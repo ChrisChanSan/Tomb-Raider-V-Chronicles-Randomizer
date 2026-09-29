@@ -51,6 +51,7 @@ set "STALE="
 
 call :onestamp hd_room hd_room_vs.inc
 call :onestamp hd_room hd_room_ps.inc
+call :onestamp hd_room hd_room_gloss_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
@@ -71,6 +72,7 @@ if errorlevel 1 (
 set "STALE="
 call :onestamp hd_room hd_room_vs.inc
 call :onestamp hd_room hd_room_ps.inc
+call :onestamp hd_room hd_room_gloss_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc

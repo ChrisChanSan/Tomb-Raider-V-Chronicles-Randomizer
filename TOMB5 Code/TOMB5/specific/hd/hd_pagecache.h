@@ -254,6 +254,11 @@ int HDPageCacheCutoutPages();
  * on such a page blended instead of alpha-tested: the RICH2 marble floors,
  * through which the copy of the room beneath them shows. */
 bool HDPageCacheSlotClear(int slot);
+/* The smallest alpha of that page's top mip, 0..255 - what HDPageClassOf
+ * reads. The room renderer takes a page below HD_GLOSS_MASK_BELOW
+ * (hd_gloss_math.h) to carry a gloss mask in its alpha. 255 for a slot that
+ * has no texture or was not measured. */
+int HDPageCacheSlotAlphaMin(int slot);
 
 /* Where that slot's .DDS was found: 0 for the white tile, 1..3 for a game
  * folder of the Tomb Raider I-III bundle, 4 or 5 for the IV-VI games, 100 +

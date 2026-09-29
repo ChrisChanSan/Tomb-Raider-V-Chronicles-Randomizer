@@ -123,6 +123,11 @@ namespace
 	 * page that is part-way clear in every texel, the RICH2 marble floors'
 	 * kind. Grown and cleared exactly with g_textures, like g_cutout. */
 	std::vector<unsigned char> g_class;
+	/* One byte per slot: the smallest alpha of the top mip the page keeps,
+	 * the number HDPageClassOf reads - and the room renderer's test for a
+	 * gloss mask (hd_gloss_math.h, HD_GLOSS_MASK_BELOW). 255 for a slot
+	 * nothing was measured on. Grown and cleared exactly with g_textures. */
+	std::vector<unsigned char> g_alpha_min;
 	/* Where each slot's file was found, in resolve_page's own encoding.
 	 * Kept per slot rather than only in the notes because the notes report
 	 * the odd cases and a tool has to be able to ask about every page -
@@ -907,6 +912,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	g_origin.resize(g_textures.size(), (short)-1);
 	g_cutout_share.resize(g_textures.size(), 0);
 	g_class.resize(g_textures.size(), (unsigned char)HD_PAGE_OPAQUE);
+	g_alpha_min.resize(g_textures.size(), (unsigned char)255);
 	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
 
 	if (stats)
@@ -1302,6 +1308,11 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 					g_class[(size_t)page.slot] = (unsigned char)HDPageClassOf(
 						page.alphaMin, page.alphaMax);
 
+				// Nothing measured (smallest above largest) reads as flat.
+				if ((size_t)page.slot < g_alpha_min.size())
+					g_alpha_min[(size_t)page.slot] = page.alphaMin <= page.alphaMax
+						? (unsigned char)page.alphaMin : (unsigned char)255;
+
 				for (const DecodedMip& mip : page.mips)
 					loaded_bytes += g_format_used == HD_PAGE_FORMAT_DXT5
 						? (double)DXT5Size(mip.w, mip.h)
@@ -1474,6 +1485,7 @@ void HDPageCacheDestroy()
 	g_cutout.clear();
 	g_cutout_share.clear();
 	g_class.clear();
+	g_alpha_min.clear();
 	g_origin.clear();
 	g_page_of_slot.clear();
 	g_slot_of_page.clear();
@@ -1706,6 +1718,14 @@ bool HDPageCacheSlotClear(int slot)
 		return false;
 
 	return g_class[(size_t)slot] == HD_PAGE_CLEAR;
+}
+
+int HDPageCacheSlotAlphaMin(int slot)
+{
+	if (slot < 0 || slot >= (int)g_alpha_min.size())
+		return 255;
+
+	return (int)g_alpha_min[(size_t)slot];
 }
 
 IDirect3DTexture9* HDPageCacheSlotTexture(int slot)

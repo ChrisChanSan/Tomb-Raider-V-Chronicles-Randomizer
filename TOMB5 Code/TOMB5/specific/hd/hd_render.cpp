@@ -32,7 +32,9 @@
 
 #include "hd_shader/hd_room_vs.inc"
 #include "hd_shader/hd_room_ps.inc"
+#include "hd_shader/hd_room_gloss_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
+#include "hd_gloss_math.h"
 
 #include <algorithm>
 #include <chrono>
@@ -1105,40 +1107,38 @@ namespace
 	 *                 triangles, JOBY3, JOBY4 and JOBY5: the submarine's
 	 *                 painted steel.
 	 *
-	 * RICH1, RICH2 and RICH3 - the three VCI levels, the ones with the marble
-	 * floors - carry neither material, not one triangle. Their marble has no
-	 * gloss datum in the .TRG and is left matt rather than given an invented
-	 * one.
+	 * RICH1 and RICH2 carry neither material, not one triangle; RICH3 carries
+	 * material 3 only as destructible pieces - 640 triangles of group 46 on
+	 * page 10084 as 0x8003, 0x8203, 0x8303 and 0x8403 (TrgProbe -mat) - so
+	 * the lookup is on the base material (hd_gloss_math.h,
+	 * HDGlossFromMaterial). Of the other material lookups, MaterialAlphaRef,
+	 * MaterialAddWeight and MaterialBookTime compare the whole number and
+	 * MaterialBlend the base: a destructible piece exists over the bases 0,
+	 * 3 and 14 only, none of them a cut-out or a book, so the alpha reference
+	 * and the book see no difference, and a destructible decal (base 14)
+	 * draws its additive pass at weight 1 where its base part would take
+	 * MaterialAddWeight's - left as it is.
 	 *
 	 * Zero means "no gloss", and a strength outside (0, 1] falls through to
 	 * zero rather than being trusted - the same shape as MaterialAlphaRef and
-	 * MaterialAddWeight above. */
+	 * MaterialAddWeight above. The strength, the exponent and the base
+	 * material go into the sort key; the class and F0 of the sheen follow
+	 * from the base (ResolveSheen). */
 	inline void MaterialGloss(const trf::remaster::TrgPart& part,
-		float& strength, float& power)
+		float& strength, float& power, int& base)
 	{
+		HDGloss gloss;
+
 		strength = 0.0f;
 		power = 0.0f;
+		base = 0;
 
-		float s;
-
-		if (part.material == 3)
-			s = part.param[2];
-		else if (part.material == 17)
-			s = part.param[1];
-		else
+		if (!HDGlossFromMaterial(part.material, part.param, &gloss))
 			return;
 
-		if (!(s > 0.0f && s <= 1.0f))
-			return;
-
-		/* The exponent is an integer in 1..191 in every tuple of the game, and
-		 * anything else would not be one. */
-		if (!(part.param[0] >= 1.0f && part.param[0] <= 255.0f) ||
-			(float)(int)part.param[0] != part.param[0])
-			return;
-
-		strength = s;
-		power = part.param[0];
+		strength = gloss.strength;
+		power = gloss.power;
+		base = (int)HDGlossBaseMaterial(part.material);
 	}
 
 	/* Whether this part is lit at all (the sky dome).
@@ -1235,6 +1235,29 @@ namespace
 		 * constant, hence part of the sort key. */
 		float gloss = 0.0f;
 		float glossPower = 0.0f;
+		/* The base material the gloss above came from, 3 or 17, and 0 where
+		 * it is zero - the class of a material's gloss follows it (see
+		 * HDGlossFromMaterial). In the sort key beside the gloss. */
+		int glossMat = 0;
+		/* The sheen of this draw call: the gloss variant's constants
+		 * (hd_room.hlsl, "The sheen"), resolved once the level's ranges are
+		 * built (ResolveSheen below). `sheen` is the strength, and 0 keeps
+		 * the draw call on the plain variant with the gloss above - which is
+		 * every draw call while hd_reflect is off. `sheenMask` is 1 where the
+		 * page's alpha is a gloss mask. Not in the sort key: a page names
+		 * one sheen, and the page is in the key already. */
+		float sheen = 0.0f;
+		float sheenPower = 0.0f;
+		float sheenF0 = 0.0f;
+		float sheenTint = 0.0f;
+		float sheenMask = 0.0f;
+		int sheenClass = 0;
+		int sheenSource = 0;
+		/* 1 where a vertex of this range can carry the caustic - a water mark
+		 * on a flat vertex in the room's surface plane (hd_room.hlsl, the
+		 * caustic). The gloss variant has no caustic, so such a range keeps
+		 * the plain variant. */
+		int wet = 0;
 		/* The ripple of this draw call - the wave scale, the travel and the
 		 * rate of a material 16 water surface, and three zeroes for every
 		 * other draw call. In the sort key like every other per-draw-call
@@ -1521,6 +1544,11 @@ namespace
 	IDirect3DPixelShader9* g_ps = 0;
 	// The glow shader, material 2's additive draw calls (hd_glow.hlsl).
 	IDirect3DPixelShader9* g_glow_ps = 0;
+	/* The room shader's gloss variant (hd_room.hlsl compiled with HD_GLOSS,
+	 * see "The sheen" there): the draw calls whose surface shines while
+	 * hd_reflect is on. Null when the device refused it - every draw call
+	 * then keeps the plain variant, as with hd_reflect off. */
+	IDirect3DPixelShader9* g_gloss_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
 	IDirect3DVertexBuffer9* g_vb = 0;
 	IDirect3DIndexBuffer9* g_ib = 0;
@@ -2795,6 +2823,74 @@ namespace
 		}
 	}
 
+	/* Whether a draw call may take the gloss variant at all. The two surface
+	 * passes only - an additive part paints light - and none of the draw
+	 * calls whose own pass the variant does not carry or must not change:
+	 * the sky, the glass and the clear floors (the blend phase), the water
+	 * surfaces (the ripple), the flipbooks and the books, the UV scrolls, and
+	 * a range the caustic can reach (HDRange::wet). Those keep the plain
+	 * variant and, where their material names one, today's grazing-angle
+	 * lift. */
+	bool RangeTakesSheen(const HDRange& r, int pass, bool sky)
+	{
+		return !sky && pass != 2 && r.blend == 0.0f && !r.clear &&
+			r.ripple[0] == 0.0f && r.ripple[1] == 0.0f && r.ripple[2] == 0.0f &&
+			r.flipTime == 0.0f && r.bookTime == 0.0f && r.flatLight == 0.0f &&
+			r.scrollU == 0.0f && r.scrollV == 0.0f && !r.wet;
+	}
+
+	// Once per level: the draw calls that take the gloss variant.
+	int g_sheen_ranges = 0;
+
+	/* The sheen of every draw call, once the level's ranges are built.
+	 *
+	 * A material 3 or 17 part names its own strength and exponent (see
+	 * MaterialGloss), and its class follows from the material: 17 is the
+	 * submarine's painted steel, metal; 3's masks select window panes,
+	 * puddles and ice, a dielectric (hd_gloss_math.h, HDGlossFromMaterial).
+	 * Whether the page's alpha masks the sheen is the page's own smallest
+	 * alpha against HD_GLOSS_MASK_BELOW. */
+	void ResolveSheen()
+	{
+		g_sheen_ranges = 0;
+
+		for (size_t g = 0; g < g_groups.size(); g++)
+		{
+			const bool sky = (int)g >= g_room_groups;
+
+			for (int pass = 0; pass < 2; pass++)
+				for (HDRange& range : g_groups[g].pass[pass])
+				{
+					range.sheen = 0.0f;
+
+					if (!RangeTakesSheen(range, pass, sky) || range.gloss <= 0.0f)
+						continue;
+
+					HDGloss mat;
+
+					HDGlossClassDefaults(HDGlossMaterialClass((unsigned int)range.glossMat), &mat);
+					mat.source = HD_GLOSS_FROM_MAT;
+					mat.strength = range.gloss;
+					mat.power = range.glossPower;
+
+					const HDGloss got = HDGlossResolve(&mat, 0, false, HD_GLOSS_NONE, 0, false);
+
+					if (got.strength <= 0.0f)
+						continue;
+
+					range.sheen = got.strength;
+					range.sheenPower = got.power;
+					range.sheenF0 = got.f0;
+					range.sheenTint = got.tint;
+					range.sheenClass = got.cls;
+					range.sheenSource = got.source;
+					range.sheenMask = HDPageCacheSlotAlphaMin(range.pageSlot) <
+						HD_GLOSS_MASK_BELOW ? 1.0f : 0.0f;
+					g_sheen_ranges++;
+				}
+		}
+	}
+
 	void release_buffers()
 	{
 		if (g_vb) { g_vb->Release(); g_vb = 0; }
@@ -2927,6 +3023,12 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
+	/* The gloss variant is not a condition of the HD path: a device that
+	 * refuses it draws every surface with the plain variant, which is the
+	 * picture hd_reflect 0 draws. */
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomGlossPS, &g_gloss_ps)))
+		g_gloss_ps = 0;
+
 	return true;
 }
 
@@ -3051,6 +3153,7 @@ void HDRenderShutdown()
 	HDPageCacheDestroy();
 
 	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
+	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
 	if (g_vs) { g_vs->Release(); g_vs = 0; }
 	if (g_decl) { g_decl->Release(); g_decl = 0; }
@@ -3628,6 +3731,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_book_watch_page = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
+	/* The water mark bits each vertex was given, kept past the locked buffer
+	 * for the ranges' `wet` flag - the buffer itself is write-only. */
+	std::vector<unsigned char> mark_bits((size_t)g_vertex_count, 0);
 
 	/* --- the vertex buffer -------------------------------------------- */
 	if (FAILED(g_device->CreateVertexBuffer((UINT)(g_vertex_count * (int)sizeof(HDVertex)),
@@ -3750,6 +3856,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			out[i].wShimmer = (unsigned char)((bits >> 1) & 1);
 			out[i].wRoomShimmer = (unsigned char)((bits >> 2) & 1);
 			out[i].wSpare = 1;
+			mark_bits[(size_t)i] = bits;
 
 			if (bits)
 				marked_vertices++;
@@ -3876,6 +3983,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int bookFirst, bookCount, bookPhase;	// see MaterialBookSlots
 		int bookPart;			// the .TRG part, for the log
 		float gloss, glossPower;	// see MaterialGloss
+		int glossMat;			// see MaterialGloss
 		float ripple[3];		// see MaterialRipple
 		float blend;			// see MaterialBlend
 		int clear;			// see HDRange::clear
@@ -4082,9 +4190,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * additive part paints light and has nothing to reflect. */
 				float gloss = 0.0f;
 				float gloss_power = 0.0f;
+				int gloss_mat = 0;
 
 				if (pass != 2)
-					MaterialGloss(part, gloss, gloss_power);
+					MaterialGloss(part, gloss, gloss_power, gloss_mat);
 
 				if (pass == 0 && gloss != 0.0f)
 					g_gloss_parts++;
@@ -4500,6 +4609,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					}
 					tri.gloss = gloss;
 					tri.glossPower = gloss_power;
+					tri.glossMat = gloss_mat;
 					tri.ripple[0] = ripple[0];
 					tri.ripple[1] = ripple[1];
 					tri.ripple[2] = ripple[2];
@@ -4577,6 +4687,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					// The gloss is one more pixel constant per draw call.
 					if (a.gloss != b.gloss) return a.gloss < b.gloss;
 					if (a.glossPower != b.glossPower) return a.glossPower < b.glossPower;
+					/* And the material the gloss came from, whose class the
+					 * sheen takes. 0 on every part without a gloss, and 3 and
+					 * 17 never share a level, so nothing else moves. */
+					if (a.glossMat != b.glossMat) return a.glossMat < b.glossMat;
 					/* And the water ripple is one more pixel constant per
 					 * draw call - three zeroes on every part of the game that
 					 * is not a water surface, so nothing else moves in the
@@ -4647,6 +4761,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.bookPart = tris[0].bookPart;
 			range.gloss = tris[0].gloss;
 			range.glossPower = tris[0].glossPower;
+			range.glossMat = tris[0].glossMat;
 			range.ripple[0] = tris[0].ripple[0];
 			range.ripple[1] = tris[0].ripple[1];
 			range.ripple[2] = tris[0].ripple[2];
@@ -4680,6 +4795,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].bookPhase == range.bookPhase &&
 					tris[i].gloss == range.gloss &&
 					tris[i].glossPower == range.glossPower &&
+					tris[i].glossMat == range.glossMat &&
 					tris[i].ripple[0] == range.ripple[0] &&
 					tris[i].ripple[1] == range.ripple[1] &&
 					tris[i].ripple[2] == range.ripple[2] &&
@@ -4752,6 +4868,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.bookPart = tris[i].bookPart;
 					range.gloss = tris[i].gloss;
 					range.glossPower = tris[i].glossPower;
+					range.glossMat = tris[i].glossMat;
+					range.wet = 0;
 					range.ripple[0] = tris[i].ripple[0];
 					range.ripple[1] = tris[i].ripple[1];
 					range.ripple[2] = tris[i].ripple[2];
@@ -4778,6 +4896,22 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					{
 						const trf::remaster::TrgVertex& v = trg.vertices[index];
 						const float p[3] = { (float)v.x, (float)v.y, (float)v.z };
+
+						/* Whether the caustic can reach this range: the
+						 * shader's water weight is the choppy mark, or a
+						 * shimmer mark on a flat vertex (the |n.y| >= 0.6
+						 * gate) in the room's surface plane, its minfloor -
+						 * the room box's floor. See HDRange::wet. */
+						if (!range.wet && index < mark_bits.size() &&
+							(mark_bits[index] & 7))
+						{
+							const int upright = (int)v.ny - 127;
+							const bool flat = upright <= -77 || upright >= 77;
+
+							if ((mark_bits[index] & 1) || (flat &&
+								(!group.hasRoomBox || p[1] == group.roomMaxs[1])))
+								range.wet = 1;
+						}
 
 						/* Per room: which of this room's vertices
 						 * carry a wind weight and how strong the strongest
@@ -5017,6 +5151,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	// The mirrors in the rooms' walls, while the .TRG and the boxes are
 	// still in hand - see FindMirrors.
 	FindMirrors(trg);
+
+	// And the sheen of every draw call - see ResolveSheen.
+	ResolveSheen();
 
 	/* --- the vertex window of every draw call ---------------------------
 	 *
@@ -5562,6 +5699,18 @@ bool HDRenderInFrame()
 
 namespace
 {
+	/* The lamps and the light cube of one glossy draw call: gGlossCube
+	 * (c80 - c85), gGlossAxes (c86 - c88) and gGlossLights (c89 - c96), see
+	 * "The sheen" in hd_room.hlsl. Black here: the only lamp is the eye,
+	 * which the shader lights with the surface's own light. */
+	void upload_sheen_lights(const HDRange& range)
+	{
+		float regs[17 * 4] = { 0 };
+
+		(void)range;
+		g_device->SetPixelShaderConstantF(80, regs, 17);
+	}
+
 	/* `blendOnly`: the alpha pass is drawn twice in a frame, once for its
 	 * solid ranges - the cut-outs, with the alpha test - and once, after
 	 * everything opaque, for its see-through ones. Both other passes are
@@ -5636,6 +5785,11 @@ namespace
 		/* The gloss constant - see the note beside the write below. */
 		float spec[4] = { 0.0f, 0.0f, g_reflect, 1.0f };
 		bool spec_dirty = true;
+		/* The gloss variant: whether it is on the device, and its gGloss
+		 * (c36) - see the note beside the switch below. */
+		bool sheen_ps_on = false;
+		float sheen[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		bool sheen_dirty = true;
 		/* gRipple: the wave scale, the travel and the rate of a material
 		 * 16 water surface. Three zeroes for every other draw call in the
 		 * game, where the pixel shader's one compare on .y skips the whole
@@ -5871,6 +6025,32 @@ namespace
 			if (!page)
 				continue;
 
+			/* The gloss variant, for a draw call whose surface resolved to a
+			 * sheen (ResolveSheen), while hd_reflect is on. With hd_reflect
+			 * off no draw call takes it and every draw call is drawn as it
+			 * always was.
+			 *
+			 * The order of the switch is the point. Each variant keeps
+			 * literals of its own in registers the other names (fxc's `def`
+			 * constants: the gloss variant in c10 and c18, which the plain
+			 * variant reads as gRoomOrigin and gAdd), and a constant written
+			 * while a shader is on the device lands on that shader's literal.
+			 * So no register the gloss variant keeps a literal in is written
+			 * while it is on the device: leaving it happens here, before a
+			 * plain draw call's writes; entering it happens after a glossy
+			 * one's, right before the draw; between two glossy draw calls
+			 * only the variant's own registers change (c4, c19, c36 and c80
+			 * to c96); and the pass ends on the plain variant, so the next
+			 * room's lighting is written with the plain variant on. */
+			const bool want_sheen = range.sheen > 0.0f && g_gloss_ps &&
+				g_reflect != 0.0f && !blendOnly && !sky && !additive_pass;
+
+			if (!want_sheen && sheen_ps_on)
+			{
+				g_device->SetPixelShader(g_ps);
+				sheen_ps_on = false;
+			}
+
 			/* Into the glow shader or out of it, ahead of this draw call's
 			 * constants, so that gRipple is written after the room shader is
 			 * back. */
@@ -5919,19 +6099,44 @@ namespace
 			 * that output is not looked at, so the picture of every other
 			 * pass is unchanged to the bit. */
 			const float want_blend = range.blend != 0.0f ? range.blend : 1.0f;
+			/* A glossy draw call on the gloss variant carries its resolved
+			 * sheen in x and y; every other draw call the material's gloss,
+			 * as it always has. */
+			const float want_gloss = want_sheen ? range.sheen : range.gloss;
+			const float want_power = want_sheen ? range.sheenPower : range.glossPower;
 
-			if (spec_dirty || spec[0] != range.gloss ||
-				spec[1] != range.glossPower || spec[3] != want_blend)
+			if (spec_dirty || spec[0] != want_gloss ||
+				spec[1] != want_power || spec[3] != want_blend)
 			{
-				spec[0] = range.gloss;
-				spec[1] = range.glossPower;
+				spec[0] = want_gloss;
+				spec[1] = want_power;
 				spec[3] = want_blend;
 				spec_dirty = false;
 				g_device->SetPixelShaderConstantF(19, spec, 1);
 			}
 
-			if (range.gloss != 0.0f)
+			if (want_gloss != 0.0f)
 				g_gloss_calls++;
+
+			/* gGloss, in gRipple's register: F0, how far the reflection
+			 * takes the texel's colour, and whether the page's alpha masks
+			 * the sheen. The plain draw call after it writes its ripple
+			 * back. */
+			if (want_sheen)
+			{
+				const float want[4] = { range.sheenF0, range.sheenTint,
+					range.sheenMask, 0.0f };
+
+				if (sheen_dirty || memcmp(want, sheen, sizeof(sheen)) != 0)
+				{
+					memcpy(sheen, want, sizeof(sheen));
+					sheen_dirty = false;
+					g_device->SetPixelShaderConstantF(36, sheen, 1);
+				}
+
+				ripple_dirty = true;
+				upload_sheen_lights(range);
+			}
 
 			const float want_weight = additive_pass ? range.addWeight : 1.0f;
 			const float want_period = additive_pass ? range.addPeriod : 0.0f;
@@ -5948,13 +6153,14 @@ namespace
 			 * material 16's own (MaterialRipple), and zero everywhere else -
 			 * so this compare is false for every draw call in nine of the
 			 * fifteen levels and the constant is written once per pass. */
-			if (ripple_dirty || ripple[0] != range.ripple[0] ||
-				ripple[1] != range.ripple[1] || ripple[2] != range.ripple[2])
+			if (!want_sheen && (ripple_dirty || ripple[0] != range.ripple[0] ||
+				ripple[1] != range.ripple[1] || ripple[2] != range.ripple[2]))
 			{
 				ripple[0] = range.ripple[0];
 				ripple[1] = range.ripple[1];
 				ripple[2] = range.ripple[2];
 				ripple_dirty = false;
+				sheen_dirty = true;	// c36 holds the ripple now
 				g_device->SetPixelShaderConstantF(36, ripple, 1);
 			}
 
@@ -6039,6 +6245,13 @@ namespace
 				g_device->SetRenderState(D3DRS_CULLMODE, cull_now);
 			}
 
+			// Into the gloss variant, after the writes - see the note above.
+			if (want_sheen && !sheen_ps_on)
+			{
+				g_device->SetPixelShader(g_gloss_ps);
+				sheen_ps_on = true;
+			}
+
 			if (g_index32)
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
 					(UINT)g_vertex_count, range.start, range.count / 3);
@@ -6074,6 +6287,11 @@ namespace
 
 		// A pass that ended on a glow draw call leaves its states behind.
 		if (glow_ps_on)
+			g_device->SetPixelShader(g_ps);
+
+		// And one that ended on a glossy draw call goes back to the plain
+		// variant, before the next room's constants are written.
+		if (sheen_ps_on)
 			g_device->SetPixelShader(g_ps);
 
 		if (glow_on)

@@ -29,12 +29,18 @@
  * classic engine's own room lighting, fog, fog bulbs and water effects.
  *
  * Build. tomb5.vcxproj has no fxc step, so the project builds with the Visual
- * Studio C++ toolset alone. The bytecode is checked in beside this file as two
- * C headers, and this file is their source. Preparation\Tools\Diagnose\
- * bshader.bat rebuilds them with exactly these two calls:
+ * Studio C++ toolset alone. The bytecode is checked in beside this file as
+ * three C headers, and this file is their source. Preparation\Tools\Diagnose\
+ * bshader.bat rebuilds them with exactly these three calls:
  *
  *     fxc /nologo /T vs_3_0 /E RoomVS /O3 /Vn kHDRoomVS /Fh hd_room_vs.inc hd_room.hlsl
  *     fxc /nologo /T ps_3_0 /E RoomPS /O3 /Vn kHDRoomPS /Fh hd_room_ps.inc hd_room.hlsl
+ *     fxc /nologo /T ps_3_0 /E RoomPS /O3 /D HD_GLOSS=1 /Vn kHDRoomGlossPS
+ *         /Fh hd_room_gloss_ps.inc hd_room.hlsl
+ *
+ * The third is the gloss variant (see "The sheen" below); every line that
+ * differs between the two pixel shaders sits under #ifdef HD_GLOSS, so the
+ * plain variant's bytecode is the same with or without it.
  *
  * fxc.exe comes from the Windows SDK (Windows Kits\10\bin\<version>\x86).
  * /Fh writes a plain byte array that CreateVertexShader / CreatePixelShader
@@ -318,9 +324,28 @@ float4 gWaterBox : register(c15);
  * c36         gRipple             per DRAW CALL
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  *
+ * and in the gloss variant alone (compiled with HD_GLOSS, see "The sheen"
+ * below):
+ *
+ * c36         gGloss              per DRAW CALL (in gRipple's place)
+ * c80 - c85   gGlossCube[6]       per DRAW CALL
+ * c86 - c88   gGlossAxes[3]       per DRAW CALL
+ * c89 - c96   gGlossLights[8]     per DRAW CALL (4 lamps, two registers each)
+ *
  * Deliberately disjoint from the vertex numbers although the two constant
  * files are separate in Direct3D 9: one table of "register -> meaning" that
- * needs no column saying which shader.
+ * needs no column saying which shader. The bulbs and the gloss registers are
+ * the exceptions - the vertex file's water table holds c32 - c95 - and they
+ * are pixel registers only. The gloss registers from c80 on lie above every
+ * literal the plain variant keeps (its highest is c76) and above the glow
+ * shader's c77 - c79, so an upload for a glossy draw call lands on nothing
+ * another shader reads.
+ *
+ * gGloss takes c36 because the gloss variant never ripples: a register the
+ * variant left unnamed there would be one fxc hands to a literal of its own
+ * (it did, in the first build of the variant), and hd_render.cpp writes c36
+ * on every draw call it changes on. Glossy draw calls write gGloss there,
+ * and the next plain draw call writes its ripple back.
  */
 
 /* x = tomb5.distance_fog * 1024, y = 255 / that. No on/off switch beside it:
@@ -389,7 +414,10 @@ float4 gAdd : register(c18);
  *
  * x = the part's own strength out of its .TRG material (0 = matt, and that is
  *     every part of the game but the 183,350 triangles of materials 3 and 17),
- * y = its exponent, an integer 1..191 (read but unused, see the light loop),
+ *     and in the gloss variant the draw call's resolved strength - the
+ *     material's, or its page's (hd_render.cpp, ResolveSheen),
+ * y = its exponent, an integer 1..191 (read but unused by the plain variant,
+ *     see the light loop; the gloss variant's Blinn-Phong exponent),
  * z = tomb5.hd_reflect,
  * w = the see-through weight of the blend phase (see the end of RoomPS).
  *
@@ -485,6 +513,81 @@ float4 gRipple : register(c36);
 /* Two registers per bulb: (x, y, z, radius) in VIEW space, then
  * (r, g, b, density). */
 float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
+
+#ifdef HD_GLOSS
+/* The sheen - the gloss variant of this shader.
+ *
+ * Compiled a second time with /D HD_GLOSS into hd_room_gloss_ps.inc, with a
+ * budget of 512 instruction slots of its own, and set by hd_render.cpp for
+ * the draw calls whose surface resolves to a gloss above zero while
+ * tomb5.hd_reflect is on; every other draw call keeps the plain variant, whose
+ * bytecode the define leaves untouched. Three textbook terms, per pixel, in
+ * VIEW space, where the normal (viewNrm), the surface point (viewPos) and the
+ * eye (the origin) already are - so the lamps are carried into view space on
+ * the processor, once per draw call, rather than every pixel being carried
+ * out of it:
+ *
+ *   the highlight   Blinn-Phong: pow(N.H, n) times N.L, H the half vector
+ *                   between the direction to the lamp and to the eye, n the
+ *                   surface's exponent, scaled by (n + 8) / 8 - the usual
+ *                   normalisation that keeps a sharp highlight as bright in
+ *                   sum as a broad one. The lamps are up to four: the room's
+ *                   own .TRG point lights nearest the draw call, the level's
+ *                   sun where it has one, and the eye itself, weighted by the
+ *                   surface's own light, so a plate in a room with no lamp in
+ *                   it still carries a sheen that moves with the camera.
+ *   the environment the ambient cube: six colours, one per world axis
+ *                   direction, weighted by the squared components of the
+ *                   reflection vector, which sum to one. The six colours are
+ *                   the .TRG light cube of the floor under the draw call,
+ *                   so the reflection is the room's own light, brighter
+ *                   where the room is brighter.
+ *   the weight      Schlick's approximation of Fresnel,
+ *                   F0 + (1 - F0) * (1 - N.V)^5, with F0 per class: high for
+ *                   metal, low for marble and ice, so metal reflects face on
+ *                   and stone mostly at a grazing angle.
+ *
+ * The sum is ADDED to the surface's own lit colour, never blended over it:
+ * the surface keeps its picture to the bit wherever the weight is zero, which
+ * is what a page's gloss mask asks for - a stucco facade whose mask is black
+ * stays exactly as it was and only its window panes shine. The same fog that
+ * darkens the surface darkens the sum. Not a mirror: nothing is drawn twice,
+ * and no image of the room appears in it.
+ *
+ * gGloss       x F0, y how far the environment takes the texel's colour (1
+ *              for metal, whose reflection is coloured by the metal; 0 for
+ *              stone and ice), z 1 where the page's alpha is a gloss mask and
+ *              0 where the page is flat, w unused. gSpec (c19) keeps the
+ *              strength in x, the exponent in y and hd_reflect in z.
+ * gGlossCube   the six faces in the file's own order: +x, -x, up, down, +z,
+ *              -z - "up" being -y in this engine's coordinates. RGB 0..1.
+ * gGlossAxes   the rows that turn a view-space direction back into world
+ *              axes, the transpose of the room's view rotation.
+ * gGlossLights (x, y, z, 1) a lamp's position in view space or (x, y, z, 0)
+ *              the direction towards a sun, then (r, g, b, 1 / reach^2) - a
+ *              sun has no reach and carries 0 there. A slot not in use
+ *              carries a black colour.
+ *
+ * The cube's gain. A light cube is darker than the light baked into the art
+ * it stands in: the median over each level's floor squares of the vertex
+ * light of the up-facing .TRG triangles against the mean of the square's
+ * six faces runs from 1.79 (RICHCUT2) to 4.10 (ANDY2), and the median of
+ * the fifteen medians is 2.93 (the tool probe189c over the fifteen .TRG and
+ * Backup .trc files). HD_GLOSS_CUBE_GAIN puts the cube on the scale of the
+ * surface's own light.
+ *
+ * The eye as a lamp. HD_GLOSS_EYE is its weight against the surface's own
+ * light - chosen, not measured: at the exponent's peak, face on, the eye adds
+ * this share of the surface's own light times the Fresnel weight. */
+#define HD_GLOSS_LIGHTS    4
+#define HD_GLOSS_CUBE_GAIN 3.0f
+#define HD_GLOSS_EYE       0.25f
+
+float4 gGloss : register(c36);
+float4 gGlossCube[6] : register(c80);
+float4 gGlossAxes[3] : register(c86);
+float4 gGlossLights[HD_GLOSS_LIGHTS * 2] : register(c89);
+#endif
 
 sampler2D sPage : register(s0);
 
@@ -869,10 +972,73 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 	return chord * b.w * smoothstep(0.0f, kRim, t);
 }
 
+#ifdef HD_GLOSS
+/* The sheen of one pixel - see the note over HD_GLOSS_LIGHTS. `light` is the
+ * surface's own lit multiply before the fog, the eye lamp's colour; `dark` is
+ * what the fog and the fog bulbs took off the surface, which the sum loses
+ * too. */
+float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark)
+{
+	float3 N = normalize(input.viewNrm);
+	float3 V = normalize(-input.viewPos);
+	float nv = dot(N, V);
+
+	/* A two-sided range (the cut-out materials, the sky) shows its back
+	 * face as well; the normal of the side seen faces the eye. */
+	N = nv < 0.0f ? -N : N;
+	nv = abs(nv);
+
+	const float power = gSpec.y;
+	float3 hl = 0.0f;
+
+	[unroll]
+	for (int k = 0; k < HD_GLOSS_LIGHTS; k++)
+	{
+		float4 a = gGlossLights[k * 2 + 0];
+		float4 b = gGlossLights[k * 2 + 1];
+
+		float3 toLamp = a.xyz - input.viewPos * a.w;
+		float d2 = dot(toLamp, toLamp);
+		float3 L = toLamp * rsqrt(max(d2, 1e-6f));
+		float fall = saturate(1.0f - d2 * b.w);
+		float3 H = normalize(L + V);
+
+		hl += b.rgb * (fall * fall * saturate(dot(N, L)) *
+			pow(saturate(dot(N, H)), power));
+	}
+
+	// The eye as the lamp: L = V, so H = V and N.H = N.L = N.V.
+	hl += light * (HD_GLOSS_EYE * nv * pow(nv, power));
+	hl *= (power + 8.0f) * 0.125f;
+
+	/* The ambient cube, looked up along the reflection of the eye ray and
+	 * turned back into world axes. The weights are the squared components
+	 * of a unit vector and sum to one. */
+	float3 R = N * (2.0f * nv) - V;
+	float3 w = float3(dot(R, gGlossAxes[0].xyz), dot(R, gGlossAxes[1].xyz),
+		dot(R, gGlossAxes[2].xyz));
+	float3 q = w * w;
+	float3 env = q.x * (w.x >= 0.0f ? gGlossCube[0].rgb : gGlossCube[1].rgb) +
+		q.y * (w.y < 0.0f ? gGlossCube[2].rgb : gGlossCube[3].rgb) +
+		q.z * (w.z >= 0.0f ? gGlossCube[4].rgb : gGlossCube[5].rgb);
+
+	env *= HD_GLOSS_CUBE_GAIN * lerp(1.0f, texel.rgb, gGloss.y);
+
+	// Schlick's Fresnel, the strength, the switch and the page's mask.
+	float grazing = 1.0f - nv;
+	float g2 = grazing * grazing;
+	float F = gGloss.x + (1.0f - gGloss.x) * (g2 * g2 * grazing);
+	float weight = F * gSpec.x * gSpec.z * lerp(1.0f, texel.a, gGloss.z);
+
+	return max(0.0f, (hl + env) * weight - dark);
+}
+#endif
+
 float4 RoomPS(VS_OUT input) : COLOR0
 {
 	float2 uv = input.uv;
 
+#ifndef HD_GLOSS
 	/* The ripple of a still water surface - see the note over
 	 * HD_RIPPLE_OCTAVE. gRipple.y is 0 for every draw call that is not one of
 	 * material 16's 28 parts, so this is one compare there and nothing else.
@@ -894,6 +1060,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
 		uv += (gRipple.y * HD_RIPPLE_NORM) *
 			float2(s.x + 0.5f * s.z, s.y + 0.5f * s.w);
 	}
+#endif
+	/* The gloss variant draws no water surface: hd_render.cpp never hands it
+	 * a draw call that ripples, and the ripple's slots go to the sheen. */
 
 	float4 texel = tex2D(sPage, uv);
 
@@ -918,7 +1087,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * differently from the roomlet next to it. */
 	/* The gloss of this draw call, once, outside the loop. Zero for every
 	 * part the .TRG does not call glossy, and zero with hd_reflect off. */
+#ifndef HD_GLOSS
 	float gloss = gSpec.x * gSpec.z;
+#endif
 
 	[unroll]
 	for (int i = 0; i < HD_MAX_LIGHTS; i++)
@@ -946,9 +1117,12 @@ float4 RoomPS(VS_OUT input) : COLOR0
 			 * because it has no relative constant addressing, one pow per
 			 * light adds about 317 instruction slots to the 476 of this
 			 * shader - far past the 512 that shader model 3 guarantees. So the
-			 * gloss is the grazing angle alone, at the end of this function,
-			 * where it costs eleven slots and no loop. The exponent is read,
-			 * logged and unused. */
+			 * plain variant's gloss is the grazing angle alone, at the end of
+			 * this function, where it costs eleven slots and no loop, and its
+			 * exponent is read, logged and unused. The gloss variant has its
+			 * own 512 slots and spends them on four lamps of its own (see
+			 * "The sheen"); these dynamic lights give no highlight there
+			 * either, for the same count. */
 		}
 	}
 
@@ -963,8 +1137,17 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * D3DRS_FOGENABLE stays off: with a pixel shader the fixed function fog
 	 * factor would have to come out of the vertex shader, and this one writes
 	 * none. */
+#ifdef HD_GLOSS
+	/* The same subtraction, kept as a number: the sheen loses it too. And the
+	 * light before it, which the eye lamp shines with. */
+	const float3 unfogged = f * (2.0f / 255.0f);
+	const float fogged = max(0.0f, input.viewPos.z - gFog.x) * gFog.y;
+
+	f -= fogged;
+#else
 	if (input.viewPos.z > gFog.x)
 		f -= (input.viewPos.z - gFog.x) * gFog.y;
+#endif
 
 	/* Back into the remaster's scale. This is the classic path's split
 	 * (drawroom.cpp) with its ceiling taken off - see the long note
@@ -1004,9 +1187,16 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * opaque pass keeps the deviation argued for at the top, to the bit.
 	 * Before the fog bulbs, because the classic path splits before it adds
 	 * them (drawroom.cpp). */
+#ifndef HD_GLOSS
 	c = lerp(c, min(c, 1.0f), gPass.y);
+#endif
+	/* The gloss variant never draws the additive pass, so the ceiling is
+	 * always the opaque one there and the line drops out. */
 
 	float3 s = 0.0f;
+#ifdef HD_GLOSS
+	float haze = 0.0f;
+#endif
 
 	/* The fog bulbs (drawroom.cpp). These DO keep the classic split:
 	 * the density darkens the multiply and the bulb's own colour is added on
@@ -1022,11 +1212,21 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 		c -= intensity * (1.0f / 255.0f);
 		s += intensity * b.rgb * (1.0f / 255.0f);
+#ifdef HD_GLOSS
+		haze += intensity;
+#endif
 	}
 
 	c = max(c, 0.0f);
 	s = saturate(s);
 
+#ifdef HD_GLOSS
+	/* The sheen, in place of the grazing-angle lift below: the fog in the
+	 * remaster's scale and the bulbs' haze in the classic 0..255 one, as the
+	 * surface lost them. */
+	const float3 sheen = GlossSheen(input, texel, unfogged,
+		fogged * (2.0f / 255.0f) + haze * (1.0f / 255.0f));
+#else
 	/* The grazing angle - see the note beside gSpec.
 	 * Applied to `c`, the multiply, so what the surface lifts towards is its
 	 * own lit colour and never a colour of this shader's making; and after the
@@ -1039,7 +1239,11 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 		c *= 1.0f + min(HD_FRESNEL_MAX, gloss * grazing * HD_FRESNEL_LIFT);
 	}
+#endif
 
+	/* The gloss variant draws no caustic: hd_render.cpp keeps every draw
+	 * call with a water-marked vertex in it on the plain variant. */
+#ifndef HD_GLOSS
 	/* The caustic (TROne's formula, see the note beside HD_WATER_UV and
 	 * THIRD-PARTY.md).
 	 *
@@ -1067,6 +1271,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 		c *= max(0.0f, 1.0f + HD_CAUSTIC_WEIGHT * input.waterAdd.w * caustic);
 	}
+#endif
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
 	 * classic path draws through, with D3DRS_SPECULARENABLE on
@@ -1075,6 +1280,11 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * sight `s` is zero and this is the plain texel * light. */
 	float3 lit = texel.rgb * c + s * gPass.w;
 
+#ifdef HD_GLOSS
+	/* Added, never blended - see the note over HD_GLOSS_LIGHTS. The two
+	 * additive-pass lines below have no work in the gloss variant. */
+	lit += sheen;
+#else
 	/* Additive pass only: an unweighted glow washes the whole frame out. */
 	lit *= lerp(1.0f, texel.a, gPass.y);
 
@@ -1089,6 +1299,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 				gAdd.y * (6.2831853f / gAdd.z));
 
 	lit *= lerp(1.0f, weight, gPass.y);
+#endif
 
 	/* The glass. gSpec.w is this draw call's own see-through weight -
 	 * material 14's param[1], and exactly 1 for every other draw call, so

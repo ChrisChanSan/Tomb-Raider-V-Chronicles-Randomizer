@@ -3002,6 +3002,53 @@ door still in the glass; the lobby floor and the other levels as before.
 
 **Commits.** `add3a27`, `35d7a1f`, `578047a`
 
+### A seam for the poison sway
+2026-09-29
+
+**What.** With `-log`, two `POISONLOG` lines while Lara is poisoned (`lara.poisoned` or
+`lara.dpoisoned` not zero). A `view` line per build of the view matrix: `call=`, `tick=`,
+`tween=`, `rebuild=`, `who=`, `poisoned=`, `dpoisoned=` and `scale=`, the three factors
+the sway applied to the matrix stack's base (16384 when it applied none). A `frame` line
+per drawn frame: `frame=`, `tick=`, `tween=`, `alpha=`, `base=` and `poisoned=`, `base=`
+being the three column lengths of the float stack's base times 10000 (10000 unscaled).
+
+**Why.** In RICH3's gas the sway is absent or faint at the interpolated frame rates and
+normal at 30; after a stretch at 30 the interpolated rates look right. Two readings fit.
+The sway's amplitude never rises at the interpolated rates, because the ramp that walks
+`lara.poisoned` towards `lara.dpoisoned` does not step there; or the scale sits on the
+frames that carry a logic tick and is missing on the frames between them, because a
+rebuild of the view builds it without. The `view` line tells the first (a `poisoned=`
+that stands while `dpoisoned=` moves), the `frame` line the second (a `base=` at 10000 on
+the in-between frames only).
+
+**How.** `specific/3dmath.cpp:602`, `PoisonLogView`, writes the `view` line;
+`aGenerateW2V` calls it behind `gLogEnabled` after its scale block (`:713`) with its own
+scale vector, which holds the factors only when the block scaled. `who=` reads two flags:
+`PoisonLogRebuild` (`:586`), set by `RebuildView` around its `phd_LookAt`
+(`game/interpolate.cpp:733`, `:735`), and `PoisonLogTickCamera` (`:591`), set by
+`ControlPhase` around the tick's camera block, `CalculateCamera` or `CalculateSpotCams`
+(`game/control.cpp:653`, `:679`); every other view build is `other` - the pickup icon,
+the gun's aim view in `FireWeapon`, the load screen, the inventory. `PoisonLogFrame`
+(`3dmath.cpp:623`) writes the `frame` line from `aMXPtr`; `DrawPhaseGame` reads
+`InterpAlphaNow` once into a local, hands it to `InterpBeginFrame` (`game/draw.cpp:470`)
+and then to `PoisonLogFrame` behind `gLogEnabled` (`:473`). `phd_GenerateW2V`'s own scale
+block has no line: it runs right before `aGenerateW2V` in the same call, one ramp step
+earlier and with the same phases.
+
+**Checked.** The engine builds without an error; ModernTest 14,063, MenuTest 42,364,
+InterpTest 683, LipsTest 270 with the lip objects and 243 without, all without a failure;
+RoomProbe and TrgProbe build.
+
+**Unchanged.** Everything the engine does: the ramp, the scale, the tick, the camera, the
+matrices and the draw order. The two flags are written whether `-log` is on or not and
+only the log reads them; the two counters step only with `-log`; `InterpAlphaNow` is read
+once per frame as before. `hd_enable 0` draws the same picture.
+
+**Left.** The fix, once a log of a poisoning at an interpolated rate says which reading
+holds.
+
+**Commits.** the commit 'Round 187 (#187): a POISONLOG seam for the poison sway'
+
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
 
@@ -10239,3 +10286,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
+| #187 | A seam for the poison sway |

@@ -730,7 +730,9 @@ namespace
 	{
 		const short poisoned = lara.poisoned;
 
+		PoisonLogRebuild(true);		// POISONLOG names this view build
 		phd_LookAt(px, py, pz, tx, ty, tz, roll);
+		PoisonLogRebuild(false);
 
 		lara.poisoned = poisoned;
 	}

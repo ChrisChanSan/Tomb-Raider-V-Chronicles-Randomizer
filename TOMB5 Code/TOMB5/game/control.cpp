@@ -650,6 +650,8 @@ long ControlPhase(long nframes, long demo_mode)
 			GLOBAL_inventoryitemchosen = NO_ITEM;
 		}
 
+		PoisonLogTickCamera(true);	// POISONLOG names the tick's view build
+
 		if (GLOBAL_playing_cutseq)
 		{
 			camera.type = CINEMATIC_CAMERA;
@@ -673,6 +675,8 @@ long ControlPhase(long nframes, long demo_mode)
 			else
 				CalculateSpotCams();
 		}
+
+		PoisonLogTickCamera(false);
 
 		CamRot.y = (mGetAngle(camera.pos.z, camera.pos.x, camera.target.z, camera.target.x) >> 4) & 0xFFF;
 		wibble = (wibble + 4) & 0xFC;

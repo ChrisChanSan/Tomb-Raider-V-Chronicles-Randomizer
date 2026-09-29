@@ -462,8 +462,15 @@ long DrawPhaseGame()
 	 * lara_item->pos in the frame, and the HD seam takes Lara's matrices from
 	 * what it produces - so specific\hd\ needs no change of its own.
 	 *
-	 * At fps_mode 0, InterpAlphaNow returns 1 and this call writes nothing. */
-	InterpBeginFrame(InterpAlphaNow());
+	 * At fps_mode 0, InterpAlphaNow returns 1 and this call writes nothing.
+	 * The alpha is read once, so POISONLOG reports the value the frame was
+	 * drawn at. */
+	const float alpha = InterpAlphaNow();
+
+	InterpBeginFrame(alpha);
+
+	if (gLogEnabled)
+		PoisonLogFrame(alpha);
 
 	ProfBegin(PROF_GATHER);
 	CalcLaraMatrices(0);

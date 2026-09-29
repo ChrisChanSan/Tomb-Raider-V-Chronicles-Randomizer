@@ -31,6 +31,12 @@ void phd_GetVectorAngles(long x, long y, long z, short* angles);
 void phd_GenerateW2V(PHD_3DPOS* viewPos);
 void phd_LookAt(long xsrc, long ysrc, long zsec, long xtar, long ytar, long ztar, short roll);
 
+// POISONLOG (-log): who is building the view, and the base a drawn frame
+// starts from. The two setters only mark the caller; see 3dmath.cpp.
+void PoisonLogRebuild(bool on);
+void PoisonLogTickCamera(bool on);
+void PoisonLogFrame(float alpha);
+
 void SetupZRange(long znear, long zfar);
 void InitWindow(long x, long y, long w, long h, long znear, long zfar, long fov, long a, long b);
 long phd_atan(long x, long y);

@@ -562,6 +562,81 @@ void phd_GetVectorAngles(long x, long y, long z, short* angles)
 	angles[1] = atan;
 }
 
+/* POISONLOG (-log). The poison sway is a per-axis scale that aGenerateW2V
+ * puts on the float stack's base, with an amplitude (lara.poisoned) that a
+ * ramp walks towards lara.dpoisoned on every view build that is not a tween
+ * frame's. Two lines, written only while Lara is poisoned:
+ *
+ *   view   one per view build: which caller built it, whether the tween
+ *          latch stood, the amplitude after the ramp and the three factors
+ *          applied (0x4000 is unscaled). Tells whether the ramp steps at all
+ *          at the interpolated rates.
+ *   frame  one per drawn frame, after InterpBeginFrame: the base every draw
+ *          of the frame starts from, as the lengths of its three columns
+ *          times 10000 (10000 is unscaled). Tells whether the frames between
+ *          two ticks carry the scale the tick's frame carries.
+ *
+ * The caller flags are plain bytes the interpolator and ControlPhase set
+ * around their own view builds; nothing reads them but the log. */
+static unsigned long poisonLogCalls = 0;
+static unsigned long poisonLogFrames = 0;
+static bool poisonLogRebuild = false;
+static bool poisonLogTickCamera = false;
+
+void PoisonLogRebuild(bool on)
+{
+	poisonLogRebuild = on;
+}
+
+void PoisonLogTickCamera(bool on)
+{
+	poisonLogTickCamera = on;
+}
+
+/* The view line. `scalar` is aGenerateW2V's own vector after its scale
+ * block: it holds the applied factors when the block scaled, and is not read
+ * otherwise. `who` is the interpolator's rebuild, the tick's camera
+ * (CalculateCamera or the spot cameras in ControlPhase), or any other view
+ * build: the pickup icon, the gun's aim view in FireWeapon, the load screen,
+ * the inventory, the cutscene player. */
+static void PoisonLogView(const PHD_VECTOR* scalar)
+{
+	const bool scaled = lara.poisoned >= 256 && (scalar->x || scalar->y || scalar->z);
+	const char* who = poisonLogRebuild ? "rebuild" : (poisonLogTickCamera ? "tick" : "other");
+
+	poisonLogCalls++;
+
+	if (!lara.poisoned && !lara.dpoisoned)
+		return;
+
+	Log("POISONLOG view call=%lu tick=%d tween=%d rebuild=%d who=%s poisoned=%d dpoisoned=%d "
+		"scale=%ld,%ld,%ld",
+		poisonLogCalls, (int)GlobalCounter, InterpIsTweenFrame() ? 1 : 0, poisonLogRebuild ? 1 : 0,
+		who, (int)lara.poisoned, (int)lara.dpoisoned,
+		scaled ? scalar->x : 0x4000L, scaled ? scalar->y : 0x4000L, scaled ? scalar->z : 0x4000L);
+}
+
+/* The frame line, called by DrawPhaseGame right after InterpBeginFrame with
+ * the alpha it handed that call. aMXPtr is the float stack's current matrix,
+ * which at that point is the base the frame's rooms, sky and bodies are
+ * drawn from. */
+void PoisonLogFrame(float alpha)
+{
+	poisonLogFrames++;
+
+	if (!lara.poisoned && !lara.dpoisoned)
+		return;
+
+	const float bx = sqrtf(aMXPtr[M00] * aMXPtr[M00] + aMXPtr[M10] * aMXPtr[M10] + aMXPtr[M20] * aMXPtr[M20]);
+	const float by = sqrtf(aMXPtr[M01] * aMXPtr[M01] + aMXPtr[M11] * aMXPtr[M11] + aMXPtr[M21] * aMXPtr[M21]);
+	const float bz = sqrtf(aMXPtr[M02] * aMXPtr[M02] + aMXPtr[M12] * aMXPtr[M12] + aMXPtr[M22] * aMXPtr[M22]);
+
+	Log("POISONLOG frame frame=%lu tick=%d tween=%d alpha=%.3f base=%ld,%ld,%ld poisoned=%d",
+		poisonLogFrames, (int)GlobalCounter, InterpIsTweenFrame() ? 1 : 0, (double)alpha,
+		(long)(bx * 10000.0F + 0.5F), (long)(by * 10000.0F + 0.5F), (long)(bz * 10000.0F + 0.5F),
+		(int)lara.poisoned);
+}
+
 static void aGenerateW2V(PHD_3DPOS* viewPos)
 {
 	PHD_VECTOR scalar;
@@ -633,6 +708,9 @@ static void aGenerateW2V(PHD_3DPOS* viewPos)
 			ScaleCurrentMatrix(&scalar);
 		}
 	}
+
+	if (gLogEnabled)
+		PoisonLogView(&scalar);
 
 	aW2VMx[M03] = (float)viewPos->x_pos;
 	aW2VMx[M13] = (float)viewPos->y_pos;

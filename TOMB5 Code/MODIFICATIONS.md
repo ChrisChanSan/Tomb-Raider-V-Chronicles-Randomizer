@@ -3108,31 +3108,31 @@ capture to the tick's values at the frame's `alpha` and hands them to
 
 **Checked.** Every `InterpIsTweenFrame` caller read by the function it sits in. In the
 tick: the ramp in both halves of `phd_GenerateW2V` (`3dmath.cpp:733`, `:828`) and
-POISONLOG's `view` line, whose `tween=` now reads 0 for `who=tick`. Before
-`DrawPhaseGame` in a loop: the four readers above, now on the drawn latch. Inside the
-frame, after `InterpBeginFrame`, the latch is the frame's as before: the footprints, the
-flash and the game info, the health bar's `PoisonFlag`, the pickups, `Fade`,
-`DoScreenFade`, the rain, the snow, the underwater dust, the sparks, the lightning bolt,
-the floor lasers, the gas cloud, the stars, `DrawRooms`, `frigup_lara`,
-`DoMonitorScreen`, the room-walk log, `S_OutputPolyList` (`specific/output.cpp:1773`,
+POISONLOG's `view` line, whose `tween=` now reads 0 for `who=tick`. Before `DrawPhaseGame`
+in a loop: the four readers above, now on the drawn latch. Inside the frame, after
+`InterpBeginFrame`, the latch is the frame's as before: the footprints, the flash and the
+game info, the health bar's `PoisonFlag`, the pickups, `Fade`, `DoScreenFade`, the rain,
+the snow, the underwater dust, the sparks, the lightning bolt, the floor lasers, the gas
+cloud, the stars, `DrawRooms`, `frigup_lara`, `DoMonitorScreen`, the room-walk log, the
+arm log and POISONLOG's `frame` line, `S_OutputPolyList` (`specific/output.cpp:1773`,
 `:1875`, `:1893`), `S_DumpScreen` (`:1505`), the cutscene interpolator's log and the
 ring's six (`game/newinv2.cpp`), which the ring latches itself before each of its frames.
 The frame before a tick presented before the tick ran, so the per-present counters step
 under its own latch as before. A modal loop entered from the tick - the pause, load, save
 and death menus - or right after it - the load screen at a level's end, the title's
 special-features screens - now finds the latch down on its first present, where it
-inherited the last game frame's; from the second present on `InterpNoteClassicPresent`
-had lowered it anyway. The inventory ring latches its own frames and is followed by
+inherited the last game frame's; from the second present on `InterpNoteClassicPresent` had
+lowered it anyway. The inventory ring latches its own frames and is followed by
 `InterpInvalidate`. InterpTest's `tick_latch` walks the loop for a simulated minute at 60
 and 165 Hz under fps_mode 2 - under the frame's latch all 1,800 ticks found it up, under
-the tick's none; the per-present counters, the caption on the drawn latch and the
-wind-up step once per tick; the caption on the lowered latch would step 3,600 and 3,601
-times - and at fps_mode 1 and 0, where the lowering finds the latch down. `sway_phase`
-pins the blend on the six steps: the capture at 0, the tick at 1, the wrap at 0x8000,
-never backwards, and at 165 Hz a phase that moves on every frame, where the tick's value
-stands still on 134 frames of a second's 165. The engine builds without an error;
-ModernTest 14,063, MenuTest 42,364, InterpTest 711 (683 before), LipsTest 270 with the
-lip objects and 243 without, all without a failure; RoomProbe and TrgProbe build.
+the tick's none; the per-present counters, the caption on the drawn latch and the wind-up
+step once per tick; the caption on the lowered latch would step 3,600 and 3,601 times -
+and at fps_mode 1 and 0, where the lowering finds the latch down. `sway_phase` pins the
+blend on the six steps: the capture at 0, the tick at 1, the wrap at 0x8000, never
+backwards, and at 165 Hz a phase that moves on every frame, where the tick's value stands
+still on 134 frames of a second's 165. The engine builds without an error; ModernTest
+14,063, MenuTest 42,364, InterpTest 711 (683 before), LipsTest 270 with the lip objects
+and 243 without, all without a failure; RoomProbe and TrgProbe build.
 
 **Unchanged.** fps_mode 0 to the count: the latch is never up there, the lowering
 changes nothing, the drawn latch equals it, and no frame reaches the phase blend. A live

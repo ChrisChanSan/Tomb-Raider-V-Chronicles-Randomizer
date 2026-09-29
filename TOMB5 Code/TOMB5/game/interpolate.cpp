@@ -162,6 +162,11 @@ namespace
 	InterpNode g_prevFx[FX_COUNT];
 	InterpNode g_prevHair[HAIR_TAILS * HAIR_LINKS];
 	InterpCamera g_prevCam;
+
+	/* The poison sway's six phases before the tick, in the order ControlPhase
+	 * steps them: XSoff1, YSoff1, ZSoff1, XSoff2, YSoff2, ZSoff2. */
+	short g_prevSway[6];
+
 	InterpLaraAim g_prevAim;
 	InterpLaraAim g_savedAim;
 	bool g_aimTouched = false;
@@ -734,7 +739,9 @@ namespace
 	 * Two extra calls per frame would ramp the poison four times as fast, so
 	 * it is saved and restored around them; the ramp steps once per tick in
 	 * CalculateCamera. specific\output.cpp guards the load screen's fade loop
-	 * the same way. The tween frame draws the sway of the tick's own level. */
+	 * the same way. The tween frame draws the sway at the tick's own level,
+	 * and InterpBeginFrame hands its build the sway's phases at the frame's
+	 * own time (PoisonSwayBlend). */
 	void RebuildView(long px, long py, long pz, long tx, long ty, long tz, short roll)
 	{
 		const short poisoned = lara.poisoned;
@@ -1095,6 +1102,13 @@ void InterpCapturePrev()
 	g_prevCam.spot = (short)bUseSpotCam;
 	g_prevCam.roll = CameraRollNow();
 	g_prevCam.valid = 1;
+
+	g_prevSway[0] = XSoff1;
+	g_prevSway[1] = YSoff1;
+	g_prevSway[2] = ZSoff1;
+	g_prevSway[3] = XSoff2;
+	g_prevSway[4] = YSoff2;
+	g_prevSway[5] = ZSoff2;
 }
 
 /* How far this frame stands past the last logic tick, as a clamped fraction
@@ -1745,9 +1759,30 @@ void InterpBeginFrame(float alpha)
 				g_eyeMovedMax = moved;
 		}
 
+		/* The poison sway's phases step once per tick (ControlPhase), so
+		 * drawn from the tick's values the sway would hold each one for all
+		 * the frames of a tick - five or six at 165 Hz - and then jump. This
+		 * frame's view is built at the phases of the frame's own time,
+		 * blended from the capture before the tick like the eye; alpha, not
+		 * camAlpha, because the sway is a clock and not a place. Only this
+		 * build reads them: InterpEndFrame's rebuild, the tick's cameras
+		 * and every other view build read the globals, which stay the
+		 * tick's. */
+		{
+			const short cur[6] = { XSoff1, YSoff1, ZSoff1, XSoff2, YSoff2, ZSoff2 };
+			short sway[6];
+
+			for (int k = 0; k < 6; k++)
+				sway[k] = LerpAngle(g_prevSway[k], cur[k], alpha);
+
+			PoisonSwayBlend(sway);
+		}
+
 		RebuildView(camera.pos.x, camera.pos.y, camera.pos.z,
 			camera.target.x, camera.target.y, camera.target.z,
 			LerpAngle(g_prevCam.roll, roll, camAlpha));
+
+		PoisonSwayBlend(NULL);
 	}
 
 	if (gLogEnabled)

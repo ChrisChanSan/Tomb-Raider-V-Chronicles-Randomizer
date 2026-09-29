@@ -637,6 +637,44 @@ void PoisonLogFrame(float alpha)
 		(int)lara.poisoned);
 }
 
+/* The sway's phases between two ticks. XSoff1 .. ZSoff2 step once per tick
+ * (ControlPhase) and the scale reads them on every view build; a frame drawn
+ * between two ticks is built at the phases of its own time, which the
+ * interpolator hands over around that one build (InterpBeginFrame). Every
+ * other build - the tick's cameras, FireWeapon's aim view, InterpEndFrame's
+ * rebuild of the tick's view, the pickup icon - reads the globals. */
+static short poisonSway[6];
+static bool poisonSwayBlended = false;
+
+void PoisonSwayBlend(const short* phases)
+{
+	poisonSwayBlended = phases != NULL;
+
+	if (phases)
+	{
+		for (int k = 0; k < 6; k++)
+			poisonSway[k] = phases[k];
+	}
+}
+
+static void PoisonSwayPhases(short* phase)
+{
+	if (poisonSwayBlended)
+	{
+		for (int k = 0; k < 6; k++)
+			phase[k] = poisonSway[k];
+
+		return;
+	}
+
+	phase[0] = XSoff1;
+	phase[1] = YSoff1;
+	phase[2] = ZSoff1;
+	phase[3] = XSoff2;
+	phase[4] = YSoff2;
+	phase[5] = ZSoff2;
+}
+
 static void aGenerateW2V(PHD_3DPOS* viewPos)
 {
 	PHD_VECTOR scalar;
@@ -702,9 +740,12 @@ static void aGenerateW2V(PHD_3DPOS* viewPos)
 
 	if (lara.poisoned >= 256)
 	{
-		scalar.x = (lara.poisoned - 256) * ((phd_sin(XSoff1) + phd_sin(XSoff2)) >> 2);
-		scalar.y = (lara.poisoned - 256) * ((phd_sin(YSoff1) + phd_sin(YSoff2)) >> 2);
-		scalar.z = (lara.poisoned - 256) * ((phd_sin(ZSoff1) + phd_sin(ZSoff2)) >> 2);
+		short phase[6];
+
+		PoisonSwayPhases(phase);
+		scalar.x = (lara.poisoned - 256) * ((phd_sin(phase[0]) + phd_sin(phase[3])) >> 2);
+		scalar.y = (lara.poisoned - 256) * ((phd_sin(phase[1]) + phd_sin(phase[4])) >> 2);
+		scalar.z = (lara.poisoned - 256) * ((phd_sin(phase[2]) + phd_sin(phase[5])) >> 2);
 
 		if (scalar.x || scalar.y || scalar.z)
 		{
@@ -794,9 +835,12 @@ void phd_GenerateW2V(PHD_3DPOS* viewPos)
 
 	if (lara.poisoned >= 256)
 	{
-		scalar.x = (lara.poisoned - 256) * ((phd_sin(XSoff1) + phd_sin(XSoff2)) >> 2);
-		scalar.y = (lara.poisoned - 256) * ((phd_sin(YSoff1) + phd_sin(YSoff2)) >> 2);
-		scalar.z = (lara.poisoned - 256) * ((phd_sin(ZSoff1) + phd_sin(ZSoff2)) >> 2);
+		short phase[6];
+
+		PoisonSwayPhases(phase);
+		scalar.x = (lara.poisoned - 256) * ((phd_sin(phase[0]) + phd_sin(phase[3])) >> 2);
+		scalar.y = (lara.poisoned - 256) * ((phd_sin(phase[1]) + phd_sin(phase[4])) >> 2);
+		scalar.z = (lara.poisoned - 256) * ((phd_sin(phase[2]) + phd_sin(phase[5])) >> 2);
 
 		if (scalar.x || scalar.y || scalar.z)
 		{

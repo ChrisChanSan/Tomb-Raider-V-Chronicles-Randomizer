@@ -37,6 +37,11 @@ void PoisonLogRebuild(bool on);
 void PoisonLogTickCamera(bool on);
 void PoisonLogFrame(float alpha);
 
+// The poison sway's six phases for the next view builds, in the order
+// XSoff1, YSoff1, ZSoff1, XSoff2, YSoff2, ZSoff2, copied; NULL returns them
+// to the globals. Only the interpolator's frame rebuild sets them.
+void PoisonSwayBlend(const short* phases);
+
 void SetupZRange(long znear, long zfar);
 void InitWindow(long x, long y, long w, long h, long znear, long zfar, long fov, long a, long b);
 long phd_atan(long x, long y);

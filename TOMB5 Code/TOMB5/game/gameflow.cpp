@@ -1142,8 +1142,10 @@ void DoLevel(uchar Name, uchar Audio)
 			 * This is the one guarded counter that sits before
 			 * DrawPhaseGame in the loop, so it reads the latch the last
 			 * frame set rather than this one's. The two alternate all the
-			 * same, which is all that matters. */
-			if (!InterpIsTweenFrame())
+			 * same, which is all that matters. The tick that ran since
+			 * lowered the live latch; the drawn frame's is the one that
+			 * steps once per tick here. */
+			if (!InterpDrawnFrameWasTween())
 			{
 				gfLegendTime--;
 				InterpNoteStep(INTERP_STEP_LEGEND);

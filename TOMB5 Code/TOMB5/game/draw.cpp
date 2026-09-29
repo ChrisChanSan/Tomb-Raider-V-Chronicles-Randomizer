@@ -582,8 +582,12 @@ void SkyDrawPhase()
 		 *
 		 * The colour it produces, LightningRGB, is a static the sky reads;
 		 * an in-between frame simply draws the last one, which is what
-		 * every other thing on that frame does. */
-		if ((gfLevelFlags & GF_LIGHTNING) && !InterpIsTweenFrame())
+		 * every other thing on that frame does.
+		 *
+		 * DoTitle calls this before its DrawPhaseGame, after the tick that
+		 * lowered the live latch, so it reads the latch of the frame drawn
+		 * last; inside a frame the two are the same. */
+		if ((gfLevelFlags & GF_LIGHTNING) && !InterpDrawnFrameWasTween())
 		{
 			if (!LightningCount && !LightningRand)
 			{

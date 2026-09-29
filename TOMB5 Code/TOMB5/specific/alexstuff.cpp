@@ -431,8 +431,10 @@ long DoCredits()
 	 * that it presents at the display's frame rate, unguarded the credits
 	 * would scroll at twice the speed at fps_mode 1 and five times over on a
 	 * 165 Hz panel. At fps_mode 0 the guard is false on every frame, and this
-	 * is vanilla's own line. */
-	if (!InterpIsTweenFrame())
+	 * is vanilla's own line. DoTitle walks TitleOptions before its
+	 * DrawPhaseGame, after the tick that lowered the live latch, so the roll
+	 * reads the latch of the frame drawn last. */
+	if (!InterpDrawnFrameWasTween())
 		StartPos--;
 
 	if (!num_drawn)

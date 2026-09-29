@@ -110,13 +110,24 @@ void InterpLogEyeFix(unsigned int frame, short walkRoom, long rooms, long outsid
  *
  * It is not "alpha < 1": a camera cut or a frame after an invalidation is
  * drawn live and still carries no tick, so the latch follows the cadence, not
- * the snapshot. It stays set for the whole game-loop iteration, because
- * gfLegendTime (DoLevel) and cutseq_busy_timeout sit on either side of
- * DrawPhaseGame. S_DumpScreen clears it on every 30 Hz present
- * (InterpNoteClassicPresent), so a modal loop entered after a tween frame
- * does not inherit `true` and RenderLoadPic's `while (DoFade != 2)` ends.
- * Always false at fps_mode 0. */
+ * the snapshot. It stands from the top of the frame through its present,
+ * and a logic tick lowers it at its first statement (InterpCapturePrev): a
+ * tick is never a tween frame, so the poison ramp the tick's own camera
+ * steps (phd_GenerateW2V) steps once per tick at every rate. S_DumpScreen
+ * clears it on every 30 Hz present (InterpNoteClassicPresent), so a modal
+ * loop entered after a tween frame does not inherit `true` and
+ * RenderLoadPic's `while (DoFade != 2)` ends. Always false at fps_mode 0. */
 bool InterpIsTweenFrame();
+
+/* The latch of the frame drawn last, which a tick does not lower. For the
+ * counters that sit before DrawPhaseGame in a loop and so read the frame
+ * before them across the tick that ran since: gfLegendTime (DoLevel), and
+ * the sky's lightning, the credits roll and cutseq_busy_timeout (DoTitle
+ * walks all three before its DrawPhaseGame). Reading the lowered latch there
+ * would step them on the tick and again on the frame that carries it. After
+ * DrawPhaseGame and before the tick it equals InterpIsTweenFrame(). Always
+ * false at fps_mode 0. */
+bool InterpDrawnFrameWasTween();
 
 /* A present that is not a 60 Hz game frame's own. Called from S_DumpScreen
  * and S_DumpScreenFrame; clears the tween latch. */

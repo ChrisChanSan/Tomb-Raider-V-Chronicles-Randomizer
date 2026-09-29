@@ -2129,10 +2129,11 @@ void handle_cutseq_triggering(long name)
 		 * handle_cutseq_triggering runs once per frame from DoLevel and
 		 * from DoTitle - so at a higher frame rate the scene would start
 		 * early; skipping interpolated frames keeps the fifty-count pace
-		 * constant. This call sits after DrawPhaseGame in the frame loop,
-		 * so InterpIsTweenFrame() reads the flag already latched for the
-		 * current frame. */
-		if (!InterpIsTweenFrame())
+		 * constant. DoLevel calls it after DrawPhaseGame and before the
+		 * tick, where it reads the frame just drawn; DoTitle calls it before
+		 * DrawPhaseGame and after the last tick, which lowered the live
+		 * latch, so it reads the latch of the frame drawn last. */
+		if (!InterpDrawnFrameWasTween())
 			cutseq_busy_timeout--;
 
 		if (cutseq_busy_timeout <= 0)

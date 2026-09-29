@@ -685,7 +685,13 @@ static void aGenerateW2V(PHD_3DPOS* viewPos)
 	 * always false and the ramp runs exactly as often as it does today,
 	 * including the fact that phd_GenerateW2V ends by calling
 	 * aGenerateW2V and therefore steps it twice per phd_LookAt. That is
-	 * Core's own arithmetic and it stays. */
+	 * Core's own arithmetic and it stays.
+	 *
+	 * The tick's own builds - CalculateCamera, the spot cameras and
+	 * FireWeapon's aim view - run with the latch down at every rate,
+	 * because a tick lowers it at its first statement (InterpCapturePrev);
+	 * the frame drawn before the tick is a tween frame at fps_mode 2
+	 * whenever a tick lasts two frames or more. */
 	if (lara.dpoisoned != lara.poisoned && !InterpIsTweenFrame())
 	{
 		lara.poisoned += (lara.dpoisoned - lara.poisoned) >> 4;

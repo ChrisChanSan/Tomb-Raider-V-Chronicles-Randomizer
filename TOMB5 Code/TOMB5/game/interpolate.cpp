@@ -337,9 +337,18 @@ namespace
 	float g_alpha = 1.0F;		// what this frame is being drawn at
 
 	/* The frame being drawn carries no logic tick. Latched at the top of the
-	 * frame and held until the next one, because the counters that ask it
-	 * sit on both sides of DrawPhaseGame (see interpolate.h). */
+	 * frame and held through its present; a logic tick lowers it at its
+	 * first statement (InterpCapturePrev), because a tick is no drawn frame
+	 * and the poison ramp in phd_GenerateW2V reads it from the tick's own
+	 * camera. */
 	bool g_tween = false;
+
+	/* The latch of the frame drawn last, which a tick leaves standing. The
+	 * counters that sit before DrawPhaseGame in a loop - the level caption
+	 * in DoLevel, the title's sky, credits and cutscene wind-up - read the
+	 * frame before them across the tick that ran since (see interpolate.h).
+	 * Written wherever g_tween is written, except by the tick. */
+	bool g_drawnTween = false;
 
 	/* The tween latch at fps_mode 2. At 60 Hz there are two frames per tick;
 	 * bound to e.g. a 144 Hz display there are several at no fixed phase and
@@ -980,6 +989,16 @@ namespace
  * first frame after the switch already has a previous state. */
 void InterpCapturePrev()
 {
+	/* A tick is no drawn frame. The loop draws first and ticks after
+	 * (DoLevel, DoTitle), so the latch the frame before this tick set would
+	 * stand through the whole tick; at fps_mode 2 that frame is a tween frame
+	 * whenever a tick lasts two frames or more, and the poison ramp that
+	 * CalculateCamera and FireWeapon step through phd_GenerateW2V would never
+	 * step. The frame before has presented already, so its per-present
+	 * counters stepped under its own latch; the next InterpBeginFrame latches
+	 * anew. At fps_mode 0 and on a live frame the latch is down already. */
+	g_tween = false;
+
 	// The logic tick counter: one step per tick at every frame rate, written
 	// only here.
 	g_tickSerial++;
@@ -1237,6 +1256,11 @@ bool InterpIsTweenFrame()
 	return g_tween;
 }
 
+bool InterpDrawnFrameWasTween()
+{
+	return g_drawnTween;
+}
+
 void InterpNoteClassicPresent()
 {
 	/* A present that waited its full two ticks is a 30 Hz one: the load/save
@@ -1249,6 +1273,7 @@ void InterpNoteClassicPresent()
 	 * 1 and 2 and set the latch themselves (InterpNoteMenuFrame,
 	 * DrawPhaseGame); at fps_mode 0 they come through here. */
 	g_tween = false;
+	g_drawnTween = false;
 }
 
 /* The ring's own frames (see interpolate.h): the same assignment
@@ -1257,6 +1282,7 @@ void InterpNoteClassicPresent()
 void InterpNoteMenuFrame(bool tween)
 {
 	g_tween = tween;
+	g_drawnTween = tween;
 }
 
 unsigned long InterpTickSerial()
@@ -1304,6 +1330,8 @@ void InterpBeginFrame(float alpha)
 	}
 	else
 		g_tween = (alpha < 1.0F);
+
+	g_drawnTween = g_tween;
 
 	/* The logic RNG is saved: several drawing routines call
 	 * GetRandomControl, the simulation's generator. InterpEndFrame restores
@@ -1898,6 +1926,7 @@ void InterpInvalidate(const char* why)
 
 	/* The frame is live again, so no counter is left standing still. */
 	g_tween = false;
+	g_drawnTween = false;
 	g_seedSaved = false;
 
 	/* The tick serial starts level with the ticks: the frame after an

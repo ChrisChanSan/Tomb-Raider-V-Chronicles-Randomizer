@@ -988,7 +988,11 @@ flicker and the delay before its thunder, the jitter of an electric bolt, the
 scan band crossing a monitor screen, footprints fading out of the snow, the
 scrolling water surfaces, the green of poison coming up, and the pause before
 a cut scene takes over. If any one of those looks faster at 60 than at 30, it
-is a bug and worth reporting.
+is a bug and worth reporting. A game step itself is never one of the
+in-between pictures, so what the game counts in its own step — the poison
+coming up in RICH3's gas, its sway and its damage — runs at the same pace at
+every setting; and the sway, which the game moves once per step, is drawn
+between two steps like the camera.
 
 **Where it deliberately jumps.** Interpolation is switched off, for one
 frame, wherever the game *meant* something to jump rather than move: a

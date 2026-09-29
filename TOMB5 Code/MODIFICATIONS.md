@@ -3047,7 +3047,123 @@ once per frame as before. `hd_enable 0` draws the same picture.
 **Left.** The fix, once a log of a poisoning at an interpolated rate says which reading
 holds.
 
-**Commits.** the commit 'Round 187 (#187): a POISONLOG seam for the poison sway'
+**Commits.** `f12bed8`
+
+### A tick is never a tween frame
+2026-09-29
+
+**What.** A logic tick lowers the tween latch at its first statement, so the poison ramp
+that the tick's own camera steps runs once per tick at every frame rate: in RICH3's gas
+the green veil and the sway rise, and the poison deals its damage, at the interpolated
+rates as at 30. The counters that sit before `DrawPhaseGame` in a loop read the latch of
+the frame drawn last, which the tick leaves standing. A frame drawn between two ticks
+builds its view at the sway's phases of its own time instead of the tick's.
+
+**Why.** The game loop draws first and ticks after: `DoLevel` calls `DrawPhaseGame` and
+then `ControlPhase` (`game/gameflow.cpp:1155`, `:1174`), `DoTitle` the same (`:923`,
+`:925`). The latch `InterpBeginFrame` sets at the top of a frame was lowered only by the
+next frame, a 30 Hz present or an invalidation, so it outlived its frame and stood
+through the tick that followed. At fps_mode 2 the frame that carries a tick is the first
+one drawn after it, so whenever a tick lasts two frames or more the frame before the next
+tick is a tween frame. The ramp guard in both halves of `phd_GenerateW2V`,
+`lara.dpoisoned != lara.poisoned && !InterpIsTweenFrame()`, read that latch from
+`CalculateCamera`, the spot cameras and `FireWeapon`'s aim view, and `lara.poisoned`, the
+sway's amplitude, stood. Measured with POISONLOG in RICH3: at 165 Hz from a fresh
+poisoning every tick build ran under the latch (`who=tick tween=1`), `lara.poisoned` 0
+throughout while `lara.dpoisoned` climbed from 2 to 1006 in fifteen seconds; at 30
+`poisoned` climbed from 122 to 2091 following `dpoisoned`; back at 165 it froze at 2108
+while `dpoisoned` climbed to 2535. The frames between two ticks carried the same scale as
+the tick's frame (the same `base=` on `tween=0` and `tween=1` frames, none unscaled), so
+the scale itself was never at fault. And the tick's poison block (`game/control.cpp:604`,
+`if (lara.poisoned && !GLOBAL_playing_cutseq)`: the climb of `dpoisoned`, the office
+levels' decay and the poison damage) never ran while `poisoned` was 0, so at 165 Hz a
+fresh poisoning dealt no damage either. The one ramp step left at fps_mode 2 was
+`S_DrawPickup`'s `phd_LookAt` (`specific/output.cpp:70`) on the frame that carries a
+tick, while a pickup icon was on screen. At fps_mode 1 the frame before a tick is live,
+at fps_mode 0 the latch is never up. The sway's six phases step once per tick
+(`control.cpp:597` - `:602`) while at fps_mode 2 the eye moves on every frame, so the
+sway held each value for five or six frames at 165 Hz and then jumped.
+
+**How.** `InterpCapturePrev` (`game/interpolate.cpp:997`), the first statement of every
+tick (`control.cpp:272`), sets `g_tween = false` (`:1007`) before `g_tickSerial++`; the
+next `InterpBeginFrame` latches anew by its own rule. A second reading, `g_drawnTween`
+(`:356`), is written wherever the frame side writes `g_tween` -
+`InterpNoteClassicPresent` (`:1290`), `InterpNoteMenuFrame` (`:1299`),
+`InterpBeginFrame` (`:1348`), `InterpInvalidate` (`:1964`) - and never by the tick;
+`InterpDrawnFrameWasTween` (`:1273`, `game/interpolate.h:130`) returns it. Four readers
+that sit before `DrawPhaseGame` in a loop take it, because on the lowered latch they
+would step on the tick and again on the frame that carries it: the level caption
+`gfLegendTime` (`gameflow.cpp:1148`), and, walked by `DoTitle` before its draw
+(`:893`, `:910`, `:922`), the sky's lightning (`game/draw.cpp:590`), the credits roll
+(`specific/alexstuff.cpp:437`) and the cutscene wind-up (`game/deltapak.cpp:2136`);
+after `DrawPhaseGame` and before the tick the two readings are equal, so the wind-up
+DoLevel calls there (`gameflow.cpp:1162`) and the sky inside a frame read what they read
+before. `FireWeapon` builds its aim view in the tick (`game/larafire.cpp:795`) and is
+covered by the same lowering. The sway: `InterpCapturePrev` captures the six phases
+(`interpolate.cpp:1106`); `InterpBeginFrame` blends them with `LerpAngle` from the
+capture to the tick's values at the frame's `alpha` and hands them to
+`PoisonSwayBlend` (`specific/3dmath.cpp:649`) around its own `RebuildView` only
+(`interpolate.cpp:1778` - `:1785`); both halves of `phd_GenerateW2V` read them through
+`PoisonSwayPhases` (`3dmath.cpp:660`, `:745`, `:840`), the globals otherwise.
+
+**Checked.** Every `InterpIsTweenFrame` caller read by the function it sits in. In the
+tick: the ramp in both halves of `phd_GenerateW2V` (`3dmath.cpp:733`, `:828`) and
+POISONLOG's `view` line, whose `tween=` now reads 0 for `who=tick`. Before
+`DrawPhaseGame` in a loop: the four readers above, now on the drawn latch. Inside the
+frame, after `InterpBeginFrame`, the latch is the frame's as before: the footprints, the
+flash and the game info, the health bar's `PoisonFlag`, the pickups, `Fade`,
+`DoScreenFade`, the rain, the snow, the underwater dust, the sparks, the lightning bolt,
+the floor lasers, the gas cloud, the stars, `DrawRooms`, `frigup_lara`,
+`DoMonitorScreen`, the room-walk log, `S_OutputPolyList` (`specific/output.cpp:1773`,
+`:1875`, `:1893`), `S_DumpScreen` (`:1505`), the cutscene interpolator's log and the
+ring's six (`game/newinv2.cpp`), which the ring latches itself before each of its frames.
+The frame before a tick presented before the tick ran, so the per-present counters step
+under its own latch as before. A modal loop entered from the tick - the pause, load, save
+and death menus - or right after it - the load screen at a level's end, the title's
+special-features screens - now finds the latch down on its first present, where it
+inherited the last game frame's; from the second present on `InterpNoteClassicPresent`
+had lowered it anyway. The inventory ring latches its own frames and is followed by
+`InterpInvalidate`. InterpTest's `tick_latch` walks the loop for a simulated minute at 60
+and 165 Hz under fps_mode 2 - under the frame's latch all 1,800 ticks found it up, under
+the tick's none; the per-present counters, the caption on the drawn latch and the
+wind-up step once per tick; the caption on the lowered latch would step 3,600 and 3,601
+times - and at fps_mode 1 and 0, where the lowering finds the latch down. `sway_phase`
+pins the blend on the six steps: the capture at 0, the tick at 1, the wrap at 0x8000,
+never backwards, and at 165 Hz a phase that moves on every frame, where the tick's value
+stands still on 134 frames of a second's 165. The engine builds without an error;
+ModernTest 14,063, MenuTest 42,364, InterpTest 711 (683 before), LipsTest 270 with the
+lip objects and 243 without, all without a failure; RoomProbe and TrgProbe build.
+
+**Unchanged.** fps_mode 0 to the count: the latch is never up there, the lowering
+changes nothing, the drawn latch equals it, and no frame reaches the phase blend. A live
+frame at any rate draws the tick's phases. The ramp's arithmetic - a sixteenth per call,
+two calls per `phd_LookAt` - and its guard, word for word; `RebuildView` keeps its save
+and restore of `lara.poisoned`; `InterpEndFrame`'s rebuild restores the tick's view with
+the tick's phases; the globals `XSoff1` .. `ZSoff2` are written by the tick alone. The
+savegames, the level data and the HD path. POISONLOG's two lines.
+
+**Decisions.** The latch describes a drawn frame, and a tick is no frame: the tick lowers
+it at its first statement and the next frame sets it anew. The ramp guard stays word for
+word; the tick's own camera builds see the latch down at every rate, and with
+`S_DrawPickup` stepping on the frame that carries the tick the count per tick is the
+vanilla one at every rate. The sway's phases between two ticks are blended for the view
+the interpolator builds for the drawn frame and for nothing else. No change to the ramp's
+speed, the damage or the office decay: they come back on their own with the amplitude.
+The counters before `DrawPhaseGame` in `DoLevel` and `DoTitle` read the drawn frame's
+latch, not the lowered one, which would step them twice per tick. The phases are blended
+from a capture, not from the six literal steps, so a tick that returned before stepping
+them draws them still.
+
+**Left.** The play test at 165 Hz with `-log`: a fresh poisoning in RICH3 - the green
+veil within seconds, the sway rising over a minute, the health dropping under the
+poison, the sway smooth; the same at 30; a poisoned savegame loaded at 165 goes on rising
+or decaying instead of freezing; the decay in the office levels at 165. In the log the
+`view` lines with `who=tick tween=0` at 165 and `poisoned=` following `dpoisoned=`, and
+`frame` lines whose `base=` changes from one `tween=1` frame to the next.
+
+**Commits.** the commits 'Round 187b (#187): a tick is never a tween frame', 'Round 187b
+(#187): the sway between two ticks', 'Round 187b (#187): the suite pins the tick's latch
+and the sway's phase', 'Round 187b (#187): the record follows'
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
@@ -10286,4 +10402,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
-| #187 | A seam for the poison sway |
+| #187 | A seam for the poison sway; A tick is never a tween frame |

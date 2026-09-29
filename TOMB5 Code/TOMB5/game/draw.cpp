@@ -1171,14 +1171,15 @@ void PrintObjects(short room_number)
 /* The item loop's body above for one item, drawn as a mirror's reflection.
  *
  * The same skips as the loop - an invisible item, the BRIDGE_FLAT of the
- * base, a slot with no draw routine (which is Lara's) - and the same draw.
- * Only the clip room differs: the reflection is seen through the glass of
- * the mirror's room and not through the item's own room, so ClipRoomNum is
- * that room, and calc_animating_item_clip_window gives the doors and the
- * ANIMATING slots its window. The call comes from DrawRooms before the rooms'
- * objects are printed, while that window is still the one GetRoomBounds
- * gave it this frame - PrintObjects empties it at its end. The view is
- * reflected by the caller. */
+ * base, a slot with no draw routine (which is Lara's) - and the same draw,
+ * less draw_routine_extra (a gun flash, a lens flare): effects are not
+ * reflected. Only the clip room differs: the reflection is seen through the
+ * glass of the mirror's room and not through the item's own room, so
+ * ClipRoomNum is that room, and calc_animating_item_clip_window gives the
+ * doors and the ANIMATING slots its window. The call comes from DrawRooms
+ * before the rooms' objects are printed, while that window is still the one
+ * GetRoomBounds gave it this frame - PrintObjects empties it at its end. The
+ * view is reflected by the caller. */
 void PrintObjectReflection(ITEM_INFO* item, short mirror_room)
 {
 	OBJECT_INFO* obj;

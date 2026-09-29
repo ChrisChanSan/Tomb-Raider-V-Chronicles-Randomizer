@@ -2796,35 +2796,36 @@ picture of `-all` (`HDRenderRoomPass`), gives the before picture with `-noclear`
 prints a `clear:` line and, with `-roombox`, the mirrors.
 
 **Checked.** The inventory, by a probe built against the engine's BC7 decoder and the
-`.TRG` reader, over all fifteen levels, and the engine's own count through
-`RoomProbe -nodraw`: 55 parts on 13 pages and 149 draw calls in RICH2, one part on one
-page in one draw call in RICHCUT2, nine parts on three pages in nine draw calls in TITLE,
-none elsewhere. Against a `RoomProbe` built from the tree before this entry the vertex,
-index and range counts and the glass lines of all fifteen levels are the same, and renders
-of JOBY3 room 9, ANDREA2 room 65 and RICH2 room 134 are the same to the pixel. Every RICH2
-group with a clear floor holds art beneath its floor's plane, down to the one-sector
-doorways (groups 53, 54, 90, 95, 97, 101, 103, 117, 118, 154 and 176), but for groups 170
-and 171: what they hold beneath is 18 triangles, all vertical, and of the level's art only
-the neighbouring groups 84 and 104 lie under that sector, covering 0.63 of it. TITLE
-groups 50 and 51 hold none. The lobby from the pose
-`RICH2 8 4100 -25300 1700 -12 35 -size 1600 900 -roombox`: with `-noclear` the same to the
-pixel as the build before, without it 792,628 of 1,440,000 pixels change, all on the
-floor, which shows the copy's doorway and a light stripe faintly. The mirrors, through
+`.TRG` reader, over all fifteen levels, and the engine's own count through `RoomProbe
+-nodraw`: 55 parts on 13 pages and 150 draw calls in RICH2 (149 without the room boxes),
+one part on one page in one draw call in RICHCUT2, nine parts on three pages in nine draw
+calls in TITLE, none elsewhere. Against a `RoomProbe` built from the tree before this
+entry the vertex, index and range counts and the glass lines of all fifteen levels are the
+same, and renders of JOBY3 room 9, ANDREA2 room 65 and RICH2 room 134 are the same to the
+pixel. Every RICH2 group with a clear floor holds art beneath its floor's plane, down to
+the one-sector doorways (groups 53, 54, 90, 95, 97, 101, 103, 117, 118, 154 and 176), but
+for groups 170 and 171: their own art holds nothing beneath the floor but 18 vertical
+triangles, and the neighbouring group 84's copy lies under the whole of both sectors, so
+they show it only while 84 is drawn. TITLE groups 50 and 51 hold none. The lobby from the
+pose `RICH2 8 4100 -25300 1700 -12 35 -size 1600 900 -roombox`: with `-noclear` the same
+to the pixel as the build before, without it 792,628 of 1,440,000 pixels change, all on
+the floor, which shows the copy's doorway and a light stripe faintly. The mirrors, through
 `RoomProbe -roombox` over the fifteen levels: RICH2 room 134 (plane x = 33792, pane 12,
 6,161 triangles behind reaching 2,054 deep, 6,107 reflected; copy x 31738..33785, y
 -25607..-24042, z 74758..78848) and room 135 (x = 30720, pane 16, 6,237 behind, 6,201
 reflected), nothing else; the rule costs 77 ms of the level build in RICH2 and 13 to 21 ms
 in ANDREA1, JOBY2 and JOBY5. The items the rule draws, out of the original RICH2 item
 list: in room 134's glass the kick doors 189, 190 and 192 of cabins 131 to 133, the
-ceiling trapdoor 188 and the electrical light 191 above them, the three ANIMATING4 items
-193 to 195 of the washroom, and Lara; in room 135's the kick doors 199, 200 and 202 of
-cabins 136 to 138, the large medipack 201, the ANIMATING4 items 196 to 198, and room 177's
-door 246 and generator slot 247; nothing that stands behind either glass; every one of
-them inside the copy's box along the glass. ModernTest pins the class, the reflection and
-the point past a copy's end (14,018 checks become 14,050); MenuTest 42,364, InterpTest
-683, and LipsTest 270 with the lip objects and 243 without, all without a failure. The
-mirror itself cannot be drawn outside the game - `RoomProbe` draws no item - so its
-picture is the play test's.
+ceiling trapdoor 188, and Lara; in room 135's the kick doors 199, 200 and 202 of cabins
+136 to 138, the large medipack 201 and room 177's door 246; the three ANIMATING4 items of
+each washroom (193 to 195 and 196 to 198) and the generator slot 247 count in `items=` but
+draw nothing, because RICH2 binds them to the DUMMY slot and the room art carries them,
+and the electrical light 191 has no draw routine; nothing that stands behind either glass;
+every one of them inside the copy's box along the glass. ModernTest pins the class, the
+reflection and the point past a copy's end (14,018 checks become 14,050); MenuTest 42,364,
+InterpTest 683, and LipsTest 270 with the lip objects and 243 without, all without a
+failure. The mirror itself cannot be drawn outside the game - `RoomProbe` draws no item -
+so its picture is the play test's.
 
 **Unchanged.** `hd_enable 0`: the clear phase is part of `HDFrameDraw`, whose rooms are
 the HD ones only, and the page class exists only in the page cache the HD level builds;
@@ -2858,8 +2859,9 @@ own and its effects are not reflected.
 floor in their own art: there the floor blends over whatever the frame holds behind it and
 comes out a little darker (`RoomProbe` over black: a mean of 18.1 against 17.0 of 255 in
 group 51); whether the title flyby ever shows it is the play test's. RICH2 groups 170 and
-171, two one-sector doorways, are the same kind of case: about a third of their floor has
-no art beneath it. Shadows and effects - flames, sparks, the gun flash - of what the
+171, two one-sector doorways, hold nothing beneath their floor in their own art; the
+neighbouring group 84's copy lies under the whole of both sectors, so they show it only
+while 84 is drawn. Shadows and effects - flames, sparks, the gun flash - of what the
 mirror reflects. The lobby floor shows its static copy only: Lara and the items are not
 reflected in it, and the Remaster's floor does not reflect them either. In first person
 the reflected Lara is drawn the way the first-person draw draws her, without her face and
@@ -2867,11 +2869,15 @@ her braid. A reflection is held only by the depth test and not cut to the pane: 
 whose origin stands at a copy's end along the glass can reach about 100 units past it,
 into corridor room 56 or doorway room 130. `DrawLara` steps its look-transparency fade
 once per call, so while a mirror draws Lara the fade back from look mode runs twice as
-fast. The play test judges the lobby's brightness, the floor's edge, a kicked door
-swinging open in the glass, the 56 to 177 doorway and the way from 134 to 130 for a
-second Lara, and that nothing is doubled outside the glass.
+fast. The frame line's object counts (`objects=`, `object_calls=` and the `hd=`,
+`classic=`, `baked=` line) include the reflected draws. A Lara drawn the classic way,
+without an HD body, takes into a second mirror's glass the light the first mirror's last
+item left, since `DrawLara` with the mirror flag keeps the light arrays; in one mirror she
+is drawn before its items for that reason. The play test judges the lobby's brightness,
+the floor's edge, a kicked door swinging open in the glass, the 56 to 177 doorway and the
+way from 134 to 130 for a second Lara, and that nothing is doubled outside the glass.
 
-**Commits.** `7235cb2`, `0737b1d`, `4f4815e`
+**Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11

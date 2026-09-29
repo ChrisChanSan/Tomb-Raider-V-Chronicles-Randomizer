@@ -192,6 +192,53 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
 	HDObjectReflection(true);
 	SetCullCW();
 
+	/* Lara: the view set the frame worked out for her, moved into the
+	 * reflected view (MirrorViewSpaceApply), and her draw with the mirror
+	 * flag - her lighting as the frame has it, and in first person the other
+	 * side culled (hd_laradraw.cpp). The same visibility as her own draw in
+	 * DrawRooms, less the camera-too-close test: her reflection is a Lara at
+	 * twice the distance to the glass. Drawn before the items: with the
+	 * mirror flag DrawLara keeps the light arrays as they stand, and an
+	 * item's CalculateObjectLighting in between would leave the classic
+	 * body its light instead of hers. */
+	const long lp[3] = { lara_item->pos.x_pos, lara_item->pos.y_pos,
+		lara_item->pos.z_pos };
+
+	*laraDrawn = false;
+
+	if (objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE) &&
+		lara_item->mesh_bits && !SCNoDrawLara &&
+		MirrorLandsInCopy(lp, a, m.plane, m.side, m.mins, m.maxs,
+			MIRROR_ITEM_SLACK))
+	{
+		float saved[sizeof(lara_matrices) / sizeof(lara_matrices[0])];
+		const short shadow = objects[LARA].shadow_size;
+		const long polyType = nPolyType;
+
+		memcpy(saved, lara_matrices, sizeof(saved));
+
+		for (int n = 0; n + indices_count <= (int)(sizeof(saved) / sizeof(saved[0]));
+			n += indices_count)
+			MirrorViewSpaceApply(q, t, &lara_matrices[n]);
+
+		objects[LARA].shadow_size = 0;
+		nPolyType = 4;
+
+		if (lara.skelebob)
+			SetupSkelebobMeshswaps();
+
+		DrawLara(lara_item, 1);
+
+		if (lara.skelebob)
+			RestoreLaraMeshswaps();
+
+		nPolyType = polyType;
+		objects[LARA].shadow_size = shadow;
+		memcpy(lara_matrices, saved, sizeof(saved));
+		*laraDrawn = true;
+	}
+
+
 	for (int r = 0; r < number_rooms; r++)
 	{
 		const ROOM_INFO* rm = &room[r];
@@ -224,47 +271,6 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn)
 			item->il = il;
 			drawn++;
 		}
-	}
-
-	/* Lara: the view set the frame worked out for her, moved into the
-	 * reflected view (MirrorViewSpaceApply), and her draw with the mirror
-	 * flag - her lighting as the frame has it, and in first person the other
-	 * side culled (hd_laradraw.cpp). The same visibility as her own draw in
-	 * DrawRooms, less the camera-too-close test: her reflection is a Lara at
-	 * twice the distance to the glass. */
-	const long lp[3] = { lara_item->pos.x_pos, lara_item->pos.y_pos,
-		lara_item->pos.z_pos };
-
-	*laraDrawn = false;
-
-	if (objects[LARA].loaded && !(lara_item->flags & IFL_INVISIBLE) &&
-		lara_item->mesh_bits && !SCNoDrawLara &&
-		MirrorLandsInCopy(lp, a, m.plane, m.side, m.mins, m.maxs,
-			MIRROR_ITEM_SLACK))
-	{
-		float saved[sizeof(lara_matrices) / sizeof(lara_matrices[0])];
-		const short shadow = objects[LARA].shadow_size;
-
-		memcpy(saved, lara_matrices, sizeof(saved));
-
-		for (int n = 0; n + indices_count <= (int)(sizeof(saved) / sizeof(saved[0]));
-			n += indices_count)
-			MirrorViewSpaceApply(q, t, &lara_matrices[n]);
-
-		objects[LARA].shadow_size = 0;
-		nPolyType = 4;
-
-		if (lara.skelebob)
-			SetupSkelebobMeshswaps();
-
-		DrawLara(lara_item, 1);
-
-		if (lara.skelebob)
-			RestoreLaraMeshswaps();
-
-		objects[LARA].shadow_size = shadow;
-		memcpy(lara_matrices, saved, sizeof(saved));
-		*laraDrawn = true;
 	}
 
 	SetCullCCW();

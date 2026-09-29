@@ -37,11 +37,12 @@
  *
  * HD_PAGE_CLEAR_TOP is measured and not a taste. Over the alpha-pass pages of
  * all fifteen .TRG files, the smallest alpha of the pages that lie over such
- * a copy runs from 165 to 233 (TITLE page 2149 the highest), and the next
- * page up has 254 as its smallest (JOBY3 pages 14070 and 14071, ANDY1 page
- * 793, the sky sheets of ANDREA1, ANDREA3 and JOBY2) - a see-through share of
- * one in 255 that no eye finds and that would put 22,752 JOBY3 triangles
- * into a phase of their own for nothing. 243 is halfway across that gap.
+ * a copy runs from 174 to 233 (TITLE page 2154 the lowest, page 2149 the
+ * highest), and the next page up has 254 as its smallest (JOBY3 pages 14070
+ * and 14071, ANDY1 page 793, the sky sheets of ANDREA1, ANDREA3 and JOBY2) -
+ * a see-through share of one in 255 that no eye finds and that would put
+ * 22,752 JOBY3 triangles into a phase of their own for nothing. 243 is
+ * halfway across that gap.
  *
  * The largest alpha does not move a page between cutout and clear: the floors
  * of TITLE (pages 2147, 2149, 2154) and RICHCUT2 (page 1103) and RICH2's

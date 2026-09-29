@@ -1237,6 +1237,296 @@ static void counters()
 	}
 }
 
+/* ---------------------------------------------------------- the tick latch --
+ *
+ * The game loop draws first and ticks after (DoLevel, DoTitle), so the tween
+ * latch a frame sets would stand through the ControlPhase that follows it.
+ * Inside the tick one guard reads it: the poison ramp in phd_GenerateW2V,
+ * stepped by the tick's own camera. At fps_mode 2 the frame before a tick is
+ * a tween frame whenever a tick lasts two frames or more, so under the
+ * frame's latch the ramp never stepped. InterpCapturePrev lowers the latch; a
+ * second reading, the latch of the frame drawn last, stays for the counters
+ * that sit before DrawPhaseGame in a loop (the level caption, the title's
+ * lightning, credits roll and cutscene wind-up).
+ *
+ * The model is the engine's loop, transcribed: the caption at the top of the
+ * loop, InterpBeginFrame's claim, the frame's present, handle_cutseq_triggering
+ * after the draw, the flip, and the ticks that came back, each one lowering
+ * the latch before its camera reads it. A simulated minute at 60 and at
+ * 165 Hz under fps_mode 2, and at the two fixed cadences. */
+static void tick_latch()
+{
+	printf("tick latch - a tick is never a tween frame\n");
+
+	const int hz[2] = { 60, 165 };
+
+	for (int h = 0; h < 2; h++)
+	{
+		const double period = 60.0 / hz[h];	// the panel's period in 1/60 s ticks
+		const double phase = 0.137;		// the vblank grid's own offset
+		const int frames = hz[h] * 60;		// a minute of them
+
+		long framecount = 0;
+		long S = 0;
+		unsigned long tickSerial = 0, steppedSerial = 0;
+		bool tween = false;			// g_tween
+		bool drawn = false;			// g_drawnTween
+		int ticks = 0;
+		int guardHeld = 0;			// ticks whose guard read the frame's latch
+		int guardBlocked = 0;			// ticks whose guard read the lowered latch
+		int present = 0, caption = 0, captionLowered = 0, windUp = 0;
+
+		for (framecount += 2; framecount > 0; framecount -= 2)
+			;
+
+		for (int i = 0; i < frames; i++)
+		{
+			// DoLevel's loop top, before DrawPhaseGame: gfLegendTime.
+			if (!drawn)
+				caption++;
+
+			if (!tween)
+				captionLowered++;
+
+			// InterpBeginFrame at fps_mode 2: the frame that finds a new tick
+			// claims it.
+			{
+				const bool carries = tickSerial != steppedSerial;
+
+				steppedSerial = tickSerial;
+				tween = !carries;
+				drawn = tween;
+			}
+
+			// The frame's present (S_OutputPolyList), then the wind-up
+			// counter after DrawPhaseGame.
+			if (!tween)
+				present++;
+
+			if (!drawn)
+				windUp++;
+
+			// The flip, and ControlPhase with the ticks that came back.
+			{
+				const double flip = (i + 1) * period + phase;
+				const long whole = (long)flip;
+				long n = whole - S;
+
+				S = whole;
+
+				if (n > 10)
+					n = 10;
+
+				for (framecount += n; framecount > 0; framecount -= 2)
+				{
+					if (tween)
+						guardHeld++;
+
+					tween = false;		// InterpCapturePrev
+					tickSerial++;
+					ticks++;
+
+					// CalculateCamera's view build: the ramp's guard.
+					if (tween)
+						guardBlocked++;
+				}
+			}
+		}
+
+		/* The run's two ends: a tick after the last frame is claimed by no
+		 * frame, the caption reads the level start's latch (down) before the
+		 * first frame, and the last frame's latch is read by no caption. */
+		const int pending = tickSerial != steppedSerial ? 1 : 0;
+		const int lastUnread = drawn ? 0 : 1;
+
+		printf("  %3d Hz: ticks=%d guard under the frame's latch %d, under the tick's %d; "
+			"present=%d caption=%d (%d on the lowered latch) wind-up=%d\n",
+			hz[h], ticks, guardHeld, guardBlocked, present, caption, captionLowered, windUp);
+
+		ok(ticks == 1800, "a minute is 1800 logic ticks at the display-bound rate", ticks, 1800);
+		ok(guardHeld == ticks,
+			"under the frame's latch every tick's camera found it up (the ramp stood)",
+			guardHeld, ticks);
+		ok(guardBlocked == 0, "under the tick's own latch no tick's camera finds it up",
+			guardBlocked, 0);
+		ok(present + pending == ticks,
+			"the per-present counters still step once per tick", present + pending, ticks);
+		ok(caption == 1 + present - lastUnread,
+			"the caption before DrawPhaseGame steps once per tick on the drawn latch",
+			caption, 1 + present - lastUnread);
+		ok(captionLowered >= 2 * ticks - 1,
+			"on the lowered latch it would step twice per tick", captionLowered, 2 * ticks - 1);
+		ok(windUp == present, "the wind-up after DrawPhaseGame steps with the present",
+			windUp, present);
+	}
+
+	/* fps_mode 1 and 0: the frame before a tick is live, so the lowering
+	 * finds the latch down already and the caption reads the same either
+	 * way. */
+	for (int mode = 1; mode >= 0; mode--)
+	{
+		const int nframes = mode ? 1 : 2;
+		const int presents = mode ? 3600 : 1800;	// a minute
+		long framecount = 0;
+		bool tween = false, drawn = false;
+		int ticks = 0, guardHeld = 0, caption = 0, captionLowered = 0;
+
+		for (int i = 0; i < presents; i++)
+		{
+			if (!drawn)
+				caption++;
+
+			if (!tween)
+				captionLowered++;
+
+			tween = (mode && framecount < 0);
+			drawn = tween;
+
+			for (framecount += nframes; framecount > 0; framecount -= 2)
+			{
+				if (tween)
+					guardHeld++;
+
+				tween = false;
+				ticks++;
+			}
+		}
+
+		printf("  fps_mode %d: ticks=%d guard under the frame's latch %d caption=%d (%d lowered)\n",
+			mode, ticks, guardHeld, caption, captionLowered);
+
+		ok(ticks == 1800, "a minute is 1800 logic ticks at the fixed cadence", ticks, 1800);
+		ok(guardHeld == 0, "the frame before a tick is live: the lowering changes nothing",
+			guardHeld, 0);
+		ok(caption == captionLowered, "the caption reads the same on either latch",
+			caption, captionLowered);
+	}
+}
+
+/* ------------------------------------------------------------- the sway --
+ *
+ * The poison sway's six phases (XSoff1, YSoff1, ZSoff1, XSoff2, YSoff2,
+ * ZSoff2) step once per tick by 150, 230, 660, 270, 440 and 160
+ * (ControlPhase). InterpBeginFrame builds a frame's view at the phases of the
+ * frame's own time, InterpLerpAngle from the capture before the tick to the
+ * tick's values; drawn from the tick's values alone the sway holds each
+ * value for every frame of a tick and jumps. What has to hold: the capture
+ * at blend 0, the tick at 1, the short way across the wrap at 0x8000, never
+ * a step backwards, and at 165 Hz a phase that moves on every frame. */
+static void sway_phase()
+{
+	printf("sway - the poison phases between two ticks\n");
+
+	const short steps[6] = { 150, 230, 660, 270, 440, 160 };
+	const short curs[5] = { 0, 1000, -20000, (short)-32768, 32767 };
+	int backwards = 0, outside = 0, ends = 0, pairs = 0;
+
+	for (int s = 0; s < 6; s++)
+	{
+		for (int c = 0; c < 5; c++)
+		{
+			const short cur = (short)(curs[c] + steps[s] / 2);	// the wrap inside the step for -32768 and 32767
+			const short prev = (short)(cur - steps[s]);
+			long last = -1;
+
+			if (InterpLerpAngle(prev, cur, 0.0F) != prev || InterpLerpAngle(prev, cur, 1.0F) != cur)
+				ends++;
+
+			for (int a = 0; a <= 64; a++)
+			{
+				const short v = InterpLerpAngle(prev, cur, (float)a / 64.0F);
+				const long d = (long)(short)(v - prev);
+
+				if (d < 0 || d > steps[s])
+					outside++;
+
+				if (d < last)
+					backwards++;
+
+				last = d;
+				pairs++;
+			}
+		}
+	}
+
+	printf("  %d phases checked: ends %d, outside the step %d, backwards %d\n",
+		pairs, ends, outside, backwards);
+
+	ok(pairs == 6 * 5 * 65, "phases checked", pairs, 6 * 5 * 65);
+	ok(ends == 0, "blend 0 is the capture and blend 1 the tick, for all six steps", ends, 0);
+	ok(outside == 0, "the drawn phase stays between the capture and the tick", outside, 0);
+	ok(backwards == 0, "and never steps backwards", backwards, 0);
+
+	// The wrap on its own: ZSoff1's step of 660 with its middle on 0x8000.
+	{
+		const short prev = (short)(32767 - 329);
+		const short cur = (short)(-32768 + 330);
+		const long half = (long)(short)(InterpLerpAngle(prev, cur, 0.5F) - prev);
+
+		ok(half == 330, "across 0x8000 the phase takes the short way, half the step at half the blend",
+			half, 330);
+	}
+
+	/* At 165 Hz, a second of the display-bound cadence: the phase each frame
+	 * draws, blended and held. */
+	{
+		const double period = 60.0 / 165;
+		const double phase = 0.137;
+		long framecount = 0, S = 0;
+		int k = 0;
+		int stills = 0, heldStills = 0, over = 0;
+		short lastBlend = 0, lastHeld = 0;
+
+		for (framecount += 2; framecount > 0; framecount -= 2)
+			k++;
+
+		for (int i = 0; i < 165; i++)
+		{
+			const double now = i * period + phase;
+			const float alpha = InterpRefreshAlpha(framecount, now - (double)S);
+			const short cur = (short)(steps[2] * k);
+			const short prev = (short)(steps[2] * (k - 1));
+			const short blend = InterpLerpAngle(prev, cur, alpha);
+
+			if (i > 0)
+			{
+				const long d = (long)(short)(blend - lastBlend);
+
+				if (d <= 0)
+					stills++;
+
+				if (d > steps[2])
+					over++;
+
+				if (cur == lastHeld)
+					heldStills++;
+			}
+
+			lastBlend = blend;
+			lastHeld = cur;
+
+			{
+				const double flip = (i + 1) * period + phase;
+				const long whole = (long)flip;
+				long n = whole - S;
+
+				S = whole;
+
+				for (framecount += n; framecount > 0; framecount -= 2)
+					k++;
+			}
+		}
+
+		printf("  165 Hz, ZSoff1: frames that did not move blended %d, held %d; over a step %d\n",
+			stills, heldStills, over);
+
+		ok(stills == 0, "blended, the sway moves on every frame at 165 Hz", stills, 0);
+		ok(over == 0, "and by less than one tick's step", over, 0);
+		ok(heldStills > 100, "held at the tick's value it stands on most frames",
+			heldStills, 100);
+	}
+}
+
 /* ---------------------------------------------------------------- the pose --
  *
  * The single-factor pose blend has two claims, and this is where both are
@@ -5693,6 +5983,8 @@ int main()
 	title_cadence();
 	refresh();
 	counters();
+	tick_latch();
+	sway_phase();
 	pose_factor();
 	pose_time();
 	pose_back();

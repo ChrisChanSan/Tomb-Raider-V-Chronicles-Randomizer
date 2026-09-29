@@ -531,11 +531,12 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *                   between the direction to the lamp and to the eye, n the
  *                   surface's exponent, scaled by (n + 8) / 8 - the usual
  *                   normalisation that keeps a sharp highlight as bright in
- *                   sum as a broad one. The lamps are up to four: the room's
- *                   own .TRG point lights nearest the draw call, the level's
- *                   sun where it has one, and the eye itself, weighted by the
- *                   surface's own light, so a plate in a room with no lamp in
- *                   it still carries a sheen that moves with the camera.
+ *                   sum as a broad one. The lamps are up to four - the
+ *                   room's own .TRG point lights nearest the draw call, one
+ *                   slot of them the level's sun where it has one - and the
+ *                   eye is one more, weighted by the surface's own light, so
+ *                   a plate in a room with no lamp in it still carries a
+ *                   sheen that moves with the camera.
  *   the environment the ambient cube: six colours, one per world axis
  *                   direction, weighted by the squared components of the
  *                   reflection vector, which sum to one. The six colours are

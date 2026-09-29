@@ -1920,4 +1920,4 @@ const BYTE kHDRoomPS[] =
       0,   1,   0,   0,  15, 128, 
     255, 255,   0,   0
 };
-// bshader-stamp 500efeb78fce1e3d27f106448db792c1
+// bshader-stamp ee5a1b162bbc4adeb860c2cfd0fec384

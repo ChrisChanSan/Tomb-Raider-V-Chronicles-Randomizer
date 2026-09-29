@@ -726,14 +726,15 @@ inline void HDGlossSeedVote(const float a[3], const float b[3], const float c[3]
  * call's own room (Trg.h, TrgGroup::volumes: a position in world units, an
  * unnormalised colour and a kind).
  *
- * Where they hang, measured per kind as the height over the floor square
- * under each lamp (TrgProbe -glosslight over the fifteen levels):
- * kinds 0, 1 and 2 hang 1,300 to 3,300 units over the floor in every level
- * (medians), where the ceiling lamps and the wall sconces are; kind 3 does the
- * same in RICH3 (median 2,087) and hangs UNDER the floor in RICH2 (median
- * -256 over the 35 of its 37 that stand over a floor square). No kind is a
- * sun or an ambience, so every lamp is taken whatever its kind; the N.L term
- * keeps a lamp under a floor off every surface that faces up.
+ * Where they hang, measured per level and kind as the median height over the
+ * floor square under each lamp (TrgProbe -glosslight over the fifteen
+ * levels): 35 of the 41 medians lie 1,100 to 3,300 units over the floor,
+ * where ceiling lamps and wall sconces hang, whatever the kind; RICH2's kind
+ * 3 (35 lamps) and the four lamps each of RICHCUT2's kind 1 and JOBY5's kind
+ * 0 stand at or under the floor (-256 to -355), TITLE's kind 0 at 200 and
+ * ANDREA3's kind 2 at 5,008. No kind stands for one sort of place, so every
+ * lamp is taken whatever its kind; the N.L term keeps a lamp under a floor
+ * off every surface that faces up.
  *
  * The colour: the median lamp is 10 in ANDREA1 and 15 in RICH2 (kind 1), up
  * to 86.8 at the most (ANDREA2); HD_GLOSS_LAMP_SCALE makes a median lamp

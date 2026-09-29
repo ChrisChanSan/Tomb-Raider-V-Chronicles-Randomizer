@@ -2872,9 +2872,10 @@ namespace
 	 * calls whose own pass the variant does not carry or must not change:
 	 * the sky, the glass and the clear floors (the blend phase), the water
 	 * surfaces (the ripple), the flipbooks and the books, the UV scrolls, and
-	 * a range the caustic can reach (HDRange::wet). Those keep the plain
-	 * variant and, where their material names one, today's grazing-angle
-	 * lift. */
+	 * a range the caustic can reach (HDRange::wet) - and, decided per room in
+	 * ResolveSheen, every draw call of a room with a clear floor. Those keep
+	 * the plain variant and, where their material names one, its
+	 * grazing-angle lift. */
 	bool RangeTakesSheen(const HDRange& r, int pass, bool sky)
 	{
 		return !sky && pass != 2 && r.blend == 0.0f && !r.clear &&
@@ -2899,6 +2900,8 @@ namespace
 	std::unordered_map<int, HDGloss> g_page_gloss;
 	std::vector<HDRenderGlossPage> g_gloss_pages;
 	int g_gloss_parts_by[5] = { 0, 0, 0, 0, 0 };
+	// HDRenderGlossOverride: every sheen at its upper bound. False in the engine.
+	bool g_gloss_max = false;
 
 	/* The resolver for one page (HDGlossResolve), with the page's slot for the
 	 * engine's second bar: a page part-way clear in every texel is a floor
@@ -3103,13 +3106,20 @@ namespace
 		for (size_t g = 0; g < g_groups.size(); g++)
 		{
 			const bool sky = (int)g >= g_room_groups;
+			/* A room with a clear floor keeps its picture whole: RICH2's
+			 * lobby and the rooms that stand mirrored beneath its floors,
+			 * RICHCUT2's and TITLE's - 55, 1 and 9 rooms (RoomProbe's
+			 * sheen line). Its walls would otherwise shine above a floor
+			 * that is itself the mirror, and differently from their copy
+			 * beneath it. */
+			const bool clear_room = g_groups[g].clearRanges != 0;
 
 			for (int pass = 0; pass < 2; pass++)
 				for (HDRange& range : g_groups[g].pass[pass])
 				{
 					range.sheen = 0.0f;
 
-					if (!RangeTakesSheen(range, pass, sky))
+					if (clear_room || !RangeTakesSheen(range, pass, sky))
 						continue;
 
 					const int page = HDPageCachePageOfSlot(range.pageSlot);
@@ -3127,6 +3137,16 @@ namespace
 					}
 					else
 						got = PageGloss(page);
+
+					// The upper bound, for the tool's picture alone.
+					if (g_gloss_max)
+					{
+						if (got.strength <= 0.0f)
+							HDGlossClassDefaults(HD_GLOSS_METAL, &got);
+
+						got.strength = 1.0f;
+						got.f0 = 1.0f;
+					}
 
 					if (got.strength <= 0.0f)
 						continue;
@@ -4399,6 +4419,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * majority; a sheet in the second list answers "the remaster built
 		 * the water here" and needs no majority. See BuildWaterSurfaces. */
 		std::vector<std::pair<int, unsigned int> > waterflats;
+		/* The GLOSSLOG part counts of this group, added to the level's once
+		 * its passes are built - a room with a clear floor takes no sheen
+		 * (RangeTakesSheen), and that is known only then. */
+		int group_parts[5] = { 0, 0, 0, 0, 0 };
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -5015,11 +5039,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				}
 
 				if (part_sheen && gloss > 0.0f)
-					g_gloss_parts_by[HD_GLOSS_FROM_MAT]++;
+					group_parts[HD_GLOSS_FROM_MAT]++;
 
 				for (int source = HD_GLOSS_FROM_SEED; source <= HD_GLOSS_FROM_FILE; source++)
 					if (part_sources & (1u << source))
-						g_gloss_parts_by[source]++;
+						group_parts[source]++;
 			}
 
 			if (tris.empty())
@@ -5384,6 +5408,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					biggest = (int)(range.count / 3);
 			}
 		}
+
+		if (!group.clearRanges)
+			for (int k = 0; k < 5; k++)
+				g_gloss_parts_by[k] += group_parts[k];
 
 		/* The occupancy, sorted and made unique once the group's three
 		 * passes have been walked - a query is a binary search from here on,
@@ -7073,6 +7101,11 @@ void HDRenderGlossFile(const char* path)
 	g_gloss_path = path ? path : "";
 }
 
+void HDRenderGlossOverride(int max)
+{
+	g_gloss_max = max ? true : false;
+}
+
 void HDRenderGlossLevelInfo(HDRenderGlossLevel* out)
 {
 	if (!out)
@@ -7206,6 +7239,20 @@ bool HDRenderGroupHasClear(int group)
 		return false;
 
 	return g_groups[(size_t)group].clearRanges != 0;
+}
+
+int HDRenderGroupSheenRanges(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	int n = 0;
+
+	for (int pass = 0; pass < 2; pass++)
+		for (const HDRange& range : g_groups[(size_t)group].pass[pass])
+			n += range.sheen > 0.0f ? 1 : 0;
+
+	return n;
 }
 
 int HDRenderMirrorCount()

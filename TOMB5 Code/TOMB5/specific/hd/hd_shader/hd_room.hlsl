@@ -572,8 +572,8 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  * it stands in: the median over each level's floor squares of the vertex
  * light of the up-facing .TRG triangles against the mean of the square's
  * six faces runs from 1.79 (RICHCUT2) to 4.10 (ANDY2), and the median of
- * the fifteen medians is 2.93 (the tool probe189c over the fifteen .TRG and
- * Backup .trc files). HD_GLOSS_CUBE_GAIN puts the cube on the scale of the
+ * the fifteen medians is 2.93 (TrgProbe -glosslight over the fifteen
+ * levels). HD_GLOSS_CUBE_GAIN puts the cube on the scale of the
  * surface's own light.
  *
  * The eye as a lamp. HD_GLOSS_EYE is its weight against the surface's own

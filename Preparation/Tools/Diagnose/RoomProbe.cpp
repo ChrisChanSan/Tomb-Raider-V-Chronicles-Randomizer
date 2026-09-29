@@ -273,6 +273,12 @@
  *                     up to eight.
  *     -noreflect      the gloss off - the picture before it was added, out of
  *                     the same build.
+ *     -glossmax       every draw call that can take the sheen takes it at
+ *                     strength 1 and F0 1 - the sheen's upper bound. The
+ *                     seed, the light cubes and the lamps need -roombox.
+ *     -glossfile <path>
+ *                     build with that hd_gloss.txt (the game reads the one
+ *                     beside its executable); none without it.
  *     -shatter        hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
@@ -1494,6 +1500,12 @@ static bool g_plane = false;
  * with -noreflect so that the before picture can be drawn out of the same
  * build. */
 static bool g_reflect = true;
+/* -glossmax: every draw call that can take the sheen takes it at strength 1
+ * and F0 1 (HDRenderGlossOverride) - the sheen's upper bound. -glossfile: an
+ * hd_gloss.txt to build with (HDRenderGlossFile), none without it, where the
+ * game reads the one beside its executable. */
+static bool g_gloss_max = false;
+static std::string g_gloss_file;
 /* Hide every destructible piece of the drawn room, which is what the engine
  * does once Lara has shot the static that stands there - the after picture
  * of a shattered room, out of the same build. */
@@ -1531,6 +1543,8 @@ static std::string g_survey;
  * that a level built with no list is unchanged. */
 static std::string g_roombox;
 static std::vector<HDRoomBox> g_boxes_built;
+static std::vector<HDRoomGrid> g_grids_built;
+static std::vector<HDSectorFloor> g_sectors_built;
 static std::vector<HDIntrusion> g_intrusions_built;
 static int g_window_mode = HD_WINDOW_ALL;
 
@@ -5077,6 +5091,13 @@ int main(int argc, char** argv)
 			HDRenderUprightOverride(1);
 		else if (!strcmp(argv[at], "-noreflect"))
 			g_reflect = false;
+		else if (!strcmp(argv[at], "-glossmax"))
+			g_gloss_max = true;
+		else if (!strcmp(argv[at], "-glossfile") && at + 1 < argc)
+		{
+			g_gloss_file = argv[at + 1];
+			at++;
+		}
 		else if (!strcmp(argv[at], "-shatter"))
 			g_shatter = true;
 		else if (!strcmp(argv[at], "-with") && at + 4 < argc)
@@ -5638,6 +5659,51 @@ int main(int argc, char** argv)
 			printf("-roombox: %d room boxes handed in from %s\n",
 				(int)g_boxes_built.size(), trc.c_str());
 
+			/* And the floor squares, as hd_level.cpp's BuildRoomSectors
+			 * hands them in: the light cubes and the lamps of the sheen, and
+			 * the seed of its page classes, come out of them. Read in the
+			 * file's own order, x-major, which is the order of
+			 * ROOM_INFO::floor. */
+			g_grids_built.resize((size_t)level.roomCount());
+			g_sectors_built.clear();
+
+			for (int i = 0; i < level.roomCount(); i++)
+			{
+				const Tr5Room& rm = level.rooms()[(size_t)i];
+				std::vector<Tr5Level::SectorInfo> squares;
+				HDRoomGrid& grid = g_grids_built[(size_t)i];
+
+				grid.first = (int)g_sectors_built.size();
+				grid.xSectors = 0;
+				grid.zSectors = 0;
+				grid.originX = (float)rm.originX;
+				grid.originZ = (float)rm.originZ;
+
+				if (!level.sectorInfo(i, squares, error) ||
+					squares.size() != (size_t)rm.numXSectors * rm.numZSectors)
+					continue;
+
+				grid.xSectors = rm.numXSectors;
+				grid.zSectors = rm.numZSectors;
+
+				for (size_t s = 0; s < squares.size(); s++)
+				{
+					HDSectorFloor f;
+
+					f.floorY = (short)(squares[s].floor * 256);
+					f.fx = (unsigned char)(squares[s].box & 15);
+					f.wall = squares[s].floor == -127 ? 1 : 0;
+					g_sectors_built.push_back(f);
+				}
+			}
+
+			if (!g_sectors_built.empty())
+				HDRenderSetSectors(&g_grids_built[0], (int)g_grids_built.size(),
+					&g_sectors_built[0], (int)g_sectors_built.size());
+
+			printf("-roombox: %d floor squares handed in\n",
+				(int)g_sectors_built.size());
+
 			/* And the rooms that may hold another room's art. The rule is
 			 * BuildRoomIntrusions' (specific\hd\hd_level.cpp), read out of
 			 * the same file: not next door by portal or by a vertical floor
@@ -5889,6 +5955,9 @@ int main(int argc, char** argv)
 		printf("RoomProbe: -hdm needs -roombox <folder holding the classic "
 			".TRC> - that folder is where the sidecar lives\n");
 
+	HDRenderGlossOverride(g_gloss_max ? 1 : 0);
+	HDRenderGlossFile(g_gloss_file.empty() ? 0 : g_gloss_file.c_str());
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -6083,6 +6152,52 @@ int main(int argc, char** argv)
 	// numbers gave them one.
 	printf("gloss: %d glossy part(s) (materials 3 and 17)\n",
 		stats.glossParts);
+
+	/* And the sheen: what the four sources named (the engine's GLOSSLOG
+	 * lines), the lamps and cubes kept, and the draw calls that take the
+	 * gloss variant. Without -roombox there is no floor square, so no seed,
+	 * no cube and no lamp - only the material, the table and the file. */
+	{
+		HDRenderGlossLevel gloss;
+
+		HDRenderGlossLevelInfo(&gloss);
+		printf("sheen: %d page(s) in %d draw call(s)%s; parts mat=%d seed=%d "
+			"table=%d file=%d; table %d line(s), file %d page(s) %d bad; "
+			"lamps %d, cubes %d\n", gloss.pages, gloss.draws,
+			g_gloss_max ? " (-glossmax)" : "", gloss.partsMat, gloss.partsSeed,
+			gloss.partsTable, gloss.partsFile, gloss.tableLines, gloss.filePages,
+			gloss.fileBad, gloss.lamps, gloss.cubes);
+
+		for (int i = 0; i < HDRenderGlossPageCount(); i++)
+		{
+			HDRenderGlossPage p;
+
+			if (HDRenderGlossPageInfo(i, &p))
+				printf("  sheen page %5d %-6s %-5s strength %.3f power %.0f F0 %.3f "
+					"tris %d\n", p.page, HDGlossClassName(p.cls),
+					HDGlossSourceName(p.source), p.strength, p.power, p.f0, p.tris);
+		}
+
+		/* The rooms with a clear floor (HD_PASS_CLEAR) - RICH2's lobby and
+		 * its mirrored copy, RICHCUT2's and TITLE's floors - and how many
+		 * glossy draw calls they carry: 0 means the sheen leaves them as
+		 * they were. */
+		int clear_rooms = 0, clear_sheen = 0;
+
+		for (int g = 0; g < HDRenderGroupCount(); g++)
+			if (HDRenderGroupHasClear(g))
+			{
+				clear_rooms++;
+				clear_sheen += HDRenderGroupSheenRanges(g);
+
+				if (HDRenderGroupSheenRanges(g))
+					printf("  sheen in clear-floor room %d: %d draw call(s)\n", g,
+						HDRenderGroupSheenRanges(g));
+			}
+
+		printf("sheen: %d room(s) with a clear floor, %d glossy draw call(s) in them\n",
+			clear_rooms, clear_sheen);
+	}
 
 	/* The destructible pieces, one line each, with the room they stand in
 	 * and their box - the numbers hd_level.cpp pairs against the classic

@@ -146,16 +146,18 @@ inline const char* HDGlossSourceName(int source)
  * glass and polished stone at n = 1.5, 0.02 for ice at n = 1.31 - and about
  * half for steel, whose reflection also takes the metal's own colour.
  *
- * The dielectrics are drawn at 0.08, twice the textbook figure. What the
- * sheen reflects is the room's light cube, a blur of the room's mean light,
- * not the bright lamps and windows a real polished floor mirrors, and at
- * the physical figure the floor barely moves: RoomProbe on ANDREA2 room 16's
- * marble from (1300, 200, 2900), yaw 90, pitch 18, 1280 x 960, lifts the
- * mean from 68.5 to 71.1 at 0.04 (strength 0.8, exponent 96; 20,538 pixels
- * by more than 32 of 255), to 73.4 at 0.08 (62,778) and to 75.0 at 0.12
- * (89,227); at 0.12 RICH2's washroom (room 135 from (2800, -24800, 2566),
- * yaw 270, pitch 22) turns milky - 280,374 pixels by more than 32 - and at
- * 0.08 it keeps its tiles (129,882).
+ * The dielectrics are drawn at F0 0.08, twice the textbook figure, and at
+ * strength 0.6. What the sheen reflects is the room's light cube, a blur of
+ * the room's mean light, not the lamps and windows a real polished floor
+ * mirrors: at a grazing angle it comes up as a veil of that mean light. At
+ * strength 1 the veil hides RICH2's washroom mosaic (room 135 from
+ * (2800, -24800, 2566), yaw 270, pitch 22, 1280 x 960: 256,720 pixels
+ * lifted by more than 32 of 255, the mean from 80.0 to 93.5); at 0.6 the
+ * tiles keep their pattern under it (45,960 pixels, mean 88.1). ANDREA2 room
+ * 16's marble (from (1300, 200, 2900), yaw 90, pitch 18) goes from a mean of
+ * 68.5 to 71.1 at the textbook 0.04 and strength 0.8, to 73.4 at 0.08 and
+ * strength 1, and to 71.5 at 0.08 and 0.6, its brightest pixel by 35
+ * (RoomProbe, before and after with -noreflect).
  *
  * Strength and exponent are chosen: metal a broad sheen (painted and worn
  * steel, crates, ducts), marble and glass a tighter one, ice between. Marble
@@ -176,13 +178,13 @@ inline bool HDGlossClassDefaults(int cls, HDGloss* out)
 		out->strength = 0.8f; out->power = 48.0f; out->f0 = 0.5f; out->tint = 1.0f;
 		return true;
 	case HD_GLOSS_MARBLE:
-		out->strength = 1.0f; out->power = 64.0f; out->f0 = 0.08f;
+		out->strength = 0.6f; out->power = 64.0f; out->f0 = 0.08f;
 		return true;
 	case HD_GLOSS_ICE:
-		out->strength = 1.0f; out->power = 48.0f; out->f0 = 0.08f;
+		out->strength = 0.6f; out->power = 48.0f; out->f0 = 0.08f;
 		return true;
 	case HD_GLOSS_GLASS:
-		out->strength = 1.0f; out->power = 96.0f; out->f0 = 0.08f;
+		out->strength = 0.6f; out->power = 96.0f; out->f0 = 0.08f;
 		return true;
 	case HD_GLOSS_CUSTOM:
 		// A custom page names its own three numbers; the defaults are those
@@ -291,16 +293,26 @@ inline bool HDGlossFromPage(const HDGlossPage& page, int source, HDGloss* out)
 }
 
 /* The pages that never shine through the seed, the table or the file:
- * RICH2's lobby. Its marble floors are part-way clear (pages 1029 to 1081,
- * alpha 231 to 239 in every texel) with the room standing mirrored beneath
- * them, and its marble walls and steps are 1010, 1032 and 1033; the floor
- * already IS a mirror, and a sheen over it would be a second one. The
- * material source is not barred - no page of the lobby carries material 3
- * or 17 (TrgProbe -mat). */
+ * RICH2's lobby. Its marble floors are part-way clear - pages 1029, 1045,
+ * 1047, 1049, 1053, 1079 and 1081, alpha 231 to 239 in every texel
+ * (hd_pageclass.h) - with the room standing mirrored beneath them, and its
+ * marble walls and steps are 1010, 1032 and 1033; the floor already IS a
+ * mirror, and a sheen over it would be a second one. The pages are named one
+ * by one: the numbers between them are other pictures - 1054 is the
+ * washroom's green mosaic, 1039 and 1040 a steel shutter and a tread plate.
+ * The engine bars every part-way clear page besides, by its alpha
+ * (hd_render.cpp, ResolvePage). The material source is not barred - no page
+ * of the lobby carries material 3 or 17 (TrgProbe -mat). */
 inline bool HDGlossPageBarred(int page)
 {
-	return page == 1010 || page == 1032 || page == 1033 ||
-		(page >= 1029 && page <= 1081);
+	switch (page)
+	{
+	case 1010: case 1029: case 1032: case 1033: case 1045: case 1047:
+	case 1049: case 1053: case 1079: case 1081:
+		return true;
+	default:
+		return false;
+	}
 }
 
 /* One line of the page table's text form - hd_gloss.txt:
@@ -488,7 +500,7 @@ inline void HDGlossParseText(const char* text, HDGlossFile* out)
 		line[n] = 0;
 		out->lines++;
 
-		HDGlossPage entry;
+		HDGlossPage entry = { -1, HD_GLOSS_NONE, -1.0f, -1.0f, -1.0f };
 		bool remove = false;
 		const int got = (size_t)(end - at) >= sizeof(line) ? -1 :
 			HDGlossParseLine(line, &entry, &remove);

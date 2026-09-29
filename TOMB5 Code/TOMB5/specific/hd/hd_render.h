@@ -1029,6 +1029,8 @@ int HDRenderGroupFlatPlanes(int group);
 // every group of a level without a part-way clear page, so the frame asks
 // no room of such a level for the phase.
 bool HDRenderGroupHasClear(int group);
+// How many of the group's draw calls take the sheen (ResolveSheen).
+int HDRenderGroupSheenRanges(int group);
 int HDRenderDestructibleCount();
 bool HDRenderDestructibleInfo(int at, int* group, unsigned int* material,
 	float* mins, float* maxs);
@@ -1113,6 +1115,11 @@ struct HDRenderGlossPage
 };
 
 void HDRenderGlossFile(const char* path);
+/* Every draw call that can take the sheen at all takes it at strength 1 and
+ * F0 1, with its own exponent where its page names one and metal's where it
+ * does not - the upper bound of the sheen, for RoomProbe's -glossmax. 0 by
+ * default and in the engine always. Read at the next build. */
+void HDRenderGlossOverride(int max);
 void HDRenderGlossLevelInfo(HDRenderGlossLevel* out);
 int HDRenderGlossPageCount();
 bool HDRenderGlossPageInfo(int at, HDRenderGlossPage* out);

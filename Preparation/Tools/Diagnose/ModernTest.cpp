@@ -59,6 +59,10 @@
  * arrangement as the one above. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pageclass.h"
 #include "../../../TOMB5 Code/TOMB5/game/mirror_math.h"
+/* The sheen's arithmetic and its page table - pure again: which surfaces
+ * shine, the override file's reader, the ambient cube and the lamp ranking
+ * (gloss_* below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_pages.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -10473,6 +10477,399 @@ static void mirror_clip()
 		(long)shx, win[0]);
 }
 
+/* The sheen: which surfaces shine (specific\hd\hd_gloss_math.h and its page
+ * table hd_gloss_pages.h). */
+
+// One page named by every source at once, and each source taken away in turn.
+static void gloss_order()
+{
+	HDGloss mat;
+	const float param[4] = { 45.0f, 0.2f, 0.6f, 0.0f };
+
+	HDGlossFromMaterial(0x8003u, param, &mat);
+
+	HDGlossPage file = { 140, HD_GLOSS_MARBLE, 0.5f, 20.0f, 0.3f };
+	HDGlossPage table = { 140, HD_GLOSS_ICE, -1.0f, -1.0f, -1.0f };
+	HDGlossPage veto = { 140, HD_GLOSS_NONE, -1.0f, -1.0f, -1.0f };
+
+	HDGloss g = HDGlossResolve(&mat, &file, false, &table, HD_GLOSS_METAL, false);
+	ok(g.source == HD_GLOSS_FROM_MAT && g.strength == 0.6f && g.power == 45.0f,
+		"gloss order: the material over the file, the table and the seed", g.source,
+		HD_GLOSS_FROM_MAT);
+	ok(g.cls == HD_GLOSS_MARBLE && g.f0 == 0.3f,
+		"gloss order: a page's named class and F0 go onto the material's gloss", g.cls,
+		HD_GLOSS_MARBLE);
+
+	g = HDGlossResolve(0, &file, false, &table, HD_GLOSS_METAL, false);
+	ok(g.source == HD_GLOSS_FROM_FILE && g.strength == 0.5f && g.power == 20.0f,
+		"gloss order: the file over the table and the seed", g.source, HD_GLOSS_FROM_FILE);
+
+	g = HDGlossResolve(0, 0, false, &table, HD_GLOSS_METAL, false);
+	ok(g.source == HD_GLOSS_FROM_TABLE && g.cls == HD_GLOSS_ICE,
+		"gloss order: the table over the seed", g.source, HD_GLOSS_FROM_TABLE);
+
+	g = HDGlossResolve(0, 0, false, 0, HD_GLOSS_METAL, false);
+	ok(g.source == HD_GLOSS_FROM_SEED && g.cls == HD_GLOSS_METAL && g.f0 == 0.5f,
+		"gloss order: the seed alone", g.source, HD_GLOSS_FROM_SEED);
+
+	g = HDGlossResolve(0, 0, false, 0, HD_GLOSS_NONE, false);
+	ok(g.strength == 0.0f && g.source == HD_GLOSS_FROM_NONE,
+		"gloss order: nothing names the page, nothing shines", (long)(g.strength * 1000), 0);
+
+	g = HDGlossResolve(0, 0, true, &table, HD_GLOSS_METAL, false);
+	ok(g.strength == 0.0f, "gloss order: the file's '-' takes the page from table and seed",
+		(long)(g.strength * 1000), 0);
+
+	g = HDGlossResolve(0, 0, false, &veto, HD_GLOSS_METAL, false);
+	ok(g.strength == 0.0f, "gloss order: the table's '-' line takes the page from the seed",
+		(long)(g.strength * 1000), 0);
+
+	g = HDGlossResolve(0, &file, false, &veto, HD_GLOSS_METAL, false);
+	ok(g.source == HD_GLOSS_FROM_FILE, "gloss order: the file names a page the table took out",
+		g.source, HD_GLOSS_FROM_FILE);
+
+	g = HDGlossResolve(&mat, 0, true, 0, HD_GLOSS_METAL, false);
+	ok(g.source == HD_GLOSS_FROM_MAT && g.cls == HD_GLOSS_GLASS,
+		"gloss order: no '-' takes a material's own gloss", g.source, HD_GLOSS_FROM_MAT);
+
+	g = HDGlossResolve(0, &file, false, &table, HD_GLOSS_METAL, true);
+	ok(g.strength == 0.0f, "gloss order: a barred page takes nothing but the material",
+		(long)(g.strength * 1000), 0);
+
+	g = HDGlossResolve(&mat, &file, false, &table, HD_GLOSS_METAL, true);
+	ok(g.source == HD_GLOSS_FROM_MAT && g.cls == HD_GLOSS_GLASS,
+		"gloss order: a barred page keeps its material, class and all", g.cls, HD_GLOSS_GLASS);
+
+	// RICH2's lobby: its clear floors and its marble, and not the pictures
+	// numbered between them (the washroom's mosaic 1054).
+	const int lobby[] = { 1010, 1029, 1032, 1033, 1045, 1047, 1049, 1053, 1079, 1081 };
+	int barred = 0;
+
+	for (size_t i = 0; i < sizeof(lobby) / sizeof(lobby[0]); i++)
+		barred += HDGlossPageBarred(lobby[i]) ? 1 : 0;
+
+	ok(barred == 10 && !HDGlossPageBarred(1054) && !HDGlossPageBarred(1082) &&
+		!HDGlossPageBarred(140), "gloss order: RICH2's lobby pages are barred, no other",
+		barred, 10);
+}
+
+// hd_gloss.txt, line by line and whole.
+static void gloss_parser()
+{
+	HDGlossPage e;
+	bool remove = false;
+
+	ok(HDGlossParseLine("140 metal", &e, &remove) == 1 && e.page == 140 &&
+		e.cls == HD_GLOSS_METAL && e.strength < 0.0f && e.power < 0.0f && e.f0 < 0.0f &&
+		!remove, "gloss parser: a page and a class, the rest the class's", e.page, 140);
+
+	ok(HDGlossParseLine("  141\tMarble 0.5 32 0.1   # the crate's front", &e, &remove) == 1 &&
+		e.page == 141 && e.cls == HD_GLOSS_MARBLE && e.strength == 0.5f &&
+		e.power == 32.0f && e.f0 == 0.1f, "gloss parser: strength, exponent, F0 and a comment",
+		(long)e.power, 32);
+
+	ok(HDGlossParseLine("142 ice - 16", &e, &remove) == 1 && e.strength < 0.0f &&
+		e.power == 16.0f && e.f0 < 0.0f, "gloss parser: '-' keeps one number's default",
+		(long)e.power, 16);
+
+	ok(HDGlossParseLine("143 custom 0.4 20 0.3", &e, &remove) == 1 &&
+		e.cls == HD_GLOSS_CUSTOM, "gloss parser: a custom page with its three numbers",
+		e.cls, HD_GLOSS_CUSTOM);
+
+	ok(HDGlossParseLine("-141", &e, &remove) == 1 && remove && e.page == 141,
+		"gloss parser: '-' takes a page out", remove ? 1 : 0, 1);
+
+	ok(HDGlossParseLine("# only a comment", &e, &remove) == 0 &&
+		HDGlossParseLine("", &e, &remove) == 0 && HDGlossParseLine(" \t ", &e, &remove) == 0,
+		"gloss parser: blank and comment lines are no entry", 0, 0);
+
+	const char* bad[] =
+	{
+		"abc metal", "140 bogus", "140", "140 metal 2", "140 metal 0", "140 metal 0.5 300",
+		"140 metal 0.5 32 1.5", "140 custom 0.5 20", "0 metal", "70000 metal",
+		"-141 metal", "140 metal x", "140 metal 0.5 32 0.1 9", "14a metal", "-"
+	};
+	int rejected = 0;
+
+	for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++)
+		rejected += HDGlossParseLine(bad[i], &e, &remove) < 0 ? 1 : 0;
+
+	ok(rejected == (int)(sizeof(bad) / sizeof(bad[0])),
+		"gloss parser: every malformed line is refused", rejected,
+		(long)(sizeof(bad) / sizeof(bad[0])));
+
+	// The whole file: CR LF, LF and CR alone, a later line winning, bad lines
+	// counted and the rest kept.
+	HDGlossFile file;
+
+	HDGlossParseText("# my pages\r\n140 metal\r\n141 marble 0.6\n-150\r"
+		"151 wrong\n140 ice\n\n152 glass", &file);
+	bool removes = false;
+	const HDGlossPage* p140 = file.find(140, &removes);
+	const HDGlossPage* p150 = file.find(150, &removes);
+
+	ok(file.present && file.lines == 8 && file.bad == 1,
+		"gloss parser: the file's lines and its one bad line", file.lines * 100 + file.bad, 801);
+	ok(p140 && p140->cls == HD_GLOSS_ICE, "gloss parser: a later line for a page wins",
+		p140 ? p140->cls : -1, HD_GLOSS_ICE);
+	ok(!p150 && removes, "gloss parser: the file's '-' line reads as a removal",
+		removes ? 1 : 0, 1);
+	ok(file.find(152, &removes) && !removes && !file.find(151, &removes),
+		"gloss parser: the last line without an end is read, the bad one is not", 1, 1);
+
+	HDGlossFile none;
+
+	HDGlossParseText(0, &none);
+	ok(!none.present && none.entries.empty(), "gloss parser: no text is no file", 0, 0);
+}
+
+// The ambient cube's weights.
+static void gloss_cube()
+{
+	int wrong = 0, tested = 0;
+
+	for (int i = -4; i <= 4; i++)
+		for (int j = -4; j <= 4; j++)
+			for (int k = -4; k <= 4; k++)
+			{
+				const float d[3] = { (float)i + 0.3f, (float)j - 0.2f, (float)k + 0.1f };
+				float w[6];
+
+				if (!HDGlossCubeWeights(d, w))
+					continue;
+
+				double sum = 0.0;
+
+				for (int f = 0; f < 6; f++)
+					sum += w[f];
+
+				// Opposite faces never both carry weight.
+				if (fabs(sum - 1.0) > 1e-5 || (w[0] > 0 && w[1] > 0) || (w[2] > 0 && w[3] > 0) ||
+					(w[4] > 0 && w[5] > 0))
+					wrong++;
+
+				tested++;
+			}
+
+	ok(wrong == 0 && tested == 729, "gloss cube: the weights sum to one on 729 directions",
+		wrong, 0);
+
+	/* The faces in the file's order: +x, -x, up (-y), down (+y), +z, -z. */
+	const float axes[6][3] =
+	{
+		{ 2, 0, 0 }, { -2, 0, 0 }, { 0, -2, 0 }, { 0, 2, 0 }, { 0, 0, 2 }, { 0, 0, -2 }
+	};
+	int picked = 0;
+
+	for (int f = 0; f < 6; f++)
+	{
+		float w[6];
+
+		HDGlossCubeWeights(axes[f], w);
+
+		bool one = w[f] == 1.0f;
+
+		for (int o = 0; o < 6; o++)
+			if (o != f && w[o] != 0.0f)
+				one = false;
+
+		picked += one ? 1 : 0;
+	}
+
+	ok(picked == 6, "gloss cube: an axis-aligned direction picks exactly its one face", picked, 6);
+
+	float w[6];
+	const float zero[3] = { 0, 0, 0 };
+
+	ok(!HDGlossCubeWeights(zero, w) && w[0] == 0.0f,
+		"gloss cube: a zero direction weighs nothing", 0, 0);
+
+	// A sample halfway between up and +x takes half of each face's colour.
+	const float faces[6][3] =
+	{
+		{ 1, 0, 0 }, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }
+	};
+	const float diag[3] = { 1, -1, 0 };
+	float rgb[3];
+
+	HDGlossCubeSample(faces, diag, rgb);
+	ok(fabs(rgb[0] - 0.5f) < 1e-5 && fabs(rgb[1] - 0.5f) < 1e-5 && rgb[2] == 0.0f,
+		"gloss cube: halfway between up and +x is half of each", (long)(rgb[0] * 100), 50);
+
+	// The sun: towards it is the file's vector with x and z turned round,
+	// and a cube dark towards it sees little of it.
+	const float file[3] = { 0.08f, -0.60f, 0.79f };
+	float toward[3];
+
+	HDGlossSunToward(file, toward);
+	ok(toward[0] == -0.08f && toward[1] == -0.60f && toward[2] == -0.79f,
+		"gloss cube: the direction towards the sun", (long)(toward[2] * 100), -79);
+
+	const float up_bright[6][3] =
+	{
+		{ 0.1f, 0.1f, 0.1f }, { 0.1f, 0.1f, 0.1f }, { 0.5f, 0.5f, 0.5f },
+		{ 0.02f, 0.02f, 0.02f }, { 0.1f, 0.1f, 0.1f }, { 0.1f, 0.1f, 0.1f }
+	};
+	const float straight_up[3] = { 0, -1, 0 };
+	const float straight_down[3] = { 0, 1, 0 };
+
+	ok(HDGlossSunSeen(up_bright, straight_up) == 1.0f &&
+		fabs(HDGlossSunSeen(up_bright, straight_down) - 0.06f) < 1e-5,
+		"gloss cube: the sun's share is the cube towards it at the gain, clamped",
+		(long)(HDGlossSunSeen(up_bright, straight_down) * 100), 6);
+}
+
+// The class defaults, the footstep materials and the base material.
+static void gloss_class()
+{
+	HDGloss g = {};
+
+	ok(HDGlossClassDefaults(HD_GLOSS_METAL, &g) && g.f0 == 0.5f && g.tint == 1.0f &&
+		g.strength > 0.0f && g.power >= 1.0f, "gloss class: metal reflects face on, in its colour",
+		(long)(g.f0 * 100), 50);
+
+	int dielectric = 0;
+	const int others[3] = { HD_GLOSS_MARBLE, HD_GLOSS_ICE, HD_GLOSS_GLASS };
+
+	for (int i = 0; i < 3; i++)
+		dielectric += HDGlossClassDefaults(others[i], &g) && g.f0 < 0.5f && g.tint == 0.0f &&
+			g.strength > 0.0f ? 1 : 0;
+
+	ok(dielectric == 3, "gloss class: marble, ice and glass reflect less, untinted",
+		dielectric, 3);
+	ok(!HDGlossClassDefaults(HD_GLOSS_NONE, &g) && g.strength == 0.0f,
+		"gloss class: no class, no gloss", 0, 0);
+
+	ok(HDGlossClassOfFx(8) == HD_GLOSS_METAL && HDGlossClassOfFx(13) == HD_GLOSS_METAL &&
+		HDGlossClassOfFx(9) == HD_GLOSS_MARBLE && HDGlossClassOfFx(4) == HD_GLOSS_ICE &&
+		HDGlossClassOfFx(6) == HD_GLOSS_NONE && HDGlossClassOfFx(5) == HD_GLOSS_NONE,
+		"gloss class: footstep metal, old metal, marble and ice, nothing else", 1, 1);
+
+	ok(HDGlossBaseMaterial(0x8003u) == 3u && HDGlossBaseMaterial(0x8403u) == 3u &&
+		HDGlossBaseMaterial(17u) == 17u, "gloss class: 0x8003 is material 3",
+		(long)HDGlossBaseMaterial(0x8003u), 3);
+
+	const float rich3[4] = { 45.0f, 0.2f, 0.6f, 0.0f };
+	const float joby3[4] = { 36.0f, 0.1f, 0.0f, 0.0f };
+	const float matt[4] = { 2.0f, 0.0f, 0.0f, 0.0f };
+	const float odd[4] = { 44.5f, 0.0f, 0.6f, 0.0f };
+
+	ok(HDGlossFromMaterial(0x8203u, rich3, &g) && g.strength == 0.6f && g.power == 45.0f &&
+		g.cls == HD_GLOSS_GLASS && g.source == HD_GLOSS_FROM_MAT,
+		"gloss class: RICH3's destructible panes carry material 3's gloss", (long)g.power, 45);
+	ok(HDGlossFromMaterial(17u, joby3, &g) && g.strength == 0.1f && g.cls == HD_GLOSS_METAL,
+		"gloss class: material 17 is metal, its strength in param[1]", g.cls, HD_GLOSS_METAL);
+	ok(!HDGlossFromMaterial(3u, matt, &g) && !HDGlossFromMaterial(3u, odd, &g) &&
+		!HDGlossFromMaterial(0u, rich3, &g) && !HDGlossFromMaterial(14u, rich3, &g),
+		"gloss class: no strength, an odd exponent or another material names none", 0, 0);
+
+	// The table: sorted, one line per page, every class a real one or a
+	// removal, and none of RICH2's lobby pages in it.
+	int bad_lines = 0;
+
+	for (int i = 0; i < HDGlossTableSize(); i++)
+	{
+		const HDGlossPage& t = kHDGlossPages[i];
+
+		if ((i && kHDGlossPages[i - 1].page >= t.page) || HDGlossPageBarred(t.page) ||
+			t.cls < HD_GLOSS_NONE || t.cls > HD_GLOSS_CUSTOM || HDGlossTableFind(t.page) != &t)
+			bad_lines++;
+	}
+
+	ok(bad_lines == 0 && HDGlossTableSize() > 0 && HDGlossTableFind(141) &&
+		HDGlossTableFind(141)->cls == HD_GLOSS_METAL && !HDGlossTableFind(140),
+		"gloss class: the page table is sorted, unique and keeps out of the lobby", bad_lines, 0);
+}
+
+// The seed and the lamps.
+static void gloss_seed()
+{
+	int fx[16] = { 0 };
+
+	// The crate's page 140 in ANDREA1: 162 on metal, 128 on stone.
+	fx[8] = 162;
+	fx[6] = 128;
+	ok(HDGlossSeedClass(fx, 2490) == HD_GLOSS_METAL,
+		"gloss seed: the crate's page is metal", HDGlossSeedClass(fx, 2490), HD_GLOSS_METAL);
+
+	// The crate's front, 141: 18 on metal, 88 on stone.
+	fx[8] = 18;
+	fx[6] = 88;
+	ok(HDGlossSeedClass(fx, 846) == HD_GLOSS_NONE,
+		"gloss seed: a page mostly on stone stays matt", HDGlossSeedClass(fx, 846), 0);
+
+	// RICH2's 3008: 194 on metal of 226,746 triangles.
+	fx[8] = 194;
+	fx[6] = 104;
+	ok(HDGlossSeedClass(fx, 226746) == HD_GLOSS_NONE,
+		"gloss seed: a page the level wears everywhere is not a metal page",
+		HDGlossSeedClass(fx, 226746), 0);
+
+	fx[8] = 0;
+	fx[6] = 0;
+	fx[9] = 288;
+	ok(HDGlossSeedClass(fx, 288) == HD_GLOSS_MARBLE, "gloss seed: marble",
+		HDGlossSeedClass(fx, 288), HD_GLOSS_MARBLE);
+
+	fx[9] = 0;
+	fx[4] = 1512;
+	ok(HDGlossSeedClass(fx, 3375) == HD_GLOSS_ICE, "gloss seed: ice",
+		HDGlossSeedClass(fx, 3375), HD_GLOSS_ICE);
+
+	fx[4] = 1;
+	ok(HDGlossSeedClass(fx, 1) == HD_GLOSS_NONE, "gloss seed: one stray triangle names nothing",
+		HDGlossSeedClass(fx, 1), 0);
+
+	// A room of 2 x 2 squares at the origin: (1, 0) is metal with its floor
+	// at -768, the crate's top; (0, 0) a wall.
+	const HDRoomGrid grid = { 0, 2, 2, 36864.0f, 28672.0f };
+	const HDSectorFloor squares[4] =
+	{
+		{ -32512, 0, 1 }, { 256, 6, 0 }, { -768, 8, 0 }, { 256, 6, 0 }
+	};
+	const float a[3] = { 1100, -768, 100 }, b[3] = { 1900, -768, 100 }, c[3] = { 1100, -768, 900 };
+	const float up_a[3] = { 1100, -1200, 100 }, up_b[3] = { 1900, -1200, 100 },
+		up_c[3] = { 1100, -1200, 900 };
+	int votes[16] = { 0 };
+
+	HDGlossSeedVote(a, b, c, -1.0f, grid, squares, 4, votes);
+	HDGlossSeedVote(a, b, c, 1.0f, grid, squares, 4, votes);		// a ceiling
+	HDGlossSeedVote(up_a, up_b, up_c, -1.0f, grid, squares, 4, votes);	// 432 above
+	ok(votes[8] == 1 && votes[6] == 0, "gloss seed: a floor triangle on the metal square votes",
+		votes[8], 1);
+
+	const float wa[3] = { 100, -500, 100 }, wb[3] = { 100, 0, 100 }, wc[3] = { 100, -500, 900 };
+
+	ok(!HDGlossFacesUp(wa, wb, wc, -0.1f) && HDGlossFacesUp(a, b, c, -1.0f) &&
+		!HDGlossFacesUp(a, b, c, 1.0f), "gloss seed: floors vote, walls and ceilings do not", 1, 1);
+	ok(HDGlossSectorAt(grid, 1500.0f, 500.0f) == 2 && HDGlossSectorAt(grid, -1.0f, 0.0f) == -1 &&
+		HDGlossSectorAt(grid, 2048.0f, 0.0f) == -1, "gloss seed: the square under a point",
+		HDGlossSectorAt(grid, 1500.0f, 500.0f), 2);
+
+	// The lamps nearest a box.
+	const float mins[3] = { 0, 0, 0 }, maxs[3] = { 100, 100, 100 };
+	const float lamps[] =
+	{
+		200, 50, 50,		// 0: 100 away
+		50, 50, 50,		// 1: inside
+		-300, 50, 50,		// 2: 300 away
+		50, 50, 150,		// 3: 50 away
+		50, 50, -50		// 4: 50 away, a tie with 3
+	};
+	int order[4] = { -1, -1, -1, -1 };
+	const int n = HDGlossRankLights(lamps, 5, mins, maxs, order, 4);
+
+	ok(n == 4 && order[0] == 1 && order[1] == 3 && order[2] == 4 && order[3] == 0,
+		"gloss lamps: nearest to the box first, a tie in the file's order",
+		order[0] * 1000 + order[1] * 100 + order[2] * 10 + order[3], 1340);
+
+	const int one = HDGlossRankLights(lamps, 5, mins, maxs, order, 1);
+
+	ok(one == 1 && order[0] == 1, "gloss lamps: one slot takes the nearest", order[0], 1);
+	ok(HDGlossRankLights(lamps, 0, mins, maxs, order, 4) == 0, "gloss lamps: no lamp, no slot",
+		0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -10532,6 +10929,11 @@ int main()
 	page_class();
 	mirror_pose();
 	mirror_clip();
+	gloss_order();
+	gloss_parser();
+	gloss_cube();
+	gloss_class();
+	gloss_seed();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

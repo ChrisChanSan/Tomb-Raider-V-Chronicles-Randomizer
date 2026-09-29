@@ -62,6 +62,9 @@
 #include "hd_render.h"
 #include "hd_scan.h"
 #include "trf_remaster/Trg.h"
+// The sheen's page classes - the engine's own seed walk, table and resolver.
+#include "hd_gloss_pages.h"
+#include "hd_gloss_seed.h"
 
 // The engine keeps these in tomb5\tomb5.cpp, filled from the registry values
 // hd_install and hd_install_tr3. Here the command line fills the first - the
@@ -2401,6 +2404,574 @@ namespace
 			"half the art\n\n", stem.c_str(), rooms, classicFaces, hdTris, gone);
 	}
 
+	/* The classic floor squares of a level, as hd_level.cpp's
+	 * BuildRoomSectors hands them to the renderer: x-major per room, which
+	 * is the file's own order. False without a -classic folder or a file. */
+	bool loadGrid(const std::string& folder, const std::string& stem,
+		std::vector<HDRoomGrid>& grids, std::vector<HDSectorFloor>& sectors)
+	{
+		grids.clear();
+		sectors.clear();
+
+		if (folder.empty())
+			return false;
+
+		Tr5Level level;
+		std::string error;
+
+		if (!level.load(toW(folder + "\\" + stem + ".TRC"), error))
+			return false;
+
+		grids.resize((size_t)level.roomCount());
+
+		for (int i = 0; i < level.roomCount(); i++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)i];
+			std::vector<Tr5Level::SectorInfo> squares;
+			HDRoomGrid& grid = grids[(size_t)i];
+
+			grid.first = (int)sectors.size();
+			grid.xSectors = 0;
+			grid.zSectors = 0;
+			grid.originX = (float)rm.originX;
+			grid.originZ = (float)rm.originZ;
+
+			if (!level.sectorInfo(i, squares, error) ||
+				squares.size() != (size_t)rm.numXSectors * rm.numZSectors)
+				continue;
+
+			grid.xSectors = rm.numXSectors;
+			grid.zSectors = rm.numZSectors;
+
+			for (size_t s = 0; s < squares.size(); s++)
+			{
+				HDSectorFloor f;
+
+				f.floorY = (short)(squares[s].floor * 256);
+				f.fx = (unsigned char)(squares[s].box & 15);
+				f.wall = squares[s].floor == -127 ? 1 : 0;
+				sectors.push_back(f);
+			}
+		}
+
+		return true;
+	}
+
+	/* -gloss and -glossseed: the sheen's page classes of a level, with the
+	 * engine's own seed walk (hd_gloss_seed.h), page table (hd_gloss_pages.h)
+	 * and resolver (hd_gloss_math.h).
+	 *
+	 * -gloss prints every page of the rooms' surface passes that shines, by
+	 * where its gloss comes from - the material, the file, the seed or the
+	 * table - with the numbers the sheen draws it with, and the triangles.
+	 * -glossseed prints the seed's evidence instead: per page with a vote,
+	 * the up-facing triangles over each kind of floor square and the verdict,
+	 * then the pages numbered within three of each metal, marble or ice
+	 * candidate, which is where a level keeps the rest of a surface's set
+	 * (the crate's side next to its front) - the list the page table was
+	 * first written from.
+	 *
+	 * What the tool cannot see is the engine's second bar, a page part-way
+	 * clear in every texel (HD_PAGE_CLEAR), which needs the page decoded:
+	 * those are the floors of the alpha pass and never glossy there. */
+	struct GlossUse
+	{
+		int tris = 0;		// surface-pass triangles on the page
+		int matTris = 0;	// of those, on a material 3 or 17 part
+		HDGloss mat;
+		unsigned int matBase = 0;
+	};
+
+	void dumpGloss(const std::string& root, const std::string& stem,
+		const std::string& classic, bool seedOnly, const HDGlossFile& file)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		std::vector<HDRoomGrid> grids;
+		std::vector<HDSectorFloor> sectors;
+		const bool haveGrid = loadGrid(classic, stem, grids, sectors);
+		const int rooms = haveGrid ? (int)grids.size() : (int)trg.groups.size();
+		std::unordered_map<int, HDGlossVotes> votes;
+
+		if (haveGrid)
+			HDGlossSeedWalk(trg, rooms, &grids[0], (int)grids.size(),
+				sectors.empty() ? 0 : &sectors[0], (int)sectors.size(), votes);
+
+		std::map<int, GlossUse> use;
+
+		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			{
+				const unsigned int base = HDGlossBaseMaterial(part.material);
+				HDGloss mat;
+				const bool hasMat = HDGlossFromMaterial(part.material, part.param, &mat);
+
+				for (int pass = 0; pass < 2; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned int at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned int index = trg.indices[run.start + at];
+
+						if (index >= trg.vertices.size())
+							continue;
+
+						const unsigned char layer = trg.vertices[index].layer;
+
+						if (!layer || (size_t)layer > trg.textures.size())
+							continue;
+
+						GlossUse& u = use[(int)trg.textures[layer - 1]];
+
+						u.tris++;
+
+						if (hasMat)
+						{
+							u.matTris++;
+							u.mat = mat;
+							u.matBase = base;
+						}
+					}
+				}
+			}
+
+		long lamps = 0;
+		int voted = 0;
+
+		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
+			lamps += (long)trg.groups[g].volumes.size();
+
+		for (const auto& kv : votes)
+		{
+			int any = 0;
+
+			for (int k = 0; k < 16; k++)
+				any += kv.second.perFx[k];
+
+			voted += any ? 1 : 0;
+		}
+
+		std::printf("%s: %d surface page(s), %d with a seed vote, table %d page(s), "
+			"file %s (%zu page(s), %d bad line(s)), lamps %ld, cubes %zu for %zu "
+			"floor squares%s\n", stem.c_str(), (int)use.size(), voted,
+			HDGlossTableSize(), file.present ? "read" : "none", file.entries.size(),
+			file.bad, lamps, trg.light_cubes.size(), sectors.size(),
+			haveGrid ? "" : " (no -classic: no seed, no cubes)");
+
+		if (seedOnly)
+		{
+			std::set<int> candidates;
+
+			std::printf("  page   tris  metal marble   ice  other  seed     table\n");
+
+			for (const auto& kv : use)
+			{
+				const std::unordered_map<int, HDGlossVotes>::const_iterator v =
+					votes.find(kv.first);
+
+				if (v == votes.end())
+					continue;
+
+				const int* fx = v->second.perFx;
+				const int metal = fx[8] + fx[13], marble = fx[9], ice = fx[4];
+				int other = 0;
+
+				for (int k = 0; k < 16; k++)
+					other += fx[k];
+
+				other -= metal + marble + ice;
+
+				if (!metal && !marble && !ice)
+					continue;
+
+				const int cls = HDGlossSeedClass(fx, v->second.tris);
+				const HDGlossPage* t = HDGlossTableFind(kv.first);
+
+				std::printf("  %5d %6d %6d %6d %5d %6d  %-7s  %s%s\n", kv.first,
+					kv.second.tris, metal, marble, ice, other, HDGlossClassName(cls),
+					t ? HDGlossClassName(t->cls) : "-",
+					HDGlossPageBarred(kv.first) ? "  (barred)" : "");
+
+				if (cls != HD_GLOSS_NONE)
+					candidates.insert(kv.first);
+			}
+
+			std::printf("  the pages numbered within three of a candidate:\n");
+
+			for (const int page : candidates)
+			{
+				std::printf("  %5d:", page);
+
+				for (int near = page - 3; near <= page + 3; near++)
+				{
+					const std::map<int, GlossUse>::const_iterator u = use.find(near);
+
+					if (near == page || u == use.end())
+						continue;
+
+					std::printf(" %d(%d tris%s%s)", near, u->second.tris,
+						u->second.matTris ? ", material" : "",
+						HDGlossSeedOf(votes, near) != HD_GLOSS_NONE ? ", seed" : "");
+				}
+
+				std::printf("\n");
+			}
+
+			return;
+		}
+
+		int bySource[5] = { 0 };
+
+		std::printf("  page   tris  source class     strength  power     F0  (material tris)\n");
+
+		for (const auto& kv : use)
+		{
+			const int page = kv.first;
+			bool removes = false;
+			const HDGlossPage* f = file.find(page, &removes);
+			const int seed = HDGlossSeedOf(votes, page);
+			const HDGlossPage* t = HDGlossTableFind(page);
+			const bool barred = HDGlossPageBarred(page);
+			const HDGloss plain = HDGlossResolve(0, f, removes, t, seed, barred);
+
+			if (kv.second.tris > kv.second.matTris && plain.strength > 0.0f)
+			{
+				std::printf("  %5d %6d  %-6s %-8s  %8.3f %6.0f %6.3f\n", page,
+					kv.second.tris - kv.second.matTris, HDGlossSourceName(plain.source),
+					HDGlossClassName(plain.cls), plain.strength, plain.power, plain.f0);
+				bySource[plain.source]++;
+			}
+
+			if (kv.second.matTris)
+			{
+				const HDGloss m = HDGlossResolve(&kv.second.mat, f, removes, t, seed, barred);
+
+				std::printf("  %5d %6d  %-6s %-8s  %8.3f %6.0f %6.3f  (material %u)\n", page,
+					kv.second.matTris, HDGlossSourceName(m.source), HDGlossClassName(m.cls),
+					m.strength, m.power, m.f0, kv.second.matBase);
+				bySource[m.source]++;
+			}
+		}
+
+		std::printf("  pages by source: mat %d, file %d, seed %d, table %d\n",
+			bySource[HD_GLOSS_FROM_MAT], bySource[HD_GLOSS_FROM_FILE],
+			bySource[HD_GLOSS_FROM_SEED], bySource[HD_GLOSS_FROM_TABLE]);
+	}
+
+	/* -glosslight: the measurements the sheen's lighting rests on
+	 * (hd_gloss_math.h and hd_room.hlsl name them), over the .TRG's light
+	 * cubes, its point lights and its sun against the classic floor:
+	 *
+	 *   order  how the cube list runs: the correlation of each floor square's
+	 *          cube brightness with the baked light of the .TRG's up-facing
+	 *          triangles on that square, the cubes read x-major (the order
+	 *          of ROOM_INFO::floor) and z-major; and how many wall squares
+	 *          and floor squares carry an all-black cube.
+	 *   gain   the median over floor squares of that baked light against
+	 *          the cube's mean face (the light over the cube, per channel).
+	 *   faces  the correlation of each face's brightness, less the cube's
+	 *          mean, with the direction to each lamp between 700 and 4096
+	 *          units away from the square (x, y, z of the unit vector).
+	 *   kinds  per lamp kind, the height over the floor square under the
+	 *          lamp (median, 10th and 90th percentile) and the colour.
+	 *   sun    for a level with a sun colour, over the cubes lit from above
+	 *          (up face 1.3 times the down face), the mean of each face's
+	 *          brightness against its normal along four readings of the
+	 *          file's vector: (x, y, z), (-x, y, -z), (x, -y, z), (-x, -y, -z).
+	 *
+	 * The last line gives the median of the levels' gain medians. */
+	double correlation(const std::vector<double>& a, const std::vector<double>& b)
+	{
+		const size_t n = a.size() < b.size() ? a.size() : b.size();
+
+		if (!n)
+			return 0.0;
+
+		double ma = 0.0, mb = 0.0;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			ma += a[i];
+			mb += b[i];
+		}
+
+		ma /= n;
+		mb /= n;
+
+		double ab = 0.0, aa = 0.0, bb = 0.0;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			ab += (a[i] - ma) * (b[i] - mb);
+			aa += (a[i] - ma) * (a[i] - ma);
+			bb += (b[i] - mb) * (b[i] - mb);
+		}
+
+		return ab / std::sqrt(aa * bb + 1e-12);
+	}
+
+	double glossLight(const std::string& root, const std::string& stem,
+		const std::string& classic)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return -1.0;
+		}
+
+		std::vector<HDRoomGrid> grids;
+		std::vector<HDSectorFloor> sectors;
+
+		if (!loadGrid(classic, stem, grids, sectors))
+		{
+			std::printf("%-9s needs -classic <folder holding the .TRC>\n", stem.c_str());
+			return -1.0;
+		}
+
+		const std::vector<std::array<uint8_t, 24> >& cubes = trg.light_cubes;
+		std::vector<double> light, xMajor, zMajor, ratio;
+		long wallBlack = 0, walls = 0, floorBlack = 0, floors = 0;
+
+		for (size_t g = 0; g < grids.size() && g < trg.groups.size(); g++)
+		{
+			const HDRoomGrid& room = grids[g];
+			const int nx = room.xSectors, nz = room.zSectors;
+			std::vector<double> sum((size_t)nx * nz, 0.0);
+			std::vector<int> count((size_t)nx * nz, 0);
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[0];
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const trf::remaster::TrgVertex* v[3];
+
+					for (int k = 0; k < 3; k++)
+						v[k] = &trg.vertices[trg.indices[run.start + at + (unsigned int)k]];
+
+					if ((v[0]->normal_y() + v[1]->normal_y() + v[2]->normal_y()) / 3.0f > -0.9f)
+						continue;
+
+					const int s = HDGlossSectorAt(room, (v[0]->x + v[1]->x + v[2]->x) / 3.0f,
+						(v[0]->z + v[1]->z + v[2]->z) / 3.0f);
+
+					if (s < 0)
+						continue;
+
+					double l = 0.0;
+
+					for (int k = 0; k < 3; k++)
+						for (int c = 0; c < 3; c++)
+							l += v[k]->colour1[c] + v[k]->colour2[c];
+
+					sum[(size_t)(s - room.first)] += l / 9.0;
+					count[(size_t)(s - room.first)]++;
+				}
+			}
+
+			for (int sx = 0; sx < nx; sx++)
+				for (int sz = 0; sz < nz; sz++)
+				{
+					const size_t k = (size_t)room.first + (size_t)sx * nz + sz;
+					const size_t k2 = (size_t)room.first + (size_t)sz * nx + sx;
+
+					if (k >= cubes.size() || k2 >= cubes.size() || k >= sectors.size())
+						continue;
+
+					double c1 = 0.0, c2 = 0.0;
+
+					for (int q = 0; q < 24; q++)
+						if (q % 4 != 3)
+						{
+							c1 += cubes[k][(size_t)q];
+							c2 += cubes[k2][(size_t)q];
+						}
+
+					if (sectors[k].wall)
+					{
+						walls++;
+						wallBlack += c1 == 0.0 ? 1 : 0;
+					}
+					else
+					{
+						floors++;
+						floorBlack += c1 == 0.0 ? 1 : 0;
+					}
+
+					const int n = count[(size_t)sx * nz + sz];
+
+					if (!n)
+						continue;
+
+					light.push_back(sum[(size_t)sx * nz + sz] / n);
+					xMajor.push_back(c1 / 18.0);
+					zMajor.push_back(c2 / 18.0);
+
+					if (c1 > 0.0)
+						ratio.push_back(light.back() / (c1 / 18.0));
+				}
+		}
+
+		std::sort(ratio.begin(), ratio.end());
+
+		const double gain = ratio.empty() ? 0.0 : ratio[ratio.size() / 2];
+
+		std::printf("%-9s order x-major %.3f z-major %.3f | black cubes: walls %ld of %ld, "
+			"floors %ld of %ld | gain median %.2f (p25 %.2f, p75 %.2f)\n", stem.c_str(),
+			correlation(light, xMajor), correlation(light, zMajor), wallBlack, walls,
+			floorBlack, floors, gain, ratio.empty() ? 0.0 : ratio[ratio.size() / 4],
+			ratio.empty() ? 0.0 : ratio[ratio.size() * 3 / 4]);
+
+		// The faces against the direction to the lamps, and the kinds.
+		std::vector<double> dir[3], face[6];
+		std::map<unsigned int, std::vector<double> > height, colour;
+		std::map<unsigned int, int> away;
+
+		for (size_t g = 0; g < grids.size() && g < trg.groups.size(); g++)
+		{
+			const HDRoomGrid& room = grids[g];
+
+			for (size_t li = 0; li < trg.groups[g].volumes.size(); li++)
+			{
+				const trf::remaster::TrgGroup::PointLight lamp = trg.groups[g].light(li);
+				const int under = HDGlossSectorAt(room, lamp.x - room.originX,
+					lamp.z - room.originZ);
+
+				colour[lamp.kind].push_back((lamp.r + lamp.g + lamp.b) / 3.0);
+
+				if (under < 0 || (size_t)under >= sectors.size() || sectors[(size_t)under].wall)
+					away[lamp.kind]++;
+				else
+					height[lamp.kind].push_back(sectors[(size_t)under].floorY - lamp.y);
+
+				if (lamp.r + lamp.g + lamp.b <= 0.0f)
+					continue;
+
+				for (int sx = 0; sx < room.xSectors; sx++)
+					for (int sz = 0; sz < room.zSectors; sz++)
+					{
+						const size_t k = (size_t)room.first + (size_t)sx * room.zSectors + sz;
+
+						if (k >= sectors.size() || k >= cubes.size() || sectors[k].wall)
+							continue;
+
+						const double px = room.originX + sx * 1024 + 512;
+						const double pz = room.originZ + sz * 1024 + 512;
+						const double py = sectors[k].floorY - 512.0;
+						const double dx = lamp.x - px, dy = lamp.y - py, dz = lamp.z - pz;
+						const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
+
+						if (d < 700.0 || d > 4096.0)
+							continue;
+
+						double lum[6], mean = 0.0;
+
+						for (int f = 0; f < 6; f++)
+						{
+							lum[f] = (double)cubes[k][(size_t)f * 4] + cubes[k][(size_t)f * 4 + 1] +
+								cubes[k][(size_t)f * 4 + 2];
+							mean += lum[f] / 6.0;
+						}
+
+						dir[0].push_back(dx / d);
+						dir[1].push_back(dy / d);
+						dir[2].push_back(dz / d);
+
+						for (int f = 0; f < 6; f++)
+							face[f].push_back(lum[f] - mean);
+					}
+			}
+		}
+
+		std::printf("          faces against the lamps (%zu squares):", dir[0].size());
+
+		for (int f = 0; f < 6; f++)
+			std::printf("  f%d x%+.2f y%+.2f z%+.2f", f, correlation(face[f], dir[0]),
+				correlation(face[f], dir[1]), correlation(face[f], dir[2]));
+
+		std::printf("\n");
+
+		for (auto& kv : colour)
+		{
+			std::vector<double>& h = height[kv.first];
+			std::vector<double>& c = kv.second;
+
+			std::sort(h.begin(), h.end());
+			std::sort(c.begin(), c.end());
+			std::printf("          kind %u: %zu over a floor (+%d in a wall or outside), height "
+				"median %.0f p10 %.0f p90 %.0f | colour median %.2f max %.2f\n", kv.first,
+				h.size(), away[kv.first], h.empty() ? 0.0 : h[h.size() / 2],
+				h.empty() ? 0.0 : h[h.size() / 10], h.empty() ? 0.0 : h[h.size() * 9 / 10],
+				c[c.size() / 2], c.back());
+		}
+
+		// The sun, where there is one.
+		if (trg.sun_colour[0] > 0.0f || trg.sun_colour[1] > 0.0f || trg.sun_colour[2] > 0.0f)
+		{
+			static const double n[6][3] =
+			{
+				{ 1, 0, 0 }, { -1, 0, 0 }, { 0, -1, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, { 0, 0, -1 }
+			};
+			const double s[3] = { trg.sun_direction[0], trg.sun_direction[1], trg.sun_direction[2] };
+			const double reading[4][3] =
+			{
+				{ s[0], s[1], s[2] }, { -s[0], s[1], -s[2] },
+				{ s[0], -s[1], s[2] }, { -s[0], -s[1], -s[2] }
+			};
+			double score[4] = { 0.0, 0.0, 0.0, 0.0 };
+			long used = 0;
+
+			for (const std::array<uint8_t, 24>& c : cubes)
+			{
+				double lum[6], mean = 0.0;
+
+				for (int f = 0; f < 6; f++)
+				{
+					lum[f] = (double)c[(size_t)f * 4] + c[(size_t)f * 4 + 1] + c[(size_t)f * 4 + 2];
+					mean += lum[f] / 6.0;
+				}
+
+				if (mean <= 0.0 || !(lum[2] > 1.3 * lum[3]))
+					continue;
+
+				used++;
+
+				for (int h = 0; h < 4; h++)
+				{
+					double a = 0.0;
+
+					for (int f = 0; f < 6; f++)
+						a += (lum[f] - mean) * (n[f][0] * reading[h][0] + n[f][1] * reading[h][1] +
+							n[f][2] * reading[h][2]);
+
+					score[h] += a / mean;
+				}
+			}
+
+			std::printf("          sun (%.2f %.2f %.2f) colour (%.2f %.2f %.2f), %ld cubes lit from "
+				"above: (x,y,z) %+.3f  (-x,y,-z) %+.3f  (x,-y,z) %+.3f  (-x,-y,-z) %+.3f\n",
+				s[0], s[1], s[2], trg.sun_colour[0], trg.sun_colour[1], trg.sun_colour[2], used,
+				used ? score[0] / used : 0.0, used ? score[1] / used : 0.0,
+				used ? score[2] / used : 0.0, used ? score[3] / used : 0.0);
+		}
+
+		return gain;
+	}
+
 	int classicRooms(const std::string& folder, const std::string& stem)
 	{
 		if (folder.empty())
@@ -2432,6 +3003,15 @@ int main(int argc, char** argv)
 		std::printf("       [-flat <group>]  the horizontal surfaces of one group, with\n");
 		std::printf("                        the page each of them wears (the water survey)\n");
 		std::printf("       [-layer0]  how much of a level names no page at all\n");
+		std::printf("       [-gloss]  every page that shines, with its source (material,\n");
+		std::printf("                 file, seed, table) and the sheen's numbers;\n");
+		std::printf("                 the seed needs -classic\n");
+		std::printf("       [-glossseed]  the seed's evidence per page and the pages\n");
+		std::printf("                     numbered next to each candidate (needs -classic)\n");
+		std::printf("       [-glossfile <path>]  an hd_gloss.txt to resolve with\n");
+		std::printf("       [-glosslight]  what the sheen's lighting rests on: the light\n");
+		std::printf("                      cubes' order, faces and gain, the lamps' kinds\n");
+		std::printf("                      and the sun (needs -classic)\n");
 		std::printf("       [-matparts <material>]  every part of ONE material with its\n");
 		std::printf("                          geometry, and (with -classic) the classic\n");
 		std::printf("                          room's own horizontal planes beside it\n");
@@ -2477,10 +3057,22 @@ int main(int argc, char** argv)
 	long near_at[3] = { 0, 0, 0 };
 	long near_radius = 0;
 	bool near_given = false;
+	bool gloss = false;
+	bool gloss_seed = false;
+	bool gloss_light = false;
+	std::string gloss_file;
 
 	for (int i = 2; i < argc; i++)
 	{
-		if (!_stricmp(argv[i], "-roomspace"))
+		if (!_stricmp(argv[i], "-gloss"))
+			gloss = true;
+		else if (!_stricmp(argv[i], "-glosslight"))
+			gloss_light = true;
+		else if (!_stricmp(argv[i], "-glossseed"))
+			gloss_seed = true;
+		else if (!_stricmp(argv[i], "-glossfile") && i + 1 < argc)
+			gloss_file = argv[++i];
+		else if (!_stricmp(argv[i], "-roomspace"))
 			room_space = true;
 		else if (!_stricmp(argv[i], "-share") && i + 1 < argc)
 			room_share = std::atoi(argv[++i]);
@@ -2569,6 +3161,60 @@ int main(int argc, char** argv)
 	const int cores = (int)std::thread::hardware_concurrency();
 	std::printf("install : %s\n", root.c_str());
 	std::printf("cores   : %d\n\n", cores);
+
+	if (gloss_light)
+	{
+		std::vector<double> gains;
+
+		for (const std::string& stem : levels)
+		{
+			const double gain = glossLight(root, stem, classic);
+
+			if (gain > 0.0)
+				gains.push_back(gain);
+		}
+
+		std::sort(gains.begin(), gains.end());
+
+		if (!gains.empty())
+			std::printf("\nthe median of the levels' gain medians: %.2f over %zu level(s)\n",
+				gains[gains.size() / 2], gains.size());
+
+		return 0;
+	}
+
+	if (gloss || gloss_seed)
+	{
+		/* The override file as the engine reads it (hd_render.cpp): the
+		 * whole text through HDGlossParseText. Without -glossfile there is
+		 * none, which is the engine without an hd_gloss.txt. */
+		HDGlossFile file;
+
+		if (!gloss_file.empty())
+		{
+			std::FILE* f = std::fopen(gloss_file.c_str(), "rb");
+			std::string text;
+
+			if (f)
+			{
+				char buffer[4096];
+				size_t got;
+
+				while ((got = std::fread(buffer, 1, sizeof(buffer), f)) > 0)
+					text.append(buffer, got);
+
+				std::fclose(f);
+				HDGlossParseText(text.c_str(), &file);
+			}
+			else
+				std::printf("-glossfile: %s cannot be read - no file\n", gloss_file.c_str());
+		}
+
+		for (const std::string& stem : levels)
+			dumpGloss(root, stem, classic, gloss_seed, file);
+
+		return 0;
+	}
 
 	if (room_space)
 	{

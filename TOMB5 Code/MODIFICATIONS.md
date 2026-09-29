@@ -2912,25 +2912,27 @@ point, R the matrix's rotation, c its camera, S the reflection's diagonal; `:177
 path projects (x = centre + persp vx / vz) and intersects their bounding rectangle with a
 window; a corner nearer than the near plane gives the window itself.
 `game/mirror.cpp:171`, `DrawOneMirror`, takes the rectangle inside the mirror room's
-portal window (`:217`; the whole screen for a room left without a window), sets `f_left`
-.. `f_bottom` and `phd_left` .. `phd_bottom` to it (`:220`), narrows the room's own window
-to it (`:230`), works out the planes after the view is reflected (`:246`) and hands them
-to `HDObjectReflection(true, planes)` (`:247`); all of it is put back at the end (`:332`).
-`specific/hd/hd_object.cpp:174`, `FrameItem::clip`, carries twelve floats; `stamp_clip`
-(`:204`) stamps the mirror's planes while a reflection is recorded and the planes that
-keep every pixel otherwise, in `HDObjectEnd` for an item (`:2922`) and in `HDObjectPush`
-for Lara's pieces and the braid (`:3830`); `HDInvEnd` stamps the ring and the pickup
-display with the planes that keep every pixel (`:3459`). `HDObjectFrameDraw` hands each
-entry's planes to `HDModelClip` beside `HDModelOffCentre` (`:3626`) and puts them back
-after the list (`:3703`). `hd_model.cpp:4109`, `HDModelClip`, uploads c5 - c7 of the pixel
-file only when the planes change; `HDModelFrameBegin` uploads the planes that keep every
-pixel at every bracket's start (`:4106`), so the pickup display's bracket, which never
-calls it, keeps every pixel. `hd_shader/hd_model.hlsl:244` declares `gClip[3]` in c5 - c7,
-and `ModelPS` clips after the neck cut (`:617`) on the smallest of the three dots with
-`viewPos`, the skinned point in view space. The classic cut: `phd_PutPolygons` and its
-variants copy `f_left` .. `f_bottom` into `clip_left` .. `clip_bottom`
-(`specific/output.cpp:1942`, `:2146`, `:2240`, `:2428`, `:2509`, `:2588`) and
-`XYUVGClipper` cuts a polygon to `f_left` .. `f_bottom` when it is inserted
+portal window (`:222`; the whole screen for a room left without a window; the room
+window's right and bottom are inclusive, as the camera room's phd_winxmax and phd_winymax,
+so they go into the intersection one past their edge and come back one short of the
+rectangle's), sets `f_left` .. `f_bottom` and `phd_left` .. `phd_bottom` to it (`:225`),
+narrows the room's own window to it (`:234`), works out the planes after the view is
+reflected (`:250`) and hands them to `HDObjectReflection(true, planes)` (`:251`); all of
+it is put back at the end (`:336`). `specific/hd/hd_object.cpp:174`, `FrameItem::clip`,
+carries twelve floats; `stamp_clip` (`:204`) stamps the mirror's planes while a reflection
+is recorded and the planes that keep every pixel otherwise, in `HDObjectEnd` for an item
+(`:2922`) and in `HDObjectPush` for Lara's pieces and the braid (`:3830`); `HDInvEnd`
+stamps the ring and the pickup display with the planes that keep every pixel (`:3459`).
+`HDObjectFrameDraw` hands each entry's planes to `HDModelClip` beside `HDModelOffCentre`
+(`:3626`) and puts them back after the list (`:3703`). `hd_model.cpp:4109`, `HDModelClip`,
+uploads c5 - c7 of the pixel file only when the planes change; `HDModelFrameBegin` uploads
+the planes that keep every pixel at every bracket's start (`:4106`), so the pickup
+display's bracket, which never calls it, keeps every pixel. `hd_shader/hd_model.hlsl:244`
+declares `gClip[3]` in c5 - c7, and `ModelPS` clips after the neck cut (`:617`) on the
+smallest of the three dots with `viewPos`, the skinned point in view space. The classic
+cut: `phd_PutPolygons` and its variants copy `f_left` .. `f_bottom` into `clip_left` ..
+`clip_bottom` (`specific/output.cpp:1942`, `:2146`, `:2240`, `:2428`, `:2509`, `:2588`)
+and `XYUVGClipper` cuts a polygon to `f_left` .. `f_bottom` when it is inserted
 (`specific/clipping.cpp:112`, `specific/polyinsert.cpp:1204`); `phd_left` .. `phd_bottom`
 only drop a whole object (`S_GetObjectBounds`, `output.cpp:860`), and `DrawLara` sets them
 to the whole screen, so the rectangle goes into `f_left` .. `f_bottom`, which reaches
@@ -2938,9 +2940,9 @@ Lara's classic body and braid as well. `game/draw.cpp:1188`, `PrintObjectReflect
 takes its window from `f_left` .. `f_bottom` (`:1204`) instead of the whole screen.
 `calc_animating_item_clip_window` (`:3665`) cannot pass the rectangle: its room branches
 read the mirror room's window, narrowed to the rectangle for the call, and its door
-branch, taken for a door of the clip room to the camera's room over the item, sets
-nothing and keeps what `PrintObjectReflection` set. The mirror's log line ends in
-` win=%ld,%ld,%ld,%ld` (`mirror.cpp:391`), the rectangle's left, top, right and bottom,
+branch, taken for a door of the clip room to the camera's room over the item, sets nothing
+and keeps what `PrintObjectReflection` set. The mirror's log line ends in
+` win=%ld,%ld,%ld,%ld` (`mirror.cpp:395`), the rectangle's left, top, right and bottom,
 right and bottom exclusive.
 
 **Checked.** The planes on the still camera, reflected: the glass (-0.4980, -0.3185,
@@ -2998,7 +3000,7 @@ glass, turning, walking along it, the braid swinging, nothing of the reflection 
 of it; in the middle of the washroom the reflection whole; the cabin doors and room 177's
 door still in the glass; the lobby floor and the other levels as before.
 
-**Commits.** `add3a27`, `35d7a1f`
+**Commits.** `add3a27`, `35d7a1f`, `578047a`
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11

@@ -201,10 +201,14 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn, long* win)
 	const short roomWin[4] = { mr->left, mr->top, mr->right, mr->bottom };
 
 	/* The copy's rectangle, through the real view and inside the mirror
-	 * room's portal window. A room the walk left without a window - an
-	 * empty one, left at or past right - bounds nothing, and the whole
-	 * screen stands in for it. */
-	long portal[4] = { mr->left, mr->top, mr->right, mr->bottom };
+	 * room's portal window. That window's right and bottom are inclusive -
+	 * the camera room's are phd_winxmax and phd_winymax (DrawRooms) - and
+	 * the rectangle's are exclusive, as f_right and f_bottom are, so the
+	 * window goes in one past its edge and comes back one short of the
+	 * rectangle's. A room the walk left without a window - an empty one,
+	 * right before left - bounds nothing, and the whole screen stands in
+	 * for it. */
+	long portal[4] = { mr->left, mr->top, mr->right + 1, mr->bottom + 1 };
 
 	if (portal[0] >= portal[2] || portal[1] >= portal[3])
 	{
@@ -229,8 +233,8 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn, long* win)
 	// The portal window narrowed to the rectangle, for the doors' window.
 	mr->left = (short)(mr->left > win[0] ? mr->left : win[0]);
 	mr->top = (short)(mr->top > win[1] ? mr->top : win[1]);
-	mr->right = (short)(mr->right < win[2] ? mr->right : win[2]);
-	mr->bottom = (short)(mr->bottom < win[3] ? mr->bottom : win[3]);
+	mr->right = (short)(mr->right < win[2] - 1 ? mr->right : win[2] - 1);
+	mr->bottom = (short)(mr->bottom < win[3] - 1 ? mr->bottom : win[3] - 1);
 
 	phd_PushMatrix();
 	MirrorView(w2v_matrix, a, m.plane, true);

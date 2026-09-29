@@ -25,7 +25,7 @@
  * crate's ribbed side, a steel duct panel, a marble slab - and it is the
  * same picture wherever a level uses it, because a page number is a file
  * name in the install's one TEX folder. Three sources name a page's gloss,
- * and the first that names it wins:
+ * and a fourth tunes them; the first that names a page wins:
  *
  *   material  a .TRG part of material 3 or 17 carries its own exponent and
  *             strength (see HDGlossFromMaterial). The art's own datum and
@@ -34,23 +34,28 @@
  *             hand-kept list in the table's format, read at every level
  *             load. An entry replaces the table's for its page, and a line
  *             "-<page>" takes the page out of the table and the seed alike -
- *             a surface can be tuned or switched off without a rebuild. Next
- *             after the material, because it is the one source a person
+ *             a surface can be tuned or switched off without a rebuild.
+ *             Next after the material, because it is the one source a person
  *             writes on purpose for this installation.
+ *   the table the page table compiled into the engine (hd_gloss_pages.h):
+ *             what the floor cannot show - walls, ducts, crate fronts - and
+ *             the seed's misreadings, a page it names that is not what its
+ *             floor says ("-<page>" lines there too). Before the seed,
+ *             because every line of it was looked at.
  *   the seed  a page whose up-facing triangles stand on classic floor
  *             squares of the footstep material metal, marble or ice takes
  *             that class, for ALL its triangles - the top of a crate names
  *             its sides as well (see HDGlossSeedClass).
- *   the table the page table compiled into the engine (hd_gloss_pages.h),
- *             for what the floor cannot show: walls, ducts, crate fronts.
  *
- * Every page RICH2's lobby is made of is barred from the last three
- * (HDGlossPageBarred): its floors are a mirror of their own. */
+ * Every page RICH2's lobby is made of is barred from the file, the table and
+ * the seed (HDGlossPageBarred): its floors are a mirror of their own. */
 
 #include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <map>
 
 /* The classes. A class is a set of three defaults - strength, exponent and
  * the reflectance at normal incidence, F0 - and whether the reflection takes
@@ -83,8 +88,9 @@
  * a gloss mask in its alpha, and the sheen is multiplied by it; above it the
  * alpha is flat (253 to 255 on 1,345 of the 1,463 opaque-pass pages of the
  * fifteen levels - BC7 noise) and the sheen is uniform. 34 of the 35 pages
- * that carry material 3 or 17 are below it (the page census, probe189t
- * masks). */
+ * that carry material 3 or 17 are below it (the top mip of every
+ * opaque-pass page of the fifteen levels, read as DdsProbe -alpha reads a
+ * page). */
 #define HD_GLOSS_MASK_BELOW	250
 
 struct HDGloss
@@ -135,14 +141,26 @@ inline const char* HDGlossSourceName(int source)
 
 /* The defaults of a class.
  *
- * F0 is the textbook reflectance at normal incidence: ((n - 1) / (n + 1))^2
- * for a dielectric of refractive index n - 0.04 for glass and polished stone
- * at n = 1.5, 0.02 for ice at n = 1.31 - and about half for steel, whose
- * reflection also takes the metal's own colour. Strength and exponent are
- * chosen: metal a broad sheen (painted and worn steel, crates, ducts),
- * marble and glass a tighter one, ice between. Marble and ice are weaker
- * face on and come up at a grazing angle through Schlick's term; metal
- * shines face on. */
+ * F0, the reflectance at normal incidence, starts from the textbook's
+ * ((n - 1) / (n + 1))^2 for a dielectric of refractive index n - 0.04 for
+ * glass and polished stone at n = 1.5, 0.02 for ice at n = 1.31 - and about
+ * half for steel, whose reflection also takes the metal's own colour.
+ *
+ * The dielectrics are drawn at 0.08, twice the textbook figure. What the
+ * sheen reflects is the room's light cube, a blur of the room's mean light,
+ * not the bright lamps and windows a real polished floor mirrors, and at
+ * the physical figure the floor barely moves: RoomProbe on ANDREA2 room 16's
+ * marble from (1300, 200, 2900), yaw 90, pitch 18, 1280 x 960, lifts the
+ * mean from 68.5 to 71.1 at 0.04 (strength 0.8, exponent 96; 20,538 pixels
+ * by more than 32 of 255), to 73.4 at 0.08 (62,778) and to 75.0 at 0.12
+ * (89,227); at 0.12 RICH2's washroom (room 135 from (2800, -24800, 2566),
+ * yaw 270, pitch 22) turns milky - 280,374 pixels by more than 32 - and at
+ * 0.08 it keeps its tiles (129,882).
+ *
+ * Strength and exponent are chosen: metal a broad sheen (painted and worn
+ * steel, crates, ducts), marble and glass a tighter one, ice between. Marble
+ * and ice are weak face on and come up at a grazing angle through Schlick's
+ * term; metal shines face on. */
 inline bool HDGlossClassDefaults(int cls, HDGloss* out)
 {
 	out->cls = cls;
@@ -158,13 +176,13 @@ inline bool HDGlossClassDefaults(int cls, HDGloss* out)
 		out->strength = 0.8f; out->power = 48.0f; out->f0 = 0.5f; out->tint = 1.0f;
 		return true;
 	case HD_GLOSS_MARBLE:
-		out->strength = 0.8f; out->power = 96.0f; out->f0 = 0.04f;
+		out->strength = 1.0f; out->power = 64.0f; out->f0 = 0.08f;
 		return true;
 	case HD_GLOSS_ICE:
-		out->strength = 0.7f; out->power = 64.0f; out->f0 = 0.02f;
+		out->strength = 1.0f; out->power = 48.0f; out->f0 = 0.08f;
 		return true;
 	case HD_GLOSS_GLASS:
-		out->strength = 0.8f; out->power = 110.0f; out->f0 = 0.04f;
+		out->strength = 1.0f; out->power = 96.0f; out->f0 = 0.08f;
 		return true;
 	case HD_GLOSS_CUSTOM:
 		// A custom page names its own three numbers; the defaults are those
@@ -424,24 +442,101 @@ inline int HDGlossParseLine(const char* line, HDGlossPage* out, bool* remove)
 	return 1;
 }
 
+/* hd_gloss.txt as read: the entries by page - a later line for the same page
+ * replaces an earlier one, and an entry of class HD_GLOSS_NONE is a "-<page>"
+ * line, a page taken out - the lines looked at and the ones that could not
+ * be read. */
+struct HDGlossFile
+{
+	std::map<int, HDGlossPage> entries;
+	int lines;
+	int bad;
+	bool present;
+
+	HDGlossFile() : lines(0), bad(0), present(false) {}
+
+	// The file's entry for a page, or null; `removes` says it took the page out.
+	const HDGlossPage* find(int page, bool* removes) const
+	{
+		const std::map<int, HDGlossPage>::const_iterator at = entries.find(page);
+
+		*removes = at != entries.end() && at->second.cls == HD_GLOSS_NONE;
+		return at != entries.end() && at->second.cls != HD_GLOSS_NONE ? &at->second : 0;
+	}
+};
+
+// The whole text of hd_gloss.txt, line by line (CR, LF or both end a line).
+inline void HDGlossParseText(const char* text, HDGlossFile* out)
+{
+	out->entries.clear();
+	out->lines = 0;
+	out->bad = 0;
+	out->present = text != 0;
+
+	for (const char* at = text; at && *at; )
+	{
+		const char* end = at;
+
+		while (*end && *end != '\n' && *end != '\r')
+			end++;
+
+		char line[256];
+		const size_t n = (size_t)(end - at) < sizeof(line) - 1
+			? (size_t)(end - at) : sizeof(line) - 1;
+
+		memcpy(line, at, n);
+		line[n] = 0;
+		out->lines++;
+
+		HDGlossPage entry;
+		bool remove = false;
+		const int got = (size_t)(end - at) >= sizeof(line) ? -1 :
+			HDGlossParseLine(line, &entry, &remove);
+
+		if (got < 0)
+			out->bad++;
+		else if (got > 0)
+		{
+			if (remove)
+				entry.cls = HD_GLOSS_NONE;
+
+			out->entries[entry.page] = entry;
+		}
+
+		// One line end, whichever of the two or both it is.
+		if (*end == '\r' && end[1] == '\n')
+			end += 2;
+		else if (*end)
+			end++;
+
+		at = end;
+	}
+}
+
 /* The order of trust for one page, as described at the top of this file:
- * the material, then the file, then the seed, then the table. `mat` is the
- * part's own gloss or null; `fileEntry` is the file's entry for the page or
- * null, and `fileRemoves` says that the file took the page out; `seedClass`
- * is HD_GLOSS_NONE where the seed names nothing; `tableEntry` is the table's
- * entry or null. A material part keeps its own strength and exponent; a
- * class the file or the table names for its page replaces the material's
- * class, F0 and tint, so a table can say that ANDREA2's material 3 armour
- * is metal. `barred` pages take nothing but the material. */
+ * the material, then the file, then the table, then the seed.
+ *
+ * `mat` is the part's own gloss or null. `fileEntry` is the file's entry for
+ * the page or null, and `fileRemoves` says that the file took the page out.
+ * `tableEntry` is the table's line or null; a line of class HD_GLOSS_NONE
+ * takes the page out, like the file's "-<page>". `seedClass` is
+ * HD_GLOSS_NONE where the seed names nothing. `barred` pages take nothing
+ * but the material.
+ *
+ * A material part keeps its own strength and exponent whatever else names
+ * its page; a class the file or the table names for the page replaces the
+ * material's class, F0 and tint - so the table can say that ANDREA2's
+ * material 3 armour is metal and JOBY2's material 3 snow is ice. */
 inline HDGloss HDGlossResolve(const HDGloss* mat, const HDGlossPage* fileEntry,
-	bool fileRemoves, int seedClass, const HDGlossPage* tableEntry, bool barred)
+	bool fileRemoves, const HDGlossPage* tableEntry, int seedClass, bool barred)
 {
 	HDGloss out;
 
 	HDGlossClassDefaults(HD_GLOSS_NONE, &out);
 
+	const bool tableRemoves = tableEntry && tableEntry->cls == HD_GLOSS_NONE;
 	const HDGlossPage* named = barred ? 0 : fileEntry ? fileEntry :
-		fileRemoves ? 0 : tableEntry;
+		fileRemoves || tableRemoves ? 0 : tableEntry;
 
 	if (mat)
 	{
@@ -462,26 +557,20 @@ inline HDGloss HDGlossResolve(const HDGloss* mat, const HDGlossPage* fileEntry,
 		return out;
 	}
 
-	if (barred)
+	if (barred || (!fileEntry && (fileRemoves || tableRemoves)))
 		return out;
 
 	if (fileEntry && HDGlossFromPage(*fileEntry, HD_GLOSS_FROM_FILE, &out))
 		return out;
 
-	if (fileRemoves)
-	{
-		HDGlossClassDefaults(HD_GLOSS_NONE, &out);
+	if (tableEntry && HDGlossFromPage(*tableEntry, HD_GLOSS_FROM_TABLE, &out))
 		return out;
-	}
 
 	if (seedClass != HD_GLOSS_NONE && HDGlossClassDefaults(seedClass, &out))
 	{
 		out.source = HD_GLOSS_FROM_SEED;
 		return out;
 	}
-
-	if (tableEntry && HDGlossFromPage(*tableEntry, HD_GLOSS_FROM_TABLE, &out))
-		return out;
 
 	HDGlossClassDefaults(HD_GLOSS_NONE, &out);
 	return out;
@@ -511,15 +600,29 @@ inline bool HDGlossFacesUp(const float a[3], const float b[3], const float c[3],
 
 /* The seed's verdict on one page, out of the up-facing triangles the page
  * has over the classic floor: `perFx[16]` counts them per footstep material
- * of the square under each centroid. The class of the gloss-naming material
- * with the most triangles wins when it holds at least half of all the
- * page's triangles over any floor - so a page that is mostly stone and
- * crosses one metal square stays matt, and the crate's top, all of it on
- * its metal square, shines. At least HD_GLOSS_SEED_MIN triangles, so that one
- * stray triangle names nothing. */
+ * of the square under each centroid, and `pageTris` is every triangle the
+ * page has in the rooms' surface passes. The class of the gloss-naming
+ * material with the most votes wins when
+ *
+ *   - it holds at least half of the page's votes over any floor, so a page
+ *     that is mostly stone and crosses one metal square stays matt, and the
+ *     crate's top, all of it on its metal square, shines;
+ *   - it is at least HD_GLOSS_SEED_MIN triangles, so that one stray triangle
+ *     names nothing;
+ *   - and it is at least HD_GLOSS_SEED_SHARE per cent of the page's own
+ *     triangles. A page the level wears everywhere and that touches a metal
+ *     floor here and there - RICH2's 3008, 194 votes on 226,746 triangles,
+ *     and 3011, 970 on 315,671; ANDREA1's stucco facades 182 and 213, 18 on
+ *     2,479 and 16 on 3,740 - is not a metal page, while the crate's page
+ *     140 has 162 votes on 2,490 triangles, 6.5 per cent, and JOBY2's
+ *     riveted plates 447 to 453 have 4 to 45 per cent (TrgProbe -glossseed
+ *     over the fifteen levels). A metal page the rule turns away - JOBY2's
+ *     riveted column 421, 108 votes on 14,406 triangles - is a line of the
+ *     page table. */
 #define HD_GLOSS_SEED_MIN	2
+#define HD_GLOSS_SEED_SHARE	1
 
-inline int HDGlossSeedClass(const int perFx[16])
+inline int HDGlossSeedClass(const int perFx[16], int pageTris)
 {
 	int total = 0;
 	int byClass[HD_GLOSS_CLASSES] = { 0 };
@@ -537,7 +640,8 @@ inline int HDGlossSeedClass(const int perFx[16])
 			best = cls;
 
 	if (best == HD_GLOSS_NONE || byClass[best] < HD_GLOSS_SEED_MIN ||
-		byClass[best] * 2 < total)
+		byClass[best] * 2 < total ||
+		(long long)byClass[best] * 100 < (long long)pageTris * HD_GLOSS_SEED_SHARE)
 		return HD_GLOSS_NONE;
 
 	return best;
@@ -549,8 +653,8 @@ inline int HDGlossSeedClass(const int perFx[16])
  * (floor[sz + x_size * sx]) and of the .TRG's light cubes, one cube per
  * square in the same order (the cube's brightness follows the floor light
  * of the .TRG triangles on its square at a correlation of 0.35 to 0.84 per
- * level read that way against 0.07 to 0.51 read z-major; probe189c over the
- * fifteen .TRG and Backup .trc files). A wall square has no floor and an
+ * level read that way against 0.07 to 0.51 read z-major; TrgProbe
+ * -glosslight over the fifteen levels). A wall square has no floor and an
  * all-black cube - 3,104 of 3,104 in ANDREA1, and the same in every level. */
 struct HDSectorFloor
 {
@@ -611,7 +715,7 @@ inline void HDGlossSeedVote(const float a[3], const float b[3], const float c[3]
  * unnormalised colour and a kind).
  *
  * Where they hang, measured per kind as the height over the floor square
- * under each lamp (probe189c over the fifteen .TRG and Backup .trc files):
+ * under each lamp (TrgProbe -glosslight over the fifteen levels):
  * kinds 0, 1 and 2 hang 1,300 to 3,300 units over the floor in every level
  * (medians), where the ceiling lamps and the wall sconces are; kind 3 does the
  * same in RICH3 (median 2,087) and hangs UNDER the floor in RICH2 (median
@@ -641,7 +745,7 @@ inline void HDGlossSeedVote(const float a[3], const float b[3], const float c[3]
  * normal along each of the four readings: (-x, y, -z) scores +0.618 in
  * ANDREA2, +0.153 in JOBY2 (against +0.173 for (x, y, z)), +0.603 in JOBY4
  * and +0.287 in TITLE, and (x, -y, z) - the plain reading - scores the
- * negative of it in all four (probe189s over the four .TRG files). */
+ * negative of it in all four (TrgProbe -glosslight on the four levels). */
 inline void HDGlossSunToward(const float file[3], float out[3])
 {
 	out[0] = -file[0];
@@ -653,10 +757,10 @@ inline void HDGlossSunToward(const float file[3], float out[3])
  * unit vector, each on the face its sign points at. The faces are in the
  * .TRG's own order - +x, -x, up, down, +z, -z, "up" being -y in this engine
  * (measured: the face correlates with the direction to the room's lamps,
- * TITLE face 2 at -0.64 and face 3 at +0.49 against the lamp's y; probe189c
- * over the fifteen .TRG files). The weights sum to one; an axis-aligned
- * direction puts all of it on one face. False, and zeroes, for a zero
- * vector. */
+ * TITLE face 2 at -0.64 and face 3 at +0.49 against the lamp's y; TrgProbe
+ * -glosslight over the fifteen levels). The weights sum to one; an
+ * axis-aligned direction puts all of it on one face. False, and zeroes, for a
+ * zero vector. */
 inline bool HDGlossCubeWeights(const float dir[3], float w[6])
 {
 	for (int f = 0; f < 6; f++)

@@ -35,12 +35,16 @@
 #include "hd_shader/hd_room_gloss_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_gloss_math.h"
+#include "hd_gloss_pages.h"
+#include "hd_gloss_seed.h"
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
+#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -2882,6 +2886,78 @@ namespace
 	// Once per level: the draw calls that take the gloss variant.
 	int g_sheen_ranges = 0;
 
+	/* Which surfaces shine - the four sources of hd_gloss_math.h.
+	 *
+	 * `g_gloss_path` is the override file handed in for the next build
+	 * (HDRenderGlossFile), `g_gloss_file` what the build read out of it.
+	 * `g_votes` is the seed's walk over the level (hd_gloss_seed.h), and
+	 * `g_page_gloss` the answer for a page's plain triangles, worked out once
+	 * per page. The part counts and the page lines are the level's GLOSSLOG. */
+	std::string g_gloss_path;
+	HDGlossFile g_gloss_file;
+	std::unordered_map<int, HDGlossVotes> g_votes;
+	std::unordered_map<int, HDGloss> g_page_gloss;
+	std::vector<HDRenderGlossPage> g_gloss_pages;
+	int g_gloss_parts_by[5] = { 0, 0, 0, 0, 0 };
+
+	/* The resolver for one page (HDGlossResolve), with the page's slot for the
+	 * engine's second bar: a page part-way clear in every texel is a floor
+	 * of the blend phase (HD_PASS_CLEAR) and never shines, whatever names it
+	 * - RICH2's, RICHCUT2's and TITLE's clear floors, beside the lobby pages
+	 * HDGlossPageBarred names. */
+	HDGloss ResolvePage(int page, int slot, const HDGloss* mat)
+	{
+		bool removes = false;
+		const HDGlossPage* file = g_gloss_file.find(page, &removes);
+		const bool barred = page < 0 || HDGlossPageBarred(page) ||
+			HDPageCacheSlotClear(slot);
+
+		return HDGlossResolve(mat, file, removes, HDGlossTableFind(page),
+			HDGlossSeedOf(g_votes, page), barred);
+	}
+
+	// The same for the triangles of a page no material names, remembered.
+	HDGloss PageGloss(int page)
+	{
+		const std::unordered_map<int, HDGloss>::const_iterator at = g_page_gloss.find(page);
+
+		if (at != g_page_gloss.end())
+			return at->second;
+
+		const HDGloss got = ResolvePage(page, HDPageCacheSlotOf(page), 0);
+
+		g_page_gloss[page] = got;
+		return got;
+	}
+
+	/* Reads the override file for the build that is about to run. A file
+	 * that is not there is no file (`present` false); one that is there is
+	 * read whole and parsed line by line (HDGlossParseText) - a bad line is
+	 * counted and the rest are kept. */
+	void ReadGlossFile()
+	{
+		g_gloss_file = HDGlossFile();
+
+		if (g_gloss_path.empty())
+			return;
+
+		std::FILE* file = std::fopen(g_gloss_path.c_str(), "rb");
+
+		if (!file)
+			return;
+
+		std::string text;
+		char buffer[4096];
+		size_t got;
+
+		while ((got = std::fread(buffer, 1, sizeof(buffer), file)) > 0 &&
+			text.size() < (1u << 20))
+			text.append(buffer, got);
+
+		std::fclose(file);
+		HDGlossParseText(text.c_str(), &g_gloss_file);
+	}
+
 	/* What one glossy draw call is lit with.
 	 *
 	 * The cube: the mean of the light cubes of the floor squares its
@@ -3005,17 +3081,24 @@ namespace
 
 	/* The sheen of every draw call, once the level's ranges are built.
 	 *
-	 * A material 3 or 17 part names its own strength and exponent (see
-	 * MaterialGloss), and its class follows from the material: 17 is the
-	 * submarine's painted steel, metal; 3's masks select window panes,
-	 * puddles and ice, a dielectric (hd_gloss_math.h, HDGlossFromMaterial).
-	 * Whether the page's alpha masks the sheen is the page's own smallest
-	 * alpha against HD_GLOSS_MASK_BELOW, and what it is lit with LightSheen's
-	 * answer. */
+	 * A draw call is one page of one room, so its sheen is its page's: the
+	 * material's where a material 3 or 17 part drew it (MaterialGloss, and
+	 * the class follows from the material - 17 the submarine's painted
+	 * steel, metal; 3's masks select window panes, puddles and ice, a
+	 * dielectric), otherwise what the file, the table or the seed name for
+	 * the page (ResolvePage, in that order). It is worked out AFTER the sort,
+	 * and nothing of it is in the sort key: the ranges, their order and their
+	 * draw calls are the ones the level had before, and the page is in the
+	 * key already. Whether the page's alpha masks the sheen is the page's
+	 * own smallest alpha against HD_GLOSS_MASK_BELOW, and what it is lit with
+	 * LightSheen's answer. */
 	void ResolveSheen(const trf::remaster::Trg& trg,
 		const std::vector<unsigned int>& sorted)
 	{
 		g_sheen_ranges = 0;
+		g_gloss_pages.clear();
+
+		std::map<long long, size_t> line_of;
 
 		for (size_t g = 0; g < g_groups.size(); g++)
 		{
@@ -3026,20 +3109,49 @@ namespace
 				{
 					range.sheen = 0.0f;
 
-					if (!RangeTakesSheen(range, pass, sky) || range.gloss <= 0.0f)
+					if (!RangeTakesSheen(range, pass, sky))
 						continue;
 
-					HDGloss mat;
+					const int page = HDPageCachePageOfSlot(range.pageSlot);
+					HDGloss got;
 
-					HDGlossClassDefaults(HDGlossMaterialClass((unsigned int)range.glossMat), &mat);
-					mat.source = HD_GLOSS_FROM_MAT;
-					mat.strength = range.gloss;
-					mat.power = range.glossPower;
+					if (range.gloss > 0.0f)
+					{
+						HDGloss mat;
 
-					const HDGloss got = HDGlossResolve(&mat, 0, false, HD_GLOSS_NONE, 0, false);
+						HDGlossClassDefaults(HDGlossMaterialClass((unsigned int)range.glossMat), &mat);
+						mat.source = HD_GLOSS_FROM_MAT;
+						mat.strength = range.gloss;
+						mat.power = range.glossPower;
+						got = ResolvePage(page, range.pageSlot, &mat);
+					}
+					else
+						got = PageGloss(page);
 
 					if (got.strength <= 0.0f)
 						continue;
+
+					/* The level's GLOSSLOG page lines: one per page and source,
+					 * with the triangles that take it. */
+					const long long key = ((long long)page << 3) | got.source;
+					const std::map<long long, size_t>::const_iterator at = line_of.find(key);
+
+					if (at == line_of.end())
+					{
+						HDRenderGlossPage line;
+
+						line.page = page;
+						line.cls = got.cls;
+						line.source = got.source;
+						line.strength = got.strength;
+						line.power = got.power;
+						line.f0 = got.f0;
+						line.tris = (int)(range.count / 3);
+						line_of[key] = g_gloss_pages.size();
+						g_gloss_pages.push_back(line);
+					}
+					else
+						g_gloss_pages[at->second].tris += (int)(range.count / 3);
 
 					range.sheen = got.strength;
 					range.sheenPower = got.power;
@@ -3064,6 +3176,9 @@ namespace
 		g_mirrors.clear();
 		g_lamps.clear();
 		g_cubes.clear();
+		g_votes.clear();
+		g_page_gloss.clear();
+		g_gloss_pages.clear();
 		g_room_groups = 0;
 		g_vertex_count = 0;
 		g_index32 = false;
@@ -3605,6 +3720,16 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	for (int c = 0; c < 3; c++)
 		g_sun_rgb[c] = trg.sun_colour[c] > 0.0f ? trg.sun_colour[c] : 0.0f;
+
+	/* Which surfaces shine: the override file and the seed, before the
+	 * build asks for a page's answer (PageGloss). */
+	ReadGlossFile();
+	HDGlossSeedWalk(trg, g_room_groups, g_grids, g_grid_count, g_sectors,
+		g_sector_count, g_votes);
+	g_page_gloss.clear();
+
+	for (int k = 0; k < 5; k++)
+		g_gloss_parts_by[k] = 0;
 
 	/* 32 bit indices unless the level is small enough not to need them, or
 	 * the device cannot do them. ANDREA2 has 5,471,013 indices over 1.1 M
@@ -4517,6 +4642,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				// Whether this part has been counted as a clear floor.
 				bool part_clear = false;
 
+				/* Which sources name the pages of this part - the GLOSSLOG
+				 * level line's part counts. Asked of the parts whose draw
+				 * calls can take the sheen at all (RangeTakesSheen), per
+				 * triangle, because a part runs over several pages. */
+				const bool part_sheen = pass != 2 && (int)g < g_room_groups &&
+					!scrolls && ftime == 0.0f && btime == 0.0f && !water &&
+					flat == 0.0f && blend == 0.0f && run.count;
+				unsigned int part_sources = 0;
+
 				for (unsigned int at = 0; at + 2 < run.count; at += 3)
 				{
 					const unsigned int first = run.start + at;
@@ -4870,7 +5004,22 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.glow = glow_id;
 					tri.first = first;
 					tris.push_back(tri);
+
+					if (part_sheen && gloss == 0.0f)
+					{
+						const HDGloss named = PageGloss(HDPageCachePageOfSlot(slot));
+
+						if (named.strength > 0.0f)
+							part_sources |= 1u << named.source;
+					}
 				}
+
+				if (part_sheen && gloss > 0.0f)
+					g_gloss_parts_by[HD_GLOSS_FROM_MAT]++;
+
+				for (int source = HD_GLOSS_FROM_SEED; source <= HD_GLOSS_FROM_FILE; source++)
+					if (part_sources & (1u << source))
+						g_gloss_parts_by[source]++;
 			}
 
 			if (tris.empty())
@@ -6917,6 +7066,48 @@ int HDRenderBookCalls()
 int HDRenderGlossCalls()
 {
 	return g_gloss_calls;
+}
+
+void HDRenderGlossFile(const char* path)
+{
+	g_gloss_path = path ? path : "";
+}
+
+void HDRenderGlossLevelInfo(HDRenderGlossLevel* out)
+{
+	if (!out)
+		return;
+
+	std::unordered_set<int> pages;
+
+	for (size_t i = 0; i < g_gloss_pages.size(); i++)
+		pages.insert(g_gloss_pages[i].page);
+
+	out->tableLines = HDGlossTableSize();
+	out->filePages = g_gloss_file.present ? (int)g_gloss_file.entries.size() : -1;
+	out->fileBad = g_gloss_file.bad;
+	out->partsMat = g_gloss_parts_by[HD_GLOSS_FROM_MAT];
+	out->partsSeed = g_gloss_parts_by[HD_GLOSS_FROM_SEED];
+	out->partsTable = g_gloss_parts_by[HD_GLOSS_FROM_TABLE];
+	out->partsFile = g_gloss_parts_by[HD_GLOSS_FROM_FILE];
+	out->lamps = g_lamp_count;
+	out->cubes = g_cube_count;
+	out->pages = (int)pages.size();
+	out->draws = g_sheen_ranges;
+}
+
+int HDRenderGlossPageCount()
+{
+	return (int)g_gloss_pages.size();
+}
+
+bool HDRenderGlossPageInfo(int at, HDRenderGlossPage* out)
+{
+	if (!out || at < 0 || at >= (int)g_gloss_pages.size())
+		return false;
+
+	*out = g_gloss_pages[(size_t)at];
+	return true;
 }
 
 // And how many drew a clear floor.

@@ -3468,6 +3468,11 @@ static void HDLevelBuildHD()
 	g_pieces.clear();
 	BuildRoomBoxes();		// before the build, like the marks
 	BuildRoomSectors();		// the same contract
+	/* The sheen's override file: hd_gloss.txt in the game's working
+	 * directory, beside the executable and SCRIPT.DAT, where Balance.txt is
+	 * read from too. Read by the build itself, at every level load, so an
+	 * edit shows at the next one without a restart. */
+	HDRenderGlossFile("hd_gloss.txt");
 	BuildRoomIntrusions();		// the same contract
 	BuildPairFaces();		// and its faces, the same contract
 	BuildRoomCuts();		// the same contract again
@@ -3549,6 +3554,12 @@ static void HDLevelBuildHD()
 	// distinct part-way clear pages the rooms' alpha-pass triangles lie on
 	// and the parts holding such a triangle. RICH2, RICHCUT2 and TITLE have
 	// them; every other level prints 0 and 0.
+	// gloss_pages / gloss_draws are the sheen's: the pages that shine and
+	// the draw calls that take the room shader's gloss variant while
+	// hd_reflect is on (the GLOSSLOG lines below say which and why).
+	HDRenderGlossLevel gloss;
+
+	HDRenderGlossLevelInfo(&gloss);
 	Log("HDLOG level=%s motion=%d scroll_parts=%d scroll_ranges=%d "
 		"scroll_tris=%d sway_verts=%d sway_parts=%d sway_dropped=%d "
 		"flipbook_parts=%d flipbook_pages=%d flipbook_dropped=%d "
@@ -3556,7 +3567,7 @@ static void HDLevelBuildHD()
 		"add_swinging=%d gloss_parts=%d reflect=%d book_parts=%d "
 		"book_pages=%d book_dropped=%d book_additive=%d book_step_min=%.3f "
 		"book_step_max=%.3f book_ranges=%d clear_pages=%d clear_parts=%d "
-		"mirrors=%d",
+		"mirrors=%d gloss_pages=%d gloss_draws=%d",
 		g_stem, tomb5.hd_motion ? 1 : 0, stats.scrollParts, stats.scrollRanges,
 		stats.scrollTris, stats.swayVertices, stats.swayParts,
 		stats.swayDropped, stats.flipbookParts, stats.flipbookDrawn,
@@ -3565,7 +3576,41 @@ static void HDLevelBuildHD()
 		stats.glossParts, tomb5.hd_reflect ? 1 : 0, stats.bookParts,
 		stats.bookPages, stats.bookDropped, stats.bookAdditive,
 		stats.bookStepMin, stats.bookStepMax, stats.bookRanges,
-		stats.clearPages, stats.clearParts, HDRenderMirrorCount());
+		stats.clearPages, stats.clearParts, HDRenderMirrorCount(),
+		gloss.pages, gloss.draws);
+
+	/* GLOSSLOG, with -log: which surfaces shine and why. One level line -
+	 * the table's lines, the override file's pages (none when there is no
+	 * hd_gloss.txt) and its unreadable lines, the parts each source named,
+	 * the lamps and light cubes kept - and one line per page and source that
+	 * shines, with the numbers the gloss variant draws it with. */
+	if (gLogEnabled)
+	{
+		char file[16];
+
+		if (gloss.filePages >= 0)
+			sprintf(file, "%d", gloss.filePages);
+		else
+			strcpy(file, "none");
+
+		Log("GLOSSLOG level=%s table=%d file=%s bad=%d parts_mat=%d "
+			"parts_seed=%d parts_table=%d lights=%d cubes=%d parts_file=%d",
+			g_stem, gloss.tableLines, file, gloss.fileBad, gloss.partsMat,
+			gloss.partsSeed, gloss.partsTable, gloss.lamps, gloss.cubes,
+			gloss.partsFile);
+
+		for (int i = 0; i < HDRenderGlossPageCount(); i++)
+		{
+			HDRenderGlossPage p;
+
+			if (!HDRenderGlossPageInfo(i, &p))
+				continue;
+
+			Log("GLOSSLOG page=%d class=%s source=%s strength=%.3f power=%.0f "
+				"f0=%.3f tris=%d", p.page, HDGlossClassName(p.cls),
+				HDGlossSourceName(p.source), p.strength, p.power, p.f0, p.tris);
+		}
+	}
 
 	/* The mirrors in the rooms' walls, one line each: the room, the plane,
 	 * which side the copy is on, the three counts the rule decided on (see

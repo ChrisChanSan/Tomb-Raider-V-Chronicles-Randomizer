@@ -1069,8 +1069,53 @@ int HDRenderFlipbookCalls();
 // (HDLOG frame book_calls) adds the solid bracket's opaque books and the glow
 // bracket's additive ones.
 int HDRenderBookCalls();
-// And how many of them carried a gloss out of their material.
+// And how many of them carried a gloss - the material's, or the sheen
+// ResolveSheen gave the draw call.
 int HDRenderGlossCalls();
+
+/* Which surfaces shine (hd_gloss_math.h, the four sources).
+ *
+ * HDRenderGlossFile names the override file for the next HDRenderLevelBegin -
+ * hd_gloss.txt, beside the executable in the game's working directory, is
+ * what hd_level.cpp hands in - and a null or empty path reads none. The file
+ * is read at every level build, so an edit shows at the next level load.
+ *
+ * After a build, HDRenderGlossLevelInfo says what the build made of it:
+ * the table's lines, the file's pages (-1 when there was no file) and its
+ * bad lines, the parts each source named (a part counts under every source
+ * that names one of its pages), the lamps and cubes kept, the pages that
+ * shine and the draw calls that take the gloss variant. One
+ * HDRenderGlossPage per page and source that shines, with its triangles. */
+struct HDRenderGlossLevel
+{
+	int tableLines;
+	int filePages;
+	int fileBad;
+	int partsMat;
+	int partsSeed;
+	int partsTable;
+	int partsFile;
+	int lamps;
+	int cubes;
+	int pages;
+	int draws;
+};
+
+struct HDRenderGlossPage
+{
+	int page;
+	int cls;		// HD_GLOSS_*
+	int source;		// HD_GLOSS_FROM_*
+	float strength;
+	float power;
+	float f0;
+	int tris;
+};
+
+void HDRenderGlossFile(const char* path);
+void HDRenderGlossLevelInfo(HDRenderGlossLevel* out);
+int HDRenderGlossPageCount();
+bool HDRenderGlossPageInfo(int at, HDRenderGlossPage* out);
 // And how many drew a clear floor (HD_PASS_CLEAR) - since the last
 // FrameBegin; the solid bracket is the one that draws them.
 int HDRenderClearCalls();

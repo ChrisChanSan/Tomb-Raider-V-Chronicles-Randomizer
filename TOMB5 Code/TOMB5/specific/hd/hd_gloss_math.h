@@ -543,6 +543,112 @@ inline int HDGlossSeedClass(const int perFx[16])
 	return best;
 }
 
+/* The classic floor, one record per floor square of the whole level in room
+ * order and, inside a room, x-major - square (sx, sz) is record
+ * first + sx * zSectors + sz, the order of ROOM_INFO::floor
+ * (floor[sz + x_size * sx]) and of the .TRG's light cubes, one cube per
+ * square in the same order (the cube's brightness follows the floor light
+ * of the .TRG triangles on its square at a correlation of 0.35 to 0.84 per
+ * level read that way against 0.07 to 0.51 read z-major; probe189c over the
+ * fifteen .TRG and Backup .trc files). A wall square has no floor and an
+ * all-black cube - 3,104 of 3,104 in ANDREA1, and the same in every level. */
+struct HDSectorFloor
+{
+	short floorY;		// FLOOR_INFO::floor * 256, world y (y down)
+	unsigned char fx;	// FLOOR_INFO::fx, the footstep material
+	unsigned char wall;	// 1 = floor -127, a wall square
+};
+
+/* One room of that table. x runs over ROOM_INFO::y_size squares and z over
+ * x_size - TR5's own naming, see hd_level.cpp's BuildRoomBoxes. */
+struct HDRoomGrid
+{
+	int first;		// the room's first record
+	int xSectors;
+	int zSectors;
+	float originX, originZ;	// r->x and r->z, world units
+};
+
+/* The record of the square under a room-local point, or -1 outside the
+ * room's grid. */
+inline int HDGlossSectorAt(const HDRoomGrid& grid, float x, float z)
+{
+	const int sx = (int)floorf(x / 1024.0f);
+	const int sz = (int)floorf(z / 1024.0f);
+
+	if (sx < 0 || sz < 0 || sx >= grid.xSectors || sz >= grid.zSectors)
+		return -1;
+
+	return grid.first + sx * grid.zSectors + sz;
+}
+
+/* The seed's vote of one triangle: an up-facing triangle whose centroid
+ * stands on a floor square of the room within HD_GLOSS_SEED_REACH of that
+ * square's floor height counts for the square's footstep material. */
+inline void HDGlossSeedVote(const float a[3], const float b[3], const float c[3],
+	float nyVertex, const HDRoomGrid& grid, const HDSectorFloor* sectors,
+	int sectorCount, int perFx[16])
+{
+	if (!HDGlossFacesUp(a, b, c, nyVertex))
+		return;
+
+	const float cx = (a[0] + b[0] + c[0]) / 3.0f;
+	const float cy = (a[1] + b[1] + c[1]) / 3.0f;
+	const float cz = (a[2] + b[2] + c[2]) / 3.0f;
+	const int at = HDGlossSectorAt(grid, cx, cz);
+
+	if (at < 0 || at >= sectorCount || sectors[at].wall)
+		return;
+
+	if (fabsf(cy - (float)sectors[at].floorY) > (float)HD_GLOSS_SEED_REACH)
+		return;
+
+	perFx[sectors[at].fx & 15]++;
+}
+
+/* The lamps of a draw call's sheen - the .TRG's point lights of the draw
+ * call's own room (Trg.h, TrgGroup::volumes: a position in world units, an
+ * unnormalised colour and a kind).
+ *
+ * Where they hang, measured per kind as the height over the floor square
+ * under each lamp (probe189c over the fifteen .TRG and Backup .trc files):
+ * kinds 0, 1 and 2 hang 1,300 to 3,300 units over the floor in every level
+ * (medians), where the ceiling lamps and the wall sconces are; kind 3 does the
+ * same in RICH3 (median 2,087) and hangs UNDER the floor in RICH2 (median
+ * -256 over the 35 of its 37 that stand over a floor square). No kind is a
+ * sun or an ambience, so every lamp is taken whatever its kind; the N.L term
+ * keeps a lamp under a floor off every surface that faces up.
+ *
+ * The colour: the median lamp is 10 in ANDREA1 and 15 in RICH2 (kind 1), up
+ * to 86.8 at the most (ANDREA2); HD_GLOSS_LAMP_SCALE makes a median lamp
+ * about one, the surface's own light at its brightest texel. The reach is
+ * chosen: six squares, over which a lamp's highlight fades out smoothly. */
+/* The light cube's gain, the same number as hd_room.hlsl's
+ * HD_GLOSS_CUBE_GAIN (the note there says where it was measured): the sun's
+ * share below is read off the cube on the processor, at the scale the shader
+ * reads the cube at. */
+#define HD_GLOSS_CUBE_GAIN	3.0f
+#define HD_GLOSS_LAMP_SCALE	0.1f
+#define HD_GLOSS_LAMP_REACH	6144.0f
+#define HD_GLOSS_LAMPS		4	// hd_room.hlsl, HD_GLOSS_LIGHTS
+
+/* The sun, where a level has one (a non-zero colour in ANDREA2, JOBY2, JOBY4
+ * and TITLE). The file's vector is the direction the light travels in a
+ * y-up frame with x and z as this engine's; the direction TOWARDS the sun in
+ * this engine's y-down coordinates is therefore (-x, y, -z). Measured over
+ * the light cubes that are lit from above (the up face 1.3 times the down
+ * face's brightness), as the mean of each face's brightness against its
+ * normal along each of the four readings: (-x, y, -z) scores +0.618 in
+ * ANDREA2, +0.153 in JOBY2 (against +0.173 for (x, y, z)), +0.603 in JOBY4
+ * and +0.287 in TITLE, and (x, -y, z) - the plain reading - scores the
+ * negative of it in all four (probe189s over the four .TRG files). */
+inline void HDGlossSunToward(const float file[3], float out[3])
+{
+	out[0] = -file[0];
+	out[1] = file[1];
+	out[2] = -file[2];
+}
+
 /* The ambient cube's weights for a direction: the squared components of the
  * unit vector, each on the face its sign points at. The faces are in the
  * .TRG's own order - +x, -x, up, down, +z, -z, "up" being -y in this engine
@@ -586,6 +692,22 @@ inline void HDGlossCubeSample(const float faces[6][3], const float dir[3], float
 		for (int f = 0; f < 6; f++)
 			rgb[c] += w[f] * faces[f][c];
 	}
+}
+
+/* How much of the sun a surface sees: the brightness of its light cube
+ * towards the sun, at the shader's gain, clamped to one. A floor under the
+ * open sky, whose cube is bright towards it, takes the sun nearly whole; a
+ * cellar, whose cube is dark, takes little of it. The .TRG has no shadow of
+ * the sun to ask, and this is the part of that answer the cube holds. */
+inline float HDGlossSunSeen(const float faces[6][3], const float toward[3])
+{
+	float rgb[3];
+
+	HDGlossCubeSample(faces, toward, rgb);
+
+	const float seen = HD_GLOSS_CUBE_GAIN * (rgb[0] + rgb[1] + rgb[2]) / 3.0f;
+
+	return seen < 0.0f ? 0.0f : seen > 1.0f ? 1.0f : seen;
 }
 
 // The squared distance from a point to a box, 0 inside it.

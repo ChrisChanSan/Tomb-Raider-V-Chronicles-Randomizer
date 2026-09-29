@@ -37,6 +37,7 @@
 #include "hd_gloss_math.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -1253,6 +1254,16 @@ namespace
 		float sheenMask = 0.0f;
 		int sheenClass = 0;
 		int sheenSource = 0;
+		/* What the sheen of this draw call is lit with, filled with the rest
+		 * of it: the six faces of the light cube the range stands over (RGB
+		 * 0..1 in the file's face order, see hd_gloss_math.h), up to
+		 * HD_GLOSS_LAMPS lamps of its room, room local, with their colour
+		 * already scaled (a black colour is a slot not in use), and the share
+		 * of the sun it sees. */
+		float sheenCube[6][3] = {};
+		float sheenLamp[HD_GLOSS_LAMPS][3] = {};
+		float sheenLampRgb[HD_GLOSS_LAMPS][3] = {};
+		float sheenSun = 0.0f;
 		/* 1 where a vertex of this range can carry the caustic - a water mark
 		 * on a flat vertex in the room's surface plane (hd_room.hlsl, the
 		 * caustic). The gloss variant has no caustic, so such a range keeps
@@ -1701,6 +1712,35 @@ namespace
 	const HDRoomBox* g_boxes = 0;
 	int g_box_count = 0;
 	#define HD_OVERHANG_SLACK	128.0f
+
+	/* The classic floor squares, borrowed for the length of the build like
+	 * the boxes above (HDRenderSetSectors). */
+	const HDRoomGrid* g_grids = 0;
+	int g_grid_count = 0;
+	const HDSectorFloor* g_sectors = 0;
+	int g_sector_count = 0;
+
+	/* What the sheen is lit with, kept from the .TRG for the whole level:
+	 * each room's point lights, room local and scaled (HD_GLOSS_LAMP_SCALE),
+	 * the light cubes - one per floor square, only when their count is the
+	 * count of squares handed in - and the sun, towards it in this engine's
+	 * coordinates (HDGlossSunToward), with its colour; black where the level
+	 * has none. The room's world-view matrix of the room being drawn is set
+	 * by prepare() for the lamps' upload. */
+	struct HDSheenLamp
+	{
+		float pos[3];
+		float rgb[3];
+	};
+	std::vector<std::vector<HDSheenLamp> > g_lamps;
+	std::vector<std::array<unsigned char, 24> > g_cubes;
+	float g_sun_toward[3] = { 0.0f, -1.0f, 0.0f };
+	float g_sun_rgb[3] = { 0.0f, 0.0f, 0.0f };
+	float g_room_wv[16] = { 0 };
+	// Once per level: the lamps kept, and the cubes kept (0 when they did
+	// not match the floor squares).
+	int g_lamp_count = 0;
+	int g_cube_count = 0;
 
 	/* The rooms that may be holding another room's art,
 	 * and how many triangles each of those boxes really caught. The list is
@@ -2842,6 +2882,127 @@ namespace
 	// Once per level: the draw calls that take the gloss variant.
 	int g_sheen_ranges = 0;
 
+	/* What one glossy draw call is lit with.
+	 *
+	 * The cube: the mean of the light cubes of the floor squares its
+	 * triangles stand over - the square under each triangle's centroid, and
+	 * for a triangle whose centroid is in a wall square (a wall's own face
+	 * lies on the room's edge) the square half a square in front of it along
+	 * its normal. One cube per draw call, because the shader has registers
+	 * for one; a draw call is one page of one room, so a crate's page takes
+	 * the cubes of the squares around the crate and a corridor's wall page
+	 * the mean down the corridor.
+	 *
+	 * The lamps: the room's own nearest HD_GLOSS_LAMPS to the draw call's box
+	 * (HDGlossRankLights), one fewer where the level has a sun, which takes
+	 * the last slot with the share of it the cube says the surface sees
+	 * (HDGlossSunSeen). */
+	void LightSheen(const trf::remaster::Trg& trg,
+		const std::vector<unsigned int>& sorted, size_t group, HDRange& range)
+	{
+		float mins[3] = { 1.0e30f, 1.0e30f, 1.0e30f };
+		float maxs[3] = { -1.0e30f, -1.0e30f, -1.0e30f };
+		double cube[6][3] = {};
+		int cubes = 0;
+		const bool grid = (int)group < g_grid_count && g_cube_count > 0;
+
+		for (unsigned int at = 0; at + 2 < range.count; at += 3)
+		{
+			const trf::remaster::TrgVertex* v[3];
+			bool ok = true;
+
+			for (int k = 0; k < 3; k++)
+			{
+				const size_t i = (size_t)range.start + at + (unsigned int)k;
+				const unsigned int index = i < sorted.size() ? sorted[i] : 0xFFFFFFFFu;
+
+				ok = ok && index < trg.vertices.size();
+				v[k] = ok ? &trg.vertices[index] : 0;
+			}
+
+			if (!ok)
+				continue;
+
+			for (int k = 0; k < 3; k++)
+			{
+				const float p[3] = { (float)v[k]->x, (float)v[k]->y, (float)v[k]->z };
+
+				for (int axis = 0; axis < 3; axis++)
+				{
+					if (p[axis] < mins[axis]) mins[axis] = p[axis];
+					if (p[axis] > maxs[axis]) maxs[axis] = p[axis];
+				}
+			}
+
+			if (!grid)
+				continue;
+
+			const HDRoomGrid& room = g_grids[group];
+			const float cx = ((float)v[0]->x + v[1]->x + v[2]->x) / 3.0f;
+			const float cz = ((float)v[0]->z + v[1]->z + v[2]->z) / 3.0f;
+			int s = HDGlossSectorAt(room, cx, cz);
+
+			if (s < 0 || s >= g_sector_count || g_sectors[s].wall)
+			{
+				const float nx = v[0]->normal_x() + v[1]->normal_x() + v[2]->normal_x();
+				const float nz = v[0]->normal_z() + v[1]->normal_z() + v[2]->normal_z();
+				const float len = sqrtf(nx * nx + nz * nz);
+
+				s = len > 1e-3f ? HDGlossSectorAt(room, cx + 512.0f * nx / len,
+					cz + 512.0f * nz / len) : -1;
+			}
+
+			if (s < 0 || s >= g_cube_count || s >= g_sector_count || g_sectors[s].wall)
+				continue;
+
+			const std::array<unsigned char, 24>& c = g_cubes[(size_t)s];
+
+			for (int f = 0; f < 6; f++)
+				for (int ch = 0; ch < 3; ch++)
+					cube[f][ch] += c[(size_t)(f * 4 + ch)];
+
+			cubes++;
+		}
+
+		for (int f = 0; f < 6; f++)
+			for (int ch = 0; ch < 3; ch++)
+				range.sheenCube[f][ch] = cubes
+					? (float)(cube[f][ch] / cubes / 255.0) : 0.0f;
+
+		const bool sun = g_sun_rgb[0] > 0.0f || g_sun_rgb[1] > 0.0f || g_sun_rgb[2] > 0.0f;
+
+		range.sheenSun = sun && cubes ? HDGlossSunSeen(range.sheenCube, g_sun_toward) : 0.0f;
+
+		for (int k = 0; k < HD_GLOSS_LAMPS; k++)
+			for (int ch = 0; ch < 3; ch++)
+			{
+				range.sheenLamp[k][ch] = 0.0f;
+				range.sheenLampRgb[k][ch] = 0.0f;
+			}
+
+		if (group >= g_lamps.size() || g_lamps[group].empty() || mins[0] > maxs[0])
+			return;
+
+		const std::vector<HDSheenLamp>& lamps = g_lamps[group];
+		std::vector<float> xyz(lamps.size() * 3);
+		int order[HD_GLOSS_LAMPS];
+
+		for (size_t i = 0; i < lamps.size(); i++)
+			for (int axis = 0; axis < 3; axis++)
+				xyz[i * 3 + axis] = lamps[i].pos[axis];
+
+		const int slots = range.sheenSun > 0.0f ? HD_GLOSS_LAMPS - 1 : HD_GLOSS_LAMPS;
+		const int chosen = HDGlossRankLights(&xyz[0], (int)lamps.size(), mins, maxs,
+			order, slots);
+
+		for (int k = 0; k < chosen; k++)
+			for (int ch = 0; ch < 3; ch++)
+			{
+				range.sheenLamp[k][ch] = lamps[(size_t)order[k]].pos[ch];
+				range.sheenLampRgb[k][ch] = lamps[(size_t)order[k]].rgb[ch];
+			}
+	}
+
 	/* The sheen of every draw call, once the level's ranges are built.
 	 *
 	 * A material 3 or 17 part names its own strength and exponent (see
@@ -2849,8 +3010,10 @@ namespace
 	 * submarine's painted steel, metal; 3's masks select window panes,
 	 * puddles and ice, a dielectric (hd_gloss_math.h, HDGlossFromMaterial).
 	 * Whether the page's alpha masks the sheen is the page's own smallest
-	 * alpha against HD_GLOSS_MASK_BELOW. */
-	void ResolveSheen()
+	 * alpha against HD_GLOSS_MASK_BELOW, and what it is lit with LightSheen's
+	 * answer. */
+	void ResolveSheen(const trf::remaster::Trg& trg,
+		const std::vector<unsigned int>& sorted)
 	{
 		g_sheen_ranges = 0;
 
@@ -2886,6 +3049,7 @@ namespace
 					range.sheenSource = got.source;
 					range.sheenMask = HDPageCacheSlotAlphaMin(range.pageSlot) <
 						HD_GLOSS_MASK_BELOW ? 1.0f : 0.0f;
+					LightSheen(trg, sorted, g, range);
 					g_sheen_ranges++;
 				}
 		}
@@ -2898,6 +3062,8 @@ namespace
 
 		g_groups.clear();
 		g_mirrors.clear();
+		g_lamps.clear();
+		g_cubes.clear();
 		g_room_groups = 0;
 		g_vertex_count = 0;
 		g_index32 = false;
@@ -3189,6 +3355,17 @@ void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count)
 	g_box_count = boxes ? count : 0;
 }
 
+void HDRenderSetSectors(const HDRoomGrid* rooms, int roomCount,
+	const HDSectorFloor* sectors, int sectorCount)
+{
+	const bool ok = rooms && roomCount > 0 && sectors && sectorCount > 0;
+
+	g_grids = ok ? rooms : 0;
+	g_grid_count = ok ? roomCount : 0;
+	g_sectors = ok ? sectors : 0;
+	g_sector_count = ok ? sectorCount : 0;
+}
+
 void HDRenderSplitOverhang(int on)
 {
 	g_split_overhang = on ? 1 : 0;
@@ -3385,6 +3562,49 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		*why = "the .TRG holds no geometry";
 		return false;
 	}
+
+	/* What the sheen is lit with - see g_lamps. The lamps need the room's
+	 * origin to be made room local, the cubes need the floor squares to be
+	 * found by; both come from HDRenderSetSectors. */
+	g_lamps.assign(trg.groups.size(), std::vector<HDSheenLamp>());
+	g_cubes.clear();
+	g_lamp_count = 0;
+	g_cube_count = 0;
+
+	for (size_t g = 0; g < trg.groups.size() && (int)g < g_grid_count; g++)
+	{
+		const trf::remaster::TrgGroup& source = trg.groups[g];
+
+		for (size_t i = 0; i < source.volumes.size(); i++)
+		{
+			const trf::remaster::TrgGroup::PointLight light = source.light(i);
+			HDSheenLamp lamp;
+
+			lamp.pos[0] = light.x - g_grids[g].originX;
+			lamp.pos[1] = light.y;
+			lamp.pos[2] = light.z - g_grids[g].originZ;
+			lamp.rgb[0] = light.r * HD_GLOSS_LAMP_SCALE;
+			lamp.rgb[1] = light.g * HD_GLOSS_LAMP_SCALE;
+			lamp.rgb[2] = light.b * HD_GLOSS_LAMP_SCALE;
+
+			if (!(lamp.rgb[0] > 0.0f || lamp.rgb[1] > 0.0f || lamp.rgb[2] > 0.0f))
+				continue;
+
+			g_lamps[g].push_back(lamp);
+			g_lamp_count++;
+		}
+	}
+
+	if (g_sector_count > 0 && (size_t)g_sector_count == trg.light_cubes.size())
+	{
+		g_cubes = trg.light_cubes;
+		g_cube_count = (int)g_cubes.size();
+	}
+
+	HDGlossSunToward(trg.sun_direction, g_sun_toward);
+
+	for (int c = 0; c < 3; c++)
+		g_sun_rgb[c] = trg.sun_colour[c] > 0.0f ? trg.sun_colour[c] : 0.0f;
 
 	/* 32 bit indices unless the level is small enough not to need them, or
 	 * the device cannot do them. ANDREA2 has 5,471,013 indices over 1.1 M
@@ -5153,7 +5373,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	FindMirrors(trg);
 
 	// And the sheen of every draw call - see ResolveSheen.
-	ResolveSheen();
+	ResolveSheen(trg, sorted);
 
 	/* --- the vertex window of every draw call ---------------------------
 	 *
@@ -5701,13 +5921,77 @@ namespace
 {
 	/* The lamps and the light cube of one glossy draw call: gGlossCube
 	 * (c80 - c85), gGlossAxes (c86 - c88) and gGlossLights (c89 - c96), see
-	 * "The sheen" in hd_room.hlsl. Black here: the only lamp is the eye,
-	 * which the shader lights with the surface's own light. */
+	 * "The sheen" in hd_room.hlsl. The shader works in view space, where the
+	 * normal and the surface point already are, so the lamps go there through
+	 * the room's world-view matrix (prepare(), g_room_wv; a D3DMATRIX, row
+	 * vectors on the left), the sun's direction through its rotation, and the
+	 * three rows of that rotation - the images of the room's axes - go up as
+	 * gGlossAxes, which turn a view-space reflection back into the cube's
+	 * world axes. Every register every time: a glossy draw call is one of a
+	 * few dozen in a frame, and 17 registers are nothing against a
+	 * constant that another room left behind. */
 	void upload_sheen_lights(const HDRange& range)
 	{
 		float regs[17 * 4] = { 0 };
+		const float* m = g_room_wv;
 
-		(void)range;
+		for (int f = 0; f < 6; f++)
+			for (int c = 0; c < 3; c++)
+				regs[f * 4 + c] = range.sheenCube[f][c];
+
+		for (int i = 0; i < 3; i++)
+		{
+			const float len = sqrtf(m[i * 4 + 0] * m[i * 4 + 0] +
+				m[i * 4 + 1] * m[i * 4 + 1] + m[i * 4 + 2] * m[i * 4 + 2]);
+
+			for (int c = 0; c < 3 && len > 0.0f; c++)
+				regs[(6 + i) * 4 + c] = m[i * 4 + c] / len;
+		}
+
+		float* lamps = &regs[9 * 4];
+
+		for (int k = 0; k < HD_GLOSS_LAMPS; k++)
+		{
+			const float* p = range.sheenLamp[k];
+			const float* rgb = range.sheenLampRgb[k];
+
+			if (!(rgb[0] > 0.0f || rgb[1] > 0.0f || rgb[2] > 0.0f))
+				continue;
+
+			for (int c = 0; c < 3; c++)
+			{
+				lamps[k * 8 + c] = p[0] * m[0 * 4 + c] + p[1] * m[1 * 4 + c] +
+					p[2] * m[2 * 4 + c] + m[3 * 4 + c];
+				lamps[k * 8 + 4 + c] = rgb[c];
+			}
+
+			lamps[k * 8 + 3] = 1.0f;
+			lamps[k * 8 + 7] = 1.0f / (HD_GLOSS_LAMP_REACH * HD_GLOSS_LAMP_REACH);
+		}
+
+		/* The sun in the last slot: a direction (w 0) and no reach. */
+		if (range.sheenSun > 0.0f)
+		{
+			const int k = HD_GLOSS_LAMPS - 1;
+			float d[3];
+
+			for (int c = 0; c < 3; c++)
+				d[c] = g_sun_toward[0] * m[0 * 4 + c] + g_sun_toward[1] * m[1 * 4 + c] +
+					g_sun_toward[2] * m[2 * 4 + c];
+
+			const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+
+			if (len > 0.0f)
+				for (int c = 0; c < 3; c++)
+				{
+					lamps[k * 8 + c] = d[c] / len;
+					lamps[k * 8 + 4 + c] = g_sun_rgb[c] * range.sheenSun;
+				}
+
+			lamps[k * 8 + 3] = 0.0f;
+			lamps[k * 8 + 7] = 0.0f;
+		}
+
 		g_device->SetPixelShaderConstantF(80, regs, 17);
 	}
 
@@ -6341,6 +6625,8 @@ namespace
 		multiply(row, g_viewproj, wvp);
 		set_matrix_constant(0, wvp);
 		set_worldview_constant(worldview);
+		// And for the lamps of this room's glossy draw calls.
+		std::memcpy(g_room_wv, worldview, sizeof(g_room_wv));
 		apply_room_lighting(lighting);
 
 		/* c15, the shore box of this room - where the

@@ -23,6 +23,7 @@
 #pragma once
 
 #include "hd_pagecache.h"
+#include "hd_gloss_math.h"		// HDSectorFloor, HDRoomGrid
 
 #include <math.h>			// sqrt, for HDPairFaceDistance
 
@@ -721,6 +722,17 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */
 void HDRenderSetRoomBoxes(const HDRoomBox* boxes, int count);
+/* The classic floor squares of the level about to be built - one
+ * HDSectorFloor per square of every room and one HDRoomGrid per room, in the
+ * order hd_gloss_math.h describes. The sheen reads the .TRG's light cube of
+ * the squares a draw call stands over, and needs the grid to find them; the
+ * cubes are taken only when the count of squares is the count of cubes the
+ * .TRG carries (a level whose rooms were resized has no cubes that match).
+ * Same contract again - before HDRenderLevelBegin, the pointers are only
+ * remembered for the length of that call. Without it no draw call has a
+ * cube or a lamp, and the sheen is the eye's alone. */
+void HDRenderSetSectors(const HDRoomGrid* rooms, int roomCount,
+	const HDSectorFloor* sectors, int sectorCount);
 /* The mirrors the build found (HDMirror above). None without the room boxes,
  * which carry the rooms' origins the rule needs; none in any level but
  * RICH2. Kept until the level is released. */

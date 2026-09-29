@@ -1424,6 +1424,53 @@ static void BuildRoomBoxes()
 		HDRenderSetRoomBoxes(0, 0);
 }
 
+/* The classic floor squares, for the renderer's sheen: the footstep
+ * material and the floor height of every square of every room, in the order
+ * of ROOM_INFO::floor - floor[z_index + x_size * x_index], so x runs over
+ * y_size squares and z over x_size, as in BuildRoomBoxes above. The renderer
+ * finds the .TRG's light cube of a square by the same order and seeds its
+ * page classes from the materials (hd_gloss_math.h). Borrowed for the length
+ * of the build, like the boxes. */
+static std::vector<HDRoomGrid> g_room_grids;
+static std::vector<HDSectorFloor> g_room_sectors;
+
+static void BuildRoomSectors()
+{
+	g_room_grids.clear();
+	g_room_sectors.clear();
+	g_room_grids.resize((size_t)number_rooms);
+
+	for (int i = 0; i < number_rooms; i++)
+	{
+		const ROOM_INFO* r = &room[i];
+		HDRoomGrid& grid = g_room_grids[(size_t)i];
+
+		grid.first = (int)g_room_sectors.size();
+		grid.xSectors = r->floor ? r->y_size : 0;
+		grid.zSectors = r->floor ? r->x_size : 0;
+		grid.originX = (float)r->x;
+		grid.originZ = (float)r->z;
+
+		for (int sx = 0; sx < grid.xSectors; sx++)
+			for (int sz = 0; sz < grid.zSectors; sz++)
+			{
+				const FLOOR_INFO& f = r->floor[sz + r->x_size * sx];
+				HDSectorFloor s;
+
+				s.floorY = (short)(f.floor * 256);
+				s.fx = (unsigned char)f.fx;
+				s.wall = f.floor == -127 ? 1 : 0;	// NO_HEIGHT in clicks
+				g_room_sectors.push_back(s);
+			}
+	}
+
+	if (!g_room_grids.empty() && !g_room_sectors.empty())
+		HDRenderSetSectors(&g_room_grids[0], (int)g_room_grids.size(),
+			&g_room_sectors[0], (int)g_room_sectors.size());
+	else
+		HDRenderSetSectors(0, 0, 0, 0);
+}
+
 /* The water surface the remaster does not draw.
  *
  * In some HD rooms a pool shows dark washed-out blotches where the classic
@@ -3420,6 +3467,7 @@ static void HDLevelBuildHD()
 	memset(g_piece_count, 0, sizeof(g_piece_count));
 	g_pieces.clear();
 	BuildRoomBoxes();		// before the build, like the marks
+	BuildRoomSectors();		// the same contract
 	BuildRoomIntrusions();		// the same contract
 	BuildPairFaces();		// and its faces, the same contract
 	BuildRoomCuts();		// the same contract again
@@ -3448,6 +3496,9 @@ static void HDLevelBuildHD()
 	HDRenderSetWaterMarks(0, 0);
 	g_water_marks.clear();
 	HDRenderSetRoomBoxes(0, 0);	// the same contract
+	HDRenderSetSectors(0, 0, 0, 0);
+	g_room_grids.clear();
+	g_room_sectors.clear();
 
 	/* What the build made of the intrusion list - which groups carry art
 	 * standing inside another room, and how much. It reads the counts the

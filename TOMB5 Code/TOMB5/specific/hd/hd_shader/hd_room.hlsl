@@ -534,9 +534,10 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *                   sum as a broad one. The lamps are up to four - the
  *                   room's own .TRG point lights nearest the draw call, one
  *                   slot of them the level's sun where it has one - and the
- *                   eye is one more, weighted by the surface's own light, so
- *                   a plate in a room with no lamp in it still carries a
- *                   sheen that moves with the camera.
+ *                   eye is one more, weighted by the surface's own light and
+ *                   left out of the (n + 8) / 8 scale, so a plate in a room
+ *                   with no lamp in it still carries a sheen that moves with
+ *                   the camera.
  *   the environment the ambient cube: six colours, one per world axis
  *                   direction, weighted by the squared components of the
  *                   reflection vector, which sum to one. The six colours are
@@ -579,7 +580,8 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *
  * The eye as a lamp. HD_GLOSS_EYE is its weight against the surface's own
  * light - chosen, not measured: at the exponent's peak, face on, the eye adds
- * this share of the surface's own light times the Fresnel weight. */
+ * this share of the surface's own light times the Fresnel weight, the
+ * strength and the mask. */
 #define HD_GLOSS_LIGHTS    4
 #define HD_GLOSS_CUBE_GAIN 3.0f
 #define HD_GLOSS_EYE       0.25f
@@ -980,7 +982,10 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
  * too. */
 float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark)
 {
-	float3 N = normalize(input.viewNrm);
+	/* viewNrm is not renormalised and a vertex may carry a zero normal; the
+	 * floor under the length keeps such a pixel at a zero sheen rather than
+	 * a NaN. */
+	float3 N = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
 	float3 V = normalize(-input.viewPos);
 	float nv = dot(N, V);
 
@@ -1002,15 +1007,20 @@ float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark)
 		float d2 = dot(toLamp, toLamp);
 		float3 L = toLamp * rsqrt(max(d2, 1e-6f));
 		float fall = saturate(1.0f - d2 * b.w);
-		float3 H = normalize(L + V);
+		// L = -V leaves no half vector; N.L is zero there already.
+		float3 LV = L + V;
+		float3 H = LV * rsqrt(max(dot(LV, LV), 1e-8f));
 
 		hl += b.rgb * (fall * fall * saturate(dot(N, L)) *
 			pow(saturate(dot(N, H)), power));
 	}
 
-	// The eye as the lamp: L = V, so H = V and N.H = N.L = N.V.
-	hl += light * (HD_GLOSS_EYE * nv * pow(nv, power));
 	hl *= (power + 8.0f) * 0.125f;
+
+	/* The eye as the lamp: L = V, so H = V and N.H = N.L = N.V. Added after
+	 * the (n + 8) / 8 scale, so its peak is HD_GLOSS_EYE of the surface's
+	 * own light whatever the exponent. */
+	hl += light * (HD_GLOSS_EYE * nv * pow(nv, power));
 
 	/* The ambient cube, looked up along the reflection of the eye ray and
 	 * turned back into world axes. The weights are the squared components

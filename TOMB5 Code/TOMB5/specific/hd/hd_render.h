@@ -1071,9 +1071,11 @@ int HDRenderFlipbookCalls();
 // (HDLOG frame book_calls) adds the solid bracket's opaque books and the glow
 // bracket's additive ones.
 int HDRenderBookCalls();
-// And how many of them carried a gloss - the material's, or the sheen
-// ResolveSheen gave the draw call.
+// And how many of them carried a material's gloss (materials 3 and 17).
 int HDRenderGlossCalls();
+// And how many were drawn on the gloss variant, with the sheen ResolveSheen
+// gave the draw call - zero while tomb5.hd_reflect is off.
+int HDRenderSheenCalls();
 
 /* Which surfaces shine (hd_gloss_math.h, the four sources).
  *

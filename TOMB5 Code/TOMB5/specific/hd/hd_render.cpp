@@ -1678,9 +1678,11 @@ namespace
 	int g_book_watch_group = -1;
 	int g_book_watch_part = -1;
 	int g_book_watch_page = 0;
-	// Draw calls that carried a gloss, and the hd_reflect switch as a
-	// float, set once per frame beside the motion switch.
+	// Draw calls that carried a material's gloss, draw calls drawn on the
+	// gloss variant, and the hd_reflect switch as a float, set once per
+	// frame beside the motion switch.
 	int g_gloss_calls = 0;
+	int g_sheen_calls = 0;
 	// Draw calls that drew a clear floor (HD_PASS_CLEAR).
 	int g_clear_calls = 0;
 	float g_reflect = 1.0f;
@@ -3466,6 +3468,7 @@ void HDRenderShutdown()
 	g_flip_calls = 0;
 	g_book_calls = 0;
 	g_gloss_calls = 0;
+	g_sheen_calls = 0;
 	g_clear_calls = 0;
 	g_water_calls = 0;
 	g_error.clear();
@@ -5948,6 +5951,7 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	g_flip_calls = 0;
 	g_book_calls = 0;
 	g_gloss_calls = 0;
+	g_sheen_calls = 0;
 	g_clear_calls = 0;
 	g_water_calls = 0;
 
@@ -6576,8 +6580,11 @@ namespace
 				g_device->SetPixelShaderConstantF(19, spec, 1);
 			}
 
-			if (want_gloss != 0.0f)
+			if (range.gloss != 0.0f)
 				g_gloss_calls++;
+
+			if (want_sheen)
+				g_sheen_calls++;
 
 			/* gGloss, in gRipple's register: F0, how far the reflection
 			 * takes the texel's colour, and whether the page's alpha masks
@@ -7094,6 +7101,12 @@ int HDRenderBookCalls()
 int HDRenderGlossCalls()
 {
 	return g_gloss_calls;
+}
+
+// And how many were drawn on the gloss variant.
+int HDRenderSheenCalls()
+{
+	return g_sheen_calls;
 }
 
 void HDRenderGlossFile(const char* path)

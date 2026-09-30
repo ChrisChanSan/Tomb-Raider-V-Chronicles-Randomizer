@@ -3192,77 +3192,84 @@ lights and 91,569 light cubes were read and counted (`hd_scan.cpp:251`) and draw
 nothing.
 
 **How.** The variant is `hd_room.hlsl` compiled with `HD_GLOSS`
-(`specific/hd/hd_shader/hd_room.hlsl:517`, `GlossSheen` `:980`, the add `:1286`) into
-`hd_room_gloss_ps.inc`, 489 of 512 slots (`hd_room_gloss_ps.inc:521`); it leaves out the
+(`specific/hd/hd_shader/hd_room.hlsl:517`, `GlossSheen` `:983`, the add `:1294`) into
+`hd_room_gloss_ps.inc`, 499 of 512 slots (`hd_room_gloss_ps.inc:541`); it leaves out the
 ripple, the caustic and the additive-pass lines, which no glossy draw call needs, and
 every line that differs sits under the define. Its registers are `gGloss` in c36,
 gRipple's (F0, how far the reflection takes the texel's colour, the mask switch),
 `gGlossCube` c80 - c85, `gGlossAxes` c86 - c88 and `gGlossLights` c89 - c96 (four lamps);
 `gSpec` c19 keeps strength, exponent and `hd_reflect`. The shading is in view space,
 where `viewNrm`, `viewPos` and the eye already are: Blinn-Phong with the (n + 8) / 8
-normalisation per lamp, the eye as a lamp at a quarter of the surface's own light, the
-ambient cube looked up along the reflection turned back into world axes, Schlick's
+normalisation per lamp, the eye as a lamp added after that normalisation, so that its
+peak is a quarter of the surface's own light whatever the exponent, the normal and the
+half vector normalised under a floor, so that a zero normal gives no sheen and no NaN,
+the ambient cube looked up along the reflection turned back into world axes, Schlick's
 weight, the page's alpha as mask where the page has one, and the fog and the bulbs'
 haze taken off the sum as off the surface. `bshader.bat` compiles it and `be.bat`
-guards its stamp. `hd_render.cpp` creates it beside the plain variant (`:3330`, a device
-that refuses it keeps the plain one); `draw_pass` picks it per draw call (`:6506`),
-writes `gGloss` (`:6595`) and the lamps and the cube (`upload_sheen_lights`, `:6110`),
-enters it after those writes (`:6712`), leaves it before a plain draw call's writes and
+guards its stamp. `hd_render.cpp` creates it beside the plain variant (`:3332`, a device
+that refuses it keeps the plain one); `draw_pass` picks it per draw call (`:6510`),
+writes `gGloss` (`:6602`) and the lamps and the cube (`upload_sheen_lights`, `:6114`),
+enters it after those writes (`:6719`), leaves it before a plain draw call's writes and
 ends every pass on the plain variant, because each variant keeps literals in registers
 the other one names. The lights: the level build keeps each room's point lights room
-local and scaled (`:3704`), the cubes when their count is the count of floor squares
-(`:3735`), and the sun towards it (`:3739`); `hd_level.cpp`'s `BuildRoomSectors`
-(`:1437`) hands the floor squares in (`HDRenderSetSectors`, `hd_render.cpp:3493`), x-major
-like `ROOM_INFO::floor` and like the cubes. `LightSheen` (`:2979`) gives a glossy draw
+local and scaled (`:3707`), the cubes when their count is the count of floor squares
+(`:3738`), and the sun towards it (`:3742`); `hd_level.cpp`'s `BuildRoomSectors`
+(`:1438`) hands the floor squares in (`HDRenderSetSectors`, `hd_render.cpp:3496`), x-major
+like `ROOM_INFO::floor` and like the cubes. `LightSheen` (`:2981`) gives a glossy draw
 call the mean cube of the squares under its triangles (a wall triangle takes the square
 half a square in front of it), its room's lamps nearest its box and, where the level
 has a sun, the share of it its cube says it sees. Which surfaces: `ResolveSheen`
-(`:3098`) runs after the sort and changes no range; `ResolvePage` (`:2911`) and
-`HDGlossResolve` (`specific/hd/hd_gloss_math.h:542`) take the material first, then the
+(`:3100`) runs after the sort and changes no range; `ResolvePage` (`:2913`) and
+`HDGlossResolve` (`specific/hd/hd_gloss_math.h:547`) take the material first, then the
 file, the table and the seed; the seed walks the rooms' surface triangles
-(`hd_gloss_seed.h:50`, `HDGlossSeedVote` `hd_gloss_math.h:704`): an up-facing triangle
+(`hd_gloss_seed.h:50`, `HDGlossSeedVote` `hd_gloss_math.h:709`): an up-facing triangle
 within 300 units of its floor square's height votes for the square's footstep
 material, and a page takes metal, marble or ice when that class holds half of its
 votes, at least two of them and at least one per cent of its triangles
-(`HDGlossSeedClass`, `:637`); the table is `hd_gloss_pages.h:42`, 39 lines; the file is
-read at every level build (`ReadGlossFile`, `hd_render.cpp:2940`, named by
-`hd_level.cpp:3475`) with `HDGlossParseLine` and `HDGlossParseText`
-(`hd_gloss_math.h:332`, `:481`). The mask is a page's smallest alpha below 250
+(`HDGlossSeedClass`, `:642`); the table is `hd_gloss_pages.h:42`, 40 lines; the file is
+read at every level build (`ReadGlossFile`, `hd_render.cpp:2942`, named by
+`hd_level.cpp:3476`) with `HDGlossParseLine` and `HDGlossParseText`
+(`hd_gloss_math.h:332`, `:481`), which steps over a UTF-8 byte order mark. The mask is
+a page's smallest alpha below 250
 (`HDPageCacheSlotAlphaMin`, `hd_pagecache.cpp:1723`). `MaterialGloss`
 (`hd_render.cpp:1132`) reads the base material, so RICH3's destructible panes 0x8003 to
 0x8403 count; `MaterialAlphaRef`,
 `MaterialAddWeight` and `MaterialBookTime` go on comparing the whole number, which a
 destructible piece never matches (they exist over bases 0, 3 and 14 only), so a
-destructible decal keeps the additive weight 1. The seam: `GLOSSLOG` (`hd_level.cpp:3596`,
-`:3609`), and the HDLOG level line ends with `gloss_pages=` and `gloss_draws=`
-(`:3570`). The tools: TrgProbe `-gloss`, `-glossseed`, `-glossfile` and `-glosslight`;
-RoomProbe `-glossmax` and `-glossfile`, and `-roombox` hands the floor squares in;
-ModernTest's `gloss_*` family.
+destructible decal keeps the additive weight 1. The seam: `GLOSSLOG` (`hd_level.cpp:3597`,
+`:3610`), the HDLOG level line ends with `gloss_pages=` and `gloss_draws=` (`:3571`), and
+the HDLOG frame line with `sheen_calls=`, the solid bracket's draw calls on the variant;
+its `gloss_calls=` goes on counting the draw calls with a material's gloss. The tools:
+TrgProbe `-gloss`, `-glossseed`, `-glossfile` and `-glosslight`; RoomProbe `-glossmax`
+and `-glossfile`, and `-roombox` hands the floor squares in; ModernTest's `gloss_*`
+family.
 
-**Checked.** The engine builds without an error or a warning; ModernTest 14,115 (14,063
+**Checked.** The engine builds without an error or a warning; ModernTest 14,116 (14,063
 before), MenuTest 42,364, InterpTest 711, LipsTest 270 with the lip objects and 243
 without, none failed; RoomProbe, TrgProbe, DdsProbe and ModelProbe build. The plain
 room pixel shader, the room vertex shader and the glow shader compile to the bytecode of
 `ca2e904` but for the stamp line. ANDREA1 room 3 from room-local (2679, -690, -1169),
 yaw 31.4, pitch 6, fov 60, with its nine neighbours, and JOBY3 room 4 from RoomProbe's
-own camera, drawn with `-noreflect` by the RoomProbe of `f9f92b5` against the
-pictures drawn with `-noreflect` at `ca2e904`: 0 of 1,587,200 and 0 of 1,228,800 pixels
-differ. Before and after, RoomProbe with `-roombox`, `-noreflect` for before (mean
+own camera, drawn with `-noreflect` by the RoomProbe of this entry's last commit against
+the pictures drawn with `-noreflect` at `ca2e904`: 0 of 1,587,200 and 0 of 1,228,800
+pixels differ. Before and after, RoomProbe with `-roombox`, `-noreflect` for before (mean
 brightness, largest difference, pixels by more than 32 of 255): ANDREA1 room 3 from the
-same camera 61.9 to 67.1, 255, 85,524 (the crate's front, the forklift, the lamp's
-bracket); JOBY3 room 4 83.8 to 85.8, 106, 31,022; JOBY3 room 79 from (1536, 8450, 1150)
-yaw 0 pitch 8 20.3 to 26.7, 87, 18,215; ANDREA1 room 64 from (3356, -2800, 3200) yaw 180
-pitch -8, a stucco facade of material 3, 101.0 to 101.9, 37, 425 - 92,909 pixels move by
-more than 4 levels, all of them window panes on the difference map, and 12,516 by 1 or
-2; JOBY2 room 20 from (1536, 2700, 1150) yaw 0 pitch 25 92.5 to 95.2, 93, 2,277; ANDREA2
+same camera 61.9 to 66.5, 255, 71,602 (the crate's front, the forklift, the lamp's
+bracket); JOBY3 room 4 83.8 to 85.6, 106, 25,848; JOBY3 room 79 from (1536, 8450, 1150)
+yaw 0 pitch 8 20.3 to 26.6, 70, 18,201; ANDREA1 room 64 from (3356, -2800, 3200) yaw 180
+pitch -8, a stucco facade of material 3, 101.0 to 101.9, 26, 0 - 92,793 pixels move by
+more than 4 levels, all of them window panes on the difference map, and 11,902 by 1 or
+2; JOBY2 room 20 from (1536, 2700, 1150) yaw 0 pitch 25 92.5 to 95.1, 93, 2,277; ANDREA2
 room 16 from (1300, 200, 2900) yaw 90 pitch 18 68.5 to 71.5, 35, 4,158; RICH2 room 135
-from (2800, -24800, 2566) yaw 270 pitch 22 80.0 to 88.1, 67, 45,960. With `-glossmax`
-ANDREA1 room 3 reaches 88.7 and 801,828 pixels. RICH2 room 8 is the same to the pixel.
+from (2800, -24800, 2566) yaw 270 pitch 22 80.0 to 87.1, 65, 13,997; RICH1 room 5 at
+960 x 720 from RoomProbe's own camera 85.8 to 91.7, 69, 104,064 (its riveted steel wall
+panels, face on), and RICH1 room 60 the same way 38.5 to 39.4, 31, 0. With `-glossmax`
+ANDREA1 room 3 reaches 84.7 and 775,231 pixels. RICH2 room 8 is the same to the pixel.
 The rooms with a clear floor - 55 in RICH2, 1 in RICHCUT2, 9 in TITLE - carry no glossy
 draw call. Glossy pages and draw calls per level (RoomProbe's sheen line): ANDREA1 16 and
 232, ANDREA2 15 and 120, ANDREA3 4 and 6, ANDY1 5 and 18, ANDY2 5 and 264, ANDY3 3 and 15,
-JOBY2 30 and 723, JOBY3 27 and 570, JOBY4 1 and 16, JOBY5 17 and 318, RICH1 34 and 741,
-RICH2 25 and 443, RICH3 23 and 267, RICHCUT2 none, TITLE 6 and 15. TrgProbe
+JOBY2 30 and 723, JOBY3 27 and 570, JOBY4 1 and 16, JOBY5 17 and 318, RICH1 33 and 647,
+RICH2 24 and 356, RICH3 23 and 267, RICHCUT2 none, TITLE 6 and 15. TrgProbe
 `-glosslight` over the fifteen levels: the cubes read x-major follow the floor light at
 0.35 to 0.84 against 0.07 to 0.51 z-major, every wall square's cube is black, the median
 of the levels' gains is 2.93, and 35 of the 41 per-level and per-kind median lamp
@@ -3281,7 +3288,8 @@ materials 6, 7 and 8 and the draw of material 17. The water, glow, flipbook, boo
 glass, decal and clear-floor draws, which keep the plain variant. The mirrors, the
 clear floors and every room that has one - RICH2's lobby and the copies beneath it,
 RICHCUT2 and TITLE - which take no sheen. The objects and Lara (`hd_model` is untouched),
-the interpolation, and every existing log line but the HDLOG level line's new end.
+the interpolation, and every existing log line but the new ends of the HDLOG level and
+frame lines.
 
 **Decisions.** The shine is light-driven and orientation-free: a highlight and a
 reflection of the room's light per pixel, no mirror image, no second room pass, no
@@ -3290,14 +3298,21 @@ and the order is the material, the file, the table, the seed: the table stands b
 the seed because it holds the seed's misreadings (a relief, planks, a label atlas) as
 well as what the seed cannot see, and the file before both, so that a page the seed
 names can be tuned or taken out without a rebuild; a material part keeps its own
-strength and exponent and takes only the class the file or the table names. The lamps
-are the room's own .TRG point lights, four at most, one of them the sun where the level
-has one, and the eye at a quarter of the surface's light; the dynamic lights give no
-highlight. One cube per draw call, the mean over the squares under it, lifted by a gain
-of 3, the measured 2.93. F0 is 0.5 for metal, whose reflection takes the texel's colour,
-and 0.08 at strength 0.6 for marble, ice and glass. RICH2's lobby pages are barred from
-every source but the material, and every room with a clear floor keeps its picture
-whole. `hd_reflect` is the one switch; there is no options row.
+strength and exponent and takes only the class the file or the table names, so neither
+can take a material 3 or 17 page out. That order corrects the one first set down for
+this entry - the material, the seed, the table, the file - under which the table's
+take-outs and the file's `-` line could not remove a page the seed names. RICH2's lobby
+is kept out page by page: its clear-class pages (1029, 1045, 1047, 1049, 1053, 1079,
+1081) and marble pages (1010, 1032, 1033) take nothing but the material, and every room
+with a clear floor takes nothing at all; the other pages numbered between 1029 and 1081
+are not the lobby's class and may shine, the washroom's green mosaic 1054 by the table
+and the steel shutter 1039 and tread plate 1040 by the seed. The lamps are the room's
+own .TRG point lights, four at most, one of them the sun where the level has one, and
+the eye at a quarter of the surface's light at its peak, outside the exponent's
+(n + 8) / 8 scale; the dynamic lights give no highlight. One cube per draw call, the
+mean over the squares under it, lifted by a gain of 3, the measured 2.93. F0 is 0.5 for
+metal, whose reflection takes the texel's colour, and 0.08 at strength 0.6 for marble,
+ice and glass. `hd_reflect` is the one switch; there is no options row.
 
 **Left.** The dynamic lights' highlight: the four lamps take the budget, and eight more
 would pass 512 slots. A cube per pixel instead of per draw call. Material 17's own
@@ -3307,8 +3322,14 @@ pages a class but not a strength. Pages to look at in the game: JOBY2's plain gr
 and JOBY2's riveted plates shine by the seed; ANDREA1 room 3's olive walls and overhead
 box (page 126) stay matt, since the page is the room's walls too; the forklift's and
 the lamp's atlases (16066 to 16068, 15073) shine whole, tyres and glass included; RICH2's
-steel shutter 1039 and tread plate 1040 shine by the seed. The seed decides per level,
-so a page can shine in one level and not in the next. What the lamps' kinds mean. The
+steel shutter 1039 and tread plate 1040 shine by the seed, and so do RICH2's diamond
+plate with a baked star of light (1100) and RICH1's riveted plate with a fan's shadow
+(3071); RICH1 room 5's teal riveted wall panels light up face on by up to 69 levels. The
+concrete page 50 of RICH1 and RICH2, which the seed calls metal, is taken out by the
+table. The plain variant's grazing-angle lift keeps its unguarded normalisation, because
+its bytecode stays that of `ca2e904`; whether any vertex carries a zero normal is not
+measured. The seed decides per level, so a page can shine in one level and not in the
+next. What the lamps' kinds mean. The
 play test at 165 Hz with `-log`: ANDREA1 room 3's crate, its sides, top and front, and
 the forklift; JOBY3's ducts and consoles; an ANDREA1 street's windows against their
 stucco; JOBY2's ice; ANDREA2's marble halls; RICH2's lobby unchanged and its washroom
@@ -3319,7 +3340,9 @@ then an `hd_gloss.txt` beside the executable, with `GLOSSLOG` saying `file=` and
 **Commits.** the commits 'Round 189 (#189): the room shader's gloss variant', 'Round 189
 (#189): the lights and the light cubes reach the shader', 'Round 189 (#189): which
 surfaces shine', 'Round 189 (#189): the tools, the suite and what they measured', 'Round
-189 (#189): the record follows'
+189 (#189): the record follows', 'Round 189 (#189): what review pass 1 found'; the fourth
+also retunes the engine's class defaults, the lobby bar and the shader stamps, and the
+fifth touches engine comments.
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11

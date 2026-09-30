@@ -485,6 +485,11 @@ inline void HDGlossParseText(const char* text, HDGlossFile* out)
 	out->bad = 0;
 	out->present = text != 0;
 
+	// A text editor's "UTF-8 with BOM" puts three bytes before the first line.
+	if (text && (unsigned char)text[0] == 0xEF && (unsigned char)text[1] == 0xBB &&
+		(unsigned char)text[2] == 0xBF)
+		text += 3;
+
 	for (const char* at = text; at && *at; )
 	{
 		const char* end = at;

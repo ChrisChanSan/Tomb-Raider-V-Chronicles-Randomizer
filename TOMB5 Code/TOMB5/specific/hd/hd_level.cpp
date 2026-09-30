@@ -917,6 +917,7 @@ namespace
 	int g_frame_room_calls = 0;
 	int g_frame_book_calls = 0;	// the two brackets' book calls, for the frame line
 	int g_frame_clear_calls = 0;	// the solid bracket's clear floors, the same
+	int g_frame_sheen_calls = 0;	// the solid bracket's gloss-variant draws, the same
 	bool g_frame_pending = false;
 
 	/* The pickup display's own projection and lighting, kept apart from the
@@ -4686,6 +4687,7 @@ void HDFrameDraw()
 	g_frame_room_calls = HDRenderDrawCalls();
 	g_frame_book_calls = HDRenderBookCalls();
 	g_frame_clear_calls = HDRenderClearCalls();
+	g_frame_sheen_calls = HDRenderSheenCalls();
 	g_frame_pending = true;
 }
 
@@ -4753,14 +4755,16 @@ void HDFrameDrawGlow()
 		Log("HDLOG frame rooms=%d calls=%d dropped=%d bulbs=%d fog_start=%.0f "
 			"wibble=%d cam_uw=%d shimmer=%d objects=%d object_calls=%d "
 			"cutout_calls=%d cutout_pages=%d flipbook_calls=%d "
-			"gloss_calls=%d water_calls=%d book_calls=%d clear_calls=%d",
+			"gloss_calls=%d water_calls=%d book_calls=%d clear_calls=%d "
+			"sheen_calls=%d",
 			g_frame_count, g_frame_room_calls, g_frame_dropped,
 			frame.bulbCount, frame.distanceFogStart, (int)wibble,
 			frame.cameraUnderwater, tomb5.shimmer ? 1 : 0,
 			objects_here, HDObjectDrawCalls(),
 			HDRenderCutoutCalls(), HDPageCacheCutoutPages(),
 			HDRenderFlipbookCalls(), HDRenderGlossCalls(),
-			HDRenderWaterCalls(), g_frame_book_calls, g_frame_clear_calls);
+			HDRenderWaterCalls(), g_frame_book_calls, g_frame_clear_calls,
+			g_frame_sheen_calls);
 	}
 
 	/* The followed book, page by page: the first book drawn in the level

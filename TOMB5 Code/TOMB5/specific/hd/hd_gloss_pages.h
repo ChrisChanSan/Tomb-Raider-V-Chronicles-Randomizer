@@ -15,7 +15,7 @@
 /* The sheen's page table: the surfaces the classic floor cannot name - the
  * walls, crates, ducts and panels a footstep never touches - by the page
  * they wear. hd_gloss_math.h says where the table stands in the order of
- * trust (after the material, the file and the seed).
+ * trust (after the material and the file, before the seed).
  *
  * One line per page: the page number, the class, then strength, exponent and
  * F0, where -1 takes the class's default (HDGlossClassDefaults), and a
@@ -43,6 +43,7 @@ static const HDGlossPage kHDGlossPages[] =
 {
 	// page class strength power  F0
 	{    33, X, -1.0f, -1.0f, -1.0f },	// RICH1: a brick wall and a lamp's glow on a metal floor
+	{    50, X, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2: poured concrete with tie holes
 	{    53, G, -1.0f, -1.0f, -1.0f },	// RICH2: a black window pane in a white frame
 	{   141, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the crate's front, the logo panel and the hazard stripes
 	{   390, X, -1.0f, -1.0f, -1.0f },	// ANDREA3: a stone relief of a procession

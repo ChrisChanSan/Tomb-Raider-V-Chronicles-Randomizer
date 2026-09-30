@@ -10617,6 +10617,13 @@ static void gloss_parser()
 	ok(file.find(152, &removes) && !removes && !file.find(151, &removes),
 		"gloss parser: the last line without an end is read, the bad one is not", 1, 1);
 
+	HDGlossFile bom;
+
+	HDGlossParseText("\xEF\xBB\xBF" "140 metal\r\n141 ice", &bom);
+	ok(bom.bad == 0 && bom.find(140, &removes) && bom.find(141, &removes),
+		"gloss parser: a UTF-8 byte order mark before the first line is skipped",
+		bom.bad, 0);
+
 	HDGlossFile none;
 
 	HDGlossParseText(0, &none);

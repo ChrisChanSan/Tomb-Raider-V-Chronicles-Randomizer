@@ -3711,15 +3711,21 @@ the run decides, with material 0's alpha kept as a specular mask
 (`docs/SHADER_RULES.md:488-507`); the page condition is this engine's own, from the
 measurement above.
 
-**Left.** The soft rim of a hole, the texels between 1 and 127, is cut at 0.5 as the
-alpha run cuts it, not blended. Page 16075, the blades' page, carries holes too (46.3
-per cent of its low texels at 0) but is worn by material 0 and stays as it is. The
-measure is taken on the mip the page keeps; a page that the texture budget makes start
-at a smaller mip is measured there. TITLE's `SAS_MIP_TITLE` stands in no item of the
-title level.
+**Left.** The soft rim of a hole, the texels between 1 and 127, is cut at 0.5 as the alpha
+run cuts it, not blended. Page 16075, the blades' page, carries holes too (46.3 per cent
+of its low texels at 0) but is worn by material 0 and stays as it is. The measure is taken
+on the mip the page keeps; a page that the texture budget makes start at a smaller mip is
+measured there. TITLE's `SAS_MIP_TITLE` stands in no item of the title level. The loose
+straw on the cards of `ANIMATING9_ANDY1` is soft alpha - under the part's triangles 49.6
+per cent of the texels lie at 0, 17.8 between 1 and 127, 11.8 between 128 and 249 and 20.9
+at 250 and above - so the cut at 0.5 takes the faint strands with the black around them.
+`STEEL_DOOR` and `ANIMATING16_ANDY3` are cut although their classic meshes carry no colour
+key (every face has attribute 0); on the steel door what goes is a strip of alpha 0 along
+its top edge, 1,490 pixels from the side that shows it.
 
-**Commits.** 'Round 190 (#190): the wire mesh of an object is cut out', 'Round 190
-(#190): the tools and the suite', 'Round 190 (#190): the record follows'.
+**Commits.** 'Round 190 (#190): the wire mesh of an object is cut out', 'Round 190 (#190):
+the tools and the suite', 'Round 190 (#190): the record follows', 'Round 190 (#190): what
+review pass 1 found'.
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11

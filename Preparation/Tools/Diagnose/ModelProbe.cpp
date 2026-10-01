@@ -9520,7 +9520,7 @@ int main(int argc, char** argv)
 			HDPageCacheSlotCutoutPermille(s) / 10.0,
 			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "",
 			HDPageCacheSlotZeroPermille(s) / 10.0,
-			HDPageCacheSlotHoles(s) ? "  <- holes: a part of material 6, 7 or 8 on it is cut" : "");
+			HDPageCacheSlotHoles(s) ? "  <- holes: a part of material 6, 7 or 8 on it would be cut" : "");
 	}
 	printf("cut ranges         %d opaque ranges of %d models drawn with the alpha test\n",
 		stats.cutRanges, stats.cutModels);

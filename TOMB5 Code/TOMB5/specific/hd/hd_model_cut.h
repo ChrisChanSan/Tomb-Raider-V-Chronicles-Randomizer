@@ -31,7 +31,7 @@
  * 11163 and 15080 lie below the reference (the cache's sample, see the table
  * below) - and drawn without the test, that hole is a solid dark plate.
  *
- * THE MATERIAL. 6, 7 and 8 are the cut-out materials of the rooms
+ * The material: 6, 7 and 8 are the cut-out materials of the rooms
  * (hd_render.cpp, MaterialAlphaRef). Over every .TRM of the install's 4 and
  * 5 ITEM folders, 6 and 8 are the two of them that occur, and both carry 0.5
  * in param[0] in every part - the reference the model shader clips at
@@ -43,7 +43,7 @@
  * exactly 0, so the page's own measure below would cut the statue in half;
  * the material is the half of the rule that keeps it whole.
  *
- * THE PAGE. The material alone would cut one model it must not: Lara's
+ * The page: the material alone would cut one model it must not: Lara's
  * HAND_BARE_PISTOL and HAND_GLOVES_PISTOL (4\ITEM) are material 6 over the
  * whole of page 8516, and 9.3 percent of that page lies below the reference -
  * the chequered grip panels, at alpha 3 to 5. That alpha is a mask, the dark

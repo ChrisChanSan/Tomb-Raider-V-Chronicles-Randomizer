@@ -28,20 +28,20 @@ if errorlevel 1 exit /b 1
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul
 cd /d "%~dp0..\..\.."
 
-rem winmain.cpp writes the first line of every -log run, "PCtomb5 built
-rem <__DATE__ __TIME__>", and those two macros are fixed when that one file is
-rem compiled. In an incremental build it is not recompiled: change a shader,
-rem or a file under specific\hd, and winmain.obj is still the old one, so the
-rem log stamps a build that never happened.
+rem The whole engine is compiled every time, never only what msbuild takes
+rem for changed. msbuild goes by file dates: a source file put back with a
+rem date older than its object file - a copy that keeps the date, an archive
+rem unpacked over the tree - is passed over although its content is new, and
+rem the link then joins object files of two states of one header. Such a
+rem build compiles, links and can die at once: a struct that grew in the
+rem object file that fills it and not in the one that holds it on its stack.
+rem The full build takes about half a minute and leaves no such mix possible.
 rem
-rem Deleting its object file before msbuild runs forces a fresh compile every
-rem time, at the cost of one file and about a second of build time.
-rem setupdlg.cpp carries the same __DATE__ in the launcher's window and goes
-rem with it.
-del /q "TOMB5 Code\Win32\Release\winmain.obj" 2>nul
-del /q "TOMB5 Code\Win32\Release\setupdlg.obj" 2>nul
+rem It also keeps the first line of every -log run true: winmain.cpp writes
+rem "PCtomb5 built <__DATE__ __TIME__>" there and setupdlg.cpp the same date
+rem in the launcher's window, and every build compiles both afresh.
 
-msbuild "TOMB5 Code\tomb5.vcxproj" /p:Configuration=Release /p:Platform=Win32 /v:minimal /nologo
+msbuild "TOMB5 Code\tomb5.vcxproj" /t:Rebuild /p:Configuration=Release /p:Platform=Win32 /v:minimal /nologo
 exit /b %errorlevel%
 
 :shaderguard

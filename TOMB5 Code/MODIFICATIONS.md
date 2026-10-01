@@ -3365,7 +3365,8 @@ clear floor too, and a draw call with a UV scroll, a flipbook, a book or a caust
 reach takes the sheen its page names; the water surfaces, the sky band and the clear
 floors keep the plain variant and are counted per level in a new `GLOSSLOG skipped` line.
 With `-log`, the GLOSSLOG level line also names the field's grid, cells, memory and build
-time.
+time. The page table names three more pages, 43 lines in all: the locker doors' two
+halves, 93 and 94, and 470, the twin of JOBY2's painted steel with a pipe across.
 
 **Why.** A play test of the previous entry's sheen showed, in pictures and videos: white
 discs with a cyan rim on JOBY2's diamond-plate floors that travel with the camera; steps
@@ -3448,66 +3449,69 @@ art meets the next room's in the picture, counted where the surface runs on (a s
 16 with the gloss off), gloss off and on: JOBY2's corridor 114 into 123, 5.68 and 6.07
 (+0.40); JOBY2's floor of room 90 into 118, 6.67 and 8.13 (+1.46), and into 85, 4.41 and
 5.28 (+0.87); RICH1 room 60 into 59, 5.84 and 5.94 (+0.10). RICH1's locker wall, room 17
-under room 87, steps by +9.20 on the wall itself, a page step and not a light step: the
-lower lockers are page 94, which the seed names metal, the upper ones page 93, which no
-source names; built with an `hd_gloss.txt` that names 93 metal, the same wall steps by
-+0.17 (+0.37 over the whole boundary). The overlap: the pixels that stand out against both
-row neighbours by 8 per cent of their own brightness, inside the floor where JOBY2 rooms
-114 and 123 lay page 425 on one plane at y -2560, 1,287 off and 975 on of 217,000, and
-where JOBY2 room 118 lays pages 12058 and 425 on one plane, 704 and 774 of 390,000. The
-burn-out, over 16 pairs of pictures - the set below and JOBY2 rooms 90, 114 and 143 and
-RICH1 room 17 - and the seams and overlaps: no picture gains more than 0.003 per cent of
-pixels with a channel at 250 or more (RICH2 room 135, 0.045 to 0.047), and the most the
-gloss adds anywhere is 41 of 255 (JOBY2 room 114's floor), 58 with every draw call at
-strength 1 and F0 1 (`-glossmax`), still with no channel brought to 250. The camera: three
-cameras 2,048 apart along JOBY2 room 90 at room-local (1536, -5800, z), z 1280, 3328 and
-5376, all looking at (2816, -4096, 3328): the highlight's centre on the floor, the
-weighted centre of the pixels the gloss lifts by at least 70 per cent of its most, stands
-at z 2034, 2399 and 2989 - it moves 955 units while the camera moves 4,096, as the mirror
-image of a lamp hung over the floor does, where a directional light's moved with the
-camera one to one. Before and after, `-noreflect` for before (mean brightness, largest
-difference, pixels by more than 32 of 255), against the previous entry's after: ANDREA1
-room 3 from that entry's camera, 61.9 to 62.5, 39, 1,613 (66.5, 255, 71,602); JOBY3 room 4
-83.8 to 84.1, 26, 0 (85.6, 106, 25,848); JOBY3 room 79 20.3 to 21.8, 6, 0 (26.6, 70,
-18,201); ANDREA1 room 64 101.0 to 101.2, 6, 0 (101.9, 26, 0); JOBY2 room 20 92.5 to 92.9,
-12, 0 (95.1, 93, 2,277); ANDREA2 room 16 68.5 to 69.3, 10, 0 (71.5, 35, 4,158); RICH2 room
-135 80.0 to 81.0, 11, 0 (87.1, 65, 13,997); RICH1 room 5 85.8 to 86.2, 6, 0 (91.7, 69,
-104,064); RICH1 room 60 38.5 to 38.7, 14, 0 (39.4, 31, 0); RICH2 room 8, the lobby, the
-same to the pixel. ANDREA1 room 3 from room-local (5300, -1500, 4400), yaw -125, pitch 40,
-over the forklift's cage: 57.9 to 58.7, 29, 0, and no pixel brought to 250. RICH2 room 46,
-a room with a clear floor, from (9727, -900, 2600), yaw 180, pitch 28.3: its steel shaft,
-page 954, shines by up to 6 on 4,641 pixels, and its copy beneath the clear floor with it.
-The field, per level (TrgProbe `-glossfield`; RoomProbe's `sheen field:` line for the
-engine's build with its textures on this machine): 2,925 cells (JOBY4) to 151,807 (RICH3),
-22 KiB to 1,185 KiB in the two textures, at most 524,288 cells and 4 MiB where a device
-asks for powers of two (ANDY2, TITLE), built in 0.2 to 6.5 ms (ANDY2); weak cells, less
-than one-third one-sided, are 0 (JOBY4) to 4.3 (RICH1) per cent of the lit ones. The light
-it carries through walls: of the light in the cells inside a room, 23.6 per cent in JOBY2
-and 30.5 in RICH2 comes from lamps of rooms more than two portals away; built with the
-sight test by the rooms, the highlight's strength on the floors falls by 15.2 per cent of
-its sum in JOBY2 (by more than 0.1 on 550 of 8,722 squares) and rises by 1.3, and falls by
-11.1 per cent in RICH2 (361 of 2,333) and rises by 4.6. The pictures show no highlight
-without a lamp either way: in JOBY2 room 90's view the test makes the one spot by the
-column larger, by up to 27 of 255 - the far lamps no longer dilute the direction there -
-and RICH2 room 135's view differs by at most 6. The cancelling case: JOBY2's strongest
-weak cell lies in room 119 at room-local (2560, -5632, 1536), its strength times one less
-its one-sidedness 0.89 (TrgProbe `-glossfield`), and RoomProbe's picture of that room,
-gloss on against off, adds at most 21 of 255 anywhere; two equal lamps either side of a
-cell leave a one-sidedness under 0.05 (ModernTest). The draw calls: RICH1 647 to 652 (33
-to 34 pages), RICH2 356 to 386, TITLE 15 to 19 (6 to 9 pages), every other level as
-before; `GLOSSLOG skipped` counts `clear=` 150 in RICH2, 1 in RICHCUT2 and 9 in TITLE and
-0 for every other reason in all fifteen levels.
+under room 87, stepped by +9.20 on the wall itself while the seed named the lower lockers'
+page 94 metal and no source named the upper ones' page 93 - a page step and not a light
+step; with both in the page table the boundary steps by 2.43 and 2.80 (+0.37, 738 pairs).
+JOBY2's corridor wall in room 114, from room-local (1300, -3900, 1200), yaw 5, pitch 12:
+the gloss adds 4.6 to 4.9 of 255 over the lower panels, page 469, and added 0.0 over the
+upper ones, page 470, which no source named; with 470 in the table it adds 4.5 to 4.7
+there. The overlap: the pixels that stand out against both row neighbours by 8 per cent of
+their own brightness, inside the floor where JOBY2 rooms 114 and 123 lay page 425 on one
+plane at y -2560, 1,287 off and 975 on of 217,000, and where JOBY2 room 118 lays pages
+12058 and 425 on one plane, 704 and 774 of 390,000. The burn-out, over 16 pairs of
+pictures - the set below and JOBY2 rooms 90, 114 and 143 and RICH1 room 17 - and the seams
+and overlaps: no picture gains more than 0.003 per cent of pixels with a channel at 250 or
+more (RICH2 room 135, 0.045 to 0.047), and the most the gloss adds anywhere is 41 of 255
+(JOBY2 room 114's floor), 58 with every draw call at strength 1 and F0 1 (`-glossmax`),
+still with no channel brought to 250. The camera: three cameras 2,048 apart along JOBY2
+room 90 at room-local (1536, -5800, z), z 1280, 3328 and 5376, all looking at (2816,
+-4096, 3328): the highlight's centre on the floor, the weighted centre of the pixels the
+gloss lifts by at least 70 per cent of its most, stands at z 2034, 2399 and 2989 - it
+moves 955 units while the camera moves 4,096, as the mirror image of a lamp hung over the
+floor does, where a directional light's moved with the camera one to one. Before and
+after, `-noreflect` for before (mean brightness, largest difference, pixels by more than
+32 of 255), against the previous entry's after: ANDREA1 room 3 from that entry's camera,
+61.9 to 62.5, 39, 1,613 (66.5, 255, 71,602); JOBY3 room 4 83.8 to 84.1, 26, 0 (85.6, 106,
+25,848); JOBY3 room 79 20.3 to 21.8, 6, 0 (26.6, 70, 18,201); ANDREA1 room 64 101.0 to
+101.2, 6, 0 (101.9, 26, 0); JOBY2 room 20 92.5 to 92.9, 12, 0 (95.1, 93, 2,277); ANDREA2
+room 16 68.5 to 69.3, 10, 0 (71.5, 35, 4,158); RICH2 room 135 80.0 to 81.0, 11, 0 (87.1,
+65, 13,997); RICH1 room 5 85.8 to 86.2, 6, 0 (91.7, 69, 104,064); RICH1 room 60 38.5 to
+38.7, 14, 0 (39.4, 31, 0); RICH2 room 8, the lobby, the same to the pixel. ANDREA1 room 3
+from room-local (5300, -1500, 4400), yaw -125, pitch 40, over the forklift's cage: 57.9 to
+58.7, 29, 0, and no pixel brought to 250. RICH2 room 46, a room with a clear floor, from
+(9727, -900, 2600), yaw 180, pitch 28.3: its steel shaft, page 954, shines by up to 6 on
+4,641 pixels, and its copy beneath the clear floor with it. The field, per level (TrgProbe
+`-glossfield`; RoomProbe's `sheen field:` line for the engine's build with its textures on
+this machine): 2,925 cells (JOBY4) to 151,807 (RICH3), 22 KiB to 1,185 KiB in the two
+textures, at most 524,288 cells and 4 MiB where a device asks for powers of two (ANDY2,
+TITLE), built in 0.2 to 6.5 ms (ANDY2); weak cells, less than one-third one-sided, are 0
+(JOBY4) to 4.3 (RICH1) per cent of the lit ones. The light it carries through walls: of
+the light in the cells inside a room, 23.6 per cent in JOBY2 and 30.5 in RICH2 comes from
+lamps of rooms more than two portals away; built with the sight test by the rooms, the
+highlight's strength on the floors falls by 15.2 per cent of its sum in JOBY2 (by more
+than 0.1 on 550 of 8,722 squares) and rises by 1.3, and falls by 11.1 per cent in RICH2
+(361 of 2,333) and rises by 4.6. The pictures show no highlight without a lamp either way:
+in JOBY2 room 90's view the test makes the one spot by the column larger, by up to 27 of
+255 - the far lamps no longer dilute the direction there - and RICH2 room 135's view
+differs by at most 6. The cancelling case: JOBY2's strongest weak cell lies in room 119 at
+room-local (2560, -5632, 1536), its strength times one less its one-sidedness 0.89
+(TrgProbe `-glossfield`), and RoomProbe's picture of that room, gloss on against off, adds
+at most 21 of 255 anywhere; two equal lamps either side of a cell leave a one-sidedness
+under 0.05 (ModernTest). The draw calls: RICH1 647 to 652 (33 to 34 pages), RICH2 356 to
+386, TITLE 15 to 19 (6 to 9 pages), every other level as before; `GLOSSLOG skipped` counts
+`clear=` 150 in RICH2, 1 in RICHCUT2 and 9 in TITLE and 0 for every other reason in all
+fifteen levels.
 
 **Unchanged.** The classic path: nothing of it is reached with `hd_enable` off. With
 `hd_reflect` off no draw call takes the gloss variant and every room is drawn to the pixel
 as at `ca2e904`; the field is still built and bound, and the plain variant reads none of
 it. The resolver's order - the material, the file, the table, the seed - the page table
-`hd_gloss_pages.h`, `hd_gloss.txt` and its format, the seed, the barred lobby pages,
-GLOSSLOG's page lines and the existing fields of its level line, TrgProbe's and
-RoomProbe's gloss switches. The alpha reference, the cut-outs, material 17's draw, the
-water, the glow, the flipbooks', books' and scrolls' own drawing, the glass, the
-clear-class ranges themselves and the mirrors. The objects and Lara: no file of the object
-path is touched. The interpolation.
+`hd_gloss_pages.h` but for its three new lines, `hd_gloss.txt` and its format, the seed,
+the barred lobby pages, GLOSSLOG's page lines and the existing fields of its level line,
+TrgProbe's and RoomProbe's gloss switches. The alpha reference, the cut-outs, material
+17's draw, the water, the glow, the flipbooks', books' and scrolls' own drawing, the
+glass, the clear-class ranges themselves and the mirrors. The objects and Lara: no file of
+the object path is touched. The interpolation.
 
 **Decisions.** The shine is a function of the place: what the gloss variant reads for a
 pixel is its world position, its normal, its page's gloss and the eye, nothing chosen per
@@ -3538,12 +3542,12 @@ give no highlight in the gloss variant: ten slots are left, and one lobe per lig
 more. No per-frame work on the processor per glossy draw call beyond the variant and the
 page's own constants: the rows go up once per room, the textures once per bracket.
 
-**Left.** RICH1's locker step is a page step: page 93, the upper lockers, wears the
-picture of page 94 and is named by no source; a line `93 metal` in `hd_gloss.txt` closes
-it to +0.17, and the page table, kept as it was built in this entry, can name it the same
-way. The same may hold for other split pictures - JOBY2's corridor wall shows a matt upper
-panel over a glossy lower one - looked at, not measured. The ripple of a water surface in
-the gloss variant (no level has a water page that names a gloss). The dynamic lights'
+**Left.** Page steps between levels: the seed votes per level, and ten pages take its
+metal in one level and nothing in another - 548 and 560 in JOBY3 against JOBY5, 977, 3008,
+3009, 3011, 12040 and 12042 among RICH1, RICH2 and RICH3, 12049 in JOBY2 against RICH1 and
+RICH3 (TrgProbe `-glossseed`; 94 was the tenth) - so one picture shines in one level and
+stays matt in the next until a table line names it. The ripple of a water surface in the
+gloss variant (no level has a water page that names a gloss). The dynamic lights'
 highlight. A second direction per cell. The sight test in the engine. Lara's own sheen, a
 task of its own. The play test at 165 Hz with `-log` and HD on: JOBY2 first - the
 diamond-plate rooms around room 90, the table room 104 and the hull outside, room 143: no
@@ -3555,7 +3559,8 @@ levels of the previous entry. In the log, `GLOSSLOG skipped` and the GLOSSLOG le
 **Commits.** the commits 'Round 189b (#189): the shine reads a light field of the level',
 'Round 189b (#189): the sheen is bounded by the surface's own light', 'Round 189b (#189):
 every room that wears the page shines', 'Round 189b (#189): the tools and the suite',
-'Round 189b (#189): the record follows'.
+'Round 189b (#189): the record follows', 'Round 189b (#189): what review pass 1 found, and
+a whole build every time'.
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
@@ -10339,8 +10344,8 @@ distance to the lens, the ambient and the light counts), `HDLOG clip` with
 (the node, animation and frame of the worst bone of the second) and
 `arms=<blended>/<refused>/<tween frames>`; `MODERNLOG` with its `init`, `pad` and
 per-tick lines and a separate `mode=tank` line; `MENULOG enter` and `MENULOG set`;
-`COMBATLOG`, `MODELOG` and `CHEATLOG`. The engine build script deletes `winmain.obj` and
-`setupdlg.obj` before `msbuild`.
+`COMBATLOG`, `MODELOG` and `CHEATLOG`. The engine build script compiles the whole engine
+on every run.
 
 **Why.** Upstream compiled `Log()` out entirely, so a player who ran into something
 could never produce a log; the only way was a special build. The switch is read by hand
@@ -10379,7 +10384,12 @@ first line of every `-log` run, `PCtomb5 built <__DATE__ __TIME__>`, and those m
 are fixed when that one file is compiled, so an incremental build that touched a shader
 or a file in `specific\hd` left yesterday's stamp on today's binary and a log could name
 a build that never ran; `setupdlg.cpp` carries the same `__DATE__` in the launcher's
-window.
+window. An incremental build can do worse: `msbuild` goes by file dates, so a source file
+put back with a date older than its object file is passed over although its content is
+new, and the link joins object files of two states of one header - a binary that
+compiles, links and dies at the end of the level build, where `HDRenderGlossLevel` had
+grown by 28 bytes in the object file that fills it and not in the one that holds it on
+its stack.
 
 **How.** `specific/function_stubs.cpp` and `.h` hold `Log()` and `gLogEnabled`;
 `specific/winmain.cpp` reads the switch and writes the stamp. A seam that has to build
@@ -10403,9 +10413,10 @@ counter is one line in `specific/dxshell.cpp`, in `DXShowFrame` directly after
 returns, no clock is read, no counter stepped and nothing allocated. The per-level
 summary is flushed at the top of `HDLevelBuild` for the level before and in
 `HDLevelDeviceLost`, so the level the player quits from gets one too, both on the main
-thread after the load thread has joined. The build stamp is two `del` lines in
-`Preparation/Tools/Diagnose/be.bat` against `TOMB5 Code/Win32/Release/winmain.obj` and
-`setupdlg.obj`. The diagnostic tools that carry these measurements — `InterpTest`,
+thread after the load thread has joined. The build: `Preparation/Tools/Diagnose/be.bat`
+calls `msbuild` with `/t:Rebuild`, so every object file - `winmain.obj` and `setupdlg.obj`
+with the stamp among them - is of the build's own source state; the full build takes about
+half a minute. The diagnostic tools that carry these measurements — `InterpTest`,
 `ModelProbe`, `AnimMap`, `ModernTest` and `MenuTest` — are listed in
 `Preparation/Tools/README.md`, with `Preparation/Tools/Diagnose/InterpTest.cpp` and
 `Preparation/Tools/Diagnose/ModelProbe.cpp` in the tree; `docs/Engine-Manual.md` carries

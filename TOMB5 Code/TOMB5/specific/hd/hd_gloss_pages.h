@@ -45,12 +45,15 @@ static const HDGlossPage kHDGlossPages[] =
 	{    33, X, -1.0f, -1.0f, -1.0f },	// RICH1: a brick wall and a lamp's glow on a metal floor
 	{    50, X, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2: poured concrete with tie holes
 	{    53, G, -1.0f, -1.0f, -1.0f },	// RICH2: a black window pane in a white frame
+	{    93, M, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2, JOBY2, TITLE: the locker doors, their upper half
+	{    94, M, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2, TITLE: the locker doors, their lower half
 	{   141, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the crate's front, the logo panel and the hazard stripes
 	{   390, X, -1.0f, -1.0f, -1.0f },	// ANDREA3: a stone relief of a procession
 	{   391, X, -1.0f, -1.0f, -1.0f },	// ANDREA3: the same relief
 	{   421, M, -1.0f, -1.0f, -1.0f },	// JOBY2: a riveted steel column
 	{   436, X, -1.0f, -1.0f, -1.0f },	// JOBY2, JOBY3, JOBY5: a pipe over a wooden pallet in the snow
 	{   469, M, -1.0f, -1.0f, -1.0f },	// JOBY2: riveted steel columns, painted
+	{   470, M, -1.0f, -1.0f, -1.0f },	// JOBY2: the same painted steel with a pipe across, the twin of 469
 	{   480, I, -1.0f, -1.0f, -1.0f },	// JOBY2: the material 3 snow and ice floor
 	{   482, X, -1.0f, -1.0f, -1.0f },	// JOBY3, JOBY5: cracked plaster over concrete
 	{   576, M, -1.0f, -1.0f, -1.0f },	// JOBY3 room 79: the duct's diamond plate with its vents

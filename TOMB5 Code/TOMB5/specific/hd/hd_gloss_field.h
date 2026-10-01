@@ -39,12 +39,12 @@
  * Blinn-Phong highlight out of the two.
  *
  * No light is tied to the camera, and nothing in the field asks which room a
- * lamp hangs in: a lamp lights every cell within its reach. Whether a lamp
- * behind a wall may reach a cell is answered in the shader, not here - the
- * sheen is bounded by the surface's own baked light (hd_gloss_math.h,
- * HDGlossSheenBound), and a surface the bake left dark stays dark. TrgProbe
- * -glossfield measures how much of the field's light crosses into rooms that
- * are no neighbour of the lamp's own.
+ * lamp hangs in or whether a wall stands between: a lamp lights every cell
+ * within its reach, adds to its colour and pulls its direction. The shader
+ * holds back only the surface the bake left dark - the sheen is bounded by
+ * the surface's own baked light (hd_gloss_math.h, HDGlossSheenBound).
+ * TrgProbe -glossfield measures how much of the field's light crosses into
+ * rooms that are no neighbour of the lamp's own.
  *
  * This header includes no engine header, like hd_gloss_math.h:
  * Preparation\Tools\Diagnose\ModernTest.cpp asserts on it without a device,

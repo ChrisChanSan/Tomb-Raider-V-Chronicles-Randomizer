@@ -198,6 +198,16 @@ itself and only then builds, and it refuses to build at all if that fails. A
 the same date and a date guard would then either cry wolf or say nothing at
 all.
 
+**`be.bat` also compiles the whole engine on every run** (`msbuild
+/t:Rebuild`, about half a minute), never only what `msbuild` takes for
+changed. `msbuild` goes by file dates: a source file put back with a date
+older than its object file - a copy that keeps the date, an archive unpacked
+over the tree - is passed over although its content is new, and the link
+joins object files of two states of one header. Such a binary compiles, links
+and can die at once. The full build leaves no such mix possible, and it gives
+every binary its own build time (`winmain.cpp` writes it as the first line of
+a `-log` run).
+
 **And a content stamp has its own trap.** An MD5 is taken over bytes, and
 line endings are bytes: with
 git's Windows default the `.hlsl` came out of a fresh clone with carriage

@@ -109,6 +109,38 @@ inline bool InterpCamTypeCut(int prevType, int type, int prevOld, int oldType)
 	return false;
 }
 
+/* Whether a level camera sequence holds the view: bUseSpotCam, or
+ * bTrackCamInit, which game\spotcam.cpp's CalculateSpotCams sets on every tick
+ * of a sequence whose first camera tracks Lara (SP_TRACKCAMERA). Under such a
+ * sequence the upstream line at the top of ControlPhase (game\control.cpp)
+ * clears bUseSpotCam on every call, the calls that run no tick included, and
+ * the tick's flyby trigger sets it again; read alone it is 0 at the start of
+ * every tick and between ticks and 1 after one, so every tick of the sequence
+ * would read as a flyby beginning. The pair is 1 from the sequence's first
+ * tick to the tick that runs CalculateCamera again, which clears
+ * bTrackCamInit. Outside a tracking sequence bTrackCamInit is 0 and the
+ * answer is bUseSpotCam's. */
+inline bool InterpLevelCamHolds(long useSpotCam, long trackCamInit)
+{
+	return useSpotCam != 0 || trackCamInit != 0;
+}
+
+/* The camera cut test's flyby term: the view passed between a level camera
+ * sequence and the game's own camera since the snapshot. `prevHolds` is
+ * InterpLevelCamHolds at the start of the tick, `holds` its value now. */
+inline bool InterpSpotCut(bool prevHolds, bool holds)
+{
+	return prevHolds != holds;
+}
+
+/* Whether the drawn-eye rule may move this frame's eye (game\interpolate.cpp,
+ * ModernCameraDrawnEye): never while a level camera sequence holds the view at
+ * either end of the blend, and never in a cutscene. */
+inline bool InterpEyeRuleRuns(bool prevHolds, bool holds, bool cutseq)
+{
+	return !holds && !prevHolds && !cutseq;
+}
+
 /* Positions are integers in this engine and stay integers: the truncation is
  * at most one unit, a TR sector is 1024 of them, and handing a float position
  * to a matrix stack that works in longs would only move the rounding

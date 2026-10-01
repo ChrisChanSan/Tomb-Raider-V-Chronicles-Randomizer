@@ -149,7 +149,7 @@ namespace
 		short room;
 		short type, oldType;
 		short fixed;
-		short spot;		// bUseSpotCam - entering a flyby is a cut
+		short spot;		// LevelCamHolds() - entering or leaving a flyby is a cut
 		short roll;
 		unsigned char valid;
 	};
@@ -441,13 +441,27 @@ namespace
 	inline long LerpLong(long a, long b, float alpha) { return InterpLerpLong(a, b, alpha); }
 	inline long Manhattan(long dx, long dy, long dz) { return InterpManhattan(dx, dy, dz); }
 
+	/* Whether a level camera sequence holds the view (InterpLevelCamHolds,
+	 * game\interpolate_math.h). Every read of the flyby flag the interpolator
+	 * makes goes through it: the snapshot, the cut test, the roll and the
+	 * drawn-eye rule. bUseSpotCam alone drops to 0 between the ticks of a
+	 * sequence that tracks Lara (the upstream reset at the top of
+	 * ControlPhase), so each of its ticks would count as a cut. */
+	bool LevelCamHolds()
+	{
+		return InterpLevelCamHolds(bUseSpotCam, bTrackCamInit);
+	}
+
 	/* The roll the view is rebuilt with. CamRoll (specific\3dmath.cpp) is
 	 * what the last phd_LookAt was handed, for all three rolling cameras; in
 	 * first person it is read through the camera's own getter so this stays
-	 * right if the head camera ever bypasses phd_LookAt. */
+	 * right if the head camera ever bypasses phd_LookAt. FirstPersonActive
+	 * refuses a flyby by bUseSpotCam alone, which reads 0 between the ticks of
+	 * a tracking sequence; asked behind LevelCamHolds, such a sequence's roll
+	 * is CamRoll at both ends of the blend, as for every other flyby. */
 	short CameraRollNow()
 	{
-		if (FirstPersonActive())
+		if (!LevelCamHolds() && FirstPersonActive())
 			return GetFirstPersonRoll();
 
 		return CamRoll;
@@ -669,7 +683,7 @@ namespace
 		else if (typeMoved && gLogEnabled)
 			g_cutHandover++;
 
-		if (g_prevCam.spot != (short)bUseSpotCam)
+		if (InterpSpotCut(g_prevCam.spot != 0, LevelCamHolds()))
 		{
 			cut = true;
 
@@ -1099,7 +1113,7 @@ void InterpCapturePrev()
 	g_prevCam.type = (short)camera.type;
 	g_prevCam.oldType = (short)camera.old_type;
 	g_prevCam.fixed = (short)camera.fixed_camera;
-	g_prevCam.spot = (short)bUseSpotCam;
+	g_prevCam.spot = (short)(LevelCamHolds() ? 1 : 0);
 	g_prevCam.roll = CameraRollNow();
 	g_prevCam.valid = 1;
 
@@ -1713,7 +1727,9 @@ void InterpBeginFrame(float alpha)
 		 * passing outside every room would fail on both ends of every chord
 		 * and lose its sky or stall at the tick rate. Entering or leaving a
 		 * flyby is a cut, so both ticks of a blend are either flyby or not;
-		 * a flyby frame keeps g_eye cleared and is drawn as before.
+		 * a flyby frame keeps g_eye cleared and is drawn as before. A flyby
+		 * that tracks Lara is asked through LevelCamHolds, since bUseSpotCam
+		 * alone reads 0 between its ticks.
 		 *
 		 * A cutscene camera is left out for the same reason: its room comes
 		 * from IsRoomOutside (do_new_cutscene_camera), which matches no room
@@ -1722,7 +1738,7 @@ void InterpBeginFrame(float alpha)
 		 * rule would withhold the sky on frames whose ticks draw it. */
 		float camAlpha = alpha;
 
-		if (!bUseSpotCam && !g_prevCam.spot && !GLOBAL_playing_cutseq)
+		if (InterpEyeRuleRuns(g_prevCam.spot != 0, LevelCamHolds(), GLOBAL_playing_cutseq != 0))
 		{
 			const long prev[3] = { g_prevCam.px, g_prevCam.py, g_prevCam.pz };
 			const long cur[3] = { g_savedCam.px, g_savedCam.py, g_savedCam.pz };

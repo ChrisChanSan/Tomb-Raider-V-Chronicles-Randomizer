@@ -3273,7 +3273,7 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 
 	/* bshader.bat compiles three pixel shaders for ps_3_0, the room shader at
 	 * 476 instruction slots, the model shader at 353 and the glow shader at
-	 * 479, and the room shader's gloss variant beside them at 436
+	 * 479, and the room shader's gloss variant beside them at 452
 	 * (hd_room_gloss_ps.inc). The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc

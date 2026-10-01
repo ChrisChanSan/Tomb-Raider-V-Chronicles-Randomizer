@@ -552,8 +552,17 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *                   metal, low for marble and ice, so metal reflects face on
  *                   and stone mostly at a grazing angle.
  *
- * The sum is ADDED to the surface's own lit colour, never blended over it:
- * the surface keeps its picture to the bit wherever the
+ * The bound. The sum is held under HD_GLOSS_BOUND times the largest channel
+ * of the surface's own lit colour (the texel times its light, after the fog
+ * and the bulbs) plus HD_GLOSS_FLOOR - softly, B (1 - e^(-t / B)) for its
+ * largest channel t, and the other two scaled with it so that it keeps its
+ * hue: a dark surface stays dark, a lamp behind a wall cannot light a
+ * surface the bake left dark, and Fresnel's rise at a grazing angle cannot
+ * wash a wall seen along its length pale. And it is composed as a screen,
+ * lit + sheen * (1 - lit), so nothing turns white that was not white before.
+ *
+ * The sum is ADDED to the surface's own lit colour (as that screen), never
+ * blended over it: the surface keeps its picture to the bit wherever the
  * weight is zero, which is what a page's gloss mask asks for - a stucco
  * facade whose mask is black stays exactly as it was and only its window
  * panes shine. The same fog that darkens the surface darkens the sum. Not a
@@ -575,10 +584,13 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *
  * The numbers are chosen, not measured, against RoomProbe's pictures of
  * JOBY2, ANDREA1 and RICH1: the highlight at twice the field's colour - the
- * field is bounded below one and the lobe carries no (n + 8) / 8 of its own -
- * and the environment at a quarter of the surface's light. */
+ * field is bounded below one and the lobe carries no (n + 8) / 8 of its own,
+ * the bound holds the peak - the environment at a quarter of the surface's
+ * light, and the bound at the surface's own lit colour plus 4 of 255. */
 #define HD_GLOSS_HIGHLIGHT 2.0f
 #define HD_GLOSS_ENV       0.25f
+#define HD_GLOSS_BOUND     1.0f
+#define HD_GLOSS_FLOOR     (4.0f / 255.0f)
 
 float4 gGloss : register(c36);
 float4 gGlossAxes[3] : register(c86);
@@ -977,11 +989,12 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 
 #ifdef HD_GLOSS
 /* The sheen of one pixel - see "The sheen" above. `light` is the surface's
- * own lit multiply before the fog, the environment's colour; `dark` what the
- * fog and the fog bulbs took off the surface, which the sum loses too.
- * `field` comes back as RoomProbe's -glossfield picture asks for it: the
- * field's colour (gGloss.w 1) or its direction (2). */
-float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark,
+ * own lit multiply before the fog, the environment's colour; `own` the
+ * surface's lit colour after the fog and the bulbs, which bounds the sum;
+ * `dark` what the fog and the fog bulbs took off the surface, which the sum
+ * loses too. `field` comes back as RoomProbe's -glossfield picture asks
+ * for it: the field's colour (gGloss.w 1) or its direction (2). */
+float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float3 own, float dark,
 	out float3 field)
 {
 	/* viewNrm is not renormalised and a vertex may carry a zero normal; the
@@ -1029,8 +1042,15 @@ float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark,
 	float g2 = grazing * grazing;
 	float F = gGloss.x + (1.0f - gGloss.x) * (g2 * g2 * grazing);
 	float weight = F * gSpec.x * gSpec.z * lerp(1.0f, texel.a, gGloss.z);
+	float3 sheen = max(0.0f, (hl + env) * weight - dark);
 
-	return max(0.0f, (hl + env) * weight - dark);
+	/* The bound - see "The sheen" above: the brightest channel t goes to
+	 * B (1 - e^(-t / B)), which follows t where it is small and never
+	 * reaches B, and the other two follow it in proportion. */
+	const float bound = HD_GLOSS_BOUND * max(own.r, max(own.g, own.b)) + HD_GLOSS_FLOOR;
+	const float k = max(sheen.r, max(sheen.g, sheen.b)) / bound;
+
+	return sheen * ((1.0f - exp(-k)) / max(k, 1e-4f));
 }
 #endif
 
@@ -1276,15 +1296,16 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	float3 lit = texel.rgb * c + s * gPass.w;
 
 #ifdef HD_GLOSS
-	/* The sheen - see "The sheen" above. The fog in the remaster's scale and
-	 * the bulbs' haze in the classic 0..255 one come off it as the surface
-	 * lost them. The two additive-pass lines below have no work in the gloss
-	 * variant. */
+	/* The sheen - see "The sheen" above: bounded by the surface's own lit
+	 * colour `texel * c`, then composed as a screen. The fog in the
+	 * remaster's scale and the bulbs' haze in the classic 0..255 one come
+	 * off it as the surface lost them. The two additive-pass lines below
+	 * have no work in the gloss variant. */
 	float3 field;
-	const float3 sheen = GlossSheen(input, texel, unfogged,
+	const float3 sheen = GlossSheen(input, texel, unfogged, texel.rgb * c,
 		fogged * (2.0f / 255.0f) + haze * (1.0f / 255.0f), field);
 
-	lit += sheen;
+	lit += sheen * saturate(1.0f - lit);
 
 	// RoomProbe's -glossfield picture: the field in place of the surface.
 	lit = gGloss.w > 0.5f ? field : lit;

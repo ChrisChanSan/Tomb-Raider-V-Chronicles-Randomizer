@@ -727,3 +727,35 @@ inline void HDGlossSeedVote(const float a[3], const float b[3], const float c[3]
 
 	perFx[sectors[at].fx & 15]++;
 }
+
+/* The bound of the sheen, the twins of hd_room.hlsl's HD_GLOSS_BOUND and
+ * HD_GLOSS_FLOOR (the note "The sheen" there says why): the sheen of a pixel
+ * is held under B, HD_GLOSS_BOUND times the largest channel of the surface's
+ * own lit colour plus HD_GLOSS_FLOOR - its largest channel t goes to
+ * B (1 - e^(-t / B)), the other two in proportion, so that it keeps its hue -
+ * and composed over the lit colour as a screen, lit + sheen * (1 - lit), per
+ * channel. These two functions are the shader's arithmetic on the processor,
+ * for the suite. */
+#define HD_GLOSS_BOUND		1.0f
+#define HD_GLOSS_FLOOR		(4.0f / 255.0f)
+
+inline void HDGlossSheenBound(const float sheen[3], const float own[3], float out[3])
+{
+	const float bound = HD_GLOSS_BOUND * fmaxf(own[0], fmaxf(own[1], own[2])) +
+		HD_GLOSS_FLOOR;
+	const float k = fmaxf(sheen[0], fmaxf(sheen[1], sheen[2])) / bound;
+	const float scale = (1.0f - expf(-k)) / fmaxf(k, 1e-4f);
+
+	for (int c = 0; c < 3; c++)
+		out[c] = sheen[c] * scale;
+}
+
+inline void HDGlossSheenCompose(const float lit[3], const float sheen[3], float out[3])
+{
+	for (int c = 0; c < 3; c++)
+	{
+		const float room = 1.0f - lit[c];
+
+		out[c] = lit[c] + sheen[c] * (room < 0.0f ? 0.0f : room > 1.0f ? 1.0f : room);
+	}
+}

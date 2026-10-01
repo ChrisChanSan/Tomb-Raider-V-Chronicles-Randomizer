@@ -489,19 +489,24 @@ yours and eases through the animation instead of snapping.
 
 Hold the left stick through the moment the sniper camera takes the view or
 hands it back, and Lara keeps the course she was running: the stick still
-steers her, but against the camera she set off under, until you let go. Push
-again and the stick goes by the view you now see. With `-log`, the `MODERNLOG`
-line of every game tick carries `cut=1` on the tick the camera changed hands
-and `latch=1` while such a held course is kept.
+steers her, but against the camera she set off under, until you let go or turn
+the stick more than 45 degrees away from where it pointed at that moment. Push
+again, or turn it that far, and the stick goes by the view you now see; turning
+it does not stop her. The same holds where a level camera that follows her
+takes the view and hands it back, as in the X-ray corridor of Escape with the
+Iris. With `-log`, the `MODERNLOG` line of every game tick carries `cut=1` on
+the tick the camera changed hands, `latch=1` while such a held course is kept,
+and `latch_drop=1` on the tick a turn of the stick ended it.
 
 In the 13th Floor and in Escape with the Iris the game pushes the camera off
 the slanted wall panels that stand in the corners of some rooms, and there the
 camera can stand close beside Lara, away from the angle you set. While it does,
 the stick goes by the view you see, not by the angle the camera would like to
 have; held through the moment the push starts or ends, it keeps her course the
-same way as at the sniper camera, until you let go. With `-log`, the `CAMLOG`
-line ends in `diag=`, how far the push moved the camera, and the `MODERNLOG`
-line ends in `ref_view=1` on the ticks the stick goes by the view.
+same way as at the sniper camera, until you let go or turn it more than 45
+degrees. With `-log`, the `CAMLOG` line ends in `diag=`, how far the push
+moved the camera, and the `MODERNLOG` line ends in `ref_view=1` on the ticks
+the stick goes by the view.
 
 ### The Modes sub-page: Combat, Sprint, Duck, Grab and Ledge hang
 
@@ -1010,7 +1015,10 @@ camera cut — a fixed camera taking over, a flyby starting or stepping to its
 next node, the binoculars going up — a cut in a cut scene's own tracks, the
 start and the end of a cut scene, and the first frame after a level start, a
 savegame load or the inventory. Those look exactly as they do
-at thirty, which is the point.
+at thirty, which is the point. A level camera that follows Lara while she
+keeps playing, like the one in the X-ray corridor of Escape with the Iris,
+jumps where it takes the view and where it hands it back, and is drawn
+between the game steps in between, in both control schemes.
 
 **At a corner.** Between two game steps the camera is drawn on the straight
 line between the two places it stood, and beside a pillar or a door frame that
@@ -3044,7 +3052,7 @@ wrote it, and each seam answers a different question:
 | at *Frame rate 60* a fade, a caption or the rain seems to run at double speed | `TICKLOG` — per second: how often the engine's own clocks stepped. The same line has to come out of a 30 run and a 60 run |
 | at *Frame rate 60* or *Display*, a black flash — or sky — for a frame or two as the camera swings past a pillar or a door frame | `CAMLOG` — a `tick` line per pass of the chase, combat, fixed and look cameras (none during flybys, binoculars or cutscenes): where the camera stands and with which room, what it aimed for and how the wall cut it, what kind of place it stands in (`kind=open`, `wall`, `door->36`, `below:12`) and how close it is to a wall face and a corner, and `clear=`, how far the *Modern* camera was just moved off a wall (`0` nothing to do, `-1` a move refused), and last `diag=`, how far the game's push off a slanted wall panel (13th Floor, Escape with the Iris) moved the *Modern* camera (`0` none); a `draw` line for every picture whose camera had to be put right between two steps, saying how (`fix=prevroom`, `chord`, `tick` or `nosky`) and how far it moved (`moved=`); and a `sum` line per second with the counts |
 | under *Modern* the mouse does not turn the camera, a mouse button does nothing, or the cursor stays hidden or visible when it should not | `MOUSELOG` — a line whenever the mouse moved or a button changed: the counts it moved (`dx=`, `dy=`), the buttons held (`buttons=`, left 1, right 2, middle 4, the side buttons 8 and 16), how far that turned the camera (`yaw=`, `pitch=`), the sensitivity (`sens=`), whether the cursor was held (`captured=`) and the counts still to be paid out on later ticks (`owed_x=`, `owed_y=`; while they are, a line comes with `dx=0 dy=0` and the step turned); and a `MOUSELOG capture=on` or `capture=off` line every time the cursor is caught or let go, with the reasons (`active=` the window has the focus, `modern=`, `fmv=`) |
-| under *Modern* Lara does not run where the camera looks, with the stick or with the movement keys | `MODERNLOG` — one line per game tick of the modern control: the stick it was handed (`stick=`), the camera and her course (`cam=`, `ref=`, `course=`), the bits it sent (`bits=`), `feed=pad` for the controller's stick, `feed=keys` for the four movement keys, `feed=none` when both rest, and at the end `ref_view=1` on a tick the stick is read in the view on screen rather than in the angle the *Modern* camera was set to (the sniper camera, the level camera that follows her through the X-ray corridor, a slanted wall panel's push); while *Look* is held a `MODERNLOG … mode=tank` line instead |
+| under *Modern* Lara does not run where the camera looks, with the stick or with the movement keys | `MODERNLOG` — one line per game tick of the modern control: the stick it was handed (`stick=`), the camera and her course (`cam=`, `ref=`, `course=`), the bits it sent (`bits=`), `feed=pad` for the controller's stick, `feed=keys` for the four movement keys, `feed=none` when both rest, and at the end `ref_view=1` on a tick the stick is read in the view on screen rather than in the angle the *Modern* camera was set to (the sniper camera, the level camera that follows her through the X-ray corridor, a slanted wall panel's push), and last `latch_drop=1` on the tick a turn of the stick by more than 45 degrees ended a course held through a camera cut (0 on every other tick); while *Look* is held a `MODERNLOG … mode=tank` line instead |
 | at *Frame rate 60* an arm or the weapon in her hands shakes | `ARMLOG` — per drawn frame: both arms' animation frames, whether they were blended, and where shoulder, elbow and hand came out |
 | the *Ledge hang* move misbehaves, or the camera jumps during it | `LEDGELOG` — one line per phase of the move, one when it starts, one when the reasons it would refuse an edge change; and with the Modern camera a `LEDGELOG cam` line on every step of the move and the ten after it: where the camera stands and what it looks at, with their rooms, and whether it had to put the look-at point back (`snaps=`, `rejected=`) |
 | Lara vanishes for a moment on a rope, for instance in the half turn | `ROPELOG` — one line per tick on the rope: her heading round it (`RopeY=`), the three lengths the placement divides by (`len=`), and the angles and position she is given (`xyz=`, `pos=`); and a `ROPELOG draw` line on every drawn frame and on the one after she lets go: whether she was drawn (`drawn=`) and which term decided it, where the camera stands and what it looks at, its distance to that point and to her (`eyed=`, `larad=`), and which candidate the chase camera took (`cand=`, `clip=`) |
@@ -3213,7 +3221,7 @@ That is the whole line, in the order the engine prints it — it is one line in
 | `items` | how many things really moved and were interpolated, per frame. Idle pickups, switches and empty slots are not counted |
 | `snaps` | how often interpolation was deliberately skipped, and why: `teleport` something crossed more than half a sector in one step, `roomjump` it did so across a room boundary, `object` an item slot was handed to a different object, `invalid` there was no previous state |
 | `halfturn` | rotations that turned **exactly half a turn** between the two steps and kept the live value instead of blending it — that is the roll's own about-face firing, once per roll. A handful over a run through a level, nought in a still second; a large number means something is turning half a turn that should not |
-| `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up. The five numbers in brackets split it: `type` changes that left the smooth camera family, `spot` flyby cuts, `eye` and `aim` the camera's two ends jumping on their own, and `handover` changes **inside** the smooth family that were deliberately *not* taken for a cut — drawing or holstering a weapon, looking around. One or two `handover` per draw is what it looks like |
+| `camcut` | camera cuts: a fixed camera taking over, a flyby starting or stepping, the binoculars going up. The five numbers in brackets split it: `type` changes that left the smooth camera family, `spot` flyby cuts (for a level camera that follows Lara, such as the X-ray corridor's, only the frames of the step it starts on and of the step after it ends — five or six each at *Display* on a 165 Hz panel, one at *Frame rate 60* — and none in between), `eye` and `aim` the camera's two ends jumping on their own, and `handover` changes **inside** the smooth family that were deliberately *not* taken for a cut — drawing or holstering a weapon, looking around. One or two `handover` per draw is what it looks like |
 | `cutscene` | in-between frames of a cut scene drawn live, wholly or for one actor, for a reason that is **not** a cut: nought in a healthy log. The cuts in the scene's tracks, an actor's jump, a half-turned joint and the scene's first step are the scene's own and are counted in `CUTLOG` |
 | `pose_items` | things whose **limbs** were drawn halfway between two game steps, per frame. Zero at 30, always |
 | `pose_skips` | poses that were *not* blended because the animation changed between the two steps, or the frame number jumped, or Lara stands between the two key frames of the tightrope turn that are drawn from the first of them (see `KEYFARLOG`, `mode=hold`). A few per second is normal — that is what an animation change is. The step after a jump's twist or a roll is not among them: its in-between pictures are bridged (see `bridge`) |

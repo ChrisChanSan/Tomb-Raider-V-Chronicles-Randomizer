@@ -8086,6 +8086,137 @@ The rule has not been seen in the game.
 
 **Commits.** `a69397a`, `ed3a2de`, `1aaf5f5`
 
+### A level camera that follows Lara is blended between its ticks
+2026-10-01
+
+**What.** At *Frame rate 60* and at *Display*, under both control schemes, a level camera
+sequence that follows Lara while she keeps her controls - the X-ray corridor of Escape
+with the Iris, and one sequence each in the level files andy1, Andy2, andy3 and rich3 and
+a second one in rich2 - is drawn between its ticks like any other flyby; its first tick
+and the tick after its last stay camera cuts. At *Frame rate 30*, and on every tick
+outside such a sequence, every frame is drawn as before. With `-log`, `INTERPLOG`'s
+`spot=` counts for such a sequence only the frames of its first tick and of the tick after
+its last.
+
+**Why.** In the X-ray corridor the whole picture juddered at a frame rate of 60 and above,
+under the classic scheme as well, and not at 30. The cause is the upstream pair of lines
+at the top of `ControlPhase` (`game/control.cpp:256`-`257`), `if (bTrackCamInit)
+bUseSpotCam = 0;`, which runs on every call, the calls that run no tick included - at
+*Display* most calls run none. The tick's `TO_FLYBY` trigger sets `bUseSpotCam` again
+(`:2685`-`2693`), and `CalculateSpotCams` sets `bTrackCamInit`
+(`game/spotcam.cpp:530`-`531`) on every tick of a sequence whose first camera tracks Lara.
+The interpolator read `bUseSpotCam` alone: its snapshot at the start of every tick took 0,
+its cut test after the tick saw 1 and counted a flyby cut, so the first frame after every
+tick was drawn live at the tick's state, and the in-between frames after it, with the flag
+back at 0, were blended from the tick before - the picture jumped a tick forward and fell
+back, thirty times a second. On those in-between frames the drawn-eye rule also ran on the
+flyby's eye, which its own comment leaves out. The measurement is a RICH2 log at the build
+of the commit before, Modern control at 165 frames a second, with four passages through
+the corridor. Of its 132 `INTERPLOG` seconds, 25 read `camcut=30` with `spot=30` and
+`tween=135` of `frames=165`, and in each of them all 30 `MODERNLOG` tick lines came
+without a `CAMLOG` tick line before them, the tracking camera holding the view. The
+seconds of the four entries read `spot=` 25, 10, 6 and 18 (the log ends inside the last
+passage), those of the three exits `spot=` 0, 1 and 11 beside `eye=` 5, 6 and 6, and the
+101 seconds outside the corridor `spot=0`. An earlier RICH2 log through the same corridor
+has 41 seconds of `spot=30`.
+
+**How.** `InterpLevelCamHolds(useSpotCam, trackCamInit)` (`game/interpolate_math.h:123`):
+a level camera sequence holds the view when either flag is set. From a tracking sequence's
+first tick to the tick that runs `CalculateCamera` again the pair is never 0, where
+`bUseSpotCam` alone is 0 between the ticks; outside a tracking sequence `bTrackCamInit` is
+0 and the answer is `bUseSpotCam`'s. `InterpSpotCut` (`:131`) and `InterpEyeRuleRuns`
+(`:139`) are the cut test's flyby term and the drawn-eye rule's exclusion as pure
+functions, so InterpTest calls what the engine calls. In `game/interpolate.cpp`,
+`LevelCamHolds()` (`:450`) hands the two flags of `game/spotcam.h` to the predicate, and
+every read of the flag the interpolator makes goes through it: the snapshot stores it in
+`g_prevCam.spot` (`:1116`, the field's comment at `:152`); the cut test compares the two
+(`:686`); the drawn-eye rule is off while either end of the blend is held (`:1741`); and
+`CameraRollNow` (`:464`) asks `FirstPersonActive` (`game/camera.cpp`), which refuses a
+flyby by `bUseSpotCam` alone, only while no level camera holds the view, so a tracking
+sequence's roll is `CamRoll` at both ends of the blend, as for every other flyby. No other
+cut reason, blend or snapshot field changes.
+
+The two flags on each kind of tick, read from the code. On the entry tick both are 0 at
+the snapshot, because the tick before ran the `CalculateCamera` branch of `ControlPhase`
+(`game/control.cpp:670`-`672`), which clears `bTrackCamInit`; the trigger sets
+`bUseSpotCam` (`:2688`), `InitialiseSpotCam` starts the sequence and clears
+`bTrackCamInit` (`game/spotcam.cpp:145`), and `CalculateSpotCams` sets it (`:531`): the
+predicate goes from 0 to 1, and every frame of that tick is a cut, the calls between ticks
+leaving `bTrackCamInit` at 1. On a continuing tick the call's first line leaves 0 and 1,
+so the snapshot reads 1; the trigger sets `bUseSpotCam`, `InitialiseSpotCam` finds the
+same sequence still tracked, clears `bTrackCamInit` and returns without restarting it
+(`:126`-`128`), and `CalculateSpotCams` sets it again - 1 and 1 after the tick, 0 and 1
+between ticks, the predicate 1 throughout, no cut. On the exit tick no trigger fires, the
+snapshot reads 1, and the `CalculateCamera` branch clears `bTrackCamInit`: 0 and 0 after
+it, a cut on every frame of that tick. The tick after reads 0 at both ends. When one call
+runs several ticks the reset at its top runs once, and the second tick's snapshot reads 1
+and 1 - the predicate is 1 either way. The `GF_OFFICE` branch of `ControlPhase`
+(`game/control.cpp:641`-`645`) starts a sequence itself whenever `bUseSpotCam` is 0 and
+goes through the same test in `InitialiseSpotCam`, so it leaves the flags as the trigger
+does. A sequence whose first camera does not track never sets `bTrackCamInit`, so its
+frames count exactly as before, and so do the title's flybys, none of whose first cameras
+tracks. `bTrackCamInit` is cleared by the `CalculateCamera` branch, by `InitialiseSpotCam`
+(`game/spotcam.cpp:128`, `:145`), by the trigger of another sequence
+(`game/control.cpp:2690`-`2691`) and by `InitSpotCamSequences` (`game/spotcam.cpp:94`),
+which `DoLevel` runs at every level start (`game/gameflow.cpp:1021`): a savegame loaded
+inside the corridor goes through `DoLevel` and the interpolator's own invalidation, and
+leaving the level inside the corridor ends at the next level's start. At *Frame rate 30*
+`InterpAlphaNow` answers 1 (`game/interpolate.cpp:1152`-`1153`) and `InterpBeginFrame`
+returns at `:1411`, before the cut test, the roll and the drawn-eye rule; the snapshot is
+still taken, but nothing else reads it, so every frame is the one before. At *Frame rate
+60* the frame that carries a tick returns there too.
+
+Tests: `level_camera()` (`Preparation/Tools/Diagnose/InterpTest.cpp:1157`, run after
+`camera_shell()`) with `sim_call` and `sim_walk` (`:1034`, `:1102`), 18 checks: the
+predicate; a walk at 165 frames to 30 ticks a second with the flags set as above - 30
+ticks before the tiles, 120 on them, 30 after - in which the entry tick and the exit tick
+are the only ticks with a flyby cut, each on every one of its frames, the 655 frames of
+the 119 continuing ticks have no cut and no drawn-eye rule, and every frame before and
+after has the rule; every frame of 40 continuing ticks, one by one; a call of two ticks in
+the middle of the sequence; nothing outside a sequence; and a flyby that does not track,
+which counts frame for frame as with `bUseSpotCam` alone from its start to its end.
+
+**Checked.** The engine builds (`be.bat`). InterpTest 729 checks (711 and 18 new),
+ModernTest 14205, MenuTest 42364, LipsTest 270 with the `.OBJ` folder and 243 without, 0
+failed; every line InterpTest printed before is printed unchanged. Built against the cut
+rule of the commit before - a `git archive` copy of it with the three functions answering
+with `bUseSpotCam` alone - 8 of the 18 checks fail: the walk counts a flyby cut on all 120
+ticks of the sequence, one frame each, and the drawn-eye rule runs on 536 of the 655
+frames of its continuing ticks. Not measured: the game. In the next log of the corridor,
+`INTERPLOG` should read `spot=0` and `tween=` equal to `frames=` in every second inside
+it, and `spot=` about five or six at 165 Hz (one at *Frame rate 60*) in the second of each
+entry and of each exit.
+
+**Unchanged.** The upstream lines in `game/control.cpp`, word for word, and every reader
+of `bUseSpotCam` outside the interpolator: `game/camera.cpp`, `specific/input.cpp`,
+`game/control.cpp` and `game/newinv2.cpp`. The cut test's other reasons (the camera type,
+the eye, the aim and a cutscene's own tracks), the blend, the snapshot's other fields,
+cutscenes, the title flyby, the binoculars and the laser sight (the look key is refused
+while `bTrackCamInit` is set, `game/control.cpp:456`), the Modern camera and
+`specific/hd`.
+
+**Decisions.** The interpolator's cut rule changes for both control schemes, inside a
+level camera sequence that tracks Lara at *Frame rate 60* and above, and nowhere else. The
+repair is in the interpolator's reads of the flag, not in the upstream reset, which stays
+as it is. Every read of the flag the interpolator makes goes through the one predicate,
+the roll's included.
+
+**Left.** The draw-time readers of `bUseSpotCam` outside the interpolator still see 0
+between the ticks of such a sequence. `ModernLaraHidden` (`game/camera.cpp`) then measures
+the eye, and the tracking camera stood 1906 units or more from her on every tick of the
+log above (`hide=`), far beyond the 122 at which she is hidden, so it changes nothing
+there. `FirstPersonActive` answers with the head marker the last `CalculateCamera` pass
+left: with the first person view on, that is set when the sequence begins, so on those
+frames her head is hidden (`specific/drawlara.cpp`, `specific/hd/hd_laradraw.cpp`) and the
+body-still frame and the sound pan follow first person, while the frames that carry a tick
+show the head - a flicker at a frame rate of 60 and above, read from the code and not
+measured. A cutscene that starts while a tracking sequence holds the view runs with
+`bTrackCamInit` still set, since its branch of `ControlPhase` calls `CalculateCamera`
+without clearing it; no such case is known, and it is not judged here.
+
+**Commits.** 'Round 191b (#191): a level camera that tracks Lara is no camera cut on every
+tick', 'Round 191b (#191): the suites', 'Round 191b (#191): the record follows'.
+
 ### Particles on the same time axis
 2026-09-07
 
@@ -9127,7 +9258,9 @@ read against the reference the course was seated on - the camera before the cut 
 against the view on the screen; a direction relative to the new view is had by letting go
 and pushing again. A second cut while the latch stands changes nothing, the cut back to
 the first camera included. The signal is the switch of the reference source, not
-`camera.old_type`. The latch ships on.
+`camera.old_type`. The latch ships on. The latch gained a second way to drop in *A held
+course also ends when the stick is turned past 45 degrees*, where a stick turned more than
+45 degrees from its direction at the cut ends the hold.
 
 **Commits.** `dc21121`, `848528c`
 
@@ -9233,16 +9366,14 @@ sniper camera. The push is told apart from the orbit's own resolution by compari
 eye before and after the upstream call, which leaves the upstream lines as they are.
 
 **Left.** In the X-ray corridor of Escape with the Iris the level's tracking camera
-(spot sequence 7) runs instead of the orbit under both schemes. At a frame rate of 60
-and above its picture judders, because `game/control.cpp:256`-`257` clears
-`bUseSpotCam` at the top of every `ControlPhase` call, the ones between ticks included,
-and the interpolator then counts a camera cut on every tick of the sequence; repairing
-it means touching the interpolator's cut rule or that upstream line, for both schemes,
-and is left to a decision. Under that camera a stick held across its entry is read
-against the chase camera of before the entry until it is let go, a median 87 degrees off
-the X-ray view for 126 to 257 ticks a passage; that is the latch's recorded rule, and
-releasing it on a re-aim or seating the orbit on the level camera's last view at the
-hand-back are left to a decision as well.
+(spot sequence 7) runs instead of the orbit under both schemes. Its judder at a frame
+rate of 60 and above, the interpolator counting a camera cut on every tick of the
+sequence, is repaired in the interpolator's reads of the flag, in *A level camera that
+follows Lara is blended between its ticks* (section 2.5). A stick held across its entry
+was read against the chase camera of before the entry until it was let go; the latch now
+also ends when the stick is turned more than 45 degrees, in *A held course also ends when
+the stick is turned past 45 degrees* below. Seating the orbit on the level camera's last
+view when it hands the view back is not done.
 
 The rule itself hands the frame back to the dialled angle on the first tick the push
 does not move the eye, while the eye still needs some 5 to 15 ticks of `MoveCamera`'s
@@ -9259,6 +9390,139 @@ is changed here.
 **Commits.** 'Round 191 (#191): at a diagonal wall the stick is read in the view on
 screen', 'Round 191 (#191): the suite', 'Round 191 (#191): the record follows', 'Round
 191 (#191): what review pass 1 found'.
+
+### A held course also ends when the stick is turned past 45 degrees
+2026-10-01
+
+**What.** With Modern control, a left stick held through a camera cut keeps the course
+Lara was running, as before, but now only until the stick is let go or turned more than 45
+degrees from where it pointed at the cut. On the tick it is turned that far the hold ends
+and she runs on: from then on the stick is read in the view on screen - the measured view
+under a level camera, the sniper camera or the diagonal-wall push, the angle the player
+dialled under the Modern orbit. It holds at every cut: into and out of the rich2 sniper
+camera, into and out of a level camera that follows her (the X-ray corridor of Escape with
+the Iris), and where Core's diagonal-wall push begins or ends. With `-log` the `MODERNLOG`
+tick line ends in `latch_drop=`.
+
+**Why.** Through the X-ray corridor the steering felt sluggish, as if the turn angles were
+unequal. The turns are not unequal: the measurement of the corridor found the per-tick
+turn to the left and to the right of the same order under every camera, and no turn the
+long way round. The cause is the latch of *A camera cut keeps the held course until the
+stick is let go*: a stick held across a cut is read against the camera before the cut
+until it is let go, and a stick steered by the picture is turned within seconds of every
+cut. A replay of a RICH2 log at the build of the commit before - Modern control, four
+passages through the corridor and 18 pushed episodes at the corner panels at its ends,
+3745 `MODERNLOG` tick lines and one init line - drives the engine's own `ModernTranslate`
+with each tick's stick, state, blocked counter, camera step and heading, and with the
+reference the seam handed in, `cam=` where `ref_view=1` and `cam_world=` elsewhere; it
+reproduces the log's `ref=`, `course=`, `latch=` and `cut=` on all 3745 ticks. On 1207
+ticks with the stick out (`feed=` pad or keys) the stick was read in a frame more than
+8192 units (45 degrees) from the picture (`ref=` against `cam=`, the short way round), and
+1196 of them are latched (`latch=1`): 637 under the level camera (no `CAMLOG` tick line
+before them) - every latched tick with the stick out there, a median 15753 units (87
+degrees) off - 35 after an orbit tick the push moved (`diag=` above 0 on the `CAMLOG` line
+before) and 524 after an orbit tick it did not. They fall in 11 holds, armed at the two
+corridor entries, the two exits and seven ends of a push. In every one the stick left its
+direction of the arming tick by more than 8192 units within 4 to 39 ticks (4, 6, 10, 6,
+10, 8, 34, 25, 39, 16 and 21) and was then read against the camera before the cut for the
+rest of the hold, 97 to 511 ticks. An earlier RICH2 log through the corridor shows the
+same at its four entries: holds of 257, 238, 161 and 126 ticks, the stick turned past 8192
+after 37, 6, 32 and 34.
+
+**How.** `MODERN_CUT_REAIM` 8192 (`game/modern_move.h:450`), and `MODERN_STATE::cut_off`
+(`:586`), the stick's direction on the tick the latch was armed. In `ModernTranslate`
+(`game/modern_move.cpp`) step 2b (`:1554`-`1559`) arms the latch only when it does not
+stand and keeps `offset` - the stick's own direction, which the translation already takes
+for itself - in `cut_off`, so a further cut under the latch moves neither. The new step 2c
+(`:1570`-`1577`) ends the hold when the latch stands with `hold_course` and
+`cfg->cut_latch` on and the stick's direction lies more than `MODERN_CUT_REAIM` from
+`cut_off`, the short way round (`ModernWrap`): it clears `have_ref`, `cut_latch` and
+`cut_off` and sets `MODERN_RESULT::latch_drop` (`game/modern_move.h:633`), and the branch
+below seats the course on the camera of the tick exactly as a fresh push seats it (`ref`,
+`course`, `last_off`, `have_ref`). Of what `ModernRelease` (`game/modern_move.cpp:289`)
+does - it clears `have_ref`, `spin`, `aligned`, `aiming` and the latch - the drop leaves
+`spin`, `aligned` and `aiming` alone, and the tick does not return early as a release
+does, so she keeps running. 2c runs after 2b: on a tick that carries a cut and a turn past
+the bound together, the cut is taken first and the seat is on that tick's new camera.
+`cut_off` is cleared with the latch by `ModernRelease` (`:296`), the aiming branch
+(`:1652`) and `ModernResetState` (`:358`), and `latch_drop` starts at 0 on every tick
+(`:1462`). `MODERN_STATE` is not part of a savegame. With `-log`, `game/modern_state.cpp`
+prints `latch_drop=` last on the `MODERNLOG` tick line (`:707`, `:717`, legend `:674`).
+The comments that stated the old rule - the latch's switch and field
+(`game/modern_move.h`), step 2b and the table of the held course
+(`game/modern_move.cpp:1417`-`1422`), the `latch=` legend
+(`game/modern_state.cpp:662`-`664`) - now state the new one. Tests: `camera_cut_reaim()`
+(`Preparation/Tools/Diagnose/ModernTest.cpp:6841`, run after `camera_cut_latch()`) with
+`reaim_sit`, `reaim_arm` and `reaim_pair` (`:6760`, `:6774`, `:6790`), 30 checks: the
+arming tick's direction is the translation's own `offset`; a quarter turn ends the hold
+and leaves course, reference and latch as a fresh push of that stick, on the camera of the
+tick, with the tick still active and sending bits; a roll of 200 units a tick ends it on
+the first tick its sum from the arming direction passes 8192 and not before, and a roll
+out to 8000 and back keeps it; a second cut under the latch keeps the remembered
+direction, so 9000 from the first cut ends the hold though it is 3000 from the second; a
+cut after the drop arms the latch again with that tick's direction; a cut and a turn past
+the bound on one tick seat on the new camera; exactly 8192 keeps the hold and 8193 ends
+it, on either side, with integer stick pairs searched for those exact gaps; across
++32767/-32768 the step is the short one; with the movement keys, forward then forward and
+right (45 degrees exactly) keeps the hold and right alone ends it; a flick of 5000 under
+the latch re-seats against the held reference as before; the release, aiming and
+`ModernResetState` clear the direction with the latch; and with `cut_latch` or
+`hold_course` off nothing latches or drops. In `camera_cut_latch()` the check of a stick
+rolled half a turn under the latch now states the new rule (`:6561`-`6574`).
+
+**Checked.** The engine builds (`be.bat`). ModernTest 14205 checks (14174, 30 new and one
+more in `camera_cut_latch()`), MenuTest 42364, InterpTest 729, LipsTest 270 with the
+`.OBJ` folder and 243 without, 0 failed; ModernTest prints every line it printed before,
+except the group's heading, which names the new rule. Built against the latch of the
+commit before - a `git archive` copy of it with only the new field, constant and result
+added - 14 checks fail: the three of the rolled stick in `camera_cut_latch()` and 11 of
+`camera_cut_reaim()`. The replay above, with the translation of this change: of the 1207
+stick-out ticks more than 8192 off the picture, 170 remain - 77 of 637 under the level
+camera, 11 of 39 after a pushed orbit tick, 82 of 531 after an unpushed one - and the
+latch stands on 308 ticks instead of 2283; `latch_drop` would have been 1 on 16 ticks (f=
+701, 744, 910, 1219, 1458, 1760, 1970, 2177, 2643, 2887, 3151, 3370, 3495, 3662, 3717 and
+3859), one in each of the 11 holds and five more where a later cut armed the latch again.
+That is an open-loop count: from the first drop on, her course, and with it the camera,
+would have run differently, and the log's headings are replayed as they were. In the
+earlier log the ticks under the level camera more than 8192 off fall from 650 to 109. Not
+measured: the game.
+
+**Unchanged.** Tank: `ModernUpdateInput` runs only behind `modern_seam`
+(`specific/input.cpp:1397`, `:1554`), which needs `tomb5.control_modern`. The latch's
+arming signal, the reference source switch (`game/modern_state.cpp:458`), and where the
+reference comes from on each tick, including the diagonal-wall rule
+(`ModernCameraOrbitIsView`, `modern_cam_pushed`). The re-seat under a standing latch: a
+stick that moves `recenter` or more but stays within 45 degrees of its direction at the
+cut is read against the held reference, as before. The release, aiming, `hold_course` off
+and `cut_latch` 0. Savegames.
+
+**Decisions.** The turn past 45 degrees ends the hold at every cut, the sniper camera's
+included, because every cut arrives as the one `cam_cut`; the check that said a stick
+rolled far under the latch is read against the reference the course was seated on now says
+it ends the hold and is read against the view of the tick. The turn is measured from the
+stick's direction on the arming tick, not from tick to tick, so a slow roll ends the hold
+once its sum passes the bound; a further cut under the latch keeps that direction, so a
+row of cuts cannot walk it round. The bound itself keeps the hold: 8192, one movement key
+added to another, keeps it, and a quarter turn ends it. The drop is not a release: she
+does not stop. The bound is a constant, not a config field; `cut_latch` switches it with
+the latch.
+
+**Left.** A stick held through the end of a diagonal-wall push: in the replayed log the
+seven holds armed there lasted 97 to 159 ticks; the turn past 45 degrees ends them after 4
+to 16 ticks, and the course is then seated on the orbit's dialled angle, which on that
+tick lay 531 to 5347 units from the picture, the eye still walking back to the dialled
+ray; the stick-out ticks more than 8192 off in those holds fall from 105 to 17. After a
+corridor exit the drop seats on the orbit's angle as well, which the orbit kept from
+before the entry while its eye swings back from the X-ray view: in the earlier log one
+drop came 10 ticks after an exit with the frame 18901 units off. Seating the orbit on the
+level camera's last view when it hands the view back is not part of this. A stick that
+never turns 45 degrees from its direction at the cut is held until it is let go, as
+before. The limits named in *At a diagonal wall the stick is read in the view on screen*
+(a stick pushed fresh while the eye walks back to the dialled ray, a short gap inside a
+pinned episode) and the flyby skipper are unchanged.
+
+**Commits.** 'Round 191b (#191): a re-aim past 45 degrees also ends the cut latch', 'Round
+191b (#191): the suites', 'Round 191b (#191): the record follows'.
 
 ### The pad: radial dead zones, a second binding set and a Modifier for chords
 2026-09-18 - 2026-09-20
@@ -11102,4 +11366,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #187 | A seam for the poison sway; A tick is never a tween frame |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
-| #191 | At a diagonal wall the stick is read in the view on screen |
+| #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |

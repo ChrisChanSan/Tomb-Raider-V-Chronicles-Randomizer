@@ -59,9 +59,11 @@
  * arrangement as the one above. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pageclass.h"
 #include "../../../TOMB5 Code/TOMB5/game/mirror_math.h"
-/* The sheen's arithmetic and its page table - pure again: which surfaces
- * shine and the override file's reader (gloss_* below). */
+/* The sheen's arithmetic, its page table and its light field - pure again:
+ * which surfaces shine, the override file's reader, the bound, and the
+ * field's grid, texels, build and sample (gloss_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_pages.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_field.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -10757,6 +10759,267 @@ static void gloss_seed()
 		HDGlossSectorAt(grid, 1500.0f, 500.0f), 2);
 }
 
+/* The light field (specific\hd\hd_gloss_field.h): the grid, the texels, a
+ * lamp's falloff, the build, the sample and the sight test. */
+static void gloss_field_grid()
+{
+	// One room box and one lamp in its middle.
+	const float box[6] = { 1024.0f, -4096.0f, 1024.0f, 9216.0f, 0.0f, 5120.0f };
+	const HDGlossLamp lamp = { { 5120.0f, -2048.0f, 3072.0f }, { 20.0f, 20.0f, 20.0f } };
+	HDGlossFieldGrid grid;
+
+	ok(HDGlossFieldLayout(box, 1, &lamp, 1, false, 0, &grid) &&
+		grid.origin[0] == 0.0f && grid.origin[1] == -5120.0f && grid.origin[2] == 0.0f &&
+		grid.dims[0] == 11 && grid.dims[1] == 7 && grid.dims[2] == 7,
+		"gloss field grid: the rooms' box on whole cells, one cell more each side",
+		grid.dims[0] * 100 + grid.dims[1] * 10 + grid.dims[2], 1177);
+
+	HDGlossFieldGrid two;
+
+	ok(HDGlossFieldLayout(box, 1, &lamp, 1, true, 0, &two) && two.dims[0] == 16 &&
+		two.dims[1] == 8 && two.dims[2] == 8 && two.origin[0] == grid.origin[0],
+		"gloss field grid: a device that asks for powers of two gets them, same corner",
+		two.dims[0], 16);
+
+	ok(!HDGlossFieldLayout(box, 1, &lamp, 1, false, 8, &two) && two.dims[0] == 0,
+		"gloss field grid: a side past the device's largest is no field", two.dims[0], 0);
+
+	const HDGlossLamp far = { { 50000.0f, -2048.0f, 3072.0f }, { 20.0f, 20.0f, 20.0f } };
+
+	ok(!HDGlossFieldLayout(box, 1, &far, 1, false, 0, &two),
+		"gloss field grid: a lamp that reaches no room is no field", 0, 0);
+
+	// The cell of a world position, and the order of the cells.
+	int cell[3];
+	const float p[3] = { 5120.0f, -2048.0f, 3072.0f };
+	const float out[3] = { -1.0f, -2048.0f, 3072.0f };
+
+	ok(HDGlossFieldCellOf(grid, p, cell) && cell[0] == 5 && cell[1] == 3 && cell[2] == 3 &&
+		!HDGlossFieldCellOf(grid, out, cell),
+		"gloss field grid: the cell of a world position, none outside", cell[0], 5);
+	ok(HDGlossFieldIndex(grid, 1, 0, 0) == 1 && HDGlossFieldIndex(grid, 0, 1, 0) == 11 &&
+		HDGlossFieldIndex(grid, 0, 0, 1) == 77,
+		"gloss field grid: x fastest, then y, then z - a volume texture's rows and slices",
+		(long)HDGlossFieldIndex(grid, 0, 0, 1), 77);
+}
+
+static void gloss_field_texels()
+{
+	ok(HDGlossFieldTexel(1.0f, 0.0f, 0.0f, 0.0f) == 0x00FF0000u &&
+		HDGlossFieldTexel(0.0f, 0.0f, 1.0f, 1.0f) == 0xFF0000FFu &&
+		HDGlossFieldTexel(2.0f, -1.0f, 0.5f, 0.0f) == 0x00FF0080u,
+		"gloss field texel: A8R8G8B8, clamped, rounded", 1, 1);
+
+	// The direction's packing, round trip over a sweep of unit vectors.
+	double worst = 0.0;
+	int tested = 0;
+
+	for (int a = 0; a < 24; a++)
+		for (int b = -6; b <= 6; b++)
+		{
+			const double yaw = a * 3.14159265 / 12.0, pitch = b * 3.14159265 / 13.0;
+			const float u[3] = { (float)(cos(pitch) * sin(yaw)), (float)sin(pitch),
+				(float)(cos(pitch) * cos(yaw)) };
+			float back[3], side = 0.0f;
+
+			HDGlossFieldUnpackDir(HDGlossFieldPackDir(u, 0.6f), back, &side);
+
+			for (int c = 0; c < 3; c++)
+				worst = fabs(back[c] - u[c]) > worst ? fabs(back[c] - u[c]) : worst;
+
+			worst = fabs(side - 0.6f) > worst ? fabs(side - 0.6f) : worst;
+			tested++;
+		}
+
+	ok(tested == 312 && worst <= 1.0 / 255.0 + 1e-6,
+		"gloss field texel: a direction and its one-sidedness come back within a byte's step",
+		(long)(worst * 100000), 392);
+
+	// A lamp's falloff: one at the lamp, nothing at its reach, smooth between.
+	const float r2 = HD_GLOSS_LAMP_REACH * HD_GLOSS_LAMP_REACH;
+	bool falls = true;
+
+	for (int i = 1; i <= 64; i++)
+		falls = falls && HDGlossFieldFalloff(r2 * i / 64.0f) < HDGlossFieldFalloff(r2 * (i - 1) / 64.0f);
+
+	ok(HDGlossFieldFalloff(0.0f) == 1.0f && HDGlossFieldFalloff(r2) == 0.0f &&
+		fabs(HDGlossFieldFalloff(r2 * 0.25f) - 0.5625f) < 1e-6 && falls,
+		"gloss field falloff: (1 - d^2 / R^2)^2, falling all the way to the reach",
+		(long)(HDGlossFieldFalloff(r2 * 0.25f) * 10000), 5625);
+
+	ok(HDGlossFieldExposure(0.0f) == 0.0f && fabs(HDGlossFieldExposure(0.01f) - 0.01f) < 1e-4 &&
+		HDGlossFieldExposure(50.0f) <= 1.0f && HDGlossFieldExposure(2.0f) > HDGlossFieldExposure(1.0f),
+		"gloss field exposure: m where small, below one whatever the sum",
+		(long)(HDGlossFieldExposure(1.0f) * 1000), 632);
+}
+
+static void gloss_field_build()
+{
+	const float box[6] = { 1024.0f, -4096.0f, 1024.0f, 9216.0f, 0.0f, 5120.0f };
+	const HDGlossLamp lamp = { { 5120.0f, -2048.0f, 3072.0f }, { 20.0f, 10.0f, 0.0f } };
+	HDGlossFieldGrid grid;
+	HDGlossFieldStats stats;
+	std::vector<unsigned int> dir, rgb;
+
+	HDGlossFieldLayout(box, 1, &lamp, 1, false, 0, &grid);
+	HDGlossFieldBuild(grid, &lamp, 1, dir, rgb, &stats);
+
+	// The cell two to the lamp's -x side: the direction points +x at it.
+	float u[3], side = 0.0f;
+	const size_t k = HDGlossFieldIndex(grid, 3, 3, 3);
+
+	HDGlossFieldUnpackDir(dir[k], u, &side);
+
+	const float centre[3] = { 3584.0f, -1536.0f, 3584.0f };
+	const float d[3] = { 5120.0f - centre[0], -2048.0f - centre[1], 3072.0f - centre[2] };
+	const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+	const float f = HDGlossFieldFalloff(len * len);
+	const float m = 20.0f * HD_GLOSS_LAMP_NORM * f;
+	const float red = (float)((rgb[k] >> 16) & 255u) / 255.0f;
+	const float green = (float)((rgb[k] >> 8) & 255u) / 255.0f;
+
+	ok(fabs(u[0] - d[0] / len) < 0.01f && fabs(u[1] - d[1] / len) < 0.01f &&
+		fabs(u[2] - d[2] / len) < 0.01f && side > 0.99f,
+		"gloss field build: one lamp - the cell points at it, wholly one-sided",
+		(long)(side * 100), 100);
+	ok(fabs(red - HDGlossFieldExposure(m)) < 0.005f && fabs(green - red * 0.5f) < 0.005f &&
+		(rgb[k] & 255u) == 0u && fabs((float)(rgb[k] >> 24) / 255.0f - HDGlossFieldExposure(m)) < 0.005f,
+		"gloss field build: its colour bounded by the exposure, the hue kept, the strength in alpha",
+		(long)(red * 1000), (long)(HDGlossFieldExposure(m) * 1000));
+	ok(stats.lamps == 1 && stats.lit > 0 && stats.lit <= (int)dir.size() &&
+		stats.brightest > 0.0f, "gloss field build: the stats count the lamp and its cells",
+		stats.lamps, 1);
+
+	// Two equal lamps either side of a cell: no direction, a weak highlight.
+	const HDGlossLamp pair[2] =
+	{
+		{ { 5632.0f - 2048.0f, -2560.0f, 3584.0f }, { 20.0f, 20.0f, 20.0f } },
+		{ { 5632.0f + 2048.0f, -2560.0f, 3584.0f }, { 20.0f, 20.0f, 20.0f } }
+	};
+
+	HDGlossFieldLayout(box, 1, pair, 2, false, 0, &grid);
+	HDGlossFieldBuild(grid, pair, 2, dir, rgb, &stats);
+
+	// The centre of cell (5, 2, 3), halfway between the two.
+	const float mid[3] = { 5632.0f, -2560.0f, 3584.0f };
+	int c[3];
+
+	HDGlossFieldCellOf(grid, mid, c);
+	HDGlossFieldUnpackDir(dir[HDGlossFieldIndex(grid, c[0], c[1], c[2])], u, &side);
+
+	const float both = (float)((rgb[HDGlossFieldIndex(grid, c[0], c[1], c[2])] >> 16) & 255u) / 255.0f;
+
+	ok(side < 0.05f && both > 0.5f && stats.weak > 0,
+		"gloss field build: two equal lamps either side cancel to no direction, bright but weak",
+		(long)(side * 100), 0);
+
+	// The sample: halfway between two cell centres is the mean of the two.
+	float colour[3], dirs[3], one = 0.0f, length = 0.0f;
+	const float half[3] = { mid[0] + 512.0f, mid[1], mid[2] };
+	const size_t a = HDGlossFieldIndex(grid, c[0], c[1], c[2]);
+	const size_t b = HDGlossFieldIndex(grid, c[0] + 1, c[1], c[2]);
+
+	HDGlossFieldSample(grid, dir, rgb, half, colour, dirs, &one, &length);
+	ok(fabs(colour[0] - 0.5f * ((float)((rgb[a] >> 16) & 255u) + (float)((rgb[b] >> 16) & 255u)) /
+		255.0f) < 1e-4f && fabs(one - 0.5f * ((float)(dir[a] >> 24) + (float)(dir[b] >> 24)) /
+		255.0f) < 1e-4f, "gloss field sample: halfway between two cells, the mean of the two",
+		(long)(colour[0] * 1000), (long)(500.0f * ((float)((rgb[a] >> 16) & 255u) +
+		(float)((rgb[b] >> 16) & 255u)) / 255.0f));
+
+	// The sight test: a lamp of room 1, which room 0 does not see.
+	const float rooms[12] =
+	{
+		1024.0f, -4096.0f, 1024.0f, 5120.0f, 0.0f, 5120.0f,
+		5120.0f, -4096.0f, 1024.0f, 9216.0f, 0.0f, 5120.0f
+	};
+	const HDGlossLamp east = { { 7680.0f, -2048.0f, 3072.0f }, { 20.0f, 20.0f, 20.0f } };
+	const int lampRoom[1] = { 1 };
+	const unsigned char apart[4] = { 1, 0, 0, 1 };
+	const HDGlossFieldSight sight = { rooms, 2, lampRoom, apart };
+	std::vector<unsigned int> dirSight, rgbSight;
+	HDGlossFieldStats statsSight;
+
+	HDGlossFieldLayout(rooms, 2, &east, 1, false, 0, &grid);
+	HDGlossFieldBuild(grid, &east, 1, dirSight, rgbSight, &statsSight, &sight);
+	HDGlossFieldBuild(grid, &east, 1, dir, rgb, &stats);
+
+	const float west[3] = { 3584.0f, -2560.0f, 3584.0f };
+	const float own[3] = { 7680.0f, -2560.0f, 3584.0f };
+	const float solid[3] = { 3584.0f, -4608.0f, 3584.0f };
+	int cw[3], co[3], cs[3];
+
+	HDGlossFieldCellOf(grid, west, cw);
+	HDGlossFieldCellOf(grid, own, co);
+	HDGlossFieldCellOf(grid, solid, cs);
+	ok(rgbSight[HDGlossFieldIndex(grid, cw[0], cw[1], cw[2])] == 0u &&
+		rgb[HDGlossFieldIndex(grid, cw[0], cw[1], cw[2])] != 0u &&
+		rgbSight[HDGlossFieldIndex(grid, co[0], co[1], co[2])] ==
+		rgb[HDGlossFieldIndex(grid, co[0], co[1], co[2])] &&
+		rgbSight[HDGlossFieldIndex(grid, cs[0], cs[1], cs[2])] != 0u,
+		"gloss field sight: a room that does not see the lamp's room takes nothing of it, "
+		"its own room and a cell in no room do", statsSight.lit < stats.lit ? 1 : 0, 1);
+}
+
+// The bound: the sheen never above its named limit, whatever goes in.
+static void gloss_field_bound()
+{
+	int over = 0, hue = 0, small = 0, white = 0, tested = 0;
+
+	for (int i = 0; i <= 20; i++)
+		for (int j = 0; j <= 20; j++)
+			for (int t = 0; t < 4; t++)
+			{
+				const float tint[4][3] = { { 1, 1, 1 }, { 1, 0.5f, 0.2f }, { 0.1f, 0.3f, 1 }, { 0, 0, 1 } };
+				const float s = 0.02f * (float)(i * i);		// up to 8 - far past white
+				const float lit = 0.05f * (float)j;		// 0 to 1
+				const float sheen[3] = { s * tint[t][0], s * tint[t][1], s * tint[t][2] };
+				const float own[3] = { lit, lit * 0.8f, lit * 0.6f };
+				float bounded[3], composed[3];
+
+				HDGlossSheenBound(sheen, own, bounded);
+				HDGlossSheenCompose(own, bounded, composed);
+
+				const float limit = HD_GLOSS_BOUND * lit + HD_GLOSS_FLOOR;
+				const float top = fmaxf(bounded[0], fmaxf(bounded[1], bounded[2]));
+
+				over += top > limit * (1.0f + 1e-5f) ? 1 : 0;
+
+				for (int c = 0; c < 3; c++)
+				{
+					if (s > 0.0f && fabs(bounded[c] * sheen[t == 3 ? 2 : 0] - sheen[c] *
+						bounded[t == 3 ? 2 : 0]) > 1e-5f)
+						hue++;
+
+					// Past white only where the surface is white already.
+					if (lit < 1.0f - HD_GLOSS_FLOOR)
+						white += composed[c] > 1.0f + 1e-6f ? 1 : 0;
+				}
+
+				// A sheen far under the limit passes almost whole.
+				if (s > 0.0f && s * 50.0f < limit && fabs(top - s) > 0.02f * s)
+					small++;
+
+				tested++;
+			}
+
+	ok(over == 0 && tested == 1764, "gloss field bound: the sheen never passes HD_GLOSS_BOUND "
+		"times the surface's own light plus HD_GLOSS_FLOOR", over, 0);
+	ok(hue == 0, "gloss field bound: the bound scales the sheen whole and keeps its hue", hue, 0);
+	ok(small == 0, "gloss field bound: a sheen far under the bound passes within 2 per cent",
+		small, 0);
+	ok(white == 0, "gloss field bound: the screen never takes a channel past white", white, 0);
+
+	// A dark surface stays dark: nothing on black but HD_GLOSS_FLOOR.
+	const float black[3] = { 0.0f, 0.0f, 0.0f };
+	const float huge[3] = { 9.0f, 9.0f, 9.0f };
+	float kept[3];
+
+	HDGlossSheenBound(huge, black, kept);
+	ok(kept[0] <= HD_GLOSS_FLOOR && kept[0] > 0.0f,
+		"gloss field bound: a black surface takes no more than HD_GLOSS_FLOOR",
+		(long)(kept[0] * 255.0f + 0.5f), 4);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -10820,6 +11083,10 @@ int main()
 	gloss_parser();
 	gloss_class();
 	gloss_seed();
+	gloss_field_grid();
+	gloss_field_texels();
+	gloss_field_build();
+	gloss_field_bound();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

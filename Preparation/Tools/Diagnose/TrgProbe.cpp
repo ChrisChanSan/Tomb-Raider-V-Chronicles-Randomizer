@@ -52,6 +52,7 @@
 #include <vector>
 
 #include <algorithm>
+#include <chrono>
 #include <iterator>
 #include <map>
 #include <set>
@@ -65,6 +66,8 @@
 // The sheen's page classes - the engine's own seed walk, table and resolver.
 #include "hd_gloss_pages.h"
 #include "hd_gloss_seed.h"
+// And the light field its highlight reads - the engine's own layout and build.
+#include "hd_gloss_field.h"
 
 // The engine keeps these in tomb5\tomb5.cpp, filled from the registry values
 // hd_install and hd_install_tr3. Here the command line fills the first - the
@@ -2972,6 +2975,369 @@ namespace
 		return gain;
 	}
 
+	/* -glossfield: the light field of a level (hd_gloss_field.h), built with
+	 * the engine's own layout and build out of the .TRG's point lights and
+	 * the rooms' boxes of the classic level - the boxes hd_level.cpp's
+	 * BuildRoomBoxes hands the renderer, made world. Per level:
+	 *
+	 *   lamps  the point lights of the rooms with a colour, and the largest
+	 *          channel of their colour: median, 90th percentile, maximum;
+	 *   grid   the cells along x, y and z, the memory of the two textures
+	 *          (and the same for a device that asks for powers of two), the
+	 *          cells a lamp reaches, the weak ones (less than one-third
+	 *          one-sided), the brightest cell's colour sum before the
+	 *          exposure, and the build's time on this machine;
+	 *   leak   the light the field carries through walls: over every cell
+	 *          inside a room (over a floor square of it, between its ceiling
+	 *          and its floor), the share of the light that comes from lamps
+	 *          of rooms more than two portals away from that room (a
+	 *          flipmap partner counts as the room itself), and the cells that
+	 *          take more from those lamps than from the near ones;
+	 *   weak   the room cell between lamps with the most light and the least
+	 *          direction - a place to look at the cancelling case.
+	 *
+	 * The last lines give the lamps' largest channel over every level. */
+	struct FieldTotals
+	{
+		std::vector<double> channel;
+	};
+
+	void glossField(const std::string& root, const std::string& stem,
+		const std::string& classic, FieldTotals& totals)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		Tr5Level level;
+
+		if (classic.empty() || !level.load(toW(classic + "\\" + stem + ".TRC"), error))
+		{
+			std::printf("%-9s needs -classic <folder holding the .TRC>\n", stem.c_str());
+			return;
+		}
+
+		const int rooms = level.roomCount();
+		std::vector<float> boxes((size_t)rooms * 6);
+
+		for (int i = 0; i < rooms; i++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)i];
+			unsigned yTop = 0, yOrigin = 0;
+			float* b = &boxes[(size_t)i * 6];
+
+			level.headerField(i, 24, yOrigin, error);
+			level.headerField(i, 36, yTop, error);
+			b[0] = (float)rm.originX + 1024.0f;
+			b[1] = (float)((int)yTop - (int)yOrigin);
+			b[2] = (float)rm.originZ + 1024.0f;
+			b[3] = (float)rm.originX + (float)((rm.numXSectors - 1) * 1024);
+			b[4] = (float)(rm.yBottom - (int)yOrigin);
+			b[5] = (float)rm.originZ + (float)((rm.numZSectors - 1) * 1024);
+
+			for (int axis = 0; axis < 3; axis++)
+				if (b[3 + axis] < b[axis])
+					b[3 + axis] = b[axis];
+		}
+
+		std::vector<HDGlossLamp> lamps;
+		std::vector<int> lampRoom;
+		std::vector<double> channel;
+
+		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
+			for (size_t li = 0; li < trg.groups[g].volumes.size(); li++)
+			{
+				const trf::remaster::TrgGroup::PointLight light = trg.groups[g].light(li);
+				HDGlossLamp lamp = { { light.x, light.y, light.z }, { light.r, light.g, light.b } };
+
+				if (!(light.r > 0.0f || light.g > 0.0f || light.b > 0.0f))
+					continue;
+
+				lamps.push_back(lamp);
+				lampRoom.push_back((int)g);
+				channel.push_back(std::max(light.r, std::max(light.g, light.b)));
+			}
+
+		totals.channel.insert(totals.channel.end(), channel.begin(), channel.end());
+		std::sort(channel.begin(), channel.end());
+
+		HDGlossFieldGrid grid, grid2;
+		HDGlossFieldStats stats;
+		std::vector<unsigned int> dir, rgb;
+		const auto started = std::chrono::steady_clock::now();
+		const bool laid = HDGlossFieldLayout(&boxes[0], rooms, lamps.empty() ? 0 : &lamps[0],
+			(int)lamps.size(), false, 0, &grid);
+
+		if (laid)
+			HDGlossFieldBuild(grid, &lamps[0], (int)lamps.size(), dir, rgb, &stats);
+
+		const double ms = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - started).count();
+		const bool laid2 = HDGlossFieldLayout(&boxes[0], rooms, lamps.empty() ? 0 : &lamps[0],
+			(int)lamps.size(), true, 0, &grid2);
+		const double cells = laid ? (double)grid.dims[0] * grid.dims[1] * grid.dims[2] : 0.0;
+		const double cells2 = laid2 ? (double)grid2.dims[0] * grid2.dims[1] * grid2.dims[2] : 0.0;
+
+		std::printf("%-9s lamps %zu, largest channel median %.1f p90 %.1f max %.1f\n",
+			stem.c_str(), lamps.size(), channel.empty() ? 0.0 : channel[channel.size() / 2],
+			channel.empty() ? 0.0 : channel[channel.size() * 9 / 10],
+			channel.empty() ? 0.0 : channel.back());
+
+		if (!laid)
+		{
+			std::printf("          no field (no lamp reaches a room, or past the cell limit)\n");
+			return;
+		}
+
+		std::printf("          grid %d x %d x %d = %.0f cells, %.2f MiB (powers of two %d x %d x "
+			"%d, %.2f MiB), lit %d, weak %d, brightest %.2f at cell %d %d %d, build %.1f ms\n",
+			grid.dims[0], grid.dims[1], grid.dims[2], cells, cells * 8.0 / 1048576.0,
+			grid2.dims[0], grid2.dims[1], grid2.dims[2], cells2 * 8.0 / 1048576.0, stats.lit,
+			stats.weak, stats.brightest, stats.brightestCell[0], stats.brightestCell[1],
+			stats.brightestCell[2], ms);
+
+		// The rooms within two portals of each room, a flipmap partner as the room.
+		std::vector<std::vector<int> > partners((size_t)rooms);
+		std::vector<std::set<int> > nearRooms((size_t)rooms);
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const int alt = level.rooms()[(size_t)r].altRoom;
+
+			if (alt >= 0 && alt < rooms)
+			{
+				partners[(size_t)r].push_back(alt);
+				partners[(size_t)alt].push_back(r);
+			}
+		}
+
+		for (int r = 0; r < rooms; r++)
+		{
+			std::set<int>& near = nearRooms[(size_t)r];
+			std::vector<int> front(1, r);
+
+			near.insert(r);
+			near.insert(partners[(size_t)r].begin(), partners[(size_t)r].end());
+			front.insert(front.end(), partners[(size_t)r].begin(), partners[(size_t)r].end());
+
+			for (int step = 0; step < 2; step++)
+			{
+				std::vector<int> next;
+
+				for (const int at : front)
+					for (const int to : level.rooms()[(size_t)at].portalRooms)
+					{
+						if (to < 0 || to >= rooms)
+							continue;
+
+						if (near.insert(to).second)
+							next.push_back(to);
+
+						for (const int alt : partners[(size_t)to])
+							if (near.insert(alt).second)
+								next.push_back(alt);
+					}
+
+				front.swap(next);
+			}
+		}
+
+		double nearLight = 0.0, farLight = 0.0;
+		long roomCells = 0, farCells = 0;
+		double weakBest = 0.0;
+		int weakRoom = -1;
+		float weakAt[3] = { 0.0f, 0.0f, 0.0f };
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			std::vector<Tr5Level::SectorInfo> squares;
+
+			if (!level.sectorInfo(r, squares, error) ||
+				squares.size() != (size_t)rm.numXSectors * rm.numZSectors)
+				continue;
+
+			for (int sx = 0; sx < rm.numXSectors; sx++)
+				for (int sz = 0; sz < rm.numZSectors; sz++)
+				{
+					const Tr5Level::SectorInfo& q = squares[(size_t)sx * rm.numZSectors + sz];
+
+					if (q.floor == -127)
+						continue;
+
+					const float floorY = (float)q.floor * 256.0f;
+					const float ceilingY = (float)q.ceiling * 256.0f;
+					const float p[3] = { (float)rm.originX + sx * 1024.0f + 512.0f, 0.0f,
+						(float)rm.originZ + sz * 1024.0f + 512.0f };
+					int cell[3];
+
+					for (int y = 0; y < grid.dims[1]; y++)
+					{
+						const float cy = grid.origin[1] + ((float)y + 0.5f) * HD_GLOSS_FIELD_CELL;
+
+						if (cy < ceilingY || cy > floorY)
+							continue;
+
+						const float c[3] = { p[0], cy, p[2] };
+
+						if (!HDGlossFieldCellOf(grid, c, cell))
+							continue;
+
+						double nearHere = 0.0, farHere = 0.0;
+
+						for (size_t li = 0; li < lamps.size(); li++)
+						{
+							const float d[3] = { lamps[li].pos[0] - c[0], lamps[li].pos[1] - c[1],
+								lamps[li].pos[2] - c[2] };
+							const float f = HDGlossFieldFalloff(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+
+							if (!(f > 0.0f))
+								continue;
+
+							const double e = f * (lamps[li].rgb[0] + lamps[li].rgb[1] +
+								lamps[li].rgb[2]) / 3.0;
+
+							if (nearRooms[(size_t)r].count(lampRoom[li]))
+								nearHere += e;
+							else
+								farHere += e;
+						}
+
+						if (nearHere + farHere <= 0.0)
+							continue;
+
+						roomCells++;
+						farCells += farHere > nearHere ? 1 : 0;
+						nearLight += nearHere;
+						farLight += farHere;
+
+						float u[3], oneSided = 0.0f;
+						const unsigned int texel =
+							rgb[HDGlossFieldIndex(grid, cell[0], cell[1], cell[2])];
+
+						HDGlossFieldUnpackDir(dir[HDGlossFieldIndex(grid, cell[0], cell[1],
+							cell[2])], u, &oneSided);
+
+						const double strength = (double)(texel >> 24) / 255.0;
+
+						if (oneSided < 1.0f / 3.0f && strength * (1.0 - oneSided) > weakBest)
+						{
+							weakBest = strength * (1.0 - oneSided);
+							weakRoom = r;
+							weakAt[0] = c[0] - (float)rm.originX;
+							weakAt[1] = c[1];
+							weakAt[2] = c[2] - (float)rm.originZ;
+						}
+					}
+				}
+		}
+
+		std::printf("          leak: %ld room cells lit, %.1f %% of their light from lamps more "
+			"than two portals away, %ld cells take more from those than from the near ones\n",
+			roomCells, nearLight + farLight > 0.0 ? 100.0 * farLight / (nearLight + farLight) : 0.0,
+			farCells);
+
+		/* And what reaches the floors, where the shader reads it: the field
+		 * built again with the sight test by the rooms (HDGlossFieldSight,
+		 * the lamps of rooms within two portals), both sampled as the pixel
+		 * shader samples them, 64 units over the middle of every floor square.
+		 * The highlight's strength there is the colour's largest channel
+		 * times the one-sidedness times the filtered direction's length. */
+		std::vector<unsigned char> nearTable((size_t)rooms * rooms, 0);
+
+		for (int r = 0; r < rooms; r++)
+			for (const int o : nearRooms[(size_t)r])
+				nearTable[(size_t)r * rooms + o] = 1;
+
+		const HDGlossFieldSight sight = { &boxes[0], rooms, &lampRoom[0], &nearTable[0] };
+		std::vector<unsigned int> dirSight, rgbSight;
+		HDGlossFieldStats statsSight;
+		const auto sightStarted = std::chrono::steady_clock::now();
+
+		HDGlossFieldBuild(grid, &lamps[0], (int)lamps.size(), dirSight, rgbSight, &statsSight,
+			&sight);
+
+		const double sightMs = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - sightStarted).count();
+		double strengthAll = 0.0, strengthLost = 0.0, strengthWon = 0.0, turned = 0.0;
+		long floors = 0, visible = 0, stronger = 0;
+		double worst = 0.0, worstFrom = 0.0;
+		int worstRoom = -1;
+		float worstAt[3] = { 0.0f, 0.0f, 0.0f };
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			std::vector<Tr5Level::SectorInfo> squares;
+
+			if (!level.sectorInfo(r, squares, error) ||
+				squares.size() != (size_t)rm.numXSectors * rm.numZSectors)
+				continue;
+
+			for (int sx = 0; sx < rm.numXSectors; sx++)
+				for (int sz = 0; sz < rm.numZSectors; sz++)
+				{
+					const Tr5Level::SectorInfo& q = squares[(size_t)sx * rm.numZSectors + sz];
+
+					if (q.floor == -127)
+						continue;
+
+					const float p[3] = { (float)rm.originX + sx * 1024.0f + 512.0f,
+						(float)q.floor * 256.0f - 64.0f, (float)rm.originZ + sz * 1024.0f + 512.0f };
+					float c0[3], u0[3], a0, l0, c1[3], u1[3], a1, l1;
+
+					HDGlossFieldSample(grid, dir, rgb, p, c0, u0, &a0, &l0);
+					HDGlossFieldSample(grid, dirSight, rgbSight, p, c1, u1, &a1, &l1);
+
+					const double h0 = std::max(c0[0], std::max(c0[1], c0[2])) * a0 * std::min(l0, 1.0f);
+					const double h1 = std::max(c1[0], std::max(c1[1], c1[2])) * a1 * std::min(l1, 1.0f);
+					const double cosine = u0[0] * u1[0] + u0[1] * u1[1] + u0[2] * u1[2];
+
+					floors++;
+					strengthAll += h0;
+					strengthLost += h0 > h1 ? h0 - h1 : 0.0;
+					strengthWon += h1 > h0 ? h1 - h0 : 0.0;
+					turned += h0 * std::acos(std::max(-1.0, std::min(1.0, cosine))) * 57.29578;
+					visible += h0 - h1 > 0.1 ? 1 : 0;
+					stronger += h1 - h0 > 0.1 ? 1 : 0;
+
+					if (h0 - h1 > worst)
+					{
+						worst = h0 - h1;
+						worstFrom = h0;
+						worstRoom = r;
+						worstAt[0] = p[0] - (float)rm.originX;
+						worstAt[1] = p[1];
+						worstAt[2] = p[2] - (float)rm.originZ;
+					}
+				}
+		}
+
+		std::printf("          floors: %ld squares; with the sight test (built in %.1f ms) the "
+			"highlight's strength there falls by %.1f %% of its sum (by more than 0.1 on %ld) "
+			"and rises by %.1f %% (by more than 0.1 on %ld) - the far lamps' share of the "
+			"direction gone - and its direction turns by %.1f degrees on the strength-weighted "
+			"mean\n", floors, sightMs,
+			strengthAll > 0.0 ? 100.0 * strengthLost / strengthAll : 0.0, visible,
+			strengthAll > 0.0 ? 100.0 * strengthWon / strengthAll : 0.0, stronger,
+			strengthAll > 0.0 ? turned / strengthAll : 0.0);
+
+		if (worstRoom >= 0)
+			std::printf("          the most light through walls: room %d at room-local %.0f %.0f "
+				"%.0f, strength %.2f without the test and %.2f with it\n", worstRoom, worstAt[0],
+				worstAt[1], worstAt[2], worstFrom, worstFrom - worst);
+
+		if (weakRoom >= 0)
+			std::printf("          weak: room %d at room-local %.0f %.0f %.0f (strength x "
+				"(1 - one-sidedness) %.2f)\n", weakRoom, weakAt[0], weakAt[1], weakAt[2], weakBest);
+	}
+
 	int classicRooms(const std::string& folder, const std::string& stem)
 	{
 		if (folder.empty())
@@ -3012,6 +3378,10 @@ int main(int argc, char** argv)
 		std::printf("       [-glosslight]  what the sheen's lighting rests on: the light\n");
 		std::printf("                      cubes' order, faces and gain, the lamps' kinds\n");
 		std::printf("                      and the sun (needs -classic)\n");
+		std::printf("       [-glossfield]  the light field the sheen's highlight reads:\n");
+		std::printf("                      the lamps, the grid, its memory and build time,\n");
+		std::printf("                      the light it carries through walls and its\n");
+		std::printf("                      weakest place (needs -classic)\n");
 		std::printf("       [-matparts <material>]  every part of ONE material with its\n");
 		std::printf("                          geometry, and (with -classic) the classic\n");
 		std::printf("                          room's own horizontal planes beside it\n");
@@ -3060,6 +3430,7 @@ int main(int argc, char** argv)
 	bool gloss = false;
 	bool gloss_seed = false;
 	bool gloss_light = false;
+	bool gloss_field = false;
 	std::string gloss_file;
 
 	for (int i = 2; i < argc; i++)
@@ -3068,6 +3439,8 @@ int main(int argc, char** argv)
 			gloss = true;
 		else if (!_stricmp(argv[i], "-glosslight"))
 			gloss_light = true;
+		else if (!_stricmp(argv[i], "-glossfield"))
+			gloss_field = true;
 		else if (!_stricmp(argv[i], "-glossseed"))
 			gloss_seed = true;
 		else if (!_stricmp(argv[i], "-glossfile") && i + 1 < argc)
@@ -3179,6 +3552,23 @@ int main(int argc, char** argv)
 		if (!gains.empty())
 			std::printf("\nthe median of the levels' gain medians: %.2f over %zu level(s)\n",
 				gains[gains.size() / 2], gains.size());
+
+		return 0;
+	}
+
+	if (gloss_field)
+	{
+		FieldTotals totals;
+
+		for (const std::string& stem : levels)
+			glossField(root, stem, classic, totals);
+
+		std::sort(totals.channel.begin(), totals.channel.end());
+
+		if (!totals.channel.empty())
+			std::printf("\nevery level's lamps: %zu, largest channel median %.1f p90 %.1f "
+				"max %.1f\n", totals.channel.size(), totals.channel[totals.channel.size() / 2],
+				totals.channel[totals.channel.size() * 9 / 10], totals.channel.back());
 
 		return 0;
 	}

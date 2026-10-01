@@ -275,7 +275,17 @@
  *                     the same build.
  *     -glossmax       every draw call that can take the sheen takes it at
  *                     strength 1 and F0 1 - the sheen's upper bound. The
- *                     seed, the light cubes and the lamps need -roombox.
+ *                     seed and the light field need -roombox.
+ *     -glossfield [colour|direction]
+ *                     every draw call that can take the sheen draws the
+ *                     level's light field in place of its surface: its
+ *                     colour times its one-sidedness (the default), or the
+ *                     direction towards the light biased into a colour.
+ *                     Implies -glossmax. Needs -roombox.
+ *     -fieldsight     build the light field with the sight test by the rooms:
+ *                     a lamp lights only the rooms within two portals of its
+ *                     own - the comparison with the engine's field, which
+ *                     has no sight test. Needs -roombox.
  *     -glossfile <path>
  *                     build with that hd_gloss.txt (the game reads the one
  *                     beside its executable); none without it.
@@ -914,7 +924,10 @@ static const int kStageCount = (int)(sizeof(kWatchedStages) / sizeof(kWatchedSta
 struct Snapshot
 {
 	DWORD rs[kStateCount];
-	DWORD samp[kSamplerCount];
+	/* Samplers 0 to 2: the page's, and the light field's two, which the
+	 * room bracket binds for the gloss variant and has to put back. */
+	DWORD samp[3][kSamplerCount];
+	void* fieldTexture[2];
 	DWORD stage[kStageCount];
 	/* The scissor rectangle. D3DRS_SCISSORTESTENABLE is in the render state
 	 * list above; the rectangle beside it is a device state of its own, and
@@ -937,8 +950,19 @@ static void Take(Snapshot& shot)
 
 	for (int i = 0; i < kStateCount; i++)
 		g_device->GetRenderState(kWatchedStates[i], &shot.rs[i]);
-	for (int i = 0; i < kSamplerCount; i++)
-		g_device->GetSamplerState(0, kWatchedSamplers[i], &shot.samp[i]);
+	for (int s = 0; s < 3; s++)
+		for (int i = 0; i < kSamplerCount; i++)
+			g_device->GetSamplerState((DWORD)s, kWatchedSamplers[i], &shot.samp[s][i]);
+	for (int s = 0; s < 2; s++)
+	{
+		IDirect3DBaseTexture9* bound = 0;
+
+		g_device->GetTexture((DWORD)(1 + s), &bound);
+		shot.fieldTexture[s] = bound;
+
+		if (bound)
+			bound->Release();
+	}
 	for (int i = 0; i < kStageCount; i++)
 		g_device->GetTextureStageState(0, kWatchedStages[i], &shot.stage[i]);
 
@@ -988,11 +1012,20 @@ static int Diff(const Snapshot& before, const Snapshot& after)
 			broken++;
 		}
 
-	for (int i = 0; i < kSamplerCount; i++)
-		if (before.samp[i] != after.samp[i])
+	for (int s = 0; s < 3; s++)
+		for (int i = 0; i < kSamplerCount; i++)
+			if (before.samp[s][i] != after.samp[s][i])
+			{
+				printf("  BROKEN sampler %d state %d: %lu -> %lu\n", s,
+					(int)kWatchedSamplers[i], before.samp[s][i], after.samp[s][i]);
+				broken++;
+			}
+
+	for (int s = 0; s < 2; s++)
+		if (before.fieldTexture[s] != after.fieldTexture[s])
 		{
-			printf("  BROKEN sampler 0 state %d: %lu -> %lu\n",
-				(int)kWatchedSamplers[i], before.samp[i], after.samp[i]);
+			printf("  BROKEN texture %d: %p -> %p\n", 1 + s, before.fieldTexture[s],
+				after.fieldTexture[s]);
 			broken++;
 		}
 
@@ -1506,6 +1539,14 @@ static bool g_reflect = true;
  * game reads the one beside its executable. */
 static bool g_gloss_max = false;
 static std::string g_gloss_file;
+/* -glossfield: the light field drawn in place of the surfaces that can take
+ * the sheen (HDRenderGlossFieldView), 1 its colour and 2 its direction; 0
+ * draws the surfaces. */
+static int g_gloss_field = 0;
+/* -fieldsight: the light field built with the sight test by the rooms
+ * (HDRenderGlossFieldSight), for the comparison with the engine's field,
+ * which has none. Needs -roombox. */
+static bool g_field_sight = false;
 /* Hide every destructible piece of the drawn room, which is what the engine
  * does once Lara has shot the static that stands there - the after picture
  * of a shattered room, out of the same build. */
@@ -5093,11 +5134,26 @@ int main(int argc, char** argv)
 			g_reflect = false;
 		else if (!strcmp(argv[at], "-glossmax"))
 			g_gloss_max = true;
+		else if (!strcmp(argv[at], "-glossfield"))
+		{
+			g_gloss_max = true;
+			g_gloss_field = 1;
+
+			if (at + 1 < argc && !strcmp(argv[at + 1], "direction"))
+			{
+				g_gloss_field = 2;
+				at++;
+			}
+			else if (at + 1 < argc && !strcmp(argv[at + 1], "colour"))
+				at++;
+		}
 		else if (!strcmp(argv[at], "-glossfile") && at + 1 < argc)
 		{
 			g_gloss_file = argv[at + 1];
 			at++;
 		}
+		else if (!strcmp(argv[at], "-fieldsight"))
+			g_field_sight = true;
 		else if (!strcmp(argv[at], "-shatter"))
 			g_shatter = true;
 		else if (!strcmp(argv[at], "-with") && at + 4 < argc)
@@ -5704,6 +5760,65 @@ int main(int argc, char** argv)
 			printf("-roombox: %d floor squares handed in\n",
 				(int)g_sectors_built.size());
 
+			/* -fieldsight: the rooms within two portals of each room, a
+			 * flipmap twin counting as the room itself - the table TrgProbe
+			 * -glossfield measures the field's leak with. */
+			if (g_field_sight)
+			{
+				const int rooms = level.roomCount();
+				std::vector<unsigned char> nearby((size_t)rooms * rooms, 0);
+				std::vector<std::vector<int> > twins((size_t)rooms);
+
+				for (int i = 0; i < rooms; i++)
+				{
+					const int alt = level.rooms()[(size_t)i].altRoom;
+
+					if (alt >= 0 && alt < rooms)
+					{
+						twins[(size_t)i].push_back(alt);
+						twins[(size_t)alt].push_back(i);
+					}
+				}
+
+				for (int i = 0; i < rooms; i++)
+				{
+					std::vector<int> front(1, i);
+
+					front.insert(front.end(), twins[(size_t)i].begin(), twins[(size_t)i].end());
+
+					for (const int f : front)
+						nearby[(size_t)i * rooms + f] = 1;
+
+					for (int step = 0; step < 2; step++)
+					{
+						std::vector<int> next;
+
+						for (const int at : front)
+							for (const int to : level.rooms()[(size_t)at].portalRooms)
+							{
+								if (to < 0 || to >= rooms)
+									continue;
+
+								std::vector<int> add(1, to);
+
+								add.insert(add.end(), twins[(size_t)to].begin(), twins[(size_t)to].end());
+
+								for (const int a : add)
+									if (!nearby[(size_t)i * rooms + a])
+									{
+										nearby[(size_t)i * rooms + a] = 1;
+										next.push_back(a);
+									}
+							}
+
+						front.swap(next);
+					}
+				}
+
+				HDRenderGlossFieldSight(&nearby[0], rooms);
+				printf("-fieldsight: the light field takes the sight test by the rooms\n");
+			}
+
 			/* And the rooms that may hold another room's art. The rule is
 			 * BuildRoomIntrusions' (specific\hd\hd_level.cpp), read out of
 			 * the same file: not next door by portal or by a vertical floor
@@ -5956,6 +6071,7 @@ int main(int argc, char** argv)
 			".TRC> - that folder is where the sidecar lives\n");
 
 	HDRenderGlossOverride(g_gloss_max ? 1 : 0);
+	HDRenderGlossFieldView(g_gloss_field);
 	HDRenderGlossFile(g_gloss_file.empty() ? 0 : g_gloss_file.c_str());
 
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
@@ -6154,9 +6270,10 @@ int main(int argc, char** argv)
 		stats.glossParts);
 
 	/* And the sheen: what the four sources named (the engine's GLOSSLOG
-	 * lines), the lamps and cubes kept, and the draw calls that take the
-	 * gloss variant. Without -roombox there is no floor square, so no seed,
-	 * no cube and no lamp - only the material, the table and the file. */
+	 * lines), the lamps and the light field, the draw calls that take the
+	 * gloss variant and the ones that keep the plain one. Without -roombox
+	 * there is no floor square and no room box, so no seed and no field -
+	 * only the material, the table and the file. */
 	{
 		HDRenderGlossLevel gloss;
 
@@ -6167,6 +6284,13 @@ int main(int argc, char** argv)
 			g_gloss_max ? " (-glossmax)" : "", gloss.partsMat, gloss.partsSeed,
 			gloss.partsTable, gloss.partsFile, gloss.tableLines, gloss.filePages,
 			gloss.fileBad, gloss.lamps, gloss.cubes);
+		printf("sheen field: %d x %d x %d cells, %d lit, %d weak, %d KiB, %.1f ms\n",
+			gloss.fieldDims[0], gloss.fieldDims[1], gloss.fieldDims[2], gloss.fieldLit,
+			gloss.fieldWeak, gloss.fieldBytes / 1024, gloss.fieldMs);
+		printf("sheen skipped: ripple=%d caustic=%d flat=%d scroll=%d flipbook=%d "
+			"book=%d clear=%d\n", gloss.skipped.ripple, gloss.skipped.caustic,
+			gloss.skipped.flat, gloss.skipped.scroll, gloss.skipped.flipbook,
+			gloss.skipped.book, gloss.skipped.clear);
 
 		for (int i = 0; i < HDRenderGlossPageCount(); i++)
 		{
@@ -6180,8 +6304,9 @@ int main(int argc, char** argv)
 
 		/* The rooms with a clear floor (HD_PASS_CLEAR) - RICH2's lobby and
 		 * its mirrored copy, RICHCUT2's and TITLE's floors - and how many
-		 * glossy draw calls they carry: 0 means the sheen leaves them as
-		 * they were. */
+		 * glossy draw calls they carry: their own pages shine where a source
+		 * names them, like every other room's, and their clear floors and
+		 * the lobby's pages do not. */
 		int clear_rooms = 0, clear_sheen = 0;
 
 		for (int g = 0; g < HDRenderGroupCount(); g++)
@@ -6923,10 +7048,11 @@ int main(int argc, char** argv)
 			HDRenderSkyGroups(), stats.skyFlatParts, skyDrew ? "true" : "FALSE");
 
 	const int broken = Diff(before, after);
-	// kStateCount + kSamplerCount + kStageCount, plus the FVF, the six bound
-	// objects, stream 0's offset/stride, and the scissor rectangle (group M).
+	// kStateCount + three samplers' kSamplerCount + kStageCount, plus the
+	// FVF, the six bound objects, stream 0's offset/stride, the scissor
+	// rectangle (group M) and the light field's two textures.
 	printf("state bracket: %d of %d watched states changed - %s\n",
-		broken, kStateCount + kSamplerCount + kStageCount + 9,
+		broken, kStateCount + 3 * kSamplerCount + kStageCount + 11,
 		broken ? "FAIL, the classic path would find a different device"
 			: "PASS, the device came back exactly as it went in");
 

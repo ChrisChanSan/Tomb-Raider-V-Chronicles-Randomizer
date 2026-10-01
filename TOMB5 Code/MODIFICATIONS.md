@@ -9131,6 +9131,122 @@ the first camera included. The signal is the switch of the reference source, not
 
 **Commits.** `dc21121`, `848528c`
 
+### At a diagonal wall the stick is read in the view on screen
+2026-10-01
+
+**What.** With Modern control in The 13th Floor and Escape with the Iris, where Core
+pushes the camera off the 45-degree wall panels that stand in the corners of some rooms,
+the left stick is read against the view on screen on every tick after that push moved
+the camera, and against the angle the player dialled everywhere else, as before. A stick
+held through the moment the push begins or ends keeps the course it was running, by the
+existing cut latch, until it is let go. With `-log` the `CAMLOG` tick line ends in
+`diag=` and the `MODERNLOG` tick line in `ref_view=`.
+
+**Why.** Beside a diagonal wall, with the camera close to her, the direction Lara ran in
+did not answer the stick as the picture showed it: the stick's position came out as her
+own running direction. The cause is in `MoveCamera` (`game/camera.cpp`). After the
+Modern orbit has walked its ray, cleared the wall and been clamped to floor and ceiling,
+the upstream lines call `CheckForRichesIllegalDiagonalWalls` (`game/tower.cpp:76`-`138`)
+in those two levels: for every static 36, and in Escape with the Iris static 27, within
+4096 units whose collision box grown by 512 holds the eye, `ItemPushCamera`
+(`:140`-`187`) moves the eye to the nearest side of that box grown by 384. The panels'
+boxes are 1526 (static 27) and 1486 (static 36) units wide and of no depth, standing on
+the diagonals of corner sectors. The orbit's ray walk does not know the panels, so its
+ideal lies behind one, and the push throws the damped eye back in front of it on every
+tick: pinned a few hundred units from her, across the dialled ray and not along it. The
+stick was read in the orbit's world yaw (`ModernCameraWorldYaw`), which geometry does not
+move, and with `clip=1` the return ran eight times as fast, so the frame went on turning
+while the picture stood. The measurement is a RICH2 log at the build of the commit
+before, 772 `MODERNLOG` and 775 `CAMLOG` tick lines, `old_type=0` on every tick. On the
+380 ticks with the stick out whose eye (`eye=` of the `CAMLOG` line of the tick before)
+stood on the push plane of room 8's south-west panel (static 27 at x 31232, z 49664, yaw
+8192), `ref=` lay a median 16411 units from `cam=`, more than 8192 off on 322 and more
+than 16384 off on 190. On the 201 other ticks with the stick out the median was 994 and
+none passed 8192, among them 31 with the eye under 400 units from her horizontally and
+44 with `clip=1`: closeness alone keeps the frame on the picture, the push takes it off.
+While pinned, the eye moved a median 11 units a tick and her target 10, in six episodes
+of 172, 21, 57, 25, 156 and 68 ticks. An earlier RICH2 log through the X-ray corridor
+shows the same at both ends of it: 331 of its 372 ticks with the stick out and
+`view_err=` above 8192 have the eye on a push plane of room 8 or room 10.
+
+The world yaw is the reference since 'The modern camera: a free orbit on the right
+stick', which repaired a close eye whose measured vector had become her own running
+direction, at a steep pitch or with a wall pulling the eye in along the ray. That holds
+while geometry moves the eye along the dialled ray. The diagonal-wall push moves it
+across, after the orbit's resolution and unknown to it, so the dialled angle no longer
+describes the picture. Before that entry the reference was the measured vector, the
+picture itself, which is the rule this entry gives back for the pushed ticks.
+
+**How.** `ModernCameraOrbitIsView(now, orbit_at, pushed)`
+(`game/modern_camera.cpp:980`, declared at `game/modern_camera.h:458`): the orbit ran on
+the tick before (`ModernCameraTickFollows`) and its eye was not pushed. In
+`game/camera.cpp` the flag `modern_cam_pushed` (`:228`) is cleared at the end of every
+orbit pass beside the orbit's stamp (`:623`) and by `ModernCameraResetOrbit` (`:350`);
+`MoveCamera` keeps the eye before the upstream call and hands it to
+`ModernCameraNotePush` (`:2833`) after it, both only when `clear_wall`, the flag that
+only the Modern orbit's pass sets (`:2996`-`3009`); the two upstream lines stay word for
+word. `ModernCameraWorldYaw` (`:768`) and `ModernCameraPlayerStep` (`:803`) ask the
+helper instead of the stamp alone, so on a tick after a push `game/modern_state.cpp:373`
+takes the measured vector, and the player's own camera step does not turn the held
+course. The source switch sets `cam_cut` (`:458`) as before, which arms
+`MODERN_CUT_LATCH` for a stick held through it. With `-log`, `cam_tick.diag`
+(`game/camera.cpp:275`) holds the units the push moved the Modern eye, |dx|+|dy|+|dz|,
+printed last on the `CAMLOG` tick line as `diag=` (`:1336`, legend `:1277`-`1281`); the
+`MODERNLOG` tick line ends in `ref_view=` (`game/modern_state.cpp:701`, legend `:666`),
+1 while the modern camera is active and the reference is the measured vector. The
+comments in `game/modern_state.cpp` (`:360`-`369`, `:435`-`436`, `:454`-`457`) and
+`game/modern_move.h` (`:589`-`590`) name the case. Tests: `camera_push_view()`
+(`Preparation/Tools/Diagnose/ModernTest.cpp:7694`, run after `camera_stamp()`), 22
+checks: the helper at the wrap, at a gap and against the stamp over all 65536 stamps; a
+walked episode of 172 pushed passes, declined on exactly the 172 ticks after them; and
+through the engine's `ModernTranslate` a stick held into and out of a push against a twin
+whose reference never moves, the release and push seated on the measured view (the
+log's tick: view -26668, world yaw 9478, 29390 units apart), the switch back to a
+turning orbit with the stick held, and `hold_course` off.
+
+**Checked.** The engine builds (`be.bat`). ModernTest 14174 checks (14152 and 22 new),
+MenuTest 42364, InterpTest 711, LipsTest 270 with the `.OBJ` folder and 243 without, 0
+failed. A replay (kept outside the repository) compiles the engine's own
+`game/modern_move.cpp` and drives `ModernTranslate` with each `MODERNLOG` tick line's
+stick, state, `blk=`, `cam_step=` and heading. With the reference of the commit before,
+`cam_world=` on every tick, it reproduces `ref=` and `course=` on all 772 ticks. With
+the rule of this entry, `cam=` on a tick after a `CAMLOG` eye on a push plane, no camera
+step there and a cut on each switch of the source, the reference lies a median 0 units
+from `cam=` on the 581 ticks with the stick out (p90 2450; before, 10512 and 27964) and
+more than 8192 off on 17 (before, 322), every one of them a tick the latch holds for a
+stick that was out through a switch; 11 switches, 4 of them with the stick out. Not
+measured: the game.
+
+**Unchanged.** Tank: `clear_wall` is `modern_cam_clear_wall`, which `ChaseCamera` and
+`CombatCamera` set to their `modern_orbit`, 0 unless `ModernCameraActive()`, so the
+classic camera never reaches the new lines and the seam does not run under it. Core's
+push itself, and the second call to it in the look camera. The world yaw as the
+reference everywhere the push did not move the eye, close eyes along the ray included.
+The latch's rules. `FixedCamera`, the rich2 sniper camera, flybys, cutscenes, first
+person, the interpolator and `specific/hd`. RICH3 carries eight static 36 panels, but
+its level is not in Core's list, so nothing changes there.
+
+**Decisions.** Any distance the push moves the eye counts, and the measured vector is
+then the reference for the next tick; there is no threshold. One mechanism holds a
+course across the switch, the cut latch, armed by the reference source switch as for the
+sniper camera. The push is told apart from the orbit's own resolution by comparing the
+eye before and after the upstream call, which leaves the upstream lines as they are.
+
+**Left.** In the X-ray corridor of Escape with the Iris the level's tracking camera
+(spot sequence 7) runs instead of the orbit under both schemes. At a frame rate of 60
+and above its picture judders, because `game/control.cpp:256`-`257` clears
+`bUseSpotCam` at the top of every `ControlPhase` call, the ones between ticks included,
+and the interpolator then counts a camera cut on every tick of the sequence; repairing
+it means touching the interpolator's cut rule or that upstream line, for both schemes,
+and is left to a decision. Under that camera a stick held across its entry is read
+against the chase camera of before the entry until it is let go, a median 87 degrees off
+the X-ray view for 126 to 257 ticks a passage; that is the latch's recorded rule, and
+releasing it on a re-aim or seating the orbit on the level camera's last view at the
+hand-back are left to a decision as well.
+
+**Commits.** 'Round 191 (#191): at a diagonal wall the stick is read in the view on
+screen', 'Round 191 (#191): the suite', 'Round 191 (#191): the record follows'.
+
 ### The pad: radial dead zones, a second binding set and a Modifier for chords
 2026-09-18 - 2026-09-20
 
@@ -10973,3 +11089,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #187 | A seam for the poison sway; A tick is never a tween frame |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
+| #191 | At a diagonal wall the stick is read in the view on screen |

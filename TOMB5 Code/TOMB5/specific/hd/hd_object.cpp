@@ -1881,11 +1881,14 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	/* The phases at the end of the line split the models time, so a slow
 	 * level build names the part that grew (key_ms: see HDPageCacheKeyOf).
 	 * The three .TRM counters beside them say how much of the wardrobe a
-	 * level change reads. */
+	 * level change reads. cut_ranges and cut_models are the opaque draw
+	 * ranges the alpha test runs on and the models they belong to
+	 * (hd_model_cut.h) - 0 on a level without such a model. */
 	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d) "
 		"mod:%d heads=%d lara=%d dummy=%d missing=%d refused=%d verts=%d idx=%d "
 		"ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f read_ms=%d build_ms=%d "
-		"find_ms=%d key_ms=%d page_ms=%d buf_ms=%d trm_open=%d trm_load=%d trm_kib=%.0f",
+		"find_ms=%d key_ms=%d page_ms=%d buf_ms=%d trm_open=%d trm_load=%d trm_kib=%.0f "
+		"cut_ranges=%d cut_models=%d",
 		g_stem, (int)(GetTickCount() - started), stats.slots, stats.loaded,
 		stats.fromGame5, stats.fromGame4, stats.fromMod, stats.heads,
 		stats.lara, stats.dummy, stats.missing, stats.refused, stats.vertices,
@@ -1894,7 +1897,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		(int)(stats.buildMs + 0.5), (int)(stats.findMs + 0.5),
 		(int)(stats.keyMs + 0.5),
 		(int)(stats.pageMs + 0.5), (int)(stats.bufferMs + 0.5),
-		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
+		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0,
+		stats.cutRanges, stats.cutModels);
 
 	/* The models' half of the texture budget. They arrive
 	 * after the rooms and into the same cache, so `have` is what the rooms

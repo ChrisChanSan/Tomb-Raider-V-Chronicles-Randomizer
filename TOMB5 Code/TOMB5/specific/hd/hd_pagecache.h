@@ -248,6 +248,14 @@ bool HDPageCacheSlotCutout(int slot);
 int HDPageCacheSlotCutoutPermille(int slot);
 // How many of the cache's slots answered true - for the level's log line.
 int HDPageCacheCutoutPages();
+/* Are the texels of the page in that slot that lie below the reference holes
+ * rather than a mask - HDPageHolesAreCoverage (hd_model_cut.h) on the same
+ * sample? The object path turns the alpha test on for a cut-out material only
+ * on such a page. False for a page with nothing below the reference and for a
+ * slot with no texture. */
+bool HDPageCacheSlotHoles(int slot);
+// The share of those texels at alpha 0, in per mille - for the tools.
+int HDPageCacheSlotZeroPermille(int slot);
 /* Is the page in that slot part-way clear in every texel of the top mip it
  * keeps - HD_PAGE_CLEAR out of HDPageClassOf (hd_pageclass.h)? False for a
  * slot that has no texture. The room renderer draws the alpha-pass triangles

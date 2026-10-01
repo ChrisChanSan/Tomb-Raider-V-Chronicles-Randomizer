@@ -24,6 +24,7 @@
 #include "hd_dxt5.h"
 #include "hd_mods.h"		// where a mod's own page lives
 #include "hd_pageclass.h"	// clear, cut-out or opaque
+#include "hd_model_cut.h"	// holes or a mask, for the object path
 #include "hd_scan.h"
 #include "../bc7.h"
 
@@ -70,6 +71,7 @@ namespace
 		 * measure_cutout. */
 		bool cutout = false;
 		int cutoutLow = 0;		// texels below the threshold
+		int cutoutZero = 0;		// of those, the ones at alpha 0
 		int cutoutTexels = 0;		// texels looked at
 		/* The smallest and the largest alpha over every texel of the same
 		 * level, for HDPageClassOf (hd_pageclass.h). Smallest above largest
@@ -119,6 +121,13 @@ namespace
 	 * tool needs to say why a page counts as a cut-out sheet, and it is how
 	 * an item page's alpha was shown not to be a cut-out mask at all. */
 	std::vector<short> g_cutout_share;
+	/* One byte per slot: 1 when the texels of the page below the reference
+	 * are holes and not a mask - HDPageHolesAreCoverage (hd_model_cut.h) on
+	 * the same sample as g_cutout - and beside it the share of those texels
+	 * at alpha 0, in per mille, for the tools. Grown and cleared exactly with
+	 * g_textures, like g_cutout. */
+	std::vector<unsigned char> g_holes;
+	std::vector<short> g_zero_share;
 	/* One byte per slot: HDPageClassOf's answer (hd_pageclass.h) - 2 for a
 	 * page that is part-way clear in every texel, the RICH2 marble floors'
 	 * kind. Grown and cleared exactly with g_textures, like g_cutout. */
@@ -660,7 +669,7 @@ namespace
 		 * of it does, and it keeps this off the level load time (measured:
 		 * under a millisecond over a whole level's pages). */
 		const long step = 4;
-		int low = 0, seen = 0;
+		int low = 0, zero = 0, seen = 0;
 
 		for (long y = 0; y < level.h; y += step)
 		{
@@ -671,11 +680,19 @@ namespace
 				seen++;
 
 				if ((row[x] >> 24) < HD_CUTOUT_ALPHA)
+				{
 					low++;
+
+					// A hole is painted at 0, a mask at a dim value that is
+					// not (hd_model_cut.h).
+					if ((row[x] >> 24) == 0)
+						zero++;
+				}
 			}
 		}
 
 		out.cutoutLow = low;
+		out.cutoutZero = zero;
 		out.cutoutTexels = seen;
 		out.cutout = seen > 0 && low * 1000 >= seen * HD_CUTOUT_PERMILLE;
 
@@ -911,6 +928,8 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	g_cutout.resize(g_textures.size(), 0);
 	g_origin.resize(g_textures.size(), (short)-1);
 	g_cutout_share.resize(g_textures.size(), 0);
+	g_holes.resize(g_textures.size(), 0);
+	g_zero_share.resize(g_textures.size(), 0);
 	g_class.resize(g_textures.size(), (unsigned char)HD_PAGE_OPAQUE);
 	g_alpha_min.resize(g_textures.size(), (unsigned char)255);
 	g_page_of_slot.insert(g_page_of_slot.end(), unique.begin(), unique.end());
@@ -1304,6 +1323,14 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 						: (short)0;
 				}
 
+				if ((size_t)page.slot < g_holes.size())
+				{
+					g_holes[(size_t)page.slot] = HDPageHolesAreCoverage(
+						page.cutoutLow, page.cutoutZero) ? 1 : 0;
+					g_zero_share[(size_t)page.slot] = (short)HDPageZeroPermille(
+						page.cutoutLow, page.cutoutZero);
+				}
+
 				if ((size_t)page.slot < g_class.size())
 					g_class[(size_t)page.slot] = (unsigned char)HDPageClassOf(
 						page.alphaMin, page.alphaMax);
@@ -1484,6 +1511,8 @@ void HDPageCacheDestroy()
 	g_textures.clear();
 	g_cutout.clear();
 	g_cutout_share.clear();
+	g_holes.clear();
+	g_zero_share.clear();
 	g_class.clear();
 	g_alpha_min.clear();
 	g_origin.clear();
@@ -1700,6 +1729,22 @@ int HDPageCacheSlotCutoutPermille(int slot)
 		return 0;
 
 	return g_cutout_share[(size_t)slot];
+}
+
+bool HDPageCacheSlotHoles(int slot)
+{
+	if (slot < 0 || slot >= (int)g_holes.size())
+		return false;
+
+	return g_holes[(size_t)slot] != 0;
+}
+
+int HDPageCacheSlotZeroPermille(int slot)
+{
+	if (slot < 0 || slot >= (int)g_zero_share.size())
+		return 0;
+
+	return g_zero_share[(size_t)slot];
 }
 
 int HDPageCacheCutoutPages()

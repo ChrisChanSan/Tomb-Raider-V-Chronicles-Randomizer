@@ -24,6 +24,7 @@
 #include "hd_bind.h"
 #include "hd_classic.h"		// the donor game's own frame 0
 #include "hd_mods.h"		// a mod's model beats the install's
+#include "hd_model_cut.h"	// which opaque triangles are cut out
 #include "hd_trm.h"
 #include "hd_trl.h"		// a face's track files, its map and its deform
 
@@ -80,6 +81,10 @@ namespace
 		// The .DDS number behind pageSlot: a material is named by PAGE and
 		// the cache slot is an allocation.
 		int page = -1;
+		// Drawn with the alpha test in the opaque pass: every triangle of
+		// the range wears a cut-out material on a page whose low alpha is
+		// holes (hd_model_cut.h).
+		bool cut = false;
 	};
 
 	/* One material, named by page.
@@ -982,6 +987,18 @@ namespace
 		count[2] = part.additive;
 	}
 
+	// How many of a model's opaque ranges the alpha test runs on - for the
+	// level's log line.
+	int cut_ranges(const Model& model)
+	{
+		int n = 0;
+
+		for (size_t i = 0; i < model.pass[0].size(); i++)
+			n += model.pass[0][i].cut ? 1 : 0;
+
+		return n;
+	}
+
 	/* Builds one model's buffers out of a .TRM. `rigidNode` >= 0 makes every
 	 * vertex hang off that one node - a facial-rig head, whose own bone
 	 * numbers belong to the rig and not to the mesh tree.
@@ -1635,6 +1652,14 @@ namespace
 
 		indices.reserve((size_t)trm.indices);
 
+		/* One byte per triangle: 1 where the opaque run draws it with the
+		 * alpha test (hd_model_cut.h). Filled for the opaque pass only - the
+		 * alpha pass tests everything anyway and the additive one nothing -
+		 * and before the sort, which keeps the cut triangles together. The
+		 * pages are in the cache by now: HDModelLevelBegin appends them
+		 * before it builds a single model. */
+		std::vector<unsigned char> cut_of_triangle(page_of_triangle.size(), 0);
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			std::vector<int> triangles;	// triangle numbers of this pass
@@ -1644,6 +1669,9 @@ namespace
 				unsigned int start[3], count[3];
 
 				part_runs(trm.part[p], start, count);
+
+				const bool cutMaterial = pass == 0 &&
+					HDTrmMaterialCuts(trm.part[p].material);
 
 				for (unsigned int i = 0; i + 2 < count[pass]; i += 3)
 				{
@@ -1662,6 +1690,14 @@ namespace
 					if (!nodeCut.wants(node_of_triangle[(size_t)(at / 3)]))
 						continue;
 
+					if (cutMaterial)
+					{
+						const int key = page_of_triangle[(size_t)(at / 3)];
+
+						cut_of_triangle[(size_t)(at / 3)] = key >= 0 &&
+							HDPageCacheSlotHoles(HDPageCacheSlotOf(key)) ? 1 : 0;
+					}
+
 					triangles.push_back((int)(at / 3));
 				}
 			}
@@ -1675,10 +1711,18 @@ namespace
 			 * way, which changes the order its triangles reach the card in -
 			 * and cannot change the picture, because that pass blends ONE to
 			 * ONE with the depth write off and addition does not care in
-			 * which order it is done. */
+			 * which order it is done.
+			 *
+			 * The cut comes before both, so that the triangles the alpha test
+			 * runs on are one run after the others and the test is switched
+			 * once per model. A model with no cut triangle sorts exactly as
+			 * without the key. */
 			std::stable_sort(triangles.begin(), triangles.end(),
-				[&page_of_triangle, &node_of_triangle](int a, int b)
+				[&page_of_triangle, &node_of_triangle, &cut_of_triangle](int a, int b)
 				{
+					if (cut_of_triangle[(size_t)a] != cut_of_triangle[(size_t)b])
+						return cut_of_triangle[(size_t)a] < cut_of_triangle[(size_t)b];
+
 					if (page_of_triangle[(size_t)a] != page_of_triangle[(size_t)b])
 						return page_of_triangle[(size_t)a] < page_of_triangle[(size_t)b];
 
@@ -1688,14 +1732,16 @@ namespace
 			Range range;
 			int page = -2;
 			int node = -2;
+			int cutNow = -1;
 
 			for (size_t i = 0; i < triangles.size(); i++)
 			{
 				const int triangle = triangles[i];
 				const int here = page_of_triangle[(size_t)triangle];
 				const int on = node_of_triangle[(size_t)triangle];
+				const int cutHere = cut_of_triangle[(size_t)triangle];
 
-				if (here != page || on != node)
+				if (here != page || on != node || cutHere != cutNow)
 				{
 					if (range.count)
 						model.pass[pass].push_back(range);
@@ -1707,8 +1753,10 @@ namespace
 					// by page.
 					range.page = here;
 					range.node = on;
+					range.cut = cutHere != 0;
 					page = here;
 					node = on;
+					cutNow = cutHere;
 				}
 
 				indices.push_back(trm.index[(size_t)triangle * 3 + 0]);
@@ -2667,27 +2715,25 @@ namespace
 
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 
-			/* No cut-out alpha test in the opaque pass.
+			/* The cut-out alpha test in the opaque pass runs on the ranges
+			 * the build marked `cut`, and on no others.
 			 *
-			 * The rooms have one (hd_render.cpp's draw_pass): the remaster
-			 * puts its vegetation in the opaque pass, where no alpha test
-			 * runs, so a leaf sheet draws as a solid rectangle unless the
-			 * test is switched on for the pages whose alpha really is a
-			 * coverage mask. For models it is wrong:
+			 * The page's share below the reference cannot decide it:
 			 * ROMAN_GOD_ANDREA_SWORD's three body pages measure 64.1, 48.7
 			 * and 56.4 percent of texels below alpha 128, and with the test
-			 * on, half the statue is discarded (ModelProbe -name
-			 * ROMAN_GOD_ANDREA_SWORD, with and without -nocutout). PIERRE and
-			 * BLUE_GUARD share a page at 26.2 percent.
+			 * on, half the statue is discarded. PIERRE and BLUE_GUARD share
+			 * a page at 26.2 percent. Their alpha is a gloss mask on material
+			 * 0 or 3, and a solid statue sits ABOVE a sheet of wire mesh in
+			 * that share. HDPageCacheSlotCutoutPermille is where those
+			 * numbers come from.
 			 *
-			 * So an ITEM page's alpha channel is not a coverage mask - it
-			 * carries something else, and no threshold separates the two
-			 * cases because a solid statue sits ABOVE a leaf sheet. The
-			 * models keep the remaster's own rule, which is the one TROne
-			 * carries too: the alpha test runs in the ALPHA pass and nowhere
-			 * else. hd_pagecache still measures the share, and
-			 * HDPageCacheSlotCutoutPermille is where the numbers above come
-			 * from. */
+			 * What decides it is the part's material and how low the page's
+			 * low texels are (hd_model_cut.h): a part of material 6, 7 or 8
+			 * on a page whose texels below the reference are mostly at 0 -
+			 * the wire mesh of the JOBY fans and trapdoors. The remaster
+			 * sorts those parts into the opaque run, and drawn without the
+			 * test their holes are a solid dark plate. Everything in the
+			 * alpha run is tested at the same 0.5. */
 			if (pass == 2)
 			{
 				g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -2720,11 +2766,13 @@ namespace
 					const Range& more = model.pass[pass][next];
 
 					/* Two ranges join when they wear the same page, when
-					 * the second begins where the first ends, and when the
-					 * mask keeps the second's node. */
+					 * the second begins where the first ends, when the
+					 * mask keeps the second's node and when both are cut
+					 * or both are not. */
 					if (more.pageSlot != first.pageSlot ||
 						more.start != start + count ||
-						!(nodeMask & (1u << (more.node & 31))))
+						!(nodeMask & (1u << (more.node & 31))) ||
+						more.cut != first.cut)
 						break;
 
 					count += more.count;
@@ -2734,6 +2782,18 @@ namespace
 				g_device->SetTexture(0, first.pageSlot >= 0
 					? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot)
 					: 0);
+
+				/* The opaque pass's alpha test, per range: gPass.x is the
+				 * shader's switch for it (hd_model.hlsl clips on gPass.x *
+				 * (alpha - 0.5)). Written only when it changes; the cut
+				 * ranges come last in the pass, so a model that has any
+				 * costs one constant write more, and every other model
+				 * none. */
+				if (pass == 0 && constants[0] != (first.cut ? 1.0f : 0.0f))
+				{
+					constants[0] = first.cut ? 1.0f : 0.0f;
+					g_device->SetPixelShaderConstantF(4, constants, 1);
+				}
 
 				/* The material of this page. Only for a model a caller has
 				 * set a table for - and then only when the
@@ -3787,6 +3847,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			stats->indices += model.indices;
 			stats->ranges += (int)(model.pass[0].size() + model.pass[1].size() +
 				model.pass[2].size());
+			stats->cutRanges += cut_ranges(model);
+			stats->cutModels += cut_ranges(model) > 0 ? 1 : 0;
 			stats->vertexBytes += (double)model.vertices * sizeof(HDModelVertex);
 			stats->indexBytes += (double)model.indices * 2.0;
 
@@ -3931,6 +3993,8 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 			stats->indices += head.indices;
 			stats->ranges += (int)(head.pass[0].size() + head.pass[1].size() +
 				head.pass[2].size());
+			stats->cutRanges += cut_ranges(head);
+			stats->cutModels += cut_ranges(head) > 0 ? 1 : 0;
 			stats->vertexBytes += (double)head.vertices * sizeof(HDModelVertex);
 			stats->indexBytes += (double)head.indices * 2.0;
 		}
@@ -4466,6 +4530,13 @@ int HDModelRanges(int slot)
 
 	return model ? (int)(model->pass[0].size() + model->pass[1].size() +
 		model->pass[2].size()) : 0;
+}
+
+int HDModelCutRanges(int slot)
+{
+	const Model* model = find(g_models, slot);
+
+	return model ? cut_ranges(*model) : 0;
 }
 
 int HDModelPageCount(int slot)

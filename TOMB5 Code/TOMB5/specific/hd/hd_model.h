@@ -334,6 +334,9 @@ struct HDModelStats
 	int vertices;
 	int indices;
 	int ranges;		// draw calls for every model, every pass
+	int cutRanges;		// of those, the opaque ones drawn with the alpha
+				// test (hd_model_cut.h)
+	int cutModels;		// models that have at least one
 	int mixedPageTriangles;	// triangles whose three corners disagree on a page
 	int pages;		// distinct .DDS pages the models added to the cache
 
@@ -812,6 +815,8 @@ bool HDModelBindDrift(int slot, float* mean, float* worst);
 int HDModelVertices(int slot);
 int HDModelIndices(int slot);
 int HDModelRanges(int slot);
+// Of those, the opaque ranges drawn with the alpha test (hd_model_cut.h).
+int HDModelCutRanges(int slot);
 int HDModelPageCount(int slot);
 int HDModelPage(int slot, int at);		// .DDS number
 

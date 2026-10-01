@@ -7675,6 +7675,203 @@ static void camera_stamp()
 		live, 1);
 }
 
+/* The diagonal-wall push: the orbit's angle is not the view while it pins the eye.
+ *
+ * In The 13th Floor and Escape with the Iris, game\camera.cpp's MoveCamera runs
+ * Core's CheckForRichesIllegalDiagonalWalls after the orbit has placed the eye,
+ * and that push throws it across the dialled ray to the near side of a
+ * 45-degree wall panel. game\camera.cpp notes the push per orbit pass and asks
+ * ModernCameraOrbitIsView before it hands out the world yaw or the player's
+ * step; a decline makes game\modern_state.cpp read the stick against the
+ * measured view, and the source switch arms the cut latch, so a stick held
+ * through the push keeps its course.
+ *
+ * The numbers are a RICH2 MODERNLOG tick at room 8's south-west panel: the
+ * measured view (`cam=`) -26668, the orbit's world yaw (`cam_world=`) 9478,
+ * `view_err=` 29390, the stick 19/125, the return turning the orbit by 1483
+ * units a tick (`cam_ret=`). Of that log's six push episodes the longest
+ * lasted 172 ticks. */
+static void camera_push_view()
+{
+	MODERN_CFG cfg;
+	MODERN_CFG off_cfg;
+	MODERN_STATE state;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	long differ1, differ2, biggest, moved, latched, early;
+	long lp, live, at, flag, bad, x, y;
+	unsigned short orbit_at;
+	short off;
+
+	const short view = -26668;
+	const short orbit = 9478;
+	const short orbit_after = ModernWrap(9478L - 8L * 1483L);
+	const long base = 0x4000;
+
+	printf("the diagonal-wall push: the stick is read in the view the push leaves\n");
+
+	/* (i) The rule itself. */
+	ok(ModernCameraOrbitIsView(1001, 1000, 0) == 1,
+		"the orbit ran last tick and its eye stayed on the ray: its angle is the view",
+		ModernCameraOrbitIsView(1001, 1000, 0), 1);
+	ok(ModernCameraOrbitIsView(1001, 1000, 1) == 0,
+		"the push moved that eye: the angle declines",
+		ModernCameraOrbitIsView(1001, 1000, 1), 0);
+	ok(ModernCameraOrbitIsView(1000, 998, 0) == 0,
+		"an orbit that did not run last tick declines as before",
+		ModernCameraOrbitIsView(1000, 998, 0), 0);
+	ok(ModernCameraOrbitIsView(1000, 998, 1) == 0, "...pushed or not",
+		ModernCameraOrbitIsView(1000, 998, 1), 0);
+	ok(ModernCameraOrbitIsView(1000, 1000, 0) == 0, "the same tick asking twice declines as before",
+		ModernCameraOrbitIsView(1000, 1000, 0), 0);
+	ok(ModernCameraOrbitIsView(0, 65535, 0) == 1, "over the wrap 65535 -> 0 the stamp still holds",
+		ModernCameraOrbitIsView(0, 65535, 0), 1);
+	ok(ModernCameraOrbitIsView(0, 65535, 1) == 0, "...and a push over the wrap still declines",
+		ModernCameraOrbitIsView(0, 65535, 1), 0);
+	ok(ModernCameraOrbitIsView(0, 65534, 0) == 0, "65534 -> 0 is a gap as before",
+		ModernCameraOrbitIsView(0, 65534, 0), 0);
+
+	/* Never live where the stamp alone is not, and never live on a push. */
+	live = 0;
+	bad = 0;
+
+	for (lp = 0; lp < 65536; lp++)
+	{
+		live += ModernCameraOrbitIsView(4321, (unsigned short)lp, 0);
+		bad += ModernCameraOrbitIsView(4321, (unsigned short)lp, 1);
+
+		if (ModernCameraOrbitIsView(4321, (unsigned short)lp, 0) !=
+			ModernCameraTickFollows(4321, (unsigned short)lp))
+			bad++;
+	}
+
+	ok(live == 1 && bad == 0,
+		"over all 65536 stamps: unpushed it is the tick stamp, pushed it is never live",
+		live * 100 + bad, 100);
+
+	/* Walked as game\camera.cpp walks it: each orbit pass stamps the tick and
+	 * clears the flag, MoveCamera of the same pass sets it while the push moves
+	 * the eye (ticks 100..271, the log's longest episode), and the seam asks
+	 * on the tick after. Declined exactly on the 172 ticks after a pushed pass:
+	 * a push two ticks ago is answered by the clean pass in between. */
+	live = 0;
+	bad = 0;
+	orbit_at = 0;
+	flag = 0;
+
+	for (lp = 1; lp <= 400; lp++)
+	{
+		const long answer = ModernCameraOrbitIsView((unsigned short)lp, orbit_at, flag);
+		const long pushed_before = (lp - 1 >= 100 && lp - 1 <= 271) ? 1 : 0;
+
+		if (lp > 1)
+		{
+			live += answer;
+
+			if (answer != (pushed_before ? 0 : 1))
+				bad++;
+		}
+
+		orbit_at = (unsigned short)lp;	/* the orbit pass of tick lp clears the flag, */
+		flag = (lp >= 100 && lp <= 271) ? 1 : 0;	/* its MoveCamera sets it on a push */
+	}
+
+	ok(bad == 0 && live == 399 - 172,
+		"172 pushed passes: the angle declines on the 172 ticks after them and on none else",
+		live, 399 - 172);
+
+	/* (ii) What the seam does with a decline, through the engine's
+	 * ModernTranslate. A stick held through a push episode: the reference
+	 * switches from the orbit to the measured view on tick 20, with cam_cut, and
+	 * back on tick 192 to the orbit, which the return has turned on meanwhile.
+	 * Against a twin whose reference never moves the course is the same on
+	 * every held tick - the cut latch carries it. */
+	ModernDefaults(&cfg);
+	off_cfg = cfg;
+	off_cfg.hold_course = 0;
+
+	cut_twin(&cfg, base, orbit, view, orbit_after, 20, 192, 320, &state, &differ1, &differ2,
+		&biggest, &moved, &latched, &early);
+	ok(early == 0, "(ii) no latch before the push", early, 0);
+	ok(latched == 300, "(ii) the push's source switch latches the held course for all 300 ticks",
+		latched, 300);
+	ok(differ1 == 0, "(ii) a stick held into the push: the course is the unpushed twin's",
+		differ1, 0);
+	ok(differ2 == 0, "(ii) ...and out of it again, onto the orbit's turned angle", differ2, 0);
+	ok(biggest < 1024, "(ii) ...no tick moves it more than a re-seat of the thumb", biggest, 1023);
+
+	sit.anim_state = 1;					/* AS_RUN */
+	sit.classic = 0;
+	sit.drawn = 0;
+	sit.action = 0;
+	sit.jump = 0;
+	sit.blocked = 0;
+	sit.cam_player_step = 0;
+	sit.cam_cut = 0;
+
+	/* Let go while pinned, push again: the push seats on the measured view, so
+	 * the course minus the picture is the stick's own angle - the log's tick,
+	 * where the orbit's angle put it 29390 units off. */
+	tick(&cfg, &state, 0, 0, orbit, 0, &sit, &out);
+	ok(state.have_ref == 0 && state.cut_latch == 0, "(ii) letting go drops the course and the latch",
+		state.have_ref + state.cut_latch, 0);
+
+	sit.cam_cut = 1;
+	tick(&cfg, &state, 0, 0, view, 0, &sit, &out);		/* the switch, with the stick at rest */
+	sit.cam_cut = 0;
+	ok(state.cut_latch == 0, "(ii) a switch with the stick at rest latches nothing", state.cut_latch, 0);
+
+	x = 19;
+	y = 125;
+	off = ModernAngle(x, -y);
+	tick(&cfg, &state, x, y, view, 0, &sit, &out);
+	ok(out.reference == view, "(ii) the push in the pinned view seats on the measured view",
+		out.reference, view);
+	ok(state.course == ModernWrap((long)view + off),
+		"(ii) ...so the course minus the picture is the stick's angle", state.course,
+		ModernWrap((long)view + off));
+	{
+		const long old_err = absl(ModernWrap((long)ModernWrap((long)orbit + off) - state.course));
+
+		ok(old_err == 29390, "(ii) ...where the orbit's angle would have put it 29390 off (view_err)",
+			old_err, 29390);
+	}
+
+	/* The switch back to the orbit with that stick held: nothing turns. */
+	at = state.course;
+	bad = 0;
+
+	for (lp = 0; lp < 60; lp++)
+	{
+		sit.cam_cut = (lp == 0) ? 1 : 0;
+		tick(&cfg, &state, x, y, (short)ModernWrap((long)orbit_after - lp * 1483L), 0, &sit, &out);
+		sit.cam_cut = 0;
+
+		if (state.course != at || !state.cut_latch)
+			bad++;
+	}
+
+	ok(bad == 0, "(ii) the switch back to the turning orbit with the stick held: no turn, latched",
+		bad, 0);
+
+	/* With the held course switched off the camera of every tick is the
+	 * reference, so under the push the course follows the picture. */
+	ModernResetState(&state);
+	bad = 0;
+
+	for (lp = 0; lp < 40; lp++)
+	{
+		const short pic = (short)ModernWrap((long)view + lp * 274L);	/* the pinned view's median turn */
+
+		tick(&off_cfg, &state, x, y, pic, 0, &sit, &out);
+
+		if (state.course != ModernWrap((long)pic + off))
+			bad++;
+	}
+
+	ok(bad == 0, "(ii) hold_course off: under the push the course follows the picture", bad, 0);
+}
+
 static void camera_lead()
 {
 	MODERN_CAMERA_CFG cfg;
@@ -11141,6 +11338,7 @@ int main()
 	camera_hide();
 	camera_seam();
 	camera_stamp();
+	camera_push_view();
 	camera_lead();
 	camera_camcut();
 	camera_carry();

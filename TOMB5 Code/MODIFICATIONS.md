@@ -9192,7 +9192,7 @@ course. The source switch sets `cam_cut` (`:458`) as before, which arms
 `MODERN_CUT_LATCH` for a stick held through it. With `-log`, `cam_tick.diag`
 (`game/camera.cpp:275`) holds the units the push moved the Modern eye, |dx|+|dy|+|dz|,
 printed last on the `CAMLOG` tick line as `diag=` (`:1336`, legend `:1277`-`1281`); the
-`MODERNLOG` tick line ends in `ref_view=` (`game/modern_state.cpp:701`, legend `:666`),
+`MODERNLOG` tick line ends in `ref_view=` (`game/modern_state.cpp:702`, legend `:666`),
 1 while the modern camera is active and the reference is the measured vector. The
 comments in `game/modern_state.cpp` (`:360`-`369`, `:435`-`436`, `:454`-`457`) and
 `game/modern_move.h` (`:589`-`590`) name the case. Tests: `camera_push_view()`
@@ -9244,8 +9244,21 @@ the X-ray view for 126 to 257 ticks a passage; that is the latch's recorded rule
 releasing it on a re-aim or seating the orbit on the level camera's last view at the
 hand-back are left to a decision as well.
 
+The rule itself hands the frame back to the dialled angle on the first tick the push
+does not move the eye, while the eye still needs some 5 to 15 ticks of `MoveCamera`'s
+damping to walk back to the dialled ray. On that first tick `cam=` lay 5702, 5292 and
+4305 units from `cam_world=` after three episodes of the second log and 9752, 6220 and
+5609 units after three of the first, and under 2000 about ten ticks later. A stick held
+through the end of an episode keeps its course by the latch; a stick pushed fresh inside
+that window is seated up to some 50 degrees off the picture. Inside an episode there are
+also short gaps in which the push moves nothing (one of a single tick in the second log,
+with `cam=` 6699 units off, and one in the first): a fresh push in such a gap is seated
+on the dialled angle and then held there by the latch the next switch arms. Neither case
+is changed here.
+
 **Commits.** 'Round 191 (#191): at a diagonal wall the stick is read in the view on
-screen', 'Round 191 (#191): the suite', 'Round 191 (#191): the record follows'.
+screen', 'Round 191 (#191): the suite', 'Round 191 (#191): the record follows', 'Round
+191 (#191): what review pass 1 found'.
 
 ### The pad: radial dead zones, a second binding set and a Modifier for chords
 2026-09-18 - 2026-09-20

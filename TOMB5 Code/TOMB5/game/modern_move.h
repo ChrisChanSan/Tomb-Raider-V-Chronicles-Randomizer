@@ -588,8 +588,8 @@ struct MODERN_SITUATION
 	 * eye -> target vector, which is what a cut to and from the rich2 sniper
 	 * camera does, and the start and end of Core's diagonal-wall push on the
 	 * orbit's eye (game\camera.cpp's ModernCameraWorldYaw). The translation
-	 * cannot see it in camera_yaw, because a
-	 * camera that turns quickly and a cut look the same there. */
+	 * cannot see it in camera_yaw, because a camera that turns quickly and a
+	 * cut look the same there. */
 	long cam_cut;
 };
 

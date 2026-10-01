@@ -433,9 +433,9 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * camera this tick had. Where either says no the step is 0 and the held
 	 * course is left alone: a flyby, a cutscene, first person, the title, the
 	 * rich2 sniper camera, the tick before the orbit's first, a tick after the
-	 * diagonal-wall push moved the eye. The accessor
-	 * returns the stick's own term and not the orbit's whole step, which keeps
-	 * the return and the carried swing out of her course. */
+	 * diagonal-wall push moved the eye. The accessor returns the stick's own
+	 * term and not the orbit's whole step, which keeps the return and the
+	 * carried swing out of her course. */
 	sit.cam_player_step = 0;
 
 	if (ModernCameraActive())
@@ -453,8 +453,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * with that rule - so the switch falls on the 38 changes of old_type.
 	 * The diagonal-wall push switches the source the same way, on the tick
 	 * after its first push and on the tick after its last, with old_type 0
-	 * throughout, so
-	 * a stick held through it keeps its course by the same latch. */
+	 * throughout, so a stick held through it keeps its course by the same
+	 * latch. */
 	sit.cam_cut = (modern_ref_seen && ref_orbit != modern_ref_orbit) ? 1 : 0;
 	modern_ref_orbit = ref_orbit;
 	modern_ref_seen = 1;
@@ -665,10 +665,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 *
 	 * `ref_view` is 1 when the modern camera may steer the view and the
 	 * reference is nevertheless the measured vector: under the rich2 sniper
-	 * camera, on the tick before the orbit's first, and on a tick after the
-	 * diagonal-wall push moved the eye (CAMLOG's `diag=` above 0 on the tick
-	 * before). 0 when the reference is the orbit's world yaw, and whenever
-	 * the modern camera is off.
+	 * camera, under a flyby that tracks her and leaves her the controls (the
+	 * X-ray corridor of rich2), whose ticks run no orbit, on the tick before
+	 * the orbit's first, and on a tick after the diagonal-wall push moved the
+	 * eye (CAMLOG's `diag=` above 0 on the tick before). 0 when the reference
+	 * is the orbit's world yaw, and whenever the modern camera is off.
 	 *
 	 * New fields are appended at the end, so the older ones keep their
 	 * places. */

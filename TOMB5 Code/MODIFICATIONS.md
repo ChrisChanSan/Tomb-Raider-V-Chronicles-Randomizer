@@ -3622,6 +3622,105 @@ left.
 
 **Commits.** the commit 'Round 189c (#189): the sheen at a strength that shows'.
 
+### Wire mesh on an HD object is cut out
+2026-10-01
+
+**What.** The HD object path draws a range of a model's opaque run with the alpha test
+when the `.TRM` part it comes from carries a cut-out material - 6, 7 or 8, the room
+renderer's three - and the page it wears has holes rather than a mask below the
+reference: of the page's texels below alpha 128, at least 100 per mille are at alpha 0.
+The cache measures that share on the same sample as its cut-out share, every fourth
+texel of the top mip it keeps. The level's `HDLOG level=<L> models` line ends in
+`cut_ranges` and `cut_models`.
+
+**Why.** In the HD build the fans of the JOBY levels showed as a dark square behind
+their wire grating. The fan of JOBY3 room 79 is item 145, ANIMATING1 at (62976, 8960,
+51712), bound to `ANIMATING1_JOBY3_JOBY5.TRM`; in the classic level the grating is 16
+faces of texture attribute 1 (the colour key) and the blades 16 more. The remaster
+model carries the grating as its part 0, material 6 with param[0] 0.5, and sorts it
+into the OPAQUE run; the fan blades are part 1, material 0, on page 16075. The grating's
+page 11163 lies 71.2 per cent below the reference and 77.4 per cent of that at 0 (the
+cache's sample); `ANIMATING15_MIP_JOBY3_JOBY5` (item 147 of the same room, a fan lying
+flat) wears page 15080 the same way, 77.4 and 89.0 per cent. The object path ran the
+alpha test in the alpha run alone, so the holes were drawn with the texels' own dark
+colour. A page's share below the reference cannot decide it on its own:
+`ROMAN_GOD_ANDREA_SWORD`'s page 9000 is 64.1 per cent below it and 71.5 per cent of that
+at 0, on material 3. Nor
+can the material on its own: Lara's `HAND_BARE_PISTOL` and `HAND_GLOVES_PISTOL` (4\ITEM)
+are material 6 over the whole of page 8516, whose texels below the reference are the
+pistol grips at alpha 3 to 5 - a mask, 0.4 per cent of them at 0. Over every `.TRM` of
+the install's 4 and 5 ITEM folders, 6 is the only cut-out material in an opaque run and
+6 and 8 carry 0.5 in param[0] in every part, which is the reference the model shader
+already clips at.
+
+**How.** `specific/hd/hd_model_cut.h` (new, no engine header): `HDTrmMaterialCuts` (86),
+`HDPageHolesAreCoverage` against `HD_MODEL_CUT_ZERO_PERMILLE` 100 (82, 95) and the
+measured table. `specific/hd/hd_pagecache.cpp`: `measure_cutout` counts the texels at 0
+among those below the reference (689), the slot keeps the verdict and the share (1328),
+`HDPageCacheSlotHoles` and `HDPageCacheSlotZeroPermille` (1734).
+`specific/hd/hd_model.cpp`: `build` marks a triangle of the opaque run whose part's
+material cuts and whose page has holes (1661, 1698) - the pages are in the cache by
+then, because `HDModelLevelBegin` appends them before it builds a model -, sorts the
+marked triangles behind the others as the first key, so a model without one sorts as
+before, and gives the range a `cut` flag; the draw joins two ranges only with the same
+flag (2775) and writes gPass.x, the model shader's switch for its clip at 0.5, when the
+flag changes (2792). `cut_ranges` (992) counts per model; `HDModelCutRanges` serves the
+tools. `specific/hd/hd_object.cpp:1891` ends the level's models line in the two counts.
+ModelProbe ends every page line in the share at 0 and a `<- holes` mark, prints
+`cut ranges` for the build and the count on the `model` line; ModernTest's `model_cut`
+holds the rule's arithmetic.
+
+**Checked.** The engine builds (`be.bat`); ModernTest 14,152 (14,130 and 22 of the
+rule), MenuTest 42,364, InterpTest 711, LipsTest 270 and 243, none failed; RoomProbe,
+TrgProbe, DdsProbe and ModelProbe build. ModelProbe `-all` over the fifteen levels
+counts the cut ranges and models: ANDY1 2 of 1, ANDY3 4 of 1, JOBY2 2 of 2, JOBY3 6 of
+6, JOBY5 4 of 4, RICH2 18 of 1, RICH3 8 of 2, TITLE 1 of 1, every other level 0. Every
+newly cut model drawn before (a ModelProbe built from the archive of `9f65c30`) and
+after, pixels that differ of 1,048,576: `ANIMATING1_JOBY3_JOBY5` from the front 356,415,
+where the fan now shows through the mesh, and from a camera like the duct's view of
+room 79 (yaw 236, pitch 16, 2900 units) 28,856; `ANIMATING15_MIP_JOBY3_JOBY5` 12,773;
+`ANIMATING14_JOBY3_JOBY5` 28,127; `CEILING_TRAPDOOR1_JOBY3_JOBY5` 44,274;
+`FLOOR_TRAPDOOR1_JOBY2_JOBY5_JOBY3` 63,216; `ANIMATING2_JOBY2`, the JOBY2 fan, 219,828;
+`DOOR_TYPE3_JOBY3_JOBY5`, a louvred door, 36,597; `ANIMATING9_ANDY1` 4,518, where black
+splinters around a bale of straw are gone; `ANIMATING16_ANDY3` 53,641, where the black
+rim around the chalk lines of the floor marking is gone; `ANIMATING14_RICH3` and
+`ANIMATING15_RICH3`, a grated staircase, 49,248; `STEEL_DOOR` 2,235; `SAS_MIP_TITLE`
+0 from the front and 219,833 from the side, where its grating is seen. Drawn to the
+pixel as at `9f65c30`: `BLUE_GUARD_JOBY` with its head, `DOOR_TYPE4_JOBY3_JOBY5` (page
+6041, holes on material 0), `EXTRA_PISTOLS_ITEM` (page 8516), `EXTRA_BIGMEDI_ITEM`,
+`PUZZLE_ITEM1_5`, `GUARDIAN`, `ROMAN_GOD_ANDREA_SWORD`, `ROLLINGBALL_RICH3` (page 12052
+on material 0), `SWAT`, `HITMAN`, `SWITCH_TYPE2_RICH3_RICH2_RICH1`, `ANIMATING7_TITLE`,
+and Lara's composite in JOBY3 (`OUTFIT_RUSSIA`) bare and with the pistols, in ANDREA1
+with the pistols and in RICH2 with the uzis; RoomProbe with the gloss on draws JOBY3
+room 79, RICH2 room 8 and ANDREA1 room 20 to the pixel as before.
+
+**Unchanged.** The classic path: no file outside `specific/hd` changes, and nothing of
+it runs with `hd_enable` 0. The rooms, their gloss and its shader variant; the shaders;
+the alpha and the additive run of every model; every model with no part of a cut-out
+material on a page with holes, whose index buffer is built in the same order as before;
+Lara and her outfits, the interpolation.
+
+**Decisions.** The rule rests on the model file's own marking and a measured property of
+the page, with no list of names; the threshold, 100 per mille at 0, lies between the
+pistol grips' 4 and the lowest cut-out page's 325 (page 12052). The cut is the object
+path's existing one, the shader's clip at 0.5; no blended pass is added for objects.
+TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - names `.TRM`
+parts of material 6 and 7 of the TR4/TR5 family as parts to cut
+(`host/render/game_renderer.cpp:6235-6240`) and documents that the material and not
+the run decides, with material 0's alpha kept as a specular mask
+(`docs/SHADER_RULES.md:488-507`); the page condition is this engine's own, from the
+measurement above.
+
+**Left.** The soft rim of a hole, the texels between 1 and 127, is cut at 0.5 as the
+alpha run cuts it, not blended. Page 16075, the blades' page, carries holes too (46.3
+per cent of its low texels at 0) but is worn by material 0 and stays as it is. The
+measure is taken on the mip the page keeps; a page that the texture budget makes start
+at a smaller mip is measured there. TITLE's `SAS_MIP_TITLE` stands in no item of the
+title level.
+
+**Commits.** 'Round 190 (#190): the wire mesh of an object is cut out', 'Round 190
+(#190): the tools and the suite', 'Round 190 (#190): the record follows'.
+
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
 
@@ -10867,3 +10966,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
+| #190 | Wire mesh on an HD object is cut out |

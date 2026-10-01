@@ -1974,6 +1974,17 @@ in half. `ModelProbe -all` prints the whole table for any level.
 * **Distance models are off** for HD objects. TR5 swaps in a coarser model
   five sectors away; the remaster has no coarse model, and a door that turned
   from HD to classic as you walked away from it would pop every time.
+* **Wire mesh on an object is see-through.** The remaster draws the grating
+  in front of the fans of the Russian levels (JOBY2, JOBY3, JOBY5), the
+  grille of their trapdoors, a grated staircase of RICH3 and a few more in
+  the pass that has no transparency test, marked with its cut-out material;
+  without the test the holes come out as a solid dark plate and the fan
+  behind it disappears. The test is switched on for those parts — the
+  remaster's cut-out material on a page whose holes are painted fully
+  transparent — and for nothing else. Every other object keeps its
+  transparency channel as the polish mask it is: the material alone would
+  cut the grips out of Lara's pistols, whose dark chequer is marked the same
+  way, and a page's transparency alone would cut a Roman statue in half.
 
 **The light is the engine's own, per vertex.** The classic engine lights an
 object vertex by vertex out of a light list it builds per piece; a flat colour
@@ -2247,6 +2258,11 @@ There is one `slot=` line per object slot the level loads: the model it asked
 for, how many pieces the mesh tree has against the highest the model names,
 how much of it is covered, the skeleton drift, and `hd=1/0` with the reason.
 That table answers "why is this door still the old one" without guessing.
+The level's `models` line ends in `cut_ranges` and `cut_models`: how many
+pieces of how many models are drawn with the cut-out test described above —
+JOBY3 6 of 6, JOBY5 4 of 4, JOBY2 2 of 2, RICH2 18 of 1 (the steel door),
+RICH3 8 of 2, ANDY3 4 of 1, ANDY1 2 of 1, the title 1 of 1, and 0 in every
+other level.
 `itemcheck` is the object twin of `matrixcheck` — the same comparison on an
 object's pieces instead of a room's vertices — and `lightcheck` puts the
 classic lighting formula and the HD one side by side on one surface normal.

@@ -328,24 +328,26 @@ float4 gWaterBox : register(c15);
  * below):
  *
  * c36         gGloss              per DRAW CALL (in gRipple's place)
- * c80 - c85   gGlossCube[6]       per DRAW CALL
- * c86 - c88   gGlossAxes[3]       per DRAW CALL
- * c89 - c96   gGlossLights[8]     per DRAW CALL (4 lamps, two registers each)
+ * c86 - c88   gGlossAxes[3]       per room
+ * c89 - c91   gGlossField[3]      per room
+ * s1, s2      the light field     per level (the two volume textures)
  *
  * Deliberately disjoint from the vertex numbers although the two constant
  * files are separate in Direct3D 9: one table of "register -> meaning" that
  * needs no column saying which shader. The bulbs and the gloss registers are
  * the exceptions - the vertex file's water table holds c32 - c95 - and they
- * are pixel registers only. The gloss registers from c80 on lie above every
- * literal the plain variant keeps (its highest is c76) and above the glow
- * shader's c77 - c79, so an upload for a glossy draw call lands on nothing
- * another shader reads.
+ * are pixel registers only. The gloss registers from c86 on lie above every
+ * register a named constant of the plain variant or of the glow shader
+ * (c77 - c79) takes.
  *
- * gGloss takes c36 because the gloss variant never ripples: a register the
- * variant left unnamed there would be one fxc hands to a literal of its own
- * (it did, in the first build of the variant), and hd_render.cpp writes c36
- * on every draw call it changes on. Glossy draw calls write gGloss there,
- * and the next plain draw call writes its ripple back.
+ * gGloss takes c36 because the gloss variant never ripples, and
+ * hd_render.cpp writes c36 on every draw call it changes on: glossy draw
+ * calls write gGloss there, and the next plain draw call writes its ripple
+ * back. A literal fxc keeps in a `def` register belongs to its own shader -
+ * Direct3D 9 applies it while that shader is bound and keeps the value set
+ * through SetPixelShaderConstantF for the other - so neither variant can
+ * overwrite a literal of the other; hd_render.cpp still switches the
+ * variants before a draw call's writes, as a precaution.
  */
 
 /* x = tomb5.distance_fog * 1024, y = 255 / that. No on/off switch beside it:
@@ -521,75 +523,73 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  * budget of 512 instruction slots of its own, and set by hd_render.cpp for
  * the draw calls whose surface resolves to a gloss above zero while
  * tomb5.hd_reflect is on; every other draw call keeps the plain variant, whose
- * bytecode the define leaves untouched. Three textbook terms, per pixel, in
- * VIEW space, where the normal (viewNrm), the surface point (viewPos) and the
- * eye (the origin) already are - so the lamps are carried into view space on
- * the processor, once per draw call, rather than every pixel being carried
- * out of it:
+ * bytecode the define leaves untouched.
  *
- *   the highlight   Blinn-Phong: pow(N.H, n) times N.L, H the half vector
- *                   between the direction to the lamp and to the eye, n the
- *                   surface's exponent, scaled by (n + 8) / 8 - the usual
- *                   normalisation that keeps a sharp highlight as bright in
- *                   sum as a broad one. The lamps are up to four - the
- *                   room's own .TRG point lights nearest the draw call, one
- *                   slot of them the level's sun where it has one - and the
- *                   eye is one more, weighted by the surface's own light and
- *                   left out of the (n + 8) / 8 scale, so a plate in a room
- *                   with no lamp in it still carries a sheen that moves with
- *                   the camera.
- *   the environment the ambient cube: six colours, one per world axis
- *                   direction, weighted by the squared components of the
- *                   reflection vector, which sum to one. The six colours are
- *                   the .TRG light cube of the floor under the draw call,
- *                   so the reflection is the room's own light, brighter
- *                   where the room is brighter.
+ * The shine belongs to the place. What the sheen of a pixel reads is the
+ * pixel's world position, its normal, its page's gloss and the eye - nothing
+ * that is chosen per draw call or per room - so two draw calls that meet on
+ * one plane, two rooms that meet at a doorway and two rooms whose art lies on
+ * the same plane carry the same shine at the same place, and no light rides
+ * on the camera. The world position and the world normal come out of the
+ * view-space ones the vertex half already hands down (viewPos, viewNrm),
+ * through gGlossAxes and gGlossField; the light comes out of the level's
+ * light field (hd_gloss_field.h), two volume textures over the whole level.
+ * Three textbook terms per pixel:
+ *
+ *   the highlight   Blinn-Phong: pow(N.H, n) times N.L, n the surface's
+ *                   exponent, H the half vector between the direction to the
+ *                   eye and the field's direction at this place - a light
+ *                   probe's dominant direction, the weighted mean of the
+ *                   directions to the lamps in reach - in the field's colour
+ *                   there, times how one-sided the light is there (two equal
+ *                   lamps on either side give a weak highlight, not two).
+ *                   On metal the highlight takes the texel's hue.
+ *   the environment the surface's own baked light, which the art keeps
+ *                   continuous from room to room, times HD_GLOSS_ENV - on
+ *                   metal coloured by the texel, on stone and ice not.
  *   the weight      Schlick's approximation of Fresnel,
  *                   F0 + (1 - F0) * (1 - N.V)^5, with F0 per class: high for
  *                   metal, low for marble and ice, so metal reflects face on
  *                   and stone mostly at a grazing angle.
  *
  * The sum is ADDED to the surface's own lit colour, never blended over it:
- * the surface keeps its picture to the bit wherever the weight is zero, which
- * is what a page's gloss mask asks for - a stucco facade whose mask is black
- * stays exactly as it was and only its window panes shine. The same fog that
- * darkens the surface darkens the sum. Not a mirror: nothing is drawn twice,
- * and no image of the room appears in it.
+ * the surface keeps its picture to the bit wherever the
+ * weight is zero, which is what a page's gloss mask asks for - a stucco
+ * facade whose mask is black stays exactly as it was and only its window
+ * panes shine. The same fog that darkens the surface darkens the sum. Not a
+ * mirror: nothing is drawn twice, and no image of the room appears in it.
  *
- * gGloss       x F0, y how far the environment takes the texel's colour (1
- *              for metal, whose reflection is coloured by the metal; 0 for
- *              stone and ice), z 1 where the page's alpha is a gloss mask and
- *              0 where the page is flat, w unused. gSpec (c19) keeps the
- *              strength in x, the exponent in y and hd_reflect in z.
- * gGlossCube   the six faces in the file's own order: +x, -x, up, down, +z,
- *              -z - "up" being -y in this engine's coordinates. RGB 0..1.
- * gGlossAxes   the rows that turn a view-space direction back into world
- *              axes, the transpose of the room's view rotation.
- * gGlossLights (x, y, z, 1) a lamp's position in view space or (x, y, z, 0)
- *              the direction towards a sun, then (r, g, b, 1 / reach^2) - a
- *              sun has no reach and carries 0 there. A slot not in use
- *              carries a black colour.
+ * gGloss       x F0, y how far the sheen takes the texel's colour (1 for
+ *              metal, 0 for stone and ice), z 1 where the page's alpha is a
+ *              gloss mask and 0 where the page is flat, w 0 - or, for
+ *              RoomProbe's -glossfield picture alone, 1 to draw the field's
+ *              colour and 2 to draw its direction in place of the surface.
+ *              gSpec (c19) keeps the strength in x, the exponent in y and
+ *              hd_reflect in z.
+ * gGlossAxes   the rows that turn a view-space direction into world axes,
+ *              the transpose of the room's view rotation.
+ * gGlossField  the rows that turn a view-space position (x, y, z, 1) into
+ *              the field's texture coordinate: the room's view transform
+ *              undone, the room's origin added, the field's corner taken
+ *              off and the field's size divided out.
  *
- * The cube's gain. A light cube is darker than the light baked into the art
- * it stands in: the median over each level's floor squares of the vertex
- * light of the up-facing .TRG triangles against the mean of the square's
- * six faces runs from 1.79 (RICHCUT2) to 4.10 (ANDY2), and the median of
- * the fifteen medians is 2.93 (TrgProbe -glosslight over the fifteen
- * levels). HD_GLOSS_CUBE_GAIN puts the cube on the scale of the
- * surface's own light.
- *
- * The eye as a lamp. HD_GLOSS_EYE is its weight against the surface's own
- * light - chosen, not measured: at the exponent's peak, face on, the eye adds
- * this share of the surface's own light times the Fresnel weight, the
- * strength and the mask. */
-#define HD_GLOSS_LIGHTS    4
-#define HD_GLOSS_CUBE_GAIN 3.0f
-#define HD_GLOSS_EYE       0.25f
+ * The numbers are chosen, not measured, against RoomProbe's pictures of
+ * JOBY2, ANDREA1 and RICH1: the highlight at twice the field's colour - the
+ * field is bounded below one and the lobe carries no (n + 8) / 8 of its own -
+ * and the environment at a quarter of the surface's light. */
+#define HD_GLOSS_HIGHLIGHT 2.0f
+#define HD_GLOSS_ENV       0.25f
 
 float4 gGloss : register(c36);
-float4 gGlossCube[6] : register(c80);
 float4 gGlossAxes[3] : register(c86);
-float4 gGlossLights[HD_GLOSS_LIGHTS * 2] : register(c89);
+float4 gGlossField[3] : register(c89);
+
+/* The light field: the direction towards the light biased into bytes with
+ * the one-sidedness in alpha, and the colour (its strength in alpha is for
+ * the tools; this file reads the colour alone). Linear filtering, clamped at
+ * the edges - hd_render.cpp sets both. */
+sampler3D sFieldDir : register(s1);
+sampler3D sFieldRgb : register(s2);
 #endif
 
 sampler2D sPage : register(s0);
@@ -976,64 +976,53 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 }
 
 #ifdef HD_GLOSS
-/* The sheen of one pixel - see the note over HD_GLOSS_LIGHTS. `light` is the
- * surface's own lit multiply before the fog, the eye lamp's colour; `dark` is
- * what the fog and the fog bulbs took off the surface, which the sum loses
- * too. */
-float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark)
+/* The sheen of one pixel - see "The sheen" above. `light` is the surface's
+ * own lit multiply before the fog, the environment's colour; `dark` what the
+ * fog and the fog bulbs took off the surface, which the sum loses too.
+ * `field` comes back as RoomProbe's -glossfield picture asks for it: the
+ * field's colour (gGloss.w 1) or its direction (2). */
+float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float dark,
+	out float3 field)
 {
 	/* viewNrm is not renormalised and a vertex may carry a zero normal; the
-	 * floor under the length keeps such a pixel at a zero sheen rather than
-	 * a NaN. */
-	float3 N = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
-	float3 V = normalize(-input.viewPos);
+	 * floor under the length keeps such a pixel free of a NaN. */
+	float3 n = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
+	float3 v = normalize(-input.viewPos);
+	float3 N = float3(dot(n, gGlossAxes[0].xyz), dot(n, gGlossAxes[1].xyz),
+		dot(n, gGlossAxes[2].xyz));
+	float3 V = float3(dot(v, gGlossAxes[0].xyz), dot(v, gGlossAxes[1].xyz),
+		dot(v, gGlossAxes[2].xyz));
 	float nv = dot(N, V);
 
-	/* A two-sided range (the cut-out materials, the sky) shows its back
-	 * face as well; the normal of the side seen faces the eye. */
+	/* A two-sided range (the cut-out materials) shows its back face as well;
+	 * the normal of the side seen faces the eye. */
 	N = nv < 0.0f ? -N : N;
 	nv = abs(nv);
 
-	const float power = gSpec.y;
-	float3 hl = 0.0f;
+	// The light field at this place - a position of the level, not of a room.
+	const float4 at = float4(input.viewPos, 1.0f);
+	const float3 uvw = float3(dot(at, gGlossField[0]), dot(at, gGlossField[1]),
+		dot(at, gGlossField[2]));
+	const float4 toward = tex3D(sFieldDir, uvw);
+	const float4 colour = tex3D(sFieldRgb, uvw);
+	float3 L = toward.xyz * 2.0f - 1.0f;
+	const float len = length(L);
 
-	[unroll]
-	for (int k = 0; k < HD_GLOSS_LIGHTS; k++)
-	{
-		float4 a = gGlossLights[k * 2 + 0];
-		float4 b = gGlossLights[k * 2 + 1];
+	L *= 1.0f / max(len, 1e-3f);
 
-		float3 toLamp = a.xyz - input.viewPos * a.w;
-		float d2 = dot(toLamp, toLamp);
-		float3 L = toLamp * rsqrt(max(d2, 1e-6f));
-		float fall = saturate(1.0f - d2 * b.w);
-		// L = -V leaves no half vector; N.L is zero there already.
-		float3 LV = L + V;
-		float3 H = LV * rsqrt(max(dot(LV, LV), 1e-8f));
+	// L = -V leaves no half vector; N.L is zero there already.
+	const float3 LV = L + V;
+	const float3 H = LV * rsqrt(max(dot(LV, LV), 1e-8f));
+	const float lobe = pow(saturate(dot(N, H)), gSpec.y) * saturate(dot(N, L));
+	const float peak = max(texel.r, max(texel.g, texel.b));
+	const float3 hue = lerp(1.0f, texel.rgb / max(peak, 1.0f / 16.0f), gGloss.y);
+	const float3 hl = colour.rgb * hue *
+		(toward.a * saturate(len) * lobe * HD_GLOSS_HIGHLIGHT);
 
-		hl += b.rgb * (fall * fall * saturate(dot(N, L)) *
-			pow(saturate(dot(N, H)), power));
-	}
+	field = gGloss.w > 1.5f ? L * 0.5f + 0.5f : colour.rgb * toward.a;
 
-	hl *= (power + 8.0f) * 0.125f;
-
-	/* The eye as the lamp: L = V, so H = V and N.H = N.L = N.V. Added after
-	 * the (n + 8) / 8 scale, so its peak is HD_GLOSS_EYE of the surface's
-	 * own light whatever the exponent. */
-	hl += light * (HD_GLOSS_EYE * nv * pow(nv, power));
-
-	/* The ambient cube, looked up along the reflection of the eye ray and
-	 * turned back into world axes. The weights are the squared components
-	 * of a unit vector and sum to one. */
-	float3 R = N * (2.0f * nv) - V;
-	float3 w = float3(dot(R, gGlossAxes[0].xyz), dot(R, gGlossAxes[1].xyz),
-		dot(R, gGlossAxes[2].xyz));
-	float3 q = w * w;
-	float3 env = q.x * (w.x >= 0.0f ? gGlossCube[0].rgb : gGlossCube[1].rgb) +
-		q.y * (w.y < 0.0f ? gGlossCube[2].rgb : gGlossCube[3].rgb) +
-		q.z * (w.z >= 0.0f ? gGlossCube[4].rgb : gGlossCube[5].rgb);
-
-	env *= HD_GLOSS_CUBE_GAIN * lerp(1.0f, texel.rgb, gGloss.y);
+	// The environment: the surface's own light.
+	const float3 env = light * lerp(1.0f, texel.rgb, gGloss.y) * HD_GLOSS_ENV;
 
 	// Schlick's Fresnel, the strength, the switch and the page's mask.
 	float grazing = 1.0f - nv;
@@ -1131,9 +1120,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
 			 * plain variant's gloss is the grazing angle alone, at the end of
 			 * this function, where it costs eleven slots and no loop, and its
 			 * exponent is read, logged and unused. The gloss variant has its
-			 * own 512 slots and spends them on four lamps of its own (see
-			 * "The sheen"); these dynamic lights give no highlight there
-			 * either, for the same count. */
+			 * own 512 slots and spends them on the light field (see "The
+			 * sheen"); these dynamic lights give no highlight there either,
+			 * for the same count. */
 		}
 	}
 
@@ -1150,7 +1139,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * none. */
 #ifdef HD_GLOSS
 	/* The same subtraction, kept as a number: the sheen loses it too. And the
-	 * light before it, which the eye lamp shines with. */
+	 * light before it, which the sheen's environment term reflects. */
 	const float3 unfogged = f * (2.0f / 255.0f);
 	const float fogged = max(0.0f, input.viewPos.z - gFog.x) * gFog.y;
 
@@ -1231,13 +1220,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	c = max(c, 0.0f);
 	s = saturate(s);
 
-#ifdef HD_GLOSS
-	/* The sheen, in place of the grazing-angle lift below: the fog in the
-	 * remaster's scale and the bulbs' haze in the classic 0..255 one, as the
-	 * surface lost them. */
-	const float3 sheen = GlossSheen(input, texel, unfogged,
-		fogged * (2.0f / 255.0f) + haze * (1.0f / 255.0f));
-#else
+#ifndef HD_GLOSS
 	/* The grazing angle - see the note beside gSpec.
 	 * Applied to `c`, the multiply, so what the surface lifts towards is its
 	 * own lit colour and never a colour of this shader's making; and after the
@@ -1251,6 +1234,7 @@ float4 RoomPS(VS_OUT input) : COLOR0
 		c *= 1.0f + min(HD_FRESNEL_MAX, gloss * grazing * HD_FRESNEL_LIFT);
 	}
 #endif
+	/* The gloss variant draws the sheen in place of that lift, further down. */
 
 	/* The gloss variant draws no caustic: hd_render.cpp keeps every draw
 	 * call with a water-marked vertex in it on the plain variant. */
@@ -1292,9 +1276,18 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	float3 lit = texel.rgb * c + s * gPass.w;
 
 #ifdef HD_GLOSS
-	/* Added, never blended - see the note over HD_GLOSS_LIGHTS. The two
-	 * additive-pass lines below have no work in the gloss variant. */
+	/* The sheen - see "The sheen" above. The fog in the remaster's scale and
+	 * the bulbs' haze in the classic 0..255 one come off it as the surface
+	 * lost them. The two additive-pass lines below have no work in the gloss
+	 * variant. */
+	float3 field;
+	const float3 sheen = GlossSheen(input, texel, unfogged,
+		fogged * (2.0f / 255.0f) + haze * (1.0f / 255.0f), field);
+
 	lit += sheen;
+
+	// RoomProbe's -glossfield picture: the field in place of the surface.
+	lit = gGloss.w > 0.5f ? field : lit;
 #else
 	/* Additive pass only: an unweighted glow washes the whole frame out. */
 	lit *= lerp(1.0f, texel.a, gPass.y);

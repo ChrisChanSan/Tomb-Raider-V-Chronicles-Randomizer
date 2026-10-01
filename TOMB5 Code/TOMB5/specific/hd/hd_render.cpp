@@ -37,6 +37,7 @@
 #include "hd_gloss_math.h"
 #include "hd_gloss_pages.h"
 #include "hd_gloss_seed.h"
+#include "hd_gloss_field.h"
 
 #include <algorithm>
 #include <array>
@@ -1258,16 +1259,6 @@ namespace
 		float sheenMask = 0.0f;
 		int sheenClass = 0;
 		int sheenSource = 0;
-		/* What the sheen of this draw call is lit with, filled with the rest
-		 * of it: the six faces of the light cube the range stands over (RGB
-		 * 0..1 in the file's face order, see hd_gloss_math.h), up to
-		 * HD_GLOSS_LAMPS lamps of its room, room local, with their colour
-		 * already scaled (a black colour is a slot not in use), and the share
-		 * of the sun it sees. */
-		float sheenCube[6][3] = {};
-		float sheenLamp[HD_GLOSS_LAMPS][3] = {};
-		float sheenLampRgb[HD_GLOSS_LAMPS][3] = {};
-		float sheenSun = 0.0f;
 		/* 1 where a vertex of this range can carry the caustic - a water mark
 		 * on a flat vertex in the room's surface plane (hd_room.hlsl, the
 		 * caustic). The gloss variant has no caustic, so such a range keeps
@@ -1521,6 +1512,10 @@ namespace
 		DWORD fvf = 0;
 		DWORD rs[32] = {};
 		DWORD samp[16] = {};
+		/* Samplers 1 and 2, the light field's (hd_room.hlsl, "The sheen"):
+		 * their textures and their states, put back like sampler 0's. */
+		IDirect3DBaseTexture9* fieldTexture[2] = { 0, 0 };
+		DWORD fieldSamp[2][16] = {};
 		/* The scissor rectangle. D3DRS_SCISSORTESTENABLE is in the render
 		 * state list below; the rectangle beside it is a device state of its
 		 * own with its own Get/Set pair, and the HD path writes it. A device
@@ -1726,25 +1721,35 @@ namespace
 	const HDSectorFloor* g_sectors = 0;
 	int g_sector_count = 0;
 
-	/* What the sheen is lit with, kept from the .TRG for the whole level:
-	 * each room's point lights, room local and scaled (HD_GLOSS_LAMP_SCALE),
-	 * the light cubes - one per floor square, only when their count is the
-	 * count of squares handed in - and the sun, towards it in this engine's
-	 * coordinates (HDGlossSunToward), with its colour; black where the level
-	 * has none. The room's world-view matrix of the room being drawn is set
-	 * by prepare() for the lamps' upload. */
-	struct HDSheenLamp
-	{
-		float pos[3];
-		float rgb[3];
-	};
-	std::vector<std::vector<HDSheenLamp> > g_lamps;
-	std::vector<std::array<unsigned char, 24> > g_cubes;
-	float g_sun_toward[3] = { 0.0f, -1.0f, 0.0f };
-	float g_sun_rgb[3] = { 0.0f, 0.0f, 0.0f };
-	float g_room_wv[16] = { 0 };
-	// Once per level: the lamps kept, and the cubes kept (0 when they did
-	// not match the floor squares).
+	/* What the sheen is lit with: the level's light field
+	 * (hd_gloss_field.h), built with the level out of every room's .TRG
+	 * point lights in world units, in two volume textures the gloss variant
+	 * reads on samplers 1 and 2. Null where the level has none - no lamp,
+	 * no rooms' boxes, or a device without filtered volume textures - and the
+	 * gloss variant then draws its environment term alone.
+	 *
+	 * `g_group_origin` is each room group's origin, x and z (r->x, r->z; a
+	 * TR5 room's y origin is 0), kept from the build's floor grids: a room's
+	 * own coordinates plus it are the world coordinates the field is in,
+	 * whatever matrix the caller draws the room with (prepare(), the gloss
+	 * rows). */
+	IDirect3DVolumeTexture9* g_field_dir = 0;
+	IDirect3DVolumeTexture9* g_field_rgb = 0;
+	HDGlossFieldGrid g_field_grid;
+	HDGlossFieldStats g_field_stats;
+	float g_field_ms = 0.0f;
+	int g_field_bytes = 0;
+	std::vector<float> g_group_origin;
+	// HDRenderGlossFieldView: RoomProbe's -glossfield picture. 0 in the engine.
+	int g_field_view = 0;
+	/* HDRenderGlossFieldSight: RoomProbe's -fieldsight, the field built with
+	 * the sight test by the rooms (HDGlossFieldSight) for a comparison.
+	 * Empty in the engine. */
+	std::vector<unsigned char> g_field_near;
+	int g_field_near_rooms = 0;
+	/* Once per level: the lamps that went into the field, and the light
+	 * cubes the .TRG holds for the floor squares (0 when their count is not
+	 * the squares'), for the GLOSSLOG level line. */
 	int g_lamp_count = 0;
 	int g_cube_count = 0;
 
@@ -2963,127 +2968,6 @@ namespace
 		HDGlossParseText(text.c_str(), &g_gloss_file);
 	}
 
-	/* What one glossy draw call is lit with.
-	 *
-	 * The cube: the mean of the light cubes of the floor squares its
-	 * triangles stand over - the square under each triangle's centroid, and
-	 * for a triangle whose centroid is in a wall square (a wall's own face
-	 * lies on the room's edge) the square half a square in front of it along
-	 * its normal. One cube per draw call, because the shader has registers
-	 * for one; a draw call is one page of one room, so a crate's page takes
-	 * the cubes of the squares around the crate and a corridor's wall page
-	 * the mean down the corridor.
-	 *
-	 * The lamps: the room's own nearest HD_GLOSS_LAMPS to the draw call's box
-	 * (HDGlossRankLights), one fewer where the level has a sun, which takes
-	 * the last slot with the share of it the cube says the surface sees
-	 * (HDGlossSunSeen). */
-	void LightSheen(const trf::remaster::Trg& trg,
-		const std::vector<unsigned int>& sorted, size_t group, HDRange& range)
-	{
-		float mins[3] = { 1.0e30f, 1.0e30f, 1.0e30f };
-		float maxs[3] = { -1.0e30f, -1.0e30f, -1.0e30f };
-		double cube[6][3] = {};
-		int cubes = 0;
-		const bool grid = (int)group < g_grid_count && g_cube_count > 0;
-
-		for (unsigned int at = 0; at + 2 < range.count; at += 3)
-		{
-			const trf::remaster::TrgVertex* v[3];
-			bool ok = true;
-
-			for (int k = 0; k < 3; k++)
-			{
-				const size_t i = (size_t)range.start + at + (unsigned int)k;
-				const unsigned int index = i < sorted.size() ? sorted[i] : 0xFFFFFFFFu;
-
-				ok = ok && index < trg.vertices.size();
-				v[k] = ok ? &trg.vertices[index] : 0;
-			}
-
-			if (!ok)
-				continue;
-
-			for (int k = 0; k < 3; k++)
-			{
-				const float p[3] = { (float)v[k]->x, (float)v[k]->y, (float)v[k]->z };
-
-				for (int axis = 0; axis < 3; axis++)
-				{
-					if (p[axis] < mins[axis]) mins[axis] = p[axis];
-					if (p[axis] > maxs[axis]) maxs[axis] = p[axis];
-				}
-			}
-
-			if (!grid)
-				continue;
-
-			const HDRoomGrid& room = g_grids[group];
-			const float cx = ((float)v[0]->x + v[1]->x + v[2]->x) / 3.0f;
-			const float cz = ((float)v[0]->z + v[1]->z + v[2]->z) / 3.0f;
-			int s = HDGlossSectorAt(room, cx, cz);
-
-			if (s < 0 || s >= g_sector_count || g_sectors[s].wall)
-			{
-				const float nx = v[0]->normal_x() + v[1]->normal_x() + v[2]->normal_x();
-				const float nz = v[0]->normal_z() + v[1]->normal_z() + v[2]->normal_z();
-				const float len = sqrtf(nx * nx + nz * nz);
-
-				s = len > 1e-3f ? HDGlossSectorAt(room, cx + 512.0f * nx / len,
-					cz + 512.0f * nz / len) : -1;
-			}
-
-			if (s < 0 || s >= g_cube_count || s >= g_sector_count || g_sectors[s].wall)
-				continue;
-
-			const std::array<unsigned char, 24>& c = g_cubes[(size_t)s];
-
-			for (int f = 0; f < 6; f++)
-				for (int ch = 0; ch < 3; ch++)
-					cube[f][ch] += c[(size_t)(f * 4 + ch)];
-
-			cubes++;
-		}
-
-		for (int f = 0; f < 6; f++)
-			for (int ch = 0; ch < 3; ch++)
-				range.sheenCube[f][ch] = cubes
-					? (float)(cube[f][ch] / cubes / 255.0) : 0.0f;
-
-		const bool sun = g_sun_rgb[0] > 0.0f || g_sun_rgb[1] > 0.0f || g_sun_rgb[2] > 0.0f;
-
-		range.sheenSun = sun && cubes ? HDGlossSunSeen(range.sheenCube, g_sun_toward) : 0.0f;
-
-		for (int k = 0; k < HD_GLOSS_LAMPS; k++)
-			for (int ch = 0; ch < 3; ch++)
-			{
-				range.sheenLamp[k][ch] = 0.0f;
-				range.sheenLampRgb[k][ch] = 0.0f;
-			}
-
-		if (group >= g_lamps.size() || g_lamps[group].empty() || mins[0] > maxs[0])
-			return;
-
-		const std::vector<HDSheenLamp>& lamps = g_lamps[group];
-		std::vector<float> xyz(lamps.size() * 3);
-		int order[HD_GLOSS_LAMPS];
-
-		for (size_t i = 0; i < lamps.size(); i++)
-			for (int axis = 0; axis < 3; axis++)
-				xyz[i * 3 + axis] = lamps[i].pos[axis];
-
-		const int slots = range.sheenSun > 0.0f ? HD_GLOSS_LAMPS - 1 : HD_GLOSS_LAMPS;
-		const int chosen = HDGlossRankLights(&xyz[0], (int)lamps.size(), mins, maxs,
-			order, slots);
-
-		for (int k = 0; k < chosen; k++)
-			for (int ch = 0; ch < 3; ch++)
-			{
-				range.sheenLamp[k][ch] = lamps[(size_t)order[k]].pos[ch];
-				range.sheenLampRgb[k][ch] = lamps[(size_t)order[k]].rgb[ch];
-			}
-	}
-
 	/* The sheen of every draw call, once the level's ranges are built.
 	 *
 	 * A draw call is one page of one room, so its sheen is its page's: the
@@ -3095,10 +2979,10 @@ namespace
 	 * and nothing of it is in the sort key: the ranges, their order and their
 	 * draw calls are the ones the level had before, and the page is in the
 	 * key already. Whether the page's alpha masks the sheen is the page's
-	 * own smallest alpha against HD_GLOSS_MASK_BELOW, and what it is lit with
-	 * LightSheen's answer. */
-	void ResolveSheen(const trf::remaster::Trg& trg,
-		const std::vector<unsigned int>& sorted)
+	 * own smallest alpha against HD_GLOSS_MASK_BELOW. What a glossy draw call
+	 * is lit with is the level's light field, read per pixel - nothing of it
+	 * is chosen here. */
+	void ResolveSheen()
 	{
 		g_sheen_ranges = 0;
 		g_gloss_pages.clear();
@@ -3183,10 +3067,138 @@ namespace
 					range.sheenSource = got.source;
 					range.sheenMask = HDPageCacheSlotAlphaMin(range.pageSlot) <
 						HD_GLOSS_MASK_BELOW ? 1.0f : 0.0f;
-					LightSheen(trg, sorted, g, range);
 					g_sheen_ranges++;
 				}
 		}
+	}
+
+	void release_field()
+	{
+		if (g_field_dir) { g_field_dir->Release(); g_field_dir = 0; }
+		if (g_field_rgb) { g_field_rgb->Release(); g_field_rgb = 0; }
+
+		std::memset(&g_field_grid, 0, sizeof(g_field_grid));
+		std::memset(&g_field_stats, 0, sizeof(g_field_stats));
+		g_field_ms = 0.0f;
+		g_field_bytes = 0;
+	}
+
+	// One build array into one volume texture of the field's size.
+	IDirect3DVolumeTexture9* MakeFieldTexture(const std::vector<unsigned int>& texels)
+	{
+		const HDGlossFieldGrid& grid = g_field_grid;
+		IDirect3DVolumeTexture9* texture = 0;
+
+		if (FAILED(g_device->CreateVolumeTexture((UINT)grid.dims[0], (UINT)grid.dims[1],
+			(UINT)grid.dims[2], 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &texture, 0)))
+			return 0;
+
+		D3DLOCKED_BOX box;
+
+		if (FAILED(texture->LockBox(0, &box, 0, 0)))
+		{
+			texture->Release();
+			return 0;
+		}
+
+		for (int z = 0; z < grid.dims[2]; z++)
+			for (int y = 0; y < grid.dims[1]; y++)
+				std::memcpy((unsigned char*)box.pBits + (size_t)z * box.SlicePitch +
+					(size_t)y * box.RowPitch, &texels[HDGlossFieldIndex(grid, 0, y, z)],
+					(size_t)grid.dims[0] * sizeof(unsigned int));
+
+		texture->UnlockBox(0);
+		return texture;
+	}
+
+	/* The level's light field (hd_gloss_field.h): every room's .TRG point
+	 * lights with a colour, in world units as the file stores them, over the
+	 * rooms' boxes made world, into the two volume textures. A device that
+	 * cannot filter a volume texture, or asks for powers of two past its
+	 * largest side, gets none. The time it takes is the HDLOG build's and is
+	 * logged on its own as GLOSSLOG's field_ms. */
+	void BuildField(const trf::remaster::Trg& trg)
+	{
+		const double started = now_ms();
+
+		release_field();
+		g_lamp_count = 0;
+		g_group_origin.assign(trg.groups.size() * 2, 0.0f);
+
+		for (int g = 0; g < g_grid_count && (size_t)g < trg.groups.size(); g++)
+		{
+			g_group_origin[(size_t)g * 2] = g_grids[g].originX;
+			g_group_origin[(size_t)g * 2 + 1] = g_grids[g].originZ;
+		}
+
+		std::vector<HDGlossLamp> lamps;
+		std::vector<int> lamp_room;
+
+		for (size_t g = 0; g < trg.groups.size() && (int)g < g_room_groups; g++)
+			for (size_t i = 0; i < trg.groups[g].volumes.size(); i++)
+			{
+				const trf::remaster::TrgGroup::PointLight light = trg.groups[g].light(i);
+				const HDGlossLamp lamp =
+				{
+					{ light.x, light.y, light.z }, { light.r, light.g, light.b }
+				};
+
+				if (light.r > 0.0f || light.g > 0.0f || light.b > 0.0f)
+				{
+					lamps.push_back(lamp);
+					lamp_room.push_back((int)g);
+				}
+			}
+
+		g_lamp_count = (int)lamps.size();
+
+		const DWORD filters = D3DPTFILTERCAPS_MINFLINEAR | D3DPTFILTERCAPS_MAGFLINEAR;
+
+		if (!g_device || lamps.empty() || !g_boxes || g_box_count <= 0 ||
+			g_grid_count <= 0 || !(g_caps.TextureCaps & D3DPTEXTURECAPS_VOLUMEMAP) ||
+			(g_caps.VolumeTextureFilterCaps & filters) != filters)
+			return;
+
+		std::vector<float> boxes((size_t)g_box_count * 6);
+
+		for (int b = 0; b < g_box_count; b++)
+		{
+			const HDRoomBox& room = g_boxes[b];
+			float* out = &boxes[(size_t)b * 6];
+
+			out[0] = room.originX + room.mins[0];
+			out[1] = room.mins[1];
+			out[2] = room.originZ + room.mins[2];
+			out[3] = room.originX + room.maxs[0];
+			out[4] = room.maxs[1];
+			out[5] = room.originZ + room.maxs[2];
+		}
+
+		const bool pow2 = (g_caps.TextureCaps & D3DPTEXTURECAPS_VOLUMEMAP_POW2) != 0;
+		std::vector<unsigned int> dir, rgb;
+
+		if (!HDGlossFieldLayout(&boxes[0], g_box_count, &lamps[0], (int)lamps.size(), pow2,
+			(int)g_caps.MaxVolumeExtent, &g_field_grid))
+			return;
+
+		const bool sighted = g_field_near_rooms == g_box_count &&
+			g_field_near.size() == (size_t)g_box_count * (size_t)g_box_count;
+		const HDGlossFieldSight sight = { &boxes[0], g_box_count, &lamp_room[0],
+			sighted ? &g_field_near[0] : 0 };
+
+		HDGlossFieldBuild(g_field_grid, &lamps[0], (int)lamps.size(), dir, rgb, &g_field_stats,
+			sighted ? &sight : 0);
+		g_field_dir = MakeFieldTexture(dir);
+		g_field_rgb = MakeFieldTexture(rgb);
+
+		if (!g_field_dir || !g_field_rgb)
+		{
+			release_field();
+			return;
+		}
+
+		g_field_bytes = (int)(dir.size() * sizeof(unsigned int) * 2);
+		g_field_ms = (float)(now_ms() - started);
 	}
 
 	void release_buffers()
@@ -3194,10 +3206,10 @@ namespace
 		if (g_vb) { g_vb->Release(); g_vb = 0; }
 		if (g_ib) { g_ib->Release(); g_ib = 0; }
 
+		release_field();
 		g_groups.clear();
 		g_mirrors.clear();
-		g_lamps.clear();
-		g_cubes.clear();
+		g_group_origin.clear();
 		g_votes.clear();
 		g_page_gloss.clear();
 		g_gloss_pages.clear();
@@ -3261,7 +3273,8 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 
 	/* bshader.bat compiles three pixel shaders for ps_3_0, the room shader at
 	 * 476 instruction slots, the model shader at 353 and the glow shader at
-	 * 479. The ps_3_0 figure is
+	 * 479, and the room shader's gloss variant beside them at 436
+	 * (hd_room_gloss_ps.inc). The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
 	 * does not hold a ps_3_0 shader to 512: a 24-bulb room shader compiles
@@ -3701,48 +3714,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		return false;
 	}
 
-	/* What the sheen is lit with - see g_lamps. The lamps need the room's
-	 * origin to be made room local, the cubes need the floor squares to be
-	 * found by; both come from HDRenderSetSectors. */
-	g_lamps.assign(trg.groups.size(), std::vector<HDSheenLamp>());
-	g_cubes.clear();
-	g_lamp_count = 0;
-	g_cube_count = 0;
+	/* What the sheen is lit with - see g_field_dir. The field needs the
+	 * rooms' origins to put the rooms' own coordinates into the world and
+	 * the rooms' boxes to know where to lie; both are handed in before the
+	 * build (HDRenderSetSectors, HDRenderSetRoomBoxes). */
+	BuildField(trg);
 
-	for (size_t g = 0; g < trg.groups.size() && (int)g < g_grid_count; g++)
-	{
-		const trf::remaster::TrgGroup& source = trg.groups[g];
-
-		for (size_t i = 0; i < source.volumes.size(); i++)
-		{
-			const trf::remaster::TrgGroup::PointLight light = source.light(i);
-			HDSheenLamp lamp;
-
-			lamp.pos[0] = light.x - g_grids[g].originX;
-			lamp.pos[1] = light.y;
-			lamp.pos[2] = light.z - g_grids[g].originZ;
-			lamp.rgb[0] = light.r * HD_GLOSS_LAMP_SCALE;
-			lamp.rgb[1] = light.g * HD_GLOSS_LAMP_SCALE;
-			lamp.rgb[2] = light.b * HD_GLOSS_LAMP_SCALE;
-
-			if (!(lamp.rgb[0] > 0.0f || lamp.rgb[1] > 0.0f || lamp.rgb[2] > 0.0f))
-				continue;
-
-			g_lamps[g].push_back(lamp);
-			g_lamp_count++;
-		}
-	}
-
-	if (g_sector_count > 0 && (size_t)g_sector_count == trg.light_cubes.size())
-	{
-		g_cubes = trg.light_cubes;
-		g_cube_count = (int)g_cubes.size();
-	}
-
-	HDGlossSunToward(trg.sun_direction, g_sun_toward);
-
-	for (int c = 0; c < 3; c++)
-		g_sun_rgb[c] = trg.sun_colour[c] > 0.0f ? trg.sun_colour[c] : 0.0f;
+	g_cube_count = g_sector_count > 0 && (size_t)g_sector_count == trg.light_cubes.size()
+		? (int)trg.light_cubes.size() : 0;
 
 	/* Which surfaces shine: the override file and the seed, before the
 	 * build asks for a page's answer (PageGloss). */
@@ -5553,7 +5532,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	FindMirrors(trg);
 
 	// And the sheen of every draw call - see ResolveSheen.
-	ResolveSheen(trg, sorted);
+	ResolveSheen();
 
 	/* --- the vertex window of every draw call ---------------------------
 	 *
@@ -5891,6 +5870,15 @@ void HDRenderStateSave()
 	for (int i = 0; i < kSamplerStateCount; i++)
 		g_device->GetSamplerState(0, kSavedSamplerStates[i], &g_saved.samp[i]);
 
+	for (int s = 0; s < 2; s++)
+	{
+		g_device->GetTexture((DWORD)(1 + s), &g_saved.fieldTexture[s]);
+
+		for (int i = 0; i < kSamplerStateCount; i++)
+			g_device->GetSamplerState((DWORD)(1 + s), kSavedSamplerStates[i],
+				&g_saved.fieldSamp[s][i]);
+	}
+
 	/* The scissor rectangle beside D3DRS_SCISSORTESTENABLE, which is
 	 * two lines above in the render state list. Read back like everything
 	 * else - the classic path never sets it, so what comes back is the
@@ -5937,6 +5925,20 @@ void HDRenderStateSave()
 	g_device->SetSamplerState(0, D3DSAMP_MAXMIPLEVEL, 0);
 	g_device->SetSamplerState(0, D3DSAMP_MIPMAPLODBIAS, 0);
 	g_device->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, FALSE);
+
+	/* The light field's samplers: linear, no mips (the field has one
+	 * level), clamped at the field's edges. Their textures are bound by the
+	 * room bracket (HDRenderFrameBegin) and put back with the states. */
+	for (DWORD s = 1; s <= 2; s++)
+	{
+		g_device->SetSamplerState(s, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		g_device->SetSamplerState(s, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		g_device->SetSamplerState(s, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+		g_device->SetSamplerState(s, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(s, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(s, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(s, D3DSAMP_SRGBTEXTURE, FALSE);
+	}
 }
 
 void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
@@ -5965,13 +5967,16 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	HDRenderStateSave();
 
 	/* The room path's own buffers and shaders. Everything above is shared
-	 * with hd_model.cpp; these five lines are what makes the bracket a room
-	 * bracket, and hd_model sets its own in their place. */
+	 * with hd_model.cpp; the lines below are what makes the bracket a room
+	 * bracket, and hd_model sets its own shaders and buffers in their place. */
 	g_device->SetVertexShader(g_vs);
 	g_device->SetPixelShader(g_ps);
 	g_device->SetVertexDeclaration(g_decl);
 	g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
 	g_device->SetIndices(g_ib);
+	// The light field, which the gloss variant alone samples.
+	g_device->SetTexture(1, g_field_dir);
+	g_device->SetTexture(2, g_field_rgb);
 
 	/* The lighting constants. They are set here, inside the bracket, and
 	 * nowhere else: with hd_enable off this function is not reached and not
@@ -6050,6 +6055,21 @@ void HDRenderStateRestore()
 	for (int i = 0; i < kSamplerStateCount; i++)
 		g_device->SetSamplerState(0, kSavedSamplerStates[i], g_saved.samp[i]);
 
+	for (int s = 0; s < 2; s++)
+	{
+		for (int i = 0; i < kSamplerStateCount; i++)
+			g_device->SetSamplerState((DWORD)(1 + s), kSavedSamplerStates[i],
+				g_saved.fieldSamp[s][i]);
+
+		g_device->SetTexture((DWORD)(1 + s), g_saved.fieldTexture[s]);
+
+		if (g_saved.fieldTexture[s])
+		{
+			g_saved.fieldTexture[s]->Release();
+			g_saved.fieldTexture[s] = 0;
+		}
+	}
+
 	g_device->SetTexture(0, g_saved.texture);
 	g_device->SetIndices(g_saved.indices);
 
@@ -6100,80 +6120,54 @@ bool HDRenderInFrame()
 
 namespace
 {
-	/* The lamps and the light cube of one glossy draw call: gGlossCube
-	 * (c80 - c85), gGlossAxes (c86 - c88) and gGlossLights (c89 - c96), see
-	 * "The sheen" in hd_room.hlsl. The shader works in view space, where the
-	 * normal and the surface point already are, so the lamps go there through
-	 * the room's world-view matrix (prepare(), g_room_wv; a D3DMATRIX, row
-	 * vectors on the left), the sun's direction through its rotation, and the
-	 * three rows of that rotation - the images of the room's axes - go up as
-	 * gGlossAxes, which turn a view-space reflection back into the cube's
-	 * world axes. Every register every time: a glossy draw call is one of a
-	 * few dozen in a frame, and 17 registers are nothing against a
-	 * constant that another room left behind. */
-	void upload_sheen_lights(const HDRange& range)
+	/* The two sets of rows the gloss variant reads its world out of (see
+	 * "The sheen" in hd_room.hlsl), once per room: gGlossAxes (c86 - c88),
+	 * which turn a view-space direction into world axes, and gGlossField
+	 * (c89 - c91), which turn a view-space position into the light field's
+	 * texture coordinate. `m` is the room's world-view matrix (a D3DMATRIX,
+	 * row vectors on the left: view = x * row 0 + y * row 1 + z * row 2 +
+	 * row 3), so the room's own coordinate along axis i is
+	 * (view - row 3) . row i / |row i|^2, and the world's is that plus the
+	 * group's origin. In the engine the matrix is the finished D3DMView and
+	 * the room's own coordinates are room local; in RoomProbe the matrix is
+	 * the tool's view of a room it draws at its own origin - both undo to the
+	 * group's own coordinates, and the origin kept from the build makes them
+	 * world. Every register every room: a constant another room left behind
+	 * would put the field somewhere else. Written while the plain variant is
+	 * on the device, which reads none of these registers. */
+	void upload_gloss_rows(int group, const float* m)
 	{
-		float regs[17 * 4] = { 0 };
-		const float* m = g_room_wv;
-
-		for (int f = 0; f < 6; f++)
-			for (int c = 0; c < 3; c++)
-				regs[f * 4 + c] = range.sheenCube[f][c];
+		float regs[6 * 4] = { 0 };
+		const float origin[3] =
+		{
+			(size_t)group * 2 + 1 < g_group_origin.size() ? g_group_origin[(size_t)group * 2] : 0.0f,
+			0.0f,
+			(size_t)group * 2 + 1 < g_group_origin.size() ? g_group_origin[(size_t)group * 2 + 1] : 0.0f
+		};
 
 		for (int i = 0; i < 3; i++)
 		{
-			const float len = sqrtf(m[i * 4 + 0] * m[i * 4 + 0] +
-				m[i * 4 + 1] * m[i * 4 + 1] + m[i * 4 + 2] * m[i * 4 + 2]);
+			const float* r = &m[i * 4];
+			const float len2 = r[0] * r[0] + r[1] * r[1] + r[2] * r[2];
 
-			for (int c = 0; c < 3 && len > 0.0f; c++)
-				regs[(6 + i) * 4 + c] = m[i * 4 + c] / len;
-		}
-
-		float* lamps = &regs[9 * 4];
-
-		for (int k = 0; k < HD_GLOSS_LAMPS; k++)
-		{
-			const float* p = range.sheenLamp[k];
-			const float* rgb = range.sheenLampRgb[k];
-
-			if (!(rgb[0] > 0.0f || rgb[1] > 0.0f || rgb[2] > 0.0f))
+			if (!(len2 > 0.0f))
 				continue;
+
+			const float len = sqrtf(len2);
+			const float side = (float)g_field_grid.dims[i] * HD_GLOSS_FIELD_CELL;
+			const float inv = g_field_dir && side > 0.0f ? 1.0f / side : 0.0f;
+			const float along = (m[12] * r[0] + m[13] * r[1] + m[14] * r[2]) / len2;
 
 			for (int c = 0; c < 3; c++)
 			{
-				lamps[k * 8 + c] = p[0] * m[0 * 4 + c] + p[1] * m[1 * 4 + c] +
-					p[2] * m[2 * 4 + c] + m[3 * 4 + c];
-				lamps[k * 8 + 4 + c] = rgb[c];
+				regs[i * 4 + c] = r[c] / len;
+				regs[(3 + i) * 4 + c] = r[c] / len2 * inv;
 			}
 
-			lamps[k * 8 + 3] = 1.0f;
-			lamps[k * 8 + 7] = 1.0f / (HD_GLOSS_LAMP_REACH * HD_GLOSS_LAMP_REACH);
+			regs[(3 + i) * 4 + 3] = (origin[i] - along - g_field_grid.origin[i]) * inv;
 		}
 
-		/* The sun in the last slot: a direction (w 0) and no reach. */
-		if (range.sheenSun > 0.0f)
-		{
-			const int k = HD_GLOSS_LAMPS - 1;
-			float d[3];
-
-			for (int c = 0; c < 3; c++)
-				d[c] = g_sun_toward[0] * m[0 * 4 + c] + g_sun_toward[1] * m[1 * 4 + c] +
-					g_sun_toward[2] * m[2 * 4 + c];
-
-			const float len = sqrtf(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
-
-			if (len > 0.0f)
-				for (int c = 0; c < 3; c++)
-				{
-					lamps[k * 8 + c] = d[c] / len;
-					lamps[k * 8 + 4 + c] = g_sun_rgb[c] * range.sheenSun;
-				}
-
-			lamps[k * 8 + 3] = 0.0f;
-			lamps[k * 8 + 7] = 0.0f;
-		}
-
-		g_device->SetPixelShaderConstantF(80, regs, 17);
+		g_device->SetPixelShaderConstantF(86, regs, 6);
 	}
 
 	/* `blendOnly`: the alpha pass is drawn twice in a frame, once for its
@@ -6495,18 +6489,17 @@ namespace
 			 * off no draw call takes it and every draw call is drawn as it
 			 * always was.
 			 *
-			 * The order of the switch is the point. Each variant keeps
-			 * literals of its own in registers the other names (fxc's `def`
-			 * constants: the gloss variant in c10 and c18, which the plain
-			 * variant reads as gRoomOrigin and gAdd), and a constant written
-			 * while a shader is on the device lands on that shader's literal.
-			 * So no register the gloss variant keeps a literal in is written
-			 * while it is on the device: leaving it happens here, before a
-			 * plain draw call's writes; entering it happens after a glossy
-			 * one's, right before the draw; between two glossy draw calls
-			 * only the variant's own registers change (c4, c19, c36 and c80
-			 * to c96); and the pass ends on the plain variant, so the next
-			 * room's lighting is written with the plain variant on. */
+			 * The order of the switch. Each variant keeps literals of its own
+			 * (fxc's `def` constants) in registers the other names, and a
+			 * `def` literal is local to its shader in Direct3D 9: it applies
+			 * while that shader is bound, and a value written through
+			 * SetPixelShaderConstantF stays in the register for the other.
+			 * The switch keeps an order anyway, as a precaution:
+			 * leaving the variant happens here, before a plain draw call's
+			 * writes; entering it happens after a glossy one's, right before
+			 * the draw; between two glossy draw calls only c4, c19 and c36
+			 * change; and the pass ends on the plain variant, so the next
+			 * room's constants are written with the plain variant on. */
 			const bool want_sheen = range.sheen > 0.0f && g_gloss_ps &&
 				g_reflect != 0.0f && !blendOnly && !sky && !additive_pass;
 
@@ -6586,14 +6579,16 @@ namespace
 			if (want_sheen)
 				g_sheen_calls++;
 
-			/* gGloss, in gRipple's register: F0, how far the reflection
-			 * takes the texel's colour, and whether the page's alpha masks
-			 * the sheen. The plain draw call after it writes its ripple
-			 * back. */
+			/* gGloss, in gRipple's register: F0, how far the sheen takes the
+			 * texel's colour, whether the page's alpha masks the sheen, and
+			 * RoomProbe's -glossfield picture (0 in the engine). The plain
+			 * draw call after it writes its ripple back. Nothing else is
+			 * written per glossy draw call: the light comes out of the field,
+			 * per pixel, and the rows that find it went up with the room. */
 			if (want_sheen)
 			{
 				const float want[4] = { range.sheenF0, range.sheenTint,
-					range.sheenMask, 0.0f };
+					range.sheenMask, (float)g_field_view };
 
 				if (sheen_dirty || memcmp(want, sheen, sizeof(sheen)) != 0)
 				{
@@ -6603,7 +6598,6 @@ namespace
 				}
 
 				ripple_dirty = true;
-				upload_sheen_lights(range);
 			}
 
 			const float want_weight = additive_pass ? range.addWeight : 1.0f;
@@ -6809,8 +6803,7 @@ namespace
 		multiply(row, g_viewproj, wvp);
 		set_matrix_constant(0, wvp);
 		set_worldview_constant(worldview);
-		// And for the lamps of this room's glossy draw calls.
-		std::memcpy(g_room_wv, worldview, sizeof(g_room_wv));
+		upload_gloss_rows(group, worldview);
 		apply_room_lighting(lighting);
 
 		/* c15, the shore box of this room - where the
@@ -7140,6 +7133,31 @@ void HDRenderGlossLevelInfo(HDRenderGlossLevel* out)
 	out->cubes = g_cube_count;
 	out->pages = (int)pages.size();
 	out->draws = g_sheen_ranges;
+
+	for (int axis = 0; axis < 3; axis++)
+		out->fieldDims[axis] = g_field_dir ? g_field_grid.dims[axis] : 0;
+
+	out->fieldLit = g_field_dir ? g_field_stats.lit : 0;
+	out->fieldWeak = g_field_dir ? g_field_stats.weak : 0;
+	out->fieldBytes = g_field_bytes;
+	out->fieldMs = g_field_ms;
+}
+
+void HDRenderGlossFieldView(int mode)
+{
+	g_field_view = mode == 1 || mode == 2 ? mode : 0;
+}
+
+void HDRenderGlossFieldSight(const unsigned char* nearby, int rooms)
+{
+	g_field_near.clear();
+	g_field_near_rooms = 0;
+
+	if (!nearby || rooms <= 0)
+		return;
+
+	g_field_near.assign(nearby, nearby + (size_t)rooms * (size_t)rooms);
+	g_field_near_rooms = rooms;
 }
 
 int HDRenderGlossPageCount()

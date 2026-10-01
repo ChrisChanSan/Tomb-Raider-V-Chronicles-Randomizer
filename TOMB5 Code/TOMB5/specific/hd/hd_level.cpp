@@ -3583,8 +3583,12 @@ static void HDLevelBuildHD()
 	/* GLOSSLOG, with -log: which surfaces shine and why. One level line -
 	 * the table's lines, the override file's pages (none when there is no
 	 * hd_gloss.txt) and its unreadable lines, the parts each source named,
-	 * the lamps and light cubes kept - and one line per page and source that
-	 * shines, with the numbers the gloss variant draws it with. */
+	 * the lamps that went into the light field and the light cubes the .TRG
+	 * holds for the floor squares, and the light field itself: its cells
+	 * along x, y and z (0x0x0 when the level has none), the cells a lamp
+	 * reaches, the weak ones between lamps, its textures' kilobytes and the
+	 * build's milliseconds. And one line per page and source that shines,
+	 * with the numbers the gloss variant draws it with. */
 	if (gLogEnabled)
 	{
 		char file[16];
@@ -3595,10 +3599,13 @@ static void HDLevelBuildHD()
 			strcpy(file, "none");
 
 		Log("GLOSSLOG level=%s table=%d file=%s bad=%d parts_mat=%d "
-			"parts_seed=%d parts_table=%d lights=%d cubes=%d parts_file=%d",
+			"parts_seed=%d parts_table=%d lights=%d cubes=%d parts_file=%d "
+			"field=%dx%dx%d field_lit=%d field_weak=%d field_kb=%d field_ms=%.1f",
 			g_stem, gloss.tableLines, file, gloss.fileBad, gloss.partsMat,
 			gloss.partsSeed, gloss.partsTable, gloss.lamps, gloss.cubes,
-			gloss.partsFile);
+			gloss.partsFile, gloss.fieldDims[0], gloss.fieldDims[1],
+			gloss.fieldDims[2], gloss.fieldLit, gloss.fieldWeak,
+			gloss.fieldBytes / 1024, gloss.fieldMs);
 
 		for (int i = 0; i < HDRenderGlossPageCount(); i++)
 		{

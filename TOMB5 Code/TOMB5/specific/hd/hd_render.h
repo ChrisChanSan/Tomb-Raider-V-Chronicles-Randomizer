@@ -1087,9 +1087,14 @@ int HDRenderSheenCalls();
  * After a build, HDRenderGlossLevelInfo says what the build made of it:
  * the table's lines, the file's pages (-1 when there was no file) and its
  * bad lines, the parts each source named (a part counts under every source
- * that names one of its pages), the lamps and cubes kept, the pages that
- * shine and the draw calls that take the gloss variant. One
- * HDRenderGlossPage per page and source that shines, with its triangles. */
+ * that names one of its pages), the lamps that went into the light field and
+ * the light cubes the .TRG holds for the floor squares (0 where their count
+ * is not the squares'), the pages that shine and the draw calls that take
+ * the gloss variant; the light field (hd_gloss_field.h) - its cells along x,
+ * y and z (all 0 when the level has none), the cells a lamp reaches, the
+ * weak ones, the bytes of its two textures and the build's time in
+ * milliseconds. One HDRenderGlossPage per page and source that shines, with
+ * its triangles. */
 struct HDRenderGlossLevel
 {
 	int tableLines;
@@ -1103,6 +1108,11 @@ struct HDRenderGlossLevel
 	int cubes;
 	int pages;
 	int draws;
+	int fieldDims[3];
+	int fieldLit;
+	int fieldWeak;
+	int fieldBytes;
+	float fieldMs;
 };
 
 struct HDRenderGlossPage
@@ -1122,6 +1132,17 @@ void HDRenderGlossFile(const char* path);
  * does not - the upper bound of the sheen, for RoomProbe's -glossmax. 0 by
  * default and in the engine always. Read at the next build. */
 void HDRenderGlossOverride(int max);
+/* RoomProbe's -glossfield picture: every draw call on the gloss variant
+ * draws the light field in place of its surface - 1 its colour times its
+ * one-sidedness, 2 its direction biased into a colour - and 0 the surface,
+ * which is what the engine always draws. Takes effect at the next frame. */
+void HDRenderGlossFieldView(int mode);
+/* RoomProbe's -fieldsight: the next build's light field takes the sight test
+ * by the rooms (hd_gloss_field.h, HDGlossFieldSight) - a lamp lights a cell
+ * only where a room holding the cell is `nearby` the lamp's room, `nearby` a
+ * rooms x rooms table as that struct reads it. Null, which is what the engine
+ * always uses, builds the field without the test. */
+void HDRenderGlossFieldSight(const unsigned char* nearby, int rooms);
 void HDRenderGlossLevelInfo(HDRenderGlossLevel* out);
 int HDRenderGlossPageCount();
 bool HDRenderGlossPageInfo(int at, HDRenderGlossPage* out);

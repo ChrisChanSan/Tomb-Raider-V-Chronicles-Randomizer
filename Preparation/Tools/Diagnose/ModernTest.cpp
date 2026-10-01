@@ -60,8 +60,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pageclass.h"
 #include "../../../TOMB5 Code/TOMB5/game/mirror_math.h"
 /* The sheen's arithmetic and its page table - pure again: which surfaces
- * shine, the override file's reader, the ambient cube and the lamp ranking
- * (gloss_* below). */
+ * shine and the override file's reader (gloss_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_pages.h"
 
 static int g_fail = 0;
@@ -10630,102 +10629,6 @@ static void gloss_parser()
 	ok(!none.present && none.entries.empty(), "gloss parser: no text is no file", 0, 0);
 }
 
-// The ambient cube's weights.
-static void gloss_cube()
-{
-	int wrong = 0, tested = 0;
-
-	for (int i = -4; i <= 4; i++)
-		for (int j = -4; j <= 4; j++)
-			for (int k = -4; k <= 4; k++)
-			{
-				const float d[3] = { (float)i + 0.3f, (float)j - 0.2f, (float)k + 0.1f };
-				float w[6];
-
-				if (!HDGlossCubeWeights(d, w))
-					continue;
-
-				double sum = 0.0;
-
-				for (int f = 0; f < 6; f++)
-					sum += w[f];
-
-				// Opposite faces never both carry weight.
-				if (fabs(sum - 1.0) > 1e-5 || (w[0] > 0 && w[1] > 0) || (w[2] > 0 && w[3] > 0) ||
-					(w[4] > 0 && w[5] > 0))
-					wrong++;
-
-				tested++;
-			}
-
-	ok(wrong == 0 && tested == 729, "gloss cube: the weights sum to one on 729 directions",
-		wrong, 0);
-
-	/* The faces in the file's order: +x, -x, up (-y), down (+y), +z, -z. */
-	const float axes[6][3] =
-	{
-		{ 2, 0, 0 }, { -2, 0, 0 }, { 0, -2, 0 }, { 0, 2, 0 }, { 0, 0, 2 }, { 0, 0, -2 }
-	};
-	int picked = 0;
-
-	for (int f = 0; f < 6; f++)
-	{
-		float w[6];
-
-		HDGlossCubeWeights(axes[f], w);
-
-		bool one = w[f] == 1.0f;
-
-		for (int o = 0; o < 6; o++)
-			if (o != f && w[o] != 0.0f)
-				one = false;
-
-		picked += one ? 1 : 0;
-	}
-
-	ok(picked == 6, "gloss cube: an axis-aligned direction picks exactly its one face", picked, 6);
-
-	float w[6];
-	const float zero[3] = { 0, 0, 0 };
-
-	ok(!HDGlossCubeWeights(zero, w) && w[0] == 0.0f,
-		"gloss cube: a zero direction weighs nothing", 0, 0);
-
-	// A sample halfway between up and +x takes half of each face's colour.
-	const float faces[6][3] =
-	{
-		{ 1, 0, 0 }, { 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }
-	};
-	const float diag[3] = { 1, -1, 0 };
-	float rgb[3];
-
-	HDGlossCubeSample(faces, diag, rgb);
-	ok(fabs(rgb[0] - 0.5f) < 1e-5 && fabs(rgb[1] - 0.5f) < 1e-5 && rgb[2] == 0.0f,
-		"gloss cube: halfway between up and +x is half of each", (long)(rgb[0] * 100), 50);
-
-	// The sun: towards it is the file's vector with x and z turned round,
-	// and a cube dark towards it sees little of it.
-	const float file[3] = { 0.08f, -0.60f, 0.79f };
-	float toward[3];
-
-	HDGlossSunToward(file, toward);
-	ok(toward[0] == -0.08f && toward[1] == -0.60f && toward[2] == -0.79f,
-		"gloss cube: the direction towards the sun", (long)(toward[2] * 100), -79);
-
-	const float up_bright[6][3] =
-	{
-		{ 0.1f, 0.1f, 0.1f }, { 0.1f, 0.1f, 0.1f }, { 0.5f, 0.5f, 0.5f },
-		{ 0.02f, 0.02f, 0.02f }, { 0.1f, 0.1f, 0.1f }, { 0.1f, 0.1f, 0.1f }
-	};
-	const float straight_up[3] = { 0, -1, 0 };
-	const float straight_down[3] = { 0, 1, 0 };
-
-	ok(HDGlossSunSeen(up_bright, straight_up) == 1.0f &&
-		fabs(HDGlossSunSeen(up_bright, straight_down) - 0.06f) < 1e-5,
-		"gloss cube: the sun's share is the cube towards it at the gain, clamped",
-		(long)(HDGlossSunSeen(up_bright, straight_down) * 100), 6);
-}
-
 // The class defaults, the footstep materials and the base material.
 static void gloss_class()
 {
@@ -10788,7 +10691,7 @@ static void gloss_class()
 		"gloss class: the page table is sorted, unique and keeps out of the lobby", bad_lines, 0);
 }
 
-// The seed and the lamps.
+// The seed.
 static void gloss_seed()
 {
 	int fx[16] = { 0 };
@@ -10852,29 +10755,6 @@ static void gloss_seed()
 	ok(HDGlossSectorAt(grid, 1500.0f, 500.0f) == 2 && HDGlossSectorAt(grid, -1.0f, 0.0f) == -1 &&
 		HDGlossSectorAt(grid, 2048.0f, 0.0f) == -1, "gloss seed: the square under a point",
 		HDGlossSectorAt(grid, 1500.0f, 500.0f), 2);
-
-	// The lamps nearest a box.
-	const float mins[3] = { 0, 0, 0 }, maxs[3] = { 100, 100, 100 };
-	const float lamps[] =
-	{
-		200, 50, 50,		// 0: 100 away
-		50, 50, 50,		// 1: inside
-		-300, 50, 50,		// 2: 300 away
-		50, 50, 150,		// 3: 50 away
-		50, 50, -50		// 4: 50 away, a tie with 3
-	};
-	int order[4] = { -1, -1, -1, -1 };
-	const int n = HDGlossRankLights(lamps, 5, mins, maxs, order, 4);
-
-	ok(n == 4 && order[0] == 1 && order[1] == 3 && order[2] == 4 && order[3] == 0,
-		"gloss lamps: nearest to the box first, a tie in the file's order",
-		order[0] * 1000 + order[1] * 100 + order[2] * 10 + order[3], 1340);
-
-	const int one = HDGlossRankLights(lamps, 5, mins, maxs, order, 1);
-
-	ok(one == 1 && order[0] == 1, "gloss lamps: one slot takes the nearest", order[0], 1);
-	ok(HDGlossRankLights(lamps, 0, mins, maxs, order, 4) == 0, "gloss lamps: no lamp, no slot",
-		0, 0);
 }
 
 int main()
@@ -10938,7 +10818,6 @@ int main()
 	mirror_clip();
 	gloss_order();
 	gloss_parser();
-	gloss_cube();
 	gloss_class();
 	gloss_seed();
 

@@ -8212,10 +8212,18 @@ body-still frame and the sound pan follow first person, while the frames that ca
 show the head - a flicker at a frame rate of 60 and above, read from the code and not
 measured. A cutscene that starts while a tracking sequence holds the view runs with
 `bTrackCamInit` still set, since its branch of `ControlPhase` calls `CalculateCamera`
-without clearing it; no such case is known, and it is not judged here.
+without clearing it; no such case is known. Read from the code, nothing differs while the
+cutscene runs: the flyby term reads held at both ends of every blend where it read not
+held at both, the drawn-eye rule is off for a cutscene either way, the roll is the
+camera's own because `FirstPersonActive` refuses a cutscene, and the cutscene's start and
+its end invalidate the interpolator (`game/cutseq_interp.cpp`). The one difference comes
+after it: where she then stands off the sequence's tiles, the first tick clears
+`bTrackCamInit` and counts one flyby cut, so that tick is drawn at the tick's state, at a
+moment the camera changes its type anyway.
 
 **Commits.** 'Round 191b (#191): a level camera that tracks Lara is no camera cut on every
-tick', 'Round 191b (#191): the suites', 'Round 191b (#191): the record follows'.
+tick', 'Round 191b (#191): the suites', 'Round 191b (#191): the record follows', 'Round
+191b (#191): what review pass 1 found'.
 
 ### Particles on the same time axis
 2026-09-07
@@ -9450,7 +9458,7 @@ the bound together, the cut is taken first and the seat is on that tick's new ca
 prints `latch_drop=` last on the `MODERNLOG` tick line (`:707`, `:717`, legend `:674`).
 The comments that stated the old rule - the latch's switch and field
 (`game/modern_move.h`), step 2b and the table of the held course
-(`game/modern_move.cpp:1417`-`1422`), the `latch=` legend
+(`game/modern_move.cpp:1417`-`1423`), the `latch=` legend
 (`game/modern_state.cpp:662`-`664`) - now state the new one. Tests: `camera_cut_reaim()`
 (`Preparation/Tools/Diagnose/ModernTest.cpp:6841`, run after `camera_cut_latch()`) with
 `reaim_sit`, `reaim_arm` and `reaim_pair` (`:6760`, `:6774`, `:6790`), 30 checks: the
@@ -9484,8 +9492,11 @@ latch stands on 308 ticks instead of 2283; `latch_drop` would have been 1 on 16 
 3859), one in each of the 11 holds and five more where a later cut armed the latch again.
 That is an open-loop count: from the first drop on, her course, and with it the camera,
 would have run differently, and the log's headings are replayed as they were. In the
-earlier log the ticks under the level camera more than 8192 off fall from 650 to 109. Not
-measured: the game.
+earlier log the ticks under the level camera more than 8192 off fall from 650 to 109. The
+rich2 log through the sniper camera on which the latch was measured, 2626 ticks, still
+gives its 1495 latched ticks with the translation of the commit before; with this change
+it gives 20 drops, the latch on 840 ticks, and 750 stick-out ticks more than 8192 off the
+view instead of 1046. Not measured: the game.
 
 **Unchanged.** Tank: `ModernUpdateInput` runs only behind `modern_seam`
 (`specific/input.cpp:1397`, `:1554`), which needs `tomb5.control_modern`. The latch's
@@ -9513,16 +9524,30 @@ to 16 ticks, and the course is then seated on the orbit's dialled angle, which o
 tick lay 531 to 5347 units from the picture, the eye still walking back to the dialled
 ray; the stick-out ticks more than 8192 off in those holds fall from 105 to 17. After a
 corridor exit the drop seats on the orbit's angle as well, which the orbit kept from
-before the entry while its eye swings back from the X-ray view: in the earlier log one
-drop came 10 ticks after an exit with the frame 18901 units off. Seating the orbit on the
-level camera's last view when it hands the view back is not part of this. A stick that
-never turns 45 degrees from its direction at the cut is held until it is let go, as
-before. The limits named in *At a diagonal wall the stick is read in the view on screen*
-(a stick pushed fresh while the eye walks back to the dialled ray, a short gap inside a
-pinned episode) and the flyby skipper are unchanged.
+before the entry while its eye swings back from the X-ray view. Where the stick was let go
+and pushed again inside the corridor and is then held through the exit, the held frame is
+the X-ray view's, nearer the picture of the first ticks after the exit than the orbit's
+angle is: in the earlier log the drop 10 ticks after one exit (f=3192) takes the frame
+from 3893 units off the picture to 18901 off, and her course turns 21111 units on a stick
+step of 1683 units; the picture then closes on the orbit's angle, to about 7000 units
+within 15 ticks, where the held frame would have been 14585 off. Three of the drops after
+a push's end seat a little further off than the held frame was as well (f=701, from 1094
+to 2787 units; f=1219, from 385 to 1012; f=1970, from 279 to 531), each adding 810 to 1861
+units of course beyond the stick's own step. Under the sniper camera a turn past 45
+degrees reads the held stick in the sniper's view from that tick on, and the course she is
+steered to can swing by up to half a turn at once: at seven of the 20 drops of the sniper
+log it turns 20890 to 31770 units on one tick (f=351, 1884, 2175, 2231, 2392, 2455 and
+2583), each bringing the frame from 13000 to 30000 units off the view to within 2000; four
+drops move the reference by 157 to 257 units only. Seating the orbit on the level camera's
+last view when it hands the view back is not part of this. A stick that never turns 45
+degrees from its direction at the cut is held until it is let go, as before. The limits
+named in *At a diagonal wall the stick is read in the view on screen* (a stick pushed
+fresh while the eye walks back to the dialled ray, a short gap inside a pinned episode)
+and the flyby skipper are unchanged.
 
 **Commits.** 'Round 191b (#191): a re-aim past 45 degrees also ends the cut latch', 'Round
-191b (#191): the suites', 'Round 191b (#191): the record follows'.
+191b (#191): the suites', 'Round 191b (#191): the record follows', 'Round 191b (#191):
+what review pass 1 found'.
 
 ### The pad: radial dead zones, a second binding set and a Modifier for chords
 2026-09-18 - 2026-09-20

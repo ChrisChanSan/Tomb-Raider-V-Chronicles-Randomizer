@@ -1159,17 +1159,24 @@ static void level_camera()
 	LevelCamCount now, old;
 	static int at[3 * 400];
 	static int atOld[3 * 400];
+	long spot;
 
 	printf("a level camera that tracks Lara: one cut in, one cut out\n");
 
 	/* The predicate itself. */
-	ok(!InterpLevelCamHolds(0, 0), "no flyby, no tracking camera: nothing holds the view", 0, 0);
-	ok(InterpLevelCamHolds(1, 0), "a flyby holds the view", 1, 1);
-	ok(InterpLevelCamHolds(0, 1), "a tracking sequence between its ticks holds it as well", 1, 1);
-	ok(InterpLevelCamHolds(1, 1), "and on its ticks", 1, 1);
-	ok(InterpSpotCut(false, true) && InterpSpotCut(true, false) &&
-		!InterpSpotCut(true, true) && !InterpSpotCut(false, false),
-		"the flyby term cuts on a change and on nothing else", 1, 1);
+	ok(!InterpLevelCamHolds(0, 0), "no flyby, no tracking camera: nothing holds the view",
+		(long)InterpLevelCamHolds(0, 0), 0);
+	ok(InterpLevelCamHolds(1, 0), "a flyby holds the view", (long)InterpLevelCamHolds(1, 0), 1);
+	ok(InterpLevelCamHolds(0, 1), "a tracking sequence between its ticks holds it as well",
+		(long)InterpLevelCamHolds(0, 1), 1);
+	ok(InterpLevelCamHolds(1, 1), "and on its ticks", (long)InterpLevelCamHolds(1, 1), 1);
+
+	/* The four answers of the flyby term as one number, so a failure names
+	 * the pair that went wrong: bit 0 into a flyby, bit 1 out of one, bit 2
+	 * inside one, bit 3 outside. */
+	spot = (InterpSpotCut(false, true) ? 1 : 0) | (InterpSpotCut(true, false) ? 2 : 0) |
+		(InterpSpotCut(true, true) ? 4 : 0) | (InterpSpotCut(false, false) ? 8 : 0);
+	ok(spot == 3, "the flyby term cuts on a change and on nothing else", spot, 3);
 
 	/* The corridor: 30 ticks before, 120 on the tiles (ticks 30 to 149), 30
 	 * after; tick 150 is the first off them. */

@@ -6886,7 +6886,7 @@ static void camera_cut_reaim()
 		"...course, reference and latch as a fresh push of that stick leaves them",
 		state.course, fresh.course);
 	ok(out.reference == cam1 && out.active == 1 && out.bits != 0,
-		"...seated on the camera of the tick, and she keeps moving", out.active, 1);
+		"...seated on the camera of the tick, and she keeps moving", out.reference, cam1);
 
 	/* (i) A slow roll, 200 units a tick, every step far under recenter: the
 	 * hold ends on the first tick its sum passes the bound from the arming

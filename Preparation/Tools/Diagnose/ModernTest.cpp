@@ -10963,7 +10963,7 @@ static void gloss_field_build()
 // The bound: the sheen never above its named limit, whatever goes in.
 static void gloss_field_bound()
 {
-	int over = 0, hue = 0, small = 0, white = 0, tested = 0;
+	int over = 0, hue = 0, small = 0, white = 0, capped = 0, tested = 0;
 
 	for (int i = 0; i <= 20; i++)
 		for (int j = 0; j <= 20; j++)
@@ -10979,7 +10979,7 @@ static void gloss_field_bound()
 				HDGlossSheenBound(sheen, own, bounded);
 				HDGlossSheenCompose(own, bounded, composed);
 
-				const float limit = HD_GLOSS_BOUND * lit + HD_GLOSS_FLOOR;
+				const float limit = fminf(HD_GLOSS_BOUND * lit + HD_GLOSS_FLOOR, HD_GLOSS_CAP);
 				const float top = fmaxf(bounded[0], fmaxf(bounded[1], bounded[2]));
 
 				over += top > limit * (1.0f + 1e-5f) ? 1 : 0;
@@ -10993,6 +10993,9 @@ static void gloss_field_bound()
 					// Past white only where the surface is white already.
 					if (lit < 1.0f - HD_GLOSS_FLOOR)
 						white += composed[c] > 1.0f + 1e-6f ? 1 : 0;
+
+					// And short of white by the cap: a quarter of the way stays.
+					capped += composed[c] > own[c] + HD_GLOSS_CAP * (1.0f - own[c]) + 1e-6f ? 1 : 0;
 				}
 
 				// A sheen far under the limit passes almost whole.
@@ -11003,11 +11006,13 @@ static void gloss_field_bound()
 			}
 
 	ok(over == 0 && tested == 1764, "gloss field bound: the sheen never passes HD_GLOSS_BOUND "
-		"times the surface's own light plus HD_GLOSS_FLOOR", over, 0);
+		"times the surface's own light plus HD_GLOSS_FLOOR, nor HD_GLOSS_CAP", over, 0);
 	ok(hue == 0, "gloss field bound: the bound scales the sheen whole and keeps its hue", hue, 0);
 	ok(small == 0, "gloss field bound: a sheen far under the bound passes within 2 per cent",
 		small, 0);
 	ok(white == 0, "gloss field bound: the screen never takes a channel past white", white, 0);
+	ok(capped == 0, "gloss field bound: the screen closes no more than HD_GLOSS_CAP of the "
+		"way to white", capped, 0);
 
 	// A dark surface stays dark: nothing on black but HD_GLOSS_FLOOR.
 	const float black[3] = { 0.0f, 0.0f, 0.0f };
@@ -11017,7 +11022,15 @@ static void gloss_field_bound()
 	HDGlossSheenBound(huge, black, kept);
 	ok(kept[0] <= HD_GLOSS_FLOOR && kept[0] > 0.0f,
 		"gloss field bound: a black surface takes no more than HD_GLOSS_FLOOR",
-		(long)(kept[0] * 255.0f + 0.5f), 4);
+		(long)(kept[0] * 255.0f + 0.5f), (long)(HD_GLOSS_FLOOR * 255.0f + 0.5f));
+
+	// And a bright one no more than the cap, whatever its own light allows.
+	const float bright[3] = { 0.9f, 0.9f, 0.9f };
+
+	HDGlossSheenBound(huge, bright, kept);
+	ok(kept[0] <= HD_GLOSS_CAP && kept[0] > 0.9f * HD_GLOSS_CAP,
+		"gloss field bound: a bright surface takes no more than HD_GLOSS_CAP",
+		(long)(kept[0] * 100.0f + 0.5f), (long)(HD_GLOSS_CAP * 100.0f + 0.5f));
 }
 
 int main()

@@ -554,12 +554,13 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *
  * The bound. The sum is held under HD_GLOSS_BOUND times the largest channel
  * of the surface's own lit colour (the texel times its light, after the fog
- * and the bulbs) plus HD_GLOSS_FLOOR - softly, B (1 - e^(-t / B)) for its
- * largest channel t, and the other two scaled with it so that it keeps its
- * hue: a dark surface stays dark, a lamp behind a wall cannot light a
- * surface the bake left dark, and Fresnel's rise at a grazing angle cannot
- * wash a wall seen along its length pale. And it is composed as a screen,
- * lit + sheen * (1 - lit), so nothing turns white that was not white before.
+ * and the bulbs) plus HD_GLOSS_FLOOR, and under HD_GLOSS_CAP whatever the
+ * surface - softly, B (1 - e^(-t / B)) for its largest channel t, and the
+ * other two scaled with it so that it keeps its hue: a surface the bake left
+ * dark stays dark, a lamp behind a wall cannot light it, and Fresnel's rise
+ * at a grazing angle cannot wash a wall seen along its length pale. And it
+ * is composed as a screen, lit + sheen * (1 - lit), which with the cap below
+ * one leaves every surface short of white that was not white before.
  *
  * The sum is ADDED to the surface's own lit colour (as that screen), never
  * blended over it: the surface keeps its picture to the bit wherever the
@@ -583,14 +584,21 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *              off and the field's size divided out.
  *
  * The numbers are chosen, not measured, against RoomProbe's pictures of
- * JOBY2, ANDREA1 and RICH1: the highlight at twice the field's colour - the
- * field is bounded below one and the lobe carries no (n + 8) / 8 of its own,
- * the bound holds the peak - the environment at a quarter of the surface's
- * light, and the bound at the surface's own lit colour plus 4 of 255. */
-#define HD_GLOSS_HIGHLIGHT 2.0f
-#define HD_GLOSS_ENV       0.25f
-#define HD_GLOSS_BOUND     1.0f
-#define HD_GLOSS_FLOOR     (4.0f / 255.0f)
+ * JOBY2, ANDREA1 and RICH1: the highlight at six times the field's colour -
+ * the field is bounded below one and the lobe carries no (n + 8) / 8 of its
+ * own, the bound holds the peak - the environment at 0.35 of the surface's
+ * light, and the bound at two and a half times the surface's own lit colour
+ * plus 8 of 255, never above three quarters. A highlight at twice the
+ * field's colour under a bound of the surface's own lit colour is hardly
+ * seen on a dark steel floor - it adds 23 of 255 at its brightest place in
+ * JOBY2 room 90, and 60 with these numbers; the environment is kept low
+ * because it lifts a whole surface evenly, which reads as a paler picture
+ * and not as a shine. */
+#define HD_GLOSS_HIGHLIGHT 6.0f
+#define HD_GLOSS_ENV       0.35f
+#define HD_GLOSS_BOUND     2.5f
+#define HD_GLOSS_FLOOR     (8.0f / 255.0f)
+#define HD_GLOSS_CAP       0.75f
 
 float4 gGloss : register(c36);
 float4 gGlossAxes[3] : register(c86);
@@ -1047,7 +1055,8 @@ float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float3 own, float da
 	/* The bound - see "The sheen" above: the brightest channel t goes to
 	 * B (1 - e^(-t / B)), which follows t where it is small and never
 	 * reaches B, and the other two follow it in proportion. */
-	const float bound = HD_GLOSS_BOUND * max(own.r, max(own.g, own.b)) + HD_GLOSS_FLOOR;
+	const float bound = min(HD_GLOSS_BOUND * max(own.r, max(own.g, own.b)) + HD_GLOSS_FLOOR,
+		HD_GLOSS_CAP);
 	const float k = max(sheen.r, max(sheen.g, sheen.b)) / bound;
 
 	return sheen * ((1.0f - exp(-k)) / max(k, 1e-4f));

@@ -3540,7 +3540,8 @@ the flipbook and the book need nothing of the pixel shader, and the water surfac
 and the sky band's flat light keep the plain variant and are counted. The dynamic lights
 give no highlight in the gloss variant: ten slots are left, and one lobe per light costs
 more. No per-frame work on the processor per glossy draw call beyond the variant and the
-page's own constants: the rows go up once per room, the textures once per bracket.
+page's own constants: the rows go up once per room, the textures once per bracket. The
+strengths chosen here are raised in the entry 'The sheen at a strength that shows'.
 
 **Left.** Page steps between levels: the seed votes per level, and ten pages take its
 metal in one level and nothing in another - 548 and 560 in JOBY3 against JOBY5, 977, 3008,
@@ -3561,6 +3562,65 @@ levels of the previous entry. In the log, `GLOSSLOG skipped` and the GLOSSLOG le
 every room that wears the page shines', 'Round 189b (#189): the tools and the suite',
 'Round 189b (#189): the record follows', 'Round 189b (#189): what review pass 1 found, and
 a whole build every time'.
+
+### The sheen at a strength that shows
+2026-10-01
+
+**What.** The sheen of the previous entry at about two and a half times its strength at a
+highlight: the highlight at six times the field's colour (`HD_GLOSS_HIGHLIGHT`, was 2),
+the environment at 0.35 of the surface's light (`HD_GLOSS_ENV`, was 0.25), the bound at
+two and a half times the surface's own lit colour plus 8 of 255 (`HD_GLOSS_BOUND`,
+`HD_GLOSS_FLOOR`, were 1 and 4 of 255), and a cap the bound never passes, three quarters
+(`HD_GLOSS_CAP`, new).
+
+**Why.** In the play test of the previous entry's build the sheen was hardly to be seen.
+Its measure says the same: on JOBY2 room 90's dark diamond plate the brightest place of
+the highlight gained 23 of 255, on a locker wall 24. The bound at the surface's own lit
+colour held it there - a floor that is 45 of 255 bright could gain about 45 at most - and
+the weight of metal, 0.4 face on, left the highlight under that bound almost everywhere. A
+highlight on dark steel is brighter than the steel; a bound of one cannot show it.
+
+**How.** `specific/hd/hd_shader/hd_room.hlsl`: the five defines over `gGloss`, and
+`min(..., HD_GLOSS_CAP)` in the bound of `GlossSheen`; the gloss variant takes 503 of 512
+instruction slots (502). `specific/hd/hd_gloss_math.h` carries the twins of the bound, the
+floor and the cap in `HDGlossSheenBound`. With a bound above one the screen alone would
+let a mid-bright surface reach white where the highlight saturates - lit (1 + B (1 - lit))
+is one at lit 0.4 for B 2.5 - so the cap holds the sheen under three quarters, and the
+screen, lit + sheen (1 - lit), then closes at most three quarters of the way to white. The
+environment is raised least: it lifts a whole surface evenly, which reads as a paler
+picture and not as a shine.
+
+**Checked.** The engine builds (`be.bat`, the full build); ModernTest 14,130 (14,128 and
+two of the cap), MenuTest 42,364, InterpTest 711, LipsTest 270 and 243, none failed. The
+plain room pixel shader and the room vertex shader differ from the previous entry's in the
+stamp line alone, so with `hd_reflect` off every room is drawn as before; ANDREA1 room 3
+drawn with `-noreflect` equals the picture drawn at `ca2e904` in all 1,587,200 pixels. Ten
+views, gloss off against on, the mean over the drawn pixels and the most the gloss adds
+anywhere, the previous strengths in brackets: JOBY2 room 90 at the column 47.4 to 52.8, 60
+(51.0, 23); JOBY2 room 114's corridor 33.9 to 39.9, 75 (36.9, 28); JOBY2's hull outside,
+room 143, 53.5 to 54.1, 16 (53.9, 11); RICH1's locker wall, room 17, 76.4 to 82.8, 64
+(79.6, 24); ANDREA1 room 3 from above 21.7 to 24.3, 77 (22.8, 29), and from the camera at
+the crate 34.4 to 35.8, 101 (35.2, 39); RICH2 room 135 63.7 to 65.5, 25 (64.8, 11); JOBY3
+room 79 16.6 to 18.9, 9 (18.1, 6); ANDREA2 room 16 40.9 to 42.3, 16 (41.9, 10); RICH1 room
+60 38.5 to 38.8, 33 (38.7, 14). The share of pixels with a channel at 250 or more is the
+same with the gloss on as off in nine of the ten and rises from 0.053 to 0.057 per cent in
+RICH2 room 135. The seams, by the previous entry's measure: the locker wall +0.50, JOBY2's
+corridor 114 into 123 +0.56, RICH1 room 60 into 59 +0.33, and along the floor's own edge
+JOBY2 room 90 into 118 +0.27 and into 85 +0.29. Over the whole boundary of those two floor
+views the measure reads +3.75 and +7.33, because it also counts the pairs where a column
+of room 90 stands in front of the next room's wall, which now carries a highlight the
+column does not.
+
+**Unchanged.** The light field, the pages that shine and their classes, strengths and
+exponents, the order of the sources, `hd_gloss.txt`, the draw calls that take the gloss
+variant, GLOSSLOG. The plain variant, the objects and Lara.
+
+**Left.** A page step shows more at this strength: the vent grille of JOBY2's corridor
+wall, page 487, stays matt in a wall that shines, and the pages the previous entry lists
+shine in one level and not in the next. The dynamic lights' highlight: nine slots are
+left.
+
+**Commits.** the commit 'Round 189c (#189): the sheen at a strength that shows'.
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
@@ -10806,4 +10866,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
-| #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call |
+| #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |

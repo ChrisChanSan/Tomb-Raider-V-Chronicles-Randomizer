@@ -6509,7 +6509,7 @@ static void camera_cut_latch()
 	const short cam2 = ModernWrap((long)cam1 + 12000L);
 	const long base = 0x4000;
 
-	printf("\nthe camera cut keeps the held course until the stick is let go\n");
+	printf("\nthe camera cut keeps the held course until the stick is let go or re-aimed\n");
 
 	ModernDefaults(&cfg);
 	off_cfg = cfg;
@@ -6558,16 +6558,20 @@ static void camera_cut_latch()
 	sit.cam_player_step = 0;
 	sit.cam_cut = 0;
 
-	/* Rolled far while the latch stands: the new direction is read against
-	 * the reference the course was seated on, the chase camera's, not the
-	 * view of the tick. */
+	/* Rolled far while the latch stands - half a turn from where the stick
+	 * pointed at the first cut, the second cut having left that direction
+	 * where it was: a re-aim past MODERN_CUT_REAIM, so the hold ends and the
+	 * new direction is read against the view of the tick, not against the
+	 * chase camera the course was seated on. */
 	stick_at(-0x4000, &x, &y);
 	tick(&cfg, &state, x, y, cam2, 0, &sit, &out);
-	ok(out.reference == cam0, "(1) rolled far under the latch: the reference stays the seated one",
-		out.reference, cam0);
-	ok(state.course == ModernWrap((long)cam0 + ModernAngle(x, -y)),
+	ok(out.reference == cam2, "(1) rolled far under the latch: the reference is the view of the tick",
+		out.reference, cam2);
+	ok(state.course == ModernWrap((long)cam2 + ModernAngle(x, -y)),
 		"(1) ...and the new direction is taken against it", state.course,
-		ModernWrap((long)cam0 + ModernAngle(x, -y)));
+		ModernWrap((long)cam2 + ModernAngle(x, -y)));
+	ok(state.cut_latch == 0 && out.latch_drop == 1,
+		"(1) ...because the re-aim ended the hold on that tick", out.latch_drop, 1);
 
 	/* Let go and push again: the latch goes with the course, and the push
 	 * seats on the camera of that tick. */
@@ -6750,6 +6754,382 @@ static void camera_cut_latch()
 	sit.cam_cut = 0;
 	ok(out.reference == cam1 && state.cut_latch == 0,
 		"a push on the cut's own tick seats on the new camera, unlatched", state.cut_latch, 0);
+}
+
+/* A situation of plain running on land with no cut. */
+static void reaim_sit(MODERN_SITUATION* sit)
+{
+	sit->anim_state = 1;				/* AS_RUN */
+	sit->classic = 0;
+	sit->drawn = 0;
+	sit->action = 0;
+	sit->jump = 0;
+	sit->blocked = 0;
+	sit->cam_player_step = 0;
+	sit->cam_cut = 0;
+}
+
+/* A latch armed the way the seam arms it: a push on `cam0` seats the course,
+ * and the next tick, the stick unchanged, carries the cut to `cam1`. */
+static void reaim_arm(const MODERN_CFG* cfg, MODERN_STATE* state, long x, long y, short cam0,
+	short cam1, MODERN_RESULT* out)
+{
+	MODERN_SITUATION sit;
+
+	reaim_sit(&sit);
+	ModernResetState(state);
+	tick(cfg, state, x, y, cam0, 0, &sit, out);
+	sit.cam_cut = 1;
+	tick(cfg, state, x, y, cam1, 0, &sit, out);
+}
+
+/* Two stick positions whose directions (ModernAngle, as the translation takes
+ * them) lie exactly `gap` apart, both pushed well out (radius 100 or more).
+ * Searched, because a direction is what an integer stick gives and not any
+ * number one likes; returns 0 when no pair exists. */
+static int reaim_pair(long gap, long* ax, long* ay, long* bx, long* by)
+{
+	static short angle_x[65536], angle_y[65536];
+	static unsigned char have[65536];
+	static int filled = 0;
+	long sx, sy;
+	long a;
+
+	if (!filled)
+	{
+		memset(have, 0, sizeof(have));
+
+		for (sx = -127; sx <= 127; sx++)
+			for (sy = -127; sy <= 127; sy++)
+			{
+				if (sx * sx + sy * sy < 100 * 100)
+					continue;
+
+				a = (unsigned short)ModernAngle(sx, -sy);
+
+				if (!have[a])
+				{
+					have[a] = 1;
+					angle_x[a] = (short)sx;
+					angle_y[a] = (short)sy;
+				}
+			}
+
+		filled = 1;
+	}
+
+	for (a = 0; a < 65536; a++)
+	{
+		const long b = (a + gap) & 0xFFFF;
+
+		if (have[a] && have[b])
+		{
+			*ax = angle_x[a];
+			*ay = angle_y[a];
+			*bx = angle_x[b];
+			*by = angle_y[b];
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/* The re-aim that ends the cut latch (MODERN_CUT_REAIM): a stick held through
+ * a cut and then turned more than 45 degrees from where it pointed at the cut
+ * is read in the view on screen from that tick on. */
+static void camera_cut_reaim()
+{
+	MODERN_CFG cfg;
+	MODERN_STATE state;
+	MODERN_STATE fresh;
+	MODERN_SITUATION sit;
+	MODERN_RESULT out;
+	MODERN_RESULT of;
+	const short cam0 = -16736;
+	const short cam1 = ModernWrap(-16736L + 29198L);
+	const short cam2 = ModernWrap((long)cam1 + 12000L);
+	long x, y, ax, ay, bx, by, t, bad, drops;
+	short off_a;
+
+	printf("\nthe cut latch also ends when the stick is re-aimed by more than 45 degrees\n");
+
+	ModernDefaults(&cfg);
+	reaim_sit(&sit);
+
+	ok(MODERN_CUT_REAIM == 8192, "the re-aim bound is 45 degrees (MODERN_CUT_REAIM)",
+		MODERN_CUT_REAIM, 8192);
+
+	/* (vii) The remembered direction is the translation's own `offset` of the
+	 * arming tick, and the arming tick itself drops nothing. */
+	stick_at(0x1234, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	ok(state.cut_latch == 1 && state.cut_off == ModernAngle(x, -y),
+		"(vii) the latch remembers the stick's direction of its arming tick", state.cut_off,
+		ModernAngle(x, -y));
+	ok(out.latch_drop == 0 && out.reference == cam0,
+		"(vii) ...and the arming tick keeps the course's reference", out.latch_drop, 0);
+
+	/* (iv) The drop seats exactly what a release and a fresh push in the same
+	 * direction would seat, on the same tick's camera - and she does not stop:
+	 * the tick is active and sends bits, where a release sends none. */
+	off_a = ModernAngle(x, -y);
+	stick_at((long)off_a + 0x4000, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	ModernResetState(&fresh);
+	tick(&cfg, &fresh, x, y, cam1, 0, &sit, &of);
+	ok(out.latch_drop == 1 && state.cut_latch == 0,
+		"a quarter turn under the latch ends the hold on that tick", out.latch_drop, 1);
+	ok(state.have_ref == fresh.have_ref && state.ref == fresh.ref &&
+		state.course == fresh.course && state.last_off == fresh.last_off &&
+		state.cut_latch == fresh.cut_latch && state.cut_off == fresh.cut_off,
+		"...course, reference and latch as a fresh push of that stick leaves them",
+		state.course, fresh.course);
+	ok(out.reference == cam1 && out.active == 1 && out.bits != 0,
+		"...seated on the camera of the tick, and she keeps moving", out.active, 1);
+
+	/* (i) A slow roll, 200 units a tick, every step far under recenter: the
+	 * hold ends on the first tick its sum passes the bound from the arming
+	 * direction, and not before. */
+	stick_at(0, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	off_a = state.cut_off;
+	bad = 0;
+	drops = 0;
+
+	for (t = 1; t <= 60; t++)
+	{
+		long dev;
+
+		stick_at(t * 200, &x, &y);
+		dev = absl(ModernWrap((long)ModernAngle(x, -y) - off_a));
+		tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+
+		if (drops)
+		{
+			if (out.latch_drop)
+				bad++;
+
+			continue;
+		}
+
+		if ((dev > 8192) != (out.latch_drop == 1))
+			bad++;
+
+		if (out.latch_drop)
+		{
+			drops++;
+
+			if (out.reference != cam1)
+				bad++;
+		}
+		else if (out.reference != cam0 || !state.cut_latch)
+			bad++;
+	}
+
+	ok(bad == 0 && drops == 1, "(i) a slow roll ends the hold when its sum passes 8192, not before",
+		bad, 0);
+
+	/* ...and a roll that turns back inside the bound keeps it, out to 8000
+	 * and home again. */
+	stick_at(0, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	bad = 0;
+
+	for (t = 0; t <= 80; t++)
+	{
+		const long r = (t <= 40) ? t * 200 : (80 - t) * 200;
+
+		stick_at(r, &x, &y);
+		tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+
+		if (out.latch_drop || !state.cut_latch || out.reference != cam0)
+			bad++;
+	}
+
+	ok(bad == 0, "(i) a roll out to 8000 and back inside the bound keeps the hold", bad, 0);
+
+	/* (ii) A cut while the latch stands leaves the remembered direction: a
+	 * stick rolled 6000, cut again, and rolled 3000 more ends the hold - 9000
+	 * from the first cut, though only 3000 from the second. */
+	stick_at(0, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	off_a = state.cut_off;
+	stick_at(6000, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	sit.cam_cut = 1;
+	tick(&cfg, &state, x, y, cam2, 0, &sit, &out);
+	sit.cam_cut = 0;
+	ok(state.cut_latch == 1 && state.cut_off == off_a && out.reference == cam0,
+		"(ii) a second cut under the latch keeps the remembered direction", state.cut_off, off_a);
+	stick_at(9000, &x, &y);
+	tick(&cfg, &state, x, y, cam2, 0, &sit, &out);
+	ok(out.latch_drop == 1 && out.reference == cam2,
+		"(ii) ...so 9000 from the first cut ends the hold", out.latch_drop, 1);
+
+	/* (iii) A cut after the drop, with the stick out, arms the latch again
+	 * with that tick's direction. */
+	sit.cam_cut = 1;
+	tick(&cfg, &state, x, y, cam0, 0, &sit, &out);
+	sit.cam_cut = 0;
+	ok(state.cut_latch == 1 && state.cut_off == ModernAngle(x, -y) && out.reference == cam2,
+		"(iii) a cut after the drop arms the latch again with the stick of its tick",
+		state.cut_off, ModernAngle(x, -y));
+
+	/* (iv) A tick that carries a cut and a roll past the bound together: the
+	 * cut is taken first (the latch already stands and keeps its direction),
+	 * then the roll ends the hold, so the course is seated on that tick's new
+	 * camera. */
+	stick_at(0, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	stick_at(0x4000, &x, &y);
+	sit.cam_cut = 1;
+	tick(&cfg, &state, x, y, cam2, 0, &sit, &out);
+	sit.cam_cut = 0;
+	ok(out.latch_drop == 1 && state.cut_latch == 0 && out.reference == cam2 &&
+		state.course == ModernWrap((long)cam2 + ModernAngle(x, -y)),
+		"(iv) a cut and a roll past the bound on one tick: seated on the new camera",
+		out.reference, cam2);
+
+	/* ...and a push with no course yet, on a tick that carries a cut, has
+	 * nothing to latch and nothing to drop. */
+	ModernResetState(&state);
+	sit.cam_cut = 1;
+	tick(&cfg, &state, x, y, cam2, 0, &sit, &out);
+	sit.cam_cut = 0;
+	ok(out.latch_drop == 0 && state.cut_latch == 0 && out.reference == cam2,
+		"(iv) a push on the cut's own tick neither latches nor drops", out.latch_drop, 0);
+
+	/* (v) The bound: exactly 8192 keeps the hold, 8193 ends it, on either
+	 * side; the pairs are integer sticks whose directions lie exactly that far
+	 * apart. */
+	{
+		const long gaps[4] = { 8192, -8192, 8193, -8193 };
+		int g;
+
+		for (g = 0; g < 4; g++)
+		{
+			const int found = reaim_pair(gaps[g], &ax, &ay, &bx, &by);
+			const long want = (absl(gaps[g]) > 8192) ? 1 : 0;
+
+			ok(found == 1, "(v) a stick pair exactly that far apart exists", found, 1);
+
+			if (!found)
+				continue;
+
+			reaim_arm(&cfg, &state, ax, ay, cam0, cam1, &out);
+			tick(&cfg, &state, bx, by, cam1, 0, &sit, &out);
+			ok(ModernWrap((long)ModernAngle(bx, -by) - ModernAngle(ax, -ay)) == gaps[g] &&
+				out.latch_drop == want && state.cut_latch == 1 - want,
+				want ? "(v) 8193 from the arming direction ends the hold" :
+				"(v) exactly 8192 from the arming direction keeps it", out.latch_drop, want);
+		}
+	}
+
+	/* ...and across the wrap the short way: armed just short of +32768,
+	 * re-aimed just past -32768 is a small step and keeps the hold; a quarter
+	 * turn on across the wrap ends it. */
+	reaim_arm(&cfg, &state, 1, 127, cam0, cam1, &out);
+	tick(&cfg, &state, -1, 127, cam1, 0, &sit, &out);
+	ok(state.cut_off == ModernAngle(1, -127) && ModernAngle(-1, -127) < 0 &&
+		out.latch_drop == 0 && state.cut_latch == 1,
+		"(v) across +32767/-32768 the step is the short one and keeps the hold",
+		out.latch_drop, 0);
+	stick_at(-0x8000 + 0x2400, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	ok(out.latch_drop == 1, "(v) ...and a turn past the bound across the wrap ends it",
+		out.latch_drop, 1);
+
+	/* (vi) The movement keys: the direction is the one the translation takes
+	 * from the stick ModernKeyStick builds. Forward held through the cut, then
+	 * right added - 45 degrees exactly - keeps the hold; right alone, a
+	 * quarter turn, ends it. */
+	ModernKeyStick(0, 0, 1, 0, 0, 0, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	ModernKeyStick(0, 0, 1, 0, 0, 1, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	ok(absl(ModernWrap((long)ModernAngle(x, -y) - state.cut_off)) == 8192 &&
+		out.latch_drop == 0 && state.cut_latch == 1 && out.reference == cam0,
+		"(vi) keys: forward, then forward and right (45 degrees) keeps the hold",
+		out.latch_drop, 0);
+	ModernKeyStick(0, 0, 0, 0, 0, 1, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	ok(out.latch_drop == 1 && out.reference == cam1,
+		"(vi) ...and right alone, a quarter turn, ends it", out.latch_drop, 1);
+
+	/* The re-seat under a standing latch: a flick of recenter or more that
+	 * stays inside the bound reads against the held reference, as before. */
+	stick_at(0, &x, &y);
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	stick_at(5000, &x, &y);
+	tick(&cfg, &state, x, y, cam1, 0, &sit, &out);
+	ok(out.latch_drop == 0 && out.reference == cam0 &&
+		state.course == ModernWrap((long)cam0 + ModernAngle(x, -y)),
+		"a flick of 5000 under the latch re-seats against the held reference", state.course,
+		ModernWrap((long)cam0 + ModernAngle(x, -y)));
+
+	/* (viii) The remembered direction goes wherever the latch goes: the
+	 * release, aiming and ModernResetState. */
+	tick(&cfg, &state, 0, 0, cam1, 0, &sit, &out);
+	ok(state.cut_latch == 0 && state.cut_off == 0,
+		"(viii) letting go clears the latch and its direction", state.cut_off, 0);
+
+	{
+		MODERN_CFG aim_cfg = cfg;
+
+		aim_cfg.aim_strafe = 1;
+		stick_at(0x2000, &x, &y);
+		reaim_arm(&aim_cfg, &state, x, y, cam0, cam1, &out);
+		sit.drawn = 1;
+		sit.action = 1;
+		tick(&aim_cfg, &state, x, y, cam1, 0, &sit, &out);
+		sit.drawn = 0;
+		sit.action = 0;
+		ok(out.mode == MODERN_MODE_AIM && state.cut_latch == 0 && state.cut_off == 0,
+			"(viii) aiming clears the latch and its direction", state.cut_off, 0);
+	}
+
+	reaim_arm(&cfg, &state, x, y, cam0, cam1, &out);
+	ModernResetState(&state);
+	ok(state.cut_latch == 0 && state.cut_off == 0,
+		"(viii) ModernResetState clears both", state.cut_off, 0);
+
+	/* (viii) With the latch switched off, or the held course off, a cut and
+	 * a quarter turn after it never report a drop, and the course is what it
+	 * is without the rule: the camera of the tick plus the stick. */
+	{
+		MODERN_CFG no_latch = cfg;
+		MODERN_CFG no_hold = cfg;
+		int pass;
+
+		no_latch.cut_latch = 0;
+		no_hold.hold_course = 0;
+		bad = 0;
+
+		for (pass = 0; pass < 2; pass++)
+		{
+			const MODERN_CFG* use = pass ? &no_hold : &no_latch;
+
+			stick_at(0, &x, &y);
+			reaim_arm(use, &state, x, y, cam0, cam1, &out);
+
+			if (state.cut_latch || out.latch_drop)
+				bad++;
+
+			for (t = 1; t <= 50; t++)
+			{
+				stick_at(t * 2000, &x, &y);
+				tick(use, &state, x, y, cam1, 0, &sit, &out);
+
+				if (out.latch_drop || state.cut_latch ||
+					state.course != ModernWrap((long)cam1 + ModernAngle(x, -y)))
+					bad++;
+			}
+		}
+
+		ok(bad == 0, "(viii) cut_latch 0 or hold_course 0: no latch, no drop, the course as before",
+			bad, 0);
+	}
 }
 
 /* ----------------------------------------------------- the modern camera --- */
@@ -11331,6 +11711,7 @@ int main()
 	grab_latch();
 	sweeps();
 	camera_cut_latch();
+	camera_cut_reaim();
 	camera_orbit();
 	camera_speed();
 	camera_pitch();

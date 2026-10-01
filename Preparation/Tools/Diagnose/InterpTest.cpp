@@ -979,6 +979,334 @@ static void camera_shell()
 	}
 }
 
+/* ------------------------------------------- a level camera that tracks Lara -- */
+
+/* The two flags of game\spotcam.cpp and the steps of game\control.cpp that
+ * write them, in the order the engine runs them, so the camera cut test's
+ * flyby term (InterpSpotCut over InterpLevelCamHolds) can be walked through
+ * snapshot, tick and frames the way ControlPhase and the draw reach it.
+ *
+ *   the top of every ControlPhase call   if (bTrackCamInit) bUseSpotCam = 0;
+ *   each tick, first                     InterpCapturePrev's snapshot
+ *   the tick's TO_FLYBY trigger          if (!bUseSpotCam) { bUseSpotCam = 1;
+ *     (or the GF_OFFICE branch)            if (LastSequence != seq) bTrackCamInit = 0;
+ *                                          InitialiseSpotCam(seq); }
+ *   InitialiseSpotCam                    if (bTrackCamInit && seq == LastSequence)
+ *                                          { bTrackCamInit = 0; return; }
+ *                                        LastSequence = seq; bTrackCamInit = 0;
+ *   the camera                           if (!bUseSpotCam) { bTrackCamInit = 0;
+ *                                          CalculateCamera(); } else
+ *                                          CalculateSpotCams(): sets bTrackCamInit
+ *                                          when the sequence tracks
+ *   a sequence that does not track ends  bUseSpotCam = 0 inside CalculateSpotCams
+ *
+ * `old` answers with bUseSpotCam alone, the term as it reads without the
+ * predicate, so the walk can show what it counted. */
+struct LevelCamSim
+{
+	long useSpotCam;
+	long trackCamInit;
+	long lastSequence;
+	short prevHolds;		// g_prevCam.spot
+	short prevOld;			// the same snapshot with bUseSpotCam alone
+	bool old;				// count with bUseSpotCam alone
+};
+
+struct LevelCamCount
+{
+	long frames;		// frames drawn
+	long spotCuts;		// frames the flyby term cut (g_cutSpot)
+	long cutTicks;		// ticks with at least one such frame
+	long eyeRule;		// frames the drawn-eye rule would have run on
+	long flybyEye;		// frames between two flyby ticks the rule ran on
+};
+
+static bool sim_holds(const LevelCamSim* s)
+{
+	return s->old ? s->useSpotCam != 0 : InterpLevelCamHolds(s->useSpotCam, s->trackCamInit);
+}
+
+/* One ControlPhase call running `ticks` ticks (0 for a call between two
+ * ticks), Lara on the sequence's trigger tiles when `onTiles`, then one drawn
+ * frame. `track` is whether the sequence's first camera tracks; `ends` makes
+ * a sequence that does not track reach the end of its spline on this call's
+ * last tick. */
+static void sim_call(LevelCamSim* s, LevelCamCount* c, int ticks, bool onTiles, bool track,
+	bool ends, bool* tickCut)
+{
+	const long seq = 7;
+
+	if (s->trackCamInit)
+		s->useSpotCam = 0;
+
+	for (int k = 0; k < ticks; k++)
+	{
+		s->prevHolds = (short)(InterpLevelCamHolds(s->useSpotCam, s->trackCamInit) ? 1 : 0);
+		s->prevOld = (short)(s->useSpotCam ? 1 : 0);
+
+		if (onTiles && !s->useSpotCam)
+		{
+			s->useSpotCam = 1;
+
+			if (s->lastSequence != seq)
+				s->trackCamInit = 0;
+
+			if (s->trackCamInit && seq == s->lastSequence)
+				s->trackCamInit = 0;
+			else
+			{
+				s->lastSequence = seq;
+				s->trackCamInit = 0;
+			}
+		}
+
+		if (!s->useSpotCam)
+			s->trackCamInit = 0;
+		else if (track)
+			s->trackCamInit = 1;
+		else if (ends && k == ticks - 1)
+			s->useSpotCam = 0;
+
+		*tickCut = false;
+	}
+
+	{
+		const bool prev = (s->old ? s->prevOld : s->prevHolds) != 0;
+		const bool now = sim_holds(s);
+
+		c->frames++;
+
+		if (InterpSpotCut(prev, now))
+		{
+			c->spotCuts++;
+
+			if (!*tickCut)
+				c->cutTicks++;
+
+			*tickCut = true;
+		}
+
+		if (InterpEyeRuleRuns(prev, now, false))
+			c->eyeRule++;
+		else if (!InterpSpotCut(prev, now))
+			c->flybyEye++;
+	}
+}
+
+/* A walk at 165 frames to 30 ticks a second, five or six frames a tick:
+ * `before` ticks off the tiles, `on` ticks on them, `after` ticks off again.
+ * `hitch` runs two ticks in one call in the middle of the stretch on the
+ * tiles. When `at` is given it receives, per tick, the frames drawn after it
+ * (at[3t]), the frames the flyby term cut (at[3t+1]) and the frames the
+ * drawn-eye rule ran on (at[3t+2]). */
+static void sim_walk(bool old, bool track, int before, int on, int after, bool hitch,
+	LevelCamCount* c, int* at)
+{
+	LevelCamSim s;
+	long acc = 0;
+	int tickNo = 0;
+	const int total = before + on + after;
+	bool tickCut = false;
+
+	memset(&s, 0, sizeof(s));
+	memset(c, 0, sizeof(*c));
+	s.old = old;
+	s.lastSequence = -1;
+
+	while (tickNo < total)
+	{
+		int ticks;
+		bool onTiles;
+
+		acc += 30;
+		ticks = 0;
+
+		while (acc >= 165)
+		{
+			acc -= 165;
+			ticks++;
+		}
+
+		if (ticks && hitch && tickNo == before + on / 2)
+			ticks = 2;
+
+		if (tickNo + ticks > total)
+			ticks = total - tickNo;
+
+		onTiles = tickNo + ticks - 1 >= before && tickNo + ticks - 1 < before + on;
+
+		{
+			const long cutsBefore = c->spotCuts;
+			const long eyeBefore = c->eyeRule;
+			const int t = (tickNo + ticks - 1 >= 0) ? tickNo + ticks - 1 : 0;
+
+			sim_call(&s, c, ticks, ticks ? onTiles : false, track, false, &tickCut);
+
+			if (at)
+			{
+				at[3 * t]++;
+				at[3 * t + 1] += (int)(c->spotCuts - cutsBefore);
+				at[3 * t + 2] += (int)(c->eyeRule - eyeBefore);
+			}
+		}
+
+		tickNo += ticks;
+	}
+}
+
+static void level_camera()
+{
+	LevelCamCount now, old;
+	static int at[3 * 400];
+	static int atOld[3 * 400];
+
+	printf("a level camera that tracks Lara: one cut in, one cut out\n");
+
+	/* The predicate itself. */
+	ok(!InterpLevelCamHolds(0, 0), "no flyby, no tracking camera: nothing holds the view", 0, 0);
+	ok(InterpLevelCamHolds(1, 0), "a flyby holds the view", 1, 1);
+	ok(InterpLevelCamHolds(0, 1), "a tracking sequence between its ticks holds it as well", 1, 1);
+	ok(InterpLevelCamHolds(1, 1), "and on its ticks", 1, 1);
+	ok(InterpSpotCut(false, true) && InterpSpotCut(true, false) &&
+		!InterpSpotCut(true, true) && !InterpSpotCut(false, false),
+		"the flyby term cuts on a change and on nothing else", 1, 1);
+
+	/* The corridor: 30 ticks before, 120 on the tiles (ticks 30 to 149), 30
+	 * after; tick 150 is the first off them. */
+	memset(at, 0, sizeof(at));
+	memset(atOld, 0, sizeof(atOld));
+	sim_walk(false, true, 30, 120, 30, false, &now, at);
+	sim_walk(true, true, 30, 120, 30, false, &old, atOld);
+	printf("  a tracking sequence of 120 ticks at 165 Hz: %ld frames; flyby cuts on %ld frames in"
+		" %ld ticks (bUseSpotCam alone: %ld frames in %ld ticks)\n",
+		now.frames, now.spotCuts, now.cutTicks, old.spotCuts, old.cutTicks);
+	ok(now.cutTicks == 2, "the entry tick and the exit tick count one cut each", now.cutTicks, 2);
+	ok(at[3 * 30 + 1] == at[3 * 30] && at[3 * 150 + 1] == at[3 * 150],
+		"...on every frame of the entry tick and of the exit tick", at[3 * 30 + 1], at[3 * 30]);
+	{
+		int inside = 0, frames = 0, eye = 0, oldCut = 0, oldEye = 0, outEye = 0, outFrames = 0;
+
+		for (int t = 31; t < 150; t++)
+		{
+			frames += at[3 * t];
+			inside += at[3 * t + 1];
+			eye += at[3 * t + 2];
+			oldCut += atOld[3 * t + 1];
+			oldEye += atOld[3 * t + 2];
+		}
+
+		for (int t = 0; t < 180; t++)
+			if (t < 30 || t > 150)
+			{
+				outFrames += at[3 * t];
+				outEye += at[3 * t + 2];
+			}
+
+		printf("  the 119 continuing ticks: %d frames, %d cut, the drawn-eye rule on %d"
+			" (bUseSpotCam alone: %d cut, the rule on %d)\n", frames, inside, eye, oldCut, oldEye);
+		ok(inside == 0, "a continuing tick of the sequence counts no flyby cut", inside, 0);
+		ok(eye == 0, "the drawn-eye rule is off on every frame of a continuing tick", eye, 0);
+		ok(oldCut == 119 && oldEye > 0,
+			"bUseSpotCam alone: one cut on every continuing tick, the rule on the rest", oldCut, 119);
+		ok(outEye == outFrames && outFrames > 0,
+			"off the tiles, before and after: the drawn-eye rule on every frame", outEye, outFrames);
+	}
+	{
+		LevelCamSim s;
+		LevelCamCount c;
+		bool tickCut = false;
+		long blended = 0, eye = 0, frames = 0;
+
+		/* Every frame of a continuing tick, one by one: blended, eye rule off. */
+		memset(&s, 0, sizeof(s));
+		memset(&c, 0, sizeof(c));
+		s.lastSequence = -1;
+		sim_call(&s, &c, 1, true, true, false, &tickCut);	/* the entry tick */
+
+		for (int t = 0; t < 40; t++)
+		{
+			const long cuts = c.spotCuts;
+			const long rule = c.eyeRule;
+
+			sim_call(&s, &c, 1, true, true, false, &tickCut);
+			frames++;
+
+			if (c.spotCuts == cuts)
+				blended++;
+
+			if (c.eyeRule == rule)
+				eye++;
+
+			for (int f = 0; f < 4; f++)
+			{
+				const long cuts2 = c.spotCuts;
+				const long rule2 = c.eyeRule;
+
+				sim_call(&s, &c, 0, true, true, false, &tickCut);
+				frames++;
+
+				if (c.spotCuts == cuts2)
+					blended++;
+
+				if (c.eyeRule == rule2)
+					eye++;
+			}
+		}
+
+		ok(blended == frames, "every frame of a continuing tracking tick is blended", blended, frames);
+		ok(eye == frames, "and the drawn-eye rule is off on every one of them", eye, frames);
+	}
+
+	/* A hitch: two ticks in one call in the middle of the sequence. */
+	sim_walk(false, true, 30, 120, 30, true, &now, NULL);
+	ok(now.cutTicks == 2, "a hitch inside the sequence adds no cut", now.cutTicks, 2);
+
+	/* Outside a sequence nothing counts, by either reading. */
+	sim_walk(false, true, 200, 0, 0, false, &now, NULL);
+	ok(now.spotCuts == 0 && now.eyeRule == now.frames,
+		"outside a sequence: no flyby cut, the drawn-eye rule on every frame", now.spotCuts, 0);
+
+	/* A flyby that does not track: bTrackCamInit stays 0, so the term is
+	 * bUseSpotCam's, frame by frame. */
+	sim_walk(false, false, 30, 120, 30, false, &now, NULL);
+	sim_walk(true, false, 30, 120, 30, false, &old, NULL);
+	ok(now.spotCuts == old.spotCuts && now.cutTicks == old.cutTicks &&
+		now.eyeRule == old.eyeRule && now.flybyEye == old.flybyEye,
+		"a flyby that does not track counts as with bUseSpotCam alone", now.spotCuts, old.spotCuts);
+	ok(now.cutTicks == 1, "...one cut where it starts", now.cutTicks, 1);
+	{
+		LevelCamSim s;
+		LevelCamCount c;
+		bool tickCut = false;
+		long same = 0, n = 0;
+
+		/* The one that ends: started on the tiles, it runs to the end of its
+		 * spline and hands the view back; the two readings agree on every
+		 * frame. */
+		memset(&s, 0, sizeof(s));
+		memset(&c, 0, sizeof(c));
+		s.lastSequence = -1;
+
+		for (int t = 0; t < 60; t++)
+		{
+			const bool on = (t == 10);
+			const bool ends = (t == 40);
+
+			for (int f = 0; f < 5; f++)
+			{
+				sim_call(&s, &c, f == 0 ? 1 : 0, f == 0 && on, false, f == 0 && ends, &tickCut);
+				n++;
+
+				if (InterpSpotCut(s.prevHolds != 0, InterpLevelCamHolds(s.useSpotCam, s.trackCamInit)) ==
+					InterpSpotCut(s.prevOld != 0, s.useSpotCam != 0))
+					same++;
+			}
+		}
+
+		ok(same == n, "a flyby that does not track, start to end: the same cut on every frame", same, n);
+	}
+}
+
 /* The title menu's own cadence.
  *
  * The title and the inventory keep two ticks per present at every setting
@@ -5979,6 +6307,7 @@ int main()
 	camera_aim();
 	pose_wrap();
 	camera_shell();
+	level_camera();
 	cadence();
 	title_cadence();
 	refresh();

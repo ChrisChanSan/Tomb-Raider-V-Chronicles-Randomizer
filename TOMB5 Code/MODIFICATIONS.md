@@ -3218,7 +3218,8 @@ local and scaled (`:3707`), the cubes when their count is the count of floor squ
 like `ROOM_INFO::floor` and like the cubes. `LightSheen` (`:2981`) gives a glossy draw
 call the mean cube of the squares under its triangles (a wall triangle takes the square
 half a square in front of it), its room's lamps nearest its box and, where the level
-has a sun, the share of it its cube says it sees. Which surfaces: `ResolveSheen`
+has a sun, the share of it its cube says it sees. The next entry replaces these lamps,
+the sun and the cube with a light field of the level. Which surfaces: `ResolveSheen`
 (`:3100`) runs after the sort and changes no range; `ResolvePage` (`:2913`) and
 `HDGlossResolve` (`specific/hd/hd_gloss_math.h:547`) take the material first, then the
 file, the table and the seed; the seed walks the rooms' surface triangles
@@ -3304,13 +3305,15 @@ this entry - the material, the seed, the table, the file - under which the table
 take-outs and the file's `-` line could not remove a page the seed names. RICH2's lobby
 is kept out page by page: its clear-class pages (1029, 1045, 1047, 1049, 1053, 1079,
 1081) and marble pages (1010, 1032, 1033) take nothing but the material, and every room
-with a clear floor takes nothing at all; the other pages numbered between 1029 and 1081
-are not the lobby's class and may shine, the washroom's green mosaic 1054 by the table
-and the steel shutter 1039 and tread plate 1040 by the seed. The lamps are the room's
-own .TRG point lights, four at most, one of them the sun where the level has one, and
-the eye at a quarter of the surface's light at its peak, outside the exponent's
-(n + 8) / 8 scale; the dynamic lights give no highlight. One cube per draw call, the
-mean over the squares under it, lifted by a gain of 3, the measured 2.93. F0 is 0.5 for
+with a clear floor takes nothing at all (the next entry lets those rooms shine by page);
+the other pages numbered between 1029 and 1081 are not the lobby's class and may shine,
+the washroom's green mosaic 1054 by the table and the steel shutter 1039 and tread plate
+1040 by the seed. The lamps are the room's own .TRG point lights, four at most, one of
+them the sun where the level has one, and the eye at a quarter of the surface's light at
+its peak, outside the exponent's (n + 8) / 8 scale; the dynamic lights give no
+highlight. One cube per draw call, the mean over the squares under it, lifted by a gain
+of 3, the measured 2.93. The next entry replaces the lamps, the sun, the eye and the cube
+with the level's light field. F0 is 0.5 for
 metal, whose reflection takes the texel's colour, and 0.08 at strength 0.6 for marble,
 ice and glass. `hd_reflect` is the one switch; there is no options row.
 
@@ -3343,6 +3346,216 @@ surfaces shine', 'Round 189 (#189): the tools, the suite and what they measured'
 189 (#189): the record follows', 'Round 189 (#189): what review pass 1 found'; the fourth
 also retunes the engine's class defaults, the lobby bar and the shader stamps, and the
 fifth touches engine comments.
+
+### The shine belongs to the place, not to the draw call
+2026-10-01
+
+**What.** The sheen of an HD room surface reads its light out of a light field of the
+level: a grid of cells, one floor square across and one square up, over the part of the
+rooms' boxes the .TRG's point lights reach, built once with the level's HD data, in which
+every cell holds one direction towards the light - a light probe's dominant direction, the
+weighted mean of the directions to the lamps within six squares - how one-sided that light
+is, and one bounded colour. Two volume textures carry it to the gloss variant of the room
+pixel shader, which reads them with linear filtering at the pixel's world position and
+forms one Blinn-Phong highlight out of them. The per-draw-call lamps, the level's sun, the
+eye as a lamp and the per-draw-call light cube are gone; the environment term is the
+surface's own baked light. The whole sheen is held under the surface's own lit colour and
+composed as a screen. Every room that wears a glossy page shines with it, the rooms with a
+clear floor too, and a draw call with a UV scroll, a flipbook, a book or a caustic within
+reach takes the sheen its page names; the water surfaces, the sky band and the clear
+floors keep the plain variant and are counted per level in a new `GLOSSLOG skipped` line.
+With `-log`, the GLOSSLOG level line also names the field's grid, cells, memory and build
+time.
+
+**Why.** A play test of the previous entry's sheen showed, in pictures and videos: white
+discs with a cyan rim on JOBY2's diamond-plate floors that travel with the camera; steps
+along straight lines - one horizontal step across RICH1's locker wall where two rooms
+meet, one on the wall of a JOBY2 corridor, and the discs cut off at polygon edges; combs
+inside the discs where two layers of art lie on one plane; burnt-out edges, ANDREA1 room
+3's forklift cage and lamp bracket white; JOBY2's hull plates washing to a pale lilac at a
+grazing angle; and rooms that wear a glossy page left matt. It also showed Lara's own
+sheen going and coming between rooms, which the build before that entry shows the same way
+and which is a task of its own. The code said why, finding by finding. A directional
+light's highlight on a flat floor sits at a fixed direction of view, so the sun's slot -
+JOBY2's sun has a colour, and its share was read off light cubes the lamps light indoors -
+drew a disc that moves with the camera exactly, and the eye as a lamp is tied to the
+camera by construction. The four lamps nearest a draw call's box out of its own room, the
+sun's share and the mean cube were chosen per draw call, so the shine stepped wherever one
+draw call met another and differed on two layers that lie on one plane.
+HD_GLOSS_LAMP_SCALE 0.1 made a median lamp - a largest channel of 10 in ANDREA1, 15 in
+RICH2, 20 in JOBY2 - one whole white or more and ANDREA2's brightest twelve, the highlight
+was then multiplied by (n + 8) / 8, 7 at exponent 48, and metal's F0 0.5 at strength 0.8
+left 2.8 whites at the peak of a median lamp. The cube was lifted by 3, and JOBY2's cubes
+are the brightest of all levels (a mean face of 41 to 52 of 255), so at Fresnel's full
+weight a whole draw call of hull plates took up to 0.6 of a white of the cube's lilac. And
+every draw call of a room with a part-way clear floor - 55 rooms of RICH2, 1 of RICHCUT2,
+9 of TITLE - stayed plain, as did every draw call with a scroll, a flipbook, a book or a
+caustic within reach, although only the caustic is a line of the pixel shader.
+
+**How.** The field is `specific/hd/hd_gloss_field.h`, a header of pure functions like
+`hd_gloss_math.h`: the cell (`HD_GLOSS_FIELD_CELL`, `:65`), the reach (`:70`), a lamp's
+colour to the field's scale (`HD_GLOSS_LAMP_NORM`, `:82`), the falloff (1 - d^2 / R^2)^2
+(`:121`), the exposure 1 - e^-m that bounds a cell's colour below one and keeps its hue
+(`:136`), the grid over the rooms' boxes that a lamp reaches, one cell more each side,
+powers of two where a device asks for them (`HDGlossFieldLayout`, `:207`), the build
+(`HDGlossFieldBuild`, `:296`) with an optional sight test by the rooms that only the tools
+use (`HDGlossFieldSight`, `:282`), and the sample as the shader reads it (`:452`).
+`hd_render.cpp` builds it at the level build out of every room group's point lights in
+world units and the rooms' boxes made world (`BuildField`, `:3158`, called at `:3759`)
+into two `D3DFMT_A8R8G8B8` volume textures in the managed pool (`MakeFieldTexture`,
+`:3125`) - a device without filtered volume textures gets none, and the variant then draws
+its environment term alone; the state bracket saves samplers 1 and 2 and their textures
+(`:5891`), sets them linear, unmipped and clamped (`:5945`), binds the field in the room
+bracket (`:5994`) and puts all of it back (`:6080`). Per room, `prepare` (`:6822`) writes
+six registers, `upload_gloss_rows` (`:6154`): `gGlossAxes`, the view rotation's transpose,
+and `gGlossField`, the rows that take a view-space position to the field's texture
+coordinate - the room's world-view matrix undone, the room group's origin kept from the
+build added, the field's corner taken off and its size divided out - so the engine, whose
+matrix is the finished D3DMView, and RoomProbe, which draws a room at its own origin, land
+on the same world. Per glossy draw call only `gGloss` changes, its `w` the tool's field
+picture (`:6606`). The shader: the note "The sheen"
+(`specific/hd/hd_shader/hd_room.hlsl:528`), the constants (`:590`), the registers (`:596`)
+and samplers (`:603`), `GlossSheen` (`:997`) with the bound (`:1047`), the caustic in both
+variants (`:1260`) and the screen (`:1305`); `hd_room_gloss_ps.inc` uses 502 of the 512
+slots (`:543`). The bound's twins for the suite are `HDGlossSheenBound` and
+`HDGlossSheenCompose` (`hd_gloss_math.h:742`, `:753`). Which draw calls keep the plain
+variant is `RangeKeepsPlain` (`hd_render.cpp:2893`); `ResolveSheen` (`:3010`) no longer
+looks at the room and counts what it keeps plain (`:3034`, `:3058`), and the GLOSSLOG part
+counts follow it (`:4690`). The log: the GLOSSLOG level line ends in `field= field_lit=
+field_weak= field_kb= field_ms=` (`hd_level.cpp:3605`), and `GLOSSLOG skipped level=
+ripple= caustic= flat= scroll= flipbook= book= clear=` follows it (`:3611`,
+`HDRenderSheenSkipped`, `hd_render.h:1105`). The tools: TrgProbe `-glossfield`
+(`TrgProbe.cpp:3005`); RoomProbe `-glossfield [colour|direction]` and `-fieldsight`
+(`RoomProbe.cpp:5137`, `:5155`, through `HDRenderGlossFieldView` and
+`HDRenderGlossFieldSight`, `hd_render.cpp:7163`, `:7168`), and its state-bracket check
+watches samplers 1 and 2 and their textures (`RoomProbe.cpp:929`, `:7055`); ModernTest's
+`gloss_field_grid`, `gloss_field_texels`, `gloss_field_build` and `gloss_field_bound`
+(`ModernTest.cpp:10764`, `:10806`, `:10856`, `:10964`) take the place of `gloss_cube` and
+the lamp ranking.
+
+**Checked.** The engine builds without an error or a warning; ModernTest 14,128 (14,116
+before: the nine checks of the cube, the sun and the lamp ranking replaced by 21 of the
+field and the bound), MenuTest 42,364, InterpTest 711, LipsTest 270 with the lip objects
+and 243 without, none failed; RoomProbe, TrgProbe, DdsProbe and ModelProbe build. The
+plain room pixel shader, the room vertex shader and the glow shader compile to the
+bytecode of `ca2e904` but for the stamp line. The switch off: ANDREA1 room 3 from
+room-local (2679, -690, -1169), yaw 31.4, pitch 6, fov 60, with its nine neighbours, and
+JOBY3 room 4 from RoomProbe's own camera, drawn with `-noreflect` against the pictures
+drawn with `-noreflect` at `ca2e904`: 0 of 1,587,200 and 0 of 1,228,800 pixels differ, and
+the state bracket is whole (0 of 83 watched states changed). The seams, as the mean
+absolute step between the pixels two and three either side of the line where a room's own
+art meets the next room's in the picture, counted where the surface runs on (a step below
+16 with the gloss off), gloss off and on: JOBY2's corridor 114 into 123, 5.68 and 6.07
+(+0.40); JOBY2's floor of room 90 into 118, 6.67 and 8.13 (+1.46), and into 85, 4.41 and
+5.28 (+0.87); RICH1 room 60 into 59, 5.84 and 5.94 (+0.10). RICH1's locker wall, room 17
+under room 87, steps by +9.20 on the wall itself, a page step and not a light step: the
+lower lockers are page 94, which the seed names metal, the upper ones page 93, which no
+source names; built with an `hd_gloss.txt` that names 93 metal, the same wall steps by
++0.17 (+0.37 over the whole boundary). The overlap: the pixels that stand out against both
+row neighbours by 8 per cent of their own brightness, inside the floor where JOBY2 rooms
+114 and 123 lay page 425 on one plane at y -2560, 1,287 off and 975 on of 217,000, and
+where JOBY2 room 118 lays pages 12058 and 425 on one plane, 704 and 774 of 390,000. The
+burn-out, over 16 pairs of pictures - the set below and JOBY2 rooms 90, 114 and 143 and
+RICH1 room 17 - and the seams and overlaps: no picture gains more than 0.003 per cent of
+pixels with a channel at 250 or more (RICH2 room 135, 0.045 to 0.047), and the most the
+gloss adds anywhere is 41 of 255 (JOBY2 room 114's floor), 58 with every draw call at
+strength 1 and F0 1 (`-glossmax`), still with no channel brought to 250. The camera: three
+cameras 2,048 apart along JOBY2 room 90 at room-local (1536, -5800, z), z 1280, 3328 and
+5376, all looking at (2816, -4096, 3328): the highlight's centre on the floor, the
+weighted centre of the pixels the gloss lifts by at least 70 per cent of its most, stands
+at z 2034, 2399 and 2989 - it moves 955 units while the camera moves 4,096, as the mirror
+image of a lamp hung over the floor does, where a directional light's moved with the
+camera one to one. Before and after, `-noreflect` for before (mean brightness, largest
+difference, pixels by more than 32 of 255), against the previous entry's after: ANDREA1
+room 3 from that entry's camera, 61.9 to 62.5, 39, 1,613 (66.5, 255, 71,602); JOBY3 room 4
+83.8 to 84.1, 26, 0 (85.6, 106, 25,848); JOBY3 room 79 20.3 to 21.8, 6, 0 (26.6, 70,
+18,201); ANDREA1 room 64 101.0 to 101.2, 6, 0 (101.9, 26, 0); JOBY2 room 20 92.5 to 92.9,
+12, 0 (95.1, 93, 2,277); ANDREA2 room 16 68.5 to 69.3, 10, 0 (71.5, 35, 4,158); RICH2 room
+135 80.0 to 81.0, 11, 0 (87.1, 65, 13,997); RICH1 room 5 85.8 to 86.2, 6, 0 (91.7, 69,
+104,064); RICH1 room 60 38.5 to 38.7, 14, 0 (39.4, 31, 0); RICH2 room 8, the lobby, the
+same to the pixel. ANDREA1 room 3 from room-local (5300, -1500, 4400), yaw -125, pitch 40,
+over the forklift's cage: 57.9 to 58.7, 29, 0, and no pixel brought to 250. RICH2 room 46,
+a room with a clear floor, from (9727, -900, 2600), yaw 180, pitch 28.3: its steel shaft,
+page 954, shines by up to 6 on 4,641 pixels, and its copy beneath the clear floor with it.
+The field, per level (TrgProbe `-glossfield`; RoomProbe's `sheen field:` line for the
+engine's build with its textures on this machine): 2,925 cells (JOBY4) to 151,807 (RICH3),
+22 KiB to 1,185 KiB in the two textures, at most 524,288 cells and 4 MiB where a device
+asks for powers of two (ANDY2, TITLE), built in 0.2 to 6.5 ms (ANDY2); weak cells, less
+than one-third one-sided, are 0 (JOBY4) to 4.3 (RICH1) per cent of the lit ones. The light
+it carries through walls: of the light in the cells inside a room, 23.6 per cent in JOBY2
+and 30.5 in RICH2 comes from lamps of rooms more than two portals away; built with the
+sight test by the rooms, the highlight's strength on the floors falls by 15.2 per cent of
+its sum in JOBY2 (by more than 0.1 on 550 of 8,722 squares) and rises by 1.3, and falls by
+11.1 per cent in RICH2 (361 of 2,333) and rises by 4.6. The pictures show no highlight
+without a lamp either way: in JOBY2 room 90's view the test makes the one spot by the
+column larger, by up to 27 of 255 - the far lamps no longer dilute the direction there -
+and RICH2 room 135's view differs by at most 6. The cancelling case: JOBY2's strongest
+weak cell lies in room 119 at room-local (2560, -5632, 1536), its strength times one less
+its one-sidedness 0.89 (TrgProbe `-glossfield`), and RoomProbe's picture of that room,
+gloss on against off, adds at most 21 of 255 anywhere; two equal lamps either side of a
+cell leave a one-sidedness under 0.05 (ModernTest). The draw calls: RICH1 647 to 652 (33
+to 34 pages), RICH2 356 to 386, TITLE 15 to 19 (6 to 9 pages), every other level as
+before; `GLOSSLOG skipped` counts `clear=` 150 in RICH2, 1 in RICHCUT2 and 9 in TITLE and
+0 for every other reason in all fifteen levels.
+
+**Unchanged.** The classic path: nothing of it is reached with `hd_enable` off. With
+`hd_reflect` off no draw call takes the gloss variant and every room is drawn to the pixel
+as at `ca2e904`; the field is still built and bound, and the plain variant reads none of
+it. The resolver's order - the material, the file, the table, the seed - the page table
+`hd_gloss_pages.h`, `hd_gloss.txt` and its format, the seed, the barred lobby pages,
+GLOSSLOG's page lines and the existing fields of its level line, TrgProbe's and
+RoomProbe's gloss switches. The alpha reference, the cut-outs, material 17's draw, the
+water, the glow, the flipbooks', books' and scrolls' own drawing, the glass, the
+clear-class ranges themselves and the mirrors. The objects and Lara: no file of the object
+path is touched. The interpolation.
+
+**Decisions.** The shine is a function of the place: what the gloss variant reads for a
+pixel is its world position, its normal, its page's gloss and the eye, nothing chosen per
+draw call or per room, so it steps nowhere the baked light does not step, and two layers
+on one plane take the same shine. No light is tied to the camera: the eye as a lamp and
+the directional sun are gone, and a highlight belongs to a lamp of the level at its place.
+No burn-out: a lamp's colour is scaled by HD_GLOSS_LAMP_NORM so that the 90th percentile
+of the lamps' largest channel over the fifteen levels (20; the median is 10 and the
+largest 120) gives one, a cell's colour is bounded below one by the exposure, the lobe's
+normalisation is folded into HD_GLOSS_HIGHLIGHT 2, and the whole sheen is held under the
+surface's own lit colour plus 4 of 255 - softly, B (1 - e^(-t / B)) - and composed as a
+screen, so a dark surface stays dark and a lamp behind a wall cannot light a surface the
+bake left dark. The environment is the surface's own baked light at a quarter, continuous
+by the art, its Fresnel rise held by the same bound. The highlight's source is the light
+field, built once per level, a cell a floor square across and a square up; a second
+direction per cell is not built - weak cells are 0 to 4.3 per cent of the lit ones, and a
+second lobe and a third texture would not fit the ten slots left. No sight test in the
+engine: the pictures show no visible leak without one, a test by the rooms on this grid
+takes a floor's own lamps half away where an unconnected room lies under it at a cell
+boundary, and it would need the rooms' portal lists in the renderer; the tools carry it
+for the measurement. Lara's own sheen is not part of this entry: her draw path is
+untouched. Every room that wears the page shines: the exclusion of rooms with a clear
+floor is gone, the lobby's pages stay matt by page and the clear floors by class; the
+caustic is back in the gloss variant (its slots came free with the lamp loop), the scroll,
+the flipbook and the book need nothing of the pixel shader, and the water surfaces' ripple
+and the sky band's flat light keep the plain variant and are counted. The dynamic lights
+give no highlight in the gloss variant: ten slots are left, and one lobe per light costs
+more. No per-frame work on the processor per glossy draw call beyond the variant and the
+page's own constants: the rows go up once per room, the textures once per bracket.
+
+**Left.** RICH1's locker step is a page step: page 93, the upper lockers, wears the
+picture of page 94 and is named by no source; a line `93 metal` in `hd_gloss.txt` closes
+it to +0.17, and the page table, kept as it was built in this entry, can name it the same
+way. The same may hold for other split pictures - JOBY2's corridor wall shows a matt upper
+panel over a glossy lower one - looked at, not measured. The ripple of a water surface in
+the gloss variant (no level has a water page that names a gloss). The dynamic lights'
+highlight. A second direction per cell. The sight test in the engine. Lara's own sheen, a
+task of its own. The play test at 165 Hz with `-log` and HD on: JOBY2 first - the
+diamond-plate rooms around room 90, the table room 104 and the hull outside, room 143: no
+white disc, nothing travelling with the camera, no comb, no step where rooms meet; RICH1's
+locker room 17; ANDREA1 room 3 from above; a RICH2 corridor beside the lobby; then the
+levels of the previous entry. In the log, `GLOSSLOG skipped` and the GLOSSLOG level line's
+`field=`, and the HDLOG frame line's `sheen_calls=`.
+
+**Commits.** the commits 'Round 189b (#189): the shine reads a light field of the level',
+'Round 189b (#189): the sheen is bounded by the surface's own light', 'Round 189b (#189):
+every room that wears the page shines', 'Round 189b (#189): the tools and the suite',
+'Round 189b (#189): the record follows'.
 
 ### The portal walk, the window on intruding art, and the doorway a randomized run opens
 2026-09-07 - 2026-09-11
@@ -10582,4 +10795,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
-| #189 | A shine on metal, marble and ice |
+| #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call |

@@ -1259,11 +1259,6 @@ namespace
 		float sheenMask = 0.0f;
 		int sheenClass = 0;
 		int sheenSource = 0;
-		/* 1 where a vertex of this range can carry the caustic - a water mark
-		 * on a flat vertex in the room's surface plane (hd_room.hlsl, the
-		 * caustic). The gloss variant has no caustic, so such a range keeps
-		 * the plain variant. */
-		int wet = 0;
 		/* The ripple of this draw call - the wave scale, the travel and the
 		 * rate of a material 16 water surface, and three zeroes for every
 		 * other draw call. In the sort key like every other per-draw-call
@@ -2874,25 +2869,53 @@ namespace
 		}
 	}
 
-	/* Whether a draw call may take the gloss variant at all. The two surface
-	 * passes only - an additive part paints light - and none of the draw
-	 * calls whose own pass the variant does not carry or must not change:
-	 * the sky, the glass and the clear floors (the blend phase), the water
-	 * surfaces (the ripple), the flipbooks and the books, the UV scrolls, and
-	 * a range the caustic can reach (HDRange::wet) - and, decided per room in
-	 * ResolveSheen, every draw call of a room with a clear floor. Those keep
-	 * the plain variant and, where their material names one, its
-	 * grazing-angle lift. */
-	bool RangeTakesSheen(const HDRange& r, int pass, bool sky)
+	/* Why a draw call keeps the plain variant whatever its page names, or
+	 * HD_PLAIN_NONE where it may take the gloss variant. The two surface
+	 * passes of the rooms only - an additive part paints light and the sky
+	 * is no room - and none of the draw calls whose feature the variant does
+	 * not carry: the clear floors and the glass (the blend phase), the water
+	 * surfaces (the ripple, whose slots the sheen takes) and the sky band's
+	 * flat light. Those keep the plain variant and, where their material
+	 * names one, its grazing-angle lift. The variant carries the caustic, and
+	 * the scroll, the flipbook and the book are a texture address, a texture
+	 * and an offset the processor sets for either variant alike, so a range
+	 * with one of them takes the sheen its page names. */
+	enum
 	{
-		return !sky && pass != 2 && r.blend == 0.0f && !r.clear &&
-			r.ripple[0] == 0.0f && r.ripple[1] == 0.0f && r.ripple[2] == 0.0f &&
-			r.flipTime == 0.0f && r.bookTime == 0.0f && r.flatLight == 0.0f &&
-			r.scrollU == 0.0f && r.scrollV == 0.0f && !r.wet;
+		HD_PLAIN_NONE,
+		HD_PLAIN_NOT_A_SURFACE,	// the additive pass, the sky
+		HD_PLAIN_GLASS,
+		HD_PLAIN_CLEAR,
+		HD_PLAIN_RIPPLE,
+		HD_PLAIN_FLAT
+	};
+
+	int RangeKeepsPlain(const HDRange& r, int pass, bool sky)
+	{
+		if (sky || pass == 2)
+			return HD_PLAIN_NOT_A_SURFACE;
+
+		if (r.clear)
+			return HD_PLAIN_CLEAR;
+
+		if (r.blend != 0.0f)
+			return HD_PLAIN_GLASS;
+
+		if (r.ripple[0] != 0.0f || r.ripple[1] != 0.0f || r.ripple[2] != 0.0f)
+			return HD_PLAIN_RIPPLE;
+
+		if (r.flatLight != 0.0f)
+			return HD_PLAIN_FLAT;
+
+		return HD_PLAIN_NONE;
 	}
 
-	// Once per level: the draw calls that take the gloss variant.
+	/* Once per level: the draw calls that take the gloss variant, and the
+	 * GLOSSLOG skipped line - the draw calls whose page names a gloss and
+	 * that keep the plain variant for each reason, and the clear floors'
+	 * draw calls, which keep it by their class whatever names their page. */
 	int g_sheen_ranges = 0;
+	HDRenderSheenSkipped g_sheen_skipped;
 
 	/* Which surfaces shine - the four sources of hd_gloss_math.h.
 	 *
@@ -2981,32 +3004,36 @@ namespace
 	 * key already. Whether the page's alpha masks the sheen is the page's
 	 * own smallest alpha against HD_GLOSS_MASK_BELOW. What a glossy draw call
 	 * is lit with is the level's light field, read per pixel - nothing of it
-	 * is chosen here. */
+	 * is chosen here, so every room that wears a page shines alike, a room
+	 * with a clear floor as well; the lobby's own pages are barred by
+	 * page (HDGlossPageBarred) and the clear floors by their class. */
 	void ResolveSheen()
 	{
 		g_sheen_ranges = 0;
 		g_gloss_pages.clear();
+		std::memset(&g_sheen_skipped, 0, sizeof(g_sheen_skipped));
 
 		std::map<long long, size_t> line_of;
 
 		for (size_t g = 0; g < g_groups.size(); g++)
 		{
 			const bool sky = (int)g >= g_room_groups;
-			/* A room with a clear floor keeps its picture whole: RICH2's
-			 * lobby and the rooms that stand mirrored beneath its floors,
-			 * RICHCUT2's and TITLE's - 55, 1 and 9 rooms (RoomProbe's
-			 * sheen line). Its walls would otherwise shine above a floor
-			 * that is itself the mirror, and differently from their copy
-			 * beneath it. */
-			const bool clear_room = g_groups[g].clearRanges != 0;
 
 			for (int pass = 0; pass < 2; pass++)
 				for (HDRange& range : g_groups[g].pass[pass])
 				{
 					range.sheen = 0.0f;
 
-					if (clear_room || !RangeTakesSheen(range, pass, sky))
+					const int plain = RangeKeepsPlain(range, pass, sky);
+
+					if (plain == HD_PLAIN_NOT_A_SURFACE || plain == HD_PLAIN_GLASS)
 						continue;
+
+					if (plain == HD_PLAIN_CLEAR)
+					{
+						g_sheen_skipped.clear++;
+						continue;
+					}
 
 					const int page = HDPageCachePageOfSlot(range.pageSlot);
 					HDGloss got;
@@ -3023,6 +3050,17 @@ namespace
 					}
 					else
 						got = PageGloss(page);
+
+					// A water surface or the sky band: counted, kept plain.
+					if (plain != HD_PLAIN_NONE)
+					{
+						if (got.strength > 0.0f && plain == HD_PLAIN_RIPPLE)
+							g_sheen_skipped.ripple++;
+						else if (got.strength > 0.0f && plain == HD_PLAIN_FLAT)
+							g_sheen_skipped.flat++;
+
+						continue;
+					}
 
 					// The upper bound, for the tool's picture alone.
 					if (g_gloss_max)
@@ -3273,7 +3311,7 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 
 	/* bshader.bat compiles three pixel shaders for ps_3_0, the room shader at
 	 * 476 instruction slots, the model shader at 353 and the glow shader at
-	 * 479, and the room shader's gloss variant beside them at 452
+	 * 479, and the room shader's gloss variant beside them at 502
 	 * (hd_room_gloss_ps.inc). The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
@@ -4078,9 +4116,6 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	g_book_watch_page = 0;
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
-	/* The water mark bits each vertex was given, kept past the locked buffer
-	 * for the ranges' `wet` flag - the buffer itself is write-only. */
-	std::vector<unsigned char> mark_bits((size_t)g_vertex_count, 0);
 
 	/* --- the vertex buffer -------------------------------------------- */
 	if (FAILED(g_device->CreateVertexBuffer((UINT)(g_vertex_count * (int)sizeof(HDVertex)),
@@ -4203,7 +4238,6 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			out[i].wShimmer = (unsigned char)((bits >> 1) & 1);
 			out[i].wRoomShimmer = (unsigned char)((bits >> 2) & 1);
 			out[i].wSpare = 1;
-			mark_bits[(size_t)i] = bits;
 
 			if (bits)
 				marked_vertices++;
@@ -4402,8 +4436,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * the water here" and needs no majority. See BuildWaterSurfaces. */
 		std::vector<std::pair<int, unsigned int> > waterflats;
 		/* The GLOSSLOG part counts of this group, added to the level's once
-		 * its passes are built - a room with a clear floor takes no sheen
-		 * (RangeTakesSheen), and that is known only then. */
+		 * its passes are built. */
 		int group_parts[5] = { 0, 0, 0, 0, 0 };
 
 		for (int pass = 0; pass < 3; pass++)
@@ -4650,11 +4683,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				/* Which sources name the pages of this part - the GLOSSLOG
 				 * level line's part counts. Asked of the parts whose draw
-				 * calls can take the sheen at all (RangeTakesSheen), per
-				 * triangle, because a part runs over several pages. */
+				 * calls can take the sheen at all (RangeKeepsPlain: no
+				 * additive part, no sky, no glass, no water surface), per
+				 * triangle, because a part runs over several pages; a clear
+				 * floor's page names nothing (ResolvePage). */
 				const bool part_sheen = pass != 2 && (int)g < g_room_groups &&
-					!scrolls && ftime == 0.0f && btime == 0.0f && !water &&
-					flat == 0.0f && blend == 0.0f && run.count;
+					!water && flat == 0.0f && blend == 0.0f && run.count;
 				unsigned int part_sources = 0;
 
 				for (unsigned int at = 0; at + 2 < run.count; at += 3)
@@ -5244,7 +5278,6 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.gloss = tris[i].gloss;
 					range.glossPower = tris[i].glossPower;
 					range.glossMat = tris[i].glossMat;
-					range.wet = 0;
 					range.ripple[0] = tris[i].ripple[0];
 					range.ripple[1] = tris[i].ripple[1];
 					range.ripple[2] = tris[i].ripple[2];
@@ -5271,22 +5304,6 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					{
 						const trf::remaster::TrgVertex& v = trg.vertices[index];
 						const float p[3] = { (float)v.x, (float)v.y, (float)v.z };
-
-						/* Whether the caustic can reach this range: the
-						 * shader's water weight is the choppy mark, or a
-						 * shimmer mark on a flat vertex (the |n.y| >= 0.6
-						 * gate) in the room's surface plane, its minfloor -
-						 * the room box's floor. See HDRange::wet. */
-						if (!range.wet && index < mark_bits.size() &&
-							(mark_bits[index] & 7))
-						{
-							const int upright = (int)v.ny - 127;
-							const bool flat = upright <= -77 || upright >= 77;
-
-							if ((mark_bits[index] & 1) || (flat &&
-								(!group.hasRoomBox || p[1] == group.roomMaxs[1])))
-								range.wet = 1;
-						}
 
 						/* Per room: which of this room's vertices
 						 * carry a wind weight and how strong the strongest
@@ -5391,9 +5408,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			}
 		}
 
-		if (!group.clearRanges)
-			for (int k = 0; k < 5; k++)
-				g_gloss_parts_by[k] += group_parts[k];
+		for (int k = 0; k < 5; k++)
+			g_gloss_parts_by[k] += group_parts[k];
 
 		/* The occupancy, sorted and made unique once the group's three
 		 * passes have been walked - a query is a binary search from here on,
@@ -7141,6 +7157,7 @@ void HDRenderGlossLevelInfo(HDRenderGlossLevel* out)
 	out->fieldWeak = g_field_dir ? g_field_stats.weak : 0;
 	out->fieldBytes = g_field_bytes;
 	out->fieldMs = g_field_ms;
+	out->skipped = g_sheen_skipped;
 }
 
 void HDRenderGlossFieldView(int mode)

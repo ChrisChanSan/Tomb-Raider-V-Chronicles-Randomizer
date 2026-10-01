@@ -1093,8 +1093,26 @@ int HDRenderSheenCalls();
  * the gloss variant; the light field (hd_gloss_field.h) - its cells along x,
  * y and z (all 0 when the level has none), the cells a lamp reaches, the
  * weak ones, the bytes of its two textures and the build's time in
- * milliseconds. One HDRenderGlossPage per page and source that shines, with
- * its triangles. */
+ * milliseconds; and the draw calls that keep the plain variant although
+ * their page names a gloss, per reason (HDRenderSheenSkipped). One
+ * HDRenderGlossPage per page and source that shines, with its triangles. */
+
+/* The draw calls of a level that keep the plain variant, per reason: the
+ * water surfaces (the ripple) and the sky band (flat light) whose page names
+ * a gloss, and every clear floor's, which keeps it by its class. The
+ * caustic, the scroll, the flipbook and the book are carried by the gloss
+ * variant and keep no draw call plain; their counts stay 0. */
+struct HDRenderSheenSkipped
+{
+	int ripple;
+	int caustic;
+	int flat;
+	int scroll;
+	int flipbook;
+	int book;
+	int clear;
+};
+
 struct HDRenderGlossLevel
 {
 	int tableLines;
@@ -1113,6 +1131,7 @@ struct HDRenderGlossLevel
 	int fieldWeak;
 	int fieldBytes;
 	float fieldMs;
+	HDRenderSheenSkipped skipped;
 };
 
 struct HDRenderGlossPage

@@ -3587,8 +3587,10 @@ static void HDLevelBuildHD()
 	 * holds for the floor squares, and the light field itself: its cells
 	 * along x, y and z (0x0x0 when the level has none), the cells a lamp
 	 * reaches, the weak ones between lamps, its textures' kilobytes and the
-	 * build's milliseconds. And one line per page and source that shines,
-	 * with the numbers the gloss variant draws it with. */
+	 * build's milliseconds. One skipped line - the draw calls whose page
+	 * names a gloss and that keep the plain variant, per reason, and the
+	 * clear floors' (HDRenderSheenSkipped). And one line per page and source
+	 * that shines, with the numbers the gloss variant draws it with. */
 	if (gLogEnabled)
 	{
 		char file[16];
@@ -3606,6 +3608,10 @@ static void HDLevelBuildHD()
 			gloss.partsFile, gloss.fieldDims[0], gloss.fieldDims[1],
 			gloss.fieldDims[2], gloss.fieldLit, gloss.fieldWeak,
 			gloss.fieldBytes / 1024, gloss.fieldMs);
+		Log("GLOSSLOG skipped level=%s ripple=%d caustic=%d flat=%d scroll=%d "
+			"flipbook=%d book=%d clear=%d", g_stem, gloss.skipped.ripple,
+			gloss.skipped.caustic, gloss.skipped.flat, gloss.skipped.scroll,
+			gloss.skipped.flipbook, gloss.skipped.book, gloss.skipped.clear);
 
 		for (int i = 0; i < HDRenderGlossPageCount(); i++)
 		{

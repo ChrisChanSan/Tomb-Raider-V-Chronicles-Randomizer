@@ -1254,11 +1254,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
 		c *= 1.0f + min(HD_FRESNEL_MAX, gloss * grazing * HD_FRESNEL_LIFT);
 	}
 #endif
-	/* The gloss variant draws the sheen in place of that lift, further down. */
+	/* The gloss variant draws the sheen in place of that lift, further down,
+	 * once the caustic has moved the surface's own light. */
 
-	/* The gloss variant draws no caustic: hd_render.cpp keeps every draw
-	 * call with a water-marked vertex in it on the plain variant. */
-#ifndef HD_GLOSS
 	/* The caustic (TROne's formula, see the note beside HD_WATER_UV and
 	 * THIRD-PARTY.md).
 	 *
@@ -1286,7 +1284,6 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 		c *= max(0.0f, 1.0f + HD_CAUSTIC_WEIGHT * input.waterAdd.w * caustic);
 	}
-#endif
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
 	 * classic path draws through, with D3DRS_SPECULARENABLE on

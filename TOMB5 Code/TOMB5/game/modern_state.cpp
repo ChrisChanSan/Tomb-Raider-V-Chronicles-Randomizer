@@ -660,8 +660,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * orbit's world yaw against the measured vector, so one per change of
 	 * old_type between 0 and 1, and one where the diagonal-wall push begins or
 	 * ends). `latch` is modern_state.cut_latch after the translation: 1 while
-	 * a course seated before a cut is held, until the stick is let go
-	 * (MODERN_CUT_LATCH).
+	 * a course seated before a cut is held, until the stick is let go or
+	 * re-aimed (MODERN_CUT_LATCH).
 	 *
 	 * `ref_view` is 1 when the modern camera may steer the view and the
 	 * reference is nevertheless the measured vector: under the rich2 sniper
@@ -670,6 +670,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * the orbit's first, and on a tick after the diagonal-wall push moved the
 	 * eye (CAMLOG's `diag=` above 0 on the tick before). 0 when the reference
 	 * is the orbit's world yaw, and whenever the modern camera is off.
+	 *
+	 * `latch_drop` is out.latch_drop: 1 on the tick the stick, turned more than
+	 * MODERN_CUT_REAIM from where it pointed when the latch was armed, ended
+	 * the hold, so `latch` reads 0 and `ref` is this tick's camera; 0 on every
+	 * other tick.
 	 *
 	 * New fields are appended at the end, so the older ones keep their
 	 * places. */
@@ -699,7 +704,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
 			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d "
-			"cam_speed=%d old_type=%d cut=%ld latch=%ld feed=%s ref_view=%ld",
+			"cam_speed=%d old_type=%d cut=%ld latch=%ld feed=%s ref_view=%ld latch_drop=%ld",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
@@ -709,7 +714,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			cam_world, clip, view_err, air, carry, modern_state.stand_hold,
 			sit.cam_player_step, (int)camera.speed, (int)camera.old_type,
 			sit.cam_cut, modern_state.cut_latch, ModernFeedName(feed),
-			(ModernCameraActive() && !ref_orbit) ? 1L : 0L);
+			(ModernCameraActive() && !ref_orbit) ? 1L : 0L, out.latch_drop);
 	}
 
 	return bits;

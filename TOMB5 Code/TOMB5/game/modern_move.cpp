@@ -293,6 +293,7 @@ static void ModernRelease(MODERN_STATE* state)
 	state->aligned = 0;
 	state->aiming = 0;
 	state->cut_latch = 0;	// no course, nothing to keep a reference for
+	state->cut_off = 0;
 }
 
 void ModernDefaults(MODERN_CFG* cfg)
@@ -354,6 +355,7 @@ void ModernResetState(MODERN_STATE* state)
 	state->last_turn = 0;
 	state->stand_hold = 0;
 	state->cut_latch = 0;
+	state->cut_off = 0;
 }
 
 /* The states that stay classic, checked state by state against
@@ -1416,7 +1418,9 @@ static void ModernFinish(MODERN_STATE* state, MODERN_RESULT* out)
  *   least recenter				a new direction was meant: seat the course on
  *								the camera of this tick - or, after a cut
  *								in the same hold, on the reference the
- *								course has (MODERN_CUT_LATCH).
+ *								course has (MODERN_CUT_LATCH), as long as
+ *								the stick stays within MODERN_CUT_REAIM of
+ *								where it pointed at the cut.
  *   stick back at rest			forget it all; the next push starts fresh.
  * (Shipped, recenter equals steer_step, so the middle band is empty.)
  *
@@ -1455,6 +1459,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	out->blocked = 0;
 	out->turning = 0;
 	out->course_step = 0;
+	out->latch_drop = 0;
 
 	/* All three may be left out. A caller that hands in nothing gets the
 	 * defaults, a scratch state and plain running on land - which is what the
@@ -1538,14 +1543,38 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	}
 
 	/* 2b. A cut while a course is held latches its reference
-	 * (MODERN_CUT_LATCH). From here until the stick is let go, camera_yaw is
-	 * another camera's than the one the course was seated on, and the re-seat
-	 * below would turn her by the angle between the two; with the latch it
-	 * reads the stick against the reference the course already has. Without a
-	 * course there is nothing to keep: the push seats on the camera of the
-	 * tick, the new one. */
-	if (state->have_ref && cfg->hold_course && cfg->cut_latch && sit->cam_cut)
+	 * (MODERN_CUT_LATCH). From here until the stick is let go or re-aimed
+	 * (2c), camera_yaw is another camera's than the one the course was seated
+	 * on, and the re-seat below would turn her by the angle between the two;
+	 * with the latch it reads the stick against the reference the course
+	 * already has. Without a course there is nothing to keep: the push seats
+	 * on the camera of the tick, the new one. The stick's direction of the
+	 * arming tick is kept for 2c; a further cut while the latch stands changes
+	 * neither. */
+	if (state->have_ref && cfg->hold_course && cfg->cut_latch && sit->cam_cut &&
+		!state->cut_latch)
+	{
 		state->cut_latch = 1;
+		state->cut_off = offset;
+	}
+
+	/* 2c. The re-aim. A stick turned more than MODERN_CUT_REAIM, the short way
+	 * round, from where it pointed when the latch was armed means a direction
+	 * in the view on screen, so the hold ends on this tick: the latch drops
+	 * and the branch below seats the course afresh on the camera of the tick,
+	 * exactly as a release followed by a push in this direction would leave
+	 * course, reference and latch. Nothing else of a release happens - spin,
+	 * aligned and aiming stay as they are, so she does not stop. It runs after
+	 * 2b, so on a tick that carries a cut as well the cut is taken first and
+	 * the seat is on that tick's new camera. */
+	if (state->cut_latch && cfg->hold_course && cfg->cut_latch &&
+		ModernAbs(ModernWrap((long)offset - state->cut_off)) > MODERN_CUT_REAIM)
+	{
+		state->have_ref = 0;
+		state->cut_latch = 0;
+		state->cut_off = 0;
+		out->latch_drop = 1;
+	}
 
 	if (!state->have_ref)
 	{
@@ -1620,6 +1649,7 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 		state->last_off = offset;
 		state->ref = camera_yaw;
 		state->cut_latch = 0;	// the reference is this tick's camera again
+		state->cut_off = 0;
 
 		delta = ModernWrap((long)target - lara_yaw);
 		bits = ModernRelativeBits(delta, cfg->aim_sector, 1);

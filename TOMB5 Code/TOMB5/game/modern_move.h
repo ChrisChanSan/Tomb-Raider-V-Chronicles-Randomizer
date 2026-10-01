@@ -428,8 +428,26 @@ enum modern_constants
 	 * reference the course was seated on, a further cut changes nothing, and
 	 * the player's own camera turn still moves reference and course together.
 	 * Letting go of the stick drops the latch, so the next push seats on the
-	 * camera of that tick. Off, every re-seat takes the camera of the tick. */
+	 * camera of that tick, and so does a re-aim: the stick's direction moved
+	 * more than MODERN_CUT_REAIM from where it pointed on the tick the latch
+	 * was armed. Off, every re-seat takes the camera of the tick. */
 	MODERN_CUT_LATCH = 1,
+
+	/* The re-aim that ends the cut latch, in angle units, measured the short
+	 * way round from the stick's direction on the tick the latch was armed
+	 * (MODERN_STATE::cut_off) - not from tick to tick, so a slow roll ends
+	 * the hold once its sum passes the bound. In a RICH2 MODERNLOG through the
+	 * X-ray corridor and the diagonal walls at its ends, the stick held across
+	 * a cut left the direction it had at the cut by more than 8192 within 4 to
+	 * 39 ticks in each of 11 latch periods, and was then read against the
+	 * camera before the cut for the rest of the hold: 1196 ticks with the
+	 * stick out and the frame more than 8192 off the picture. A stick turned
+	 * that far follows the view on screen. 8192 is 45 degrees, one movement
+	 * key added to another; it keeps the hold, and a quarter turn ends it. A
+	 * wandering thumb keeps it: in a rich2 MODERNLOG through the sniper camera
+	 * the median stick step of a held tick is 61 units. Not a cfg field:
+	 * cut_latch switches the latch, and with it this. */
+	MODERN_CUT_REAIM = 8192,
 
 	/* The ledge hang (the option tomb5.ledge_hang, the state AS_LEDGEHANG in
 	 * game\lara.cpp). These are not cfg fields: ModernLedgeDecide and the
@@ -513,7 +531,7 @@ struct MODERN_CFG
 	long aim_strafe;	// strafe instead of turning while aiming
 	long jump_dir;		// directional jump and flips out of a stand
 	long block_turn;	// a blocked forward becomes a pure turn
-	long cut_latch;		// a camera cut keeps the held course's reference until the stick is let go
+	long cut_latch;		// a camera cut keeps the held course's reference until the stick is let go or re-aimed
 };
 
 /* What the translation remembers from tick to tick. Nothing here is an engine
@@ -557,8 +575,15 @@ struct MODERN_STATE
 	/* 1 = the camera was cut since the held course was seated, so `ref`
 	 * belongs to a camera that no longer has the view and a re-seat keeps it
 	 * (MODERN_CUT_LATCH). Set only while a course is held; the release of the
-	 * stick clears it with have_ref. MODERNLOG's latch=. */
+	 * stick clears it with have_ref, and a re-aim past MODERN_CUT_REAIM clears
+	 * it alone. MODERNLOG's latch=. */
 	long cut_latch;
+
+	/* The stick's direction (the translation's `offset`) on the tick the latch
+	 * was armed; the re-aim is measured from it. A further cut while the latch
+	 * stands leaves it where it is, so a row of cuts cannot walk it round.
+	 * Meaningful only while cut_latch is 1, and cleared wherever that is. */
+	short cut_off;
 };
 
 /* What the caller knows about Lara this tick. A struct of zeroes gives plain
@@ -605,6 +630,7 @@ struct MODERN_RESULT
 	long blocked;		// the blocked rule took IN_FORWARD away this tick
 	long turning;		// a turn bit is in `bits`
 	short course_step;	// how far the course itself moved this tick - MODERNLOG's `cstep=`
+	long latch_drop;	// 1 on the tick a re-aim ended the cut latch - MODERNLOG's `latch_drop=`
 };
 
 /* The ledge hang's phases. The value is what tomb5_save_info keeps, so a

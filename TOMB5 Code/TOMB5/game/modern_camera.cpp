@@ -955,3 +955,32 @@ long ModernCameraTickFollows(unsigned short now, unsigned short stamp)
 {
 	return ((unsigned short)(now - stamp) == 1) ? 1 : 0;
 }
+
+/* Whether the angle the orbit holds is the view on screen, for the movement
+ * reference and the player's camera step (game\camera.cpp's
+ * ModernCameraWorldYaw and ModernCameraPlayerStep, which both ask here so
+ * they cannot disagree).
+ *
+ * Two conditions. The orbit ran on the tick before `now` (`orbit_at`, see
+ * ModernCameraTickFollows above). And the eye that pass left was not moved off
+ * the dialled angle afterwards (`pushed`, 1 when it was): game\camera.cpp's
+ * MoveCamera runs Core's CheckForRichesIllegalDiagonalWalls (game\tower.cpp)
+ * after the orbit's ray walk in The 13th Floor and Escape with the Iris, and
+ * that push throws the eye to the near side of a 45-degree wall panel's
+ * collision box grown by 384 units - across the dialled ray, not along it. The
+ * ray walk does not know the panels, so the ideal stands behind one and the
+ * eye is thrown back in front of it on every tick: pinned a few hundred units
+ * from her while the dialled angle turns on. Measured in a RICH2 MODERNLOG
+ * beside room 8's south-west panel (static 27): on the 380 stick-pushed ticks
+ * whose eye stood on a push plane, the orbit's angle lay a median 16411 units
+ * from the measured view and more than 8192 off on 322; on the 201 other
+ * stick-pushed ticks the median was 994 and none passed 8192, close eyes and
+ * clipped eyes included. On a pushed tick the measured eye -> target vector
+ * is the picture, so the caller falls back to it. */
+long ModernCameraOrbitIsView(unsigned short now, unsigned short orbit_at, long pushed)
+{
+	if (!ModernCameraTickFollows(now, orbit_at))
+		return 0;
+
+	return pushed ? 0 : 1;
+}

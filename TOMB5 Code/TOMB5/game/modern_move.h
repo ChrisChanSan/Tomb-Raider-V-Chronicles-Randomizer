@@ -586,7 +586,9 @@ struct MODERN_SITUATION
 	/* 1 on the tick the reference comes from another camera than on the tick
 	 * before: the seam switched between the orbit's world yaw and the measured
 	 * eye -> target vector, which is what a cut to and from the rich2 sniper
-	 * camera does. The translation cannot see it in camera_yaw, because a
+	 * camera does, and the start and end of Core's diagonal-wall push on the
+	 * orbit's eye (game\camera.cpp's ModernCameraWorldYaw). The translation
+	 * cannot see it in camera_yaw, because a
 	 * camera that turns quickly and a cut look the same there. */
 	long cam_cut;
 };

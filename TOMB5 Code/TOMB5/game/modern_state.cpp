@@ -357,6 +357,17 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * the tick before, so the measured vector - the camera the player sees - is
 	 * the reference while the sniper has the view.
 	 *
+	 * The same accessor declines on a tick after Core's diagonal-wall push
+	 * moved the orbit's eye (The 13th Floor and Escape with the Iris,
+	 * game\tower.cpp). That push throws the eye across the dialled ray to the
+	 * near side of a 45-degree wall panel (its collision box grown by 384,
+	 * tested within 512) and pins it there, so the dialled angle no longer
+	 * describes the picture: in a RICH2 MODERNLOG at room 8's south-west panel
+	 * the world yaw lay more than 8192 units off the measured view on 322
+	 * stick-pushed ticks, every one of them with the eye on that panel's push
+	 * plane. The eye is pinned, not trailing her run, so the measured vector
+	 * is the steady picture there and is the reference.
+	 *
 	 * MODERNLOG prints both: `cam=` is the measured vector and `ref=` what the
 	 * translation used (out.reference). */
 	ref_orbit = (ModernCameraActive() && ModernCameraWorldYaw(&ref_yaw)) ? 1 : 0;
@@ -421,7 +432,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * "did it really run" - so the two answers cannot disagree about which
 	 * camera this tick had. Where either says no the step is 0 and the held
 	 * course is left alone: a flyby, a cutscene, first person, the title, the
-	 * rich2 sniper camera, the tick before the orbit's first. The accessor
+	 * rich2 sniper camera, the tick before the orbit's first, a tick after the
+	 * diagonal-wall push moved the eye. The accessor
 	 * returns the stick's own term and not the orbit's whole step, which keeps
 	 * the return and the carried swing out of her course. */
 	sit.cam_player_step = 0;
@@ -438,7 +450,11 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 * two agree: the 405 ticks with the stick at rest show the reference
 	 * handed in, the orbit's on all 235 with old_type 0 and the measured
 	 * vector on all 170 with old_type 1, and the 2626 ticks replay exactly
-	 * with that rule - so the switch falls on the 38 changes of old_type. */
+	 * with that rule - so the switch falls on the 38 changes of old_type.
+	 * The diagonal-wall push switches the source the same way, on the tick
+	 * after its first push and on the tick after its last, with old_type 0
+	 * throughout, so
+	 * a stick held through it keeps its course by the same latch. */
 	sit.cam_cut = (modern_ref_seen && ref_orbit != modern_ref_orbit) ? 1 : 0;
 	modern_ref_orbit = ref_orbit;
 	modern_ref_seen = 1;
@@ -642,9 +658,17 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 	 *
 	 * `cut` is sit.cam_cut, 1 on the tick the reference changed cameras (the
 	 * orbit's world yaw against the measured vector, so one per change of
-	 * old_type between 0 and 1). `latch` is modern_state.cut_latch after the
-	 * translation: 1 while a course seated before a cut is held, until the
-	 * stick is let go (MODERN_CUT_LATCH).
+	 * old_type between 0 and 1, and one where the diagonal-wall push begins or
+	 * ends). `latch` is modern_state.cut_latch after the translation: 1 while
+	 * a course seated before a cut is held, until the stick is let go
+	 * (MODERN_CUT_LATCH).
+	 *
+	 * `ref_view` is 1 when the modern camera may steer the view and the
+	 * reference is nevertheless the measured vector: under the rich2 sniper
+	 * camera, on the tick before the orbit's first, and on a tick after the
+	 * diagonal-wall push moved the eye (CAMLOG's `diag=` above 0 on the tick
+	 * before). 0 when the reference is the orbit's world yaw, and whenever
+	 * the modern camera is off.
 	 *
 	 * New fields are appended at the end, so the older ones keep their
 	 * places. */
@@ -674,7 +698,7 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			"yawd=%d bits=%08lX cam_off=%d cam_pitch=%d cam_ret=%d rs=%ld/%ld hide=%d "
 			"water=%d xrot=%d stroke=%d cstep=%d cam_world=%d clip=%d "
 			"view_err=%ld air=%ld carry=%ld stand_hold=%ld cam_step=%d "
-			"cam_speed=%d old_type=%d cut=%ld latch=%ld feed=%s",
+			"cam_speed=%d old_type=%d cut=%ld latch=%ld feed=%s ref_view=%ld",
 			(long)GlobalCounter, out.active ? "pad" : "keys", stick_x, stick_y, out.mag,
 			camera_yaw, out.reference, modern_state.course, lara_yaw,
 			out.delta, sit.anim_state, ModernModeName(out.mode), modern_state.spin,
@@ -683,7 +707,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 			ModernLaraEyeDistance(), water, xrot, stroke, out.course_step,
 			cam_world, clip, view_err, air, carry, modern_state.stand_hold,
 			sit.cam_player_step, (int)camera.speed, (int)camera.old_type,
-			sit.cam_cut, modern_state.cut_latch, ModernFeedName(feed));
+			sit.cam_cut, modern_state.cut_latch, ModernFeedName(feed),
+			(ModernCameraActive() && !ref_orbit) ? 1L : 0L);
 	}
 
 	return bits;

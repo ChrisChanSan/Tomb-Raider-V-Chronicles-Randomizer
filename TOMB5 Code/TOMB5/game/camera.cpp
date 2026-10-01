@@ -225,6 +225,7 @@ static long modern_cam_mouse_pitch;	// as input.cpp last handed them - see Moder
 static long modern_cam_clipped;		// did mgLOS have to clip the eye LAST tick?
 static ushort modern_cam_clipped_at;	// the tick that measured it - see ModernCameraOrbit
 static ushort modern_cam_orbit_at;	// and the tick the orbit itself last ran - ModernCameraWorldYaw
+static long modern_cam_pushed;		// Core's diagonal-wall push moved the eye of that orbit pass - ModernCameraNotePush
 static long modern_cam_lead_yaw;	// what the STICK moved this tick, and not the return
 static long modern_cam_lead_pitch;	// - the two steps ModernCameraLeadEye hands the eye
 static long modern_cam_have_pos;	// is the position below this level's?
@@ -271,6 +272,7 @@ static struct
 	long ideal_set;
 	GAME_VECTOR ideal;		// the ideal MoveCamera was handed, as it left it
 	long clear;			// ModernCameraWallClearance's answer in MoveCamera, 0 when it did not run
+	long diag;			// how far Core's diagonal-wall push moved the Modern orbit's eye in MoveCamera
 } cam_tick;
 
 /* Set by ChaseCamera and CombatCamera to their modern_orbit just before they
@@ -345,6 +347,7 @@ void ModernCameraResetOrbit()
 	modern_cam_clipped = 0;
 	modern_cam_clipped_at = 0;	// harmless either way: a flag of 0 turns any tick it is accepted on into no wall at all
 	modern_cam_orbit_at = 0;	// likewise: the state it guards is unseated by the reset above, and unseated answers nothing
+	modern_cam_pushed = 0;
 	modern_cam_lead_yaw = 0;
 	modern_cam_lead_pitch = 0;
 	modern_cam_mouse_yaw = 0;	// a step handed over under the other scheme turns nothing
@@ -611,8 +614,13 @@ static void ModernCameraOrbit()
 	 * camera - the one level camera Modern does not discard - FixedCamera runs
 	 * instead and the orbit stands still while the player still steers her.
 	 * ModernCameraWorldYaw checks this stamp, one tick apart, like the clip
-	 * flag. */
+	 * flag.
+	 *
+	 * The push flag starts each orbit pass at 0; the MoveCamera call that ends
+	 * this pass sets it when Core's diagonal-wall push moves the eye
+	 * (ModernCameraNotePush), so it always describes the pass the stamp names. */
 	modern_cam_orbit_at = GlobalCounter;
+	modern_cam_pushed = 0;
 }
 
 /* Turns the eye by this tick's stick step before MoveCamera's lag sees it.
@@ -728,9 +736,16 @@ static void ModernCameraLeadEye()
  * 26721). The world yaw is what the player dialled, exact at any pitch, and
  * does not move when geometry moves the eye.
  *
- * It answers 0, and the caller falls back to the measured vector, in two
- * cases: before the orbit's first tick (`seated`), and on a tick the orbit
- * did not run. ModernCameraActive() does not mean "the orbit is the camera":
+ * That holds while geometry moves the eye along the dialled ray, which is what
+ * the orbit's own wall resolution does. Core's diagonal-wall push in The 13th
+ * Floor and Escape with the Iris moves it across, after the orbit has placed
+ * it, and pins it where the dialled angle no longer describes the picture
+ * (game\modern_camera.cpp's ModernCameraOrbitIsView has the measurement).
+ *
+ * It answers 0, and the caller falls back to the measured vector, in three
+ * cases: before the orbit's first tick (`seated`), on a tick the orbit did
+ * not run, and on a tick whose orbit eye that push moved.
+ * ModernCameraActive() does not mean "the orbit is the camera":
  * under a rich2 sniper camera (CalculateCamera's modernDiscard keeps sniperCam
  * on purpose) FixedCamera runs, the orbit stands still, and the player still
  * steers her. A frozen world angle would walk her along the chase camera's
@@ -749,8 +764,8 @@ long ModernCameraWorldYaw(short* yaw)
 	 * game\control.cpp runs before CalculateCamera in the same tick body - so
 	 * the orbit's own most recent tick is the previous one and
 	 * "one apart" is what a live orbit looks like from here, exactly as it is
-	 * from the clip flag's side. */
-	if (!ModernCameraTickFollows(GlobalCounter, modern_cam_orbit_at))
+	 * from the clip flag's side. The push flag belongs to that same pass. */
+	if (!ModernCameraOrbitIsView(GlobalCounter, modern_cam_orbit_at, modern_cam_pushed))
 		return 0;
 
 	if (yaw)
@@ -761,9 +776,12 @@ long ModernCameraWorldYaw(short* yaw)
 
 /* How far the player's own stick moved the orbit last tick.
  *
- * The same two gates as the world yaw above: an unseated orbit has no step to
+ * The same gates as the world yaw above: an unseated orbit has no step to
  * give, and an orbit that did not tick on the previous tick would hand out the
- * step of some earlier tick, which would be added to her course twice.
+ * step of some earlier tick, which would be added to her course twice. On a
+ * tick whose eye the diagonal-wall push pinned, the course is read against
+ * the measured vector, which the stick's step does not turn, so the step
+ * stays out of the course as well.
  *
  * It is not modern_cam_lead_yaw, which is the world yaw's step less the
  * return and so contains the carried swing after an about-turn. That is right
@@ -782,7 +800,7 @@ long ModernCameraPlayerStep(short* step)
 	if (!modern_cam_state.seated)
 		return 0;
 
-	if (!ModernCameraTickFollows(GlobalCounter, modern_cam_orbit_at))
+	if (!ModernCameraOrbitIsView(GlobalCounter, modern_cam_orbit_at, modern_cam_pushed))
 		return 0;
 
 	if (step)
@@ -1255,7 +1273,12 @@ static void CameraEyeNear(long x, long y, long z, short room, long* face, long* 
  *   clear      what ModernCameraWallClearance did to the eye in MoveCamera: the
  *              units it moved it off a wall, 0 nothing to do or a pass without
  *              the Modern orbit, -1 a move refused because the moved point
- *              opens in no room */
+ *              opens in no room
+ *   diag       the units Core's diagonal-wall push (CheckForRichesIllegalDiagonalWalls)
+ *              moved the Modern orbit's eye in MoveCamera, |dx|+|dy|+|dz|; 0 when
+ *              it did not move it or on a pass without the Modern orbit. Above 0
+ *              the next tick's movement reference is the measured view
+ *              (ModernCameraNotePush) */
 static void CameraTickLog()
 {
 	CAMERA_EYE_TEST t;
@@ -1309,13 +1332,14 @@ static void CameraTickLog()
 	}
 
 	Log("CAMLOG tick f=%d eye=(%ld,%ld,%ld)/%d ideal=%s want=%s target=(%ld,%ld,%ld)/%d "
-		"los=%ld los_lp=%ld pull=%ld lead=%ld,%ld mc_pull=%ld snaps=%d kind=%s face=%ld corner=%ld clear=%ld",
+		"los=%ld los_lp=%ld pull=%ld lead=%ld,%ld mc_pull=%ld snaps=%d kind=%s face=%ld corner=%ld clear=%ld "
+		"diag=%ld",
 		(int)GlobalCounter, camera.pos.x, camera.pos.y, camera.pos.z, (int)camera.pos.room_number,
 		ideal, want, camera.target.x, camera.target.y, camera.target.z,
 		(int)camera.target.room_number, los, los_lp,
 		(cam_tick.los_set && cam_tick.ray) ? ledge_log.pull : -1L,
 		modern_cam_lead_yaw, modern_cam_lead_pitch, ledge_log.mc_pull, (int)CameraSnaps, kind,
-		face, corner, cam_tick.clear);
+		face, corner, cam_tick.clear, cam_tick.diag);
 }
 
 void CalculateCamera()
@@ -2797,6 +2821,26 @@ static void ModernCameraClearWall()
 		cam_tick.clear = moved;
 }
 
+/* Notes whether Core's diagonal-wall push moved the Modern orbit's eye.
+ *
+ * MoveCamera hands the eye it held before CheckForRichesIllegalDiagonalWalls
+ * (game\tower.cpp); any difference afterwards is the push, or its fallback to
+ * CamOldPos when the pushed point stands in no floor. The flag tells
+ * ModernCameraWorldYaw and ModernCameraPlayerStep, on the next tick, that the
+ * orbit's dialled angle is not the picture this pass left
+ * (ModernCameraOrbitIsView in game\modern_camera.cpp). Called only for the
+ * Modern orbit's pass, so Tank and FixedCamera never reach it. */
+static void ModernCameraNotePush(long x, long y, long z)
+{
+	const long moved = abs(camera.pos.x - x) + abs(camera.pos.y - y) + abs(camera.pos.z - z);
+
+	if (moved)
+		modern_cam_pushed = 1;
+
+	if (gLogEnabled)
+		cam_tick.diag = moved;
+}
+
 void MoveCamera(GAME_VECTOR* ideal, long speed)
 {
 	FLOOR_INFO* floor;
@@ -2949,8 +2993,20 @@ void MoveCamera(GAME_VECTOR* ideal, long speed)
 		camera.pos.room_number = ideal->room_number;
 	}
 
+	// The Modern orbit's eye before Core's diagonal-wall push, so that
+	// ModernCameraNotePush can tell whether the push moved it.
+	if (clear_wall)
+	{
+		wx = camera.pos.x;
+		wy = camera.pos.y;
+		wz = camera.pos.z;
+	}
+
 	if (gfLevelId == LVL5_THIRTEENTH_FLOOR || gfLevelId == LVL5_ESCAPE_WITH_THE_IRIS)
 		CheckForRichesIllegalDiagonalWalls();
+
+	if (clear_wall)
+		ModernCameraNotePush(wx, wy, wz);
 
 	GetFloor(camera.pos.x, camera.pos.y, camera.pos.z, &camera.pos.room_number);
 	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);

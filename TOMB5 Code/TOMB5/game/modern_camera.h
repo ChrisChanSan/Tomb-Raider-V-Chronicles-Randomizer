@@ -455,6 +455,7 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance);
 short ModernCameraSwimPitch(const MODERN_CAMERA_CFG* cfg, long pitch);
 long ModernCameraTickFollows(unsigned short now, unsigned short stamp);
+long ModernCameraOrbitIsView(unsigned short now, unsigned short orbit_at, long pushed);
 
 /* The drawn eye between two ticks.
  *

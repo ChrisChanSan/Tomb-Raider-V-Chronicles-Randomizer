@@ -59,6 +59,9 @@
  * arrangement as the one above. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pageclass.h"
 #include "../../../TOMB5 Code/TOMB5/game/mirror_math.h"
+/* Which opaque triangles of an HD object are cut out - pure as well
+ * (model_cut below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model_cut.h"
 /* The sheen's arithmetic, its page table and its light field - pure again:
  * which surfaces shine, the override file's reader, the bound, and the
  * field's grid, texels, build and sample (gloss_* below). */
@@ -10020,6 +10023,66 @@ static void page_class()
 		"page: a page nothing was measured on is opaque", HDPageClassOf(255, 0), HD_PAGE_OPAQUE);
 }
 
+/* The object path's cut-out rule (specific\hd\hd_model_cut.h): the material
+ * of a .TRM part, and whether a page's texels below the reference are holes.
+ * The (below, at 0) pairs are the cache's own sample of the pages named, as
+ * ModelProbe -slot prints them. */
+static void model_cut()
+{
+	// The materials: 6, 7 and 8 cut, the gloss materials and the rest not.
+	ok(HDTrmMaterialCuts(6), "cut: material 6 is a cut-out material", HDTrmMaterialCuts(6), 1);
+	ok(HDTrmMaterialCuts(7), "cut: material 7 is a cut-out material", HDTrmMaterialCuts(7), 1);
+	ok(HDTrmMaterialCuts(8), "cut: material 8 is a cut-out material", HDTrmMaterialCuts(8), 1);
+	ok(!HDTrmMaterialCuts(0), "cut: material 0 is not", HDTrmMaterialCuts(0), 0);
+	ok(!HDTrmMaterialCuts(3), "cut: material 3 (gloss) is not", HDTrmMaterialCuts(3), 0);
+	ok(!HDTrmMaterialCuts(14), "cut: material 14 is not", HDTrmMaterialCuts(14), 0);
+	ok(!HDTrmMaterialCuts(18), "cut: material 18 is not", HDTrmMaterialCuts(18), 0);
+	// Compared whole: a high bit makes it another material.
+	ok(!HDTrmMaterialCuts(0x8006), "cut: 0x8006 is not material 6", HDTrmMaterialCuts(0x8006), 0);
+
+	// The pages the rule cuts.
+	ok(HDPageHolesAreCoverage(12694, 11300),
+		"cut: page 15080 (fan mesh, 890 per mille at 0) is holes",
+		HDPageHolesAreCoverage(12694, 11300), 1);
+	ok(HDPageHolesAreCoverage(11672, 9038),
+		"cut: page 11163 (fan and trapdoor mesh, 774) is holes",
+		HDPageHolesAreCoverage(11672, 9038), 1);
+	ok(HDPageHolesAreCoverage(232, 177),
+		"cut: page 22009 (ANDY1 straw, 762) is holes", HDPageHolesAreCoverage(232, 177), 1);
+	ok(HDPageHolesAreCoverage(1505, 490),
+		"cut: page 12052 (RICH3 grating stairs, 325) is holes",
+		HDPageHolesAreCoverage(1505, 490), 1);
+
+	// The page it keeps whole: the pistol grips, at alpha 3 to 5.
+	ok(!HDPageHolesAreCoverage(1517, 7),
+		"cut: page 8516 (pistol grips, 4 per mille at 0) is a mask",
+		HDPageHolesAreCoverage(1517, 7), 0);
+
+	// The edges: the threshold itself, nothing below the reference, and a
+	// count that cannot be.
+	ok(HDPageHolesAreCoverage(1000, HD_MODEL_CUT_ZERO_PERMILLE),
+		"cut: exactly the threshold is holes",
+		HDPageHolesAreCoverage(1000, HD_MODEL_CUT_ZERO_PERMILLE), 1);
+	ok(!HDPageHolesAreCoverage(1000, HD_MODEL_CUT_ZERO_PERMILLE - 1),
+		"cut: one below the threshold is a mask",
+		HDPageHolesAreCoverage(1000, HD_MODEL_CUT_ZERO_PERMILLE - 1), 0);
+	ok(!HDPageHolesAreCoverage(0, 0), "cut: a page with nothing below is not cut",
+		HDPageHolesAreCoverage(0, 0), 0);
+	ok(!HDPageHolesAreCoverage(10, 11), "cut: more at 0 than below is refused",
+		HDPageHolesAreCoverage(10, 11), 0);
+	ok(HD_MODEL_CUT_ZERO_PERMILLE > 4 && HD_MODEL_CUT_ZERO_PERMILLE < 325,
+		"cut: the threshold lies in the measured gap 4..325", HD_MODEL_CUT_ZERO_PERMILLE, 100);
+
+	// The share the tools print.
+	ok(HDPageZeroPermille(12694, 11300) == 890, "cut: page 15080's share is 890",
+		HDPageZeroPermille(12694, 11300), 890);
+	ok(HDPageZeroPermille(1517, 7) == 4, "cut: page 8516's share is 4",
+		HDPageZeroPermille(1517, 7), 4);
+	ok(HDPageZeroPermille(0, 0) == 0, "cut: nothing below reads 0", HDPageZeroPermille(0, 0), 0);
+	ok(HDPageZeroPermille(10, 20) == 1000, "cut: the share stops at 1000",
+		HDPageZeroPermille(10, 20), 1000);
+}
+
 /* A camera matrix in the engine's layout (aW2VMx): the rotation - a yaw
  * about y after a pitch about x, orthonormal - in the three rows and the
  * camera's world position in M03 / M13 / M23. */
@@ -11090,6 +11153,7 @@ int main()
 	ledge_trigger();
 	deferred();
 	page_class();
+	model_cut();
 	mirror_pose();
 	mirror_clip();
 	gloss_order();

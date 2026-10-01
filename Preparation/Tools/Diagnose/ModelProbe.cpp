@@ -9511,11 +9511,19 @@ int main(int argc, char** argv)
 		else
 			snprintf(label, sizeof(label), "%d", key);
 
-		printf("  page %-12s from %-7s holes %4.1f %%%s\n", label,
+		/* The second number is the object path's own: of the texels below
+		 * the reference, the share at exactly 0 - holes, where a gloss mask
+		 * lies at a dim value that is not 0 (hd_model_cut.h). */
+		printf("  page %-12s from %-7s holes %4.1f %%%s  at 0 %5.1f %% of them%s\n",
+			label,
 			HDPageCacheOriginText(HDPageCacheSlotOrigin(s)),
 			HDPageCacheSlotCutoutPermille(s) / 10.0,
-			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "");
+			HDPageCacheSlotCutout(s) ? "  <- counted as a cut-out sheet" : "",
+			HDPageCacheSlotZeroPermille(s) / 10.0,
+			HDPageCacheSlotHoles(s) ? "  <- holes: a part of material 6, 7 or 8 on it is cut" : "");
 	}
+	printf("cut ranges         %d opaque ranges of %d models drawn with the alpha test\n",
+		stats.cutRanges, stats.cutModels);
 	/* The phases of `building` - keys is
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
@@ -9940,9 +9948,10 @@ int main(int argc, char** argv)
 		if (wanted[i].slot == slot)
 			here = &classic[(size_t)order[i]];
 
-	printf("\nmodel   : %s.TRM, %d vertices, %d indices, %d draw calls, %d page(s)\n",
+	printf("\nmodel   : %s.TRM, %d vertices, %d indices, %d draw calls, %d page(s), "
+		"%d cut\n",
 		HDModelName(slot), HDModelVertices(slot), HDModelIndices(slot),
-		HDModelRanges(slot), HDModelPageCount(slot));
+		HDModelRanges(slot), HDModelPageCount(slot), HDModelCutRanges(slot));
 
 	for (int p = 0; p < HDModelPageCount(slot); p++)
 	{

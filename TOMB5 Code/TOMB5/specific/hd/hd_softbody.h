@@ -120,9 +120,9 @@ inline float HDSoftStrengthScale(int strength)
  *   TORSO       a vertex is the torso's when its weight on the torso node
  *               reaches this, of 1.
  *   BAND_LO, BAND_HI  the band the apexes are looked for in, as parts of
- *               the height above the hips joint. Over the 105 wardrobe
+ *               the height above the hips joint. Over the 98 wardrobe
  *               bodies the finder accepts (ModelProbe -lara, 122 scanned) the
- *               apexes stand between 0.51 and 0.62 of it; the diving suit's
+ *               apexes stand between 0.53 and 0.60 of it; the diving suit's
  *               helmet rim tops the band and is refused at its edge.
  *   MID         the middle strip left out of the search, as a part of the
  *               half width: the breastbone.
@@ -139,6 +139,16 @@ inline float HDSoftStrengthScale(int strength)
  *   PROMINENCE  each apex stands this part of the radius in front of the
  *               torso one radius below it, or it does not stand out.
  *   INSIDE      fewest torso-weighted vertices inside a region.
+ *   COLLAR      the strip at the band's top, as a part of the height, whose
+ *               front in the apex's column is the chest wall: the torso at
+ *               the collarbones, which a chest does not reach up to.
+ *   WALL        the least mask the region may have at the chest wall, the
+ *               wall's point straight behind the apex. A chest deeper than
+ *               the region reaches moves at its tip alone and bends into a
+ *               point; over the wardrobe bodies (ModelProbe -lara, 122
+ *               scanned) the accepted ones give 0.068 and more at the wall,
+ *               the deepest chests (the mods' OUTFIT_THICC family) 0.023
+ *               and less.
  *   RADIUS_LO, RADIUS_HI  the radius as a part of the height.
  *   MIN_TORSO   fewest torso vertices for a torso at all.
  *   FEET        fewest vertices below the ankles to tell front from back. */
@@ -154,6 +164,8 @@ inline float HDSoftStrengthScale(int strength)
 #define HD_SOFT_SETBACK		0.5f
 #define HD_SOFT_PROMINENCE	0.08f
 #define HD_SOFT_INSIDE		30
+#define HD_SOFT_COLLAR		0.05f
+#define HD_SOFT_WALL		0.04f
 #define HD_SOFT_RADIUS_LO	0.07f
 #define HD_SOFT_RADIUS_HI	0.25f
 #define HD_SOFT_MIN_TORSO	100
@@ -198,6 +210,7 @@ struct HDSoftRegion
 	float height;		// the torso's height along `up`
 	float width;		// its half width across the band
 	float prominence;	// the lesser apex's lead over the middle strip
+	float wall;		// the lesser side's mask at the chest wall, 0 with no wall found
 	int torsoVerts;		// vertices with a torso weight of HD_SOFT_TORSO or more
 	int inside[2];		// torso-weighted vertices with a mask above 0
 };
@@ -256,7 +269,8 @@ inline void hd_soft_refuse(HDSoftRegion* out, const char* why)
  * Refusals, in the order they are checked: no_axes, no_front, no_torso,
  * band_empty, band_edge (a frontmost vertex at the band's edge), flat
  * (neither apex stands out of the torso below it), asymmetric (one side
- * alone stands out, or the two are not mirror images), radius, sparse. */
+ * alone stands out, or the two are not mirror images), radius, deep (the
+ * region does not reach back to the chest wall), sparse. */
 inline void HDSoftFindRegion(const HDSoftVertex* v, int count,
 	const HDSoftSkeleton* sk, HDSoftRegion* out)
 {
@@ -585,6 +599,65 @@ inline void HDSoftFindRegion(const HDSoftVertex* v, int count,
 			out->centre[k][i] = out->apex[k][i] - fwd[i] * HD_SOFT_SETBACK * radius;
 
 	const float inv = 1.0f / radius;
+
+	/* The region has to reach back to the chest wall, or only the chest's tip
+	 * moves. The wall is the torso's front at the collarbones in the apex's
+	 * column; its point straight behind the apex, at the wall's depth, gets
+	 * the mask the shader would give it. A column with nothing at the
+	 * collarbones has no wall to show the region reaching, and is refused
+	 * the same way. */
+	out->wall = 1.0f;
+
+	for (int k = 0; k < 2; k++)
+	{
+		bool any = false;
+		float front = 0.0f;
+
+		for (int i = 0; i < count; i++)
+		{
+			if (!(v[i].torso >= HD_SOFT_TORSO))
+				continue;
+
+			const float rel[3] = { v[i].x - sk->torso[0], v[i].y - sk->torso[1],
+				v[i].z - sk->torso[2] };
+			const float relHips[3] = { v[i].x - sk->hips[0], v[i].y - sk->hips[1],
+				v[i].z - sk->hips[2] };
+			const float h = hd_soft_dot(relHips, up);
+
+			if (fabsf(hd_soft_dot(rel, side) - s2[k]) > 0.5f * window ||
+				h < bandHi - HD_SOFT_COLLAR * height || h > bandHi)
+				continue;
+
+			const float f = hd_soft_dot(rel, fwd);
+
+			if (!any || f > front)
+				front = f;
+
+			any = true;
+		}
+
+		float mask = 0.0f;
+
+		if (any)
+		{
+			const float depth = f2[k] > front ? f2[k] - front : 0.0f;
+			float p[3];
+
+			for (int i = 0; i < 3; i++)
+				p[i] = out->apex[k][i] - depth * fwd[i];
+
+			mask = HDSoftMask(p, out->centre[k], inv);
+		}
+
+		if (mask < out->wall)
+			out->wall = mask;
+	}
+
+	if (!(out->wall >= HD_SOFT_WALL))
+	{
+		hd_soft_refuse(out, "deep");
+		return;
+	}
 
 	for (int i = 0; i < count; i++)
 	{

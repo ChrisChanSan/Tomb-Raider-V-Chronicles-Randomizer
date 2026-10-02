@@ -782,8 +782,9 @@ namespace
 	 *   state=    on or off
 	 *   reason=   ok, or why it is off: young (a young-Lara level), classic
 	 *             (no HD Lara), option (switched off), or the region's own
-	 *             refusal - no_body, no_axes, no_front, no_torso,
-	 *             band_empty, asymmetric, radius, flat, sparse
+	 *             refusal - no_body, and in the finder's order no_axes,
+	 *             no_front, no_torso, band_empty, band_edge, flat,
+	 *             asymmetric, radius, deep, sparse
 	 *             (hd_softbody.h, HDSoftFindRegion)
 	 *   strength= the option, 0 off .. 3 strong
 	 *   apexL=, apexR=  the two apexes in the body's bind space, units

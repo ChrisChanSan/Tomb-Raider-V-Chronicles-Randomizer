@@ -12526,9 +12526,11 @@ static void softbody_clock()
 /* A synthetic body for the finder: hips at the origin, head 250 up (y is
  * down), thighs 20 to either side, feet pointing `toes` along z, and a torso
  * that is an elliptical tube from the waist to the neck with up to two bumps
- * on its front. */
+ * on its front. `collar` leans the whole front forward above 120 up, that
+ * many units for every 120 higher, the way a collar or a helmet's rim keeps
+ * coming forward over the band. */
 static void sb_body(std::vector<HDSoftVertex>& v, HDSoftSkeleton& sk, float left, float right,
-	float toes, float ridge = 0.0f)
+	float toes, float ridge = 0.0f, float collar = 0.0f)
 {
 	const float sk0[7][3] =
 	{
@@ -12569,6 +12571,9 @@ static void sb_body(std::vector<HDSoftVertex>& v, HDSoftSkeleton& sk, float left
 				 * same at every height - as far forward as a chest and
 				 * standing out of nothing below it. */
 				z += ridge * expf(-(x - 28.0f) * (x - 28.0f) / (2.0f * 13.0f * 13.0f));
+
+				if (-y > 120.0f)
+					z += collar * (-y - 120.0f) / 120.0f;
 			}
 
 			HDSoftVertex p = { x, y, z, 1.0f, 0 };
@@ -12647,6 +12652,72 @@ static void softbody_region()
 	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
 	ok(!r.ok && !strcmp(r.reason, "no_torso"),
 		"softbody: a body whose torso weights stay under a half has no torso", r.ok, 0);
+
+	/* A chest under a front that keeps leaning forward above the band: the
+	 * band's frontmost vertex sits on its top edge, which is the band cutting
+	 * through a collar and not a peak. */
+	sb_body(v, sk, 16.0f, 16.0f, 40.0f, 0.0f, 60.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "band_edge"),
+		"softbody: a front still coming forward at the band's top is refused at the band's edge",
+		r.ok, 0);
+
+	/* The region reaches back to the chest wall: the ordinary chest moves as
+	 * a whole, a chest standing far further forward than the regions' radius
+	 * would move at its tip alone. */
+	sb_body(v, sk, 16.0f, 16.0f, 40.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(r.ok == 1 && r.wall >= HD_SOFT_WALL,
+		"softbody: an ordinary chest's region reaches its wall", sb_milli(r.wall), 1000);
+
+	sb_body(v, sk, 60.0f, 60.0f, 40.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	printf("  softbody: deep synthetic chest: %s, radius %.1f, mask at the wall %.3f\n",
+		r.reason, r.radius, r.wall);
+	ok(!r.ok && !strcmp(r.reason, "deep") && r.wall < HD_SOFT_WALL,
+		"softbody: a chest deeper than its region reaches is refused as deep",
+		sb_milli(r.wall), 0);
+
+	// Nothing of the torso at the collarbones: no wall to show the reach.
+	sb_body(v, sk, 16.0f, 16.0f, 40.0f);
+
+	for (size_t i = 0; i < v.size(); i++)
+		if (v[i].leg == 0 && -v[i].y > 170.0f)
+			v[i].torso = 0.4f;
+
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "deep") && r.wall == 0.0f,
+		"softbody: a chest with no torso at its collarbones is refused as deep",
+		sb_milli(r.wall), 0);
+
+	/* From the ordinary chest to the deep one: the mask at the wall only
+	 * falls, and the refusal comes exactly where it falls under HD_SOFT_WALL. */
+	bool rule = true, falls = true, both = false, none = true;
+	float last = 2.0f;
+
+	for (float bump = 16.0f; bump <= 60.0f; bump += 2.0f)
+	{
+		sb_body(v, sk, bump, bump, 40.0f);
+		HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+
+		const bool deep = !strcmp(r.reason, "deep");
+
+		if (!r.ok && !deep)
+		{
+			none = false;
+			continue;
+		}
+
+		rule = rule && deep == (r.wall < HD_SOFT_WALL);
+		falls = falls && r.wall <= last + 1e-4f;
+		last = r.wall;
+		both = both || deep;
+	}
+
+	ok(rule && falls && both && none,
+		"softbody: growing chests lose the wall step by step and are refused where the mask "
+		"falls under the limit", (rule ? 1 : 0) + (falls ? 2 : 0) + (both ? 4 : 0) +
+		(none ? 8 : 0), 15);
 }
 
 /* The mask against the pairs hd_softbody.h documents beside HDSoftMask, which

@@ -6906,21 +6906,24 @@ it stands in one table and the log shows what it did.
 the table (:58 to :95) - natural frequency 3 Hz, damping ratio 0.3, gain 0.1, bound 0.3 of
 the radius, front-back share 0.35, strengths 0.5 / 1 / 1.5 on gain and bound, and the
 machinery under it (sub-step 1/480 s, gap 0.25 s, anchor speed 9000 units a second plus
-128, rest below 0.05 units and 0.5 units a second); the finder's numbers (:145);
-`HDSoftMask` (:225), a smoothstep of 1 - distance / radius; `HDSoftFindRegion` (:260): up
+128, rest below 0.05 units and 0.5 units a second); the finder's numbers (:155);
+`HDSoftMask` (:238), a smoothstep of 1 - distance / radius; `HDSoftFindRegion` (:274): up
 from the hips joint to the head joint, her right from the left thigh joint to the right,
 the front where the lower-leg vertices below the ankle joints point; per side the
 frontmost torso vertex (weight 0.5 or more) in the band 0.45 to 0.75 of the hips-to-head
 height between the middle strip and the outer edge, its cap's middle across; the radius
 half the apexes' distance apart, so that the regions meet in the middle; the centre half a
-radius behind the apex. `HDSoftPropagator` (:677) is the exact step of the damped
-oscillator, so the sub-step's length cuts nothing but the frame's remainder;
-`HDSoftOutput` (:703) eases gain times travel into the bound with a tanh; `HDSoftAdvance`
-(:747) takes a change of the anchor's speed out of the point's relative speed, runs whole
-sub-steps and carries the rest, resets on a gap, a jump or a value that is not finite,
-bounds the state and snaps both sides to exact zero below the rest thresholds;
-`HDSoftClockStep` (:952), `HDSoftAnchor` (:985), `HDSoftToTorso` (:999) and
-`HDSoftConstants` (:1025). `hd_model.hlsl`: `gSoft` in c163 to c166 (:245), the torso
+radius behind the apex; the chest wall (:603), the torso's front at the collarbones in the
+apex's column, whose point straight behind the apex must get a mask of 0.04 or more, or
+the chest is deeper than the region reaches and refused as `deep`. `HDSoftPropagator`
+(:750) is the exact step of the damped oscillator, so the sub-step's length cuts nothing
+but the frame's remainder; `HDSoftOutput` (:776) eases gain times travel into the bound
+with a tanh; `HDSoftAdvance` (:820) takes a change of the anchor's speed out of the
+point's relative speed, runs whole sub-steps and carries the rest, resets on a gap, a jump
+or a value that is not finite, bounds the state and snaps both sides to exact zero below
+the rest thresholds;
+`HDSoftClockStep` (:1025), `HDSoftAnchor` (:1058), `HDSoftToTorso` (:1072) and
+`HDSoftConstants` (:1098). `hd_model.hlsl`: `gSoft` in c163 to c166 (:245), the torso
 weight beside the head weight in the skinning loop (:377), the two masks and the offset
 before the light reads the position (:388). `hd_model.h`: `HDModelSoft` (:650) and
 `HDModelDraw`'s `soft` (:665); `hd_model.cpp` writes the four registers for every draw,
@@ -6929,11 +6932,11 @@ zeroed for every item, copied by `HDObjectPush` (:3908) and handed to the draw (
 `hd_lara.cpp`: `measure_softbody` (:1346) in the body's measure hook (:1393) while the
 file is still a file, cleared at every plan (:1875); `HDLaraSoftRegion` (:2576) and
 `HDLaraPartSoft` (:2590). `hd_laradraw.cpp`: `soft_strength` (:738), `soft_gate` (:749),
-`soft_log` (:793) and `soft_constants` (:840) - the gates, a reset on a cutscene's first
+`soft_log` (:794) and `soft_constants` (:841) - the gates, a reset on a cutscene's first
 and last frame, the clock, the anchors (the region centres carried by
 `lara_joint_matrices[LMX_TORSO]` from `lara_item->pos`), the step, the per-second line
-(:915) and the constants on the draw's own torso matrix; the build lines (:1040, :1045),
-the clock's frame mark (:1284) and the five pushes from :1360. `tomb5/tomb5.cpp` (:241,
+(:916) and the constants on the draw's own torso matrix; the build lines (:1041, :1046),
+the clock's frame mark (:1285) and the five pushes from :1361. `tomb5/tomb5.cpp` (:241,
 :455, :685) and `global/types.h` (:2882) for the option. The row: `game/menu_frame.cpp`
 `MenuValBodyPhysics` (:755) shows the table's own `off`, `Subtle`, `Normal` or `Strong`,
 anything out of range as `off`; `MenuStepBodyPhysics` (:763) steps from a stored value
@@ -6943,11 +6946,11 @@ holding as on *Camera damping*; the row itself is a `MENU_VALUE` with `MENU_SAVE
 `game/gameflow.cpp` (:1425) gives `Body physics`, `Subtle` and `Normal` their five columns
 (German `K\xF6rperphysik`, `Dezent`, `Normal`); `off` and `Strong` were there. The running
 level takes the change on its next drawn frame: `soft_constants` compares the option with
-the strength it logged last (`hd_laradraw.cpp:846`), resets to rest and writes a new
+the strength it logged last (`hd_laradraw.cpp:847`), resets to rest and writes a new
 `HDLOG softbody` line. `game/menu_frame.h` (:128): the geometry note says that a page with
 more than twelve rows pages, as *Key bindings* and now *Graphics* do.
 
-**Checked.** The engine builds (`be.bat`). ModernTest 14,275 (14,225 and 50 in nine new
+**Checked.** The engine builds (`be.bat`). ModernTest 14,280 (14,225 and 55 in nine new
 groups `softbody_*`), MenuTest 42,439 (42,364 and 75 in `graphics_softbody_row`),
 InterpTest 729, LipsTest 270 and 243, none failed;
 ModelProbe and MapProbe, the two tools that link the changed files, build. The groups hold
@@ -6961,16 +6964,26 @@ mid-swing without a kick; exact zeros at rest (a landing at 1500 units a second 
 frames later at 60 fps) and frames that do not advance the game changing nothing; one step
 a frame and never from a mirror's draw; the finder on synthetic torsos - two bumps found
 and mirrored, the front read from the feet, a flat front, one bump, a chest beside a ridge
-and a body without torso weights refused with the right reason; the mask's documented
-pairs; the register layout, a mirror's reflected offset and two cameras. Eleven mutations
-of the header, at least one per group, each fail one or more checks. Off is unchanged in
+and a body without torso weights refused with the right reason, a front still coming
+forward at the band's top refused at the band's edge, a chest deeper than its region
+reaches and one with no torso at its collarbones refused as deep, and over a sweep of
+chest sizes the refusal coming exactly where the mask at the wall falls under 0.04; the
+mask's documented pairs; the register layout, a mirror's reflected offset and two cameras.
+Fifteen mutations of the header, at least one per group and four on the band_edge and
+deep refusals, each fail one or more checks. Off is unchanged in
 pictures: ModelProbe built at e57a9e2 (a `git archive` copy) and at this commit renders
 the same fourteen PNGs byte for byte (md5) - Lara in five outfits, three of them front and
 side, a posed body, two first person cuts, SAS, two pickups - and the old build twice
-gives the same bytes. The regions in pictures: ModelProbe `-softtest 0 -10 5` over all 122
-outfits of the wardrobe scan (22 of the IV-VI install, 30 of the I-III install, 70 of the
-Mods folder), front and side with a difference picture each; in the 105 outfits the finder
-accepts the moved area is the chest and nothing else. The vertex shader takes 579
+gives the same bytes; the build with the deep check renders them again byte for byte. The
+regions in pictures: ModelProbe `-softtest 0 -10 5` over all 122 outfits of the wardrobe
+scan (22 of the IV-VI install, 30 of the I-III install, 70 of the Mods folder), front and
+side with a difference picture each; in the 98 outfits the finder accepts the moved area
+is the chest and nothing else. Seen from the side at `-softtest 0 -25 10`, an offset past
+the bound of *Strong*, `46/OUTFIT_CLASSIC`, `13/OUTFIT_TRX_BIKER_1` and the bikinis'
+`OUTFIT_OPEN` move the whole chest; on the seven `OUTFIT_THICC` bodies the region takes in
+a pointed cap at the front of the chest alone, and they are refused as deep and move
+nothing. Over the dumped bodies the accepted ones give a mask of 0.068 and more at the
+chest wall, the refused deep ones 0.023 and less. The vertex shader takes 579
 instruction slots (553); fxc's own literal constants, which sat in c163 and c164, move to
 c167 and c168, clear of `gSoft`, and the room shader declares nothing above c127. The row:
 `graphics_softbody_row` reads the tree as text, as the mouse rows' family does - the
@@ -7009,8 +7022,12 @@ and the holster rig - and never the hands with what they hold, the thigh holster
 weapon on the back or the braid. The constants travel in `hd_object.cpp`'s frame list from
 `HDObjectPush` to the draw, because Lara's parts are queued there and drawn later; the
 option is a field of `tomb5_options` in `global/types.h`, where its neighbours live. The
-finder's numbers were set over the 122 bodies of the scan: in the 105 it accepts the
-apexes stand between 0.51 and 0.62 of the hips-to-head height. The menu row stands under
+finder's numbers were set over the 122 bodies of the scan: in the 98 it accepts the
+apexes stand between 0.53 and 0.60 of the hips-to-head height. A chest deeper than its
+region reaches is refused and not given a larger region: a radius grown until it reaches
+the wall of the deepest chests would take in the collarbones and the armpits as well. The
+limit, a mask of 0.04 at the wall, lies between the lowest accepted body (0.068, the TRX
+biker) and the highest refused one (0.023, `OUTFIT_THICC`). The menu row stands under
 *HD textures*, the switch it depends on, though the thirteenth row makes *Graphics* page;
 it is not greyed, because no row of that page is greyed while HD is off. Its first state
 is the table's own `off` (German `aus`), as on *Camera damping*, rather than a second
@@ -7019,15 +7036,22 @@ spelling of the same value.
 **Left.** The feel is untuned: frequency, damping, gain, bound and the front-back share
 are a starting point, and whether running, jumping and landing look right at the three
 strengths, in cutscenes and in a mirror room is for the game to show; the `HDLOG softbody
-second` line is there for that. Seventeen outfits stay still, each by a check and not by a
-list: `46/OUTFIT_RUSSIA_EXTRA` (no_front: too few lower-leg vertices below the ankles to
+second` line is there for that. Twenty-four outfits stay still, each by a check and not by
+a list: `46/OUTFIT_RUSSIA_EXTRA` (no_front: too few lower-leg vertices below the ankles to
 tell front from back), `46/OUTFIT_SUBSUIT` (band_edge: the diving helmet's rim tops the
 chest band), `46/OUTFIT_TR2_VEGAS` and the barefoot mod's `OUTFIT_VEGAS` (radius: the
 apexes 32 units apart), `13/OUTFIT_TRX_DRAGON_1` to `_3` (radius: the apexes 25 units
-apart), `13/OUTFIT_TRX_ATLANTEAN_1` to `_3`, `13/OUTFIT_TRX_ICE_1` to `_3` and
-`13/OUTFIT_TRX_RUNNER_1` to `_3` (sparse: fewer than 30 torso-weighted vertices inside a
-region, too few to bend smoothly), and the TR V mod's `OUTFIT_JACKET` (asymmetric: the
-open jacket's two fronts at different heights). The motion ignores gravity (there is no
+apart), `13/OUTFIT_TRX_ATLANTEAN_1` to `_3` and `13/OUTFIT_TRX_ICE_1` to `_3` (sparse:
+fewer than 30 torso-weighted vertices inside a region, too few to bend smoothly),
+`13/OUTFIT_TRX_RUNNER_1` to `_3` (deep, checked before sparse, which they would fail as
+well), the TR V mod's `OUTFIT_JACKET` (asymmetric: the open jacket's two fronts at
+different heights) and its seven `OUTFIT_THICC` bodies - `OUTFIT_THICC`, `_COAST`, `_GYM`,
+`_HOME`, `_NEVADA`, `_SWIM` and `_TIBET` (deep: the chest stands 42 to 58 units in front
+of its wall, against regions of 24 to 37 units' radius). The margins round the deep limit
+are narrow, 0.068 against 0.04 against 0.023, so a body exported again near it can fall to
+either side. At the test offset of 27 units, past every bound, slivers of skin show
+through the top of `OUTFIT_OPEN`'s suit, at about the bound of *Strong* a single pixel;
+the game's own offsets stay under that bound. The motion ignores gravity (there is no
 sag at rest), the torso's own turning except as it carries the anchors, collisions with
 the arms and anything else, and the normals of the moved surface, whose shading stays
 where it was. In a frame in which her own draw is hidden - the camera inside her - while a
@@ -7039,7 +7063,8 @@ seen, and the row does not say so.
 **Commits.** 'Round 193 (#193): the chest's soft motion for the HD Lara', 'Round 193
 (#193): the suites', 'Round 193 (#193): the suites catch a stepping mirror and a one-sided
 ridge', 'Round 193 (#193): the record follows', 'Round 193 (#193): the options menu row',
-'Round 193 (#193): the suites', 'Round 193 (#193): the record follows'.
+'Round 193 (#193): the suites', 'Round 193 (#193): the record follows', 'Round 193
+(#193): what review pass 1 found', 'Round 193 (#193): the record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

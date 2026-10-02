@@ -3659,8 +3659,8 @@ lists, and the savegame's restore leaves `il` alone; the log's `HDLOG frame lara
 reads `lights=0` on the first frame after each of its two loads, and the eye lamp is
 back. What else a load resets was ruled out: the outfit's sheen values are a table, the
 room ambient fades in integer eighths that land exactly (96 before and after), the rooms
-of the walk hold no water, and room 10's shadow lights stayed 729 units outside their
-range.
+of the walk hold no water, and room 10's shadow lights stayed about 700 units outside
+their range.
 
 **How.** `specific/hd/hd_objlight_dark.h` (new; no engine header, like
 `hd_model_cut.h`): `HD_OBJLIGHT_DARK_BOUND` (:60) and `HDObjLightIsDark` (:64), with the
@@ -3671,14 +3671,14 @@ lists; the comment above it (:931) says what is added to `Active`. An optional
 two lists' counts, the dynamics handed on, the count handed on, the count left out, the
 brightest channel left out and the dimmest handed on; `report_dark` and `report_lit`
 (:965, :978) fill it and do nothing without one. `specific/hd/hd_laradraw.cpp`: the
-`HDLOG laralights` line (:1197), on her first frame of a level and whenever her room, the
+`HDLOG laralights` line (:1199), on her first frame of a level and whenever her room, the
 count handed on or the count left out changes; the level's name is kept from
 `HDLaraDrawBuild` (:800). The bound lies a factor of 112 above the largest remainder and
 below every colour a step of a fade leaves on a light that can add half a unit of 0..255
 to a vertex: 0.5/255 has 2.45e-4 on the first step of its fade-in, 1/255 has 4.9e-4 there
 and 6.1e-5 on the last step but one of a fade-out that a room change began one step into
-its fade-in. The dimmest light of the level files, 0.0624 in its brightest channel, has
-7.8e-3 on its first step.
+its fade-in. The dimmest light of the level files that is not black, 0.0624 in its
+brightest channel, has 7.8e-3 on its first step.
 
 **Checked.** The engine builds (`be.bat`, the full build). ModernTest 14,225 (14,205 and
 20 of the new group `objlight_dark`), MenuTest 42,364, InterpTest 729, LipsTest 270 and
@@ -3738,7 +3738,8 @@ the rooms of the logged walk are smaller. The play test: the same walk with `-lo
 10 into room 9 and back, and its `HDLOG laralights` lines.
 
 **Commits.** 'Round 192 (#192): a light faded to nothing is left out of an HD object's
-list', 'Round 192 (#192): the suites', 'Round 192 (#192): the record follows'.
+list', 'Round 192 (#192): the suites', 'Round 192 (#192): the record follows', 'Round 192
+(#192): what review pass 1 found'.
 
 ### Wire mesh on an HD object is cut out
 2026-10-01

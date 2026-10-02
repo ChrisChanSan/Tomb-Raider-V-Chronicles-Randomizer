@@ -47,11 +47,11 @@
  * first step of its fade-in is 2.45e-4, a factor of 24 above, and a light
  * of 1/255 has 4.9e-4 there. Even a fade-out that begins one step into a
  * fade-in, a sixty-fourth of the colour, stays above it from 1/255 up
- * (6.1e-5). The dimmest light in the level files has a brightest channel
- * of 0.0624, a first step of 7.8e-3. Over the same lights and colours,
- * every state a room change can catch a fade in - its full colour and
- * every step of a fade-in and of a fade-out - ends either cleared or below
- * the bound.
+ * (6.1e-5). The dimmest light in the level files that is not black has a
+ * brightest channel of 0.0624, a first step of 7.8e-3. Over the same
+ * lights and colours, every state a room change can catch a fade in - its
+ * full colour and every step of a fade-in and of a fade-out - ends either
+ * cleared or below the bound.
  *
  * What an entry left out would have added to a vertex is under
  * HD_OBJLIGHT_DARK_BOUND * 255 times the light's own factor: 0.0051 of a

@@ -1180,7 +1180,9 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * Written on her first frame of a level and whenever room, handed or
 	 * dark differ from the line before. A room change out of a lit room
 	 * reads as a line with the old room's light fading in prev (handed k,
-	 * dark 0, eye 0) and, eight drawn frames on, one with dark=k. */
+	 * dark 0, eye 0) and, eight drawn frames on, a second one: dark counts
+	 * the lights the fade left Active with nothing to give, and a light the
+	 * fade cleared is missing from prev's Active count instead. */
 	HDObjLightReport lightReport = {};
 
 	const int lightCount = HDObjectLights(lara_item, lights,

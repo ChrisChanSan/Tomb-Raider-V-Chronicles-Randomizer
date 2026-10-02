@@ -6889,7 +6889,10 @@ model vertex shader moves the vertices of two regions of the body by that side's
 weighted by a smooth mask and by the vertex's own weight on the torso node. The two
 regions are found once per outfit, at the level build, from the body model's own vertices.
 One new option, `tomb5.hd_softbody` (registry `hd_softbody`): 0 off - the default - 1
-subtle, 2 normal, 3 strong; a stored value out of range reads as off. Two new log lines
+subtle, 2 normal, 3 strong; a stored value out of range reads as off. One new options menu
+row, *Graphics* -> *Body physics*, directly under *HD textures*: off, Subtle, Normal,
+Strong, saved with the tomb5 settings and taking effect at once in the running level; the
+page holds thirteen rows with it and pages in two, seven and six. Two new log lines
 behind `-log`: `HDLOG softbody` whenever her composite is built or the option changes, and
 `HDLOG softbody second` once a second of game time in which the motion moved.
 
@@ -6931,10 +6934,22 @@ and last frame, the clock, the anchors (the region centres carried by
 `lara_joint_matrices[LMX_TORSO]` from `lara_item->pos`), the step, the per-second line
 (:915) and the constants on the draw's own torso matrix; the build lines (:1040, :1045),
 the clock's frame mark (:1284) and the five pushes from :1360. `tomb5/tomb5.cpp` (:241,
-:455, :685) and `global/types.h` (:2882) for the option.
+:455, :685) and `global/types.h` (:2882) for the option. The row: `game/menu_frame.cpp`
+`MenuValBodyPhysics` (:755) shows the table's own `off`, `Subtle`, `Normal` or `Strong`,
+anything out of range as `off`; `MenuStepBodyPhysics` (:763) steps from a stored value
+taken as off when out of range through `menu_nav.h`'s `MenuSliderStep` over 0..3, the ends
+holding as on *Camera damping*; the row itself is a `MENU_VALUE` with `MENU_SAVE_TOMB5`
+(:1541), so a change is written to the registry at once by `save_new_tomb5_settings`.
+`game/gameflow.cpp` (:1425) gives `Body physics`, `Subtle` and `Normal` their five columns
+(German `K\xF6rperphysik`, `Dezent`, `Normal`); `off` and `Strong` were there. The running
+level takes the change on its next drawn frame: `soft_constants` compares the option with
+the strength it logged last (`hd_laradraw.cpp:846`), resets to rest and writes a new
+`HDLOG softbody` line. `game/menu_frame.h` (:128): the geometry note says that a page with
+more than twelve rows pages, as *Key bindings* and now *Graphics* do.
 
 **Checked.** The engine builds (`be.bat`). ModernTest 14,275 (14,225 and 50 in nine new
-groups `softbody_*`), MenuTest 42,364, InterpTest 729, LipsTest 270 and 243, none failed;
+groups `softbody_*`), MenuTest 42,439 (42,364 and 75 in `graphics_softbody_row`),
+InterpTest 729, LipsTest 270 and 243, none failed;
 ModelProbe and MapProbe, the two tools that link the changed files, build. The groups hold
 the spring against the closed form of a damped oscillator to 0.1 per cent; the same anchor
 path at 30, 60 and 165 frames a second with the same peak to within 5 per cent (7.2883 /
@@ -6957,7 +6972,18 @@ outfits of the wardrobe scan (22 of the IV-VI install, 30 of the I-III install, 
 Mods folder), front and side with a difference picture each; in the 105 outfits the finder
 accepts the moved area is the chest and nothing else. The vertex shader takes 579
 instruction slots (553); fxc's own literal constants, which sat in c163 and c164, move to
-c167 and c168, clear of `gSoft`, and the room shader declares nothing above c127.
+c167 and c168, clear of `gSoft`, and the room shader declares nothing above c127. The row:
+`graphics_softbody_row` reads the tree as text, as the mouse rows' family does - the
+Graphics table's thirteen rows in order and their split into seven and six with the second
+page starting at *Shadow mode*, the row's kind, functions, save class and missing gate,
+its four values, the five columns of its three new strings and the German of `off` and
+`Strong`, the registry name written, read and saved with off for a missing or
+out-of-range value, the draw's reset on a change - and sweeps the step over the four
+states and one past each end. Run against the tree before the row it fails 20 checks, and
+twelve single changes of the tree (the row after *Fog*, saved with the game block, gated,
+stepping to 4, out of range not taken as off, *Medium* for 2, the German label without its
+umlaut, *Subtle* untranslated, *Normal* missing, a registry default of 2, the registry
+clamp removed, the draw ignoring a change) each fail at least one.
 
 **Unchanged.** The classic path: with `tomb5.hd_enable` 0 `HDLevelLoad` stops at its guard
 (`specific/hd/hd_level.cpp`) before any HD model or Lara is built, so neither the new
@@ -6984,7 +7010,11 @@ weapon on the back or the braid. The constants travel in `hd_object.cpp`'s frame
 `HDObjectPush` to the draw, because Lara's parts are queued there and drawn later; the
 option is a field of `tomb5_options` in `global/types.h`, where its neighbours live. The
 finder's numbers were set over the 122 bodies of the scan: in the 105 it accepts the
-apexes stand between 0.51 and 0.62 of the hips-to-head height.
+apexes stand between 0.51 and 0.62 of the hips-to-head height. The menu row stands under
+*HD textures*, the switch it depends on, though the thirteenth row makes *Graphics* page;
+it is not greyed, because no row of that page is greyed while HD is off. Its first state
+is the table's own `off` (German `aus`), as on *Camera damping*, rather than a second
+spelling of the same value.
 
 **Left.** The feel is untuned: frequency, damping, gain, bound and the front-back share
 are a starting point, and whether running, jumping and landing look right at the three
@@ -7001,12 +7031,15 @@ open jacket's two fronts at different heights). The motion ignores gravity (ther
 sag at rest), the torso's own turning except as it carries the anchors, collisions with
 the arms and anything else, and the normals of the moved surface, whose shading stays
 where it was. In a frame in which her own draw is hidden - the camera inside her - while a
-mirror shows her, the mirror draws the last state. The options menu row follows
-separately.
+mirror shows her, the mirror draws the last state. The menu row is offered whatever the
+level on screen draws, like *HD textures* above it and every row of that page: with HD
+off, on a young-Lara level or for an outfit left still it changes nothing that can be
+seen, and the row does not say so.
 
 **Commits.** 'Round 193 (#193): the chest's soft motion for the HD Lara', 'Round 193
 (#193): the suites', 'Round 193 (#193): the suites catch a stepping mirror and a one-sided
-ridge', 'Round 193 (#193): the record follows'.
+ridge', 'Round 193 (#193): the record follows', 'Round 193 (#193): the options menu row',
+'Round 193 (#193): the suites', 'Round 193 (#193): the record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

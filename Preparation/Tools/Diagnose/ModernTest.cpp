@@ -70,6 +70,11 @@
 /* Which of the engine's item lights give an HD object nothing - pure as well
  * (objlight_dark below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_objlight_dark.h"
+/* The soft motion of the chest: the region finder, the mask, the spring, its
+ * clock and the draw constants - pure again (softbody_* below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_softbody.h"
+#include <string.h>
+#include <vector>
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -11967,6 +11972,798 @@ static void objlight_dark()
 		engine_handed(list, 5), 1);
 }
 
+/* The soft motion of the chest (specific\hd\hd_softbody.h). */
+
+static float sb_len(const float* v)
+{
+	return sqrtf(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+static long sb_milli(double v)
+{
+	return (long)floor(v * 1000.0 + 0.5);
+}
+
+/* An anchor path: where both centres stand at time t. The right one rides 60
+ * units to the side of the left. */
+typedef void (*SbPath)(double t, float* a);
+
+/* A run along a path at a frame rate: every frame samples the path, steps the
+ * motion by 1 / fps and keeps the largest offset either side draws. With
+ * `ticks` set, the path is sampled at the 30 game ticks a second and the
+ * frames in between are blended linearly - which is what the game's pose is
+ * at every frame rate above 30. */
+static float sb_run(SbPath path, double fps, double seconds, int strength, float radius,
+	bool ticks, int* resets)
+{
+	HDSoftSim s;
+
+	HDSoftClear(&s);
+
+	float peak = 0.0f;
+	const int frames = (int)(seconds * fps + 0.5);
+
+	for (int f = 0; f <= frames; f++)
+	{
+		const double t = f / fps;
+		float a[2][3];
+
+		if (ticks)
+		{
+			const double k = floor(t * 30.0 + 1e-9);
+			const double w = t * 30.0 - k;
+			float p0[3], p1[3];
+
+			path(k / 30.0, p0);
+			path((k + 1.0) / 30.0, p1);
+
+			for (int i = 0; i < 3; i++)
+				a[0][i] = (float)(p0[i] + (p1[i] - p0[i]) * w);
+		}
+		else
+			path(t, a[0]);
+
+		a[1][0] = a[0][0] + 60.0f;
+		a[1][1] = a[0][1];
+		a[1][2] = a[0][2];
+
+		float out[2][3];
+
+		HDSoftAdvance(&s, a, f ? (float)(1.0 / fps) : 0.0f, strength, radius, out);
+
+		for (int k = 0; k < 2; k++)
+			if (sb_len(out[k]) > peak)
+				peak = sb_len(out[k]);
+	}
+
+	if (resets)
+		*resets = s.resets;
+
+	return peak;
+}
+
+/* A run on the spot that bobs at 2.2 Hz, a sprint from a standstill to 3000
+ * units a second and back, and a fall that lands - the three things her torso
+ * does most. y is down, as in the game. */
+static void sb_path_play(double t, float* a)
+{
+	const double pi = 3.14159265358979323846;
+	double x = 0.0, y = 0.0;
+
+	if (t < 1.5)
+		y = 6.0 * sin(2.0 * pi * 2.2 * t);
+
+	if (t > 0.5)
+		x = t < 1.2 ? 3000.0 * (t - 0.5) * (t - 0.5) / 1.4 : 1050.0;
+
+	if (t > 1.6)
+		y += t < 2.1 ? 2700.0 * (t - 1.6) * (t - 1.6) : 2700.0 * 0.25;
+
+	a[0] = (float)x;
+	a[1] = (float)y;
+	a[2] = 0.0f;
+}
+
+
+static void sb_path_walk(double t, float* a)
+{
+	a[0] = (float)(2000.0 * t);
+	a[1] = 0.0f;
+	a[2] = (float)(-500.0 * t);
+}
+
+/* The spring against the closed form of a damped oscillator: an anchor that
+ * starts moving at speed V leaves the point behind, and its travel is
+ *
+ *   x(t) = -V / wd * exp(-z w t) * sin(wd t)
+ *
+ * sampled at frames that are whole numbers of sub-steps, so nothing is carried. */
+static void softbody_spring()
+{
+	const double pi = 3.14159265358979323846;
+	const double w = 2.0 * pi * HD_SOFT_HZ;
+	const double z = HD_SOFT_DAMPING;
+	const double wd = w * sqrt(1.0 - z * z);
+	const float V = 100.0f;
+	const float dt = 8.0f * HD_SOFT_STEP;
+	const float radius = 100.0f;
+	HDSoftSim s;
+	float a[2][3] = { { 0, 0, 0 }, { 60, 0, 0 } };
+	float out[2][3];
+
+	HDSoftClear(&s);
+	HDSoftAdvance(&s, a, 0.0f, 2, radius, out);
+	HDSoftAdvance(&s, a, dt, 2, radius, out);
+
+	double worst = 0.0;
+	double peak = 0.0;
+	double afterRest = 0.0;
+	int frames = 0, restAt = -1;
+
+	for (int f = 1; f <= 360; f++)
+	{
+		a[0][2] = V * dt * (float)f;
+		a[1][2] = a[0][2];
+
+		const bool rest = HDSoftAdvance(&s, a, dt, 2, radius, out);
+		const double t = (double)dt * f;
+		const double want = -V / wd * exp(-z * w * t) * sin(wd * t);
+		const double got = s.side[0].x[2];
+
+		if (rest && restAt < 0)
+			restAt = f;
+
+		if (restAt < 0 && fabs(got - want) > worst)
+			worst = fabs(got - want);
+
+		if (restAt >= 0 && fabs(want) > afterRest)
+			afterRest = fabs(want);
+
+		if (fabs(want) > peak)
+			peak = fabs(want);
+
+		frames++;
+	}
+
+	ok(frames == 360 && worst < 1e-3 * peak,
+		"softbody: the spring follows the damped oscillator's closed form to 0.1 per cent",
+		sb_milli(worst / peak * 1000.0), 0);
+	/* Until it snaps to rest, which it does only where the closed form itself
+	 * no longer swings past REST_X. */
+	ok(restAt > 0 && afterRest < HD_SOFT_REST_X,
+		"softbody: the spring snaps to rest only once the true swing is under REST_X",
+		sb_milli(afterRest), 0);
+	ok(s.side[0].x[0] == 0.0f && s.side[0].x[1] == 0.0f,
+		"softbody: a push along one axis moves the point along that axis alone",
+		sb_milli(sb_len(s.side[0].x)), 0);
+
+	/* The output: GAIN times the travel while it is small, never past BOUND
+	 * times the radius however large. */
+	const float small[3] = { 0.0f, 0.0f, 1.0f };
+	const float huge[3] = { 1.0e6f, -1.0e6f, 3.0e5f };
+	float o[3];
+
+	HDSoftOutput(small, 2, 30.0f, o);
+	ok(fabsf(o[2] - HD_SOFT_GAIN) < 1e-3f * HD_SOFT_GAIN,
+		"softbody: a small travel is drawn at GAIN times itself", sb_milli(o[2]), 0);
+	ok(HDSoftOutput(huge, 3, 30.0f, o) && sb_len(o) <= HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f &&
+		sb_len(o) > 0.99f * HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f,
+		"softbody: a huge travel is drawn just under the bound and reported as at it",
+		sb_milli(sb_len(o)), sb_milli(HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f));
+	ok(!HDSoftOutput(huge, 0, 30.0f, o) && sb_len(o) == 0.0f,
+		"softbody: strength 0 draws nothing", sb_milli(sb_len(o)), 0);
+	ok(HDSoftStrengthScale(1) == HD_SOFT_SUBTLE && HDSoftStrengthScale(2) == HD_SOFT_NORMAL &&
+		HDSoftStrengthScale(3) == HD_SOFT_STRONG && HDSoftStrengthScale(4) == 0.0f &&
+		HDSoftStrengthScale(-1) == 0.0f,
+		"softbody: the strengths are subtle, normal, strong and nothing else", 0, 0);
+}
+
+/* R3: the same path at 30, 60 and 165 frames a second gives the same peak to
+ * within 5 per cent - blended between ticks as the game draws it, and
+ * sampled directly as a smooth path. */
+static void softbody_rate()
+{
+	for (int blend = 1; blend >= 0; blend--)
+	{
+		const float p30 = sb_run(sb_path_play, 30.0, 3.0, 2, 30.0f, blend != 0, 0);
+		const float p60 = sb_run(sb_path_play, 60.0, 3.0, 2, 30.0f, blend != 0, 0);
+		const float p165 = sb_run(sb_path_play, 165.0, 3.0, 2, 30.0f, blend != 0, 0);
+		const float lo = p30 < p60 ? (p30 < p165 ? p30 : p165) : (p60 < p165 ? p60 : p165);
+		const float hi = p30 > p60 ? (p30 > p165 ? p30 : p165) : (p60 > p165 ? p60 : p165);
+
+		printf("  softbody: peak at 30 / 60 / 165 fps, %s: %.4f / %.4f / %.4f units\n",
+			blend ? "blended between ticks" : "smooth", p30, p60, p165);
+
+		ok(lo > 0.0f && hi <= 1.05f * lo,
+			blend ? "softbody: the peak is the same at 30, 60 and 165 fps (blended path)"
+				: "softbody: the peak is the same at 30, 60 and 165 fps (smooth path)",
+			sb_milli((hi / lo - 1.0f) * 100.0f), 0);
+	}
+
+	// And the run on the spot alone, which stays below the bound throughout.
+	const float bob30 = sb_run([](double t, float* a) {
+		a[0] = 0.0f; a[1] = (float)(6.0 * sin(2.0 * 3.14159265358979323846 * 2.2 * t)); a[2] = 0.0f; },
+		30.0, 3.0, 2, 30.0f, true, 0);
+	const float bob165 = sb_run([](double t, float* a) {
+		a[0] = 0.0f; a[1] = (float)(6.0 * sin(2.0 * 3.14159265358979323846 * 2.2 * t)); a[2] = 0.0f; },
+		165.0, 3.0, 2, 30.0f, true, 0);
+
+	ok(bob30 > 0.0f && fabsf(bob165 - bob30) <= 0.05f * bob30,
+		"softbody: a run on the spot peaks the same at 30 and 165 fps",
+		sb_milli(bob165), sb_milli(bob30));
+}
+
+/* R4: bounded. Wild anchors, zero, negative, tiny and huge time steps, NaN
+ * and infinity - the drawn offset stays finite and within the bound at every
+ * strength, and so does the state. */
+static void softbody_bound()
+{
+	unsigned int seed = 12345u;
+	const auto next = [&seed]() { seed = seed * 1664525u + 1013904223u; return seed; };
+	const float dts[] = { -0.1f, 0.0f, 1e-7f, 1.0f / 30.0f, 1.0f / 165.0f, HD_SOFT_GAP,
+		0.3f, 5.0f };
+	int beyond = 0, nonFinite = 0, frames = 0, stateBad = 0;
+
+	for (int strength = 0; strength < HD_SOFT_LEVELS; strength++)
+	{
+		HDSoftSim s;
+		float a[2][3] = { { 0, 0, 0 }, { 60, 0, 0 } };
+
+		HDSoftClear(&s);
+
+		for (int f = 0; f < 20000; f++)
+		{
+			const unsigned int r = next();
+			float dt = dts[r % 8];
+
+			if ((r >> 3) % 4 != 0)
+				dt = 1.0f / 60.0f;
+
+			/* Mostly within the teleport bound, so that the spring is driven
+			 * hard rather than reset: a jump of up to 120 units a frame is
+			 * 7200 units a second. */
+			for (int k = 0; k < 2; k++)
+				for (int i = 0; i < 3; i++)
+					a[k][i] += (float)((int)(next() % 241) - 120);
+
+			if ((r >> 8) % 997 == 0)
+				a[0][1] = NAN;
+			else if ((r >> 8) % 991 == 0)
+				a[1][2] = INFINITY;
+			else if ((r >> 8) % 983 == 0)
+				a[0][0] += 1.0e7f;
+
+			float out[2][3];
+
+			HDSoftAdvance(&s, a, dt, strength, 30.0f, out);
+
+			for (int k = 0; k < 2; k++)
+			{
+				const float m = sb_len(out[k]);
+
+				if (!(m == m) || m > 1e30f)
+					nonFinite++;
+				else if (m > HD_SOFT_BOUND * HDSoftStrengthScale(strength) * 30.0f * 1.00001f)
+					beyond++;
+
+				if (!(sb_len(s.side[k].x) == sb_len(s.side[k].x)) ||
+					!(sb_len(s.side[k].u) == sb_len(s.side[k].u)))
+					stateBad++;
+
+				for (int i = 0; i < 3; i++)
+					if (!(a[k][i] == a[k][i]) || fabsf(a[k][i]) > 1e8f)
+						a[k][i] = 0.0f;
+			}
+
+			frames++;
+		}
+	}
+
+	ok(frames == 80000 && nonFinite == 0, "softbody: no drawn offset is ever NaN or infinite",
+		nonFinite, 0);
+	ok(beyond == 0, "softbody: no drawn offset ever passes the bound, at any strength",
+		beyond, 0);
+	ok(stateBad == 0, "softbody: the state stays a number under any input", stateBad, 0);
+
+	/* A resonant shake at the spring's own frequency, as hard as the teleport
+	 * bound allows, for ten seconds. */
+	HDSoftSim s;
+	float peak = 0.0f;
+
+	HDSoftClear(&s);
+
+	for (int f = 0; f <= 600; f++)
+	{
+		const double t = f / 60.0;
+		const float y = (float)(300.0 * sin(2.0 * 3.14159265358979323846 * HD_SOFT_HZ * t));
+		float a[2][3] = { { 0, y, 0 }, { 60, y, 0 } };
+		float out[2][3];
+
+		HDSoftAdvance(&s, a, f ? 1.0f / 60.0f : 0.0f, 3, 30.0f, out);
+		peak = sb_len(out[0]) > peak ? sb_len(out[0]) : peak;
+	}
+
+	ok(peak <= HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f && s.clamped > 0 && s.resets == 0,
+		"softbody: a resonant shake runs into the bound, is counted there and never passes it",
+		sb_milli(peak), sb_milli(HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f));
+}
+
+/* R5: back to rest without a kick. An anchor that moves at a constant speed
+ * drives nothing, so every one of these must leave the drawn offset exactly
+ * zero from the reset on. */
+static void softbody_reset()
+{
+	int resets = 0;
+	const float walk = sb_run(sb_path_walk, 60.0, 2.0, 3, 30.0f, false, &resets);
+
+	ok(walk == 0.0f && resets == 0,
+		"softbody: starting while she walks at a steady 2060 units a second does not kick",
+		sb_milli(walk), 0);
+
+	HDSoftSim s;
+	float out[2][3];
+	float a[2][3] = { { 0, 0, 0 }, { 60, 0, 0 } };
+	const float dt = 1.0f / 60.0f;
+	int kicked = 0;
+
+	HDSoftClear(&s);
+
+	/* Excite it with a stop, then reset it while she keeps walking: a level
+	 * start, a savegame, an outfit or an option change all come down to this
+	 * call in the engine. */
+	for (int f = 0; f < 240; f++)
+	{
+		const float v = f < 60 ? 2000.0f : 0.0f;
+
+		a[0][0] += v * (f ? dt : 0.0f);
+		a[1][0] = a[0][0] + 60.0f;
+
+		if (f == 120)
+			HDSoftReset(&s);
+
+		HDSoftAdvance(&s, a, f ? dt : 0.0f, 2, 30.0f, out);
+
+		if (f >= 120 && (sb_len(out[0]) != 0.0f || sb_len(out[1]) != 0.0f))
+			kicked++;
+	}
+
+	ok(kicked == 0, "softbody: a reset leaves her at rest, with nothing carried over",
+		kicked, 0);
+
+	/* A teleport: the anchor jumps 50000 units between two frames while she
+	 * walks - a cutscene's first frame. */
+	HDSoftClear(&s);
+	kicked = 0;
+
+	for (int f = 0; f < 120; f++)
+	{
+		a[0][0] = 2000.0f * dt * f + (f >= 60 ? 50000.0f : 0.0f);
+		a[1][0] = a[0][0] + 60.0f;
+		HDSoftAdvance(&s, a, f ? dt : 0.0f, 2, 30.0f, out);
+
+		if (sb_len(out[0]) != 0.0f || sb_len(out[1]) != 0.0f)
+			kicked++;
+	}
+
+	ok(kicked == 0 && s.resets == 1,
+		"softbody: a jump of the anchor resets once, without a kick", kicked + s.resets * 1000,
+		1000);
+
+	/* A gap: a frame half a second after the last - a hitch, a load. */
+	HDSoftClear(&s);
+	kicked = 0;
+
+	for (int f = 0; f < 120; f++)
+	{
+		a[0][0] = 2000.0f * dt * f;
+		a[1][0] = a[0][0] + 60.0f;
+		HDSoftAdvance(&s, a, f == 60 ? 0.5f : (f ? dt : 0.0f), 2, 30.0f, out);
+
+		if (sb_len(out[0]) != 0.0f || sb_len(out[1]) != 0.0f)
+			kicked++;
+	}
+
+	ok(kicked == 0 && s.resets == 1, "softbody: a gap beyond GAP resets once, without a kick",
+		kicked + s.resets * 1000, 1000);
+
+	/* And a reset in the middle of a swing ends the swing on the spot. */
+	HDSoftClear(&s);
+
+	for (int f = 0; f < 30; f++)
+	{
+		a[0][1] = f < 15 ? 100.0f * dt * f : 100.0f * dt * 15;
+		a[1][1] = a[0][1];
+		HDSoftAdvance(&s, a, f ? dt : 0.0f, 2, 30.0f, out);
+	}
+
+	const float swinging = sb_len(out[0]);
+
+	a[0][1] += 40000.0f;
+	a[1][1] = a[0][1];
+	HDSoftAdvance(&s, a, dt, 2, 30.0f, out);
+
+	ok(swinging > 0.0f && sb_len(out[0]) == 0.0f && sb_len(out[1]) == 0.0f,
+		"softbody: a jump in the middle of a swing ends it at once", sb_milli(sb_len(out[0])), 0);
+}
+
+/* R6: at rest is exactly at rest - offsets and state exactly zero, and the
+ * draw constants of the offset exactly zero, which the shader adds as
+ * nothing. R2: a frame that does not advance the game does not move the
+ * state by a bit. */
+static void softbody_rest()
+{
+	HDSoftSim s;
+	float a[2][3] = { { 0, 0, 0 }, { 60, 0, 0 } };
+	float out[2][3];
+	const float dt = 1.0f / 60.0f;
+	bool rest = false;
+	int settled = -1;
+
+	HDSoftClear(&s);
+
+	for (int f = 0; f < 600; f++)
+	{
+		if (f < 20)
+			a[0][1] = a[1][1] = 1500.0f * dt * f;
+
+		rest = HDSoftAdvance(&s, a, f ? dt : 0.0f, 3, 30.0f, out);
+
+		if (rest && settled < 0 && f > 20)
+			settled = f;
+	}
+
+	bool zero = true;
+
+	for (int k = 0; k < 2; k++)
+		for (int i = 0; i < 3; i++)
+			if (out[k][i] != 0.0f || s.side[k].x[i] != 0.0f || s.side[k].u[i] != 0.0f)
+				zero = false;
+
+	printf("  softbody: a landing at 1500 units a second comes to rest %d frames (60 fps) "
+		"after it\n", settled - 20);
+
+	ok(rest && zero && settled > 20 && settled < 20 + 600,
+		"softbody: after a landing she comes to rest, and at rest everything is exactly zero",
+		settled, 0);
+
+	/* Paused: the same frame drawn again, and a frame that is not later. */
+	HDSoftClear(&s);
+
+	for (int f = 0; f < 40; f++)
+	{
+		a[0][1] = a[1][1] = f < 20 ? 1500.0f * dt * f : 1500.0f * dt * 20;
+		HDSoftAdvance(&s, a, f ? dt : 0.0f, 2, 30.0f, out);
+	}
+
+	const HDSoftSim before = s;
+	float first[2][3];
+
+	memcpy(first, out, sizeof(first));
+
+	for (int f = 0; f < 50; f++)
+	{
+		a[0][0] += 5.0f;	// the anchor moves while the time does not: still nothing
+		HDSoftAdvance(&s, a, f % 2 ? 0.0f : -0.01f, 2, 30.0f, out);
+	}
+
+	ok(memcmp(&before, &s, sizeof(s)) == 0 && memcmp(first, out, sizeof(first)) == 0,
+		"softbody: frames that do not advance the game leave the state and the offset alone",
+		0, 0);
+
+	/* The constants of an offset of zero carry exact zeros in the offset
+	 * registers. */
+	HDSoftRegion region = HDSoftRegion();
+	const float zeros[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };
+	const float view[16] = { 0.6f, 0.8f, 0, 0, -0.8f, 0.6f, 0, 0, 0, 0, 1, 0, 10, 20, 30, 1 };
+	float c[16];
+
+	region.ok = 1;
+	region.radius = 30.0f;
+	HDSoftConstants(&region, zeros, view, 7, c);
+
+	ok(c[8] == 0.0f && c[9] == 0.0f && c[10] == 0.0f && c[12] == 0.0f && c[13] == 0.0f &&
+		c[14] == 0.0f && c[11] == 7.0f,
+		"softbody: at rest the offset registers are exactly zero", 0, 0);
+}
+
+/* R1 and R2, the clock: one step per drawn frame, never from a mirror's draw,
+ * game time with half ticks at sixty and the counter's wrap, nothing while
+ * the game stands still. */
+static void softbody_clock()
+{
+	HDSoftClock c = { 0, 0, 0, 0.0f };
+	float dt = 0.0f;
+	int steps = 0;
+
+	HDSoftClockFrame(&c);
+	steps += HDSoftClockStep(&c, true, 100, 1.0f, &dt) ? 1 : 0;	// the mirror first
+	steps += HDSoftClockStep(&c, false, 100, 1.0f, &dt) ? 1 : 0;	// her own draw
+	ok(steps == 1 && dt == 0.0f, "softbody: a mirror's draw never steps; the first draw starts "
+		"the clock", steps, 1);
+
+	steps += HDSoftClockStep(&c, false, 100, 1.0f, &dt) ? 1 : 0;	// drawn twice
+	steps += HDSoftClockStep(&c, true, 100, 1.0f, &dt) ? 1 : 0;
+	ok(steps == 1, "softbody: one step per frame, however often she is drawn", steps, 1);
+
+	HDSoftClockFrame(&c);
+	HDSoftClockStep(&c, false, 101, 0.5f, &dt);
+	ok(fabsf(dt - 1.0f / 60.0f) < 1e-6f, "softbody: a frame half a tick on is 1/60 s",
+		sb_milli(dt * 60.0f), 1000);
+
+	HDSoftClockFrame(&c);
+	HDSoftClockStep(&c, false, 101, 1.0f, &dt);
+	ok(fabsf(dt - 1.0f / 60.0f) < 1e-6f, "softbody: and the tick after it 1/60 s more",
+		sb_milli(dt * 60.0f), 1000);
+
+	HDSoftClockFrame(&c);
+	HDSoftClockStep(&c, false, 101, 1.0f, &dt);
+	ok(dt == 0.0f, "softbody: the game standing still - the same tick again - is no time",
+		sb_milli(dt), 0);
+
+	HDSoftClockFrame(&c);
+	HDSoftClockStep(&c, false, 101, 0.5f, &dt);
+	ok(dt == 0.0f && c.tick == 101 && c.alpha == 1.0f,
+		"softbody: a frame that is not later is no time and does not move the clock",
+		sb_milli(dt), 0);
+
+	c.tick = 65535;
+	c.alpha = 1.0f;
+	HDSoftClockFrame(&c);
+	HDSoftClockStep(&c, false, 0, 1.0f, &dt);
+	ok(fabsf(dt - 1.0f / 30.0f) < 1e-6f, "softbody: the tick counter's wrap is one tick",
+		sb_milli(dt * 30.0f), 1000);
+
+	HDSoftClockForget(&c);
+	HDSoftClockFrame(&c);
+	HDSoftClockStep(&c, false, 9000, 0.5f, &dt);
+	ok(dt == 0.0f && c.tick == 9000, "softbody: a forgotten clock starts again at no time",
+		sb_milli(dt), 0);
+}
+
+/* A synthetic body for the finder: hips at the origin, head 250 up (y is
+ * down), thighs 20 to either side, feet pointing `toes` along z, and a torso
+ * that is an elliptical tube from the waist to the neck with up to two bumps
+ * on its front. */
+static void sb_body(std::vector<HDSoftVertex>& v, HDSoftSkeleton& sk, float left, float right,
+	float toes)
+{
+	const float sk0[7][3] =
+	{
+		{ 0, 0, 0 }, { 0, -250, 0 }, { -20, 10, 0 }, { 20, 10, 0 }, { 0, -70, 0 },
+		{ -20, 400, 0 }, { 20, 400, 0 }
+	};
+
+	memcpy(&sk, sk0, sizeof(sk));
+	v.clear();
+
+	// The feet: under the ankles, reaching `toes` units along z.
+	for (int side = 0; side < 2; side++)
+		for (int i = 0; i < 20; i++)
+		{
+			HDSoftVertex p = { side ? 20.0f : -20.0f, 410.0f + (float)(i % 3) * 5.0f,
+				toes * (float)i / 19.0f - toes * 0.2f, 0.0f, side + 1 };
+
+			v.push_back(p);
+		}
+
+	// The torso, its front +z.
+	for (float y = -40.0f; y >= -240.0f; y -= 4.0f)
+		for (int k = 0; k < 90; k++)
+		{
+			const float ang = (float)k * 6.2831853f / 90.0f;
+			const float x = 55.0f * cosf(ang);
+			float z = 35.0f * sinf(ang);
+
+			if (z > 0.0f)
+			{
+				const float dl = (x + 28.0f) * (x + 28.0f) + (y + 150.0f) * (y + 150.0f);
+				const float dr = (x - 28.0f) * (x - 28.0f) + (y + 150.0f) * (y + 150.0f);
+
+				z += left * expf(-dl / (2.0f * 13.0f * 13.0f)) +
+					right * expf(-dr / (2.0f * 13.0f * 13.0f));
+			}
+
+			HDSoftVertex p = { x, y, z, 1.0f, 0 };
+
+			v.push_back(p);
+		}
+}
+
+static void softbody_region()
+{
+	std::vector<HDSoftVertex> v;
+	HDSoftSkeleton sk;
+	HDSoftRegion r;
+
+	sb_body(v, sk, 16.0f, 16.0f, 40.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+
+	printf("  softbody: synthetic chest: %s, apexes (%.1f, %.1f, %.1f) / (%.1f, %.1f, %.1f), "
+		"radius %.1f, %d/%d inside\n", r.reason, r.apex[0][0], r.apex[0][1], r.apex[0][2],
+		r.apex[1][0], r.apex[1][1], r.apex[1][2], r.radius, r.inside[0], r.inside[1]);
+
+	ok(r.ok == 1, "softbody: two bumps on a torso are found", r.ok, 1);
+	/* On the bumps - within their own width of 13 of the bump's middle; the
+	 * tube's own front leans the peak a little towards the middle. */
+	ok(fabsf(r.apex[0][0] + 28.0f) < 8.0f && fabsf(r.apex[1][0] - 28.0f) < 8.0f &&
+		fabsf(r.apex[0][1] + 150.0f) < 4.0f && fabsf(r.apex[1][1] + 150.0f) < 4.0f,
+		"softbody: the apexes stand on the bumps, the left one on her left",
+		sb_milli(r.apex[0][0]), -28000);
+	ok(fabsf(r.apex[0][0] + r.apex[1][0]) < 0.5f && fabsf(r.apex[0][1] - r.apex[1][1]) < 0.5f &&
+		fabsf(r.apex[0][2] - r.apex[1][2]) < 0.5f,
+		"softbody: the two apexes are mirror images", sb_milli(r.apex[0][0] + r.apex[1][0]), 0);
+	ok(fabsf(r.radius - 0.5f * (r.apex[1][0] - r.apex[0][0])) < 1e-3f &&
+		fabsf(r.centre[0][2] - (r.apex[0][2] - HD_SOFT_SETBACK * r.radius)) < 1e-3f,
+		"softbody: the regions meet in the middle and the centres stand behind the apexes",
+		sb_milli(r.radius), 0);
+	ok(r.fwd[2] > 0.99f && r.up[1] < -0.99f && r.side[0] > 0.99f,
+		"softbody: front, up and her right are read from the feet and the joints",
+		sb_milli(r.fwd[2]), 1000);
+
+	// The same body with its feet the other way round: its front is behind.
+	sb_body(v, sk, 16.0f, 16.0f, -40.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(r.fwd[2] < -0.99f && strcmp(r.reason, "ok") != 0,
+		"softbody: feet pointing back turn the front round, and the back has no chest",
+		sb_milli(r.fwd[2]), -1000);
+
+	sb_body(v, sk, 0.0f, 0.0f, 40.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "flat"), "softbody: a front with no chest is refused as flat",
+		r.ok, 0);
+
+	sb_body(v, sk, 16.0f, 0.0f, 40.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "asymmetric"),
+		"softbody: a front with one bump is refused as asymmetric", r.ok, 0);
+
+	sb_body(v, sk, 16.0f, 16.0f, 0.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "no_front"), "softbody: feet that point nowhere give no front",
+		r.ok, 0);
+
+	// No torso weights at all.
+	sb_body(v, sk, 16.0f, 16.0f, 40.0f);
+
+	for (size_t i = 0; i < v.size(); i++)
+		v[i].torso = 0.4f;
+
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "no_torso"),
+		"softbody: a body whose torso weights stay under a half has no torso", r.ok, 0);
+}
+
+/* The mask against the pairs hd_softbody.h documents beside HDSoftMask, which
+ * the shader carries line for line: 1 at the centre, 0 at the radius and
+ * beyond, monotone between. */
+static void softbody_mask()
+{
+	const float c[3] = { 10.0f, -20.0f, 30.0f };
+	const float pairs[][2] = { { 0.0f, 1.0f }, { 0.25f, 0.84375f }, { 0.5f, 0.5f },
+		{ 0.75f, 0.15625f }, { 1.0f, 0.0f }, { 1.5f, 0.0f }, { 7.0f, 0.0f } };
+	int wrong = 0;
+
+	for (size_t i = 0; i < sizeof(pairs) / sizeof(pairs[0]); i++)
+	{
+		const float p[3] = { c[0], c[1] + pairs[i][0] * 40.0f, c[2] };
+
+		if (fabsf(HDSoftMask(p, c, 1.0f / 40.0f) - pairs[i][1]) > 1e-6f)
+			wrong++;
+	}
+
+	ok(wrong == 0, "softbody: the mask meets its documented pairs", wrong, 0);
+
+	int rising = 0;
+	float last = 2.0f;
+
+	for (int i = 0; i <= 1000; i++)
+	{
+		const float p[3] = { c[0] + 0.05f * i * 0.6f, c[1], c[2] + 0.05f * i * 0.8f };
+		const float m = HDSoftMask(p, c, 1.0f / 40.0f);
+
+		if (m > last || m < 0.0f || m > 1.0f)
+			rising++;
+
+		last = m;
+	}
+
+	ok(rising == 0, "softbody: the mask falls monotonely from 1 to 0 in any direction",
+		rising, 0);
+
+	const float p[3] = { 500.0f, 0.0f, 0.0f };
+
+	ok(HDSoftMask(p, c, 0.0f) == 1.0f,
+		"softbody: an inverse radius of 0 masks everything in - why no region sends zeros",
+		0, 0);
+}
+
+/* The constants of a draw: the layout, the offset turned with the torso's
+ * own view matrix, a mirror's reflected draw giving a reflected offset, and
+ * the camera changing the direction the offset is written in but neither its
+ * size nor the motion behind it (R7). */
+static void softbody_constants()
+{
+	HDSoftRegion region = HDSoftRegion();
+
+	region.ok = 1;
+	region.radius = 25.0f;
+	region.centre[0][0] = -28.0f;
+	region.centre[0][1] = -150.0f;
+	region.centre[0][2] = 60.0f;
+	region.centre[1][0] = 28.0f;
+	region.centre[1][1] = -150.0f;
+	region.centre[1][2] = 60.0f;
+
+	const float off[2][3] = { { 1.0f, -2.0f, 0.5f }, { -1.0f, -2.0f, 0.5f } };
+	const float identity[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 6, 7, 1 };
+	float c[16];
+
+	HDSoftConstants(&region, off, identity, 7, c);
+	ok(c[0] == -28.0f && c[2] == 60.0f && c[3] == 1.0f / 25.0f && c[4] == 28.0f &&
+		c[7] == 1.0f / 25.0f && c[8] == 1.0f && c[9] == -2.0f && c[10] == 0.5f &&
+		c[11] == 7.0f && c[12] == -1.0f && c[15] == 0.0f,
+		"softbody: the four registers carry centre, 1 / radius, offset and the torso node",
+		sb_milli(c[3] * 25.0f), 1000);
+
+	// A mirror's draw: the reflection in the view's own z plane.
+	const float mirror[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, -1, 0, 5, 6, 7, 1 };
+
+	HDSoftConstants(&region, off, mirror, 7, c);
+	ok(c[8] == 1.0f && c[9] == -2.0f && c[10] == -0.5f,
+		"softbody: a mirror's draw gets the offset reflected", sb_milli(c[10]), -500);
+
+	// Two cameras: the same offset, the same length, the one turned into the other.
+	const float yaw = 0.7f;
+	const float cam[16] = { cosf(yaw), 0, sinf(yaw), 0, 0, 1, 0, 0, -sinf(yaw), 0, cosf(yaw), 0,
+		0, 0, 0, 1 };
+	float d[16];
+
+	HDSoftConstants(&region, off, identity, 7, c);
+	HDSoftConstants(&region, off, cam, 7, d);
+	ok(fabsf(sb_len(&c[8]) - sb_len(&d[8])) < 1e-5f &&
+		fabsf(d[8] - (cosf(yaw) * c[8] - sinf(yaw) * c[10])) < 1e-5f,
+		"softbody: a camera turns the offset with it and does not change its size",
+		sb_milli(sb_len(&d[8])), sb_milli(sb_len(&c[8])));
+
+	HDSoftRegion bad = region;
+
+	bad.ok = 0;
+	HDSoftConstants(&bad, off, identity, 7, c);
+
+	int nonZero = 0;
+
+	for (int i = 0; i < 16; i++)
+		nonZero += c[i] != 0.0f ? 1 : 0;
+
+	ok(nonZero == 0, "softbody: a refused region sends sixteen zeros", nonZero, 0);
+
+	/* The anchor and the torso's own axes: a joint turned a quarter round y
+	 * carries a centre and takes a world offset back into its own frame, the
+	 * front part weakened. */
+	const float joint[12] = { 0, 0, 1, 10, 0, 1, 0, 20, -1, 0, 0, 30 };
+	const float origin[3] = { 1000.0f, 2000.0f, 3000.0f };
+	const float centre[3] = { 4.0f, -150.0f, 60.0f };
+	const float bind[3] = { 0.0f, -70.0f, 0.0f };
+	float anchor[3];
+
+	HDSoftAnchor(joint, origin, centre, bind, anchor);
+	ok(fabsf(anchor[0] - (1000.0f + 10.0f + 60.0f)) < 1e-3f &&
+		fabsf(anchor[1] - (2000.0f + 20.0f - 80.0f)) < 1e-3f &&
+		fabsf(anchor[2] - (3000.0f + 30.0f - 4.0f)) < 1e-3f,
+		"softbody: the anchor is the centre carried by the torso joint into the world",
+		sb_milli(anchor[0]), 1070000);
+
+	const float fwd[3] = { 0.0f, 0.0f, 1.0f };
+	const float world[3] = { 10.0f, 2.0f, -3.0f };
+	float torso[3];
+
+	HDSoftToTorso(joint, fwd, world, torso);
+	ok(fabsf(torso[0] - 3.0f) < 1e-5f && fabsf(torso[1] - 2.0f) < 1e-5f &&
+		fabsf(torso[2] - 10.0f * HD_SOFT_FRONTBACK) < 1e-5f,
+		"softbody: a world offset comes into the torso's axes with its front part weakened",
+		sb_milli(torso[2]), sb_milli(10.0f * HD_SOFT_FRONTBACK));
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -12038,6 +12835,15 @@ int main()
 	gloss_field_build();
 	gloss_field_bound();
 	objlight_dark();
+	softbody_spring();
+	softbody_rate();
+	softbody_bound();
+	softbody_reset();
+	softbody_rest();
+	softbody_clock();
+	softbody_region();
+	softbody_mask();
+	softbody_constants();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

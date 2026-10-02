@@ -97,6 +97,13 @@
  *     -flare / -torch     the LEFT hand alone, as laraflar.cpp / flmtorch.cpp
  *                         set it.
  *     -back <what>        shotgun, hk or grapple on her back.
+ *     -softtest <x> <y> <z>
+ *                         the chest's secondary motion at a fixed offset, in
+ *                         the torso's own axes (y down, z forward), the same
+ *                         on both sides, through the engine's own draw
+ *                         constants and to the parts the engine hands them
+ *                         to. Every -lara run prints the outfit's regions as
+ *                         the `softbody:` lines, with or without it.
  *     -lara-nodes         the node table: every classic
  *                         node 0..14 against every source, and which .TRM
  *                         part covers it.
@@ -6658,6 +6665,11 @@ struct LaraOptions
 	 * picture of the whole of her. -1 draws them all. */
 	int onlyPart;
 	bool noSheen;			// the picture before the sheen split existed
+	/* The chest's secondary motion at a fixed offset: x, y, z in the
+	 * torso's own axes, units, the same on both sides, handed to every part
+	 * the engine hands the motion to. Not set draws with none. */
+	bool softTest;
+	float softOffset[3];
 	bool check;
 	bool noDraw;
 	// The ring's own presentation - see -invrot.
@@ -7107,6 +7119,33 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("\nHDLaraLevelBuild says classic - see the notes above.\n");
 		HDModelLevelEnd();
 		return 6;
+	}
+
+	/* The chest's regions, out of the engine's own finder at the engine's
+	 * own build: the fields of the engine's HDLOG softbody line with the
+	 * finder's working numbers beside them. */
+	{
+		const HDSoftRegion* r = HDLaraSoftRegion();
+		std::string parts;
+
+		for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+		{
+			const char* name = "-";
+
+			if (HDLaraPartSoft(part, &name) && HDLaraHasPart(part))
+				parts += (parts.empty() ? "" : ",") + std::string(name);
+		}
+
+		printf("\nsoftbody: outfit=%s ok=%d reason=%s apexL=(%.1f,%.1f,%.1f) "
+			"apexR=(%.1f,%.1f,%.1f) radius=%.1f verts=%d/%d parts=%s\n",
+			HDLaraOutfitModel(outfit) ? HDLaraOutfitModel(outfit) : "-", r->ok,
+			r->reason ? r->reason : "-", r->apex[0][0], r->apex[0][1], r->apex[0][2],
+			r->apex[1][0], r->apex[1][1], r->apex[1][2], r->radius, r->inside[0],
+			r->inside[1], parts.empty() ? "-" : parts.c_str());
+		printf("softbody: torso=%d height=%.1f prominence=%.2f up=(%.2f,%.2f,%.2f) "
+			"side=(%.2f,%.2f,%.2f) fwd=(%.2f,%.2f,%.2f)\n", r->torsoVerts, r->height,
+			r->prominence, r->up[0], r->up[1], r->up[2], r->side[0], r->side[1],
+			r->side[2], r->fwd[0], r->fwd[1], r->fwd[2]);
 	}
 
 	/* --- the frame ------------------------------------------------------ */
@@ -7993,6 +8032,32 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * of that part. A lambda rather than six copies of the same test. */
 	const auto draws = [&o](int part) { return o.onlyPart < 0 || o.onlyPart == part; };
 
+	/* -softtest: the chest's motion at a fixed offset, through the engine's
+	 * own constants on this picture's torso matrix and to the parts the
+	 * engine hands it to. Without it every draw gets none, as in the game
+	 * with the option off. */
+	HDModelSoft softConstants = {};
+
+	if (o.softTest)
+	{
+		const float offset[2][3] =
+		{
+			{ o.softOffset[0], o.softOffset[1], o.softOffset[2] },
+			{ o.softOffset[0], o.softOffset[1], o.softOffset[2] }
+		};
+
+		HDSoftConstants(HDLaraSoftRegion(), offset, matrices + HD_LARA_TORSO * 16,
+			HD_LARA_TORSO, softConstants.constants);
+		printf("softtest: (%.1f, %.1f, %.1f) in the torso's axes, both sides%s\n",
+			o.softOffset[0], o.softOffset[1], o.softOffset[2],
+			HDLaraSoftRegion()->ok ? "" : " - the region is not ok, nothing moves");
+	}
+
+	const auto soft = [&o, &softConstants](int part) -> const HDModelSoft*
+	{
+		return o.softTest && HDLaraPartSoft(part) ? &softConstants : 0;
+	};
+
 	/* --- draw -------------------------------------------------------------- */
 	printf("\n-- the picture ------------------------------------------------\n");
 
@@ -8156,7 +8221,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
 
 		if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
-			light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull))
+			light, ownBody, &lighting, cutting ? &neckCut : 0, o.cull, -1, -1,
+			soft(HD_LARA_PART_BODY)))
 			drawn++;
 
 		/* TR5's own head, in the same place and with the same rules the
@@ -8168,7 +8234,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 			if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
 				HD_LARA_NODES, light, bodyMask, &lighting,
-				cutting ? &neckCut : 0, o.cull))
+				cutting ? &neckCut : 0, o.cull, -1, -1, soft(HD_LARA_PART_HEAD)))
 				drawn++;
 		}
 
@@ -8185,7 +8251,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 			if (HDModelDraw(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
 				HD_LARA_NODES, light, ~0u, &lighting, 0,
-				HD_MODEL_CULL_NONE))
+				HD_MODEL_CULL_NONE, -1, -1, soft(HD_LARA_PART_NECK_CAP)))
 				drawn++;
 		}
 
@@ -8194,7 +8260,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		// The face with her lips at the frame asked for, and -1 without -lips.
 		if (!o.firstPerson && draws(HD_LARA_PART_FACE) &&
 			HDModelDraw(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
-			light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsTrack, lipsFrame))
+			light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsTrack, lipsFrame,
+			soft(HD_LARA_PART_FACE)))
 			drawn++;
 
 		/* The holster rig, in the same place and with the
@@ -8205,7 +8272,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
 			HDModelDraw(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
 				HD_LARA_NODES, light,
-				HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask, &lighting))
+				HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask, &lighting, 0,
+				HD_MODEL_CULL_NONE, -1, -1, soft(HD_LARA_PART_HOLSTER_RIG)))
 			drawn++;
 
 		for (int i = 0; i < pieces; i++)
@@ -8381,6 +8449,8 @@ int main(int argc, char** argv)
 	bool classicBraidRoot = false;	// -classicroot: the before picture
 	int onlyPart = -1;		// -onlypart: one part alone
 	bool noSheen = false;		// -nosheen: the before picture
+	bool softTest = false;		// -softtest: the chest's motion at a fixed offset
+	float softOffset[3] = { 0.0f, 0.0f, 0.0f };
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// -braidsim: the braid's own physics
 	/* -braidanim: the same chain under a real animation. */
@@ -8652,6 +8722,13 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-nosheen"))
 			noSheen = true;
+		else if (!_stricmp(argv[i], "-softtest") && i + 3 < argc)
+		{
+			softTest = true;
+			softOffset[0] = (float)atof(argv[++i]);
+			softOffset[1] = (float)atof(argv[++i]);
+			softOffset[2] = (float)atof(argv[++i]);
+		}
 		else if (!_stricmp(argv[i], "-braid"))
 		{
 			lara = true;
@@ -9175,6 +9252,10 @@ int main(int argc, char** argv)
 		o.classicBraidRoot = classicBraidRoot;
 		o.onlyPart = onlyPart;
 		o.noSheen = noSheen;
+		o.softTest = softTest;
+		o.softOffset[0] = softOffset[0];
+		o.softOffset[1] = softOffset[1];
+		o.softOffset[2] = softOffset[2];
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
 		o.handFold = laraHandFold;

@@ -13,10 +13,10 @@
 
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
- * Build with bmenu.bat, run with no arguments from this folder: the last two
- * families (pad_scheme_repair and controls_mouse_rows) read engine files as
- * text, by their paths relative to it, because the tables and rows they check
- * live in files that cannot be linked here.
+ * Build with bmenu.bat, run with no arguments from this folder: the last three
+ * families (pad_scheme_repair, controls_mouse_rows and graphics_softbody_row)
+ * read engine files as text, by their paths relative to it, because the
+ * tables and rows they check live in files that cannot be linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
  * call sites, so every row added above a list meant recounting a shift
@@ -1785,6 +1785,202 @@ static void controls_mouse_rows()
 	free(opts);
 }
 
+/* ------------------------------------------------- the Body physics row -- */
+
+/* The row of the chest's soft motion lives in game\menu_frame.cpp's Graphics
+ * table, which cannot be linked here, so what is checked is what the tree
+ * says, the way controls_mouse_rows reads the Controls table: the table's
+ * thirteen rows in order and the split they page into, the row's kind, save
+ * class and lack of a gate, the four values it shows, their five strings
+ * in game\gameflow.cpp's table, the registry name in tomb5\tomb5.cpp, and
+ * the draw's reset on a change in specific\hd\hd_laradraw.cpp. The step is
+ * game\menu_nav.h's MenuSliderStep over 0..3, swept whole. */
+static void graphics_softbody_row()
+{
+	static const char* const want[13] =
+	{
+		"Display", "HD textures", "Body physics", "Fog", "Distance fog", "Shimmer",
+		"Mono screen style", "Shadow mode", "PSX skies", "Static lighting", "UW Effect",
+		"Look transparency", "Footprints"
+	};
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char* draw = tree_file("../../../TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp");
+	char label[16][64];
+	char line[16][512];
+	int rows = 0, i, v, d;
+
+	check(frame && flow && opts && draw, 1, "softbody row: the four engine files are readable from here");
+
+	if (!frame || !flow || !opts || !draw)
+	{
+		free(frame);
+		free(flow);
+		free(opts);
+		free(draw);
+		return;
+	}
+
+	// The Graphics table, row by row.
+	{
+		const char* p = strstr(frame, "static const menu_row menu_rows_graphics[] =");
+		const char* end = p ? strstr(p, "};") : 0;
+
+		check(p != 0 && end != 0, 1, "softbody row: the Graphics table is found");
+
+		while (p && end && p < end && rows < 16)
+		{
+			const char* nl = strchr(p, '\n');
+			const char* s = p;
+
+			while (*s == '\t' || *s == ' ')
+				s++;
+
+			if (!strncmp(s, "MENU_", 5) && s < end)
+			{
+				char q[2][64];
+				int k = 0;
+
+				tree_quoted(s, q, 1);
+				strcpy_s(label[rows], sizeof(label[rows]), q[0]);
+
+				while (s[k] && s[k] != '\n' && s[k] != '\r' && k < 511)
+				{
+					line[rows][k] = s[k];
+					k++;
+				}
+
+				line[rows][k] = 0;
+				rows++;
+			}
+
+			p = nl ? nl + 1 : 0;
+		}
+	}
+
+	check(rows, 13, "softbody row: the Graphics table holds thirteen rows");
+
+	for (i = 0; i < rows && i < 13; i++)
+		check(strcmp(label[i], want[i]), 0, "softbody row: the Graphics rows stand in this order");
+
+	if (rows == 13)
+	{
+		check(!strncmp(line[2], "MENU_VALUE(\"Body physics\"", 25), 1,
+			"softbody row: Body physics is an ungated value row, right after HD textures");
+		check(strstr(line[2], "MenuValBodyPhysics, MenuStepBodyPhysics") != 0, 1,
+			"softbody row: it shows and steps tomb5.hd_softbody through its own two functions");
+		check(strstr(line[2], "MENU_SAVE_TOMB5") != 0, 1, "softbody row: it is saved with the tomb5 settings");
+		check(!strncmp(line[1], "MENU_VALUE(\"HD textures\"", 24) && !strncmp(line[3], "MENU_VALUE(\"Fog\"", 16), 1,
+			"softbody row: ungated like its neighbours, which no page row greys while HD is off");
+	}
+
+	// Thirteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, seven
+	// and six, and the second starts at Shadow mode.
+	check(MenuPageCount(13, 12), 2, "softbody row: Graphics pages in two");
+	check(MenuRowsOnPage(13, 12, 0), 7, "softbody row: seven rows on the first page");
+	check(MenuRowsOnPage(13, 12, 1), 6, "softbody row: six on the second");
+	check(MenuPageFirstRow(13, 12, 1), 7, "softbody row: the second page starts at row 7");
+	check(rows == 13 && !strcmp(label[MenuPageFirstRow(13, 12, 1)], "Shadow mode"), 1,
+		"softbody row: which is Shadow mode, and Body physics is on the first page beside HD textures");
+
+	// What the row shows and how it steps.
+	check(strstr(frame, "tomb5.hd_softbody == 1 ? \"Subtle\" :") != 0, 1,
+		"softbody row: 1 shows Subtle");
+	check(strstr(frame, "tomb5.hd_softbody == 2 ? \"Normal\" :") != 0, 1,
+		"softbody row: 2 shows Normal");
+	check(strstr(frame, "tomb5.hd_softbody == 3 ? \"Strong\" : \"off\"") != 0, 1,
+		"softbody row: 3 shows Strong, and 0 or anything out of range the table's own off");
+	check(strstr(frame, "ulong old = tomb5.hd_softbody > 3 ? 0 : tomb5.hd_softbody;") != 0, 1,
+		"softbody row: a stored value out of range steps from off");
+	check(strstr(frame, "MenuSliderStep((int)old, (int)dir, 3)") != 0, 1,
+		"softbody row: the step is MenuSliderStep over 0..3");
+
+	// The strings: the label and the two new values with five columns each,
+	// and the two values the table already had.
+	{
+		static const char* const names[3] = { "Body physics", "Subtle", "Normal" };
+		static const char* const deutsch[3] = { "K\\xF6rperphysik", "Dezent", "Normal" };
+
+		for (i = 0; i < 3; i++)
+		{
+			char key[64];
+			char col[5][64];
+			const char* at;
+			int n;
+
+			snprintf(key, sizeof(key), "{ \"%s\",", names[i]);
+			at = strstr(flow, key);
+			check(at != 0, 1, "softbody row: the string has its row in CustomText's table");
+
+			if (!at)
+				continue;
+
+			n = tree_quoted(at, col, 5);
+			check(n, 5, "softbody row: five columns, one per language");
+			check(strcmp(col[0], names[i]), 0, "softbody row: the English column is the string itself");
+			check(strcmp(col[2], deutsch[i]), 0, "softbody row: the German column is its translation");
+			check(!strcmp(col[1], names[i]) && !strcmp(col[3], names[i]) && !strcmp(col[4], names[i]), 1,
+				"softbody row: French, Italian and Spanish repeat the English");
+			check((int)strlen(col[2]) <= (int)strlen("Kamerageschwindigkeit"), 1,
+				"softbody row: the German string is no longer than the longest label the column holds");
+			check(tree_count(flow, key), 1, "softbody row: and the string has exactly one row");
+		}
+
+		static const char* const had[2] = { "off", "Strong" };
+		static const char* const hadDe[2] = { "aus", "Stark" };
+
+		for (i = 0; i < 2; i++)
+		{
+			char key[64];
+			char col[5][64];
+			const char* at;
+
+			snprintf(key, sizeof(key), "{ \"%s\",", had[i]);
+			at = strstr(flow, key);
+			check(at != 0 && tree_quoted(at, col, 5) == 5 && !strcmp(col[2], hadDe[i]), 1,
+				"softbody row: off and Strong are in the table already, aus and Stark");
+		}
+	}
+
+	// The registry: written on a first run, read, and saved; a missing or
+	// out-of-range value reads as off.
+	check(tree_count(opts, "sprintf(buf, \"hd_softbody\");"), 3,
+		"softbody row: hd_softbody is written on a first run, read and saved");
+	check(strstr(opts, "REG_ReadLong(buf, tomb5.hd_softbody, 0);") != 0, 1,
+		"softbody row: a registry without hd_softbody reads as off");
+	check(strstr(opts, "if (tomb5.hd_softbody > 3)\r\n\t\t\ttomb5.hd_softbody = 0;") != 0
+		|| strstr(opts, "if (tomb5.hd_softbody > 3)\n\t\t\ttomb5.hd_softbody = 0;") != 0, 1,
+		"softbody row: and one out of range as off");
+
+	// A change of the row reaches the running level: the draw compares the
+	// option with the strength it used last and starts again from rest.
+	{
+		const char* at = strstr(draw, "if (strength != g_soft_logged && g_soft_logged >= 0)");
+		const char* reset = at ? strstr(at, "soft_reset();") : 0;
+
+		check(at != 0 && reset != 0 && reset - at < 64, 1,
+			"softbody row: the draw resets to rest on the next frame after a change of the option");
+	}
+
+	// The step, swept over the four states and one past each end.
+	for (v = -1; v <= 4; v++)
+		for (d = -1; d <= 1; d++)
+		{
+			int w = v + d;
+
+			if (w < 0 || w > 3)
+				w = v < 0 ? (d > 0 ? 0 : v) : v > 3 ? (d < 0 ? 3 : v) : v;
+
+			check(MenuSliderStep(v, d, 3), w, "softbody row: one press is one state, and off and Strong hold");
+		}
+
+	free(frame);
+	free(flow);
+	free(opts);
+	free(draw);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -1810,6 +2006,7 @@ int main()
 	pad_default_tables();
 	pad_scheme_repair();
 	controls_mouse_rows();
+	graphics_softbody_row();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

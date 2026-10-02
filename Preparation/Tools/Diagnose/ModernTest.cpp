@@ -67,6 +67,9 @@
  * field's grid, texels, build and sample (gloss_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_pages.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_gloss_field.h"
+/* Which of the engine's item lights give an HD object nothing - pure as well
+ * (objlight_dark below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_objlight_dark.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -11673,6 +11676,297 @@ static void gloss_field_bound()
 		(long)(kept[0] * 100.0f + 0.5f), (long)(HD_GLOSS_CAP * 100.0f + 0.5f));
 }
 
+/* The faded engine light (specific\hd\hd_objlight_dark.h): which entries of
+ * the engine's two item light lists fill_lights leaves out. The fade is
+ * specific\lighting.cpp's own, statement for statement on the same floats:
+ * the swap's fade-out of a previous light and the fade-in of a light that
+ * comes in range (CreateLightList), the fade-out of a current light that is
+ * out of range, and FadeLightList's step. Shadow lights fade an integer and
+ * are not handed on, so they are not walked here. */
+struct EngineLight
+{
+	float r, g, b, tr, tg, tb, rs, gs, bs;
+	long fcnt;
+	unsigned char Type, Active;
+};
+
+static EngineLight engine_light(float r, float g, float b, unsigned char type)
+{
+	EngineLight l;
+
+	memset(&l, 0, sizeof(l));
+	l.r = l.tr = r;
+	l.g = l.tg = g;
+	l.b = l.tb = b;
+	l.Type = type;
+	return l;
+}
+
+// CreateLightList: a previous light at a room change.
+static void engine_swap_out(EngineLight& l)
+{
+	if (l.Active)
+	{
+		l.rs = l.r * -0.125F;
+		l.gs = l.g * -0.125F;
+		l.bs = l.b * -0.125F;
+		l.tr = 0.0F;
+		l.tg = 0.0F;
+		l.tb = 0.0F;
+		l.fcnt = 8;
+	}
+}
+
+// CreateLightList: a current light that is in range.
+static void engine_in_range(EngineLight& l)
+{
+	if (!l.Active)
+	{
+		l.rs = l.tr * 0.125F;
+		l.gs = l.tg * 0.125F;
+		l.bs = l.tb * 0.125F;
+		l.r = 0;
+		l.g = 0;
+		l.b = 0;
+		l.Active = 1;
+		l.fcnt = 8;
+	}
+}
+
+// CreateLightList: a current light that is out of range.
+static void engine_out_of_range(EngineLight& l)
+{
+	if (l.Active && !l.fcnt)
+	{
+		l.rs = l.r * -0.125F;
+		l.gs = l.g * -0.125F;
+		l.bs = l.b * -0.125F;
+		l.fcnt = 8;
+	}
+}
+
+// FadeLightList, one light.
+static void engine_fade(EngineLight& l)
+{
+	if (l.Active && l.fcnt)
+	{
+		l.r += l.rs;
+		l.g += l.gs;
+		l.b += l.bs;
+		l.fcnt--;
+
+		if (l.r <= 0 && l.g <= 0 && l.b <= 0)
+			l.Active = 0;
+	}
+}
+
+static bool engine_dark(const EngineLight& l)
+{
+	return HDObjLightIsDark(l.r, l.g, l.b) != 0;
+}
+
+/* fill_lights' choice over one list, without the conversion: an Active
+ * sun, point or spot (types 0, 1 and 2) that is not dark. */
+static int engine_handed(const EngineLight* list, int n)
+{
+	int handed = 0;
+
+	for (int i = 0; i < n; i++)
+		if (list[i].Active && list[i].Type <= 2 && !engine_dark(list[i]))
+			handed++;
+
+	return handed;
+}
+
+/* Fade a state out eight steps, by the swap or by the range test. `steps`
+ * counts the steps before the last that came out dark, `left` whether the
+ * light is still Active after the last and `leftLight` whether it is so
+ * with a colour that is not dark. */
+static void engine_fade_out(EngineLight l, bool swap, int& steps, int& left, int& leftLight)
+{
+	if (swap)
+		engine_swap_out(l);
+	else
+		engine_out_of_range(l);
+
+	for (int k = 1; k <= 8; k++)
+	{
+		engine_fade(l);
+
+		if (k < 8 && l.Active && engine_dark(l))
+			steps++;
+	}
+
+	if (l.Active)
+	{
+		left++;
+
+		if (!engine_dark(l))
+			leftLight++;
+	}
+}
+
+static float float_of(unsigned int bits)
+{
+	float f;
+
+	memcpy(&f, &bits, sizeof(f));
+	return f;
+}
+
+static void objlight_dark()
+{
+	const float bound = HD_OBJLIGHT_DARK_BOUND;
+	const float below = nextafterf(bound, 0.0f);
+	const float above = nextafterf(bound, 1.0f);
+
+	// The predicate at its edge.
+	ok(HDObjLightIsDark(below, below, below),
+		"objlight: just below the bound in all three channels is dark", 0, 1);
+	ok(!HDObjLightIsDark(bound, bound, bound), "objlight: at the bound is light", 1, 0);
+	ok(!HDObjLightIsDark(above, above, above), "objlight: above the bound is light", 1, 0);
+	ok(!HDObjLightIsDark(above, below, below) && !HDObjLightIsDark(below, above, below) &&
+		!HDObjLightIsDark(below, below, above),
+		"objlight: one channel above with two below is light, in each channel", 1, 0);
+	ok(HDObjLightIsDark(0.0f, 0.0f, 0.0f), "objlight: black is dark", 0, 1);
+	ok(HDObjLightIsDark(-0.1f, -1e-9f, -0.5f), "objlight: negative remainders are dark", 0, 1);
+	ok(HDObjLightIsDark(-1.49e-8f, 4.47e-8f, 0.0f),
+		"objlight: a remainder of mixed sign is dark", 0, 1);
+	ok(!HDObjLightIsDark(1.0f / 255.0f, 0.0f, 0.0f),
+		"objlight: one unit of 0..255 in one channel is light", 1, 0);
+	ok(!HDObjLightIsDark(NAN, 0.0f, 0.0f), "objlight: a NaN counts as light", 1, 0);
+
+	/* The bound in the measured gap: above the largest remainder of a fade
+	 * by a factor of a hundred, below the smallest step of a fade-out that
+	 * begins one step into the fade-in of a light of 1/255. */
+	ok(bound > 100.0f * 8.94e-8f && bound < (1.0f / 255.0f) / 64.0f,
+		"objlight: the bound lies between 100 x 8.94e-8 and (1/255) / 64",
+		(long)(bound * 1e9f), 10000);
+
+	/* The fade over the byte grid, grey and red alone: the fade-in from 0,
+	 * the fade-out from its end by the swap and by the range test, a swap
+	 * at every step of the fade-in and at every step of a fade-out out of
+	 * range, and the current list's second fade of a remainder. */
+	int left = 0, leftLight = 0, steps = 0, inDark = 0, greyLeft = 0, refades = 0;
+	int partLeft = 0, partLight = 0, partSteps = 0;
+
+	for (int n = 1; n <= 255; n++)
+		for (int shape = 0; shape < 2; shape++)
+		{
+			const float c = (float)n / 255.0f;
+			EngineLight l = shape ? engine_light(c, 0.0f, 0.0f, 1) : engine_light(c, c, c, 0);
+			EngineLight in[8];
+
+			engine_in_range(l);
+
+			for (int k = 0; k < 8; k++)
+			{
+				engine_fade(l);
+				inDark += !l.Active || engine_dark(l) ? 1 : 0;
+				in[k] = l;
+			}
+
+			// From the full colour, both ways out.
+			const int before = left;
+
+			engine_fade_out(in[7], true, steps, left, leftLight);
+			greyLeft += shape == 0 && left > before ? 1 : 0;
+			engine_fade_out(in[7], false, steps, left, leftLight);
+
+			// A swap at every step of the fade-in.
+			for (int k = 0; k < 7; k++)
+			{
+				EngineLight part = in[k];
+
+				engine_fade_out(part, true, partSteps, partLeft, partLight);
+			}
+
+			// A swap at every step of a fade-out out of range, and the
+			// remainder at its end faded again.
+			EngineLight out = in[7];
+
+			engine_out_of_range(out);
+
+			for (int k = 1; k <= 8; k++)
+			{
+				engine_fade(out);
+
+				if (!out.Active)
+					break;
+
+				int ignored = 0;
+
+				engine_fade_out(out, true, k < 8 ? partSteps : ignored, partLeft, partLight);
+			}
+
+			int cycles = 0;
+
+			while (out.Active && cycles < 16)
+			{
+				engine_out_of_range(out);
+
+				for (int k = 0; k < 8; k++)
+					engine_fade(out);
+
+				cycles++;
+			}
+
+			refades += cycles > 1 ? 1 : 0;
+		}
+
+	ok(greyLeft == 139, "objlight: 139 of the 255 grey byte-grid colours stay Active after "
+		"the swap's fade-out", greyLeft, 139);
+	ok(left > 0 && leftLight == 0, "objlight: every light left Active by a fade-out from its "
+		"full colour is dark", leftLight, 0);
+	ok(partLeft > 0 && partLight == 0, "objlight: every light left Active by a fade-out from a "
+		"part-way state is dark", partLight, 0);
+	ok(inDark == 0, "objlight: no step of a fade-in from 1/255 up is dark", inDark, 0);
+	ok(steps == 0, "objlight: no step of a fade-out from 1/255 up is dark but the last", steps, 0);
+	ok(partSteps == 0, "objlight: nor of one that begins part-way, from 1/255 up", partSteps, 0);
+	ok(refades == 0, "objlight: the current list's second fade clears every remainder",
+		refades, 0);
+
+	/* The lists. A list of nothing but remainders, a shadow light and a
+	 * light that is not Active hands nothing on, and the eye is the lamp;
+	 * one real light beside them hands one. The first entry is ANDREA2 room
+	 * 9's sun (0.749969, 0.655856, 0.608799 in the level file) walked
+	 * through its fade-in and the swap's fade-out: Active, 0 / 4.47e-8 /
+	 * 1.49e-8. */
+	EngineLight sun = engine_light(float_of(0x3f3ffe00u), float_of(0x3f27e629u),
+		float_of(0x3f1bda3du), 0);
+
+	engine_in_range(sun);
+
+	for (int k = 0; k < 8; k++)
+		engine_fade(sun);
+
+	engine_swap_out(sun);
+
+	for (int k = 0; k < 8; k++)
+		engine_fade(sun);
+
+	ok(sun.Active && sun.fcnt == 0 && engine_dark(sun),
+		"objlight: ANDREA2 room 9's sun stays Active and dark after the swap's fade-out",
+		sun.Active && engine_dark(sun) ? 1 : 0, 1);
+
+	EngineLight list[5];
+
+	list[0] = sun;
+	list[1] = engine_light(2.0e-8f, -3.0e-8f, 1.0e-9f, 1);
+	list[1].Active = 1;
+	list[2] = engine_light(0.25f, 0.25f, 0.25f, 3);
+	list[2].Active = 1;
+	list[3] = engine_light(0.5f, 0.4f, 0.3f, 2);
+	list[4] = engine_light(0.37f, 0.28f, 0.26f, 1);
+	list[4].Active = 1;
+
+	ok(engine_handed(list, 4) == 0,
+		"objlight: a list of remainders, a shadow and an inactive light hands none on",
+		engine_handed(list, 4), 0);
+	ok(engine_handed(list, 5) == 1, "objlight: one real light beside them hands one on",
+		engine_handed(list, 5), 1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -11743,6 +12037,7 @@ int main()
 	gloss_field_texels();
 	gloss_field_build();
 	gloss_field_bound();
+	objlight_dark();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

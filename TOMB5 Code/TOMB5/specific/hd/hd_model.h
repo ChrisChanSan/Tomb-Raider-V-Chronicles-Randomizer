@@ -642,16 +642,27 @@ struct HDModelNeckCut
 	float bar;		// discard where that weight reaches this, of 1
 };
 
+/* The soft motion of the chest, as the four vertex registers c163 to c166 of
+ * hd_model.hlsl (gSoft): two regions in the body's bind space and an offset
+ * each in view space, laid out as hd_softbody.h's HDSoftConstants fills
+ * them. A null pointer is sixteen zeros, which moves nothing; every draw
+ * writes the registers, so no draw inherits another's offset. */
+struct HDModelSoft
+{
+	float constants[16];
+};
+
 // False when the slot has no model or the frame is not open; the caller then
 // draws it the classic way.
 //
 // `lipsTrack` and `lipsFrame` are a cutscene's audio track and the frame of it
 // this draw shows, for a face that speaks - see the lips below; -1 draws the
-// model as it was built.
+// model as it was built. `soft` is the chest's secondary motion for this draw,
+// or 0 for none.
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
 	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
-	int lipsTrack = -1, int lipsFrame = -1);
+	int lipsTrack = -1, int lipsFrame = -1, const HDModelSoft* soft = 0);
 
 // The separate HD face, drawn right after the body on the same matrices. Does
 // nothing and returns false when the slot has no <NAME>_HEAD.TRM.

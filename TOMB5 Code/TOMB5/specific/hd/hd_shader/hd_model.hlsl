@@ -87,6 +87,7 @@
  * c160        gLightInfo          per object (count, the sun's factor)
  * c161        gSpec               per draw
  * c162        gNeckCut            per draw
+ * c163 - c166 gSoft[4]            per draw   (the chest's secondary motion)
  *
  * The vertex registers overlap the room shader's, on purpose. Direct3D 9
  * has ONE constant register file behind both shaders, and hd_room.hlsl keeps
@@ -102,7 +103,11 @@
  * both. What must never happen is writing a register a shader `def`s for
  * itself, which is why gPass goes to the pixel file alone (see below).
  *
- * 166 of the 256 vs_3_0 registers. The palette is 32 nodes because the
+ * c163 and up lie above everything hd_room.hlsl declares (its vertex
+ * registers end at c127), so the room shader leaves nothing there for a
+ * later draw to trip over.
+ *
+ * 167 of the 256 vs_3_0 registers. The palette is 32 nodes because the
  * highest bone index a weighted vertex names over all 566 models of game 5 is
  * 28 (GREEN_TEETH); the only two files past that, PIERRE_HEAD and
  * LARSON_HEAD at 40, are facial-rig heads whose numbers belong to the rig and
@@ -215,6 +220,30 @@ float4 gSpec : register(c161);
  * model (hd_lara.h, HD_LARA_NECK_CAP_SEGMENTS). */
 float4 gNeckCut : register(c162);
 
+/* The soft motion of the chest: two regions on the body and an offset each.
+ *
+ *   gSoft[0]  the left region's centre in BIND space, and 1 / its radius
+ *   gSoft[1]  the right region's, likewise
+ *   gSoft[2]  the left offset in VIEW space, and in w the node whose weight
+ *             carries it - Lara's torso, node 7
+ *   gSoft[3]  the right offset in view space; w unused
+ *
+ * A vertex moves by the sum over the two sides of its mask times the side's
+ * offset, times its own weight on the torso node. The mask is a smoothstep of
+ * 1 - distance / radius from the vertex's bind position, so it is 1 at the
+ * centre and 0 from the radius out, and - being a property of the bind pose
+ * like the weights - it is the same patch of her in every pose.
+ *
+ * The region and the weight live in the vertex's bind space and the offset in
+ * the space the vertex lands in, so the offset is the only number that changes
+ * from frame to frame and from a draw to its mirrored draw (hd_softbody.h,
+ * HDSoftConstants). The normal is left as it is: the offset is a few units
+ * on a surface whose shading is set by its curvature.
+ *
+ * Every draw writes all four (hd_model.cpp). Zeros for every draw but Lara's
+ * own body parts with the motion on; zero offsets add exactly nothing. */
+float4 gSoft[4] : register(c163);
+
 /* --------------------------------------------------- the parity block ------
  *
  * constants, pixel side
@@ -326,6 +355,10 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	// walks.
 	float headWeight = 0.0f;
 
+	// The soft motion's share: the vertex's weight on the torso node gSoft
+	// names, out of the same three bones.
+	float torsoWeight = 0.0f;
+
 	/* Three bones. Unrolled, so every gJoints access is a literal register
 	 * offset plus one address register - and so that inBone[i] is a component
 	 * select rather than an indexed one, which vs_3_0 cannot do on a
@@ -341,7 +374,18 @@ VS_OUT ModelVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		light += weight * gNodeLight[node].rgb;
 
 		headWeight += abs((float)node - gNeckCut.x) < 0.5f ? weight : 0.0f;
+		torsoWeight += abs((float)node - gSoft[2].w) < 0.5f ? weight : 0.0f;
 	}
+
+	/* The soft motion of the chest, before anything below reads `view`, so
+	 * the light and the fog see the surface where it is drawn. The mask is
+	 * hd_softbody.h's HDSoftMask line for line. */
+	float tl = saturate(1.0f - length(inPos.xyz - gSoft[0].xyz) * gSoft[0].w);
+	float tr = saturate(1.0f - length(inPos.xyz - gSoft[1].xyz) * gSoft[1].w);
+	float ml = tl * tl * (3.0f - 2.0f * tl);
+	float mr = tr * tr * (3.0f - 2.0f * tr);
+
+	view += (ml * gSoft[2].xyz + mr * gSoft[3].xyz) * torsoWeight;
 
 	/* The head cut, Lara's alone.
 	 *

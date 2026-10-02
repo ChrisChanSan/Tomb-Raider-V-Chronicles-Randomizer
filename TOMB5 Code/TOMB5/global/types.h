@@ -2873,5 +2873,12 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * it looks down. The stick keeps its own convention and this does not
 	 * reach it. Registry: mouse_invert. */
 	bool mouse_invert;
+
+	/* The soft motion of the chest of the HD Lara: 0 off, the default, 1
+	 * subtle, 2 normal, 3 strong. A stored value out of range reads as
+	 * off. Dead with hd_enable off and wherever Lara is drawn classic, and
+	 * off on a young-Lara level whatever it says (specific\hd\hd_laradraw.cpp,
+	 * hd_softbody.h for the strengths). Registry: hd_softbody. */
+	ulong hd_softbody;
 };
 #pragma pack(pop)

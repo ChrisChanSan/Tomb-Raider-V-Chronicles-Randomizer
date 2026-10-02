@@ -2550,7 +2550,8 @@ namespace
 	 * below serve both. */
 	void draw_model(const Model& model, const float* nodeMatrix, int nodeCount,
 		const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-		const HDModelNeckCut* cut, int cull, IDirect3DVertexBuffer9* stream)
+		const HDModelNeckCut* cut, int cull, IDirect3DVertexBuffer9* stream,
+		const HDModelSoft* soft)
 	{
 		const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
 
@@ -2607,6 +2608,14 @@ namespace
 		};
 
 		g_device->SetVertexShaderConstantF(162, neck, 1);
+
+		/* c163 to c166, the chest's secondary motion (hd_model.h,
+		 * HDModelSoft). Written for every draw for the reason c162 is, and
+		 * zeros - which add nothing to any vertex - for every draw that has
+		 * none. */
+		static const HDModelSoft kNoSoft = {};
+
+		g_device->SetVertexShaderConstantF(163, (soft ? soft : &kNoSoft)->constants, 4);
 
 		/* The object's lights, in the VERTEX shader (c136) - the classic path
 		 * lights per vertex out of the same list, so this is the same place
@@ -4241,7 +4250,8 @@ void HDModelOffCentre(float kx, float ky)
 
 bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	const float* nodeLight, unsigned int nodeMask, const HDModelLighting* lighting,
-	const HDModelNeckCut* cut, int cull, int lipsTrack, int lipsFrame)
+	const HDModelNeckCut* cut, int cull, int lipsTrack, int lipsFrame,
+	const HDModelSoft* soft)
 {
 	if (!g_in_frame || !nodeMatrix || nodeCount <= 0)
 		return false;
@@ -4256,7 +4266,7 @@ bool HDModelDraw(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetVertexDeclaration(g_decl);
 
 	draw_model(*model, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
-		cut, cull, lips_stream(*model, slot, false, lipsTrack, lipsFrame));
+		cut, cull, lips_stream(*model, slot, false, lipsTrack, lipsFrame), soft);
 	return true;
 }
 
@@ -4281,7 +4291,7 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 	g_device->SetVertexDeclaration(g_decl);
 
 	draw_model(at->second, nodeMatrix, nodeCount, nodeLight, nodeMask, lighting,
-		cut, cull, lips_stream(at->second, slot, true, lipsTrack, lipsFrame));
+		cut, cull, lips_stream(at->second, slot, true, lipsTrack, lipsFrame), 0);
 	return true;
 }
 

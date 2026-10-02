@@ -1329,6 +1329,73 @@ namespace
 		g_inner_span = bestSpan;
 	}
 
+	/* ----------------------------------------- the chest's soft motion -- */
+	/* The two regions the motion moves, out of the body file and the level's
+	 * bind pose. The finder and its checks are hd_softbody.h's; this hands it
+	 * the vertices in its own terms - the weight on the torso node, and which
+	 * lower leg a vertex belongs to by its heaviest node. Reset at every plan,
+	 * so a level whose body never arrives keeps "no_body". */
+	HDSoftRegion g_soft_region;
+
+	void soft_region_clear()
+	{
+		g_soft_region = HDSoftRegion();
+		g_soft_region.reason = "no_body";
+	}
+
+	void measure_softbody(const HDTrmModel* source)
+	{
+		soft_region_clear();
+
+		if (!source || !g_neck_bind_ok || source->vertices <= 0)
+			return;
+
+		std::vector<HDSoftVertex> verts((size_t)source->vertices);
+
+		for (int i = 0; i < source->vertices; i++)
+		{
+			const HDTrmVertex& v = source->vertex[i];
+			HDSoftVertex& out = verts[(size_t)i];
+			int torso = 0;
+
+			for (int k = 0; k < 3; k++)
+				if (v.bone[k] == HD_LARA_TORSO)
+					torso += v.weight[k];
+
+			const int node = dominant_node(v);
+
+			out.x = v.x;
+			out.y = v.y;
+			out.z = v.z;
+			out.torso = (float)torso / 255.0f;
+			out.leg = node == HD_LARA_LSHIN || node == HD_LARA_LFOOT ? 1
+				: node == HD_LARA_RSHIN || node == HD_LARA_RFOOT ? 2 : 0;
+		}
+
+		HDSoftSkeleton sk;
+		const struct { float* to; int node; } joints[] =
+		{
+			{ sk.hips, HD_LARA_HIPS }, { sk.head, HD_LARA_HEAD_NODE },
+			{ sk.leftThigh, HD_LARA_LTHIGH }, { sk.rightThigh, HD_LARA_RTHIGH },
+			{ sk.torso, HD_LARA_TORSO }, { sk.leftAnkle, HD_LARA_LFOOT },
+			{ sk.rightAnkle, HD_LARA_RFOOT }
+		};
+
+		for (size_t j = 0; j < sizeof(joints) / sizeof(joints[0]); j++)
+			for (int i = 0; i < 3; i++)
+				joints[j].to[i] = g_neck_bind[joints[j].node * 3 + i];
+
+		HDSoftFindRegion(&verts[0], source->vertices, &sk, &g_soft_region);
+	}
+
+	/* The body's look at its own file: the throat texel and the chest's
+	 * regions, both while the vertices can still be read. */
+	void measure_body(const HDTrmModel* source)
+	{
+		measure_neck_skin(source);
+		measure_softbody(source);
+	}
+
 	/* ---------------------------------------------------- the lid ------ */
 	/* What closes the hole the head cut leaves: a fan over the body's own
 	 * rim. The cut discards every fragment whose head weight reaches
@@ -1805,6 +1872,7 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 	 * before anything can call either. */
 	std::memcpy(g_neck_bind, level->bodyBind, sizeof(g_neck_bind));
 	g_neck_bind_ok = true;
+	soft_region_clear();
 
 	int written = 0;
 
@@ -1856,11 +1924,12 @@ int HDLaraPlan(const HDLaraLevel* level, HDModelSlot* out, int max)
 		}
 
 		/* The body is looked at while it is still a file: the throat texel is
-		 * a place on a page of the outfit, and after the build there is no
-		 * page and no vertex left to ask. */
+		 * a place on a page of the outfit, the chest's regions are found out
+		 * of its vertices, and after the build there is no page and no vertex
+		 * left to ask. */
 		if (part == HD_LARA_PART_BODY)
 		{
-			one.measure = &measure_neck_skin;
+			one.measure = &measure_body;
 
 			/* And the scan says where it is. The model resolver can only find
 			 * the eight known bodies: an outfit of the
@@ -2502,6 +2571,40 @@ bool HDLaraHeadCut(int* node, float* bar)
 	*bar = HD_LARA_HEAD_CUT_WEIGHT;
 
 	return true;
+}
+
+const HDSoftRegion* HDLaraSoftRegion()
+{
+	static HDSoftRegion none;
+
+	if (!g_active || !g_has[HD_LARA_PART_BODY] || !g_soft_region.reason)
+	{
+		none = HDSoftRegion();
+		none.reason = "no_body";
+		return &none;
+	}
+
+	return &g_soft_region;
+}
+
+bool HDLaraPartSoft(int part, const char** name)
+{
+	const char* said = 0;
+
+	switch (part)
+	{
+	case HD_LARA_PART_BODY:		said = "body"; break;
+	case HD_LARA_PART_HEAD:		said = "head"; break;
+	case HD_LARA_PART_FACE:		said = "face"; break;
+	case HD_LARA_PART_NECK_CAP:	said = "lid"; break;
+	case HD_LARA_PART_HOLSTER_RIG:	said = "rig"; break;
+	default:			break;
+	}
+
+	if (name)
+		*name = said ? said : "-";
+
+	return said != 0;
 }
 
 /* --------------------------------------------------------- the frame -- */

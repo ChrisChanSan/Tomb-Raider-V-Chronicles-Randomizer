@@ -1536,4 +1536,4 @@ const BYTE kHDModelPS[] =
       8, 128,   3,   0, 255, 128, 
     255, 255,   0,   0
 };
-// bshader-stamp a4778306b401170cf1ad58055eb67062
+// bshader-stamp 8dad39d5b2d3a0b6d25c0c3b35032350

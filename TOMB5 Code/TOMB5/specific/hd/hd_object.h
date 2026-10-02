@@ -275,9 +275,11 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
  * per part.
  *
  * `lipsTrack` and `lipsFrame` are HDObjectLips's two for a model that is
- * itself a face - Lara's, in a cutscene she acts in; -1 for every other push. */
+ * itself a face - Lara's, in a cutscene she acts in; -1 for every other push.
+ * `soft` is the chest's secondary motion for the draw (hd_model.h,
+ * HDModelSoft), copied into the entry; 0 for none. */
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
 	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
 	float specStrength = 0.0f, float specPower = 1.0f,
-	int lipsTrack = -1, int lipsFrame = -1);
+	int lipsTrack = -1, int lipsFrame = -1, const HDModelSoft* soft = 0);

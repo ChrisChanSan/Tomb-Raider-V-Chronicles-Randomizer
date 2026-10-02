@@ -109,6 +109,30 @@ namespace
 	bool g_neck_probe_ever = false;
 	unsigned short g_neck_probe_at = 0;
 
+	/* The chest's soft motion (hd_softbody.h): the spring state, this frame's
+	 * offsets in world units with the torso joint matrix they were taken on,
+	 * and the clock - one step per drawn frame, by the first non-mirror draw
+	 * of Lara after HDLaraDrawFrameReset.
+	 *
+	 * The clock is game time: GlobalCounter, which advances once a logic
+	 * tick and stands still while the game does (the pause menu, the
+	 * inventory), plus InterpFrameAlpha, the interpolation factor the frame
+	 * was drawn at, so a frame drawn between two ticks is half a tick on. */
+	HDSoftSim g_soft;
+	HDSoftClock g_soft_clock;
+	float g_soft_world[2][3];
+	float g_soft_joint[12];
+	bool g_soft_cutscene = false;
+
+	/* The log: the strength the last HDLOG softbody line was written with,
+	 * -1 for none yet, and the second the counters of the per-second line
+	 * cover - GlobalCounter when it opened, and whether the state moved in
+	 * it at all. */
+	int g_soft_logged = -1;
+	bool g_soft_window = false;
+	unsigned short g_soft_window_at = 0;
+	bool g_soft_window_awake = false;
+
 	/* The reason the registry choice hands back. A literal with the lifetime
 	 * of the program, because
 	 * HDLaraOutfitFor's `why` is kept by the caller and written into the log
@@ -706,6 +730,213 @@ namespace
 	}
 }
 
+/* --------------------------------------------- the chest's soft motion -- */
+
+namespace
+{
+	/* The strength in force, 0 when the option is off or out of range. */
+	int soft_strength()
+	{
+		return tomb5.hd_softbody >= 1 && tomb5.hd_softbody < HD_SOFT_LEVELS
+			? (int)tomb5.hd_softbody : HD_SOFT_OFF;
+	}
+
+	/* Why the motion is off, or "ok". The gates in the order they are asked,
+	 * all of them fixed: a young-Lara level whatever the option says, a Lara
+	 * drawn classic (which is every frame with hd_enable off, because no HD
+	 * Lara is then built at all), an outfit whose region failed a check, and
+	 * the option itself. */
+	const char* soft_gate()
+	{
+		if (gfLevelFlags & GF_YOUNGLARA)
+			return "young";
+
+		if (!HDLaraDrawActive())
+			return "classic";
+
+		const HDSoftRegion* region = HDLaraSoftRegion();
+
+		if (!region->ok)
+			return region->reason ? region->reason : "no_body";
+
+		if (soft_strength() == HD_SOFT_OFF)
+			return "option";
+
+		return "ok";
+	}
+
+	void soft_reset()
+	{
+		HDSoftReset(&g_soft);
+		HDSoftClockForget(&g_soft_clock);
+
+		for (int k = 0; k < 2; k++)
+			for (int i = 0; i < 3; i++)
+				g_soft_world[k][i] = 0.0f;
+	}
+
+	/* HDLOG softbody - one line whenever Lara's composite is built, and
+	 * whenever the option changes:
+	 *
+	 *   outfit=   the body's model stem, "-" with none
+	 *   state=    on or off
+	 *   reason=   ok, or why it is off: young (a young-Lara level), classic
+	 *             (no HD Lara), option (switched off), or the region's own
+	 *             refusal - no_body, no_axes, no_front, no_torso,
+	 *             band_empty, asymmetric, radius, flat, sparse
+	 *             (hd_softbody.h, HDSoftFindRegion)
+	 *   strength= the option, 0 off .. 3 strong
+	 *   apexL=, apexR=  the two apexes in the body's bind space, units
+	 *   radius=   the regions' radius, units
+	 *   verts=    torso-weighted body vertices with a mask above 0, left/right
+	 *   parts=    the parts whose draws carry the motion, as loaded */
+	void soft_log(const char* outfit)
+	{
+		const HDSoftRegion* region = HDLaraSoftRegion();
+		const char* why = soft_gate();
+		char parts[96] = "";
+
+		for (int part = 0; part < HD_LARA_PART_COUNT; part++)
+		{
+			const char* name = "-";
+
+			if (!HDLaraPartSoft(part, &name) || !HDLaraHasPart(part))
+				continue;
+
+			if (parts[0])
+				strncat(parts, ",", sizeof(parts) - strlen(parts) - 1);
+
+			strncat(parts, name, sizeof(parts) - strlen(parts) - 1);
+		}
+
+		g_soft_logged = soft_strength();
+
+		Log("HDLOG softbody outfit=%s state=%s reason=%s strength=%d "
+			"apexL=(%.1f,%.1f,%.1f) apexR=(%.1f,%.1f,%.1f) radius=%.1f verts=%d/%d "
+			"parts=%s",
+			outfit && *outfit ? outfit : "-", strcmp(why, "ok") ? "off" : "on", why,
+			g_soft_logged, region->apex[0][0], region->apex[0][1], region->apex[0][2],
+			region->apex[1][0], region->apex[1][1], region->apex[1][2], region->radius,
+			region->inside[0], region->inside[1], parts[0] ? parts : "-");
+	}
+
+	/* One draw's constants. Off - any gate closed - leaves `out` at zeros
+	 * and the state at rest, so that switching it on starts from rest.
+	 *
+	 * The step runs once per drawn frame, from the first non-mirror draw:
+	 * the pose is the one this frame draws (lara_joint_matrices, built by
+	 * game\draw.cpp from the interpolated pose before any of Lara is drawn,
+	 * and lara_item->pos), and a mirror pass never advances anything. The
+	 * anchors are the two region centres carried by the torso joint into the
+	 * world, so only the torso's own motion through the world drives the
+	 * spring: the camera enters only below, where the offset is turned into
+	 * the view of the very draw it is for. A mirror's draw therefore gets the
+	 * same offset reflected, through its own reflected torso matrix.
+	 *
+	 * Resets to rest without a kick: a level start and a savegame load (both
+	 * rebuild the level, HDLaraDrawEnd), the outfit (the same), the option
+	 * changed, a cutscene starting or ending, and inside HDSoftAdvance a gap
+	 * or a jump of the anchor. */
+	bool soft_constants(long mirror, const float* matrices, HDModelSoft* out)
+	{
+		memset(out, 0, sizeof(*out));
+
+		const int strength = soft_strength();
+
+		if (strength != g_soft_logged && g_soft_logged >= 0)
+		{
+			soft_reset();
+			soft_log(HDLaraOutfitModel(g_level.outfit));
+		}
+
+		if (strcmp(soft_gate(), "ok"))
+		{
+			soft_reset();
+			return false;
+		}
+
+		const HDSoftRegion* region = HDLaraSoftRegion();
+
+		/* A cutscene's first and last frame put her somewhere else: back to
+		 * rest, and the clock starts again with the next step. */
+		const bool cutscene = GLOBAL_playing_cutseq != 0;
+
+		if (!mirror && cutscene != g_soft_cutscene)
+		{
+			g_soft_cutscene = cutscene;
+			soft_reset();
+			g_soft.resets++;
+		}
+
+		const unsigned short tick = GlobalCounter;
+		float dt = 0.0f;
+
+		if (HDSoftClockStep(&g_soft_clock, mirror != 0, tick, InterpFrameAlpha(), &dt))
+		{
+			const float* joint = &lara_joint_matrices[lara_lmx_of_node[HD_LARA_TORSO] *
+				indices_count];
+			const float origin[3] =
+			{
+				(float)lara_item->pos.x_pos, (float)lara_item->pos.y_pos,
+				(float)lara_item->pos.z_pos
+			};
+			float anchor[2][3];
+
+			for (int k = 0; k < 2; k++)
+				HDSoftAnchor(joint, origin, region->centre[k],
+					&g_bodyBind[HD_LARA_TORSO * 3], anchor[k]);
+
+			for (int i = 0; i < 12; i++)
+				g_soft_joint[i] = joint[i];
+
+			const bool rest = HDSoftAdvance(&g_soft, anchor, dt, strength,
+				region->radius, g_soft_world);
+
+			/* HDLOG softbody second - once a second of game time in which
+			 * the state was not at rest throughout, while the motion is on:
+			 *
+			 *   peak=     the largest offset drawn in that second, units
+			 *   bound=    the largest it may be at this strength, units
+			 *   clamped=  frames whose offset ran past the bound before the
+			 *             tanh eased it in
+			 *   resets=   resets to rest (a gap, a jump, a cutscene edge)
+			 *   steps=    sub-steps the spring ran */
+			if (!rest)
+				g_soft_window_awake = true;
+
+			if (!g_soft_window)
+			{
+				g_soft_window = true;
+				g_soft_window_at = tick;
+			}
+			else if ((unsigned short)(tick - g_soft_window_at) >= 30)
+			{
+				if (gLogEnabled && g_soft_window_awake)
+					Log("HDLOG softbody second peak=%.2f bound=%.2f clamped=%d "
+						"resets=%d steps=%d", g_soft.peak,
+						HD_SOFT_BOUND * HDSoftStrengthScale(strength) * region->radius,
+						g_soft.clamped, g_soft.resets, g_soft.steps);
+
+				g_soft_window_at = tick;
+				g_soft_window_awake = false;
+				g_soft.peak = 0.0f;
+				g_soft.clamped = 0;
+				g_soft.resets = 0;
+				g_soft.steps = 0;
+			}
+		}
+
+		float torso[2][3];
+
+		for (int k = 0; k < 2; k++)
+			HDSoftToTorso(g_soft_joint, region->fwd, g_soft_world[k], torso[k]);
+
+		HDSoftConstants(region, torso, matrices + HD_LARA_TORSO * 16, HD_LARA_TORSO,
+			out->constants);
+		return true;
+	}
+}
+
 /* ------------------------------------------------------------ the level -- */
 
 int HDLaraDrawPlan(HDModelSlot* out, int max)
@@ -806,10 +1037,12 @@ void HDLaraDrawBuild(const char* stem)
 			"young=%d reason=%s", stem, (int)LaraDrawType, (int)GfHdOutfit,
 			((gfLevelFlags & GF_YOUNGLARA) != 0 || LaraDrawType == LARA_YOUNG) ? 1 : 0,
 			g_why && *g_why ? g_why : "the HD object path is off");
+		soft_log(0);
 		return;
 	}
 
 	g_active = HDLaraLevelBuild(&g_level, &stats);
+	soft_log(HDLaraOutfitModel(g_level.outfit));
 
 	Log("HDLOG level=%s lara outfit=%s(%s) laratype=%d data3=%d hd=%d "
 		"parts=%d/%d twins=%d missing=%d "
@@ -938,6 +1171,15 @@ void HDLaraDrawEnd()
 	g_lights_stem[0] = 0;
 	g_lights_logged = false;
 	face_reset();
+
+	// A new level starts the chest's motion at rest, with fresh counters.
+	HDSoftClear(&g_soft);
+	soft_reset();
+	HDSoftClockFrame(&g_soft_clock);
+	g_soft_cutscene = false;
+	g_soft_logged = -1;
+	g_soft_window = false;
+	g_soft_window_awake = false;
 }
 
 bool HDLaraDrawActive()
@@ -1038,6 +1280,9 @@ void HDLaraDrawFrameReset()
 
 	g_frame_parts = 0;
 
+	// The next frame's first non-mirror draw of Lara steps her chest's motion.
+	HDSoftClockFrame(&g_soft_clock);
+
 	/* The first person and binocular log lines. They belong here because
 	 * this is the one place in the HD path that runs on every frame whether
 	 * Lara is drawn or not - which is exactly the state the second reports.
@@ -1107,6 +1352,16 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	for (int node = 0; node < HD_LARA_NODES; node++)
 		to_row_major(&lara_matrices[lara_lmx_of_node[node] * indices_count],
 			matrices + node * 16);
+
+	/* --- the chest's soft motion ----------------------------------------- */
+	/* This draw's four registers, on its own torso matrix; zeros with the
+	 * motion off. Handed to the parts HDLaraPartSoft names and no other. */
+	HDModelSoft softConstants;
+	const bool softOn = soft_constants(mirror, matrices, &softConstants);
+	const auto soft = [&](int part) -> const HDModelSoft*
+	{
+		return softOn && HDLaraPartSoft(part) ? &softConstants : 0;
+	};
 
 	/* --- the light ------------------------------------------------------ */
 	/* These three lines are the first three of phd_PutPolygons with the draw
@@ -1401,7 +1656,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
 		HD_LARA_NODES, nodeLight, bodyMask, lights, lightCount, sunScale,
-		cutting ? &neckCut : 0, cull, sheen, sheenPower))
+		cutting ? &neckCut : 0, cull, sheen, sheenPower, -1, -1,
+		soft(HD_LARA_PART_BODY)))
 	{
 		g_dropped++;
 		return;
@@ -1437,7 +1693,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
 			HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
-			cutting ? &neckCut : 0, cull, headSheen, headPower))
+			cutting ? &neckCut : 0, cull, headSheen, headPower, -1, -1,
+			soft(HD_LARA_PART_HEAD)))
 			drawn++;
 	}
 
@@ -1482,7 +1739,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), matrices,
 			HD_LARA_NODES, nodeLight, ~0u, lights,
-			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, capSheen, capPower))
+			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, capSheen, capPower, -1, -1,
+			soft(HD_LARA_PART_NECK_CAP)))
 			drawn++;
 	}
 
@@ -1515,7 +1773,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
-		0, HD_MODEL_CULL_NONE, sheen, sheenPower, faceTrack, faceFrame))
+		0, HD_MODEL_CULL_NONE, sheen, sheenPower, faceTrack, faceFrame,
+		soft(HD_LARA_PART_FACE)))
 		drawn++;
 
 	/* The pouches, under whatever goes in them.
@@ -1540,7 +1799,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
 			HD_LARA_NODES, nodeLight, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & mask,
 			lights, lightCount, sunScale, 0, HD_MODEL_CULL_NONE,
-			sheen, sheenPower))
+			sheen, sheenPower, -1, -1, soft(HD_LARA_PART_HOLSTER_RIG)))
 		drawn++;
 
 	for (int i = 0; i < pieceCount; i++)

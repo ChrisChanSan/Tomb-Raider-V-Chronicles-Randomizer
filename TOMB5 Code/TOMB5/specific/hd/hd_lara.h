@@ -27,6 +27,7 @@
 #pragma once
 
 #include "hd_model.h"
+#include "hd_softbody.h"
 
 // Lara in HD: the composite.
 //
@@ -1064,6 +1065,26 @@ bool HDLaraSkinPage(int page);
  * 8, 9, 10 on the right, 11, 12, 13 on the left. When they agree, which is
  * every other frame, it is one draw with every node, exactly as before. */
 int HDLaraFrameParts(const HDLaraFrame* now, HDLaraDraw* out, int max);
+
+/* The soft motion of the chest: the two regions of the outfit that is on.
+ *
+ * Found once per level build out of the body model's own vertices, while the
+ * file is still a file (hd_softbody.h, HDSoftFindRegion, has the rule). Never
+ * null: with no body built the region is not ok and its reason is
+ * "no_body", and an outfit the finder refused carries the reason it gave. The
+ * region is found whatever the option says, so the log can tell an outfit
+ * that cannot carry the motion from one that has it switched off. */
+const HDSoftRegion* HDLaraSoftRegion();
+
+/* Whether a part's draws carry the motion: every part skinned on the body's
+ * skeleton in the body's own bind space - the body, TR5's borrowed head, the
+ * face with its throat on the torso, the neck lid and the holster rig - so
+ * that a layer that lies on the skin moves with it and no seam opens between
+ * the two. Never a part whose vertices live in a space of their own and ride
+ * a node rigidly: the hands with what they hold, the thigh holsters, the
+ * weapon on the back and the braid. A short name for the log comes back in
+ * `name` when it is not null. */
+bool HDLaraPartSoft(int part, const char** name = 0);
 
 // --- the log ---------------------------------------------------------------
 

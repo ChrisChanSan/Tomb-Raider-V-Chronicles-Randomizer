@@ -141,6 +141,7 @@ namespace
 		float sunScale;
 		HDModelNeckCut cut;	// first-person neck cut: Lara's body alone
 		int cull;		// and the one-sided draw that goes with it
+		HDModelSoft soft;	// the chest's secondary motion: zeros but for Lara's body
 		/* The sheen. 0 for an item - the specular term is Lara's alone. */
 		float specStrength;
 		float specPower;
@@ -3111,6 +3112,7 @@ void HDObjectEnd()
 	// camera inside it.
 	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
+	memset(&entry.soft, 0, sizeof(entry.soft));
 	// No sheen on an object - the specular term is Lara's alone.
 	entry.specStrength = 0.0f;
 	entry.specPower = 1.0f;
@@ -3631,6 +3633,7 @@ void HDInvEnd()
 
 	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
+	memset(&entry.soft, 0, sizeof(entry.soft));
 	/* No sheen, which is what an item has in the level too - the specular
 	 * term is Lara's alone. A pistol on the ring therefore shines exactly as
 	 * the same pistol shines lying on the floor. */
@@ -3718,7 +3721,7 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		 * below, and a model with no lips ignores them. */
 		HDModelDraw(entry.drawSlot, entry.matrix, entry.nodes, entry.light,
 			entry.mask, &lighting, &entry.cut, entry.cull, entry.lipsTrack,
-			entry.lipsFrame);
+			entry.lipsFrame, &entry.soft);
 
 		/* The separate HD face, right after the body and on the same
 		 * matrices. VON_CROY.TRM is a body with an empty collar and
@@ -3844,7 +3847,7 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
 	const HDModelNeckCut* cut, int cull, float specStrength, float specPower,
-	int lipsTrack, int lipsFrame)
+	int lipsTrack, int lipsFrame, const HDModelSoft* soft)
 {
 	/* Not behind g_active. That flag says "this level has HD objects", and a
 	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
@@ -3900,6 +3903,12 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 		memset(&entry.cut, 0, sizeof(entry.cut));
 
 	entry.cull = cull;
+
+	if (soft)
+		entry.soft = *soft;
+	else
+		memset(&entry.soft, 0, sizeof(entry.soft));
+
 	entry.specStrength = specStrength;
 	entry.specPower = specPower;
 	/* No portal window. Everything that comes through here is a

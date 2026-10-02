@@ -92,6 +92,17 @@ namespace
 	bool g_binos_was = false;
 	bool g_binos_pending = false;
 
+	/* The HDLOG laralights line. The level's name for it, kept from
+	 * HDLaraDrawBuild, and what the last line said: a line is written on her
+	 * first frame of a level and then only when her room, the count handed
+	 * to the shader or the count left out changes - and with the count, the
+	 * eye flag. Level state, cleared in HDLaraDrawEnd. */
+	char g_lights_stem[64] = { 0 };
+	bool g_lights_logged = false;
+	int g_lights_room = 0;
+	int g_lights_handed = 0;
+	int g_lights_dark = 0;
+
 	/* The throttle of the HDLOG headcut line - GlobalCounter when it was
 	 * last written. The counter ticks thirty times a second at every
 	 * fps_mode, so 30 is one second of game time. */
@@ -786,6 +797,9 @@ void HDLaraDrawBuild(const char* stem)
 	if (!stem)
 		stem = "?";
 
+	strncpy(g_lights_stem, stem, sizeof(g_lights_stem) - 1);
+	g_lights_stem[sizeof(g_lights_stem) - 1] = 0;
+
 	if (!g_planned || g_level.outfit == HD_LARA_OUTFIT_NONE)
 	{
 		Log("HDLOG level=%s lara outfit=none parts=0 laratype=%d data3=%d "
@@ -921,6 +935,8 @@ void HDLaraDrawEnd()
 	g_fp_was = false;
 	g_binos_was = false;
 	g_binos_pending = false;
+	g_lights_stem[0] = 0;
+	g_lights_logged = false;
 	face_reset();
 }
 
@@ -1143,8 +1159,49 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		nodeLight[node * 3 + 2] = from[2];
 	}
 
+	/* With -log the list comes back with its report, for the HDLOG
+	 * laralights line:
+	 *
+	 *   room      lara_item->room_number, the room she is in
+	 *   il_room   il.room_number, the room CreateLightList last built her
+	 *             current list for
+	 *   cur, prev the engine's current and previous list, Active entries /
+	 *             entries (shadow lights included)
+	 *   dyn       dynamic lights handed to the shader
+	 *   handed    entries handed to the shader - its gLightInfo.x
+	 *   dark      entries of the two lists left out because every channel
+	 *             has faded below HD_OBJLIGHT_DARK_BOUND
+	 *   eye       1 when nothing is handed, so the eye is the lamp of her
+	 *             sheen
+	 *   max_dark  brightest channel among the entries left out, 0..1
+	 *   min_lit   smallest brightest channel among the entries of the two
+	 *             lists handed on, 0..1; 0 when there is none
+	 *
+	 * Written on her first frame of a level and whenever room, handed or
+	 * dark differ from the line before. A room change out of a lit room
+	 * reads as a line with the old room's light fading in prev (handed k,
+	 * dark 0, eye 0) and, eight drawn frames on, one with dark=k. */
+	HDObjLightReport lightReport = {};
+
 	const int lightCount = HDObjectLights(lara_item, lights,
-		HD_MAX_OBJ_LIGHTS, &sunScale);
+		HD_MAX_OBJ_LIGHTS, &sunScale, gLogEnabled ? &lightReport : 0);
+
+	if (gLogEnabled && (!g_lights_logged ||
+		lara_item->room_number != g_lights_room ||
+		lightReport.handed != g_lights_handed || lightReport.dark != g_lights_dark))
+	{
+		g_lights_logged = true;
+		g_lights_room = lara_item->room_number;
+		g_lights_handed = lightReport.handed;
+		g_lights_dark = lightReport.dark;
+		Log("HDLOG laralights level=%s room=%d il_room=%d cur=%d/%d prev=%d/%d dyn=%d "
+			"handed=%d dark=%d eye=%d max_dark=%g min_lit=%g",
+			g_lights_stem[0] ? g_lights_stem : "?", (int)lara_item->room_number,
+			(int)lara_item->il.room_number, lightReport.curActive,
+			lightReport.curCount, lightReport.prevActive, lightReport.prevCount,
+			lightReport.dynamics, lightReport.handed, lightReport.dark,
+			lightReport.handed == 0 ? 1 : 0, lightReport.maxDark, lightReport.minLit);
+	}
 
 	/* --- which nodes are drawn at all ------------------------------------ */
 	unsigned int mask = ~0u;

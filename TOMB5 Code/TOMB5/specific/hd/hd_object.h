@@ -240,8 +240,26 @@ void HDObjectBindPose(int slot, float* out /* nodes * 3 */, int nodes);
 // suns first, then the dynamics, then the room's points and spots. Returns
 // how many were written; `sunScale` comes back with the inventory's doubling
 // already in it. `lit` is the item CalculateObjectLighting last worked on,
-// which for Lara is lara_item.
-int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale);
+// which for Lara is lara_item. An entry of the engine's two lists whose
+// colour is below HD_OBJLIGHT_DARK_BOUND in every channel is left out
+// (hd_objlight_dark.h).
+//
+// `report`, when given, comes back with what the list was made of, for the
+// HDLOG laralights line; null costs nothing.
+struct HDObjLightReport
+{
+	int curActive, curCount;	// il.pCurrentLights: Active entries / entries
+	int prevActive, prevCount;	// il.pPrevLights: Active entries / entries
+	int dynamics;		// dynamic lights handed on
+	int handed;		// entries handed on, the shader's count
+	int dark;		// engine-list entries left out for their colour
+	float maxDark;		// brightest channel among those left out, 0..1
+	float minLit;		// smallest brightest channel among the engine-list
+				// entries handed on, 0..1; 0 when there is none
+};
+
+int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
+	HDObjLightReport* report = 0);
 
 /* One model on this frame's list that is not an item. `matrix` is `nodes`
  * row-major 4x4 matrices in view space, `light` a colour triple a node in the

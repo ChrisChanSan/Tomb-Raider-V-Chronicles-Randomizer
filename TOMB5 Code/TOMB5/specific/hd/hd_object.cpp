@@ -34,6 +34,7 @@
 #include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
 #include "hd_render.h"
 #include "hd_level.h"
+#include "hd_objlight_dark.h"		// which engine lights give nothing
 #include "hd_trl.h"			// the lips' sources, for LIPLOG
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
@@ -933,19 +934,60 @@ namespace
 	 * direction in the node's model space and a falloff measured from the
 	 * node's world position. Both of those are per node and the shader can do
 	 * better than either, so what travels here is the light itself: a sun's
-	 * direction, everything else's position, all in view space. The activity,
-	 * the fade and the range test are not redone - `Active` and the faded r/g/b
-	 * are the engine's own answer, worked out in CreateLightList a moment ago
-	 * inside CalculateObjectLighting.
+	 * direction, everything else's position, all in view space. The fade and
+	 * the range test are not redone - `Active` and the faded r/g/b are the
+	 * engine's own answer, worked out in CreateLightList a moment ago inside
+	 * CalculateObjectLighting. One thing is added to `Active`: an entry whose
+	 * colour has faded below HD_OBJLIGHT_DARK_BOUND in every channel is left
+	 * out (hd_objlight_dark.h). FadeLightList leaves such a remainder Active
+	 * after a fade-out more often than not, it lights nothing, and counted it
+	 * would keep the list from being empty - the one case in which the model
+	 * shader takes the eye as the lamp of the sheen. The classic path keeps
+	 * the entry and adds its nothing; the light a vertex gets is the same.
 	 *
 	 * The order matters. Suns first because there are at most a handful
 	 * and they light the whole body; then the dynamics, because a torch, a
 	 * flare and a gun flash are what a player watches for; then the room's own
 	 * points and spots. Only past twelve does anything fall off the end, and
 	 * then it is the least of them.
+	 *
+	 * `report` is for the log: when it is given, it comes back with what the
+	 * two engine lists held, what went on and what was left out. Lara's draw
+	 * asks for it with -log only; the item path never does.
 	 */
+	float brightest(const PCLIGHT& light)
+	{
+		const float rg = light.r > light.g ? light.r : light.g;
+
+		return rg > light.b ? rg : light.b;
+	}
+
+	void report_dark(HDObjLightReport* report, const PCLIGHT& light)
+	{
+		if (!report)
+			return;
+
+		const float top = brightest(light);
+
+		if (!report->dark || top > report->maxDark)
+			report->maxDark = top;
+
+		report->dark++;
+	}
+
+	void report_lit(HDObjLightReport* report, const PCLIGHT& light, bool handed)
+	{
+		if (!report || !handed)
+			return;
+
+		const float top = brightest(light);
+
+		if (report->minLit <= 0.0f || top < report->minLit)
+			report->minLit = top;
+	}
+
 	void fill_lights(HDObjLight* list, int max, int* countOut, float* sunScale,
-		ITEM_INFO* lit)
+		ITEM_INFO* lit, HDObjLightReport* report = 0)
 	{
 		HDObjLight light;
 		LightSink out;
@@ -964,6 +1006,22 @@ namespace
 		counts[0] = lit ? lit->il.nCurrentLights : 0;
 		counts[1] = lit ? lit->il.nPrevLights : 0;
 
+		if (report)
+		{
+			memset(report, 0, sizeof(*report));
+			report->curCount = (int)counts[0];
+			report->prevCount = (int)counts[1];
+
+			for (int list = 0; list < 2; list++)
+			{
+				PCLIGHT* source = (PCLIGHT*)lists[list];
+
+				for (long i = 0; source && i < counts[list]; i++)
+					if (source[i].Active)
+						(list ? report->prevActive : report->curActive)++;
+			}
+		}
+
 		/* --- the suns ---------------------------------------------------- */
 		for (int list = 0; list < 2; list++)
 		{
@@ -973,6 +1031,13 @@ namespace
 			{
 				if (!source[i].Active || source[i].Type != LIGHT_SUN)
 					continue;
+
+				// A faded remainder: nothing to give, see above.
+				if (HDObjLightIsDark(source[i].r, source[i].g, source[i].b))
+				{
+					report_dark(report, source[i]);
+					continue;
+				}
 
 				/* Minus one, because the level files carry the direction
 				 * inverted - SuperSetupLight says so in the original comment
@@ -998,9 +1063,11 @@ namespace
 				light.b = source[i].b * 255.0f;
 				light.invRange = 0.0f;
 
-				add_light(out, light);
+				report_lit(report, source[i], add_light(out, light));
 			}
 		}
+
+		const int beforeDynamics = out.count;
 
 		/* --- the dynamics ------------------------------------------------ */
 		for (int i = 0; i < 32; i++)
@@ -1047,6 +1114,9 @@ namespace
 			add_light(out, light);
 		}
 
+		if (report)
+			report->dynamics = out.count - beforeDynamics;
+
 		/* --- the room's points and spots --------------------------------- */
 		for (int list = 0; list < 2; list++)
 		{
@@ -1061,6 +1131,13 @@ namespace
 				 * engine has already taken it off aAmbient. */
 				if (source[i].Type != LIGHT_POINT && source[i].Type != LIGHT_SPOT)
 					continue;
+
+				// A faded remainder: nothing to give, see above.
+				if (HDObjLightIsDark(source[i].r, source[i].g, source[i].b))
+				{
+					report_dark(report, source[i]);
+					continue;
+				}
 
 				const bool spot = source[i].Type == LIGHT_SPOT;
 				const float range = spot ? source[i].Cutoff : source[i].Outer;
@@ -1081,9 +1158,12 @@ namespace
 				light.b = source[i].b * 255.0f;
 				light.invRange = 1.0f / range;
 
-				add_light(out, light);
+				report_lit(report, source[i], add_light(out, light));
 			}
 		}
+
+		if (report)
+			report->handed = out.count;
 
 		if (countOut)
 			*countOut = out.count;
@@ -3749,14 +3829,15 @@ void HDObjectBindPose(int slot, float* out, int nodes)
 	bind_pose_of(slot, out, nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES);
 }
 
-int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale)
+int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
+	HDObjLightReport* report)
 {
 	int count = 0;
 
 	if (!out || max <= 0)
 		return 0;
 
-	fill_lights(out, max, &count, sunScale, lit);
+	fill_lights(out, max, &count, sunScale, lit, report);
 	return count;
 }
 

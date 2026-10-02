@@ -12476,10 +12476,13 @@ static void softbody_clock()
 	int steps = 0;
 
 	HDSoftClockFrame(&c);
-	steps += HDSoftClockStep(&c, true, 100, 1.0f, &dt) ? 1 : 0;	// the mirror first
+
+	const bool mirrorStepped = HDSoftClockStep(&c, true, 100, 1.0f, &dt);	// the mirror first
+
 	steps += HDSoftClockStep(&c, false, 100, 1.0f, &dt) ? 1 : 0;	// her own draw
-	ok(steps == 1 && dt == 0.0f, "softbody: a mirror's draw never steps; the first draw starts "
-		"the clock", steps, 1);
+	ok(!mirrorStepped && steps == 1 && dt == 0.0f,
+		"softbody: a mirror's draw never steps; the first draw starts the clock",
+		mirrorStepped ? 1 : 0, 0);
 
 	steps += HDSoftClockStep(&c, false, 100, 1.0f, &dt) ? 1 : 0;	// drawn twice
 	steps += HDSoftClockStep(&c, true, 100, 1.0f, &dt) ? 1 : 0;
@@ -12525,7 +12528,7 @@ static void softbody_clock()
  * that is an elliptical tube from the waist to the neck with up to two bumps
  * on its front. */
 static void sb_body(std::vector<HDSoftVertex>& v, HDSoftSkeleton& sk, float left, float right,
-	float toes)
+	float toes, float ridge = 0.0f)
 {
 	const float sk0[7][3] =
 	{
@@ -12561,6 +12564,11 @@ static void sb_body(std::vector<HDSoftVertex>& v, HDSoftSkeleton& sk, float left
 
 				z += left * expf(-dl / (2.0f * 13.0f * 13.0f)) +
 					right * expf(-dr / (2.0f * 13.0f * 13.0f));
+
+				/* A ridge on her right: the bump's own profile across, the
+				 * same at every height - as far forward as a chest and
+				 * standing out of nothing below it. */
+				z += ridge * expf(-(x - 28.0f) * (x - 28.0f) / (2.0f * 13.0f * 13.0f));
 			}
 
 			HDSoftVertex p = { x, y, z, 1.0f, 0 };
@@ -12616,6 +12624,14 @@ static void softbody_region()
 	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
 	ok(!r.ok && !strcmp(r.reason, "asymmetric"),
 		"softbody: a front with one bump is refused as asymmetric", r.ok, 0);
+
+	// A chest on her left and a ridge just as far forward on her right: the
+	// apexes are mirror images, and only the right one stands out of nothing.
+	sb_body(v, sk, 16.0f, 0.0f, 40.0f, 16.0f);
+	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);
+	ok(!r.ok && !strcmp(r.reason, "asymmetric"),
+		"softbody: a chest on one side and a ridge on the other is refused as asymmetric",
+		r.ok, 0);
 
 	sb_body(v, sk, 16.0f, 16.0f, 0.0f);
 	HDSoftFindRegion(&v[0], (int)v.size(), &sk, &r);

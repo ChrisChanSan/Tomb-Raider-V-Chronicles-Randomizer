@@ -3622,6 +3622,124 @@ left.
 
 **Commits.** the commit 'Round 189c (#189): the sheen at a strength that shows'.
 
+### A light faded to nothing is not counted into an HD object's light list
+2026-10-02
+
+**What.** `fill_lights` leaves out an entry of the engine's two item light lists, the
+current and the previous one, whose colour lies below `HD_OBJLIGHT_DARK_BOUND` - 1e-5 of
+the engine's own 0..1 scale - in all three channels: at the suns and at the points and
+spots, through one predicate, `HDObjLightIsDark` in the new header
+`specific/hd/hd_objlight_dark.h`. Such an entry is neither handed to the model shader nor
+counted. With nothing but such entries the count is 0, and the shader's own branch for an
+empty list makes the eye the lamp of Lara's sheen, as after a fresh load. A new log line,
+`HDLOG laralights`, written from Lara's draw with `-log`, shows her list whenever it
+changes.
+
+**Why.** On a walk between rooms of different kinds Lara's sheen now and then went, and
+came back when the game was saved and loaded at that place - in two builds alike. The
+model vertex shader makes the eye the lamp of the sheen only when the object's list is
+empty (`hd_model.hlsl`, the sheen); with one entry, only that entry's direction and
+falloff make a highlight, whatever its colour. `FadeLightList` (`specific/lighting.cpp`)
+fades a light out by adding an eighth of its colour eight times and clears `Active` only
+when red, green and blue are all at or below 0 after a step. Eight float additions need
+not land on 0. Run with the engine's own statements and compiler settings (`/O2
+/fp:precise`, SSE2), 1503 of the 2732 sun, point and spot lights in the rooms of the
+game's level files - 162 of 266 in ANDREA2 - and 139 of the 255 byte-grid colours n/255
+end the fade with a channel a hair above 0 and keep `Active`; the largest remainder is
+8.94e-8, under 2.3e-5 of a unit of 0..255. A walk in ANDREA2 with `-log` shows the case.
+By the CAMLOG `tick` lines' `target=` room, Lara was loaded in room 10 (two shadow lights,
+ambient 96) and crossed into room 9 (one sun, 0.749969 / 0.655856 / 0.608799) and back
+three times between ticks 184 and 623, and the save menu opened in room 10. Replayed
+through `CreateLightList` and `FadeLightList` with the rooms' own lights, room 9's sun
+ends every return to room 10 in the previous list at 0 / 4.47e-8 / 1.49e-8, `Active`
+with `fcnt` 0, eight drawn frames after the room change: her list holds one sun that
+gives nothing, and there is no eye lamp. Nothing touches the previous list again until the
+next room change. A load runs `InitialiseItem` (`game/items.cpp`), which empties both
+lists, and the savegame's restore leaves `il` alone; the log's `HDLOG frame lara`
+reads `lights=0` on the first frame after each of its two loads, and the eye lamp is
+back. What else a load resets was ruled out: the outfit's sheen values are a table, the
+room ambient fades in integer eighths that land exactly (96 before and after), the rooms
+of the walk hold no water, and room 10's shadow lights stayed 729 units outside their
+range.
+
+**How.** `specific/hd/hd_objlight_dark.h` (new; no engine header, like
+`hd_model_cut.h`): `HD_OBJLIGHT_DARK_BOUND` (:60) and `HDObjLightIsDark` (:64), with the
+measurement in the comment. `specific/hd/hd_object.cpp`: `fill_lights` (:989) asks it
+after the type filter at the suns (:1036) and at the points and spots (:1136), in both
+lists; the comment above it (:931) says what is added to `Active`. An optional
+`HDObjLightReport` (`hd_object.h` :249) comes back from `HDObjectLights` (:3832) with the
+two lists' counts, the dynamics handed on, the count handed on, the count left out, the
+brightest channel left out and the dimmest handed on; `report_dark` and `report_lit`
+(:965, :978) fill it and do nothing without one. `specific/hd/hd_laradraw.cpp`: the
+`HDLOG laralights` line (:1197), on her first frame of a level and whenever her room, the
+count handed on or the count left out changes; the level's name is kept from
+`HDLaraDrawBuild` (:800). The bound lies a factor of 112 above the largest remainder and
+below every colour a step of a fade leaves on a light that can add half a unit of 0..255
+to a vertex: 0.5/255 has 2.45e-4 on the first step of its fade-in, 1/255 has 4.9e-4 there
+and 6.1e-5 on the last step but one of a fade-out that a room change began one step into
+its fade-in. The dimmest light of the level files, 0.0624 in its brightest channel, has
+7.8e-3 on its first step.
+
+**Checked.** The engine builds (`be.bat`, the full build). ModernTest 14,225 (14,205 and
+20 of the new group `objlight_dark`), MenuTest 42,364, InterpTest 729, LipsTest 270 and
+243, none failed. The group asserts the predicate at, just below and just above the
+bound, with one channel above and two below, on black, on negative and mixed remainders
+and on a NaN; it walks the fade of `lighting.cpp`, transcribed statement for statement,
+over the 255 grey and the 255 red byte-grid colours and every state a room change can
+catch - the full colour, every step of the fade-in, every step of an out-of-range
+fade-out, the remainder faded again - and asserts that every light left `Active` is dark
+and that no step of a fade from 1/255 up is dark but the fade-out's last; 139 grey
+colours stay `Active`; ANDREA2 room 9's sun ends `Active` and dark; a list of remainders,
+a shadow light and a light that is not `Active` hands none on, and one real light beside
+them hands one. With the predicate answering light for everything, as `fill_lights` did,
+nine of the twenty fail. The wiring in `fill_lights` is out of the suite's reach - it
+needs the engine's item, its lists and the view - and the diff shows it as two calls of
+the one predicate after the type filters that were there. A left-out entry would have
+added to a vertex less than the bound times 255 times its factor: 0.0051 of a unit for a
+sun in the inventory, 0.0026 for a point or a spot, 0.0019 for a sun in the world.
+`HDLOG lightcheck` and `HDLOG creaturelight` keep `diff=0.0,0.0,0.0`; their `engine=`
+counts the engine's `Active` entries and can now exceed `hd_lights=`.
+
+**Unchanged.** `specific/lighting.cpp` word for word: `CreateLightList`, `FadeLightList`
+and `InitObjectLighting` keep their lists, fades and `Active` flags, and the classic path
+adds the remainders as it does. Every shader file: the sheen, the eye lamp and the
+diffuse arithmetic. The dynamics loop of `fill_lights`, the room gloss, the wardrobe's
+sheen values, the first person view, the 2D item path's own list. With
+`tomb5.hd_enable` 0 `HDLevelLoad` stops at its guard (`specific/hd/hd_level.cpp` :3174)
+before `HDObjectLevelBuild`, so neither the item path nor `HDLaraDrawActive` opens and
+`fill_lights` never runs; without `-log` no report is asked for. The two callers:
+`HDObjectEnd` (:3106) for every HD item and creature in the world, which wear no sheen
+and gain the slots of the twelve that remainders took, and `HDObjectLights` for Lara's
+composite, whose every part shares the one list and gains the eye lamp back.
+
+**Decisions.** The rule is in the HD path and not in `FadeLightList`: the classic path
+draws a remainder as nothing either way, and its fade stays the original's. The bound is
+a colour in the engine's own scale rather than a test of the fade counter, because what
+is left out is a light that gives nothing, wherever it came from; a fade-in starts from 0
+and is never dark on a step, its first step being an eighth of the colour. The log line
+is Lara's alone: the items' lists are the same code, and Lara is where the sheen shows.
+
+**Left.** The current list keeps remainders too. A current light out of range is faded
+again eight frames later and clears on that second fade (over every light and colour a
+third was never needed); but a light that comes back in range while its remainder is
+`Active` is not faded in again (`CreateLightList` asks `!Active`) and stays at nothing
+until the next room change - a darker diffuse than the room means, in the classic path
+as here, and `lighting.cpp` is not touched. A flipped room sets its items'
+`il.room_number` to `NO_ROOM` (`FlipMap`, `game/control.cpp`), which runs the swap and
+its fade-out in place. Four neighbours that touch the look are questions and not code: a
+dynamic light between its falloff and falloff + 1024 is handed on and gives nothing; a
+point or spot near the edge of its range gives little; a sun's highlight sits where the
+half vector of the sun and the eye meets the normal, which may be on her back; and when
+the last light leaves the list or the first arrives, the eye lamp switches in one frame
+while the light fades over eight. The fade counts drawn frames and not logic ticks:
+`CalculateObjectLightingLara` runs once for every frame drawn. Which ANDREA2 room the
+courtyard of the earlier picture is cannot be told from the picture and the level alone;
+the rooms of the logged walk are smaller. The play test: the same walk with `-log`, room
+10 into room 9 and back, and its `HDLOG laralights` lines.
+
+**Commits.** 'Round 192 (#192): a light faded to nothing is left out of an HD object's
+list', 'Round 192 (#192): the suites', 'Round 192 (#192): the record follows'.
+
 ### Wire mesh on an HD object is cut out
 2026-10-01
 
@@ -11392,3 +11510,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |
+| #192 | A light faded to nothing is not counted into an HD object's light list |

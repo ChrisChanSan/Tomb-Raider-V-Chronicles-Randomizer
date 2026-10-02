@@ -1562,7 +1562,12 @@ see *Lara in HD* below for which of her stays classic and why.
   catsuits, rubber for the diving suit, a soft wide sheen on skin, a light
   satin on the Rome top, a hard small point on a weapon. It follows the room's
   own lights, and in a dark corner there is nothing to reflect and it goes
-  away. Only Lara has it; the creatures and the props have none. The material
+  away. Where no light of the level reaches her, the camera itself is the
+  lamp, weighted by the light she already has, so the shine stays in a room
+  lit by its painted colours alone; a light of the room she has just left
+  counts only while it still gives light, and once it has faded out it no
+  longer stands in for that lamp. Only Lara has it; the creatures and the
+  props have none. The material
   is named per **texture page**, not per model, because a hand model is a hand
   *and* the gun in it: her skin keeps the soft wide sheen while the weapon in
   the same hand keeps the hard point, and a gloved outfit's hands shine like
@@ -2013,7 +2018,11 @@ ambient, and every dynamic light the game makes: a flare, a torch, a muzzle
 flash, an explosion. Two of those are finer than the classic engine could
 afford: a point light's direction and its falloff are measured from the
 surface itself rather than from the middle of a limb, so a flare at an enemy's
-feet lights his boots and not his helmet.
+feet lights his boots and not his helmet. One light the engine holds is not
+sent: a light it has faded out after a room change or out of range, where the
+fade stopped a few hundred-millionths short of nothing and the engine left it
+switched on. It lights nothing, and in the list it would take a place and,
+for Lara, the place of the lamp her shine falls back on.
 
 **The proof, in the log.** With `-log` the first HD object of each level
 writes two lines. `HDLOG itemcheck` puts each of its pieces on the screen
@@ -2021,7 +2030,10 @@ twice — once through the classic transform and once through the matrix the
 graphics card is handed — and prints the worst disagreement, which is under a
 pixel. `HDLOG lightcheck` runs the classic lighting formula on the engine's
 own light arrays and the HD one on the list that was sent to the card, on the
-same surface normal, and prints both colours side by side.
+same surface normal, and prints both colours side by side. Its `engine=`
+counts the lights the engine holds and `hd_lights=` those sent, so a light
+faded to nothing shows as `engine=` above `hd_lights=` with the two colours
+still equal; `HDLOG creaturelight` counts the same way.
 
 **The inventory ring draws HD too.** Open the inventory and the pistols, the
 medipacks, the flares, the keys and the puzzle pieces turning on the ring are
@@ -3042,6 +3054,7 @@ wrote it, and each seam answers a different question:
 | the first person view sits wrong | `FPHEAD`, `ALTERFOV` — the head bone per frame, and the field of view |
 | a face in a cutscene does not move its lips, or moves them wrong | `HDLOG … lips` — at the level build, one line per face and per track file it has: which file, how many frames, how many of the face's joints it moves, and why it would not be used (`reason=`); `LIPLOG` — while a cutscene plays, one line each time a speaking face's frame changes: the frame, the track, whether the file, the settling back or the face at rest was shown (`src=`), how far the face moved from rest at its farthest point (`jaw=`) and the language; and `lips=` at the end of `HDLOG cutseq actor` and `HDLOG frame lara` |
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
+| in HD Lara's catsuit loses its shine after she walks from one room into another, and a save and a load bring it back | `HDLOG laralights` — one line on her first frame of a level and one whenever her room, the number of lights handed to the card or the number left out changes: `level=` the level, `room=` her room, `il_room=` the room her current light list was last built for, `cur=` and `prev=` the engine's current and previous light list as lights switched on / lights in it (shadow lights included), `dyn=` the dynamic lights (a flare, a torch, a muzzle flash) handed on, `handed=` every light handed to the card, `dark=` the lights of the two lists left out because they have faded to nothing, `eye=` 1 when nothing is handed on, so that the camera is the lamp of her shine, `max_dark=` the brightest colour channel among those left out and `min_lit=` the dimmest brightest channel among the room lights handed on, both on the engine's 0..1 scale (0 when there is none). Walking out of a lit room reads as a line with the old room's light in `prev=` and `dark=0`, and eight drawn frames later one with `dark=` counting it and, when nothing else lights her, `handed=0 eye=1` |
 | in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |

@@ -741,6 +741,41 @@ static bool MenuStepHdTextures(long, long dir)
 	return 1;
 }
 
+/* Body physics, the one row of this page that base's Page0 and Page1 do not
+ * have: the chest's secondary motion on the HD Lara, tomb5.hd_softbody -
+ * 0 off, 1 subtle, 2 normal, 3 strong (the strengths are
+ * specific/hd/hd_softbody.h's). It stands under HD textures because it
+ * moves only an HD Lara, and like that row it is offered whatever the level
+ * on screen draws: with HD off, on a young-Lara level or for an outfit
+ * whose region failed its checks the draw leaves the motion off by itself.
+ * The draw compares the option with the strength it used last on every
+ * frame and starts again from rest when they differ
+ * (specific/hd/hd_laradraw.cpp, soft_constants), so a change here shows on
+ * the next drawn frame of the running level. */
+static const char* MenuValBodyPhysics(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.hd_softbody == 1 ? "Subtle" :
+	           tomb5.hd_softbody == 2 ? "Normal" :
+	           tomb5.hd_softbody == 3 ? "Strong" : "off"));
+	return buf;
+}
+
+static bool MenuStepBodyPhysics(long, long dir)
+{
+	// Four states and the ends hold, as Camera damping; through
+	// MenuSliderStep so that MenuTest can sweep the rule. A stored value out
+	// of range counts as off, as the registry read takes it (tomb5/tomb5.cpp).
+	ulong old = tomb5.hd_softbody > 3 ? 0 : tomb5.hd_softbody;
+	ulong now = (ulong)MenuSliderStep((int)old, (int)dir, 3);
+
+	if (now == old)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.hd_softbody = now;
+	return 1;
+}
+
 static const char* MenuValPsxSkies(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.PSX_skies ? "on" : "off"));
@@ -1501,6 +1536,9 @@ static const menu_row menu_rows_graphics[] =
 {
 	MENU_TAB("Display", MENU_PAGE_DISPLAY),
 	MENU_VALUE("HD textures", MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),
+	// Directly under the HD switch it depends on. The thirteenth row: the
+	// page now pages, seven rows and six, with the arrow row under them.
+	MENU_VALUE("Body physics", MenuValBodyPhysics, MenuStepBodyPhysics, MENU_SAVE_TOMB5),
 	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Distance fog", MenuValDistanceFog, MenuStepDistanceFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Shimmer", MenuValShimmer, MenuStepShimmer, MENU_SAVE_TOMB5),

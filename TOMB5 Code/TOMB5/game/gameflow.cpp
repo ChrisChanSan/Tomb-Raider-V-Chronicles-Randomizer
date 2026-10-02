@@ -1419,6 +1419,12 @@ const char* CustomText(const char* engl)
 		{ "Gameover menu",   "Gameover menu",   "Game-Over-Men\xFC", "Gameover menu",     "Gameover menu" },
 		{ "Fog",             "Fog",             "Nebel",          "Fog",                "Fog" },
 		{ "HD textures",     "HD textures",     "HD-Texturen",    "HD textures",        "HD textures" },
+		// The row under it and two of its values; "off" and "Strong" are
+		// already in this table below. "Normal" is the same word in all five
+		// and stands here so that every value of the row has its own entry.
+		{ "Body physics",    "Body physics",    "K\xF6rperphysik", "Body physics",      "Body physics" },
+		{ "Subtle",          "Subtle",          "Dezent",         "Subtle",             "Subtle" },
+		{ "Normal",          "Normal",          "Normal",         "Normal",             "Normal" },
 		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },
 		{ "PSX skies",       "PSX skies",       "PSX-Himmel",     "PSX skies",          "PSX skies" },
 		{ "TR4 loadscreens", "TR4 loadscreens", "TR4-Ladebilder", "TR4 loadscreens",    "TR4 loadscreens" },

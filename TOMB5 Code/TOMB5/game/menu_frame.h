@@ -125,9 +125,9 @@ struct menu_page
  * anchor (game/chardef.inc h=13/YOffset=-11, rescaled by
  * phd_winymax/240 in game/text.cpp), so the last usable anchor is
  * 16 * 28 = 448, bottom 452. That line is the arrow row's, pinned
- * there, and the rows run from 4 to 15 - twelve of them, which is
- * exactly what the fullest page (Graphics: the Display tab and eleven
- * settings) needs. */
+ * there, and the rows run from 4 to 15 - twelve of them. A page with
+ * more rows than that pages (game/menu_nav.h), as Key bindings and
+ * Graphics do. */
 #define MENU_TITLE_ROW	2
 #define MENU_FIRST_ROW	4
 #define MENU_MAX_ROWS	12

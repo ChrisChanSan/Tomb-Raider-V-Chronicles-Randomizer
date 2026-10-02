@@ -6880,6 +6880,134 @@ log. Files: `specific/hd/hd_feet.cpp`/`.h`, `hd_level.cpp`/`.h`, `game/footprnt.
 
 **Commits.** `4698b8f`, `77b3028`, `52ec0c9`, `1ff12e4`, `5d98092`
 
+### The soft motion of the chest: an optional secondary motion for the HD Lara
+2026-10-02
+
+**What.** An HD Lara can carry a secondary motion of the chest. Each side of the chest is
+one point mass on a damped spring whose anchor the torso carries through the world; the
+model vertex shader moves the vertices of two regions of the body by that side's offset,
+weighted by a smooth mask and by the vertex's own weight on the torso node. The two
+regions are found once per outfit, at the level build, from the body model's own vertices.
+One new option, `tomb5.hd_softbody` (registry `hd_softbody`): 0 off - the default - 1
+subtle, 2 normal, 3 strong; a stored value out of range reads as off. Two new log lines
+behind `-log`: `HDLOG softbody` whenever her composite is built or the option changes, and
+`HDLOG softbody second` once a second of game time in which the motion moved.
+
+**Why.** An optional secondary motion for the HD model. The wardrobe's bodies are skinned
+surfaces that can bend where the classic meshes are rigid, and a chest that follows the
+torso without any lag reads as stiff in a landing, a run or a sudden stop. It is a proof
+of concept: the feel can only be judged and tuned in the game, so every number that shapes
+it stands in one table and the log shows what it did.
+
+**How.** `specific/hd/hd_softbody.h` (new; no engine header, like `hd_objlight_dark.h`):
+the table (:58 to :95) - natural frequency 3 Hz, damping ratio 0.3, gain 0.1, bound 0.3 of
+the radius, front-back share 0.35, strengths 0.5 / 1 / 1.5 on gain and bound, and the
+machinery under it (sub-step 1/480 s, gap 0.25 s, anchor speed 9000 units a second plus
+128, rest below 0.05 units and 0.5 units a second); the finder's numbers (:145);
+`HDSoftMask` (:225), a smoothstep of 1 - distance / radius; `HDSoftFindRegion` (:260): up
+from the hips joint to the head joint, her right from the left thigh joint to the right,
+the front where the lower-leg vertices below the ankle joints point; per side the
+frontmost torso vertex (weight 0.5 or more) in the band 0.45 to 0.75 of the hips-to-head
+height between the middle strip and the outer edge, its cap's middle across; the radius
+half the apexes' distance apart, so that the regions meet in the middle; the centre half a
+radius behind the apex. `HDSoftPropagator` (:677) is the exact step of the damped
+oscillator, so the sub-step's length cuts nothing but the frame's remainder;
+`HDSoftOutput` (:703) eases gain times travel into the bound with a tanh; `HDSoftAdvance`
+(:747) takes a change of the anchor's speed out of the point's relative speed, runs whole
+sub-steps and carries the rest, resets on a gap, a jump or a value that is not finite,
+bounds the state and snaps both sides to exact zero below the rest thresholds;
+`HDSoftClockStep` (:952), `HDSoftAnchor` (:985), `HDSoftToTorso` (:999) and
+`HDSoftConstants` (:1025). `hd_model.hlsl`: `gSoft` in c163 to c166 (:245), the torso
+weight beside the head weight in the skinning loop (:377), the two masks and the offset
+before the light reads the position (:388). `hd_model.h`: `HDModelSoft` (:650) and
+`HDModelDraw`'s `soft` (:665); `hd_model.cpp` writes the four registers for every draw,
+zeros without one (:2618). `hd_object.cpp`: the frame list's entry carries it (:144),
+zeroed for every item, copied by `HDObjectPush` (:3908) and handed to the draw (:3724).
+`hd_lara.cpp`: `measure_softbody` (:1346) in the body's measure hook (:1393) while the
+file is still a file, cleared at every plan (:1875); `HDLaraSoftRegion` (:2576) and
+`HDLaraPartSoft` (:2590). `hd_laradraw.cpp`: `soft_strength` (:738), `soft_gate` (:749),
+`soft_log` (:793) and `soft_constants` (:840) - the gates, a reset on a cutscene's first
+and last frame, the clock, the anchors (the region centres carried by
+`lara_joint_matrices[LMX_TORSO]` from `lara_item->pos`), the step, the per-second line
+(:915) and the constants on the draw's own torso matrix; the build lines (:1040, :1045),
+the clock's frame mark (:1284) and the five pushes from :1360. `tomb5/tomb5.cpp` (:241,
+:455, :685) and `global/types.h` (:2882) for the option.
+
+**Checked.** The engine builds (`be.bat`). ModernTest 14,275 (14,225 and 50 in nine new
+groups `softbody_*`), MenuTest 42,364, InterpTest 729, LipsTest 270 and 243, none failed;
+ModelProbe and MapProbe, the two tools that link the changed files, build. The groups hold
+the spring against the closed form of a damped oscillator to 0.1 per cent; the same anchor
+path at 30, 60 and 165 frames a second with the same peak to within 5 per cent (7.2883 /
+7.2883 / 7.3242 units blended between ticks as the game draws it, 7.2883 / 7.2881 / 7.3273
+sampled smoothly); 80,000 frames of random jumps, zero, negative, tiny and huge time
+steps, NaN and infinity at every strength and a resonant shake, never past the bound and
+never a NaN; a start during a steady walk, a reset, a teleport, a gap and a jump in
+mid-swing without a kick; exact zeros at rest (a landing at 1500 units a second rests 78
+frames later at 60 fps) and frames that do not advance the game changing nothing; one step
+a frame and never from a mirror's draw; the finder on synthetic torsos - two bumps found
+and mirrored, the front read from the feet, a flat front, one bump, a chest beside a ridge
+and a body without torso weights refused with the right reason; the mask's documented
+pairs; the register layout, a mirror's reflected offset and two cameras. Eleven mutations
+of the header, at least one per group, each fail one or more checks. Off is unchanged in
+pictures: ModelProbe built at e57a9e2 (a `git archive` copy) and at this commit renders
+the same fourteen PNGs byte for byte (md5) - Lara in five outfits, three of them front and
+side, a posed body, two first person cuts, SAS, two pickups - and the old build twice
+gives the same bytes. The regions in pictures: ModelProbe `-softtest 0 -10 5` over all 122
+outfits of the wardrobe scan (22 of the IV-VI install, 30 of the I-III install, 70 of the
+Mods folder), front and side with a difference picture each; in the 105 outfits the finder
+accepts the moved area is the chest and nothing else. The vertex shader takes 579
+instruction slots (553); fxc's own literal constants, which sat in c163 and c164, move to
+c167 and c168, clear of `gSoft`, and the room shader declares nothing above c127.
+
+**Unchanged.** The classic path: with `tomb5.hd_enable` 0 `HDLevelLoad` stops at its guard
+(`specific/hd/hd_level.cpp`) before any HD model or Lara is built, so neither the new
+shader nor any of this runs. Every other HD object, a cutscene actor's face and the pickup
+display draw with zero constants, which add exactly nothing. The pixel shader (only the
+stamp line of `hd_model_ps.inc` changes), the room and glow shaders, the sheen, the light
+list, the head cut, the lips, the braid and `game/hair.cpp`. Savegames: nothing is added
+to one.
+
+**Decisions.** Off by default. Never on a level whose gameflow flags carry `GF_YOUNGLARA`,
+whatever the option says, and there is no switch for that. HD only: never for a Lara drawn
+classic. Active in cutscenes like everywhere else her composite is drawn. The three
+strengths scale gain and bound and nothing else, so the swing's timing is the same at all
+three. Only the torso's motion through the world drives it: the anchors come from
+`lara_joint_matrices` and `lara_item->pos`, which no camera enters, and the view enters
+last, as the torso matrix of the very draw that turns the offset into view space - which
+also gives a mirror's draw the offset reflected. The clock is `GlobalCounter` plus
+`InterpFrameAlpha`. One step per drawn frame, by the first draw of Lara that is not a
+mirror's. The motion's offset is taken into the torso's own axes and its front-back part
+kept at 0.35. The parts that carry it are those skinned on her skeleton in the body's bind
+space - the body, TR5's borrowed head, the face with its throat on the torso, the neck lid
+and the holster rig - and never the hands with what they hold, the thigh holsters, the
+weapon on the back or the braid. The constants travel in `hd_object.cpp`'s frame list from
+`HDObjectPush` to the draw, because Lara's parts are queued there and drawn later; the
+option is a field of `tomb5_options` in `global/types.h`, where its neighbours live. The
+finder's numbers were set over the 122 bodies of the scan: in the 105 it accepts the
+apexes stand between 0.51 and 0.62 of the hips-to-head height.
+
+**Left.** The feel is untuned: frequency, damping, gain, bound and the front-back share
+are a starting point, and whether running, jumping and landing look right at the three
+strengths, in cutscenes and in a mirror room is for the game to show; the `HDLOG softbody
+second` line is there for that. Seventeen outfits stay still, each by a check and not by a
+list: `46/OUTFIT_RUSSIA_EXTRA` (no_front: too few lower-leg vertices below the ankles to
+tell front from back), `46/OUTFIT_SUBSUIT` (band_edge: the diving helmet's rim tops the
+chest band), `46/OUTFIT_TR2_VEGAS` and the barefoot mod's `OUTFIT_VEGAS` (radius: the
+apexes 32 units apart), `13/OUTFIT_TRX_DRAGON_1` to `_3` (radius: the apexes 25 units
+apart), `13/OUTFIT_TRX_ATLANTEAN_1` to `_3`, `13/OUTFIT_TRX_ICE_1` to `_3` and
+`13/OUTFIT_TRX_RUNNER_1` to `_3` (sparse: fewer than 30 torso-weighted vertices inside a
+region, too few to bend smoothly), and the TR V mod's `OUTFIT_JACKET` (asymmetric: the
+open jacket's two fronts at different heights). The motion ignores gravity (there is no
+sag at rest), the torso's own turning except as it carries the anchors, collisions with
+the arms and anything else, and the normals of the moved surface, whose shading stays
+where it was. In a frame in which her own draw is hidden - the camera inside her - while a
+mirror shows her, the mirror draws the last state. The options menu row follows
+separately.
+
+**Commits.** 'Round 193 (#193): the chest's soft motion for the HD Lara', 'Round 193
+(#193): the suites', 'Round 193 (#193): the suites catch a stepping mirror and a one-sided
+ridge', 'Round 193 (#193): the record follows'.
+
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14
 
@@ -11512,3 +11640,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #190 | Wire mesh on an HD object is cut out |
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |
 | #192 | A light faded to nothing is not counted into an HD object's light list |
+| #193 | The soft motion of the chest: an optional secondary motion for the HD Lara |

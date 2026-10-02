@@ -12144,8 +12144,9 @@ static void softbody_spring()
 	float o[3];
 
 	HDSoftOutput(small, 2, 30.0f, o);
-	ok(fabsf(o[2] - HD_SOFT_GAIN) < 1e-3f * HD_SOFT_GAIN,
-		"softbody: a small travel is drawn at GAIN times itself", sb_milli(o[2]), 0);
+	ok(fabsf(o[2] - HD_SOFT_GAIN * HD_SOFT_NORMAL) < 1e-3f * HD_SOFT_GAIN * HD_SOFT_NORMAL,
+		"softbody: a small travel is drawn at GAIN times the strength's scale",
+		sb_milli(o[2]), sb_milli(HD_SOFT_GAIN * HD_SOFT_NORMAL));
 	ok(HDSoftOutput(huge, 3, 30.0f, o) && sb_len(o) <= HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f &&
 		sb_len(o) > 0.99f * HD_SOFT_BOUND * HD_SOFT_STRONG * 30.0f,
 		"softbody: a huge travel is drawn just under the bound and reported as at it",

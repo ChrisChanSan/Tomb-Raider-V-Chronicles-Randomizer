@@ -52,17 +52,17 @@
  *   FRONTBACK   how much of the offset along her front-back axis is kept.
  *               A chest shears and bobs far more than it is pushed in or
  *               out; 1 keeps all of it, 0 none.
- *   SUBTLE, NORMAL, STRONG  the option's three strengths. Each scales GAIN
- *               and BOUND together and nothing else, so the timing of the
- *               swing is the same at all three. */
+ *   SUBTLE, NORMAL, STRONG  the three strengths, scaling GAIN and BOUND
+ *               together (the timing stays). Subtle is the smallest size
+ *               that shows in the game (a bound of 18 units, radius 41). */
 #define HD_SOFT_HZ		3.0f
 #define HD_SOFT_DAMPING		0.3f
 #define HD_SOFT_GAIN		0.1f
 #define HD_SOFT_BOUND		0.3f
 #define HD_SOFT_FRONTBACK	0.35f
-#define HD_SOFT_SUBTLE		0.5f
-#define HD_SOFT_NORMAL		1.0f
-#define HD_SOFT_STRONG		1.5f
+#define HD_SOFT_SUBTLE		1.5f
+#define HD_SOFT_NORMAL		3.0f
+#define HD_SOFT_STRONG		4.5f
 
 /* The machinery under the table: these keep the motion honest and are not a
  * matter of taste.

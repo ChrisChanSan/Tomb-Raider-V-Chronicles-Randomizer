@@ -6904,7 +6904,7 @@ it stands in one table and the log shows what it did.
 
 **How.** `specific/hd/hd_softbody.h` (new; no engine header, like `hd_objlight_dark.h`):
 the table (:58 to :95) - natural frequency 3 Hz, damping ratio 0.3, gain 0.1, bound 0.3 of
-the radius, front-back share 0.35, strengths 0.5 / 1 / 1.5 on gain and bound, and the
+the radius, front-back share 0.35, strengths 1.5 / 3 / 4.5 on gain and bound, and the
 machinery under it (sub-step 1/480 s, gap 0.25 s, anchor speed 9000 units a second plus
 128, rest below 0.05 units and 0.5 units a second); the finder's numbers (:155);
 `HDSoftMask` (:238), a smoothstep of 1 - distance / radius; `HDSoftFindRegion` (:274): up
@@ -7010,7 +7010,10 @@ to one.
 whatever the option says, and there is no switch for that. HD only: never for a Lara drawn
 classic. Active in cutscenes like everywhere else her composite is drawn. The three
 strengths scale gain and bound and nothing else, so the swing's timing is the same at all
-three. Only the torso's motion through the world drives it: the anchors come from
+three. Their size: with the bound at 18 units on a region radius of 41 (`OUTFIT_BARE`, the
+largest strength at 1.5) the swing of a landing was barely to be seen in the game, so that
+size became *Subtle*, and *Normal* and *Strong* stand at twice and three times it. Only
+the torso's motion through the world drives it: the anchors come from
 `lara_joint_matrices` and `lara_item->pos`, which no camera enters, and the view enters
 last, as the torso matrix of the very draw that turns the offset into view space - which
 also gives a mirror's draw the offset reflected. The clock is `GlobalCounter` plus
@@ -7022,16 +7025,16 @@ and the holster rig - and never the hands with what they hold, the thigh holster
 weapon on the back or the braid. The constants travel in `hd_object.cpp`'s frame list from
 `HDObjectPush` to the draw, because Lara's parts are queued there and drawn later; the
 option is a field of `tomb5_options` in `global/types.h`, where its neighbours live. The
-finder's numbers were set over the 122 bodies of the scan: in the 98 it accepts the
-apexes stand between 0.53 and 0.60 of the hips-to-head height. A chest deeper than its
-region reaches is refused and not given a larger region: a radius grown until it reaches
-the wall of the deepest chests would take in the collarbones and the armpits as well. The
-limit, a mask of 0.04 at the wall, lies between the lowest accepted body (0.068, the TRX
-biker) and the highest refused one (0.023, `OUTFIT_THICC`). The menu row stands under
-*HD textures*, the switch it depends on, though the thirteenth row makes *Graphics* page;
-it is not greyed, because no row of that page is greyed while HD is off. Its first state
-is the table's own `off` (German `aus`), as on *Camera damping*, rather than a second
-spelling of the same value.
+finder's numbers were set over the 122 bodies of the scan: in the 98 it accepts the apexes
+stand between 0.53 and 0.60 of the hips-to-head height. A chest deeper than its region
+reaches is refused and not given a larger region: a radius grown until it reaches the wall
+of the deepest chests would take in the collarbones and the armpits as well. The limit, a
+mask of 0.04 at the wall, lies between the lowest accepted body (0.068, the TRX biker) and
+the highest refused one (0.023, `OUTFIT_THICC`). The menu row stands under *HD textures*,
+the switch it depends on, though the thirteenth row makes *Graphics* page; it is not
+greyed, because no row of that page is greyed while HD is off. Its first state is the
+table's own `off` (German `aus`), as on *Camera damping*, rather than a second spelling of
+the same value.
 
 **Left.** The feel is untuned: frequency, damping, gain, bound and the front-back share
 are a starting point, and whether running, jumping and landing look right at the three
@@ -7063,8 +7066,9 @@ seen, and the row does not say so.
 **Commits.** 'Round 193 (#193): the chest's soft motion for the HD Lara', 'Round 193
 (#193): the suites', 'Round 193 (#193): the suites catch a stepping mirror and a one-sided
 ridge', 'Round 193 (#193): the record follows', 'Round 193 (#193): the options menu row',
-'Round 193 (#193): the suites', 'Round 193 (#193): the record follows', 'Round 193
-(#193): what review pass 1 found', 'Round 193 (#193): the record follows'.
+'Round 193 (#193): the suites', 'Round 193 (#193): the record follows', 'Round 193 (#193):
+what review pass 1 found', 'Round 193 (#193): the record follows', 'Round 193 (#193): the
+three strengths start at the old strong'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

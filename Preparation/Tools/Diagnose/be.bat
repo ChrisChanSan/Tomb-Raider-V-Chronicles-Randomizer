@@ -57,6 +57,7 @@ call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
 call :onestamp hd_shadow hd_shadow_cast_vs.inc
 call :onestamp hd_shadow hd_shadow_cast_ps.inc
+call :onestamp hd_shadow_receive hd_shadow_receive_ps.inc
 
 if not defined STALE (
 	endlocal
@@ -80,6 +81,7 @@ call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
 call :onestamp hd_shadow hd_shadow_cast_vs.inc
 call :onestamp hd_shadow hd_shadow_cast_ps.inc
+call :onestamp hd_shadow_receive hd_shadow_receive_ps.inc
 
 if defined STALE (
 	echo be: shaders STILL out of step after bshader -!STALE!

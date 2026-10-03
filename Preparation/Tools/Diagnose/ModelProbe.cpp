@@ -104,6 +104,32 @@
  *                         constants and to the parts the engine hands them
  *                         to. Every -lara run prints the outfit's regions as
  *                         the `softbody:` lines, with or without it.
+ *     -shadowmap          the projected shadow's map of this pose, through
+ *                         the engine's own box, cast matrix, target and cast
+ *                         shaders (hd_shadow.h, hd_render.cpp, hd_model.cpp),
+ *                         written as <out>_shadowmap_<outfit>.png: white is
+ *                         nothing cast, grey the depth along the light,
+ *                         darker nearer the light, stretched over the depths
+ *                         cast. u runs along the box's right axis, the
+ *                         picture's top is its up axis.
+ *     -shadowdir <x> <y> <z>
+ *                         the light's travel direction in her model space (y
+ *                         down), held to the slant limit as the game holds
+ *                         it; 0.35 1 0.2 without the switch.
+ *     -shadowcast         run the cast pass inside the picture's own bracket,
+ *                         after the bracket opens and before the models, where
+ *                         the game runs it; the picture is written with
+ *                         _cast in its name and must be the picture without
+ *                         the switch, byte for byte.
+ *     -shadowdevice [<frames>]
+ *                         the map on this device: the formats it answers, the
+ *                         device's reference count before, while and after the
+ *                         map lives, the map made, released, the device
+ *                         Reset and the map made again - the same map before
+ *                         and after - and the cast pass's time against a
+ *                         2560 x 1440 target, a mean over <frames> (300)
+ *                         frames each waited for with an event query. Takes
+ *                         the pages managed, which a Reset needs.
  *     -lara-nodes         the node table: every classic
  *                         node 0..14 against every source, and which .TRM
  *                         part covers it.
@@ -594,6 +620,7 @@ char tomb5_hd_install[260];
 char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trm.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_trl.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "psapi.lib")
@@ -966,6 +993,8 @@ static double PeakCommitMiB()
 static HWND g_window = 0;
 static IDirect3D9* g_d3d = 0;
 static IDirect3DDevice9* g_device = 0;
+// The parameters the device was made with, for -shadowdevice's Reset.
+static D3DPRESENT_PARAMETERS g_present;
 
 static bool MakeDevice()
 {
@@ -1004,6 +1033,7 @@ static bool MakeDevice()
 	pp.BackBufferHeight = 16;
 	pp.hDeviceWindow = g_window;
 	pp.EnableAutoDepthStencil = FALSE;
+	g_present = pp;
 
 	if (FAILED(g_d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, g_window,
 		D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_FPU_PRESERVE, &pp, &g_device)))
@@ -6670,6 +6700,16 @@ struct LaraOptions
 	 * the engine hands the motion to. Not set draws with none. */
 	bool softTest;
 	float softOffset[3];
+	/* The projected shadow's map (hd_shadow.h): -shadowmap writes it as a
+	 * grey picture, -shadowcast runs the cast pass inside the picture's own
+	 * bracket where the game runs it, -shadowdevice runs the device checks.
+	 * `shadowDir` is the light's travel direction in her model space (y
+	 * down), held to the slant limit as the game holds it. */
+	bool shadowMap;
+	bool shadowCast;
+	bool shadowDevice;
+	float shadowDir[3];
+	int shadowFrames;
 	bool check;
 	bool noDraw;
 	// The ring's own presentation - see -invrot.
@@ -6846,6 +6886,101 @@ static bool LaraBodySlot(const Tr5Level& level, ClassicSlot& out, int* slotOut)
 	}
 
 	return false;
+}
+
+/* The projected shadow's map off the card, one float a texel - the engine's
+ * own target (hd_render.cpp), copied through a system-memory surface. */
+static bool ShadowMapRead(std::vector<float>& out)
+{
+	IDirect3DTexture9* map = HDRenderShadowMap();
+	IDirect3DSurface9* level = 0;
+	IDirect3DSurface9* copy = 0;
+	bool ok = false;
+
+	out.clear();
+
+	if (!map || FAILED(map->GetSurfaceLevel(0, &level)))
+		return false;
+
+	if (SUCCEEDED(g_device->CreateOffscreenPlainSurface(HD_SHADOW_MAP, HD_SHADOW_MAP,
+		D3DFMT_R32F, D3DPOOL_SYSTEMMEM, &copy, 0)) &&
+		SUCCEEDED(g_device->GetRenderTargetData(level, copy)))
+	{
+		D3DLOCKED_RECT rect;
+
+		if (SUCCEEDED(copy->LockRect(&rect, 0, D3DLOCK_READONLY)))
+		{
+			out.resize((size_t)HD_SHADOW_MAP * HD_SHADOW_MAP);
+
+			for (int y = 0; y < HD_SHADOW_MAP; y++)
+				memcpy(&out[(size_t)y * HD_SHADOW_MAP],
+					(const unsigned char*)rect.pBits + (size_t)y * rect.Pitch,
+					sizeof(float) * HD_SHADOW_MAP);
+
+			copy->UnlockRect();
+			ok = true;
+		}
+	}
+
+	if (copy)
+		copy->Release();
+
+	level->Release();
+	return ok;
+}
+
+/* The map as a grey picture, and what is in it: white is the clear value 1
+ * (nothing cast), grey the cast depth stretched over the depths that occur,
+ * darker nearer the light. Prints the cast texels' count, their box in
+ * texels and their depth range; the margins say whether the outline stands
+ * inside the map with room to spare. */
+static bool ShadowMapWrite(const std::vector<float>& map, const char* path)
+{
+	const int n = HD_SHADOW_MAP;
+	float lo = 1.0f, hi = 0.0f;
+	int cast = 0, x0 = n, y0 = n, x1 = -1, y1 = -1, odd = 0;
+
+	for (int y = 0; y < n; y++)
+		for (int x = 0; x < n; x++)
+		{
+			const float v = map[(size_t)y * n + x];
+
+			if (!(v == v) || v < 0.0f || v > 1.0f)
+				odd++;
+
+			if (!(v < 1.0f))
+				continue;
+
+			cast++;
+			lo = v < lo ? v : lo;
+			hi = v > hi ? v : hi;
+			x0 = x < x0 ? x : x0;
+			y0 = y < y0 ? y : y0;
+			x1 = x > x1 ? x : x1;
+			y1 = y > y1 ? y : y1;
+		}
+
+	std::vector<unsigned long> pixels((size_t)n * n, 0xFFFFFFFFu);
+	const float span = hi > lo ? hi - lo : 1.0f;
+
+	for (size_t i = 0; i < pixels.size(); i++)
+		if (map[i] < 1.0f)
+		{
+			const unsigned long g = (unsigned long)(32.0f + 176.0f * (map[i] - lo) / span);
+
+			pixels[i] = 0xFF000000u | (g << 16) | (g << 8) | g;
+		}
+
+	printf("  map: %d of %d texels cast (%.2f%%), texels x %d..%d y %d..%d, margins "
+		"%d/%d/%d/%d (left/right/top/bottom), depth %.4f..%.4f (%.0f..%.0f units "
+		"from the box's middle), %d texels not in 0..1\n", cast, n * n,
+		100.0 * cast / ((double)n * n), x0, x1, y0, y1, x0, n - 1 - x1, y0, n - 1 - y1,
+		lo, hi, (lo - 0.5) * HD_SHADOW_DEPTH, (hi - 0.5) * HD_SHADOW_DEPTH, odd);
+
+	const bool ok = WritePng(path, &pixels[0], n, n);
+
+	printf("  %-58s %s\n", path, ok ? "written" : "NOT written");
+	return ok;
 }
 
 static int RunLara(const LaraOptions& o, const Tr5Level& level)
@@ -8058,6 +8193,119 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		return o.softTest && HDLaraPartSoft(part) ? &softConstants : 0;
 	};
 
+	/* -shadowmap, -shadowcast, -shadowdevice: the projected shadow's box for
+	 * this pose, through the engine's own hd_shadow.h. The picture's view is
+	 * the world-to-view, so her model space is the world, y down; her nodes
+	 * go back into it out of the very matrices drawn, as hd_laradraw.cpp
+	 * takes them out of the frame's. */
+	const bool shadowAny = o.shadowMap || o.shadowCast || o.shadowDevice;
+	float shadowClip[16];
+	HDShadowBox shadowBox;
+
+	memset(shadowClip, 0, sizeof(shadowClip));
+	memset(&shadowBox, 0, sizeof(shadowBox));
+
+	if (shadowAny)
+	{
+		float R[9], t[3], nodesW[HD_LARA_NODES * 3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			for (int j = 0; j < 3; j++)
+				R[i * 3 + j] = view[j * 4 + i];
+
+			t[i] = view[12 + i];
+		}
+
+		for (int n = 0; n < HD_LARA_NODES; n++)
+			HDShadowViewToWorld(R, t, matrices + n * 16 + 12, nodesW + n * 3);
+
+		float dir[3] = { o.shadowDir[0], o.shadowDir[1], o.shadowDir[2] };
+
+		hd_shadow_unit(dir);
+
+		const bool held = HDShadowLimit(dir);
+
+		HDShadowBoxMake(&shadowBox, dir, nodesW, HD_LARA_NODES);
+		HDShadowCastMatrix(&shadowBox, R, t, shadowClip);
+
+		printf("shadow  : light (%.3f, %.3f, %.3f), %.1f degrees off straight down%s\n",
+			dir[0], dir[1], dir[2], HDShadowSlant(dir),
+			held ? " (held to the slant limit)" : "");
+		printf("          box centre (%.1f, %.1f, %.1f), her nodes y %.1f (lowest) .. %.1f\n",
+			shadowBox.centre[0], shadowBox.centre[1], shadowBox.centre[2], shadowBox.lowest,
+			shadowBox.highest);
+		printf("          map u along right (%.3f, %.3f, %.3f), picture top along up "
+			"(%.3f, %.3f, %.3f)\n", shadowBox.right[0], shadowBox.right[1],
+			shadowBox.right[2], shadowBox.up[0], shadowBox.up[1], shadowBox.up[2]);
+	}
+
+	/* Every part the engine marks for the map, with the mask hd_laradraw.cpp
+	 * gives it: the frame's own (-meshbits), first person not taken off, the
+	 * face and the braid in first person too, no neck lid. */
+	const auto castParts = [&](int lipsT, int lipsF) -> int
+	{
+		const unsigned int full = o.nodeMask;
+		int n = 0;
+
+		if (draws(HD_LARA_PART_BODY) && HDModelCastDraw(HDLaraPartSlot(HD_LARA_PART_BODY),
+			false, matrices, HD_LARA_NODES, full & HDLaraBodyMask(), -1, -1,
+			soft(HD_LARA_PART_BODY)))
+			n++;
+
+		if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD) &&
+			HDModelCastDraw(HDLaraPartSlot(HD_LARA_PART_HEAD), false, matrices,
+				HD_LARA_NODES, full, -1, -1, soft(HD_LARA_PART_HEAD)))
+			n++;
+
+		if (draws(HD_LARA_PART_FACE) && HDModelCastDraw(HDLaraPartSlot(HD_LARA_PART_FACE),
+			false, matrices, HD_LARA_NODES, full, lipsT, lipsF, soft(HD_LARA_PART_FACE)))
+			n++;
+
+		if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG) &&
+			HDModelCastDraw(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), false, matrices,
+				HD_LARA_NODES, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & full, -1, -1,
+				soft(HD_LARA_PART_HOLSTER_RIG)))
+			n++;
+
+		for (int i = 0; i < pieces; i++)
+		{
+			if (draws(list[i].part) && HDModelCastDraw(HDLaraPartSlot(list[i].part), false,
+				matrices, HD_LARA_NODES, list[i].nodeMask & full))
+				n++;
+
+			if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part) &&
+				HDModelCastDraw(HDLaraPartTwinSlot(list[i].part), false, matrices,
+					HD_LARA_NODES, list[i].nodeMask & full))
+				n++;
+		}
+
+		if (draws(HD_LARA_PART_BRAID) && HDLaraHasPart(HD_LARA_PART_BRAID) &&
+			HDModelCastDraw(HDLaraPartSlot(HD_LARA_PART_BRAID), false, hairMatrices,
+				HD_LARA_HAIR_NODES, ~0u))
+			n++;
+
+		return n;
+	};
+
+	/* The cast pass exactly as hd_level.cpp runs it, inside an open bracket.
+	 * -1 when the device refused the map or its shaders. */
+	const auto shadowPass = [&](int lipsT, int lipsF) -> int
+	{
+		if (!HDRenderShadowTargetReady() || !HDModelCastReady() || !HDRenderShadowCastBegin())
+			return -1;
+
+		HDModelCastBegin(shadowClip);
+
+		const int n = castParts(lipsT, lipsF);
+
+		HDModelCastEnd();
+		HDRenderShadowCastEnd();
+		return n;
+	};
+
+	int shadowCastDrawn = 0;
+
 	/* --- draw -------------------------------------------------------------- */
 	printf("\n-- the picture ------------------------------------------------\n");
 
@@ -8214,6 +8462,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		g_device->BeginScene();
 		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+
+		/* -shadowcast: the cast pass where HDFrameDraw runs it, after the
+		 * bracket has opened and before the models' own frame begins. */
+		if (o.shadowCast)
+			shadowCastDrawn = shadowPass(lipsTrack, lipsFrame);
+
 		HDModelFrameBegin(&projection, bulbCount);
 
 		drawn = 0;
@@ -8338,9 +8592,14 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * first, the last and the step. */
 	const std::string lipsName = LipsName(o.lips, lipsTrack, pictures > 1);
 
-	sprintf(path, "%s_lara_%s%s%s%s%s.png", o.out.c_str(),
+	sprintf(path, "%s_lara_%s%s%s%s%s%s.png", o.out.c_str(),
 		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
-		o.mirror ? "_mirror" : "", lipsName.c_str());
+		o.mirror ? "_mirror" : "", lipsName.c_str(), o.shadowCast ? "_cast" : "");
+
+	if (o.shadowCast)
+		printf("shadowcast: the cast pass ran inside the picture's bracket, %d models "
+			"into the map%s\n", shadowCastDrawn,
+			shadowCastDrawn < 0 ? " - REFUSED, the map or its shaders" : "");
 
 	if (pictures > 1)
 	{
@@ -8353,6 +8612,157 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		ShotWrite(shot, path);
 
 	ShotEnd(shot);
+
+	/* The map alone, in a bracket of its own on the device's own target. */
+	const auto mapRun = [&](std::vector<float>& map) -> int
+	{
+		g_device->BeginScene();
+		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+
+		const int n = shadowPass(-1, -1);
+
+		HDRenderFrameEnd();
+		g_device->EndScene();
+
+		if (n < 0 || !ShadowMapRead(map))
+			return -1;
+
+		return n;
+	};
+
+	if (o.shadowMap)
+	{
+		std::vector<float> map;
+
+		printf("\n-- the projected shadow's map --------------------------------\n");
+
+		const int n = mapRun(map);
+
+		sprintf(path, "%s_shadowmap_%s%s.png", o.out.c_str(), HDLaraOutfitModel(outfit),
+			o.firstPerson ? "_firstperson" : "");
+
+		if (n < 0)
+			printf("  the map was refused or not read back\n");
+		else
+		{
+			printf("  %d models into the map, %d draw calls\n", n, HDModelCastCalls());
+			ShadowMapWrite(map, path);
+		}
+	}
+
+	if (o.shadowDevice)
+	{
+		printf("\n-- the projected shadow on this device ------------------------\n");
+
+		/* The reference count: a made and released map leaves the device's
+		 * count where it found it. */
+		HDRenderShadowTargetRelease();
+		g_device->AddRef();
+
+		const ULONG before = g_device->Release();
+		const bool made = HDRenderShadowTargetReady();
+
+		g_device->AddRef();
+
+		const ULONG during = g_device->Release();
+		HDShadowTargetInfo info;
+
+		HDRenderShadowTargetInfo(&info);
+		printf("  target %s (%s): %s %dx%d, depth %s, cast shaders %s\n",
+			made ? "made" : "REFUSED", info.reason, info.format, info.size, info.size,
+			info.depth, HDModelCastReady() ? "made" : "MISSING");
+
+		HDRenderShadowTargetRelease();
+		g_device->AddRef();
+
+		const ULONG after = g_device->Release();
+
+		printf("  device references: %lu before, %lu with the map, %lu after - %s\n",
+			before, during, after, after == before ? "PASS" : "FAIL");
+
+		// The map, the device Reset, the map again.
+		std::vector<float> first, second;
+		const int castFirst = mapRun(first);
+
+		HDRenderShadowTargetRelease();
+
+		const HRESULT reset = g_device->Reset(&g_present);
+
+		printf("  map before the Reset: %d models; Reset 0x%08lx (%s)\n", castFirst,
+			(unsigned long)reset, SUCCEEDED(reset) ? "ok" : "FAILED");
+
+		const int castSecond = SUCCEEDED(reset) ? mapRun(second) : -1;
+		const bool same = castFirst >= 0 && castSecond >= 0 && first.size() == second.size() &&
+			!memcmp(&first[0], &second[0], first.size() * sizeof(float));
+
+		HDRenderShadowTargetInfo(&info);
+		printf("  map after the Reset: %d models, target %s, %u state changes - %s\n",
+			castSecond, info.state == HD_SHADOW_TARGET_MADE ? "made again" : "NOT made",
+			(unsigned)info.events, same ? "PASS, the same map bit for bit"
+			: "FAIL, the maps differ");
+
+		/* The time: the bracket with the pass against the bracket alone, each
+		 * frame waited for with an event query, so the card has finished what
+		 * the frame sent before the clock stops. */
+		Shot big;
+
+		if (ShotBegin(big, 2560, 1440))
+		{
+			IDirect3DQuery9* query = 0;
+
+			if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &query)))
+			{
+				LARGE_INTEGER rate;
+
+				QueryPerformanceFrequency(&rate);
+
+				double mean[2] = { 0.0, 0.0 };
+
+				for (int with = 0; with < 2; with++)
+				{
+					double total = 0.0;
+
+					for (int f = 0; f < o.shadowFrames + 10; f++)
+					{
+						LARGE_INTEGER from, to;
+
+						QueryPerformanceCounter(&from);
+						g_device->BeginScene();
+						HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+
+						if (with)
+							shadowPass(-1, -1);
+
+						HDRenderFrameEnd();
+						g_device->EndScene();
+						query->Issue(D3DISSUE_END);
+
+						while (query->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE)
+							;
+
+						QueryPerformanceCounter(&to);
+
+						// The first ten warm the card and the caches up.
+						if (f >= 10)
+							total += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
+								(double)rate.QuadPart;
+					}
+
+					mean[with] = total / o.shadowFrames;
+				}
+
+				printf("  2560x1440 target, %d frames each: bracket alone %.4f ms, with the "
+					"cast pass %.4f ms - the pass %.4f ms a frame\n", o.shadowFrames,
+					mean[0], mean[1], mean[1] - mean[0]);
+				query->Release();
+			}
+			else
+				printf("  no event query on this device - no time\n");
+		}
+
+		ShotEnd(big);
+		HDRenderShadowTargetRelease();
+	}
 
 	HDModelLevelEnd();
 	return 0;
@@ -8451,6 +8861,10 @@ int main(int argc, char** argv)
 	bool noSheen = false;		// -nosheen: the before picture
 	bool softTest = false;		// -softtest: the chest's motion at a fixed offset
 	float softOffset[3] = { 0.0f, 0.0f, 0.0f };
+	// -shadowmap, -shadowcast, -shadowdevice: the projected shadow's map.
+	bool shadowMap = false, shadowCast = false, shadowDevice = false;
+	float shadowDir[3] = { 0.35f, 1.0f, 0.2f };
+	int shadowFrames = 300;
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// -braidsim: the braid's own physics
 	/* -braidanim: the same chain under a real animation. */
@@ -8728,6 +9142,23 @@ int main(int argc, char** argv)
 			softOffset[0] = (float)atof(argv[++i]);
 			softOffset[1] = (float)atof(argv[++i]);
 			softOffset[2] = (float)atof(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-shadowmap"))
+			shadowMap = true;
+		else if (!_stricmp(argv[i], "-shadowcast"))
+			shadowCast = true;
+		else if (!_stricmp(argv[i], "-shadowdevice"))
+		{
+			shadowDevice = true;
+
+			if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
+				shadowFrames = atoi(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-shadowdir") && i + 3 < argc)
+		{
+			shadowDir[0] = (float)atof(argv[++i]);
+			shadowDir[1] = (float)atof(argv[++i]);
+			shadowDir[2] = (float)atof(argv[++i]);
 		}
 		else if (!_stricmp(argv[i], "-braid"))
 		{
@@ -9256,6 +9687,13 @@ int main(int argc, char** argv)
 		o.softOffset[0] = softOffset[0];
 		o.softOffset[1] = softOffset[1];
 		o.softOffset[2] = softOffset[2];
+		o.shadowMap = shadowMap;
+		o.shadowCast = shadowCast;
+		o.shadowDevice = shadowDevice;
+		o.shadowDir[0] = shadowDir[0];
+		o.shadowDir[1] = shadowDir[1];
+		o.shadowDir[2] = shadowDir[2];
+		o.shadowFrames = shadowFrames > 0 ? shadowFrames : 300;
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
 		o.handFold = laraHandFold;
@@ -9276,7 +9714,9 @@ int main(int argc, char** argv)
 		o.invRot[2] = invRot[2];
 		o.invRotSet = invRotSet;
 		o.noDraw = noDraw;
-		o.managed = managed;
+		/* A device Reset refuses while a D3DPOOL_DEFAULT page lives, so the
+		 * device check takes the pages managed. */
+		o.managed = managed || shadowDevice;
 		o.threads = threads;
 		o.width = width;
 		o.height = height;

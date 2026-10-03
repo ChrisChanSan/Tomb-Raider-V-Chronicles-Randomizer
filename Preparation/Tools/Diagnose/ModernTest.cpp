@@ -73,6 +73,9 @@
 /* The soft motion of the chest: the region finder, the mask, the spring, its
  * clock and the draw constants - pure again (softbody_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_softbody.h"
+/* The projected shadow: the key light, its following in time, the box and
+ * the map mapping, and the gate - pure again (shadow_* below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"
 #include <string.h>
 #include <vector>
 
@@ -12852,6 +12855,713 @@ static void softbody_constants()
 		sb_milli(torso[2]), sb_milli(10.0f * HD_SOFT_FRONTBACK));
 }
 
+/* ------------------------------------------------- the projected shadow -- */
+
+static long sh_milli(double f)
+{
+	return (long)floor(f * 1000.0 + 0.5);
+}
+
+static double sh_angle(const float* a, const float* b)
+{
+	double d = (double)a[0] * b[0] + (double)a[1] * b[1] + (double)a[2] * b[2];
+	const double la = sqrt((double)a[0] * a[0] + (double)a[1] * a[1] + (double)a[2] * a[2]);
+	const double lb = sqrt((double)b[0] * b[0] + (double)b[1] * b[1] + (double)b[2] * b[2]);
+
+	d /= la * lb;
+	d = d > 1.0 ? 1.0 : (d < -1.0 ? -1.0 : d);
+	return acos(d) * 180.0 / 3.14159265358979323846;
+}
+
+static bool sh_unit_finite(const float* d)
+{
+	for (int i = 0; i < 3; i++)
+		if (!(d[i] == d[i]) || d[i] > 2.0f || d[i] < -2.0f)
+			return false;
+
+	return fabs(sqrt((double)d[0] * d[0] + (double)d[1] * d[1] + (double)d[2] * d[2]) - 1.0) < 1e-5;
+}
+
+static HDShadowLight sh_sun(float x, float y, float z, float c)
+{
+	HDShadowLight l;
+
+	l.kind = HD_SHADOW_SUN;
+	l.x = x; l.y = y; l.z = z;
+	l.r = l.g = l.b = c;
+	l.range = 0.0f;
+	return l;
+}
+
+static HDShadowLight sh_lamp(int kind, float x, float y, float z, float c, float range)
+{
+	HDShadowLight l;
+
+	l.kind = kind;
+	l.x = x; l.y = y; l.z = z;
+	l.r = l.g = l.b = c;
+	l.range = range;
+	return l;
+}
+
+/* The key light: one sun, one lamp, two that cancel, none; continuity in P;
+ * the slant limit; nothing that is not a number. */
+static void shadow_key()
+{
+	const float P[3] = { 30000.0f, -2000.0f, 41000.0f };
+	float fb[3];
+	HDShadowKey k;
+
+	HDShadowFallback(fb);
+	ok(fabs(HDShadowSlant(fb) - HD_SHADOW_FALLBACK_SLANT) < 1e-3 && fb[1] > 0.0f,
+		"shadow: the fixed slant stands FALLBACK_SLANT off straight down",
+		sh_milli(HDShadowSlant(fb)), sh_milli(HD_SHADOW_FALLBACK_SLANT));
+
+	/* The model shader's falloff, max(0, 1 - d / range), at the documented
+	 * pairs. */
+	ok(HDShadowFalloff(0.0f, 1000.0f) == 1.0f && HDShadowFalloff(250.0f, 1000.0f) == 0.75f &&
+		HDShadowFalloff(500.0f, 1000.0f) == 0.5f && HDShadowFalloff(1000.0f, 1000.0f) == 0.0f &&
+		HDShadowFalloff(1500.0f, 1000.0f) == 0.0f && HDShadowFalloff(10.0f, 0.0f) == 0.0f,
+		"shadow: the falloff is the model shader's 1 - d / range, 0 past it",
+		sh_milli(HDShadowFalloff(250.0f, 1000.0f)), 750);
+
+	// One white sun: its own direction with the fixed slant's weight beside it.
+	{
+		const HDShadowLight sun = sh_sun(0.3f, 1.0f, 0.2f, 1.0f);
+		float want[3] = { 0.3f, 1.0f, 0.2f };
+		const float l = sqrtf(0.3f * 0.3f + 1.0f + 0.2f * 0.2f);
+
+		for (int i = 0; i < 3; i++)
+			want[i] = want[i] / l + HD_SHADOW_W_FALLBACK * fb[i];
+
+		hd_shadow_unit(want);
+		HDShadowKeyTarget(&sun, 1, P, &k);
+
+		const float sunDir[3] = { 0.3f, 1.0f, 0.2f };
+
+		ok(sh_angle(k.dir, want) < 1e-3 && sh_angle(k.dir, sunDir) < sh_angle(k.dir, fb),
+			"shadow: one sun gives its own direction, plus the fixed slant's weight",
+			sh_milli(sh_angle(k.dir, sunDir)), 0);
+		// Short of DARK by the AGREE_EPS under the agreement alone.
+		ok(fabs(k.strength - HD_SHADOW_DARK) < 1e-4 && k.lights == 1,
+			"shadow: one bright sun gives the full darkness", sh_milli(k.strength),
+			sh_milli(HD_SHADOW_DARK));
+	}
+
+	// One lamp above and to the left: the shadow is thrown away from it.
+	{
+		const HDShadowLight lamp = sh_lamp(HD_SHADOW_POINT, P[0] - 500.0f, P[1] - 800.0f,
+			P[2], 1.0f, 4000.0f);
+		const float away[3] = { 500.0f, 800.0f, 0.0f };
+
+		HDShadowKeyTarget(&lamp, 1, P, &k);
+		ok(k.dir[0] > 0.0f && sh_angle(k.dir, away) < 8.0,
+			"shadow: a lamp throws the shadow away from itself",
+			sh_milli(sh_angle(k.dir, away)), 0);
+		ok(fabs(k.weight - (1.0f - sqrtf(500.0f * 500.0f + 800.0f * 800.0f) / 4000.0f)) < 1e-4,
+			"shadow: a lamp weighs its luminance times its falloff at P",
+			sh_milli(k.weight), sh_milli(1.0 - sqrt(890000.0) / 4000.0));
+
+		// A spot weighs the same way, out to its own range.
+		const HDShadowLight spot = sh_lamp(HD_SHADOW_SPOT, P[0] - 500.0f, P[1] - 800.0f,
+			P[2], 1.0f, 4000.0f);
+		HDShadowKey ks;
+
+		HDShadowKeyTarget(&spot, 1, P, &ks);
+		ok(sh_angle(ks.dir, k.dir) < 1e-4 && fabs(ks.weight - k.weight) < 1e-6,
+			"shadow: a spot weighs and points like a point of the same range",
+			sh_milli(sh_angle(ks.dir, k.dir)), 0);
+	}
+
+	// Two equal lamps on opposite sides cancel: the fixed slant is left.
+	{
+		const HDShadowLight two[2] =
+		{
+			sh_lamp(HD_SHADOW_POINT, P[0] - 600.0f, P[1], P[2], 0.8f, 3000.0f),
+			sh_lamp(HD_SHADOW_POINT, P[0] + 600.0f, P[1], P[2], 0.8f, 3000.0f)
+		};
+
+		HDShadowKeyTarget(two, 2, P, &k);
+		ok(sh_angle(k.dir, fb) < 1e-3,
+			"shadow: two equal opposite lamps leave the fixed slant",
+			sh_milli(sh_angle(k.dir, fb)), 0);
+		ok(fabs(k.strength - HD_SHADOW_DARK * HD_SHADOW_LOW) < 1e-5 && k.agree < 1e-5,
+			"shadow: lamps that cancel give LOW of the darkness",
+			sh_milli(k.strength), sh_milli(HD_SHADOW_DARK * HD_SHADOW_LOW));
+	}
+
+	// No light at all: the fixed slant at LOW of the darkness.
+	HDShadowKeyTarget(0, 0, P, &k);
+	ok(sh_angle(k.dir, fb) < 1e-4 && fabs(k.strength - HD_SHADOW_DARK * HD_SHADOW_LOW) < 1e-6 &&
+		k.lights == 0 && k.weight == 0.0f,
+		"shadow: no light leaves the fixed slant at LOW of the darkness",
+		sh_milli(k.strength), sh_milli(HD_SHADOW_DARK * HD_SHADOW_LOW));
+
+	/* A dim lamp: the darkness follows the weight up to W_REF. A quarter of
+	 * W_REF agrees fully and reaches a quarter of the way from LOW. */
+	{
+		const HDShadowLight dim = sh_sun(0.0f, 1.0f, 0.0f, 0.25f * HD_SHADOW_W_REF);
+
+		HDShadowKeyTarget(&dim, 1, P, &k);
+
+		const double want = HD_SHADOW_DARK * (HD_SHADOW_LOW + (1.0 - HD_SHADOW_LOW) *
+			0.25 * (0.25 * HD_SHADOW_W_REF) / (0.25 * HD_SHADOW_W_REF + HD_SHADOW_AGREE_EPS));
+
+		ok(fabs(k.strength - want) < 1e-5,
+			"shadow: below W_REF the darkness falls towards LOW with the weight",
+			sh_milli(k.strength), sh_milli(want));
+	}
+
+	/* A small move of P is a small turn, even straight under a lamp, and
+	 * across a lamp's range edge. */
+	{
+		const HDShadowLight lamps[2] =
+		{
+			sh_lamp(HD_SHADOW_POINT, P[0], P[1] - 900.0f, P[2], 1.0f, 2500.0f),
+			sh_lamp(HD_SHADOW_POINT, P[0] + 2600.0f, P[1] - 500.0f, P[2] + 300.0f, 0.7f, 2000.0f)
+		};
+		double worst = 0.0, worstS = 0.0;
+		HDShadowKey prev;
+
+		for (int step = 0; step <= 1600; step++)
+		{
+			const float at[3] = { P[0] - 800.0f + (float)step, P[1], P[2] + 0.25f * step };
+
+			HDShadowKeyTarget(lamps, 2, at, &k);
+
+			if (step)
+			{
+				const double a = sh_angle(k.dir, prev.dir);
+				const double s = fabs((double)k.strength - prev.strength);
+
+				worst = a > worst ? a : worst;
+				worstS = s > worstS ? s : worstS;
+			}
+
+			prev = k;
+		}
+
+		ok(worst < 0.2 && worstS < 1e-3,
+			"shadow: a step of one unit turns the direction by less than 0.2 degrees",
+			sh_milli(worst), 0);
+	}
+
+	// The slant limit: a low sun, a sun from below, one from straight below.
+	{
+		const HDShadowLight low = sh_sun(1.0f, 0.05f, 0.0f, 1.0f);
+
+		HDShadowKeyTarget(&low, 1, P, &k);
+		ok(fabs(k.slant - HD_SHADOW_SLANT_MAX) < 1e-3 && k.dir[0] > 0.0f &&
+			fabs(atan2(k.dir[2], k.dir[0]) - atan2(0.0f + HD_SHADOW_W_FALLBACK * fb[2],
+				1.0f + HD_SHADOW_W_FALLBACK * fb[0])) < 1e-4,
+			"shadow: a low sun is held to SLANT_MAX with its compass bearing",
+			sh_milli(k.slant), sh_milli(HD_SHADOW_SLANT_MAX));
+
+		const HDShadowLight below = sh_sun(0.2f, -1.0f, 0.0f, 1.0f);
+
+		HDShadowKeyTarget(&below, 1, P, &k);
+		ok(fabs(k.slant - HD_SHADOW_SLANT_MAX) < 1e-3 && k.dir[1] > 0.0f && k.dir[0] > 0.0f,
+			"shadow: a light from below points down at the limit, bearing kept",
+			sh_milli(k.slant), sh_milli(HD_SHADOW_SLANT_MAX));
+
+		float up[3] = { 0.0f, -1.0f, 0.0f };
+
+		ok(HDShadowLimit(up) && fabs(HDShadowSlant(up) - HD_SHADOW_SLANT_MAX) < 1e-3 &&
+			up[0] > 0.0f && up[2] > 0.0f,
+			"shadow: straight up takes the fixed slant's bearing at the limit",
+			sh_milli(HDShadowSlant(up)), sh_milli(HD_SHADOW_SLANT_MAX));
+
+		int over = 0;
+
+		for (int i = 0; i < 2000; i++)
+		{
+			const float a = (float)i * 0.731f, b = (float)i * 1.917f;
+			const HDShadowLight any = sh_sun(cosf(a) * sinf(b), cosf(b), sinf(a) * sinf(b), 1.0f);
+
+			HDShadowKeyTarget(&any, 1, P, &k);
+
+			if (k.slant > HD_SHADOW_SLANT_MAX + 1e-3f || !sh_unit_finite(k.dir))
+				over++;
+		}
+
+		ok(over == 0, "shadow: no direction of 2000 leaves the slant limit", over, 0);
+	}
+
+	// Nothing that is not a number, whatever the lights.
+	{
+		const float nan = sqrtf(-1.0f);
+		const HDShadowLight bad[5] =
+		{
+			sh_sun(0.0f, 0.0f, 0.0f, 1.0f),				// a sun of no direction
+			sh_lamp(HD_SHADOW_POINT, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f),	// a range of zero
+			sh_lamp(HD_SHADOW_POINT, P[0], P[1], P[2], 1.0f, 1000.0f),	// at P itself
+			sh_lamp(HD_SHADOW_SPOT, P[0], P[1], P[2], nan, 1000.0f),	// a colour of NaN
+			sh_lamp(7, P[0], P[1], P[2], 1.0f, 1000.0f)			// a kind it does not know
+		};
+
+		HDShadowKeyTarget(bad, 5, P, &k);
+		ok(sh_unit_finite(k.dir) && k.strength == k.strength && k.weight == k.weight &&
+			k.lights == 1 && sh_angle(k.dir, fb) < 1e-4,
+			"shadow: no NaN from a zero vector, a zero range, a lamp at P itself",
+			k.lights, 1);
+	}
+}
+
+/* The following in time: the closed form, three frame rates, the snaps, a
+ * clock that stands. */
+static void shadow_follow()
+{
+	const float P[3] = { 100.0f, 200.0f, 300.0f };
+	HDShadowKey from, to;
+	HDShadowFollow f;
+
+	memset(&f, 0, sizeof(f));
+	memset(&from, 0, sizeof(from));
+	memset(&to, 0, sizeof(to));
+	from.dir[1] = 1.0f;
+	from.strength = 0.0f;
+	to.dir[0] = sinf(0.6f);
+	to.dir[1] = cosf(0.6f);
+	to.strength = 1.0f;
+
+	ok(HDShadowFollowStep(&f, &from, P, 0.0f) && f.strength == 0.0f && f.snaps == 1,
+		"shadow: the first step snaps to the target", f.snaps, 1);
+
+	// The closed form: after n steps of dt, 1 - exp(-n dt / TAU) of the way.
+	bool closed = true;
+
+	for (int n = 1; n <= 90; n++)
+	{
+		HDShadowFollowStep(&f, &to, P, 1.0f / 60.0f);
+
+		if (fabs(f.strength - (1.0 - exp(-(double)n / 60.0 / HD_SHADOW_TAU))) > 2e-5)
+			closed = false;
+	}
+
+	ok(closed && f.snaps == 1,
+		"shadow: the strength follows 1 - exp(-t / TAU) step by step",
+		sh_milli(f.strength), sh_milli(1.0 - exp(-1.5 / HD_SHADOW_TAU)));
+
+	/* The same path at 30, 60 and 165 frames a second: the target turns and
+	 * darkens at a quarter of a second and turns back and lightens at one,
+	 * sampled at half a second, one and a quarter, and two. */
+	const int rates[3] = { 30, 60, 165 };
+	const double times[3] = { 0.5, 1.25, 2.0 };
+	double got[3][3][2];
+
+	for (int r = 0; r < 3; r++)
+	{
+		HDShadowFollow g;
+
+		memset(&g, 0, sizeof(g));
+		HDShadowFollowStep(&g, &from, P, 0.0f);
+
+		const int frames = 2 * rates[r];
+		int next = 0;
+
+		for (int i = 1; i <= frames; i++)
+		{
+			const double t = (double)i / rates[r];
+			HDShadowKey want = t <= 0.25 + 1e-9 ? from : to;
+
+			if (t > 1.0 + 1e-9)
+			{
+				want = to;
+				want.strength = 0.4f;
+				want.dir[0] = -sinf(0.3f);
+				want.dir[1] = cosf(0.3f);
+			}
+
+			HDShadowFollowStep(&g, &want, P, 1.0f / (float)rates[r]);
+
+			while (next < 3 && t >= times[next] - 1e-9)
+			{
+				got[r][next][0] = g.strength;
+				got[r][next][1] = HDShadowSlant(g.dir) * (g.dir[0] < 0.0f ? -1.0 : 1.0);
+				next++;
+			}
+		}
+	}
+
+	double worst = 0.0;
+
+	for (int r = 1; r < 3; r++)
+		for (int s = 0; s < 3; s++)
+			for (int q = 0; q < 2; q++)
+			{
+				/* Relative to the size of the move, so a value near zero is
+				 * not judged by its own smallness. */
+				const double span = q ? 34.4 + 17.2 : 1.0;
+				const double e = fabs(got[r][s][q] - got[0][s][q]) / span;
+
+				worst = e > worst ? e : worst;
+			}
+
+	ok(worst < 0.02,
+		"shadow: 30, 60 and 165 frames a second follow the same path within 2 per cent",
+		sh_milli(worst * 100.0), 0);
+
+	// The snaps: a gap, a jump, a time that is not a number, a reset.
+	memset(&f, 0, sizeof(f));
+	HDShadowFollowStep(&f, &from, P, 0.0f);
+	ok(HDShadowFollowStep(&f, &to, P, HD_SHADOW_GAP * 1.5f) && f.strength == to.strength &&
+		f.dir[0] == to.dir[0],
+		"shadow: a gap beyond GAP snaps to the target", sh_milli(f.strength), 1000);
+
+	HDShadowFollowReset(&f);
+	HDShadowFollowStep(&f, &from, P, 0.0f);
+	HDShadowFollowStep(&f, &from, P, 1.0f / 60.0f);
+
+	const float far[3] = { P[0] + HD_SHADOW_SPEED / 60.0f + HD_SHADOW_SLACK + 1.0f, P[1], P[2] };
+	const float near[3] = { P[0] + HD_SHADOW_SPEED / 60.0f + HD_SHADOW_SLACK - 1.0f, P[1], P[2] };
+	HDShadowFollow g = f;
+
+	ok(HDShadowFollowStep(&f, &to, far, 1.0f / 60.0f) && f.strength == 1.0f &&
+		!HDShadowFollowStep(&g, &to, near, 1.0f / 60.0f) && g.strength < 0.1f,
+		"shadow: a jump further than she can move snaps, one just inside glides",
+		sh_milli(g.strength), 0);
+
+	ok(HDShadowFollowStep(&f, &from, near, sqrtf(-1.0f)) && f.strength == 0.0f,
+		"shadow: a time that is not a number snaps", sh_milli(f.strength), 0);
+
+	HDShadowFollowReset(&f);
+	ok(HDShadowFollowStep(&f, &to, near, 1.0f / 60.0f) && f.strength == 1.0f,
+		"shadow: the step after a reset snaps", sh_milli(f.strength), 1000);
+
+	// A clock that stands moves nothing, whatever the target does.
+	HDShadowFollowStep(&f, &from, near, 0.0f);
+	HDShadowFollowStep(&f, &from, near, 0.1f);
+
+	const HDShadowFollow before = f;
+	bool still = true;
+
+	for (int i = 0; i < 50; i++)
+	{
+		HDShadowFollowStep(&f, i & 1 ? &to : &from, near, 0.0f);
+
+		if (f.strength != before.strength || f.dir[0] != before.dir[0] ||
+			f.dir[1] != before.dir[1] || f.snaps != before.snaps)
+			still = false;
+	}
+
+	ok(still, "shadow: nothing moves while the clock stands", f.snaps, before.snaps);
+
+	ok(HDShadowBlend(0.0f) == 0.0f && HDShadowBlend(-1.0f) == 0.0f &&
+		fabs(HDShadowBlend(HD_SHADOW_TAU) - (1.0 - exp(-1.0))) < 1e-6,
+		"shadow: one TAU goes 63 per cent of the way", sh_milli(HDShadowBlend(HD_SHADOW_TAU)),
+		sh_milli(1.0 - exp(-1.0)));
+}
+
+/* The box: the basis, the snap, the half-texel rule, the matrices. */
+static void shadow_box()
+{
+	float right[3], up[3], fwd[3];
+	int bad = 0;
+	double worstStep = 0.0;
+	float lastRight[3] = { 0.0f, 0.0f, 0.0f };
+
+	// Every direction of the limit cone's rim and inside it, in steps.
+	for (int s = 0; s <= 11; s++)
+		for (int a = 0; a <= 720; a++)
+		{
+			const float slant = (float)s * 5.0f * 3.14159265f / 180.0f;
+			const float bearing = (float)a * 0.5f * 3.14159265f / 180.0f;
+			const float d[3] = { sinf(slant) * cosf(bearing), cosf(slant),
+				sinf(slant) * sinf(bearing) };
+
+			HDShadowBasis(d, right, up, fwd);
+
+			const float cr[3] = { right[1] * up[2] - right[2] * up[1],
+				right[2] * up[0] - right[0] * up[2], right[0] * up[1] - right[1] * up[0] };
+
+			if (fabs(hd_shadow_len(right) - 1.0f) > 1e-5f || fabs(hd_shadow_len(up) - 1.0f) > 1e-5f ||
+				fabs(hd_shadow_dot(right, up)) > 1e-5f || fabs(hd_shadow_dot(right, fwd)) > 1e-5f ||
+				fabs(hd_shadow_dot(up, fwd)) > 1e-5f || sh_angle(cr, fwd) > 1e-2)
+				bad++;
+
+			if (a)
+			{
+				const double turn = sh_angle(right, lastRight);
+
+				worstStep = turn > worstStep ? turn : worstStep;
+			}
+
+			for (int i = 0; i < 3; i++)
+				lastRight[i] = right[i];
+		}
+
+	ok(bad == 0, "shadow: the basis is orthonormal and right-handed inside the limit",
+		bad, 0);
+	ok(worstStep < 1.0,
+		"shadow: half a degree of bearing turns the basis by less than a degree, no flip",
+		sh_milli(worstStep), 0);
+
+	// The box round fifteen nodes, standing far from the world's origin.
+	float nodes[15 * 3];
+
+	for (int n = 0; n < 15; n++)
+	{
+		nodes[n * 3 + 0] = 52345.6f + 13.0f * (float)(n % 5);
+		nodes[n * 3 + 1] = -3210.4f - 52.0f * (float)n;	// node 0 lowest, node 14 highest
+		nodes[n * 3 + 2] = 47890.1f - 9.0f * (float)(n % 3);
+	}
+
+	const float dir[3] = { 0.40f, 0.83f, -0.39f };
+	float unit[3] = { dir[0], dir[1], dir[2] };
+	HDShadowBox box;
+
+	hd_shadow_unit(unit);
+	HDShadowLimit(unit);
+
+	const bool made = HDShadowBoxMake(&box, unit, nodes, 15);
+
+	ok(made && box.lowest == nodes[1] && box.highest == nodes[14 * 3 + 1],
+		"shadow: the box knows her lowest and highest node", sh_milli(box.lowest),
+		sh_milli(nodes[1]));
+
+	const double texel = (double)HD_SHADOW_BOX / HD_SHADOW_MAP;
+	const double cr = hd_shadow_dot(box.centre, box.right) / texel;
+	const double cu = hd_shadow_dot(box.centre, box.up) / texel;
+
+	/* Within the float rounding of a position 70,000 units from the origin
+	 * (a float's step there is 1 / 128 unit, 1 / 512 of a texel). */
+	ok(fabs(cr - floor(cr + 0.5)) < 5e-3 && fabs(cu - floor(cu + 0.5)) < 5e-3,
+		"shadow: the centre stands on whole texels across the light",
+		sh_milli(cr - floor(cr + 0.5)), 0);
+
+	float uvd[3];
+	const float midDelta[3] = { box.mid[0] - box.centre[0], box.mid[1] - box.centre[1],
+		box.mid[2] - box.centre[2] };
+
+	HDShadowMapUVD(&box, box.centre, uvd);
+	ok(fabs(uvd[0] - 0.5f) < 1e-6f && fabs(uvd[1] - 0.5f) < 1e-6f && fabs(uvd[2] - 0.5f) < 1e-6f,
+		"shadow: the box's centre lands on u = v = 0.5, depth 0.5", sh_milli(uvd[0] * 1000.0), 500000);
+	ok(fabs(hd_shadow_dot(midDelta, box.right)) <= texel * 0.5 + 1e-3 &&
+		fabs(hd_shadow_dot(midDelta, box.up)) <= texel * 0.5 + 1e-3 &&
+		fabs(hd_shadow_dot(midDelta, box.fwd)) < 1e-2,
+		"shadow: her middle is within half a texel of the centre",
+		sh_milli(hd_shadow_dot(midDelta, box.right)), 0);
+
+	// One texel to the right is one texel on in u, one up is one back in v.
+	{
+		float p[3], q[3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			p[i] = box.centre[i] + box.right[i] * (float)texel;
+			q[i] = box.centre[i] + box.up[i] * (float)texel;
+		}
+
+		float a[3], b[3];
+
+		HDShadowMapUVD(&box, p, a);
+		HDShadowMapUVD(&box, q, b);
+		ok(fabs((a[0] - 0.5f) * HD_SHADOW_MAP - 1.0f) < 1e-3f && fabs(a[1] - 0.5f) < 1e-6f &&
+			fabs((0.5f - b[1]) * HD_SHADOW_MAP - 1.0f) < 1e-3f && fabs(b[0] - 0.5f) < 1e-6f,
+			"shadow: a point one texel to the right lands one texel to the right",
+			sh_milli((a[0] - 0.5f) * HD_SHADOW_MAP), 1000);
+	}
+
+	// Depth is linear along the light, 0 at the near side, 1 at the far.
+	{
+		const float steps[5] = { -1024.0f, -400.0f, 0.0f, 512.0f, 1024.0f };
+		bool linear = true;
+
+		for (int s = 0; s < 5; s++)
+		{
+			float p[3], d[3];
+
+			for (int i = 0; i < 3; i++)
+				p[i] = box.centre[i] + box.fwd[i] * steps[s];
+
+			HDShadowMapUVD(&box, p, d);
+
+			if (fabs(d[2] - (0.5f + steps[s] / HD_SHADOW_DEPTH)) > 1e-5f)
+				linear = false;
+		}
+
+		ok(linear, "shadow: depth is linear along the light, 0 to 1 across the box", 0, 0);
+	}
+
+	/* The snap holds the outline still: a world point keeps its place inside
+	 * its texel while she walks across the light. */
+	{
+		const float fixed[3] = { 52400.0f, -3100.0f, 47950.0f };
+		float first = -1.0f;
+		double worst = 0.0;
+
+		for (int step = 0; step < 40; step++)
+		{
+			float moved[15 * 3];
+
+			for (int n = 0; n < 15; n++)
+			{
+				moved[n * 3 + 0] = nodes[n * 3 + 0] + 1.37f * (float)step;
+				moved[n * 3 + 1] = nodes[n * 3 + 1];
+				moved[n * 3 + 2] = nodes[n * 3 + 2] + 0.61f * (float)step;
+			}
+
+			HDShadowBox b;
+			float m[3];
+
+			HDShadowBoxMake(&b, unit, moved, 15);
+			HDShadowMapUVD(&b, fixed, m);
+
+			const double t = m[0] * HD_SHADOW_MAP;
+			const float frac = (float)(t - floor(t));
+
+			if (first < 0.0f)
+				first = frac;
+			else
+			{
+				double e = fabs(frac - first);
+
+				e = e > 0.5 ? 1.0 - e : e;
+				worst = e > worst ? e : worst;
+			}
+		}
+
+		ok(worst < 0.01, "shadow: with a steady light a point keeps its place in its texel",
+			sh_milli(worst), 0);
+	}
+
+	/* The two matrices against the one mapping, through a camera far from
+	 * the origin: a turned view, view = R p + t. */
+	{
+		const float yaw = 0.7f, pitch = 0.35f;
+		const float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
+		const float R[9] =
+		{
+			cy, 0.0f, -sy,
+			sy * sp, cp, cy * sp,
+			sy * cp, -sp, cy * cp
+		};
+		const float eye[3] = { 51800.0f, -3900.0f, 47100.0f };
+		float t[3];
+
+		for (int i = 0; i < 3; i++)
+			t[i] = -(R[i * 3 + 0] * eye[0] + R[i * 3 + 1] * eye[1] + R[i * 3 + 2] * eye[2]);
+
+		float viewToMap[16], cast[16];
+
+		HDShadowViewToMap(&box, R, t, viewToMap);
+		HDShadowCastMatrix(&box, R, t, cast);
+
+		double worstMap = 0.0, worstCast = 0.0, worstBack = 0.0;
+
+		for (int s = 0; s < 64; s++)
+		{
+			const float p[3] =
+			{
+				box.centre[0] + 700.0f * sinf(0.37f * s), box.centre[1] - 600.0f * cosf(0.71f * s),
+				box.centre[2] + 650.0f * sinf(1.13f * s)
+			};
+			float v[3], back[3], want[3];
+
+			for (int i = 0; i < 3; i++)
+				v[i] = R[i * 3 + 0] * p[0] + R[i * 3 + 1] * p[1] + R[i * 3 + 2] * p[2] + t[i];
+
+			HDShadowViewToWorld(R, t, v, back);
+			HDShadowMapUVD(&box, p, want);
+
+			for (int i = 0; i < 3; i++)
+			{
+				const double e = fabs((double)back[i] - p[i]);
+
+				worstBack = e > worstBack ? e : worstBack;
+			}
+
+			double m[4], c[4];
+
+			for (int col = 0; col < 4; col++)
+			{
+				m[col] = v[0] * viewToMap[col] + v[1] * viewToMap[4 + col] +
+					v[2] * viewToMap[8 + col] + viewToMap[12 + col];
+				c[col] = v[0] * cast[col] + v[1] * cast[4 + col] + v[2] * cast[8 + col] +
+					cast[12 + col];
+			}
+
+			/* The map in texels and in units of depth, and the rasteriser's
+			 * rule: Direct3D 9 puts a pixel's centre on whole screen
+			 * coordinates, a texel's centre at (i + 0.5) / MAP. */
+			for (int i = 0; i < 2; i++)
+			{
+				const double e = fabs(m[i] - want[i]) * HD_SHADOW_MAP;
+
+				worstMap = e > worstMap ? e : worstMap;
+			}
+
+			worstMap = fabs(m[2] - want[2]) * HD_SHADOW_DEPTH > worstMap
+				? fabs(m[2] - want[2]) * HD_SHADOW_DEPTH : worstMap;
+
+			const double sx = (c[0] / c[3] + 1.0) * 0.5 * HD_SHADOW_MAP;
+			const double sy2 = (1.0 - c[1] / c[3]) * 0.5 * HD_SHADOW_MAP;
+			const double eu = fabs((sx + 0.5) / HD_SHADOW_MAP - want[0]) * HD_SHADOW_MAP;
+			const double ev = fabs((sy2 + 0.5) / HD_SHADOW_MAP - want[1]) * HD_SHADOW_MAP;
+			const double ez = fabs(c[2] / c[3] - want[2]) * HD_SHADOW_DEPTH;
+
+			worstCast = eu > worstCast ? eu : worstCast;
+			worstCast = ev > worstCast ? ev : worstCast;
+			worstCast = ez > worstCast ? ez : worstCast;
+		}
+
+		ok(worstBack < 0.02, "shadow: view space goes back into the world exactly",
+			sh_milli(worstBack), 0);
+		ok(worstMap < 0.01,
+			"shadow: the view-to-map matrix gives the mapping to a hundredth of a texel",
+			sh_milli(worstMap), 0);
+		ok(worstCast < 0.01,
+			"shadow: the cast matrix rasterises a point into the texel the lookup reads",
+			sh_milli(worstCast), 0);
+	}
+}
+
+/* The gate: every stored value, every reason, in the order asked. */
+static void shadow_gate()
+{
+	int wrong = 0;
+
+	for (long stored = 0; stored <= 7; stored++)
+	{
+		const int g = HDShadowGate(stored, true, true, true, true);
+
+		if ((stored == HD_SHADOW_MODE_PROJECTED) != (g == HD_SHADOW_GATE_OK))
+			wrong++;
+
+		if (stored != HD_SHADOW_MODE_PROJECTED && g != HD_SHADOW_GATE_OPTION)
+			wrong++;
+
+		// HD off answers the option first for a classic state, hd_off for 5.
+		const int off = HDShadowGate(stored, false, false, false, false);
+
+		if (off != (stored == HD_SHADOW_MODE_PROJECTED ? HD_SHADOW_GATE_HD_OFF
+			: HD_SHADOW_GATE_OPTION))
+			wrong++;
+	}
+
+	ok(wrong == 0, "shadow: only the stored value 5 lets the projected shadow run",
+		wrong, 0);
+
+	const long p = HD_SHADOW_MODE_PROJECTED;
+
+	ok(HDShadowGate(p, false, true, true, true) == HD_SHADOW_GATE_HD_OFF &&
+		HDShadowGate(p, true, false, true, true) == HD_SHADOW_GATE_CLASSIC_LARA &&
+		HDShadowGate(p, true, true, false, true) == HD_SHADOW_GATE_CLASSIC_ROOM &&
+		HDShadowGate(p, true, true, true, false) == HD_SHADOW_GATE_TARGET &&
+		HDShadowGate(p, true, false, false, false) == HD_SHADOW_GATE_CLASSIC_LARA &&
+		HDShadowGate(p, true, true, false, false) == HD_SHADOW_GATE_CLASSIC_ROOM,
+		"shadow: each reason in its order - hd_off, classic_lara, classic_room, target",
+		HDShadowGate(p, true, true, false, false), HD_SHADOW_GATE_CLASSIC_ROOM);
+
+	ok(!strcmp(HDShadowGateWord(HD_SHADOW_GATE_OK), "ok") &&
+		!strcmp(HDShadowGateWord(HD_SHADOW_GATE_OPTION), "option") &&
+		!strcmp(HDShadowGateWord(HD_SHADOW_GATE_HD_OFF), "hd_off") &&
+		!strcmp(HDShadowGateWord(HD_SHADOW_GATE_CLASSIC_LARA), "classic_lara") &&
+		!strcmp(HDShadowGateWord(HD_SHADOW_GATE_CLASSIC_ROOM), "classic_room") &&
+		!strcmp(HDShadowGateWord(HD_SHADOW_GATE_TARGET), "target"),
+		"shadow: the gate's words are the log's", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -12932,6 +13642,10 @@ int main()
 	softbody_region();
 	softbody_mask();
 	softbody_constants();
+	shadow_key();
+	shadow_follow();
+	shadow_box();
+	shadow_gate();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

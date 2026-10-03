@@ -330,9 +330,9 @@ int HDObjectCastOthersCount();
  * `stepped`, which only a frame in which it runs - HDShadowFrameDecide -
  * has), the item is drawn as an HD model (what HDObjectBegin decides for it,
  * asked of the same decision), it is not a mirror's reflection, and the
- * second map and the cast shaders exist on this device (asked last, because
- * asking makes the map). False in every other case, and the blob is drawn as
- * it always is.
+ * two-map receive shader, the cast shaders and the second map exist on this
+ * device (the map asked last, because asking makes it). False in every other
+ * case, and the blob is drawn as it always is.
  *
  * A true answer is remembered for this item: the HDObjectBegin that follows
  * for it takes it over, and HDObjectEnd marks the entry HD_OBJ_CAST_OTHERS

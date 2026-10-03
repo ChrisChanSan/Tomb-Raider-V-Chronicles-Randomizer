@@ -1043,7 +1043,19 @@ inline const char* HDShadowModeWord(long effective)
  *
  *     1 - strength * lookup * edge * height * facing
  *
- * The functions below are that formula on the processor, term by term, for
+ * In a frame whose second map was drawn the shader is the two-map variant
+ * (Receive2PS in the same file), and the factor is
+ *
+ *     1 - max(strength * hers, strength * theirs)
+ *
+ * with `hers` the product above without the strength, and `theirs` the
+ * second map's lookup weighted tap by tap with the distance term
+ * (HDShadowLookupBehind), times the edge term of the second box and the
+ * same facing term. The max leaves a floor under two overlapping shadows as
+ * dark as under one, and where nothing of the second map falls it is the
+ * one-map factor itself.
+ *
+ * The functions below are those formulas on the processor, term by term, for
  * ModernTest and for the probes; the shader is their transcription. */
 
 /* The edge term at (u, v): 1 inside the box, falling to 0 linearly over the
@@ -1074,6 +1086,17 @@ inline float HDShadowFacingTerm(float ndotl)
 	return hd_shadow_saturate(ndotl / HD_SHADOW_FACING);
 }
 
+/* The distance term of one tap of the second map, for a receiver `behind`
+ * units further along the light than the caster that tap holds: 1 up to
+ * OTHERS_FULL, 0 from OTHERS_END on, linear between. It stands in for her
+ * height term, which measures from her lowest node: the second map holds
+ * many casters at many heights, so each tap measures from its own. */
+inline float HDShadowBehindTerm(float behind)
+{
+	return hd_shadow_saturate((HD_SHADOW_OTHERS_END - behind) /
+		(HD_SHADOW_OTHERS_END - HD_SHADOW_OTHERS_FULL));
+}
+
 /* The weights of the four taps along one axis for a position `f` (0..1)
  * inside its texel: 1 - f, 1, 1, f on the texels i - 1, i, i + 1 and i + 2,
  * i the texel whose centre is at or before the position. They sum to 3, so
@@ -1088,11 +1111,11 @@ inline void HDShadowTapWeights(float f, float* w)
 	w[3] = f;
 }
 
-/* The lookup, as the receive shader does it, on a map of `size` x `size`
- * depths held row by row (row 0 at v = 0): the 4 x 4 texels round (u, v),
- * clamped at the map's border as the sampler's CLAMP clamps them; a texel
- * casts when it is not the clear value 1 and lies nearer the light than
- * `depth` minus the bias. The weighted share of casting texels, 0..1. */
+/* The lookup of her map, as the receive shader does it, on a map of `size` x
+ * `size` depths held row by row (row 0 at v = 0): the 4 x 4 texels round
+ * (u, v), clamped at the map's border as the sampler's CLAMP clamps them; a
+ * texel casts when it is not the clear value 1 and lies nearer the light
+ * than `depth` minus the bias. The weighted share of casting texels, 0..1. */
 inline float HDShadowLookup(const float* map, int size, float u, float v, float depth)
 {
 	if (!map || size <= 0)
@@ -1127,6 +1150,65 @@ inline float HDShadowLookup(const float* map, int size, float u, float v, float 
 		}
 
 	return sum * (1.0f / 9.0f);
+}
+
+/* The lookup of the second map, as the two-map shader does it: the same
+ * sixteen taps, weights, clamp and clear value as HDShadowLookup, the bias
+ * in the units of a box `depthUnits` long (OTHERS_DEPTH for the second box),
+ * and every casting tap weighted with the distance term of how far the
+ * receiver lies behind that tap's caster, (depth - tap) * depthUnits units
+ * (HDShadowBehindTerm). 0..1. */
+inline float HDShadowLookupBehind(const float* map, int size, float u, float v, float depth,
+	float depthUnits)
+{
+	if (!map || size <= 0 || !(depthUnits > 0.0f))
+		return 0.0f;
+
+	const float s = u * (float)size - 0.5f;
+	const float r = v * (float)size - 0.5f;
+	const float bs = floorf(s);
+	const float br = floorf(r);
+	float wx[4], wy[4];
+
+	HDShadowTapWeights(s - bs, wx);
+	HDShadowTapWeights(r - br, wy);
+
+	float limit = depth - HD_SHADOW_BIAS / depthUnits;
+
+	limit = limit < 1.0f ? limit : 1.0f;
+
+	float sum = 0.0f;
+
+	for (int j = 0; j < 4; j++)
+		for (int k = 0; k < 4; k++)
+		{
+			int x = (int)bs + k - 1;
+			int y = (int)br + j - 1;
+
+			x = x < 0 ? 0 : (x >= size ? size - 1 : x);
+			y = y < 0 ? 0 : (y >= size ? size - 1 : y);
+
+			const float tap = map[y * size + x];
+
+			if (tap < limit)
+				sum += wx[k] * wy[j] * HDShadowBehindTerm((depth - tap) * depthUnits);
+		}
+
+	return sum * (1.0f / 9.0f);
+}
+
+/* The factor the two-map shader writes, for her part and the second map's
+ * part, each its lookup times its terms, both 0..1: 1 - strength times the
+ * larger of the two, worked as the smaller of the two factors 1 - strength *
+ * hers and 1 - strength * theirs, as the shader works it. Where the second
+ * map gives nothing it is her factor itself; where two shadows overlap the
+ * floor is as dark as under the darker one, never darker. */
+inline float HDShadowReceiveFactor(float strength, float hers, float theirs)
+{
+	const float herFactor = 1.0f - strength * hers;
+	const float theirFactor = 1.0f - strength * theirs;
+
+	return herFactor < theirFactor ? herFactor : theirFactor;
 }
 
 /* The pixel registers of the receive shader, in this order from
@@ -1192,6 +1274,64 @@ inline void HDShadowReceiveConstants(const HDShadowBox* b, const float* R, const
 	regs[24] = 1.0f / (float)b->map;
 }
 
+/* Her block made to give nothing, for a frame whose second map was drawn and
+ * her own was not: the u row reads -1 at every pixel, so her edge term, and
+ * with it her part of the factor, is 0, and the two-map shader never reads
+ * the map an earlier frame left in her target. */
+inline void HDShadowReceiveWithoutHer(float* regs)
+{
+	regs[0] = 0.0f;
+	regs[1] = 0.0f;
+	regs[2] = 0.0f;
+	regs[3] = -1.0f;
+}
+
+/* The two-map shader's further pixel registers, the second map's own, in
+ * this order from HD_SHADOW_RECEIVE2_FIRST on, right after her block
+ * (hd_shadow_receive.hlsl's table):
+ *
+ *   +0 .. +2  u, v and depth of the second map as dot(float4(viewPos, 1),
+ *             row): the columns of HDShadowViewToMap of the second box
+ *   +3        x BIAS in the second box's depth units, y the second map's
+ *             side in texels, z 1 / that side
+ *   +4        the distance term as a line in the depth difference of a tap:
+ *             x depth / (OTHERS_END - OTHERS_FULL), y OTHERS_END /
+ *             (OTHERS_END - OTHERS_FULL); the term is saturate(y - x *
+ *             (depth - tap))
+ *
+ * The strength, the edge's scale and the direction towards the light are
+ * her block's: one light throws both shadows. `R` and `t` are the frame's
+ * world-to-view, view = R p + t. */
+#define HD_SHADOW_RECEIVE2_FIRST	(HD_SHADOW_RECEIVE_FIRST + HD_SHADOW_RECEIVE_COUNT)
+#define HD_SHADOW_RECEIVE2_COUNT	5
+
+inline void HDShadowReceiveOthersConstants(const HDShadowBox* b, const float* R, const float* t,
+	float* regs)
+{
+	float m[16];
+
+	HDShadowViewToMap(b, R, t, m);
+
+	for (int i = 0; i < HD_SHADOW_RECEIVE2_COUNT * 4; i++)
+		regs[i] = 0.0f;
+
+	for (int c = 0; c < 3; c++)
+	{
+		regs[c * 4 + 0] = m[0 * 4 + c];
+		regs[c * 4 + 1] = m[1 * 4 + c];
+		regs[c * 4 + 2] = m[2 * 4 + c];
+		regs[c * 4 + 3] = m[3 * 4 + c];
+	}
+
+	const float span = HD_SHADOW_OTHERS_END - HD_SHADOW_OTHERS_FULL;
+
+	regs[12] = HD_SHADOW_BIAS / b->depth;
+	regs[13] = (float)b->map;
+	regs[14] = 1.0f / (float)b->map;
+	regs[16] = b->depth / span;
+	regs[17] = HD_SHADOW_OTHERS_END / span;
+}
+
 /* The world box a receiver must touch to take any of the shadow: the box's
  * cross-section along the light (the box's own extent), from half its depth
  * on the light's side of her middle (where her casting parts end) down to
@@ -1231,6 +1371,39 @@ inline void HDShadowReach(const HDShadowBox* b, float* mins, float* maxs)
 	}
 
 	maxs[1] = maxs[1] < bottom ? maxs[1] : bottom;
+}
+
+/* The same for the second box: its cross-section along the light (its own
+ * extent), from its near side to OTHERS_END beyond its far side - a caster
+ * stands anywhere inside the box, and a receiver takes its shadow up to
+ * OTHERS_END behind it along the light (HDShadowBehindTerm) - as an
+ * axis-aligned box. Her height term plays no part. */
+inline void HDShadowReachOthers(const HDShadowBox* b, float* mins, float* maxs)
+{
+	const float half = 0.5f * b->extent;
+	const float nearF = -0.5f * b->depth;
+	const float farF = 0.5f * b->depth + HD_SHADOW_OTHERS_END;
+
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = 3.0e38f;
+		maxs[i] = -3.0e38f;
+	}
+
+	for (int corner = 0; corner < 8; corner++)
+	{
+		const float a = (corner & 1) ? half : -half;
+		const float c = (corner & 2) ? half : -half;
+		const float f = (corner & 4) ? farF : nearF;
+
+		for (int i = 0; i < 3; i++)
+		{
+			const float p = b->centre[i] + a * b->right[i] + c * b->up[i] + f * b->fwd[i];
+
+			mins[i] = p < mins[i] ? p : mins[i];
+			maxs[i] = p > maxs[i] ? p : maxs[i];
+		}
+	}
 }
 
 /* Whether two axis-aligned boxes overlap, edges included. */

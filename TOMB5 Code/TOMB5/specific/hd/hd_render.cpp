@@ -35,6 +35,7 @@
 #include "hd_shader/hd_room_gloss_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
+#include "hd_shader/hd_shadow_receive2_ps.inc"
 #include "hd_gloss_math.h"
 #include "hd_gloss_pages.h"
 #include "hd_gloss_seed.h"
@@ -1560,6 +1561,11 @@ namespace
 	 * when the device refused it; the projected shadow then does not run and
 	 * the blob stays. */
 	IDirect3DPixelShader9* g_shadow_receive_ps = 0;
+	/* Its two-map variant (the same file's Receive2PS), for a frame whose
+	 * second map was drawn. Null when the device refused it; the creatures
+	 * then keep their blobs (hd_object.cpp asks HDRenderShadowReceive2Ready
+	 * before their blob gives way). */
+	IDirect3DPixelShader9* g_shadow_receive2_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
 	IDirect3DVertexBuffer9* g_vb = 0;
 	IDirect3DIndexBuffer9* g_ib = 0;
@@ -3394,6 +3400,11 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_shadow_receive_ps)))
 		g_shadow_receive_ps = 0;
 
+	// Nor is its two-map variant: without it the creatures keep their blobs.
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceive2PS,
+		&g_shadow_receive2_ps)))
+		g_shadow_receive2_ps = 0;
+
 	return true;
 }
 
@@ -3528,6 +3539,7 @@ void HDRenderShutdown()
 	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
+	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
 	if (g_vs) { g_vs->Release(); g_vs = 0; }
 	if (g_decl) { g_decl->Release(); g_decl = 0; }
@@ -7442,14 +7454,23 @@ namespace
 	// The stage the map is sampled from (hd_shadow_receive.hlsl, sMap).
 	const DWORD kReceiveStage = 3;
 
+	// The stage the second map is sampled from (Receive2PS, sOthers).
+	const DWORD kReceiveOthersStage = 4;
+
+	/* What a receive's Begin found and End puts back. `two` is a receive with
+	 * both maps; `samp2` and `texture2` are stage 4's, remembered only
+	 * then. */
 	struct ReceiveSaved
 	{
 		bool open = false;
 		bool stencil = false;
+		bool two = false;
 		int calls = 0;
 		DWORD rs[19] = {};
 		DWORD samp[7] = {};
+		DWORD samp2[7] = {};
 		IDirect3DBaseTexture9* texture = 0;
+		IDirect3DBaseTexture9* texture2 = 0;
 		IDirect3DPixelShader9* ps = 0;
 	};
 
@@ -7639,11 +7660,38 @@ bool HDRenderShadowReceiveReady()
 	return g_shadow_receive_ps != 0;
 }
 
-bool HDRenderShadowReceiveBegin(const float* constants)
+bool HDRenderShadowReceive2Ready()
 {
+	return g_shadow_receive2_ps != 0;
+}
+
+/* One map's sampler on a stage, as the receive reads it: point sampled,
+ * clamped, no sRGB conversion, the top level only. */
+static void receive_stage(DWORD stage, IDirect3DTexture9* map)
+{
+	g_device->SetTexture(stage, map);
+	g_device->SetSamplerState(stage, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(stage, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(stage, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	g_device->SetSamplerState(stage, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(stage, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(stage, D3DSAMP_SRGBTEXTURE, FALSE);
+	g_device->SetSamplerState(stage, D3DSAMP_MAXMIPLEVEL, 0);
+}
+
+/* The receive's Begin for one map (`others` null: ReceivePS, her map on
+ * stage 3) or for both (Receive2PS, the second map on stage 4 and its
+ * registers from HD_SHADOW_RECEIVE2_FIRST on). The one-map receive makes
+ * exactly the device calls it makes without the second map; the two-map one
+ * makes them and, beside them, the second map's. */
+static bool receive_open(const float* constants, const float* others)
+{
+	const bool two = others != 0;
+	IDirect3DPixelShader9* shader = two ? g_shadow_receive2_ps : g_shadow_receive_ps;
+
 	if (!g_device || !g_in_frame || g_receive.open || g_shadow_saved.open ||
-		!g_shadow_receive_ps || !g_shadow_texture || !constants || !g_vs || !g_decl ||
-		!g_vb || !g_ib)
+		!shader || !g_shadow_texture || (two && !g_others_texture) || !constants || !g_vs ||
+		!g_decl || !g_vb || !g_ib)
 		return false;
 
 	ReceiveSaved& s = g_receive;
@@ -7660,25 +7708,36 @@ bool HDRenderShadowReceiveBegin(const float* constants)
 		g_device->GetSamplerState(kReceiveStage, kReceiveSamplerStates[i], &s.samp[i]);
 
 	g_device->GetTexture(kReceiveStage, &s.texture);
+
+	if (two)
+	{
+		for (int i = 0; i < kReceiveSamplerStateCount; i++)
+			g_device->GetSamplerState(kReceiveOthersStage, kReceiveSamplerStates[i],
+				&s.samp2[i]);
+
+		g_device->GetTexture(kReceiveOthersStage, &s.texture2);
+	}
+
 	g_device->GetPixelShader(&s.ps);
 	s.open = true;
+	s.two = two;
 
 	g_device->SetVertexShader(g_vs);
 	g_device->SetVertexDeclaration(g_decl);
 	g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
 	g_device->SetIndices(g_ib);
-	g_device->SetPixelShader(g_shadow_receive_ps);
+	g_device->SetPixelShader(shader);
 	g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE_FIRST, constants,
 		HD_SHADOW_RECEIVE_COUNT);
 
-	g_device->SetTexture(kReceiveStage, g_shadow_texture);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MINFILTER, D3DTEXF_POINT);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_SRGBTEXTURE, FALSE);
-	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MAXMIPLEVEL, 0);
+	if (two)
+		g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE2_FIRST, others,
+			HD_SHADOW_RECEIVE2_COUNT);
+
+	receive_stage(kReceiveStage, g_shadow_texture);
+
+	if (two)
+		receive_stage(kReceiveOthersStage, g_others_texture);
 
 	/* The picture times the factor, where the face is the one the room loop
 	 * left visible: the same depth to the bit, EQUAL, nothing written but
@@ -7723,6 +7782,16 @@ bool HDRenderShadowReceiveBegin(const float* constants)
 	return true;
 }
 
+bool HDRenderShadowReceiveBegin(const float* constants)
+{
+	return receive_open(constants, 0);
+}
+
+bool HDRenderShadowReceive2Begin(const float* constants, const float* others)
+{
+	return others ? receive_open(constants, others) : false;
+}
+
 bool HDRenderRoomShadow(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,
 	int window)
 {
@@ -7761,9 +7830,21 @@ void HDRenderShadowReceiveEnd()
 	// The map leaves the stage: whatever was bound there before, which in the
 	// HD path is nothing.
 	g_device->SetTexture(kReceiveStage, s.texture);
+
+	// The second map's stage the same way, after a receive with both maps.
+	if (s.two)
+	{
+		for (int i = 0; i < kReceiveSamplerStateCount; i++)
+			g_device->SetSamplerState(kReceiveOthersStage, kReceiveSamplerStates[i],
+				s.samp2[i]);
+
+		g_device->SetTexture(kReceiveOthersStage, s.texture2);
+	}
+
 	g_device->SetPixelShader(s.ps);
 
 	if (s.texture) { s.texture->Release(); s.texture = 0; }
+	if (s.texture2) { s.texture2->Release(); s.texture2 = 0; }
 	if (s.ps) { s.ps->Release(); s.ps = 0; }
 
 	s.open = false;

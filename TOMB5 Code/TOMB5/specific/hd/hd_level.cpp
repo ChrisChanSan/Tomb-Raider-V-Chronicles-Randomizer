@@ -4533,7 +4533,7 @@ bool HDFrameSky(const float* viewWorld)
  * bracket and after the room loops, so the device is in the HD path's state;
  * HDRenderShadowCastBegin and End leave it as they found it. Nothing at all
  * happens in a frame the projected shadow does not run in. */
-static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0, 0.0 };
+static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0, 0.0, 0 };
 
 /* Whether this frame's map was drawn: the receive pass reads the map only
  * then, never a map an earlier frame left behind. */
@@ -4654,15 +4654,24 @@ static void DrawRoomShadowWindowed(const FrameRoom& entry)
 }
 
 /* The projected shadow's receive pass: every HD room group of this frame
- * whose box comes within the shadow's reach (HDShadowReach - the map's
+ * whose box comes within the shadow's reach (HDShadowReach - her map's
  * cross-section along the light, down to where the height term ends) is
  * drawn again with the receive shader. The statics baked into a group
- * receive with it. Only in a frame whose map was drawn just now. */
+ * receive with it. Only in a frame whose map was drawn just now.
+ *
+ * In a frame whose second map was drawn too, the shader is the two-map
+ * variant, and a group within the second map's reach (HDShadowReachOthers)
+ * is drawn again as well. A frame whose second map was not drawn runs the
+ * one-map receive alone, with the very calls it makes without the second
+ * map. Should her map not have been drawn while the second was, her block
+ * is made to give nothing (HDShadowReceiveWithoutHer), so an earlier
+ * frame's map in her target is never read. */
 static void ShadowReceivePass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
+	const bool others = g_others_cast_now && HDRenderShadowReceive2Ready();
 
-	if (!shadow->runs || !g_shadow_cast_now)
+	if (!shadow->runs || !(g_shadow_cast_now || others))
 		return;
 
 	LARGE_INTEGER from, to, rate;
@@ -4670,12 +4679,23 @@ static void ShadowReceivePass()
 	QueryPerformanceCounter(&from);
 
 	float regs[HD_SHADOW_RECEIVE_COUNT * 4];
+	float oregs[HD_SHADOW_RECEIVE2_COUNT * 4];
 	float reachMin[3], reachMax[3];
+	float otherMin[3], otherMax[3];
 
 	HDShadowReceiveConstants(&shadow->box, shadow->R, shadow->t, shadow->strength, regs);
 	HDShadowReach(&shadow->box, reachMin, reachMax);
 
-	if (!HDRenderShadowReceiveBegin(regs))
+	if (others)
+	{
+		if (!g_shadow_cast_now)
+			HDShadowReceiveWithoutHer(regs);
+
+		HDShadowReceiveOthersConstants(&shadow->others, shadow->R, shadow->t, oregs);
+		HDShadowReachOthers(&shadow->others, otherMin, otherMax);
+	}
+
+	if (!(others ? HDRenderShadowReceive2Begin(regs, oregs) : HDRenderShadowReceiveBegin(regs)))
 		return;
 
 	for (int i = 0; i < g_frame_count; i++)
@@ -4697,11 +4717,16 @@ static void ShadowReceivePass()
 			maxs[k] += origin[k];
 		}
 
-		if (!HDShadowBoxesTouch(mins, maxs, reachMin, reachMax))
+		const bool hers = g_shadow_cast_now && HDShadowBoxesTouch(mins, maxs, reachMin, reachMax);
+
+		if (!hers && !(others && HDShadowBoxesTouch(mins, maxs, otherMin, otherMax)))
 			continue;
 
 		DrawRoomShadowWindowed(entry);
 		g_shadow_stats.rooms++;
+
+		if (others)
+			g_shadow_stats.othersRooms++;
 	}
 
 	g_shadow_stats.calls += HDRenderShadowReceiveCalls();
@@ -4740,7 +4765,16 @@ static void ShadowReceivePass()
  *   lag=       the largest angle in that second between the drawn direction
  *              and the frame's target, degrees: 0 while the pull is 0; above
  *              it, near 0 while only she moves, up at a change of the lights
- *              and back down over about a second and a half */
+ *              and back down over about a second and a half
+ *   others=    items cast into the second map, a frame (the mean over the
+ *              frames whose second map was drawn); 0.0 in a second without
+ *              one
+ *   omap=      frames whose second map was drawn / frames the shadow ran
+ *   orooms=    room groups drawn again, a frame, in the frames whose second
+ *              map was read (the mean over those frames) - hers and those
+ *              only the second map's reach brings in
+ *   oms=       processor time of the second map's cast pass, a frame (the
+ *              mean over the frames the shadow ran); its receive is in ms= */
 static bool g_shadow_window = false;
 static unsigned short g_shadow_window_at = 0;
 
@@ -4779,17 +4813,20 @@ static void ShadowSecond()
 	{
 		const double frames = s.frames > 0 ? (double)s.frames : 1.0;
 		const double cast = s.cast > 0 ? (double)s.cast : 1.0;
+		const double ocast = s.othersCast > 0 ? (double)s.othersCast : 1.0;
 
 		Log("HDLOG shadow second dir=(%.3f,%.3f,%.3f) target=(%.3f,%.3f,%.3f) "
 			"strength=%.3f/%.3f lights=%d weight=%.3f slant=%.1f snaps=%d cast=%d/%d "
-			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d lag=%.2f",
+			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d lag=%.2f "
+			"others=%.1f omap=%d/%d orooms=%.1f oms=%.3f",
 			shadow->dir[0], shadow->dir[1], shadow->dir[2], shadow->target.dir[0],
 			shadow->target.dir[1], shadow->target.dir[2], shadow->strength,
 			shadow->target.strength, shadow->target.lights, shadow->target.weight,
 			HDShadowSlant(shadow->dir), follow->snaps, s.cast, s.frames,
 			(double)s.parts / cast, (double)s.rooms / cast, (double)s.calls / cast,
 			(s.ms + s.receiveMs) / frames, HDRenderShadowReceiveStencil() ? 1 : 0,
-			follow->lag);
+			follow->lag, (double)s.othersItems / ocast, s.othersCast, s.frames,
+			(double)s.othersRooms / ocast, s.othersMs / frames);
 	}
 
 	follow->snaps = 0;

@@ -299,7 +299,9 @@ void HDFrameDrawGlow();
  *   othersModels models drawn into the second map (a body and a separate
  *            face are two), all frames together
  *   othersMs     processor time of the second map's cast pass,
- *            milliseconds, all frames together */
+ *            milliseconds, all frames together
+ *   othersRooms  room groups drawn again by the receive pass in frames whose
+ *            second map was read, all those frames together */
 struct HDShadowCastStats
 {
 	int frames;
@@ -313,6 +315,7 @@ struct HDShadowCastStats
 	int othersItems;
 	int othersModels;
 	double othersMs;
+	int othersRooms;
 };
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);

@@ -72,6 +72,12 @@ rem outputs by semantic and includes nothing.
 "%FXC%" /nologo /T ps_3_0 /E ReceivePS /O3 /Vn kHDShadowReceivePS /Fh "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive.hlsl"
 if errorlevel 1 exit /b 1
 
+rem Its two-map variant: the same file's second entry point, a pixel shader
+rem of its own that reads the second map beside hers (hd_shadow_receive.hlsl,
+rem Receive2PS). Stamped with the same .hlsl's MD5 as the one-map one.
+"%FXC%" /nologo /T ps_3_0 /E Receive2PS /O3 /Vn kHDShadowReceive2PS /Fh "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive.hlsl"
+if errorlevel 1 exit /b 1
+
 call :stamp hd_room hd_room_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
@@ -90,8 +96,10 @@ call :stamp hd_shadow hd_shadow_cast_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_shadow_receive hd_shadow_receive_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_shadow_receive hd_shadow_receive2_ps.inc
+if errorlevel 1 exit /b 1
 
-for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
+for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 exit /b 0
 
 :stamp

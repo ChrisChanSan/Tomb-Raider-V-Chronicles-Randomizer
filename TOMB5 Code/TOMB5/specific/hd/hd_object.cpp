@@ -4069,8 +4069,8 @@ bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 	const bool herStep = shadow->stepped != 0;
 	const bool runs = herStep && shadow->runs != 0;
 	const bool hdModel = runs && begin_decision(item, obj) == BEGIN_HD;
-	const bool target = hdModel && !g_reflection && HDRenderShadowOthersReady() &&
-		HDModelCastReady();
+	const bool target = hdModel && !g_reflection && HDRenderShadowReceive2Ready() &&
+		HDModelCastReady() && HDRenderShadowOthersReady();
 
 	if (!HDShadowBlobGivesWay(runs, herStep, target, hdModel, g_reflection))
 		return false;

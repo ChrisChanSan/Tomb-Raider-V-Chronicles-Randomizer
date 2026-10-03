@@ -1012,11 +1012,11 @@ namespace
 		f.stepped = 1;
 	}
 
-	/* The two state lines of the projected shadow, behind -log. Both are
+	/* The three state lines of the projected shadow, behind -log. Each is
 	 * written on the first decision of a level (HDLaraDrawEnd forgets what
-	 * was logged) and again whenever their answer changes.
+	 * was logged) and again whenever its answer changes.
 	 *
-	 * HDLOG shadow target - the map on this device:
+	 * HDLOG shadow target - her map on this device:
 	 *   state=   none (never asked for), made, refused or released
 	 *   reason=  ok, or what refused it: no_device, format, depth, match,
 	 *            create, surface, depth_create (hd_render.h)
@@ -1025,6 +1025,12 @@ namespace
 	 *   depth=   the map's depth surface, D24X8 or D16; "-" before it was made
 	 *   events=  changes of state on this run, a counter
 	 *
+	 * HDLOG shadow others - the second map on this device, the same fields.
+	 * It is made when an item's blob first asks for it (hd_object.cpp,
+	 * HDObjectBlobGivesWay), so its made line follows at the next frame's
+	 * decision; its state is none until a creature with a blob is drawn HD
+	 * in a frame the projected shadow runs in.
+	 *
 	 * HDLOG shadow mode - what this frame draws for Lara:
 	 *   stored=     tomb5.shadow_mode as the option holds it
 	 *   effective=  projected, original, circle, faded or psx
@@ -1032,6 +1038,7 @@ namespace
 	 *   reason=     ok, or why the projected shadow does not run: option,
 	 *               hd_off, classic_lara, classic_room, target */
 	int g_shadow_logged_events = -1;
+	int g_others_logged_events = -1;
 	long g_shadow_logged_stored = -1;
 	int g_shadow_logged_gate = -1;
 
@@ -1040,16 +1047,25 @@ namespace
 		if (!gLogEnabled)
 			return;
 
+		static const char* const kState[4] = { "none", "made", "refused", "released" };
 		HDShadowTargetInfo info;
 
 		HDRenderShadowTargetInfo(&info);
 
 		if (info.events != g_shadow_logged_events)
 		{
-			static const char* const kState[4] = { "none", "made", "refused", "released" };
-
 			g_shadow_logged_events = info.events;
 			Log("HDLOG shadow target state=%s reason=%s format=%s size=%d depth=%s "
+				"events=%d", info.state >= 0 && info.state < 4 ? kState[info.state] : "?",
+				info.reason, info.format, info.size, info.depth, info.events);
+		}
+
+		HDRenderShadowOthersInfo(&info);
+
+		if (info.events != g_others_logged_events)
+		{
+			g_others_logged_events = info.events;
+			Log("HDLOG shadow others state=%s reason=%s format=%s size=%d depth=%s "
 				"events=%d", info.state >= 0 && info.state < 4 ? kState[info.state] : "?",
 				info.reason, info.format, info.size, info.depth, info.events);
 		}
@@ -1355,6 +1371,7 @@ void HDLaraDrawEnd()
 	HDSoftClockForget(&g_shadow_clock);
 	HDSoftClockFrame(&g_shadow_clock);
 	g_shadow_logged_events = -1;
+	g_others_logged_events = -1;
 	g_shadow_logged_stored = -1;
 	g_shadow_logged_gate = -1;
 }

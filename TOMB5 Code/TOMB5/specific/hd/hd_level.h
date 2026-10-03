@@ -278,6 +278,25 @@ bool HDFrameSky(const float* viewWorld);
 void HDFrameDraw();
 void HDFrameDrawGlow();
 
+/* The projected shadow's cast pass, as HDFrameDraw runs it: after the room
+ * loops, before the models' solid passes, in frames whose Lara main draw
+ * decided it runs (hd_laradraw.h, HDShadowFrameDecide). Counted since the
+ * last call with `clear` set:
+ *
+ *   frames   frames in which the projected shadow ran
+ *   cast     of those, frames in which the map was drawn
+ *   parts    models drawn into the map, all frames together
+ *   ms       processor time of the pass, milliseconds, all frames together */
+struct HDShadowCastStats
+{
+	int frames;
+	int cast;
+	int parts;
+	double ms;
+};
+
+void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);
+
 // The frame clock, a diagnostic. Called from DXShowFrame
 // (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns -
 // the one function in this engine that presents anything, so the game frame,

@@ -143,3 +143,29 @@ void HDLaraDrawFrameReset();
  *                    the very cutscenes that hide the classic joints.
  */
 void HDLaraDrawFrame(long mirror, bool honourMeshBits);
+
+// --- the projected shadow --------------------------------------------------
+
+/* Whether the projected shadow runs in this drawn frame (hd_shadow.h,
+ * HDShadowGate): the option asks for it, the level is drawn HD, Lara is the
+ * HD composite, the room she is in is HD, and the map and its shaders exist
+ * on this device - asking makes them. Decided once a frame, by the first call
+ * after HDLaraDrawFrameReset, and the same answer for every later call of
+ * that frame; Lara's main draw asks it before it pushes her parts, and the
+ * caller of her blob shadow may ask it first.
+ *
+ * A frame in which it does not run lets the next frame that runs start the
+ * key light afresh: no glide out of an old direction. */
+bool HDShadowFrameDecide();
+
+/* The frame's state (hd_shadow.h, HDShadowFrame), filled by Lara's main draw
+ * when the projected shadow runs: the key light as drawn, the box, the
+ * view-to-map and the cast matrices, the frame's world-to-view. `runs` is 0
+ * in every other frame. Never null. */
+struct HDShadowFrame;
+struct HDShadowFollow;
+
+const HDShadowFrame* HDShadowFrameState();
+
+// The key light's following across frames, for the log.
+HDShadowFollow* HDShadowFollowState();

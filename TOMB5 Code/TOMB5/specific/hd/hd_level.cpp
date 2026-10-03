@@ -22,6 +22,9 @@
 #include "hd_render.h"
 #include "hd_book.h"			// HDBookClock - the time the material 15 books turn on
 #include "hd_object.h"
+#include "hd_model.h"			// HDModelCastBegin - the projected shadow's map
+#include "hd_laradraw.h"		// HDShadowFrameState - whether it runs
+#include "hd_shadow.h"
 #include "hd_font.h"			// the HD font's texture goes with the device
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
@@ -4555,6 +4558,56 @@ bool HDFrameSky(const float* viewWorld)
  * The lighting itself is worked out once: FillRoomLighting counts the lights
  * it turns away, so it runs in this phase and the glow phase reads what it
  * left in the FrameRoom. */
+/* The projected shadow's cast pass: Lara's parts that her main draw marked,
+ * into the map, as seen along the frame's key light. Inside the frame's
+ * bracket and after the room loops, so the device is in the HD path's state;
+ * HDRenderShadowCastBegin and End leave it as they found it. Nothing at all
+ * happens in a frame the projected shadow does not run in. */
+static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0 };
+
+static void ShadowCastPass()
+{
+	const HDShadowFrame* shadow = HDShadowFrameState();
+
+	if (!shadow->runs)
+		return;
+
+	g_shadow_stats.frames++;
+
+	if (!HDObjectCastCount())
+		return;
+
+	LARGE_INTEGER from, to, rate;
+
+	QueryPerformanceCounter(&from);
+
+	if (!HDRenderShadowCastBegin())
+		return;
+
+	HDModelCastBegin(shadow->castClip);
+	g_shadow_stats.parts += HDObjectCastFrame();
+	HDModelCastEnd();
+	HDRenderShadowCastEnd();
+
+	QueryPerformanceCounter(&to);
+	QueryPerformanceFrequency(&rate);
+
+	g_shadow_stats.cast++;
+
+	if (rate.QuadPart)
+		g_shadow_stats.ms += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
+			(double)rate.QuadPart;
+}
+
+void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear)
+{
+	if (out)
+		*out = g_shadow_stats;
+
+	if (clear)
+		memset(&g_shadow_stats, 0, sizeof(g_shadow_stats));
+}
+
 void HDFrameDraw()
 {
 	const int objects_here = HDObjectFrameCount();
@@ -4664,6 +4717,11 @@ void HDFrameDraw()
 	 * window would still be in force when the bracket closes, and the
 	 * classic path must get the device state it had. */
 	HDRenderScissorOff();
+
+	/* The projected shadow's map, after every room's solid art and before
+	 * the models: Lara's pose of this very drawn frame is on the list
+	 * already. */
+	ShadowCastPass();
 
 	/* The objects, after the rooms and inside the same bracket.
 	 *

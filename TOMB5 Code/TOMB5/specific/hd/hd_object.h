@@ -277,9 +277,44 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
  * `lipsTrack` and `lipsFrame` are HDObjectLips's two for a model that is
  * itself a face - Lara's, in a cutscene she acts in; -1 for every other push.
  * `soft` is the chest's secondary motion for the draw (hd_model.h,
- * HDModelSoft), copied into the entry; 0 for none. */
+ * HDModelSoft), copied into the entry; 0 for none.
+ *
+ * `cast` marks the entry for the projected shadow's map: HD_OBJ_CAST_NONE
+ * for everything but Lara's main draw in a frame the projected shadow runs
+ * in, HD_OBJ_CAST_ALSO for a part drawn in the picture and cast into the
+ * map, HD_OBJ_CAST_ONLY for a part the picture leaves out and the map does
+ * not (first person: her face and braid). `castMask` is the node mask the
+ * map draws it with - the frame's own mask before first person takes the
+ * head node off. */
+enum
+{
+	HD_OBJ_CAST_NONE = 0,
+	HD_OBJ_CAST_ALSO,
+	HD_OBJ_CAST_ONLY
+};
+
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
 	const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
 	float specStrength = 0.0f, float specPower = 1.0f,
-	int lipsTrack = -1, int lipsFrame = -1, const HDModelSoft* soft = 0);
+	int lipsTrack = -1, int lipsFrame = -1, const HDModelSoft* soft = 0,
+	int cast = HD_OBJ_CAST_NONE, unsigned int castMask = ~0u);
+
+/* The projected shadow's cast pass over this frame's list: every entry
+ * marked for the map, drawn with HDModelCastDraw - its body and, for a slot
+ * that has one, its separate face. Called between HDModelCastBegin and
+ * HDModelCastEnd. Returns how many models went into the map. */
+int HDObjectCastFrame();
+
+// How many entries of this frame's list are marked for the map.
+int HDObjectCastCount();
+
+/* The lights the projected shadow's key light weighs, in WORLD space
+ * (hd_shadow.h, HDShadowLight): the suns, points and spots of the item's two
+ * engine lists that HDObjectLights hands the model shader - Active, not dark
+ * (hd_objlight_dark.h), a point or spot with a range - and none of the
+ * dynamic lights, which HDObjectLights adds from a list of their own: a gun
+ * flash must not swing the shadow. Returns how many were written. */
+struct HDShadowLight;
+
+int HDObjectShadowLights(ITEM_INFO* lit, HDShadowLight* out, int max);

@@ -44,6 +44,8 @@
 #include "../../game/gameflow.h"	// gfLevelId, gfLevelFlags
 #include "../../game/interpolate.h"	// InterpFrameAlpha - what this frame was drawn at
 #include "../../game/deltapak.h"	// the cutscene her lips speak in
+#include "hd_shadow.h"			// the projected shadow's arithmetic
+#include "hd_level.h"			// HDLevelActive, HDRoomIsHD - its gate
 
 #include <math.h>
 
@@ -123,6 +125,15 @@ namespace
 	float g_soft_world[2][3];
 	float g_soft_joint[12];
 	bool g_soft_cutscene = false;
+
+	/* The projected shadow (hd_shadow.h): this frame's decision and state,
+	 * whether it has been decided since HDLaraDrawFrameReset, the key light's
+	 * following across frames, and its clock - the soft motion's clock type,
+	 * so it runs on the same game time and steps once per drawn main frame. */
+	HDShadowFrame g_shadow_frame;
+	bool g_shadow_decided = false;
+	HDShadowFollow g_shadow_follow;
+	HDSoftClock g_shadow_clock;
 
 	/* The log: the strength the last HDLOG softbody line was written with,
 	 * -1 for none yet, and the second the counters of the per-second line
@@ -936,6 +947,92 @@ namespace
 			out->constants);
 		return true;
 	}
+
+	/* The projected shadow's key light and box for this frame, from Lara's
+	 * main draw. The frame's world-to-view is aW2VMx, rotation rows M00..M22
+	 * and the camera's world position in M03 / M13 / M23 (view = R (p - c),
+	 * the line phd_TranslateAbs computes); her fifteen node origins go back
+	 * into the world out of the very matrices this draw pushes, so the box
+	 * and the map matrix stand on one camera. The torso node is the reference
+	 * point the lights are weighed at; the lights are her two engine lists'
+	 * (HDObjectShadowLights, no dynamics). One step a drawn main frame, on the
+	 * soft motion's game clock. */
+	void shadow_step(const float* matrices)
+	{
+		HDShadowFrame& f = g_shadow_frame;
+		const float camera[3] = { aW2VMx[M03], aW2VMx[M13], aW2VMx[M23] };
+
+		for (int i = 0; i < 3; i++)
+		{
+			f.R[i * 3 + 0] = aW2VMx[M00 + i * 4];
+			f.R[i * 3 + 1] = aW2VMx[M01 + i * 4];
+			f.R[i * 3 + 2] = aW2VMx[M02 + i * 4];
+		}
+
+		for (int i = 0; i < 3; i++)
+			f.t[i] = -(f.R[i * 3 + 0] * camera[0] + f.R[i * 3 + 1] * camera[1] +
+				f.R[i * 3 + 2] * camera[2]);
+
+		float nodes[HD_LARA_NODES * 3];
+
+		for (int n = 0; n < HD_LARA_NODES; n++)
+			HDShadowViewToWorld(f.R, f.t, matrices + n * 16 + 12, nodes + n * 3);
+
+		const float* reference = nodes + HD_LARA_TORSO * 3;
+		HDShadowLight lights[HD_SHADOW_MAX_LIGHTS];
+		const int count = HDObjectShadowLights(lara_item, lights, HD_SHADOW_MAX_LIGHTS);
+
+		HDShadowKeyTarget(lights, count, reference, &f.target);
+
+		float dt = 0.0f;
+
+		HDSoftClockStep(&g_shadow_clock, false, GlobalCounter, InterpFrameAlpha(), &dt);
+		f.snapped = HDShadowFollowStep(&g_shadow_follow, &f.target, reference, dt) ? 1 : 0;
+
+		for (int i = 0; i < 3; i++)
+			f.dir[i] = g_shadow_follow.dir[i];
+
+		f.strength = g_shadow_follow.strength;
+
+		HDShadowBoxMake(&f.box, f.dir, nodes, HD_LARA_NODES);
+		HDShadowViewToMap(&f.box, f.R, f.t, f.viewToMap);
+		HDShadowCastMatrix(&f.box, f.R, f.t, f.castClip);
+	}
+}
+
+bool HDShadowFrameDecide()
+{
+	if (g_shadow_decided)
+		return g_shadow_frame.runs != 0;
+
+	g_shadow_decided = true;
+
+	int gate = HDShadowGate((long)tomb5.shadow_mode, HDLevelActive(), HDLaraDrawActive(),
+		lara_item && HDRoomIsHD(lara_item->room_number), true);
+
+	if (gate == HD_SHADOW_GATE_OK && !(HDRenderShadowTargetReady() && HDModelCastReady()))
+		gate = HD_SHADOW_GATE_TARGET;
+
+	g_shadow_frame.gate = gate;
+	g_shadow_frame.runs = gate == HD_SHADOW_GATE_OK ? 1 : 0;
+
+	if (!g_shadow_frame.runs)
+	{
+		HDShadowFollowReset(&g_shadow_follow);
+		HDSoftClockForget(&g_shadow_clock);
+	}
+
+	return g_shadow_frame.runs != 0;
+}
+
+const HDShadowFrame* HDShadowFrameState()
+{
+	return &g_shadow_frame;
+}
+
+HDShadowFollow* HDShadowFollowState()
+{
+	return &g_shadow_follow;
 }
 
 /* ------------------------------------------------------------ the level -- */
@@ -1181,6 +1278,14 @@ void HDLaraDrawEnd()
 	g_soft_logged = -1;
 	g_soft_window = false;
 	g_soft_window_awake = false;
+
+	/* And the projected shadow: a level start and a savegame load snap its
+	 * key light instead of gliding out of the last level's. */
+	memset(&g_shadow_frame, 0, sizeof(g_shadow_frame));
+	g_shadow_decided = false;
+	memset(&g_shadow_follow, 0, sizeof(g_shadow_follow));
+	HDSoftClockForget(&g_shadow_clock);
+	HDSoftClockFrame(&g_shadow_clock);
 }
 
 bool HDLaraDrawActive()
@@ -1283,6 +1388,11 @@ void HDLaraDrawFrameReset()
 
 	// The next frame's first non-mirror draw of Lara steps her chest's motion.
 	HDSoftClockFrame(&g_soft_clock);
+
+	// ... and decides and steps the projected shadow afresh.
+	g_shadow_decided = false;
+	g_shadow_frame.runs = 0;
+	HDSoftClockFrame(&g_shadow_clock);
 
 	/* The first person and binocular log lines. They belong here because
 	 * this is the one place in the HD path that runs on every frame whether
@@ -1461,6 +1571,18 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			lightReport.handed == 0 ? 1 : 0, lightReport.maxDark, lightReport.minLit);
 	}
 
+	/* --- the projected shadow -------------------------------------------- */
+	/* The main draw of a frame the projected shadow runs in steps its key
+	 * light and marks every part below for the map; a mirror's draw marks
+	 * nothing and steps nothing. With the shadow not running `casting` is
+	 * false and every push below is the push it is without the shadow. */
+	const bool casting = !mirror && HDShadowFrameDecide();
+
+	if (casting)
+		shadow_step(matrices);
+
+	const int castWith = casting ? HD_OBJ_CAST_ALSO : HD_OBJ_CAST_NONE;
+
 	/* --- which nodes are drawn at all ------------------------------------ */
 	unsigned int mask = ~0u;
 
@@ -1490,6 +1612,11 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * head node is one range of triangles and dropping it drops nothing
 	 * else. */
 	const bool firstPerson = FirstPersonActive();
+
+	/* The map's mask: the frame's own, mesh_bits included, before first
+	 * person takes the head node off - the shadow of a first person frame is
+	 * still her whole body. */
+	const unsigned int castMask = mask;
 
 	if (firstPerson)
 		mask &= ~(1u << HD_LARA_HEAD_NODE);
@@ -1658,7 +1785,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (!HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BODY), matrices,
 		HD_LARA_NODES, nodeLight, bodyMask, lights, lightCount, sunScale,
 		cutting ? &neckCut : 0, cull, sheen, sheenPower, -1, -1,
-		soft(HD_LARA_PART_BODY)))
+		soft(HD_LARA_PART_BODY), castWith, castMask & HDLaraBodyMask()))
 	{
 		g_dropped++;
 		return;
@@ -1695,7 +1822,7 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HEAD), matrices,
 			HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
 			cutting ? &neckCut : 0, cull, headSheen, headPower, -1, -1,
-			soft(HD_LARA_PART_HEAD)))
+			soft(HD_LARA_PART_HEAD), castWith, castMask))
 			drawn++;
 	}
 
@@ -1775,8 +1902,15 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	if (!firstPerson && HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE),
 		matrices, HD_LARA_NODES, nodeLight, mask, lights, lightCount, sunScale,
 		0, HD_MODEL_CULL_NONE, sheen, sheenPower, faceTrack, faceFrame,
-		soft(HD_LARA_PART_FACE)))
+		soft(HD_LARA_PART_FACE), castWith, castMask))
 		drawn++;
+	else if (firstPerson && casting)
+		/* First person leaves the face out of the picture; the map still
+		 * takes it, as built, so her shadow keeps its head. */
+		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_FACE), matrices, HD_LARA_NODES,
+			nodeLight, mask, lights, lightCount, sunScale, 0, HD_MODEL_CULL_NONE,
+			sheen, sheenPower, -1, -1, soft(HD_LARA_PART_FACE), HD_OBJ_CAST_ONLY,
+			castMask);
 
 	/* The pouches, under whatever goes in them.
 	 *
@@ -1800,7 +1934,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		HDObjectPush(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), matrices,
 			HD_LARA_NODES, nodeLight, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & mask,
 			lights, lightCount, sunScale, 0, HD_MODEL_CULL_NONE,
-			sheen, sheenPower, -1, -1, soft(HD_LARA_PART_HOLSTER_RIG)))
+			sheen, sheenPower, -1, -1, soft(HD_LARA_PART_HOLSTER_RIG), castWith,
+			HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & castMask))
 		drawn++;
 
 	for (int i = 0; i < pieceCount; i++)
@@ -1809,7 +1944,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 		if (HDObjectPush(HDLaraPartSlot(pieces[i].part), matrices,
 			HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
-			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
+			lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower, -1, -1, 0,
+			castWith, pieces[i].nodeMask & castMask))
 			drawn++;
 
 		/* And the install's own hands under a mod's gun.
@@ -1822,7 +1958,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		if (HDLaraHasPartTwin(pieces[i].part) &&
 			HDObjectPush(HDLaraPartTwinSlot(pieces[i].part), matrices,
 				HD_LARA_NODES, nodeLight, pieces[i].nodeMask & mask, lights,
-				lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower))
+				lightCount, sunScale, 0, HD_MODEL_CULL_NONE, sheen, sheenPower, -1, -1, 0,
+				castWith, pieces[i].nodeMask & castMask))
 			drawn++;
 	}
 
@@ -1833,13 +1970,15 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	float hairMatrices[HD_LARA_HAIR_NODES * 16];
 	bool haveBraid = false;
 
-	if (!firstPerson && HDLaraHasPart(HD_LARA_PART_BRAID))
+	/* In first person the braid is left out of the picture and still goes
+	 * into the map, like the face. */
+	if ((!firstPerson || casting) && HDLaraHasPart(HD_LARA_PART_BRAID))
 	{
 		float hairLight[HD_LARA_HAIR_NODES * 3];
 		const int head = HD_LARA_HEAD_NODE;
 
 		braid_matrices(hairMatrices);
-		haveBraid = true;
+		haveBraid = !firstPerson;
 
 		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
 		{
@@ -1852,7 +1991,8 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 
 		if (HDObjectPush(HDLaraPartSlot(HD_LARA_PART_BRAID), hairMatrices,
 			HD_LARA_HAIR_NODES, hairLight, ~0u, lights, lightCount, sunScale,
-			0, HD_MODEL_CULL_NONE, sheen, sheenPower))
+			0, HD_MODEL_CULL_NONE, sheen, sheenPower, -1, -1, 0,
+			firstPerson ? HD_OBJ_CAST_ONLY : castWith, ~0u) && !firstPerson)
 			drawn++;
 	}
 

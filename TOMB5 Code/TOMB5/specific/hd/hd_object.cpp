@@ -35,6 +35,7 @@
 #include "hd_render.h"
 #include "hd_level.h"
 #include "hd_objlight_dark.h"		// which engine lights give nothing
+#include "hd_shadow.h"			// HDShadowLight - the projected shadow's key light
 #include "hd_trl.h"			// the lips' sources, for LIPLOG
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
@@ -142,6 +143,11 @@ namespace
 		HDModelNeckCut cut;	// first-person neck cut: Lara's body alone
 		int cull;		// and the one-sided draw that goes with it
 		HDModelSoft soft;	// the chest's secondary motion: zeros but for Lara's body
+		/* The projected shadow's mark (HD_OBJ_CAST_*) and the node mask the
+		 * map draws the entry with: HD_OBJ_CAST_NONE for every item and for
+		 * every frame the projected shadow does not run in. */
+		int cast;
+		unsigned int castMask;
 		/* The sheen. 0 for an item - the specular term is Lara's alone. */
 		float specStrength;
 		float specPower;
@@ -3113,6 +3119,9 @@ void HDObjectEnd()
 	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
 	memset(&entry.soft, 0, sizeof(entry.soft));
+	// Only Lara casts the projected shadow.
+	entry.cast = HD_OBJ_CAST_NONE;
+	entry.castMask = 0;
 	// No sheen on an object - the specular term is Lara's alone.
 	entry.specStrength = 0.0f;
 	entry.specPower = 1.0f;
@@ -3634,6 +3643,8 @@ void HDInvEnd()
 	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
 	memset(&entry.soft, 0, sizeof(entry.soft));
+	entry.cast = HD_OBJ_CAST_NONE;
+	entry.castMask = 0;
 	/* No sheen, which is what an item has in the level too - the specular
 	 * term is Lara's alone. A pistol on the ring therefore shines exactly as
 	 * the same pistol shines lying on the floor. */
@@ -3682,6 +3693,10 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 	{
 		const FrameItem& entry = g_frame[i];
 		HDModelLighting lighting;
+
+		// A part of Lara pushed for the projected shadow's map alone.
+		if (entry.cast == HD_OBJ_CAST_ONLY)
+			continue;
 
 		/* The call switches the scissor test off for every item and takes a
 		 * count on the way past; the argument is over HDFrameScissorForRoom
@@ -3844,10 +3859,108 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
 	return count;
 }
 
+/* The same two lists and the same tests as fill_lights' suns and its points
+ * and spots, in world space and without the conversion to view space; the
+ * dynamics are a third list fill_lights adds between the two, and are not
+ * read here. A sun's file direction is the way its light travels - the
+ * model shader's "towards the light" is its negation. */
+int HDObjectShadowLights(ITEM_INFO* lit, HDShadowLight* out, int max)
+{
+	int count = 0;
+
+	if (!lit || !out || max <= 0)
+		return 0;
+
+	void* lists[2] = { lit->il.pCurrentLights, lit->il.pPrevLights };
+	const long counts[2] = { lit->il.nCurrentLights, lit->il.nPrevLights };
+
+	for (int list = 0; list < 2; list++)
+	{
+		PCLIGHT* source = (PCLIGHT*)lists[list];
+
+		for (long i = 0; source && i < counts[list] && count < max; i++)
+		{
+			const PCLIGHT& l = source[i];
+
+			if (!l.Active || HDObjLightIsDark(l.r, l.g, l.b))
+				continue;
+
+			HDShadowLight& to = out[count];
+
+			to.r = l.r;
+			to.g = l.g;
+			to.b = l.b;
+			to.range = 0.0f;
+
+			if (l.Type == LIGHT_SUN)
+			{
+				to.kind = HD_SHADOW_SUN;
+				to.x = l.nx;
+				to.y = l.ny;
+				to.z = l.nz;
+			}
+			else if (l.Type == LIGHT_POINT || l.Type == LIGHT_SPOT)
+			{
+				const bool spot = l.Type == LIGHT_SPOT;
+
+				to.kind = spot ? HD_SHADOW_SPOT : HD_SHADOW_POINT;
+				to.x = l.x;
+				to.y = l.y;
+				to.z = l.z;
+				to.range = spot ? l.Cutoff : l.Outer;
+
+				if (to.range <= 0.0f)
+					continue;
+			}
+			else
+				continue;
+
+			count++;
+		}
+	}
+
+	return count;
+}
+
+int HDObjectCastFrame()
+{
+	int drawn = 0;
+
+	for (int i = 0; i < g_count; i++)
+	{
+		const FrameItem& entry = g_frame[i];
+
+		if (entry.cast != HD_OBJ_CAST_ALSO && entry.cast != HD_OBJ_CAST_ONLY)
+			continue;
+
+		if (HDModelCastDraw(entry.drawSlot, false, entry.matrix, entry.nodes,
+			entry.castMask, entry.lipsTrack, entry.lipsFrame, &entry.soft))
+			drawn++;
+
+		if (entry.head && HDModelCastDraw(entry.slot, true, entry.matrix, entry.nodes,
+			entry.castMask, entry.lipsTrack, entry.lipsFrame, 0))
+			drawn++;
+	}
+
+	return drawn;
+}
+
+int HDObjectCastCount()
+{
+	int marked = 0;
+
+	for (int i = 0; i < g_count; i++)
+		if (g_frame[i].cast == HD_OBJ_CAST_ALSO || g_frame[i].cast == HD_OBJ_CAST_ONLY)
+			marked++;
+
+	return marked;
+}
+
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	unsigned int mask, const HDObjLight* lights, int lightCount, float sunScale,
 	const HDModelNeckCut* cut, int cull, float specStrength, float specPower,
-	int lipsTrack, int lipsFrame, const HDModelSoft* soft)
+	int lipsTrack, int lipsFrame, const HDModelSoft* soft, int cast,
+	unsigned int castMask)
 {
 	/* Not behind g_active. That flag says "this level has HD objects", and a
 	 * level can have an HD Lara and not one HD object - JOBY4's diving suit
@@ -3909,6 +4022,9 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	else
 		memset(&entry.soft, 0, sizeof(entry.soft));
 
+	entry.cast = cast == HD_OBJ_CAST_ALSO || cast == HD_OBJ_CAST_ONLY
+		? cast : HD_OBJ_CAST_NONE;
+	entry.castMask = castMask;
 	entry.specStrength = specStrength;
 	entry.specPower = specPower;
 	/* No portal window. Everything that comes through here is a

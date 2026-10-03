@@ -154,6 +154,26 @@
  *                         1440 target, a mean over <frames> (300) frames each
  *                         waited for with an event query; take -size 2560
  *                         1440 so the target is framed as the picture.
+ *     -shadowcreature <slot> <x> <z> [<yaw>]
+ *                         an HD model of this level's slot (a number or a
+ *                         name) stood beside her in its first animation
+ *                         frame, turned by <yaw> degrees: on the room's floor
+ *                         at (x, z) room local with -shadowroom, at (x, z) of
+ *                         her own space on her soles' height without it. Up to
+ *                         four. Drawn in the picture after her (its separate
+ *                         face too), and with -shadowcast or -shadowreceive
+ *                         drawn into the second map by the engine's own cast
+ *                         draw and target right after her map, where the game
+ *                         draws it - when its place lies inside the second box
+ *                         (hd_shadow.h, HDShadowBoxHolds), which the run
+ *                         prints. The picture's name gets _c<n>.
+ *     -shadowothers       the second map of this pose and these creatures,
+ *                         written as <out>_shadowothers_<outfit>_c<n>.png,
+ *                         2048 texels a side, grey as -shadowmap's. With
+ *                         -shadowdevice the second map's life is checked as
+ *                         well: made and released alone, the device's
+ *                         reference count, released with hers, the device
+ *                         Reset and the map made again, the same bit for bit.
  *     -lara-nodes         the node table: every classic
  *                         node 0..14 against every source, and which .TRM
  *                         part covers it.
@@ -6744,6 +6764,17 @@ struct LaraOptions
 	bool shadowEmpty;
 	bool shadowNoGuard;
 	int shadowTime;
+	/* -shadowcreature: up to four HD models of the level's other slots stood
+	 * beside her, drawn in the picture and cast into the second map;
+	 * -shadowothers writes that map as a grey picture. */
+	struct Creature
+	{
+		std::string slot;	// a slot number or a slot name of the level
+		float at[2];		// room local (x, z) with -shadowroom, else her own space
+		float yaw;		// degrees about the vertical
+	};
+	std::vector<Creature> creatures;
+	bool shadowOthers;
 	bool check;
 	bool noDraw;
 	// The ring's own presentation - see -invrot.
@@ -6922,11 +6953,12 @@ static bool LaraBodySlot(const Tr5Level& level, ClassicSlot& out, int* slotOut)
 	return false;
 }
 
-/* The projected shadow's map off the card, one float a texel - the engine's
- * own target (hd_render.cpp), copied through a system-memory surface. */
-static bool ShadowMapRead(std::vector<float>& out)
+/* A projected shadow's map off the card, one float a texel - one of the
+ * engine's own targets (hd_render.cpp, HDRenderShadowMap or
+ * HDRenderShadowOthersMap), `size` texels a side, copied through a
+ * system-memory surface. */
+static bool ShadowMapRead(std::vector<float>& out, IDirect3DTexture9* map, int size)
 {
-	IDirect3DTexture9* map = HDRenderShadowMap();
 	IDirect3DSurface9* level = 0;
 	IDirect3DSurface9* copy = 0;
 	bool ok = false;
@@ -6936,7 +6968,7 @@ static bool ShadowMapRead(std::vector<float>& out)
 	if (!map || FAILED(map->GetSurfaceLevel(0, &level)))
 		return false;
 
-	if (SUCCEEDED(g_device->CreateOffscreenPlainSurface(HD_SHADOW_MAP, HD_SHADOW_MAP,
+	if (SUCCEEDED(g_device->CreateOffscreenPlainSurface(size, size,
 		D3DFMT_R32F, D3DPOOL_SYSTEMMEM, &copy, 0)) &&
 		SUCCEEDED(g_device->GetRenderTargetData(level, copy)))
 	{
@@ -6944,12 +6976,12 @@ static bool ShadowMapRead(std::vector<float>& out)
 
 		if (SUCCEEDED(copy->LockRect(&rect, 0, D3DLOCK_READONLY)))
 		{
-			out.resize((size_t)HD_SHADOW_MAP * HD_SHADOW_MAP);
+			out.resize((size_t)size * size);
 
-			for (int y = 0; y < HD_SHADOW_MAP; y++)
-				memcpy(&out[(size_t)y * HD_SHADOW_MAP],
+			for (int y = 0; y < size; y++)
+				memcpy(&out[(size_t)y * size],
 					(const unsigned char*)rect.pBits + (size_t)y * rect.Pitch,
-					sizeof(float) * HD_SHADOW_MAP);
+					sizeof(float) * size);
 
 			copy->UnlockRect();
 			ok = true;
@@ -6967,10 +6999,12 @@ static bool ShadowMapRead(std::vector<float>& out)
  * (nothing cast), grey the cast depth stretched over the depths that occur,
  * darker nearer the light. Prints the cast texels' count, their box in
  * texels and their depth range; the margins say whether the outline stands
- * inside the map with room to spare. */
-static bool ShadowMapWrite(const std::vector<float>& map, const char* path)
+ * inside the map with room to spare. `size` is the map's side and `depth`
+ * the length of its box along the light, units. */
+static bool ShadowMapWrite(const std::vector<float>& map, int size, float depth,
+	const char* path)
 {
-	const int n = HD_SHADOW_MAP;
+	const int n = size;
 	float lo = 1.0f, hi = 0.0f;
 	int cast = 0, x0 = n, y0 = n, x1 = -1, y1 = -1, odd = 0;
 
@@ -7009,7 +7043,7 @@ static bool ShadowMapWrite(const std::vector<float>& map, const char* path)
 		"%d/%d/%d/%d (left/right/top/bottom), depth %.4f..%.4f (%.0f..%.0f units "
 		"from the box's middle), %d texels not in 0..1\n", cast, n * n,
 		100.0 * cast / ((double)n * n), x0, x1, y0, y1, x0, n - 1 - x1, y0, n - 1 - y1,
-		lo, hi, (lo - 0.5) * HD_SHADOW_DEPTH, (hi - 0.5) * HD_SHADOW_DEPTH, odd);
+		lo, hi, (lo - 0.5) * depth, (hi - 0.5) * depth, odd);
 
 	const bool ok = WritePng(path, &pixels[0], n, n);
 
@@ -7176,10 +7210,57 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	printf("wardrobe: %d parts planned\n", count);
 
+	/* -shadowcreature: the level's slots stood beside her, planned the way
+	 * the engine plans a slot of the level (its classic mesh tree as the
+	 * bind pose and the parents for a separate face's neck), after her
+	 * parts. Reserved, because every plan points into these. */
+	std::vector<HDModelSlot> plan(wanted, wanted + count);
+	std::vector<ClassicSlot> creatureTree;
+	std::vector<int> creatureSlot;
+	std::vector<size_t> creatureAsk;	// which -shadowcreature each one is
+
+	creatureTree.reserve(o.creatures.size());
+
+	for (size_t c = 0; c < o.creatures.size(); c++)
+	{
+		const std::string& name = o.creatures[c].slot;
+		const int slot = isdigit((unsigned char)name[0]) ? atoi(name.c_str())
+			: SlotByName(level, name.c_str());
+		ClassicSlot tree;
+
+		if (slot < 0 || !ReadClassicSlot(level, slot, tree) || tree.nodes < 1)
+		{
+			printf("creature: %s is no moveable of this level - left out\n", name.c_str());
+			continue;
+		}
+
+		creatureTree.push_back(tree);
+		creatureSlot.push_back(slot);
+		creatureAsk.push_back(c);
+
+		bool planned = false;
+
+		for (size_t k = 0; k + 1 < creatureSlot.size(); k++)
+			planned = planned || creatureSlot[k] == slot;
+
+		if (planned)
+			continue;
+
+		HDModelSlot one;
+
+		one.slot = slot;
+		one.nodes = creatureTree.back().nodes;
+		one.bind = &creatureTree.back().bind[0][0];
+		one.parent = creatureTree.back().parent;
+		one.name = 0;
+		plan.push_back(one);
+	}
+
 	HDModelStats stats;
 	const char* trouble = "";
 
-	if (!HDModelLevelBegin(g_device, o.root.c_str(), wanted, count, o.managed,
+	if (!HDModelLevelBegin(g_device, o.root.c_str(), plan.empty() ? wanted : &plan[0],
+		(int)plan.size(), o.managed,
 		o.threads, &stats, &trouble))
 	{
 		printf("ModelProbe: HDModelLevelBegin failed - %s\n", trouble);
@@ -8233,7 +8314,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * go back into it out of the very matrices drawn, as hd_laradraw.cpp
 	 * takes them out of the frame's. */
 	const bool shadowAny = o.shadowMap || o.shadowCast || o.shadowDevice || o.shadowReceive ||
-		o.shadowTime > 0;
+		o.shadowTime > 0 || o.shadowOthers;
 	float shadowClip[16];
 	HDShadowBox shadowBox;
 	float R[9], t[3];
@@ -8421,6 +8502,161 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		}
 	}
 
+	/* -shadowcreature: each creature in its slot's first animation frame
+	 * (ReadFramePose, the walk the engine measures with, plus the frame's own
+	 * offset, which puts the item's origin at its feet), turned by its yaw
+	 * and stood with that origin on the floor: the room's floor at its room
+	 * local (x, z) under -shadowroom, her soles' height at (x, z) of her own
+	 * space without it. Node matrices model space to view, as the engine's
+	 * walk hands them to HDModelDraw. */
+	struct Placed
+	{
+		int slot;
+		int nodes;
+		std::vector<float> matrices;
+		float place[3];
+	};
+	std::vector<Placed> placed;
+
+	for (size_t c = 0; c < creatureSlot.size(); c++)
+	{
+		const ClassicSlot& tree = creatureTree[c];
+		const LaraOptions::Creature* ask = &o.creatures[creatureAsk[c]];
+		float px = ask->at[0], py = maxs[1], pz = ask->at[1];
+
+		if (roomHas)
+		{
+			const int sx = (int)floorf(ask->at[0] / 1024.0f);
+			const int sz = (int)floorf(ask->at[1] / 1024.0f);
+			const float fx = ask->at[0] / 1024.0f - (float)sx;
+			const float fz = ask->at[1] / 1024.0f - (float)sz;
+			long c00 = 0, c10 = 0, c01 = 0, c11 = 0;
+
+			if (!level.cornerFloor(o.shadowRoom, sx, sz, 0, 0, c00) ||
+				!level.cornerFloor(o.shadowRoom, sx, sz, 1024, 0, c10) ||
+				!level.cornerFloor(o.shadowRoom, sx, sz, 0, 1024, c01) ||
+				!level.cornerFloor(o.shadowRoom, sx, sz, 1024, 1024, c11))
+			{
+				printf("creature: (%.0f, %.0f) is not a floor of room %d - %s left out\n",
+					ask->at[0], ask->at[1], o.shadowRoom, ask->slot.c_str());
+				continue;
+			}
+
+			const float floorAt = (float)c00 * (1.0f - fx) * (1.0f - fz) +
+				(float)c10 * fx * (1.0f - fz) + (float)c01 * (1.0f - fx) * fz +
+				(float)c11 * fx * fz;
+
+			px = ask->at[0] + roomWorld._41;
+			py = floorAt + roomWorld._42;
+			pz = ask->at[1] + roomWorld._43;
+		}
+
+		std::vector<float> pose;
+		Tr5Level::MoveableInfo info;
+		float offset[3] = { 0.0f, 0.0f, 0.0f };
+
+		if (ReadFramePose(level, tree, pose) && level.moveableInfo(tree.slot, info))
+			for (int i = 0; i < 3; i++)
+				offset[i] = (float)level.debugReadFrameShort(
+					(long long)(info.frameOffset / 2) + 6 + i);
+
+		// Toff * RotY * Tpos * view: a row vector through the frame's offset,
+		// the item's turn, its place, and the camera.
+		float toff[16], rot[16], tpos[16], a[16], b[16], itemView[16];
+
+		MatTranslate(offset[0], offset[1], offset[2], toff);
+		MatRotY(ask->yaw, rot);
+		MatTranslate(px, py, pz, tpos);
+		MatMul(toff, rot, a);
+		MatMul(a, tpos, b);
+		MatMul(b, view, itemView);
+
+		Placed one;
+
+		one.slot = tree.slot;
+		one.nodes = tree.nodes;
+		one.matrices.assign((size_t)tree.nodes * 16, 0.0f);
+		one.place[0] = px;
+		one.place[1] = py;
+		one.place[2] = pz;
+		BuildNodeMatrices(tree, itemView, 0, &one.matrices[0], pose.empty() ? 0 : &pose[0]);
+		placed.push_back(one);
+
+		printf("creature: %s (slot %d, %d nodes%s) at (%.0f, %.0f, %.0f) of her space, turned "
+			"%.0f, frame offset (%.0f, %.0f, %.0f), HD model %s\n",
+			HDSlotName(tree.slot) ? HDSlotName(tree.slot) : "?", tree.slot, tree.nodes,
+			pose.empty() ? ", bind pose" : "", px, py, pz, ask->yaw, offset[0], offset[1],
+			offset[2], HDModelHas(tree.slot) ? "loaded" : "MISSING");
+	}
+
+	/* The second map's box round hers and its cast matrix, as hd_laradraw.cpp
+	 * makes them; which creatures stand inside it, as hd_object.cpp asks
+	 * (HDShadowBoxHolds on the item's place). */
+	HDShadowBox othersBox;
+	float othersClip[16];
+
+	memset(&othersBox, 0, sizeof(othersBox));
+	memset(othersClip, 0, sizeof(othersClip));
+
+	if (shadowAny && !placed.empty())
+	{
+		HDShadowBoxAround(&othersBox, &shadowBox, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+			HD_SHADOW_OTHERS_MAP);
+		HDShadowCastMatrix(&othersBox, R, t, othersClip);
+
+		for (size_t c = 0; c < placed.size(); c++)
+		{
+			float uvd[3];
+
+			HDShadowMapUVD(&othersBox, placed[c].place, uvd);
+			printf("creature: %s in the second box at u %.4f v %.4f depth %.4f - %s\n",
+				HDSlotName(placed[c].slot) ? HDSlotName(placed[c].slot) : "?", uvd[0], uvd[1],
+				uvd[2], HDShadowBoxHolds(&othersBox, placed[c].place) ? "casts"
+				: "outside, casts nothing");
+		}
+	}
+
+	/* The second map's cast pass as hd_level.cpp runs it (ShadowOthersPass):
+	 * the creatures inside the second box, through the engine's cast draw,
+	 * into the second target. 0 with none inside, and then nothing is drawn;
+	 * -1 when the device refused the map or its shaders. */
+	const auto othersPass = [&]() -> int
+	{
+		int inside = 0;
+
+		for (size_t c = 0; c < placed.size(); c++)
+			inside += HDShadowBoxHolds(&othersBox, placed[c].place) ? 1 : 0;
+
+		if (!inside)
+			return 0;
+
+		if (!HDRenderShadowOthersReady() || !HDModelCastReady() ||
+			!HDRenderShadowOthersCastBegin())
+			return -1;
+
+		HDModelCastBegin(othersClip);
+
+		int n = 0;
+
+		for (size_t c = 0; c < placed.size(); c++)
+		{
+			if (!HDShadowBoxHolds(&othersBox, placed[c].place))
+				continue;
+
+			if (HDModelCastDraw(placed[c].slot, false, &placed[c].matrices[0], placed[c].nodes,
+				~0u, -1, -1, 0))
+				n++;
+
+			if (HDModelHasHead(placed[c].slot) && HDModelCastDraw(placed[c].slot, true,
+				&placed[c].matrices[0], placed[c].nodes, ~0u, -1, -1, 0))
+				n++;
+		}
+
+		HDModelCastEnd();
+		HDRenderShadowCastEnd();
+		return n;
+	};
+
 	/* The receive pass as hd_level.cpp runs it, on the one room: the
 	 * constants out of this picture's box and view at the full strength of
 	 * one dominant light. -shadownoguard takes the stencil guard away again
@@ -8456,6 +8692,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	};
 
 	int receiveCalls = 0;
+	int othersCastDrawn = 0;
 
 	/* --- draw -------------------------------------------------------------- */
 	printf("\n-- the picture ------------------------------------------------\n");
@@ -8623,6 +8860,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		if (o.shadowCast || o.shadowReceive)
 			shadowCastDrawn = shadowPass(lipsTrack, lipsFrame);
 
+		// -shadowcreature: the second map's cast pass right after hers.
+		if ((o.shadowCast || o.shadowReceive) && !placed.empty())
+			othersCastDrawn = othersPass();
+
 		// -shadowreceive: the receive pass right after it, as HDFrameDraw has it.
 		if (o.shadowReceive && roomHas && shadowCastDrawn >= 0)
 			receiveCalls = receivePass();
@@ -8722,6 +8963,26 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				drawn++;
 		}
 
+		/* -shadowcreature: the creatures after her, each with its separate
+		 * face where its slot has one, in her light without her sheen - an
+		 * item has none. */
+		for (size_t c = 0; c < placed.size(); c++)
+		{
+			HDModelLighting itemLighting = lighting;
+			std::vector<float> itemLight((size_t)placed[c].nodes * 3, (float)o.shade);
+
+			itemLighting.specStrength = 0.0f;
+			itemLighting.specPower = 1.0f;
+
+			if (HDModelDraw(placed[c].slot, &placed[c].matrices[0], placed[c].nodes,
+				&itemLight[0], ~0u, &itemLighting))
+				drawn++;
+
+			if (HDModelHasHead(placed[c].slot) && HDModelDrawHead(placed[c].slot,
+				&placed[c].matrices[0], placed[c].nodes, &itemLight[0], ~0u, &itemLighting))
+				drawn++;
+		}
+
 		calls = HDModelDrawCalls();
 
 		HDRenderFrameEnd();
@@ -8778,6 +9039,22 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		strcat(path, tail);
 	}
 
+	// ... and one with creatures beside her, how many.
+	if (!placed.empty())
+	{
+		const size_t at = strlen(path) - 4;
+		char tail[32];
+
+		sprintf(tail, "_c%d.png", (int)placed.size());
+		path[at] = 0;
+		strcat(path, tail);
+
+		if (o.shadowCast || o.shadowReceive)
+			printf("shadowothers: %d models into the second map%s\n", othersCastDrawn,
+				othersCastDrawn < 0 ? " - REFUSED, the map or its shaders"
+				: othersCastDrawn == 0 ? " - none inside the second box, the map not drawn" : "");
+	}
+
 	if (o.shadowCast)
 		printf("shadowcast: the cast pass ran inside the picture's bracket, %d models "
 			"into the map%s\n", shadowCastDrawn,
@@ -8813,7 +9090,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDRenderFrameEnd();
 		g_device->EndScene();
 
-		if (n < 0 || !ShadowMapRead(map))
+		if (n < 0 || !ShadowMapRead(map, HDRenderShadowMap(), HD_SHADOW_MAP))
 			return -1;
 
 		return n;
@@ -8835,7 +9112,53 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		else
 		{
 			printf("  %d models into the map, %d draw calls\n", n, HDModelCastCalls());
-			ShadowMapWrite(map, path);
+			ShadowMapWrite(map, HD_SHADOW_MAP, HD_SHADOW_DEPTH, path);
+		}
+	}
+
+	/* The second map alone, in a bracket of its own: her pass and then the
+	 * creatures', as HDFrameDraw runs them. -1 when it was refused, not
+	 * drawn (no creature inside the second box) or not read back. */
+	const auto othersMapRun = [&](std::vector<float>& map) -> int
+	{
+		g_device->BeginScene();
+		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+
+		shadowPass(-1, -1);
+
+		const int n = othersPass();
+
+		HDRenderFrameEnd();
+		g_device->EndScene();
+
+		if (n <= 0 || !ShadowMapRead(map, HDRenderShadowOthersMap(), HD_SHADOW_OTHERS_MAP))
+			return -1;
+
+		return n;
+	};
+
+	if (o.shadowOthers)
+	{
+		std::vector<float> map;
+
+		printf("\n-- the second map ---------------------------------------------\n");
+
+		const int n = placed.empty() ? -1 : othersMapRun(map);
+
+		sprintf(path, "%s_shadowothers_%s_c%d.png", o.out.c_str(), HDLaraOutfitModel(outfit),
+			(int)placed.size());
+
+		if (n < 0)
+			printf("  no creature drawn into it (-shadowcreature, inside the second box), "
+				"or the map was refused or not read back\n");
+		else
+		{
+			HDShadowTargetInfo info;
+
+			HDRenderShadowOthersInfo(&info);
+			printf("  %d models into the second map, %d draw calls; the target %s %dx%d, depth "
+				"%s\n", n, HDModelCastCalls(), info.format, info.size, info.size, info.depth);
+			ShadowMapWrite(map, HD_SHADOW_OTHERS_MAP, HD_SHADOW_OTHERS_DEPTH, path);
 		}
 	}
 
@@ -8889,6 +9212,69 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			castSecond, info.state == HD_SHADOW_TARGET_MADE ? "made again" : "NOT made",
 			(unsigned)info.events, same ? "PASS, the same map bit for bit"
 			: "FAIL, the maps differ");
+
+		/* The second map the same way: made alone and released alone with
+		 * the device's count where it was; released with hers by
+		 * HDRenderShadowTargetRelease, the device Reset, and made again with
+		 * the creatures drawn into it the same, bit for bit. */
+		{
+			HDRenderShadowTargetRelease();
+			g_device->AddRef();
+
+			const ULONG obefore = g_device->Release();
+			const bool omade = HDRenderShadowOthersReady();
+
+			g_device->AddRef();
+
+			const ULONG oduring = g_device->Release();
+			HDShadowTargetInfo oinfo;
+
+			HDRenderShadowOthersInfo(&oinfo);
+			printf("  second target %s (%s): %s %dx%d, depth %s - her map %s meanwhile\n",
+				omade ? "made" : "REFUSED", oinfo.reason, oinfo.format, oinfo.size, oinfo.size,
+				oinfo.depth, HDRenderShadowMap() ? "made" : "not made");
+
+			HDRenderShadowOthersRelease();
+			g_device->AddRef();
+
+			const ULONG oafter = g_device->Release();
+
+			printf("  device references: %lu before, %lu with the second map, %lu after - %s\n",
+				obefore, oduring, oafter, oafter == obefore ? "PASS" : "FAIL");
+
+			std::vector<float> ofirst, osecond;
+			const int ocastFirst = placed.empty() ? -1 : othersMapRun(ofirst);
+
+			HDRenderShadowTargetInfo(&info);
+			HDRenderShadowOthersInfo(&oinfo);
+
+			const bool bothMade = info.state == HD_SHADOW_TARGET_MADE &&
+				oinfo.state == HD_SHADOW_TARGET_MADE;
+
+			HDRenderShadowTargetRelease();
+			HDRenderShadowOthersInfo(&oinfo);
+
+			const bool bothGone = !HDRenderShadowMap() && !HDRenderShadowOthersMap() &&
+				oinfo.state == HD_SHADOW_TARGET_RELEASED;
+			const HRESULT oreset = g_device->Reset(&g_present);
+
+			printf("  second map before the Reset: %d models; both maps %s, both released by "
+				"HDRenderShadowTargetRelease: %s; Reset 0x%08lx (%s)\n", ocastFirst,
+				bothMade ? "made" : "NOT both made", bothGone ? "PASS" : "FAIL",
+				(unsigned long)oreset, SUCCEEDED(oreset) ? "ok" : "FAILED");
+
+			const int ocastSecond = SUCCEEDED(oreset) && !placed.empty()
+				? othersMapRun(osecond) : -1;
+			const bool osame = ocastFirst > 0 && ocastSecond > 0 &&
+				ofirst.size() == osecond.size() &&
+				!memcmp(&ofirst[0], &osecond[0], ofirst.size() * sizeof(float));
+
+			HDRenderShadowOthersInfo(&oinfo);
+			printf("  second map after the Reset: %d models, target %s, %u state changes - %s\n",
+				ocastSecond, oinfo.state == HD_SHADOW_TARGET_MADE ? "made again" : "NOT made",
+				(unsigned)oinfo.events, placed.empty() ? "no creature (-shadowcreature), no map "
+				"to compare" : osame ? "PASS, the same map bit for bit" : "FAIL, the maps differ");
+		}
 
 		/* The time: the bracket with the pass against the bracket alone, each
 		 * frame waited for with an event query, so the card has finished what
@@ -9128,6 +9514,9 @@ int main(int argc, char** argv)
 	float shadowAt[2] = { 0.0f, 0.0f };
 	bool shadowReceive = false, shadowEmpty = false, shadowNoGuard = false;
 	int shadowTime = 0;
+	// -shadowcreature, -shadowothers: the second map's casters and its picture.
+	std::vector<LaraOptions::Creature> shadowCreatures;
+	bool shadowOthers = false;
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// -braidsim: the braid's own physics
 	/* -braidanim: the same chain under a real animation. */
@@ -9442,6 +9831,28 @@ int main(int argc, char** argv)
 			if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
 				shadowTime = atoi(argv[++i]);
 		}
+		else if (!_stricmp(argv[i], "-shadowcreature") && i + 3 < argc)
+		{
+			LaraOptions::Creature c;
+
+			c.slot = argv[++i];
+			c.at[0] = (float)atof(argv[++i]);
+			c.at[1] = (float)atof(argv[++i]);
+			c.yaw = 0.0f;
+
+			// An optional turn, a number (a minus sign included).
+			if (i + 1 < argc && ((argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9') ||
+				(argv[i + 1][0] == '-' && argv[i + 1][1] >= '0' && argv[i + 1][1] <= '9')))
+				c.yaw = (float)atof(argv[++i]);
+
+			if (shadowCreatures.size() < 4)
+				shadowCreatures.push_back(c);
+			else
+				printf("ModelProbe: -shadowcreature takes four at most - %s left out\n",
+					c.slot.c_str());
+		}
+		else if (!_stricmp(argv[i], "-shadowothers"))
+			shadowOthers = true;
 		else if (!_stricmp(argv[i], "-braid"))
 		{
 			lara = true;
@@ -9983,6 +10394,8 @@ int main(int argc, char** argv)
 		o.shadowEmpty = shadowEmpty;
 		o.shadowNoGuard = shadowNoGuard;
 		o.shadowTime = shadowTime;
+		o.creatures = shadowCreatures;
+		o.shadowOthers = shadowOthers;
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
 		o.handFold = laraHandFold;

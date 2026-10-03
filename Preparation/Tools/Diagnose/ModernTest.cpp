@@ -14776,6 +14776,511 @@ static void shadow_mode()
 		0, 0);
 }
 
+/* Her box's arithmetic written with the table's numbers in place of the
+ * box's own extent, depth and map: the functions before the box carried its
+ * size. Her box through hd_shadow.h must give these bits exactly. */
+static void sh_fixed_centre(HDShadowBox* b)
+{
+	const double texel = (double)HD_SHADOW_BOX / (double)HD_SHADOW_MAP;
+	double cr = 0.0, cu = 0.0, cf = 0.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		cr += (double)b->mid[i] * b->right[i];
+		cu += (double)b->mid[i] * b->up[i];
+		cf += (double)b->mid[i] * b->fwd[i];
+	}
+
+	cr = floor(cr / texel + 0.5) * texel;
+	cu = floor(cu / texel + 0.5) * texel;
+
+	for (int i = 0; i < 3; i++)
+		b->centre[i] = (float)(cr * b->right[i] + cu * b->up[i] + cf * b->fwd[i]);
+}
+
+static void sh_fixed_uvd(const HDShadowBox* b, const float* p, float* out)
+{
+	const float d[3] = { p[0] - b->centre[0], p[1] - b->centre[1], p[2] - b->centre[2] };
+
+	out[0] = 0.5f + hd_shadow_dot(d, b->right) / HD_SHADOW_BOX;
+	out[1] = 0.5f - hd_shadow_dot(d, b->up) / HD_SHADOW_BOX;
+	out[2] = 0.5f + hd_shadow_dot(d, b->fwd) / HD_SHADOW_DEPTH;
+}
+
+static void sh_fixed_view_to_map(const HDShadowBox* b, const float* R, const float* t, float* m)
+{
+	const float* axis[3] = { b->right, b->up, b->fwd };
+	const double scale[3] = { 1.0 / HD_SHADOW_BOX, -1.0 / HD_SHADOW_BOX,
+		1.0 / HD_SHADOW_DEPTH };
+
+	for (int i = 0; i < 16; i++)
+		m[i] = 0.0f;
+
+	for (int col = 0; col < 3; col++)
+	{
+		double ra[3];
+		double c = 0.0;
+
+		for (int i = 0; i < 3; i++)
+		{
+			ra[i] = (double)R[i * 3 + 0] * axis[col][0] +
+				(double)R[i * 3 + 1] * axis[col][1] + (double)R[i * 3 + 2] * axis[col][2];
+			c -= (double)t[i] * ra[i] + (double)b->centre[i] * axis[col][i];
+		}
+
+		for (int i = 0; i < 3; i++)
+			m[i * 4 + col] = (float)(ra[i] * scale[col]);
+
+		m[12 + col] = (float)(0.5 + c * scale[col]);
+	}
+
+	m[15] = 1.0f;
+}
+
+static void sh_fixed_cast(const HDShadowBox* b, const float* R, const float* t, float* m)
+{
+	float uvd[16];
+
+	sh_fixed_view_to_map(b, R, t, uvd);
+
+	for (int row = 0; row < 4; row++)
+	{
+		m[row * 4 + 0] = 2.0f * uvd[row * 4 + 0];
+		m[row * 4 + 1] = -2.0f * uvd[row * 4 + 1];
+		m[row * 4 + 2] = uvd[row * 4 + 2];
+		m[row * 4 + 3] = uvd[row * 4 + 3];
+	}
+
+	m[12] += -1.0f - 1.0f / (float)HD_SHADOW_MAP;
+	m[13] += 1.0f + 1.0f / (float)HD_SHADOW_MAP;
+}
+
+static void sh_fixed_reach(const HDShadowBox* b, float* mins, float* maxs)
+{
+	const float half = 0.5f * HD_SHADOW_BOX;
+	const float bottom = b->lowest + HD_SHADOW_END;
+	const float spread = half * (fabsf(b->right[1]) + fabsf(b->up[1]));
+	const float down = b->fwd[1] > 0.1f ? b->fwd[1] : 0.1f;
+	const float nearF = -0.5f * HD_SHADOW_DEPTH;
+	float farF = (bottom - b->centre[1] + spread) / down;
+
+	farF = farF > nearF ? farF : nearF;
+
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = 3.0e38f;
+		maxs[i] = -3.0e38f;
+	}
+
+	for (int corner = 0; corner < 8; corner++)
+	{
+		const float a = (corner & 1) ? half : -half;
+		const float c = (corner & 2) ? half : -half;
+		const float f = (corner & 4) ? farF : nearF;
+
+		for (int i = 0; i < 3; i++)
+		{
+			const float p = b->centre[i] + a * b->right[i] + c * b->up[i] + f * b->fwd[i];
+
+			mins[i] = p < mins[i] ? p : mins[i];
+			maxs[i] = p > maxs[i] ? p : maxs[i];
+		}
+	}
+
+	maxs[1] = maxs[1] < bottom ? maxs[1] : bottom;
+}
+
+/* A camera turned by `yaw` and `pitch` (degrees) standing at `at`: R rows
+ * right, down, forward, and t = -R at. */
+static void sh_camera(float yawDeg, float pitchDeg, const float* at, float* R, float* t)
+{
+	const float d2r = 3.14159265f / 180.0f;
+	const float cy = cosf(yawDeg * d2r), sy = sinf(yawDeg * d2r);
+	const float cp = cosf(pitchDeg * d2r), sp = sinf(pitchDeg * d2r);
+	const float rows[9] =
+	{
+		cy, 0.0f, -sy,
+		-sy * sp, cp, -cy * sp,
+		sy * cp, sp, cy * cp
+	};
+
+	for (int i = 0; i < 9; i++)
+		R[i] = rows[i];
+
+	for (int i = 0; i < 3; i++)
+		t[i] = -(R[i * 3 + 0] * at[0] + R[i * 3 + 1] * at[1] + R[i * 3 + 2] * at[2]);
+}
+
+/* Fifteen nodes of a standing figure round (x, y, z), node 0 the lowest. */
+static void sh_figure(float x, float y, float z, float* nodes)
+{
+	for (int n = 0; n < 15; n++)
+	{
+		nodes[n * 3 + 0] = x + 11.0f * (float)(n % 4) - 17.0f;
+		nodes[n * 3 + 1] = y - 51.0f * (float)n;
+		nodes[n * 3 + 2] = z + 7.0f * (float)(n % 3) - 7.0f;
+	}
+}
+
+/* The second map's box: the numbers, the centre, the texel, the snap, the
+ * depth; and her box through the same functions gives the bits the table's
+ * numbers give. */
+static void shadow_others_box()
+{
+	ok(HD_SHADOW_OTHERS_MAP == 2048 && HD_SHADOW_OTHERS_BOX == 8192.0f &&
+		HD_SHADOW_OTHERS_DEPTH == 8192.0f && HD_SHADOW_OTHERS_FULL == 1536.0f &&
+		HD_SHADOW_OTHERS_END == 2560.0f,
+		"shadow others: the table's numbers - map 2048, box 8192, depth 8192, 1536, 2560",
+		HD_SHADOW_OTHERS_MAP, 2048);
+	ok(HD_SHADOW_OTHERS_BOX / HD_SHADOW_OTHERS_MAP == HD_SHADOW_BOX / HD_SHADOW_MAP &&
+		HD_SHADOW_OTHERS_BOX / HD_SHADOW_OTHERS_MAP == 4.0f,
+		"shadow others: a texel of the second map is a texel of hers, 4 units",
+		sh_milli(HD_SHADOW_OTHERS_BOX / HD_SHADOW_OTHERS_MAP), 4000);
+
+	float nodes[15 * 3];
+	float unit[3] = { 0.40f, 0.83f, -0.39f };
+
+	sh_figure(52345.6f, -3210.4f, 47890.1f, nodes);
+	hd_shadow_unit(unit);
+	HDShadowLimit(unit);
+
+	HDShadowBox her, others;
+
+	HDShadowBoxMake(&her, unit, nodes, 15);
+	HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+		HD_SHADOW_OTHERS_MAP);
+
+	ok(her.extent == HD_SHADOW_BOX && her.depth == HD_SHADOW_DEPTH && her.map == HD_SHADOW_MAP &&
+		others.extent == HD_SHADOW_OTHERS_BOX && others.depth == HD_SHADOW_OTHERS_DEPTH &&
+		others.map == HD_SHADOW_OTHERS_MAP,
+		"shadow others: each box carries its own extent, depth and map", others.map,
+		HD_SHADOW_OTHERS_MAP);
+
+	ok(!memcmp(her.right, others.right, sizeof(her.right)) &&
+		!memcmp(her.up, others.up, sizeof(her.up)) &&
+		!memcmp(her.fwd, others.fwd, sizeof(her.fwd)) &&
+		!memcmp(her.mid, others.mid, sizeof(her.mid)) &&
+		her.lowest == others.lowest && her.highest == others.highest,
+		"shadow others: the same light, the same basis, her middle and her heights", 0, 0);
+
+	// With texels of her size the centre is hers to the bit.
+	ok(!memcmp(her.centre, others.centre, sizeof(her.centre)),
+		"shadow others: with 4-unit texels the second box's centre is hers, bit for bit",
+		sh_milli(others.centre[0] - her.centre[0]), 0);
+
+	float uvd[3];
+
+	HDShadowMapUVD(&others, others.centre, uvd);
+	ok(fabs(uvd[0] - 0.5f) < 1e-6f && fabs(uvd[1] - 0.5f) < 1e-6f && fabs(uvd[2] - 0.5f) < 1e-6f,
+		"shadow others: the centre lands on u = v = 0.5, depth 0.5", sh_milli(uvd[0] * 1000.0),
+		500000);
+
+	// One texel, 4 units, to the right is 1 / 2048 on in u; one up is one back in v.
+	{
+		float p[3], q[3], a[3], b[3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			p[i] = others.centre[i] + others.right[i] * 4.0f;
+			q[i] = others.centre[i] + others.up[i] * 4.0f;
+		}
+
+		HDShadowMapUVD(&others, p, a);
+		HDShadowMapUVD(&others, q, b);
+		ok(fabs((a[0] - 0.5f) * HD_SHADOW_OTHERS_MAP - 1.0f) < 1e-2f && fabs(a[1] - 0.5f) < 1e-6f &&
+			fabs((0.5f - b[1]) * HD_SHADOW_OTHERS_MAP - 1.0f) < 1e-2f && fabs(b[0] - 0.5f) < 1e-6f,
+			"shadow others: 4 units to the right is one texel of 2048 to the right",
+			sh_milli((a[0] - 0.5f) * HD_SHADOW_OTHERS_MAP), 1000);
+	}
+
+	// Four sectors to every side: the box's edge is 4096 units from the centre.
+	{
+		float p[3], q[3], a[3], b[3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			p[i] = others.centre[i] + others.right[i] * 4096.0f;
+			q[i] = others.centre[i] - others.up[i] * 4096.0f;
+		}
+
+		HDShadowMapUVD(&others, p, a);
+		HDShadowMapUVD(&others, q, b);
+		ok(fabs(a[0] - 1.0f) < 1e-5f && fabs(b[1] - 1.0f) < 1e-5f,
+			"shadow others: 4096 units across the light is the box's edge, u or v 1",
+			sh_milli(a[0] * 1000.0), 1000000);
+	}
+
+	// Depth is linear along the light, 0 at -4096, 1 at +4096.
+	{
+		const float steps[5] = { -4096.0f, -1500.0f, 0.0f, 2048.0f, 4096.0f };
+		bool linear = true;
+
+		for (int s = 0; s < 5; s++)
+		{
+			float p[3], d[3];
+
+			for (int i = 0; i < 3; i++)
+				p[i] = others.centre[i] + others.fwd[i] * steps[s];
+
+			HDShadowMapUVD(&others, p, d);
+
+			if (fabs(d[2] - (0.5f + steps[s] / HD_SHADOW_OTHERS_DEPTH)) > 1e-5f)
+				linear = false;
+		}
+
+		ok(linear, "shadow others: depth is linear along the light, 0 to 1 over 8192 units",
+			0, 0);
+	}
+
+	/* The snap of a box round her with texels of another size - 16 units, an
+	 * 8192 box on a 512 map: its centre stands on whole 16-unit texels, and
+	 * within half of one of her middle. */
+	{
+		HDShadowBox coarse;
+
+		HDShadowBoxAround(&coarse, &her, 8192.0f, 8192.0f, 512);
+
+		const double cr = hd_shadow_dot(coarse.centre, coarse.right) / 16.0;
+		const double cu = hd_shadow_dot(coarse.centre, coarse.up) / 16.0;
+		const float midDelta[3] = { coarse.mid[0] - coarse.centre[0],
+			coarse.mid[1] - coarse.centre[1], coarse.mid[2] - coarse.centre[2] };
+
+		ok(fabs(cr - floor(cr + 0.5)) < 5e-3 && fabs(cu - floor(cu + 0.5)) < 5e-3 &&
+			fabs(hd_shadow_dot(midDelta, coarse.right)) <= 8.0 + 1e-3 &&
+			fabs(hd_shadow_dot(midDelta, coarse.up)) <= 8.0 + 1e-3 &&
+			fabs(hd_shadow_dot(midDelta, coarse.fwd)) < 1e-2,
+			"shadow others: a box of 16-unit texels snaps its centre to whole texels of its own",
+			sh_milli(cr - floor(cr + 0.5)), 0);
+	}
+
+	// The cast matrix lands a point in the texel whose centre its (u, v) is.
+	{
+		const float at[3] = { 52000.0f, -4700.0f, 46100.0f };
+		float R[9], t[3], clip[16];
+		int off = 0;
+
+		sh_camera(37.0f, 21.0f, at, R, t);
+		HDShadowCastMatrix(&others, R, t, clip);
+
+		for (int k = 0; k < 64; k++)
+		{
+			const float p[3] =
+			{
+				others.centre[0] + (float)((k * 977) % 7000) - 3500.0f,
+				others.centre[1] + (float)((k * 331) % 3000) - 1500.0f,
+				others.centre[2] + (float)((k * 613) % 7000) - 3500.0f
+			};
+			float v[3], want[3];
+
+			for (int i = 0; i < 3; i++)
+				v[i] = R[i * 3 + 0] * p[0] + R[i * 3 + 1] * p[1] + R[i * 3 + 2] * p[2] + t[i];
+
+			HDShadowMapUVD(&others, p, want);
+
+			double c[4];
+
+			for (int col = 0; col < 4; col++)
+				c[col] = (double)v[0] * clip[0 * 4 + col] + (double)v[1] * clip[1 * 4 + col] +
+					(double)v[2] * clip[2 * 4 + col] + clip[3 * 4 + col];
+
+			const double sx = (c[0] / c[3] + 1.0) * 0.5 * HD_SHADOW_OTHERS_MAP;
+			const double sy = (1.0 - c[1] / c[3]) * 0.5 * HD_SHADOW_OTHERS_MAP;
+
+			if (fabs((sx + 0.5) / HD_SHADOW_OTHERS_MAP - want[0]) * HD_SHADOW_OTHERS_MAP > 0.05 ||
+				fabs((sy + 0.5) / HD_SHADOW_OTHERS_MAP - want[1]) * HD_SHADOW_OTHERS_MAP > 0.05 ||
+				fabs(c[2] / c[3] - want[2]) * HD_SHADOW_OTHERS_DEPTH > 0.5)
+				off++;
+		}
+
+		ok(off == 0, "shadow others: the cast matrix puts a point into the texel of its (u, v)",
+			off, 0);
+	}
+
+	// Inside the box: its place's (u, v) and depth within 0..1, edges included.
+	{
+		float in[3], edge[3], out1[3], out2[3], deep[3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			in[i] = others.centre[i] + others.right[i] * 3000.0f - others.up[i] * 2000.0f;
+			edge[i] = others.centre[i] + others.right[i] * 4095.0f;
+			out1[i] = others.centre[i] + others.right[i] * 4097.0f;
+			out2[i] = others.centre[i] - others.up[i] * 4200.0f;
+			deep[i] = others.centre[i] + others.fwd[i] * 4200.0f;
+		}
+
+		volatile float zero = 0.0f;
+		const float notANumber[3] = { zero / zero, others.centre[1], others.centre[2] };
+
+		ok(HDShadowBoxHolds(&others, others.centre) && HDShadowBoxHolds(&others, in) &&
+			HDShadowBoxHolds(&others, edge) && !HDShadowBoxHolds(&others, out1) &&
+			!HDShadowBoxHolds(&others, out2) && !HDShadowBoxHolds(&others, deep) &&
+			!HDShadowBoxHolds(&others, notANumber),
+			"shadow others: a place inside the box is held, one past its edge or along the "
+			"light or not a number is not", 0, 0);
+	}
+
+	/* Her box through the box's own size against the table's numbers: the
+	 * centre, the mapping of a point, the two matrices, the receive block and
+	 * the reach, bit for bit, over many lights, figures and cameras. */
+	{
+		int differ = 0;
+
+		for (int k = 0; k < 400; k++)
+		{
+			const float slant = (float)(k % 12) * 4.5f * 3.14159265f / 180.0f;
+			const float bearing = (float)k * 0.137f;
+			float d[3] = { sinf(slant) * cosf(bearing), cosf(slant), sinf(slant) * sinf(bearing) };
+			float fig[15 * 3];
+
+			sh_figure(-60000.0f + 317.3f * (float)k, -8000.0f + 41.7f * (float)(k % 97),
+				70000.0f - 211.9f * (float)k, fig);
+
+			HDShadowBox b, old;
+
+			HDShadowBoxMake(&b, d, fig, 15);
+			old = b;
+			sh_fixed_centre(&old);
+
+			if (memcmp(b.centre, old.centre, sizeof(b.centre)))
+				differ++;
+
+			const float at[3] = { fig[0] + 900.0f, fig[1] - 700.0f, fig[2] - 1100.0f };
+			float R[9], t[3];
+
+			sh_camera((float)(k * 7 % 360), (float)(k % 50) - 25.0f, at, R, t);
+
+			float m1[16], m2[16], c1[16], c2[16];
+
+			HDShadowViewToMap(&b, R, t, m1);
+			sh_fixed_view_to_map(&b, R, t, m2);
+			HDShadowCastMatrix(&b, R, t, c1);
+			sh_fixed_cast(&b, R, t, c2);
+
+			if (memcmp(m1, m2, sizeof(m1)) || memcmp(c1, c2, sizeof(c1)))
+				differ++;
+
+			const float p[3] = { fig[0] + 300.0f * sinf((float)k), fig[1] + 250.0f,
+				fig[2] - 280.0f * cosf((float)k) };
+			float u1[3], u2[3];
+
+			HDShadowMapUVD(&b, p, u1);
+			sh_fixed_uvd(&b, p, u2);
+
+			if (memcmp(u1, u2, sizeof(u1)))
+				differ++;
+
+			float regs[HD_SHADOW_RECEIVE_COUNT * 4];
+
+			HDShadowReceiveConstants(&b, R, t, 0.3375f, regs);
+
+			if (regs[22] != HD_SHADOW_BIAS / HD_SHADOW_DEPTH ||
+				regs[23] != (float)HD_SHADOW_MAP || regs[24] != 1.0f / (float)HD_SHADOW_MAP)
+				differ++;
+
+			for (int c = 0; c < 3; c++)
+				if (regs[c * 4 + 0] != m2[0 * 4 + c] || regs[c * 4 + 1] != m2[1 * 4 + c] ||
+					regs[c * 4 + 2] != m2[2 * 4 + c] || regs[c * 4 + 3] != m2[3 * 4 + c])
+					differ++;
+
+			float r1[6], r2[6];
+
+			HDShadowReach(&b, r1, r1 + 3);
+			sh_fixed_reach(&b, r2, r2 + 3);
+
+			if (memcmp(r1, r2, sizeof(r1)))
+				differ++;
+		}
+
+		ok(differ == 0,
+			"shadow others: her box through its own size gives the table's bits - centre, "
+			"mapping, matrices, receive block, reach", differ, 0);
+	}
+}
+
+/* Who casts into the second map: the rule as a pure function of its seven
+ * facts, every combination. */
+static void shadow_others_rule()
+{
+	int wrong = 0, casters = 0;
+
+	for (int m = 0; m < 128; m++)
+	{
+		const bool blob = (m & 1) != 0, runs = (m & 2) != 0, step = (m & 4) != 0,
+			target = (m & 8) != 0, hd = (m & 16) != 0, mirrored = (m & 32) != 0,
+			inside = (m & 64) != 0;
+		const bool casts = HDShadowOtherCasts(blob, runs, step, target, hd, mirrored, inside);
+
+		if (casts != (blob && runs && step && target && hd && !mirrored && inside))
+			wrong++;
+
+		casters += casts ? 1 : 0;
+	}
+
+	ok(wrong == 0 && casters == 1,
+		"shadow others: an item casts exactly when it has a blob, is HD, not mirrored, inside "
+		"the box, her step ran, the shadow runs and the target exists", wrong, 0);
+
+	// Each fact alone takes the casting away.
+	ok(HDShadowOtherCasts(true, true, true, true, true, false, true) &&
+		!HDShadowOtherCasts(false, true, true, true, true, false, true) &&
+		!HDShadowOtherCasts(true, false, true, true, true, false, true) &&
+		!HDShadowOtherCasts(true, true, false, true, true, false, true) &&
+		!HDShadowOtherCasts(true, true, true, false, true, false, true) &&
+		!HDShadowOtherCasts(true, true, true, true, false, false, true) &&
+		!HDShadowOtherCasts(true, true, true, true, true, true, true) &&
+		!HDShadowOtherCasts(true, true, true, true, true, false, false),
+		"shadow others: no blob, no shadow, no step, no target, classic, mirrored or outside "
+		"each leave the item out", 0, 0);
+}
+
+/* The blob's gate, the rule's other face: never both, never neither inside
+ * the box; outside it the blob stays exactly where it does not give way. */
+static void shadow_others_gate()
+{
+	int both = 0, neither = 0, outside = 0, today = 0;
+
+	for (int m = 0; m < 128; m++)
+	{
+		const bool blob = (m & 1) != 0, runs = (m & 2) != 0, step = (m & 4) != 0,
+			target = (m & 8) != 0, hd = (m & 16) != 0, mirrored = (m & 32) != 0,
+			inside = (m & 64) != 0;
+		const bool casts = HDShadowOtherCasts(blob, runs, step, target, hd, mirrored, inside);
+		const bool drawn = blob && !HDShadowBlobGivesWay(runs, step, target, hd, mirrored);
+
+		if (casts && drawn)
+			both++;
+
+		if (blob && inside && !casts && !drawn)
+			neither++;
+
+		if (!inside && casts)
+			outside++;
+
+		// Without every fact of the frame the blob is drawn as it always was.
+		if (blob && !(runs && step && target && hd && !mirrored) && !drawn)
+			today++;
+	}
+
+	ok(both == 0, "shadow others: no item has its blob and the projected shadow at once",
+		both, 0);
+	ok(neither == 0,
+		"shadow others: inside the box an item with a blob has the one or the other", neither, 0);
+	ok(outside == 0, "shadow others: an item outside the box casts nothing", outside, 0);
+	ok(today == 0,
+		"shadow others: wherever one fact is missing the blob is drawn as before", today, 0);
+
+	ok(!HDShadowBlobGivesWay(false, false, false, false, false) &&
+		!HDShadowBlobGivesWay(false, true, true, true, false) &&
+		!HDShadowBlobGivesWay(true, false, true, true, false) &&
+		!HDShadowBlobGivesWay(true, true, false, true, false) &&
+		!HDShadowBlobGivesWay(true, true, true, false, false) &&
+		!HDShadowBlobGivesWay(true, true, true, true, true) &&
+		HDShadowBlobGivesWay(true, true, true, true, false),
+		"shadow others: the blob gives way only to an HD item, not mirrored, with her step, the "
+		"shadow and the target", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -14870,6 +15375,9 @@ int main()
 	shadow_lookup();
 	shadow_receive();
 	shadow_mode();
+	shadow_others_box();
+	shadow_others_rule();
+	shadow_others_gate();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -153,7 +153,9 @@
  *                         the two passes' time on that room against a 2560 x
  *                         1440 target, a mean over <frames> (300) frames each
  *                         waited for with an event query; take -size 2560
- *                         1440 so the target is framed as the picture.
+ *                         1440 so the target is framed as the picture. With
+ *                         -shadowcreature a third time: her cast pass, the
+ *                         second map's cast pass and the two-map receive.
  *     -shadowcreature <slot> <x> <z> [<yaw>]
  *                         an HD model of this level's slot (a number or a
  *                         name) stood beside her in its first animation
@@ -166,7 +168,10 @@
  *                         draw and target right after her map, where the game
  *                         draws it - when its place lies inside the second box
  *                         (hd_shadow.h, HDShadowBoxHolds), which the run
- *                         prints. The picture's name gets _c<n>.
+ *                         prints; with -shadowreceive the room then takes
+ *                         both maps through the two-map receive shader, as
+ *                         the game's frame with the second map drawn. The
+ *                         picture's name gets _c<n>.
  *     -shadowothers       the second map of this pose and these creatures,
  *                         written as <out>_shadowothers_<outfit>_c<n>.png,
  *                         2048 texels a side, grey as -shadowmap's. With
@@ -8620,9 +8625,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * the creatures inside the second box, through the engine's cast draw,
 	 * into the second target. 0 with none inside, and then nothing is drawn;
 	 * -1 when the device refused the map or its shaders. */
+	/* Whether the last othersPass drew the second map - the bracket opened,
+	 * as hd_level.cpp's g_others_cast_now - which makes receivePass the
+	 * two-map receive. */
+	bool othersDrawn = false;
+
 	const auto othersPass = [&]() -> int
 	{
 		int inside = 0;
+
+		othersDrawn = false;
 
 		for (size_t c = 0; c < placed.size(); c++)
 			inside += HDShadowBoxHolds(&othersBox, placed[c].place) ? 1 : 0;
@@ -8633,6 +8645,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		if (!HDRenderShadowOthersReady() || !HDModelCastReady() ||
 			!HDRenderShadowOthersCastBegin())
 			return -1;
+
+		othersDrawn = true;
 
 		HDModelCastBegin(othersClip);
 
@@ -8659,16 +8673,23 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	/* The receive pass as hd_level.cpp runs it, on the one room: the
 	 * constants out of this picture's box and view at the full strength of
-	 * one dominant light. -shadownoguard takes the stencil guard away again
-	 * inside the pass, for the count of pixels it saves from a second
+	 * one dominant light - and, when othersPass has just drawn the second
+	 * map, the two-map receive with the second box's constants, as
+	 * hd_level.cpp chooses it. -shadownoguard takes the stencil guard away
+	 * again inside the pass, for the count of pixels it saves from a second
 	 * darkening. -1 when the receive could not begin. */
 	const auto receivePass = [&]() -> int
 	{
 		float regs[HD_SHADOW_RECEIVE_COUNT * 4];
+		float oregs[HD_SHADOW_RECEIVE2_COUNT * 4];
 
 		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK, regs);
 
-		if (!HDRenderShadowReceiveBegin(regs))
+		if (othersDrawn)
+			HDShadowReceiveOthersConstants(&othersBox, R, t, oregs);
+
+		if (!(othersDrawn ? HDRenderShadowReceive2Begin(regs, oregs)
+			: HDRenderShadowReceiveBegin(regs)))
 			return -1;
 
 		if (o.shadowNoGuard)
@@ -9341,11 +9362,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	/* -shadowtime: the two passes' time on the room of -shadowroom against a
 	 * 2560 x 1440 target, the frame being the room's solid art alone against
-	 * the room's solid art with the cast and the receive pass after it. Each
-	 * frame is waited for with an event query, so the card has finished what
-	 * the frame sent before the clock stops; the first ten warm up. The
-	 * picture's own projection is used, so -size 2560 1440 frames the time's
-	 * target as the picture. */
+	 * the room's solid art with the cast and the receive pass after it - and,
+	 * with -shadowcreature, a third frame with her cast pass, the second
+	 * map's cast pass of the creatures and the two-map receive. Each frame is
+	 * waited for with an event query, so the card has finished what the frame
+	 * sent before the clock stops; the first ten warm up. The picture's own
+	 * projection is used, so -size 2560 1440 frames the time's target as the
+	 * picture. */
 	if (o.shadowTime > 0 && roomHas)
 	{
 		printf("\n-- the time of the two passes ---------------------------------\n");
@@ -9357,12 +9380,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &query)))
 		{
 			LARGE_INTEGER rate;
-			double mean[2] = { 0.0, 0.0 };
-			int rcalls = 0;
+			double mean[3] = { 0.0, 0.0, 0.0 };
+			int rcalls = 0, ocalls = 0, omodels = 0;
+			const int kinds = placed.empty() ? 2 : 3;
 
 			QueryPerformanceFrequency(&rate);
 
-			for (int with = 0; with < 2; with++)
+			for (int with = 0; with < kinds; with++)
 			{
 				double total = 0.0;
 
@@ -9374,9 +9398,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 					g_device->BeginScene();
 					HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 					roomSolid();
+					othersDrawn = false;
 
-					if (with && shadowPass(-1, -1) >= 0)
+					if (with == 1 && shadowPass(-1, -1) >= 0)
 						rcalls = receivePass();
+
+					if (with == 2 && shadowPass(-1, -1) >= 0)
+					{
+						omodels = othersPass();
+						ocalls = receivePass();
+					}
 
 					HDRenderFrameEnd();
 					g_device->EndScene();
@@ -9398,6 +9429,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			printf("  2560x1440 target, %d frames each: the room alone %.4f ms, with the cast "
 				"and the receive pass %.4f ms - the two passes %.4f ms a frame (%d receive "
 				"draw calls)\n", o.shadowTime, mean[0], mean[1], mean[1] - mean[0], rcalls);
+
+			if (kinds == 3)
+				printf("  with %d creature(s) (%d models into the second map) and the two-map "
+					"receive %.4f ms - the three passes %.4f ms a frame, %.4f ms above her two "
+					"(%d receive draw calls)\n", (int)placed.size(), omodels, mean[2],
+					mean[2] - mean[0], mean[2] - mean[1], ocalls);
 		}
 		else
 			printf("  no 2560x1440 target or no event query on this device - no time\n");

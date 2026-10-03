@@ -15281,6 +15281,334 @@ static void shadow_others_gate()
 		"shadow and the target", 0, 0);
 }
 
+/* The second map's distance term: how far a receiver lies behind a tap's
+ * caster along the light. */
+static void shadow_others_behind()
+{
+	int bad = 0;
+	float last = 2.0f;
+
+	for (int i = -500; i <= 4000; i++)
+	{
+		const float b = HDShadowBehindTerm((float)i);
+
+		if (b > last + 1e-6f || b < 0.0f || b > 1.0f)
+			bad++;
+
+		last = b;
+	}
+
+	ok(bad == 0 && HDShadowBehindTerm(0.0f) == 1.0f &&
+		HDShadowBehindTerm(HD_SHADOW_OTHERS_FULL) == 1.0f &&
+		HDShadowBehindTerm(HD_SHADOW_OTHERS_END) == 0.0f &&
+		HDShadowBehindTerm(HD_SHADOW_OTHERS_END + 4096.0f) == 0.0f &&
+		sh_milli(HDShadowBehindTerm(0.5f * (HD_SHADOW_OTHERS_FULL + HD_SHADOW_OTHERS_END))) == 500,
+		"shadow others: the distance term is 1 up to OTHERS_FULL, 0 from OTHERS_END, linear and "
+		"monotone between", bad, 0);
+
+	/* A creature's head 760 units above its feet, seen along the fixed light
+	 * (30 degrees off straight down): the floor at its feet lies 760 / cos 30
+	 * = 878 units behind the head along the light - inside FULL, the whole
+	 * shadow. */
+	const float headBehind = 760.0f / cosf(HD_SHADOW_FALLBACK_SLANT * 3.14159265f / 180.0f);
+
+	ok(headBehind < HD_SHADOW_OTHERS_FULL && HDShadowBehindTerm(headBehind) == 1.0f,
+		"shadow others: a head 760 above the feet at 30 degrees shadows the floor at the feet in "
+		"full", (long)headBehind, 878);
+
+	/* A floor a storey under the caster's feet - 2560 units below along the
+	 * light, 2217 straight down at 30 degrees - takes nothing of any tap:
+	 * every part of the caster lies at least that far in front of it. */
+	int lit = 0;
+
+	for (int k = 0; k <= 100; k++)
+		if (HDShadowBehindTerm(HD_SHADOW_OTHERS_END + 20.0f * (float)k) > 0.0f)
+			lit++;
+
+	ok(lit == 0, "shadow others: a floor OTHERS_END or more behind the feet takes nothing", lit, 0);
+}
+
+/* The second map's lookup: hers, tap for tap, with the distance term on each
+ * casting tap. */
+static void shadow_others_lookup()
+{
+	const int n = 64;
+	const float units = HD_SHADOW_OTHERS_DEPTH;
+	std::vector<float> at((size_t)(n * n), 0.25f), none((size_t)(n * n), 1.0f);
+
+	// A map cast everywhere at depth 0.25: the result is the distance term of
+	// how far the pixel lies behind, for every distance.
+	int bad = 0;
+
+	for (int i = 0; i <= 3200; i += 16)
+	{
+		const float depth = 0.25f + (float)i / units;
+		const float got = HDShadowLookupBehind(&at[0], n, 0.5f, 0.5f, depth, units);
+		const float want = (float)i > HD_SHADOW_BIAS ? HDShadowBehindTerm((float)i) : 0.0f;
+
+		if (fabs((double)got - want) > 2e-4)
+			bad++;
+	}
+
+	ok(bad == 0 && HDShadowLookupBehind(&none[0], n, 0.5f, 0.5f, 0.9f, units) == 0.0f,
+		"shadow others: under a caster the lookup is the distance term of how far behind, 0 "
+		"within BIAS, and the clear map gives 0", bad, 0);
+
+	/* With every caster within FULL the term is 1 on every tap, and the
+	 * lookup is her own lookup, bit for bit: the same taps, weights, clamp
+	 * and bias (in the same depth units). A straight edge walked over by
+	 * hundredths of a texel. */
+	std::vector<float> half((size_t)(n * n), 1.0f);
+
+	for (int y = 0; y < n; y++)
+		for (int x = 0; x < 32; x++)
+			half[(size_t)(y * n + x)] = 0.25f;
+
+	int differ = 0;
+
+	for (int i = 0; i <= 1200; i++)
+	{
+		const float u = (26.0f + (float)i * 0.01f) / n;
+		const float v = (20.0f + (float)(i % 97) * 0.13f) / n;
+		const float mine = HDShadowLookupBehind(&half[0], n, u, v, 0.4f, HD_SHADOW_DEPTH);
+		const float hers = HDShadowLookup(&half[0], n, u, v, 0.4f);
+
+		if (memcmp(&mine, &hers, sizeof(float)) != 0)
+			differ++;
+	}
+
+	ok(differ == 0,
+		"shadow others: with every caster inside FULL the second lookup is her lookup, bit for bit",
+		differ, 0);
+
+	/* Two casters at different heights side by side: texels left of column
+	 * 32 hold a caster 1000 units in front of the pixel (term 1), the rest a
+	 * caster 2304 in front (term 0.25). Half way across the edge the lookup
+	 * is the mean of the two. */
+	std::vector<float> two((size_t)(n * n), 0.0f);
+	const float depth = 0.6f;
+
+	for (int y = 0; y < n; y++)
+		for (int x = 0; x < n; x++)
+			two[(size_t)(y * n + x)] = depth - (x < 32 ? 1000.0f : 2304.0f) / units;
+
+	const float mid = HDShadowLookupBehind(&two[0], n, 32.0f / n, 0.5f, depth, units);
+
+	ok(sh_milli(HDShadowLookupBehind(&two[0], n, 26.0f / n, 0.5f, depth, units)) == 1000 &&
+		sh_milli(HDShadowLookupBehind(&two[0], n, 38.0f / n, 0.5f, depth, units)) == 250 &&
+		sh_milli(mid) == 625,
+		"shadow others: each tap takes its own caster's distance - 1 and 0.25 either side of an "
+		"edge, their mean on it", sh_milli(mid), 625);
+}
+
+/* The factor where both maps are read: the darker of the two shadows, never
+ * their product, and her own factor where the second gives nothing. */
+static void shadow_others_factor()
+{
+	int notHers = 0, wrong = 0, darker = 0;
+
+	for (int i = 0; i <= 100; i++)
+		for (int j = 0; j <= 100; j++)
+		{
+			const float s = 0.05f + 0.4f * (float)(i % 11) / 10.0f;
+			const float hers = (float)i / 100.0f;
+			const float theirs = (float)j / 100.0f;
+			const float f = HDShadowReceiveFactor(s, hers, theirs);
+			const float big = hers > theirs ? hers : theirs;
+
+			if (j == 0)
+			{
+				const float one = 1.0f - s * hers;
+
+				if (memcmp(&f, &one, sizeof(float)) != 0)
+					notHers++;
+			}
+
+			if (fabs((double)f - (1.0 - (double)s * big)) > 1e-6)
+				wrong++;
+
+			if (f < 1.0f - s - 1e-6f)
+				darker++;
+		}
+
+	ok(notHers == 0,
+		"shadow others: where the second map gives nothing the factor is her own, bit for bit",
+		notHers, 0);
+	ok(wrong == 0 && darker == 0,
+		"shadow others: the factor is 1 - strength * max(hers, theirs), never below 1 - strength",
+		wrong + darker, 0);
+
+	// The overlap of two full shadows is as dark as one, not as their product.
+	const float one = HDShadowReceiveFactor(0.45f, 1.0f, 0.0f);
+	const float both = HDShadowReceiveFactor(0.45f, 1.0f, 1.0f);
+
+	ok(one == both && both == 1.0f - 0.45f && HDShadowReceiveFactor(0.45f, 0.0f, 1.0f) == both,
+		"shadow others: two full shadows overlapping give the factor of one", sh_milli(both),
+		sh_milli(one));
+}
+
+/* The two-map shader's registers: the second box's rows through a turned
+ * camera far from the origin, the distance term's line, the second block
+ * right after hers, her block silenced, and the second reach. */
+static void shadow_others_receive()
+{
+	const float d2r = 3.14159265f / 180.0f;
+	const float yaw = -52.0f * d2r, pitch = 17.0f * d2r;
+	const float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
+	const float R[9] =
+	{
+		cy, 0.0f, -sy,
+		-sy * sp, cp, -cy * sp,
+		sy * cp, sp, cy * cp
+	};
+	const float camera[3] = { 58113.0f, -5120.0f, 71440.0f };
+	float t[3];
+
+	for (int i = 0; i < 3; i++)
+		t[i] = -(R[i * 3 + 0] * camera[0] + R[i * 3 + 1] * camera[1] + R[i * 3 + 2] * camera[2]);
+
+	float nodes[15 * 3];
+
+	for (int k = 0; k < 15; k++)
+	{
+		nodes[k * 3 + 0] = 59000.0f + 7.0f * (float)k;
+		nodes[k * 3 + 1] = -2300.0f + 52.0f * (float)k;
+		nodes[k * 3 + 2] = 70500.0f - 6.0f * (float)k;
+	}
+
+	float dir[3];
+
+	HDShadowFallback(dir);
+
+	HDShadowBox her, box;
+
+	HDShadowBoxMake(&her, dir, nodes, 15);
+	HDShadowBoxAround(&box, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+		HD_SHADOW_OTHERS_MAP);
+
+	float regs[HD_SHADOW_RECEIVE2_COUNT * 4];
+
+	HDShadowReceiveOthersConstants(&box, R, t, regs);
+
+	double worstMap = 0.0, worstTerm = 0.0;
+
+	for (int k = 0; k < 300; k++)
+	{
+		const float p[3] =
+		{
+			box.centre[0] + (float)((k * 37) % 8000) - 4000.0f,
+			box.centre[1] + (float)((k * 53) % 6000) - 3000.0f,
+			box.centre[2] + (float)((k * 71) % 8000) - 4000.0f
+		};
+		float v[3];
+
+		for (int i = 0; i < 3; i++)
+			v[i] = R[i * 3 + 0] * p[0] + R[i * 3 + 1] * p[1] + R[i * 3 + 2] * p[2] + t[i];
+
+		float want[3];
+
+		HDShadowMapUVD(&box, p, want);
+
+		for (int c = 0; c < 3; c++)
+		{
+			const double got = (double)v[0] * regs[c * 4] + (double)v[1] * regs[c * 4 + 1] +
+				(double)v[2] * regs[c * 4 + 2] + regs[c * 4 + 3];
+			const double err = fabs(got - want[c]) * HD_SHADOW_OTHERS_MAP;
+
+			worstMap = err > worstMap ? err : worstMap;
+		}
+
+		// The shader's line for the distance term against the function.
+		const float tap = want[2] - (float)((k * 113) % 3000) / HD_SHADOW_OTHERS_DEPTH;
+		double line = (double)regs[17] - (double)regs[16] * ((double)want[2] - tap);
+
+		line = line < 0.0 ? 0.0 : (line > 1.0 ? 1.0 : line);
+
+		const double err = fabs(line - HDShadowBehindTerm((want[2] - tap) * HD_SHADOW_OTHERS_DEPTH));
+
+		worstTerm = err > worstTerm ? err : worstTerm;
+	}
+
+	ok(worstMap < 0.01 && worstTerm < 1e-4,
+		"shadow others: the second block's rows give the second box's mapping (within 0.01 texel) "
+		"and its line gives the distance term, through a turned camera 70,000 units out",
+		(long)(worstMap * 1000.0), 0);
+
+	ok(regs[12] == HD_SHADOW_BIAS / HD_SHADOW_OTHERS_DEPTH && regs[13] == (float)HD_SHADOW_OTHERS_MAP &&
+		regs[14] == 1.0f / (float)HD_SHADOW_OTHERS_MAP && regs[15] == 0.0f &&
+		regs[18] == 0.0f && regs[19] == 0.0f,
+		"shadow others: the second block's scalars are the second box's bias, side and texel", 0, 0);
+
+	// The second block follows hers without a gap or an overlap, inside the
+	// 224 constants of ps_3_0.
+	ok(HD_SHADOW_RECEIVE2_FIRST == HD_SHADOW_RECEIVE_FIRST + HD_SHADOW_RECEIVE_COUNT &&
+		HD_SHADOW_RECEIVE2_FIRST == 103 &&
+		HD_SHADOW_RECEIVE2_FIRST + HD_SHADOW_RECEIVE2_COUNT <= 224,
+		"shadow others: the second block is c103 - c107, right after hers",
+		HD_SHADOW_RECEIVE2_FIRST, 103);
+
+	/* Her block silenced: u is -1 wherever the pixel is, so her edge term is
+	 * 0; nothing else of her block changes. */
+	float hersRegs[HD_SHADOW_RECEIVE_COUNT * 4], silent[HD_SHADOW_RECEIVE_COUNT * 4];
+
+	HDShadowReceiveConstants(&her, R, t, 0.33f, hersRegs);
+	memcpy(silent, hersRegs, sizeof(silent));
+	HDShadowReceiveWithoutHer(silent);
+
+	int edges = 0;
+
+	for (int k = 0; k < 200; k++)
+	{
+		const float v[3] = { (float)(k * 17 % 900) - 450.0f, (float)(k * 29 % 700) - 350.0f,
+			100.0f + (float)(k * 41 % 3000) };
+		const float u = v[0] * silent[0] + v[1] * silent[1] + v[2] * silent[2] + silent[3];
+		const float vv = v[0] * silent[4] + v[1] * silent[5] + v[2] * silent[6] + silent[7];
+
+		if (HDShadowEdgeTerm(u, vv) != 0.0f)
+			edges++;
+	}
+
+	ok(edges == 0 && memcmp(silent + 4, hersRegs + 4, sizeof(float) * (HD_SHADOW_RECEIVE_COUNT - 1) * 4) == 0,
+		"shadow others: her block silenced gives her edge term 0 everywhere and keeps the rest",
+		edges, 0);
+
+	/* The second reach: every point of the second box's cross-section from
+	 * its near side to OTHERS_END beyond its far side lies in it. */
+	float rmin[3], rmax[3];
+	int outside = 0;
+
+	HDShadowReachOthers(&box, rmin, rmax);
+
+	for (int k = 0; k < 4000; k++)
+	{
+		const float a = ((float)((k * 7919) % 1000) / 1000.0f - 0.5f) * HD_SHADOW_OTHERS_BOX;
+		const float c = ((float)((k * 104729) % 1000) / 1000.0f - 0.5f) * HD_SHADOW_OTHERS_BOX;
+		const float f = -0.5f * HD_SHADOW_OTHERS_DEPTH +
+			(float)((k * 31) % 1000) / 1000.0f * (HD_SHADOW_OTHERS_DEPTH + HD_SHADOW_OTHERS_END);
+		float p[3];
+
+		for (int i = 0; i < 3; i++)
+			p[i] = box.centre[i] + a * box.right[i] + c * box.up[i] + f * box.fwd[i];
+
+		if (!HDShadowBoxesTouch(p, p, rmin, rmax))
+			outside++;
+	}
+
+	const float beyond[3] =
+	{
+		box.centre[0], box.centre[1] + 0.5f * HD_SHADOW_OTHERS_DEPTH + HD_SHADOW_OTHERS_END +
+			0.5f * HD_SHADOW_OTHERS_BOX + 100.0f, box.centre[2]
+	};
+	float hmin[3], hmax[3];
+
+	HDShadowReach(&her, hmin, hmax);
+
+	ok(outside == 0 && !HDShadowBoxesTouch(beyond, beyond, rmin, rmax) &&
+		HDShadowBoxesTouch(hmin, hmax, rmin, rmax),
+		"shadow others: the second reach holds every point a caster inside the box can shadow, "
+		"not one far below it, and meets her reach", outside, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -15378,6 +15706,10 @@ int main()
 	shadow_others_box();
 	shadow_others_rule();
 	shadow_others_gate();
+	shadow_others_behind();
+	shadow_others_lookup();
+	shadow_others_factor();
+	shadow_others_receive();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

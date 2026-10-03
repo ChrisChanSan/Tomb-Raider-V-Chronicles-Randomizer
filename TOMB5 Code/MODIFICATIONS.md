@@ -7324,7 +7324,8 @@ state, Projected, only in HD', 'Round 188 (#188): the suites', 'Round 188 (#188)
 record follows', 'Round 188 (#188): what review pass 1 found', 'Round 188 (#188): the
 record follows', 'Round 188 (#188): the shadow follows her movement at once and only the
 lights' change in time', 'Round 188 (#188): the suites', 'Round 188 (#188): the record
-follows'.
+follows', 'Round 188 (#188): what the correction's review pass 1 found', 'Round 188
+(#188): the record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

@@ -13,10 +13,11 @@
 
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
- * Build with bmenu.bat, run with no arguments from this folder: the last three
- * families (pad_scheme_repair, controls_mouse_rows and graphics_softbody_row)
- * read engine files as text, by their paths relative to it, because the
- * tables and rows they check live in files that cannot be linked here.
+ * Build with bmenu.bat, run with no arguments from this folder: the last four
+ * families (pad_scheme_repair, controls_mouse_rows, graphics_softbody_row and
+ * graphics_shadow_row) read engine files as text, by their paths relative to
+ * it, because the tables and rows they check live in files that cannot be
+ * linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
  * call sites, so every row added above a list meant recounting a shift
@@ -43,6 +44,7 @@
 #include "../../../TOMB5 Code/TOMB5/game/menu_nav.h"
 #include "../../../TOMB5 Code/TOMB5/game/key_scheme.h"
 #include "../../../TOMB5 Code/TOMB5/game/pad_scheme.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"	// the Shadow mode row's numbers and blob mode
 
 static int g_checks;
 static int g_fail;
@@ -1981,6 +1983,286 @@ static void graphics_softbody_row()
 	free(draw);
 }
 
+/* -------------------------------------------------- the Shadow mode row -- */
+
+/* What the row shows and steps to: the expressions of game\menu_frame.cpp's
+ * MenuShadowModeShown, MenuValShadowMode and MenuStepShadowMode, stated again
+ * here because that file cannot be linked. graphics_shadow_row holds each
+ * one against the file's own line; HDShadowBlobMode and the mode numbers are
+ * specific\hd\hd_shadow.h's own, included. */
+static unsigned long shadow_row_shown(bool hd, unsigned long stored)
+{
+	return hd ? stored : (unsigned long)HDShadowBlobMode((long)stored);
+}
+
+static const char* shadow_row_text(bool hd, unsigned long stored)
+{
+	const unsigned long shown = shadow_row_shown(hd, stored);
+
+	return shown == 1 ? "Original" : shown == 2 ? "Circle" :
+		shown == 3 ? "Faded circle" : shown == 5 ? "Projected" : "PSX";
+}
+
+static unsigned long shadow_row_step(bool hd, unsigned long stored, long dir)
+{
+	const unsigned long shown = shadow_row_shown(hd, stored);
+	const unsigned long top = hd ? HD_SHADOW_MODE_PROJECTED : HD_SHADOW_MODE_PSX;
+
+	if (dir > 0)
+		return shown >= top ? 1 : shown + 1;
+
+	if (dir < 0)
+		return shown <= 1 ? top : shown - 1;
+
+	return stored;
+}
+
+// The four-state row of base, which the row with HD off keeps for every
+// stored value but 5.
+static unsigned long shadow_row_step_four(unsigned long v, long dir)
+{
+	if (dir > 0)
+		return v >= 4 ? 1 : v + 1;
+
+	if (dir < 0)
+		return v <= 1 ? 4 : v - 1;
+
+	return v;
+}
+
+static const char* shadow_row_text_four(unsigned long v)
+{
+	return v == 1 ? "Original" : v == 2 ? "Circle" : v == 3 ? "Faded circle" : "PSX";
+}
+
+/* The Shadow mode row on the Graphics page and its fifth state, Projected.
+ * Read from the tree: the row's table line, the three functions' lines in
+ * game\menu_frame.cpp (HD is HDEnabled, a stored 5 shown and stepped through
+ * HDShadowBlobMode without HD, the top 5 with HD and 4 without, the sound,
+ * no write but the two steps), the new string's five columns in
+ * game\gameflow.cpp, and specific\hd\hd_laradraw.cpp's per-frame decision,
+ * which reads the option every frame and forgets the following in a frame
+ * without the projected shadow. Swept: both cases over the five states, the
+ * wrap both ways, the texts, every other stored value against base's rule,
+ * and hd_shadow.h's own HDShadowFollowStep snapping after that reset. */
+static void graphics_shadow_row()
+{
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* draw = tree_file("../../../TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp");
+	unsigned long v;
+	int i, d;
+
+	check(frame && flow && draw, 1, "shadow row: the three engine files are readable from here");
+
+	if (!frame || !flow || !draw)
+	{
+		free(frame);
+		free(flow);
+		free(draw);
+		return;
+	}
+
+	// The table line: the same kind, functions and save class as before.
+	check(tree_count(frame, "MENU_VALUE(\"Shadow mode\", MenuValShadowMode, MenuStepShadowMode, MENU_SAVE_TOMB5),"), 1,
+		"shadow row: an ungated value row, saved with the tomb5 settings");
+	check(strstr(frame, "#include \"../specific/hd/hd_level.h\"") != 0
+		&& strstr(frame, "#include \"../specific/hd/hd_shadow.h\"") != 0, 1,
+		"shadow row: the menu reads HDEnabled and HDShadowBlobMode from the engine's own headers");
+
+	// The three functions, as one block and its two halves.
+	{
+		const char* begin = strstr(frame, "static ulong MenuShadowModeShown(bool hd)");
+		const char* step = begin ? strstr(begin, "static bool MenuStepShadowMode(long, long dir)") : 0;
+		const char* end = step ? strstr(step, "static const char* MenuValFog") : 0;
+
+		check(begin != 0 && step != 0 && end != 0, 1, "shadow row: its three functions stand together");
+
+		if (begin && step && end)
+		{
+			const size_t showLen = (size_t)(step - begin);
+			const size_t stepLen = (size_t)(end - step);
+			char* show = (char*)malloc(showLen + 1);
+			char* walk = (char*)malloc(stepLen + 1);
+
+			memcpy(show, begin, showLen);
+			show[showLen] = 0;
+			memcpy(walk, step, stepLen);
+			walk[stepLen] = 0;
+
+			check(strstr(show, "return hd ? tomb5.shadow_mode : (ulong)HDShadowBlobMode((long)tomb5.shadow_mode);") != 0, 1,
+				"shadow row: with HD the stored value is shown, without it what the blob draws");
+			check(strstr(show, "const ulong shown = MenuShadowModeShown(HDEnabled());") != 0, 1,
+				"shadow row: the shown value asks HDEnabled");
+			check(strstr(show, "CustomText(shown == 1 ? \"Original\" : shown == 2 ? \"Circle\" :") != 0, 1,
+				"shadow row: 1 shows Original and 2 Circle, through CustomText");
+			check(strstr(show, "shown == 3 ? \"Faded circle\" : shown == 5 ? \"Projected\" : \"PSX\"));") != 0, 1,
+				"shadow row: 3 shows Faded circle, 5 Projected, everything else PSX");
+			check(tree_count(show, "tomb5.shadow_mode ="), 0,
+				"shadow row: showing the row writes nothing, so a stored 5 survives a visit with HD off");
+
+			check(strstr(walk, "const bool hd = HDEnabled();") != 0, 1, "shadow row: a step asks HDEnabled once");
+			check(strstr(walk, "const ulong shown = MenuShadowModeShown(hd);") != 0, 1,
+				"shadow row: and steps from the value it shows");
+			check(strstr(walk, "const ulong top = hd ? HD_SHADOW_MODE_PROJECTED : HD_SHADOW_MODE_PSX;") != 0, 1,
+				"shadow row: five states with HD, four without");
+			check(strstr(walk, "tomb5.shadow_mode = shown >= top ? 1 : shown + 1;") != 0, 1,
+				"shadow row: right past the top wraps to Original");
+			check(strstr(walk, "tomb5.shadow_mode = shown <= 1 ? top : shown - 1;") != 0, 1,
+				"shadow row: left below Original wraps to the top");
+			check(tree_count(walk, "tomb5.shadow_mode ="), 2, "shadow row: the two steps are the only writes");
+			check(tree_count(walk, "SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);"), 2,
+				"shadow row: each step plays the menu's select sound, as the rows beside it");
+			check(strstr(walk, "\treturn 0;") != 0, 1, "shadow row: no direction, no change");
+
+			free(show);
+			free(walk);
+		}
+	}
+
+	// The numbers and the blob mode the row is built on.
+	check(HD_SHADOW_MODE_ORIGINAL * 10000 + HD_SHADOW_MODE_CIRCLE * 1000 + HD_SHADOW_MODE_FADED * 100
+		+ HD_SHADOW_MODE_PSX * 10 + HD_SHADOW_MODE_PROJECTED, 12345, "shadow row: the five mode numbers are 1..5");
+
+	for (v = 0; v <= 9; v++)
+		check(HDShadowBlobMode((long)v), v == 5 ? 3 : (int)v,
+			"shadow row: the blob draws a stored 5 as the faded circle and every other value as stored");
+
+	// HD on: five states, the wrap both ways, the texts.
+	{
+		static const char* const text[6] = { 0, "Original", "Circle", "Faded circle", "PSX", "Projected" };
+
+		for (v = 1; v <= 5; v++)
+		{
+			check(strcmp(shadow_row_text(true, v), text[v]), 0, "shadow row: with HD each of the five states has its text");
+			check((int)shadow_row_step(true, v, 1), v == 5 ? 1 : (int)v + 1, "shadow row: with HD right goes 1 2 3 4 5 1");
+			check((int)shadow_row_step(true, v, -1), v == 1 ? 5 : (int)v - 1, "shadow row: with HD left goes 1 5 4 3 2 1");
+			check((int)shadow_row_step(true, v, 0), (int)v, "shadow row: with HD no direction keeps the state");
+		}
+
+		unsigned long seen = 0, at = 1;
+
+		for (i = 0; i < 5; i++)
+		{
+			seen |= 1ul << at;
+			at = shadow_row_step(true, at, 1);
+		}
+
+		check((int)seen, 0x3E, "shadow row: with HD five presses visit all five states");
+		check((int)at, 1, "shadow row: and come back to the first");
+	}
+
+	// HD off: four states, a stored 5 shown and stepped as Faded circle.
+	{
+		static const char* const text[5] = { 0, "Original", "Circle", "Faded circle", "PSX" };
+		unsigned long seen = 0, at = 1;
+
+		for (i = 0; i < 4; i++)
+		{
+			seen |= 1ul << at;
+			at = shadow_row_step(false, at, 1);
+		}
+
+		check((int)seen, 0x1E, "shadow row: without HD four presses visit the four blobs");
+		check((int)at, 1, "shadow row: and come back to the first");
+
+		for (v = 1; v <= 4; v++)
+		{
+			check(strcmp(shadow_row_text(false, v), text[v]), 0, "shadow row: without HD each of the four states has its text");
+			check((int)shadow_row_step(false, v, 1), v == 4 ? 1 : (int)v + 1, "shadow row: without HD right goes 1 2 3 4 1");
+			check((int)shadow_row_step(false, v, -1), v == 1 ? 4 : (int)v - 1, "shadow row: without HD left goes 1 4 3 2 1");
+		}
+
+		for (v = 1; v <= 4; v++)
+			for (d = -1; d <= 1; d++)
+				check((int)shadow_row_step(false, v, d) <= 4, 1, "shadow row: without HD every step stays in 1..4");
+
+		check(strcmp(shadow_row_text(false, 5), "Faded circle"), 0, "shadow row: without HD a stored 5 shows Faded circle");
+		check((int)shadow_row_step(false, 5, 1), 4, "shadow row: and right from it gives PSX");
+		check((int)shadow_row_step(false, 5, -1), 2, "shadow row: and left gives Circle");
+		check((int)shadow_row_step(false, 5, 0), 5, "shadow row: and no direction leaves the stored 5 alone");
+
+		static const unsigned long odd[13] = { 0, 1, 2, 3, 4, 6, 7, 8, 9, 100, 0x7FFFFFFFul, 0x80000000ul, 0xFFFFFFFFul };
+
+		for (i = 0; i < 13; i++)
+		{
+			check(strcmp(shadow_row_text(false, odd[i]), shadow_row_text_four(odd[i])), 0,
+				"shadow row: without HD every value but 5 shows as base's row shows it");
+
+			for (d = -1; d <= 1; d++)
+				check(shadow_row_step(false, odd[i], d) == shadow_row_step_four(odd[i], d), 1,
+					"shadow row: without HD every value but 5 steps as base's row steps it");
+		}
+
+		// With HD only the values below 1 differ from base's row: left wraps
+		// to the new top.
+		for (i = 0; i < 13; i++)
+			for (d = -1; d <= 1; d++)
+				if (odd[i] < 1 || odd[i] > 5)
+					check(shadow_row_step(true, odd[i], d) == (odd[i] == 0 && d < 0 ? 5 : shadow_row_step_four(odd[i], d)), 1,
+						"shadow row: with HD a value outside 1..5 steps as base's row, but left from 0 to the top");
+	}
+
+	// The string: one row, five columns, the German its translation.
+	{
+		char col[5][64];
+		const char* at = strstr(flow, "{ \"Projected\",");
+
+		check(at != 0 && tree_quoted(at, col, 5) == 5, 1, "shadow row: Projected has its row in CustomText's table");
+
+		if (at)
+		{
+			check(strcmp(col[0], "Projected"), 0, "shadow row: the English column is the string itself");
+			check(strcmp(col[2], "Projiziert"), 0, "shadow row: the German column is Projiziert");
+			check(!strcmp(col[1], "Projected") && !strcmp(col[3], "Projected") && !strcmp(col[4], "Projected"), 1,
+				"shadow row: French, Italian and Spanish repeat the English");
+		}
+
+		check(tree_count(flow, "{ \"Projected\","), 1, "shadow row: and the string has exactly one row");
+
+		at = strstr(flow, "{ \"Faded circle\",");
+		check(at != 0 && tree_quoted(at, col, 5) == 5 && !strcmp(col[2], "Weicher Kreis"), 1,
+			"shadow row: Faded circle is in the table already, Weicher Kreis");
+		check(tree_count(flow, "{ \"PSX\",") + tree_count(flow, "{ \"Original\","), 0,
+			"shadow row: PSX and Original have no row and fall back to the English");
+	}
+
+	// The running level: the draw reads the option every frame, forgets the
+	// following in a frame without the projected shadow, and the next step
+	// after that places the shadow at once.
+	{
+		const char* at = strstr(draw, "if (!g_shadow_frame.runs)");
+		const char* reset = at ? strstr(at, "HDShadowFollowReset(&g_shadow_follow);") : 0;
+
+		check(strstr(draw, "int gate = HDShadowGate((long)tomb5.shadow_mode,") != 0, 1,
+			"shadow row: the draw reads the option in every frame's decision");
+		check(at != 0 && reset != 0 && reset - at < 64, 1,
+			"shadow row: a frame without the projected shadow forgets the following");
+		check(strstr(draw, "HDShadowFollowStep(&g_shadow_follow, &f.target, reference, dt)") != 0, 1,
+			"shadow row: a frame with it steps the following");
+
+		HDShadowFollow f;
+		HDShadowKey a = { { 0.6f, 0.8f, 0.0f }, 0.4f, 1.0f, 1.0f, 37.0f, 1 };
+		HDShadowKey b = { { 0.0f, 1.0f, 0.0f }, 0.27f, 0.5f, 1.0f, 0.0f, 1 };
+		const float P[3] = { 100.0f, -200.0f, 300.0f };
+
+		memset(&f, 0, sizeof(f));
+		HDShadowFollowReset(&f);
+		check(HDShadowFollowStep(&f, &a, P, 1.0f / 60.0f), 1, "shadow row: the first frame with the shadow snaps");
+		check(f.dir[0] == a.dir[0] && f.dir[1] == a.dir[1] && f.dir[2] == a.dir[2] && f.strength == a.strength, 1,
+			"shadow row: to the target's direction and strength");
+		check(HDShadowFollowStep(&f, &b, P, 1.0f / 60.0f), 0, "shadow row: the next frame glides");
+		check(f.strength < a.strength && f.strength > b.strength, 1, "shadow row: part of the way to a new target");
+		HDShadowFollowReset(&f);
+		check(HDShadowFollowStep(&f, &b, P, 1.0f / 60.0f) && f.strength == b.strength, 1,
+			"shadow row: and after a frame without it, the first frame with it snaps again");
+	}
+
+	free(frame);
+	free(flow);
+	free(draw);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -2007,6 +2289,7 @@ int main()
 	pad_scheme_repair();
 	controls_mouse_rows();
 	graphics_softbody_row();
+	graphics_shadow_row();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

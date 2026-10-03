@@ -7070,7 +7070,7 @@ ridge', 'Round 193 (#193): the record follows', 'Round 193 (#193): the options m
 what review pass 1 found', 'Round 193 (#193): the record follows', 'Round 193 (#193): the
 three strengths start at the old strong'.
 
-### The projected shadow: Lara's outline on the HD rooms, thrown away from the light
+### The projected shadow: Lara's outline on the HD rooms, cast by one fixed light
 2026-10-03
 
 **What.** In an HD room the HD Lara throws a projected shadow in place of the classic
@@ -7086,58 +7086,79 @@ is the faded circle. Three new log lines behind `-log`: `HDLOG shadow target`, `
 shadow mode` and `HDLOG shadow second`. The *Shadow mode* row on the *Graphics* page
 offers *Projected* as its fifth state while HD is on and steps the four blobs while it is
 off, showing a stored 5 then as *Faded circle*, which is what is drawn for it. The shadow
-lies where her movement through the light puts it in every frame and stands still the
-frame she stands still; only a change of the lights themselves - another room's list
-coming in, a lamp that goes out or fades - is blended in, over about half a second of game
-time.
+is thrown by one fixed light for the whole game - 30 degrees off straight down, from one
+side, at one darkness - so it lies the same way in every room and moves only as she does.
+The lights that light her model can turn and deepen it by one number of the table,
+`HD_SHADOW_PULL`, which stands at 0; above 0 the shadow lies where her movement through
+the light puts it in every frame and stands still the frame she stands still, and only a
+change of the lights themselves - another room's list coming in, a lamp that goes out or
+fades - is blended in, over about half a second of game time.
 
-**Why.** A shadow that shows her outline and where the light comes from. The blob says
-where she stands and nothing more; a silhouette laid on the floor and the steps, offset to
-the side the room's lights throw it, ties her to the room she is lit by.
+**Why.** A shadow that shows her outline. The blob says where she stands and nothing
+more; a silhouette laid on the floor and the steps, offset to one side, ties her to the
+room she stands in. The light is a fixed one because the lamps of the levels are set to
+colour the walls - low, close and one at a time - and each throws the shadow somewhere
+else, so a shadow turned by them wanders by itself. Measured over 45 seconds of ANDREA2
+with the lamps' full part (pull 1): her list held no lamp or one at a time; the drawn
+direction turned by more than 40 degrees from one second to the next in 27 of the 44
+steps, by up to 104; it stood within a degree of the 55-degree slant limit in 19 of the
+45 seconds; and the largest angle of a second between the drawn direction and the frame's
+target passed 20 degrees in 28. The darkness the lamps gave there, 0.28 to 0.43 and 0.32
+on average, is what the fixed darkness, 0.45 x 0.75 = 0.34, stands near.
 
 **How.** The arithmetic is one pure header, `specific/hd/hd_shadow.h` (new; no engine
-header, like `hd_softbody.h`), with one table of the numbers that shape the look (:83 to
-:97: map 512 texels, box 2048 units across and 2048 along the light, darkness 0.45, LOW
-0.6, W_REF 0.5, W_FALLBACK 0.15 at 25 degrees, slant limit 55 degrees, TAU 0.5 s, FULL
-1024 and END 2048 units below her lowest node, EDGE 0.1, FACING 0.2, BIAS 8 units) and the
-machinery under it (:115). The key light, `HDShadowKeyTarget` (:300): every sun, point and
-spot of her two engine light lists (`HDObjectShadowLights`, `hd_object.cpp:3867` - the
-dynamic lights are not in them, so a gun flash does not swing it) gives a weight, its
-luminance times the model shader's own falloff (`HDShadowFalloff`, :237), and the
-direction it travels at her torso node; their weighted sum plus the fixed slant is made
-unit and held to the slant limit with its bearing kept (`HDShadowLimit`, :265); the
-darkness is DARK times LOW..1 by how far the lights agree. The following,
-`HDShadowFollow` (:406), tells her movement from a change of the lights:
-`HDShadowFollowLights` (:444) weighs the frame's lights at the last step's torso position,
-and `HDShadowFollowStep` (:491) takes that minus the last step's target - what the lights
-alone changed, measured at one place - into an offset and lets the offset decay by
-exp(-dt / TAU) (`HDShadowDecay`, :433, :531) on a clock of its own on the soft motion's
-`HDSoftClock` (`hd_laradraw.cpp:136`). The drawn direction is the frame's target plus the
-offset, made unit and held to the slant limit (:553), the drawn darkness the target's plus
-its offset held to 0..DARK (:574). With the lights unchanged the offset is nothing and the
-target is drawn as it is, so her own movement shows at once; a change of the lights starts
-from what was drawn and reaches the new target along exp(-t / TAU), the same at 30, 60 and
-165 frames a second. The pause and the inventory stand the clock still: a change of the
-lights in such a frame goes into the offset whole and decays once the clock runs. A level
-start, a load, a jump further than she can move, a gap of a quarter of a second and the
-first frame after the shadow was off snap and clear the offset (:494). A step given only a
-target, with no measurement before it, counts the whole change of the target as the
-lights'. The box (`HDShadowBasis` :616, `HDShadowBoxMake` :651): right is fwd x (1, 0, 0),
-which cannot flip inside the slant limit; the centre between her lowest and highest node,
-snapped to whole texels so a still light does not let the outline crawl; one mapping,
-`HDShadowMapUVD` (:703), as a matrix on view space (`HDShadowViewToMap`, :727) and as the
-cast's clip matrix with Direct3D 9's half-texel rule (`HDShadowCastMatrix`, :771). The
-gate, `HDShadowGate` (:811): the option, the level drawn HD, Lara drawn as the HD
-composite, her room drawn HD, and last the map. The receive side: `HDShadowEdgeTerm`
-(:911), `HDShadowHeightTerm` (:923), `HDShadowFacingTerm` (:931), `HDShadowLookup`
-(:955) - the 4 x 4 texels round the position weighted 1 - f, 1, 1, f along each axis, so
-the result is continuous in the position -, `HDShadowReceiveConstants` (:1007), the
-receive shader's seven registers out of the same mapping, and `HDShadowReach` (:1057),
-the world box a room group must touch to be drawn again. The mode: `HDShadowBlobMode`
-(:867) draws a stored 5 as the faded circle, `HDShadowEffectiveMode` (:875) is 5 exactly
-when the gate is open. The shaders: `hd_shader/hd_shadow.hlsl` (new)
-includes `hd_model.hlsl` and calls `ModelVS`, replacing only the projection, and writes
-the depth into an R32F map, alpha-tested by the part's page;
+header, like `hd_softbody.h`), with one table of the numbers that shape the look (:108
+to :123: map 512 texels, box 2048 units across and 2048 along the light, darkness 0.45,
+LOW 0.75, PULL 0, W_REF 0.5, W_FALLBACK 0.15, the fixed slant 30 degrees, slant limit 55
+degrees, TAU 0.5 s, FULL 1024 and END 2048 units below her lowest node, EDGE 0.1, FACING
+0.2, BIAS 8 units) and the machinery under it (:141). The key light, `HDShadowKeyTarget`
+(:329), takes the pull as a last parameter that defaults to the table's `HD_SHADOW_PULL`
+(:113) and is held to 0..1 (:332); `HDShadowFollowLights` takes it the same way, so
+`shadow_step`'s calls stand as they were. Every sun, point and spot of her two engine
+light lists (`HDObjectShadowLights`, `hd_object.cpp:3867` - the dynamic lights are not in
+them, so a gun flash does not swing it) gives a weight, its luminance times the model
+shader's own falloff (`HDShadowFalloff`, :263), and the direction it travels at her torso
+node; the key light uses the weight times the pull. The weighted sum plus W_FALLBACK times
+the fixed slant is made unit and held to the slant limit with its bearing kept
+(`HDShadowLimit`, :291), and a sum of nothing leaves the fixed slant exactly as
+`HDShadowFallback` (:186) gives it (:398); the darkness is DARK times LOW..1 by how far
+the pulled lights agree and how far their pulled weight reaches W_REF. At pull 0 every
+product is 0, so the target is the fixed slant at DARK x LOW, the same bits for any lights
+at any place, while the key's `lights` and `weight` - the log's `lights=` and `weight=` -
+still count her list before the pull. The following, `HDShadowFollow` (:453), tells her
+movement from a change of the lights: `HDShadowFollowLights` (:492) weighs the frame's
+lights at the last step's torso position with the same pull, and `HDShadowFollowStep`
+(:540) takes that minus the last step's target, which is what the lights alone changed,
+measured at one place, into an offset and lets the offset decay by exp(-dt / TAU)
+(`HDShadowDecay`, :480, :580) on a clock of its own on the soft motion's `HDSoftClock`
+(`hd_laradraw.cpp:136`). The drawn direction is the frame's target plus the offset, made
+unit and held to the slant limit (:602), the drawn darkness the target's plus its offset
+held to 0..DARK (:623). With the lights unchanged - at pull 0 in every frame - the offset
+is nothing and the target is drawn as it is, so her own movement shows at once; with a
+pull above 0 a change of the lights starts from what was drawn and reaches the new target
+along exp(-t / TAU), the same at 30, 60 and 165 frames a second. The pause and the
+inventory stand the clock still: a change of the lights in such a frame goes into the
+offset whole and decays once the clock runs. A level start, a load, a jump further than
+she can move, a gap of a quarter of a second and the first frame after the shadow was
+off snap and clear the offset (:543). A step given only a target, with no measurement
+before it, counts the whole change of the target as the lights'. The box
+(`HDShadowBasis` :665, `HDShadowBoxMake` :700): right is fwd x (1, 0, 0), which cannot
+flip inside the slant limit; the centre between her lowest and highest node, snapped to
+whole texels so a still light does not let the outline crawl; one mapping,
+`HDShadowMapUVD` (:752), as a matrix on view space
+(`HDShadowViewToMap`, :776) and as the cast's clip matrix with Direct3D 9's half-texel
+rule (`HDShadowCastMatrix`, :820). The gate, `HDShadowGate` (:860): the option, the level
+drawn HD, Lara drawn as the HD composite, her room drawn HD, and last the map. The receive
+side: `HDShadowEdgeTerm` (:960), `HDShadowHeightTerm` (:972), `HDShadowFacingTerm`
+(:980), `HDShadowLookup` (:1004) - the 4 x 4 texels round the position weighted 1 - f, 1,
+1, f along each axis, so the result is continuous in the position -,
+`HDShadowReceiveConstants` (:1056), the receive shader's seven registers out of the same
+mapping, and `HDShadowReach` (:1106), the world box a room group must touch to be drawn
+again. The mode: `HDShadowBlobMode` (:916) draws a stored 5 as the faded circle,
+`HDShadowEffectiveMode` (:924) is 5 exactly when the gate is open. The shaders:
+`hd_shader/hd_shadow.hlsl` (new) includes `hd_model.hlsl` and calls `ModelVS`, replacing
+only the projection, and writes the depth into an R32F map, alpha-tested by the part's
+page;
 `hd_shader/hd_shadow_receive.hlsl` (new) reads `RoomVS`'s outputs by semantic (TEXCOORD0,
 2 and 5), runs the range's alpha test, the three terms and the lookup in a dynamic branch
 with explicit-level taps, and writes 1 - strength x lookup x terms; about 55, 5 and 125
@@ -7177,9 +7198,9 @@ two state lines. `hd_level.cpp`: `ShadowCastPass` (:4542), then `ShadowReceivePa
 (:4608) - every room group of the frame whose box, moved by its room's origin, touches the
 reach, again in the windows and scissors `DrawRoomWindowed` used
 (`DrawRoomShadowWindowed`, :4582), only in a frame whose map was drawn just now - and
-`ShadowSecond` (:4690), which ends its line in `lag=`, the largest angle of the second
-between the drawn direction and the frame's target (:4728, cleared at :4708 and :4739);
-all three in `HDFrameDraw` (:4898) after the room loop, the clear floors and
+`ShadowSecond` (:4694), which ends its line in `lag=`, the largest angle of the second
+between the drawn direction and the frame's target (:4732, cleared at :4712 and :4743),
+0 at pull 0; all three in `HDFrameDraw` (:4902) after the room loop, the clear floors and
 `HDRenderScissorOff`, before the models' solid passes. The blob:
 `specific/drawlara.cpp` (:133, :388, :652) calls `S_PrintShadow` only for the mirror's
 copy or when `HDShadowFrameDecide` says no; `specific/specificfx.cpp` (:6652, :6667,
@@ -7197,20 +7218,49 @@ unchanged. `game/gameflow.cpp` (:1445): *Projected* in `CustomText`'s table, Ger
 *Projiziert*, the English repeated in the French, Italian and Spanish columns. A change
 reaches the running level on its next drawn frame: `HDShadowFrameDecide` reads the option
 every frame, a frame without the projected shadow resets the following
-(`hd_laradraw.cpp:1080`), and the first step after that reset snaps (`hd_shadow.h:494`).
+(`hd_laradraw.cpp:1080`), and the first step after that reset snaps (`hd_shadow.h:543`).
 
-**Checked.** The engine builds (`be.bat`). ModernTest 14,425 (14,280 and 145 in twelve
-groups: `shadow_key`, `shadow_follow`, `shadow_follow_move`, `shadow_follow_lights`,
-`shadow_follow_both`, `shadow_follow_edges`, `shadow_box`, `shadow_gate`, `shadow_terms`,
-`shadow_lookup`, `shadow_receive`, `shadow_mode`), MenuTest 42,613, InterpTest 729,
-LipsTest 270 and 243, none failed; ModelProbe, RoomProbe and MapProbe, the tools that link
-the changed files, build. Eighteen mutations of the header outside the following, each in
-a `git archive` copy, fail at least one check each: a sun reversed, the falloff
-stretched, no slant limit, no half-texel shift, no texel snap, a basis that flips, two
-gates swapped, a hard box edge, the height term reversed, faces turned away taking it,
-flat tap weights, no bias, the clear value casting, the height plane without her lowest
-node, the light's row reversed, the reach cut at her feet, a 5 handed to the blob and
-projected without the gate. Fourteen mutations of the following fail as well, with the
+**Checked.** The engine builds (`be.bat`). ModernTest 14,443 (14,280 and 163 in fourteen
+groups: `shadow_key`, `shadow_pull`, `shadow_fixed`, `shadow_follow`,
+`shadow_follow_move`, `shadow_follow_lights`, `shadow_follow_both`, `shadow_follow_edges`,
+`shadow_box`, `shadow_gate`, `shadow_terms`, `shadow_lookup`, `shadow_receive`,
+`shadow_mode`), MenuTest 42,613, InterpTest 729, LipsTest 270 and 243, none failed;
+ModelProbe, RoomProbe and MapProbe, the tools that link the changed files, build. The
+fixed light (`shadow_fixed`, 10 checks): at the table's pull the key light gives the
+fixed slant and DARK x LOW bit for bit, and an agreement of exactly 0, for 35 light
+sets - none, a list pointer of nothing,
+a lamp above her, at her feet, below her and at the reference point itself, a spot beside
+her, a sun from each of 26 sides, thirty lights at once and lights that are not numbers -
+at five reference points from the origin to 1e30 and NaN, the same as an explicit pull of
+0, with `lights` and `weight` those of pull 1; the same sets at pull 1 turn the direction
+by over 5 degrees in at least 100 of the 175 cases, so the check is not empty; a walk of
+five seconds through lights that change every four steps, driven as `shadow_step` drives
+it, draws the fixed slant and DARK x LOW bit for bit in every step at 30, 60 and 165 steps
+a second, with no offset, one snap and a lag of exactly 0, while the same walk at pull 1
+turns the drawn direction away from the target. The lights' part (`shadow_pull`, 8
+checks): every check of `shadow_key` and of the following calls the key light with the
+pull given as 1 and holds as it stood; for a sun and for a lamp, 21 pulls from 0 to 1 turn
+the direction along the arc from the fixed slant towards the lights' own within 1e-3
+degrees, monotone, and give a strength between DARK x LOW and the lights', rising; half
+the pull is neither end; a white sun at pull p has the strength of a sun p as bright
+within 1e-5; a pull above 1 counts as 1 and one below 0, minus 1e30 or NaN as 0, bit for
+bit. Against the key light of before, with LOW and the slant set to the same numbers,
+200,000 random light sets at pull 1 give the same bits in 161,144 and, where the sum is
+nothing (38,856), the fixed slant exactly where the old rule gave the unit vector of
+W_FALLBACK times it, with the same strength, weight and count. Thirteen mutations of the
+header, each in a `git archive` copy, fail checks: the pull left out (11), the pull on
+the direction only with the strength from the unpulled lights (9), the pull on the
+strength only (9), the strength's weights unpulled (1), no exact fixed slant for a sum of
+nothing (4), the weight counted after the pull (1), the pull not held to 0..1 (1), the
+measurement before the step without the pull (82), the table's pull 1 (6) and 0.5 (6),
+the default of the key light's pull 1 (5), the slant 25 (2), LOW 0.6 (1). Eighteen
+mutations of the header outside the following, each in a `git archive` copy, fail at
+least one check each: a sun reversed, the falloff stretched, no slant limit, no
+half-texel shift, no texel snap, a basis that flips, two gates swapped, a hard box edge,
+the height term reversed, faces turned away taking it, flat tap weights, no bias, the
+clear value casting, the height plane without her lowest node, the light's row reversed,
+the reach cut at her feet, a 5 handed to the blob and projected without the gate.
+Fourteen mutations of the following fail as well, with the
 number of checks each fails: the measurement not used, so every change of the target
 trails again (38), the jump measured at the new reference point (38), offset times decay
 minus jump in place of (offset - jump) times decay (43), no decay (51), a linear decay
@@ -7270,8 +7320,14 @@ the mirror pass, every other HD draw - items, creatures, cutscene actors, the in
 and the savegame are untouched.
 
 **Decisions.** On by default. The four classic blobs stay selectable in HD too. The new
-state of the *Shadow mode* row is reachable only while HD is on. While the projected
-shadow runs, a change of the lights is blended over time and never stepped, the darkness
+state of the *Shadow mode* row is reachable only while HD is on. The shadow's light is a
+fixed one - one slant for the whole game, 30 degrees, and one darkness, 0.34 - so the
+shadow moves only as she does; the lamps' part stays in the arithmetic behind one number
+of the table, `HD_SHADOW_PULL`, set to 0, which multiplies every light's weight in the
+direction and in the darkness alike, so that the lights' rule stays built and checked and
+a pull between 0 and 1 mixes the two. The key light takes the pull as a defaulted last
+parameter, so the engine's calls and the lines MenuTest reads stay as they were. With a
+pull above 0, a change of the lights is blended over time and never stepped, the darkness
 as well as the direction, while her own movement through the light is drawn at once, so
 the shadow comes to rest the frame she does; the change between the blob and the
 projected shadow itself is made from one frame to the next. The lights are told from her
@@ -7293,23 +7349,25 @@ back, so switching HD on again brings *Projected* back.
 (the reflected rooms do not receive, and her reflection keeps the blob); the parts of her
 drawn classic (the diving suit's two propulsion units are not in the map); classic rooms
 (her blob is drawn there); the classic statics of an HD room (`HDStaticIsClassic`, 21 in
-ANDREA1) do not receive; the tuning of the numbers. A shadow that reaches past a wall
-falls on the floor beyond it as well, because receivers never cast; the height term stops
-a storey below, nothing stops a room beside. A face turned away from the light is not
-darkened even where the room's baked light lights it. If the frame list is full and her
-body cannot be pushed, the frame has neither shadow nor blob (the blob gave way, the map
-stays empty). The change between the blob and the projected shadow is not blended: at the
-border between an HD room and a classic one, on a step of the row and when the map is
-lost, one gives way to the other within a single frame, the shadow at its full strength.
-The shadow multiplies the finished colour of the room, so it darkens the distance fog and
-the fog bulbs that stand in front of the floor as well. Whatever changes her two light
-lists while she walks, a light that enters or leaves them or a brightness the engine
-fades, counts as a change of the lights and is blended, so `lag=` above 0 while she only
-moves says that her lists changed under her. What cannot be proven without playing: how
-the shadow looks in motion, how the direction behaves while she walks through real rooms
-and how often her lists change there, the darkness and softness against taste, cutscenes,
-first person, and whether the frame's world-to-view (`aW2VMx`) is the camera her main
-draw's matrices stand on at sixty frames a second as well.
+ANDREA1) do not receive; the tuning of the numbers. The fixed light falls the same way in
+every room, so near a lamp the shadow can lie towards the lamp rather than away from it.
+A shadow that reaches past a wall falls on the floor beyond it as well, because receivers
+never cast; the height term stops a storey below, nothing stops a room beside. A face
+turned away from the light is not darkened even where the room's baked light lights it.
+If the frame list is full and her body cannot be pushed, the frame has neither shadow nor
+blob (the blob gave way, the map stays empty). The change between the blob and the
+projected shadow is not blended: at the border between an HD room and a classic one, on a
+step of the row and when the map is lost, one gives way to the other within a single
+frame, the shadow at its full strength. The shadow multiplies the finished colour of the
+room, so it darkens the distance fog and the fog bulbs that stand in front of the floor as
+well. With a pull above 0, whatever changes her two light lists while she walks, a light
+that enters or leaves them or a brightness the engine fades, counts as a change of the
+lights and is blended, so `lag=` above 0 while she only moves says that her lists changed
+under her; at pull 0 `lag=` stays 0. What cannot be proven without playing: how the fixed
+shadow looks in motion and in the levels' rooms, its slant and darkness against taste, a
+pull between 0 and 1, cutscenes, first person, and whether the frame's world-to-view
+(`aW2VMx`) is the camera her main draw's matrices stand on at sixty frames a second as
+well.
 
 **Commits.** 'Round 188 (#188): the projected shadow's arithmetic', 'Round 188 (#188): the
 cast shaders and the cast draw of a model', 'Round 188 (#188): the shadow map's target and
@@ -7325,7 +7383,9 @@ record follows', 'Round 188 (#188): what review pass 1 found', 'Round 188 (#188)
 record follows', 'Round 188 (#188): the shadow follows her movement at once and only the
 lights' change in time', 'Round 188 (#188): the suites', 'Round 188 (#188): the record
 follows', 'Round 188 (#188): what the correction's review pass 1 found', 'Round 188
-(#188): the record follows'.
+(#188): the record follows', 'Round 188 (#188): the shadow's light is a fixed one, and the
+lamps pull by a number of the table', 'Round 188 (#188): the suites', 'Round 188 (#188):
+the record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14
@@ -11955,7 +12015,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
-| #188 | The projected shadow: Lara's outline on the HD rooms, thrown away from the light |
+| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |

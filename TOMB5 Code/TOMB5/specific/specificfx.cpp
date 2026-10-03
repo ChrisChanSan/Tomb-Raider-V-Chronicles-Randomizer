@@ -43,6 +43,7 @@
 #include "../game/deltapak.h"
 #include "../game/interpolate.h"	// the in-between frame's counters
 #include "../game/interpolate_math.h"	// InterpTrailLong - the particles
+#include "hd/hd_shadow.h"		// HDShadowBlobMode - the mode a blob is drawn with
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -6648,7 +6649,7 @@ static void S_PrintCircleShadow(short size, short* box, ITEM_INFO* item)
 		z3 = (long)ccv.z;
 		setXYZ3(v, x1, y1, z1, x2, y2, z2, x3, y3, z3, clipflags);
 
-		if (tomb5.shadow_mode == 3)	//psx like?
+		if (HDShadowBlobMode((long)tomb5.shadow_mode) == 3)	//psx like?
 		{
 			v[0].color = 0x00000000;
 			v[1].color = 0x00000000;
@@ -6663,7 +6664,7 @@ static void S_PrintCircleShadow(short size, short* box, ITEM_INFO* item)
 
 		if (item->after_death)
 		{
-			if (tomb5.shadow_mode == 3)	//to stop PSX shadow from turning to a flat circle when entities are dying
+			if (HDShadowBlobMode((long)tomb5.shadow_mode) == 3)	//to stop PSX shadow from turning to a flat circle when entities are dying
 				v[2].color = 0x80000000 - (item->after_death << 24);
 			else
 			{
@@ -6869,9 +6870,12 @@ void S_PrintShadow(short size, short* box, ITEM_INFO* item)
 	long x, y, z, x1, y1, z1, x2, y2, z2, x3, y3, z3, xSize, zSize, xDist, zDist;
 	short room_number, s;
 
-	if (tomb5.shadow_mode != 1)
+	/* The option's mode as a blob draws it: a stored 5, the projected
+	 * shadow, is the faded circle for every blob still drawn
+	 * (hd/hd_shadow.h). */
+	if (HDShadowBlobMode((long)tomb5.shadow_mode) != 1)
 	{
-		if (tomb5.shadow_mode == 4)
+		if (HDShadowBlobMode((long)tomb5.shadow_mode) == 4)
 			S_PrintSpriteShadow(size, box, item);
 		else
 			S_PrintCircleShadow(size, box, item);

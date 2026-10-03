@@ -2654,7 +2654,7 @@ struct ROOM_PORTAL
 struct tomb5_options	//only bools or ulongs because that's what registry likes
 {
 	bool footprints;			//on off
-	ulong shadow_mode;			//1-> original, 2-> circle, 3-> faded circle, 4-> PSX sprite
+	ulong shadow_mode;			//1-> original, 2-> circle, 3-> faded circle, 4-> PSX sprite, 5-> projected (HD Lara; every blob still drawn is 3)
 	bool fix_climb_up_delay;	//on off 
 	bool flexible_crawling;		//on off
 	bool cutseq_skipper;		//on off

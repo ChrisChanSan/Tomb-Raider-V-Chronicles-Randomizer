@@ -99,7 +99,7 @@ void init_tomb5_stuff()
 		REG_WriteBool(buf, tomb5.footprints);
 
 		sprintf(buf, "shadow");
-		tomb5.shadow_mode = 3;							//PSX like shadow
+		tomb5.shadow_mode = 5;							//projected shadow for the HD Lara, faded circle for every blob
 		REG_WriteLong(buf, tomb5.shadow_mode);
 
 		sprintf(buf, "climbup");
@@ -340,7 +340,7 @@ void init_tomb5_stuff()
 		REG_ReadBool(buf, tomb5.footprints, 1);
 
 		sprintf(buf, "shadow");
-		REG_ReadLong(buf, tomb5.shadow_mode, 3);
+		REG_ReadLong(buf, tomb5.shadow_mode, 5);
 
 		sprintf(buf, "climbup");
 		REG_ReadBool(buf, tomb5.fix_climb_up_delay, 1);

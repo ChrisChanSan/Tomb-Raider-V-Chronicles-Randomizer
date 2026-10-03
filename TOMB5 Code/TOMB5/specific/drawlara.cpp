@@ -126,7 +126,12 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	phd_right = phd_winxmax;
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
-	S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
+	/* Her blob, unless the projected shadow throws her outline in this frame
+	 * (hd/hd_laradraw.h, HDShadowFrameDecide - the one decision the two
+	 * passes obey as well): never both, never neither. Her mirrored copy
+	 * keeps the blob. */
+	if (mirror || !HDShadowFrameDecide())
+		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 
 	if (!mirror)
 		CalculateObjectLightingLara();
@@ -376,7 +381,12 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	phd_right = phd_winxmax;
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
-	S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
+	/* Her blob, unless the projected shadow throws her outline in this frame
+	 * (hd/hd_laradraw.h, HDShadowFrameDecide - the one decision the two
+	 * passes obey as well): never both, never neither. Her mirrored copy
+	 * keeps the blob. */
+	if (mirror || !HDShadowFrameDecide())
+		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 
 	if (!mirror)
 		CalculateObjectLightingLara();
@@ -635,7 +645,12 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
-	S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
+	/* Her blob, unless the projected shadow throws her outline in this frame
+	 * (hd/hd_laradraw.h, HDShadowFrameDecide - the one decision the two
+	 * passes obey as well): never both, never neither. Her mirrored copy
+	 * keeps the blob. */
+	if (mirror || !HDShadowFrameDecide())
+		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 	CalculateObjectLightingLara();
 
 	/* The seam, and the one of the three that does not leave the function.

@@ -1005,6 +1005,44 @@ bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* light
 bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
 	const HDRoomLighting* lighting = 0);
 
+/* --- the projected shadow's receive -----------------------------------------
+ *
+ * The HD room groups near her drawn a second time, after the map has been
+ * cast: RoomVS with the same constants and the same ranges as their opaque
+ * and alpha passes and their clear floors, the depth test EQUAL, no depth
+ * write, and hd_shadow_receive.hlsl's pixel shader, whose factor multiplies
+ * the picture (source ZERO, destination SRCCOLOR, colour write RGB only).
+ *
+ * HDRenderShadowReceiveReady - the receive shader exists on this device.
+ *
+ * HDRenderShadowReceiveBegin, inside an open bracket and outside the cast
+ * bracket, with the map made: remembers the render states it sets, sampler
+ * stage 3 and the pixel shader; sets the room path's vertex shader,
+ * declaration, stream and indices, the receive shader with its
+ * HD_SHADOW_RECEIVE_COUNT registers from HD_SHADOW_RECEIVE_FIRST on
+ * (hd_shadow.h, HDShadowReceiveConstants), the map on stage 3 (point,
+ * clamp) and the states above; switches the scissor test off; and where the
+ * depth surface has a stencil, clears it and lets each pixel be darkened
+ * once. False, with nothing changed, otherwise.
+ *
+ * HDRenderRoomShadow - one group again, in the window HDRenderRoomMask drew
+ * it with; the caller sets the scissor that went with it. False when no
+ * receive is open or the group is missing or empty.
+ *
+ * HDRenderShadowReceiveEnd puts back what Begin remembered, and the map
+ * leaves stage 3. The vertex constants the receive writes are the ones a
+ * room draw writes, and its pixel registers are its own.
+ *
+ * HDRenderShadowReceiveCalls - draw calls since the last Begin; and
+ * HDRenderShadowReceiveStencil - whether that Begin found a stencil. */
+bool HDRenderShadowReceiveReady();
+bool HDRenderShadowReceiveBegin(const float* constants);
+bool HDRenderRoomShadow(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,
+	int window = HD_WINDOW_ALL);
+void HDRenderShadowReceiveEnd();
+int HDRenderShadowReceiveCalls();
+bool HDRenderShadowReceiveStencil();
+
 /* The sky dome. How many groups past the last room this
  * level has - 0 for a level with no sky, 1 for every level that has one, 2
  * for TITLE - and the call that draws them all, camera centred, behind

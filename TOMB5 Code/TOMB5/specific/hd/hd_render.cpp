@@ -34,6 +34,7 @@
 #include "hd_shader/hd_room_ps.inc"
 #include "hd_shader/hd_room_gloss_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
+#include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_gloss_math.h"
 #include "hd_gloss_pages.h"
 #include "hd_gloss_seed.h"
@@ -1555,6 +1556,10 @@ namespace
 	 * hd_reflect is on. Null when the device refused it - every draw call
 	 * then keeps the plain variant, as with hd_reflect off. */
 	IDirect3DPixelShader9* g_gloss_ps = 0;
+	/* The projected shadow's receive shader (hd_shadow_receive.hlsl). Null
+	 * when the device refused it; the projected shadow then does not run and
+	 * the blob stays. */
+	IDirect3DPixelShader9* g_shadow_receive_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
 	IDirect3DVertexBuffer9* g_vb = 0;
 	IDirect3DIndexBuffer9* g_ib = 0;
@@ -3384,6 +3389,11 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomGlossPS, &g_gloss_ps)))
 		g_gloss_ps = 0;
 
+	// Nor is the projected shadow's: without it the blob is drawn.
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
+		&g_shadow_receive_ps)))
+		g_shadow_receive_ps = 0;
+
 	return true;
 }
 
@@ -3517,6 +3527,7 @@ void HDRenderShutdown()
 
 	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
+	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
 	if (g_vs) { g_vs->Release(); g_vs = 0; }
 	if (g_decl) { g_decl->Release(); g_decl = 0; }
@@ -7280,6 +7291,376 @@ bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
 		draw_pass(room, 1, wvp, true, HD_WINDOW_ALL, false, true);
 
 	return true;
+}
+
+/* ------------------------------------- the projected shadow's receive -- */
+
+namespace
+{
+	/* What the receive pass changes, as it was: the render states below,
+	 * sampler stage 3's states and texture, and the pixel shader. The vertex
+	 * shader, the declaration, stream 0 and the indices are set to the room
+	 * path's own, which is what the frame's bracket holds while rooms draw. */
+	const D3DRENDERSTATETYPE kReceiveRenderStates[] =
+	{
+		D3DRS_ZFUNC, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND,
+		D3DRS_DESTBLEND, D3DRS_BLENDOP, D3DRS_SEPARATEALPHABLENDENABLE,
+		D3DRS_COLORWRITEENABLE, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+		D3DRS_STENCILENABLE, D3DRS_TWOSIDEDSTENCILMODE, D3DRS_STENCILFUNC,
+		D3DRS_STENCILREF, D3DRS_STENCILMASK, D3DRS_STENCILWRITEMASK,
+		D3DRS_STENCILPASS, D3DRS_STENCILFAIL, D3DRS_STENCILZFAIL
+	};
+
+	const int kReceiveRenderStateCount =
+		(int)(sizeof(kReceiveRenderStates) / sizeof(kReceiveRenderStates[0]));
+
+	const D3DSAMPLERSTATETYPE kReceiveSamplerStates[] =
+	{
+		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER, D3DSAMP_ADDRESSU,
+		D3DSAMP_ADDRESSV, D3DSAMP_SRGBTEXTURE, D3DSAMP_MAXMIPLEVEL
+	};
+
+	const int kReceiveSamplerStateCount =
+		(int)(sizeof(kReceiveSamplerStates) / sizeof(kReceiveSamplerStates[0]));
+
+	// The stage the map is sampled from (hd_shadow_receive.hlsl, sMap).
+	const DWORD kReceiveStage = 3;
+
+	struct ReceiveSaved
+	{
+		bool open = false;
+		bool stencil = false;
+		int calls = 0;
+		DWORD rs[19] = {};
+		DWORD samp[7] = {};
+		IDirect3DBaseTexture9* texture = 0;
+		IDirect3DPixelShader9* ps = 0;
+	};
+
+	ReceiveSaved g_receive;
+
+	/* The page a range shows this frame: draw_pass's flipbook and book
+	 * choice, without its counters and its watch - the alpha test of a
+	 * cut-out must see the page the picture saw. */
+	int receive_page(const HDRange& range)
+	{
+		int page_slot = range.pageSlot;
+
+		if (range.flipTime > 0.0f && g_motion[3] != 0.0f)
+		{
+			const float cycle = range.flipTime * 4.0f;
+			const int frame = (int)(fmodf(g_motion[2], cycle) / range.flipTime);
+
+			if (frame > 0 && frame < 4 && range.flipSlot[frame - 1] >= 0)
+				page_slot = range.flipSlot[frame - 1];
+		}
+
+		if (range.bookTime > 0.0f && (g_motion[3] != 0.0f || g_book_page >= 0))
+		{
+			const int page = g_book_page >= 0
+				? g_book_page % range.bookCount
+				: HDBookPage(g_book_clock, range.bookTime, range.bookCount, range.bookPhase);
+
+			if (page > 0 && range.bookFirst >= 0 &&
+				(size_t)(range.bookFirst + page - 1) < g_book_slots.size())
+				page_slot = g_book_slots[(size_t)(range.bookFirst + page - 1)];
+		}
+
+		return page_slot;
+	}
+
+	/* One pass of a group again, for the receive: the ranges draw_pass draws
+	 * in that pass and phase, with every vertex constant draw_pass writes per
+	 * range (gPass, gMotion, gFlat) and its cull, so RoomVS puts each
+	 * triangle on the very depth it wrote; and the page and the alpha
+	 * reference, so a cut-out keeps its holes. `clearOnly` is the clear
+	 * floors' half of the alpha pass, which writes depth too. Nothing of the
+	 * pixel shader's own constants is touched here. */
+	void draw_receive(const HDGroup& group, int pass, int window, bool clearOnly)
+	{
+		if (group.pass[pass].empty())
+			return;
+
+		float constants[4] =
+		{
+			(pass == 1 && !clearOnly) ? 0.5f : 0.0f,
+			0.0f,
+			1.0f,
+			1.0f
+		};
+
+		g_device->SetVertexShaderConstantF(4, constants, 1);
+		g_device->SetPixelShaderConstantF(4, constants, 1);
+
+		float alpha_ref = constants[0];
+		float flat[4] = { 0.0f, 0.0f, 0.0f, g_no_upright ? 0.0f : 1.0f };
+		bool flat_dirty = true;
+		DWORD cull_now = D3DCULL_NONE;
+
+		g_motion_dirty = true;
+
+		for (const HDRange& range : group.pass[pass])
+		{
+			if ((range.blend != 0.0f) != clearOnly)
+				continue;
+
+			if (clearOnly && !range.clear)
+				continue;
+
+			const bool windowed = range.intruding &&
+				!group.pairWhole[(size_t)range.intruding - 1];
+
+			if ((window == HD_WINDOW_OPEN && windowed) ||
+				(window == HD_WINDOW_INTRUDING && !windowed))
+				continue;
+
+			if ((window == HD_WINDOW_INSIDE && range.overhang) ||
+				(window == HD_WINDOW_OVERHANG && !range.overhang))
+				continue;
+
+			if (range.destructId >= 0 && g_destruct[(size_t)range.destructId].hidden)
+				continue;
+
+			IDirect3DTexture9* page = HDPageCacheSlotTexture(receive_page(range));
+
+			if (!page)
+				continue;
+
+			if (pass == 0 && range.alphaRef != alpha_ref)
+			{
+				alpha_ref = range.alphaRef;
+				constants[0] = range.alphaRef;
+				g_device->SetPixelShaderConstantF(4, constants, 1);
+			}
+
+			if (flat_dirty || flat[0] != range.flatLight)
+			{
+				flat[0] = range.flatLight;
+				flat_dirty = false;
+				g_device->SetVertexShaderConstantF(14, flat, 1);
+			}
+
+			const bool scroll = g_motion[3] != 0.0f &&
+				(range.scrollU != 0.0f || range.scrollV != 0.0f);
+
+			if (scroll != g_wrapping)
+			{
+				const DWORD mode = scroll ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP;
+
+				g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, mode);
+				g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, mode);
+				g_wrapping = scroll;
+			}
+
+			const float u = scroll ? fmodf(range.scrollU * g_motion[2], 1.0f) : 0.0f;
+			const float v = scroll ? fmodf(range.scrollV * g_motion[2], 1.0f) : 0.0f;
+
+			if (g_motion_dirty || u != g_motion[0] || v != g_motion[1])
+			{
+				g_motion[0] = u;
+				g_motion[1] = v;
+				g_motion_dirty = false;
+				g_device->SetVertexShaderConstantF(13, g_motion, 1);
+			}
+
+			g_device->SetTexture(0, page);
+
+			const DWORD want_cull = range.cull && g_cull_opaque ? D3DCULL_CCW : D3DCULL_NONE;
+
+			if (want_cull != cull_now)
+			{
+				cull_now = want_cull;
+				g_device->SetRenderState(D3DRS_CULLMODE, cull_now);
+			}
+
+			if (g_index32)
+				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+					(UINT)g_vertex_count, range.start, range.count / 3);
+			else
+			{
+				g_device->SetStreamSource(0, g_vb,
+					range.baseVertex * (UINT)sizeof(HDVertex), sizeof(HDVertex));
+				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+					range.vertexSpan, range.start, range.count / 3);
+			}
+
+			g_receive.calls++;
+		}
+
+		if (g_wrapping)
+		{
+			g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			g_wrapping = false;
+		}
+
+		if (cull_now != D3DCULL_NONE)
+			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	}
+
+	// A depth surface with a stencil to guard the pixels with.
+	bool depth_has_stencil()
+	{
+		IDirect3DSurface9* depth = 0;
+		D3DSURFACE_DESC desc;
+		bool stencil = false;
+
+		if (SUCCEEDED(g_device->GetDepthStencilSurface(&depth)) && depth)
+		{
+			if (SUCCEEDED(depth->GetDesc(&desc)))
+				stencil = desc.Format == D3DFMT_D24S8 || desc.Format == D3DFMT_D24FS8 ||
+					desc.Format == D3DFMT_D24X4S4 || desc.Format == D3DFMT_D15S1;
+
+			depth->Release();
+		}
+
+		return stencil;
+	}
+}
+
+bool HDRenderShadowReceiveReady()
+{
+	return g_shadow_receive_ps != 0;
+}
+
+bool HDRenderShadowReceiveBegin(const float* constants)
+{
+	if (!g_device || !g_in_frame || g_receive.open || g_shadow_saved.open ||
+		!g_shadow_receive_ps || !g_shadow_texture || !constants || !g_vs || !g_decl ||
+		!g_vb || !g_ib)
+		return false;
+
+	ReceiveSaved& s = g_receive;
+
+	s = ReceiveSaved();
+
+	// The rooms' windows are done; the receive sets each room's again.
+	HDRenderScissorOff();
+
+	for (int i = 0; i < kReceiveRenderStateCount; i++)
+		g_device->GetRenderState(kReceiveRenderStates[i], &s.rs[i]);
+
+	for (int i = 0; i < kReceiveSamplerStateCount; i++)
+		g_device->GetSamplerState(kReceiveStage, kReceiveSamplerStates[i], &s.samp[i]);
+
+	g_device->GetTexture(kReceiveStage, &s.texture);
+	g_device->GetPixelShader(&s.ps);
+	s.open = true;
+
+	g_device->SetVertexShader(g_vs);
+	g_device->SetVertexDeclaration(g_decl);
+	g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
+	g_device->SetIndices(g_ib);
+	g_device->SetPixelShader(g_shadow_receive_ps);
+	g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE_FIRST, constants,
+		HD_SHADOW_RECEIVE_COUNT);
+
+	g_device->SetTexture(kReceiveStage, g_shadow_texture);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_SRGBTEXTURE, FALSE);
+	g_device->SetSamplerState(kReceiveStage, D3DSAMP_MAXMIPLEVEL, 0);
+
+	/* The picture times the factor, where the face is the one the room loop
+	 * left visible: the same depth to the bit, EQUAL, nothing written but
+	 * the colour. */
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	/* Once per pixel. Two faces of the room art can lie in one plane - a
+	 * cut-out laid over a wall, a decal on a floor, the faces two rooms
+	 * share at a portal - and both pass EQUAL; without a guard the factor
+	 * would multiply twice there. The first face to darken a pixel marks it
+	 * in the stencil and the test turns every later one away. The engine
+	 * itself uses no stencil, so the whole of it is cleared here; a depth
+	 * surface without one leaves the guard off. */
+	s.stencil = depth_has_stencil();
+
+	if (s.stencil)
+	{
+		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+		g_device->SetRenderState(D3DRS_STENCILREF, 0);
+		g_device->SetRenderState(D3DRS_STENCILMASK, 1);
+		g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 1);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_INVERT);
+		g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	}
+	else
+		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+	return true;
+}
+
+bool HDRenderRoomShadow(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,
+	int window)
+{
+	float wvp[16];
+
+	if (!g_receive.open || !prepare(group, world, lighting, wvp))
+		return false;
+
+	const HDGroup& room = g_groups[(size_t)group];
+
+	if (!room.triangles[0] && !room.triangles[1])
+		return false;
+
+	draw_receive(room, 0, window, false);
+	draw_receive(room, 1, window, false);
+
+	if (room.clearRanges)
+		draw_receive(room, 1, window, true);
+
+	return true;
+}
+
+void HDRenderShadowReceiveEnd()
+{
+	ReceiveSaved& s = g_receive;
+
+	if (!s.open || !g_device)
+		return;
+
+	for (int i = 0; i < kReceiveRenderStateCount; i++)
+		g_device->SetRenderState(kReceiveRenderStates[i], s.rs[i]);
+
+	for (int i = 0; i < kReceiveSamplerStateCount; i++)
+		g_device->SetSamplerState(kReceiveStage, kReceiveSamplerStates[i], s.samp[i]);
+
+	// The map leaves the stage: whatever was bound there before, which in the
+	// HD path is nothing.
+	g_device->SetTexture(kReceiveStage, s.texture);
+	g_device->SetPixelShader(s.ps);
+
+	if (s.texture) { s.texture->Release(); s.texture = 0; }
+	if (s.ps) { s.ps->Release(); s.ps = 0; }
+
+	s.open = false;
+}
+
+int HDRenderShadowReceiveCalls()
+{
+	return g_receive.calls;
+}
+
+bool HDRenderShadowReceiveStencil()
+{
+	return g_receive.stencil;
 }
 
 int HDRenderGroupCount()

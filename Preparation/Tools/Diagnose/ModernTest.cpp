@@ -13143,10 +13143,12 @@ static void shadow_follow()
 		sh_milli(f.strength), sh_milli(1.0 - exp(-1.5 / HD_SHADOW_TAU)));
 
 	/* The same path at 30, 60 and 165 frames a second: the target turns and
-	 * darkens at a quarter of a second and turns back and lightens at one,
-	 * sampled at half a second, one and a quarter, and two. */
+	 * darkens at a fifth of a second and turns back and lightens at one,
+	 * sampled at 0.6, 1.2 and 2 seconds - every one a whole number of frames
+	 * at all three rates (a fifteenth of a second is 2, 4 and 11 frames), so
+	 * the three see the target change at the same moment. */
 	const int rates[3] = { 30, 60, 165 };
-	const double times[3] = { 0.5, 1.25, 2.0 };
+	const double times[3] = { 0.6, 1.2, 2.0 };
 	double got[3][3][2];
 
 	for (int r = 0; r < 3; r++)
@@ -13162,7 +13164,7 @@ static void shadow_follow()
 		for (int i = 1; i <= frames; i++)
 		{
 			const double t = (double)i / rates[r];
-			HDShadowKey want = t <= 0.25 + 1e-9 ? from : to;
+			HDShadowKey want = t <= 0.2 + 1e-9 ? from : to;
 
 			if (t > 1.0 + 1e-9)
 			{

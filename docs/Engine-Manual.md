@@ -2676,6 +2676,52 @@ braid never do.
 Never on a young-Lara level, whatever the setting says, and never while Lara is drawn
 classic - with `hd_enable` off nothing of it runs at all.
 
+#### The projected shadow
+
+In an HD room the HD Lara can throw a real shadow instead of the round blob under her
+feet: her own outline, soft-edged, lying on the floor on the side away from the light that
+lights her, on steps and slopes as they are, and up a wall she stands close to. It is the
+fifth value of the shadow option, *Projected*, and it is the default of a fresh
+installation. The option is the registry value `shadow`:
+
+| `shadow` | What is drawn |
+|---|---|
+| `1` | Original - the classic blob, a grid laid over the floor |
+| `2` | Circle - a flat dark circle |
+| `3` | Faded circle - a circle that fades out to its edge |
+| `4` | PSX - the PlayStation's sprite |
+| `5` | Projected, the default - Lara's projected shadow where it runs; every blob still drawn is the faded circle |
+
+The four blobs stay what they were, in HD as without it, for Lara and for everything else.
+With `5`, every other creature and item keeps its faded circle, and Lara gets the faded
+circle as well wherever the projected shadow cannot run: with *HD textures* off, while she
+is drawn classic, while she stands in a room that is drawn classic, and on a graphics card
+that refuses the shadow's map (`HDLOG shadow target` says which). In a frame she has the
+projected shadow she has no blob, and in a frame she has the blob she has no projected
+shadow - never both, never neither. Her reflection in a mirror keeps the blob. Any other
+stored number is drawn as it always was.
+
+Where the light comes from. The direction is worked out from the lights that light her
+model - the room's lamps, spots and sun, each counted by its brightness and how near it is,
+without the flashes of a gun, a flare or an explosion - plus a small fixed slant, so that a
+room without a lamp still lays the shadow a little beside her feet. The slant is held to at
+most 55 degrees off straight down, about one and a half of her heights long. Where the
+lights pull against each other, the shadow is fainter. Direction and darkness are never
+switched: they glide towards a new light over about half a second of game time (two thirds
+of the way after half a second, nearly all of it after one and a half), the same at 30, 60
+or 165 frames a second, and standing still while the game is paused; a level start, a load,
+a jump to somewhere else and the first frame after the shadow was off start it in place.
+
+What takes it. The HD rooms around her and the statics that are part of their art; not
+Lara herself, not HD items or creatures, not the classic polygons, and not the glows and
+glass, which are drawn over it. A floor more than one block below her lowest point fades
+out of it, and two blocks down it is gone, so a storey under her takes nothing through its
+ceiling; a face turned away from the light - a ceiling, the back of a wall - takes none.
+A cut-out keeps its holes. A pixel in the deepest shadow keeps 55 per cent of its colour.
+
+Every number that shapes it - darkness, softness, slant, time - stands in one table at the
+top of `specific/hd/hd_shadow.h`; they are a first setting, to be tuned in the game.
+
 ---
 
 ## The outfit changer, Mods and footsteps
@@ -3094,6 +3140,8 @@ wrote it, and each seam answers a different question:
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
 | in HD Lara's catsuit loses its shine after she walks from one room into another, and a save and a load bring it back | `HDLOG laralights` — one line on her first frame of a level and one whenever her room, the number of lights handed to the card or the number left out changes: `level=` the level, `room=` her room, `il_room=` the room her current light list was last built for, `cur=` and `prev=` the engine's current and previous light list as lights switched on / lights in it (shadow lights included), `dyn=` the dynamic lights (a flare, a torch, a muzzle flash) handed on, `handed=` every light handed to the card, `dark=` the lights of the two lists left out because they have faded to nothing, `eye=` 1 when nothing is handed on, so that the camera is the lamp of her shine, `max_dark=` the brightest colour channel among those left out and `min_lit=` the dimmest brightest channel among the room lights handed on, both on the engine's 0..1 scale (0 when there is none). Walking out of a lit room reads as a line with the old room's light in `prev=` and `dark=0`, and eight drawn frames later a second line: `dark=` counts the light where its fade left it switched on with nothing to give, `prev=` shows it switched off where the fade cleared it, and when nothing else lights her the line reads `handed=0 eye=1` either way |
 | the soft motion of the chest does not show, shows on the wrong place, or moves too much or too little | `HDLOG softbody` — one line whenever her HD composite is built and whenever the option changes: `outfit=` the body's model, `state=` on or off, `reason=` `ok` or why it is off (`young` a young-Lara level, `classic` no HD Lara, `option` switched off, or the outfit's own refusal: `no_body`, `no_axes`, `no_front`, `no_torso`, `band_empty`, `band_edge`, `flat`, `asymmetric`, `radius`, `deep` (the chest stands further forward than its region reaches back), `sparse`), `strength=` the option 0 to 3, `apexL=` and `apexR=` the two points the regions are built on, in the body model's own units, `radius=` the regions' radius, `verts=` how many of the body's vertices each region moves, left/right, and `parts=` which parts carry the motion. While it is on, `HDLOG softbody second` once for every second of game time in which it moved at all: `peak=` the largest offset drawn in that second, `bound=` the largest it may be at this strength, `clamped=` frames that ran into the bound, `resets=` how often it went back to rest (a jump, a gap, a cutscene edge) and `steps=` how many sub-steps the spring ran |
+| Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes |
+| the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one it glides towards (world axes, y down), `strength=` the darkness drawn / the target's (0.45 is the darkest), `lights=` the lights that counted and `weight=` their summed brightness times nearness, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice |
 | in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |

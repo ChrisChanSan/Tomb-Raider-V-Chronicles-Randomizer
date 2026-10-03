@@ -12904,8 +12904,9 @@ static HDShadowLight sh_lamp(int kind, float x, float y, float z, float c, float
 	return l;
 }
 
-/* The key light: one sun, one lamp, two that cancel, none; continuity in P;
- * the slant limit; nothing that is not a number. */
+/* The key light at the lights' full part, pull 1: one sun, one lamp, two
+ * that cancel, none; continuity in P; the slant limit; nothing that is not a
+ * number. */
 static void shadow_key()
 {
 	const float P[3] = { 30000.0f, -2000.0f, 41000.0f };
@@ -12935,7 +12936,7 @@ static void shadow_key()
 			want[i] = want[i] / l + HD_SHADOW_W_FALLBACK * fb[i];
 
 		hd_shadow_unit(want);
-		HDShadowKeyTarget(&sun, 1, P, &k);
+		HDShadowKeyTarget(&sun, 1, P, &k, 1.0f);
 
 		const float sunDir[3] = { 0.3f, 1.0f, 0.2f };
 
@@ -12954,7 +12955,7 @@ static void shadow_key()
 			P[2], 1.0f, 4000.0f);
 		const float away[3] = { 500.0f, 800.0f, 0.0f };
 
-		HDShadowKeyTarget(&lamp, 1, P, &k);
+		HDShadowKeyTarget(&lamp, 1, P, &k, 1.0f);
 		ok(k.dir[0] > 0.0f && sh_angle(k.dir, away) < 8.0,
 			"shadow: a lamp throws the shadow away from itself",
 			sh_milli(sh_angle(k.dir, away)), 0);
@@ -12967,7 +12968,7 @@ static void shadow_key()
 			P[2], 1.0f, 4000.0f);
 		HDShadowKey ks;
 
-		HDShadowKeyTarget(&spot, 1, P, &ks);
+		HDShadowKeyTarget(&spot, 1, P, &ks, 1.0f);
 		ok(sh_angle(ks.dir, k.dir) < 1e-4 && fabs(ks.weight - k.weight) < 1e-6,
 			"shadow: a spot weighs and points like a point of the same range",
 			sh_milli(sh_angle(ks.dir, k.dir)), 0);
@@ -12981,7 +12982,7 @@ static void shadow_key()
 			sh_lamp(HD_SHADOW_POINT, P[0] + 600.0f, P[1], P[2], 0.8f, 3000.0f)
 		};
 
-		HDShadowKeyTarget(two, 2, P, &k);
+		HDShadowKeyTarget(two, 2, P, &k, 1.0f);
 		ok(sh_angle(k.dir, fb) < 1e-3,
 			"shadow: two equal opposite lamps leave the fixed slant",
 			sh_milli(sh_angle(k.dir, fb)), 0);
@@ -12991,7 +12992,7 @@ static void shadow_key()
 	}
 
 	// No light at all: the fixed slant at LOW of the darkness.
-	HDShadowKeyTarget(0, 0, P, &k);
+	HDShadowKeyTarget(0, 0, P, &k, 1.0f);
 	ok(sh_angle(k.dir, fb) < 1e-4 && fabs(k.strength - HD_SHADOW_DARK * HD_SHADOW_LOW) < 1e-6 &&
 		k.lights == 0 && k.weight == 0.0f,
 		"shadow: no light leaves the fixed slant at LOW of the darkness",
@@ -13002,7 +13003,7 @@ static void shadow_key()
 	{
 		const HDShadowLight dim = sh_sun(0.0f, 1.0f, 0.0f, 0.25f * HD_SHADOW_W_REF);
 
-		HDShadowKeyTarget(&dim, 1, P, &k);
+		HDShadowKeyTarget(&dim, 1, P, &k, 1.0f);
 
 		const double want = HD_SHADOW_DARK * (HD_SHADOW_LOW + (1.0 - HD_SHADOW_LOW) *
 			0.25 * (0.25 * HD_SHADOW_W_REF) / (0.25 * HD_SHADOW_W_REF + HD_SHADOW_AGREE_EPS));
@@ -13027,7 +13028,7 @@ static void shadow_key()
 		{
 			const float at[3] = { P[0] - 800.0f + (float)step, P[1], P[2] + 0.25f * step };
 
-			HDShadowKeyTarget(lamps, 2, at, &k);
+			HDShadowKeyTarget(lamps, 2, at, &k, 1.0f);
 
 			if (step)
 			{
@@ -13050,7 +13051,7 @@ static void shadow_key()
 	{
 		const HDShadowLight low = sh_sun(1.0f, 0.05f, 0.0f, 1.0f);
 
-		HDShadowKeyTarget(&low, 1, P, &k);
+		HDShadowKeyTarget(&low, 1, P, &k, 1.0f);
 		ok(fabs(k.slant - HD_SHADOW_SLANT_MAX) < 1e-3 && k.dir[0] > 0.0f &&
 			fabs(atan2(k.dir[2], k.dir[0]) - atan2(0.0f + HD_SHADOW_W_FALLBACK * fb[2],
 				1.0f + HD_SHADOW_W_FALLBACK * fb[0])) < 1e-4,
@@ -13059,7 +13060,7 @@ static void shadow_key()
 
 		const HDShadowLight below = sh_sun(0.2f, -1.0f, 0.0f, 1.0f);
 
-		HDShadowKeyTarget(&below, 1, P, &k);
+		HDShadowKeyTarget(&below, 1, P, &k, 1.0f);
 		ok(fabs(k.slant - HD_SHADOW_SLANT_MAX) < 1e-3 && k.dir[1] > 0.0f && k.dir[0] > 0.0f,
 			"shadow: a light from below points down at the limit, bearing kept",
 			sh_milli(k.slant), sh_milli(HD_SHADOW_SLANT_MAX));
@@ -13078,7 +13079,7 @@ static void shadow_key()
 			const float a = (float)i * 0.731f, b = (float)i * 1.917f;
 			const HDShadowLight any = sh_sun(cosf(a) * sinf(b), cosf(b), sinf(a) * sinf(b), 1.0f);
 
-			HDShadowKeyTarget(&any, 1, P, &k);
+			HDShadowKeyTarget(&any, 1, P, &k, 1.0f);
 
 			if (k.slant > HD_SHADOW_SLANT_MAX + 1e-3f || !sh_unit_finite(k.dir))
 				over++;
@@ -13099,7 +13100,7 @@ static void shadow_key()
 			sh_lamp(7, P[0], P[1], P[2], 1.0f, 1000.0f)			// a kind it does not know
 		};
 
-		HDShadowKeyTarget(bad, 5, P, &k);
+		HDShadowKeyTarget(bad, 5, P, &k, 1.0f);
 		ok(sh_unit_finite(k.dir) && k.strength == k.strength && k.weight == k.weight &&
 			k.lights == 1 && sh_angle(k.dir, fb) < 1e-4,
 			"shadow: no NaN from a zero vector, a zero range, a lamp at P itself",
@@ -13107,14 +13108,333 @@ static void shadow_key()
 	}
 }
 
-/* The following the way shadow_step drives it: the frame's target out of
- * the lights at P, the same lights weighed at the last step's P, the step.
- * True when the step snapped. */
+/* Whether two floats hold the same bits, and two key lights the same
+ * direction, strength, agreement and slant. */
+static bool sh_same(float a, float b)
+{
+	return memcmp(&a, &b, sizeof(float)) == 0;
+}
+
+static bool sh_same_key(const HDShadowKey& a, const HDShadowKey& b)
+{
+	return sh_same(a.dir[0], b.dir[0]) && sh_same(a.dir[1], b.dir[1]) &&
+		sh_same(a.dir[2], b.dir[2]) && sh_same(a.strength, b.strength) &&
+		sh_same(a.agree, b.agree) && sh_same(a.slant, b.slant);
+}
+
+/* The lights' part between 0 and 1, for a sun and for a lamp: a pull
+ * between turns the direction along the arc from the fixed slant towards
+ * the lights' own at pull 1, the further the larger the pull, and gives a
+ * strength between DARK * LOW and the lights' own, rising with it - for a
+ * sun at pull p the strength of a sun p as bright; a pull past either end
+ * counts as that end. */
+static void shadow_pull()
+{
+	const float P[3] = { 30000.0f, -2000.0f, 41000.0f };
+	const HDShadowLight sun = sh_sun(0.5f, 1.0f, -0.3f, 1.0f);
+	const HDShadowLight lamp = sh_lamp(HD_SHADOW_POINT, P[0] + 400.0f, P[1] - 900.0f,
+		P[2] - 500.0f, 0.9f, 3000.0f);
+	const HDShadowLight* sets[2] = { &sun, &lamp };
+	float fb[3];
+
+	HDShadowFallback(fb);
+
+	for (int s = 0; s < 2; s++)
+	{
+		HDShadowKey zero, full, k, prev;
+
+		HDShadowKeyTarget(sets[s], 1, P, &zero, 0.0f);
+		HDShadowKeyTarget(sets[s], 1, P, &full, 1.0f);
+		prev = zero;
+
+		const double span = sh_angle(fb, full.dir);
+		double worstArc = 0.0;
+		int back = 0, outside = 0, fall = 0;
+
+		for (int i = 0; i <= 20; i++)
+		{
+			HDShadowKeyTarget(sets[s], 1, P, &k, 0.05f * (float)i);
+
+			const double a = sh_angle(k.dir, fb);
+			const double arc = fabs(a + sh_angle(k.dir, full.dir) - span);
+
+			worstArc = arc > worstArc ? arc : worstArc;
+
+			if (k.strength < zero.strength || k.strength > full.strength)
+				outside++;
+
+			if (i && a < sh_angle(prev.dir, fb) - 1e-4)
+				back++;
+
+			if (i && k.strength < prev.strength - 1e-6f)
+				fall++;
+
+			prev = k;
+		}
+
+		ok(span > 10.0 && worstArc < 1e-3 && back == 0,
+			s ? "shadow: a lamp's pull turns the direction along the arc from the fixed slant, the further the larger"
+				: "shadow: a sun's pull turns the direction along the arc from the fixed slant, the further the larger",
+			sh_milli(worstArc), 0);
+		ok(outside == 0 && fall == 0 && full.strength > zero.strength,
+			s ? "shadow: a lamp's pull gives a strength between DARK * LOW and its own, rising with it"
+				: "shadow: a sun's pull gives a strength between DARK * LOW and its own, rising with it",
+			outside + fall, 0);
+
+		HDShadowKeyTarget(sets[s], 1, P, &k, 0.5f);
+		ok(sh_angle(k.dir, fb) > 1.0 && sh_angle(k.dir, full.dir) > 1.0 &&
+			k.strength > zero.strength && k.strength < full.strength,
+			s ? "shadow: half a lamp's pull is neither the fixed light nor the lamp's"
+				: "shadow: half a sun's pull is neither the fixed light nor the sun's",
+			sh_milli(sh_angle(k.dir, fb)), 0);
+	}
+
+	/* A white sun at a pull p weighs p times its luminance, in the
+	 * agreement and against W_REF alike: the strength is that of a sun p as
+	 * bright at pull 1. */
+	{
+		const double lum = HDShadowLuminance(1.0f, 1.0f, 1.0f);
+		double worst = 0.0;
+
+		for (int i = 1; i <= 10; i++)
+		{
+			const float p = 0.1f * (float)i;
+			const double w = (double)p * lum;
+			const double agree = w / (w + HD_SHADOW_AGREE_EPS) *
+				(w < HD_SHADOW_W_REF ? w / HD_SHADOW_W_REF : 1.0);
+			const double want = HD_SHADOW_DARK * (HD_SHADOW_LOW + (1.0 - HD_SHADOW_LOW) * agree);
+			HDShadowKey k;
+
+			HDShadowKeyTarget(&sun, 1, P, &k, p);
+
+			const double e = fabs((double)k.strength - want);
+
+			worst = e > worst ? e : worst;
+		}
+
+		ok(worst < 1e-5, "shadow: a sun's strength at a pull p is that of a sun p as bright",
+			sh_milli(worst * 1000.0), 0);
+	}
+
+	// Past the ends: above 1 is 1; below 0, minus infinity and NaN are 0.
+	{
+		HDShadowKey one, nil, k;
+		int differ = 0;
+
+		HDShadowKeyTarget(&lamp, 1, P, &one, 1.0f);
+		HDShadowKeyTarget(&lamp, 1, P, &nil, 0.0f);
+		HDShadowKeyTarget(&lamp, 1, P, &k, 2.0f);
+		differ += sh_same_key(k, one) ? 0 : 1;
+		HDShadowKeyTarget(&lamp, 1, P, &k, 1.0e30f);
+		differ += sh_same_key(k, one) ? 0 : 1;
+		HDShadowKeyTarget(&lamp, 1, P, &k, -0.5f);
+		differ += sh_same_key(k, nil) ? 0 : 1;
+		HDShadowKeyTarget(&lamp, 1, P, &k, -1.0e30f);
+		differ += sh_same_key(k, nil) ? 0 : 1;
+		HDShadowKeyTarget(&lamp, 1, P, &k, sqrtf(-1.0f));
+		differ += sh_same_key(k, nil) ? 0 : 1;
+		ok(differ == 0 && !sh_same_key(one, nil),
+			"shadow: a pull above 1 counts as 1, one below 0 or not a number as 0", differ, 0);
+	}
+}
+
+/* The fixed light. At the table's pull the key light gives the same bits
+ * for no light, a lamp above her, at her feet, below her and at P itself, a
+ * spot beside her, a sun from any of 26 sides, thirty lights at once and
+ * lights that are not numbers, at five reference points from the origin to
+ * NaN: the fixed slant as HDShadowFallback gives it, at DARK * LOW, with
+ * `lights` and `weight` what the list holds at pull 1. Driven as shadow_step
+ * drives it, through a walk whose lights change every four steps, the
+ * following draws exactly that in every step, with no offset and the lag at
+ * 0, at 30, 60 and 165 steps a second; the same walk at pull 1 turns. */
+static void shadow_fixed()
+{
+	const float nan = sqrtf(-1.0f);
+	const float big = 1.0e30f;
+	const float Ps[5][3] =
+	{
+		{ 30000.0f, -2000.0f, 41000.0f }, { 0.0f, 0.0f, 0.0f },
+		{ -70000.0f, 12000.0f, 65000.0f }, { big, -big, big }, { nan, nan, nan }
+	};
+	const float down[3] = { 0.0f, 1.0f, 0.0f };
+	const float dark = HD_SHADOW_DARK * HD_SHADOW_LOW;
+	float fb[3];
+
+	HDShadowFallback(fb);
+
+	ok(HD_SHADOW_PULL == 0.0f && HD_SHADOW_FALLBACK_SLANT == 30.0f && HD_SHADOW_LOW == 0.75f,
+		"shadow: the table's light is fixed - pull 0, 30 degrees, 0.75 of DARK",
+		sh_milli(HD_SHADOW_PULL), 0);
+	ok(fabs(sh_angle(fb, down) - 30.0) < 1e-3 &&
+		fabs(atan2((double)fb[2], (double)fb[0]) -
+			atan2((double)HD_SHADOW_FALLBACK_Z, (double)HD_SHADOW_FALLBACK_X)) < 1e-6 &&
+		fabs(sqrt((double)fb[0] * fb[0] + (double)fb[2] * fb[2]) / fb[1] - 0.57735) < 1e-4,
+		"shadow: the fixed slant stands 30 degrees off straight down on its bearing, 0.58 of her height long",
+		sh_milli(sh_angle(fb, down)), 30000);
+
+	int dirs = 0, strengths = 0, counts = 0, pulled = 0, cases = 0;
+
+	for (int p = 0; p < 5; p++)
+	{
+		const float* P = Ps[p];
+
+		for (int c = 0; c < 35; c++)
+		{
+			HDShadowLight set[HD_SHADOW_MAX_LIGHTS];
+			const HDShadowLight* lights = set;
+			int n = 1;
+
+			if (c == 0)
+				n = 0;
+			else if (c == 1)
+			{
+				lights = 0;
+				n = 5;
+			}
+			else if (c == 2)
+				set[0] = sh_lamp(HD_SHADOW_POINT, P[0] + 100.0f, P[1] - 800.0f, P[2], 1.0f, 3000.0f);
+			else if (c == 3)
+				set[0] = sh_lamp(HD_SHADOW_POINT, P[0] - 300.0f, P[1] + 900.0f, P[2] + 200.0f, 1.0f, 3000.0f);
+			else if (c == 4)
+				set[0] = sh_lamp(HD_SHADOW_POINT, P[0] + 200.0f, P[1] + 2500.0f, P[2] - 300.0f, 1.0f, 6000.0f);
+			else if (c == 5)
+				set[0] = sh_lamp(HD_SHADOW_POINT, P[0], P[1], P[2], 1.0f, 3000.0f);
+			else if (c == 6)
+				set[0] = sh_lamp(HD_SHADOW_SPOT, P[0] - 600.0f, P[1] - 100.0f, P[2] + 150.0f, 0.7f, 1500.0f);
+			else if (c < 33)
+			{
+				// 26 sides: the six axes and twenty between them.
+				const int i = c - 7;
+				const float a = (float)i * 0.9f, b = (float)i * 0.37f;
+
+				set[0] = i < 6 ? sh_sun(i == 0 ? 1.0f : (i == 1 ? -1.0f : 0.0f),
+					i == 2 ? 1.0f : (i == 3 ? -1.0f : 0.0f),
+					i == 4 ? 1.0f : (i == 5 ? -1.0f : 0.0f), 1.0f)
+					: sh_sun(cosf(a) * sinf(b), cosf(b), sinf(a) * sinf(b), 0.8f);
+			}
+			else if (c == 33)
+			{
+				n = 30;
+
+				for (int i = 0; i < 15; i++)
+				{
+					const float a = (float)i * 0.42f;
+
+					set[i] = sh_lamp(i & 1 ? HD_SHADOW_SPOT : HD_SHADOW_POINT,
+						P[0] + 900.0f * cosf(a), P[1] - 300.0f - 60.0f * i, P[2] + 900.0f * sinf(a),
+						0.2f + 0.05f * i, 2500.0f);
+					set[15 + i] = sh_sun(sinf(a), 0.3f + 0.1f * i, -cosf(a), 0.1f + 0.03f * i);
+				}
+			}
+			else
+			{
+				n = 3;
+				set[0] = sh_lamp(HD_SHADOW_SPOT, P[0], P[1], P[2], nan, 1000.0f);
+				set[1] = sh_lamp(HD_SHADOW_POINT, nan, P[1], P[2], 1.0f, 1000.0f);
+				set[2] = sh_sun(big, -big, nan, 1.0f);
+			}
+
+			HDShadowKey k, k0, k1;
+
+			HDShadowKeyTarget(lights, n, P, &k);
+			HDShadowKeyTarget(lights, n, P, &k0, 0.0f);
+			HDShadowKeyTarget(lights, n, P, &k1, 1.0f);
+			cases++;
+
+			if (!sh_same(k.dir[0], fb[0]) || !sh_same(k.dir[1], fb[1]) ||
+				!sh_same(k.dir[2], fb[2]) || !sh_same_key(k, k0))
+				dirs++;
+
+			if (!sh_same(k.strength, dark) || !sh_same(k.agree, 0.0f))
+				strengths++;
+
+			if (k.lights != k1.lights || !sh_same(k.weight, k1.weight))
+				counts++;
+
+			if (sh_angle(k1.dir, fb) > 5.0)
+				pulled++;
+		}
+	}
+
+	ok(dirs == 0, "shadow: at the table's pull every light set at every P gives the fixed slant, bit for bit",
+		dirs, 0);
+	ok(strengths == 0, "shadow: at the table's pull every light set at every P gives DARK * LOW, bit for bit",
+		strengths, 0);
+	ok(counts == 0, "shadow: lights and weight count what the list holds, before the pull", counts, 0);
+	// The same sets at pull 1 turn the direction, so the checks above are not empty.
+	ok(pulled >= 100 && cases == 175, "shadow: the same light sets at pull 1 turn the direction by over 5 degrees",
+		pulled, 100);
+
+	// The walk, with lights that change every four steps.
+	const float* O = Ps[0];
+	const HDShadowLight walkLamps[3] =
+	{
+		sh_lamp(HD_SHADOW_POINT, O[0] + 1500.0f, O[1] - 700.0f, O[2] + 200.0f, 1.0f, 3000.0f),
+		sh_lamp(HD_SHADOW_SPOT, O[0] + 3500.0f, O[1] - 400.0f, O[2] - 600.0f, 0.8f, 2500.0f),
+		sh_sun(-0.7f, 0.5f, 0.4f, 0.9f)
+	};
+	const HDShadowLight* walkSets[4] = { walkLamps, walkLamps + 1, 0, walkLamps };
+	const int walkCounts[4] = { 1, 2, 0, 3 };
+	const int rates[3] = { 30, 60, 165 };
+	double turned = 0.0;
+
+	for (int r = 0; r < 3; r++)
+	{
+		const float dt = 1.0f / (float)rates[r];
+		HDShadowFollow f, g;
+		int wrong = 0;
+
+		memset(&f, 0, sizeof(f));
+		memset(&g, 0, sizeof(g));
+		HDShadowFollowReset(&f);
+		HDShadowFollowReset(&g);
+
+		for (int i = 0; i < rates[r] * 5; i++)
+		{
+			const float t = (float)i * dt;
+			const float at[3] = { O[0] + 1000.0f * t, O[1], O[2] + 250.0f * t };
+			const int s = (i / 4) % 4;
+			const float step = i && i % 13 ? dt : 0.0f;
+			HDShadowKey k, k1;
+
+			HDShadowKeyTarget(walkSets[s], walkCounts[s], at, &k);
+			HDShadowFollowLights(&f, walkSets[s], walkCounts[s]);
+
+			const bool snap = HDShadowFollowStep(&f, &k, at, step);
+
+			if (snap != (i == 0) || !sh_same(f.dir[0], fb[0]) || !sh_same(f.dir[1], fb[1]) ||
+				!sh_same(f.dir[2], fb[2]) || !sh_same(f.strength, dark) ||
+				f.offset[0] != 0.0f || f.offset[1] != 0.0f || f.offset[2] != 0.0f ||
+				f.offsetStrength != 0.0f || !sh_same(f.lag, 0.0f))
+				wrong++;
+
+			HDShadowKeyTarget(walkSets[s], walkCounts[s], at, &k1, 1.0f);
+			HDShadowFollowLights(&g, walkSets[s], walkCounts[s], 1.0f);
+			HDShadowFollowStep(&g, &k1, at, step);
+		}
+
+		turned = g.lag > turned ? g.lag : turned;
+
+		ok(wrong == 0 && f.snaps == 1,
+			r == 0 ? "shadow: at 30 steps a second a walk through changing lights draws the fixed light, lag 0"
+				: (r == 1 ? "shadow: at 60 steps a second a walk through changing lights draws the fixed light, lag 0"
+					: "shadow: at 165 steps a second a walk through changing lights draws the fixed light, lag 0"),
+			wrong, 0);
+	}
+
+	ok(turned > 5.0, "shadow: the same walk at pull 1 turns the drawn direction away from the target",
+		sh_milli(turned), 5000);
+}
+
+/* The following the way shadow_step drives it, at the lights' full part,
+ * pull 1, so that a change of the lights moves the target: the frame's
+ * target out of the lights at P, the same lights weighed at the last step's
+ * P, the step. True when the step snapped. */
 static bool sh_follow(HDShadowFollow* f, const HDShadowLight* lights, int count, const float* P,
 	float dt, HDShadowKey* target)
 {
-	HDShadowKeyTarget(lights, count, P, target);
-	HDShadowFollowLights(f, lights, count);
+	HDShadowKeyTarget(lights, count, P, target, 1.0f);
+	HDShadowFollowLights(f, lights, count, 1.0f);
 	return HDShadowFollowStep(f, target, P, dt);
 }
 
@@ -13331,8 +13651,8 @@ static void shadow_follow_lights()
 		HDShadowKey from, to;
 		float got[3][4][4];
 
-		HDShadowKeyTarget(olds[c], oldN[c], P, &from);
-		HDShadowKeyTarget(news[c], newN[c], P, &to);
+		HDShadowKeyTarget(olds[c], oldN[c], P, &from, 1.0f);
+		HDShadowKeyTarget(news[c], newN[c], P, &to, 1.0f);
 
 		const double turn = sh_angle(from.dir, to.dir);
 
@@ -13501,8 +13821,8 @@ static void shadow_follow_both()
 					for (int j = 0; j < 3; j++)
 						at0[j] = at[j];
 
-					HDShadowKeyTarget(old, 2, at0, &jf);
-					HDShadowKeyTarget(&A, 1, at0, &jt);
+					HDShadowKeyTarget(old, 2, at0, &jf, 1.0f);
+					HDShadowKeyTarget(&A, 1, at0, &jt, 1.0f);
 					jump = sh_angle(jf.dir, jt.dir);
 				}
 
@@ -13590,8 +13910,8 @@ static void shadow_follow_edges()
 	HDShadowKey from, to, k, k2;
 	HDShadowFollow settled, live;
 
-	HDShadowKeyTarget(old, 2, P, &from);
-	HDShadowKeyTarget(&A, 1, P, &to);
+	HDShadowKeyTarget(old, 2, P, &from, 1.0f);
+	HDShadowKeyTarget(&A, 1, P, &to, 1.0f);
 
 	const double turn = sh_angle(from.dir, to.dir);
 
@@ -14537,6 +14857,8 @@ int main()
 	softbody_mask();
 	softbody_constants();
 	shadow_key();
+	shadow_pull();
+	shadow_fixed();
 	shadow_follow();
 	shadow_follow_move();
 	shadow_follow_lights();

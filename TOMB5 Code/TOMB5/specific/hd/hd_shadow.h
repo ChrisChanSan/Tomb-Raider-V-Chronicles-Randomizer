@@ -1,0 +1,751 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
+#pragma once
+
+#include <math.h>
+
+/* The projected shadow of the HD Lara: the arithmetic.
+ *
+ * Four pieces, each a pure function of its arguments: the KEY LIGHT, one
+ * direction and one darkness out of the lights that light her; the FOLLOWING,
+ * which carries both through game time so that neither ever jumps; the BOX,
+ * an orthographic volume round her seen along that direction, with the one
+ * mapping from a point to its place in the shadow map; and the GATE, which
+ * says whether the projected shadow runs in a frame.
+ *
+ * This header includes no engine header on purpose, like hd_softbody.h:
+ * Preparation\Tools\Diagnose\ModernTest.cpp includes it and asserts on every
+ * function below without a device or a level, and ModelProbe builds its map
+ * matrices through the same functions. hd_laradraw.cpp gathers and steps,
+ * hd_model.cpp and hd_render.cpp draw.
+ *
+ * Space: the engine's world, y growing downward. A direction is the way the
+ * light TRAVELS, so straight down is (0, 1, 0). */
+
+/* ------------------------------------------------------------ the table -- */
+
+/* Every number that decides how the shadow looks, in one place. None is
+ * measured against the game; they are a starting point to be tuned.
+ *
+ *   MAP         texels a side of the square map. More is a sharper outline
+ *               and a dearer pass; the box below over this is the size of a
+ *               texel in the world (4 units).
+ *   BOX         the box's width and height across the light, units. Larger
+ *               holds a longer shadow and spends the texels more thinly;
+ *               2048 holds her standing outline with room on every side.
+ *   DEPTH       the box's length along the light, units: what lies further
+ *               from her middle than half of it neither casts nor receives.
+ *   DARK        how much a fully shadowed pixel loses, 0..1: 0.45 keeps 0.55
+ *               of its colour. Higher is a blacker shadow.
+ *   LOW         the part of DARK left where no light gives a direction (the
+ *               lights cancel, or there are none). Lower makes a shadow in
+ *               a flatly lit room fainter; 1 makes it as dark as anywhere.
+ *   W_REF       the summed light weight (luminance times falloff) from which
+ *               the direction counts fully. Higher needs brighter lamps
+ *               before the shadow reaches its full darkness.
+ *   W_FALLBACK  the weight of the fixed slant added to every direction, so
+ *               the direction is defined in a room without lights and turns
+ *               smoothly as lights come and go. Higher pulls every shadow
+ *               towards the fixed slant.
+ *   FALLBACK_SLANT  that fixed slant, degrees off straight down. 0 puts a
+ *               shadow without lights under her feet; more lays it beside
+ *               them.
+ *   SLANT_MAX   the steepest slant off straight down a shadow may have,
+ *               degrees. Higher allows longer shadows from low lamps; the
+ *               shadow's length grows with the tangent, 1.43 of her height
+ *               at 55.
+ *   TAU         the time constant of the following, game seconds: after TAU
+ *               a change has gone 63 per cent of the way, after three TAU
+ *               95. Longer is softer and slower.
+ *   FULL, END   below her lowest node: a receiver up to FULL units below
+ *               takes the whole shadow, from END on none, smooth between - a
+ *               storey under her takes none through its ceiling.
+ *   EDGE        the outer part of the box, of its half width, over which the
+ *               shadow fades out, so the box's edge is never seen.
+ *   FACING      the n.l from which a face takes the whole shadow; a face
+ *               turned away from the light (n.l at 0 or below) takes none.
+ *   BIAS        units a receiver must lie behind the cast depth to be in
+ *               shadow. Receivers never cast, so it covers arithmetic only;
+ *               more is safer and lets a shadow start a little later. */
+#define HD_SHADOW_MAP			512
+#define HD_SHADOW_BOX			2048.0f
+#define HD_SHADOW_DEPTH			2048.0f
+#define HD_SHADOW_DARK			0.45f
+#define HD_SHADOW_LOW			0.6f
+#define HD_SHADOW_W_REF			0.5f
+#define HD_SHADOW_W_FALLBACK		0.15f
+#define HD_SHADOW_FALLBACK_SLANT	25.0f
+#define HD_SHADOW_SLANT_MAX		55.0f
+#define HD_SHADOW_TAU			0.5f
+#define HD_SHADOW_FULL			1024.0f
+#define HD_SHADOW_END			2048.0f
+#define HD_SHADOW_EDGE			0.1f
+#define HD_SHADOW_FACING		0.2f
+#define HD_SHADOW_BIAS			8.0f
+
+/* The machinery under the table: these keep the following honest and are
+ * not a matter of taste.
+ *
+ *   GAP         a frame further than this from the last one, game seconds,
+ *               snaps instead of gliding: a hitch, a load, a long pause.
+ *               hd_softbody.h's HD_SOFT_GAP, for the same reason.
+ *   SPEED, SLACK  the fastest she can travel, units a second, and a margin
+ *               on top, units: a reference point further than SPEED * dt +
+ *               SLACK from the last one has been put somewhere (a teleport,
+ *               a cutscene's edge) and snaps. hd_softbody.h's numbers.
+ *   AGREE_EPS   added to the summed weight under the agreement of the
+ *               directions, so no light at all divides nothing by nothing.
+ *   NEAR_LAMP   a lamp nearer to her reference point than this, units, has
+ *               no direction there; its weight still counts.
+ *   FALLBACK_X, _Z  the compass bearing of the fixed slant, a unit vector in
+ *               the world's x-z plane. */
+#define HD_SHADOW_GAP			0.25f
+#define HD_SHADOW_SPEED			9000.0f
+#define HD_SHADOW_SLACK			128.0f
+#define HD_SHADOW_AGREE_EPS		1.0e-4f
+#define HD_SHADOW_NEAR_LAMP		1.0f
+#define HD_SHADOW_FALLBACK_X		0.70710678f
+#define HD_SHADOW_FALLBACK_Z		0.70710678f
+
+/* The option's value that asks for the projected shadow; 1..4 are the four
+ * blob shadows of S_PrintShadow. */
+#define HD_SHADOW_MODE_PROJECTED	5
+
+/* The light kinds, the numbers HD_OBJLIGHT_SUN / _POINT / _SPOT have in
+ * hd_model.h. */
+#define HD_SHADOW_SUN			0
+#define HD_SHADOW_POINT			1
+#define HD_SHADOW_SPOT			2
+
+/* At most this many lights are weighed; the engine's two lists of an item
+ * hold far fewer. */
+#define HD_SHADOW_MAX_LIGHTS		32
+
+/* ----------------------------------------------------------- the helpers -- */
+
+inline float hd_shadow_dot(const float* a, const float* b)
+{
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+inline float hd_shadow_len(const float* a)
+{
+	return sqrtf(hd_shadow_dot(a, a));
+}
+
+inline bool hd_shadow_finite(float f)
+{
+	return f == f && f < 3.0e38f && f > -3.0e38f;
+}
+
+inline float hd_shadow_saturate(float f)
+{
+	return f > 0.0f ? (f < 1.0f ? f : 1.0f) : 0.0f;
+}
+
+/* The fixed slant: FALLBACK_SLANT off straight down, towards FALLBACK_X/_Z. */
+inline void HDShadowFallback(float* d)
+{
+	const float a = HD_SHADOW_FALLBACK_SLANT * (3.14159265f / 180.0f);
+	const float s = sinf(a);
+
+	d[0] = s * HD_SHADOW_FALLBACK_X;
+	d[1] = cosf(a);
+	d[2] = s * HD_SHADOW_FALLBACK_Z;
+}
+
+/* `v` made a unit vector; the fixed slant for a vector of no length or one
+ * that is not a number. */
+inline void hd_shadow_unit(float* v)
+{
+	const float l = hd_shadow_len(v);
+
+	if (!(l > 1.0e-6f) || !hd_shadow_finite(l))
+	{
+		HDShadowFallback(v);
+		return;
+	}
+
+	v[0] /= l;
+	v[1] /= l;
+	v[2] /= l;
+}
+
+/* --------------------------------------------------------- the key light -- */
+
+/* One light as the key light weighs it, in world space:
+ *
+ *   kind     HD_SHADOW_SUN, _POINT or _SPOT
+ *   x, y, z  a sun's travel direction (any length), a point's or a spot's
+ *            position
+ *   r, g, b  its colour as the engine's list holds it, 0..1
+ *   range    a point's Outer, a spot's Cutoff, units; not read for a sun */
+struct HDShadowLight
+{
+	int kind;
+	float x, y, z;
+	float r, g, b;
+	float range;
+};
+
+/* The key light of one frame.
+ *
+ *   dir       the unit direction the shadow is thrown in
+ *   strength  DARK * lerp(LOW, 1, agree)
+ *   weight    the summed weight of the lights counted
+ *   agree     0..1: how far the lights agree on one direction, times how far
+ *             their weight reaches W_REF
+ *   slant     degrees between dir and straight down
+ *   lights    lights with a weight above 0 */
+struct HDShadowKey
+{
+	float dir[3];
+	float strength;
+	float weight;
+	float agree;
+	float slant;
+	int lights;
+};
+
+/* Rec. 709's luminance of a colour. */
+inline float HDShadowLuminance(float r, float g, float b)
+{
+	return 0.2126f * r + 0.7152f * g + 0.0722f * b;
+}
+
+/* A point's or a spot's falloff at a distance, the model shader's own term
+ * (hd_model.hlsl, ModelVS: rad = max(0, 1 - dist * invRange), invRange 1 /
+ * Outer for a point and 1 / Cutoff for a spot). Distance over range against
+ * the falloff:
+ *
+ *   0  1      0.25  0.75      0.5  0.5      1 and over  0
+ *
+ * A range of 0 or less, or a distance that is not a number, gives 0. */
+inline float HDShadowFalloff(float dist, float range)
+{
+	if (!(range > 0.0f) || !hd_shadow_finite(dist))
+		return 0.0f;
+
+	const float f = 1.0f - dist / range;
+
+	return f > 0.0f ? f : 0.0f;
+}
+
+/* The angle between `d` and straight down, degrees. */
+inline float HDShadowSlant(const float* d)
+{
+	const float l = hd_shadow_len(d);
+
+	if (!(l > 0.0f))
+		return 0.0f;
+
+	float c = d[1] / l;
+
+	c = c > 1.0f ? 1.0f : (c < -1.0f ? -1.0f : c);
+	return acosf(c) * (180.0f / 3.14159265f);
+}
+
+/* The slant limit, on a unit vector in place: a direction more than
+ * SLANT_MAX off straight down - an upward one included - is turned back to
+ * the limit with its compass bearing kept. A direction with no bearing at
+ * all (straight up) takes the fixed slant's. True when it was turned. */
+inline bool HDShadowLimit(float* d)
+{
+	const float a = HD_SHADOW_SLANT_MAX * (3.14159265f / 180.0f);
+	const float cosMax = cosf(a);
+
+	if (d[1] >= cosMax)
+		return false;
+
+	float h[2] = { d[0], d[2] };
+	float hl = sqrtf(h[0] * h[0] + h[1] * h[1]);
+
+	if (!(hl > 1.0e-6f))
+	{
+		h[0] = HD_SHADOW_FALLBACK_X;
+		h[1] = HD_SHADOW_FALLBACK_Z;
+		hl = 1.0f;
+	}
+
+	const float s = sinf(a);
+
+	d[0] = s * h[0] / hl;
+	d[1] = cosMax;
+	d[2] = s * h[1] / hl;
+	return true;
+}
+
+/* The key light's target for a reference point P on her.
+ *
+ * Every light gives a weight w = luminance * falloff at P (1 for a sun) and
+ * a direction d, the way it travels at P: a sun's own, and P minus the lamp,
+ * made unit, for a point or a spot. The direction is the sum of w * d plus
+ * W_FALLBACK times the fixed slant, made unit and held to the slant limit -
+ * continuous in P, and defined in a room without lights. The strength
+ * follows how far the lights agree: |sum w d| / sum w, times sum w over
+ * W_REF, both held to 0..1. */
+inline void HDShadowKeyTarget(const HDShadowLight* lights, int count, const float* P,
+	HDShadowKey* out)
+{
+	float sum[3] = { 0.0f, 0.0f, 0.0f };
+	float weight = 0.0f;
+	int used = 0;
+
+	for (int i = 0; lights && i < count && i < HD_SHADOW_MAX_LIGHTS; i++)
+	{
+		const HDShadowLight& l = lights[i];
+		const float lum = HDShadowLuminance(l.r, l.g, l.b);
+		float d[3] = { 0.0f, 0.0f, 0.0f };
+		float w = 0.0f;
+
+		if (!hd_shadow_finite(lum) || !(lum > 0.0f))
+			continue;
+
+		if (l.kind == HD_SHADOW_SUN)
+		{
+			const float v[3] = { l.x, l.y, l.z };
+			const float len = hd_shadow_len(v);
+
+			if (!(len > 1.0e-6f) || !hd_shadow_finite(len))
+				continue;
+
+			d[0] = v[0] / len;
+			d[1] = v[1] / len;
+			d[2] = v[2] / len;
+			w = lum;
+		}
+		else if (l.kind == HD_SHADOW_POINT || l.kind == HD_SHADOW_SPOT)
+		{
+			const float v[3] = { P[0] - l.x, P[1] - l.y, P[2] - l.z };
+			const float dist = hd_shadow_len(v);
+
+			w = lum * HDShadowFalloff(dist, l.range);
+
+			if (dist > HD_SHADOW_NEAR_LAMP && hd_shadow_finite(dist))
+			{
+				d[0] = v[0] / dist;
+				d[1] = v[1] / dist;
+				d[2] = v[2] / dist;
+			}
+		}
+		else
+			continue;
+
+		if (!(w > 0.0f) || !hd_shadow_finite(w))
+			continue;
+
+		sum[0] += w * d[0];
+		sum[1] += w * d[1];
+		sum[2] += w * d[2];
+		weight += w;
+		used++;
+	}
+
+	float fb[3];
+
+	HDShadowFallback(fb);
+
+	out->dir[0] = sum[0] + HD_SHADOW_W_FALLBACK * fb[0];
+	out->dir[1] = sum[1] + HD_SHADOW_W_FALLBACK * fb[1];
+	out->dir[2] = sum[2] + HD_SHADOW_W_FALLBACK * fb[2];
+	hd_shadow_unit(out->dir);
+	HDShadowLimit(out->dir);
+
+	const float agree = hd_shadow_saturate(hd_shadow_len(sum) / (weight + HD_SHADOW_AGREE_EPS)) *
+		hd_shadow_saturate(weight / HD_SHADOW_W_REF);
+
+	out->agree = agree;
+	out->strength = HD_SHADOW_DARK * (HD_SHADOW_LOW + (1.0f - HD_SHADOW_LOW) * agree);
+	out->weight = weight;
+	out->slant = HDShadowSlant(out->dir);
+	out->lights = used;
+}
+
+/* ------------------------------------------------------- the following -- */
+
+/* The key light as it is drawn: the target followed in game time.
+ *
+ *   primed    0 until the first step, and after a reset; the next step snaps
+ *   dir       the drawn direction, a unit vector
+ *   strength  the drawn strength
+ *   at        the reference point of the last step, for the jump test
+ *   snaps     snaps since the caller last cleared it, for the log */
+struct HDShadowFollow
+{
+	int primed;
+	float dir[3];
+	float strength;
+	float at[3];
+	int snaps;
+};
+
+inline void HDShadowFollowReset(HDShadowFollow* f)
+{
+	f->primed = 0;
+}
+
+/* How much of the way to the target one step of `dt` game seconds goes:
+ * 1 - exp(-dt / TAU), the exact solution of v' = (target - v) / TAU over
+ * dt. Steps add up to the same path at any frame rate, because
+ * (1 - a)(1 - b) = exp(-(dt1 + dt2) / TAU). 0 for dt <= 0. */
+inline float HDShadowBlend(float dt)
+{
+	if (!(dt > 0.0f))
+		return 0.0f;
+
+	return 1.0f - expf(-dt / HD_SHADOW_TAU);
+}
+
+/* One step of the following, once per drawn main frame.
+ *
+ *   dt <= 0           nothing moves: a frame drawn twice, or the game standing
+ *                     still (the clock is hd_softbody.h's HDSoftClock, which
+ *                     the pause and the inventory do not advance).
+ *   a snap            the drawn values become the target at once: the first
+ *                     step after a reset (level start, savegame, a frame in
+ *                     which the projected shadow did not run), dt beyond GAP
+ *                     or not a number, and P further from the last step's
+ *                     than SPEED * dt + SLACK.
+ *   otherwise         both move towards the target by HDShadowBlend(dt), the
+ *                     direction made unit again. Two directions inside the
+ *                     slant limit blend to one inside it: the limit is a cone
+ *                     about straight down, and a cone is convex.
+ *
+ * True when it snapped. */
+inline bool HDShadowFollowStep(HDShadowFollow* f, const HDShadowKey* target, const float* P,
+	float dt)
+{
+	bool snap = !f->primed || !hd_shadow_finite(dt) || dt > HD_SHADOW_GAP;
+
+	if (!snap)
+	{
+		const float d[3] = { P[0] - f->at[0], P[1] - f->at[1], P[2] - f->at[2] };
+		const float jump = hd_shadow_len(d);
+		const float reach = HD_SHADOW_SPEED * (dt > 0.0f ? dt : 0.0f) + HD_SHADOW_SLACK;
+
+		if (!hd_shadow_finite(jump) || jump > reach)
+			snap = true;
+	}
+
+	for (int i = 0; i < 3; i++)
+		f->at[i] = P[i];
+
+	if (snap)
+	{
+		for (int i = 0; i < 3; i++)
+			f->dir[i] = target->dir[i];
+
+		f->strength = target->strength;
+		f->primed = 1;
+		f->snaps++;
+		return true;
+	}
+
+	const float k = HDShadowBlend(dt);
+
+	if (k > 0.0f)
+	{
+		for (int i = 0; i < 3; i++)
+			f->dir[i] += (target->dir[i] - f->dir[i]) * k;
+
+		hd_shadow_unit(f->dir);
+		f->strength += (target->strength - f->strength) * k;
+	}
+
+	return false;
+}
+
+/* --------------------------------------------------------------- the box -- */
+
+/* The map's volume in the world.
+ *
+ *   fwd       the light's direction
+ *   right     normalise(fwd x (1, 0, 0)): its length is sqrt(fwd.y^2 +
+ *             fwd.z^2), at least cos(SLANT_MAX) = 0.57 while the slant
+ *             limit holds, so it never vanishes and never flips sign as the
+ *             direction turns
+ *   up        fwd x right; (right, up, fwd) is a rotation of the world's
+ *             axes
+ *   centre    the middle between her lowest and highest node, its right and
+ *             up components snapped to whole texels
+ *   mid       the same middle before the snap
+ *   lowest, highest  the y of her lowest node (the largest y) and of her
+ *             highest */
+struct HDShadowBox
+{
+	float right[3];
+	float up[3];
+	float fwd[3];
+	float centre[3];
+	float mid[3];
+	float lowest;
+	float highest;
+};
+
+inline void HDShadowBasis(const float* dir, float* right, float* up, float* fwd)
+{
+	for (int i = 0; i < 3; i++)
+		fwd[i] = dir[i];
+
+	hd_shadow_unit(fwd);
+
+	right[0] = 0.0f;
+	right[1] = fwd[2];
+	right[2] = -fwd[1];
+
+	const float l = hd_shadow_len(right);
+
+	if (l > 1.0e-6f)
+	{
+		right[1] /= l;
+		right[2] /= l;
+	}
+	else
+	{
+		/* Only a direction along the world's x axis comes here, which the
+		 * slant limit never lets through. */
+		right[1] = 0.0f;
+		right[2] = -1.0f;
+	}
+
+	up[0] = fwd[1] * right[2] - fwd[2] * right[1];
+	up[1] = fwd[2] * right[0] - fwd[0] * right[2];
+	up[2] = fwd[0] * right[1] - fwd[1] * right[0];
+}
+
+/* The box for a direction and her nodes' world positions, three floats
+ * each. The snap: with a steady light every point of the world keeps the
+ * same place inside its texel while she moves, so the outline does not crawl.
+ * False with no node. */
+inline bool HDShadowBoxMake(HDShadowBox* b, const float* dir, const float* nodes, int count)
+{
+	if (!nodes || count <= 0)
+		return false;
+
+	int lo = 0, hi = 0;
+
+	for (int n = 1; n < count; n++)
+	{
+		if (nodes[n * 3 + 1] > nodes[lo * 3 + 1])
+			lo = n;
+
+		if (nodes[n * 3 + 1] < nodes[hi * 3 + 1])
+			hi = n;
+	}
+
+	HDShadowBasis(dir, b->right, b->up, b->fwd);
+
+	for (int i = 0; i < 3; i++)
+		b->mid[i] = 0.5f * (nodes[lo * 3 + i] + nodes[hi * 3 + i]);
+
+	b->lowest = nodes[lo * 3 + 1];
+	b->highest = nodes[hi * 3 + 1];
+
+	const double texel = (double)HD_SHADOW_BOX / (double)HD_SHADOW_MAP;
+	double cr = 0.0, cu = 0.0, cf = 0.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		cr += (double)b->mid[i] * b->right[i];
+		cu += (double)b->mid[i] * b->up[i];
+		cf += (double)b->mid[i] * b->fwd[i];
+	}
+
+	cr = floor(cr / texel + 0.5) * texel;
+	cu = floor(cu / texel + 0.5) * texel;
+
+	for (int i = 0; i < 3; i++)
+		b->centre[i] = (float)(cr * b->right[i] + cu * b->up[i] + cf * b->fwd[i]);
+
+	return true;
+}
+
+/* Where a world point lies in the map: (u, v) in texture coordinates, 0..1
+ * across the box, and depth 0..1 from the box's near side (towards the
+ * light) to its far side. The box's centre lands on (0.5, 0.5, 0.5) and one
+ * texel along `right` is 1 / MAP in u; along `up`, v falls.
+ *
+ * The receive side looks a point up with exactly this; the cast side
+ * rasterises with HDShadowCastMatrix, which puts the point whose (u, v) this
+ * gives into the texel whose centre is (u, v) - Direct3D 9's half-texel
+ * rule, see there. */
+inline void HDShadowMapUVD(const HDShadowBox* b, const float* p, float* out)
+{
+	const float d[3] = { p[0] - b->centre[0], p[1] - b->centre[1], p[2] - b->centre[2] };
+
+	out[0] = 0.5f + hd_shadow_dot(d, b->right) / HD_SHADOW_BOX;
+	out[1] = 0.5f - hd_shadow_dot(d, b->up) / HD_SHADOW_BOX;
+	out[2] = 0.5f + hd_shadow_dot(d, b->fwd) / HD_SHADOW_DEPTH;
+}
+
+/* A world point out of a view-space one, for a world-to-view of
+ * view = R p + t with R a rotation, row-major. */
+inline void HDShadowViewToWorld(const float* R, const float* t, const float* v, float* out)
+{
+	const float d[3] = { v[0] - t[0], v[1] - t[1], v[2] - t[2] };
+
+	for (int j = 0; j < 3; j++)
+		out[j] = R[0 * 3 + j] * d[0] + R[1 * 3 + j] * d[1] + R[2 * 3 + j] * d[2];
+}
+
+/* HDShadowMapUVD as one matrix on VIEW space: (vx, vy, vz, 1) * m = (u, v,
+ * depth, 1), row-major with the row vector on the left, as a D3DMATRIX is
+ * used. `R` and `t` are the frame's world-to-view, view = R p + t. Worked
+ * in double: the camera and the box may stand far from the world's origin,
+ * and the constants are differences of those large positions. */
+inline void HDShadowViewToMap(const HDShadowBox* b, const float* R, const float* t, float* m)
+{
+	const float* axis[3] = { b->right, b->up, b->fwd };
+	const double scale[3] = { 1.0 / HD_SHADOW_BOX, -1.0 / HD_SHADOW_BOX,
+		1.0 / HD_SHADOW_DEPTH };
+
+	for (int i = 0; i < 16; i++)
+		m[i] = 0.0f;
+
+	for (int col = 0; col < 3; col++)
+	{
+		/* The axis in view space, R a; and dot(p - centre, a) for
+		 * p = R^T (v - t) is dot(v, R a) - dot(t, R a) - dot(centre, a). */
+		double ra[3];
+		double c = 0.0;
+
+		for (int i = 0; i < 3; i++)
+		{
+			ra[i] = (double)R[i * 3 + 0] * axis[col][0] +
+				(double)R[i * 3 + 1] * axis[col][1] + (double)R[i * 3 + 2] * axis[col][2];
+			c -= (double)t[i] * ra[i] + (double)b->centre[i] * axis[col][i];
+		}
+
+		for (int i = 0; i < 3; i++)
+			m[i * 4 + col] = (float)(ra[i] * scale[col]);
+
+		m[12 + col] = (float)(0.5 + c * scale[col]);
+	}
+
+	m[15] = 1.0f;
+}
+
+/* The cast side's projection: view space into the map's clip space,
+ * row-major, row vector on the left - the matrix the model shader takes in
+ * place of the frame's projection.
+ *
+ * Direct3D 9 centres a pixel on whole screen coordinates while a texel's
+ * centre is at (i + 0.5) / MAP, so a clip x of 2u - 1 would land half a texel
+ * off the lookup. The clip position is therefore
+ *
+ *   x = 2u - 1 - 1 / MAP,   y = 1 - 2v + 1 / MAP,   z = depth,   w = 1
+ *
+ * which the viewport turns into the screen position u * MAP - 0.5: the texel
+ * whose centre is (u, v). */
+inline void HDShadowCastMatrix(const HDShadowBox* b, const float* R, const float* t, float* m)
+{
+	float uvd[16];
+
+	HDShadowViewToMap(b, R, t, uvd);
+
+	for (int row = 0; row < 4; row++)
+	{
+		m[row * 4 + 0] = 2.0f * uvd[row * 4 + 0];
+		m[row * 4 + 1] = -2.0f * uvd[row * 4 + 1];
+		m[row * 4 + 2] = uvd[row * 4 + 2];
+		m[row * 4 + 3] = uvd[row * 4 + 3];
+	}
+
+	m[12] += -1.0f - 1.0f / (float)HD_SHADOW_MAP;
+	m[13] += 1.0f + 1.0f / (float)HD_SHADOW_MAP;
+}
+
+/* -------------------------------------------------------------- the gate -- */
+
+/* Why the projected shadow does not run in a frame, in the order asked:
+ *
+ *   OPTION        the option does not ask for it
+ *   HD_OFF        the level is not drawn HD (hd_enable off among others)
+ *   CLASSIC_LARA  Lara is not drawn as the HD composite
+ *   CLASSIC_ROOM  the room she is in is drawn classic
+ *   TARGET        the map, its depth surface or its shaders do not exist on
+ *                 this device - refused, or not made
+ *
+ * The target is asked last, because asking for it makes it. */
+enum
+{
+	HD_SHADOW_GATE_OK = 0,
+	HD_SHADOW_GATE_OPTION,
+	HD_SHADOW_GATE_HD_OFF,
+	HD_SHADOW_GATE_CLASSIC_LARA,
+	HD_SHADOW_GATE_CLASSIC_ROOM,
+	HD_SHADOW_GATE_TARGET
+};
+
+inline int HDShadowGate(long stored, bool hdLevel, bool hdLara, bool hdRoom, bool target)
+{
+	if (stored != HD_SHADOW_MODE_PROJECTED)
+		return HD_SHADOW_GATE_OPTION;
+
+	if (!hdLevel)
+		return HD_SHADOW_GATE_HD_OFF;
+
+	if (!hdLara)
+		return HD_SHADOW_GATE_CLASSIC_LARA;
+
+	if (!hdRoom)
+		return HD_SHADOW_GATE_CLASSIC_ROOM;
+
+	if (!target)
+		return HD_SHADOW_GATE_TARGET;
+
+	return HD_SHADOW_GATE_OK;
+}
+
+inline const char* HDShadowGateWord(int gate)
+{
+	switch (gate)
+	{
+	case HD_SHADOW_GATE_OK: return "ok";
+	case HD_SHADOW_GATE_OPTION: return "option";
+	case HD_SHADOW_GATE_HD_OFF: return "hd_off";
+	case HD_SHADOW_GATE_CLASSIC_LARA: return "classic_lara";
+	case HD_SHADOW_GATE_CLASSIC_ROOM: return "classic_room";
+	case HD_SHADOW_GATE_TARGET: return "target";
+	default: return "?";
+	}
+}
+
+/* ------------------------------------------------------------ the frame -- */
+
+/* One drawn frame's projected shadow, filled by hd_laradraw.cpp at Lara's
+ * main draw and read by the passes in hd_level.cpp.
+ *
+ *   runs        1 when the projected shadow runs in this frame
+ *   gate        HD_SHADOW_GATE_*, why it does not
+ *   target      the key light's target this frame
+ *   dir, strength  the drawn key light (HDShadowFollow's)
+ *   box         the map's volume
+ *   viewToMap   view space -> (u, v, depth, 1), HDShadowViewToMap
+ *   castClip    view space -> the map's clip space, HDShadowCastMatrix
+ *   R, t        the frame's world-to-view, view = R p + t
+ *   snapped     1 when the following snapped in this frame */
+struct HDShadowFrame
+{
+	int runs;
+	int gate;
+	HDShadowKey target;
+	float dir[3];
+	float strength;
+	HDShadowBox box;
+	float viewToMap[16];
+	float castClip[16];
+	float R[9];
+	float t[3];
+	int snapped;
+};

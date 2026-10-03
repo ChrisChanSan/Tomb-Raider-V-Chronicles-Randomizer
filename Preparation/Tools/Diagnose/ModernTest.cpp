@@ -13564,6 +13564,337 @@ static void shadow_gate()
 		"shadow: the gate's words are the log's", 0, 0);
 }
 
+/* The receive terms: each is 1, 0 and monotone between, at the numbers of
+ * the table. */
+static void shadow_terms()
+{
+	// The edge: 1 in the middle and inside the band, 0 on the border and
+	// outside, never rising towards the border.
+	int bad = 0;
+	float last = 2.0f;
+
+	for (int i = 0; i <= 1000; i++)
+	{
+		const float u = 0.5f - 0.5f * (float)i / 1000.0f;	// the middle to the border
+		const float e = HDShadowEdgeTerm(u, 0.5f);
+
+		if (e > last + 1e-6f || e < 0.0f || e > 1.0f)
+			bad++;
+
+		last = e;
+	}
+
+	ok(bad == 0 && HDShadowEdgeTerm(0.5f, 0.5f) == 1.0f &&
+		HDShadowEdgeTerm(0.5f * HD_SHADOW_EDGE + 0.001f, 0.5f) == 1.0f &&
+		HDShadowEdgeTerm(0.0f, 0.5f) == 0.0f && HDShadowEdgeTerm(1.0f, 0.3f) == 0.0f &&
+		HDShadowEdgeTerm(-0.2f, 0.5f) == 0.0f && HDShadowEdgeTerm(0.5f, 1.3f) == 0.0f,
+		"shadow: the edge term is 1 inside, 0 on and past the border, monotone between",
+		bad, 0);
+
+	ok(sh_milli(HDShadowEdgeTerm(0.5f * HD_SHADOW_EDGE, 0.5f)) == 1000 &&
+		sh_milli(HDShadowEdgeTerm(0.25f * HD_SHADOW_EDGE, 0.5f)) == 500 &&
+		sh_milli(HDShadowEdgeTerm(0.5f, 1.0f - 0.25f * HD_SHADOW_EDGE)) == 500,
+		"shadow: the edge fades over the outer EDGE of the half box (0.05 of the map's side)",
+		sh_milli(HDShadowEdgeTerm(0.25f * HD_SHADOW_EDGE, 0.5f)), 500);
+
+	// The height: 1 above her and down to FULL, 0 from END, monotone.
+	bad = 0;
+	last = 2.0f;
+
+	for (int i = -200; i <= 3000; i++)
+	{
+		const float h = HDShadowHeightTerm((float)i);
+
+		if (h > last + 1e-6f || h < 0.0f || h > 1.0f)
+			bad++;
+
+		last = h;
+	}
+
+	ok(bad == 0 && HDShadowHeightTerm(-500.0f) == 1.0f && HDShadowHeightTerm(0.0f) == 1.0f &&
+		HDShadowHeightTerm(HD_SHADOW_FULL) == 1.0f && HDShadowHeightTerm(HD_SHADOW_END) == 0.0f &&
+		HDShadowHeightTerm(HD_SHADOW_END + 4096.0f) == 0.0f &&
+		sh_milli(HDShadowHeightTerm(0.5f * (HD_SHADOW_FULL + HD_SHADOW_END))) == 500,
+		"shadow: the height term is 1 down to FULL, 0 from END, linear and monotone between",
+		bad, 0);
+
+	// The facing: 0 turned away, 1 from FACING on, monotone.
+	bad = 0;
+	last = -1.0f;
+
+	for (int i = -1000; i <= 1000; i++)
+	{
+		const float f = HDShadowFacingTerm((float)i / 1000.0f);
+
+		if (f < last - 1e-6f || f < 0.0f || f > 1.0f)
+			bad++;
+
+		last = f;
+	}
+
+	ok(bad == 0 && HDShadowFacingTerm(-1.0f) == 0.0f && HDShadowFacingTerm(0.0f) == 0.0f &&
+		HDShadowFacingTerm(HD_SHADOW_FACING) == 1.0f && HDShadowFacingTerm(1.0f) == 1.0f &&
+		sh_milli(HDShadowFacingTerm(0.5f * HD_SHADOW_FACING)) == 500,
+		"shadow: the facing term is 0 turned away, 1 from FACING on, monotone between",
+		bad, 0);
+}
+
+/* The lookup's weights and its continuity: a straight edge of casting
+ * texels moved under the position by fractions of a texel. */
+static void shadow_lookup()
+{
+	// The weights of one axis sum to 3 for every position in the texel.
+	int bad = 0;
+
+	for (int i = 0; i < 100; i++)
+	{
+		float w[4];
+
+		HDShadowTapWeights((float)i / 100.0f, w);
+
+		if (fabs((double)w[0] + w[1] + w[2] + w[3] - 3.0) > 1e-6 || w[0] < 0.0f || w[3] < 0.0f)
+			bad++;
+	}
+
+	ok(bad == 0, "shadow: the four tap weights of an axis sum to 3, the block of 16 to 9", bad, 0);
+
+	const int n = 64;
+	std::vector<float> all((size_t)(n * n), 0.25f), none((size_t)(n * n), 1.0f);
+
+	ok(sh_milli(HDShadowLookup(&all[0], n, 0.5f, 0.5f, 0.6f)) == 1000 &&
+		sh_milli(HDShadowLookup(&none[0], n, 0.5f, 0.5f, 0.6f)) == 0 &&
+		sh_milli(HDShadowLookup(&none[0], n, 0.5f, 0.5f, 3.0f)) == 0,
+		"shadow: a map cast everywhere gives 1, the clear map 0 - even behind the box",
+		sh_milli(HDShadowLookup(&all[0], n, 0.5f, 0.5f, 0.6f)), 1000);
+
+	// The bias: a caster at the pixel's own depth, or within BIAS of it,
+	// does not cast; one further than BIAS nearer the light does.
+	const float bias = HD_SHADOW_BIAS / HD_SHADOW_DEPTH;
+	std::vector<float> at((size_t)(n * n), 0.5f);
+
+	ok(sh_milli(HDShadowLookup(&at[0], n, 0.5f, 0.5f, 0.5f)) == 0 &&
+		sh_milli(HDShadowLookup(&at[0], n, 0.5f, 0.5f, 0.5f + 0.5f * bias)) == 0 &&
+		sh_milli(HDShadowLookup(&at[0], n, 0.5f, 0.5f, 0.5f + 2.0f * bias)) == 1000,
+		"shadow: a receiver takes the shadow only BIAS behind the caster",
+		sh_milli(HDShadowLookup(&at[0], n, 0.5f, 0.5f, 0.5f + 2.0f * bias)), 1000);
+
+	/* A straight edge: texels left of column 32 cast. The position walks from
+	 * column 26 to column 38 in steps of a hundredth of a texel; the result
+	 * falls from 1 to 0, never rises, and moves by at most a little per step
+	 * - no jump where a texel ends. */
+	std::vector<float> half((size_t)(n * n), 1.0f);
+
+	for (int y = 0; y < n; y++)
+		for (int x = 0; x < 32; x++)
+			half[(size_t)(y * n + x)] = 0.25f;
+
+	bad = 0;
+
+	float prev = HDShadowLookup(&half[0], n, 26.0f / n, 0.5f, 0.6f);
+	double worst = 0.0;
+
+	for (int i = 1; i <= 1200; i++)
+	{
+		const float u = (26.0f + (float)i * 0.01f) / n;
+		const float now = HDShadowLookup(&half[0], n, u, 0.5f, 0.6f);
+		const double step = fabs((double)now - prev);
+
+		if (now > prev + 1e-6f)
+			bad++;
+
+		worst = step > worst ? step : worst;
+		prev = now;
+	}
+
+	ok(bad == 0 && worst < 0.01 &&
+		sh_milli(HDShadowLookup(&half[0], n, 26.0f / n, 0.5f, 0.6f)) == 1000 &&
+		sh_milli(HDShadowLookup(&half[0], n, 38.0f / n, 0.5f, 0.6f)) == 0,
+		"shadow: across a straight edge the lookup falls 1 to 0, monotone, under 0.01 per "
+		"hundredth of a texel", (long)(worst * 100000.0), 0);
+
+	// And it is symmetric about the edge: half way across it, it is half.
+	ok(sh_milli(HDShadowLookup(&half[0], n, 32.0f / n, 0.5f, 0.6f)) == 500,
+		"shadow: the lookup is one half exactly on the edge",
+		sh_milli(HDShadowLookup(&half[0], n, 32.0f / n, 0.5f, 0.6f)), 500);
+}
+
+/* The receive constants: the shader's rows give the one mapping, the height
+ * term and the light's direction, through a turned camera far from the
+ * origin; and the reach holds every point that can take the shadow. */
+static void shadow_receive()
+{
+	const float d2r = 3.14159265f / 180.0f;
+	const float yaw = 37.0f * d2r, pitch = 21.0f * d2r;
+	const float cy = cosf(yaw), sy = sinf(yaw), cp = cosf(pitch), sp = sinf(pitch);
+	// Rows: right, down, forward of a camera turned by yaw and pitch.
+	const float R[9] =
+	{
+		cy, 0.0f, -sy,
+		-sy * sp, cp, -cy * sp,
+		sy * cp, sp, cy * cp
+	};
+	const float camera[3] = { 61234.0f, -3200.0f, 48211.0f };
+	float t[3];
+
+	for (int i = 0; i < 3; i++)
+		t[i] = -(R[i * 3 + 0] * camera[0] + R[i * 3 + 1] * camera[1] + R[i * 3 + 2] * camera[2]);
+
+	float nodes[15 * 3];
+
+	for (int k = 0; k < 15; k++)
+	{
+		nodes[k * 3 + 0] = 61500.0f + 9.0f * (float)k;
+		nodes[k * 3 + 1] = -1200.0f + 55.0f * (float)k;
+		nodes[k * 3 + 2] = 49000.0f - 4.0f * (float)k;
+	}
+
+	float dir[3] = { 0.4f, 1.0f, -0.3f };
+
+	hd_shadow_unit(dir);
+
+	HDShadowBox box;
+
+	HDShadowBoxMake(&box, dir, nodes, 15);
+
+	float regs[HD_SHADOW_RECEIVE_COUNT * 4];
+
+	HDShadowReceiveConstants(&box, R, t, 0.33f, regs);
+
+	double worstMap = 0.0, worstHeight = 0.0;
+
+	for (int k = 0; k < 200; k++)
+	{
+		const float p[3] =
+		{
+			box.centre[0] + (float)((k * 37) % 2000) - 1000.0f,
+			box.lowest + (float)((k * 53) % 2400) - 300.0f,
+			box.centre[2] + (float)((k * 71) % 2000) - 1000.0f
+		};
+		float v[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+		for (int i = 0; i < 3; i++)
+			v[i] = R[i * 3 + 0] * p[0] + R[i * 3 + 1] * p[1] + R[i * 3 + 2] * p[2] + t[i];
+
+		float want[3];
+
+		HDShadowMapUVD(&box, p, want);
+
+		for (int c = 0; c < 3; c++)
+		{
+			const double got = (double)v[0] * regs[c * 4] + (double)v[1] * regs[c * 4 + 1] +
+				(double)v[2] * regs[c * 4 + 2] + regs[c * 4 + 3];
+			const double err = fabs(got - want[c]) * HD_SHADOW_MAP;
+
+			worstMap = err > worstMap ? err : worstMap;
+		}
+
+		const double h = (double)v[0] * regs[12] + (double)v[1] * regs[13] +
+			(double)v[2] * regs[14] + regs[15];
+		const double hs = h < 0.0 ? 0.0 : (h > 1.0 ? 1.0 : h);
+		const double err = fabs(hs - HDShadowHeightTerm(p[1] - box.lowest));
+
+		worstHeight = err > worstHeight ? err : worstHeight;
+	}
+
+	ok(worstMap < 0.01 && worstHeight < 1e-3,
+		"shadow: the receive rows give the one mapping (within 0.01 texel) and the height "
+		"term, through a turned camera 60,000 units out", (long)(worstMap * 1000.0), 0);
+
+	// Towards the light, in view space: the light's reverse turned by R.
+	float back[3];
+
+	for (int i = 0; i < 3; i++)
+		back[i] = -(R[i * 3 + 0] * box.fwd[0] + R[i * 3 + 1] * box.fwd[1] + R[i * 3 + 2] * box.fwd[2]);
+
+	ok(fabs((double)regs[16] - back[0]) < 1e-5 && fabs((double)regs[17] - back[1]) < 1e-5 &&
+		fabs((double)regs[18] - back[2]) < 1e-5 &&
+		fabs(sqrt((double)regs[16] * regs[16] + (double)regs[17] * regs[17] +
+			(double)regs[18] * regs[18]) - 1.0) < 1e-5 &&
+		regs[19] == 1.0f / HD_SHADOW_FACING && regs[20] == 0.33f &&
+		regs[21] == 1.0f / (0.5f * HD_SHADOW_EDGE) && regs[22] == HD_SHADOW_BIAS / HD_SHADOW_DEPTH &&
+		regs[23] == (float)HD_SHADOW_MAP && regs[24] == 1.0f / (float)HD_SHADOW_MAP,
+		"shadow: the light's row is unit and points back up the light; the scalars are the "
+		"table's", 0, 0);
+
+	/* The reach: every point inside the box's cross-section, on the far side
+	 * of her middle's near half and with any height term left, lies in it. */
+	float rmin[3], rmax[3];
+	int outside = 0;
+
+	HDShadowReach(&box, rmin, rmax);
+
+	for (int k = 0; k < 4000; k++)
+	{
+		const float a = ((float)((k * 7919) % 1000) / 1000.0f - 0.5f) * HD_SHADOW_BOX;
+		const float c = ((float)((k * 104729) % 1000) / 1000.0f - 0.5f) * HD_SHADOW_BOX;
+		const float f = -0.5f * HD_SHADOW_DEPTH + (float)((k * 31) % 6000);
+		float p[3];
+
+		for (int i = 0; i < 3; i++)
+			p[i] = box.centre[i] + a * box.right[i] + c * box.up[i] + f * box.fwd[i];
+
+		if (HDShadowHeightTerm(p[1] - box.lowest) <= 0.0f)
+			continue;
+
+		if (!HDShadowBoxesTouch(p, p, rmin, rmax))
+			outside++;
+	}
+
+	const float far[3] = { box.centre[0], box.lowest + HD_SHADOW_END + 600.0f, box.centre[2] };
+
+	ok(outside == 0 && HDShadowBoxesTouch(box.centre, box.centre, rmin, rmax) &&
+		!HDShadowBoxesTouch(far, far, rmin, rmax),
+		"shadow: the reach holds every point that can take the shadow, and not a storey "
+		"below END", outside, 0);
+}
+
+/* The effective mode: the stored values 0..7, HD on and off, and every
+ * reason the projected shadow does not run. */
+static void shadow_mode()
+{
+	int bad = 0;
+
+	for (long stored = 0; stored <= 7; stored++)
+	{
+		const long blob = HDShadowBlobMode(stored);
+
+		if (blob != (stored == 5 ? 3 : stored))
+			bad++;
+
+		for (int mask = 0; mask < 16; mask++)
+		{
+			const bool hd = (mask & 1) != 0, lara = (mask & 2) != 0, room = (mask & 4) != 0,
+				target = (mask & 8) != 0;
+			const int gate = HDShadowGate(stored, hd, lara, room, target);
+			const long effective = HDShadowEffectiveMode(stored, gate);
+			const bool runs = stored == 5 && hd && lara && room && target;
+
+			if (effective != (runs ? 5 : blob))
+				bad++;
+		}
+	}
+
+	ok(bad == 0, "shadow: 5 is projected exactly when every gate opens, the faded circle "
+		"otherwise; 0..4 and 6, 7 are themselves", bad, 0);
+
+	ok(HDShadowEffectiveMode(5, HD_SHADOW_GATE_HD_OFF) == 3 &&
+		HDShadowEffectiveMode(5, HD_SHADOW_GATE_CLASSIC_LARA) == 3 &&
+		HDShadowEffectiveMode(5, HD_SHADOW_GATE_CLASSIC_ROOM) == 3 &&
+		HDShadowEffectiveMode(5, HD_SHADOW_GATE_TARGET) == 3 &&
+		HDShadowEffectiveMode(5, HD_SHADOW_GATE_OK) == 5 &&
+		HDShadowEffectiveMode(1, HD_SHADOW_GATE_OPTION) == 1 &&
+		HDShadowEffectiveMode(4, HD_SHADOW_GATE_OPTION) == 4,
+		"shadow: hd_off, classic_lara, classic_room and target each leave the faded circle",
+		HDShadowEffectiveMode(5, HD_SHADOW_GATE_TARGET), 3);
+
+	ok(!strcmp(HDShadowModeWord(1), "original") && !strcmp(HDShadowModeWord(2), "circle") &&
+		!strcmp(HDShadowModeWord(3), "faded") && !strcmp(HDShadowModeWord(4), "psx") &&
+		!strcmp(HDShadowModeWord(5), "projected") && !strcmp(HDShadowModeWord(0), "circle") &&
+		!strcmp(HDShadowModeWord(7), "circle"),
+		"shadow: the mode's words are the log's; S_PrintShadow's circle for every other value",
+		0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -13648,6 +13979,10 @@ int main()
 	shadow_follow();
 	shadow_box();
 	shadow_gate();
+	shadow_terms();
+	shadow_lookup();
+	shadow_receive();
+	shadow_mode();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

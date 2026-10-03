@@ -130,6 +130,30 @@
  *                         2560 x 1440 target, a mean over <frames> (300)
  *                         frames each waited for with an event query. Takes
  *                         the pages managed, which a Reset needs.
+ *     -shadowroom <room> <x> <z>
+ *                         one room group of the level under her feet, with
+ *                         -withrooms <LEVEL>: she stands at (x, z), room
+ *                         local units, on the classic level's floor there
+ *                         (the sector's four corners interpolated), her
+ *                         soles on it. Prints the room's floor per sector, to
+ *                         find a step or a wall by. The room's solid art is
+ *                         drawn before her and its glass and glows after, as
+ *                         HDFrameDraw and HDFrameDrawGlow do; the picture's
+ *                         name gets _room<n>.
+ *     -shadowreceive      the cast pass and the receive pass in that
+ *                         picture, where HDFrameDraw runs them, at the full
+ *                         strength of one dominant light: _recv.
+ *     -shadowempty        the same with nothing cast into the map: _empty,
+ *                         which must be the picture without the passes, byte
+ *                         for byte.
+ *     -shadownoguard      the same with the stencil guard switched off inside
+ *                         the pass: _noguard, which differs from _recv
+ *                         exactly where a pixel would be darkened twice.
+ *     -shadowtime [<frames>]
+ *                         the two passes' time on that room against a 2560 x
+ *                         1440 target, a mean over <frames> (300) frames each
+ *                         waited for with an event query; take -size 2560
+ *                         1440 so the target is framed as the picture.
  *     -lara-nodes         the node table: every classic
  *                         node 0..14 against every source, and which .TRM
  *                         part covers it.
@@ -6710,6 +6734,16 @@ struct LaraOptions
 	bool shadowDevice;
 	float shadowDir[3];
 	int shadowFrames;
+	/* -shadowroom: the room group under her feet, at (x, z) room local;
+	 * -shadowreceive runs the cast and the receive pass in the picture,
+	 * -shadowempty with nothing cast, -shadownoguard without the stencil
+	 * guard, -shadowtime times the two passes. */
+	int shadowRoom;
+	float shadowAt[2];
+	bool shadowReceive;
+	bool shadowEmpty;
+	bool shadowNoGuard;
+	int shadowTime;
 	bool check;
 	bool noDraw;
 	// The ring's own presentation - see -invrot.
@@ -8198,16 +8232,18 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * the world-to-view, so her model space is the world, y down; her nodes
 	 * go back into it out of the very matrices drawn, as hd_laradraw.cpp
 	 * takes them out of the frame's. */
-	const bool shadowAny = o.shadowMap || o.shadowCast || o.shadowDevice;
+	const bool shadowAny = o.shadowMap || o.shadowCast || o.shadowDevice || o.shadowReceive ||
+		o.shadowTime > 0;
 	float shadowClip[16];
 	HDShadowBox shadowBox;
+	float R[9], t[3];
 
 	memset(shadowClip, 0, sizeof(shadowClip));
 	memset(&shadowBox, 0, sizeof(shadowBox));
 
 	if (shadowAny)
 	{
-		float R[9], t[3], nodesW[HD_LARA_NODES * 3];
+		float nodesW[HD_LARA_NODES * 3];
 
 		for (int i = 0; i < 3; i++)
 		{
@@ -8297,7 +8333,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		HDModelCastBegin(shadowClip);
 
-		const int n = castParts(lipsT, lipsF);
+		// -shadowempty: the map cleared and nothing cast into it.
+		const int n = o.shadowEmpty ? 0 : castParts(lipsT, lipsF);
 
 		HDModelCastEnd();
 		HDRenderShadowCastEnd();
@@ -8305,6 +8342,120 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	};
 
 	int shadowCastDrawn = 0;
+
+	/* -shadowroom: one room group of the level (-withrooms) under her feet.
+	 * Her model space stays the world of this picture, y down; the room is
+	 * moved so that its floor at (x, z), room local, meets her soles - the
+	 * deepest point of her composite. The floor is the classic level's own,
+	 * the four corners of that sector interpolated, so on a slope it is the
+	 * slope's height there. */
+	bool roomHas = false;
+	D3DMATRIX roomWorld;
+	float roomFloor = 0.0f;
+
+	memset(&roomWorld, 0, sizeof(roomWorld));
+
+	if (o.shadowRoom >= 0)
+	{
+		float gmin[3], gmax[3];
+		const auto& rooms = level.rooms();
+
+		if (o.shadowRoom >= HDRenderGroupCount() || o.shadowRoom >= (int)rooms.size() ||
+			!HDRenderGroupBounds(o.shadowRoom, gmin, gmax))
+			printf("shadowroom: room %d has no HD group here (-withrooms <LEVEL>?) - no "
+				"room in the picture\n", o.shadowRoom);
+		else
+		{
+			const Tr5Room& rm = rooms[(size_t)o.shadowRoom];
+			const int sx = (int)floorf(o.shadowAt[0] / 1024.0f);
+			const int sz = (int)floorf(o.shadowAt[1] / 1024.0f);
+			const float fx = o.shadowAt[0] / 1024.0f - (float)sx;
+			const float fz = o.shadowAt[1] / 1024.0f - (float)sz;
+			long c00 = 0, c10 = 0, c01 = 0, c11 = 0;
+
+			if (level.cornerFloor(o.shadowRoom, sx, sz, 0, 0, c00) &&
+				level.cornerFloor(o.shadowRoom, sx, sz, 1024, 0, c10) &&
+				level.cornerFloor(o.shadowRoom, sx, sz, 0, 1024, c01) &&
+				level.cornerFloor(o.shadowRoom, sx, sz, 1024, 1024, c11))
+			{
+				roomFloor = (float)c00 * (1.0f - fx) * (1.0f - fz) + (float)c10 * fx * (1.0f - fz) +
+					(float)c01 * (1.0f - fx) * fz + (float)c11 * fx * fz;
+				roomHas = true;
+			}
+			else
+				printf("shadowroom: (%.0f, %.0f) is not a floor of room %d - no room in "
+					"the picture\n", o.shadowAt[0], o.shadowAt[1], o.shadowRoom);
+
+			printf("shadowroom: room %d, %d x %d sectors, group box x %.0f..%.0f y %.0f..%.0f "
+				"z %.0f..%.0f\n", o.shadowRoom, rm.numXSectors, rm.numZSectors, gmin[0], gmax[0],
+				gmin[1], gmax[1], gmin[2], gmax[2]);
+			printf("            the floor of each sector, units (x across, z down; # a wall):\n");
+
+			for (int z = 0; z < rm.numZSectors; z++)
+			{
+				printf("            z%2d ", z);
+
+				for (int x = 0; x < rm.numXSectors; x++)
+				{
+					long y = 0;
+
+					if (level.cornerFloor(o.shadowRoom, x, z, 0, 0, y))
+						printf(" %6ld", y);
+					else
+						printf("      #");
+				}
+
+				printf("\n");
+			}
+
+			if (roomHas)
+			{
+				roomWorld._11 = roomWorld._22 = roomWorld._33 = roomWorld._44 = 1.0f;
+				roomWorld._41 = -o.shadowAt[0];
+				roomWorld._42 = maxs[1] - roomFloor;
+				roomWorld._43 = -o.shadowAt[1];
+				printf("            she stands at (%.0f, %.0f) on the floor at y %.1f; her soles "
+					"at y %.1f of her own space\n", o.shadowAt[0], o.shadowAt[1], roomFloor,
+					maxs[1]);
+			}
+		}
+	}
+
+	/* The receive pass as hd_level.cpp runs it, on the one room: the
+	 * constants out of this picture's box and view at the full strength of
+	 * one dominant light. -shadownoguard takes the stencil guard away again
+	 * inside the pass, for the count of pixels it saves from a second
+	 * darkening. -1 when the receive could not begin. */
+	const auto receivePass = [&]() -> int
+	{
+		float regs[HD_SHADOW_RECEIVE_COUNT * 4];
+
+		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK, regs);
+
+		if (!HDRenderShadowReceiveBegin(regs))
+			return -1;
+
+		if (o.shadowNoGuard)
+			g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+		HDRenderRoomShadow(o.shadowRoom, &roomWorld, 0, HD_WINDOW_ALL);
+
+		const int n = HDRenderShadowReceiveCalls();
+
+		HDRenderShadowReceiveEnd();
+		return n;
+	};
+
+	// The room's solid art, as the room loop and the clear-floor loop draw it.
+	const auto roomSolid = [&]()
+	{
+		HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_SOLID);
+
+		if (HDRenderGroupHasClear(o.shadowRoom))
+			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_CLEAR);
+	};
+
+	int receiveCalls = 0;
 
 	/* --- draw -------------------------------------------------------------- */
 	printf("\n-- the picture ------------------------------------------------\n");
@@ -8463,10 +8614,18 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		g_device->BeginScene();
 		HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 
+		// -shadowroom: the room's solid art first, as HDFrameDraw's room loop.
+		if (roomHas)
+			roomSolid();
+
 		/* -shadowcast: the cast pass where HDFrameDraw runs it, after the
 		 * bracket has opened and before the models' own frame begins. */
-		if (o.shadowCast)
+		if (o.shadowCast || o.shadowReceive)
 			shadowCastDrawn = shadowPass(lipsTrack, lipsFrame);
+
+		// -shadowreceive: the receive pass right after it, as HDFrameDraw has it.
+		if (o.shadowReceive && roomHas && shadowCastDrawn >= 0)
+			receiveCalls = receivePass();
 
 		HDModelFrameBegin(&projection, bulbCount);
 
@@ -8566,6 +8725,17 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		calls = HDModelDrawCalls();
 
 		HDRenderFrameEnd();
+
+		/* And the room's glass and glows in a bracket of their own, as
+		 * HDFrameDrawGlow draws them after the classic buckets. */
+		if (roomHas)
+		{
+			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_BLEND);
+			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_ADDITIVE);
+			HDRenderFrameEnd();
+		}
+
 		g_device->EndScene();
 
 		LipsSay();
@@ -8596,10 +8766,29 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDLaraOutfitModel(outfit), o.firstPerson ? "_firstperson" : "", cut,
 		o.mirror ? "_mirror" : "", lipsName.c_str(), o.shadowCast ? "_cast" : "");
 
+	/* A picture with a room says which, and what the receive did to it. */
+	if (roomHas)
+	{
+		const size_t at = strlen(path) - 4;
+		char tail[64];
+
+		sprintf(tail, "_room%d%s.png", o.shadowRoom, !o.shadowReceive ? ""
+			: o.shadowEmpty ? "_empty" : o.shadowNoGuard ? "_noguard" : "_recv");
+		path[at] = 0;
+		strcat(path, tail);
+	}
+
 	if (o.shadowCast)
 		printf("shadowcast: the cast pass ran inside the picture's bracket, %d models "
 			"into the map%s\n", shadowCastDrawn,
 			shadowCastDrawn < 0 ? " - REFUSED, the map or its shaders" : "");
+
+	if (o.shadowReceive && roomHas)
+		printf("shadowreceive: %d models into the map%s, the room again in %d draw calls%s, "
+			"stencil guard %s\n", shadowCastDrawn, o.shadowEmpty ? " (-shadowempty)" : "",
+			receiveCalls, receiveCalls < 0 ? " - REFUSED" : "",
+			o.shadowNoGuard ? "OFF (-shadownoguard)"
+			: HDRenderShadowReceiveStencil() ? "on" : "off - no stencil");
 
 	if (pictures > 1)
 	{
@@ -8764,6 +8953,75 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		HDRenderShadowTargetRelease();
 	}
 
+	/* -shadowtime: the two passes' time on the room of -shadowroom against a
+	 * 2560 x 1440 target, the frame being the room's solid art alone against
+	 * the room's solid art with the cast and the receive pass after it. Each
+	 * frame is waited for with an event query, so the card has finished what
+	 * the frame sent before the clock stops; the first ten warm up. The
+	 * picture's own projection is used, so -size 2560 1440 frames the time's
+	 * target as the picture. */
+	if (o.shadowTime > 0 && roomHas)
+	{
+		printf("\n-- the time of the two passes ---------------------------------\n");
+
+		Shot big;
+		IDirect3DQuery9* query = 0;
+
+		if (ShotBegin(big, 2560, 1440) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &query)))
+		{
+			LARGE_INTEGER rate;
+			double mean[2] = { 0.0, 0.0 };
+			int rcalls = 0;
+
+			QueryPerformanceFrequency(&rate);
+
+			for (int with = 0; with < 2; with++)
+			{
+				double total = 0.0;
+
+				for (int f = 0; f < o.shadowTime + 10; f++)
+				{
+					LARGE_INTEGER from, to;
+
+					QueryPerformanceCounter(&from);
+					g_device->BeginScene();
+					HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+					roomSolid();
+
+					if (with && shadowPass(-1, -1) >= 0)
+						rcalls = receivePass();
+
+					HDRenderFrameEnd();
+					g_device->EndScene();
+					query->Issue(D3DISSUE_END);
+
+					while (query->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE)
+						;
+
+					QueryPerformanceCounter(&to);
+
+					if (f >= 10)
+						total += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
+							(double)rate.QuadPart;
+				}
+
+				mean[with] = total / o.shadowTime;
+			}
+
+			printf("  2560x1440 target, %d frames each: the room alone %.4f ms, with the cast "
+				"and the receive pass %.4f ms - the two passes %.4f ms a frame (%d receive "
+				"draw calls)\n", o.shadowTime, mean[0], mean[1], mean[1] - mean[0], rcalls);
+		}
+		else
+			printf("  no 2560x1440 target or no event query on this device - no time\n");
+
+		if (query)
+			query->Release();
+
+		ShotEnd(big);
+	}
+
 	HDModelLevelEnd();
 	return 0;
 }
@@ -8865,6 +9123,11 @@ int main(int argc, char** argv)
 	bool shadowMap = false, shadowCast = false, shadowDevice = false;
 	float shadowDir[3] = { 0.35f, 1.0f, 0.2f };
 	int shadowFrames = 300;
+	// -shadowroom, -shadowreceive, -shadowempty, -shadownoguard, -shadowtime.
+	int shadowRoom = -1;
+	float shadowAt[2] = { 0.0f, 0.0f };
+	bool shadowReceive = false, shadowEmpty = false, shadowNoGuard = false;
+	int shadowTime = 0;
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// -braidsim: the braid's own physics
 	/* -braidanim: the same chain under a real animation. */
@@ -9159,6 +9422,25 @@ int main(int argc, char** argv)
 			shadowDir[0] = (float)atof(argv[++i]);
 			shadowDir[1] = (float)atof(argv[++i]);
 			shadowDir[2] = (float)atof(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-shadowroom") && i + 3 < argc)
+		{
+			shadowRoom = atoi(argv[++i]);
+			shadowAt[0] = (float)atof(argv[++i]);
+			shadowAt[1] = (float)atof(argv[++i]);
+		}
+		else if (!_stricmp(argv[i], "-shadowreceive"))
+			shadowReceive = true;
+		else if (!_stricmp(argv[i], "-shadowempty"))
+			shadowReceive = shadowEmpty = true;
+		else if (!_stricmp(argv[i], "-shadownoguard"))
+			shadowReceive = shadowNoGuard = true;
+		else if (!_stricmp(argv[i], "-shadowtime"))
+		{
+			shadowTime = 300;
+
+			if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
+				shadowTime = atoi(argv[++i]);
 		}
 		else if (!_stricmp(argv[i], "-braid"))
 		{
@@ -9694,6 +9976,13 @@ int main(int argc, char** argv)
 		o.shadowDir[1] = shadowDir[1];
 		o.shadowDir[2] = shadowDir[2];
 		o.shadowFrames = shadowFrames > 0 ? shadowFrames : 300;
+		o.shadowRoom = shadowRoom;
+		o.shadowAt[0] = shadowAt[0];
+		o.shadowAt[1] = shadowAt[1];
+		o.shadowReceive = shadowReceive;
+		o.shadowEmpty = shadowEmpty;
+		o.shadowNoGuard = shadowNoGuard;
+		o.shadowTime = shadowTime;
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
 		o.handFold = laraHandFold;
@@ -9742,6 +10031,24 @@ int main(int argc, char** argv)
 		o.turn = turn;
 		o.nodeMask = nodeMask;
 		o.lips = lips;
+
+		/* -withrooms in -lara mode: the level's rooms first, as for a slot,
+		 * so that -shadowroom has a room group to stand her in. With the
+		 * classic level's room count, as RoomProbe's -rooms gives it, so a
+		 * group is a room and not the sky. */
+		if (!withRooms.empty())
+		{
+			HDRenderStats roomStats;
+			const char* roomWhy = "";
+
+			if (HDRenderLevelBegin(root.c_str(), withRooms.c_str(), (int)level.rooms().size(),
+				o.managed,
+				threads, &roomStats, &roomWhy))
+				printf("rooms first        %s: %d group(s), %d page(s)\n", withRooms.c_str(),
+					HDRenderGroupCount(), roomStats.pages.slots);
+			else
+				printf("rooms first        %s FAILED - %s\n", withRooms.c_str(), roomWhy);
+		}
 
 		const int result = RunLara(o, level);
 

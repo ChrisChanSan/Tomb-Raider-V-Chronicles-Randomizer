@@ -534,7 +534,7 @@ inline bool HDShadowFollowStep(HDShadowFollow* f, const HDShadowKey* target, con
 
 		f->offsetStrength = (f->offsetStrength - (backStrength - f->lastStrength)) * k;
 
-		/* An offset that is no longer a number is dropped, so the target
+		/* An offset that is not a number is dropped, so the target
 		 * is drawn. */
 		if (!numbers || !hd_shadow_finite(f->offsetStrength))
 		{

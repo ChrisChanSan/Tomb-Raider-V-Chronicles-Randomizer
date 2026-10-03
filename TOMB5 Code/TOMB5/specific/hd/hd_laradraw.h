@@ -159,9 +159,10 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits);
 bool HDShadowFrameDecide();
 
 /* The frame's state (hd_shadow.h, HDShadowFrame), filled by Lara's main draw
- * when the projected shadow runs: the key light as drawn, the box, the
- * view-to-map and the cast matrices, the frame's world-to-view. `runs` is 0
- * in every other frame. Never null. */
+ * when the projected shadow runs: the key light as drawn, her box and the
+ * second map's, the view-to-map and the cast matrices of each, the frame's
+ * world-to-view, and `stepped`, which says that this draw has run. `runs`
+ * and `stepped` are 0 in every other frame. Never null. */
 struct HDShadowFrame;
 struct HDShadowFollow;
 

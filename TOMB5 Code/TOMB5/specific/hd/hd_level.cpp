@@ -4533,11 +4533,14 @@ bool HDFrameSky(const float* viewWorld)
  * bracket and after the room loops, so the device is in the HD path's state;
  * HDRenderShadowCastBegin and End leave it as they found it. Nothing at all
  * happens in a frame the projected shadow does not run in. */
-static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0 };
+static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0, 0.0 };
 
 /* Whether this frame's map was drawn: the receive pass reads the map only
  * then, never a map an earlier frame left behind. */
 static bool g_shadow_cast_now = false;
+
+/* The same for the second map (ShadowOthersPass). */
+static bool g_others_cast_now = false;
 
 static void ShadowCastPass()
 {
@@ -4574,6 +4577,56 @@ static void ShadowCastPass()
 	if (rate.QuadPart)
 		g_shadow_stats.ms += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
 			(double)rate.QuadPart;
+}
+
+/* The second map's cast pass: the items whose blob gave way and whose place
+ * lies inside the second box (hd_object.cpp marks them HD_OBJ_CAST_OTHERS),
+ * into the second map, along the same light, with the same cast draw her
+ * parts use. Right after hers, in the same bracket. Only in a frame in which
+ * the projected shadow runs, her step ran (the box exists) and at least one
+ * item is marked; in every other frame the second map is neither drawn nor
+ * read, and the frame is the frame it is without it. */
+static void ShadowOthersPass()
+{
+	const HDShadowFrame* shadow = HDShadowFrameState();
+
+	g_others_cast_now = false;
+
+	if (!shadow->runs || !shadow->stepped)
+		return;
+
+	const int items = HDObjectCastOthersCount();
+
+	if (!items)
+		return;
+
+	LARGE_INTEGER from, to, rate;
+
+	QueryPerformanceCounter(&from);
+
+	if (!HDRenderShadowOthersCastBegin())
+		return;
+
+	HDModelCastBegin(shadow->othersCastClip);
+	g_shadow_stats.othersModels += HDObjectCastOthersFrame();
+	HDModelCastEnd();
+	HDRenderShadowCastEnd();
+
+	QueryPerformanceCounter(&to);
+	QueryPerformanceFrequency(&rate);
+
+	g_shadow_stats.othersCast++;
+	g_shadow_stats.othersItems += items;
+	g_others_cast_now = true;
+
+	if (rate.QuadPart)
+		g_shadow_stats.othersMs += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
+			(double)rate.QuadPart;
+}
+
+bool HDFrameShadowOthersDrawn()
+{
+	return g_others_cast_now;
 }
 
 /* One room's art again for the receive, in exactly the pieces and windows
@@ -4893,13 +4946,14 @@ void HDFrameDraw()
 	 * classic path must get the device state it had. */
 	HDRenderScissorOff();
 
-	/* The projected shadow's map, after every room's solid art and before
-	 * the models: Lara's pose of this very drawn frame is on the list
-	 * already. Then the rooms near her take it, before the models, so that
-	 * no model is darkened, and before DrawBuckets, so that no classic
-	 * polygon is: both are drawn over the darkened rooms and keep their own
-	 * picture. */
+	/* The projected shadow's two maps, after every room's solid art and
+	 * before the models: Lara's pose and the items' of this very drawn frame
+	 * are on the list already. Then the rooms near her take hers, before the
+	 * models, so that no model is darkened, and before DrawBuckets, so that
+	 * no classic polygon is: both are drawn over the darkened rooms and keep
+	 * their own picture. */
 	ShadowCastPass();
+	ShadowOthersPass();
 	ShadowReceivePass();
 	ShadowSecond();
 

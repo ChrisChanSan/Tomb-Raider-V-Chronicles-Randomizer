@@ -144,8 +144,10 @@ namespace
 		int cull;		// and the one-sided draw that goes with it
 		HDModelSoft soft;	// the chest's secondary motion: zeros but for Lara's body
 		/* The projected shadow's mark (HD_OBJ_CAST_*) and the node mask the
-		 * map draws the entry with: HD_OBJ_CAST_NONE for every item and for
-		 * every frame the projected shadow does not run in. */
+		 * map draws the entry with: her parts for her map, an item whose blob
+		 * gave way for the second map (HD_OBJ_CAST_OTHERS), and
+		 * HD_OBJ_CAST_NONE for every other entry and in every frame the
+		 * projected shadow does not run in. */
 		int cast;
 		unsigned int castMask;
 		/* The sheen. 0 for an item - the specular term is Lara's alone. */
@@ -206,6 +208,16 @@ namespace
 	bool g_reflection = false;
 	int g_reflected = 0;
 	float g_clip[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+
+	/* The second map's casters. game\draw.cpp asks HDObjectBlobGivesWay
+	 * right before an item's blob and then opens the same item with
+	 * HDObjectBegin: `g_gave_way` is the item whose blob gave way, which
+	 * HDObjectBegin takes over into `g_open_casts` and clears, and
+	 * `g_open_place` is the item's world position, the place the second box
+	 * is asked about in HDObjectEnd. */
+	const ITEM_INFO* g_gave_way = 0;
+	bool g_open_casts = false;
+	float g_open_place[3] = { 0.0f, 0.0f, 0.0f };
 
 	/* The entry's clip planes: the mirror's while a reflection is recorded,
 	 * planes that keep every pixel otherwise. */
@@ -2732,6 +2744,8 @@ void HDObjectFrameReset()
 	g_count = 0;
 	g_dropped = 0;
 	g_open = false;
+	g_gave_way = 0;
+	g_open_casts = false;
 	g_items_classic = 0;
 	g_swap_ignored = 0;
 	g_swap_drawn = 0;
@@ -2805,15 +2819,22 @@ void HDObjectFrameReset()
 	HDLaraDrawFrameReset();
 }
 
-bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
+/* What HDObjectBegin decides for an item, without doing any of it: the one
+ * decision HDObjectBegin acts on and HDObjectBlobGivesWay asks before the
+ * item's blob, so the two can never answer differently. */
+enum
 {
-	// PROF_HD_OBJ is what this call, HDObjectNode and HDObjectEnd cost
-	// together - the three of them never nest, so one accumulator holds the
-	// whole per-item recording of the frame.
-	ProfScope prof(PROF_HD_OBJ);
+	BEGIN_NONE = 0,		// no item, or the HD objects are off: drawn classic
+	BEGIN_BAKED,		// the room's art already has it: drawn not at all
+	BEGIN_CLASSIC,		// its slot has no HD model: drawn classic
+	BEGIN_FULL,		// the frame's list is full: drawn classic
+	BEGIN_HD		// drawn as an HD model
+};
 
+static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
+{
 	if (!item || !obj)
-		return false;
+		return BEGIN_NONE;
 
 	/* The art already has it. Before every other guard: this item is not
 	 * drawn HD, it is not drawn at all, and the reason sits in the room path
@@ -2825,8 +2846,8 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	 * is empty, still needs its lamp post drawn the old way. That is the same
 	 * test DrawStaticObjects makes for a room's static meshes.
 	 *
-	 * Returning true with no node recorded is what makes it vanish:
-	 * DrawAnimatingItem then puts no classic polygon in, HDObjectNode is
+	 * HDObjectBegin returning true with no node recorded is what makes it
+	 * vanish: DrawAnimatingItem then puts no classic polygon in, HDObjectNode is
 	 * never reached because g_open stays false, and HDObjectEnd sees nothing
 	 * and drops the item. */
 	if (g_baked_any)
@@ -2835,32 +2856,62 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 
 		if (baked_slot >= 0 && baked_slot < NUMBER_OBJECTS &&
 			g_slot[baked_slot].baked && HDRoomIsHD(item->room_number))
-		{
-			g_items_baked++;
-			g_open = false;
-			return true;
-		}
+			return BEGIN_BAKED;
 	}
 
 	// The guard. With hd_objects off, or before a level built its models,
 	// this is where DrawAnimatingItem turns round and draws what it always
 	// drew.
 	if (!g_active || !tomb5.hd_objects)
-		return false;
+		return BEGIN_NONE;
 
 	const int slot = (int)item->object_number;
 
 	if (slot < 0 || slot >= NUMBER_OBJECTS || !g_slot[slot].hd)
+		return BEGIN_CLASSIC;
+
+	if (g_count >= HD_OBJ_ITEMS)
+		return BEGIN_FULL;
+
+	return BEGIN_HD;
+}
+
+bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
+{
+	// PROF_HD_OBJ is what this call, HDObjectNode and HDObjectEnd cost
+	// together - the three of them never nest, so one accumulator holds the
+	// whole per-item recording of the frame.
+	ProfScope prof(PROF_HD_OBJ);
+
+	/* Whether this item's blob gave way to the second map
+	 * (HDObjectBlobGivesWay, asked right before for the same item): taken
+	 * over for this item, and asked of no later one. */
+	g_open_casts = item && item == g_gave_way;
+	g_gave_way = 0;
+
+	switch (begin_decision(item, obj))
 	{
+	case BEGIN_BAKED:
+		g_items_baked++;
+		g_open = false;
+		return true;
+
+	case BEGIN_CLASSIC:
 		g_items_classic++;
+		return false;
+
+	case BEGIN_FULL:
+		g_dropped++;
+		return false;
+
+	case BEGIN_HD:
+		break;
+
+	default:
 		return false;
 	}
 
-	if (g_count >= HD_OBJ_ITEMS)
-	{
-		g_dropped++;
-		return false;
-	}
+	const int slot = (int)item->object_number;
 
 	// The frame's field of view, if no HD room has taken it yet - an item can
 	// be the first HD thing in a frame whose rooms all stayed classic.
@@ -2871,6 +2922,10 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_nodes = g_slot[slot].nodes;
 	g_open_room = (int)item->room_number;	// its portal window
 	g_open_mask = (unsigned int)item->mesh_bits;
+	// Its place, the world position its blob would be drawn under.
+	g_open_place[0] = (float)item->pos.x_pos;
+	g_open_place[1] = (float)item->pos.y_pos;
+	g_open_place[2] = (float)item->pos.z_pos;
 	g_seen = 0;
 	g_open_lips_track = -1;	// only a cutscene's actor speaks - HDObjectLips
 	g_open_lips_frame = -1;
@@ -3119,9 +3174,18 @@ void HDObjectEnd()
 	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
 	memset(&entry.soft, 0, sizeof(entry.soft));
-	// Only Lara casts the projected shadow.
-	entry.cast = HD_OBJ_CAST_NONE;
-	entry.castMask = 0;
+
+	/* The second map: an item whose blob gave way is drawn into it when its
+	 * place lies inside the second box (hd_shadow.h, HDShadowOtherCasts -
+	 * the blob, the frame, her step, the target, HD and not mirrored were
+	 * all asked when the blob gave way), with the node mask it is drawn with
+	 * here. Every other item casts nothing. */
+	const HDShadowFrame* shadow = HDShadowFrameState();
+	const bool inside = g_open_casts && HDShadowBoxHolds(&shadow->others, g_open_place);
+
+	entry.cast = inside ? HD_OBJ_CAST_OTHERS : HD_OBJ_CAST_NONE;
+	entry.castMask = inside ? entry.mask : 0;
+	g_open_casts = false;
 	// No sheen on an object - the specular term is Lara's alone.
 	entry.specStrength = 0.0f;
 	entry.specPower = 1.0f;
@@ -3954,6 +4018,65 @@ int HDObjectCastCount()
 			marked++;
 
 	return marked;
+}
+
+int HDObjectCastOthersFrame()
+{
+	int drawn = 0;
+
+	for (int i = 0; i < g_count; i++)
+	{
+		const FrameItem& entry = g_frame[i];
+
+		if (entry.cast != HD_OBJ_CAST_OTHERS)
+			continue;
+
+		// The body - or the swapped model - and the separate face, as drawn.
+		if (HDModelCastDraw(entry.drawSlot, false, entry.matrix, entry.nodes,
+			entry.castMask, entry.lipsTrack, entry.lipsFrame, &entry.soft))
+			drawn++;
+
+		if (entry.head && HDModelCastDraw(entry.slot, true, entry.matrix, entry.nodes,
+			entry.castMask, entry.lipsTrack, entry.lipsFrame, 0))
+			drawn++;
+	}
+
+	return drawn;
+}
+
+int HDObjectCastOthersCount()
+{
+	int marked = 0;
+
+	for (int i = 0; i < g_count; i++)
+		if (g_frame[i].cast == HD_OBJ_CAST_OTHERS)
+			marked++;
+
+	return marked;
+}
+
+bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
+{
+	g_gave_way = 0;
+
+	if (!item || !obj || !obj->shadow_size)
+		return false;
+
+	/* Her step first: it ran only in a frame the projected shadow runs in,
+	 * so a frame without it asks nothing else - in particular not for the
+	 * second target, which asking makes. */
+	const HDShadowFrame* shadow = HDShadowFrameState();
+	const bool herStep = shadow->stepped != 0;
+	const bool runs = herStep && shadow->runs != 0;
+	const bool hdModel = runs && begin_decision(item, obj) == BEGIN_HD;
+	const bool target = hdModel && !g_reflection && HDRenderShadowOthersReady() &&
+		HDModelCastReady();
+
+	if (!HDShadowBlobGivesWay(runs, herStep, target, hdModel, g_reflection))
+		return false;
+
+	g_gave_way = item;
+	return true;
 }
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,

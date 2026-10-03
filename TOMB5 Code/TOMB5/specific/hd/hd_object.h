@@ -285,12 +285,15 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
  * map, HD_OBJ_CAST_ONLY for a part the picture leaves out and the map does
  * not (first person: her face and braid). `castMask` is the node mask the
  * map draws it with - the frame's own mask before first person takes the
- * head node off. */
+ * head node off. HD_OBJ_CAST_OTHERS is never pushed: it marks an item drawn
+ * in the picture and cast into the second map (HDObjectEnd, after its blob
+ * gave way - HDObjectBlobGivesWay). */
 enum
 {
 	HD_OBJ_CAST_NONE = 0,
 	HD_OBJ_CAST_ALSO,
-	HD_OBJ_CAST_ONLY
+	HD_OBJ_CAST_ONLY,
+	HD_OBJ_CAST_OTHERS
 };
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
@@ -308,6 +311,35 @@ int HDObjectCastFrame();
 
 // How many entries of this frame's list are marked for the map.
 int HDObjectCastCount();
+
+/* The second map's cast pass over this frame's list: every item marked
+ * HD_OBJ_CAST_OTHERS, drawn with HDModelCastDraw exactly as the first pass
+ * draws her parts - its body (the swapped model where it has one) with the
+ * node mask it is drawn with and, for a slot that has one, its separate face.
+ * Called between HDModelCastBegin and HDModelCastEnd inside the second map's
+ * bracket. Returns how many models went into the map; HDObjectCastOthersCount
+ * says how many items are marked. */
+int HDObjectCastOthersFrame();
+int HDObjectCastOthersCount();
+
+/* The blob's gate, game\draw.cpp's one call before an item's blob
+ * (S_PrintShadow): true when the blob is left out because the item takes the
+ * projected shadow's second map instead. hd_shadow.h's HDShadowBlobGivesWay
+ * on this frame's facts: the item's object has a blob (shadow_size), her main
+ * draw stepped the projected shadow in this frame (HDShadowFrameState's
+ * `stepped`, which only a frame in which it runs - HDShadowFrameDecide -
+ * has), the item is drawn as an HD model (what HDObjectBegin decides for it,
+ * asked of the same decision), it is not a mirror's reflection, and the
+ * second map and the cast shaders exist on this device (asked last, because
+ * asking makes the map). False in every other case, and the blob is drawn as
+ * it always is.
+ *
+ * A true answer is remembered for this item: the HDObjectBegin that follows
+ * for it takes it over, and HDObjectEnd marks the entry HD_OBJ_CAST_OTHERS
+ * when the item's place (its world position) lies inside the second box -
+ * an item beyond that box has neither the blob nor the projected shadow in
+ * that frame, where the edge term has faded the projected one out. */
+bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj);
 
 /* The lights the projected shadow's key light weighs, in WORLD space
  * (hd_shadow.h, HDShadowLight): the suns, points and spots of the item's two

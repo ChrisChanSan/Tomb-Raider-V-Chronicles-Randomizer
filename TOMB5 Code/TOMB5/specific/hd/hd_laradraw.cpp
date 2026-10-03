@@ -1001,6 +1001,15 @@ namespace
 		HDShadowBoxMake(&f.box, f.dir, nodes, HD_LARA_NODES);
 		HDShadowViewToMap(&f.box, f.R, f.t, f.viewToMap);
 		HDShadowCastMatrix(&f.box, f.R, f.t, f.castClip);
+
+		/* The second map's box round hers, for the items drawn after her:
+		 * their blobs ask whether this step ran (hd_object.cpp,
+		 * HDObjectBlobGivesWay). */
+		HDShadowBoxAround(&f.others, &f.box, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+			HD_SHADOW_OTHERS_MAP);
+		HDShadowViewToMap(&f.others, f.R, f.t, f.othersViewToMap);
+		HDShadowCastMatrix(&f.others, f.R, f.t, f.othersCastClip);
+		f.stepped = 1;
 	}
 
 	/* The two state lines of the projected shadow, behind -log. Both are
@@ -1454,6 +1463,7 @@ void HDLaraDrawFrameReset()
 	// ... and decides and steps the projected shadow afresh.
 	g_shadow_decided = false;
 	g_shadow_frame.runs = 0;
+	g_shadow_frame.stepped = 0;
 	HDSoftClockFrame(&g_shadow_clock);
 
 	/* The first person and binocular log lines. They belong here because

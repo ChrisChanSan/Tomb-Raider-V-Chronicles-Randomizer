@@ -14,16 +14,20 @@
 
 #include <math.h>
 
-/* The projected shadow of the HD Lara: the arithmetic.
+/* The projected shadow of the HD Lara and of the things near her: the
+ * arithmetic.
  *
- * Four pieces, each a pure function of its arguments: the KEY LIGHT, one
+ * Five pieces, each a pure function of its arguments: the KEY LIGHT, one
  * direction and one darkness - a fixed slant and a fixed darkness, which the
  * lights that light her turn and deepen by the table's PULL; the FOLLOWING,
  * which draws both where her movement through the light puts them at once
  * and blends a change of the lights over game time so that it never steps;
  * the BOX, an orthographic volume round her seen along that direction, with
- * the one mapping from a point to its place in the shadow map; and the GATE,
- * which says whether the projected shadow runs in a frame.
+ * the one mapping from a point to its place in a shadow map - one box for
+ * her own map, and a larger one round it for the second map, which the
+ * other casters are drawn into; the GATE, which says whether the projected
+ * shadow runs in a frame; and the RULE of who else casts, whose other face
+ * says whose blob gives way.
  *
  * This header includes no engine header on purpose, like hd_softbody.h:
  * Preparation\Tools\Diagnose\ModernTest.cpp includes it and asserts on every
@@ -44,10 +48,10 @@
  * only as she does. W_REF, W_FALLBACK, SLANT_MAX and TAU shape what the
  * lights add, and matter only while PULL is above 0.
  *
- *   MAP         texels a side of the square map. More is a sharper outline
+ *   MAP         texels a side of her square map. More is a sharper outline
  *               and a dearer pass; the box below over this is the size of a
  *               texel in the world (4 units).
- *   BOX         the box's width and height across the light, units. Larger
+ *   BOX         her box's width and height across the light, units. Larger
  *               holds a longer shadow and spends the texels more thinly;
  *               2048 holds her standing outline with room on every side.
  *   DEPTH       the box's length along the light, units: what lies further
@@ -104,7 +108,34 @@
  *               turned away from the light (n.l at 0 or below) takes none.
  *   BIAS        units a receiver must lie behind the cast depth to be in
  *               shadow. Receivers never cast, so it covers arithmetic only;
- *               more is safer and lets a shadow start a little later. */
+ *               more is safer and lets a shadow start a little later.
+ *
+ * The second map, the one the other casters - the creatures and the items
+ * the classic engine gives a blob - are drawn into: the same light and the
+ * same basis as hers, a larger box round the same centre.
+ *
+ *   OTHERS_MAP    texels a side of the second map. With OTHERS_BOX it gives
+ *                 the size of a texel in the world, 4 units at 2048, the
+ *                 texel of her map, so a creature's outline is as soft as
+ *                 hers; fewer is a softer, blockier outline and a cheaper
+ *                 map (16 MiB of colour and 16 of depth at 2048).
+ *   OTHERS_BOX    the second box's width and height across the light,
+ *                 units. A caster further from her than half of it casts
+ *                 nothing and keeps no blob either; larger reaches further
+ *                 and spends the texels more thinly. 8192 is four sectors to
+ *                 every side of her.
+ *   OTHERS_DEPTH  the second box's length along the light, units: a caster
+ *                 further from her centre along the light than half of it
+ *                 casts nothing. 8192 holds a storey above and below her.
+ *   OTHERS_FULL, OTHERS_END  how far behind a caster along the light a
+ *                 receiver still takes its shadow: whole up to OTHERS_FULL
+ *                 units, none from OTHERS_END on, smooth between. A
+ *                 creature's head (760 units above its feet, 880 along a
+ *                 30 degree light) lies well inside FULL, so the floor at
+ *                 its feet takes the whole shadow; a storey beneath it lies
+ *                 beyond END and takes none. Larger lets the shadow reach a
+ *                 lower floor, smaller cuts a tall creature's head off its
+ *                 shadow. */
 #define HD_SHADOW_MAP			512
 #define HD_SHADOW_BOX			2048.0f
 #define HD_SHADOW_DEPTH			2048.0f
@@ -121,6 +152,11 @@
 #define HD_SHADOW_EDGE			0.1f
 #define HD_SHADOW_FACING		0.2f
 #define HD_SHADOW_BIAS			8.0f
+#define HD_SHADOW_OTHERS_MAP		2048
+#define HD_SHADOW_OTHERS_BOX		8192.0f
+#define HD_SHADOW_OTHERS_DEPTH		8192.0f
+#define HD_SHADOW_OTHERS_FULL		1536.0f
+#define HD_SHADOW_OTHERS_END		2560.0f
 
 /* The machinery under the table: these keep the following honest and are
  * not a matter of taste.
@@ -650,7 +686,17 @@ inline bool HDShadowFollowStep(HDShadowFollow* f, const HDShadowKey* target, con
  *             up components snapped to whole texels
  *   mid       the same middle before the snap
  *   lowest, highest  the y of her lowest node (the largest y) and of her
- *             highest */
+ *             highest
+ *   extent    the box's width and height across the light, units
+ *   depth     its length along the light, units
+ *   map       texels a side of the map it is drawn into
+ *
+ * The last three are the box's own size, so one set of functions below
+ * serves both maps: her box (HDShadowBoxMake) has BOX, DEPTH and MAP, the
+ * second map's (HDShadowBoxAround) OTHERS_BOX, OTHERS_DEPTH and OTHERS_MAP.
+ * Every division by them is the division by the table's number it stands
+ * for, so her box gives the same bits through them as through the
+ * numbers. */
 struct HDShadowBox
 {
 	float right[3];
@@ -660,6 +706,9 @@ struct HDShadowBox
 	float mid[3];
 	float lowest;
 	float highest;
+	float extent;
+	float depth;
+	int map;
 };
 
 inline void HDShadowBasis(const float* dir, float* right, float* up, float* fwd)
@@ -693,9 +742,32 @@ inline void HDShadowBasis(const float* dir, float* right, float* up, float* fwd)
 	up[2] = fwd[0] * right[1] - fwd[1] * right[0];
 }
 
-/* The box for a direction and her nodes' world positions, three floats
- * each. The snap: with a steady light every point of the world keeps the
- * same place inside its texel while she moves, so the outline does not crawl.
+/* The box's centre out of its middle: the middle's right and up components
+ * snapped to whole texels of the box's own map (extent / map units), its
+ * component along the light kept. The snap: with a steady light every point
+ * of the world keeps the same place inside its texel while she moves, so the
+ * outline does not crawl. */
+inline void hd_shadow_box_snap(HDShadowBox* b)
+{
+	const double texel = (double)b->extent / (double)b->map;
+	double cr = 0.0, cu = 0.0, cf = 0.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		cr += (double)b->mid[i] * b->right[i];
+		cu += (double)b->mid[i] * b->up[i];
+		cf += (double)b->mid[i] * b->fwd[i];
+	}
+
+	cr = floor(cr / texel + 0.5) * texel;
+	cu = floor(cu / texel + 0.5) * texel;
+
+	for (int i = 0; i < 3; i++)
+		b->centre[i] = (float)(cr * b->right[i] + cu * b->up[i] + cf * b->fwd[i]);
+}
+
+/* Her box: for a direction and her nodes' world positions, three floats
+ * each, BOX wide and high, DEPTH long, drawn into a map MAP texels a side.
  * False with no node. */
 inline bool HDShadowBoxMake(HDShadowBox* b, const float* dir, const float* nodes, int count)
 {
@@ -720,30 +792,34 @@ inline bool HDShadowBoxMake(HDShadowBox* b, const float* dir, const float* nodes
 
 	b->lowest = nodes[lo * 3 + 1];
 	b->highest = nodes[hi * 3 + 1];
-
-	const double texel = (double)HD_SHADOW_BOX / (double)HD_SHADOW_MAP;
-	double cr = 0.0, cu = 0.0, cf = 0.0;
-
-	for (int i = 0; i < 3; i++)
-	{
-		cr += (double)b->mid[i] * b->right[i];
-		cu += (double)b->mid[i] * b->up[i];
-		cf += (double)b->mid[i] * b->fwd[i];
-	}
-
-	cr = floor(cr / texel + 0.5) * texel;
-	cu = floor(cu / texel + 0.5) * texel;
-
-	for (int i = 0; i < 3; i++)
-		b->centre[i] = (float)(cr * b->right[i] + cu * b->up[i] + cf * b->fwd[i]);
-
+	b->extent = HD_SHADOW_BOX;
+	b->depth = HD_SHADOW_DEPTH;
+	b->map = HD_SHADOW_MAP;
+	hd_shadow_box_snap(b);
 	return true;
+}
+
+/* A box of another size round her box: the same light, the same basis, the
+ * same middle and the same nodes' heights, `extent` wide and high, `depth`
+ * long, drawn into a map of `map` texels a side, its centre snapped to whole
+ * texels of that map the way hers is. With texels of her size (OTHERS_BOX /
+ * OTHERS_MAP is BOX / MAP, 4 units) the centre is hers to the bit. The
+ * second map's box is HDShadowBoxAround(her, OTHERS_BOX, OTHERS_DEPTH,
+ * OTHERS_MAP). */
+inline void HDShadowBoxAround(HDShadowBox* out, const HDShadowBox* her, float extent,
+	float depth, int map)
+{
+	*out = *her;
+	out->extent = extent;
+	out->depth = depth;
+	out->map = map;
+	hd_shadow_box_snap(out);
 }
 
 /* Where a world point lies in the map: (u, v) in texture coordinates, 0..1
  * across the box, and depth 0..1 from the box's near side (towards the
  * light) to its far side. The box's centre lands on (0.5, 0.5, 0.5) and one
- * texel along `right` is 1 / MAP in u; along `up`, v falls.
+ * texel along `right` is 1 / map in u; along `up`, v falls.
  *
  * The receive side looks a point up with exactly this; the cast side
  * rasterises with HDShadowCastMatrix, which puts the point whose (u, v) this
@@ -753,9 +829,25 @@ inline void HDShadowMapUVD(const HDShadowBox* b, const float* p, float* out)
 {
 	const float d[3] = { p[0] - b->centre[0], p[1] - b->centre[1], p[2] - b->centre[2] };
 
-	out[0] = 0.5f + hd_shadow_dot(d, b->right) / HD_SHADOW_BOX;
-	out[1] = 0.5f - hd_shadow_dot(d, b->up) / HD_SHADOW_BOX;
-	out[2] = 0.5f + hd_shadow_dot(d, b->fwd) / HD_SHADOW_DEPTH;
+	out[0] = 0.5f + hd_shadow_dot(d, b->right) / b->extent;
+	out[1] = 0.5f - hd_shadow_dot(d, b->up) / b->extent;
+	out[2] = 0.5f + hd_shadow_dot(d, b->fwd) / b->depth;
+}
+
+/* Whether a world point lies inside a box: its (u, v) and its depth
+ * (HDShadowMapUVD) all within 0..1, the edges included; false for a point
+ * that is not a number. The test the second map asks of a caster's place. */
+inline bool HDShadowBoxHolds(const HDShadowBox* b, const float* p)
+{
+	float uvd[3];
+
+	HDShadowMapUVD(b, p, uvd);
+
+	for (int i = 0; i < 3; i++)
+		if (!(uvd[i] >= 0.0f && uvd[i] <= 1.0f))
+			return false;
+
+	return true;
 }
 
 /* A world point out of a view-space one, for a world-to-view of
@@ -776,8 +868,7 @@ inline void HDShadowViewToWorld(const float* R, const float* t, const float* v, 
 inline void HDShadowViewToMap(const HDShadowBox* b, const float* R, const float* t, float* m)
 {
 	const float* axis[3] = { b->right, b->up, b->fwd };
-	const double scale[3] = { 1.0 / HD_SHADOW_BOX, -1.0 / HD_SHADOW_BOX,
-		1.0 / HD_SHADOW_DEPTH };
+	const double scale[3] = { 1.0 / b->extent, -1.0 / b->extent, 1.0 / b->depth };
 
 	for (int i = 0; i < 16; i++)
 		m[i] = 0.0f;
@@ -810,13 +901,13 @@ inline void HDShadowViewToMap(const HDShadowBox* b, const float* R, const float*
  * place of the frame's projection.
  *
  * Direct3D 9 centres a pixel on whole screen coordinates while a texel's
- * centre is at (i + 0.5) / MAP, so a clip x of 2u - 1 would land half a texel
+ * centre is at (i + 0.5) / map, so a clip x of 2u - 1 would land half a texel
  * off the lookup. The clip position is therefore
  *
- *   x = 2u - 1 - 1 / MAP,   y = 1 - 2v + 1 / MAP,   z = depth,   w = 1
+ *   x = 2u - 1 - 1 / map,   y = 1 - 2v + 1 / map,   z = depth,   w = 1
  *
- * which the viewport turns into the screen position u * MAP - 0.5: the texel
- * whose centre is (u, v). */
+ * which the viewport turns into the screen position u * map - 0.5: the texel
+ * whose centre is (u, v). `map` is the box's own. */
 inline void HDShadowCastMatrix(const HDShadowBox* b, const float* R, const float* t, float* m)
 {
 	float uvd[16];
@@ -831,8 +922,8 @@ inline void HDShadowCastMatrix(const HDShadowBox* b, const float* R, const float
 		m[row * 4 + 3] = uvd[row * 4 + 3];
 	}
 
-	m[12] += -1.0f - 1.0f / (float)HD_SHADOW_MAP;
-	m[13] += 1.0f + 1.0f / (float)HD_SHADOW_MAP;
+	m[12] += -1.0f - 1.0f / (float)b->map;
+	m[13] += 1.0f + 1.0f / (float)b->map;
 }
 
 /* -------------------------------------------------------------- the gate -- */
@@ -900,8 +991,9 @@ inline const char* HDShadowGateWord(int gate)
  *   1 original, 2 circle, 3 faded circle, 4 PSX   the blob of S_PrintShadow,
  *                 for Lara and for every other item, in HD as without it
  *   5 projected   Lara's projected shadow where it runs; every blob that is
- *                 still drawn - every other item's, and Lara's in a frame the
- *                 projected shadow does not run in - is the faded circle
+ *                 still drawn - an item's that does not give way to the
+ *                 second map (HDShadowBlobGivesWay), and Lara's in a frame
+ *                 the projected shadow does not run in - is the faded circle
  *
  * Any other stored value is handed on as it is, so S_PrintShadow draws for
  * it what it always drew (its circle). */
@@ -1046,10 +1138,13 @@ inline float HDShadowLookup(const float* map, int size, float u, float v, float 
  *             (END - (y - lowest)) / (END - FULL), y the world y of the point
  *   +4        xyz the unit direction towards the light in view space, w
  *             1 / FACING
- *   +5        x the strength, y 1 / (EDGE / 2), z BIAS in depth units, w MAP
- *   +6        x 1 / MAP
+ *   +5        x the strength, y 1 / (EDGE / 2), z BIAS in depth units, w the
+ *             map's side in texels
+ *   +6        x 1 / the map's side
  *
- * `R` and `t` are the frame's world-to-view, view = R p + t. */
+ * The depth unit and the map's side are the box's own (extent, depth, map),
+ * MAP and DEPTH for hers. `R` and `t` are the frame's world-to-view,
+ * view = R p + t. */
 #define HD_SHADOW_RECEIVE_FIRST		96
 #define HD_SHADOW_RECEIVE_COUNT		7
 
@@ -1092,24 +1187,24 @@ inline void HDShadowReceiveConstants(const HDShadowBox* b, const float* R, const
 	regs[19] = 1.0f / HD_SHADOW_FACING;
 	regs[20] = strength;
 	regs[21] = 1.0f / (0.5f * HD_SHADOW_EDGE);
-	regs[22] = HD_SHADOW_BIAS / HD_SHADOW_DEPTH;
-	regs[23] = (float)HD_SHADOW_MAP;
-	regs[24] = 1.0f / (float)HD_SHADOW_MAP;
+	regs[22] = HD_SHADOW_BIAS / b->depth;
+	regs[23] = (float)b->map;
+	regs[24] = 1.0f / (float)b->map;
 }
 
 /* The world box a receiver must touch to take any of the shadow: the box's
- * cross-section along the light, from DEPTH / 2 on the light's side of her
- * middle (where her casting parts end) down to where the height term ends
- * (lowest + END), as an axis-aligned box. A room group whose own box misses
- * it is not drawn again. Generous on purpose: the corners of a slanted
- * prism's box hold more than the prism. */
+ * cross-section along the light (the box's own extent), from half its depth
+ * on the light's side of her middle (where her casting parts end) down to
+ * where her height term ends (lowest + END), as an axis-aligned box. A room
+ * group whose own box misses it is not drawn again. Generous on purpose: the
+ * corners of a slanted prism's box hold more than the prism. */
 inline void HDShadowReach(const HDShadowBox* b, float* mins, float* maxs)
 {
-	const float half = 0.5f * HD_SHADOW_BOX;
+	const float half = 0.5f * b->extent;
 	const float bottom = b->lowest + HD_SHADOW_END;
 	const float spread = half * (fabsf(b->right[1]) + fabsf(b->up[1]));
 	const float down = b->fwd[1] > 0.1f ? b->fwd[1] : 0.1f;
-	const float nearF = -0.5f * HD_SHADOW_DEPTH;
+	const float nearF = -0.5f * b->depth;
 	float farF = (bottom - b->centre[1] + spread) / down;
 
 	farF = farF > nearF ? farF : nearF;
@@ -1149,6 +1244,43 @@ inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float
 	return true;
 }
 
+/* ------------------------------------------------------ who else casts -- */
+
+/* The other casters: every item the classic engine gives a blob (its
+ * object's shadow_size is not 0) is drawn into the second map instead,
+ * where it can be, and its blob gives way. One rule with two faces, as pure
+ * functions of the facts of one item in one frame:
+ *
+ *   runs      the projected shadow runs in this frame (HDShadowFrameDecide)
+ *   herStep   her main draw stepped the key light and made both boxes in
+ *             this frame; she is drawn before the items, so it is known
+ *             when an item's blob is asked about
+ *   target    the second map, its depth surface and its shaders exist on
+ *             this device
+ *   hdModel   the item is drawn as an HD model in this frame - what
+ *             HDObjectBegin decides for it
+ *   mirrored  the item is a mirror's reflection
+ *   blob      its object's shadow_size is not 0
+ *   inside    its place lies inside the second box (HDShadowBoxHolds)
+ *
+ * HDShadowBlobGivesWay says whether the item's blob is left out; the item
+ * itself is then drawn into the second map exactly when it also has a blob
+ * and stands inside the box (HDShadowOtherCasts). Inside the box an item
+ * with a blob therefore has always the one or the other, never both; beyond
+ * the box it has neither, where the edge term has faded the projected one
+ * out already. */
+inline bool HDShadowBlobGivesWay(bool runs, bool herStep, bool target, bool hdModel,
+	bool mirrored)
+{
+	return runs && herStep && target && hdModel && !mirrored;
+}
+
+inline bool HDShadowOtherCasts(bool blob, bool runs, bool herStep, bool target, bool hdModel,
+	bool mirrored, bool inside)
+{
+	return blob && inside && HDShadowBlobGivesWay(runs, herStep, target, hdModel, mirrored);
+}
+
 /* ------------------------------------------------------------ the frame -- */
 
 /* One drawn frame's projected shadow, filled by hd_laradraw.cpp at Lara's
@@ -1158,11 +1290,16 @@ inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float
  *   gate        HD_SHADOW_GATE_*, why it does not
  *   target      the key light's target this frame
  *   dir, strength  the drawn key light (HDShadowFollow's)
- *   box         the map's volume
- *   viewToMap   view space -> (u, v, depth, 1), HDShadowViewToMap
- *   castClip    view space -> the map's clip space, HDShadowCastMatrix
+ *   box         her map's volume
+ *   viewToMap   view space -> (u, v, depth, 1) of her map, HDShadowViewToMap
+ *   castClip    view space -> her map's clip space, HDShadowCastMatrix
  *   R, t        the frame's world-to-view, view = R p + t
- *   snapped     1 when the following snapped in this frame */
+ *   snapped     1 when the following snapped in this frame
+ *   stepped     1 when her main draw stepped the key light in this frame and
+ *               made both boxes; 0 from HDLaraDrawFrameReset on
+ *   others      the second map's volume, HDShadowBoxAround her box
+ *   othersViewToMap, othersCastClip  the same two matrices for the second
+ *               map */
 struct HDShadowFrame
 {
 	int runs;
@@ -1176,4 +1313,8 @@ struct HDShadowFrame
 	float R[9];
 	float t[3];
 	int snapped;
+	int stepped;
+	HDShadowBox others;
+	float othersViewToMap[16];
+	float othersCastClip[16];
 };

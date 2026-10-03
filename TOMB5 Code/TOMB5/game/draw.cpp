@@ -772,7 +772,13 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	frac = GetFramesNow(item, frm, &blend);
 	obj = &objects[item->object_number];
 
-	if (obj->shadow_size)
+	/* The blob, unless the item takes the projected shadow's second map
+	 * instead (specific\hd\hd_object.h, HDObjectBlobGivesWay): only an HD
+	 * item in a frame whose projected shadow her own draw has just stepped,
+	 * and false everywhere else - the classic path, the stored modes 1 to 4,
+	 * a classic item, a frame without her step - so the blob is drawn there
+	 * as it always is. */
+	if (obj->shadow_size && !HDObjectBlobGivesWay(item, obj))
 		S_PrintShadow(obj->shadow_size, frm[0], item);
 
 	phd_PushMatrix();

@@ -6163,6 +6163,14 @@ namespace
 	IDirect3DSurface9* g_shadow_depth = 0;
 	HDShadowTargetInfo g_shadow_info = { HD_SHADOW_TARGET_NONE, "ok", "-", "-", 0, 0 };
 
+	/* The second map, the other casters', beside hers: the same kind of
+	 * pair, HD_SHADOW_OTHERS_MAP texels a side, with a life of its own - a
+	 * refusal of it leaves hers running. */
+	IDirect3DTexture9* g_others_texture = 0;
+	IDirect3DSurface9* g_others_colour = 0;
+	IDirect3DSurface9* g_others_depth = 0;
+	HDShadowTargetInfo g_others_info = { HD_SHADOW_TARGET_NONE, "ok", "-", "-", 0, 0 };
+
 	/* The vertex registers the cast pass may write: gProj (c0 - c3) and
 	 * everything ModelVS reads up to gSoft (c163 - c166). */
 	const int kShadowVertexRegisters = 167;
@@ -6217,6 +6225,113 @@ namespace
 		shadow_state(HD_SHADOW_TARGET_REFUSED, reason);
 		return false;
 	}
+
+	void others_state(int state, const char* reason)
+	{
+		g_others_info.state = state;
+		g_others_info.reason = reason;
+		g_others_info.events++;
+	}
+
+	/* The second pair alone: hers stays as it is. */
+	void others_release()
+	{
+		const bool had = g_others_texture || g_others_colour || g_others_depth;
+
+		if (g_others_depth) { g_others_depth->Release(); g_others_depth = 0; }
+		if (g_others_colour) { g_others_colour->Release(); g_others_colour = 0; }
+		if (g_others_texture) { g_others_texture->Release(); g_others_texture = 0; }
+
+		if (had)
+			others_state(HD_SHADOW_TARGET_RELEASED, "ok");
+	}
+
+	bool others_refuse(const char* reason)
+	{
+		others_release();
+		others_state(HD_SHADOW_TARGET_REFUSED, reason);
+		return false;
+	}
+
+	/* One pair made: an R32F render target texture `size` texels a side and
+	 * a depth surface of its own beside it, both D3DPOOL_DEFAULT. 0 when
+	 * both were made, otherwise the word for what refused - the caller
+	 * releases what was made and refuses with it. `depthName` comes back
+	 * with the depth format's name.
+	 *
+	 * The format first, of the adapter the device runs on: R32F as a render
+	 * target texture, then a depth format that goes with it. The adapter
+	 * format is the display mode's, which is the back buffer's family on a
+	 * windowed device. */
+	const char* shadow_pair_make(int size, IDirect3DTexture9*& texture,
+		IDirect3DSurface9*& colour, IDirect3DSurface9*& depthSurface, const char** depthName)
+	{
+		if (!g_device)
+			return "no_device";
+
+		IDirect3D9* d3d = 0;
+		D3DDEVICE_CREATION_PARAMETERS made;
+		D3DDISPLAYMODE mode;
+
+		if (FAILED(g_device->GetDirect3D(&d3d)) || !d3d)
+			return "no_device";
+
+		const bool known = SUCCEEDED(g_device->GetCreationParameters(&made)) &&
+			SUCCEEDED(g_device->GetDisplayMode(0, &mode));
+		D3DFORMAT depth = D3DFMT_UNKNOWN;
+		const char* refused = 0;
+
+		if (!known)
+			refused = "no_device";
+		else if (FAILED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType,
+			mode.Format, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_R32F)))
+			refused = "format";
+		else
+		{
+			static const D3DFORMAT kDepth[2] = { D3DFMT_D24X8, D3DFMT_D16 };
+
+			for (int i = 0; i < 2 && depth == D3DFMT_UNKNOWN; i++)
+				if (SUCCEEDED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType,
+					mode.Format, D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_SURFACE, kDepth[i])))
+					depth = kDepth[i];
+
+			if (depth == D3DFMT_UNKNOWN)
+				refused = "depth";
+			else if (FAILED(d3d->CheckDepthStencilMatch(made.AdapterOrdinal,
+				made.DeviceType, mode.Format, D3DFMT_R32F, depth)))
+				refused = "match";
+		}
+
+		d3d->Release();
+
+		if (refused)
+			return refused;
+
+		if (FAILED(g_device->CreateTexture(size, size, 1, D3DUSAGE_RENDERTARGET,
+			D3DFMT_R32F, D3DPOOL_DEFAULT, &texture, 0)))
+		{
+			texture = 0;
+			return "create";
+		}
+
+		if (FAILED(texture->GetSurfaceLevel(0, &colour)))
+		{
+			colour = 0;
+			return "surface";
+		}
+
+		/* Not multisampled, like the texture, and discarded: the pass clears
+		 * it every frame and nothing reads it afterwards. */
+		if (FAILED(g_device->CreateDepthStencilSurface(size, size, depth,
+			D3DMULTISAMPLE_NONE, 0, TRUE, &depthSurface, 0)))
+		{
+			depthSurface = 0;
+			return "depth_create";
+		}
+
+		*depthName = depth == D3DFMT_D24X8 ? "D24X8" : "D16";
+		return 0;
+	}
 }
 
 bool HDRenderShadowTargetReady()
@@ -6227,83 +6342,29 @@ bool HDRenderShadowTargetReady()
 	if (g_shadow_info.state == HD_SHADOW_TARGET_REFUSED)
 		return false;
 
-	if (!g_device)
-		return shadow_refuse("no_device");
-
-	/* The format first, of the adapter the device runs on: R32F as a render
-	 * target texture, then a depth format that goes with it. The adapter
-	 * format is the display mode's, which is the back buffer's family on a
-	 * windowed device. */
-	IDirect3D9* d3d = 0;
-	D3DDEVICE_CREATION_PARAMETERS made;
-	D3DDISPLAYMODE mode;
-
-	if (FAILED(g_device->GetDirect3D(&d3d)) || !d3d)
-		return shadow_refuse("no_device");
-
-	const bool known = SUCCEEDED(g_device->GetCreationParameters(&made)) &&
-		SUCCEEDED(g_device->GetDisplayMode(0, &mode));
-	D3DFORMAT depth = D3DFMT_UNKNOWN;
-	const char* refused = 0;
-
-	if (!known)
-		refused = "no_device";
-	else if (FAILED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType, mode.Format,
-		D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_R32F)))
-		refused = "format";
-	else
-	{
-		static const D3DFORMAT kDepth[2] = { D3DFMT_D24X8, D3DFMT_D16 };
-
-		for (int i = 0; i < 2 && depth == D3DFMT_UNKNOWN; i++)
-			if (SUCCEEDED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType,
-				mode.Format, D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_SURFACE, kDepth[i])))
-				depth = kDepth[i];
-
-		if (depth == D3DFMT_UNKNOWN)
-			refused = "depth";
-		else if (FAILED(d3d->CheckDepthStencilMatch(made.AdapterOrdinal, made.DeviceType,
-			mode.Format, D3DFMT_R32F, depth)))
-			refused = "match";
-	}
-
-	d3d->Release();
+	const char* depth = "-";
+	const char* refused = shadow_pair_make(HD_SHADOW_MAP, g_shadow_texture, g_shadow_colour,
+		g_shadow_depth, &depth);
 
 	if (refused)
 		return shadow_refuse(refused);
 
-	if (FAILED(g_device->CreateTexture(HD_SHADOW_MAP, HD_SHADOW_MAP, 1, D3DUSAGE_RENDERTARGET,
-		D3DFMT_R32F, D3DPOOL_DEFAULT, &g_shadow_texture, 0)))
-	{
-		g_shadow_texture = 0;
-		return shadow_refuse("create");
-	}
-
-	if (FAILED(g_shadow_texture->GetSurfaceLevel(0, &g_shadow_colour)))
-	{
-		g_shadow_colour = 0;
-		return shadow_refuse("surface");
-	}
-
-	/* Not multisampled, like the texture, and discarded: the pass clears it
-	 * every frame and nothing reads it afterwards. */
-	if (FAILED(g_device->CreateDepthStencilSurface(HD_SHADOW_MAP, HD_SHADOW_MAP, depth,
-		D3DMULTISAMPLE_NONE, 0, TRUE, &g_shadow_depth, 0)))
-	{
-		g_shadow_depth = 0;
-		return shadow_refuse("depth_create");
-	}
-
 	g_shadow_info.format = "R32F";
-	g_shadow_info.depth = depth == D3DFMT_D24X8 ? "D24X8" : "D16";
+	g_shadow_info.depth = depth;
 	g_shadow_info.size = HD_SHADOW_MAP;
 	shadow_state(HD_SHADOW_TARGET_MADE, "ok");
 	return true;
 }
 
+/* Hers and, with it, the second: every road that releases her map - a
+ * refusal of hers, the device going away, a probe's own call - releases the
+ * second too, so no D3DPOOL_DEFAULT surface of the pair outlives the other
+ * across a Reset. */
 void HDRenderShadowTargetRelease()
 {
 	const bool had = g_shadow_texture || g_shadow_colour || g_shadow_depth;
+
+	others_release();
 
 	if (g_shadow_depth) { g_shadow_depth->Release(); g_shadow_depth = 0; }
 	if (g_shadow_colour) { g_shadow_colour->Release(); g_shadow_colour = 0; }
@@ -6317,6 +6378,9 @@ static void ShadowForgetRefusal()
 {
 	if (g_shadow_info.state == HD_SHADOW_TARGET_REFUSED)
 		shadow_state(HD_SHADOW_TARGET_RELEASED, "ok");
+
+	if (g_others_info.state == HD_SHADOW_TARGET_REFUSED)
+		others_state(HD_SHADOW_TARGET_RELEASED, "ok");
 }
 
 void HDRenderShadowTargetInfo(HDShadowTargetInfo* out)
@@ -6330,10 +6394,51 @@ IDirect3DTexture9* HDRenderShadowMap()
 	return g_shadow_saved.open ? 0 : g_shadow_texture;
 }
 
-bool HDRenderShadowCastBegin()
+bool HDRenderShadowOthersReady()
 {
-	if (!g_device || !g_in_frame || g_shadow_saved.open || !g_shadow_texture ||
-		!g_shadow_colour || !g_shadow_depth)
+	if (g_others_texture && g_others_colour && g_others_depth)
+		return true;
+
+	if (g_others_info.state == HD_SHADOW_TARGET_REFUSED)
+		return false;
+
+	const char* depth = "-";
+	const char* refused = shadow_pair_make(HD_SHADOW_OTHERS_MAP, g_others_texture,
+		g_others_colour, g_others_depth, &depth);
+
+	if (refused)
+		return others_refuse(refused);
+
+	g_others_info.format = "R32F";
+	g_others_info.depth = depth;
+	g_others_info.size = HD_SHADOW_OTHERS_MAP;
+	others_state(HD_SHADOW_TARGET_MADE, "ok");
+	return true;
+}
+
+void HDRenderShadowOthersRelease()
+{
+	others_release();
+}
+
+void HDRenderShadowOthersInfo(HDShadowTargetInfo* out)
+{
+	if (out)
+		*out = g_others_info;
+}
+
+IDirect3DTexture9* HDRenderShadowOthersMap()
+{
+	return g_shadow_saved.open ? 0 : g_others_texture;
+}
+
+/* The cast bracket's opening, on either pair: everything the pass changes
+ * remembered, the pair set, the viewport its whole side, the colour cleared
+ * to 1 and the depth to 1. */
+static bool ShadowCastOpen(IDirect3DTexture9* texture, IDirect3DSurface9* colour,
+	IDirect3DSurface9* depth, int size)
+{
+	if (!g_device || !g_in_frame || g_shadow_saved.open || !texture || !colour || !depth)
 		return false;
 
 	ShadowSaved& s = g_shadow_saved;
@@ -6366,10 +6471,10 @@ bool HDRenderShadowCastBegin()
 
 	/* SetRenderTarget puts the viewport and the scissor rectangle to the
 	 * whole map; both are put back from the copies above. */
-	g_device->SetRenderTarget(0, g_shadow_colour);
-	g_device->SetDepthStencilSurface(g_shadow_depth);
+	g_device->SetRenderTarget(0, colour);
+	g_device->SetDepthStencilSurface(depth);
 
-	D3DVIEWPORT9 whole = { 0, 0, HD_SHADOW_MAP, HD_SHADOW_MAP, 0.0f, 1.0f };
+	D3DVIEWPORT9 whole = { 0, 0, (DWORD)size, (DWORD)size, 0.0f, 1.0f };
 
 	g_device->SetViewport(&whole);
 
@@ -6392,6 +6497,17 @@ bool HDRenderShadowCastBegin()
 	// White is 1.0 in the red channel of an R32F target: nothing cast.
 	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFFFFFFFF, 1.0f, 0);
 	return true;
+}
+
+bool HDRenderShadowCastBegin()
+{
+	return ShadowCastOpen(g_shadow_texture, g_shadow_colour, g_shadow_depth, HD_SHADOW_MAP);
+}
+
+bool HDRenderShadowOthersCastBegin()
+{
+	return ShadowCastOpen(g_others_texture, g_others_colour, g_others_depth,
+		HD_SHADOW_OTHERS_MAP);
 }
 
 void HDRenderShadowCastEnd()

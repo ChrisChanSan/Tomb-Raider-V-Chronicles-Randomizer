@@ -923,6 +923,27 @@ bool HDRenderShadowCastBegin();
 void HDRenderShadowCastEnd();
 IDirect3DTexture9* HDRenderShadowMap();
 
+/* The second map, the one the other casters are drawn into: the same kind of
+ * pair, HD_SHADOW_OTHERS_MAP texels a side (hd_shadow.h), with a life of its
+ * own beside hers.
+ *
+ * HDRenderShadowOthersReady makes it when it does not exist yet and answers
+ * whether it exists; a device that refuses it is not asked again until the
+ * device changes, and her map keeps running - only the other casters keep
+ * their blobs. HDRenderShadowTargetRelease releases it with hers, so every
+ * road that releases hers (a refusal of hers, HDRenderShutdown before a
+ * Reset or a new device) releases it too; HDRenderShadowOthersRelease
+ * releases it alone. HDRenderShadowOthersInfo is HDRenderShadowTargetInfo's
+ * twin. HDRenderShadowOthersCastBegin opens the cast bracket on it exactly
+ * as HDRenderShadowCastBegin does on hers - one bracket at a time - and
+ * HDRenderShadowCastEnd closes either. HDRenderShadowOthersMap is the
+ * texture, null while a bracket is open. */
+bool HDRenderShadowOthersReady();
+void HDRenderShadowOthersRelease();
+void HDRenderShadowOthersInfo(HDShadowTargetInfo* out);
+bool HDRenderShadowOthersCastBegin();
+IDirect3DTexture9* HDRenderShadowOthersMap();
+
 /* Which of the three passes a call is to draw.
  *
  * The first two write depth and the third does not, and that one fact decides

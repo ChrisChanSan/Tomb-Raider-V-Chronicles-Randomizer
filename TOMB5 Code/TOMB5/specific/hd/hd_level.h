@@ -278,22 +278,28 @@ bool HDFrameSky(const float* viewWorld);
 void HDFrameDraw();
 void HDFrameDrawGlow();
 
-/* The projected shadow's two passes, as HDFrameDraw runs them: the cast
- * pass and then the receive pass, after the room loops and before the
- * models' solid passes, in frames whose Lara main draw decided it runs
- * (hd_laradraw.h, HDShadowFrameDecide). Counted since the last call with
- * `clear` set:
+/* The projected shadow's passes, as HDFrameDraw runs them: her map's cast
+ * pass, the second map's cast pass and then the receive pass, after the room
+ * loops and before the models' solid passes, in frames whose Lara main draw
+ * decided it runs (hd_laradraw.h, HDShadowFrameDecide). Counted since the
+ * last call with `clear` set:
  *
  *   frames   frames in which the projected shadow ran
- *   cast     of those, frames in which the map was drawn
- *   parts    models drawn into the map, all frames together
- *   ms       processor time of the cast pass, milliseconds, all frames
+ *   cast     of those, frames in which her map was drawn
+ *   parts    models drawn into her map, all frames together
+ *   ms       processor time of her map's cast pass, milliseconds, all frames
  *            together
  *   rooms    room groups drawn again by the receive pass, all frames
  *            together
  *   calls    draw calls of the receive pass, all frames together
  *   receiveMs  processor time of the receive pass, milliseconds, all frames
- *            together */
+ *            together
+ *   othersCast   frames in which the second map was drawn
+ *   othersItems  items drawn into the second map, all frames together
+ *   othersModels models drawn into the second map (a body and a separate
+ *            face are two), all frames together
+ *   othersMs     processor time of the second map's cast pass,
+ *            milliseconds, all frames together */
 struct HDShadowCastStats
 {
 	int frames;
@@ -303,9 +309,19 @@ struct HDShadowCastStats
 	int rooms;
 	int calls;
 	double receiveMs;
+	int othersCast;
+	int othersItems;
+	int othersModels;
+	double othersMs;
 };
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);
+
+/* Whether the second map was drawn in this frame, by the cast pass
+ * HDFrameDraw has just run: its receive reads it only then, never a map an
+ * earlier frame left behind. False from the start of every frame's passes
+ * until that pass has drawn it. */
+bool HDFrameShadowOthersDrawn();
 
 // The frame clock, a diagnostic. Called from DXShowFrame
 // (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns -

@@ -956,7 +956,10 @@ namespace
 	 * and the map matrix stand on one camera. The torso node is the reference
 	 * point the lights are weighed at; the lights are her two engine lists'
 	 * (HDObjectShadowLights, no dynamics). One step a drawn main frame, on the
-	 * soft motion's game clock. */
+	 * soft motion's game clock; the same lights are weighed at the last
+	 * step's reference point first (HDShadowFollowLights), so the step draws
+	 * her movement through the light at once and blends only what the lights
+	 * themselves changed. */
 	void shadow_step(const float* matrices)
 	{
 		HDShadowFrame& f = g_shadow_frame;
@@ -983,6 +986,7 @@ namespace
 		const int count = HDObjectShadowLights(lara_item, lights, HD_SHADOW_MAX_LIGHTS);
 
 		HDShadowKeyTarget(lights, count, reference, &f.target);
+		HDShadowFollowLights(&g_shadow_follow, lights, count);
 
 		float dt = 0.0f;
 

@@ -18,10 +18,11 @@
  *
  * Four pieces, each a pure function of its arguments: the KEY LIGHT, one
  * direction and one darkness out of the lights that light her; the FOLLOWING,
- * which carries both through game time so that neither ever jumps; the BOX,
- * an orthographic volume round her seen along that direction, with the one
- * mapping from a point to its place in the shadow map; and the GATE, which
- * says whether the projected shadow runs in a frame.
+ * which draws both where her movement through the light puts them at once
+ * and blends a change of the lights over game time so that it never steps;
+ * the BOX, an orthographic volume round her seen along that direction, with
+ * the one mapping from a point to its place in the shadow map; and the GATE,
+ * which says whether the projected shadow runs in a frame.
  *
  * This header includes no engine header on purpose, like hd_softbody.h:
  * Preparation\Tools\Diagnose\ModernTest.cpp includes it and asserts on every
@@ -64,9 +65,11 @@
  *               degrees. Higher allows longer shadows from low lamps; the
  *               shadow's length grows with the tangent, 1.43 of her height
  *               at 55.
- *   TAU         the time constant of the following, game seconds: after TAU
- *               a change has gone 63 per cent of the way, after three TAU
- *               95. Longer is softer and slower.
+ *   TAU         the time constant with which a change of the lights blends
+ *               in, game seconds: after TAU it has gone 63 per cent of the
+ *               way, after three TAU 95. Longer is softer and slower. Her
+ *               own movement through the light is drawn at once whatever it
+ *               is.
  *   FULL, END   below her lowest node: a receiver up to FULL units below
  *               takes the whole shadow, from END on none, smooth between - a
  *               storey under her takes none through its ceiling.
@@ -97,7 +100,7 @@
  * not a matter of taste.
  *
  *   GAP         a frame further than this from the last one, game seconds,
- *               snaps instead of gliding: a hitch, a load, a long pause.
+ *               snaps instead of blending: a hitch, a load, a long pause.
  *               hd_softbody.h's HD_SOFT_GAP, for the same reason.
  *   SPEED, SLACK  the fastest she can travel, units a second, and a margin
  *               on top, units: a reference point further than SPEED * dt +
@@ -373,13 +376,33 @@ inline void HDShadowKeyTarget(const HDShadowLight* lights, int count, const floa
 
 /* ------------------------------------------------------- the following -- */
 
-/* The key light as it is drawn: the target followed in game time.
+/* The key light as it is drawn: the frame's target plus an offset that holds
+ * back what a change of the lights moved.
+ *
+ * The target turns for two reasons. She moves through the light: that is
+ * where the shadow lies in this very frame, and it is drawn at once. The
+ * lights themselves change - another room's list comes in, a lamp goes out
+ * or fades: that is blended, so neither the direction nor the darkness ever
+ * steps. To tell the two apart, HDShadowFollowLights weighs the frame's
+ * lights at the last step's reference point before each step; against the
+ * last step's target that is what the lights alone changed, at one place,
+ * and the step takes it into the offset, which falls off along
+ * exp(-t / TAU).
  *
  *   primed    0 until the first step, and after a reset; the next step snaps
  *   dir       the drawn direction, a unit vector
  *   strength  the drawn strength
- *   at        the reference point of the last step, for the jump test
- *   snaps     snaps since the caller last cleared it, for the log */
+ *   at        the reference point of the last step, for the jump test and
+ *             for the measurement of the lights
+ *   snaps     snaps since the caller last cleared it, for the log
+ *   last, lastStrength  the target of the last step
+ *   offset, offsetStrength  the drawn values minus the target, the direction
+ *             before it is made unit: 0 while the lights stay as they are
+ *   back, backStrength  the frame's lights weighed at `at`
+ *             (HDShadowFollowLights)
+ *   measured  1 while `back` holds a measurement the next step has not used
+ *   lag       the largest angle between the drawn direction and the target,
+ *             degrees, since the caller last cleared it, for the log */
 struct HDShadowFollow
 {
 	int primed;
@@ -387,39 +410,82 @@ struct HDShadowFollow
 	float strength;
 	float at[3];
 	int snaps;
+	float last[3];
+	float lastStrength;
+	float offset[3];
+	float offsetStrength;
+	float back[3];
+	float backStrength;
+	int measured;
+	float lag;
 };
 
 inline void HDShadowFollowReset(HDShadowFollow* f)
 {
 	f->primed = 0;
+	f->measured = 0;
 }
 
-/* How much of the way to the target one step of `dt` game seconds goes:
- * 1 - exp(-dt / TAU), the exact solution of v' = (target - v) / TAU over
- * dt. Steps add up to the same path at any frame rate, because
- * (1 - a)(1 - b) = exp(-(dt1 + dt2) / TAU). 0 for dt <= 0. */
-inline float HDShadowBlend(float dt)
+/* How much of an offset is left after `dt` game seconds: exp(-dt / TAU),
+ * the exact solution of v' = -v / TAU over dt. Steps multiply to the same
+ * value at any frame rate, because exp(-a) exp(-b) = exp(-(a + b)). 1 for
+ * dt <= 0. */
+inline float HDShadowDecay(float dt)
 {
 	if (!(dt > 0.0f))
-		return 0.0f;
+		return 1.0f;
 
-	return 1.0f - expf(-dt / HD_SHADOW_TAU);
+	return expf(-dt / HD_SHADOW_TAU);
 }
 
-/* One step of the following, once per drawn main frame.
+/* The measurement before a step: the frame's lights - the same ones its
+ * target is made of - weighed at the last step's reference point,
+ * HDShadowKeyTarget at `at`. Nothing before the first step, which snaps. */
+inline void HDShadowFollowLights(HDShadowFollow* f, const HDShadowLight* lights, int count)
+{
+	f->measured = 0;
+
+	if (!f->primed)
+		return;
+
+	HDShadowKey back;
+
+	HDShadowKeyTarget(lights, count, f->at, &back);
+
+	for (int i = 0; i < 3; i++)
+		f->back[i] = back.dir[i];
+
+	f->backStrength = back.strength;
+	f->measured = 1;
+}
+
+/* One step of the following, once per drawn main frame, with the frame's
+ * target and reference point P; HDShadowFollowLights comes right before it.
  *
- *   dt <= 0           nothing moves: a frame drawn twice, or the game standing
- *                     still (the clock is hd_softbody.h's HDSoftClock, which
- *                     the pause and the inventory do not advance).
- *   a snap            the drawn values become the target at once: the first
- *                     step after a reset (level start, savegame, a frame in
- *                     which the projected shadow did not run), dt beyond GAP
- *                     or not a number, and P further from the last step's
- *                     than SPEED * dt + SLACK.
- *   otherwise         both move towards the target by HDShadowBlend(dt), the
- *                     direction made unit again. Two directions inside the
- *                     slant limit blend to one inside it: the limit is a cone
- *                     about straight down, and a cone is convex.
+ *   a snap      the offset is cleared, so the target is drawn as it is: the
+ *               first step after a reset (level start, savegame, a frame in
+ *               which the projected shadow did not run), dt beyond GAP or not
+ *               a number, and P further from the last step's than SPEED * dt
+ *               + SLACK.
+ *   otherwise   the jump is back - last, what the lights alone changed since
+ *               the last step, measured at the last step's P, and the offset
+ *               becomes (offset - jump) * HDShadowDecay(dt). A step without a
+ *               measurement cannot tell her movement from the lights and
+ *               counts the whole change of the target as the lights': back is
+ *               then the target itself.
+ *   dt <= 0     the jump is taken and nothing decays: a frame drawn twice,
+ *               or the game standing still (the clock is hd_softbody.h's
+ *               HDSoftClock, which the pause and the inventory do not
+ *               advance), so nothing leaps when the clock runs again.
+ *
+ * The drawn direction is target + offset made unit and held to the slant
+ * limit - the target itself where the offset is nothing or the sum has no
+ * length - and the drawn strength is target + offset held to 0..DARK. With
+ * the lights unchanged the jump is 0 and the shadow lies where the light
+ * throws it in every frame, standing still the frame she stands still; a
+ * change of the lights starts from what was drawn and reaches the new target
+ * along exp(-t / TAU), t from the last step that saw the old lights, the
+ * same at every frame rate.
  *
  * True when it snapped. */
 inline bool HDShadowFollowStep(HDShadowFollow* f, const HDShadowKey* target, const float* P,
@@ -437,32 +503,87 @@ inline bool HDShadowFollowStep(HDShadowFollow* f, const HDShadowKey* target, con
 			snap = true;
 	}
 
+	const bool measured = f->measured != 0;
+
+	f->measured = 0;
+
 	for (int i = 0; i < 3; i++)
 		f->at[i] = P[i];
 
 	if (snap)
 	{
 		for (int i = 0; i < 3; i++)
-			f->dir[i] = target->dir[i];
+			f->offset[i] = 0.0f;
 
-		f->strength = target->strength;
+		f->offsetStrength = 0.0f;
 		f->primed = 1;
 		f->snaps++;
-		return true;
 	}
-
-	const float k = HDShadowBlend(dt);
-
-	if (k > 0.0f)
+	else
 	{
-		for (int i = 0; i < 3; i++)
-			f->dir[i] += (target->dir[i] - f->dir[i]) * k;
+		const float k = HDShadowDecay(dt);
+		const float* back = measured ? f->back : target->dir;
+		const float backStrength = measured ? f->backStrength : target->strength;
+		bool numbers = true;
 
-		hd_shadow_unit(f->dir);
-		f->strength += (target->strength - f->strength) * k;
+		for (int i = 0; i < 3; i++)
+		{
+			f->offset[i] = (f->offset[i] - (back[i] - f->last[i])) * k;
+			numbers = numbers && hd_shadow_finite(f->offset[i]);
+		}
+
+		f->offsetStrength = (f->offsetStrength - (backStrength - f->lastStrength)) * k;
+
+		/* An offset that is no longer a number is dropped, so the target
+		 * is drawn. */
+		if (!numbers || !hd_shadow_finite(f->offsetStrength))
+		{
+			for (int i = 0; i < 3; i++)
+				f->offset[i] = 0.0f;
+
+			f->offsetStrength = 0.0f;
+		}
 	}
 
-	return false;
+	for (int i = 0; i < 3; i++)
+		f->last[i] = target->dir[i];
+
+	f->lastStrength = target->strength;
+
+	float d[3] = { target->dir[0], target->dir[1], target->dir[2] };
+
+	if (f->offset[0] != 0.0f || f->offset[1] != 0.0f || f->offset[2] != 0.0f)
+	{
+		const float sum[3] = { d[0] + f->offset[0], d[1] + f->offset[1], d[2] + f->offset[2] };
+		const float l = hd_shadow_len(sum);
+
+		if (l > 1.0e-6f && hd_shadow_finite(l))
+		{
+			for (int i = 0; i < 3; i++)
+				d[i] = sum[i] / l;
+
+			HDShadowLimit(d);
+		}
+	}
+
+	for (int i = 0; i < 3; i++)
+		f->dir[i] = d[i];
+
+	const float s = target->strength + f->offsetStrength;
+
+	f->strength = s > 0.0f ? (s < HD_SHADOW_DARK ? s : HD_SHADOW_DARK) : 0.0f;
+
+	/* The lag for the log: the angle as atan2 of the cross product's length
+	 * over the dot product, which keeps its precision near 0. */
+	const float* t = target->dir;
+	const float cr[3] = { d[1] * t[2] - d[2] * t[1], d[2] * t[0] - d[0] * t[2],
+		d[0] * t[1] - d[1] * t[0] };
+	const float lag = atan2f(hd_shadow_len(cr), hd_shadow_dot(d, t)) * (180.0f / 3.14159265f);
+
+	if (lag > f->lag)
+		f->lag = lag;
+
+	return snap;
 }
 
 /* --------------------------------------------------------------- the box -- */

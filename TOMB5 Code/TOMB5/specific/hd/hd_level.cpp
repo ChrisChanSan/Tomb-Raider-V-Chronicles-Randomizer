@@ -4667,7 +4667,8 @@ static void ShadowReceivePass()
  * shadow runs, behind -log:
  *
  *   dir=       the drawn direction of the light, world axes (y down)
- *   target=    the direction the key light is gliding towards
+ *   target=    the key light's direction this frame; the drawn one differs
+ *              from it only while a change of the lights blends in
  *   strength=  the drawn strength / the target's
  *   lights=    lights that gave a weight this frame
  *   weight=    their summed weight (luminance times falloff)
@@ -4678,7 +4679,11 @@ static void ShadowReceivePass()
  *   rooms=     room groups drawn again, a frame
  *   calls=     receive draw calls, a frame
  *   ms=        processor time of the two passes, a frame (the mean)
- *   stencil=   1 when the depth surface's stencil guards each pixel */
+ *   stencil=   1 when the depth surface's stencil guards each pixel
+ *   lag=       the largest angle in that second between the drawn direction
+ *              and the frame's target, degrees: near 0 while only she moves,
+ *              up at a change of the lights and back down over about a
+ *              second and a half */
 static bool g_shadow_window = false;
 static unsigned short g_shadow_window_at = 0;
 
@@ -4700,6 +4705,7 @@ static void ShadowSecond()
 		g_shadow_window_at = tick;
 		HDFrameShadowCastStats(0, true);
 		HDShadowFollowState()->snaps = 0;
+		HDShadowFollowState()->lag = 0.0f;
 		return;
 	}
 
@@ -4719,16 +4725,18 @@ static void ShadowSecond()
 
 		Log("HDLOG shadow second dir=(%.3f,%.3f,%.3f) target=(%.3f,%.3f,%.3f) "
 			"strength=%.3f/%.3f lights=%d weight=%.3f slant=%.1f snaps=%d cast=%d/%d "
-			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d",
+			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d lag=%.2f",
 			shadow->dir[0], shadow->dir[1], shadow->dir[2], shadow->target.dir[0],
 			shadow->target.dir[1], shadow->target.dir[2], shadow->strength,
 			shadow->target.strength, shadow->target.lights, shadow->target.weight,
 			HDShadowSlant(shadow->dir), follow->snaps, s.cast, s.frames,
 			(double)s.parts / cast, (double)s.rooms / cast, (double)s.calls / cast,
-			(s.ms + s.receiveMs) / frames, HDRenderShadowReceiveStencil() ? 1 : 0);
+			(s.ms + s.receiveMs) / frames, HDRenderShadowReceiveStencil() ? 1 : 0,
+			follow->lag);
 	}
 
 	follow->snaps = 0;
+	follow->lag = 0.0f;
 	g_shadow_window_at = tick;
 }
 

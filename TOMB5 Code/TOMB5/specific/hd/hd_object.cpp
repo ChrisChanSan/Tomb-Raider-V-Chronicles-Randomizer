@@ -3176,12 +3176,16 @@ void HDObjectEnd()
 	memset(&entry.soft, 0, sizeof(entry.soft));
 
 	/* The second map: an item whose blob gave way is drawn into it when its
-	 * place lies inside the second box (hd_shadow.h, HDShadowOtherCasts -
-	 * the blob, the frame, her step, the target, HD and not mirrored were
-	 * all asked when the blob gave way), with the node mask it is drawn with
-	 * here. Every other item casts nothing. */
+	 * place lies inside the second box grown across the light by
+	 * OTHERS_MARGIN (hd_shadow.h, HDShadowOtherCasts - the blob, the frame,
+	 * her step, the target, HD and not mirrored were all asked when the blob
+	 * gave way), with the node mask it is drawn with here. The margin keeps
+	 * an item whose feet have left the box casting while its upper body
+	 * still reaches into it, so its shadow fades out at the box's edge on
+	 * every side. Every other item casts nothing. */
 	const HDShadowFrame* shadow = HDShadowFrameState();
-	const bool inside = g_open_casts && HDShadowBoxHolds(&shadow->others, g_open_place);
+	const bool inside = g_open_casts &&
+		HDShadowBoxHolds(&shadow->others, g_open_place, HD_SHADOW_OTHERS_MARGIN);
 
 	entry.cast = inside ? HD_OBJ_CAST_OTHERS : HD_OBJ_CAST_NONE;
 	entry.castMask = inside ? entry.mask : 0;

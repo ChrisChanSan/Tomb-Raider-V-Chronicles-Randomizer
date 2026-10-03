@@ -4580,7 +4580,8 @@ static void ShadowCastPass()
 }
 
 /* The second map's cast pass: the items whose blob gave way and whose place
- * lies inside the second box (hd_object.cpp marks them HD_OBJ_CAST_OTHERS),
+ * lies inside the second box grown across the light by OTHERS_MARGIN
+ * (hd_object.cpp marks them HD_OBJ_CAST_OTHERS),
  * into the second map, along the same light, with the same cast draw her
  * parts use. Right after hers, in the same bracket. Only in a frame in which
  * the projected shadow runs, her step ran (the box exists) and at least one

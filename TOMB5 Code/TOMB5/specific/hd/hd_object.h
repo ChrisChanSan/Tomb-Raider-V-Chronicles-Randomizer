@@ -336,9 +336,15 @@ int HDObjectCastOthersCount();
  *
  * A true answer is remembered for this item: the HDObjectBegin that follows
  * for it takes it over, and HDObjectEnd marks the entry HD_OBJ_CAST_OTHERS
- * when the item's place (its world position) lies inside the second box -
- * an item beyond that box has neither the blob nor the projected shadow in
- * that frame, where the edge term has faded the projected one out. */
+ * when the item's place (its world position) lies inside the second box
+ * grown across the light by OTHERS_MARGIN - an item beyond that has neither
+ * the blob nor the projected shadow in that frame, where the edge term has
+ * faded the projected one out on every side. Along the light nothing fades:
+ * an item crossing the box's near or far side loses its shadow at once. An
+ * item that draw.cpp clips away (its bounds outside the view or the portal
+ * window) is not drawn and so not cast either, while its blob has given
+ * way: where its shadow reaches into the view beyond its bounds, that part
+ * appears at once when the item comes into the view. */
 bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj);
 
 /* The lights the projected shadow's key light weighs, in WORLD space

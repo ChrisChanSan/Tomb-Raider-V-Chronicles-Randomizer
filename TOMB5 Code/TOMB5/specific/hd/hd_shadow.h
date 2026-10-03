@@ -120,13 +120,31 @@
  *                 hers; fewer is a softer, blockier outline and a cheaper
  *                 map (16 MiB of colour and 16 of depth at 2048).
  *   OTHERS_BOX    the second box's width and height across the light,
- *                 units. A caster further from her than half of it casts
- *                 nothing and keeps no blob either; larger reaches further
+ *                 units. A caster further from her than half of it and
+ *                 OTHERS_MARGIN of it casts nothing and keeps no blob
+ *                 either, and the edge term has faded its shadow out before
+ *                 the box's side; larger reaches further
  *                 and spends the texels more thinly. 8192 is four sectors to
  *                 every side of her.
+ *   OTHERS_MARGIN how far beyond the second box's four sides across the
+ *                 light, as a part of OTHERS_BOX, a caster's place may lie
+ *                 and the caster still be drawn into the map. Its parts that
+ *                 reach into the box cast there and the edge term fades
+ *                 them, so a creature leaving the box loses its shadow
+ *                 gradually on every side, also on the two its upper body
+ *                 leans in from its feet. 0.1 is 819 units across the light:
+ *                 at the fixed slant a head up to 2160 units above the feet.
+ *                 Smaller cuts a tall creature's shadow off where it leaves
+ *                 the box on those two sides; larger draws casters of which
+ *                 no part reaches into the box.
  *   OTHERS_DEPTH  the second box's length along the light, units: a caster
  *                 further from her centre along the light than half of it
  *                 casts nothing. 8192 holds a storey above and below her.
+ *                 Nothing fades along the light: a caster that crosses the
+ *                 box's near or far side (4096 units along the light from
+ *                 her centre, 4730 straight above or below her at the fixed
+ *                 slant) loses its whole shadow in one frame, and the near
+ *                 side cuts off the part of a caster that reaches past it.
  *   OTHERS_FULL, OTHERS_END  how far behind a caster along the light a
  *                 receiver still takes its shadow: whole up to OTHERS_FULL
  *                 units, none from OTHERS_END on, smooth between. A
@@ -154,6 +172,7 @@
 #define HD_SHADOW_BIAS			8.0f
 #define HD_SHADOW_OTHERS_MAP		2048
 #define HD_SHADOW_OTHERS_BOX		8192.0f
+#define HD_SHADOW_OTHERS_MARGIN		0.1f
 #define HD_SHADOW_OTHERS_DEPTH		8192.0f
 #define HD_SHADOW_OTHERS_FULL		1536.0f
 #define HD_SHADOW_OTHERS_END		2560.0f
@@ -834,20 +853,25 @@ inline void HDShadowMapUVD(const HDShadowBox* b, const float* p, float* out)
 	out[2] = 0.5f + hd_shadow_dot(d, b->fwd) / b->depth;
 }
 
-/* Whether a world point lies inside a box: its (u, v) and its depth
- * (HDShadowMapUVD) all within 0..1, the edges included; false for a point
- * that is not a number. The test the second map asks of a caster's place. */
-inline bool HDShadowBoxHolds(const HDShadowBox* b, const float* p)
+/* Whether a world point lies inside a box grown across the light by
+ * `margin`, a part of its extent on each of its four sides: its u and v
+ * (HDShadowMapUVD) within -margin..1 + margin and its depth within 0..1, the
+ * edges included; false for a point that is not a number. With margin 0 it
+ * is the box itself. The second map asks it of a caster's place with
+ * OTHERS_MARGIN: the place is one point, the caster's feet, and the parts
+ * above them lie further in on two of the box's sides, where they still cast
+ * after the feet have left it. */
+inline bool HDShadowBoxHolds(const HDShadowBox* b, const float* p, float margin)
 {
 	float uvd[3];
 
 	HDShadowMapUVD(b, p, uvd);
 
-	for (int i = 0; i < 3; i++)
-		if (!(uvd[i] >= 0.0f && uvd[i] <= 1.0f))
+	for (int i = 0; i < 2; i++)
+		if (!(uvd[i] >= -margin && uvd[i] <= 1.0f + margin))
 			return false;
 
-	return true;
+	return uvd[2] >= 0.0f && uvd[2] <= 1.0f;
 }
 
 /* A world point out of a view-space one, for a world-to-view of
@@ -1434,14 +1458,18 @@ inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float
  *             HDObjectBegin decides for it
  *   mirrored  the item is a mirror's reflection
  *   blob      its object's shadow_size is not 0
- *   inside    its place lies inside the second box (HDShadowBoxHolds)
+ *   inside    its place lies inside the second box grown across the light
+ *             by OTHERS_MARGIN (HDShadowBoxHolds)
  *
  * HDShadowBlobGivesWay says whether the item's blob is left out; the item
  * itself is then drawn into the second map exactly when it also has a blob
- * and stands inside the box (HDShadowOtherCasts). Inside the box an item
+ * and stands inside the grown box (HDShadowOtherCasts). Inside it an item
  * with a blob therefore has always the one or the other, never both; beyond
- * the box it has neither, where the edge term has faded the projected one
- * out already. */
+ * it the item has neither, and no part of a caster up to OTHERS_MARGIN of
+ * the box across the light from its place reaches into the box, so the edge
+ * term has faded its projected shadow out already on every side. Along the
+ * light nothing fades: a caster crossing the box's near or far side loses
+ * its shadow in one frame. */
 inline bool HDShadowBlobGivesWay(bool runs, bool herStep, bool target, bool hdModel,
 	bool mirrored)
 {

@@ -167,7 +167,8 @@
  *                         drawn into the second map by the engine's own cast
  *                         draw and target right after her map, where the game
  *                         draws it - when its place lies inside the second box
- *                         (hd_shadow.h, HDShadowBoxHolds), which the run
+ *                         grown across the light by OTHERS_MARGIN (hd_shadow.h,
+ *                         HDShadowBoxHolds), which the run
  *                         prints; with -shadowreceive the room then takes
  *                         both maps through the two-map receive shader, as
  *                         the game's frame with the second map drawn. The
@@ -8596,7 +8597,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	/* The second map's box round hers and its cast matrix, as hd_laradraw.cpp
 	 * makes them; which creatures stand inside it, as hd_object.cpp asks
-	 * (HDShadowBoxHolds on the item's place). */
+	 * (HDShadowBoxHolds on the item's place with OTHERS_MARGIN). */
 	HDShadowBox othersBox;
 	float othersClip[16];
 
@@ -8616,7 +8617,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HDShadowMapUVD(&othersBox, placed[c].place, uvd);
 			printf("creature: %s in the second box at u %.4f v %.4f depth %.4f - %s\n",
 				HDSlotName(placed[c].slot) ? HDSlotName(placed[c].slot) : "?", uvd[0], uvd[1],
-				uvd[2], HDShadowBoxHolds(&othersBox, placed[c].place) ? "casts"
+				uvd[2], HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN)
+				? "casts"
 				: "outside, casts nothing");
 		}
 	}
@@ -8637,7 +8639,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		othersDrawn = false;
 
 		for (size_t c = 0; c < placed.size(); c++)
-			inside += HDShadowBoxHolds(&othersBox, placed[c].place) ? 1 : 0;
+			inside += HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN)
+				? 1 : 0;
 
 		if (!inside)
 			return 0;
@@ -8654,7 +8657,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		for (size_t c = 0; c < placed.size(); c++)
 		{
-			if (!HDShadowBoxHolds(&othersBox, placed[c].place))
+			if (!HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN))
 				continue;
 
 			if (HDModelCastDraw(placed[c].slot, false, &placed[c].matrices[0], placed[c].nodes,

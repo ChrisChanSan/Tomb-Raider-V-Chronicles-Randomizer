@@ -15112,10 +15112,10 @@ static void shadow_others_box()
 		volatile float zero = 0.0f;
 		const float notANumber[3] = { zero / zero, others.centre[1], others.centre[2] };
 
-		ok(HDShadowBoxHolds(&others, others.centre) && HDShadowBoxHolds(&others, in) &&
-			HDShadowBoxHolds(&others, edge) && !HDShadowBoxHolds(&others, out1) &&
-			!HDShadowBoxHolds(&others, out2) && !HDShadowBoxHolds(&others, deep) &&
-			!HDShadowBoxHolds(&others, notANumber),
+		ok(HDShadowBoxHolds(&others, others.centre, 0.0f) && HDShadowBoxHolds(&others, in, 0.0f) &&
+			HDShadowBoxHolds(&others, edge, 0.0f) && !HDShadowBoxHolds(&others, out1, 0.0f) &&
+			!HDShadowBoxHolds(&others, out2, 0.0f) && !HDShadowBoxHolds(&others, deep, 0.0f) &&
+			!HDShadowBoxHolds(&others, notANumber, 0.0f),
 			"shadow others: a place inside the box is held, one past its edge or along the "
 			"light or not a number is not", 0, 0);
 	}
@@ -15196,6 +15196,114 @@ static void shadow_others_box()
 			"shadow others: her box through its own size gives the table's bits - centre, "
 			"mapping, matrices, receive block, reach", differ, 0);
 	}
+}
+
+/* The second box grown across the light by OTHERS_MARGIN, at the fixed slant
+ * the game draws with: a place up to the margin beyond any of the four sides
+ * is held, one a few units past it is not, and the depth is not grown. And no
+ * part of a caster lies inside the box once its feet have left the grown one:
+ * for feet just past the margin anywhere along each side, a head up to 2160
+ * units above them projects outside the box's u or v - on the u = 1 and
+ * v = 0 sides too, where the upper body lies inward of the feet. Without the
+ * margin a 760 unit tall caster with its feet at u 1.0009 still reaches
+ * 0.035 into the box there. */
+static void shadow_others_margin()
+{
+	ok(HD_SHADOW_OTHERS_MARGIN == 0.1f, "shadow others: the table's margin, 0.1 of the box",
+		sh_milli(HD_SHADOW_OTHERS_MARGIN), 100);
+
+	float nodes[15 * 3];
+	float dir[3];
+
+	HDShadowFallback(dir);
+	sh_figure(-4321.5f, 1234.25f, 8765.75f, nodes);
+
+	HDShadowBox her, others;
+
+	HDShadowBoxMake(&her, dir, nodes, 15);
+	HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+		HD_SHADOW_OTHERS_MAP);
+
+	const float half = 0.5f * HD_SHADOW_OTHERS_BOX;
+	const float grown = half + HD_SHADOW_OTHERS_MARGIN * HD_SHADOW_OTHERS_BOX;
+	const auto at = [&](float a, float c, float f, float* p)
+	{
+		for (int i = 0; i < 3; i++)
+			p[i] = others.centre[i] + a * others.right[i] + c * others.up[i] + f * others.fwd[i];
+	};
+
+	// The four sides, as (right, up) unit steps outward; up = +1 is v = 0.
+	const float side[4][2] = { { 1.0f, 0.0f }, { -1.0f, 0.0f }, { 0.0f, 1.0f }, { 0.0f, -1.0f } };
+	int held = 0;
+
+	for (int s = 0; s < 4; s++)
+	{
+		float in[3], out[3];
+
+		at(side[s][0] * (grown - 4.0f), side[s][1] * (grown - 4.0f), 0.0f, in);
+		at(side[s][0] * (grown + 4.0f), side[s][1] * (grown + 4.0f), 0.0f, out);
+
+		if (HDShadowBoxHolds(&others, in, HD_SHADOW_OTHERS_MARGIN) &&
+			!HDShadowBoxHolds(&others, out, HD_SHADOW_OTHERS_MARGIN) &&
+			!HDShadowBoxHolds(&others, in, 0.0f))
+			held++;
+	}
+
+	float nearSide[3], farSide[3], within[3];
+
+	at(0.0f, 0.0f, -0.5f * HD_SHADOW_OTHERS_DEPTH - 4.0f, nearSide);
+	at(0.0f, 0.0f, 0.5f * HD_SHADOW_OTHERS_DEPTH + 4.0f, farSide);
+	at(0.0f, 0.0f, 0.5f * HD_SHADOW_OTHERS_DEPTH - 4.0f, within);
+
+	ok(held == 4 && !HDShadowBoxHolds(&others, nearSide, HD_SHADOW_OTHERS_MARGIN) &&
+		!HDShadowBoxHolds(&others, farSide, HD_SHADOW_OTHERS_MARGIN) &&
+		HDShadowBoxHolds(&others, within, HD_SHADOW_OTHERS_MARGIN),
+		"shadow others: the grown box holds a place up to the margin past each side, not "
+		"one beyond it, and is not grown along the light", held, 4);
+
+	int reaching = 0, heads = 0;
+
+	for (int s = 0; s < 4; s++)
+		for (float along = -grown; along <= grown; along += 128.0f)
+			for (float h = 0.0f; h <= 2160.0f; h += 40.0f)
+			{
+				const float a = side[s][0] != 0.0f ? side[s][0] * (grown + 4.0f) : along;
+				const float c = side[s][1] != 0.0f ? side[s][1] * (grown + 4.0f) : along;
+				float feet[3], head[3], uvd[3];
+
+				at(a, c, 0.0f, feet);
+
+				for (int i = 0; i < 3; i++)
+					head[i] = feet[i];
+
+				head[1] -= h;
+				HDShadowMapUVD(&others, head, uvd);
+				heads++;
+
+				if (uvd[0] >= 0.0f && uvd[0] <= 1.0f && uvd[1] >= 0.0f && uvd[1] <= 1.0f)
+					reaching++;
+			}
+
+	ok(heads > 10000 && reaching == 0,
+		"shadow others: beyond the grown box no part of a caster up to 2160 units tall reaches "
+		"into the box on any side", reaching, 0);
+
+	// The case without the margin: feet at u 1.0009, the head 760 above them.
+	float feet[3], head[3], uvd[3];
+
+	at(half + 0.0009f * HD_SHADOW_OTHERS_BOX, 0.0f, 0.0f, feet);
+
+	for (int i = 0; i < 3; i++)
+		head[i] = feet[i];
+
+	head[1] -= 760.0f;
+	HDShadowMapUVD(&others, head, uvd);
+
+	ok(!HDShadowBoxHolds(&others, feet, 0.0f) &&
+		HDShadowBoxHolds(&others, feet, HD_SHADOW_OTHERS_MARGIN) &&
+		uvd[0] > 0.96f && uvd[0] < 0.97f,
+		"shadow others: a caster with its feet just past the u = 1 side still reaches 0.035 "
+		"into the box, and the grown box holds it", sh_milli(uvd[0]), 966);
 }
 
 /* Who casts into the second map: the rule as a pure function of its seven
@@ -15704,6 +15812,7 @@ int main()
 	shadow_receive();
 	shadow_mode();
 	shadow_others_box();
+	shadow_others_margin();
 	shadow_others_rule();
 	shadow_others_gate();
 	shadow_others_behind();

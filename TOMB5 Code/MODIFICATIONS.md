@@ -7083,7 +7083,9 @@ a wall she stands close to. `tomb5.shadow_mode` (registry `shadow`) gains the va
 and 4 PSX keep their meaning and their pictures. With 5, every blob still drawn - every
 other creature's and item's, and Lara's in a frame the projected shadow does not run in -
 is the faded circle. Three new log lines behind `-log`: `HDLOG shadow target`, `HDLOG
-shadow mode` and `HDLOG shadow second`.
+shadow mode` and `HDLOG shadow second`. The *Shadow mode* row on the *Graphics* page
+offers *Projected* as its fifth state while HD is on and steps the four blobs while it is
+off, showing a stored 5 then as *Faded circle*, which is what is drawn for it.
 
 **Why.** A shadow that shows her outline and where the light comes from. The blob says
 where she stands and nothing more; a silhouette laid on the floor and the steps, offset to
@@ -7164,7 +7166,20 @@ floors and `HDRenderScissorOff`, before the models' solid passes. The blob:
 `specific/drawlara.cpp` (:133, :388, :652) calls `S_PrintShadow` only for the mirror's
 copy or when `HDShadowFrameDecide` says no; `specific/specificfx.cpp` (:6652, :6667,
 :6876, :6878) reads the option through `HDShadowBlobMode`. `tomb5/tomb5.cpp` (:102, :343)
-and `global/types.h` (:2657) for the default and the comment.
+and `global/types.h` (:2657) for the default and the comment. The row:
+`game/menu_frame.cpp` includes `hd_level.h` and `hd_shadow.h` (:32, :33);
+`MenuShadowModeShown` (:700) is the stored value while `HDEnabled()` answers true - the
+*HD textures* option and an installed Remaster, no level asked, so the title screen
+answers as a level does - and `HDShadowBlobMode` of it otherwise; `MenuValShadowMode`
+(:705) shows 1 Original, 2 Circle, 3 Faded circle, 5 Projected and any other value PSX,
+and writes nothing; `MenuStepShadowMode` (:714) steps from the shown value with 5 as the
+top while HD is on and 4 while it is off, past the top to 1 and below 1 to the top, with
+the select sound and the same storage as the rows beside it; the table line (:1574) is
+unchanged. `game/gameflow.cpp` (:1445): *Projected* in `CustomText`'s table, German
+*Projiziert*, the English repeated in the French, Italian and Spanish columns. A change
+reaches the running level on its next drawn frame: `HDShadowFrameDecide` reads the option
+every frame, a frame without the projected shadow resets the following
+(`hd_laradraw.cpp:1076`), and the first step after that reset snaps (`hd_shadow.h:428`).
 
 **Checked.** The engine builds (`be.bat`). ModernTest 14,336 (14,280 and 56 in eight new
 groups: `shadow_key`, `shadow_follow`, `shadow_box`, `shadow_gate`, `shadow_terms`,
@@ -7197,6 +7212,16 @@ nowhere to be seen. With nothing cast the picture with both passes is the pictur
 them byte for byte, so the passes leave the device as they find it and the models drawn
 after them see the states they always saw; with the stencil guard switched off the three
 scenes come out byte-identical as well, so none of them has two faces in one plane.
+The row: MenuTest 42,613 (42,439 and 174 in `graphics_shadow_row`), none failed. It
+reads the row's lines and the new string in the tree and includes `hd_shadow.h`; swept
+are the five states with HD and both wraps and their texts, the four without, a stored 5
+shown as *Faded circle* and stepped to PSX and Circle and kept with no direction, every
+other stored value against the four-state rule, and `HDShadowFollowStep` snapping on the
+first step after the reset a frame without the shadow makes. Against the tree before the
+row it fails 4 checks; eleven single changes each fail one: five states without HD, a
+stored 5 not mapped, showing that writes, 5 shown as PSX, either wrap wrong, HD read from
+the level, no sound, the save class dropped, the German untranslated, the following not
+reset.
 
 **Unchanged.** `hd_room.hlsl`, `hd_model.hlsl`, `hd_glow.hlsl` and their six `.inc` are
 byte for byte the files of before. With `tomb5.hd_enable` 0 the HD path is not reached
@@ -7216,7 +7241,11 @@ round the HD rooms and the statics that are part of their art receive, and only 
 casts. The receive draws the room groups again with their own vertex shader and a pixel
 shader of its own, instead of a lookup inside the room shader, which has no instruction
 slots left. The key light reads her two engine light lists in world space rather than the
-model shader's view-space list, which cannot tell the dynamic lights apart.
+model shader's view-space list, which cannot tell the dynamic lights apart. The row asks
+`HDEnabled()` for HD, the setting and the installation, not whether the level on screen
+is drawn HD, so it answers in the title screen too and does not change with the room she
+stands in. With HD off a stored 5 is shown as what is drawn for it and stepped from there,
+but not written back, so switching HD on again brings *Projected* back.
 
 **Left.** Lara's shadow on herself and on HD items and creatures; other casters than Lara
 (creatures, items and cutscene actors keep their blob); the shadow in a mirror's image
@@ -7241,7 +7270,9 @@ record follows', 'Round 188 (#188): the receive pass's arithmetic and the effect
 'Round 188 (#188): the receive shader', 'Round 188 (#188): the receive draw of a room
 group', 'Round 188 (#188): the rooms near her take the shadow, and its log', 'Round 188
 (#188): shadow mode 5, the projected shadow, by default', 'Round 188 (#188): the suites',
-'Round 188 (#188): the record follows'.
+'Round 188 (#188): the record follows', 'Round 188 (#188): the Shadow mode row's fifth
+state, Projected, only in HD', 'Round 188 (#188): the suites', 'Round 188 (#188): the
+record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

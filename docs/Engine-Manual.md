@@ -639,7 +639,7 @@ right). The seven tabs:
 |---|---|---|
 | Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
 | Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
-| Graphics | *Display*, HD textures, Body physics, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — thirteen rows on two pages, seven and six, turned with the arrows at the bottom | see **tomb5 options**; Body physics off |
+| Graphics | *Display*, HD textures, Body physics, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — thirteen rows on two pages, seven and six, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
 | HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, TR4 loadscreens, Loadbar style, Loading text | see **tomb5 options** |
 | tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
@@ -756,6 +756,10 @@ chords** above for binding one of them to a pad chord.
 - **Level Select** adds a fifth row to the title screen that jumps straight to
   any level. It is a development shortcut, hidden by default.
 - **Loading text** only shows while *Loadbar style* is TR4.
+- **Shadow mode** has five values while HD is on - *Original*, *Circle*,
+  *Faded circle*, *PSX* and *Projected*, Lara's projected shadow - and the
+  four blobs while it is off. See **The projected shadow** for what each
+  draws and when the fifth one runs.
 
 ---
 
@@ -2700,6 +2704,19 @@ that refuses the shadow's map (`HDLOG shadow target` says which). In a frame she
 projected shadow she has no blob, and in a frame she has the blob she has no projected
 shadow - never both, never neither. Her reflection in a mirror keeps the blob. Any other
 stored number is drawn as it always was.
+
+The menu row is *Graphics → Shadow mode*. While HD is on - *HD textures* on and a
+*Tomb Raider IV-VI Remastered* found, in the title screen as in a level - it steps
+*Original*, *Circle*, *Faded circle*, *PSX*, *Projected* and wraps round at either end.
+While HD is off it steps the four blobs only, as it always did, and a stored `5` is shown
+as *Faded circle*, which is what is drawn for it then: right gives *PSX*, left *Circle*.
+Opening the page writes nothing, so a `5` stays stored until the row is stepped, and comes
+back as *Projected* when HD is switched on again. The row shows the stored value, not
+whether this very frame can draw the projected shadow (in a classic room it cannot;
+`HDLOG shadow mode` says why). A change shows on the next drawn frame of the running level; the
+first frame of the projected shadow places it at once where the light throws it, and from
+then on it glides. An installation that already stored a blob - `3`, the faded circle, for
+most - keeps it: the projected shadow comes on there by stepping the row to *Projected*.
 
 Where the light comes from. The direction is worked out from the lights that light her
 model - the room's lamps, spots and sun, each counted by its brightness and how near it is,

@@ -7157,11 +7157,11 @@ decision of a frame, also asks for the receive shader (:1067); `shadow_step` (:9
 the key light and the box from her main draw's own matrices and the frame's world-to-view
 (`aW2VMx`); her main draw marks every part it pushes (:1637), and in first person the face
 and the braid go into the map only, so the shadow keeps its head; `shadow_log` (:1025)
-writes the two state lines. `hd_level.cpp`: `ShadowCastPass` (:4572), then
-`ShadowReceivePass` (:4638) - every room group of the frame whose box, moved by its room's
+writes the two state lines. `hd_level.cpp`: `ShadowCastPass` (:4542), then
+`ShadowReceivePass` (:4608) - every room group of the frame whose box, moved by its room's
 origin, touches the reach, again in the windows and scissors `DrawRoomWindowed` used
-(`DrawRoomShadowWindowed`, :4612), only in a frame whose map was drawn just now - and
-`ShadowSecond` (:4715), all three in `HDFrameDraw` (:4890) after the room loop, the clear
+(`DrawRoomShadowWindowed`, :4582), only in a frame whose map was drawn just now - and
+`ShadowSecond` (:4685), all three in `HDFrameDraw` (:4890) after the room loop, the clear
 floors and `HDRenderScissorOff`, before the models' solid passes. The blob:
 `specific/drawlara.cpp` (:133, :388, :652) calls `S_PrintShadow` only for the mirror's
 copy or when `HDShadowFrameDecide` says no; `specific/specificfx.cpp` (:6652, :6667,
@@ -7235,17 +7235,19 @@ the mirror pass, every other HD draw - items, creatures, cutscene actors, the in
 and the savegame are untouched.
 
 **Decisions.** On by default. The four classic blobs stay selectable in HD too. The new
-state of the *Shadow mode* row is reachable only while HD is on. A change of the light is
-blended over time and never stepped, the darkness as well as the direction. In this first
-round the HD rooms and the statics that are part of their art receive, and only Lara
-casts. The receive draws the room groups again with their own vertex shader and a pixel
-shader of its own, instead of a lookup inside the room shader, which has no instruction
-slots left. The key light reads her two engine light lists in world space rather than the
-model shader's view-space list, which cannot tell the dynamic lights apart. The row asks
-`HDEnabled()` for HD, the setting and the installation, not whether the level on screen
-is drawn HD, so it answers in the title screen too and does not change with the room she
-stands in. With HD off a stored 5 is shown as what is drawn for it and stepped from there,
-but not written back, so switching HD on again brings *Projected* back.
+state of the *Shadow mode* row is reachable only while HD is on. While the projected
+shadow runs, a change of the light is blended over time and never stepped, the darkness as
+well as the direction; the change between the blob and the projected shadow itself is made
+from one frame to the next. In this first round the HD rooms and the statics that are part
+of their art receive, and only Lara casts. The receive draws the room groups again with
+their own vertex shader and a pixel shader of its own, instead of a lookup inside the room
+shader, which has no instruction slots left. The key light reads her two engine light
+lists in world space rather than the model shader's view-space list, which cannot tell the
+dynamic lights apart. The row asks `HDEnabled()` for HD, the setting and the installation,
+not whether the level on screen is drawn HD, so it answers in the title screen too and
+does not change with the room she stands in. With HD off a stored 5 is shown as what is
+drawn for it and stepped from there, but not written back, so switching HD on again brings
+*Projected* back.
 
 **Left.** Lara's shadow on herself and on HD items and creatures; other casters than Lara
 (creatures, items and cutscene actors keep their blob); the shadow in a mirror's image
@@ -7256,11 +7258,16 @@ ANDREA1) do not receive; the tuning of the numbers. A shadow that reaches past a
 falls on the floor beyond it as well, because receivers never cast; the height term stops
 a storey below, nothing stops a room beside. A face turned away from the light is not
 darkened even where the room's baked light lights it. If the frame list is full and her
-body cannot be pushed, the frame has neither shadow (the blob gave way, the map stays
-empty). What cannot be proven without playing: how the shadow looks in motion, how the
-direction behaves while she walks through real rooms, the darkness and softness against
-taste, cutscenes, first person, and whether the frame's world-to-view (`aW2VMx`) is the
-camera her main draw's matrices stand on at sixty frames a second as well.
+body cannot be pushed, the frame has neither shadow nor blob (the blob gave way, the map
+stays empty). The change between the blob and the projected shadow is not blended: at the
+border between an HD room and a classic one, on a step of the row and when the map is
+lost, one gives way to the other within a single frame, the shadow at its full strength.
+The shadow multiplies the finished colour of the room, so it darkens the distance fog and
+the fog bulbs that stand in front of the floor as well. What cannot be proven without
+playing: how the shadow looks in motion, how the direction behaves while she walks through
+real rooms, the darkness and softness against taste, cutscenes, first person, and whether
+the frame's world-to-view (`aW2VMx`) is the camera her main draw's matrices stand on at
+sixty frames a second as well.
 
 **Commits.** 'Round 188 (#188): the projected shadow's arithmetic', 'Round 188 (#188): the
 cast shaders and the cast draw of a model', 'Round 188 (#188): the shadow map's target and
@@ -7272,6 +7279,7 @@ group', 'Round 188 (#188): the rooms near her take the shadow, and its log', 'Ro
 (#188): shadow mode 5, the projected shadow, by default', 'Round 188 (#188): the suites',
 'Round 188 (#188): the record follows', 'Round 188 (#188): the Shadow mode row's fifth
 state, Projected, only in HD', 'Round 188 (#188): the suites', 'Round 188 (#188): the
+record follows', 'Round 188 (#188): what review pass 1 found', 'Round 188 (#188): the
 record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod

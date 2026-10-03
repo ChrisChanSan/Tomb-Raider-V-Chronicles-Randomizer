@@ -2719,22 +2719,27 @@ then on it glides. An installation that already stored a blob - `3`, the faded c
 most - keeps it: the projected shadow comes on there by stepping the row to *Projected*.
 
 Where the light comes from. The direction is worked out from the lights that light her
-model - the room's lamps, spots and sun, each counted by its brightness and how near it is,
-without the flashes of a gun, a flare or an explosion - plus a small fixed slant, so that a
-room without a lamp still lays the shadow a little beside her feet. The slant is held to at
-most 55 degrees off straight down, about one and a half of her heights long. Where the
-lights pull against each other, the shadow is fainter. Direction and darkness are never
-switched: they glide towards a new light over about half a second of game time (two thirds
-of the way after half a second, nearly all of it after one and a half), the same at 30, 60
-or 165 frames a second, and standing still while the game is paused; a level start, a load,
-a jump to somewhere else and the first frame after the shadow was off start it in place.
+model - the room's lamps, spots and sun, each counted by its brightness and how near it
+is, without the flashes of a gun, a flare or an explosion - plus a small fixed slant, so
+that a room without a lamp still lays the shadow a little beside her feet. The slant is
+held to at most 55 degrees off straight down, about one and a half of her heights long.
+Where the lights pull against each other, the shadow is fainter. While the shadow is
+there, direction and darkness are never switched: they glide towards a new light over
+about half a second of game time (two thirds of the way after half a second, nearly all of
+it after one and a half), the same at 30, 60 or 165 frames a second, and standing still
+while the game is paused; a level start, a load, a jump to somewhere else and the first
+frame after the shadow was off start it in place. The change between the blob and the
+projected shadow itself - at the border between an HD room and a classic one, on a step of
+the row - is made from one frame to the next.
 
 What takes it. The HD rooms around her and the statics that are part of their art; not
 Lara herself, not HD items or creatures, not the classic polygons, and not the glows and
 glass, which are drawn over it. A floor more than one block below her lowest point fades
 out of it, and two blocks down it is gone, so a storey under her takes nothing through its
-ceiling; a face turned away from the light - a ceiling, the back of a wall - takes none.
-A cut-out keeps its holes. A pixel in the deepest shadow keeps 55 per cent of its colour.
+ceiling; a face turned away from the light - a ceiling, the back of a wall - takes none. A
+cut-out keeps its holes. A pixel in the deepest shadow keeps 55 per cent of its colour.
+The shadow darkens the finished picture of the room, so the fog and the fog bulbs in front
+of a floor are darkened with it.
 
 Every number that shapes it - darkness, softness, slant, time - stands in one table at the
 top of `specific/hd/hd_shadow.h`; they are a first setting, to be tuned in the game.

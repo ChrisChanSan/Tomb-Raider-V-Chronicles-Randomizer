@@ -2,13 +2,13 @@
 rem bmenu - build MenuTest.
 rem
 rem vcvars32, like bit.bat and bmt.bat and for the same reason: the tool
-rem includes the engine's own game\menu_nav.h, game\key_scheme.h and
-rem game\pad_scheme.h rather than copies, and the engine is a Win32 build. All
-rem three are `int` and `long` arithmetic, the same widths in either target on
-rem Windows, so this is belt and braces - but the tool exists to say what the
-rem engine does.
+rem includes the engine's own game\menu_nav.h, game\key_scheme.h,
+rem game\pad_scheme.h and specific\hd\hd_shadow.h rather than copies, and the
+rem engine is a Win32 build. What the tool uses of them is `int` and `long`
+rem arithmetic, the same widths in either target on Windows, so this is belt
+rem and braces - but the tool exists to say what the engine does.
 rem
-rem Only this one file on the command line: all three headers are headers of
+rem Only this one file on the command line: all four headers are headers of
 rem inline functions with no engine include at all, which is what lets them be checked
 rem with a compiler and nothing else. The drawing half (game\menu_frame.cpp)
 rem needs font_height and a device and is not testable here - by design, the

@@ -868,6 +868,61 @@ bool HDRenderScissorAvailable();
 void HDRenderScissor(int left, int top, int right, int bottom);
 void HDRenderScissorOff();
 
+/* --- the projected shadow's map ---------------------------------------------
+ *
+ * A render target texture HD_SHADOW_MAP texels a side in D3DFMT_R32F and a
+ * depth surface of its own beside it (hd_shadow.h has the arithmetic,
+ * hd_model.cpp the draw). Both live in D3DPOOL_DEFAULT: HDRenderShutdown
+ * releases them, which is the path every device loss and every device end
+ * takes (HDLevelDeviceLost before a Reset, DXClose before a new device), and
+ * HDRenderShadowTargetReady makes them again when they are next asked for.
+ *
+ * HDRenderShadowTargetReady makes the pair when it does not exist yet and
+ * answers whether it exists. A device that refuses the format, the depth
+ * format, their match or the creation is not asked again until the device
+ * changes; the answer is then false and the blob stays.
+ *
+ * HDRenderShadowCastBegin, inside an open bracket: remembers the render
+ * target, the depth surface, the viewport, the scissor rectangle, the render
+ * states the pass sets, the shaders, the declaration, stream 0, the indices,
+ * texture 0 and the constants c0 - c166 of the vertex file and c4 of the pixel
+ * file; sets the map and its depth surface; clears the colour to 1 (nothing
+ * cast) and the depth to 1. False, with nothing changed, when the target does
+ * not exist or no bracket is open. HDRenderShadowCastEnd puts every one of
+ * them back and releases every reference the Get calls added. The map is
+ * never bound as a texture between the two. */
+struct IDirect3DTexture9;
+
+enum
+{
+	HD_SHADOW_TARGET_NONE = 0,	// never asked for on this device
+	HD_SHADOW_TARGET_MADE,
+	HD_SHADOW_TARGET_REFUSED,
+	HD_SHADOW_TARGET_RELEASED
+};
+
+/* What the target is, for the log. `reason` is "ok" or what refused it:
+ * no_device, format (R32F as a render target texture), depth (neither D24X8
+ * nor D16), match (CheckDepthStencilMatch), create (CreateTexture), surface
+ * (GetSurfaceLevel), depth_create (CreateDepthStencilSurface). `events`
+ * grows by one with every change of state. */
+struct HDShadowTargetInfo
+{
+	int state;
+	const char* reason;
+	const char* format;
+	const char* depth;
+	int size;
+	int events;
+};
+
+bool HDRenderShadowTargetReady();
+void HDRenderShadowTargetRelease();
+void HDRenderShadowTargetInfo(HDShadowTargetInfo* out);
+bool HDRenderShadowCastBegin();
+void HDRenderShadowCastEnd();
+IDirect3DTexture9* HDRenderShadowMap();
+
 /* Which of the three passes a call is to draw.
  *
  * The first two write depth and the third does not, and that one fact decides

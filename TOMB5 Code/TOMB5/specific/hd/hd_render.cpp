@@ -38,6 +38,7 @@
 #include "hd_gloss_pages.h"
 #include "hd_gloss_seed.h"
 #include "hd_gloss_field.h"
+#include "hd_shadow.h"			// HD_SHADOW_MAP, the projected shadow's map
 
 #include <algorithm>
 #include <array>
@@ -3501,10 +3502,18 @@ void HDRenderBookPageOverride(int page)
 	g_book_page = page >= 0 ? page : -1;
 }
 
+static void ShadowForgetRefusal();
+
 void HDRenderShutdown()
 {
 	release_buffers();
 	HDPageCacheDestroy();
+
+	/* The projected shadow's map belongs to the device that is going away,
+	 * and a refusal was that device's answer: the next device is asked
+	 * afresh. */
+	HDRenderShadowTargetRelease();
+	ShadowForgetRefusal();
 
 	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
@@ -6132,6 +6141,290 @@ void HDRenderFrameEnd()
 bool HDRenderInFrame()
 {
 	return g_in_frame;
+}
+
+/* ------------------------------------------------- the projected shadow -- */
+
+namespace
+{
+	IDirect3DTexture9* g_shadow_texture = 0;
+	IDirect3DSurface9* g_shadow_colour = 0;
+	IDirect3DSurface9* g_shadow_depth = 0;
+	HDShadowTargetInfo g_shadow_info = { HD_SHADOW_TARGET_NONE, "ok", "-", "-", 0, 0 };
+
+	/* The vertex registers the cast pass may write: gProj (c0 - c3) and
+	 * everything ModelVS reads up to gSoft (c163 - c166). */
+	const int kShadowVertexRegisters = 167;
+
+	/* What the cast pass changes, as it was. The render states are the ones
+	 * HDRenderShadowCastBegin sets; every other state the pass leaves alone. */
+	const D3DRENDERSTATETYPE kShadowRenderStates[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC, D3DRS_CULLMODE,
+		D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_STENCILENABLE,
+		D3DRS_SCISSORTESTENABLE, D3DRS_COLORWRITEENABLE, D3DRS_SRGBWRITEENABLE,
+		D3DRS_CLIPPING, D3DRS_FILLMODE, D3DRS_FOGENABLE
+	};
+
+	const int kShadowRenderStateCount =
+		(int)(sizeof(kShadowRenderStates) / sizeof(kShadowRenderStates[0]));
+
+	struct ShadowSaved
+	{
+		bool open = false;
+		IDirect3DSurface9* colour = 0;
+		IDirect3DSurface9* depth = 0;
+		D3DVIEWPORT9 viewport = {};
+		RECT scissor = { 0, 0, 0, 0 };
+		bool scissorValid = false;
+		DWORD rs[16] = {};
+		IDirect3DVertexShader9* vs = 0;
+		IDirect3DPixelShader9* ps = 0;
+		IDirect3DVertexDeclaration9* decl = 0;
+		DWORD fvf = 0;
+		IDirect3DVertexBuffer9* stream = 0;
+		UINT streamOffset = 0;
+		UINT streamStride = 0;
+		IDirect3DIndexBuffer9* indices = 0;
+		IDirect3DBaseTexture9* texture = 0;
+		float vertex[kShadowVertexRegisters * 4] = {};
+		float pixel[4] = {};
+	};
+
+	ShadowSaved g_shadow_saved;
+
+	void shadow_state(int state, const char* reason)
+	{
+		g_shadow_info.state = state;
+		g_shadow_info.reason = reason;
+		g_shadow_info.events++;
+	}
+
+	bool shadow_refuse(const char* reason)
+	{
+		HDRenderShadowTargetRelease();
+		shadow_state(HD_SHADOW_TARGET_REFUSED, reason);
+		return false;
+	}
+}
+
+bool HDRenderShadowTargetReady()
+{
+	if (g_shadow_texture && g_shadow_colour && g_shadow_depth)
+		return true;
+
+	if (g_shadow_info.state == HD_SHADOW_TARGET_REFUSED)
+		return false;
+
+	if (!g_device)
+		return shadow_refuse("no_device");
+
+	/* The format first, of the adapter the device runs on: R32F as a render
+	 * target texture, then a depth format that goes with it. The adapter
+	 * format is the display mode's, which is the back buffer's family on a
+	 * windowed device. */
+	IDirect3D9* d3d = 0;
+	D3DDEVICE_CREATION_PARAMETERS made;
+	D3DDISPLAYMODE mode;
+
+	if (FAILED(g_device->GetDirect3D(&d3d)) || !d3d)
+		return shadow_refuse("no_device");
+
+	const bool known = SUCCEEDED(g_device->GetCreationParameters(&made)) &&
+		SUCCEEDED(g_device->GetDisplayMode(0, &mode));
+	D3DFORMAT depth = D3DFMT_UNKNOWN;
+	const char* refused = 0;
+
+	if (!known)
+		refused = "no_device";
+	else if (FAILED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType, mode.Format,
+		D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_R32F)))
+		refused = "format";
+	else
+	{
+		static const D3DFORMAT kDepth[2] = { D3DFMT_D24X8, D3DFMT_D16 };
+
+		for (int i = 0; i < 2 && depth == D3DFMT_UNKNOWN; i++)
+			if (SUCCEEDED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType,
+				mode.Format, D3DUSAGE_DEPTHSTENCIL, D3DRTYPE_SURFACE, kDepth[i])))
+				depth = kDepth[i];
+
+		if (depth == D3DFMT_UNKNOWN)
+			refused = "depth";
+		else if (FAILED(d3d->CheckDepthStencilMatch(made.AdapterOrdinal, made.DeviceType,
+			mode.Format, D3DFMT_R32F, depth)))
+			refused = "match";
+	}
+
+	d3d->Release();
+
+	if (refused)
+		return shadow_refuse(refused);
+
+	if (FAILED(g_device->CreateTexture(HD_SHADOW_MAP, HD_SHADOW_MAP, 1, D3DUSAGE_RENDERTARGET,
+		D3DFMT_R32F, D3DPOOL_DEFAULT, &g_shadow_texture, 0)))
+	{
+		g_shadow_texture = 0;
+		return shadow_refuse("create");
+	}
+
+	if (FAILED(g_shadow_texture->GetSurfaceLevel(0, &g_shadow_colour)))
+	{
+		g_shadow_colour = 0;
+		return shadow_refuse("surface");
+	}
+
+	/* Not multisampled, like the texture, and discarded: the pass clears it
+	 * every frame and nothing reads it afterwards. */
+	if (FAILED(g_device->CreateDepthStencilSurface(HD_SHADOW_MAP, HD_SHADOW_MAP, depth,
+		D3DMULTISAMPLE_NONE, 0, TRUE, &g_shadow_depth, 0)))
+	{
+		g_shadow_depth = 0;
+		return shadow_refuse("depth_create");
+	}
+
+	g_shadow_info.format = "R32F";
+	g_shadow_info.depth = depth == D3DFMT_D24X8 ? "D24X8" : "D16";
+	g_shadow_info.size = HD_SHADOW_MAP;
+	shadow_state(HD_SHADOW_TARGET_MADE, "ok");
+	return true;
+}
+
+void HDRenderShadowTargetRelease()
+{
+	const bool had = g_shadow_texture || g_shadow_colour || g_shadow_depth;
+
+	if (g_shadow_depth) { g_shadow_depth->Release(); g_shadow_depth = 0; }
+	if (g_shadow_colour) { g_shadow_colour->Release(); g_shadow_colour = 0; }
+	if (g_shadow_texture) { g_shadow_texture->Release(); g_shadow_texture = 0; }
+
+	if (had)
+		shadow_state(HD_SHADOW_TARGET_RELEASED, "ok");
+}
+
+static void ShadowForgetRefusal()
+{
+	if (g_shadow_info.state == HD_SHADOW_TARGET_REFUSED)
+		shadow_state(HD_SHADOW_TARGET_RELEASED, "ok");
+}
+
+void HDRenderShadowTargetInfo(HDShadowTargetInfo* out)
+{
+	if (out)
+		*out = g_shadow_info;
+}
+
+IDirect3DTexture9* HDRenderShadowMap()
+{
+	return g_shadow_saved.open ? 0 : g_shadow_texture;
+}
+
+bool HDRenderShadowCastBegin()
+{
+	if (!g_device || !g_in_frame || g_shadow_saved.open || !g_shadow_texture ||
+		!g_shadow_colour || !g_shadow_depth)
+		return false;
+
+	ShadowSaved& s = g_shadow_saved;
+
+	s = ShadowSaved();
+
+	if (FAILED(g_device->GetRenderTarget(0, &s.colour)))
+		return false;
+
+	// A device without a depth surface answers with a failure and a null.
+	if (FAILED(g_device->GetDepthStencilSurface(&s.depth)))
+		s.depth = 0;
+
+	g_device->GetViewport(&s.viewport);
+	s.scissorValid = SUCCEEDED(g_device->GetScissorRect(&s.scissor));
+
+	for (int i = 0; i < kShadowRenderStateCount; i++)
+		g_device->GetRenderState(kShadowRenderStates[i], &s.rs[i]);
+
+	g_device->GetVertexShader(&s.vs);
+	g_device->GetPixelShader(&s.ps);
+	g_device->GetVertexDeclaration(&s.decl);
+	g_device->GetFVF(&s.fvf);
+	g_device->GetStreamSource(0, &s.stream, &s.streamOffset, &s.streamStride);
+	g_device->GetIndices(&s.indices);
+	g_device->GetTexture(0, &s.texture);
+	g_device->GetVertexShaderConstantF(0, s.vertex, kShadowVertexRegisters);
+	g_device->GetPixelShaderConstantF(4, s.pixel, 1);
+	s.open = true;
+
+	/* SetRenderTarget puts the viewport and the scissor rectangle to the
+	 * whole map; both are put back from the copies above. */
+	g_device->SetRenderTarget(0, g_shadow_colour);
+	g_device->SetDepthStencilSurface(g_shadow_depth);
+
+	D3DVIEWPORT9 whole = { 0, 0, HD_SHADOW_MAP, HD_SHADOW_MAP, 0.0f, 1.0f };
+
+	g_device->SetViewport(&whole);
+
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
+		D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
+	g_device->SetRenderState(D3DRS_SRGBWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CLIPPING, TRUE);
+	g_device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+
+	// White is 1.0 in the red channel of an R32F target: nothing cast.
+	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFFFFFFFF, 1.0f, 0);
+	return true;
+}
+
+void HDRenderShadowCastEnd()
+{
+	ShadowSaved& s = g_shadow_saved;
+
+	if (!s.open || !g_device)
+		return;
+
+	g_device->SetRenderTarget(0, s.colour);
+	g_device->SetDepthStencilSurface(s.depth);
+	g_device->SetViewport(&s.viewport);
+
+	if (s.scissorValid)
+		g_device->SetScissorRect(&s.scissor);
+
+	for (int i = 0; i < kShadowRenderStateCount; i++)
+		g_device->SetRenderState(kShadowRenderStates[i], s.rs[i]);
+
+	g_device->SetVertexShaderConstantF(0, s.vertex, kShadowVertexRegisters);
+	g_device->SetPixelShaderConstantF(4, s.pixel, 1);
+	g_device->SetTexture(0, s.texture);
+	g_device->SetIndices(s.indices);
+	g_device->SetStreamSource(0, s.stream, s.streamOffset, s.streamStride);
+
+	// The declaration as HDRenderStateRestore puts it back.
+	if (s.fvf)
+		g_device->SetFVF(s.fvf);
+	else
+		g_device->SetVertexDeclaration(s.decl);
+
+	g_device->SetVertexShader(s.vs);
+	g_device->SetPixelShader(s.ps);
+
+	if (s.colour) { s.colour->Release(); s.colour = 0; }
+	if (s.depth) { s.depth->Release(); s.depth = 0; }
+	if (s.vs) { s.vs->Release(); s.vs = 0; }
+	if (s.ps) { s.ps->Release(); s.ps = 0; }
+	if (s.decl) { s.decl->Release(); s.decl = 0; }
+	if (s.stream) { s.stream->Release(); s.stream = 0; }
+	if (s.indices) { s.indices->Release(); s.indices = 0; }
+	if (s.texture) { s.texture->Release(); s.texture = 0; }
+
+	s.open = false;
 }
 
 namespace

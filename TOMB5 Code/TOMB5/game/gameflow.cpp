@@ -1441,6 +1441,8 @@ const char* CustomText(const char* engl)
 		{ "off",             "off",             "aus",            "off",                "off" },
 		{ "Circle",          "Circle",          "Kreis",          "Circle",             "Circle" },
 		{ "Faded circle",    "Faded circle",    "Weicher Kreis",  "Faded circle",       "Faded circle" },
+		// Shadow mode's fifth value, offered while HD is on.
+		{ "Projected",       "Projected",       "Projiziert",     "Projected",          "Projected" },
 		{ "Improved",        "Improved",        "Verbessert",     "Improved",           "Improved" },
 		{ "Clear",           "Clear",           "Klar",           "Clear",              "Clear" },
 		{ "Light",           "Light",           "Leicht",         "Light",              "Light" },

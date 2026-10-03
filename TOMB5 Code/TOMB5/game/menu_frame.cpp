@@ -29,6 +29,8 @@
 #include "../specific/audio.h"
 #include "../specific/dxsound.h"
 #include "../specific/function_stubs.h"	// Log, gLogEnabled - the MENULOG seam
+#include "../specific/hd/hd_level.h"		// HDEnabled - the Shadow mode row's fifth state
+#include "../specific/hd/hd_shadow.h"		// HDShadowBlobMode - what a stored 5 draws without HD
 #include "../tomb5/tomb5.h"
 #include "../tomb5/troyestuff.h"
 
@@ -680,26 +682,52 @@ static bool MenuStepFootprints(long, long dir)
 	return 1;
 }
 
+/* Shadow mode: base's four blobs, 1 Original, 2 Circle, 3 Faded circle and
+ * 4 PSX, and a fifth state, 5 Projected - the HD Lara's projected shadow
+ * (specific/hd/hd_shadow.h). The fifth state is offered only while HD is on,
+ * HDEnabled(): the HD textures row and an installed Remaster found. It asks
+ * no level, so it answers the same in the title screen and in a running
+ * level. Without HD the engine draws a stored 5 as the faded circle
+ * (HDShadowBlobMode), so then the row is the four-state row and a stored 5
+ * is shown and stepped as what is drawn: right gives PSX, left Circle. Only
+ * a step writes the option, so a 5 survives a visit to the page with HD off.
+ * Every other stored value steps as base's row: past the top to 1, below 1
+ * to the top. The draw decides once a frame whether the projected shadow
+ * runs (specific/hd/hd_laradraw.cpp, HDShadowFrameDecide), so a change here
+ * shows on the next drawn frame of the running level; a frame without it
+ * forgets the following, and the first frame with it places the shadow
+ * where the light throws it at once (hd_shadow.h, HDShadowFollowStep). */
+static ulong MenuShadowModeShown(bool hd)
+{
+	return hd ? tomb5.shadow_mode : (ulong)HDShadowBlobMode((long)tomb5.shadow_mode);
+}
+
 static const char* MenuValShadowMode(long, char* buf)
 {
-	strcpy(buf, CustomText(tomb5.shadow_mode == 1 ? "Original" : tomb5.shadow_mode == 2 ? "Circle" :
-	           tomb5.shadow_mode == 3 ? "Faded circle" : "PSX"));
+	const ulong shown = MenuShadowModeShown(HDEnabled());
+
+	strcpy(buf, CustomText(shown == 1 ? "Original" : shown == 2 ? "Circle" :
+	           shown == 3 ? "Faded circle" : shown == 5 ? "Projected" : "PSX"));
 	return buf;
 }
 
 static bool MenuStepShadowMode(long, long dir)
 {
+	const bool hd = HDEnabled();
+	const ulong shown = MenuShadowModeShown(hd);
+	const ulong top = hd ? HD_SHADOW_MODE_PROJECTED : HD_SHADOW_MODE_PSX;
+
 	if (dir > 0)
 	{
 		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-		tomb5.shadow_mode = tomb5.shadow_mode >= 4 ? 1 : tomb5.shadow_mode + 1;
+		tomb5.shadow_mode = shown >= top ? 1 : shown + 1;
 		return 1;
 	}
 
 	if (dir < 0)
 	{
 		SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-		tomb5.shadow_mode = tomb5.shadow_mode <= 1 ? 4 : tomb5.shadow_mode - 1;
+		tomb5.shadow_mode = shown <= 1 ? top : shown - 1;
 		return 1;
 	}
 

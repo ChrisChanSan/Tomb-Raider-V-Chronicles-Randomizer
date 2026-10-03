@@ -17,7 +17,8 @@
 /* The projected shadow of the HD Lara: the arithmetic.
  *
  * Four pieces, each a pure function of its arguments: the KEY LIGHT, one
- * direction and one darkness out of the lights that light her; the FOLLOWING,
+ * direction and one darkness - a fixed slant and a fixed darkness, which the
+ * lights that light her turn and deepen by the table's PULL; the FOLLOWING,
  * which draws both where her movement through the light puts them at once
  * and blends a change of the lights over game time so that it never steps;
  * the BOX, an orthographic volume round her seen along that direction, with
@@ -35,8 +36,13 @@
 
 /* ------------------------------------------------------------ the table -- */
 
-/* Every number that decides how the shadow looks, in one place. None is
- * measured against the game; they are a starting point to be tuned.
+/* Every number that decides how the shadow looks, in one place.
+ *
+ * With PULL at 0 the shadow's light is one fixed light for the whole game:
+ * FALLBACK_SLANT off straight down, from the side FALLBACK_X/_Z name, at the
+ * darkness DARK * LOW, whatever lights her list holds - the shadow moves
+ * only as she does. W_REF, W_FALLBACK, SLANT_MAX and TAU shape what the
+ * lights add, and matter only while PULL is above 0.
  *
  *   MAP         texels a side of the square map. More is a sharper outline
  *               and a dearer pass; the box below over this is the size of a
@@ -46,30 +52,49 @@
  *               2048 holds her standing outline with room on every side.
  *   DEPTH       the box's length along the light, units: what lies further
  *               from her middle than half of it neither casts nor receives.
- *   DARK        how much a fully shadowed pixel loses, 0..1: 0.45 keeps 0.55
- *               of its colour. Higher is a blacker shadow.
- *   LOW         the part of DARK left where no light gives a direction (the
- *               lights cancel, or there are none). Lower makes a shadow in
- *               a flatly lit room fainter; 1 makes it as dark as anywhere.
- *   W_REF       the summed light weight (luminance times falloff) from which
- *               the direction counts fully. Higher needs brighter lamps
- *               before the shadow reaches its full darkness.
- *   W_FALLBACK  the weight of the fixed slant added to every direction, so
- *               the direction is defined in a room without lights and turns
- *               smoothly as lights come and go. Higher pulls every shadow
- *               towards the fixed slant.
- *   FALLBACK_SLANT  that fixed slant, degrees off straight down. 0 puts a
- *               shadow without lights under her feet; more lays it beside
- *               them.
+ *   DARK        how much a pixel loses in the darkest shadow the lights can
+ *               give, 0..1, where all of them agree and their weight reaches
+ *               W_REF. The fixed light's shadow is DARK * LOW of it. Higher
+ *               is a blacker shadow.
+ *   LOW         the part of DARK the shadow has where no light gives a
+ *               direction - with PULL 0 everywhere. At 0.75 the shadow loses
+ *               0.34 of a pixel's colour and keeps 0.66: about the darkness
+ *               the lamps give her with PULL 1 over 45 seconds of ANDREA2
+ *               (0.28 to 0.43, 0.32 on average). Higher is a darker shadow, 1
+ *               is DARK itself.
+ *   PULL        how much the lights of her list turn the shadow away from
+ *               the fixed slant and deepen it, 0..1: every light's weight is
+ *               multiplied by it, in the direction's sum and in the darkness
+ *               alike. 0 is the fixed light; 1 the lights' full part. 0,
+ *               because the lamps of the levels light the walls - low, close
+ *               and one at a time - and each throws the shadow somewhere
+ *               else: over 45 seconds of ANDREA2 at PULL 1 her list holds no
+ *               lamp or one, the direction turns by more than 40 degrees
+ *               from one second to the next 27 times in 44 (104 at most),
+ *               and it stands within a degree of SLANT_MAX in 19 of them.
+ *   W_REF       the summed light weight (luminance times falloff, times
+ *               PULL) from which the direction counts fully. Higher needs
+ *               brighter lamps before the shadow reaches its full darkness.
+ *               Only while PULL is above 0.
+ *   W_FALLBACK  the weight of the fixed slant added to the lights' sum, so
+ *               the direction turns smoothly as lights come and go. Higher
+ *               pulls every shadow towards the fixed slant. Only while PULL
+ *               is above 0.
+ *   FALLBACK_SLANT  the fixed slant, degrees off straight down. 0 puts the
+ *               shadow under her feet; more lays it beside them, her height
+ *               times the tangent long: 0.58 of it at 30, a little more than
+ *               half her height.
  *   SLANT_MAX   the steepest slant off straight down a shadow may have,
  *               degrees. Higher allows longer shadows from low lamps; the
  *               shadow's length grows with the tangent, 1.43 of her height
- *               at 55.
+ *               at 55. Only while PULL is above 0, or for a FALLBACK_SLANT
+ *               above it, which it holds to itself.
  *   TAU         the time constant with which a change of the lights blends
  *               in, game seconds: after TAU it has gone 63 per cent of the
  *               way, after three TAU 95. Longer is softer and slower. Her
  *               own movement through the light is drawn at once whatever it
- *               is.
+ *               is. Only while PULL is above 0: at 0 the lights change
+ *               nothing, so nothing blends.
  *   FULL, END   below her lowest node: a receiver up to FULL units below
  *               takes the whole shadow, from END on none, smooth between - a
  *               storey under her takes none through its ceiling.
@@ -84,10 +109,11 @@
 #define HD_SHADOW_BOX			2048.0f
 #define HD_SHADOW_DEPTH			2048.0f
 #define HD_SHADOW_DARK			0.45f
-#define HD_SHADOW_LOW			0.6f
+#define HD_SHADOW_LOW			0.75f
+#define HD_SHADOW_PULL			0.0f
 #define HD_SHADOW_W_REF			0.5f
 #define HD_SHADOW_W_FALLBACK		0.15f
-#define HD_SHADOW_FALLBACK_SLANT	25.0f
+#define HD_SHADOW_FALLBACK_SLANT	30.0f
 #define HD_SHADOW_SLANT_MAX		55.0f
 #define HD_SHADOW_TAU			0.5f
 #define HD_SHADOW_FULL			1024.0f
@@ -205,11 +231,11 @@ struct HDShadowLight
  *
  *   dir       the unit direction the shadow is thrown in
  *   strength  DARK * lerp(LOW, 1, agree)
- *   weight    the summed weight of the lights counted
+ *   weight    the summed weight of the lights counted, before the pull
  *   agree     0..1: how far the lights agree on one direction, times how far
- *             their weight reaches W_REF
+ *             their weight times the pull reaches W_REF; 0 at pull 0
  *   slant     degrees between dir and straight down
- *   lights    lights with a weight above 0 */
+ *   lights    lights with a weight above 0, before the pull */
 struct HDShadowKey
 {
 	float dir[3];
@@ -288,20 +314,25 @@ inline bool HDShadowLimit(float* d)
 	return true;
 }
 
-/* The key light's target for a reference point P on her.
+/* The key light's target for a reference point P on her, with `pull` the
+ * lights' part, held to 0..1 - the table's PULL unless the caller gives one.
  *
  * Every light gives a weight w = luminance * falloff at P (1 for a sun) and
  * a direction d, the way it travels at P: a sun's own, and P minus the lamp,
- * made unit, for a point or a spot. The direction is the sum of w * d plus
- * W_FALLBACK times the fixed slant, made unit and held to the slant limit -
- * continuous in P, and defined in a room without lights. The strength
- * follows how far the lights agree: |sum w d| / sum w, times sum w over
- * W_REF, both held to 0..1. */
+ * made unit, for a point or a spot; the key light uses pull * w. The
+ * direction is the sum of pull * w * d plus W_FALLBACK times the fixed
+ * slant, made unit and held to the slant limit - continuous in P - and the
+ * fixed slant itself where that sum is nothing. The strength follows how far
+ * the lights agree: |sum pull w d| / sum pull w, times sum pull w over W_REF,
+ * both held to 0..1. At pull 0 every product is 0, so the target is the
+ * fixed slant at DARK * LOW, the same bits for any lights and any P. */
 inline void HDShadowKeyTarget(const HDShadowLight* lights, int count, const float* P,
-	HDShadowKey* out)
+	HDShadowKey* out, float pull = HD_SHADOW_PULL)
 {
+	const float k = hd_shadow_saturate(pull);
 	float sum[3] = { 0.0f, 0.0f, 0.0f };
 	float weight = 0.0f;
+	float pulled = 0.0f;
 	int used = 0;
 
 	for (int i = 0; lights && i < count && i < HD_SHADOW_MAX_LIGHTS; i++)
@@ -347,10 +378,13 @@ inline void HDShadowKeyTarget(const HDShadowLight* lights, int count, const floa
 		if (!(w > 0.0f) || !hd_shadow_finite(w))
 			continue;
 
-		sum[0] += w * d[0];
-		sum[1] += w * d[1];
-		sum[2] += w * d[2];
+		const float wp = k * w;
+
+		sum[0] += wp * d[0];
+		sum[1] += wp * d[1];
+		sum[2] += wp * d[2];
 		weight += w;
+		pulled += wp;
 		used++;
 	}
 
@@ -358,14 +392,26 @@ inline void HDShadowKeyTarget(const HDShadowLight* lights, int count, const floa
 
 	HDShadowFallback(fb);
 
-	out->dir[0] = sum[0] + HD_SHADOW_W_FALLBACK * fb[0];
-	out->dir[1] = sum[1] + HD_SHADOW_W_FALLBACK * fb[1];
-	out->dir[2] = sum[2] + HD_SHADOW_W_FALLBACK * fb[2];
-	hd_shadow_unit(out->dir);
+	/* A sum of nothing leaves the fixed slant as HDShadowFallback gives
+	 * it, so the fixed light does not depend on the rounding of a unit
+	 * vector made of a fraction of itself. */
+	if (sum[0] == 0.0f && sum[1] == 0.0f && sum[2] == 0.0f)
+	{
+		for (int i = 0; i < 3; i++)
+			out->dir[i] = fb[i];
+	}
+	else
+	{
+		out->dir[0] = sum[0] + HD_SHADOW_W_FALLBACK * fb[0];
+		out->dir[1] = sum[1] + HD_SHADOW_W_FALLBACK * fb[1];
+		out->dir[2] = sum[2] + HD_SHADOW_W_FALLBACK * fb[2];
+		hd_shadow_unit(out->dir);
+	}
+
 	HDShadowLimit(out->dir);
 
-	const float agree = hd_shadow_saturate(hd_shadow_len(sum) / (weight + HD_SHADOW_AGREE_EPS)) *
-		hd_shadow_saturate(weight / HD_SHADOW_W_REF);
+	const float agree = hd_shadow_saturate(hd_shadow_len(sum) / (pulled + HD_SHADOW_AGREE_EPS)) *
+		hd_shadow_saturate(pulled / HD_SHADOW_W_REF);
 
 	out->agree = agree;
 	out->strength = HD_SHADOW_DARK * (HD_SHADOW_LOW + (1.0f - HD_SHADOW_LOW) * agree);
@@ -387,7 +433,8 @@ inline void HDShadowKeyTarget(const HDShadowLight* lights, int count, const floa
  * lights at the last step's reference point before each step; against the
  * last step's target that is what the lights alone changed, at one place,
  * and the step takes it into the offset, which falls off along
- * exp(-t / TAU).
+ * exp(-t / TAU). At PULL 0 the target is the same in every frame, the offset
+ * stays 0 and the target is drawn as it is.
  *
  *   primed    0 until the first step, and after a reset; the next step snaps
  *   dir       the drawn direction, a unit vector
@@ -440,8 +487,10 @@ inline float HDShadowDecay(float dt)
 
 /* The measurement before a step: the frame's lights - the same ones its
  * target is made of - weighed at the last step's reference point,
- * HDShadowKeyTarget at `at`. Nothing before the first step, which snaps. */
-inline void HDShadowFollowLights(HDShadowFollow* f, const HDShadowLight* lights, int count)
+ * HDShadowKeyTarget at `at` with the same pull as the target. Nothing before
+ * the first step, which snaps. */
+inline void HDShadowFollowLights(HDShadowFollow* f, const HDShadowLight* lights, int count,
+	float pull = HD_SHADOW_PULL)
 {
 	f->measured = 0;
 
@@ -450,7 +499,7 @@ inline void HDShadowFollowLights(HDShadowFollow* f, const HDShadowLight* lights,
 
 	HDShadowKey back;
 
-	HDShadowKeyTarget(lights, count, f->at, &back);
+	HDShadowKeyTarget(lights, count, f->at, &back, pull);
 
 	for (int i = 0; i < 3; i++)
 		f->back[i] = back.dir[i];

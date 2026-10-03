@@ -4667,11 +4667,15 @@ static void ShadowReceivePass()
  * shadow runs, behind -log:
  *
  *   dir=       the drawn direction of the light, world axes (y down)
- *   target=    the key light's direction this frame; the drawn one differs
- *              from it only while a change of the lights blends in
- *   strength=  the drawn strength / the target's
- *   lights=    lights that gave a weight this frame
- *   weight=    their summed weight (luminance times falloff)
+ *   target=    the key light's direction this frame, the fixed slant while
+ *              HD_SHADOW_PULL is 0; the drawn one differs from it only while
+ *              a change of the lights blends in
+ *   strength=  the drawn strength / the target's, DARK * LOW while the pull
+ *              is 0
+ *   lights=    lights of her list that gave a weight this frame, before the
+ *              pull
+ *   weight=    their summed weight (luminance times falloff), before the
+ *              pull
  *   slant=     degrees between the drawn direction and straight down
  *   snaps=     snaps of the following in that second (a reset, a gap, a jump)
  *   cast=      frames whose map was drawn / frames the shadow ran
@@ -4681,9 +4685,9 @@ static void ShadowReceivePass()
  *   ms=        processor time of the two passes, a frame (the mean)
  *   stencil=   1 when the depth surface's stencil guards each pixel
  *   lag=       the largest angle in that second between the drawn direction
- *              and the frame's target, degrees: near 0 while only she moves,
- *              up at a change of the lights and back down over about a
- *              second and a half */
+ *              and the frame's target, degrees: 0 while the pull is 0; above
+ *              it, near 0 while only she moves, up at a change of the lights
+ *              and back down over about a second and a half */
 static bool g_shadow_window = false;
 static unsigned short g_shadow_window_at = 0;
 

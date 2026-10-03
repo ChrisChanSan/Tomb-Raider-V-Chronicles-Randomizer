@@ -7260,53 +7260,50 @@ half-texel shift, no texel snap, a basis that flips, two gates swapped, a hard b
 the height term reversed, faces turned away taking it, flat tap weights, no bias, the
 clear value casting, the height plane without her lowest node, the light's row reversed,
 the reach cut at her feet, a 5 handed to the blob and projected without the gate.
-Fourteen mutations of the following fail as well, with the
-number of checks each fails: the measurement not used, so every change of the target
-trails again (38), the jump measured at the new reference point (38), offset times decay
-minus jump in place of (offset - jump) times decay (43), no decay (51), a linear decay
-(41), the jump's sign reversed (48), the offset not drawn (39), a snap that keeps the
-offset (4), a standing clock that drops the jump (5), no jump test (1), no slant limit on
-the drawn direction (1), the strength not held to 0..DARK (1), an offset that is not a
-number kept (1), no lag (9); a measurement before the first step, which that step's snap
-discards, is the one change that fails none, and changes nothing. The groups pin one sun
-to within 1e-3 degrees of its own direction beside the slant's weight. With fixed lights
-(one lamp; two lamps and a sun) and her walking past the lamp at 30, 60 and 165 steps a
-second, the drawn direction is each step's target within 0.001 degrees and the strength
-within 1e-6, the lag stays under 0.001 degrees, and every step after she stops draws the
-same bits as the one before. With a lamp removed, a sun added or a lamp's colour halved
-(turns of 31, 8 and 14 degrees) every later step follows the closed form within 0.005
-degrees and 1e-5 of strength, the change's own step is the curve's first step, and the
-three rates draw the same at 1.2, 1.6, 2 and 3 seconds; walking while a lamp is removed,
-the offset is -jump exp(-t / TAU) within 1e-5 whichever way she walks on. Further: the
-half-texel rule by rasterising the cast matrix, the lookup falling from 1 to 0 across an
-edge by under 0.01 per hundredth of a texel and the receive registers on the one mapping
-within 0.01 texel 60,000 units out. On this
-machine the device gives R32F 512 x 512 with D24X8; the device's reference count reads 72,
-74 and 72 before, with and after the map; the map is the same bit for bit across a device
-`Reset`. The two passes cost 0.087 ms a frame on JOBY2 room 8 and 0.090 ms on ANDREA1 room
-0 against a 2560 x 1440 target, the cast pass alone 0.061 ms (ModelProbe `-shadowtime` and
-`-shadowdevice`, 300 frames each waited for with an event query). The pictures (ModelProbe
-`-shadowroom` with `-shadowreceive`, looked at one by one): with the light at 22 degrees a
-short outline at her feet; at 45 degrees her whole outline beside her on the floor; at the
-slant limit a longer one; on ANDREA1 room 159's steps the shadow lies on the treads,
-broken at the edge of each step; against the pillar of JOBY2 room 8 it runs along the
-floor and up the wall; through ANDREA1 room 0's railing the floor behind the bars takes it
-and the bars do not; every one meets her feet without a gap, has a soft edge without
-steps, stripes or speckles, darkens nothing outside the outline, and the box's border is
-nowhere to be seen. With nothing cast the picture with both passes is the picture without
-them byte for byte, so the passes leave the device as they find it and the models drawn
-after them see the states they always saw; with the stencil guard switched off the three
-scenes come out byte-identical as well, so none of them has two faces in one plane.
-The row: MenuTest 42,613 (42,439 and 174 in `graphics_shadow_row`), none failed. It
-reads the row's lines and the new string in the tree and includes `hd_shadow.h`; swept
-are the five states with HD and both wraps and their texts, the four without, a stored 5
-shown as *Faded circle* and stepped to PSX and Circle and kept with no direction, every
-other stored value against the four-state rule, and `HDShadowFollowStep` snapping on the
-first step after the reset a frame without the shadow makes. Against the tree before the
-row it fails 4 checks; eleven single changes each fail one: five states without HD, a
-stored 5 not mapped, showing that writes, 5 shown as PSX, either wrap wrong, HD read from
-the level, no sound, the save class dropped, the German untranslated, the following not
-reset.
+Fourteen mutations of the following each fail at least one check: the measurement not
+used, so every change of the target trails again, the jump measured at the new reference
+point, offset times decay minus jump in place of (offset - jump) times decay, no decay, a
+linear decay, the jump's sign reversed, the offset not drawn, a snap that keeps the
+offset, a standing clock that drops the jump, no jump test, no slant limit on the drawn
+direction, the strength not held to 0..DARK, an offset that is not a number kept, no lag;
+a measurement before the first step, which that step's snap discards, is the one change
+that fails none, and changes nothing. The groups pin one sun to within 1e-3 degrees of its
+own direction beside the slant's weight. With fixed lights (one lamp; two lamps and a sun)
+and her walking past the lamp at 30, 60 and 165 steps a second, the drawn direction is
+each step's target within 0.001 degrees and the strength within 1e-6, the lag stays under
+0.001 degrees, and every step after she stops draws the same bits as the one before. With
+a lamp removed, a sun added or a lamp's colour halved (turns of 31, 8 and 14 degrees)
+every later step follows the closed form within 0.005 degrees and 1e-5 of strength, the
+change's own step is the curve's first step, and the three rates draw the same at 1.2,
+1.6, 2 and 3 seconds; walking while a lamp is removed, the offset is -jump exp(-t / TAU)
+within 1e-5 whichever way she walks on. Further: the half-texel rule by rasterising the
+cast matrix, the lookup falling from 1 to 0 across an edge by under 0.01 per hundredth of
+a texel and the receive registers on the one mapping within 0.01 texel 60,000 units out.
+On this machine the device gives R32F 512 x 512 with D24X8; the device's reference count
+reads 72, 74 and 72 before, with and after the map; the map is the same bit for bit across
+a device `Reset`. The two passes cost 0.087 ms a frame on JOBY2 room 8 and 0.090 ms on
+ANDREA1 room 0 against a 2560 x 1440 target, the cast pass alone 0.061 ms (ModelProbe
+`-shadowtime` and `-shadowdevice`, 300 frames each waited for with an event query). The
+pictures (ModelProbe `-shadowroom` with `-shadowreceive`, looked at one by one): with the
+light at 22 degrees a short outline at her feet; at 45 degrees her whole outline beside
+her on the floor; at the slant limit a longer one; on ANDREA1 room 159's steps the shadow
+lies on the treads, broken at the edge of each step; against the pillar of JOBY2 room 8 it
+runs along the floor and up the wall; through ANDREA1 room 0's railing the floor behind
+the bars takes it and the bars do not; every one meets her feet without a gap, has a soft
+edge without steps, stripes or speckles, darkens nothing outside the outline, and the
+box's border is nowhere to be seen. With nothing cast the picture with both passes is the
+picture without them byte for byte, so the passes leave the device as they find it and the
+models drawn after them see the states they always saw; with the stencil guard switched
+off the three scenes come out byte-identical as well, so none of them has two faces in one
+plane. The row: MenuTest 42,613 (42,439 and 174 in `graphics_shadow_row`), none failed. It
+reads the row's lines and the new string in the tree and includes `hd_shadow.h`; swept are
+the five states with HD and both wraps and their texts, the four without, a stored 5 shown
+as *Faded circle* and stepped to PSX and Circle and kept with no direction, every other
+stored value against the four-state rule, and `HDShadowFollowStep` snapping on the first
+step after the reset a frame without the shadow makes. Against the tree before the row it
+fails 4 checks; eleven single changes each fail one: five states without HD, a stored 5
+not mapped, showing that writes, 5 shown as PSX, either wrap wrong, HD read from the
+level, no sound, the save class dropped, the German untranslated, the following not reset.
 
 **Unchanged.** `hd_room.hlsl`, `hd_model.hlsl`, `hd_glow.hlsl` and their six `.inc` are
 byte for byte the files of before. With `tomb5.hd_enable` 0 the HD path is not reached
@@ -7385,7 +7382,7 @@ lights' change in time', 'Round 188 (#188): the suites', 'Round 188 (#188): the 
 follows', 'Round 188 (#188): what the correction's review pass 1 found', 'Round 188
 (#188): the record follows', 'Round 188 (#188): the shadow's light is a fixed one, and the
 lamps pull by a number of the table', 'Round 188 (#188): the suites', 'Round 188 (#188):
-the record follows'.
+the record follows', 'Round 188 (#188): the record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

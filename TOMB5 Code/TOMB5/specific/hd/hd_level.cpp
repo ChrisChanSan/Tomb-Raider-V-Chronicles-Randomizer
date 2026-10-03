@@ -4528,36 +4528,6 @@ bool HDFrameSky(const float* viewWorld)
 	return drew;
 }
 
-/* The frame in two phases.
- *
- * The first two passes write depth and the third does not (hd_render.cpp,
- * draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE FALSE). Drawn
- * room-major - all passes of one room, then the next, then the objects, then
- * the classic buckets - every later draw that writes depth and stands behind
- * a glow passes the depth test (the glow left no depth to fail against) and
- * paints over it: a RICH2 wall lamp whose cone hangs in a portal is cut off
- * along the portal's edge by the far wall of the room beyond, and an
- * object's glow disappears behind a classic crate.
- *
- * So the order is the classic engine's own: everything that writes depth
- * first, whatever it belongs to, then everything that does not.
- *
- *   HDFrameDraw       every room's passes 0 and 1, then every HD object and
- *                     Lara's passes 0 and 1
- *   DrawBuckets       the classic opaque world (output.cpp)
- *   HDFrameDrawGlow   every room's pass 2, then every object's pass 2
- *   DrawSortList      TR5's own see-through polygons, last of all
- *
- * so an HD glow is behind the classic sort list and in front of every opaque
- * thing it should be in front of - as the classic path does with its own
- * additive polygons.
- *
- * The cost is one more state bracket per frame (HDRenderFrameBegin does a
- * GetRenderState and a SetRenderState for each state it owns) and one more
- * prepare per drawn room - two matrix multiplies and the room's light block.
- * The lighting itself is worked out once: FillRoomLighting counts the lights
- * it turns away, so it runs in this phase and the glow phase reads what it
- * left in the FrameRoom. */
 /* The projected shadow's cast pass: Lara's parts that her main draw marked,
  * into the map, as seen along the frame's key light. Inside the frame's
  * bracket and after the room loops, so the device is in the HD path's state;
@@ -4771,6 +4741,36 @@ void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear)
 		memset(&g_shadow_stats, 0, sizeof(g_shadow_stats));
 }
 
+/* The frame in two phases.
+ *
+ * The first two passes write depth and the third does not (hd_render.cpp,
+ * draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE FALSE). Drawn
+ * room-major - all passes of one room, then the next, then the objects, then
+ * the classic buckets - every later draw that writes depth and stands behind
+ * a glow passes the depth test (the glow left no depth to fail against) and
+ * paints over it: a RICH2 wall lamp whose cone hangs in a portal is cut off
+ * along the portal's edge by the far wall of the room beyond, and an
+ * object's glow disappears behind a classic crate.
+ *
+ * So the order is the classic engine's own: everything that writes depth
+ * first, whatever it belongs to, then everything that does not.
+ *
+ *   HDFrameDraw       every room's passes 0 and 1, then every HD object and
+ *                     Lara's passes 0 and 1
+ *   DrawBuckets       the classic opaque world (output.cpp)
+ *   HDFrameDrawGlow   every room's pass 2, then every object's pass 2
+ *   DrawSortList      TR5's own see-through polygons, last of all
+ *
+ * so an HD glow is behind the classic sort list and in front of every opaque
+ * thing it should be in front of - as the classic path does with its own
+ * additive polygons.
+ *
+ * The cost is one more state bracket per frame (HDRenderFrameBegin does a
+ * GetRenderState and a SetRenderState for each state it owns) and one more
+ * prepare per drawn room - two matrix multiplies and the room's light block.
+ * The lighting itself is worked out once: FillRoomLighting counts the lights
+ * it turns away, so it runs in this phase and the glow phase reads what it
+ * left in the FrameRoom. */
 void HDFrameDraw()
 {
 	const int objects_here = HDObjectFrameCount();

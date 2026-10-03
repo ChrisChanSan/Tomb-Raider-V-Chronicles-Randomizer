@@ -721,6 +721,264 @@ inline const char* HDShadowGateWord(int gate)
 	}
 }
 
+/* ------------------------------------------------------ the blob's mode -- */
+
+/* What tomb5.shadow_mode draws. The stored value is the option as the menu
+ * and the registry hold it; the EFFECTIVE value is what a frame draws with
+ * it:
+ *
+ *   1 original, 2 circle, 3 faded circle, 4 PSX   the blob of S_PrintShadow,
+ *                 for Lara and for every other item, in HD as without it
+ *   5 projected   Lara's projected shadow where it runs; every blob that is
+ *                 still drawn - every other item's, and Lara's in a frame the
+ *                 projected shadow does not run in - is the faded circle
+ *
+ * Any other stored value is handed on as it is, so S_PrintShadow draws for
+ * it what it always drew (its circle). */
+#define HD_SHADOW_MODE_ORIGINAL	1
+#define HD_SHADOW_MODE_CIRCLE		2
+#define HD_SHADOW_MODE_FADED		3
+#define HD_SHADOW_MODE_PSX		4
+
+/* The mode every blob is drawn with: the stored one, with 5 drawn as the
+ * faded circle. The one function every reader of the option in
+ * specificfx.cpp asks. */
+inline long HDShadowBlobMode(long stored)
+{
+	return stored == HD_SHADOW_MODE_PROJECTED ? HD_SHADOW_MODE_FADED : stored;
+}
+
+/* The mode Lara is drawn with in a frame whose gate answered `gate`
+ * (HDShadowGate): 5 exactly when the projected shadow runs, her blob's mode
+ * otherwise. */
+inline long HDShadowEffectiveMode(long stored, int gate)
+{
+	return stored == HD_SHADOW_MODE_PROJECTED && gate == HD_SHADOW_GATE_OK
+		? HD_SHADOW_MODE_PROJECTED : HDShadowBlobMode(stored);
+}
+
+/* The log's word for an effective mode. S_PrintShadow draws its plain circle
+ * for 2 and for every value it has no branch of its own for, so those are
+ * all "circle". */
+inline const char* HDShadowModeWord(long effective)
+{
+	switch (effective)
+	{
+	case HD_SHADOW_MODE_ORIGINAL: return "original";
+	case HD_SHADOW_MODE_FADED: return "faded";
+	case HD_SHADOW_MODE_PSX: return "psx";
+	case HD_SHADOW_MODE_PROJECTED: return "projected";
+	default: return "circle";
+	}
+}
+
+/* ---------------------------------------------------------- the receive -- */
+
+/* The HD room groups near her are drawn a second time with a pixel shader of
+ * its own (hd_shader/hd_shadow_receive.hlsl): the same vertex shader, the
+ * same constants and the same ranges as their opaque and alpha passes, the
+ * depth test EQUAL, and the picture multiplied by
+ *
+ *     1 - strength * lookup * edge * height * facing
+ *
+ * The functions below are that formula on the processor, term by term, for
+ * ModernTest and for the probes; the shader is their transcription. */
+
+/* The edge term at (u, v): 1 inside the box, falling to 0 linearly over the
+ * outer EDGE of its half width - 0.05 of the map's side at EDGE 0.1 - and 0
+ * outside it, so the box's border is never seen. */
+inline float HDShadowEdgeTerm(float u, float v)
+{
+	const float a = u < 1.0f - u ? u : 1.0f - u;
+	const float b = v < 1.0f - v ? v : 1.0f - v;
+
+	return hd_shadow_saturate((a < b ? a : b) / (0.5f * HD_SHADOW_EDGE));
+}
+
+/* The height term for a receiver `below` units below her lowest node (y
+ * grows downward, so a receiver above that node has a negative `below`): 1
+ * down to FULL, 0 from END on, linear between - the floor of a storey under
+ * her takes no shadow through its ceiling. */
+inline float HDShadowHeightTerm(float below)
+{
+	return hd_shadow_saturate((HD_SHADOW_END - below) / (HD_SHADOW_END - HD_SHADOW_FULL));
+}
+
+/* The facing term for n.l, the unit normal of the face against the unit
+ * direction towards the light: 0 for a face turned away (a ceiling, the far
+ * side of a wall), 1 from FACING on, linear between. */
+inline float HDShadowFacingTerm(float ndotl)
+{
+	return hd_shadow_saturate(ndotl / HD_SHADOW_FACING);
+}
+
+/* The weights of the four taps along one axis for a position `f` (0..1)
+ * inside its texel: 1 - f, 1, 1, f on the texels i - 1, i, i + 1 and i + 2,
+ * i the texel whose centre is at or before the position. They sum to 3, so
+ * the sixteen of a block sum to 9; each is linear in f and the block slides
+ * over by one texel exactly when f wraps from 1 to 0, so the lookup is
+ * continuous in the position - no step where a texel ends. */
+inline void HDShadowTapWeights(float f, float* w)
+{
+	w[0] = 1.0f - f;
+	w[1] = 1.0f;
+	w[2] = 1.0f;
+	w[3] = f;
+}
+
+/* The lookup, as the receive shader does it, on a map of `size` x `size`
+ * depths held row by row (row 0 at v = 0): the 4 x 4 texels round (u, v),
+ * clamped at the map's border as the sampler's CLAMP clamps them; a texel
+ * casts when it is not the clear value 1 and lies nearer the light than
+ * `depth` minus the bias. The weighted share of casting texels, 0..1. */
+inline float HDShadowLookup(const float* map, int size, float u, float v, float depth)
+{
+	if (!map || size <= 0)
+		return 0.0f;
+
+	const float s = u * (float)size - 0.5f;
+	const float r = v * (float)size - 0.5f;
+	const float bs = floorf(s);
+	const float br = floorf(r);
+	float wx[4], wy[4];
+
+	HDShadowTapWeights(s - bs, wx);
+	HDShadowTapWeights(r - br, wy);
+
+	float limit = depth - HD_SHADOW_BIAS / HD_SHADOW_DEPTH;
+
+	limit = limit < 1.0f ? limit : 1.0f;
+
+	float sum = 0.0f;
+
+	for (int j = 0; j < 4; j++)
+		for (int k = 0; k < 4; k++)
+		{
+			int x = (int)bs + k - 1;
+			int y = (int)br + j - 1;
+
+			x = x < 0 ? 0 : (x >= size ? size - 1 : x);
+			y = y < 0 ? 0 : (y >= size ? size - 1 : y);
+
+			if (map[y * size + x] < limit)
+				sum += wx[k] * wy[j];
+		}
+
+	return sum * (1.0f / 9.0f);
+}
+
+/* The pixel registers of the receive shader, in this order from
+ * HD_SHADOW_RECEIVE_FIRST on (hd_shadow_receive.hlsl's table):
+ *
+ *   +0 .. +2  u, v and depth as dot(float4(viewPos, 1), row): the columns of
+ *             HDShadowViewToMap, so receiver and caster share one mapping
+ *   +3        the height term before its saturate, as a plane in view space:
+ *             (END - (y - lowest)) / (END - FULL), y the world y of the point
+ *   +4        xyz the unit direction towards the light in view space, w
+ *             1 / FACING
+ *   +5        x the strength, y 1 / (EDGE / 2), z BIAS in depth units, w MAP
+ *   +6        x 1 / MAP
+ *
+ * `R` and `t` are the frame's world-to-view, view = R p + t. */
+#define HD_SHADOW_RECEIVE_FIRST		96
+#define HD_SHADOW_RECEIVE_COUNT		7
+
+inline void HDShadowReceiveConstants(const HDShadowBox* b, const float* R, const float* t,
+	float strength, float* regs)
+{
+	float m[16];
+
+	HDShadowViewToMap(b, R, t, m);
+
+	for (int i = 0; i < HD_SHADOW_RECEIVE_COUNT * 4; i++)
+		regs[i] = 0.0f;
+
+	for (int c = 0; c < 3; c++)
+	{
+		regs[c * 4 + 0] = m[0 * 4 + c];
+		regs[c * 4 + 1] = m[1 * 4 + c];
+		regs[c * 4 + 2] = m[2 * 4 + c];
+		regs[c * 4 + 3] = m[3 * 4 + c];
+	}
+
+	/* World y = sum_i R[i][1] (v_i - t_i); worked in double for the same
+	 * reason as HDShadowViewToMap - the constant is a difference of large
+	 * positions. */
+	const double span = (double)HD_SHADOW_END - (double)HD_SHADOW_FULL;
+	double ty = 0.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		regs[12 + i] = (float)(-(double)R[i * 3 + 1] / span);
+		ty += (double)t[i] * R[i * 3 + 1];
+	}
+
+	regs[15] = (float)(((double)HD_SHADOW_END + b->lowest + ty) / span);
+
+	for (int i = 0; i < 3; i++)
+		regs[16 + i] = -(R[i * 3 + 0] * b->fwd[0] + R[i * 3 + 1] * b->fwd[1] +
+			R[i * 3 + 2] * b->fwd[2]);
+
+	regs[19] = 1.0f / HD_SHADOW_FACING;
+	regs[20] = strength;
+	regs[21] = 1.0f / (0.5f * HD_SHADOW_EDGE);
+	regs[22] = HD_SHADOW_BIAS / HD_SHADOW_DEPTH;
+	regs[23] = (float)HD_SHADOW_MAP;
+	regs[24] = 1.0f / (float)HD_SHADOW_MAP;
+}
+
+/* The world box a receiver must touch to take any of the shadow: the box's
+ * cross-section along the light, from DEPTH / 2 on the light's side of her
+ * middle (where her casting parts end) down to where the height term ends
+ * (lowest + END), as an axis-aligned box. A room group whose own box misses
+ * it is not drawn again. Generous on purpose: the corners of a slanted
+ * prism's box hold more than the prism. */
+inline void HDShadowReach(const HDShadowBox* b, float* mins, float* maxs)
+{
+	const float half = 0.5f * HD_SHADOW_BOX;
+	const float bottom = b->lowest + HD_SHADOW_END;
+	const float spread = half * (fabsf(b->right[1]) + fabsf(b->up[1]));
+	const float down = b->fwd[1] > 0.1f ? b->fwd[1] : 0.1f;
+	const float nearF = -0.5f * HD_SHADOW_DEPTH;
+	float farF = (bottom - b->centre[1] + spread) / down;
+
+	farF = farF > nearF ? farF : nearF;
+
+	for (int i = 0; i < 3; i++)
+	{
+		mins[i] = 3.0e38f;
+		maxs[i] = -3.0e38f;
+	}
+
+	for (int corner = 0; corner < 8; corner++)
+	{
+		const float a = (corner & 1) ? half : -half;
+		const float c = (corner & 2) ? half : -half;
+		const float f = (corner & 4) ? farF : nearF;
+
+		for (int i = 0; i < 3; i++)
+		{
+			const float p = b->centre[i] + a * b->right[i] + c * b->up[i] + f * b->fwd[i];
+
+			mins[i] = p < mins[i] ? p : mins[i];
+			maxs[i] = p > maxs[i] ? p : maxs[i];
+		}
+	}
+
+	maxs[1] = maxs[1] < bottom ? maxs[1] : bottom;
+}
+
+/* Whether two axis-aligned boxes overlap, edges included. */
+inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float* bmin,
+	const float* bmax)
+{
+	for (int i = 0; i < 3; i++)
+		if (amax[i] < bmin[i] || bmax[i] < amin[i])
+			return false;
+
+	return true;
+}
+
 /* ------------------------------------------------------------ the frame -- */
 
 /* One drawn frame's projected shadow, filled by hd_laradraw.cpp at Lara's

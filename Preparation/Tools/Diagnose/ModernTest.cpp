@@ -13107,8 +13107,56 @@ static void shadow_key()
 	}
 }
 
-/* The following in time: the closed form, three frame rates, the snaps, a
- * clock that stands. */
+/* The following the way shadow_step drives it: the frame's target out of
+ * the lights at P, the same lights weighed at the last step's P, the step.
+ * True when the step snapped. */
+static bool sh_follow(HDShadowFollow* f, const HDShadowLight* lights, int count, const float* P,
+	float dt, HDShadowKey* target)
+{
+	HDShadowKeyTarget(lights, count, P, target);
+	HDShadowFollowLights(f, lights, count);
+	return HDShadowFollowStep(f, target, P, dt);
+}
+
+/* The closed form of a change of the lights from the target `from` to `to`
+ * with `e` of the change still held back: to + (from - to) e, worked in
+ * double, made unit and held to the slant limit; the strength likewise,
+ * held to 0..DARK. */
+static void sh_closed(const HDShadowKey& from, const HDShadowKey& to, double e, float* dir,
+	float* strength)
+{
+	double raw[3], l = 0.0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		raw[i] = to.dir[i] + ((double)from.dir[i] - to.dir[i]) * e;
+		l += raw[i] * raw[i];
+	}
+
+	l = sqrt(l);
+
+	for (int i = 0; i < 3; i++)
+		dir[i] = (float)(raw[i] / l);
+
+	HDShadowLimit(dir);
+
+	const double s = to.strength + ((double)from.strength - to.strength) * e;
+
+	*strength = (float)(s > 0.0 ? (s < HD_SHADOW_DARK ? s : HD_SHADOW_DARK) : 0.0);
+}
+
+/* Whether a step left no offset and drew the target as it is. */
+static bool sh_cleared(const HDShadowFollow& f, const HDShadowKey& k)
+{
+	return f.offset[0] == 0.0f && f.offset[1] == 0.0f && f.offset[2] == 0.0f &&
+		f.offsetStrength == 0.0f && f.dir[0] == k.dir[0] && f.dir[1] == k.dir[1] &&
+		f.dir[2] == k.dir[2] && f.strength == k.strength;
+}
+
+/* The following's ground: the first step snaps to the target; a step given
+ * only a target, with no measurement of the lights, counts the whole change
+ * of the target as the lights' and blends it along the closed form; the
+ * decay of an offset. */
 static void shadow_follow()
 {
 	const float P[3] = { 100.0f, 200.0f, 300.0f };
@@ -13119,139 +13167,652 @@ static void shadow_follow()
 	memset(&from, 0, sizeof(from));
 	memset(&to, 0, sizeof(to));
 	from.dir[1] = 1.0f;
-	from.strength = 0.0f;
+	from.strength = 0.1f;
 	to.dir[0] = sinf(0.6f);
 	to.dir[1] = cosf(0.6f);
-	to.strength = 1.0f;
+	to.strength = 0.4f;
 
-	ok(HDShadowFollowStep(&f, &from, P, 0.0f) && f.strength == 0.0f && f.snaps == 1,
+	ok(HDShadowFollowStep(&f, &from, P, 0.0f) && f.strength == from.strength &&
+		f.dir[0] == 0.0f && f.dir[1] == 1.0f && f.snaps == 1 && f.offsetStrength == 0.0f,
 		"shadow: the first step snaps to the target", f.snaps, 1);
 
-	// The closed form: after n steps of dt, 1 - exp(-n dt / TAU) of the way.
-	bool closed = true;
+	// After n steps of dt, exp(-n dt / TAU) of the change is still held back.
+	double worst = 0.0, worstS = 0.0;
 
 	for (int n = 1; n <= 90; n++)
 	{
 		HDShadowFollowStep(&f, &to, P, 1.0f / 60.0f);
 
-		if (fabs(f.strength - (1.0 - exp(-(double)n / 60.0 / HD_SHADOW_TAU))) > 2e-5)
-			closed = false;
+		float cd[3], cs;
+
+		sh_closed(from, to, exp(-(double)n / 60.0 / HD_SHADOW_TAU), cd, &cs);
+
+		const double a = sh_angle(f.dir, cd);
+		const double e = fabs((double)f.strength - cs);
+
+		worst = a > worst ? a : worst;
+		worstS = e > worstS ? e : worstS;
 	}
 
-	ok(closed && f.snaps == 1,
-		"shadow: the strength follows 1 - exp(-t / TAU) step by step",
-		sh_milli(f.strength), sh_milli(1.0 - exp(-1.5 / HD_SHADOW_TAU)));
+	ok(worst < 1e-3 && worstS < 2e-6 && f.snaps == 1,
+		"shadow: given only a target, a change is blended along exp(-t / TAU)",
+		sh_milli(worst), 0);
 
-	/* The same path at 30, 60 and 165 frames a second: the target turns and
-	 * darkens at a fifth of a second and turns back and lightens at one,
-	 * sampled at 0.6, 1.2 and 2 seconds - every one a whole number of frames
-	 * at all three rates (a fifteenth of a second is 2, 4 and 11 frames), so
-	 * the three see the target change at the same moment. */
+	ok(HDShadowDecay(0.0f) == 1.0f && HDShadowDecay(-1.0f) == 1.0f &&
+		fabs(HDShadowDecay(HD_SHADOW_TAU) - exp(-1.0)) < 1e-6,
+		"shadow: after one TAU 37 per cent of an offset is left, none decays without time",
+		sh_milli(HDShadowDecay(HD_SHADOW_TAU)), sh_milli(exp(-1.0)));
+}
+
+/* Her movement is not delayed. With the lights fixed - one lamp; two lamps
+ * and a sun - P walks past the lamp at 1000 units a second for four seconds
+ * and then stands for two, at 30, 60 and 165 steps a second: in every step
+ * the drawn direction and strength are that step's target, the log's lag
+ * stays near 0, and once she stands every further step draws the same bits
+ * as the one before. */
+static void shadow_follow_move()
+{
+	const float O[3] = { 30000.0f, -2000.0f, 41000.0f };
+	const HDShadowLight one[1] =
+	{
+		sh_lamp(HD_SHADOW_POINT, O[0], O[1] - 900.0f, O[2], 1.0f, 3000.0f)
+	};
+	const HDShadowLight three[3] =
+	{
+		sh_lamp(HD_SHADOW_POINT, O[0], O[1] - 900.0f, O[2], 0.9f, 3000.0f),
+		sh_lamp(HD_SHADOW_SPOT, O[0] + 1200.0f, O[1] - 700.0f, O[2] - 400.0f, 0.6f, 2500.0f),
+		sh_sun(0.4f, 1.0f, -0.3f, 0.3f)
+	};
+	const HDShadowLight* sets[2] = { one, three };
+	const int counts[2] = { 1, 3 };
+	const char* names[2] = { "one lamp", "two lamps and a sun" };
 	const int rates[3] = { 30, 60, 165 };
-	const double times[3] = { 0.6, 1.2, 2.0 };
-	double got[3][3][2];
+	char what[192];
 
-	for (int r = 0; r < 3; r++)
-	{
-		HDShadowFollow g;
-
-		memset(&g, 0, sizeof(g));
-		HDShadowFollowStep(&g, &from, P, 0.0f);
-
-		const int frames = 2 * rates[r];
-		int next = 0;
-
-		for (int i = 1; i <= frames; i++)
+	for (int s = 0; s < 2; s++)
+		for (int r = 0; r < 3; r++)
 		{
-			const double t = (double)i / rates[r];
-			HDShadowKey want = t <= 0.2 + 1e-9 ? from : to;
+			const int rate = rates[r];
+			const float dt = 1.0f / (float)rate;
+			HDShadowFollow f;
+			HDShadowKey k, start, end;
+			double worstA = 0.0, worstS = 0.0;
+			float held[3] = { 0.0f, 0.0f, 0.0f };
+			float heldS = 0.0f;
+			bool same = true;
 
-			if (t > 1.0 + 1e-9)
+			memset(&f, 0, sizeof(f));
+			memset(&start, 0, sizeof(start));
+			memset(&end, 0, sizeof(end));
+
+			for (int i = 0; i <= 6 * rate; i++)
 			{
-				want = to;
-				want.strength = 0.4f;
-				want.dir[0] = -sinf(0.3f);
-				want.dir[1] = cosf(0.3f);
+				const double t = (double)(i < 4 * rate ? i : 4 * rate) / rate;
+				const float at[3] = { O[0] - 2000.0f + (float)(1000.0 * t), O[1],
+					O[2] + (float)(150.0 * t) };
+
+				sh_follow(&f, sets[s], counts[s], at, i ? dt : 0.0f, &k);
+
+				if (i == 0)
+					start = k;
+
+				if (i <= 4 * rate)
+				{
+					const double a = sh_angle(f.dir, k.dir);
+					const double e = fabs((double)f.strength - k.strength);
+
+					worstA = a > worstA ? a : worstA;
+					worstS = e > worstS ? e : worstS;
+					end = k;
+				}
+				else if (f.dir[0] != held[0] || f.dir[1] != held[1] || f.dir[2] != held[2] ||
+					f.strength != heldS)
+					same = false;
+
+				for (int j = 0; j < 3; j++)
+					held[j] = f.dir[j];
+
+				heldS = f.strength;
 			}
 
-			HDShadowFollowStep(&g, &want, P, 1.0f / (float)rates[r]);
-
-			while (next < 3 && t >= times[next] - 1e-9)
-			{
-				got[r][next][0] = g.strength;
-				got[r][next][1] = HDShadowSlant(g.dir) * (g.dir[0] < 0.0f ? -1.0 : 1.0);
-				next++;
-			}
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the drawn direction is each step's target",
+				names[s], rate);
+			ok(worstA < 1e-3 && sh_angle(start.dir, end.dir) > 30.0, what, sh_milli(worstA), 0);
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the drawn strength is each step's target",
+				names[s], rate);
+			ok(worstS < 1e-6, what, sh_milli(worstS * 1000.0), 0);
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the log's lag stays near 0", names[s], rate);
+			ok(f.lag < 1e-3f, what, sh_milli(f.lag), 0);
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - standing, every step draws the same bits",
+				names[s], rate);
+			ok(same, what, same ? 1 : 0, 1);
 		}
-	}
+}
 
-	double worst = 0.0;
+/* A change of the lights is blended. P stands; at one second a lamp is
+ * removed, a sun added, or a lamp's colour halved. Every later step draws
+ * the closed form new + (old - new) exp(-(t - 1) / TAU), t from the last
+ * step with the old lights, made unit and held to the limit, and the
+ * strength likewise; the step of the change moves no further than the
+ * curve's own first step; 30, 60 and 165 steps a second draw the same at
+ * the same moments; and the log's lag is 0 before the change, about the
+ * whole turn right after it, and under a tenth of it a second and a half
+ * later. */
+static void shadow_follow_lights()
+{
+	const float P[3] = { 30000.0f, -2000.0f, 41000.0f };
+	const HDShadowLight A = sh_lamp(HD_SHADOW_POINT, P[0] - 700.0f, P[1] - 900.0f, P[2] + 200.0f,
+		1.0f, 3000.0f);
+	const HDShadowLight B = sh_lamp(HD_SHADOW_POINT, P[0] + 900.0f, P[1] - 600.0f, P[2] - 300.0f,
+		0.8f, 2500.0f);
+	const HDShadowLight sun = sh_sun(0.5f, 1.0f, 0.2f, 0.7f);
+	HDShadowLight half = B;
 
-	for (int r = 1; r < 3; r++)
-		for (int s = 0; s < 3; s++)
-			for (int q = 0; q < 2; q++)
+	half.r = half.g = half.b = 0.4f;
+
+	const HDShadowLight olds[3][2] = { { A, B }, { A, A }, { A, B } };
+	const int oldN[3] = { 2, 1, 2 };
+	const HDShadowLight news[3][2] = { { A, A }, { A, sun }, { A, half } };
+	const int newN[3] = { 1, 2, 2 };
+	const char* names[3] = { "a lamp removed", "a sun added", "a lamp's colour halved" };
+	const int rates[3] = { 30, 60, 165 };
+
+	/* Whole numbers of steps at all three rates, as the change at one second
+	 * is, so the three see it at the same moment. */
+	const double times[4] = { 1.2, 1.6, 2.0, 3.0 };
+	char what[192];
+
+	for (int c = 0; c < 3; c++)
+	{
+		HDShadowKey from, to;
+		float got[3][4][4];
+
+		HDShadowKeyTarget(olds[c], oldN[c], P, &from);
+		HDShadowKeyTarget(news[c], newN[c], P, &to);
+
+		const double turn = sh_angle(from.dir, to.dir);
+
+		for (int r = 0; r < 3; r++)
+		{
+			const int rate = rates[r];
+			const float dt = 1.0f / (float)rate;
+			HDShadowFollow f;
+			HDShadowKey k;
+			double worstA = 0.0, worstS = 0.0, stepA = -1.0, stepWant = 0.0;
+			float lagBefore = 0.0f, lagAt = 0.0f;
+			float prev[3] = { 0.0f, 0.0f, 0.0f };
+			int next = 0;
+
+			memset(&f, 0, sizeof(f));
+
+			for (int i = 0; i <= 3 * rate; i++)
 			{
-				/* Relative to the size of the move, so a value near zero is
-				 * not judged by its own smallness. */
-				const double span = q ? 34.4 + 17.2 : 1.0;
-				const double e = fabs(got[r][s][q] - got[0][s][q]) / span;
+				const double t = (double)i / rate;
+				const bool changed = i > rate;
 
-				worst = e > worst ? e : worst;
+				sh_follow(&f, changed ? news[c] : olds[c], changed ? newN[c] : oldN[c], P,
+					i ? dt : 0.0f, &k);
+
+				if (changed)
+				{
+					float cd[3], cs;
+
+					sh_closed(from, to, exp(-(t - 1.0) / HD_SHADOW_TAU), cd, &cs);
+
+					const double a = sh_angle(f.dir, cd);
+					const double e = fabs((double)f.strength - cs);
+
+					worstA = a > worstA ? a : worstA;
+					worstS = e > worstS ? e : worstS;
+
+					if (i == rate + 1)
+					{
+						stepA = sh_angle(f.dir, prev);
+						stepWant = sh_angle(from.dir, cd);
+					}
+				}
+
+				if (i == rate)
+				{
+					lagBefore = f.lag;
+					f.lag = 0.0f;
+				}
+				else if (i == 2 * rate + rate / 2)
+				{
+					lagAt = f.lag;
+					f.lag = 0.0f;
+				}
+
+				for (int j = 0; j < 3; j++)
+					prev[j] = f.dir[j];
+
+				while (next < 4 && t >= times[next] - 1e-9)
+				{
+					for (int j = 0; j < 3; j++)
+						got[r][next][j] = f.dir[j];
+
+					got[r][next][3] = f.strength;
+					next++;
+				}
 			}
 
-	ok(worst < 0.02,
-		"shadow: 30, 60 and 165 frames a second follow the same path within 2 per cent",
-		sh_milli(worst * 100.0), 0);
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the direction follows the closed form",
+				names[c], rate);
+			ok(worstA < 0.005 && turn > 3.0, what, sh_milli(worstA), 0);
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the strength follows the closed form",
+				names[c], rate);
+			ok(worstS < 1e-5, what, sh_milli(worstS * 1000.0), 0);
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the change's step is the curve's first step",
+				names[c], rate);
+			ok(stepA > 0.0 && fabs(stepA - stepWant) < 0.005 && stepA < 0.07 * turn, what,
+				sh_milli(stepA), sh_milli(stepWant));
+			snprintf(what, sizeof(what),
+				"shadow: %s, %d steps a second - the log's lag: 0, the turn, under a tenth",
+				names[c], rate);
+			ok(lagBefore < 1e-3f && lagAt > 0.8 * turn && lagAt < turn + 1e-3 &&
+				f.lag < 0.1 * turn, what, sh_milli(lagAt), sh_milli(turn));
+		}
 
-	// The snaps: a gap, a jump, a time that is not a number, a reset.
-	memset(&f, 0, sizeof(f));
-	HDShadowFollowStep(&f, &from, P, 0.0f);
-	ok(HDShadowFollowStep(&f, &to, P, HD_SHADOW_GAP * 1.5f) && f.strength == to.strength &&
-		f.dir[0] == to.dir[0],
-		"shadow: a gap beyond GAP snaps to the target", sh_milli(f.strength), 1000);
+		double worstR = 0.0, worstRS = 0.0;
 
-	HDShadowFollowReset(&f);
-	HDShadowFollowStep(&f, &from, P, 0.0f);
-	HDShadowFollowStep(&f, &from, P, 1.0f / 60.0f);
+		for (int r = 1; r < 3; r++)
+			for (int s = 0; s < 4; s++)
+			{
+				const double a = sh_angle(got[r][s], got[0][s]);
+				const double e = fabs((double)got[r][s][3] - got[0][s][3]);
 
-	const float far[3] = { P[0] + HD_SHADOW_SPEED / 60.0f + HD_SHADOW_SLACK + 1.0f, P[1], P[2] };
-	const float near[3] = { P[0] + HD_SHADOW_SPEED / 60.0f + HD_SHADOW_SLACK - 1.0f, P[1], P[2] };
-	HDShadowFollow g = f;
+				worstR = a > worstR ? a : worstR;
+				worstRS = e > worstRS ? e : worstRS;
+			}
 
-	ok(HDShadowFollowStep(&f, &to, far, 1.0f / 60.0f) && f.strength == 1.0f &&
-		!HDShadowFollowStep(&g, &to, near, 1.0f / 60.0f) && g.strength < 0.1f,
-		"shadow: a jump further than she can move snaps, one just inside glides",
-		sh_milli(g.strength), 0);
+		snprintf(what, sizeof(what),
+			"shadow: %s - 30, 60 and 165 steps a second draw the same at the same moments",
+			names[c]);
+		ok(worstR < 0.005 && worstRS < 1e-5, what, sh_milli(worstR), 0);
+	}
+}
 
-	ok(HDShadowFollowStep(&f, &from, near, sqrtf(-1.0f)) && f.strength == 0.0f,
-		"shadow: a time that is not a number snaps", sh_milli(f.strength), 0);
-
-	HDShadowFollowReset(&f);
-	ok(HDShadowFollowStep(&f, &to, near, 1.0f / 60.0f) && f.strength == 1.0f,
-		"shadow: the step after a reset snaps", sh_milli(f.strength), 1000);
-
-	// A clock that stands moves nothing, whatever the target does.
-	HDShadowFollowStep(&f, &from, near, 0.0f);
-	HDShadowFollowStep(&f, &from, near, 0.1f);
-
-	const HDShadowFollow before = f;
-	bool still = true;
-
-	for (int i = 0; i < 50; i++)
+/* Both at once: she walks while a lamp is removed. The offset - the drawn
+ * values minus the target, the direction before it is made unit - is
+ * -jump exp(-(t - t0) / TAU), the jump being the change of the lights
+ * measured where she stood at t0, the last step with the old lights; it is
+ * the same whichever way she walks on, and the drawn direction is the
+ * target plus it. */
+static void shadow_follow_both()
+{
+	const float O[3] = { 30000.0f, -2000.0f, 41000.0f };
+	const HDShadowLight A = sh_lamp(HD_SHADOW_POINT, O[0] - 700.0f, O[1] - 900.0f, O[2] + 200.0f,
+		1.0f, 3000.0f);
+	const HDShadowLight old[2] =
 	{
-		HDShadowFollowStep(&f, i & 1 ? &to : &from, near, 0.0f);
+		A, sh_lamp(HD_SHADOW_POINT, O[0] + 900.0f, O[1] - 600.0f, O[2] - 300.0f, 0.8f, 2500.0f)
+	};
+	const char* names[3] = { "she stops", "she walks on", "she turns back" };
+	const int rates[2] = { 60, 165 };
+	static float offs[3][400][4];
+	char what[192];
 
-		if (f.strength != before.strength || f.dir[0] != before.dir[0] ||
-			f.dir[1] != before.dir[1] || f.snaps != before.snaps)
-			still = false;
+	for (int r = 0; r < 2; r++)
+	{
+		const int rate = rates[r];
+		const float dt = 1.0f / (float)rate;
+
+		for (int p = 0; p < 3; p++)
+		{
+			HDShadowFollow f;
+			HDShadowKey k, jf, jt;
+			float at0[3] = { 0.0f, 0.0f, 0.0f };
+			double worstO = 0.0, worstOS = 0.0, worstC = 0.0, jump = 0.0;
+
+			memset(&f, 0, sizeof(f));
+
+			for (int i = 0; i <= 2 * rate; i++)
+			{
+				const double t = (double)i / rate;
+				const double u = t < 1.0 ? t : 1.0;
+				const double v = t > 1.0 ? t - 1.0 : 0.0;
+				float at[3] = { O[0] - 800.0f + (float)(900.0 * u), O[1], O[2] + (float)(100.0 * u) };
+
+				if (p == 1)
+				{
+					at[0] += (float)(900.0 * v);
+					at[2] += (float)(100.0 * v);
+				}
+				else if (p == 2)
+				{
+					at[0] -= (float)(300.0 * v);
+					at[2] -= (float)(700.0 * v);
+				}
+
+				if (i > rate)
+					sh_follow(&f, &A, 1, at, dt, &k);
+				else
+					sh_follow(&f, old, 2, at, i ? dt : 0.0f, &k);
+
+				if (i == rate)
+				{
+					for (int j = 0; j < 3; j++)
+						at0[j] = at[j];
+
+					HDShadowKeyTarget(old, 2, at0, &jf);
+					HDShadowKeyTarget(&A, 1, at0, &jt);
+					jump = sh_angle(jf.dir, jt.dir);
+				}
+
+				if (i <= rate)
+					continue;
+
+				const double e = exp(-(t - 1.0) / HD_SHADOW_TAU);
+
+				for (int j = 0; j < 3; j++)
+				{
+					const double want = -((double)jt.dir[j] - jf.dir[j]) * e;
+					const double d = fabs(f.offset[j] - want);
+
+					worstO = d > worstO ? d : worstO;
+				}
+
+				const double wantS = -((double)jt.strength - jf.strength) * e;
+				const double ds = fabs(f.offsetStrength - wantS);
+
+				worstOS = ds > worstOS ? ds : worstOS;
+
+				float sum[3] = { f.last[0] + f.offset[0], f.last[1] + f.offset[1],
+					f.last[2] + f.offset[2] };
+
+				hd_shadow_unit(sum);
+				HDShadowLimit(sum);
+
+				const double c = sh_angle(sum, f.dir);
+
+				worstC = c > worstC ? c : worstC;
+
+				for (int j = 0; j < 3; j++)
+					offs[p][i - rate - 1][j] = f.offset[j];
+
+				offs[p][i - rate - 1][3] = f.offsetStrength;
+			}
+
+			snprintf(what, sizeof(what),
+				"shadow: walking while a lamp is removed (%s, %d/s) - the offset is -jump exp(-t / TAU)",
+				names[p], rate);
+			ok(worstO < 1e-5 && jump > 3.0, what, sh_milli(worstO * 1000.0), 0);
+			snprintf(what, sizeof(what),
+				"shadow: walking while a lamp is removed (%s, %d/s) - the strength's offset too",
+				names[p], rate);
+			ok(worstOS < 1e-6, what, sh_milli(worstOS * 1000.0), 0);
+			snprintf(what, sizeof(what),
+				"shadow: walking while a lamp is removed (%s, %d/s) - drawn is target plus offset",
+				names[p], rate);
+			ok(worstC < 1e-3, what, sh_milli(worstC), 0);
+		}
+
+		double worstP = 0.0;
+
+		for (int p = 1; p < 3; p++)
+			for (int i = 0; i < rate; i++)
+				for (int j = 0; j < 4; j++)
+				{
+					const double d = fabs((double)offs[p][i][j] - offs[0][i][j]);
+
+					worstP = d > worstP ? d : worstP;
+				}
+
+		snprintf(what, sizeof(what),
+			"shadow: %d steps a second - the offset does not depend on the way she walks on",
+			rate);
+		ok(worstP < 1e-6, what, sh_milli(worstP * 1000.0), 0);
+	}
+}
+
+/* The edges: every snap clears the offset and draws the target; a clock
+ * that stands takes a change of the lights without decay, and nothing leaps
+ * when it runs again; lights that flicker under a standing clock move
+ * nothing; no offset, whatever it points at, leads out of the slant limit or
+ * to a NaN; and lights without a direction give no NaN. */
+static void shadow_follow_edges()
+{
+	const float P[3] = { 30000.0f, -2000.0f, 41000.0f };
+	const HDShadowLight A = sh_lamp(HD_SHADOW_POINT, P[0] - 700.0f, P[1] - 900.0f, P[2] + 200.0f,
+		1.0f, 3000.0f);
+	const HDShadowLight old[2] =
+	{
+		A, sh_lamp(HD_SHADOW_POINT, P[0] + 900.0f, P[1] - 600.0f, P[2] - 300.0f, 0.8f, 2500.0f)
+	};
+	const float dt = 1.0f / 60.0f;
+	HDShadowKey from, to, k, k2;
+	HDShadowFollow settled, live;
+
+	HDShadowKeyTarget(old, 2, P, &from);
+	HDShadowKeyTarget(&A, 1, P, &to);
+
+	const double turn = sh_angle(from.dir, to.dir);
+
+	memset(&settled, 0, sizeof(settled));
+
+	for (int i = 0; i <= 60; i++)
+		sh_follow(&settled, old, 2, P, i ? dt : 0.0f, &k);
+
+	live = settled;
+	sh_follow(&live, &A, 1, P, dt, &k);
+
+	const bool held = fabs(live.offset[0]) + fabs(live.offset[1]) + fabs(live.offset[2]) > 0.01;
+
+	// Every snap clears the offset: a gap, a jump, a time that is no number, a reset.
+	{
+		HDShadowFollow f = live;
+
+		ok(held && sh_follow(&f, &A, 1, P, HD_SHADOW_GAP * 1.5f, &k) && sh_cleared(f, k),
+			"shadow: a gap beyond GAP snaps, clears the offset and draws the target",
+			sh_milli(sh_angle(f.dir, k.dir)), 0);
 	}
 
-	ok(still, "shadow: nothing moves while the clock stands", f.snaps, before.snaps);
+	{
+		const float far[3] = { P[0] + HD_SHADOW_SPEED / 60.0f + HD_SHADOW_SLACK + 1.0f, P[1], P[2] };
+		const float near[3] = { P[0] + HD_SHADOW_SPEED / 60.0f + HD_SHADOW_SLACK - 1.0f, P[1], P[2] };
+		HDShadowFollow f = live, g = live;
+		const bool snapFar = sh_follow(&f, &A, 1, far, dt, &k);
+		const bool snapNear = sh_follow(&g, &A, 1, near, dt, &k2);
 
-	ok(HDShadowBlend(0.0f) == 0.0f && HDShadowBlend(-1.0f) == 0.0f &&
-		fabs(HDShadowBlend(HD_SHADOW_TAU) - (1.0 - exp(-1.0))) < 1e-6,
-		"shadow: one TAU goes 63 per cent of the way", sh_milli(HDShadowBlend(HD_SHADOW_TAU)),
-		sh_milli(1.0 - exp(-1.0)));
+		ok(snapFar && sh_cleared(f, k) && !snapNear &&
+			fabs(g.offset[0]) + fabs(g.offset[1]) + fabs(g.offset[2]) > 0.005,
+			"shadow: a jump further than she can move snaps and clears, one just inside does not",
+			sh_milli(sh_angle(g.dir, k2.dir)), 0);
+	}
+
+	{
+		HDShadowFollow f = live;
+
+		ok(sh_follow(&f, &A, 1, P, sqrtf(-1.0f), &k) && sh_cleared(f, k),
+			"shadow: a time that is not a number snaps and clears the offset",
+			sh_milli(f.strength), sh_milli(k.strength));
+	}
+
+	{
+		HDShadowFollow f = live;
+
+		HDShadowFollowReset(&f);
+		ok(sh_follow(&f, &A, 1, P, dt, &k) && sh_cleared(f, k) && f.snaps == live.snaps + 1,
+			"shadow: the step after a reset snaps and clears the offset", f.snaps, live.snaps + 1);
+	}
+
+	/* A change of the lights under a standing clock, dt 0 and dt below 0:
+	 * the jump goes into the offset whole, so nothing is drawn differently,
+	 * and the next step with the clock running moves exactly the curve's
+	 * first step. */
+	const float stand[2] = { 0.0f, -0.01f };
+	float first[3], firstS;
+
+	sh_closed(from, to, exp(-dt / HD_SHADOW_TAU), first, &firstS);
+
+	const double firstStep = sh_angle(from.dir, first);
+
+	for (int d = 0; d < 2; d++)
+	{
+		HDShadowFollow f = settled;
+		const float before[3] = { f.dir[0], f.dir[1], f.dir[2] };
+		const float beforeS = f.strength;
+		char what[160];
+
+		sh_follow(&f, &A, 1, P, stand[d], &k);
+
+		double taken = 0.0;
+
+		for (int j = 0; j < 3; j++)
+		{
+			const double e = fabs(f.offset[j] + ((double)to.dir[j] - from.dir[j]));
+
+			taken = e > taken ? e : taken;
+		}
+
+		snprintf(what, sizeof(what),
+			"shadow: dt %s - a change of the lights goes into the offset without decay",
+			d ? "below 0" : "0");
+		ok(sh_angle(f.dir, before) < 1e-4 && fabs(f.strength - beforeS) < 1e-6 && taken < 1e-6,
+			what, sh_milli(sh_angle(f.dir, before)), 0);
+
+		const float still[3] = { f.dir[0], f.dir[1], f.dir[2] };
+
+		sh_follow(&f, &A, 1, P, dt, &k);
+
+		const double moved = sh_angle(f.dir, still);
+
+		snprintf(what, sizeof(what),
+			"shadow: dt %s - the clock running again moves one step of the curve, no leap",
+			d ? "below 0" : "0");
+		ok(fabs(moved - firstStep) < 0.005 && moved < 0.05 * turn, what, sh_milli(moved),
+			sh_milli(firstStep));
+	}
+
+	// Lights that flicker while the clock stands move nothing.
+	{
+		HDShadowFollow f = settled;
+		double worst = 0.0, worstS = 0.0;
+
+		for (int i = 0; i < 50; i++)
+		{
+			if (i & 1)
+				sh_follow(&f, old, 2, P, 0.0f, &k);
+			else
+				sh_follow(&f, &A, 1, P, 0.0f, &k);
+
+			const double a = sh_angle(f.dir, settled.dir);
+			const double e = fabs((double)f.strength - settled.strength);
+
+			worst = a > worst ? a : worst;
+			worstS = e > worstS ? e : worstS;
+		}
+
+		ok(worst < 1e-4 && worstS < 1e-6 && f.snaps == settled.snaps,
+			"shadow: lights that flicker under a standing clock move nothing",
+			sh_milli(worst), 0);
+	}
+
+	/* Any offset: 400 directions round the sphere at seven lengths from a
+	 * thousandth to 1e30, strengths' offsets to 1e30 either way. */
+	{
+		const float lengths[7] = { 1e-3f, 0.1f, 1.0f, 2.0f, 10.0f, 1e6f, 1e30f };
+		int bad = 0;
+
+		for (int i = 0; i < 400; i++)
+			for (int m = 0; m < 7; m++)
+			{
+				const float a = (float)i * 0.731f, b = (float)i * 1.917f;
+				const float d[3] = { cosf(a) * sinf(b), cosf(b), sinf(a) * sinf(b) };
+				HDShadowFollow f;
+
+				memset(&f, 0, sizeof(f));
+				f.primed = 1;
+
+				for (int j = 0; j < 3; j++)
+				{
+					f.at[j] = P[j];
+					f.last[j] = to.dir[j];
+					f.offset[j] = lengths[m] * d[j];
+				}
+
+				f.lastStrength = to.strength;
+				f.offsetStrength = lengths[m] * (float)(i % 3 - 1);
+				HDShadowFollowStep(&f, &to, P, dt);
+
+				if (!sh_unit_finite(f.dir) || HDShadowSlant(f.dir) > HD_SHADOW_SLANT_MAX + 1e-3f ||
+					!(f.strength >= 0.0f && f.strength <= HD_SHADOW_DARK) || !(f.lag == f.lag))
+					bad++;
+			}
+
+		ok(bad == 0, "shadow: no offset of 2800, any way and up to 1e30 long, leaves the limit",
+			bad, 0);
+	}
+
+	{
+		HDShadowFollow f;
+
+		memset(&f, 0, sizeof(f));
+		f.primed = 1;
+
+		for (int j = 0; j < 3; j++)
+		{
+			f.at[j] = P[j];
+			f.last[j] = to.dir[j];
+			f.offset[j] = -to.dir[j];
+		}
+
+		f.lastStrength = to.strength;
+		HDShadowFollowStep(&f, &to, P, 0.0f);
+
+		const bool against = f.dir[0] == to.dir[0] && f.dir[1] == to.dir[1] &&
+			f.dir[2] == to.dir[2];
+
+		f.offset[1] = sqrtf(-1.0f);
+		HDShadowFollowStep(&f, &to, P, dt);
+		ok(against && sh_cleared(f, to),
+			"shadow: an offset straight against the target or not a number draws the target",
+			against ? 1 : 0, 1);
+	}
+
+	/* No lights, a lamp at P itself, a sun of no direction, a lamp of no
+	 * range, and P at the origin, changing every few steps. */
+	{
+		const float zero[3] = { 0.0f, 0.0f, 0.0f };
+		const HDShadowLight odd[4] =
+		{
+			sh_lamp(HD_SHADOW_POINT, P[0], P[1], P[2], 1.0f, 1000.0f),
+			sh_sun(0.0f, 0.0f, 0.0f, 1.0f),
+			A,
+			sh_lamp(HD_SHADOW_SPOT, P[0], P[1] - 500.0f, P[2], 1.0f, 0.0f)
+		};
+		HDShadowFollow f;
+		int bad = 0;
+
+		memset(&f, 0, sizeof(f));
+
+		for (int i = 0; i < 300; i++)
+		{
+			const int set = (i / 7) % 5;
+			const float* at = (i / 37) & 1 ? zero : P;
+
+			if (set == 4)
+				sh_follow(&f, 0, 0, at, dt, &k);
+			else
+				sh_follow(&f, odd + set, 1, at, (i % 11) ? dt : 0.0f, &k);
+
+			if (!sh_unit_finite(f.dir) || HDShadowSlant(f.dir) > HD_SHADOW_SLANT_MAX + 1e-3f ||
+				!(f.strength >= 0.0f && f.strength <= HD_SHADOW_DARK) || !(f.lag == f.lag) ||
+				!(f.offset[0] == f.offset[0] && f.offset[1] == f.offset[1] &&
+				f.offset[2] == f.offset[2] && f.offsetStrength == f.offsetStrength))
+				bad++;
+		}
+
+		ok(bad == 0, "shadow: no NaN from no lights, a lamp at P, a zero vector, a zero range",
+			bad, 0);
+	}
 }
 
 /* The box: the basis, the snap, the half-texel rule, the matrices. */
@@ -13977,6 +14538,10 @@ int main()
 	softbody_constants();
 	shadow_key();
 	shadow_follow();
+	shadow_follow_move();
+	shadow_follow_lights();
+	shadow_follow_both();
+	shadow_follow_edges();
 	shadow_box();
 	shadow_gate();
 	shadow_terms();

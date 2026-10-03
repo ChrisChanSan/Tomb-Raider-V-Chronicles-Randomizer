@@ -673,6 +673,31 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 
 int HDModelDrawCalls();		// since the last HDModelFrameBegin
 
+/* The projected shadow's cast draw: a model into the shadow map
+ * (hd_render.h, HDRenderShadowCastBegin), skinned exactly as HDModelDraw
+ * skins it - the same joints, the same bind fold, the same soft motion, a
+ * speaking face's deformed buffer - but with the cast shaders of
+ * hd_shadow.hlsl, which write the map's depth and nothing else.
+ *
+ * HDModelCastReady says whether the two shaders were made on this device.
+ * HDModelCastBegin binds them and the declaration and puts `castClip`
+ * (hd_shadow.h, HDShadowCastMatrix; row-major) into c0 - c3 in the frame's
+ * projection's place; HDRenderShadowCastEnd puts the frame's registers back.
+ *
+ * HDModelCastDraw draws the opaque and the alpha-tested pass, never the
+ * additive one, with the alpha test of each range as HDModelDraw has it,
+ * with no head cut and double sided. `head` draws the slot's separate face
+ * instead of its body. False when the model is not there or no cast has
+ * begun. HDModelCastEnd closes the cast, before HDRenderShadowCastEnd.
+ * HDModelCastCalls counts the draw calls since HDModelCastBegin. */
+bool HDModelCastReady();
+void HDModelCastBegin(const float* castClip);
+void HDModelCastEnd();
+bool HDModelCastDraw(int slot, bool head, const float* nodeMatrix, int nodeCount,
+	unsigned int nodeMask, int lipsTrack = -1, int lipsFrame = -1,
+	const HDModelSoft* soft = 0);
+int HDModelCastCalls();
+
 /* The lips of a speaking face.
  *
  * A cutscene face speaks with one file per audio track, <FACE>_HEAD_<track>

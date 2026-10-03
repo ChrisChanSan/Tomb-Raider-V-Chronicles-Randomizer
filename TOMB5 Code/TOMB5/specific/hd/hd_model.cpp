@@ -40,6 +40,8 @@
 
 #include "hd_shader/hd_model_vs.inc"
 #include "hd_shader/hd_model_ps.inc"
+#include "hd_shader/hd_shadow_cast_vs.inc"
+#include "hd_shader/hd_shadow_cast_ps.inc"
 
 namespace
 {
@@ -282,6 +284,13 @@ namespace
 	IDirect3DVertexShader9* g_vs = 0;
 	IDirect3DPixelShader9* g_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
+	/* The projected shadow's cast shaders (hd_shadow.hlsl). Not a condition
+	 * of the model path: without them the projected shadow is refused and
+	 * the blob stays. */
+	IDirect3DVertexShader9* g_cast_vs = 0;
+	IDirect3DPixelShader9* g_cast_ps = 0;
+	bool g_in_cast = false;
+	int g_cast_calls = 0;
 
 	std::map<int, Model> g_models;		// slot -> body
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
@@ -2939,6 +2948,12 @@ bool HDModelInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
+	if (FAILED(device->CreateVertexShader((const DWORD*)kHDShadowCastVS, &g_cast_vs)))
+		g_cast_vs = 0;
+
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowCastPS, &g_cast_ps)))
+		g_cast_ps = 0;
+
 	return true;
 }
 
@@ -2949,9 +2964,12 @@ void HDModelShutdown()
 	if (g_decl) { g_decl->Release(); g_decl = 0; }
 	if (g_vs) { g_vs->Release(); g_vs = 0; }
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
+	if (g_cast_vs) { g_cast_vs->Release(); g_cast_vs = 0; }
+	if (g_cast_ps) { g_cast_ps->Release(); g_cast_ps = 0; }
 
 	g_device = 0;
 	g_in_frame = false;
+	g_in_cast = false;
 }
 
 bool HDModelReady()
@@ -4298,6 +4316,129 @@ bool HDModelDrawHead(int slot, const float* nodeMatrix, int nodeCount,
 int HDModelDrawCalls()
 {
 	return g_draw_calls;
+}
+
+/* ---------------------------------------------------- the shadow's cast -- */
+
+bool HDModelCastReady()
+{
+	return HDModelReady() && g_cast_vs && g_cast_ps;
+}
+
+void HDModelCastBegin(const float* castClip)
+{
+	g_in_cast = false;
+	g_cast_calls = 0;
+
+	if (!HDModelCastReady() || !castClip)
+		return;
+
+	g_device->SetVertexShader(g_cast_vs);
+	g_device->SetPixelShader(g_cast_ps);
+	g_device->SetVertexDeclaration(g_decl);
+	set_matrix_constant(0, castClip);
+	g_in_cast = true;
+}
+
+void HDModelCastEnd()
+{
+	g_in_cast = false;
+}
+
+bool HDModelCastDraw(int slot, bool head, const float* nodeMatrix, int nodeCount,
+	unsigned int nodeMask, int lipsTrack, int lipsFrame, const HDModelSoft* soft)
+{
+	if (!g_in_cast || !nodeMatrix || nodeCount <= 0)
+		return false;
+
+	const Model* model = find(head ? g_heads : g_models, slot);
+
+	if (!model || !model->vb)
+		return false;
+
+	/* The joints and the soft motion as draw_model writes them; the cast
+	 * vertex shader reads nothing else of the model's registers. */
+	const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
+
+	for (int node = 0; node < kJointBudget; node++)
+	{
+		const int from = node < nodes ? node : nodes - 1;
+
+		set_joint(node, nodeMatrix + from * 16, model->hasBind ? model->bind[from] : 0);
+	}
+
+	static const HDModelSoft kNoSoft = {};
+
+	g_device->SetVertexShaderConstantF(163, (soft ? soft : &kNoSoft)->constants, 4);
+
+	g_device->SetStreamSource(0, lips_stream(*model, slot, head, lipsTrack, lipsFrame),
+		0, sizeof(HDModelVertex));
+	g_device->SetIndices(model->ib);
+
+	/* The opaque and the alpha-tested pass: what the picture draws solid.
+	 * The additive pass casts nothing - a glow throws no shadow. */
+	for (int pass = 0; pass < 2; pass++)
+	{
+		const std::vector<Range>& ranges = model->pass[pass];
+
+		if (ranges.empty())
+			continue;
+
+		float constants[4] = { pass == 1 ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f };
+
+		g_device->SetPixelShaderConstantF(4, constants, 1);
+
+		// The ranges merged as draw_model merges them.
+		for (size_t i = 0; i < ranges.size(); )
+		{
+			const Range& first = ranges[i];
+
+			if (!(nodeMask & (1u << (first.node & 31))))
+			{
+				i++;
+				continue;
+			}
+
+			unsigned int start = first.start;
+			unsigned int count = first.count;
+			size_t next = i + 1;
+
+			while (next < ranges.size())
+			{
+				const Range& more = ranges[next];
+
+				if (more.pageSlot != first.pageSlot || more.start != start + count ||
+					!(nodeMask & (1u << (more.node & 31))) || more.cut != first.cut)
+					break;
+
+				count += more.count;
+				next++;
+			}
+
+			g_device->SetTexture(0, first.pageSlot >= 0
+				? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot) : 0);
+
+			// The cut-out ranges of the opaque pass keep their alpha test.
+			if (pass == 0 && constants[0] != (first.cut ? 1.0f : 0.0f))
+			{
+				constants[0] = first.cut ? 1.0f : 0.0f;
+				g_device->SetPixelShaderConstantF(4, constants, 1);
+			}
+
+			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+				(UINT)model->vertices, start, count / 3);
+
+			g_cast_calls++;
+			i = next;
+		}
+	}
+
+	return true;
+}
+
+int HDModelCastCalls()
+{
+	return g_cast_calls;
 }
 
 /* ------------------------------------------------------------ the lips -- */

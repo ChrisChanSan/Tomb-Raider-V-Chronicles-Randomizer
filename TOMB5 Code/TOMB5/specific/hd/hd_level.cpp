@@ -4563,11 +4563,17 @@ bool HDFrameSky(const float* viewWorld)
  * bracket and after the room loops, so the device is in the HD path's state;
  * HDRenderShadowCastBegin and End leave it as they found it. Nothing at all
  * happens in a frame the projected shadow does not run in. */
-static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0 };
+static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0 };
+
+/* Whether this frame's map was drawn: the receive pass reads the map only
+ * then, never a map an earlier frame left behind. */
+static bool g_shadow_cast_now = false;
 
 static void ShadowCastPass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
+
+	g_shadow_cast_now = false;
 
 	if (!shadow->runs)
 		return;
@@ -4593,10 +4599,167 @@ static void ShadowCastPass()
 	QueryPerformanceFrequency(&rate);
 
 	g_shadow_stats.cast++;
+	g_shadow_cast_now = true;
 
 	if (rate.QuadPart)
 		g_shadow_stats.ms += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
 			(double)rate.QuadPart;
+}
+
+/* One room's art again for the receive, in exactly the pieces and windows
+ * DrawRoomWindowed drew it with, so every triangle is rasterised inside the
+ * scissor it wrote its depth in. */
+static void DrawRoomShadowWindowed(const FrameRoom& entry)
+{
+	if (!entry.windowed || entry.full || !HDRenderScissorAvailable())
+	{
+		HDRenderScissorOff();
+		HDRenderRoomShadow(entry.group, &entry.world, &entry.lighting, HD_WINDOW_ALL);
+		return;
+	}
+
+	HDRenderScissorOff();
+	HDRenderRoomShadow(entry.group, &entry.world, &entry.lighting, HD_WINDOW_OPEN);
+
+	if (!ClipEmpty(entry))
+	{
+		HDRenderScissor(entry.x0, entry.y0, entry.x1, entry.y1);
+		HDRenderRoomShadow(entry.group, &entry.world, &entry.lighting,
+			HD_WINDOW_INTRUDING);
+		HDRenderScissorOff();
+	}
+}
+
+/* The projected shadow's receive pass: every HD room group of this frame
+ * whose box comes within the shadow's reach (HDShadowReach - the map's
+ * cross-section along the light, down to where the height term ends) is
+ * drawn again with the receive shader. The statics baked into a group
+ * receive with it. Only in a frame whose map was drawn just now. */
+static void ShadowReceivePass()
+{
+	const HDShadowFrame* shadow = HDShadowFrameState();
+
+	if (!shadow->runs || !g_shadow_cast_now)
+		return;
+
+	LARGE_INTEGER from, to, rate;
+
+	QueryPerformanceCounter(&from);
+
+	float regs[HD_SHADOW_RECEIVE_COUNT * 4];
+	float reachMin[3], reachMax[3];
+
+	HDShadowReceiveConstants(&shadow->box, shadow->R, shadow->t, shadow->strength, regs);
+	HDShadowReach(&shadow->box, reachMin, reachMax);
+
+	if (!HDRenderShadowReceiveBegin(regs))
+		return;
+
+	for (int i = 0; i < g_frame_count; i++)
+	{
+		const FrameRoom& entry = g_frame[i];
+		float mins[3], maxs[3];
+
+		if (!HDRenderGroupBounds(entry.group, mins, maxs))
+			continue;
+
+		const float origin[3] =
+		{
+			entry.lighting.originX, entry.lighting.originY, entry.lighting.originZ
+		};
+
+		for (int k = 0; k < 3; k++)
+		{
+			mins[k] += origin[k];
+			maxs[k] += origin[k];
+		}
+
+		if (!HDShadowBoxesTouch(mins, maxs, reachMin, reachMax))
+			continue;
+
+		DrawRoomShadowWindowed(entry);
+		g_shadow_stats.rooms++;
+	}
+
+	g_shadow_stats.calls += HDRenderShadowReceiveCalls();
+	HDRenderShadowReceiveEnd();
+	HDRenderScissorOff();
+
+	QueryPerformanceCounter(&to);
+	QueryPerformanceFrequency(&rate);
+
+	if (rate.QuadPart)
+		g_shadow_stats.receiveMs += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
+			(double)rate.QuadPart;
+}
+
+/* HDLOG shadow second - once a second of game time while the projected
+ * shadow runs, behind -log:
+ *
+ *   dir=       the drawn direction of the light, world axes (y down)
+ *   target=    the direction the key light is gliding towards
+ *   strength=  the drawn strength / the target's
+ *   lights=    lights that gave a weight this frame
+ *   weight=    their summed weight (luminance times falloff)
+ *   slant=     degrees between the drawn direction and straight down
+ *   snaps=     snaps of the following in that second (a reset, a gap, a jump)
+ *   cast=      frames whose map was drawn / frames the shadow ran
+ *   parts=     models into the map, a frame (the mean over cast frames)
+ *   rooms=     room groups drawn again, a frame
+ *   calls=     receive draw calls, a frame
+ *   ms=        processor time of the two passes, a frame (the mean)
+ *   stencil=   1 when the depth surface's stencil guards each pixel */
+static bool g_shadow_window = false;
+static unsigned short g_shadow_window_at = 0;
+
+static void ShadowSecond()
+{
+	const HDShadowFrame* shadow = HDShadowFrameState();
+
+	if (!shadow->runs)
+	{
+		g_shadow_window = false;
+		return;
+	}
+
+	const unsigned short tick = GlobalCounter;
+
+	if (!g_shadow_window)
+	{
+		g_shadow_window = true;
+		g_shadow_window_at = tick;
+		HDFrameShadowCastStats(0, true);
+		HDShadowFollowState()->snaps = 0;
+		return;
+	}
+
+	if ((unsigned short)(tick - g_shadow_window_at) < 30)
+		return;
+
+	HDShadowCastStats s;
+
+	HDFrameShadowCastStats(&s, true);
+
+	HDShadowFollow* follow = HDShadowFollowState();
+
+	if (gLogEnabled)
+	{
+		const double frames = s.frames > 0 ? (double)s.frames : 1.0;
+		const double cast = s.cast > 0 ? (double)s.cast : 1.0;
+
+		Log("HDLOG shadow second dir=(%.3f,%.3f,%.3f) target=(%.3f,%.3f,%.3f) "
+			"strength=%.3f/%.3f lights=%d weight=%.3f slant=%.1f snaps=%d cast=%d/%d "
+			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d",
+			shadow->dir[0], shadow->dir[1], shadow->dir[2], shadow->target.dir[0],
+			shadow->target.dir[1], shadow->target.dir[2], shadow->strength,
+			shadow->target.strength, shadow->target.lights, shadow->target.weight,
+			HDShadowSlant(shadow->dir), follow->snaps, s.cast, s.frames,
+			(double)s.parts / cast, (double)s.rooms / cast, (double)s.calls / cast,
+			(s.ms + s.receiveMs) / frames, HDRenderShadowReceiveStencil() ? 1 : 0);
+	}
+
+	follow->snaps = 0;
+	g_shadow_window_at = tick;
 }
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear)
@@ -4720,8 +4883,13 @@ void HDFrameDraw()
 
 	/* The projected shadow's map, after every room's solid art and before
 	 * the models: Lara's pose of this very drawn frame is on the list
-	 * already. */
+	 * already. Then the rooms near her take it, before the models, so that
+	 * no model is darkened, and before DrawBuckets, so that no classic
+	 * polygon is: both are drawn over the darkened rooms and keep their own
+	 * picture. */
 	ShadowCastPass();
+	ShadowReceivePass();
+	ShadowSecond();
 
 	/* The objects, after the rooms and inside the same bracket.
 	 *

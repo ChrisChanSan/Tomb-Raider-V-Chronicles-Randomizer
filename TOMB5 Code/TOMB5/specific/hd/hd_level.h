@@ -278,21 +278,31 @@ bool HDFrameSky(const float* viewWorld);
 void HDFrameDraw();
 void HDFrameDrawGlow();
 
-/* The projected shadow's cast pass, as HDFrameDraw runs it: after the room
- * loops, before the models' solid passes, in frames whose Lara main draw
- * decided it runs (hd_laradraw.h, HDShadowFrameDecide). Counted since the
- * last call with `clear` set:
+/* The projected shadow's two passes, as HDFrameDraw runs them: the cast
+ * pass and then the receive pass, after the room loops and before the
+ * models' solid passes, in frames whose Lara main draw decided it runs
+ * (hd_laradraw.h, HDShadowFrameDecide). Counted since the last call with
+ * `clear` set:
  *
  *   frames   frames in which the projected shadow ran
  *   cast     of those, frames in which the map was drawn
  *   parts    models drawn into the map, all frames together
- *   ms       processor time of the pass, milliseconds, all frames together */
+ *   ms       processor time of the cast pass, milliseconds, all frames
+ *            together
+ *   rooms    room groups drawn again by the receive pass, all frames
+ *            together
+ *   calls    draw calls of the receive pass, all frames together
+ *   receiveMs  processor time of the receive pass, milliseconds, all frames
+ *            together */
 struct HDShadowCastStats
 {
 	int frames;
 	int cast;
 	int parts;
 	double ms;
+	int rooms;
+	int calls;
+	double receiveMs;
 };
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);

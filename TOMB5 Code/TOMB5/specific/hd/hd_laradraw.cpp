@@ -998,6 +998,59 @@ namespace
 		HDShadowViewToMap(&f.box, f.R, f.t, f.viewToMap);
 		HDShadowCastMatrix(&f.box, f.R, f.t, f.castClip);
 	}
+
+	/* The two state lines of the projected shadow, behind -log. Both are
+	 * written on the first decision of a level (HDLaraDrawEnd forgets what
+	 * was logged) and again whenever their answer changes.
+	 *
+	 * HDLOG shadow target - the map on this device:
+	 *   state=   none (never asked for), made, refused or released
+	 *   reason=  ok, or what refused it: no_device, format, depth, match,
+	 *            create, surface, depth_create (hd_render.h)
+	 *   format=  the map's format, R32F; "-" before it was made
+	 *   size=    texels a side; 0 before it was made
+	 *   depth=   the map's depth surface, D24X8 or D16; "-" before it was made
+	 *   events=  changes of state on this run, a counter
+	 *
+	 * HDLOG shadow mode - what this frame draws for Lara:
+	 *   stored=     tomb5.shadow_mode as the option holds it
+	 *   effective=  projected, original, circle, faded or psx
+	 *               (hd_shadow.h, HDShadowEffectiveMode)
+	 *   reason=     ok, or why the projected shadow does not run: option,
+	 *               hd_off, classic_lara, classic_room, target */
+	int g_shadow_logged_events = -1;
+	long g_shadow_logged_stored = -1;
+	int g_shadow_logged_gate = -1;
+
+	void shadow_log(int gate)
+	{
+		if (!gLogEnabled)
+			return;
+
+		HDShadowTargetInfo info;
+
+		HDRenderShadowTargetInfo(&info);
+
+		if (info.events != g_shadow_logged_events)
+		{
+			static const char* const kState[4] = { "none", "made", "refused", "released" };
+
+			g_shadow_logged_events = info.events;
+			Log("HDLOG shadow target state=%s reason=%s format=%s size=%d depth=%s "
+				"events=%d", info.state >= 0 && info.state < 4 ? kState[info.state] : "?",
+				info.reason, info.format, info.size, info.depth, info.events);
+		}
+
+		const long stored = (long)tomb5.shadow_mode;
+
+		if (stored != g_shadow_logged_stored || gate != g_shadow_logged_gate)
+		{
+			g_shadow_logged_stored = stored;
+			g_shadow_logged_gate = gate;
+			Log("HDLOG shadow mode stored=%ld effective=%s reason=%s", stored,
+				HDShadowModeWord(HDShadowEffectiveMode(stored, gate)), HDShadowGateWord(gate));
+		}
+	}
 }
 
 bool HDShadowFrameDecide()
@@ -1010,11 +1063,13 @@ bool HDShadowFrameDecide()
 	int gate = HDShadowGate((long)tomb5.shadow_mode, HDLevelActive(), HDLaraDrawActive(),
 		lara_item && HDRoomIsHD(lara_item->room_number), true);
 
-	if (gate == HD_SHADOW_GATE_OK && !(HDRenderShadowTargetReady() && HDModelCastReady()))
+	if (gate == HD_SHADOW_GATE_OK && !(HDRenderShadowTargetReady() && HDModelCastReady() &&
+		HDRenderShadowReceiveReady()))
 		gate = HD_SHADOW_GATE_TARGET;
 
 	g_shadow_frame.gate = gate;
 	g_shadow_frame.runs = gate == HD_SHADOW_GATE_OK ? 1 : 0;
+	shadow_log(gate);
 
 	if (!g_shadow_frame.runs)
 	{
@@ -1286,6 +1341,9 @@ void HDLaraDrawEnd()
 	memset(&g_shadow_follow, 0, sizeof(g_shadow_follow));
 	HDSoftClockForget(&g_shadow_clock);
 	HDSoftClockFrame(&g_shadow_clock);
+	g_shadow_logged_events = -1;
+	g_shadow_logged_stored = -1;
+	g_shadow_logged_gate = -1;
 }
 
 bool HDLaraDrawActive()

@@ -2747,11 +2747,16 @@ Who else casts. In a frame Lara has the projected shadow, every creature and ite
 classic game gives a blob - the guards, soldiers, dogs, the Hydra, the gladiators and the
 rest - that is drawn as an HD model and stands within four sectors of her throws the same
 shadow, along the same fixed light, at the same darkness and with an edge as soft as
-hers, and has no blob. Towards four sectors away its shadow fades out, and further away it
-has neither; a creature drawn classic, one baked into a room's art and one in a mirror
-keep their blob. Where two shadows overlap, the floor is as dark as under one. A
-creature's shadow falls whole on a floor up to one and a half blocks behind it along the
-light and fades out by two and a half, so a floor well below its feet takes none.
+hers, and has no blob. Towards four sectors away its shadow fades out on every side, and
+a little further away it has neither; a creature drawn classic, one baked into a room's
+art and one in a mirror keep their blob. Above and below her nothing fades: a creature
+about four and a half blocks above or below her along the light loses its shadow at once
+as it crosses that distance. A creature just out of the view or behind a door's edge has
+no shadow either, so when it comes into the view from the side its shadow points
+towards, the part of its shadow already in the picture appears at once. Where two
+shadows overlap, the floor is as dark as under one. A creature's shadow falls whole on a
+floor up to one and a half blocks behind it along the light and fades out by two and a
+half, so a floor well below its feet takes none.
 
 What takes it. The HD rooms around her and the statics that are part of their art; not
 Lara herself, not HD items or creatures - neither her shadow nor theirs falls on her or on
@@ -2765,13 +2770,17 @@ of a floor are darkened with it.
 
 Every number that shapes it - darkness, softness, slant, the lights' pull, time - stands
 in one table at the top of `specific/hd/hd_shadow.h`; they are a first setting, to be
-tuned in the game. Five of them are the creatures' map: `HD_SHADOW_OTHERS_BOX` 8192, how
+tuned in the game. Six of them are the creatures' map: `HD_SHADOW_OTHERS_BOX` 8192, how
 far round her a creature still casts (larger reaches further, smaller keeps the map's
-texels finer); `HD_SHADOW_OTHERS_MAP` 2048, the map's texels a side (fewer is a softer,
-blockier outline and a cheaper map - 2048 with 8192 is the texel of her own map);
-`HD_SHADOW_OTHERS_DEPTH` 8192, how far above and below her along the light a creature
-still casts; `HD_SHADOW_OTHERS_FULL` 1536 and `HD_SHADOW_OTHERS_END` 2560, how far behind
-a creature along the light a floor takes its whole shadow and from where none (larger
+texels finer); `HD_SHADOW_OTHERS_MARGIN` 0.1, how far beyond that, as a part of it, a
+creature's feet may stand and the creature still cast what of it reaches in, so that its
+shadow fades out on every side (smaller cuts a tall creature's shadow off at the map's
+edge, larger draws creatures of which nothing reaches in); `HD_SHADOW_OTHERS_MAP` 2048,
+the map's texels a side (fewer is a softer, blockier outline and a cheaper map - 2048
+with 8192 is the texel of her own map); `HD_SHADOW_OTHERS_DEPTH` 8192, how far above and
+below her along the light a creature still casts, with no fade at that distance;
+`HD_SHADOW_OTHERS_FULL` 1536 and `HD_SHADOW_OTHERS_END` 2560, how far behind a creature
+along the light a floor takes its whole shadow and from where none (larger
 lets the shadow reach a lower floor, smaller cuts a tall creature's head off its
 shadow).
 

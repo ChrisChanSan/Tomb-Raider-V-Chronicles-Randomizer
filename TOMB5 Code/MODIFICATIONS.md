@@ -7394,8 +7394,10 @@ the record follows', 'Round 188 (#188): the record follows'.
 engine gives a blob (its object's `shadow_size` is not 0) and that is drawn as an HD model
 gives up its blob and throws a projected shadow along the same fixed light: it is drawn
 into a second map beside Lara's, and the HD room groups take both maps in the one receive
-pass. The second map reaches four sectors to every side of her and along the light, with
-texels of her map's size, so a creature's outline is as soft as hers and its shadow as
+pass. The second map reaches four sectors to every side of her and along the light; a
+creature whose feet stand up to 819 units beyond its sides still casts what of it reaches
+in, so its shadow fades out at the map's edge on every side. Its texels are of her map's
+size, so a creature's outline is as soft as hers and its shadow as
 dark; where two shadows overlap the floor is as dark as under one. A receiver up to 1536
 units behind a creature along the light takes its whole shadow, from 2560 on none. Lara's
 own shadow is the one of before, to the bit, and so is every frame without a creature in
@@ -7405,35 +7407,43 @@ its end, and a new line, `HDLOG shadow others`, reports the second map's target.
 **Why.** With Lara's projected shadow in the room, the creatures beside her stood on round
 blobs: two kinds of shadow under one light. Now they carry the shadow she carries.
 
-**How.** The table (`specific/hd/hd_shadow.h:155` to `:159`) gains OTHERS_MAP 2048
-texels, OTHERS_BOX 8192 units across, OTHERS_DEPTH 8192 along the light, OTHERS_FULL 1536
-and OTHERS_END 2560, each with what it does to the picture. The box carries its own
-extent, depth and map size (`HDShadowBox`, :700): `hd_shadow_box_snap` (:750) snaps a
-centre to whole texels of the box's own map, `HDShadowBoxMake` (:772) gives her box the
-table's BOX, DEPTH and MAP, `HDShadowBoxAround` (:809) makes the second box round hers -
-the same light, basis and middle, snapped the same way, so with texels of her size its
-centre is hers to the bit - and the mapping, the matrices, the receive block and the reach
-read the box's own size; `HDShadowBoxHolds` (:840) says whether a point lies inside. The
-rule with its two faces (:1445, :1451): an item's blob gives way when the projected shadow
-runs, her step ran, the second target exists, the item is drawn HD and it is not
-mirrored; the item casts when it also has a blob and its place lies inside the second box.
-The frame (`HDShadowFrame`, :1476) gains `stepped`, the second box and its two matrices,
+**How.** The table (`specific/hd/hd_shadow.h:173` to `:178`) gains OTHERS_MAP 2048
+texels, OTHERS_BOX 8192 units across, OTHERS_MARGIN 0.1 of it, OTHERS_DEPTH 8192 along the
+light, OTHERS_FULL 1536 and OTHERS_END 2560, each with what it does to the picture. The
+box carries its own extent, depth and map size (`HDShadowBox`, :719):
+`hd_shadow_box_snap` (:769) snaps a centre to whole texels of the box's own map,
+`HDShadowBoxMake` (:791) gives her box the table's BOX, DEPTH and MAP, `HDShadowBoxAround`
+(:828) makes the second box round hers - the same light, basis and middle, snapped the
+same way, so with texels of her size its centre is hers to the bit - and the mapping, the
+matrices, the receive block and the reach read the box's own size; `HDShadowBoxHolds`
+(:864) says whether a point lies inside the box grown across the light by a margin, a
+part of its extent on each of its four sides, its depth not grown. The rule with its two
+faces (:1473, :1479): an item's blob gives way when the projected shadow runs, her step
+ran, the second target exists, the item is drawn HD and it is not mirrored; the item casts
+when it also has a blob and its place lies inside the second box grown by OTHERS_MARGIN.
+The frame (`HDShadowFrame`, :1504) gains `stepped`, the second box and its two matrices,
 filled by `shadow_step` (`hd_laradraw.cpp:1008` to `:1012`), `stepped` cleared every frame
 (:1483). The blob's one call, `game/draw.cpp:781`, asks `HDObjectBlobGivesWay`
-(`hd_object.cpp:4058`): her step first, the frame second, then `begin_decision` (:2834),
+(`hd_object.cpp:4062`): her step first, the frame second, then `begin_decision` (:2834),
 the decision `HDObjectBegin` (:2879) acts on, must answer HD, then the item must not be a
 reflection and the two-map receive shader, the cast shaders and the second target must
-exist (:4072, the target asked last, because asking makes it). `HDObjectBegin` takes the
+exist (:4076, the target asked last, because asking makes it). `HDObjectBegin` takes the
 answer over, and `HDObjectEnd` marks the entry for the second map when the item's place,
-its world position, lies inside the second box (:3184), with the node mask it is drawn
-with. The targets (`hd_render.cpp`): one road makes a pair, `shadow_pair_make` (:6278),
-for hers and for the second (`HDRenderShadowOthersReady`, :6409, R32F 2048 x 2048 with a
-D24X8 or D16 depth surface of its own, 32 MiB in `D3DPOOL_DEFAULT`); a refusal of the
-second leaves hers running; `HDRenderShadowTargetRelease` (:6375) releases both, so every
-road that drops hers drops the second; `ShadowCastOpen` (:6450) opens the cast bracket on
-either (`HDRenderShadowOthersCastBegin`, :6519). `ShadowOthersPass` (`hd_level.cpp:4589`,
-called at :4993 after hers) draws the marked items with `HDObjectCastOthersFrame`
-(`hd_object.cpp:4023`) - each body, or its swapped model, and its separate face, with the
+its world position, lies inside the second box grown by OTHERS_MARGIN (:3187), with the
+node mask it is drawn with. The place is one point, the feet; at the fixed slant a head
+760 units above them lies 0.035 of the box further in on its u = 1 side and 0.030 on its
+v = 0 side, so without the margin a creature leaving the box there lost a shadow still at
+0.64 within ten units. The margin, 819 units across the light, keeps it casting until no
+part of a caster up to 2160 units tall reaches into the box; the map's border clips the
+cast, and the edge term fades what lies inside. The targets (`hd_render.cpp`): one road
+makes a pair, `shadow_pair_make` (:6278), for hers and for the second
+(`HDRenderShadowOthersReady`, :6409, R32F 2048 x 2048 with a D24X8 or D16 depth surface
+of its own, 32 MiB in `D3DPOOL_DEFAULT`); a refusal of the second leaves hers running;
+`HDRenderShadowTargetRelease` (:6375) releases both, so every road that drops hers drops
+the second; `ShadowCastOpen` (:6450) opens the cast bracket on
+either (`HDRenderShadowOthersCastBegin`, :6519). `ShadowOthersPass` (`hd_level.cpp:4590`,
+called at :4994 after hers) draws the marked items with `HDObjectCastOthersFrame`
+(`hd_object.cpp:4027`) - each body, or its swapped model, and its separate face, with the
 cast draw her parts use - only when the shadow runs, her step ran and an item is marked.
 The rooms: `hd_shader/hd_shadow_receive.hlsl` gains a second entry point, `Receive2PS`
 (:197): her part line for line as `ReceivePS` (:87), and the second map on sampler stage 4
@@ -7443,26 +7453,30 @@ from how far the pixel lies behind that tap's caster, saturate(y - x (depth - ta
 writes the smaller of 1 - strength x hers and 1 - strength x theirs. About 244 instruction
 slots (65 texture, 179 arithmetic); `bshader.bat` compiles it into
 `hd_shadow_receive2_ps.inc` and stamps it with the same file's MD5, `be.bat` checks it.
-Its arithmetic in the header: `HDShadowBehindTerm` (:1094), `HDShadowLookupBehind`
-(:1161), `HDShadowReceiveFactor` (:1206), `HDShadowReceiveWithoutHer` (:1281),
-`HD_SHADOW_RECEIVE2_FIRST` and `_COUNT` (:1305), `HDShadowReceiveOthersConstants` (:1308)
-and `HDShadowReachOthers` (:1381), the second box's prism from its near side to
+Its arithmetic in the header: `HDShadowBehindTerm` (:1118), `HDShadowLookupBehind`
+(:1185), `HDShadowReceiveFactor` (:1230), `HDShadowReceiveWithoutHer` (:1305),
+`HD_SHADOW_RECEIVE2_FIRST` and `_COUNT` (:1329), `HDShadowReceiveOthersConstants` (:1332)
+and `HDShadowReachOthers` (:1405), the second box's prism from its near side to
 OTHERS_END beyond its far side. The draw: `receive_open` (`hd_render.cpp:7687`) serves
 `HDRenderShadowReceiveBegin` and `HDRenderShadowReceive2Begin` (:7790); the one-map Begin
 makes exactly the calls it made, the two-map one remembers and sets stage 4 as well
 (`receive_stage`, :7670) and the second block of registers, and
 `HDRenderShadowReceiveEnd` (:7817) puts stage 4 back; the variant is made beside the
 receive shader (:3404) and asked by `HDRenderShadowReceive2Ready` (:7663).
-`ShadowReceivePass` (`hd_level.cpp:4669`) takes the variant in a frame whose second map
-was drawn (`HDFrameShadowOthersDrawn`, :4627) and then also draws the groups within the
-second reach (:4695); should only the second map have been drawn, her block is silenced,
+`ShadowReceivePass` (`hd_level.cpp:4670`) takes the variant in a frame whose second map
+was drawn (`HDFrameShadowOthersDrawn`, :4628) and then also draws the groups within the
+second reach (:4696); should only the second map have been drawn, her block is silenced,
 so a map an earlier frame left in her target is never read. The log: `ShadowSecond`
-(:4781) ends its line in the four new fields (:4821); `shadow_log` writes `HDLOG shadow
+(:4782) ends its line in the four new fields (:4822); `shadow_log` writes `HDLOG shadow
 others` (`hd_laradraw.cpp:1068`) whenever the second target's state changes.
 
 **Checked.** The engine builds (`be.bat`), and with it ModelProbe, RoomProbe, MapProbe and
-TrgProbe, the tools that link or include the changed files. ModernTest 14,477 (14,443 and
-34 in seven groups: `shadow_others_box` 13, `shadow_others_rule` 2, `shadow_others_gate`
+TrgProbe, the tools that link or include the changed files. ModernTest 14,481 (14,443 and
+38 in eight groups: `shadow_others_box` 13, `shadow_others_margin` 4 - the margin's
+number, a place held up to it past each side and not beyond nor along the light, no part
+of a caster up to 2160 units tall reaching into the box once its feet have left the grown
+one, on all four sides over 16,000 places and heights, and a 760 unit tall caster with its
+feet at u 1.0009 still 0.035 inside - `shadow_others_rule` 2, `shadow_others_gate`
 5, `shadow_others_behind` 3, `shadow_others_lookup` 3, `shadow_others_factor` 3,
 `shadow_others_receive` 5), MenuTest 42,613, InterpTest 729, LipsTest 270 and 243, none
 failed. Her box built through its own size gives the old bits - centre, mapping, matrices,
@@ -7478,7 +7492,9 @@ taking her centre unsnapped (1), the distance term with her height numbers (3), 
 second lookup without the distance (2) or with her bias (1), the factor as the product of
 the two (2) or the brighter of the two (3), the distance line's slope (1), the second
 block's bias (1), the second block overlapping hers (1), her block silenced to the middle
-of her map (1), the second reach ending at the box's far side (1). Unchanged where it was
+of her map (1), the second reach ending at the box's far side (1); and five of the
+margin: 0 (4), 0.05 (2), not applied (2), applied on the low side only (2), the depth
+grown as well (1). Unchanged where it was
 accepted: `git diff` against the round's start is empty for `hd_room.hlsl`,
 `hd_model.hlsl`, `hd_glow.hlsl` and their six `.inc`, and the one-map receive `.inc`
 differs in its stamp line alone - a fresh compile of `ReceivePS` out of the new file is
@@ -7499,7 +7515,14 @@ the 8-bit rounding of 0.55; a MAFIA on the lower floor of ANDREA1 room 159 besid
 platform 300 units higher - its legs' shadow on its own floor, its shoulders' on the
 platform; a MAFIA at the second box's edge, at u 0.117, 0.059, 0.030, 0.015 and 0.001 of
 it - the median factor of its shadow 0.556, 0.680, 0.895, 0.920 and 0.964, fading, no
-line - and beyond the edge neither shadow nor blob. The second map alone, with one
+line - and beyond the edge neither shadow nor blob. On the u = 1 side, where its upper
+body's shadow lies inward of its feet (ANDREA1 room 0, Lara at (1536, 6400), the MAFIA
+behind her at x 2560): with its feet at u 0.9975, 1.0009 and 1.0031 the lowest factor of
+its shadow is 0.636 over 385 to 398 pixels, at 1.0144 0.727, at 1.0257 0.846, at 1.0370
+0.923 over 2 pixels, from 1.0483 on none - fading over about 400 units of its walk, no
+line; it still casts up to u 1.0992 and draws nothing into the picture there (the frame is
+byte for byte the frame without the passes), and at 1.1048 it casts nothing. The second
+map alone, with one
 creature and with two: each outline seen along the light, inside the map with wide
 margins. On this machine the second target is R32F 2048 x 2048 with D24X8; the device's
 reference count reads 81, 83 and 81 before, with and after it (one above the first
@@ -7529,7 +7552,11 @@ second map does not reach is that shader's pixel to the bit. The variant is a se
 point of the same file, its own `.inc` beside the first. In place of her height plane,
 which measures from her lowest node, each tap measures from its own caster, because the
 second map holds many casters at many heights. A creature's place is its world position,
-the point its blob is laid under. The blob gives way only on a device that has the
+the point its blob is laid under; the box that place is asked against is grown across the
+light by a fixed part of its width rather than by each caster's own height, one number
+that covers every caster up to 2160 units tall, because the map's border clips the rest
+and a caster with nothing inside costs one model in the cast pass and changes no pixel.
+The blob gives way only on a device that has the
 variant, the cast shaders and the second target, so it never gives way to a shadow that
 cannot be drawn. The receive draws the groups within either reach; the second reach is the
 second box's prism with OTHERS_END beyond its far side and no height bound. Should only
@@ -7537,22 +7564,34 @@ the second map be drawn in a frame, her block is silenced rather than her map re
 log line gains `oms=`, the second cast pass's time, beside the three fields asked for; its
 receive is in `ms=`.
 
-**Left.** A creature more than four sectors from her - beyond 4096 units across the light,
-or along it from her middle - has no shadow at all, neither blob nor projected one; the
-edge term fades the projected one out towards there. An HD item clipped away (no node
-walked) has had its blob skipped before the clip is known and is not in the second map,
-so an off-screen creature whose shadow would fall into view has none. A creature that
-stands in a room the HD level draws classic loses its blob and takes the projected shadow
-only where HD groups receive. A floor less than OTHERS_END behind a creature's feet along
-the light takes the lower part of its shadow, faintly - at the fixed slant a floor 2048
-units below the feet takes the feet's part at 0.19 of the strength, one 1792 below at
-0.48, and only a floor 2217 or more below takes nothing; no storey beneath was pictured,
-because the probe draws one room group. Receivers never cast, so a creature's shadow, like
-hers, passes through a floor or a wall. In a frame with the second map the receive draws
-every group within the second reach again, up to about four sectors round her and further
-along the light; its cost was measured on one room group only. Nothing receives on an HD
-model: neither her shadow nor theirs falls on her or on a creature. The mirror's image
-keeps its blobs. If the frame list is full, an item is drawn classic and keeps its blob.
+**Left.** A creature further from her than 4096 and 819 units across the light, or 4096
+along it from her middle, has no shadow at all, neither blob nor projected one; across
+the light the edge term fades the projected one out on every side before. Along the light
+nothing fades: the second box ends 4096 units along the light from her centre, about 4730
+straight above or below her at the fixed slant, and a creature crossing there - as she
+climbs or drops past it, or a creature walks up a ramp below her ledge - loses a shadow of
+full strength in one frame, and at the near side the cast loses what of a caster reaches
+past it along a sharp line. A fade on each tap's own caster depth near 0 and 1, in
+`Receive2PS` and `HDShadowLookupBehind`, with the mark's depth grown to match, would
+soften it. An HD item clipped away (its bounds outside the view or the portal window, no
+node walked) has had its blob skipped before the clip is known and is not in the second
+map; its shadow reaches 440 to 900 units beyond its bounds along the light, so when it
+enters the view or a door's window from the side its shadow points towards, a strip of
+shadow appears at once at the screen's or the door's edge. A cast-only entry for a clipped
+item, its nodes walked for the map and not drawn, would remove it. The play test should
+watch first for creatures entering the view and for a creature walking four sectors away
+from her. A creature that stands in a room the HD level draws classic loses its blob and
+takes the projected shadow only where HD groups receive. A floor less than OTHERS_END
+behind a creature's feet along the light takes the lower part of its shadow, faintly - at
+the fixed slant a floor 2048 units below the feet takes the feet's part at 0.19 of the
+strength, one 1792 below at 0.48, and only a floor 2217 or more below takes nothing; no
+storey beneath was pictured, because the probe draws one room group. Receivers never
+cast, so a creature's shadow, like hers, passes through a floor or a wall. In a frame with
+the second map the receive draws every group within the second reach again, up to about
+four sectors round her and further along the light; its cost was measured on one room
+group only. Nothing receives on an HD model: neither her shadow nor theirs falls on her or
+on a creature. The mirror's image keeps its blobs. If the frame list is full, an item is
+drawn classic and keeps its blob.
 What cannot be proven without playing: how the creatures' shadows look in motion, in a
 fight, on a dying or exploding creature and under mesh swaps (the cast draws the swapped
 model and the item's `mesh_bits`), and which creatures of which levels show it. The object
@@ -7566,7 +7605,9 @@ imports only the vulture's slot, CROW 43, carries one.
 
 **Commits.** 'Round 188 (#188): the creatures cast into a second map, and their blobs give
 way', 'Round 188 (#188): the suites', 'Round 188 (#188): the rooms take both maps', 'Round
-188 (#188): the suites', 'Round 188 (#188): the record follows'.
+188 (#188): the suites', 'Round 188 (#188): the record follows', 'Round 188 (#188): what
+round two's review pass 1 found', 'Round 188 (#188): the suites', 'Round 188 (#188): the
+record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14

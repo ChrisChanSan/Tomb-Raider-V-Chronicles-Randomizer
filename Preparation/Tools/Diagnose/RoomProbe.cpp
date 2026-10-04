@@ -258,6 +258,13 @@
  *                     lives in. Without the switch the very same files draw
  *                     with every room whole and the doorway still shut,
  *                     the before picture out of the same build.
+ *     -classicroom <room>
+ *                     that room's classic faces out of the .TRC, flat grey,
+ *                     in the same depth buffer as the art; repeat for more
+ *                     rooms. Needs -roombox. -classiconly draws them
+ *                     alone; -coincide <units> counts the pixels at which
+ *                     a classic face lands within <units> of the art, and
+ *                     -coincidemark paints them yellow.
  *     -watersurvey <folder holding the classic .TRC>
  *                     the offline twin of hd_level.cpp's BuildWaterSurfaces:
  *                     per reflecting room of the classic level, the faces in
@@ -1605,6 +1612,29 @@ static int g_window_mode = HD_WINDOW_ALL;
  * the switch left off. */
 static bool g_hdm = false;
 static std::vector<HDCut> g_cuts_built;
+
+/* -classicroom <room>: the classic room's own faces in the picture beside the
+ * art - the roomlets' quads and triangles out of the .TRC in -roombox
+ * (Tr5Level::roomFaces, the faces InsertRoomlet draws), flat grey shaded by
+ * their normal, untextured, in the same depth buffer and through the same
+ * view and projection as the art. A single-sided face is culled the way the
+ * renderer culls the art's opaque ranges, which faces the same way
+ * (TrgProbe -classicart measures that agreement). Repeat for more rooms.
+ *
+ * -classiconly clears the art out of the picture before the classic faces are
+ * drawn: the room as the classic path would place it, alone.
+ *
+ * -coincide <units> counts the pixels at which a classic face lands within
+ * `units` of the art in front of the eye - the place a frame that draws both
+ * fights over. Two stencil passes of the classic faces against the art's
+ * depth, the faces moved `units` towards the eye and then `units` away from
+ * it along the line of sight: a pixel the first passes and the second fails
+ * is one. Counted with an occlusion query; -coincidemark paints those pixels
+ * yellow over the finished picture. */
+static std::vector<int> g_classic_rooms;
+static bool g_classic_only = false;
+static double g_coincide = 0.0;
+static bool g_coincide_mark = false;
 
 /* -clipgroup <group> <l,t,r,b>: one group drawn inside a scissor rectangle
  * and every other group drawn whole.
@@ -4897,6 +4927,280 @@ static void RunSequence(const char* root, const char* list, int rooms,
 
 /* ---------------------------------------------------------------- main -- */
 
+/* The classic faces of -classicroom, drawn into the finished picture - see the
+ * note at g_classic_rooms. Its own scene and its own state block, after the
+ * state bracket of the HD frame has been checked, so the check is the HD
+ * path's alone. */
+static void DrawClassicFaces(const char* stem, int seed, const float* view,
+	const D3DMATRIX& projection, double ex, double ey, double ez, long width,
+	long height)
+{
+	if (g_classic_rooms.empty())
+		return;
+
+	if (g_roombox.empty())
+	{
+		printf("classic: -classicroom needs -roombox <folder holding the "
+			"classic .TRC>\n");
+		return;
+	}
+
+	Tr5Level level;
+	std::string error;
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	std::wstring wide;
+
+	for (size_t i = 0; i < trc.size(); i++)
+		wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+	if (!level.load(wide, error) || seed < 0 || seed >= level.roomCount())
+	{
+		printf("classic: %s could not be read (%s)\n", trc.c_str(), error.c_str());
+		return;
+	}
+
+	// The seed group's own frame: x and z from its origin, y world.
+	unsigned yOrigin = 0;
+
+	level.headerField(seed, 24, yOrigin, error);
+
+	const double ox = (double)level.rooms()[(size_t)seed].originX;
+	const double oy = (double)(int)yOrigin;
+	const double oz = (double)level.rooms()[(size_t)seed].originZ;
+
+	struct Vtx
+	{
+		float x, y, z;
+		DWORD colour;
+	};
+
+	// [0] single-sided, culled like the art's opaque ranges; [1] double-sided.
+	std::vector<Vtx> faces[2];
+	int count = 0;
+
+	for (int room : g_classic_rooms)
+	{
+		std::vector<Tr5Level::FaceInfo> list;
+
+		if (room < 0 || room >= level.roomCount() || !level.roomFaces(room, list, error))
+		{
+			printf("classic: room %d has no faces to read (%s)\n", room, error.c_str());
+			continue;
+		}
+
+		for (const Tr5Level::FaceInfo& face : list)
+		{
+			const int corners = face.quad ? 4 : 3;
+
+			for (int half = 0; half + 2 < corners; half++)
+			{
+				const int at[3] = { 0, half + 1, half + 2 };
+				double p[3][3];
+
+				for (int c = 0; c < 3; c++)
+				{
+					p[c][0] = (double)face.v[at[c]][0] - ox;
+					p[c][1] = (double)face.v[at[c]][1] - oy;
+					p[c][2] = (double)face.v[at[c]][2] - oz;
+				}
+
+				const double e1[3] = { p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2] };
+				const double e2[3] = { p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2] };
+				double n[3] =
+				{
+					e1[1] * e2[2] - e1[2] * e2[1],
+					e1[2] * e2[0] - e1[0] * e2[2],
+					e1[0] * e2[1] - e1[1] * e2[0]
+				};
+				const double length = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+				if (length <= 0.0)
+					continue;
+
+				// A light from above and to one side, y down: walls and floors
+				// come out in different greys, so a face reads as a face.
+				const double l[3] = { 0.35, -0.8, 0.48 };
+				const double lit = fabs((n[0] * l[0] + n[1] * l[1] + n[2] * l[2]) / length);
+				const int grey = 70 + (int)(150.0 * lit);
+				const DWORD colour = D3DCOLOR_XRGB(grey, grey, grey - 20 > 0 ? grey - 20 : 0);
+
+				for (int c = 0; c < 3; c++)
+				{
+					Vtx v;
+
+					v.x = (float)p[c][0];
+					v.y = (float)p[c][1];
+					v.z = (float)p[c][2];
+					v.colour = colour;
+					faces[face.doubleSided ? 1 : 0].push_back(v);
+				}
+			}
+
+			count++;
+		}
+	}
+
+	printf("classic: %d face(s) of %d room(s) drawn flat, %d triangle(s) "
+		"single-sided and %d double-sided\n", count, (int)g_classic_rooms.size(),
+		(int)faces[0].size() / 3, (int)faces[1].size() / 3);
+
+	IDirect3DStateBlock9* saved = 0;
+
+	g_device->CreateStateBlock(D3DSBT_ALL, &saved);
+	g_device->BeginScene();
+
+	D3DMATRIX identity;
+
+	memset(&identity, 0, sizeof(identity));
+	identity._11 = identity._22 = identity._33 = identity._44 = 1.0f;
+	g_device->SetTransform(D3DTS_WORLD, &identity);
+	g_device->SetTransform(D3DTS_VIEW, (const D3DMATRIX*)view);
+	g_device->SetTransform(D3DTS_PROJECTION, &projection);
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetTexture(0, 0);
+	g_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	g_device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_CLIPPING, TRUE);
+
+	/* The faces, `shift` units along the line of sight towards the eye
+	 * (negative: away from it). */
+	const auto draw = [&](double shift)
+	{
+		for (int sided = 0; sided < 2; sided++)
+		{
+			if (faces[sided].empty())
+				continue;
+
+			std::vector<Vtx> moved = faces[sided];
+
+			if (shift != 0.0)
+				for (Vtx& v : moved)
+				{
+					const double d[3] = { ex - v.x, ey - v.y, ez - v.z };
+					const double length = sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+
+					if (length <= 0.0)
+						continue;
+
+					v.x += (float)(d[0] / length * shift);
+					v.y += (float)(d[1] / length * shift);
+					v.z += (float)(d[2] / length * shift);
+				}
+
+			g_device->SetRenderState(D3DRS_CULLMODE, sided ? D3DCULL_NONE : D3DCULL_CCW);
+			g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(moved.size() / 3),
+				&moved[0], sizeof(Vtx));
+		}
+	};
+
+	struct Flat
+	{
+		float x, y, z, rhw;
+		DWORD colour;
+	};
+
+	const Flat screen[4] =
+	{
+		{ -0.5f, -0.5f, 0.0f, 1.0f, D3DCOLOR_XRGB(255, 255, 0) },
+		{ (float)width - 0.5f, -0.5f, 0.0f, 1.0f, D3DCOLOR_XRGB(255, 255, 0) },
+		{ -0.5f, (float)height - 0.5f, 0.0f, 1.0f, D3DCOLOR_XRGB(255, 255, 0) },
+		{ (float)width - 0.5f, (float)height - 0.5f, 0.0f, 1.0f, D3DCOLOR_XRGB(255, 255, 0) }
+	};
+
+	if (g_classic_only)
+		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL,
+			D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
+
+	if (g_coincide > 0.0)
+	{
+		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_STENCILMASK, 0xFF);
+		g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0xFF);
+		g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+
+		// In front of the art or within `units` behind it: 1.
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+		g_device->SetRenderState(D3DRS_STENCILREF, 1);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+		draw(g_coincide);
+
+		// Still in front of it from `units` further away: not within, 2.
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_INCR);
+		draw(-g_coincide);
+
+		// The ones left at 1, counted.
+		IDirect3DQuery9* query = 0;
+		DWORD pixels = 0;
+
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+
+		if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query)))
+		{
+			query->Issue(D3DISSUE_BEGIN);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, screen, sizeof(Flat));
+			query->Issue(D3DISSUE_END);
+
+			while (query->GetData(&pixels, sizeof(pixels), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			query->Release();
+			printf("coincide: %lu pixel(s) of %ld at which a classic face lands "
+				"within %.0f units of the art\n", (unsigned long)pixels,
+				width * height, g_coincide);
+		}
+		else
+			printf("coincide: this device has no occlusion query - no count\n");
+
+		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	}
+
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	draw(0.0);
+
+	if (g_coincide > 0.0 && g_coincide_mark)
+	{
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+		g_device->SetRenderState(D3DRS_STENCILREF, 1);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, screen, sizeof(Flat));
+	}
+
+	g_device->EndScene();
+
+	if (saved)
+	{
+		saved->Apply();
+		saved->Release();
+	}
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 4)
@@ -4917,6 +5221,12 @@ int main(int argc, char** argv)
 		printf("       -glowblend add|screen  -aniso 0|1  -glowps 0|1\n");
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
+		printf("       -classicroom <room>   that room's classic faces, flat, "
+			"beside the art (needs -roombox)\n");
+		printf("       -classiconly  -coincide <units>  -coincidemark   the "
+			"classic faces alone; the\n");
+		printf("                     pixels where they land within <units> of "
+			"the art, counted (and painted)\n");
 		printf("       -hdm                          apply the .hdm sidecar "
 			"beside it (needs -roombox)\n");
 		printf("       -window all|open|intruding   (needs -roombox)\n");
@@ -5187,6 +5497,14 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-hdm"))
 			g_hdm = true;
+		else if (!strcmp(argv[at], "-classicroom") && at + 1 < argc)
+			g_classic_rooms.push_back(atoi(argv[++at]));
+		else if (!strcmp(argv[at], "-classiconly"))
+			g_classic_only = true;
+		else if (!strcmp(argv[at], "-coincide") && at + 1 < argc)
+			g_coincide = atof(argv[++at]);
+		else if (!strcmp(argv[at], "-coincidemark"))
+			g_coincide_mark = true;
 		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
 		{
 			walkSeed = atoi(argv[at + 1]);
@@ -7055,6 +7373,8 @@ int main(int argc, char** argv)
 		broken, kStateCount + 3 * kSamplerCount + kStageCount + 11,
 		broken ? "FAIL, the classic path would find a different device"
 			: "PASS, the device came back exactly as it went in");
+
+	DrawClassicFaces(stem, room, view, projection, cx, cy, cz, width, height);
 
 	sprintf(path, "%s_%s_r%d.png", out, stem, room);
 	ShotWrite(shot, path);

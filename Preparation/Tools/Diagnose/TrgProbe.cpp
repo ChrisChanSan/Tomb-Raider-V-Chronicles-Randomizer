@@ -56,6 +56,9 @@
 #include <iterator>
 #include <map>
 #include <set>
+#include <array>
+#include <cmath>
+#include <unordered_map>
 
 #include "core/Tr5Level.h"
 #include "hd_install.h"
@@ -3349,6 +3352,737 @@ namespace
 			return 0;
 		return level.roomCount();
 	}
+
+	/* -classicart: the rooms the engine draws classic, and the HD art of other
+	 * rooms that stands where their faces are.
+	 *
+	 * A room is drawn classic when the .TRG has no group for it, an empty
+	 * group, or a hollow one - every triangle's centroid outside the room's
+	 * inside grown by the renderer's HD_OVERHANG_SLACK of 128 units
+	 * (hd_level.cpp, the loop that fills g_group_hd; hd_render.cpp tags the
+	 * overhang). Such a room's classic roomlets are drawn whenever it is on the
+	 * frame's list, and the art of every HD group is drawn whenever that group
+	 * is - so where another group's art stands in the classic room's place, a
+	 * frame with both on the list draws the place twice.
+	 *
+	 * Per classic room this lists every HD group with a triangle centroid in
+	 * the room's WHOLE box - its grid including the wall ring of border
+	 * sectors, maxceiling to minfloor - split into the inside (one sector in
+	 * from the grid's edge, the box BuildRoomIntrusions hands the renderer)
+	 * and the ring around it, and whether the pair is on the engine's
+	 * intrusion list (`rel=pair`: no portal or vertical link between the two
+	 * and not a flipmap twin) or a neighbour (`rel=next`).
+	 *
+	 * The coverage test, per classic face of the room (Tr5Level::roomFaces,
+	 * the faces InsertRoomlet draws): the face is sampled at the centroids of
+	 * a regular subdivision of each of its triangles, no sample farther than
+	 * `step` units from the next, none on an edge. A sample is covered when a
+	 * segment along the face's normal, `tol` units to each side, meets an art
+	 * triangle that faces the same way as the face (the side the classic
+	 * face is drawn from; `-artfacing any` drops that condition). A face is
+	 * covered when all of its samples are, and a room is `covered` by a set of
+	 * groups when every one of its faces is; one uncovered sample anywhere is
+	 * `not_covered`. `tol` defaults to 128, HD_PAIR_FACE_REACH: the art of a
+	 * face stands within 86 units of it where that was measured.
+	 *
+	 * The control line holds the test against rooms whose answer is known:
+	 * HD rooms of the same level against their own group, which draws them in
+	 * the game. A test that covers those well is a test that can be believed
+	 * where it says a classic room is not covered. */
+	struct ArtTri
+	{
+		float a[3], e1[3], e2[3];	// world units, y down as in TR5
+		float n[3];			// unit normal, (b - a) x (c - a)
+		float lo[3], hi[3];
+		int group;
+	};
+
+	struct ArtGrid
+	{
+		std::vector<ArtTri> tris;
+		std::unordered_map<long long, std::vector<int> > cells;
+
+		static long long key(int x, int y, int z)
+		{
+			return ((long long)(x + 1048576) << 42) |
+				((long long)(y + 1048576) << 21) | (long long)(z + 1048576);
+		}
+
+		void build()
+		{
+			cells.clear();
+
+			for (size_t t = 0; t < tris.size(); t++)
+			{
+				const ArtTri& tri = tris[t];
+				int lo[3], hi[3];
+
+				for (int k = 0; k < 3; k++)
+				{
+					lo[k] = (int)std::floor(tri.lo[k] / 256.0f);
+					hi[k] = (int)std::floor(tri.hi[k] / 256.0f);
+				}
+
+				for (int x = lo[0]; x <= hi[0]; x++)
+					for (int y = lo[1]; y <= hi[1]; y++)
+						for (int z = lo[2]; z <= hi[2]; z++)
+							cells[key(x, y, z)].push_back((int)t);
+			}
+		}
+
+		/* Does the segment p - tol n .. p + tol n meet a triangle of the set
+		 * that faces along `n` (facing 1), against it (-1) or either way (0)?
+		 * Moller-Trumbore with a small barycentric slack, so the seam between
+		 * two art triangles is not a gap. */
+		bool hits(const double p[3], const double n[3], double tol, int facing,
+			std::vector<int>& seen, int stamp) const
+		{
+			double lo[3], hi[3];
+
+			for (int k = 0; k < 3; k++)
+			{
+				lo[k] = std::min(p[k] - tol * n[k], p[k] + tol * n[k]);
+				hi[k] = std::max(p[k] - tol * n[k], p[k] + tol * n[k]);
+			}
+
+			const double origin[3] = { p[0] - tol * n[0], p[1] - tol * n[1],
+				p[2] - tol * n[2] };
+			const double dir[3] = { 2.0 * tol * n[0], 2.0 * tol * n[1],
+				2.0 * tol * n[2] };
+
+			for (int x = (int)std::floor(lo[0] / 256.0); x <= (int)std::floor(hi[0] / 256.0); x++)
+				for (int y = (int)std::floor(lo[1] / 256.0); y <= (int)std::floor(hi[1] / 256.0); y++)
+					for (int z = (int)std::floor(lo[2] / 256.0); z <= (int)std::floor(hi[2] / 256.0); z++)
+					{
+						auto it = cells.find(key(x, y, z));
+
+						if (it == cells.end())
+							continue;
+
+						for (int t : it->second)
+						{
+							if (seen[(size_t)t] == stamp)
+								continue;
+
+							seen[(size_t)t] = stamp;
+
+							const ArtTri& tri = tris[(size_t)t];
+							const double d = tri.n[0] * n[0] + tri.n[1] * n[1] +
+								tri.n[2] * n[2];
+
+							if ((facing > 0 && d <= 0.0) || (facing < 0 && d >= 0.0))
+								continue;
+
+							const double e1[3] = { tri.e1[0], tri.e1[1], tri.e1[2] };
+							const double e2[3] = { tri.e2[0], tri.e2[1], tri.e2[2] };
+							const double h[3] =
+							{
+								dir[1] * e2[2] - dir[2] * e2[1],
+								dir[2] * e2[0] - dir[0] * e2[2],
+								dir[0] * e2[1] - dir[1] * e2[0]
+							};
+							const double det = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
+
+							if (std::fabs(det) < 1e-9)
+								continue;	// the segment runs in the art's plane
+
+							const double inv = 1.0 / det;
+							const double s[3] = { origin[0] - tri.a[0],
+								origin[1] - tri.a[1], origin[2] - tri.a[2] };
+							const double u = inv * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
+							const double slackUV = 1e-3;
+
+							if (u < -slackUV || u > 1.0 + slackUV)
+								continue;
+
+							const double q[3] =
+							{
+								s[1] * e1[2] - s[2] * e1[1],
+								s[2] * e1[0] - s[0] * e1[2],
+								s[0] * e1[1] - s[1] * e1[0]
+							};
+							const double v = inv * (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]);
+
+							if (v < -slackUV || u + v > 1.0 + slackUV)
+								continue;
+
+							const double w = inv * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
+
+							if (w >= 0.0 && w <= 1.0)
+								return true;
+						}
+					}
+
+			return false;
+		}
+	};
+
+	struct ArtCover
+	{
+		int faces = 0, facesCovered = 0;
+		long long samples = 0, samplesCovered = 0;
+		std::vector<double> faceShare;	// per face, covered samples / samples
+	};
+
+	/* The coverage of one room's classic faces by the art in `grid`. */
+	ArtCover coverFaces(const std::vector<Tr5Level::FaceInfo>& faces,
+		const ArtGrid& grid, double tol, double step, int facing)
+	{
+		ArtCover out;
+		std::vector<int> seen(grid.tris.size(), 0);
+		int stamp = 0;
+
+		for (size_t f = 0; f < faces.size(); f++)
+		{
+			const Tr5Level::FaceInfo& face = faces[f];
+			const int corners = face.quad ? 4 : 3;
+			long long samples = 0, covered = 0;
+
+			for (int half = 0; half + 2 < corners; half++)
+			{
+				const long* a = face.v[0];
+				const long* b = face.v[half + 1];
+				const long* c = face.v[half + 2];
+				const double e1[3] = { (double)(b[0] - a[0]), (double)(b[1] - a[1]), (double)(b[2] - a[2]) };
+				const double e2[3] = { (double)(c[0] - a[0]), (double)(c[1] - a[1]), (double)(c[2] - a[2]) };
+				double n[3] =
+				{
+					e1[1] * e2[2] - e1[2] * e2[1],
+					e1[2] * e2[0] - e1[0] * e2[2],
+					e1[0] * e2[1] - e1[1] * e2[0]
+				};
+				const double length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+				if (length <= 0.0)
+					continue;	// a face of no area
+
+				for (int k = 0; k < 3; k++)
+					n[k] /= length;
+
+				const double e3[3] = { e2[0] - e1[0], e2[1] - e1[1], e2[2] - e1[2] };
+				const double longest = std::max(std::sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]),
+					std::max(std::sqrt(e2[0] * e2[0] + e2[1] * e2[1] + e2[2] * e2[2]),
+					std::sqrt(e3[0] * e3[0] + e3[1] * e3[1] + e3[2] * e3[2])));
+				const int cuts = std::max(1, (int)std::ceil(longest / step));
+
+				for (int i = 0; i < cuts; i++)
+					for (int j = 0; i + j < cuts; j++)
+						for (int down = 0; down < 2; down++)
+						{
+							if (down && i + j >= cuts - 1)
+								continue;
+
+							const double u = ((double)i + (down ? 2.0 : 1.0) / 3.0) / cuts;
+							const double v = ((double)j + (down ? 2.0 : 1.0) / 3.0) / cuts;
+							const double p[3] =
+							{
+								a[0] + u * e1[0] + v * e2[0],
+								a[1] + u * e1[1] + v * e2[1],
+								a[2] + u * e1[2] + v * e2[2]
+							};
+
+							if (++stamp == 0x7fffffff)
+							{
+								std::fill(seen.begin(), seen.end(), 0);
+								stamp = 1;
+							}
+
+							samples++;
+
+							if (grid.hits(p, n, tol, face.doubleSided ? 0 : facing,
+								seen, stamp))
+								covered++;
+						}
+			}
+
+			if (!samples)
+			{
+				out.faceShare.push_back(1.0);	// no area: nothing to cover
+				continue;
+			}
+
+			out.faces++;
+			out.samples += samples;
+			out.samplesCovered += covered;
+			out.faceShare.push_back((double)covered / (double)samples);
+
+			if (covered == samples)
+				out.facesCovered++;
+		}
+
+		return out;
+	}
+
+	void dumpClassicArt(const std::string& root, const std::string& stem,
+		const std::string& folder, int focus, double tol, double step,
+		int facing, int controls)
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = folder + "\\" + stem + ".TRC";
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+
+		if (!level.load(toW(trc), error))
+		{
+			std::printf("classicart: %s classic level not loadable: %s\n",
+				stem.c_str(), error.c_str());
+			return;
+		}
+
+		if (!trf::remaster::read_trg(path, trg, error))
+		{
+			std::printf("classicart: %s .TRG FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		const int rooms = level.roomCount();
+		const int groups = (int)trg.groups.size();
+		std::vector<RoomSpace> box((size_t)rooms);
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			RoomSpace& b = box[(size_t)r];
+			unsigned yTop = 0, yOrigin = 0;
+
+			level.headerField(r, 24, yOrigin, error);
+			level.headerField(r, 36, yTop, error);
+			b.numX = rm.numXSectors;
+			b.numZ = rm.numZSectors;
+			b.ox = rm.originX;
+			b.oy = (long)(int)yOrigin;
+			b.oz = rm.originZ;
+			b.meshes = 0;
+			b.x0 = rm.originX;
+			b.x1 = rm.originX + (long)rm.numXSectors * 1024;
+			b.z0 = rm.originZ;
+			b.z1 = rm.originZ + (long)rm.numZSectors * 1024;
+			b.y0 = (long)(int)yTop;
+			b.y1 = rm.yBottom;
+			b.ix0 = b.x0 + 1024;
+			b.ix1 = b.x0 + (long)(rm.numXSectors - 1) * 1024;
+			b.iz0 = b.z0 + 1024;
+			b.iz1 = b.z0 + (long)(rm.numZSectors - 1) * 1024;
+		}
+
+		// Next door: the portals and the vertical links, as -roomspace asks.
+		std::vector<std::set<int> > nextDoor((size_t)rooms);
+
+		for (int r = 0; r < rooms; r++)
+		{
+			for (int p : level.rooms()[(size_t)r].portalRooms)
+				if (p >= 0 && p < rooms)
+				{
+					nextDoor[(size_t)r].insert(p);
+					nextDoor[(size_t)p].insert(r);
+				}
+
+			std::vector<Tr5Level::SectorInfo> sect;
+
+			if (!level.sectorInfo(r, sect, error))
+				continue;
+
+			for (const Tr5Level::SectorInfo& s : sect)
+				for (int other : { s.roomAbove, s.roomBelow })
+					if (other >= 0 && other < rooms)
+					{
+						nextDoor[(size_t)r].insert(other);
+						nextDoor[(size_t)other].insert(r);
+					}
+		}
+
+		/* Every group's triangles in world units, and the engine's two
+		 * questions of them: how many there are, and how many stand outside
+		 * the room's inside by more than the slack. */
+		std::vector<std::vector<ArtTri> > art((size_t)groups);
+		std::vector<int> tris((size_t)rooms, 0), overhang((size_t)rooms, 0);
+
+		for (int g = 0; g < groups && g < rooms; g++)
+		{
+			const RoomSpace& b = box[(size_t)g];
+			const float mins[3] = { 1024.0f, (float)(b.y0 - b.oy), 1024.0f };
+			float maxs[3] = { (float)((b.numX - 1) * 1024), (float)(b.y1 - b.oy),
+				(float)((b.numZ - 1) * 1024) };
+
+			for (int k = 0; k < 3; k++)
+				if (maxs[k] < mins[k])
+					maxs[k] = mins[k];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						float v[3][3];
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& tv =
+								trg.vertices[trg.indices[first + c]];
+
+							v[c][0] = (float)tv.x;
+							v[c][1] = (float)tv.y;
+							v[c][2] = (float)tv.z;
+						}
+
+						const float centre[3] =
+						{
+							(v[0][0] + v[1][0] + v[2][0]) / 3.0f,
+							(v[0][1] + v[1][1] + v[2][1]) / 3.0f,
+							(v[0][2] + v[1][2] + v[2][2]) / 3.0f
+						};
+
+						tris[(size_t)g]++;
+
+						for (int k = 0; k < 3; k++)
+							if (centre[k] < mins[k] - 128.0f || centre[k] > maxs[k] + 128.0f)
+							{
+								overhang[(size_t)g]++;
+								break;
+							}
+
+						ArtTri t;
+						const float off[3] = { (float)b.ox, (float)b.oy, (float)b.oz };
+
+						for (int k = 0; k < 3; k++)
+						{
+							t.a[k] = v[0][k] + off[k];
+							t.e1[k] = v[1][k] - v[0][k];
+							t.e2[k] = v[2][k] - v[0][k];
+							t.lo[k] = std::min(v[0][k], std::min(v[1][k], v[2][k])) + off[k];
+							t.hi[k] = std::max(v[0][k], std::max(v[1][k], v[2][k])) + off[k];
+						}
+
+						const double n[3] =
+						{
+							(double)t.e1[1] * t.e2[2] - (double)t.e1[2] * t.e2[1],
+							(double)t.e1[2] * t.e2[0] - (double)t.e1[0] * t.e2[2],
+							(double)t.e1[0] * t.e2[1] - (double)t.e1[1] * t.e2[0]
+						};
+						const double length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+						if (length <= 0.0)
+							continue;	// counted, but it covers nothing
+
+						for (int k = 0; k < 3; k++)
+							t.n[k] = (float)(n[k] / length);
+
+						t.group = g;
+						art[(size_t)g].push_back(t);
+					}
+				}
+		}
+
+		std::vector<const char*> reason((size_t)rooms, (const char*)0);
+		int noGroup = 0, empty = 0, hollow = 0;
+
+		for (int r = 0; r < rooms; r++)
+		{
+			if (r >= groups)
+			{
+				reason[(size_t)r] = "no_group";
+				noGroup++;
+			}
+			else if (!tris[(size_t)r])
+			{
+				reason[(size_t)r] = "empty_group";
+				empty++;
+			}
+			else if (overhang[(size_t)r] >= tris[(size_t)r])
+			{
+				reason[(size_t)r] = "hollow_group";
+				hollow++;
+			}
+		}
+
+		const auto drawsHD = [&](int g)
+		{
+			return g >= 0 && g < rooms && g < groups && !reason[(size_t)g];
+		};
+
+		/* The control: HD rooms against their own group, evenly spread over
+		 * the level, under the three facing rules. */
+		if (controls > 0)
+		{
+			int done = 0;
+			long long s[3] = { 0, 0, 0 }, c[3] = { 0, 0, 0 };
+			int f[3] = { 0, 0, 0 }, fc[3] = { 0, 0, 0 };
+
+			for (int at = 0; at < controls; at++)
+			{
+				const int r = (int)((long long)at * rooms / controls);
+
+				if (!drawsHD(r))
+					continue;
+
+				std::vector<Tr5Level::FaceInfo> faces;
+
+				if (!level.roomFaces(r, faces, error) || faces.empty())
+					continue;
+
+				ArtGrid grid;
+
+				grid.tris = art[(size_t)r];
+				grid.build();
+				done++;
+
+				for (int k = 0; k < 3; k++)
+				{
+					const ArtCover cover = coverFaces(faces, grid, tol, step, k == 0 ? 1 : (k == 1 ? -1 : 0));
+
+					s[k] += cover.samples;
+					c[k] += cover.samplesCovered;
+					f[k] += cover.faces;
+					fc[k] += cover.facesCovered;
+				}
+			}
+
+			std::printf("classicart: %s control rooms=%d own group covers samples "
+				"same-facing %.1f%% (faces %d/%d) against %.1f%% (faces %d/%d) any "
+				"%.1f%% (faces %d/%d)\n", stem.c_str(), done,
+				s[0] ? 100.0 * c[0] / s[0] : 0.0, fc[0], f[0],
+				s[1] ? 100.0 * c[1] / s[1] : 0.0, fc[1], f[1],
+				s[2] ? 100.0 * c[2] / s[2] : 0.0, fc[2], f[2]);
+		}
+
+		int holders = 0;
+
+		for (int h = 0; h < rooms; h++)
+		{
+			if (!reason[(size_t)h])
+				continue;
+
+			const RoomSpace& H = box[(size_t)h];
+			const Tr5Room& hr = level.rooms()[(size_t)h];
+			std::vector<int> inside((size_t)groups, 0), ring((size_t)groups, 0);
+			bool any = false;
+
+			for (int g = 0; g < groups && g < rooms; g++)
+			{
+				if (g == h || !drawsHD(g))
+					continue;
+
+				if (hr.altRoom == g || level.rooms()[(size_t)g].altRoom == h)
+					continue;	// a flipmap twin is never drawn with it
+
+				for (const ArtTri& t : art[(size_t)g])
+				{
+					const float cx = t.a[0] + (t.e1[0] + t.e2[0]) / 3.0f;
+					const float cy = t.a[1] + (t.e1[1] + t.e2[1]) / 3.0f;
+					const float cz = t.a[2] + (t.e1[2] + t.e2[2]) / 3.0f;
+
+					if (cx < H.x0 || cx > H.x1 || cz < H.z0 || cz > H.z1 ||
+						cy < H.y0 || cy > H.y1)
+						continue;
+
+					if (cx >= H.ix0 && cx <= H.ix1 && cz >= H.iz0 && cz <= H.iz1)
+						inside[(size_t)g]++;
+					else
+						ring[(size_t)g]++;
+
+					any = true;
+				}
+			}
+
+			std::vector<Tr5Level::FaceInfo> faces;
+
+			level.roomFaces(h, faces, error);
+
+			if (!any)
+			{
+				if (focus == h)
+					std::printf("classicart: %s room=%d reason=%s faces=%d no foreign "
+						"art in its box\n", stem.c_str(), h, reason[(size_t)h],
+						(int)faces.size());
+				continue;
+			}
+
+			holders++;
+
+			const auto artIn = [&](const std::vector<int>& which)
+			{
+				ArtGrid grid;
+
+				for (int g : which)
+					for (const ArtTri& t : art[(size_t)g])
+						if (t.hi[0] >= H.x0 - tol && t.lo[0] <= H.x1 + tol &&
+							t.hi[1] >= H.y0 - tol && t.lo[1] <= H.y1 + tol &&
+							t.hi[2] >= H.z0 - tol && t.lo[2] <= H.z1 + tol)
+							grid.tris.push_back(t);
+
+				grid.build();
+				return grid;
+			};
+
+			std::printf("classicart: %s room=%d reason=%s faces=%d box=%ld..%ld,"
+				"%ld..%ld,%ld..%ld\n", stem.c_str(), h, reason[(size_t)h],
+				(int)faces.size(), H.x0, H.x1, H.y0, H.y1, H.z0, H.z1);
+
+			std::vector<int> pairs, all;
+
+			for (int g = 0; g < groups && g < rooms; g++)
+			{
+				if (!inside[(size_t)g] && !ring[(size_t)g])
+					continue;
+
+				const bool next = nextDoor[(size_t)h].count(g) != 0;
+				const ArtCover cover = coverFaces(faces, artIn(std::vector<int>(1, g)),
+					tol, step, facing);
+
+				all.push_back(g);
+
+				if (!next)
+					pairs.push_back(g);
+
+				std::printf("classicart: %s room=%d art=%d rel=%s inside=%d ring=%d "
+					"faces_covered=%d/%d samples=%lld/%lld (%.1f%%)%s\n", stem.c_str(),
+					h, g, next ? "next" : "pair", inside[(size_t)g], ring[(size_t)g],
+					cover.facesCovered, cover.faces, cover.samplesCovered,
+					cover.samples, cover.samples ? 100.0 * cover.samplesCovered /
+					cover.samples : 0.0, cover.faces &&
+					cover.facesCovered == cover.faces ? " alone=covered" : "");
+			}
+
+			/* The art a build could tag by its centroid alone: the triangles
+			 * of every group above whose centroid lies within a face's
+			 * outline and `tol` of its plane (HDPairFaceDistance, the
+			 * renderer's own face claim) and that face the way the face
+			 * does. `union=claimed` is what those triangles cover; where it
+			 * falls short of `union=all`, a triangle that covers the face
+			 * has its centroid off it. */
+			ArtGrid claimedGrid;
+
+			{
+				std::vector<HDPairFace> outline;
+				std::vector<std::array<double, 3> > normal;
+
+				for (const Tr5Level::FaceInfo& face : faces)
+				{
+					HDPairFace one;
+
+					one.group = h;
+					one.corners = face.quad ? 4 : 3;
+
+					for (int c = 0; c < 4; c++)
+						for (int axis = 0; axis < 3; axis++)
+							one.v[c][axis] = (float)face.v[c < one.corners ? c : 0][axis];
+
+					const double e1[3] = { (double)one.v[1][0] - one.v[0][0],
+						(double)one.v[1][1] - one.v[0][1], (double)one.v[1][2] - one.v[0][2] };
+					const double e2[3] = { (double)one.v[2][0] - one.v[0][0],
+						(double)one.v[2][1] - one.v[0][1], (double)one.v[2][2] - one.v[0][2] };
+
+					outline.push_back(one);
+					normal.push_back({ e1[1] * e2[2] - e1[2] * e2[1],
+						e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0] });
+				}
+
+				const ArtGrid every = artIn(all);
+				int claimedTris = 0;
+
+				for (const ArtTri& t : every.tris)
+				{
+					const float p[3] =
+					{
+						t.a[0] + (t.e1[0] + t.e2[0]) / 3.0f,
+						t.a[1] + (t.e1[1] + t.e2[1]) / 3.0f,
+						t.a[2] + (t.e1[2] + t.e2[2]) / 3.0f
+					};
+
+					for (size_t f = 0; f < outline.size(); f++)
+					{
+						const double d = HDPairFaceDistance(outline[f], p);
+						const double side = normal[f][0] * t.n[0] +
+							normal[f][1] * t.n[1] + normal[f][2] * t.n[2];
+
+						if (d >= 0.0 && d <= tol &&
+							(faces[f].doubleSided || facing == 0 ||
+							(facing > 0 ? side > 0.0 : side < 0.0)))
+						{
+							claimedGrid.tris.push_back(t);
+							claimedTris++;
+							break;
+						}
+					}
+				}
+
+				claimedGrid.build();
+
+				const ArtCover cover = coverFaces(faces, claimedGrid, tol, step, facing);
+
+				std::printf("classicart: %s room=%d union=claimed tris=%d "
+					"faces_covered=%d/%d samples=%lld/%lld (%.1f%%)\n",
+					stem.c_str(), h, claimedTris, cover.facesCovered, cover.faces,
+					cover.samplesCovered, cover.samples, cover.samples ?
+					100.0 * cover.samplesCovered / cover.samples : 0.0);
+			}
+
+			for (int which = 0; which < 2; which++)
+			{
+				const std::vector<int>& set = which ? all : pairs;
+
+				if (set.empty())
+					continue;
+
+				const ArtCover cover = coverFaces(faces, artIn(set), tol, step, facing);
+				std::string names;
+
+				for (int g : set)
+					names += (names.empty() ? "" : ",") + std::to_string(g);
+
+				std::printf("classicart: %s room=%d union=%s groups=%s "
+					"faces_covered=%d/%d samples=%lld/%lld (%.1f%%) verdict=%s\n",
+					stem.c_str(), h, which ? "all" : "pairs", names.c_str(),
+					cover.facesCovered, cover.faces, cover.samplesCovered,
+					cover.samples, cover.samples ? 100.0 * cover.samplesCovered /
+					cover.samples : 0.0, !cover.faces ? "no_faces" :
+					(cover.facesCovered == cover.faces ? "covered" : "not_covered"));
+
+				/* With -room naming this room, the faces the set leaves
+				 * uncovered: where they are and how much of each is bare. */
+				if (focus == h)
+				{
+					size_t at = 0;
+
+					for (size_t f = 0; f < faces.size(); f++)
+					{
+						const Tr5Level::FaceInfo& face = faces[f];
+						const int corners = face.quad ? 4 : 3;
+						double c[3] = { 0, 0, 0 };
+
+						for (int k = 0; k < corners; k++)
+							for (int axis = 0; axis < 3; axis++)
+								c[axis] += (double)face.v[k][axis] / corners;
+
+						if (at >= cover.faceShare.size())
+							break;
+
+						const double share = cover.faceShare[at++];
+
+						if (share < 1.0)
+							std::printf("classicart: %s room=%d union=%s face=%d "
+								"corners=%d centre=%.0f,%.0f,%.0f covered=%.1f%%\n",
+								stem.c_str(), h, which ? "all" : "pairs", (int)f,
+								corners, c[0], c[1], c[2], 100.0 * share);
+					}
+				}
+			}
+		}
+
+		std::printf("classicart: %s rooms=%d groups=%d classic=%d (no_group %d, "
+			"empty_group %d, hollow_group %d) holding foreign art=%d tol=%.0f "
+			"step=%.0f facing=%s\n", stem.c_str(), rooms, groups,
+			noGroup + empty + hollow, noGroup, empty, hollow, holders, tol, step,
+			facing > 0 ? "same" : (facing < 0 ? "against" : "any"));
+	}
 }
 
 int main(int argc, char** argv)
@@ -3385,6 +4119,14 @@ int main(int argc, char** argv)
 		std::printf("       [-matparts <material>]  every part of ONE material with its\n");
 		std::printf("                          geometry, and (with -classic) the classic\n");
 		std::printf("                          room's own horizontal planes beside it\n");
+		std::printf("       [-classicart]  the rooms drawn classic (no, empty or hollow\n");
+		std::printf("                      group), the HD art of other groups in their\n");
+		std::printf("                      whole box (inside / wall ring, pair or next\n");
+		std::printf("                      door) and how much of their classic faces it\n");
+		std::printf("                      covers (needs -classic); -room <n> lists the\n");
+		std::printf("                      uncovered faces, -arttol <units> (128),\n");
+		std::printf("                      -artstep <units> (64), -artfacing\n");
+		std::printf("                      same|against|any, -artcontrol <rooms> (12)\n");
 		return 1;
 	}
 
@@ -3432,10 +4174,29 @@ int main(int argc, char** argv)
 	bool gloss_light = false;
 	bool gloss_field = false;
 	std::string gloss_file;
+	bool classic_art = false;
+	double art_tol = 128.0;
+	double art_step = 64.0;
+	int art_facing = 1;
+	int art_controls = 12;
 
 	for (int i = 2; i < argc; i++)
 	{
-		if (!_stricmp(argv[i], "-gloss"))
+		if (!_stricmp(argv[i], "-classicart"))
+			classic_art = true;
+		else if (!_stricmp(argv[i], "-arttol") && i + 1 < argc)
+			art_tol = std::atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-artstep") && i + 1 < argc)
+			art_step = std::atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-artcontrol") && i + 1 < argc)
+			art_controls = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-artfacing") && i + 1 < argc)
+		{
+			++i;
+			art_facing = !_stricmp(argv[i], "any") ? 0 :
+				(!_stricmp(argv[i], "against") ? -1 : 1);
+		}
+		else if (!_stricmp(argv[i], "-gloss"))
 			gloss = true;
 		else if (!_stricmp(argv[i], "-glosslight"))
 			gloss_light = true;
@@ -3602,6 +4363,21 @@ int main(int argc, char** argv)
 
 		for (const std::string& stem : levels)
 			dumpGloss(root, stem, classic, gloss_seed, file);
+
+		return 0;
+	}
+
+	if (classic_art)
+	{
+		if (classic.empty())
+		{
+			std::printf("-classicart needs -classic <folder holding the .TRC>\n");
+			return 1;
+		}
+
+		for (const std::string& stem : levels)
+			dumpClassicArt(root, stem, classic, room_focus, art_tol, art_step,
+				art_facing, art_controls);
 
 		return 0;
 	}

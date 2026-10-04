@@ -24,6 +24,7 @@
 
 #include "hd_pagecache.h"
 #include "hd_gloss_math.h"		// HDSectorFloor, HDRoomGrid
+#include "hd_cover.h"			// HDCoverTri, HDCoverFace - the stand ranges
 
 #include <math.h>			// sqrt, for HDPairFaceDistance
 
@@ -316,6 +317,8 @@ struct HDPairFace
  * within 1 unit. 128, half a click of TR5's height grid, is the next round
  * number past the furthest of them. */
 #define HD_PAIR_FACE_REACH	128.0
+// The stand ranges ask the same reach of the faces of a room drawn classic.
+static_assert(HD_COVER_REACH == HD_PAIR_FACE_REACH, "one reach for both rules");
 
 /* The distance from `p` to the face's plane when `p` stands within the
  * face's outline, and -1 when it does not. A quad is asked as its two
@@ -749,6 +752,84 @@ void HDRenderSetIntrusions(const HDIntrusion* list, int count);
  * one piece per entry that no face claims, drawn inside the window. */
 void HDRenderSetPairFaces(const HDPairFace* faces, int count);
 
+/* The classic faces another group's art may stand on - see hd_cover.h.
+ *
+ * `rooms` is every room of the level, in room order: its origin in world units
+ * and its flipmap twin (-1 for none). `holders` are the rooms whose faces are
+ * handed in, each with its run of `faces` (world units) and its whole box -
+ * the grid with its wall ring, maxceiling to minfloor - grown by
+ * HD_COVER_REACH, in world units. The caller hands every room with a classic
+ * face that the randomizer did not mark; the build keeps those whose group
+ * draws nothing inside the room's own box (no group, no triangle, or every
+ * centroid outside the box and its HD_OVERHANG_SLACK - the classic rooms, as
+ * far as the .TRG alone can say before the build), and tags every triangle
+ * of every other room group that stands on one of their faces
+ * (HDCoverOverlaps), its flipmap twin's excepted. Those triangles leave the
+ * open and the intruding half and become a range per (group, holder, kind),
+ * as do those on no face whose centroid stands in a holder's box -
+ * HDRenderGroupStandRange below.
+ *
+ * Same contract as the lists above - before HDRenderLevelBegin, the pointers
+ * are only remembered for the length of that call. Without it nothing is
+ * tagged and every group draws as it did. */
+struct HDStandRoom
+{
+	float origin[3];
+	int twin;
+};
+
+struct HDStandHolder
+{
+	int room;
+	int firstFace;
+	int faceCount;
+	float mins[3];
+	float maxs[3];
+};
+
+void HDRenderSetStandFaces(const HDStandRoom* rooms, int roomCount,
+	const HDStandHolder* holders, int holderCount, const HDCoverFace* faces,
+	int faceCount);
+
+/* What the build tagged. A group's stand ranges, up to three per holder its
+ * art stands in: the holder's room, the kind - 0 for triangles that reach
+ * onto the holder's faces, 1 for those that lie on them whole
+ * (HDCoverTriOnFaces), 2 for those on no face whose centroid stands in the
+ * holder's box all the same (the relief of a room drawn as the art) - and the
+ * triangles, all three passes together. A triangle an intrusion piece holds
+ * is never kind 2.
+ * HDRenderStandTriangleAt hands out every tagged triangle in world units
+ * (HDCoverTri::group is its group) with its holder, for the coverage test
+ * hd_level.cpp runs once the build has said which groups are drawn HD; the
+ * list is kept until the level is released. */
+struct HDStandRange
+{
+	int holder;
+	int kind;
+	int triangles;
+};
+
+int HDRenderGroupStandRanges(int group);
+bool HDRenderGroupStandRange(int group, int index, HDStandRange* out);
+int HDRenderStandTriangleCount();
+bool HDRenderStandTriangleAt(int at, HDCoverTri* tri, int* holder);
+/* The holders the build kept out of those handed in, and of the tagged
+ * triangles how many the intrusion list had asked about too (a stand range
+ * takes them out of their intrusion piece). For the log. */
+int HDRenderStandHolders();
+int HDRenderStandFromIntrusions();
+/* This frame's answer for one stand range: nonzero draws it with its own
+ * group (HD_WINDOW_ALL and HD_WINDOW_OPEN), zero leaves it out there. 1 after
+ * the build, so a frame that never answers draws every triangle as a group
+ * without stand ranges would. Kept until it is set again, so the glow phase
+ * draws the answer the solid phase was given. */
+void HDRenderStandWith(int group, int index, int with);
+/* One stand range alone - the triangles of `group` that stand on the faces
+ * of its holder - with the group's own matrix and lighting; the caller sets
+ * the holder's portal window. False when there is nothing to draw. */
+bool HDRenderRoomStand(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes, int index);
+
 /* The pieces a group's intruding triangles were split into at the build, one
  * per (entry of the intrusion list, classic face, smaller box) and one per
  * entry for the triangles no face claims. `intrusion` is the entry (the first
@@ -1011,6 +1092,10 @@ IDirect3DTexture9* HDRenderShadowOthersMap();
  * across ANDREA2's courtyard. */
 #define HD_WINDOW_INSIDE	3
 #define HD_WINDOW_OVERHANG	4
+/* One stand range alone (HDRenderRoomStand). Every other window draws a
+ * stand range only while HDRenderStandWith says so, and with the open half -
+ * it is never windowed with the group's intruding art. */
+#define HD_WINDOW_STAND		5
 
 // One room, the passes the mask names, world matrix as the classic path would
 // set it (the room's origin translation). False when the group is missing or

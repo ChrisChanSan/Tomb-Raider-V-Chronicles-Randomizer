@@ -1303,6 +1303,12 @@ namespace
 		 * whole screen along with everything else. It is still counted per
 		 * triangle (HDGroup::overhang) for the hollow-room test. */
 		int intruding = 0;
+		/* 0, or one plus the stand range these triangles belong to: art that
+		 * stands on the faces, or in the box, of a room drawn classic
+		 * (hd_cover.h, HDStandRange). In the
+		 * sort key, because a frame draws a stand range with its group, in
+		 * its holder's window or not at all, on an answer of its own. */
+		int stand = 0;
 		// The inside/overhang split, filled always and in the sort key only
 		// while HDRenderSplitOverhang is on - see the note over it.
 		int overhang = 0;
@@ -1390,6 +1396,12 @@ namespace
 		 * frame's answer per piece, set by HDRenderPairWhole. */
 		std::vector<HDPairRange> pairRanges;
 		std::vector<unsigned char> pairWhole;
+		/* The stand ranges - see HDStandRange in hd_render.h. A range's
+		 * `stand` is one plus its index here. `standWith` is this frame's
+		 * answer per range, set by HDRenderStandWith; 1 until a frame sets
+		 * it. */
+		std::vector<HDStandRange> standRanges;
+		std::vector<unsigned char> standWith;
 		/* The same for the cut boxes, and how many triangles
 		 * this group lost to them. The count is not per pass - a cut
 		 * triangle never reaches a pass's list, it is left out of the build
@@ -1795,6 +1807,25 @@ namespace
 	 * the index fill hands to the open half, never asked per frame. Counted
 	 * on the same terms as g_intrusion_hits, for the level's log line. */
 	std::vector<int> g_intrusion_band;
+
+	/* The classic faces another group's art may stand on (HDStandRoom,
+	 * HDStandHolder, HDCoverFace in hd_render.h), borrowed for the length of
+	 * the build like the lists above, and what the build made of them: the
+	 * tagged triangles with their holders, kept for hd_level.cpp's coverage
+	 * test, the holders it kept, and how many tagged triangles an intrusion
+	 * entry had asked about too. `g_stand_pick` is the one range
+	 * HD_WINDOW_STAND draws, -1 outside HDRenderRoomStand. */
+	const HDStandRoom* g_stand_rooms = 0;
+	int g_stand_room_count = 0;
+	const HDStandHolder* g_stand_holders = 0;
+	int g_stand_holder_count = 0;
+	const HDCoverFace* g_stand_faces = 0;
+	int g_stand_face_count = 0;
+	std::vector<HDCoverTri> g_stand_tris;
+	std::vector<int> g_stand_tri_holder;
+	int g_stand_kept = 0;
+	int g_stand_from_intrusions = 0;
+	int g_stand_pick = -1;
 
 	/* The openings the randomizer cut, and how many triangles
 	 * each of those boxes took away. Borrowed and counted on exactly the same
@@ -3268,6 +3299,10 @@ namespace
 		release_field();
 		g_groups.clear();
 		g_mirrors.clear();
+		g_stand_tris.clear();
+		g_stand_tri_holder.clear();
+		g_stand_kept = 0;
+		g_stand_from_intrusions = 0;
 		g_group_origin.clear();
 		g_votes.clear();
 		g_page_gloss.clear();
@@ -3716,6 +3751,83 @@ void HDRenderPairWhole(int group, int index, int whole)
 
 	if (index >= 0 && index < (int)g.pairWhole.size())
 		g.pairWhole[(size_t)index] = whole ? 1 : 0;
+}
+
+void HDRenderSetStandFaces(const HDStandRoom* rooms, int roomCount,
+	const HDStandHolder* holders, int holderCount, const HDCoverFace* faces,
+	int faceCount)
+{
+	const bool all = rooms && roomCount > 0 && holders && holderCount > 0 &&
+		faces && faceCount > 0;
+
+	g_stand_rooms = all ? rooms : 0;
+	g_stand_room_count = all ? roomCount : 0;
+	g_stand_holders = all ? holders : 0;
+	g_stand_holder_count = all ? holderCount : 0;
+	g_stand_faces = all ? faces : 0;
+	g_stand_face_count = all ? faceCount : 0;
+}
+
+int HDRenderGroupStandRanges(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return (int)g_groups[(size_t)group].standRanges.size();
+}
+
+bool HDRenderGroupStandRange(int group, int index, HDStandRange* out)
+{
+	if (group < 0 || group >= (int)g_groups.size() || !out)
+		return false;
+
+	const HDGroup& g = g_groups[(size_t)group];
+
+	if (index < 0 || index >= (int)g.standRanges.size())
+		return false;
+
+	*out = g.standRanges[(size_t)index];
+	return true;
+}
+
+int HDRenderStandTriangleCount()
+{
+	return (int)g_stand_tris.size();
+}
+
+bool HDRenderStandTriangleAt(int at, HDCoverTri* tri, int* holder)
+{
+	if (at < 0 || at >= (int)g_stand_tris.size())
+		return false;
+
+	if (tri)
+		*tri = g_stand_tris[(size_t)at];
+
+	if (holder)
+		*holder = g_stand_tri_holder[(size_t)at];
+
+	return true;
+}
+
+int HDRenderStandHolders()
+{
+	return g_stand_kept;
+}
+
+int HDRenderStandFromIntrusions()
+{
+	return g_stand_from_intrusions;
+}
+
+void HDRenderStandWith(int group, int index, int with)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return;
+
+	HDGroup& g = g_groups[(size_t)group];
+
+	if (index >= 0 && index < (int)g.standWith.size())
+		g.standWith[(size_t)index] = with ? 1 : 0;
 }
 
 void HDRenderSetCuts(const HDCut* list, int count)
@@ -4424,12 +4536,123 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int glow;			// see BuildGlowParts, else -1
 		int overhang;			// see HDRoomBox
 		int intruding;			// see HDIntrusion
+		int stand;			// see HDStandRange
 		int cull;			// see RangeCulls
 		unsigned int first;
 	};
 
 	std::vector<HDTri> tris;
 	std::vector<unsigned char> sway_seen(trg.vertices.size(), 0);
+
+	/* --- the holders of stand art -------------------------------------
+	 *
+	 * Of the rooms handed to HDRenderSetStandFaces, the ones the engine will
+	 * draw classic, as far as the .TRG says before the build: no group, or a
+	 * group none of whose triangles has its centroid inside the room's box
+	 * with HD_OVERHANG_SLACK - the empty and the hollow rule of hd_level.cpp
+	 * asked of every triangle of the file. The build only ever leaves
+	 * triangles out, so a room the engine draws HD is never among them; a
+	 * marked room is never handed in. Each face's box, grown by
+	 * HD_COVER_REACH, spares the overlap test for all but a few faces per
+	 * triangle. */
+	g_stand_tris.clear();
+	g_stand_tri_holder.clear();
+	g_stand_kept = 0;
+	g_stand_from_intrusions = 0;
+
+	std::vector<int> stand_keep;
+	std::vector<float> stand_face_box((size_t)g_stand_face_count * 6, 0.0f);
+
+	for (int k = 0; k < g_stand_holder_count; k++)
+	{
+		const int r = g_stand_holders[k].room;
+		bool inside = false;
+
+		if (r < 0 || r >= g_stand_room_count)
+			continue;
+
+		if (r < (int)trg.groups.size())
+		{
+			const bool boxed = g_boxes && r < g_box_count;
+
+			for (const trf::remaster::TrgPart& part : trg.groups[(size_t)r].parts)
+				for (int pass = 0; pass < 3 && !inside; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned int at = 0; at + 2 < run.count && !inside; at += 3)
+					{
+						const unsigned int first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						if (!boxed)
+						{
+							inside = true;	// no box: only an empty group is classic
+							break;
+						}
+
+						float centre[3] = { 0.0f, 0.0f, 0.0f };
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& tv =
+								trg.vertices[trg.indices[first + c]];
+
+							centre[0] += (float)tv.x;
+							centre[1] += (float)tv.y;
+							centre[2] += (float)tv.z;
+						}
+
+						bool in = true;
+
+						for (int axis = 0; axis < 3; axis++)
+						{
+							const float p = centre[axis] / 3.0f;
+
+							if (p < g_boxes[r].mins[axis] - HD_OVERHANG_SLACK ||
+								p > g_boxes[r].maxs[axis] + HD_OVERHANG_SLACK)
+								in = false;
+						}
+
+						inside = in;
+					}
+				}
+		}
+
+		if (inside)
+			continue;
+
+		stand_keep.push_back(k);
+
+		for (int f = 0; f < g_stand_holders[k].faceCount; f++)
+		{
+			const int at = g_stand_holders[k].firstFace + f;
+
+			if (at < 0 || at >= g_stand_face_count)
+				continue;
+
+			const HDCoverFace& face = g_stand_faces[at];
+			float* box = &stand_face_box[(size_t)at * 6];
+
+			for (int axis = 0; axis < 3; axis++)
+			{
+				double lo = face.v[0][axis], hi = face.v[0][axis];
+
+				for (int c = 1; c < face.corners && c < 4; c++)
+				{
+					if (face.v[c][axis] < lo) lo = face.v[c][axis];
+					if (face.v[c][axis] > hi) hi = face.v[c][axis];
+				}
+
+				box[axis] = (float)(lo - HD_COVER_REACH);
+				box[axis + 3] = (float)(hi + HD_COVER_REACH);
+			}
+		}
+	}
+
+	g_stand_kept = (int)stand_keep.size();
 
 	for (size_t g = 0; g < trg.groups.size(); g++)
 	{
@@ -4461,6 +4684,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		for (int k = 0; k < g_intrusion_count; k++)
 			if (g_intrusions[k].group == (int)g)
 				group.intrusionAt.push_back(k);
+
+		/* And the holders of stand art this group's triangles are asked
+		 * against: every one but its own room and its flipmap twin, which
+		 * is the same place at another moment and never drawn with it. Empty
+		 * for the sky and in every level whose classic rooms have no face. */
+		std::vector<int> standAt;
+		float stand_origin[3] = { 0.0f, 0.0f, 0.0f };
+
+		if ((int)g < g_room_groups && (int)g < g_stand_room_count)
+		{
+			for (int k = 0; k < 3; k++)
+				stand_origin[k] = g_stand_rooms[g].origin[k];
+
+			for (size_t k = 0; k < stand_keep.size(); k++)
+			{
+				const int h = g_stand_holders[stand_keep[k]].room;
+
+				if (h == (int)g || g_stand_rooms[h].twin == (int)g ||
+					g_stand_rooms[g].twin == h)
+					continue;
+
+				standAt.push_back(stand_keep[k]);
+			}
+		}
 
 		// And the classic faces those triangles may belong to - only of a
 		// group that has an entry at all.
@@ -4934,6 +5181,123 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
+					/* Does the triangle stand on a face of a room drawn classic
+					 * (HDCoverOverlaps)? The first holder whose face it stands
+					 * on takes it. Such a triangle leaves the open and the
+					 * intruding half - a stand range is drawn on an answer of
+					 * its own (hd_level.cpp, HDStandDraw) - and is kept in world
+					 * units for the coverage test. The hits of the intrusion
+					 * list above are counted all the same: they say what its
+					 * boxes caught. */
+					int stand_at = -1;
+					int box_at = -1;
+					HDCoverTri cover;
+
+					if (!standAt.empty())
+					{
+						float v[3][3];
+						float lo[3], hi[3];
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& tv =
+								trg.vertices[trg.indices[first + c]];
+
+							v[c][0] = (float)tv.x;
+							v[c][1] = (float)tv.y;
+							v[c][2] = (float)tv.z;
+						}
+
+						for (int axis = 0; axis < 3; axis++)
+						{
+							lo[axis] = hi[axis] = v[0][axis] + stand_origin[axis];
+
+							for (int c = 1; c < 3; c++)
+							{
+								const float p = v[c][axis] + stand_origin[axis];
+
+								if (p < lo[axis]) lo[axis] = p;
+								if (p > hi[axis]) hi[axis] = p;
+							}
+						}
+
+						bool made = false, noArea = false;
+
+						for (size_t k = 0; k < standAt.size() && stand_at < 0 && !noArea; k++)
+						{
+							const HDStandHolder& holder = g_stand_holders[standAt[k]];
+							bool near_box = true;
+
+							for (int axis = 0; axis < 3; axis++)
+								if (hi[axis] < holder.mins[axis] || lo[axis] > holder.maxs[axis])
+									near_box = false;
+
+							if (!near_box)
+								continue;
+
+							for (int f = 0; f < holder.faceCount && stand_at < 0; f++)
+							{
+								const int at_face = holder.firstFace + f;
+
+								if (at_face < 0 || at_face >= g_stand_face_count)
+									continue;
+
+								const float* fb = &stand_face_box[(size_t)at_face * 6];
+
+								if (hi[0] < fb[0] || lo[0] > fb[3] ||
+									hi[1] < fb[1] || lo[1] > fb[4] ||
+									hi[2] < fb[2] || lo[2] > fb[5])
+									continue;
+
+								if (!made)
+								{
+									made = true;
+
+									if (!HDCoverMakeTri(v, stand_origin, (int)g, &cover))
+									{
+										noArea = true;	// it stands on nothing
+										break;
+									}
+								}
+
+								if (HDCoverOverlaps(cover, g_stand_faces[at_face],
+									HD_COVER_REACH))
+									stand_at = standAt[k];
+							}
+						}
+
+						/* On no face: does its centroid stand in a holder's box
+						 * all the same? That is the relief and the reveals of a
+						 * room drawn as another group's art - a planter, the
+						 * jambs of an arch - which the covered room needs in its
+						 * window as much as its floor (HDStandDraw, kind 2). */
+						for (size_t k = 0; k < standAt.size() && stand_at < 0 && box_at < 0; k++)
+						{
+							const HDStandHolder& holder = g_stand_holders[standAt[k]];
+							bool in = true;
+
+							for (int axis = 0; axis < 3; axis++)
+							{
+								const float c = (v[0][axis] + v[1][axis] + v[2][axis]) / 3.0f +
+									stand_origin[axis];
+
+								if (c < holder.mins[axis] || c > holder.maxs[axis])
+									in = false;
+							}
+
+							if (in)
+								box_at = standAt[k];
+						}
+					}
+
+					if (stand_at >= 0)
+					{
+						if (pair_at >= 0)
+							g_stand_from_intrusions++;
+
+						pair_at = -1;
+					}
+
 					/* The classic face the triangle belongs to - the nearest
 					 * one that claims it, see HDPairFace - and the piece of
 					 * (pair, face, smaller box) it is drawn with. The pieces
@@ -5027,10 +5391,60 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						intruding = piece + 1;
 					}
 
+					int stand = 0;
+
+					// In a box only when no intrusion piece has it.
+					if (stand_at < 0 && pair_at >= 0)
+						box_at = -1;
+
+					if (stand_at >= 0 || box_at >= 0)
+					{
+						/* Reaching onto the holder's faces (kind 0), lying on
+						 * them whole (1) or standing in its box on no face (2):
+						 * answered apart (HDStandDraw), so ranges of their own. */
+						const HDStandHolder& at = g_stand_holders[stand_at >= 0 ? stand_at : box_at];
+						const int holder = at.room;
+						const int kind = stand_at < 0 ? 2 : HDCoverTriOnFaces(cover,
+							&g_stand_faces[at.firstFace], at.faceCount,
+							HD_COVER_REACH) ? 1 : 0;
+						int piece = -1;
+
+						for (size_t j = 0; j < group.standRanges.size(); j++)
+							if (group.standRanges[j].holder == holder &&
+								group.standRanges[j].kind == kind)
+							{
+								piece = (int)j;
+								break;
+							}
+
+						if (piece < 0)
+						{
+							HDStandRange made;
+
+							made.holder = holder;
+							made.kind = kind;
+							made.triangles = 0;
+							piece = (int)group.standRanges.size();
+							group.standRanges.push_back(made);
+							group.standWith.push_back(1);
+						}
+
+						group.standRanges[(size_t)piece].triangles++;
+						stand = piece + 1;
+
+						// The coverage test asks only the art on the faces.
+						if (stand_at >= 0)
+						{
+							g_stand_tris.push_back(cover);
+							g_stand_tri_holder.push_back(holder);
+						}
+					}
+
 					HDTri tri;
 
 					tri.overhang = overhang;
 					tri.intruding = intruding;
+					tri.stand = stand;
 					tri.cull = cull;
 					tri.slot = slot;
 					tri.scrollU = su;
@@ -5186,7 +5600,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (g_split_overhang && a.overhang != b.overhang)
 						return a.overhang < b.overhang;
 
-					return a.intruding < b.intruding;
+					if (a.intruding != b.intruding)
+						return a.intruding < b.intruding;
+
+					/* And a stand range never shares a draw call with
+					 * anything else. After everything, so a group without
+					 * one - every triangle answering 0 - sorts as before. */
+					return a.stand < b.stand;
 				});
 
 			group.triangles[pass] = (unsigned int)tris.size();
@@ -5231,6 +5651,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.material = tris[0].material;
 			range.glow = tris[0].glow;
 			range.intruding = tris[0].intruding;
+			range.stand = tris[0].stand;
 			range.overhang = tris[0].overhang;
 			range.cull = tris[0].cull;
 			range.start = (unsigned int)sorted.size();
@@ -5265,6 +5686,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].material == range.material &&
 					tris[i].glow == range.glow &&
 					tris[i].intruding == range.intruding &&
+					tris[i].stand == range.stand &&
 					tris[i].cull == range.cull &&
 					(!g_split_overhang ||
 						tris[i].overhang == range.overhang);
@@ -5338,6 +5760,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.material = tris[i].material;
 					range.glow = tris[i].glow;
 					range.intruding = tris[i].intruding;
+					range.stand = tris[i].stand;
 					range.overhang = tris[i].overhang;
 					range.cull = tris[i].cull;
 					range.start = (unsigned int)sorted.size();
@@ -6870,6 +7293,17 @@ namespace
 			const bool windowed = range.intruding &&
 				!group.pairWhole[(size_t)range.intruding - 1];
 
+			/* A stand range: alone in HD_WINDOW_STAND, and otherwise with
+			 * the open half while this frame's HDRenderStandWith says so -
+			 * see HDStandDraw in hd_cover.h. */
+			if (window == HD_WINDOW_STAND)
+			{
+				if (range.stand != g_stand_pick + 1)
+					continue;
+			}
+			else if (range.stand && !group.standWith[(size_t)range.stand - 1])
+				continue;
+
 			if ((window == HD_WINDOW_OPEN && windowed) ||
 				(window == HD_WINDOW_INTRUDING && !windowed))
 				continue;
@@ -7353,6 +7787,22 @@ bool HDRenderRoom(int group, const D3DMATRIX* world, const HDRoomLighting* light
 	return HDRenderRoomMask(group, world, lighting, HD_PASS_ALL);
 }
 
+bool HDRenderRoomStand(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes, int index)
+{
+	if (group < 0 || group >= (int)g_groups.size() || index < 0 ||
+		index >= (int)g_groups[(size_t)group].standRanges.size())
+		return false;
+
+	g_stand_pick = index;
+
+	const bool drew = HDRenderRoomMask(group, world, lighting, passes,
+		HD_WINDOW_STAND);
+
+	g_stand_pick = -1;
+	return drew;
+}
+
 /* The sky dome.
  *
  * Every .TRG whose level has a sky ends in one group past the
@@ -7571,6 +8021,15 @@ namespace
 
 			const bool windowed = range.intruding &&
 				!group.pairWhole[(size_t)range.intruding - 1];
+
+			// A stand range takes the receive only where draw_pass drew it.
+			if (window == HD_WINDOW_STAND)
+			{
+				if (range.stand != g_stand_pick + 1)
+					continue;
+			}
+			else if (range.stand && !group.standWith[(size_t)range.stand - 1])
+				continue;
 
 			if ((window == HD_WINDOW_OPEN && windowed) ||
 				(window == HD_WINDOW_INTRUDING && !windowed))

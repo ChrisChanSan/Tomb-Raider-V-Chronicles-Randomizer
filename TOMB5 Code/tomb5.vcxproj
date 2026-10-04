@@ -546,6 +546,7 @@
     <ClInclude Include="TOMB5\specific\hdscreen.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_bind.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_classic.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_cover.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_install.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_dxt5.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_light.h" />

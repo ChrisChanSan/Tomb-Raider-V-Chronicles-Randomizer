@@ -4542,11 +4542,18 @@ static bool g_shadow_cast_now = false;
 /* The same for the second map (ShadowOthersPass). */
 static bool g_others_cast_now = false;
 
+/* Whether the rooms' receive pass ran in this frame, and with the second
+ * map: the models' pass takes the maps only then, the same maps. */
+static bool g_receive_now = false;
+static bool g_receive_others_now = false;
+
 static void ShadowCastPass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
 
 	g_shadow_cast_now = false;
+	g_receive_now = false;
+	g_receive_others_now = false;
 
 	if (!shadow->runs)
 		return;
@@ -4625,11 +4632,6 @@ static void ShadowOthersPass()
 			(double)rate.QuadPart;
 }
 
-bool HDFrameShadowOthersDrawn()
-{
-	return g_others_cast_now;
-}
-
 /* One room's art again for the receive, in exactly the pieces and windows
  * DrawRoomWindowed drew it with, so every triangle is rasterised inside the
  * scissor it wrote its depth in. */
@@ -4699,6 +4701,9 @@ static void ShadowReceivePass()
 	if (!(others ? HDRenderShadowReceive2Begin(regs, oregs) : HDRenderShadowReceiveBegin(regs)))
 		return;
 
+	g_receive_now = true;
+	g_receive_others_now = others;
+
 	for (int i = 0; i < g_frame_count; i++)
 	{
 		const FrameRoom& entry = g_frame[i];
@@ -4740,6 +4745,36 @@ static void ShadowReceivePass()
 	if (rate.QuadPart)
 		g_shadow_stats.receiveMs += (double)(to.QuadPart - from.QuadPart) * 1000.0 /
 			(double)rate.QuadPart;
+}
+
+/* The projected shadow on the HD models: after the models' solid pass, in a
+ * frame whose rooms' receive ran, every entry of the frame list that takes
+ * one of the maps the rooms took and comes within its reach is drawn again
+ * with the model receive shader (hd_object.cpp, HDObjectShadowReceiveFrame;
+ * which entry takes which map, hd_shadow.h's HDShadowReceiverTakes). After
+ * the solid pass, because the test is EQUAL against the depth each model
+ * has just written; before DrawBuckets, so a classic polygon drawn over a
+ * model keeps its own picture. A frame without the rooms' receive draws
+ * nothing here and binds nothing. The entries drawn again and their draw
+ * calls come back for the caller. */
+static int ShadowModelsPass(int* calls)
+{
+	*calls = 0;
+
+	if (!g_receive_now || !HDModelReceiveReady())
+		return 0;
+
+	if (!HDRenderShadowModelsBegin(g_shadow_cast_now, g_receive_others_now))
+		return 0;
+
+	HDModelReceiveBegin();
+
+	const int models = HDObjectShadowReceiveFrame(g_shadow_cast_now, g_receive_others_now);
+
+	*calls = HDModelReceiveCalls();
+	HDModelReceiveEnd();
+	HDRenderShadowModelsEnd();
+	return models;
 }
 
 /* HDLOG shadow second - once a second of game time while the projected
@@ -4986,10 +5021,11 @@ void HDFrameDraw()
 
 	/* The projected shadow's two maps, after every room's solid art and
 	 * before the models: Lara's pose and the items' of this very drawn frame
-	 * are on the list already. Then the rooms near her take hers, before the
-	 * models, so that no model is darkened, and before DrawBuckets, so that
-	 * no classic polygon is: both are drawn over the darkened rooms and keep
-	 * their own picture. */
+	 * are on the list already. Then the rooms near her take them, before the
+	 * models, so that no model is darkened by a room's draw - the models
+	 * take the maps in a pass of their own after their solid one - and
+	 * before DrawBuckets, so that no classic polygon is: both are drawn over
+	 * the darkened rooms and keep their own picture. */
 	ShadowCastPass();
 	ShadowOthersPass();
 	ShadowReceivePass();
@@ -5022,6 +5058,12 @@ void HDFrameDraw()
 	 * swapping shader, declaration and stream twice per room costs more than
 	 * the whole object path does. */
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_SOLID);
+
+	/* And the models take the projected shadow, on the depth they have just
+	 * written. */
+	int modelCalls = 0;
+
+	ShadowModelsPass(&modelCalls);
 
 	HDRenderFrameEnd();
 

@@ -26,8 +26,8 @@
  * the one mapping from a point to its place in a shadow map - one box for
  * her own map, and a larger one round it for the second map, which the
  * other casters are drawn into; the GATE, which says whether the projected
- * shadow runs in a frame; and the RULE of who else casts, whose other face
- * says whose blob gives way.
+ * shadow runs in a frame; and the RULES of who else casts, whose other face
+ * says whose blob gives way, and of which maps an HD model takes.
  *
  * This header includes no engine header on purpose, like hd_softbody.h:
  * Preparation\Tools\Diagnose\ModernTest.cpp includes it and asserts on every
@@ -126,25 +126,39 @@
  *                 the box's side; larger reaches further
  *                 and spends the texels more thinly. 8192 is four sectors to
  *                 every side of her.
- *   OTHERS_MARGIN how far beyond the second box's four sides across the
- *                 light, as a part of OTHERS_BOX, a caster's place may lie
- *                 and the caster still be drawn into the map. Its parts that
- *                 reach into the box cast there and the edge term fades
- *                 them, so a creature leaving the box loses its shadow
- *                 gradually on every side, also on the two its upper body
- *                 leans in from its feet. 0.1 is 819 units across the light:
- *                 at the fixed slant a head up to 2160 units above the feet.
+ *   OTHERS_MARGIN how far beyond the second box's sides a caster's place may
+ *                 lie and the caster still be drawn into the map: a part of
+ *                 OTHERS_BOX beyond the four sides across the light, and the
+ *                 same part of OTHERS_DEPTH beyond the near and far side
+ *                 along it. Its parts that reach into the box cast there and
+ *                 the edge term, or OTHERS_FADE along the light, fades them,
+ *                 so a creature leaving the box loses its shadow gradually
+ *                 on every side, also on the two its upper body leans in
+ *                 from its feet. 0.1 is 819 units across the light: at the
+ *                 fixed slant a head up to 2160 units above the feet.
  *                 Smaller cuts a tall creature's shadow off where it leaves
  *                 the box on those two sides; larger draws casters of which
  *                 no part reaches into the box.
  *   OTHERS_DEPTH  the second box's length along the light, units: a caster
  *                 further from her centre along the light than half of it
  *                 casts nothing. 8192 holds a storey above and below her.
- *                 Nothing fades along the light: a caster that crosses the
- *                 box's near or far side (4096 units along the light from
- *                 her centre, 4730 straight above or below her at the fixed
- *                 slant) loses its whole shadow in one frame, and the near
- *                 side cuts off the part of a caster that reaches past it.
+ *                 Its near and far side (4096 units along the light from her
+ *                 centre, 4730 straight above or below her at the fixed
+ *                 slant) are faded over by OTHERS_FADE.
+ *   OTHERS_FADE   the part of OTHERS_DEPTH next to each of the box's near
+ *                 and far side over which a caster's shadow fades out along
+ *                 the light: a part of a caster at that side casts nothing,
+ *                 one OTHERS_FADE of the depth in from it casts in full,
+ *                 linear between. A caster's place is held up to
+ *                 OTHERS_MARGIN past those sides as past the other four, so
+ *                 a creature crossing one of them loses its shadow
+ *                 gradually and never in one frame. 0.05 is 410 units, where
+ *                 a creature 760 units tall spans 658 along a 30 degree
+ *                 light; OTHERS_MARGIN past the side its 658 lie wholly
+ *                 outside the box, where nothing casts any more. Smaller
+ *                 shows a harder end of the shadow where a creature climbs
+ *                 or falls out of the box; larger lets a creature's shadow
+ *                 thin out already on the storey above or below her.
  *   OTHERS_FULL, OTHERS_END  how far behind a caster along the light a
  *                 receiver still takes its shadow: whole up to OTHERS_FULL
  *                 units, none from OTHERS_END on, smooth between. A
@@ -174,6 +188,7 @@
 #define HD_SHADOW_OTHERS_BOX		8192.0f
 #define HD_SHADOW_OTHERS_MARGIN		0.1f
 #define HD_SHADOW_OTHERS_DEPTH		8192.0f
+#define HD_SHADOW_OTHERS_FADE		0.05f
 #define HD_SHADOW_OTHERS_FULL		1536.0f
 #define HD_SHADOW_OTHERS_END		2560.0f
 
@@ -853,25 +868,27 @@ inline void HDShadowMapUVD(const HDShadowBox* b, const float* p, float* out)
 	out[2] = 0.5f + hd_shadow_dot(d, b->fwd) / b->depth;
 }
 
-/* Whether a world point lies inside a box grown across the light by
- * `margin`, a part of its extent on each of its four sides: its u and v
- * (HDShadowMapUVD) within -margin..1 + margin and its depth within 0..1, the
- * edges included; false for a point that is not a number. With margin 0 it
- * is the box itself. The second map asks it of a caster's place with
- * OTHERS_MARGIN: the place is one point, the caster's feet, and the parts
- * above them lie further in on two of the box's sides, where they still cast
- * after the feet have left it. */
+/* Whether a world point lies inside a box grown by `margin` on all six
+ * sides - a part of its extent on each of the four across the light, and
+ * the same part of its depth on the near and the far side along it: its u,
+ * v and depth (HDShadowMapUVD) all within -margin..1 + margin, the edges
+ * included; false for a point that is not a number. With margin 0 it is the
+ * box itself. The second map asks it of a caster's place with OTHERS_MARGIN:
+ * the place is one point, the caster's feet, and the parts above them lie
+ * further in on two of the box's sides across the light, where they still
+ * cast after the feet have left it, and nearer the light than the feet,
+ * where they still cast after the feet have crossed the far side. */
 inline bool HDShadowBoxHolds(const HDShadowBox* b, const float* p, float margin)
 {
 	float uvd[3];
 
 	HDShadowMapUVD(b, p, uvd);
 
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 3; i++)
 		if (!(uvd[i] >= -margin && uvd[i] <= 1.0f + margin))
 			return false;
 
-	return uvd[2] >= 0.0f && uvd[2] <= 1.0f;
+	return true;
 }
 
 /* A world point out of a view-space one, for a world-to-view of
@@ -1073,9 +1090,9 @@ inline const char* HDShadowModeWord(long effective)
  *     1 - max(strength * hers, strength * theirs)
  *
  * with `hers` the product above without the strength, and `theirs` the
- * second map's lookup weighted tap by tap with the distance term
- * (HDShadowLookupBehind), times the edge term of the second box and the
- * same facing term. The max leaves a floor under two overlapping shadows as
+ * second map's lookup weighted tap by tap with the distance term and the
+ * fade along the light (HDShadowLookupBehind), times the edge term of the
+ * second box and the same facing term. The max leaves a floor under two overlapping shadows as
  * dark as under one, and where nothing of the second map falls it is the
  * one-map factor itself.
  *
@@ -1119,6 +1136,20 @@ inline float HDShadowBehindTerm(float behind)
 {
 	return hd_shadow_saturate((HD_SHADOW_OTHERS_END - behind) /
 		(HD_SHADOW_OTHERS_END - HD_SHADOW_OTHERS_FULL));
+}
+
+/* The fade along the light of one tap of the second map, for the depth
+ * `tap` (0..1 of the box) its caster stands at: 0 at the box's near and far
+ * side, 1 from OTHERS_FADE in from either, linear between - and exactly 1 in
+ * the box's middle, so a caster there casts as it would without it. A
+ * caster crossing either side thins out over OTHERS_FADE of the depth
+ * instead of losing its shadow in one frame. Worked as a product with the
+ * reciprocal, as the shader works it. */
+inline float HDShadowFadeTerm(float tap)
+{
+	const float edge = tap < 1.0f - tap ? tap : 1.0f - tap;
+
+	return hd_shadow_saturate(edge * (1.0f / HD_SHADOW_OTHERS_FADE));
 }
 
 /* The weights of the four taps along one axis for a position `f` (0..1)
@@ -1181,7 +1212,8 @@ inline float HDShadowLookup(const float* map, int size, float u, float v, float 
  * in the units of a box `depthUnits` long (OTHERS_DEPTH for the second box),
  * and every casting tap weighted with the distance term of how far the
  * receiver lies behind that tap's caster, (depth - tap) * depthUnits units
- * (HDShadowBehindTerm). 0..1. */
+ * (HDShadowBehindTerm), and with the fade of the tap's own depth along the
+ * light (HDShadowFadeTerm). 0..1. */
 inline float HDShadowLookupBehind(const float* map, int size, float u, float v, float depth,
 	float depthUnits)
 {
@@ -1215,7 +1247,8 @@ inline float HDShadowLookupBehind(const float* map, int size, float u, float v, 
 			const float tap = map[y * size + x];
 
 			if (tap < limit)
-				sum += wx[k] * wy[j] * HDShadowBehindTerm((depth - tap) * depthUnits);
+				sum += wx[k] * wy[j] * (HDShadowBehindTerm((depth - tap) * depthUnits) *
+					HDShadowFadeTerm(tap));
 		}
 
 	return sum * (1.0f / 9.0f);
@@ -1299,9 +1332,11 @@ inline void HDShadowReceiveConstants(const HDShadowBox* b, const float* R, const
 }
 
 /* Her block made to give nothing, for a frame whose second map was drawn and
- * her own was not: the u row reads -1 at every pixel, so her edge term, and
- * with it her part of the factor, is 0, and the two-map shader never reads
- * the map an earlier frame left in her target. */
+ * her own was not, and for an entry that does not take her map (her own
+ * pieces): the u row reads -1 at every pixel, so her edge term, and with it
+ * her part of the factor, is 0, and the two-map shader never reads her
+ * map - neither one an earlier frame left in her target nor her own
+ * outline on herself. */
 inline void HDShadowReceiveWithoutHer(float* regs)
 {
 	regs[0] = 0.0f;
@@ -1321,7 +1356,8 @@ inline void HDShadowReceiveWithoutHer(float* regs)
  *   +4        the distance term as a line in the depth difference of a tap:
  *             x depth / (OTHERS_END - OTHERS_FULL), y OTHERS_END /
  *             (OTHERS_END - OTHERS_FULL); the term is saturate(y - x *
- *             (depth - tap))
+ *             (depth - tap)); z 1 / OTHERS_FADE, the fade along the light
+ *             saturate(min(tap, 1 - tap) * z) (HDShadowFadeTerm)
  *
  * The strength, the edge's scale and the direction towards the light are
  * her block's: one light throws both shadows. `R` and `t` are the frame's
@@ -1354,6 +1390,20 @@ inline void HDShadowReceiveOthersConstants(const HDShadowBox* b, const float* R,
 	regs[14] = 1.0f / (float)b->map;
 	regs[16] = b->depth / span;
 	regs[17] = HD_SHADOW_OTHERS_END / span;
+	regs[18] = 1.0f / HD_SHADOW_OTHERS_FADE;
+}
+
+/* The second map's block made to give nothing, for an entry that does not
+ * take the second map or a frame whose second map was not drawn: the u row
+ * reads -1 at every pixel, so the second box's edge term, and with it the
+ * second map's part of the factor, is 0 and its lookup is never taken - the
+ * twin of HDShadowReceiveWithoutHer. */
+inline void HDShadowReceiveWithoutOthers(float* regs)
+{
+	regs[0] = 0.0f;
+	regs[1] = 0.0f;
+	regs[2] = 0.0f;
+	regs[3] = -1.0f;
 }
 
 /* The world box a receiver must touch to take any of the shadow: the box's
@@ -1466,10 +1516,9 @@ inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float
  * and stands inside the grown box (HDShadowOtherCasts). Inside it an item
  * with a blob therefore has always the one or the other, never both; beyond
  * it the item has neither, and no part of a caster up to OTHERS_MARGIN of
- * the box across the light from its place reaches into the box, so the edge
- * term has faded its projected shadow out already on every side. Along the
- * light nothing fades: a caster crossing the box's near or far side loses
- * its shadow in one frame. */
+ * the box from its place reaches into the box, so the edge term across the
+ * light and the fade along it (HDShadowFadeTerm) have faded its projected
+ * shadow out already on every side. */
 inline bool HDShadowBlobGivesWay(bool runs, bool herStep, bool target, bool hdModel,
 	bool mirrored)
 {
@@ -1480,6 +1529,85 @@ inline bool HDShadowOtherCasts(bool blob, bool runs, bool herStep, bool target, 
 	bool mirrored, bool inside)
 {
 	return blob && inside && HDShadowBlobGivesWay(runs, herStep, target, hdModel, mirrored);
+}
+
+/* ------------------------------------------------- who takes the shadow -- */
+
+/* The HD models take the maps as the rooms do: after their solid pass every
+ * entry of the frame list that can touch a map's reach is drawn again with
+ * the model receive shader (hd_shadow_receive.hlsl, ModelReceivePS), the
+ * depth test EQUAL, and the picture multiplied by the two-map factor. Which
+ * maps an entry takes is a fact of what it is, never of whether it was cast
+ * in this frame, so a creature does not change its look as it walks into
+ * the second box:
+ *
+ *   LARA    her pieces, in third and in first person: the second map only -
+ *           her own map would lay her outline on herself
+ *   BLOB    an item whose object has a classic blob (shadow_size, read
+ *           where the mirror's loop has not zeroed it): her map only - the
+ *           second map is the one it is cast into
+ *   OTHER   every other HD item - a door, a crate, a pickup: both maps
+ *   NONE    what never takes a shadow: the inventory ring and the pickup
+ *           display
+ *
+ * A mirror's reflection takes by the same class, through its mirror's
+ * blocks: `mirrored` says the entry is one, `mirrorBlocks` that its mirror's
+ * blocks exist in this frame; a reflection without them takes nothing. A
+ * map not drawn in this frame is taken by no one. The answer is the maps the
+ * entry takes, HD_SHADOW_TAKES_HERS and HD_SHADOW_TAKES_OTHERS or'd; 0 is
+ * an entry that is not drawn again. The block of a map an entry does not
+ * take is silenced (HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers),
+ * so one shader serves every class and never reads a map it is not to read. */
+enum
+{
+	HD_SHADOW_RECEIVER_NONE = 0,
+	HD_SHADOW_RECEIVER_LARA,
+	HD_SHADOW_RECEIVER_BLOB,
+	HD_SHADOW_RECEIVER_OTHER
+};
+
+#define HD_SHADOW_TAKES_HERS		1
+#define HD_SHADOW_TAKES_OTHERS		2
+
+inline int HDShadowReceiverTakes(int receiver, bool herDrawn, bool othersDrawn, bool mirrored,
+	bool mirrorBlocks)
+{
+	if (mirrored && !mirrorBlocks)
+		return 0;
+
+	int takes = 0;
+
+	if (herDrawn && (receiver == HD_SHADOW_RECEIVER_BLOB || receiver == HD_SHADOW_RECEIVER_OTHER))
+		takes |= HD_SHADOW_TAKES_HERS;
+
+	if (othersDrawn && (receiver == HD_SHADOW_RECEIVER_LARA ||
+		receiver == HD_SHADOW_RECEIVER_OTHER))
+		takes |= HD_SHADOW_TAKES_OTHERS;
+
+	return takes;
+}
+
+/* Whether a sphere touches an axis-aligned box, edges included: the
+ * models' pass asks it of an entry's bounding sphere in the world and a
+ * map's reach (HDShadowReach, HDShadowReachOthers). False for a sphere that
+ * is not a number. */
+inline bool HDShadowSphereTouches(const float* centre, float radius, const float* mins,
+	const float* maxs)
+{
+	float sum = 0.0f;
+
+	for (int i = 0; i < 3; i++)
+	{
+		const float c = centre[i];
+		const float d = c < mins[i] ? mins[i] - c : (c > maxs[i] ? c - maxs[i] : 0.0f);
+
+		if (!hd_shadow_finite(c))
+			return false;
+
+		sum += d * d;
+	}
+
+	return hd_shadow_finite(radius) && sum <= radius * radius;
 }
 
 /* ------------------------------------------------------------ the frame -- */

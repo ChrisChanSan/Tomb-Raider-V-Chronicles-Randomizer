@@ -11,9 +11,11 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* The projected shadow on the rooms: the receive pixel shaders. ReceivePS
- * reads her map alone; Receive2PS, at the end of this file, reads her map
- * and the second map, in a frame whose second map was drawn.
+/* The projected shadow on the rooms and the models: the receive pixel
+ * shaders. ReceivePS reads her map alone; Receive2PS, further down, reads
+ * her map and the second map, in a frame whose second map was drawn; and
+ * ModelReceivePS, at the end of this file, is the two-map body on an HD
+ * model's vertex outputs.
  *
  * hd_render.cpp draws the HD room groups near her a second time with the
  * room's own vertex shader (RoomVS in hd_room.hlsl, unchanged), the same
@@ -148,22 +150,25 @@ float4 ReceivePS(RECEIVE_IN input) : COLOR0
 	return float4((1.0f - gShadow.x * shade * terms).xxx, 1.0f);
 }
 
-/* The two-map variant, Receive2PS: the one-map shader above, line for line,
- * and the second map beside it - the map the creatures and the other items
- * with a blob are cast into, a larger box round hers on the same light.
- * hd_render.cpp draws with it in a frame whose second map was drawn, and
- * with ReceivePS in every other frame. It writes
+/* The two-map variant, Receive2PS: the one-map shader above and the second
+ * map beside it - the map the creatures and the other items with a blob are
+ * cast into, a larger box round hers on the same light. hd_render.cpp draws
+ * with it in a frame whose second map was drawn, and with ReceivePS in every
+ * other frame. It writes
  *
  *     1 - max(strength * hers, strength * theirs)
  *
- * with `hers` the one-map shader's lookup times its terms, and `theirs` the
- * second map's: the same sixteen taps and weights, each casting tap weighted
- * by how far the pixel lies behind that tap's caster along the light (1 up
- * to OTHERS_FULL, 0 from OTHERS_END on - hd_shadow.h, HDShadowBehindTerm,
- * HDShadowLookupBehind), times the edge term of the second box and the same
- * facing term. A floor under two overlapping shadows is as dark as under
- * the darker one. Where the second map gives nothing the max is her own
- * product, so the pixel is the pixel ReceivePS writes.
+ * with `hers` the one-map shader's lookup times its terms (HerShade, line
+ * for line ReceivePS's), and `theirs` the second map's (OthersShade): the
+ * same sixteen taps and weights, each casting tap weighted by how far the
+ * pixel lies behind that tap's caster along the light (1 up to OTHERS_FULL,
+ * 0 from OTHERS_END on - hd_shadow.h, HDShadowBehindTerm) and by the fade of
+ * the tap's own depth near the second box's near and far side
+ * (HDShadowFadeTerm; both in HDShadowLookupBehind), times the edge term of
+ * the second box and the same facing term. A floor under two overlapping
+ * shadows is as dark as under the darker one. Where the second map gives
+ * nothing the max is her own product, so the pixel is the pixel ReceivePS
+ * writes.
  *
  * Build. bshader.bat compiles it out of this file with
  *
@@ -191,26 +196,20 @@ float4 gOthersMap : register(c106);
 
 /* The distance term as a line in a tap's depth difference: x the second
  * box's depth / (OTHERS_END - OTHERS_FULL), y OTHERS_END / (OTHERS_END -
- * OTHERS_FULL). */
+ * OTHERS_FULL); z 1 / OTHERS_FADE, the fade's slope in a tap's depth. */
 float4 gOthersBehind : register(c107);
 
-float4 Receive2PS(RECEIVE_IN input) : COLOR0
+/* Her part at the view-space point `at` for a face whose facing term is
+ * `facing`: x her lookup, y her terms - ReceivePS's own lines, so a caller
+ * that writes 1 - gShadow.x * x * y writes ReceivePS's expression. */
+float2 HerShade(float4 at, float facing)
 {
-	/* Her part: ReceivePS's own lines. */
-	float4 texel = tex2D(sPage, input.uv);
-
-	clip(texel.a - gPass.x);
-
-	const float4 at = float4(input.viewPos, 1.0f);
 	const float u = dot(at, gMapU);
 	const float v = dot(at, gMapV);
 	const float depth = dot(at, gMapD);
 
 	const float edge = saturate(min(min(u, 1.0f - u), min(v, 1.0f - v)) * gShadow.y);
 	const float height = saturate(dot(at, gHeight));
-
-	const float3 n = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
-	const float facing = saturate(dot(n, gToLight.xyz) * gToLight.w);
 	const float terms = edge * height * facing;
 
 	float shade = 0.0f;
@@ -245,8 +244,14 @@ float4 Receive2PS(RECEIVE_IN input) : COLOR0
 		shade = sum * (1.0f / 9.0f);
 	}
 
-	/* The second map's part: its own place, its own edge, the same facing,
-	 * and no height plane - the distance term per tap takes its place. */
+	return float2(shade, terms);
+}
+
+/* The second map's part at `at`: x its lookup, y its terms - its own place,
+ * its own edge, the same facing, and no height plane, the distance term per
+ * tap takes its place. */
+float2 OthersShade(float4 at, float facing)
+{
 	const float ou = dot(at, gOthersU);
 	const float ov = dot(at, gOthersV);
 	const float odepth = dot(at, gOthersD);
@@ -277,9 +282,12 @@ float4 Receive2PS(RECEIVE_IN input) : COLOR0
 			tap.w = tex2Dlod(sOthers, float4((base.x + 2.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
 
 			/* A casting tap counts with how far the pixel lies behind its
-			 * caster; the clear value 1 never lies below the limit. */
+			 * caster and with the fade of its caster's depth near the
+			 * box's two ends along the light; the clear value 1 never lies
+			 * below the limit. */
 			const float4 behind = saturate(gOthersBehind.y - gOthersBehind.x * (odepth - tap));
-			const float row = dot(wx, (tap < limit) ? behind : 0.0f);
+			const float4 fade = saturate(min(tap, 1.0f - tap) * gOthersBehind.z);
+			const float row = dot(wx, (tap < limit) ? behind * fade : 0.0f);
 			const float wy = j == 0 ? 1.0f - f.y : (j == 3 ? f.y : 1.0f);
 
 			sum += wy * row;
@@ -288,12 +296,102 @@ float4 Receive2PS(RECEIVE_IN input) : COLOR0
 		oshade = sum * (1.0f / 9.0f);
 	}
 
+	return float2(oshade, oterms);
+}
+
+float4 Receive2PS(RECEIVE_IN input) : COLOR0
+{
+	/* The alpha test of the range, ReceivePS's own line. */
+	float4 texel = tex2D(sPage, input.uv);
+
+	clip(texel.a - gPass.x);
+
+	const float4 at = float4(input.viewPos, 1.0f);
+
+	const float3 n = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
+	const float facing = saturate(dot(n, gToLight.xyz) * gToLight.w);
+
+	const float2 hers = HerShade(at, facing);
+	const float2 theirs = OthersShade(at, facing);
+
 	/* 1 - max(strength * hers, strength * theirs), written as the smaller of
 	 * the two factors: her factor is then ReceivePS's own expression, and
 	 * where the second map gives nothing the other factor is 1 and the
 	 * pixel is ReceivePS's to the bit. */
-	const float herFactor = 1.0f - gShadow.x * shade * terms;
-	const float theirFactor = 1.0f - gShadow.x * oshade * oterms;
+	const float herFactor = 1.0f - gShadow.x * hers.x * hers.y;
+	const float theirFactor = 1.0f - gShadow.x * theirs.x * theirs.y;
+
+	return float4(min(herFactor, theirFactor).xxx, 1.0f);
+}
+
+/* The models' variant, ModelReceivePS: the two-map body above on an HD
+ * model. hd_model.cpp draws an entry of the frame list again after the
+ * models' solid pass with the model's own vertex shader (ModelVS in
+ * hd_model.hlsl, unchanged) and the very constants that decide its pixels'
+ * depth in the solid draw, the depth test EQUAL, no depth write, and this
+ * shader in place of ModelPS; the blend multiplies the picture with what it
+ * writes, as for a room.
+ *
+ * Which maps an entry takes is the caller's (hd_shadow.h,
+ * HDShadowReceiverTakes): the block of a map it does not take is silenced
+ * through its u row (HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers),
+ * so that part's edge term is 0, its lookup is never taken and its factor
+ * is 1.
+ *
+ * A pixel shader reads the vertex shader's outputs by semantic, and ModelVS
+ * hands them down in a layout of its own: the texture coordinate
+ * (TEXCOORD0), the view-space position (TEXCOORD2), the view-space normal,
+ * skinned and not renormalised (TEXCOORD3), and the head cut's keep value
+ * (TEXCOORD5). The three clips are ModelPS's own, on the registers the
+ * solid draw left them in - the alpha test of the range (gPass.x), the head
+ * cut (gPass.z) and a mirror's three planes (gClip, c5 - c7) - so a pixel
+ * the solid draw discarded is discarded here too.
+ *
+ * Build. bshader.bat compiles it out of this file with
+ *
+ *     fxc /nologo /T ps_3_0 /E ModelReceivePS /O3 /Vn kHDShadowReceiveModelPS
+ *         /Fh hd_shadow_receive_model_ps.inc hd_shadow_receive.hlsl
+ *
+ * and stamps the .inc with this file's MD5, as it stamps the other two.
+ *
+ * Registers. gPass in c4 as the model draw sets it per range (x the alpha
+ * test's switch, z the head cut's), gClip in c5 - c7 as HDModelClip sets
+ * them, the page in s0, her map in s3 and the second map in s4, and her
+ * block and the second map's in c96 - c107: the two-map variant's set, and
+ * none of them a register ModelPS reads besides c4 - c7. */
+
+/* A mirror's three clip planes in view space, hd_model.hlsl's gClip. */
+float4 gClip[3] : register(c5);
+
+struct MODEL_RECEIVE_IN
+{
+	float2 uv      : TEXCOORD0;
+	float3 viewPos : TEXCOORD2;
+	float3 viewNrm : TEXCOORD3;
+	float  cut     : TEXCOORD5;
+};
+
+float4 ModelReceivePS(MODEL_RECEIVE_IN input) : COLOR0
+{
+	/* ModelPS's three clips, line for line. */
+	float4 texel = tex2D(sPage, input.uv);
+
+	clip(gPass.x * (texel.a - 0.5f));
+	clip(lerp(1.0f, input.cut, gPass.z));
+
+	const float4 at = float4(input.viewPos, 1.0f);
+
+	clip(min(min(dot(at, gClip[0]), dot(at, gClip[1])), dot(at, gClip[2])));
+
+	/* The model's normal, with the room shader's guard against a zero one. */
+	const float3 n = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
+	const float facing = saturate(dot(n, gToLight.xyz) * gToLight.w);
+
+	const float2 hers = HerShade(at, facing);
+	const float2 theirs = OthersShade(at, facing);
+
+	const float herFactor = 1.0f - gShadow.x * hers.x * hers.y;
+	const float theirFactor = 1.0f - gShadow.x * theirs.x * theirs.y;
 
 	return float4(min(herFactor, theirFactor).xxx, 1.0f);
 }

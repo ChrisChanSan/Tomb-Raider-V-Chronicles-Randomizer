@@ -322,6 +322,24 @@ int HDObjectCastCount();
 int HDObjectCastOthersFrame();
 int HDObjectCastOthersCount();
 
+/* The projected shadow's models' pass over this frame's list: every entry
+ * the solid pass drew, again with HDModelReceiveDraw - its body (the swapped
+ * model where it has one) and, for a slot that has one, its separate face,
+ * with the arguments of its solid draw and its clip planes - where it takes
+ * a map (hd_shadow.h, HDShadowReceiverTakes, on what the entry is:
+ * HD_SHADOW_RECEIVER_LARA for every push, _BLOB or _OTHER for an item by
+ * its object's shadow_size, _NONE for the ring and the pickup display) and
+ * its bounding sphere touches the reach of a map it takes (HDShadowReach,
+ * HDShadowReachOthers). `herDrawn` and `othersDrawn` say which maps were
+ * drawn in this frame and are read. The block of a map an entry does not take is silenced
+ * (HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers) and the pair
+ * handed to HDRenderShadowModelsBlocks. Left out: a piece cast into her map
+ * alone (HD_OBJ_CAST_ONLY), the ring's and the display's entries, and a
+ * mirror's reflection, which has no blocks of its mirror. Called between
+ * HDModelReceiveBegin and HDModelReceiveEnd inside the models' receive
+ * bracket. Returns how many entries were drawn again. */
+int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn);
+
 /* The blob's gate, game\draw.cpp's one call before an item's blob
  * (S_PrintShadow): true when the blob is left out because the item takes the
  * projected shadow's second map instead. hd_shadow.h's HDShadowBlobGivesWay
@@ -330,17 +348,18 @@ int HDObjectCastOthersCount();
  * `stepped`, which only a frame in which it runs - HDShadowFrameDecide -
  * has), the item is drawn as an HD model (what HDObjectBegin decides for it,
  * asked of the same decision), it is not a mirror's reflection, and the
- * two-map receive shader, the cast shaders and the second map exist on this
- * device (the map asked last, because asking makes it). False in every other
+ * second map and the two-map receive shader exist on this device - what the
+ * frame's decision asked for beside her map (hd_laradraw.h,
+ * HDShadowFrameOthersReady) - and the cast shaders. False in every other
  * case, and the blob is drawn as it always is.
  *
  * A true answer is remembered for this item: the HDObjectBegin that follows
  * for it takes it over, and HDObjectEnd marks the entry HD_OBJ_CAST_OTHERS
  * when the item's place (its world position) lies inside the second box
- * grown across the light by OTHERS_MARGIN - an item beyond that has neither
- * the blob nor the projected shadow in that frame, where the edge term has
- * faded the projected one out on every side. Along the light nothing fades:
- * an item crossing the box's near or far side loses its shadow at once. An
+ * grown by OTHERS_MARGIN on all six sides - an item beyond that has neither
+ * the blob nor the projected shadow in that frame, where the edge term
+ * across the light and the fade along it have faded the projected one out
+ * on every side. An
  * item that draw.cpp clips away (its bounds outside the view or the portal
  * window) is not drawn and so not cast either, while its blob has given
  * way: where its shadow reaches into the view beyond its bounds, that part

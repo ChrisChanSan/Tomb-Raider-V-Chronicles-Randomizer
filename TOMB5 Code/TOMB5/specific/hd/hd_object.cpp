@@ -182,6 +182,14 @@ namespace
 		 * for HDModelClip - (0, 0, 0, 1) three times for everything that is
 		 * not a reflection, which keeps every pixel. */
 		float clip[12];
+		/* What the entry is to the projected shadow's models' pass
+		 * (hd_shadow.h, HD_SHADOW_RECEIVER_*): Lara's pieces LARA, an item
+		 * whose object has a classic blob BLOB, every other item OTHER, the
+		 * ring NONE - which maps it takes (HDShadowReceiverTakes). And
+		 * whether it was recorded as a mirror's reflection, which takes the
+		 * maps only through its mirror's blocks. */
+		int receiver;
+		bool mirrored;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -218,6 +226,9 @@ namespace
 	const ITEM_INFO* g_gave_way = 0;
 	bool g_open_casts = false;
 	float g_open_place[3] = { 0.0f, 0.0f, 0.0f };
+	/* What the item being walked is to the models' pass, decided by
+	 * HDObjectBegin out of its object (HD_SHADOW_RECEIVER_BLOB or _OTHER). */
+	int g_open_receiver = HD_SHADOW_RECEIVER_OTHER;
 
 	/* The entry's clip planes: the mirror's while a reflection is recorded,
 	 * planes that keep every pixel otherwise. */
@@ -2926,6 +2937,11 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_place[0] = (float)item->pos.x_pos;
 	g_open_place[1] = (float)item->pos.y_pos;
 	g_open_place[2] = (float)item->pos.z_pos;
+	/* Whether it is a caster of the second map by what it is: its object's
+	 * blob, read here, where only a mirror's loop has zeroed it (game\
+	 * mirror.cpp, around the reflection's draw) - so a reflection reads
+	 * OTHER, and takes nothing until its mirror's blocks exist. */
+	g_open_receiver = obj->shadow_size ? HD_SHADOW_RECEIVER_BLOB : HD_SHADOW_RECEIVER_OTHER;
 	g_seen = 0;
 	g_open_lips_track = -1;	// only a cutscene's actor speaks - HDObjectLips
 	g_open_lips_frame = -1;
@@ -3066,6 +3082,8 @@ void HDObjectEnd()
 	entry.lipsTrack = g_open_lips_track;
 	entry.lipsFrame = g_open_lips_frame;
 	stamp_clip(entry.clip, g_reflection);
+	entry.receiver = g_open_receiver;
+	entry.mirrored = g_reflection;
 
 	/* And the pickup on the floor takes the mod's own inventory model.
 	 *
@@ -3176,13 +3194,14 @@ void HDObjectEnd()
 	memset(&entry.soft, 0, sizeof(entry.soft));
 
 	/* The second map: an item whose blob gave way is drawn into it when its
-	 * place lies inside the second box grown across the light by
-	 * OTHERS_MARGIN (hd_shadow.h, HDShadowOtherCasts - the blob, the frame,
-	 * her step, the target, HD and not mirrored were all asked when the blob
+	 * place lies inside the second box grown by OTHERS_MARGIN on all six
+	 * sides (hd_shadow.h, HDShadowOtherCasts - the blob, the frame, her
+	 * step, the target, HD and not mirrored were all asked when the blob
 	 * gave way), with the node mask it is drawn with here. The margin keeps
 	 * an item whose feet have left the box casting while its upper body
 	 * still reaches into it, so its shadow fades out at the box's edge on
-	 * every side. Every other item casts nothing. */
+	 * every side, along the light through the fade of the second map's
+	 * lookup (HDShadowFadeTerm). Every other item casts nothing. */
 	const HDShadowFrame* shadow = HDShadowFrameState();
 	const bool inside = g_open_casts &&
 		HDShadowBoxHolds(&shadow->others, g_open_place, HD_SHADOW_OTHERS_MARGIN);
@@ -3620,6 +3639,9 @@ void HDInvEnd()
 	entry.offCentreY = g_ring_ky;
 	// The ring and the display are never a reflection: no pixel is clipped.
 	stamp_clip(entry.clip, false);
+	// Nor do they ever take the projected shadow.
+	entry.receiver = HD_SHADOW_RECEIVER_NONE;
+	entry.mirrored = false;
 
 	store_matrices(entry);
 
@@ -4059,6 +4081,162 @@ int HDObjectCastOthersCount()
 	return marked;
 }
 
+/* An entry's bounding sphere in VIEW space: round the middle of its nodes'
+ * origins, reaching the farthest of them plus the diagonal of its model's
+ * bind-pose box (the face's box joined to the body's for a slot with a
+ * separate face). Every vertex is a weighted sum of its nodes' matrices
+ * applied to its offset from a node's bind origin, and an offset between two
+ * points of that box is no longer than its diagonal, so the sphere holds the
+ * drawn model. A model without a box gets a sphere of
+ * kReceiveSphereFallback round its nodes. */
+static const float kReceiveSphereFallback = 2048.0f;
+
+static float entry_sphere(const FrameItem& entry, float* centre)
+{
+	const int nodes = entry.nodes < HD_OBJ_NODES ? entry.nodes : HD_OBJ_NODES;
+	float lo[3] = { 3.0e38f, 3.0e38f, 3.0e38f };
+	float hi[3] = { -3.0e38f, -3.0e38f, -3.0e38f };
+
+	for (int n = 0; n < nodes; n++)
+		for (int i = 0; i < 3; i++)
+		{
+			const float v = entry.matrix[n * 16 + 12 + i];
+
+			lo[i] = v < lo[i] ? v : lo[i];
+			hi[i] = v > hi[i] ? v : hi[i];
+		}
+
+	float spread = 0.0f;
+
+	for (int i = 0; i < 3; i++)
+	{
+		centre[i] = 0.5f * (lo[i] + hi[i]);
+		spread += (hi[i] - lo[i]) * (hi[i] - lo[i]);
+	}
+
+	float mins[3], maxs[3];
+
+	if (!HDModelBounds(entry.drawSlot, mins, maxs))
+		return 0.5f * sqrtf(spread) + kReceiveSphereFallback;
+
+	float hmins[3], hmaxs[3];
+
+	if (entry.head && HDModelHeadBounds(entry.slot, hmins, hmaxs))
+		for (int i = 0; i < 3; i++)
+		{
+			mins[i] = hmins[i] < mins[i] ? hmins[i] : mins[i];
+			maxs[i] = hmaxs[i] > maxs[i] ? hmaxs[i] : maxs[i];
+		}
+
+	float diagonal = 0.0f;
+
+	for (int i = 0; i < 3; i++)
+		diagonal += (maxs[i] - mins[i]) * (maxs[i] - mins[i]);
+
+	return 0.5f * sqrtf(spread) + sqrtf(diagonal);
+}
+
+/* The two blocks an entry is drawn with: the frame's blocks with the one of
+ * each map it does not take silenced. A reflection's would be its mirror's
+ * blocks; there are none, so a reflection takes nothing here
+ * (HDShadowReceiverTakes with `mirrorBlocks` false). */
+struct ReceiveBlocks
+{
+	float hers[HD_SHADOW_RECEIVE_COUNT * 4];
+	float others[HD_SHADOW_RECEIVE2_COUNT * 4];
+	float herMin[3], herMax[3];
+	float otherMin[3], otherMax[3];
+};
+
+static void receive_blocks_frame(const HDShadowFrame* shadow, bool herDrawn, bool othersDrawn,
+	ReceiveBlocks* out)
+{
+	HDShadowReceiveConstants(&shadow->box, shadow->R, shadow->t, shadow->strength, out->hers);
+	HDShadowReach(&shadow->box, out->herMin, out->herMax);
+
+	if (!herDrawn)
+		HDShadowReceiveWithoutHer(out->hers);
+
+	HDShadowReceiveOthersConstants(&shadow->others, shadow->R, shadow->t, out->others);
+	HDShadowReachOthers(&shadow->others, out->otherMin, out->otherMax);
+
+	if (!othersDrawn)
+		HDShadowReceiveWithoutOthers(out->others);
+}
+
+int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn)
+{
+	const HDShadowFrame* shadow = HDShadowFrameState();
+	ReceiveBlocks frame;
+	int drawn = 0;
+
+	receive_blocks_frame(shadow, herDrawn, othersDrawn, &frame);
+
+	for (int i = 0; i < g_count; i++)
+	{
+		const FrameItem& entry = g_frame[i];
+
+		/* A piece cast into her map alone is drawn nowhere, and the ring and
+		 * the pickup display draw about a centre of their own. */
+		if (entry.cast == HD_OBJ_CAST_ONLY || entry.offCentreX != 0.0f ||
+			entry.offCentreY != 0.0f)
+			continue;
+
+		int takes = HDShadowReceiverTakes(entry.receiver, herDrawn, othersDrawn, entry.mirrored,
+			false);
+
+		if (!takes)
+			continue;
+
+		/* Drawn again where its sphere touches the reach of a map it takes;
+		 * the edge, height and distance terms fade the shadow out inside the
+		 * reach, so a model straddling its border takes what is left. */
+		float view[3], world[3];
+		const float radius = entry_sphere(entry, view);
+
+		HDShadowViewToWorld(shadow->R, shadow->t, view, world);
+
+		if ((takes & HD_SHADOW_TAKES_HERS) &&
+			!HDShadowSphereTouches(world, radius, frame.herMin, frame.herMax))
+			takes &= ~HD_SHADOW_TAKES_HERS;
+
+		if ((takes & HD_SHADOW_TAKES_OTHERS) &&
+			!HDShadowSphereTouches(world, radius, frame.otherMin, frame.otherMax))
+			takes &= ~HD_SHADOW_TAKES_OTHERS;
+
+		if (!takes)
+			continue;
+
+		float hers[HD_SHADOW_RECEIVE_COUNT * 4];
+		float others[HD_SHADOW_RECEIVE2_COUNT * 4];
+
+		memcpy(hers, frame.hers, sizeof(hers));
+		memcpy(others, frame.others, sizeof(others));
+
+		if (!(takes & HD_SHADOW_TAKES_HERS))
+			HDShadowReceiveWithoutHer(hers);
+
+		if (!(takes & HD_SHADOW_TAKES_OTHERS))
+			HDShadowReceiveWithoutOthers(others);
+
+		HDRenderShadowModelsBlocks(hers, others);
+		HDModelClip(entry.clip);
+
+		// The body - or the swapped model - and the separate face, as drawn.
+		bool any = HDModelReceiveDraw(entry.drawSlot, false, entry.matrix, entry.nodes,
+			entry.mask, &entry.cut, entry.cull, entry.lipsTrack, entry.lipsFrame, &entry.soft);
+
+		if (entry.head)
+			any = HDModelReceiveDraw(entry.slot, true, entry.matrix, entry.nodes, entry.mask,
+				&entry.cut, entry.cull, entry.lipsTrack, entry.lipsFrame, 0) || any;
+
+		drawn += any ? 1 : 0;
+	}
+
+	HDModelClip(0);
+	return drawn;
+}
+
 bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 {
 	g_gave_way = 0;
@@ -4067,14 +4245,14 @@ bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 		return false;
 
 	/* Her step first: it ran only in a frame the projected shadow runs in,
-	 * so a frame without it asks nothing else - in particular not for the
-	 * second target, which asking makes. */
+	 * whose decision asked for the second target beside hers
+	 * (HDShadowFrameOthersReady); a blob asks for no target itself. */
 	const HDShadowFrame* shadow = HDShadowFrameState();
 	const bool herStep = shadow->stepped != 0;
 	const bool runs = herStep && shadow->runs != 0;
 	const bool hdModel = runs && begin_decision(item, obj) == BEGIN_HD;
-	const bool target = hdModel && !g_reflection && HDRenderShadowReceive2Ready() &&
-		HDModelCastReady() && HDRenderShadowOthersReady();
+	const bool target = hdModel && !g_reflection && HDShadowFrameOthersReady() &&
+		HDModelCastReady();
 
 	if (!HDShadowBlobGivesWay(runs, herStep, target, hdModel, g_reflection))
 		return false;
@@ -4165,6 +4343,9 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.offCentreY = 0.0f;
 	// Her pieces and the braid in a mirror carry the mirror's planes.
 	stamp_clip(entry.clip, g_reflection);
+	// Everything pushed is a piece of her.
+	entry.receiver = HD_SHADOW_RECEIVER_LARA;
+	entry.mirrored = g_reflection;
 
 	/* A pushed model that is itself a face speaks the way an actor's face
 	 * does - see HDObjectLips. Where it has no clip for the track it draws

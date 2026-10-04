@@ -698,6 +698,38 @@ bool HDModelCastDraw(int slot, bool head, const float* nodeMatrix, int nodeCount
 	const HDModelSoft* soft = 0);
 int HDModelCastCalls();
 
+/* The projected shadow's receive draw: a model that the solid pass has just
+ * drawn, drawn again inside the models' receive bracket (hd_render.h,
+ * HDRenderShadowModelsBegin) with ModelVS and every vertex constant that
+ * decides where its pixels lie - the same joints, the same bind fold, the
+ * same head cut and soft motion, a speaking face's deformed buffer of the
+ * same frame, the same cull - so each pixel lands on the very depth the
+ * solid draw wrote, and with hd_shadow_receive.hlsl's ModelReceivePS in
+ * ModelPS's place, which repeats ModelPS's three clips (the range's alpha
+ * test, the head cut, a mirror's planes as HDModelClip left them) and writes
+ * the shadow's factor.
+ *
+ * HDModelReceiveReady says whether the shader was made on this device.
+ * HDModelReceiveBegin, inside an open model bracket (HDModelFrameBegin) with
+ * the frame's projection in c0 - c3, binds ModelVS, the receive shader and
+ * the declaration; HDModelReceiveEnd closes it, before
+ * HDRenderShadowModelsEnd, which puts the shaders back.
+ *
+ * HDModelReceiveDraw draws the opaque and the alpha-tested pass, never the
+ * additive one, with the alpha test of each range and the arguments of the
+ * solid draw it repeats: HDModelDraw's for the body (`head` false), and
+ * HDModelDrawHead's for the slot's separate face (`head` true, `soft` 0).
+ * The two maps' blocks are the caller's (HDRenderShadowModelsBlocks). False
+ * when the model is not there or no receive has begun. HDModelReceiveCalls
+ * counts the draw calls since HDModelReceiveBegin. */
+bool HDModelReceiveReady();
+void HDModelReceiveBegin();
+void HDModelReceiveEnd();
+bool HDModelReceiveDraw(int slot, bool head, const float* nodeMatrix, int nodeCount,
+	unsigned int nodeMask, const HDModelNeckCut* cut = 0, int cull = HD_MODEL_CULL_NONE,
+	int lipsTrack = -1, int lipsFrame = -1, const HDModelSoft* soft = 0);
+int HDModelReceiveCalls();
+
 /* The lips of a speaking face.
  *
  * A cutscene face speaks with one file per audio track, <FACE>_HEAD_<track>

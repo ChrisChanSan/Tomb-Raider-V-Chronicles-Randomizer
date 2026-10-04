@@ -320,12 +320,6 @@ struct HDShadowCastStats
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);
 
-/* Whether the second map was drawn in this frame, by the cast pass
- * HDFrameDraw has just run: its receive reads it only then, never a map an
- * earlier frame left behind. False from the start of every frame's passes
- * until that pass has drawn it. */
-bool HDFrameShadowOthersDrawn();
-
 // The frame clock, a diagnostic. Called from DXShowFrame
 // (specific\dxshell.cpp) directly after IDirect3DDevice9::Present returns -
 // the one function in this engine that presents anything, so the game frame,

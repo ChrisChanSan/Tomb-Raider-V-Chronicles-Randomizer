@@ -168,5 +168,13 @@ struct HDShadowFollow;
 
 const HDShadowFrame* HDShadowFrameState();
 
+/* Whether the second map exists on this device in this frame: its target
+ * and depth surface (hd_render.h, HDRenderShadowOthersReady) and the two-map
+ * receive shader, asked by the decision of a frame the projected shadow runs
+ * in - asking makes the target - and false in every other frame. A device
+ * that refuses the second map alone answers false while her shadow runs, and
+ * the other casters keep their blobs. */
+bool HDShadowFrameOthersReady();
+
 // The key light's following across frames, for the log.
 HDShadowFollow* HDShadowFollowState();

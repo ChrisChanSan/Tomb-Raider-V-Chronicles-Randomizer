@@ -1075,6 +1075,44 @@ void HDRenderShadowReceiveEnd();
 int HDRenderShadowReceiveCalls();
 bool HDRenderShadowReceiveStencil();
 
+/* --- the projected shadow on the HD models -----------------------------------
+ *
+ * The models' receive bracket, around hd_model.h's receive draw: the
+ * entries of the frame list drawn a second time after the models' solid
+ * pass, with the model's own vertex shader and constants, the depth test
+ * EQUAL, no depth write, and hd_shadow_receive.hlsl's ModelReceivePS, whose
+ * factor multiplies the picture (source ZERO, destination SRCCOLOR, colour
+ * write RGB only).
+ *
+ * HDRenderShadowModelsBegin, inside an open bracket and outside every other
+ * receive or cast bracket, with `hers` and `others` the maps drawn in this
+ * frame (at least one, each made): remembers the receive's render states
+ * and the scissor test, sampler stages 3 and 4 with their textures, texture
+ * 0, the shaders, the declaration, stream 0, the indices, the vertex
+ * registers c0 - c166 and the pixel registers c4 - c7 and c96 - c107; binds
+ * her map on stage 3 and the second on stage 4 (point, clamp) - a map not
+ * drawn in this frame is bound to nothing; sets the states above and
+ * switches the scissor test off; and where the depth surface has a stencil
+ * lets each pixel be darkened once, through bit 1 of it (the value 2), which
+ * the rooms' receive leaves 0 - a bracket whose rooms' receive cleared
+ * nothing clears the stencil here. False, with nothing changed, otherwise.
+ *
+ * HDRenderShadowModelsBlocks - her block (HD_SHADOW_RECEIVE_COUNT
+ * registers) and the second map's (HD_SHADOW_RECEIVE2_COUNT) for the next
+ * draws, uploaded from HD_SHADOW_RECEIVE_FIRST on when they differ from the
+ * last; a block made to give nothing (hd_shadow.h,
+ * HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers) for a map the
+ * entry does not take.
+ *
+ * HDRenderShadowModelsEnd puts back everything Begin remembered and
+ * releases every reference its Get calls added.
+ *
+ * HDRenderShadowModelsStencil - whether the last Begin found a stencil. */
+bool HDRenderShadowModelsBegin(bool hers, bool others);
+void HDRenderShadowModelsBlocks(const float* hers, const float* others);
+void HDRenderShadowModelsEnd();
+bool HDRenderShadowModelsStencil();
+
 /* The sky dome. How many groups past the last room this
  * level has - 0 for a level with no sky, 1 for every level that has one, 2
  * for TITLE - and the call that draws them all, camera centred, behind

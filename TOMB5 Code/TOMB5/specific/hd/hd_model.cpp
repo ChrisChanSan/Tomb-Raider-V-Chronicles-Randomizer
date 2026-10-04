@@ -42,6 +42,7 @@
 #include "hd_shader/hd_model_ps.inc"
 #include "hd_shader/hd_shadow_cast_vs.inc"
 #include "hd_shader/hd_shadow_cast_ps.inc"
+#include "hd_shader/hd_shadow_receive_model_ps.inc"
 
 namespace
 {
@@ -291,6 +292,13 @@ namespace
 	IDirect3DPixelShader9* g_cast_ps = 0;
 	bool g_in_cast = false;
 	int g_cast_calls = 0;
+	/* The projected shadow's receive shader for the models
+	 * (hd_shadow_receive.hlsl, ModelReceivePS). Not a condition of the model
+	 * path either: without it no model takes the shadow and the rooms still
+	 * do. */
+	IDirect3DPixelShader9* g_receive_ps = 0;
+	bool g_in_receive = false;
+	int g_receive_calls = 0;
 
 	std::map<int, Model> g_models;		// slot -> body
 	std::map<int, Model> g_heads;		// slot -> its separate HD face
@@ -2954,6 +2962,9 @@ bool HDModelInit(IDirect3DDevice9* device, const char** why)
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowCastPS, &g_cast_ps)))
 		g_cast_ps = 0;
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceiveModelPS, &g_receive_ps)))
+		g_receive_ps = 0;
+
 	return true;
 }
 
@@ -2966,10 +2977,12 @@ void HDModelShutdown()
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
 	if (g_cast_vs) { g_cast_vs->Release(); g_cast_vs = 0; }
 	if (g_cast_ps) { g_cast_ps->Release(); g_cast_ps = 0; }
+	if (g_receive_ps) { g_receive_ps->Release(); g_receive_ps = 0; }
 
 	g_device = 0;
 	g_in_frame = false;
 	g_in_cast = false;
+	g_in_receive = false;
 }
 
 bool HDModelReady()
@@ -4439,6 +4452,160 @@ bool HDModelCastDraw(int slot, bool head, const float* nodeMatrix, int nodeCount
 int HDModelCastCalls()
 {
 	return g_cast_calls;
+}
+
+/* ----------------------------------------------- the shadow's receive -- */
+
+bool HDModelReceiveReady()
+{
+	return HDModelReady() && g_receive_ps;
+}
+
+void HDModelReceiveBegin()
+{
+	g_in_receive = false;
+	g_receive_calls = 0;
+
+	if (!HDModelReceiveReady() || !g_in_frame)
+		return;
+
+	g_device->SetVertexShader(g_vs);
+	g_device->SetPixelShader(g_receive_ps);
+	g_device->SetVertexDeclaration(g_decl);
+	g_in_receive = true;
+}
+
+void HDModelReceiveEnd()
+{
+	g_in_receive = false;
+}
+
+bool HDModelReceiveDraw(int slot, bool head, const float* nodeMatrix, int nodeCount,
+	unsigned int nodeMask, const HDModelNeckCut* cut, int cull, int lipsTrack, int lipsFrame,
+	const HDModelSoft* soft)
+{
+	if (!g_in_receive || !nodeMatrix || nodeCount <= 0)
+		return false;
+
+	const Model* model = find(head ? g_heads : g_models, slot);
+
+	if (!model || !model->vb)
+		return false;
+
+	/* What puts a vertex where the solid draw put it, written as draw_model
+	 * writes it: all 32 joints with the same rule for the nodes past the
+	 * caller's count, the head cut's two numbers (c162), the soft motion
+	 * (c163 - c166), the same stream - a speaking face's deformed buffer of
+	 * the same frame - and the same indices. The projection in c0 - c3 is
+	 * the one the solid draw left there. ModelVS reads its other registers
+	 * for the light and the sheen alone, which the receive shader does not
+	 * read. */
+	const int nodes = nodeCount < kJointBudget ? nodeCount : kJointBudget;
+
+	for (int node = 0; node < kJointBudget; node++)
+	{
+		const int from = node < nodes ? node : nodes - 1;
+
+		set_joint(node, nodeMatrix + from * 16, model->hasBind ? model->bind[from] : 0);
+	}
+
+	const float neck[4] =
+	{
+		cut && cut->on > 0.0f ? cut->node : 0.0f,
+		cut && cut->on > 0.0f ? cut->bar : 1.0e6f,
+		0.0f,
+		0.0f
+	};
+
+	g_device->SetVertexShaderConstantF(162, neck, 1);
+
+	static const HDModelSoft kNoSoft = {};
+
+	g_device->SetVertexShaderConstantF(163, (soft ? soft : &kNoSoft)->constants, 4);
+
+	g_device->SetStreamSource(0, lips_stream(*model, slot, head, lipsTrack, lipsFrame),
+		0, sizeof(HDModelVertex));
+	g_device->SetIndices(model->ib);
+
+	// The draw's own cull, as draw_model sets and puts it back.
+	if (cull != HD_MODEL_CULL_NONE)
+		g_device->SetRenderState(D3DRS_CULLMODE,
+			cull == HD_MODEL_CULL_CW ? D3DCULL_CW : D3DCULL_CCW);
+
+	/* The opaque and the alpha-tested pass, never the additive one: what the
+	 * solid pass drew and what wrote the depth the test compares with. */
+	for (int pass = 0; pass < 2; pass++)
+	{
+		const std::vector<Range>& ranges = model->pass[pass];
+
+		if (ranges.empty())
+			continue;
+
+		// gPass as draw_model writes it: x the alpha test, z the head cut.
+		float constants[4] =
+		{
+			pass == 1 ? 1.0f : 0.0f,
+			0.0f,
+			cut && cut->on > 0.0f ? 1.0f : 0.0f,
+			1.0f
+		};
+
+		g_device->SetPixelShaderConstantF(4, constants, 1);
+
+		// The ranges merged as draw_model merges them.
+		for (size_t i = 0; i < ranges.size(); )
+		{
+			const Range& first = ranges[i];
+
+			if (!(nodeMask & (1u << (first.node & 31))))
+			{
+				i++;
+				continue;
+			}
+
+			unsigned int start = first.start;
+			unsigned int count = first.count;
+			size_t next = i + 1;
+
+			while (next < ranges.size())
+			{
+				const Range& more = ranges[next];
+
+				if (more.pageSlot != first.pageSlot || more.start != start + count ||
+					!(nodeMask & (1u << (more.node & 31))) || more.cut != first.cut)
+					break;
+
+				count += more.count;
+				next++;
+			}
+
+			g_device->SetTexture(0, first.pageSlot >= 0
+				? (IDirect3DBaseTexture9*)HDPageCacheSlotTexture(first.pageSlot) : 0);
+
+			// The cut-out ranges of the opaque pass keep their alpha test.
+			if (pass == 0 && constants[0] != (first.cut ? 1.0f : 0.0f))
+			{
+				constants[0] = first.cut ? 1.0f : 0.0f;
+				g_device->SetPixelShaderConstantF(4, constants, 1);
+			}
+
+			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+				(UINT)model->vertices, start, count / 3);
+
+			g_receive_calls++;
+			i = next;
+		}
+	}
+
+	if (cull != HD_MODEL_CULL_NONE)
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	return true;
+}
+
+int HDModelReceiveCalls()
+{
+	return g_receive_calls;
 }
 
 /* ------------------------------------------------------------ the lips -- */

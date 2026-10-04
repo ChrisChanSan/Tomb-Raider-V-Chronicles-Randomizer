@@ -1563,9 +1563,13 @@ namespace
 	IDirect3DPixelShader9* g_shadow_receive_ps = 0;
 	/* Its two-map variant (the same file's Receive2PS), for a frame whose
 	 * second map was drawn. Null when the device refused it; the creatures
-	 * then keep their blobs (hd_object.cpp asks HDRenderShadowReceive2Ready
-	 * before their blob gives way). */
+	 * then keep their blobs (the frame's decision asks
+	 * HDRenderShadowReceive2Ready beside the second map, hd_laradraw.cpp). */
 	IDirect3DPixelShader9* g_shadow_receive2_ps = 0;
+	/* Whether the rooms' receive cleared the stencil inside the open
+	 * bracket: the models' receive then finds its own bit 0 everywhere and
+	 * clears nothing. Set by the rooms' Begin, cleared by HDRenderFrameBegin. */
+	bool g_receive_cleared = false;
 	IDirect3DVertexDeclaration9* g_decl = 0;
 	IDirect3DVertexBuffer9* g_vb = 0;
 	IDirect3DIndexBuffer9* g_ib = 0;
@@ -6004,6 +6008,7 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	g_sheen_calls = 0;
 	g_clear_calls = 0;
 	g_water_calls = 0;
+	g_receive_cleared = false;
 
 	if (view)
 		std::memcpy(g_view, view, sizeof(g_view));
@@ -7758,14 +7763,17 @@ static bool receive_open(const float* constants, const float* others)
 	 * cut-out laid over a wall, a decal on a floor, the faces two rooms
 	 * share at a portal - and both pass EQUAL; without a guard the factor
 	 * would multiply twice there. The first face to darken a pixel marks it
-	 * in the stencil and the test turns every later one away. The engine
-	 * itself uses no stencil, so the whole of it is cleared here; a depth
-	 * surface without one leaves the guard off. */
+	 * in the stencil and the test turns every later one away. Nothing but
+	 * the two receives uses the stencil, so the whole of it is cleared here,
+	 * and the models' receive later in the same bracket guards with a bit of
+	 * its own (HDRenderShadowModelsBegin); a depth surface without one
+	 * leaves the guard off. */
 	s.stencil = depth_has_stencil();
 
 	if (s.stencil)
 	{
 		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+		g_receive_cleared = true;
 		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
 		g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
 		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
@@ -7858,6 +7866,219 @@ int HDRenderShadowReceiveCalls()
 bool HDRenderShadowReceiveStencil()
 {
 	return g_receive.stencil;
+}
+
+/* ------------------------------ the projected shadow on the HD models -- */
+
+namespace
+{
+	/* What the models' receive changes, as it was: the receive's render
+	 * states and the scissor test, sampler stages 3 and 4 with their
+	 * textures, texture 0, the shaders, the declaration, stream 0, the
+	 * indices, every vertex register ModelVS reads (c0 - c166) and the pixel
+	 * registers the model draw and the receive write (c4 - c7, c96 - c107). */
+	const int kModelsVertexRegisters = 167;
+	const int kModelsPixelFirst = HD_SHADOW_RECEIVE_FIRST;
+	const int kModelsPixelCount = HD_SHADOW_RECEIVE_COUNT + HD_SHADOW_RECEIVE2_COUNT;
+
+	// The stencil bit the models' receive guards each pixel with.
+	const DWORD kModelsStencilBit = 2;
+
+	struct ModelsSaved
+	{
+		bool open = false;
+		bool stencil = false;
+		DWORD rs[19] = {};
+		DWORD scissorTest = 0;
+		DWORD samp[2][7] = {};
+		IDirect3DBaseTexture9* texture[2] = { 0, 0 };
+		IDirect3DBaseTexture9* page = 0;
+		IDirect3DVertexShader9* vs = 0;
+		IDirect3DPixelShader9* ps = 0;
+		IDirect3DVertexDeclaration9* decl = 0;
+		DWORD fvf = 0;
+		IDirect3DVertexBuffer9* stream = 0;
+		UINT streamOffset = 0;
+		UINT streamStride = 0;
+		IDirect3DIndexBuffer9* indices = 0;
+		float vertex[kModelsVertexRegisters * 4] = {};
+		float pass[4 * 4] = {};
+		float blocks[kModelsPixelCount * 4] = {};
+		// The two blocks as last uploaded, so an unchanged pair costs nothing.
+		float now[kModelsPixelCount * 4] = {};
+		bool nowValid = false;
+	};
+
+	ModelsSaved g_models;
+}
+
+bool HDRenderShadowModelsBegin(bool hers, bool others)
+{
+	if (!g_device || !g_in_frame || g_models.open || g_receive.open || g_shadow_saved.open ||
+		(hers && !g_shadow_texture) || (others && !g_others_texture) || !(hers || others))
+		return false;
+
+	ModelsSaved& s = g_models;
+	const DWORD stages[2] = { kReceiveStage, kReceiveOthersStage };
+
+	s = ModelsSaved();
+
+	for (int i = 0; i < kReceiveRenderStateCount; i++)
+		g_device->GetRenderState(kReceiveRenderStates[i], &s.rs[i]);
+
+	g_device->GetRenderState(D3DRS_SCISSORTESTENABLE, &s.scissorTest);
+
+	for (int k = 0; k < 2; k++)
+	{
+		for (int i = 0; i < kReceiveSamplerStateCount; i++)
+			g_device->GetSamplerState(stages[k], kReceiveSamplerStates[i], &s.samp[k][i]);
+
+		g_device->GetTexture(stages[k], &s.texture[k]);
+	}
+
+	g_device->GetTexture(0, &s.page);
+	g_device->GetVertexShader(&s.vs);
+	g_device->GetPixelShader(&s.ps);
+	g_device->GetVertexDeclaration(&s.decl);
+	g_device->GetFVF(&s.fvf);
+	g_device->GetStreamSource(0, &s.stream, &s.streamOffset, &s.streamStride);
+	g_device->GetIndices(&s.indices);
+	g_device->GetVertexShaderConstantF(0, s.vertex, kModelsVertexRegisters);
+	g_device->GetPixelShaderConstantF(4, s.pass, 4);
+	g_device->GetPixelShaderConstantF(kModelsPixelFirst, s.blocks, kModelsPixelCount);
+	s.open = true;
+
+	// Every model's whole surface: the solid pass drew each without a window.
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+
+	/* A map this frame did not draw is bound to nothing: every entry's block
+	 * of it is silenced (hd_shadow.h, HDShadowReceiverTakes), so the shader
+	 * never samples it. */
+	receive_stage(kReceiveStage, hers ? g_shadow_texture : 0);
+	receive_stage(kReceiveOthersStage, others ? g_others_texture : 0);
+
+	/* The picture times the factor where a model's face is the one the solid
+	 * pass left visible: the same depth to the bit, EQUAL, nothing written
+	 * but the colour - the rooms' receive's states. The cull mode is the
+	 * draw's own, set per entry as the solid pass sets it. */
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN | D3DCOLORWRITEENABLE_BLUE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	/* Once per pixel, as on the rooms: a model's faces can lie in one plane
+	 * (a holster over the hip, a decal over a body) and both pass EQUAL. The
+	 * rooms' receive leaves its bit set on the room pixels behind the
+	 * models, so the models guard with a bit of their own, which that
+	 * receive's clear left 0 everywhere; in a bracket whose rooms' receive
+	 * cleared nothing the stencil is cleared here. */
+	s.stencil = depth_has_stencil();
+
+	if (s.stencil)
+	{
+		if (!g_receive_cleared)
+		{
+			g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+			g_receive_cleared = true;
+		}
+
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+		g_device->SetRenderState(D3DRS_STENCILREF, 0);
+		g_device->SetRenderState(D3DRS_STENCILMASK, kModelsStencilBit);
+		g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kModelsStencilBit);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_INVERT);
+		g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	}
+	else
+		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+	return true;
+}
+
+void HDRenderShadowModelsBlocks(const float* hers, const float* others)
+{
+	ModelsSaved& s = g_models;
+
+	if (!s.open || !hers || !others)
+		return;
+
+	float want[kModelsPixelCount * 4];
+
+	std::memcpy(want, hers, sizeof(float) * HD_SHADOW_RECEIVE_COUNT * 4);
+	std::memcpy(want + HD_SHADOW_RECEIVE_COUNT * 4, others,
+		sizeof(float) * HD_SHADOW_RECEIVE2_COUNT * 4);
+
+	if (s.nowValid && !std::memcmp(want, s.now, sizeof(want)))
+		return;
+
+	std::memcpy(s.now, want, sizeof(want));
+	s.nowValid = true;
+	g_device->SetPixelShaderConstantF(kModelsPixelFirst, want, kModelsPixelCount);
+}
+
+void HDRenderShadowModelsEnd()
+{
+	ModelsSaved& s = g_models;
+	const DWORD stages[2] = { kReceiveStage, kReceiveOthersStage };
+
+	if (!s.open || !g_device)
+		return;
+
+	for (int i = 0; i < kReceiveRenderStateCount; i++)
+		g_device->SetRenderState(kReceiveRenderStates[i], s.rs[i]);
+
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, s.scissorTest);
+
+	for (int k = 0; k < 2; k++)
+	{
+		for (int i = 0; i < kReceiveSamplerStateCount; i++)
+			g_device->SetSamplerState(stages[k], kReceiveSamplerStates[i], s.samp[k][i]);
+
+		g_device->SetTexture(stages[k], s.texture[k]);
+	}
+
+	g_device->SetTexture(0, s.page);
+	g_device->SetVertexShaderConstantF(0, s.vertex, kModelsVertexRegisters);
+	g_device->SetPixelShaderConstantF(4, s.pass, 4);
+	g_device->SetPixelShaderConstantF(kModelsPixelFirst, s.blocks, kModelsPixelCount);
+	g_device->SetIndices(s.indices);
+	g_device->SetStreamSource(0, s.stream, s.streamOffset, s.streamStride);
+
+	// The declaration as HDRenderStateRestore puts it back.
+	if (s.fvf)
+		g_device->SetFVF(s.fvf);
+	else
+		g_device->SetVertexDeclaration(s.decl);
+
+	g_device->SetVertexShader(s.vs);
+	g_device->SetPixelShader(s.ps);
+
+	for (int k = 0; k < 2; k++)
+		if (s.texture[k]) { s.texture[k]->Release(); s.texture[k] = 0; }
+
+	if (s.page) { s.page->Release(); s.page = 0; }
+	if (s.vs) { s.vs->Release(); s.vs = 0; }
+	if (s.ps) { s.ps->Release(); s.ps = 0; }
+	if (s.decl) { s.decl->Release(); s.decl = 0; }
+	if (s.stream) { s.stream->Release(); s.stream = 0; }
+	if (s.indices) { s.indices->Release(); s.indices = 0; }
+
+	s.open = false;
+}
+
+bool HDRenderShadowModelsStencil()
+{
+	return g_models.stencil;
 }
 
 int HDRenderGroupCount()

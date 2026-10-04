@@ -132,6 +132,10 @@ namespace
 	 * so it runs on the same game time and steps once per drawn main frame. */
 	HDShadowFrame g_shadow_frame;
 	bool g_shadow_decided = false;
+	/* Whether the second map, its depth surface and the two-map receive
+	 * shader exist on this device in this frame, asked by the decision of a
+	 * frame the projected shadow runs in; false in every other frame. */
+	bool g_shadow_others_ready = false;
 	HDShadowFollow g_shadow_follow;
 	HDSoftClock g_shadow_clock;
 
@@ -1026,10 +1030,9 @@ namespace
 	 *   events=  changes of state on this run, a counter
 	 *
 	 * HDLOG shadow others - the second map on this device, the same fields.
-	 * It is made when an item's blob first asks for it (hd_object.cpp,
-	 * HDObjectBlobGivesWay), so its made line follows at the next frame's
-	 * decision; its state is none until a creature with a blob is drawn HD
-	 * in a frame the projected shadow runs in.
+	 * It is asked for by the decision of the first frame the projected
+	 * shadow runs in, right beside hers, so its made or refused line is
+	 * written in that very frame; its state is none until then.
 	 *
 	 * HDLOG shadow mode - what this frame draws for Lara:
 	 *   stored=     tomb5.shadow_mode as the option holds it
@@ -1098,6 +1101,13 @@ bool HDShadowFrameDecide()
 
 	g_shadow_frame.gate = gate;
 	g_shadow_frame.runs = gate == HD_SHADOW_GATE_OK ? 1 : 0;
+
+	/* The second map beside hers, asked only in a frame hers runs in: a
+	 * refusal of it alone leaves her shadow running, and the other casters
+	 * keep their blobs (HDObjectBlobGivesWay reads the answer). Asked before
+	 * the log, so its state line follows in the frame it changed in. */
+	g_shadow_others_ready = g_shadow_frame.runs && HDRenderShadowOthersReady() &&
+		HDRenderShadowReceive2Ready();
 	shadow_log(gate);
 
 	if (!g_shadow_frame.runs)
@@ -1112,6 +1122,11 @@ bool HDShadowFrameDecide()
 const HDShadowFrame* HDShadowFrameState()
 {
 	return &g_shadow_frame;
+}
+
+bool HDShadowFrameOthersReady()
+{
+	return g_shadow_others_ready;
 }
 
 HDShadowFollow* HDShadowFollowState()
@@ -1367,6 +1382,7 @@ void HDLaraDrawEnd()
 	 * key light instead of gliding out of the last level's. */
 	memset(&g_shadow_frame, 0, sizeof(g_shadow_frame));
 	g_shadow_decided = false;
+	g_shadow_others_ready = false;
 	memset(&g_shadow_follow, 0, sizeof(g_shadow_follow));
 	HDSoftClockForget(&g_shadow_clock);
 	HDSoftClockFrame(&g_shadow_clock);
@@ -1481,6 +1497,7 @@ void HDLaraDrawFrameReset()
 	g_shadow_decided = false;
 	g_shadow_frame.runs = 0;
 	g_shadow_frame.stepped = 0;
+	g_shadow_others_ready = false;
 	HDSoftClockFrame(&g_shadow_clock);
 
 	/* The first person and binocular log lines. They belong here because

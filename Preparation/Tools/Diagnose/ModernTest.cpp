@@ -15198,9 +15198,10 @@ static void shadow_others_box()
 	}
 }
 
-/* The second box grown across the light by OTHERS_MARGIN, at the fixed slant
- * the game draws with: a place up to the margin beyond any of the four sides
- * is held, one a few units past it is not, and the depth is not grown. And no
+/* The second box grown by OTHERS_MARGIN, at the fixed slant the game draws
+ * with: a place up to the margin beyond any of the four sides across the
+ * light, and beyond the near or far side along it, is held, one a few units
+ * past it is not. And no
  * part of a caster lies inside the box once its feet have left the grown one:
  * for feet just past the margin anywhere along each side, a head up to 2160
  * units above them projects outside the box's u or v - on the u = 1 and
@@ -15250,16 +15251,18 @@ static void shadow_others_margin()
 	}
 
 	float nearSide[3], farSide[3], within[3];
+	const float grownDepth = 0.5f * HD_SHADOW_OTHERS_DEPTH +
+		HD_SHADOW_OTHERS_MARGIN * HD_SHADOW_OTHERS_DEPTH;
 
-	at(0.0f, 0.0f, -0.5f * HD_SHADOW_OTHERS_DEPTH - 4.0f, nearSide);
-	at(0.0f, 0.0f, 0.5f * HD_SHADOW_OTHERS_DEPTH + 4.0f, farSide);
-	at(0.0f, 0.0f, 0.5f * HD_SHADOW_OTHERS_DEPTH - 4.0f, within);
+	at(0.0f, 0.0f, -grownDepth - 4.0f, nearSide);
+	at(0.0f, 0.0f, grownDepth + 4.0f, farSide);
+	at(0.0f, 0.0f, grownDepth - 4.0f, within);
 
 	ok(held == 4 && !HDShadowBoxHolds(&others, nearSide, HD_SHADOW_OTHERS_MARGIN) &&
 		!HDShadowBoxHolds(&others, farSide, HD_SHADOW_OTHERS_MARGIN) &&
 		HDShadowBoxHolds(&others, within, HD_SHADOW_OTHERS_MARGIN),
 		"shadow others: the grown box holds a place up to the margin past each side, not "
-		"one beyond it, and is not grown along the light", held, 4);
+		"one beyond it, along the light as across it", held, 4);
 
 	int reaching = 0, heads = 0;
 
@@ -15644,8 +15647,9 @@ static void shadow_others_receive()
 
 	ok(regs[12] == HD_SHADOW_BIAS / HD_SHADOW_OTHERS_DEPTH && regs[13] == (float)HD_SHADOW_OTHERS_MAP &&
 		regs[14] == 1.0f / (float)HD_SHADOW_OTHERS_MAP && regs[15] == 0.0f &&
-		regs[18] == 0.0f && regs[19] == 0.0f,
-		"shadow others: the second block's scalars are the second box's bias, side and texel", 0, 0);
+		regs[18] == 1.0f / HD_SHADOW_OTHERS_FADE && regs[19] == 0.0f,
+		"shadow others: the second block's scalars are the second box's bias, side and texel, and "
+		"the fade's slope", 0, 0);
 
 	// The second block follows hers without a gap or an overlap, inside the
 	// 224 constants of ps_3_0.
@@ -15715,6 +15719,380 @@ static void shadow_others_receive()
 		HDShadowBoxesTouch(hmin, hmax, rmin, rmax),
 		"shadow others: the second reach holds every point a caster inside the box can shadow, "
 		"not one far below it, and meets her reach", outside, 0);
+}
+
+/* The fade of the second map along the light: the term itself, the lookup
+ * that carries it, the shader's line for it, and a caster walking out of the
+ * box along the light through either side. */
+static void shadow_others_fade()
+{
+	ok(HD_SHADOW_OTHERS_FADE == 0.05f, "shadow fade: the table's number, 0.05 of the depth",
+		sh_milli(HD_SHADOW_OTHERS_FADE), 50);
+
+	// The term: 0 at both sides, exactly 1 in the middle and from FADE in,
+	// rising to the middle and falling after it, never outside 0..1.
+	int bad = 0;
+	float last = -1.0f;
+
+	for (int i = 0; i <= 10000; i++)
+	{
+		const float tap = (float)i / 10000.0f;
+		const float f = HDShadowFadeTerm(tap);
+
+		if (f < 0.0f || f > 1.0f)
+			bad++;
+
+		if (i <= 5000 ? f < last : f > last)
+			bad++;
+
+		if (tap >= HD_SHADOW_OTHERS_FADE + 1e-4f && tap <= 1.0f - HD_SHADOW_OTHERS_FADE - 1e-4f &&
+			f != 1.0f)
+			bad++;
+
+		last = f;
+	}
+
+	ok(bad == 0 && HDShadowFadeTerm(0.0f) == 0.0f && HDShadowFadeTerm(1.0f) == 0.0f &&
+		HDShadowFadeTerm(0.5f) == 1.0f && HDShadowFadeTerm(-0.25f) == 0.0f &&
+		HDShadowFadeTerm(1.25f) == 0.0f &&
+		sh_milli(HDShadowFadeTerm(0.5f * HD_SHADOW_OTHERS_FADE)) == 500 &&
+		sh_milli(HDShadowFadeTerm(1.0f - 0.5f * HD_SHADOW_OTHERS_FADE)) == 500,
+		"shadow fade: 0 at depth 0 and 1, exactly 1 in the middle and from FADE in, linear and "
+		"monotone between", bad, 0);
+
+	// The shader's line, saturate(min(tap, 1 - tap) * c107.z), against the term.
+	float nodes[15 * 3];
+	float dir[3];
+
+	HDShadowFallback(dir);
+	sh_figure(1024.0f, -768.0f, 2048.0f, nodes);
+
+	HDShadowBox her, others;
+
+	HDShadowBoxMake(&her, dir, nodes, 15);
+	HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+		HD_SHADOW_OTHERS_MAP);
+
+	const float R[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	const float t[3] = { 0, 0, 0 };
+	float regs[HD_SHADOW_RECEIVE2_COUNT * 4];
+	int line = 0;
+
+	HDShadowReceiveOthersConstants(&others, R, t, regs);
+
+	for (int i = 0; i <= 1000; i++)
+	{
+		const float tap = (float)i / 1000.0f;
+		const float edge = tap < 1.0f - tap ? tap : 1.0f - tap;
+		const float shader = hd_shadow_saturate(edge * regs[18]);
+
+		if (shader != HDShadowFadeTerm(tap))
+			line++;
+	}
+
+	ok(line == 0, "shadow fade: the shader's line on c107.z is the term, bit for bit", line, 0);
+
+	/* The lookup carries it: a map cast everywhere at a depth near either
+	 * side gives the distance term times the fade of that depth. */
+	const int n = 32;
+	int lookups = 0;
+
+	for (int i = 0; i <= 40; i++)
+	{
+		const float tap = (float)i * 0.0025f;
+
+		for (int side = 0; side < 2; side++)
+		{
+			const float at = side ? 1.0f - tap : tap;
+			std::vector<float> map((size_t)(n * n), at);
+			const float depth = at + 1000.0f / HD_SHADOW_OTHERS_DEPTH;
+			const float got = HDShadowLookupBehind(&map[0], n, 0.5f, 0.5f, depth,
+				HD_SHADOW_OTHERS_DEPTH);
+			const float want = HDShadowBehindTerm(1000.0f) * HDShadowFadeTerm(at);
+
+			if (fabs((double)got - want) > 2e-6)
+				lookups++;
+		}
+	}
+
+	ok(lookups == 0, "shadow fade: the second lookup is the distance term times the fade of "
+		"each tap's depth", lookups, 0);
+
+	/* A caster 760 units tall walking out along the light at the fixed
+	 * slant, its feet held by the grown box (the mark) step by step: while
+	 * the mark holds, its strongest part fades smoothly; on the step the
+	 * mark drops, every part of it already lies where the fade is 0 - on
+	 * both sides. No frame shows a shadow at full strength next to none. */
+	const auto walk = [&](int sign, float* lastHeld, float* jump) -> bool
+	{
+		float before = -1.0f;
+		bool dropped = false;
+		bool zeroAtDrop = false;
+
+		*jump = 0.0f;
+		*lastHeld = -1.0f;
+
+		for (float f = 0.0f; f <= 0.5f * HD_SHADOW_OTHERS_DEPTH + 2000.0f; f += 8.0f)
+		{
+			float feet[3];
+
+			for (int i = 0; i < 3; i++)
+				feet[i] = others.centre[i] + (float)sign * f * others.fwd[i];
+
+			// The strongest fade over the caster, feet to head.
+			float strongest = 0.0f;
+
+			for (float h = 0.0f; h <= 760.0f; h += 10.0f)
+			{
+				float p[3] = { feet[0], feet[1] - h, feet[2] }, uvd[3];
+
+				HDShadowMapUVD(&others, p, uvd);
+
+				const float fade = HDShadowFadeTerm(uvd[2]);
+
+				strongest = fade > strongest ? fade : strongest;
+			}
+
+			const bool held = HDShadowBoxHolds(&others, feet, HD_SHADOW_OTHERS_MARGIN);
+
+			if (held)
+			{
+				if (before >= 0.0f)
+				{
+					const float d = fabsf(strongest - before);
+
+					*jump = d > *jump ? d : *jump;
+				}
+
+				before = strongest;
+				*lastHeld = strongest;
+			}
+			else if (!dropped)
+			{
+				dropped = true;
+				zeroAtDrop = strongest == 0.0f;
+			}
+		}
+
+		return dropped && zeroAtDrop;
+	};
+
+	float nearLast = 0.0f, nearJump = 0.0f, farLast = 0.0f, farJump = 0.0f;
+	const bool nearOk = walk(-1, &nearLast, &nearJump);
+	const bool farOk = walk(1, &farLast, &farJump);
+
+	ok(nearOk && farOk && nearLast == 0.0f && farLast == 0.0f,
+		"shadow fade: a caster 760 tall at 30 degrees lies wholly in the fade's 0 before its mark "
+		"drops, through the near and the far side", sh_milli(nearLast + farLast), 0);
+	ok(nearJump < 0.025f && farJump < 0.025f,
+		"shadow fade: walking out 8 units a step, its strongest part changes by less than 0.025 a "
+		"step", sh_milli(nearJump > farJump ? nearJump : farJump), 0);
+}
+
+/* The mark's test along the light: the second box grown by the margin on its
+ * near and far side as on its four others, the box itself with margin 0. */
+static void shadow_others_holds()
+{
+	float nodes[15 * 3];
+	float dir[3];
+
+	HDShadowFallback(dir);
+	sh_figure(-9000.0f, 2500.0f, 40000.0f, nodes);
+
+	HDShadowBox her, others;
+
+	HDShadowBoxMake(&her, dir, nodes, 15);
+	HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+		HD_SHADOW_OTHERS_MAP);
+
+	const auto along = [&](float f, float* p)
+	{
+		for (int i = 0; i < 3; i++)
+			p[i] = others.centre[i] + f * others.fwd[i] + 300.0f * others.right[i] -
+				200.0f * others.up[i];
+	};
+
+	const float half = 0.5f * HD_SHADOW_OTHERS_DEPTH;
+	const float grown = half + HD_SHADOW_OTHERS_MARGIN * HD_SHADOW_OTHERS_DEPTH;
+	int wrong = 0;
+
+	for (int s = -1; s <= 1; s += 2)
+	{
+		float in[3], out[3], edgeIn[3], edgeOut[3];
+
+		along((float)s * (grown - 4.0f), in);
+		along((float)s * (grown + 4.0f), out);
+		along((float)s * (half - 4.0f), edgeIn);
+		along((float)s * (half + 4.0f), edgeOut);
+
+		wrong += HDShadowBoxHolds(&others, in, HD_SHADOW_OTHERS_MARGIN) ? 0 : 1;
+		wrong += HDShadowBoxHolds(&others, out, HD_SHADOW_OTHERS_MARGIN) ? 1 : 0;
+		wrong += HDShadowBoxHolds(&others, edgeIn, 0.0f) ? 0 : 1;
+		wrong += HDShadowBoxHolds(&others, edgeOut, 0.0f) ? 1 : 0;
+		wrong += HDShadowBoxHolds(&others, in, 0.0f) ? 1 : 0;
+	}
+
+	ok(wrong == 0,
+		"shadow holds: along the light the mark holds up to OTHERS_MARGIN of the depth past the "
+		"near and the far side, the box itself only inside them", wrong, 0);
+
+	// Margin 0 is the box: depth 0..1 and u, v 0..1, edges included.
+	int differ = 0;
+
+	for (int k = 0; k < 4000; k++)
+	{
+		const float a = ((float)((k * 7919) % 2001) / 1000.0f - 1.0f) * HD_SHADOW_OTHERS_BOX * 0.6f;
+		const float c = ((float)((k * 104729) % 2001) / 1000.0f - 1.0f) * HD_SHADOW_OTHERS_BOX * 0.6f;
+		const float f = ((float)((k * 31) % 2001) / 1000.0f - 1.0f) * HD_SHADOW_OTHERS_DEPTH * 0.6f;
+		float p[3], uvd[3];
+
+		for (int i = 0; i < 3; i++)
+			p[i] = others.centre[i] + a * others.right[i] + c * others.up[i] + f * others.fwd[i];
+
+		HDShadowMapUVD(&others, p, uvd);
+
+		const bool box = uvd[0] >= 0.0f && uvd[0] <= 1.0f && uvd[1] >= 0.0f && uvd[1] <= 1.0f &&
+			uvd[2] >= 0.0f && uvd[2] <= 1.0f;
+
+		if (box != HDShadowBoxHolds(&others, p, 0.0f))
+			differ++;
+	}
+
+	const float nan = std::numeric_limits<float>::quiet_NaN();
+	const float notANumber[3] = { nan, others.centre[1], others.centre[2] };
+
+	ok(differ == 0 && !HDShadowBoxHolds(&others, notANumber, HD_SHADOW_OTHERS_MARGIN),
+		"shadow holds: with margin 0 it is the box itself, and a place that is not a number is "
+		"never held", differ, 0);
+}
+
+/* Which maps a model takes: the rule as a pure function of what the entry
+ * is, which maps were drawn and whether it is a reflection with its
+ * mirror's blocks, every combination; the second block silenced; and the
+ * reach's sphere test. */
+static void shadow_takes()
+{
+	const int receivers[4] =
+	{
+		HD_SHADOW_RECEIVER_NONE, HD_SHADOW_RECEIVER_LARA, HD_SHADOW_RECEIVER_BLOB,
+		HD_SHADOW_RECEIVER_OTHER
+	};
+	int wrong = 0, own = 0, empty = 0, mirrorDiffers = 0, noBlocks = 0;
+
+	for (int r = 0; r < 4; r++)
+		for (int m = 0; m < 16; m++)
+		{
+			const int who = receivers[r];
+			const bool herDrawn = (m & 1) != 0, othersDrawn = (m & 2) != 0,
+				mirrored = (m & 4) != 0, blocks = (m & 8) != 0;
+			const int takes = HDShadowReceiverTakes(who, herDrawn, othersDrawn, mirrored, blocks);
+
+			const bool wantHers = herDrawn && (who == HD_SHADOW_RECEIVER_BLOB ||
+				who == HD_SHADOW_RECEIVER_OTHER) && (!mirrored || blocks);
+			const bool wantOthers = othersDrawn && (who == HD_SHADOW_RECEIVER_LARA ||
+				who == HD_SHADOW_RECEIVER_OTHER) && (!mirrored || blocks);
+
+			if (takes != ((wantHers ? HD_SHADOW_TAKES_HERS : 0) |
+				(wantOthers ? HD_SHADOW_TAKES_OTHERS : 0)))
+				wrong++;
+
+			// Never its own map: Lara never hers, a caster never the second.
+			if ((who == HD_SHADOW_RECEIVER_LARA && (takes & HD_SHADOW_TAKES_HERS)) ||
+				(who == HD_SHADOW_RECEIVER_BLOB && (takes & HD_SHADOW_TAKES_OTHERS)))
+				own++;
+
+			// Nothing to take without a map drawn, for the ring, or for a
+			// reflection without its mirror's blocks.
+			if (takes && (!(herDrawn || othersDrawn) || who == HD_SHADOW_RECEIVER_NONE ||
+				(mirrored && !blocks)))
+				empty++;
+
+			// A reflection with its blocks takes what the thing itself takes.
+			if (mirrored && blocks &&
+				takes != HDShadowReceiverTakes(who, herDrawn, othersDrawn, false, false))
+				mirrorDiffers++;
+
+			if (mirrored && !blocks && takes)
+				noBlocks++;
+		}
+
+	ok(wrong == 0, "shadow takes: the rule over every class, map and reflection, 64 cases",
+		wrong, 0);
+	ok(own == 0, "shadow takes: Lara never takes her map, a caster never the map it is cast into",
+		own, 0);
+	ok(empty == 0 && noBlocks == 0,
+		"shadow takes: nothing is drawn again with nothing to take - no map, the ring, a "
+		"reflection without its mirror's blocks", empty, 0);
+	ok(mirrorDiffers == 0,
+		"shadow takes: a reflection takes by the class of what it reflects", mirrorDiffers, 0);
+
+	ok(HDShadowReceiverTakes(HD_SHADOW_RECEIVER_LARA, true, true, false, false) ==
+		HD_SHADOW_TAKES_OTHERS &&
+		HDShadowReceiverTakes(HD_SHADOW_RECEIVER_BLOB, true, true, false, false) ==
+		HD_SHADOW_TAKES_HERS &&
+		HDShadowReceiverTakes(HD_SHADOW_RECEIVER_OTHER, true, true, false, false) ==
+		(HD_SHADOW_TAKES_HERS | HD_SHADOW_TAKES_OTHERS) &&
+		HDShadowReceiverTakes(HD_SHADOW_RECEIVER_LARA, true, false, false, false) == 0 &&
+		HDShadowReceiverTakes(HD_SHADOW_RECEIVER_BLOB, false, true, false, false) == 0,
+		"shadow takes: Lara the second map, a creature hers, a door both; each alone with its map "
+		"not drawn takes nothing", 0, 0);
+
+	/* The second block silenced: its u is -1 wherever the pixel is, so the
+	 * second box's edge term is 0; nothing else changes. */
+	float nodes[15 * 3];
+	float dir[3];
+
+	HDShadowFallback(dir);
+	sh_figure(300.0f, -1200.0f, -800.0f, nodes);
+
+	HDShadowBox her, others;
+
+	HDShadowBoxMake(&her, dir, nodes, 15);
+	HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+		HD_SHADOW_OTHERS_MAP);
+
+	const float R[9] = { 0.8f, 0.0f, -0.6f, 0.0f, 1.0f, 0.0f, 0.6f, 0.0f, 0.8f };
+	const float t[3] = { 120.0f, -40.0f, 900.0f };
+	float regs[HD_SHADOW_RECEIVE2_COUNT * 4], silent[HD_SHADOW_RECEIVE2_COUNT * 4];
+
+	HDShadowReceiveOthersConstants(&others, R, t, regs);
+	memcpy(silent, regs, sizeof(silent));
+	HDShadowReceiveWithoutOthers(silent);
+
+	int edges = 0;
+
+	for (int k = 0; k < 200; k++)
+	{
+		const float v[3] = { (float)(k * 17 % 9000) - 4500.0f, (float)(k * 29 % 7000) - 3500.0f,
+			100.0f + (float)(k * 41 % 30000) };
+		const float u = v[0] * silent[0] + v[1] * silent[1] + v[2] * silent[2] + silent[3];
+		const float vv = v[0] * silent[4] + v[1] * silent[5] + v[2] * silent[6] + silent[7];
+
+		if (HDShadowEdgeTerm(u, vv) != 0.0f)
+			edges++;
+	}
+
+	ok(edges == 0 && memcmp(silent + 4, regs + 4,
+		sizeof(float) * (HD_SHADOW_RECEIVE2_COUNT - 1) * 4) == 0,
+		"shadow takes: the second block silenced gives its edge term 0 everywhere and keeps the "
+		"rest", edges, 0);
+
+	// The reach's sphere test: inside, touching a face, off a corner, apart.
+	const float mins[3] = { 0.0f, 0.0f, 0.0f }, maxs[3] = { 100.0f, 200.0f, 300.0f };
+	const float inside[3] = { 50.0f, 50.0f, 50.0f };
+	const float face[3] = { 150.0f, 100.0f, 100.0f };
+	const float corner[3] = { 130.0f, 240.0f, 300.0f };
+	const float nan = std::numeric_limits<float>::quiet_NaN();
+	const float notANumber[3] = { nan, 0.0f, 0.0f };
+
+	ok(HDShadowSphereTouches(inside, 1.0f, mins, maxs) &&
+		HDShadowSphereTouches(face, 50.0f, mins, maxs) &&
+		!HDShadowSphereTouches(face, 49.0f, mins, maxs) &&
+		HDShadowSphereTouches(corner, 50.0f, mins, maxs) &&
+		!HDShadowSphereTouches(corner, 49.9f, mins, maxs) &&
+		!HDShadowSphereTouches(notANumber, 1.0e6f, mins, maxs),
+		"shadow takes: a sphere touches the reach when it reaches a face or a corner, and not one "
+		"unit short of it", 0, 0);
 }
 
 int main()
@@ -15819,6 +16197,9 @@ int main()
 	shadow_others_lookup();
 	shadow_others_factor();
 	shadow_others_receive();
+	shadow_others_fade();
+	shadow_others_holds();
+	shadow_takes();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

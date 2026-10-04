@@ -129,7 +129,11 @@
  *                         and after - and the cast pass's time against a
  *                         2560 x 1440 target, a mean over <frames> (300)
  *                         frames each waited for with an event query. Takes
- *                         the pages managed, which a Reset needs.
+ *                         the pages managed, which a Reset needs; a room's
+ *                         pages (-withrooms) are not, and the Reset is
+ *                         refused with them. With -shadowreceive and a room,
+ *                         the device's whole state is compared before and
+ *                         after the models' pass of the first picture.
  *     -shadowroom <room> <x> <z>
  *                         one room group of the level under her feet, with
  *                         -withrooms <LEVEL>: she stands at (x, z), room
@@ -142,7 +146,32 @@
  *                         name gets _room<n>.
  *     -shadowreceive      the cast pass and the receive pass in that
  *                         picture, where HDFrameDraw runs them, at the full
- *                         strength of one dominant light: _recv.
+ *                         strength of one dominant light: _recv. The models
+ *                         take the maps too, after their solid draw, as
+ *                         HDFrameDraw's models' pass has it: her parts the
+ *                         second map, a creature hers, an item without a
+ *                         blob both (hd_shadow.h, HDShadowReceiverTakes).
+ *                         The probe draws a model's additive pass in the
+ *                         same bracket as its solid ones, before the models'
+ *                         pass, where the game draws it after.
+ *     -shadownomodels     the same with the models' pass left out:
+ *                         _nomodels, which must be the picture without the
+ *                         models' pass, byte for byte.
+ *     -shadowcount        the same with each model's pixels marked in the
+ *                         stencil by the draw that leaves it visible (the
+ *                         solid passes alone), and then counted: per model
+ *                         the pixels visible and those of them the models'
+ *                         pass reached - equal for every model drawn again,
+ *                         the depth identity - and the pixels it reached on
+ *                         no model, which must be 0. The picture is the
+ *                         mask instead, _mask: red a model's pixel, yellow
+ *                         one the models' pass reached, green one it reached
+ *                         off every model.
+ *     -shadowalong <units>
+ *                         the second box moved that many units against the
+ *                         light (negative: with it), so the creatures stand
+ *                         that much nearer its far (near) side - a creature
+ *                         crossing the box's side along the light, in view.
  *     -shadowempty        the same with nothing cast into the map: _empty,
  *                         which must be the picture without the passes, byte
  *                         for byte.
@@ -155,24 +184,31 @@
  *                         waited for with an event query; take -size 2560
  *                         1440 so the target is framed as the picture. With
  *                         -shadowcreature a third time: her cast pass, the
- *                         second map's cast pass and the two-map receive.
+ *                         second map's cast pass and the two-map receive;
+ *                         a fourth with the models' solid draw after them
+ *                         and a fifth with the models' pass after that.
  *     -shadowcreature <slot> <x> <z> [<yaw>]
  *                         an HD model of this level's slot (a number or a
  *                         name) stood beside her in its first animation
  *                         frame, turned by <yaw> degrees: on the room's floor
  *                         at (x, z) room local with -shadowroom, at (x, z) of
  *                         her own space on her soles' height without it. Up to
- *                         four. Drawn in the picture after her (its separate
- *                         face too), and with -shadowcast or -shadowreceive
- *                         drawn into the second map by the engine's own cast
- *                         draw and target right after her map, where the game
- *                         draws it - when its place lies inside the second box
- *                         grown across the light by OTHERS_MARGIN (hd_shadow.h,
- *                         HDShadowBoxHolds), which the run
+ *                         eight, with -shadowitem. Drawn in the picture after
+ *                         her (its separate face too), and with -shadowcast
+ *                         or -shadowreceive drawn into the second map by the
+ *                         engine's own cast draw and target right after her
+ *                         map, where the game draws it - when its place lies
+ *                         inside the second box grown by OTHERS_MARGIN
+ *                         (hd_shadow.h, HDShadowBoxHolds), which the run
  *                         prints; with -shadowreceive the room then takes
  *                         both maps through the two-map receive shader, as
  *                         the game's frame with the second map drawn. The
  *                         picture's name gets _c<n>.
+ *     -shadowitem <slot> <x> <z> [<yaw>]
+ *                         the same for an HD item without a blob - a door, a
+ *                         crate, a pickup: placed and drawn the same way,
+ *                         cast into no map, and in the models' pass it takes
+ *                         both.
  *     -shadowothers       the second map of this pose and these creatures,
  *                         written as <out>_shadowothers_<outfit>_c<n>.png,
  *                         2048 texels a side, grey as -shadowmap's. With
@@ -6770,17 +6806,28 @@ struct LaraOptions
 	bool shadowEmpty;
 	bool shadowNoGuard;
 	int shadowTime;
-	/* -shadowcreature: up to four HD models of the level's other slots stood
-	 * beside her, drawn in the picture and cast into the second map;
-	 * -shadowothers writes that map as a grey picture. */
+	/* -shadowcreature: HD models of the level's other slots stood beside
+	 * her, drawn in the picture and cast into the second map; -shadowitem
+	 * the same without a blob, cast nowhere; up to eight of the two together.
+	 * -shadowothers writes the second map as a grey picture. */
 	struct Creature
 	{
 		std::string slot;	// a slot number or a slot name of the level
 		float at[2];		// room local (x, z) with -shadowroom, else her own space
 		float yaw;		// degrees about the vertical
+		bool blob;		// a creature with a classic blob, or an item without
 	};
 	std::vector<Creature> creatures;
 	bool shadowOthers;
+	/* -shadownomodels: the models' receive pass left out; -shadowcount: the
+	 * pixels each model leaves visible and the models' pass reaches,
+	 * counted through the stencil, and the models' mask written in place of
+	 * the picture. */
+	bool shadowNoModels;
+	bool shadowCount;
+	/* -shadowalong: the second box moved by this many units against the
+	 * light, so the creatures stand that much nearer its far side. */
+	float shadowAlong;
 	bool check;
 	bool noDraw;
 	// The ring's own presentation - see -invrot.
@@ -7055,6 +7102,249 @@ static bool ShadowMapWrite(const std::vector<float>& map, int size, float depth,
 
 	printf("  %-58s %s\n", path, ok ? "written" : "NOT written");
 	return ok;
+}
+
+/* The stencil, read through occlusion queries: the pixels of the whole
+ * target whose stencil value, masked with `mask`, equals `ref` - a quad over
+ * the screen with the stencil test and nothing written. -1 without an
+ * occlusion query. With `colour` the quad paints those pixels in it instead
+ * (added, so two quads mix), and nothing is counted. */
+static long StencilQuad(long width, long height, DWORD func, DWORD ref, DWORD mask,
+	D3DCOLOR colour = 0)
+{
+	struct Vertex
+	{
+		float x, y, z, rhw;
+		D3DCOLOR c;
+	};
+
+	const float w = (float)width - 0.5f, h = (float)height - 0.5f;
+	const Vertex quad[4] =
+	{
+		{ -0.5f, -0.5f, 0.0f, 1.0f, colour }, { w, -0.5f, 0.0f, 1.0f, colour },
+		{ -0.5f, h, 0.0f, 1.0f, colour }, { w, h, 0.0f, 1.0f, colour }
+	};
+
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+	g_device->SetTexture(0, 0);
+	g_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, colour ? TRUE : FALSE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, colour ? 0xF : 0);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILFUNC, func);
+	g_device->SetRenderState(D3DRS_STENCILREF, ref);
+	g_device->SetRenderState(D3DRS_STENCILMASK, mask);
+	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
+	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+
+	long pixels = -1;
+
+	if (colour)
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(Vertex));
+	else
+	{
+		IDirect3DQuery9* query = 0;
+
+		if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query)))
+		{
+			DWORD got = 0;
+
+			query->Issue(D3DISSUE_BEGIN);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(Vertex));
+			query->Issue(D3DISSUE_END);
+
+			while (query->GetData(&got, sizeof(got), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			pixels = (long)got;
+			query->Release();
+		}
+	}
+
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0xF);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	return pixels;
+}
+
+/* The device's state as a list of numbers, for "the same after as before":
+ * the render target, the depth surface, the viewport, the scissor
+ * rectangle, the shaders, the declaration, the FVF, stream 0, the indices,
+ * the textures of stages 0 - 7, every render state from D3DRS_ZENABLE to
+ * D3DRS_BLENDOPALPHA, the sampler states of stages 0 - 7, the 256 vertex and
+ * the 224 pixel float constants. The references the Get calls add are
+ * released at once - only the addresses are compared. `names` says what each
+ * stretch of the list is. */
+static void DeviceStateTake(std::vector<unsigned long long>& out,
+	std::vector<std::string>* names = 0)
+{
+	out.clear();
+
+	if (names)
+		names->clear();
+
+	const auto put = [&](unsigned long long v, const char* what)
+	{
+		out.push_back(v);
+
+		if (names)
+			names->push_back(what);
+	};
+
+	IDirect3DSurface9* surface = 0;
+
+	if (SUCCEEDED(g_device->GetRenderTarget(0, &surface)) && surface)
+	{
+		put((unsigned long long)(size_t)surface, "render target");
+		surface->Release();
+	}
+	else
+		put(0, "render target");
+
+	surface = 0;
+
+	if (SUCCEEDED(g_device->GetDepthStencilSurface(&surface)) && surface)
+	{
+		put((unsigned long long)(size_t)surface, "depth surface");
+		surface->Release();
+	}
+	else
+		put(0, "depth surface");
+
+	D3DVIEWPORT9 vp = {};
+	RECT scissor = { 0, 0, 0, 0 };
+
+	g_device->GetViewport(&vp);
+	g_device->GetScissorRect(&scissor);
+	put(vp.X, "viewport");
+	put(vp.Y, "viewport");
+	put(vp.Width, "viewport");
+	put(vp.Height, "viewport");
+	put((unsigned long long)scissor.left, "scissor");
+	put((unsigned long long)scissor.top, "scissor");
+	put((unsigned long long)scissor.right, "scissor");
+	put((unsigned long long)scissor.bottom, "scissor");
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DVertexBuffer9* vb = 0;
+	IDirect3DIndexBuffer9* ib = 0;
+	DWORD fvf = 0;
+	UINT offset = 0, stride = 0;
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetStreamSource(0, &vb, &offset, &stride);
+	g_device->GetIndices(&ib);
+	put((unsigned long long)(size_t)vs, "vertex shader");
+	put((unsigned long long)(size_t)ps, "pixel shader");
+	put((unsigned long long)(size_t)decl, "declaration");
+	put(fvf, "fvf");
+	put((unsigned long long)(size_t)vb, "stream 0");
+	put(offset, "stream 0");
+	put(stride, "stream 0");
+	put((unsigned long long)(size_t)ib, "indices");
+
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+	if (decl) decl->Release();
+	if (vb) vb->Release();
+	if (ib) ib->Release();
+
+	for (DWORD stage = 0; stage < 8; stage++)
+	{
+		IDirect3DBaseTexture9* texture = 0;
+
+		g_device->GetTexture(stage, &texture);
+		put((unsigned long long)(size_t)texture, "texture");
+
+		if (texture)
+			texture->Release();
+
+		for (DWORD s = D3DSAMP_ADDRESSU; s <= D3DSAMP_DMAPOFFSET; s++)
+		{
+			DWORD v = 0;
+
+			g_device->GetSamplerState(stage, (D3DSAMPLERSTATETYPE)s, &v);
+			put(v, "sampler state");
+		}
+	}
+
+	for (DWORD rs = D3DRS_ZENABLE; rs <= D3DRS_BLENDOPALPHA; rs++)
+	{
+		DWORD v = 0;
+
+		if (SUCCEEDED(g_device->GetRenderState((D3DRENDERSTATETYPE)rs, &v)))
+			put(((unsigned long long)rs << 32) | v, "render state");
+	}
+
+	float vertex[256 * 4], pixel[224 * 4];
+
+	g_device->GetVertexShaderConstantF(0, vertex, 256);
+	g_device->GetPixelShaderConstantF(0, pixel, 224);
+
+	for (int i = 0; i < 256 * 4; i++)
+	{
+		unsigned int bits;
+
+		memcpy(&bits, &vertex[i], 4);
+		put(bits, "vertex constant");
+	}
+
+	for (int i = 0; i < 224 * 4; i++)
+	{
+		unsigned int bits;
+
+		memcpy(&bits, &pixel[i], 4);
+		put(bits, "pixel constant");
+	}
+}
+
+/* -shadowcount's count and mask, after the picture's solid bracket: model 1
+ * is her parts, 2 on the creatures and items in the order asked. */
+static void CountModelPixels(long width, long height, int models, int drawnAgain)
+{
+	printf("shadowcount: %d model(s) drawn again by the models' pass\n", drawnAgain);
+
+	for (int id = 1; id <= models && id < 64; id++)
+	{
+		const long visible = StencilQuad(width, height, D3DCMP_EQUAL, (DWORD)id << 2, 0xFC);
+		const long reached = StencilQuad(width, height, D3DCMP_EQUAL, ((DWORD)id << 2) | 2, 0xFE);
+
+		printf("  model %d (%s): %ld pixels visible, %ld reached by the models' pass%s\n", id,
+			id == 1 ? "her parts" : "creature or item", visible, reached,
+			reached == visible ? " - equal" : reached == 0 ? " - not drawn again"
+			: " - DIFFER");
+	}
+
+	const long stray = StencilQuad(width, height, D3DCMP_EQUAL, 2, 0xFE);
+
+	printf("  pixels the models' pass reached on no model: %ld%s\n", stray,
+		stray == 0 ? "" : " - DEFECT");
+
+	g_device->Clear(0, 0, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+	StencilQuad(width, height, D3DCMP_NOTEQUAL, 0, 0xFC, D3DCOLOR_XRGB(255, 0, 0));
+	StencilQuad(width, height, D3DCMP_EQUAL, 2, 2, D3DCOLOR_XRGB(0, 255, 0));
 }
 
 static int RunLara(const LaraOptions& o, const Tr5Level& level)
@@ -8521,6 +8811,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		int nodes;
 		std::vector<float> matrices;
 		float place[3];
+		bool blob;	// -shadowcreature: cast into the second map; -shadowitem: not
 	};
 	std::vector<Placed> placed;
 
@@ -8585,11 +8876,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		one.place[0] = px;
 		one.place[1] = py;
 		one.place[2] = pz;
+		one.blob = ask->blob;
 		BuildNodeMatrices(tree, itemView, 0, &one.matrices[0], pose.empty() ? 0 : &pose[0]);
 		placed.push_back(one);
 
-		printf("creature: %s (slot %d, %d nodes%s) at (%.0f, %.0f, %.0f) of her space, turned "
+		printf("%s: %s (slot %d, %d nodes%s) at (%.0f, %.0f, %.0f) of her space, turned "
 			"%.0f, frame offset (%.0f, %.0f, %.0f), HD model %s\n",
+			ask->blob ? "creature" : "item (no blob)",
 			HDSlotName(tree.slot) ? HDSlotName(tree.slot) : "?", tree.slot, tree.nodes,
 			pose.empty() ? ", bind pose" : "", px, py, pz, ask->yaw, offset[0], offset[1],
 			offset[2], HDModelHas(tree.slot) ? "loaded" : "MISSING");
@@ -8608,6 +8901,24 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	{
 		HDShadowBoxAround(&othersBox, &shadowBox, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
 			HD_SHADOW_OTHERS_MAP);
+
+		/* -shadowalong: the second box moved along the light, which puts
+		 * the creatures where they would stand that much nearer her far
+		 * side (a negative move: her near side) - the picture of a creature
+		 * crossing the box's side along the light, with the creature and
+		 * its floor still in view. */
+		if (o.shadowAlong != 0.0f)
+		{
+			for (int i = 0; i < 3; i++)
+			{
+				othersBox.centre[i] -= o.shadowAlong * othersBox.fwd[i];
+				othersBox.mid[i] -= o.shadowAlong * othersBox.fwd[i];
+			}
+
+			printf("shadowalong: the second box moved %.0f units against the light\n",
+				o.shadowAlong);
+		}
+
 		HDShadowCastMatrix(&othersBox, R, t, othersClip);
 
 		for (size_t c = 0; c < placed.size(); c++)
@@ -8617,7 +8928,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HDShadowMapUVD(&othersBox, placed[c].place, uvd);
 			printf("creature: %s in the second box at u %.4f v %.4f depth %.4f - %s\n",
 				HDSlotName(placed[c].slot) ? HDSlotName(placed[c].slot) : "?", uvd[0], uvd[1],
-				uvd[2], HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN)
+				uvd[2], !placed[c].blob ? "no blob, casts nothing"
+				: HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN)
 				? "casts"
 				: "outside, casts nothing");
 		}
@@ -8639,8 +8951,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		othersDrawn = false;
 
 		for (size_t c = 0; c < placed.size(); c++)
-			inside += HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN)
-				? 1 : 0;
+			inside += placed[c].blob &&
+				HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN) ? 1 : 0;
 
 		if (!inside)
 			return 0;
@@ -8657,7 +8969,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		for (size_t c = 0; c < placed.size(); c++)
 		{
-			if (!HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN))
+			if (!placed[c].blob ||
+				!HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN))
 				continue;
 
 			if (HDModelCastDraw(placed[c].slot, false, &placed[c].matrices[0], placed[c].nodes,
@@ -8861,6 +9174,244 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		sheet.assign((size_t)sheetW * (size_t)sheetH, 0xFF000000u);
 	}
 
+	/* The models' list once more, as the picture draws it: her parts with
+	 * their masks, cuts, culls, lips and soft motion, then the creatures and
+	 * the items with their separate faces. `receive` draws it through the
+	 * models' receive draw (hd_model.h, HDModelReceiveDraw), each entry with
+	 * the blocks of the maps its class takes (hd_shadow.h,
+	 * HDShadowReceiverTakes: her parts LARA, a creature BLOB, an item
+	 * OTHER), as hd_object.cpp's HDObjectShadowReceiveFrame draws the frame
+	 * list; otherwise through HDModelDraw, for -shadowtime's frame. Returns
+	 * the entries drawn. */
+	float receiveHers[HD_SHADOW_RECEIVE_COUNT * 4];
+	float receiveOthers[HD_SHADOW_RECEIVE2_COUNT * 4];
+	bool receiveHersDrawn = false;
+
+	const auto receiveBlocks = [&](int receiver) -> bool
+	{
+		const int takes = HDShadowReceiverTakes(receiver, receiveHersDrawn, othersDrawn, false,
+			false);
+
+		if (!takes)
+			return false;
+
+		float h[HD_SHADOW_RECEIVE_COUNT * 4], s[HD_SHADOW_RECEIVE2_COUNT * 4];
+
+		memcpy(h, receiveHers, sizeof(h));
+		memcpy(s, receiveOthers, sizeof(s));
+
+		if (!(takes & HD_SHADOW_TAKES_HERS))
+			HDShadowReceiveWithoutHer(h);
+
+		if (!(takes & HD_SHADOW_TAKES_OTHERS))
+			HDShadowReceiveWithoutOthers(s);
+
+		HDRenderShadowModelsBlocks(h, s);
+		return true;
+	};
+
+	const auto modelList = [&](bool receive, int lipsT, int lipsF) -> int
+	{
+		const auto one = [&](int slot, bool head, const float* m, int nodes,
+			const float* nodeLight, unsigned int mask, const HDModelLighting* lit,
+			const HDModelNeckCut* cut, int cull, int lt, int lf, const HDModelSoft* sft) -> bool
+		{
+			if (receive)
+				return HDModelReceiveDraw(slot, head, m, nodes, mask, cut, cull, lt, lf,
+					head ? 0 : sft);
+
+			return head ? HDModelDrawHead(slot, m, nodes, nodeLight, mask, lit, cut, cull, lt, lf)
+				: HDModelDraw(slot, m, nodes, nodeLight, mask, lit, cut, cull, lt, lf, sft);
+		};
+
+		int n = 0;
+		const HDModelNeckCut* bodyCut = cutting ? &neckCut : 0;
+
+		if (!receive || receiveBlocks(HD_SHADOW_RECEIVER_LARA))
+		{
+			bool any = false;
+
+			if (draws(HD_LARA_PART_BODY))
+				any = one(HDLaraPartSlot(HD_LARA_PART_BODY), false, matrices, HD_LARA_NODES,
+					light, ownBody, &lighting, bodyCut, o.cull, -1, -1,
+					soft(HD_LARA_PART_BODY)) || any;
+
+			if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
+				any = one(HDLaraPartSlot(HD_LARA_PART_HEAD), false, matrices, HD_LARA_NODES,
+					light, bodyMask, &lighting, bodyCut, o.cull, -1, -1,
+					soft(HD_LARA_PART_HEAD)) || any;
+
+			if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
+				HDLaraHasPart(HD_LARA_PART_NECK_CAP))
+				any = one(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), false, matrices, HD_LARA_NODES,
+					light, ~0u, &lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
+					soft(HD_LARA_PART_NECK_CAP)) || any;
+
+			if (!o.firstPerson && draws(HD_LARA_PART_FACE))
+				any = one(HDLaraPartSlot(HD_LARA_PART_FACE), false, matrices, HD_LARA_NODES,
+					light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsT, lipsF,
+					soft(HD_LARA_PART_FACE)) || any;
+
+			if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG))
+				any = one(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), false, matrices,
+					HD_LARA_NODES, light, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask,
+					&lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
+					soft(HD_LARA_PART_HOLSTER_RIG)) || any;
+
+			for (int i = 0; i < pieces; i++)
+			{
+				if (draws(list[i].part))
+					any = one(HDLaraPartSlot(list[i].part), false, matrices, HD_LARA_NODES,
+						light, list[i].nodeMask & bodyMask, &lighting, 0, HD_MODEL_CULL_NONE,
+						-1, -1, 0) || any;
+
+				if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part))
+					any = one(HDLaraPartTwinSlot(list[i].part), false, matrices, HD_LARA_NODES,
+						light, list[i].nodeMask & bodyMask, &lighting, 0, HD_MODEL_CULL_NONE,
+						-1, -1, 0) || any;
+			}
+
+			if (!o.firstPerson && draws(HD_LARA_PART_BRAID) && HDLaraHasPart(HD_LARA_PART_BRAID))
+			{
+				float hairLight[HD_LARA_HAIR_NODES * 3];
+
+				for (int i = 0; i < HD_LARA_HAIR_NODES * 3; i++)
+					hairLight[i] = (float)o.shade;
+
+				any = one(HDLaraPartSlot(HD_LARA_PART_BRAID), false, hairMatrices,
+					HD_LARA_HAIR_NODES, hairLight, ~0u, &lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
+					0) || any;
+			}
+
+			n += any ? 1 : 0;
+		}
+
+		for (size_t c = 0; c < placed.size(); c++)
+		{
+			if (receive && !receiveBlocks(placed[c].blob ? HD_SHADOW_RECEIVER_BLOB
+				: HD_SHADOW_RECEIVER_OTHER))
+				continue;
+
+			HDModelLighting itemLighting = lighting;
+			std::vector<float> itemLight((size_t)placed[c].nodes * 3, (float)o.shade);
+
+			itemLighting.specStrength = 0.0f;
+			itemLighting.specPower = 1.0f;
+
+			bool any = one(placed[c].slot, false, &placed[c].matrices[0], placed[c].nodes,
+				&itemLight[0], ~0u, &itemLighting, 0, HD_MODEL_CULL_NONE, -1, -1, 0);
+
+			if (HDModelHasHead(placed[c].slot))
+				any = one(placed[c].slot, true, &placed[c].matrices[0], placed[c].nodes,
+					&itemLight[0], ~0u, &itemLighting, 0, HD_MODEL_CULL_NONE, -1, -1, 0) || any;
+
+			n += any ? 1 : 0;
+		}
+
+		return n;
+	};
+
+	/* The models' receive pass as hd_level.cpp runs it (ShadowModelsPass):
+	 * after the models' solid pass, in a frame whose rooms' receive ran,
+	 * with the maps the rooms took - her map, and the second map when
+	 * othersPass drew it. -shadownoguard takes the guard away inside it as
+	 * well. -1 when the bracket could not begin; `modelCalls` comes back
+	 * with its draw calls. */
+	int modelCalls = 0;
+	bool stateChecked = false;
+
+	const auto modelsPass = [&](int lipsT, int lipsF) -> int
+	{
+		receiveHersDrawn = shadowCastDrawn >= 0;
+		modelCalls = 0;
+
+		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK, receiveHers);
+
+		if (othersDrawn)
+			HDShadowReceiveOthersConstants(&othersBox, R, t, receiveOthers);
+		else
+		{
+			memset(receiveOthers, 0, sizeof(receiveOthers));
+			HDShadowReceiveWithoutOthers(receiveOthers);
+		}
+
+		/* -shadowdevice: the device's whole state before the pass and after
+		 * it, compared - once, on the first picture. */
+		std::vector<unsigned long long> before, after;
+		std::vector<std::string> what;
+		const bool compare = o.shadowDevice && !stateChecked;
+
+		if (compare)
+			DeviceStateTake(before, &what);
+
+		if (!HDModelReceiveReady() || !HDRenderShadowModelsBegin(receiveHersDrawn, othersDrawn))
+			return -1;
+
+		if (o.shadowNoGuard)
+			g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+		HDModelReceiveBegin();
+
+		const int n = modelList(true, lipsT, lipsF);
+
+		modelCalls = HDModelReceiveCalls();
+		HDModelReceiveEnd();
+		HDRenderShadowModelsEnd();
+
+		if (compare)
+		{
+			int differ = 0;
+
+			DeviceStateTake(after);
+			stateChecked = true;
+
+			for (size_t i = 0; i < before.size() && i < after.size(); i++)
+				if (before[i] != after[i])
+				{
+					if (differ < 8)
+						printf("  state differs after the models' pass: %s (item %d)\n",
+							what[i].c_str(), (int)i);
+
+					differ++;
+				}
+
+			printf("shadowdevice: the device's state after the models' pass as before it, %d "
+				"values over the targets, viewport, scissor, shaders, streams, textures, "
+				"samplers, render states and constants - %s (%d differ, %d models drawn again)\n",
+				(int)before.size(), differ == 0 && before.size() == after.size() ? "PASS" : "FAIL",
+				differ, n);
+		}
+
+		return n;
+	};
+
+	/* -shadowcount: each model's pixels marked in the stencil's bits 2 to 7
+	 * by the last draw that passes the depth test there - so the mark is the
+	 * model the picture left visible - her parts as 1, the creatures and
+	 * items from 2 on. 0 switches the marking off. Without the switch it
+	 * sets nothing. */
+	const auto tag = [&](int id)
+	{
+		if (!o.shadowCount)
+			return;
+
+		if (!id)
+		{
+			g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+			return;
+		}
+
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+		g_device->SetRenderState(D3DRS_STENCILREF, (DWORD)id << 2);
+		g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0xFC);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+		g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	};
+
+	int modelsDrawn = 0;
 	int drawn = 0;
 	int calls = 0;
 
@@ -8892,10 +9443,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		if (o.shadowReceive && roomHas && shadowCastDrawn >= 0)
 			receiveCalls = receivePass();
 
-		HDModelFrameBegin(&projection, bulbCount);
+		/* -shadowcount draws the solid passes alone, so that no glow, which
+		 * writes no depth, marks a pixel. */
+		HDModelFrameBegin(&projection, bulbCount, o.shadowCount ? HD_PASS_SOLID : HD_PASS_ALL);
 
 		drawn = 0;
 
+		tag(1);
 		SetSheen(lighting, HD_LARA_PART_BODY, sheenOn);
 
 		if (draws(HD_LARA_PART_BODY) && HDModelDraw(HDLaraPartSlot(HD_LARA_PART_BODY), matrices, HD_LARA_NODES,
@@ -8998,6 +9552,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			itemLighting.specStrength = 0.0f;
 			itemLighting.specPower = 1.0f;
 
+			tag(2 + (int)c);
+
 			if (HDModelDraw(placed[c].slot, &placed[c].matrices[0], placed[c].nodes,
 				&itemLight[0], ~0u, &itemLighting))
 				drawn++;
@@ -9008,12 +9564,32 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		}
 
 		calls = HDModelDrawCalls();
+		tag(0);
+
+		/* -shadowreceive: the models take the maps after their solid pass,
+		 * as HDFrameDraw has it, in a picture whose room took them;
+		 * -shadownomodels leaves it out. */
+		modelsDrawn = 0;
+
+		if (o.shadowReceive && roomHas && receiveCalls >= 0 && shadowCastDrawn >= 0 &&
+			!o.shadowNoModels)
+			modelsDrawn = modelsPass(lipsTrack, lipsFrame);
 
 		HDRenderFrameEnd();
 
+		/* -shadowcount: per model, the pixels the picture left it visible
+		 * (its mark) and those of them the models' pass reached (its mark
+		 * and the guard's bit 1), and the pixels the pass reached on no
+		 * model; then the mask in place of the picture: red a model's
+		 * pixel, yellow one the pass reached, green one it reached off every
+		 * model. Depth identity is reached == visible for every model drawn
+		 * again, and 0 off them. */
+		if (o.shadowCount && picture == 0)
+			CountModelPixels(o.width, o.height, 1 + (int)placed.size(), modelsDrawn);
+
 		/* And the room's glass and glows in a bracket of their own, as
 		 * HDFrameDrawGlow draws them after the classic buckets. */
-		if (roomHas)
+		if (roomHas && !o.shadowCount)
 		{
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_BLEND);
@@ -9058,7 +9634,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		char tail[64];
 
 		sprintf(tail, "_room%d%s.png", o.shadowRoom, !o.shadowReceive ? ""
-			: o.shadowEmpty ? "_empty" : o.shadowNoGuard ? "_noguard" : "_recv");
+			: o.shadowCount ? "_mask" : o.shadowEmpty ? "_empty" : o.shadowNoGuard ? "_noguard"
+			: o.shadowNoModels ? "_nomodels" : "_recv");
 		path[at] = 0;
 		strcat(path, tail);
 	}
@@ -9085,11 +9662,21 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			shadowCastDrawn < 0 ? " - REFUSED, the map or its shaders" : "");
 
 	if (o.shadowReceive && roomHas)
+	{
 		printf("shadowreceive: %d models into the map%s, the room again in %d draw calls%s, "
 			"stencil guard %s\n", shadowCastDrawn, o.shadowEmpty ? " (-shadowempty)" : "",
 			receiveCalls, receiveCalls < 0 ? " - REFUSED" : "",
 			o.shadowNoGuard ? "OFF (-shadownoguard)"
 			: HDRenderShadowReceiveStencil() ? "on" : "off - no stencil");
+
+		if (o.shadowNoModels)
+			printf("shadowmodels: the models' pass left out (-shadownomodels)\n");
+		else
+			printf("shadowmodels: %d model(s) drawn again in %d draw calls%s, stencil guard %s\n",
+				modelsDrawn, modelCalls, modelsDrawn < 0 ? " - REFUSED" : "",
+				o.shadowNoGuard ? "OFF (-shadownoguard)"
+				: HDRenderShadowModelsStencil() ? "on" : "off - no stencil");
+	}
 
 	if (pictures > 1)
 	{
@@ -9246,17 +9833,24 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			g_device->AddRef();
 
 			const ULONG obefore = g_device->Release();
+			LARGE_INTEGER makeFrom, makeTo, makeRate;
+
+			QueryPerformanceFrequency(&makeRate);
+			QueryPerformanceCounter(&makeFrom);
+
 			const bool omade = HDRenderShadowOthersReady();
 
+			QueryPerformanceCounter(&makeTo);
 			g_device->AddRef();
 
 			const ULONG oduring = g_device->Release();
 			HDShadowTargetInfo oinfo;
 
 			HDRenderShadowOthersInfo(&oinfo);
-			printf("  second target %s (%s): %s %dx%d, depth %s - her map %s meanwhile\n",
-				omade ? "made" : "REFUSED", oinfo.reason, oinfo.format, oinfo.size, oinfo.size,
-				oinfo.depth, HDRenderShadowMap() ? "made" : "not made");
+			printf("  second target %s (%s): %s %dx%d, depth %s - her map %s meanwhile; made in "
+				"%.3f ms\n", omade ? "made" : "REFUSED", oinfo.reason, oinfo.format, oinfo.size,
+				oinfo.size, oinfo.depth, HDRenderShadowMap() ? "made" : "not made",
+				(double)(makeTo.QuadPart - makeFrom.QuadPart) * 1000.0 / (double)makeRate.QuadPart);
 
 			HDRenderShadowOthersRelease();
 			g_device->AddRef();
@@ -9383,9 +9977,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &query)))
 		{
 			LARGE_INTEGER rate;
-			double mean[3] = { 0.0, 0.0, 0.0 };
-			int rcalls = 0, ocalls = 0, omodels = 0;
-			const int kinds = placed.empty() ? 2 : 3;
+			double mean[5] = { 0.0, 0.0, 0.0, 0.0, 0.0 };
+			int rcalls = 0, ocalls = 0, omodels = 0, mmodels = 0, mcalls = 0;
+			const int kinds = placed.empty() ? 2 : 5;
 
 			QueryPerformanceFrequency(&rate);
 
@@ -9406,10 +10000,24 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 					if (with == 1 && shadowPass(-1, -1) >= 0)
 						rcalls = receivePass();
 
-					if (with == 2 && shadowPass(-1, -1) >= 0)
+					if (with >= 2 && (shadowCastDrawn = shadowPass(-1, -1)) >= 0)
 					{
 						omodels = othersPass();
 						ocalls = receivePass();
+					}
+
+					/* The models' solid pass, and in the last frame the
+					 * models' receive pass after it. */
+					if (with >= 3)
+					{
+						HDModelFrameBegin(&projection, bulbCount, HD_PASS_SOLID);
+						modelList(false, -1, -1);
+
+						if (with == 4)
+						{
+							mmodels = modelsPass(-1, -1);
+							mcalls = modelCalls;
+						}
 					}
 
 					HDRenderFrameEnd();
@@ -9433,11 +10041,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				"and the receive pass %.4f ms - the two passes %.4f ms a frame (%d receive "
 				"draw calls)\n", o.shadowTime, mean[0], mean[1], mean[1] - mean[0], rcalls);
 
-			if (kinds == 3)
+			if (kinds == 5)
+			{
 				printf("  with %d creature(s) (%d models into the second map) and the two-map "
 					"receive %.4f ms - the three passes %.4f ms a frame, %.4f ms above her two "
 					"(%d receive draw calls)\n", (int)placed.size(), omodels, mean[2],
 					mean[2] - mean[0], mean[2] - mean[1], ocalls);
+				printf("  with the models drawn %.4f ms; with the models' pass after them %.4f ms "
+					"- the models' pass %.4f ms a frame (%d models again, %d draw calls)\n",
+					mean[3], mean[4], mean[4] - mean[3], mmodels, mcalls);
+			}
 		}
 		else
 			printf("  no 2560x1440 target or no event query on this device - no time\n");
@@ -9557,6 +10170,9 @@ int main(int argc, char** argv)
 	// -shadowcreature, -shadowothers: the second map's casters and its picture.
 	std::vector<LaraOptions::Creature> shadowCreatures;
 	bool shadowOthers = false;
+	// -shadowitem, -shadownomodels, -shadowcount: the models' receive.
+	bool shadowNoModels = false, shadowCount = false;
+	float shadowAlong = 0.0f;
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// -braidsim: the braid's own physics
 	/* -braidanim: the same chain under a real animation. */
@@ -9871,10 +10487,12 @@ int main(int argc, char** argv)
 			if (i + 1 < argc && argv[i + 1][0] >= '0' && argv[i + 1][0] <= '9')
 				shadowTime = atoi(argv[++i]);
 		}
-		else if (!_stricmp(argv[i], "-shadowcreature") && i + 3 < argc)
+		else if ((!_stricmp(argv[i], "-shadowcreature") || !_stricmp(argv[i], "-shadowitem")) &&
+			i + 3 < argc)
 		{
 			LaraOptions::Creature c;
 
+			c.blob = !_stricmp(argv[i], "-shadowcreature");
 			c.slot = argv[++i];
 			c.at[0] = (float)atof(argv[++i]);
 			c.at[1] = (float)atof(argv[++i]);
@@ -9885,14 +10503,20 @@ int main(int argc, char** argv)
 				(argv[i + 1][0] == '-' && argv[i + 1][1] >= '0' && argv[i + 1][1] <= '9')))
 				c.yaw = (float)atof(argv[++i]);
 
-			if (shadowCreatures.size() < 4)
+			if (shadowCreatures.size() < 8)
 				shadowCreatures.push_back(c);
 			else
-				printf("ModelProbe: -shadowcreature takes four at most - %s left out\n",
-					c.slot.c_str());
+				printf("ModelProbe: -shadowcreature and -shadowitem take eight at most - %s "
+					"left out\n", c.slot.c_str());
 		}
 		else if (!_stricmp(argv[i], "-shadowothers"))
 			shadowOthers = true;
+		else if (!_stricmp(argv[i], "-shadownomodels"))
+			shadowReceive = shadowNoModels = true;
+		else if (!_stricmp(argv[i], "-shadowcount"))
+			shadowReceive = shadowCount = true;
+		else if (!_stricmp(argv[i], "-shadowalong") && i + 1 < argc)
+			shadowAlong = (float)atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-braid"))
 		{
 			lara = true;
@@ -10436,6 +11060,9 @@ int main(int argc, char** argv)
 		o.shadowTime = shadowTime;
 		o.creatures = shadowCreatures;
 		o.shadowOthers = shadowOthers;
+		o.shadowNoModels = shadowNoModels;
+		o.shadowCount = shadowCount;
+		o.shadowAlong = shadowAlong;
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
 		o.handFold = laraHandFold;

@@ -1075,6 +1075,30 @@ void HDRenderShadowReceiveEnd();
 int HDRenderShadowReceiveCalls();
 bool HDRenderShadowReceiveStencil();
 
+/* The copy behind a mirror's glass, inside an open receive (hd_shadow.h,
+ * "the mirror's image"):
+ *
+ * HDRenderShadowReceiveMirrorReady - the mirror's variant of the receive
+ * shader (hd_shadow_receive.hlsl, MirrorReceivePS) exists on this device.
+ *
+ * HDRenderShadowReceiveMirrorBegin - the variant in place of the receive's
+ * shader, with the mirror's two blocks (her HD_SHADOW_RECEIVE_COUNT registers
+ * and the second map's HD_SHADOW_RECEIVE2_COUNT, made with HDShadowMirrorView;
+ * the second silenced in a frame whose second map was not drawn) and the
+ * glass's plane (HDShadowMirrorPlane) in HD_SHADOW_RECEIVE_MIRROR. The next
+ * HDRenderRoomShadow calls of the mirror's group then darken its pixels
+ * behind the glass alone and mark them in the stencil, so the group's
+ * ordinary draw after HDRenderShadowReceiveMirrorEnd leaves them be. False,
+ * with nothing changed, without an open receive, without the variant, and
+ * without a stencil guard - the copy then takes the ordinary receive.
+ *
+ * HDRenderShadowReceiveMirrorEnd - the receive's own shader and blocks back;
+ * HDRenderShadowReceiveEnd calls it for a draw left open. */
+bool HDRenderShadowReceiveMirrorReady();
+bool HDRenderShadowReceiveMirrorBegin(const float* hers, const float* others,
+	const float* plane);
+void HDRenderShadowReceiveMirrorEnd();
+
 /* --- the projected shadow on the HD models -----------------------------------
  *
  * The models' receive bracket, around hd_model.h's receive draw: the

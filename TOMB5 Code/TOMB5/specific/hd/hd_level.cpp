@@ -4533,7 +4533,8 @@ bool HDFrameSky(const float* viewWorld)
  * bracket and after the room loops, so the device is in the HD path's state;
  * HDRenderShadowCastBegin and End leave it as they found it. Nothing at all
  * happens in a frame the projected shadow does not run in. */
-static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0, 0.0, 0 };
+static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0, 0.0, 0, 0, 0, 0,
+	0 };
 
 /* Whether this frame's map was drawn: the receive pass reads the map only
  * then, never a map an earlier frame left behind. */
@@ -4547,6 +4548,10 @@ static bool g_others_cast_now = false;
 static bool g_receive_now = false;
 static bool g_receive_others_now = false;
 
+/* Whether a mirror's room group took the maps through its mirror's blocks in
+ * this frame's receive pass, for the log's mirror= count. */
+static bool g_receive_mirror_now = false;
+
 static void ShadowCastPass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
@@ -4554,6 +4559,7 @@ static void ShadowCastPass()
 	g_shadow_cast_now = false;
 	g_receive_now = false;
 	g_receive_others_now = false;
+	g_receive_mirror_now = false;
 
 	if (!shadow->runs)
 		return;
@@ -4587,13 +4593,14 @@ static void ShadowCastPass()
 }
 
 /* The second map's cast pass: the items whose blob gave way and whose place
- * lies inside the second box grown across the light by OTHERS_MARGIN
- * (hd_object.cpp marks them HD_OBJ_CAST_OTHERS),
- * into the second map, along the same light, with the same cast draw her
- * parts use. Right after hers, in the same bracket. Only in a frame in which
- * the projected shadow runs, her step ran (the box exists) and at least one
- * item is marked; in every other frame the second map is neither drawn nor
- * read, and the frame is the frame it is without it. */
+ * lies inside the second box grown by OTHERS_MARGIN on all six sides
+ * (hd_object.cpp marks them HD_OBJ_CAST_OTHERS, or HD_OBJ_CAST_OTHERS_ONLY
+ * for one the picture clipped away), into the second map, along the same
+ * light, with the same cast draw her parts use. Right after hers, in the
+ * same bracket. Only in a frame in which the projected shadow runs, her step
+ * ran (the box exists) and at least one item is marked; in every other frame
+ * the second map is neither drawn nor read, and the frame is the frame it is
+ * without it. */
 static void ShadowOthersPass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
@@ -4625,6 +4632,7 @@ static void ShadowOthersPass()
 
 	g_shadow_stats.othersCast++;
 	g_shadow_stats.othersItems += items;
+	g_shadow_stats.castOnly += HDObjectCastUnseenCount();
 	g_others_cast_now = true;
 
 	if (rate.QuadPart)
@@ -4656,6 +4664,33 @@ static void DrawRoomShadowWindowed(const FrameRoom& entry)
 	}
 }
 
+/* A mirror's two blocks and its plane, out of the frame's (hd_shadow.h,
+ * HDShadowMirrorView, HDShadowMirrorPlane): her block silenced in a frame her
+ * map was not drawn in, the second in one the second map was not drawn in.
+ * False for a mirror seen from behind. */
+static bool ShadowMirrorBlocks(const HDShadowFrame* shadow, const HDMirror& m, bool hers,
+	bool others, float* regs, float* oregs, float* plane)
+{
+	if (!HDShadowMirrorFaces(shadow->R, shadow->t, m.axis, m.plane, m.side))
+		return false;
+
+	float R[9], t[3];
+
+	HDShadowMirrorView(shadow->R, shadow->t, m.axis, m.plane, R, t);
+	HDShadowReceiveConstants(&shadow->box, R, t, shadow->strength, regs);
+
+	if (!hers)
+		HDShadowReceiveWithoutHer(regs);
+
+	HDShadowReceiveOthersConstants(&shadow->others, R, t, oregs);
+
+	if (!others)
+		HDShadowReceiveWithoutOthers(oregs);
+
+	HDShadowMirrorPlane(shadow->R, shadow->t, m.axis, m.plane, m.side, plane);
+	return true;
+}
+
 /* The projected shadow's receive pass: every HD room group of this frame
  * whose box comes within the shadow's reach (HDShadowReach - her map's
  * cross-section along the light, down to where the height term ends) is
@@ -4668,7 +4703,16 @@ static void DrawRoomShadowWindowed(const FrameRoom& entry)
  * one-map receive alone, with the very calls it makes without the second
  * map. Should her map not have been drawn while the second was, her block
  * is made to give nothing (HDShadowReceiveWithoutHer), so an earlier
- * frame's map in her target is never read. */
+ * frame's map in her target is never read.
+ *
+ * A mirror's room group (hd_render.h, HDMirror) is drawn twice: first with
+ * the mirror's variant and the mirror's blocks (ShadowMirrorBlocks), which
+ * darkens the copy behind the glass with the shadows in front of it,
+ * reflected, and marks those pixels in the stencil; then as every group, which
+ * the stencil keeps off the copy. Only while the mirror is seen from its
+ * room's side, the variant exists and the stencil guards - otherwise the copy
+ * takes the ordinary receive. A frame without a mirror's group in the pass
+ * binds nothing new. */
 static void ShadowReceivePass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
@@ -4728,6 +4772,25 @@ static void ShadowReceivePass()
 		if (!hers && !(others && HDShadowBoxesTouch(mins, maxs, otherMin, otherMax)))
 			continue;
 
+		// A mirror's group: the copy behind its glass first.
+		for (int m = 0; m < HDRenderMirrorCount(); m++)
+		{
+			HDMirror mirror;
+			float mregs[HD_SHADOW_RECEIVE_COUNT * 4];
+			float moregs[HD_SHADOW_RECEIVE2_COUNT * 4];
+			float plane[4];
+
+			if (!HDRenderMirrorInfo(m, &mirror) || mirror.group != entry.group ||
+				!ShadowMirrorBlocks(shadow, mirror, g_shadow_cast_now, others, mregs, moregs,
+					plane) ||
+				!HDRenderShadowReceiveMirrorBegin(mregs, moregs, plane))
+				continue;
+
+			DrawRoomShadowWindowed(entry);
+			HDRenderShadowReceiveMirrorEnd();
+			g_receive_mirror_now = true;
+		}
+
 		DrawRoomShadowWindowed(entry);
 		g_shadow_stats.rooms++;
 
@@ -4755,26 +4818,31 @@ static void ShadowReceivePass()
  * the solid pass, because the test is EQUAL against the depth each model
  * has just written; before DrawBuckets, so a classic polygon drawn over a
  * model keeps its own picture. A frame without the rooms' receive draws
- * nothing here and binds nothing. The entries drawn again and their draw
- * calls come back for the caller. */
-static int ShadowModelsPass(int* calls)
+ * nothing here and binds nothing. A mirror's reflections take the maps
+ * through their mirror's blocks (HDObjectShadowReceiveFrame). The entries
+ * drawn again and their draw calls are counted for the log, with the frame
+ * when a mirror's image took the maps - its room group in the receive pass
+ * or a reflection here. */
+static void ShadowModelsPass()
 {
-	*calls = 0;
+	int models = 0, calls = 0, reflections = 0;
 
-	if (!g_receive_now || !HDModelReceiveReady())
-		return 0;
+	if (g_receive_now && HDModelReceiveReady() &&
+		HDRenderShadowModelsBegin(g_shadow_cast_now, g_receive_others_now))
+	{
+		HDModelReceiveBegin();
+		models = HDObjectShadowReceiveFrame(g_shadow_cast_now, g_receive_others_now,
+			&reflections);
+		calls = HDModelReceiveCalls();
+		HDModelReceiveEnd();
+		HDRenderShadowModelsEnd();
+	}
 
-	if (!HDRenderShadowModelsBegin(g_shadow_cast_now, g_receive_others_now))
-		return 0;
+	g_shadow_stats.models += models;
+	g_shadow_stats.modelCalls += calls;
 
-	HDModelReceiveBegin();
-
-	const int models = HDObjectShadowReceiveFrame(g_shadow_cast_now, g_receive_others_now);
-
-	*calls = HDModelReceiveCalls();
-	HDModelReceiveEnd();
-	HDRenderShadowModelsEnd();
-	return models;
+	if (g_receive_mirror_now || reflections)
+		g_shadow_stats.mirror++;
 }
 
 /* HDLOG shadow second - once a second of game time while the projected
@@ -4810,7 +4878,16 @@ static int ShadowModelsPass(int* calls)
  *              map was read (the mean over those frames) - hers and those
  *              only the second map's reach brings in
  *   oms=       processor time of the second map's cast pass, a frame (the
- *              mean over the frames the shadow ran); its receive is in ms= */
+ *              mean over the frames the shadow ran); its receive is in ms=
+ *   models=    entries of the frame list the models' pass drew again - Lara,
+ *              a creature, an item, a reflection - a frame (the mean over the
+ *              frames the shadow ran)
+ *   mcalls=    the models' pass's draw calls, a frame (the same mean)
+ *   castonly=  items cast into the second map that the picture clipped away,
+ *              a frame (the same mean)
+ *   mirror=    frames in which a mirror's image took the maps through its
+ *              mirror's blocks (its room group's copy or a reflection) /
+ *              frames the shadow ran */
 static bool g_shadow_window = false;
 static unsigned short g_shadow_window_at = 0;
 
@@ -4854,7 +4931,8 @@ static void ShadowSecond()
 		Log("HDLOG shadow second dir=(%.3f,%.3f,%.3f) target=(%.3f,%.3f,%.3f) "
 			"strength=%.3f/%.3f lights=%d weight=%.3f slant=%.1f snaps=%d cast=%d/%d "
 			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d lag=%.2f "
-			"others=%.1f omap=%d/%d orooms=%.1f oms=%.3f",
+			"others=%.1f omap=%d/%d orooms=%.1f oms=%.3f models=%.1f mcalls=%.1f "
+			"castonly=%.1f mirror=%d/%d",
 			shadow->dir[0], shadow->dir[1], shadow->dir[2], shadow->target.dir[0],
 			shadow->target.dir[1], shadow->target.dir[2], shadow->strength,
 			shadow->target.strength, shadow->target.lights, shadow->target.weight,
@@ -4862,7 +4940,8 @@ static void ShadowSecond()
 			(double)s.parts / cast, (double)s.rooms / cast, (double)s.calls / cast,
 			(s.ms + s.receiveMs) / frames, HDRenderShadowReceiveStencil() ? 1 : 0,
 			follow->lag, (double)s.othersItems / ocast, s.othersCast, s.frames,
-			(double)s.othersRooms / ocast, s.othersMs / frames);
+			(double)s.othersRooms / ocast, s.othersMs / frames, (double)s.models / frames,
+			(double)s.modelCalls / frames, (double)s.castOnly / frames, s.mirror, s.frames);
 	}
 
 	follow->snaps = 0;
@@ -5029,7 +5108,6 @@ void HDFrameDraw()
 	ShadowCastPass();
 	ShadowOthersPass();
 	ShadowReceivePass();
-	ShadowSecond();
 
 	/* The objects, after the rooms and inside the same bracket.
 	 *
@@ -5060,10 +5138,9 @@ void HDFrameDraw()
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_SOLID);
 
 	/* And the models take the projected shadow, on the depth they have just
-	 * written. */
-	int modelCalls = 0;
-
-	ShadowModelsPass(&modelCalls);
+	 * written; the shadow's log line then has the whole frame's passes. */
+	ShadowModelsPass();
+	ShadowSecond();
 
 	HDRenderFrameEnd();
 

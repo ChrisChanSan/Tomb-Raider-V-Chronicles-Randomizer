@@ -145,7 +145,8 @@ namespace
 		HDModelSoft soft;	// the chest's secondary motion: zeros but for Lara's body
 		/* The projected shadow's mark (HD_OBJ_CAST_*) and the node mask the
 		 * map draws the entry with: her parts for her map, an item whose blob
-		 * gave way for the second map (HD_OBJ_CAST_OTHERS), and
+		 * gave way for the second map (HD_OBJ_CAST_OTHERS, or
+		 * HD_OBJ_CAST_OTHERS_ONLY for one the picture clipped away), and
 		 * HD_OBJ_CAST_NONE for every other entry and in every frame the
 		 * projected shadow does not run in. */
 		int cast;
@@ -187,9 +188,12 @@ namespace
 		 * whose object has a classic blob BLOB, every other item OTHER, the
 		 * ring NONE - which maps it takes (HDShadowReceiverTakes). And
 		 * whether it was recorded as a mirror's reflection, which takes the
-		 * maps only through its mirror's blocks. */
+		 * maps only through its mirror's blocks, and that mirror: its index
+		 * among the level's mirrors (HDRenderMirrorInfo), -1 for an entry that
+		 * is no reflection. */
 		int receiver;
 		bool mirrored;
+		int mirror;
 	};
 
 	FrameItem g_frame[HD_OBJ_ITEMS];
@@ -212,10 +216,15 @@ namespace
 	int g_open_lips_frame = -1;
 	/* The items being walked are a mirror's reflection (HDObjectReflection),
 	 * how many of them were recorded since the mirror's log line last asked,
-	 * and the clip planes the reflection is stamped with. */
+	 * the clip planes the reflection is stamped with, and the mirror's index.
+	 * `g_reflection_blob` is whether the object of the reflected item about
+	 * to be walked has a classic blob (HDObjectReflectedBlob): the mirror's
+	 * loop zeroes the object's shadow_size for the draw. */
 	bool g_reflection = false;
 	int g_reflected = 0;
 	float g_clip[12] = { 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	int g_reflection_mirror = -1;
+	bool g_reflection_blob = false;
 
 	/* The second map's casters. game\draw.cpp asks HDObjectBlobGivesWay
 	 * right before an item's blob and then opens the same item with
@@ -226,6 +235,9 @@ namespace
 	const ITEM_INFO* g_gave_way = 0;
 	bool g_open_casts = false;
 	float g_open_place[3] = { 0.0f, 0.0f, 0.0f };
+	/* The item being walked is walked for the second map alone: draw.cpp
+	 * clipped it away and HDObjectCastUnseen answered true for it. */
+	bool g_open_unseen = false;
 	/* What the item being walked is to the models' pass, decided by
 	 * HDObjectBegin out of its object (HD_SHADOW_RECEIVER_BLOB or _OTHER). */
 	int g_open_receiver = HD_SHADOW_RECEIVER_OTHER;
@@ -2899,6 +2911,7 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	 * over for this item, and asked of no later one. */
 	g_open_casts = item && item == g_gave_way;
 	g_gave_way = 0;
+	g_open_unseen = false;
 
 	switch (begin_decision(item, obj))
 	{
@@ -2938,10 +2951,13 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	g_open_place[1] = (float)item->pos.y_pos;
 	g_open_place[2] = (float)item->pos.z_pos;
 	/* Whether it is a caster of the second map by what it is: its object's
-	 * blob, read here, where only a mirror's loop has zeroed it (game\
-	 * mirror.cpp, around the reflection's draw) - so a reflection reads
-	 * OTHER, and takes nothing until its mirror's blocks exist. */
-	g_open_receiver = obj->shadow_size ? HD_SHADOW_RECEIVER_BLOB : HD_SHADOW_RECEIVER_OTHER;
+	 * blob. A mirror's loop zeroes the object's shadow_size around a
+	 * reflection's draw (game\mirror.cpp) and hands the value it had over
+	 * beforehand (HDObjectReflectedBlob), so a reflected creature takes the
+	 * maps as the creature does. */
+	const bool blob = g_reflection ? g_reflection_blob : obj->shadow_size != 0;
+
+	g_open_receiver = blob ? HD_SHADOW_RECEIVER_BLOB : HD_SHADOW_RECEIVER_OTHER;
 	g_seen = 0;
 	g_open_lips_track = -1;	// only a cutscene's actor speaks - HDObjectLips
 	g_open_lips_frame = -1;
@@ -3084,6 +3100,7 @@ void HDObjectEnd()
 	stamp_clip(entry.clip, g_reflection);
 	entry.receiver = g_open_receiver;
 	entry.mirrored = g_reflection;
+	entry.mirror = g_reflection ? g_reflection_mirror : -1;
 
 	/* And the pickup on the floor takes the mod's own inventory model.
 	 *
@@ -3171,20 +3188,35 @@ void HDObjectEnd()
 	 *
 	 * current_item and not `item`: CalculateObjectLighting has just set it,
 	 * and for an item with a shade value it points at the static-mesh light
-	 * item instead - the classic path's own decision. */
-	SetD3DMatrix(&D3DMView, g_raw);
-	SuperResetLights();
-	InitObjectLighting(current_item);
-
-	for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
+	 * item instead - the classic path's own decision.
+	 *
+	 * An item walked for the second map alone is not lit: draw.cpp ran no
+	 * CalculateObjectLighting for it, current_item is another item's, and the
+	 * cast draw reads no light. Its entry carries none, and the engine's
+	 * light arrays are left as the last drawn item left them. */
+	if (!g_open_unseen)
 	{
-		entry.light[node * 3 + 0] = (float)aAmbientR;
-		entry.light[node * 3 + 1] = (float)aAmbientG;
-		entry.light[node * 3 + 2] = (float)aAmbientB;
-	}
+		SetD3DMatrix(&D3DMView, g_raw);
+		SuperResetLights();
+		InitObjectLighting(current_item);
 
-	fill_lights(entry.lights, HD_MAX_OBJ_LIGHTS, &entry.lightCount,
-		&entry.sunScale, current_item);
+		for (int node = 0; node < entry.nodes && node < HD_OBJ_NODES; node++)
+		{
+			entry.light[node * 3 + 0] = (float)aAmbientR;
+			entry.light[node * 3 + 1] = (float)aAmbientG;
+			entry.light[node * 3 + 2] = (float)aAmbientB;
+		}
+
+		fill_lights(entry.lights, HD_MAX_OBJ_LIGHTS, &entry.lightCount,
+			&entry.sunScale, current_item);
+	}
+	else
+	{
+		memset(entry.light, 0, sizeof(float) * 3 * (size_t)(entry.nodes < HD_OBJ_NODES
+			? entry.nodes : HD_OBJ_NODES));
+		entry.lightCount = 0;
+		entry.sunScale = 0.0f;
+	}
 
 	// An item is never cut. The neck cut exists because the first-person
 	// camera sits inside Lara's own head, and nothing else in the level has a
@@ -3201,12 +3233,15 @@ void HDObjectEnd()
 	 * an item whose feet have left the box casting while its upper body
 	 * still reaches into it, so its shadow fades out at the box's edge on
 	 * every side, along the light through the fade of the second map's
-	 * lookup (HDShadowFadeTerm). Every other item casts nothing. */
+	 * lookup (HDShadowFadeTerm). An item walked for the second map alone
+	 * (HDObjectCastUnseen asked the same box) is marked to be cast and drawn
+	 * in no pass. Every other item casts nothing. */
 	const HDShadowFrame* shadow = HDShadowFrameState();
 	const bool inside = g_open_casts &&
 		HDShadowBoxHolds(&shadow->others, g_open_place, HD_SHADOW_OTHERS_MARGIN);
 
-	entry.cast = inside ? HD_OBJ_CAST_OTHERS : HD_OBJ_CAST_NONE;
+	entry.cast = !inside ? HD_OBJ_CAST_NONE
+		: g_open_unseen ? HD_OBJ_CAST_OTHERS_ONLY : HD_OBJ_CAST_OTHERS;
 	entry.castMask = inside ? entry.mask : 0;
 	g_open_casts = false;
 	// No sheen on an object - the specular term is Lara's alone.
@@ -3216,8 +3251,11 @@ void HDObjectEnd()
 	/* The two checks, on the first HD item of the level and while the
 	 * engine's own light arrays still hold this item's answer. Not on a
 	 * reflection: its lights went through the mirrored view and the
-	 * classic answer they are held against did not. */
-	if (!g_reflection)
+	 * classic answer they are held against did not. Nor on an item walked
+	 * for the second map alone, which has no light. */
+	if (g_open_unseen)
+		g_open_unseen = false;
+	else if (!g_reflection)
 	{
 		self_test(entry);
 
@@ -3231,14 +3269,38 @@ void HDObjectEnd()
 	g_count++;
 }
 
-void HDObjectReflection(bool on, const float* planes)
+void HDObjectReflection(bool on, const float* planes, int mirror)
 {
 	g_reflection = on;
+	g_reflection_mirror = on ? mirror : -1;
+	g_reflection_blob = false;
 
 	if (on && planes)
 		memcpy(g_clip, planes, sizeof(g_clip));
 	else
 		stamp_clip(g_clip, false);
+}
+
+void HDObjectReflectedBlob(bool blob)
+{
+	g_reflection_blob = g_reflection && blob;
+}
+
+bool HDObjectCastUnseen()
+{
+	ProfScope prof(PROF_HD_OBJ);
+
+	if (!g_open || !g_open_casts)
+		return false;
+
+	/* The rule's facts: the item is open for the HD path (g_open), it was
+	 * clipped away (the caller's question), its blob gave way and its place
+	 * lies inside the grown second box - HDObjectEnd's own test. */
+	const HDShadowFrame* shadow = HDShadowFrameState();
+	const bool inside = HDShadowBoxHolds(&shadow->others, g_open_place, HD_SHADOW_OTHERS_MARGIN);
+
+	g_open_unseen = HDShadowItemWalk(true, true, true, inside) == HD_SHADOW_WALK_UNSEEN;
+	return g_open_unseen;
 }
 
 int HDObjectReflectedTake()
@@ -3642,6 +3704,7 @@ void HDInvEnd()
 	// Nor do they ever take the projected shadow.
 	entry.receiver = HD_SHADOW_RECEIVER_NONE;
 	entry.mirrored = false;
+	entry.mirror = -1;
 
 	store_matrices(entry);
 
@@ -3784,8 +3847,9 @@ void HDObjectFrameDraw(const void* projection, int bulbs, unsigned int passes)
 		const FrameItem& entry = g_frame[i];
 		HDModelLighting lighting;
 
-		// A part of Lara pushed for the projected shadow's map alone.
-		if (entry.cast == HD_OBJ_CAST_ONLY)
+		/* A part of Lara pushed for the projected shadow's map alone, and an
+		 * item walked for the second map alone. */
+		if (entry.cast == HD_OBJ_CAST_ONLY || entry.cast == HD_OBJ_CAST_OTHERS_ONLY)
 			continue;
 
 		/* The call switches the scissor test off for every item and takes a
@@ -4054,10 +4118,11 @@ int HDObjectCastOthersFrame()
 	{
 		const FrameItem& entry = g_frame[i];
 
-		if (entry.cast != HD_OBJ_CAST_OTHERS)
+		if (entry.cast != HD_OBJ_CAST_OTHERS && entry.cast != HD_OBJ_CAST_OTHERS_ONLY)
 			continue;
 
-		// The body - or the swapped model - and the separate face, as drawn.
+		/* The body - or the swapped model - and the separate face, as drawn,
+		 * or as they would be drawn for an item the picture clipped away. */
 		if (HDModelCastDraw(entry.drawSlot, false, entry.matrix, entry.nodes,
 			entry.castMask, entry.lipsTrack, entry.lipsFrame, &entry.soft))
 			drawn++;
@@ -4075,7 +4140,18 @@ int HDObjectCastOthersCount()
 	int marked = 0;
 
 	for (int i = 0; i < g_count; i++)
-		if (g_frame[i].cast == HD_OBJ_CAST_OTHERS)
+		if (g_frame[i].cast == HD_OBJ_CAST_OTHERS || g_frame[i].cast == HD_OBJ_CAST_OTHERS_ONLY)
+			marked++;
+
+	return marked;
+}
+
+int HDObjectCastUnseenCount()
+{
+	int marked = 0;
+
+	for (int i = 0; i < g_count; i++)
+		if (g_frame[i].cast == HD_OBJ_CAST_OTHERS_ONLY)
 			marked++;
 
 	return marked;
@@ -4136,72 +4212,125 @@ static float entry_sphere(const FrameItem& entry, float* centre)
 	return 0.5f * sqrtf(spread) + sqrtf(diagonal);
 }
 
-/* The two blocks an entry is drawn with: the frame's blocks with the one of
- * each map it does not take silenced. A reflection's would be its mirror's
- * blocks; there are none, so a reflection takes nothing here
- * (HDShadowReceiverTakes with `mirrorBlocks` false). */
+/* The two blocks an entry is drawn with: the frame's blocks - or, for a
+ * mirror's reflection, its mirror's (hd_shadow.h, HDShadowMirrorView) - with
+ * the one of each map it does not take silenced, and the view the entry's
+ * view-space place goes back to the world through: the frame's own, or the
+ * mirror's reflected one, which takes a reflection's place in the copy back
+ * to the place of what it reflects. */
 struct ReceiveBlocks
 {
+	bool valid;
+	float R[9], t[3];
 	float hers[HD_SHADOW_RECEIVE_COUNT * 4];
 	float others[HD_SHADOW_RECEIVE2_COUNT * 4];
-	float herMin[3], herMax[3];
-	float otherMin[3], otherMax[3];
 };
 
-static void receive_blocks_frame(const HDShadowFrame* shadow, bool herDrawn, bool othersDrawn,
-	ReceiveBlocks* out)
+static void receive_blocks_make(const HDShadowFrame* shadow, const float* R, const float* t,
+	bool herDrawn, bool othersDrawn, ReceiveBlocks* out)
 {
-	HDShadowReceiveConstants(&shadow->box, shadow->R, shadow->t, shadow->strength, out->hers);
-	HDShadowReach(&shadow->box, out->herMin, out->herMax);
+	memcpy(out->R, R, sizeof(out->R));
+	memcpy(out->t, t, sizeof(out->t));
+	HDShadowReceiveConstants(&shadow->box, R, t, shadow->strength, out->hers);
 
 	if (!herDrawn)
 		HDShadowReceiveWithoutHer(out->hers);
 
-	HDShadowReceiveOthersConstants(&shadow->others, shadow->R, shadow->t, out->others);
-	HDShadowReachOthers(&shadow->others, out->otherMin, out->otherMax);
+	HDShadowReceiveOthersConstants(&shadow->others, R, t, out->others);
 
 	if (!othersDrawn)
 		HDShadowReceiveWithoutOthers(out->others);
+
+	out->valid = true;
 }
 
-int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn)
+/* A mirror's blocks for this frame, made the first time an entry of that
+ * mirror asks: false when the mirror is unknown or seen from behind - its
+ * reflections then take nothing (HDShadowReceiverTakes with `mirrorBlocks`
+ * false). A level has two mirrors at most (RICH2); one beyond the table's
+ * size is made for every entry that asks. */
+static const int kReceiveMirrors = 4;
+
+static bool receive_blocks_mirror(const HDShadowFrame* shadow, int mirror, bool herDrawn,
+	bool othersDrawn, ReceiveBlocks* table, ReceiveBlocks* scratch, const ReceiveBlocks** out)
+{
+	HDMirror m;
+
+	if (mirror < 0 || !HDRenderMirrorInfo(mirror, &m) ||
+		!HDShadowMirrorFaces(shadow->R, shadow->t, m.axis, m.plane, m.side))
+		return false;
+
+	ReceiveBlocks* blocks = mirror < kReceiveMirrors ? &table[mirror] : scratch;
+
+	if (!blocks->valid || blocks == scratch)
+	{
+		float R[9], t[3];
+
+		HDShadowMirrorView(shadow->R, shadow->t, m.axis, m.plane, R, t);
+		receive_blocks_make(shadow, R, t, herDrawn, othersDrawn, blocks);
+	}
+
+	*out = blocks;
+	return true;
+}
+
+int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn, int* reflections)
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
 	ReceiveBlocks frame;
+	ReceiveBlocks mirrors[kReceiveMirrors];
+	ReceiveBlocks scratch;
+	float herMin[3], herMax[3], otherMin[3], otherMax[3];
 	int drawn = 0;
 
-	receive_blocks_frame(shadow, herDrawn, othersDrawn, &frame);
+	if (reflections)
+		*reflections = 0;
+
+	for (int k = 0; k < kReceiveMirrors; k++)
+		mirrors[k].valid = false;
+
+	scratch.valid = false;
+	receive_blocks_make(shadow, shadow->R, shadow->t, herDrawn, othersDrawn, &frame);
+	HDShadowReach(&shadow->box, herMin, herMax);
+	HDShadowReachOthers(&shadow->others, otherMin, otherMax);
 
 	for (int i = 0; i < g_count; i++)
 	{
 		const FrameItem& entry = g_frame[i];
 
-		/* A piece cast into her map alone is drawn nowhere, and the ring and
-		 * the pickup display draw about a centre of their own. */
-		if (entry.cast == HD_OBJ_CAST_ONLY || entry.offCentreX != 0.0f ||
-			entry.offCentreY != 0.0f)
+		/* A piece cast into her map alone and an item cast into the second
+		 * map alone are drawn nowhere, and the ring and the pickup display
+		 * draw about a centre of their own. */
+		if (entry.cast == HD_OBJ_CAST_ONLY || entry.cast == HD_OBJ_CAST_OTHERS_ONLY ||
+			entry.offCentreX != 0.0f || entry.offCentreY != 0.0f)
 			continue;
 
+		const ReceiveBlocks* blocks = &frame;
+		const bool mirrorBlocks = entry.mirrored &&
+			receive_blocks_mirror(shadow, entry.mirror, herDrawn, othersDrawn, mirrors, &scratch,
+				&blocks);
 		int takes = HDShadowReceiverTakes(entry.receiver, herDrawn, othersDrawn, entry.mirrored,
-			false);
+			mirrorBlocks);
 
 		if (!takes)
 			continue;
 
 		/* Drawn again where its sphere touches the reach of a map it takes;
 		 * the edge, height and distance terms fade the shadow out inside the
-		 * reach, so a model straddling its border takes what is left. */
+		 * reach, so a model straddling its border takes what is left. A
+		 * reflection's sphere goes back to the world through its mirror's
+		 * view, to the place of what it reflects. */
 		float view[3], world[3];
 		const float radius = entry_sphere(entry, view);
 
-		HDShadowViewToWorld(shadow->R, shadow->t, view, world);
+		HDShadowViewToWorld(blocks->R, blocks->t, view, world);
 
 		if ((takes & HD_SHADOW_TAKES_HERS) &&
-			!HDShadowSphereTouches(world, radius, frame.herMin, frame.herMax))
+			!HDShadowSphereTouches(world, radius, herMin, herMax))
 			takes &= ~HD_SHADOW_TAKES_HERS;
 
 		if ((takes & HD_SHADOW_TAKES_OTHERS) &&
-			!HDShadowSphereTouches(world, radius, frame.otherMin, frame.otherMax))
+			!HDShadowSphereTouches(world, radius, otherMin, otherMax))
 			takes &= ~HD_SHADOW_TAKES_OTHERS;
 
 		if (!takes)
@@ -4210,8 +4339,8 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn)
 		float hers[HD_SHADOW_RECEIVE_COUNT * 4];
 		float others[HD_SHADOW_RECEIVE2_COUNT * 4];
 
-		memcpy(hers, frame.hers, sizeof(hers));
-		memcpy(others, frame.others, sizeof(others));
+		memcpy(hers, blocks->hers, sizeof(hers));
+		memcpy(others, blocks->others, sizeof(others));
 
 		if (!(takes & HD_SHADOW_TAKES_HERS))
 			HDShadowReceiveWithoutHer(hers);
@@ -4231,6 +4360,9 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn)
 				&entry.cut, entry.cull, entry.lipsTrack, entry.lipsFrame, 0) || any;
 
 		drawn += any ? 1 : 0;
+
+		if (any && mirrorBlocks && reflections)
+			(*reflections)++;
 	}
 
 	HDModelClip(0);
@@ -4346,6 +4478,7 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	// Everything pushed is a piece of her.
 	entry.receiver = HD_SHADOW_RECEIVER_LARA;
 	entry.mirrored = g_reflection;
+	entry.mirror = g_reflection ? g_reflection_mirror : -1;
 
 	/* A pushed model that is itself a face speaks the way an actor's face
 	 * does - see HDObjectLips. Where it has no clip for the track it draws

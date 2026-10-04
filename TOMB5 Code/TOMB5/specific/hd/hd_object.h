@@ -114,8 +114,19 @@ void HDObjectEnd();
  * to HDModelClip so that the reflection ends where the copy behind the glass
  * ends. Null with false; everything recorded while it is off - the world, the
  * inventory ring, the pickup display - is stamped with planes that keep every
- * pixel. */
-void HDObjectReflection(bool on, const float* planes);
+ * pixel. `mirror` is the mirror's index among the level's mirrors
+ * (hd_level.h, HDLevelMirrorAt; hd_render.h, HDRenderMirrorInfo), stamped on
+ * every entry recorded while it is on: the projected shadow's models' pass
+ * gives a reflection the maps through that mirror's blocks. */
+void HDObjectReflection(bool on, const float* planes, int mirror = -1);
+
+/* Whether the object of the reflected item about to be drawn has a classic
+ * blob (its shadow_size is not 0), handed over by the mirror's loop before it
+ * zeroes the field for the draw: what the reflection is to the projected
+ * shadow's models' pass (hd_shadow.h, HD_SHADOW_RECEIVER_BLOB or _OTHER), the
+ * class of the item it reflects. Read by the next HDObjectBegin; ignored while
+ * no reflection is on, and cleared by HDObjectReflection. */
+void HDObjectReflectedBlob(bool blob);
 // How many HD items were recorded as a reflection since the last call - read
 // and cleared by the mirror's log line.
 int HDObjectReflectedTake();
@@ -287,13 +298,16 @@ int HDObjectLights(ITEM_INFO* lit, HDObjLight* out, int max, float* sunScale,
  * map draws it with - the frame's own mask before first person takes the
  * head node off. HD_OBJ_CAST_OTHERS is never pushed: it marks an item drawn
  * in the picture and cast into the second map (HDObjectEnd, after its blob
- * gave way - HDObjectBlobGivesWay). */
+ * gave way - HDObjectBlobGivesWay); nor is HD_OBJ_CAST_OTHERS_ONLY, which
+ * marks an item the picture clipped away, walked for the second map alone and
+ * drawn in no pass (HDObjectCastUnseen). */
 enum
 {
 	HD_OBJ_CAST_NONE = 0,
 	HD_OBJ_CAST_ALSO,
 	HD_OBJ_CAST_ONLY,
-	HD_OBJ_CAST_OTHERS
+	HD_OBJ_CAST_OTHERS,
+	HD_OBJ_CAST_OTHERS_ONLY
 };
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
@@ -313,14 +327,16 @@ int HDObjectCastFrame();
 int HDObjectCastCount();
 
 /* The second map's cast pass over this frame's list: every item marked
- * HD_OBJ_CAST_OTHERS, drawn with HDModelCastDraw exactly as the first pass
- * draws her parts - its body (the swapped model where it has one) with the
- * node mask it is drawn with and, for a slot that has one, its separate face.
- * Called between HDModelCastBegin and HDModelCastEnd inside the second map's
- * bracket. Returns how many models went into the map; HDObjectCastOthersCount
- * says how many items are marked. */
+ * HD_OBJ_CAST_OTHERS or HD_OBJ_CAST_OTHERS_ONLY, drawn with HDModelCastDraw
+ * exactly as the first pass draws her parts - its body (the swapped model
+ * where it has one) with the node mask it is drawn with and, for a slot that
+ * has one, its separate face. Called between HDModelCastBegin and
+ * HDModelCastEnd inside the second map's bracket. Returns how many models
+ * went into the map; HDObjectCastOthersCount says how many items are marked,
+ * HDObjectCastUnseenCount how many of them the picture clipped away. */
 int HDObjectCastOthersFrame();
 int HDObjectCastOthersCount();
+int HDObjectCastUnseenCount();
 
 /* The projected shadow's models' pass over this frame's list: every entry
  * the solid pass drew, again with HDModelReceiveDraw - its body (the swapped
@@ -328,17 +344,23 @@ int HDObjectCastOthersCount();
  * with the arguments of its solid draw and its clip planes - where it takes
  * a map (hd_shadow.h, HDShadowReceiverTakes, on what the entry is:
  * HD_SHADOW_RECEIVER_LARA for every push, _BLOB or _OTHER for an item by
- * its object's shadow_size, _NONE for the ring and the pickup display) and
- * its bounding sphere touches the reach of a map it takes (HDShadowReach,
- * HDShadowReachOthers). `herDrawn` and `othersDrawn` say which maps were
- * drawn in this frame and are read. The block of a map an entry does not take is silenced
+ * its object's shadow_size - a reflection's by the value its mirror's loop
+ * handed over, HDObjectReflectedBlob - _NONE for the ring and the pickup
+ * display) and its bounding sphere touches the reach of a map it takes
+ * (HDShadowReach, HDShadowReachOthers). `herDrawn` and `othersDrawn` say
+ * which maps were drawn in this frame and are read. A mirror's reflection
+ * takes them through its mirror's blocks (hd_shadow.h, HDShadowMirrorView),
+ * and its sphere is taken back to the world through the same reflected
+ * view; a reflection whose mirror is unknown or seen from behind takes
+ * nothing. The block of a map an entry does not take is silenced
  * (HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers) and the pair
  * handed to HDRenderShadowModelsBlocks. Left out: a piece cast into her map
- * alone (HD_OBJ_CAST_ONLY), the ring's and the display's entries, and a
- * mirror's reflection, which has no blocks of its mirror. Called between
- * HDModelReceiveBegin and HDModelReceiveEnd inside the models' receive
- * bracket. Returns how many entries were drawn again. */
-int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn);
+ * alone (HD_OBJ_CAST_ONLY), an item cast into the second map alone
+ * (HD_OBJ_CAST_OTHERS_ONLY), the ring's and the display's entries. Called
+ * between HDModelReceiveBegin and HDModelReceiveEnd inside the models'
+ * receive bracket. Returns how many entries were drawn again; `reflections`,
+ * when given, how many of them through a mirror's blocks. */
+int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn, int* reflections = 0);
 
 /* The blob's gate, game\draw.cpp's one call before an item's blob
  * (S_PrintShadow): true when the blob is left out because the item takes the
@@ -359,12 +381,24 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn);
  * grown by OTHERS_MARGIN on all six sides - an item beyond that has neither
  * the blob nor the projected shadow in that frame, where the edge term
  * across the light and the fade along it have faded the projected one out
- * on every side. An
- * item that draw.cpp clips away (its bounds outside the view or the portal
- * window) is not drawn and so not cast either, while its blob has given
- * way: where its shadow reaches into the view beyond its bounds, that part
- * appears at once when the item comes into the view. */
+ * on every side. An item that draw.cpp clips away (its bounds outside the
+ * view or the portal window) is walked for the second map alone when its
+ * place lies inside that box (HDObjectCastUnseen), so its shadow lies in the
+ * view before the item does. */
 bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj);
+
+/* The node walk of an item draw.cpp has clipped away, asked between
+ * HDObjectBegin and HDObjectEnd once the clip test has answered 0: true when
+ * the item is to be walked for the projected shadow's second map alone -
+ * it is open for the HD path, its blob gave way (HDObjectBlobGivesWay) and
+ * its place lies inside the second box grown by OTHERS_MARGIN on all six
+ * sides (hd_shadow.h, HDShadowItemWalk). The caller then walks its nodes as
+ * for a drawn item, without the light (CalculateObjectLighting) and without
+ * the interpolation's root fix and its counters, and HDObjectEnd marks the
+ * entry HD_OBJ_CAST_OTHERS_ONLY: cast into the second map, drawn in no pass,
+ * no light worked out for it. False in every other case, and nothing is
+ * walked, as for every clipped item. */
+bool HDObjectCastUnseen();
 
 /* The lights the projected shadow's key light weighs, in WORLD space
  * (hd_shadow.h, HDShadowLight): the suns, points and spots of the item's two

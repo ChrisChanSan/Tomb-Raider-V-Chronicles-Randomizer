@@ -13,9 +13,10 @@
 
 /* The projected shadow on the rooms and the models: the receive pixel
  * shaders. ReceivePS reads her map alone; Receive2PS, further down, reads
- * her map and the second map, in a frame whose second map was drawn; and
- * ModelReceivePS, at the end of this file, is the two-map body on an HD
- * model's vertex outputs.
+ * her map and the second map, in a frame whose second map was drawn;
+ * MirrorReceivePS is the two-map body on the copy behind a mirror's glass,
+ * through the mirror's blocks; and ModelReceivePS, at the end of this file,
+ * is the two-map body on an HD model's vertex outputs.
  *
  * hd_render.cpp draws the HD room groups near her a second time with the
  * room's own vertex shader (RoomVS in hd_room.hlsl, unchanged), the same
@@ -324,6 +325,58 @@ float4 Receive2PS(RECEIVE_IN input) : COLOR0
 	return float4(min(herFactor, theirFactor).xxx, 1.0f);
 }
 
+/* The mirror's variant, MirrorReceivePS: Receive2PS on the copy behind a
+ * mirror's glass alone. A mirror's room group holds the room and, behind the
+ * glass, a copy of it reflected in the glass's plane (hd_render.h, HDMirror);
+ * the shadows in the copy are the shadows in front of the glass, reflected.
+ * hd_level.cpp draws such a group once with this shader, before its ordinary
+ * receive draw: the blocks in c96 - c107 are the mirror's (hd_shadow.h,
+ * HDShadowMirrorView - the frame's blocks made with the reflected view, so a
+ * pixel of the copy looks the maps up at the place it reflects), and the one
+ * clip against the glass's plane keeps the pixels behind it. The stencil
+ * guard marks every pixel this draw leaves, so the ordinary draw that follows
+ * is kept off the copy and darkens the room in front alone. A frame whose
+ * second map was not drawn hands in its block silenced
+ * (HDShadowReceiveWithoutOthers), so the variant serves both receives.
+ *
+ * Build. bshader.bat compiles it out of this file with
+ *
+ *     fxc /nologo /T ps_3_0 /E MirrorReceivePS /O3 /Vn kHDShadowReceiveMirrorPS
+ *         /Fh hd_shadow_receive_mirror_ps.inc hd_shadow_receive.hlsl
+ *
+ * and stamps the .inc with this file's MD5, as it stamps the others.
+ *
+ * Registers. Everything Receive2PS names, and the glass's plane in c108
+ * (hd_shadow.h, HD_SHADOW_RECEIVE_MIRROR, HDShadowMirrorPlane): a view-space
+ * point with dot(float4(viewPos, 1), gMirror) >= 0 lies behind the glass. */
+
+/* The glass's plane in view space, positive behind it. */
+float4 gMirror : register(c108);
+
+float4 MirrorReceivePS(RECEIVE_IN input) : COLOR0
+{
+	/* The alpha test of the range, Receive2PS's own line. */
+	float4 texel = tex2D(sPage, input.uv);
+
+	clip(texel.a - gPass.x);
+
+	const float4 at = float4(input.viewPos, 1.0f);
+
+	// The copy alone: the room in front of the glass is the ordinary draw's.
+	clip(dot(at, gMirror));
+
+	const float3 n = input.viewNrm * rsqrt(max(dot(input.viewNrm, input.viewNrm), 1e-8f));
+	const float facing = saturate(dot(n, gToLight.xyz) * gToLight.w);
+
+	const float2 hers = HerShade(at, facing);
+	const float2 theirs = OthersShade(at, facing);
+
+	const float herFactor = 1.0f - gShadow.x * hers.x * hers.y;
+	const float theirFactor = 1.0f - gShadow.x * theirs.x * theirs.y;
+
+	return float4(min(herFactor, theirFactor).xxx, 1.0f);
+}
+
 /* The models' variant, ModelReceivePS: the two-map body above on an HD
  * model. hd_model.cpp draws an entry of the frame list again after the
  * models' solid pass with the model's own vertex shader (ModelVS in
@@ -336,7 +389,8 @@ float4 Receive2PS(RECEIVE_IN input) : COLOR0
  * HDShadowReceiverTakes): the block of a map it does not take is silenced
  * through its u row (HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers),
  * so that part's edge term is 0, its lookup is never taken and its factor
- * is 1.
+ * is 1. A mirror's reflection is drawn with its mirror's blocks
+ * (HDShadowMirrorView), so it takes the shadows of what it reflects.
  *
  * A pixel shader reads the vertex shader's outputs by semantic, and ModelVS
  * hands them down in a layout of its own: the texture coordinate

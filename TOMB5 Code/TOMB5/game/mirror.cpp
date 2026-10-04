@@ -145,9 +145,13 @@ void Draw_Mirror_Lara()
  * at the uncapped rate, the tick's at 30. What a draw changes in the item is
  * put back: the ambient fade CalcAmbientLight steps per call (item->il),
  * which would run twice as fast for an item drawn twice. A reflection casts
- * no shadow of its own - the slot's shadow size is 0 for the call - and its
- * effects are not reflected: they are drawn from their own lists after the
- * rooms.
+ * no shadow of its own - the slot's shadow size is 0 for the call, so it has
+ * no blob and is drawn into no shadow map - and its effects are not
+ * reflected: they are drawn from their own lists after the rooms. What the
+ * slot's shadow size was is handed to the seam beforehand
+ * (HDObjectReflectedBlob), and the mirror's index with HDObjectReflection:
+ * the projected shadow's models' pass gives the reflection the shadows of
+ * what it reflects, through that mirror's reflected view.
  *
  * The classic path culls by the winding on the screen, which the reflection
  * turns round, so SetCullCW for the call as Draw_Mirror_Lara does; the HD
@@ -167,8 +171,9 @@ void Draw_Mirror_Lara()
  * variant copies into clip_left .. clip_bottom and XYUVGClipper cuts to
  * (specific\clipping.cpp), and the mirror room's portal window narrowed to
  * it, which calc_animating_item_clip_window hands the doors and the
- * ANIMATING slots. `win` receives the rectangle. */
-static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn, long* win)
+ * ANIMATING slots. `win` receives the rectangle; `index` is the mirror's
+ * among the level's (HDLevelMirrorAt). */
+static int DrawOneMirror(const HDLevelMirror& m, int index, bool* laraDrawn, long* win)
 {
 	const int a = m.axis;
 	long frontMin[3], frontMax[3];
@@ -248,7 +253,7 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn, long* win)
 	float planes[12];
 
 	MirrorClipPlanes(aW2VMx, a, m.plane, m.side, m.mins, m.maxs, planes);
-	HDObjectReflection(true, planes);
+	HDObjectReflection(true, planes, index);
 	SetCullCW();
 
 	/* Lara: the view set the frame worked out for her, moved into the
@@ -324,6 +329,7 @@ static int DrawOneMirror(const HDLevelMirror& m, bool* laraDrawn, long* win)
 			const ITEM_LIGHT il = item->il;
 			const short shadow = obj->shadow_size;
 
+			HDObjectReflectedBlob(shadow != 0);
 			obj->shadow_size = 0;
 			PrintObjectReflection(item, (short)m.room);
 			obj->shadow_size = shadow;
@@ -376,7 +382,7 @@ void Draw_Mirror_Items()
 
 		HDObjectReflectedTake();
 
-		const int drawn = DrawOneMirror(m, &lara_drawn, win);
+		const int drawn = DrawOneMirror(m, i, &lara_drawn, win);
 		const int hd = HDObjectReflectedTake();
 
 		/* The mirror's log line, once a second while a mirror draws

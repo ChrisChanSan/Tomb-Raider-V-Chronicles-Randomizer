@@ -36,6 +36,7 @@
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
+#include "hd_shader/hd_shadow_receive_mirror_ps.inc"
 #include "hd_gloss_math.h"
 #include "hd_gloss_pages.h"
 #include "hd_gloss_seed.h"
@@ -1566,6 +1567,10 @@ namespace
 	 * then keep their blobs (the frame's decision asks
 	 * HDRenderShadowReceive2Ready beside the second map, hd_laradraw.cpp). */
 	IDirect3DPixelShader9* g_shadow_receive2_ps = 0;
+	/* Its mirror's variant (the same file's MirrorReceivePS), for the copy
+	 * behind a mirror's glass. Null when the device refused it; the copy then
+	 * takes the ordinary receive, as the room in front of it does. */
+	IDirect3DPixelShader9* g_shadow_receive_mirror_ps = 0;
 	/* Whether the rooms' receive cleared the stencil inside the open
 	 * bracket: the models' receive then finds its own bit 0 everywhere and
 	 * clears nothing. Set by the rooms' Begin, cleared by HDRenderFrameBegin. */
@@ -3409,6 +3414,11 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_shadow_receive2_ps)))
 		g_shadow_receive2_ps = 0;
 
+	// Nor is the mirror's variant: without it the copy takes the ordinary one.
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceiveMirrorPS,
+		&g_shadow_receive_mirror_ps)))
+		g_shadow_receive_mirror_ps = 0;
+
 	return true;
 }
 
@@ -3544,6 +3554,11 @@ void HDRenderShutdown()
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
+	if (g_shadow_receive_mirror_ps)
+	{
+		g_shadow_receive_mirror_ps->Release();
+		g_shadow_receive_mirror_ps = 0;
+	}
 	if (g_ps) { g_ps->Release(); g_ps = 0; }
 	if (g_vs) { g_vs->Release(); g_vs = 0; }
 	if (g_decl) { g_decl->Release(); g_decl = 0; }
@@ -7464,13 +7479,18 @@ namespace
 
 	/* What a receive's Begin found and End puts back. `two` is a receive with
 	 * both maps; `samp2` and `texture2` are stage 4's, remembered only
-	 * then. */
+	 * then. `blocks` are the receive's own pixel registers as Begin wrote
+	 * them - her block and, in a receive with both maps, the second map's -
+	 * which a mirror's draw (HDRenderShadowReceiveMirrorBegin) replaces and
+	 * its End writes back; `mirror` is such a draw open. */
 	struct ReceiveSaved
 	{
 		bool open = false;
 		bool stencil = false;
 		bool two = false;
+		bool mirror = false;
 		int calls = 0;
+		float blocks[(HD_SHADOW_RECEIVE_COUNT + HD_SHADOW_RECEIVE2_COUNT) * 4] = {};
 		DWORD rs[19] = {};
 		DWORD samp[7] = {};
 		DWORD samp2[7] = {};
@@ -7726,6 +7746,11 @@ static bool receive_open(const float* constants, const float* others)
 	g_device->GetPixelShader(&s.ps);
 	s.open = true;
 	s.two = two;
+	std::memcpy(s.blocks, constants, sizeof(float) * HD_SHADOW_RECEIVE_COUNT * 4);
+
+	if (two)
+		std::memcpy(s.blocks + HD_SHADOW_RECEIVE_COUNT * 4, others,
+			sizeof(float) * HD_SHADOW_RECEIVE2_COUNT * 4);
 
 	g_device->SetVertexShader(g_vs);
 	g_device->SetVertexDeclaration(g_decl);
@@ -7822,12 +7847,61 @@ bool HDRenderRoomShadow(int group, const D3DMATRIX* world, const HDRoomLighting*
 	return true;
 }
 
+bool HDRenderShadowReceiveMirrorReady()
+{
+	return g_shadow_receive_mirror_ps != 0;
+}
+
+bool HDRenderShadowReceiveMirrorBegin(const float* hers, const float* others,
+	const float* plane)
+{
+	ReceiveSaved& s = g_receive;
+
+	/* Only with the stencil guard: it is what keeps the ordinary draw that
+	 * follows off the copy, which would otherwise take both lookups. */
+	if (!g_device || !s.open || s.mirror || !s.stencil || !g_shadow_receive_mirror_ps ||
+		!hers || !others || !plane)
+		return false;
+
+	g_device->SetPixelShader(g_shadow_receive_mirror_ps);
+	g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE_FIRST, hers, HD_SHADOW_RECEIVE_COUNT);
+	g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE2_FIRST, others,
+		HD_SHADOW_RECEIVE2_COUNT);
+	g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE_MIRROR, plane, 1);
+	s.mirror = true;
+	return true;
+}
+
+void HDRenderShadowReceiveMirrorEnd()
+{
+	ReceiveSaved& s = g_receive;
+
+	if (!g_device || !s.open || !s.mirror)
+		return;
+
+	/* The receive's own shader and blocks again. In a receive with one map
+	 * the second block's registers keep the mirror's values, which ReceivePS
+	 * does not read, and c108 keeps the plane, which only this variant
+	 * reads. */
+	g_device->SetPixelShader(s.two ? g_shadow_receive2_ps : g_shadow_receive_ps);
+	g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE_FIRST, s.blocks,
+		HD_SHADOW_RECEIVE_COUNT);
+
+	if (s.two)
+		g_device->SetPixelShaderConstantF(HD_SHADOW_RECEIVE2_FIRST,
+			s.blocks + HD_SHADOW_RECEIVE_COUNT * 4, HD_SHADOW_RECEIVE2_COUNT);
+
+	s.mirror = false;
+}
+
 void HDRenderShadowReceiveEnd()
 {
 	ReceiveSaved& s = g_receive;
 
 	if (!s.open || !g_device)
 		return;
+
+	HDRenderShadowReceiveMirrorEnd();
 
 	for (int i = 0; i < kReceiveRenderStateCount; i++)
 		g_device->SetRenderState(kReceiveRenderStates[i], s.rs[i]);

@@ -27,7 +27,8 @@
  * her own map, and a larger one round it for the second map, which the
  * other casters are drawn into; the GATE, which says whether the projected
  * shadow runs in a frame; and the RULES of who else casts, whose other face
- * says whose blob gives way, and of which maps an HD model takes.
+ * says whose blob gives way, and of which maps an HD model takes - with the
+ * reflected view a mirror's image takes them through.
  *
  * This header includes no engine header on purpose, like hd_softbody.h:
  * Preparation\Tools\Diagnose\ModernTest.cpp includes it and asserts on every
@@ -1508,17 +1509,18 @@ inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float
  *             HDObjectBegin decides for it
  *   mirrored  the item is a mirror's reflection
  *   blob      its object's shadow_size is not 0
- *   inside    its place lies inside the second box grown across the light
- *             by OTHERS_MARGIN (HDShadowBoxHolds)
+ *   inside    its place lies inside the second box grown by OTHERS_MARGIN on
+ *             all six sides (HDShadowBoxHolds)
  *
  * HDShadowBlobGivesWay says whether the item's blob is left out; the item
  * itself is then drawn into the second map exactly when it also has a blob
- * and stands inside the grown box (HDShadowOtherCasts). Inside it an item
- * with a blob therefore has always the one or the other, never both; beyond
- * it the item has neither, and no part of a caster up to OTHERS_MARGIN of
- * the box from its place reaches into the box, so the edge term across the
- * light and the fade along it (HDShadowFadeTerm) have faded its projected
- * shadow out already on every side. */
+ * and stands inside the grown box (HDShadowOtherCasts) - whether the picture
+ * draws it or not (HDShadowItemWalk). Inside it an item with a blob therefore
+ * has always the one or the other, never both; beyond it the item has
+ * neither, and no part of a caster up to OTHERS_MARGIN of the box from its
+ * place reaches into the box, so the edge term across the light and the fade
+ * along it (HDShadowFadeTerm) have faded its projected shadow out already on
+ * every side. */
 inline bool HDShadowBlobGivesWay(bool runs, bool herStep, bool target, bool hdModel,
 	bool mirrored)
 {
@@ -1529,6 +1531,41 @@ inline bool HDShadowOtherCasts(bool blob, bool runs, bool herStep, bool target, 
 	bool mirrored, bool inside)
 {
 	return blob && inside && HDShadowBlobGivesWay(runs, herStep, target, hdModel, mirrored);
+}
+
+/* What game\draw.cpp's item draw does with an item's node walk
+ * (DrawAnimatingItem), out of four facts of the item in the frame:
+ *
+ *   hdModel   it is drawn as an HD model (HDObjectBegin)
+ *   clipped   its bounds lie outside the view or its portal window - the
+ *             clip test answered 0, and the picture draws nothing of it
+ *   gaveWay   its blob gave way to the second map (HDShadowBlobGivesWay)
+ *   inside    its place lies inside the grown second box (HDShadowBoxHolds
+ *             with OTHERS_MARGIN)
+ *
+ *   DRAWN    an item that is not clipped: its nodes are walked and drawn,
+ *            HD or classic, as they always are
+ *   UNSEEN   an HD item clipped away whose blob gave way and whose place lies
+ *            inside: its nodes are walked for the second map alone - cast
+ *            into it and drawn in no pass - so its shadow, which reaches 440
+ *            to 900 units beyond its bounds along the light, lies on the
+ *            floor before the item itself comes into the view; the classic
+ *            engine draws the blob of such an item too, the blob's call stands
+ *            before the clip
+ *   NONE     every other clipped item: no node is walked */
+enum
+{
+	HD_SHADOW_WALK_NONE = 0,
+	HD_SHADOW_WALK_DRAWN,
+	HD_SHADOW_WALK_UNSEEN
+};
+
+inline int HDShadowItemWalk(bool hdModel, bool clipped, bool gaveWay, bool inside)
+{
+	if (!clipped)
+		return HD_SHADOW_WALK_DRAWN;
+
+	return hdModel && gaveWay && inside ? HD_SHADOW_WALK_UNSEEN : HD_SHADOW_WALK_NONE;
 }
 
 /* ------------------------------------------------- who takes the shadow -- */
@@ -1543,19 +1580,21 @@ inline bool HDShadowOtherCasts(bool blob, bool runs, bool herStep, bool target, 
  *
  *   LARA    her pieces, in third and in first person: the second map only -
  *           her own map would lay her outline on herself
- *   BLOB    an item whose object has a classic blob (shadow_size, read
- *           where the mirror's loop has not zeroed it): her map only - the
- *           second map is the one it is cast into
+ *   BLOB    an item whose object has a classic blob (its shadow_size; for a
+ *           reflection the value the mirror's loop hands over before it zeroes
+ *           the field for the draw): her map only - the second map is the one
+ *           it is cast into
  *   OTHER   every other HD item - a door, a crate, a pickup: both maps
  *   NONE    what never takes a shadow: the inventory ring and the pickup
  *           display
  *
  * A mirror's reflection takes by the same class, through its mirror's
- * blocks: `mirrored` says the entry is one, `mirrorBlocks` that its mirror's
- * blocks exist in this frame; a reflection without them takes nothing. A
- * map not drawn in this frame is taken by no one. The answer is the maps the
- * entry takes, HD_SHADOW_TAKES_HERS and HD_SHADOW_TAKES_OTHERS or'd; 0 is
- * an entry that is not drawn again. The block of a map an entry does not
+ * blocks (HDShadowMirrorView): `mirrored` says the entry is one,
+ * `mirrorBlocks` that its mirror's blocks exist in this frame - its mirror is
+ * known and seen from its room's side; a reflection without them takes
+ * nothing. A map not drawn in this frame is taken by no one. The answer is
+ * the maps the entry takes, HD_SHADOW_TAKES_HERS and HD_SHADOW_TAKES_OTHERS
+ * or'd; 0 is an entry that is not drawn again. The block of a map an entry does not
  * take is silenced (HDShadowReceiveWithoutHer, HDShadowReceiveWithoutOthers),
  * so one shader serves every class and never reads a map it is not to read. */
 enum
@@ -1609,6 +1648,82 @@ inline bool HDShadowSphereTouches(const float* centre, float radius, const float
 
 	return hd_shadow_finite(radius) && sum <= radius * radius;
 }
+
+/* ------------------------------------------------- the mirror's image -- */
+
+/* A mirror (hd_render.h, HDMirror) shows the world reflected in its plane:
+ * behind the glass stands a copy of the room, and the reflections of Lara
+ * and the items are drawn into it (game\mirror.cpp). The shadows in that
+ * image are the shadows in front of the glass, reflected - the same two maps,
+ * looked up at the reflected place.
+ *
+ * For the plane of constant `axis` (0 x, 2 z) at `plane`, a point p' of the
+ * image is the reflection of p = S p' + c, S the diagonal that negates the
+ * axis and c the vector with 2 * plane on it. A view-space point v = R p' + t
+ * of the image therefore stands for the world point S R^T (v - t) + c, and
+ * that is the world point a world-to-view of
+ *
+ *     R' = R S,   t' = t - R S c
+ *
+ * gives back for v (HDShadowViewToWorld): every block of the receive made
+ * with R', t' in place of the frame's R, t - her rows, the height plane, the
+ * direction towards the light, the second map's rows - is the block for a
+ * pixel of the image. It holds for both halves of the image alike: the
+ * copy's art, drawn through the real view at p', and a reflection, whose
+ * node matrices the mirror's view puts at the view position of p' for a
+ * point p of its body. Applied twice it gives R, t back.
+ *
+ * `R` and `t` are the frame's world-to-view, view = R p + t; worked in double
+ * for the reason HDShadowViewToMap is. */
+inline void HDShadowMirrorView(const float* R, const float* t, int axis, float plane,
+	float* outR, float* outT)
+{
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 3; j++)
+			outR[i * 3 + j] = j == axis ? -R[i * 3 + j] : R[i * 3 + j];
+
+		outT[i] = (float)((double)t[i] - 2.0 * (double)plane * (double)outR[i * 3 + axis]);
+	}
+}
+
+/* The glass's plane as the pixel shader's clip of the copy, in view space: a
+ * view-space point v with dot(float4(v, 1), out) >= 0 lies on the copy's side
+ * of the plane, `side` -1 for a copy at smaller coordinates than the plane and
+ * +1 for one at larger (HDMirror's own). The art of a mirror's room group
+ * behind the plane is the copy; in front of it stands the room. */
+inline void HDShadowMirrorPlane(const float* R, const float* t, int axis, float plane,
+	int side, float* out)
+{
+	double d = -(double)plane;
+
+	for (int i = 0; i < 3; i++)
+	{
+		out[i] = (float)side * R[i * 3 + axis];
+		d -= (double)R[i * 3 + axis] * (double)t[i];
+	}
+
+	out[3] = (float)((double)side * d);
+}
+
+/* Whether the camera sees a mirror from its room's side: the camera's world
+ * position, -R^T t, on the side of the plane away from the copy. A mirror
+ * seen from behind shows no image (game\mirror.cpp, Draw_Mirror_Items, asks
+ * the same of the classic view). */
+inline bool HDShadowMirrorFaces(const float* R, const float* t, int axis, float plane, int side)
+{
+	double camera = 0.0;
+
+	for (int i = 0; i < 3; i++)
+		camera -= (double)R[i * 3 + axis] * (double)t[i];
+
+	return (camera - (double)plane) * (double)side < 0.0;
+}
+
+/* The receive pixel register of the mirror's variant of the rooms' receive
+ * (hd_shadow_receive.hlsl, MirrorReceivePS): the plane above, right after the
+ * second map's block. */
+#define HD_SHADOW_RECEIVE_MIRROR	(HD_SHADOW_RECEIVE2_FIRST + HD_SHADOW_RECEIVE2_COUNT)
 
 /* ------------------------------------------------------------ the frame -- */
 

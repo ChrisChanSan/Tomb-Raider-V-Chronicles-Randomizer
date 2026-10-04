@@ -875,9 +875,17 @@ void DrawAnimatingItem(ITEM_INFO* item)
 	if (gLogEnabled)
 		aClipReportObj = obj->intelligent ? item->object_number : -1;
 
-	if (clip)
+	/* An HD item clipped away is walked for the projected shadow's second map
+	 * alone where its blob gave way to that map and its place lies inside the
+	 * second box (specific\hd\hd_object.h, HDObjectCastUnseen): the same walk
+	 * without the light and without the root fix with its counter, which
+	 * belong to a drawn item. Every other clipped item walks nothing. */
+	const bool unseen = hd && !clip && HDObjectCastUnseen();
+
+	if (clip || unseen)
 	{
-		CalculateObjectLighting(item, frm[0]);
+		if (clip)
+			CalculateObjectLighting(item, frm[0]);
 
 		if (!item->data)
 			data = no_rotation;
@@ -893,10 +901,11 @@ void DrawAnimatingItem(ITEM_INFO* item)
 		 * GetFramesAt). False on every other frame - a frame that carries the
 		 * tick, an accepted blend, the whole of fps_mode 0 - and then `root` is
 		 * not written and the two branches below take the frame's own root.
-		 * Asked inside `clip` because an item that is not drawn has no root to
-		 * fix and must not be counted as one. */
+		 * Asked only for a drawn item (`clip`) because an item that is not
+		 * drawn has no root to fix and must not be counted as one: an item
+		 * walked for the second map alone takes the frame's own root. */
 		long root[3];
-		const bool rootFix = InterpRootNow(item, frm, frac, blend, root);
+		const bool rootFix = clip && InterpRootNow(item, frm, frac, blend, root);
 
 		if (frac)
 		{
@@ -1031,8 +1040,9 @@ void DrawAnimatingItem(ITEM_INFO* item)
 
 	/* The item's node walk is over. HDObjectEnd works out the
 	 * light out of the engine's own light lists and puts the item on the
-	 * frame's list; with clip == 0 above, no node was recorded and it drops
-	 * the item again. Outside `if (clip)` so that the bracket HDObjectBegin
+	 * frame's list - an item walked for the second map alone without a
+	 * light; with no walk above, no node was recorded and it drops the item
+	 * again. Outside the walk's condition so that the bracket HDObjectBegin
 	 * opened is closed on every road out of this function. */
 	if (hd)
 		HDObjectEnd();

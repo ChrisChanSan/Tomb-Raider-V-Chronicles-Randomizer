@@ -280,9 +280,9 @@ void HDFrameDrawGlow();
 
 /* The projected shadow's passes, as HDFrameDraw runs them: her map's cast
  * pass, the second map's cast pass and then the receive pass, after the room
- * loops and before the models' solid passes, in frames whose Lara main draw
- * decided it runs (hd_laradraw.h, HDShadowFrameDecide). Counted since the
- * last call with `clear` set:
+ * loops and before the models' solid passes, and the models' pass after
+ * those, in frames whose Lara main draw decided it runs (hd_laradraw.h,
+ * HDShadowFrameDecide). Counted since the last call with `clear` set:
  *
  *   frames   frames in which the projected shadow ran
  *   cast     of those, frames in which her map was drawn
@@ -301,7 +301,14 @@ void HDFrameDrawGlow();
  *   othersMs     processor time of the second map's cast pass,
  *            milliseconds, all frames together
  *   othersRooms  room groups drawn again by the receive pass in frames whose
- *            second map was read, all those frames together */
+ *            second map was read, all those frames together
+ *   models   entries of the frame list drawn again by the models' pass, all
+ *            frames together
+ *   modelCalls  draw calls of the models' pass, all frames together
+ *   castOnly items cast into the second map that the picture clipped away
+ *            (drawn in no pass), all frames together
+ *   mirror   frames in which a mirror's image took the maps through its
+ *            mirror's blocks - a mirror's room group or a reflection */
 struct HDShadowCastStats
 {
 	int frames;
@@ -316,6 +323,10 @@ struct HDShadowCastStats
 	int othersModels;
 	double othersMs;
 	int othersRooms;
+	int models;
+	int modelCalls;
+	int castOnly;
+	int mirror;
 };
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);

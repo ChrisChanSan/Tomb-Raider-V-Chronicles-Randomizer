@@ -84,6 +84,12 @@ rem with the same .hlsl's MD5 as the other two.
 "%FXC%" /nologo /T ps_3_0 /E ModelReceivePS /O3 /Vn kHDShadowReceiveModelPS /Fh "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The mirror's variant: the same file's fourth entry point, the two-map body
+rem on the copy behind a mirror's glass alone (hd_shadow_receive.hlsl,
+rem MirrorReceivePS). Stamped with the same .hlsl's MD5 as the other three.
+"%FXC%" /nologo /T ps_3_0 /E MirrorReceivePS /O3 /Vn kHDShadowReceiveMirrorPS /Fh "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc" "%SHADERDIR%\hd_shadow_receive.hlsl"
+if errorlevel 1 exit /b 1
+
 call :stamp hd_room hd_room_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
@@ -106,8 +112,10 @@ call :stamp hd_shadow_receive hd_shadow_receive2_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_shadow_receive hd_shadow_receive_model_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_shadow_receive hd_shadow_receive_mirror_ps.inc
+if errorlevel 1 exit /b 1
 
-for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
+for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 exit /b 0
 
 :stamp

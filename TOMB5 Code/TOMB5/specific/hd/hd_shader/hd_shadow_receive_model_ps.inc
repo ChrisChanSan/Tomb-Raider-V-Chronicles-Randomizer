@@ -1014,4 +1014,4 @@ const BYTE kHDShadowReceiveModelPS[] =
       8, 128,   1,   0, 170, 160, 
     255, 255,   0,   0
 };
-// bshader-stamp d885f51ada05cb925ebc31f24e9a2230
+// bshader-stamp 3ec54cd5d70e3171db352285e0070050

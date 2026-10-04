@@ -16095,6 +16095,359 @@ static void shadow_takes()
 		"unit short of it", 0, 0);
 }
 
+/* One view-space point through the receive's blocks, worked in double out
+ * of the float registers as the shader works it in its own floats: her u, v,
+ * depth and the height term before its saturate, her facing for a view-space
+ * normal, and the second map's u, v and depth. */
+struct ShMirrorTake
+{
+	double u, v, d, height, facing;
+	double ou, ov, od;
+};
+
+static double sh_row(const float* row, const double* v)
+{
+	return row[0] * v[0] + row[1] * v[1] + row[2] * v[2] + row[3];
+}
+
+static ShMirrorTake sh_mirror_take(const float* hers, const float* others, const double* v,
+	const double* n)
+{
+	ShMirrorTake out;
+
+	out.u = sh_row(hers + 0, v);
+	out.v = sh_row(hers + 4, v);
+	out.d = sh_row(hers + 8, v);
+	out.height = sh_row(hers + 12, v);
+	out.facing = (n[0] * hers[16] + n[1] * hers[17] + n[2] * hers[18]) * hers[19];
+	out.ou = sh_row(others + 0, v);
+	out.ov = sh_row(others + 4, v);
+	out.od = sh_row(others + 8, v);
+	return out;
+}
+
+static void sh_view_of(const float* R, const float* t, const double* p, double* v)
+{
+	for (int i = 0; i < 3; i++)
+		v[i] = R[i * 3 + 0] * p[0] + R[i * 3 + 1] * p[1] + R[i * 3 + 2] * p[2] + t[i];
+}
+
+static void sh_turn_of(const float* R, const double* n, double* out)
+{
+	for (int i = 0; i < 3; i++)
+		out[i] = R[i * 3 + 0] * n[0] + R[i * 3 + 1] * n[1] + R[i * 3 + 2] * n[2];
+}
+
+/* The largest difference between two takes, u, v and depth of both maps in
+ * texels of their own map (her depth in units of her box, the second's in
+ * its own), the height term and the facing as they are. */
+static double sh_take_gap(const ShMirrorTake& a, const ShMirrorTake& b, double* facing)
+{
+	double gap = 0.0;
+	const double terms[8][2] =
+	{
+		{ a.u, b.u }, { a.v, b.v }, { a.d, b.d }, { a.height, b.height },
+		{ a.ou, b.ou }, { a.ov, b.ov }, { a.od, b.od }, { 0.0, 0.0 }
+	};
+	const double scale[7] =
+	{
+		(double)HD_SHADOW_MAP, (double)HD_SHADOW_MAP, (double)HD_SHADOW_DEPTH, 1.0,
+		(double)HD_SHADOW_OTHERS_MAP, (double)HD_SHADOW_OTHERS_MAP, (double)HD_SHADOW_OTHERS_DEPTH
+	};
+
+	for (int i = 0; i < 7; i++)
+	{
+		const double g = fabs(terms[i][0] - terms[i][1]) * scale[i];
+
+		gap = g > gap ? g : gap;
+	}
+
+	*facing = fabs(a.facing - b.facing);
+	return gap;
+}
+
+/* The mirror's image takes the maps through the reflected view: a point of
+ * the copy through the mirror's blocks gives what its reflection gives
+ * through the frame's - her u, v and depth, the height term and the facing
+ * of the reflected face, and the second map's u, v and depth - for both
+ * axes, both sides, cameras far from the origin and points up to six sectors
+ * from the glass; reflecting twice gives the view back; and the glass's
+ * plane keeps the copy's side and the camera's side test says which side
+ * the camera is on. */
+static void shadow_mirror_view()
+{
+	float nodes[15 * 3];
+	float dir[3];
+	int worst = 0, facings = 0, twice = 0, planes = 0, faces = 0, cases = 0;
+	double worstGap = 0.0, worstFacing = 0.0;
+
+	HDShadowFallback(dir);
+
+	for (int axis = 0; axis <= 2; axis += 2)
+		for (int side = -1; side <= 1; side += 2)
+			for (int cam = 0; cam < 6; cam++)
+			{
+				const float plane = cam & 1 ? 33792.0f : -30720.0f + 1024.0f * (float)cam;
+				const int k = 2 - axis;
+				float at[3] = { 0.0f, -1500.0f - 200.0f * (float)cam, 0.0f };
+				float figure[3] = { 0.0f, -700.0f, 0.0f };
+
+				// Camera and figure on the room's side of the glass.
+				at[axis] = plane - (float)side * (2500.0f + 300.0f * (float)cam);
+				at[k] = 70000.0f - 9000.0f * (float)cam;
+				figure[axis] = plane - (float)side * 900.0f;
+				figure[k] = at[k] + 1800.0f;
+				sh_figure(figure[0], figure[1], figure[2], nodes);
+
+				HDShadowBox her, others;
+				float R[9], t[3], Rm[9], tm[3], R2[9], t2[3];
+				float hers[HD_SHADOW_RECEIVE_COUNT * 4], oth[HD_SHADOW_RECEIVE2_COUNT * 4];
+				float mh[HD_SHADOW_RECEIVE_COUNT * 4], mo[HD_SHADOW_RECEIVE2_COUNT * 4];
+				float glass[4];
+
+				HDShadowBoxMake(&her, dir, nodes, 15);
+				HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+					HD_SHADOW_OTHERS_MAP);
+				sh_camera(37.0f * (float)cam - 80.0f, 10.0f + 6.0f * (float)cam, at, R, t);
+				HDShadowReceiveConstants(&her, R, t, 0.45f, hers);
+				HDShadowReceiveOthersConstants(&others, R, t, oth);
+				HDShadowMirrorView(R, t, axis, plane, Rm, tm);
+				HDShadowReceiveConstants(&her, Rm, tm, 0.45f, mh);
+				HDShadowReceiveOthersConstants(&others, Rm, tm, mo);
+				HDShadowMirrorPlane(R, t, axis, plane, side, glass);
+
+				// Twice is the view itself.
+				HDShadowMirrorView(Rm, tm, axis, plane, R2, t2);
+
+				for (int i = 0; i < 9; i++)
+					twice += R2[i] != R[i] ? 1 : 0;
+
+				for (int i = 0; i < 3; i++)
+					twice += fabs((double)t2[i] - t[i]) > 0.02 ? 1 : 0;
+
+				faces += HDShadowMirrorFaces(R, t, axis, plane, side) ? 0 : 1;
+
+				for (int s = 0; s < 64; s++)
+				{
+					// A world point in front of the glass and a face's normal there.
+					double p[3], n[3] =
+					{
+						0.3 * (double)((s % 5) - 2), -1.0 + 0.4 * (double)(s % 3),
+						0.25 * (double)((s % 7) - 3)
+					};
+
+					p[axis] = plane - (double)side * (5.0 + 97.0 * (double)s);
+					p[1] = -40.0 * (double)(s % 23);
+					p[k] = figure[k] - 3000.0 + 101.0 * (double)s;
+
+					const double nl = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+					for (int i = 0; i < 3; i++)
+						n[i] /= nl;
+
+					// Its image behind the glass, and the image of the normal.
+					double q[3] = { p[0], p[1], p[2] }, m[3] = { n[0], n[1], n[2] };
+
+					q[axis] = 2.0 * plane - p[axis];
+					m[axis] = -n[axis];
+
+					double v[3], vq[3], vn[3], vm[3];
+
+					sh_view_of(R, t, p, v);
+					sh_view_of(R, t, q, vq);
+					sh_turn_of(R, n, vn);
+					sh_turn_of(R, m, vm);
+
+					const ShMirrorTake real = sh_mirror_take(hers, oth, v, vn);
+					const ShMirrorTake image = sh_mirror_take(mh, mo, vq, vm);
+					double facing = 0.0;
+					const double gap = sh_take_gap(real, image, &facing);
+
+					worstGap = gap > worstGap ? gap : worstGap;
+					worstFacing = facing > worstFacing ? facing : worstFacing;
+					worst += gap > 0.02 ? 1 : 0;
+					facings += facing > 1e-4 ? 1 : 0;
+
+					// The plane: the image behind the glass, the point in front.
+					planes += sh_row(glass, vq) > 0.0 ? 0 : 1;
+					planes += sh_row(glass, v) < 0.0 ? 0 : 1;
+					cases++;
+				}
+			}
+
+	ok(worst == 0, "shadow mirror: a point of the copy through the mirror's blocks gives its "
+		"reflection's u, v, depth and height through the frame's, both maps, to 0.02 of a texel",
+		worst, 0);
+	ok(facings == 0, "shadow mirror: the reflected face takes the facing of the face it reflects",
+		facings, 0);
+	ok(twice == 0, "shadow mirror: the reflected view reflected again is the frame's view", twice,
+		0);
+	ok(planes == 0 && cases == 1536, "shadow mirror: the glass's plane keeps the copy and leaves "
+		"the room in front", planes, 0);
+	// A camera at x 40000, the copy at smaller x than the glass at 33792:
+	// behind the glass, seen from the room's side. At x 30000 it is behind.
+	const float identity[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	const float front[3] = { -40000.0f, 0.0f, 0.0f }, back[3] = { -30000.0f, 0.0f, 0.0f };
+
+	ok(faces == 0 && HDShadowMirrorFaces(identity, front, 0, 33792.0f, -1) &&
+		!HDShadowMirrorFaces(identity, back, 0, 33792.0f, -1),
+		"shadow mirror: a camera on the room's side faces the glass, one behind it does not",
+		faces, 0);
+	printf("    shadow mirror: largest gap %.5f texel, facing %.2e over %d points\n", worstGap,
+		worstFacing, cases);
+}
+
+/* The reflected view against the engine's own reflection (game\mirror_math.h):
+ * a body point drawn through the camera matrix MirrorView reflects lands at a
+ * view position whose take through the mirror's blocks is the point's own
+ * take through the frame's - the reflections of Lara and the items take the
+ * shadows of what they reflect - and the first of MirrorClipPlanes, the
+ * copy's side of the glass, is HDShadowMirrorPlane up to its scale. */
+static void shadow_mirror_engine()
+{
+	float nodes[15 * 3];
+	float dir[3];
+	int worst = 0, glassOff = 0, cases = 0;
+
+	HDShadowFallback(dir);
+
+	for (int axis = 0; axis <= 2; axis += 2)
+		for (int c = 0; c < 4; c++)
+		{
+			const long plane = axis == 0 ? 33792 : 30720;
+			const int side = c & 1 ? 1 : -1;
+			const int k = 2 - axis;
+			float at[3] = { 0.0f, -1600.0f, 0.0f };
+			float figure[3] = { 0.0f, -700.0f, 0.0f };
+
+			at[axis] = (float)plane - (float)side * (3000.0f + 500.0f * (float)c);
+			at[k] = 74000.0f;
+			figure[axis] = (float)plane - (float)side * 1100.0f;
+			figure[k] = 75500.0f;
+			sh_figure(figure[0], figure[1], figure[2], nodes);
+
+			HDShadowBox her, others;
+			float R[9], t[3], Rm[9], tm[3];
+			float hers[HD_SHADOW_RECEIVE_COUNT * 4], oth[HD_SHADOW_RECEIVE2_COUNT * 4];
+			float mh[HD_SHADOW_RECEIVE_COUNT * 4], mo[HD_SHADOW_RECEIVE2_COUNT * 4];
+
+			HDShadowBoxMake(&her, dir, nodes, 15);
+			HDShadowBoxAround(&others, &her, HD_SHADOW_OTHERS_BOX, HD_SHADOW_OTHERS_DEPTH,
+				HD_SHADOW_OTHERS_MAP);
+			sh_camera(50.0f * (float)c - 60.0f, 20.0f, at, R, t);
+			HDShadowReceiveConstants(&her, R, t, 0.45f, hers);
+			HDShadowReceiveOthersConstants(&others, R, t, oth);
+			HDShadowMirrorView(R, t, axis, (float)plane, Rm, tm);
+			HDShadowReceiveConstants(&her, Rm, tm, 0.45f, mh);
+			HDShadowReceiveOthersConstants(&others, Rm, tm, mo);
+
+			// The engine's camera matrix: R's rows with the camera's place.
+			float cam[12], mirrored[12];
+
+			for (int r = 0; r < 3; r++)
+			{
+				for (int j = 0; j < 3; j++)
+					cam[r * 4 + j] = R[r * 3 + j];
+
+				cam[r * 4 + 3] = at[r];
+			}
+
+			memcpy(mirrored, cam, sizeof(cam));
+			MirrorView(mirrored, axis, (float)plane, true);
+
+			for (int s = 0; s < 48; s++)
+			{
+				const double p[3] =
+				{
+					figure[0] + 37.0 * (double)((s % 9) - 4), -60.0 * (double)(s % 17),
+					figure[2] + 41.0 * (double)((s % 11) - 5)
+				};
+				const double n[3] = { 0.0, -1.0, 0.0 };
+				double v[3], vr[3], vn[3], vrn[3];
+
+				// Through the real camera, and through the reflected one.
+				for (int r = 0; r < 3; r++)
+				{
+					v[r] = 0.0;
+					vr[r] = 0.0;
+					vn[r] = 0.0;
+					vrn[r] = 0.0;
+
+					for (int j = 0; j < 3; j++)
+					{
+						v[r] += cam[r * 4 + j] * (p[j] - cam[j * 4 + 3]);
+						vr[r] += mirrored[r * 4 + j] * (p[j] - mirrored[j * 4 + 3]);
+						vn[r] += cam[r * 4 + j] * n[j];
+						vrn[r] += mirrored[r * 4 + j] * n[j];
+					}
+				}
+
+				const ShMirrorTake real = sh_mirror_take(hers, oth, v, vn);
+				const ShMirrorTake drawn = sh_mirror_take(mh, mo, vr, vrn);
+				double facing = 0.0;
+
+				worst += sh_take_gap(real, drawn, &facing) > 0.02 || facing > 1e-4 ? 1 : 0;
+				cases++;
+			}
+
+			// The engine's clip plane of the copy's side against the glass's.
+			const long mins[3] = { plane - 4000, -3000, 70000 };
+			const long maxs[3] = { plane + 4000, 0, 80000 };
+			float clip[12], glass[4];
+			double scale = 0.0, off = 0.0;
+
+			MirrorClipPlanes(mirrored, axis, plane, side, mins, maxs, clip);
+			HDShadowMirrorPlane(R, t, axis, (float)plane, side, glass);
+
+			for (int i = 0; i < 3; i++)
+				scale += (double)clip[i] * glass[i];
+
+			for (int i = 0; i < 4; i++)
+				off = fmax(off, fabs((double)clip[i] - scale * glass[i]) /
+					(i == 3 ? 1.0e4 : 1.0));
+
+			glassOff += scale > 0.999 && scale < 1.001 && off < 1e-4 ? 0 : 1;
+		}
+
+	ok(worst == 0 && cases == 384,
+		"shadow mirror engine: a body point drawn through MirrorView's reflected camera takes, "
+		"through the mirror's blocks, what it takes through the frame's", worst, 0);
+	ok(glassOff == 0, "shadow mirror engine: MirrorClipPlanes' copy side is the glass's plane",
+		glassOff, 0);
+}
+
+/* Who is walked for the second map unseen: the rule over all sixteen
+ * combinations of its four facts - a drawn item walks as it always walks,
+ * a clipped one only when it is HD, its blob gave way and its place lies
+ * inside. */
+static void shadow_walk()
+{
+	int wrong = 0, unseen = 0;
+
+	for (int m = 0; m < 16; m++)
+	{
+		const bool hd = (m & 1) != 0, clipped = (m & 2) != 0, gave = (m & 4) != 0,
+			inside = (m & 8) != 0;
+		const int walk = HDShadowItemWalk(hd, clipped, gave, inside);
+		const int want = !clipped ? HD_SHADOW_WALK_DRAWN
+			: hd && gave && inside ? HD_SHADOW_WALK_UNSEEN : HD_SHADOW_WALK_NONE;
+
+		wrong += walk != want ? 1 : 0;
+		unseen += walk == HD_SHADOW_WALK_UNSEEN ? 1 : 0;
+	}
+
+	ok(wrong == 0 && unseen == 1,
+		"shadow walk: a drawn item walks as always, a clipped one unseen only when HD, given way "
+		"and inside, and none else", wrong, 0);
+	ok(HDShadowItemWalk(false, false, false, false) == HD_SHADOW_WALK_DRAWN &&
+		HDShadowItemWalk(true, true, true, false) == HD_SHADOW_WALK_NONE &&
+		HDShadowItemWalk(false, true, true, true) == HD_SHADOW_WALK_NONE &&
+		HDShadowItemWalk(true, true, false, true) == HD_SHADOW_WALK_NONE &&
+		HDShadowItemWalk(true, true, true, true) == HD_SHADOW_WALK_UNSEEN,
+		"shadow walk: a classic item, one outside the box and one whose blob stays walk nothing "
+		"clipped", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -16200,6 +16553,9 @@ int main()
 	shadow_others_fade();
 	shadow_others_holds();
 	shadow_takes();
+	shadow_mirror_view();
+	shadow_mirror_engine();
+	shadow_walk();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

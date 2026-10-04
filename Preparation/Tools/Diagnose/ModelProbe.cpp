@@ -172,7 +172,34 @@
  *                         light (negative: with it), so the creatures stand
  *                         that much nearer its far (near) side - a creature
  *                         crossing the box's side along the light, in view.
- *     -shadowempty        the same with nothing cast into the map: _empty,
+ *     -shadowunseen       the -shadowcreature models cast into the second
+ *                         map and drawn in no pass - neither in the picture
+ *                         nor in the models' pass - as an item the picture
+ *                         clipped away (hd_object.h, HDObjectCastUnseen):
+ *                         its shadow on the floor, no body. _unseen.
+ *     -shadowmirror       the mirror of the -shadowroom group (RICH2 rooms
+ *                         134 and 135): the classic rooms' boxes handed in
+ *                         before the level build, so the build finds it;
+ *                         her reflection and the creatures' drawn into the
+ *                         copy behind the glass, clipped to it, as
+ *                         game\mirror.cpp draws them. With -shadowreceive the
+ *                         copy takes the maps through the mirror's blocks
+ *                         (hd_shadow.h, HDShadowMirrorView; the receive's
+ *                         MirrorReceivePS) before the group's ordinary
+ *                         receive, and the reflections in the models' pass,
+ *                         as hd_level.cpp and hd_object.cpp draw them.
+ *                         _mirror.
+ *     -shadowmirrorview   the same, the camera reflected in the glass: it sees
+ *                         the room where the picture without it sees the copy,
+ *                         mirror-inverted, so the two pictures' factors can
+ *                         be compared pixel for pixel. _mview.
+ *     -shadownomirror     the same with the mirror's blocks left out: the copy
+ *                         takes the ordinary receive and the reflections
+ *                         nothing. _nomirror.
+ *     -shadowmirrormask   the receive with the mirror, and in place of the
+ *                         picture the copy's pixels - those the mirror's
+ *                         draw left - white on black, counted. _copymask.
+ *     -shadowempty       the same with nothing cast into the map: _empty,
  *                         which must be the picture without the passes, byte
  *                         for byte.
  *     -shadownoguard      the same with the stencil guard switched off inside
@@ -6828,6 +6855,17 @@ struct LaraOptions
 	/* -shadowalong: the second box moved by this many units against the
 	 * light, so the creatures stand that much nearer its far side. */
 	float shadowAlong;
+	/* -shadowunseen: the creatures cast into the second map and drawn in no
+	 * pass, as an item the picture clipped away. -shadowmirror: the room's
+	 * mirror - her reflection and the creatures' drawn into the copy, and with
+	 * -shadowreceive the copy and the reflections taking the maps through the
+	 * mirror's blocks; -shadowmirrorview: the camera reflected in the glass;
+	 * -shadownomirror: the mirror's blocks left out. */
+	bool shadowUnseen;
+	bool shadowMirror;
+	bool shadowMirrorView;
+	bool shadowNoMirror;
+	bool shadowMirrorMask;
 	bool check;
 	bool noDraw;
 	// The ring's own presentation - see -invrot.
@@ -8067,6 +8105,79 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("mirror  : the view is flipped in x - determinant negative\n");
 	}
 
+	/* -shadowmirror: the mirror of the -shadowroom group, as the level build
+	 * found it (hd_render.h, HDMirror), in this picture's world - the room's
+	 * art is moved by -(x, z) of her stand point and the art is room local,
+	 * so the plane and the copy's ends move by the room's origin and her
+	 * stand point. `Refl` is the world's reflection in the glass, row vector
+	 * on the left. -shadowmirrorview puts it in front of the view: the
+	 * camera reflected in the glass, which sees the room where the picture
+	 * without it sees the copy. */
+	HDMirror mirror;
+	bool mirrorOn = false;
+	float mirrorPlane = 0.0f, mirrorEnds[2] = { 0.0f, 0.0f };
+	float refl[16];
+
+	memset(&mirror, 0, sizeof(mirror));
+	MatIdentity(refl);
+
+	if (o.shadowMirror && o.shadowRoom >= 0)
+	{
+		for (int m = 0; m < HDRenderMirrorCount(); m++)
+		{
+			HDMirror one;
+
+			if (HDRenderMirrorInfo(m, &one) && one.group == o.shadowRoom)
+			{
+				mirror = one;
+				mirrorOn = true;
+			}
+		}
+
+		if (!mirrorOn || o.shadowRoom >= (int)level.rooms().size())
+		{
+			mirrorOn = false;
+			printf("shadowmirror: room %d has no mirror here (%d in the level) - no mirror in "
+				"the picture\n", o.shadowRoom, HDRenderMirrorCount());
+		}
+		else
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)o.shadowRoom];
+			const int k = 2 - mirror.axis;
+			const float origin[3] = { (float)rm.originX, 0.0f, (float)rm.originZ };
+			const float stand[3] = { o.shadowAt[0], 0.0f, o.shadowAt[1] };
+
+			mirrorPlane = mirror.plane - origin[mirror.axis] - stand[mirror.axis];
+			mirrorEnds[0] = mirror.mins[k] - origin[k] - stand[k];
+			mirrorEnds[1] = mirror.maxs[k] - origin[k] - stand[k];
+			refl[mirror.axis * 5] = -1.0f;
+			refl[12 + mirror.axis] = 2.0f * mirrorPlane;
+
+			printf("shadowmirror: room %d, the glass in %c = %.0f (%.1f in this picture), the "
+				"copy at %s %c, its ends along the glass %.0f..%.0f here; %d pane, %d behind, "
+				"%d reflected%s\n", o.shadowRoom, mirror.axis == 0 ? 'x' : 'z', mirror.plane,
+				mirrorPlane, mirror.side < 0 ? "smaller" : "larger", mirror.axis == 0 ? 'x' : 'z',
+				mirrorEnds[0], mirrorEnds[1], mirror.pane, mirror.behind, mirror.mirrored,
+				o.shadowNoMirror ? " - its blocks left out (-shadownomirror)" : "");
+
+			if (o.shadowMirrorView)
+			{
+				float mirrored[16];
+
+				MatMul(refl, view, mirrored);
+				memcpy(view, mirrored, sizeof(view));
+				printf("shadowmirror: the camera reflected in the glass (-shadowmirrorview)\n");
+			}
+
+			/* Both sides of every room face: the reflected camera turns the
+			 * winding round, and a culled face would then be the other one.
+			 * Every mirror picture draws the same way, so the two views are
+			 * pictures of the same faces. */
+			HDRenderCullOpaque(0);
+			printf("shadowmirror: the room's faces drawn double sided in every mirror picture\n");
+		}
+	}
+
 	D3DMATRIX projection;
 	double a = 0, b = 0, boo = 0;
 
@@ -8812,6 +8923,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		std::vector<float> matrices;
 		float place[3];
 		bool blob;	// -shadowcreature: cast into the second map; -shadowitem: not
+		bool unseen;	// -shadowunseen: a creature cast and drawn in no pass
 	};
 	std::vector<Placed> placed;
 
@@ -8877,15 +8989,95 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		one.place[1] = py;
 		one.place[2] = pz;
 		one.blob = ask->blob;
+		one.unseen = ask->blob && o.shadowUnseen;
 		BuildNodeMatrices(tree, itemView, 0, &one.matrices[0], pose.empty() ? 0 : &pose[0]);
 		placed.push_back(one);
 
 		printf("%s: %s (slot %d, %d nodes%s) at (%.0f, %.0f, %.0f) of her space, turned "
 			"%.0f, frame offset (%.0f, %.0f, %.0f), HD model %s\n",
-			ask->blob ? "creature" : "item (no blob)",
+			one.unseen ? "creature (unseen: cast, drawn in no pass)"
+			: ask->blob ? "creature" : "item (no blob)",
 			HDSlotName(tree.slot) ? HDSlotName(tree.slot) : "?", tree.slot, tree.nodes,
 			pose.empty() ? ", bind pose" : "", px, py, pz, ask->yaw, offset[0], offset[1],
 			offset[2], HDModelHas(tree.slot) ? "loaded" : "MISSING");
+	}
+
+	/* -shadowmirror: her reflection and the creatures', as game\mirror.cpp
+	 * draws them - every node matrix through the world's reflection in the
+	 * glass (node * view^-1 * Refl * view), which lands a reflected body
+	 * point at the view position of its image in the copy - and the three
+	 * planes the reflection is clipped with in view space, as
+	 * MirrorClipPlanes gives them: the copy's side of the glass and the
+	 * copy's two ends along it. */
+	float reflMatrices[HD_LARA_NODES * 16];
+	float reflHair[HD_LARA_HAIR_NODES * 16];
+	std::vector<std::vector<float> > reflPlaced;
+	float mirrorClip[12];
+	float viewR[9], viewT[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < 3; j++)
+			viewR[i * 3 + j] = view[j * 4 + i];
+
+		viewT[i] = view[12 + i];
+	}
+
+	if (mirrorOn)
+	{
+		// view^-1: the transposed rotation and the translation taken back.
+		float inv[16], a[16], q[16];
+
+		MatIdentity(inv);
+
+		for (int i = 0; i < 3; i++)
+			for (int j = 0; j < 3; j++)
+				inv[i * 4 + j] = view[j * 4 + i];
+
+		for (int j = 0; j < 3; j++)
+			inv[12 + j] = -(view[12] * inv[0 * 4 + j] + view[13] * inv[1 * 4 + j] +
+				view[14] * inv[2 * 4 + j]);
+
+		MatMul(inv, refl, a);
+		MatMul(a, view, q);
+
+		for (int n = 0; n < HD_LARA_NODES; n++)
+			MatMul(matrices + n * 16, q, reflMatrices + n * 16);
+
+		for (int n = 0; n < HD_LARA_HAIR_NODES; n++)
+			MatMul(hairMatrices + n * 16, q, reflHair + n * 16);
+
+		reflPlaced.resize(placed.size());
+
+		for (size_t c = 0; c < placed.size(); c++)
+		{
+			reflPlaced[c].assign(placed[c].matrices.size(), 0.0f);
+
+			for (int n = 0; n < placed[c].nodes; n++)
+				MatMul(&placed[c].matrices[(size_t)n * 16], q, &reflPlaced[c][(size_t)n * 16]);
+		}
+
+		/* A world plane n.p + d >= 0 in view space: (R n, d - (R n).t). The
+		 * copy's ends along the glass: k >= its low end, k <= its high end. */
+		const int k = 2 - mirror.axis;
+		const float world[2][4] = { { 0, 0, 0, -mirrorEnds[0] }, { 0, 0, 0, mirrorEnds[1] } };
+
+		HDShadowMirrorPlane(viewR, viewT, mirror.axis, mirrorPlane, mirror.side, mirrorClip);
+
+		for (int e = 0; e < 2; e++)
+		{
+			float n[3] = { 0.0f, 0.0f, 0.0f };
+			float* out = mirrorClip + 4 * (e + 1);
+
+			n[k] = e == 0 ? 1.0f : -1.0f;
+			out[3] = world[e][3];
+
+			for (int i = 0; i < 3; i++)
+			{
+				out[i] = viewR[i * 3 + 0] * n[0] + viewR[i * 3 + 1] * n[1] + viewR[i * 3 + 2] * n[2];
+				out[3] -= out[i] * viewT[i];
+			}
+		}
 	}
 
 	/* The second map's box round hers and its cast matrix, as hd_laradraw.cpp
@@ -8993,7 +9185,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * map, the two-map receive with the second box's constants, as
 	 * hd_level.cpp chooses it. -shadownoguard takes the stencil guard away
 	 * again inside the pass, for the count of pixels it saves from a second
-	 * darkening. -1 when the receive could not begin. */
+	 * darkening. -1 when the receive could not begin. `mirrorCalls` comes back
+	 * with the mirror's draw calls, -shadowmirror's. */
+	int mirrorCalls = 0;
+
 	const auto receivePass = [&]() -> int
 	{
 		float regs[HD_SHADOW_RECEIVE_COUNT * 4];
@@ -9010,6 +9205,50 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		if (o.shadowNoGuard)
 			g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+		/* -shadowmirror: the mirror's group first with the mirror's variant
+		 * and blocks, as hd_level.cpp's receive pass draws it - unless
+		 * -shadownomirror leaves the blocks out. */
+		if (mirrorOn && !o.shadowNoMirror)
+		{
+			float mh[HD_SHADOW_RECEIVE_COUNT * 4], mo[HD_SHADOW_RECEIVE2_COUNT * 4];
+			float glass[4], Rm[9], tm[3];
+
+			HDShadowMirrorView(R, t, mirror.axis, mirrorPlane, Rm, tm);
+			HDShadowReceiveConstants(&shadowBox, Rm, tm, HD_SHADOW_DARK, mh);
+
+			if (othersDrawn)
+				HDShadowReceiveOthersConstants(&othersBox, Rm, tm, mo);
+			else
+			{
+				memset(mo, 0, sizeof(mo));
+				HDShadowReceiveWithoutOthers(mo);
+			}
+
+			HDShadowMirrorPlane(R, t, mirror.axis, mirrorPlane, mirror.side, glass);
+
+			if (!HDShadowMirrorFaces(R, t, mirror.axis, mirrorPlane, mirror.side))
+				printf("shadowmirror: the camera stands behind the glass - no mirror's draw\n");
+			else if (HDRenderShadowReceiveMirrorBegin(mh, mo, glass))
+			{
+				/* -shadowmirrormask: the pixels the mirror's draw leaves - the
+				 * copy - marked in stencil bit 2 as well as the guard's bit 0. */
+				if (o.shadowMirrorMask)
+					g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 1 | 4);
+
+				HDRenderRoomShadow(o.shadowRoom, &roomWorld, 0, HD_WINDOW_ALL);
+
+				if (o.shadowMirrorMask)
+					g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 1);
+
+				HDRenderShadowReceiveMirrorEnd();
+				mirrorCalls = HDRenderShadowReceiveCalls();
+			}
+			else
+				printf("shadowmirror: the mirror's draw refused (variant %s, stencil %s)\n",
+					HDRenderShadowReceiveMirrorReady() ? "ready" : "MISSING",
+					HDRenderShadowReceiveStencil() ? "on" : "off");
+		}
 
 		HDRenderRoomShadow(o.shadowRoom, &roomWorld, 0, HD_WINDOW_ALL);
 
@@ -9185,20 +9424,26 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * the entries drawn. */
 	float receiveHers[HD_SHADOW_RECEIVE_COUNT * 4];
 	float receiveOthers[HD_SHADOW_RECEIVE2_COUNT * 4];
+	// -shadowmirror: the mirror's two blocks, made with its reflected view.
+	float mirrorHers[HD_SHADOW_RECEIVE_COUNT * 4];
+	float mirrorOthers[HD_SHADOW_RECEIVE2_COUNT * 4];
 	bool receiveHersDrawn = false;
+	bool mirrorBlocks = false;
 
-	const auto receiveBlocks = [&](int receiver) -> bool
+	/* `reflected`: a reflection, which takes through the mirror's blocks
+	 * where they exist and nothing where they do not. */
+	const auto receiveBlocks = [&](int receiver, bool reflected) -> bool
 	{
-		const int takes = HDShadowReceiverTakes(receiver, receiveHersDrawn, othersDrawn, false,
-			false);
+		const int takes = HDShadowReceiverTakes(receiver, receiveHersDrawn, othersDrawn, reflected,
+			reflected && mirrorBlocks);
 
 		if (!takes)
 			return false;
 
 		float h[HD_SHADOW_RECEIVE_COUNT * 4], s[HD_SHADOW_RECEIVE2_COUNT * 4];
 
-		memcpy(h, receiveHers, sizeof(h));
-		memcpy(s, receiveOthers, sizeof(s));
+		memcpy(h, reflected ? mirrorHers : receiveHers, sizeof(h));
+		memcpy(s, reflected ? mirrorOthers : receiveOthers, sizeof(s));
 
 		if (!(takes & HD_SHADOW_TAKES_HERS))
 			HDShadowReceiveWithoutHer(h);
@@ -9210,8 +9455,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		return true;
 	};
 
-	const auto modelList = [&](bool receive, int lipsT, int lipsF) -> int
+	/* `reflected`: the same list as the mirror's reflections, on the
+	 * reflected matrices (-shadowmirror), with the mirror's blocks. */
+	const auto modelList = [&](bool receive, int lipsT, int lipsF, bool reflected) -> int
 	{
+		const float* const mats = reflected ? reflMatrices : matrices;
+		const float* const hair = reflected ? reflHair : hairMatrices;
+
 		const auto one = [&](int slot, bool head, const float* m, int nodes,
 			const float* nodeLight, unsigned int mask, const HDModelLighting* lit,
 			const HDModelNeckCut* cut, int cull, int lt, int lf, const HDModelSoft* sft) -> bool
@@ -9227,33 +9477,33 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		int n = 0;
 		const HDModelNeckCut* bodyCut = cutting ? &neckCut : 0;
 
-		if (!receive || receiveBlocks(HD_SHADOW_RECEIVER_LARA))
+		if (!receive || receiveBlocks(HD_SHADOW_RECEIVER_LARA, reflected))
 		{
 			bool any = false;
 
 			if (draws(HD_LARA_PART_BODY))
-				any = one(HDLaraPartSlot(HD_LARA_PART_BODY), false, matrices, HD_LARA_NODES,
+				any = one(HDLaraPartSlot(HD_LARA_PART_BODY), false, mats, HD_LARA_NODES,
 					light, ownBody, &lighting, bodyCut, o.cull, -1, -1,
 					soft(HD_LARA_PART_BODY)) || any;
 
 			if (draws(HD_LARA_PART_HEAD) && HDLaraHasPart(HD_LARA_PART_HEAD))
-				any = one(HDLaraPartSlot(HD_LARA_PART_HEAD), false, matrices, HD_LARA_NODES,
+				any = one(HDLaraPartSlot(HD_LARA_PART_HEAD), false, mats, HD_LARA_NODES,
 					light, bodyMask, &lighting, bodyCut, o.cull, -1, -1,
 					soft(HD_LARA_PART_HEAD)) || any;
 
 			if (o.firstPerson && cutting && !o.noCap && draws(HD_LARA_PART_NECK_CAP) &&
 				HDLaraHasPart(HD_LARA_PART_NECK_CAP))
-				any = one(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), false, matrices, HD_LARA_NODES,
+				any = one(HDLaraPartSlot(HD_LARA_PART_NECK_CAP), false, mats, HD_LARA_NODES,
 					light, ~0u, &lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
 					soft(HD_LARA_PART_NECK_CAP)) || any;
 
 			if (!o.firstPerson && draws(HD_LARA_PART_FACE))
-				any = one(HDLaraPartSlot(HD_LARA_PART_FACE), false, matrices, HD_LARA_NODES,
+				any = one(HDLaraPartSlot(HD_LARA_PART_FACE), false, mats, HD_LARA_NODES,
 					light, bodyMask, &lighting, 0, HD_MODEL_CULL_NONE, lipsT, lipsF,
 					soft(HD_LARA_PART_FACE)) || any;
 
 			if (draws(HD_LARA_PART_HOLSTER_RIG) && HDLaraHasPart(HD_LARA_PART_HOLSTER_RIG))
-				any = one(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), false, matrices,
+				any = one(HDLaraPartSlot(HD_LARA_PART_HOLSTER_RIG), false, mats,
 					HD_LARA_NODES, light, HDLaraPartCoverage(HD_LARA_PART_HOLSTER_RIG) & bodyMask,
 					&lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
 					soft(HD_LARA_PART_HOLSTER_RIG)) || any;
@@ -9261,12 +9511,12 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			for (int i = 0; i < pieces; i++)
 			{
 				if (draws(list[i].part))
-					any = one(HDLaraPartSlot(list[i].part), false, matrices, HD_LARA_NODES,
+					any = one(HDLaraPartSlot(list[i].part), false, mats, HD_LARA_NODES,
 						light, list[i].nodeMask & bodyMask, &lighting, 0, HD_MODEL_CULL_NONE,
 						-1, -1, 0) || any;
 
 				if (draws(list[i].part) && HDLaraHasPartTwin(list[i].part))
-					any = one(HDLaraPartTwinSlot(list[i].part), false, matrices, HD_LARA_NODES,
+					any = one(HDLaraPartTwinSlot(list[i].part), false, mats, HD_LARA_NODES,
 						light, list[i].nodeMask & bodyMask, &lighting, 0, HD_MODEL_CULL_NONE,
 						-1, -1, 0) || any;
 			}
@@ -9278,7 +9528,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				for (int i = 0; i < HD_LARA_HAIR_NODES * 3; i++)
 					hairLight[i] = (float)o.shade;
 
-				any = one(HDLaraPartSlot(HD_LARA_PART_BRAID), false, hairMatrices,
+				any = one(HDLaraPartSlot(HD_LARA_PART_BRAID), false, hair,
 					HD_LARA_HAIR_NODES, hairLight, ~0u, &lighting, 0, HD_MODEL_CULL_NONE, -1, -1,
 					0) || any;
 			}
@@ -9288,9 +9538,15 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		for (size_t c = 0; c < placed.size(); c++)
 		{
-			if (receive && !receiveBlocks(placed[c].blob ? HD_SHADOW_RECEIVER_BLOB
-				: HD_SHADOW_RECEIVER_OTHER))
+			// A creature the picture clipped away is drawn in no pass.
+			if (placed[c].unseen)
 				continue;
+
+			if (receive && !receiveBlocks(placed[c].blob ? HD_SHADOW_RECEIVER_BLOB
+				: HD_SHADOW_RECEIVER_OTHER, reflected))
+				continue;
+
+			const float* const cm = reflected ? &reflPlaced[c][0] : &placed[c].matrices[0];
 
 			HDModelLighting itemLighting = lighting;
 			std::vector<float> itemLight((size_t)placed[c].nodes * 3, (float)o.shade);
@@ -9298,11 +9554,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			itemLighting.specStrength = 0.0f;
 			itemLighting.specPower = 1.0f;
 
-			bool any = one(placed[c].slot, false, &placed[c].matrices[0], placed[c].nodes,
+			bool any = one(placed[c].slot, false, cm, placed[c].nodes,
 				&itemLight[0], ~0u, &itemLighting, 0, HD_MODEL_CULL_NONE, -1, -1, 0);
 
 			if (HDModelHasHead(placed[c].slot))
-				any = one(placed[c].slot, true, &placed[c].matrices[0], placed[c].nodes,
+				any = one(placed[c].slot, true, cm, placed[c].nodes,
 					&itemLight[0], ~0u, &itemLighting, 0, HD_MODEL_CULL_NONE, -1, -1, 0) || any;
 
 			n += any ? 1 : 0;
@@ -9335,6 +9591,29 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HDShadowReceiveWithoutOthers(receiveOthers);
 		}
 
+		/* -shadowmirror: the mirror's blocks for the reflections, as
+		 * hd_object.cpp makes them (HDShadowMirrorView) while the camera sees
+		 * the glass from the room's side; -shadownomirror leaves them out and
+		 * the reflections take nothing, as before they had any. */
+		mirrorBlocks = mirrorOn && !o.shadowNoMirror &&
+			HDShadowMirrorFaces(R, t, mirror.axis, mirrorPlane, mirror.side);
+
+		if (mirrorBlocks)
+		{
+			float Rm[9], tm[3];
+
+			HDShadowMirrorView(R, t, mirror.axis, mirrorPlane, Rm, tm);
+			HDShadowReceiveConstants(&shadowBox, Rm, tm, HD_SHADOW_DARK, mirrorHers);
+
+			if (othersDrawn)
+				HDShadowReceiveOthersConstants(&othersBox, Rm, tm, mirrorOthers);
+			else
+			{
+				memset(mirrorOthers, 0, sizeof(mirrorOthers));
+				HDShadowReceiveWithoutOthers(mirrorOthers);
+			}
+		}
+
 		/* -shadowdevice: the device's whole state before the pass and after
 		 * it, compared - once, on the first picture. */
 		std::vector<unsigned long long> before, after;
@@ -9352,7 +9631,15 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		HDModelReceiveBegin();
 
-		const int n = modelList(true, lipsT, lipsF);
+		int n = modelList(true, lipsT, lipsF, false);
+
+		// The reflections, clipped to the copy, as hd_object.cpp draws them.
+		if (mirrorOn)
+		{
+			HDModelClip(mirrorClip);
+			n += modelList(true, lipsT, lipsF, true);
+			HDModelClip(0);
+		}
 
 		modelCalls = HDModelReceiveCalls();
 		HDModelReceiveEnd();
@@ -9552,6 +9839,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			itemLighting.specStrength = 0.0f;
 			itemLighting.specPower = 1.0f;
 
+			// -shadowunseen: cast into the second map, drawn in no pass.
+			if (placed[c].unseen)
+				continue;
+
 			tag(2 + (int)c);
 
 			if (HDModelDraw(placed[c].slot, &placed[c].matrices[0], placed[c].nodes,
@@ -9561,6 +9852,18 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			if (HDModelHasHead(placed[c].slot) && HDModelDrawHead(placed[c].slot,
 				&placed[c].matrices[0], placed[c].nodes, &itemLight[0], ~0u, &itemLighting))
 				drawn++;
+		}
+
+		/* -shadowmirror: the reflections into the copy, clipped to it, after
+		 * the things they reflect - game\mirror.cpp draws them before the
+		 * items, and the depth buffer sorts the two, which never overlap
+		 * across the glass. -shadowcount marks them as one model more. */
+		if (mirrorOn)
+		{
+			tag(2 + (int)placed.size());
+			HDModelClip(mirrorClip);
+			drawn += modelList(false, lipsTrack, lipsFrame, true);
+			HDModelClip(0);
 		}
 
 		calls = HDModelDrawCalls();
@@ -9585,11 +9888,22 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		 * model. Depth identity is reached == visible for every model drawn
 		 * again, and 0 off them. */
 		if (o.shadowCount && picture == 0)
-			CountModelPixels(o.width, o.height, 1 + (int)placed.size(), modelsDrawn);
+			CountModelPixels(o.width, o.height, 1 + (int)placed.size() + (mirrorOn ? 1 : 0),
+				modelsDrawn);
+
+		/* -shadowmirrormask: the copy's pixels, which the mirror's draw left
+		 * (stencil bit 2), white on black in place of the picture. */
+		if (o.shadowMirrorMask && picture == 0)
+		{
+			g_device->Clear(0, 0, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
+			StencilQuad(o.width, o.height, D3DCMP_EQUAL, 4, 4, D3DCOLOR_XRGB(255, 255, 255));
+			printf("shadowmirrormask: %ld pixels of the copy took the mirror's blocks\n",
+				StencilQuad(o.width, o.height, D3DCMP_EQUAL, 4, 4));
+		}
 
 		/* And the room's glass and glows in a bracket of their own, as
 		 * HDFrameDrawGlow draws them after the classic buckets. */
-		if (roomHas && !o.shadowCount)
+		if (roomHas && !o.shadowCount && !o.shadowMirrorMask)
 		{
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_BLEND);
@@ -9640,13 +9954,30 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		strcat(path, tail);
 	}
 
+	// ... one with the room's mirror, which view and whether its blocks ran ...
+	if (mirrorOn)
+	{
+		const size_t at = strlen(path) - 4;
+
+		path[at] = 0;
+		strcat(path, o.shadowMirrorView ? "_mview" : "_mirror");
+
+		if (o.shadowNoMirror)
+			strcat(path, "_nomirror");
+
+		if (o.shadowMirrorMask)
+			strcat(path, "_copymask");
+
+		strcat(path, ".png");
+	}
+
 	// ... and one with creatures beside her, how many.
 	if (!placed.empty())
 	{
 		const size_t at = strlen(path) - 4;
 		char tail[32];
 
-		sprintf(tail, "_c%d.png", (int)placed.size());
+		sprintf(tail, "_c%d%s.png", (int)placed.size(), o.shadowUnseen ? "_unseen" : "");
 		path[at] = 0;
 		strcat(path, tail);
 
@@ -9668,6 +9999,11 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			receiveCalls, receiveCalls < 0 ? " - REFUSED" : "",
 			o.shadowNoGuard ? "OFF (-shadownoguard)"
 			: HDRenderShadowReceiveStencil() ? "on" : "off - no stencil");
+
+		if (mirrorOn)
+			printf("shadowmirror: the mirror's group again in %d draw calls through the "
+				"mirror's blocks%s\n", mirrorCalls,
+				o.shadowNoMirror ? " - left out (-shadownomirror)" : "");
 
 		if (o.shadowNoModels)
 			printf("shadowmodels: the models' pass left out (-shadownomodels)\n");
@@ -10011,7 +10347,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 					if (with >= 3)
 					{
 						HDModelFrameBegin(&projection, bulbCount, HD_PASS_SOLID);
-						modelList(false, -1, -1);
+						modelList(false, -1, -1, false);
 
 						if (with == 4)
 						{
@@ -10173,6 +10509,9 @@ int main(int argc, char** argv)
 	// -shadowitem, -shadownomodels, -shadowcount: the models' receive.
 	bool shadowNoModels = false, shadowCount = false;
 	float shadowAlong = 0.0f;
+	// -shadowunseen, -shadowmirror, -shadowmirrorview, -shadownomirror.
+	bool shadowUnseen = false, shadowMirror = false, shadowMirrorView = false;
+	bool shadowNoMirror = false, shadowMirrorMask = false;
 	bool laraBraid = false;
 	int laraBraidSim = 0;		// -braidsim: the braid's own physics
 	/* -braidanim: the same chain under a real animation. */
@@ -10517,6 +10856,16 @@ int main(int argc, char** argv)
 			shadowReceive = shadowCount = true;
 		else if (!_stricmp(argv[i], "-shadowalong") && i + 1 < argc)
 			shadowAlong = (float)atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-shadowunseen"))
+			shadowUnseen = true;
+		else if (!_stricmp(argv[i], "-shadowmirror"))
+			shadowMirror = true;
+		else if (!_stricmp(argv[i], "-shadowmirrorview"))
+			shadowMirror = shadowMirrorView = true;
+		else if (!_stricmp(argv[i], "-shadownomirror"))
+			shadowMirror = shadowNoMirror = true;
+		else if (!_stricmp(argv[i], "-shadowmirrormask"))
+			shadowMirror = shadowMirrorMask = shadowReceive = true;
 		else if (!_stricmp(argv[i], "-braid"))
 		{
 			lara = true;
@@ -11063,6 +11412,11 @@ int main(int argc, char** argv)
 		o.shadowNoModels = shadowNoModels;
 		o.shadowCount = shadowCount;
 		o.shadowAlong = shadowAlong;
+		o.shadowUnseen = shadowUnseen;
+		o.shadowMirror = shadowMirror;
+		o.shadowMirrorView = shadowMirrorView;
+		o.shadowNoMirror = shadowNoMirror;
+		o.shadowMirrorMask = shadowMirrorMask;
 		o.neck = laraNeck;
 		o.headWeight = laraHeadWeight;
 		o.handFold = laraHandFold;
@@ -11120,6 +11474,44 @@ int main(int argc, char** argv)
 		{
 			HDRenderStats roomStats;
 			const char* roomWhy = "";
+
+			/* -shadowmirror: the classic rooms' boxes handed in first, as
+			 * hd_level.cpp's BuildRoomBoxes does, so the level build finds
+			 * the mirrors in the art (hd_render.cpp, FindMirrors). */
+			static std::vector<HDRoomBox> boxes;
+
+			if (shadowMirror)
+			{
+				std::string why;
+
+				boxes.assign(level.rooms().size(), HDRoomBox());
+
+				for (size_t r = 0; r < level.rooms().size(); r++)
+				{
+					const Tr5Room& rm = level.rooms()[r];
+					HDRoomBox& b = boxes[r];
+					unsigned yTop = 0, yOrigin = 0;
+
+					level.headerField((int)r, 24, yOrigin, why);
+					level.headerField((int)r, 36, yTop, why);
+					b.mins[0] = 1024.0f;
+					b.maxs[0] = (float)((rm.numXSectors - 1) * 1024);
+					b.mins[1] = (float)((int)yTop - (int)yOrigin);
+					b.maxs[1] = (float)(rm.yBottom - (int)yOrigin);
+					b.mins[2] = 1024.0f;
+					b.maxs[2] = (float)((rm.numZSectors - 1) * 1024);
+
+					for (int axis = 0; axis < 3; axis++)
+						if (b.maxs[axis] < b.mins[axis])
+							b.maxs[axis] = b.mins[axis];
+
+					b.originX = (float)rm.originX;
+					b.originZ = (float)rm.originZ;
+				}
+
+				if (!boxes.empty())
+					HDRenderSetRoomBoxes(&boxes[0], (int)boxes.size());
+			}
 
 			if (HDRenderLevelBegin(root.c_str(), withRooms.c_str(), (int)level.rooms().size(),
 				o.managed,

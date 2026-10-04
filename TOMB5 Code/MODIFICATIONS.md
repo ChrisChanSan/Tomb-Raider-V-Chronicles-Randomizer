@@ -7343,33 +7343,32 @@ it answers in the title screen too and does not change with the room she stands 
 HD off a stored 5 is shown as what is drawn for it and stepped from there, but not written
 back, so switching HD on again brings *Projected* back.
 
-**Left.** Lara's shadow on herself, and - until the third entry gives it - on HD items
-and creatures; casters other than Lara and the creatures and items the classic engine
-gives a blob, which cast into a second map once drawn HD (the next entry) - the cutscene
-actors among them cast nothing; the shadow in a mirror's image, which the third entry
-gives (her reflection has no blob: the HD level's mirror zeroes her slot's shadow size
-around it); the parts of her drawn classic (the diving suit's two propulsion units are
-not in the map); classic rooms (her blob is drawn there); the classic statics of an HD room
+**Left.** Lara's shadow on herself, and - until the third entry gives it - on HD items and
+creatures; casters other than Lara and the creatures and items the classic engine gives a
+blob, which cast into a second map once drawn HD (the next entry) - the cutscene actors
+among them cast nothing; the shadow in a mirror's image, which the third entry gives (her
+reflection has no blob: the HD level's mirror zeroes her slot's shadow size around it);
+the parts of her drawn classic (the diving suit's two propulsion units are not in the
+map); classic rooms (her blob is drawn there); the classic statics of an HD room
 (`HDStaticIsClassic`, 21 in ANDREA1) do not receive; the tuning of the numbers. The fixed
 light falls the same way in every room, so near a lamp the shadow can lie towards the lamp
-rather than away from it.
-A shadow that reaches past a wall falls on the floor beyond it as well, because receivers
-never cast; the height term stops a storey below, nothing stops a room beside. A face
-turned away from the light is not darkened even where the room's baked light lights it.
-If the frame list is full and her body cannot be pushed, the frame has neither shadow nor
-blob (the blob gave way, the map stays empty). The change between the blob and the
-projected shadow is not blended: at the border between an HD room and a classic one, on a
-step of the row and when the map is lost, one gives way to the other within a single
-frame, the shadow at its full strength. The shadow multiplies the finished colour of the
-room, so it darkens the distance fog and the fog bulbs that stand in front of the floor as
-well. With a pull above 0, whatever changes her two light lists while she walks, a light
-that enters or leaves them or a brightness the engine fades, counts as a change of the
-lights and is blended, so `lag=` above 0 while she only moves says that her lists changed
-under her; at pull 0 `lag=` stays 0. What cannot be proven without playing: how the fixed
-shadow looks in motion and in the levels' rooms, its slant and darkness against taste, a
-pull between 0 and 1, cutscenes, first person, and whether the frame's world-to-view
-(`aW2VMx`) is the camera her main draw's matrices stand on at sixty frames a second as
-well.
+rather than away from it. A shadow that reaches past a wall falls on the floor beyond it
+as well, because receivers never cast; the height term stops a storey below, nothing stops
+a room beside. A face turned away from the light is not darkened even where the room's
+baked light lights it. If the frame list is full and her body cannot be pushed, the frame
+has neither shadow nor blob (the blob gave way, the map stays empty). The change between
+the blob and the projected shadow is not blended: at the border between an HD room and a
+classic one, on a step of the row and when the map is lost, one gives way to the other
+within a single frame, the shadow at its full strength. The shadow multiplies the finished
+colour of the room, so it darkens the distance fog and the fog bulbs that stand in front
+of the floor as well. With a pull above 0, whatever changes her two light lists while she
+walks, a light that enters or leaves them or a brightness the engine fades, counts as a
+change of the lights and is blended, so `lag=` above 0 while she only moves says that her
+lists changed under her; at pull 0 `lag=` stays 0. What cannot be proven without playing:
+how the fixed shadow looks in motion and in the levels' rooms, its slant and darkness
+against taste, a pull between 0 and 1, cutscenes, first person, and whether the frame's
+world-to-view (`aW2VMx`) is the camera her main draw's matrices stand on at sixty frames a
+second as well.
 
 **Commits.** 'Round 188 (#188): the projected shadow's arithmetic', 'Round 188 (#188): the
 cast shaders and the cast draw of a model', 'Round 188 (#188): the shadow map's target and
@@ -7571,40 +7570,40 @@ log line gains `oms=`, the second cast pass's time, beside the three fields aske
 receive is in `ms=`.
 
 **Left.** A creature further from her than 4096 and 819 units across the light, or 4096
-along it from her middle, has no shadow at all, neither blob nor projected one; across
-the light the edge term fades the projected one out on every side before. Along the light
-the second box ends 4096 units from her centre, about 4730 straight above or below her at
-the fixed slant; the next entry fades each tap of the second map by its own caster's
-depth near both ends and grows the mark's box along the light to match, so a creature
-crossing there no longer loses a shadow of full strength in one frame. An HD item clipped
-away (its bounds outside the view or the portal window) has had its blob skipped before
-the clip is known; its shadow reaches 440 to 900 units beyond its bounds along the light,
-and the next entry walks such an item's nodes for the second map alone, so its shadow
-lies in the view before it does. The play test should
-watch first for creatures entering the view and for a creature walking four sectors away
-from her. A creature that stands in a room the HD level draws classic loses its blob and
-takes the projected shadow only where HD groups receive. A floor less than OTHERS_END
-behind a creature's feet along the light takes the lower part of its shadow, faintly - at
-the fixed slant a floor 2048 units below the feet takes the feet's part at 0.19 of the
-strength, one 1792 below at 0.48, and only a floor 2217 or more below takes nothing; no
-storey beneath was pictured, because the probe draws one room group. Receivers never
-cast, so a creature's shadow, like hers, passes through a floor or a wall. In a frame with
-the second map the receive draws every group within the second reach again, up to about
-four sectors round her and further along the light; its cost was measured on one room
-group only. The HD models take neither her shadow nor theirs here; the next entry draws
-them again for both maps. The mirror's image has no blobs - the HD level's mirror zeroes
-`shadow_size` around its draws - and takes the projected shadows from the next entry on.
-If the frame list is full, an item is drawn classic and keeps its blob.
-What cannot be proven without playing: how the creatures' shadows look in motion, in a
-fight, on a dying or exploding creature and under mesh swaps (the cast draws the swapped
-model and the item's `mesh_bits`), and which creatures of which levels show it. The object
-slots with a `shadow_size` (`game/setup.cpp`) are DARTS (drawn by `S_DrawDarts`, which
-prints no blob), LARA (her own), SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA, SCIENTIST,
-CRANE_GUY, BLUE_GUARD2, ATTACK_SUB, LION, DOG, HUSKIE, CROW, REAPER, MAFIA2, PIERRE,
-LARSON, HITMAN, CYBORG, SNIPER, CHEF, TWOGUN, HYDRA, IMP, WILLOWISP, MAZE_MONSTER,
-SKELETON, GLADIATOR, ROMAN_GOD and ROMAN_GOD2 at 128, SAILOR at 85 and GREEN_TEETH at
-256; only those drawn by `DrawAnimatingItem` ever had a blob. Of the Tomb Raider III
-imports only the vulture's slot, CROW 43, carries one.
+and 819 units along it from her middle, has no shadow at all, neither blob nor projected
+one; across the light the edge term fades the projected one out on every side before.
+Along the light the second box ends 4096 units from her centre, about 4730 straight above
+or below her at the fixed slant; the next entry fades each tap of the second map by its
+own caster's depth near both ends and grows the mark's box along the light to match, so a
+creature crossing there no longer loses a shadow of full strength in one frame. An HD item
+clipped away (its bounds outside the view or the portal window) has had its blob skipped
+before the clip is known; its shadow reaches 440 to 900 units beyond its bounds along the
+light, and the next entry walks such an item's nodes for the second map alone, so its
+shadow lies in the view before it does. The play test should watch first for creatures
+entering the view and for a creature walking four sectors away from her. A creature that
+stands in a room the HD level draws classic loses its blob and takes the projected shadow
+only where HD groups receive. A floor less than OTHERS_END behind a creature's feet along
+the light takes the lower part of its shadow, faintly - at the fixed slant a floor 2048
+units below the feet takes the feet's part at 0.19 of the strength, one 1792 below at
+0.48, and only a floor 2217 or more below takes nothing; no storey beneath was pictured,
+because the probe draws one room group. Receivers never cast, so a creature's shadow, like
+hers, passes through a floor or a wall. In a frame with the second map the receive draws
+every group within the second reach again, up to about four sectors round her and further
+along the light; its cost was measured on one room group only. The HD models take neither
+her shadow nor theirs here; the next entry draws them again for both maps. The mirror's
+image has no blobs - the HD level's mirror zeroes `shadow_size` around its draws - and
+takes the projected shadows from the next entry on. If the frame list is full, an item is
+drawn classic and keeps its blob. What cannot be proven without playing: how the
+creatures' shadows look in motion, in a fight, on a dying or exploding creature and under
+mesh swaps (the cast draws the swapped model and the item's `mesh_bits`), and which
+creatures of which levels show it. The object slots with a `shadow_size`
+(`game/setup.cpp`) are DARTS (drawn by `S_DrawDarts`, which prints no blob), LARA (her
+own), SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA, SCIENTIST, CRANE_GUY, BLUE_GUARD2,
+ATTACK_SUB, LION, DOG, HUSKIE, CROW, REAPER, MAFIA2, PIERRE, LARSON, HITMAN, CYBORG,
+SNIPER, CHEF, TWOGUN, HYDRA, IMP, WILLOWISP, MAZE_MONSTER, SKELETON, GLADIATOR, ROMAN_GOD
+and ROMAN_GOD2 at 128, SAILOR at 85 and GREEN_TEETH at 256; only those drawn by
+`DrawAnimatingItem` ever had a blob. Of the Tomb Raider III imports only the vulture's
+slot, CROW 43, carries one.
 
 **Commits.** 'Round 188 (#188): the creatures cast into a second map, and their blobs give
 way', 'Round 188 (#188): the suites', 'Round 188 (#188): the rooms take both maps', 'Round
@@ -7612,7 +7611,7 @@ way', 'Round 188 (#188): the suites', 'Round 188 (#188): the rooms take both map
 round two's review pass 1 found', 'Round 188 (#188): the suites', 'Round 188 (#188): the
 record follows'.
 
-### The projected shadow on the HD models, in a mirror's image and from a creature out of view
+### The projected shadow on the HD models, in a mirror and from a creature out of view
 2026-10-04
 
 **What.** The HD models take the projected shadow as the rooms do: her outline falls on a
@@ -7692,7 +7691,7 @@ every other clipped item walks nothing. `DrawAnimatingItem` asks it through
 `HD_OBJ_CAST_OTHERS_ONLY` (:3244), which the second map's cast pass draws and no picture
 pass does (:3852). The log: `ShadowSecond` (`hd_level.cpp:4894`) ends its line in
 `models=`, `mcalls=`, `castonly=` and `mirror=` (:4935), counted by `ShadowModelsPass` and
-`ShadowOthersPass` (:4635), and is called after the models' pass (:5142) so its line holds
+`ShadowOthersPass` (:4635), and is called after the models' pass (:5143) so its line holds
 the whole frame. Builds: `bshader.bat` compiles the two new entry points into
 `hd_shadow_receive_model_ps.inc` and `hd_shadow_receive_mirror_ps.inc`, and `be.bat`
 checks their stamps.
@@ -7810,7 +7809,9 @@ walking into view from the side their shadow points to.
 **Commits.** 'Round 188 (#188): the HD models take the projected shadow', 'Round 188
 (#188): the suites', 'Round 188 (#188): the mirror's image takes the shadows, and a
 clipped creature casts unseen', 'Round 188 (#188): the suites', 'Round 188 (#188): the
-record follows'.
+record follows', 'Round 188 (#188): the second box's depth comment names the part that
+casts', 'Round 188 (#188): the record follows'.
+
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14
 
@@ -12439,7 +12440,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
-| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light; The projected shadow: the creatures cast as well, into a second map; The projected shadow on the HD models, in a mirror's image and from a creature out of view |
+| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light; The projected shadow: the creatures cast as well, into a second map; The projected shadow on the HD models, in a mirror and from a creature out of view |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |

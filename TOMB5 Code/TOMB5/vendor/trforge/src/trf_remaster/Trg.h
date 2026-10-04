@@ -91,15 +91,6 @@ namespace trf::remaster
     {
         int16_t x = 0, y = 0, z = 0;
         int16_t sway = 0;
-        /* THE RAW BYTES, biased. The shaders in tomb123.exe read this as
-         * normalize(n - 127) with n unsigned, so 127 is zero and 255 is +1.
-         * Kept raw and unbiased here because that is what round-trips; the
-         * three floats below are what anybody actually wants.
-         *
-         * Reading them as signed bytes and using them straight, which is the
-         * obvious thing and what TRForge did at first, turns every normal
-         * into nonsense - and quietly, because the numbers still look like
-         * numbers. */
         uint8_t nx = 127, ny = 127, nz = 127;
 
         float normal_x() const { return ((float)nx - 127.0f) / 128.0f; }

@@ -140,9 +140,9 @@
  *                 Smaller cuts a tall creature's shadow off where it leaves
  *                 the box on those two sides; larger draws casters of which
  *                 no part reaches into the box.
- *   OTHERS_DEPTH  the second box's length along the light, units: a caster
- *                 further from her centre along the light than half of it
- *                 casts nothing. 8192 holds a storey above and below her.
+ *   OTHERS_DEPTH  the second box's length along the light, units: no part
+ *                 of a caster further from her centre along the light than
+ *                 half of it casts. 8192 holds a storey above and below her.
  *                 Its near and far side (4096 units along the light from her
  *                 centre, 4730 straight above or below her at the fixed
  *                 slant) are faded over by OTHERS_FADE.

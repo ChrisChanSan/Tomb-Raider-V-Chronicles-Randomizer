@@ -1398,8 +1398,8 @@ namespace
 		std::vector<unsigned char> pairWhole;
 		/* The stand ranges - see HDStandRange in hd_render.h. A range's
 		 * `stand` is one plus its index here. `standWith` is this frame's
-		 * answer per range, set by HDRenderStandWith; 1 until a frame sets
-		 * it. */
+		 * answer per range (HD_STAND_OUT, _WITH or _BEHIND), set by
+		 * HDRenderStandWith; HD_STAND_WITH until a frame sets it. */
 		std::vector<HDStandRange> standRanges;
 		std::vector<unsigned char> standWith;
 		/* The same for the cut boxes, and how many triangles
@@ -2445,6 +2445,30 @@ namespace
 				columns[col * 4 + row] = rowMajor[row * 4 + col];
 
 		g_device->SetVertexShaderConstantF((UINT)reg, columns, 4);
+	}
+
+	/* The group's matrix in c0 as prepare wrote it, or pushed back in depth
+	 * for a stand range answered HD_STAND_BEHIND (hd_render.h): the clip z
+	 * raised by HD_STAND_PUSH times the projection's b. With depth = a - b / z
+	 * (HDRenderMakeProjection) the depth becomes a - b (1 - HD_STAND_PUSH) / z,
+	 * the depth of the point HD_STAND_PUSH times its distance further away;
+	 * x, y and w are untouched, so the art keeps its pixels and loses the
+	 * depth test to a classic face it lies within that distance in front of.
+	 * Returns whether c0 now holds the pushed matrix. */
+	bool set_stand_matrix(const float* wvp, bool behind)
+	{
+		if (!wvp)
+			return false;
+
+		float moved[16];
+
+		std::memcpy(moved, wvp, sizeof(moved));
+
+		if (behind)
+			moved[14] -= HD_STAND_PUSH * g_proj[14];
+
+		set_matrix_constant(0, moved);
+		return behind;
 	}
 
 	/* The classic D3DMView for this room, as three columns rather than four.
@@ -3827,7 +3851,8 @@ void HDRenderStandWith(int group, int index, int with)
 	HDGroup& g = g_groups[(size_t)group];
 
 	if (index >= 0 && index < (int)g.standWith.size())
-		g.standWith[(size_t)index] = with ? 1 : 0;
+		g.standWith[(size_t)index] = (unsigned char)(with == HD_STAND_BEHIND
+			? HD_STAND_BEHIND : with ? HD_STAND_WITH : HD_STAND_OUT);
 }
 
 void HDRenderSetCuts(const HDCut* list, int count)
@@ -5426,7 +5451,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							made.triangles = 0;
 							piece = (int)group.standRanges.size();
 							group.standRanges.push_back(made);
-							group.standWith.push_back(1);
+							group.standWith.push_back(HD_STAND_WITH);
 						}
 
 						group.standRanges[(size_t)piece].triangles++;
@@ -7148,6 +7173,8 @@ namespace
 		float ripple[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		bool ripple_dirty = true;
 		const bool additive_pass = pass == 2;
+		// Whether c0 holds the pushed-back matrix - see set_stand_matrix.
+		bool behind_on = false;
 
 		/* The glow: material 2's draw calls in the additive pass - the light
 		 * shafts, the lamp cones and the window glows.
@@ -7616,6 +7643,14 @@ namespace
 				sheen_ps_on = true;
 			}
 
+			// Pushed back in depth where this frame's answer says so - see
+			// set_stand_matrix.
+			const bool want_behind = window != HD_WINDOW_STAND && range.stand &&
+				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+
+			if (want_behind != behind_on)
+				behind_on = set_stand_matrix(wvp, want_behind);
+
 			if (g_index32)
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
 					(UINT)g_vertex_count, range.start, range.count / 3);
@@ -7649,6 +7684,10 @@ namespace
 		if (cull_now != D3DCULL_NONE)
 			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
+		// The next pass of this group draws with the matrix prepare wrote.
+		if (behind_on)
+			set_stand_matrix(wvp, false);
+
 		// A pass that ended on a glow draw call leaves its states behind.
 		if (glow_ps_on)
 			g_device->SetPixelShader(g_ps);
@@ -7677,8 +7716,6 @@ namespace
 		}
 		else if (sky && pass == 1)
 			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-
-		(void)wvp;
 	}
 
 	bool prepare(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,
@@ -7983,12 +8020,13 @@ namespace
 
 	/* One pass of a group again, for the receive: the ranges draw_pass draws
 	 * in that pass and phase, with every vertex constant draw_pass writes per
-	 * range (gPass, gMotion, gFlat) and its cull, so RoomVS puts each
-	 * triangle on the very depth it wrote; and the page and the alpha
-	 * reference, so a cut-out keeps its holes. `clearOnly` is the clear
-	 * floors' half of the alpha pass, which writes depth too. Nothing of the
-	 * pixel shader's own constants is touched here. */
-	void draw_receive(const HDGroup& group, int pass, int window, bool clearOnly)
+	 * range (gPass, gMotion, gFlat, the pushed-back matrix of HD_STAND_BEHIND)
+	 * and its cull, so RoomVS puts each triangle on the very depth it wrote;
+	 * and the page and the alpha reference, so a cut-out keeps its holes.
+	 * `clearOnly` is the clear floors' half of the alpha pass, which writes
+	 * depth too. Nothing of the pixel shader's own constants is touched here. */
+	void draw_receive(const HDGroup& group, int pass, const float* wvp, int window,
+		bool clearOnly)
 	{
 		if (group.pass[pass].empty())
 			return;
@@ -8008,6 +8046,7 @@ namespace
 		float flat[4] = { 0.0f, 0.0f, 0.0f, g_no_upright ? 0.0f : 1.0f };
 		bool flat_dirty = true;
 		DWORD cull_now = D3DCULL_NONE;
+		bool behind_on = false;
 
 		g_motion_dirty = true;
 
@@ -8041,6 +8080,13 @@ namespace
 
 			if (range.destructId >= 0 && g_destruct[(size_t)range.destructId].hidden)
 				continue;
+
+			// And at the depth draw_pass drew it at.
+			const bool want_behind = window != HD_WINDOW_STAND && range.stand &&
+				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+
+			if (want_behind != behind_on)
+				behind_on = set_stand_matrix(wvp, want_behind);
 
 			IDirect3DTexture9* page = HDPageCacheSlotTexture(receive_page(range));
 
@@ -8117,6 +8163,9 @@ namespace
 
 		if (cull_now != D3DCULL_NONE)
 			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+		if (behind_on)
+			set_stand_matrix(wvp, false);
 	}
 
 	// A depth surface with a stencil to guard the pixels with.
@@ -8297,11 +8346,11 @@ bool HDRenderRoomShadow(int group, const D3DMATRIX* world, const HDRoomLighting*
 	if (!room.triangles[0] && !room.triangles[1])
 		return false;
 
-	draw_receive(room, 0, window, false);
-	draw_receive(room, 1, window, false);
+	draw_receive(room, 0, wvp, window, false);
+	draw_receive(room, 1, wvp, window, false);
 
 	if (room.clearRanges)
-		draw_receive(room, 1, window, true);
+		draw_receive(room, 1, wvp, window, true);
 
 	return true;
 }

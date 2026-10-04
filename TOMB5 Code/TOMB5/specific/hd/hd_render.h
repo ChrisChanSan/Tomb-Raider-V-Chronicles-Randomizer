@@ -818,11 +818,28 @@ bool HDRenderStandTriangleAt(int at, HDCoverTri* tri, int* holder);
  * takes them out of their intrusion piece). For the log. */
 int HDRenderStandHolders();
 int HDRenderStandFromIntrusions();
-/* This frame's answer for one stand range: nonzero draws it with its own
- * group (HD_WINDOW_ALL and HD_WINDOW_OPEN), zero leaves it out there. 1 after
- * the build, so a frame that never answers draws every triangle as a group
- * without stand ranges would. Kept until it is set again, so the glow phase
- * draws the answer the solid phase was given. */
+/* This frame's answer for one stand range: HD_STAND_WITH draws it with its
+ * own group (HD_WINDOW_ALL and HD_WINDOW_OPEN), HD_STAND_BEHIND does the same
+ * pushed back in depth (HDStandDraw's `behind`), HD_STAND_OUT leaves it out
+ * there. HD_STAND_WITH after the build, so a frame that never answers draws
+ * every triangle as a group without stand ranges would. Kept until it is set
+ * again, so the glow phase draws the answer the solid phase was given. */
+#define HD_STAND_OUT		0
+#define HD_STAND_WITH		1
+#define HD_STAND_BEHIND		2
+/* How far HD_STAND_BEHIND pushes the art back: this fraction of its distance
+ * from the eye, so 2 units at 1024 and 8 at 4096 - a fraction rather than a
+ * fixed depth offset because the depth buffer's step grows with the square
+ * of the distance, and a fixed offset would be hundreds of units far off and
+ * nothing close by. Measured with RoomProbe -stand -coincide 16 in seven
+ * views of RICH2's rooms 16, 18 and 19: the pixels the art wins of those it
+ * shares with the classic faces fall from 23,564 / 40,855 / 6,497 / 15 /
+ * 12,500 / 5,465 / 7 unpushed to 1,231 / 602 / 526 / 15 / 29 / 53 / 7 at
+ * 1/1024, 1/512 and 1/256 alike - a rest that does not move with the push,
+ * art the room's grazing ranges do not hold - while 1/2048 leaves 4,355 in
+ * one view of room 19. 1/512 keeps a factor of two in hand for nearer
+ * views. */
+#define HD_STAND_PUSH		(1.0f / 512.0f)
 void HDRenderStandWith(int group, int index, int with);
 /* One stand range alone - the triangles of `group` that stand on the faces
  * of its holder - with the group's own matrix and lighting; the caller sets

@@ -684,12 +684,14 @@ inline bool HDCoverTriOnFaces(const HDCoverTri& tri, const HDCoverFace* faces,
  * frame's list, whether the art's own room is, whether the room is covered,
  * whether this group is the one that covers it (the carrier, see above) and
  * whether the range's triangles lie on the room's faces whole
- * (HDCoverTriOnFaces - the renderer's kind 1):
+ * (HDCoverTriOnFaces - the renderer's kind 1) and whether they reach onto
+ * them with part of their area only (the renderer's kind 0):
  *
  *   classic   the room's classic roomlets
  *   withArt   the stand range with its own group, wherever that group draws
  *   inHolder  the stand range inside the room's own portal window, with its
  *             group's matrix and lighting
+ *   behind    withArt, pushed back in depth (HD_STAND_PUSH, hd_render.h)
  *
  * While the room is listed its place comes from exactly one source: a
  * covered room is drawn as its carrier's art - all of the carrier's stand
@@ -699,7 +701,11 @@ inline bool HDCoverTriOnFaces(const HDCoverTri& tri, const HDCoverFace* faces,
  * out; a room no group covers is drawn classic and all the art that lies on
  * its faces whole is left out. Art that only grazes the room's faces, and
  * every other group's art in its box, is drawn with its group whatever the
- * room does - leaving it out would cut it where it leaves the faces. A room
+ * room does - leaving it out would cut it where it leaves the faces. Where
+ * such art reaches onto the faces of a listed room that stays classic, the
+ * classic faces and the art lie in one place (RICH2's room 16 and group 14's
+ * stairwell walls), so the art is drawn pushed back: the classic face wins
+ * every pixel the two share, and the art beyond the faces stays. A room
  * that is not listed draws nothing of its own, and the art on its faces is
  * drawn with its group as everywhere else. */
 struct HDStandAnswer
@@ -707,10 +713,11 @@ struct HDStandAnswer
 	bool classic;
 	bool withArt;
 	bool inHolder;
+	bool behind;
 };
 
 inline HDStandAnswer HDStandDraw(bool holderListed, bool artListed, bool covered,
-	bool carrier, bool onFaces)
+	bool carrier, bool onFaces, bool grazes)
 {
 	HDStandAnswer out;
 	const bool drawnAs = covered && carrier;
@@ -718,5 +725,6 @@ inline HDStandAnswer HDStandDraw(bool holderListed, bool artListed, bool covered
 	out.classic = holderListed && !covered;
 	out.withArt = artListed && (!holderListed || drawnAs || !onFaces);
 	out.inHolder = holderListed && drawnAs && !artListed;
+	out.behind = out.withArt && out.classic && grazes && !onFaces;
 	return out;
 }

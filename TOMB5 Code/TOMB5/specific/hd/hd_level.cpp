@@ -563,11 +563,13 @@ namespace
 	StandDraw g_stand_draw[HD_MAX_STAND_DRAW];
 	int g_stand_draw_count = 0;
 	// This frame's stand ranges drawn with their group, in their holder's
-	// window and left out, and the in-holder draws past HD_MAX_STAND_DRAW.
+	// window and left out, the in-holder draws past HD_MAX_STAND_DRAW, and
+	// of those drawn with their group the ones pushed back.
 	int g_clip_stand_with = 0;
 	int g_clip_stand_holder = 0;
 	int g_clip_stand_out = 0;
 	int g_clip_stand_dropped = 0;
+	int g_clip_stand_behind = 0;
 
 	/* What the portal windows of this frame came to, for the log. `full`
 	 * drew over the whole backbuffer, `scissored` inside a rectangle, `empty`
@@ -2843,6 +2845,29 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 				carrierTris = tris;
 			}
 		}
+
+		/* Two rooms stay classic whatever the art covers. One whose flags
+		 * let the classic path lay a water surface on its faces (ROOM_MIST,
+		 * ROOM_REFLECT): BuildWaterSurfaces restores water only for HD
+		 * groups, so drawn as the art it would lose its water. And one whose
+		 * carrier a flipmap can swap away: the in-holder draw finds the
+		 * carrier's room by its group (RoomOfGroup), and while a flip draws
+		 * another group there the room would be drawn by nothing. Neither
+		 * holds for a covered room of the game (ANDREA2 124 and RICH2 15:
+		 * flags 0x0040 and 0x0048, no flipmap twin for 121 or 14). */
+		bool carrierFlips = false;
+
+		if (carrier >= 0 && carrier < (int)g_stand_rooms.size())
+		{
+			carrierFlips = g_stand_rooms[(size_t)carrier].twin >= 0;
+
+			for (const HDStandRoom& one : g_stand_rooms)
+				carrierFlips = carrierFlips || one.twin == carrier;
+		}
+
+		if (carrier >= 0 && (carrierFlips || h >= number_rooms ||
+			(room[h].flags & (ROOM_MIST | ROOM_REFLECT))))
+			carrier = -1;
 
 		g_group_stand[h] = 1;
 		g_group_stand_covered[h] = carrier >= 0 ? 1 : 0;
@@ -5362,44 +5387,8 @@ void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear)
 		memset(&g_shadow_stats, 0, sizeof(g_shadow_stats));
 }
 
-/* The frame in two phases.
- *
- * The first two passes write depth and the third does not (hd_render.cpp,
- * draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE FALSE). Drawn
- * room-major - all passes of one room, then the next, then the objects, then
- * the classic buckets - every later draw that writes depth and stands behind
- * a glow passes the depth test (the glow left no depth to fail against) and
- * paints over it: a RICH2 wall lamp whose cone hangs in a portal is cut off
- * along the portal's edge by the far wall of the room beyond, and an
- * object's glow disappears behind a classic crate.
- *
- * So the order is the classic engine's own: everything that writes depth
- * first, whatever it belongs to, then everything that does not.
- *
- *   HDFrameDraw       every room's passes 0 and 1, then every HD object and
- *                     Lara's passes 0 and 1
- *   DrawBuckets       the classic opaque world (output.cpp)
- *   HDFrameDrawGlow   every room's pass 2, then every object's pass 2
- *   DrawSortList      TR5's own see-through polygons, last of all
- *
- * so an HD glow is behind the classic sort list and in front of every opaque
- * thing it should be in front of - as the classic path does with its own
- * additive polygons.
- *
- * The cost is one more state bracket per frame (HDRenderFrameBegin does a
- * GetRenderState and a SetRenderState for each state it owns) and one more
- * prepare per drawn room - two matrix multiplies and the room's light block.
- * The lighting itself is worked out once: FillRoomLighting counts the lights
- * it turns away, so it runs in this phase and the glow phase reads what it
- * left in the FrameRoom. */
-/* This frame's answer for every stand range (HDStandDraw in hd_cover.h):
- * whether its holder is on the list (g_stand_frame), whether its own group
- * is (g_frame), and whether the art covers the holder. The answer for
- * drawing with its group goes to the renderer for both phases; a range to be
- * drawn in its holder's window gets an entry of g_stand_draw with its
- * group's matrix - the holder's view * world moved by the difference of the
- * two rooms' origins, since a flipmap pair stands at one place - and its
- * group's lighting, so that it looks the same whichever room brings it. */
+// The room the frame draws `group` for, -1 while a flip draws another
+// group in its place.
 static int RoomOfGroup(int group)
 {
 	for (int r = 0; r < g_room_count; r++)
@@ -5409,6 +5398,14 @@ static int RoomOfGroup(int group)
 	return -1;
 }
 
+/* This frame's answer for every stand range (HDStandDraw in hd_cover.h):
+ * whether its holder is on the list (g_stand_frame), whether its own group
+ * is (g_frame), and whether the art covers the holder. The answer for
+ * drawing with its group goes to the renderer for both phases; a range to be
+ * drawn in its holder's window gets an entry of g_stand_draw with its
+ * group's matrix - the holder's view * world moved by the difference of the
+ * two rooms' origins, since a flipmap pair stands at one place - and its
+ * group's lighting, so that it looks the same whichever room brings it. */
 static void DecideStand()
 {
 	g_stand_draw_count = 0;
@@ -5416,6 +5413,7 @@ static void DecideStand()
 	g_clip_stand_holder = 0;
 	g_clip_stand_out = 0;
 	g_clip_stand_dropped = 0;
+	g_clip_stand_behind = 0;
 
 	for (size_t p = 0; p < g_stand_pieces.size(); p++)
 	{
@@ -5433,14 +5431,18 @@ static void DecideStand()
 		const HDStandAnswer answer = HDStandDraw(holderAt >= 0, artListed,
 			g_group_stand_covered[piece.holder] != 0,
 			g_group_stand_carrier[piece.holder] == piece.group,
-			piece.kind == 1);
+			piece.kind == 1, piece.kind == 0);
 
-		HDRenderStandWith(piece.group, piece.index, answer.withArt ? 1 : 0);
+		HDRenderStandWith(piece.group, piece.index, answer.behind ? HD_STAND_BEHIND
+			: answer.withArt ? HD_STAND_WITH : HD_STAND_OUT);
 
 		if (answer.withArt)
 			g_clip_stand_with++;
 		else if (!answer.inHolder && artListed)
 			g_clip_stand_out++;
+
+		if (answer.behind)
+			g_clip_stand_behind++;
 
 		if (!answer.inHolder)
 			continue;
@@ -5507,6 +5509,36 @@ static void DrawStandInHolders(unsigned int passes)
 	HDRenderScissorOff();
 }
 
+/* The frame in two phases.
+ *
+ * The first two passes write depth and the third does not (hd_render.cpp,
+ * draw_pass: pass 2 is ONE / ONE with D3DRS_ZWRITEENABLE FALSE). Drawn
+ * room-major - all passes of one room, then the next, then the objects, then
+ * the classic buckets - every later draw that writes depth and stands behind
+ * a glow passes the depth test (the glow left no depth to fail against) and
+ * paints over it: a RICH2 wall lamp whose cone hangs in a portal is cut off
+ * along the portal's edge by the far wall of the room beyond, and an
+ * object's glow disappears behind a classic crate.
+ *
+ * So the order is the classic engine's own: everything that writes depth
+ * first, whatever it belongs to, then everything that does not.
+ *
+ *   HDFrameDraw       every room's passes 0 and 1, then every HD object and
+ *                     Lara's passes 0 and 1
+ *   DrawBuckets       the classic opaque world (output.cpp)
+ *   HDFrameDrawGlow   every room's pass 2, then every object's pass 2
+ *   DrawSortList      TR5's own see-through polygons, last of all
+ *
+ * so an HD glow is behind the classic sort list and in front of every opaque
+ * thing it should be in front of - as the classic path does with its own
+ * additive polygons.
+ *
+ * The cost is one more state bracket per frame (HDRenderFrameBegin does a
+ * GetRenderState and a SetRenderState for each state it owns) and one more
+ * prepare per drawn room - two matrix multiplies and the room's light block.
+ * The lighting itself is worked out once: FillRoomLighting counts the lights
+ * it turns away, so it runs in this phase and the glow phase reads what it
+ * left in the FrameRoom. */
 void HDFrameDraw()
 {
 	const int objects_here = HDObjectFrameCount();
@@ -5893,19 +5925,22 @@ void HDFrameDrawGlow()
 			 * (hd_cover.h, DecideStand): classic rooms with stand art on the
 			 * list / ranges drawn with their own group / drawn in their
 			 * holder's window / left out because their holder is listed and
-			 * not covered / in-holder draws past HD_MAX_STAND_DRAW. */
+			 * not covered / in-holder draws past HD_MAX_STAND_DRAW.
+			 * `stand_behind=` is how many of those drawn with their group are
+			 * drawn pushed back (HD_STAND_BEHIND): art reaching onto the faces
+			 * of a listed room that stays classic. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
 				"pairs=%d whole=%d scissored=%d reach_rooms=%d "
 				"reach_pieces=%d reach_whole=%d reach_hidden=%d "
-				"stand=%d/%d/%d/%d/%d",
+				"stand=%d/%d/%d/%d/%d stand_behind=%d",
 				g_frame_count, g_clip_open, g_clip_full, g_clip_scissored,
 				g_clip_empty, g_clip_windowed_tris, g_clip_items_spared,
 				views, viewsObj, g_clip_pairs, g_clip_pairs_whole,
 				g_clip_pairs_scissored, g_clip_reach_rooms,
 				g_clip_reach_pieces, g_clip_reach_whole, g_clip_reach_hidden,
 				g_stand_frame_count, g_clip_stand_with, g_clip_stand_holder,
-				g_clip_stand_out, g_clip_stand_dropped);
+				g_clip_stand_out, g_clip_stand_dropped, g_clip_stand_behind);
 			LogReachArt();
 			g_reachart_due = false;
 		}

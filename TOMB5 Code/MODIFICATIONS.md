@@ -4637,10 +4637,13 @@ pictures of rooms that hold no stand art - three each of ANDREA1, ANDY2, JOBY5, 
 ANDREA2 - are md5-identical between the probes of 7af0167 and HEAD; the probe's build
 lines of ANDREA1 are identical and ANDREA2's differ in `cull` (2235 to 2297 opaque draw
 calls) and in the overlap summary (`intruding tris` 13548 to 13532 and `unbound` 898 to
-882: the 16 trunk triangles of the pair 124/117; `band_unclaimed` 2437 to 2335). The
-opaque draw calls of a whole level, base against HEAD: ANDREA2 2235 to 2297, ANDREA3 944
-to 947, ANDY1 1465 to 1477, ANDY3 1369 to 1452, JOBY2 1869 to 1887, RICH2 1839 to 1972,
-RICHCUT2 70 to 126, TITLE 784 to 883, and the seven levels with no such room unchanged.
+882: the 16 trunk triangles of the pair 124/117; `band_unclaimed` 2437 to 2335). In the
+other levels the summary changes on classic holders alone - ANDY3 `intruding tris` 2349 to
+2335 (the pair 103/8 `bound` 43 to 29), TITLE `band_unclaimed` 12 to 3, RICH2 22697 to
+22690 - and no HD holder's pair line changes in any of the fifteen levels. The opaque draw
+calls of a whole level, base against HEAD: ANDREA2 2235 to 2297, ANDREA3 944 to 947, ANDY1
+1465 to 1477, ANDY3 1369 to 1452, JOBY2 1869 to 1887, RICH2 1839 to 1972, RICHCUT2 70 to
+126, TITLE 784 to 883, and the seven levels with no such room unchanged.
 
 **Unchanged.** How an HD room's own group is drawn and every range of a level without such
 a room; the intrusion list, its pieces, `DecidePairs` and the portal windows of the
@@ -4674,14 +4677,17 @@ concerned (TITLE 103's art groups come in pairs, likely flip twins); the carrier
 group and a carrier with a flipmap partner leaves its room classic, unmeasured in a
 flipped frame. The randomizer's marked rooms. The double draw of ANDREA2 124's two classic
 palm statics (slot 8) with the palm art of groups 117 and 127. The shared pixels the art
-still wins in the rooms that stay classic (1,231, 602 and 526 in three views of RICH2 16):
-art the room's grazing ranges do not hold, presumably the triangles the renderer tagged to
-room 15 first - a triangle on the faces of two holders follows the first one's answer
-alone, and TrgProbe does not model that. In-window draws receive no projected
-shadow, and Lara in a covered room casts the classic shadow, so the play test sees the
-round shadow in ANDREA2 124. A picture of a level with stand ranges can differ where two
-surfaces tie in depth, because the ranges change the draw order - 18 pixels in a view of
-RICHCUT2 room 0 without `-stand`.
+still wins in the rooms that stay classic (1,231, 602 and 526 in three views of RICH2 16)
+are mostly not the first-holder tag's: with the tag given to the last holder instead, room
+16 holds all 938 triangles and the art still wins 1,146 of the 1,231. About 440 of them
+are art that faces against the face, which the overlap test does not tag and which shows
+only where its range is drawn two-sided; the rest is art that stands in front of the wall
+within 16 units - the stair stringers - where it rightly wins. A triangle on the faces of
+two holders follows the first one's answer alone, and TrgProbe does not model that.
+In-window draws receive no projected shadow, and Lara in a covered room casts the classic
+shadow, so the play test sees the round shadow in ANDREA2 124. A picture of a level with
+stand ranges can differ where two surfaces tie in depth, because the ranges change the
+draw order - 18 pixels in a view of RICHCUT2 room 0 without `-stand`.
 
 **Commits.** `a2557be`, `851d3fc`, `6a490bc`, `914d284`
 

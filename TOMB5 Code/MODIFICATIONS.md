@@ -1840,7 +1840,9 @@ a destructible copy - bit 15 set, a counter in bits 8 to 14 - is recognised as t
 material it copies. Static meshes are not drawn twice: `DrawStaticObjects` returns at
 once for an HD room, the Remaster having baked them into the room art. A group with no
 triangle inside its own room (a *hollow group*: ANDREA2 124, JOBY2 19 and 21, RICHCUT2
-2, 3 and 4, TITLE 70, 101 and 103) does not count as HD art and its room stays classic.
+2, 3 and 4, TITLE 70, 101 and 103) does not count as HD art and its room stays classic,
+unless one other group's art covers its faces (*A classic room covered by another
+group's art is drawn as that art*, below: ANDREA2 124).
 
 **Why.** The remaster's room art has to be drawn where the classic room polygons were
 drawn, with the same depth, the same projection and the same effects order, or Lara, the
@@ -4512,6 +4514,129 @@ neighbour's group are the same kind of piece - and none is built; `hd_reach` sta
 way to see the classic walk's answer.
 
 **Commits.** `205eb33`
+
+### A classic room covered by another group's art is drawn as that art
+2026-10-04
+
+**What.** A room the engine draws classic - no group, an empty group, a hollow group - can
+have its floor and walls modelled in another group's art, and the frame now draws such a
+place once. At level build every classic face of every room the randomizer did not mark is
+handed to the renderer (`BuildStandFaces`); the renderer keeps the rooms whose own group
+draws nothing inside their box and gives every other room group's art on their faces, or
+standing in their box, draw calls of their own - stand ranges, three kinds per (group,
+holder): reaching onto the faces, lying on them whole, in the box on no face. After the
+build a room is *covered* when one HD group's art covers every sample of every face; that
+group is its *carrier*. Per frame, a listed covered room skips its roomlets and is drawn
+as the carrier's art - with the carrier when the carrier's room is listed, inside the
+room's own portal window with the carrier's matrix and lighting when it is not - and every
+other group's copy of its faces is left out. A listed room no group covers stays classic
+and the art lying on its faces whole is left out. Art that only grazes the faces, and
+every other group's art in the box, is drawn with its group as before. In the game two
+rooms are covered and drawn as art - ANDREA2 124 (carrier 121) and RICH2 15 (carrier 14) -
+and twenty stay classic with foreign art on their faces: ANDREA3 74, ANDY1 212, ANDY3 26,
+28, 88, 103, 118, 122 and 210, JOBY2 19 and 21, RICH2 16, 18 and 19, RICHCUT2 2, 3 and 4,
+TITLE 70, 101 and 103. Sixty-one more classic rooms hold foreign art and have no classic
+face, so the classic path draws nothing there (ANDREA2 102 among them); twenty have no
+foreign art. ANDREA1, ANDY2, JOBY3, JOBY4, JOBY5, RICH1 and RICH3 have no such room.
+
+**Why.** ANDREA2's courtyard room 124 is a hollow group and drawn classic, and group 121 -
+the room through its west portal, never on the intrusion list because a neighbour is not -
+carries 14,700 triangles inside it that cover all 46 of its classic faces. A frame that
+listed both rooms drew both surfaces into one depth buffer: the floors coincide and
+fought, the classic walls stand up to 128 units in front of the recessed art walls and
+won, and looking away from the portal 121 left the list and the classic room was drawn
+alone - which surface won depended on the angle. RICH2's stairwell (rooms 14 to 19, all
+their art in group 14) is the same case. Calling such a room HD is not an answer: its own
+group holds nothing in it, and in a frame without the neighbour it would be void, which is
+what the hollow rule exists for. The covering group is one group and not the union of
+several, because a second group that covers the faces is a second copy of the surface:
+group 127 carries a copy of 36 of room 124's 46 faces beside 121's, and drawn in the
+room's window as well it fought with 121's like the classic faces did. The art that lies
+on the faces whole is what can be left out; a triangle that only reaches onto a face
+leaves it - group 117's palm trunk grazes a face of room 124 and lost its lower half when
+its 16 such triangles were left out - so it is kept. The relief in the room's box (a
+planter, the jambs of an arch) is part of the carrier's art in the room's window: without
+it the arches showed slivers of the clear colour.
+
+**How.** `specific/hd/hd_cover.h` is new and pure, shared by the engine, ModernTest,
+TrgProbe and RoomProbe: `HDCoverMakeTri` (`:87`), the sample test
+`HDCoverHits`/`HDCoverSamples`/`HDCoverSet`/`HDCoverFaces` (`:128`, `:181`, `:243`,
+`:326`), the threshold `HDCoverRoomCovered` (`:384`), `HDCoverOverlaps` (`:401`, the
+triangle clipped to the face's 128-unit slab and both compared in its plane by separating
+axes), `HDCoverTriOnFaces` (`:652`) and `HDStandDraw` (`:712`).
+`specific/hd/hd_render.cpp`: `HDRenderSetStandFaces` (`:3756`) on the contract of the
+intrusion list; before the build, the holders the `.TRG` leaves classic - no group, or no
+triangle whose centroid lies in the room's box with `HD_OVERHANG_SLACK` (`:4547`); per
+group the holders asked, its own room and its flipmap twin left out (`:4692`); per
+triangle the tag (`:5192`, taken out of the intrusion piece and the open half; the
+intrusion hits are still counted) and the range by holder and kind (`:5396`); the sort key
+ends in `stand` (`:5609`); `draw_pass` (`:7299`) and `draw_receive` (`:8026`) draw a stand
+range alone in `HD_WINDOW_STAND` or with its group while `HDRenderStandWith` (`:3822`)
+says so; `HDRenderRoomStand` (`:7790`). `specific/hd/hd_level.cpp`: `BuildStandFaces`
+(`:2667`), called beside `BuildRoomCuts` (`:3805`); `BuildStandRanges` (`:2771`), run once
+every group's `g_group_hd` is decided (`:4103`), picks each holder's carrier and lists the
+ranges the frame answers; `StandHolderRoom` (`:4730`), reached from `HDFrameRoom` for a
+room whose group is not HD (`:4773`), notes a holder with its matrix and window and
+answers true for a covered one, so `InsertRoom` skips its roomlets; `DecideStand`
+(`:5412`) answers every range per frame and queues the in-window draws,
+`DrawStandInHolders` (`:5489`) draws them in each phase (`:5609`, `:5623`, `:5729`,
+`:5736`); a covered room listed with no HD room still opens the frame (`:5520`). The
+hollow rule's comment (`:4046`) says what the room is drawn as. Seams, at the end of
+existing lines: `HDLOG room=` ends in `stand=` (triangles of HD groups on its faces),
+`covered=` and `carrier=` (`:4124`); the build line in `stand_rooms=`, `covered=`,
+`stand_tris=` (`:4181`); the clip line in `stand=` with five counts (`:5901`).
+
+**Checked.** The engine builds; ModernTest 14,539 checks (14,505 before; `stand_draw`,
+`stand_cover`, `stand_overlap`), MenuTest 42,613, InterpTest 729, LipsTest 270 with the
+`.OBJ` folder and 243 without, 0 failed; four mutations of `hd_cover.h` in a copy of the
+tree fail one to four checks each. RoomProbe, TrgProbe, ModelProbe (`bmodel`) and MapProbe
+(`bmap`) build. TrgProbe `-classicart` over the fifteen levels prints the measurement
+before this change byte for byte, its art triangle, grid and coverage now being
+`hd_cover.h`'s; its new `union=stand` line - the engine's tag and threshold from the
+`.TRC` - covers exactly the samples all foreign art covers in all 83 classic rooms with
+foreign art, and names the two carriers above. RoomProbe at 1280 x 720, field of view 80,
+`-coincide 16` (pixels at which a classic face lands within 16 units of the art): ANDREA2
+124 from three views 447,788, 398,428 and 19,067 before, 0 at HEAD with `-stand`, and 0
+with the carrier off the list; RICH2 15 from two views 267,163 and 241,200 before, 0 and
+0; ANDREA2 102 0 before and after (no classic face). Holes - pixels the classic faces
+alone cover that the HEAD picture leaves empty - 0, 2, 0, 0, 0 with both rooms listed (the
+2 are a gap of the art itself) and 0, 2, 0, 0, 34 with the carrier off the list (the 34
+are one-pixel dots on the rim of RICH2 15's floor opening into room 14, whose own art
+fills them in any view that sees through it). For ANDREA2 the picture with the carrier off
+the list differs from the one with it listed in 0 or 1 pixel. Without `-stand` the probe
+draws the same pictures as before (0 pixels differ, 8 views). Fifteen RoomProbe pictures
+of rooms that hold no stand art - three each of ANDREA1, ANDY2, JOBY5, RICH1 and ANDREA2 -
+are md5-identical between the probes of 7af0167 and HEAD; the probe's build lines of
+ANDREA1 are identical and ANDREA2's differ in `cull` (2235 to 2297 opaque draw calls) and
+in the overlap summary (`intruding tris` 13548 to 13532 and `unbound` 898 to 882: the 16
+trunk triangles of the pair 124/117; `band_unclaimed` 2437 to 2335).
+
+**Unchanged.** How an HD room's own group is drawn and every range of a level without such
+a room; the intrusion list, its pieces, `DecidePairs` and the portal windows of the
+intruding art; `HDRoomIsHD`, `GroupOfRoom` and everything that asks them (the statics, the
+projected shadow's choice); the randomizer's marked rooms, which are not handed in; the
+classic path with `hd_enable` 0, where `HDFrameRoom` answers false at once; the shaders.
+
+**Decisions.** The threshold is strict - every sample of every face, sampled every 64
+units, art within 128 units facing the way the face does: a room drawn as art that does
+not cover it shows the void where the art stops (RICH2 16 has no art under its 14 ceiling
+faces, RICH2 18 one bare face, RICHCUT2 3 two faces at 27 to 29 per cent). The carrier is
+one group, of several the one with the most triangles on the faces, then the lowest. Art
+that only grazes a classic room's faces is kept rather than cut: in a room that stays
+classic the frame draws it over the classic faces where it reaches onto them, which
+RoomProbe measures at 74,322 coincident pixels in a view of RICH2 16 and 19,969 in one of
+RICH2 18 (598,449 and 464,496 before). The palm statics of ANDREA2 124 stay classic as a
+classic room's statics always are.
+
+**Left.** The look at grazing angles in motion, and the frames of a real walk through
+ANDREA2 124 and RICH2's stairwell. The flipmaps of the levels concerned (TITLE 103's art
+groups come in pairs, likely flip twins); the carrier is per group, so a flip keeps it
+with the art, unmeasured. The randomizer's marked rooms. The double draw of ANDREA2 124's
+two classic palm statics (slot 8) with the palm art of groups 117 and 127. The residual
+over the classic faces of the twenty rooms that stay classic, from art that reaches onto
+their faces from elsewhere. In-window draws receive no projected shadow.
+
+**Commits.** `a2557be`, `851d3fc`
 
 ### The material 15 books in motion: a fan's shadow that turns, and flames that play
 2026-09-27
@@ -12446,3 +12571,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |
 | #192 | A light faded to nothing is not counted into an HD object's light list |
 | #193 | The soft motion of the chest: an optional secondary motion for the HD Lara |
+| #194 | A classic room covered by another group's art is drawn as that art |

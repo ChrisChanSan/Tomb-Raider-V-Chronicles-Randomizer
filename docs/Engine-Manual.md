@@ -2122,7 +2122,30 @@ would be worse than a classic model.
 **A room the remaster has nothing for stays classic**, on its own, room by
 room. In ANDREA1 that is four rooms out of 242. A room the randomizer built
 from scratch (a secret's new chamber) is in the same position and behaves the
-same way: classic, without being asked.
+same way: classic, without being asked. So does a room whose art draws nothing
+inside the room itself - a *hollow* group, nine rooms in the game, ANDREA2's
+courtyard room 124 among them.
+
+**A classic room whose floor and walls the remaster built in a neighbour's
+art is drawn as that art.** The remaster sometimes models a room in the group
+of the room next door: ANDREA2's room 124 stands in group 121, the room through
+its west portal, and RICH2's stairwell room 15 in group 14. Drawn classic, such
+a room and the neighbour's art lie in the same place, and whenever the view
+lists both they fight in the depth buffer - which one wins changes with the
+angle. At level build the engine measures, per classic room with faces, the art
+of every other HD group that stands on those faces (within 128 units of a face,
+facing the way it does). When one group's art covers every face completely
+(sampled every 64 units), that group is the room's carrier and the room is
+drawn as its art: with the carrier when the carrier's room is on the list, and
+inside the room's own portal window when it is not, so the place is never
+empty and never doubled. The other groups' copies of the same faces are left
+out while the room is listed. A room no group covers stays classic, and the art
+that lies on its faces whole is left out while it is listed; art that only
+grazes its faces - a palm trunk beside a wall, a stair that runs on into the
+next room - is drawn as before, because leaving it out would cut it. In the
+game two rooms are covered (ANDREA2 124, RICH2 15) and twenty stay classic
+with some foreign art on their faces; the rest of the classic rooms either have
+no face or no foreign art.
 
 **A room the randomizer RESHAPED is a different case, and it has to be told.**
 The remaster's art describes the level as Core shipped it. When a run cuts a
@@ -2188,8 +2211,13 @@ The ones worth reading:
 ```
 HDLOG level=ANDREA1 trg=v3 groups=243 rooms=242 sky=1 empty=4 pages=179 ...
 HDLOG room=0 group=0 tris=1216/0/0 ranges=4 statics=2 hd=1 reason=ok
+      stand=0 covered=0 carrier=-1
 HDLOG room=66 group=66 tris=0/0/0 ranges=0 statics=0 hd=0 reason=empty_group
+      stand=0 covered=0 carrier=-1
+HDLOG room=124 group=124 tris=4/0/0 overhang=4 ... hd=0 reason=hollow_group
+      stand=5070 covered=1 carrier=121
 HDLOG level=ANDREA1 built ms=1180 rooms=242 hd=238 classic=4 sky_groups=1 ...
+      ... stand_rooms=0 covered=0 stand_tris=0
 HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
 HDLOG level=ANDREA1 statics suppressed=255 kept=0 (in 238 HD rooms, 4 classic)
 HDLOG level=ANDREA1 water marks=... rooms=...
@@ -2203,6 +2231,7 @@ HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
       items_spared=... view=... view_obj=... pairs=... whole=... scissored=...
       reach_rooms=... reach_pieces=... reach_whole=... reach_hidden=...
+      stand=.../.../.../.../...
 HDLOG reachart level=ANDREA1 room=93 reach=... holder=101 listed=1 pieces=6
       tris=108 answer=hidden band_tris=0
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
@@ -2249,6 +2278,18 @@ group, the room of that number until a flipmap swaps it with its pair, and
 end of the level line counts the unclaimed art near the holder's wall, drawn
 whole on every frame. The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.
+
+The three fields at the end of a room line are the classic room drawn as a
+neighbour's art (above): `stand=` the triangles of HD groups standing on its
+classic faces, `covered=1` when one group covers every face and the room is
+drawn as that art, `carrier=` that group (-1 for none); all three are 0, 0 and
+-1 for an HD room. The build line ends in how many classic rooms hold such art
+(`stand_rooms=`), how many of them are covered and how many triangles stand on
+their faces. The `stand=` field at the end of the `clip` line is the frame's
+answer, five numbers: the classic rooms with such art on the list, the art
+ranges drawn with their own group, those drawn in a covered room's window
+because their group is not listed, those left out because the room is listed,
+and in-window draws the frame had no room for (always 0).
 
 A randomized level adds two more room reasons and a block of its own. A room
 the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the

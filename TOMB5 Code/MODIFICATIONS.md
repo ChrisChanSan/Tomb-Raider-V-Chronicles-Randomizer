@@ -7203,8 +7203,9 @@ reach, again in the windows and scissors `DrawRoomWindowed` used
 between the drawn direction and the frame's target (:4732, cleared at :4712 and :4743),
 0 at pull 0; all three in `HDFrameDraw` (:4902) after the room loop, the clear floors and
 `HDRenderScissorOff`, before the models' solid passes. The blob:
-`specific/drawlara.cpp` (:133, :388, :652) calls `S_PrintShadow` only for the mirror's
-copy or when `HDShadowFrameDecide` says no; `specific/specificfx.cpp` (:6652, :6667,
+`specific/drawlara.cpp` (:133, :388, :652) calls `S_PrintShadow` only in a mirror's draw -
+where the HD level's mirror has zeroed her slot's shadow size, so it draws nothing - or
+when `HDShadowFrameDecide` says no; `specific/specificfx.cpp` (:6652, :6667,
 :6876, :6878) reads the option through `HDShadowBlobMode`. `tomb5/tomb5.cpp` (:102, :343)
 and `global/types.h` (:2657) for the default and the comment. The row:
 `game/menu_frame.cpp` includes `hd_level.h` and `hd_shadow.h` (:32, :33);
@@ -7342,12 +7343,13 @@ it answers in the title screen too and does not change with the room she stands 
 HD off a stored 5 is shown as what is drawn for it and stepped from there, but not written
 back, so switching HD on again brings *Projected* back.
 
-**Left.** Lara's shadow on herself and on HD items and creatures; casters other than Lara
-and the creatures and items the classic engine gives a blob, which cast into a second map
-once drawn HD (the next entry) - the cutscene actors among them cast nothing; the shadow
-in a mirror's image (the reflected rooms do not receive, and her reflection keeps the
-blob); the parts of her drawn classic (the diving suit's two propulsion units are not in
-the map); classic rooms (her blob is drawn there); the classic statics of an HD room
+**Left.** Lara's shadow on herself, and - until the third entry gives it - on HD items
+and creatures; casters other than Lara and the creatures and items the classic engine
+gives a blob, which cast into a second map once drawn HD (the next entry) - the cutscene
+actors among them cast nothing; the shadow in a mirror's image, which the third entry
+gives (her reflection has no blob: the HD level's mirror zeroes her slot's shadow size
+around it); the parts of her drawn classic (the diving suit's two propulsion units are
+not in the map); classic rooms (her blob is drawn there); the classic statics of an HD room
 (`HDStaticIsClassic`, 21 in ANDREA1) do not receive; the tuning of the numbers. The fixed
 light falls the same way in every room, so near a lamp the shadow can lie towards the lamp
 rather than away from it.
@@ -7416,8 +7418,9 @@ box carries its own extent, depth and map size (`HDShadowBox`, :719):
 (:828) makes the second box round hers - the same light, basis and middle, snapped the
 same way, so with texels of her size its centre is hers to the bit - and the mapping, the
 matrices, the receive block and the reach read the box's own size; `HDShadowBoxHolds`
-(:864) says whether a point lies inside the box grown across the light by a margin, a
-part of its extent on each of its four sides, its depth not grown. The rule with its two
+(:864) says whether a point lies inside the box grown by a margin, a part of its extent
+on each of its four sides across the light and the same part of its depth on the two
+along it (the depth grown with the fade of the next entry). The rule with its two
 faces (:1473, :1479): an item's blob gives way when the projected shadow runs, her step
 ran, the second target exists, the item is drawn HD and it is not mirrored; the item casts
 when it also has a blob and its place lies inside the second box grown by OTHERS_MARGIN.
@@ -7427,7 +7430,9 @@ filled by `shadow_step` (`hd_laradraw.cpp:1008` to `:1012`), `stepped` cleared e
 (`hd_object.cpp:4062`): her step first, the frame second, then `begin_decision` (:2834),
 the decision `HDObjectBegin` (:2879) acts on, must answer HD, then the item must not be a
 reflection and the two-map receive shader, the cast shaders and the second target must
-exist (:4076, the target asked last, because asking makes it). `HDObjectBegin` takes the
+exist - the target and the variant as the frame's decision asked for them beside her
+map (`hd_laradraw.cpp`, `HDShadowFrameDecide`, since the next entry; a blob asks for no
+target itself). `HDObjectBegin` takes the
 answer over, and `HDObjectEnd` marks the entry for the second map when the item's place,
 its world position, lies inside the second box grown by OTHERS_MARGIN (:3187), with the
 node mask it is drawn with. The place is one point, the feet; at the fixed slant a head
@@ -7464,9 +7469,10 @@ makes exactly the calls it made, the two-map one remembers and sets stage 4 as w
 `HDRenderShadowReceiveEnd` (:7817) puts stage 4 back; the variant is made beside the
 receive shader (:3404) and asked by `HDRenderShadowReceive2Ready` (:7663).
 `ShadowReceivePass` (`hd_level.cpp:4670`) takes the variant in a frame whose second map
-was drawn (`HDFrameShadowOthersDrawn`, :4628) and then also draws the groups within the
-second reach (:4696); should only the second map have been drawn, her block is silenced,
-so a map an earlier frame left in her target is never read. The log: `ShadowSecond`
+was drawn (`g_others_cast_now`, set by `ShadowOthersPass`) and then also draws the
+groups within the second reach (:4696); should only the second map have been drawn, her
+block is silenced, so a map an earlier frame left in her target is never read. The log:
+`ShadowSecond`
 (:4782) ends its line in the four new fields (:4822); `shadow_log` writes `HDLOG shadow
 others` (`hd_laradraw.cpp:1068`) whenever the second target's state changes.
 
@@ -7567,18 +7573,14 @@ receive is in `ms=`.
 **Left.** A creature further from her than 4096 and 819 units across the light, or 4096
 along it from her middle, has no shadow at all, neither blob nor projected one; across
 the light the edge term fades the projected one out on every side before. Along the light
-nothing fades: the second box ends 4096 units along the light from her centre, about 4730
-straight above or below her at the fixed slant, and a creature crossing there - as she
-climbs or drops past it, or a creature walks up a ramp below her ledge - loses a shadow of
-full strength in one frame, and at the near side the cast loses what of a caster reaches
-past it along a sharp line. A fade on each tap's own caster depth near 0 and 1, in
-`Receive2PS` and `HDShadowLookupBehind`, with the mark's depth grown to match, would
-soften it. An HD item clipped away (its bounds outside the view or the portal window, no
-node walked) has had its blob skipped before the clip is known and is not in the second
-map; its shadow reaches 440 to 900 units beyond its bounds along the light, so when it
-enters the view or a door's window from the side its shadow points towards, a strip of
-shadow appears at once at the screen's or the door's edge. A cast-only entry for a clipped
-item, its nodes walked for the map and not drawn, would remove it. The play test should
+the second box ends 4096 units from her centre, about 4730 straight above or below her at
+the fixed slant; the next entry fades each tap of the second map by its own caster's
+depth near both ends and grows the mark's box along the light to match, so a creature
+crossing there no longer loses a shadow of full strength in one frame. An HD item clipped
+away (its bounds outside the view or the portal window) has had its blob skipped before
+the clip is known; its shadow reaches 440 to 900 units beyond its bounds along the light,
+and the next entry walks such an item's nodes for the second map alone, so its shadow
+lies in the view before it does. The play test should
 watch first for creatures entering the view and for a creature walking four sectors away
 from her. A creature that stands in a room the HD level draws classic loses its blob and
 takes the projected shadow only where HD groups receive. A floor less than OTHERS_END
@@ -7589,9 +7591,10 @@ storey beneath was pictured, because the probe draws one room group. Receivers n
 cast, so a creature's shadow, like hers, passes through a floor or a wall. In a frame with
 the second map the receive draws every group within the second reach again, up to about
 four sectors round her and further along the light; its cost was measured on one room
-group only. Nothing receives on an HD model: neither her shadow nor theirs falls on her or
-on a creature. The mirror's image keeps its blobs. If the frame list is full, an item is
-drawn classic and keeps its blob.
+group only. The HD models take neither her shadow nor theirs here; the next entry draws
+them again for both maps. The mirror's image has no blobs - the HD level's mirror zeroes
+`shadow_size` around its draws - and takes the projected shadows from the next entry on.
+If the frame list is full, an item is drawn classic and keeps its blob.
 What cannot be proven without playing: how the creatures' shadows look in motion, in a
 fight, on a dying or exploding creature and under mesh swaps (the cast draws the swapped
 model and the item's `mesh_bits`), and which creatures of which levels show it. The object
@@ -7609,6 +7612,205 @@ way', 'Round 188 (#188): the suites', 'Round 188 (#188): the rooms take both map
 round two's review pass 1 found', 'Round 188 (#188): the suites', 'Round 188 (#188): the
 record follows'.
 
+### The projected shadow on the HD models, in a mirror's image and from a creature out of view
+2026-10-04
+
+**What.** The HD models take the projected shadow as the rooms do: her outline falls on a
+creature or an HD item that stands down-light of her, a creature's on her and on the HD
+items, each at the darkness it has on the floor, and two shadows over one model are as
+dark as one. A mirror's image shows the shadows of the room in front of it, reflected: the
+copy behind the glass takes them at the place it reflects, and so do the reflections of
+Lara and the items. A creature the picture has clipped away - its bounds outside the view
+or its door's window - still casts into the second map, so its shadow lies on the floor
+before the creature comes into view. The second map's shadow fades out over the box's near
+and far side along the light as it does across it, so no creature loses its shadow in one
+frame. `HDLOG shadow second` gains `models=`, `mcalls=`, `castonly=` and `mirror=` at its
+end. The table gains one number, OTHERS_FADE.
+
+**Why.** With the rooms darkened and the models not, a creature in her shadow stood lit on
+a dark floor, and her outline stopped at its feet; the mirror's copy looked the maps up
+at its own place behind the glass, where none of the shadows in front of it lie, instead
+of at the place it reflects, and the reflections took none; and a creature
+walking into view brought a strip of shadow with it at the screen's edge. The rest of the
+projected shadow, as decided for this round, closes those three; a second light for walls
+turned away from the fixed one is not built.
+
+**How.** The number: `HD_SHADOW_OTHERS_FADE` 0.05 (`specific/hd/hd_shadow.h:192`), with
+what it does to the picture and which way to turn it in the table's comment. The fade:
+`HDShadowFadeTerm` (:1149) weights each casting tap of the second map by saturate(min(tap,
+1 - tap) / OTHERS_FADE), exactly 1 in the box's middle, in `HDShadowLookupBehind` and in
+the shaders' `OthersShade` (`hd_shader/hd_shadow_receive.hlsl:254`, the slope in c107.z);
+`HDShadowBoxHolds` (:882) grows all six sides of the box by its margin, so a caster's mark
+holds along the light as across it and the fade has eaten its shadow before the mark
+drops. The second target is asked for in the frame's decision beside hers
+(`hd_laradraw.cpp:1109`, read through `HDShadowFrameOthersReady`, :1127), so its state
+line is written in the frame it changes and no blob asks for a target;
+`HDFrameShadowOthersDrawn` is gone, the receive pass reads `g_others_cast_now`. The
+models: who takes which map is a pure rule of what an entry is (`HDShadowReceiverTakes`,
+:1611) - Lara's pieces the second map only, never her own; an item whose object has a blob
+her map only, never the one it is cast into; every other HD item both; the ring and the
+pickup display nothing - and a block not taken is silenced through its u row
+(`HDShadowReceiveWithoutHer`, `HDShadowReceiveWithoutOthers`, :1402), so one shader serves
+all and reads no map it is not to read. `ModelReceivePS` (`hd_shadow_receive.hlsl:428`) is
+the two-map body on ModelVS's outputs with ModelPS's three clips; `HDModelReceiveDraw`
+(`hd_model.cpp:4483`) draws an entry again with ModelVS, the same joints, neck cut, soft
+constants, lips stream, indices and cull as the solid draw, the opaque and alpha ranges
+only; `HDRenderShadowModelsBegin` (`hd_render.cpp:7989`) sets EQUAL, no depth write, ZERO
+/ SRCCOLOR, RGB and guards each pixel with stencil bit 1, which the rooms' receive leaves
+0; `HDObjectShadowReceiveFrame` (`hd_object.cpp:4277`) walks the frame list, tests each
+entry's bounding sphere (`entry_sphere`, :4170) against the reach of the maps it takes
+(`HDShadowSphereTouches`, :1633), and `ShadowModelsPass` (`hd_level.cpp:4826`) runs it
+after the models' solid pass, only in a frame whose rooms' receive ran. The mirror: for a
+mirror in the plane of constant `axis` at `plane`, `HDShadowMirrorView` (:1678) makes the
+reflected world-to-view R' = R S, t' = t - R S c (S negates the axis, c is 2 plane on it);
+a pixel of the image at view position v stands for the world point R'^T (v - t'), the
+place it reflects, so every receive block made with R', t' is the block of the image - for
+the copy's art, drawn through the real view at the image point, and for a reflection,
+whose node matrices the mirror's view puts at that same view position.
+`HDShadowMirrorPlane` (:1695) is the glass in view space, `HDShadowMirrorFaces` (:1713)
+whether the camera sees it from its room's side. The rooms: `ShadowReceivePass`
+(`hd_level.cpp:4716`) draws a mirror's group first with the mirror's blocks
+(`ShadowMirrorBlocks`, :4671; the loop at :4775) through a new variant, `MirrorReceivePS`
+(`hd_shadow_receive.hlsl:356`), which clips everything in front of the glass (c108,
+`HD_SHADOW_RECEIVE_MIRROR`, :1726) and marks the copy's pixels in the guard's stencil bit,
+then the group as every group, which the guard keeps off the copy;
+`HDRenderShadowReceiveMirrorBegin` and `End` (`hd_render.cpp:7855`, :7875) switch the
+shader and the blocks inside the open receive and put the receive's own back (kept at
+:7749). The reflections: `DrawOneMirror` hands the seam its index (`game/mirror.cpp:256`)
+and, before it zeroes an item's `shadow_size` for the draw, whether the object has a blob
+(`HDObjectReflectedBlob`, :332); `HDObjectBegin` reads the class from that
+(`hd_object.cpp:2958`), every entry recorded while the reflection is on carries its mirror
+(:3103, :4481), and `HDObjectShadowReceiveFrame` gives it its mirror's blocks
+(`receive_blocks_mirror`, :4254), taking its sphere back to the world through the same
+reflected view. Out of view: `HDShadowItemWalk` (`hd_shadow.h:1563`) is the rule of an
+item's node walk - a drawn item walks as always; a clipped one walks for the second map
+alone when it is HD, its blob gave way and its place lies inside the grown second box;
+every other clipped item walks nothing. `DrawAnimatingItem` asks it through
+`HDObjectCastUnseen` (`game/draw.cpp:883`, `hd_object.cpp:3289`) and walks the nodes under
+`clip || unseen` (:885), without `CalculateObjectLighting` and without `InterpRootNow`
+(:908); `HDObjectEnd` leaves the light out for it (:3197) and marks it
+`HD_OBJ_CAST_OTHERS_ONLY` (:3244), which the second map's cast pass draws and no picture
+pass does (:3852). The log: `ShadowSecond` (`hd_level.cpp:4894`) ends its line in
+`models=`, `mcalls=`, `castonly=` and `mirror=` (:4935), counted by `ShadowModelsPass` and
+`ShadowOthersPass` (:4635), and is called after the models' pass (:5142) so its line holds
+the whole frame. Builds: `bshader.bat` compiles the two new entry points into
+`hd_shadow_receive_model_ps.inc` and `hd_shadow_receive_mirror_ps.inc`, and `be.bat`
+checks their stamps.
+
+**Checked.** The engine builds (`be.bat`), and with it ModelProbe, RoomProbe, MapProbe,
+TrgProbe, MenuTest, InterpTest and LipsTest. ModernTest 14,505 (14,481 and 24 in six
+groups: `shadow_others_fade`, `shadow_others_holds`, `shadow_takes`, and
+`shadow_mirror_view` - a point of the copy through the mirror's blocks gives its
+reflection's u, v, depth, height term and facing through the frame's, both axes and both
+sides, 1,536 points up to six sectors from the glass with cameras far from the origin, the
+largest gap 0.002 of a texel; twice reflected is the view; the glass keeps the copy -
+`shadow_mirror_engine` - a body point drawn through `MirrorView`'s reflected camera takes
+through the mirror's blocks what it takes through the frame's, and the first of
+`MirrorClipPlanes` is the glass's plane - and `shadow_walk`, all sixteen cases), MenuTest
+42,613, InterpTest 729, LipsTest 270 and 243, none failed. Each new group fails against
+broken copies of the header in a `git archive` tree: the fade 0 everywhere (4) or near
+side only (4), the box flat along the light (3), Lara taking her map (3), a creature the
+second (3), a reflection taking without blocks (2), the fade's slope 0 (2), the lookup
+without the fade (1), the second block not silenced (1), a loose sphere (1); the reflected
+view without its translation (2), without its rotation (4), with the sign of its
+translation turned (2), the plane without its side (2) or at the origin (2), the camera's
+side test turned (1), the unseen walk for a classic item (2), outside the box (2), with
+the blob kept (2) and for a drawn item (2). Accepted and built: `git diff` against the
+accepted state is empty for `hd_room.hlsl`, `hd_model.hlsl`, `hd_glow.hlsl` and their six
+`.inc`, against the first part of round two for the cast shaders, and the one-map receive
+`.inc` differs in its stamp line alone. ModelProbe built at that first part and at the end
+draws the same md5 for Lara alone with the shadow - ANDREA1 room 0, the same in first
+person, ANDREA1 room 159, JOBY2 room 8, the empty map, her map, a plain picture - and,
+with a creature in the second box's middle and the models' pass left out
+(`-shadownomodels`), the same md5 as that build's picture; with the models' pass the
+pixels that differ lie on the models alone (0 off the models' mask). Depth identity
+(`-shadowcount`, the stencil): every model drawn again reaches exactly the pixels its
+solid draw left visible - Lara 4,638, a SWAT 7,894 and 6,660, a medipack 1,401, a door
+182,618, first person 294,911, the reflections in RICH2 room 134 42,999 and 7,830 - and no
+pixel off a model. The pictures, looked at: her outline on a SWAT's trousers and a SWAT's
+on her leg and boots at the floor's factor (0.55); a medipack without a blob in her
+shadow; a medipack under her shadow and a SWAT's no darker than under one (433 pixels,
+median 0.549 against the product's 0.303); a SWAT carried along the light past the second
+box's far side, its summed darkening falling from 849 to 0 between 0.95 and 1.087 of the
+box's depth, and past the near side from 328 to 0 between 0.073 and -0.012, never full in
+one picture and none in the next, no cut line; a SWAT walked unseen (`-shadowunseen`) -
+its shadow on the floor where the drawn SWAT's lies, at the same factor (0.551), no body,
+and the second map bit for bit the drawn run's. The mirror (RICH2 room 134, the glass in x
+= 33792, a camera above her looking down through the pane over the basin): the copy's
+factor against the factor of the room in front of the glass seen from the camera reflected
+in the glass (`-shadowmirrorview`), pixel for pixel over the copy's 431,734 pixels
+(`-shadowmirrormask`): her shadow on the copy's floor 55,504 pixels at median 0.760 (the
+pane's glass is added on top), the reflected room 55,490 at 0.760, the mean difference
+0.002 - the larger ones along the tiles' joints of an art copy that is 99 % a reflection -
+while the copy without the mirror's blocks takes none of it (mean difference 0.027, 53,129
+pixels off by more than 0.05); with a SWAT beside her the same (57,501 against 57,129,
+mean 0.002); with a light towards the glass her shadow lies under the basin and the copy's
+matches the reflected room's (mean 0.001). On this machine both targets are made,
+released, the device `Reset` and made again with the same maps bit for bit, the reference
+count 76 / 78 / 76 (one above the first part with the mirror's variant made), the second
+target made in 0.08 to 0.39 ms; the device's 2,197 values of state are the same after the
+models' pass as before it, also in the mirror's frame with two reflections. Against a 2560
+x 1440 target, 400 frames each waited for: the models' pass with Lara, four creatures and
+three items 0.086 ms; RICH2 room 134 with the mirror, her and a SWAT: her cast, the second
+map's cast and the receive 0.215 ms with the mirror's draw against 0.095 ms without it -
+the mirror's group is drawn a second time - and the models' pass with two reflections
+0.042 ms against 0.034 ms without them.
+
+**Unchanged.** The light, its following, the gate's rule for her, the option, the row and
+every number the table had; her box, her map, her terms; how the rooms take the two maps
+in a frame without a mirror, but for the fade along the light, which is exactly 1 in the
+box's middle, so a creature there gives the earlier picture byte for byte. The one-map
+receive shader's bytecode; `hd_room.hlsl`, `hd_model.hlsl`, `hd_glow.hlsl` and the cast
+shaders. With `tomb5.hd_enable` 0, the stored modes 1 to 4, a classic Lara or a frame
+without her step, nothing of this runs: the gate stops the cast passes, the models' pass
+runs only after a rooms' receive that ran, the second target is asked only in a frame hers
+runs in, and an item clipped away walks nothing because its blob never gave way. The walk
+of a drawn item, the poses, the interpolation's counters and seams, the classic blobs'
+drawing code and the savegame. A frame without a mirror's group in the receive pass binds
+nothing new.
+
+**Decisions.** Which maps a model takes is what it is, not whether it cast in the frame,
+so a creature does not change its look as it walks into the second box; Lara never takes
+her own map and a caster never the map it is cast into, because the fixed light is not the
+light that lights them and a model's own outline would darken half of it. The models guard
+with a stencil bit of their own, because the rooms' receive leaves its bit set on the room
+pixels behind them. The mirror's image takes the same two maps through a reflected view
+rather than maps of its own: nothing is cast twice, and the copy's art and the reflections
+share one arithmetic. The copy is told from the room by the glass's plane in the pixel
+shader and kept apart by the stencil guard; on a depth surface without a stencil the copy
+takes the ordinary receive, and so it does while the mirror is seen from behind. A
+reflection takes the class of what it reflects from the value the mirror's loop hands
+over, not from `shadow_size`, which that loop zeroes so that a reflection has no blob and
+casts nothing. The fade along the light is a fade of each tap's own caster depth, so a
+caster in the box's middle casts as before. An item walked unseen takes the frame's own
+root offset and no light: those belong to a drawn item and their counters to the picture.
+The log's line is written after the models' pass, so `models=` and `mcalls=` count the
+frame they belong to; the new fields are means over the frames the shadow ran, `mirror=` a
+count over them.
+
+**Left.** Her shadow on herself, a creature's on itself or on another creature, and a
+second light for walls turned away from the fixed one are not built. An item in a room
+that is not on the frame's list is never visited and casts nothing, whether the second box
+holds it or not; an item walked unseen takes a slot of the frame list, which holds 128.
+The probe draws neither `game/draw.cpp`'s item loop nor `game/mirror.cpp`: the unseen walk
+is proven by its pure rule (`HDShadowItemWalk`, ModernTest), by the walk read at
+`game/draw.cpp:883` to `:1048` and by a probe creature cast and drawn in no pass; the
+reflections' class and mirror by the code walk (`game/mirror.cpp:256`, :332;
+`hd_object.cpp:2958`, :3103, :4254) and by probe reflections made by hand through the
+world's reflection in the glass, whose arithmetic `shadow_mirror_engine` holds against the
+engine's own `MirrorView`. Only the game shows the item loop, a real clipped creature
+entering the view, Lara's and the items' reflections in RICH2 rooms 134 and 135 in motion,
+and both mirrors in one frame (each has its own blocks; the probe draws one room). The
+wall faces lying in the glass's plane take the mirror's blocks or the frame's pixel by
+pixel; there both give the same place. A creature's reflection drawn classic (a slot
+without an HD model) takes nothing. The play test should look first at the RICH2 washrooms
+with Lara before a mirror, at a creature behind her in her shadow, and at creatures
+walking into view from the side their shadow points to.
+
+**Commits.** 'Round 188 (#188): the HD models take the projected shadow', 'Round 188
+(#188): the suites', 'Round 188 (#188): the mirror's image takes the shadows, and a
+clipped creature casts unseen', 'Round 188 (#188): the suites', 'Round 188 (#188): the
+record follows'.
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14
 
@@ -12237,7 +12439,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
-| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light; The projected shadow: the creatures cast as well, into a second map |
+| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light; The projected shadow: the creatures cast as well, into a second map; The projected shadow on the HD models, in a mirror's image and from a creature out of view |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |

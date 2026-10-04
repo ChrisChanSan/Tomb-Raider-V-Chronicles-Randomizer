@@ -2704,8 +2704,9 @@ the projected shadow cannot run: with *HD textures* off, while she
 is drawn classic, while she stands in a room that is drawn classic, and on a graphics card
 that refuses the shadow's map (`HDLOG shadow target` says which). In a frame she has the
 projected shadow she has no blob, and in a frame she has the blob she has no projected
-shadow - never both, never neither. Her reflection in a mirror keeps the blob. Any other
-stored number is drawn as it always was.
+shadow - never both, never neither. Her reflection in a mirror has no blob; it takes the
+shadows of the room as she does (see *The mirror* below). Any other stored number is
+drawn as it always was.
 
 The menu row is *Graphics → Shadow mode*. While HD is on - *HD textures* on and a
 *Tomb Raider IV-VI Remastered* found, in the title screen as in a level - it steps
@@ -2748,29 +2749,41 @@ classic game gives a blob - the guards, soldiers, dogs, the Hydra, the gladiator
 rest - that is drawn as an HD model and stands within four sectors of her throws the same
 shadow, along the same fixed light, at the same darkness and with an edge as soft as
 hers, and has no blob. Towards four sectors away its shadow fades out on every side, and
-a little further away it has neither; a creature drawn classic, one baked into a room's
-art and one in a mirror keep their blob. Above and below her nothing fades: a creature
-about four and a half blocks above or below her along the light loses its shadow at once
-as it crosses that distance. A creature just out of the view or behind a door's edge has
-no shadow either, so when it comes into the view from the side its shadow points
-towards, the part of its shadow already in the picture appears at once. Where two
-shadows overlap, the floor is as dark as under one. A creature's shadow falls whole on a
+a little further away it has neither; a creature drawn classic and one baked into a
+room's art keep their blob, and a creature's reflection in a mirror has none. Above and
+below her it fades the same way, about four and a half blocks along the light, so a
+creature she climbs or drops past loses its shadow gradually. A creature just out of the
+view or behind a door's edge still casts, so the part of its shadow that reaches into
+the picture is there before the creature comes into view. Where two shadows overlap,
+the floor is as dark as under one. A creature's shadow falls whole on a
 floor up to one and a half blocks behind it along the light and fades out by two and a
 half, so a floor well below its feet takes none.
 
-What takes it. The HD rooms around her and the statics that are part of their art; not
-Lara herself, not HD items or creatures - neither her shadow nor theirs falls on her or on
-a creature - not the classic polygons, and not the glows and glass, which are drawn over
-it. A floor more than one block below her lowest point fades
+What takes it. The HD rooms around her and the statics that are part of their art, and
+the HD models: her outline falls on a creature or an HD item that stands in it, and a
+creature's on her and on the HD items, each as dark as on the floor - never a shadow on
+the one who throws it: Lara takes the creatures' shadows and not her own, a creature
+takes hers and not its own or another creature's, an HD item without a blob (a door, a
+crate, a pickup) takes both. Not the classic polygons, and not the glows and glass, which
+are drawn over it. A floor more than one block below her lowest point fades
 out of it, and two blocks down it is gone, so a storey under her takes nothing through its
 ceiling; a face turned away from the light - a ceiling, the back of a wall - takes none. A
 cut-out keeps its holes. A pixel in the shadow keeps two thirds of its colour.
 The shadow darkens the finished picture of the room, so the fog and the fog bulbs in front
 of a floor are darkened with it.
 
+The mirror. The two washrooms of RICH2 have mirrors: behind the glass stands a copy
+of the room, and Lara's and the items' reflections are drawn into it. The copy takes the
+shadows of the room in front of the glass, reflected - her outline on the copy's floor is
+the reflection of her outline on the room's floor - and so do the reflections: hers takes
+the creatures' shadows, a creature's reflection hers. A reflection has no blob and
+throws no shadow of its own. Seen from behind, a mirror shows nothing, and the copy then
+takes the room's ordinary shadow, as it does on a card whose depth buffer has no
+stencil.
+
 Every number that shapes it - darkness, softness, slant, the lights' pull, time - stands
 in one table at the top of `specific/hd/hd_shadow.h`; they are a first setting, to be
-tuned in the game. Six of them are the creatures' map: `HD_SHADOW_OTHERS_BOX` 8192, how
+tuned in the game. Seven of them are the creatures' map: `HD_SHADOW_OTHERS_BOX` 8192, how
 far round her a creature still casts (larger reaches further, smaller keeps the map's
 texels finer); `HD_SHADOW_OTHERS_MARGIN` 0.1, how far beyond that, as a part of it, a
 creature's feet may stand and the creature still cast what of it reaches in, so that its
@@ -2778,7 +2791,10 @@ shadow fades out on every side (smaller cuts a tall creature's shadow off at the
 edge, larger draws creatures of which nothing reaches in); `HD_SHADOW_OTHERS_MAP` 2048,
 the map's texels a side (fewer is a softer, blockier outline and a cheaper map - 2048
 with 8192 is the texel of her own map); `HD_SHADOW_OTHERS_DEPTH` 8192, how far above and
-below her along the light a creature still casts, with no fade at that distance;
+below her along the light a creature still casts; `HD_SHADOW_OTHERS_FADE` 0.05, the part
+of that depth at each end over which a creature's shadow fades out along the light
+(smaller is a harder end where a creature climbs or falls out of the map, larger thins
+a creature's shadow already on the storey above or below her);
 `HD_SHADOW_OTHERS_FULL` 1536 and `HD_SHADOW_OTHERS_END` 2560, how far behind a creature
 along the light a floor takes its whole shadow and from where none (larger
 lets the shadow reach a lower floor, smaller cuts a tall creature's head off its
@@ -3202,8 +3218,8 @@ wrote it, and each seam answers a different question:
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
 | in HD Lara's catsuit loses its shine after she walks from one room into another, and a save and a load bring it back | `HDLOG laralights` — one line on her first frame of a level and one whenever her room, the number of lights handed to the card or the number left out changes: `level=` the level, `room=` her room, `il_room=` the room her current light list was last built for, `cur=` and `prev=` the engine's current and previous light list as lights switched on / lights in it (shadow lights included), `dyn=` the dynamic lights (a flare, a torch, a muzzle flash) handed on, `handed=` every light handed to the card, `dark=` the lights of the two lists left out because they have faded to nothing, `eye=` 1 when nothing is handed on, so that the camera is the lamp of her shine, `max_dark=` the brightest colour channel among those left out and `min_lit=` the dimmest brightest channel among the room lights handed on, both on the engine's 0..1 scale (0 when there is none). Walking out of a lit room reads as a line with the old room's light in `prev=` and `dark=0`, and eight drawn frames later a second line: `dark=` counts the light where its fade left it switched on with nothing to give, `prev=` shows it switched off where the fade cleared it, and when nothing else lights her the line reads `handed=0 eye=1` either way |
 | the soft motion of the chest does not show, shows on the wrong place, or moves too much or too little | `HDLOG softbody` — one line whenever her HD composite is built and whenever the option changes: `outfit=` the body's model, `state=` on or off, `reason=` `ok` or why it is off (`young` a young-Lara level, `classic` no HD Lara, `option` switched off, or the outfit's own refusal: `no_body`, `no_axes`, `no_front`, `no_torso`, `band_empty`, `band_edge`, `flat`, `asymmetric`, `radius`, `deep` (the chest stands further forward than its region reaches back), `sparse`), `strength=` the option 0 to 3, `apexL=` and `apexR=` the two points the regions are built on, in the body model's own units, `radius=` the regions' radius, `verts=` how many of the body's vertices each region moves, left/right, and `parts=` which parts carry the motion. While it is on, `HDLOG softbody second` once for every second of game time in which it moved at all: `peak=` the largest offset drawn in that second, `bound=` the largest it may be at this strength, `clamped=` frames that ran into the bound, `resets=` how often it went back to rest (a jump, a gap, a cutscene edge) and `steps=` how many sub-steps the spring ran |
-| Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes. `HDLOG shadow others` — the same fields for the creatures' map (R32F, 2048), written at the frame after it changes; it is made when the first creature with a blob is drawn HD near her, and a card that refuses it leaves her shadow running and the creatures their blobs |
-| the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one the key light gives this frame (world axes, y down; the fixed slant while `HD_SHADOW_PULL` is 0, and the two differ only while a change of the lights glides in), `strength=` the darkness drawn / the target's (0.34 with the fixed light, 0.45 the darkest the lights can give), `lights=` the lights of her list that counted and `weight=` their summed brightness times nearness, both before the pull, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice, `lag=` the largest angle in degrees that second between the drawn direction and the frame's target - 0 with the fixed light; with a pull above 0, near 0 while only she moves, up when the lights change and back down over about a second and a half; then the creatures' map: `others=` the creatures and items drawn into it a frame (over the frames it was drawn in; 0.0 when none was near her), `omap=` frames it was drawn / frames the shadow ran, `orooms=` the room groups drawn again a frame while it was read - hers and those only its wider reach, four sectors round her, brings in - and `oms=` the processor time of its cast pass a frame (its share of the receive is in `ms=`) |
+| Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes. `HDLOG shadow others` — the same fields for the creatures' map (R32F, 2048), written in the frame it changes; it is made beside her map in the first frame her shadow runs, and a card that refuses it leaves her shadow running and the creatures their blobs |
+| the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one the key light gives this frame (world axes, y down; the fixed slant while `HD_SHADOW_PULL` is 0, and the two differ only while a change of the lights glides in), `strength=` the darkness drawn / the target's (0.34 with the fixed light, 0.45 the darkest the lights can give), `lights=` the lights of her list that counted and `weight=` their summed brightness times nearness, both before the pull, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice, `lag=` the largest angle in degrees that second between the drawn direction and the frame's target - 0 with the fixed light; with a pull above 0, near 0 while only she moves, up when the lights change and back down over about a second and a half; then the creatures' map: `others=` the creatures and items drawn into it a frame (over the frames it was drawn in; 0.0 when none was near her), `omap=` frames it was drawn / frames the shadow ran, `orooms=` the room groups drawn again a frame while it was read - hers and those only its wider reach, four sectors round her, brings in - and `oms=` the processor time of its cast pass a frame (its share of the receive is in `ms=`); then the models: `models=` Lara, the creatures, the items and the reflections drawn again to take the shadow, a frame (the mean over the frames the shadow ran), `mcalls=` their draw calls a frame, `castonly=` the creatures out of view drawn into the creatures' map a frame, and `mirror=` frames in which a mirror's copy or a reflection took the shadow through the mirror / frames the shadow ran (0 outside RICH2's washrooms) |
 | in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |

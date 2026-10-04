@@ -263,14 +263,17 @@
  *                     in the same depth buffer as the art; repeat for more
  *                     rooms. Needs -roombox. -classiconly draws them
  *                     alone; -coincide <units> counts the pixels at which
- *                     a classic face lands within <units> of the art, and
- *                     -coincidemark paints them yellow.
+ *                     a classic face lands within <units> of the art and,
+ *                     of those, the ones the art wins the depth test at;
+ *                     -coincidemark paints the first yellow and the second
+ *                     red.
  *     -stand          the frame's rule for a room drawn classic that another
  *                     group's art stands on (specific\hd\hd_cover.h): the
  *                     -classicroom rooms count as listed, the seed and the
  *                     -with groups as the listed art. A room the art covers
  *                     loses its classic faces; the art on the faces of one
- *                     it does not cover is left out; a covered room's art
+ *                     it does not cover is left out, the art reaching onto
+ *                     them is drawn pushed back; a covered room's art
  *                     whose group is not listed is drawn with that group's
  *                     offset over the whole screen. Prints a `stand:` line
  *                     per holder. Needs -roombox, which hands the renderer
@@ -1641,8 +1644,10 @@ static std::vector<HDCut> g_cuts_built;
  * fights over. Two stencil passes of the classic faces against the art's
  * depth, the faces moved `units` towards the eye and then `units` away from
  * it along the line of sight: a pixel the first passes and the second fails
- * is one. Counted with an occlusion query; -coincidemark paints those pixels
- * yellow over the finished picture. */
+ * is one. Counted with an occlusion query, and of those the ones a third pass
+ * of the faces where they are loses against the art's depth - the art's,
+ * which a frame that draws both shows instead of the face; -coincidemark
+ * paints the first yellow and the second red over the finished picture. */
 static std::vector<int> g_classic_rooms;
 static bool g_classic_only = false;
 static double g_coincide = 0.0;
@@ -5125,9 +5130,10 @@ static void PrepareStand(int seed)
 			int carrier = -1;
 			const bool covered = holderListed && StandCovered(range.holder, &carrier);
 			const HDStandAnswer answer = HDStandDraw(holderListed, listed(g),
-				covered, carrier == g, range.kind == 1);
+				covered, carrier == g, range.kind == 1, range.kind == 0);
 
-			HDRenderStandWith(g, j, answer.withArt ? 1 : 0);
+			HDRenderStandWith(g, j, answer.behind ? HD_STAND_BEHIND
+				: answer.withArt ? HD_STAND_WITH : HD_STAND_OUT);
 
 			if (answer.withArt)
 				with++;
@@ -5138,7 +5144,8 @@ static void PrepareStand(int seed)
 				printf("stand: group %d range %d holder %d kind %d tris %d "
 					"listed %d covered %d -> %s\n", g, j, range.holder,
 					range.kind, range.triangles, listed(g) ? 1 : 0, covered ? 1 : 0,
-					answer.withArt ? "with its group"
+					answer.behind ? "with its group, pushed back"
+					: answer.withArt ? "with its group"
 					: answer.inHolder ? "in the holder's window" : "left out");
 
 			if (!answer.inHolder || g >= (int)g_stand_rooms_built.size() ||
@@ -5397,17 +5404,22 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_INCR);
 		draw(-g_coincide);
 
-		// The ones left at 1, counted.
-		IDirect3DQuery9* query = 0;
-		DWORD pixels = 0;
-
-		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
-		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
-		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-		g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
-
-		if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query)))
+		// The pixels at stencil `ref`, counted; -1 without an occlusion query.
+		const auto count = [&](DWORD ref) -> long
 		{
+			IDirect3DQuery9* query = 0;
+			DWORD pixels = 0;
+
+			g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+			g_device->SetRenderState(D3DRS_STENCILREF, ref);
+			g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+			g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+			g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+			g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+
+			if (FAILED(g_device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &query)))
+				return -1;
+
 			query->Issue(D3DISSUE_BEGIN);
 			g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, screen, sizeof(Flat));
 			query->Issue(D3DISSUE_END);
@@ -5416,10 +5428,37 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 				;
 
 			query->Release();
-			printf("coincide: %lu pixel(s) of %ld at which a classic face lands "
-				"within %.0f units of the art\n", (unsigned long)pixels,
-				width * height, g_coincide);
+			g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+			return (long)pixels;
+		};
+
+		// The ones left at 1, counted.
+		const long shared = count(1);
+
+		/* Of those, the ones the classic face wins: the faces once more where
+		 * they are, depth test as the frame's, and a pixel at 1 that passes
+		 * gets bit 4 (5). The ones still at 1 are the art's - where the art
+		 * stands in front of the face within `units`, in the depth the
+		 * renderer wrote (an art range drawn pushed back loses those). */
+		long artWins = -1;
+
+		if (shared >= 0)
+		{
+			g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+			g_device->SetRenderState(D3DRS_STENCILREF, 5);
+			g_device->SetRenderState(D3DRS_STENCILMASK, 0x3);
+			g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0x4);
+			g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+			draw(0.0);
+			g_device->SetRenderState(D3DRS_STENCILMASK, 0xFF);
+			g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0xFF);
+			artWins = count(1);
 		}
+
+		if (shared >= 0)
+			printf("coincide: %ld pixel(s) of %ld at which a classic face lands "
+				"within %.0f units of the art, %ld of them the art's\n", shared,
+				width * height, g_coincide, artWins);
 		else
 			printf("coincide: this device has no occlusion query - no count\n");
 
@@ -5434,14 +5473,27 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 	if (g_coincide > 0.0 && g_coincide_mark)
 	{
+		// Yellow where the two share a place (1 and 5), red where the art
+		// wins it (1).
+		Flat red[4];
+
+		for (int c = 0; c < 4; c++)
+		{
+			red[c] = screen[c];
+			red[c].colour = D3DCOLOR_XRGB(255, 0, 0);
+		}
+
 		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
 		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
 		g_device->SetRenderState(D3DRS_STENCILREF, 1);
+		g_device->SetRenderState(D3DRS_STENCILMASK, 0x3);
 		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 		g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
 		g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, screen, sizeof(Flat));
+		g_device->SetRenderState(D3DRS_STENCILMASK, 0xFF);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, red, sizeof(Flat));
 	}
 
 	g_device->EndScene();
@@ -5478,7 +5530,8 @@ int main(int argc, char** argv)
 		printf("       -classiconly  -coincide <units>  -coincidemark   the "
 			"classic faces alone; the\n");
 		printf("                     pixels where they land within <units> of "
-			"the art, counted (and painted)\n");
+			"the art, and the art's of them,\n");
+		printf("                     counted (and painted yellow and red)\n");
 		printf("       -stand   the frame's rule for stand art (hd_cover.h): "
 			"-classicroom rooms listed,\n");
 		printf("                the seed and -with groups the listed art "

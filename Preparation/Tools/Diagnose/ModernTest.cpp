@@ -10622,9 +10622,11 @@ static void page_class()
  * carrier's art with its group, or the carrier's art in the room's window -
  * never two and never none; the art that lies on the faces whole is drawn
  * only with the carrier or while the room is not listed; art that only
- * grazes the faces is drawn with its group whenever that is listed; nothing
- * is drawn in a window of a room that is not listed. And the four list
- * states of ANDREA2's room 124 and its carrier, group 121, one by one.
+ * grazes the faces is drawn with its group whenever that is listed, and
+ * pushed back exactly when it reaches onto the faces of a listed room drawn
+ * classic; nothing is drawn in a window of a room that is not listed. And the
+ * four list states of ANDREA2's room 124 and its carrier, group 121, one by
+ * one, and RICH2 16's grazing art.
  *
  * stand_cover: the threshold - every face of a room with faces - and the
  * coverage count of HDCoverFaces on a floor sector covered by its two
@@ -10670,14 +10672,25 @@ static bool stand_tri(double ax, double az, double bx, double bz, double cx, dou
 static void stand_draw()
 {
 	int sources_bad = 0, both = 0, window_unlisted = 0, copy_kept = 0;
-	int graze_lost = 0, classic_wrong = 0, unlisted_wrong = 0;
+	int graze_lost = 0, classic_wrong = 0, unlisted_wrong = 0, behind_wrong = 0;
 
-	for (int bits = 0; bits < 32; bits++)
+	for (int bits = 0; bits < 64; bits++)
 	{
 		const bool holder = (bits & 1) != 0, art = (bits & 2) != 0;
 		const bool covered = (bits & 4) != 0, carrier = (bits & 8) != 0;
-		const bool onFaces = (bits & 16) != 0;
-		const HDStandAnswer a = HDStandDraw(holder, art, covered, carrier, onFaces);
+		const bool onFaces = (bits & 16) != 0, grazes = (bits & 32) != 0;
+
+		// A range is one kind: on the faces whole, grazing them, or neither.
+		if (onFaces && grazes)
+			continue;
+
+		const HDStandAnswer a = HDStandDraw(holder, art, covered, carrier, onFaces,
+			grazes);
+
+		/* Pushed back: drawn with its group, grazing the faces of a listed
+		 * room that is drawn classic - and never otherwise. */
+		if (a.behind != (a.withArt && holder && !covered && grazes))
+			behind_wrong++;
 
 		if (a.withArt && a.inHolder)
 			both++;
@@ -10724,31 +10737,41 @@ static void stand_draw()
 	ok(graze_lost == 0, "stand: grazing art is drawn wherever its group is", graze_lost, 0);
 	ok(sources_bad == 0, "stand: a listed room's place has exactly one source",
 		sources_bad, 0);
+	ok(behind_wrong == 0, "stand: pushed back exactly where grazing art meets classic",
+		behind_wrong, 0);
 
 	// ANDREA2 124, covered, carrier 121: the four list states.
-	HDStandAnswer a = HDStandDraw(true, true, true, true, true);
+	HDStandAnswer a = HDStandDraw(true, true, true, true, true, false);
 	ok(!a.classic && a.withArt && !a.inHolder, "stand: 124 and 121 listed - 121 draws it",
 		a.withArt, 1);
-	a = HDStandDraw(true, false, true, true, true);
+	a = HDStandDraw(true, false, true, true, true, false);
 	ok(!a.classic && !a.withArt && a.inHolder, "stand: 124 listed alone - in 124's window",
 		a.inHolder, 1);
-	a = HDStandDraw(false, true, true, true, true);
+	a = HDStandDraw(false, true, true, true, true, false);
 	ok(!a.classic && a.withArt && !a.inHolder, "stand: 121 listed alone - with 121",
 		a.withArt, 1);
-	a = HDStandDraw(false, false, true, true, true);
+	a = HDStandDraw(false, false, true, true, true, false);
 	ok(!a.classic && !a.withArt && !a.inHolder, "stand: neither listed - nothing", a.withArt, 0);
 	// Group 127's second copy of 124's floor, 121 the carrier.
-	a = HDStandDraw(true, true, true, false, true);
+	a = HDStandDraw(true, true, true, false, true, false);
 	ok(!a.withArt && !a.inHolder, "stand: 127's copy left out while 124 is listed",
 		a.withArt, 0);
-	// Group 117's palm trunk, grazing 124's faces.
-	a = HDStandDraw(true, true, true, false, false);
-	ok(a.withArt, "stand: 117's trunk drawn with 117", a.withArt, 1);
+	// Group 117's palm trunk, grazing 124's faces: 124 is drawn as art.
+	a = HDStandDraw(true, true, true, false, false, true);
+	ok(a.withArt && !a.behind, "stand: 117's trunk drawn with 117, in place", a.behind, 0);
 	// RICH2 16, not covered: classic, group 14's copy out, its grazing art in.
-	a = HDStandDraw(true, true, false, false, true);
+	a = HDStandDraw(true, true, false, false, true, false);
 	ok(a.classic && !a.withArt, "stand: RICH2 16 classic, 14's copy out", a.classic, 1);
-	a = HDStandDraw(true, true, false, false, false);
+	a = HDStandDraw(true, true, false, false, false, true);
 	ok(a.classic && a.withArt, "stand: RICH2 16, 14's grazing art kept", a.withArt, 1);
+	ok(a.behind, "stand: RICH2 16, 14's grazing art pushed back", a.behind, 1);
+	// 16 off the list: the same art in place.
+	a = HDStandDraw(false, true, false, false, false, true);
+	ok(a.withArt && !a.behind, "stand: RICH2 16 off the list - 14's art in place",
+		a.behind, 0);
+	// Art in 16's box on no face is not pushed.
+	a = HDStandDraw(true, true, false, false, false, false);
+	ok(a.withArt && !a.behind, "stand: RICH2 16, art on no face in place", a.behind, 0);
 }
 
 static void stand_cover()

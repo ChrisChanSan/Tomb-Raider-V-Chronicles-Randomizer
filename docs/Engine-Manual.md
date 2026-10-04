@@ -2142,10 +2142,17 @@ empty and never doubled. The other groups' copies of the same faces are left
 out while the room is listed. A room no group covers stays classic, and the art
 that lies on its faces whole is left out while it is listed; art that only
 grazes its faces - a palm trunk beside a wall, a stair that runs on into the
-next room - is drawn as before, because leaving it out would cut it. In the
-game two rooms are covered (ANDREA2 124, RICH2 15) and twenty stay classic
-with some foreign art on their faces; the rest of the classic rooms either have
-no face or no foreign art.
+next room - is still drawn, because leaving it out would cut it, but while the
+room is listed it is drawn pushed back by a five-hundredth of its distance, so
+the classic face wins wherever the two meet and the art beyond the face stays.
+Two kinds of room stay classic however completely the art covers them: one
+whose classic water surface the HD path would not restore (a room with the
+mist or reflection flag), and one whose covering group a flipmap can swap
+away. In the game two rooms are covered (ANDREA2 124, RICH2 15) and twenty stay
+classic with some foreign art on their faces; the rest of the classic rooms
+either have no face or no foreign art. While Lara stands in a covered room she
+casts the classic shadow, as she does in every room the engine counts as
+classic.
 
 **A room the randomizer RESHAPED is a different case, and it has to be told.**
 The remaster's art describes the level as Core shipped it. When a run cuts a
@@ -2214,8 +2221,6 @@ HDLOG room=0 group=0 tris=1216/0/0 ranges=4 statics=2 hd=1 reason=ok
       stand=0 covered=0 carrier=-1
 HDLOG room=66 group=66 tris=0/0/0 ranges=0 statics=0 hd=0 reason=empty_group
       stand=0 covered=0 carrier=-1
-HDLOG room=124 group=124 tris=4/0/0 overhang=4 ... hd=0 reason=hollow_group
-      stand=5070 covered=1 carrier=121
 HDLOG level=ANDREA1 built ms=1180 rooms=242 hd=238 classic=4 sky_groups=1 ...
       ... stand_rooms=0 covered=0 stand_tris=0
 HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
@@ -2231,7 +2236,7 @@ HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
       items_spared=... view=... view_obj=... pairs=... whole=... scissored=...
       reach_rooms=... reach_pieces=... reach_whole=... reach_hidden=...
-      stand=.../.../.../.../...
+      stand=.../.../.../.../... stand_behind=...
 HDLOG reachart level=ANDREA1 room=93 reach=... holder=101 listed=1 pieces=6
       tris=108 answer=hidden band_tris=0
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
@@ -2283,13 +2288,22 @@ The three fields at the end of a room line are the classic room drawn as a
 neighbour's art (above): `stand=` the triangles of HD groups standing on its
 classic faces, `covered=1` when one group covers every face and the room is
 drawn as that art, `carrier=` that group (-1 for none); all three are 0, 0 and
--1 for an HD room. The build line ends in how many classic rooms hold such art
+-1 for an HD room. ANDREA1 has no such room; in ANDREA2 the courtyard reads
+
+```
+HDLOG room=124 group=124 tris=4/0/0 overhang=4 ... hd=0 reason=hollow_group
+      stand=5070 covered=1 carrier=121
+```
+
+The build line ends in how many classic rooms hold such art
 (`stand_rooms=`), how many of them are covered and how many triangles stand on
 their faces. The `stand=` field at the end of the `clip` line is the frame's
 answer, five numbers: the classic rooms with such art on the list, the art
 ranges drawn with their own group, those drawn in a covered room's window
 because their group is not listed, those left out because the room is listed,
-and in-window draws the frame had no room for (always 0).
+and in-window draws the frame had no room for (always 0). `stand_behind=`
+after it counts the ranges of the second number that are drawn pushed back,
+because they reach onto the faces of a listed room that stays classic.
 
 A randomized level adds two more room reasons and a block of its own. A room
 the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the

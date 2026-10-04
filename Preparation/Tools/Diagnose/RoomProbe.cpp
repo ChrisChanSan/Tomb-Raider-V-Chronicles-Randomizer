@@ -265,6 +265,18 @@
  *                     alone; -coincide <units> counts the pixels at which
  *                     a classic face lands within <units> of the art, and
  *                     -coincidemark paints them yellow.
+ *     -stand          the frame's rule for a room drawn classic that another
+ *                     group's art stands on (specific\hd\hd_cover.h): the
+ *                     -classicroom rooms count as listed, the seed and the
+ *                     -with groups as the listed art. A room the art covers
+ *                     loses its classic faces; the art on the faces of one
+ *                     it does not cover is left out; a covered room's art
+ *                     whose group is not listed is drawn with that group's
+ *                     offset over the whole screen. Prints a `stand:` line
+ *                     per holder. Needs -roombox, which hands the renderer
+ *                     the faces as hd_level.cpp's BuildStandFaces does.
+ *     -skipgroup <g>  group g is left out of the picture and counts as not
+ *                     listed - the seed or a -with group; repeat for more.
  *     -watersurvey <folder holding the classic .TRC>
  *                     the offline twin of hd_level.cpp's BuildWaterSurfaces:
  *                     per reflecting room of the classic level, the faces in
@@ -1635,6 +1647,30 @@ static std::vector<int> g_classic_rooms;
 static bool g_classic_only = false;
 static double g_coincide = 0.0;
 static bool g_coincide_mark = false;
+
+/* -stand and -skipgroup - see the usage at the top. The lists are the ones
+ * hd_level.cpp's BuildStandFaces hands the renderer, built from the .TRC in
+ * -roombox: every room's origin and twin, every room with a classic face
+ * (less the rooms -hdm names whole) with its whole box grown by
+ * HD_COVER_REACH, and the faces in world units. `g_stand_covered` caches each
+ * holder's verdict; `g_stand_draws` are this picture's in-holder draws. */
+static bool g_stand_rule = false;
+static std::set<int> g_skip_groups;
+static std::vector<HDStandRoom> g_stand_rooms_built;
+static std::vector<HDStandHolder> g_stand_holders_built;
+static std::vector<HDCoverFace> g_stand_faces_built;
+static std::vector<int> g_stand_covered_room;
+static std::vector<int> g_stand_covered_answer;
+static std::vector<int> g_stand_carrier;
+
+struct StandDrawProbe
+{
+	int group;
+	int index;
+	D3DMATRIX world;
+};
+
+static std::vector<StandDrawProbe> g_stand_draws;
 
 /* -clipgroup <group> <l,t,r,b>: one group drawn inside a scissor rectangle
  * and every other group drawn whole.
@@ -3871,6 +3907,9 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty);
 static bool DrawOneGroup(int group, const D3DMATRIX* world,
 	const HDRoomLighting* lighting, unsigned int passes)
 {
+	if (g_skip_groups.count(group))
+		return false;
+
 	/* -hdm: a room the sidecar names WHOLE is drawn classic by the engine,
 	 * which means its group never reaches the HD buffers at all
 	 * (hd_level.cpp sets g_group_hd[r] = 0 and HDFrameRoom then skips it).
@@ -4927,6 +4966,212 @@ static void RunSequence(const char* root, const char* list, int rooms,
 
 /* ---------------------------------------------------------------- main -- */
 
+/* Whether the engine draws group g in HD: hd_level.cpp's rule, out of the
+ * same build - triangles, not all of them overhang, not named whole. */
+static bool StandGroupHD(int g)
+{
+	const int tris = HDRenderGroupTriangles(g, -1);
+
+	return tris > 0 && HDRenderGroupOverhangTriangles(g) < tris &&
+		!(g_hdm && HDMarkersRoomTouched(g));
+}
+
+/* A holder's verdict as hd_level.cpp's BuildStandRanges reaches it: per HD
+ * group, its tagged triangles on the holder's faces, HDCoverFaces with
+ * HD_COVER_REACH and HD_COVER_STEP, HDCoverRoomCovered; the carrier is the
+ * covering group with the most triangles, then the lowest. Printed once;
+ * `carrier` gets the carrier or -1. */
+static bool StandCovered(int h, int* carrier = 0)
+{
+	for (size_t i = 0; i < g_stand_covered_room.size(); i++)
+		if (g_stand_covered_room[i] == h)
+		{
+			if (carrier)
+				*carrier = g_stand_carrier[i];
+
+			return g_stand_covered_answer[i] != 0;
+		}
+
+	const HDStandHolder* holder = 0;
+
+	for (const HDStandHolder& one : g_stand_holders_built)
+		if (one.room == h)
+			holder = &one;
+
+	HDCoverSet set;
+
+	for (int i = 0; i < HDRenderStandTriangleCount(); i++)
+	{
+		HDCoverTri tri;
+		int at = -1;
+
+		if (HDRenderStandTriangleAt(i, &tri, &at) && at == h &&
+			StandGroupHD(tri.group))
+			set.tris.push_back(tri);
+	}
+
+	set.build();
+
+	int best = -1, bestTris = 0;
+
+	if (holder && !set.tris.empty() && !StandGroupHD(h))
+	{
+		const HDCoverCount cover = HDCoverFaces(
+			&g_stand_faces_built[(size_t)holder->firstFace], holder->faceCount,
+			set, HD_COVER_REACH, HD_COVER_STEP, 1);
+		std::set<int> groups;
+
+		for (const HDCoverTri& tri : set.tris)
+			groups.insert(tri.group);
+
+		printf("stand: room %d holds %d triangle(s) of stand art, all of it "
+			"covers faces %d/%d, samples %lld/%lld\n", h, (int)set.tris.size(),
+			cover.facesCovered, cover.faces, cover.samplesCovered, cover.samples);
+
+		for (int g : groups)
+		{
+			HDCoverSet one;
+
+			for (const HDCoverTri& tri : set.tris)
+				if (tri.group == g)
+					one.tris.push_back(tri);
+
+			one.build();
+
+			const HDCoverCount alone = HDCoverFaces(
+				&g_stand_faces_built[(size_t)holder->firstFace], holder->faceCount,
+				one, HD_COVER_REACH, HD_COVER_STEP, 1);
+			const int tris = (int)one.tris.size();
+			const bool covers = HDCoverRoomCovered(alone.faces, alone.facesCovered);
+
+			printf("stand: room %d group %d %d triangle(s) cover faces %d/%d, "
+				"samples %lld/%lld%s\n", h, g, tris, alone.facesCovered,
+				alone.faces, alone.samplesCovered, alone.samples,
+				covers ? " - covers it alone" : "");
+
+			if (covers && (best < 0 || tris > bestTris || (tris == bestTris && g < best)))
+			{
+				best = g;
+				bestTris = tris;
+			}
+		}
+
+		printf("stand: room %d - %s\n", h, best >= 0 ? "COVERED, drawn as the "
+			"carrier's art" : "not covered, drawn classic");
+
+		if (best >= 0)
+			printf("stand: room %d carrier %d\n", h, best);
+	}
+	else
+		printf("stand: room %d has no stand art%s - drawn as before\n", h,
+			StandGroupHD(h) ? " (its own group is drawn HD)" : "");
+
+	g_stand_covered_room.push_back(h);
+	g_stand_covered_answer.push_back(best >= 0 ? 1 : 0);
+	g_stand_carrier.push_back(best);
+
+	if (carrier)
+		*carrier = best;
+
+	return best >= 0;
+}
+
+/* -stand: every stand range of every group answered as DecideStand
+ * (hd_level.cpp) answers it, with the -classicroom rooms as the listed
+ * holders and the seed and the -with groups, less -skipgroup, as the listed
+ * art; the in-holder draws get their group's offset from the seed. */
+static void PrepareStand(int seed)
+{
+	g_stand_draws.clear();
+
+	if (!g_stand_rule)
+		return;
+
+	const auto listed = [&](int g)
+	{
+		if (g_skip_groups.count(g))
+			return false;
+
+		if (g == seed)
+			return true;
+
+		for (int i = 0; i < g_with_count; i++)
+			if (g_with_group[i] == g)
+				return true;
+
+		return false;
+	};
+
+	int with = 0, inHolder = 0, out = 0;
+
+	for (int g = 0; g < HDRenderGroupCount(); g++)
+	{
+		if (!StandGroupHD(g))
+			continue;
+
+		for (int j = 0; j < HDRenderGroupStandRanges(g); j++)
+		{
+			HDStandRange range;
+
+			if (!HDRenderGroupStandRange(g, j, &range))
+				continue;
+
+			bool holderListed = false;
+
+			for (int h : g_classic_rooms)
+				holderListed = holderListed || h == range.holder;
+
+			// Only a holder the frame would ask about: its own group not HD.
+			int carrier = -1;
+			const bool covered = holderListed && StandCovered(range.holder, &carrier);
+			const HDStandAnswer answer = HDStandDraw(holderListed, listed(g),
+				covered, carrier == g, range.kind == 1);
+
+			HDRenderStandWith(g, j, answer.withArt ? 1 : 0);
+
+			if (answer.withArt)
+				with++;
+			else if (!answer.inHolder && listed(g))
+				out++;
+
+			if (holderListed)
+				printf("stand: group %d range %d holder %d kind %d tris %d "
+					"listed %d covered %d -> %s\n", g, j, range.holder,
+					range.kind, range.triangles, listed(g) ? 1 : 0, covered ? 1 : 0,
+					answer.withArt ? "with its group"
+					: answer.inHolder ? "in the holder's window" : "left out");
+
+			if (!answer.inHolder || g >= (int)g_stand_rooms_built.size() ||
+				seed < 0 || seed >= (int)g_stand_rooms_built.size())
+				continue;
+
+			StandDrawProbe draw;
+
+			memset(&draw.world, 0, sizeof(draw.world));
+			draw.world._11 = draw.world._22 = draw.world._33 = draw.world._44 = 1.0f;
+			draw.world._41 = g_stand_rooms_built[(size_t)g].origin[0] -
+				g_stand_rooms_built[(size_t)seed].origin[0];
+			draw.world._42 = g_stand_rooms_built[(size_t)g].origin[1] -
+				g_stand_rooms_built[(size_t)seed].origin[1];
+			draw.world._43 = g_stand_rooms_built[(size_t)g].origin[2] -
+				g_stand_rooms_built[(size_t)seed].origin[2];
+			draw.group = g;
+			draw.index = j;
+			g_stand_draws.push_back(draw);
+			inHolder++;
+		}
+	}
+
+	printf("stand: %d range(s) with their group, %d in the holder's window, "
+		"%d left out\n", with, inHolder, out);
+}
+
+static void DrawStandInHolders(const HDRoomLighting* lighting, unsigned int passes)
+{
+	for (const StandDrawProbe& draw : g_stand_draws)
+		HDRenderRoomStand(draw.group, &draw.world, lighting, passes, draw.index);
+}
+
 /* The classic faces of -classicroom, drawn into the finished picture - see the
  * note at g_classic_rooms. Its own scene and its own state block, after the
  * state bracket of the HD frame has been checked, so the check is the HD
@@ -4981,6 +5226,13 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	for (int room : g_classic_rooms)
 	{
 		std::vector<Tr5Level::FaceInfo> list;
+
+		if (g_stand_rule && StandCovered(room))
+		{
+			printf("classic: room %d is covered by stand art - no classic face "
+				"drawn (-stand)\n", room);
+			continue;
+		}
 
 		if (room < 0 || room >= level.roomCount() || !level.roomFaces(room, list, error))
 		{
@@ -5227,6 +5479,12 @@ int main(int argc, char** argv)
 			"classic faces alone; the\n");
 		printf("                     pixels where they land within <units> of "
 			"the art, counted (and painted)\n");
+		printf("       -stand   the frame's rule for stand art (hd_cover.h): "
+			"-classicroom rooms listed,\n");
+		printf("                the seed and -with groups the listed art "
+			"(needs -roombox)\n");
+		printf("       -skipgroup <g>   group g left out of the picture and "
+			"not listed\n");
 		printf("       -hdm                          apply the .hdm sidecar "
 			"beside it (needs -roombox)\n");
 		printf("       -window all|open|intruding   (needs -roombox)\n");
@@ -5505,6 +5763,10 @@ int main(int argc, char** argv)
 			g_coincide = atof(argv[++at]);
 		else if (!strcmp(argv[at], "-coincidemark"))
 			g_coincide_mark = true;
+		else if (!strcmp(argv[at], "-stand"))
+			g_stand_rule = true;
+		else if (!strcmp(argv[at], "-skipgroup") && at + 1 < argc)
+			g_skip_groups.insert(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
 		{
 			walkSeed = atoi(argv[at + 1]);
@@ -6317,6 +6579,78 @@ int main(int argc, char** argv)
 
 				printf("-roombox: %d classic faces handed in\n",
 					(int)g_faces_built.size());
+
+				/* And the faces another group's art may stand on, as
+				 * BuildStandFaces hands them over: every room's origin and
+				 * twin, every room with a classic face that -hdm does not
+				 * name whole, its whole box grown by HD_COVER_REACH, the
+				 * faces in world units. */
+				g_stand_rooms_built.resize((size_t)n);
+
+				for (int r = 0; r < n; r++)
+				{
+					const Tr5Room& rm = level.rooms()[(size_t)r];
+					unsigned yOrigin = 0;
+
+					level.headerField(r, 24, yOrigin, error);
+					g_stand_rooms_built[(size_t)r].origin[0] = (float)rm.originX;
+					g_stand_rooms_built[(size_t)r].origin[1] = (float)(int)yOrigin;
+					g_stand_rooms_built[(size_t)r].origin[2] = (float)rm.originZ;
+					g_stand_rooms_built[(size_t)r].twin = rm.altRoom;
+				}
+
+				for (int r = 0; r < n; r++)
+				{
+					const Tr5Room& rm = level.rooms()[(size_t)r];
+					std::vector<Tr5Level::FaceInfo> faces;
+					unsigned yTop = 0;
+
+					if ((g_hdm && HDMarkersRoomTouched(r)) ||
+						!level.roomFaces(r, faces, error) || faces.empty())
+						continue;
+
+					level.headerField(r, 36, yTop, error);
+
+					HDStandHolder holder;
+
+					holder.room = r;
+					holder.firstFace = (int)g_stand_faces_built.size();
+					holder.faceCount = (int)faces.size();
+					holder.mins[0] = (float)(rm.originX - HD_COVER_REACH);
+					holder.maxs[0] = (float)(rm.originX + (long)rm.numXSectors * 1024 +
+						HD_COVER_REACH);
+					holder.mins[1] = (float)((int)yTop - HD_COVER_REACH);
+					holder.maxs[1] = (float)(rm.yBottom + HD_COVER_REACH);
+					holder.mins[2] = (float)(rm.originZ - HD_COVER_REACH);
+					holder.maxs[2] = (float)(rm.originZ + (long)rm.numZSectors * 1024 +
+						HD_COVER_REACH);
+
+					for (const Tr5Level::FaceInfo& face : faces)
+					{
+						HDCoverFace one;
+
+						one.corners = face.quad ? 4 : 3;
+						one.doubleSided = face.doubleSided ? 1 : 0;
+
+						for (int c = 0; c < 4; c++)
+							for (int k = 0; k < 3; k++)
+								one.v[c][k] = (double)face.v[c < one.corners ? c : 0][k];
+
+						g_stand_faces_built.push_back(one);
+					}
+
+					g_stand_holders_built.push_back(holder);
+				}
+
+				if (!g_stand_holders_built.empty())
+					HDRenderSetStandFaces(&g_stand_rooms_built[0],
+						(int)g_stand_rooms_built.size(), &g_stand_holders_built[0],
+						(int)g_stand_holders_built.size(), &g_stand_faces_built[0],
+						(int)g_stand_faces_built.size());
+
+				printf("-roombox: %d rooms with %d classic faces handed in for "
+					"the stand ranges\n", (int)g_stand_holders_built.size(),
+					(int)g_stand_faces_built.size());
 			}
 
 			/* -hdm: the openings the randomizer cut, out of the sidecar
@@ -7215,6 +7549,9 @@ int main(int argc, char** argv)
 	printf("animation: motion %d, clock %.2f s, water wobble %d\n",
 		g_motion ? 1 : 0, g_time, (g_water || g_shimmer) ? 1 : 0);
 
+	// -stand: the frame's answers for the stand ranges, before the bracket.
+	PrepareStand(room);
+
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 	PrintDepthTruth("(inside the HD frame)");
@@ -7292,6 +7629,9 @@ int main(int argc, char** argv)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_SOLID);
 
+			// And the -stand ranges drawn in their holder's place.
+			DrawStandInHolders(&lighting, HD_PASS_SOLID);
+
 			/* The clear floors, once every group's solid art is in - the
 			 * place HDFrameDraw gives them, before the models and the
 			 * glass. */
@@ -7300,6 +7640,8 @@ int main(int argc, char** argv)
 			for (int i = 0; i < g_with_count; i++)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_CLEAR);
+
+			DrawStandInHolders(&lighting, HD_PASS_CLEAR);
 
 			/* The see-through half of the alpha pass - the glass - after
 			 * everything opaque and before the glows, which is the order
@@ -7310,11 +7652,15 @@ int main(int argc, char** argv)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_BLEND);
 
+			DrawStandInHolders(&lighting, HD_PASS_BLEND);
+
 			DrawOneGroup(room, 0, &lighting, HD_PASS_ADDITIVE);
 
 			for (int i = 0; i < g_with_count; i++)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_ADDITIVE);
+
+			DrawStandInHolders(&lighting, HD_PASS_ADDITIVE);
 		}
 	}
 

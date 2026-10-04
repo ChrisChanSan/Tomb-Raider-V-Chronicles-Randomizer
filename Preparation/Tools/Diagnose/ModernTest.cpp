@@ -76,6 +76,10 @@
 /* The projected shadow: the key light, its following in time, the box and
  * the map mapping, and the gate - pure again (shadow_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"
+/* A classic room and another group's art in one place: which art stands on
+ * a face, whether it covers the room, and which of the two a frame draws -
+ * pure again (stand_* below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_cover.h"
 #include <string.h>
 #include <vector>
 
@@ -10611,6 +10615,247 @@ static void page_class()
 		"page: a page nothing was measured on is opaque", HDPageClassOf(255, 0), HD_PAGE_OPAQUE);
 }
 
+/* The stand rule (specific\hd\hd_cover.h).
+ *
+ * stand_draw: HDStandDraw over every input. While the room is listed its
+ * place comes from exactly one source - the classic roomlets, or the
+ * carrier's art with its group, or the carrier's art in the room's window -
+ * never two and never none; the art that lies on the faces whole is drawn
+ * only with the carrier or while the room is not listed; art that only
+ * grazes the faces is drawn with its group whenever that is listed; nothing
+ * is drawn in a window of a room that is not listed. And the four list
+ * states of ANDREA2's room 124 and its carrier, group 121, one by one.
+ *
+ * stand_cover: the threshold - every face of a room with faces - and the
+ * coverage count of HDCoverFaces on a floor sector covered by its two
+ * halves, by one half, and by art a reach too far off.
+ *
+ * stand_overlap: which art triangle stands on a face (HDCoverOverlaps) and
+ * which lies on it whole (HDCoverTriOnFaces): a copy of the face, the same
+ * within the reach and past it, turned away, double-sided, touching only an
+ * edge, and reaching half off the face. */
+static HDCoverFace stand_floor(double x0, double z0, double size, double y)
+{
+	// A floor sector seen from above, TR5's y down: (b - a) x (c - a) points
+	// to -y, the way a floor faces.
+	HDCoverFace f;
+
+	f.corners = 4;
+	f.doubleSided = 0;
+	const double v[4][3] =
+	{
+		{ x0, y, z0 }, { x0, y, z0 + size }, { x0 + size, y, z0 + size }, { x0 + size, y, z0 }
+	};
+
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+			f.v[c][k] = v[c][k];
+
+	return f;
+}
+
+static bool stand_tri(double ax, double az, double bx, double bz, double cx, double cz,
+	double y, HDCoverTri* out)
+{
+	const float v[3][3] =
+	{
+		{ (float)ax, (float)y, (float)az }, { (float)bx, (float)y, (float)bz },
+		{ (float)cx, (float)y, (float)cz }
+	};
+	const float origin[3] = { 0.0f, 0.0f, 0.0f };
+
+	return HDCoverMakeTri(v, origin, 121, out);
+}
+
+static void stand_draw()
+{
+	int sources_bad = 0, both = 0, window_unlisted = 0, copy_kept = 0;
+	int graze_lost = 0, classic_wrong = 0, unlisted_wrong = 0;
+
+	for (int bits = 0; bits < 32; bits++)
+	{
+		const bool holder = (bits & 1) != 0, art = (bits & 2) != 0;
+		const bool covered = (bits & 4) != 0, carrier = (bits & 8) != 0;
+		const bool onFaces = (bits & 16) != 0;
+		const HDStandAnswer a = HDStandDraw(holder, art, covered, carrier, onFaces);
+
+		if (a.withArt && a.inHolder)
+			both++;
+
+		if (a.inHolder && (!holder || art))
+			window_unlisted++;
+
+		if (a.classic != (holder && !covered))
+			classic_wrong++;
+
+		// Not listed: nothing of its own, the art with its group.
+		if (!holder && (a.classic || a.inHolder || a.withArt != art))
+			unlisted_wrong++;
+
+		// A copy of the faces drawn while the room is listed: only the carrier.
+		if (holder && onFaces && (a.withArt || a.inHolder) && !(covered && carrier))
+			copy_kept++;
+
+		// Grazing art is never left out where its group is listed.
+		if (!onFaces && art && !a.withArt)
+			graze_lost++;
+
+		/* The sources of a listed room's place: its roomlets, or the carrier
+		 * range of a covered room (asked with carrier and onFaces set). */
+		if (holder && carrier && onFaces)
+		{
+			const int n = (a.classic ? 1 : 0) + (covered ? ((a.withArt ? 1 : 0) +
+				(a.inHolder ? 1 : 0)) : 0);
+
+			if (n != 1)
+				sources_bad++;
+		}
+	}
+
+	ok(both == 0, "stand: never with the group and in the window at once", both, 0);
+	ok(window_unlisted == 0, "stand: the window only for a listed room, art off the list",
+		window_unlisted, 0);
+	ok(classic_wrong == 0, "stand: classic exactly when listed and not covered",
+		classic_wrong, 0);
+	ok(unlisted_wrong == 0, "stand: a room off the list draws nothing of its own",
+		unlisted_wrong, 0);
+	ok(copy_kept == 0, "stand: a copy of the faces is left out but the carrier's",
+		copy_kept, 0);
+	ok(graze_lost == 0, "stand: grazing art is drawn wherever its group is", graze_lost, 0);
+	ok(sources_bad == 0, "stand: a listed room's place has exactly one source",
+		sources_bad, 0);
+
+	// ANDREA2 124, covered, carrier 121: the four list states.
+	HDStandAnswer a = HDStandDraw(true, true, true, true, true);
+	ok(!a.classic && a.withArt && !a.inHolder, "stand: 124 and 121 listed - 121 draws it",
+		a.withArt, 1);
+	a = HDStandDraw(true, false, true, true, true);
+	ok(!a.classic && !a.withArt && a.inHolder, "stand: 124 listed alone - in 124's window",
+		a.inHolder, 1);
+	a = HDStandDraw(false, true, true, true, true);
+	ok(!a.classic && a.withArt && !a.inHolder, "stand: 121 listed alone - with 121",
+		a.withArt, 1);
+	a = HDStandDraw(false, false, true, true, true);
+	ok(!a.classic && !a.withArt && !a.inHolder, "stand: neither listed - nothing", a.withArt, 0);
+	// Group 127's second copy of 124's floor, 121 the carrier.
+	a = HDStandDraw(true, true, true, false, true);
+	ok(!a.withArt && !a.inHolder, "stand: 127's copy left out while 124 is listed",
+		a.withArt, 0);
+	// Group 117's palm trunk, grazing 124's faces.
+	a = HDStandDraw(true, true, true, false, false);
+	ok(a.withArt, "stand: 117's trunk drawn with 117", a.withArt, 1);
+	// RICH2 16, not covered: classic, group 14's copy out, its grazing art in.
+	a = HDStandDraw(true, true, false, false, true);
+	ok(a.classic && !a.withArt, "stand: RICH2 16 classic, 14's copy out", a.classic, 1);
+	a = HDStandDraw(true, true, false, false, false);
+	ok(a.classic && a.withArt, "stand: RICH2 16, 14's grazing art kept", a.withArt, 1);
+}
+
+static void stand_cover()
+{
+	ok(HDCoverRoomCovered(46, 46), "stand: 46 of 46 faces is covered",
+		HDCoverRoomCovered(46, 46), 1);
+	ok(!HDCoverRoomCovered(46, 45), "stand: 45 of 46 is not", HDCoverRoomCovered(46, 45), 0);
+	ok(!HDCoverRoomCovered(0, 0), "stand: a room with no face is not",
+		HDCoverRoomCovered(0, 0), 0);
+	ok(!HDCoverRoomCovered(32, 16), "stand: RICH2 16 (16 of 32) is not",
+		HDCoverRoomCovered(32, 16), 0);
+
+	const HDCoverFace face = stand_floor(0.0, 0.0, 1024.0, 0.0);
+	HDCoverTri t0, t1, far0, far1;
+
+	// The two halves of the face, as art 40 units above it (y down: -40).
+	stand_tri(0, 0, 0, 1024, 1024, 1024, -40.0, &t0);
+	stand_tri(0, 0, 1024, 1024, 1024, 0, -40.0, &t1);
+	stand_tri(0, 0, 0, 1024, 1024, 1024, -200.0, &far0);
+	stand_tri(0, 0, 1024, 1024, 1024, 0, -200.0, &far1);
+
+	HDCoverSet whole, half, far;
+
+	whole.tris.push_back(t0);
+	whole.tris.push_back(t1);
+	half.tris.push_back(t0);
+	far.tris.push_back(far0);
+	far.tris.push_back(far1);
+	whole.build();
+	half.build();
+	far.build();
+
+	const HDCoverCount cw = HDCoverFaces(&face, 1, whole, HD_COVER_REACH, HD_COVER_STEP, 1);
+	const HDCoverCount ch = HDCoverFaces(&face, 1, half, HD_COVER_REACH, HD_COVER_STEP, 1);
+	const HDCoverCount cf = HDCoverFaces(&face, 1, far, HD_COVER_REACH, HD_COVER_STEP, 1);
+
+	ok(cw.faces == 1 && cw.facesCovered == 1 && cw.samples == cw.samplesCovered,
+		"stand: both halves cover the sector", (long)cw.samplesCovered, (long)cw.samples);
+	// Each half's longest edge is the diagonal, 1448 units: 23 cuts of 64.
+	ok(cw.samples == 2 * 23 * 23, "stand: a sector is 2 x 23 x 23 samples at step 64",
+		(long)cw.samples, 2 * 23 * 23);
+	ok(ch.facesCovered == 0 && ch.samplesCovered > 0 && ch.samplesCovered < ch.samples,
+		"stand: one half covers part of it", (long)ch.samplesCovered, 256);
+	ok(cf.samplesCovered == 0, "stand: art 200 units off covers nothing",
+		(long)cf.samplesCovered, 0);
+}
+
+static void stand_overlap()
+{
+	const HDCoverFace face = stand_floor(0.0, 0.0, 1024.0, 0.0);
+	HDCoverFace two = face;
+	HDCoverTri t;
+
+	two.doubleSided = 1;
+
+	stand_tri(0, 0, 0, 1024, 1024, 1024, -40.0, &t);
+	ok(HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: a copy of a half stands on it",
+		HDCoverOverlaps(t, face, HD_COVER_REACH), 1);
+	ok(HDCoverTriOnFaces(t, &face, 1, HD_COVER_REACH), "stand: and lies on it whole",
+		HDCoverTriOnFaces(t, &face, 1, HD_COVER_REACH), 1);
+
+	stand_tri(0, 0, 0, 1024, 1024, 1024, -120.0, &t);
+	ok(HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: 120 units off is within the reach",
+		HDCoverOverlaps(t, face, HD_COVER_REACH), 1);
+
+	stand_tri(0, 0, 0, 1024, 1024, 1024, -140.0, &t);
+	ok(!HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: 140 units off is past it",
+		HDCoverOverlaps(t, face, HD_COVER_REACH), 0);
+
+	// Turned away: the winding reversed.
+	stand_tri(0, 0, 1024, 1024, 0, 1024, -40.0, &t);
+	ok(!HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: art turned away does not",
+		HDCoverOverlaps(t, face, HD_COVER_REACH), 0);
+	ok(HDCoverOverlaps(t, two, HD_COVER_REACH), "stand: unless the face is double-sided",
+		HDCoverOverlaps(t, two, HD_COVER_REACH), 1);
+
+	// Next door, sharing the face's edge x = 1024 and nothing else.
+	stand_tri(1024, 0, 1024, 1024, 2048, 1024, -40.0, &t);
+	ok(!HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: touching an edge is not standing on it",
+		HDCoverOverlaps(t, face, HD_COVER_REACH), 0);
+
+	// Half on the face, half off it: stands on it, not whole.
+	stand_tri(512, 0, 512, 1024, 1536, 1024, -40.0, &t);
+	ok(HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: reaching half off still stands on it",
+		HDCoverOverlaps(t, face, HD_COVER_REACH), 1);
+	ok(!HDCoverTriOnFaces(t, &face, 1, HD_COVER_REACH), "stand: but does not lie on it whole",
+		HDCoverTriOnFaces(t, &face, 1, HD_COVER_REACH), 0);
+
+	// A wall triangle beside the floor (facing +x) is not on the floor.
+	{
+		const float v[3][3] = { { 512, 0, 0 }, { 512, -512, 0 }, { 512, 0, 512 } };
+		const float origin[3] = { 0, 0, 0 };
+
+		HDCoverMakeTri(v, origin, 117, &t);
+		ok(!HDCoverOverlaps(t, face, HD_COVER_REACH), "stand: an upright trunk is not on the floor",
+			HDCoverOverlaps(t, face, HD_COVER_REACH), 0);
+	}
+
+	// The tri maker: corner in the world, edges local, no area refused.
+	{
+		const float v[3][3] = { { 1, 2, 3 }, { 1, 2, 3 }, { 1, 2, 3 } };
+		const float origin[3] = { 100, 0, 200 };
+
+		ok(!HDCoverMakeTri(v, origin, 0, &t), "stand: a triangle of no area is refused", 1, 0);
+	}
+}
+
 /* The object path's cut-out rule (specific\hd\hd_model_cut.h): the material
  * of a .TRM part, and whether a page's texels below the reference are holes.
  * The (below, at 0) pairs are the cache's own sample of the pages named, as
@@ -16508,6 +16753,9 @@ int main()
 	deferred();
 	page_class();
 	model_cut();
+	stand_draw();
+	stand_cover();
+	stand_overlap();
 	mirror_pose();
 	mirror_clip();
 	gloss_order();

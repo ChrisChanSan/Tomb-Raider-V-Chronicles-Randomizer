@@ -3389,228 +3389,37 @@ namespace
 	 * HD rooms of the same level against their own group, which draws them in
 	 * the game. A test that covers those well is a test that can be believed
 	 * where it says a classic room is not covered. */
-	struct ArtTri
+	typedef HDCoverTri ArtTri;
+	typedef HDCoverSet ArtGrid;
+	typedef HDCoverCount ArtCover;
+
+	/* The coverage of one room's classic faces by the art in `grid` -
+	 * HDCoverFaces of specific/hd/hd_cover.h, the test hd_level.cpp asks of
+	 * the stand art, on the faces of the .TRC. */
+	HDCoverFace toCoverFace(const Tr5Level::FaceInfo& face)
 	{
-		float a[3], e1[3], e2[3];	// world units, y down as in TR5
-		float n[3];			// unit normal, (b - a) x (c - a)
-		float lo[3], hi[3];
-		int group;
-	};
+		HDCoverFace out;
 
-	struct ArtGrid
-	{
-		std::vector<ArtTri> tris;
-		std::unordered_map<long long, std::vector<int> > cells;
+		out.corners = face.quad ? 4 : 3;
+		out.doubleSided = face.doubleSided ? 1 : 0;
 
-		static long long key(int x, int y, int z)
-		{
-			return ((long long)(x + 1048576) << 42) |
-				((long long)(y + 1048576) << 21) | (long long)(z + 1048576);
-		}
-
-		void build()
-		{
-			cells.clear();
-
-			for (size_t t = 0; t < tris.size(); t++)
-			{
-				const ArtTri& tri = tris[t];
-				int lo[3], hi[3];
-
-				for (int k = 0; k < 3; k++)
-				{
-					lo[k] = (int)std::floor(tri.lo[k] / 256.0f);
-					hi[k] = (int)std::floor(tri.hi[k] / 256.0f);
-				}
-
-				for (int x = lo[0]; x <= hi[0]; x++)
-					for (int y = lo[1]; y <= hi[1]; y++)
-						for (int z = lo[2]; z <= hi[2]; z++)
-							cells[key(x, y, z)].push_back((int)t);
-			}
-		}
-
-		/* Does the segment p - tol n .. p + tol n meet a triangle of the set
-		 * that faces along `n` (facing 1), against it (-1) or either way (0)?
-		 * Moller-Trumbore with a small barycentric slack, so the seam between
-		 * two art triangles is not a gap. */
-		bool hits(const double p[3], const double n[3], double tol, int facing,
-			std::vector<int>& seen, int stamp) const
-		{
-			double lo[3], hi[3];
-
+		for (int c = 0; c < 4; c++)
 			for (int k = 0; k < 3; k++)
-			{
-				lo[k] = std::min(p[k] - tol * n[k], p[k] + tol * n[k]);
-				hi[k] = std::max(p[k] - tol * n[k], p[k] + tol * n[k]);
-			}
+				out.v[c][k] = (double)face.v[c < out.corners ? c : 0][k];
 
-			const double origin[3] = { p[0] - tol * n[0], p[1] - tol * n[1],
-				p[2] - tol * n[2] };
-			const double dir[3] = { 2.0 * tol * n[0], 2.0 * tol * n[1],
-				2.0 * tol * n[2] };
+		return out;
+	}
 
-			for (int x = (int)std::floor(lo[0] / 256.0); x <= (int)std::floor(hi[0] / 256.0); x++)
-				for (int y = (int)std::floor(lo[1] / 256.0); y <= (int)std::floor(hi[1] / 256.0); y++)
-					for (int z = (int)std::floor(lo[2] / 256.0); z <= (int)std::floor(hi[2] / 256.0); z++)
-					{
-						auto it = cells.find(key(x, y, z));
-
-						if (it == cells.end())
-							continue;
-
-						for (int t : it->second)
-						{
-							if (seen[(size_t)t] == stamp)
-								continue;
-
-							seen[(size_t)t] = stamp;
-
-							const ArtTri& tri = tris[(size_t)t];
-							const double d = tri.n[0] * n[0] + tri.n[1] * n[1] +
-								tri.n[2] * n[2];
-
-							if ((facing > 0 && d <= 0.0) || (facing < 0 && d >= 0.0))
-								continue;
-
-							const double e1[3] = { tri.e1[0], tri.e1[1], tri.e1[2] };
-							const double e2[3] = { tri.e2[0], tri.e2[1], tri.e2[2] };
-							const double h[3] =
-							{
-								dir[1] * e2[2] - dir[2] * e2[1],
-								dir[2] * e2[0] - dir[0] * e2[2],
-								dir[0] * e2[1] - dir[1] * e2[0]
-							};
-							const double det = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
-
-							if (std::fabs(det) < 1e-9)
-								continue;	// the segment runs in the art's plane
-
-							const double inv = 1.0 / det;
-							const double s[3] = { origin[0] - tri.a[0],
-								origin[1] - tri.a[1], origin[2] - tri.a[2] };
-							const double u = inv * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
-							const double slackUV = 1e-3;
-
-							if (u < -slackUV || u > 1.0 + slackUV)
-								continue;
-
-							const double q[3] =
-							{
-								s[1] * e1[2] - s[2] * e1[1],
-								s[2] * e1[0] - s[0] * e1[2],
-								s[0] * e1[1] - s[1] * e1[0]
-							};
-							const double v = inv * (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]);
-
-							if (v < -slackUV || u + v > 1.0 + slackUV)
-								continue;
-
-							const double w = inv * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
-
-							if (w >= 0.0 && w <= 1.0)
-								return true;
-						}
-					}
-
-			return false;
-		}
-	};
-
-	struct ArtCover
-	{
-		int faces = 0, facesCovered = 0;
-		long long samples = 0, samplesCovered = 0;
-		std::vector<double> faceShare;	// per face, covered samples / samples
-	};
-
-	/* The coverage of one room's classic faces by the art in `grid`. */
 	ArtCover coverFaces(const std::vector<Tr5Level::FaceInfo>& faces,
 		const ArtGrid& grid, double tol, double step, int facing)
 	{
-		ArtCover out;
-		std::vector<int> seen(grid.tris.size(), 0);
-		int stamp = 0;
+		std::vector<HDCoverFace> list;
 
-		for (size_t f = 0; f < faces.size(); f++)
-		{
-			const Tr5Level::FaceInfo& face = faces[f];
-			const int corners = face.quad ? 4 : 3;
-			long long samples = 0, covered = 0;
+		for (const Tr5Level::FaceInfo& face : faces)
+			list.push_back(toCoverFace(face));
 
-			for (int half = 0; half + 2 < corners; half++)
-			{
-				const long* a = face.v[0];
-				const long* b = face.v[half + 1];
-				const long* c = face.v[half + 2];
-				const double e1[3] = { (double)(b[0] - a[0]), (double)(b[1] - a[1]), (double)(b[2] - a[2]) };
-				const double e2[3] = { (double)(c[0] - a[0]), (double)(c[1] - a[1]), (double)(c[2] - a[2]) };
-				double n[3] =
-				{
-					e1[1] * e2[2] - e1[2] * e2[1],
-					e1[2] * e2[0] - e1[0] * e2[2],
-					e1[0] * e2[1] - e1[1] * e2[0]
-				};
-				const double length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-
-				if (length <= 0.0)
-					continue;	// a face of no area
-
-				for (int k = 0; k < 3; k++)
-					n[k] /= length;
-
-				const double e3[3] = { e2[0] - e1[0], e2[1] - e1[1], e2[2] - e1[2] };
-				const double longest = std::max(std::sqrt(e1[0] * e1[0] + e1[1] * e1[1] + e1[2] * e1[2]),
-					std::max(std::sqrt(e2[0] * e2[0] + e2[1] * e2[1] + e2[2] * e2[2]),
-					std::sqrt(e3[0] * e3[0] + e3[1] * e3[1] + e3[2] * e3[2])));
-				const int cuts = std::max(1, (int)std::ceil(longest / step));
-
-				for (int i = 0; i < cuts; i++)
-					for (int j = 0; i + j < cuts; j++)
-						for (int down = 0; down < 2; down++)
-						{
-							if (down && i + j >= cuts - 1)
-								continue;
-
-							const double u = ((double)i + (down ? 2.0 : 1.0) / 3.0) / cuts;
-							const double v = ((double)j + (down ? 2.0 : 1.0) / 3.0) / cuts;
-							const double p[3] =
-							{
-								a[0] + u * e1[0] + v * e2[0],
-								a[1] + u * e1[1] + v * e2[1],
-								a[2] + u * e1[2] + v * e2[2]
-							};
-
-							if (++stamp == 0x7fffffff)
-							{
-								std::fill(seen.begin(), seen.end(), 0);
-								stamp = 1;
-							}
-
-							samples++;
-
-							if (grid.hits(p, n, tol, face.doubleSided ? 0 : facing,
-								seen, stamp))
-								covered++;
-						}
-			}
-
-			if (!samples)
-			{
-				out.faceShare.push_back(1.0);	// no area: nothing to cover
-				continue;
-			}
-
-			out.faces++;
-			out.samples += samples;
-			out.samplesCovered += covered;
-			out.faceShare.push_back((double)covered / (double)samples);
-
-			if (covered == samples)
-				out.facesCovered++;
-		}
-
-		return out;
+		return HDCoverFaces(list.empty() ? 0 : &list[0], (int)list.size(), grid,
+			tol, step, facing);
 	}
 
 	void dumpClassicArt(const std::string& root, const std::string& stem,
@@ -3752,30 +3561,9 @@ namespace
 						ArtTri t;
 						const float off[3] = { (float)b.ox, (float)b.oy, (float)b.oz };
 
-						for (int k = 0; k < 3; k++)
-						{
-							t.a[k] = v[0][k] + off[k];
-							t.e1[k] = v[1][k] - v[0][k];
-							t.e2[k] = v[2][k] - v[0][k];
-							t.lo[k] = std::min(v[0][k], std::min(v[1][k], v[2][k])) + off[k];
-							t.hi[k] = std::max(v[0][k], std::max(v[1][k], v[2][k])) + off[k];
-						}
-
-						const double n[3] =
-						{
-							(double)t.e1[1] * t.e2[2] - (double)t.e1[2] * t.e2[1],
-							(double)t.e1[2] * t.e2[0] - (double)t.e1[0] * t.e2[2],
-							(double)t.e1[0] * t.e2[1] - (double)t.e1[1] * t.e2[0]
-						};
-						const double length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
-
-						if (length <= 0.0)
+						if (!HDCoverMakeTri(v, off, g, &t))
 							continue;	// counted, but it covers nothing
 
-						for (int k = 0; k < 3; k++)
-							t.n[k] = (float)(n[k] / length);
-
-						t.group = g;
 						art[(size_t)g].push_back(t);
 					}
 				}
@@ -4023,6 +3811,91 @@ namespace
 					stem.c_str(), h, claimedTris, cover.facesCovered, cover.faces,
 					cover.samplesCovered, cover.samples, cover.samples ?
 					100.0 * cover.samplesCovered / cover.samples : 0.0);
+			}
+
+			/* The stand art: the triangles of every HD group but this
+			 * room and its flipmap twin that stand on one of its faces
+			 * (HDCoverOverlaps, the renderer's own tag), and what they
+			 * cover with the engine's threshold. `verdict` is the union's;
+			 * `carrier` the group that covers the room alone (most
+			 * triangles, then the lowest group) and `engine` what
+			 * hd_level.cpp makes of it - the line the engine's
+			 * `HDLOG room=... stand= covered= carrier=` answers, from the
+			 * .TRC. */
+			{
+				std::vector<HDCoverFace> list;
+
+				for (const Tr5Level::FaceInfo& face : faces)
+					list.push_back(toCoverFace(face));
+
+				ArtGrid standGrid;
+				std::set<int> standGroups;
+
+				for (int g = 0; g < groups && g < rooms; g++)
+				{
+					if (g == h || !drawsHD(g) || hr.altRoom == g ||
+						level.rooms()[(size_t)g].altRoom == h)
+						continue;
+
+					for (const ArtTri& t : art[(size_t)g])
+					{
+						if (t.hi[0] < H.x0 - tol || t.lo[0] > H.x1 + tol ||
+							t.hi[1] < H.y0 - tol || t.lo[1] > H.y1 + tol ||
+							t.hi[2] < H.z0 - tol || t.lo[2] > H.z1 + tol)
+							continue;
+
+						for (const HDCoverFace& face : list)
+							if (HDCoverOverlaps(t, face, tol))
+							{
+								standGrid.tris.push_back(t);
+								standGroups.insert(g);
+								break;
+							}
+					}
+				}
+
+				standGrid.build();
+
+				const ArtCover cover = HDCoverFaces(list.empty() ? 0 : &list[0],
+					(int)list.size(), standGrid, tol, step, facing);
+				std::string names;
+
+				int carrier = -1, carrierTris = 0;
+
+				for (int g : standGroups)
+				{
+					ArtGrid alone;
+
+					names += (names.empty() ? "" : ",") + std::to_string(g);
+
+					for (const ArtTri& t : standGrid.tris)
+						if (t.group == g)
+							alone.tris.push_back(t);
+
+					alone.build();
+
+					const ArtCover one = HDCoverFaces(list.empty() ? 0 : &list[0],
+						(int)list.size(), alone, tol, step, facing);
+					const int n = (int)alone.tris.size();
+
+					if (HDCoverRoomCovered(one.faces, one.facesCovered) &&
+						(carrier < 0 || n > carrierTris || (n == carrierTris && g < carrier)))
+					{
+						carrier = g;
+						carrierTris = n;
+					}
+				}
+
+				std::printf("classicart: %s room=%d union=stand groups=%s tris=%d "
+					"faces_covered=%d/%d samples=%lld/%lld (%.1f%%) verdict=%s "
+					"carrier=%d engine=%s\n",
+					stem.c_str(), h, names.empty() ? "-" : names.c_str(),
+					(int)standGrid.tris.size(), cover.facesCovered, cover.faces,
+					cover.samplesCovered, cover.samples, cover.samples ?
+					100.0 * cover.samplesCovered / cover.samples : 0.0,
+					!cover.faces ? "no_faces" : HDCoverRoomCovered(cover.faces,
+					cover.facesCovered) ? "covered" : "not_covered", carrier,
+					carrier >= 0 ? "as_art" : "classic");
 			}
 
 			for (int which = 0; which < 2; which++)

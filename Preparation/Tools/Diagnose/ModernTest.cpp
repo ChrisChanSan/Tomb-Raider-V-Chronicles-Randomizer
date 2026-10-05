@@ -10639,7 +10639,8 @@ static void page_class()
 static HDCoverFace stand_floor(double x0, double z0, double size, double y)
 {
 	// A floor sector seen from above, TR5's y down: (b - a) x (c - a) points
-	// to -y, the way a floor faces.
+	// to +y, away from the side it is seen from, as the game's classic floors
+	// are wound (hd_cover.h, HD_COVER_UP_SIGN).
 	HDCoverFace f;
 
 	f.corners = 4;
@@ -10876,6 +10877,265 @@ static void stand_overlap()
 		const float origin[3] = { 100, 0, 200 };
 
 		ok(!HDCoverMakeTri(v, origin, 0, &t), "stand: a triangle of no area is refused", 1, 0);
+	}
+}
+
+/* stand_part: a classic room's faces one by one (hd_cover.h). The room's
+ * state from its faces and the carrier's (HDCoverRoomState, at least half
+ * for a room drawn in part), the carrier among the groups
+ * (HDCoverCarrierBetter), a face covered (HDCoverFaceCovered), and
+ * HDStandDrawFaces over every input: a room drawn classic or wholly as art
+ * answers exactly as HDStandDraw; a room drawn in part, while it is listed,
+ * keeps its classic roomlets, gets every covered face from exactly one
+ * source - the carrier's range with its group or in the room's window, never
+ * both and never none - leaves out art that lies whole on kept faces alone
+ * and every other group's copy, never leaves out a carrier triangle that
+ * stands on a covered face, and pushes back exactly what reaches onto a kept
+ * face; off the list it draws nothing of its own. And RICH2's rooms 16, 18
+ * and 19 with group 14 and TITLE's rooms with group 71, measured with
+ * TrgProbe -classicart -perface.
+ *
+ * stand_shadow: a face she can stand on (HDCoverFaceFloor) - a floor, a
+ * ceiling, a wall, a double-sided ceiling, two slopes, a face of no area -
+ * and whether a room counts as HD for her shadow (HDCoverRoomShadowHD) with
+ * the gate's answer for ANDREA2 124, RICH2 15, 16, 18 and 19, ANDY3 26 (drawn
+ * classic, no face covered), ANDREA3 115 (no classic face) and an HD room. */
+static void stand_part()
+{
+	ok(HDCoverRoomState(32, 16) == HD_STAND_ROOM_PART, "part: RICH2 16, 16 of 32, in part",
+		HDCoverRoomState(32, 16), HD_STAND_ROOM_PART);
+	ok(HDCoverRoomState(16, 15) == HD_STAND_ROOM_PART, "part: RICH2 18, 15 of 16, in part",
+		HDCoverRoomState(16, 15), HD_STAND_ROOM_PART);
+	ok(HDCoverRoomState(15, 13) == HD_STAND_ROOM_PART, "part: RICH2 19, 13 of 15, in part",
+		HDCoverRoomState(15, 13), HD_STAND_ROOM_PART);
+	ok(HDCoverRoomState(46, 46) == HD_STAND_ROOM_COVERED, "part: ANDREA2 124, 46 of 46, covered",
+		HDCoverRoomState(46, 46), HD_STAND_ROOM_COVERED);
+	ok(HDCoverRoomState(32, 15) == HD_STAND_ROOM_CLASSIC, "part: 15 of 32 is under half, classic",
+		HDCoverRoomState(32, 15), HD_STAND_ROOM_CLASSIC);
+	ok(HDCoverRoomState(65, 10) == HD_STAND_ROOM_CLASSIC, "part: TITLE 70, 10 of 65, classic",
+		HDCoverRoomState(65, 10), HD_STAND_ROOM_CLASSIC);
+	ok(HDCoverRoomState(213, 7) == HD_STAND_ROOM_CLASSIC, "part: TITLE 103, 7 of 213, classic",
+		HDCoverRoomState(213, 7), HD_STAND_ROOM_CLASSIC);
+	ok(HDCoverRoomState(46, 0) == HD_STAND_ROOM_CLASSIC, "part: no face covered, classic",
+		HDCoverRoomState(46, 0), HD_STAND_ROOM_CLASSIC);
+	ok(HDCoverRoomState(0, 0) == HD_STAND_ROOM_CLASSIC, "part: no face at all, classic",
+		HDCoverRoomState(0, 0), HD_STAND_ROOM_CLASSIC);
+
+	ok(HDCoverFaceCovered(1.0), "part: every sample covered is a covered face", 1, 1);
+	ok(!HDCoverFaceCovered(0.999), "part: one bare sample keeps the face", 0, 0);
+
+	// ANDREA2 124: 121 covers 46 faces with 3322 triangles, 127 36 with 1732.
+	int best = -1, bestFaces = 0, bestTris = 0;
+	const int cand[3][3] = { { 117, 0, 16 }, { 121, 46, 3322 }, { 127, 36, 1732 } };
+
+	for (int i = 0; i < 3; i++)
+		if (HDCoverCarrierBetter(cand[i][1], cand[i][2], cand[i][0], bestFaces, bestTris, best))
+		{
+			best = cand[i][0];
+			bestFaces = cand[i][1];
+			bestTris = cand[i][2];
+		}
+
+	ok(best == 121, "part: ANDREA2 124's carrier is 121", best, 121);
+	ok(HDCoverCarrierBetter(10, 5, 9, 9, 500, 3), "part: more faces beat more triangles", 1, 1);
+	ok(HDCoverCarrierBetter(10, 6, 9, 10, 5, 3), "part: equal faces, more triangles win", 1, 1);
+	ok(HDCoverCarrierBetter(10, 5, 3, 10, 5, 9), "part: all equal, the lower group wins", 1, 1);
+	ok(!HDCoverCarrierBetter(10, 5, 9, 10, 5, 3), "part: all equal, the higher group loses", 0, 0);
+	ok(!HDCoverCarrierBetter(0, 900, 1, -1, 0, -1), "part: a group that covers no face never carries",
+		0, 0);
+
+	int same_wrong = 0, both = 0, sources_bad = 0, copy_kept = 0, carrier_lost = 0;
+	int behind_wrong = 0, unlisted_wrong = 0, classic_wrong = 0, window_wrong = 0;
+
+	for (int bits = 0; bits < 16; bits++)
+		for (int state = 0; state < 3; state++)
+			for (int kind = 0; kind < 3; kind++)
+				for (int faces = 0; faces < 4; faces++)
+				{
+					const bool holder = (bits & 1) != 0, art = (bits & 2) != 0;
+					const bool carrier = (bits & 4) != 0;
+
+					if ((bits & 8) || (kind == 2 && faces))
+						continue;
+
+					const HDStandAnswer a = HDStandDrawFaces(holder, art, state, carrier, kind,
+						faces);
+
+					if (state != HD_STAND_ROOM_PART)
+					{
+						const HDStandAnswer b = HDStandDraw(holder, art,
+							state == HD_STAND_ROOM_COVERED, carrier, kind == 1, kind == 0);
+
+						if (a.classic != b.classic || a.withArt != b.withArt ||
+							a.inHolder != b.inHolder || a.behind != b.behind)
+							same_wrong++;
+
+						continue;
+					}
+
+					// A range of a room drawn in part.
+					const bool onCovered = (faces & HD_STAND_FACES_COVERED) != 0;
+					const bool onKept = (faces & HD_STAND_FACES_KEPT) != 0;
+					const bool drawn = a.withArt || a.inHolder;
+
+					if (a.withArt && a.inHolder)
+						both++;
+
+					if (a.classic != holder)
+						classic_wrong++;
+
+					if (a.inHolder && (!holder || art))
+						window_wrong++;
+
+					if (!holder && (a.classic || a.inHolder || a.behind || a.withArt != art))
+						unlisted_wrong++;
+
+					if (!holder)
+						continue;
+
+					// The carrier's art on a covered face, or its relief: one source.
+					if (carrier && (kind == 2 || onCovered) && (drawn ? 1 : 0) != 1)
+						sources_bad++;
+
+					if (carrier && onCovered && !drawn)
+						carrier_lost++;
+
+					// Lying whole on the faces and not the carrier's on a covered one.
+					if (kind == 1 && !(carrier && onCovered) && drawn)
+						copy_kept++;
+
+					const bool want_behind = drawn && kind != 2 &&
+						(onKept || !(carrier && onCovered));
+
+					if (a.behind != want_behind)
+						behind_wrong++;
+				}
+
+	ok(same_wrong == 0, "part: classic and covered rooms answer as HDStandDraw", same_wrong, 0);
+	ok(both == 0, "part: never with the group and in the window at once", both, 0);
+	ok(classic_wrong == 0, "part: the kept faces drawn exactly while listed", classic_wrong, 0);
+	ok(window_wrong == 0, "part: the window only for a listed room, art off the list",
+		window_wrong, 0);
+	ok(unlisted_wrong == 0, "part: a room off the list draws nothing of its own",
+		unlisted_wrong, 0);
+	ok(sources_bad == 0, "part: a covered face has exactly one source while listed",
+		sources_bad, 0);
+	ok(carrier_lost == 0, "part: a carrier triangle on a covered face is never left out",
+		carrier_lost, 0);
+	ok(copy_kept == 0, "part: art whole on kept faces and every other copy left out",
+		copy_kept, 0);
+	ok(behind_wrong == 0, "part: pushed back exactly what reaches onto a kept face",
+		behind_wrong, 0);
+
+	// RICH2 16 drawn in part, carrier 14, both listed and 14 off the list.
+	const int P = HD_STAND_ROOM_PART;
+	HDStandAnswer a = HDStandDrawFaces(true, true, P, true, 1, HD_STAND_FACES_COVERED);
+	ok(a.classic && a.withArt && !a.behind, "part: RICH2 16, 14's walls with 14, in place",
+		a.withArt, 1);
+	a = HDStandDrawFaces(true, false, P, true, 1, HD_STAND_FACES_COVERED);
+	ok(a.inHolder && !a.withArt && !a.behind, "part: RICH2 16, 14 off - its walls in 16's window",
+		a.inHolder, 1);
+	a = HDStandDrawFaces(true, true, P, true, 1, HD_STAND_FACES_BOTH);
+	ok(a.withArt && a.behind, "part: RICH2 16, 14's art on a covered and a kept face pushed back",
+		a.behind, 1);
+	a = HDStandDrawFaces(true, false, P, true, 1, HD_STAND_FACES_BOTH);
+	ok(a.inHolder && a.behind, "part: the same in 16's window, pushed back", a.behind, 1);
+	a = HDStandDrawFaces(true, true, P, true, 1, HD_STAND_FACES_KEPT);
+	ok(!a.withArt && !a.inHolder, "part: RICH2 19, 14's art whole on its kept wall left out",
+		a.withArt, 0);
+	a = HDStandDrawFaces(true, true, P, true, 0, HD_STAND_FACES_KEPT);
+	ok(a.withArt && a.behind, "part: 14's art reaching onto a kept face, pushed back", a.behind, 1);
+	a = HDStandDrawFaces(true, false, P, true, 0, HD_STAND_FACES_KEPT);
+	ok(!a.withArt && !a.inHolder, "part: the same with 14 off - nothing", a.withArt, 0);
+	a = HDStandDrawFaces(true, false, P, true, 2, 0);
+	ok(a.inHolder && !a.behind, "part: 14's relief in 16's box, 14 off - in the window",
+		a.inHolder, 1);
+	a = HDStandDrawFaces(false, true, P, true, 1, HD_STAND_FACES_KEPT);
+	ok(a.withArt && !a.behind && !a.classic, "part: 16 off the list - 14's art in place",
+		a.withArt, 1);
+	// TITLE 103: 7 of 213 faces is a room drawn classic, 71's copy left out.
+	a = HDStandDrawFaces(true, true, HDCoverRoomState(213, 7), true, 1, 0);
+	ok(a.classic && !a.withArt, "part: TITLE 103 classic, 71's art on its faces left out",
+		a.withArt, 0);
+}
+
+static void stand_shadow()
+{
+	const HDCoverFace floor = stand_floor(0.0, 0.0, 1024.0, 0.0);
+	HDCoverFace ceiling = floor, wall = floor, twoSided = floor, slope45 = floor;
+	HDCoverFace slope70 = floor, none = floor;
+
+	// The ceiling: the floor's corners the other way round.
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+			ceiling.v[c][k] = floor.v[3 - c][k];
+
+	twoSided = ceiling;
+	twoSided.doubleSided = 1;
+
+	// A wall in the x-y plane, and two slopes rising along z.
+	const double w[4][3] = { { 0, 0, 0 }, { 0, -1024, 0 }, { 1024, -1024, 0 }, { 1024, 0, 0 } };
+	const double s45[4][3] = { { 0, 0, 0 }, { 0, -1024, 1024 }, { 1024, -1024, 1024 },
+		{ 1024, 0, 0 } };
+	const double s70[4][3] = { { 0, 0, 0 }, { 0, -2814, 1024 }, { 1024, -2814, 1024 },
+		{ 1024, 0, 0 } };
+
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+		{
+			wall.v[c][k] = w[c][k];
+			slope45.v[c][k] = s45[c][k];
+			slope70.v[c][k] = s70[c][k];
+			none.v[c][k] = 5.0;
+		}
+
+	ok(HDCoverFaceUp(floor) > 0.999, "shadow: a floor points up", (long)(HDCoverFaceUp(floor) * 1000),
+		1000);
+	ok(HDCoverFaceFloor(floor), "shadow: a floor is a face she can stand on", 1, 1);
+	ok(HDCoverFaceUp(ceiling) < -0.999 && !HDCoverFaceFloor(ceiling),
+		"shadow: a ceiling points down and is none", (long)(HDCoverFaceUp(ceiling) * 1000), -1000);
+	ok(!HDCoverFaceFloor(wall), "shadow: a wall is none", (long)(HDCoverFaceUp(wall) * 1000), 0);
+	ok(HDCoverFaceFloor(twoSided), "shadow: a double-sided ceiling is a floor from above", 1, 1);
+	ok(HDCoverFaceFloor(slope45), "shadow: a 45 degree slope is one",
+		(long)(HDCoverFaceUp(slope45) * 1000), 707);
+	ok(!HDCoverFaceFloor(slope70), "shadow: a 70 degree slope is none",
+		(long)(HDCoverFaceUp(slope70) * 1000), 342);
+	ok(!HDCoverFaceFloor(none) && HDCoverFaceUp(none) == 0.0, "shadow: a face of no area is none",
+		0, 0);
+
+	/* The rooms of the game, from TrgProbe -classicart -perface: the state
+	 * and the kept floors; the gate at HEAD and as it stood before, when
+	 * only a room drawn HD counted. */
+	struct Room
+	{
+		const char* name;
+		bool hd;
+		int faces, covered, floorsKept;
+		bool want;
+	};
+	const Room rooms[] =
+	{
+		{ "ANDREA2 124", false, 46, 46, 0, true },
+		{ "RICH2 15", false, 15, 15, 0, true },
+		{ "RICH2 16", false, 32, 16, 0, true },
+		{ "RICH2 18", false, 16, 15, 1, false },
+		{ "RICH2 19", false, 15, 13, 1, false },
+		{ "ANDY3 26", false, 31, 0, 0, false },
+		{ "ANDREA3 115", false, 0, 0, 0, true },
+		{ "an HD room", true, 0, 0, 0, true },
+	};
+
+	for (const Room& r : rooms)
+	{
+		const bool hd = HDCoverRoomShadowHD(r.hd, HDCoverRoomState(r.faces, r.covered),
+			r.floorsKept, r.faces);
+		const int gate = HDShadowGate(HD_SHADOW_MODE_PROJECTED, true, true, hd, true);
+		const int before = HDShadowGate(HD_SHADOW_MODE_PROJECTED, true, true, r.hd, true);
+		char what[96];
+
+		snprintf(what, sizeof(what), "shadow: %s %s (was %s)", r.name, HDShadowGateWord(gate),
+			HDShadowGateWord(before));
+		ok(hd == r.want, what, hd ? 1 : 0, r.want ? 1 : 0);
 	}
 }
 
@@ -16779,6 +17039,8 @@ int main()
 	stand_draw();
 	stand_cover();
 	stand_overlap();
+	stand_part();
+	stand_shadow();
 	mirror_pose();
 	mirror_clip();
 	gloss_order();

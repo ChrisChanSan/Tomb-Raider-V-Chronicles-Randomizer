@@ -3422,9 +3422,378 @@ namespace
 			tol, step, facing);
 	}
 
+	/* -classicart -perface: the rule per classic face, as hd_level.cpp's
+	 * BuildStandRanges reaches it from the renderer's tag.
+	 *
+	 * The tag first, as hd_render.cpp makes it: every triangle of every HD
+	 * group goes to the first holder in room order - a classic-drawn room
+	 * with a classic face, not the group's own room or its flipmap twin -
+	 * one of whose faces it stands on (HDCoverOverlaps). Per holder then the
+	 * coverage of every face by each group's tagged triangles, the carrier
+	 * (HDCoverCarrierBetter: most faces covered, then most triangles, then
+	 * the lowest group), the room's state (HDCoverRoomState) and the two
+	 * guards. One `perface room=` line per holder; one `perface face=` line
+	 * per face: covered by the carrier or kept, the share of its samples the
+	 * carrier, all the tagged art and all of it facing either way cover (a
+	 * kept face with no share at all is bare, otherwise mixed), whether it
+	 * is a face Lara can stand on (HDCoverFaceFloor) and its upward normal.
+	 * One `perface tris=` line per holder with a carrier: the carrier's
+	 * tagged triangles by kind (lying on the faces whole or reaching onto
+	 * them) and by the faces they stand on - covered ones only (cov), kept
+	 * ones only (kept) or both.
+	 *
+	 * And per classic-drawn room without a classic face, a `perface
+	 * noface=` line: its sectors - walls, floors that open into the room
+	 * below, solid floors - the rooms below and whether each is drawn HD, and
+	 * the HD art whose centroid stands in its box: where Lara can be in such
+	 * a room and what is under her. */
+	void dumpPerFace(const Tr5Level& level, const trf::remaster::Trg& trg,
+		const std::string& stem, const std::vector<std::vector<ArtTri> >& art,
+		const std::vector<const char*>& reason, const std::vector<RoomSpace>& box,
+		int rooms, int groups, double tol, double step, int facing)
+	{
+		std::string error;
+		std::vector<std::vector<HDCoverFace> > faces((size_t)rooms);
+		std::vector<std::vector<float> > faceBox((size_t)rooms);
+		std::vector<int> holders;
+
+		const auto drawsHD = [&](int g)
+		{
+			return g >= 0 && g < rooms && g < groups && !reason[(size_t)g];
+		};
+
+		for (int h = 0; h < rooms; h++)
+		{
+			if (!reason[(size_t)h])
+				continue;
+
+			std::vector<Tr5Level::FaceInfo> info;
+
+			level.roomFaces(h, info, error);
+
+			for (const Tr5Level::FaceInfo& face : info)
+			{
+				const HDCoverFace one = toCoverFace(face);
+
+				faces[(size_t)h].push_back(one);
+
+				for (int axis = 0; axis < 3; axis++)
+				{
+					double lo = one.v[0][axis], hi = one.v[0][axis];
+
+					for (int c = 1; c < one.corners; c++)
+					{
+						if (one.v[c][axis] < lo) lo = one.v[c][axis];
+						if (one.v[c][axis] > hi) hi = one.v[c][axis];
+					}
+
+					faceBox[(size_t)h].push_back((float)(lo - tol));
+					faceBox[(size_t)h].push_back((float)(hi + tol));
+				}
+			}
+
+			if (!faces[(size_t)h].empty())
+				holders.push_back(h);
+		}
+
+		// The tag: the first holder in room order takes the triangle.
+		std::vector<std::vector<ArtTri> > tagged((size_t)rooms);
+
+		for (int g = 0; g < groups && g < rooms; g++)
+		{
+			if (!drawsHD(g))
+				continue;
+
+			const int twin = level.rooms()[(size_t)g].altRoom;
+
+			for (const ArtTri& t : art[(size_t)g])
+			{
+				bool done = false;
+
+				for (int h : holders)
+				{
+					if (done)
+						break;
+
+					if (h == g || h == twin || level.rooms()[(size_t)h].altRoom == g)
+						continue;
+
+					const std::vector<HDCoverFace>& list = faces[(size_t)h];
+					const std::vector<float>& fb = faceBox[(size_t)h];
+
+					for (size_t f = 0; f < list.size() && !done; f++)
+					{
+						const float* b = &fb[f * 6];
+
+						if (t.hi[0] < b[0] || t.lo[0] > b[1] || t.hi[1] < b[2] ||
+							t.lo[1] > b[3] || t.hi[2] < b[4] || t.lo[2] > b[5])
+							continue;
+
+						if (HDCoverOverlaps(t, list[f], tol))
+						{
+							tagged[(size_t)h].push_back(t);
+							done = true;
+						}
+					}
+				}
+			}
+		}
+
+		int states[4] = { 0, 0, 0, 0 };
+
+		for (int h : holders)
+		{
+			const std::vector<HDCoverFace>& list = faces[(size_t)h];
+			const std::vector<ArtTri>& all = tagged[(size_t)h];
+			const Tr5Room& hr = level.rooms()[(size_t)h];
+
+			if (all.empty())
+			{
+				std::printf("classicart: %s perface room=%d faces=%d stand=0 state=classic\n",
+					stem.c_str(), h, (int)list.size());
+				states[0]++;
+				continue;
+			}
+
+			std::set<int> groupSet;
+
+			for (const ArtTri& t : all)
+				groupSet.insert(t.group);
+
+			int carrier = -1, carrierFaces = 0, carrierTris = 0;
+			HDCoverCount carrierCover;
+			std::string per;
+
+			for (int g : groupSet)
+			{
+				ArtGrid one;
+
+				for (const ArtTri& t : all)
+					if (t.group == g)
+						one.tris.push_back(t);
+
+				one.build();
+
+				const HDCoverCount cover = HDCoverFaces(&list[0], (int)list.size(), one,
+					tol, step, facing);
+				const int n = (int)one.tris.size();
+
+				per += (per.empty() ? "" : ",") + std::to_string(g) + ":" +
+					std::to_string(cover.facesCovered) + "f/" + std::to_string(n) + "t";
+
+				if (HDCoverCarrierBetter(cover.facesCovered, n, g, carrierFaces,
+					carrierTris, carrier))
+				{
+					carrier = g;
+					carrierFaces = cover.facesCovered;
+					carrierTris = n;
+					carrierCover = cover;
+				}
+			}
+
+			ArtGrid every;
+
+			every.tris = all;
+			every.build();
+
+			const HDCoverCount same = HDCoverFaces(&list[0], (int)list.size(), every, tol,
+				step, facing);
+			const HDCoverCount any = HDCoverFaces(&list[0], (int)list.size(), every, tol,
+				step, 0);
+			int areaFaces = 0;
+
+			for (size_t f = 0; f < list.size(); f++)
+				if (any.faceShare.size() > f && HDCoverSamples(list[f], step,
+					[](const double*, const double*) {}) > 0)
+					areaFaces++;
+
+			const int state = carrier < 0 ? HD_STAND_ROOM_CLASSIC :
+				HDCoverRoomState(areaFaces, carrierFaces);
+			bool flips = false;
+
+			if (carrier >= 0)
+			{
+				flips = level.rooms()[(size_t)carrier].altRoom >= 0;
+
+				for (int r = 0; r < rooms; r++)
+					flips = flips || level.rooms()[(size_t)r].altRoom == carrier;
+			}
+
+			const bool water = (hr.flags & (0x100 | 0x200)) != 0;
+			const bool guarded = carrier >= 0 && (flips || water);
+			const int drawn = guarded ? HD_STAND_ROOM_CLASSIC : state;
+			int kept = 0, keptFloors = 0, bare = 0;
+
+			for (size_t f = 0; f < list.size(); f++)
+			{
+				const bool area = HDCoverSamples(list[f], step,
+					[](const double*, const double*) {}) > 0;
+				const bool covered = drawn != HD_STAND_ROOM_CLASSIC &&
+					f < carrierCover.faceShare.size() &&
+					HDCoverFaceCovered(carrierCover.faceShare[f]);
+
+				if (!covered && area)
+				{
+					kept++;
+
+					if (HDCoverFaceFloor(list[f]))
+						keptFloors++;
+
+					if (any.faceShare[f] <= 0.0)
+						bare++;
+				}
+			}
+
+			states[drawn + 1]++;
+			std::printf("classicart: %s perface room=%d faces=%d area=%d stand=%d "
+				"groups=%s carrier=%d covered=%d kept=%d kept_bare=%d kept_floors=%d "
+				"state=%s guard=%s flags=0x%04x shadow=%d\n", stem.c_str(), h,
+				(int)list.size(), areaFaces, (int)all.size(), per.c_str(), carrier,
+				drawn == HD_STAND_ROOM_CLASSIC ? 0 : carrierFaces, kept, bare, keptFloors,
+				drawn == HD_STAND_ROOM_COVERED ? "covered" :
+				drawn == HD_STAND_ROOM_PART ? "part" : "classic",
+				!guarded ? "-" : flips ? "flip" : "water", hr.flags,
+				HDCoverRoomShadowHD(false, drawn, keptFloors, (int)list.size()) ? 1 : 0);
+
+			for (size_t f = 0; f < list.size(); f++)
+			{
+				const HDCoverFace& face = list[f];
+				double c[3] = { 0, 0, 0 };
+
+				for (int k = 0; k < face.corners; k++)
+					for (int axis = 0; axis < 3; axis++)
+						c[axis] += face.v[k][axis] / face.corners;
+
+				const bool area = HDCoverSamples(face, step,
+					[](const double*, const double*) {}) > 0;
+				const double mine = f < carrierCover.faceShare.size() ?
+					carrierCover.faceShare[f] : 0.0;
+				const bool covered = drawn != HD_STAND_ROOM_CLASSIC &&
+					HDCoverFaceCovered(mine);
+
+				std::printf("classicart: %s perface room=%d face=%d corners=%d ds=%d "
+					"centre=%.0f,%.0f,%.0f up=%.2f floor=%d carrier=%.1f%% stand=%.1f%% "
+					"any=%.1f%% %s\n", stem.c_str(), h, (int)f, face.corners,
+					face.doubleSided, c[0], c[1], c[2], HDCoverFaceUp(face),
+					HDCoverFaceFloor(face) ? 1 : 0, 100.0 * mine,
+					100.0 * same.faceShare[f], 100.0 * any.faceShare[f],
+					!area ? "noarea" : covered ? "covered" :
+					any.faceShare[f] <= 0.0 ? "kept_bare" : "kept_mixed");
+			}
+
+			if (carrier < 0)
+				continue;
+
+			// The carrier's tagged triangles by kind and by the faces they stand on.
+			int count[2][3] = { { 0, 0, 0 }, { 0, 0, 0 } };
+
+			for (const ArtTri& t : all)
+			{
+				if (t.group != carrier)
+					continue;
+
+				bool onCovered = false, onKept = false;
+
+				for (size_t f = 0; f < list.size(); f++)
+				{
+					if (!HDCoverOverlaps(t, list[f], tol))
+						continue;
+
+					if (drawn != HD_STAND_ROOM_CLASSIC &&
+						HDCoverFaceCovered(carrierCover.faceShare[f]))
+						onCovered = true;
+					else
+						onKept = true;
+				}
+
+				const int kind = HDCoverTriOnFaces(t, &list[0], (int)list.size(), tol) ? 1 : 0;
+
+				count[kind][onCovered && onKept ? 2 : onCovered ? 0 : 1]++;
+			}
+
+			std::printf("classicart: %s perface room=%d tris carrier=%d "
+				"whole: cov=%d kept=%d both=%d  reaching: cov=%d kept=%d both=%d\n",
+				stem.c_str(), h, carrier, count[1][0], count[1][1], count[1][2],
+				count[0][0], count[0][1], count[0][2]);
+		}
+
+		std::printf("classicart: %s perface holders=%d without stand art=%d classic=%d "
+			"part=%d covered=%d\n", stem.c_str(), (int)holders.size(), states[0],
+			states[1], states[2], states[3]);
+
+		// The classic-drawn rooms without a classic face.
+		for (int r = 0; r < rooms; r++)
+		{
+			if (!reason[(size_t)r] || !faces[(size_t)r].empty())
+				continue;
+
+			std::vector<Tr5Level::SectorInfo> sect;
+			int walls = 0, open = 0, solid = 0;
+			std::map<int, int> below;
+
+			if (!level.sectorInfo(r, sect, error))
+				continue;
+
+			for (const Tr5Level::SectorInfo& s : sect)
+			{
+				if (s.floor == -127)
+					walls++;
+				else if (s.roomBelow != 255)
+				{
+					open++;
+					below[s.roomBelow]++;
+				}
+				else
+					solid++;
+			}
+
+			const RoomSpace& H = box[(size_t)r];
+			int artTris = 0;
+			std::set<int> artGroups;
+
+			for (int g = 0; g < groups && g < rooms; g++)
+			{
+				if (g == r || !drawsHD(g))
+					continue;
+
+				for (const ArtTri& t : art[(size_t)g])
+				{
+					const float cx = t.a[0] + (t.e1[0] + t.e2[0]) / 3.0f;
+					const float cy = t.a[1] + (t.e1[1] + t.e2[1]) / 3.0f;
+					const float cz = t.a[2] + (t.e1[2] + t.e2[2]) / 3.0f;
+
+					if (cx < H.x0 || cx > H.x1 || cz < H.z0 || cz > H.z1 ||
+						cy < H.y0 || cy > H.y1)
+						continue;
+
+					artTris++;
+					artGroups.insert(g);
+				}
+			}
+
+			std::string under;
+
+			for (const auto& one : below)
+				under += (under.empty() ? "" : ",") + std::to_string(one.first) + "x" +
+					std::to_string(one.second) + (drawsHD(one.first) ? "hd" : "classic");
+
+			std::string names;
+
+			for (int g : artGroups)
+				names += (names.empty() ? "" : ",") + std::to_string(g);
+
+			std::printf("classicart: %s perface noface=%d reason=%s sectors=%d walls=%d "
+				"open_down=%d solid=%d below=%s art_tris=%d art_groups=%s flags=0x%04x "
+				"water=%d\n", stem.c_str(), r, reason[(size_t)r], (int)sect.size(), walls,
+				open, solid, under.empty() ? "-" : under.c_str(), artTris,
+				names.empty() ? "-" : names.c_str(), level.rooms()[(size_t)r].flags,
+				(level.rooms()[(size_t)r].flags & 1) ? 1 : 0);
+		}
+	}
+
 	void dumpClassicArt(const std::string& root, const std::string& stem,
 		const std::string& folder, int focus, double tol, double step,
-		int facing, int controls)
+		int facing, int controls, bool perFace)
 	{
 		Tr5Level level;
 		std::string error;
@@ -3950,6 +4319,10 @@ namespace
 			}
 		}
 
+		if (perFace)
+			dumpPerFace(level, trg, stem, art, reason, box, rooms, groups, tol, step,
+				facing);
+
 		std::printf("classicart: %s rooms=%d groups=%d classic=%d (no_group %d, "
 			"empty_group %d, hollow_group %d) holding foreign art=%d tol=%.0f "
 			"step=%.0f facing=%s\n", stem.c_str(), rooms, groups,
@@ -3999,7 +4372,13 @@ int main(int argc, char** argv)
 		std::printf("                      covers (needs -classic); -room <n> lists the\n");
 		std::printf("                      uncovered faces, -arttol <units> (128),\n");
 		std::printf("                      -artstep <units> (64), -artfacing\n");
-		std::printf("                      same|against|any, -artcontrol <rooms> (12)\n");
+		std::printf("                      same|against|any, -artcontrol <rooms> (12);\n");
+		std::printf("                      -perface adds the rule per face: the\n");
+		std::printf("                      renderer's tag, each holder's carrier and\n");
+		std::printf("                      state, every face covered or kept (bare or\n");
+		std::printf("                      mixed, floor or not), the carrier's\n");
+		std::printf("                      triangles by kind, and the sectors of the\n");
+		std::printf("                      classic rooms without a face\n");
 		return 1;
 	}
 
@@ -4052,11 +4431,14 @@ int main(int argc, char** argv)
 	double art_step = 64.0;
 	int art_facing = 1;
 	int art_controls = 12;
+	bool art_per_face = false;
 
 	for (int i = 2; i < argc; i++)
 	{
 		if (!_stricmp(argv[i], "-classicart"))
 			classic_art = true;
+		else if (!_stricmp(argv[i], "-perface"))
+			art_per_face = true;
 		else if (!_stricmp(argv[i], "-arttol") && i + 1 < argc)
 			art_tol = std::atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-artstep") && i + 1 < argc)
@@ -4250,7 +4632,7 @@ int main(int argc, char** argv)
 
 		for (const std::string& stem : levels)
 			dumpClassicArt(root, stem, classic, room_focus, art_tol, art_step,
-				art_facing, art_controls);
+				art_facing, art_controls, art_per_face);
 
 		return 0;
 	}

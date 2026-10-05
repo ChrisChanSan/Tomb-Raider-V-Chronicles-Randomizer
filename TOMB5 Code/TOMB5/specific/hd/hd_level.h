@@ -195,8 +195,10 @@ const unsigned char* HDRoomletDropped(int roomIndex, int roomlet);
  * (hd_shadow.h, HDShadowGate): a room drawn HD, a room drawn as another
  * group's art - wholly or in part - that keeps no classic face she can
  * stand on (hd_cover.h, HDCoverFaceFloor), or a room drawn classic that has
- * no classic face at all. In each of them whatever is under her is art that
- * takes the receive. False for every room while HDLevelActive() is false. */
+ * no classic face at all and no sector she can stand on bare of other
+ * groups' art (HDCoverRoomShadowHD's `bareFloor`). In each of them whatever
+ * is under her is art that takes the receive. False for every room while
+ * HDLevelActive() is false. */
 bool HDRoomShadowHD(int roomIndex);
 
 /* One classic water face an HD room still has to draw. The remaster's .TRG

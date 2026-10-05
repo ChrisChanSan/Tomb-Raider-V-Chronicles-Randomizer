@@ -235,8 +235,10 @@ namespace
 	 *                          keeps whole
 	 *   g_group_stand_shadow   a room drawn as the carrier's art, wholly or
 	 *                          in part, that keeps no classic face Lara can
-	 *                          stand on (HDCoverFaceFloor): it counts as an
-	 *                          HD room for her shadow (HDRoomShadowHD)
+	 *                          stand on (HDCoverFaceFloor), and a classic
+	 *                          room with no classic face and no bare floor:
+	 *                          it counts as an HD room for her shadow
+	 *                          (HDRoomShadowHD)
 	 *
 	 * `g_group_drop` is, per group of a room drawn in part, one flag per face
 	 * of its roomlets in InsertRoomlet's order (the quads, then the
@@ -4367,7 +4369,15 @@ static void HDLevelBuildHD()
 	 * group and taking the receive, or the room below. It counts as HD for
 	 * her shadow like a room drawn as art that keeps no floor
 	 * (g_group_stand_shadow). A room the randomizer marked stays out, as it
-	 * does of the stand rule. */
+	 * does of the stand rule. So does one with a sector she can stand on - no
+	 * wall, no opening into a room below - while no HD group but its flipmap
+	 * twin has a vertex in a 256-unit cell that meets the room's whole box
+	 * (the grid with its wall ring, maxceiling to minfloor): nothing is drawn
+	 * under her there, and the blob stays. TrgProbe -classicart -perface
+	 * counts 17 such rooms in the game (its noface lines, bare=1), and each
+	 * holds no triangle centroid of another group's art in that box either;
+	 * the inside box made one cell smaller would call 21 rooms bare that hold
+	 * such art. */
 	for (int r = 0; r < g_room_count && r < number_rooms && r < HD_MAX_ROOMS; r++)
 	{
 		if (g_group_hd[r] || HDMarkersRoomTouched(r))
@@ -4378,7 +4388,35 @@ static void HDLevelBuildHD()
 		for (int i = 0; room[r].pRoomlets && i < room[r].nRoomlets; i++)
 			faces += room[r].pRoomlets[i].nQuad + room[r].pRoomlets[i].nTri;
 
-		if (HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, faces))
+		bool bare = false;
+
+		if (faces <= 0 && room[r].floor)
+		{
+			const ROOM_INFO* rm = &room[r];
+
+			for (int i = 0; i < rm->x_size * rm->y_size && !bare; i++)
+				bare = rm->floor[i].floor != NO_HEIGHT / 256 &&
+					rm->floor[i].pit_room == NO_ROOM;
+
+			for (int g = 0; g < g_room_count && g < number_rooms && bare; g++)
+			{
+				if (g == r || !g_group_hd[g] || rm->flipped_room == g ||
+					room[g].flipped_room == r)
+					continue;
+
+				// The box in group g's own frame: x and z from its room's origin.
+				const float dx = (float)(rm->x - room[g].x);
+				const float dz = (float)(rm->z - room[g].z);
+				const float mins[3] = { dx, (float)(rm->maxceiling - rm->y), dz };
+				const float maxs[3] = { (float)(rm->y_size << 10) + dx,
+					(float)(rm->minfloor - rm->y), (float)(rm->x_size << 10) + dz };
+
+				if (HDRenderGroupCellsIn(g, mins, maxs, 0) > 0)
+					bare = false;
+			}
+		}
+
+		if (HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, faces, bare))
 			g_group_stand_shadow[r] = 1;
 	}
 
@@ -4471,7 +4509,7 @@ static void HDLevelBuildHD()
 	 * those the ones drawn wholly as art (`covered`) and in part (`part`),
 	 * the triangles, and the classic-drawn rooms that count as HD for her
 	 * shadow (`shadow_rooms`: drawn as art keeping no floor, or with no
-	 * classic face at all). */
+	 * classic face at all and no bare floor). */
 	Log("HDLOG level=%s built ms=%d rooms=%d hd=%d classic=%d sky_groups=%d "
 		"verts=%d idx=%d(%dbit) ranges=%d split=%d layer0_tris=%d "
 		"overhang_tris=%d hollow=%d "

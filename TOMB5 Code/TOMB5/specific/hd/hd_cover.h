@@ -523,11 +523,19 @@ inline bool HDCoverFaceFloor(const HDCoverFace& face)
  * wholly or in part (`state`, HDCoverRoomState), and none of the faces it
  * keeps is a floor (`floorsKept`, HDCoverFaceFloor). Under her there is then
  * only art, which takes the receive; on a classic floor the projection would
- * land on nothing that shows it, and the round blob stays. */
-inline bool HDCoverRoomShadowHD(bool roomHD, int state, int floorsKept, int classicFaces)
+ * land on nothing that shows it, and the round blob stays. A room with no
+ * classic face whose floor data has a sector she can stand on (no wall, no
+ * opening into a room below) while no other group's art stands in its box
+ * (`bareFloor`) draws nothing at all under her there, so it keeps the blob
+ * too. */
+inline bool HDCoverRoomShadowHD(bool roomHD, int state, int floorsKept, int classicFaces,
+	bool bareFloor = false)
 {
-	if (roomHD || classicFaces <= 0)
+	if (roomHD)
 		return true;
+
+	if (classicFaces <= 0)
+		return !bareFloor;
 
 	return state != HD_STAND_ROOM_CLASSIC && floorsKept <= 0;
 }

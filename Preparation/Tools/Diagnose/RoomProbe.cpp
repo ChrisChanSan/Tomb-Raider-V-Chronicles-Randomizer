@@ -299,8 +299,17 @@
  *     -statics new|old  the classic statics a frame of this picture draws -
  *                     of the seed, the -with groups and the -classicroom
  *                     rooms - flat, beside the art; new is this engine's
- *                     rule, old the one before it. With -coincide a
- *                     `coincide statics:` line of their own.
+ *                     rule, old the one before it. With new, a static held by
+ *                     groups none of which the picture lists is drawn as its
+ *                     piece (hd_cover.h, HDStaticDrawSource), in the frame
+ *                     with the groups, over the whole screen like them. With
+ *                     -coincide a `coincide statics:` line of their own.
+ *     -piece <room>:<mesh>  with -statics new, only the statics named, each
+ *                     as its piece or as the classic static, as the rule
+ *                     answers. Repeatable.
+ *     -listroom <room>  that room counts as listed for the statics and
+ *                     nothing of it is drawn - a static's piece alone in a
+ *                     picture. Repeatable.
  *     -static <room>:<mesh>  that static whatever a rule says; repeatable.
  *     -staticsonly    the statics alone over a cleared picture.
  *     -watersurvey <folder holding the classic .TRC>
@@ -5541,6 +5550,42 @@ namespace probestatics
 		}
 	}
 
+	/* The places of the statics, handed to the build as hd_level.cpp's
+	 * BuildStaticPlaces hands them - the boxes moved to world x and z - in
+	 * the order of g_list, which is the place each static is asked with. */
+	static std::vector<HDStaticPlace> g_places;
+
+	static void HandPlaces(const char* stem)
+	{
+		if (!Load(stem))
+			return;
+
+		g_places.clear();
+
+		for (const Static& s : g_list)
+		{
+			HDStaticPlace place;
+			const Tr5Room& rm = g_level.rooms()[(size_t)s.room];
+
+			place.room = s.room;
+
+			for (int axis = 0; axis < 3; axis++)
+			{
+				place.mins[axis] = s.mins[axis];
+				place.maxs[axis] = s.maxs[axis];
+			}
+
+			place.mins[0] += (float)rm.originX;
+			place.maxs[0] += (float)rm.originX;
+			place.mins[2] += (float)rm.originZ;
+			place.maxs[2] += (float)rm.originZ;
+			g_places.push_back(place);
+		}
+
+		HDRenderSetStaticPlaces(g_places.empty() ? 0 : &g_places[0],
+			(int)g_places.size());
+	}
+
 	/* The answers, as BuildStaticTables gets them: per group drawn HD or
 	 * not (StandGroupHD), the state and carrier of a room drawn classic
 	 * (StandState), the room's origin. */
@@ -5573,17 +5618,65 @@ namespace probestatics
 
 		std::vector<float> verts;
 
-		for (Static& s : g_list)
+		for (size_t at = 0; at < g_list.size(); at++)
 		{
+			Static& s = g_list[at];
+
 			Verts(s, verts);
 			HDRenderStaticArt(s.room, s.mins, s.maxs, verts.empty() ? 0 : &verts[0],
-				(int)verts.size() / 3, &asked[0], groups, &s.art);
+				(int)verts.size() / 3, &asked[0], groups,
+				at < g_places.size() ? (int)at : -1, &s.art);
 
 			const bool hd = s.room < groups && asked[(size_t)s.room].hd;
 
 			s.oldAnswer = hd && HDStaticCellsHold(s.art.own, s.art.boxCells) ?
 				HD_STATIC_ART : HD_STATIC_CLASSIC;
 		}
+
+		// A room's pieces all or none, and their index buffer, as
+		// BuildStaticTables ends.
+		std::vector<int> rooms;
+		std::vector<HDStaticArt> arts;
+
+		for (const Static& s : g_list)
+		{
+			rooms.push_back(s.room);
+			arts.push_back(s.art);
+		}
+
+		if (!arts.empty())
+			HDRenderStaticPiecesWhole(&rooms[0], &arts[0], (int)arts.size());
+
+		for (size_t at = 0; at < g_list.size(); at++)
+			g_list[at].art = arts[at];
+
+		HDRenderStaticPiecesUpload();
+		HDRenderSetStaticPlaces(0, 0);
+	}
+
+	/* The pieces this picture draws (hd_cover.h, HDStaticDrawSource): of the
+	 * statics of a listed room held by groups none of which the picture lists,
+	 * each one with a piece, at its group's offset from the seed, over the
+	 * whole screen like every group of the picture. */
+	struct PieceDrawProbe
+	{
+		int piece;
+		int room;
+		int mesh;
+		D3DMATRIX world;
+	};
+
+	static std::vector<PieceDrawProbe> g_piece_draws;
+	static std::vector<std::pair<int, int> > g_piece_only;	// -piece
+	static std::vector<int> g_list_rooms;			// -listroom
+
+	static bool PieceDrawn(const Static& s)
+	{
+		for (const PieceDrawProbe& draw : g_piece_draws)
+			if (draw.room == s.room && draw.mesh == s.mesh)
+				return true;
+
+		return false;
 	}
 
 	static const char* Said(int answer)
@@ -5693,13 +5786,25 @@ namespace probestatics
 				at += sprintf(named + at, "%s%d:%d%s", k ? "," : "", a.group[k],
 					a.groupVerts[k], a.holds[k] ? "*" : "");
 
+			// The piece, as the engine's HDLOG static line gives it.
+			char piece[64];
+
+			if (a.piece >= 0)
+				sprintf(piece, "%d:%d held=%d open=%d others=%d", a.pieceGroup,
+					a.pieceTris, a.pieceHeld, a.pieceOpen, a.pieceOthers);
+			else if (a.answer == HD_STATIC_GROUPS)
+				sprintf(piece, "- held=%d open=%d others=%d", a.pieceHeld, a.pieceOpen,
+					a.pieceOthers);
+			else
+				sprintf(piece, "-");
+
 			printf("statictable: %s room=%d mesh=%d slot=%d hd=%d flags=%d "
 				"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f cells=%d own=%d verts=%d "
-				"carrier=%d sure=%d groups=%s old=%s new=%s%s\n",
+				"carrier=%d sure=%d groups=%s old=%s new=%s%s piece=%s\n",
 				stem, s.room, s.mesh, (int)s.slot, hd ? 1 : 0, (int)s.flags,
 				s.mins[0], s.maxs[0], s.mins[1], s.maxs[1], s.mins[2], s.maxs[2],
 				a.boxCells, a.own, a.verts, a.carrier, a.sure, at ? named : "-",
-				Said(s.oldAnswer), Said(a.answer), same ? "" : " CHANGED");
+				Said(s.oldAnswer), Said(a.answer), same ? "" : " CHANGED", piece);
 		}
 
 		printf("statictable: %s statics=%d old art=%d classic=%d; new art=%d "
@@ -5875,6 +5980,93 @@ namespace probestatics
 			tri(s16(p), s16(p + 2), s16(p + 4));
 	}
 
+	/* The groups this picture lists - the seed and the -with groups, less
+	 * -skipgroup - and the rooms: those and the -classicroom rooms. */
+	static void Listed(int seed, std::set<int>& artListed, std::set<int>& rooms)
+	{
+		if (!g_skip_groups.count(seed))
+			artListed.insert(seed);
+
+		for (int i = 0; i < g_with_count; i++)
+			if (!g_skip_groups.count(g_with_group[i]))
+				artListed.insert(g_with_group[i]);
+
+		rooms = artListed;
+
+		for (int r : g_classic_rooms)
+			rooms.insert(r);
+
+		for (int r : g_list_rooms)
+			rooms.insert(r);
+	}
+
+	// Whether -piece leaves a static to this picture: all, or those named.
+	static bool Named(const Static& s)
+	{
+		bool named = g_piece_only.empty();
+
+		for (const std::pair<int, int>& only : g_piece_only)
+			named = named || (only.first == s.room && only.second == s.mesh);
+
+		return named;
+	}
+
+	/* -statics new: the pieces of this picture, before the bracket, so the
+	 * frame draws them with the groups and Gather leaves their statics out. */
+	static void PreparePieces(const char* stem, int seed)
+	{
+		g_piece_draws.clear();
+
+		if (g_rule != 1 || !Load(stem))
+			return;
+
+		Answer(stem);
+
+		if (seed < 0 || seed >= (int)g_stand_rooms_built.size())
+			return;
+
+		std::set<int> artListed, rooms;
+
+		Listed(seed, artListed, rooms);
+
+		for (const Static& s : g_list)
+		{
+			const HDStaticArt& a = s.art;
+
+			if (!rooms.count(s.room) || !(s.flags & 1) || a.answer != HD_STATIC_GROUPS ||
+				HolderListed(a, artListed) || !HDRenderStaticPieceReady(a.piece) ||
+				a.pieceGroup < 0 || a.pieceGroup >= (int)g_stand_rooms_built.size())
+				continue;
+
+			if (!Named(s))
+				continue;
+
+			PieceDrawProbe draw;
+
+			memset(&draw.world, 0, sizeof(draw.world));
+			draw.world._11 = draw.world._22 = draw.world._33 = draw.world._44 = 1.0f;
+			draw.world._41 = g_stand_rooms_built[(size_t)a.pieceGroup].origin[0] -
+				g_stand_rooms_built[(size_t)seed].origin[0];
+			draw.world._42 = g_stand_rooms_built[(size_t)a.pieceGroup].origin[1] -
+				g_stand_rooms_built[(size_t)seed].origin[1];
+			draw.world._43 = g_stand_rooms_built[(size_t)a.pieceGroup].origin[2] -
+				g_stand_rooms_built[(size_t)seed].origin[2];
+			draw.piece = a.piece;
+			draw.room = s.room;
+			draw.mesh = s.mesh;
+			g_piece_draws.push_back(draw);
+			printf("statics: room %d mesh %d slot %d drawn as its piece, group %d "
+				"(%d triangle(s))\n", s.room, s.mesh, (int)s.slot, a.pieceGroup,
+				a.pieceTris);
+		}
+	}
+
+	static void DrawPieces(const HDRoomLighting* lighting, unsigned int passes)
+	{
+		for (const PieceDrawProbe& draw : g_piece_draws)
+			HDRenderStaticPiece(draw.piece, &draw.world, lighting, passes);
+	}
+
 	/* The statics this picture draws, as triangles in the seed's frame, and
 	 * how many. */
 	static int Gather(const char* stem, int seed, std::vector<Vtx>& out)
@@ -5895,17 +6087,7 @@ namespace probestatics
 		std::set<int> artListed;	// the groups this picture lists
 		std::set<int> rooms;		// the rooms it lists
 
-		if (!g_skip_groups.count(seed))
-			artListed.insert(seed);
-
-		for (int i = 0; i < g_with_count; i++)
-			if (!g_skip_groups.count(g_with_group[i]))
-				artListed.insert(g_with_group[i]);
-
-		rooms = artListed;
-
-		for (int r : g_classic_rooms)
-			rooms.insert(r);
+		Listed(seed, artListed, rooms);
 
 		int drawn = 0;
 
@@ -5916,11 +6098,12 @@ namespace probestatics
 			for (const std::pair<int, int>& f : g_forced)
 				want = want || (f.first == s.room && f.second == s.mesh);
 
-			if (!want && g_rule && rooms.count(s.room) && (s.flags & 1))
+			if (!want && g_rule && rooms.count(s.room) && (s.flags & 1) && Named(s))
 			{
 				if (g_rule == 1)
-					want = HDStaticDrawClassic(s.art.answer,
-						HolderListed(s.art, artListed));
+					want = HDStaticDrawSource(s.art.answer,
+						HolderListed(s.art, artListed), PieceDrawn(s)) ==
+						HD_STATIC_FROM_CLASSIC;
 				else
 				{
 					/* The rule before: a room drawn HD draws a static only
@@ -5944,7 +6127,7 @@ namespace probestatics
 
 						one[(size_t)s.room].hd = 1;
 						HDRenderStaticArt(s.room, s.mins, s.maxs, 0, 0, &one[0],
-							(int)one.size(), &own);
+							(int)one.size(), -1, &own);
 						want = !HDStaticCellsHold(own.own, own.boxCells);
 					}
 				}
@@ -6377,7 +6560,11 @@ int main(int argc, char** argv)
 			"shares and the shatterable\n");
 		printf("                      ones, then no picture (needs -roombox)\n");
 		printf("       -statics new|old   the classic statics a frame of this "
-			"picture draws, flat\n");
+			"picture draws, flat, and with new the statics' pieces\n");
+		printf("       -piece <room>:<mesh>   with -statics new, only that "
+			"static, as its piece or classic; repeatable\n");
+		printf("       -listroom <room>   that room listed for the statics, "
+			"nothing of it drawn; repeatable\n");
 		printf("       -static <room>:<mesh>   that static, whatever a rule says;"
 			"  -staticsonly   alone\n");
 		printf("       -hdm                          apply the .hdm sidecar "
@@ -6677,6 +6864,15 @@ int main(int argc, char** argv)
 			if (sscanf(argv[++at], "%d:%d", &r, &m) == 2)
 				probestatics::g_forced.push_back(std::make_pair(r, m));
 		}
+		else if (!strcmp(argv[at], "-piece") && at + 1 < argc)
+		{
+			int r = -1, m = -1;
+
+			if (sscanf(argv[++at], "%d:%d", &r, &m) == 2)
+				probestatics::g_piece_only.push_back(std::make_pair(r, m));
+		}
+		else if (!strcmp(argv[at], "-listroom") && at + 1 < argc)
+			probestatics::g_list_rooms.push_back(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-staticsonly"))
 			probestatics::g_only = true;
 		else if (!strcmp(argv[at], "-skipgroup") && at + 1 < argc)
@@ -7640,6 +7836,10 @@ int main(int argc, char** argv)
 	HDRenderGlossFieldView(g_gloss_field);
 	HDRenderGlossFile(g_gloss_file.empty() ? 0 : g_gloss_file.c_str());
 
+	// The statics' places, for their pieces, as hd_level.cpp hands them.
+	if (!g_roombox.empty())
+		probestatics::HandPlaces(stem);
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -8472,8 +8672,10 @@ int main(int argc, char** argv)
 	printf("animation: motion %d, clock %.2f s, water wobble %d\n",
 		g_motion ? 1 : 0, g_time, (g_water || g_shimmer) ? 1 : 0);
 
-	// -stand: the frame's answers for the stand ranges, before the bracket.
+	// -stand: the frame's answers for the stand ranges, before the bracket;
+	// -statics new: the statics' pieces.
 	PrepareStand(room);
+	probestatics::PreparePieces(stem, room);
 
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
@@ -8552,8 +8754,10 @@ int main(int argc, char** argv)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
 					HD_PASS_SOLID);
 
-			// And the -stand ranges drawn in their holder's place.
+			// And the -stand ranges drawn in their holder's place, and the
+			// pieces of -statics new.
 			DrawStandInHolders(&lighting, HD_PASS_SOLID);
+			probestatics::DrawPieces(&lighting, HD_PASS_SOLID);
 
 			/* The clear floors, once every group's solid art is in - the
 			 * place HDFrameDraw gives them, before the models and the
@@ -8565,6 +8769,7 @@ int main(int argc, char** argv)
 					HD_PASS_CLEAR);
 
 			DrawStandInHolders(&lighting, HD_PASS_CLEAR);
+			probestatics::DrawPieces(&lighting, HD_PASS_CLEAR);
 			StandReceiveCount(&lighting);
 
 			/* The see-through half of the alpha pass - the glass - after
@@ -8577,6 +8782,7 @@ int main(int argc, char** argv)
 					HD_PASS_BLEND);
 
 			DrawStandInHolders(&lighting, HD_PASS_BLEND);
+			probestatics::DrawPieces(&lighting, HD_PASS_BLEND);
 
 			DrawOneGroup(room, 0, &lighting, HD_PASS_ADDITIVE);
 
@@ -8585,6 +8791,7 @@ int main(int argc, char** argv)
 					HD_PASS_ADDITIVE);
 
 			DrawStandInHolders(&lighting, HD_PASS_ADDITIVE);
+			probestatics::DrawPieces(&lighting, HD_PASS_ADDITIVE);
 		}
 	}
 

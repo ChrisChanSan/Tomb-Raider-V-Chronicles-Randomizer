@@ -11153,6 +11153,60 @@ static void stand_shadow()
 		"shadow: the flag is not asked of a room with classic faces", 1, 1);
 }
 
+/* static_piece: the one source a frame takes a static from (hd_cover.h,
+ * HDStaticDrawSource). Per answer and per list state - a holder listed or
+ * not, the static's piece drawn or not - exactly one of the classic static,
+ * the art and the piece: a static held by groups is the art while a holder
+ * is listed, its piece while none is and the piece is drawn, and the classic
+ * static otherwise; the piece is never drawn beside the art. With no piece the
+ * answer is HDStaticDrawClassic's. And the three distances the piece is made
+ * with, against what they were measured on (RoomProbe's build of ANDREA2). */
+static void static_piece()
+{
+	for (int answer = HD_STATIC_GROUPS; answer <= HD_STATIC_CLASSIC; answer++)
+		for (int listed = 0; listed < 2; listed++)
+			for (int piece = 0; piece < 2; piece++)
+			{
+				const int source = HDStaticDrawSource(answer, listed != 0, piece != 0);
+				const int want = answer == HD_STATIC_ART ? HD_STATIC_FROM_ART :
+					answer != HD_STATIC_GROUPS ? HD_STATIC_FROM_CLASSIC :
+					listed ? HD_STATIC_FROM_ART :
+					piece ? HD_STATIC_FROM_PIECE : HD_STATIC_FROM_CLASSIC;
+				char what[128];
+
+				snprintf(what, sizeof(what), "piece: answer %d, a holder listed %d, its "
+					"piece drawn %d - one source", answer, listed, piece);
+				ok(source == want, what, source, want);
+			}
+
+	for (int answer = HD_STATIC_GROUPS; answer <= HD_STATIC_CLASSIC; answer++)
+		for (int listed = 0; listed < 2; listed++)
+		{
+			char what[128];
+
+			snprintf(what, sizeof(what), "piece: answer %d, a holder listed %d, no piece - "
+				"as HDStaticDrawClassic", answer, listed);
+			ok((HDStaticDrawSource(answer, listed != 0, false) == HD_STATIC_FROM_CLASSIC) ==
+				HDStaticDrawClassic(answer, listed != 0), what, 1, 1);
+		}
+
+	// A palm trunk of ANDREA2 room 124: 124 listed, 117 and 127 not - its
+	// piece; with 127 listed - the art, the piece not again.
+	ok(HDStaticDrawSource(HD_STATIC_GROUPS, false, true) == HD_STATIC_FROM_PIECE,
+		"piece: ANDREA2 124 trunk, no holder listed - its piece", 1, 1);
+	ok(HDStaticDrawSource(HD_STATIC_GROUPS, true, true) == HD_STATIC_FROM_ART,
+		"piece: ANDREA2 124 trunk, group 127 listed - the art alone", 1, 1);
+	ok(HDStaticDrawSource(HD_STATIC_GROUPS, false, false) == HD_STATIC_FROM_CLASSIC,
+		"piece: ANDY1 225's hut, no piece - the classic fallback", 1, 1);
+
+	ok(HD_STATIC_PIECE_REACH > HD_STATIC_PIECE_OPEN && HD_STATIC_PIECE_OPEN > 530.0f,
+		"piece: the reach past the open limit, the open limit past the leaf cards' 530",
+		(int)HD_STATIC_PIECE_OPEN, (int)HD_STATIC_PIECE_OPEN);
+	ok(HD_STATIC_PIECE_SLACK >= 32.0f && HD_STATIC_PIECE_SLACK < HD_STATIC_PIECE_OPEN,
+		"piece: the slack covers the trunks' 32 units", (int)HD_STATIC_PIECE_SLACK,
+		(int)HD_STATIC_PIECE_SLACK);
+}
+
 /* static_art: which art draws a static mesh's place (hd_cover.h,
  * HDStaticAnswer and the two stand range questions). The room's own art is
  * asked at the box as before; another source at the static's own vertices,
@@ -17217,6 +17271,7 @@ int main()
 	stand_part();
 	stand_shadow();
 	static_art();
+	static_piece();
 	mirror_pose();
 	mirror_clip();
 	gloss_order();

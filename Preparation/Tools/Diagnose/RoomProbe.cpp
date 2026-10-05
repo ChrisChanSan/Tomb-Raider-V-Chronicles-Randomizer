@@ -290,6 +290,19 @@
  *                     the range's visible pixels and the second 0.
  *     -skipgroup <g>  group g is left out of the picture and counts as not
  *                     listed - the seed or a -with group; repeat for more.
+ *     -statictable    every static mesh of the level answered as
+ *                     hd_level.cpp's BuildStaticTables answers it (the same
+ *                     HDRenderStaticArt), beside the answer of the rule
+ *                     before it; the shares binned; every shatterable static
+ *                     with the pieces it pairs with. Prints and stops. Needs
+ *                     -roombox.
+ *     -statics new|old  the classic statics a frame of this picture draws -
+ *                     of the seed, the -with groups and the -classicroom
+ *                     rooms - flat, beside the art; new is this engine's
+ *                     rule, old the one before it. With -coincide a
+ *                     `coincide statics:` line of their own.
+ *     -static <room>:<mesh>  that static whatever a rule says; repeatable.
+ *     -staticsonly    the statics alone over a cleared picture.
  *     -watersurvey <folder holding the classic .TRC>
  *                     the offline twin of hd_level.cpp's BuildWaterSurfaces:
  *                     per reflecting room of the classic level, the faces in
@@ -1670,6 +1683,8 @@ static bool g_coincide_mark = false;
  * HD_COVER_REACH, and the faces in world units. `g_stand_covered` caches each
  * holder's verdict; `g_stand_draws` are this picture's in-holder draws. */
 static bool g_stand_rule = false;
+// StandState's lines held back while -statictable asks every room.
+static bool g_stand_quiet = false;
 static std::set<int> g_skip_groups;
 static std::vector<HDStandRoom> g_stand_rooms_built;
 static std::vector<HDStandHolder> g_stand_holders_built;
@@ -5039,7 +5054,8 @@ static int StandState(int h, int* carrier = 0, const unsigned char** covered = 0
 
 	if (holder && tagged && !StandGroupHD(h))
 	{
-		printf("stand: room %d holds %d triangle(s) of stand art\n", h, tagged);
+		if (!g_stand_quiet)
+			printf("stand: room %d holds %d triangle(s) of stand art\n", h, tagged);
 
 		for (int c = 0; c < HDRenderStandCovers(); c++)
 		{
@@ -5051,8 +5067,9 @@ static int StandState(int h, int* carrier = 0, const unsigned char** covered = 0
 				continue;
 
 			faces = cover.faces;
-			printf("stand: room %d group %d %d triangle(s) cover faces %d/%d\n", h,
-				cover.group, cover.tris, cover.facesCovered, cover.faces);
+			if (!g_stand_quiet)
+				printf("stand: room %d group %d %d triangle(s) cover faces %d/%d\n", h,
+					cover.group, cover.tris, cover.facesCovered, cover.faces);
 
 			if (HDCoverCarrierBetter(cover.facesCovered, cover.tris, cover.group,
 				bestFaces, bestTris, best))
@@ -5067,12 +5084,13 @@ static int StandState(int h, int* carrier = 0, const unsigned char** covered = 0
 		const int state = best >= 0 ? HDCoverRoomState(faces, bestFaces) :
 			HD_STAND_ROOM_CLASSIC;
 
-		printf("stand: room %d - %s\n", h, state == HD_STAND_ROOM_COVERED ?
-			"COVERED, drawn as the carrier's art" : state == HD_STAND_ROOM_PART ?
-			"PART, the covered faces drawn as the carrier's art" :
-			"not covered, drawn classic");
+		if (!g_stand_quiet)
+			printf("stand: room %d - %s\n", h, state == HD_STAND_ROOM_COVERED ?
+				"COVERED, drawn as the carrier's art" : state == HD_STAND_ROOM_PART ?
+				"PART, the covered faces drawn as the carrier's art" :
+				"not covered, drawn classic");
 
-		if (best >= 0)
+		if (best >= 0 && !g_stand_quiet)
 			printf("stand: room %d carrier %d faces %d/%d\n", h, best, bestFaces, faces);
 
 		if (state == HD_STAND_ROOM_CLASSIC)
@@ -5095,8 +5113,9 @@ static int StandState(int h, int* carrier = 0, const unsigned char** covered = 0
 		return state;
 	}
 
-	printf("stand: room %d has no stand art%s - drawn as before\n", h,
-		StandGroupHD(h) ? " (its own group is drawn HD)" : "");
+	if (!g_stand_quiet)
+		printf("stand: room %d has no stand art%s - drawn as before\n", h,
+			StandGroupHD(h) ? " (its own group is drawn HD)" : "");
 
 	g_stand_covered_room.push_back(h);
 	g_stand_covered_answer.push_back(HD_STAND_ROOM_CLASSIC);
@@ -5293,6 +5312,659 @@ static void DrawStandInHolders(const HDRoomLighting* lighting, unsigned int pass
 			draw.behind);
 }
 
+/* The static meshes - -statictable, -statics, -static and -staticsonly.
+ *
+ * The engine answers once per level which statics the art draws
+ * (hd_level.cpp, BuildStaticTables, through HDRenderStaticArt and the rule in
+ * hd_cover.h) and DrawStaticObjects asks the answer per frame. This tool has
+ * the same renderer, so it asks the same function, with the groups' states
+ * out of StandState: -statictable prints the answer of every static of the
+ * level beside the answer the rule before it gave (only the room's own group
+ * asked, and only in a room drawn HD), the distribution of the shares, and
+ * every shatterable static with the pieces the engine pairs it with.
+ *
+ * -statics new|old draws the classic statics a frame of this picture draws -
+ * those of the listed rooms (the seed, the -with groups and the
+ * -classicroom rooms) that the rule leaves to the classic path, the frame
+ * listing the seed and the -with groups - flat like the classic faces; new
+ * is this engine's rule, old the one before it. -static <room>:<mesh> draws
+ * that static whatever a rule says (repeatable); -staticsonly draws the
+ * statics alone over a cleared picture. With -coincide each set of statics
+ * gets a line of its own: the pixels where a static lands within the units
+ * of the art (`within`), and those where it stands in front of the art by
+ * more than the units (`beyond` - the art has nothing for it there). The
+ * mesh is the static's own (not its far copy), both sides drawn. */
+namespace probestatics
+{
+	struct Static
+	{
+		int room;
+		int mesh;
+		long x, y, z;
+		short rot;
+		short flags;
+		short slot;
+		float mins[3], maxs[3];
+		HDStaticArt art;
+		int oldAnswer;
+	};
+
+	static std::vector<Static> g_list;
+	static Tr5Level g_level;
+	static bool g_loaded = false;
+	static short g_vis[70][6];
+	static int g_mesh_of[70];
+	static bool g_have[70];
+	static int g_rule = 0;			// -statics: 0 none, 1 new, 2 old
+	static std::vector<std::pair<int, int> > g_forced;	// -static
+	static bool g_only = false;		// -staticsonly
+	static bool g_table = false;		// -statictable
+	static bool g_answered = false;
+
+	static bool Load(const char* stem)
+	{
+		if (g_loaded)
+			return true;
+
+		if (g_roombox.empty())
+			return false;
+
+		std::string error;
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		if (!g_level.load(wide, error))
+		{
+			printf("statics: %s could not be read (%s)\n", trc.c_str(), error.c_str());
+			return false;
+		}
+
+		memset(g_vis, 0, sizeof(g_vis));
+		memset(g_have, 0, sizeof(g_have));
+
+		/* The level's static block follows the moveables: a count, then 32
+		 * bytes per slot - the slot number, the mesh, the visibility box
+		 * (STATIC_INFO x_minp..z_maxp) and the collision box. */
+		size_t objAt = 0, frAt = 0;
+		int32_t objN = 0, frN = 0;
+
+		if (g_level.debugModelBlocks(objAt, objN, frAt, frN))
+		{
+			const std::vector<uint8_t>& raw = g_level.debugBytes();
+			size_t at = objAt + (size_t)objN * 20;
+			int n = 0;
+
+			memcpy(&n, raw.data() + at, 4);
+			at += 4;
+
+			for (int i = 0; i < n; i++, at += 32)
+			{
+				int slot = 0;
+				unsigned short mesh = 0;
+
+				memcpy(&slot, raw.data() + at, 4);
+				memcpy(&mesh, raw.data() + at + 4, 2);
+
+				if (slot < 0 || slot >= 70)
+					continue;
+
+				memcpy(g_vis[slot], raw.data() + at + 6, 12);
+				g_mesh_of[slot] = mesh;
+				g_have[slot] = true;
+			}
+		}
+
+		/* Every room's MESH_INFO list, 20 bytes each: x, y, z, y_rot, shade,
+		 * Flags, static_number. The box as hd_level.cpp's StaticBox makes it:
+		 * the visibility box's four XZ corners turned through the engine's
+		 * sine table, room local. */
+		const std::vector<uint8_t>& raw = g_level.debugBytes();
+
+		for (int r = 0; r < g_level.roomCount(); r++)
+		{
+			const Tr5Room& rm = g_level.rooms()[(size_t)r];
+			unsigned meshOfs = 0, lightsMeshes = 0, yOrigin = 0;
+
+			if (!rm.headerOffset || !g_level.headerField(r, 16, meshOfs, error) ||
+				!g_level.headerField(r, 48, lightsMeshes, error))
+				continue;
+
+			g_level.headerField(r, 24, yOrigin, error);
+
+			const int count = (int)(lightsMeshes >> 16);
+
+			for (int m = 0; m < count; m++)
+			{
+				const size_t at = rm.headerOffset + 208 + meshOfs + (size_t)m * 20;
+
+				if (at + 20 > raw.size())
+					break;
+
+				Static s;
+				int mx = 0, my = 0, mz = 0;
+
+				memset(&s, 0, sizeof(s));
+				memcpy(&mx, raw.data() + at, 4);
+				memcpy(&my, raw.data() + at + 4, 4);
+				memcpy(&mz, raw.data() + at + 8, 4);
+				memcpy(&s.rot, raw.data() + at + 12, 2);
+				memcpy(&s.flags, raw.data() + at + 16, 2);
+				memcpy(&s.slot, raw.data() + at + 18, 2);
+				s.room = r;
+				s.mesh = m;
+				s.x = mx;
+				s.y = my;
+				s.z = mz;
+
+				if (s.slot < 0 || s.slot >= 70)
+					continue;
+
+				const short* v = g_vis[s.slot];
+				const float c = (float)enginecam::PhdCos(s.rot) * (1.0f / 16384.0f);
+				const float sn = (float)enginecam::PhdSin(s.rot) * (1.0f / 16384.0f);
+				const float xs[4] = { (float)v[0], (float)v[1], (float)v[0], (float)v[1] };
+				const float zs[4] = { (float)v[4], (float)v[4], (float)v[5], (float)v[5] };
+				const float cx = (float)(mx - rm.originX);
+				const float cz = (float)(mz - rm.originZ);
+
+				for (int k = 0; k < 4; k++)
+				{
+					const float wx = cx + xs[k] * c + zs[k] * sn;
+					const float wz = cz + zs[k] * c - xs[k] * sn;
+
+					if (!k)
+					{
+						s.mins[0] = s.maxs[0] = wx;
+						s.mins[2] = s.maxs[2] = wz;
+					}
+					else
+					{
+						if (wx < s.mins[0]) s.mins[0] = wx;
+						if (wx > s.maxs[0]) s.maxs[0] = wx;
+						if (wz < s.mins[2]) s.mins[2] = wz;
+						if (wz > s.maxs[2]) s.maxs[2] = wz;
+					}
+				}
+
+				s.mins[1] = (float)(my - (int)yOrigin + v[2]);
+				s.maxs[1] = (float)(my - (int)yOrigin + v[3]);
+				g_list.push_back(s);
+			}
+		}
+
+		g_loaded = true;
+		return true;
+	}
+
+	/* A static's own mesh vertices where they stand, local to its room as
+	 * BuildStaticTables makes them out of MESH_DATA::aVtx: x and z from the
+	 * room's origin, y less the room's y. The vertex count is the low byte
+	 * of the word at +10, as the engine's mesh conversion reads it. */
+	static void Verts(const Static& s, std::vector<float>& out)
+	{
+		out.clear();
+
+		size_t at = 0;
+		const std::vector<uint8_t>& raw = g_level.debugBytes();
+
+		if (!g_have[s.slot] || !g_level.debugMeshAt(g_mesh_of[s.slot], at) ||
+			at + 12 > raw.size() || s.room >= (int)g_stand_rooms_built.size())
+			return;
+
+		short word = 0;
+
+		memcpy(&word, raw.data() + at + 10, 2);
+
+		const int verts = word & 0xFF;
+		const float c = (float)enginecam::PhdCos(s.rot) * (1.0f / 16384.0f);
+		const float sn = (float)enginecam::PhdSin(s.rot) * (1.0f / 16384.0f);
+		const float* o = g_stand_rooms_built[(size_t)s.room].origin;
+
+		for (int v = 0; v < verts; v++)
+		{
+			short p[3] = { 0, 0, 0 };
+			const size_t q = at + 12 + (size_t)v * 6;
+
+			if (q + 6 > raw.size())
+				break;
+
+			memcpy(p, raw.data() + q, 6);
+
+			const float x = (float)p[0], y = (float)p[1], z = (float)p[2];
+
+			out.push_back((float)(s.x - (long)o[0]) + x * c + z * sn);
+			out.push_back((float)(s.y - (long)o[1]) + y);
+			out.push_back((float)(s.z - (long)o[2]) + z * c - x * sn);
+		}
+	}
+
+	/* The answers, as BuildStaticTables gets them: per group drawn HD or
+	 * not (StandGroupHD), the state and carrier of a room drawn classic
+	 * (StandState), the room's origin. */
+	static void Answer(const char* stem)
+	{
+		if (g_answered || !Load(stem) || g_stand_rooms_built.empty())
+			return;
+
+		g_answered = true;
+
+		const int groups = (int)g_stand_rooms_built.size();
+		std::vector<HDStaticGroup> asked((size_t)groups);
+
+		g_stand_quiet = true;
+
+		for (int g = 0; g < groups; g++)
+		{
+			HDStaticGroup& one = asked[(size_t)g];
+			int carrier = -1;
+
+			one.hd = StandGroupHD(g) ? 1 : 0;
+			one.state = (unsigned char)(one.hd ? HD_STAND_ROOM_CLASSIC :
+				StandState(g, &carrier));
+			one.carrier = (short)(one.state != HD_STAND_ROOM_CLASSIC ? carrier : -1);
+			one.originX = g_stand_rooms_built[(size_t)g].origin[0];
+			one.originZ = g_stand_rooms_built[(size_t)g].origin[2];
+		}
+
+		g_stand_quiet = false;
+
+		std::vector<float> verts;
+
+		for (Static& s : g_list)
+		{
+			Verts(s, verts);
+			HDRenderStaticArt(s.room, s.mins, s.maxs, verts.empty() ? 0 : &verts[0],
+				(int)verts.size() / 3, &asked[0], groups, &s.art);
+
+			const bool hd = s.room < groups && asked[(size_t)s.room].hd;
+
+			s.oldAnswer = hd && HDStaticCellsHold(s.art.own, s.art.boxCells) ?
+				HD_STATIC_ART : HD_STATIC_CLASSIC;
+		}
+	}
+
+	static const char* Said(int answer)
+	{
+		return answer == HD_STATIC_ART ? "art" : answer == HD_STATIC_GROUPS ?
+			"groups" : "classic";
+	}
+
+	// Whether a group the picture lists holds the static.
+	static bool HolderListed(const HDStaticArt& a, const std::set<int>& listed)
+	{
+		for (int k = 0; k < a.groupCount; k++)
+			if (a.holds[k] && listed.count(a.group[k]))
+				return true;
+
+		return false;
+	}
+
+	/* -statictable. The shares, binned so a gap shows: the old question (the
+	 * cells of the box the room's own art holds, in a room drawn HD) and the
+	 * new one per static (that, or where it does not reach a twentieth the
+	 * largest share of the static's vertices another source holds), and
+	 * every other source - the carrier's art drawn in every frame and each
+	 * other group - on its own, for the statics the room's own art does not
+	 * hold. */
+	static void Table(const char* stem)
+	{
+		Answer(stem);
+
+		static const double edges[] = { 0.0, 0.01, 0.02, 0.03, 0.04, 0.05,
+			0.075, 0.10, 0.20, 0.50, 1e9 };
+		const int bins = (int)(sizeof(edges) / sizeof(edges[0]));
+		std::vector<int> oldBin((size_t)bins + 1, 0), newBin((size_t)bins + 1, 0);
+		std::vector<int> otherBin((size_t)bins + 1, 0);
+		int changed = 0, toArt = 0, toGroup = 0, toClassic = 0;
+		int nArt = 0, nGroup = 0, nClassic = 0, oArt = 0, oClassic = 0;
+
+		const auto bin = [&](double share)
+		{
+			if (share <= 0.0)
+				return 0;
+
+			for (int b = 1; b < bins; b++)
+				if (share < edges[b])
+					return b;
+
+			return bins;
+		};
+
+		for (const Static& s : g_list)
+		{
+			const HDStaticArt& a = s.art;
+			const bool hd = s.room < (int)g_stand_rooms_built.size() && StandGroupHD(s.room);
+			int best = a.own > a.sure ? a.own : a.sure;
+
+			const int verts = a.verts > 0 ? a.verts : 1;
+			double share = (double)a.own / a.boxCells;
+
+			(void)best;
+
+			if (!HDStaticCellsHold(a.own, a.boxCells))
+			{
+				if (a.carrier >= 0)
+				{
+					otherBin[(size_t)bin((double)a.sure / verts)]++;
+
+					if ((double)a.sure / verts > share)
+						share = (double)a.sure / verts;
+				}
+
+				for (int k = 0; k < a.groupCount; k++)
+				{
+					otherBin[(size_t)bin((double)a.groupVerts[k] / verts)]++;
+
+					if ((double)a.groupVerts[k] / verts > share)
+						share = (double)a.groupVerts[k] / verts;
+				}
+			}
+
+			oldBin[(size_t)bin(hd ? (double)a.own / a.boxCells : 0.0)]++;
+			newBin[(size_t)bin(share)]++;
+
+			const bool same = a.answer == s.oldAnswer;
+
+			if (a.answer == HD_STATIC_ART) nArt++;
+			else if (a.answer == HD_STATIC_GROUPS) nGroup++;
+			else nClassic++;
+
+			if (s.oldAnswer == HD_STATIC_ART) oArt++;
+			else oClassic++;
+
+			if (!same)
+			{
+				changed++;
+
+				if (a.answer == HD_STATIC_ART) toArt++;
+				else if (a.answer == HD_STATIC_GROUPS) toGroup++;
+				else toClassic++;
+			}
+
+			char named[160];
+			int at = 0;
+
+			named[0] = 0;
+
+			for (int k = 0; k < a.groupCount; k++)
+				at += sprintf(named + at, "%s%d:%d%s", k ? "," : "", a.group[k],
+					a.groupVerts[k], a.holds[k] ? "*" : "");
+
+			printf("statictable: %s room=%d mesh=%d slot=%d hd=%d flags=%d "
+				"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f cells=%d own=%d verts=%d "
+				"carrier=%d sure=%d groups=%s old=%s new=%s%s\n",
+				stem, s.room, s.mesh, (int)s.slot, hd ? 1 : 0, (int)s.flags,
+				s.mins[0], s.maxs[0], s.mins[1], s.maxs[1], s.mins[2], s.maxs[2],
+				a.boxCells, a.own, a.verts, a.carrier, a.sure, at ? named : "-",
+				Said(s.oldAnswer), Said(a.answer), same ? "" : " CHANGED");
+		}
+
+		printf("statictable: %s statics=%d old art=%d classic=%d; new art=%d "
+			"by_group=%d classic=%d; changed=%d (to art %d, to group %d, to "
+			"classic %d)\n", stem, (int)g_list.size(), oArt, oClassic, nArt, nGroup,
+			nClassic, changed, toArt, toGroup, toClassic);
+
+		for (int b = 0; b <= bins; b++)
+		{
+			char name[48];
+
+			if (!b)
+				sprintf(name, "nothing");
+			else if (b == bins)
+				sprintf(name, "all");
+			else if (edges[b] > 1.0)
+				sprintf(name, ">= %.3f", edges[b - 1]);
+			else
+				sprintf(name, "%.3f..%.3f", edges[b - 1], edges[b]);
+
+			if (oldBin[(size_t)b] || newBin[(size_t)b] || otherBin[(size_t)b])
+				printf("statictable: %s share %-13s old %5d new %5d other %5d\n",
+					stem, name, oldBin[(size_t)b], newBin[(size_t)b],
+					otherBin[(size_t)b]);
+		}
+
+		/* The shatterable ones and their pieces, as BuildStaticTables pairs
+		 * them: every piece of a group drawn HD whose box overlaps the
+		 * static's, in the piece group's frame. */
+		for (const Static& s : g_list)
+		{
+			if (s.slot < 50 || s.slot >= 58)
+				continue;
+
+			int found = 0;
+
+			for (int p = 0; p < HDRenderDestructibleCount(); p++)
+			{
+				int group = -1;
+				float lo[3], hi[3];
+
+				if (!HDRenderDestructibleInfo(p, &group, 0, lo, hi) || group < 0 ||
+					group >= (int)g_stand_rooms_built.size() || !StandGroupHD(group))
+					continue;
+
+				const float dx = g_stand_rooms_built[(size_t)s.room].origin[0] -
+					g_stand_rooms_built[(size_t)group].origin[0];
+				const float dz = g_stand_rooms_built[(size_t)s.room].origin[2] -
+					g_stand_rooms_built[(size_t)group].origin[2];
+
+				if (!HDStaticPiecePaired(s.mins, s.maxs, dx, dz, lo, hi))
+					continue;
+
+				found++;
+				printf("statictable: %s shatter room=%d mesh=%d slot=%d answer=%s "
+					"piece=%d group=%d%s\n", stem, s.room, s.mesh, (int)s.slot,
+					Said(s.art.answer), p, group, group == s.room ? "" : " other");
+			}
+
+			if (!found)
+				printf("statictable: %s shatter room=%d mesh=%d slot=%d answer=%s "
+					"piece=none%s\n", stem, s.room, s.mesh, (int)s.slot,
+					Said(s.art.answer), s.art.answer == HD_STATIC_CLASSIC ? "" :
+					" DEFECT - left to the art with no piece");
+		}
+	}
+
+	struct Vtx
+	{
+		float x, y, z;
+		DWORD colour;
+	};
+
+	/* One static's mesh, as triangles in the seed's frame: the mesh's own
+	 * vertices turned by its y_rot through the engine's sine table and moved
+	 * to its place. A mesh is a 12-byte head (the centre, the radius, the
+	 * vertex count in the low byte of the word at +10), the vertices, the
+	 * normals or the lights, then the quads (four corners, the texture and
+	 * the effects) and the triangles (three corners and the same two). */
+	static void Mesh(const Static& s, double ox, double oy, double oz,
+		std::vector<Vtx>& out)
+	{
+		size_t at = 0;
+		const std::vector<uint8_t>& raw = g_level.debugBytes();
+
+		if (!g_have[s.slot] || !g_level.debugMeshAt(g_mesh_of[s.slot], at) ||
+			at + 12 > raw.size())
+			return;
+
+		const auto s16 = [&](size_t p) -> int
+		{
+			short v = 0;
+
+			if (p + 2 <= raw.size())
+				memcpy(&v, raw.data() + p, 2);
+
+			return v;
+		};
+
+		const int verts = s16(at + 10) & 0xFF;
+		size_t p = at + 12;
+		std::vector<double> pos((size_t)verts * 3);
+		const double c = (double)enginecam::PhdCos(s.rot) / 16384.0;
+		const double sn = (double)enginecam::PhdSin(s.rot) / 16384.0;
+
+		for (int v = 0; v < verts; v++, p += 6)
+		{
+			const double x = s16(p), y = s16(p + 2), z = s16(p + 4);
+
+			pos[(size_t)v * 3 + 0] = (double)s.x + x * c + z * sn - ox;
+			pos[(size_t)v * 3 + 1] = (double)s.y + y - oy;
+			pos[(size_t)v * 3 + 2] = (double)s.z + z * c - x * sn - oz;
+		}
+
+		const int norms = s16(p);
+
+		p += 2 + (size_t)verts * (norms >= 0 ? 6 : 2);
+
+		const auto tri = [&](int a, int b, int d)
+		{
+			if (a < 0 || b < 0 || d < 0 || a >= verts || b >= verts || d >= verts)
+				return;
+
+			const double* q[3] = { &pos[(size_t)a * 3], &pos[(size_t)b * 3], &pos[(size_t)d * 3] };
+			const double e1[3] = { q[1][0] - q[0][0], q[1][1] - q[0][1], q[1][2] - q[0][2] };
+			const double e2[3] = { q[2][0] - q[0][0], q[2][1] - q[0][1], q[2][2] - q[0][2] };
+			const double n[3] =
+			{
+				e1[1] * e2[2] - e1[2] * e2[1],
+				e1[2] * e2[0] - e1[0] * e2[2],
+				e1[0] * e2[1] - e1[1] * e2[0]
+			};
+			const double length = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+			if (length <= 0.0)
+				return;
+
+			// Greener than the faces, so a static reads as a static.
+			const double l[3] = { 0.35, -0.8, 0.48 };
+			const double lit = fabs((n[0] * l[0] + n[1] * l[1] + n[2] * l[2]) / length);
+			const int grey = 60 + (int)(140.0 * lit);
+			const DWORD colour = D3DCOLOR_XRGB(grey / 2, grey, grey / 2);
+
+			for (int k = 0; k < 3; k++)
+			{
+				Vtx v;
+
+				v.x = (float)q[k][0];
+				v.y = (float)q[k][1];
+				v.z = (float)q[k][2];
+				v.colour = colour;
+				out.push_back(v);
+			}
+		};
+
+		const int quads = s16(p);
+
+		p += 2;
+
+		for (int i = 0; i < quads && quads > 0; i++, p += 12)
+		{
+			const int a = s16(p), b = s16(p + 2), d = s16(p + 4), e = s16(p + 6);
+
+			tri(a, b, d);
+			tri(a, d, e);
+		}
+
+		const int tris = quads >= 0 ? s16(p) : 0;
+
+		p += 2;
+
+		for (int i = 0; i < tris && tris > 0; i++, p += 10)
+			tri(s16(p), s16(p + 2), s16(p + 4));
+	}
+
+	/* The statics this picture draws, as triangles in the seed's frame, and
+	 * how many. */
+	static int Gather(const char* stem, int seed, std::vector<Vtx>& out)
+	{
+		if ((!g_rule && g_forced.empty()) || !Load(stem))
+			return 0;
+
+		if (g_rule == 1)
+			Answer(stem);
+
+		if (seed < 0 || seed >= (int)g_stand_rooms_built.size())
+			return 0;
+
+		const double ox = g_stand_rooms_built[(size_t)seed].origin[0];
+		const double oy = g_stand_rooms_built[(size_t)seed].origin[1];
+		const double oz = g_stand_rooms_built[(size_t)seed].origin[2];
+
+		std::set<int> artListed;	// the groups this picture lists
+		std::set<int> rooms;		// the rooms it lists
+
+		if (!g_skip_groups.count(seed))
+			artListed.insert(seed);
+
+		for (int i = 0; i < g_with_count; i++)
+			if (!g_skip_groups.count(g_with_group[i]))
+				artListed.insert(g_with_group[i]);
+
+		rooms = artListed;
+
+		for (int r : g_classic_rooms)
+			rooms.insert(r);
+
+		int drawn = 0;
+
+		for (const Static& s : g_list)
+		{
+			bool want = false;
+
+			for (const std::pair<int, int>& f : g_forced)
+				want = want || (f.first == s.room && f.second == s.mesh);
+
+			if (!want && g_rule && rooms.count(s.room) && (s.flags & 1))
+			{
+				if (g_rule == 1)
+					want = HDStaticDrawClassic(s.art.answer,
+						HolderListed(s.art, artListed));
+				else
+				{
+					/* The rule before: a room drawn HD draws a static only
+					 * where its own group has under a twentieth; a room drawn
+					 * classic draws all. */
+					if (!StandGroupHD(s.room))
+						want = true;
+					else
+					{
+						HDStaticArt own;
+						std::vector<HDStaticGroup> one(g_stand_rooms_built.size());
+
+						for (size_t g = 0; g < one.size(); g++)
+						{
+							one[g].hd = 0;
+							one[g].state = HD_STAND_ROOM_CLASSIC;
+							one[g].carrier = -1;
+							one[g].originX = g_stand_rooms_built[g].origin[0];
+							one[g].originZ = g_stand_rooms_built[g].origin[2];
+						}
+
+						one[(size_t)s.room].hd = 1;
+						HDRenderStaticArt(s.room, s.mins, s.maxs, 0, 0, &one[0],
+							(int)one.size(), &own);
+						want = !HDStaticCellsHold(own.own, own.boxCells);
+					}
+				}
+			}
+
+			if (!want)
+				continue;
+
+			const size_t before = out.size();
+
+			Mesh(s, ox, oy, oz, out);
+			drawn++;
+			printf("statics: room %d mesh %d slot %d drawn classic (%d triangle(s))\n",
+				s.room, s.mesh, (int)s.slot, (int)((out.size() - before) / 3));
+		}
+
+		return drawn;
+	}
+}
+
 /* The classic faces of -classicroom, drawn into the finished picture - see the
  * note at g_classic_rooms. Its own scene and its own state block, after the
  * state bracket of the HD frame has been checked, so the check is the HD
@@ -5301,13 +5973,14 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	const D3DMATRIX& projection, double ex, double ey, double ez, long width,
 	long height)
 {
-	if (g_classic_rooms.empty())
+	if (g_classic_rooms.empty() && !probestatics::g_rule &&
+		probestatics::g_forced.empty())
 		return;
 
 	if (g_roombox.empty())
 	{
-		printf("classic: -classicroom needs -roombox <folder holding the "
-			"classic .TRC>\n");
+		printf("classic: -classicroom and the statics need -roombox <folder "
+			"holding the classic .TRC>\n");
 		return;
 	}
 
@@ -5334,15 +6007,14 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	const double oy = (double)(int)yOrigin;
 	const double oz = (double)level.rooms()[(size_t)seed].originZ;
 
-	struct Vtx
-	{
-		float x, y, z;
-		DWORD colour;
-	};
+	typedef probestatics::Vtx Vtx;
 
 	// [0] single-sided, culled like the art's opaque ranges; [1] double-sided.
 	std::vector<Vtx> faces[2];
 	int count = 0;
+	// The static meshes of -statics and -static, both sides drawn.
+	std::vector<Vtx> statics[2];
+	const int staticCount = probestatics::Gather(stem, seed, statics[1]);
 
 	for (int room : g_classic_rooms)
 	{
@@ -5434,6 +6106,11 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 		"single-sided and %d double-sided\n", count, (int)g_classic_rooms.size(),
 		(int)faces[0].size() / 3, (int)faces[1].size() / 3);
 
+	if (probestatics::g_rule || !probestatics::g_forced.empty())
+		printf("statics: %d static(s) drawn flat, %d triangle(s), rule %s\n",
+			staticCount, (int)statics[1].size() / 3, probestatics::g_rule == 1 ? "new" :
+			probestatics::g_rule == 2 ? "old" : "none (-static only)");
+
 	IDirect3DStateBlock9* saved = 0;
 
 	g_device->CreateStateBlock(D3DSBT_ALL, &saved);
@@ -5465,14 +6142,16 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 	/* The faces, `shift` units along the line of sight towards the eye
 	 * (negative: away from it). */
+	const std::vector<Vtx>* set = faces;
+
 	const auto draw = [&](double shift)
 	{
 		for (int sided = 0; sided < 2; sided++)
 		{
-			if (faces[sided].empty())
+			if (set[sided].empty())
 				continue;
 
-			std::vector<Vtx> moved = faces[sided];
+			std::vector<Vtx> moved = set[sided];
 
 			if (shift != 0.0)
 				for (Vtx& v : moved)
@@ -5509,12 +6188,19 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 		{ (float)width - 0.5f, (float)height - 0.5f, 0.0f, 1.0f, D3DCOLOR_XRGB(255, 255, 0) }
 	};
 
-	if (g_classic_only)
+	if (g_classic_only || probestatics::g_only)
 		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL,
 			D3DCOLOR_XRGB(255, 0, 255), 1.0f, 0);
 
-	if (g_coincide > 0.0)
+	/* The faces first, then the statics, each counted on its own against
+	 * the art alone: the second set is counted before the first is drawn. */
+	for (int which = 0; which < 2 && g_coincide > 0.0; which++)
 	{
+		set = which ? statics : faces;
+
+		if (set[0].empty() && set[1].empty())
+			continue;
+
 		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
 		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -5586,12 +6272,22 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 			artWins = count(1);
 		}
 
-		if (shared >= 0)
+		/* In front of the art by more than `units`: still at 2 after the
+		 * second pass. For a static, that is where the art has nothing for
+		 * it. */
+		const long beyond = shared >= 0 ? count(2) : -1;
+
+		if (shared < 0)
+			printf("coincide: this device has no occlusion query - no count\n");
+		else if (!which)
 			printf("coincide: %ld pixel(s) of %ld at which a classic face lands "
 				"within %.0f units of the art, %ld of them the art's\n", shared,
 				width * height, g_coincide, artWins);
 		else
-			printf("coincide: this device has no occlusion query - no count\n");
+			printf("coincide statics: within=%ld of %ld at which a classic static "
+				"lands within %.0f units of the art, %ld of them the art's; "
+				"beyond=%ld in front of it by more\n", shared, width * height,
+				g_coincide, artWins, beyond);
 
 		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
@@ -5600,7 +6296,11 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	}
 
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	set = faces;
 	draw(0.0);
+	set = statics;
+	draw(0.0);
+	set = faces;
 
 	if (g_coincide > 0.0 && g_coincide_mark)
 	{
@@ -5673,6 +6373,13 @@ int main(int argc, char** argv)
 			"push\n");
 		printf("       -skipgroup <g>   group g left out of the picture and "
 			"not listed\n");
+		printf("       -statictable   every static's answer, old and new, the "
+			"shares and the shatterable\n");
+		printf("                      ones, then no picture (needs -roombox)\n");
+		printf("       -statics new|old   the classic statics a frame of this "
+			"picture draws, flat\n");
+		printf("       -static <room>:<mesh>   that static, whatever a rule says;"
+			"  -staticsonly   alone\n");
 		printf("       -hdm                          apply the .hdm sidecar "
 			"beside it (needs -roombox)\n");
 		printf("       -window all|open|intruding   (needs -roombox)\n");
@@ -5955,6 +6662,23 @@ int main(int argc, char** argv)
 			g_stand_rule = true;
 		else if (!strcmp(argv[at], "-standreceive"))
 			g_stand_rule = g_stand_receive = true;
+		else if (!strcmp(argv[at], "-statictable"))
+			probestatics::g_table = true;
+		else if (!strcmp(argv[at], "-statics") && at + 1 < argc)
+		{
+			++at;
+			probestatics::g_rule = !strcmp(argv[at], "old") ? 2 :
+				!strcmp(argv[at], "new") ? 1 : 0;
+		}
+		else if (!strcmp(argv[at], "-static") && at + 1 < argc)
+		{
+			int r = -1, m = -1;
+
+			if (sscanf(argv[++at], "%d:%d", &r, &m) == 2)
+				probestatics::g_forced.push_back(std::make_pair(r, m));
+		}
+		else if (!strcmp(argv[at], "-staticsonly"))
+			probestatics::g_only = true;
 		else if (!strcmp(argv[at], "-skipgroup") && at + 1 < argc)
 			g_skip_groups.insert(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
@@ -6928,6 +7652,15 @@ int main(int argc, char** argv)
 		HDRenderShutdown();
 		DropDevice();
 		return 4;
+	}
+
+	/* -statictable: the answers, and no picture. */
+	if (probestatics::g_table)
+	{
+		probestatics::Table(stem);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
 	}
 
 	const double commitAfter = CommitMiB();

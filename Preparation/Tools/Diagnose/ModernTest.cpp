@@ -11139,6 +11139,167 @@ static void stand_shadow()
 	}
 }
 
+/* static_art: which art draws a static mesh's place (hd_cover.h,
+ * HDStaticAnswer and the two stand range questions). The room's own art is
+ * asked at the box as before; another source at the static's own vertices,
+ * nine twentieths of them; the classic static is drawn while the room is
+ * listed only where no source the frame draws holds it. Every stand range
+ * kind and state: a range HDStaticStandSure keeps is drawn in every frame
+ * that lists its holder, one HDStaticStandWithGroup keeps in every frame
+ * that lists its group - checked against HDStandDrawFaces in all four list
+ * states, never the other way round. The rows of the game, from RoomProbe
+ * -statictable. */
+static void static_art()
+{
+	unsigned char holds[HD_STATIC_MAX_GROUPS];
+	const int none[1] = { 0 };
+
+	// The own group, at the box: a twentieth, as the rule before measured it.
+	ok(HDStaticAnswer(1, 20, 0, none, 0, 0, holds) == HD_STATIC_ART,
+		"static: own art 1 of 20 cells holds it", 1, 1);
+	ok(HDStaticAnswer(1, 21, 0, none, 0, 0, holds) == HD_STATIC_CLASSIC,
+		"static: own art 1 of 21 cells does not", 1, 1);
+	ok(HDStaticAnswer(0, 768, 0, none, 0, 50, holds) == HD_STATIC_CLASSIC,
+		"static: nothing anywhere stays classic", 1, 1);
+
+	// Another source, at the vertices: nine twentieths.
+	ok(HDStaticOtherHolds(9, 20) && !HDStaticOtherHolds(8, 20),
+		"static: another source needs nine twentieths of the vertices", 1, 1);
+	ok(!HDStaticOtherHolds(0, 0), "static: a mesh of no vertices is held by nothing", 1, 1);
+
+	// The carrier's sure art holds it for good, another group per frame.
+	ok(HDStaticAnswer(0, 75, 37, none, 0, 39, holds) == HD_STATIC_ART,
+		"static: RICH2 15 mesh 0, the carrier's art 37 of 39 vertices - art", 1, 1);
+	ok(HDStaticAnswer(0, 75, 12, none, 0, 39, holds) == HD_STATIC_CLASSIC,
+		"static: RICH2 18 mesh 0, 12 of 39 - classic", 1, 1);
+
+	{
+		const int found[3] = { 9, 6, 3 };
+		const int answer = HDStaticAnswer(0, 36, 3, found, 3, 12, holds);
+
+		ok(answer == HD_STATIC_GROUPS && holds[0] && holds[1] && !holds[2],
+			"static: ANDREA2 124 trunk - groups 127 and 117 hold it, the carrier's "
+			"floor (3 of 12) does not", holds[0] + holds[1] + holds[2], 2);
+	}
+	{
+		const int found[1] = { 27 };
+
+		ok(HDStaticAnswer(0, 768, 0, found, 1, 50, holds) == HD_STATIC_GROUPS && holds[0],
+			"static: ANDREA2 119 crown - group 117, 27 of 50", 1, 1);
+	}
+	{
+		const int found[1] = { 6 };
+
+		ok(HDStaticAnswer(0, 10, 0, found, 1, 15, holds) == HD_STATIC_CLASSIC && !holds[0],
+			"static: 6 of 15 (0.40, the highest share under the gap) stays classic", 1, 1);
+	}
+
+	// A flat static: a box with no extent along one axis.
+	{
+		const float pane[2][3] = { { 1281.0f, -24712.0f, 5120.0f }, { 1281.0f, -24043.0f, 6144.0f } };
+		const float crown[2][3] = { { 1568.0f, -4735.0f, 6874.0f }, { 3552.0f, -2048.0f, 8486.0f } };
+		const float floorSquare[2][3] = { { 0.0f, -256.0f, 0.0f }, { 1024.0f, -256.0f, 1024.0f } };
+
+		ok(HDStaticFlat(pane[0], pane[1]), "static: RICH2 6's pane is flat", 1, 1);
+		ok(HDStaticFlat(floorSquare[0], floorSquare[1]), "static: a square on a floor is flat",
+			1, 1);
+		ok(!HDStaticFlat(crown[0], crown[1]), "static: a palm crown is not", 1, 1);
+	}
+
+	/* The shatterable ones: a piece pairs with the static whose box it
+	 * overlaps, in the piece's group frame. A box of room A at x 1000..1200
+	 * is at 4072..4272 in a group whose room starts 3072 units further west. */
+	{
+		const float mins[3] = { 1000.0f, -512.0f, 2000.0f };
+		const float maxs[3] = { 1200.0f, 0.0f, 2200.0f };
+		const float own[2][3] = { { 1100.0f, -400.0f, 2100.0f }, { 1300.0f, -100.0f, 2300.0f } };
+		const float west[2][3] = { { 4100.0f, -400.0f, 1100.0f }, { 4300.0f, -100.0f, 1300.0f } };
+		const float beside[2][3] = { { 1201.0f, -400.0f, 2100.0f }, { 1400.0f, -100.0f, 2300.0f } };
+
+		ok(HDStaticPiecePaired(mins, maxs, 0.0f, 0.0f, own[0], own[1]),
+			"static: a piece of its own group in its box pairs", 1, 1);
+		ok(HDStaticPiecePaired(mins, maxs, 3072.0f, -1024.0f, west[0], west[1]),
+			"static: a piece of another group pairs in that group's frame", 1, 1);
+		ok(!HDStaticPiecePaired(mins, maxs, 0.0f, 0.0f, west[0], west[1]),
+			"static: the same piece read in the static's own frame does not", 1, 1);
+		ok(!HDStaticPiecePaired(mins, maxs, 0.0f, 0.0f, beside[0], beside[1]),
+			"static: a piece one unit beside the box does not", 1, 1);
+	}
+
+	// The frame: never both the static and its art, never neither.
+	for (int answer = HD_STATIC_GROUPS; answer <= HD_STATIC_CLASSIC; answer++)
+		for (int listed = 0; listed < 2; listed++)
+		{
+			const bool classic = HDStaticDrawClassic(answer, listed != 0);
+			const bool art = answer == HD_STATIC_ART ||
+				(answer == HD_STATIC_GROUPS && listed);
+			char what[96];
+
+			snprintf(what, sizeof(what), "static: answer %d, a holder listed %d - "
+				"exactly one of static and art", answer, listed);
+			ok(classic != art, what, classic ? 1 : 0, art ? 0 : 1);
+		}
+
+	// The two stand range questions, against the frame's own answer.
+	int sure = 0, withGroup = 0;
+
+	for (int state = HD_STAND_ROOM_CLASSIC; state <= HD_STAND_ROOM_COVERED; state++)
+		for (int carrier = 0; carrier < 2; carrier++)
+			for (int kind = 0; kind < 3; kind++)
+				for (int faces = 0; faces < 4; faces++)
+				{
+					bool allHolder = true, allGroup = true;
+
+					for (int artListed = 0; artListed < 2; artListed++)
+					{
+						const HDStandAnswer a = HDStandDrawFaces(true, artListed != 0,
+							state, carrier != 0, kind, faces);
+
+						allHolder = allHolder && (a.withArt || a.inHolder);
+					}
+
+					for (int holderListed = 0; holderListed < 2; holderListed++)
+					{
+						const HDStandAnswer a = HDStandDrawFaces(holderListed != 0, true,
+							state, carrier != 0, kind, faces);
+
+						allGroup = allGroup && (a.withArt || a.inHolder);
+					}
+
+					char what[128];
+
+					snprintf(what, sizeof(what), "static: state %d carrier %d kind %d "
+						"faces %d - sure %d, with its group %d", state, carrier, kind,
+						faces, allHolder ? 1 : 0, allGroup ? 1 : 0);
+					ok(HDStaticStandSure(state, carrier != 0, kind, faces) == allHolder &&
+						HDStaticStandWithGroup(state, carrier != 0, kind, faces) == allGroup,
+						what, 1, 1);
+
+					sure += HDStaticStandSure(state, carrier != 0, kind, faces) ? 1 : 0;
+					withGroup += HDStaticStandWithGroup(state, carrier != 0, kind, faces) ? 1 : 0;
+				}
+
+	// A covered room's carrier ranges are all sure; nothing of a room drawn
+	// classic is.
+	ok(HDStaticStandSure(HD_STAND_ROOM_COVERED, true, 1, 0) &&
+		HDStaticStandSure(HD_STAND_ROOM_COVERED, true, 2, 0) &&
+		!HDStaticStandSure(HD_STAND_ROOM_CLASSIC, true, 2, 0) &&
+		!HDStaticStandSure(HD_STAND_ROOM_COVERED, false, 2, 0),
+		"static: sure is the carrier's art of a room drawn as it", 1, 1);
+	// In part: the carrier's art on covered faces and its relief, never its
+	// art lying whole on kept faces.
+	ok(HDStaticStandSure(HD_STAND_ROOM_PART, true, 1, HD_STAND_FACES_COVERED) &&
+		HDStaticStandSure(HD_STAND_ROOM_PART, true, 2, 0) &&
+		!HDStaticStandSure(HD_STAND_ROOM_PART, true, 1, HD_STAND_FACES_KEPT),
+		"static: in part, sure is the carrier's art on covered faces and its relief", 1, 1);
+	// Art lying whole on a classic room's faces is left out while it is listed.
+	ok(!HDStaticStandWithGroup(HD_STAND_ROOM_CLASSIC, false, 1, 0) &&
+		HDStaticStandWithGroup(HD_STAND_ROOM_CLASSIC, false, 0, 0) &&
+		HDStaticStandWithGroup(HD_STAND_ROOM_CLASSIC, false, 2, 0),
+		"static: with its group, all but art lying whole on listed faces", 1, 1);
+	ok(sure > 0 && withGroup > sure, "static: the two sets are not empty", sure, withGroup);
+}
+
 /* The object path's cut-out rule (specific\hd\hd_model_cut.h): the material
  * of a .TRM part, and whether a page's texels below the reference are holes.
  * The (below, at 0) pairs are the cache's own sample of the pages named, as
@@ -17041,6 +17202,7 @@ int main()
 	stand_overlap();
 	stand_part();
 	stand_shadow();
+	static_art();
 	mirror_pose();
 	mirror_clip();
 	gloss_order();

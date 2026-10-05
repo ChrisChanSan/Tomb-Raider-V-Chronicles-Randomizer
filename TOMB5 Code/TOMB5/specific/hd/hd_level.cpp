@@ -574,7 +574,7 @@ namespace
 	 * carrier's ranges - at most five per holder: its relief, and its art
 	 * reaching onto or lying on covered faces alone or on covered and kept
 	 * ones - of each holder drawn as art, wholly or in part, on the list
-	 * whose carrier is off it. The game has twelve such holders, four of them
+	 * whose carrier is off it. The game has eight such holders, four of them
 	 * in one level (TrgProbe -classicart -perface: RICH2 15, 16, 18 and 19),
 	 * so 64 is far past any frame. One past it is not drawn and counted. */
 	#define HD_MAX_STAND_DRAW	64

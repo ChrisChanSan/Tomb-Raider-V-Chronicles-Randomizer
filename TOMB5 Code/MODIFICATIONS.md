@@ -4771,7 +4771,7 @@ group the cells of its overhang of no intrusion piece and no stand range (`cells
 `hd_render.cpp:1386`) and one list per stand range (`:6050`), and `HDRenderStaticArt`
 (`:9381`, `hd_render.h:1364`) answers one static for the engine and for RoomProbe alike;
 `BuildStaticTables` (`hd_level.cpp:3293`) asks it for every static of every room with the
-static's mesh vertices out of `MESH_DATA::aVtx` (`:3408`), pairs the shatterable ones with
+static's mesh vertices out of `MESH_DATA::aVtx` (`:3391`), pairs the shatterable ones with
 any HD group's piece (`:3485`), and `HDStaticDrawnClassic` (`:3522`), indexed through the
 flip table and answering by the level as built, answers `DrawStaticObjects`
 (`game/draw.cpp:3561`) with the frame's `draw_rooms` and no test of the option before it.

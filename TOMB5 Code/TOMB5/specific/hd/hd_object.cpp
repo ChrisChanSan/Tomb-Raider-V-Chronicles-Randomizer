@@ -2866,8 +2866,8 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 	 *
 	 * Per item and not per slot, because only a room that really draws HD has
 	 * the baked copy: a room the sidecar marked classic, or one whose group
-	 * is empty, still needs its lamp post drawn the old way. That is the same
-	 * test DrawStaticObjects makes for a room's static meshes.
+	 * is empty, still needs its lamp post drawn the old way. A room's static
+	 * meshes ask HDStaticDrawnClassic, which counts another group's art too.
 	 *
 	 * HDObjectBegin returning true with no node recorded is what makes it
 	 * vanish: DrawAnimatingItem then puts no classic polygon in, HDObjectNode is

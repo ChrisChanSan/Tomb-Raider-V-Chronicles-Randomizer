@@ -852,10 +852,11 @@ inline bool HDCoverTriOnFaces(const HDCoverTri& tri, const HDCoverFace* faces,
  * ranges, the relief standing in the room's box on no face included, with
  * the carrier's group when that is listed and in the room's window when it
  * is not - and every other group's art that lies on its faces whole is left
- * out; a room no group covers a face of is drawn classic and all the art that
- * lies on its faces whole is left out. Art that only grazes the room's faces,
- * and every other group's art in its box, is drawn with its group whatever
- * the room does - leaving it out would cut it where it leaves the faces.
+ * out; a room no group covers at least half the faces of is drawn classic
+ * and all the art that lies on its faces whole is left out. Art that only
+ * grazes the room's faces, and every other group's art in its box, is drawn
+ * with its group whatever the room does - leaving it out would cut it where
+ * it leaves the faces.
  * Where such art reaches onto the faces of a listed room that stays classic,
  * the classic faces and the art lie in one place, so the art is drawn pushed
  * back: the classic face wins every pixel the two share, and the art beyond

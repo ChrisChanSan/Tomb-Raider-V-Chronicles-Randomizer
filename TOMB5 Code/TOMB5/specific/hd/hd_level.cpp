@@ -160,9 +160,10 @@ namespace
 	 *
 	 *   g_group_hd    is per group, not per room - "this art exists and may
 	 *                 be drawn" is a property of the .TRG and travels with
-	 *                 the art. HDRoomIsHD, which also decides whether a
-	 *                 room's static meshes are suppressed, reads
-	 *                 g_group_hd[g_room_group[r]].
+	 *                 the art. HDRoomIsHD reads g_group_hd[g_room_group[r]];
+	 *                 whether a room's static meshes are suppressed is
+	 *                 HDStaticDrawnClassic's answer, read through the same
+	 *                 table.
 	 *   water marks   are built once, before any flip, on the classic
 	 *                 vertices of every room including the alternates, and
 	 *                 carried into the group of the room they were found in,
@@ -231,8 +232,9 @@ namespace
 	 *                          drawn as the carrier's art, the rest stay
 	 *   g_group_stand_carrier  the group whose art covers the most faces
 	 *                          (HDCoverCarrierBetter), -1 for a room no
-	 *                          group covers a face of or one of the guards
-	 *                          keeps whole
+	 *                          group covers a face of, one its carrier
+	 *                          covers fewer than half of, or one of the
+	 *                          guards keeps whole
 	 *   g_group_stand_shadow   a room drawn as the carrier's art, wholly or
 	 *                          in part, that keeps no classic face Lara can
 	 *                          stand on (HDCoverFaceFloor), and a classic
@@ -3371,7 +3373,7 @@ static void BuildStaticTables()
 			 * 768 of the upper room's own art, which is the wall behind it.
 			 * The crown is modelled in the art of the trunk's room, and that
 			 * art holds it (HDRenderStaticArt asks every group); the same
-			 * level's room 162 crown is in its own room's art, 380 of 768.
+			 * level's room 162 crown is in its own room's art, 313 of 768.
 			 *
 			 * So the question is how much, against the static's own box.
 			 * Measured over the fifteen files (RoomProbe -statictable), the

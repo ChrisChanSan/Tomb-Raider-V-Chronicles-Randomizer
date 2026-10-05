@@ -245,7 +245,9 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
  * (draw_rooms), holds a room drawn by that group. True where the art has
  * nothing for it (103 of the game's 2,845 statics, which would otherwise
  * vanish), in a frame without a group holding it, for an index out of
- * range, before a level is built and with HD off.
+ * range, before a level is built and in a level built with HD off. It reads
+ * the level as built, like HDRoomIsHD, so hd_enable switched off in a
+ * running level changes no answer until the next level.
  *
  * `meshIndex` counts ROOM_INFO::mesh from zero. */
 bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,

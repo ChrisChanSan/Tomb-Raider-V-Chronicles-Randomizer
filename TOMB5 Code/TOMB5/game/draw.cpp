@@ -1801,22 +1801,12 @@ static void ReachBeginWalk(short seed)
  * for a room that is no longer in the list. */
 static const long kReachBudget = 128;
 
-static void ReachTrimRooms(long ex, long ey, long ez)
+/* Takes off the list every reach-only room whose place the art does not draw
+ * (the paragraph in ReachTrimRooms says why) and returns how many it took. */
+static int ReachDropArtless()
 {
-	/* First, the rooms the reach cannot help. What a reach-only room shows
-	 * is its HD art: its classic geometry is clipped away by its own empty
-	 * window - `phd_left = r->left` in DrawStaticObjects and `clip_left =
-	 * r->left` in InsertRoom (specific\drawroom.cpp) both reject everything
-	 * when left > right - so a room the .TRG has nothing for would be in the
-	 * list with nothing of itself in the picture, and only its items would
-	 * be drawn (PrintObjects hands every item the whole screen), leaving
-	 * enemies standing in a room that is not there. Such a room comes
-	 * straight back out of the list. A room drawn wholly as another group's
-	 * art stays while that group is listed, because then its place is in the
-	 * picture and its items belong there (hd_level.h, HDRoomArtListed).
-	 *
-	 * This also keeps the reach from touching the classic picture at all:
-	 * everything it adds is .TRG art. */
+	int dropped = 0;
+
 	for (int i = 0; i < number_draw_rooms; )
 	{
 		const short which = draw_rooms[i];
@@ -1832,11 +1822,35 @@ static void ReachTrimRooms(long ex, long ey, long ez)
 
 			number_draw_rooms--;
 			g_reach_noart++;
+			dropped++;
 			continue;
 		}
 
 		i++;
 	}
+
+	return dropped;
+}
+
+static void ReachTrimRooms(long ex, long ey, long ez)
+{
+	int trimmed = 0;
+
+	/* First, the rooms the reach cannot help. What a reach-only room shows
+	 * is its HD art: its classic geometry is clipped away by its own empty
+	 * window - `phd_left = r->left` in DrawStaticObjects and `clip_left =
+	 * r->left` in InsertRoom (specific\drawroom.cpp) both reject everything
+	 * when left > right - so a room the .TRG has nothing for would be in the
+	 * list with nothing of itself in the picture, and only its items would
+	 * be drawn (PrintObjects hands every item the whole screen), leaving
+	 * enemies standing in a room that is not there. Such a room comes
+	 * straight back out of the list. A room drawn wholly as another group's
+	 * art stays while that group is listed, because then its place is in the
+	 * picture and its items belong there (hd_level.h, HDRoomArtListed).
+	 *
+	 * This also keeps the reach from touching the classic picture at all:
+	 * everything it adds is .TRG art. */
+	ReachDropArtless();
 
 	g_reach_added = 0;
 
@@ -1882,7 +1896,18 @@ static void ReachTrimRooms(long ex, long ey, long ez)
 		number_draw_rooms--;
 		g_reach_trimmed++;
 		g_reach_added--;
+		trimmed++;
 	}
+
+	/* The budget can trim the carrier of a room the first pass kept for
+	 * being drawn wholly as that carrier's art; the room's place would then
+	 * be drawn by nothing while its items still are. Asked again after a
+	 * trim, such a room comes off too. A room taken here is never a carrier
+	 * itself - a carrier is an HD room, which the art always draws - so one
+	 * more pass leaves no such room behind. Without a trim the list is the
+	 * one the first pass settled and nothing is asked. */
+	if (trimmed > 0)
+		g_reach_added -= ReachDropArtless();
 }
 
 static void NoteRoomWalk(short logicRoom, short walkRoom)
@@ -3511,13 +3536,14 @@ void DrawStaticObjects(short room_number)
 	 * drawn as another group's art, or another group's art, which a frame
 	 * draws only while it lists that group - and HDStaticDrawnClassic
 	 * answers with the frame's room list. A static the .TRG has nothing for
-	 * is still drawn here (103 of the game's 2,845), in any room.
+	 * is still drawn here (103 of the game's 2,845), in any room. The answer
+	 * follows the level as it was built, not the hd_enable option: switched
+	 * off in a running level, the art goes on drawing its rooms until the
+	 * next level, and the statics it holds stay out with it.
 	 *
 	 * A static the game destroys at run time is handled on the other side:
 	 * the .TRG's own destructible pieces are switched off with their
 	 * MESH_INFO's Flags bit, so nothing has to be drawn here for it. */
-	const bool hd = HDLevelActive();
-
 	phd_PushMatrix();
 	phd_TranslateAbs(r->x, r->y, r->z);
 	phd_left = r->left;
@@ -3532,7 +3558,7 @@ void DrawStaticObjects(short room_number)
 		if (!(mesh->Flags & 1))
 			continue;
 
-		if (hd && !HDStaticDrawnClassic(room_number, i, draw_rooms,
+		if (!HDStaticDrawnClassic(room_number, i, draw_rooms,
 			(int)number_draw_rooms))
 			continue;
 

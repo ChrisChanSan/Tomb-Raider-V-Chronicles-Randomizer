@@ -45,7 +45,7 @@
 #include "../../game/interpolate.h"	// InterpFrameAlpha - what this frame was drawn at
 #include "../../game/deltapak.h"	// the cutscene her lips speak in
 #include "hd_shadow.h"			// the projected shadow's arithmetic
-#include "hd_level.h"			// HDLevelActive, HDRoomIsHD - its gate
+#include "hd_level.h"			// HDLevelActive, HDRoomShadowHD - its gate
 
 #include <math.h>
 
@@ -1093,7 +1093,7 @@ bool HDShadowFrameDecide()
 	g_shadow_decided = true;
 
 	int gate = HDShadowGate((long)tomb5.shadow_mode, HDLevelActive(), HDLaraDrawActive(),
-		lara_item && HDRoomIsHD(lara_item->room_number), true);
+		lara_item && HDRoomShadowHD(lara_item->room_number), true);
 
 	if (gate == HD_SHADOW_GATE_OK && !(HDRenderShadowTargetReady() && HDModelCastReady() &&
 		HDRenderShadowReceiveReady()))

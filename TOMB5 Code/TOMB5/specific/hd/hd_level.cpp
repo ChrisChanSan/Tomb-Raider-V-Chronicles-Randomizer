@@ -223,16 +223,39 @@ namespace
 	 *
 	 *   g_group_stand          the group is drawn classic and art of some
 	 *                          HD group stands on its faces (a stand range)
-	 *   g_group_stand_covered  and one group's art covers every face, so the
-	 *                          room is drawn as that art and its roomlets
+	 *   g_group_stand_covered  and the carrier's art covers every face, so
+	 *                          the room is drawn as that art and its roomlets
 	 *                          never
-	 *   g_group_stand_carrier  that group, -1 for a room not covered
+	 *   g_group_stand_part     or at least half of them: those are
+	 *                          left out of the roomlets (g_group_drop) and
+	 *                          drawn as the carrier's art, the rest stay
+	 *   g_group_stand_carrier  the group whose art covers the most faces
+	 *                          (HDCoverCarrierBetter), -1 for a room no
+	 *                          group covers a face of or one of the guards
+	 *                          keeps whole
+	 *   g_group_stand_shadow   a room drawn as the carrier's art, wholly or
+	 *                          in part, that keeps no classic face Lara can
+	 *                          stand on (HDCoverFaceFloor): it counts as an
+	 *                          HD room for her shadow (HDRoomShadowHD)
+	 *
+	 * `g_group_drop` is, per group of a room drawn in part, one flag per face
+	 * of its roomlets in InsertRoomlet's order (the quads, then the
+	 * triangles, roomlet after roomlet), 1 for a face the carrier covers, and
+	 * `g_group_drop_first` where each roomlet's run starts. For the log, the
+	 * faces of any area, the covered ones and the kept floors.
 	 *
 	 * `g_stand_pieces` is every stand range of an HD group whose holder is
 	 * such a room, answered per frame by DecideStand. */
 	unsigned char g_group_stand[HD_MAX_ROOMS];
 	unsigned char g_group_stand_covered[HD_MAX_ROOMS];
+	unsigned char g_group_stand_part[HD_MAX_ROOMS];
 	short g_group_stand_carrier[HD_MAX_ROOMS];
+	unsigned char g_group_stand_shadow[HD_MAX_ROOMS];
+	short g_group_stand_faces[HD_MAX_ROOMS];
+	short g_group_stand_faces_covered[HD_MAX_ROOMS];
+	short g_group_stand_floors_kept[HD_MAX_ROOMS];
+	std::vector<std::vector<unsigned char> > g_group_drop;
+	std::vector<std::vector<int> > g_group_drop_first;
 
 	struct StandPiece
 	{
@@ -240,6 +263,7 @@ namespace
 		int index;		// its stand range in that group
 		int holder;		// the classic-drawn group it stands in
 		int kind;		// HDStandRange::kind
+		int faces;		// HDStandRange::faces
 	};
 
 	std::vector<StandPiece> g_stand_pieces;
@@ -543,16 +567,19 @@ namespace
 
 	/* The stand ranges this frame draws inside their holder's window, with
 	 * their own group's matrix and lighting (HDStandDraw's `inHolder`): the
-	 * carrier's ranges - at most three kinds - of each covered holder on the
-	 * list whose carrier is off it. The game has two covered rooms
-	 * (TrgProbe -classicart), so 64 is far past any frame. One past it is
-	 * not drawn and counted. */
+	 * carrier's ranges - at most five per holder: its relief, and its art
+	 * reaching onto or lying on covered faces alone or on covered and kept
+	 * ones - of each holder drawn as art, wholly or in part, on the list
+	 * whose carrier is off it. The game has twelve such holders, four of them
+	 * in one level (TrgProbe -classicart -perface: RICH2 15, 16, 18 and 19),
+	 * so 64 is far past any frame. One past it is not drawn and counted. */
 	#define HD_MAX_STAND_DRAW	64
 
 	struct StandDraw
 	{
 		int group;
 		int index;
+		bool behind;
 		D3DMATRIX world;
 		HDRoomLighting lighting;
 		HDLightSource lights[HD_MAX_LIGHTS];
@@ -2665,12 +2692,17 @@ static void BuildPairFaces()
  * the faces back. */
 static std::vector<HDStandHolder> g_stand_holders_built;
 static std::vector<HDCoverFace> g_stand_faces_built;
+// Per face handed in, its roomlet and its place in InsertRoomlet's loops.
+static std::vector<int> g_stand_face_roomlet;
+static std::vector<int> g_stand_face_slot;
 
 static void BuildStandFaces()
 {
 	g_stand_rooms.clear();
 	g_stand_holders_built.clear();
 	g_stand_faces_built.clear();
+	g_stand_face_roomlet.clear();
+	g_stand_face_slot.clear();
 	g_stand_rooms.resize((size_t)number_rooms);
 
 	for (int r = 0; r < number_rooms; r++)
@@ -2742,6 +2774,8 @@ static void BuildStandFaces()
 				if (good)
 				{
 					g_stand_faces_built.push_back(face);
+					g_stand_face_roomlet.push_back(i);
+					g_stand_face_slot.push_back(q);
 					holder.faceCount++;
 				}
 			}
@@ -2759,30 +2793,43 @@ static void BuildStandFaces()
 		HDRenderSetStandFaces(0, 0, 0, 0, 0, 0);
 }
 
-/* Which rooms the stand art covers, once the build has said which groups are
- * drawn HD. Per holder that is drawn classic and per HD group whose tagged
- * triangles stand on its faces: those triangles held against the faces with
- * the coverage test (HDCoverFaces: every face sampled every HD_COVER_STEP
- * units, a sample covered when art facing the way the face does lies within
- * HD_COVER_REACH of it along the face's normal) and the threshold of
- * HDCoverRoomCovered - every sample of every face. A group that covers the
- * room alone is its carrier; of several, the one with the most triangles on
- * the faces, and of those the lowest group. Then the list of stand ranges
- * the frame answers. Returns the triangles found, for the log; `onFaces[r]`
- * gets each holder's. */
+/* Which rooms the stand art covers, and which of their faces, once the build
+ * has said which groups are drawn HD. Per holder that is drawn classic, the
+ * renderer's coverage of its faces by each group's tagged triangles
+ * (HDRenderStandCoverAt: HDCoverFaces, every face sampled every
+ * HD_COVER_STEP units, a sample covered when art facing the way the face
+ * does lies within HD_COVER_REACH of it along the face's normal, a face
+ * covered when every sample is). Of the HD groups the one that covers the
+ * most faces is the carrier - then the most triangles, then the lowest group
+ * (HDCoverCarrierBetter) - and the room is drawn as its art where it covers a
+ * face: wholly when it covers every face, in part when it covers at least
+ * half of them (HDCoverRoomState). A room drawn in part gets its drop flags,
+ * the faces InsertRoomlet leaves out; a room drawn as art, wholly or in part,
+ * that keeps no classic face Lara can stand on counts as HD for her shadow
+ * (HDCoverRoomShadowHD). Then the list of stand ranges the frame answers.
+ * Returns the triangles found, for the log; `onFaces[r]` gets each holder's. */
 static int BuildStandRanges(std::vector<int>& onFaces)
 {
 	memset(g_group_stand, 0, sizeof(g_group_stand));
 	memset(g_group_stand_covered, 0, sizeof(g_group_stand_covered));
+	memset(g_group_stand_part, 0, sizeof(g_group_stand_part));
+	memset(g_group_stand_shadow, 0, sizeof(g_group_stand_shadow));
+	memset(g_group_stand_faces, 0, sizeof(g_group_stand_faces));
+	memset(g_group_stand_faces_covered, 0, sizeof(g_group_stand_faces_covered));
+	memset(g_group_stand_floors_kept, 0, sizeof(g_group_stand_floors_kept));
 
 	for (int g = 0; g < HD_MAX_ROOMS; g++)
 		g_group_stand_carrier[g] = -1;
 
 	g_stand_pieces.clear();
+	g_group_drop.assign((size_t)(g_room_count > 0 ? g_room_count : 0),
+		std::vector<unsigned char>());
+	g_group_drop_first.assign((size_t)(g_room_count > 0 ? g_room_count : 0),
+		std::vector<int>());
 	onFaces.assign((size_t)(g_room_count > 0 ? g_room_count : 0), 0);
 
 	const int count = HDRenderStandTriangleCount();
-	std::vector<std::vector<HDCoverTri> > byHolder((size_t)onFaces.size());
+	std::vector<int> tagged((size_t)onFaces.size(), 0);
 	int total = 0;
 
 	for (int i = 0; i < count; i++)
@@ -2791,58 +2838,43 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 		int holder = -1;
 
 		if (!HDRenderStandTriangleAt(i, &tri, &holder) || holder < 0 ||
-			holder >= (int)byHolder.size() || tri.group < 0 ||
+			holder >= (int)tagged.size() || tri.group < 0 ||
 			tri.group >= HD_MAX_ROOMS || !g_group_hd[tri.group])
 			continue;
 
-		byHolder[(size_t)holder].push_back(tri);
+		tagged[(size_t)holder]++;
 	}
 
 	for (const HDStandHolder& holder : g_stand_holders_built)
 	{
 		const int h = holder.room;
 
-		if (h < 0 || h >= (int)byHolder.size() || h >= HD_MAX_ROOMS ||
-			g_group_hd[h] || byHolder[(size_t)h].empty())
+		if (h < 0 || h >= (int)tagged.size() || h >= HD_MAX_ROOMS ||
+			g_group_hd[h] || !tagged[(size_t)h])
 			continue;
 
-		const std::vector<HDCoverTri>& all = byHolder[(size_t)h];
-		std::vector<int> groups;
+		int carrier = -1, carrierFaces = 0, carrierTris = 0, faces = 0;
+		const unsigned char* covered = 0;
 
-		for (const HDCoverTri& tri : all)
+		for (int c = 0; c < HDRenderStandCovers(); c++)
 		{
-			bool seen = false;
+			HDStandCover cover;
 
-			for (int g : groups)
-				seen = seen || g == tri.group;
+			if (!HDRenderStandCoverAt(c, &cover) || cover.holder != h ||
+				cover.group < 0 || cover.group >= HD_MAX_ROOMS ||
+				!g_group_hd[cover.group] || cover.faceCount != holder.faceCount ||
+				!cover.covered)
+				continue;
 
-			if (!seen)
-				groups.push_back(tri.group);
-		}
+			faces = cover.faces;
 
-		int carrier = -1, carrierTris = 0;
-
-		for (int g : groups)
-		{
-			HDCoverSet set;
-
-			for (const HDCoverTri& tri : all)
-				if (tri.group == g)
-					set.tris.push_back(tri);
-
-			set.build();
-
-			const HDCoverCount cover = HDCoverFaces(
-				&g_stand_faces_built[(size_t)holder.firstFace], holder.faceCount,
-				set, HD_COVER_REACH, HD_COVER_STEP, 1);
-			const int tris = (int)set.tris.size();
-
-			if (HDCoverRoomCovered(cover.faces, cover.facesCovered) &&
-				(carrier < 0 || tris > carrierTris ||
-				(tris == carrierTris && g < carrier)))
+			if (HDCoverCarrierBetter(cover.facesCovered, cover.tris, cover.group,
+				carrierFaces, carrierTris, carrier))
 			{
-				carrier = g;
-				carrierTris = tris;
+				carrier = cover.group;
+				carrierFaces = cover.facesCovered;
+				carrierTris = cover.tris;
+				covered = cover.covered;
 			}
 		}
 
@@ -2853,8 +2885,8 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 		 * carrier a flipmap can swap away: the in-holder draw finds the
 		 * carrier's room by its group (RoomOfGroup), and while a flip draws
 		 * another group there the room would be drawn by nothing. Neither
-		 * holds for a covered room of the game (ANDREA2 124 and RICH2 15:
-		 * flags 0x0040 and 0x0048, no flipmap twin for 121 or 14). */
+		 * holds for a room of the game the art covers a face of (TrgProbe
+		 * -classicart -perface, `guard=-` on all twelve). */
 		bool carrierFlips = false;
 
 		if (carrier >= 0 && carrier < (int)g_stand_rooms.size())
@@ -2869,11 +2901,66 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 			(room[h].flags & (ROOM_MIST | ROOM_REFLECT))))
 			carrier = -1;
 
+		const int state = carrier >= 0 ? HDCoverRoomState(faces, carrierFaces) :
+			HD_STAND_ROOM_CLASSIC;
+		int floorsKept = 0;
+
+		for (int f = 0; f < holder.faceCount; f++)
+		{
+			const size_t at = (size_t)(holder.firstFace + f);
+
+			if (at < g_stand_faces_built.size() &&
+				!(state != HD_STAND_ROOM_CLASSIC && covered[f]) &&
+				HDCoverFaceFloor(g_stand_faces_built[at]))
+				floorsKept++;
+		}
+
+		/* The faces InsertRoomlet leaves out of a room drawn in part: one
+		 * flag per face of every roomlet, each roomlet's run starting after
+		 * the last one's quads and triangles. */
+		if (state == HD_STAND_ROOM_PART && h < number_rooms)
+		{
+			const ROOM_INFO* info = &room[h];
+			std::vector<int>& first = g_group_drop_first[(size_t)h];
+			std::vector<unsigned char>& drop = g_group_drop[(size_t)h];
+			int run = 0;
+
+			for (int i = 0; i < info->nRoomlets; i++)
+			{
+				first.push_back(run);
+				run += info->pRoomlets[i].nQuad + info->pRoomlets[i].nTri;
+			}
+
+			drop.assign((size_t)run, 0);
+
+			for (int f = 0; f < holder.faceCount; f++)
+			{
+				const size_t at = (size_t)(holder.firstFace + f);
+
+				if (!covered[f] || at >= g_stand_face_roomlet.size())
+					continue;
+
+				const int roomlet = g_stand_face_roomlet[at];
+				const int slot = first[(size_t)roomlet] + g_stand_face_slot[at];
+
+				if (roomlet >= 0 && roomlet < (int)first.size() && slot >= 0 &&
+					slot < run)
+					drop[(size_t)slot] = 1;
+			}
+		}
+
 		g_group_stand[h] = 1;
-		g_group_stand_covered[h] = carrier >= 0 ? 1 : 0;
-		g_group_stand_carrier[h] = (short)carrier;
-		onFaces[(size_t)h] = (int)all.size();
-		total += (int)all.size();
+		g_group_stand_covered[h] = state == HD_STAND_ROOM_COVERED ? 1 : 0;
+		g_group_stand_part[h] = state == HD_STAND_ROOM_PART ? 1 : 0;
+		g_group_stand_carrier[h] = (short)(state != HD_STAND_ROOM_CLASSIC ? carrier : -1);
+		g_group_stand_shadow[h] = HDCoverRoomShadowHD(false, state, floorsKept,
+			holder.faceCount) ? 1 : 0;
+		g_group_stand_faces[h] = (short)faces;
+		g_group_stand_faces_covered[h] = (short)(state != HD_STAND_ROOM_CLASSIC ?
+			carrierFaces : 0);
+		g_group_stand_floors_kept[h] = (short)floorsKept;
+		onFaces[(size_t)h] = tagged[(size_t)h];
+		total += tagged[(size_t)h];
 	}
 
 	for (int g = 0; g < g_room_count && g < HD_MAX_ROOMS; g++)
@@ -2895,12 +2982,15 @@ static int BuildStandRanges(std::vector<int>& onFaces)
 			piece.index = j;
 			piece.holder = range.holder;
 			piece.kind = range.kind;
+			piece.faces = range.faces;
 			g_stand_pieces.push_back(piece);
 		}
 	}
 
 	g_stand_holders_built.clear();
 	g_stand_faces_built.clear();
+	g_stand_face_roomlet.clear();
+	g_stand_face_slot.clear();
 	return total;
 }
 
@@ -3699,6 +3789,10 @@ static void HDLevelBuildHD()
 	memset(g_group_windowed, 0, sizeof(g_group_windowed));
 	memset(g_group_stand, 0, sizeof(g_group_stand));
 	memset(g_group_stand_covered, 0, sizeof(g_group_stand_covered));
+	memset(g_group_stand_part, 0, sizeof(g_group_stand_part));
+	memset(g_group_stand_shadow, 0, sizeof(g_group_stand_shadow));
+	g_group_drop.clear();
+	g_group_drop_first.clear();
 	g_stand_pieces.clear();
 	g_stand_frame_count = 0;
 	g_room_count = 0;
@@ -4126,18 +4220,46 @@ static void HDLevelBuildHD()
 	 * group's g_group_hd, so it runs once all of them are decided. */
 	std::vector<int> stand_on;
 	const int stand_tris = BuildStandRanges(stand_on);
-	int stand_rooms = 0, stand_covered = 0;
+	int stand_rooms = 0, stand_covered = 0, stand_part = 0, shadow_rooms = 0;
+
+	/* A room drawn classic with no classic face at all - the air over a
+	 * court, a shaft whose walls another group models - draws nothing classic
+	 * Lara could stand on: whatever is under her there is art, drawn with its
+	 * group and taking the receive, or the room below. It counts as HD for
+	 * her shadow like a room drawn as art that keeps no floor
+	 * (g_group_stand_shadow). A room the randomizer marked stays out, as it
+	 * does of the stand rule. */
+	for (int r = 0; r < g_room_count && r < number_rooms && r < HD_MAX_ROOMS; r++)
+	{
+		if (g_group_hd[r] || HDMarkersRoomTouched(r))
+			continue;
+
+		int faces = 0;
+
+		for (int i = 0; room[r].pRoomlets && i < room[r].nRoomlets; i++)
+			faces += room[r].pRoomlets[i].nQuad + room[r].pRoomlets[i].nTri;
+
+		if (HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, faces))
+			g_group_stand_shadow[r] = 1;
+	}
 
 	/* One line per room. `stand` is the triangles of HD groups that stand on
 	 * the room's classic faces - 0 for a room drawn HD and for a classic one
-	 * no other art stands on - `covered` 1 when one group's art covers every
-	 * face, so that the room is drawn as that art (hd_cover.h), and `carrier`
-	 * that group, -1 for none. */
+	 * no other art stands on - `covered` 1 when the carrier's art covers
+	 * every face, so that the room is drawn as that art (hd_cover.h), and
+	 * `carrier` the group whose art covers the most of its faces, -1 for a
+	 * room drawn classic. At the end: `faces` the room's classic faces of any
+	 * area that stand art was asked about (0 for a room no art stands on),
+	 * `faces_covered` those the carrier covers - left out of the roomlets and
+	 * drawn as its art - `floors_kept` the faces Lara can stand on that stay
+	 * classic (HDCoverFaceFloor), and `shadow` 1 when the room counts as HD
+	 * for her projected shadow (HDRoomShadowHD). */
 	for (int r = 0; r < g_room_count; r++)
 	{
 		const int on = (size_t)r < stand_on.size() ? stand_on[(size_t)r] : 0;
 		const int covered = r < HD_MAX_ROOMS ? (int)g_group_stand_covered[r] : 0;
 		const int carrier = r < HD_MAX_ROOMS ? (int)g_group_stand_carrier[r] : -1;
+		const bool here = r < HD_MAX_ROOMS;
 
 		if (on)
 			stand_rooms++;
@@ -4145,14 +4267,23 @@ static void HDLevelBuildHD()
 		if (covered)
 			stand_covered++;
 
+		if (here && g_group_stand_part[r])
+			stand_part++;
+
+		if (here && !g_group_hd[r] && g_group_stand_shadow[r])
+			shadow_rooms++;
+
 		Log("HDLOG room=%d group=%d tris=%d/%d/%d overhang=%d cut=%d "
 			"ranges=%d statics=%d hd=%d reason=%s stand=%d covered=%d "
-			"carrier=%d",
+			"carrier=%d faces=%d faces_covered=%d floors_kept=%d shadow=%d",
 			r, r, HDRenderGroupTriangles(r, 0), HDRenderGroupTriangles(r, 1),
 			HDRenderGroupTriangles(r, 2), HDRenderGroupOverhangTriangles(r),
 			cuts[(size_t)r], HDRenderGroupRanges(r, -1),
 			(int)room[r].num_meshes, (int)g_group_hd[r], reasons[(size_t)r],
-			on, covered, carrier);
+			on, covered, carrier, here ? (int)g_group_stand_faces[r] : 0,
+			here ? (int)g_group_stand_faces_covered[r] : 0,
+			here ? (int)g_group_stand_floors_kept[r] : 0,
+			here && (g_group_hd[r] || g_group_stand_shadow[r]) ? 1 : 0);
 	}
 
 	g_level_active = hd_rooms > 0;
@@ -4197,13 +4328,18 @@ static void HDLevelBuildHD()
 			HDMarkersCutCount(), stats.cutTris, stats.cutGroups,
 			HDMarkersDonorCount(), HDMarkersOutfit());
 
+	/* At the end, the stand rule's counts: the rooms stand art stands on, of
+	 * those the ones drawn wholly as art (`covered`) and in part (`part`),
+	 * the triangles, and the classic-drawn rooms that count as HD for her
+	 * shadow (`shadow_rooms`: drawn as art keeping no floor, or with no
+	 * classic face at all). */
 	Log("HDLOG level=%s built ms=%d rooms=%d hd=%d classic=%d sky_groups=%d "
 		"verts=%d idx=%d(%dbit) ranges=%d split=%d layer0_tris=%d "
 		"overhang_tris=%d hollow=%d "
 		"intruding_tris=%d intruding_ranges=%d intruding_groups=%d "
 		"cut_tris=%d cut_groups=%d "
 		"vb_mib=%.1f ib_mib=%.1f read_ms=%d build_ms=%d "
-		"stand_rooms=%d covered=%d stand_tris=%d",
+		"stand_rooms=%d covered=%d stand_tris=%d part=%d shadow_rooms=%d",
 		g_stem, (int)build_ms, g_room_count, hd_rooms, classic_rooms,
 		stats.skyGroups, stats.vertices, stats.indices, stats.index32 ? 32 : 16,
 		stats.ranges, stats.splitRanges, stats.fallbackPageTris,
@@ -4212,7 +4348,7 @@ static void HDLevelBuildHD()
 		stats.cutTris, stats.cutGroups,
 		stats.vertexBytes / 1048576.0, stats.indexBytes / 1048576.0,
 		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5),
-		stand_rooms, stand_covered, stand_tris);
+		stand_rooms, stand_covered, stand_tris, stand_part, shadow_rooms);
 
 	Log("HDLOG level=%s pages named=%d distinct=%d from5=%d from4=%d "
 		"white=%d failed=%d mips=%d widest=%d big=%d mib=%.1f "
@@ -4521,6 +4657,42 @@ bool HDRoomIsHD(int roomIndex)
 	return GroupOfRoom(roomIndex) >= 0;
 }
 
+/* Read through g_room_group like every stand answer, so a flipmap that swaps
+ * a room's roomlets swaps its flags with them. */
+const unsigned char* HDRoomletDropped(int roomIndex, int roomlet)
+{
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+		return 0;
+
+	const int group = g_room_group[roomIndex];
+
+	if (group < 0 || group >= HD_MAX_ROOMS || !g_group_stand_part[group] ||
+		(size_t)group >= g_group_drop.size())
+		return 0;
+
+	const std::vector<int>& first = g_group_drop_first[(size_t)group];
+	const std::vector<unsigned char>& drop = g_group_drop[(size_t)group];
+
+	if (roomlet < 0 || roomlet >= (int)first.size() ||
+		(size_t)first[(size_t)roomlet] >= drop.size())
+		return 0;
+
+	return &drop[(size_t)first[(size_t)roomlet]];
+}
+
+bool HDRoomShadowHD(int roomIndex)
+{
+	if (HDRoomIsHD(roomIndex))
+		return true;
+
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+		return false;
+
+	const int group = g_room_group[roomIndex];
+
+	return group >= 0 && group < HD_MAX_ROOMS && g_group_stand_shadow[group] != 0;
+}
+
 /* The one question the room walk asks of the HD path. g_level_active is
  * false with hd_enable off, before a level is built, after HDLevelUnload and
  * in a level whose .TRG had no rooms - and in every one of those the walk in
@@ -4751,7 +4923,10 @@ void HDFramePickupEnd()
  * list: noted with its matrix and window for DecideStand. A room the art
  * covers is drawn as the art, so the answer is true and InsertRoom draws none
  * of its roomlets; every other one answers false, as a classic room always
- * did, and its roomlets are drawn. */
+ * did, and its roomlets are drawn - for a room the carrier covers in part
+ * without the covered faces (HDRoomletDropped). A room drawn as art, wholly
+ * or in part, may need the carrier's art in its window with no HD room on
+ * the list, so it takes the projection. */
 static bool StandHolderRoom(int roomIndex, const float* viewWorld,
 	int left, int top, int right, int bottom)
 {
@@ -4779,11 +4954,11 @@ static bool StandHolderRoom(int roomIndex, const float* viewWorld,
 	entry.y1 = window.y1;
 	entry.full = window.full;
 
-	if (!g_group_stand_covered[group])
+	if (!g_group_stand_covered[group] && !g_group_stand_part[group])
 		return false;
 
 	HDFrameCaptureProjection();
-	return true;
+	return g_group_stand_covered[group] != 0;
 }
 
 bool HDFrameRoom(int roomIndex, const float* viewWorld,
@@ -5142,6 +5317,8 @@ static bool ShadowMirrorBlocks(const HDShadowFrame* shadow, const HDMirror& m, b
  * room's side, the variant exists and the stencil guards - otherwise the copy
  * takes the ordinary receive. A frame without a mirror's group in the pass
  * binds nothing new. */
+static void ReceiveStandInHolders();
+
 static void ShadowReceivePass()
 {
 	const HDShadowFrame* shadow = HDShadowFrameState();
@@ -5227,6 +5404,8 @@ static void ShadowReceivePass()
 			g_shadow_stats.othersRooms++;
 	}
 
+	// And the art drawn in the window of a room drawn as art.
+	ReceiveStandInHolders();
 	g_shadow_stats.calls += HDRenderShadowReceiveCalls();
 	HDRenderShadowReceiveEnd();
 	HDRenderScissorOff();
@@ -5428,20 +5607,20 @@ static void DecideStand()
 		for (int i = 0; i < g_frame_count && !artListed; i++)
 			artListed = g_frame[i].group == piece.group;
 
-		const HDStandAnswer answer = HDStandDraw(holderAt >= 0, artListed,
-			g_group_stand_covered[piece.holder] != 0,
-			g_group_stand_carrier[piece.holder] == piece.group,
-			piece.kind == 1, piece.kind == 0);
+		const int state = g_group_stand_covered[piece.holder] ? HD_STAND_ROOM_COVERED :
+			g_group_stand_part[piece.holder] ? HD_STAND_ROOM_PART : HD_STAND_ROOM_CLASSIC;
+		const HDStandAnswer answer = HDStandDrawFaces(holderAt >= 0, artListed, state,
+			g_group_stand_carrier[piece.holder] == piece.group, piece.kind, piece.faces);
 
-		HDRenderStandWith(piece.group, piece.index, answer.behind ? HD_STAND_BEHIND
-			: answer.withArt ? HD_STAND_WITH : HD_STAND_OUT);
+		HDRenderStandWith(piece.group, piece.index, answer.behind && answer.withArt ?
+			HD_STAND_BEHIND : answer.withArt ? HD_STAND_WITH : HD_STAND_OUT);
 
 		if (answer.withArt)
 			g_clip_stand_with++;
 		else if (!answer.inHolder && artListed)
 			g_clip_stand_out++;
 
-		if (answer.behind)
+		if (answer.behind && answer.withArt)
 			g_clip_stand_behind++;
 
 		if (!answer.inHolder)
@@ -5471,6 +5650,7 @@ static void DecideStand()
 
 		draw.group = piece.group;
 		draw.index = piece.index;
+		draw.behind = answer.behind;
 		draw.world = m;
 		draw.world._41 = off[0] * m._11 + off[1] * m._21 + off[2] * m._31 + m._41;
 		draw.world._42 = off[0] * m._12 + off[1] * m._22 + off[2] * m._32 + m._42;
@@ -5503,10 +5683,30 @@ static void DrawStandInHolders(unsigned int passes)
 			HDRenderScissor(draw.x0, draw.y0, draw.x1, draw.y1);
 
 		HDRenderRoomStand(draw.group, &draw.world, &draw.lighting, passes,
-			draw.index);
+			draw.index, draw.behind);
 	}
 
 	HDRenderScissorOff();
+}
+
+/* The same draws once more in the projected shadow's receive, with the
+ * matrix, lighting, depth push and window they were drawn with, so that her
+ * shadow lands on a room drawn as art whose carrier is off the list as it
+ * does on the carrier's own art. */
+static void ReceiveStandInHolders()
+{
+	for (int i = 0; i < g_stand_draw_count; i++)
+	{
+		const StandDraw& draw = g_stand_draw[i];
+
+		if (draw.full || !HDRenderScissorAvailable())
+			HDRenderScissorOff();
+		else
+			HDRenderScissor(draw.x0, draw.y0, draw.x1, draw.y1);
+
+		HDRenderRoomShadowStand(draw.group, &draw.world, &draw.lighting, draw.index,
+			draw.behind);
+	}
 }
 
 /* The frame in two phases.
@@ -5546,8 +5746,9 @@ void HDFrameDraw()
 	g_frame_objects = objects_here;
 	g_frame_pending = false;
 
-	/* A covered room listed with no HD room is drawn by DrawStandInHolders
-	 * below; StandHolderRoom took the projection for it. */
+	/* A room drawn as art, wholly or in part, listed with no HD room is
+	 * drawn by DrawStandInHolders below; StandHolderRoom took the
+	 * projection for it. */
 	if (!g_frame_count && !objects_here &&
 		!(g_stand_frame_count && g_projection_taken))
 		return;
@@ -5637,7 +5838,7 @@ void HDFrameDraw()
 		DrawRoomWindowed(g_frame[i], HD_PASS_SOLID);
 	}
 
-	// The art that stands in a covered room whose own group is not listed.
+	// The art that stands in a room drawn as art whose carrier is not listed.
 	DrawStandInHolders(HD_PASS_SOLID);
 
 	/* The clear floors, once every room's solid art is in, so that whatever
@@ -5925,10 +6126,11 @@ void HDFrameDrawGlow()
 			 * (hd_cover.h, DecideStand): classic rooms with stand art on the
 			 * list / ranges drawn with their own group / drawn in their
 			 * holder's window / left out because their holder is listed and
-			 * not covered / in-holder draws past HD_MAX_STAND_DRAW.
-			 * `stand_behind=` is how many of those drawn with their group are
-			 * drawn pushed back (HD_STAND_BEHIND): art reaching onto the faces
-			 * of a listed room that stays classic. */
+			 * they lie on faces it draws classic or are another group's copy /
+			 * in-holder draws past HD_MAX_STAND_DRAW. `stand_behind=` is how
+			 * many of those drawn with their group are drawn pushed back
+			 * (HD_STAND_BEHIND): art reaching onto faces a listed room draws
+			 * classic. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
 				"pairs=%d whole=%d scissored=%d reach_rooms=%d "

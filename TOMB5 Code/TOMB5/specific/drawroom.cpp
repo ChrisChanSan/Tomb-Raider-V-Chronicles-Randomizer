@@ -239,8 +239,19 @@ void InsertRoomlet(ROOMLET* roomlet)
 		aRoomletTransformLight(roomlet->pSVtx, roomlet->nVtx, lights & 0x7FFFFFFF, roomlet->nWVtx, roomlet->nSVtx);
 		ptr = roomlet->pFac;
 
+		/* The faces another group's HD art draws in this room's place, left
+		 * out one by one (hd_level.h, HDRoomletDropped): one flag per face,
+		 * the quads then the triangles. Null with hd_enable off and for every
+		 * room the art covers no face of, and the loops below run as they
+		 * always did. */
+		const unsigned char* dropped = HDRoomletDropped((int)(CurrentRoomPtr - room),
+			(int)(roomlet - CurrentRoomPtr->pRoomlets));
+
 		for (int i = 0; i < roomlet->nQuad; i++, ptr += 6)
 		{
+			if (dropped && dropped[i])
+				continue;
+
 			double_sided = (ptr[4] >> 15) & 1;
 			tex = &textinfo[ptr[4] & 0x3FFF];
 
@@ -252,6 +263,9 @@ void InsertRoomlet(ROOMLET* roomlet)
 
 		for (int i = 0; i < roomlet->nTri; i++, ptr += 5)
 		{
+			if (dropped && dropped[roomlet->nQuad + i])
+				continue;
+
 			double_sided = (ptr[3] >> 15) & 1;
 			tex = &textinfo[ptr[3] & 0x3FFF];
 

@@ -170,6 +170,23 @@ bool HDLevelMirrorAt(int at, HDLevelMirror* out);
 // not be drawn a second time - that is the one other caller of this.
 bool HDRoomIsHD(int roomIndex);
 
+/* The classic faces InsertRoomlet (specific\drawroom.cpp) leaves out of one
+ * roomlet of a room drawn classic that another group's art covers in part:
+ * one flag per face in the order of its loops - the quads, then the
+ * triangles - 1 for a face the art draws instead (hd_cover.h,
+ * HDCoverRoomState). Null at once with hd_enable off, before a level is
+ * built and for every room without such a face, so the classic path asks one
+ * pointer per roomlet. */
+const unsigned char* HDRoomletDropped(int roomIndex, int roomlet);
+
+/* Whether the room Lara is in counts as HD for her projected shadow
+ * (hd_shadow.h, HDShadowGate): a room drawn HD, a room drawn as another
+ * group's art - wholly or in part - that keeps no classic face she can
+ * stand on (hd_cover.h, HDCoverFaceFloor), or a room drawn classic that has
+ * no classic face at all. In each of them whatever is under her is art that
+ * takes the receive. False for every room while HDLevelActive() is false. */
+bool HDRoomShadowHD(int roomIndex);
+
 /* One classic water face an HD room still has to draw. The remaster's .TRG
  * has no geometry in the plane of the classic water surface in 61 of the
  * game's 93 reflecting rooms (every VCI pool among them), so an HD room would

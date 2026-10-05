@@ -975,7 +975,8 @@ inline void HDShadowCastMatrix(const HDShadowBox* b, const float* R, const float
  *   OPTION        the option does not ask for it
  *   HD_OFF        the level is not drawn HD (hd_enable off among others)
  *   CLASSIC_LARA  Lara is not drawn as the HD composite
- *   CLASSIC_ROOM  the room she is in is drawn classic
+ *   CLASSIC_ROOM  the room she is in is drawn classic and keeps a classic
+ *                 face she can stand on (hd_level.h, HDRoomShadowHD)
  *   TARGET        the map, its depth surface or its shaders do not exist on
  *                 this device - refused, or not made
  *

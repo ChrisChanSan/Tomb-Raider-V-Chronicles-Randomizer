@@ -27,11 +27,17 @@
  *     those which lie on the room's faces with all of their area
  *     (HDCoverTriOnFaces) - the renderer gives those triangles draw calls of
  *     their own per holder, "stand ranges" (hd_render.cpp);
- *   - whether one group's art covers the room's faces completely
- *     (HDCoverFaces and HDCoverRoomCovered) - then the room is drawn as that
- *     group's art, its carrier; otherwise it stays classic and the art on
- *     its faces is left out while it is listed;
- *   - which of them a frame draws (HDStandDraw).
+ *   - which of the room's faces one group's art covers (HDCoverFaces,
+ *     HDCoverFaceCovered); the group that covers the most of them is the
+ *     room's carrier (HDCoverCarrierBetter); when it covers at least half
+ *     of them the room is drawn as the carrier's art where the carrier
+ *     covers a face and classic where it does not - wholly as art when it
+ *     covers every face (HDCoverRoomCovered, HDCoverRoomState);
+ *   - which of the stand ranges a frame draws (HDStandDraw,
+ *     HDStandDrawFaces);
+ *   - whether a classic face is one Lara can stand on (HDCoverFaceFloor),
+ *     which decides whether a room drawn as art counts as HD for her
+ *     shadow.
  *
  * No engine header on purpose, like hd_pageclass.h: ModernTest asserts on the
  * rule without a device, TrgProbe measures the game with the same functions
@@ -49,8 +55,8 @@
  * planes (TrgProbe -classicart -arttol 64 covers 34 of its 46 faces, 128
  * covers all 46). */
 #define HD_COVER_REACH		128.0
-/* The spacing of the samples a face is tested at: a quarter of a sector, so
- * a 1024-unit wall is asked at a few hundred points and the whole game's
+/* The spacing of the samples a face is tested at: a sixteenth of a sector,
+ * so a 1024-unit wall is asked at a few hundred points and the whole game's
  * classic rooms take TrgProbe about six seconds. */
 #define HD_COVER_STEP		64.0
 /* Barycentric slack of the segment test, so that the seam between two art
@@ -60,6 +66,17 @@
  * plane, before it counts as standing on it - so that a triangle that only
  * touches a face's edge belongs to the face next door. */
 #define HD_COVER_TOUCH		1e-3
+/* The sign that turns the y of a classic face's normal (b - a) x (c - a)
+ * into "up": +1, because a classic room's faces are wound so that this
+ * normal points away from the side they are seen from - RICH2's room 15
+ * has its floor at y -26112 under walls centred at -26368, and its normal's
+ * y is +1 there, pointing down. And how far up a face Lara can stand on
+ * points: more than half way, a slope of under 60 degrees. The faces the
+ * rooms drawn as art keep point up by 0 (walls), -1 (ceilings), 1
+ * (floors) or 0.80 (one slope of RICHCUT2's room 2) (TrgProbe -classicart
+ * -perface, `up=`), so any value between 0 and 0.8 gives the same answer. */
+#define HD_COVER_UP_SIGN	1.0
+#define HD_COVER_FLOOR_UP	0.5
 
 // One art triangle in world units: a corner, two edges, its unit normal
 // ((b - a) x (c - a)) and its box. `group` is the .TRG group it is drawn with.
@@ -367,23 +384,152 @@ inline HDCoverCount HDCoverFaces(const HDCoverFace* faces, int count,
 	return out;
 }
 
-/* The threshold: a room is drawn as the art only when it has a face and one
- * group's art covers every sample of every face. One bare sample keeps it
- * classic - a strict rule, because a room drawn as art that does not cover
- * it shows the void where the art stops (RICH2's room 16 has no art under
- * its 14 ceiling faces).
+/* The threshold, per face: a face is covered when one group's art covers
+ * every one of its samples, and one bare sample keeps it classic - a strict
+ * rule, because a face left out where the art does not cover it shows the
+ * void where the art stops (RICH2's room 16 has no art under the 16 faces of
+ * its ceiling, TrgProbe -classicart -perface). A room is drawn wholly as the
+ * art when it has a face and the carrier covers every one.
  *
  * One group and not the union of several, because two groups that both
  * cover a face are two copies of one surface: ANDREA2's group 127 carries a
  * second copy of 36 of room 124's 46 faces beside group 121's, and the two
  * drawn together fight as the classic faces did. So the covering group - the
- * carrier - is the one the room is drawn as, and the stand art of every other
- * group is left out while the room is listed. In the game the two rules give
- * the same verdicts: both covered rooms have a single group that covers
- * them alone (TrgProbe -classicart, `art=... alone=covered`). */
+ * carrier - is the one the room's covered faces are drawn as, and the stand
+ * art of every other group that lies on the faces is left out while the room
+ * is listed. */
 inline bool HDCoverRoomCovered(int faces, int facesCovered)
 {
 	return faces > 0 && facesCovered >= faces;
+}
+
+/* One face covered by one group: every one of its samples is
+ * (HDCoverCount::faceShare 1). A face of no area has share 1 as well and
+ * draws nothing either way. */
+inline bool HDCoverFaceCovered(double share)
+{
+	return share >= 1.0;
+}
+
+/* Is group `group`, covering `faces` of a room's faces with `tris` tagged
+ * triangles, a better carrier than `best` (-1 for none yet)? The one that
+ * covers the most faces, then the one with the most triangles on the faces,
+ * then the lowest group; a group that covers no face is never a carrier. A
+ * group that covers every face always wins over one that covers some, so
+ * of the groups that cover a room wholly the choice is the one the
+ * threshold above makes. */
+inline bool HDCoverCarrierBetter(int faces, int tris, int group, int bestFaces,
+	int bestTris, int best)
+{
+	if (faces <= 0)
+		return false;
+
+	if (best < 0)
+		return true;
+
+	if (faces != bestFaces)
+		return faces > bestFaces;
+
+	if (tris != bestTris)
+		return tris > bestTris;
+
+	return group < best;
+}
+
+/* What a classic-drawn room is drawn as, from its faces of any area and the
+ * faces its carrier covers:
+ *
+ *   HD_STAND_ROOM_CLASSIC  fewer than half of them covered: every face drawn
+ *                          classic
+ *   HD_STAND_ROOM_PART     at least half and not all: the covered faces are
+ *                          left out and drawn as the carrier's art, the
+ *                          others stay classic
+ *   HD_STAND_ROOM_COVERED  all: the room is drawn as the carrier's art and
+ *                          none of its roomlets
+ *
+ * Half, because where the art covers few of a room's faces it is another
+ * surface than the room's, and the faces it leaves out open cracks where
+ * they meet the kept ones: TITLE's dunes cover 10 of room 70's 65 faces, 7 of
+ * 101's 96 and 7 of 103's 213, and drawn in part room 103 showed 741 pixels
+ * of nothing along those edges in one RoomProbe view (2,107 with the carrier
+ * off the list) where it shows none drawn classic. Every other room the art
+ * covers a face of has a carrier that covers at least half (RICH2 16 half of
+ * 32, 18 15 of 16, 19 13 of 15; RICHCUT2 2, 3 and 4 46 of 49, 106 of 112 and
+ * 22 of 29) but ANDREA3's room 74, one face of 69 (TrgProbe -classicart
+ * -perface). */
+#define HD_COVER_PART_SHARE	0.5
+
+enum
+{
+	HD_STAND_ROOM_CLASSIC = 0,
+	HD_STAND_ROOM_PART,
+	HD_STAND_ROOM_COVERED
+};
+
+inline int HDCoverRoomState(int faces, int facesCovered)
+{
+	if (faces <= 0 || facesCovered <= 0 ||
+		(double)facesCovered < HD_COVER_PART_SHARE * (double)faces)
+		return HD_STAND_ROOM_CLASSIC;
+
+	return facesCovered >= faces ? HD_STAND_ROOM_COVERED : HD_STAND_ROOM_PART;
+}
+
+/* How far a classic face points up: the upward component (-y, TR5's y runs
+ * down) of the unit normal of its first half of any area, the side
+ * InsertRoomlet draws it from; either side of a double-sided face, so its
+ * absolute value. 0 for a face of no area. */
+inline double HDCoverFaceUp(const HDCoverFace& face)
+{
+	for (int half = 0; half + 2 < face.corners; half++)
+	{
+		const double* a = face.v[0];
+		const double* b = face.v[half + 1];
+		const double* c = face.v[half + 2];
+		const double e1[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+		const double e2[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+		const double n[3] =
+		{
+			e1[1] * e2[2] - e1[2] * e2[1],
+			e1[2] * e2[0] - e1[0] * e2[2],
+			e1[0] * e2[1] - e1[1] * e2[0]
+		};
+		const double length = sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+		if (length <= 0.0)
+			continue;
+
+		const double up = HD_COVER_UP_SIGN * n[1] / length;
+
+		return face.doubleSided && up < 0.0 ? -up : up;
+	}
+
+	return 0.0;
+}
+
+/* A face Lara can stand on: one that points up by more than
+ * HD_COVER_FLOOR_UP. The projected shadow lands on art alone, so a classic
+ * face that can be under her is what keeps a room drawn as art from
+ * counting as an HD room for her shadow (hd_level.h, HDRoomShadowHD). */
+inline bool HDCoverFaceFloor(const HDCoverFace& face)
+{
+	return HDCoverFaceUp(face) > HD_COVER_FLOOR_UP;
+}
+
+/* Does a room count as HD for her projected shadow? A room drawn HD does; a
+ * room drawn classic does when no classic face she can stand on is drawn in
+ * it: it has no classic face at all (`classicFaces` 0 - the air over a
+ * court, a shaft another group models), or it is drawn as its carrier's art,
+ * wholly or in part (`state`, HDCoverRoomState), and none of the faces it
+ * keeps is a floor (`floorsKept`, HDCoverFaceFloor). Under her there is then
+ * only art, which takes the receive; on a classic floor the projection would
+ * land on nothing that shows it, and the round blob stays. */
+inline bool HDCoverRoomShadowHD(bool roomHD, int state, int floorsKept, int classicFaces)
+{
+	if (roomHD || classicFaces <= 0)
+		return true;
+
+	return state != HD_STAND_ROOM_CLASSIC && floorsKept <= 0;
 }
 
 /* Does an art triangle stand on a classic face? True when some part of it
@@ -698,16 +844,16 @@ inline bool HDCoverTriOnFaces(const HDCoverTri& tri, const HDCoverFace* faces,
  * ranges, the relief standing in the room's box on no face included, with
  * the carrier's group when that is listed and in the room's window when it
  * is not - and every other group's art that lies on its faces whole is left
- * out; a room no group covers is drawn classic and all the art that lies on
- * its faces whole is left out. Art that only grazes the room's faces, and
- * every other group's art in its box, is drawn with its group whatever the
- * room does - leaving it out would cut it where it leaves the faces. Where
- * such art reaches onto the faces of a listed room that stays classic, the
- * classic faces and the art lie in one place (RICH2's room 16 and group 14's
- * stairwell walls), so the art is drawn pushed back: the classic face wins
- * every pixel the two share, and the art beyond the faces stays. A room
- * that is not listed draws nothing of its own, and the art on its faces is
- * drawn with its group as everywhere else. */
+ * out; a room no group covers a face of is drawn classic and all the art that
+ * lies on its faces whole is left out. Art that only grazes the room's faces,
+ * and every other group's art in its box, is drawn with its group whatever
+ * the room does - leaving it out would cut it where it leaves the faces.
+ * Where such art reaches onto the faces of a listed room that stays classic,
+ * the classic faces and the art lie in one place, so the art is drawn pushed
+ * back: the classic face wins every pixel the two share, and the art beyond
+ * the faces stays. A room that is not listed draws nothing of its own, and
+ * the art on its faces is drawn with its group as everywhere else. A room
+ * its carrier covers in part is HDStandDrawFaces' below. */
 struct HDStandAnswer
 {
 	bool classic;
@@ -726,5 +872,46 @@ inline HDStandAnswer HDStandDraw(bool holderListed, bool artListed, bool covered
 	out.withArt = artListed && (!holderListed || drawnAs || !onFaces);
 	out.inHolder = holderListed && drawnAs && !artListed;
 	out.behind = out.withArt && out.classic && grazes && !onFaces;
+	return out;
+}
+
+/* The faces a stand range stands on, where its group covers some of its
+ * holder's faces and not all: covered ones only, kept ones only, or both
+ * (HDStandRange::faces, hd_render.h). 0 for a range of kind 2 and wherever
+ * the group covers none or all of the faces - every range of a room no group
+ * covers in part. */
+#define HD_STAND_FACES_COVERED	1
+#define HD_STAND_FACES_KEPT		2
+#define HD_STAND_FACES_BOTH		3
+
+/* HDStandDraw with the room's state (HDCoverRoomState) and a range's kind
+ * (0 reaching onto the faces, 1 lying on them whole, 2 in the box on no
+ * face) and faces. A room drawn classic or wholly as art answers exactly as
+ * HDStandDraw. A room its carrier covers in part, while it is listed: the
+ * covered faces are not drawn classic, the kept ones are (`classic` - the
+ * roomlets with the covered faces left out). The carrier's ranges on covered
+ * faces and its relief are drawn as for a covered room - with its group when
+ * that is listed, in the room's window when it is not; of those, the ones
+ * that also stand on a kept face are drawn pushed back, so the kept face
+ * wins the pixels the two share and no part of a covered face is ever left
+ * without its art. The carrier's art that lies whole on kept faces is left
+ * out, and its art that reaches onto kept faces only is drawn with its group
+ * pushed back, as for a room drawn classic; every other group's art answers
+ * as for a room drawn classic. */
+inline HDStandAnswer HDStandDrawFaces(bool holderListed, bool artListed, int state,
+	bool carrier, int kind, int faces)
+{
+	if (state != HD_STAND_ROOM_PART)
+		return HDStandDraw(holderListed, artListed, state == HD_STAND_ROOM_COVERED,
+			carrier, kind == 1, kind == 0);
+
+	HDStandAnswer out;
+	const bool drawnAs = carrier && (kind == 2 || (faces & HD_STAND_FACES_COVERED) != 0);
+
+	out.classic = holderListed;
+	out.withArt = artListed && (!holderListed || drawnAs || kind != 1);
+	out.inHolder = holderListed && drawnAs && !artListed;
+	out.behind = holderListed && (out.withArt || out.inHolder) && kind != 2 &&
+		(!drawnAs || (faces & HD_STAND_FACES_KEPT) != 0);
 	return out;
 }

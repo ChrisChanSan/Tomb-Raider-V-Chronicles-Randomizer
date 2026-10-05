@@ -2167,7 +2167,10 @@ whose carrier a flipmap can swap away. In the game ANDREA2 124 and RICH2 15
 are drawn as the art, RICH2 16, 18 and 19 (the upper storeys of the
 stairwell) and RICHCUT2 2, 3 and 4 in part; the classic faces RICH2's
 storeys keep are the ceiling at the top of the stairwell, two landings and
-one wall square, which the art does not cover. TITLE 70, 101 and 103 and
+one wall square, which the art does not cover; RICHCUT2's keep wall squares
+across the art's windows, a sloped floor, a corridor ceiling, and room 3's four
+corner walls, which the art covers with triangles tagged to the storey below
+(a face counts only the art its own room is given). TITLE 70, 101 and 103 and
 ANDREA3 74 stay classic with a few covered faces, and ANDY1 212, ANDY3 26,
 28, 88, 103, 118, 122 and 210 and JOBY2 19 and 21 with none.
 
@@ -2176,9 +2179,13 @@ square laid on a wall that the carrier's art holds is drawn by the art alone.
 And the projected shadow: Lara standing in a room drawn as the art casts it
 when the room keeps no classic face she can stand on - a face that points up
 by more than half, a slope under 60 degrees - and so does a classic room with
-no classic face at all, where whatever is under her is art. The art drawn
-inside such a room's window takes her shadow like any other. In RICH2 18 and
-19, which keep a classic landing each, she casts the round shadow.
+no classic face at all, where whatever is under her is art or the room below,
+unless a floor sector of it that opens into no room below has no other group's
+art anywhere in the room's box: nothing would take the shadow there, and she
+keeps the round one (17 rooms of the game, ANDREA3 71 and 72, RICH1 142 and
+RICH3 205, 212 and 217 among them). The art drawn inside such a room's window
+takes her shadow like any other. In RICH2 18 and 19, which keep a classic
+landing each, she casts the round shadow.
 
 **A room the randomizer RESHAPED is a different case, and it has to be told.**
 The remaster's art describes the level as Core shipped it. When a run cuts a
@@ -2336,36 +2343,40 @@ The build line ends in how many classic rooms hold such art
 their faces, how many rooms are drawn in part (`part=`) and how many
 classic-drawn rooms count as HD for her shadow (`shadow_rooms=`).
 
-**The static meshes in the log.** One `HDLOG static` line per static that
-its room's own art does not hold. In a room drawn HD it reads `classic
-cells=<n> of <m>` - the cells of the static's box that hold the room's own art,
-against the box's - then `verts=` the static's mesh vertices, `groups=` the
-other groups whose art stands at them (group:vertices, the most first, a star
-on each that holds the static: nine twentieths of its vertices, in that
-group's art outside its own room) and `answer=` - `art` (never drawn classic),
-`groups` (drawn classic only in a frame that lists none of the starred
-groups) or `classic` (drawn in every frame). A static of a room drawn classic
-gets a `classic_room` line with its box, `verts=`, `carrier=` and `sure=` - the
+**The static meshes in the log.** One `HDLOG static` line per static that its
+room's own art does not hold. In a room drawn HD it reads `classic cells=<n>
+of <m>` - the cells of the static's box that hold the room's own art, against
+the box's - then `verts=` the static's mesh vertices, `groups=` the other
+groups whose art stands at them (group:vertices, the most first, a star on
+each that holds the static: nine twentieths of its vertices, in that group's
+art outside its own room) and `answer=` - `art` (never drawn classic),
+`groups` (drawn classic only in a frame that lists none of the starred groups)
+or `classic` (drawn in every frame). A static of a room drawn classic gets a
+`classic_room` line with its box, `verts=`, `carrier=` and `sure=` - the
 vertices the carrier's art holds that every frame listing the room draws -,
 `groups=` and `answer=`. A flat static (a pane, a square laid on a wall) is
 asked only of its own room's art and the carrier, so its `groups=` reads `-`.
 `HDLOG static ... destructible piece=<p> group=<g>` pairs a shatterable static
 with a piece of the art - any group's - that the game hides with it. The
 level's first summary line counts the statics of rooms drawn HD that stay
-classic (`classic=`), all shatterable statics and the pairs, then the statics
-of classic-drawn rooms given to the art for good and per frame, and the pairs
-with another group's piece; the second ends in `art=`, `by_group=` and
-`classic=` over every static of the level. In the game 65 statics changed
-their answer with this rule: ANDREA2's six crowns and two trunks, RICH2's 40
-flights, railings and squares of the stairwell, RICHCUT2's four hanging lamps,
-ANDY1's nine parts of a hut, ANDY2's two roof beams, one each in ANDREA1 and
-ANDY3. The `stand=` field at the end of the `clip` line is the frame's
-answer, five numbers: the classic rooms with such art on the list, the art
-ranges drawn with their own group, those drawn in a covered room's window
-because their group is not listed, those left out because the room is listed,
-and in-window draws the frame had no room for (always 0). `stand_behind=`
-after it counts the ranges of the second number that are drawn pushed back,
-because they reach onto the faces of a listed room that stays classic.
+classic (`classic=` - only those answered `classic`; one held by other groups'
+frames is counted in the second line's `by_group=`), all shatterable statics
+of every room whatever their answer and the pairs (`shatterable=`, `paired=`;
+a log of the build before this rule counted those two over the statics of HD
+rooms the art held), then the statics of classic-drawn rooms given to the art
+for good and per frame, and the pairs with another group's piece; the second
+ends in `art=`, `by_group=` and `classic=` over every static of the level. In
+the game 65 statics changed their answer with this rule: ANDREA2's six crowns
+and two trunks, RICH2's 40 flights, railings and squares of the stairwell,
+RICHCUT2's four hanging lamps, ANDY1's nine parts of a hut, ANDY2's two roof
+beams, one each in ANDREA1 and ANDY3. The `stand=` field at the end of the
+`clip` line is the frame's answer, five numbers: the classic rooms with such
+art on the list, the art ranges drawn with their own group, those drawn in a
+covered room's window because their group is not listed, those left out
+because the room is listed, and in-window draws the frame had no room for
+(always 0). `stand_behind=` after it counts the ranges of the second number
+that are drawn pushed back, because they reach onto the faces of a listed room
+that stays classic.
 
 A randomized level adds two more room reasons and a block of its own. A room
 the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the

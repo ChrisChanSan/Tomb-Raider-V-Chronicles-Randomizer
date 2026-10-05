@@ -2176,7 +2176,14 @@ ANDREA3 74 stay classic with a few covered faces, and ANDY1 212, ANDY3 26,
 
 The static meshes of such a room follow the art: a flight, a railing or a
 square laid on a wall that the carrier's art holds is drawn by the art alone.
-And the projected shadow: Lara standing in a room drawn as the art casts it
+A static another room's art holds - ANDREA2's palms, whose trunks stand in the
+courtyard 124 and whose crowns in the room above it, both modelled in the art
+of the rooms beside them - is that art while one of those rooms is drawn, and
+otherwise its piece: those rooms' triangles of the object alone, drawn in the
+static's own room's window, so a palm stays the art at every angle of the
+camera. Where the art models the object as part of a larger structure (ANDY1's
+hut, ANDY2's roof beams) no piece is cut out of it and the classic static
+stands in. And the projected shadow: Lara standing in a room drawn as the art casts it
 when the room keeps no classic face she can stand on - a face that points up
 by more than half, a slope under 60 degrees - and so does a classic room with
 no classic face at all, where whatever is under her is art or the room below,
@@ -2258,11 +2265,11 @@ HDLOG level=ANDREA1 built ms=1180 rooms=242 hd=238 classic=4 sky_groups=1 ...
       ... stand_rooms=0 covered=0 stand_tris=0 part=0 shadow_rooms=...
 HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
 HDLOG static room=136 mesh=0 slot=25 classic cells=0 of 768 box=... verts=50
-      groups=154:30*,144:10 answer=groups
+      groups=154:30*,144:10 answer=groups piece=154:2041 held=30 open=0 others=0
 HDLOG level=ANDREA1 statics classic=10 of 255, destructible pieces=6
       shatterable=3 paired=4 classic_room_art=0 classic_room_group=0 paired_other=0
 HDLOG level=ANDREA1 statics suppressed=255 kept=0 (in 238 HD rooms, 4 classic)
-      art=244 by_group=1 classic=10
+      art=244 by_group=1 classic=10 pieces=1
 HDLOG level=ANDREA1 water marks=... rooms=...
 HDLOG level=ANDREA1 water stamped=... choppy=... shimmer=... ps_slots=...
 HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
@@ -2350,12 +2357,25 @@ the box's - then `verts=` the static's mesh vertices, `groups=` the other
 groups whose art stands at them (group:vertices, the most first, a star on
 each that holds the static: nine twentieths of its vertices, in that group's
 art outside its own room) and `answer=` - `art` (never drawn classic),
-`groups` (drawn classic only in a frame that lists none of the starred groups)
-or `classic` (drawn in every frame). A static of a room drawn classic gets a
-`classic_room` line with its box, `verts=`, `carrier=` and `sure=` - the
-vertices the carrier's art holds that every frame listing the room draws -,
-`groups=` and `answer=`. A flat static (a pane, a square laid on a wall) is
-asked only of its own room's art and the carrier, so its `groups=` reads `-`.
+`groups` (the art of a starred group while one is listed) or `classic` (drawn
+in every frame). A static of a room drawn classic gets a `classic_room` line
+with its box, `verts=`, `carrier=` and `sure=` - the vertices the carrier's art
+holds that every frame listing the room draws -, `groups=` and `answer=`. Both
+lines end in `piece=`: for `groups`, the static's piece - the triangles of the
+first starred group that make the object, `group:triangles` - drawn in a frame
+that lists its room and none of the starred groups, in its room's window, with
+that group's matrix and lighting, so the object is the art at every angle;
+`held=` the static's vertices the piece's own cells hold (nine twentieths
+needed), `open=` the triangles of the runs it reaches into that go on outside
+every static's box past 768 units (a larger structure: none allowed) and
+`others=` the statics of its room held by the same group with no piece (none
+allowed: a room's held statics are pieces all or none). `piece=-` with the
+three counts is a static with no piece, drawn classic while none of the
+starred groups is listed - ANDY1's nine parts of a hut in room 225 and ANDY2's
+two beams in room 17, which the art models as one run with its walls and its
+roof. Every other answer reads `piece=-`. A flat static (a pane, a square
+laid on a wall) is asked only of its own room's art and the carrier, so its
+`groups=` reads `-`.
 `HDLOG static ... destructible piece=<p> group=<g>` pairs a shatterable static
 with a piece of the art - any group's - that the game hides with it. The
 level's first summary line counts the statics of rooms drawn HD that stay
@@ -2365,7 +2385,9 @@ of every room whatever their answer and the pairs (`shatterable=`, `paired=`;
 a log of the build before this rule counted those two over the statics of HD
 rooms the art held), then the statics of classic-drawn rooms given to the art
 for good and per frame, and the pairs with another group's piece; the second
-ends in `art=`, `by_group=` and `classic=` over every static of the level. In
+ends in `art=`, `by_group=` and `classic=` over every static of the level and
+`pieces=`, the statics of `by_group=` with a piece (ten in the game: ANDREA2's
+two trunks and six crowns, ANDREA1's and ANDY3's one each). In
 the game 65 statics changed their answer with this rule: ANDREA2's six crowns
 and two trunks, RICH2's 40 flights, railings and squares of the stairwell,
 RICHCUT2's four hanging lamps, ANDY1's nine parts of a hut, ANDY2's two roof

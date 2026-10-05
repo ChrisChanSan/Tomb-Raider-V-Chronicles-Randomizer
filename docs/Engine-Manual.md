@@ -1330,11 +1330,15 @@ see *Lara in HD* below for which of her stays classic and why.
   picture of it would go on standing after the game has broken it. The
   Remaster gives every such copy a number of its own, and the engine takes
   that copy out of the room when the game takes the object out of the level.
-- **The statics the Remaster has no art for are drawn the classic way.** A
-  room whose Remaster art covers only part of it would otherwise lose every
-  lamp, crate and post standing in the rest. The engine asks, per object,
-  whether the art draws anything where it stands, and draws the classic one
-  where it does not.
+- **The statics the Remaster has no art for are drawn the classic way, and
+  only those.** A room whose Remaster art covers only part of it would
+  otherwise lose every lamp, crate and post standing in the rest. The engine
+  asks, per object, whether the art draws anything where it stands - the art
+  of the object's own room, the art a room drawn as a neighbour's art is
+  drawn as, and the art other rooms model outside their own walls: ANDREA2's
+  palm crowns stand in the room above the palm and are modelled with the
+  trunk. The classic object is drawn where none of it is there, and where only
+  another room's art holds it, only while that room is on the screen.
 - **No room shows through another one's wall.** Tomb Raider levels are not
   built like buildings: two rooms can stand in exactly the same place in the
   world, and the game only ever shows you one of them at a time, because it
@@ -2139,20 +2143,42 @@ facing the way it does). When one group's art covers every face completely
 drawn as its art: with the carrier when the carrier's room is on the list, and
 inside the room's own portal window when it is not, so the place is never
 empty and never doubled. The other groups' copies of the same faces are left
-out while the room is listed. A room no group covers stays classic, and the art
-that lies on its faces whole is left out while it is listed; art that only
-grazes its faces - a palm trunk beside a wall, a stair that runs on into the
-next room - is still drawn, because leaving it out would cut it, but while the
-room is listed it is drawn pushed back by a five-hundredth of its distance, so
-the classic face wins wherever the two meet and the art beyond the face stays.
-Two kinds of room stay classic however completely the art covers them: one
-whose classic water surface the HD path would not restore (a room with the
-mist or reflection flag), and one whose covering group a flipmap can swap
-away. In the game two rooms are covered (ANDREA2 124, RICH2 15) and twenty stay
-classic with some foreign art on their faces; the rest of the classic rooms
-either have no face or no foreign art. While Lara stands in a covered room she
-casts the classic shadow, as she does in every room the engine counts as
-classic.
+out while the room is listed.
+
+The question is asked face by face. A face is covered by a group when that
+group's art covers every one of its samples; the room's carrier is the group
+that covers the most faces (then the most triangles on them, then the lowest
+group). When the carrier covers every face the room is drawn as its art, as
+above. When it covers at least half of them the room is drawn *in part*: the
+covered faces are left out of the classic room, one by one, and drawn as the
+carrier's art, the kept faces stay classic; the carrier's art that lies whole
+on a kept face is left out, and its art that stands on a covered face and
+reaches onto a kept one is drawn pushed back, so the kept face wins the pixels
+the two share. When it covers fewer than half - or none - the room stays
+classic, and the art that lies on its faces whole is left out while it is
+listed; art that only grazes its faces - a palm trunk beside a wall, a stair
+that runs on into the next room - is still drawn, because leaving it out
+would cut it, but while the room is listed it is drawn pushed back by a
+five-hundredth of its distance, so the classic face wins wherever the two
+meet and the art beyond the face stays. Two kinds of room keep every face
+however completely the art covers them: one whose classic water surface the
+HD path would not restore (a room with the mist or reflection flag), and one
+whose carrier a flipmap can swap away. In the game ANDREA2 124 and RICH2 15
+are drawn as the art, RICH2 16, 18 and 19 (the upper storeys of the
+stairwell) and RICHCUT2 2, 3 and 4 in part; the classic faces RICH2's
+storeys keep are the ceiling at the top of the stairwell, two landings and
+one wall square, which the art does not cover. TITLE 70, 101 and 103 and
+ANDREA3 74 stay classic with a few covered faces, and ANDY1 212, ANDY3 26,
+28, 88, 103, 118, 122 and 210 and JOBY2 19 and 21 with none.
+
+The static meshes of such a room follow the art: a flight, a railing or a
+square laid on a wall that the carrier's art holds is drawn by the art alone.
+And the projected shadow: Lara standing in a room drawn as the art casts it
+when the room keeps no classic face she can stand on - a face that points up
+by more than half, a slope under 60 degrees - and so does a classic room with
+no classic face at all, where whatever is under her is art. The art drawn
+inside such a room's window takes her shadow like any other. In RICH2 18 and
+19, which keep a classic landing each, she casts the round shadow.
 
 **A room the randomizer RESHAPED is a different case, and it has to be told.**
 The remaster's art describes the level as Core shipped it. When a run cuts a
@@ -2218,13 +2244,18 @@ The ones worth reading:
 ```
 HDLOG level=ANDREA1 trg=v3 groups=243 rooms=242 sky=1 empty=4 pages=179 ...
 HDLOG room=0 group=0 tris=1216/0/0 ranges=4 statics=2 hd=1 reason=ok
-      stand=0 covered=0 carrier=-1
+      stand=0 covered=0 carrier=-1 faces=0 faces_covered=0 floors_kept=0 shadow=1
 HDLOG room=66 group=66 tris=0/0/0 ranges=0 statics=0 hd=0 reason=empty_group
-      stand=0 covered=0 carrier=-1
+      stand=0 covered=0 carrier=-1 faces=0 faces_covered=0 floors_kept=0 shadow=1
 HDLOG level=ANDREA1 built ms=1180 rooms=242 hd=238 classic=4 sky_groups=1 ...
-      ... stand_rooms=0 covered=0 stand_tris=0
+      ... stand_rooms=0 covered=0 stand_tris=0 part=0 shadow_rooms=...
 HDLOG level=ANDREA1 pages named=179 distinct=179 from5=179 ... mib=279.9 ...
+HDLOG static room=136 mesh=0 slot=25 classic cells=0 of 768 box=... verts=50
+      groups=154:30*,144:10 answer=groups
+HDLOG level=ANDREA1 statics classic=10 of 255, destructible pieces=6
+      shatterable=3 paired=4 classic_room_art=0 classic_room_group=0 paired_other=0
 HDLOG level=ANDREA1 statics suppressed=255 kept=0 (in 238 HD rooms, 4 classic)
+      art=244 by_group=1 classic=10
 HDLOG level=ANDREA1 water marks=... rooms=...
 HDLOG level=ANDREA1 water stamped=... choppy=... shimmer=... ps_slots=...
 HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
@@ -2284,20 +2315,51 @@ end of the level line counts the unclaimed art near the holder's wall, drawn
 whole on every frame. The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.
 
-The three fields at the end of a room line are the classic room drawn as a
+The fields at the end of a room line are the classic room drawn as a
 neighbour's art (above): `stand=` the triangles of HD groups standing on its
 classic faces, `covered=1` when one group covers every face and the room is
-drawn as that art, `carrier=` that group (-1 for none); all three are 0, 0 and
--1 for an HD room. ANDREA1 has no such room; in ANDREA2 the courtyard reads
+drawn as that art, `carrier=` that group, the carrier of a room drawn in part
+too (-1 for none), `faces=` its classic faces, `faces_covered=` those the
+carrier covers - left out of the classic room and drawn as the art -,
+`floors_kept=` the faces she can stand on that it keeps classic, and
+`shadow=1` when the room counts as HD for her projected shadow. ANDREA1 has no
+such room; in ANDREA2 the courtyard reads
 
 ```
 HDLOG room=124 group=124 tris=4/0/0 overhang=4 ... hd=0 reason=hollow_group
-      stand=5070 covered=1 carrier=121
+      stand=5070 covered=1 carrier=121 faces=46 faces_covered=46 floors_kept=0
+      shadow=1
 ```
 
 The build line ends in how many classic rooms hold such art
-(`stand_rooms=`), how many of them are covered and how many triangles stand on
-their faces. The `stand=` field at the end of the `clip` line is the frame's
+(`stand_rooms=`), how many of them are covered, how many triangles stand on
+their faces, how many rooms are drawn in part (`part=`) and how many
+classic-drawn rooms count as HD for her shadow (`shadow_rooms=`).
+
+**The static meshes in the log.** One `HDLOG static` line per static that
+its room's own art does not hold. In a room drawn HD it reads `classic
+cells=<n> of <m>` - the cells of the static's box that hold the room's own art,
+against the box's - then `verts=` the static's mesh vertices, `groups=` the
+other groups whose art stands at them (group:vertices, the most first, a star
+on each that holds the static: nine twentieths of its vertices, in that
+group's art outside its own room) and `answer=` - `art` (never drawn classic),
+`groups` (drawn classic only in a frame that lists none of the starred
+groups) or `classic` (drawn in every frame). A static of a room drawn classic
+gets a `classic_room` line with its box, `verts=`, `carrier=` and `sure=` - the
+vertices the carrier's art holds that every frame listing the room draws -,
+`groups=` and `answer=`. A flat static (a pane, a square laid on a wall) is
+asked only of its own room's art and the carrier, so its `groups=` reads `-`.
+`HDLOG static ... destructible piece=<p> group=<g>` pairs a shatterable static
+with a piece of the art - any group's - that the game hides with it. The
+level's first summary line counts the statics of rooms drawn HD that stay
+classic (`classic=`), all shatterable statics and the pairs, then the statics
+of classic-drawn rooms given to the art for good and per frame, and the pairs
+with another group's piece; the second ends in `art=`, `by_group=` and
+`classic=` over every static of the level. In the game 65 statics changed
+their answer with this rule: ANDREA2's six crowns and two trunks, RICH2's 40
+flights, railings and squares of the stairwell, RICHCUT2's four hanging lamps,
+ANDY1's nine parts of a hut, ANDY2's two roof beams, one each in ANDREA1 and
+ANDY3. The `stand=` field at the end of the `clip` line is the frame's
 answer, five numbers: the classic rooms with such art on the list, the art
 ranges drawn with their own group, those drawn in a covered room's window
 because their group is not listed, those left out because the room is listed,
@@ -3273,7 +3335,7 @@ wrote it, and each seam answers a different question:
 | Lara's face does not blink between her lines, or does not bare its teeth when she fires | `HDLOG … lips loop` — at the level build, one line per face: how many frames its joint block holds, where it loops, where it lies in the file, which of its joints the loop moves and how many blinks it has, and why it would not play (`reason=`); `LIPLOG … lara face=` — one line each time her face changes between the cutscene line, the firing face, the loop and rest, with what it was before and why; `LIPLOG … lara blink` — one line on the first frame of each blink, with how far the lids are closed; and `lips=loop` or `lips=fire` at the end of `HDLOG frame lara` |
 | in HD Lara's catsuit loses its shine after she walks from one room into another, and a save and a load bring it back | `HDLOG laralights` — one line on her first frame of a level and one whenever her room, the number of lights handed to the card or the number left out changes: `level=` the level, `room=` her room, `il_room=` the room her current light list was last built for, `cur=` and `prev=` the engine's current and previous light list as lights switched on / lights in it (shadow lights included), `dyn=` the dynamic lights (a flare, a torch, a muzzle flash) handed on, `handed=` every light handed to the card, `dark=` the lights of the two lists left out because they have faded to nothing, `eye=` 1 when nothing is handed on, so that the camera is the lamp of her shine, `max_dark=` the brightest colour channel among those left out and `min_lit=` the dimmest brightest channel among the room lights handed on, both on the engine's 0..1 scale (0 when there is none). Walking out of a lit room reads as a line with the old room's light in `prev=` and `dark=0`, and eight drawn frames later a second line: `dark=` counts the light where its fade left it switched on with nothing to give, `prev=` shows it switched off where the fade cleared it, and when nothing else lights her the line reads `handed=0 eye=1` either way |
 | the soft motion of the chest does not show, shows on the wrong place, or moves too much or too little | `HDLOG softbody` — one line whenever her HD composite is built and whenever the option changes: `outfit=` the body's model, `state=` on or off, `reason=` `ok` or why it is off (`young` a young-Lara level, `classic` no HD Lara, `option` switched off, or the outfit's own refusal: `no_body`, `no_axes`, `no_front`, `no_torso`, `band_empty`, `band_edge`, `flat`, `asymmetric`, `radius`, `deep` (the chest stands further forward than its region reaches back), `sparse`), `strength=` the option 0 to 3, `apexL=` and `apexR=` the two points the regions are built on, in the body model's own units, `radius=` the regions' radius, `verts=` how many of the body's vertices each region moves, left/right, and `parts=` which parts carry the motion. While it is on, `HDLOG softbody second` once for every second of game time in which it moved at all: `peak=` the largest offset drawn in that second, `bound=` the largest it may be at this strength, `clamped=` frames that ran into the bound, `resets=` how often it went back to rest (a jump, a gap, a cutscene edge) and `steps=` how many sub-steps the spring ran |
-| Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes. `HDLOG shadow others` — the same fields for the creatures' map (R32F, 2048), written in the frame it changes; it is made beside her map in the first frame her shadow runs, and a card that refuses it leaves her shadow running and the creatures their blobs |
+| Lara has the round blob where the projected shadow was expected, or neither | `HDLOG shadow mode` — on her first frame of a level and whenever the answer changes: `stored=` the option as the registry holds it, `effective=` what her frame draws (`projected`, `original`, `circle`, `faded` or `psx`) and `reason=` `ok` or why the projected shadow does not run: `option` (the option is not 5), `hd_off` (the level is not drawn HD), `classic_lara` (she is drawn classic), `classic_room` (her room is drawn classic and keeps a classic face she can stand on - the line `HDLOG room=` says `shadow=0`), `target` (the shadow's map, its depth surface or its shaders do not exist on this card). `HDLOG shadow target` — on her first frame of a level and whenever the map changes: `state=` `none` (never asked for), `made`, `refused` or `released` (a lost device, a resolution change, the end), `reason=` `ok` or what refused it (`no_device`, `format` - no R32F render target, `depth` - neither D24X8 nor D16, `match`, `create`, `surface`, `depth_create`), `format=` and `size=` the map (R32F, 512), `depth=` its depth surface and `events=` a counter of the changes. `HDLOG shadow others` — the same fields for the creatures' map (R32F, 2048), written in the frame it changes; it is made beside her map in the first frame her shadow runs, and a card that refuses it leaves her shadow running and the creatures their blobs |
 | the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one the key light gives this frame (world axes, y down; the fixed slant while `HD_SHADOW_PULL` is 0, and the two differ only while a change of the lights glides in), `strength=` the darkness drawn / the target's (0.34 with the fixed light, 0.45 the darkest the lights can give), `lights=` the lights of her list that counted and `weight=` their summed brightness times nearness, both before the pull, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice, `lag=` the largest angle in degrees that second between the drawn direction and the frame's target - 0 with the fixed light; with a pull above 0, near 0 while only she moves, up when the lights change and back down over about a second and a half; then the creatures' map: `others=` the creatures and items drawn into it a frame (over the frames it was drawn in; 0.0 when none was near her), `omap=` frames it was drawn / frames the shadow ran, `orooms=` the room groups drawn again a frame while it was read - hers and those only its wider reach, four sectors round her, brings in - and `oms=` the processor time of its cast pass a frame (its share of the receive is in `ms=`); then the models: `models=` Lara, the creatures, the items and the reflections drawn again to take the shadow, a frame (the mean over the frames the shadow ran), `mcalls=` their draw calls a frame, `castonly=` the creatures out of view drawn into the creatures' map a frame, and `mirror=` frames in which a mirror's copy or a reflection took the shadow through the mirror / frames the shadow ran (0 outside RICH2's washrooms) |
 | in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |

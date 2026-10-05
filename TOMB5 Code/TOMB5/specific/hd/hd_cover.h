@@ -1101,3 +1101,49 @@ inline bool HDStaticDrawClassic(int answer, bool holderListed)
 
 	return true;
 }
+
+/* The piece of a static other groups hold (hd_render.cpp, MakeStaticPiece):
+ * the triangles of the holder that holds the most of its vertices that make
+ * the object, drawn on their own in a frame that lists the static's room and
+ * none of its holders, with that group's matrix and lighting, inside the
+ * room's window - so the object is the art at every angle and not the
+ * classic static whenever the list happens to leave its holders out.
+ *
+ * The build notes every triangle of a group's overhang of no intrusion piece
+ * and of its stand ranges whose centroid lies within the reach of the box of
+ * a static of another room: 1024 units, one floor square, past the 530 units
+ * the leaf cards of ANDREA2's palm crowns reach beyond the classic crown's
+ * box (RoomProbe's build, the cards' own corners). A triangle belongs to a
+ * static's box within the slack: 64 units, twice the 32 by which the art of
+ * a palm trunk stands past the classic trunk's box, so the side triangles of
+ * a trunk whose centroids lie just outside it are the trunk's. A piece is
+ * the object alone only while no run of triangles it reaches into goes on,
+ * outside every static's box, past 768 units - three quarters of the reach,
+ * past the leaf cards' 530 - so a static the art models as part of a larger
+ * structure keeps the classic fallback. */
+#define HD_STATIC_PIECE_REACH	1024.0f
+#define HD_STATIC_PIECE_SLACK	64.0f
+#define HD_STATIC_PIECE_OPEN	768.0f
+
+// Where a frame takes a static from (HDStaticDrawSource).
+#define HD_STATIC_FROM_CLASSIC	0
+#define HD_STATIC_FROM_ART	1
+#define HD_STATIC_FROM_PIECE	2
+
+/* The one source per frame of a static: its answer, whether the frame lists a
+ * group that holds it, and whether its piece is drawn in this frame - made,
+ * and its room's window and its group's room in hand. A static the art holds
+ * for good, or one a listed holder draws, is the art; one held by groups none
+ * of which is listed is its piece where that is drawn, and the classic static
+ * otherwise, so the object is never lost; every other static is classic. */
+inline int HDStaticDrawSource(int answer, bool holderListed, bool pieceDrawn)
+{
+	if (answer == HD_STATIC_ART)
+		return HD_STATIC_FROM_ART;
+
+	if (answer == HD_STATIC_GROUPS)
+		return holderListed ? HD_STATIC_FROM_ART :
+			pieceDrawn ? HD_STATIC_FROM_PIECE : HD_STATIC_FROM_CLASSIC;
+
+	return HD_STATIC_FROM_CLASSIC;
+}

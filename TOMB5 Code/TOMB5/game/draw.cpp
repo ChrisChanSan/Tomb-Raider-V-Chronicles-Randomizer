@@ -3533,9 +3533,13 @@ void DrawStaticObjects(short room_number)
 	 * Which entries: those whose place the art draws in this frame. hd_level
 	 * asks the renderer once per level whether the art draws anything where
 	 * each static stands - the room's own group, the carrier's art of a room
-	 * drawn as another group's art, or another group's art, which a frame
-	 * draws only while it lists that group - and HDStaticDrawnClassic
-	 * answers with the frame's room list. A static the .TRG has nothing for
+	 * drawn as another group's art, or another group's art - and
+	 * HDStaticDrawnClassic answers with the frame's room list. Another
+	 * group's art draws the object in a frame that lists that group, and its
+	 * piece - that group's triangles of the object alone - in a frame that
+	 * lists the static's room and none of its holders, so the object is the
+	 * art at every angle; such a static with no piece is drawn here while no
+	 * holder is listed. A static the .TRG has nothing for
 	 * is still drawn here (103 of the game's 2,845), in any room. The answer
 	 * follows the level as it was built, not the hd_enable option: switched
 	 * off in a running level, the art goes on drawing its rooms until the

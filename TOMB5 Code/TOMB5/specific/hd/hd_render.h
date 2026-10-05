@@ -1359,11 +1359,66 @@ struct HDStaticArt
 	int groupVerts[HD_STATIC_MAX_GROUPS];
 	unsigned char holds[HD_STATIC_MAX_GROUPS];
 	int flat;		// HDStaticFlat: no other group asked
+	/* For HD_STATIC_GROUPS: the piece made of the first holder's triangles
+	 * at the static's place (HDRenderStaticPiece) or -1, that holder (-1
+	 * where no piece was asked), its triangles, the static's vertices its own
+	 * cells hold, and the
+	 * triangles of the runs it reaches into that go on past
+	 * HD_STATIC_PIECE_OPEN (hd_cover.h) - a piece is made only with none. */
+	int piece;
+	int pieceGroup;
+	int pieceTris;
+	int pieceHeld;
+	int pieceOpen;
+	// The statics of its room held by the same group with no piece of their
+	// own (HDRenderStaticPiecesWhole): its piece is dropped while there are.
+	int pieceOthers;
 };
 
+/* `place` is the static's entry of the list handed to HDRenderSetStaticPlaces,
+ * or -1 for none, which asks no piece. */
 void HDRenderStaticArt(int room, const float* mins, const float* maxs,
 	const float* verts, int vertCount, const HDStaticGroup* groups,
-	int groupCount, HDStaticArt* out);
+	int groupCount, int place, HDStaticArt* out);
+
+/* The places of the level's static meshes, for the pieces: every static's box
+ * as StaticBox makes it (hd_level.cpp), x and z moved by its room's origin to
+ * world units, y as it is (a TR5 room's y origin is 0), and its room. Handed
+ * before HDRenderLevelBegin, whose index fill notes the art near each place
+ * (hd_cover.h, HD_STATIC_PIECE_REACH), and borrowed until
+ * HDRenderStaticPiecesUpload; a place whose box is empty (maxs below mins) is
+ * no place. Null or 0 notes nothing and makes no piece. */
+struct HDStaticPlace
+{
+	int room;
+	float mins[3];
+	float maxs[3];
+};
+
+void HDRenderSetStaticPlaces(const HDStaticPlace* places, int count);
+
+/* The answers of a level's statics, `rooms` their rooms: the statics of one
+ * room held by one group are drawn as pieces all of them or none, so an
+ * object the art models out of several statics - ANDY1's hut in room 225 -
+ * is never half art and half classic. A static whose piece goes keeps the
+ * classic fallback; `pieceOthers` says why. */
+void HDRenderStaticPiecesWhole(const int* rooms, HDStaticArt* arts, int count);
+
+/* After the last HDRenderStaticArt of the level: the pieces' index buffer,
+ * and the noted triangles let go. Returns the number of pieces. */
+int HDRenderStaticPiecesUpload();
+
+// Whether a piece is there to draw.
+bool HDRenderStaticPieceReady(int piece);
+
+/* One piece, drawn as its group draws its own ranges - its vertices, pages,
+ * matrix constants and lighting - with the matrix of its group's frame, the
+ * passes the mask names; and the same triangles in the projected shadow's
+ * receive, inside its Begin and End. */
+bool HDRenderStaticPiece(int piece, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes);
+bool HDRenderStaticPieceShadow(int piece, const D3DMATRIX* world,
+	const HDRoomLighting* lighting);
 // How many triangles of the group stand outside its own room box, all three
 // passes together. A group whose whole art is outside is
 // a group that draws nothing in its own room, and the caller keeps that room

@@ -242,12 +242,16 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
  * False where the art draws the static's place in every frame that lists its
  * room - its room's own group, or the carrier's art of a room drawn as it -
  * and where another group's art draws it and `listed`, the frame's room list
- * (draw_rooms), holds a room drawn by that group. True where the art has
- * nothing for it (103 of the game's 2,845 statics, which would otherwise
- * vanish), in a frame without a group holding it, for an index out of
- * range, before a level is built and in a level built with HD off. It reads
- * the level as built, like HDRoomIsHD, so hd_enable switched off in a
- * running level changes no answer until the next level.
+ * (draw_rooms), holds a room drawn by that group. False too where other
+ * groups hold it, none of them is listed and its piece - the holder's
+ * triangles of the object - is drawn this frame in its room's window; the
+ * call notes that draw for HDFrameDraw (hd_cover.h, HDStaticDrawSource). True
+ * where the art has nothing for it (103 of the game's 2,845 statics, which
+ * would otherwise vanish), where other groups hold it but none is listed and
+ * it has no piece or its piece cannot be drawn, for an index out of range,
+ * before a level is built and in a level built with HD off. It reads the
+ * level as built, like HDRoomIsHD, so hd_enable switched off in a running
+ * level changes no answer until the next level.
  *
  * `meshIndex` counts ROOM_INFO::mesh from zero. */
 bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,

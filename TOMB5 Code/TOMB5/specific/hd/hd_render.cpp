@@ -1839,6 +1839,40 @@ namespace
 	int g_stand_pick = -1;
 	bool g_stand_pick_behind = false;
 
+	/* The static meshes' places (HDRenderSetStaticPlaces), borrowed until
+	 * HDRenderStaticPiecesUpload, and what the build kept of the art around
+	 * them for the pieces (HDRenderStaticArt): `g_place_sectors` the places by
+	 * the 1024-unit floor squares their grown boxes reach, sorted by the key;
+	 * `g_place_tris` every triangle of a group's overhang of no intrusion
+	 * piece, or of a stand range, whose centroid lies within
+	 * HD_STATIC_PIECE_REACH of the box of a static of another room - its
+	 * place, group, pass, range, stand range, where its corners stand in the
+	 * sorted index stream and, after the rebase, their indices, and the
+	 * corners themselves, group local. The pieces made of them are drawn on
+	 * their own: `g_static_pieces` holds per piece its ranges as a group holds
+	 * its own, out of `g_piece_ib`, `g_static_piece_group` the group whose
+	 * vertices, matrix and lighting they are drawn with. */
+	struct PlaceTri
+	{
+		int place;
+		int group;
+		int pass;
+		int range;
+		int stand;
+		unsigned int at;
+		unsigned int index[3];
+		float corner[9];
+	};
+
+	const HDStaticPlace* g_places = 0;
+	int g_place_count = 0;
+	std::vector<std::pair<unsigned int, int> > g_place_sectors;
+	std::vector<PlaceTri> g_place_tris;
+	std::vector<HDGroup> g_static_pieces;
+	std::vector<int> g_static_piece_group;
+	std::vector<unsigned int> g_piece_indices;
+	IDirect3DIndexBuffer9* g_piece_ib = 0;
+
 	struct StandCoverBuilt
 	{
 		HDStandCover cover;
@@ -3340,9 +3374,14 @@ namespace
 	{
 		if (g_vb) { g_vb->Release(); g_vb = 0; }
 		if (g_ib) { g_ib->Release(); g_ib = 0; }
+		if (g_piece_ib) { g_piece_ib->Release(); g_piece_ib = 0; }
 
 		release_field();
 		g_groups.clear();
+		g_place_tris.clear();
+		g_static_pieces.clear();
+		g_static_piece_group.clear();
+		g_piece_indices.clear();
 		g_mirrors.clear();
 		g_stand_tris.clear();
 		g_stand_tri_holder.clear();
@@ -3895,6 +3934,99 @@ void HDRenderStandWith(int group, int index, int with)
 	if (index >= 0 && index < (int)g.standWith.size())
 		g.standWith[(size_t)index] = (unsigned char)(with == HD_STAND_BEHIND
 			? HD_STAND_BEHIND : with ? HD_STAND_WITH : HD_STAND_OUT);
+}
+
+// The key of a 1024-unit floor square of a world position.
+static unsigned int PlaceSector(float x, float z)
+{
+	return ((unsigned int)(((int)floorf(x) >> 10) & 0xFFFF) << 16) |
+		(unsigned int)(((int)floorf(z) >> 10) & 0xFFFF);
+}
+
+/* One triangle of group `g` that a static's piece may take: noted for every
+ * place of another room whose box, grown by HD_STATIC_PIECE_REACH, holds its
+ * centroid. `at` is where its first corner stands in the sorted index stream,
+ * `first` where it starts in the .TRG's own. */
+static void NotePlaceTri(const trf::remaster::Trg& trg, int g, int pass, int range,
+	int stand, unsigned int at, unsigned int first)
+{
+	if (!g_place_count || g < 0 || g >= g_grid_count || !g_grids)
+		return;
+
+	PlaceTri tri;
+	float centre[3] = { 0.0f, 0.0f, 0.0f };
+
+	for (int k = 0; k < 3; k++)
+	{
+		const unsigned int index = trg.indices[first + (unsigned int)k];
+
+		if (index >= trg.vertices.size())
+			return;
+
+		const trf::remaster::TrgVertex& v = trg.vertices[index];
+
+		tri.corner[k * 3 + 0] = (float)v.x;
+		tri.corner[k * 3 + 1] = (float)v.y;
+		tri.corner[k * 3 + 2] = (float)v.z;
+
+		for (int axis = 0; axis < 3; axis++)
+			centre[axis] += tri.corner[k * 3 + axis] * (1.0f / 3.0f);
+	}
+
+	const float wx = centre[0] + g_grids[g].originX;
+	const float wz = centre[2] + g_grids[g].originZ;
+	const float reach = HD_STATIC_PIECE_REACH;
+	const unsigned int key = PlaceSector(wx, wz);
+	std::vector<std::pair<unsigned int, int> >::const_iterator it = std::lower_bound(
+		g_place_sectors.begin(), g_place_sectors.end(), std::make_pair(key, -1));
+
+	for (; it != g_place_sectors.end() && it->first == key; ++it)
+	{
+		const HDStaticPlace& place = g_places[it->second];
+
+		if (place.room == g ||
+			wx < place.mins[0] - reach || wx > place.maxs[0] + reach ||
+			centre[1] < place.mins[1] - reach || centre[1] > place.maxs[1] + reach ||
+			wz < place.mins[2] - reach || wz > place.maxs[2] + reach)
+			continue;
+
+		tri.place = it->second;
+		tri.group = g;
+		tri.pass = pass;
+		tri.range = range;
+		tri.stand = stand;
+		tri.at = at;
+		tri.index[0] = tri.index[1] = tri.index[2] = 0;
+		g_place_tris.push_back(tri);
+	}
+}
+
+void HDRenderSetStaticPlaces(const HDStaticPlace* places, int count)
+{
+	g_places = places && count > 0 ? places : 0;
+	g_place_count = g_places ? count : 0;
+	g_place_sectors.clear();
+
+	// Every floor square a place's box, grown by the reach, touches.
+	for (int p = 0; p < g_place_count; p++)
+	{
+		const HDStaticPlace& place = g_places[p];
+
+		if (place.maxs[0] < place.mins[0] || place.maxs[2] < place.mins[2])
+			continue;
+
+		const int x0 = (int)floorf(place.mins[0] - HD_STATIC_PIECE_REACH) >> 10;
+		const int x1 = (int)floorf(place.maxs[0] + HD_STATIC_PIECE_REACH) >> 10;
+		const int z0 = (int)floorf(place.mins[2] - HD_STATIC_PIECE_REACH) >> 10;
+		const int z1 = (int)floorf(place.maxs[2] + HD_STATIC_PIECE_REACH) >> 10;
+
+		for (int x = x0; x <= x1; x++)
+			for (int z = z0; z <= z1; z++)
+				g_place_sectors.push_back(std::make_pair(
+					((unsigned int)(x & 0xFFFF) << 16) | (unsigned int)(z & 0xFFFF), p));
+	}
+
+	std::sort(g_place_sectors.begin(), g_place_sectors.end());
 }
 
 void HDRenderSetCuts(const HDCut* list, int count)
@@ -6002,6 +6134,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				const unsigned int first = tris[i].first;
 
+				/* The art a static's piece may take: the overhang of no
+				 * intrusion piece and the stand ranges, the parts of a group
+				 * HDRenderStaticArt asks. The range is the one being filled,
+				 * pushed at this index. */
+				if (g_place_count && (tris[i].stand > 0 ||
+					(tris[i].overhang && !tris[i].intruding)))
+					NotePlaceTri(trg, (int)g, pass, (int)group.pass[pass].size(),
+						tris[i].stand, (unsigned int)sorted.size(), first);
+
 				for (int corner = 0; corner < 3; corner++)
 				{
 					const unsigned int index = trg.indices[first + (unsigned int)corner];
@@ -6376,13 +6517,20 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	/* The rebase. With 16 bit indices every range's numbers are written
 	 * relative to the lowest vertex it names, and the draw call moves the
 	 * stream to that vertex - see HDRenderRoomPass. Done in place because
-	 * `sorted` is not read again after this. */
+	 * `sorted` is read after this only as the index buffer holds it. */
 	if (!g_index32)
 		for (const HDGroup& group : g_groups)
 			for (int pass = 0; pass < 3; pass++)
 				for (const HDRange& range : group.pass[pass])
 					for (unsigned int at = 0; at < range.count; at++)
 						sorted[range.start + at] -= range.baseVertex;
+
+	// The indices of the triangles a static's piece may take, as the index
+	// buffer holds them: a piece's range draws with its source range's base.
+	for (PlaceTri& tri : g_place_tris)
+		for (int k = 0; k < 3; k++)
+			tri.index[k] = (size_t)tri.at + (size_t)k < sorted.size()
+				? sorted[(size_t)tri.at + (size_t)k] : 0;
 
 	const size_t index_bytes = sorted.size() * (g_index32 ? 4u : 2u);
 
@@ -9378,9 +9526,285 @@ static int GroupVertsIn(const HDGroup& group, const float* verts, int count,
 	return found;
 }
 
+/* Whether a group-local point lies in a place's box moved into that group's
+ * frame and grown by HD_STATIC_PIECE_SLACK on every side. */
+static bool PlaceHolds(int place, float originX, float originZ, const float* p)
+{
+	const HDStaticPlace& box = g_places[place];
+	const float q[3] = { p[0] + originX, p[1], p[2] + originZ };
+
+	if (box.maxs[0] < box.mins[0])
+		return false;
+
+	for (int axis = 0; axis < 3; axis++)
+		if (q[axis] < box.mins[axis] - HD_STATIC_PIECE_SLACK ||
+			q[axis] > box.maxs[axis] + HD_STATIC_PIECE_SLACK)
+			return false;
+
+	return true;
+}
+
+/* The piece of a static held by other groups (hd_cover.h, over
+ * HD_STATIC_PIECE_REACH): the triangles of `group` that make the object at
+ * place `place`, as ranges of their own out of the piece index list. Taken are
+ * the triangles the build noted at the place - the group's overhang of no
+ * intrusion piece and its stand ranges a frame draws whenever the group is
+ * listed (`usable`), less those lying whole on a classic room's faces, which
+ * are that room's floor or wall - whose centroid lies in the static's box
+ * (grown by HD_STATIC_PIECE_SLACK; of several such boxes the nearest centre's,
+ * so no two pieces share a triangle and a static the art of its own room
+ * holds keeps its triangles out of the piece of the static above it), and
+ * those whose centroid lies in no static's box but whose connected run of
+ * triangles (corners welded by position) has at least as many centroids in
+ * this box as in all others - the leaf tips past the box. The piece is kept
+ * only while it is the object alone - no run it reaches into goes on, outside
+ * every static's box, past HD_STATIC_PIECE_OPEN (`pieceOpen` counts those
+ * triangles) - and its own triangles hold the static as the group's art did
+ * (HDStaticOtherHolds): `verts` in the group's frame. */
+static void MakeStaticPiece(int place, int group, const std::vector<unsigned char>& usable,
+	float originX, float originZ, const float* verts, int vertCount, HDStaticArt* out)
+{
+	const HDGroup& art = g_groups[(size_t)group];
+	std::vector<int> mine;
+
+	out->pieceGroup = group;
+
+	for (size_t i = 0; i < g_place_tris.size(); i++)
+	{
+		const PlaceTri& tri = g_place_tris[i];
+
+		if (tri.place != place || tri.group != group)
+			continue;
+
+		if (tri.stand > 0 && ((size_t)tri.stand > usable.size() ||
+			!usable[(size_t)tri.stand - 1] ||
+			art.standRanges[(size_t)tri.stand - 1].kind == 1))
+			continue;
+
+		mine.push_back((int)i);
+	}
+
+	if (mine.empty())
+		return;
+
+	/* Per triangle: 1 in this box, 2 in another static's box, 0 in none; and
+	 * the runs, by a union over the welded corners. */
+	const size_t n = mine.size();
+	std::vector<unsigned char> home(n, 0);
+	std::vector<int> parent(n);
+	std::vector<std::pair<unsigned long long, int> > welded;
+
+	for (size_t i = 0; i < n; i++)
+	{
+		const PlaceTri& tri = g_place_tris[(size_t)mine[i]];
+		float centre[3];
+
+		for (int axis = 0; axis < 3; axis++)
+			centre[axis] = (tri.corner[axis] + tri.corner[3 + axis] +
+				tri.corner[6 + axis]) * (1.0f / 3.0f);
+
+		parent[i] = (int)i;
+
+		/* The box that holds the centroid; of several, the one whose centre
+		 * is nearest, the first place on a tie - so boxes that overlap share
+		 * no triangle. */
+		const unsigned int key = PlaceSector(centre[0] + originX, centre[2] + originZ);
+		std::vector<std::pair<unsigned int, int> >::const_iterator it =
+			std::lower_bound(g_place_sectors.begin(), g_place_sectors.end(),
+			std::make_pair(key, -1));
+		int best = -1;
+		float bestDistance = 0.0f;
+
+		for (; it != g_place_sectors.end() && it->first == key; ++it)
+		{
+			if (!PlaceHolds(it->second, originX, originZ, centre))
+				continue;
+
+			const HDStaticPlace& box = g_places[it->second];
+			float distance = 0.0f;
+
+			for (int axis = 0; axis < 3; axis++)
+			{
+				const float shift = axis == 0 ? originX : axis == 2 ? originZ : 0.0f;
+				const float d = centre[axis] + shift - (box.mins[axis] + box.maxs[axis]) * 0.5f;
+
+				distance += d * d;
+			}
+
+			if (best < 0 || distance < bestDistance ||
+				(distance == bestDistance && it->second < best))
+			{
+				best = it->second;
+				bestDistance = distance;
+			}
+		}
+
+		home[i] = (unsigned char)(best < 0 ? 0 : best == place ? 1 : 2);
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float* c = &tri.corner[k * 3];
+			const unsigned long long x = (unsigned long long)((long long)c[0] + (1 << 20)) & 0x1FFFFF;
+			const unsigned long long y = (unsigned long long)((long long)c[1] + (1 << 20)) & 0x1FFFFF;
+			const unsigned long long z = (unsigned long long)((long long)c[2] + (1 << 20)) & 0x1FFFFF;
+
+			welded.push_back(std::make_pair((x << 42) | (y << 21) | z, (int)i));
+		}
+	}
+
+	const auto root = [&](int i)
+	{
+		while (parent[(size_t)i] != i)
+		{
+			parent[(size_t)i] = parent[(size_t)parent[(size_t)i]];
+			i = parent[(size_t)i];
+		}
+
+		return i;
+	};
+
+	std::sort(welded.begin(), welded.end());
+
+	for (size_t w = 1; w < welded.size(); w++)
+		if (welded[w].first == welded[w - 1].first)
+		{
+			const int a = root(welded[w].second);
+			const int b = root(welded[w - 1].second);
+
+			if (a != b)
+				parent[(size_t)a] = b;
+		}
+
+	std::vector<int> here(n, 0), there(n, 0);
+
+	for (size_t i = 0; i < n; i++)
+	{
+		const int r = root((int)i);
+
+		if (home[i] == 1)
+			here[(size_t)r]++;
+		else if (home[i] == 2)
+			there[(size_t)r]++;
+	}
+
+	std::vector<int> taken;
+	const HDStaticPlace& box = g_places[place];
+
+	for (size_t i = 0; i < n; i++)
+	{
+		const int r = root((int)i);
+
+		if (home[i] == 1 || (home[i] == 0 && here[(size_t)r] > 0 &&
+			here[(size_t)r] >= there[(size_t)r]))
+			taken.push_back(mine[i]);
+
+		/* A run that reaches into the box and, outside every static's box,
+		 * on past HD_STATIC_PIECE_OPEN is a larger structure the object is
+		 * part of - a hut's walls, a roof - and not the object alone. */
+		if (home[i] != 0 || here[(size_t)r] <= 0)
+			continue;
+
+		const PlaceTri& tri = g_place_tris[(size_t)mine[i]];
+		bool beyond = false;
+
+		for (int k = 0; k < 3 && !beyond; k++)
+			for (int axis = 0; axis < 3 && !beyond; axis++)
+			{
+				const float shift = axis == 0 ? originX : axis == 2 ? originZ : 0.0f;
+				const float q = tri.corner[k * 3 + axis] + shift;
+
+				beyond = q < box.mins[axis] - HD_STATIC_PIECE_OPEN ||
+					q > box.maxs[axis] + HD_STATIC_PIECE_OPEN;
+			}
+
+		if (beyond)
+			out->pieceOpen++;
+	}
+
+	// The static's vertices the piece's own cells hold.
+	std::vector<unsigned int> cells;
+
+	for (size_t i = 0; i < taken.size(); i++)
+	{
+		const PlaceTri& tri = g_place_tris[(size_t)taken[i]];
+
+		for (int k = 0; k < 3; k++)
+			cells.push_back(CellKey((int)tri.corner[k * 3], (int)tri.corner[k * 3 + 1],
+				(int)tri.corner[k * 3 + 2]));
+	}
+
+	std::sort(cells.begin(), cells.end());
+	cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+
+	for (int v = 0; v < vertCount; v++)
+	{
+		const float* p = &verts[v * 3];
+
+		if (std::binary_search(cells.begin(), cells.end(), CellKey((int)floorf(p[0]),
+			(int)floorf(p[1]), (int)floorf(p[2]))))
+			out->pieceHeld++;
+	}
+
+	if (taken.empty() || out->pieceOpen > 0 ||
+		!HDStaticOtherHolds(out->pieceHeld, vertCount))
+		return;
+
+	// The ranges, in the order the group's own draw calls hold the triangles.
+	std::sort(taken.begin(), taken.end(), [](int a, int b)
+	{
+		const PlaceTri& x = g_place_tris[(size_t)a];
+		const PlaceTri& y = g_place_tris[(size_t)b];
+
+		if (x.pass != y.pass) return x.pass < y.pass;
+		if (x.range != y.range) return x.range < y.range;
+		return x.at < y.at;
+	});
+
+	HDGroup piece;
+
+	for (size_t i = 0; i < taken.size(); i++)
+	{
+		const PlaceTri& tri = g_place_tris[(size_t)taken[i]];
+
+		if (tri.pass < 0 || tri.pass > 2 || tri.range < 0 ||
+			(size_t)tri.range >= art.pass[tri.pass].size())
+			continue;
+
+		std::vector<HDRange>& list = piece.pass[tri.pass];
+		const bool same = i > 0 && !list.empty() &&
+			g_place_tris[(size_t)taken[i - 1]].pass == tri.pass &&
+			g_place_tris[(size_t)taken[i - 1]].range == tri.range;
+
+		if (!same)
+		{
+			HDRange range = art.pass[tri.pass][(size_t)tri.range];
+
+			range.start = (unsigned int)g_piece_indices.size();
+			range.count = 0;
+			range.intruding = 0;
+			range.stand = 0;
+			list.push_back(range);
+
+			if (range.clear)
+				piece.clearRanges++;
+		}
+
+		for (int k = 0; k < 3; k++)
+			g_piece_indices.push_back(tri.index[k]);
+
+		list.back().count += 3;
+		piece.triangles[tri.pass]++;
+		out->pieceTris++;
+	}
+
+	out->piece = (int)g_static_pieces.size();
+	g_static_pieces.push_back(piece);
+	g_static_piece_group.push_back(group);
+}
+
 void HDRenderStaticArt(int room, const float* mins, const float* maxs,
 	const float* verts, int vertCount, const HDStaticGroup* groups,
-	int groupCount, HDStaticArt* out)
+	int groupCount, int place, HDStaticArt* out)
 {
 	if (!out)
 		return;
@@ -9388,6 +9812,8 @@ void HDRenderStaticArt(int room, const float* mins, const float* maxs,
 	std::memset(out, 0, sizeof(*out));
 	out->answer = HD_STATIC_CLASSIC;
 	out->carrier = -1;
+	out->piece = -1;
+	out->pieceGroup = -1;
 	out->boxCells = 1;
 	out->verts = vertCount > 0 ? vertCount : 0;
 
@@ -9525,6 +9951,172 @@ void HDRenderStaticArt(int room, const float* mins, const float* maxs,
 
 	out->answer = HDStaticAnswer(out->own, out->boxCells, out->sure,
 		out->groupVerts, out->groupCount, out->verts, out->holds);
+
+	/* 4. The piece of a static other groups hold, out of the group that
+	 * holds the most of its vertices - the first holder, the list being kept
+	 * the most first and the lowest group first on a tie. */
+	if (out->answer != HD_STATIC_GROUPS || place < 0 || place >= g_place_count)
+		return;
+
+	int holder = -1;
+
+	for (int k = 0; k < out->groupCount && holder < 0; k++)
+		if (out->holds[k])
+			holder = out->group[k];
+
+	if (holder < 0 || holder >= count)
+		return;
+
+	const HDGroup& art = g_groups[(size_t)holder];
+	std::vector<unsigned char> usable(art.standRanges.size(), 0);
+
+	for (size_t s = 0; s < art.standRanges.size(); s++)
+	{
+		const HDStandRange& range = art.standRanges[s];
+		const bool known = range.holder >= 0 && range.holder < groupCount;
+		const int state = known ? groups[range.holder].state : HD_STAND_ROOM_CLASSIC;
+		const bool carries = known && groups[range.holder].carrier == holder;
+
+		usable[s] = (unsigned char)HDStaticStandWithGroup(state, carries,
+			range.kind, range.faces);
+	}
+
+	shifted(holder);
+	MakeStaticPiece(place, holder, usable, groups[holder].originX,
+		groups[holder].originZ, &moved[0], vertCount, out);
+}
+
+void HDRenderStaticPiecesWhole(const int* rooms, HDStaticArt* arts, int count)
+{
+	if (!rooms || !arts)
+		return;
+
+	for (int i = 0; i < count; i++)
+	{
+		// A static held by groups that asked for a piece and has none.
+		if (arts[i].answer != HD_STATIC_GROUPS || arts[i].pieceGroup < 0 ||
+			arts[i].piece >= 0)
+			continue;
+
+		for (int j = 0; j < count; j++)
+			if (j != i && rooms[j] == rooms[i] &&
+				arts[j].answer == HD_STATIC_GROUPS &&
+				arts[j].pieceGroup == arts[i].pieceGroup)
+				arts[j].pieceOthers++;
+	}
+
+	for (int i = 0; i < count; i++)
+		if (arts[i].pieceOthers > 0)
+			arts[i].piece = -1;
+}
+
+int HDRenderStaticPiecesUpload()
+{
+	/* What the pieces took is in g_piece_indices; the triangles noted for them
+	 * are not needed again. */
+	std::vector<PlaceTri>().swap(g_place_tris);
+
+	if (g_piece_ib)
+	{
+		g_piece_ib->Release();
+		g_piece_ib = 0;
+	}
+
+	if (!g_device || g_piece_indices.empty())
+	{
+		std::vector<unsigned int>().swap(g_piece_indices);
+		return 0;
+	}
+
+	const size_t bytes = g_piece_indices.size() * (g_index32 ? 4u : 2u);
+	void* raw = 0;
+
+	if (FAILED(g_device->CreateIndexBuffer((UINT)bytes, D3DUSAGE_WRITEONLY,
+		g_index32 ? D3DFMT_INDEX32 : D3DFMT_INDEX16, D3DPOOL_DEFAULT, &g_piece_ib, 0)) ||
+		FAILED(g_piece_ib->Lock(0, 0, &raw, 0)))
+	{
+		if (g_piece_ib)
+		{
+			g_piece_ib->Release();
+			g_piece_ib = 0;
+		}
+
+		// Without the buffer no piece can be drawn: the statics keep the
+		// classic fallback (HDRenderStaticPieceReady).
+		std::vector<unsigned int>().swap(g_piece_indices);
+		return 0;
+	}
+
+	if (g_index32)
+		std::memcpy(raw, &g_piece_indices[0], bytes);
+	else
+	{
+		unsigned short* to = (unsigned short*)raw;
+
+		for (size_t i = 0; i < g_piece_indices.size(); i++)
+			to[i] = (unsigned short)g_piece_indices[i];
+	}
+
+	g_piece_ib->Unlock();
+	std::vector<unsigned int>().swap(g_piece_indices);
+	return (int)g_static_pieces.size();
+}
+
+bool HDRenderStaticPieceReady(int piece)
+{
+	return g_piece_ib && piece >= 0 && piece < (int)g_static_pieces.size();
+}
+
+bool HDRenderStaticPiece(int piece, const D3DMATRIX* world,
+	const HDRoomLighting* lighting, unsigned int passes)
+{
+	float wvp[16];
+
+	if (!HDRenderStaticPieceReady(piece) ||
+		!prepare(g_static_piece_group[(size_t)piece], world, lighting, wvp))
+		return false;
+
+	const HDGroup& art = g_static_pieces[(size_t)piece];
+
+	// The piece's own index list for its ranges, the level's back after them.
+	g_device->SetIndices(g_piece_ib);
+
+	for (int pass = 0; pass < 3; pass++)
+	{
+		if (passes & (1u << pass))
+			draw_pass(art, pass, wvp);
+
+		if (pass == 1 && (passes & HD_PASS_CLEAR) && art.clearRanges)
+			draw_pass(art, 1, wvp, true, HD_WINDOW_ALL, false, true);
+	}
+
+	if (passes & HD_PASS_BLEND)
+		draw_pass(art, 1, wvp, true);
+
+	g_device->SetIndices(g_ib);
+	return true;
+}
+
+bool HDRenderStaticPieceShadow(int piece, const D3DMATRIX* world,
+	const HDRoomLighting* lighting)
+{
+	float wvp[16];
+
+	if (!g_receive.open || !HDRenderStaticPieceReady(piece) ||
+		!prepare(g_static_piece_group[(size_t)piece], world, lighting, wvp))
+		return false;
+
+	const HDGroup& art = g_static_pieces[(size_t)piece];
+
+	g_device->SetIndices(g_piece_ib);
+	draw_receive(art, 0, wvp, HD_WINDOW_ALL, false);
+	draw_receive(art, 1, wvp, HD_WINDOW_ALL, false);
+
+	if (art.clearRanges)
+		draw_receive(art, 1, wvp, HD_WINDOW_ALL, true);
+
+	g_device->SetIndices(g_ib);
+	return true;
 }
 
 int HDRenderGroupOverhangTriangles(int group)

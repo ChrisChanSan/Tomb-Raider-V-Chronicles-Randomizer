@@ -593,6 +593,29 @@ namespace
 
 	StandDraw g_stand_draw[HD_MAX_STAND_DRAW];
 	int g_stand_draw_count = 0;
+
+	/* The static pieces this frame draws (hd_cover.h, HDStaticDrawSource),
+	 * each inside its static's room's window with its group's matrix and
+	 * lighting, noted by HDStaticDrawnClassic as DrawStaticObjects asks it.
+	 * The game has ten statics with a piece, eight of them in ANDREA2
+	 * (RoomProbe -statictable), so 32 is past any frame; one past it stays
+	 * classic. */
+	#define HD_MAX_PIECE_DRAW	32
+
+	struct PieceDraw
+	{
+		int piece;
+		int group;
+		int roomOfArt;
+		D3DMATRIX world;
+		HDRoomLighting lighting;
+		HDLightSource lights[HD_MAX_LIGHTS];
+		int x0, y0, x1, y1;
+		bool full;
+	};
+
+	PieceDraw g_piece_draw[HD_MAX_PIECE_DRAW];
+	int g_piece_draw_count = 0;
 	// This frame's stand ranges drawn with their group, in their holder's
 	// window and left out, the in-holder draws past HD_MAX_STAND_DRAW, and
 	// of those drawn with their group the ones pushed back.
@@ -2323,11 +2346,17 @@ struct HDStaticEntry
 {
 	int answer;
 	short holder[HD_STATIC_MAX_GROUPS];	// HD_STATIC_GROUPS: the groups, -1 after
+	int piece;		// HD_STATIC_GROUPS: its piece (HDRenderStaticPiece) or -1
+	int pieceGroup;		// and the group that draws it
 };
 
 static std::vector<HDStaticEntry> g_static_art;
 static std::vector<int> g_static_first;		// per room, index into the above
 static std::vector<HDStaticPair> g_destruct_pairs;
+/* Every static's place, in the order of g_static_art, handed to the build
+ * (HDRenderSetStaticPlaces) and given back once BuildStaticTables has made
+ * the pieces. */
+static std::vector<HDStaticPlace> g_static_places;
 
 static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
 	float* mins, float* maxs)
@@ -2364,6 +2393,44 @@ static void StaticBox(const MESH_INFO* mesh, const ROOM_INFO* r,
 
 	mins[1] = (float)(mesh->y - r->y + s->y_minp);
 	maxs[1] = (float)(mesh->y - r->y + s->y_maxp);
+}
+
+/* The statics' places for the build: every MESH_INFO of every room in the
+ * order BuildStaticTables numbers them, its box moved to world x and z; one
+ * with no static slot gets an empty box. Before HDRenderLevelBegin, like the
+ * marks; group r is room r here, before any flip. */
+static void BuildStaticPlaces()
+{
+	g_static_places.clear();
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+
+		for (int i = 0; i < info->num_meshes; i++)
+		{
+			const MESH_INFO* mesh = &info->mesh[i];
+			HDStaticPlace place;
+
+			place.room = r;
+			place.mins[0] = place.mins[1] = place.mins[2] = 1.0f;
+			place.maxs[0] = place.maxs[1] = place.maxs[2] = 0.0f;
+
+			if (mesh->static_number >= 0 && mesh->static_number < 70)
+			{
+				StaticBox(mesh, info, place.mins, place.maxs);
+				place.mins[0] += (float)info->x;
+				place.maxs[0] += (float)info->x;
+				place.mins[2] += (float)info->z;
+				place.maxs[2] += (float)info->z;
+			}
+
+			g_static_places.push_back(place);
+		}
+	}
+
+	HDRenderSetStaticPlaces(g_static_places.empty() ? 0 : &g_static_places[0],
+		(int)g_static_places.size());
 }
 
 /* Whose art stands inside whose room.
@@ -3289,6 +3356,7 @@ static void ReportRoomCuts()
 static int g_statics_art = 0;
 static int g_statics_by_group = 0;
 static int g_statics_classic = 0;
+static int g_statics_piece = 0;
 
 static void BuildStaticTables()
 {
@@ -3298,6 +3366,7 @@ static void BuildStaticTables()
 	g_statics_art = 0;
 	g_statics_by_group = 0;
 	g_statics_classic = 0;
+	g_statics_piece = 0;
 
 	int total = 0;
 
@@ -3312,6 +3381,8 @@ static void BuildStaticTables()
 	HDStaticEntry none;
 
 	none.answer = HD_STATIC_CLASSIC;
+	none.piece = -1;
+	none.pieceGroup = -1;
 
 	for (int k = 0; k < HD_STATIC_MAX_GROUPS; k++)
 		none.holder[k] = -1;
@@ -3346,11 +3417,15 @@ static void BuildStaticTables()
 	int classic_room_group = 0;
 	const int pieces = HDRenderDestructibleCount();
 	std::vector<float> verts;
+	/* The answers first, every static of the level, then the rule over a
+	 * room's pieces (HDRenderStaticPiecesWhole), then the table and the log
+	 * below. */
+	std::vector<HDStaticArt> arts((size_t)total);
+	std::vector<int> artRoom((size_t)total, -1);
 
 	for (int r = 0; r < groups; r++)
 	{
 		const ROOM_INFO* info = &room[r];
-		const bool hd = g_group_hd[r] != 0;
 
 		for (int i = 0; i < info->num_meshes; i++)
 		{
@@ -3403,14 +3478,44 @@ static void BuildStaticTables()
 				verts[(size_t)v * 3 + 2] = (float)(mesh->z - info->z) + at.z * c - at.x * sn;
 			}
 
-			HDStaticArt art;
+			const int place = g_static_first[(size_t)r] + i;
 
-			HDRenderStaticArt(r, mins, maxs, &verts[0], nv, &asked[0], groups, &art);
+			HDRenderStaticArt(r, mins, maxs, &verts[0], nv, &asked[0], groups,
+				place < (int)g_static_places.size() ? place : -1, &arts[(size_t)place]);
+			artRoom[(size_t)place] = r;
+		}
+	}
 
-			HDStaticEntry& entry = g_static_art[(size_t)(g_static_first[(size_t)r] + i)];
+	if (total > 0)
+		HDRenderStaticPiecesWhole(&artRoom[0], &arts[0], total);
+
+	for (int r = 0; r < groups; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		const bool hd = g_group_hd[r] != 0;
+
+		for (int i = 0; i < info->num_meshes; i++)
+		{
+			const MESH_INFO* mesh = &info->mesh[i];
+
+			if (mesh->static_number < 0 || mesh->static_number >= 70)
+				continue;
+
+			float mins[3], maxs[3];
+
+			StaticBox(mesh, info, mins, maxs);
+
+			const int place = g_static_first[(size_t)r] + i;
+			const HDStaticArt& art = arts[(size_t)place];
+			HDStaticEntry& entry = g_static_art[(size_t)place];
 			int held = 0;
 
 			entry.answer = art.answer;
+			entry.piece = art.piece;
+			entry.pieceGroup = art.pieceGroup;
+
+			if (art.piece >= 0)
+				g_statics_piece++;
 
 			for (int k = 0; k < art.groupCount && art.answer == HD_STATIC_GROUPS; k++)
 				if (art.holds[k])
@@ -3447,20 +3552,38 @@ static void BuildStaticTables()
 			const char* said = art.answer == HD_STATIC_ART ? "art" :
 				art.answer == HD_STATIC_GROUPS ? "groups" : "classic";
 
+			/* The piece: its group and triangles, the static's vertices its
+			 * cells hold, the triangles of the runs it reaches into that go
+			 * on past HD_STATIC_PIECE_OPEN and the statics of its room held
+			 * by that group with no piece; `-` and the three counts for a
+			 * static held by groups with no piece, `-` for every other
+			 * answer. */
+			char piece[80];
+
+			if (art.piece >= 0)
+				snprintf(piece, sizeof(piece), "%d:%d held=%d open=%d others=%d",
+					art.pieceGroup, art.pieceTris, art.pieceHeld, art.pieceOpen,
+					art.pieceOthers);
+			else if (art.answer == HD_STATIC_GROUPS)
+				snprintf(piece, sizeof(piece), "- held=%d open=%d others=%d",
+					art.pieceHeld, art.pieceOpen, art.pieceOthers);
+			else
+				snprintf(piece, sizeof(piece), "-");
+
 			if (gLogEnabled && hd && !HDStaticCellsHold(art.own, art.boxCells))
 				Log("HDLOG static room=%d mesh=%d slot=%d classic "
 					"cells=%d of %d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f "
-					"verts=%d groups=%s answer=%s",
+					"verts=%d groups=%s answer=%s piece=%s",
 					r, i, (int)mesh->static_number, art.own, art.boxCells,
 					mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2],
-					art.verts, at ? named : "-", said);
+					art.verts, at ? named : "-", said, piece);
 			else if (gLogEnabled && !hd)
 				Log("HDLOG static room=%d mesh=%d slot=%d classic_room "
 					"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f verts=%d carrier=%d "
-					"sure=%d groups=%s answer=%s",
+					"sure=%d groups=%s answer=%s piece=%s",
 					r, i, (int)mesh->static_number, mins[0], maxs[0], mins[1],
 					maxs[1], mins[2], maxs[2], art.verts, art.carrier, art.sure,
-					at ? named : "-", said);
+					at ? named : "-", said, piece);
 
 			/* 2. And if the engine can destroy it, which piece of the art is
 			 * it? Slots 50 to 57 are the shatterable ones - the same test
@@ -3510,14 +3633,90 @@ static void BuildStaticTables()
 		"paired_other=%d",
 		g_stem, orphans, total, pieces, shatterable, paired, classic_room_art,
 		classic_room_group, paired_other);
+
+	// The pieces' index buffer; the places were borrowed until now.
+	HDRenderStaticPiecesUpload();
+	HDRenderSetStaticPlaces(0, 0);
+	std::vector<HDStaticPlace>().swap(g_static_places);
 }
 
 /* Indexed through g_room_group: a flipmap swaps two ROOM_INFO records, their
  * MESH_INFO lists with them, and the group number is the room whose list now
- * stands at this index. A group the frame lists is one a listed room is drawn
- * by now (GroupOfRoom). At most HD_STATIC_MAX_GROUPS groups per static and
- * one walk of the list for each static that names any. */
+ * stands at this index - the entry, its holders and its piece follow the
+ * flip. A group the frame lists is one a listed room is drawn by now
+ * (GroupOfRoom). At most HD_STATIC_MAX_GROUPS groups per static and one walk
+ * of the list for each static that names any; a frame that lists none of
+ * them draws the static's piece where it has one (NoteStaticPiece) and the
+ * classic static otherwise. */
 static int GroupOfRoom(int roomIndex);
+static int RoomOfGroup(int group);
+
+/* A static's piece for this frame (HDStaticDrawSource): drawn inside the
+ * window of the static's room - which HDFrameRoom (a room drawn HD) or
+ * StandHolderRoom (a room drawn classic that holds stand art) took before
+ * DrawStaticObjects asks - with that room's matrix moved by the difference of
+ * the origins of its group and the piece's, as DecideStand moves a stand
+ * range, and the piece group's own lighting (HDFrameDraw). False, and the
+ * classic static stays, where the room has no such entry, the piece's group
+ * is no room's now or the frame has no entry left. */
+static bool NoteStaticPiece(int roomIndex, int group, const HDStaticEntry& entry)
+{
+	if (g_piece_draw_count >= HD_MAX_PIECE_DRAW || !HDRenderStaticPieceReady(entry.piece) ||
+		entry.pieceGroup < 0 || (size_t)entry.pieceGroup >= g_stand_rooms.size() ||
+		(size_t)group >= g_stand_rooms.size())
+		return false;
+
+	PieceDraw& draw = g_piece_draw[g_piece_draw_count];
+	const D3DMATRIX* world = 0;
+
+	for (int i = 0; i < g_frame_count && !world; i++)
+		if (g_frame[i].room == roomIndex)
+		{
+			world = &g_frame[i].world;
+			draw.x0 = g_frame[i].x0;
+			draw.y0 = g_frame[i].y0;
+			draw.x1 = g_frame[i].x1;
+			draw.y1 = g_frame[i].y1;
+			draw.full = g_frame[i].full;
+		}
+
+	for (int i = 0; i < g_stand_frame_count && !world; i++)
+		if (g_stand_frame[i].room == roomIndex)
+		{
+			world = &g_stand_frame[i].world;
+			draw.x0 = g_stand_frame[i].x0;
+			draw.y0 = g_stand_frame[i].y0;
+			draw.x1 = g_stand_frame[i].x1;
+			draw.y1 = g_stand_frame[i].y1;
+			draw.full = g_stand_frame[i].full;
+		}
+
+	const int roomOfArt = world ? RoomOfGroup(entry.pieceGroup) : -1;
+
+	if (roomOfArt < 0)
+		return false;
+
+	const D3DMATRIX& m = *world;
+	float off[3];
+
+	for (int k = 0; k < 3; k++)
+		off[k] = g_stand_rooms[(size_t)entry.pieceGroup].origin[k] -
+			g_stand_rooms[(size_t)group].origin[k];
+
+	draw.piece = entry.piece;
+	draw.group = entry.pieceGroup;
+	draw.roomOfArt = roomOfArt;
+	draw.world = m;
+	draw.world._41 = off[0] * m._11 + off[1] * m._21 + off[2] * m._31 + m._41;
+	draw.world._42 = off[0] * m._12 + off[1] * m._22 + off[2] * m._32 + m._42;
+	draw.world._43 = off[0] * m._13 + off[1] * m._23 + off[2] * m._33 + m._43;
+	draw.world._44 = off[0] * m._14 + off[1] * m._24 + off[2] * m._34 + m._44;
+	g_piece_draw_count++;
+
+	// A frame that lists no HD room draws its HD part for the piece too.
+	HDFrameCaptureProjection();
+	return true;
+}
 
 bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
 	int listedCount)
@@ -3548,7 +3747,11 @@ bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
 				holderListed = true;
 	}
 
-	return HDStaticDrawClassic(entry.answer, holderListed);
+	const bool pieceDrawn = entry.answer == HD_STATIC_GROUPS && !holderListed &&
+		entry.piece >= 0 && NoteStaticPiece(roomIndex, group, entry);
+
+	return HDStaticDrawSource(entry.answer, holderListed, pieceDrawn) ==
+		HD_STATIC_FROM_CLASSIC;
 }
 
 /* Once per frame, before the rooms are drawn: a piece whose static the engine
@@ -4065,11 +4268,13 @@ static void HDLevelBuildHD()
 	BuildPairFaces();		// and its faces, the same contract
 	BuildRoomCuts();		// the same contract again
 	BuildStandFaces();		// and once more
+	BuildStaticPlaces();		// kept until BuildStaticTables
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms,
 		kPagesManaged, DecodeThreads(), &stats, &why))
 	{
 		Log("HDLOG level=%s build failed reason=%s", g_stem, why);
+		HDRenderSetStaticPlaces(0, 0);
 
 		/* The page cache's own notes before it is emptied - on the way out
 		 * they are the only place that says which page the card gave up on.
@@ -4593,11 +4798,13 @@ static void HDLevelBuildHD()
 	/* `suppressed` and `kept` count the statics of the rooms drawn HD and of
 	 * the rooms drawn classic; `art`, `by_group` and `classic` the answers of
 	 * BuildStaticTables over all of them - never drawn, drawn only while no
-	 * group holding them is on the frame's list, drawn in every frame. */
+	 * group holding them is on the frame's list, drawn in every frame - and
+	 * `pieces` those of `by_group` with a piece, drawn as the art in its
+	 * place while no holder is listed. */
 	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic) "
-		"art=%d by_group=%d classic=%d",
+		"art=%d by_group=%d classic=%d pieces=%d",
 		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms,
-		g_statics_art, g_statics_by_group, g_statics_classic);
+		g_statics_art, g_statics_by_group, g_statics_classic, g_statics_piece);
 
 	if (!g_level_active)
 	{
@@ -5009,6 +5216,7 @@ void HDFrameReset()
 	g_frame_count = 0;
 	g_frame_dropped = 0;
 	g_stand_frame_count = 0;
+	g_piece_draw_count = 0;
 	g_projection_taken = false;
 	// Whatever glow phase was still owing belongs to a frame that is over.
 	// A new frame's HDFrameDraw sets it again.
@@ -5526,6 +5734,7 @@ static bool ShadowMirrorBlocks(const HDShadowFrame* shadow, const HDMirror& m, b
  * takes the ordinary receive. A frame without a mirror's group in the pass
  * binds nothing new. */
 static void ReceiveStandInHolders();
+static void DrawStaticPieces(unsigned int passes, bool receive);
 
 static void ShadowReceivePass()
 {
@@ -5612,8 +5821,9 @@ static void ShadowReceivePass()
 			g_shadow_stats.othersRooms++;
 	}
 
-	// And the art drawn in the window of a room drawn as art.
+	// And the art drawn in the window of a room drawn as art, and the pieces.
 	ReceiveStandInHolders();
+	DrawStaticPieces(0, true);
 	g_shadow_stats.calls += HDRenderShadowReceiveCalls();
 	HDRenderShadowReceiveEnd();
 	HDRenderScissorOff();
@@ -5897,6 +6107,37 @@ static void DrawStandInHolders(unsigned int passes)
 	HDRenderScissorOff();
 }
 
+/* The static pieces this frame noted (NoteStaticPiece), the passes the mask
+ * names, each inside its static's room's window; with `receive` the same
+ * triangles in the projected shadow's receive instead, so that her shadow
+ * falls on a palm's trunk drawn as its piece as it does on the art that holds
+ * it. Their group's lighting is filled once, before the solid pass. */
+static void DrawStaticPieces(unsigned int passes, bool receive)
+{
+	for (int i = 0; i < g_piece_draw_count; i++)
+	{
+		PieceDraw& draw = g_piece_draw[i];
+
+		if (draw.x1 <= draw.x0 || draw.y1 <= draw.y0)
+			continue;	// an empty window draws nothing of the room
+
+		if (!receive && (passes & HD_PASS_SOLID))
+			FillRoomLighting(draw.roomOfArt, draw.group, draw.lighting, draw.lights);
+
+		if (draw.full || !HDRenderScissorAvailable())
+			HDRenderScissorOff();
+		else
+			HDRenderScissor(draw.x0, draw.y0, draw.x1, draw.y1);
+
+		if (receive)
+			HDRenderStaticPieceShadow(draw.piece, &draw.world, &draw.lighting);
+		else
+			HDRenderStaticPiece(draw.piece, &draw.world, &draw.lighting, passes);
+	}
+
+	HDRenderScissorOff();
+}
+
 /* The same draws once more in the projected shadow's receive, with the
  * matrix, lighting, depth push and window they were drawn with, so that her
  * shadow lands on a room drawn as art whose carrier is off the list as it
@@ -6046,8 +6287,10 @@ void HDFrameDraw()
 		DrawRoomWindowed(g_frame[i], HD_PASS_SOLID);
 	}
 
-	// The art that stands in a room drawn as art whose carrier is not listed.
+	// The art that stands in a room drawn as art whose carrier is not listed,
+	// and the statics' pieces whose holders are not.
 	DrawStandInHolders(HD_PASS_SOLID);
+	DrawStaticPieces(HD_PASS_SOLID, false);
 
 	/* The clear floors, once every room's solid art is in, so that whatever
 	 * lies behind a floor - the copy of the room beneath RICH2's marble, and
@@ -6062,6 +6305,7 @@ void HDFrameDraw()
 	}
 
 	DrawStandInHolders(HD_PASS_CLEAR);
+	DrawStaticPieces(HD_PASS_CLEAR, false);
 
 	/* The rooms are done. The objects switch the scissor off per item, so
 	 * this line is for the frame that has none: without it the last room's
@@ -6168,6 +6412,7 @@ void HDFrameDrawGlow()
 	}
 
 	DrawStandInHolders(HD_PASS_BLEND);
+	DrawStaticPieces(HD_PASS_BLEND, false);
 
 	for (int i = 0; i < g_frame_count; i++)
 	{
@@ -6175,6 +6420,7 @@ void HDFrameDrawGlow()
 	}
 
 	DrawStandInHolders(HD_PASS_ADDITIVE);
+	DrawStaticPieces(HD_PASS_ADDITIVE, false);
 
 	// The rooms are done - see the same line in HDFrameDraw.
 	HDRenderScissorOff();

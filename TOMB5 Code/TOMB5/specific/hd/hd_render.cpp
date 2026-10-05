@@ -1377,6 +1377,14 @@ namespace
 		 * list is asked of this one, because the overhang is drawn without a
 		 * window whatever the answer. */
 		std::vector<unsigned int> cellsIn;
+		/* And split by how a frame draws the triangles, for the static
+		 * meshes (HDRenderStaticArt): `cellsFree` holds the overhang - the
+		 * triangles outside the group's own room box - of no intrusion piece
+		 * and no stand range, drawn over the whole screen in every frame that
+		 * lists the group, and `standCells` one list per stand range, in the
+		 * order of `standRanges`. */
+		std::vector<unsigned int> cellsFree;
+		std::vector<std::vector<unsigned int> > standCells;
 		unsigned int triangles[3] = { 0, 0, 0 };
 		unsigned int overhang[3] = { 0, 0, 0 };		// of those, outside the box
 		/* And of those, the ones standing inside another
@@ -6032,6 +6040,18 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						if (!tris[i].overhang)
 							group.cellsIn.push_back(CellKey(v.x, v.y, v.z));
 
+						if (tris[i].stand > 0)
+						{
+							const size_t at = (size_t)tris[i].stand - 1;
+
+							if (group.standCells.size() <= at)
+								group.standCells.resize(at + 1);
+
+							group.standCells[at].push_back(CellKey(v.x, v.y, v.z));
+						}
+						else if (!tris[i].intruding && tris[i].overhang)
+							group.cellsFree.push_back(CellKey(v.x, v.y, v.z));
+
 						if (tris[i].destructId >= 0)
 						{
 							HDDestructible& piece = g_destruct[(size_t)tris[i].destructId];
@@ -6122,6 +6142,20 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		group.cellsIn.erase(std::unique(group.cellsIn.begin(),
 			group.cellsIn.end()), group.cellsIn.end());
 		group.cellsIn.shrink_to_fit();
+
+		std::sort(group.cellsFree.begin(), group.cellsFree.end());
+		group.cellsFree.erase(std::unique(group.cellsFree.begin(),
+			group.cellsFree.end()), group.cellsFree.end());
+		group.cellsFree.shrink_to_fit();
+
+		for (size_t s = 0; s < group.standCells.size(); s++)
+		{
+			std::vector<unsigned int>& list = group.standCells[s];
+
+			std::sort(list.begin(), list.end());
+			list.erase(std::unique(list.begin(), list.end()), list.end());
+			list.shrink_to_fit();
+		}
 
 		/* The horizontal planes, one row per height, sorted by it. The
 		 * per-triangle rows are merged here rather than while they are found,
@@ -9309,6 +9343,188 @@ int HDRenderGroupCellsIn(int group, const float* mins, const float* maxs,
 	}
 
 	return found;
+}
+
+/* How many of a static's own vertices stand in a 256-unit cell that holds a
+ * vertex of the chosen parts of a group's art: `free` its overhang of no
+ * intrusion piece and no stand range (`cellsFree`), and every stand range
+ * whose flag in `take` is set. The vertices come in the group's own frame. */
+static int GroupVertsIn(const HDGroup& group, const float* verts, int count,
+	bool free, const std::vector<unsigned char>& take)
+{
+	int found = 0;
+
+	for (int v = 0; v < count; v++)
+	{
+		const float* p = &verts[v * 3];
+
+		if (p[0] < -32768.0f || p[0] > 32767.0f || p[1] < -32768.0f ||
+			p[1] > 32767.0f || p[2] < -32768.0f || p[2] > 32767.0f)
+			continue;
+
+		const unsigned int key = CellKey((int)floorf(p[0]), (int)floorf(p[1]),
+			(int)floorf(p[2]));
+		bool in = free && std::binary_search(group.cellsFree.begin(),
+			group.cellsFree.end(), key);
+
+		for (size_t s = 0; !in && s < take.size() && s < group.standCells.size(); s++)
+			in = take[s] && std::binary_search(group.standCells[s].begin(),
+				group.standCells[s].end(), key);
+
+		if (in)
+			found++;
+	}
+
+	return found;
+}
+
+void HDRenderStaticArt(int room, const float* mins, const float* maxs,
+	const float* verts, int vertCount, const HDStaticGroup* groups,
+	int groupCount, HDStaticArt* out)
+{
+	if (!out)
+		return;
+
+	std::memset(out, 0, sizeof(*out));
+	out->answer = HD_STATIC_CLASSIC;
+	out->carrier = -1;
+	out->boxCells = 1;
+	out->verts = vertCount > 0 ? vertCount : 0;
+
+	for (int k = 0; k < HD_STATIC_MAX_GROUPS; k++)
+		out->group[k] = -1;
+
+	if (!mins || !maxs || !groups || room < 0 || room >= groupCount)
+		return;
+
+	for (int axis = 0; axis < 3; axis++)
+	{
+		const int lo = (int)mins[axis] >> 8;
+		const int hi = (int)maxs[axis] >> 8;
+
+		out->boxCells *= (hi - lo) + 1;
+	}
+
+	const HDStaticGroup& self = groups[room];
+	const int count = (int)g_groups.size() < groupCount ? (int)g_groups.size() : groupCount;
+
+	// 1. The room's own group, drawn in every frame the room is listed.
+	if (self.hd && room < count)
+		out->own = HDRenderGroupCellsIn(room, mins, maxs, 0);
+
+	if (!verts || vertCount <= 0)
+	{
+		out->answer = HDStaticAnswer(out->own, out->boxCells, 0, 0, 0, 0,
+			out->holds);
+		return;
+	}
+
+	// The static's vertices in another group's frame: x and z from that
+	// room's origin.
+	std::vector<float> moved((size_t)vertCount * 3);
+
+	const auto shifted = [&](int g)
+	{
+		const float dx = self.originX - groups[g].originX;
+		const float dz = self.originZ - groups[g].originZ;
+
+		for (int v = 0; v < vertCount; v++)
+		{
+			moved[(size_t)v * 3 + 0] = verts[v * 3 + 0] + dx;
+			moved[(size_t)v * 3 + 1] = verts[v * 3 + 1];
+			moved[(size_t)v * 3 + 2] = verts[v * 3 + 2] + dz;
+		}
+	};
+
+	// 2. The carrier's stand ranges in this room that every frame listing
+	// the room draws, with the carrier's group or in the room's window.
+	const int carrier = self.carrier;
+
+	if (!self.hd && self.state != HD_STAND_ROOM_CLASSIC && carrier >= 0 &&
+		carrier < count && groups[carrier].hd)
+	{
+		const HDGroup& art = g_groups[(size_t)carrier];
+		std::vector<unsigned char> take(art.standRanges.size(), 0);
+
+		for (size_t s = 0; s < art.standRanges.size(); s++)
+			take[s] = (unsigned char)(art.standRanges[s].holder == room &&
+				HDStaticStandSure(self.state, true, art.standRanges[s].kind,
+				art.standRanges[s].faces));
+
+		shifted(carrier);
+		out->carrier = carrier;
+		out->sure = GroupVertsIn(art, &moved[0], vertCount, false, take);
+	}
+
+	/* 3. Every other group drawn HD: the art it draws in every frame that
+	 * lists it, at the static's vertices. Kept the most vertices first, the
+	 * lowest group first on a tie. Not for a flat static (HDStaticFlat). */
+	out->flat = HDStaticFlat(mins, maxs) ? 1 : 0;
+
+	for (int g = 0; g < count && !out->flat; g++)
+	{
+		if (g == room || !groups[g].hd)
+			continue;
+
+		const HDGroup& art = g_groups[(size_t)g];
+
+		if (!art.hasBounds)
+			continue;
+
+		const float dx = self.originX - groups[g].originX;
+		const float dz = self.originZ - groups[g].originZ;
+
+		if (art.maxs[0] + 256.0f < mins[0] + dx || art.mins[0] > maxs[0] + dx + 256.0f ||
+			art.maxs[1] + 256.0f < mins[1] || art.mins[1] > maxs[1] + 256.0f ||
+			art.maxs[2] + 256.0f < mins[2] + dz || art.mins[2] > maxs[2] + dz + 256.0f)
+			continue;
+
+		std::vector<unsigned char> take(art.standRanges.size(), 0);
+
+		for (size_t s = 0; s < art.standRanges.size(); s++)
+		{
+			const HDStandRange& range = art.standRanges[s];
+			const bool known = range.holder >= 0 && range.holder < groupCount;
+			const int state = known ? groups[range.holder].state : HD_STAND_ROOM_CLASSIC;
+			const bool carries = known && groups[range.holder].carrier == g;
+
+			take[s] = (unsigned char)HDStaticStandWithGroup(state, carries,
+				range.kind, range.faces);
+		}
+
+		shifted(g);
+
+		const int found = GroupVertsIn(art, &moved[0], vertCount, true, take);
+
+		if (found <= 0)
+			continue;
+
+		int at = out->groupCount;
+
+		while (at > 0 && out->groupVerts[at - 1] < found)
+			at--;
+
+		if (at >= HD_STATIC_MAX_GROUPS)
+			continue;
+
+		const int last = out->groupCount < HD_STATIC_MAX_GROUPS ?
+			out->groupCount : HD_STATIC_MAX_GROUPS - 1;
+
+		for (int k = last; k > at; k--)
+		{
+			out->group[k] = out->group[k - 1];
+			out->groupVerts[k] = out->groupVerts[k - 1];
+		}
+
+		out->group[at] = g;
+		out->groupVerts[at] = found;
+
+		if (out->groupCount < HD_STATIC_MAX_GROUPS)
+			out->groupCount++;
+	}
+
+	out->answer = HDStaticAnswer(out->own, out->boxCells, out->sure,
+		out->groupVerts, out->groupCount, out->verts, out->holds);
 }
 
 int HDRenderGroupOverhangTriangles(int group)

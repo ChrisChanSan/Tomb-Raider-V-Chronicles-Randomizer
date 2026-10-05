@@ -915,3 +915,180 @@ inline HDStandAnswer HDStandDrawFaces(bool holderListed, bool artListed, int sta
 		(!drawnAs || (faces & HD_STAND_FACES_KEPT) != 0);
 	return out;
 }
+
+/* Which art draws the place of a static mesh (hd_render.cpp,
+ * HDRenderStaticArt; hd_level.cpp, BuildStaticTables).
+ *
+ * A static mesh is drawn the classic way only where the art a frame draws at
+ * its place, in a frame that lists its room, has nothing for it. Three
+ * sources are asked, whatever the room is drawn as:
+ *
+ *   the room's own group, when it is drawn HD - drawn in every frame that
+ *     lists the room;
+ *   the carrier's stand ranges in a room drawn as its art, wholly or in
+ *     part, that every frame listing the room draws, with the carrier's
+ *     group or in the room's window (HDStaticStandSure) - RICH2's stairwell
+ *     rooms 15, 16, 18 and 19 have their flights, railings and wall squares
+ *     there;
+ *   every other group drawn HD, with the art it draws outside its own room
+ *     in every frame that lists it: its overhang of no intrusion piece and
+ *     no stand range, and its stand ranges a frame draws whenever their
+ *     group is listed (HDStaticStandWithGroup). Such a group is drawn only
+ *     in a frame that lists it, so the classic static is left out only
+ *     there - ANDREA2's palm crowns stand in the rooms above the palms, in
+ *     the art of the trunk's room, and the two trunks of its room 124 in the
+ *     art of both rooms beside it, 117 and 127. Its overhang alone, because
+ *     inside its own room a group models that room, and a static of another
+ *     room standing there is not its object; and not for a flat static
+ *     (HDStaticFlat).
+ *
+ * How much is enough is asked two ways. The room's own group: the 256-unit
+ * cells of the static's own box that hold a vertex of its art, a twentieth
+ * of the box's cells (HD_STATIC_SHARE). Any other source: the static's own
+ * mesh vertices that stand in a cell holding a vertex of that art, nine
+ * twentieths of them (HD_STATIC_OTHER_NUM / _DEN). The box count cannot tell
+ * another place's floor or wall from the object: in a small box a floor
+ * alone reaches a twentieth - the carrier of ANDREA2's room 124 holds 4 of
+ * the 36 cells of a palm trunk's box, the floor under it. Its own vertices
+ * can: the carrier holds 3 of the trunk's 12, the two groups that model the
+ * trunk 9 and 6, and a crown's 50 have 27 to 29 in the art of the groups
+ * that model it. Measured over the fifteen files (RoomProbe -statictable),
+ * the 152 other sources of the statics their room's own art does not hold
+ * fall into 17 below 0.20, 36 from 0.20 to 0.444 (8 of 18), none above that
+ * and below 0.50, and 99 from 0.50 up: nine twentieths sit in that gap.
+ *
+ * The answer: the room's own group or the carrier reaching it gives the
+ * static to the art for good (HD_STATIC_ART); otherwise every other group
+ * reaching it holds it, and the classic static is drawn only in a frame that
+ * lists none of them (HD_STATIC_GROUPS); otherwise it stays classic
+ * (HD_STATIC_CLASSIC). The intrusion pieces are not asked: a frame draws them
+ * inside a window or not at all, and a static they hold could come out
+ * cut. */
+#define HD_STATIC_SHARE		20
+#define HD_STATIC_OTHER_NUM	9
+#define HD_STATIC_OTHER_DEN	20
+#define HD_STATIC_CLASSIC	(-1)
+#define HD_STATIC_ART		(-2)
+#define HD_STATIC_GROUPS	(-3)
+// The most other groups one static keeps, the most vertices first: twice the
+// most that hold one static of the game (four, ANDREA2's room 154 crown).
+#define HD_STATIC_MAX_GROUPS	8
+
+inline bool HDStaticCellsHold(int cells, int boxCells)
+{
+	return (long long)cells * HD_STATIC_SHARE >= (long long)boxCells;
+}
+
+inline bool HDStaticOtherHolds(int found, int verts)
+{
+	return found > 0 && (long long)found * HD_STATIC_OTHER_DEN >=
+		(long long)verts * HD_STATIC_OTHER_NUM;
+}
+
+/* A stand range drawn in every frame that lists its holder, the carrier's
+ * group listed or not. */
+inline bool HDStaticStandSure(int state, bool carrier, int kind, int faces)
+{
+	for (int artListed = 0; artListed < 2; artListed++)
+	{
+		const HDStandAnswer a = HDStandDrawFaces(true, artListed != 0, state,
+			carrier, kind, faces);
+
+		if (!a.withArt && !a.inHolder)
+			return false;
+	}
+
+	return true;
+}
+
+/* A stand range drawn in every frame that lists its group, its holder listed
+ * or not. */
+inline bool HDStaticStandWithGroup(int state, bool carrier, int kind, int faces)
+{
+	for (int holderListed = 0; holderListed < 2; holderListed++)
+	{
+		const HDStandAnswer a = HDStandDrawFaces(holderListed != 0, true, state,
+			carrier, kind, faces);
+
+		if (!a.withArt && !a.inHolder)
+			return false;
+	}
+
+	return true;
+}
+
+/* The answer: `own` the cells of the static's box that hold the room's own
+ * group's art (0 for a room not drawn HD) of `boxCells`; `sure` the
+ * static's vertices the carrier's art drawn in every frame that lists the
+ * room holds, and `found[0..count)` those each other group's art holds, of
+ * `verts`. `holds[k]` comes back 1 for every other group that holds the
+ * static when the answer is HD_STATIC_GROUPS, 0 otherwise. */
+inline int HDStaticAnswer(int own, int boxCells, int sure, const int* found,
+	int count, int verts, unsigned char* holds)
+{
+	for (int k = 0; k < count; k++)
+		holds[k] = 0;
+
+	if (HDStaticCellsHold(own, boxCells) || HDStaticOtherHolds(sure, verts))
+		return HD_STATIC_ART;
+
+	int held = 0;
+
+	for (int k = 0; k < count; k++)
+		if (HDStaticOtherHolds(found[k], verts))
+		{
+			holds[k] = 1;
+			held++;
+		}
+
+	return held ? HD_STATIC_GROUPS : HD_STATIC_CLASSIC;
+}
+
+/* A flat static: its box has no extent along one axis - a pane, a plank, a
+ * square laid on a wall. Its vertices fall into the cells of whatever art it
+ * lies on or stands in front of, so another group's art is not asked for it
+ * (HDRenderStaticArt); the room's own group and the carrier, which draw the
+ * very surface it lies on, are. Measured: RICH2's room 6 has two panes above
+ * the consoles of room 11, whose art holds all twelve of their corners at
+ * 256 units and shows no pane; RICH3's room 26 a triangle that stands clear
+ * of the art that holds two of its three corners. */
+inline bool HDStaticFlat(const float* mins, const float* maxs)
+{
+	for (int axis = 0; axis < 3; axis++)
+		if (maxs[axis] - mins[axis] < 1.0f)
+			return true;
+
+	return false;
+}
+
+/* Whether a destructible piece of the art is the piece of a shatterable
+ * static (slot 50 to 57): their boxes overlap, the static's box - local to
+ * its room - moved into the piece's group frame by the difference of the two
+ * rooms' origins (`dx`, `dz`: the static's room's origin less the piece's).
+ * Any group's piece: a piece is art standing at the static's place, and once
+ * the static is shot neither may be drawn. */
+inline bool HDStaticPiecePaired(const float* mins, const float* maxs, float dx,
+	float dz, const float* pieceMins, const float* pieceMaxs)
+{
+	const float lo[3] = { mins[0] + dx, mins[1], mins[2] + dz };
+	const float hi[3] = { maxs[0] + dx, maxs[1], maxs[2] + dz };
+
+	for (int axis = 0; axis < 3; axis++)
+		if (hi[axis] < pieceMins[axis] || lo[axis] > pieceMaxs[axis])
+			return false;
+
+	return true;
+}
+
+/* Whether a frame draws a static the classic way, from its answer and from
+ * whether the frame lists a group that holds it. */
+inline bool HDStaticDrawClassic(int answer, bool holderListed)
+{
+	if (answer == HD_STATIC_ART)
+		return false;
+
+	if (answer == HD_STATIC_GROUPS)
+		return !holderListed;
+
+	return true;
+}

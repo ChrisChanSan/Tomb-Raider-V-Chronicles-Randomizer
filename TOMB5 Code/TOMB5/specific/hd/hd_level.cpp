@@ -2275,26 +2275,33 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out)
 
 /* The two static mesh tables of an HD level.
  *
- * An HD room's whole MESH_INFO list is suppressed, because the remaster bakes
- * the static meshes into the room's art. That rule has two holes:
+ * The remaster bakes the static meshes into the art, so a static whose place
+ * the art draws must not be drawn a second time. The art that holds a static
+ * is not always its room's own: ANDREA2's palm crowns stand in the rooms
+ * above the palms and are modelled in the trunk's room, and a room drawn as
+ * another group's art (hd_cover.h, HDCoverRoomState) has its statics in that
+ * group. And the art does not hold every static: 103 of the game's 2,845
+ * stay classic, 24 of them in JOBY3 (RoomProbe -statictable). A static the
+ * game destroys at run time is gone from the classic list but goes on standing in
+ * the baked art, so it could not be destroyed.
  *
- *   - 21 statics of ANDREA1 (rooms 121 and 221) sit in no .TRG group at all.
- *     The room seam takes them away and puts nothing in their place, so they
- *     would be gone from the level.
- *   - a static the game destroys at run time is gone from the classic list
- *     but goes on standing in the baked art, so it could not be destroyed.
+ * All of it is answered here, once per level, against the .TRG's own
+ * geometry:
  *
- * Both are answered here, once per level, against the .TRG's own geometry:
- *
- *   g_static_classic  one byte per static of the level: 1 = the .TRG draws
- *                     nothing where it stands, so DrawStaticObjects draws it
- *                     the classic way even inside an HD room.
+ *   g_static_art      one answer per static of the level (hd_cover.h,
+ *                     HDStaticAnswer): HD_STATIC_ART - the art draws its
+ *                     place in every frame that lists its room, so
+ *                     DrawStaticObjects never draws it; HD_STATIC_GROUPS -
+ *                     the art of the groups it names draws it, so it is
+ *                     drawn the classic way only in a frame that lists none
+ *                     of them; HD_STATIC_CLASSIC - drawn the classic way in
+ *                     every frame.
  *   g_destruct_pairs  the destructible pieces of the .TRG - a part whose
  *                     material carries bit 15 - paired with the classic
- *                     MESH_INFO standing inside their box. The engine clears
- *                     that mesh's Flags bit 0 when Lara shoots a static of
- *                     slot 50 to 57 (control.cpp), and the piece goes
- *                     with it.
+ *                     MESH_INFO of slot 50 to 57 standing inside their box,
+ *                     whichever group the piece is in. The engine clears
+ *                     that mesh's Flags bit 0 when Lara shoots it
+ *                     (control.cpp), and the piece goes with it.
  *
  * The box of a static is its own visibility box (STATIC_INFO x_minp..z_maxp)
  * turned by the mesh's y_rot - the four corners of the XZ rectangle through
@@ -2308,7 +2315,13 @@ struct HDStaticPair
 	int piece;
 };
 
-static std::vector<unsigned char> g_static_classic;
+struct HDStaticEntry
+{
+	int answer;
+	short holder[HD_STATIC_MAX_GROUPS];	// HD_STATIC_GROUPS: the groups, -1 after
+};
+
+static std::vector<HDStaticEntry> g_static_art;
 static std::vector<int> g_static_first;		// per room, index into the above
 static std::vector<HDStaticPair> g_destruct_pairs;
 
@@ -3267,11 +3280,20 @@ static void ReportRoomCuts()
 	g_cuts.clear();
 }
 
+/* The counts of the two summary lines, kept from BuildStaticTables for the
+ * second of them, which the level build writes after the water. */
+static int g_statics_art = 0;
+static int g_statics_by_group = 0;
+static int g_statics_classic = 0;
+
 static void BuildStaticTables()
 {
-	g_static_classic.clear();
+	g_static_art.clear();
 	g_static_first.assign((size_t)number_rooms + 1, 0);
 	g_destruct_pairs.clear();
+	g_statics_art = 0;
+	g_statics_by_group = 0;
+	g_statics_classic = 0;
 
 	int total = 0;
 
@@ -3282,19 +3304,49 @@ static void BuildStaticTables()
 	}
 
 	g_static_first[(size_t)number_rooms] = total;
-	g_static_classic.assign((size_t)total, 0);
+
+	HDStaticEntry none;
+
+	none.answer = HD_STATIC_CLASSIC;
+
+	for (int k = 0; k < HD_STATIC_MAX_GROUPS; k++)
+		none.holder[k] = -1;
+
+	g_static_art.assign((size_t)total, none);
+
+	/* What HDRenderStaticArt is told about every group: drawn HD or not, the
+	 * state of a room drawn classic (BuildStandRanges) and its carrier, and
+	 * the room's origin. Group r is room r: this runs at level build, before
+	 * any flip. */
+	const int groups = number_rooms < HD_MAX_ROOMS ? number_rooms : HD_MAX_ROOMS;
+	std::vector<HDStaticGroup> asked((size_t)groups);
+
+	for (int g = 0; g < groups; g++)
+	{
+		HDStaticGroup& one = asked[(size_t)g];
+
+		one.hd = g_group_hd[g];
+		one.state = (unsigned char)(g_group_hd[g] ? HD_STAND_ROOM_CLASSIC :
+			g_group_stand_covered[g] ? HD_STAND_ROOM_COVERED :
+			g_group_stand_part[g] ? HD_STAND_ROOM_PART : HD_STAND_ROOM_CLASSIC);
+		one.carrier = one.state != HD_STAND_ROOM_CLASSIC ? g_group_stand_carrier[g] : -1;
+		one.originX = (float)room[g].x;
+		one.originZ = (float)room[g].z;
+	}
 
 	int orphans = 0;
 	int paired = 0;
+	int paired_other = 0;
 	int shatterable = 0;
+	int classic_room_art = 0;
+	int classic_room_group = 0;
 	const int pieces = HDRenderDestructibleCount();
+	std::vector<float> verts;
 
-	for (int r = 0; r < number_rooms; r++)
+	for (int r = 0; r < groups; r++)
 	{
-		if (!HDRoomIsHD(r))
-			continue;
-
 		const ROOM_INFO* info = &room[r];
+		const bool hd = g_group_hd[r] != 0;
 
 		for (int i = 0; i < info->num_meshes; i++)
 		{
@@ -3314,44 +3366,104 @@ static void BuildStaticTables()
 			 * take a static away. ANDREA2's courtyard palm is two statics -
 			 * the trunk (slot 8) in the ground room and the crown (slot 9)
 			 * in the room above - and the crown's box catches four cells of
-			 * 768, which is the wall behind it: suppressing the crown would
-			 * leave a trunk with no fronds. The same level's room 162 crown
-			 * catches 380 of 768 and is in the art.
+			 * 768 of the upper room's own art, which is the wall behind it.
+			 * The crown is modelled in the art of the trunk's room, and that
+			 * art holds it (HDRenderStaticArt asks every group); the same
+			 * level's room 162 crown is in its own room's art, 380 of 768.
 			 *
 			 * So the question is how much, against the static's own box.
-			 * Measured over the fifteen files and all 2,601 statics, the
-			 * coverage falls into 271 at nothing at all, 44 between nothing
-			 * and a twentieth, and 2,286 above a twentieth - a gap the
-			 * threshold sits in rather than a line drawn through a crowd.
-			 * The 44 go back to being drawn the classic way. */
-			const int cells = HDRenderGroupCellsIn(r, mins, maxs, 0);
-			int box_cells = 1;
+			 * Measured over the fifteen files (RoomProbe -statictable), the
+			 * 2,776 statics of rooms drawn HD fall into 79 at nothing, 20
+			 * between nothing and a twentieth (the highest 1 in 21) and 2,677
+			 * at a twentieth or more (the lowest exactly 1 in 20) - the
+			 * statics the own art does not hold are mostly the empty boxes.
+			 * The other sources are asked at the static's own vertices,
+			 * which the floor or the wall of another place does not reach
+			 * (hd_cover.h, over HD_STATIC_SHARE). */
+			/* The static's own mesh where it stands, room local - its
+			 * vertices, which the other sources are asked about. */
+			const STATIC_INFO* sinfo = &static_objects[mesh->static_number];
+			const MESH_DATA* data = (const MESH_DATA*)meshes[sinfo->mesh_number];
+			const int nv = data && data->aVtx ? data->nVerts : 0;
+			const float c = (float)phd_cos(mesh->y_rot) * (1.0f / 16384.0f);
+			const float sn = (float)phd_sin(mesh->y_rot) * (1.0f / 16384.0f);
 
-			for (int axis = 0; axis < 3; axis++)
+			verts.resize((size_t)(nv > 0 ? nv : 1) * 3);
+
+			for (int v = 0; v < nv; v++)
 			{
-				const int lo = (int)mins[axis] >> 8;
-				const int hi = (int)maxs[axis] >> 8;
+				const ACMESHVERTEX& at = data->aVtx[v];
 
-				box_cells *= (hi - lo) + 1;
+				verts[(size_t)v * 3 + 0] = (float)(mesh->x - info->x) + at.x * c + at.z * sn;
+				verts[(size_t)v * 3 + 1] = (float)(mesh->y - info->y) + at.y;
+				verts[(size_t)v * 3 + 2] = (float)(mesh->z - info->z) + at.z * c - at.x * sn;
 			}
 
-			if (cells * 20 < box_cells)
-			{
-				g_static_classic[(size_t)(g_static_first[(size_t)r] + i)] = 1;
+			HDStaticArt art;
+
+			HDRenderStaticArt(r, mins, maxs, &verts[0], nv, &asked[0], groups, &art);
+
+			HDStaticEntry& entry = g_static_art[(size_t)(g_static_first[(size_t)r] + i)];
+			int held = 0;
+
+			entry.answer = art.answer;
+
+			for (int k = 0; k < art.groupCount && art.answer == HD_STATIC_GROUPS; k++)
+				if (art.holds[k])
+					entry.holder[held++] = (short)art.group[k];
+
+			if (art.answer == HD_STATIC_ART)
+				g_statics_art++;
+			else if (art.answer == HD_STATIC_GROUPS)
+				g_statics_by_group++;
+			else
+				g_statics_classic++;
+
+			if (hd && art.answer == HD_STATIC_CLASSIC)
 				orphans++;
 
-				if (gLogEnabled)
-					Log("HDLOG static room=%d mesh=%d slot=%d classic "
-						"cells=%d of %d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f",
-						r, i, (int)mesh->static_number, cells, box_cells,
-						mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]);
+			if (!hd && art.answer == HD_STATIC_ART)
+				classic_room_art++;
+			else if (!hd && art.answer == HD_STATIC_GROUPS)
+				classic_room_group++;
 
-				continue;
-			}
+			/* The other groups' art at its vertices, the most first, a
+			 * group that holds the static marked with a star. */
+			char named[160];
+			int at = 0;
+
+			named[0] = 0;
+
+			// At most HD_STATIC_MAX_GROUPS entries of at most 16 characters.
+			for (int k = 0; k < art.groupCount && at < (int)sizeof(named) - 20; k++)
+				at += snprintf(named + at, sizeof(named) - (size_t)at, "%s%d:%d%s",
+					k ? "," : "", art.group[k], art.groupVerts[k],
+					art.holds[k] ? "*" : "");
+
+			const char* said = art.answer == HD_STATIC_ART ? "art" :
+				art.answer == HD_STATIC_GROUPS ? "groups" : "classic";
+
+			if (gLogEnabled && hd && !HDStaticCellsHold(art.own, art.boxCells))
+				Log("HDLOG static room=%d mesh=%d slot=%d classic "
+					"cells=%d of %d box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f "
+					"verts=%d groups=%s answer=%s",
+					r, i, (int)mesh->static_number, art.own, art.boxCells,
+					mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2],
+					art.verts, at ? named : "-", said);
+			else if (gLogEnabled && !hd)
+				Log("HDLOG static room=%d mesh=%d slot=%d classic_room "
+					"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f verts=%d carrier=%d "
+					"sure=%d groups=%s answer=%s",
+					r, i, (int)mesh->static_number, mins[0], maxs[0], mins[1],
+					maxs[1], mins[2], maxs[2], art.verts, art.carrier, art.sure,
+					at ? named : "-", said);
 
 			/* 2. And if the engine can destroy it, which piece of the art is
 			 * it? Slots 50 to 57 are the shatterable ones - the same test
-			 * control.cpp makes before it shatters one. */
+			 * control.cpp makes before it shatters one. Every piece of a
+			 * group drawn HD whose box overlaps the static's, whatever its
+			 * group (hd_cover.h, HDStaticPiecePaired), whatever the static's
+			 * answer. */
 			if (mesh->static_number < 50 || mesh->static_number >= 58)
 				continue;
 
@@ -3363,16 +3475,11 @@ static void BuildStaticTables()
 				float pmins[3], pmaxs[3];
 
 				if (!HDRenderDestructibleInfo(p, &group, 0, pmins, pmaxs) ||
-					group != r)
+					group < 0 || group >= groups || !g_group_hd[group])
 					continue;
 
-				bool overlaps = true;
-
-				for (int axis = 0; axis < 3; axis++)
-					if (maxs[axis] < pmins[axis] || mins[axis] > pmaxs[axis])
-						overlaps = false;
-
-				if (!overlaps)
+				if (!HDStaticPiecePaired(mins, maxs, (float)(info->x - room[group].x),
+					(float)(info->z - room[group].z), pmins, pmaxs))
 					continue;
 
 				HDStaticPair pair;
@@ -3383,29 +3490,61 @@ static void BuildStaticTables()
 				g_destruct_pairs.push_back(pair);
 				paired++;
 
+				if (group != r)
+					paired_other++;
+
 				if (gLogEnabled)
 					Log("HDLOG static room=%d mesh=%d slot=%d destructible "
-						"piece=%d", r, i, (int)mesh->static_number, p);
+						"piece=%d group=%d", r, i, (int)mesh->static_number, p,
+						group);
 			}
 		}
 	}
 
 	Log("HDLOG level=%s statics classic=%d of %d, destructible pieces=%d "
-		"shatterable=%d paired=%d",
-		g_stem, orphans, total, pieces, shatterable, paired);
+		"shatterable=%d paired=%d classic_room_art=%d classic_room_group=%d "
+		"paired_other=%d",
+		g_stem, orphans, total, pieces, shatterable, paired, classic_room_art,
+		classic_room_group, paired_other);
 }
 
-bool HDStaticIsClassic(int roomIndex, int meshIndex)
+/* Indexed through g_room_group: a flipmap swaps two ROOM_INFO records, their
+ * MESH_INFO lists with them, and the group number is the room whose list now
+ * stands at this index. A group the frame lists is one a listed room is drawn
+ * by now (GroupOfRoom). At most HD_STATIC_MAX_GROUPS groups per static and
+ * one walk of the list for each static that names any. */
+static int GroupOfRoom(int roomIndex);
+
+bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
+	int listedCount)
 {
-	if (roomIndex < 0 || roomIndex + 1 >= (int)g_static_first.size())
-		return false;
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+		return true;
 
-	const int at = g_static_first[(size_t)roomIndex] + meshIndex;
+	const int group = g_room_group[roomIndex];
 
-	if (meshIndex < 0 || at >= g_static_first[(size_t)roomIndex + 1])
-		return false;
+	if (group < 0 || group + 1 >= (int)g_static_first.size())
+		return true;
 
-	return g_static_classic[(size_t)at] != 0;
+	const int at = g_static_first[(size_t)group] + meshIndex;
+
+	if (meshIndex < 0 || at >= g_static_first[(size_t)group + 1])
+		return true;
+
+	const HDStaticEntry& entry = g_static_art[(size_t)at];
+	bool holderListed = false;
+
+	for (int i = 0; entry.answer == HD_STATIC_GROUPS && listed && i < listedCount &&
+		!holderListed; i++)
+	{
+		const int drawnBy = GroupOfRoom(listed[i]);
+
+		for (int k = 0; k < HD_STATIC_MAX_GROUPS && entry.holder[k] >= 0; k++)
+			if (entry.holder[k] == drawnBy)
+				holderListed = true;
+	}
+
+	return HDStaticDrawClassic(entry.answer, holderListed);
 }
 
 /* Once per frame, before the rooms are drawn: a piece whose static the engine
@@ -4390,15 +4529,16 @@ static void HDLevelBuildHD()
 	 * streaming).
 	 *
 	 * This seam is narrower and the rule with it: a room's own MESH_INFO
-	 * list is suppressed, and only for a room that really draws HD. A
-	 * moveable that shares a static's MESH_DATA* goes through
-	 * DrawAnimatingItem and is never touched, and a room that stayed classic
-	 * keeps every static it had, so TROne's exception cannot arise here.
+	 * list is asked, static by static, whether the art draws its place - the
+	 * room's own group, the carrier's art of a room drawn as it, or another
+	 * group's art in a frame that lists that group. A moveable that shares a
+	 * static's MESH_DATA* goes through DrawAnimatingItem and is never
+	 * touched, so TROne's exception cannot arise here.
 	 *
 	 * A static the game removes at run time - a shattered vase - is gone from
 	 * the classic list but still stands in the baked art; the destructible
-	 * pairs of BuildStaticTables hide its piece. BuildStaticTables also finds
-	 * the statics the .TRG does not cover. */
+	 * pairs of BuildStaticTables hide its piece. After BuildStandRanges,
+	 * whose carriers and room states BuildStaticTables asks. */
 	BuildStaticTables();
 
 	/* The water surface the remaster left out - see the note over
@@ -4410,8 +4550,14 @@ static void HDLevelBuildHD()
 	 * BuildWaterSurfaces, because it asks which faces are really drawn. */
 	BuildWaterFrames();
 
-	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic)",
-		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms);
+	/* `suppressed` and `kept` count the statics of the rooms drawn HD and of
+	 * the rooms drawn classic; `art`, `by_group` and `classic` the answers of
+	 * BuildStaticTables over all of them - never drawn, drawn only while no
+	 * group holding them is on the frame's list, drawn in every frame. */
+	Log("HDLOG level=%s statics suppressed=%d kept=%d (in %d HD rooms, %d classic) "
+		"art=%d by_group=%d classic=%d",
+		g_stem, suppressed_statics, kept_statics, hd_rooms, classic_rooms,
+		g_statics_art, g_statics_by_group, g_statics_classic);
 
 	if (!g_level_active)
 	{
@@ -4581,7 +4727,7 @@ void HDLevelUnload()
 	g_room_count = 0;
 	g_stem[0] = 0;
 	/* The static tables point into this level's rooms. */
-	g_static_classic.clear();
+	g_static_art.clear();
 	g_static_first.clear();
 	g_destruct_pairs.clear();
 
@@ -4691,6 +4837,28 @@ bool HDRoomShadowHD(int roomIndex)
 	const int group = g_room_group[roomIndex];
 
 	return group >= 0 && group < HD_MAX_ROOMS && g_group_stand_shadow[group] != 0;
+}
+
+bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount)
+{
+	if (HDRoomIsHD(roomIndex))
+		return true;
+
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+		return false;
+
+	const int group = g_room_group[roomIndex];
+
+	if (group < 0 || group >= HD_MAX_ROOMS || !g_group_stand_covered[group])
+		return false;
+
+	const int carrier = g_group_stand_carrier[group];
+
+	for (int i = 0; listed && i < listedCount; i++)
+		if (carrier >= 0 && GroupOfRoom(listed[i]) == carrier)
+			return true;
+
+	return false;
 }
 
 /* The one question the room walk asks of the HD path. g_level_active is

@@ -1324,6 +1324,46 @@ bool HDRenderGroupHasGeometry(int group, const float* mins, const float* maxs);
  * The box is room local, in the group's own frame. */
 int HDRenderGroupCellsIn(int group, const float* mins, const float* maxs,
 	int interiorOnly);
+
+/* Which art draws the place of one static mesh (the rule: hd_cover.h, over
+ * HD_STATIC_SHARE). The caller hands, per group of the level - group i is
+ * room i, as at the build - whether it is drawn HD, the state of the room it
+ * is (HD_STAND_ROOM_*, CLASSIC for a room drawn HD), the room's carrier or
+ * -1, and the room's origin in x and z; and the static's box and its own
+ * mesh's vertices where they stand, both local to its room `room` (x and z
+ * from the room's origin, y world). The answer comes back with what it was
+ * made of: `own` the cells of the box that hold the room's own group's art
+ * and `boxCells` the box's cells; `sure` the vertices the carrier's stand
+ * ranges drawn in every frame that lists the room hold, of `verts`; `group`
+ * and `groupVerts` the other groups' art at the vertices, the most first (at
+ * most HD_STATIC_MAX_GROUPS of them), `holds` which of them hold the static.
+ * One function for the engine and for RoomProbe, so the two answer alike. */
+struct HDStaticGroup
+{
+	unsigned char hd;
+	unsigned char state;
+	short carrier;
+	float originX, originZ;
+};
+
+struct HDStaticArt
+{
+	int answer;		// HD_STATIC_ART, HD_STATIC_GROUPS or HD_STATIC_CLASSIC
+	int own;
+	int boxCells;
+	int verts;
+	int carrier;	// the room's carrier asked, or -1
+	int sure;
+	int groupCount;
+	int group[HD_STATIC_MAX_GROUPS];
+	int groupVerts[HD_STATIC_MAX_GROUPS];
+	unsigned char holds[HD_STATIC_MAX_GROUPS];
+	int flat;		// HDStaticFlat: no other group asked
+};
+
+void HDRenderStaticArt(int room, const float* mins, const float* maxs,
+	const float* verts, int vertCount, const HDStaticGroup* groups,
+	int groupCount, HDStaticArt* out);
 // How many triangles of the group stand outside its own room box, all three
 // passes together. A group whose whole art is outside is
 // a group that draws nothing in its own room, and the caller keeps that room

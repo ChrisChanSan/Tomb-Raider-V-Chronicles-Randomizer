@@ -1811,7 +1811,9 @@ static void ReachTrimRooms(long ex, long ey, long ez)
 	 * list with nothing of itself in the picture, and only its items would
 	 * be drawn (PrintObjects hands every item the whole screen), leaving
 	 * enemies standing in a room that is not there. Such a room comes
-	 * straight back out of the list.
+	 * straight back out of the list. A room drawn wholly as another group's
+	 * art stays while that group is listed, because then its place is in the
+	 * picture and its items belong there (hd_level.h, HDRoomArtListed).
 	 *
 	 * This also keeps the reach from touching the classic picture at all:
 	 * everything it adds is .TRG art. */
@@ -1821,7 +1823,7 @@ static void ReachTrimRooms(long ex, long ey, long ez)
 		const ROOM_INFO* rr = &room[which];
 
 		if ((rr->left >= rr->right || rr->top >= rr->bottom) &&
-			!HDRoomIsHD(which))
+			!HDRoomArtListed(which, draw_rooms, (int)number_draw_rooms))
 		{
 			room[which].bound_active = 0;
 
@@ -3499,21 +3501,22 @@ void DrawStaticObjects(short room_number)
 	 *
 	 * TROne suppresses by mesh pointer and needs an exception for the case
 	 * where a moveable claims that same pointer. This seam is narrower: it
-	 * skips a room's own MESH_INFO list and nothing else, so a moveable
-	 * sharing the mesh still draws (it comes through DrawAnimatingItem, not
-	 * through here), and a room that stayed classic keeps every static. The
-	 * exception cannot arise.
+	 * skips entries of a room's own MESH_INFO list and nothing else, so a
+	 * moveable sharing the mesh still draws (it comes through
+	 * DrawAnimatingItem, not through here). The exception cannot arise.
 	 *
-	 * A static of an HD room that the .TRG has nothing for is still drawn
-	 * here (21 of them in ANDREA1's rooms 121 and 221, in no group at all).
-	 * hd_level asks the renderer, once per level, whether the room's art
-	 * draws anything where the static stands, and the answer comes back
-	 * through HDStaticIsClassic.
+	 * Which entries: those whose place the art draws in this frame. hd_level
+	 * asks the renderer once per level whether the art draws anything where
+	 * each static stands - the room's own group, the carrier's art of a room
+	 * drawn as another group's art, or another group's art, which a frame
+	 * draws only while it lists that group - and HDStaticDrawnClassic
+	 * answers with the frame's room list. A static the .TRG has nothing for
+	 * is still drawn here (103 of the game's 2,845), in any room.
 	 *
 	 * A static the game destroys at run time is handled on the other side:
 	 * the .TRG's own destructible pieces are switched off with their
 	 * MESH_INFO's Flags bit, so nothing has to be drawn here for it. */
-	const bool hd = HDRoomIsHD(room_number);
+	const bool hd = HDLevelActive();
 
 	phd_PushMatrix();
 	phd_TranslateAbs(r->x, r->y, r->z);
@@ -3529,7 +3532,8 @@ void DrawStaticObjects(short room_number)
 		if (!(mesh->Flags & 1))
 			continue;
 
-		if (hd && !HDStaticIsClassic(room_number, i))
+		if (hd && !HDStaticDrawnClassic(room_number, i, draw_rooms,
+			(int)number_draw_rooms))
 			continue;
 
 		phd_PushMatrix();

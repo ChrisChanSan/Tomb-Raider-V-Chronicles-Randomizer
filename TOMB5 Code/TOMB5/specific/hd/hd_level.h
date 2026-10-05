@@ -163,12 +163,24 @@ struct HDLevelMirror
 int HDLevelMirrorCount();
 bool HDLevelMirrorAt(int at, HDLevelMirror* out);
 
-// Whether room `roomIndex` of the level now loaded is drawn by the HD path.
-// Decided once at level load, not per frame. False for every room while HD is
-// off, while no HD level is built, and for every room the .TRG has nothing
-// for. The static meshes of an HD room are already part of its art and must
-// not be drawn a second time - that is the one other caller of this.
+// Whether room `roomIndex` of the level now loaded is drawn by its own group
+// of HD art. Decided once at level load, not per frame. False for every room
+// while HD is off, while no HD level is built, for every room the .TRG has
+// nothing for, and for a room drawn as another group's art (hd_cover.h) -
+// HDRoomShadowHD, HDRoomArtListed and HDStaticDrawnClassic answer for such a
+// room what is drawn there.
 bool HDRoomIsHD(int roomIndex);
+
+/* Whether the art draws room `roomIndex` in a frame whose room list is
+ * `listed`: a room drawn HD, and a room drawn wholly as its carrier's art
+ * while a listed room is drawn by the carrier. The room walk (game\draw.cpp,
+ * ReachTrimRooms) asks it of a room the reach lists with no window: such a
+ * room shows only its art, and one the art does not draw comes off the list.
+ * A room drawn as art in part keeps classic faces the empty window cannot
+ * show, and listed it would leave out the carrier's art that lies whole on
+ * them, so it answers false. False for every room while HDLevelActive() is
+ * false. */
+bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount);
 
 /* The classic faces InsertRoomlet (specific\drawroom.cpp) leaves out of one
  * roomlet of a room drawn classic that another group's art covers in part:
@@ -220,19 +232,22 @@ const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at);
 struct TEXTURESTRUCT;
 bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
 
-/* The static meshes of an HD room that still have to be drawn. Worked out
- * once at level load against the .TRG's own geometry; DrawStaticObjects
- * (game\draw.cpp) is the only caller.
+/* Whether a frame draws a static mesh the classic way. Worked out once at
+ * level load against the .TRG's own geometry (hd_level.cpp,
+ * BuildStaticTables; the rule: hd_cover.h, HDStaticAnswer);
+ * DrawStaticObjects (game\draw.cpp) is the only caller.
  *
- * HDStaticIsClassic - the .TRG draws nothing where this static stands (21 of
- * them in ANDREA1 alone, in rooms 121 and 221, which would otherwise vanish).
- * Such a static is drawn the classic way inside an HD room; every other one
- * stays suppressed, because its art is baked into the room.
+ * False where the art draws the static's place in every frame that lists its
+ * room - its room's own group, or the carrier's art of a room drawn as it -
+ * and where another group's art draws it and `listed`, the frame's room list
+ * (draw_rooms), holds a room drawn by that group. True where the art has
+ * nothing for it (103 of the game's 2,845 statics, which would otherwise
+ * vanish), in a frame without a group holding it, for an index out of
+ * range, before a level is built and with HD off.
  *
- * `meshIndex` counts ROOM_INFO::mesh from zero. Both return false for a room
- * that is not HD, for an index out of range, and with HD off - a classic room
- * draws all of its statics through the ordinary path. */
-bool HDStaticIsClassic(int roomIndex, int meshIndex);
+ * `meshIndex` counts ROOM_INFO::mesh from zero. */
+bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
+	int listedCount);
 
 // One FlipMap swap. Called from FlipMap (game\control.cpp) where the two
 // ROOM_INFO records change places, once per pair. FlipMap swaps the contents

@@ -3771,6 +3771,50 @@ namespace
 				}
 			}
 
+			/* The engine's own question (hd_level.cpp, the faceless rooms of
+			 * the shadow): a sector she can stand on, and no vertex of an HD
+			 * group but the flipmap twin's in a 256-unit cell that meets the
+			 * room's whole box - the grid with its wall ring, maxceiling to
+			 * minfloor, the box art_tris counts centroids in. */
+			bool bare = solid > 0;
+			const int twin = level.rooms()[(size_t)r].altRoom;
+
+			for (int g = 0; g < groups && g < rooms && bare; g++)
+			{
+				if (g == r || !drawsHD(g) || g == twin ||
+					level.rooms()[(size_t)g].altRoom == r)
+					continue;
+
+				for (size_t t = 0; t < art[(size_t)g].size() && bare; t++)
+				{
+					const ArtTri& one = art[(size_t)g][t];
+
+					for (int c = 0; c < 3 && bare; c++)
+					{
+						double p[3];
+						bool in = true;
+
+						for (int axis = 0; axis < 3; axis++)
+							p[axis] = one.a[axis] + (c == 1 ? one.e1[axis] : 0.0) +
+								(c == 2 ? one.e2[axis] : 0.0);
+
+						const double lo[3] = { (double)H.x0, (double)H.y0, (double)H.z0 };
+						const double hi[3] = { (double)H.x1, (double)H.y1, (double)H.z1 };
+
+						for (int axis = 0; axis < 3; axis++)
+						{
+							const double cell = std::floor(p[axis] / 256.0) * 256.0;
+
+							if (cell + 255.0 < lo[axis] || cell > hi[axis])
+								in = false;
+						}
+
+						if (in)
+							bare = false;
+					}
+				}
+			}
+
 			std::string under;
 
 			for (const auto& one : below)
@@ -3784,10 +3828,12 @@ namespace
 
 			std::printf("classicart: %s perface noface=%d reason=%s sectors=%d walls=%d "
 				"open_down=%d solid=%d below=%s art_tris=%d art_groups=%s flags=0x%04x "
-				"water=%d\n", stem.c_str(), r, reason[(size_t)r], (int)sect.size(), walls,
-				open, solid, under.empty() ? "-" : under.c_str(), artTris,
-				names.empty() ? "-" : names.c_str(), level.rooms()[(size_t)r].flags,
-				(level.rooms()[(size_t)r].flags & 1) ? 1 : 0);
+				"water=%d bare=%d shadow=%d\n", stem.c_str(), r, reason[(size_t)r],
+				(int)sect.size(), walls, open, solid, under.empty() ? "-" : under.c_str(),
+				artTris, names.empty() ? "-" : names.c_str(),
+				level.rooms()[(size_t)r].flags,
+				(level.rooms()[(size_t)r].flags & 1) ? 1 : 0, bare ? 1 : 0,
+				HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, 0, bare) ? 1 : 0);
 		}
 	}
 

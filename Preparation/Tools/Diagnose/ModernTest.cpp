@@ -11137,6 +11137,20 @@ static void stand_shadow()
 			HDShadowGateWord(before));
 		ok(hd == r.want, what, hd ? 1 : 0, r.want ? 1 : 0);
 	}
+
+	/* A room with no classic face and a sector she can stand on with no art
+	 * in its box (TrgProbe -perface noface lines, bare=1: ANDREA3 71, RICH3
+	 * 205) keeps the blob; the flag means nothing for a room with faces or
+	 * one drawn HD. */
+	ok(!HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, 0, true),
+		"shadow: a faceless room with a bare floor (ANDREA3 71) keeps the blob", 0, 0);
+	ok(HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, 0, false),
+		"shadow: a faceless room with art in its box (ANDREA3 115) counts as HD", 1, 1);
+	ok(HDCoverRoomShadowHD(true, HD_STAND_ROOM_CLASSIC, 0, 0, true),
+		"shadow: a room drawn HD counts whatever its floor data", 1, 1);
+	ok(HDCoverRoomShadowHD(false, HDCoverRoomState(46, 46), 0, 46, true) &&
+		!HDCoverRoomShadowHD(false, HD_STAND_ROOM_CLASSIC, 0, 31, false),
+		"shadow: the flag is not asked of a room with classic faces", 1, 1);
 }
 
 /* static_art: which art draws a static mesh's place (hd_cover.h,

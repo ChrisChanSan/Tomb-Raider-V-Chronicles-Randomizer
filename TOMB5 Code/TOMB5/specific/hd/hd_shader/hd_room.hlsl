@@ -2,7 +2,9 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The lighting rule below - room light is the SUM of the two vertex colour
- * triples - rests on this project's own count over the fifteen levels: on
+ * triples - came to this tree by way of TROne and TRForge (THIRD-PARTY.md,
+ * the origin ledger, entry 7), and it rests on this project's own count
+ * over the fifteen levels: on
  * the classic room vertices a .TRG vertex stands on exactly, the sum puts the
  * vertices in the order of the classic prelight more often than the product
  * or either triple alone does (TrgProbe -shadeorder; the counts are in
@@ -129,7 +131,7 @@
  *
  * the multiply on the texel never passes 1, and the rest arrives as an ADD.
  * The remaster's baked light covers the same total range - colour1 + colour2
- * reaches 2.0 in twelve of the fifteen files and lies above 1 in 3.3 % of
+ * reaches 2.0 in eleven of the fifteen files and lies above 1 in 3.3 % of
  * all their channels (TrgProbe -shadeorder) - but as a straight MULTIPLY.
  *
  * The two agree exactly below 128, and the bridge between them is
@@ -749,7 +751,8 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * files themselves: 0..32767 in thirteen of the fifteen levels, never
 	 * below 0, and none at all in RICH1 and RICHCUT2 (TrgProbe -normals), so
 	 * over 32767 it is a weight of 0..1. The engine keeps each group's largest
-	 * in HDRenderGroupMotion::swayMax (hd_render.h) for the log.
+	 * in HDRenderGroupMotion::swayMax (hd_render.h), which RoomProbe's
+	 * table of what moves prints.
 	 * Over the 15 levels it is the ivy and the banners of Rome, the grass of
 	 * Ireland and the kelp of the Deepsea Dive, and it is disjoint from the
 	 * classic engine's water vertices except in JOBY4, where the kelp stands

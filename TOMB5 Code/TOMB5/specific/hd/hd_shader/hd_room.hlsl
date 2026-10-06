@@ -2,18 +2,23 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The lighting rule below - room light is the SUM of the two vertex colour
- * triples, the alpha test lives in the alpha pass ONLY, and the additive pass
- * carries its weight in the texture's alpha - is carried over from TROne
- * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, the GLSL
- * shaders k_hd_vert / k_hd_frag). Translated to HLSL for Direct3D 9; not a
- * line of the original is copied. See THIRD-PARTY.md.
+ * triples - rests on this project's own count over the fifteen levels: on
+ * the classic room vertices a .TRG vertex stands on exactly, the sum puts the
+ * vertices in the order of the classic prelight more often than the product
+ * or either triple alone does (TrgProbe -shadeorder; the counts are in
+ * MODIFICATIONS.md and in "The light" below). The alpha test living in the
+ * alpha pass ONLY and the additive pass carrying its weight in the texture's
+ * alpha are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
+ * TROne-main (copy of 2026-10-05), the GLSL shader k_hd_frag), TROne's own
+ * design. Translated to HLSL for Direct3D 9; not a line of the original is
+ * copied. See THIRD-PARTY.md.
  *
- * Everything below the line "the parity block" is ours and has no counterpart
- * in TROne: TROne has no fog of any kind (its set_fog is a logged stub), no
- * fog bulbs (it parses Trg::fog_boxes and drops them), no dynamic lights in
- * rooms, and its water is an invented wave rather than the engine's own
- * WaterTable. Those five are transcriptions of specific\drawroom.cpp,
- * aRoomletTransformLight, line for line.
+ * Everything below the line "the parity block" is this project's own: the
+ * distance fog, the fog bulbs, the dynamic lights in rooms and the
+ * WaterTable effects are transcriptions of specific\drawroom.cpp,
+ * aRoomletTransformLight, line for line. TROne-main (copy of 2026-10-05)
+ * has a fog model, fog bulbs and room lights of its own (set_fog_model,
+ * set_fog_bulbs, set_room_lights); none of them is used here.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -68,16 +73,27 @@
  * blue exchanged, a plausible-looking but wrong picture.
  *
  * The alpha byte, .a, is the texture coordinate already divided by 255, the
- * scale it needs (TROne: u / 255.0f). The two coordinates sitting in two
- * different colours' alpha bytes is the remaster's own packing.
- * D3DDECLTYPE_UBYTE4 is not normalised, so the flag bytes arrive as 0.0 or
- * 1.0 exactly as written.
+ * scale it needs: both bytes run over 0..255 in every one of the fifteen
+ * files. That u is the fourth byte of colour1 and v the fourth byte of
+ * colour2 is counted on the files themselves (TrgProbe -uvbytes): of the
+ * .TRG vertices lying inside a classic face of their room, two vertices
+ * are put the same way round by the classic u and by +15 in 3,157,175
+ * pairs and the other way in 1,465,989, by the classic v and +19 in
+ * 3,354,530 against 1,340,180, while the crossed reading (u in +19, v in
+ * +15) splits even, 2,213,580 against 2,213,351 and 2,215,512 against
+ * 2,249,987. D3DDECLTYPE_UBYTE4 is not normalised, so the flag bytes arrive
+ * as 0.0 or 1.0 exactly as written.
  *
- * The light. light = colour1 * gPass.z + colour2, and the pixel is
- * texel * light. A SUM, not a product - as TRForge's MIT reader adds the
- * two triples (trf_remaster/HdMesh.cpp, colour_of). gPass.z is a spare
- * scale on the first colour that this build always sets to 1; nothing
- * computes it.
+ * The light. light = colour1 + colour2, and the pixel is texel * light. A
+ * SUM, not a product: on the 107,118 classic room vertices that a .TRG
+ * vertex of the same room stands on exactly, the sum puts the classic
+ * prelight's order better than the product in 14 of the 15 levels (rank
+ * correlation 0.553 over all of them against 0.460; of the vertex pairs
+ * the two put in opposite order, the classic shade sides with the sum in
+ * 121,606 and with the product in 56,907) and better than either triple
+ * alone (0.397 and 0.527). JOBY4, the sea level, orders by neither. Counted
+ * with TrgProbe -shadeorder; MODIFICATIONS.md has the table per level and
+ * the picture check beside it.
  *
  * The three passes are the three index runs of a .TRG part, in this order:
  *
@@ -111,8 +127,9 @@
  *     texel * (c / 255) + (s / 255),  c, s from that split,
  *
  * the multiply on the texel never passes 1, and the rest arrives as an ADD.
- * The remaster's baked light covers the same total range - 0..2, TRForge over
- * 144 .TRG files, colour1 + colour2 - but as a straight MULTIPLY.
+ * The remaster's baked light covers the same total range - colour1 + colour2
+ * reaches 2.0 in twelve of the fifteen files and lies above 1 in 3.3 % of
+ * all their channels (TrgProbe -shadeorder) - but as a straight MULTIPLY.
  *
  * The two agree exactly below 128, and the bridge between them is
  *
@@ -150,7 +167,7 @@
 /* ------------------------------------------------- constants, vertex side --
  *
  * c0  - c3    gWorldViewProj      per room
- * c4          gPass               per pass
+ * c4          (a literal of fxc's own; gPass is read on the pixel side)
  * c5  - c7    gWorldView          per room   (the classic D3DMView: the
  *                                             "stash" the fog and the bulbs
  *                                             are measured in)
@@ -166,14 +183,17 @@
  */
 float4x4 gWorldViewProj : register(c0);
 
-/* x = alpha test on/off, y = additive weight on/off, z = room shadow,
+/* x = alpha test on/off, y = additive weight on/off, z = not read here,
  * w = specular (overbright) on/off.
  *
- * hd_model.hlsl shares this register and shares x, y and w with it; only z
- * differs, and there it switches the first person head cut. The two do not
- * collide because this file's z is read in the VERTEX half and written
- * through SetVertexShaderConstantF, while hd_model.cpp writes c4 to the PIXEL
- * constant file alone - and a room is drawn before a model in every frame. */
+ * Read by the pixel shader only. The vertex shader reads none of it, so fxc
+ * gives c4 of the vertex file to a literal of its own, and hd_render.cpp
+ * writes the register to the pixel file alone.
+ *
+ * hd_model.hlsl shares this register and shares x, y and w with it; its z
+ * switches the first person head cut, and hd_model.cpp writes all four
+ * components to the PIXEL constant file before every model pass, so the z a
+ * room pass leaves behind never reaches a model. */
 float4 gPass : register(c4);
 
 /* float4x3, not float4x4, and three registers rather than four: only the
@@ -836,7 +856,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + water * HD_WATER_UV *
 		float2(sin(wavA), cos(wavB));
 
-	o.light = lerp(inC0.rgb * gPass.z + inC1.rgb, 1.0f, gFlat.x);
+	o.light = lerp(inC0.rgb + inC1.rgb, 1.0f, gFlat.x);
 	o.viewPos = view;
 	o.roomPos = pos;
 	o.waterAdd = float4(waterAdd, water);

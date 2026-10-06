@@ -122,11 +122,11 @@ float4x4 gProj : register(c0);
 /* x = alpha test on/off, y = additive weight on/off, z = the HEAD CUT on/off
  * (the cut itself - node and threshold - is in gNeckCut), w = specular
  * (overbright) on/off. The room shader carries the same register and the
- * same x, y and w; only z differs, and it differs safely - see the note at
- * the cut itself in ModelPS.
+ * same x, y and w and does not read z - see the note at the cut itself in
+ * ModelPS.
  *
- * Read by the pixel shader only, and that matters. The room shader
- * reads gPass in both halves; this one does not need it in the vertex half,
+ * Read by the pixel shader only, and that matters. Neither this shader nor
+ * the room shader needs it in the vertex half,
  * so fxc drops it there and puts two of its own def constants in c4 and c5 of
  * the vertex shader (visible in the /Fc listing). Writing gPass to the vertex
  * constant file would silently overwrite a literal. hd_model.cpp therefore
@@ -643,9 +643,9 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	 * The vertex shader added the weight up (see gNeckCut there); this is the
 	 * clip, and gPass.z is 1 when the cut runs and 0 when it does not. lerp to a
 	 * flat 1 for the off case, so that a model with no cut discards nothing
-	 * whatever is left in the interpolant - and so that this line stays safe
-	 * against the room shader, which reads its own gPass.z in the VERTEX half
-	 * while hd_model.cpp writes c4 to the PIXEL file alone.
+	 * whatever is left in the interpolant. hd_model.cpp writes c4 to the
+	 * PIXEL file before every pass, so the 0 a room pass leaves in z never
+	 * reaches this line.
 	 *
 	 * Written per DRAW, so only Lara's body carries it: her hands, her
 	 * holsters, the weapon on her back and the neck cap itself are their own

@@ -2728,9 +2728,9 @@ namespace
 			 * for every model but Lara's body makes the shader's clip discard
 			 * nothing), w the overbright add. The PIXEL constant
 			 * file only - the vertex shader does not read gPass and fxc has
-			 * put its own literals in that register there, and the room
-			 * shader's own gPass.z lives in the VERTEX file, which this call
-			 * never touches. */
+			 * put its own literals in that register there; the room passes
+			 * write the same register of the pixel file with z 0, which
+			 * this call overwrites before every pass. */
 			float constants[4] =
 			{
 				pass == 1 ? 1.0f : 0.0f,

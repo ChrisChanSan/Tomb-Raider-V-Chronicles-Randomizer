@@ -58,10 +58,13 @@
 #include <set>
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <unordered_map>
 
 #include "core/Tr5Level.h"
 #include "hd_install.h"
+// The .TRM reader, for -trmnormals.
+#include "hd_trm.h"
 // HDPairFace and HDPairFaceDistance - the renderer's own face test, inline.
 #include "hd_render.h"
 #include "hd_scan.h"
@@ -4375,6 +4378,1240 @@ namespace
 			noGroup + empty + hollow, noGroup, empty, hollow, holders, tol, step,
 			facing > 0 ? "same" : (facing < 0 ? "against" : "any"));
 	}
+
+	/* -------------------------------------------- the HD rules on our own data
+	 *
+	 * Four counts that hold a rule of the HD path against the level files
+	 * themselves: how the two colour triples of a .TRG vertex make the room
+	 * light (-shadeorder), which two bytes of the vertex are the texture
+	 * coordinates (-uvbytes), how the normal bytes of a .TRG and a .TRM read
+	 * (-normals, -trmnormals), and what sizes the pages in TEX are
+	 * (-ddssizes). Each prints a table per level and a total line. */
+
+	/* One classic room vertex: the room-local position as the engine
+	 * truncates it (hd_level.cpp, BuildWaterMarks: a short of the file's
+	 * float) and the prelight drawroom.cpp lights it with
+	 * (aRoomletTransformLight, ROOMLET_VERTEX::prelight, the dword after the
+	 * normal - the colour the classic path draws a room vertex with when no
+	 * dynamic light reaches it). */
+	struct ShadeVertex
+	{
+		short p[3];
+		int rgb[3];
+	};
+
+	/* One classic room face: its corners' room-local positions and the
+	 * texinfo it wears. */
+	struct ShadeFace
+	{
+		int corners;
+		int texInfo;
+		short p[4][3];
+	};
+
+	/* The vertices and faces of one classic room, read straight out of the
+	 * .TRC with the walk Tr5Level::roomFaces makes: 28-byte vertices (three
+	 * floats of position, three of normal, the prelight dword), faces of
+	 * n corner indices, the texture word and the effects word. */
+	bool classicRoomData(const Tr5Level& level, int room,
+		std::vector<ShadeVertex>* verts, std::vector<ShadeFace>* faces)
+	{
+		const std::vector<uint8_t>& bytes = level.debugBytes();
+		const Tr5Room& r = level.rooms()[(size_t)room];
+
+		if (!r.headerOffset)
+			return false;
+
+		const size_t hdr = r.headerOffset, body = hdr + 208;
+		int32_t nRoomlets = 0;
+		uint32_t oRoomlets = 0, oVtx = 0, oFace = 0;
+
+		std::memcpy(&nRoomlets, &bytes[hdr + 168], 4);
+		std::memcpy(&oRoomlets, &bytes[hdr + 172], 4);
+		std::memcpy(&oVtx, &bytes[hdr + 176], 4);
+		std::memcpy(&oFace, &bytes[hdr + 180], 4);
+
+		if (nRoomlets <= 0 || nRoomlets > 4096)
+			return true;
+
+		size_t facAt = body + oFace;
+		size_t vtxAt = body + oVtx;
+
+		for (int i = 0; i < nRoomlets; i++)
+		{
+			const size_t rl = body + oRoomlets + (size_t)i * 56;
+
+			if (rl + 56 > bytes.size())
+				return false;
+
+			int16_t nVtx, nQuad, nTri;
+			std::memcpy(&nVtx, &bytes[rl], 2);
+			std::memcpy(&nQuad, &bytes[rl + 6], 2);
+			std::memcpy(&nTri, &bytes[rl + 8], 2);
+
+			if (vtxAt + (size_t)nVtx * 28 > bytes.size())
+				return false;
+
+			auto position = [&](int idx, short* out)
+			{
+				float f[3];
+				std::memcpy(f, &bytes[vtxAt + (size_t)idx * 28], 12);
+				out[0] = (short)f[0];
+				out[1] = (short)f[1];
+				out[2] = (short)f[2];
+			};
+
+			if (verts)
+				for (int v = 0; v < nVtx; v++)
+				{
+					ShadeVertex sv;
+					uint32_t col;
+
+					position(v, sv.p);
+					std::memcpy(&col, &bytes[vtxAt + (size_t)v * 28 + 24], 4);
+					sv.rgb[0] = (int)((col >> 16) & 0xFF);
+					sv.rgb[1] = (int)((col >> 8) & 0xFF);
+					sv.rgb[2] = (int)(col & 0xFF);
+					verts->push_back(sv);
+				}
+
+			for (int q = 0; q < nQuad + nTri; q++)
+			{
+				const int n = q < nQuad ? 4 : 3;
+
+				if (facAt + (size_t)(n + 2) * 2 > bytes.size())
+					return false;
+
+				ShadeFace face;
+				uint16_t tw;
+				bool good = true;
+
+				face.corners = n;
+				std::memcpy(&tw, &bytes[facAt + (size_t)n * 2], 2);
+				face.texInfo = tw & 0x3FFF;
+
+				for (int k = 0; k < n; k++)
+				{
+					uint16_t w;
+					std::memcpy(&w, &bytes[facAt + (size_t)k * 2], 2);
+
+					if (w >= (uint16_t)nVtx)
+						good = false;
+					else
+						position(w, face.p[k]);
+				}
+
+				if (good && faces)
+					faces->push_back(face);
+
+				facAt += (size_t)(n + 2) * 2;
+			}
+
+			vtxAt += (size_t)nVtx * 28;
+		}
+
+		return true;
+	}
+
+	uint64_t positionKey(const short* p)
+	{
+		return ((uint64_t)(uint16_t)p[0] << 32) | ((uint64_t)(uint16_t)p[1] << 16) |
+			(uint64_t)(uint16_t)p[2];
+	}
+
+	uint64_t positionKey(const trf::remaster::TrgVertex& v)
+	{
+		const short p[3] = { v.x, v.y, v.z };
+		return positionKey(p);
+	}
+
+	/* The triangles of one .TRG group, all three passes, as index triples. */
+	void groupTriangles(const trf::remaster::Trg& trg, size_t g,
+		std::vector<std::array<uint32_t, 3>>& out)
+	{
+		out.clear();
+
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			for (int pass = 0; pass < 3; pass++)
+				for (uint32_t i = 0; i + 2 < part.pass[pass].count; i += 3)
+				{
+					const uint32_t at = part.pass[pass].start + i;
+
+					if (at + 2 >= trg.indices.size())
+						break;
+
+					out.push_back({ trg.indices[at], trg.indices[at + 1], trg.indices[at + 2] });
+				}
+	}
+
+	/* Average ranks, ties shared - the ranks a Spearman correlation takes. */
+	std::vector<double> averageRanks(const std::vector<double>& v)
+	{
+		std::vector<size_t> order(v.size());
+
+		for (size_t i = 0; i < order.size(); i++)
+			order[i] = i;
+
+		std::sort(order.begin(), order.end(),
+			[&](size_t a, size_t b) { return v[a] < v[b]; });
+
+		std::vector<double> rank(v.size());
+
+		for (size_t i = 0; i < order.size();)
+		{
+			size_t j = i;
+
+			while (j + 1 < order.size() && v[order[j + 1]] == v[order[i]])
+				j++;
+
+			const double mean = 0.5 * (double)(i + j) + 1.0;
+
+			for (size_t k = i; k <= j; k++)
+				rank[order[k]] = mean;
+
+			i = j + 1;
+		}
+
+		return rank;
+	}
+
+	double pearson(const std::vector<double>& a, const std::vector<double>& b)
+	{
+		const size_t n = a.size();
+
+		if (n < 2)
+			return 0.0;
+
+		double ma = 0, mb = 0;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			ma += a[i];
+			mb += b[i];
+		}
+
+		ma /= (double)n;
+		mb /= (double)n;
+
+		double sab = 0, saa = 0, sbb = 0;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			sab += (a[i] - ma) * (b[i] - mb);
+			saa += (a[i] - ma) * (a[i] - ma);
+			sbb += (b[i] - mb) * (b[i] - mb);
+		}
+
+		return saa > 0 && sbb > 0 ? sab / std::sqrt(saa * sbb) : 0.0;
+	}
+
+	double spearman(const std::vector<double>& a, const std::vector<double>& b)
+	{
+		return pearson(averageRanks(a), averageRanks(b));
+	}
+
+	/* A fixed sequence, so a run is repeatable to the count. */
+	struct Lcg
+	{
+		uint64_t s = 0x2545F4914F6CDD1DULL;
+
+		size_t next(size_t n)
+		{
+			s = s * 6364136223846793005ULL + 1442695040888963407ULL;
+			return (size_t)((s >> 33) % (uint64_t)n);
+		}
+	};
+
+	/* The classic shade against the .TRG's two colour triples.
+	 *
+	 * The classic room vertices of room g are paired with the vertices of
+	 * .TRG group g at the same room-local position - the pairing
+	 * hd_level.cpp's BuildWaterMarks and hd_render.cpp make for the water
+	 * marks. Where several .TRG vertices of the group stand at one position
+	 * their triples are averaged. Per paired vertex five brightnesses, each
+	 * the sum of three channels: the classic prelight, colour1, colour2,
+	 * colour1 + colour2, and colour1 * colour2 / 255 per channel.
+	 *
+	 * Two measures of whether a combination orders the vertices the way the
+	 * classic shade does: the Spearman rank correlation with the classic
+	 * shade, and a sample of 200,000 vertex pairs with different classic
+	 * shades, counted as agreeing (the combination puts the two the same way
+	 * round), disagreeing, or tied. The decisive count is the last one: of
+	 * the sampled pairs that the sum and the product put in OPPOSITE order,
+	 * how many the classic shade puts the sum's way and how many the
+	 * product's. */
+	struct ShadeTotals
+	{
+		long long classic = 0, paired = 0;
+		long long agree[4] = {}, disagree[4] = {}, tie[4] = {};
+		long long split = 0, splitSum = 0, splitProduct = 0;
+		long long channels = 0, aboveOne = 0;
+		std::vector<double> all[5];
+	};
+
+	void dumpShadeOrder(const std::string& root, const std::string& stem,
+		const std::string& folder, ShadeTotals& totals, bool header)
+	{
+		static const char* const kName[4] = { "c1+c2", "c1*c2", "c1", "c2" };
+
+		Tr5Level level;
+		std::string error;
+
+		if (!level.load(toW(folder + "\\" + stem + ".TRC"), error))
+		{
+			std::printf("%-9s classic level not loadable: %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		trf::remaster::Trg trg;
+
+		if (!trf::remaster::read_trg(root + "\\DATA\\" + stem + ".TRG", trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		if (header)
+		{
+			std::printf("%-9s %8s %8s  %-6s %7s %8s %8s %8s\n", "level", "classic",
+				"paired", "rule", "rho", "agree", "disagree", "tie");
+			std::printf("%-9s %8s %8s  %-6s %7s %8s %8s %8s\n", "---------", "--------",
+				"--------", "------", "-------", "--------", "--------", "--------");
+		}
+
+		/* shade, sum, product, c1, c2 */
+		std::vector<double> col[5];
+		long long classicCount = 0;
+		const size_t groups = std::min((size_t)level.roomCount(), trg.groups.size());
+		std::vector<std::array<uint32_t, 3>> tris;
+
+		for (size_t g = 0; g < groups; g++)
+		{
+			std::vector<ShadeVertex> verts;
+
+			if (!classicRoomData(level, (int)g, &verts, 0))
+				continue;
+
+			classicCount += (long long)verts.size();
+			groupTriangles(trg, g, tris);
+
+			struct Acc { double c1[3] = {}, c2[3] = {}; int n = 0; };
+			std::unordered_map<uint64_t, Acc> at;
+			std::set<uint32_t> seen;
+
+			for (const auto& t : tris)
+				for (int k = 0; k < 3; k++)
+				{
+					if (!seen.insert(t[k]).second || t[k] >= trg.vertices.size())
+						continue;
+
+					const trf::remaster::TrgVertex& v = trg.vertices[t[k]];
+					Acc& a = at[positionKey(v)];
+
+					for (int c = 0; c < 3; c++)
+					{
+						a.c1[c] += v.colour1[c];
+						a.c2[c] += v.colour2[c];
+					}
+
+					a.n++;
+				}
+
+			for (const ShadeVertex& sv : verts)
+			{
+				auto it = at.find(positionKey(sv.p));
+
+				if (it == at.end())
+					continue;
+
+				const Acc& a = it->second;
+				double c1 = 0, c2 = 0, product = 0;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const double x = a.c1[c] / a.n, y = a.c2[c] / a.n;
+					c1 += x;
+					c2 += y;
+					product += x * y / 255.0;
+				}
+
+				col[0].push_back((double)(sv.rgb[0] + sv.rgb[1] + sv.rgb[2]));
+				col[1].push_back(c1 + c2);
+				col[2].push_back(product);
+				col[3].push_back(c1);
+				col[4].push_back(c2);
+			}
+		}
+
+		const size_t n = col[0].size();
+		long long agree[4] = {}, disagree[4] = {}, tie[4] = {};
+		long long split = 0, splitSum = 0, splitProduct = 0;
+		Lcg lcg;
+
+		if (n >= 2)
+			for (int s = 0; s < 200000; s++)
+			{
+				const size_t a = lcg.next(n), b = lcg.next(n);
+				const double d = col[0][a] - col[0][b];
+
+				if (d == 0.0)
+				{
+					s--;
+					continue;
+				}
+
+				for (int r = 0; r < 4; r++)
+				{
+					const double e = col[r + 1][a] - col[r + 1][b];
+
+					if (e == 0.0)
+						tie[r]++;
+					else if ((e > 0) == (d > 0))
+						agree[r]++;
+					else
+						disagree[r]++;
+				}
+
+				const double es = col[1][a] - col[1][b];
+				const double ep = col[2][a] - col[2][b];
+
+				if (es != 0.0 && ep != 0.0 && (es > 0) != (ep > 0))
+				{
+					split++;
+
+					if ((es > 0) == (d > 0))
+						splitSum++;
+					else
+						splitProduct++;
+				}
+			}
+
+		for (int r = 0; r < 4; r++)
+		{
+			const double rho = n >= 2 ? spearman(col[0], col[r + 1]) : 0.0;
+
+			std::printf("%-9s %8lld %8zu  %-6s %7.4f %8lld %8lld %8lld\n", stem.c_str(),
+				classicCount, n, kName[r], rho, agree[r], disagree[r], tie[r]);
+
+			totals.agree[r] += agree[r];
+			totals.disagree[r] += disagree[r];
+			totals.tie[r] += tie[r];
+		}
+
+		std::printf("%-9s sum and product in opposite order: %lld pair(s); the classic "
+			"shade sides with the sum in %lld, with the product in %lld\n", stem.c_str(),
+			split, splitSum, splitProduct);
+
+		/* The range of the sum the room shader multiplies with, over every
+		 * vertex of the file: each channel of colour1 + colour2 over 255. */
+		long long channels = 0, aboveOne = 0;
+		int widest = 0;
+
+		for (const trf::remaster::TrgVertex& v : trg.vertices)
+			for (int c = 0; c < 3; c++)
+			{
+				const int sum = v.colour1[c] + v.colour2[c];
+
+				channels++;
+				aboveOne += sum > 255 ? 1 : 0;
+				widest = std::max(widest, sum);
+			}
+
+		std::printf("%-9s c1+c2 over 255: largest %.3f, above 1 in %lld of %lld channels "
+			"(%.1f %%)\n", stem.c_str(), widest / 255.0, aboveOne, channels,
+			channels ? 100.0 * aboveOne / channels : 0.0);
+
+		totals.channels += channels;
+		totals.aboveOne += aboveOne;
+
+		totals.classic += classicCount;
+		totals.paired += (long long)n;
+		totals.split += split;
+		totals.splitSum += splitSum;
+		totals.splitProduct += splitProduct;
+
+		for (int c = 0; c < 5; c++)
+			totals.all[c].insert(totals.all[c].end(), col[c].begin(), col[c].end());
+	}
+
+	void printShadeTotals(const ShadeTotals& totals)
+	{
+		static const char* const kName[4] = { "c1+c2", "c1*c2", "c1", "c2" };
+
+		std::printf("\nall levels: %lld classic room vertices, %lld paired with a .TRG "
+			"vertex at the same room-local position\n", totals.classic, totals.paired);
+
+		for (int r = 0; r < 4; r++)
+			std::printf("all       %-6s rho %7.4f   agree %8lld  disagree %8lld  tie %8lld\n",
+				kName[r], spearman(totals.all[0], totals.all[r + 1]), totals.agree[r],
+				totals.disagree[r], totals.tie[r]);
+
+		std::printf("all       sum and product in opposite order: %lld pair(s); classic "
+			"with the sum %lld, with the product %lld\n", totals.split, totals.splitSum,
+			totals.splitProduct);
+		std::printf("all       c1+c2 above 1 in %lld of %lld channels (%.1f %%)\n",
+			totals.aboveOne, totals.channels,
+			totals.channels ? 100.0 * totals.aboveOne / totals.channels : 0.0);
+	}
+
+	/* Which two bytes of a .TRG vertex are the texture coordinates.
+	 *
+	 * The layout read here puts u in the fourth byte of colour1 (offset 15)
+	 * and v in the fourth byte of colour2 (offset 19). Three counts hold it
+	 * against the files:
+	 *
+	 *   the value ranges of the two bytes and of the layer byte, which has to
+	 *   lie in 1 .. the file's texture count;
+	 *   the .TRG vertices that lie inside one classic face of their room (in
+	 *   its plane, inside one of its two triangles with a margin): the
+	 *   classic u and v there, interpolated from the face's texinfo corners,
+	 *   held against the bytes. Per face, on the vertices of its commonest
+	 *   layer: every two vertices counted as agreeing when a byte puts them
+	 *   the same way round as the classic u (or v) does, for the reading
+	 *   (u = +15, v = +19) and for the swapped one; and a straight-line fit
+	 *   of each byte on the classic (u, v), whose R squared says whether the
+	 *   byte is a texture coordinate of that tile at all;
+	 *   and the consistency test of a texture coordinate: every classic face
+	 *   that wears one texinfo must put that tile's corners at the same place
+	 *   on the same page - the fit, evaluated at the texinfo's four corners,
+	 *   must agree between two faces within three steps. A light byte - the
+	 *   red of colour1 - goes through the same fit and the same test as the
+	 *   control. */
+	struct UvTotals
+	{
+		long long faces = 0, vertices = 0;
+		long long agree[4] = {}, disagree[4] = {}, tie[4] = {};
+		long long fitted = 0, goodFit[3] = {};
+		long long keys = 0, keysSame[2] = {};
+		std::vector<double> cu, cv, b15, b19;
+	};
+
+	/* Least squares of y on (1, u, v); false when the three are degenerate.
+	 * r2 is the share of y's variance the line explains. */
+	bool fitPlane(const std::vector<double>& u, const std::vector<double>& v,
+		const std::vector<double>& y, double c[3], double* r2)
+	{
+		const size_t n = y.size();
+		double m[3][3] = {}, r[3] = {};
+
+		for (size_t i = 0; i < n; i++)
+		{
+			const double x[3] = { 1.0, u[i], v[i] };
+
+			for (int a = 0; a < 3; a++)
+			{
+				r[a] += x[a] * y[i];
+
+				for (int b = 0; b < 3; b++)
+					m[a][b] += x[a] * x[b];
+			}
+		}
+
+		const double det =
+			m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+			m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+			m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+
+		if (std::fabs(det) < 1e-6)
+			return false;
+
+		for (int k = 0; k < 3; k++)
+		{
+			double t[3][3];
+
+			for (int a = 0; a < 3; a++)
+				for (int b = 0; b < 3; b++)
+					t[a][b] = b == k ? r[a] : m[a][b];
+
+			c[k] = (t[0][0] * (t[1][1] * t[2][2] - t[1][2] * t[2][1]) -
+				t[0][1] * (t[1][0] * t[2][2] - t[1][2] * t[2][0]) +
+				t[0][2] * (t[1][0] * t[2][1] - t[1][1] * t[2][0])) / det;
+		}
+
+		double mean = 0, all = 0, rest = 0;
+
+		for (size_t i = 0; i < n; i++)
+			mean += y[i];
+
+		mean /= (double)n;
+
+		for (size_t i = 0; i < n; i++)
+		{
+			const double f = c[0] + c[1] * u[i] + c[2] * v[i];
+			all += (y[i] - mean) * (y[i] - mean);
+			rest += (y[i] - f) * (y[i] - f);
+		}
+
+		*r2 = all > 0 ? 1.0 - rest / all : (rest < 1e-9 ? 1.0 : 0.0);
+		return true;
+	}
+
+	void dumpUvBytes(const std::string& root, const std::string& stem,
+		const std::string& folder, UvTotals& totals)
+	{
+		Tr5Level level;
+		std::string error;
+
+		if (!level.load(toW(folder + "\\" + stem + ".TRC"), error))
+		{
+			std::printf("%-9s classic level not loadable: %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		trf::remaster::Trg trg;
+
+		if (!trf::remaster::read_trg(root + "\\DATA\\" + stem + ".TRG", trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		size_t texAt = 0;
+		int32_t texCount = 0;
+		level.debugTexinfoBlock(texAt, texCount);
+		const std::vector<uint8_t>& bytes = level.debugBytes();
+
+		/* The ranges, over every vertex of the file. */
+		int lo[3] = { 255, 255, 255 }, hi[3] = { 0, 0, 0 };
+		std::set<int> distinct[3];
+		long long layerBad = 0;
+
+		for (const trf::remaster::TrgVertex& v : trg.vertices)
+		{
+			const int b[3] = { v.u, v.v, v.layer };
+
+			for (int i = 0; i < 3; i++)
+			{
+				lo[i] = std::min(lo[i], b[i]);
+				hi[i] = std::max(hi[i], b[i]);
+				distinct[i].insert(b[i]);
+			}
+
+			if (!v.layer || v.layer > trg.textures.size())
+				layerBad++;
+		}
+
+		std::printf("%-9s vertices %zu  u(+15) %d..%d %zu distinct  v(+19) %d..%d %zu "
+			"distinct  layer(+11) %d..%d of %zu textures, %lld outside 1..%zu\n",
+			stem.c_str(), trg.vertices.size(), lo[0], hi[0], distinct[0].size(), lo[1],
+			hi[1], distinct[1].size(), lo[2], hi[2], trg.textures.size(), layerBad,
+			trg.textures.size());
+
+		/* The classic texinfo's corner coordinates, in pixels of its 256 page. */
+		auto classicUv = [&](int ti, int k, double* u, double* v) -> bool
+		{
+			if (ti < 0 || ti >= texCount || !texAt)
+				return false;
+
+			const size_t at = texAt + (size_t)ti * 40 + 6 + (size_t)k * 4;
+			uint16_t wu, wv;
+
+			if (at + 4 > bytes.size())
+				return false;
+
+			std::memcpy(&wu, &bytes[at], 2);
+			std::memcpy(&wv, &bytes[at + 2], 2);
+			*u = (double)(wu >> 8);
+			*v = (double)(wv >> 8);
+			return true;
+		};
+
+		long long faceCount = 0, vertexCount = 0, fitted = 0, goodFit[3] = {};
+		long long agree[4] = {}, disagree[4] = {}, tie[4] = {};
+		/* texinfo -> the first face's page and its fit of u, v and the control
+		 * at the texinfo's corners; whether a later face agreed */
+		struct Seen { int page; int corners; double at[4][3]; int face; bool other; bool same[2]; };
+		std::map<int, Seen> seen;
+		const size_t groups = std::min((size_t)level.roomCount(), trg.groups.size());
+		std::vector<std::array<uint32_t, 3>> list;
+
+		for (size_t g = 0; g < groups; g++)
+		{
+			std::vector<ShadeFace> faces;
+
+			if (!classicRoomData(level, (int)g, 0, &faces) || faces.empty())
+				continue;
+
+			/* Each face's plane, its classic corner (u, v) and its box, and a
+			 * grid of 512 units over x and z that names the faces whose box
+			 * reaches into a cell. */
+			struct FacePlane
+			{
+				double n[3], d;
+				double cu[4], cv[4];
+				double lo[3], hi[3];
+				bool good;
+			};
+
+			std::vector<FacePlane> plane(faces.size());
+			std::unordered_map<uint64_t, std::vector<int>> grid;
+
+			for (size_t f = 0; f < faces.size(); f++)
+			{
+				const ShadeFace& face = faces[f];
+				FacePlane& fp = plane[f];
+				double e1[3], e2[3];
+
+				for (int x = 0; x < 3; x++)
+				{
+					e1[x] = (double)face.p[1][x] - face.p[0][x];
+					e2[x] = (double)face.p[2][x] - face.p[0][x];
+				}
+
+				fp.n[0] = e1[1] * e2[2] - e1[2] * e2[1];
+				fp.n[1] = e1[2] * e2[0] - e1[0] * e2[2];
+				fp.n[2] = e1[0] * e2[1] - e1[1] * e2[0];
+				const double nl = std::sqrt(fp.n[0] * fp.n[0] + fp.n[1] * fp.n[1] +
+					fp.n[2] * fp.n[2]);
+				fp.good = nl > 1e-6;
+
+				for (int k = 0; k < face.corners && fp.good; k++)
+					fp.good = classicUv(face.texInfo, k, &fp.cu[k], &fp.cv[k]);
+
+				if (!fp.good)
+					continue;
+
+				for (int x = 0; x < 3; x++)
+					fp.n[x] /= nl;
+
+				fp.d = fp.n[0] * face.p[0][0] + fp.n[1] * face.p[0][1] + fp.n[2] * face.p[0][2];
+
+				for (int x = 0; x < 3; x++)
+				{
+					fp.lo[x] = fp.hi[x] = face.p[0][x];
+
+					for (int k = 1; k < face.corners; k++)
+					{
+						fp.lo[x] = std::min(fp.lo[x], (double)face.p[k][x]);
+						fp.hi[x] = std::max(fp.hi[x], (double)face.p[k][x]);
+					}
+				}
+
+				for (int cx = (int)std::floor((fp.lo[0] - 4) / 512); cx <= (int)std::floor((fp.hi[0] + 4) / 512); cx++)
+					for (int cz = (int)std::floor((fp.lo[2] - 4) / 512); cz <= (int)std::floor((fp.hi[2] + 4) / 512); cz++)
+						grid[((uint64_t)(uint32_t)cx << 32) | (uint32_t)cz].push_back((int)f);
+			}
+
+			/* The group's own vertices, each once. */
+			groupTriangles(trg, g, list);
+			std::set<uint32_t> own;
+
+			for (const auto& t : list)
+				for (int k = 0; k < 3; k++)
+					if (t[k] < trg.vertices.size())
+						own.insert(t[k]);
+
+			/* face -> its vertices: classic u, v; bytes +15, +19, colour1 red;
+			 * layer */
+			struct Sample { double cu, cv, b15, b19, red; int layer; };
+			std::vector<std::vector<Sample>> inside(faces.size());
+
+			for (const uint32_t index : own)
+			{
+				const trf::remaster::TrgVertex& v = trg.vertices[index];
+				const double p[3] = { (double)v.x, (double)v.y, (double)v.z };
+				const int cx = (int)std::floor(p[0] / 512), cz = (int)std::floor(p[2] / 512);
+				auto cell = grid.find(((uint64_t)(uint32_t)cx << 32) | (uint32_t)cz);
+
+				if (cell == grid.end())
+					continue;
+
+				int hit = -1, hits = 0;
+				double hu = 0, hv = 0;
+
+				for (const int f : cell->second)
+				{
+					const FacePlane& fp = plane[(size_t)f];
+					const ShadeFace& face = faces[(size_t)f];
+
+					if (!fp.good ||
+						std::fabs(fp.n[0] * p[0] + fp.n[1] * p[1] + fp.n[2] * p[2] - fp.d) > 2.0)
+						continue;
+
+					/* The face's two triangles, (0, 1, 2) and (0, 2, 3). */
+					for (int tri = 0; tri < (face.corners == 4 ? 2 : 1); tri++)
+					{
+						const int k[3] = { 0, tri ? 2 : 1, tri ? 3 : 2 };
+						double w[3];
+						double area = 0;
+
+						for (int j = 0; j < 3; j++)
+						{
+							const short* a = face.p[k[(j + 1) % 3]];
+							const short* b = face.p[k[(j + 2) % 3]];
+							const double ea[3] = { a[0] - p[0], a[1] - p[1], a[2] - p[2] };
+							const double eb[3] = { b[0] - p[0], b[1] - p[1], b[2] - p[2] };
+							const double c[3] =
+							{
+								ea[1] * eb[2] - ea[2] * eb[1],
+								ea[2] * eb[0] - ea[0] * eb[2],
+								ea[0] * eb[1] - ea[1] * eb[0]
+							};
+							w[j] = c[0] * fp.n[0] + c[1] * fp.n[1] + c[2] * fp.n[2];
+							area += w[j];
+						}
+
+						if (std::fabs(area) < 1e-6)
+							continue;
+
+						bool in = true;
+
+						for (int j = 0; j < 3; j++)
+						{
+							w[j] /= area;
+							in = in && w[j] >= 0.02;
+						}
+
+						if (!in)
+							continue;
+
+						hits++;
+						hit = f;
+						hu = w[0] * fp.cu[k[0]] + w[1] * fp.cu[k[1]] + w[2] * fp.cu[k[2]];
+						hv = w[0] * fp.cv[k[0]] + w[1] * fp.cv[k[1]] + w[2] * fp.cv[k[2]];
+					}
+				}
+
+				if (hits != 1)
+					continue;
+
+				inside[(size_t)hit].push_back({ hu, hv, (double)v.u, (double)v.v,
+					(double)v.colour1[0], v.layer });
+			}
+
+			for (size_t f = 0; f < faces.size(); f++)
+			{
+				std::vector<Sample>& s = inside[f];
+
+				if (s.size() < 4)
+					continue;
+
+				/* The commonest layer of the face, and only its vertices. */
+				std::map<int, int> layers;
+
+				for (const Sample& x : s)
+					layers[x.layer]++;
+
+				int layer = 0, most = 0;
+
+				for (const auto& kv : layers)
+					if (kv.second > most)
+					{
+						most = kv.second;
+						layer = kv.first;
+					}
+
+				std::vector<Sample> keep;
+
+				for (const Sample& x : s)
+					if (x.layer == layer)
+						keep.push_back(x);
+
+				if (keep.size() < 4)
+					continue;
+
+				faceCount++;
+				vertexCount += (long long)keep.size();
+
+				const size_t cap = std::min(keep.size(), (size_t)64);
+
+				for (size_t a = 0; a < cap; a++)
+				{
+					totals.cu.push_back(keep[a].cu);
+					totals.cv.push_back(keep[a].cv);
+					totals.b15.push_back(keep[a].b15);
+					totals.b19.push_back(keep[a].b19);
+
+					for (size_t b = a + 1; b < cap; b++)
+					{
+						const double du = keep[a].cu - keep[b].cu, dv = keep[a].cv - keep[b].cv;
+						const double d15 = keep[a].b15 - keep[b].b15;
+						const double d19 = keep[a].b19 - keep[b].b19;
+						const double cl[4] = { du, du, dv, dv };
+						const double hd[4] = { d15, d19, d19, d15 };
+
+						for (int r = 0; r < 4; r++)
+						{
+							if (std::fabs(cl[r]) < 1.0)
+								continue;
+
+							if (hd[r] == 0.0)
+								tie[r]++;
+							else if ((hd[r] > 0) == (cl[r] > 0))
+								agree[r]++;
+							else
+								disagree[r]++;
+						}
+					}
+				}
+
+				std::vector<double> u, v, y[3];
+
+				for (const Sample& x : keep)
+				{
+					u.push_back(x.cu);
+					v.push_back(x.cv);
+					y[0].push_back(x.b15);
+					y[1].push_back(x.b19);
+					y[2].push_back(x.red);
+				}
+
+				double c[3][3], r2[3];
+				bool ok = true;
+
+				for (int i = 0; i < 3 && ok; i++)
+					ok = fitPlane(u, v, y[i], c[i], &r2[i]);
+
+				if (!ok)
+					continue;
+
+				fitted++;
+
+				for (int i = 0; i < 3; i++)
+					goodFit[i] += r2[i] >= 0.95 ? 1 : 0;
+
+				/* Where the fit puts the texinfo's corners: u, v and the
+				 * control. A tile mapped once on the page lands every face
+				 * that wears it on the same place. */
+				Seen now;
+				now.page = layer >= 1 && (size_t)layer <= trg.textures.size()
+					? (int)trg.textures[(size_t)layer - 1] : -1;
+				now.corners = faces[f].corners;
+				now.face = (int)f;
+				now.other = false;
+				now.same[0] = now.same[1] = true;
+
+				for (int k = 0; k < faces[f].corners; k++)
+					for (int i = 0; i < 3; i++)
+						now.at[k][i] = c[i][0] + c[i][1] * plane[f].cu[k] +
+							c[i][2] * plane[f].cv[k];
+
+				auto put = seen.insert({ faces[f].texInfo, now });
+
+				if (!put.second && put.first->second.face != (int)f)
+				{
+					Seen& was = put.first->second;
+					bool uv = was.page == now.page && was.corners == now.corners;
+					bool red = was.corners == now.corners;
+
+					for (int k = 0; k < now.corners; k++)
+					{
+						uv = uv && std::fabs(was.at[k][0] - now.at[k][0]) <= 3.0 &&
+							std::fabs(was.at[k][1] - now.at[k][1]) <= 3.0;
+						red = red && std::fabs(was.at[k][2] - now.at[k][2]) <= 3.0;
+					}
+
+					was.other = true;
+					was.same[0] = was.same[0] && uv;
+					was.same[1] = was.same[1] && red;
+				}
+			}
+		}
+
+		long long keys = 0, keysSame[2] = {};
+
+		for (const auto& kv : seen)
+			if (kv.second.other)
+			{
+				keys++;
+				keysSame[0] += kv.second.same[0] ? 1 : 0;
+				keysSame[1] += kv.second.same[1] ? 1 : 0;
+			}
+
+		static const char* const kPair[4] =
+		{ "u ~ +15", "u ~ +19", "v ~ +19", "v ~ +15" };
+
+		std::printf("%-9s classic faces with .TRG vertices inside %lld, vertices %lld, "
+			"fitted %lld: R2 >= 0.95 for +15 %lld, +19 %lld, colour1 red %lld\n",
+			stem.c_str(), faceCount, vertexCount, fitted, goodFit[0], goodFit[1],
+			goodFit[2]);
+
+		for (int r = 0; r < 4; r++)
+			std::printf("%-9s   pair order %s: agree %lld disagree %lld tie %lld\n",
+				stem.c_str(), kPair[r], agree[r], disagree[r], tie[r]);
+
+		std::printf("%-9s   texinfos met on two faces or more %lld: corners on the same page "
+			"within 3 steps %lld, colour1 red within 3 (control) %lld\n", stem.c_str(), keys,
+			keysSame[0], keysSame[1]);
+
+		totals.faces += faceCount;
+		totals.vertices += vertexCount;
+		totals.fitted += fitted;
+
+		for (int i = 0; i < 3; i++)
+			totals.goodFit[i] += goodFit[i];
+
+		for (int r = 0; r < 4; r++)
+		{
+			totals.agree[r] += agree[r];
+			totals.disagree[r] += disagree[r];
+			totals.tie[r] += tie[r];
+		}
+
+		totals.keys += keys;
+		totals.keysSame[0] += keysSame[0];
+		totals.keysSame[1] += keysSame[1];
+	}
+
+	void printUvTotals(const UvTotals& totals)
+	{
+		static const char* const kPair[4] =
+		{ "u ~ +15", "u ~ +19", "v ~ +19", "v ~ +15" };
+
+		std::printf("\nall levels: %lld classic faces with .TRG vertices inside, %lld vertices, "
+			"%lld fitted: R2 >= 0.95 for +15 %lld, +19 %lld, colour1 red %lld\n",
+			totals.faces, totals.vertices, totals.fitted, totals.goodFit[0],
+			totals.goodFit[1], totals.goodFit[2]);
+
+		for (int r = 0; r < 4; r++)
+			std::printf("all   pair order %s: agree %lld disagree %lld tie %lld\n",
+				kPair[r], totals.agree[r], totals.disagree[r], totals.tie[r]);
+
+		std::printf("all   Spearman over %zu vertices: u~+15 %.4f  u~+19 %.4f  "
+			"v~+19 %.4f  v~+15 %.4f\n", totals.cu.size(), spearman(totals.cu, totals.b15),
+			spearman(totals.cu, totals.b19), spearman(totals.cv, totals.b19),
+			spearman(totals.cv, totals.b15));
+		std::printf("all   texinfos met on two faces or more %lld: corners on the same page "
+			"within 3 steps %lld, colour1 red within 3 (control) %lld\n", totals.keys,
+			totals.keysSame[0], totals.keysSame[1]);
+	}
+
+	/* A vertex normal against the plane of the triangle it belongs to, read
+	 * two ways: biased by 127 ((n - 127) / 128) and as signed bytes. Counted
+	 * per corner of every triangle with an area: within 10 degrees of the
+	 * face normal, either way round, and within 10 degrees on the side the
+	 * winding gives. */
+	struct NormalCount
+	{
+		long long corners = 0;
+		long long within[2] = {}, sameSide[2] = {};
+	};
+
+	void countNormal(const float* p0, const float* p1, const float* p2,
+		const unsigned char* n, NormalCount& out)
+	{
+		const double e1[3] = { p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2] };
+		const double e2[3] = { p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2] };
+		double f[3] =
+		{
+			e1[1] * e2[2] - e1[2] * e2[1],
+			e1[2] * e2[0] - e1[0] * e2[2],
+			e1[0] * e2[1] - e1[1] * e2[0]
+		};
+		const double fl = std::sqrt(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
+
+		if (fl < 1e-3)
+			return;
+
+		out.corners++;
+
+		for (int reading = 0; reading < 2; reading++)
+		{
+			double m[3];
+
+			for (int c = 0; c < 3; c++)
+				m[c] = reading == 0 ? ((double)n[c] - 127.0) / 128.0 : (double)(signed char)n[c];
+
+			const double ml = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+
+			if (ml < 1e-9)
+				continue;
+
+			const double cosine = (m[0] * f[0] + m[1] * f[1] + m[2] * f[2]) / (ml * fl);
+			const double ten = std::cos(10.0 * 3.14159265358979 / 180.0);
+
+			if (std::fabs(cosine) >= ten)
+				out.within[reading]++;
+
+			if (cosine >= ten)
+				out.sameSide[reading]++;
+		}
+	}
+
+	void printNormalCount(const char* what, const NormalCount& c)
+	{
+		const double n = c.corners ? (double)c.corners : 1.0;
+
+		std::printf("%-9s corners %10lld  biased-127: within 10 deg %10lld (%5.1f %%), "
+			"same side %10lld (%5.1f %%)  signed: within %10lld (%5.1f %%), same side "
+			"%10lld (%5.1f %%)\n", what, c.corners, c.within[0], 100.0 * c.within[0] / n,
+			c.sameSide[0], 100.0 * c.sameSide[0] / n, c.within[1], 100.0 * c.within[1] / n,
+			c.sameSide[1], 100.0 * c.sameSide[1] / n);
+	}
+
+	void dumpTrgNormals(const std::string& root, const std::string& stem, NormalCount& all)
+	{
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(root + "\\DATA\\" + stem + ".TRG", trg, error))
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		NormalCount here;
+		std::vector<std::array<uint32_t, 3>> list;
+
+		for (size_t g = 0; g < trg.groups.size(); g++)
+		{
+			groupTriangles(trg, g, list);
+
+			for (const auto& t : list)
+			{
+				if (t[0] >= trg.vertices.size() || t[1] >= trg.vertices.size() ||
+					t[2] >= trg.vertices.size())
+					continue;
+
+				float p[3][3];
+
+				for (int j = 0; j < 3; j++)
+				{
+					const trf::remaster::TrgVertex& v = trg.vertices[t[j]];
+					p[j][0] = v.x;
+					p[j][1] = v.y;
+					p[j][2] = v.z;
+				}
+
+				for (int j = 0; j < 3; j++)
+				{
+					const trf::remaster::TrgVertex& v = trg.vertices[t[j]];
+					const unsigned char n[3] = { v.nx, v.ny, v.nz };
+					countNormal(p[0], p[1], p[2], n, here);
+				}
+			}
+		}
+
+		printNormalCount(stem.c_str(), here);
+		all.corners += here.corners;
+
+		for (int i = 0; i < 2; i++)
+		{
+			all.within[i] += here.within[i];
+			all.sameSide[i] += here.sameSide[i];
+		}
+	}
+
+	void dumpTrmNormals(const std::string& root)
+	{
+		NormalCount all;
+		int files = 0, failed = 0;
+		const std::string folder = root + "\\ITEM";
+
+		for (const auto& entry : std::filesystem::directory_iterator(folder))
+		{
+			std::string ext = entry.path().extension().string();
+
+			for (char& c : ext)
+				c = (char)toupper((unsigned char)c);
+
+			if (ext != ".TRM")
+				continue;
+
+			HDTrmModel model;
+			const char* why = "";
+
+			if (!HDTrmLoad(entry.path().string().c_str(), &model, &why))
+			{
+				failed++;
+				continue;
+			}
+
+			files++;
+
+			for (int i = 0; i + 2 < model.indices; i += 3)
+			{
+				const unsigned short* t = &model.index[i];
+
+				if (t[0] >= model.vertices || t[1] >= model.vertices || t[2] >= model.vertices)
+					continue;
+
+				const HDTrmVertex* v[3] = { &model.vertex[t[0]], &model.vertex[t[1]],
+					&model.vertex[t[2]] };
+				const float p[3][3] =
+				{
+					{ v[0]->x, v[0]->y, v[0]->z },
+					{ v[1]->x, v[1]->y, v[1]->z },
+					{ v[2]->x, v[2]->y, v[2]->z }
+				};
+
+				for (int j = 0; j < 3; j++)
+				{
+					const unsigned char n[3] = { v[j]->nx, v[j]->ny, v[j]->nz };
+					countNormal(p[0], p[1], p[2], n, all);
+				}
+			}
+
+			HDTrmFree(&model);
+		}
+
+		std::printf("%s: %d .TRM file(s) read, %d refused\n", folder.c_str(), files, failed);
+		printNormalCount("ITEM", all);
+	}
+
+	/* The sizes of the pages: every .DDS in this game's TEX and in the
+	 * sibling games' TEX folders beside it, counted by the width and height
+	 * of its header (offsets 16 and 12 after the four-byte magic), and the
+	 * names that carry a _1024 or _2048 suffix beside a plain number. */
+	void dumpDdsSizes(const std::string& root)
+	{
+		const std::filesystem::path five(root);
+		const std::filesystem::path parent = five.parent_path();
+
+		for (const auto& game : std::filesystem::directory_iterator(parent))
+		{
+			const std::filesystem::path tex = game.path() / "TEX";
+
+			if (!game.is_directory() || !std::filesystem::is_directory(tex))
+				continue;
+
+			std::map<std::pair<int, int>, int> sizes;
+			int files = 0, unread = 0, suffixed = 0;
+
+			for (const auto& entry : std::filesystem::directory_iterator(tex))
+			{
+				std::string name = entry.path().filename().string();
+				std::string upper = name;
+
+				for (char& c : upper)
+					c = (char)toupper((unsigned char)c);
+
+				if (upper.size() < 4 || upper.substr(upper.size() - 4) != ".DDS")
+					continue;
+
+				files++;
+
+				if (upper.find("_1024.DDS") != std::string::npos ||
+					upper.find("_2048.DDS") != std::string::npos)
+					suffixed++;
+
+				std::FILE* f = std::fopen(entry.path().string().c_str(), "rb");
+				unsigned char head[20];
+
+				if (!f || std::fread(head, 1, 20, f) != 20 || std::memcmp(head, "DDS ", 4))
+				{
+					unread++;
+
+					if (f)
+						std::fclose(f);
+
+					continue;
+				}
+
+				std::fclose(f);
+				uint32_t h, w;
+				std::memcpy(&h, head + 12, 4);
+				std::memcpy(&w, head + 16, 4);
+				sizes[{ (int)w, (int)h }]++;
+			}
+
+			std::printf("%s: %d .DDS, %d unreadable, %d named <n>_1024 or <n>_2048\n",
+				tex.string().c_str(), files, unread, suffixed);
+
+			for (const auto& kv : sizes)
+				std::printf("    %5d x %-5d %6d\n", kv.first.first, kv.first.second, kv.second);
+		}
+	}
 }
 
 int main(int argc, char** argv)
@@ -4425,6 +5662,18 @@ int main(int argc, char** argv)
 		std::printf("                      mixed, floor or not), the carrier's\n");
 		std::printf("                      triangles by kind, and the sectors of the\n");
 		std::printf("                      classic rooms without a face\n");
+		std::printf("       [-shadeorder]  the classic room vertices' own shade against\n");
+		std::printf("                      the .TRG colour triples at the same position:\n");
+		std::printf("                      rank correlation and pair order of c1+c2,\n");
+		std::printf("                      c1*c2, c1 and c2 (needs -classic)\n");
+		std::printf("       [-uvbytes]  which bytes are u and v: value ranges, corner\n");
+		std::printf("                   order against the classic texinfo and the\n");
+		std::printf("                   one-texinfo-one-place test (needs -classic)\n");
+		std::printf("       [-normals]  the .TRG vertex normal against its triangle,\n");
+		std::printf("                   biased by 127 and as signed bytes\n");
+		std::printf("       [-trmnormals]  the same over every .TRM of the ITEM folder\n");
+		std::printf("       [-ddssizes]  every .DDS of this game's and its siblings'\n");
+		std::printf("                    TEX by the size in its header\n");
 		return 1;
 	}
 
@@ -4478,10 +5727,25 @@ int main(int argc, char** argv)
 	int art_facing = 1;
 	int art_controls = 12;
 	bool art_per_face = false;
+	bool shade_order = false;
+	bool uv_bytes = false;
+	bool trg_normals = false;
+	bool trm_normals = false;
+	bool dds_sizes = false;
 
 	for (int i = 2; i < argc; i++)
 	{
-		if (!_stricmp(argv[i], "-classicart"))
+		if (!_stricmp(argv[i], "-shadeorder"))
+			shade_order = true;
+		else if (!_stricmp(argv[i], "-uvbytes"))
+			uv_bytes = true;
+		else if (!_stricmp(argv[i], "-normals"))
+			trg_normals = true;
+		else if (!_stricmp(argv[i], "-trmnormals"))
+			trm_normals = true;
+		else if (!_stricmp(argv[i], "-ddssizes"))
+			dds_sizes = true;
+		else if (!_stricmp(argv[i], "-classicart"))
 			classic_art = true;
 		else if (!_stricmp(argv[i], "-perface"))
 			art_per_face = true;
@@ -4596,6 +5860,64 @@ int main(int argc, char** argv)
 	const int cores = (int)std::thread::hardware_concurrency();
 	std::printf("install : %s\n", root.c_str());
 	std::printf("cores   : %d\n\n", cores);
+
+	if (shade_order || uv_bytes)
+	{
+		if (classic.empty())
+		{
+			std::printf("-shadeorder and -uvbytes need -classic <folder holding the .TRC>\n");
+			return 1;
+		}
+
+		if (shade_order)
+		{
+			ShadeTotals totals;
+			bool first = true;
+
+			for (const std::string& stem : levels)
+			{
+				dumpShadeOrder(root, stem, classic, totals, first);
+				first = false;
+			}
+
+			printShadeTotals(totals);
+		}
+
+		if (uv_bytes)
+		{
+			UvTotals totals;
+
+			for (const std::string& stem : levels)
+				dumpUvBytes(root, stem, classic, totals);
+
+			printUvTotals(totals);
+		}
+
+		return 0;
+	}
+
+	if (trg_normals)
+	{
+		NormalCount all;
+
+		for (const std::string& stem : levels)
+			dumpTrgNormals(root, stem, all);
+
+		printNormalCount("all", all);
+		return 0;
+	}
+
+	if (trm_normals)
+	{
+		dumpTrmNormals(root);
+		return 0;
+	}
+
+	if (dds_sizes)
+	{
+		dumpDdsSizes(root);
+		return 0;
+	}
 
 	if (gloss_light)
 	{

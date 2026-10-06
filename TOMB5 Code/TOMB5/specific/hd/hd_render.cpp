@@ -7485,12 +7485,13 @@ namespace
 			return;
 
 		/* gPass: x is the alpha reference - a texel below it is thrown away
-		 * and zero throws nothing away - y the additive weighting, z a spare
-		 * scale on the first vertex colour that is always 1 here and that
-		 * nothing computes, w the specular add - the
+		 * and zero throws nothing away - y the additive weighting, z unread
+		 * by the room shaders (0), w the specular add - the
 		 * classic path switches D3DRS_SPECULARENABLE off for its additive
 		 * draw type (HWR_DrawSortList, polyinsert.cpp) and the overbright half of the room
-		 * colour goes off with it.
+		 * colour goes off with it. The PIXEL constant file only: the room
+		 * vertex shader reads none of the four, and fxc keeps a literal of
+		 * its own in c4 of that shader (the def list in hd_room_vs.inc).
 		 *
 		 * The alpha pass's 0.5 is the classic path's own reference
 		 * (function_table.cpp, D3DRS_ALPHAREF 128 over a 0..255 alpha); the
@@ -7502,11 +7503,10 @@ namespace
 		{
 			(pass == 1 && !blendOnly) ? 0.5f : 0.0f,
 			pass == 2 ? 1.0f : 0.0f,
-			1.0f,
+			0.0f,
 			pass == 2 ? 0.0f : 1.0f
 		};
 
-		g_device->SetVertexShaderConstantF(4, constants, 1);
 		g_device->SetPixelShaderConstantF(4, constants, 1);
 
 		/* The opaque pass turns the alpha test on for the ranges whose .TRG
@@ -7663,7 +7663,6 @@ namespace
 			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 			constants[0] = 0.0f;
 			alpha_ref = 0.0f;
-			g_device->SetVertexShaderConstantF(4, constants, 1);
 			g_device->SetPixelShaderConstantF(4, constants, 1);
 		}
 		else if (blendOnly)
@@ -8404,7 +8403,7 @@ namespace
 
 	/* One pass of a group again, for the receive: the ranges draw_pass draws
 	 * in that pass and phase, with every vertex constant draw_pass writes per
-	 * range (gPass, gMotion, gFlat, the pushed-back matrix of HD_STAND_BEHIND)
+	 * range (gMotion, gFlat, the pushed-back matrix of HD_STAND_BEHIND)
 	 * and its cull, so RoomVS puts each triangle on the very depth it wrote;
 	 * and the page and the alpha reference, so a cut-out keeps its holes.
 	 * `clearOnly` is the clear floors' half of the alpha pass, which writes
@@ -8419,11 +8418,10 @@ namespace
 		{
 			(pass == 1 && !clearOnly) ? 0.5f : 0.0f,
 			0.0f,
-			1.0f,
+			0.0f,
 			1.0f
 		};
 
-		g_device->SetVertexShaderConstantF(4, constants, 1);
 		g_device->SetPixelShaderConstantF(4, constants, 1);
 
 		float alpha_ref = constants[0];

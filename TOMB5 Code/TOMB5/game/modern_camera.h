@@ -39,8 +39,9 @@
  * engine wants is derived from the world yaw on every tick, and the return is
  * the only thing that brings the camera home.
  *
- * TROne (GPLv3) holds its orbit as a world angle too, and that is the only
- * thing in common: TROne's orbit never returns behind the player, this one
+ * TROne (GPLv3) held its orbit as a world angle too in the version of
+ * 2026-09-13, and that is the only thing in common: TROne's orbit there never
+ * returns behind the player, this one
  * falls home at MODERN_CAMERA_RETURN whenever she moves and the stick is at
  * rest. No code of TROne is copied here; the shared idea is that a camera
  * angle is a state and not a derivation.

@@ -5,13 +5,14 @@
  * separate LARA_HEAD, the braid a six bone HAIR_OG, the hands come from
  * the HAND_ model of the slot whose mesh sits at the hand node and the worn
  * weapons from that slot's HOLSTER_ model - are carried over from TROne
- * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp:
- * lara_flush 1547-1679, lara_build_models 2462-2604, lara_load 2619-2800,
- * draw_hair 1498-1546, and games\tr5\glue\hostglue_file5.cpp:
- * RegisterLaraWardrobe 1856-1922). The names of the parts are TROne's; the
- * SECTION table under them is measured here, because TROne's TR5 glue has
- * ANDY and JOBY the wrong way round (it gives the Russia outfit to the Irish
- * levels and calls the Russian ones young Lara) - see the note in the .cpp.
+ * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * host\render\game_renderer.cpp: lara_flush, lara_build_models, lara_load,
+ * draw_hair, and games\tr5\glue\hostglue_file5.cpp: RegisterLaraWardrobe),
+ * TROne's own design. The names of the parts are TROne's; the SECTION table
+ * under them is measured here (ModelProbe -lara), because TROne's TR5 glue
+ * of its copy of 2026-09-05 had ANDY and JOBY the wrong way round (it gave
+ * the Russia outfit to the Irish levels and called the Russian ones young
+ * Lara) - see the note in the .cpp.
  * The renderer under all of it is new: TROne is OpenGL 3.3, this is Direct3D
  * 9 through hd_model. See THIRD-PARTY.md.
  *
@@ -35,8 +36,8 @@
 // engine draws her out of up to five classic slots at once - the skin from
 // LARA_SKIN, the seams from LARA_SKIN_JOINTS, the hands from whichever weapon
 // slot the mesh swap put there, the thigh straps from LARA_HOLSTERS* and the
-// braid from HAIR - and the remaster does the same with a wardrobe of separate
-// models. This module is the wardrobe: which files a level needs, what each of
+// braid from HAIR - and the install ships the same as a wardrobe of separate
+// models (4\ITEM). This module is the wardrobe: which files a level needs, what each of
 // them covers, and which of them the draw seam puts on the card for a frame.
 //
 // This file is the wardrobe and not the seam. It knows nothing about the

@@ -6,9 +6,10 @@
  * from the mesh tree's accumulated offsets, a <NAME>_HEAD.TRM rides rigidly
  * on the node nearest the face geometry's centre, and the three index runs of
  * a part are the three passes - are carried over from TROne (Copyright 2026
- * Todesengel, GPLv3, host\render\game_renderer.cpp: build_skinned_model
- * 1807-1913, bind_pose_of_slot 1752-1805, hd_load's model and head loops
- * 1978-2100). The renderer under them is new: TROne is OpenGL 3.3 with vertex
+ * Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * host\render\game_renderer.cpp: build_skinned_model, bind_pose_of_slot,
+ * hd_load's model and head loops), TROne's own design. The renderer under
+ * them is new: TROne is OpenGL 3.3 with vertex
  * arrays, texture arrays and runtime GLSL, this is Direct3D 9 with a vertex
  * declaration, one texture per page and compiled bytecode. See THIRD-PARTY.md.
  *
@@ -30,8 +31,8 @@ struct IDirect3DDevice9;
 
 // The HD object models of one level.
 //
-// The remaster does not repaint an object's classic tiles; it replaces the
-// mesh with a model of its own. This module stores those models for one
+// The install does not repaint an object's classic tiles; it ships a model of
+// its own for the mesh (<5>\ITEM). This module stores those models for one
 // level: which slot has one, its buffers on the card, which of the slot's
 // classic nodes it covers, and the draw that stands in for DrawAnimatingItem.
 //
@@ -43,8 +44,9 @@ struct IDirect3DDevice9;
 // print the per-node vertex counts beside the classic mesh tree.
 //
 // Nothing is drawn on an uncovered node, not the classic mesh either: TROne
-// marks every node of a valid model as covered (game_renderer.cpp:1826,
-// `model.covered = ~0u`), because classic patches on an HD body look wrong.
+// marks every node of a valid model as covered (TROne-main, copy of
+// 2026-10-05, build_skinned_model: `model.covered = ~0u`), because classic
+// patches on an HD body look wrong.
 // An uncovered node is nearly always a door's invisible root or a face that
 // ships as its own _HEAD.TRM, both meant to be empty. The decision is made
 // by the caller in hd_object.cpp.
@@ -589,8 +591,10 @@ void HDModelClip(const float* planes);
 //
 /* Which side of a triangle is drawn.
  *
- * The HD path draws every model DOUBLE SIDED, which is what TROne does too
- * (game_renderer.cpp:3419, glDisable(GL_CULL_FACE)) and what the classic
+ * The HD path draws every model DOUBLE SIDED, which is what TROne did too in
+ * its copy of 2026-09-05; TROne-main (copy of 2026-10-05, item_flush) draws
+ * Tomb Raider IV and V objects one-sided and Lara double-sided, and this rule
+ * does not follow it - it rests on our own count below. It is what the classic
  * engine appears to do - specific/function_table.cpp sets D3DCULL_NONE for
  * the whole session. But TR5 culls back faces in SOFTWARE, per polygon,
  * through the IsVisible function pointer, so the card never sees one. The

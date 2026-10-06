@@ -5,9 +5,10 @@
  * for the list of functions and THIRD-PARTY.md for the licence.
  *
  * What is not TROne's, and must not be made to follow it: which outfit a
- * section wears. TROne's TR5 glue (games\tr5\glue\hostglue_file5.cpp,
- * RegisterLaraWardrobe) gives OUTFIT_RUSSIA to the levels whose file names
- * begin with ANDY and treats the JOBY ones as young Lara. In this game it is
+ * section wears. TROne's TR5 glue of its copy of 2026-09-05
+ * (games\tr5\glue\hostglue_file5.cpp, RegisterLaraWardrobe) gave
+ * OUTFIT_RUSSIA to the levels whose file names begin with ANDY and treated
+ * the JOBY ones as young Lara. In this game it is
  * the other way round and the level files say so: the JOBY files are the
  * Russian submarine section (gfLevelId LVL5_BASE .. LVL5_SINKING_SUBMARINE,
  * which is what game\hair.cpp's own braid test asks about) and the ANDY files
@@ -393,7 +394,8 @@ namespace
 	 * It is a table and not a measurement, unlike everything else in this
 	 * file. The obvious source would be the pages' alpha channel: on the room
 	 * pages it is a gloss mask, and TROne says the same of the item ones
-	 * (host\render\game_renderer.cpp:373). It is not one here. Measured with
+	 * (TROne-main, copy of 2026-10-05, k_hd_frag and k_trm_frag). It is not
+	 * one here. Measured with
 	 * DdsProbe -alpha over the wardrobe's pages:
 	 *
 	 *     page 8001 (skin trim)   mean 254.9   0 texels below 128
@@ -509,7 +511,7 @@ namespace
 	 *
 	 * TR5's CROSSBOW_ANIM is the grappling gun, not a crossbow - the slot
 	 * kept its Tomb Raider IV name and the weapon changed. HAND_BARE_GRAPPLE
-	 * and HOLSTER_GRAPPLE are the models the remaster draws there, which is
+	 * and HOLSTER_GRAPPLE are the models the install ships for it, which is
 	 * also what TROne's TR5 glue picks. LARA_CROSSBOW_LASER is the same
 	 * gun: TR5 has no laser sight for
 	 * the grappling gun - the W_LASERSIGHT bit is a Tomb Raider IV leftover

@@ -62,8 +62,9 @@ void HWR_DrawSortList(D3DTLBUMPVERTEX* info, short num_verts, short texture, sho
 	 *    with them the bias pulls the level back under one so the picture
 	 *    stays sharp instead of going soft. -0.7 is TROne's number, for the
 	 *    same reason and in its own words (Copyright 2026 Todesengel,
-	 *    GPLv3, host\render\game_renderer.cpp:2100-2106 of the TROne version
-	 *    of 2026-09-13). It lands at level 0.14 at 1080p and at 0 at 1440p,
+	 *    GPLv3, host\render\game_renderer.cpp of the TROne version of
+	 *    2026-09-13; in TROne-main, copy of 2026-10-05, the GLSL shader
+	 *    k_ui_frag). It lands at level 0.14 at 1080p and at 0 at 1440p,
 	 *    which is ours: the minification above is measured on this engine's
 	 *    own output.
 	 *  - Linear min and mag filtering regardless of App.Filtering. Point

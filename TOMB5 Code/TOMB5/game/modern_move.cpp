@@ -1628,7 +1628,8 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	 * lara_as_compress reads only IN_FORWARD/IN_BACK/IN_LEFT/IN_RIGHT, so a side
 	 * step bit would turn a flip while firing into a jump straight up. TROne
 	 * clears aim_strafe in its glue whenever the situation is a jump
-	 * (trone_modern_glue.h:473); aim_strafe is read only here, so asking here is
+	 * (trone_modern_glue.h, trone_modern_glue_situation, TROne-main copy of
+	 * 2026-10-05); aim_strafe is read only here, so asking here is
 	 * the same rule without copying the config every tick. A tap is enough: the
 	 * direction lara_as_compress writes into goal_anim_state is not taken back
 	 * on the following ticks.

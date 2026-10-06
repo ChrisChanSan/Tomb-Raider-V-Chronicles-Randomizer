@@ -4,11 +4,13 @@
  * The routing rules below - one .TRM replaces the whole classic model, a node
  * the model does not cover is drawn by nobody, and a swap mesh on a covered
  * node loses to the model - are carried over from TROne (Copyright 2026
- * Todesengel, GPLv3, host\render\game_renderer.cpp: the item bracket
- * 1440-1520, `model.covered = ~0u` at 1826-1830, the swap-key rule at
- * 3800-3812 and 4170-4180). So is the idea of folding the inventory ring's
- * off-centre projection into the item for the length of one draw
- * (games\tr5\glue\hostglue_2d5.cpp:502-506) - the idea alone: TROne shears the
+ * Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * host\render\game_renderer.cpp: the item bracket of item_flush and
+ * draw_mesh, `model.covered = ~0u` in build_skinned_model, the swap-key
+ * rule beside item_flush), TROne's own design. So is the idea of folding
+ * the inventory ring's off-centre projection into the item for the length
+ * of one draw (games\tr5\glue\hostglue_2d5.cpp of the same copy, the ring's
+ * centre) - the idea alone: TROne shears the
  * item's matrix with it and this engine may not, because its shader takes the
  * vertex normal through that matrix (see HDInvNode). The offset goes into the
  * projection instead, and the arithmetic is derived from TR5's own projection

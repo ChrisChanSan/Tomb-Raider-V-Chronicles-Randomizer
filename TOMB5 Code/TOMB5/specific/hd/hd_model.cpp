@@ -2,9 +2,10 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The rules of the object path are carried over from TROne (Copyright 2026
- * Todesengel, GPLv3, host\render\game_renderer.cpp) - see hd_model.h for the
- * list, function by function. The renderer under them is new. The .TRM format
- * itself is TRForge's measurement (MIT) and is documented in hd_trm.h.
+ * Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * host\render\game_renderer.cpp) - see hd_model.h for the list, function by
+ * function. The renderer under them is new. The .TRM format is TRForge's
+ * description (MIT), counted again here over game 5; hd_trm.h has it.
  * See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
@@ -992,8 +993,9 @@ namespace
 	/* The three index runs of one part, in pass order. Measured over all 566
 	 * models of game 5: opaqueEnd == start + opaque and alphaEnd == opaqueEnd
 	 * + alpha in every part of every file, so the three runs tile the part
-	 * back to front without a gap. They are read as they stand all the same -
-	 * the counts are what the remaster's own draw uses. */
+	 * back to front without a gap. They are read as they stand all the same,
+	 * so a file whose runs did not tile would still draw each run as its
+	 * own counts say. */
 	void part_runs(const HDTrmPart& part, unsigned int start[3], unsigned int count[3])
 	{
 		start[0] = part.start;
@@ -1840,11 +1842,11 @@ namespace
 
 	/* Which node a separate HD face rides on. The remaster ships some faces
 	 * as their own file - VON_CROY.TRM is a body with an empty collar and its
-	 * face is VON_CROY_HEAD.TRM - and draws them rigidly on the creature's
-	 * head node. Which node that is, is measured and not hard coded: it is
-	 * the bind-pose node nearest the face geometry's own centre (TROne,
-	 * game_renderer.cpp:2056-2100 - node 21 in a 25 mesh tree, node 14 in a
-	 * 15 mesh one). Where the speech table puts the face on another node,
+	 * face is VON_CROY_HEAD.TRM - and this path draws such a face rigidly on
+	 * the creature's head node. Which node that is, is measured and not hard
+	 * coded: it is the bind-pose node nearest the face geometry's own centre
+	 * (TROne's rule, TROne-main (copy of 2026-10-05), hd_load's head loop -
+	 * node 21 in a 25 mesh tree, node 14 in a 15 mesh one). Where the speech table puts the face on another node,
 	 * the face table says so (g_head_of_model) and this is not asked. */
 	int head_node_of(const HDTrmModel& head, const Model& body)
 	{
@@ -2578,7 +2580,7 @@ namespace
 		 * from the object before - a limb somewhere else in the room, and only
 		 * sometimes. The nodes past the caller's count get the last one it
 		 * gave, which is TROne's rule for a node it never saw
-		 * (fill_unseen_joints, game_renderer.cpp:1389): a slightly wrong limb
+		 * (TROne-main, copy of 2026-10-05, fill_unseen_joints): a slightly wrong limb
 		 * beats a collapsed one. */
 		for (int node = 0; node < kJointBudget; node++)
 		{

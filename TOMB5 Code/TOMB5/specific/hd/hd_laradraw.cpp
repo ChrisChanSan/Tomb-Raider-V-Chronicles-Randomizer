@@ -4,8 +4,11 @@
  * The composite's rules are TROne's (Copyright 2026 Todesengel, GPLv3) and
  * live in hd_lara.cpp; the braid's six links being rebuilt as
  * TranslateAbs / RotY / RotX per link rather than TR5's three rigid pieces
- * plus three skinned connectors is TROne's draw_hair
- * (host\render\game_renderer.cpp:1498-1546). The seam under all of it - the
+ * plus three skinned connectors is TROne's draw_hair of its copy of
+ * 2026-09-05 - in TROne-main (copy of 2026-10-05) draw_hair skins the links
+ * its glues build the same way - and the build itself is the classic
+ * game\hair.cpp's, HairControl's (braidcheck below holds the two to each
+ * other). The seam under all of it - the
  * LMX to LM turn, the per node ambient, the hand pointer comparison, the
  * first person mask and the mirror - is new. See THIRD-PARTY.md.
  *

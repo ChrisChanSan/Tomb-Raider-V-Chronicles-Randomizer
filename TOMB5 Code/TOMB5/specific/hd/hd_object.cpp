@@ -366,7 +366,7 @@ namespace
 	 * fixed-function pipe, and the one the rooms use.
 	 *
 	 * A node the walk never reached keeps the last one that was: TROne's
-	 * fill_unseen_joints (game_renderer.cpp:1391), and the reason is that a
+	 * fill_unseen_joints (TROne-main, copy of 2026-10-05), and the reason is that a
 	 * slightly wrong limb beats a limb collapsed onto the camera. It cannot
 	 * happen from DrawAnimatingItem or DrawInventoryItemMe, both of which walk
 	 * every node - but HDObjectNode and HDInvNode are public calls and a zero
@@ -1571,7 +1571,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * own floor and wall inside a big enemy's box.
 	 *
 	 * So they must be drawn by nobody, exactly as a room's static meshes are.
-	 * This is TROne's baked-mesh rule (game_renderer.cpp:3722-3736) reached
+	 * This is TROne's baked-mesh rule (TROne-main, copy of 2026-10-05,
+	 * draw_mesh) reached
 	 * from the other end: TROne keys on the mesh pointer of a static, this
 	 * engine keys on the remaster's own word for it.
 	 *
@@ -2182,9 +2183,12 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		{
 			/* A model that read but carries no triangle is the same
 			 * statement DUMMY makes, and TRForge says so in as many words
-			 * (vendor's HdMesh.cpp: "a model with nothing in it is an
-			 * answer, not a failure ... either way the classic object must
-			 * not stand in for it"). So it counts as baked and draws
+			 * (its HdMesh.cpp, in TROne-main's vendored copy of TRForge of
+			 * 2026-10-05 - not vendored here: "a model with nothing in it is
+			 * an answer, not a failure ... either way the classic object must
+			 * not stand in for it"), a fact about the files that our own
+			 * BakeProbe count over ANDREA1's DUMMY slots backs (see the note
+			 * over the DUMMY rule above). So it counts as baked and draws
 			 * nothing, rather than falling back to the classic mesh on top
 			 * of art that already has it. */
 			verdict.why = "baked_empty";
@@ -2968,7 +2972,7 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	 * guard's hands (bits 10 and 13, set for every soldier the moment he is
 	 * initialised), the cyborg's eleven damage panels, the Mafia's pistols
 	 * coming out of their holsters. A .TRM carries no second geometry for a
-	 * node; the remaster does not swap a node but ships a whole second model
+	 * node; the install has no swap of a node but ships a whole second model
 	 * for the swapped look, and the table at the top of this file says which.
 	 *
 	 * Where such a model exists the item draws it instead of the plain one -
@@ -2977,7 +2981,8 @@ bool HDObjectBegin(ITEM_INFO* item, OBJECT_INFO* obj)
 	 * second file because MAFIA.TRM and SWAT.TRM already hold the weapon
 	 * (measured with ModelProbe -name MAFIA). The classic swap mesh is never
 	 * drawn over the HD body - TROne took that approach and reversed it after
-	 * reports of classic patches on an HD model (game_renderer.cpp:1825-1830). */
+	 * reports of classic patches on an HD model (TROne-main, copy of
+	 * 2026-10-05, build_skinned_model). */
 	g_open_swap = swap_model_for(swap_plan_of(slot), item);
 
 	if (g_open_swap < 0 && item->meshswap_meshbits &&

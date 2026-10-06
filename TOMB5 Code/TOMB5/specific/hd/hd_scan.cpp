@@ -35,15 +35,6 @@ namespace
 	std::vector<int> scan_pages;
 	std::string scan_error;
 
-	bool file_there(const std::string& path)
-	{
-		std::FILE* file = std::fopen(path.c_str(), "rb");
-		if (!file)
-			return false;
-		std::fclose(file);
-		return true;
-	}
-
 	bool read_whole(const std::string& path, std::vector<unsigned char>& out)
 	{
 		std::FILE* file = std::fopen(path.c_str(), "rb");
@@ -78,7 +69,10 @@ namespace
 	 * A .TRG vertex names its texture as a layer counted from one into the
 	 * file's own texture list - reading it from zero gave 0 of 273 faces the
 	 * page the .TEX names and reading it from one gave 249 (TRForge's
-	 * measurement, Trg.h). Layer 0 means the vertex names no page at all. */
+	 * measurement, Trg.h). Counted again here: every vertex of the fifteen
+	 * TR5 files has a layer from 1 to its file's own texture count, none
+	 * outside (TrgProbe -uvbytes). Layer 0 means the vertex names no page at
+	 * all. */
 	int page_of(const trf::remaster::Trg& trg, unsigned int index)
 	{
 		if (index >= trg.vertices.size())
@@ -98,22 +92,12 @@ const char* HDScanPagePath(const char* installRoot, int page, char* buffer, int 
 	const std::string folder = join(installRoot ? installRoot : "", "TEX");
 	std::string path = join(folder, std::to_string(page) + ".DDS");
 
-	/* Thirty-five textures of Tomb Raider 1 are shipped three times over, as
-	 * <n>.DDS, <n>_1024.DDS and <n>_2048.DDS, and the game picks by the
-	 * texture quality setting. TRForge measured that this only ever happens
-	 * for ids 8000..8499 and that no level's .TEX names one of them; the
-	 * fallback is here so that a .TRG which does is not simply reported
-	 * missing. Highest first, because that is what the game defaults to. */
-	if (page >= 8000 && page <= 8499 && !file_there(path))
-	{
-		const std::string big = join(folder, std::to_string(page) + "_2048.DDS");
-		const std::string mid = join(folder, std::to_string(page) + "_1024.DDS");
-		if (file_there(big))
-			path = big;
-		else if (file_there(mid))
-			path = mid;
-	}
-
+	/* The plain name is the only one looked for. The two bundles ship 35
+	 * pages a second and third time as <n>_1024.DDS and <n>_2048.DDS, all of
+	 * them in the I-III bundle's 1\TEX and none in 2, 3, 4, 5 or 6 (TrgProbe
+	 * -ddssizes counts them per folder), and every one of the 35 has its
+	 * plain <n>.DDS beside it - so a page this function names exists under
+	 * the plain name or under none. */
 	std::strncpy(buffer, path.c_str(), (size_t)size - 1);
 	buffer[size - 1] = 0;
 	return buffer;

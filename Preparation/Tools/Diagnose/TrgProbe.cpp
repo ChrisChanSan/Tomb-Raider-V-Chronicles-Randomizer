@@ -34,8 +34,8 @@
 //
 // "<path to the game 5 folder>" is the "5" inside an installed Tomb Raider
 // IV-VI Remastered, the one with DATA, TEX and ITEM in it. Nothing is written
-// and nothing is copied - the asset rule stands (see docs\LEGAL of TROne and
-// THIRD-PARTY.md here): the Remaster's files stay where they are.
+// and nothing is copied - this project ships no game data (THIRD-PARTY.md,
+// "No game data"): the Remaster's files stay where they are.
 //
 // The room count comes from a classic level folder handed in with -classic,
 // read with the randomizer's own Tr5Level, so "groups against rooms" is
@@ -673,11 +673,9 @@ namespace
 
 	/* One material, part by part, against the classic room.
 	 *
-	 * Two trees read material 16 two ways: ours as an additive sheet whose
-	 * weight sits in param[2] (hd_render.cpp, MaterialAddWeight), TROne's as
-	 * the still-water surface with param[0..2] as noise scale, distortion
-	 * and time scale. Neither reading was ever held against the geometry,
-	 * and the geometry is the one thing that can decide it. A water surface
+	 * Material 16 could be an additive sheet whose weight sits in param[2]
+	 * or a still-water surface. The geometry is the one thing that can
+	 * decide it (hd_render.cpp, MaterialRipple, has the answer). A water surface
 	 * is one horizontal plane; it sits at the height the classic room draws
 	 * its water at; its normals point up; and it is tessellated far finer
 	 * than a wall needs to be, because a wave has to be able to move its
@@ -5483,6 +5481,22 @@ namespace
 		}
 
 		printNormalCount(stem.c_str(), here);
+
+		/* And the other field the same header documents beside the normal:
+		 * the sway weight, the fourth short of the position. */
+		int swayLo = 32767, swayHi = -32768;
+		long long swayed = 0;
+
+		for (const trf::remaster::TrgVertex& v : trg.vertices)
+		{
+			swayLo = std::min(swayLo, (int)v.sway);
+			swayHi = std::max(swayHi, (int)v.sway);
+			swayed += v.sway ? 1 : 0;
+		}
+
+		std::printf("%-9s sway %d..%d, non-zero on %lld of %zu vertices\n", stem.c_str(),
+			swayLo, swayHi, swayed, trg.vertices.size());
+
 		all.corners += here.corners;
 
 		for (int i = 0; i < 2; i++)

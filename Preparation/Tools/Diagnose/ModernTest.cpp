@@ -1595,8 +1595,9 @@ static void jumping()
 
 	/* TROne: modern.standing_jump_is_a_side_flip_with_and_without_a_drawn_gun.
 	 *
-	 * TROne's own line that disarms aiming on a jump is
-	 * trone_modern_glue.h:473, outside the profile block that forces
+	 * TROne's own line that disarms aiming on a jump is in
+	 * trone_modern_glue.h, trone_modern_glue_situation (TROne-main, copy of
+	 * 2026-10-05), outside the profile block that forces
 	 * aim_strafe off for the Remaster, and their own test builds a plain
 	 * modern_test_glue() that never sets remaster_profile - so their
 	 * expectation is unconditional. Measured against a Remaster recording
@@ -7153,9 +7154,10 @@ static void camera_cut_reaim()
  * way the translation is, for exactly the same reason - a feel number
  * nobody can re-measure is a number nobody can change.
  *
- * None of the expectations below comes from TROne. Their orbit holds a world
- * angle and never returns behind the player at all; ours holds an offset from
- * Lara's own heading and lets it fall back. The numbers here come from two
+ * None of the expectations below comes from TROne. Their orbit (the version
+ * of 2026-09-13) holds a world angle and never returns behind the player at
+ * all; ours holds a world angle too and lets it fall back behind her
+ * (game\modern_camera.h). The numbers here come from two
  * places and the comments say which: the design's four governing sentences,
  * quoted in full in game\modern_camera.h, and the classic camera's own
  * limits, measured out of game\camera.cpp before a line of the orbit was

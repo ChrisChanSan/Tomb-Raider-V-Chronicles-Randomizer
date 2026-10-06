@@ -145,12 +145,13 @@ struct HDTrmModel
 	 * matrix, 3x4 and row-major, so the joint itself stands at -R^T t, which
 	 * is what is kept. A vertex's bone number is an index into this list.
 	 * That reading of the rig is TROne's own measurement on the .TRM files
-	 * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05), its
-	 * vendored ItemModels.h: over the 54 head files of both installs every
-	 * facial joint read so lands within 9 units of the vertices it carries),
-	 * a fact about the files; here it is held by LipsTest, which finds the
-	 * frame-0 joints of ten rigged faces on the rig's joints read so, 0.0002
-	 * to 3.46 units apart (hd_trl.cpp, the axes).
+	 * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06,
+	 * commit 75c4c843), its vendored ItemModels.h: over the 54 head files of
+	 * both installs every facial joint read so lands within 9 units of the
+	 * vertices it carries), a fact about the files; here it is held by
+	 * LipsTest, which finds the frame-0 joints of ten rigged faces on the
+	 * rig's joints read so, 0.0002 to 3.46 units apart (hd_trl.cpp, the
+	 * axes).
 	 *
 	 * In the rig's own axes, which are not the vertices' - LARA_HEAD's head
 	 * joint is (1, -12, 247) here and (1, -247, -12) in the model - so only

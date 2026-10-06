@@ -924,8 +924,8 @@ void DrawAnimatingItem(ITEM_INFO* item)
 			 * its mesh goes into the buckets - never both. A node the HD
 			 * model does not cover is not drawn at all: TROne tried a classic
 			 * fallback there and removed it again because it left classic
-			 * patches on an HD body (TROne-main, copy of 2026-10-05,
-			 * build_skinned_model).
+			 * patches on an HD body (TROne-main, copy of 2026-10-06, commit
+			 * 75c4c843, build_skinned_model).
 			 *
 			 * The matrix is recorded whether or not mesh_bits shows the node,
 			 * because a hidden node still carries the ones below it - the
@@ -3523,7 +3523,8 @@ void DrawStaticObjects(short room_number)
 	/* The static meshes of an HD room are already in its art - the Remaster
 	 * baked them into the .TRG - so drawing them again would put a second
 	 * lantern inside the first one; TROne avoids the same doubling with its
-	 * baked-mesh rule (TROne-main, copy of 2026-10-05, draw_mesh).
+	 * baked-mesh rule (TROne-main, copy of 2026-10-06, commit 75c4c843,
+	 * draw_mesh).
 	 *
 	 * TROne suppresses by mesh pointer and needs an exception for the case
 	 * where a moveable claims that same pointer. This seam is narrower: it

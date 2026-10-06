@@ -4,19 +4,19 @@
  * The skinning rule below - bind-pose vertices with THREE bone indices into
  * the classic mesh tree, the bind offset subtracted before the node matrix is
  * applied, and the alpha test in the alpha pass ONLY - is carried over from
- * TROne (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
- * host\render\game_renderer.cpp, the GLSL shaders k_trm_vert / k_trm_frag),
- * TROne's own design. The additive pass weighted by the texture's own alpha
- * is this project's, the same rule the room shader keeps. Translated to HLSL
- * for Direct3D 9 and
- * with the bind offset folded into the matrix on the processor instead of
- * subtracted in the shader; not a line of the original is copied. See
- * THIRD-PARTY.md.
+ * TROne (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06,
+ * commit 75c4c843), host\render\game_renderer.cpp, the GLSL shaders
+ * k_trm_vert / k_trm_frag), TROne's own design. The additive pass weighted by
+ * the texture's own alpha is this project's, the same rule the room shader
+ * keeps. Translated to HLSL for Direct3D 9 and with the bind offset folded
+ * into the matrix on the processor instead of subtracted in the shader; not a
+ * line of the original is copied. See THIRD-PARTY.md.
  *
  * The lighting below the line "the parity block" is ours: TROne lit an
  * item with a flat ambient blown up into a six-face cube and up to four point
- * lights of its own (its copy of 2026-09-05), while this engine has the
- * classic path's own
+ * lights of its own (its copy of 2026-09-05; in 75c4c843 the cube carries
+ * direction from the .TRG light cubes), while this engine has the classic
+ * path's own
  * per-object light list, its distance fog and its fog bulbs - and a torch has
  * to reach an HD guard exactly as far as it reaches the classic wall behind
  * him. So the ambient comes from the engine's own CalculateObjectLighting, the

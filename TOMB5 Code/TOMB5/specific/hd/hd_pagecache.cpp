@@ -3,9 +3,10 @@
  *
  * The search order for a missing page and the "no page is ever black, it is
  * WHITE.DDS" rule are carried over from TROne (Copyright 2026 Todesengel,
- * GPLv3, TROne-main (copy of 2026-10-05), host\render\hd_pages.cpp,
- * upload_shared / upload2, and the white layer 0 of its page array in
- * game_renderer.cpp), TROne's own design. The upload
+ * GPLv3, TROne-main (copy of 2026-10-06, commit 75c4c843): the order from
+ * host\render\hd_pages.cpp, upload_shared / upload2, the white rule from its
+ * docs\SHADER_RULES.md and the k_hd_frag note; the white layer 0 of its page
+ * array stood in its copy of 2026-10-05), TROne's own design. The upload
  * itself is new: TROne hands the driver BC7 blocks in one texture array,
  * Direct3D 9 has neither. See THIRD-PARTY.md.
  *

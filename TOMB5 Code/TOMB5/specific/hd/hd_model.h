@@ -4,9 +4,10 @@
  * The rules of the object path - one .TRM replaces the WHOLE classic model,
  * the three bone indices are classic mesh tree nodes, the bind pose comes
  * from the mesh tree's accumulated offsets, a <NAME>_HEAD.TRM rides rigidly
- * on the node nearest the face geometry's centre, and the three index runs of
- * a part are the three passes - are carried over from TROne (Copyright 2026
- * Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * on the node nearest the face geometry's centre (TROne splits the neck onto
+ * the parent node by default since), and the three index runs of a part are
+ * the three passes - are carried over from TROne (Copyright 2026 Todesengel,
+ * GPLv3, TROne-main (copy of 2026-10-06, commit 75c4c843),
  * host\render\game_renderer.cpp: build_skinned_model, bind_pose_of_slot,
  * hd_load's model and head loops), TROne's own design. The renderer under
  * them is new: TROne is OpenGL 3.3 with vertex
@@ -592,9 +593,10 @@ void HDModelClip(const float* planes);
 /* Which side of a triangle is drawn.
  *
  * The HD path draws every model DOUBLE SIDED, which is what TROne did too in
- * its copy of 2026-09-05; TROne-main (copy of 2026-10-05, item_flush) draws
- * Tomb Raider IV and V objects one-sided and Lara double-sided, and this rule
- * does not follow it - it rests on our own count below. It is what the classic
+ * its copy of 2026-09-05; TROne-main (copy of 2026-10-06, commit 75c4c843,
+ * item_flush) draws every game's objects one-sided and Lara double-sided,
+ * and this rule does not follow it - it rests on our own count below. It is
+ * what the classic
  * engine appears to do - specific/function_table.cpp sets D3DCULL_NONE for
  * the whole session. But TR5 culls back faces in SOFTWARE, per polygon,
  * through the IsVisible function pointer, so the card never sees one. The

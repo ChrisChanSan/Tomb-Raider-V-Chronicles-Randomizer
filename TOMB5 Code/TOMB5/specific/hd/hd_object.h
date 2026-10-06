@@ -4,7 +4,7 @@
  * The routing rules below - one .TRM replaces the whole classic model, a node
  * the model does not cover is drawn by nobody, and a swap mesh on a covered
  * node loses to the model - are carried over from TROne (Copyright 2026
- * Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * Todesengel, GPLv3, TROne-main (copy of 2026-10-06, commit 75c4c843),
  * host\render\game_renderer.cpp: the item bracket of item_flush and
  * draw_mesh, `model.covered = ~0u` in build_skinned_model, the swap-key
  * rule beside item_flush), TROne's own design. So is the idea of folding
@@ -152,8 +152,9 @@ int HDObjectReflectedTake();
 //      one draw call - never the item's matrices, which the shader also skins
 //      the normals with. The derivation stands over HDInvNode in
 //      hd_object.cpp. The idea of folding it into the item at all is TROne's
-//      (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
-//      games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup); the way and
+//      (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06,
+//      commit 75c4c843), games\tr5\glue\hostglue_2d5.cpp,
+//      phd_PutPolygonsPickup); the way and
 //      the arithmetic are this engine's own and are derived from the classic
 //      formula, not copied.
 //   2. The light. No room, no room cube, no point lights, no dynamics: the

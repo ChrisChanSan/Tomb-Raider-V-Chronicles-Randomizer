@@ -7155,9 +7155,11 @@ static void camera_cut_reaim()
  * nobody can re-measure is a number nobody can change.
  *
  * None of the expectations below comes from TROne. Their orbit (TROne-main,
- * copy of 2026-09-13) holds a world angle and never returns behind the
+ * copy of 2026-09-13) held a world angle and never returned behind the
  * player at all; ours holds a world angle too and lets it fall back behind
- * her (game\modern_camera.h). The numbers here come from two
+ * her (game\modern_camera.h); since its round K32 TROne runs this orbit
+ * itself (copy of 2026-10-06, commit 75c4c843). The numbers here come from
+ * two
  * places and the comments say which: the design's four governing sentences,
  * quoted in full in game\modern_camera.h, and the classic camera's own
  * limits, measured out of game\camera.cpp before a line of the orbit was

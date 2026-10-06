@@ -2,7 +2,7 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The rules of the object path are carried over from TROne (Copyright 2026
- * Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * Todesengel, GPLv3, TROne-main (copy of 2026-10-06, commit 75c4c843),
  * host\render\game_renderer.cpp) - see hd_model.h for the list, function by
  * function. The renderer under them is new. The .TRM format is TRForge's
  * description (MIT), counted again here over game 5; hd_trm.h has it.
@@ -1845,10 +1845,10 @@ namespace
 	 * face is VON_CROY_HEAD.TRM - and this path draws such a face rigidly on
 	 * the creature's head node. Which node that is, is measured and not hard
 	 * coded: it is the bind-pose node nearest the face geometry's own centre
-	 * (TROne's rule, TROne-main (copy of 2026-10-05), hd_load's head loop -
-	 * node 21 in a 25 mesh tree, node 14 in a 15 mesh one). Where the speech
-	 * table puts the face on another node, the face table says so
-	 * (g_head_of_model) and this is not asked. */
+	 * (TROne's rule, TROne-main (copy of 2026-10-06, commit 75c4c843),
+	 * hd_load's head loop - node 21 in a 25 mesh tree, node 14 in a 15 mesh
+	 * one). Where the speech table puts the face on another node, the face
+	 * table says so (g_head_of_model) and this is not asked. */
 	int head_node_of(const HDTrmModel& head, const Model& body)
 	{
 		if (!body.hasBind || !head.vertices)
@@ -2577,12 +2577,13 @@ namespace
 
 		/* All 32 joints go up, not just the ones the caller has. A .TRM is
 		 * the remaster's file and the classic node count is the level's, and
-		 * the two disagreeing by one would let a vertex read a joint left over
-		 * from the object before - a limb somewhere else in the room, and only
-		 * sometimes. The nodes past the caller's count get the last one it
-		 * gave, which is TROne's rule for a node it never saw
-		 * (TROne-main, copy of 2026-10-05, fill_unseen_joints): a slightly wrong limb
-		 * beats a collapsed one. */
+		 * the two disagreeing by one would let a vertex read a joint left
+		 * over from the object before - a limb somewhere else in the room,
+		 * and only sometimes. The nodes past the caller's count get the last
+		 * one it gave, which is TROne's rule for a node it never saw
+		 * (TROne-main, copy of 2026-10-06, commit 75c4c843,
+		 * fill_unseen_joints): a slightly wrong limb beats a collapsed one.
+		 * */
 		for (int node = 0; node < kJointBudget; node++)
 		{
 			const int from = node < nodes ? node : nodes - 1;

@@ -40,11 +40,12 @@
  * the only thing that brings the camera home.
  *
  * TROne (GPLv3) held its orbit as a world angle too in TROne-main (copy of
- * 2026-09-13), and that is the only thing in common: TROne's orbit there
- * never returns behind the player, this one falls home at
+ * 2026-09-13), and that was the only thing in common: TROne's orbit there
+ * never returned behind the player, this one falls home at
  * MODERN_CAMERA_RETURN whenever she moves and the stick is at rest. No code
- * of TROne is copied here; the shared idea is that a camera angle is a
- * state and not a derivation.
+ * of TROne is copied here; since its round K32 TROne runs this camera itself
+ * (TROne-main, copy of 2026-10-06, commit 75c4c843, docs\CONTROLS.md 4.8).
+ * The shared idea is that a camera angle is a state and not a derivation.
  *
  * No engine header is included, like game\modern_move.h:
  * Preparation\Tools\Diagnose\ModernTest.cpp compiles this file itself and

@@ -3,14 +3,13 @@
  *
  * The structure of the level build (read the .TRG, one buffer for the whole
  * level, a range table per group, three passes per room) and the draw rule
- * are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
- * TROne-main (copy of 2026-10-05), host\render\game_renderer.cpp, hd_load
- * and hd_draw_room), TROne's own design. The renderer under it is new:
- * TROne is OpenGL 3.3 with vertex arrays, texture arrays and runtime GLSL,
- * this is Direct3D 9 with a vertex declaration, one texture per page and
- * compiled bytecode, beside a fixed-function neighbour that must find its
- * state exactly as it left it.
- * See THIRD-PARTY.md.
+ * are carried over from TROne (Copyright 2026 Todesengel, GPLv3, TROne-main
+ * (copy of 2026-10-06, commit 75c4c843), host\render\game_renderer.cpp,
+ * hd_load and hd_draw_room), TROne's own design. The renderer under it is
+ * new: TROne is OpenGL 3.3 with vertex arrays, texture arrays and runtime
+ * GLSL, this is Direct3D 9 with a vertex declaration, one texture per page
+ * and compiled bytecode, beside a fixed-function neighbour that must find its
+ * state exactly as it left it. See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -756,8 +755,8 @@ namespace
 	 * pass's; it is asked once per material 16 part at level build, which is
 	 * 28 parts in the whole game. Holding the ripple's travel to the part's
 	 * own rectangle is TROne's own design for its material 16 water
-	 * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-05);
-	 * the tenth and the anchors are this file's.
+	 * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-06,
+	 * commit 75c4c843); the tenth and the anchors are this file's.
 	 *
 	 * The rectangle rests on u and v being the alpha bytes at +15 and +19,
 	 * which TrgProbe -uvbytes counts on the files (hd_room.hlsl, the vertex
@@ -832,25 +831,25 @@ namespace
 	 * the two seas and largest on the puddle (param[0] from 0.1 to 5.0,
 	 * param[2] from 0.035 to 0.5, TrgProbe -mat 16), though not in step in
 	 * every pair of tuples - (0.3, 0.08) against (0.4, 0.04), (0.8, 0.2)
-	 * against (1.0, 0.1) - and no count of ours separates them. The order settled on - param[0] the scale,
-	 * param[1] the travel, param[2] the rate - coincides with the order
-	 * TROne's prose names for these three slots (TROne-main, copy of
-	 * 2026-10-05). TROne states that it read that order off the Remaster's
-	 * own shader programs, which this project uses neither at first hand nor
-	 * at second, so the coincidence is written down here and is not taken
-	 * as evidence; for that one bit there is no measurement of our own. If
-	 * the sea ripples too finely and too fast while the fountain is too
-	 * coarse and too slow, the choice is the wrong way round. The
-	 * reversal is not a swap of out[0] and out[2]: each anchor below
-	 * belongs to its parameter, so the sources change places and keep
-	 * their anchors - the scale reads param[2] through the 0.2 anchor
-	 * (floored at 0.0125), the rate reads param[0] through the 0.8 anchor.
-	 * No constant of TROne's is used; every number below comes from a TR5
-	 * measurement. The structure around them - the travel held to the
-	 * part's own UV span (PartUvSpan) and no movement in the vertex - is
-	 * TROne's own design (Copyright 2026 Todesengel, GPLv3, TROne-main
-	 * (copy of 2026-10-05), its own water rule for material 16), and the
-	 * wave in hd_room.hlsl is a different curve with different terms.
+	 * against (1.0, 0.1) - and no count of ours separates them. The order
+	 * settled on - param[0] the scale, param[1] the travel, param[2] the rate
+	 * - coincides with the order TROne's prose names for these three slots
+	 * (TROne-main, copy of 2026-10-05). TROne states that it read that order
+	 * off the Remaster's own shader programs, which this project uses neither
+	 * at first hand nor at second, so the coincidence is written down here
+	 * and is not taken as evidence; for that one bit there is no measurement
+	 * of our own. If the sea ripples too finely and too fast while the
+	 * fountain is too coarse and too slow, the choice is the wrong way round.
+	 * The reversal is not a swap of out[0] and out[2]: each anchor below
+	 * belongs to its parameter, so the sources change places and keep their
+	 * anchors - the scale reads param[2] through the 0.2 anchor (floored at
+	 * 0.0125), the rate reads param[0] through the 0.8 anchor. No constant of
+	 * TROne's is used; every number below comes from a TR5 measurement. The
+	 * structure around them - the travel held to the part's own UV span
+	 * (PartUvSpan) and no movement in the vertex - is TROne's own design
+	 * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06,
+	 * commit 75c4c843), its own water rule for material 16), and the wave in
+	 * hd_room.hlsl is a different curve with different terms.
 	 *
 	 * The three anchors:
 	 *
@@ -1127,12 +1126,13 @@ namespace
 	/* The gloss of one part.
 	 *
 	 * Origin: the reading below is our own measurement, and nothing here is
-	 * carried over from TROne. TROne-main (copy of 2026-10-05) has a planar
-	 * reflection and an environment rule for material 3 of its own; neither
-	 * is used here, and our material 3 reading differs from TROne's. The one
-	 * TROne remark this touches - that an opaque page's DDS alpha is a
-	 * sparkle mask, not coverage (TROne-main, copy of 2026-10-05, k_hd_frag)
-	 * - is held against our own pages in the next paragraph.
+	 * carried over from TROne. TROne-main (copy of 2026-10-06, commit
+	 * 75c4c843) has a planar reflection and an environment rule for material
+	 * 3 of its own; neither is used here, and our material 3 reading differs
+	 * from TROne's. The one TROne remark this touches - that an opaque page's
+	 * DDS alpha is a sparkle mask, not coverage (TROne-main, copy of
+	 * 2026-10-06, commit 75c4c843, k_hd_frag) - is held against our own pages
+	 * in the next paragraph.
 	 *
 	 * The alpha mask of a page is not a gloss source: RICH2's marble floors
 	 * draw with pages 1010, 1032 and 1033, and all three are alpha 255 on all
@@ -4239,10 +4239,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * Only needed for the water marks, and only built when there are any. A
 	 * .TRG names its vertices per group through the index runs and nowhere
 	 * else, so the ownership is read out of the runs - the same walk TROne
-	 * makes for its own water flag (TROne-main (copy of 2026-10-05),
-	 * hd_load). A vertex
-	 * named by two groups keeps the last one; the marks are per room and a
-	 * shared vertex sits on a portal, where both answers agree. */
+	 * makes for its own water flag (TROne-main (copy of 2026-10-06, commit
+	 * 75c4c843), hd_load). A vertex named by two groups keeps the last one;
+	 * the marks are per room and a shared vertex sits on a portal, where both
+	 * answers agree. */
 	std::vector<int> vertex_group;
 	std::unordered_map<unsigned long long, unsigned char> mark_map;
 	/* One room's marked water surface at one height, as a box in x and z

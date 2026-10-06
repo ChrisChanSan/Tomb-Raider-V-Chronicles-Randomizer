@@ -6,7 +6,7 @@
  * them, the skeleton test and the light conversion are new. So is the
  * inventory ring at the bottom of this file, except for one idea that is
  * TROne's: that the ring's off-centre projection can be folded into the item
- * for the length of one draw (TROne-main, copy of 2026-10-05,
+ * for the length of one draw (TROne-main, copy of 2026-10-06, commit 75c4c843,
  * games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup), which
  * is what lets the HD path keep one projection for the whole frame. TROne
  * folds it into the item's matrix as a shear; this engine folds it into the
@@ -367,11 +367,11 @@ namespace
 	 * fixed-function pipe, and the one the rooms use.
 	 *
 	 * A node the walk never reached keeps the last one that was: TROne's
-	 * fill_unseen_joints (TROne-main, copy of 2026-10-05), and the reason is that a
-	 * slightly wrong limb beats a limb collapsed onto the camera. It cannot
-	 * happen from DrawAnimatingItem or DrawInventoryItemMe, both of which walk
-	 * every node - but HDObjectNode and HDInvNode are public calls and a zero
-	 * matrix is a divide by zero.
+	 * fill_unseen_joints (TROne-main, copy of 2026-10-06, commit 75c4c843),
+	 * and the reason is that a slightly wrong limb beats a limb collapsed
+	 * onto the camera. It cannot happen from DrawAnimatingItem or
+	 * DrawInventoryItemMe, both of which walk every node - but HDObjectNode
+	 * and HDInvNode are public calls and a zero matrix is a divide by zero.
 	 *
 	 * Shared by the world and the ring, so the matrix convention exists once. */
 	void store_matrices(FrameItem& entry)
@@ -1575,10 +1575,10 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * the triangle counts do not, until a probe switch makes them again.
 	 *
 	 * So they must be drawn by nobody, exactly as a room's static meshes are.
-	 * This is TROne's baked-mesh rule (TROne-main, copy of 2026-10-05,
-	 * draw_mesh) reached
-	 * from the other end: TROne keys on the mesh pointer of a static, this
-	 * engine keys on the remaster's own word for it.
+	 * This is TROne's baked-mesh rule (TROne-main, copy of 2026-10-06, commit
+	 * 75c4c843, draw_mesh) reached from the other end: TROne keys on the mesh
+	 * pointer of a static (and, since, on the .MAP's DUMMY binding as well),
+	 * this engine keys on the remaster's own word for it.
 	 *
 	 * A donor slot is never baked. Its model came out of another level file,
 	 * so whatever this level's map says about the slot's vanilla content says
@@ -3545,7 +3545,7 @@ bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
 	 * arithmetic in hd_model.h.
 	 *
 	 * No scale term. TROne multiplies its sheared row by f_mpersp/persp
-	 * (TROne-main, copy of 2026-10-05, hostglue_2d5.cpp,
+	 * (TROne-main, copy of 2026-10-06, commit 75c4c843, hostglue_2d5.cpp,
 	 * phd_PutPolygonsPickup) because its host builds a projection of its
 	 * own out of the window's real width, while TR5 computes f_persp from a
 	 * 4:3 width whatever the window is (specific\3dmath.cpp, AlterFOV:
@@ -3626,9 +3626,9 @@ bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
  * ring's light to the bit.
  *
  * The idea of folding the ring's centre into the item at all is TROne's
- * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
- * games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup, which shears the
- * matrix); the way taken here and the arithmetic in
+ * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06, commit
+ * 75c4c843), games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup, which
+ * shears the matrix); the way taken here and the arithmetic in
  * HDModelOffCentreMatrix are derived from TR5's own projection line.
  */
 void HDInvNode(int node)

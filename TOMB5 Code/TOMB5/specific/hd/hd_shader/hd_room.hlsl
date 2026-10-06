@@ -3,24 +3,23 @@
  *
  * The lighting rule below - room light is the SUM of the two vertex colour
  * triples - came to this tree by way of TROne and TRForge (THIRD-PARTY.md,
- * the origin ledger, entry 7), and it rests on this project's own count
- * over the fifteen levels: on
- * the classic room vertices a .TRG vertex stands on exactly, the sum puts the
- * vertices in the order of the classic prelight more often than the product
- * or either triple alone does (TrgProbe -shadeorder; the counts are in
- * MODIFICATIONS.md and in "The light" below). The alpha test living in the
- * alpha pass ONLY and the additive pass carrying its weight in the texture's
- * alpha are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
- * TROne-main (copy of 2026-10-05), the GLSL shader k_hd_frag), TROne's own
- * design. Translated to HLSL for Direct3D 9; not a line of the original is
- * copied. See THIRD-PARTY.md.
+ * the origin ledger, entry 7), and it rests on this project's own count over
+ * the fifteen levels: on the classic room vertices a .TRG vertex stands on
+ * exactly, the sum puts the vertices in the order of the classic prelight
+ * more often than the product or either triple alone does (TrgProbe
+ * -shadeorder; the counts are in MODIFICATIONS.md and in "The light" below).
+ * The alpha test living in the alpha pass ONLY and the additive pass carrying
+ * its weight in the texture's alpha are carried over from TROne (Copyright
+ * 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06, commit 75c4c843),
+ * the GLSL shader k_hd_frag), TROne's own design. Translated to HLSL for
+ * Direct3D 9; not a line of the original is copied. See THIRD-PARTY.md.
  *
  * Everything below the line "the parity block" is this project's own: the
- * distance fog, the fog bulbs, the dynamic lights in rooms and the
- * WaterTable effects are transcriptions of specific\drawroom.cpp,
- * aRoomletTransformLight, line for line. TROne-main (copy of 2026-10-05)
- * has a fog model, fog bulbs and room lights of its own (set_fog_model,
- * set_fog_bulbs, set_room_lights); none of them is used here.
+ * distance fog, the fog bulbs, the dynamic lights in rooms and the WaterTable
+ * effects are transcriptions of specific\drawroom.cpp,
+ * aRoomletTransformLight, line for line. TROne-main (copy of 2026-10-06,
+ * commit 75c4c843) has a fog model, fog bulbs and room lights of its own
+ * (set_fog_model, set_fog_bulbs, set_room_lights); none of them is used here.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -104,9 +103,9 @@
  *               MaterialAlphaRef). On every other material the alpha
  *               channel of an opaque tile carries a gloss/wetness MASK, not
  *               coverage, and testing on it blanks whole floors and facades
- *               (TROne-main, copy of 2026-10-05, k_hd_frag, on a TR1 snow
- *               floor; ANDREA1's stucco, JOBY2's snow
- *               and JOBY3's bulkheads here).
+ *               (TROne-main, copy of 2026-10-06, commit 75c4c843,
+ *               k_hd_frag, on a TR1 snow floor; ANDREA1's stucco, JOBY2's
+ *               snow and JOBY3's bulkheads here).
  *   1 alpha     clip(a - 0.5), the punch-through pass.
  *   2 additive  colour * alpha, blended ONE/ONE with the depth write off.
  *
@@ -258,7 +257,9 @@ float4 gMotion : register(c13);
  * shape is TROne's own (TROne-main, copy of 2026-09-05, k_hd_vert's water
  * block: a sine of x + z, a second one across it); 24 units of travel and a
  * wavelength of about 1.4 blocks is what that shader used for its own water
- * in that copy, and grass, ivy and kelp are the same size of thing. */
+ * in that copy (TROne dropped that wave since, for the classic WaterTable:
+ * TROne-main, copy of 2026-10-06, commit 75c4c843), and grass, ivy and kelp
+ * are the same size of thing. */
 #define HD_WIND_TRAVEL     24.0f
 #define HD_WIND_WAVELENGTH 0.0045f
 #define HD_WIND_SPEED      2.1f
@@ -266,24 +267,26 @@ float4 gMotion : register(c13);
 /* The water surface, carried over from TROne
  * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, the GLSL
  * shaders k_hd_vert and k_hd_frag - the shape of the UV wobble and of the
- * caustic and the caustic's scale of 0.018 are TROne's own design in
- * TROne-main (copy of 2026-10-05); the vertical swell is TROne's design of
- * its copy of 2026-09-05; see THIRD-PARTY.md).
+ * caustic and the caustic's scale of 0.018 are TROne's own design in its
+ * copy of 2026-10-05 - the caustic still stands in TROne-main (copy of
+ * 2026-10-06, commit 75c4c843), the wobble TROne has dropped since; the
+ * vertical swell is TROne's design of its copy of 2026-09-05, dropped there
+ * too; see THIRD-PARTY.md).
  *
  * Why a caustic on top of the classic shimmer. TR5's own shimmer is the
  * WaterTable term, computed PER VERTEX, and a remaster water surface is a few
  * large quads whose corners are its only vertices, so that term reaches the
  * screen as a slow blotch, not a shimmer. TROne notes the same in its copy
  * of 2026-09-05 ("a vertex-interpolated shimmer stayed flat and the surface
- * looked still"). The
+ * looked still"; its basin note in 75c4c843 says the same of a ripple). The
  * WaterTable term therefore stays untouched, parity and all, and the caustic
  * is added as a ZERO MEAN MODULATION on top of it: no average brightness of
  * its own, only the movement the classic term cannot carry at this vertex
  * count - so the shimmer's brightness is not counted twice.
  *
- * The three amplitudes are TROne's own (its copy of 2026-09-05). The
- * strength, 0.32, is this project's own - TROne-main (copy of 2026-10-05)
- * gives its caustic 0.12 - and is matched to two
+ * The three amplitudes are TROne's own (its copy of 2026-09-05; dropped there
+ * since). The strength, 0.32, is this project's own - TROne-main (copy of
+ * 2026-10-06, commit 75c4c843) gives its caustic 0.12 - and is matched to two
  * reference shots of the same VCI pool from the remaster: over the water
  * region the two frames differ by 8.4 of 255 on average, with 17 percent of
  * the pixels more than 16 apart against a mean of 34 - a swing of a third to
@@ -484,7 +487,8 @@ float4 gSpec : register(c19);
  * names - see MaterialRipple in hd_render.cpp for both. No number of
  * TROne's is used. The structure - a texture ripple with no movement in the
  * vertex, its travel held to the part's own UV span - is TROne's own design
- * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-05).
+ * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-06,
+ * commit 75c4c843).
  *
  * The curve is this file's own: two sheets travelling across each other, and
  * a finer, faster octave over them so that the pattern does not read as one
@@ -775,8 +779,8 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	}
 
 	/* 2c. The swell. The same water weight the UV wobble rides on also lifts
-	 * the surface - TROne's shape of its copy of 2026-09-05, one wave over
-	 * about a block and a half.
+	 * the surface - TROne's shape of its copy of 2026-09-05 (dropped there
+	 * since), one wave over about a block and a half.
 	 * Like the wind it moves `drawn` and not `pos`, so the water hash, the
 	 * surface test, the WaterTable and the classic choppy displacement (which
 	 * is in `pos`) are untouched by it. */
@@ -865,8 +869,8 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * branch: the remaster authored a scroll on 14 of the 15 levels, on
 	 * waterfalls, drifting sky and light shafts as well.
 	 *
-	 * The wobble is TROne's water_effect (TROne-main, copy of 2026-09-05,
-	 * k_hd_vert): on a marked water surface the UV
+	 * The wobble is TROne's water_effect of its copy of 2026-09-05 (k_hd_vert;
+	 * dropped there since): on a marked water surface the UV
 	 * moves a little, so an HD water plane is not a mirror. It rides on the
 	 * SAME two waves as the swell - one clock, one shape, so the picture and
 	 * the geometry agree - six texels, TROne's own figure. It dies with

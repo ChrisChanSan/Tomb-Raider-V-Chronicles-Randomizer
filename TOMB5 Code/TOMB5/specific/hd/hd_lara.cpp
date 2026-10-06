@@ -8,7 +8,8 @@
  * section wears. TROne's TR5 glue of its copy of 2026-09-05
  * (games\tr5\glue\hostglue_file5.cpp, RegisterLaraWardrobe) gave
  * OUTFIT_RUSSIA to the levels whose file names begin with ANDY and treated
- * the JOBY ones as young Lara. In this game it is
+ * the JOBY ones as young Lara; TROne fixed that in 75c4c843, which asks
+ * GF_YOUNGLARA and LaraDrawType. In this game it is
  * the other way round and the level files say so: the JOBY files are the
  * Russian submarine section (gfLevelId LVL5_BASE .. LVL5_SINKING_SUBMARINE,
  * which is what game\hair.cpp's own braid test asks about) and the ANDY files
@@ -394,9 +395,9 @@ namespace
 	 * It is a table and not a measurement, unlike everything else in this
 	 * file. The obvious source would be the pages' alpha channel: on the room
 	 * pages it is a gloss mask, and TROne says the same of the item ones
-	 * (TROne-main, copy of 2026-10-05, k_hd_frag and k_trm_frag). It is not
-	 * one here. Measured with
-	 * DdsProbe -alpha over the wardrobe's pages:
+	 * (TROne-main, copy of 2026-10-06, commit 75c4c843, k_hd_frag and
+	 * k_trm_frag). It is not one here. Measured with DdsProbe -alpha over the
+	 * wardrobe's pages:
 	 *
 	 *     page 8001 (skin trim)   mean 254.9   0 texels below 128
 	 *     page 8008 (leggings)    mean 254.8   0

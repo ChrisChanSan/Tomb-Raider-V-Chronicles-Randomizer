@@ -40,12 +40,12 @@ namespace
 
 	/* The prefilter: a summed area table over the atlas ink, so that the ink
 	 * count of any window is three additions instead of w * h reads. A window
-	 * whose ink count is nowhere near the template's cannot reach 0.94 anyway,
-	 * and TROne prefilters on 0.85 .. 1.20 of it - TROne's own choice of
-	 * window (TROne-main, copy of 2026-10-05, hdtext_find), the same window
-	 * here. It decides speed only; the 0.94 decides the match. Without it the
-	 * full comparison would run 65 536 times per glyph instead of a few
-	 * dozen. */
+	 * whose ink count is nowhere near the template's cannot reach 0.94
+	 * anyway, and TROne prefilters on 0.85 .. 1.20 of it - TROne's own choice
+	 * of window (TROne-main, copy of 2026-10-06, commit 75c4c843,
+	 * hdtext_find), the same window here. It decides speed only; the 0.94
+	 * decides the match. Without it the full comparison would run 65 536
+	 * times per glyph instead of a few dozen. */
 	struct Sat
 	{
 		// (SIDE + 1) squared, so that the row and column of zeroes above and

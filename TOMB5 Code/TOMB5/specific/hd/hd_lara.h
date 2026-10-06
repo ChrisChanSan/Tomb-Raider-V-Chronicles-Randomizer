@@ -2,19 +2,20 @@
  * Modified 2026 by ChrisChanSan.
  *
  * The rules of the Lara composite - the body is an OUTFIT_ model, the face a
- * separate LARA_HEAD, the braid a six bone HAIR_OG, the hands come from
- * the HAND_ model of the slot whose mesh sits at the hand node and the worn
+ * separate LARA_HEAD, the braid a six bone HAIR_OG, the hands come from the
+ * HAND_ model of the slot whose mesh sits at the hand node and the worn
  * weapons from that slot's HOLSTER_ model - are carried over from TROne
- * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
- * host\render\game_renderer.cpp: lara_flush, lara_build_models, lara_load,
- * draw_hair, and games\tr5\glue\hostglue_file5.cpp: RegisterLaraWardrobe),
- * TROne's own design. The names of the parts are TROne's; the SECTION table
- * under them is measured here (ModelProbe -lara), because TROne's TR5 glue
- * of its copy of 2026-09-05 had ANDY and JOBY the wrong way round (it gave
- * the Russia outfit to the Irish levels and called the Russian ones young
- * Lara) - see the note in the .cpp.
- * The renderer under all of it is new: TROne is OpenGL 3.3, this is Direct3D
- * 9 through hd_model. See THIRD-PARTY.md.
+ * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06, commit
+ * 75c4c843), host\render\game_renderer.cpp: lara_flush, lara_build_models,
+ * lara_load, draw_hair, and games\tr5\glue\hostglue_file5.cpp:
+ * RegisterLaraWardrobe), TROne's own design. The names of the parts are
+ * TROne's; the SECTION table under them is measured here (ModelProbe -lara),
+ * because TROne's TR5 glue of its copy of 2026-09-05 had ANDY and JOBY the
+ * wrong way round (it gave the Russia outfit to the Irish levels and called
+ * the Russian ones young Lara; fixed in TROne-main, copy of 2026-10-06,
+ * commit 75c4c843) - see the note in the .cpp. The renderer under all of it
+ * is new: TROne is OpenGL 3.3, this is Direct3D 9 through hd_model. See
+ * THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git

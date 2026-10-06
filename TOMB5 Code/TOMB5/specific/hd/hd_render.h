@@ -3,14 +3,13 @@
  *
  * The structure of the level build (read the .TRG, one buffer for the whole
  * level, a range table per group, three passes per room) and the draw rule
- * are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
- * TROne-main (copy of 2026-10-05), host\render\game_renderer.cpp, hd_load
- * and hd_draw_room), TROne's own design. The renderer under it is new:
- * TROne is OpenGL 3.3 with vertex arrays, texture arrays and runtime GLSL,
- * this is Direct3D 9 with a vertex declaration, one texture per page and
- * compiled bytecode, beside a fixed-function neighbour that must find its
- * state exactly as it left it.
- * See THIRD-PARTY.md.
+ * are carried over from TROne (Copyright 2026 Todesengel, GPLv3, TROne-main
+ * (copy of 2026-10-06, commit 75c4c843), host\render\game_renderer.cpp,
+ * hd_load and hd_draw_room), TROne's own design. The renderer under it is
+ * new: TROne is OpenGL 3.3 with vertex arrays, texture arrays and runtime
+ * GLSL, this is Direct3D 9 with a vertex declaration, one texture per page
+ * and compiled bytecode, beside a fixed-function neighbour that must find its
+ * state exactly as it left it. See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
@@ -147,9 +146,10 @@ struct HDRoomLighting
  * predicate walks the neighbouring rooms through the portals
  * (IsMistVert, IsReflectionVert and IsShoreVert in drawroom.cpp). So the
  * answer is computed once, at level build, on the classic vertices, and
- * carried to the HD vertices by position - the same road TROne takes for its
- * own water flag (TROne-main (copy of 2026-10-05), hd_load and
- * hd_water_mark: a per room hash of packed int16 x/y/z). The road holds on
+ * carried to the HD vertices by position - the same road TROne took for its
+ * own water flag in its copy of 2026-10-05 (hd_load and hd_water_mark: a per
+ * room hash of packed int16 x/y/z; in 75c4c843 TROne keeps that hash for shore
+ * corners and matches water surfaces as horizontal planes). The road holds on
  * our own count: 107,118 of the 126,170 classic room vertices of the fifteen
  * levels have a .TRG vertex of the same room at exactly their position
  * (TrgProbe -shadeorder).

@@ -102,7 +102,8 @@
  *               MaterialAlphaRef). On every other material the alpha
  *               channel of an opaque tile carries a gloss/wetness MASK, not
  *               coverage, and testing on it blanks whole floors and facades
- *               (TROne on a TR1 snow floor; ANDREA1's stucco, JOBY2's snow
+ *               (TROne-main, copy of 2026-10-05, k_hd_frag, on a TR1 snow
+ *               floor; ANDREA1's stucco, JOBY2's snow
  *               and JOBY3's bulkheads here).
  *   1 alpha     clip(a - 0.5), the punch-through pass.
  *   2 additive  colour * alpha, blended ONE/ONE with the depth write off.
@@ -251,30 +252,35 @@ float4 gMotion : register(c13);
 
 /* The wind, in classic units and radians per second. These numbers are a
  * judgement rather than a measurement, which is why they are named here. The
- * shape is TROne's (game_renderer.cpp, k_hd_vert: a sine of x + z, a second
- * one across it); 24 units of travel and a wavelength of about 1.4 blocks is
- * what that shader uses for its own water, and grass, ivy and kelp are the
- * same size of thing. */
+ * shape is TROne's own (TROne-main, copy of 2026-09-05, k_hd_vert's water
+ * block: a sine of x + z, a second one across it); 24 units of travel and a
+ * wavelength of about 1.4 blocks is what that shader used for its own water
+ * in that copy, and grass, ivy and kelp are the same size of thing. */
 #define HD_WIND_TRAVEL     24.0f
 #define HD_WIND_WAVELENGTH 0.0045f
 #define HD_WIND_SPEED      2.1f
 
 /* The water surface, carried over from TROne
- * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, k_hd_vert
- * 153-172 and k_hd_frag 211-223 - the shape of the swell, the UV wobble and
- * the caustic are his; see THIRD-PARTY.md).
+ * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, the GLSL
+ * shaders k_hd_vert and k_hd_frag - the shape of the UV wobble and of the
+ * caustic and the caustic's scale of 0.018 are TROne's own design in
+ * TROne-main (copy of 2026-10-05); the vertical swell is TROne's design of
+ * its copy of 2026-09-05; see THIRD-PARTY.md).
  *
  * Why a caustic on top of the classic shimmer. TR5's own shimmer is the
  * WaterTable term, computed PER VERTEX, and a remaster water surface is a few
  * large quads whose corners are its only vertices, so that term reaches the
- * screen as a slow blotch, not a shimmer. TROne notes the same ("a
- * vertex-interpolated shimmer stayed flat and the surface looked still"). The
+ * screen as a slow blotch, not a shimmer. TROne notes the same in its copy
+ * of 2026-09-05 ("a vertex-interpolated shimmer stayed flat and the surface
+ * looked still"). The
  * WaterTable term therefore stays untouched, parity and all, and the caustic
  * is added as a ZERO MEAN MODULATION on top of it: no average brightness of
  * its own, only the movement the classic term cannot carry at this vertex
  * count - so the shimmer's brightness is not counted twice.
  *
- * The three amplitudes are TROne's own. The strength is matched to two
+ * The three amplitudes are TROne's own (its copy of 2026-09-05). The
+ * strength, 0.32, is this project's own - TROne-main (copy of 2026-10-05)
+ * gives its caustic 0.12 - and is matched to two
  * reference shots of the same VCI pool from the remaster: over the water
  * region the two frames differ by 8.4 of 255 on average, with 17 percent of
  * the pixels more than 16 apart against a mean of 34 - a swing of a third to
@@ -468,11 +474,16 @@ float4 gSpec : register(c19);
  *    everywhere else this costs one compare
  * z  how fast, in waves a second
  *
- * All three come out of the .TRG part's own three numbers. Where those
- * numbers come from is our own measurement of the material; nothing of
- * TROne's is used - see MaterialRipple in hd_render.cpp.
+ * All three come out of the .TRG part's own three numbers. The reading of
+ * param[1] as the travel is our own measurement of the material; which of
+ * param[0] and param[2] is the frequency and which the rate is this
+ * project's free choice, and it coincides with the order TROne's prose
+ * names - see MaterialRipple in hd_render.cpp for both. No number of
+ * TROne's is used. The structure - a texture ripple with no movement in the
+ * vertex, its travel held to the part's own UV span - is TROne's own design
+ * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-05).
  *
- * The shape is this file's own: two sheets travelling across each other, and
+ * The curve is this file's own: two sheets travelling across each other, and
  * a finer, faster octave over them so that the pattern does not read as one
  * moving grid. They are written on the WORLD position (roomPos plus
  * gRoomOrigin) rather than on the UV, so a sheet built out of a handful of
@@ -733,9 +744,12 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 
 	/* 2b. The wind. The fourth SHORT of the position is TrgVertex::sway, the
 	 * remaster's own per vertex weight for what moves in the wind or the
-	 * current - a wind and water weight over 32767. That is the .TRG field
-	 * layout as TRForge's MIT format description gives it, and the range is
-	 * re-measured on the player's own files (hd_render.h, HDStats::swayMax).
+	 * current - a wind and water weight over 32767. The field's place is
+	 * TRForge's MIT format description (Trg.h); its range is counted on the
+	 * files themselves: 0..32767 in thirteen of the fifteen levels, never
+	 * below 0, and none at all in RICH1 and RICHCUT2 (TrgProbe -normals), so
+	 * over 32767 it is a weight of 0..1. The engine keeps each group's largest
+	 * in HDRenderGroupMotion::swayMax (hd_render.h) for the log.
 	 * Over the 15 levels it is the ivy and the banners of Rome, the grass of
 	 * Ireland and the kelp of the Deepsea Dive, and it is disjoint from the
 	 * classic engine's water vertices except in JOBY4, where the kelp stands
@@ -757,7 +771,8 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	}
 
 	/* 2c. The swell. The same water weight the UV wobble rides on also lifts
-	 * the surface - TROne's shape, one wave over about a block and a half.
+	 * the surface - TROne's shape of its copy of 2026-09-05, one wave over
+	 * about a block and a half.
 	 * Like the wind it moves `drawn` and not `pos`, so the water hash, the
 	 * surface test, the WaterTable and the classic choppy displacement (which
 	 * is in `pos`) are untouched by it. */
@@ -846,7 +861,8 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * branch: the remaster authored a scroll on 14 of the 15 levels, on
 	 * waterfalls, drifting sky and light shafts as well.
 	 *
-	 * The wobble is TROne's water_effect: on a marked water surface the UV
+	 * The wobble is TROne's water_effect (TROne-main, copy of 2026-09-05,
+	 * k_hd_vert): on a marked water surface the UV
 	 * moves a little, so an HD water plane is not a mirror. It rides on the
 	 * SAME two waves as the swell - one clock, one shape, so the picture and
 	 * the geometry agree - six texels, TROne's own figure. It dies with
@@ -861,7 +877,10 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.roomPos = pos;
 	o.waterAdd = float4(waterAdd, water);
 
-	/* The byte normal, biased by 127, into the same space the classic path
+	/* The byte normal, biased by 127 - read so, 53.9 % of the triangle
+	 * corners of the fifteen files lie within 10 degrees of their
+	 * triangle's plane, read as signed bytes 0.5 % (TrgProbe -normals) -
+	 * into the same space the classic path
 	 * puts it in - view space, by the linear part of D3DMView. It is NOT
 	 * renormalised, because the classic path does not renormalise either. */
 	o.viewNrm = mul(float4((inNormal.xyz - 127.0f) * (1.0f / 128.0f), 0.0f), gWorldView);

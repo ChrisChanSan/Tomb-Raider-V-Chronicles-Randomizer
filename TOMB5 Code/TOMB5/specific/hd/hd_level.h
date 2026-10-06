@@ -101,7 +101,7 @@ bool HDLevelRedress(const char* why);
  *
  * Measured (PoolProbe -pool): the cache's pages are D3DPOOL_DEFAULT and cost
  * the process 0.00 to 0.04 MiB of address space each - the 85.25 MiB of a
- * 4096 page in A8R8G8B8 goes on the card only. A D3DPOOL_MANAGED page would
+ * 4096x4096 texture in A8R8G8B8 goes on the card only. A D3DPOOL_MANAGED page would
  * cost the process its own size (85.37 MiB, in one reserve), and the engine
  * makes none. So the card's budget is the real wall; the address side is a
  * guard for the one big block a page load takes from the process (the

@@ -4,8 +4,8 @@
  * The structure of the level build (read the .TRG, one buffer for the whole
  * level, a range table per group, three passes per room) and the draw rule
  * are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
- * host\render\game_renderer.cpp, hd_load 1919-2256 and hd_draw_room
- * 2259-2312). The renderer under it is new: TROne is OpenGL 3.3 with vertex
+ * TROne-main (copy of 2026-10-05), host\render\game_renderer.cpp, hd_load
+ * and hd_draw_room), TROne's own design. The renderer under it is new: TROne is OpenGL 3.3 with vertex
  * arrays, texture arrays and runtime GLSL, this is Direct3D 9 with a vertex
  * declaration, one texture per page and compiled bytecode, beside a
  * fixed-function neighbour that must find its state exactly as it left it.
@@ -98,8 +98,12 @@ namespace
 	 *    1  the flow material: a UV scroll, speed in param.xy - waterfalls,
 	 *       rivers, conveyor belts. Its vertices may also carry a bend, and
 	 *       that bend is the water's own
-	 *    7  a wind material, param (alphaRef 0.5, strength, scale, scale)
-	 *    8  the other wind material, the same param shape - foliage, ivy,
+	 *    7  a wind material. param[0] is 0.5 in all 7 of its tuples and is
+	 *       the one slot read here (MaterialAlphaRef); the other three run
+	 *       0..10, 5..32 and 0..24 (TrgProbe -mat 7) and are not read
+	 *    8  the other wind material, the same param shape - param[0] 0.5 in
+	 *       25 of its 26 tuples (ANDY2's one alpha-pass part 0.12), the
+	 *       others 0..12, 4..80 and 0..40 (TrgProbe -mat 8) - foliage, ivy,
 	 *       banners, kelp. 7 and 8 are the same thing in two numbers: no
 	 *       level carries both, ANDREA3 has only 7 and JOBY4 only 8, and
 	 *       TITLE - which is a montage of every level - has both
@@ -738,7 +742,14 @@ namespace
 	 *
 	 * Walked over all three passes, so the answer is the part's and not the
 	 * pass's; it is asked once per material 16 part at level build, which is
-	 * 28 parts in the whole game. */
+	 * 28 parts in the whole game. Holding the ripple's travel to the part's
+	 * own rectangle is TROne's own design for its material 16 water
+	 * (Copyright 2026 Todesengel, GPLv3, TROne-main, copy of 2026-10-05);
+	 * the tenth and the anchors are this file's.
+	 *
+	 * The rectangle rests on u and v being the alpha bytes at +15 and +19,
+	 * which TrgProbe -uvbytes counts on the files (hd_room.hlsl, the vertex
+	 * note). */
 	inline bool PartUvSpan(const trf::remaster::Trg& trg,
 		const trf::remaster::TrgPart& part, float& spanU, float& spanV)
 	{
@@ -802,22 +813,31 @@ namespace
 	 * param[1] is the one that does not follow the area, so it is read as an
 	 * amplitude.
 	 *
-	 * Origin: this reading is our own measurement of the table above and
-	 * nothing else. TROne names these three slots as well; nothing of
-	 * TROne's is used here. The order settled on - param[0] the scale,
-	 * param[1] the travel, param[2] the rate - is the same order TROne's
-	 * prose names. param[1] follows from the table; which of the two
-	 * monotone slots is the frequency and which the rate is unproven,
-	 * because both move with the area and one measurement cannot separate
-	 * them. If the sea ripples too finely and too fast while the fountain
-	 * is too coarse and too slow, they are the wrong way round. The
+	 * Origin. That param[1] is the travel is our own reading of the table
+	 * above: it is the one slot that does not follow the area. Which of the
+	 * other two is the frequency and which the rate is a FREE CHOICE of this
+	 * project, not a result: both move with the area and in the same
+	 * direction over every part that carries them (param[0] from 0.1 to 5.0,
+	 * param[2] from 0.035 to 0.5, TrgProbe -mat 16), and no count of
+	 * ours separates them. The order settled on - param[0] the scale,
+	 * param[1] the travel, param[2] the rate - coincides with the order
+	 * TROne's prose names for these three slots (TROne-main, copy of
+	 * 2026-10-05). TROne states that it read that order off the Remaster's
+	 * own shader programs, which this project uses neither at first hand nor
+	 * at second, so the coincidence is written down here and is not taken
+	 * as evidence; for that one bit there is no measurement of our own. If
+	 * the sea ripples too finely and too fast while the fountain is too
+	 * coarse and too slow, the choice is the wrong way round. The
 	 * reversal is not a swap of out[0] and out[2]: each anchor below
 	 * belongs to its parameter, so the sources change places and keep
 	 * their anchors - the scale reads param[2] through the 0.2 anchor
 	 * (floored at 0.0125), the rate reads param[0] through the 0.8 anchor.
 	 * No constant of TROne's is used; every number below comes from a TR5
-	 * measurement, and the wave in hd_room.hlsl is a different curve with
-	 * different terms.
+	 * measurement. The structure around them - the travel held to the
+	 * part's own UV span (PartUvSpan) and no movement in the vertex - is
+	 * TROne's own design (Copyright 2026 Todesengel, GPLv3, TROne-main
+	 * (copy of 2026-10-05), its own water rule for material 16), and the
+	 * wave in hd_room.hlsl is a different curve with different terms.
 	 *
 	 * The three anchors:
 	 *
@@ -847,7 +867,8 @@ namespace
 	 *
 	 * Nothing here touches the vertex: `sway` is 0 on 27 of the 28 parts, and
 	 * a sheet that bobbed would tear away from the stone rim it is let into.
-	 * This is a texture ripple and nothing else.
+	 * This is a texture ripple and nothing else - TROne's own reasoning for
+	 * its material 16 water, and the same count here.
 	 *
 	 * Returns false for every other material in the game, and then out[] is
 	 * three zeroes and the pixel shader's one compare skips the whole thing.
@@ -1092,12 +1113,13 @@ namespace
 
 	/* The gloss of one part.
 	 *
-	 * Origin: TROne has no reflection and no specular anywhere - its only
-	 * related lines are a comment about the water UV wobble "distorting the
-	 * reflection" and the note in game_renderer.cpp:373 that an opaque page's
-	 * DDS alpha is a sparkle/specular mask, not coverage - and its
-	 * SHADER_RULES.md lists six rules, none of them a mirror. So nothing here
-	 * is carried over from it; the reading below is our own measurement.
+	 * Origin: the reading below is our own measurement, and nothing here is
+	 * carried over from TROne. TROne-main (copy of 2026-10-05) has a planar
+	 * reflection and an environment rule for material 3 of its own; neither
+	 * is used here, and our material 3 reading differs from TROne's. The one
+	 * TROne remark this touches - that an opaque page's DDS alpha is a
+	 * sparkle mask, not coverage (TROne-main, copy of 2026-10-05, k_hd_frag)
+	 * - is held against our own pages in the next paragraph.
 	 *
 	 * The alpha mask of a page is not a gloss source: RICH2's marble floors
 	 * draw with pages 1010, 1032 and 1033, and all three are alpha 255 on all
@@ -4173,8 +4195,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * hd_level: the format and the budget are the player's settings, but
 	 * how wide a texture this card can hold is a fact of the device, and this
 	 * is the one place that has both the caps and the cache in hand. Eleven
-	 * remaster pages are 4096x4096 and a card that stops at 2048 gets them
-	 * one level down instead of not at all. */
+	 * pages of 5\TEX (and eight of 4\TEX) are 4096 wide by 2048 high, the
+	 * widest the bundle ships (TrgProbe -ddssizes), and a card that stops at
+	 * 2048 gets them one level down instead of not at all. */
 	{
 		HDPageCachePolicy policy;
 
@@ -4203,7 +4226,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * Only needed for the water marks, and only built when there are any. A
 	 * .TRG names its vertices per group through the index runs and nowhere
 	 * else, so the ownership is read out of the runs - the same walk TROne
-	 * makes for its own water flag (game_renderer.cpp:2113-2124). A vertex
+	 * makes for its own water flag (TROne-main (copy of 2026-10-05),
+	 * hd_load). A vertex
 	 * named by two groups keeps the last one; the marks are per room and a
 	 * shared vertex sits on a portal, where both answers agree. */
 	std::vector<int> vertex_group;
@@ -4367,7 +4391,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * themselves say which is which:
 	 *
 	 *   8 and 7 are the wind materials, the same thing under two numbers -
-	 *     param (alphaRef 0.5, strength, scale, scale) in both, the cut-out
+	 *     param[0] 0.5 in both (the only slot read; the ranges of the other
+	 *     three are in the material list at the top of this file), the cut-out
 	 *     sheets of leaves, and no level carries both (ANDREA3 has only 7,
 	 *     JOBY4 only 8; TITLE, a montage of every level, has both). Ivy,
 	 *     banners, grass, kelp.

@@ -14,8 +14,8 @@
 
 // Which .TRM belongs to which slot.
 //
-// The remaster does not repaint an object's classic tiles; it throws the mesh
-// away and draws a model of its own, one file per slot in <5>\ITEM. Which file
+// The install does not repaint an object's classic tiles; it ships a model of
+// its own in place of the mesh, one file per slot in <5>\ITEM. Which file
 // that is comes from three places, in this order:
 //
 //   1. The level's own <LEVEL>.MAP - plain text, KEY=VALUE a line, CRLF. It

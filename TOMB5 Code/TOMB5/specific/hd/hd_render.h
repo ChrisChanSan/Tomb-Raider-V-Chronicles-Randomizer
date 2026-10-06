@@ -4,8 +4,8 @@
  * The structure of the level build (read the .TRG, one buffer for the whole
  * level, a range table per group, three passes per room) and the draw rule
  * are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
- * host\render\game_renderer.cpp, hd_load 1919-2256 and hd_draw_room
- * 2259-2312). The renderer under it is new: TROne is OpenGL 3.3 with vertex
+ * TROne-main (copy of 2026-10-05), host\render\game_renderer.cpp, hd_load
+ * and hd_draw_room), TROne's own design. The renderer under it is new: TROne is OpenGL 3.3 with vertex
  * arrays, texture arrays and runtime GLSL, this is Direct3D 9 with a vertex
  * declaration, one texture per page and compiled bytecode, beside a
  * fixed-function neighbour that must find its state exactly as it left it.
@@ -147,8 +147,11 @@ struct HDRoomLighting
  * (IsMistVert, IsReflectionVert and IsShoreVert in drawroom.cpp). So the
  * answer is computed once, at level build, on the classic vertices, and
  * carried to the HD vertices by position - the same road TROne takes for its
- * own water flag (game_renderer.cpp:2127-2188, a per room hash of packed
- * int16 x/y/z).
+ * own water flag (TROne-main (copy of 2026-10-05), hd_load and
+ * hd_water_mark: a per room hash of packed int16 x/y/z). The road holds on
+ * our own count: 107,118 of the 126,170 classic room vertices of the fifteen
+ * levels have a .TRG vertex of the same room at exactly their position
+ * (TrgProbe -shadeorder).
  *
  *   bit 0  the vertex is one of the roomlet's nWVtx water vertices - it gets
  *          the choppy displacement
@@ -168,7 +171,10 @@ struct HDRoomLighting
 struct HDRenderSample
 {
 	short x, y, z;			// room local
-	unsigned char nx, ny, nz;	// biased by 127, as on disk
+	/* Biased by 127, as on disk: read so, 53.9 % of the corners of the
+	 * fifteen files lie within 10 degrees of their triangle's plane normal,
+	 * read as signed bytes 0.5 % (TrgProbe -normals). */
+	unsigned char nx, ny, nz;
 	unsigned char c1[3], c2[3];	// the two baked light triples, R G B
 	unsigned char bits;		// the water marks that were found here
 };

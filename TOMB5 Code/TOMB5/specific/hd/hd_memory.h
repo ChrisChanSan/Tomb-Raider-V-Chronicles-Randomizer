@@ -90,10 +90,12 @@ void HDMemoryMeasure(HDMemoryRoom* out);
 
 /* The biggest single allocation one page costs: one texture of `side` by
  * `side` with its whole mip chain, four bytes a texel or one when dxt5 is set.
- * Eleven pages of the remaster are 4096x4096 (hd_render.cpp, where the
- * device's own cap enters the policy), which is 85.33 MiB in A8R8G8B8 and
- * 21.33 MiB in BC3 - the two numbers the fragmentation condition is asked
- * against. Measured against the real thing with PoolProbe -pool. */
+ * The widest pages of the remaster are 4096 across (eleven of 5\TEX, eight
+ * of 4\TEX, all of them 4096x2048: TrgProbe -ddssizes); a square of that
+ * side, the bound the caller passes, is 85.33 MiB in A8R8G8B8 and 21.33 MiB
+ * in BC3 - the two numbers the fragmentation condition is asked against, and
+ * twice what such a page really takes. Measured against the real thing with
+ * PoolProbe -pool. */
 double HDRedressPageBlock(int dxt5, int side);
 
 // Which of the three conditions refused, for the log and for the grid.

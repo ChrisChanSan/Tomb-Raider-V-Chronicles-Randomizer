@@ -3,7 +3,9 @@
  *
  * The search order for a missing page and the "no page is ever black, it is
  * WHITE.DDS" rule are carried over from TROne (Copyright 2026 Todesengel,
- * GPLv3, host\render\hd_pages.cpp, upload2 / fill_missing_tiles). The upload
+ * GPLv3, TROne-main (copy of 2026-10-05), host\render\hd_pages.cpp,
+ * upload_shared / upload2, and the white layer 0 of its page array in
+ * game_renderer.cpp), TROne's own design. The upload
  * itself is new: TROne hands the driver BC7 blocks in one texture array,
  * Direct3D 9 has neither. See THIRD-PARTY.md.
  *
@@ -148,9 +150,10 @@ namespace
 	std::vector<std::string> g_notes;
 
 	/* The one reused staging texture of the DEFAULT path. It is recreated
-	 * only when a page has a shape the last one did not - which over every
-	 * TR5 level means exactly once, because every remaster page is 512x512
-	 * with six mips. */
+	 * only when a page has a shape the last one did not - which over a TR5
+	 * level is seldom, because 2391 of the 2406 pages of 5\TEX are 512x512
+	 * (the other fifteen: eleven 4096x2048, two 2048x2048, two 256x256;
+	 * TrgProbe -ddssizes). */
 	IDirect3DTexture9* g_staging = 0;
 	long g_staging_w = 0, g_staging_h = 0, g_staging_levels = 0;
 	int g_staging_format = HD_PAGE_FORMAT_RGBA;
@@ -361,8 +364,10 @@ namespace
 	 * those three pages are black holes in the middle of the level. Six item
 	 * models are in the same position and follow the same rule.
 	 *
-	 * WHITE.DDS is slot 0 of the remaster's own page table - a plain white
-	 * tile. A missing page painted white shows the room's baked light and
+	 * WHITE.DDS is a plain white tile the install ships in 4\TEX only, and
+	 * no .TRG vertex of the fifteen levels names layer 0, the one place a
+	 * page number could point at it (TrgProbe -layer0). A missing page
+	 * painted white shows the room's baked light and
 	 * looks like untextured geometry; painted black it looks like a hole and
 	 * gets reported as a rendering bug. That choice is TROne's and it is the
 	 * right one. */
@@ -646,9 +651,12 @@ namespace
  * a test it always passes, so the test is switched on exactly where it has
  * something to do and the gloss-mask trap is never entered.
  *
- * The threshold is 0.5, and it is not a taste: material 6 and material 8 both
- * carry 0.5 in param[0] in every level of the game, which is the remaster's
- * own alpha reference for the material.
+ * The threshold is 0.5, and it is not a taste: materials 6, 7 and 8 carry
+ * 0.5 in param[0] in 42 of their 44 tuples over the fifteen levels (ANDY1
+ * has one 0.503 on material 6, ANDY2 one 0.12 on an alpha-pass part of
+ * material 8; TrgProbe -mat 6, -mat 7, -mat 8), and the pages those three
+ * wear are half hole or more (the table above). That is why this file reads
+ * the slot as the cut-out's threshold.
  *
  * The cutoff is 2 % and not one texel: a page that is a gloss mask has a few
  * dark corners; a page that is a cut-out sheet is half hole. The measured gap
@@ -851,7 +859,7 @@ namespace
 
 /* The one builder. Create empties the cache first and Append does not; every
  * other line is the same, and a second copy of the batching, the decoding and
- * the two upload paths would be a second place for the 4096x4096 budget to be
+ * the two upload paths would be a second place for the big pages' budget to be
  * got wrong. `append` is the whole difference, and it shows up in exactly
  * three places below: the slot numbers start at what is already there, the
  * texture array grows instead of being replaced, and the notes are kept. */
@@ -1028,8 +1036,9 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		}
 
 		/* The device's own limit first, before the budget gets a say. Eleven
-		 * remaster pages are 4096x4096, and a card whose MaxTextureWidth is
-		 * 2048 cannot hold one of them at all - the CreateTexture would fail
+		 * pages of 5\TEX are 4096 wide (by 2048 high, TrgProbe -ddssizes),
+		 * and a card whose MaxTextureWidth is 2048 cannot hold one of them at
+		 * all - the CreateTexture would fail
 		 * and the page would be a hole. Starting it one level down is not a
 		 * compromise, it is the only picture that card can show. */
 		if (g_policy.maxSide > 0)
@@ -1161,10 +1170,11 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	 * than one batch.
 	 *
 	 * The batch is measured in bytes, not in pages, and that is not a
-	 * refinement. The remaster's pages are not one size: 2391 of them are
-	 * 512x512 and decode to 1.4 MiB, but eleven are 4096x4096 and decode to
-	 * 85 MiB each. A batch of "threads * 2 + 2" pages that happened to catch
-	 * several of those would ask for one and a half gigabytes in a process
+	 * refinement. The remaster's pages are not one size: 2391 of the 2406 of
+	 * 5\TEX are 512x512 and decode to 1.4 MiB, but eleven are 4096x2048 and
+	 * decode to 42.7 MiB each (TrgProbe -ddssizes). A batch of
+	 * "threads * 2 + 2" pages that happened to catch several of those would
+	 * ask for most of a gigabyte in a process
 	 * that has three, and it would do it rarely enough to look like a random
 	 * crash. The estimate is the page's own header, read above - and a batch
 	 * always holds at least one page, however big.
@@ -1429,7 +1439,7 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 		upload_ms += now_ms() - upload_started;
 
-		/* A staging texture for one of the eleven 4096x4096 pages is 85 MiB
+		/* A staging texture for one of the eleven 4096x2048 pages is 42.7 MiB
 		 * of system memory, and keeping it "for reuse" would mean carrying
 		 * that for the rest of the load because one page in the middle
 		 * happened to be big. Anything past a 1024x1024 page goes back at

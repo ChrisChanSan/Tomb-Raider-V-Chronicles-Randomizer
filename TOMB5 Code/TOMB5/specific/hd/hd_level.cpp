@@ -279,7 +279,7 @@ namespace
 	// the shader's fixed maxima ever bit.
 	std::vector<HDWaterMark> g_water_marks;
 
-	/* The water surface the remaster does not draw.
+	/* The water surface the .TRG has no geometry for.
 	 *
 	 * One entry per classic room face that is a water surface and that the
 	 * .TRG has no art for. See BuildWaterSurfaces for the measurement; the
@@ -1135,7 +1135,8 @@ namespace
 	 * every one goes through one reused D3DPOOL_SYSTEMMEM staging texture of
 	 * the page's whole size
 	 * (hd_pagecache.cpp, ensure_staging) - and that is an 85.33 MiB block for
-	 * a 4096 page in A8R8G8B8, measured at 85.34 in a single reserve. */
+	 * a 4096x4096 texture in A8R8G8B8, measured at 85.34 in a single
+	 * reserve, the bound kWidestPage below works with. */
 	double g_redress_page_block = 0;
 
 	/* Which pool the pages live in, in one place instead of a literal at each
@@ -1145,10 +1146,13 @@ namespace
 	 * same answer; it is a property of the loader, not a setting. */
 	const bool kPagesManaged = false;
 
-	/* The widest page the remaster has. Eleven of them are 4096x4096 and
-	 * nothing is wider (hd_render.cpp, where the device's own cap enters the
-	 * policy); a card that stops at 2048 clamps them, and the policy says so,
-	 * which is why the block below is worked out from both. */
+	/* The widest page the remaster has: eleven pages of 5\TEX and eight of
+	 * 4\TEX are 4096 wide by 2048 high and nothing is wider (TrgProbe
+	 * -ddssizes). The block below is worked out for a square of that side,
+	 * which bounds the real page from above by a factor of two; a card that
+	 * stops at 2048 clamps them (hd_render.cpp, where the device's own cap
+	 * enters the policy), and the policy says so, which is why the block is
+	 * worked out from both. */
 	const int kWidestPage = 4096;
 
 	/* The automatic texture budget.
@@ -1607,7 +1611,7 @@ static void BuildRoomSectors()
 		HDRenderSetSectors(0, 0, 0, 0);
 }
 
-/* The water surface the remaster does not draw.
+/* The water surface the .TRG has no geometry for.
  *
  * In some HD rooms a pool shows dark washed-out blotches where the classic
  * level has a moving water surface. It is not a missing texture layer: over
@@ -1625,7 +1629,9 @@ static void BuildRoomSectors()
  *     JOBY5  13 of 25          -   the whole VCI pool set
  *     ANDY3  23 of 23, ANDY1 5 of 6, ANDREA2 10 of 13, ANDREA1 3 of 3,
  *     JOBY4   1 of 1, RICH3 2 of 4
- *     ANDREA3, JOBY3, RICH2  0 of 15 - those rooms keep their surface
+ *     ANDREA3, JOBY3, RICH2  0 of 13 - those rooms keep their surface
+ *
+ * 61 of the 93 rooms, then, whose plane has less than half the art.
  *
  * JOBY2's room 66, for example: 24 classic faces of one texinfo at y -1280,
  * and 0 .TRG triangles in that plane. The HD room draws the pool floor and
@@ -4769,9 +4775,9 @@ static void HDLevelBuildHD()
 
 	/* The static meshes. A .TRG room has the level's static meshes baked into
 	 * its art, so DrawStaticObjects must not draw them a second time - the
-	 * "double lantern" TROne guards against (game_renderer.cpp:3722-3736, a
-	 * baked mesh pointer passes only while the moveable that claims it is
-	 * streaming).
+	 * "double lantern" TROne guards against (TROne-main (copy of
+	 * 2026-10-05), draw_mesh: a baked mesh pointer passes only while the
+	 * moveable that claims it is streaming).
 	 *
 	 * This seam is narrower and the rule with it: a room's own MESH_INFO
 	 * list is asked, static by static, whether the art draws its place - the
@@ -4786,7 +4792,7 @@ static void HDLevelBuildHD()
 	 * whose carriers and room states BuildStaticTables asks. */
 	BuildStaticTables();
 
-	/* The water surface the remaster left out - see the note over
+	/* The water surface the .TRG has no geometry for - see the note over
 	 * BuildWaterSurfaces. After the loop above, because it asks per room
 	 * whether that room draws HD at all. */
 	BuildWaterSurfaces();

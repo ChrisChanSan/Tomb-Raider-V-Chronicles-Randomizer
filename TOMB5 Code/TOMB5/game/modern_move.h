@@ -29,10 +29,14 @@
  * decompilation - and no code of TROne's is copied here. Units, state list and
  * wording here are TR5's own; ModernTest.cpp takes over TROne's test
  * expectations. Of the 32 constants, 16 carry a stated origin, 9 are measured
- * in play of this game, 5 do not apply and 2 of unknown origin are not used. The only fact from the
- * Remaster is a set of option names read from the player's own COMMON.TXT; no
- * Remaster program is used, and the Remaster's modern control is rebuilt only
- * from how it plays.
+ * in play of this game, 5 do not apply and 2 of unknown origin are not used.
+ * What the Remaster gave is what anybody sees of it: timings taken from
+ * video of it playing - the turn on the spot and the half turn while running
+ * (MODERN_TURN_RATE below), the camera's return behind her in 0.6 to 0.75 s
+ * and its own orbit rate of a full circle in 2.85 to 2.95 s (modern_camera.h)
+ * - and a set of option names read from the player's own COMMON.TXT. No
+ * Remaster program is used, and the Remaster's modern control is rebuilt
+ * only from how it plays.
  *
  * Angles are the engine's 16-bit units: 65536 is a full turn, 0 is +Z, 0x4000
  * is +X (item->pos.y_rot, phd_atan(z, x)). The per-tick state machine, the
@@ -213,12 +217,14 @@ enum modern_constants
 
 	/* Once aligned, it takes twice the window to start turning again. Without
 	 * the hysteresis the turn bit flickers on the window's edge at tick rate,
-	 * a visible twitch at small angles. */
+	 * a visible twitch at small angles. TROne's default, taken over as it
+	 * stands (the version of 2026-09-13), as are the two spin thresholds, the
+	 * quadrant and the two blocked numbers below. */
 	MODERN_ALIGNED_FACTOR = 2,
 
 	/* Above 112.5 degrees of error she turns on the spot and does not run;
 	 * she runs again below 56.25. Two thresholds, so a 180 degree flick cannot
-	 * chatter between them. */
+	 * chatter between them. TROne's defaults. */
 	MODERN_SPIN_ENTER = 0x5000,
 	MODERN_SPIN_EXIT = 0x2800,
 
@@ -249,13 +255,15 @@ enum modern_constants
 	MODERN_RECENTER = MODERN_STEER_STEP,
 
 	/* The quadrant boundary: within 45 degrees of her nose the direction is
-	 * "forward", within 45 of her back it is "back", the rest a side step. */
+	 * "forward", within 45 of her back it is "back", the rest a side step.
+	 * TROne's default. */
 	MODERN_AIM_SECTOR = 0x2000,
 
 	/* Read by game\modern_state.cpp, not by the translation. Lara counts as
 	 * blocked when she has moved less than 4 world units for 6 ticks while
 	 * asking to go forward and to turn. Six ticks is a fifth of a second: fewer
-	 * and the first ticks of a start from a standstill look like a wall. */
+	 * and the first ticks of a start from a standstill look like a wall.
+	 * TROne's defaults, both. */
 	MODERN_BLOCK_FRAMES = 6,
 	MODERN_BLOCK_EPS = 4,
 

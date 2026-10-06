@@ -469,7 +469,9 @@ namespace
 
 		/* The rig's joints. Each is an inverse bind matrix of twelve floats,
 		 * rows (m0 m1 m2 | m3), (m4 m5 m6 | m7), (m8 m9 m10 | m11); the
-		 * joint stands at -R^T t. Kept only when the whole list lies between
+		 * joint stands at -R^T t - TROne's measurement on the head files
+		 * (GPLv3; hd_trm.h, HDTrmModel::rigJoint, has it and our own check).
+		 * Kept only when the whole list lies between
 		 * the count and the geometry the rescan found, and never past 256
 		 * joints, the most a byte-wide bone number can name. */
 		if (facial_rig && rig_joints && rig_joints <= 256 &&

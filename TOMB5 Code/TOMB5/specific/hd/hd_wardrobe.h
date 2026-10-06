@@ -1,6 +1,10 @@
 /*
  * Modified 2026 by ChrisChanSan.
  *
+ * The role table of the wardrobe (which slot means which model) and the
+ * composite it serves are carried over from TROne (Copyright 2026
+ * Todesengel, GPLv3) - see hd_lara.h and THIRD-PARTY.md.
+ *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
  * TR5 Randomizer project. The individual changes are recorded in the git
  * history of this source tree.

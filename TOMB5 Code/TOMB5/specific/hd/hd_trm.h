@@ -19,11 +19,12 @@
 // geometry. It is cheap. HDTrmLoad reads the geometry as well, for a model
 // that has to be drawn and not only counted.
 //
-// The format is TRForge's measurement over 2,923 files of all five games
-// (MIT, trf_remaster\ItemModels.h - not vendored: see vendor\trforge\
-// VERSION.txt for why that one file could not be taken verbatim). The byte
-// offsets below were measured again here over the 566 .TRM files of the
-// remaster's game 5 folder; every number in the comments is from that pass.
+// The layout is TRForge's description (MIT, trf_remaster\ItemModels.h - not
+// vendored: see vendor\trforge\VERSION.txt for why that one file could not
+// be taken verbatim). It is not taken on trust: the byte offsets below were
+// counted again here over the 566 .TRM files of the remaster's game 5
+// folder, every number in the comments is from that pass, and the normal
+// bias in particular over its triangles (TrgProbe -trmnormals, below).
 //
 //     char[3] "TRM"; u8 version (2 everywhere); u32 parts
 //     parts * 44:  u32 material; float param[4]; u32 startIndex;
@@ -36,9 +37,14 @@
 //     vertices * 24:
 //         +0   float x, y, z
 //         +12  u8 nx, ny, nz      the normal, biased by 127 - (n-127)/128,
-//                                 the same bias a .TRG vertex normal carries.
-//                                 Read as signed bytes it comes out nonsense
-//                                 and quietly, so the bytes are kept raw.
+//                                 the same bias a .TRG vertex normal carries:
+//                                 over 4,683,717 triangle corners of 565
+//                                 files of 5\ITEM, 38.1 % lie within 10
+//                                 degrees of their triangle's plane read so,
+//                                 0.6 % read as signed bytes (TrgProbe
+//                                 -trmnormals). Read as signed bytes it comes
+//                                 out nonsense and quietly, so the bytes are
+//                                 kept raw.
 //         +15  u8 layer           which of texId[] this vertex wears,
 //                                 counted from one
 //         +16  u8 bone0, bone1, bone2      indices into the classic mesh tree
@@ -138,6 +144,13 @@ struct HDTrmModel
 	 * them, three floats each. The rig stores every joint as an inverse bind
 	 * matrix, 3x4 and row-major, so the joint itself stands at -R^T t, which
 	 * is what is kept. A vertex's bone number is an index into this list.
+	 * That reading of the rig is TROne's own measurement on the .TRM files
+	 * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05), its
+	 * vendored ItemModels.h: over the 54 head files of both installs every
+	 * facial joint read so lands within 9 units of the vertices it carries),
+	 * a fact about the files; here it is held by LipsTest, which finds the
+	 * frame-0 joints of ten rigged faces on the rig's joints read so, 0.0002
+	 * to 3.46 units apart (hd_trl.cpp, the axes).
 	 *
 	 * In the rig's own axes, which are not the vertices' - LARA_HEAD's head
 	 * joint is (1, -12, 247) here and (1, -247, -12) in the model - so only
@@ -251,8 +264,10 @@ int HDTrmPageOf(const HDTrmModel* model, const HDTrmVertex* vertex);
  * are in hd_lara.cpp.
  *
  * The weights are renormalised to sum to 255 - the sum every one of the
- * 1,260,496 vertices of the remaster's own game 5 has, and the sum the shader
- * assumes - for every vertex of the model, folded or not. A vertex that
+ * 1,260,496 vertices of the remaster's own game 5 has (counted here, see the
+ * top of this file), and the sum our model shader reads the three weights
+ * against (UBYTE4N, hd_model.hlsl) - for every vertex of the model, folded
+ * or not. A vertex that
  * already sums to 255 is not touched, so a file with no crossed vertices and
  * no odd sums comes out of this byte for byte as it went in.
  *

@@ -5527,6 +5527,7 @@ namespace
 
 			if (!HDTrmLoad(entry.path().string().c_str(), &model, &why))
 			{
+				std::printf("refused %s: %s\n", entry.path().filename().string().c_str(), why);
 				failed++;
 				continue;
 			}

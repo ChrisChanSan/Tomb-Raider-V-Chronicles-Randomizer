@@ -11,7 +11,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-// MapProbe - which .TRM the Remaster draws for each of a level's slots.
+// MapProbe - which .TRM the install assigns to each of a level's slots.
 //
 // Occasion: the HD path replaces an object's mesh with a model of its own,
 // one file per slot in <5>\ITEM. Which file that is comes from the level's

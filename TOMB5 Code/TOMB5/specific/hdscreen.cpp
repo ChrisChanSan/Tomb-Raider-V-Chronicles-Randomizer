@@ -396,10 +396,10 @@ long HDScreenCutLogo(const ulong* logo, long lw, long lh, ulong* dst, long dstPi
 // title picture with the localised wordmark over it, horizontally centred and
 // just under the top edge.
 //
-// The remaster draws the wordmark alone on a transparent 1920x1080 frame
+// The install ships the wordmark alone on a transparent 1920x1080 frame
 // (LOGO_DE.DDS and its three siblings) and the title picture without it
-// (TITLE.DDS), so the two only ever appeared one after the other. Putting
-// them together used to mean a single hand-made composite file; that file
+// (TITLE.DDS); no file holds the two together. Putting them together used
+// to mean a single hand-made composite file; that file
 // cannot ship, because it is remaster material - so the engine does it at
 // load time instead, out of the player's own two files.
 //

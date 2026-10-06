@@ -1,5 +1,5 @@
 @echo off
-rem bmap - build MapProbe: which .TRM the Remaster draws for a level's slots,
+rem bmap - build MapProbe: which .TRM the install assigns to a level's slots,
 rem and, with -hdm, what the .hdm sidecar of a randomized level decides, line
 rem by line.
 rem

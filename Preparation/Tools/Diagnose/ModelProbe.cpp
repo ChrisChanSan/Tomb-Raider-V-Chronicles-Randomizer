@@ -1500,9 +1500,9 @@ static void ShotEnd(Shot& shot)
  * and the flags carry the matrix stack: bit 0 pops, bit 1 pushes, and the
  * push happens BEFORE the translation, so what is pushed is the parent's
  * frame (game\draw.cpp, DrawAnimatingItem). The bind pose is that walk with
- * every rotation left out, which is TROne's bind_pose_of_slot
- * (game_renderer.cpp:1752) and the very thing the .TRM's vertices are
- * measured against.
+ * every rotation left out, which is TROne's bind_pose_of_slot (TROne-main,
+ * copy of 2026-10-06, commit 75c4c843, host\render\game_renderer.cpp) and
+ * the very thing the .TRM's vertices are measured against.
  */
 struct ClassicSlot
 {

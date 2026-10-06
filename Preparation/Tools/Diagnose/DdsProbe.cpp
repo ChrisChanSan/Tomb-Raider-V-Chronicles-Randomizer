@@ -351,9 +351,10 @@ static void AlphaKind(const unsigned long* px, long w, long h)
 /* -alpha: the gloss mask.
  *
  * An item page's alpha channel is not coverage - measured on the room pages,
- * and TROne says the same about the item ones in so many words
- * (host\render\game_renderer.cpp:373: "an opaque-pass tile's alpha channel
- * holds a sparkle/specular MASK, not coverage"). This mode reads that channel
+ * and TROne says the same about the item ones in so many words (TROne-main,
+ * copy of 2026-10-06, commit 75c4c843, host\render\game_renderer.cpp, the
+ * k_hd_frag shader: "an opaque-pass tile's alpha channel holds a
+ * sparkle/specular MASK, not coverage"). This mode reads that channel
  * out: a histogram in sixteen buckets, the mean, and the PNG written is the
  * alpha as a grey picture, so a person can see whether the bright parts sit
  * where a highlight belongs.

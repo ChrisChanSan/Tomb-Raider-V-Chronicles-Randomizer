@@ -362,7 +362,7 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 		*HQSfxPlainSource() ? HQSfxPlainSource() : "the level's own samples",
 		g_takes, g_takes == 1 ? "" : "s",
 		landLoaded ? "a landing of its own"
-			: g_bareLand >= 0 ? "the landing drawn from the same recordings (the remaster does the same)"
+			: g_bareLand >= 0 ? "the landing drawn from the same recordings (no separate one in the install)"
 			: "the boots' own landing (this level has no id 4 entry)",
 		g_source, next, next + loaded - 1, (int)g_bareSteps, (int)g_bareLand,
 		(int)own.volume, (int)own.radius, (int)own.pitch, pitch);

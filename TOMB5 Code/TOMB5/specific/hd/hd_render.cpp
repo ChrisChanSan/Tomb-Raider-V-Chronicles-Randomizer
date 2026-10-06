@@ -98,18 +98,19 @@ namespace
 	 *    1  the flow material: a UV scroll, speed in param.xy - waterfalls,
 	 *       rivers, conveyor belts. Its vertices may also carry a bend, and
 	 *       that bend is the water's own
-	 *    7  a wind material. param[0] is 0.5 in all 7 of its tuples and is
-	 *       the one slot read here (MaterialAlphaRef); the other three run
+	 *    7  a wind material. param[0] is 0.5 in all 7 of its per-level
+	 *       tuples, and is the one slot read here (MaterialAlphaRef); the
+	 *       other three run
 	 *       0..10, 5..32 and 0..24 (TrgProbe -mat 7) and are not read
 	 *    8  the other wind material, the same param shape - param[0] 0.5 in
-	 *       25 of its 26 tuples (ANDY2's one alpha-pass part 0.12), the
+	 *       25 of its 26 per-level tuples (ANDY2's alpha-pass one 0.12), the
 	 *       others 0..12, 4..80 and 0..40 (TrgProbe -mat 8) - foliage, ivy,
 	 *       banners, kelp. 7 and 8 are the same thing in two numbers: no
 	 *       level carries both, ANDREA3 has only 7 and JOBY4 only 8, and
 	 *       TITLE - which is a montage of every level - has both
 	 *    6  the plain cut-out material - gratings, nets, railings, ladders.
-	 *       param[0] is its alpha reference and is 0.5 in 10 of the 11
-	 *       tuples the game has (ANDY1 carries one 0.503)
+	 *       param[0] is its alpha reference and is 0.5 in 10 of its 11
+	 *       per-level tuples (ANDY1 carries one 0.503)
 	 *   13  the remaster's own four-frame flipbook, the other three pages in
 	 *       param[0..2] (MaterialFlipTime below)
 	 *    2  the glow material: light shafts, lamp cones, window glows and
@@ -144,18 +145,22 @@ namespace
 	 * puddles of the crane yard.
 	 *
 	 * The material says it, and the material alone. Measured over the 15
-	 * .TRG files, the distinct (material, param) tuples:
+	 * .TRG files with TrgProbe -all -mat <n>, which prints one line per
+	 * level and distinct (material, param) tuple - the per-level tuples
+	 * counted here and in the material list above:
 	 *
-	 *   material 6   param[0] 0.500 (once 0.503), opaque only, 513,647 tris
-	 *   material 7   param[0] 0.500 in all 7 tuples, opaque, 88,726 tris
-	 *   material 8   param[0] 0.500 in 10 of 11 tuples, the odd one 0.120
-	 *                and in the alpha pass, 1,308,742 tris
+	 *   material 6   param[0] 0.500 in 10 of its 11 per-level tuples,
+	 *                ANDY1's other one 0.503; opaque only, 513,647 tris
+	 *   material 7   param[0] 0.500 in all 7, opaque, 88,726 tris
+	 *   material 8   param[0] 0.500 in 25 of 26, ANDY2's one 0.120 and in
+	 *                the alpha pass; 1,308,731 tris opaque, 154 alpha
+	 *                (that one), 738 additive
 	 *   material 3   param[0] 1, 2, 4, 26, 32, 35, 39, 56, 69, 78, 107,
 	 *                109, 110, 141, 161, 191 - a specular exponent
 	 *   material 17  param[0] 22, 25, 36, 38, 63, 70, 72 - the same shape
 	 *   material 13  param[0..2] are page numbers, material 14 likewise
 	 *   material 2   param[0] 0.5, 1.0, 1.5, but additive in every one of
-	 *                its 20 tuples, where no alpha test runs at all
+	 *                its 36 per-level tuples, where no alpha test runs
 	 *
 	 * So 6, 7 and 8 are the three materials whose param[0] is an alpha
 	 * reference, and every other material's param[0] is measurably
@@ -244,7 +249,7 @@ namespace
 	 * 126 of JOBY2 = pages 3180 to 3183) and its param[3] is 0.15, the
 	 * classic flipbook's own cadence of five frames at 30 Hz to within a
 	 * sixtieth of a second. So the weight slot is found per material, slot by
-	 * slot, over the distinct (material, param) tuples of all fifteen levels:
+	 * slot, over the per-level (material, param) tuples of all fifteen levels:
 	 *
 	 *   material  2  p0 in {0.5, 1.0, 1.5} and p2 in {0, 0.1, 0.4, 0.6, 0.8,
 	 *                1.0, 2.0} move together and with the page - a preset;
@@ -288,7 +293,7 @@ namespace
 	 * classic path has no answer to it either.
 	 *
 	 * The rule comes out of the distribution: TrgProbe -mat 2 over the
-	 * fifteen files prints 36 distinct tuples, 32 of them with p1 in (0, 1).
+	 * fifteen files prints 36 per-level tuples, 32 of them with p1 in (0, 1).
 	 * Grouped by the preset - the (param[0], param[2]) pair that moves with
 	 * the page - the weight is all but constant inside a preset:
 	 *
@@ -816,10 +821,11 @@ namespace
 	 * Origin. That param[1] is the travel is our own reading of the table
 	 * above: it is the one slot that does not follow the area. Which of the
 	 * other two is the frequency and which the rate is a FREE CHOICE of this
-	 * project, not a result: both move with the area and in the same
-	 * direction over every part that carries them (param[0] from 0.1 to 5.0,
-	 * param[2] from 0.035 to 0.5, TrgProbe -mat 16), and no count of
-	 * ours separates them. The order settled on - param[0] the scale,
+	 * project, not a result: over the game as a whole both are smallest on
+	 * the two seas and largest on the puddle (param[0] from 0.1 to 5.0,
+	 * param[2] from 0.035 to 0.5, TrgProbe -mat 16), though not in step in
+	 * every pair of tuples - (0.3, 0.08) against (0.4, 0.04), (0.8, 0.2)
+	 * against (1.0, 0.1) - and no count of ours separates them. The order settled on - param[0] the scale,
 	 * param[1] the travel, param[2] the rate - coincides with the order
 	 * TROne's prose names for these three slots (TROne-main, copy of
 	 * 2026-10-05). TROne states that it read that order off the Remaster's

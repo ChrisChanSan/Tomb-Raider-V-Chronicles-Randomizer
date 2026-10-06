@@ -652,7 +652,7 @@ namespace
  * something to do and the gloss-mask trap is never entered.
  *
  * The threshold is 0.5, and it is not a taste: materials 6, 7 and 8 carry
- * 0.5 in param[0] in 42 of their 44 tuples over the fifteen levels (ANDY1
+ * 0.5 in param[0] in 42 of their 44 per-level tuples (ANDY1
  * has one 0.503 on material 6, ANDY2 one 0.12 on an alpha-pass part of
  * material 8; TrgProbe -mat 6, -mat 7, -mat 8), and the pages those three
  * wear are half hole or more (the table above). That is why this file reads

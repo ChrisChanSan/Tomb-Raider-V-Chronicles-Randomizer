@@ -7154,10 +7154,10 @@ static void camera_cut_reaim()
  * way the translation is, for exactly the same reason - a feel number
  * nobody can re-measure is a number nobody can change.
  *
- * None of the expectations below comes from TROne. Their orbit (the version
- * of 2026-09-13) holds a world angle and never returns behind the player at
- * all; ours holds a world angle too and lets it fall back behind her
- * (game\modern_camera.h). The numbers here come from two
+ * None of the expectations below comes from TROne. Their orbit (TROne-main,
+ * copy of 2026-09-13) holds a world angle and never returns behind the
+ * player at all; ours holds a world angle too and lets it fall back behind
+ * her (game\modern_camera.h). The numbers here come from two
  * places and the comments say which: the design's four governing sentences,
  * quoted in full in game\modern_camera.h, and the classic camera's own
  * limits, measured out of game\camera.cpp before a line of the orbit was

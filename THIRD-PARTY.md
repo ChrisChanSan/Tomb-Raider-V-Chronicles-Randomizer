@@ -31,7 +31,9 @@ Same licence as this project, which is what allows the combination.
 The HD art read at run time carries code over from TROne, and the modern
 control scheme carries its design and its test expectations over.
 TROne is under the same licence as this project, which is what allows the
-combination. What was taken, file by file:
+combination. TROne-main was read in three downloads, of 2026-09-05, 2026-09-13
+and 2026-10-05; the last is the reference copy, and every citation names the
+copy it was read in. What was taken, file by file:
 
 | Here | From TROne | What |
 |---|---|---|
@@ -53,9 +55,9 @@ combination. What was taken, file by file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind and the water UV | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) and `k_hd_frag`'s caustic (TROne-main, copy of 2026-10-05) | The **wave shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of roughly one and a half blocks, plus a UV displacement of a few texels driven by the same phase; the vertical swell on the water marks; and the per-pixel caustic - `sin(x) * sin(z)` plus a half-weight diagonal, all three on the world position and on the game clock, at TROne's own scale of 0.018 per unit; the vertical swell is TROne's design of its copy of 2026-09-05. The caustic's strength, 0.32, is this project's own, matched to two reference shots of one pool (TROne-main, copy of 2026-10-05, gives its caustic 0.12). Translated to HLSL; the weight the wave rides on is the `.TRG`'s own `TrgVertex::sway`, which TROne does not read. Not taken: TROne's water flag, which is a room bit, where ours is the classic path's own water marks (the water marks row above). TR5 has a brightness term of its own, the `WaterTable` shimmer, reproduced exactly, and a second brightness term would count it twice; but that shimmer is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which is the same thing TROne's own comment reports about TR4 water. So the shimmer is untouched, parity and all, and the caustic is added as a zero mean modulation that carries no average brightness of its own. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_fontmatch.cpp/.h`, `hd_font.cpp/.h` and the branch in `game/text.cpp` | `host/render/game_renderer.cpp`, the block its own code marks `hdtext` (`hdtext_find` and `hdtext_arm`), and the glyph draw beside it. **No line numbers**, on purpose: no line range for it could be checked against a copy of TROne that can be read here, so the block is named by its own marker instead — the reasoning stands over `hd_fontmatch.h` | The **method**, not the code: find a classic glyph in the remaster's `FONT<n>_OG.DDS` by sliding its ink mask over the atlas and scoring **intersection over union**, refuse anything under **0.94** because a similar character is the wrong character, take the `FONT<n>.DDS` beside the winner as the picture to draw from, and relocate the classic UV to the hit while adding **one texel of margin to image and screen in the same ratio**, so that the letter neither moves nor grows. Also theirs: the alpha ramp threshold 96 for what counts as ink, and the observation that the atlas of TR5 carries the classic glyph bitmaps unchanged. What is **not** taken and is not needed: their sprite scan and their "is this an alphabet" gate - the 106 glyph rectangles are known here (`game/chardef.inc`), so there is nothing to discover and nothing to guard against. New here: the per-glyph margin (a uniform one puts a slice of the neighbouring tick beside the apostrophe - measured), the seeding of that measurement from the classic page, the tpage sentinel that carries a quad to a texture outside `Textures[]`, the mip chain with its LOD bias, and the whole Direct3D 9 side. Their alpha-test change is not needed either: this engine's alpha reference is already 0. |
 
-| `TOMB5 Code/TOMB5/specific/polyinsert.cpp`, the mip LOD bias of the HD font quad | `host/render/game_renderer.cpp` of the TROne version of 2026-09-13 (Copyright 2026 Todesengel, GPLv3), where the same bias stands with the same reason in TROne's own words | The **number and the reason for it**: a mip LOD bias of **-0.7** on the glyph quad, so that a font atlas minified by a D3D9 sampler keeps its edge instead of blurring into the next mip. The minification this project spends it on is its own measurement (1.8 at 1080p, 2.7 at 720p, 1.35 at 1440p), and so is where the bias lands at each of those (level 0.14 at 1080p, 0 at 1440p). |
+| `TOMB5 Code/TOMB5/specific/polyinsert.cpp`, the mip LOD bias of the HD font quad | `host/render/game_renderer.cpp` (TROne-main, copy of 2026-09-13; Copyright 2026 Todesengel, GPLv3), where the same bias stands with the same reason in TROne's own words | The **number and the reason for it**: a mip LOD bias of **-0.7** on the glyph quad, so that a font atlas minified by a D3D9 sampler keeps its edge instead of blurring into the next mip. The minification this project spends it on is its own measurement (1.8 at 1080p, 2.7 at 720p, 1.35 at 1440p), and so is where the bias lands at each of those (level 0.14 at 1080p, 0 at 1440p). |
 
-| `TOMB5 Code/TOMB5/game/modern_move.cpp/.h`, `game/modern_camera.cpp/.h`, `game/modern_state.cpp` and `Preparation/Tools/Diagnose/ModernTest.cpp` | `tests/test_controller.cpp`, `host/input/` and `docs/CONTROLS.md` of the TROne version of 2026-09-13 | The modern (analog-stick) control scheme. The **design** is TROne's and is re-derived here rather than copied: the stick's direction is measured against a held reference heading and turned into the classic engine's own tank bits, so that the game logic underneath never learns that anything changed. What was taken **verbatim** is the one thing worth having verbatim - the 32 expectations of TROne's own test suite (28 `modern.*`, 4 `combatmode.*`), rescaled to this engine's units by `S()`. Not taken: TROne's code. `game/modern_move.h` carries the origin block - which TROne version, and that the taboo table of 2026-09-16 found none of the set's 32 constants derived from a Remaster binary. |
+| `TOMB5 Code/TOMB5/game/modern_move.cpp/.h`, `game/modern_camera.cpp/.h`, `game/modern_state.cpp` and `Preparation/Tools/Diagnose/ModernTest.cpp` | `tests/test_controller.cpp`, `host/input/` and `docs/CONTROLS.md` (TROne-main, copy of 2026-09-13) | The modern (analog-stick) control scheme. The **design** is TROne's and is re-derived here rather than copied: the stick's direction is measured against a held reference heading and turned into the classic engine's own tank bits, so that the game logic underneath never learns that anything changed. What was taken **verbatim** is the one thing worth having verbatim - the 32 expectations of TROne's own test suite (28 `modern.*`, 4 `combatmode.*`), rescaled to this engine's units by `S()`. Not taken: TROne's code. `game/modern_move.h` carries the origin block - which TROne version, and that the taboo table of 2026-09-16 found none of the set's 32 constants derived from a Remaster binary. |
 
 The HD files above name Todesengel's copyright in their own headers, beside
 our modification notice, as GPLv3 section 5(a) asks. In the last two rows the
@@ -278,7 +280,7 @@ entry "Where the HD rules come from", carries the tables.
    Ours: every vertex of the fifteen files has a layer from 1 to its file's
    texture count (`TrgProbe -uvbytes`); none names layer 0 (`TrgProbe -layer0`).
 5. **The normal is biased by 127.** TRForge, `Trg.h`. DATA. Ours: 53.9 % of
-   45,170,724 triangle corners lie within 10 degrees of their triangle's plane
+   45,170,724 triangle corners lie within 10 degrees of their triangle's normal
    read so, 0.5 % as signed bytes (`TrgProbe -normals`); for the `.TRM` normal
    38.1 % against 0.6 % over 565 files of `5\ITEM` (`TrgProbe -trmnormals`).
 6. **The sway weight is over 32767.** TRForge, `Trg.h`. DATA. Ours: 0..32767 in
@@ -397,9 +399,9 @@ entry "Where the HD rules come from", carries the tables.
     and its mimic measurement. DATA. Ours: `LipsTest` over 45 files of `5\ITEM`.
 35. **The modern control's design, its 32 test expectations and six default
     constants.** TROne, `tests/test_controller.cpp`, `host/input/` and
-    `docs/CONTROLS.md` (the version of 2026-09-13). OWN. Ours: `ModernTest`;
-    nine constants re-measured in play, the Remaster's timings from video
-    (PICTURE).
+    `docs/CONTROLS.md` (TROne-main, copy of 2026-09-13). OWN. Ours:
+    `ModernTest`; nine constants re-measured in play, the Remaster's timings
+    from video (PICTURE).
 36. **Material 1's scroll in param.xy.** Read so by TROne as well. DATA. Ours:
     calibrated against the classic UVROT tile in RICH2; 5 to 65 parts a level.
 37. **Materials 13 and 15, the flipbook and the books.** Read the same way by

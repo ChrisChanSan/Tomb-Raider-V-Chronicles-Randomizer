@@ -2885,19 +2885,19 @@ group 51); whether the title flyby ever shows it is the play test's. RICH2 group
 neighbouring group 84's copy lies under the whole of both sectors, so they show it only
 while 84 is drawn. Shadows and effects - flames, sparks, the gun flash - of what the
 mirror reflects. The lobby floor shows its static copy only: Lara and the items are not
-reflected in it. In first person
-the reflected Lara is drawn the way the first-person draw draws her, without her face and
-her braid. A reflection is held only by the depth test and not cut to the pane: a body
-whose origin stands at a copy's end along the glass can reach about 100 units past it,
-into corridor room 56 or doorway room 130. `DrawLara` steps its look-transparency fade
-once per call, so while a mirror draws Lara the fade back from look mode runs twice as
-fast. The frame line's object counts (`objects=`, `object_calls=` and the `hd=`,
-`classic=`, `baked=` line) include the reflected draws. A Lara drawn the classic way,
-without an HD body, takes into a second mirror's glass the light the first mirror's last
-item left, since `DrawLara` with the mirror flag keeps the light arrays; in one mirror she
-is drawn before its items for that reason. The play test judges the lobby's brightness,
-the floor's edge, a kicked door swinging open in the glass, the 56 to 177 doorway and the
-way from 134 to 130 for a second Lara, and that nothing is doubled outside the glass.
+reflected in it. In first person the reflected Lara is drawn the way the first-person draw
+draws her, without her face and her braid. A reflection is held only by the depth test and
+not cut to the pane: a body whose origin stands at a copy's end along the glass can reach
+about 100 units past it, into corridor room 56 or doorway room 130. `DrawLara` steps its
+look-transparency fade once per call, so while a mirror draws Lara the fade back from look
+mode runs twice as fast. The frame line's object counts (`objects=`, `object_calls=` and
+the `hd=`, `classic=`, `baked=` line) include the reflected draws. A Lara drawn the
+classic way, without an HD body, takes into a second mirror's glass the light the first
+mirror's last item left, since `DrawLara` with the mirror flag keeps the light arrays; in
+one mirror she is drawn before its items for that reason. The play test judges the lobby's
+brightness, the floor's edge, a kicked door swinging open in the glass, the 56 to 177
+doorway and the way from 134 to 130 for a second Lara, and that nothing is doubled outside
+the glass.
 
 **Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`
 
@@ -5644,8 +5644,8 @@ draw routine is not `DrawAnimatingItem` (scaled spikes, the three lasers, darts,
 doors, portal door, gas cloud, flare in flight, thrown weapon). Every HD item is drawn
 against the whole screen and not against its room's portal window.
 
-**Why.** The Remaster does not repaint an object's classic tiles: it discards the mesh
-and draws a model of its own, so HD art for objects can only come from those models. The
+**Why.** The install ships no repainted classic tiles for an object, only a model of
+its own in the ITEM folder, so HD art for objects can only come from those models. The
 randomizer puts foreign creatures into slots, so a model must be proved to fit the
 skeleton it will be hung on, or a body is torn across the room. The light is per vertex
 because the classic path is per vertex (`aTransformLightClipMesh` runs the light formula
@@ -5673,28 +5673,28 @@ enemy in a neighbouring room was cut to the doorway rectangle and one whose wind
 out small was not drawn at all.
 
 **How.** `specific/hd/hd_trm.cpp`/`.h` reads the format, written against TRForge's
-measurement (MIT, `ItemModels.h`) and re-measured over the 566 models of game 5: a
-24-byte vertex of three position floats, a byte normal biased by 127, a 1-based texture
-layer, three bone indices and three weights summing to 255, the two texture coordinates
-in the fourth byte of each triple; a model's triangles never span two pages, a part's
-three passes are contiguous, and the highest bone index a weighted vertex names is 28,
-which allows a joint palette of 32. A `.TRM` bone index is the slot's classic mesh-tree
-node, so `specific/hd/hd_model.cpp`/`.h` computes only a coverage list per slot; an
-uncovered node is not a classic fallback (in most door slots it is node 0, the invisible
-root). The bind offset is folded into the node matrix on the processor (`t' = t - bind *
-R`), the bind pose being the mesh tree's accumulated offsets with every rotation left
-out. `hd_shader/hd_model.hlsl` (`vs_3_0`/`ps_3_0`, generated to
-`hd_model_vs.inc`/`hd_model_ps.inc`) takes the disk vertex unchanged through a `FLOAT3`
-+ `UBYTE4` + `UBYTE4` + `UBYTE4N` declaration; 32 joints of three registers at `c8`, the
+measurement (MIT, `ItemModels.h`) and re-measured over the 566 models of game 5: a 24-byte
+vertex of three position floats, a byte normal biased by 127, a 1-based texture layer,
+three bone indices and three weights summing to 255, the two texture coordinates in the
+fourth byte of each triple; a model's triangles never span two pages, a part's three
+passes are contiguous, and the highest bone index a weighted vertex names is 28, which
+allows a joint palette of 32. A `.TRM` bone index is the slot's classic mesh-tree node, so
+`specific/hd/hd_model.cpp`/`.h` computes only a coverage list per slot; an uncovered node
+is not a classic fallback (in most door slots it is node 0, the invisible root). The bind
+offset is folded into the node matrix on the processor (`t' = t - bind * R`), the bind
+pose being the mesh tree's accumulated offsets with every rotation left out.
+`hd_shader/hd_model.hlsl` (`vs_3_0`/`ps_3_0`, generated to
+`hd_model_vs.inc`/`hd_model_ps.inc`) takes the disk vertex unchanged through a `FLOAT3` +
+`UBYTE4` + `UBYTE4` + `UBYTE4N` declaration; 32 joints of three registers at `c8`, the
 projection at `c0`, the light list at `c136`-`c159` with count and sun factor at `c160`;
-the pixel half shares `gPass` `c4`, `gFog` `c16`, `gCounts` `c17` and `gBulbs` `c40`
-with the room shader, and an object writes `c17.x = 0` so the room shader's per-pixel
-light loop does not light it twice, while `gPass.y` carries the additive ceiling.
-`gPass` is written through `SetPixelShaderConstantF` only, because `fxc` puts two `def`
-constants of its own at `c4` and `c5` in the vertex half. The seam is five places in
-`DrawAnimatingItem` (`game/draw.cpp`): `HDObjectBegin` after `phd_RotYXZ`, the MIP
-branch guarded, node 0 and the node loop in both the plain and the interpolated branch,
-and `HDObjectEnd` outside `if (clip)`; the interpolated branch records the matrix
+the pixel half shares `gPass` `c4`, `gFog` `c16`, `gCounts` `c17` and `gBulbs` `c40` with
+the room shader, and an object writes `c17.x = 0` so the room shader's per-pixel light
+loop does not light it twice, while `gPass.y` carries the additive ceiling. `gPass` is
+written through `SetPixelShaderConstantF` only, because `fxc` puts two `def` constants of
+its own at `c4` and `c5` in the vertex half. The seam is five places in
+`DrawAnimatingItem` (`game/draw.cpp`): `HDObjectBegin` after `phd_RotYXZ`, the MIP branch
+guarded, node 0 and the node loop in both the plain and the interpolated branch, and
+`HDObjectEnd` outside `if (clip)`; the interpolated branch records the matrix
 `phd_PutPolygons_I` would have drawn with. `specific/hd/hd_object.cpp`/`.h` is the
 engine-facing half; `HDMapLoadForLevel` loads the map in `HDObjectLevelBuild` and
 `HDObjectLevelEnd` frees it (`specific/hd/hd_bind.cpp`). Two fit tests per slot at level
@@ -5702,69 +5702,68 @@ build: a weighted vertex naming a node the slot does not have refuses the model 
 (`FIREROPE` fails this in eleven of the fourteen levels), and for a model with the right
 node count the bind drift is measured pairwise - the distance between two nodes' vertex
 centres in the model against the distance between their bind positions in the mesh tree,
-each mesh's own RMS size subtracted - with a limit of **256**, set inside the measured
-gap between the worst model that belongs where it stands (239) and the best that does
-not (308); a one-node model has no pair and is never refused. Triangles are sorted by
-`(page, node)`, every range carrying the node that holds most weight over its three
-corners, and consecutive visible ranges of the same page are merged at draw time, so at
-`mesh_bits` `-1` the draw-call count is unchanged (`SWAT` builds 16 ranges and draws 2).
-Light: suns, points and spots go to the vertex shader in view space, one list for every
-node because a node matrix is a rotation without scale; ambient is per object, a point
-light's direction and falloff are worked out per surface point, and the activity flags,
-the eight-frame fades and range culling stay the engine's own in `CreateLightList`
-inside `CalculateObjectLighting`. HD objects are drawn in `HDFrameDraw` after the rooms
-and before `DrawBuckets`, inside the bracket the rooms opened, sharing an exact depth
-buffer. Shared pieces: `HDPageCacheAppend` (`hd_pagecache.cpp`/`.h`) so models and rooms
-keep one texture per page, and `HDRenderStateSave`/`HDRenderStateRestore`
-(`hd_render.cpp`/`.h`). `aW2VMx` in `specific/3dmath.cpp`/`.h` was un-`static`ed: the
-float twin of `w2v_matrix` puts a light's world position into view space. Slot binding
-by name goes through the hand table in `specific/hd/hd_bind.cpp`, which resolves the
-randomizer's own slots (`CYBORG` 469 to `HITMAN`, `BLUE_GUARD2` 460 to
-`BLUE_GUARD_JOBY`), carries `ROMAN_GOD` -> `ROMAN_GOD_ANDREA_SWORD` (consulted only when
-the level's `.MAP` is silent: there is no `ROMAN_GOD.TRM`, and of the fifteen `.MAP`
-files only ANDREA2 and ANDREA3 name the slot), and names `VULTURE_CHUNNEL` for slot 43,
-because the randomizer's vulture comes from THE LOST ARTIFACT's `chunnel.TR2` and the
-I-III Remaster ships `VULTURE.TRM` and `VULTURE_CHUNNEL.TRM` side by side. Mesh-swap
-sources are read from `game/setup.cpp` (`MeshSwapSource`) and the run-time bits set in
-`game/init.cpp`, `game/hitman.cpp`, `game/mafia2.cpp`, `game/romangod.cpp`,
-`game/sas.cpp` and `game/imp.cpp`; the swap models are ordinary models on pseudo slots
-and `hitman_nodes` moved from a `static` in `game/hitman.cpp` into `game/hitman.h`. A
-head file's neck bone hangs off the head node's PARENT with the file's own weights kept,
-so the seam blends rather than tears; `bind_pose_of` returns the classic mesh tree
-beside the bind pose. `find_head_model` (`hd_model.cpp`) adds a STRIP rule that cuts the
-last `_<QUALIFIER>` off and asks again (17 names over the 1,335 model names of the 4 and
-5 folders; ten of them reached a face not theirs through a `_MIP`, and the rule now stops
-there, see *Six cutscene faces, and none on a MIP prop* below) and a TABLE of two entries
-for bodies carrying no part of the person's name - `ANIMATING4_RICHCUT2` ->
-`VON_CROY_SENIOR_HEAD` (7.4 units apart by neck-ring measurement, next nearest face
-11.4, sharing texture page 9075) and `ANIMATING6_RICHCUT2` -> `VON_CROY_ELDER_HEAD` (2.7
-against 35.3), each confirmed by picture; a face is never given a face of its own.
-`DrawCutSeqActors` (`game/deltapak.cpp`) hands the node walk's MATRIX to the HD path
-with `duff_item` carrying slot number and mesh bits. Item pages keep the room path's
-rule, the alpha test in the alpha pass only (TROne's own design), because an item page's
-alpha is not a coverage mask
-(`ROMAN_GOD_ANDREA_SWORD`'s three body pages measure 64.1, 48.7 and 56.4
-per cent of texels below alpha 128, PIERRE and BLUE_GUARD share a page at 26.2); the
-number is kept as a measurement in `HDPageCacheSlotCutoutPermille`.
-`HDFrameScissorForRoom` (`hd_level.cpp`) gives an item the full frame and counts what
-the room window would have cut (`items_spared=` on the `HDLOG clip` line); a view serial
-(`ViewSerial`, stepped once per `phd_LookAt`, `specific/3dmath.cpp`/`.h`) is written
-beside every room matrix and every collected object and reported as `view=`/`view_obj=`,
-a counter nothing branches on. Seams with `-log`: per slot one line with its reason
-(`baked`, `model_missing`, `skeleton_nodes`, `skeleton_drift`, `no_geometry`), per level
-`hd=`/`classic=`/`baked=`, one `HDLOG cutseq actor=` line per actor per cutscene, and on
-the first HD object of every level `HDLOG itemcheck …` (each node's origin on the screen
-through the classic transform and through the projection the card is handed, worst
-disagreement in pixels) and `HDLOG lightcheck …` (the classic light formula and the HD
-one on the same normal). `Preparation/Tools/Diagnose/ModelProbe.cpp` (built with
-`bmodel.bat`; `bshader.bat` builds the model shader) links the engine's own sources and
-draws the same picture without the game (`-nodes`, `-meshbits`, `-all`). Files:
-`specific/hd/hd_trm.*`, `hd_model.*`, `hd_object.*`, `hd_pagecache.*`, `hd_render.*`,
-`hd_level.*`, `hd_bind.*`, `hd_shader/hd_model.hlsl` and its two `.inc`,
-`game/draw.cpp`, `game/deltapak.cpp`, `game/hitman.*`, `game/setup.cpp`,
-`game/init.cpp`, `game/mafia2.cpp`, `game/romangod.cpp`, `game/sas.cpp`, `game/imp.cpp`,
-`global/types.h`, `specific/3dmath.*`, `specific/output.cpp`, `tomb5/tomb5.cpp`,
-`tomb5.vcxproj`, `docs/Engine-Manual.md`.
+each mesh's own RMS size subtracted - with a limit of **256**, set inside the measured gap
+between the worst model that belongs where it stands (239) and the best that does not
+(308); a one-node model has no pair and is never refused. Triangles are sorted by `(page,
+node)`, every range carrying the node that holds most weight over its three corners, and
+consecutive visible ranges of the same page are merged at draw time, so at `mesh_bits`
+`-1` the draw-call count is unchanged (`SWAT` builds 16 ranges and draws 2). Light: suns,
+points and spots go to the vertex shader in view space, one list for every node because a
+node matrix is a rotation without scale; ambient is per object, a point light's direction
+and falloff are worked out per surface point, and the activity flags, the eight-frame
+fades and range culling stay the engine's own in `CreateLightList` inside
+`CalculateObjectLighting`. HD objects are drawn in `HDFrameDraw` after the rooms and
+before `DrawBuckets`, inside the bracket the rooms opened, sharing an exact depth buffer.
+Shared pieces: `HDPageCacheAppend` (`hd_pagecache.cpp`/`.h`) so models and rooms keep one
+texture per page, and `HDRenderStateSave`/`HDRenderStateRestore` (`hd_render.cpp`/`.h`).
+`aW2VMx` in `specific/3dmath.cpp`/`.h` was un-`static`ed: the float twin of `w2v_matrix`
+puts a light's world position into view space. Slot binding by name goes through the hand
+table in `specific/hd/hd_bind.cpp`, which resolves the randomizer's own slots (`CYBORG`
+469 to `HITMAN`, `BLUE_GUARD2` 460 to `BLUE_GUARD_JOBY`), carries `ROMAN_GOD` ->
+`ROMAN_GOD_ANDREA_SWORD` (consulted only when the level's `.MAP` is silent: there is no
+`ROMAN_GOD.TRM`, and of the fifteen `.MAP` files only ANDREA2 and ANDREA3 name the slot),
+and names `VULTURE_CHUNNEL` for slot 43, because the randomizer's vulture comes from THE
+LOST ARTIFACT's `chunnel.TR2` and the I-III Remaster ships `VULTURE.TRM` and
+`VULTURE_CHUNNEL.TRM` side by side. Mesh-swap sources are read from `game/setup.cpp`
+(`MeshSwapSource`) and the run-time bits set in `game/init.cpp`, `game/hitman.cpp`,
+`game/mafia2.cpp`, `game/romangod.cpp`, `game/sas.cpp` and `game/imp.cpp`; the swap models
+are ordinary models on pseudo slots and `hitman_nodes` moved from a `static` in
+`game/hitman.cpp` into `game/hitman.h`. A head file's neck bone hangs off the head node's
+PARENT with the file's own weights kept, so the seam blends rather than tears;
+`bind_pose_of` returns the classic mesh tree beside the bind pose. `find_head_model`
+(`hd_model.cpp`) adds a STRIP rule that cuts the last `_<QUALIFIER>` off and asks again
+(17 names over the 1,335 model names of the 4 and 5 folders; ten of them reached a face
+not theirs through a `_MIP`, and the rule now stops there, see *Six cutscene faces, and
+none on a MIP prop* below) and a TABLE of two entries for bodies carrying no part of the
+person's name - `ANIMATING4_RICHCUT2` -> `VON_CROY_SENIOR_HEAD` (7.4 units apart by
+neck-ring measurement, next nearest face 11.4, sharing texture page 9075) and
+`ANIMATING6_RICHCUT2` -> `VON_CROY_ELDER_HEAD` (2.7 against 35.3), each confirmed by
+picture; a face is never given a face of its own. `DrawCutSeqActors` (`game/deltapak.cpp`)
+hands the node walk's MATRIX to the HD path with `duff_item` carrying slot number and mesh
+bits. Item pages keep the room path's rule, the alpha test in the alpha pass only (TROne's
+own design), because an item page's alpha is not a coverage mask
+(`ROMAN_GOD_ANDREA_SWORD`'s three body pages measure 64.1, 48.7 and 56.4 per cent of
+texels below alpha 128, PIERRE and BLUE_GUARD share a page at 26.2); the number is kept as
+a measurement in `HDPageCacheSlotCutoutPermille`. `HDFrameScissorForRoom` (`hd_level.cpp`)
+gives an item the full frame and counts what the room window would have cut
+(`items_spared=` on the `HDLOG clip` line); a view serial (`ViewSerial`, stepped once per
+`phd_LookAt`, `specific/3dmath.cpp`/`.h`) is written beside every room matrix and every
+collected object and reported as `view=`/`view_obj=`, a counter nothing branches on. Seams
+with `-log`: per slot one line with its reason (`baked`, `model_missing`,
+`skeleton_nodes`, `skeleton_drift`, `no_geometry`), per level `hd=`/`classic=`/`baked=`,
+one `HDLOG cutseq actor=` line per actor per cutscene, and on the first HD object of every
+level `HDLOG itemcheck …` (each node's origin on the screen through the classic transform
+and through the projection the card is handed, worst disagreement in pixels) and `HDLOG
+lightcheck …` (the classic light formula and the HD one on the same normal).
+`Preparation/Tools/Diagnose/ModelProbe.cpp` (built with `bmodel.bat`; `bshader.bat` builds
+the model shader) links the engine's own sources and draws the same picture without the
+game (`-nodes`, `-meshbits`, `-all`). Files: `specific/hd/hd_trm.*`, `hd_model.*`,
+`hd_object.*`, `hd_pagecache.*`, `hd_render.*`, `hd_level.*`, `hd_bind.*`,
+`hd_shader/hd_model.hlsl` and its two `.inc`, `game/draw.cpp`, `game/deltapak.cpp`,
+`game/hitman.*`, `game/setup.cpp`, `game/init.cpp`, `game/mafia2.cpp`,
+`game/romangod.cpp`, `game/sas.cpp`, `game/imp.cpp`, `global/types.h`,
+`specific/3dmath.*`, `specific/output.cpp`, `tomb5/tomb5.cpp`, `tomb5.vcxproj`,
+`docs/Engine-Manual.md`.
 
 **Six cutscene faces, and none on a MIP prop** (2026-09-25). *What.* In many cutscenes the
 actors stood without heads. The 44 cutscenes of `DATA\cutseq.bin` put 133 actors on 98
@@ -8628,7 +8627,7 @@ draw sets `D3DTEXF_LINEAR` with `D3DSAMP_MIPMAPLODBIAS` -0.7, which lands at lev
 at 1080p and 0 at 1440p, the sampler states being put back the way the classic path
 keeps them the moment the call returns; the three minification figures are our own
 measurement and the bias -0.7 is TROne's number (GPLv3, `host/render/game_renderer.cpp`
-of the stand of 2026-09-13; in TROne-main, copy of 2026-10-05, the shader `k_ui_frag`),
+of its copy of 2026-09-13; in TROne-main, copy of 2026-10-05, the shader `k_ui_frag`),
 cited as such in `specific/polyinsert.cpp`. Where it lives:
 `game/chardef.inc` holds the 106 rectangles, moved out of `text.cpp` unchanged, and
 `game/accent.inc` the 46 accented letters, so the engine, the HD font and `FontProbe`
@@ -8807,7 +8806,7 @@ and 0.090 for v against +19: the pages are laid out anew, and only the order wit
 face carries the reading.
 
 The normals (`TrgProbe <5> -all -normals`; `-trmnormals` for `5\ITEM`): the share of
-triangle corners within 10 degrees of their triangle's plane, either side, under the two
+triangle corners within 10 degrees of their triangle's normal, either side, under the two
 readings, and the sway field:
 
 | level | corners | biased 127 | signed | sway | sway non-zero |
@@ -10565,7 +10564,7 @@ https://github.com/todesengel1931 — re-derived here in this engine's own units
 numbers, with 32 test expectations (28 `modern.*` and 4 `combatmode.*` cases of their
 `tests/test_controller.cpp`) taken across verbatim and named as such in the test's own
 header; none of their modern-control code is in this tree. The orbit camera shares only
-the idea that a camera angle is a state: TROne's world angle (its version of 2026-09-13)
+the idea that a camera angle is a state: TROne's world angle (its copy of 2026-09-13)
 never returns behind the player, this one falls home. Nothing in the scheme comes from the
 Remaster's programs at first or second hand — it was rebuilt by playing the Remaster and
 watching what it does, a walk of all 32 constants of the design found none traceable to a
@@ -10819,7 +10818,7 @@ discarded pass; FIXED is outside the interpolator's smooth family
 tile counted as a camera cut and drew its tick live (INTERPLOG's `type=` count matched
 her 12 crossings of room 19's tile exactly).
 
-**How.** Origin: TROne's orbit held a world angle too in the version of 2026-09-13, and
+**How.** Origin: TROne's orbit held a world angle too in its copy of 2026-09-13, and
 that is where the resemblance stops — theirs there never returns behind the player, this
 one falls home at `MODERN_CAMERA_RETURN` whenever she is moving and the thumb is off the
 stick; nothing of theirs is copied, and `game/modern_camera.h`'s own header says so

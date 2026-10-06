@@ -40,8 +40,8 @@
 //                                 the same bias a .TRG vertex normal carries:
 //                                 over 4,683,717 triangle corners of 565
 //                                 files of 5\ITEM, 38.1 % lie within 10
-//                                 degrees of their triangle's plane read so,
-//                                 0.6 % read as signed bytes (TrgProbe
+//                                 degrees of their triangle's normal read
+//                                 so, 0.6 % read as signed bytes (TrgProbe
 //                                 -trmnormals). Read as signed bytes it comes
 //                                 out nonsense and quietly, so the bytes are
 //                                 kept raw.

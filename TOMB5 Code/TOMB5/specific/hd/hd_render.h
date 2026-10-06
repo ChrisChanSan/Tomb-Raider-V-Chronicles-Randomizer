@@ -5,10 +5,11 @@
  * level, a range table per group, three passes per room) and the draw rule
  * are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
  * TROne-main (copy of 2026-10-05), host\render\game_renderer.cpp, hd_load
- * and hd_draw_room), TROne's own design. The renderer under it is new: TROne is OpenGL 3.3 with vertex
- * arrays, texture arrays and runtime GLSL, this is Direct3D 9 with a vertex
- * declaration, one texture per page and compiled bytecode, beside a
- * fixed-function neighbour that must find its state exactly as it left it.
+ * and hd_draw_room), TROne's own design. The renderer under it is new:
+ * TROne is OpenGL 3.3 with vertex arrays, texture arrays and runtime GLSL,
+ * this is Direct3D 9 with a vertex declaration, one texture per page and
+ * compiled bytecode, beside a fixed-function neighbour that must find its
+ * state exactly as it left it.
  * See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the

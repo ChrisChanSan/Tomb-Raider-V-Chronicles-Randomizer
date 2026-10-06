@@ -5,10 +5,11 @@
  * level, a range table per group, three passes per room) and the draw rule
  * are carried over from TROne (Copyright 2026 Todesengel, GPLv3,
  * TROne-main (copy of 2026-10-05), host\render\game_renderer.cpp, hd_load
- * and hd_draw_room), TROne's own design. The renderer under it is new: TROne is OpenGL 3.3 with vertex
- * arrays, texture arrays and runtime GLSL, this is Direct3D 9 with a vertex
- * declaration, one texture per page and compiled bytecode, beside a
- * fixed-function neighbour that must find its state exactly as it left it.
+ * and hd_draw_room), TROne's own design. The renderer under it is new:
+ * TROne is OpenGL 3.3 with vertex arrays, texture arrays and runtime GLSL,
+ * this is Direct3D 9 with a vertex declaration, one texture per page and
+ * compiled bytecode, beside a fixed-function neighbour that must find its
+ * state exactly as it left it.
  * See THIRD-PARTY.md.
  *
  * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
@@ -68,7 +69,13 @@ namespace
 	 * byte at offset 3 is alpha. Writing (b, g, r, coordinate) here lets
 	 * hd_room.hlsl read the triple as plain .rgb and the coordinate as .a.
 	 * The swap happens once, in this struct; a second swap in the shader
-	 * would paint the level with red and blue exchanged. */
+	 * would paint the level with red and blue exchanged.
+	 *
+	 * The fourth byte of each colour pair is a texture coordinate, 0..255 in
+	 * every file: counted over all fifteen, byte 15 follows the classic u and
+	 * byte 19 the classic v within a face (3,157,175 agreeing pairs against
+	 * 1,465,989, and 3,354,530 against 1,340,180; the crossed pairing comes
+	 * out even; TrgProbe -uvbytes). */
 	struct HDVertex
 	{
 		short x, y, z, sway;

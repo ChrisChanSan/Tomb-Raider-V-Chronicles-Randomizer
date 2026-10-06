@@ -1846,8 +1846,9 @@ namespace
 	 * the creature's head node. Which node that is, is measured and not hard
 	 * coded: it is the bind-pose node nearest the face geometry's own centre
 	 * (TROne's rule, TROne-main (copy of 2026-10-05), hd_load's head loop -
-	 * node 21 in a 25 mesh tree, node 14 in a 15 mesh one). Where the speech table puts the face on another node,
-	 * the face table says so (g_head_of_model) and this is not asked. */
+	 * node 21 in a 25 mesh tree, node 14 in a 15 mesh one). Where the speech
+	 * table puts the face on another node, the face table says so
+	 * (g_head_of_model) and this is not asked. */
 	int head_node_of(const HDTrmModel& head, const Model& body)
 	{
 		if (!body.hasBind || !head.vertices)

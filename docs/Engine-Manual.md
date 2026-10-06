@@ -2477,8 +2477,9 @@ HDLOG level=TITLE clipped summary frames=173 lights=0 bulbs=173
 
 The first line is written by the first frame that clipped, the second at the
 end of the level — **never once per frame**. `offered_` is what the engine
-wanted, the `maxima` are what the shader has room for (the numbers above show
-the line's form). Sixteen bulbs is a measured number, not a guess: counted out
+wanted, the `maxima` are what the shader has room for (the lines above are a
+format sample with invented numbers; no shipped level writes them, see
+below). Sixteen bulbs is a measured number, not a guess: counted out
 of all sixteen level files, a level holds up to seventeen fog bulbs (`ANDREA2`,
 and `TITLE` has seventeen too), and sweeping every camera position a level
 allows, up to sixteen of them can be alight at once — 16 in `ANDREA2`, 14 in

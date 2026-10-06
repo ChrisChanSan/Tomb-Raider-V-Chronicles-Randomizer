@@ -130,9 +130,10 @@
  *     texel * (c / 255) + (s / 255),  c, s from that split,
  *
  * the multiply on the texel never passes 1, and the rest arrives as an ADD.
- * The remaster's baked light covers the same total range - colour1 + colour2
+ * The install's baked light covers the same total range - colour1 + colour2
  * reaches 2.0 in eleven of the fifteen files and lies above 1 in 3.3 % of
- * all their channels (TrgProbe -shadeorder) - but as a straight MULTIPLY.
+ * all their channels (TrgProbe -shadeorder) - and this shader applies it
+ * as a straight MULTIPLY, its own choice.
  *
  * The two agree exactly below 128, and the bridge between them is
  *
@@ -881,11 +882,11 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.waterAdd = float4(waterAdd, water);
 
 	/* The byte normal, biased by 127 - read so, 53.9 % of the triangle
-	 * corners of the fifteen files lie within 10 degrees of their
-	 * triangle's plane, read as signed bytes 0.5 % (TrgProbe -normals) -
-	 * into the same space the classic path
-	 * puts it in - view space, by the linear part of D3DMView. It is NOT
-	 * renormalised, because the classic path does not renormalise either. */
+	 * corners of the fifteen files lie within 10 degrees of their triangle's
+	 * normal, read as signed bytes 0.5 % (TrgProbe -normals) - into the same
+	 * space the classic path puts it in - view space, by the linear part of
+	 * D3DMView. It is NOT renormalised, because the classic path does not
+	 * renormalise either. */
 	o.viewNrm = mul(float4((inNormal.xyz - 127.0f) * (1.0f / 128.0f), 0.0f), gWorldView);
 
 	return o;

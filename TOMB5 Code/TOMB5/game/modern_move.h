@@ -22,7 +22,7 @@
  * can compile this very file and assert on it.
  *
  * Origin: the design is re-derived from TROne (GPLv3) by Todesengel1931 -
- * https://github.com/todesengel1931 (the version of 2026-09-13), whose own
+ * https://github.com/todesengel1931 (copy of 2026-09-13), whose own
  * docs\CONTROLS.md sets out the arithmetic and proves the held-heading rule
  * with a recording of its own. TROne's modern control is its own design, not
  * a reading of any program - its input code cites no disassembler or
@@ -218,8 +218,8 @@ enum modern_constants
 	/* Once aligned, it takes twice the window to start turning again. Without
 	 * the hysteresis the turn bit flickers on the window's edge at tick rate,
 	 * a visible twitch at small angles. TROne's default, taken over as it
-	 * stands (the version of 2026-09-13), as are the two spin thresholds, the
-	 * quadrant and the two blocked numbers below. */
+	 * stands (TROne-main, copy of 2026-09-13), as are the two spin thresholds,
+	 * the quadrant and the two blocked numbers below. */
 	MODERN_ALIGNED_FACTOR = 2,
 
 	/* Above 112.5 degrees of error she turns on the spot and does not run;

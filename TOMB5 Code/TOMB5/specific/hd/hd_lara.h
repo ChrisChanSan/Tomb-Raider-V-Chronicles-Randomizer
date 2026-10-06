@@ -37,8 +37,9 @@
 // LARA_SKIN, the seams from LARA_SKIN_JOINTS, the hands from whichever weapon
 // slot the mesh swap put there, the thigh straps from LARA_HOLSTERS* and the
 // braid from HAIR - and the install ships the same as a wardrobe of separate
-// models (4\ITEM). This module is the wardrobe: which files a level needs, what each of
-// them covers, and which of them the draw seam puts on the card for a frame.
+// models (4\ITEM). This module is the wardrobe: which files a level needs,
+// what each of them covers, and which of them the draw seam puts on the card
+// for a frame.
 //
 // This file is the wardrobe and not the seam. It knows nothing about the
 // engine and is built into ModelProbe as well. What reads lara_matrices,

@@ -1740,13 +1740,17 @@ copyright in the files' own headers and in `THIRD-PARTY.md`; everything else is 
 project's own measurement over the player's files. No byte and no logic of the
 Remaster's programs `tomb5.dll`, `tomb456.exe` or `tomb123.exe` is in this tree -
 `hd_install.cpp` only tests that such a file EXISTS, as a marker that a folder is the
-right one. Three rules of this path had come at second hand all the same, as plain prose
-in TRForge's and TROne's text that rested on their reading of the Remaster's shaders: the
-room light as the SUM of a vertex's two colour triples, which bytes of a `.TRG` vertex are
-u, v and the biased normal, and the order of material 16's scale and rate. Each now rests
-on this project's own count over the player's files, or is declared this project's free
-choice (the entry "Where the HD rules come from" below); `THIRD-PARTY.md` keeps the
-origin ledger of every rule of this path that came by way of TROne or TRForge.
+right one. Four rules of this path are named in TRForge's or TROne's text as readings of
+the Remaster's shaders: the room light as the SUM of a vertex's two colour triples, which
+bytes of a `.TRG` vertex are u, v and the biased normal, the order of material 16's scale
+and rate, and `param[0]` of materials 6, 7 and 8 as the cut-out threshold. The first three
+had reached this tree at second hand all the same, as plain prose with no evidence of its
+own; the fourth already rested on this project's count (0.5 in 42 of 44 per-level
+tuples). Beside them the vendored `Trg.h` carried TRForge's prose about the Remaster's
+renderer. Each rule now rests on this project's own count over the player's files, or is
+declared this project's free choice, and the prose is left out of the copy (the entry
+"Where the HD rules come from" below); `THIRD-PARTY.md` keeps the origin ledger of every
+rule of this path that came by way of TROne or TRForge.
 
 ### Finding an installed Remaster, reading what it holds for a level, and the settings that steer it
 2026-09-05 - 2026-09-20
@@ -8654,7 +8658,7 @@ for a tpage no quad can then carry; `fps_mode` is not touched. Files: `game/text
 **What.** Every rule of the HD path that came by way of TROne or TRForge now carries this
 project's own evidence, is declared this project's free choice, is credited to TROne's own
 design under the GPLv3, or is gone; `THIRD-PARTY.md` keeps the list as an origin ledger of
-37 entries, each with its class and its evidence. Five `TrgProbe` switches count the rules
+39 entries, each with its class and its evidence. Five `TrgProbe` switches count the rules
 on the player's own files: `-shadeorder` (how the two colour triples of a `.TRG` vertex
 make the room light), `-uvbytes` (which bytes are u, v and the layer), `-normals` and
 `-trmnormals` (the normal bias of a `.TRG` and of a `.TRM`, and the sway range) and
@@ -8671,14 +8675,18 @@ about what the Remaster's program does become the file facts they rest on; every
 number into TROne's files becomes the function it falls in and the copy it was read in;
 sentences about TROne's state are dated. The picture of the game is the same.
 
-**Why.** A reading of every line of TROne, TRForge and this tree found three pieces of
-knowledge out of the Remaster's programs in this tree at second hand, none of them as
-code, an address, a table or shader text, all of them as plain prose rules that no origin
-sentence named: the room light as `colour1 * factor + colour2` with the factor at 1
-(TROne's, resting on TRForge's reading of the extracted shaders); which of material 16's
+**Why.** A reading of every line of TROne, TRForge and this tree found four rules of the
+HD path that TRForge's or TROne's text names as readings of the Remaster's shaders, none
+of them in this tree as code, an address, a table or shader text, all of them as plain
+prose rules: the room light as `colour1 * factor + colour2` with the factor at 1
+(TROne's, resting on TRForge's reading of the extracted shaders); which bytes of a `.TRG`
+vertex are u, v and the biased normal (TRForge's names); which of material 16's
 `param[0]` and `param[2]` is the ripple's scale and which its rate (the order TROne's
-prose names, read off the Remaster's shaders); and TRForge's prose in the vendored
-`Trg.h` about the renderer's use of the vertex and of the point lights. Beside them stood
+prose names); and `param[0]` of materials 6, 7 and 8 as the cut-out threshold. The first
+three had come at second hand with no evidence of this project's own and no origin
+sentence naming the route; the fourth already had its own count here. The vendored
+`Trg.h` carried TRForge's prose about the renderer's use of the vertex and of the point
+lights besides. Beside them stood
 numbers with no stated origin - eleven pages "of 4096x4096" (they are 4096x2048), the
 slot names "strength, scale, scale" of materials 7 and 8, the three-resolution id range of
 TRForge's - and the cleanup of 2026-09-22 had shortened the origin note over material
@@ -8751,15 +8759,32 @@ prelight takes:
 The sum orders the vertices better than the product in 14 of the 15 levels and over all of
 them, and better than either triple over all; JOBY4, the sea, orders by none of the four,
 `colour2` alone does better than the sum in four levels and `colour1` in one. `c1+c2`
-reaches 2.0 in twelve files and lies above 1 in 3.3 % of the 39,788,013 channels. The
-picture check: RoomProbe's RICH2 X-ray view (seed room 6, camera 1900 -24500 3700, yaw
-minus 75, pitch 8, the view an earlier round matched to the Remaster recording's frame
-`rem_t4`) drawn once from the install's `.TRG` and once from a copy whose first triple is
-`c1 * c2 / 255` and second 0; the corridor's back wall and its tiled floor, picked by eye
-in each picture, against the same surfaces of the recording's frame (Rec. 709 luma, mean):
-wall 106.8 under the sum, 40.7 under the product, 94.3 in the recording (1.13 and 0.43 of
-it); floor 145.2, 51.9 and 119.9 (1.21 and 0.43). The sum decides; the light of this
-engine stays a little brighter than the Remaster's there.
+reaches exactly 2.0 in eleven files and lies above 1 in 3.3 % of the 39,788,013 channels.
+
+The room light rests on these rank counts, which no scale on either triple can change.
+The picture check adds less. RoomProbe's RICH2 X-ray view (seed room 6, camera 1900
+-24500 3700, yaw minus 75, pitch 8, the view an earlier round matched to the Remaster
+recording's frame `rem_t4`) is drawn from scratch copies of the install's RICH2 files
+whose two triples are rewritten so that the shader's sum draws the rule under test - the
+product as `c1 * c2 / 255` and 0, one triple alone as that triple and 0. The copy left
+as it is draws the install's own picture to the byte, and every copy finds all 209 of
+its pages. The corridor's back wall and its tiled floor, picked by eye in each picture,
+against the same surfaces of the recording's frame (Rec. 709 luma, mean; the gain is the
+one factor per rule that fits both regions best, the remainder what it leaves):
+
+| rule | wall | floor | of the recording | wall / floor | gain | remainder |
+|---|---:|---:|---|---:|---:|---:|
+| the recording | 94.3 | 119.9 | | 0.787 | | |
+| sum | 106.8 | 145.2 | 1.13 / 1.21 | 0.736 | 0.85 | 4.9 |
+| product | 19.1 | 30.7 | 0.20 / 0.26 | 0.624 | 4.19 | 16.6 |
+| `colour1` | 49.8 | 87.7 | 0.53 / 0.73 | 0.568 | 1.50 | 22.8 |
+| `colour2` | 57.2 | 57.6 | 0.61 / 0.48 | 0.992 | 1.87 | 17.5 |
+
+The shipped scale lies in the recording's range, a little brighter than the Remaster
+there. Read without a scale the sum also sits nearest, but once a free gain is fitted,
+two regions of one frame leave a single comparison, too thin to tell a rule from a scaled
+other one; the picture checks that the sum is not out of range and is not the evidence
+for it.
 
 The texture coordinates (`TrgProbe <5> -all -uvbytes -classic <data\Backup>`): the bytes
 at +15 and +19 run over 0..255 in every file, the layer from 1 to the file's own texture
@@ -8820,24 +8845,27 @@ folders):
 
 No page is 4096x4096 and none is wider than 4096. The same switch over the I-III bundle
 (`<3> -ddssizes`) finds 70 files named `<n>_1024.DDS` or `<n>_2048.DDS`, 35 ids from 8001
-to 8432, all in `1\TEX`, every one beside its plain `<n>.DDS`. Materials 7 and 8 over the
-fifteen levels (`-mat 7`, `-mat 8`): 7 tuples and 26; `param[0]` 0.5 in all but ANDY2's
-one 0.12, `param[1]` 0 to 10 and 0 to 12, `param[2]` 5 to 32 and 4 to 80, `param[3]` 0 to
-24 and 0 to 40. The water planes (`-watergap`): 93 reflecting rooms, 61 with less than
-half the art in their plane.
+to 8432, all in `1\TEX`, every one beside its plain `<n>.DDS`. Materials 6, 7 and 8 over
+the fifteen levels (`-mat 6`, `-mat 7`, `-mat 8`, one line per level and distinct tuple):
+11, 7 and 26 per-level tuples; `param[0]` 0.5 in 42 of the 44, the other two ANDY1's
+0.503 on material 6 and ANDY2's 0.12 on material 8; for 7 and 8 `param[1]` 0 to 10 and 0
+to 12, `param[2]` 5 to 32 and 4 to 80, `param[3]` 0 to 24 and 0 to 40. The water planes
+(`-watergap`): 93 reflecting rooms, 61 with less than half the art in their plane.
 
 **Checked.** The HD picture: RoomProbe built from `96a9c95` and from HEAD draws eight
 rooms of four levels (ANDREA1 64 and 101 and RICH2 6 at the cameras of earlier rounds,
 RICH2 11, JOBY2 28 and 66, ANDREA2 131 and 134), the full frame and the three passes each:
-32 PNGs, md5-identical. The classic path: RoomProbe's own classic picture of six rooms of
-three levels (`-classicroom <n> -classiconly`), md5-identical between the two builds; and
+32 PNGs, md5-identical; after the round's last engine commit, RICH2 6 and ANDREA2 131
+again, 8 PNGs, md5-identical. The classic path: RoomProbe's own classic picture of six
+rooms of three levels (`-classicroom <n> -classiconly`), md5-identical between the two
+builds; and
 the comment-free token stream of every source this round changed, at `96a9c95` and at
 HEAD: 29 files identical to the token, among them `game/draw.cpp`,
 `specific/polyinsert.cpp` and `game/modern_move.cpp`; five with a code change -
 `hd_render.cpp` (three `SetVertexShaderConstantF(4, ...)` calls fewer, `gPass.z` 0),
 `hd_scan.cpp`, `hd_room.hlsl` and `hd_room_vs.inc` (the factor) and `TrgProbe.cpp`. The
 four other regenerated `.inc` differ in their stamp line alone. The engine builds
-(`be.bat`, `PCtomb5 built Oct  6 2026 19:16:21`); TrgProbe, RoomProbe, ModelProbe and
+(`be.bat`, `PCtomb5 built Oct  6 2026 19:50:20`); TrgProbe, RoomProbe, ModelProbe and
 MapProbe build; ModernTest 14,721 checks, MenuTest 42,613, InterpTest 729, LipsTest 270
 with the `.OBJ` folder and 243 without, 0 failed.
 
@@ -8847,10 +8875,13 @@ weak on this data (246 of 1,263). RoomProbe draws no picture of the engine's cla
 itself; the token proof stands beside its classic faces. `DdsProbe.cpp` and
 `ModelProbe.cpp` (`Preparation/Tools/Diagnose`) each keep one line citation into TROne's
 renderer, files outside this round. The picture check rests on one frame of one recording
-and on regions picked by eye.
+and on two regions picked by eye, and cannot tell the sum from a scaled other rule. The
+DUMMY rule's own evidence reproduces only in part: MapProbe counts ANDREA1's 14 DUMMY
+slots, but the triangles of the art inside each such item's box were counted by a probe
+that is not in this tree.
 
 **Commits.** `7c82c34`, `1d364f7`, `af37039`, `28fbd9a`, `df7b39a`, `565eaf8`, `f312f7b`,
-`6f46ac0`
+`6f46ac0`, `243f5bf`, `e325f04`, `56a248c`
 
 ## 2.5 Sixty frames a second
 
@@ -12763,14 +12794,19 @@ its own statements. The result is this: every file the project modified carries 
 GPLv3 section 5(a) modification notice, every origin sentence in the code names the
 lawful source the code really rests on — TRForge's MIT format description, TROne's GPLv3
 code with its file and function, or a measurement made here on the player's own data
-files — and a fresh clone builds on a Windows checkout. Nothing in the tree opens, maps,
+files — and a fresh clone builds on a Windows checkout. Two diagnostic tools,
+`DdsProbe.cpp` and `ModelProbe.cpp`, still cite TROne's renderer by a line number
+rather than by its function. Nothing in the tree opens, maps,
 links, parses or disassembles a program of the Tomb Raider IV-VI Remaster;
 `hd_install.cpp` tests that `tomb456.exe` or `tomb123.exe` exists and nothing more. The
-audit's walk followed the words that name a program; three rules of the HD path that
-had come as plain prose resting on TRForge's and TROne's reading of the Remaster's
-shaders carried none of those words and passed it. A reading of every line of TROne,
+audit's walk followed the words that name a program; four rules of the HD path that
+TRForge's or TROne's text names as readings of the Remaster's shaders carried none of
+those words and passed it - the room light as the sum of the two colour triples, the u,
+v and normal bytes of a `.TRG` vertex, the order of material 16's scale and rate, and
+`param[0]` of materials 6, 7 and 8 as the cut-out threshold - and so did TRForge's prose
+about the Remaster's renderer in the vendored `Trg.h`. A reading of every line of TROne,
 TRForge and this tree found them, and section 2.4's entry "Where the HD rules come from"
-measures them on our own data.
+measures the rules on our own data and leaves the prose out.
 
 ### Licence notices, origin sentences and the corrections made before the public push
 2026-09-21 - 2026-09-22
@@ -12813,12 +12849,14 @@ move randomized bytes and a fourth detector for the encoding sweep.
 the change. An origin sentence that names the wrong source is a licence claim that
 cannot be honoured: every rule in the engine is to rest on TRForge's MIT format
 description, on TROne's own GPLv3 code with its file and function, or on a measurement
-made here on the player's own data files, and the sentences are to say so. Three rules
-of the HD path did not meet that until the entry "Where the HD rules come from" (2.4)
-measured them on our own data: they had come as prose resting on TRForge's and TROne's
-reading of the Remaster's shaders, and no origin sentence said so. A byte-hashing shader
-guard fires falsely when git rewrites line endings on checkout, which breaks the build
-from a clean clone. A diagnostic seam that formats its lines without testing `-log` costs
+made here on the player's own data files, and the sentences are to say so. Three of the
+four rules named in the opening of this section did not meet that until the entry "Where
+the HD rules come from" (2.4) measured them on our own data or declared them a free
+choice - the room light, the u, v and normal bytes, material 16's order: they had come
+as prose resting on TRForge's and TROne's reading of the Remaster's shaders, and no
+origin sentence said so; the fourth, the cut-out threshold, had its own count here
+already. A byte-hashing shader guard fires falsely when git rewrites line endings on
+checkout, which breaks the build from a clean clone. A diagnostic seam that formats its lines without testing `-log` costs
 work on every level load for output nobody reads. A checkbox that promises a feature the
 program does not have misleads the player, and a hard-coded German string cannot be
 translated. `RANDO_BUILD_ID` distinguishes builds whose output can differ: four commits
@@ -12879,10 +12917,13 @@ every comment this project had added or changed was rewritten to state facts ins
 narrating the work. The origin facts already in place - TRForge (MIT), TROne (GPLv3) by
 Todesengel1931, tomb3 (Troye's decompilation of Tomb Raider III), and measurement made here on
 the player's own files - stand as before, with one exception: the comment pass shortened
-the origin note over material 16's slot order (`hd_render.cpp`, `MaterialRipple`) and
-dropped the sentence that the order coincides with TROne's reading and is not ours by
-measurement; section 2.4's entry "Where the HD rules come from" puts it back in its true
-form. Nothing changed about what the code does.
+the origin note over material 16's slot order (`hd_render.cpp`, `MaterialRipple`). It
+kept that the order is the one TROne's prose names and that it is unproven; it cut the
+sentence naming where TROne's reading came from - the Remaster's own shaders - and that
+this source is off limits here at first and at second hand, and the paragraph saying
+plainly that the choice between `param[0]` and `param[2]` is one this project's
+measurement cannot decide. Section 2.4's entry "Where the HD rules come from" puts both
+back in their true form. Nothing changed about what the code does.
 
 ### The record: from an eighteen-thousand-line diary to a licence document
 2026-09-22

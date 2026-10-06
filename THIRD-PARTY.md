@@ -43,7 +43,7 @@ combination. What was taken, file by file:
 | `TOMB5 Code/TOMB5/specific/hd/hd_model.cpp` | `host/render/game_renderer.cpp`: `build_skinned_model`, `bind_pose_of_slot`, the model and head loops of `hd_load` (TROne-main, copy of 2026-10-05) | The rules of the object path: one `.TRM` replaces the **whole** classic model; a vertex's three bone indices are nodes of the classic mesh tree; the bind pose is that tree's accumulated offsets with the rotations left out, walked with the same push and pop; a `<NAME>_HEAD.TRM` is drawn **rigidly** on the node nearest the face geometry's own centre (measured, not hard-coded); a part's three index runs are the three passes, additive blended `ONE, ONE` with the depth write off; and a node the caller never gave a matrix for gets the last one it did give rather than collapsing to the origin (`fill_unseen_joints`). The renderer under them is new: TROne is OpenGL 3.3 with vertex arrays and texture arrays, this is Direct3D 9 with a vertex declaration, one texture per page and compiled bytecode. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_model.hlsl` | the same file's GLSL `k_trm_vert` / `k_trm_frag` (TROne-main, copy of 2026-10-05) | The skinning rule — three bones and three weights per vertex, the bind offset off before the node matrix goes on, the normal through the same matrix's 3×3 part — and the alpha test in the alpha pass **only** (TROne's golden-skull report). Translated to HLSL for shader model 3, with the bind offset folded into the matrix on the processor instead of subtracted per vertex; not a line of the GLSL is copied. The lighting is **not** TROne's: its item light in its copy of 2026-09-05 was a flat ambient blown into a six-face cube plus four point lights of its own, while this engine has the classic path's own per-object light list, distance fog and fog bulbs. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp/.h` | `host/render/game_renderer.cpp`: the item bracket of `item_flush` and `draw_mesh`, `fill_unseen_joints`, `model.covered = ~0u` in `build_skinned_model` and the swap-key rule beside `item_flush` (TROne-main, copy of 2026-10-05) | The **routing rules**, not the code: an item is drawn either wholly HD or wholly classic and never half of each; a node the model has no geometry for is drawn by NOBODY, not even classically (TROne tried the classic fallback there and took it out again after user reports of classic patches on HD bodies); a swapped mesh on a covered node loses to the model, so the model draws what the remaster drew; and a node the walk never reached keeps the last matrix it saw rather than collapsing to the origin. The seam itself is ours - TROne is a module beside a foreign engine and reads its brackets out of a stream of draw calls, this one rides on `DrawAnimatingItem`'s own node walk - and so are the skeleton test, the `mesh_bits` node ranges and the whole of the lighting. |
-| `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp`, the inventory ring (`HDInvBegin` / `HDInvNode` / `HDInvEnd`) | `games/tr5/glue/hostglue_2d5.cpp` (467-523), and the `TRONE_LIGHT_EXACT_NODES` semantics of `host/api/trone_host_api.h` (154-169) | The **idea**, not the code, and only half of it was kept: that the classic ring's off-centre projection - it moves the projection centre to each item's place on the screen - can be folded into the ITEM for the length of one draw, so that the HD path keeps one projection for the whole frame; and that the ring's light collapses to the ambient plus one sun taken from the ring's own brightness. TROne folds it into the item's own matrix as a **shear** of two rows against the third; this engine does **not**, because its shader takes the vertex normal through those same matrices and renormalises it, so a shear lights the ring by screen position (measured on the shader: 28 % too dark in the middle of the inventory row, 16 % too bright on the ammo row). The offset goes into the projection matrix instead, per draw call (`HDModelOffCentre`, `hd_model.cpp`), where the classic path has it and where a normal cannot reach it. The arithmetic was derived from TR5's own projection line (`aTransformLightClipMesh`, `specific/output.cpp`) and is written for this engine's matrices, not for TROne's float stack; the derivation stands in full over `HDInvNode` and over `HDModelOffCentre`. TROne also needs a flag to make the ring draw **exactly** the nodes it was given, because its default invents a matrix for an unseen node; ours takes `item->mesh_bits` as a mask and needs none. Not taken: TROne's scale term `f_mpersp/persp`, which corrects for a host projection built from the window's real width - TR5 computes `f_persp` from a 4:3 implied width whatever the window is, and the HD projection here is built from that very number, so the factor is exactly one (measured: `ModelProbe -ringcheck`, the bounding rectangle at the same **size** on 4:3 and on 16:9). |
+| `TOMB5 Code/TOMB5/specific/hd/hd_object.cpp`, the inventory ring (`HDInvBegin` / `HDInvNode` / `HDInvEnd`) | `games/tr5/glue/hostglue_2d5.cpp`, `phd_PutPolygonsPickup`, and the `TRONE_LIGHT_EXACT_NODES` flag of `host/api/trone_host_api.h` (TROne-main, copy of 2026-10-05) | The **idea**, not the code, and only half of it was kept: that the classic ring's off-centre projection - it moves the projection centre to each item's place on the screen - can be folded into the ITEM for the length of one draw, so that the HD path keeps one projection for the whole frame; and that the ring's light collapses to the ambient plus one sun taken from the ring's own brightness. TROne folds it into the item's own matrix as a **shear** of two rows against the third; this engine does **not**, because its shader takes the vertex normal through those same matrices and renormalises it, so a shear lights the ring by screen position (measured on the shader: 28 % too dark in the middle of the inventory row, 16 % too bright on the ammo row). The offset goes into the projection matrix instead, per draw call (`HDModelOffCentre`, `hd_model.cpp`), where the classic path has it and where a normal cannot reach it. The arithmetic was derived from TR5's own projection line (`aTransformLightClipMesh`, `specific/output.cpp`) and is written for this engine's matrices, not for TROne's float stack; the derivation stands in full over `HDInvNode` and over `HDModelOffCentre`. TROne also needs a flag to make the ring draw **exactly** the nodes it was given, because its default invents a matrix for an unseen node; ours takes `item->mesh_bits` as a mask and needs none. Not taken: TROne's scale term `f_mpersp/persp`, which corrects for a host projection built from the window's real width - TR5 computes `f_persp` from a 4:3 implied width whatever the window is, and the HD projection here is built from that very number, so the factor is exactly one (measured: `ModelProbe -ringcheck`, the bounding rectangle at the same **size** on 4:3 and on 16:9). |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp`, the water marks | `host/render/game_renderer.cpp`, `hd_load` and `hd_water_mark` (TROne-main, copy of 2026-10-05) | The **road**, not the code: the remaster's geometry carries no water flag, so the classic level's own water vertices are matched to it by room-local position through a hash of the packed int16 x/y/z, per room, once at level build - and which group owns which vertex is recovered by walking the group's index runs. TROne marks a vertex from the classic `RoomVertexMove` flag and from the room's underwater bit; ours marks it from `ROOMLET::nWVtx` and from the engine's own shimmer predicate, and carries three bits rather than one. |
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_lara.cpp/.h`, and `hd_wardrobe.cpp/.h` with it | `host/render/game_renderer.cpp`: `lara_flush`, `lara_build_models`, `lara_load`, `draw_hair`, and `games/tr5/glue/hostglue_file5.cpp`: `RegisterLaraWardrobe` (TROne-main, copy of 2026-10-05) | The **composite itself**: Lara is not one model but an outfit for the body, a separate `LARA_HEAD` drawn rigidly on the head node, a `HAIR_OG` braid on its own six-bone chain, a `HAND_` model chosen by the slot whose mesh sits at the hand node, and a `HOLSTER_` model for a worn weapon; an empty holster draws nothing because the straps are in the outfit; and the whole wardrobe lives in the shared `4\ITEM` folder, not in the running game's. The role table (which slot means which model) is TROne's, name for name. What is **not** TROne's: the section table - its TR5 glue of its copy of 2026-09-05 had `ANDY` and `JOBY` the wrong way round and would put the Russia outfit on Ireland - and the outfit test, which here reads the engine's own `LaraDrawType` and its own braid predicate rather than the level's file name. Also this project's own is the split hand rule: TROne drew one hand model for both hands in its copy of 2026-09-05 (TROne-main, copy of 2026-10-05, has a split of its own), which loses TR5's flare, torch and crowbar frames, so a frame whose two hands differ draws both models masked to one arm each. The role table and the search that finds those models live in `hd_wardrobe.cpp/.h`, which is why that file stands in this row rather than in one of its own. |
@@ -291,9 +291,13 @@ entry "Where the HD rules come from", carries the tables.
    product 0.460, `colour1` 0.397, `colour2` 0.527; of the sampled pairs sum and
    product put in opposite order the prelight sides with the sum in 121,606 and
    with the product in 56,907; better than the product in 14 of 15 levels
-   (`TrgProbe -shadeorder`). Picture: RoomProbe's RICH2 X-ray view against the
-   Remaster recording of the same place, the corridor wall's mean brightness at
-   1.13 of the recording's under the sum and 0.43 under the product.
+   (`TrgProbe -shadeorder`). The rule rests on these rank counts, which no scale
+   on a triple changes. Picture: RoomProbe's RICH2 X-ray view against the
+   Remaster recording of the same place, the corridor wall's and floor's mean
+   brightness at 1.13 and 1.21 of the recording's under the sum (0.20 and 0.26
+   under the product, `colour2` alone 0.61 and 0.48); it shows the shipped scale
+   is in the recording's range, and with two regions of one frame it cannot
+   tell the sum from a scaled other rule.
 8. **The `.TRM` layout** - 44-byte part, 24- or 30-byte vertex, three bones and
    three weights, the zero word and the head geometry behind a facial rig.
    TRForge, `trf_remaster/ItemModels.h`, as a description (TROne-main's vendored
@@ -314,7 +318,11 @@ entry "Where the HD rules come from", carries the tables.
     out.** TROne, `hd_load`'s prefix pass. DATA and OWN. Ours: the same 471-slot
     table; `GUN_FLASH` measured never to reach the per-item path.
 13. **A `DUMMY` model means "draw nothing".** TRForge, `HdMesh.cpp` (TROne-main's
-    vendored copy). DATA. Ours: `BakeProbe` over ANDREA1's 14 `DUMMY` slots.
+    vendored copy). DATA. Ours: ANDREA1's map calls 14 of its slots `DUMMY`
+    (`MapProbe <5> ANDREA1.TRC`, column dummy). The count of the art's own
+    triangles inside each such item's box (1250, 730 and 5001 against at most
+    18 elsewhere, `hd_object.cpp`) was made with a probe that is not in this
+    tree: that part of the evidence is missing here.
 14. **The `.TEX` sidecar and the 64 x 64 cell an HD page repaints.** TRForge,
     `trf_remaster/Remaster.h` and `HdPages.h`, as a description. DATA. Ours:
     over five TR5 levels no cell wants two files.
@@ -363,7 +371,8 @@ entry "Where the HD rules come from", carries the tables.
     mesh on a covered node loses to the model. TROne, `item_flush` and
     `draw_mesh`. OWN. Ours: `ModelProbe -name MAFIA` (the swap files).
 26. **The ring's off-centre projection folded into the draw, its light as
-    ambient and one sun.** TROne, `games/tr5/glue/hostglue_2d5.cpp`. OWN (the
+    ambient and one sun.** TROne, `games/tr5/glue/hostglue_2d5.cpp`,
+    `phd_PutPolygonsPickup` (copy of 2026-10-05). OWN (the
     idea; the arithmetic is TR5's). Ours: `ModelProbe -ringcheck`, `-ringlight`.
 27. **Lara's composite and the role table.** TROne, `lara_flush`, `lara_load`,
     `RegisterLaraWardrobe`. OWN. Ours: the section table (`ModelProbe -lara`).
@@ -396,6 +405,27 @@ entry "Where the HD rules come from", carries the tables.
 37. **Materials 13 and 15, the flipbook and the books.** Read the same way by
     TROne. DATA. Ours: the four-phase cycles and the thirty-page loops counted
     in `hd_render.cpp`.
+38. **`param[0]` of materials 6, 7 and 8 is the cut-out threshold.** Read the
+    same way by TROne (TROne-main, copy of 2026-10-05, its rules for the
+    cut-out materials), whose reading rests on the Remaster's shaders. DATA.
+    Ours: 0.5 in 42 of the 44 per-level tuples of the three materials over the
+    fifteen levels, the other two ANDY1's 0.503 on material 6 and ANDY2's 0.12
+    on material 8 (`TrgProbe -all -mat 6`, `-mat 7`, `-mat 8`); every other
+    material's `param[0]` is measurably something else - an exponent on 3 and
+    17, page numbers on 13 and 14, a preset on the additive material 2
+    (`hd_render.cpp`, `MaterialAlphaRef`); and the pages the three wear are
+    half hole or more where the opaque pages' alpha is a mask (`hd_pagecache.cpp`,
+    the per-page measure).
+39. **On a `.TRM` the material, not the index run, decides the cut, and
+    material 0's alpha stays a mask.** TROne, `docs/SHADER_RULES.md` (copy of
+    2026-09-05), on its own data. DATA and OWN. Ours: of the three cut-out
+    materials only 6 and 8 occur in the `.TRM` files of `4\ITEM` and
+    `5\ITEM`, both with 0.5 in `param[0]` in every part, and only 6 in the
+    opaque run; the page's share of texels at exactly 0 among those below the
+    reference (`HDPageCacheSlotZeroPermille`, `hd_model_cut.h`; ModelProbe's
+    page lines) puts the cut-out sheets at 325 per mille and up and the pistol
+    grips at 4, and material 0's page 9000 of the Roman statue at 715, which
+    the material rule keeps whole.
 
 Removed in the same round, so that nothing of the HD path rests on a reading of
 the Remaster's programs: the spare scale on the first colour triple (TROne's

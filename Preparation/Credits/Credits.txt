@@ -9,7 +9,7 @@ tomb3 Decompile: https://github.com/Trxyebeep/tomb3 (Trxyebeep) - the TR3 enemie
 
 TROne (GPLv3): https://github.com/todesengel1931 (Todesengel1931) - the
   HD-at-run-time path carries his code, and the modern control scheme
-  carries his design and his test expectations. Twenty-one source files
+  carries his design and his test expectations. Twenty-six source files
   here name his copyright beside ours; THIRD-PARTY.md lists what was taken,
   file by file. He is in the contributors list below as well, because he
   played and reported too.
@@ -27,10 +27,12 @@ stb: https://github.com/nothings/stb (Sean Barrett)
 zlib: https://zlib.net/ (Jean-loup Gailly and Mark Adler) - the complete
   source is in the tree and compiled into both binaries.
 
-TRForge (MIT, TRForge contributors): five files are vendored byte for byte
-  and compiled into PCtomb5.exe - the reader for the remasters' LEVELn.TRG
-  geometry and the helpers it needs. TRForge's own format descriptions are
-  where several more of the HD path's rules come from. Licence and
+TRForge (MIT, TRForge contributors): five files are vendored (byte for
+  byte but for three comment passages left out of Trg.h) and compiled into
+  PCtomb5.exe - the reader for the remasters' LEVELn.TRG geometry and the
+  helpers it needs. TRForge's own format descriptions are where several more
+  of the HD path's rules come from; THIRD-PARTY.md's origin ledger names
+  each, with this project's own count on the files. Licence and
   provenance: TOMB5 Code\TOMB5\vendor\trforge\.
 
 discord-rpc: https://github.com/discord/discord-rpc (Discord, Inc.) - in

@@ -1295,7 +1295,9 @@ HQ sounds have.
 > build and of the draw, the page lookup, the rules of the object path, the
 > composite Lara is made of — re-derived here for Direct3D 9 and this engine's
 > own classic path. `THIRD-PARTY.md` lists what was taken, file by file, and
-> says what was deliberately left. **None of the Remaster's own art is
+> says what was deliberately left; its origin ledger names every rule of this
+> chapter that came by way of TROne or TRForge, with the count on your own
+> files that holds it. **None of the Remaster's own art is
 > included here**: every picture, page and model the HD mode draws is read at
 > run time out of your own installation.
 
@@ -1311,11 +1313,13 @@ see *Lara in HD* below for which of her stays classic and why.
   contents of two rooms and leaves their numbers where they are, so the HD art
   follows the contents and not the number; art nailed to the number would
   leave a wall that has gone still standing as a texture.
-- **Leaves are leaves.** The remaster draws its vegetation — the kelp of the
-  Deepsea Dive, the trees and grass of Ireland, the ivy of Rome — in the pass
-  that has no transparency test, and the pages it draws them on are up to 95 %
-  hole; without the test they come out as solid green rectangles. The test is
-  switched on for the remaster's own cut-out materials, and for no others. It
+- **Leaves are leaves.** The remaster's art puts its vegetation — the kelp of
+  the Deepsea Dive, the trees and grass of Ireland, the ivy of Rome — in the
+  opaque run of a part's index list, marked with one of the three cut-out
+  materials 6, 7 and 8, whose first parameter is 0.5 in 42 of their 44 settings,
+  and the pages it wears there are up to 95 % hole; drawn without a
+  transparency test they come out as solid green rectangles. The test is
+  switched on for those three materials, and for no others. It
   is not decided per texture page from how much of the page is transparent:
   an ordinary wall's transparency channel is a polish and wetness mask rather
   than a shape, and a per-page rule eats Rome's shop fronts, the snow of the
@@ -1651,7 +1655,7 @@ it.
   caustic, that wall shows a sheared, darkened triangle at the waterline. The
   geometry half therefore asks the surface to be **flat** as well; the colour
   still shimmers on those points, exactly as the original engine does.
-- **The water surface the Remaster does not draw.** Held plane by plane
+- **The water surface the Remaster's art has no geometry for.** Held plane by plane
   against the original level, the Remaster's own room art has **no geometry at
   all** where the original draws its water surface in 61 of the game's 93
   reflecting rooms - every VCI pool among them. An HD room on its own would
@@ -1682,7 +1686,7 @@ it.
   only on the squares the sheet really covers, so the pool keeps its own
   surface everywhere else and no square is left bare. It stops with
   `hd_motion`.
-- **And the water the Remaster does NOT build wears its HD frames.** The
+- **And the water the Remaster's art does NOT build wears its HD frames.** The
   level's own water faces above are animated the way the original animates
   water - eight pictures that take turns in the same texture slot every fifth
   of a second - and the Remaster ships an HD painting of each of those eight.
@@ -1712,7 +1716,7 @@ are drawn the old way, each on its own, in the middle of a sharp line. Bars,
 icons and the loading screens are a different matter and are not affected.
 
 Still open in the rooms, and named rather than hidden: a **visible border**
-where an HD room meets one the remaster draws nothing for (they fall back to
+where an HD room meets one the remaster's art has nothing for (they fall back to
 the classic look, and the log's `HDLOG room=… hd=0` lines name every one), and
 a **step in the wall brightness at a room boundary**, which is measured and is
 the Remaster's own: it bakes each room's light on its own, and at the same
@@ -1763,9 +1767,10 @@ model 3 guarantees; the room shader uses 476), the **UBYTE4** vertex element
 the 20-byte vertex is built out of, and **A8R8G8B8 textures**. Miss one of
 those and the game runs classic for the rest of the session, with the reason in
 the log — nothing crashes and no message box appears. Textures up to **4096
-pixels** are wanted but not required: eleven of the Remaster's pages are that
-big, and a card that stops at 2048 gets those eleven one mip level down instead
-of not at all.
+pixels** wide are wanted but not required: eleven of the Remaster's pages for
+this game are that wide (4096 by 2048, the sky panoramas among them), and a
+card that stops at 2048 gets those eleven one mip level down instead of not at
+all.
 
 A **32 bit index buffer** is *not* on that list. A card that says it can only
 address 65,536 vertices at a time is not turned away: every draw here is one range, so each range's indices are
@@ -1866,8 +1871,10 @@ one part in 255 — the rounding the classic path does when it truncates its own
 sum. The **brightest surfaces** stay brighter than the classic engine would
 draw them: TR5 stops multiplying the texture at a certain point and starts
 adding instead, which is a trick from the days of fixed graphics hardware, and
-the HD path keeps multiplying — which is how the remaster's own art is meant to
-be lit. And the **water
+the HD path keeps multiplying, a choice of this engine: the remaster's art
+carries its light as two triples that add up to as much as twice the texture
+(that they add, and do not multiply, is counted on the level files themselves
+— see `MODIFICATIONS.md`, "Where the HD rules come from"). And the **water
 pattern** is finer: the table is sampled once per vertex, and an HD room has
 far more vertices than a classic one. Same table, same speed, same strength — a
 denser grid.
@@ -2005,14 +2012,14 @@ in half. `ModelProbe -all` prints the whole table for any level.
 * **Distance models are off** for HD objects. TR5 swaps in a coarser model
   five sectors away; the remaster has no coarse model, and a door that turned
   from HD to classic as you walked away from it would pop every time.
-* **Wire mesh on an object is see-through.** The remaster draws the grating
-  in front of the fans of the Russian levels (JOBY2, JOBY3, JOBY5), the
-  grille of their trapdoors, a grated staircase of RICH3 and a few more in
-  the pass that has no transparency test, marked with its cut-out material;
-  without the test the holes come out as a solid dark plate and the fan
-  behind it disappears. The test is switched on for those parts — the
-  remaster's cut-out material on a page whose holes are painted fully
-  transparent — and for nothing else. Every other object keeps its
+* **Wire mesh on an object is see-through.** The remaster's object models put
+  the grating in front of the fans of the Russian levels (JOBY2, JOBY3,
+  JOBY5), the grille of their trapdoors, a grated staircase of RICH3 and a
+  few more in the opaque run of a part's index list, marked with the cut-out
+  material 6; drawn without a transparency test the holes come out as
+  a solid dark plate and the fan behind it disappears. The test is switched
+  on for those parts — a cut-out material on a page whose holes are painted
+  fully transparent — and for nothing else. Every other object keeps its
   transparency channel as the polish mask it is: the material alone would
   cut the grips out of Lara's pistols, whose dark chequer is marked the same
   way, and a page's transparency alone would cut a Roman statue in half.
@@ -2458,26 +2465,27 @@ state the HD rooms are actually drawing with, so a "the fog does nothing"
 report can be answered from the log: `fog_start` is `Distance fog` times 1024,
 `bulbs` is zero whenever `Fog` is off, `shimmer` is the switch itself. And a
 `clipped` line appears only if a room ever wanted more than eight dynamic
-lights or more than eight fog bulbs at once — if you never see one, the
+lights or more than sixteen fog bulbs at once — if you never see one, the
 shader's maxima never bit:
 
 ```
 HDLOG level=TITLE clipped first frame lights=0 bulbs=1 room=-1
-      offered_lights=0 offered_bulbs=9 (maxima 8 / 8)
+      offered_lights=0 offered_bulbs=17 (maxima 8 / 16)
 HDLOG level=TITLE clipped summary frames=173 lights=0 bulbs=173
-      worst_lights=0(room -1) worst_bulbs=9 (maxima 8 / 8)
+      worst_lights=0(room -1) worst_bulbs=17 (maxima 8 / 16)
 ```
 
 The first line is written by the first frame that clipped, the second at the
-end of the level — **never once per frame**. `offered_` is what the engine wanted, the `maxima` are what the shader
-has room for. Eight is a measured number, not a guess: counted out of all
-sixteen level files, a level holds up to seventeen fog bulbs (`ANDREA2`, and
-`TITLE` has seventeen too), and sweeping every camera position a level allows,
-up to sixteen of them can be alight at once — 16 in `ANDREA2`, 14 in `RICH2`,
-13 in `ANDY1`, 11 in `TITLE`, 10 in `RICH1`. So a `clipped bulbs` line in those
-levels is expected: the bulbs that are dropped are the ones furthest down the
-engine's own list. Eight is where the title screen stops visibly losing one —
-at six it does; the engine's own ceiling is sixteen.
+end of the level — **never once per frame**. `offered_` is what the engine
+wanted, the `maxima` are what the shader has room for (the numbers above show
+the line's form). Sixteen bulbs is a measured number, not a guess: counted out
+of all sixteen level files, a level holds up to seventeen fog bulbs (`ANDREA2`,
+and `TITLE` has seventeen too), and sweeping every camera position a level
+allows, up to sixteen of them can be alight at once — 16 in `ANDREA2`, 14 in
+`RICH2`, 13 in `ANDY1`, 11 in `TITLE`, 10 in `RICH1` — which is also the
+engine's own ceiling. So in the shipped levels the bulbs never clip; if they
+ever do, the bulbs that are dropped are the ones furthest down the engine's own
+list.
 
 If the HD path refuses, it says so in one line and the game runs on classic —
 no error box, no changed picture:
@@ -2512,7 +2520,7 @@ one slot and one model file. Lara is a **composite**: the engine draws her out
 of five slots at once — the skinned body from `LARA_SKIN`, the seams that close
 it from `LARA_SKIN_JOINTS`, the hands from whichever weapon slot the mesh swap
 put there this frame, the thigh straps from `LARA_HOLSTERS*` and the braid from
-`HAIR` — and the remaster does the same thing with a wardrobe of separate
+`HAIR` — and the install ships the same thing as a wardrobe of separate
 models.
 
 **How she is drawn.** Her fifteen joint matrices are the engine's own, built by
@@ -2609,7 +2617,7 @@ laratype=… data3=…` line.
 | The skeleton cheat (`skelebob`) | its own draw path and its own overlay meshes; the wardrobe has neither. |
 | The muzzle flash, the gun shells, the flare in flight | drawn by their own routines outside `DrawLara` and never part of the composite. |
 | The diving suit's two thrusters | they are a separate object on her torso, not a part of her body, and the remaster's wardrobe has no model for them. They keep being drawn the classic way **on top of** the HD suit — two small low-resolution pieces, against a diving suit with nothing on its back. |
-| The catsuit's sheen | the classic catsuit is drawn through the engine's environment map, a second view-dependent pass an HD model does not have. The remaster's own `OUTFIT_VCI` carries its shading in its textures, so the HD catsuit is matte where the classic one glints. Not faked: inventing a specular term would be inventing a look. |
+| The catsuit's environment map | the classic catsuit is drawn through the engine's environment map, a second view-dependent pass an HD model does not have. The HD catsuit shines instead through the outfit sheen described above - a latex highlight from the engine's own lights, out of a table named per material, because the wardrobe's pages carry no gloss mask to read - so it glints, but not with the classic reflection. |
 | The inventory | the ring draws its own objects and never calls `DrawLara`. |
 
 **First person** drops the same three things from the HD Lara that it
@@ -2789,9 +2797,8 @@ is nearest, with the rear one preferred and a margin that is the plait's own
 radius. A sphere cannot do that job: one tangent to a flat face touches it at a
 point, and a hand's width to either side the braid is inside the pack again.
 With the box under it the braid also hangs from the hair knot rather than 15
-units behind the skull, which is where the remaster hangs it — an anchor that
-two spheres pushing in turn would never let settle, while a box has no curved
-side to slide down.
+units behind the skull — an anchor that two spheres pushing in turn would never
+let settle, while a box has no curved side to slide down.
 
 #### The soft motion of the chest
 

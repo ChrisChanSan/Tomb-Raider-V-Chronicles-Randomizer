@@ -810,9 +810,11 @@ you are running, and nothing else.
   suite's expectations taken across verbatim and credited by name in
   `Preparation/Tools/Diagnose/ModernTest.cpp`'s own header. The
   HD-at-run-time path is different: it **carries TROne's own code
-  over**. Twenty-one source files in this tree name Todesengel's copyright in
+  over**. Twenty-six source files in this tree name Todesengel's copyright in
   their own headers, and [THIRD-PARTY.md](THIRD-PARTY.md) lists what came
-  from where, file by file.
+  from where, file by file, with an origin ledger of every HD rule that came
+  by way of TROne or TRForge and the count on the player's own files that
+  holds it.
 - **[trview](https://github.com/chreden/trview)** by chreden — the tool
   every single zone boundary of this randomizer was verified with.
 - **[Dear ImGui](https://github.com/ocornut/imgui)** by Omar Cornut (MIT) —
@@ -823,8 +825,8 @@ you are running, and nothing else.
   level files are compressed with it.
 - **TRForge** by the TRForge contributors (MIT) — five of its files, the
   reader for the Remaster's own room-geometry format, are vendored into the
-  engine byte for byte and compiled in;
-  [THIRD-PARTY.md](THIRD-PARTY.md) says which and why.
+  engine and compiled in, byte for byte but for three comment passages left
+  out of one header; [THIRD-PARTY.md](THIRD-PARTY.md) says which and why.
 - **[discord-rpc](https://github.com/discord/discord-rpc)** by Discord, Inc.
   (MIT) — Troye's Discord Rich Presence. This fork switches it off, so it is
   in no binary; its libraries and headers still travel in the source tree,

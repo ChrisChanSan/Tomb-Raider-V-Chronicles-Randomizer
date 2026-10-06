@@ -29,7 +29,13 @@ Fourteen of the 220 do not carry the notice, and none of them should:
 
 - the four `specific/hd/hd_shader/*.inc` are compiler output (`fxc` bytecode as a C array), regenerated from the `.hlsl` files beside them and carrying no source of this project at all;
 - `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other people's files that are not modified here in any way - stb_vorbis carries its own licence at the end of the file, and the second one *is* a licence. A notice on them would claim an authorship this project does not have;
-- the other eight are under `vendor/trforge/`: five source files copied byte for byte from TRForge (MIT), its `LICENSE`, its `NOTICE.md` and a `VERSION.txt` recording where they came from. The five sources carry a hidden signature in their first three lines; writing anything into them, a notice included, would destroy it, and nothing in them is changed, so there is nothing to notice.
+- the other eight are under `vendor/trforge/`: five source files copied from TRForge
+  (MIT), its `LICENSE`, its `NOTICE.md` and a `VERSION.txt` recording where they came
+  from. The five sources carry a hidden signature in their first three lines; writing
+  anything into them, a notice included, would destroy it. Four are byte for byte
+  TRForge's; `trf_remaster/Trg.h` differs only in three comment passages left out (one
+  on 2026-10-04, two in the entry "Where the HD rules come from"), which `VERSION.txt`
+  names with the file's new hash, so there is nothing else to notice.
 
 `game/trex.h`, `game/raptor.h` and `game/compy.h` carry the notice and additionally name
 tomb3 as their origin further down (section 2.3).
@@ -1731,10 +1737,16 @@ facial-rig rescan and the byte reader in `hd_trm.cpp`, and `read_map_file` in
 `hd_bind.cpp`; the design of the HD renderer, the installation walk and the water effect
 come from TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - with his
 copyright in the files' own headers and in `THIRD-PARTY.md`; everything else is this
-project's own measurement over the player's files. The taboo holds throughout: nothing
-is taken from the Remaster's programs `tomb5.dll`, `tomb456.exe` or `tomb123.exe`,
-neither bytes nor logic, not at second hand - `hd_install.cpp` only tests that such a
-file EXISTS, as a marker that a folder is the right one.
+project's own measurement over the player's files. No byte and no logic of the
+Remaster's programs `tomb5.dll`, `tomb456.exe` or `tomb123.exe` is in this tree -
+`hd_install.cpp` only tests that such a file EXISTS, as a marker that a folder is the
+right one. Three rules of this path had come at second hand all the same, as plain prose
+in TRForge's and TROne's text that rested on their reading of the Remaster's shaders: the
+room light as the SUM of a vertex's two colour triples, which bytes of a `.TRG` vertex are
+u, v and the biased normal, and the order of material 16's scale and rate. Each now rests
+on this project's own count over the player's files, or is declared this project's free
+choice (the entry "Where the HD rules come from" below); `THIRD-PARTY.md` keeps the
+origin ledger of every rule of this path that came by way of TROne or TRForge.
 
 ### Finding an installed Remaster, reading what it holds for a level, and the settings that steer it
 2026-09-05 - 2026-09-20
@@ -1792,19 +1804,19 @@ BC7 decoder over every page; it is engine-free on purpose, so that `TrgProbe` an
 `MapProbe` compile the same file and measure what the game measures. `hd_level.cpp`/`.h`
 is the level bracket and the `HDLOG` line. New, under `TOMB5/vendor/trforge/`: verbatim
 TRForge (MIT), five source files plus `LICENSE`, `NOTICE.md` and `VERSION.txt`; those
-five carry no modification notice of this project and must not - they are copied byte
-for byte, their first three lines carry a hidden signature, and nothing in them is
-changed. Changed: `specific/file.cpp` calls `HDLevelLoad` after `LoadTextureInfos` (the
-first moment rooms, meshes and slots are all in memory, in their randomized state) and
-`HDLevelUnload` in `FreeLevel`; `specific/registry.cpp`/`.h` gained
-`REG_ReadString`/`REG_WriteString` for the settings that are paths and not numbers
-(`hd_install`, `hd_install_tr3`, declared in `registry.h`); `global/types.h` and
-`tomb5/tomb5.cpp`/`.h` hold the seven settings; `tomb5.vcxproj` carries the new files
-and `/std:c++17` per file for the ones that use `<filesystem>`, the engine keeping its
-own default. The options row and its label live in `game/menu_frame.cpp`
-(`menu_rows_graphics`) and `game/gameflow.cpp` (the frame's `CustomText` table); nothing
-in the randomizer's own `Language.cpp` is involved. The TR3 bundle:
-`HDModelSlot::fromTr3` in `hd_model.cpp`/`.h` for the one-way lookup,
+five carry no modification notice of this project and must not - they were copied byte
+for byte and their first three lines carry a hidden signature; the one change since is
+three comment passages left out of `Trg.h`, recorded in `VERSION.txt`. Changed:
+`specific/file.cpp` calls `HDLevelLoad` after `LoadTextureInfos` (the first moment rooms,
+meshes and slots are all in memory, in their randomized state) and `HDLevelUnload` in
+`FreeLevel`; `specific/registry.cpp`/`.h` gained `REG_ReadString`/`REG_WriteString` for
+the settings that are paths and not numbers (`hd_install`, `hd_install_tr3`, declared in
+`registry.h`); `global/types.h` and `tomb5/tomb5.cpp`/`.h` hold the seven settings;
+`tomb5.vcxproj` carries the new files and `/std:c++17` per file for the ones that use
+`<filesystem>`, the engine keeping its own default. The options row and its label live in
+`game/menu_frame.cpp` (`menu_rows_graphics`) and `game/gameflow.cpp` (the frame's
+`CustomText` table); nothing in the randomizer's own `Language.cpp` is involved. The TR3
+bundle: `HDModelSlot::fromTr3` in `hd_model.cpp`/`.h` for the one-way lookup,
 `hd_pagecache.cpp`/`.h` offering a guest's pages with `HD_PAGE_ALT_BASE` added and
 taking the base off again at the one place a number becomes a file name, a
 `static_assert` in `hd_level.cpp` holding the four slot numbers against the enum, and
@@ -2043,8 +2055,13 @@ are bridged: the classic path builds a colour in 0..255 and splits it at 128, do
 below and putting the halved excess into the specular colour, which the fixed-function
 pipeline adds after the texture modulation (`D3DRS_SPECULARENABLE` on,
 `specific/function_table.cpp:104`); a classic surface therefore covers 0..2, and the
-Remaster's baked light covers the same 0..2 (`colour1 + colour2`) as a straight
-multiply. Below 128 the two are the same line, and that is the bridge. The split itself
+`.TRG`'s baked light covers the same 0..2 as `colour1 + colour2`, used as a straight
+multiply. That the two triples ADD is this project's own count, not a reading of anybody's
+renderer: on the 107,118 classic room vertices a `.TRG` vertex of the same room stands on
+exactly, the sum orders the vertices the way the classic prelight does better than the
+product, `colour1` or `colour2` alone (`TrgProbe -shadeorder`; the table is in the entry
+"Where the HD rules come from", section 2.4). Below 128 the two are the same line, and
+that is the bridge. The split itself
 is not reproduced, and that is the single place this work leaves the classic path: the
 split is a hardware workaround for fitting a brightness of 2 into two bytes, and a
 shader has floats; following it would dull every bright surface the Remaster bakes - 20
@@ -2685,14 +2702,13 @@ and 4100 at the equator, wearing one 4096 x 2048 panorama out of the page block
 cloud discs of up to 24,000 units' radius at fixed heights above the camera, material 1,
 which therefore scroll on their own parameters (`p1` -0.03 to 0.06 page units per
 second) and carry baked light of 0.26 to 2.00. The band's baked light is exactly zero on
-every vertex of every level, because the Remaster's own sky shader does not read it, so
-through the room formula it would be black. The two alpha-pass sky pages carry a soft
-ramp with every value in between - 42.0 per cent of their texels under alpha 16 and 35.9
-per cent over 240 for the second cloud sheet, 33.5 and 59.2 for the dome - and a test at
-0.5 leaves a feathered cloud as a hard-edged silhouette and puts a hard rim across the
-dome. The depth write stays on, unlike the glass surfaces, because the sky sorts inside
-itself in its own depth slice: the dome stands in front of the cloud sheets at the
-horizon and behind them overhead.
+every vertex of every level, so through the room formula it would be black. The two
+alpha-pass sky pages carry a soft ramp with every value in between - 42.0 per cent of
+their texels under alpha 16 and 35.9 per cent over 240 for the second cloud sheet, 33.5
+and 59.2 for the dome - and a test at 0.5 leaves a feathered cloud as a hard-edged
+silhouette and puts a hard rim across the dome. The depth write stays on, unlike the glass
+surfaces, because the sky sorts inside itself in its own depth slice: the dome stands in
+front of the cloud sheets at the horizon and behind them overhead.
 
 **How.** A sky part with no light anywhere is drawn at light 1 and its page is the whole
 picture. No scaling and no rotation: the sphere's four blocks sit far inside the far
@@ -2865,7 +2881,7 @@ group 51); whether the title flyby ever shows it is the play test's. RICH2 group
 neighbouring group 84's copy lies under the whole of both sectors, so they show it only
 while 84 is drawn. Shadows and effects - flames, sparks, the gun flash - of what the
 mirror reflects. The lobby floor shows its static copy only: Lara and the items are not
-reflected in it, and the Remaster's floor does not reflect them either. In first person
+reflected in it. In first person
 the reflected Lara is drawn the way the first-person draw draws her, without her face and
 her braid. A reflection is held only by the depth test and not cut to the pane: a body
 whose origin stands at a copy's end along the glass can reach about 100 units past it,
@@ -3825,12 +3841,10 @@ Lara and her outfits, the interpolation.
 the page, with no list of names; the threshold, 100 per mille at 0, lies between the
 pistol grips' 4 and the lowest cut-out page's 325 (page 12052). The cut is the object
 path's existing one, the shader's clip at 0.5; no blended pass is added for objects.
-TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - names `.TRM`
-parts of material 6 and 7 of the TR4/TR5 family as parts to cut
-(`host/render/game_renderer.cpp:6235-6240`) and documents that the material and not
-the run decides, with material 0's alpha kept as a specular mask
-(`docs/SHADER_RULES.md:488-507`); the page condition is this engine's own, from the
-measurement above.
+TROne (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - documents on its
+own data that the material and not the run decides, with material 0's alpha kept as a
+specular mask (`docs/SHADER_RULES.md:488-507` of its copy of 2026-09-05); which `.TRM`
+parts are cut, and the page condition, are this engine's own, from the measurement above.
 
 **Left.** The soft rim of a hole, the texels between 1 and 127, is cut at 0.5 as the alpha
 run cuts it, not blended. Page 16075, the blades' page, carries holes too (46.3 per cent
@@ -5259,27 +5273,33 @@ bit is itself a decision about a plane (`specific/drawroom.cpp` opens the branch
 `pos.y == CurrentRoomPtr->minfloor`). The swell, the wobble and the caustic are TROne's
 water effect (GPLv3, by Todesengel1931, re-derived here): the WaterTable term stays
 untouched, parity and all, and the caustic is added as a zero-mean modulation of the
-multiply so that it carries no average brightness of its own, its amplitude TROne's 0.32
-either way, which matches the measured swing of a body of water between two frames (two
-reference shots of one pool differ by 8.4 of 255 on average, 17 per cent of the pixels
-more than 16 apart against a mean of 34). The ripple: `MaterialRipple` (`hd_render.cpp`)
-reads material 16's three numbers and the per-draw-call constant `gRipple` (pixel
-register c36) carries them, `(0, 0, 0)` for every other draw call in the game, where the
-shader's one compare on `.y` skips the whole of it; `MaterialAddWeight` lets material 16
-fall through to weight 1.0. The anchors come from the TR5 measurement: `param[0]` = 0.8,
-the commonest value, is one wave per 1,536 units with a floor of 0.05; `param[2]` = 0.2
-is put on the classic water surface's own period of 64 steps of a 30 Hz clock (2.13 s),
-so 0.5 becomes 0.85 s and JOBY4's 0.035 twelve seconds; `param[1]` = 1 moves the
-coordinate by a tenth of the part's own smaller UV span, 23 of the 28 parts living in a
-sub-rectangle of their page with the sampler on CLAMP. The wave is the smoothstep of a
-triangle, `abs(frac(p) * 2 - 1)` then `3f^2 - 2f^3`, doubled and centred, which agrees
-with a cosine to within 6 per cent of its own amplitude and has the same zero mean and
-continuous slope - four sines take the room pixel shader from 453 to 512 slots, exactly
-what shader model 3 guarantees, and four of these take it to 476. The vertex shader does
-nothing for it: `sway` is 0 on 27 of the 28 parts and a bobbing sheet would tear away
-from the stone rim it is let into. Which of `param[0]` and `param[2]` is the frequency
-and which the rate is not decided by the measurement; it is written into
-`MaterialRipple` as a reversible choice with a one-line reversal beside it. The water
+multiply so that it carries no average brightness of its own. Its shape and its scale of
+0.018 per unit are TROne's own design; its amplitude, 0.32 either way, is this project's,
+matched to the measured swing of a body of water between two frames (two reference shots
+of one pool differ by 8.4 of 255 on average, 17 per cent of the pixels more than 16 apart
+against a mean of 34) - TROne-main, copy of 2026-10-05, gives its caustic 0.12. The
+ripple: `MaterialRipple` (`hd_render.cpp`) reads material 16's three numbers and the
+per-draw-call constant `gRipple` (pixel register c36) carries them, `(0, 0, 0)` for every
+other draw call in the game, where the shader's one compare on `.y` skips the whole of it;
+`MaterialAddWeight` lets material 16 fall through to weight 1.0. The anchors come from the
+TR5 measurement: `param[0]` = 0.8, the commonest value, is one wave per 1,536 units with a
+floor of 0.05; `param[2]` = 0.2 is put on the classic water surface's own period of 64
+steps of a 30 Hz clock (2.13 s), so 0.5 becomes 0.85 s and JOBY4's 0.035 twelve seconds;
+`param[1]` = 1 moves the coordinate by a tenth of the part's own smaller UV span, 23 of
+the 28 parts living in a sub-rectangle of their page with the sampler on CLAMP. The wave
+is the smoothstep of a triangle, `abs(frac(p) * 2 - 1)` then `3f^2 - 2f^3`, doubled and
+centred, which agrees with a cosine to within 6 per cent of its own amplitude and has the
+same zero mean and continuous slope - four sines take the room pixel shader from 453 to
+512 slots, exactly what shader model 3 guarantees, and four of these take it to 476. The
+vertex shader does nothing for it: `sway` is 0 on 27 of the 28 parts and a bobbing sheet
+would tear away from the stone rim it is let into; that structure - a texture ripple held
+to the part's own UV span, nothing moving in the vertex - is TROne's own design for
+material 16 (GPLv3). Which of `param[0]` and `param[2]` is the frequency and which the
+rate is not decided by any measurement of ours: it is this project's free choice, written
+into `MaterialRipple` with its reversal beside it. The order chosen coincides with the
+order TROne's prose names for the three slots, a reading TROne states it took from the
+Remaster's own shader programs; this project uses those neither at first hand nor at
+second, so the coincidence is recorded and is no evidence. The water
 frames: `HDScanLevelTextures` (`specific/hd/hd_scan.cpp`) reads the `.TEX` sidecar - a
 page count, that many page numbers, then one `uint16` per object texture - written
 against TRForge's format description (MIT; `trf_remaster/Remaster.h` and `HdPages.h`
@@ -5364,15 +5384,15 @@ the floor of the card condition so the rule is never stricter than it was.
 **Why.** The engine is a 32-bit process. For TITLE's 220 pages the peak commit is 270
 MiB in `DEFAULT` against 545 MiB in `MANAGED`, and the batches are counted in bytes and
 not in pages because 2391 of the 2406 pages are 512x512 and decode to 1.4 MiB while
-eleven are 4096x4096 and decode to 85 MiB each - a batch counted in pages would
-occasionally ask for one and a half gigabytes. A missing page is a hole in a wall and
-reads as a rendering fault, while a page that starts one mip level down is only a softer
-wall, the texture coordinates being 0..1 of whatever the texture turns out to be. The
-cost sort is stable because almost every comparison is a tie and an unstable sort would
-pick a different set each run and make two screenshots of the same wall disagree. The
-decision is taken from the DDS headers because an estimate is not a thing to promise a
-card: the earlier estimate of four times the file length is now exact to the mebibyte
-(TITLE plans 375.8 MiB and loads 375.8 MiB). The white page needed its own texels
+eleven are 4096x2048 and decode to 42.7 MiB each (`TrgProbe -ddssizes`) - a batch
+counted in pages would occasionally ask for most of a gigabyte. A missing page is a hole
+in a wall and reads as a rendering fault, while a page that starts one mip level down is
+only a softer wall, the texture coordinates being 0..1 of whatever the texture turns out
+to be. The cost sort is stable because almost every comparison is a tie and an unstable
+sort would pick a different set each run and make two screenshots of the same wall
+disagree. The decision is taken from the DDS headers because an estimate is not a thing to
+promise a card: the earlier estimate of four times the file length is now exact to the
+mebibyte (TITLE plans 375.8 MiB and loads 375.8 MiB). The white page needed its own texels
 because `TEX\WHITE.DDS` exists in `4\TEX` only, so an installation without the fourth
 game had no white tile and the wall was not white but gone. 32-bit indices cannot be
 worked around for the large levels: a `.TRG` numbers its vertices over the whole level
@@ -5716,9 +5736,10 @@ for bodies carrying no part of the person's name - `ANIMATING4_RICHCUT2` ->
 11.4, sharing texture page 9075) and `ANIMATING6_RICHCUT2` -> `VON_CROY_ELDER_HEAD` (2.7
 against 35.3), each confirmed by picture; a face is never given a face of its own.
 `DrawCutSeqActors` (`game/deltapak.cpp`) hands the node walk's MATRIX to the HD path
-with `duff_item` carrying slot number and mesh bits. Item pages keep the Remaster's own
-rule, the alpha test in the alpha pass only, because an item page's alpha is not a
-coverage mask (`ROMAN_GOD_ANDREA_SWORD`'s three body pages measure 64.1, 48.7 and 56.4
+with `duff_item` carrying slot number and mesh bits. Item pages keep the room path's
+rule, the alpha test in the alpha pass only (TROne's own design), because an item page's
+alpha is not a coverage mask
+(`ROMAN_GOD_ANDREA_SWORD`'s three body pages measure 64.1, 48.7 and 56.4
 per cent of texels below alpha 128, PIERRE and BLUE_GUARD share a page at 26.2); the
 number is kept as a measurement in `HDPageCacheSlotCutoutPermille`.
 `HDFrameScissorForRoom` (`hd_level.cpp`) gives an item the full frame and counts what
@@ -6949,9 +6970,9 @@ gfLevelId <= LVL5_SINKING_SUBMARINE && LaraDrawType == LARA_NORMAL) || LaraDrawT
 LARA_BUNHEAD`, which already stands three times in `game/hair.cpp` and once in
 `game/laraskin.cpp`; read against all fifteen vanilla level files the rules answer
 correctly fifteen times out of fifteen. Which model plays which role is TROne's wardrobe
-(GPLv3, TROne by Todesengel1931 - https://github.com/todesengel1931), with its TR5
-glue's ANDY/JOBY assignment deliberately not followed: in these level files, measured,
-`JOBY` is the Russian submarine section and `ANDY` is Ireland. The marker:
+(GPLv3, TROne by Todesengel1931 - https://github.com/todesengel1931), with the ANDY/JOBY
+assignment of its TR5 glue of 2026-09-05 deliberately not followed: in these level files,
+measured, `JOBY` is the Russian submarine section and `ANDY` is Ireland. The marker:
 `specific/file.cpp` reads the fourth word of the 32-byte header block behind the texture
 pages into `GfHdOutfit`, beside `LaraType` at `data[0]`, the weather at `data[1]` and
 the foreign-speech-head flag at `data[2]`; `hd_laradraw.cpp` hands it to
@@ -8603,7 +8624,8 @@ draw sets `D3DTEXF_LINEAR` with `D3DSAMP_MIPMAPLODBIAS` -0.7, which lands at lev
 at 1080p and 0 at 1440p, the sampler states being put back the way the classic path
 keeps them the moment the call returns; the three minification figures are our own
 measurement and the bias -0.7 is TROne's number (GPLv3, `host/render/game_renderer.cpp`
-of the stand of 2026-09-13), cited as such in `specific/polyinsert.cpp`. Where it lives:
+of the stand of 2026-09-13; in TROne-main, copy of 2026-10-05, the shader `k_ui_frag`),
+cited as such in `specific/polyinsert.cpp`. Where it lives:
 `game/chardef.inc` holds the 106 rectangles, moved out of `text.cpp` unchanged, and
 `game/accent.inc` the 46 accented letters, so the engine, the HD font and `FontProbe`
 read the same numbers; `specific/hd/hd_fontmatch.cpp` holds the matcher, the margins, an
@@ -8625,6 +8647,210 @@ for a tpage no quad can then carry; `fps_mode` is not touched. Files: `game/text
 `specific/function_table.cpp`, `Preparation/Tools/Diagnose/FontProbe.cpp`.
 
 **Commits.** `f6d2e6e`
+
+### Where the HD rules come from, counted on our own data
+2026-10-06
+
+**What.** Every rule of the HD path that came by way of TROne or TRForge now carries this
+project's own evidence, is declared this project's free choice, is credited to TROne's own
+design under the GPLv3, or is gone; `THIRD-PARTY.md` keeps the list as an origin ledger of
+37 entries, each with its class and its evidence. Five `TrgProbe` switches count the rules
+on the player's own files: `-shadeorder` (how the two colour triples of a `.TRG` vertex
+make the room light), `-uvbytes` (which bytes are u, v and the layer), `-normals` and
+`-trmnormals` (the normal bias of a `.TRG` and of a `.TRM`, and the sway range) and
+`-ddssizes` (the size of every page). With the room light settled as the SUM by that
+count, the room shader drops the spare scale it carried on the first triple, the one
+place where the shape of a rule read off the Remaster's shaders stood in the code; the
+room vertex shader now reads nothing of `c4`, which `fxc` gives a literal of its own, so
+the room passes write `c4` to the pixel file alone. `HDScanPagePath` no longer tries
+`<n>_2048.DDS` and `<n>_1024.DDS` for ids 8000..8499, a branch that never applies.
+`vendor/trforge/src/trf_remaster/Trg.h` leaves out its two passages that told in words
+what the Remaster's renderer does with a vertex and with the point lights, and its
+dangling "see below"; `VERSION.txt` and `NOTICE.md` say so with the new hash. Sentences
+about what the Remaster's program does become the file facts they rest on; every line
+number into TROne's files becomes the function it falls in and the copy it was read in;
+sentences about TROne's state are dated. The picture of the game is the same.
+
+**Why.** A reading of every line of TROne, TRForge and this tree found three pieces of
+knowledge out of the Remaster's programs in this tree at second hand, none of them as
+code, an address, a table or shader text, all of them as plain prose rules that no origin
+sentence named: the room light as `colour1 * factor + colour2` with the factor at 1
+(TROne's, resting on TRForge's reading of the extracted shaders); which of material 16's
+`param[0]` and `param[2]` is the ripple's scale and which its rate (the order TROne's
+prose names, read off the Remaster's shaders); and TRForge's prose in the vendored
+`Trg.h` about the renderer's use of the vertex and of the point lights. Beside them stood
+numbers with no stated origin - eleven pages "of 4096x4096" (they are 4096x2048), the
+slot names "strength, scale, scale" of materials 7 and 8, the three-resolution id range of
+TRForge's - and the cleanup of 2026-09-22 had shortened the origin note over material
+16's order. The keyword search of the push audit found none of it, because none of it
+names a program.
+
+**How.** `Preparation/Tools/Diagnose/TrgProbe.cpp`: `classicRoomData` (`:4414`) walks a
+classic room's 28-byte vertices and faces straight out of the `.TRC` the way
+`Tr5Level::roomFaces` does and keeps each vertex's prelight, the colour
+`aRoomletTransformLight` lights it with; `dumpShadeOrder` (`:4650`) pairs them with the
+`.TRG` vertices of the same group at the same room-local position (the water marks'
+road; several `.TRG` vertices at one position are averaged) and prints, per level and over
+all, the Spearman rank correlation of the classic shade with `c1+c2`, `c1*c2`, `c1` and
+`c2` (each the sum of its three channels), the agree / disagree / tie counts over 200,000
+sampled vertex pairs, and the pairs that sum and product put in opposite order with the
+side the classic shade takes; `dumpUvBytes` (`:4947`) interpolates the classic texinfo's
+u and v at every `.TRG` vertex lying inside one classic face (in its plane, inside one of
+its two triangles with a margin of 0.02), counts per face the order of every two vertices
+under the classic coordinate against the byte, fits each byte on the classic (u, v) and
+holds the fits of the faces wearing one texinfo against each other; `dumpTrgNormals`
+(`:5440`) and `dumpTrmNormals` (`:5509`) hold every triangle corner's normal against the
+triangle's plane; `dumpDdsSizes` (`:5571`) reads the width and height of every `.DDS`
+header. `specific/hd/hd_shader/hd_room.hlsl:875`: `o.light = lerp(inC0.rgb + inC1.rgb,
+1.0f, gFlat.x)`; the header (`:4`), the light note (`:87`) and the register note name the
+count. `specific/hd/hd_render.cpp:7527` and `:8442`: `gPass.z` is written 0 and `c4` goes
+to the pixel file only; `MaterialRipple` (`:876`, note at `:816`) states the order of
+scale and rate as a free choice, the coincidence with TROne's reading, and TROne's own
+design of the ripple's structure (also `PartUvSpan`, `:753`, and `hd_room.hlsl`'s ripple
+note); the material list names the ranges of materials 7 and 8 in place of slot names.
+`specific/hd/hd_scan.cpp:95`: the plain page name only. The page sizes:
+`hd_render.cpp:4197`, `hd_level.cpp`'s `kWidestPage` note, `hd_pagecache.cpp`'s staging
+and batch notes, `hd_memory.h`. The water surface the `.TRG` has no geometry for:
+`hd_level.cpp:282`, `:1614`, `:4795`, and the table's "0 of 15" is 0 of 13, 61 of 93 rooms
+in all. `hd_pagecache.cpp:367` (`WHITE.DDS`, the install's white tile in `4\TEX`) and
+`:659` (the cut-out threshold, 42 of 44 tuples). Credits: TROne's measurement of a facial
+rig's inverse binds (`hd_trm.h`, `hd_trm.cpp`), its six default control constants
+(`game/modern_move.h`), its ripple design, its caustic shape and scale with the strength
+0.32 named as ours, and the notice in `hd_wardrobe.h`. Citations by function and copy in
+`hd_render.cpp/.h`, `hd_model.cpp/.h`, `hd_object.cpp/.h`, `hd_lara.cpp/.h`,
+`hd_laradraw.cpp`, `hd_level.cpp`, `hd_fontmatch.cpp`, `hd_pagecache.cpp`, `hd_room.hlsl`,
+`hd_model.hlsl`, `game/draw.cpp`, `specific/polyinsert.cpp`, `game/modern_move.cpp`,
+`game/modern_camera.h` and `ModernTest.cpp`. `vendor/trforge/src/trf_remaster/Trg.h:44`
+and `:113` carry the one-line notes.
+
+**Measured.** The room light (`TrgProbe <5> -all -shadeorder -classic <data\Backup>`):
+107,118 of the 126,170 classic room vertices of the fifteen levels have a `.TRG` vertex of
+their own group at exactly their position. Rank correlation with the classic prelight,
+then the sampled pairs that sum and product put in opposite order and which side the
+prelight takes:
+
+| level | paired of classic | sum | product | c1 | c2 | opposite | sum | product |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ANDREA1 | 9758 of 11092 | 0.374 | 0.358 | 0.340 | 0.285 | 7677 | 4429 | 3248 |
+| ANDREA2 | 10060 of 11058 | 0.455 | 0.439 | 0.398 | 0.371 | 8567 | 5089 | 3478 |
+| ANDREA3 | 5808 of 6585 | 0.382 | 0.362 | 0.373 | 0.210 | 8139 | 4814 | 3325 |
+| ANDY1 | 4344 of 6645 | 0.507 | 0.481 | 0.492 | 0.350 | 7730 | 4847 | 2883 |
+| ANDY2 | 12347 of 12940 | 0.369 | 0.346 | 0.390 | 0.199 | 10227 | 6148 | 4079 |
+| ANDY3 | 5377 of 10095 | 0.416 | 0.387 | 0.395 | 0.258 | 13064 | 7864 | 5200 |
+| JOBY2 | 14052 of 14757 | 0.581 | 0.532 | 0.471 | 0.565 | 11313 | 7896 | 3417 |
+| JOBY3 | 5357 of 5535 | 0.468 | 0.371 | 0.312 | 0.538 | 10941 | 8593 | 2348 |
+| JOBY4 | 3887 of 6188 | -0.044 | -0.040 | -0.073 | 0.043 | 11713 | 3800 | 7913 |
+| JOBY5 | 5932 of 6107 | 0.387 | 0.314 | 0.282 | 0.435 | 10547 | 8507 | 2040 |
+| RICH1 | 5207 of 5702 | 0.452 | 0.429 | 0.339 | 0.499 | 10849 | 6327 | 4522 |
+| RICH2 | 7344 of 8518 | 0.523 | 0.475 | 0.383 | 0.618 | 9209 | 6000 | 3209 |
+| RICH3 | 8739 of 9415 | 0.508 | 0.498 | 0.359 | 0.487 | 12365 | 6668 | 5697 |
+| RICHCUT2 | 436 of 779 | 0.468 | 0.184 | 0.380 | 0.443 | 26517 | 25427 | 1090 |
+| TITLE | 8470 of 10754 | 0.572 | 0.421 | 0.414 | 0.443 | 19655 | 15197 | 4458 |
+| all | 107118 of 126170 | 0.553 | 0.460 | 0.397 | 0.527 | 178513 | 121606 | 56907 |
+
+The sum orders the vertices better than the product in 14 of the 15 levels and over all of
+them, and better than either triple over all; JOBY4, the sea, orders by none of the four,
+`colour2` alone does better than the sum in four levels and `colour1` in one. `c1+c2`
+reaches 2.0 in twelve files and lies above 1 in 3.3 % of the 39,788,013 channels. The
+picture check: RoomProbe's RICH2 X-ray view (seed room 6, camera 1900 -24500 3700, yaw
+minus 75, pitch 8, the view an earlier round matched to the Remaster recording's frame
+`rem_t4`) drawn once from the install's `.TRG` and once from a copy whose first triple is
+`c1 * c2 / 255` and second 0; the corridor's back wall and its tiled floor, picked by eye
+in each picture, against the same surfaces of the recording's frame (Rec. 709 luma, mean):
+wall 106.8 under the sum, 40.7 under the product, 94.3 in the recording (1.13 and 0.43 of
+it); floor 145.2, 51.9 and 119.9 (1.21 and 0.43). The sum decides; the light of this
+engine stays a little brighter than the Remaster's there.
+
+The texture coordinates (`TrgProbe <5> -all -uvbytes -classic <data\Backup>`): the bytes
+at +15 and +19 run over 0..255 in every file, the layer from 1 to the file's own texture
+count with none outside. On the 475,529 `.TRG` vertices inside 15,999 classic faces:
+
+| reading | agree | disagree | tie |
+|---|---:|---:|---:|
+| classic u against +15 | 3,157,175 | 1,465,989 | 405,146 |
+| classic u against +19 | 2,213,580 | 2,213,351 | 601,379 |
+| classic v against +19 | 3,354,530 | 1,340,180 | 393,719 |
+| classic v against +15 | 2,215,512 | 2,249,987 | 622,930 |
+
+A straight-line fit of the byte on the classic (u, v) explains 95 % or more of +15 on
+9,888 of the 15,313 fitted faces and of +19 on 9,986, of the first triple's red on 4,925.
+Of the 1,263 texinfos met on two faces or more, 246 put their corners at one place on one
+page within three steps, against 63 for the red byte: the remaster does not keep one
+place per classic tile, so that test, the one TROne's custom-level code makes, is weak
+here. Over the 318,135 vertices sampled the rank correlation is 0.069 for u against +15
+and 0.090 for v against +19: the pages are laid out anew, and only the order within a
+face carries the reading.
+
+The normals (`TrgProbe <5> -all -normals`; `-trmnormals` for `5\ITEM`): the share of
+triangle corners within 10 degrees of their triangle's plane, either side, under the two
+readings, and the sway field:
+
+| level | corners | biased 127 | signed | sway | sway non-zero |
+|---|---:|---:|---:|---|---:|
+| ANDREA1 | 2878809 | 50.1 % | 0.5 % | 0..32767 | 84408 |
+| ANDREA2 | 5449326 | 57.2 % | 0.3 % | 0..32767 | 89141 |
+| ANDREA3 | 3817638 | 53.0 % | 0.4 % | 0..32767 | 4730 |
+| ANDY1 | 2450541 | 24.9 % | 1.0 % | 0..32767 | 140210 |
+| ANDY2 | 2428755 | 53.6 % | 0.4 % | 0..32767 | 7010 |
+| ANDY3 | 3110928 | 23.2 % | 1.3 % | 0..32767 | 60400 |
+| JOBY2 | 4527276 | 31.2 % | 0.5 % | 0..32767 | 3834 |
+| JOBY3 | 2189637 | 71.3 % | 0.3 % | 0..32767 | 2820 |
+| JOBY4 | 1178322 | 49.7 % | 1.2 % | 0..32767 | 19453 |
+| JOBY5 | 3062604 | 70.1 % | 0.3 % | 0..32767 | 68958 |
+| RICH1 | 1883118 | 71.9 % | 0.4 % | 0..0 | 0 |
+| RICH2 | 4703751 | 83.7 % | 0.1 % | 0..32767 | 528 |
+| RICH3 | 2306727 | 81.0 % | 0.1 % | 0..32767 | 1260 |
+| RICHCUT2 | 171147 | 73.3 % | 0.4 % | 0..0 | 0 |
+| TITLE | 5012145 | 42.3 % | 0.8 % | 0..32767 | 237227 |
+| all | 45170724 | 53.9 % | 0.5 % | | |
+| `5\ITEM`, 565 `.TRM` | 4683717 | 38.1 % | 0.6 % | | |
+
+Almost every corner within 10 degrees lies on the side opposite the winding's cross
+product (0.1 % on the same side), a convention of the files. `DUMMY.TRM` is the one `.TRM`
+the reader refuses: it has no geometry.
+
+The pages (`TrgProbe <5> -ddssizes`, every `.DDS` header of the bundle's three `TEX`
+folders):
+
+| folder | files | 512x512 | 4096x2048 | 2048x2048 | 256x256 | other | `_1024`/`_2048` |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `4\TEX` | 4296 | 4233 | 8 | 30 | 25 | 0 | 0 |
+| `5\TEX` | 2406 | 2391 | 11 | 2 | 2 | 0 | 0 |
+| `6\TEX` | 6644 | 6590 | 0 | 3 | 25 | 26 | 0 |
+
+No page is 4096x4096 and none is wider than 4096. The same switch over the I-III bundle
+(`<3> -ddssizes`) finds 70 files named `<n>_1024.DDS` or `<n>_2048.DDS`, 35 ids from 8001
+to 8432, all in `1\TEX`, every one beside its plain `<n>.DDS`. Materials 7 and 8 over the
+fifteen levels (`-mat 7`, `-mat 8`): 7 tuples and 26; `param[0]` 0.5 in all but ANDY2's
+one 0.12, `param[1]` 0 to 10 and 0 to 12, `param[2]` 5 to 32 and 4 to 80, `param[3]` 0 to
+24 and 0 to 40. The water planes (`-watergap`): 93 reflecting rooms, 61 with less than
+half the art in their plane.
+
+**Checked.** The HD picture: RoomProbe built from `96a9c95` and from HEAD draws eight
+rooms of four levels (ANDREA1 64 and 101 and RICH2 6 at the cameras of earlier rounds,
+RICH2 11, JOBY2 28 and 66, ANDREA2 131 and 134), the full frame and the three passes each:
+32 PNGs, md5-identical. The classic path: RoomProbe's own classic picture of six rooms of
+three levels (`-classicroom <n> -classiconly`), md5-identical between the two builds; and
+the comment-free token stream of every source this round changed, at `96a9c95` and at
+HEAD: 29 files identical to the token, among them `game/draw.cpp`,
+`specific/polyinsert.cpp` and `game/modern_move.cpp`; five with a code change -
+`hd_render.cpp` (three `SetVertexShaderConstantF(4, ...)` calls fewer, `gPass.z` 0),
+`hd_scan.cpp`, `hd_room.hlsl` and `hd_room_vs.inc` (the factor) and `TrgProbe.cpp`. The
+four other regenerated `.inc` differ in their stamp line alone. The engine builds
+(`be.bat`, `PCtomb5 built Oct  6 2026 19:16:21`); TrgProbe, RoomProbe, ModelProbe and
+MapProbe build; ModernTest 14,721 checks, MenuTest 42,613, InterpTest 729, LipsTest 270
+with the `.OBJ` folder and 243 without, 0 failed.
+
+**Left.** Which of material 16's `param[0]` and `param[2]` is the scale and which the rate
+stays a free choice with no measurement of ours behind it. The texinfo consistency test is
+weak on this data (246 of 1,263). RoomProbe draws no picture of the engine's classic path
+itself; the token proof stands beside its classic faces. `DdsProbe.cpp` and
+`ModelProbe.cpp` (`Preparation/Tools/Diagnose`) each keep one line citation into TROne's
+renderer, files outside this round. The picture check rests on one frame of one recording
+and on regions picked by eye.
+
+**Commits.** `7c82c34`, `1d364f7`, `af37039`, `28fbd9a`, `df7b39a`, `565eaf8`, `f312f7b`,
+`6f46ac0`
 
 ## 2.5 Sixty frames a second
 
@@ -10308,14 +10534,17 @@ https://github.com/todesengel1931 — re-derived here in this engine's own units
 numbers, with 32 test expectations (28 `modern.*` and 4 `combatmode.*` cases of their
 `tests/test_controller.cpp`) taken across verbatim and named as such in the test's own
 header; none of their modern-control code is in this tree. The orbit camera shares only
-the idea that a camera angle is a state: TROne's world angle never returns behind the
-player, this one falls home. Nothing in the scheme comes from the Remaster's programs at
-first or second hand — it was rebuilt by playing the Remaster and watching what it does,
-a walk of all 32 constants of the design found none traceable to a Remaster program (16
-kept as they stood, 9 re-measured by play, 5 not applicable, 2 unknown and therefore not
-taken), and the only Remaster-derived facts in the set are a handful of option names
-read out of a plain text file of the player's own installation. The same statement
-stands in the origin block of `game/modern_move.h` beside the code.
+the idea that a camera angle is a state: TROne's world angle (its version of 2026-09-13)
+never returns behind the player, this one falls home. Nothing in the scheme comes from the
+Remaster's programs at first or second hand — it was rebuilt by playing the Remaster and
+watching what it does, a walk of all 32 constants of the design found none traceable to a
+Remaster program (16 kept as they stood, 9 re-measured by play, 5 not applicable, 2
+unknown and therefore not taken), and what the Remaster gave is what anybody sees of it:
+timings taken from video of it playing - the turn on the spot and the half turn while
+running (`MODERN_TURN_RATE`), the camera's return behind her in 0.6 to 0.75 s and its own
+orbit rate of a full circle in 2.85 to 2.95 s (`game/modern_camera.h`) - and a handful of
+option names read out of a plain text file of the player's own installation. The same
+statement stands in the origin block of `game/modern_move.h` beside the code.
 
 ### Modern control: the stick turned into the classic direction bits
 2026-09-17 - 2026-09-20
@@ -10559,14 +10788,14 @@ discarded pass; FIXED is outside the interpolator's smooth family
 tile counted as a camera cut and drew its tick live (INTERPLOG's `type=` count matched
 her 12 crossings of room 19's tile exactly).
 
-**How.** Origin: TROne's orbit holds a world angle too, and that is where the
-resemblance stops — theirs never returns behind the player, this one falls home at
-`MODERN_CAMERA_RETURN` whenever she is moving and the thumb is off the stick; nothing of
-theirs is copied, and `game/modern_camera.h`'s own header says so before a line of
-arithmetic. `game/modern_camera.h` / `.cpp` (new) hold the pure half and no engine
-header: the state (`world_yaw`, `stick_step`, the last return step), the config with an
-origin comment on each field, `ModernCameraUpdate` (the wall, then the stick, then the
-return, in that order), `ModernCameraReset`, `ModernCameraHidesLara`,
+**How.** Origin: TROne's orbit held a world angle too in the version of 2026-09-13, and
+that is where the resemblance stops — theirs there never returns behind the player, this
+one falls home at `MODERN_CAMERA_RETURN` whenever she is moving and the thumb is off the
+stick; nothing of theirs is copied, and `game/modern_camera.h`'s own header says so
+before a line of arithmetic. `game/modern_camera.h` / `.cpp` (new) hold the pure half and
+no engine header: the state (`world_yaw`, `stick_step`, the last return step), the config
+with an origin comment on each field, `ModernCameraUpdate` (the wall, then the stick, then
+the return, in that order), `ModernCameraReset`, `ModernCameraHidesLara`,
 `ModernCameraSwimPitch`, `ModernCameraSpeedRates` (the speed mapping, 18 or 19 units per
 setting), `ModernCameraCarryStep` (a 64-bit numerator, because 3·n³·4096 passes 2³¹ at n
 = 56) and `ModernCameraTickFollows` (the "exactly one tick apart" arithmetic including
@@ -12327,9 +12556,9 @@ the idle travels in one cycle, on the frame she starts moving anyway.
 **How.** `specific/hd/hd_model.cpp` / `.h` and `hd_object.cpp` / `.h` carry the two
 arguments; the cut rides in `gPass.z`, the pixel-side constant `hd_model.cpp` already
 writes per pass, and the cull mode is set and put back around the model's own draw
-calls. `gPass.z` is the one component in which the two shaders differ, and it is safe
-because `hd_model.cpp` writes `c4` to the pixel constant file alone while
-`hd_shader/hd_room.hlsl` reads its own `gPass.z` in the vertex half; the register table
+calls. `gPass.z` is read by the model shader alone, and it is safe because
+`hd_model.cpp` writes all of `c4` to the pixel constant file before every model pass,
+whatever a room pass left there (the room shaders read no `z`); the register table
 at the top of `hd_shader/hd_model.hlsl` names it accordingly and
 `hd_shader/hd_model_ps.inc` is the compiled form. `specific/hd/hd_laradraw.cpp` and
 `hd_lara.h` decide when the body asks and hold `HD_LARA_HEAD_CUT_WEIGHT` with its
@@ -12533,10 +12762,15 @@ Before the repository was made public it was walked once against the licence and
 its own statements. The result is this: every file the project modified carries the
 GPLv3 section 5(a) modification notice, every origin sentence in the code names the
 lawful source the code really rests on — TRForge's MIT format description, TROne's GPLv3
-code with its file and line, or a measurement made here on the player's own data files —
-and a fresh clone builds on a Windows checkout. Nothing in the tree opens, maps, links,
-parses or disassembles a program of the Tomb Raider IV-VI Remaster; `hd_install.cpp`
-tests that `tomb456.exe` or `tomb123.exe` exists and nothing more.
+code with its file and function, or a measurement made here on the player's own data
+files — and a fresh clone builds on a Windows checkout. Nothing in the tree opens, maps,
+links, parses or disassembles a program of the Tomb Raider IV-VI Remaster;
+`hd_install.cpp` tests that `tomb456.exe` or `tomb123.exe` exists and nothing more. The
+audit's walk followed the words that name a program; three rules of the HD path that
+had come as plain prose resting on TRForge's and TROne's reading of the Remaster's
+shaders carried none of those words and passed it. A reading of every line of TROne,
+TRForge and this tree found them, and section 2.4's entry "Where the HD rules come from"
+measures them on our own data.
 
 ### Licence notices, origin sentences and the corrections made before the public push
 2026-09-21 - 2026-09-22
@@ -12577,15 +12811,18 @@ move randomized bytes and a fourth detector for the encoding sweep.
 
 **Why.** GPLv3 section 5(a) requires every modified file to carry a prominent notice of
 the change. An origin sentence that names the wrong source is a licence claim that
-cannot be honoured: every rule in the engine rests on TRForge's MIT format description,
-on TROne's own GPLv3 code with its file and line, or on a measurement made here on the
-player's own data files, and the sentences say so. A byte-hashing shader guard fires
-falsely when git rewrites line endings on checkout, which breaks the build from a clean
-clone. A diagnostic seam that formats its lines without testing `-log` costs work on
-every level load for output nobody reads. A checkbox that promises a feature the program
-does not have misleads the player, and a hard-coded German string cannot be translated.
-`RANDO_BUILD_ID` distinguishes builds whose output can differ: four commits since Beta
-1.0 change where an enemy may stand, so 18 became 19.
+cannot be honoured: every rule in the engine is to rest on TRForge's MIT format
+description, on TROne's own GPLv3 code with its file and function, or on a measurement
+made here on the player's own data files, and the sentences are to say so. Three rules
+of the HD path did not meet that until the entry "Where the HD rules come from" (2.4)
+measured them on our own data: they had come as prose resting on TRForge's and TROne's
+reading of the Remaster's shaders, and no origin sentence said so. A byte-hashing shader
+guard fires falsely when git rewrites line endings on checkout, which breaks the build
+from a clean clone. A diagnostic seam that formats its lines without testing `-log` costs
+work on every level load for output nobody reads. A checkbox that promises a feature the
+program does not have misleads the player, and a hard-coded German string cannot be
+translated. `RANDO_BUILD_ID` distinguishes builds whose output can differ: four commits
+since Beta 1.0 change where an enemy may stand, so 18 became 19.
 
 **How.** Engine: the notice block was copied byte for byte out of `game/lara.cpp` into
 the seven unmarked files (`7c02357`). Origin sentences throughout the engine and in
@@ -12641,7 +12878,11 @@ section 2.8's push audit: the record was condensed from a diary into a licence d
 every comment this project had added or changed was rewritten to state facts instead of
 narrating the work. The origin facts already in place - TRForge (MIT), TROne (GPLv3) by
 Todesengel1931, tomb3 (Troye's decompilation of Tomb Raider III), and measurement made here on
-the player's own files - stand as before; nothing changed about what the code does.
+the player's own files - stand as before, with one exception: the comment pass shortened
+the origin note over material 16's slot order (`hd_render.cpp`, `MaterialRipple`) and
+dropped the sentence that the order coincides with TROne's reading and is not ours by
+measurement; section 2.4's entry "Where the HD rules come from" puts it back in its true
+form. Nothing changed about what the code does.
 
 ### The record: from an eighteen-thousand-line diary to a licence document
 2026-09-22
@@ -12665,7 +12906,9 @@ old record carried is present in the new one.
 **What.** Every comment this project added or changed in the engine, the randomizer and the
 tools now states what the code does, why, and what it is for. Task numbers, round and stage
 names, dates and play-test narration are gone. Measured facts, failure modes and origin
-sentences (TROne, TRForge, tomb3 by Troye, or a measurement made here) stand as facts. Line
+sentences (TROne, TRForge, tomb3 by Troye, or a measurement made here) stand as facts, all
+but the one over material 16's slot order, which the pass shortened (see the section's
+opening paragraph). Line
 numbers that pointed into another file of this project were dropped; file and function names
 stayed.
 
@@ -12915,3 +13158,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #193 | The soft motion of the chest: an optional secondary motion for the HD Lara |
 | #194 | A classic room covered by another group's art is drawn as that art |
 | #194 | A place the art draws is drawn by the art alone: a classic room face by face, her shadow there, and the static meshes |
+| #196 | Where the HD rules come from, counted on our own data |

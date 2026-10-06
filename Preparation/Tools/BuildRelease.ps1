@@ -182,7 +182,8 @@ if (Test-Path "$ImGui\LICENSE.txt") { Copy-Item "$ImGui\LICENSE.txt" "$lic\DearI
 # source tree this package distributes. See THIRD-PARTY.md.
 $drpc = "$EngineSrc\TOMB5\tomb5\libs\discordRPC\LICENSE"
 if (Test-Path $drpc) { Copy-Item $drpc "$lic\DiscordRPC-MIT.txt" -Force }
-# TRForge: five files are vendored verbatim under TOMB5\vendor\trforge and
+# TRForge: five files are vendored under TOMB5\vendor\trforge (verbatim but
+# for three comment passages of Trg.h, see its VERSION.txt) and
 # its .TRG reader is compiled into PCtomb5.exe, so unlike discord-rpc this
 # notice has to travel with the binary, not only with the source.
 $trf = "$EngineSrc\TOMB5\vendor\trforge\LICENSE"

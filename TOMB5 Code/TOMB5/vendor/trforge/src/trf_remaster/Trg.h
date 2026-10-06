@@ -41,16 +41,12 @@
  *     part   36, 40, 42, 43, 45, 46, 48, 52 .... 0 of 144
  *     the sizes above ......................... 144 of 144
  *
- * THE VERTEX is 20 bytes and is not guesswork either. The remaster's renderer
- * carries its shaders uncompressed, and what they do with this vertex names
- * every field of it: the two texture coordinates are the fourth byte of the
- * light group and of the colour group, the texture layer is the fourth byte
- * of the normal group, the normal is un-biased by subtracting 127, and the
- * sway is divided by 32767.
+ * THE VERTEX is 20 bytes. (How a renderer uses each field is left out of
+ * this copy; the layout is the file's.)
  *
  *     +0  i16 x, y, z     room local, classic units, 1:1
  *     +6  i16 sway        wind and water weight
- *     +8  u8  nx, ny, nz  normal, normalize(n - 127) - BIASED, see below
+ *     +8  u8  nx, ny, nz  normal, normalize(n - 127) - BIASED
  *     +11 u8  layer       which of the file's textures, COUNTED FROM ONE -
  *                         see HdMesh, where reading it from zero gave 0 of
  *                         273 faces the page the .TEX names and reading it
@@ -114,16 +110,8 @@ namespace trf::remaster
          *                        ASSAULT is (10, 7.72, 5.18)
          *     u32   kind         1 or 3 in every file there is
          *
-         * The remaster's renderer is what these are for. An object takes the
-         * ambient cube of the square it stands on and adds FOUR of these
-         * lights on top of it. Each contributes its colour times
-         *
-         *     (1024/6)^2 / (distance squared)   times   max(0, N . L)
-         *
-         * so a lamp one square away is worth about 0.028 of its colour, and
-         * one four squares away is worth a five-hundredth of it. That is why
-         * a door across the hall from a sconce is lit almost entirely by the
-         * cube.
+         * (How a renderer lights an object with these is left out of this
+         * copy.)
          *
          * ASSAULT's room 9 carries six of these at y = -1390, which is where
          * the sconces hang on its walls, and their warm colour is the colour

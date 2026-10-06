@@ -1,7 +1,8 @@
 # TRForge — notice
 
-The files under `src/` are verbatim copies of TRForge modules and are covered
-by the MIT licence in [LICENSE](LICENSE):
+The files under `src/` are copies of TRForge modules, verbatim but for three
+comment passages left out of `trf_remaster/Trg.h` ([VERSION.txt](VERSION.txt)
+names them), and are covered by the MIT licence in [LICENSE](LICENSE):
 
 > MIT License
 > Copyright (c) 2026 TRForge contributors

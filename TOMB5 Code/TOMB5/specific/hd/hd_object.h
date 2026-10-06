@@ -9,8 +9,8 @@
  * draw_mesh, `model.covered = ~0u` in build_skinned_model, the swap-key
  * rule beside item_flush), TROne's own design. So is the idea of folding
  * the inventory ring's off-centre projection into the item for the length
- * of one draw (games\tr5\glue\hostglue_2d5.cpp of the same copy, the ring's
- * centre) - the idea alone: TROne shears the
+ * of one draw (games\tr5\glue\hostglue_2d5.cpp of the same copy,
+ * phd_PutPolygonsPickup) - the idea alone: TROne shears the
  * item's matrix with it and this engine may not, because its shader takes the
  * vertex normal through that matrix (see HDInvNode). The offset goes into the
  * projection instead, and the arithmetic is derived from TR5's own projection
@@ -152,10 +152,10 @@ int HDObjectReflectedTake();
 //      one draw call - never the item's matrices, which the shader also skins
 //      the normals with. The derivation stands over HDInvNode in
 //      hd_object.cpp. The idea of folding it into the item at all is TROne's
-//      (Copyright 2026 Todesengel, GPLv3,
-//      games\tr5\glue\hostglue_2d5.cpp:502-506); the way and the arithmetic
-//      are this engine's own and are derived from the classic formula, not
-//      copied.
+//      (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+//      games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup); the way and
+//      the arithmetic are this engine's own and are derived from the classic
+//      formula, not copied.
 //   2. The light. No room, no room cube, no point lights, no dynamics: the
 //      classic ring lights an item with one sun of its own and an ambient of
 //      8/8/8 (phd_PutPolygonsPickup again), and that is what travels.

@@ -6,7 +6,8 @@
  * them, the skeleton test and the light conversion are new. So is the
  * inventory ring at the bottom of this file, except for one idea that is
  * TROne's: that the ring's off-centre projection can be folded into the item
- * for the length of one draw (games\tr5\glue\hostglue_2d5.cpp:502-506), which
+ * for the length of one draw (TROne-main, copy of 2026-10-05,
+ * games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup), which
  * is what lets the HD path keep one projection for the whole frame. TROne
  * folds it into the item's matrix as a shear; this engine folds it into the
  * projection, because the shader takes the vertex normal through those
@@ -1562,13 +1563,16 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 *
 	 * A .MAP entry of DUMMY is not "no model for this slot" - it is the
 	 * remaster saying it draws nothing here, and the reason it can is that
-	 * the object is baked into the .TRG room art. Measured with BakeProbe
-	 * over ANDREA1: every one of the 14 DUMMY slots that has items has the
-	 * remaster's own triangles standing inside the item's own bounding box -
+	 * the object is baked into the .TRG room art. ANDREA1's map calls 14 of
+	 * the level's slots DUMMY (MapProbe <...\5> ANDREA1.TRC, column dummy).
+	 * A one-off count over ANDREA1, made with a probe that is not kept in
+	 * this tree, found the remaster's own triangles standing inside the
+	 * item's own bounding box for every one of those slots that has items -
 	 * the wall lantern (ANIMATING12) 1250 of them in 633x417x132 units, the
 	 * lamp post (ANIMATING11) 730, the alcove (SEARCH_OBJECT3) 5001 - and no
-	 * slot the map does not call DUMMY has more than 18, which is the room's
-	 * own floor and wall inside a big enemy's box.
+	 * slot the map does not call DUMMY with more than 18, which is the room's
+	 * own floor and wall inside a big enemy's box. The slot count reproduces;
+	 * the triangle counts do not, until a probe switch makes them again.
 	 *
 	 * So they must be drawn by nobody, exactly as a room's static meshes are.
 	 * This is TROne's baked-mesh rule (TROne-main, copy of 2026-10-05,
@@ -2186,9 +2190,10 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			 * (its HdMesh.cpp, in TROne-main's vendored copy of TRForge of
 			 * 2026-10-05 - not vendored here: "a model with nothing in it is
 			 * an answer, not a failure ... either way the classic object must
-			 * not stand in for it"), a fact about the files that our own
-			 * BakeProbe count over ANDREA1's DUMMY slots backs (see the note
-			 * over the DUMMY rule above). So it counts as baked and draws
+			 * not stand in for it"), a fact about the files. This project's
+			 * own evidence is the count over ANDREA1's 14 DUMMY slots in the
+			 * note over the DUMMY rule above, whose triangle part no tool in
+			 * this tree reproduces. So it counts as baked and draws
 			 * nothing, rather than falling back to the classic mesh on top
 			 * of art that already has it. */
 			verdict.why = "baked_empty";
@@ -3540,7 +3545,8 @@ bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
 	 * arithmetic in hd_model.h.
 	 *
 	 * No scale term. TROne multiplies its sheared row by f_mpersp/persp
-	 * (hostglue_2d5.cpp:485-498) because its host builds a projection of its
+	 * (TROne-main, copy of 2026-10-05, hostglue_2d5.cpp,
+	 * phd_PutPolygonsPickup) because its host builds a projection of its
 	 * own out of the window's real width, while TR5 computes f_persp from a
 	 * 4:3 width whatever the window is (specific\3dmath.cpp, AlterFOV:
 	 * fov_width = phd_winheight * 320 / 240). This engine's HD projection is
@@ -3620,8 +3626,9 @@ bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
  * ring's light to the bit.
  *
  * The idea of folding the ring's centre into the item at all is TROne's
- * (Copyright 2026 Todesengel, GPLv3, games\tr5\glue\hostglue_2d5.cpp:502-506,
- * which shears the matrix); the way taken here and the arithmetic in
+ * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-05),
+ * games\tr5\glue\hostglue_2d5.cpp, phd_PutPolygonsPickup, which shears the
+ * matrix); the way taken here and the arithmetic in
  * HDModelOffCentreMatrix are derived from TR5's own projection line.
  */
 void HDInvNode(int node)

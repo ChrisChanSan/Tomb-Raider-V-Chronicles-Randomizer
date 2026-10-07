@@ -805,8 +805,9 @@ static bool MenuStepBodyPhysics(long, long dir)
 }
 
 /* HD water, tomb5.hd_water: this project's water surface over every water
- * square of an HD level, or the level's own restored water faces in its
- * place. Like HD textures it is taken at the start of a level
+ * square of an HD level the sheet can cover - over an underwater room, in a
+ * room drawn HD - or the level's own restored water faces in its place.
+ * Like HD textures it is taken at the start of a level
  * (specific/hd/hd_level.cpp, BuildWaterSheets), so the row shows what the
  * next level will do, and it is offered whatever the level on screen draws. */
 static const char* MenuValHdWater(long, char* buf)

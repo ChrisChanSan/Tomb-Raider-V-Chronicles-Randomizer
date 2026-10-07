@@ -13,11 +13,11 @@
 
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
- * Build with bmenu.bat, run with no arguments from this folder: the last four
- * families (pad_scheme_repair, controls_mouse_rows, graphics_softbody_row and
- * graphics_shadow_row) read engine files as text, by their paths relative to
- * it, because the tables and rows they check live in files that cannot be
- * linked here.
+ * Build with bmenu.bat, run with no arguments from this folder: the last five
+ * families (pad_scheme_repair, controls_mouse_rows, graphics_softbody_row,
+ * graphics_water_row and graphics_shadow_row) read engine files as text, by
+ * their paths relative to it, because the tables and rows they check live in
+ * files that cannot be linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
  * call sites, so every row added above a list meant recounting a shift
@@ -1792,18 +1792,19 @@ static void controls_mouse_rows()
 /* The row of the chest's soft motion lives in game\menu_frame.cpp's Graphics
  * table, which cannot be linked here, so what is checked is what the tree
  * says, the way controls_mouse_rows reads the Controls table: the table's
- * thirteen rows in order and the split they page into, the row's kind, save
+ * fourteen rows in order and the split they page into, the row's kind, save
  * class and lack of a gate, the four values it shows, their five strings
  * in game\gameflow.cpp's table, the registry name in tomb5\tomb5.cpp, and
  * the draw's reset on a change in specific\hd\hd_laradraw.cpp. The step is
  * game\menu_nav.h's MenuSliderStep over 0..3, swept whole. */
 static void graphics_softbody_row()
 {
-	static const char* const want[13] =
+	static const char* const want[14] =
 	{
-		"Display", "HD textures", "Body physics", "Fog", "Distance fog", "Shimmer",
-		"Mono screen style", "Shadow mode", "PSX skies", "Static lighting", "UW Effect",
-		"Look transparency", "Footprints"
+		"Display", "HD textures", "Body physics", "HD water", "Fog",
+		"Distance fog", "Shimmer", "Mono screen style", "Shadow mode",
+		"PSX skies", "Static lighting", "UW Effect", "Look transparency",
+		"Footprints"
 	};
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
 	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
@@ -1861,30 +1862,40 @@ static void graphics_softbody_row()
 		}
 	}
 
-	check(rows, 13, "softbody row: the Graphics table holds thirteen rows");
+	check(rows, 14, "softbody row: the Graphics table holds fourteen rows");
 
-	for (i = 0; i < rows && i < 13; i++)
-		check(strcmp(label[i], want[i]), 0, "softbody row: the Graphics rows stand in this order");
+	for (i = 0; i < rows && i < 14; i++)
+		check(strcmp(label[i], want[i]), 0,
+			"softbody row: the Graphics rows stand in this order");
 
-	if (rows == 13)
+	if (rows == 14)
 	{
 		check(!strncmp(line[2], "MENU_VALUE(\"Body physics\"", 25), 1,
-			"softbody row: Body physics is an ungated value row, right after HD textures");
-		check(strstr(line[2], "MenuValBodyPhysics, MenuStepBodyPhysics") != 0, 1,
-			"softbody row: it shows and steps tomb5.hd_softbody through its own two functions");
-		check(strstr(line[2], "MENU_SAVE_TOMB5") != 0, 1, "softbody row: it is saved with the tomb5 settings");
-		check(!strncmp(line[1], "MENU_VALUE(\"HD textures\"", 24) && !strncmp(line[3], "MENU_VALUE(\"Fog\"", 16), 1,
-			"softbody row: ungated like its neighbours, which no page row greys while HD is off");
+			"softbody row: Body physics is an ungated value row, "
+			"right after HD textures");
+		check(strstr(line[2], "MenuValBodyPhysics, MenuStepBodyPhysics")
+			!= 0, 1, "softbody row: it shows and steps tomb5.hd_softbody "
+			"through its own two functions");
+		check(strstr(line[2], "MENU_SAVE_TOMB5") != 0, 1,
+			"softbody row: it is saved with the tomb5 settings");
+		check(!strncmp(line[1], "MENU_VALUE(\"HD textures\"", 24) &&
+			!strncmp(line[4], "MENU_VALUE(\"Fog\"", 16), 1,
+			"softbody row: ungated like its neighbours, which no page row "
+			"greys while HD is off");
 	}
 
-	// Thirteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages, seven
-	// and six, and the second starts at Shadow mode.
-	check(MenuPageCount(13, 12), 2, "softbody row: Graphics pages in two");
-	check(MenuRowsOnPage(13, 12, 0), 7, "softbody row: seven rows on the first page");
-	check(MenuRowsOnPage(13, 12, 1), 6, "softbody row: six on the second");
-	check(MenuPageFirstRow(13, 12, 1), 7, "softbody row: the second page starts at row 7");
-	check(rows == 13 && !strcmp(label[MenuPageFirstRow(13, 12, 1)], "Shadow mode"), 1,
-		"softbody row: which is Shadow mode, and Body physics is on the first page beside HD textures");
+	// Fourteen rows at MENU_MAX_ROWS 12 and no fixed row: two pages of
+	// seven, and the second starts at Mono screen style.
+	check(MenuPageCount(14, 12), 2, "softbody row: Graphics pages in two");
+	check(MenuRowsOnPage(14, 12, 0), 7,
+		"softbody row: seven rows on the first page");
+	check(MenuRowsOnPage(14, 12, 1), 7, "softbody row: seven on the second");
+	check(MenuPageFirstRow(14, 12, 1), 7,
+		"softbody row: the second page starts at row 7");
+	check(rows == 14 &&
+		!strcmp(label[MenuPageFirstRow(14, 12, 1)], "Mono screen style"), 1,
+		"softbody row: which is Mono screen style, and Body physics is on "
+		"the first page beside HD textures");
 
 	// What the row shows and how it steps.
 	check(strstr(frame, "tomb5.hd_softbody == 1 ? \"Subtle\" :") != 0, 1,
@@ -1981,6 +1992,91 @@ static void graphics_softbody_row()
 	free(flow);
 	free(opts);
 	free(draw);
+}
+
+/* ------------------------------------------------------ the HD water row -- */
+
+/* The HD water row on the Graphics page, read from the tree as the Body
+ * physics row is: its table line (an ungated value row right under Body
+ * physics, saved with the tomb5 settings), the two expressions of its value
+ * and its step, its string's five columns in game\gameflow.cpp, the
+ * registry name in tomb5\tomb5.cpp (written on a first run, read with on as
+ * the default, saved), and the one place the engine reads the option, the
+ * water sheets' build in specific\hd\hd_level.cpp. */
+static void graphics_water_row()
+{
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char* level = tree_file(
+		"../../../TOMB5 Code/TOMB5/specific/hd/hd_level.cpp");
+
+	check(frame && flow && opts && level, 1,
+		"water row: the four engine files are readable from here");
+
+	if (!frame || !flow || !opts || !level)
+	{
+		free(frame);
+		free(flow);
+		free(opts);
+		free(level);
+		return;
+	}
+
+	// The table line, right under Body physics.
+	{
+		const char* body = strstr(frame, "MENU_VALUE(\"Body physics\"");
+		const char* row = strstr(frame, "MENU_VALUE(\"HD water\", "
+			"MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),");
+		const char* between = body ? strchr(body, '\n') : 0;
+
+		check(tree_count(frame, "MENU_VALUE(\"HD water\""), 1,
+			"water row: one row of that name");
+		check(row != 0, 1, "water row: an ungated value row with its own two "
+			"functions, saved with the tomb5 settings");
+		check(body != 0 && row != 0 && between != 0 &&
+			strstr(between + 1, "MENU_VALUE(") == row, 1,
+			"water row: the next row after Body physics");
+	}
+
+	// What it shows and how it steps: on and off, one press toggles.
+	check(strstr(frame, "CustomText(tomb5.hd_water ? \"on\" : \"off\")")
+		!= 0, 1, "water row: it shows the table's own on and off");
+	check(strstr(frame, "tomb5.hd_water = !tomb5.hd_water;") != 0, 1,
+		"water row: a press either way toggles it");
+
+	// The string, five columns.
+	{
+		char col[5][64];
+		const char* at = strstr(flow, "{ \"HD water\",");
+
+		check(at != 0 && tree_quoted(at, col, 5) == 5, 1,
+			"water row: the label has its row in CustomText's table");
+
+		if (at)
+		{
+			check(!strcmp(col[0], "HD water") && !strcmp(col[1], "HD water") &&
+				!strcmp(col[3], "HD water") && !strcmp(col[4], "HD water"),
+				1, "water row: English, French, Italian and Spanish alike");
+			check(strcmp(col[2], "HD-Wasser"), 0,
+				"water row: the German column is its translation");
+			check(tree_count(flow, "{ \"HD water\","), 1,
+				"water row: and the string has exactly one row");
+		}
+	}
+
+	// The registry, and the engine's one reader.
+	check(tree_count(opts, "sprintf(buf, \"hd_water\");"), 3,
+		"water row: hd_water is written on a first run, read and saved");
+	check(strstr(opts, "REG_ReadBool(buf, tomb5.hd_water, 1);") != 0, 1,
+		"water row: a registry without hd_water reads as on");
+	check(tree_count(level, "tomb5.hd_water ? 1 : 0"), 2, "water row: the "
+		"water sheets' build and its log line read the option");
+
+	free(frame);
+	free(flow);
+	free(opts);
+	free(level);
 }
 
 /* -------------------------------------------------- the Shadow mode row -- */
@@ -2289,6 +2385,7 @@ int main()
 	pad_scheme_repair();
 	controls_mouse_rows();
 	graphics_softbody_row();
+	graphics_water_row();
 	graphics_shadow_row();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

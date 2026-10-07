@@ -1425,6 +1425,8 @@ const char* CustomText(const char* engl)
 		{ "Body physics",    "Body physics",    "K\xF6rperphysik", "Body physics",      "Body physics" },
 		{ "Subtle",          "Subtle",          "Dezent",         "Subtle",             "Subtle" },
 		{ "Normal",          "Normal",          "Normal",         "Normal",             "Normal" },
+		// The row under it; its values are "on" and "off" of this table.
+		{ "HD water", "HD water", "HD-Wasser", "HD water", "HD water" },
 		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },
 		{ "PSX skies",       "PSX skies",       "PSX-Himmel",     "PSX skies",          "PSX skies" },
 		{ "TR4 loadscreens", "TR4 loadscreens", "TR4-Ladebilder", "TR4 loadscreens",    "TR4 loadscreens" },

@@ -3411,8 +3411,13 @@ namespace
 		g_field_ms = (float)(now_ms() - started);
 	}
 
+	void release_water_sheets();
+
+	/* Every buffer of the level, the water sheets' among them - at a new
+	 * level, at a shutdown and on a lost device (HDLevelDeviceLost). */
 	void release_buffers()
 	{
+		release_water_sheets();
 		if (g_vb) { g_vb->Release(); g_vb = 0; }
 		if (g_ib) { g_ib->Release(); g_ib = 0; }
 		if (g_piece_ib) { g_piece_ib->Release(); g_piece_ib = 0; }
@@ -8434,6 +8439,7 @@ namespace
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
 	IDirect3DIndexBuffer9* g_sheet_ib = 0;
+	std::string g_water_path;
 	float g_basin_rows[16];
 	bool g_basin_rows_set = false;
 	/* The diagnostic tool's sheet timing: GPU timestamps round every sheet
@@ -8497,6 +8503,153 @@ namespace
 			return HD_WATER_CHANNEL;
 
 		return HD_WATER_BASIN;
+	}
+
+	/* hd_water.txt, one row a line:
+	 *
+	 *   <LEVEL> <room> <class|->  [tint <r> <g> <b>] [waves <s>] [foam <s>]
+	 *
+	 * LEVEL is the level file's name without its extension (ANDREA2), room
+	 * any room of the body the row tunes, class basin, channel or sea, or -
+	 * to keep the class. tint multiplies the shallow and the deep colour,
+	 * waves the wave heights, foam the shore foam and the whitecaps; each 0
+	 * to 4, 1 changing nothing. '#' starts a comment. Returns 1 for a row, 0
+	 * for a line without one, -1 for a line that cannot be read. */
+	int ParseWaterLine(const char* text, WaterRow* out)
+	{
+		char line[256];
+		char* tok[17];
+		char* next = 0;
+		int n = 0;
+
+		strncpy_s(line, sizeof(line), text, _TRUNCATE);
+
+		if (char* hash = std::strchr(line, '#'))
+			*hash = 0;
+
+		for (char* t = strtok_s(line, " \t", &next); t && n < 17;
+			t = strtok_s(0, " \t", &next))
+			tok[n++] = t;
+
+		if (!n)
+			return 0;
+
+		if (n < 3 || n > 16 || std::strlen(tok[0]) >= sizeof(out->stem))
+			return -1;
+
+		WaterRow row = {};
+		char* end = 0;
+		const long room = std::strtol(tok[1], &end, 10);
+
+		if (*end || end == tok[1] || room < 0 || room > 1023)
+			return -1;
+
+		strcpy_s(row.stem, sizeof(row.stem), tok[0]);
+		row.room = (int)room;
+		row.cls = std::strcmp(tok[2], "-") ? -2 : -1;
+
+		for (int c = 0; c < HD_WATER_CLASSES; c++)
+			if (!_stricmp(tok[2], kWaterClass[c].name))
+				row.cls = c;
+
+		if (row.cls == -2)
+			return -1;
+
+		row.tint[0] = row.tint[1] = row.tint[2] = 1.0f;
+		row.waves = row.foam = 1.0f;
+
+		for (int i = 3; i < n; )
+		{
+			float* into = 0;
+			int count = 0;
+
+			if (!_stricmp(tok[i], "tint"))
+				into = row.tint, count = 3;
+			else if (!_stricmp(tok[i], "waves"))
+				into = &row.waves, count = 1;
+			else if (!_stricmp(tok[i], "foam"))
+				into = &row.foam, count = 1;
+
+			if (!into || i + count >= n)
+				return -1;
+
+			for (int k = 0; k < count; k++)
+			{
+				const char* num = tok[i + 1 + k];
+				const double v = std::strtod(num, &end);
+
+				if (*end || end == num || !(v >= 0.0 && v <= 4.0))
+					return -1;
+
+				into[k] = (float)v;
+			}
+
+			i += 1 + count;
+		}
+
+		*out = row;
+		return 1;
+	}
+
+	// The whole file, line by line (CR, LF or both end a line).
+	void read_water_file(std::vector<WaterRow>& rows)
+	{
+		if (g_water_path.empty())
+			return;
+
+		std::FILE* file = std::fopen(g_water_path.c_str(), "rb");
+
+		if (!file)
+			return;
+
+		std::string text;
+		char buffer[4096];
+		size_t got;
+
+		while ((got = std::fread(buffer, 1, sizeof(buffer), file)) > 0 &&
+			text.size() < (1u << 20))
+			text.append(buffer, got);
+
+		std::fclose(file);
+		g_wlevel.fileLines = 0;
+
+		const char* at = text.c_str();
+
+		// "UTF-8 with BOM" puts three bytes before the first line.
+		if ((unsigned char)at[0] == 0xEF && (unsigned char)at[1] == 0xBB &&
+			(unsigned char)at[2] == 0xBF)
+			at += 3;
+
+		while (*at)
+		{
+			const char* end = at;
+
+			while (*end && *end != '\n' && *end != '\r')
+				end++;
+
+			const std::string line(at, end);
+			WaterRow row;
+			const int kind = line.size() < 255 ?
+				ParseWaterLine(line.c_str(), &row) : -1;
+
+			g_wlevel.fileLines++;
+
+			if (kind < 0)
+				g_wlevel.fileBad++;
+			else if (kind > 0)
+			{
+				row.file = 1;
+				rows.push_back(row);
+				g_wlevel.fileRows++;
+			}
+
+			if (*end == '\r' && end[1] == '\n')
+				end += 2;
+			else if (*end)
+				end++;
+
+			at = end;
+		}
 	}
 
 	/* How deep the water stands over a square: the walk down through the
@@ -8678,6 +8831,11 @@ namespace
 
 		return !hit.empty();
 	}
+}
+
+void HDRenderWaterFile(const char* path)
+{
+	g_water_path = path ? path : "";
 }
 
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
@@ -8932,6 +9090,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		row.foam = w.foam;
 		rows.push_back(row);
 	}
+
+	read_water_file(rows);
 
 	for (size_t r = 0; r < rows.size(); r++)
 	{

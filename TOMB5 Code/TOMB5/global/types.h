@@ -2880,5 +2880,14 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * off on a young-Lara level whatever it says (specific\hd\hd_laradraw.cpp,
 	 * hd_softbody.h for the strengths). Registry: hd_softbody. */
 	ulong hd_softbody;
+
+	/* The water sheets of the HD path: on, the default, every water
+	 * square of the level gets this project's own water surface and the
+	 * classic water face under it is not restored; off, no sheet is built
+	 * and the classic faces are restored as without it. Taken at the
+	 * start of a level, like HD textures. The wave on the remaster's own
+	 * water art and the caustic stay either way. Dead with hd_enable off
+	 * (specific\hd\hd_level.cpp, BuildWaterSheets). Registry: hd_water. */
+	bool hd_water;
 };
 #pragma pack(pop)

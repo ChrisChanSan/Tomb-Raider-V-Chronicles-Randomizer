@@ -804,6 +804,27 @@ static bool MenuStepBodyPhysics(long, long dir)
 	return 1;
 }
 
+/* HD water, tomb5.hd_water: this project's water surface over every water
+ * square of an HD level, or the level's own restored water faces in its
+ * place. Like HD textures it is taken at the start of a level
+ * (specific/hd/hd_level.cpp, BuildWaterSheets), so the row shows what the
+ * next level will do, and it is offered whatever the level on screen draws. */
+static const char* MenuValHdWater(long, char* buf)
+{
+	strcpy(buf, CustomText(tomb5.hd_water ? "on" : "off"));
+	return buf;
+}
+
+static bool MenuStepHdWater(long, long dir)
+{
+	if (!dir)
+		return 0;
+
+	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
+	tomb5.hd_water = !tomb5.hd_water;
+	return 1;
+}
+
 static const char* MenuValPsxSkies(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.PSX_skies ? "on" : "off"));
@@ -1567,6 +1588,8 @@ static const menu_row menu_rows_graphics[] =
 	// Directly under the HD switch it depends on. The thirteenth row: the
 	// page now pages, seven rows and six, with the arrow row under them.
 	MENU_VALUE("Body physics", MenuValBodyPhysics, MenuStepBodyPhysics, MENU_SAVE_TOMB5),
+	// The fourteenth row, under the HD rows: the page pages seven and seven.
+	MENU_VALUE("HD water", MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),
 	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Distance fog", MenuValDistanceFog, MenuStepDistanceFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Shimmer", MenuValShimmer, MenuStepShimmer, MENU_SAVE_TOMB5),

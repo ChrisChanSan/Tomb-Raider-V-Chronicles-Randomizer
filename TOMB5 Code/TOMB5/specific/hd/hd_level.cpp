@@ -1611,6 +1611,98 @@ static void BuildRoomSectors()
 		HDRenderSetSectors(0, 0, 0, 0);
 }
 
+/* The water sheets (hd_render.h, HDRenderSetWaterSheets): every room's
+ * floor squares handed to the renderer, which finds the water squares,
+ * joins them into bodies, classes them and builds the sheets over them.
+ * tomb5.hd_water 0 builds the bodies and the caustic under them and no
+ * sheet, so BuildWaterSurfaces restores every classic water face as it
+ * would without this. The section picks the palette, by the game's own
+ * level id rather than by a file name. */
+static_assert(HD_WATER_ROOM_UNDERWATER == ROOM_UNDERWATER &&
+	HD_WATER_ROOM_OPEN == (ROOM_OUTSIDE | ROOM_NOT_INSIDE),
+	"the water sheets read the engine's own room flags");
+
+static int WaterSection()
+{
+	if (gfLevelId >= LVL5_BASE && gfLevelId <= LVL5_SINKING_SUBMARINE)
+		return HD_WATER_RUSSIA;
+
+	if (gfLevelId >= LVL5_GALLOWS_TREE && gfLevelId <= LVL5_OLD_MILL)
+		return HD_WATER_IRELAND;
+
+	if (gfLevelId >= LVL5_THIRTEENTH_FLOOR && gfLevelId <= LVL5_RED_ALERT)
+		return HD_WATER_VCI;
+
+	return HD_WATER_ROME;
+}
+
+static void BuildWaterSheets()
+{
+	std::vector<HDWaterRoom> rooms((size_t)number_rooms);
+	std::vector<signed char> floors;
+	std::vector<short> below;
+	std::vector<size_t> first((size_t)number_rooms, 0);
+
+	for (int pass = 0; pass < 2; pass++)
+		for (int i = 0; i < number_rooms; i++)
+		{
+			const ROOM_INFO* r = &room[i];
+			const int nx = r->floor ? r->y_size : 0;
+			const int nz = r->floor ? r->x_size : 0;
+
+			if (!pass)
+			{
+				first[(size_t)i] = floors.size();
+				floors.resize(floors.size() + (size_t)(nx * nz));
+				below.resize(floors.size());
+				continue;
+			}
+
+			HDWaterRoom& w = rooms[(size_t)i];
+
+			w.originX = r->x;
+			w.originY = r->y;
+			w.originZ = r->z;
+			w.sizeX = nx;
+			w.sizeZ = nz;
+			w.flags = r->flags;
+			w.flip = r->flipped_room;
+			w.drawn = i < HD_MAX_ROOMS && g_group_hd[i] ? 1 : 0;
+			w.floor = nx * nz ? &floors[first[(size_t)i]] : 0;
+			w.below = nx * nz ? &below[first[(size_t)i]] : 0;
+
+			for (int sx = 0; sx < nx; sx++)
+				for (int sz = 0; sz < nz; sz++)
+				{
+					const FLOOR_INFO& f = r->floor[sz + r->x_size * sx];
+					const size_t at = first[(size_t)i] + (size_t)(sx * nz + sz);
+
+					floors[at] = f.floor;
+					below[at] = f.pit_room == NO_ROOM ? -1 : f.pit_room;
+				}
+		}
+
+	HDRenderWaterFile("hd_water.txt");
+	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
+		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
+
+	/* WATERLOG, with -log: one level line and one line per body - the
+	 * legend is over HDRenderWaterLogLine in hd_render.cpp, which writes
+	 * RoomProbe -hdwater's lines too. */
+	if (!gLogEnabled)
+		return;
+
+	char line[512];
+
+	HDRenderWaterLogLine(-1, g_stem, tomb5.hd_water ? 1 : 0, line,
+		sizeof(line));
+	Log("%s", line);
+
+	for (int b = 0; b < HDRenderWaterBodies(); b++)
+		if (HDRenderWaterLogLine(b, g_stem, 0, line, sizeof(line)))
+			Log("%s", line);
+}
+
 /* The water surface the .TRG has no geometry for.
  *
  * In some HD rooms a pool shows dark washed-out blotches where the classic
@@ -1655,6 +1747,8 @@ static void BuildWaterSurfaces()
 	g_water_face_rooms = 0;
 	g_water_face_kept = 0;
 
+	int underSheets = 0;	// faces a water sheet takes the place of
+
 	for (int i = 0; i < number_rooms && i < HD_MAX_ROOMS; i++)
 	{
 		g_water_faces[i].clear();
@@ -1682,6 +1776,7 @@ static void BuildWaterSurfaces()
 		int inPlane = 0;
 		int covered = 0;
 		int sheeted = 0;
+		int underSheet = 0;
 
 		for (int n = 0; n < r->nRoomlets; n++)
 		{
@@ -1755,6 +1850,15 @@ static void BuildWaterSurfaces()
 					continue;
 				}
 
+				/* This project's water sheet over this piece of ground takes
+				 * the face's place (BuildWaterSheets). With tomb5.hd_water 0
+				 * no sheet is built and the answer is always no. */
+				if (HDRenderWaterSheetAt(i, (int)x0, (int)z0, (int)x1, (int)z1))
+				{
+					underSheet++;
+					continue;
+				}
+
 				HDRoomWaterFace entry;
 
 				entry.roomlet = (short)n;
@@ -1815,17 +1919,25 @@ static void BuildWaterSurfaces()
 
 			Log("HDLOG room=%d water surface restored=%d of %d face(s) at "
 				"y=%d, the .TRG covers %d of them and lays its own water over "
-				"%d", i, (int)g_water_faces[i].size(), inPlane,
-				(int)r->minfloor, covered, sheeted);
+				"%d, under a water sheet %d", i,
+				(int)g_water_faces[i].size(), inPlane, (int)r->minfloor,
+				covered, sheeted, underSheet);
 		}
 		else if (sheeted)
 			Log("HDLOG room=%d water surface left to the .TRG, %d of its %d "
-				"face(s) under the .TRG's own sheet", i, sheeted, inPlane);
+				"face(s) under the .TRG's own sheet, under a water sheet %d",
+				i, sheeted, inPlane, underSheet);
+		else if (underSheet)
+			Log("HDLOG room=%d water surface under a water sheet, %d of its "
+				"%d face(s)", i, underSheet, inPlane);
+
+		underSheets += underSheet;
 	}
 
 	Log("HDLOG level=%s water surfaces restored=%d in %d room(s), "
-		"left to the .TRG=%d", g_stem, g_water_face_total, g_water_face_rooms,
-		g_water_face_kept);
+		"left to the .TRG=%d, under a water sheet=%d", g_stem,
+		g_water_face_total, g_water_face_rooms, g_water_face_kept,
+		underSheets);
 }
 
 
@@ -4794,7 +4906,9 @@ static void HDLevelBuildHD()
 
 	/* The water surface the .TRG has no geometry for - see the note over
 	 * BuildWaterSurfaces. After the loop above, because it asks per room
-	 * whether that room draws HD at all. */
+	 * whether that room draws HD at all. The water sheets first: a face under
+	 * one is not restored. */
+	BuildWaterSheets();
 	BuildWaterSurfaces();
 
 	/* And the HD pictures of that water's own animation frames. After

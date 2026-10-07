@@ -1614,10 +1614,10 @@ static void BuildRoomSectors()
 /* The water sheets (hd_render.h, HDRenderSetWaterSheets): every room's
  * floor squares handed to the renderer, which finds the water squares,
  * joins them into bodies, classes them and builds the sheets over them.
- * tomb5.hd_water 0 builds the bodies and the caustic under them and no
- * sheet, so BuildWaterSurfaces restores every classic water face as it
- * would without this. The section picks the palette, by the game's own
- * level id rather than by a file name. */
+ * tomb5.hd_water 0 builds the bodies and no sheet and draws no caustic under
+ * them, so BuildWaterSurfaces restores every classic water face as it would
+ * without this. The section picks the palette, by the game's own level id
+ * rather than by a file name. */
 static_assert(HD_WATER_ROOM_UNDERWATER == ROOM_UNDERWATER &&
 	HD_WATER_ROOM_OPEN == (ROOM_OUTSIDE | ROOM_NOT_INSIDE),
 	"the water sheets read the engine's own room flags");
@@ -1852,7 +1852,8 @@ static void BuildWaterSurfaces()
 
 				/* This project's water sheet over this piece of ground takes
 				 * the face's place (BuildWaterSheets). With tomb5.hd_water 0
-				 * no sheet is built and the answer is always no. */
+				 * no sheet is built and the answer is always no; so it is for
+				 * a body a row of class none switched off. */
 				if (HDRenderWaterSheetAt(i, (int)x0, (int)z0, (int)x1, (int)z1))
 				{
 					underSheet++;
@@ -1901,7 +1902,16 @@ static void BuildWaterSurfaces()
 		 *
 		 * Over the fifteen levels that changes six rooms and no others:
 		 * JOBY5's 4 (30 -> 24), 27 (6 -> 5), 28 (7 -> 4), 83 (3 -> 2), 115
-		 * (6 -> 5) and 184 (29 -> 27). */
+		 * (6 -> 5) and 184 (29 -> 27).
+		 *
+		 * This project's water sheet is dropped per face as well, and before
+		 * the majority, which still counts the face. A sheet is no hole
+		 * either: it covers every water square of its room, whatever art lies
+		 * on it, so a face under it is never restored, and the majority only
+		 * decides the faces no sheet covers - over a square with no
+		 * underwater room below, or of a body an hd_water.txt row of class
+		 * none switched off. With tomb5.hd_water 0 no face is under a sheet
+		 * and the majority decides alone. */
 		if (inPlane && covered * 2 >= inPlane)
 		{
 			g_water_face_kept += inPlane;

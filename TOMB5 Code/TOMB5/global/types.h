@@ -2882,12 +2882,17 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	ulong hd_softbody;
 
 	/* The water sheets of the HD path: on, the default, every water
-	 * square of the level gets this project's own water surface and the
-	 * classic water face under it is not restored; off, no sheet is built
-	 * and the classic faces are restored as without it. Taken at the
-	 * start of a level, like HD textures. The wave on the remaster's own
-	 * water art and the caustic stay either way. Dead with hd_enable off
-	 * (specific\hd\hd_level.cpp, BuildWaterSheets). Registry: hd_water. */
+	 * square the sheet can cover - over an underwater room, in a room
+	 * drawn HD - gets this project's own water surface, with the caustic
+	 * on the floor under it, and the classic water face there is not
+	 * restored; a water plane with no underwater room below keeps its
+	 * faces. Off, no sheet is built, the caustic under it is off and the
+	 * classic faces are restored as without it; what stays is the
+	 * caustic's shape and footprint fade on the remaster's own marked
+	 * water art and the wave rows on that art, which live in the compiled
+	 * shaders. Taken at the start of a level, like HD textures. Dead with
+	 * hd_enable off (specific\hd\hd_level.cpp, BuildWaterSheets).
+	 * Registry: hd_water. */
 	bool hd_water;
 };
 #pragma pack(pop)

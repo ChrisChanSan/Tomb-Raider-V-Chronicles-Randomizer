@@ -1585,10 +1585,10 @@ static const menu_row menu_rows_graphics[] =
 {
 	MENU_TAB("Display", MENU_PAGE_DISPLAY),
 	MENU_VALUE("HD textures", MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),
-	// Directly under the HD switch it depends on. The thirteenth row: the
-	// page now pages, seven rows and six, with the arrow row under them.
+	// Directly under the HD switch it depends on.
 	MENU_VALUE("Body physics", MenuValBodyPhysics, MenuStepBodyPhysics, MENU_SAVE_TOMB5),
-	// The fourteenth row, under the HD rows: the page pages seven and seven.
+	// Under the HD rows. Fourteen rows: the page pages seven and seven,
+	// with the arrow row under them.
 	MENU_VALUE("HD water", MenuValHdWater, MenuStepHdWater, MENU_SAVE_TOMB5),
 	MENU_VALUE("Fog", MenuValFog, MenuStepFog, MENU_SAVE_TOMB5),
 	MENU_VALUE("Distance fog", MenuValDistanceFog, MenuStepDistanceFog, MENU_SAVE_TOMB5),

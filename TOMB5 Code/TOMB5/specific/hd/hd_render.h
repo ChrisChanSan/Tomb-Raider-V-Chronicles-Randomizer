@@ -740,20 +740,25 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * override rows (the compiled table, then hd_water.txt) and builds a grid of
  * 256-unit quads over every sector that draws a sheet, for WaterVS and
  * WaterPS in the blend phase of its room. A sector of a room drawn classic,
- * or one the remaster covers with flat art that is not its material 16
- * water, stays in its body and in the shore test and draws no sheet.
+ * or of a body an override row of class none switches off, stays in its
+ * body and in the shore test and draws no sheet. Flat art the remaster lays
+ * over a sector does not take its sheet away: the art draws in its own pass
+ * as it does without the sheet, opaque art over it and additive art on top.
  *
- * Called after HDRenderLevelBegin (it reads the groups' flat art and light
- * samples) and before the first frame; nothing of the arrays is kept.
- * `sheets` 0 builds the bodies, their classes and the caustic under them,
- * and no sheet. No rooms removes it all. The engine and the diagnostic tool
- * both build through this one function. */
+ * Called after HDRenderLevelBegin (it reads the groups' light samples) and
+ * before the first frame; nothing of the arrays is kept. `sheets` 0 builds
+ * the bodies and their classes and no sheet, and switches the caustic under
+ * them off. No rooms removes it all. The engine and the diagnostic tool both
+ * build through this one function. */
 enum
 {
 	HD_WATER_BASIN = 0,
 	HD_WATER_CHANNEL = 1,
 	HD_WATER_SEA = 2,
-	HD_WATER_CLASSES = 3
+	HD_WATER_CLASSES = 3,
+	/* An override row's class 'none': no sheet for the bodies the row
+	 * reaches, which keep the class they have. */
+	HD_WATER_NONE = -2
 };
 
 // The palette's four sections of the game.
@@ -802,7 +807,7 @@ void HDRenderWaterFile(const char* path);
 bool HDRenderWaterSheetAt(int group, int x0, int z0, int x1, int z1);
 
 // Whether the water shaders exist on this device - without them no sheet is
-// built and the classic faces are restored as before.
+// built and the classic faces are restored as they are without the sheets.
 bool HDRenderWaterSheetsAvailable();
 
 // One body, for the log and the diagnostic tool.
@@ -810,8 +815,10 @@ struct HDRenderWaterBody
 {
 	int cls;			// HD_WATER_BASIN .. HD_WATER_SEA, as drawn
 	int ruleCls;			// what WaterClassOf gives
-	int sectors;			// all its water sectors
-	int sheets;			// those that draw a sheet
+	int sectors;			// its water sectors, each place once
+	int sheets;			// of those places, the ones drawing a sheet
+	int twins;			// sectors of a flipmap twin at those places
+	int noSheet;			// 1 when a row of class none applied
 	int perimeter;			// square edges with no water behind
 	int openAir;			// a room of it is open air
 	int surfaceY;			// world y of the surface
@@ -819,6 +826,7 @@ struct HDRenderWaterBody
 	int roomCount;			// how many rooms in all
 	int depthMax;			// the deepest square, units
 	float light[3];			// the light its colours are lit by
+	float raw[3];			// that light before gain, floor and cap
 	int source;			// 0 the rule, 1 the compiled row, 2 the file
 	int sourceRoom;			// the room that row names, or -1
 	float tint[3];			// the applied row's numbers
@@ -828,8 +836,9 @@ struct HDRenderWaterBody
 // What the level built, for its log line.
 struct HDRenderWaterLevel
 {
-	int sectors;		// water sectors
-	int sheets;		// of those, the ones drawing a sheet
+	int sectors;		// water sectors, each place once
+	int sheets;		// of those places, the ones drawing a sheet
+	int twins;		// sectors of a flipmap twin at those places
 	int bodies;
 	int section;		// HD_WATER_ROME ..
 	int built;		// 1 when the sheets' buffers exist

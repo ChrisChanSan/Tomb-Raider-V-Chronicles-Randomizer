@@ -2001,8 +2001,8 @@ static void graphics_softbody_row()
  * physics, saved with the tomb5 settings), the two expressions of its value
  * and its step, its string's five columns in game\gameflow.cpp, the
  * registry name in tomb5\tomb5.cpp (written on a first run, read with on as
- * the default, saved), and the one place the engine reads the option, the
- * water sheets' build in specific\hd\hd_level.cpp. */
+ * the default, saved), and the two places in specific\hd\hd_level.cpp
+ * that read the option, the water sheets' build and its log line. */
 static void graphics_water_row()
 {
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
@@ -2065,7 +2065,7 @@ static void graphics_water_row()
 		}
 	}
 
-	// The registry, and the engine's one reader.
+	// The registry, and the engine's two readers.
 	check(tree_count(opts, "sprintf(buf, \"hd_water\");"), 3,
 		"water row: hd_water is written on a first run, read and saved");
 	check(strstr(opts, "REG_ReadBool(buf, tomb5.hd_water, 1);") != 0, 1,

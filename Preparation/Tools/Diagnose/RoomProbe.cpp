@@ -348,9 +348,12 @@
  *                     HDRenderSetWaterSheets over the classic level's floor
  *                     squares: 1 with the sheets (tomb5.hd_water 1), 0 with
  *                     the bodies, their wave on the remaster's water art
- *                     and the caustic under them and no sheet. Prints the
- *                     WATERLOG lines the engine writes and, after the
- *                     picture, the GPU time of the sheet draws. With
+ *                     and no sheet and no caustic under them. A room
+ *                     counts as drawn HD by the engine's own test (a
+ *                     group with triangles, not hollow, with -hdm not
+ *                     marked). Prints the WATERLOG lines the engine
+ *                     writes and, after the picture, the GPU time of
+ *                     the sheet draws. With
  *                     -nodraw it is the sweep of one level. Needs -roombox.
  *     -waterfile <path>
  *                     build with that hd_water.txt; none without it.
@@ -8356,7 +8359,9 @@ int main(int argc, char** argv)
 				w.originZ = rm.originZ;
 				w.flags = (int)rm.flags;
 				w.flip = rm.altRoom;
-				w.drawn = r < HDRenderGroupCount() ? 1 : 0;
+				// The engine's test for a room drawn HD (StandGroupHD; the
+				// randomizer's markers with -hdm).
+				w.drawn = r < HDRenderGroupCount() && StandGroupHD(r) ? 1 : 0;
 
 				if (!level.sectorInfo(r, sec, error))
 					continue;

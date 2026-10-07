@@ -3497,16 +3497,18 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		return false;
 	}
 
-	/* bshader.bat compiles three pixel shaders for ps_3_0, the room shader at
-	 * 476 instruction slots, the model shader at 353 and the glow shader at
-	 * 479, and the room shader's gloss variant beside them at 502
-	 * (hd_room_gloss_ps.inc). The ps_3_0 figure is
+	/* bshader.bat compiles four pixel shaders for ps_3_0, the room shader at
+	 * 477 instruction slots, the model shader at 360, the glow shader at 478
+	 * and the water sheet's at 247, and the room shader's gloss variant
+	 * beside them at 502 (hd_room_gloss_ps.inc). The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
 	 * does not hold a ps_3_0 shader to 512: a 24-bulb room shader compiles
-	 * at 524 slots without a warning. The three shaders stay inside the
-	 * guarantee only because of their own size, 476, 353 and 479, so anyone who
-	 * grows one has to read the "instruction slots used" line of its .inc.
+	 * at 524 slots without a warning. The shaders stay inside the guarantee
+	 * only because of their own size, so anyone who grows one has to read
+	 * the "instruction slots used" line of its .inc. The vertex shaders are
+	 * not checked here; the room's, at 412, and the water sheet's, at 153,
+	 * lie inside the 512 slots vs_3_0 guarantees.
 	 * A device that answers less than 512 could fail CreatePixelShader below
 	 * with nothing but an HRESULT, so it is refused here with a reason in
 	 * the log. A device that leaves the
@@ -4698,10 +4700,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	/* The shore of each room's water.
 	 *
-	 * The shader lifts every marked vertex by up to one and a half times
-	 * HD_WATER_SWELL - 36 units upwards (y counts downwards in this engine).
-	 * The vertices at the water's own edge are marked like the rest, so
-	 * without a taper the surface rises over the bank it should meet: in the
+	 * The shader moves every marked vertex up and down by up to the class's
+	 * whole wave height times its swell share - 64 units in a sea, under 4 in
+	 * a channel, none in a basin (hd_room.hlsl, gSwell; y counts downwards
+	 * in this engine). The vertices at the water's own edge are marked like
+	 * the rest, so without a taper the surface rises over the bank it should
+	 * meet: in the
 	 * Rome cistern a dark travelling band would cover the lit coping.
 	 *
 	 * So the flood box is kept, per group, and the vertex shader fades the
@@ -8328,13 +8332,16 @@ namespace
 	};
 
 	/* What an open-air body reflects: the sky dome's colour at the horizon
-	 * and overhead, out of RoomProbe -sky -skyonly pictures. JOBY2: the
-	 * horizon the mean of the rows just above it, overhead chosen darker.
-	 * ANDY1 and ANDY3, whose dome is one and the same dusk: the mean of the
-	 * rows 6 to 40 pixels above the horizon toward four directions, and
-	 * overhead the mean of the dome's clouds, which cover 41 % of the view
-	 * straight up. Every level with an open-air body has a row; one without
-	 * reflects its body's own light, like an indoor body. */
+	 * and overhead, out of RoomProbe -sky -skyonly -black pictures at 960
+	 * by 540, one method for every row: the camera at 1024 0 1024 in JOBY2's
+	 * room 42, ANDY1's 132 and ANDY3's 17; the horizon the mean of the rows
+	 * 6 to 40 pixels above the picture's middle toward four directions (yaw
+	 * 0, 90, 180 and 270, pitch 0), overhead the mean of the dome straight
+	 * up (pitch -85) where it covers the view - all of it in JOBY2; in ANDY1
+	 * and ANDY3, whose dome is one and the same dusk, its clouds, 41 % of
+	 * the view. Black, where no dome is drawn, is left out. Every level with
+	 * an open-air body has a row; one without reflects its body's own light,
+	 * like an indoor body. */
 	struct HDWaterSky
 	{
 		const char* stem;
@@ -8343,16 +8350,17 @@ namespace
 
 	const HDWaterSky kWaterSky[] =
 	{
-		{ "JOBY2", { 163, 165, 178 }, { 100, 104, 122 } },
+		{ "JOBY2", { 152, 154, 171 }, { 96, 93, 116 } },
 		{ "ANDY1", { 113, 78, 67 }, { 11, 19, 32 } },
 		{ "ANDY3", { 113, 78, 67 }, { 11, 19, 32 } },
 	};
 
 	/* The compiled override rows: level and room, then the class (-1 keeps
-	 * the class), the tint of the shallow and deep colour, the scale of the
-	 * wave heights and of the foam. A row tunes the whole body its room
-	 * belongs to. The rows below pin the classes the rule gives today, so
-	 * that a later change of the rule cannot move these places. */
+	 * the class, HD_WATER_NONE draws no sheet), the tint of the shallow and
+	 * deep colour, the scale of the wave heights and of the foam. A row
+	 * tunes every body its room has water in. The rows below pin the
+	 * classes the rule gives today, so that a later change of the rule
+	 * cannot move these places. */
 	struct HDWaterOverride
 	{
 		const char* stem;
@@ -8376,14 +8384,20 @@ namespace
 	// units standing for 1.77 m.
 	const float kWaterG = 4300.0f;
 
-	/* How a room's light becomes the water's: times the gain and never under
-	 * the floor. The mean of colour1 + colour2 over a room's samples runs
-	 * 0.09 to 0.55 over the water rooms of ANDREA2 and JOBY2 (RoomProbe
-	 * -hdwater), because it counts the dark pool floor and the shadowed
-	 * corners beside the lit walls; the gain holds the water to what the lit
-	 * walls round it show. Both chosen on the pictures. */
+	/* How a room's light becomes the water's: times the gain, never under
+	 * the floor and never over the cap. The mean of colour1 + colour2 over a
+	 * body's rooms, weighted by their squares, runs 0.09 to 0.55 a channel
+	 * over the bodies of ANDREA2 and JOBY2 - the lowest ANDREA2's room 196,
+	 * the highest JOBY2's 143 with its flipmap twin 45 (RoomProbe -hdwater 1
+	 * -nodraw, WATERLOG raw=) - because it counts the dark pool floor and the
+	 * shadowed corners beside the lit walls; the gain holds
+	 * the water to what the lit walls round it show. Gain and floor are
+	 * chosen on the pictures; the cap, which holds a brightly lit body's
+	 * water to one and a half times the palette's colour, is a free choice,
+	 * set by eye on the RoomProbe pictures of the water. */
 	const float kWaterLightGain = 1.8f;
 	const float kWaterLightFloor = 0.30f;
+	const float kWaterLightCap = 1.5f;
 
 	struct WaterSquare
 	{
@@ -8435,6 +8449,10 @@ namespace
 	std::vector<std::vector<SheetRange> > g_sheet_ranges;	// per group
 	std::vector<int> g_group_body;		// per group, its largest body
 	std::vector<float> g_caustic_top;	// per group, room local y
+	/* Whether that caustic is drawn: only with the sheets. With
+	 * tomb5.hd_water 0 the floors under a surface carry no caustic, as
+	 * without the sheets. */
+	bool g_caustic_on = false;
 	std::unordered_set<unsigned long long> g_sheet_at;
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
@@ -8475,6 +8493,7 @@ namespace
 		g_sheet_ranges.clear();
 		g_group_body.clear();
 		g_caustic_top.clear();
+		g_caustic_on = false;
 		g_sheet_at.clear();
 		g_wlevel = HDRenderWaterLevel();
 		g_wlevel.fileLines = -1;
@@ -8510,11 +8529,14 @@ namespace
 	 *   <LEVEL> <room> <class|->  [tint <r> <g> <b>] [waves <s>] [foam <s>]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
-	 * any room of the body the row tunes, class basin, channel or sea, or -
-	 * to keep the class. tint multiplies the shallow and the deep colour,
-	 * waves the wave heights, foam the shore foam and the whitecaps; each 0
-	 * to 4, 1 changing nothing. '#' starts a comment. Returns 1 for a row, 0
-	 * for a line without one, -1 for a line that cannot be read. */
+	 * a room with water of the bodies the row tunes - every body the room
+	 * has water in - class basin, channel or sea, - to keep the class, or
+	 * none for no sheet over those bodies (they keep their class; a later
+	 * row of any other class, - included, gives the sheet back). tint
+	 * multiplies the shallow and the deep colour, waves the wave heights,
+	 * foam the shore foam and the whitecaps; each 0 to 4, 1 changing
+	 * nothing. '#' starts a comment. Returns 1 for a row, 0 for a line
+	 * without one, -1 for a line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
@@ -8546,13 +8568,18 @@ namespace
 
 		strcpy_s(row.stem, sizeof(row.stem), tok[0]);
 		row.room = (int)room;
-		row.cls = std::strcmp(tok[2], "-") ? -2 : -1;
+		bool known = !std::strcmp(tok[2], "-");
+
+		row.cls = -1;
+
+		if (!_stricmp(tok[2], "none"))
+			row.cls = HD_WATER_NONE, known = true;
 
 		for (int c = 0; c < HD_WATER_CLASSES; c++)
 			if (!_stricmp(tok[2], kWaterClass[c].name))
-				row.cls = c;
+				row.cls = c, known = true;
 
-		if (row.cls == -2)
+		if (!known)
 			return -1;
 
 		row.tint[0] = row.tint[1] = row.tint[2] = 1.0f;
@@ -8785,7 +8812,9 @@ namespace
 		deep[3] = 1.0f / c.absorb;
 		shallow[3] = c.grain;
 		refl[3] = 0.02f;	// F0 of water, n = 1.33
-		zen[3] = 0.0f;
+		// The light the fog is measured against: the sky band's flat 1, or
+		// the body's own (WaterPS, the note over WATER_OUT).
+		zen[3] = open ? 1.0f : (amb[0] + amb[1] + amb[2]) / 3.0f;
 		high[3] = c.specExp;
 
 		const float el = c.sunElev * 0.017453293f;
@@ -8819,6 +8848,8 @@ namespace
 
 			if (row.cls >= 0)
 				b.cls = row.cls;
+
+			b.noSheet = row.cls == HD_WATER_NONE ? 1 : 0;
 
 			for (int k = 0; k < 3; k++)
 				b.tint[k] = row.tint[k];
@@ -8854,14 +8885,15 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	const int groups = (int)g_groups.size();
 
 	g_caustic_top.assign((size_t)groups, -1.0e9f);
+	g_caustic_on = sheets != 0;
 	g_group_body.assign((size_t)groups, -1);
 	g_sheet_ranges.assign((size_t)groups, std::vector<SheetRange>());
 
 	/* 1. The water squares. A square draws a sheet when sheets are asked
-	 * for, its room draws its own HD group and the remaster has no flat art
-	 * in that plane over it but its material 16 water. The room below gets
-	 * the caustic from the surface down - the lowest surface, should two
-	 * stand over it. */
+	 * for and its room draws its own HD group, whatever flat art the
+	 * remaster lays in that plane over it (an override row of class none
+	 * takes the sheet away, step 5). The room below gets the caustic from
+	 * the surface down - the lowest surface, should two stand over it. */
 	for (int r = 0; r < count; r++)
 	{
 		const HDWaterRoom& rm = rooms[r];
@@ -8891,13 +8923,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				s.depth = water_depth(rooms, count, pit, s.wx, s.wz, s.wy);
 				s.open = (rm.flags & HD_WATER_ROOM_OPEN) ? 1 : 0;
 				s.body = -1;
-
-				const int x0 = sx * 1024, z0 = sz * 1024;
-
-				s.sheet = sheets && rm.drawn && r < groups &&
-					!(HDRenderGroupFlatArt(r, s.localY, x0, z0, x0 + 1024,
-					z0 + 1024) && !HDRenderGroupWaterArt(r, s.localY, x0, z0,
-					x0 + 1024, z0 + 1024)) ? 1 : 0;
+				s.sheet = sheets && rm.drawn && r < groups ? 1 : 0;
 				g_wsquares.push_back(s);
 
 				if (pit < groups)
@@ -8910,14 +8936,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			}
 	}
 
-	g_wlevel.sectors = (int)g_wsquares.size();
-
 	for (int g = 0; g < groups; g++)
 		g_wlevel.causticRooms += g_caustic_top[(size_t)g] > -1.0e8f ? 1 : 0;
 
 	/* 2. The squares by world place and height. A flipmap pair stands at one
-	 * place twice: the first answers the map and both draw. Two rooms that
-	 * are no pair and hold one square at one height are counted. */
+	 * place twice: the first answers the map and both draw; the second is
+	 * counted as a twin. Two rooms that are no pair and hold one square at
+	 * one height are counted as an overlap. */
 	std::unordered_map<unsigned long long, int> at;
 
 	for (size_t i = 0; i < g_wsquares.size(); i++)
@@ -8938,7 +8963,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		if (other != s.room && rooms[s.room].flip != other &&
 			rooms[other].flip != s.room)
 			g_wlevel.overlaps++;
+		else
+			g_wlevel.twins++;
 	}
+
+	g_wlevel.sectors = (int)at.size();
 
 	// 3. The bodies: four-connected at one height, across rooms.
 	static const int step[4][2] =
@@ -9009,9 +9038,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			s.body = g_wsquares[(size_t)at[WaterKey(s.wx, s.wz, s.wy)]].body;
 	}
 
-	/* 4. Per body: its rooms, its squares that draw, its deepest square, the
-	 * open air a twin may add, and its light - the rooms' lights weighted by
-	 * their squares, over the rooms that draw HD. */
+	/* 4. Per body: its rooms, its twins, its deepest square, the open air a
+	 * twin may add, and its light - the rooms' lights weighted by their
+	 * squares, over the rooms that draw HD. */
 	std::vector<double> light(g_wbodies.size() * 3, 0.0);
 	std::vector<int> lit(g_wbodies.size(), 0);
 	std::vector<std::vector<int> > roomsOf(g_wbodies.size());
@@ -9020,8 +9049,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	{
 		const WaterSquare& s = g_wsquares[i];
 		HDRenderWaterBody& b = g_wbodies[(size_t)s.body].info;
+		const int first = at[WaterKey(s.wx, s.wz, s.wy)];
+		const int other = g_wsquares[(size_t)first].room;
 
-		b.sheets += s.sheet;
+		if (first != (int)i && (other == s.room ||
+			rooms[s.room].flip == other || rooms[other].flip == s.room))
+			b.twins++;
+
 		b.openAir |= s.open;
 		b.depthMax = s.depth > b.depthMax ? s.depth : b.depthMax;
 		roomsOf[(size_t)s.body].push_back(s.room);
@@ -9057,13 +9091,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				(float)(light[b * 3 + k] / (double)lit[b]) : 0.5f;
 			const float l = raw * kWaterLightGain;
 
+			info.raw[k] = raw;
 			info.light[k] = l < kWaterLightFloor ? kWaterLightFloor :
-				l > 1.5f ? 1.5f : l;
+				l > kWaterLightCap ? kWaterLightCap : l;
 		}
 
 		info.ruleCls = WaterClassOf(info);
 		info.cls = info.ruleCls;
-		g_wlevel.sheets += info.sheets;
 	}
 
 	g_wlevel.bodies = (int)g_wbodies.size();
@@ -9102,6 +9136,35 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			g_wlevel.rowsApplied++;
 		else
 			g_wlevel.rowsUnmatched++;
+	}
+
+	/* The squares of a body a row of class none reached draw no sheet, and
+	 * the classic faces there come back (HDRenderWaterSheetAt). Then the
+	 * sheets per body, each place once: a place draws when any square at it
+	 * does. */
+	std::unordered_set<unsigned long long> drawing;
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		WaterSquare& s = g_wsquares[i];
+
+		if (g_wbodies[(size_t)s.body].info.noSheet)
+			s.sheet = 0;
+
+		if (s.sheet)
+			drawing.insert(WaterKey(s.wx, s.wz, s.wy));
+	}
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		const WaterSquare& s = g_wsquares[i];
+		const unsigned long long key = WaterKey(s.wx, s.wz, s.wy);
+
+		if (at[key] == (int)i && drawing.count(key))
+		{
+			g_wbodies[(size_t)s.body].info.sheets++;
+			g_wlevel.sheets++;
+		}
 	}
 
 	// 6. Every body's look, and every group's largest body.
@@ -9339,18 +9402,22 @@ const char* HDRenderWaterSectionName(int section)
 		kWaterPalette[section].name : "?";
 }
 
-/* WATERLOG. The level line: the option, the section, the water squares and
- * of those the ones drawing a sheet, whether the sheets' buffers were
- * built, the bodies by class, hd_water.txt's lines (none without the file),
- * the rows it gave and the lines it could not read, the override rows of
- * this level that found a body and those that did not, the squares two
- * rooms that are no flipmap pair both hold, the underwater rooms with the
- * caustic, the sheets' vertices and triangles. A body line: its rooms
- * (+n for more than sixteen), the world y of its surface, its squares and
- * those drawing, twice the area over the perimeter, open air, the class
- * drawn and the rule's, the deepest square, the light its colours are lit
- * by, the override row that applied - table or file with its room - or
- * none, and the tint, wave and foam scales in force. */
+/* WATERLOG. The level line: the option, the section, the water squares
+ * (sectors, each place once) and of those places the ones drawing a sheet,
+ * whether the sheets' buffers were built, the bodies by class, hd_water.txt's
+ * lines (none without the file), the rows it gave and the lines it could not
+ * read, the override rows of this level that found a body and those that did
+ * not, the squares two rooms that are no flipmap pair both hold, the
+ * underwater rooms with a surface above them (the caustic's, drawn with the
+ * sheets only), the sheets' vertices and triangles, and the squares of a
+ * flipmap twin at a place already counted. A body line: its rooms (+n for
+ * more than sixteen), the world y of its surface, its squares (each place
+ * once) and of those places the ones drawing a sheet, twice the area over
+ * the perimeter, open air, the class drawn and the rule's, the deepest
+ * square, the light its colours are lit by, the override row that applied
+ * - table or file with its room - or none, the tint, wave and foam scales in
+ * force, its flipmap twins' squares, the light before gain, floor and cap,
+ * and 1 when a row of class none took its sheet away. */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -9373,14 +9440,14 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		snprintf(out, size, "WATERLOG level=%s option=%d section=%s "
 			"sectors=%d sheets=%d built=%d bodies=%d basin=%d channel=%d "
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
-			"overlaps=%d caustic_rooms=%d verts=%d tris=%d",
+			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
 			cls[HD_WATER_BASIN], cls[HD_WATER_CHANNEL], cls[HD_WATER_SEA],
 			file, g_wlevel.fileRows, g_wlevel.fileBad, g_wlevel.rowsApplied,
 			g_wlevel.rowsUnmatched, g_wlevel.overlaps, g_wlevel.causticRooms,
-			g_wlevel.vertices, g_wlevel.triangles);
+			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins);
 		return true;
 	}
 
@@ -9411,11 +9478,13 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	snprintf(out, size, "WATERLOG body=%d rooms=%s surface=%d sectors=%d "
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
-		"foam=%.2f", body, list, b.surfaceY, b.sectors, b.sheets,
+		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d", body, list,
+		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
 		HDRenderWaterClassName(b.cls), HDRenderWaterClassName(b.ruleCls),
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
-		b.tint[1], b.tint[2], b.waves, b.foam);
+		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
+		b.raw[2], b.noSheet);
 	return true;
 }
 
@@ -9470,14 +9539,16 @@ namespace
 		g_device->SetVertexShaderConstantF(20, g_basin_rows, 4);
 	}
 
-	/* The room's water constants, vertex side: the caustic under a surface,
-	 * the eye in room coordinates, the swell and the four rows. Called by
-	 * prepare() for every room. */
+	/* The room's water constants, vertex side: the caustic under a surface
+	 * (zero with tomb5.hd_water 0, see g_caustic_on), the eye in room
+	 * coordinates, the swell and the four rows. Called by prepare() for
+	 * every room. */
 	void upload_water_room(int group, const float* m)
 	{
 		float caustic[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-		if (group >= 0 && group < (int)g_caustic_top.size() &&
+		if (g_caustic_on && group >= 0 &&
+			group < (int)g_caustic_top.size() &&
 			g_caustic_top[(size_t)group] > -1.0e8f)
 		{
 			caustic[0] = g_motion[3];

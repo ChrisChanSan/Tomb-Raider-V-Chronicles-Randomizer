@@ -115,6 +115,10 @@ call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_ps.inc
 if errorlevel 1 exit /b 1
+rem The glow shader reads hd_room.hlsl's CausticOf as well: its .inc carries
+rem that file's MD5 on a line of its own, before its own stamp (be.bat).
+call :incstamp hd_room hd_glow_ps.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_glow hd_glow_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_shadow hd_shadow_cast_vs.inc
@@ -145,6 +149,22 @@ if not defined HASH (
 )
 set "HASH=!HASH: =!"
 >>"%SHADERDIR%\%~2" echo // bshader-stamp !HASH!
+exit /b 0
+
+:incstamp
+rem %1 the stem of an .hlsl the shader includes, %2 the .inc: the line
+rem "// bshader-include <stem> <MD5>", which be.bat's :incstamp compares.
+set "HASH="
+set "G=%SHADERDIR%\%~1.hlsl"
+for /f "skip=1 delims=" %%H in ('certutil -hashfile "!G!" MD5') do (
+	if not defined HASH set "HASH=%%H"
+)
+if not defined HASH (
+	echo bshader: certutil could not hash %~1.hlsl - no stamp written.
+	exit /b 1
+)
+set "HASH=!HASH: =!"
+>>"%SHADERDIR%\%~2" echo // bshader-include %~1 !HASH!
 exit /b 0
 
 :size

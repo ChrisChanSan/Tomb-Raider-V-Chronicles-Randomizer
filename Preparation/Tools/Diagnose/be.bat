@@ -57,6 +57,7 @@ call :onestamp hd_room hd_room_water_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
+call :incstamp hd_room hd_glow_ps.inc
 call :onestamp hd_shadow hd_shadow_cast_vs.inc
 call :onestamp hd_shadow hd_shadow_cast_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_ps.inc
@@ -81,9 +82,12 @@ set "STALE="
 call :onestamp hd_room hd_room_vs.inc
 call :onestamp hd_room hd_room_ps.inc
 call :onestamp hd_room hd_room_gloss_ps.inc
+call :onestamp hd_room hd_room_water_vs.inc
+call :onestamp hd_room hd_room_water_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
+call :incstamp hd_room hd_glow_ps.inc
 call :onestamp hd_shadow hd_shadow_cast_vs.inc
 call :onestamp hd_shadow hd_shadow_cast_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_ps.inc
@@ -107,5 +111,23 @@ set "S="
 for /f "skip=1 delims=" %%H in ('certutil -hashfile "%SHADERDIR%\%~1.hlsl" MD5') do if not defined H set "H=%%H"
 set "H=!H: =!"
 for /f "tokens=3" %%S in ('findstr /b /c:"// bshader-stamp " "%SHADERDIR%\%~2" 2^>nul') do set "S=%%S"
+if not "!H!"=="!S!" set "STALE=!STALE! %~2"
+exit /b 0
+
+:incstamp
+rem %1 an .hlsl stem the shader of %2 includes, %2 the .inc. The include's
+rem MD5 stands on the .inc's line "// bshader-include <stem> <MD5>"
+rem (bshader.bat, :incstamp), so an edit to the included file alone - the
+rem glow shader calls hd_room.hlsl's CausticOf - is caught as well.
+set "H="
+set "S="
+set "G=%SHADERDIR%\%~1.hlsl"
+set "F=%SHADERDIR%\%~2"
+set "P=// bshader-include %~1 "
+for /f "skip=1 delims=" %%H in ('certutil -hashfile "!G!" MD5') do (
+	if not defined H set "H=%%H"
+)
+set "H=!H: =!"
+for /f "tokens=4" %%S in ('findstr /b /c:"!P!" "!F!" 2^>nul') do set "S=%%S"
 if not "!H!"=="!S!" set "STALE=!STALE! %~2"
 exit /b 0

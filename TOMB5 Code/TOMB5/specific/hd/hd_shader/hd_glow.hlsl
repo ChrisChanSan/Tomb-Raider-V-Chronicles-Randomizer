@@ -161,10 +161,18 @@ float4 GlowPS(VS_OUT input) : COLOR0
 
 	c = max(c, 0.0f);
 
+	/* The caustic, faded by the pixel's footprint as RoomPS fades it (see
+	 * HD_CAUSTIC_FOOT), taken before the branch where the gradient is
+	 * defined. */
+	const float2 footX = ddx(input.roomPos.xz);
+	const float2 footY = ddy(input.roomPos.xz);
+	const float sharp = saturate(2.0f - sqrt(max(dot(footX, footX),
+		dot(footY, footY))) * (1.0f / HD_CAUSTIC_FOOT));
+
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
-		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w *
+		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
 			CausticOf(world.xz, gAdd.y));
 	}
 

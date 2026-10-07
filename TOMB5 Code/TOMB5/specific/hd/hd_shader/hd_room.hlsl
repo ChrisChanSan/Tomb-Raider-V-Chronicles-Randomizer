@@ -181,6 +181,12 @@
  * c13         gMotion             per DRAW CALL
  * c14         gFlat               per DRAW CALL (.w is the flat-surface gate)
  * c15         gWaterBox           per room
+ * c16         gCaustic            per room   (RoomVS)
+ * c17         gEye                per room   (WaterVS)
+ * c18         gSwell              per room, and per sheet draw (x RoomVS
+ *                                             and WaterVS, y WaterVS alone)
+ * c20 - c23   gWaveV[4]           per room, and per sheet draw (RoomVS and
+ *                                             WaterVS)
  * c32 - c95   gWaterTable[64]     per room, only when the row changes
  * c96 - c127  gWibbleTable[32]    per level (it never changes)
  */
@@ -290,10 +296,21 @@ float4 gMotion : register(c13);
  * the light. The classic WaterTable term stays untouched: all of this is on
  * top of it.
  *
- * HD_CAUSTIC_FOOT: a bright line is a median 25 units across at half its
+ * HD_CAUSTIC_FOOT: a bright line is a median 25.5 units across at half its
  * height (counted along x and z on 400 lines of the curve), so where a pixel
  * spans more than 10 units the lines fade out, gone at 20, instead of
- * aliasing into stripes at a grazing view. */
+ * aliasing into stripes at a grazing view.
+ *
+ * The other four numbers are free choices, set by eye on the RoomProbe
+ * pictures of the pools of ANDREA2 and JOBY2:
+ *
+ *   HD_WATER_UV         the wobble, 4/512 of a page per unit of slope
+ *   HD_CAUSTIC_SCALE    0.0224 radians a unit, so one cell of the net is
+ *                       2 pi / 0.0224 = 280 units across, a little over a
+ *                       quarter of a square
+ *   HD_CAUSTIC_FLOOR    the spread on a submerged floor or wall, 0.30
+ *   HD_CAUSTIC_SURFACE  on a surface the remaster drew, 0.6 of the floor's,
+ *                       0.18 */
 #define HD_WATER_UV        (4.0f / 512.0f)	// page units per unit of slope
 #define HD_CAUSTIC_SCALE   0.0224f		// radians per unit: a cell of 280
 #define HD_CAUSTIC_MEAN    0.2310f
@@ -333,8 +350,8 @@ float4 gFlat : register(c14);
  * water"). A room with no water gets a box so large that nothing is ever
  * near its edge, and the taper below is then exactly 1.
  *
- * What it is for. The swell lifts every marked vertex by up to the class's
- * whole wave height, 64 units in a sea, UPWARDS (y counts downwards). The
+ * What it is for. The swell moves every marked vertex by up to the class's
+ * whole wave height, 64 units in a sea, up and down (y counts downwards). The
  * vertices at the water's own edge carry the mark too, so without the taper
  * the surface climbs over the coping it should meet and covers it with a
  * moving band of dark water (visible on the Rome cistern). Real water goes
@@ -357,7 +374,9 @@ float4 gWaterBox : register(c15);
  *            depth it fades out over, w unused
  * gEye       xyz the camera in this room's own coordinates (WaterVS)
  * gSwell     x the share of the wave height the vertex takes (0 basin),
- *            y the shore distance the swell tapers in over, zw unused
+ *            y the shore distance the swell tapers in over - read by
+ *            WaterVS alone, RoomVS tapers over its flood box
+ *            (HD_WATER_SHORE) - zw unused
  * gWaveV     the four wave rows (kx, kz, omega, height): wave vector in
  *            radians a unit, angular speed in radians a second, height in
  *            units - the room's largest body's, or the basin's in a room
@@ -387,13 +406,22 @@ float4 gWaveV[4] : register(c20);
  * c89 - c91   gGlossField[3]      per room
  * s1, s2      the light field     per level (the two volume textures)
  *
+ * and in WaterPS alone (the water sheet, see "the sheet" below), all twelve
+ * uploaded before every sheet draw:
+ *
+ * c92 - c95   gWaveP[4]           per DRAW CALL
+ * c96 - c103  gWaterDeep .. gWaterMisc   per DRAW CALL
+ *
  * Deliberately disjoint from the vertex numbers although the two constant
  * files are separate in Direct3D 9: one table of "register -> meaning" that
- * needs no column saying which shader. The bulbs and the gloss registers are
- * the exceptions - the vertex file's water table holds c32 - c95 - and they
- * are pixel registers only. The gloss registers from c86 on lie above every
+ * needs no column saying which shader. The bulbs, the gloss registers and
+ * the water registers are the exceptions - the vertex file's water table
+ * holds c32 - c95 and its wibble table c96 - c127, and the water's own
+ * vertex rows take c16 - c23, where the pixel file keeps the fog and the
+ * lights - and they are pixel registers only (the water's vertex rows
+ * vertex registers only). The gloss registers from c86 on lie above every
  * register a named constant of the plain variant or of the glow shader
- * (c77 - c79) takes.
+ * (c77 - c79) takes, and the sheet's from c92 on above the gloss ones.
  *
  * gGloss takes c36 because the gloss variant never ripples, and
  * hd_render.cpp writes c36 on every draw call it changes on: glossy draw
@@ -587,7 +615,9 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  *             foam's blotch pattern
  * gWaterRefl  rgb what the surface reflects at the horizon (the sky's
  *             measured colour out of doors, the body's light indoors); w F0
- * gWaterZen   rgb the same overhead; w unused
+ * gWaterZen   rgb the same overhead; w the light the distance fog is
+ *             measured against: the body's light, the mean of its three
+ *             channels, or 1 for a body that reflects the sky
  * gWaterHigh  rgb the highlight colour times its strength; w the exponent
  * gWaterSun   xyz toward the highlight's light (room axes, y down);
  *             w the whitecap threshold, 0..1 of the crest height
@@ -760,7 +790,7 @@ int WaterPhase(float3 world, float wibbleShift)
 	return (int)WrapIndex(ShiftDown(gScreen.z, wibbleShift) + rnd, 64.0f);
 }
 
-/* A periodic curve of period 2 pi that agrees with a cosine to within 6 % of
+/* A periodic curve of period 2 pi that agrees with a cosine to within 2 % of
  * its amplitude - the smoothstep of a triangle, the ripple's own curve (see
  * HD_RIPPLE_OCTAVE) - two at a time: about six slots where two sines cost
  * sixteen. */
@@ -773,7 +803,9 @@ float2 Wave2(float2 x)
 
 /* The water's one wave: four travelling sines, `w` the four rows (kx, kz,
  * omega, height). Returns the height (units, UP positive - y counts down in
- * this engine) and, in `slope`, its derivative along x and z. */
+ * this engine) and, in `slope`, the slope of the unbent wave along x and z:
+ * the bend below moves the crests and is left out of the slope, so the
+ * normal leans a little off the drawn shape (no Jacobian of the bend). */
 float WaveSum(float2 p, float t, float4 w0, float4 w1, float4 w2, float4 w3,
 	out float2 slope)
 {
@@ -1434,9 +1466,14 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 *
 	 * Per PIXEL and out of the WORLD position: a remaster water quad has its
 	 * corners and nothing between them, so a shimmer carried down the
-	 * interpolators is a slow blotch however fast its clock runs. From the
-	 * world position the net is fine wherever the surface is coarse, and it
-	 * does not slide when the camera moves.
+	 * interpolators is a slow blotch however fast its clock runs - which is
+	 * why a per-pixel term exists at all. That observation is TROne's
+	 * (Copyright 2026 Todesengel, GPLv3): its own comment reported it about
+	 * TR4 water in its copy of 2026-09-05, and in TROne-main (copy of
+	 * 2026-10-06, commit 75c4c843) its basin note says the same of a ripple
+	 * (THIRD-PARTY.md, the wind row). From the world position the net is
+	 * fine wherever the surface is coarse, and it does not slide when the
+	 * camera moves.
 	 *
 	 * Zero mean, so it adds no brightness of its own: the curve's own mean
 	 * is taken off, and what is left is the movement. It is clamped at zero
@@ -1543,14 +1580,18 @@ float4 RoomPS(VS_OUT input) : COLOR0
  *
  * Seen from below (the camera under water), the surface shows the bright
  * window overhead within the critical angle and the deep colour outside it.
- * The distance fog takes off what it takes off a room. The fog bulbs and
- * the dynamic lights do not light the sheet. */
+ * The distance fog darkens the water as it darkens a room: a room loses the
+ * fog from its light, and is black where the fog reaches that light; the
+ * water, whose colours are the body's light times the palette, loses the
+ * same share of its colour - the fog over the body's light (gWaterZen.w) -
+ * and goes black where its banks do. The fog bulbs and the dynamic lights
+ * do not light the sheet. */
 struct WATER_OUT
 {
 	float4 pos     : POSITION;
 	float4 roomPos : TEXCOORD0;	// xyz room local (as drawn), w depth
 	float4 eye     : TEXCOORD1;	// xyz toward the eye, w shore distance
-	float4 misc    : TEXCOORD2;	// x view depth (fog), y wave height
+	float  viewZ   : TEXCOORD2;	// the view depth, for the fog
 };
 
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
@@ -1590,7 +1631,7 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.pos = clip;
 	o.roomPos = float4(pos, depth);
 	o.eye = float4(gEye.xyz - pos, shore);
-	o.misc = float4(view.z, h, 0.0f, 0.0f);
+	o.viewZ = view.z;
 	return o;
 }
 
@@ -1599,9 +1640,9 @@ float4 WaterPS(WATER_OUT input) : COLOR0
 	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
 	const float t = gWaterMisc.z;
 
-	/* A row whose wave is finer than about two pixels fades out instead of
-	 * aliasing into stripes: the footprint of the pixel in world units
-	 * against each row's wave number. */
+	/* A row whose wave spans fewer than eight pixels a wavelength fades out,
+	 * gone at four, instead of aliasing into stripes: the footprint of the
+	 * pixel in world units against each row's wave number. */
 	const float2 dx = ddx(world.xz);
 	const float2 dy = ddy(world.xz);
 	const float foot = sqrt(max(dot(dx, dx), dot(dy, dy)));
@@ -1686,7 +1727,7 @@ float4 WaterPS(WATER_OUT input) : COLOR0
 	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
 	const float edge = saturate(1.0f - input.eye.w /
 		max(gWaterMisc.x, 1.0f));
-	float foam = gWaterFoam.w * saturate((edge - (1.0f - n) * 0.8f) * 3.0f);
+	float foam = gWaterFoam.w * saturate((edge - (1.0f - n) * 0.8f) * 2.0f);
 
 	foam += gWaterMisc.y * smoothstep(0.45f, 0.85f, n) *
 		saturate((h / max(gWaterMisc.w, 1.0f) - gWaterSun.w) * 4.0f);
@@ -1695,10 +1736,12 @@ float4 WaterPS(WATER_OUT input) : COLOR0
 	col = lerp(col, gWaterFoam.rgb, foam);
 	a = lerp(a, 1.0f, foam);
 
-	// The distance fog, as RoomPS takes it off (drawroom.cpp).
-	const float fog = max(0.0f, input.misc.x - gFog.x) * gFog.y *
+	/* The distance fog (drawroom.cpp), in the light's own scale as RoomPS
+	 * takes it, as a share of the body's light - see the note over
+	 * WATER_OUT. */
+	const float fog = max(0.0f, input.viewZ - gFog.x) * gFog.y *
 		(2.0f / 255.0f);
 
-	col = max(0.0f, col - fog * a);
+	col *= saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 	return float4(col, a);
 }

@@ -54,7 +54,10 @@
  * after. c96 - c102 are this shader's own (hd_shadow.h,
  * HD_SHADOW_RECEIVE_FIRST): above every register the room, gloss, glow and
  * model pixel shaders name (the highest is the gloss variant's c91), so no
- * later draw expects one of them to have kept its value. */
+ * later draw expects one of them to have kept its value. The water sheet's
+ * WaterPS names c92 - c103 and so overlaps c96 - c102, but it writes all of
+ * them before each of its draws, and no sheet is drawn inside a receive
+ * pass, so neither shader relies on what the other left there. */
 
 sampler2D sPage : register(s0);
 sampler2D sMap : register(s3);

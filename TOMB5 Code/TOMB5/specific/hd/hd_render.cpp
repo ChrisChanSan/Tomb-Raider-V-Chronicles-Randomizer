@@ -33,6 +33,8 @@
 #include "hd_shader/hd_room_vs.inc"
 #include "hd_shader/hd_room_ps.inc"
 #include "hd_shader/hd_room_gloss_ps.inc"
+#include "hd_shader/hd_room_water_vs.inc"
+#include "hd_shader/hd_room_water_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -3564,6 +3566,16 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomGlossPS, &g_gloss_ps)))
 		g_gloss_ps = 0;
 
+	// Nor is the water sheet's pair: without it no sheet is built and the
+	// classic water faces are restored (hd_level.cpp, BuildWaterSurfaces).
+	if (FAILED(device->CreateVertexShader((const DWORD*)kHDRoomWaterVS,
+		&g_water_vs)))
+		g_water_vs = 0;
+
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterPS,
+		&g_water_ps)))
+		g_water_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -3712,6 +3724,8 @@ void HDRenderShutdown()
 
 	if (g_glow_ps) { g_glow_ps->Release(); g_glow_ps = 0; }
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
+	if (g_water_vs) { g_water_vs->Release(); g_water_vs = 0; }
+	if (g_water_ps) { g_water_ps->Release(); g_water_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)

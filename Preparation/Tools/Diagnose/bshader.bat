@@ -48,6 +48,17 @@ rem "The sheen"). Stamped with the same .hlsl's MD5 as the plain one.
 "%FXC%" /nologo /T ps_3_0 /E RoomPS /O3 /D HD_GLOSS=1 /Vn kHDRoomGlossPS /Fh "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The water sheet: the same file's WaterVS and WaterPS, a vertex and a
+rem pixel shader of their own for the water surface (hd_room.hlsl, "the
+rem sheet"). Stamped with the same .hlsl's MD5 as the room shaders.
+"%FXC%" /nologo /T vs_3_0 /E WaterVS /O3 /Vn kHDRoomWaterVS ^
+ /Fh "%SHADERDIR%\hd_room_water_vs.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
+"%FXC%" /nologo /T ps_3_0 /E WaterPS /O3 /Vn kHDRoomWaterPS ^
+ /Fh "%SHADERDIR%\hd_room_water_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
 
@@ -96,6 +107,10 @@ call :stamp hd_room hd_room_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_gloss_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_vs.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_ps.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_ps.inc
@@ -116,6 +131,8 @@ call :stamp hd_shadow_receive hd_shadow_receive_mirror_ps.inc
 if errorlevel 1 exit /b 1
 
 for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
+call :size "%SHADERDIR%\hd_room_water_vs.inc"
+call :size "%SHADERDIR%\hd_room_water_ps.inc"
 exit /b 0
 
 :stamp
@@ -128,6 +145,11 @@ if not defined HASH (
 )
 set "HASH=!HASH: =!"
 >>"%SHADERDIR%\%~2" echo // bshader-stamp !HASH!
+exit /b 0
+
+:size
+rem %1 an .inc file: its name and size, as the line above prints them.
+echo bshader: %~nx1 %~z1 bytes of C source
 exit /b 0
 
 :find

@@ -264,40 +264,43 @@ float4 gMotion : register(c13);
 #define HD_WIND_WAVELENGTH 0.0045f
 #define HD_WIND_SPEED      2.1f
 
-/* The water surface, carried over from TROne
- * (Copyright 2026 Todesengel, GPLv3, host\render\game_renderer.cpp, the GLSL
- * shaders k_hd_vert and k_hd_frag - the shape of the UV wobble and of the
- * caustic and the caustic's scale of 0.018 are TROne's own design in its
- * copy of 2026-10-05 - the caustic still stands in TROne-main (copy of
- * 2026-10-06, commit 75c4c843), the wobble TROne has dropped since; the
- * vertical swell is TROne's design of its copy of 2026-09-05, dropped there
- * too; see THIRD-PARTY.md).
+/* The water, this project's own design.
  *
- * Why a caustic on top of the classic shimmer. TR5's own shimmer is the
- * WaterTable term, computed PER VERTEX, and a remaster water surface is a few
- * large quads whose corners are its only vertices, so that term reaches the
- * screen as a slow blotch, not a shimmer. TROne notes the same in its copy
- * of 2026-09-05 ("a vertex-interpolated shimmer stayed flat and the surface
- * looked still"; its basin note in 75c4c843 says the same of a ripple). The
- * WaterTable term therefore stays untouched, parity and all, and the caustic
- * is added as a ZERO MEAN MODULATION on top of it: no average brightness of
- * its own, only the movement the classic term cannot carry at this vertex
- * count - so the shimmer's brightness is not counted twice.
+ * What moves water in this file comes from one function of the world
+ * position and the game clock, WaveSum below: four travelling sines, each
+ * with its own direction, wave number, angular speed and height. The rows
+ * are per room and per class of body (basin, channel, sea), worked out on
+ * the processor (hd_render.cpp, "the water sheets"): the wavelengths,
+ * heights and directions are chosen per class, the speeds follow deep-water
+ * dispersion, omega = calm * sqrt(g k) with g = 4300 units/s^2 (9.81 m/s^2
+ * at 2.3 mm a unit), and a channel adds its current.
  *
- * The three amplitudes are TROne's own (its copy of 2026-09-05; dropped there
- * since). The strength, 0.32, is this project's own - TROne-main (copy of
- * 2026-10-06, commit 75c4c843) gives its caustic 0.12 - and is matched to two
- * reference shots of the same VCI pool from the remaster: over the water
- * region the two frames differ by 8.4 of 255 on average, with 17 percent of
- * the pixels more than 16 apart against a mean of 34 - a swing of a third to
- * a half of the local value, which 0.32 either way meets. */
-#define HD_WATER_UV        (6.0f / 512.0f)
-#define HD_WATER_WAVE      0.0045f
-#define HD_WATER_SWELL     24.0f
-#define HD_WATER_SPEED_A   2.1f
-#define HD_WATER_SPEED_B   1.6f
-#define HD_CAUSTIC_SCALE   0.018f
-#define HD_CAUSTIC_WEIGHT  0.32f
+ *   the swell     a marked surface rises by the class's share of that
+ *                 height, tapered at the shore - a sea and a channel only
+ *   the wobble    the texture of a surface the remaster drew moves with the
+ *                 slope, as refraction would move it
+ *   the normal    WaterPS reads the slope per pixel (see "the sheet")
+ *
+ * The caustic is a zero-mean modulation of a surface's own light: thin
+ * bright lines where two domain-warped waves cancel (CausticOf), with no
+ * average brightness of its own, on the submerged floor and walls of a pool
+ * (gCaustic) and on a surface the remaster drew. Its mean (0.2310) and
+ * spread (0.2964), counted over 400,000 samples of the curve, are divided
+ * out, so HD_CAUSTIC_FLOOR and HD_CAUSTIC_SURFACE are the spread in units of
+ * the light. The classic WaterTable term stays untouched: all of this is on
+ * top of it.
+ *
+ * HD_CAUSTIC_FOOT: a bright line is a median 25 units across at half its
+ * height (counted along x and z on 400 lines of the curve), so where a pixel
+ * spans more than 10 units the lines fade out, gone at 20, instead of
+ * aliasing into stripes at a grazing view. */
+#define HD_WATER_UV        (4.0f / 512.0f)	// page units per unit of slope
+#define HD_CAUSTIC_SCALE   0.0224f		// radians per unit: a cell of 280
+#define HD_CAUSTIC_MEAN    0.2310f
+#define HD_CAUSTIC_SD      0.2964f
+#define HD_CAUSTIC_FLOOR   0.30f
+#define HD_CAUSTIC_SURFACE 0.18f
+#define HD_CAUSTIC_FOOT    10.0f		// units a pixel, see above
 
 /* WaterTable[room->MeshEffect], 64 entries: x = shimmer, y = choppy,
  * z = random, w = abs. The engine hands over its OWN table rather than a
@@ -330,8 +333,8 @@ float4 gFlat : register(c14);
  * water"). A room with no water gets a box so large that nothing is ever
  * near its edge, and the taper below is then exactly 1.
  *
- * What it is for. The swell lifts every marked vertex by up to one and a half
- * times HD_WATER_SWELL, 36 units of it UPWARDS (y counts downwards). The
+ * What it is for. The swell lifts every marked vertex by up to the class's
+ * whole wave height, 64 units in a sea, UPWARDS (y counts downwards). The
  * vertices at the water's own edge carry the mark too, so without the taper
  * the surface climbs over the coping it should meet and covers it with a
  * moving band of dark water (visible on the Rome cistern). Real water goes
@@ -343,6 +346,26 @@ float4 gWaterBox : register(c15);
  * grid of them can fade at all - anything shorter would fade inside a single
  * triangle and read as a crease rather than as a shore. */
 #define HD_WATER_SHORE     1024.0f
+
+/* The water's vertex constants, per room. c16 - c23 are free in the vertex
+ * file; the pixel file's c16 - c23 are the fog and the lights, which is why
+ * the pixel half reads the same rows out of its own registers (c92 - c103).
+ *
+ * gCaustic   x the submerged caustic's weight in this room (1 in an
+ *            underwater room with a surface above it, times hd_motion),
+ *            y the height of that surface (room local), z one over the
+ *            depth it fades out over, w unused
+ * gEye       xyz the camera in this room's own coordinates (WaterVS)
+ * gSwell     x the share of the wave height the vertex takes (0 basin),
+ *            y the shore distance the swell tapers in over, zw unused
+ * gWaveV     the four wave rows (kx, kz, omega, height): wave vector in
+ *            radians a unit, angular speed in radians a second, height in
+ *            units - the room's largest body's, or the basin's in a room
+ *            with no water square of its own */
+float4 gCaustic : register(c16);
+float4 gEye : register(c17);
+float4 gSwell : register(c18);
+float4 gWaveV[4] : register(c20);
 
 /* -------------------------------------------------- constants, pixel side --
  *
@@ -554,6 +577,34 @@ float4 gRipple : register(c36);
  * (r, g, b, density). */
 float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
 
+/* The sheet's pixel constants, per draw - read by WaterPS alone; the plain
+ * and gloss variants never name them. Above the gloss registers (c86 - c91).
+ *
+ * gWaveP      c92 - c95, the same four rows as gWaveV
+ * gWaterDeep  rgb the deep colour, lit (palette x body light); w one over
+ *             the absorption length in units
+ * gWaterBase  rgb the shallow colour, lit the same way; w the scale of the
+ *             foam's blotch pattern
+ * gWaterRefl  rgb what the surface reflects at the horizon (the sky's
+ *             measured colour out of doors, the body's light indoors); w F0
+ * gWaterZen   rgb the same overhead; w unused
+ * gWaterHigh  rgb the highlight colour times its strength; w the exponent
+ * gWaterSun   xyz toward the highlight's light (room axes, y down);
+ *             w the whitecap threshold, 0..1 of the crest height
+ * gWaterFoam  rgb the foam colour, lit; w the shore foam strength
+ * gWaterMisc  x the foam band in units, y the whitecap strength, z the
+ *             clock in seconds (0 with hd_motion off), w the whole wave
+ *             height in units (for the crest test) */
+float4 gWaveP[4] : register(c92);
+float4 gWaterDeep : register(c96);
+float4 gWaterBase : register(c97);
+float4 gWaterRefl : register(c98);
+float4 gWaterZen : register(c99);
+float4 gWaterHigh : register(c100);
+float4 gWaterSun : register(c101);
+float4 gWaterFoam : register(c102);
+float4 gWaterMisc : register(c103);
+
 #ifdef HD_GLOSS
 /* The sheen - the gloss variant of this shader.
  *
@@ -709,6 +760,61 @@ int WaterPhase(float3 world, float wibbleShift)
 	return (int)WrapIndex(ShiftDown(gScreen.z, wibbleShift) + rnd, 64.0f);
 }
 
+/* A periodic curve of period 2 pi that agrees with a cosine to within 6 % of
+ * its amplitude - the smoothstep of a triangle, the ripple's own curve (see
+ * HD_RIPPLE_OCTAVE) - two at a time: about six slots where two sines cost
+ * sixteen. */
+float2 Wave2(float2 x)
+{
+	const float2 f = abs(frac(x * 0.15915494f) * 2.0f - 1.0f);
+
+	return f * f * (3.0f - 2.0f * f) * 2.0f - 1.0f;
+}
+
+/* The water's one wave: four travelling sines, `w` the four rows (kx, kz,
+ * omega, height). Returns the height (units, UP positive - y counts down in
+ * this engine) and, in `slope`, its derivative along x and z. */
+float WaveSum(float2 p, float t, float4 w0, float4 w1, float4 w2, float4 w3,
+	out float2 slope)
+{
+	/* The crests are bent: the position is pushed about by a quarter of the
+	 * longest wavelength, along a slow pattern of its own, so that four
+	 * straight sines do not read as a corrugated sheet from above. The slope
+	 * leaves the push out - the bend is in the shape, not in the tilt. */
+	const float k0 = length(w0.xy);
+	const float2 warp = Wave2(p.yx * (0.21f * k0) +
+		t * float2(0.23f, -0.19f));
+
+	p += warp * (1.6f / max(k0, 1e-4f));
+
+	float4 ph = float4(dot(p, w0.xy), dot(p, w1.xy), dot(p, w2.xy),
+		dot(p, w3.xy)) - float4(w0.z, w1.z, w2.z, w3.z) * t;
+	float4 s, c;
+
+	sincos(ph, s, c);
+
+	const float4 h = float4(w0.w, w1.w, w2.w, w3.w);
+	const float4 hc = h * c;
+
+	slope = hc.x * w0.xy + hc.y * w1.xy + hc.z * w2.xy + hc.w * w3.xy;
+	return dot(h, s);
+}
+
+/* The caustic: thin bright lines where two domain-warped waves cancel, as a
+ * zero-mean number of unit spread (see the note over HD_CAUSTIC_SCALE). */
+float CausticOf(float2 xz, float t)
+{
+	const float2 q = xz * HD_CAUSTIC_SCALE;
+	const float2 warp = Wave2(float2(q.y * 0.83f + 1.1f * t,
+		q.x * 0.77f - 0.8f * t));
+	const float2 ab = Wave2(float2(q.x + 0.6f * warp.x + 0.9f * t,
+		q.y * 0.91f - 0.55f * warp.y - 0.7f * t));
+	const float r = 1.0f - abs(ab.x + ab.y) * 0.5f;
+	const float r2 = r * r;
+
+	return (r2 * r2 * r2 - HD_CAUSTIC_MEAN) * (1.0f / HD_CAUSTIC_SD);
+}
+
 VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
 {
@@ -779,8 +885,7 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	}
 
 	/* 2c. The swell. The same water weight the UV wobble rides on also lifts
-	 * the surface - TROne's shape of its copy of 2026-09-05 (dropped there
-	 * since), one wave over about a block and a half.
+	 * the surface, by the room's own wave (WaveSum, the rows of its class).
 	 * Like the wind it moves `drawn` and not `pos`, so the water hash, the
 	 * surface test, the WaterTable and the classic choppy displacement (which
 	 * is in `pos`) are untouched by it. */
@@ -818,8 +923,14 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		abs((inNormal.y - 127.0f) * (1.0f / 128.0f))), gFlat.w);
 	float surfaceOn = dot(inFlags, gSel1) * atSurface * upright;
 	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, surfaceOn));
-	float wavA = (pos.x + pos.z) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_A;
-	float wavB = (pos.z - pos.y) * HD_WATER_WAVE + gMotion.z * HD_WATER_SPEED_B;
+	/* The wave at this vertex - see WaveSum, with the rows of this room's
+	 * class (gWaveV). World position, so neighbouring rooms meet. */
+	float2 slope = 0.0f;
+	float height = 0.0f;
+
+	if (water > 0.002f)
+		height = WaveSum(pos.xz + gRoomOrigin.xz, gMotion.z, gWaveV[0],
+			gWaveV[1], gWaveV[2], gWaveV[3], slope);
 
 	/* And none of it at the shore. How far this vertex stands inside
 	 * the flood box, in squares, clamped to one - see gWaterBox. It multiplies
@@ -829,9 +940,8 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float2 inset = min(pos.xz - gWaterBox.xy, gWaterBox.zw - pos.xz);
 	float shore = saturate(min(inset.x, inset.y) * (1.0f / HD_WATER_SHORE));
 
-	if (water > 0.002f)
-		drawn.y += water * shore * HD_WATER_SWELL *
-			(sin(wavA) + 0.5f * cos(wavB * 1.7f + gMotion.z));
+	// Up is -y. gSwell.x is the class's share of the height (0 in a basin).
+	drawn.y -= water * shore * gSwell.x * height;
 
 	/* 3. The transform. */
 	float4 clip = mul(float4(drawn, 1.0f), gWorldViewProj);
@@ -869,21 +979,27 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * branch: the remaster authored a scroll on 14 of the 15 levels, on
 	 * waterfalls, drifting sky and light shafts as well.
 	 *
-	 * The wobble is TROne's water_effect of its copy of 2026-09-05 (k_hd_vert;
-	 * dropped there since): on a marked water surface the UV
-	 * moves a little, so an HD water plane is not a mirror. It rides on the
-	 * SAME two waves as the swell - one clock, one shape, so the picture and
-	 * the geometry agree - six texels, TROne's own figure. It dies with
+	 * The wobble: on a marked water surface the UV moves with the slope of
+	 * the room's own wave, HD_WATER_UV page units per unit of slope, so an
+	 * HD water plane is not a mirror. One clock and one shape with the
+	 * swell, so the picture and the geometry agree. It dies with
 	 * tomb5.shimmer, because gSel1 does, and with hd_motion, because gMotion.w
 	 * does. The caustic is in the pixel half; the note beside HD_WATER_UV says
 	 * why it does not count the classic shimmer twice. */
-	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + water * HD_WATER_UV *
-		float2(sin(wavA), cos(wavB));
+	o.uv = float2(inC0.a, inC1.a) + gMotion.xy + water * HD_WATER_UV * slope;
 
 	o.light = lerp(inC0.rgb + inC1.rgb, 1.0f, gFlat.x);
 	o.viewPos = view;
 	o.roomPos = pos;
-	o.waterAdd = float4(waterAdd, water);
+	/* Under the water: the floor and the walls of a pool carry the caustic,
+	 * fading out with the depth below the surface (gCaustic, the room's own:
+	 * zero everywhere but in an underwater room with a surface above). */
+	const float below = pos.y - gCaustic.y;
+	const float submerged = gCaustic.x * step(0.0f, below) *
+		saturate(1.0f - below * gCaustic.z);
+
+	o.waterAdd = float4(waterAdd,
+		max(water * (HD_CAUSTIC_SURFACE / HD_CAUSTIC_FLOOR), submerged));
 
 	/* The byte normal, biased by 127 - read so, 53.9 % of the triangle
 	 * corners of the fifteen files lie within 10 degrees of their triangle's
@@ -1313,8 +1429,8 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	/* The gloss variant draws the sheen in place of that lift, further down,
 	 * once the caustic has moved the surface's own light. */
 
-	/* The caustic (TROne's formula, see the note beside HD_WATER_UV and
-	 * THIRD-PARTY.md).
+	/* The caustic (CausticOf, this project's own - see the note beside
+	 * HD_CAUSTIC_SCALE).
 	 *
 	 * Per PIXEL and out of the WORLD position: a remaster water quad has its
 	 * corners and nothing between them, so a shimmer carried down the
@@ -1322,23 +1438,25 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * world position the net is fine wherever the surface is coarse, and it
 	 * does not slide when the camera moves.
 	 *
-	 * ZERO MEAN, so it adds no brightness of its own: the sum of the two sine
-	 * products averages out over any patch bigger than its own wavelength, and
-	 * what is left is the movement. It is clamped at zero rather than allowed
-	 * to invert the multiply.
+	 * Zero mean, so it adds no brightness of its own: the curve's own mean
+	 * is taken off, and what is left is the movement. It is clamped at zero
+	 * rather than allowed to invert the multiply, and it fades out where a
+	 * pixel spans more than HD_CAUSTIC_FOOT units - the footprint is taken
+	 * before the branch, where the gradient is defined.
 	 *
 	 * gAdd.y is the game clock in seconds on the pixel side. With hd_motion 0
 	 * the weight waterAdd.w is already zero, because the vertex half
 	 * multiplied it by gMotion.w. */
+	const float2 footX = ddx(input.roomPos.xz);
+	const float2 footY = ddy(input.roomPos.xz);
+	const float sharp = saturate(2.0f - sqrt(max(dot(footX, footX),
+		dot(footY, footY))) * (1.0f / HD_CAUSTIC_FOOT));
+
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
-		float cx = world.x * HD_CAUSTIC_SCALE;
-		float cz = world.z * HD_CAUSTIC_SCALE;
-		float caustic = sin(cx + gAdd.y * 2.0f) * sin(cz + gAdd.y * 1.7f) +
-			0.5f * sin((cx - cz) * 1.3f + gAdd.y * 2.4f);
-
-		c *= max(0.0f, 1.0f + HD_CAUSTIC_WEIGHT * input.waterAdd.w * caustic);
+		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
+			CausticOf(world.xz, gAdd.y));
 	}
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
@@ -1387,4 +1505,200 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * opacity times the page's own alpha, which is what makes a texel at 0.45
 	 * half there instead of gone. */
 	return float4(lit, texel.a * gSpec.w);
+}
+
+/* ---------------------------------------------------------- the sheet -- */
+
+/* The water sheet: this project's own water surface over the water squares
+ * of the classic level (hd_render.h, HDWaterRoom, says which). A grid of
+ * 256-unit quads at the classic surface height, drawn in the blend phase of
+ * its room, two-sided, with premultiplied alpha (ONE / INVSRCALPHA) and no
+ * depth write, over the pool floor the opaque pass has already drawn.
+ *
+ * The vertex is the room vertex with its bytes read differently: colour1's
+ * red is the depth down to the floor below in steps of 32 units, its green
+ * the distance to the nearest square with no water in steps of 16 - both
+ * counted on the classic floor data at level build. Nothing else is read.
+ *
+ * Per pixel, five textbook terms - none of them a picture of anything:
+ *
+ *   the normal      the slope of WaveSum (the four rows of the body's class)
+ *   the reflection  Schlick's Fresnel, F0 + (1 - F0)(1 - N.V)^5 with
+ *                   F0 = 0.02 for water, weighting what the reflected ray
+ *                   would see: the horizon colour to the overhead one by
+ *                   how far it climbs (the sky's measured colours out of
+ *                   doors, the body's light indoors)
+ *   the highlight   Blinn-Phong toward the class's light direction
+ *   the water       what comes through from the floor beneath, exp(-path /
+ *                   absorption) with the path the depth over the cosine of
+ *                   the view, and the scattered colour in its place,
+ *                   shallow to deep: a view from above sees the floor, a
+ *                   flat one the reflection
+ *   the foam        at the shore, within the class's band, broken by a
+ *                   moving pattern; and on the crests of a sea
+ *
+ * Premultiplied: rgb is what the water adds, alpha how much of the floor it
+ * hides, 1 - (1 - F) T. The floor is dimmed by that one scalar; tinting it
+ * per channel would need a copy of the picture behind it.
+ *
+ * Seen from below (the camera under water), the surface shows the bright
+ * window overhead within the critical angle and the deep colour outside it.
+ * The distance fog takes off what it takes off a room. The fog bulbs and
+ * the dynamic lights do not light the sheet. */
+struct WATER_OUT
+{
+	float4 pos     : POSITION;
+	float4 roomPos : TEXCOORD0;	// xyz room local (as drawn), w depth
+	float4 eye     : TEXCOORD1;	// xyz toward the eye, w shore distance
+	float4 misc    : TEXCOORD2;	// x view depth (fog), y wave height
+};
+
+WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
+	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
+{
+	WATER_OUT o;
+
+	float3 pos = inPos.xyz;
+	const float depth = inC0.r * (255.0f * 32.0f);
+	const float shore = inC0.g * (255.0f * 16.0f);
+	float2 slope;
+	const float h = WaveSum(pos.xz + gRoomOrigin.xz, gMotion.z, gWaveV[0],
+		gWaveV[1], gWaveV[2], gWaveV[3], slope);
+	const float taper = saturate(shore / max(gSwell.y, 1.0f));
+
+	pos.y -= gSwell.x * taper * h * gMotion.w;
+
+	float4 clip = mul(float4(pos, 1.0f), gWorldViewProj);
+	const float3 view = mul(float4(pos, 1.0f), gWorldView);
+
+	// The underwater screen wobble, as RoomVS draws it (drawroom.cpp).
+	if (gScreen.w > 0.5f && clip.w > 1.0f)
+	{
+		float invw = 1.0f / clip.w;
+		float zv2 = 512.0f * invw;
+
+		float dx = gWibbleTable[(int)WrapIndex(ShiftDown(gScreen.z +
+			trunc(zv2 * view.y), 8.0f), 32.0f)].x;
+		float sx = clip.x * invw * gScreen.x + gScreen.x + dx;
+		float dy = gWibbleTable[(int)WrapIndex(ShiftDown(gScreen.z +
+			trunc(zv2 * sx), 8.0f), 32.0f)].x;
+
+		clip.x += dx * clip.w / gScreen.x;
+		clip.y -= dy * clip.w / gScreen.y;
+	}
+
+	o.pos = clip;
+	o.roomPos = float4(pos, depth);
+	o.eye = float4(gEye.xyz - pos, shore);
+	o.misc = float4(view.z, h, 0.0f, 0.0f);
+	return o;
+}
+
+float4 WaterPS(WATER_OUT input) : COLOR0
+{
+	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
+	const float t = gWaterMisc.z;
+
+	/* A row whose wave is finer than about two pixels fades out instead of
+	 * aliasing into stripes: the footprint of the pixel in world units
+	 * against each row's wave number. */
+	const float2 dx = ddx(world.xz);
+	const float2 dy = ddy(world.xz);
+	const float foot = sqrt(max(dot(dx, dx), dot(dy, dy)));
+	const float4 k = float4(length(gWaveP[0].xy), length(gWaveP[1].xy),
+		length(gWaveP[2].xy), length(gWaveP[3].xy));
+	const float4 keep = saturate(2.0f - foot * k * 1.3f);
+	float2 slope;
+	const float h = WaveSum(world.xz, t,
+		float4(gWaveP[0].xyz, gWaveP[0].w * keep.x),
+		float4(gWaveP[1].xyz, gWaveP[1].w * keep.y),
+		float4(gWaveP[2].xyz, gWaveP[2].w * keep.z),
+		float4(gWaveP[3].xyz, gWaveP[3].w * keep.w), slope);
+
+	// y counts down: the surface's normal points to -y.
+	float3 N = normalize(float3(-slope.x, -1.0f, -slope.y));
+	const float3 V = normalize(input.eye.xyz);
+	const float above = V.y < 0.0f ? 1.0f : 0.0f;
+
+	N = above > 0.5f ? N : -N;
+
+	const float nv = saturate(dot(N, V));
+	const float g = 1.0f - nv;
+	const float g2 = g * g;
+	const float F = gWaterRefl.w + (1.0f - gWaterRefl.w) * (g2 * g2 * g);
+
+	// What the reflected ray would see: horizon to overhead.
+	const float3 R = reflect(-V, N);
+	float3 refl = lerp(gWaterRefl.rgb, gWaterZen.rgb, saturate(-R.y));
+
+	/* A room is not one colour all round: lit stretches of wall and dark
+	 * ones, openings and pillars. A slow pattern over the reflected
+	 * direction stands in for them, so that the waves bend something - no
+	 * picture of the room, only light and dark, +-25 % about its mean. */
+	const float2 env = Wave2(R.xz * float2(5.0f, 4.3f) +
+		float2(0.0f, 1.7f));
+
+	refl *= 0.75f + 0.5f * (0.5f + 0.5f * env.x * env.y);
+
+	/* And brighter toward the light: what stands round a lamp, or the
+	 * bright band of a sky, is brighter than the rest. A broad lobe (the
+	 * eighth power of R.L) of the highlight's colour - it is what lets the
+	 * waves be seen in a reflection that has no picture in it. */
+	const float toward = saturate(dot(R, gWaterSun.xyz));
+	const float t2 = toward * toward;
+
+	refl += gWaterHigh.rgb * (0.35f * t2 * t2 * t2 * t2);
+
+	// The highlight.
+	const float3 H = normalize(gWaterSun.xyz + V);
+	const float3 spec = gWaterHigh.rgb *
+		pow(saturate(dot(N, H)), gWaterHigh.w);
+
+	// The water: transmitted from the floor, or scattered in its place.
+	const float path = input.roomPos.w / max(abs(V.y), 0.25f);
+	const float T = exp(-path * gWaterDeep.w);
+	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb,
+		saturate(1.0f - T));
+
+	float3 col = F * refl + (1.0f - F) * (1.0f - T) * scatter + spec * above;
+	float a = 1.0f - (1.0f - F) * T;
+
+	/* Seen from below: inside the critical angle (about 49 degrees off the
+	 * vertical, N.V above 0.66) the bright window, outside it the deep
+	 * colour mirrored back. */
+	if (above < 0.5f)
+	{
+		const float window = smoothstep(0.6f, 0.75f, nv);
+
+		a = lerp(0.92f, 0.55f, window);
+		col = a * lerp(gWaterDeep.rgb * 1.3f, refl, window);
+	}
+
+	/* The foam: a blotchy pattern that drifts - two layers of Wave2, the
+	 * second warped by the first so that it never lines up into a grid,
+	 * scaled by the class's grain (gWaterBase.w) - kept near the shore
+	 * within the band, and on the crests of a sea. */
+	const float2 fp = world.xz * gWaterBase.w;
+	const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
+		t * float2(0.7f, -0.5f));
+	const float2 w2 = Wave2(fp * float2(0.047f, 0.041f) + w1 * 1.7f +
+		t * float2(-0.9f, 1.1f));
+	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
+	const float edge = saturate(1.0f - input.eye.w /
+		max(gWaterMisc.x, 1.0f));
+	float foam = gWaterFoam.w * saturate((edge - (1.0f - n) * 0.8f) * 3.0f);
+
+	foam += gWaterMisc.y * smoothstep(0.45f, 0.85f, n) *
+		saturate((h / max(gWaterMisc.w, 1.0f) - gWaterSun.w) * 4.0f);
+	foam = saturate(foam) * above * 0.9f;
+
+	col = lerp(col, gWaterFoam.rgb, foam);
+	a = lerp(a, 1.0f, foam);
+
+	// The distance fog, as RoomPS takes it off (drawroom.cpp).
+	const float fog = max(0.0f, input.misc.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+
+	col = max(0.0f, col - fog * a);
+	return float4(col, a);
 }

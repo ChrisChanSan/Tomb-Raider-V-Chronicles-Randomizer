@@ -164,12 +164,8 @@ float4 GlowPS(VS_OUT input) : COLOR0
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
-		float cx = world.x * HD_CAUSTIC_SCALE;
-		float cz = world.z * HD_CAUSTIC_SCALE;
-		float caustic = sin(cx + gAdd.y * 2.0f) * sin(cz + gAdd.y * 1.7f) +
-			0.5f * sin((cx - cz) * 1.3f + gAdd.y * 2.4f);
-
-		c *= max(0.0f, 1.0f + HD_CAUSTIC_WEIGHT * input.waterAdd.w * caustic);
+		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w *
+			CausticOf(world.xz, gAdd.y));
 	}
 
 	float3 lit = texel.rgb * c;

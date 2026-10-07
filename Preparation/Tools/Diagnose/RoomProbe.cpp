@@ -343,6 +343,17 @@
  *     -glossfile <path>
  *                     build with that hd_gloss.txt (the game reads the one
  *                     beside its executable); none without it.
+ *     -hdwater 0|1    the water sheets, built as hd_level.cpp's
+ *                     BuildWaterSheets builds them - the same
+ *                     HDRenderSetWaterSheets over the classic level's floor
+ *                     squares: 1 with the sheets (tomb5.hd_water 1), 0 with
+ *                     the bodies, their wave on the remaster's water art
+ *                     and the caustic under them and no sheet. Prints the
+ *                     WATERLOG lines the engine writes and, after the
+ *                     picture, the GPU time of the sheet draws. With
+ *                     -nodraw it is the sweep of one level. Needs -roombox.
+ *     -waterfile <path>
+ *                     build with that hd_water.txt; none without it.
  *     -shatter        hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
@@ -1577,6 +1588,9 @@ static int g_mesh_effect = 0;
  * away again, which is what the engine's hd_motion does. */
 static double g_time = 0;
 static bool g_water = false;
+// -hdwater 0|1 (-1 not asked) and -waterfile - see the usage above.
+static int g_hdwater = -1;
+static std::string g_water_file;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
  * would leave them on the corners of one water quad. The renderer's flood
@@ -6530,6 +6544,8 @@ int main(int argc, char** argv)
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
+		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
+			"(needs -roombox)\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
@@ -6699,6 +6715,10 @@ int main(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-water"))
 			g_water = true;
+		else if (!strcmp(argv[at], "-hdwater") && at + 1 < argc)
+			g_hdwater = atoi(argv[++at]) ? 1 : 0;
+		else if (!strcmp(argv[at], "-waterfile") && at + 1 < argc)
+			g_water_file = argv[++at];
 		else if ((!strcmp(argv[at], "-plane") ||
 			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
 		{
@@ -8300,6 +8320,91 @@ int main(int argc, char** argv)
 	 *
 	 * The point of it is that the engine's own gate can be run over all
 	 * fifteen levels without starting the game. */
+	/* The water sheets (-hdwater): the classic level's floor squares,
+	 * handed to the renderer exactly as hd_level.cpp's BuildWaterSheets
+	 * hands the engine's - the same HDRenderSetWaterSheets finds the water,
+	 * joins the bodies and classes them - and the WATERLOG lines it writes.
+	 * The tool's room y origin is 0, the classic file's own. */
+	if (g_hdwater >= 0 && g_roombox.empty())
+		printf("-hdwater: needs -roombox\n");
+	else if (g_hdwater >= 0)
+	{
+		Tr5Level level;
+		std::string error;
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+		std::wstring wide;
+
+		for (size_t i = 0; i < trc.size(); i++)
+			wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+		if (!level.load(wide, error))
+			printf("-hdwater: classic level not loadable: %s\n", error.c_str());
+		else
+		{
+			const int nr = level.roomCount();
+			std::vector<HDWaterRoom> rooms((size_t)nr);
+			std::vector<std::vector<signed char> > floors((size_t)nr);
+			std::vector<std::vector<short> > below((size_t)nr);
+
+			for (int r = 0; r < nr; r++)
+			{
+				const Tr5Room& rm = level.rooms()[(size_t)r];
+				std::vector<Tr5Level::SectorInfo> sec;
+				HDWaterRoom& w = rooms[(size_t)r];
+
+				w.originX = rm.originX;
+				w.originZ = rm.originZ;
+				w.flags = (int)rm.flags;
+				w.flip = rm.altRoom;
+				w.drawn = r < HDRenderGroupCount() ? 1 : 0;
+
+				if (!level.sectorInfo(r, sec, error))
+					continue;
+
+				w.sizeX = rm.numXSectors;
+				w.sizeZ = rm.numZSectors;
+				floors[(size_t)r].assign(sec.size(), (signed char)-127);
+				below[(size_t)r].assign(sec.size(), (short)-1);
+
+				for (size_t i = 0; i < sec.size(); i++)
+				{
+					const size_t at = (size_t)(sec[i].sx * w.sizeZ + sec[i].sz);
+
+					if (at >= sec.size())
+						continue;
+
+					floors[(size_t)r][at] = (signed char)sec[i].floor;
+					below[(size_t)r][at] = (short)(sec[i].roomBelow >= 255 ||
+						sec[i].roomBelow < 0 ? -1 : sec[i].roomBelow);
+				}
+
+				if (!sec.empty())
+				{
+					w.floor = &floors[(size_t)r][0];
+					w.below = &below[(size_t)r][0];
+				}
+			}
+
+			const int section = !_strnicmp(stem, "ANDREA", 6) ? HD_WATER_ROME :
+				!_strnicmp(stem, "JOBY", 4) ? HD_WATER_RUSSIA :
+				!_strnicmp(stem, "ANDY", 4) ? HD_WATER_IRELAND :
+				!_strnicmp(stem, "RICH", 4) ? HD_WATER_VCI : HD_WATER_ROME;
+			char line[512];
+
+			HDRenderWaterFile(g_water_file.empty() ? 0 : g_water_file.c_str());
+			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
+				g_hdwater);
+			HDRenderWaterTiming(1, 0, 0);
+			HDRenderWaterLogLine(-1, stem, g_hdwater, line, sizeof(line));
+			printf("%s\n", line);
+
+			for (int b = 0; b < HDRenderWaterBodies(); b++)
+				if (HDRenderWaterLogLine(b, stem, g_hdwater, line,
+					sizeof(line)))
+					printf("%s\n", line);
+		}
+	}
+
 	if (!g_survey.empty())
 	{
 		Tr5Level level;
@@ -8817,6 +8922,16 @@ int main(int argc, char** argv)
 
 	printf("HDRenderRoom returned %s after %d draw calls\n",
 		drew ? "true" : "FALSE", calls);
+
+	if (g_hdwater >= 0)
+	{
+		double ms = 0.0;
+		int timed = 0;
+
+		HDRenderWaterTiming(-1, &ms, &timed);
+		printf("-hdwater: %d sheet draw(s), GPU %.3f ms (timestamps round "
+			"the sheet draws)\n", timed, ms);
+	}
 
 	if (g_roomwin_count)
 		printf("decide: clip rooms=%d open=%d full=%d scissored=%d empty=%d "

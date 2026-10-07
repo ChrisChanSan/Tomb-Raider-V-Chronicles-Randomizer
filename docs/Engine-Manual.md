@@ -1745,6 +1745,23 @@ it.
   floor by the bending. A card without it draws the same sheet with the depth
   of the level's own floor data. With *HD water* off neither the copy nor the
   depth texture is made.
+- **The water's life.** The waves of a sheet are eight rows, long and short, in
+  directions that never line up, and each row swells and fades on its own slow
+  cycle of 8 to 15 seconds, so the water breathes and never settles into one
+  pattern; a sea breathes deepest, a basin least. The foam is translucent - the
+  water shows through it - lacy at its outer edge and dense at the bank; it runs
+  up the bank and draws back every few seconds and with the waves, its blotches
+  drift, grow and dissolve, and no two stretches of a bank look alike. Where the
+  depth texture is there the foam follows the water's real depth - a sloping
+  bank, a step, an ice floe - rather than the level's squares. The whitecaps of
+  a sea break on the highest crests and trail behind them. Where the game itself
+  makes a ripple - Lara wading or swimming, a drip, a bubble reaching the
+  surface, a rat, a falling shell - the sheet draws a ring of waves that runs
+  outwards and fades within two seconds, in place of the game's flat ripple
+  picture; rain keeps its own rings. Indoors the reflection's light and dark
+  stretches are stronger and finer, so a basin seen at eye level shows its
+  waves. With `hd_motion` off the water stands still and the game's own ripple
+  pictures are drawn.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
@@ -1759,14 +1776,22 @@ it.
   and skipped. The rows apply after the engine's own pinned rows, so a row of
   the file wins, and a later row wins over an earlier one - for example
   `ANDREA2 144 - tint 1.1 1.0 0.85 waves 0.7`, `JOBY2 42 - foam 0.6` or
-  `ANDY2 57 none`. No file means the engine's own rows alone.
+  `ANDY2 57 none`. Any row may also carry `ripple <x> <z> <size> <seconds>`: a
+  ring at that place (world units, as the game and trview give them) every so
+  many seconds while the level runs, as big as a game ripple of that size
+  (1 to 255; a wading Lara's is about 120) and every 0.1 to 60 seconds - for a
+  fountain the game gives no ripple of its own, for example `ANDREA2 194 -
+  ripple 55808 32768 80 0.7`; the rest of such a row applies like any row's.
+  No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
   sheet, the bodies by class, `hd_water.txt`'s lines, rows and unreadable lines,
   the rows of this level that found a body and those that did not, the
   squares of a flipmap twin, and whether the sheets read the copy of the
-  picture (`copy=1`) and the depth texture (`depth=1`) - and one `WATERLOG
-  body=` line per body: its rooms,
+  picture (`copy=1`) and the depth texture (`depth=1`), the wave rows a sheet
+  sums (`waverows=8`), the rings one sheet can show at once (`rings=8`) and the
+  ripple rows of the file that found their water (`sources=`) - and one
+  `WATERLOG body=` line per body: its rooms,
   the height of its surface, its squares and those drawing a sheet, twice its
   area over its perimeter, open air, the class drawn and the class the rule
   gives, the deepest square, the light its colours are lit by and the row that

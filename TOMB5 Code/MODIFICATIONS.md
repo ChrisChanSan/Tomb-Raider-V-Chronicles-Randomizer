@@ -9052,6 +9052,58 @@ without `-hdwater`, takes the copy where `HDFrameDrawGlow` takes it (`RoomProbe.
 the refused pixels in red) and `-waterbend <s>` (the refraction scaled for a proof
 picture).
 
+The life of the water. Every class has eight wave rows (`kWaterClass` :8333): the four
+it had, which RoomVS still moves the Remaster's marked art with, and four more - three
+at the geometric mean of two neighbours' wavelengths and one at the shortest over 1.5,
+each as high as 0.8 of its neighbours' mean steepness times its wavelength, so heights
+fall with the wave number, directions at least 0.15 radians from every other row's. A
+sheet draw uploads all eight in a phase form (`water_rows_now` :8972): the phase is omega
+t plus the row's own start, wrapped to one turn in double precision, and each height
+carries a slow envelope, `1 - e + e (0.5 + 0.5 sin(2 pi t / P + i golden))`, with P 8 to
+15 seconds and different for every row (`kWaterGroupPeriod` :8365) and e 0.30 for a
+basin, 0.35 for a channel, 0.50 for a sea. `WaveSum8` (`hd_room.hlsl` :931) sums the
+eight with the bend `WaveSum` gives its own position and Wave2's curve for sine and
+cosine (eight `sincos` would cost about 64 pixel slots, the curve about 24); `WaterVS`
+and both `WaterPS` variants read it, the footprint fade per row now for eight rows from
+wave numbers the processor works out (`gWaveK`). The foam (`WaterPS` :2021) is a
+density: at most 0.75, lacy at its outer edge and dense at the bank, lit as before; its
+reach swings with a swash of 4.5 seconds whose phase runs along the bank and with the
+wave's height there; its pattern drifts at two speeds and, through a third slow layer
+whose threshold swings over 5 seconds with a phase of its own per region, grows and
+dissolves; a smooth variety field of two Wave2 layers (periods about 6,700 and 8,900
+units) moves it, turns it toward a second orientation and shifts its phase, so no two
+stretches of bank look alike. In the depth variant the reach is the water's real depth
+under the pixel, full at nothing and gone at one click (256 units), for water within
+three squares of a classic bank; the fallback keeps the class's band. Whitecaps break
+where the eight rows stand above the class's share of their whole height now and trail
+where the two longest stood half a second earlier, weaker and broken up. The rings
+(`hd_render.cpp`, "the rings"): once a frame, only when the level built sheets,
+`FeedWaterRipples` (`hd_level.cpp` :1656) hands the live slots of the game's own
+`ripples[]` with flags 0x10 or 0x02 and without 0x20 to `HDRenderWaterRipples` (:9729),
+which starts a ring where a slot is new and ages it by what its `init` has counted
+(`UpdateSplashes` adds 4 a tick, 8 with flags 2); the ring then lives two seconds on the
+frame's clock, its front running out at 210 units a second from half the ripple's first
+size, its strength a slope of 0.5 times that size over 128, falling with what is left
+of its life. A sheet draw takes the eight youngest within 512 units of its squares and
+256 of its surface (`gather_rings` :10243); `RingSlope` (`hd_room.hlsl` :1851) adds a
+train of waves 56 units long behind each front to the slope, its amplitude divided by
+the square root of 1 + d / 256 for the distance d from the centre - a loop over eight
+registers, so the slots do not grow with the count. `S_DrawSplashes`
+(`specific/specificfx.cpp` :4208) leaves a ripple's flat sprite out where
+`HDWaterRippleOnSheet` (`hd_level.cpp` :1683) finds a drawing sheet under it with
+`hd_water` and `hd_motion` on; raindrops (flags 0) and the underwater blood
+keep their sprites, and with `hd_enable 0` the call is false at its first test. The
+indoor stand-in reflects 0.65 of the body light at the horizon and 0.25 overhead and
+swings +-40 % with a finer second pattern for 0.4 of it; under the sky it keeps the
+measured sky rows and its +-25 %. `hd_water.txt` takes `ripple <x> <z> <size>
+<seconds>` on any row (world units, size 1 to 255, seconds 0.1 to 60, `ParseWaterLine`
+:8723): a ring source at that place every so many seconds, at the surface of the row's
+room's square under it (`apply_water_row` :9121). RoomProbe `-ripple x,z,age[,size]`
+(repeatable, world units, `RoomProbe.cpp` :6783) puts a ring of that age in every
+picture. `WATERLOG`'s level line ends with `waverows=8 rings=8 sources=<n>`, the ripple
+rows that found a body; the key is `waverows` and not `rows`, which the line already
+carries for the file's rows.
+
 `hd_water 0` builds no sheet, restores every classic face as without the sheets and
 switches the caustic under a surface off; what stays with 0 is only the caustic's shape
 and footprint fade on the Remaster's own marked water art and the wave rows on that art,
@@ -9130,6 +9182,25 @@ the water (A1, A2, B1, C1) and 1,972 from below (D1), along the near banks, the 
 across ANDREA2's fountain and the ice floes' edges (`-waterdepthview 3`); with the
 refraction six times as strong, 1,794 to 2,619 and 5,994.
 
+The life of the water, measured with RoomProbe built after its last engine commit. The
+slots of fxc 10.0.26100 /O3: `WaterPS` 307 to 436 in the fallback and 354 to 487 in the
+depth variant, `WaterVS` 153 to 150; taking one feature out of the final shader at a
+time, the rings cost 51 and 52 (eight of them, a loop), the four added rows 42 and 42,
+the new foam 75 and 78 against the foam before it (of that the earlier crest 19 and
+20), the stand-in's finer pattern 3 and 4; Wave2's curve in place of `sincos` and the
+wave numbers worked out on the processor give back about 42. RoomVS 412, RoomPS 477,
+gloss RoomPS 502 and GlowPS 478 keep their bytecode. GPU time by timestamp queries,
+the full-water view at 2560 x 1440, three runs each: the sheet draws 0.188 to 0.192 ms
+with the depth texture (0.113 to 0.117 before), 0.182 to 0.183 with the fallback, and
+from 0.188 to 0.191 with eight rings injected; the copy 0.017 ms as before; at 960 x
+540 from 0.035 to 0.060 ms in the thirteen views that draw a sheet. The ripple scan on the
+processor, by count rather than by clock: 128 slots read a frame, a ring started per
+new slot, at most 64 rings kept, and per sheet draw a pass over those rings and the
+file's sources and a sort of at most 96 - a few thousand operations a frame. The
+pictures for the strips: four views at eight clock times over four seconds (3 to 6.5),
+and the sea of JOBY2 42 and the sewer of ANDREA2 19 at 0, 10, ... 60 seconds before
+and after.
+
 **Checked.** The engine builds (`be.bat`), and RoomProbe, TrgProbe, ModelProbe, MapProbe,
 ModernTest, MenuTest, InterpTest and LipsTest; ModernTest 14,721, MenuTest 42,627 (42,613,
 13 in the new `graphics_water_row` and one more in `graphics_softbody_row`, which now
@@ -9179,6 +9250,25 @@ it releases the `INTZ` texture and the reference on the own surface, so `Reset` 
 `D3DPOOL_DEFAULT` object of the water alive; after the `Reset` the device holds its
 automatic depth-stencil again and the next level binds the texture anew.
 
+The life of the water, with the tools built after its last engine commit: the engine
+and the tools build, the suites count as before (nothing was added to them) and none
+failed; the classic faces of the six rooms are the same bytes as at 8691e82 (6 of 6);
+the fifteen views with `-hdwater 0` are the same bytes as the pictures of the frame
+behind the sheet and of the fix round (15 of 15), so nothing of the life runs without
+sheets; the shared shaders' `.inc` differ in the stamp lines alone (12 of 12); the
+sweep's counts are unchanged. ANDREA2's fountain 194 has no ripple of the game's own -
+no item stands in room 194 or in the water room 120 below it (ItemCheck on the classic
+level), and no caller of `SetupRipple` is an object's control - so a ripple row is what
+gives it rings: `ANDREA2 194 - ripple 55808 32768 80 0.7` in a test file read by
+RoomProbe gives `rows=1 bad=0 applied=4 sources=1`, the body of room 194 names
+`override=file:194`, and the fountain's picture changes in the pool alone; a file of
+four unreadable ripple rows (size 0, 100 seconds, three numbers, a word) and one full
+row of sixteen words counts `bad=4` and `sources=1`. Rings injected with `-ripple` show
+on ANDREA2's fountain at 0.3 and 1.0 seconds and are gone at 2.0, and show on JOBY2's
+sea. The motion strips show the foam moving up and down the bank, blotches coming and
+going and the waves' pattern changing over a minute, where the foam before it showed the
+same blotches at the same places at every clock time.
+
 **Left.** The in-game look, the palette under the game's gamma and fog, the mirror rooms
 and the camera under water in the game, all unseen: nobody could play in this round. The
 shore foam's softer edge (a ramp of gain 2 where the build had 3) is to be judged in the
@@ -9211,10 +9301,20 @@ Remaster's art over a sheet and the ANDY3 planes at three heights stay as listed
 above; where the depth texture finds a deep shaft or a pit the floor data does not
 know (ANDREA2 76, fountain 194), the water now goes dark there, which is to be judged in
 the game; an adapter without `INTZ` draws the fallback, which this machine shows only
-through `-nodepth`.
+through `-nodepth`. Of the life of the water: the waves, the foam and the rings in
+motion in the game, unseen - the rings of the game's ripples in particular are proved
+only through `-ripple`, since only the game makes ripples; in the depth variant the
+foam rises wherever something stands within a click under the surface near a bank,
+a wading or swimming Lara included; a sheet draw shows at most its eight youngest rings,
+and where more ripples lie under one sheet the classic sprites of the rest stay out as
+well; a raindrop's ripple keeps its sprite and gets no ring; the waves, the foam and the
+rings step with the game's thirty-hertz clock, as every motion of the HD path does; the
+fountain's ripple row lives in a test file and is not in this tree, like the rest of
+`hd_water.txt`.
 
 **Commits.** `4ee001a`, `e7db80a`, `b6866f3`, `6f79503`, `19ad148`, `73522ab`, `a96a091`,
-`128a4a3`, `8b19a7e`; the frame behind the sheet `8020e8a`, `cdb4640`.
+`128a4a3`, `8b19a7e`; the frame behind the sheet `8020e8a`, `cdb4640`; the life of the
+water `536f735`, `77d333c`.
 
 ## 2.5 Sixty frames a second
 

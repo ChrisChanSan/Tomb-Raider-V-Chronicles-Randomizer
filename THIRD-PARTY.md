@@ -451,15 +451,16 @@ I-III bundle's `1\TEX`, all beside a plain `<n>.DDS`); and the passages of
 `Trg.h` that told in words what the Remaster's renderer does with a vertex and
 with the point lights. The engine manual's HD chapter points here.
 
-**This project's own water.** Entries 40 to 65 came by way of neither TROne nor
+**This project's own water.** Entries 40 to 73 came by way of neither TROne nor
 TRForge: the water sheets, their wave and their caustic are this project's own
 design out of textbook graphics (sums of sines, Schlick's fresnel, Blinn-Phong,
 exponential absorption, foam by shore distance, refraction by Snell's law, a
 copy of the frame and a depth texture read back) and its own counts. In these
 entries OWN is this project's own design - a free choice, a count on our data, or
 tuned by eye on reference pictures supplied for this project (not in the
-repository) - and DATA a measurement on the player's files with the tool switch
-that repeats it. `MODIFICATIONS.md`, entry "The water sheets: this project's own
+repository) - DATA a measurement on the player's files with the tool switch
+that repeats it, and CLASSIC the classic engine's own code, as above (entry 71,
+the game's own ripples). `MODIFICATIONS.md`, entry "The water sheets: this project's own
 water surface", carries the tables.
 
 40. **The water square.** A square of a room that is not under water whose room
@@ -482,9 +483,10 @@ water surface", carries the tables.
     count on our data: ANDREA2's sewer (44 squares, 1.83) a channel, its
     fountain (36, 2.25) a basin, JOBY2's water along the submarine a sea.
 44. **The wave rows of the three classes** - four wavelengths, heights and
-    directions each, the calm factor, a channel's current of 180 units a
-    second, the swell's share and taper. OWN, tuned by eye on reference
-    pictures supplied for this project.
+    directions each (the first four of the sheet's eight, entry 66, and the
+    rows of the Remaster's marked water), the calm factor, a channel's current
+    of 180 units a second, the swell's share and taper. OWN, tuned by eye on
+    reference pictures supplied for this project.
 45. **Deep-water dispersion**, omega = calm * sqrt(g k) with g = 4300 units
     a second squared: 9.81 m/s^2 at 2.3 mm a unit, Lara's 768 units standing
     for 1.77 m. OWN, free choice of the scale.
@@ -502,8 +504,11 @@ water surface", carries the tables.
     low open-air light follows the JOBY2 dome's bright horizon
     (`RoomProbe -sky -skyonly`).
 49. **The fresnel and the reflection colours** - Schlick with F0 = 0.02 (water,
-    n = 1.33); indoors the body light times 0.55 at the horizon and 0.30
-    overhead, plus or minus a quarter by a slow pattern; a broad lobe of the
+    n = 1.33); indoors the body light times 0.65 at the horizon and 0.25
+    overhead, plus or minus 40 % by a slow pattern and a finer second one
+    taking 0.4 of it, under the sky plus or minus a quarter by the slow pattern
+    alone (the indoor numbers a free choice, set by eye on RoomProbe strips
+    of ANDREA2's fountain and room 76); a broad lobe of the
     highlight colour, (R.L)^8 at 0.35; Blinn-Phong exponent 90 for a basin and
     a sea, 70 for a channel; strength 0.8 indoors, 0.5 out of doors. OWN, tuned
     by eye on reference pictures supplied for this project.
@@ -519,12 +524,11 @@ water surface", carries the tables.
     900 for a sea - and the Snell window from below (N.V 0.6 to 0.75, alpha
     0.92 outside, 0.55 inside). OWN, tuned by eye; a clear basin and a murky
     channel a project decision of 2026-10-07.
-52. **The foam rule** - strength * saturate((edge - (1 - n) * 0.8) * 2) in a
-    300-unit band, strengths 0, 0.7 and 0.85, whitecaps 0.6 above half the
-    wave height, the blotch pattern 1.5 times finer for a channel and a sea.
-    OWN, tuned by eye; the finer grain a project decision of 2026-10-07, the
-    softer edge (a gain of 2 where it was 3) a free choice, set by eye on
-    RoomProbe pictures of both.
+52. **The foam's band and strengths** - a 300-unit band without the depth
+    texture, strengths 0, 0.7 and 0.85, whitecaps 0.6 above half the wave
+    height, the blotch pattern 1.5 times finer for a channel and a sea; the
+    foam's shape and motion in entries 68 to 70. OWN, tuned by eye; the finer
+    grain a project decision of 2026-10-07.
 53. **The caustic's shape** - one minus half the absolute sum of two
     domain-warped smoothed-triangle waves, to the sixth power, 0.0224 radians
     a unit (a cell of 280); 0.30 on a pool floor fading out over 2048 units
@@ -586,6 +590,59 @@ water surface", carries the tables.
     techniques of general graphics knowledge. OWN: where in the frame the
     copy is taken and when the texture is bound are this project's own
     choices.
+66. **The sheet's spectrum** - eight rows a class: the four of entry 44 and
+    three at the geometric mean of two neighbours' wavelengths and one at the
+    shortest over 1.5 (moved two units off a whole fraction of another row),
+    each 0.8 of its neighbours' mean steepness high, directions at least 0.15
+    radians from every other row's; sine and cosine as Wave2's curve. OWN,
+    free choice.
+67. **The envelope and the phase form** - each row's height times
+    1 - e + e (0.5 + 0.5 sin(2 pi t / P + i golden)), where the depth e
+    is 0.30 for a basin, 0.35 for a channel and 0.50 for a sea and the periods P
+    of the eight rows are 8.0, 13.7, 10.3, 15.0, 9.1, 11.9, 14.3 and 12.6
+    seconds; the phase omega t plus the row's start (0 for the first four,
+    multiples of the golden angle for the rest) wrapped in double precision on
+    the processor. OWN, free choice, set by eye on RoomProbe strips.
+68. **The foam's density and reach** - at most 0.75, a soft threshold that runs
+    from only the peaks of the pattern at the outer edge to nearly all of it at
+    the bank; the reach times 0.55 to 1.0 by a swash of 4.5 seconds whose phase
+    runs along the bank, plus 0.35 of the wave's height there; with the depth
+    texture the reach is the water's depth, gone at one click (256 units), for
+    water within three squares of a classic bank. OWN, free choice, set by eye
+    on RoomProbe pictures.
+69. **The foam's motion and variety** - the coarse layer drifting at a third
+    of the fine one's speed, a slow third layer giving each region of blotches
+    its own phase for a threshold that swings over 5 seconds; a smooth field of
+    two Wave2 layers (periods about 6,700 and 8,900 units) moving the pattern by
+    up to 400 units, turning it toward a second orientation 57 degrees off and
+    shifting the swash. OWN, free choice; a field rather than a number per
+    square, which would draw a seam at every square's edge.
+70. **The trailing whitecaps** - a cap where the eight rows stand above the
+    class's share of their whole height now, and, at 0.7 and broken up by the
+    slow layer, where the two longest rows stood half a second earlier. OWN,
+    free choice.
+71. **The game's own ripples** - `ripples[]` (`game/tomb4fx.cpp`), 128
+    `RIPPLE_STRUCT` (`global/types.h`), set up by `SetupRipple` and grown by
+    `UpdateSplashes` (`game/effect2.cpp`): Lara in the water and drips with
+    flags 0x10, bubbles at the surface, rats and shells with 0x02, raindrops
+    with 0, the underwater blood of `TriggerUnderwaterBlood` with 0x20; `init`
+    counts up by 4 a tick (8 with flags 2) while `size` grows by 4 (2). CLASSIC:
+    the sheet draws a ring where the classic engine drew a flat sprite
+    (`S_DrawSplashes`, `specific/specificfx.cpp`), for the ripples with 0x10 or
+    0x02 and without 0x20; the rain and the blood keep the sprite.
+72. **The ring** - started where a ripple slot is new, aged by what its `init`
+    has counted, then two seconds on the frame's clock; a front running out at
+    210 units a second from half the ripple's first size, a train of waves 56
+    units long gone three wavelengths behind it, a slope of 0.5 times the first
+    size over 128 (at most 1) falling with the life left and over the square
+    root of 1 + d / 256; the eight youngest within 512 units of a sheet draw's
+    squares and 256 of its surface. OWN, free choice, set by eye on RoomProbe
+    pictures (`RoomProbe -ripple`).
+73. **The ripple row of `hd_water.txt`** - `ripple <x> <z> <size> <seconds>`
+    on any row: a ring at that world place every so many seconds, its phase
+    from the place, at the surface of the row's room's square under it. OWN,
+    free choice; for a fountain where the game makes no ripple of its own
+    (ANDREA2 194: no item in it or in room 120 below, `ItemCheck`).
 
 ## Credited, but not contained here
 

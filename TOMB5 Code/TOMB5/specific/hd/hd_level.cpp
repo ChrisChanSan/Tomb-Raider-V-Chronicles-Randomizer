@@ -1686,6 +1686,23 @@ static void BuildWaterSheets()
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
 
+	/* The depth texture the sheets read (HDRenderWaterDepthBind), bound
+	 * here, between frames, only when this level built sheets - with
+	 * tomb5.hd_water 0, and in a level with no water square, the device
+	 * keeps its own depth buffer. It goes with the level's buffers
+	 * (release_buffers): at the next level, and before a Reset or DXClose
+	 * through HDLevelDeviceLost, after which the HD path waits for the next
+	 * level as it does for everything else. */
+	HDRenderWaterLevel built;
+	const char* refused = "ok";
+
+	HDRenderWaterLevelInfo(&built);
+
+	if (built.built && built.depth && !HDRenderWaterDepthBind(&refused) &&
+		gLogEnabled)
+		Log("HDLOG water depth texture refused: %s - the sheets read the "
+			"classic floor's depth", refused);
+
 	/* WATERLOG, with -log: one level line and one line per body - the
 	 * legend is over HDRenderWaterLogLine in hd_render.cpp, which writes
 	 * RoomProbe -hdwater's lines too. */
@@ -6524,6 +6541,18 @@ void HDFrameDrawGlow()
 	const int objects_here = g_frame_objects;
 
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
+
+	/* The frame behind the water sheets: every opaque thing of the frame is
+	 * in the render target now - the HD rooms and objects, Lara and the
+	 * classic buckets - and nothing of the blend phase yet. One copy, and
+	 * only when a room of this frame has a sheet (none with tomb5.hd_water
+	 * 0, which builds no sheet). */
+	for (int i = 0; i < g_frame_count; i++)
+		if (HDRenderGroupHasSheet(g_frame[i].group))
+		{
+			HDRenderWaterCopy();
+			break;
+		}
 
 	/* The glass first and the glows after it. Both are drawn without a depth
 	 * write against a depth buffer that holds the whole opaque frame; the

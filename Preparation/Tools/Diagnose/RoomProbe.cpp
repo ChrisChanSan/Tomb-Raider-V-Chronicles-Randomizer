@@ -357,6 +357,24 @@
  *                     -nodraw it is the sweep of one level. Needs -roombox.
  *     -waterfile <path>
  *                     build with that hd_water.txt; none without it.
+ *     -nocopy         the sheets without the frame's copy: the floor is
+ *                     dimmed by one scalar and not bent (with -nodepth the
+ *                     look the sheets had before they read the frame).
+ *     -nodepth        the picture's depth buffer is a D24S8 surface and the
+ *                     sheets read the vertex depth - the fallback of an
+ *                     adapter without INTZ. Without it the depth buffer of
+ *                     every picture is an INTZ texture where the adapter
+ *                     offers one (HDRenderWaterDepthBind), with or without
+ *                     -hdwater, so that the classic and the HD path are
+ *                     proved to draw into it unchanged.
+ *     -waterdepthview 1|2|3
+ *                     the sheets draw the depth texture as grey: 1 the
+ *                     scene's view depth over 16384 units, 2 the water depth
+ *                     out of it over the vertex depth, times 0.5 (mid grey
+ *                     where the two agree); 3 the sheet with the pixels
+ *                     whose bent place the depth refused in red.
+ *     -waterbend <s>  the refraction times s, for a picture that shows what
+ *                     the depth texture's mask refuses; 1 is the look built.
  *     -shatter        hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
@@ -1224,6 +1242,11 @@ static bool g_black = false;
 // -glow: the additive pass alone over black, with and without the scene's
 // depth - see GlowShots.
 static bool g_glow_alone = false;
+// -nocopy, -nodepth, -waterdepthview and -waterbend - see the usage above.
+static bool g_water_copy = true;
+static bool g_water_depth = true;
+static int g_water_depth_view = 0;
+static float g_water_bend = 1.0f;
 
 static bool ShotBegin(Shot& shot, long w, long h)
 {
@@ -1257,6 +1280,16 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	g_device->GetRenderTarget(0, &shot.oldColour);
 	g_device->SetRenderTarget(0, shot.colour);
 	g_device->SetDepthStencilSurface(shot.depth);
+
+	/* The INTZ texture in the D24S8 surface's place, as the engine binds it
+	 * for a level with sheets - here for every picture, -hdwater or not,
+	 * unless -nodepth; ShotEnd puts the surface back. */
+	{
+		const char* refused = "ok";
+
+		if (g_water_depth && !HDRenderWaterDepthBind(&refused))
+			printf("water depth texture refused: %s\n", refused);
+	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws
 	 * black are the same picture on a black background, and the first is a
@@ -1366,6 +1399,7 @@ static void ShotEnd(Shot& shot)
 		shot.oldColour = 0;
 	}
 
+	HDRenderWaterDepthUnbind();
 	g_device->SetDepthStencilSurface(0);
 
 	if (shot.readback) { shot.readback->Release(); shot.readback = 0; }
@@ -6549,6 +6583,9 @@ int main(int argc, char** argv)
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");
+		printf("       -nocopy  -nodepth  -waterdepthview 1|2|3  "
+			"-waterbend <s>   the sheets without the frame's copy or depth "
+			"texture, the depth as grey, the refraction scaled\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
@@ -6722,6 +6759,14 @@ int main(int argc, char** argv)
 			g_hdwater = atoi(argv[++at]) ? 1 : 0;
 		else if (!strcmp(argv[at], "-waterfile") && at + 1 < argc)
 			g_water_file = argv[++at];
+		else if (!strcmp(argv[at], "-nocopy"))
+			g_water_copy = false;
+		else if (!strcmp(argv[at], "-nodepth"))
+			g_water_depth = false;
+		else if (!strcmp(argv[at], "-waterdepthview") && at + 1 < argc)
+			g_water_depth_view = atoi(argv[++at]);
+		else if (!strcmp(argv[at], "-waterbend") && at + 1 < argc)
+			g_water_bend = (float)atof(argv[++at]);
 		else if ((!strcmp(argv[at], "-plane") ||
 			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
 		{
@@ -7310,6 +7355,13 @@ int main(int argc, char** argv)
 		DropDevice();
 		return 3;
 	}
+
+	// -nocopy, -nodepth, -waterdepthview.
+	HDRenderWaterStage2(g_water_copy ? 1 : 0, g_water_depth ? 1 : 0,
+		g_water_depth_view, g_water_bend);
+	printf("water depth texture: INTZ %s by the adapter%s\n",
+		HDRenderWaterDepthOffered() ? "offered" : "NOT offered",
+		g_water_depth ? "" : " (-nodepth: not used)");
 
 	/* The texture policy. The device's own size limit is added inside
 	 * HDRenderLevelBegin, exactly as it is in the game - this sets only the
@@ -8882,6 +8934,17 @@ int main(int argc, char** argv)
 			probestatics::DrawPieces(&lighting, HD_PASS_CLEAR);
 			StandReceiveCount(&lighting);
 
+			/* The frame behind the water sheets, where HDFrameDrawGlow takes
+			 * it: after everything opaque, before the glass, once, and only
+			 * when a drawn group has a sheet. */
+			bool sheet = HDRenderGroupHasSheet(room);
+
+			for (int i = 0; i < g_with_count; i++)
+				sheet = sheet || HDRenderGroupHasSheet(g_with_group[i]);
+
+			if (sheet)
+				HDRenderWaterCopy();
+
 			/* The see-through half of the alpha pass - the glass - after
 			 * everything opaque and before the glows, which is the order
 			 * HDFrameDrawGlow draws them in. */
@@ -8936,6 +8999,10 @@ int main(int argc, char** argv)
 		HDRenderWaterTiming(-1, &ms, &timed);
 		printf("-hdwater: %d sheet draw(s), GPU %.3f ms (timestamps round "
 			"the sheet draws)\n", timed, ms);
+		HDRenderWaterCopyTiming(&ms, &timed);
+		printf("-hdwater: %d frame copy(ies) %dx%d, GPU %.3f ms (timestamps "
+			"round the StretchRect), depth texture %s\n", timed, (int)width,
+			(int)height, ms, HDRenderWaterDepthBound() ? "bound" : "not bound");
 	}
 
 	if (g_roomwin_count)

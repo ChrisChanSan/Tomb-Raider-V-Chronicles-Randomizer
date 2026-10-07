@@ -850,6 +850,8 @@ struct HDRenderWaterLevel
 	int overlaps;		// squares another room's sector holds too
 	int causticRooms;	// underwater rooms with a surface above
 	int vertices, triangles;
+	int copy;		// 1 when the sheets read the frame's copy
+	int depth;		// 1 when they read the depth texture as well
 };
 
 int HDRenderWaterBodies();
@@ -867,6 +869,37 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
  * waited for - it stalls, so the engine never turns it on): on 1 or 0 resets
  * and switches, -1 only reads the milliseconds and draws so far. */
 void HDRenderWaterTiming(int on, double* ms, int* draws);
+// And of the frame's copy, the same way: milliseconds and copies so far.
+void HDRenderWaterCopyTiming(double* ms, int* copies);
+
+/* The frame behind the sheets (hd_room.hlsl, "the frame behind the sheet").
+ *
+ * HDRenderWaterCopy copies render target 0 into a texture of its size and
+ * format (StretchRect, D3DPOOL_DEFAULT, made on first use and released with
+ * the level's buffers), at most once a bracket, and only while this level
+ * has built sheets: the blend phase calls it before its first draw, when a
+ * room of the frame has a sheet (HDRenderGroupHasSheet). A sheet drawn in a
+ * bracket without a copy keeps the look it has without one.
+ *
+ * HDRenderWaterDepthBind makes the device's depth-stencil the surface of an
+ * INTZ texture of the same size - a depth buffer the sheet can read - where
+ * the adapter offers that format as a depth texture, keeping the device's
+ * own surface to put back; HDRenderWaterDepthUnbind puts it back and
+ * releases the texture, and release_buffers calls it, so a lost device and
+ * a new level never find it bound. Both paths draw into it unchanged. The
+ * engine binds it when a level has built sheets (hd_level.cpp,
+ * BuildWaterSheets), RoomProbe for its picture. `why` names a refusal.
+ *
+ * HDRenderWaterStage2 is RoomProbe's: copy 0 (-nocopy) and depth 0
+ * (-nodepth) switch the two off, `view` is -waterdepthview, `bend` scales
+ * the refraction for a proof picture (-waterbend, 1 as built). */
+bool HDRenderGroupHasSheet(int group);
+bool HDRenderWaterCopy();
+bool HDRenderWaterDepthOffered();
+bool HDRenderWaterDepthBind(const char** why);
+void HDRenderWaterDepthUnbind();
+bool HDRenderWaterDepthBound();
+void HDRenderWaterStage2(int copy, int depth, int view, float bend);
 /* The rooms' own boxes for the level about to be built.
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */

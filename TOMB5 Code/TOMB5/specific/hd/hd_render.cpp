@@ -35,6 +35,7 @@
 #include "hd_shader/hd_room_gloss_ps.inc"
 #include "hd_shader/hd_room_water_vs.inc"
 #include "hd_shader/hd_room_water_ps.inc"
+#include "hd_shader/hd_room_water_depth_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1619,6 +1620,9 @@ namespace
 	// device refused either: then no sheet is built.
 	IDirect3DVertexShader9* g_water_vs = 0;
 	IDirect3DPixelShader9* g_water_ps = 0;
+	// Its pixel shader that reads the depth texture as well. Null when the
+	// device refused it: the sheets then draw with g_water_ps.
+	IDirect3DPixelShader9* g_water_depth_ps = 0;
 	/* The projected shadow's receive shader (hd_shadow_receive.hlsl). Null
 	 * when the device refused it; the projected shadow then does not run and
 	 * the blob stays. */
@@ -3583,6 +3587,10 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_water_ps)))
 		g_water_ps = 0;
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterDepthPS,
+		&g_water_depth_ps)))
+		g_water_depth_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -3733,6 +3741,7 @@ void HDRenderShutdown()
 	if (g_gloss_ps) { g_gloss_ps->Release(); g_gloss_ps = 0; }
 	if (g_water_vs) { g_water_vs->Release(); g_water_vs = 0; }
 	if (g_water_ps) { g_water_ps->Release(); g_water_ps = 0; }
+	if (g_water_depth_ps) { g_water_depth_ps->Release(); g_water_depth_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -7066,12 +7075,18 @@ void HDRenderStateRestore()
 	if (g_saved.ps) { g_saved.ps->Release(); g_saved.ps = 0; }
 }
 
+namespace
+{
+	void water_bracket_end();
+}
+
 void HDRenderFrameEnd()
 {
 	if (!g_in_frame)
 		return;
 
 	g_in_frame = false;
+	water_bracket_end();
 	HDRenderStateRestore();
 }
 
@@ -8429,7 +8444,7 @@ namespace
 	{
 		float rows[16];		// gWaveV and gWaveP: kx, kz, omega, height
 		float swell[4];		// gSwell
-		float pixel[8 * 4];	// c96 - c103
+		float pixel[11 * 4];	// c96 - c106, c105 and c106 per draw
 	};
 
 	// An override row, the compiled table's or the file's.
@@ -8466,6 +8481,43 @@ namespace
 	bool g_sheet_timing = false;
 	double g_sheet_gpu_ms = 0.0;
 	int g_sheet_timed = 0;
+	double g_copy_gpu_ms = 0.0;
+	int g_copy_timed = 0;
+
+	/* The frame behind the sheets (HDRenderWaterCopy) and the depth texture
+	 * (HDRenderWaterDepthBind), both D3DPOOL_DEFAULT and released with the
+	 * level's buffers (release_water_sheets), so a new level, a shutdown
+	 * and a lost device take them along before a Reset. g_copy_valid
+	 * says the copy holds this bracket's frame; HDRenderFrameEnd clears it.
+	 * g_depth_own is the device's own depth-stencil, held while the INTZ
+	 * surface stands in its place. */
+	IDirect3DTexture9* g_copy_texture = 0;
+	IDirect3DSurface9* g_copy_surface = 0;
+	D3DSURFACE_DESC g_copy_desc = {};
+	bool g_copy_valid = false;
+	IDirect3DTexture9* g_depth_texture = 0;
+	IDirect3DSurface9* g_depth_surface = 0;
+	IDirect3DSurface9* g_depth_own = 0;
+	// RoomProbe's switches (HDRenderWaterStage2); the engine keeps them on.
+	bool g_copy_allowed = true;
+	bool g_depth_allowed = true;
+	int g_depth_view = 0;
+	float g_bend_scale = 1.0f;
+
+	const D3DFORMAT kIntz = (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z');
+
+	void release_water_copy()
+	{
+		if (g_copy_surface) { g_copy_surface->Release(); g_copy_surface = 0; }
+		if (g_copy_texture) { g_copy_texture->Release(); g_copy_texture = 0; }
+		g_copy_valid = false;
+	}
+
+	// The copy belongs to the bracket it was taken in (HDRenderFrameEnd).
+	void water_bracket_end()
+	{
+		g_copy_valid = false;
+	}
 
 	// A world square and a surface height, as one key.
 	unsigned long long WaterKey(int wx, int wz, int wy)
@@ -8485,6 +8537,8 @@ namespace
 
 	void release_water_sheets()
 	{
+		release_water_copy();
+		HDRenderWaterDepthUnbind();
 		if (g_sheet_vb) { g_sheet_vb->Release(); g_sheet_vb = 0; }
 		if (g_sheet_ib) { g_sheet_ib->Release(); g_sheet_ib = 0; }
 		g_wsquares.clear();
@@ -8829,6 +8883,43 @@ namespace
 		misc[1] = c.caps * b.foam;
 		misc[2] = 0.0f;			// the clock, per draw
 		misc[3] = total;
+
+		/* gWaterAbsorb: the absorption per channel in the ratio of
+		 * ln(shallow / deep) of the section's palette, its mean the class's
+		 * 1 / absorb - the deep colour is what a long path leaves of the
+		 * shallow one, channel by channel (hd_room.hlsl, "the frame behind
+		 * the sheet"). Out of the palette alone: the body's light and the
+		 * tint multiply both colours alike. A channel the palette does not
+		 * darken (ratio 1 or below) takes a sixteenth of the mean, so it
+		 * still fades over a long path - a free choice, a guard that no row
+		 * of the four palettes reaches. Rome comes out 1.31 / 0.82 / 0.87
+		 * of the mean, Russia 1.32 / 0.94 / 0.74, Ireland 1.24 / 0.84 /
+		 * 0.92, VCI 1.31 / 1.03 / 0.66. w is the refraction's strength,
+		 * the absorption length times 1 - 1 / 1.33 (water's refractive
+		 * index, the one F0 is taken from): times 1 - T it is the refracted
+		 * move of the floor for a short path (hd_room.hlsl, RefractUV) -
+		 * 992 units for a basin, 372 for a channel, 223 for a sea. */
+		float* absorb = out.pixel + 32;
+		float r[3];
+		float mean = 0.0f;
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float s = pal.base[k] > 0 ? (float)pal.base[k] : 1.0f;
+			const float d = pal.deep[k] > 0 ? (float)pal.deep[k] : 1.0f;
+
+			r[k] = logf(s / d);
+			mean += r[k] / 3.0f;
+		}
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float share = mean > 0.0f ? r[k] / mean : 1.0f;
+
+			absorb[k] = (share > 0.0625f ? share : 0.0625f) / c.absorb;
+		}
+
+		absorb[3] = c.absorb * (1.0f - 1.0f / 1.33f);
 	}
 
 	// One row applied to every body its room has water in.
@@ -9353,6 +9444,12 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	g_wlevel.built = 1;
 	g_wlevel.vertices = (int)verts.size();
 	g_wlevel.triangles = (int)idx.size() / 3;
+	/* What the sheets will read: the frame's copy, and the depth texture
+	 * where the adapter offers it and the variant exists - until a bind
+	 * refuses (HDRenderWaterDepthBind). */
+	g_wlevel.copy = g_copy_allowed ? 1 : 0;
+	g_wlevel.depth = g_depth_allowed && g_water_depth_ps &&
+		HDRenderWaterDepthOffered() ? 1 : 0;
 }
 
 bool HDRenderWaterSheetAt(int group, int x0, int z0, int x1, int z1)
@@ -9409,8 +9506,12 @@ const char* HDRenderWaterSectionName(int section)
  * read, the override rows of this level that found a body and those that did
  * not, the squares two rooms that are no flipmap pair both hold, the
  * underwater rooms with a surface above them (the caustic's, drawn with the
- * sheets only), the sheets' vertices and triangles, and the squares of a
- * flipmap twin at a place already counted. A body line: its rooms (+n for
+ * sheets only), the sheets' vertices and triangles, the squares of a
+ * flipmap twin at a place already counted, and 1 or 0 for whether the
+ * sheets read the frame's copy and the depth texture (copy, depth: what the
+ * level was built for and the adapter offers; a bind the device refuses sets
+ * depth back to 0 - the engine writes the line after its bind, RoomProbe
+ * before its picture). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -9440,14 +9541,16 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		snprintf(out, size, "WATERLOG level=%s option=%d section=%s "
 			"sectors=%d sheets=%d built=%d bodies=%d basin=%d channel=%d "
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
-			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d",
+			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
+			"copy=%d depth=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
 			cls[HD_WATER_BASIN], cls[HD_WATER_CHANNEL], cls[HD_WATER_SEA],
 			file, g_wlevel.fileRows, g_wlevel.fileBad, g_wlevel.rowsApplied,
 			g_wlevel.rowsUnmatched, g_wlevel.overlaps, g_wlevel.causticRooms,
-			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins);
+			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins,
+			g_wlevel.copy, g_wlevel.depth);
 		return true;
 	}
 
@@ -9502,6 +9605,231 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 
 	if (draws)
 		*draws = g_sheet_timed;
+}
+
+void HDRenderWaterCopyTiming(double* ms, int* copies)
+{
+	if (ms)
+		*ms = g_copy_gpu_ms;
+
+	if (copies)
+		*copies = g_copy_timed;
+}
+
+bool HDRenderGroupHasSheet(int group)
+{
+	return group >= 0 && group < (int)g_sheet_ranges.size() &&
+		!g_sheet_ranges[(size_t)group].empty();
+}
+
+/* The copy: render target 0 as it stands, whole and unfiltered, into a
+ * texture of its own size and format. StretchRect between two surfaces of
+ * one size and format is a plain copy; the back buffer is not multisampled
+ * (dxshell.cpp leaves MultiSampleType at none) and holds the colours in the
+ * space the shaders write, with sRGB off everywhere, so the copy is read as
+ * it is. RoomProbe's timing brackets it with GPU timestamps. */
+bool HDRenderWaterCopy()
+{
+	if (!g_device || !g_copy_allowed || g_copy_valid || !g_wlevel.built)
+		return false;
+
+	IDirect3DSurface9* target = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return false;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		desc.MultiSampleType != D3DMULTISAMPLE_NONE)
+	{
+		target->Release();
+		return false;
+	}
+
+	if (g_copy_texture && (g_copy_desc.Width != desc.Width ||
+		g_copy_desc.Height != desc.Height || g_copy_desc.Format != desc.Format))
+		release_water_copy();
+
+	if (!g_copy_texture)
+	{
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT,
+			&g_copy_texture, 0)) ||
+			FAILED(g_copy_texture->GetSurfaceLevel(0, &g_copy_surface)))
+		{
+			release_water_copy();
+			target->Release();
+			return false;
+		}
+
+		g_copy_desc = desc;
+	}
+
+	IDirect3DQuery9* q[3] = { 0, 0, 0 };
+
+	if (g_sheet_timing &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+		&q[0])) &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1])) &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2])))
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	g_copy_valid = SUCCEEDED(g_device->StretchRect(target, 0, g_copy_surface,
+		0, D3DTEXF_NONE));
+	target->Release();
+
+	IDirect3DQuery9* freq_q = 0;
+
+	if (q[2] && SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ,
+		&freq_q)))
+	{
+		UINT64 t0 = 0, t1 = 0, freq = 0;
+
+		q[2]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+		freq_q->Issue(D3DISSUE_END);
+
+		while (freq_q->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+			S_FALSE) {}
+		while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) == S_FALSE) {}
+		while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) == S_FALSE) {}
+
+		if (freq && t1 > t0)
+		{
+			g_copy_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
+			g_copy_timed++;
+		}
+
+		freq_q->Release();
+	}
+
+	for (int i = 0; i < 3; i++)
+		if (q[i])
+			q[i]->Release();
+
+	return g_copy_valid;
+}
+
+/* INTZ: a depth-stencil format the adapter can also hand to a sampler, 24
+ * bits of depth and 8 of stencil like the D24S8 it stands in for. Asked of
+ * the adapter the device runs on, against its display format. */
+bool HDRenderWaterDepthOffered()
+{
+	if (!g_device)
+		return false;
+
+	IDirect3D9* d3d = 0;
+	D3DDEVICE_CREATION_PARAMETERS made;
+	D3DDISPLAYMODE mode;
+	bool offered = false;
+
+	if (FAILED(g_device->GetDirect3D(&d3d)) || !d3d)
+		return false;
+
+	if (SUCCEEDED(g_device->GetCreationParameters(&made)) &&
+		SUCCEEDED(g_device->GetDisplayMode(0, &mode)))
+		offered = SUCCEEDED(d3d->CheckDeviceFormat(made.AdapterOrdinal,
+			made.DeviceType, mode.Format, D3DUSAGE_DEPTHSTENCIL,
+			D3DRTYPE_TEXTURE, kIntz));
+
+	d3d->Release();
+	return offered;
+}
+
+/* The INTZ surface in place of the device's depth-stencil, of its size,
+ * cleared once (depth 1, stencil 0, over the whole surface) so that the
+ * first frame drawn into it finds what a fresh buffer holds; every frame
+ * after that clears it where it cleared the device's own. */
+bool HDRenderWaterDepthBind(const char** why)
+{
+	const char* dummy = 0;
+
+	if (!why)
+		why = &dummy;
+
+	*why = "ok";
+
+	if (g_depth_texture)
+		return true;
+
+	IDirect3DSurface9* own = 0;
+	D3DSURFACE_DESC desc;
+
+	if (!g_device || !g_depth_allowed)
+		*why = "off";
+	else if (!HDRenderWaterDepthOffered())
+		*why = "format";
+	else if (FAILED(g_device->GetDepthStencilSurface(&own)) || !own)
+		*why = "no_depth";
+	else if (FAILED(own->GetDesc(&desc)) ||
+		desc.MultiSampleType != D3DMULTISAMPLE_NONE)
+		*why = "multisample";
+	else if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+		D3DUSAGE_DEPTHSTENCIL, kIntz, D3DPOOL_DEFAULT, &g_depth_texture, 0)) ||
+		FAILED(g_depth_texture->GetSurfaceLevel(0, &g_depth_surface)) ||
+		FAILED(g_device->SetDepthStencilSurface(g_depth_surface)))
+		*why = "create";
+
+	if (std::strcmp(*why, "ok"))
+	{
+		if (g_depth_surface)
+			g_depth_surface->Release();
+
+		if (g_depth_texture)
+			g_depth_texture->Release();
+
+		if (own)
+			own->Release();
+
+		g_depth_surface = 0;
+		g_depth_texture = 0;
+		g_wlevel.depth = 0;
+		return false;
+	}
+
+	g_depth_own = own;
+
+	D3DVIEWPORT9 viewport;
+	D3DVIEWPORT9 whole = { 0, 0, desc.Width, desc.Height, 0.0f, 1.0f };
+	DWORD scissor = FALSE;
+	const bool kept = SUCCEEDED(g_device->GetViewport(&viewport));
+
+	g_device->GetRenderState(D3DRS_SCISSORTESTENABLE, &scissor);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetViewport(&whole);
+	g_device->Clear(0, 0, D3DCLEAR_ZBUFFER | D3DCLEAR_STENCIL, 0, 1.0f, 0);
+
+	if (kept)
+		g_device->SetViewport(&viewport);
+
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, scissor);
+	return true;
+}
+
+void HDRenderWaterDepthUnbind()
+{
+	if (g_device && g_depth_own)
+		g_device->SetDepthStencilSurface(g_depth_own);
+
+	if (g_depth_own) { g_depth_own->Release(); g_depth_own = 0; }
+	if (g_depth_surface) { g_depth_surface->Release(); g_depth_surface = 0; }
+	if (g_depth_texture) { g_depth_texture->Release(); g_depth_texture = 0; }
+}
+
+bool HDRenderWaterDepthBound()
+{
+	return g_depth_texture != 0;
+}
+
+void HDRenderWaterStage2(int copy, int depth, int view, float bend)
+{
+	g_copy_allowed = copy != 0;
+	g_depth_allowed = depth != 0;
+	g_depth_view = view;
+	g_bend_scale = bend;
 }
 
 namespace
@@ -9598,8 +9926,19 @@ namespace
 			g_sheet_ranges[(size_t)group].empty())
 			return;
 
+		/* The depth variant while the INTZ surface is the depth buffer, and
+		 * the frame behind the sheet on s5 and the depth texture on s6 for
+		 * this draw alone: the depth writes are off while the texture is
+		 * read, and both are unbound again below, before anything writes
+		 * depth into it. */
+		const bool depth = g_depth_texture && g_water_depth_ps;
+		D3DSURFACE_DESC size = g_copy_desc;
+
+		if (depth)
+			g_depth_texture->GetLevelDesc(0, &size);
+
 		g_device->SetVertexShader(g_water_vs);
-		g_device->SetPixelShader(g_water_ps);
+		g_device->SetPixelShader(depth ? g_water_depth_ps : g_water_ps);
 		g_device->SetStreamSource(0, g_sheet_vb, 0, sizeof(HDVertex));
 		g_device->SetIndices(g_sheet_ib);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -9608,18 +9947,47 @@ namespace
 		g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 
+		for (DWORD s = 5; s <= 6; s++)
+		{
+			const DWORD filter = s == 5 ? D3DTEXF_LINEAR : D3DTEXF_POINT;
+
+			g_device->SetSamplerState(s, D3DSAMP_MINFILTER, filter);
+			g_device->SetSamplerState(s, D3DSAMP_MAGFILTER, filter);
+			g_device->SetSamplerState(s, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+			g_device->SetSamplerState(s, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(s, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(s, D3DSAMP_SRGBTEXTURE, FALSE);
+		}
+
+		g_device->SetTexture(5, g_copy_valid ? g_copy_texture : 0);
+		g_device->SetTexture(6, depth ? g_depth_texture : 0);
+
 		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
 		{
 			const WaterLook& look = g_wlooks[(size_t)r.body];
-			float pixel[12 * 4];
+			float pixel[15 * 4];
 
 			std::memcpy(pixel, look.rows, sizeof(look.rows));
 			std::memcpy(pixel + 16, look.pixel, sizeof(look.pixel));
 			pixel[16 + 7 * 4 + 2] = g_motion[2] * g_motion[3];	// the clock
 
+			// c105, gWaterScreen: the target's pixel and the projection.
+			pixel[16 + 9 * 4 + 0] = size.Width ? 1.0f / (float)size.Width :
+				0.0f;
+			pixel[16 + 9 * 4 + 1] = size.Height ? 1.0f / (float)size.Height :
+				0.0f;
+			pixel[16 + 9 * 4 + 2] = g_proj[10];
+			pixel[16 + 9 * 4 + 3] = -g_proj[14];
+			// c106, gWaterStage: the copy, and RoomProbe's depth view.
+			pixel[16 + 10 * 4 + 0] = g_copy_valid ? 1.0f : 0.0f;
+			pixel[16 + 10 * 4 + 1] = 0.0f;
+			pixel[16 + 10 * 4 + 2] = depth ? (float)g_depth_view : 0.0f;
+			pixel[16 + 10 * 4 + 3] = 0.0f;
+			pixel[16 + 8 * 4 + 3] *= g_bend_scale;
+
 			g_device->SetVertexShaderConstantF(18, look.swell, 1);
 			g_device->SetVertexShaderConstantF(20, look.rows, 4);
-			g_device->SetPixelShaderConstantF(92, pixel, 12);
+			g_device->SetPixelShaderConstantF(92, pixel, 15);
 
 			IDirect3DQuery9* q[3] = { 0, 0, 0 };
 
@@ -9671,6 +10039,8 @@ namespace
 					q[i]->Release();
 		}
 
+		g_device->SetTexture(5, 0);
+		g_device->SetTexture(6, 0);
 		set_room_rows(group);
 		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
@@ -10081,7 +10451,9 @@ namespace
 			set_stand_matrix(wvp, false);
 	}
 
-	// A depth surface with a stencil to guard the pixels with.
+	/* A depth surface with a stencil to guard the pixels with - the INTZ
+	 * surface of the sheets' depth texture among them, 8 bits of stencil
+	 * like the D24S8 it stands in for. */
 	bool depth_has_stencil()
 	{
 		IDirect3DSurface9* depth = 0;
@@ -10092,7 +10464,8 @@ namespace
 		{
 			if (SUCCEEDED(depth->GetDesc(&desc)))
 				stencil = desc.Format == D3DFMT_D24S8 || desc.Format == D3DFMT_D24FS8 ||
-					desc.Format == D3DFMT_D24X4S4 || desc.Format == D3DFMT_D15S1;
+					desc.Format == D3DFMT_D24X4S4 ||
+					desc.Format == D3DFMT_D15S1 || desc.Format == kIntz;
 
 			depth->Release();
 		}

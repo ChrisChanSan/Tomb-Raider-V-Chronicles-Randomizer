@@ -2462,6 +2462,10 @@ namespace
 	 * 13 out of it. `g_wrapping` remembers whether the sampler is currently in
 	 * WRAP, so a level with no scroll in it never touches the state at all. */
 	float g_motion[4] = { 0, 0, 0, 0 };
+	/* The x and z of the room origin the last room's lighting gave the
+	 * shaders (gRoomOrigin): the world origin of the classic room in the
+	 * engine, 0 in RoomProbe, whose world is the drawn room's own. */
+	float g_room_origin[2] = { 0, 0 };
 	bool g_wrapping = false;
 	int g_scroll_parts = 0;
 
@@ -2670,6 +2674,8 @@ namespace
 		 * and the alternative - a seventh interpolator carrying the world
 		 * position - would cost every pixel of every room instead. */
 		g_device->SetPixelShaderConstantF(10, origin, 1);
+		g_room_origin[0] = origin[0];
+		g_room_origin[1] = origin[2];
 		g_device->SetPixelShaderConstantF(17, counts, 1);
 		g_device->SetPixelShaderConstantF(20, lights, HD_MAX_LIGHTS * 2);
 	}
@@ -8256,10 +8262,14 @@ namespace
 {
 	/* One class of body.
 	 *
-	 * lambda, height, angle  the four wave rows: wavelength and height in
+	 * lambda, height, angle  the eight wave rows: wavelength and height in
 	 *            units, direction in radians off the body's own direction,
 	 *            spread so that no two rows run in step and the sum does
-	 *            not read as a grid
+	 *            not read as a grid. The first four are the rows RoomVS
+	 *            moves the remaster's marked water art with; the sheet takes
+	 *            all eight (water_rows_now)
+	 * groups     how deep the rows' slow envelope breathes, 0..1: the share
+	 *            of a row's height that comes and goes over its period
 	 * calm       the share of the deep-water speed the rows run at,
 	 *            omega = calm * sqrt(g k) - see kWaterG
 	 * current    a channel's flow along its long axis, units a second
@@ -8283,9 +8293,10 @@ namespace
 	struct HDWaterClass
 	{
 		const char* name;
-		float lambda[4];
-		float height[4];
-		float angle[4];
+		float lambda[8];
+		float height[8];
+		float angle[8];
+		float groups;
 		float calm;
 		float current;
 		float swell;
@@ -8306,22 +8317,54 @@ namespace
 	 * and no foam. A channel is a sewer: livelier, carried by its current,
 	 * murky, foam along its banks. A sea is open water: long, high waves,
 	 * foam at every edge and on the crests. The foam blotches of a channel
-	 * and a sea are 1.5 times finer than the basin's scale. */
+	 * and a sea are 1.5 times finer than the basin's scale.
+	 *
+	 * The rows five to eight fill the spectrum between and below the first
+	 * four: three wavelengths at the geometric mean of two neighbours and
+	 * one at the shortest over 1.5 (moved by two units where it came near a
+	 * whole fraction of another row's: 31, 43 and 100 against 63, 88 and
+	 * 1500), each as high as 0.8 of its neighbours' mean
+	 * steepness (height over wavelength) times its wavelength, so the
+	 * heights fall with the wave number and the first four stay on top.
+	 * Their directions keep at least 0.15 radians from every other row's.
+	 * The envelope's depth - basin 0.30, channel 0.35, sea 0.50 - and the
+	 * directions are free choices, set by eye on the round's RoomProbe
+	 * pictures. */
 	const HDWaterClass kWaterClass[HD_WATER_CLASSES] =
 	{
-		{ "basin", { 260.0f, 150.0f, 85.0f, 47.0f },
-			{ 2.0f, 1.4f, 0.8f, 0.45f }, { 0.0f, 1.13f, -0.79f, 2.51f },
+		{ "basin", { 260.0f, 150.0f, 85.0f, 47.0f, 197.0f, 113.0f, 63.0f,
+			29.0f },
+			{ 2.0f, 1.4f, 0.8f, 0.45f, 1.34f, 0.85f, 0.48f, 0.22f },
+			{ 0.0f, 1.13f, -0.79f, 2.51f, 1.87f, -1.61f, 0.41f, -2.83f },
+			0.30f,
 			0.6f, 0.0f, 0.0f, 512.0f, 4000.0f, 0.0f, 0.0f, 1.0f, 0.0f,
 			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f },
-		{ "channel", { 420.0f, 230.0f, 120.0f, 64.0f },
-			{ 3.0f, 1.8f, 0.9f, 0.45f }, { 0.0f, 0.42f, -0.37f, 0.9f },
+		{ "channel", { 420.0f, 230.0f, 120.0f, 64.0f, 311.0f, 166.0f, 88.0f,
+			41.0f },
+			{ 3.0f, 1.8f, 0.9f, 0.45f, 1.86f, 1.02f, 0.51f, 0.23f },
+			{ 0.0f, 0.42f, -0.37f, 0.9f, -0.19f, 0.63f, -0.71f, 1.21f },
+			0.35f,
 			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
 			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f },
-		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f },
-			{ 38.0f, 16.0f, 7.0f, 2.8f }, { 0.0f, 0.61f, -0.52f, 1.37f },
+		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f, 1025.0f, 481.0f, 222.0f,
+			98.0f },
+			{ 38.0f, 16.0f, 7.0f, 2.8f, 19.75f, 8.47f, 3.55f, 1.47f },
+			{ 0.0f, 0.61f, -0.52f, 1.37f, -0.29f, 0.97f, -1.13f, 0.27f },
+			0.50f,
 			1.0f, 0.0f, 1.0f, 1024.0f, 900.0f, 0.85f, 300.0f, 1.5f, 0.6f,
 			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f },
 	};
+
+	/* The rows' slow envelope (water_rows_now): a row's height swells and
+	 * fades over its own period, 8 to 15 seconds and different for every
+	 * row, so the eight never return to one pattern together; the periods
+	 * and the start of each envelope (row i at i times the golden angle)
+	 * are free choices, set by eye on the round's RoomProbe strips. The
+	 * rows five to eight start their wave a multiple of the golden angle
+	 * further on, the first four where they always have. */
+	const float kWaterGroupPeriod[8] =
+		{ 8.0f, 13.7f, 10.3f, 15.0f, 9.1f, 11.9f, 14.3f, 12.6f };
+	const float kWaterGolden = 2.3999632f;	// radians, 2 pi (1 - 1 / phi)
 
 	/* The sections' colours, RGB 0..255: base the shallow water, deep the
 	 * water where no floor shows through, high the highlight, foam the foam.
@@ -8432,19 +8475,27 @@ namespace
 		int minX, maxX, minZ, maxZ;	// world, the squares' corners
 	};
 
-	// One draw: the sheet squares of one body in one group.
+	/* One draw: the sheet squares of one body in one group, and the world
+	 * box of those squares with their surface - where a ring is near - and
+	 * the classic origin of the group's room. */
 	struct SheetRange
 	{
 		unsigned int start, tris, minVertex, vertices;
 		int body;
+		int minX, maxX, minZ, maxZ, surfaceY;
+		int originX, originZ;
 	};
 
-	// A body's constants: the four rows, the swell and the pixel rows.
+	/* A body's constants: the eight rows (the first four are RoomVS's), the
+	 * swell and the pixel rows. */
 	struct WaterLook
 	{
-		float rows[16];		// gWaveV and gWaveP: kx, kz, omega, height
+		float rows[32];		// kx, kz, omega, height
+		float phase0[8];	// each row's own start, radians
+		float groups;		// the envelope's depth (HDWaterClass)
 		float swell[4];		// gSwell
 		float pixel[11 * 4];	// c96 - c106, c105 and c106 per draw
+		float life[2];		// gWaterLife x, y: the stand-in's swing
 	};
 
 	// An override row, the compiled table's or the file's.
@@ -8456,6 +8507,8 @@ namespace
 		float tint[3];
 		float waves, foam;
 		int file;		// 1 for a row of hd_water.txt
+		int ripple;		// 1 with a ripple source
+		float rx, rz, rsize, rperiod;
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -8469,6 +8522,72 @@ namespace
 	 * without the sheets. */
 	bool g_caustic_on = false;
 	std::unordered_set<unsigned long long> g_sheet_at;
+	// The squares that draw a sheet, by world square (WaterKey, y 0): the
+	// surface height - HDRenderWaterSheetUnder.
+	std::unordered_multimap<unsigned long long, int> g_sheet_world;
+
+	/* The rings (hd_room.hlsl, RingSlope).
+	 *
+	 * The game's own ripples (ripples[], game\tomb4fx.cpp, set up by
+	 * SetupRipple and grown by UpdateSplashes, game\effect2.cpp) are where
+	 * something meets the water: Lara wading or swimming, a drip, a bubble
+	 * reaching the surface, a rat, a shell. HDRenderWaterRipples sees the
+	 * live ones every frame and starts a ring where a slot is new - it was
+	 * empty, its init counted up from 1 again or its size fell - aged by
+	 * what its init has counted since: SetupRipple sets init to 1 and
+	 * UpdateSplashes adds 4 a tick (8 with flags 2) while the ripple grows,
+	 * so (init - 1) / 4 ticks of 1/30 s have passed, exact while it grows;
+	 * its size then less that growth (4 a tick, 2 with flags 2) is the
+	 * size it began with. From there the ring keeps its own clock, the
+	 * frame's, and lives kRingLife whatever the slot does: the game frees a
+	 * slot after about a second.
+	 *
+	 * A ring's front runs out from half the ripple's first size at
+	 * kRingSpeed; its strength, a slope, is kRingSlope times its first size
+	 * over 128 (a wading Lara's ripple is 112 to 127), at most 1, and falls
+	 * with what is left of its life. A sheet draw takes the
+	 * kRingsPerDraw youngest whose centre lies within kRingNear of its
+	 * squares and whose height within kRingHeight of its surface. Speed,
+	 * life, slope and the two distances are free choices, set by eye on the
+	 * round's RoomProbe pictures: a wading Lara's ring about a square
+	 * across, faded within two seconds. */
+	const double kRingLife = 2.0;		// seconds
+	const float kRingSpeed = 210.0f;	// units a second
+	const float kRingSlope = 0.5f;
+	const int kRingNear = 512;		// units
+	const int kRingHeight = 256;		// units
+	const int kRingsPerDraw = 8;		// gWaterRings[8]
+	const size_t kRingsKept = 64;
+
+	struct WaterRing
+	{
+		float x, y, z;		// world; y the water's height there
+		double born;		// on the frame clock, seconds
+		float size;		// the ripple's size when it began, units
+	};
+
+	// What a ripple slot held the frame before.
+	struct RippleSeen
+	{
+		int alive, init, size;
+	};
+
+	// A ripple row of hd_water.txt: a ring every `period` seconds.
+	struct WaterSource
+	{
+		float x, y, z, size, period, phase;
+	};
+
+	// RoomProbe -ripple: a ring of a given age in every picture.
+	struct ProbeRing
+	{
+		float x, z, age, size;
+	};
+
+	std::vector<WaterRing> g_rings;
+	RippleSeen g_ripple_seen[HD_WATER_RIPPLE_SLOTS] = {};
+	std::vector<WaterSource> g_wsources;
+	std::vector<ProbeRing> g_ring_probe;
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
 	IDirect3DIndexBuffer9* g_sheet_ib = 0;
@@ -8549,6 +8668,11 @@ namespace
 		g_caustic_top.clear();
 		g_caustic_on = false;
 		g_sheet_at.clear();
+		g_sheet_world.clear();
+		g_wsources.clear();
+		g_rings.clear();
+		g_ring_probe.clear();
+		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
 		g_wlevel.fileLines = -1;
 	}
@@ -8581,6 +8705,7 @@ namespace
 	/* hd_water.txt, one row a line:
 	 *
 	 *   <LEVEL> <room> <class|->  [tint <r> <g> <b>] [waves <s>] [foam <s>]
+	 *                             [ripple <x> <z> <size> <seconds>]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -8589,8 +8714,12 @@ namespace
 	 * row of any other class, - included, gives the sheet back). tint
 	 * multiplies the shallow and the deep colour, waves the wave heights,
 	 * foam the shore foam and the whitecaps; each 0 to 4, 1 changing
-	 * nothing. '#' starts a comment. Returns 1 for a row, 0 for a line
-	 * without one, -1 for a line that cannot be read. */
+	 * nothing. ripple starts a ring at world x, z (units, as the game's own
+	 * ripples and trview give them) every `seconds` (0.1 to 60) while the
+	 * level runs, `size` (1 to 255) as a ripple's size - a fountain's jet
+	 * landing, where the game itself makes no ripple; the rest of the row
+	 * applies as any row's. '#' starts a comment. Returns 1 for a row, 0
+	 * for a line without one, -1 for a line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
@@ -8643,6 +8772,8 @@ namespace
 		{
 			float* into = 0;
 			int count = 0;
+			float rip[4];
+			const bool ripple = !_stricmp(tok[i], "ripple");
 
 			if (!_stricmp(tok[i], "tint"))
 				into = row.tint, count = 3;
@@ -8650,6 +8781,8 @@ namespace
 				into = &row.waves, count = 1;
 			else if (!_stricmp(tok[i], "foam"))
 				into = &row.foam, count = 1;
+			else if (ripple)
+				into = rip, count = 4;
 
 			if (!into || i + count >= n)
 				return -1;
@@ -8658,11 +8791,26 @@ namespace
 			{
 				const char* num = tok[i + 1 + k];
 				const double v = std::strtod(num, &end);
+				// x and z anywhere in a level, the size and the seconds
+				// as above, every scale 0 to 4.
+				const double lo = !ripple ? 0.0 : k < 2 ? -1.0e7 :
+					k == 2 ? 1.0 : 0.1;
+				const double hi = !ripple ? 4.0 : k < 2 ? 1.0e7 :
+					k == 2 ? 255.0 : 60.0;
 
-				if (*end || end == num || !(v >= 0.0 && v <= 4.0))
+				if (*end || end == num || !(v >= lo && v <= hi))
 					return -1;
 
 				into[k] = (float)v;
+			}
+
+			if (ripple)
+			{
+				row.ripple = 1;
+				row.rx = rip[0];
+				row.rz = rip[1];
+				row.rsize = rip[2];
+				row.rperiod = rip[3];
 			}
 
 			i += 1 + count;
@@ -8792,13 +8940,14 @@ namespace
 			out[k] = (float)(sum[k] / (double)s.size());
 	}
 
-	// The four rows of a class, turned by `base`, heights times `waves`.
+	/* The first `count` rows of a class, turned by `base`, heights times
+	 * `waves`; `total` the sum of the first four heights. */
 	void water_rows(const HDWaterClass& c, float base, float waves,
-		float* rows, float* total)
+		float* rows, float* total, int count = 4)
 	{
 		*total = 0.0f;
 
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < count; i++)
 		{
 			const float k = 6.2831853f / c.lambda[i];
 			const float th = base + c.angle[i];
@@ -8808,7 +8957,38 @@ namespace
 			rows[i * 4 + 2] = c.calm * sqrtf(kWaterG * k) +
 				k * c.current * cosf(c.angle[i]);
 			rows[i * 4 + 3] = c.height[i] * waves;
-			*total += rows[i * 4 + 3];
+			*total += i < 4 ? rows[i * 4 + 3] : 0.0f;
+		}
+	}
+
+	/* The sheet's rows at the clock `t`: all eight in the phase form
+	 * (kx, kz, phase, height) WaveSum8 reads - the phase omega t plus the
+	 * row's start, wrapped to one turn in double precision; the height
+	 * times the row's envelope, 1 - e + e (0.5 + 0.5 sin(2 pi t / P + i
+	 * golden)) with e the class's depth and P the row's period
+	 * (kWaterGroupPeriod). `heights` is the sum of the eight heights now,
+	 * the whitecaps' measure: a crest breaks where the waves stand high
+	 * together, more often while the envelopes swell. */
+	void water_rows_now(const WaterLook& look, double t, float* out,
+		float* heights)
+	{
+		*heights = 0.0f;
+
+		for (int i = 0; i < 8; i++)
+		{
+			const float* r = look.rows + i * 4;
+			const double turn = 6.283185307179586;
+			const double ph = std::fmod((double)r[2] * t +
+				(double)look.phase0[i], turn);
+			const double env = 1.0 - look.groups + look.groups * (0.5 +
+				0.5 * std::sin(turn * t / (double)kWaterGroupPeriod[i] +
+				(double)kWaterGolden * i));
+
+			out[i * 4 + 0] = r[0];
+			out[i * 4 + 1] = r[1];
+			out[i * 4 + 2] = (float)(ph < 0.0 ? ph + turn : ph);
+			out[i * 4 + 3] = (float)((double)r[3] * env);
+			*heights += out[i * 4 + 3];
 		}
 	}
 
@@ -8830,7 +9010,13 @@ namespace
 
 		float total = 0.0f;
 
-		water_rows(c, base, b.waves, out.rows, &total);
+		water_rows(c, base, b.waves, out.rows, &total, 8);
+
+		for (int i = 0; i < 8; i++)
+			out.phase0[i] = i < 4 ? 0.0f :
+				fmodf(kWaterGolden * (float)(i - 3), 6.2831853f);
+
+		out.groups = c.groups;
 		out.swell[0] = c.swell;
 		out.swell[1] = c.taper;
 		out.swell[2] = 0.0f;
@@ -8856,8 +9042,8 @@ namespace
 		{
 			deep[k] = pal.deep[k] / 255.0f * amb[k] * b.tint[k];
 			shallow[k] = pal.base[k] / 255.0f * amb[k] * b.tint[k];
-			refl[k] = open ? sky->horizon[k] / 255.0f : amb[k] * 0.55f;
-			zen[k] = open ? sky->zenith[k] / 255.0f : amb[k] * 0.30f;
+			refl[k] = open ? sky->horizon[k] / 255.0f : amb[k] * 0.65f;
+			zen[k] = open ? sky->zenith[k] / 255.0f : amb[k] * 0.25f;
 			high[k] = pal.high[k] / 255.0f * c.specStrength *
 				(open ? 1.0f : amb[k]);
 			foam[k] = pal.foam[k] / 255.0f * (open ? 0.85f : amb[k] * 0.9f);
@@ -8882,7 +9068,16 @@ namespace
 		misc[0] = c.band;
 		misc[1] = c.caps * b.foam;
 		misc[2] = 0.0f;			// the clock, per draw
-		misc[3] = total;
+		misc[3] = total;		// per draw, with the envelope
+
+		/* The stand-in's pattern (hd_room.hlsl, WaterPS): indoors a swing
+		 * of +-40 % with a finer second pattern for 0.4 of it, under the
+		 * sky the +-25 % of one pattern that reflects the sky's own rows -
+		 * free choices, set by eye on the round's RoomProbe strips. With
+		 * the horizon at 0.65 and overhead at 0.25 of the body's light
+		 * indoors (above), a basin seen at eye level shows its waves. */
+		out.life[0] = open ? 0.25f : 0.40f;
+		out.life[1] = open ? 0.0f : 0.40f;
 
 		/* gWaterAbsorb: the absorption per channel in the ratio of
 		 * ln(shallow / deep) of the section's palette, its mean the class's
@@ -8949,6 +9144,36 @@ namespace
 			b.foam = row.foam;
 			b.source = row.file ? 2 : 1;
 			b.sourceRoom = row.room;
+		}
+
+		/* A ripple source stands at the surface of the row's room's square
+		 * under it, or at the surface of the room's first body; its rings
+		 * start at a phase of their own, so two sources do not beat in
+		 * step. */
+		if (row.ripple && !hit.empty())
+		{
+			WaterSource src = {};
+
+			src.x = row.rx;
+			src.z = row.rz;
+			src.y = (float)g_wbodies[(size_t)hit[0]].info.surfaceY;
+			src.size = row.rsize;
+			src.period = row.rperiod;
+			src.phase = fmodf(fabsf(row.rx * 0.0013f + row.rz * 0.0029f),
+				1.0f) * row.rperiod;
+
+			for (size_t i = 0; i < g_wsquares.size(); i++)
+			{
+				const WaterSquare& s = g_wsquares[i];
+
+				if (s.room == row.room && row.rx >= (float)s.wx &&
+					row.rx < (float)(s.wx + 1024) && row.rz >= (float)s.wz &&
+					row.rz < (float)(s.wz + 1024))
+					src.y = (float)s.wy;
+			}
+
+			g_wsources.push_back(src);
+			g_wlevel.ringSources++;
 		}
 
 		return !hit.empty();
@@ -9311,6 +9536,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			range.start = (unsigned int)idx.size();
 			range.minVertex = (unsigned int)verts.size();
 			range.body = (int)b;
+			range.minX = range.minZ = 0x7FFFFFFF;
+			range.maxX = range.maxZ = -0x7FFFFFFF;
+			range.surfaceY = g_wbodies[b].info.surfaceY;
+			range.originX = g < count ? rooms[g].originX : 0;
+			range.originZ = g < count ? rooms[g].originZ : 0;
 
 			for (size_t k = 0; k < squaresOf[(size_t)g].size(); k++)
 			{
@@ -9400,6 +9630,14 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					}
 
 				g_sheet_at.insert(SheetKey(g, s.sx, s.sz));
+				g_sheet_world.insert(std::make_pair(
+					WaterKey(s.wx, s.wz, 0), s.wy));
+				range.minX = s.wx < range.minX ? s.wx : range.minX;
+				range.maxX = s.wx + 1024 > range.maxX ? s.wx + 1024 :
+					range.maxX;
+				range.minZ = s.wz < range.minZ ? s.wz : range.minZ;
+				range.maxZ = s.wz + 1024 > range.maxZ ? s.wz + 1024 :
+					range.maxZ;
 			}
 
 			range.tris = ((unsigned int)idx.size() - range.start) / 3;
@@ -9424,6 +9662,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			g_sheet_ranges[(size_t)g].clear();
 
 		g_sheet_at.clear();
+		g_sheet_world.clear();
 		return;
 	}
 
@@ -9466,6 +9705,84 @@ bool HDRenderWaterSheetAt(int group, int x0, int z0, int x1, int z1)
 bool HDRenderWaterSheetsAvailable()
 {
 	return g_water_vs && g_water_ps;
+}
+
+bool HDRenderWaterSheetsBuilt()
+{
+	return g_sheet_vb && g_sheet_ib && !g_sheet_world.empty();
+}
+
+bool HDRenderWaterSheetUnder(int x, int y, int z)
+{
+	if (g_sheet_world.empty())
+		return false;
+
+	const auto at = g_sheet_world.equal_range(WaterKey(x, z, 0));
+
+	for (auto i = at.first; i != at.second; ++i)
+		if (i->second - y <= kRingHeight && y - i->second <= kRingHeight)
+			return true;
+
+	return false;
+}
+
+void HDRenderWaterRipples(const HDRenderRipple* live, int count)
+{
+	const double now = g_motion[2];
+	bool seen[HD_WATER_RIPPLE_SLOTS] = {};
+
+	for (int i = 0; live && i < count; i++)
+	{
+		const HDRenderRipple& r = live[i];
+
+		if (r.slot < 0 || r.slot >= HD_WATER_RIPPLE_SLOTS || seen[r.slot])
+			continue;
+
+		RippleSeen& s = g_ripple_seen[r.slot];
+		const bool fresh = !s.alive || (!s.init && r.init) || r.size < s.size;
+
+		if (fresh)
+		{
+			const int count_step = (r.flags & 2) ? 8 : 4;
+			const int grow_step = (r.flags & 2) ? 2 : 4;
+			const int ticks = r.init > 0 ? (r.init - 1) / count_step : 0;
+			WaterRing ring;
+
+			ring.x = (float)r.x;
+			ring.y = (float)r.y;
+			ring.z = (float)r.z;
+			ring.born = now - ticks / 30.0;
+			ring.size = (float)(r.size - grow_step * ticks > 1 ?
+				r.size - grow_step * ticks : 1);
+
+			if (g_rings.size() >= kRingsKept)
+				g_rings.erase(g_rings.begin());
+
+			g_rings.push_back(ring);
+		}
+
+		s.alive = 1;
+		s.init = r.init;
+		s.size = r.size;
+		seen[r.slot] = true;
+	}
+
+	for (int i = 0; i < HD_WATER_RIPPLE_SLOTS; i++)
+		if (!seen[i])
+			g_ripple_seen[i].alive = 0;
+
+	/* Rings past their life go, and so does every ring when the clock has
+	 * gone back (a new level, a loaded game). */
+	for (size_t i = g_rings.size(); i-- > 0; )
+		if (now - g_rings[i].born > kRingLife || g_rings[i].born > now + 0.1)
+			g_rings.erase(g_rings.begin() + (std::ptrdiff_t)i);
+}
+
+void HDRenderWaterRing(float x, float z, float age, float size)
+{
+	ProbeRing ring = { x, z, age, size };
+
+	g_ring_probe.push_back(ring);
 }
 
 int HDRenderWaterBodies()
@@ -9511,7 +9828,9 @@ const char* HDRenderWaterSectionName(int section)
  * sheets read the frame's copy and the depth texture (copy, depth: what the
  * level was built for and the adapter offers; a bind the device refuses sets
  * depth back to 0 - the engine writes the line after its bind, RoomProbe
- * before its picture). A body line: its rooms (+n for
+ * before its picture), the wave rows a sheet sums (waverows), the rings a
+ * sheet draw can show (rings) and the ripple rows of the file that found a
+ * body (sources). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -9542,7 +9861,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"sectors=%d sheets=%d built=%d bodies=%d basin=%d channel=%d "
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
-			"copy=%d depth=%d",
+			"copy=%d depth=%d waverows=8 rings=%d sources=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -9550,7 +9869,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			file, g_wlevel.fileRows, g_wlevel.fileBad, g_wlevel.rowsApplied,
 			g_wlevel.rowsUnmatched, g_wlevel.overlaps, g_wlevel.causticRooms,
 			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins,
-			g_wlevel.copy, g_wlevel.depth);
+			g_wlevel.copy, g_wlevel.depth, kRingsPerDraw,
+			g_wlevel.ringSources);
 		return true;
 	}
 
@@ -9916,6 +10236,80 @@ namespace
 		set_room_rows(group);
 	}
 
+	/* The rings one sheet draw shows (see "the rings"): the game's, the
+	 * file's sources and RoomProbe's, near its squares and its surface, the
+	 * youngest kRingsPerDraw of them, each as (x, z, radius, strength) into
+	 * `out`. None while tomb5.hd_motion is off - the water stands still. */
+	int gather_rings(const SheetRange& r, float* out)
+	{
+		struct Near
+		{
+			float x, z, size;
+			double age;
+		};
+
+		Near found[kRingsKept + 32];
+		int n = 0;
+		const int cap = (int)(sizeof(found) / sizeof(found[0]));
+		const double now = g_motion[2];
+
+		if (g_motion[3] == 0.0f)
+			return 0;
+
+		auto add = [&](float x, float y, float z, bool anyY, float size,
+			double age)
+		{
+			if (n >= cap || age < 0.0 || age > kRingLife ||
+				x < (float)(r.minX - kRingNear) ||
+				x > (float)(r.maxX + kRingNear) ||
+				z < (float)(r.minZ - kRingNear) ||
+				z > (float)(r.maxZ + kRingNear) ||
+				(!anyY && fabsf(y - (float)r.surfaceY) > (float)kRingHeight))
+				return;
+
+			found[n].x = x;
+			found[n].z = z;
+			found[n].size = size;
+			found[n].age = age;
+			n++;
+		};
+
+		for (const WaterRing& g : g_rings)
+			add(g.x, g.y, g.z, false, g.size, now - g.born);
+
+		for (const WaterSource& s : g_wsources)
+			for (double age = std::fmod(now + s.phase, (double)s.period);
+				age <= kRingLife; age += s.period)
+				add(s.x, s.y, s.z, false, s.size, age);
+
+		// RoomProbe's rings carry no height: the box alone places them.
+		for (const ProbeRing& p : g_ring_probe)
+			add(p.x, 0.0f, p.z, true, p.size, p.age);
+
+		std::sort(found, found + n, [](const Near& a, const Near& b)
+		{
+			return a.age < b.age;
+		});
+
+		const int count = n < kRingsPerDraw ? n : kRingsPerDraw;
+
+		for (int i = 0; i < count; i++)
+		{
+			const float life = 1.0f - (float)(found[i].age / kRingLife);
+			const float first = found[i].size / 128.0f;
+
+			// The centre in the frame the shader's world position is in.
+			out[i * 4 + 0] = found[i].x - (float)r.originX + g_room_origin[0];
+			out[i * 4 + 1] = found[i].z - (float)r.originZ + g_room_origin[1];
+			out[i * 4 + 2] = found[i].size * 0.5f +
+				kRingSpeed * (float)found[i].age;
+			out[i * 4 + 3] = kRingSlope * (first < 1.0f ? first : 1.0f) *
+				life;
+		}
+
+		return count;
+	}
+
 	/* The sheet of one room, in its blend phase: one draw per body, with
 	 * premultiplied alpha (ONE / INVSRCALPHA), two-sided and without a depth
 	 * write, then the states every pass of draw_pass leaves behind. */
@@ -9965,11 +10359,34 @@ namespace
 		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
 		{
 			const WaterLook& look = g_wlooks[(size_t)r.body];
-			float pixel[15 * 4];
+			float pixel[31 * 4] = {};
+			float rows[32];
+			float lag[32];
+			float heights = 0.0f;
+			float lagHeights = 0.0f;
+			const double clock = (double)g_motion[2] * g_motion[3];
 
-			std::memcpy(pixel, look.rows, sizeof(look.rows));
+			// c92 - c95 and c107 - c110: the eight rows now; c111 the two
+			// longest half a second ago (gWaterLag).
+			water_rows_now(look, clock, rows, &heights);
+			water_rows_now(look, clock - 0.5, lag, &lagHeights);
+			std::memcpy(pixel, rows, 16 * sizeof(float));
 			std::memcpy(pixel + 16, look.pixel, sizeof(look.pixel));
-			pixel[16 + 7 * 4 + 2] = g_motion[2] * g_motion[3];	// the clock
+			pixel[16 + 7 * 4 + 2] = (float)clock;	// the clock
+			pixel[16 + 7 * 4 + 3] = heights;
+			std::memcpy(pixel + 15 * 4, rows + 16, 16 * sizeof(float));
+			pixel[19 * 4 + 0] = lag[2];
+			pixel[19 * 4 + 1] = lag[6];
+			pixel[19 * 4 + 2] = lag[3];
+			pixel[19 * 4 + 3] = lag[7];
+			// c112 gWaterLife, c113 - c120 the rings, c121 - c122 gWaveK.
+			pixel[20 * 4 + 0] = look.life[0];
+			pixel[20 * 4 + 1] = look.life[1];
+			pixel[20 * 4 + 2] = (float)gather_rings(r, pixel + 21 * 4);
+
+			for (int i = 0; i < 8; i++)
+				pixel[29 * 4 + i] = sqrtf(rows[i * 4] * rows[i * 4] +
+					rows[i * 4 + 1] * rows[i * 4 + 1]);
 
 			// c105, gWaterScreen: the target's pixel and the projection.
 			pixel[16 + 9 * 4 + 0] = size.Width ? 1.0f / (float)size.Width :
@@ -9985,9 +10402,12 @@ namespace
 			pixel[16 + 10 * 4 + 3] = 0.0f;
 			pixel[16 + 8 * 4 + 3] *= g_bend_scale;
 
+			/* The vertex rows in WaterVS's phase form, c20 - c27: the next
+			 * room's prepare() writes c20 - c23 back in RoomVS's form before
+			 * RoomVS draws again - the sheet is the last draw of its call. */
 			g_device->SetVertexShaderConstantF(18, look.swell, 1);
-			g_device->SetVertexShaderConstantF(20, look.rows, 4);
-			g_device->SetPixelShaderConstantF(92, pixel, 15);
+			g_device->SetVertexShaderConstantF(20, rows, 8);
+			g_device->SetPixelShaderConstantF(92, pixel, 31);
 
 			IDirect3DQuery9* q[3] = { 0, 0, 0 };
 

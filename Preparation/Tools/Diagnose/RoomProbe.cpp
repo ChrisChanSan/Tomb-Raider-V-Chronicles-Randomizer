@@ -375,6 +375,11 @@
  *                     whose bent place the depth refused in red.
  *     -waterbend <s>  the refraction times s, for a picture that shows what
  *                     the depth texture's mask refuses; 1 is the look built.
+ *     -ripple x,z,age[,size]
+ *                     a ring on the sheets at world x, z (units, as the
+ *                     game's own ripples), age seconds after it began, of
+ *                     a ripple that began at size (120, a wading Lara's,
+ *                     without it); repeatable. Needs -hdwater 1.
  *     -shatter        hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
@@ -1628,6 +1633,12 @@ static bool g_water = false;
 // -hdwater 0|1 (-1 not asked) and -waterfile - see the usage above.
 static int g_hdwater = -1;
 static std::string g_water_file;
+// -ripple x,z,age[,size]: the rings handed to every picture.
+struct ProbeRipple
+{
+	float x, z, age, size;
+};
+static std::vector<ProbeRipple> g_ripples;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
  * would leave them on the corners of one water quad. The renderer's flood
@@ -6586,6 +6597,8 @@ int main(int argc, char** argv)
 		printf("       -nocopy  -nodepth  -waterdepthview 1|2|3  "
 			"-waterbend <s>   the sheets without the frame's copy or depth "
 			"texture, the depth as grey, the refraction scaled\n");
+		printf("       -ripple x,z,age[,size]   a ring on the sheets at world "
+			"x, z, age seconds old (size 120), repeatable\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
@@ -6767,6 +6780,17 @@ int main(int argc, char** argv)
 			g_water_depth_view = atoi(argv[++at]);
 		else if (!strcmp(argv[at], "-waterbend") && at + 1 < argc)
 			g_water_bend = (float)atof(argv[++at]);
+		else if (!strcmp(argv[at], "-ripple") && at + 1 < argc)
+		{
+			ProbeRipple r = { 0.0f, 0.0f, 0.0f, 120.0f };
+
+			if (sscanf_s(argv[++at], "%f,%f,%f,%f", &r.x, &r.z, &r.age,
+				&r.size) >= 3)
+				g_ripples.push_back(r);
+			else
+				printf("RoomProbe: -ripple wants x,z,age[,size] - '%s' "
+					"ignored\n", argv[at]);
+		}
 		else if ((!strcmp(argv[at], "-plane") ||
 			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
 		{
@@ -8451,6 +8475,11 @@ int main(int argc, char** argv)
 			HDRenderWaterFile(g_water_file.empty() ? 0 : g_water_file.c_str());
 			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 				g_hdwater);
+
+			for (size_t i = 0; i < g_ripples.size(); i++)
+				HDRenderWaterRing(g_ripples[i].x, g_ripples[i].z,
+					g_ripples[i].age, g_ripples[i].size);
+
 			HDRenderWaterTiming(1, 0, 0);
 			HDRenderWaterLogLine(-1, stem, g_hdwater, line, sizeof(line));
 			printf("%s\n", line);

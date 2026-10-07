@@ -852,6 +852,7 @@ struct HDRenderWaterLevel
 	int vertices, triangles;
 	int copy;		// 1 when the sheets read the frame's copy
 	int depth;		// 1 when they read the depth texture as well
+	int ringSources;	// ripple rows of the file that found a body
 };
 
 int HDRenderWaterBodies();
@@ -900,6 +901,30 @@ bool HDRenderWaterDepthBind(const char** why);
 void HDRenderWaterDepthUnbind();
 bool HDRenderWaterDepthBound();
 void HDRenderWaterStage2(int copy, int depth, int view, float bend);
+
+/* The rings on the sheets (hd_render.cpp, "the rings"), out of the game's
+ * own ripples. HDRenderWaterRipples takes the live slots of ripples[]
+ * (game\tomb4fx.cpp) once a frame, after HDRenderFrameBegin, each with its
+ * slot and its fields as UpdateSplashes leaves them; slots it is not given
+ * count as empty. HDRenderWaterRing is RoomProbe's -ripple: a ring of that
+ * age (seconds) and first size at world x, z in every picture until the
+ * next level. HDRenderWaterSheetUnder says whether a drawing sheet lies
+ * under world x, z within 256 units of height y - the classic ripple
+ * sprite is left out there (hd_level.cpp, HDWaterRippleOnSheet). */
+#define HD_WATER_RIPPLE_SLOTS	128	// MAX_RIPPLES, global\types.h
+
+struct HDRenderRipple
+{
+	int slot;			// its index in ripples[]
+	int x, y, z;			// world; y the water's height
+	int flags, life, size, init;	// RIPPLE_STRUCT's own
+};
+
+// Whether this level built sheets: the frame then feeds the ripples.
+bool HDRenderWaterSheetsBuilt();
+void HDRenderWaterRipples(const HDRenderRipple* live, int count);
+void HDRenderWaterRing(float x, float z, float age, float size);
+bool HDRenderWaterSheetUnder(int x, int y, int z);
 /* The rooms' own boxes for the level about to be built.
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */

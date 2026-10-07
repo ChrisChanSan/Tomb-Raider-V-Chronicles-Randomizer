@@ -40,6 +40,7 @@
 #include "../game/draw.h"
 #include "../tomb5/tomb5.h"
 #include "../game/lara_states.h"
+#include "hd/hd_level.h"		// HDWaterRippleOnSheet
 #include "../game/deltapak.h"
 #include "../game/interpolate.h"	// the in-between frame's counters
 #include "../game/interpolate_math.h"	// InterpTrailLong - the particles
@@ -4199,6 +4200,13 @@ void S_DrawSplashes()
 		ripple = &ripples[i];
 
 		if (!(ripple->flags & 1))
+			continue;
+
+		/* Where a water sheet draws this ripple as a ring (hd_level.h), the
+		 * flat sprite stays out - as the classic water face does under a
+		 * sheet. False on the classic path. */
+		if (HDWaterRippleOnSheet(ripple->x, ripple->y, ripple->z,
+			ripple->flags))
 			continue;
 
 		phd_PushMatrix();

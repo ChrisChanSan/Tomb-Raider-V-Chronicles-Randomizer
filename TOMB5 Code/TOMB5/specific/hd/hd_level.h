@@ -234,6 +234,15 @@ const HDRoomWaterFace* HDRoomWaterFaceAt(int roomIndex, int at);
 struct TEXTURESTRUCT;
 bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
 
+/* Whether the classic sprite of a ripple (x, y, z and flags of a
+ * RIPPLE_STRUCT) is left out because a water sheet draws its ring there:
+ * HD on, tomb5.hd_water and tomb5.hd_motion on, a ripple of the kind the
+ * rings are made of and a drawing sheet under it (hd_level.cpp,
+ * RippleIsRing). The only caller is S_DrawSplashes
+ * (specific\specificfx.cpp); with hd_enable off it is false at its first
+ * test. */
+bool HDWaterRippleOnSheet(long x, long y, long z, int flags);
+
 /* Whether a frame draws a static mesh the classic way. Worked out once at
  * level load against the .TRG's own geometry (hd_level.cpp,
  * BuildStaticTables; the rule: hd_cover.h, HDStaticAnswer);

@@ -40,6 +40,7 @@
 #include "../../game/camera.h"		// camera.underwater
 #include "../../game/draw.h"
 #include "../../game/effect2.h"		// dynamics, wibble
+#include "../../game/tomb4fx.h"		// ripples - the rings on the sheets
 #include "../../game/gameflow.h"		// gfLevelId
 #include "../../game/lara.h"		// GfHdOutfit - data[3]
 #include "../../game/interpolate.h"	// InterpFrameAlpha - the state this frame draws
@@ -1634,6 +1635,56 @@ static int WaterSection()
 		return HD_WATER_VCI;
 
 	return HD_WATER_ROME;
+}
+
+/* The ripples the sheets draw as rings (hd_render.cpp, "the rings"): those
+ * with flags 0x10 (Lara wading or swimming, a drip) or 0x02 (a bubble at
+ * the surface, a rat, a shell) and without 0x20, which marks the blood
+ * TriggerUnderwaterBlood keeps in the same array. A raindrop's ripple
+ * (flags 0, specificfx.cpp) is left out: up to 128 of them would crowd the
+ * eight rings a sheet draw has, so the rain keeps its classic sprite. */
+static_assert(MAX_RIPPLES == HD_WATER_RIPPLE_SLOTS,
+	"the rings follow ripples[] slot by slot");
+
+static bool RippleIsRing(int flags)
+{
+	return !(flags & 0x20) && (flags & 0x12);
+}
+
+/* Every live ripple of that kind, once a frame (HDFrameDrawGlow): 128 slots
+ * read, nothing written. */
+static void FeedWaterRipples()
+{
+	HDRenderRipple live[MAX_RIPPLES];
+	int count = 0;
+
+	for (int i = 0; i < MAX_RIPPLES; i++)
+	{
+		const RIPPLE_STRUCT& r = ripples[i];
+
+		if (!(r.flags & 1) || !RippleIsRing(r.flags))
+			continue;
+
+		HDRenderRipple& out = live[count++];
+
+		out.slot = i;
+		out.x = (int)r.x;
+		out.y = (int)r.y;
+		out.z = (int)r.z;
+		out.flags = r.flags;
+		out.life = r.life;
+		out.size = r.size;
+		out.init = r.init;
+	}
+
+	HDRenderWaterRipples(live, count);
+}
+
+bool HDWaterRippleOnSheet(long x, long y, long z, int flags)
+{
+	return HDLevelActive() && tomb5.hd_water && tomb5.hd_motion &&
+		(flags & 1) && RippleIsRing(flags) &&
+		HDRenderWaterSheetUnder((int)x, (int)y, (int)z);
 }
 
 static void BuildWaterSheets()
@@ -6553,6 +6604,11 @@ void HDFrameDrawGlow()
 			HDRenderWaterCopy();
 			break;
 		}
+
+	/* The game's own ripples for the rings on the sheets, once a frame and
+	 * only in a level that built sheets (none with tomb5.hd_water 0). */
+	if (HDRenderWaterSheetsBuilt())
+		FeedWaterRipples();
 
 	/* The glass first and the glows after it. Both are drawn without a depth
 	 * write against a depth buffer that holds the whole opaque frame; the

@@ -1682,8 +1682,8 @@ it.
   quick waves, the Deepsea Dive's sea a long slow swell - which is what says
   they are a wave and not a brightness. In six rooms of the sinking submarine
   the two surfaces would stand on the same piece of floor, one to twenty units
-  apart; there the original's face gives way to the Remaster's sheet - but
-  only on the squares the sheet really covers, so the pool keeps its own
+  apart; there the original's face gives way to the Remaster's surface - but
+  only on the squares that surface really covers, so the pool keeps its own
   surface everywhere else and no square is left bare. It stops with
   `hd_motion`.
 - **And the water the Remaster's art does NOT build wears its HD frames.** The
@@ -1700,49 +1700,63 @@ it.
 - **The water sheets: this engine's own water surface** (`hd_water`, on by
   default). A *water square* is a 1024-unit square of a room that is not under
   water and whose room below is an underwater room - the very link Lara dives
-  through - and its surface is the square's own floor height. Every such square
-  of every level gets a *sheet*: a fine grid that moves, reflects, lets the pool
-  floor show through and foams at the bank, drawn after the room's glass. The
-  squares are joined into **bodies** of water across rooms, and every body is
-  one of three **classes**: a **sea** where any of its rooms is open to the sky
-  (long, high waves, foam at every edge and on the crests, the level's own sky
-  in the reflection), a **channel** where it is indoors, 16 squares or more and
-  narrow (a current along it, murky water, foam along the banks), a **basin**
-  everywhere else (short, calm ripples, clear water, no foam). Each section of
-  the game has its own colours - Rome warm green and yellow, Russia cold blue
-  and green, Ireland a dark green, the VCI a dark blue - lit by the light of the
-  rooms round the water, so a dark sewer has dark water. Where a sheet lies, the
-  level's own water face of the bullet above is not drawn; a square the
-  Remaster covers with art of its own that is not its still water keeps that
-  art and gets no sheet; the Remaster's still water and a sheet on the same
-  square both draw. The floor and the walls of a pool under a surface catch a
-  moving caustic either way. Fifteen levels hold 699 water squares in 81 bodies
-  (ANDREA3, JOBY3, RICH1, RICH3, RICHCUT2 and the title none). Set *HD water*
-  off and the level's own water faces are restored exactly as without the
-  sheets; the wave on the Remaster's own water art, the caustic's shape and the
-  caustic on the pool floors stay, because going back on those would need a
-  second set of shaders. Taken at the start of a level.
+  through - and its surface is the square's own floor height. Every water
+  square the sheet can cover - every one in a room drawn HD - gets a *sheet*: a
+  fine grid that moves, reflects, lets the pool floor show through and foams at
+  the bank, drawn after the room's glass. The squares are joined into
+  **bodies** of water across rooms, and every body is one of three **classes**:
+  a **sea** where any of its rooms is open to the sky (long, high waves, foam
+  at every edge and on the crests, the level's own sky in the reflection), a
+  **channel** where it is indoors, 16 squares or more and narrow (a current
+  along it, murky water, foam along the banks), a **basin** everywhere else
+  (short, calm ripples, clear water, no foam). Each section of the game has its
+  own colours - Rome warm green and yellow, Russia cold blue and green, Ireland
+  a dark green, the VCI a dark blue - lit by the light of the rooms round the
+  water, so a dark sewer has dark water, and the distance fog darkens the water
+  as it darkens its banks. Where a sheet lies, the level's own water face of
+  the bullet above is not drawn. Art the Remaster lays over a water square
+  stays and draws as it always did, its still water and its other flat art
+  alike, and the sheet draws as well; a row of class `none` in `hd_water.txt`
+  takes the sheet away where the two do not go together. The floor and the
+  walls of a pool under a sheet catch a moving caustic. A water plane with no
+  underwater room below - all of JOBY3's and RICH3's water, ANDREA3's two
+  pools, and 20 more planes - is no water square by this rule and keeps the
+  level's own faces. Fifteen levels hold 577 water squares in 81 bodies, each
+  place counted once (a flipmap pair's second room adds 122 squares at the
+  same places); ANDREA3, JOBY3, RICH1, RICH3, RICHCUT2 and the title have no
+  water square by this rule. Set *HD water* off and the level's own water
+  faces are restored exactly as without the sheets, and the caustic under them
+  is off; what stays is only the caustic's shape and its fade with distance on
+  the Remaster's own marked water art and the wave on that art, which live in
+  the compiled shaders. Taken at the start of a level.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
-  load. One row a line: `<LEVEL> <room> <class|->` and then any of
+  load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
   `tint <r> <g> <b>`, `waves <s>` and `foam <s>`. LEVEL is the level file's name
-  (`ANDREA2`), room any room of the body (a `-log` run names them), class
-  `basin`, `channel` or `sea`, or `-` to keep the class the body has; tint
-  multiplies the water's colour per channel, waves the wave heights, foam the
-  shore foam and the whitecaps - every number 0 to 4, where 1 changes nothing.
-  `#` starts a comment; a line that cannot be read is counted and skipped. The
-  rows apply after the engine's own pinned rows, so a row of the file wins - for
-  example `ANDREA2 144 - tint 1.1 1.0 0.85 waves 0.7` or `JOBY2 42 - foam 0.6`.
-  No file means the engine's own rows alone.
+  (`ANDREA2`), room a room with water (a `-log` run names them) - the row tunes
+  every body that room has water in - class `basin`, `channel` or `sea`, `-` to
+  keep the class the body has, or `none` for no sheet over those bodies (they
+  keep their class, and the level's own water faces come back there); tint
+  multiplies the shallow and the deep colour per channel, waves the wave
+  heights, foam the shore foam and the whitecaps - every number 0 to 4, where 1
+  changes nothing. `#` starts a comment; a line that cannot be read is counted
+  and skipped. The rows apply after the engine's own pinned rows, so a row of
+  the file wins, and a later row wins over an earlier one - for example
+  `ANDREA2 144 - tint 1.1 1.0 0.85 waves 0.7`, `JOBY2 42 - foam 0.6` or
+  `ANDY2 57 none`. No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
   sheet, the bodies by class, `hd_water.txt`'s lines, rows and unreadable lines,
-  the rows of this level that found a body and those that did not - and one
-  `WATERLOG body=` line per body: its rooms, the height of its surface, its
-  squares, twice its area over its perimeter, open air, the class drawn and the
-  class the rule gives, the deepest square, the light its colours are lit by
-  and the row that tuned it (`table:` the engine's, `file:` yours, with the
-  room) and the tint, wave and foam numbers in force.
+  the rows of this level that found a body and those that did not, and the
+  squares of a flipmap twin - and one `WATERLOG body=` line per body: its rooms,
+  the height of its surface, its squares and those drawing a sheet, twice its
+  area over its perimeter, open air, the class drawn and the class the rule
+  gives, the deepest square, the light its colours are lit by and the row that
+  tuned it (`table:` the engine's, `file:` yours, with the room), the tint, wave
+  and foam numbers in force, its twins' squares, the light before gain, floor
+  and cap (`raw=`) and `none=1` when a row of class `none` took its sheet away.
+  The squares and the sheets count each place once, the level's and a body's
+  alike; the second room of a flipmap pair at a place counts under `twins=`.
 
 **Text.** The title menu, the names under the inventory ring, the options
 pages, the load and save lists with their *(quicksave)* line, the statistics
@@ -1796,7 +1810,7 @@ values, in the same key as every other setting
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
 | `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing at all while `hd_enable` is off. |
-| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square of an HD level gets this engine's own water surface and the level's own water face under it is not drawn. `0` builds no sheet and restores every water face of the level as without them; the wave on the Remaster's own water art, the caustic's shape and the caustic on the pool floors stay either way. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
+| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it, and the level's own water face there is not drawn; a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |

@@ -8885,9 +8885,11 @@ that is not in this tree.
 ### The water sheets: this project's own water surface
 2026-10-07
 
-**What.** Every water square of every HD level gets a water surface of this project's own
-design, built from the classic level's data at level load: a *sheet*, a grid that moves,
-reflects, lets the pool floor show through and foams at the bank. Its wave, the swell and
+**What.** Every water square of every HD level the sheet can cover - a square over an
+underwater room, in a room drawn HD - gets a water surface of this project's own design,
+built from the classic level's data at level load: a *sheet*, a grid that moves,
+reflects, lets the pool floor show through and foams at the bank. A water plane with no
+underwater room below keeps the level's own restored faces. Its wave, the swell and
 UV wobble on the Remaster's own marked water art and the caustic on pool floors and walls
 are one design of this project's own, which replaces the wave, swell, wobble and caustic
 shapes the entry "Water in the HD rooms" took from TROne; the wind keeps TROne's shape and
@@ -8904,154 +8906,206 @@ the level's own restored classic faces with the Remaster's glint pages (means 14
 water was to be this project's own, from general graphics knowledge and counts on our own
 data. Project decisions of 2026-10-07: the sheet replaces the restored classic faces; the
 Remaster's own material 16 water in ANDREA2 room 231 stays over it; the palette is judged
-in the game; the channel murky and the basin clear; the sea foam finer, with a per-room
-foam scale for later; every water room of every level gets its sheet by the data rule;
-the override table becomes a text file; the light direction stands per class; and all
-fifteen levels are built at once, secured by the option, by a sweep table over all levels
-and by the text file, while the tuning stays with ANDREA2 and JOBY2.
+in the game; the channel murky and the basin clear; the sea foam finer, and a foam scale
+per body of water (`hd_water.txt`); every water room of every level gets its sheet by the
+data rule; the override table becomes a text file; the light direction stands per class;
+and all fifteen levels are built at once, secured by the option, by a sweep table over
+all levels and by the text file, while the tuning stays with ANDREA2 and JOBY2. After the
+review, also of 2026-10-07: `hd_water 0` switches the caustic under a surface off too;
+every water square of a room drawn HD gets its sheet whatever flat art the Remaster lays
+on it, and the rooms where that art lies over a sheet are tuned later, through the text
+file's class `none` where needed.
 
-**How.** The data rule (`specific/hd/hd_render.cpp`, `HDRenderSetWaterSheets` :8841): a
+**How.** The data rule (`specific/hd/hd_render.cpp`, `HDRenderSetWaterSheets` :8872): a
 square of a room that is not under water whose room below (`FLOOR_INFO::pit_room`) is an
 underwater room is water, its surface its own floor (clicks times 256); the depth walks
 down through further water portals to the first floor that is not one, at most six rooms
-(`water_depth` :8659). Squares are joined four-connected at one world height across rooms
-into bodies; a flipmap twin joins the body of the square at its place. A square draws a
-sheet when its room draws its own HD group and the Remaster has no flat art over it but
-its material 16 water. The class rule (`WaterClassOf` :8496): sea when any room of the
-body carries `ROOM_OUTSIDE` or `ROOM_NOT_INSIDE`, channel when indoors with 16 squares or
-more and twice the area over the perimeter under 2, basin otherwise. The class table
-(:8291): wavelengths 260/150/85/47, 420/230/120/64 and 1500/700/330/150 units, heights
-2.0/1.4/0.8/0.45, 3.0/1.8/0.9/0.45 and 38/16/7/2.8, speeds by deep-water dispersion,
-omega = calm * sqrt(g k) with g = 4300 units/s^2 (`kWaterG` :8377, 9.81 m/s^2 at 2.3 mm
-a unit) and calm 0.6/0.8/1.0, a channel's current 180 units a second along its long axis,
-swell 0/0.6/1.0, absorption 4000/1500/900 units, shore foam 0/0.7/0.85 in a 300-unit band,
-whitecaps 0.6 on a sea above half the wave height, the foam pattern's grain 1/1.5/1.5,
-the highlight indoors 55 degrees up at azimuth 40 (exponents 90 and 70, strength 0.8) and
-out of doors 22 degrees up at azimuth 200 (exponent 90, strength 0.5). The palette
-(:8318), RGB shallow / deep / highlight / foam: Rome 150,170,90 / 62,98,50 / 255,232,170
-/ 238,232,200; Russia 96,150,160 / 28,62,80 / 205,228,255 / 240,248,255; Ireland
-100,125,98 / 34,60,44 / 235,240,230 / 248,248,242; VCI 64,92,150 / 14,28,70 /
-190,210,255 / 215,225,245, all times the body light: the squares' rooms' mean colour1 +
-colour2 over their light samples, weighted by squares, times 1.8 and between 0.30 and 1.5
-(:8385). The sky table (:8344) for the open-air bodies; the override table (:8366); the
-text file (`ParseWaterLine` :8518, `read_water_file` :8595); the look per body
-(`water_look` :8736) and the rows applied after the table (`apply_water_row` :8806). The
-grid: 5 x 5 vertices a square in its own MANAGED 16-bit buffers, colour1's red the depth
-over 32 and green the distance to the nearest square without water within three squares
-over 16; one range per body of a group. `upload_water_room` (:9476) writes c16 to c23 for
-every room in `prepare()` (:8222): the caustic under a surface, the eye in room
-coordinates out of a full inverse of the room-to-view matrix, the swell and rows of the
-room's largest body or the basin's rows and no swell. `draw_water_sheet` (:9523) draws a
-room's sheet in `HDRenderRoomMask`'s blend phase after its glass, for the whole room's or
-the open half's call only (:9657), premultiplied ONE / INVSRCALPHA, two-sided, no depth
-write. `HDRenderWaterLogLine` (:9354) writes the `WATERLOG` text the engine and RoomProbe
-share; `HDRenderWaterSheetAt` (:9295) answers BuildWaterSurfaces; the buffers are released
-with every other buffer of the level (`release_buffers` :3414), so a lost device takes
-them along. `specific/hd/hd_render.h`: `HDWaterRoom` (:780), `HDRenderSetWaterSheets`
-(:791), `HDRenderWaterBody` (:809), `HDRenderWaterLevel` (:829). `hd_room.hlsl`:
-`Wave2` (:767), `WaveSum` (:777), `CausticOf` (:805) - one minus half the absolute sum of
-two warped waves to the sixth power, 0.0224 radians a unit, its mean 0.2310 and spread
-0.2964 counted over 400,000 samples and divided out; the registers c16 to c23 (:365) and
-c92 to c103 (:598); RoomVS's swell (:944) and wobble (:989, 4/512 page a unit of slope);
-the submerged weight (0.30, fading over 2048 units down); RoomPS's caustic footprint fade
-(:1452, full to 10 units a pixel, gone at 20); `WaterVS` (:1556) and `WaterPS` (:1597).
-`hd_glow.hlsl` takes the same caustic. `specific/hd/hd_level.cpp`: `BuildWaterSheets`
+(`water_depth` :8686). Squares are joined four-connected at one world height across rooms
+into bodies; a flipmap twin joins the body of the square at its place and is counted as a
+twin. A square draws a sheet when its room draws its own HD group, whatever flat art the
+Remaster lays over it - that art draws in its own pass as it does without the sheet,
+opaque art in the opaque pass before the sheet, additive art after it - unless a row of
+class `none` reached its body. The class rule (`WaterClassOf` :8515): sea when any room
+of the body carries `ROOM_OUTSIDE` or `ROOM_NOT_INSIDE`, channel when indoors with 16
+squares or more and twice the area over the perimeter under 2, basin otherwise. The class
+table (:8295): wavelengths 260/150/85/47, 420/230/120/64 and 1500/700/330/150 units,
+heights 2.0/1.4/0.8/0.45, 3.0/1.8/0.9/0.45 and 38/16/7/2.8, speeds by deep-water
+dispersion, omega = calm * sqrt(g k) with g = 4300 units/s^2 (`kWaterG` :8385, 9.81 m/s^2
+at 2.3 mm a unit) and calm 0.6/0.8/1.0, a channel's current 180 units a second along its
+long axis, swell 0/0.6/1.0, absorption 4000/1500/900 units, shore foam 0/0.7/0.85 in a
+300-unit band with a ramp of gain 2, whitecaps 0.6 on a sea above half the wave height,
+the foam pattern's grain 1/1.5/1.5, the highlight indoors 55 degrees up at azimuth 40
+(exponent 90 for a basin, 70 for a channel, strength 0.8) and out of doors 22 degrees up
+at azimuth 200 (exponent 90, strength 0.5). The palette (:8322), RGB shallow / deep /
+highlight / foam: Rome 150,170,90 / 62,98,50 / 255,232,170 / 238,232,200; Russia
+96,150,160 / 28,62,80 / 205,228,255 / 240,248,255; Ireland 100,125,98 / 34,60,44 /
+235,240,230 / 248,248,242; VCI 64,92,150 / 14,28,70 / 190,210,255 / 215,225,245, all
+times the body light: the squares' rooms' mean colour1 + colour2 over their light
+samples, weighted by squares, times the gain 1.8, never under the floor 0.30 and never
+over the cap 1.5 (`kWaterLightGain`, `kWaterLightFloor`, `kWaterLightCap` :8398 to :8400;
+gain and floor chosen on the pictures, the cap a free choice, set by eye on the RoomProbe
+pictures). The sky table (:8351) for the open-air bodies, one method for every row; the
+override table (:8374), whose class may be `HD_WATER_NONE` (`hd_render.h` :761); the text
+file (`ParseWaterLine` :8540, `read_water_file` :8622); the look per body (`water_look`
+:8763) and the rows applied after the table (`apply_water_row` :8835). The grid: 5 x 5
+vertices a square in its own MANAGED 16-bit buffers, colour1's red the depth over 32 and
+green the distance to the nearest square without water within three squares over 16; one
+range per body of a group. `upload_water_room` (:9546) writes c16 to c23 for every room
+in `prepare()` (:8226): the caustic under a surface - only when the level was built with
+the sheets (`g_caustic_on` :8455) - the eye in room coordinates out of a full inverse of
+the room-to-view matrix, the swell and rows of the room's largest body or the basin's
+rows and no swell. `draw_water_sheet` (:9594) draws a room's sheet in
+`HDRenderRoomMask`'s blend phase after its glass, for the whole room's or the open half's
+call only (:9728), premultiplied ONE / INVSRCALPHA, two-sided, no depth write.
+`HDRenderWaterLogLine` (:9421) writes the `WATERLOG` text the engine and RoomProbe share;
+`HDRenderWaterSheetAt` (:9358) answers BuildWaterSurfaces; the buffers are released with
+every other buffer of the level (`release_buffers` :3414), so a lost device takes them
+along. `specific/hd/hd_render.h`: `HDWaterRoom` (:785), `HDRenderSetWaterSheets` (:796),
+`HDRenderWaterBody` (:814), `HDRenderWaterLevel` (:837). `hd_room.hlsl`: `Wave2` (:797),
+`WaveSum` (:809), `CausticOf` (:837) - one minus half the absolute sum of two warped
+waves to the sixth power, 0.0224 radians a unit, its mean 0.2310 and spread 0.2964
+counted over 400,000 samples and divided out; the registers c16 to c23 (:384) and c92 to
+c103 (:628); RoomVS's swell (:976) and wobble (:1021, 4/512 page a unit of slope); the
+submerged weight (0.30, fading over 2048 units down); RoomPS's caustic footprint fade
+(:1489, full to 10 units a pixel, gone at 20); `WaterVS` (:1597) and `WaterPS` (:1638),
+whose distance fog (:1745) takes the same share of the water's colour as of the body's
+light (`gWaterZen.w`, the mean of its three channels, 1 for a body that reflects the
+sky), so the water goes black where its banks do. `hd_glow.hlsl` takes the same caustic
+with the same footprint fade (:169). `specific/hd/hd_level.cpp`: `BuildWaterSheets`
 (:1639) fills the rooms, reads `hd_water.txt` (:1685) and writes the log (:1697), the
 section from `gfLevelId` (`WaterSection` :1625), a `static_assert` on the room flags
-(:1621); `BuildWaterSurfaces` leaves out a face whose square draws a sheet (:1856) and
-ends its three log lines with `under a water sheet`; the call (:4911). The option:
-`global/types.h` (:2891), `tomb5/tomb5.cpp` (:245, :465, :696), `game/menu_frame.cpp`
-`MenuValHdWater` and `MenuStepHdWater` (:807) and the row (:1592), `game/gameflow.cpp`
-(:1429, German `HD-Wasser`). `bshader.bat` compiles `hd_room_water_vs.inc` and
-`hd_room_water_ps.inc`, `be.bat` checks their stamps. RoomProbe: `-hdwater 0|1`
-and `-waterfile` build through the same `HDRenderSetWaterSheets` out of the classic file's
-squares (`Tr5Level::sectorInfo`) and print the same `WATERLOG` lines and the sheet draws'
-GPU time.
+(:1621); `BuildWaterSurfaces` leaves out a face whose square draws a sheet (:1857),
+before the majority over the `.TRG`'s flat art, which then decides only the faces no
+sheet covers, and ends its three log lines with `under a water sheet`; the call (:4921).
+The option: `global/types.h` (:2896), `tomb5/tomb5.cpp` (:245, :465, :696),
+`game/menu_frame.cpp` `MenuValHdWater` and `MenuStepHdWater` (:807) and the row (:1593),
+`game/gameflow.cpp` (:1429, German `HD-Wasser`). `bshader.bat` compiles
+`hd_room_water_vs.inc` and `hd_room_water_ps.inc`, `be.bat` checks their stamps before
+and after a regeneration, and checks `hd_glow_ps.inc` against `hd_room.hlsl` as well (a
+`// bshader-include` line). RoomProbe: `-hdwater 0|1` and `-waterfile` build through the
+same `HDRenderSetWaterSheets` out of the classic file's squares (`Tr5Level::sectorInfo`),
+with a room drawn HD by the engine's own test (`StandGroupHD`: triangles, not hollow,
+with `-hdm` not marked), and print the same `WATERLOG` lines and the sheet draws' GPU
+time.
 
-`hd_water 0` builds no sheet and restores every classic face as before; the bodies, the
-classes, the caustic on the floors under a surface and the wave rows on the Remaster's
-marked water art are built either way, because going back on the shader's new caustic
-shape and wave would need a second set of compiled pixel shaders (the gloss RoomPS stands
-at 502 of the 512 slots). With `hd_enable 0` nothing of this runs.
+`hd_water 0` builds no sheet, restores every classic face as without the sheets and
+switches the caustic under a surface off; what stays with 0 is only the caustic's shape
+and footprint fade on the Remaster's own marked water art and the wave rows on that art,
+because they live in the compiled pixel and vertex shaders (the gloss RoomPS stands at 502
+of the 512 slots). The bodies and their classes are built either way. With `hd_enable 0`
+nothing of this runs.
 
-`hd_water.txt`, read at every level load like `hd_gloss.txt`: one row a line,
-`<LEVEL> <room> <class|->` and any of `tint <r> <g> <b>`, `waves <s>`, `foam <s>`, each
-number 0 to 4; `-` keeps the class; `#` starts a comment; an unreadable line is counted.
-Rows apply after the compiled table's, to every body their room has water in, so the
-file wins. A default file with the five pinned places stands beside this round's sweep;
-nothing ships it (see Left).
+`hd_water.txt`, read at every level load like `hd_gloss.txt`: one row a line, `<LEVEL>
+<room> <class|-|none>` and any of `tint <r> <g> <b>`, `waves <s>`, `foam <s>`, each number
+0 to 4; `-` keeps the class; `none` draws no sheet over the bodies the row reaches, which
+keep their class, and the classic faces come back there; `#` starts a comment; an
+unreadable line is counted. Rows apply after the compiled table's, to every body their
+room has water in, so the file wins, and a later row wins over an earlier one. A default
+file with the five pinned places was written but is not in this tree and does not ship
+(see Left).
 
 `WATERLOG level=<stem> option section sectors sheets built bodies basin channel sea file
-rows bad applied unmatched overlaps caustic_rooms verts tris`, then per body
+rows bad applied unmatched overlaps caustic_rooms verts tris twins`, then per body
 `WATERLOG body=<n> rooms surface sectors sheets shape open class rule depth light override
-tint waves foam`.
+tint waves foam twins raw none`. One definition of the counts: `sectors` and `sheets`
+count each place once, the level's and a body's alike, and the second room of a flipmap
+pair at a place goes to `twins`; `raw` is the body light before gain, floor and cap;
+`none` is 1 when a row of class `none` took the body's sheet away.
 
-**Measured.** The sweep, RoomProbe `-hdwater 1 -nodraw` over the fifteen levels, squares
-/ drawing a sheet / bodies (basin, channel, sea): ANDREA1 34 / 34 / 4 (4, 0, 0); ANDREA2
-94 / 94 / 7 (6, 1, 0); ANDY1 30 / 30 / 4 (1, 0, 3); ANDY2 92 / 26 / 18 (15, 3, 0); ANDY3
-212 / 185 / 26 (5, 0, 21); JOBY2 84 / 84 / 3 (1, 0, 2); JOBY4 2 / 2 / 1 (1, 0, 0); JOBY5
-142 / 128 / 14 (11, 3, 0); RICH2 9 / 9 / 4 (4, 0, 0); ANDREA3, JOBY3, RICH1, RICH3,
-RICHCUT2 and TITLE none. 699 squares, 592 drawing, 81 bodies (48 basins, 7 channels, 26
-seas); no square held by two rooms that are no flipmap pair. ANDREA2 and JOBY2 give the
-bodies the design counted (94 squares in 7 bodies, 84 in 3). The sky: ANDY1 and ANDY3
-share one dusk dome, horizon 113, 78, 67 over the rows 6 to 40 pixels above the horizon
-toward four directions, overhead 11, 19, 32 where its clouds cover 41 % of the view; the
-same measure gives JOBY2 152, 154, 171 and 96, 93, 116, beside the 163, 165, 178 and 100,
-104, 122 the table keeps for it. No class of the sweep was pinned: no indoor pool came
-out a sea, no sea a basin; the rule's classes stand. fxc 10.0.26100 /O3 slots, 8691e82
-to now: RoomPS 476 to 477 (the caustic's new shape saves 12, the footprint fade costs
-13), gloss RoomPS 503 to 502, RoomVS 348 to 412, GlowPS 479 to 465, WaterPS 243,
-WaterVS 155. GPU time of the sheet draws by timestamp queries: 0.027 to 0.042 ms in the
-thirteen 960 x 540 views that draw a sheet, 0.087 ms for a screen full of water at
-2560 x 1440 (JOBY2 room 42 from above, two draws).
+**Measured.** The sweep, RoomProbe `-hdwater 1 -nodraw` over the fifteen levels,
+places / drawing a sheet / bodies (basin, channel, sea), and the squares of a flipmap
+twin where there are any: ANDREA1 34 / 34 / 4 (4, 0, 0); ANDREA2 94 / 94 / 7 (6, 1,
+0); ANDY1 30 / 30 / 4 (1, 0, 3); ANDY2 72 / 72 / 18 (15, 3, 0), 20 twins; ANDY3 125 /
+125 / 26 (5, 0, 21), 87 twins; JOBY2 69 / 69 / 3 (1, 0, 2), 15 twins; JOBY4 2 / 2 / 1
+(1, 0, 0); JOBY5 142 / 142 / 14 (11, 3, 0); RICH2 9 / 9 / 4 (4, 0, 0); ANDREA3, JOBY3,
+RICH1, RICH3, RICHCUT2 and TITLE no water square by this rule (the water planes of
+ANDREA3, JOBY3 and RICH3 have no underwater room below and keep their faces, see
+Left). 577 places, every one drawing a sheet, and 122 squares of a twin, 699 squares
+in all; 81 bodies (48 basins, 7 channels, 26 seas); no square held by two rooms that
+are no flipmap pair. 107 of the squares lie under the Remaster's flat art and drew no
+sheet before the review's rule; they draw one now. ANDREA2 and JOBY2 give the bodies
+the design counted (ANDREA2 94 squares in 7 bodies; JOBY2 69 places in 3, 84 squares
+with the 15 of room 45, the twin of 143). ANDREA2 room 76 has its surface: body 1, 4
+squares, a basin. The body light before gain, floor and cap (`raw=`) runs 0.09 to 0.55
+a channel over the bodies of ANDREA2 and JOBY2 (lowest ANDREA2's room 196, highest
+JOBY2's 143 with its twin 45) and 0.07 to 1.88 over all levels (ANDY1 room 144; JOBY4
+room 7, the one body at the cap); the design gave 0.09 for ANDREA2 231 alone, a single
+room's mean - that room's body, 144, 229 and 231, runs from 0.17 to 0.20. The sky, one
+method for every row (`RoomProbe -sky -skyonly -black` at 960 x 540 from 1024 0 1024
+in JOBY2's room 42, ANDY1's 132 and ANDY3's 17; the mean of the rows 6 to 40 pixels
+above the picture's middle toward four directions, and straight up where the dome
+covers the view): JOBY2 horizon 152, 154, 171 and overhead 96, 93, 116, in the table
+now in place of the 163, 165, 178 and 100, 104, 122 the design row had, which no row
+band of the round's pictures repeats; ANDY1 and ANDY3 share one dusk dome, 113, 78, 67
+and 11, 19, 32 where its clouds cover 41 % of the view. No class of the sweep was
+pinned: no indoor pool came out a sea, no sea a basin; the rule's classes stand. The
+slots of fxc 10.0.26100 /O3, 8691e82 to now: RoomPS 476 to 477 (the caustic's new
+shape saves 12, the footprint fade costs 13), gloss RoomPS 503 to 502, RoomVS 348 to
+412, GlowPS 479 to 478 (465 with the new shape, 13 more for the footprint fade),
+WaterPS 247 (243 before its fog took the body light), WaterVS 153. GPU time of the
+sheet draws by timestamp queries: 0.027 to 0.041 ms in the thirteen 960 x 540 views
+that draw a sheet, 0.091 ms for a screen full of water at 2560 x 1440 (JOBY2 room 42
+from above, two draws).
 
 **Checked.** The engine builds (`be.bat`), and RoomProbe, TrgProbe, ModelProbe, MapProbe,
-ModernTest, MenuTest, InterpTest and LipsTest; ModernTest 14,721, MenuTest 42,627
-(42,613 and 14 in `graphics_water_row`; `graphics_softbody_row` now holds fourteen rows),
-InterpTest 729, LipsTest 270 and 243, none failed. The classic faces: RoomProbe
-`-classicroom -classiconly` of ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34,
-built at 8691e82 and now, are the same bytes (md5). The fifteen views at 960 x 540 (the
-nine of the design, the view from under the fountain, the view from above it, ANDREA2 76,
-JOBY2 66, RICH2's mirror washroom 134 and JOBY5 102's marked Remaster water): without
-`-hdwater` 14 of 15 are the same bytes as at 8691e82, the fifteenth the marked water
-with the new wave and caustic; with `-hdwater 0` the mirror room is the same bytes and the
-other fourteen differ by the caustic on the floors under a surface and the new rows on
-the marked water; with `-hdwater 1` the sheets show. The mirrors: TR5's mirrors are art
-and a second draw of Lara and the items, never a second draw of a room through the blend
-phase, and no mirror room holds a water square, so no sheet is ever drawn mirrored; the
-eye is still an inverse in full, right for a reflected matrix too. The pass order: the
-engine's HDFrameDrawGlow and RoomProbe both draw every room's blend phase (its glass, then
-its sheet), then the stand-ins and statics, then the additive pass. Seen from below, the
-sheet is drawn with its dry room's constants, where the underwater flicker of
-`gWaterMode.x` is 0 - the classic face it replaces never took it either; the camera's
+ModernTest, MenuTest, InterpTest and LipsTest; ModernTest 14,721, MenuTest 42,627 (42,613,
+13 in the new `graphics_water_row` and one more in `graphics_softbody_row`, which now
+holds fourteen rows - counted on the code, MenuTest prints no count per family),
+InterpTest 729, LipsTest 270 and 243, none failed. `be.bat` with a wrong `bshader-include`
+line in `hd_glow_ps.inc` regenerates the shaders. The classic faces: RoomProbe
+`-classicroom -classiconly` of ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34, built
+at 8691e82 and now, are the same bytes (md5). The fifteen views at 960 x 540 (the nine of
+the design, the view from under the fountain, the view from above it, ANDREA2 76, JOBY2
+66, RICH2's mirror washroom 134 and JOBY5 102's marked Remaster water): with `-hdwater 0`
+and without the switch 14 of 15 are the same bytes as at 8691e82, the fifteenth the marked
+water with the new wave rows and caustic shape (11.3 % of its pixels); with `-hdwater 1`
+the sheets show. The distance fog: the sea of JOBY2 room 42 and the sewer of ANDREA2 room
+19 under RoomProbe `-fog 12288` and `-fog 4096` - the water now darkens with its banks,
+where it went black ahead of them. The full-water view's straight seam at x 3072 lies in
+the floor: 9.9 of 255 across it with `-hdwater 0`, 1.6 through the sheet. The mirrors:
+TR5's mirrors are art and a second draw of Lara and the items, never a second draw of a
+room through the blend phase, and no mirror room holds a water square, so no sheet is ever
+drawn mirrored; the eye is still an inverse in full, right for a reflected matrix too. The
+pass order: the engine's HDFrameDrawGlow and RoomProbe both draw every room's blend phase
+(its glass, then its sheet), then the stand-ins and statics, then the additive pass. Seen
+from below, the sheet is drawn with its dry room's constants, where the underwater flicker
+of `gWaterMode.x` is 0 - the classic face it replaces never took it either; the camera's
 underwater wobble and the fog reach it as they reach a room. `hd_water.txt` read in
-RoomProbe with five good rows, three good test rows, three unreadable lines and one row
-for a room without water: `rows=8 bad=3 applied=8 unmatched=1`, and the bodies name
-`override=file:<room>` with their numbers. The motion over six clock times in two views.
+RoomProbe with the five pinned rows, three good test rows, three unreadable lines, one row
+for a room without water and two rows of class `none`: ANDREA2 `rows=10 bad=3 applied=9
+unmatched=1`, its fountain 194 `sheets=0 none=1` and the level's sheets 94 to 88; ANDY2 57
+`none` reaches the five bodies of rooms 57 and 136, the level's sheets 72 to 52; the
+bodies name `override=file:<room>` with their numbers. The motion over six clock times in
+two views.
 
 **Left.** The in-game look, the palette under the game's gamma and fog, the mirror rooms
-and the camera under water in the game, all unseen: nobody could play in this round.
-What the sweep found odd: ANDY3's rooms 34 and 183 (a flipmap pair) hold water squares
-at three heights, 10496, 10752 and 11008, where their classic faces stand at 11008
-alone - sixteen small bodies, three of them of depth 0 (bodies 6, 9, 12); ANDY2's
-rooms 158 and 159 hold two 20-square channels at 15616 under the Remaster's own flat art
-(no sheet) and eight single squares at 14592 that now get a sheet where nothing showed
-water; rooms 57 and 136 four single squares at 20992 under flat art. Planes where the
-Remaster's material 16 water and a sheet both draw: ANDREA2 231 (additive, 2048
-triangles, 7 to 9 units above the sheet), ANDY2 52 (additive, 128), ANDY2 57 (OPAQUE,
-2256 triangles at 22009, 7 units above the sheet at 22016, which it hides and may fight
-with in depth at a distance), JOBY5 4, 27, 28, 49 (two parts), 53, 61, 83, 115, 117 (two
-parts), 139, 143, 151 and 184 (all additive). Classic water planes with no underwater
-room below, which keep their restored faces and get no sheet: ANDREA2 70, 204, 237;
-ANDREA3 70, 120; ANDY1 26; ANDY3 28, 87, 104, 107, 210; JOBY3 21, 26, 135, 144, 164, 180,
-184, 191, 192; JOBY5 2, 14, 26, 50, 52, 102, 114, 119, 161, 178, 182; RICH3 87, 143,
-191, 192. JOBY4's one basin (room 7) is lit at the cap of 1.5. The basin's ripples read
-as regular rings from straight above; the sheet writes no depth, so models drawn after it
-are not tinted; one alpha dims the floor and cannot colour it. Whether `hd_water.txt`
-ships with the release, as `hd_gloss.txt` does not, is open.
+and the camera under water in the game, all unseen: nobody could play in this round. The
+shore foam's softer edge (a ramp of gain 2 where the build had 3) is to be judged in the
+game against the 3 it replaces, a one-number change in `WaterPS`. A channel's current runs along its body's longer box axis, one direction for a turning
+canal. What the sweep found odd: ANDY3's rooms 34 and 183 (a flipmap pair) hold water
+squares at three heights, 10496, 10752 and 11008, where their classic faces stand at
+11008 alone - sixteen small bodies, three of them of depth 0 (bodies 6, 9, 12); ANDY2's
+rooms 158 and 159 hold eight single squares at 14592 that get a sheet where nothing
+showed water. Rooms where the Remaster's flat art that is not its water lies over a sheet
+now, to be tuned in the game (the class `none` takes a body's sheet away): ANDY2 57 and
+136 (four single squares at 20992), ANDY2 158 and 159 (a 20-square channel and a single
+square each, at 15616); ANDY3's twin rooms 0, 42, 43 and 182, 17, 101, 206 and 207, 34,
+38, 183 and 184, and 38, 41, 184 and 185 (squares of the second room of a pair); JOBY5 4,
+61, 139 and 184. Planes where the Remaster's material 16 water and a sheet both draw:
+ANDREA2 231 (additive, 2048 triangles, 7 to 9 units above the sheet), ANDY2 52 (additive,
+128), ANDY2 57 (OPAQUE, 2256 triangles at 22009, 7 units above the sheet at 22016, which
+it hides and may fight with in depth at a distance), JOBY5 4, 27, 28, 49 (two parts), 53,
+61, 83, 115, 117 (two parts), 139, 143, 151 and 184 (all additive). Classic water planes
+with no underwater room below, which keep their restored faces and get no sheet: ANDREA2
+70, 204, 237; ANDREA3 70, 120; ANDY1 26; ANDY3 28, 87, 104, 107, 210; JOBY3 21, 26, 135,
+144, 164, 180, 184, 191, 192; JOBY5 2, 14, 26, 50, 52, 102, 114, 119, 161, 178, 182;
+RICH3 87, 143, 191, 192. JOBY4's one basin (room 7) is lit at the cap of 1.5. The basin's
+ripples read as regular rings from straight above; the sheet writes no depth, so models
+drawn after it are not tinted; one alpha dims the floor and cannot colour it. Whether
+`hd_water.txt` ships with the release, as `hd_gloss.txt` does not, is open.
 
-**Commits.** `4ee001a`, `e7db80a`, `b6866f3`, `6f79503`, `19ad148`, and the commit that
-writes this entry
+**Commits.** `4ee001a`, `e7db80a`, `b6866f3`, `6f79503`, `19ad148`, `73522ab`, `a96a091`,
+`128a4a3`, `8b19a7e`.
 
 ## 2.5 Sixty frames a second
 

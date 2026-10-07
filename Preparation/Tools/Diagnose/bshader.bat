@@ -59,6 +59,14 @@ if errorlevel 1 exit /b 1
  /Fh "%SHADERDIR%\hd_room_water_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The sheet's pixel shader once more with HD_WATER_DEPTH defined: the
+rem variant that reads the frame's depth texture where the adapter offers
+rem one (hd_room.hlsl, WaterDepthBelow); the plain one is the fallback.
+"%FXC%" /nologo /T ps_3_0 /E WaterPS /O3 /D HD_WATER_DEPTH=1 ^
+ /Vn kHDRoomWaterDepthPS ^
+ /Fh "%SHADERDIR%\hd_room_water_depth_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
 
@@ -111,6 +119,8 @@ call :stamp hd_room hd_room_water_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_depth_ps.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_ps.inc
@@ -137,6 +147,7 @@ if errorlevel 1 exit /b 1
 for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 call :size "%SHADERDIR%\hd_room_water_vs.inc"
 call :size "%SHADERDIR%\hd_room_water_ps.inc"
+call :size "%SHADERDIR%\hd_room_water_depth_ps.inc"
 exit /b 0
 
 :stamp

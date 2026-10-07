@@ -411,6 +411,10 @@ float4 gWaveV[4] : register(c20);
  *
  * c92 - c95   gWaveP[4]           per DRAW CALL
  * c96 - c103  gWaterDeep .. gWaterMisc   per DRAW CALL
+ * c104 - c106 gWaterAbsorb, gWaterScreen, gWaterStage   per DRAW CALL
+ * s5          the copy of the frame behind the sheet   per frame
+ * s6          the frame's depth texture (the variant compiled with
+ *             HD_WATER_DEPTH alone)                     per frame
  *
  * Deliberately disjoint from the vertex numbers although the two constant
  * files are separate in Direct3D 9: one table of "register -> meaning" that
@@ -634,6 +638,37 @@ float4 gWaterHigh : register(c100);
 float4 gWaterSun : register(c101);
 float4 gWaterFoam : register(c102);
 float4 gWaterMisc : register(c103);
+
+/* What the sheet does with the frame behind it, read by WaterPS alone:
+ *
+ * gWaterAbsorb  rgb one over the absorption length per channel (units),
+ *               w how far the wave's slope moves the floor seen through
+ *               it, in units at a slope of 1
+ * gWaterScreen  x, y one over the render target's width and height in
+ *               pixels; z, w the projection's a and b, the depth a - b / z
+ *               of HDRenderMakeProjection
+ * gWaterStage   x 1 while this frame's copy is bound to s5, z RoomProbe's
+ *               view of the depth texture (0 off, 1 the scene's view depth
+ *               over 16384 units, 2 the water depth out of the depth
+ *               texture over the vertex depth, times 0.5, 3 the pixels
+ *               whose bent place the depth refused, red), y and w unused
+ *
+ * Above the pixel registers of every other shader of the blend phase; the
+ * shadow receive shaders' c103 - c108 are written by every one of their
+ * passes, and hd_model.hlsl's c104 and up are vertex registers. */
+float4 gWaterAbsorb : register(c104);
+float4 gWaterScreen : register(c105);
+float4 gWaterStage : register(c106);
+
+/* The frame behind the sheet, copied out of the render target before the
+ * blend phase (HDRenderWaterCopy): linear, clamped, one level. The frame's
+ * depth texture, where the adapter offers one (INTZ, HDRenderWaterDepth-
+ * Bind): point, clamped, bound with the depth writes off. s0 is the page,
+ * s1 and s2 the light field, s3 and s4 the shadow maps. */
+sampler2D sWaterCopy : register(s5);
+#ifdef HD_WATER_DEPTH
+sampler2D sWaterDepth : register(s6);
+#endif
 
 #ifdef HD_GLOSS
 /* The sheen - the gloss variant of this shader.
@@ -1575,8 +1610,10 @@ float4 RoomPS(VS_OUT input) : COLOR0
  *                   moving pattern; and on the crests of a sea
  *
  * Premultiplied: rgb is what the water adds, alpha how much of the floor it
- * hides, 1 - (1 - F) T. The floor is dimmed by that one scalar; tinting it
- * per channel would need a copy of the picture behind it.
+ * hides, 1 - (1 - F) T. Without the frame's copy (gWaterStage.x 0) the floor
+ * is dimmed by that one scalar. With it the sheet reads the floor itself, at
+ * a place moved by the wave's slope, dims it per channel and writes the whole
+ * pixel with alpha 1 - see "the frame behind the sheet" below.
  *
  * Seen from below (the camera under water), the surface shows the bright
  * window overhead within the critical angle and the deep colour outside it.
@@ -1635,7 +1672,84 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	return o;
 }
 
-float4 WaterPS(WATER_OUT input) : COLOR0
+/* The frame behind the sheet: the classic and HD opaque frame, Lara and the
+ * objects included, as the blend phase found it.
+ *
+ * The refraction. A wave tilts the surface, and the ray to the floor bends
+ * with it: for a slope s the floor point seen moves by about s times the
+ * path through the water times 1 - 1 / 1.33 along the slope. The sheet
+ * moves it by the slope times gWaterAbsorb.w times what the water hides
+ * there (1 - T), with gWaterAbsorb.w the absorption length times
+ * 1 - 1 / 1.33: for a short path 1 - T is the path over that length, and
+ * the move is the refracted one; for a long path it stops growing where the
+ * floor fades out anyway. The move is carried to the screen through the
+ * pixel's own footprint, the world step of one pixel right and one pixel
+ * down: solving that 2 x 2 system turns world units into pixels, which
+ * shrinks the move with the view distance - far water does not swim - and
+ * turns it with the view. Two bounds, free choices set by eye on the
+ * round's RoomProbe pictures: 256 units (a quarter square) in the world,
+ * against a wave scaled up by hd_water.txt, and 4 % of the screen, against
+ * a footprint that collapses at a grazing view; and the place read stays
+ * inside the screen.
+ *
+ * The absorption per channel (gWaterAbsorb.rgb): the deep colour of the
+ * section's palette is what a long path leaves of the shallow one, so the
+ * channels are absorbed in the ratio of ln(shallow / deep), scaled so that
+ * their mean is the class's one over the absorption length - the palette
+ * keeps its meaning and the class its depth (water_look). */
+float2 RefractUV(float2 uv, float2 slope, float amount, float2 fx, float2 fy)
+{
+	float2 d = slope * (gWaterAbsorb.w * amount);
+	const float len = length(d);
+
+	d *= len > 256.0f ? 256.0f / len : 1.0f;
+
+	const float det = fx.x * fy.y - fy.x * fx.y;
+	float2 p = abs(det) > 1.0e-6f ? float2(d.x * fy.y - d.y * fy.x,
+		d.y * fx.x - d.x * fx.y) / det : float2(0.0f, 0.0f);
+	float2 move = p * gWaterScreen.xy;
+	const float far = length(move);
+
+	move *= far > 0.04f ? 0.04f / far : 1.0f;
+	return clamp(uv + move, 0.5f * gWaterScreen.xy,
+		1.0f - 0.5f * gWaterScreen.xy);
+}
+
+#ifdef HD_WATER_DEPTH
+/* The frame's view depth at uv: the texture holds the depth a - b / z of
+ * HDRenderMakeProjection, so z = b / (a - d). A pixel nothing was drawn on
+ * (cleared to 1, past the far plane's 0.995) comes out very far away. */
+float SceneZ(float2 uv)
+{
+	const float d = tex2Dlod(sWaterDepth, float4(uv, 0.0f, 0.0f)).r;
+
+	return gWaterScreen.w / max(gWaterScreen.z - d, 1.0e-6f);
+}
+#endif
+
+/* The water under the pixel, straight down in units, and the path the view
+ * ray runs through it. With the depth texture both come out of the frame's
+ * own depth behind the sheet: the ray from the sheet to what was drawn
+ * behind it, its length the view depth between them times the eye distance
+ * over the sheet's view depth - a floor of any shape, a step, an ice floe, a
+ * statue's foot, and nothing at the bank. Without it out of the vertex depth,
+ * the classic floor square's, over the cosine of the view (at least 0.25, so
+ * a grazing view does not run to infinity). The one place the sheet asks for
+ * the depth, for every term that needs it. */
+float WaterDepthBelow(float vertexDepth, float viewZ, float3 eye, float2 uv,
+	out float path)
+{
+	const float down = abs(normalize(eye).y);
+#ifdef HD_WATER_DEPTH
+	path = max(0.0f, SceneZ(uv) - viewZ) * length(eye) / max(viewZ, 1.0f);
+	return path * down;
+#else
+	path = vertexDepth / max(down, 0.25f);
+	return vertexDepth;
+#endif
+}
+
+float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 {
 	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
 	const float t = gWaterMisc.z;
@@ -1695,24 +1809,34 @@ float4 WaterPS(WATER_OUT input) : COLOR0
 	const float3 spec = gWaterHigh.rgb *
 		pow(saturate(dot(N, H)), gWaterHigh.w);
 
-	// The water: transmitted from the floor, or scattered in its place.
-	const float path = input.roomPos.w / max(abs(V.y), 0.25f);
+	/* The water: transmitted from the floor, or scattered in its place.
+	 * `through` is what of the frame behind the sheet comes through, per
+	 * channel - the floor's share once the copy is there. */
+	const float2 uv = (vpos + 0.5f) * gWaterScreen.xy;
+	float path;
+	const float depth = WaterDepthBelow(input.roomPos.w, input.viewZ,
+		input.eye.xyz, uv, path);
 	const float T = exp(-path * gWaterDeep.w);
 	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb,
 		saturate(1.0f - T));
 
 	float3 col = F * refl + (1.0f - F) * (1.0f - T) * scatter + spec * above;
 	float a = 1.0f - (1.0f - F) * T;
+	float3 through = (1.0f - F) * exp(-path * gWaterAbsorb.rgb);
+	float bend = 1.0f - T;
 
 	/* Seen from below: inside the critical angle (about 49 degrees off the
 	 * vertical, N.V above 0.66) the bright window, outside it the deep
-	 * colour mirrored back. */
+	 * colour mirrored back. With the copy the window shows the world above,
+	 * bent by the waves at the full slope. */
 	if (above < 0.5f)
 	{
 		const float window = smoothstep(0.6f, 0.75f, nv);
 
 		a = lerp(0.92f, 0.55f, window);
 		col = a * lerp(gWaterDeep.rgb * 1.3f, refl, window);
+		through = 1.0f - a;
+		bend = 1.0f;
 	}
 
 	/* The foam: a blotchy pattern that drifts - two layers of Wave2, the
@@ -1735,13 +1859,50 @@ float4 WaterPS(WATER_OUT input) : COLOR0
 
 	col = lerp(col, gWaterFoam.rgb, foam);
 	a = lerp(a, 1.0f, foam);
+	through *= 1.0f - foam;
 
 	/* The distance fog (drawroom.cpp), in the light's own scale as RoomPS
 	 * takes it, as a share of the body's light - see the note over
-	 * WATER_OUT. */
+	 * WATER_OUT. The frame behind the sheet is fogged already. */
 	const float fog = max(0.0f, input.viewZ - gFog.x) * gFog.y *
 		(2.0f / 255.0f);
 
 	col *= saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
+
+	/* With the copy: the floor read at the bent place and added with its
+	 * share, the pixel written whole. With the depth texture the bent place
+	 * is refused where the frame there lies nearer than the sheet - a leg,
+	 * a pillar or a statue standing in the water is not pulled into the
+	 * floor; the pixel's own place is read instead. */
+	float refused = 0.0f;
+
+	if (gWaterStage.x > 0.5f)
+	{
+		float2 at = RefractUV(uv, slope, bend, dx, dy);
+
+#ifdef HD_WATER_DEPTH
+		refused = SceneZ(at) < input.viewZ ? 1.0f : 0.0f;
+		at = refused > 0.5f ? uv : at;
+#endif
+		col += through * tex2Dlod(sWaterCopy, float4(at, 0.0f, 0.0f)).rgb;
+		a = 1.0f;
+	}
+
+#ifdef HD_WATER_DEPTH
+	/* RoomProbe -waterdepthview: 1 and 2 the depth texture as grey, 3 the
+	 * pixels whose bent place the depth refused, in red over the sheet. */
+	if (gWaterStage.z > 2.5f)
+		return float4(lerp(col, float3(1.0f, 0.0f, 0.0f), refused), 1.0f);
+
+	if (gWaterStage.z > 0.5f)
+	{
+		const float grey = gWaterStage.z > 1.5f ?
+			0.5f * depth / max(input.roomPos.w, 1.0f) :
+			SceneZ(uv) * (1.0f / 16384.0f);
+
+		return float4(saturate(grey).xxx, 1.0f);
+	}
+#endif
+
 	return float4(col, a);
 }

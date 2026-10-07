@@ -1729,6 +1729,22 @@ it.
   is off; what stays is only the caustic's shape and its fade with distance on
   the Remaster's own marked water art and the wave on that art, which live in
   the compiled shaders. Taken at the start of a level.
+- **Seeing through the water.** Before the frame's see-through things are
+  drawn, the engine takes one copy of the picture as it stands - the rooms,
+  the objects, Lara - when a room of the frame has a sheet, and the sheet reads
+  the floor out of that copy: bent by the waves (deep water more than shallow,
+  far water less than near), tinted channel by channel by the section's colours
+  (the deep colour is what a long path through the water leaves of the shallow
+  one), so Lara's legs and the pool floor are seen bent and coloured through
+  the surface. Seen from below, the bright window overhead shows the world
+  above, bent the same way. Where the graphics card offers it (the `INTZ`
+  format), the frame's depth buffer becomes a texture the sheet can read, bound
+  when a level with sheets loads: the water then knows how far below it
+  something was drawn - a step, an ice floe, a deep shaft - and grows clearer
+  or darker with it, and nothing standing in the water is pulled into the
+  floor by the bending. A card without it draws the same sheet with the depth
+  of the level's own floor data. With *HD water* off neither the copy nor the
+  depth texture is made.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
@@ -1747,8 +1763,10 @@ it.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
   sheet, the bodies by class, `hd_water.txt`'s lines, rows and unreadable lines,
-  the rows of this level that found a body and those that did not, and the
-  squares of a flipmap twin - and one `WATERLOG body=` line per body: its rooms,
+  the rows of this level that found a body and those that did not, the
+  squares of a flipmap twin, and whether the sheets read the copy of the
+  picture (`copy=1`) and the depth texture (`depth=1`) - and one `WATERLOG
+  body=` line per body: its rooms,
   the height of its surface, its squares and those drawing a sheet, twice its
   area over its perimeter, open air, the class drawn and the class the rule
   gives, the deepest square, the light its colours are lit by and the row that

@@ -8914,7 +8914,12 @@ all levels and by the text file, while the tuning stays with ANDREA2 and JOBY2. 
 review, also of 2026-10-07: `hd_water 0` switches the caustic under a surface off too;
 every water square of a room drawn HD gets its sheet whatever flat art the Remaster lays
 on it, and the rooms where that art lies over a sheet are tuned later, through the text
-file's class `none` where needed.
+file's class `none` where needed. After the owner's first play test of 2026-10-07: the
+water still looks very static, the waves monotonous, the foam static, opaque and the
+same at every bank; the second stage - the floor seen through the sheet, bent by the
+waves and tinted per channel - comes first, so that the water can be judged honestly,
+and the life of the water is folded in after it; master waits until the water is
+complete.
 
 **How.** The data rule (`specific/hd/hd_render.cpp`, `HDRenderSetWaterSheets` :8872): a
 square of a room that is not under water whose room below (`FLOOR_INFO::pit_room`) is an
@@ -8988,6 +8993,65 @@ with a room drawn HD by the engine's own test (`StandGroupHD`: triangles, not ho
 with `-hdm` not marked), and print the same `WATERLOG` lines and the sheet draws' GPU
 time.
 
+The frame behind the sheet. `HDRenderWaterCopy` (`hd_render.cpp` :9631) copies render
+target 0 by `StretchRect` into a `D3DPOOL_DEFAULT` render-target texture of its size and
+format, made on first use, once a bracket (`g_copy_valid`, cleared by `HDRenderFrameEnd`
+through `water_bracket_end` :8517); `HDFrameDrawGlow` (`hd_level.cpp` :6551) calls it
+after its `HDRenderFrameBegin` and before the first blend phase, when a room of the frame
+has a sheet (`HDRenderGroupHasSheet` :9619) - so the copy holds every opaque thing of the
+frame, the HD rooms and objects, the classic buckets and Lara, and none of the glass. The
+back buffer is X8R8G8B8 and not multisampled, sRGB is off everywhere in the HD path, so
+the copy is read as it is. `draw_water_sheet` (:9922) binds it to sampler s5 (linear,
+clamped, one level) for the sheet draw alone and unbinds it after. `WaterPS` takes its
+screen place from `VPOS` plus half a pixel (`hd_room.hlsl` :1752), so `WaterVS` keeps its
+bytecode. The refraction (`RefractUV` :1700): the floor is read at a place moved by the
+wave's slope times the absorption length times 1 - 1 / 1.33 times 1 - T - for a short
+path the small-angle refraction of a ray through a tilted surface, for a long one no
+further growth where the floor fades - 992 units for a basin, 372 for a channel, 223 for
+a sea (`water_look`, :8922); the move is carried to the screen by solving the pixel's
+footprint (`ddx`, `ddy` of the world position), which shrinks it with the distance and
+turns it with the view, at most 256 units and 4 % of the screen, the place clamped
+inside it. The absorption per channel (:8902): the channels in the ratio of ln(shallow /
+deep) of the section's palette, their mean the class's 1 / absorb (Rome 1.31 / 0.82 /
+0.87 of the mean, Russia 1.32 / 0.94 / 0.74, Ireland 1.24 / 0.84 / 0.92, VCI 1.31 / 1.03
+/ 0.66). With the copy the sheet writes
+F * reflection + (1 - F) * (copy * T_rgb + (1 - T) * scatter) + highlight,
+foam over it, the fog on its own colour (the copy is fogged
+already), with alpha 1 under the same ONE / INVSRCALPHA; without it the shader is the
+stage before term for term. From below, inside the Snell window the copy is read with
+the bend at the full slope in place of the 45 % of the frame that showed through
+before; outside it as before. The depth texture: where `CheckDeviceFormat` offers `INTZ`
+as a depth-stencil texture (`HDRenderWaterDepthOffered` :9719), `HDRenderWaterDepthBind`
+(:9746) makes an `INTZ` texture of the depth buffer's size the device's depth-stencil,
+keeps the device's own surface and clears the new one once (whole surface, scissor off);
+`HDRenderWaterDepthUnbind` (:9812) puts the own surface back and releases both. The
+engine binds it in `BuildWaterSheets` (`hd_level.cpp` :1701) when the level built sheets,
+between frames, and logs a refusal; `release_water_sheets` (:8538) unbinds it and
+releases the copy, so a new level, `HDRenderShutdown` and `HDLevelDeviceLost` before a
+`Reset` or `DXClose` take both along, and the HD path makes them again with the next
+level as it does its buffers. `depth_has_stencil` (:10457) counts `INTZ` (8 bits of
+stencil) so the shadow receive keeps its stencil guard. The depth variant of `WaterPS`,
+compiled with `HD_WATER_DEPTH` into `hd_room_water_depth_ps.inc` and picked while the
+`INTZ` surface is bound, reads it on s6 (point, clamped, depth writes off, unbound after
+the draw): `SceneZ` (:1722) undoes the projection, z = b / (a - d) with a and b of
+`HDRenderMakeProjection`; `WaterDepthBelow` (:1739) gives the path through the water as
+the view depth between the sheet and what was drawn behind it times the eye distance over
+the sheet's view depth, and the depth straight down, for every term that needs it; the
+bent place is refused and the pixel's own read where the frame there lies nearer than the
+sheet (:1879). The fallback, `hd_room_water_ps.inc`, reads the vertex depth, does not
+mask and keeps the sector band for the foam. New pixel constants c104 to c106
+(`gWaterAbsorb`, `gWaterScreen`, `gWaterStage`), above every pixel register of the blend
+phase's other shaders; samplers s5 and s6, free in every shader. `bshader.bat` compiles
+and stamps the new variant, `be.bat` checks its stamp. `WATERLOG`'s level line ends with
+`copy=` and `depth=`: what the sheets read, 1 where the level built sheets and the copy
+is on and, for the depth, where the adapter offers `INTZ` and no bind refused. RoomProbe
+binds the `INTZ` texture for every picture in `ShotBegin` unless `-nodepth`, with or
+without `-hdwater`, takes the copy where `HDFrameDrawGlow` takes it (`RoomProbe.cpp`
+:8946), prints the copy's GPU time, and has `-nocopy`, `-nodepth`, `-waterdepthview
+1|2|3` (the scene's view depth as grey, the water depth out of it over the vertex depth,
+the refused pixels in red) and `-waterbend <s>` (the refraction scaled for a proof
+picture).
+
 `hd_water 0` builds no sheet, restores every classic face as without the sheets and
 switches the caustic under a surface off; what stays with 0 is only the caustic's shape
 and footprint fade on the Remaster's own marked water art and the wave rows on that art,
@@ -9047,6 +9111,25 @@ sheet draws by timestamp queries: 0.027 to 0.041 ms in the thirteen 960 x 540 vi
 that draw a sheet, 0.091 ms for a screen full of water at 2560 x 1440 (JOBY2 room 42
 from above, two draws).
 
+The frame behind the sheet, measured on this machine (NVIDIA GeForce RTX 5080, driver
+32.0.15.9636): `CheckDeviceFormat` offers `INTZ` as a depth-stencil texture, and the
+texture reads back as the depth - `-waterdepthview 2` gives 124 to 171 of 255 (a depth
+ratio of 0.97 to 1.34) over the flat floor of ANDREA2's fountain seen from above, where
+the floor data and the scene agree, and it shows the deep shaft under ANDREA2 room 76
+and the pit under fountain 194 that the floor data does not know. The slots of fxc
+10.0.26100 /O3: `WaterPS` 247 to 307 in the fallback (the copy's read and the
+composition 19, the per-channel absorption 5, the refraction 36) and 354 in the depth
+variant (the depth path 10, the mask 10, RoomProbe's depth views 27); `WaterVS` 153,
+RoomPS 477, gloss RoomPS 502, GlowPS 478 and RoomVS 412 the same bytecode as before.
+GPU time by timestamp queries, the full-water view at 2560 x 1440, three runs each: the
+copy 0.017 ms; the sheet draws 0.113 to 0.116 ms with the depth texture, 0.106 to 0.107
+with the fallback, 0.090 to 0.093 without the copy (0.091 before). At 960 x 540 the copy
+takes 0.006 to 0.007 ms and the sheet draws 0.038 to 0.057 ms in the thirteen views that
+draw one. The depth texture's mask refuses 332 to 550 pixels of a 960 x 540 view above
+the water (A1, A2, B1, C1) and 1,972 from below (D1), along the near banks, the rod
+across ANDREA2's fountain and the ice floes' edges (`-waterdepthview 3`); with the
+refraction six times as strong, 1,794 to 2,619 and 5,994.
+
 **Checked.** The engine builds (`be.bat`), and RoomProbe, TrgProbe, ModelProbe, MapProbe,
 ModernTest, MenuTest, InterpTest and LipsTest; ModernTest 14,721, MenuTest 42,627 (42,613,
 13 in the new `graphics_water_row` and one more in `graphics_softbody_row`, which now
@@ -9078,6 +9161,24 @@ unmatched=1`, its fountain 194 `sheets=0 none=1` and the level's sheets 94 to 88
 bodies name `override=file:<room>` with their numbers. The motion over six clock times in
 two views.
 
+The frame behind the sheet, with RoomProbe built after the last engine commit: the
+engine and the tools build, the suites count as before and none failed; the
+classic faces of the six rooms above with the `INTZ` texture as the depth buffer are the
+same bytes as at 8691e82 (6 of 6); the fifteen views with `-hdwater 0` and the `INTZ`
+texture bound are the same bytes as the fix round's parity pictures (15 of 15), so both
+paths draw into it unchanged; with `-nocopy -nodepth` the fifteen are the same bytes as
+the fix round's `-hdwater 1` pictures (15 of 15), the stage before term for term; the
+sweep's counts are unchanged; RoomVS, RoomPS, the gloss RoomPS, GlowPS, WaterVS and the
+shadow and model shaders compile to the same bytecode, their `.inc` differing in the
+stamp lines alone. The state bracket passes with the copy and the depth texture
+(83 watched states). The lost device, by reading: `HDLevelDeviceLost` calls
+`HDRenderShutdown` whenever the INTZ texture can be bound (it is bound only after the
+sheets were built, which needs the HD shaders), `release_buffers` runs before `g_device`
+is dropped, and `release_water_sheets` puts the device's own depth-stencil back before
+it releases the `INTZ` texture and the reference on the own surface, so `Reset` finds no
+`D3DPOOL_DEFAULT` object of the water alive; after the `Reset` the device holds its
+automatic depth-stencil again and the next level binds the texture anew.
+
 **Left.** The in-game look, the palette under the game's gamma and fog, the mirror rooms
 and the camera under water in the game, all unseen: nobody could play in this round. The
 shore foam's softer edge (a ramp of gain 2 where the build had 3) is to be judged in the
@@ -9101,12 +9202,19 @@ their restored faces and get no sheet: ANDREA2 70, 204, 237; ANDREA3 70, 120; AN
 ANDY3 28, 87, 104, 107, 210; JOBY3 21, 26, 135, 144, 164, 180, 184, 191, 192; JOBY5 2, 14,
 26, 50, 52, 102, 114, 119, 161, 178, 182; RICH3 87, 143, 191, 192. JOBY4's one basin (room
 7) is lit at the cap of 1.5. The basin's ripples read as regular rings from straight
-above; the sheet writes no depth, so models drawn after it are not tinted; one alpha dims
-the floor and cannot colour it. Whether `hd_water.txt` ships with the release, as
-`hd_gloss.txt` does not, is open.
+above; the sheet writes no depth, so models drawn after it are not tinted; a bracket that
+takes no copy dims the floor by one alpha and cannot colour it. Whether `hd_water.txt`
+ships with the release, as `hd_gloss.txt` does not, is open. Of the frame behind the
+sheet: the look of the refraction, the tint and the depth texture in the game, unseen;
+a room's glass is drawn after the copy and is not seen through a sheet; the
+Remaster's art over a sheet and the ANDY3 planes at three heights stay as listed
+above; where the depth texture finds a deep shaft or a pit the floor data does not
+know (ANDREA2 76, fountain 194), the water now goes dark there, which is to be judged in
+the game; an adapter without `INTZ` draws the fallback, which this machine shows only
+through `-nodepth`.
 
 **Commits.** `4ee001a`, `e7db80a`, `b6866f3`, `6f79503`, `19ad148`, `73522ab`, `a96a091`,
-`128a4a3`, `8b19a7e`.
+`128a4a3`, `8b19a7e`; the frame behind the sheet `8020e8a`, `cdb4640`.
 
 ## 2.5 Sixty frames a second
 

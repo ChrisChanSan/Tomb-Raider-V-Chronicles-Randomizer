@@ -451,10 +451,11 @@ I-III bundle's `1\TEX`, all beside a plain `<n>.DDS`); and the passages of
 `Trg.h` that told in words what the Remaster's renderer does with a vertex and
 with the point lights. The engine manual's HD chapter points here.
 
-**This project's own water.** Entries 40 to 60 came by way of neither TROne nor
+**This project's own water.** Entries 40 to 65 came by way of neither TROne nor
 TRForge: the water sheets, their wave and their caustic are this project's own
 design out of textbook graphics (sums of sines, Schlick's fresnel, Blinn-Phong,
-exponential absorption, foam by shore distance) and its own counts. In these
+exponential absorption, foam by shore distance, refraction by Snell's law, a
+copy of the frame and a depth texture read back) and its own counts. In these
 entries OWN is this project's own design - a free choice, a count on our data, or
 tuned by eye on reference pictures supplied for this project (not in the
 repository) - and DATA a measurement on the player's files with the tool switch
@@ -555,6 +556,36 @@ water surface", carries the tables.
     that the fog takes of the body's light, col * (1 - fog / light), the light
     the mean of the body's three channels or 1 for a body that reflects the
     sky, so it goes black where a room lit like it does. OWN, free choice.
+61. **The refraction by the slope** - the floor read at a place moved by the
+    wave's slope times the absorption length times 1 - 1 / 1.33 times 1 - T,
+    which for a short path is the small-angle refraction of a ray through a
+    tilted surface and stops growing where the floor fades; carried to the
+    screen by solving the pixel's footprint (`ddx`, `ddy` of the world
+    position); at most 256 units and 4 % of the screen; from below at the full
+    slope. OWN: the strength derived from water's index, the two bounds a free
+    choice, set by eye on RoomProbe pictures.
+62. **The absorption per channel** - the channels absorbed in the ratio of
+    ln(shallow / deep) of the section's palette, their mean the class's one
+    over the absorption length, a channel the palette does not darken at a
+    sixteenth of the mean; the floor dimmed by exp(-path * sigma) per channel,
+    the scattered colour as before. OWN: the rule a free choice, the ratios a
+    count on the palette (Rome 1.31 / 0.82 / 0.87, Russia 1.32 / 0.94 / 0.74,
+    Ireland 1.24 / 0.84 / 0.92, VCI 1.31 / 1.03 / 0.66 of the mean).
+63. **The depth mask** - the bent place refused, and the pixel's own place
+    read, where the frame's depth there is nearer than the sheet. OWN, free
+    choice (`RoomProbe -waterdepthview 3` shows the refused pixels).
+64. **The water path out of the depth** - the view depth between the sheet
+    and what was drawn behind it, times the eye distance over the sheet's view
+    depth; the depth straight down that path times the view's vertical
+    share; the projection undone as z = b / (a - d). OWN: geometry of the
+    projection this engine already uses; `RoomProbe -waterdepthview 1|2`
+    repeats it (view 2 is mid grey where it agrees with the floor data).
+65. **The frame's copy and the depth texture** - a copy of the render target
+    by `StretchRect` before the blend phase, and an `INTZ` texture as the
+    depth-stencil where the adapter offers the format - standard Direct3D 9
+    techniques of general graphics knowledge. OWN: where in the frame the
+    copy is taken and when the texture is bound are this project's own
+    choices.
 
 ## Credited, but not contained here
 

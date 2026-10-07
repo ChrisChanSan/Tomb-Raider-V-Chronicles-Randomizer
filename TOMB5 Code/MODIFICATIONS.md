@@ -9081,28 +9081,29 @@ two views.
 **Left.** The in-game look, the palette under the game's gamma and fog, the mirror rooms
 and the camera under water in the game, all unseen: nobody could play in this round. The
 shore foam's softer edge (a ramp of gain 2 where the build had 3) is to be judged in the
-game against the 3 it replaces, a one-number change in `WaterPS`. A channel's current runs along its body's longer box axis, one direction for a turning
-canal. What the sweep found odd: ANDY3's rooms 34 and 183 (a flipmap pair) hold water
-squares at three heights, 10496, 10752 and 11008, where their classic faces stand at
-11008 alone - sixteen small bodies, three of them of depth 0 (bodies 6, 9, 12); ANDY2's
-rooms 158 and 159 hold eight single squares at 14592 that get a sheet where nothing
-showed water. Rooms where the Remaster's flat art that is not its water lies over a sheet
-now, to be tuned in the game (the class `none` takes a body's sheet away): ANDY2 57 and
-136 (four single squares at 20992), ANDY2 158 and 159 (a 20-square channel and a single
-square each, at 15616); ANDY3's twin rooms 0, 42, 43 and 182, 17, 101, 206 and 207, 34,
-38, 183 and 184, and 38, 41, 184 and 185 (squares of the second room of a pair); JOBY5 4,
-61, 139 and 184. Planes where the Remaster's material 16 water and a sheet both draw:
-ANDREA2 231 (additive, 2048 triangles, 7 to 9 units above the sheet), ANDY2 52 (additive,
-128), ANDY2 57 (OPAQUE, 2256 triangles at 22009, 7 units above the sheet at 22016, which
-it hides and may fight with in depth at a distance), JOBY5 4, 27, 28, 49 (two parts), 53,
-61, 83, 115, 117 (two parts), 139, 143, 151 and 184 (all additive). Classic water planes
-with no underwater room below, which keep their restored faces and get no sheet: ANDREA2
-70, 204, 237; ANDREA3 70, 120; ANDY1 26; ANDY3 28, 87, 104, 107, 210; JOBY3 21, 26, 135,
-144, 164, 180, 184, 191, 192; JOBY5 2, 14, 26, 50, 52, 102, 114, 119, 161, 178, 182;
-RICH3 87, 143, 191, 192. JOBY4's one basin (room 7) is lit at the cap of 1.5. The basin's
-ripples read as regular rings from straight above; the sheet writes no depth, so models
-drawn after it are not tinted; one alpha dims the floor and cannot colour it. Whether
-`hd_water.txt` ships with the release, as `hd_gloss.txt` does not, is open.
+game against the 3 it replaces, a one-number change in `WaterPS`. A channel's current runs
+along its body's longer box axis, one direction for a turning canal. What the sweep found
+odd: ANDY3's rooms 34 and 183 (a flipmap pair) hold water squares at three heights, 10496,
+10752 and 11008, where their classic faces stand at 11008 alone - sixteen small bodies,
+three of them of depth 0 (bodies 6, 9, 12); ANDY2's rooms 158 and 159 hold eight single
+squares at 14592 that get a sheet where nothing showed water. Rooms where the Remaster's
+flat art that is not its water lies over a sheet now, to be tuned in the game (the class
+`none` takes a body's sheet away): ANDY2 57 and 136 (four single squares at 20992), ANDY2
+158 and 159 (a 20-square channel and a single square each, at 15616); ANDY3's twin rooms
+0, 42, 43 and 182, 17, 101, 206 and 207, 34, 38, 183 and 184, and 38, 41, 184 and 185
+(squares of the second room of a pair); JOBY5 4, 61, 139 and 184. Planes where the
+Remaster's material 16 water and a sheet both draw: ANDREA2 231 (additive, 2048 triangles,
+7 to 9 units above the sheet), ANDY2 52 (additive, 128), ANDY2 57 (OPAQUE, 2256 triangles
+at 22009, 7 units above the sheet at 22016, which it hides and may fight with in depth at
+a distance), JOBY5 4, 27, 28, 49 (two parts), 53, 61, 83, 115, 117 (two parts), 139, 143,
+151 and 184 (all additive). Classic water planes with no underwater room below, which keep
+their restored faces and get no sheet: ANDREA2 70, 204, 237; ANDREA3 70, 120; ANDY1 26;
+ANDY3 28, 87, 104, 107, 210; JOBY3 21, 26, 135, 144, 164, 180, 184, 191, 192; JOBY5 2, 14,
+26, 50, 52, 102, 114, 119, 161, 178, 182; RICH3 87, 143, 191, 192. JOBY4's one basin (room
+7) is lit at the cap of 1.5. The basin's ripples read as regular rings from straight
+above; the sheet writes no depth, so models drawn after it are not tinted; one alpha dims
+the floor and cannot colour it. Whether `hd_water.txt` ships with the release, as
+`hd_gloss.txt` does not, is open.
 
 **Commits.** `4ee001a`, `e7db80a`, `b6866f3`, `6f79503`, `19ad148`, `73522ab`, `a96a091`,
 `128a4a3`, `8b19a7e`.

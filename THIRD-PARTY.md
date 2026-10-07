@@ -61,7 +61,7 @@ file:
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp/.h` | `host/render/game_renderer.cpp`: `draw_hair` (its copy of 2026-09-05; in TROne-main, copy of 2026-10-06, commit 75c4c843, `draw_hair` skins the links its glues build the same way) | The **braid rule**: `HAIR_OG` has one bone per link, so all six links get a frame of their own built from the link's absolute position and its two angles - where TR5 itself builds a matrix for links 1, 3 and 5 only and draws 0, 2 and 4 as skinned connectors out of stashed vertices. Everything else in that file is this engine's own: the LMX-to-LM turn of `lara_matrices`, the per-node ambient out of `LaraNodeAmbient`, the hand-slot pointer comparison, the first-person mask and the mirror. |
 
-| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind and the water UV | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) and `k_hd_frag`'s caustic (TROne-main, copy of 2026-10-06, commit 75c4c843) | The **wave shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of roughly one and a half blocks, plus a UV displacement of a few texels driven by the same phase; the vertical swell on the water marks; and the per-pixel caustic - `sin(x) * sin(z)` plus a half-weight diagonal, all three on the world position and on the game clock, at TROne's own scale of 0.018 per unit; the vertical swell is TROne's design of its copy of 2026-09-05. TROne has dropped the wave, the swell and the UV wobble since: in TROne-main (copy of 2026-10-06, commit 75c4c843) `hd.water_effect` drives the classic `WaterTable` wave, and of the four shapes only the caustic stands there as cited. The caustic's strength, 0.32, is this project's own, matched to two reference shots of one pool (TROne-main, copy of 2026-10-06, commit 75c4c843, gives its caustic 0.12). Translated to HLSL; the weight the wave rides on is the `.TRG`'s own `TrgVertex::sway`, which TROne does not read. Not taken: TROne's water flag, a room bit in its copy of 2026-10-05 (75c4c843 classes water and shore from the engine's own split), where ours is the classic path's own water marks (the water marks row above). TR5 has a brightness term of its own, the `WaterTable` shimmer, reproduced exactly, and a second brightness term would count it twice; but that shimmer is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which TROne's own comment reported about TR4 water in its copy of 2026-09-05 (in 75c4c843 its basin note says the same of a ripple). So the shimmer is untouched, parity and all, and the caustic is added as a zero mean modulation that carries no average brightness of its own. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) | The **wind's shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of roughly one and a half blocks - the shape that block gave TROne's water in that copy, applied here to the `.TRG`'s own `TrgVertex::sway` weight, which TROne does not read. Translated to HLSL. The water itself - its wave, swell, UV wobble and caustic - is this project's own design (the origin ledger below, entries 40 to 59) and takes nothing from TROne; the water shapes this row credited to TROne before are recorded in `MODIFICATIONS.md`, entry "Water in the HD rooms". Not taken: TROne's water flag, a room bit in its copy of 2026-10-05 (75c4c843 classes water and shore from the engine's own split), where ours is the classic path's own water marks (the water marks row above) and the classic floor data's water squares. One observation stays TROne's: TR5's own brightness term, the `WaterTable` shimmer, is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which TROne's own comment reported about TR4 water in its copy of 2026-09-05 (in 75c4c843 its basin note says the same of a ripple). That is why a per-pixel term is added at all: the shimmer is untouched, parity and all, and the caustic on top of it is a zero mean modulation that carries no average brightness of its own. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_fontmatch.cpp/.h`, `hd_font.cpp/.h` and the branch in `game/text.cpp` | `host/render/game_renderer.cpp`, the block its own code marks `hdtext` (`hdtext_find` and `hdtext_arm`), and the glyph draw beside it. **No line numbers**, on purpose: no line range for it could be checked against a copy of TROne that can be read here, so the block is named by its own marker instead — the reasoning stands over `hd_fontmatch.h` | The **method**, not the code: find a classic glyph in the remaster's `FONT<n>_OG.DDS` by sliding its ink mask over the atlas and scoring **intersection over union**, refuse anything under **0.94** because a similar character is the wrong character, take the `FONT<n>.DDS` beside the winner as the picture to draw from, and relocate the classic UV to the hit while adding **one texel of margin to image and screen in the same ratio**, so that the letter neither moves nor grows. Also theirs: the alpha ramp threshold 96 for what counts as ink, and the observation that the atlas of TR5 carries the classic glyph bitmaps unchanged. What is **not** taken and is not needed: their sprite scan and their "is this an alphabet" gate - the 106 glyph rectangles are known here (`game/chardef.inc`), so there is nothing to discover and nothing to guard against. New here: the per-glyph margin (a uniform one puts a slice of the neighbouring tick beside the apostrophe - measured), the seeding of that measurement from the classic page, the tpage sentinel that carries a quad to a texture outside `Textures[]`, the mip chain with its LOD bias, and the whole Direct3D 9 side. Their alpha-test change is not needed either: this engine's alpha reference is already 0. |
 
 | `TOMB5 Code/TOMB5/specific/polyinsert.cpp`, the mip LOD bias of the HD font quad | `host/render/game_renderer.cpp` (TROne-main, copy of 2026-09-13; Copyright 2026 Todesengel, GPLv3), where the same bias stands with the same reason in TROne's own words | The **number and the reason for it**: a mip LOD bias of **-0.7** on the glyph quad, so that a font atlas minified by a D3D9 sampler keeps its edge instead of blurring into the next mip. The minification this project spends it on is its own measurement (1.8 at 1080p, 2.7 at 720p, 1.35 at 1440p), and so is where the bias lands at each of those (level 0.14 at 1080p, 0 at 1440p). |
@@ -356,13 +356,13 @@ entry "Where the HD rules come from", carries the tables.
     by a hash of the packed int16 position, the owning group read from the index
     runs. TROne, `hd_load` and `hd_water_mark`. OWN. Ours: the pairing count of
     entry 2.
-20. **The water's wave, swell, UV wobble and caustic shapes**, the caustic's
-    scale 0.018 and six texels of wobble. TROne, `k_hd_vert` and `k_hd_frag`
-    (the swell and the wobble from its copy of 2026-09-05; the caustic stands
-    in 75c4c843, the wave, swell and wobble TROne has since dropped for the
-    classic `WaterTable`). OWN; free choice to keep TROne's numbers. The
-    caustic's strength 0.32 is ours, matched to two reference shots of one pool
-    (PICTURE; TROne gives 0.12).
+20. **The wind's shape** - two sines of the position taken across each other,
+    about 24 units of travel, a wavelength of about one and a half blocks.
+    TROne, `k_hd_vert`'s water block (copy of 2026-09-05), where the same
+    shape moved TROne's water. OWN; free choice to keep TROne's numbers for
+    the wind. The water's wave, swell, UV wobble and caustic, which this entry
+    credited to TROne before (`MODIFICATIONS.md`, "Water in the HD rooms"),
+    are this project's own design: entries 40 to 59.
 21. **Material 16's ripple held to the part's own UV span, nothing moving in
     the vertex.** TROne, its own material 16 water rule. OWN. Ours: `sway` is 0
     on 27 of the 28 parts; 23 of 28 live in a sub-rectangle of their page.
@@ -450,6 +450,96 @@ room-shadow factor, always 1 here); the sibling names `<n>_1024.DDS` and
 I-III bundle's `1\TEX`, all beside a plain `<n>.DDS`); and the passages of
 `Trg.h` that told in words what the Remaster's renderer does with a vertex and
 with the point lights. The engine manual's HD chapter points here.
+
+**This project's own water.** Entries 40 to 59 came by way of neither TROne nor
+TRForge: the water sheets, their wave and their caustic are this project's own
+design out of textbook graphics (sums of sines, Schlick's fresnel, Blinn-Phong,
+exponential absorption, foam by shore distance) and its own counts. In these
+entries OWN is this project's own design - a free choice, a count on our data, or
+tuned by eye on reference pictures supplied for this project (not in the
+repository) - and DATA a measurement on the player's files with the tool switch
+that repeats it. `MODIFICATIONS.md`, entry "The water sheets: this project's own
+water surface", carries the tables.
+
+40. **The water square.** A square of a room that is not under water whose room
+    below (`FLOOR_INFO::pit_room`) is an underwater room; its surface the
+    square's own floor, clicks times 256. OWN, free choice. Count on our data:
+    699 squares in the fifteen levels (`RoomProbe -hdwater 1 -nodraw`).
+41. **The depth walk** - down through further water portals to the first floor
+    that is not one, at most six rooms; a wall or a floor at or above the
+    surface is depth 0. OWN, free choice.
+42. **The body join** - squares four-connected at one world height across
+    rooms; a flipmap twin joins the body of the square at its place. OWN, free
+    choice. Count: 81 bodies, no square held by two rooms that are no flipmap
+    pair (`RoomProbe -hdwater 1 -nodraw`).
+43. **The class rule** - sea when a room of the body carries `ROOM_OUTSIDE` or
+    `ROOM_NOT_INSIDE`; channel when indoors, 16 squares or more and twice the
+    area over the perimeter under 2; basin otherwise. OWN; the thresholds a
+    count on our data: ANDREA2's sewer (44 squares, 1.83) a channel, its
+    fountain (36, 2.25) a basin, JOBY2's water along the submarine a sea.
+44. **The wave rows of the three classes** - four wavelengths, heights and
+    directions each, the calm factor, a channel's current of 180 units a
+    second, the swell's share and taper. OWN, tuned by eye on reference
+    pictures supplied for this project.
+45. **Deep-water dispersion**, omega = calm * sqrt(g k) with g = 4300 units
+    a second squared: 9.81 m/s^2 at 2.3 mm a unit, Lara's 768 units standing
+    for 1.77 m. OWN, free choice of the scale.
+46. **The palette** of the four sections - shallow, deep, highlight and foam
+    colours. OWN, tuned by eye on reference pictures supplied for this
+    project; to be judged in the game.
+47. **The body light** - the squares' rooms' mean colour1 + colour2 over their
+    light samples, weighted by squares, times 1.8, never under 0.30 nor over
+    1.5. OWN; count on our data: the rooms' means run 0.09 to 0.55 over the
+    water rooms of ANDREA2 and JOBY2 (`RoomProbe -hdwater`).
+48. **The light directions** - indoors 55 degrees up at azimuth 40, out of
+    doors 22 degrees up at azimuth 200. OWN, free choice: TR5 has no sun; the
+    low open-air light follows the JOBY2 dome's bright horizon
+    (`RoomProbe -sky -skyonly`).
+49. **The fresnel and the reflection colours** - Schlick with F0 = 0.02 (water,
+    n = 1.33); indoors the body light times 0.55 at the horizon and 0.30
+    overhead, plus or minus a quarter by a slow pattern; a broad lobe of the
+    highlight colour, (R.L)^8 at 0.35; Blinn-Phong exponents 90 and 70 at
+    strengths 0.8 and 0.5. OWN, tuned by eye on reference pictures supplied
+    for this project.
+50. **The sky table** - JOBY2 horizon 163, 165, 178 (DATA, the rows just above
+    the horizon, `RoomProbe -sky -skyonly`), overhead 100, 104, 122 chosen;
+    ANDY1 and ANDY3, one dusk dome, horizon 113, 78, 67 as the mean of the rows
+    6 to 40 pixels above the horizon toward four directions and overhead 11, 19,
+    32 as the mean of the dome's clouds straight up. DATA
+    (`RoomProbe -sky -skyonly -black`).
+51. **The absorption lengths** - 4000 units for a basin, 1500 for a channel,
+    900 for a sea - and the Snell window from below (N.V 0.6 to 0.75, alpha
+    0.92 outside, 0.55 inside). OWN, tuned by eye; a clear basin and a murky
+    channel a project decision of 2026-10-07.
+52. **The foam rule** - strength * saturate((edge - (1 - n) * 0.8) * 3) in a
+    300-unit band, strengths 0, 0.7 and 0.85, whitecaps 0.6 above half the
+    wave height, the blotch pattern 1.5 times finer for a channel and a sea.
+    OWN, tuned by eye; the finer grain a project decision of 2026-10-07.
+53. **The caustic's shape** - one minus half the absolute sum of two
+    domain-warped smoothed-triangle waves, to the sixth power, 0.0224 radians
+    a unit (a cell of 280); 0.30 on a pool floor fading out over 2048 units
+    down, 0.18 on the Remaster's marked water. OWN, tuned by eye.
+54. **The caustic's normalisation** - its mean 0.2310 and spread 0.2964,
+    counted over 400,000 samples of the curve and divided out. DATA (on the
+    curve itself).
+55. **The caustic's footprint fade** - full up to 10 units a pixel, gone at 20:
+    a bright line is a median 25 units across at half its height, counted along
+    x and z on 400 lines of the curve. DATA for the width, OWN for the fade.
+56. **The wave's footprint fade and bent crests** - a row fades by
+    2 - footprint * k * 1.3; the position is pushed about by a quarter of the
+    longest wavelength along a slow pattern. OWN, free choice.
+57. **The sheet's grid and bytes** - 5 x 5 vertices a square; the depth over
+    32 and the distance to the nearest square without water within three
+    squares over 16 in colour1's red and green; the depth averaged over the
+    squares that meet at a vertex. OWN, free choice.
+58. **The wobble and the swell on the Remaster's marked water** - 4/512 page a
+    unit of slope, and the class's share of the wave height, tapered by the
+    shore box. OWN, free choice.
+59. **The override table and `hd_water.txt`** - five compiled rows pinning the
+    classes the rule gives at ANDREA2 144, 194 and 60 and JOBY2 42 and 143; a
+    row of the file `<LEVEL> <room> <class|->` with `tint`, `waves` and `foam`,
+    applied after the table to the body its room belongs to. OWN, free choice;
+    the pins a count on our data (`RoomProbe -hdwater`).
 
 ## Credited, but not contained here
 

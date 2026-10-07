@@ -728,6 +728,136 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 // calling it) leaves every HD vertex unmarked, which is what the diagnostic
 // tool does unless it is asked for water.
 void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
+
+/* The water sheets: this project's own water surface.
+ *
+ * A water sector is a 1024-unit square of a room that is not under water
+ * and whose room below (FLOOR_INFO::pit_room) is an underwater room; its
+ * surface is the square's own floor. HDRenderSetWaterSheets finds them in
+ * the classic level's floor data, one HDWaterRoom per room, joins them into
+ * bodies - four-connected at one world height, across rooms - classes every
+ * body (basin, channel, sea: WaterClassOf in hd_render.cpp), applies the
+ * override rows (the compiled table, then hd_water.txt) and builds a grid of
+ * 256-unit quads over every sector that draws a sheet, for WaterVS and
+ * WaterPS in the blend phase of its room. A sector of a room drawn classic,
+ * or one the remaster covers with flat art that is not its material 16
+ * water, stays in its body and in the shore test and draws no sheet.
+ *
+ * Called after HDRenderLevelBegin (it reads the groups' flat art and light
+ * samples) and before the first frame; nothing of the arrays is kept.
+ * `sheets` 0 builds the bodies, their classes and the caustic under them,
+ * and no sheet. No rooms removes it all. The engine and the diagnostic tool
+ * both build through this one function. */
+enum
+{
+	HD_WATER_BASIN = 0,
+	HD_WATER_CHANNEL = 1,
+	HD_WATER_SEA = 2,
+	HD_WATER_CLASSES = 3
+};
+
+// The palette's four sections of the game.
+enum
+{
+	HD_WATER_ROME = 0,
+	HD_WATER_RUSSIA = 1,
+	HD_WATER_IRELAND = 2,
+	HD_WATER_VCI = 3,
+	HD_WATER_SECTIONS = 4
+};
+
+// The room flags the sheets read: ROOM_UNDERWATER, and ROOM_OUTSIDE together
+// with ROOM_NOT_INSIDE for open air (global\types.h).
+#define HD_WATER_ROOM_UNDERWATER	0x0001
+#define HD_WATER_ROOM_OPEN		0x0028
+
+// The rooms a body line names before it counts the rest.
+#define HD_WATER_BODY_ROOMS	16
+
+/* One room of the classic level. The squares run x-major: square (sx, sz)
+ * is entry sx * sizeZ + sz, sx along world x - ROOM_INFO's y_size squares,
+ * sz along z - its x_size. */
+struct HDWaterRoom
+{
+	int originX, originY, originZ;	// r->x, r->y, r->z
+	int sizeX, sizeZ;		// squares along x and along z
+	int flags;			// the room's flags
+	int flip;			// the flipmap partner, or -1
+	int drawn;			// 1 when the room draws its own HD group
+	const signed char* floor;	// the floor of each square, clicks
+	const short* below;		// the room below each square, or -1
+};
+
+void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
+	const char* stem, int sheets);
+
+/* The override file for the next HDRenderSetWaterSheets: hd_water.txt,
+ * beside the executable, read at every level load. None or a missing file
+ * leaves the compiled rows alone. The format is in hd_render.cpp, over
+ * ParseWaterLine. */
+void HDRenderWaterFile(const char* path);
+
+// Whether the square under the middle of that room-local box draws a sheet
+// of this group - the classic face there is then not restored.
+bool HDRenderWaterSheetAt(int group, int x0, int z0, int x1, int z1);
+
+// Whether the water shaders exist on this device - without them no sheet is
+// built and the classic faces are restored as before.
+bool HDRenderWaterSheetsAvailable();
+
+// One body, for the log and the diagnostic tool.
+struct HDRenderWaterBody
+{
+	int cls;			// HD_WATER_BASIN .. HD_WATER_SEA, as drawn
+	int ruleCls;			// what WaterClassOf gives
+	int sectors;			// all its water sectors
+	int sheets;			// those that draw a sheet
+	int perimeter;			// square edges with no water behind
+	int openAir;			// a room of it is open air
+	int surfaceY;			// world y of the surface
+	int rooms[HD_WATER_BODY_ROOMS];	// its rooms, smallest first
+	int roomCount;			// how many rooms in all
+	int depthMax;			// the deepest square, units
+	float light[3];			// the light its colours are lit by
+	int source;			// 0 the rule, 1 the compiled row, 2 the file
+	int sourceRoom;			// the room that row names, or -1
+	float tint[3];			// the applied row's numbers
+	float waves, foam;
+};
+
+// What the level built, for its log line.
+struct HDRenderWaterLevel
+{
+	int sectors;		// water sectors
+	int sheets;		// of those, the ones drawing a sheet
+	int bodies;
+	int section;		// HD_WATER_ROME ..
+	int built;		// 1 when the sheets' buffers exist
+	int fileLines;		// lines of the file, -1 without one
+	int fileRows;		// rows the file gave
+	int fileBad;		// lines that could not be read
+	int rowsApplied;	// rows of this level that found a body
+	int rowsUnmatched;	// rows of this level whose room has no water
+	int overlaps;		// squares another room's sector holds too
+	int causticRooms;	// underwater rooms with a surface above
+	int vertices, triangles;
+};
+
+int HDRenderWaterBodies();
+bool HDRenderWaterBodyInfo(int at, HDRenderWaterBody* out);
+void HDRenderWaterLevelInfo(HDRenderWaterLevel* out);
+const char* HDRenderWaterClassName(int cls);
+const char* HDRenderWaterSectionName(int section);
+/* The WATERLOG line of the level (body -1, `option` the tomb5.hd_water the
+ * build ran with) or of one body - the engine's -log and RoomProbe -hdwater
+ * print the same text. False for a body that does not exist. */
+bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
+	size_t size);
+
+/* The diagnostic tool's GPU timing of the sheet draws (timestamp queries,
+ * waited for - it stalls, so the engine never turns it on): on 1 or 0 resets
+ * and switches, -1 only reads the milliseconds and draws so far. */
+void HDRenderWaterTiming(int on, double* ms, int* draws);
 /* The rooms' own boxes for the level about to be built.
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */

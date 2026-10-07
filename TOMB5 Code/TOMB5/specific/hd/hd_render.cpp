@@ -1613,6 +1613,10 @@ namespace
 	 * hd_reflect is on. Null when the device refused it - every draw call
 	 * then keeps the plain variant, as with hd_reflect off. */
 	IDirect3DPixelShader9* g_gloss_ps = 0;
+	// The water sheet's own pair (hd_room.hlsl, "the sheet"). Null when the
+	// device refused either: then no sheet is built.
+	IDirect3DVertexShader9* g_water_vs = 0;
+	IDirect3DPixelShader9* g_water_ps = 0;
 	/* The projected shadow's receive shader (hd_shadow_receive.hlsl). Null
 	 * when the device refused it; the projected shadow then does not run and
 	 * the blob stays. */
@@ -8194,6 +8198,1062 @@ namespace
 
 		return true;
 	}
+}
+
+/* ------------------------------------------------------ the water sheets --
+ *
+ * This project's own water surface. hd_render.h (HDWaterRoom) says where
+ * the squares come from and hd_room.hlsl ("the sheet") what the shader does
+ * with them; this block finds the squares, joins them into bodies, classes
+ * every body, works out its look and builds and draws the grid. The numbers
+ * in the tables are this project's own choices, made on RoomProbe pictures
+ * of ANDREA2 and JOBY2 and on reference pictures supplied for this project,
+ * except where a line names a measurement. */
+namespace
+{
+	/* One class of body.
+	 *
+	 * lambda, height, angle  the four wave rows: wavelength and height in
+	 *            units, direction in radians off the body's own direction,
+	 *            spread so that no two rows run in step and the sum does
+	 *            not read as a grid
+	 * calm       the share of the deep-water speed the rows run at,
+	 *            omega = calm * sqrt(g k) - see kWaterG
+	 * current    a channel's flow along its long axis, units a second
+	 * swell      the share of the wave height the vertex rises by (0: the
+	 *            sheet lies flat and only its normals move)
+	 * taper      the distance from the shore over which the swell grows in
+	 * absorb     the path through the water that leaves 1/e of the floor's
+	 *            light: a clear basin, a murky channel, a dark sea
+	 * foam, band the shore foam's strength and its width in units
+	 * grain      the scale of the foam's blotch pattern, the basin's 1
+	 * caps, capAt  the whitecaps' strength, and the share of the whole wave
+	 *            height above which a crest breaks
+	 * specExp, specStrength  the highlight's Blinn-Phong exponent, strength
+	 * sunElev, sunAzim  the highlight's light, degrees. TR5 has no sun:
+	 *            indoors it stands high, as the lamps and light shafts of
+	 *            the Rome halls hang overhead; out of doors low, the
+	 *            brightest band of the JOBY2 dome being its horizon
+	 *            (RoomProbe -skyonly)
+	 * baseAngle  the body's own direction for a basin and a sea; a channel
+	 *            takes its long axis */
+	struct HDWaterClass
+	{
+		const char* name;
+		float lambda[4];
+		float height[4];
+		float angle[4];
+		float calm;
+		float current;
+		float swell;
+		float taper;
+		float absorb;
+		float foam;
+		float band;
+		float grain;
+		float caps;
+		float capAt;
+		float specExp;
+		float specStrength;
+		float sunElev, sunAzim;
+		float baseAngle;
+	};
+
+	/* A basin is a calm fountain: short, low, slow ripples in clear water
+	 * and no foam. A channel is a sewer: livelier, carried by its current,
+	 * murky, foam along its banks. A sea is open water: long, high waves,
+	 * foam at every edge and on the crests. The foam blotches of a channel
+	 * and a sea are 1.5 times finer than the basin's scale. */
+	const HDWaterClass kWaterClass[HD_WATER_CLASSES] =
+	{
+		{ "basin", { 260.0f, 150.0f, 85.0f, 47.0f },
+			{ 2.0f, 1.4f, 0.8f, 0.45f }, { 0.0f, 1.13f, -0.79f, 2.51f },
+			0.6f, 0.0f, 0.0f, 512.0f, 4000.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f },
+		{ "channel", { 420.0f, 230.0f, 120.0f, 64.0f },
+			{ 3.0f, 1.8f, 0.9f, 0.45f }, { 0.0f, 0.42f, -0.37f, 0.9f },
+			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
+			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f },
+		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f },
+			{ 38.0f, 16.0f, 7.0f, 2.8f }, { 0.0f, 0.61f, -0.52f, 1.37f },
+			1.0f, 0.0f, 1.0f, 1024.0f, 900.0f, 0.85f, 300.0f, 1.5f, 0.6f,
+			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f },
+	};
+
+	/* The sections' colours, RGB 0..255: base the shallow water, deep the
+	 * water where no floor shows through, high the highlight, foam the foam.
+	 * Rome warm green and yellow, Russia cold blue and green, Ireland a
+	 * neutral dark green and white, VCI a dark blue. All four are lit by the
+	 * body's light (water_look), so a dark sewer has dark water. */
+	struct HDWaterPalette
+	{
+		const char* name;
+		unsigned char base[3], deep[3], high[3], foam[3];
+	};
+
+	const HDWaterPalette kWaterPalette[HD_WATER_SECTIONS] =
+	{
+		{ "Rome", { 150, 170, 90 }, { 62, 98, 50 }, { 255, 232, 170 },
+			{ 238, 232, 200 } },
+		{ "Russia", { 96, 150, 160 }, { 28, 62, 80 }, { 205, 228, 255 },
+			{ 240, 248, 255 } },
+		{ "Ireland", { 100, 125, 98 }, { 34, 60, 44 }, { 235, 240, 230 },
+			{ 248, 248, 242 } },
+		{ "VCI", { 64, 92, 150 }, { 14, 28, 70 }, { 190, 210, 255 },
+			{ 215, 225, 245 } },
+	};
+
+	/* What an open-air body reflects: the sky dome's colour at the horizon
+	 * and overhead, out of RoomProbe -sky -skyonly pictures. JOBY2: the
+	 * horizon the mean of the rows just above it, overhead chosen darker.
+	 * ANDY1 and ANDY3, whose dome is one and the same dusk: the mean of the
+	 * rows 6 to 40 pixels above the horizon toward four directions, and
+	 * overhead the mean of the dome's clouds, which cover 41 % of the view
+	 * straight up. Every level with an open-air body has a row; one without
+	 * reflects its body's own light, like an indoor body. */
+	struct HDWaterSky
+	{
+		const char* stem;
+		unsigned char horizon[3], zenith[3];
+	};
+
+	const HDWaterSky kWaterSky[] =
+	{
+		{ "JOBY2", { 163, 165, 178 }, { 100, 104, 122 } },
+		{ "ANDY1", { 113, 78, 67 }, { 11, 19, 32 } },
+		{ "ANDY3", { 113, 78, 67 }, { 11, 19, 32 } },
+	};
+
+	/* The compiled override rows: level and room, then the class (-1 keeps
+	 * the class), the tint of the shallow and deep colour, the scale of the
+	 * wave heights and of the foam. A row tunes the whole body its room
+	 * belongs to. The rows below pin the classes the rule gives today, so
+	 * that a later change of the rule cannot move these places. */
+	struct HDWaterOverride
+	{
+		const char* stem;
+		int room;
+		int cls;
+		float tint[3];
+		float waves;
+		float foam;
+	};
+
+	const HDWaterOverride kWaterOverride[] =
+	{
+		{ "ANDREA2", 144, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+		{ "ANDREA2", 60, HD_WATER_CHANNEL, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+		{ "JOBY2", 42, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+	};
+
+	// Units a second squared: 9.81 m/s^2 at 2.3 mm a unit, Lara's 768
+	// units standing for 1.77 m.
+	const float kWaterG = 4300.0f;
+
+	/* How a room's light becomes the water's: times the gain and never under
+	 * the floor. The mean of colour1 + colour2 over a room's samples runs
+	 * 0.09 to 0.55 over the water rooms of ANDREA2 and JOBY2 (RoomProbe
+	 * -hdwater), because it counts the dark pool floor and the shadowed
+	 * corners beside the lit walls; the gain holds the water to what the lit
+	 * walls round it show. Both chosen on the pictures. */
+	const float kWaterLightGain = 1.8f;
+	const float kWaterLightFloor = 0.30f;
+
+	struct WaterSquare
+	{
+		int room;
+		int sx, sz;		// the square in its room
+		int wx, wz, wy;		// world: the square's corner, the surface
+		int localY;		// the surface, room local
+		int depth;		// down to the floor below, units
+		int open;		// its room is open air
+		int sheet;		// it draws a sheet
+		int body;
+	};
+
+	struct WaterBody
+	{
+		HDRenderWaterBody info;
+		int minX, maxX, minZ, maxZ;	// world, the squares' corners
+	};
+
+	// One draw: the sheet squares of one body in one group.
+	struct SheetRange
+	{
+		unsigned int start, tris, minVertex, vertices;
+		int body;
+	};
+
+	// A body's constants: the four rows, the swell and the pixel rows.
+	struct WaterLook
+	{
+		float rows[16];		// gWaveV and gWaveP: kx, kz, omega, height
+		float swell[4];		// gSwell
+		float pixel[8 * 4];	// c96 - c103
+	};
+
+	// An override row, the compiled table's or the file's.
+	struct WaterRow
+	{
+		char stem[16];
+		int room;
+		int cls;		// -1 keeps the class
+		float tint[3];
+		float waves, foam;
+		int file;		// 1 for a row of hd_water.txt
+	};
+
+	std::vector<WaterSquare> g_wsquares;
+	std::vector<WaterBody> g_wbodies;
+	std::vector<WaterLook> g_wlooks;
+	std::vector<std::vector<SheetRange> > g_sheet_ranges;	// per group
+	std::vector<int> g_group_body;		// per group, its largest body
+	std::vector<float> g_caustic_top;	// per group, room local y
+	std::unordered_set<unsigned long long> g_sheet_at;
+	HDRenderWaterLevel g_wlevel = {};
+	IDirect3DVertexBuffer9* g_sheet_vb = 0;
+	IDirect3DIndexBuffer9* g_sheet_ib = 0;
+	float g_basin_rows[16];
+	bool g_basin_rows_set = false;
+	/* The diagnostic tool's sheet timing: GPU timestamps round every sheet
+	 * draw, waited for at once - a measurement that stalls the pipeline,
+	 * never on in the engine. */
+	bool g_sheet_timing = false;
+	double g_sheet_gpu_ms = 0.0;
+	int g_sheet_timed = 0;
+
+	// A world square and a surface height, as one key.
+	unsigned long long WaterKey(int wx, int wz, int wy)
+	{
+		return ((unsigned long long)((unsigned)(wx >> 10) & 0xFFFFu) << 32) |
+			((unsigned long long)((unsigned)(wz >> 10) & 0xFFFFu) << 16) |
+			(unsigned long long)(unsigned short)(short)wy;
+	}
+
+	// A square of a group, as one key.
+	unsigned long long SheetKey(int group, int sx, int sz)
+	{
+		return ((unsigned long long)(unsigned)group << 32) |
+			((unsigned long long)((unsigned)sx & 0xFFFFu) << 16) |
+			(unsigned long long)((unsigned)sz & 0xFFFFu);
+	}
+
+	void release_water_sheets()
+	{
+		if (g_sheet_vb) { g_sheet_vb->Release(); g_sheet_vb = 0; }
+		if (g_sheet_ib) { g_sheet_ib->Release(); g_sheet_ib = 0; }
+		g_wsquares.clear();
+		g_wbodies.clear();
+		g_wlooks.clear();
+		g_sheet_ranges.clear();
+		g_group_body.clear();
+		g_caustic_top.clear();
+		g_sheet_at.clear();
+		g_wlevel = HDRenderWaterLevel();
+		g_wlevel.fileLines = -1;
+	}
+
+	/* The data rule for a body's class.
+	 *
+	 *   sea      any of its rooms open to the sky (ROOM_OUTSIDE or
+	 *            ROOM_NOT_INSIDE, the flag game\hair.cpp reads for the wind)
+	 *   channel  indoors, 16 squares or more, and narrow: twice the area
+	 *            over the perimeter under 2 (a strip two squares wide comes
+	 *            to 1.6 to 1.9, a pool four or more wide to 2.2 and over)
+	 *   basin    everything else
+	 *
+	 * The thresholds are chosen on the bodies of ANDREA2 and JOBY2: the
+	 * sewer under room 60, 44 squares at 1.83, is a channel; the fountain of
+	 * rooms 144, 229 and 231, 36 at 2.25, a basin; JOBY2's water along the
+	 * submarine, open air, a sea. */
+	int WaterClassOf(const HDRenderWaterBody& b)
+	{
+		if (b.openAir)
+			return HD_WATER_SEA;
+
+		if (b.sectors >= 16 && b.perimeter > 0 &&
+			2.0f * (float)b.sectors / (float)b.perimeter < 2.0f)
+			return HD_WATER_CHANNEL;
+
+		return HD_WATER_BASIN;
+	}
+
+	/* How deep the water stands over a square: the walk down through the
+	 * rooms below to the first floor that is not a further water portal. A
+	 * wall, a square outside the room or a floor at or above the surface
+	 * is depth 0, and so is a walk that has not ended six rooms down. */
+	int water_depth(const HDWaterRoom* rooms, int count, int at, int wx,
+		int wz, int wy)
+	{
+		for (int hop = 0; hop < 6; hop++)
+		{
+			const HDWaterRoom& b = rooms[at];
+			const int bx = (wx - b.originX) >> 10;
+			const int bz = (wz - b.originZ) >> 10;
+
+			if (!b.floor || !b.below || bx < 0 || bz < 0 || bx >= b.sizeX ||
+				bz >= b.sizeZ)
+				return 0;
+
+			const int i = bx * b.sizeZ + bz;
+			const int floor = b.floor[i];
+
+			if (floor == -127 || floor * 256 <= wy)
+				return 0;
+
+			const int pit = b.below[i];
+
+			if (pit >= 0 && pit < count &&
+				(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+			{
+				at = pit;
+				continue;
+			}
+
+			return floor * 256 - wy;
+		}
+
+		return 0;
+	}
+
+	// A room's own light: the mean of colour1 + colour2 over its samples,
+	// 0..2 a channel - the scale the room shader multiplies its texels by.
+	void group_light(int group, float* out)
+	{
+		out[0] = out[1] = out[2] = 0.5f;
+
+		if (group < 0 || group >= (int)g_groups.size() ||
+			g_groups[(size_t)group].samples.empty())
+			return;
+
+		const std::vector<HDRenderSample>& s = g_groups[(size_t)group].samples;
+		double sum[3] = { 0, 0, 0 };
+
+		for (size_t i = 0; i < s.size(); i++)
+			for (int k = 0; k < 3; k++)
+				sum[k] += (s[i].c1[k] + s[i].c2[k]) / 255.0;
+
+		for (int k = 0; k < 3; k++)
+			out[k] = (float)(sum[k] / (double)s.size());
+	}
+
+	// The four rows of a class, turned by `base`, heights times `waves`.
+	void water_rows(const HDWaterClass& c, float base, float waves,
+		float* rows, float* total)
+	{
+		*total = 0.0f;
+
+		for (int i = 0; i < 4; i++)
+		{
+			const float k = 6.2831853f / c.lambda[i];
+			const float th = base + c.angle[i];
+
+			rows[i * 4 + 0] = k * cosf(th);
+			rows[i * 4 + 1] = k * sinf(th);
+			rows[i * 4 + 2] = c.calm * sqrtf(kWaterG * k) +
+				k * c.current * cosf(c.angle[i]);
+			rows[i * 4 + 3] = c.height[i] * waves;
+			*total += rows[i * 4 + 3];
+		}
+	}
+
+	// A body's constants out of its class, its section's colours, its light
+	// and its level's sky.
+	void water_look(WaterLook& out, const WaterBody& wb, int section,
+		const char* stem)
+	{
+		const HDRenderWaterBody& b = wb.info;
+		const HDWaterClass& c = kWaterClass[b.cls];
+		const HDWaterPalette& pal = kWaterPalette[section];
+		const float* amb = b.light;
+
+		// The body's own direction: a channel's long axis, else the class's.
+		float base = c.baseAngle;
+
+		if (b.cls == HD_WATER_CHANNEL)
+			base = wb.maxX - wb.minX >= wb.maxZ - wb.minZ ? 0.0f : 1.5707963f;
+
+		float total = 0.0f;
+
+		water_rows(c, base, b.waves, out.rows, &total);
+		out.swell[0] = c.swell;
+		out.swell[1] = c.taper;
+		out.swell[2] = 0.0f;
+		out.swell[3] = 0.0f;
+
+		const HDWaterSky* sky = 0;
+
+		for (size_t i = 0; i < sizeof(kWaterSky) / sizeof(kWaterSky[0]); i++)
+			if (stem && !_stricmp(stem, kWaterSky[i].stem))
+				sky = &kWaterSky[i];
+
+		const bool open = b.openAir && sky;
+		float* deep = out.pixel;
+		float* shallow = out.pixel + 4;
+		float* refl = out.pixel + 8;
+		float* zen = out.pixel + 12;
+		float* high = out.pixel + 16;
+		float* sun = out.pixel + 20;
+		float* foam = out.pixel + 24;
+		float* misc = out.pixel + 28;
+
+		for (int k = 0; k < 3; k++)
+		{
+			deep[k] = pal.deep[k] / 255.0f * amb[k] * b.tint[k];
+			shallow[k] = pal.base[k] / 255.0f * amb[k] * b.tint[k];
+			refl[k] = open ? sky->horizon[k] / 255.0f : amb[k] * 0.55f;
+			zen[k] = open ? sky->zenith[k] / 255.0f : amb[k] * 0.30f;
+			high[k] = pal.high[k] / 255.0f * c.specStrength *
+				(open ? 1.0f : amb[k]);
+			foam[k] = pal.foam[k] / 255.0f * (open ? 0.85f : amb[k] * 0.9f);
+		}
+
+		deep[3] = 1.0f / c.absorb;
+		shallow[3] = c.grain;
+		refl[3] = 0.02f;	// F0 of water, n = 1.33
+		zen[3] = 0.0f;
+		high[3] = c.specExp;
+
+		const float el = c.sunElev * 0.017453293f;
+		const float az = c.sunAzim * 0.017453293f;
+
+		sun[0] = cosf(el) * cosf(az);
+		sun[1] = -sinf(el);		// y counts down
+		sun[2] = cosf(el) * sinf(az);
+		sun[3] = c.capAt;
+		foam[3] = c.foam * b.foam;
+		misc[0] = c.band;
+		misc[1] = c.caps * b.foam;
+		misc[2] = 0.0f;			// the clock, per draw
+		misc[3] = total;
+	}
+
+	// One row applied to every body its room has water in.
+	bool apply_water_row(const WaterRow& row)
+	{
+		std::vector<int> hit;
+
+		for (size_t i = 0; i < g_wsquares.size(); i++)
+			if (g_wsquares[i].room == row.room && g_wsquares[i].body >= 0 &&
+				std::find(hit.begin(), hit.end(), g_wsquares[i].body) ==
+				hit.end())
+				hit.push_back(g_wsquares[i].body);
+
+		for (size_t i = 0; i < hit.size(); i++)
+		{
+			HDRenderWaterBody& b = g_wbodies[(size_t)hit[i]].info;
+
+			if (row.cls >= 0)
+				b.cls = row.cls;
+
+			for (int k = 0; k < 3; k++)
+				b.tint[k] = row.tint[k];
+
+			b.waves = row.waves;
+			b.foam = row.foam;
+			b.source = row.file ? 2 : 1;
+			b.sourceRoom = row.room;
+		}
+
+		return !hit.empty();
+	}
+}
+
+void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
+	const char* stem, int sheets)
+{
+	release_water_sheets();
+
+	if (!rooms || count <= 0 || g_groups.empty())
+		return;
+
+	if (section < 0 || section >= HD_WATER_SECTIONS)
+		section = HD_WATER_ROME;
+
+	g_wlevel.section = section;
+
+	const int groups = (int)g_groups.size();
+
+	g_caustic_top.assign((size_t)groups, -1.0e9f);
+	g_group_body.assign((size_t)groups, -1);
+	g_sheet_ranges.assign((size_t)groups, std::vector<SheetRange>());
+
+	/* 1. The water squares. A square draws a sheet when sheets are asked
+	 * for, its room draws its own HD group and the remaster has no flat art
+	 * in that plane over it but its material 16 water. The room below gets
+	 * the caustic from the surface down - the lowest surface, should two
+	 * stand over it. */
+	for (int r = 0; r < count; r++)
+	{
+		const HDWaterRoom& rm = rooms[r];
+
+		if ((rm.flags & HD_WATER_ROOM_UNDERWATER) || !rm.floor || !rm.below)
+			continue;
+
+		for (int sx = 0; sx < rm.sizeX; sx++)
+			for (int sz = 0; sz < rm.sizeZ; sz++)
+			{
+				const int at = sx * rm.sizeZ + sz;
+				const int pit = rm.below[at];
+
+				if (pit < 0 || pit >= count || rm.floor[at] == -127 ||
+					!(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+					continue;
+
+				WaterSquare s = {};
+
+				s.room = r;
+				s.sx = sx;
+				s.sz = sz;
+				s.wx = rm.originX + sx * 1024;
+				s.wz = rm.originZ + sz * 1024;
+				s.wy = rm.floor[at] * 256;
+				s.localY = s.wy - rm.originY;
+				s.depth = water_depth(rooms, count, pit, s.wx, s.wz, s.wy);
+				s.open = (rm.flags & HD_WATER_ROOM_OPEN) ? 1 : 0;
+				s.body = -1;
+
+				const int x0 = sx * 1024, z0 = sz * 1024;
+
+				s.sheet = sheets && rm.drawn && r < groups &&
+					!(HDRenderGroupFlatArt(r, s.localY, x0, z0, x0 + 1024,
+					z0 + 1024) && !HDRenderGroupWaterArt(r, s.localY, x0, z0,
+					x0 + 1024, z0 + 1024)) ? 1 : 0;
+				g_wsquares.push_back(s);
+
+				if (pit < groups)
+				{
+					const float top = (float)(s.wy - rooms[pit].originY);
+
+					if (top > g_caustic_top[(size_t)pit])
+						g_caustic_top[(size_t)pit] = top;
+				}
+			}
+	}
+
+	g_wlevel.sectors = (int)g_wsquares.size();
+
+	for (int g = 0; g < groups; g++)
+		g_wlevel.causticRooms += g_caustic_top[(size_t)g] > -1.0e8f ? 1 : 0;
+
+	/* 2. The squares by world place and height. A flipmap pair stands at one
+	 * place twice: the first answers the map and both draw. Two rooms that
+	 * are no pair and hold one square at one height are counted. */
+	std::unordered_map<unsigned long long, int> at;
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		const WaterSquare& s = g_wsquares[i];
+		const unsigned long long key = WaterKey(s.wx, s.wz, s.wy);
+		const std::unordered_map<unsigned long long, int>::const_iterator f =
+			at.find(key);
+
+		if (f == at.end())
+		{
+			at[key] = (int)i;
+			continue;
+		}
+
+		const int other = g_wsquares[(size_t)f->second].room;
+
+		if (other != s.room && rooms[s.room].flip != other &&
+			rooms[other].flip != s.room)
+			g_wlevel.overlaps++;
+	}
+
+	// 3. The bodies: four-connected at one height, across rooms.
+	static const int step[4][2] =
+		{ { 1024, 0 }, { -1024, 0 }, { 0, 1024 }, { 0, -1024 } };
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		const WaterSquare& seed = g_wsquares[i];
+
+		if (seed.body >= 0 || at[WaterKey(seed.wx, seed.wz, seed.wy)] != (int)i)
+			continue;		// a body's already, or a twin, below
+
+		WaterBody b = {};
+
+		b.minX = b.minZ = 1 << 30;
+		b.maxX = b.maxZ = -(1 << 30);
+		b.info.surfaceY = seed.wy;
+		b.info.sourceRoom = -1;
+		b.info.tint[0] = b.info.tint[1] = b.info.tint[2] = 1.0f;
+		b.info.waves = b.info.foam = 1.0f;
+
+		const int id = (int)g_wbodies.size();
+		std::vector<size_t> stack(1, i);
+
+		g_wsquares[i].body = id;
+
+		while (!stack.empty())
+		{
+			const WaterSquare s = g_wsquares[stack.back()];
+
+			stack.pop_back();
+			b.info.sectors++;
+			b.info.openAir |= s.open;
+			b.minX = s.wx < b.minX ? s.wx : b.minX;
+			b.maxX = s.wx > b.maxX ? s.wx : b.maxX;
+			b.minZ = s.wz < b.minZ ? s.wz : b.minZ;
+			b.maxZ = s.wz > b.maxZ ? s.wz : b.maxZ;
+
+			for (int n = 0; n < 4; n++)
+			{
+				const std::unordered_map<unsigned long long, int>::
+					const_iterator f = at.find(WaterKey(s.wx + step[n][0],
+					s.wz + step[n][1], s.wy));
+
+				if (f == at.end())
+				{
+					b.info.perimeter++;
+					continue;
+				}
+
+				if (g_wsquares[(size_t)f->second].body < 0)
+				{
+					g_wsquares[(size_t)f->second].body = id;
+					stack.push_back((size_t)f->second);
+				}
+			}
+		}
+
+		g_wbodies.push_back(b);
+	}
+
+	// The twins join the body of the square that answers their place.
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		WaterSquare& s = g_wsquares[i];
+
+		if (s.body < 0)
+			s.body = g_wsquares[(size_t)at[WaterKey(s.wx, s.wz, s.wy)]].body;
+	}
+
+	/* 4. Per body: its rooms, its squares that draw, its deepest square, the
+	 * open air a twin may add, and its light - the rooms' lights weighted by
+	 * their squares, over the rooms that draw HD. */
+	std::vector<double> light(g_wbodies.size() * 3, 0.0);
+	std::vector<int> lit(g_wbodies.size(), 0);
+	std::vector<std::vector<int> > roomsOf(g_wbodies.size());
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		const WaterSquare& s = g_wsquares[i];
+		HDRenderWaterBody& b = g_wbodies[(size_t)s.body].info;
+
+		b.sheets += s.sheet;
+		b.openAir |= s.open;
+		b.depthMax = s.depth > b.depthMax ? s.depth : b.depthMax;
+		roomsOf[(size_t)s.body].push_back(s.room);
+
+		if (!rooms[s.room].drawn || s.room >= groups)
+			continue;
+
+		float l[3];
+
+		group_light(s.room, l);
+
+		for (int k = 0; k < 3; k++)
+			light[(size_t)s.body * 3 + k] += l[k];
+
+		lit[(size_t)s.body]++;
+	}
+
+	for (size_t b = 0; b < g_wbodies.size(); b++)
+	{
+		HDRenderWaterBody& info = g_wbodies[b].info;
+		std::vector<int>& list = roomsOf[b];
+
+		std::sort(list.begin(), list.end());
+		list.erase(std::unique(list.begin(), list.end()), list.end());
+		info.roomCount = (int)list.size();
+
+		for (size_t k = 0; k < list.size() && k < HD_WATER_BODY_ROOMS; k++)
+			info.rooms[k] = list[k];
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float raw = lit[b] ?
+				(float)(light[b * 3 + k] / (double)lit[b]) : 0.5f;
+			const float l = raw * kWaterLightGain;
+
+			info.light[k] = l < kWaterLightFloor ? kWaterLightFloor :
+				l > 1.5f ? 1.5f : l;
+		}
+
+		info.ruleCls = WaterClassOf(info);
+		info.cls = info.ruleCls;
+		g_wlevel.sheets += info.sheets;
+	}
+
+	g_wlevel.bodies = (int)g_wbodies.size();
+
+	/* 5. The override rows of this level: the compiled table's, then the
+	 * file's, in their order, so a row of the file wins over one of the
+	 * table. */
+	std::vector<WaterRow> rows;
+
+	for (size_t o = 0; o < sizeof(kWaterOverride) / sizeof(kWaterOverride[0]);
+		o++)
+	{
+		const HDWaterOverride& w = kWaterOverride[o];
+		WaterRow row = {};
+
+		strcpy_s(row.stem, sizeof(row.stem), w.stem);
+		row.room = w.room;
+		row.cls = w.cls;
+
+		for (int k = 0; k < 3; k++)
+			row.tint[k] = w.tint[k];
+
+		row.waves = w.waves;
+		row.foam = w.foam;
+		rows.push_back(row);
+	}
+
+	for (size_t r = 0; r < rows.size(); r++)
+	{
+		if (!stem || _stricmp(stem, rows[r].stem))
+			continue;
+
+		if (apply_water_row(rows[r]))
+			g_wlevel.rowsApplied++;
+		else
+			g_wlevel.rowsUnmatched++;
+	}
+
+	// 6. Every body's look, and every group's largest body.
+	g_wlooks.assign(g_wbodies.size(), WaterLook());
+
+	for (size_t b = 0; b < g_wbodies.size(); b++)
+		water_look(g_wlooks[b], g_wbodies[b], section, stem);
+
+	std::vector<std::vector<int> > squaresOf((size_t)groups);
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+		if (g_wsquares[i].room < groups)
+			squaresOf[(size_t)g_wsquares[i].room].push_back((int)i);
+
+	for (int g = 0; g < groups; g++)
+	{
+		int best = 0;
+
+		for (size_t b = 0; b < g_wbodies.size(); b++)
+		{
+			int n = 0;
+
+			for (size_t k = 0; k < squaresOf[(size_t)g].size(); k++)
+				n += g_wsquares[(size_t)squaresOf[(size_t)g][k]].body ==
+					(int)b ? 1 : 0;
+
+			if (n > best)
+			{
+				best = n;
+				g_group_body[(size_t)g] = (int)b;
+			}
+		}
+	}
+
+	/* 7. The grid: 5 x 5 vertices a square, every 256 units, one range per
+	 * body of a group. The vertex is the room vertex with colour1 read as
+	 * the depth over 32 (red) and the distance to the nearest square with no
+	 * water at this height, within three squares, over 16 (green); the
+	 * depth is the mean of the squares that meet at the vertex, so the
+	 * colour runs on across a square's edge. 16-bit indices: a level's
+	 * squares stop at 65535 vertices, and those left over draw no sheet. */
+	if (!sheets || !g_device || !g_water_vs || !g_water_ps)
+		return;
+
+	std::vector<HDVertex> verts;
+	std::vector<unsigned short> idx;
+
+	for (int g = 0; g < groups; g++)
+		for (size_t b = 0; b < g_wbodies.size(); b++)
+		{
+			SheetRange range = {};
+
+			range.start = (unsigned int)idx.size();
+			range.minVertex = (unsigned int)verts.size();
+			range.body = (int)b;
+
+			for (size_t k = 0; k < squaresOf[(size_t)g].size(); k++)
+			{
+				const WaterSquare& s =
+					g_wsquares[(size_t)squaresOf[(size_t)g][k]];
+
+				if (!s.sheet || s.body != (int)b || verts.size() + 25 > 65535)
+					continue;
+
+				const HDWaterRoom& rm = rooms[s.room];
+				const unsigned short first = (unsigned short)verts.size();
+
+				for (int j = 0; j <= 4; j++)
+					for (int i = 0; i <= 4; i++)
+					{
+						const int lx = s.sx * 1024 + i * 256;
+						const int lz = s.sz * 1024 + j * 256;
+						const int wx = rm.originX + lx;
+						const int wz = rm.originZ + lz;
+						float depth = 0.0f;
+						int touching = 0;
+
+						for (int q = 0; q < 4; q++)
+						{
+							const std::unordered_map<unsigned long long,
+								int>::const_iterator f = at.find(WaterKey(
+								wx + ((q & 1) ? 1 : -1),
+								wz + ((q & 2) ? 1 : -1), s.wy));
+
+							if (f == at.end())
+								continue;
+
+							depth += (float)g_wsquares[(size_t)f->second].depth;
+							touching++;
+						}
+
+						depth = touching ? depth / (float)touching :
+							(float)s.depth;
+
+						float shore = 3072.0f;
+
+						for (int qz = -3; qz <= 3; qz++)
+							for (int qx = -3; qx <= 3; qx++)
+							{
+								const int x0 = ((wx >> 10) + qx) << 10;
+								const int z0 = ((wz >> 10) + qz) << 10;
+
+								if (at.count(WaterKey(x0, z0, s.wy)))
+									continue;
+
+								const float ex = (float)(wx < x0 ? x0 - wx :
+									wx > x0 + 1024 ? wx - x0 - 1024 : 0);
+								const float ez = (float)(wz < z0 ? z0 - wz :
+									wz > z0 + 1024 ? wz - z0 - 1024 : 0);
+								const float e = sqrtf(ex * ex + ez * ez);
+
+								shore = e < shore ? e : shore;
+							}
+
+						const float dq = depth / 32.0f + 0.5f;
+						const float sq = shore / 16.0f + 0.5f;
+						HDVertex v = {};
+
+						v.x = (short)lx;
+						v.y = (short)s.localY;
+						v.z = (short)lz;
+						v.nx = 127;
+						v.nz = 127;
+						v.layer = (unsigned char)g_wbodies[b].info.cls;
+						v.c1r = (unsigned char)(dq > 255.0f ? 255.0f : dq);
+						v.c1g = (unsigned char)(sq > 255.0f ? 255.0f : sq);
+						v.wSpare = 1;
+						verts.push_back(v);
+					}
+
+				for (int j = 0; j < 4; j++)
+					for (int i = 0; i < 4; i++)
+					{
+						const int a = first + j * 5 + i;
+
+						idx.push_back((unsigned short)a);
+						idx.push_back((unsigned short)(a + 1));
+						idx.push_back((unsigned short)(a + 5));
+						idx.push_back((unsigned short)(a + 1));
+						idx.push_back((unsigned short)(a + 6));
+						idx.push_back((unsigned short)(a + 5));
+					}
+
+				g_sheet_at.insert(SheetKey(g, s.sx, s.sz));
+			}
+
+			range.tris = ((unsigned int)idx.size() - range.start) / 3;
+			range.vertices = (unsigned int)verts.size() - range.minVertex;
+
+			if (range.tris)
+				g_sheet_ranges[(size_t)g].push_back(range);
+		}
+
+	if (verts.empty() || idx.empty() ||
+		FAILED(g_device->CreateVertexBuffer(
+		(UINT)(verts.size() * sizeof(HDVertex)), D3DUSAGE_WRITEONLY, 0,
+		D3DPOOL_MANAGED, &g_sheet_vb, 0)) ||
+		FAILED(g_device->CreateIndexBuffer(
+		(UINT)(idx.size() * sizeof(unsigned short)), D3DUSAGE_WRITEONLY,
+		D3DFMT_INDEX16, D3DPOOL_MANAGED, &g_sheet_ib, 0)))
+	{
+		if (g_sheet_vb) { g_sheet_vb->Release(); g_sheet_vb = 0; }
+		if (g_sheet_ib) { g_sheet_ib->Release(); g_sheet_ib = 0; }
+
+		for (int g = 0; g < groups; g++)
+			g_sheet_ranges[(size_t)g].clear();
+
+		g_sheet_at.clear();
+		return;
+	}
+
+	void* p = 0;
+
+	if (SUCCEEDED(g_sheet_vb->Lock(0, 0, &p, 0)))
+	{
+		std::memcpy(p, &verts[0], verts.size() * sizeof(HDVertex));
+		g_sheet_vb->Unlock();
+	}
+
+	if (SUCCEEDED(g_sheet_ib->Lock(0, 0, &p, 0)))
+	{
+		std::memcpy(p, &idx[0], idx.size() * sizeof(unsigned short));
+		g_sheet_ib->Unlock();
+	}
+
+	g_wlevel.built = 1;
+	g_wlevel.vertices = (int)verts.size();
+	g_wlevel.triangles = (int)idx.size() / 3;
+}
+
+bool HDRenderWaterSheetAt(int group, int x0, int z0, int x1, int z1)
+{
+	if (g_sheet_at.empty())
+		return false;
+
+	const int sx = (int)floorf((float)(x0 + x1) * 0.5f / 1024.0f);
+	const int sz = (int)floorf((float)(z0 + z1) * 0.5f / 1024.0f);
+
+	return sx >= 0 && sz >= 0 && g_sheet_at.count(SheetKey(group, sx, sz));
+}
+
+bool HDRenderWaterSheetsAvailable()
+{
+	return g_water_vs && g_water_ps;
+}
+
+int HDRenderWaterBodies()
+{
+	return (int)g_wbodies.size();
+}
+
+bool HDRenderWaterBodyInfo(int at, HDRenderWaterBody* out)
+{
+	if (!out || at < 0 || at >= (int)g_wbodies.size())
+		return false;
+
+	*out = g_wbodies[(size_t)at].info;
+	return true;
+}
+
+void HDRenderWaterLevelInfo(HDRenderWaterLevel* out)
+{
+	if (out)
+		*out = g_wlevel;
+}
+
+const char* HDRenderWaterClassName(int cls)
+{
+	return cls >= 0 && cls < HD_WATER_CLASSES ? kWaterClass[cls].name : "?";
+}
+
+const char* HDRenderWaterSectionName(int section)
+{
+	return section >= 0 && section < HD_WATER_SECTIONS ?
+		kWaterPalette[section].name : "?";
+}
+
+/* WATERLOG. The level line: the option, the section, the water squares and
+ * of those the ones drawing a sheet, whether the sheets' buffers were
+ * built, the bodies by class, hd_water.txt's lines (none without the file),
+ * the rows it gave and the lines it could not read, the override rows of
+ * this level that found a body and those that did not, the squares two
+ * rooms that are no flipmap pair both hold, the underwater rooms with the
+ * caustic, the sheets' vertices and triangles. A body line: its rooms
+ * (+n for more than sixteen), the world y of its surface, its squares and
+ * those drawing, twice the area over the perimeter, open air, the class
+ * drawn and the rule's, the deepest square, the light its colours are lit
+ * by, the override row that applied - table or file with its room - or
+ * none, and the tint, wave and foam scales in force. */
+bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
+	size_t size)
+{
+	if (!out || !size)
+		return false;
+
+	if (body < 0)
+	{
+		int cls[HD_WATER_CLASSES] = { 0, 0, 0 };
+		char file[16];
+
+		for (size_t b = 0; b < g_wbodies.size(); b++)
+			cls[g_wbodies[b].info.cls]++;
+
+		if (g_wlevel.fileLines >= 0)
+			snprintf(file, sizeof(file), "%d", g_wlevel.fileLines);
+		else
+			snprintf(file, sizeof(file), "none");
+
+		snprintf(out, size, "WATERLOG level=%s option=%d section=%s "
+			"sectors=%d sheets=%d built=%d bodies=%d basin=%d channel=%d "
+			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
+			"overlaps=%d caustic_rooms=%d verts=%d tris=%d",
+			stem ? stem : "?", option,
+			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
+			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
+			cls[HD_WATER_BASIN], cls[HD_WATER_CHANNEL], cls[HD_WATER_SEA],
+			file, g_wlevel.fileRows, g_wlevel.fileBad, g_wlevel.rowsApplied,
+			g_wlevel.rowsUnmatched, g_wlevel.overlaps, g_wlevel.causticRooms,
+			g_wlevel.vertices, g_wlevel.triangles);
+		return true;
+	}
+
+	if (body >= (int)g_wbodies.size())
+		return false;
+
+	const HDRenderWaterBody& b = g_wbodies[(size_t)body].info;
+	char list[128];
+	char from[24];
+	int at = 0;
+
+	list[0] = 0;
+
+	for (int k = 0; k < b.roomCount && k < HD_WATER_BODY_ROOMS; k++)
+		at += snprintf(list + at, sizeof(list) - (size_t)at,
+			k ? ",%d" : "%d", b.rooms[k]);
+
+	if (b.roomCount > HD_WATER_BODY_ROOMS)
+		snprintf(list + at, sizeof(list) - (size_t)at, ",+%d",
+			b.roomCount - HD_WATER_BODY_ROOMS);
+
+	if (b.source)
+		snprintf(from, sizeof(from), "%s:%d", b.source == 2 ? "file" :
+			"table", b.sourceRoom);
+	else
+		snprintf(from, sizeof(from), "none");
+
+	snprintf(out, size, "WATERLOG body=%d rooms=%s surface=%d sectors=%d "
+		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
+		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
+		"foam=%.2f", body, list, b.surfaceY, b.sectors, b.sheets,
+		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
+		HDRenderWaterClassName(b.cls), HDRenderWaterClassName(b.ruleCls),
+		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
+		b.tint[1], b.tint[2], b.waves, b.foam);
+	return true;
+}
+
+void HDRenderWaterTiming(int on, double* ms, int* draws)
+{
+	if (on >= 0)
+	{
+		g_sheet_timing = on ? true : false;
+		g_sheet_gpu_ms = 0.0;
+		g_sheet_timed = 0;
+	}
+
+	if (ms)
+		*ms = g_sheet_gpu_ms;
+
+	if (draws)
+		*draws = g_sheet_timed;
 }
 
 bool HDRenderRoomMask(int group, const D3DMATRIX* world,

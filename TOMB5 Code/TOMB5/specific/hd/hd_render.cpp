@@ -8155,6 +8155,9 @@ namespace
 			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
 	}
 
+	void upload_water_room(int group, const float* worldview);
+	void draw_water_sheet(int group);
+
 	bool prepare(int group, const D3DMATRIX* world, const HDRoomLighting* lighting,
 		float* wvp)
 	{
@@ -8210,6 +8213,8 @@ namespace
 			g_device->SetVertexShaderConstantF(15, box, 1);
 		}
 
+		// c16 - c23, the water's - see upload_water_room.
+		upload_water_room(group, worldview);
 		return true;
 	}
 }
@@ -9270,6 +9275,181 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 		*draws = g_sheet_timed;
 }
 
+namespace
+{
+	/* The wave rows and the swell RoomVS reads for a room: its largest
+	 * body's, or for a room with marked water and no square of its own the
+	 * basin's rows and no swell - the vertex shader reads them on marked
+	 * vertices alone. */
+	void set_room_rows(int group)
+	{
+		const int body = group >= 0 && group < (int)g_group_body.size() ?
+			g_group_body[(size_t)group] : -1;
+
+		if (body >= 0)
+		{
+			g_device->SetVertexShaderConstantF(18, g_wlooks[(size_t)body].swell,
+				1);
+			g_device->SetVertexShaderConstantF(20, g_wlooks[(size_t)body].rows,
+				4);
+			return;
+		}
+
+		if (!g_basin_rows_set)
+		{
+			float total = 0.0f;
+			const HDWaterClass& c = kWaterClass[HD_WATER_BASIN];
+
+			water_rows(c, c.baseAngle, 1.0f, g_basin_rows, &total);
+			g_basin_rows_set = true;
+		}
+
+		const float none[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		g_device->SetVertexShaderConstantF(18, none, 1);
+		g_device->SetVertexShaderConstantF(20, g_basin_rows, 4);
+	}
+
+	/* The room's water constants, vertex side: the caustic under a surface,
+	 * the eye in room coordinates, the swell and the four rows. Called by
+	 * prepare() for every room. */
+	void upload_water_room(int group, const float* m)
+	{
+		float caustic[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		if (group >= 0 && group < (int)g_caustic_top.size() &&
+			g_caustic_top[(size_t)group] > -1.0e8f)
+		{
+			caustic[0] = g_motion[3];
+			caustic[1] = g_caustic_top[(size_t)group];
+			caustic[2] = 1.0f / 2048.0f;	// gone two squares down
+		}
+
+		/* The eye: the room point the room-to-view matrix (row vectors)
+		 * takes to the view's origin, -t M^-1 - inverted in full, so a
+		 * mirrored or scaled matrix is answered as well. */
+		const float a = m[0], b = m[1], c = m[2];
+		const float d = m[4], e = m[5], f = m[6];
+		const float g = m[8], h = m[9], k = m[10];
+		const float det = a * (e * k - f * h) - b * (d * k - f * g) +
+			c * (d * h - e * g);
+		float eye[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		if (det != 0.0f)
+		{
+			const float inv[9] =
+			{
+				(e * k - f * h) / det, (c * h - b * k) / det,
+				(b * f - c * e) / det,
+				(f * g - d * k) / det, (a * k - c * g) / det,
+				(c * d - a * f) / det,
+				(d * h - e * g) / det, (b * g - a * h) / det,
+				(a * e - b * d) / det
+			};
+
+			for (int j = 0; j < 3; j++)
+				eye[j] = -(m[12] * inv[j] + m[13] * inv[3 + j] +
+					m[14] * inv[6 + j]);
+		}
+
+		g_device->SetVertexShaderConstantF(16, caustic, 1);
+		g_device->SetVertexShaderConstantF(17, eye, 1);
+		set_room_rows(group);
+	}
+
+	/* The sheet of one room, in its blend phase: one draw per body, with
+	 * premultiplied alpha (ONE / INVSRCALPHA), two-sided and without a depth
+	 * write, then the states every pass of draw_pass leaves behind. */
+	void draw_water_sheet(int group)
+	{
+		if (!g_sheet_vb || !g_sheet_ib || !g_water_vs || !g_water_ps ||
+			group < 0 || group >= (int)g_sheet_ranges.size() ||
+			g_sheet_ranges[(size_t)group].empty())
+			return;
+
+		g_device->SetVertexShader(g_water_vs);
+		g_device->SetPixelShader(g_water_ps);
+		g_device->SetStreamSource(0, g_sheet_vb, 0, sizeof(HDVertex));
+		g_device->SetIndices(g_sheet_ib);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+		g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
+		{
+			const WaterLook& look = g_wlooks[(size_t)r.body];
+			float pixel[12 * 4];
+
+			std::memcpy(pixel, look.rows, sizeof(look.rows));
+			std::memcpy(pixel + 16, look.pixel, sizeof(look.pixel));
+			pixel[16 + 7 * 4 + 2] = g_motion[2] * g_motion[3];	// the clock
+
+			g_device->SetVertexShaderConstantF(18, look.swell, 1);
+			g_device->SetVertexShaderConstantF(20, look.rows, 4);
+			g_device->SetPixelShaderConstantF(92, pixel, 12);
+
+			IDirect3DQuery9* q[3] = { 0, 0, 0 };
+
+			if (g_sheet_timing &&
+				SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+				&q[0])) &&
+				SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP,
+				&q[1])) &&
+				SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP,
+				&q[2])))
+			{
+				q[0]->Issue(D3DISSUE_BEGIN);
+				q[1]->Issue(D3DISSUE_END);
+			}
+
+			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, r.minVertex,
+				r.vertices, r.start, r.tris);
+			g_draw_calls++;
+
+			IDirect3DQuery9* freq_q = 0;
+
+			if (q[2] && SUCCEEDED(g_device->CreateQuery(
+				D3DQUERYTYPE_TIMESTAMPFREQ, &freq_q)))
+			{
+				UINT64 t0 = 0, t1 = 0, freq = 0;
+
+				q[2]->Issue(D3DISSUE_END);
+				q[0]->Issue(D3DISSUE_END);
+				freq_q->Issue(D3DISSUE_END);
+
+				while (freq_q->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+					S_FALSE) {}
+				while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) ==
+					S_FALSE) {}
+				while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) ==
+					S_FALSE) {}
+
+				if (freq && t1 > t0)
+				{
+					g_sheet_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
+					g_sheet_timed++;
+				}
+
+				freq_q->Release();
+			}
+
+			for (int i = 0; i < 3; i++)
+				if (q[i])
+					q[i]->Release();
+		}
+
+		set_room_rows(group);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+		g_device->SetVertexShader(g_vs);
+		g_device->SetPixelShader(g_ps);
+		g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
+		g_device->SetIndices(g_ib);
+	}
+}
+
 bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 	const HDRoomLighting* lighting, unsigned int passes, int window)
 {
@@ -9307,7 +9487,15 @@ bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 	 * its own because it must come after everything opaque - see
 	 * MaterialBlend and the note on draw_pass's `blendOnly`. */
 	if (passes & HD_PASS_BLEND)
+	{
 		draw_pass(room, 1, wvp, true, window);
+
+		/* The water sheet, after the room's glass and once per room: with
+		 * the whole room's call or the open half's, never with the pieces
+		 * of its intruding art. */
+		if (window == HD_WINDOW_ALL || window == HD_WINDOW_OPEN)
+			draw_water_sheet(group);
+	}
 
 	return true;
 }

@@ -367,14 +367,16 @@
  *                     offers one (HDRenderWaterDepthBind), with or without
  *                     -hdwater, so that the classic and the HD path are
  *                     proved to draw into it unchanged.
- *     -waterdepthview 1|2|3|4
+ *     -waterdepthview 1|2|3|4|5
  *                     the sheets draw the depth texture as grey: 1 the
  *                     path through the water over 16384 units, 2 the water
  *                     depth out of it over the vertex depth, times 0.5 (mid
  *                     grey where the two agree); 3 the sheet with the pixels
  *                     whose bent place the guard refused in red; 4 the
  *                     depth under the surface at rest over 64 units, with
- *                     nothing clipped - what the clip measures.
+ *                     nothing clipped - what the clip measures; 5 the sheet
+ *                     with the bank foam's patches in green, as strong as
+ *                     they are, nothing clipped.
  *     -waterbend <s>  the refraction times s, for a picture that shows what
  *                     the depth texture's mask refuses; 1 is the look built.
  *     -ripple x,z,age[,size]
@@ -382,7 +384,11 @@
  *                     game's own ripples), age seconds after it began, of
  *                     a ripple that began at size (120, a wading Lara's,
  *                     without it); repeatable. Needs -hdwater 1.
- *     -shatter        hide every destructible piece of the drawn room -
+ *     -lara x,z       Lara's place in the water for the sheets' waterline,
+ *                     which leaves out the circle round her that the game
+ *                     leaves out round a swimming or wading Lara; world
+ *                     x, z. RoomProbe draws no Lara. Needs -hdwater 1.
+ *     -shatter       hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
  *     -hasgeom <x0 y0 z0 x1 y1 z1>
@@ -1671,6 +1677,9 @@ struct ProbeRipple
 	float x, z, age, size;
 };
 static std::vector<ProbeRipple> g_ripples;
+// -lara x,z: Lara's place for the waterline's gap round her.
+static bool g_lara_set = false;
+static float g_lara_x = 0.0f, g_lara_z = 0.0f;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
  * would leave them on the corners of one water quad. The renderer's flood
@@ -6626,11 +6635,14 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");
-		printf("       -nocopy  -nodepth  -waterdepthview 1|2|3|4  "
+		printf("       -nocopy  -nodepth  -waterdepthview 1|2|3|4|5  "
 			"-waterbend <s>   the sheets without the frame's copy or depth "
-			"texture, the depth as grey, the refraction scaled\n");
+			"texture, the depth as grey or the patches in green, the "
+			"refraction scaled\n");
 		printf("       -ripple x,z,age[,size]   a ring on the sheets at world "
 			"x, z, age seconds old (size 120), repeatable\n");
+		printf("       -lara x,z   Lara's place in the water: no waterline "
+			"round it\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
@@ -6824,6 +6836,15 @@ static int ProbeMain(int argc, char** argv)
 			else
 				printf("RoomProbe: -ripple wants x,z,age[,size] - '%s' "
 					"ignored\n", argv[at]);
+		}
+		else if (!strcmp(argv[at], "-lara") && at + 1 < argc)
+		{
+			g_lara_set = sscanf_s(argv[++at], "%f,%f", &g_lara_x,
+				&g_lara_z) == 2;
+
+			if (!g_lara_set)
+				printf("RoomProbe: -lara wants x,z - '%s' ignored\n",
+					argv[at]);
 		}
 		else if ((!strcmp(argv[at], "-plane") ||
 			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
@@ -8514,6 +8535,7 @@ static int ProbeMain(int argc, char** argv)
 				HDRenderWaterRing(g_ripples[i].x, g_ripples[i].z,
 					g_ripples[i].age, g_ripples[i].size);
 
+			HDRenderWaterLara(g_lara_set ? 1 : 0, g_lara_x, g_lara_z);
 			HDRenderWaterTiming(1, 0, 0);
 			HDRenderWaterLogLine(-1, stem, g_hdwater, line, sizeof(line));
 			printf("%s\n", line);
@@ -9355,6 +9377,7 @@ int main(int argc, char** argv)
 		}
 
 		g_ripples.clear();
+		g_lara_set = false;
 		g_classic_rooms.clear();
 		g_faces_built.clear();
 		g_cuts_built.clear();

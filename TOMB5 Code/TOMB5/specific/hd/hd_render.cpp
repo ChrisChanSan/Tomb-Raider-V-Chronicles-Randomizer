@@ -8542,6 +8542,18 @@ namespace
 	// blotches' edges into a grain.
 	const float kWaterFoamRelief = 24.0f;
 
+	// The share of a channel's current the bank foam's patches drift at:
+	// the water by a bank runs slower than in the middle of the channel. A
+	// free choice; a basin and a sea have no current and no drift.
+	const float kWaterPatchDrift = 0.3f;
+
+	/* Where the waterline gives way to Lara (hd_room.hlsl, gWaterLara):
+	 * none within kWaterLaraRadius of her place, back in full kWaterLaraEdge
+	 * further out. She is 768 units tall and lies about 700 long when she
+	 * swims, round her place; 320 and 64 are free choices that cover her. */
+	const float kWaterLaraRadius = 320.0f;
+	const float kWaterLaraEdge = 64.0f;
+
 	/* How a room's light becomes the water's: times the gain, never under
 	 * the floor and never over the cap. The mean of colour1 + colour2 over a
 	 * body's rooms, weighted by their squares, runs 0.09 to 0.55 a channel
@@ -8598,6 +8610,7 @@ namespace
 		float life[2];		// gWaterLife x, y: the stand-in's swing
 		float foamLight;	// gWaterLife w: the foam's body
 		float eyeGain;		// gWaterStage y plus one: the class's
+		float drift[2];		// the patches' drift, units a second
 	};
 
 	// An override row, the compiled table's or the file's.
@@ -8710,6 +8723,9 @@ namespace
 	RippleSeen g_ripple_seen[HD_WATER_RIPPLE_SLOTS] = {};
 	std::vector<WaterSource> g_wsources;
 	std::vector<ProbeRing> g_ring_probe;
+	// Lara's place for the waterline's gap round her (HDRenderWaterLara).
+	bool g_lara_in_water = false;
+	float g_lara_x = 0.0f, g_lara_z = 0.0f;
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
 	IDirect3DIndexBuffer9* g_sheet_ib = 0;
@@ -8794,6 +8810,7 @@ namespace
 		g_wsources.clear();
 		g_rings.clear();
 		g_ring_probe.clear();
+		g_lara_in_water = false;
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
 		g_wlevel.fileLines = -1;
@@ -9239,6 +9256,11 @@ namespace
 		 * (-sun[1]), so that a flat layer keeps the foam's colour. */
 		out.foamLight = 0.45f * kWaterFoamRelief / (0.55f - 0.45f * sun[1]);
 		out.eyeGain = c.eyeGain;
+
+		/* The bank foam's patches (hd_room.hlsl, PatchField) drift with a
+		 * channel's current, along the direction its rows run with it. */
+		out.drift[0] = kWaterPatchDrift * c.current * cosf(base);
+		out.drift[1] = kWaterPatchDrift * c.current * sinf(base);
 
 		/* gWaterAbsorb: the absorption per channel in the ratio of
 		 * ln(shallow / deep) of the section's palette, its mean the class's
@@ -10017,6 +10039,13 @@ void HDRenderWaterRing(float x, float z, float age, float size)
 	g_ring_probe.push_back(ring);
 }
 
+void HDRenderWaterLara(int inWater, float x, float z)
+{
+	g_lara_in_water = inWater != 0;
+	g_lara_x = x;
+	g_lara_z = z;
+}
+
 int HDRenderWaterBodies()
 {
 	return (int)g_wbodies.size();
@@ -10618,7 +10647,7 @@ namespace
 		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
 		{
 			const WaterLook& look = g_wlooks[(size_t)r.body];
-			float pixel[31 * 4] = {};
+			float pixel[32 * 4] = {};
 			float rows[32];
 			float lag[32];
 			float heights = 0.0f;
@@ -10676,9 +10705,20 @@ namespace
 			pixel[16 + 10 * 4 + 3] = 0.0f;
 			pixel[16 + 8 * 4 + 3] *= g_bend_scale;
 
-			// c19, gWaterView: half the viewport in pixels (the rows' fade).
+			/* c123, gWaterLara: her place in the frame the shader's world
+			 * position is in, or far away while she is out of the water. */
+			pixel[31 * 4 + 0] = g_lara_in_water ? g_lara_x -
+				(float)r.originX + g_room_origin[0] : 1.0e7f;
+			pixel[31 * 4 + 1] = g_lara_in_water ? g_lara_z -
+				(float)r.originZ + g_room_origin[1] : 1.0e7f;
+			pixel[31 * 4 + 2] = kWaterLaraRadius;
+			pixel[31 * 4 + 3] = 1.0f / kWaterLaraEdge;
+
+			/* c19, gWaterView: half the viewport in pixels (the rows' fade);
+			 * zw how far the patches have drifted by the clock. */
 			const float view[4] = { view_port.Width * 0.5f,
-				view_port.Height * 0.5f, 0.0f, 0.0f };
+				view_port.Height * 0.5f, (float)(look.drift[0] * clock),
+				(float)(look.drift[1] * clock) };
 
 			/* The vertex rows in WaterVS's phase form, c20 - c27: the next
 			 * room's prepare() writes c20 - c23 back in RoomVS's form before
@@ -10686,7 +10726,7 @@ namespace
 			g_device->SetVertexShaderConstantF(18, swell, 1);
 			g_device->SetVertexShaderConstantF(19, view, 1);
 			g_device->SetVertexShaderConstantF(20, rows, 8);
-			g_device->SetPixelShaderConstantF(92, pixel, 31);
+			g_device->SetPixelShaderConstantF(92, pixel, 32);
 
 			IDirect3DQuery9* q[3] = { 0, 0, 0 };
 

@@ -42,7 +42,7 @@
 #include "../../game/effect2.h"		// dynamics, wibble
 #include "../../game/tomb4fx.h"		// ripples - the rings on the sheets
 #include "../../game/gameflow.h"		// gfLevelId
-#include "../../game/lara.h"		// GfHdOutfit - data[3]
+#include "../../game/lara.h"		// GfHdOutfit - data[3]; lara, lara_item
 #include "../../game/interpolate.h"	// InterpFrameAlpha - the state this frame draws
 #include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
 #include "../file.h"				// textinfo, aranges, nAnimUVRanges
@@ -1679,6 +1679,20 @@ static void FeedWaterRipples()
 	}
 
 	HDRenderWaterRipples(live, count);
+}
+
+/* Lara's place for the sheets' waterline, which leaves her out: a thin wet
+ * line round a swimming or wading body is white on her legs and shoulders
+ * and not where water meets a bank. In the water while she swims at the
+ * surface or wades (lara.water_status); under water the sheet lies over her
+ * and a waterline does not reach her, and on dry land she meets no water. */
+static void FeedWaterLara()
+{
+	const bool in = lara_item && (lara.water_status == LW_SURFACE ||
+		lara.water_status == LW_WADE);
+
+	HDRenderWaterLara(in ? 1 : 0, in ? (float)lara_item->pos.x_pos : 0.0f,
+		in ? (float)lara_item->pos.z_pos : 0.0f);
 }
 
 bool HDWaterRippleOnSheet(long x, long y, long z, int flags)
@@ -6614,10 +6628,14 @@ void HDFrameDrawGlow()
 			break;
 		}
 
-	/* The game's own ripples for the rings on the sheets, once a frame and
-	 * only in a level that built sheets (none with tomb5.hd_water 0). */
+	/* The game's own ripples for the rings on the sheets and Lara's place
+	 * for their waterline, once a frame and only in a level that built
+	 * sheets (none with tomb5.hd_water 0). */
 	if (HDRenderWaterSheetsBuilt())
+	{
 		FeedWaterRipples();
+		FeedWaterLara();
+	}
 
 	/* The glass first and the glows after it. Both are drawn without a depth
 	 * write against a depth buffer that holds the whole opaque frame; the

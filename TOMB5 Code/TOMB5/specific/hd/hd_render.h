@@ -936,6 +936,11 @@ bool HDRenderWaterSheetsBuilt();
 void HDRenderWaterRipples(const HDRenderRipple* live, int count);
 void HDRenderWaterRing(float x, float z, float age, float size);
 bool HDRenderWaterSheetUnder(int x, int y, int z);
+/* Lara's world x and z for the sheets' waterline, which leaves her out
+ * (hd_room.hlsl, gWaterLara): `inWater` 0 while she is out of the water or
+ * the level has no Lara. The engine sets it once a frame, RoomProbe for its
+ * picture (-lara); a new level starts with 0. */
+void HDRenderWaterLara(int inWater, float x, float z);
 /* The rooms' own boxes for the level about to be built.
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */

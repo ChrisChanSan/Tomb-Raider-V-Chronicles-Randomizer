@@ -1724,7 +1724,9 @@ it.
   raised to the water plane - the sheet leaves those pixels to it (with the
   depth texture, below); a row of class `none` in `hd_water.txt` takes the
   sheet away where the two do not go together. The floor and the
-  walls of a pool under a sheet catch a moving caustic. A water plane with no
+  walls of a pool under a sheet catch a moving caustic, a net of light on the
+  walls as on the floor (projected along the wall's own face, not streaked
+  down it). A water plane with no
   underwater room below - all of JOBY3's and RICH3's water, ANDREA3's two
   pools, and 20 more planes - is no water square by this rule and keeps the
   level's own faces. Fifteen levels hold 577 water squares in 81 bodies, each
@@ -1743,7 +1745,11 @@ it.
   (the deep colour is what a long path through the water leaves of the shallow
   one), so Lara's legs and the pool floor are seen bent and coloured through
   the surface. Seen from below, the bright window overhead shows the world
-  above, bent the same way. Where the graphics card offers it (the `INTZ`
+  above, bent the same way, with a fifth of the reflection's colour in it so
+  that a dark room above does not turn it to mud; outside the window the deep
+  colour covers three quarters and the world above still shows through the
+  rest, dimmed and tinted, so the surface keeps the waves' shapes instead of
+  turning into one flat colour. Where the graphics card offers it (the `INTZ`
   format), the frame's depth buffer becomes a texture the sheet can read, bound
   when a level with sheets loads: the water then knows how far below it
   something was drawn - a step, an ice floe, a deep shaft - and grows clearer
@@ -1765,8 +1771,17 @@ it.
 - **The water's life.** The waves of a sheet are eight rows, long and short, in
   directions that never line up, and each row swells and fades on its own slow
   cycle of 8 to 15 seconds, so the water breathes and never settles into one
-  pattern; a sea breathes deepest, a basin least. The foam is translucent - the
-  water shows through it - lacy at its outer edge and dense at the bank; it runs
+  pattern; a sea breathes deepest, a basin least. Seen flat - at eye level, or
+  swimming - the waves are drawn up to three times steeper (a basin three, a
+  channel two, a sea as it is), and the fine waves whose crests run toward the
+  eye are kept instead of fading out with the distance, so the water has a
+  body there; looking down from 37 degrees or more the surface is drawn as
+  before. The foam is translucent - the
+  water shows through it - lacy at its outer edge and dense at the bank, and it
+  is lit as a layer with thickness: a blotch is bright on the side toward the
+  light, darker on the other and round its rim, and thin foam lies darker
+  than thick; on a sea a breaking crest stands a little higher, so its foam
+  rides the crest; it runs
   up the bank and draws back every few seconds and with the waves, its blotches
   drift, grow and dissolve, and no two stretches of a bank look alike. The
   broad foam lies along the banks of the level's squares with or without the
@@ -1777,25 +1792,33 @@ it.
   thirty steps a second. The whitecaps of
   a sea break on the highest crests and trail behind them. Where the game itself
   makes a ripple - Lara wading or swimming, a drip, a bubble reaching the
-  surface, a rat, a falling shell - the sheet draws a ring of waves that runs
-  outwards and fades within two seconds, in place of the game's flat ripple
-  picture; rain keeps its own rings. Indoors the reflection's light and dark
+  surface, a rat, a falling shell - the sheet draws a ring of two long, low
+  waves that runs outwards and fades slowly over three and a half seconds, in
+  place of the game's flat ripple picture; one body makes one ring: a ripple
+  close to a ring of its kind that is younger than 0.6 seconds goes into it,
+  and one that comes later starts it again from there, so a wading Lara has
+  one ring that starts again every 0.6 seconds at most instead of a quick
+  train of rings. Rain keeps its own rings - the game's white ring pictures.
+  Indoors the reflection's light and dark
   stretches are stronger and finer, so a basin seen at eye level shows its
   waves. With `hd_motion` off the water stands still and the game's own ripple
   pictures are drawn.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
-  `tint <r> <g> <b>`, `waves <s>` and `foam <s>`. LEVEL is the level file's name
+  `tint <r> <g> <b>`, `waves <s>`, `foam <s>` and `bend <s>`. LEVEL is the
+  level file's name
   (`ANDREA2`), room a room with water (a `-log` run names them) - the row tunes
   every body that room has water in - class `basin`, `channel` or `sea`, `-` to
   keep the class the body has, or `none` for no sheet over those bodies (they
   keep their class, and the level's own water faces come back there); tint
   multiplies the shallow and the deep colour per channel, waves the wave
-  heights, foam the shore foam and the whitecaps - every number 0 to 4, where 1
-  changes nothing. `#` starts a comment; a line that cannot be read is counted
-  and skipped. The rows apply after the engine's own pinned rows, so a row of
-  the file wins, and a later row wins over an earlier one - for example
+  heights, foam the shore foam and the whitecaps, bend how far the waves bend
+  the floor seen through them (`bend 1.5` half as much again) - every number 0
+  to 4, where 1 changes nothing. `#` starts a comment; a line that cannot be
+  read is counted and skipped. The rows apply after the engine's own pinned
+  rows, so a row of the file wins, and a later row wins over an earlier one -
+  for example
   `ANDREA2 144 - tint 1.1 1.0 0.85 waves 0.7`, `JOBY2 42 - foam 0.6` or
   `ANDY2 57 none`. Any row may also carry `ripple <x> <z> <size> <seconds>`: a
   ring at that place (world units, as the game and trview give them) every so
@@ -1824,7 +1847,8 @@ it.
   tuned it (`table:` the engine's, `file:` yours, with the room), the tint, wave
   and foam numbers in force, its twins' squares, the light before gain, floor
   and cap (`raw=`), `none=1` when a row of class `none` took its sheet away,
-  and whether the Remaster's water art over it is kept or hidden (`art=`).
+  whether the Remaster's water art over it is kept or hidden (`art=`), and
+  the bend in force (`bend=`).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
 

@@ -9438,6 +9438,126 @@ and the flat water at eye level, which the play test also named, are not this ro
 water `536f735`, `77d333c`; after the second play test `5f39959`, `948d633`, `0a281e8`,
 `b2af791`, `9252c6f`, `3401ab8`, `fb73b62`.
 
+**The look, after the same play test.** The play test also asked for the water's look: the
+foam flat and unnatural, a texture where the waves have a body; the rings restless,
+repeating quickly, fading too soon; the water at eye level completely flat; the surface
+from below and the light on the walls under it less good than from above. The view from
+above in ANDREA1 and ANDREA2 was judged good, and every change here leaves it as it was or
+nearly so (the fountain hall seen from above, `D2`, changes by 0.68 of 255 on average,
+from the walls' caustic and the rows' fade).
+
+The rings (`hd_render.cpp` :8676, :9985; `hd_room.hlsl` :1979). A wading Lara sets up a
+ripple every four ticks (`game/effects.cpp`, `WadeSplash`), and each became a ring: a
+quick train of rings, all alike. Now one body makes one ring: a new ripple of the same
+kind - a body's (flags 0x10) or a small one's (a bubble, a rat, a shell) - within 192
+units of a live ring goes into it, taken as its own while that ring is younger than 0.6 s
+and starting it again from the new ripple when it is older. The ring is two long, low
+swells of 90 units behind its front instead of three of 56, runs at 150 units a second
+instead of 210, and lives 3.5 s instead of 2 with its strength, still 0.5, times the
+square of the life left: as strong at one second as the straight two-second fade made it
+(0.255 against 0.25), still there in the third second, gone at three and a half. A
+strength of 0.35, tried first, made every ring fainter at every age - calmer, but not
+slower to fade - and was set back to 0.5 (`4fce14b`). All free choices, set by eye on the
+play test's words. The rain's white rings are the game's own ripple pictures (flags 0,
+kept as they are, entry 71 of the ledger); if those are the restless rings of the play
+test, this does not touch them.
+
+The foam's body (`hd_room.hlsl` :2264, `hd_render.cpp` :8543). The foam is lit as a layer
+with thickness: its cover times the pattern is a height of up to 24 units, its rise toward
+the class's light - the screen gradient against the screen step of one unit toward the
+light, the footprint solved as the refraction solves it - lights it with a soft diffuse
+term to first order, over what a flat layer gets, never under 0.3; thin foam is shaded to
+0.65 and a blotch has a darker rim where its cover is half. The relief was tried at 8
+(hardly shows), 24 and 48 (the edges turn to grain). On a sea `WaterVS` lifts a breaking
+crest by up to a quarter of the whole wave height (:1796), so the whitecaps ride the
+crests. The translucency stays: the foam's cover never passes 0.75.
+
+The body at eye level (`hd_room.hlsl` :2059, :1839). Two causes. The rows' fade measured
+the pixel's longest step: seen flat a pixel spans far more water in depth than across, and
+the rows faded out - at 3,000 units and 5 degrees over the surface a pixel 0.0015 radians
+tall spans about 52 units in depth (3,000 x 0.0015 / sin 5 degrees), so the basin's rows
+of 29 to 197 units were gone and the longest, 260, kept a third: the water at eye level
+was drawn nearly without waves. The fade is now measured along each row's own direction,
+the phase step to the next pixel right and down, worked out per vertex from the
+projection's derivative (`gWaterView`, c19) and carried to the pixel shader, so the rows
+whose crests run toward the eye stay. And the slopes are raised by the class's gain -
+basin 3, channel 2, sea 1, the factors asked for - where the view runs within about 9
+degrees of the surface, not at all where it looks down by 37 degrees or more, linearly
+between. Not taken: raising the heights themselves - a higher wave is higher from above
+too, and the view from above is the one the play test kept - and a swell for a basin: the
+sheet has a vertex every 256 units, a row shorter than 512 cannot be carried by the
+geometry (every basin row is 29 to 260 units long, so it would alias into a slow crawl of
+the whole sheet), and 0.6 of the tripled heights is at most 13.6 units with all eight rows
+in step and about 4 as their root mean square - about one pixel at 960 x 540 from A1, some
+3,000 units away (80 degrees over 960 pixels).
+
+The view from below (:2163). Outside the Snell window the deep colour covers three
+quarters (0.92 before) and the frame behind shows through the rest; the window's edge
+spans 0.61 to 0.71 of N.V round the critical angle's 0.66; inside it the bent frame with a
+fifth of the reflection colour (0.55 before). Free choices, set by eye on RoomProbe
+pictures.
+
+The caustic on the walls (`hd_room.hlsl` :999, :1669, `hd_glow.hlsl` :177). `CausticOf` is
+a pattern of the horizontal plane; a wall read it along one axis and got vertical streaks.
+`CausticFace` reads it in the plane of the face normal's major axis - x and z on a floor,
+z and y or x and y on a wall, the normal from the screen derivatives of the position - one
+sample, the planes never blended (a second sample costs about 20 of the 512 slots), the
+footprint by the pixel's step in all three axes, which on a floor is the step it always
+was. In `RoomPS`'s plain variant and `GlowPS`; the gloss variant, at 502 slots, keeps the
+horizontal plane on the polished floors it draws.
+
+The bend key (`hd_render.cpp` :8938, :9279). `hd_water.txt` takes `bend <s>` per row, 0 to
+4, the refraction's strength times s; a row may hold 20 tokens; WATERLOG's body line ends
+with `bend=`. The default stays 1; a default of 1.5 was asked for and not taken: the
+refraction is what the view from above shows, and that view was kept. RoomProbe pictures
+of the fountain hall at 1, 1.5 and 2 lie beside this round's proofs.
+
+The depth views of RoomProbe move into a variant of their own (`HD_WATER_VIEW`,
+`hd_room_water_view_ps.inc`, made the first time a view is asked for, :10589), compiled by
+`bshader.bat` and checked by `be.bat`: the game never draws a view, and the 16 slots of
+the views pay for the foam's body in the variant it draws.
+
+The play test's eighteen pictures, what became of each: the view from above in ANDREA1 and
+of the fountain hall, kept; ANDY1's sea pools and JOBY2's channel by the hull, the foam's
+body here (the comb along the bank went with `b2af791`); JOBY2 under the sea and an
+underwater room of Rome, the walls' net and the view from below here; the dive into the
+fountain, the rings here, an HD splash left; Lara's streaks in the fountain hall, the rats
+in the water, the white blotches on a swimming or wading Lara and the pier posts, the
+guard and the waterline of `b2af791`; the deck in JOBY5, ANDY3's pond and RICH2's raised
+floor, the clip of `b2af791`; the fountain hall half under the Remaster's art, `0a281e8`;
+the lilac beside Lara's legs, left (above); the rain pool where Lara wades, the foam and
+legs with `b2af791`, its white rings the rain's own.
+
+**Measured.** Slots, fxc /O3: `WaterPS` 425 to 443, its depth variant 499 to 500 (the
+foam's body 26, the gain at eye level 3, the view from below and the rings 0; out of it
+the views' block, 16, and the fade by the pixel's footprint, 11), the view variant 491,
+`WaterVS` 152 to 206 (the rows' fade 51, the crest lift 3), `RoomPS` 477 to 482, `GlowPS`
+478 to 483; the gloss variant and `RoomVS` unchanged at 502 and 412. All under 512 in one
+draw each. The full-water timing view at 2560 x 1440, three runs each: 0.194, 0.193, 0.194
+ms against 0.192, 0.194, 0.192 at `a3e4884`. The fifteen cameras with `-hdwater 1`:
+thirteen change, by 0.22 to 1.76 of 255 on average, D1 (from below) by 6.43; E3 and E4 are
+as before.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set - E4 too, though `RoomPS`
+and `GlowPS` changed: its marked art is horizontal, read in the plane it always was, and
+the footprint's third axis is zero there; the shared shaders' bytecode identical to
+`a3e4884` without the stamp lines but `RoomPS` and `GlowPS`, 10 of 12; the sweep's counts
+identical; a text file with a `bend 1.5` row, `bend 5`, `bend much` and a full 20-token
+row read as rows 2, bad 2, `bend=1.50` and `bend=2.00` on the two bodies; the suites
+(ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the
+engine and every tool build.
+
+**Left.** The look in the game: no one in this round could play it. The rain's own white
+rings, if those were the restless rings. An HD splash where Lara dives in: the game's own
+splash (`SetupSplash`, three rings of columns) drawn as lit, refracting droplets and a
+crown over the sheet, and a burst of rings - a feature of its own. The reflection of the
+room itself, the third stage. The lilac beside Lara's legs under the surface. The sea's
+geometry, whose rows of 98 to 330 units alias at the vertex spacing of 256, which the
+per-pixel normal hides.
+
+**Commits.** The look after the second play test `6b03bbd`, `282795b`, `4fce14b`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

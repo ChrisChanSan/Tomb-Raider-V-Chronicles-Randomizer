@@ -30,6 +30,7 @@
 #include "fmv.h"
 #include "setupdlg.h"
 #include "../tomb5/tomb5.h"	// load_tomb5_present_settings
+#include "crashseam.h"		// the CRASH line and the minidump
 #include "hd/hd_mods.h"		// the mods folder's log sink
 #include "hd/hd_wardrobe.h"	// and the wardrobe scan's
 
@@ -876,6 +877,12 @@ static void ModsLogLine(const char* line)
 	Log("%s", line);
 }
 
+// The crash seam's writer (crashseam.h): its line into the -log file.
+static void CrashLogLine(const char* line)
+{
+	Log("%s", line);
+}
+
 int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmdLine, int nShowCmd)
 {
 	DXDISPLAYMODE* dm;
@@ -895,6 +902,12 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	// that need them have to print them themselves.
 	if (gLogEnabled)
 		Log("Logging enabled by -log. PCtomb5 built " __DATE__ " " __TIME__);
+
+	/* The crash seam, as early as the log: an exception nobody catches
+	 * writes its CRASH line into the log (with -log) or into crash.txt
+	 * (without) and a minidump beside it - crashseam.h. This thread is the
+	 * window's, "main"; the game thread is named where it starts. */
+	CrashSeamInstall(CrashLogLine, !gLogEnabled, "PCtomb5");
 
 	/* Where the mods folder's notes go: hd_mods.cpp is engine-free - the
 	 * diagnostic tools link the very same file - so it does not know Log()
@@ -1008,6 +1021,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 	MainThread.active = 1;
 	MainThread.ended = 0;
 	MainThread.handle = _beginthreadex(0, 0, GameMain, 0, 0, (unsigned int*)&MainThread.address);
+	CrashSeamGameThread((DWORD)MainThread.address);
 	WinProcMsg();
 	MainThread.ended = 1;
 	while (MainThread.active) {};

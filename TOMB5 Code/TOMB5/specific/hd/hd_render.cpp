@@ -8667,11 +8667,12 @@ namespace
 	 * within kRingHeight of its surface. Speed, life, slope, the merge
 	 * distance, the restart and the two other distances are free choices,
 	 * set by eye on the round's RoomProbe pictures: a wading Lara's ring
-	 * slower and fainter than a quick splash, gone in three and a half
-	 * seconds. */
+	 * slower than a quick splash, as strong at one second as a ring with a
+	 * straight fade over two seconds and still there in the third, gone in
+	 * three and a half. */
 	const double kRingLife = 3.5;		// seconds
 	const float kRingSpeed = 150.0f;	// units a second
-	const float kRingSlope = 0.35f;
+	const float kRingSlope = 0.5f;
 	const float kRingMerge = 192.0f;	// units
 	const double kRingRestart = 0.6;	// seconds
 	const int kRingNear = 512;		// units

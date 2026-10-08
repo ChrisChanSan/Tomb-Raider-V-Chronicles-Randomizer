@@ -9312,9 +9312,131 @@ rings step with the game's thirty-hertz clock, as every motion of the HD path do
 fountain's ripple row lives in a test file and is not in this tree, like the rest of
 `hd_water.txt`.
 
+**After the owner's second play test of 2026-10-08.** The build of `77d333c` was played
+through ANDREA1, ANDREA2, ANDY1, ANDY3, RICH2, JOBY2 and JOBY5 (reference pictures and two
+logs supplied for this project, not in the repository): waves running over solid floor,
+white blotches on a swimming Lara, a rat and the pier posts, foam with a zigzag edge, the
+Remaster's water and the sheet side by side in one basin, Lara's legs tinted under the
+surface, every motion stepping at sixty frames a second, and a crash on Alt+Enter. The
+surface seen from above in ANDREA1 and ANDREA2 was judged good and is kept.
+
+The crash seam. `specific/crashseam.h` (header only, `CrashSeamFilter` :73), installed in
+`WinMain` (`specific/winmain.cpp` :910), which names the game thread where it starts
+(:1024): an exception nobody catches writes `CRASH code=<hex> at=<address>
+module=<file>+<offset> thread=main|game|other` through `Log` with `-log` and into
+`crash.txt` without it, and a minidump `PCtomb5_<date>_<time>.dmp` beside it
+(MiniDumpNormal, through `dbghelp.dll` loaded at that moment; without it the line still
+goes out). RoomProbe `-crash` proves both.
+
+Alt+Enter. The log of the crash ends after `HDLOG shadow mode ... reason=hd_off`, in the
+first frame on the new device. Read from `WinProcessCommands` through
+`DXToggleFullScreen`, `DXCreate`, `DXClose` and `HDLevelDeviceLost`: everything of the
+water - the copy, the `INTZ` texture, the device's own depth surface held while it stood
+in, the sheet buffers and every table - is released in `release_water_sheets` before the
+device goes, and nothing of the water runs again before the next level
+(`HDRenderWaterSheetsBuilt`, `HDLevelActive` and the renderer's device are all false
+then). RoomProbe `-devicecycle` repeats the path: with the sheets built and `INTZ` bound
+the device is released with no reference of ours left on it (`RefCnt = 0`), and the HD
+picture drawn again on a third device is byte for byte the first. The 87 references the
+log prints at the release are the classic path's own - the level's texture pages and the
+other MANAGED textures, made on the old device at level load and not made again on the new
+one. Drawing with a MANAGED texture of one device on a second one, the first's own
+reference released, runs without a fault on this machine, so that is not shown to be the
+crash, and the classic path is not changed: the crash seam names the faulting module and
+offset the next time.
+
+The clock. `FillFrameLighting` (`specific/hd/hd_level.cpp` :4008) and the two brackets
+(:5523, :5736) hand the frame the drawn state's time, `HDBookClock` - the tick clock less
+the part of a tick the blended pose stands behind it, which the material 15 books already
+turned on - in place of the tick clock. The water's waves, foam and rings, the wind, the
+caustic, the scroll and the flipbooks move on every frame drawn instead of in thirty steps
+a second; an improvement of the sixty frames path, not a change of the look. At
+`fps_mode 0` the time is the tick clock, and RoomProbe's `-time` is untouched, so every
+proof picture stays what it was. A clock of the tick count plus the blend factor was not
+taken: it runs a tick ahead of the pose the frame draws.
+
+The clip. `WaterVS` hands the swell's lift on in `TEXCOORD2.y` (`hd_room.hlsl` :1734); the
+depth variant measures the frame's depth under the surface at rest (`rest`, :1999) and,
+seen from above, `clip()`s where it is under 8 units (:2020), so a deck, a rim or a bank
+at the water's height shows itself. 8 against the depth's own error - `rest` is one value
+to a sixteenth of a unit over JOBY2 66's flat pool floor at 2560 x 1440, about 2,600 units
+away, and 24 bits over the near and far planes of 20 and 20,480 give about 1.2 units at
+the far plane - and wide enough for the Remaster's planes, which stand 2 to 9 units off
+the classic height. `clip()` and not alpha 0: with the copy the sheet writes the whole
+pixel. The fallback cannot know such a floor and keeps the data rule; there a row of class
+`none` stays the way.
+
+The refraction guard. `RefractMove` (:1807) returns the move; the bent place's depth
+(:2142, the tap the mask read already) refuses it where the frame there lies within 48
+units of the surface at rest or above it, and scales the move to the shorter of the two
+paths, here and there: `1 - T` of the shorter over `1 - T` of this pixel's own. 48 is a
+free choice, set by eye on RoomProbe pictures of JOBY2's pier posts and the floe;
+`-waterdepthview 3` shows the refused pixels.
+
+The waterline and the comb. The broad foam is the sector band in both variants; the depth
+variant adds a waterline, full under 24 units and gone at 48, broken by the foam pattern
+(:2096), so a swimming Lara, a rat or a post gets at most a wet line, and the hull and the
+floes keep theirs. The zigzag was neither the shore field (already the distance to the
+nearest dry square's box at every vertex) nor the depth foam: it shows in both variants.
+The pattern was blended toward a copy of itself turned by 57 degrees, and a blend between
+two orientations of world coordinates some 50,000 units from the origin multiplies the
+pattern's rate of change by that distance where the blend is half done: drawn alone as
+grey in RoomProbe it was a moire of stripes a few units apart, the comb along the banks.
+The pattern is now moved by the variety field and not turned (:2076).
+
+The purple. Not changed. The composition cannot make it: what comes through is
+`exp(-path sigma)`, at most 1 in every channel, red absorbed at least as much as green in
+all four palettes, and the water's shallow and deep colours hold green over red in every
+row; `gWaterAbsorb` is written and read in the order red, green, blue. A lilac lighter
+than her suit is therefore in the frame the copy holds. A node of Lara under water is lit
+with the underwater room's ambient (`hd_laradraw.cpp`, the classic rule of
+`InitObjectLighting`), the same light that colours the floors of the underwater rooms
+purple and blue (JOBY2 76 in RoomProbe with `-hdwater 0`); the veil of stage 1 hid it,
+and the short path of a leg under the surface shows it now. In the play test's picture
+the lilac lies beside her legs rather than on them, which this reading does not explain;
+RoomProbe draws no Lara, and the classic light rule stays as it is.
+
+The Remaster's water art over a sheet. A draw call that is wholly the Remaster's own water
+art - horizontal triangles of material 16 or water-marked at every corner
+(`HDRange::artTris` :1340, counted in the triangle walk :6237) - within 32 units of a
+sheet's surface over a square whose sheet draws is hidden (step 8 of
+`HDRenderSetWaterSheets` :9796; the draws skip it at :7903 and :10949). The sort key and
+the draw calls stay as they are; with `hd_water 0` nothing is hidden, and the classic
+faces' rule is unchanged. `hd_water.txt` takes `art keep` and `art hide`, the default, per
+row (:8874), and a row may hold 18 tokens. This reverses the decision of 2026-10-07 that
+ANDREA2 231's art stays over the sheet, on the play test's picture of the fountain hall,
+half under that art and half the sheet; `ANDREA2 231 - art keep` puts it back. The
+WATERLOG level line ends with `art_hidden=<triangles> clip=<1 for the depth variant>`, the
+body line with `art=keep|hide`.
+
+**Measured.** Slots, fxc /O3: WaterPS 436 to 425 (the turn taken out), its depth variant
+487 to 499 (the clip 4, the waterline 6, the guard 19, the four depth views now one block
+of 16), WaterVS 150 to 152; all under the 512 of one draw. The full-water timing view at
+2560 x 1440, three runs each: 0.193 to 0.194 ms against 0.183 to 0.185 at `77d333c`.
+`art_hidden` over the fifteen levels: ANDREA2 2048, ANDY2 2384, JOBY5 15906, none
+elsewhere; the sweep's counts are unchanged. RoomProbe `-crash`: the line with its module
+and offset, and a dump of about 30 KB beginning with `MDMP`.
+
+**Checked.** The classic path (`-classicroom` and `-classiconly` on ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34, `INTZ` bound) md5-identical to `8691e82`, 6 of 6; the
+fifteen cameras with `-hdwater 0` identical to the fix round's parity set, 15 of 15; the
+shared shaders' bytecode identical to `3bde4f4` without the stamp lines, 12 of 12;
+`-devicecycle` 1 of 1 identical with `RefCnt = 0` three times; a text file with the
+fountain row, `art keep`, an unknown `art` word and a full 18-token row read as rows 3,
+bad 1, sources 2, the later row winning; the suites (ModernTest 14721, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The Alt+Enter crash itself, not reproduced: the next one's `CRASH` line and dump
+name it. The purple beside Lara's legs, above. The play test's deck at the water's height
+in JOBY5 was not found by camera - the rooms tried, 4 and 184, stand a click deep - and
+the clip is proved on the depth view and the ANDY3 pond. Lara, a rat and the rings of the
+game's own ripples are unseen here. The foam with a body of its own, the pace of the rings
+and the flat water at eye level, which the play test also named, are not this round's.
+
 **Commits.** `4ee001a`, `e7db80a`, `b6866f3`, `6f79503`, `19ad148`, `73522ab`, `a96a091`,
 `128a4a3`, `8b19a7e`; the frame behind the sheet `8020e8a`, `cdb4640`; the life of the
-water `536f735`, `77d333c`.
+water `536f735`, `77d333c`; after the second play test `5f39959`, `948d633`, `0a281e8`,
+`b2af791`, `9252c6f`, `3401ab8`, `fb73b62`.
 
 ## 2.5 Sixty frames a second
 

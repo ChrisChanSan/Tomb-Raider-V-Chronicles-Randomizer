@@ -1714,10 +1714,16 @@ it.
   a dark green, the VCI a dark blue - lit by the light of the rooms round the
   water, so a dark sewer has dark water, and the distance fog darkens the water
   as it darkens its banks. Where a sheet lies, the level's own water face of
-  the bullet above is not drawn. Art the Remaster lays over a water square
-  stays and draws as it always did, its still water and its other flat art
-  alike, and the sheet draws as well; a row of class `none` in `hd_water.txt`
-  takes the sheet away where the two do not go together. The floor and the
+  the bullet above is not drawn. The Remaster's own water art over a sheet -
+  its still-water surfaces and the flat water art it marks - is left out, so
+  a body of water has one look and not the Remaster's in one half and the
+  sheet's in the other (ANDREA2's fountain hall, ANDY2's rooms 52 and 57,
+  fourteen rooms of JOBY5); a row with `art keep` in `hd_water.txt` puts it
+  back. Its other flat art stays and draws as it always did, and where that
+  art lies at the water's own height - a deck, a rim, a bank the Remaster
+  raised to the water plane - the sheet leaves those pixels to it (with the
+  depth texture, below); a row of class `none` in `hd_water.txt` takes the
+  sheet away where the two do not go together. The floor and the
   walls of a pool under a sheet catch a moving caustic. A water plane with no
   underwater room below - all of JOBY3's and RICH3's water, ANDREA3's two
   pools, and 20 more planes - is no water square by this rule and keeps the
@@ -1742,18 +1748,33 @@ it.
   when a level with sheets loads: the water then knows how far below it
   something was drawn - a step, an ice floe, a deep shaft - and grows clearer
   or darker with it, and nothing standing in the water is pulled into the
-  floor by the bending. A card without it draws the same sheet with the depth
-  of the level's own floor data. With *HD water* off neither the copy nor the
-  depth texture is made.
+  floor by the bending. Three more things follow from it. Where something was
+  drawn less than 8 units under the surface at rest - a deck, a rim, a raised
+  bank, the top of a floe - the sheet is not drawn there at all, so solid
+  ground at the water's height shows itself instead of waves running over it.
+  Where the bent place lies within 48 units of the surface - a rat, a post,
+  Lara's shoulders - the sheet reads the pixel's own place, and the bending
+  never reaches further than the shallower side allows, so a thing at the
+  surface is not shown a second time torn off beside itself. And where the
+  drawn shape meets the water - a post, a hull, a floe, Lara wading or
+  swimming - a thin wet line of foam runs round it (within 24 units, gone at
+  48) and nothing more. A card without it draws the same sheet with the depth
+  of the level's own floor data, and cannot know a floor at the water's
+  height: there a row of class `none` is the way. With *HD water* off neither
+  the copy nor the depth texture is made.
 - **The water's life.** The waves of a sheet are eight rows, long and short, in
   directions that never line up, and each row swells and fades on its own slow
   cycle of 8 to 15 seconds, so the water breathes and never settles into one
   pattern; a sea breathes deepest, a basin least. The foam is translucent - the
   water shows through it - lacy at its outer edge and dense at the bank; it runs
   up the bank and draws back every few seconds and with the waves, its blotches
-  drift, grow and dissolve, and no two stretches of a bank look alike. Where the
-  depth texture is there the foam follows the water's real depth - a sloping
-  bank, a step, an ice floe - rather than the level's squares. The whitecaps of
+  drift, grow and dissolve, and no two stretches of a bank look alike. The
+  broad foam lies along the banks of the level's squares with or without the
+  depth texture; the depth texture adds the thin waterline round whatever
+  stands in the water. The waves, the foam, the rings, the wind and the
+  caustic move on every frame drawn, at the time the frame's Lara and items
+  are drawn at - at sixty frames a second and more they no longer move in
+  thirty steps a second. The whitecaps of
   a sea break on the highest crests and trail behind them. Where the game itself
   makes a ripple - Lara wading or swimming, a drip, a bubble reaching the
   surface, a rat, a falling shell - the sheet draws a ring of waves that runs
@@ -1782,22 +1803,28 @@ it.
   (1 to 255; a wading Lara's is about 120) and every 0.1 to 60 seconds - for a
   fountain the game gives no ripple of its own, for example `ANDREA2 194 -
   ripple 55808 32768 80 0.7`; the rest of such a row applies like any row's.
-  No file means the engine's own rows alone.
+  And `art keep` (or `art hide`, what a row says without it) draws the
+  Remaster's own water art over the sheets of the row's bodies again, for
+  example `ANDREA2 231 - art keep`. No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
   sheet, the bodies by class, `hd_water.txt`'s lines, rows and unreadable lines,
   the rows of this level that found a body and those that did not, the
   squares of a flipmap twin, and whether the sheets read the copy of the
   picture (`copy=1`) and the depth texture (`depth=1`), the wave rows a sheet
-  sums (`waverows=8`), the rings one sheet can show at once (`rings=8`) and the
-  ripple rows of the file that found their water (`sources=`) - and one
+  sums (`waverows=8`), the rings one sheet can show at once (`rings=8`), the
+  ripple rows of the file that found their water (`sources=`), the triangles
+  of the Remaster's water art left out under the sheets (`art_hidden=`) and
+  whether the sheets give way to a floor at the water's height (`clip=1`, with
+  the depth texture) - and one
   `WATERLOG body=` line per body: its rooms,
   the height of its surface, its squares and those drawing a sheet, twice its
   area over its perimeter, open air, the class drawn and the class the rule
   gives, the deepest square, the light its colours are lit by and the row that
   tuned it (`table:` the engine's, `file:` yours, with the room), the tint, wave
   and foam numbers in force, its twins' squares, the light before gain, floor
-  and cap (`raw=`) and `none=1` when a row of class `none` took its sheet away.
+  and cap (`raw=`), `none=1` when a row of class `none` took its sheet away,
+  and whether the Remaster's water art over it is kept or hidden (`art=`).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
 
@@ -1853,7 +1880,7 @@ values, in the same key as every other setting
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
 | `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing at all while `hd_enable` is off. |
-| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it, and the level's own water face there is not drawn; a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
+| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it, and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
@@ -3462,6 +3489,20 @@ still exceed one stops with a clear message instead of corrupting memory.
 
 **Start with `Log.bat`.** It runs `PCTomb5.exe -log` and writes `log.txt` next
 to the executable, from the very first startup line.
+
+**When the game crashes.** The engine catches the crash itself, with or
+without `-log`, and writes one line:
+`CRASH code=0xC0000005 at=0x... module=PCtomb5.exe+0x... thread=game` - the
+kind of fault (`0xC0000005` is a read or write through a bad pointer), the
+address, the program file it happened in with the offset into it, and the
+thread (`main` the window's, `game` the game's own). With `-log` the line is
+the last of `log.txt`; without it, it goes into `crash.txt` beside where
+`log.txt` would be. Beside it lies `PCtomb5_<date>_<time>.dmp`, a minidump
+(the threads' stacks and the loaded modules, a few dozen kilobytes, no game
+data) written through Windows' own `dbghelp.dll`; on a machine without that
+file the line still goes out (`dump=none` in `crash.txt`). Send the line and
+the dump with `log.txt`: the offset and the dump name the source line of the
+very build that crashed. Windows' own crash report follows as before.
 
 The log is not one stream — each line begins with the name of the seam that
 wrote it, and each seam answers a different question:

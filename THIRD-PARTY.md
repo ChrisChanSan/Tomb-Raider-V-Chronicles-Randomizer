@@ -61,7 +61,7 @@ file:
 
 | `TOMB5 Code/TOMB5/specific/hd/hd_laradraw.cpp/.h` | `host/render/game_renderer.cpp`: `draw_hair` (its copy of 2026-09-05; in TROne-main, copy of 2026-10-06, commit 75c4c843, `draw_hair` skins the links its glues build the same way) | The **braid rule**: `HAIR_OG` has one bone per link, so all six links get a frame of their own built from the link's absolute position and its two angles - where TR5 itself builds a matrix for links 1, 3 and 5 only and draws 0, 2 and 4 as skinned connectors out of stashed vertices. Everything else in that file is this engine's own: the LMX-to-LM turn of `lara_matrices`, the per-node ambient out of `LaraNodeAmbient`, the hand-slot pointer comparison, the first-person mask and the mirror. |
 
-| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) | The **wind's shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of about 1.4 blocks - the shape that block gave TROne's water in that copy, applied here to the `.TRG`'s own `TrgVertex::sway` weight, which TROne does not read. Translated to HLSL. The water itself - its wave, swell, UV wobble and caustic - is this project's own design (the origin ledger below, entries 40 to 73) and takes no shape or number from TROne; the water shapes this row credited to TROne before are recorded in `MODIFICATIONS.md`, entry "Water in the HD rooms". Not taken: TROne's water flag, a room bit in its copy of 2026-10-05 (75c4c843 classes water and shore from the engine's own split), where ours is the classic path's own water marks (the water marks row above) and the classic floor data's water squares. One observation stays TROne's: TR5's own brightness term, the `WaterTable` shimmer, is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which TROne's own comment reported about TR4 water in its copy of 2026-09-05 (in 75c4c843 its basin note says the same of a ripple). That is why a per-pixel term is added at all: the shimmer is untouched, parity and all, and the caustic on top of it is a zero mean modulation that carries no average brightness of its own. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl`, the wind | `host/render/game_renderer.cpp`: `k_hd_vert`'s `hd.water_effect` block (its copy of 2026-09-05) | The **wind's shape and its scale**: two sines of the position taken across each other, about 24 classic units of travel and a wavelength of about 1.4 blocks - the shape that block gave TROne's water in that copy, applied here to the `.TRG`'s own `TrgVertex::sway` weight, which TROne does not read. Translated to HLSL. The water itself - its wave, swell, UV wobble and caustic - is this project's own design (the origin ledger below, entries 40 to 78) and takes no shape or number from TROne; the water shapes this row credited to TROne before are recorded in `MODIFICATIONS.md`, entry "Water in the HD rooms". Not taken: TROne's water flag, a room bit in its copy of 2026-10-05 (75c4c843 classes water and shore from the engine's own split), where ours is the classic path's own water marks (the water marks row above) and the classic floor data's water squares. One observation stays TROne's: TR5's own brightness term, the `WaterTable` shimmer, is computed per vertex, and a remaster water surface is a few large quads, so on its own it reaches the screen as a slow blotch - which TROne's own comment reported about TR4 water in its copy of 2026-09-05 (in 75c4c843 its basin note says the same of a ripple). That is why a per-pixel term is added at all: the shimmer is untouched, parity and all, and the caustic on top of it is a zero mean modulation that carries no average brightness of its own. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_fontmatch.cpp/.h`, `hd_font.cpp/.h` and the branch in `game/text.cpp` | `host/render/game_renderer.cpp`, the block its own code marks `hdtext` (`hdtext_find` and `hdtext_arm`), and the glyph draw beside it. **No line numbers**, on purpose: no line range for it could be checked against a copy of TROne that can be read here, so the block is named by its own marker instead — the reasoning stands over `hd_fontmatch.h` | The **method**, not the code: find a classic glyph in the remaster's `FONT<n>_OG.DDS` by sliding its ink mask over the atlas and scoring **intersection over union**, refuse anything under **0.94** because a similar character is the wrong character, take the `FONT<n>.DDS` beside the winner as the picture to draw from, and relocate the classic UV to the hit while adding **one texel of margin to image and screen in the same ratio**, so that the letter neither moves nor grows. Also theirs: the alpha ramp threshold 96 for what counts as ink, and the observation that the atlas of TR5 carries the classic glyph bitmaps unchanged. What is **not** taken and is not needed: their sprite scan and their "is this an alphabet" gate - the 106 glyph rectangles are known here (`game/chardef.inc`), so there is nothing to discover and nothing to guard against. New here: the per-glyph margin (a uniform one puts a slice of the neighbouring tick beside the apostrophe - measured), the seeding of that measurement from the classic page, the tpage sentinel that carries a quad to a texture outside `Textures[]`, the mip chain with its LOD bias, and the whole Direct3D 9 side. Their alpha-test change is not needed either: this engine's alpha reference is already 0. |
 
 | `TOMB5 Code/TOMB5/specific/polyinsert.cpp`, the mip LOD bias of the HD font quad | `host/render/game_renderer.cpp` (TROne-main, copy of 2026-09-13; Copyright 2026 Todesengel, GPLv3), where the same bias stands with the same reason in TROne's own words | The **number and the reason for it**: a mip LOD bias of **-0.7** on the glyph quad, so that a font atlas minified by a D3D9 sampler keeps its edge instead of blurring into the next mip. The minification this project spends it on is its own measurement (1.8 at 1080p, 2.7 at 720p, 1.35 at 1440p), and so is where the bias lands at each of those (level 0.14 at 1080p, 0 at 1440p). |
@@ -362,7 +362,7 @@ entry "Where the HD rules come from", carries the tables.
     shape moved TROne's water. OWN; free choice to keep TROne's numbers for
     the wind. The water's wave, swell, UV wobble and caustic, which this entry
     credited to TROne before (`MODIFICATIONS.md`, "Water in the HD rooms"),
-    are this project's own design: entries 40 to 73.
+    are this project's own design: entries 40 to 78.
 21. **Material 16's ripple held to the part's own UV span, nothing moving in
     the vertex.** TROne, its own material 16 water rule. OWN. Ours: `sway` is 0
     on 27 of the 28 parts; 23 of 28 live in a sub-rectangle of their page.
@@ -451,7 +451,7 @@ I-III bundle's `1\TEX`, all beside a plain `<n>.DDS`); and the passages of
 `Trg.h` that told in words what the Remaster's renderer does with a vertex and
 with the point lights. The engine manual's HD chapter points here.
 
-**This project's own water.** Entries 40 to 73 came by way of neither TROne nor
+**This project's own water.** Entries 40 to 78 came by way of neither TROne nor
 TRForge: the water sheets, their wave and their caustic are this project's own
 design out of textbook graphics (sums of sines, Schlick's fresnel, Blinn-Phong,
 exponential absorption, foam by shore distance, refraction by Snell's law, a
@@ -466,8 +466,9 @@ water surface", carries the tables.
 40. **The water square.** A square of a room that is not under water whose room
     below (`FLOOR_INFO::pit_room`) is an underwater room; its surface the
     square's own floor, clicks times 256; in a room drawn HD it draws its
-    sheet whatever flat art the Remaster lays over it, the art staying on top.
-    OWN, free choice. Count on our data: 577 places in the fifteen levels, all
+    sheet whatever flat art the Remaster lays over it (its own water art
+    there is hidden, entry 77; the rest of its art stays on top). OWN, free
+    choice. Count on our data: 577 places in the fifteen levels, all
     of them drawing, and 122 more squares of the second rooms of flipmap pairs
     (`RoomProbe -hdwater 1 -nodraw`).
 41. **The depth walk** - down through further water portals to the first floor
@@ -606,17 +607,19 @@ water surface", carries the tables.
 68. **The foam's density and reach** - at most 0.75, a soft threshold that runs
     from only the peaks of the pattern at the outer edge to nearly all of it at
     the bank; the reach times 0.55 to 1.0 by a swash of 4.5 seconds whose phase
-    runs along the bank, plus 0.35 of the wave's height there; with the depth
-    texture the reach is the water's depth, gone at one click (256 units), for
-    water within three squares of a classic bank. OWN, free choice, set by eye
-    on RoomProbe pictures.
+    runs along the bank, plus 0.35 of the wave's height there, over the
+    class's band from the classic shore in both variants (the depth texture's
+    own share is the waterline, entry 76). OWN, free choice, set by eye on
+    RoomProbe pictures.
 69. **The foam's motion and variety** - the coarse layer drifting at a third
     of the fine one's speed, a slow third layer giving each region of blotches
     its own phase for a threshold that swings over 5 seconds; a smooth field of
     two Wave2 layers (periods about 6,700 and 8,900 units) moving the pattern by
-    up to 400 units, turning it toward a second orientation 57 degrees off and
-    shifting the swash. OWN, free choice; a field rather than a number per
-    square, which would draw a seam at every square's edge.
+    up to 400 units and shifting the swash - moving it and not turning it: a
+    blend toward a turned copy of world-sized coordinates multiplied the
+    pattern's frequency where half done and drew a comb along the banks. OWN,
+    free choice; a field rather than a number per square, which would draw a
+    seam at every square's edge.
 70. **The trailing whitecaps** - a cap where the eight rows stand above the
     class's share of their whole height now, and, at 0.7 and broken up by the
     slow layer, where the two longest rows stood half a second earlier. OWN,
@@ -643,6 +646,36 @@ water surface", carries the tables.
     from the place, at the surface of the row's room's square under it. OWN,
     free choice; for a fountain where the game makes no ripple of its own
     (ANDREA2 194: no item in it or in room 120 below, `ItemCheck`).
+74. **The clip** - with the depth texture and the camera above the water, a
+    sheet pixel is not drawn (`clip()`) where the frame lies less than 8 units
+    under the surface at rest (the swell's lift handed from `WaterVS` and taken
+    back), so a deck, a rim or a bank at the surface's own height shows itself.
+    OWN, free choice; 8 against the depth's own error, measured: one value to
+    a sixteenth of a unit over JOBY2 66's flat pool floor at 2560 x 1440
+    (`RoomProbe -waterdepthview`), about 1.2 units at the far plane by the
+    24-bit arithmetic, and the Remaster's planes 2 to 9 units off the classic
+    height.
+75. **The refraction guard** - with the depth texture, from above, the bent
+    place is refused where the frame there lies within 48 units of the surface
+    at rest or above it, and the move is the one the shorter of the two paths
+    (here or there) gives: 1 - T of the shorter over 1 - T of the pixel's own.
+    OWN, free choice, 48 set by eye on RoomProbe pictures (JOBY2's pier posts,
+    the floe; `-waterdepthview 3` shows the refused pixels).
+76. **The waterline** - with the depth texture, foam where the frame lies
+    within 24 units under the surface at rest, gone at 48, broken by the foam
+    pattern (a soft threshold 0.25 to 0.6), at the class's foam strength. OWN,
+    free choice, set by eye on RoomProbe pictures.
+77. **The art over a sheet** - a draw call wholly of the Remaster's own water
+    art (horizontal triangles of material 16 or water-marked at every corner),
+    within 32 units of a sheet's surface over a square whose sheet draws, is
+    hidden unless an `hd_water.txt` row says `art keep`. OWN, free choice; the
+    32 is the slack of the flat-art question (`HDRenderGroupFlatArt`). Count on
+    our data: 2048 triangles in ANDREA2, 2384 in ANDY2, 15906 in JOBY5, none
+    elsewhere (`RoomProbe -hdwater 1 -nodraw`, WATERLOG `art_hidden`).
+78. **The motion clock** - every motion of the HD path runs on the drawn
+    state's time, the tick clock less the part of a tick the blended pose
+    stands behind it (`hd_book.h`, `HDBookClock`), so it moves on every frame
+    at sixty frames a second and more. A rule of this project.
 
 ## Credited, but not contained here
 

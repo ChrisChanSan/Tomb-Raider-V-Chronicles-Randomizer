@@ -660,14 +660,19 @@ water surface", carries the tables.
     24-bit arithmetic, and the Remaster's planes 2 to 9 units off the classic
     height.
 75. **The refraction guard** - with the depth texture, from above, the bent
-    place is refused where the frame there lies within 48 units of the surface
+    place is refused where the frame there lies within 96 units of the surface
     at rest or above it, and the move is the one the shorter of the two paths
     (here or there) gives: 1 - T of the shorter over 1 - T of the pixel's own.
-    OWN, free choice, 48 set by eye on RoomProbe pictures (JOBY2's pier posts,
-    the floe; `-waterdepthview 3` shows the refused pixels).
+    OWN; 96 rests on a measurement of the classic data: a swimming rat stands
+    50 units under the surface (`game/rat.cpp`) and its mesh reaches 10 below
+    its place (`ModelOffset` on the classic ANDREA2.TRC, slot RAT, y -84 to
+    10), so its belly lies 60 down, under the 48 the guard took before (set by
+    eye on JOBY2's pier posts and the floe); `-waterdepthview 3` shows the
+    refused pixels.
 76. **The waterline** - with the depth texture, foam where the frame lies
     within 24 units under the surface at rest, gone at 48, broken by the foam
-    pattern (a soft threshold 0.25 to 0.6), at the class's foam strength. OWN,
+    pattern (a soft threshold 0.25 to 0.6), at the class's foam strength;
+    held to 0.25 by a bare bank and left out round Lara (entries 88, 89). OWN,
     free choice, set by eye on RoomProbe pictures.
 77. **The art over a sheet** - a draw call wholly of the Remaster's own water
     art (horizontal triangles of material 16 or water-marked at every corner),
@@ -719,13 +724,39 @@ water surface", carries the tables.
     OWN: the fade's thresholds those of entry 56; the per-direction measure
     is the sampling bound of a sine, general graphics knowledge.
 85. **The view from below** - the Snell window's edge 0.61 to 0.71 of N.V
-    (round the critical angle's 0.66), alpha 0.75 outside with the frame
-    behind showing through the rest, 0.2 inside: a fifth of the reflection
-    colour and four fifths of the bent frame. OWN, free choice, set by eye
-    on RoomProbe pictures.
+    (round the critical angle's 0.66), alpha 0.35 of the shallow colour
+    outside with the bent frame showing through the rest, 0.1 inside: a tenth
+    of the reflection colour and nine tenths of the bent frame. OWN, free
+    choice, set by eye on RoomProbe pictures and on the reference pictures of
+    the play test of 2026-10-08 (the surface from below opaque and milky);
+    before it, 0.75 of the deep colour outside and 0.2 inside.
 86. **The `bend` key of `hd_water.txt`** - the refraction's strength of entry
     61 times `bend` (0 to 4, 1 without the key), per row. OWN, free choice;
     1 by default, so the look from above stays as the play test found it.
+87. **The bank foam's patches** - a field worked out per vertex: three layers
+    of cells, each the product of two Wave2 along axes turned by 0.35, 1.25
+    and 2.20 radians, periods 3,800, 5,400 and 7,400 units, each times a
+    clock of 26.3, 33.7 and 45.9 seconds whose phase turns once, twice and
+    three times over the variety field of entry 69 and a quarter turn with
+    the next layer's cell; their sum over 1.5. A patch where it stands over
+    0.05; the band of entry 68 reaches 1.5 times the square root of the
+    excess over 0.4. A channel's patches drift at 0.3 of its current. OWN,
+    free choice, set by eye against the reference pictures supplied for this
+    project (foam on parts of a bank, in lobes of different sizes); count on
+    the arithmetic (a script over eight bank lines of 24,000 units for ten
+    minutes): foam on 0.45 of a bank's length, a patch 320 / 864 / 2,080
+    units long and living 11 / 25 / 68 seconds at the tenth, half and ninth
+    tenth. Cells of products of sines and a threshold are general graphics
+    knowledge.
+88. **The faint line where no patch is** - with the depth texture the
+    waterline of entry 76 held to 0.25 within the band of a bank and outside
+    a patch, 0.75 elsewhere; without it a line over the band's innermost 24
+    units at 0.25 of foam, broken by the pattern. OWN, free choice.
+89. **Lara's gap in the waterline** - no waterline within 320 units of Lara's
+    place, back in full 64 further out, while she swims at the surface or
+    wades (`lara.water_status`); her rings stay. A rule of this project: a
+    wet line round her body read as white paint on her (the play test of
+    2026-10-08); 320 and 64 free choices that cover her 768 units.
 
 ## Credited, but not contained here
 

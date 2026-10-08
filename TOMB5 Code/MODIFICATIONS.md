@@ -9558,6 +9558,110 @@ per-pixel normal hides.
 
 **Commits.** The look after the second play test `6b03bbd`, `282795b`, `4fce14b`.
 
+**After the owner's third play test of 2026-10-08.** The build of `4fce14b` was played
+(reference pictures, a video's frames and a sketch supplied for this project, not in the
+repository). Kept as they are: the rain's white double rings (the game's own sprites), the
+lilac on Lara's legs (the room below's light, accepted), the gain at eye level, the
+sheet's look in the fountain hall. Asked for: the bank foam is far too regular, the edge
+of a tablecloth - it is to be broken up by other shapes and be gone in places, there or
+not at random, in different shapes, never the same; the waterline foam on Lara's body is
+to go (the posts' line is fine); the rats are still slightly torn; the surface seen from
+below is in places opaque, a milky green, and is to become clear.
+
+The patches (`hd_room.hlsl` :1819, :1855, :2300; `hd_render.cpp` :8548, :9262). The band
+of the bank foam reached the same width along every bank, and only the pattern inside it
+varied. Now a slow field decides where along a bank foam is at all. `WaterVS` works it out
+per vertex - a field of thousands of units needs no more than a vertex every 256 - from
+three layers of cells, each the product of two Wave2 along axes turned by 0.35, 1.25 and
+2.20 radians (none lines up with the classic grid's banks), periods 3,800, 5,400 and 7,400
+units, each times a clock of its own, 26.3, 33.7 and 45.9 seconds, whose phase turns once,
+twice and three times over the variety field and a quarter turn with the next layer's
+cell. A cell grows in place while its clock swings up, stands and dissolves, and the cells
+of the other sign take over elsewhere. `WaterPS` takes a patch where the field stands over
+0.05 and lets the band reach 1.5 times the square root of the excess over 0.4: nothing at
+a patch's ends, rising like a half circle where the field crosses the threshold, so a
+patch is a rounded lobe, and the further the field stands over it, the further the lobe
+reaches. Inside a patch the pattern, the swash, the dissolve and the foam's body are as
+they were. In a channel the field is read at the place less the drift, 0.3 of the class's
+current along the channel's axis times the clock (c19 zw): the water by a bank runs slower
+than in the middle. The variety field moves from `WaterPS` to `WaterVS` with it, which
+pays for the patches in the pixel shader. All free choices, set by eye against the sketch,
+which shows foam on parts of a pool's sides in lobes of different sizes, bare edge
+between; RoomProbe's `-waterdepthview 5` draws the patches' strength in green.
+
+Decided against the brief: lobes of about a third of a square to two squares, not one to
+four. The sketch's lobes are 0.1 to 0.37 of a side (measured on it, sides of about 450
+pixels), and ANDY1's two pools, 14 squares each, are 3 to 5 squares a side, so the sketch
+reads as 0.3 to 1.85 squares there; lobes of one to four squares would make a whole side
+of those pools one patch or none.
+
+The faint line. Where no patch is, the bank is not left bare: with the depth texture the
+waterline is held to 0.25 within the band of a bank and outside a patch, 0.75 inside a
+patch and out in the water (the posts, the floes, the hull), and without it the band's
+innermost 24 units carry a line of 0.25, broken by the pattern. The sea's whitecaps are
+unchanged; a basin has no bank foam.
+
+Lara (`hd_room.hlsl` :2311; `hd_render.cpp` :8554, :10042, :10710; `hd_level.cpp` :1689,
+:6637). The waterline gives way round her: no line within 320 units of her place, back in
+full 64 further out, while she swims at the surface or wades (`lara.water_status`), set
+once a frame from `lara_item` into c123 (`gWaterLara`); the posts, the hull and the floes
+keep theirs, and her rings stay. She stands 768 units tall and lies about 700 long when
+she swims; 320 and 64 are free choices that cover her. RoomProbe `-lara x,z` places her
+for a picture.
+
+The rat (`hd_room.hlsl` :1999). A swimming rat stands at the underwater room's ceiling
+plus 50 (`game/rat.cpp` :222, y down) and its mesh reaches 10 below its place
+(`ModelOffset` on the classic ANDREA2.TRC, slot RAT: y -84 to 10), so its belly lies 60
+units under the surface, and the guard of 48 let a neighbour's bent place that fell on the
+lowest 12 units read the rat - a piece of it drawn beside itself. The guard now refuses
+within 96 units. Shown on the guard's own arithmetic, a cut through a rounded body 60
+units deep in a channel's water, seen 45 degrees down, with the channel's eight rows at 40
+phases and the rat's rings at five ages: water pixels that show the rat 106 with 48, 0
+with 96; taking the rings' slope out of the move instead gives 70, and with 96 it adds
+nothing, so the rings stay in the move. RoomProbe cannot draw a rat; JOBY2's floe with the
+rat's rings at its edge shows no tear either way, because the Remaster's floe is its top
+alone and the frame lies deeper than 96 right up to its edge (`-waterdepthview 4`). What
+96 costs: the refused pixels of the thirteen cameras that see a sheet from above about
+double (1,267 to 20,482 a picture before, 2,234 to 53,119 after), all in bands along walls
+and posts, where the bent place falls on a wall's upper part; no classic floor lies less
+than a click (256) down, so the floors bend as before.
+
+From below (`hd_room.hlsl` :2242). Outside the Snell window the sheet shows the bent frame
+under 0.35 of the shallow colour (it was 0.75 of the deep colour times 1.3), inside the
+window 0.1 of the reflection colour (0.2); the window's edge stays 0.61 to 0.71 of N.V,
+the room's underwater fog and the screen's wobble are the engine's. Free choices, set by
+eye on D1, U1 and the rain pool from below.
+
+**Measured.** Slots, fxc /O3: `WaterPS` 443 to 442, its depth variant 500 to 508, the view
+variant 491 to 503, `WaterVS` 206 to 266; one draw each, no split. In the depth variant
+the patches cost 4 and the line's cap 7, the gap round Lara 8, the view from below saves 1
+and the variety field moved out of it 10; in the fallback the patches 6, the line 6; in
+`WaterVS` the variety field 13 and the patches 47. The patches, counted on the same
+arithmetic (eight bank lines of 24,000 units for ten minutes, steps of 32 units and half a
+second): foam on 0.45 of a bank's length at any moment; a patch 320 / 864 / 2,080 units
+long and living 11 / 25 / 68 seconds at the tenth, half and ninth tenth (two patches that
+touch count as one); where a patch is, the band reaching 0.49 / 1.17 / 1.5 of its width; 6
+% of all four-square stretches of bank hold foam on less than a tenth of their length at a
+time. The full-water timing view at 2560 x 1440, three runs each: 0.198, 0.197, 0.200 ms
+against 0.197, 0.197, 0.200 at `c9a09f2`. The fifteen cameras with `-hdwater 1`: thirteen
+change against `c9a09f2`, the seas by 1.6 to 7.0 % of their pixels, the sewer channel by
+1.1 and 1.2 %, D1 by 72 % (from below), the rest by under 1 % (the guard); E3 and E4 as
+before.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set; the shared shaders'
+bytecode identical to `c9a09f2` without the stamp lines, 12 of 12; the sweep's counts
+identical; the suites (ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and
+243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the patches' amount
+and size, the faint line, Lara wading without her line, the rat, the surface from below.
+The waterfall of ANDREA2 room 231 that stops above the surface, the swirl where it lands
+and a splash of drops there, asked for in the same play test, are not this round's. The
+reflection of the room itself, the third stage.
+
+**Commits.** After the third play test `0b1e1ca`, `a1ea812`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

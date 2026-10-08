@@ -1744,12 +1744,13 @@ it.
   far water less than near), tinted channel by channel by the section's colours
   (the deep colour is what a long path through the water leaves of the shallow
   one), so Lara's legs and the pool floor are seen bent and coloured through
-  the surface. Seen from below, the bright window overhead shows the world
-  above, bent the same way, with a fifth of the reflection's colour in it so
-  that a dark room above does not turn it to mud; outside the window the deep
-  colour covers three quarters and the world above still shows through the
-  rest, dimmed and tinted, so the surface keeps the waves' shapes instead of
-  turning into one flat colour. Where the graphics card offers it (the `INTZ`
+  the surface. Seen from below, the surface is clear: the window overhead
+  shows the world above, bent the same way, with a tenth of the reflection's
+  colour in it, and outside the window the world above still shows through
+  under a light veil of the section's shallow colour (a third of it), so the
+  surface keeps the waves' shapes instead of turning into one milky plane;
+  the room's own underwater fog and the screen's wobble do the rest. Where
+  the graphics card offers it (the `INTZ`
   format), the frame's depth buffer becomes a texture the sheet can read, bound
   when a level with sheets loads: the water then knows how far below it
   something was drawn - a step, an ice floe, a deep shaft - and grows clearer
@@ -1758,13 +1759,15 @@ it.
   drawn less than 8 units under the surface at rest - a deck, a rim, a raised
   bank, the top of a floe - the sheet is not drawn there at all, so solid
   ground at the water's height shows itself instead of waves running over it.
-  Where the bent place lies within 48 units of the surface - a rat, a post,
-  Lara's shoulders - the sheet reads the pixel's own place, and the bending
-  never reaches further than the shallower side allows, so a thing at the
-  surface is not shown a second time torn off beside itself. And where the
-  drawn shape meets the water - a post, a hull, a floe, Lara wading or
-  swimming - a thin wet line of foam runs round it (within 24 units, gone at
-  48) and nothing more. A card without it draws the same sheet with the depth
+  Where the bent place lies within 96 units of the surface - a rat, whose
+  belly hangs 60 units down, a post, Lara's shoulders - the sheet reads the
+  pixel's own place, and the bending never reaches further than the
+  shallower side allows, so a thing at the surface is not shown a second time
+  torn off beside itself. And where the drawn shape meets the water - a
+  post, a hull, a floe - a thin wet line of foam runs round it (within 24
+  units, gone at 48) and nothing more; not round Lara: within 320 units of
+  her, while she swims at the surface or wades, the line is left out, and
+  only her rings stay. A card without it draws the same sheet with the depth
   of the level's own floor data, and cannot know a floor at the water's
   height: there a row of class `none` is the way. With *HD water* off neither
   the copy nor the depth texture is made.
@@ -1784,9 +1787,16 @@ it.
   rides the crest; it runs
   up the bank and draws back every few seconds and with the waves, its blotches
   drift, grow and dissolve, and no two stretches of a bank look alike. The
-  broad foam lies along the banks of the level's squares with or without the
-  depth texture; the depth texture adds the thin waterline round whatever
-  stands in the water. The waves, the foam, the rings, the wind and the
+  broad foam lies along the banks of the level's squares, with or without the
+  depth texture, in patches and not as a rim: rounded lobes of their own
+  sizes - from a third of a square to two squares long, reaching up to one
+  and a half times the band into the water - on a little under half of a
+  bank at any moment, with bare bank between them; a patch grows over a few
+  seconds, stands, dissolves after about half a minute and another comes up
+  elsewhere, and in a channel the patches drift with the current. Where no
+  patch is, the bank keeps only a faint, broken wet line. The depth texture
+  adds the thin waterline round whatever stands in the water. The waves, the
+  foam, the rings, the wind and the
   caustic move on every frame drawn, at the time the frame's Lara and items
   are drawn at - at sixty frames a second and more they no longer move in
   thirty steps a second. The whitecaps of

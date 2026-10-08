@@ -1832,11 +1832,93 @@ void HDWaterFallsTick()
 	}
 }
 
+/* What the water squares read of a square's floor data (HDWaterRoom): the
+ * floor's slope entry, walked as GetHeight walks the chain (game\
+ * control.cpp: a portal, a slope or a ceiling slope carry one data word, a
+ * trigger its setup word and command words to the one with the end bit -
+ * a camera's and a flyby's command one word more -, lava, climb, monkey
+ * and the trigger trigger none); the ceiling's slope entry as
+ * GetMinimumCeiling reads it, the first entry or the one behind a floor
+ * slope; and the first TO_SINK command's camera entry. */
+static void WaterSquareWords(const FLOOR_INFO& f, unsigned short* slope,
+	short* sink)
+{
+	slope[0] = slope[1] = slope[2] = slope[3] = 0;
+	*sink = -1;
+
+	if (!f.index || !floor_data)
+		return;
+
+	const short* data = &floor_data[f.index];
+	const int first = data[0] & 0x1F;
+	const bool floorSlope = first == TILT_TYPE || first == SPLIT1 ||
+		first == SPLIT2 || (first >= NOCOLF1T && first <= NOCOLF2B);
+	const unsigned short ceil = floorSlope ?
+		((data[0] & 0x8000) ? 0 : (unsigned short)data[2]) :
+		(unsigned short)data[0];
+	const int cfn = ceil & 0x1F;
+
+	if (cfn == ROOF_TYPE || cfn == SPLIT3 || cfn == SPLIT4 ||
+		(cfn >= NOCOLC1T && cfn <= NOCOLC2B))
+	{
+		slope[2] = ceil;
+		slope[3] = (unsigned short)(floorSlope ? data[3] : data[1]);
+	}
+
+	for (int guard = 0; guard < 64; guard++)
+	{
+		const unsigned short type = (unsigned short)*data++;
+		const int fn = type & 0x1F;
+
+		if (fn == DOOR_TYPE || fn == ROOF_TYPE || fn == SPLIT3 ||
+			fn == SPLIT4 || (fn >= NOCOLC1T && fn <= NOCOLC2B))
+			data++;
+		else if (fn == TILT_TYPE || fn == SPLIT1 || fn == SPLIT2 ||
+			(fn >= NOCOLF1T && fn <= NOCOLF2B))
+		{
+			if (!slope[0])
+			{
+				slope[0] = type;
+				slope[1] = (unsigned short)*data;
+			}
+
+			data++;
+		}
+		else if (fn == TRIGGER_TYPE)
+		{
+			unsigned short trigger;
+
+			data++;
+
+			do
+			{
+				trigger = (unsigned short)*data++;
+
+				if ((trigger & 0x3C00) == (TO_SINK << 10) && *sink < 0)
+					*sink = (short)(trigger & 0x3FF);
+
+				if ((trigger & 0x3C00) == (TO_CAMERA << 10) ||
+					(trigger & 0x3C00) == (TO_FLYBY << 10))
+					trigger = (unsigned short)*data++;
+			} while (!(trigger & 0x8000));
+		}
+		else if (fn != LAVA_TYPE && fn != CLIMB_TYPE && fn != MONKEY_TYPE &&
+			fn != TRIGTRIGGER_TYPE)
+			break;
+
+		if (type & 0x8000)
+			break;
+	}
+}
+
 static void BuildWaterSheets()
 {
 	std::vector<HDWaterRoom> rooms((size_t)number_rooms);
 	std::vector<signed char> floors;
 	std::vector<short> below;
+	std::vector<signed char> ceilings;
+	std::vector<unsigned short> slopes;
+	std::vector<short> sinks;
 	std::vector<size_t> first((size_t)number_rooms, 0);
 
 	for (int pass = 0; pass < 2; pass++)
@@ -1851,6 +1933,9 @@ static void BuildWaterSheets()
 				first[(size_t)i] = floors.size();
 				floors.resize(floors.size() + (size_t)(nx * nz));
 				below.resize(floors.size());
+				ceilings.resize(floors.size());
+				slopes.resize(floors.size() * 4);
+				sinks.resize(floors.size());
 				continue;
 			}
 
@@ -1866,6 +1951,9 @@ static void BuildWaterSheets()
 			w.drawn = i < HD_MAX_ROOMS && g_group_hd[i] ? 1 : 0;
 			w.floor = nx * nz ? &floors[first[(size_t)i]] : 0;
 			w.below = nx * nz ? &below[first[(size_t)i]] : 0;
+			w.ceiling = nx * nz ? &ceilings[first[(size_t)i]] : 0;
+			w.slope = nx * nz ? &slopes[first[(size_t)i] * 4] : 0;
+			w.sink = nx * nz ? &sinks[first[(size_t)i]] : 0;
 
 			for (int sx = 0; sx < nx; sx++)
 				for (int sz = 0; sz < nz; sz++)
@@ -1875,9 +1963,25 @@ static void BuildWaterSheets()
 
 					floors[at] = f.floor;
 					below[at] = f.pit_room == NO_ROOM ? -1 : f.pit_room;
+					ceilings[at] = f.ceiling;
+					WaterSquareWords(f, &slopes[at * 4], &sinks[at]);
 				}
 		}
 
+	// The sinks: the camera table's places and strengths.
+	std::vector<HDWaterSink> table;
+
+	for (int c = 0; camera.fixed && c < number_cameras; c++)
+	{
+		HDWaterSink k;
+
+		k.x = camera.fixed[c].x;
+		k.z = camera.fixed[c].z;
+		k.strength = camera.fixed[c].data;
+		table.push_back(k);
+	}
+
+	HDRenderWaterSinks(table.empty() ? 0 : &table[0], (int)table.size());
 	HDRenderWaterFile("hd_water.txt");
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
@@ -6707,8 +6811,14 @@ void HDFrameDraw()
 	 * Drawing the objects inside the room loop would be worse for a reason
 	 * that has nothing to do with depth: a model's state is not a room's, and
 	 * swapping shader, declaration and stream twice per room costs more than
-	 * the whole object path does. */
+	 * the whole object path does.
+	 *
+	 * Lara and the objects mark their pixels for the water sheets, which
+	 * draw no waterline on them (hd_render.cpp, "the creatures' mark");
+	 * nothing without sheets that read the depth texture. */
+	HDRenderWaterMarkBegin();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_SOLID);
+	HDRenderWaterMarkEnd();
 
 	/* And the models take the projected shadow, on the depth they have just
 	 * written; the shadow's log line then has the whole frame's passes. */

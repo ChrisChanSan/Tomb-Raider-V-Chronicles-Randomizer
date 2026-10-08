@@ -1691,6 +1691,15 @@ static bool g_lara_set = false;
 static float g_lara_x = 0.0f, g_lara_z = 0.0f;
 // -swirl x,z,r: the feet handed to every picture, as x, z, r.
 static std::vector<float> g_swirls;
+/* -creature x,z: stand-ins for swimming creatures, as x, z, drawn with the
+ * creatures' mark where the HD objects are drawn (HDRenderWaterProbe-
+ * Creature); the seed room's classic origin shifts them into the picture. */
+static std::vector<float> g_creatures;
+static float g_seed_origin[2] = { 0.0f, 0.0f };
+// -nomark: the stand-ins without the mark (the picture before it);
+// -markview: the marked pixels in red over the finished picture.
+static bool g_creature_mark = true;
+static bool g_mark_view = false;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
  * would leave them on the corners of one water quad. The renderer's flood
@@ -4746,6 +4755,187 @@ static void PrintPsnr(const char* root, int howMany)
 	printf("(mip 0 only; a quarter of the video memory is what is bought with it)\n");
 }
 
+/* The words a water square reads of one square's floor data (HDWaterRoom),
+ * out of the classic .TRC - the twin of hd_level.cpp's WaterSquareWords,
+ * which reads floor_data: the floor's slope entry as Tr5Level::floorSlope
+ * finds it (the first TILT, SPLIT1/2 or NOCOLF entry, GetHeight's), the
+ * ceiling's as GetMinimumCeiling reads it (the first entry, or the second
+ * behind a floor slope, when a ROOF, SPLIT3/4 or NOCOLC entry), and the
+ * first TO_SINK command's camera entry, a camera's and a flyby's command
+ * taking one word more. */
+static void ProbeWaterWords(const Tr5Level& level, int room, int sx, int sz,
+	unsigned short* slope, short* sink)
+{
+	slope[0] = slope[1] = slope[2] = slope[3] = 0;
+	*sink = -1;
+
+	const int index = level.sectorIndex(room, sx, sz);
+	std::vector<Tr5FloorEntry> chain;
+
+	if (index <= 0 || !level.readChain(index, chain) || chain.empty())
+		return;
+
+	auto floorSlope = [](int fn)
+	{
+		return fn == 2 || fn == 7 || fn == 8 || (fn >= 11 && fn <= 14);
+	};
+
+	for (size_t i = 0; i < chain.size(); i++)
+		if (floorSlope(chain[i].function) && chain[i].words.size() >= 2)
+		{
+			slope[0] = chain[i].words[0];
+			slope[1] = chain[i].words[1];
+			break;
+		}
+
+	const Tr5FloorEntry* c = &chain[0];
+
+	if (floorSlope(c->function))
+		c = (c->words[0] & 0x8000) || chain.size() < 2 ? 0 : &chain[1];
+
+	if (c && c->words.size() >= 2 && (c->function == 3 || c->function == 9 ||
+		c->function == 10 || (c->function >= 15 && c->function <= 18)))
+	{
+		slope[2] = c->words[0];
+		slope[3] = c->words[1];
+	}
+
+	for (size_t i = 0; i < chain.size() && *sink < 0; i++)
+	{
+		if (chain[i].function != 4)
+			continue;
+
+		for (size_t k = 2; k < chain[i].words.size(); k++)
+		{
+			const int type = (chain[i].words[k] >> 10) & 0xF;
+
+			if (type == 2)
+			{
+				*sink = (short)(chain[i].words[k] & 0x3FF);
+				break;
+			}
+
+			if (type == 1 || type == 12)
+				k++;
+		}
+	}
+}
+
+/* The proof of the water squares' corners: for every square of a dry room
+ * over an underwater room, the corners HDRenderWaterCorners makes of the
+ * words above against Tr5Level::cornerFloor and cornerCeiling - the dry
+ * floor's and, at the same place in the room below, the water's ceiling. */
+static void ProbeWaterCorners(const Tr5Level& level,
+	const std::vector<HDWaterRoom>& rooms)
+{
+	long squares = 0, equal = 0;
+
+	for (size_t r = 0; r < rooms.size(); r++)
+	{
+		const HDWaterRoom& w = rooms[r];
+
+		if ((w.flags & HD_WATER_ROOM_UNDERWATER) || !w.floor || !w.below ||
+			!w.slope)
+			continue;
+
+		for (int sx = 0; sx < w.sizeX; sx++)
+			for (int sz = 0; sz < w.sizeZ; sz++)
+			{
+				const int at = sx * w.sizeZ + sz;
+				const int pit = w.below[at];
+
+				if (pit < 0 || pit >= (int)rooms.size() ||
+					w.floor[at] == -127 ||
+					!(rooms[(size_t)pit].flags & HD_WATER_ROOM_UNDERWATER) ||
+					!rooms[(size_t)pit].slope)
+					continue;
+
+				const HDWaterRoom& b = rooms[(size_t)pit];
+				const int bx = (w.originX + sx * 1024 - b.originX) >> 10;
+				const int bz = (w.originZ + sz * 1024 - b.originZ) >> 10;
+
+				if (bx < 0 || bz < 0 || bx >= b.sizeX || bz >= b.sizeZ)
+					continue;
+
+				const int bi = bx * b.sizeZ + bz;
+				int f[4], c[4];
+				bool same = true;
+
+				HDRenderWaterCorners(w.floor[at], w.slope[at * 4],
+					w.slope[at * 4 + 1], 0, f);
+				HDRenderWaterCorners(b.ceiling[bi], b.slope[bi * 4 + 2],
+					b.slope[bi * 4 + 3], 1, c);
+
+				for (int k = 0; k < 4; k++)
+				{
+					long y = 0;
+
+					if (!level.cornerFloor((int)r, sx, sz, (k & 1) ? 1024 : 0,
+						(k & 2) ? 1024 : 0, y) || y != f[k])
+						same = false;
+
+					if (!level.cornerCeiling(pit, bx, bz, (k & 1) ? 1024 : 0,
+						(k & 2) ? 1024 : 0, y) || y != c[k])
+						same = false;
+				}
+
+				squares++;
+				equal += same ? 1 : 0;
+			}
+	}
+
+	/* And the formula over every square of the level, floor and ceiling,
+	 * where the words above are the square's own entries - the slopes the
+	 * water squares meet are few, the level's are thousands. */
+	long all = 0, allEqual = 0, sloped = 0;
+
+	for (size_t r = 0; r < rooms.size(); r++)
+	{
+		const HDWaterRoom& w = rooms[r];
+
+		if (!w.floor || !w.slope || !w.ceiling)
+			continue;
+
+		for (int sx = 0; sx < w.sizeX; sx++)
+			for (int sz = 0; sz < w.sizeZ; sz++)
+			{
+				const int at = sx * w.sizeZ + sz;
+
+				if (w.floor[at] == -127 || w.ceiling[at] == -127)
+					continue;
+
+				int f[4], c[4];
+				bool same = true;
+
+				HDRenderWaterCorners(w.floor[at], w.slope[at * 4],
+					w.slope[at * 4 + 1], 0, f);
+				HDRenderWaterCorners(w.ceiling[at], w.slope[at * 4 + 2],
+					w.slope[at * 4 + 3], 1, c);
+
+				for (int k = 0; k < 4; k++)
+				{
+					long y = 0;
+
+					if (!level.cornerFloor((int)r, sx, sz, (k & 1) ? 1024 : 0,
+						(k & 2) ? 1024 : 0, y) || y != f[k])
+						same = false;
+
+					if (!level.cornerCeiling((int)r, sx, sz, (k & 1) ? 1024 :
+						0, (k & 2) ? 1024 : 0, y) || y != c[k])
+						same = false;
+				}
+
+				all++;
+				allEqual += same ? 1 : 0;
+				sloped += w.slope[at * 4] || w.slope[at * 4 + 2] ? 1 : 0;
+			}
+	}
+
+	printf("water corners: %ld of %ld squares agree with Tr5Level, floor and "
+		"ceiling, corner for corner; over the whole level %ld of %ld (%ld "
+		"with a slope)\n", equal, squares, allEqual, all, sloped);
+}
+
 /* The waterfall objects for their feet, out of the classic .TRC - the twin
  * of hd_level.cpp's BuildWaterFalls, which reads items[]: every item of
  * WATERFALL1 to 3 (slots 410 - 412) and WATERFALLSS1 and 2 (414, 415;
@@ -6738,6 +6928,9 @@ static int ProbeMain(int argc, char** argv)
 			"x, z, age seconds old (size 120), repeatable\n");
 		printf("       -lara x,z   Lara's place in the water: no waterline "
 			"round it\n");
+		printf("       -creature x,z   a stand-in for a swimming creature at "
+			"world x, z, drawn with the creatures' mark, repeatable; "
+			"-nomark draws it without, -markview shows the mark in red\n");
 		printf("       -swirl x,z,r   a waterfall's foot on the sheets at "
 			"world x, z, radius r, repeatable\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
@@ -6954,6 +7147,20 @@ static int ProbeMain(int argc, char** argv)
 				printf("RoomProbe: -swirl wants x,z,r (r 64 to 2048) - '%s' "
 					"ignored\n", argv[at]);
 		}
+		else if (!strcmp(argv[at], "-creature") && at + 1 < argc)
+		{
+			float c[2] = { 0.0f, 0.0f };
+
+			if (sscanf_s(argv[++at], "%f,%f", &c[0], &c[1]) == 2)
+				g_creatures.insert(g_creatures.end(), c, c + 2);
+			else
+				printf("RoomProbe: -creature wants x,z - '%s' ignored\n",
+					argv[at]);
+		}
+		else if (!strcmp(argv[at], "-nomark"))
+			g_creature_mark = false;
+		else if (!strcmp(argv[at], "-markview"))
+			g_mark_view = true;
 		else if ((!strcmp(argv[at], "-plane") ||
 			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
 		{
@@ -8587,6 +8794,15 @@ static int ProbeMain(int argc, char** argv)
 			std::vector<HDWaterRoom> rooms((size_t)nr);
 			std::vector<std::vector<signed char> > floors((size_t)nr);
 			std::vector<std::vector<short> > below((size_t)nr);
+			std::vector<std::vector<signed char> > ceilings((size_t)nr);
+			std::vector<std::vector<unsigned short> > slopes((size_t)nr);
+			std::vector<std::vector<short> > sinks((size_t)nr);
+
+			if (room >= 0 && room < nr)
+			{
+				g_seed_origin[0] = (float)level.rooms()[(size_t)room].originX;
+				g_seed_origin[1] = (float)level.rooms()[(size_t)room].originZ;
+			}
 
 			for (int r = 0; r < nr; r++)
 			{
@@ -8609,6 +8825,9 @@ static int ProbeMain(int argc, char** argv)
 				w.sizeZ = rm.numZSectors;
 				floors[(size_t)r].assign(sec.size(), (signed char)-127);
 				below[(size_t)r].assign(sec.size(), (short)-1);
+				ceilings[(size_t)r].assign(sec.size(), (signed char)-127);
+				slopes[(size_t)r].assign(sec.size() * 4, (unsigned short)0);
+				sinks[(size_t)r].assign(sec.size(), (short)-1);
 
 				for (size_t i = 0; i < sec.size(); i++)
 				{
@@ -8620,14 +8839,40 @@ static int ProbeMain(int argc, char** argv)
 					floors[(size_t)r][at] = (signed char)sec[i].floor;
 					below[(size_t)r][at] = (short)(sec[i].roomBelow >= 255 ||
 						sec[i].roomBelow < 0 ? -1 : sec[i].roomBelow);
+					ceilings[(size_t)r][at] = (signed char)sec[i].ceiling;
+					ProbeWaterWords(level, r, sec[i].sx, sec[i].sz,
+						&slopes[(size_t)r][at * 4], &sinks[(size_t)r][at]);
 				}
 
 				if (!sec.empty())
 				{
 					w.floor = &floors[(size_t)r][0];
 					w.below = &below[(size_t)r][0];
+					w.ceiling = &ceilings[(size_t)r][0];
+					w.slope = &slopes[(size_t)r][0];
+					w.sink = &sinks[(size_t)r][0];
 				}
 			}
+
+			// The sinks: the camera table's places and strengths.
+			std::vector<Tr5Level::CameraRecord> cams;
+			std::vector<HDWaterSink> table;
+			std::string camError;
+
+			if (level.cameraRecords(cams, camError))
+				for (size_t c = 0; c < cams.size(); c++)
+				{
+					HDWaterSink k;
+
+					k.x = cams[c].x;
+					k.z = cams[c].z;
+					k.strength = cams[c].room;
+					table.push_back(k);
+				}
+
+			HDRenderWaterSinks(table.empty() ? 0 : &table[0],
+				(int)table.size());
+			ProbeWaterCorners(level, rooms);
 
 			const int section = !_strnicmp(stem, "ANDREA", 6) ? HD_WATER_ROME :
 				!_strnicmp(stem, "JOBY", 4) ? HD_WATER_RUSSIA :
@@ -9140,6 +9385,15 @@ static int ProbeMain(int argc, char** argv)
 			probestatics::DrawPieces(&lighting, HD_PASS_CLEAR);
 			StandReceiveCount(&lighting);
 
+			/* -creature: the stand-ins where HDFrameDraw draws the HD
+			 * objects, after the rooms, with the creatures' mark. */
+			for (size_t i = 0; i + 1 < g_creatures.size(); i += 2)
+				if (!HDRenderWaterProbeCreature(g_creatures[i],
+					g_creatures[i + 1], g_seed_origin[0], g_seed_origin[1],
+					g_creature_mark ? 1 : 0))
+					printf("-creature %.0f,%.0f: no sheet there - not drawn\n",
+						g_creatures[i], g_creatures[i + 1]);
+
 			/* The frame behind the water sheets, where HDFrameDrawGlow takes
 			 * it: after everything opaque, before the glass, once, and only
 			 * when a drawn group has a sheet. */
@@ -9171,6 +9425,9 @@ static int ProbeMain(int argc, char** argv)
 
 			DrawStandInHolders(&lighting, HD_PASS_ADDITIVE);
 			probestatics::DrawPieces(&lighting, HD_PASS_ADDITIVE);
+
+			if (g_mark_view && !HDRenderWaterMarkView())
+				printf("-markview: the depth surface has no stencil\n");
 		}
 	}
 
@@ -9215,6 +9472,9 @@ static int ProbeMain(int argc, char** argv)
 		HDRenderWaterSwirlTiming(&ms, &timed, &sources);
 		printf("-hdwater: %d swirl draw(s) carrying %d source(s), GPU %.3f "
 			"ms (timestamps round the swirls' draws)\n", timed, sources, ms);
+		HDRenderWaterRiverTiming(&ms, &timed);
+		printf("-hdwater: %d river draw(s), GPU %.3f ms (timestamps round "
+			"the rivers' streak draws)\n", timed, ms);
 	}
 
 	if (g_roomwin_count)
@@ -9506,6 +9766,9 @@ int main(int argc, char** argv)
 		g_ripples.clear();
 		g_lara_set = false;
 		g_swirls.clear();
+		g_creatures.clear();
+		g_creature_mark = true;
+		g_mark_view = false;
 		g_classic_rooms.clear();
 		g_faces_built.clear();
 		g_cuts_built.clear();

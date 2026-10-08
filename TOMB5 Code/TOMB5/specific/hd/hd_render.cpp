@@ -38,6 +38,7 @@
 #include "hd_shader/hd_room_water_depth_ps.inc"
 #include "hd_shader/hd_room_water_view_ps.inc"
 #include "hd_shader/hd_room_water_swirl_ps.inc"
+#include "hd_shader/hd_room_water_river_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1343,6 +1344,12 @@ namespace
 		int artY = 0, artYMax = 0;
 		int artMinX = 0, artMaxX = 0, artMinZ = 0, artMaxZ = 0;
 		bool artHidden = false;
+		/* Its horizontal triangles of the flow material (1): the remaster's
+		 * moving water surface, which a river's sheet takes the place of -
+		 * counted, with their heights and box, the way artTris is. */
+		int flowTris = 0;
+		int flowY = 0, flowYMax = 0;
+		int flowMinX = 0, flowMaxX = 0, flowMinZ = 0, flowMaxZ = 0;
 		/* Which half of the room this draw call is: 0 for the open half,
 		 * and for triangles that stand inside another room one plus the
 		 * piece of the intruding art they belong to - see HDIntrusion and
@@ -1643,6 +1650,10 @@ namespace
 	 * sheet range with a foot near it. Null when the device refused it: the
 	 * sheets then draw without swirls; the rings and the drops stay. */
 	IDirect3DPixelShader9* g_water_swirl_ps = 0;
+	/* The rivers' streaks and the foam where they end (hd_room.hlsl,
+	 * RiverPS), a second draw over a river's sheet range. Null when the
+	 * device refused it: a river then draws its rows alone. */
+	IDirect3DPixelShader9* g_water_river_ps = 0;
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -3642,6 +3653,10 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_water_swirl_ps)))
 		g_water_swirl_ps = 0;
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterRiverPS,
+		&g_water_river_ps)))
+		g_water_river_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -3795,6 +3810,7 @@ void HDRenderShutdown()
 	if (g_water_depth_ps) { g_water_depth_ps->Release(); g_water_depth_ps = 0; }
 	if (g_water_view_ps) { g_water_view_ps->Release(); g_water_view_ps = 0; }
 	if (g_water_swirl_ps) { g_water_swirl_ps->Release(); g_water_swirl_ps = 0; }
+	if (g_water_river_ps) { g_water_river_ps->Release(); g_water_river_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -6322,6 +6338,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 					range.artTris = 0;
+					range.flowTris = 0;
 				}
 
 				const unsigned int first = tris[i].first;
@@ -6379,6 +6396,47 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 
 							range.artTris++;
+						}
+
+						/* The flow material's flat triangles (HDRange::
+						 * flowTris) - the additive pass is the one that
+						 * names its material. */
+						if (a.y == b.y && b.y == c.y && range.material == 1)
+						{
+							const int x0 = a.x < b.x ? (a.x < c.x ? a.x : c.x) :
+								(b.x < c.x ? b.x : c.x);
+							const int x1 = a.x > b.x ? (a.x > c.x ? a.x : c.x) :
+								(b.x > c.x ? b.x : c.x);
+							const int z0 = a.z < b.z ? (a.z < c.z ? a.z : c.z) :
+								(b.z < c.z ? b.z : c.z);
+							const int z1 = a.z > b.z ? (a.z > c.z ? a.z : c.z) :
+								(b.z > c.z ? b.z : c.z);
+
+							if (!range.flowTris)
+							{
+								range.flowY = range.flowYMax = (int)a.y;
+								range.flowMinX = x0;
+								range.flowMaxX = x1;
+								range.flowMinZ = z0;
+								range.flowMaxZ = z1;
+							}
+							else
+							{
+								range.flowY = (int)a.y < range.flowY ?
+									(int)a.y : range.flowY;
+								range.flowYMax = (int)a.y > range.flowYMax ?
+									(int)a.y : range.flowYMax;
+								range.flowMinX = x0 < range.flowMinX ? x0 :
+									range.flowMinX;
+								range.flowMaxX = x1 > range.flowMaxX ? x1 :
+									range.flowMaxX;
+								range.flowMinZ = z0 < range.flowMinZ ? z0 :
+									range.flowMinZ;
+								range.flowMaxZ = z1 > range.flowMaxZ ? z1 :
+									range.flowMaxZ;
+							}
+
+							range.flowTris++;
 						}
 					}
 				}
@@ -8510,7 +8568,19 @@ namespace
 	 * directions are free choices, set by eye on the round's RoomProbe
 	 * pictures. So are the gains at eye level, basin 3, channel 2, sea 1:
 	 * the calmer the class, the flatter it lies seen flat; the sea's rows
-	 * are high enough already. */
+	 * are high enough already.
+	 *
+	 * A river is water a current pulls along: its rows are stretched along
+	 * the flow, every one of them 1.11 to 1.25 radians off it, so that a
+	 * crest runs along the current 2 to 3 times as far as across it (the
+	 * tangent of the angle), its heights are low (the steepest, 1.2 over
+	 * 300, a third of the channel's), its base is the body's own flow and
+	 * its current the body's speed (water_look); no bank foam and no
+	 * whitecaps - foam does not stay on a fast river; its streaks and the
+	 * foam where it ends are RiverPS's. The wavelengths are the channel's
+	 * kind of spread, moved off whole ratios; the heights, the angles and
+	 * the 240 units a second of a row's `river` without a flow are free
+	 * choices, set by eye on the round's RoomProbe strips. */
 	const HDWaterClass kWaterClass[HD_WATER_CLASSES] =
 	{
 		{ "basin", { 260.0f, 150.0f, 85.0f, 47.0f, 197.0f, 113.0f, 63.0f,
@@ -8534,6 +8604,13 @@ namespace
 			0.50f,
 			1.0f, 0.0f, 1.0f, 1024.0f, 900.0f, 0.85f, 300.0f, 1.5f, 0.6f,
 			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f, 1.0f },
+		{ "river", { 300.0f, 187.0f, 117.0f, 73.0f, 237.0f, 149.0f, 93.0f,
+			47.0f },
+			{ 1.2f, 0.8f, 0.5f, 0.28f, 1.0f, 0.65f, 0.38f, 0.18f },
+			{ 1.18f, -1.15f, 1.23f, -1.21f, 1.12f, -1.25f, 1.2f, -1.13f },
+			0.35f,
+			0.8f, 240.0f, 0.3f, 512.0f, 1500.0f, 0.0f, 300.0f, 1.5f, 0.0f,
+			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f },
 	};
 
 	/* The rows' slow envelope (water_rows_now): a row's height swells and
@@ -8641,6 +8718,49 @@ namespace
 	const float kWaterLaraRadius = 320.0f;
 	const float kWaterLaraEdge = 64.0f;
 
+	/* The rivers. A sink of strength 1 pulls Lara at 120 units a second:
+	 * LaraWaterCurrent (game\laraswim.cpp) steers her velocity, in 1/256
+	 * units a tick, toward strength * 4096 / 4 along the way to the sink
+	 * and moves her by a 256th of it, 4 units a tick for strength 1, at the
+	 * game's 30 ticks a second. ANDY3's two rivers come to 1080 and 480
+	 * (strengths 10, 8 and 4; RoomProbe -hdwater, the WATERLOG flow=).
+	 *
+	 * What the water shows of that speed is held to kRiverLookCap: rows of
+	 * a few hundred units carried at a square a second slide past as a
+	 * smear; the cap is a free choice, set by eye on the round's RoomProbe
+	 * strips. The streaks (hd_room.hlsl, RiverPS) run kRiverStreakRate
+	 * times as fast as the rows - the surface's skin is carried faster than
+	 * the shape of the waves - with at most kRiverStreak of the foam's
+	 * cover, and the foam where a river ends against a wall or a drop
+	 * reaches kRiverEdge upstream from that end (0.75 of a square, inside
+	 * the half to one square a weir's foam takes on the reference pictures
+	 * supplied for this project). Free choices, set by eye on the round's
+	 * RoomProbe pictures. */
+	const float kSinkUnitsPerSecond = 120.0f;
+	const float kRiverLookCap = 720.0f;
+	const float kRiverStreakRate = 1.4f;
+	const float kRiverStreak = 0.5f;
+	const float kRiverEdge = 768.0f;
+
+	/* The creatures' mark: the stencil bit HDRenderWaterMarkBegin writes
+	 * under every HD object and the sheets' second draw tests - the rooms'
+	 * receive owns bit 1 and the models' bit 2 (the projected shadow's
+	 * receive), so this is the next. */
+	const DWORD kCreatureStencilBit = 4;
+
+	// The stencil states the mark and the sheets' split set and put back.
+	const D3DRENDERSTATETYPE kMarkStates[] =
+	{
+		D3DRS_STENCILENABLE, D3DRS_TWOSIDEDSTENCILMODE, D3DRS_STENCILFUNC,
+		D3DRS_STENCILREF, D3DRS_STENCILMASK, D3DRS_STENCILWRITEMASK,
+		D3DRS_STENCILPASS, D3DRS_STENCILFAIL, D3DRS_STENCILZFAIL
+	};
+
+	const int kMarkStateCount =
+		(int)(sizeof(kMarkStates) / sizeof(kMarkStates[0]));
+
+	bool depth_has_stencil();	// with the projected shadow's receive
+
 	/* How a room's light becomes the water's: times the gain, never under
 	 * the floor and never over the cap. The mean of colour1 + colour2 over a
 	 * body's rooms, weighted by their squares, runs 0.09 to 0.55 a channel
@@ -8666,6 +8786,7 @@ namespace
 		int open;		// its room is open air
 		int sheet;		// it draws a sheet
 		int body;
+		int sink;		// the sink its water names, or -1
 	};
 
 	struct WaterBody
@@ -8698,6 +8819,8 @@ namespace
 		float foamLight;	// gWaterLife w: the foam's body
 		float eyeGain;		// gWaterStage y plus one: the class's
 		float drift[2];		// the patches' drift, units a second
+		float river[8];		// RiverPS's c132, c133; a river's only
+		int isRiver;
 	};
 
 	// An override row, the compiled table's or the file's.
@@ -8715,6 +8838,8 @@ namespace
 		int art;		// 1 for `art keep`, 0 hides the art (default)
 		int swirl;		// 1 with a swirl source, -1 for `swirl off`
 		float sx, sz, sr;
+		int flow;		// 1 with `flow dx dz speed`
+		float fx, fz, fspeed;
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -8904,6 +9029,14 @@ namespace
 	// Lara's place for the waterline's gap round her (HDRenderWaterLara).
 	bool g_lara_in_water = false;
 	float g_lara_x = 0.0f, g_lara_z = 0.0f;
+	// The level's sinks (HDRenderWaterSinks), for the rivers.
+	std::vector<HDWaterSink> g_wsinks;
+	/* The creatures' mark: whether this frame marked anything (the sheets
+	 * then draw their second, line-less pass) and the stencil states the
+	 * bracket found, put back by HDRenderWaterMarkEnd. */
+	bool g_mark_frame = false;
+	bool g_mark_open = false;
+	DWORD g_mark_saved[kMarkStateCount] = {};
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
 	IDirect3DIndexBuffer9* g_sheet_ib = 0;
@@ -8922,6 +9055,9 @@ namespace
 	double g_swirl_gpu_ms = 0.0;
 	int g_swirl_timed = 0;
 	int g_swirl_sources = 0;
+	// And of the rivers' second draws.
+	double g_river_gpu_ms = 0.0;
+	int g_river_timed = 0;
 
 	/* The frame behind the sheets (HDRenderWaterCopy) and the depth texture
 	 * (HDRenderWaterDepthBind), both D3DPOOL_DEFAULT and released with the
@@ -8997,6 +9133,7 @@ namespace
 		g_wroom_origin.clear();
 		g_wroom_drawn.clear();
 		g_lara_in_water = false;
+		g_mark_frame = false;
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
 		g_wlevel.fileLines = -1;
@@ -9010,6 +9147,8 @@ namespace
 
 	/* The data rule for a body's class.
 	 *
+	 *   river    the water under any of its squares names a sink (a TO_SINK
+	 *            trigger): the classic level pulls Lara through it
 	 *   sea      any of its rooms open to the sky (ROOM_OUTSIDE or
 	 *            ROOM_NOT_INSIDE, the flag game\hair.cpp reads for the wind)
 	 *   channel  indoors, 16 squares or more, and narrow: twice the area
@@ -9020,9 +9159,14 @@ namespace
 	 * The thresholds are chosen on the bodies of ANDREA2 and JOBY2: the
 	 * sewer under room 60, 44 squares at 1.83, is a channel; the fountain of
 	 * rooms 144, 229 and 231, 36 at 2.25, a basin; JOBY2's water along the
-	 * submarine, open air, a sea. */
+	 * submarine, open air, a sea. The river comes first: a current is the
+	 * level's own word that the water flows, open air or not - ANDY3's two
+	 * rivers lie out of doors. */
 	int WaterClassOf(const HDRenderWaterBody& b)
 	{
+		if (b.sinks)
+			return HD_WATER_RIVER;
+
 		if (b.openAir)
 			return HD_WATER_SEA;
 
@@ -9040,10 +9184,12 @@ namespace
 	 *                             [ripple <x> <z> <size> <seconds>]
 	 *                             [art keep|hide]
 	 *                             [swirl <x> <z> <radius> | swirl off]
+	 *                             [flow <dx> <dz> <speed>]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
-	 * has water in - class basin, channel or sea, - to keep the class, or
+	 * has water in - class basin, channel, sea or river, - to keep the
+	 * class, or
 	 * none for no sheet over those bodies (they keep their class; a later
 	 * row of any other class, - included, gives the sheet back). tint
 	 * multiplies the shallow and the deep colour, waves the wave heights,
@@ -9060,12 +9206,16 @@ namespace
 	 * with that radius (64 to 2048 units) on the surface of the row's room's
 	 * square under it - a fountain's jet that has no waterfall object -, and
 	 * swirl off takes the waterfall objects' own feet in the row's bodies
-	 * away. '#' starts a comment. Returns 1 for a row, 0 for a line without
-	 * one, -1 for a line that cannot be read. */
+	 * away. flow sets the bodies' current by hand: the way along world x
+	 * and z (-1 to 1 each, not both 0; it is made a unit vector) and the
+	 * speed in units a second (0 to 4000), in place of the one their sinks
+	 * give - what a river draws with (a body of another class keeps it for
+	 * the log). '#' starts a comment. Returns 1 for a row, 0 for a line
+	 * without one, -1 for a line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[25];
+		char* tok[29];
 		char* next = 0;
 		int n = 0;
 
@@ -9075,16 +9225,16 @@ namespace
 			*hash = 0;
 
 		// The longest row: the three words, tint's four, waves', foam's and
-		// bend's two each, ripple's five, art's two and swirl's four - 24
-		// tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 25;
+		// bend's two each, ripple's five, art's two, swirl's four and
+		// flow's four - 28 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 29;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 24 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 28 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -9120,6 +9270,7 @@ namespace
 			float rip[4];
 			const bool ripple = !_stricmp(tok[i], "ripple");
 			const bool swirl = !_stricmp(tok[i], "swirl");
+			const bool flow = !_stricmp(tok[i], "flow");
 
 			// swirl off: a word; swirl x z r: three numbers.
 			if (swirl && i + 1 < n && !_stricmp(tok[i + 1], "off"))
@@ -9158,6 +9309,8 @@ namespace
 				into = rip, count = 4;
 			else if (swirl)
 				into = rip, count = 3;
+			else if (flow)
+				into = rip, count = 3;
 
 			if (!into || i + count >= n)
 				return -1;
@@ -9166,14 +9319,18 @@ namespace
 			{
 				const char* num = tok[i + 1 + k];
 				const double v = std::strtod(num, &end);
-				// x and z anywhere in a level, the size and the seconds
-				// as above, a swirl's radius 64 to 2048, every scale 0
-				// to 4.
+				/* x and z anywhere in a level, the size and the seconds
+				 * as above, a swirl's radius 64 to 2048, a flow's way
+				 * -1 to 1 along x and z and its speed 0 to 4000 units a
+				 * second (a sink of the classic levels' strongest, 10,
+				 * pulls at 1200), every scale 0 to 4. */
 				const bool place = (ripple || swirl) && k < 2;
 				const double lo = place ? -1.0e7 : ripple ?
-					(k == 2 ? 1.0 : 0.1) : swirl ? 64.0 : 0.0;
+					(k == 2 ? 1.0 : 0.1) : swirl ? 64.0 : flow ?
+					(k < 2 ? -1.0 : 0.0) : 0.0;
 				const double hi = place ? 1.0e7 : ripple ?
-					(k == 2 ? 255.0 : 60.0) : swirl ? 2048.0 : 4.0;
+					(k == 2 ? 255.0 : 60.0) : swirl ? 2048.0 : flow ?
+					(k < 2 ? 1.0 : 4000.0) : 4.0;
 
 				if (*end || end == num || !(v >= lo && v <= hi))
 					return -1;
@@ -9196,6 +9353,18 @@ namespace
 				row.sx = rip[0];
 				row.sz = rip[1];
 				row.sr = rip[2];
+			}
+
+			// A way of length 0 has no direction: not a flow.
+			if (flow)
+			{
+				if (rip[0] == 0.0f && rip[1] == 0.0f)
+					return -1;
+
+				row.flow = 1;
+				row.fx = rip[0];
+				row.fz = rip[1];
+				row.fspeed = rip[2];
 			}
 
 			i += 1 + count;
@@ -9266,6 +9435,179 @@ namespace
 		}
 	}
 
+	/* A split's height step, five signed bits of the type word, as GetHeight
+	 * and GetCeiling sign-extend it (game\control.cpp). */
+	int split_step(unsigned short type, int shift)
+	{
+		int hadj = (type >> shift) & 0x1F;
+
+		return (hadj & 0x10) ? hadj - 32 : hadj;
+	}
+
+	/* The corner heights of a square (HDRenderWaterCorners). The engine asks
+	 * GetHeight and GetCeiling for a point inside a square, where they work
+	 * with (v & 1023) and ((-1 - v) & 1023); at a corner those become the
+	 * corner's own 0 or 1024 and 1024 less it, the same linear function on
+	 * the square's edge, and a split's triangle is the one a point a unit
+	 * inside the corner lies in - the substitution the randomizer's
+	 * Tr5Level::cornerFloor and cornerCeiling make, which matched the faces
+	 * of all sixteen classic levels corner for corner. The slope words are
+	 * the entry the engine reads (HDWaterRoom::slope). */
+	void water_corners(int clicks, unsigned short type, unsigned short data,
+		int ceiling, int* out)
+	{
+		const int fn = type & 0x1F;
+		const int t[4] = { data & 0xF, (data >> 4) & 0xF, (data >> 8) & 0xF,
+			(data >> 12) & 0xF };
+
+		for (int k = 0; k < 4; k++)
+		{
+			const int cx = (k & 1) ? 1024 : 0;
+			const int cz = (k & 2) ? 1024 : 0;
+			const int px = cx ? 1023 : 1;
+			const int pz = cz ? 1023 : 1;
+			int h = clicks * 256;
+			int a = 0, b = 0;
+
+			if (!ceiling && fn == 2)		// TILT_TYPE
+			{
+				a = (short)data >> 8;
+				b = (signed char)(data & 0xFF);
+			}
+			else if (!ceiling && (fn == 7 || fn == 8 ||
+				(fn >= 11 && fn <= 14)))	// SPLIT1/2, NOCOLF*
+			{
+				const bool fam1 = fn == 7 || fn == 11 || fn == 12;
+
+				if (fam1 ? px > 1024 - pz : px > pz)
+				{
+					h += split_step(type, 5) * 256;
+					a = t[3] - t[0];
+					b = fam1 ? t[3] - t[2] : t[0] - t[1];
+				}
+				else
+				{
+					h += split_step(type, 10) * 256;
+					a = t[2] - t[1];
+					b = fam1 ? t[0] - t[1] : t[3] - t[2];
+				}
+			}
+			else if (ceiling && fn == 3)		// ROOF_TYPE
+			{
+				a = (short)data >> 8;
+				b = (signed char)(data & 0xFF);
+			}
+			else if (ceiling && (fn == 9 || fn == 10 ||
+				(fn >= 15 && fn <= 18)))	// SPLIT3/4, NOCOLC*
+			{
+				// The ceiling's nibbles go in negated, its steps the
+				// other way round from the floor's.
+				const bool fam1 = fn == 9 || fn == 15 || fn == 16;
+
+				if (fam1 ? px <= 1024 - pz : px <= pz)
+				{
+					h += 256 * split_step(type, 10);
+					a = t[1] - t[2];
+					b = fam1 ? t[2] - t[3] : t[1] - t[0];
+				}
+				else
+				{
+					h += 256 * split_step(type, 5);
+					a = t[0] - t[3];
+					b = fam1 ? t[1] - t[0] : t[2] - t[3];
+				}
+			}
+
+			if (!ceiling)
+			{
+				h += a < 0 ? -((a * cz) >> 2) : (a * (1024 - cz)) >> 2;
+				h += b < 0 ? -((b * cx) >> 2) : (b * (1024 - cx)) >> 2;
+			}
+			else
+			{
+				h += a < 0 ? (a * cz) >> 2 : -((a * (1024 - cz)) >> 2);
+				h += b < 0 ? (b * (1024 - cx)) >> 2 : -((b * cx) >> 2);
+			}
+
+			out[k] = h;
+		}
+	}
+
+	/* The surface of a water square and whether it is one (HDWaterRoom).
+	 * The top is the highest corner of the water room's ceiling over the
+	 * square - the flat part of a split ceiling; the other part is the
+	 * underside of a raised floor -, found in the room below at the
+	 * square's place. The dry floor's lowest corner is held against it:
+	 * more than a click (256) over the top at every corner, the square is
+	 * an island or a rim and no water (false). Without the words the top
+	 * is the square's own floor, as for a feeder that hands none. */
+	bool water_square(const HDWaterRoom* rooms, int count, int r, int at,
+		int pit, int wx, int wz, int* top)
+	{
+		const HDWaterRoom& rm = rooms[r];
+
+		*top = rm.floor[at] * 256;
+
+		if (!rm.slope || pit < 0 || pit >= count || !rooms[pit].ceiling ||
+			!rooms[pit].slope || !rooms[pit].floor)
+			return true;
+
+		const HDWaterRoom& b = rooms[pit];
+		const int bx = (wx - b.originX) >> 10;
+		const int bz = (wz - b.originZ) >> 10;
+
+		if (bx < 0 || bz < 0 || bx >= b.sizeX || bz >= b.sizeZ ||
+			b.ceiling[bx * b.sizeZ + bz] == -127)
+			return true;
+
+		const int i = bx * b.sizeZ + bz;
+		int c[4], f[4];
+
+		water_corners(b.ceiling[i], b.slope[i * 4 + 2], b.slope[i * 4 + 3], 1,
+			c);
+		water_corners(rm.floor[at], rm.slope[at * 4], rm.slope[at * 4 + 1], 0,
+			f);
+
+		int high = c[0], low = f[0];
+
+		for (int k = 1; k < 4; k++)
+		{
+			high = c[k] < high ? c[k] : high;
+			low = f[k] > low ? f[k] : low;
+		}
+
+		*top = high;
+		return low >= high - 256;
+	}
+
+	/* The sink the water under a square names: the first of the squares
+	 * straight under it, room by room down through the underwater rooms -
+	 * lara.current_active is set where she swims, in the water room, and
+	 * a sink's square may lie a room further down. -1 for none. */
+	int water_sink(const HDWaterRoom* rooms, int count, int at, int wx,
+		int wz)
+	{
+		for (int hop = 0; hop < 6 && at >= 0 && at < count; hop++)
+		{
+			const HDWaterRoom& b = rooms[at];
+			const int bx = (wx - b.originX) >> 10;
+			const int bz = (wz - b.originZ) >> 10;
+
+			if (!(b.flags & HD_WATER_ROOM_UNDERWATER) || !b.below || bx < 0 ||
+				bz < 0 || bx >= b.sizeX || bz >= b.sizeZ)
+				return -1;
+
+			const int i = bx * b.sizeZ + bz;
+
+			if (b.sink && b.sink[i] >= 0 && b.sink[i] < (int)g_wsinks.size())
+				return b.sink[i];
+
+			at = b.below[i];
+		}
+
+		return -1;
+	}
+
 	/* How deep the water stands over a square: the walk down through the
 	 * rooms below to the first floor that is not a further water portal. A
 	 * wall, a square outside the room or a floor at or above the surface
@@ -9326,11 +9668,15 @@ namespace
 	}
 
 	/* The first `count` rows of a class, turned by `base`, heights times
-	 * `waves`; `total` the sum of the first four heights. */
+	 * `waves`; `total` the sum of the first four heights. The rows ride a
+	 * current along `base` of the class's speed, or of `current` where it is
+	 * not negative (a river's own). */
 	void water_rows(const HDWaterClass& c, float base, float waves,
-		float* rows, float* total, int count = 4)
+		float* rows, float* total, int count = 4, float current = -1.0f)
 	{
 		*total = 0.0f;
+
+		const float speed = current < 0.0f ? c.current : current;
 
 		for (int i = 0; i < count; i++)
 		{
@@ -9340,7 +9686,7 @@ namespace
 			rows[i * 4 + 0] = k * cosf(th);
 			rows[i * 4 + 1] = k * sinf(th);
 			rows[i * 4 + 2] = c.calm * sqrtf(kWaterG * k) +
-				k * c.current * cosf(c.angle[i]);
+				k * speed * cosf(c.angle[i]);
 			rows[i * 4 + 3] = c.height[i] * waves;
 			*total += i < 4 ? rows[i * 4 + 3] : 0.0f;
 		}
@@ -9387,15 +9733,32 @@ namespace
 		const HDWaterPalette& pal = kWaterPalette[section];
 		const float* amb = b.light;
 
-		// The body's own direction: a channel's long axis, else the class's.
+		/* The body's own direction: a channel's long axis, a river's flow -
+		 * its long axis where it has none -, else the class's. A river's
+		 * rows ride its own speed, held to kRiverLookCap. */
 		float base = c.baseAngle;
+		float current = -1.0f;
 
-		if (b.cls == HD_WATER_CHANNEL)
+		if (b.cls == HD_WATER_CHANNEL || (b.cls == HD_WATER_RIVER &&
+			b.flow[0] == 0.0f && b.flow[1] == 0.0f))
 			base = wb.maxX - wb.minX >= wb.maxZ - wb.minZ ? 0.0f : 1.5707963f;
+
+		out.isRiver = b.cls == HD_WATER_RIVER ? 1 : 0;
+
+		if (out.isRiver)
+		{
+			const bool own = b.flow[0] != 0.0f || b.flow[1] != 0.0f;
+
+			if (own)
+				base = atan2f(b.flow[1], b.flow[0]);
+
+			current = own ? b.speed : c.current;
+			current = current < kRiverLookCap ? current : kRiverLookCap;
+		}
 
 		float total = 0.0f;
 
-		water_rows(c, base, b.waves, out.rows, &total, 8);
+		water_rows(c, base, b.waves, out.rows, &total, 8, current);
 
 		for (int i = 0; i < 8; i++)
 			out.phase0[i] = i < 4 ? 0.0f :
@@ -9474,6 +9837,25 @@ namespace
 		 * channel's current, along the direction its rows run with it. */
 		out.drift[0] = kWaterPatchDrift * c.current * cosf(base);
 		out.drift[1] = kWaterPatchDrift * c.current * sinf(base);
+
+		/* RiverPS's c132 and c133 (hd_room.hlsl, "the river"): the way the
+		 * river runs, the streaks' speed and strength; the reach of the foam
+		 * where it ends, its strength and the speed that pushes it there -
+		 * the bank patches' share of the current, the water piled at a wall
+		 * running slower as the water by a bank does - both strengths times
+		 * the body's foam scale (a row's `foam`). */
+		std::memset(out.river, 0, sizeof(out.river));
+
+		if (out.isRiver)
+		{
+			out.river[0] = cosf(base);
+			out.river[1] = sinf(base);
+			out.river[2] = current * kRiverStreakRate;
+			out.river[3] = kRiverStreak * b.foam;
+			out.river[4] = kRiverEdge;
+			out.river[5] = b.foam;
+			out.river[6] = current * kWaterPatchDrift;
+		}
 
 		/* gWaterAbsorb: the absorption per channel in the ratio of
 		 * ln(shallow / deep) of the section's palette, its mean the class's
@@ -9557,6 +9939,15 @@ namespace
 
 			if (row.swirl < 0)
 				b.swirlOff = 1;
+
+			if (row.flow)
+			{
+				const float len = sqrtf(row.fx * row.fx + row.fz * row.fz);
+
+				b.flow[0] = row.fx / len;
+				b.flow[1] = row.fz / len;
+				b.speed = row.fspeed;
+			}
 		}
 
 		// A row's swirl: a foot of its own, placed as a ripple source is.
@@ -9628,6 +10019,19 @@ void HDRenderWaterFile(const char* path)
 	g_water_path = path ? path : "";
 }
 
+void HDRenderWaterSinks(const HDWaterSink* sinks, int count)
+{
+	g_wsinks.assign(sinks && count > 0 ? sinks : 0,
+		sinks && count > 0 ? sinks + count : 0);
+}
+
+void HDRenderWaterCorners(int clicks, unsigned short type,
+	unsigned short data, int ceiling, int* out)
+{
+	if (out)
+		water_corners(clicks, type, data, ceiling, out);
+}
+
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	const char* stem, int sheets)
 {
@@ -9662,8 +10066,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	/* 1. The water squares. A square draws a sheet when sheets are asked
 	 * for and its room draws its own HD group, whatever flat art the
 	 * remaster lays in that plane over it (an override row of class none
-	 * takes the sheet away, step 5). The room below gets the caustic from
-	 * the surface down - the lowest surface, should two stand over it. */
+	 * takes the sheet away, step 5). Its surface is the water room's top
+	 * there, and a square whose dry floor stands over that top by more than
+	 * a click at every corner is none (water_square); the WATERLOG counts
+	 * both. The room below gets the caustic from the surface down - the
+	 * lowest surface, should two stand over it. */
 	for (int r = 0; r < count; r++)
 	{
 		const HDWaterRoom& rm = rooms[r];
@@ -9688,7 +10095,26 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				s.sz = sz;
 				s.wx = rm.originX + sx * 1024;
 				s.wz = rm.originZ + sz * 1024;
+
+				/* The water's top, and the rivers' sinks, with the sheets
+				 * alone: with tomb5.hd_water 0 the bodies stand at the
+				 * squares' floors and carry no current, as without them -
+				 * their rows move the remaster's water art (step 6). */
 				s.wy = rm.floor[at] * 256;
+				s.sink = -1;
+
+				if (sheets && !water_square(rooms, count, r, at, pit, s.wx,
+					s.wz, &s.wy))
+				{
+					g_wlevel.dropped++;
+					continue;
+				}
+
+				if (sheets)
+				{
+					g_wlevel.lowered += s.wy != rm.floor[at] * 256 ? 1 : 0;
+					s.sink = water_sink(rooms, count, pit, s.wx, s.wz);
+				}
 				s.localY = s.wy - rm.originY;
 				s.depth = water_depth(rooms, count, pit, s.wx, s.wz, s.wy);
 				s.open = (rm.flags & HD_WATER_ROOM_OPEN) ? 1 : 0;
@@ -9814,6 +10240,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	std::vector<double> light(g_wbodies.size() * 3, 0.0);
 	std::vector<int> lit(g_wbodies.size(), 0);
 	std::vector<std::vector<int> > roomsOf(g_wbodies.size());
+	// Per body: the ways toward the sinks summed, and their speeds.
+	std::vector<double> pull(g_wbodies.size() * 3, 0.0);
 
 	for (size_t i = 0; i < g_wsquares.size(); i++)
 	{
@@ -9821,6 +10249,26 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		HDRenderWaterBody& b = g_wbodies[(size_t)s.body].info;
 		const int first = at[WaterKey(s.wx, s.wz, s.wy)];
 		const int other = g_wsquares[(size_t)first].room;
+
+		/* A place whose water names a sink pulls toward it: the way from the
+		 * square's middle to the sink, as LaraWaterCurrent steers her, and
+		 * its speed, each place once. */
+		if (first == (int)i && s.sink >= 0)
+		{
+			const HDWaterSink& k = g_wsinks[(size_t)s.sink];
+			const double dx = (double)k.x - (s.wx + 512);
+			const double dz = (double)k.z - (s.wz + 512);
+			const double len = sqrt(dx * dx + dz * dz);
+
+			if (len > 1.0)
+			{
+				pull[(size_t)s.body * 3] += dx / len;
+				pull[(size_t)s.body * 3 + 1] += dz / len;
+			}
+
+			pull[(size_t)s.body * 3 + 2] += kSinkUnitsPerSecond * k.strength;
+			b.sinks++;
+		}
 
 		if (first != (int)i && (other == s.room ||
 			rooms[s.room].flip == other || rooms[other].flip == s.room))
@@ -9864,6 +10312,18 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			info.raw[k] = raw;
 			info.light[k] = l < kWaterLightFloor ? kWaterLightFloor :
 				l > kWaterLightCap ? kWaterLightCap : l;
+		}
+
+		// The current: the mean way toward the sinks, their mean speed.
+		if (info.sinks)
+		{
+			const double len = sqrt(pull[b * 3] * pull[b * 3] +
+				pull[b * 3 + 1] * pull[b * 3 + 1]);
+
+			info.flow[0] = len > 1.0e-6 ? (float)(pull[b * 3] / len) : 0.0f;
+			info.flow[1] = len > 1.0e-6 ? (float)(pull[b * 3 + 1] / len) :
+				0.0f;
+			info.speed = (float)(pull[b * 3 + 2] / info.sinks);
 		}
 
 		info.ruleCls = WaterClassOf(info);
@@ -10055,8 +10515,43 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 								shore = e < shore ? e : shore;
 							}
 
+						/* A river's end ahead: the way along its flow to the
+						 * first point with no water at this height, in steps
+						 * of 32 units, up to 4080 - colour1's blue over 16
+						 * (RiverPS, the foam where it ends). A vertex on a
+						 * bank runs along the edge between water and land,
+						 * so a point counts as water when water lies a unit
+						 * to either side of it. 4080 for every other body. */
+						float ahead = 4080.0f;
+						const WaterLook& wl = g_wlooks[b];
+
+						if (wl.isRiver)
+							for (float u = 1.0f; u < 4080.0f; u += 32.0f)
+							{
+								bool wet = false;
+
+								for (int side = -1; side <= 1; side += 2)
+								{
+									const float px = (float)wx +
+										wl.river[0] * u - wl.river[1] * side;
+									const float pz = (float)wz +
+										wl.river[1] * u + wl.river[0] * side;
+
+									wet = wet || at.count(WaterKey(
+										(int)floorf(px), (int)floorf(pz),
+										s.wy)) != 0;
+								}
+
+								if (!wet)
+								{
+									ahead = u;
+									break;
+								}
+							}
+
 						const float dq = depth / 32.0f + 0.5f;
 						const float sq = shore / 16.0f + 0.5f;
+						const float aq = ahead / 16.0f + 0.5f;
 						HDVertex v = {};
 
 						v.x = (short)lx;
@@ -10067,6 +10562,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 						v.layer = (unsigned char)g_wbodies[b].info.cls;
 						v.c1r = (unsigned char)(dq > 255.0f ? 255.0f : dq);
 						v.c1g = (unsigned char)(sq > 255.0f ? 255.0f : sq);
+						v.c1b = (unsigned char)(aq > 255.0f ? 255.0f : aq);
 						v.wSpare = 1;
 						verts.push_back(v);
 					}
@@ -10174,6 +10670,30 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 				range.artHidden = true;
 				g_wlevel.artHidden += range.artTris;
+			}
+
+		/* Over a river the remaster's moving surface goes the same way: a
+		 * draw call wholly of flat flow-material triangles (HDRange::
+		 * flowTris) within the same 32 units of the surface. ANDY3's rivers
+		 * carry one each in rooms 38, 41, 42 and 43, three units over the
+		 * classic height (TrgProbe -parts); under the sheet it is a second
+		 * surface scrolling a texture of its own through the river's. */
+		if (g_wbodies[(size_t)s.body].info.cls != HD_WATER_RIVER)
+			continue;
+
+		for (int pass = 0; pass < 3; pass++)
+			for (HDRange& range : g_groups[(size_t)s.room].pass[pass])
+			{
+				if (range.artHidden || !range.flowTris ||
+					(unsigned int)range.flowTris * 3 != range.count ||
+					range.flowY < s.wy - 32 || range.flowYMax > s.wy + 32 ||
+					range.flowMinX >= x0 + 1024 ||
+					range.flowMaxX <= x0 || range.flowMinZ >= z0 + 1024 ||
+					range.flowMaxZ <= z0)
+					continue;
+
+				range.artHidden = true;
+				g_wlevel.artHidden += range.flowTris;
 			}
 	}
 
@@ -10638,6 +11158,312 @@ void HDRenderWaterLara(int inWater, float x, float z)
 	g_lara_z = z;
 }
 
+/* The creatures' mark. The waterline of the sheets' depth variant is a wet
+ * line wherever the frame lies within 24 to 48 units under the surface:
+ * round a post, a bank, a floe - and on a swimming body, where it is white
+ * paint. Lara's own gap (gWaterLara) is a circle round her place; every
+ * other creature in the water - a swimming rat lies 50 units under the
+ * surface (game\rat.cpp) and its belly 60 - needs its own. So what the HD
+ * objects draw marks its pixels in the stencil, bit kCreatureStencilBit,
+ * and the sheets draw the marked pixels in a second pass with no line
+ * (draw_water_sheet): a mark costs the depth variant no slot, where a list
+ * of creatures read in a loop would take it over its 512.
+ *
+ * The bit is the frame's own: the rooms' receive clears the whole stencil
+ * at its start, and where no receive ran this bracket the mark clears it
+ * itself and says so (g_receive_cleared), so the models' receive after it
+ * clears nothing. Both receives keep to their own bits. The classic
+ * buckets drawn between the two phases (output.cpp, DrawBuckets) are not
+ * marked: they hold the statics of the rooms that stay classic, whose wet
+ * line is a bank's; every creature that swims in TR5 - the rat - has an HD
+ * model (MapProbe, the RAT slot in every level). */
+void HDRenderWaterMarkBegin()
+{
+	g_mark_frame = false;
+	g_mark_open = false;
+
+	if (!g_device || !g_wlevel.built || !g_depth_texture || !g_water_depth_ps ||
+		!depth_has_stencil())
+		return;
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->GetRenderState(kMarkStates[i], &g_mark_saved[i]);
+
+	if (!g_receive_cleared)
+	{
+		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+		g_receive_cleared = true;
+	}
+
+	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+	g_device->SetRenderState(D3DRS_STENCILREF, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILMASK, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	g_mark_frame = true;
+	g_mark_open = true;
+}
+
+void HDRenderWaterMarkEnd()
+{
+	if (!g_mark_open)
+		return;
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->SetRenderState(kMarkStates[i], g_mark_saved[i]);
+
+	g_mark_open = false;
+}
+
+/* RoomProbe's stand-in: a box 120 units across, from 60 under the surface
+ * (a swimming rat's belly) to 100 over it, grey, drawn with the fixed
+ * function in the frame's view and projection - everything it sets is put
+ * back. */
+bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
+	int mark)
+{
+	if (!g_device)
+		return false;
+
+	float y = 0.0f;
+	bool found = false;
+	const std::unordered_multimap<unsigned long long, int>::const_iterator f =
+		g_sheet_world.find(WaterKey((int)floorf(x), (int)floorf(z), 0));
+
+	if (f != g_sheet_world.end())
+	{
+		y = (float)f->second;
+		found = true;
+	}
+
+	if (!found)
+		return false;
+
+	struct Corner
+	{
+		float x, y, z;
+		D3DCOLOR c;
+	};
+
+	const float lx = x - offX, lz = z - offZ;
+	Corner v[8];
+
+	for (int i = 0; i < 8; i++)
+	{
+		v[i].x = lx + ((i & 1) ? 60.0f : -60.0f);
+		v[i].y = y + ((i & 2) ? 60.0f : -100.0f);
+		v[i].z = lz + ((i & 4) ? 60.0f : -60.0f);
+		v[i].c = D3DCOLOR_XRGB(120, 112, 100);
+	}
+
+	static const unsigned short faces[36] =
+	{
+		0, 1, 3, 0, 3, 2,  4, 6, 7, 4, 7, 5,  0, 4, 5, 0, 5, 1,
+		2, 3, 7, 2, 7, 6,  0, 2, 6, 0, 6, 4,  1, 5, 7, 1, 7, 3
+	};
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex = 0;
+	DWORD fvf = 0;
+	D3DMATRIX world, view, proj;
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_LIGHTING, D3DRS_CULLMODE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_ALPHATESTENABLE, D3DRS_ZENABLE, D3DRS_ZWRITEENABLE,
+		D3DRS_ZFUNC, D3DRS_FOGENABLE, D3DRS_COLORWRITEENABLE
+	};
+	const D3DTEXTURESTAGESTATETYPE stages[] =
+	{
+		D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_ALPHAOP, D3DTSS_ALPHAARG1
+	};
+	DWORD saved[9], stage[4];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetTexture(0, &tex);
+	g_device->GetTransform(D3DTS_WORLD, &world);
+	g_device->GetTransform(D3DTS_VIEW, &view);
+	g_device->GetTransform(D3DTS_PROJECTION, &proj);
+
+	for (int i = 0; i < 9; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int i = 0; i < 4; i++)
+		g_device->GetTextureStageState(0, stages[i], &stage[i]);
+
+	D3DMATRIX identity = {};
+
+	identity._11 = identity._22 = identity._33 = identity._44 = 1.0f;
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+	g_device->SetTexture(0, 0);
+	g_device->SetTransform(D3DTS_WORLD, &identity);
+	g_device->SetTransform(D3DTS_VIEW, (const D3DMATRIX*)g_view);
+	g_device->SetTransform(D3DTS_PROJECTION, (const D3DMATRIX*)g_proj);
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
+		D3DCOLORWRITEENABLE_BLUE);
+	g_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+
+	if (mark)
+		HDRenderWaterMarkBegin();
+
+	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 12, faces,
+		D3DFMT_INDEX16, v, sizeof(Corner));
+
+	if (mark)
+		HDRenderWaterMarkEnd();
+
+	g_device->SetTransform(D3DTS_WORLD, &world);
+	g_device->SetTransform(D3DTS_VIEW, &view);
+	g_device->SetTransform(D3DTS_PROJECTION, &proj);
+
+	for (int i = 0; i < 9; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < 4; i++)
+		g_device->SetTextureStageState(0, stages[i], stage[i]);
+
+	g_device->SetTexture(0, tex);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (tex) tex->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	return true;
+}
+
+bool HDRenderWaterMarkView()
+{
+	if (!g_device || !depth_has_stencil())
+		return false;
+
+	D3DVIEWPORT9 vp = {};
+
+	if (FAILED(g_device->GetViewport(&vp)))
+		return false;
+
+	struct Corner
+	{
+		float x, y, z, rhw;
+		D3DCOLOR c;
+	};
+
+	const float x0 = (float)vp.X - 0.5f, y0 = (float)vp.Y - 0.5f;
+	const float x1 = x0 + (float)vp.Width, y1 = y0 + (float)vp.Height;
+	const D3DCOLOR red = D3DCOLOR_ARGB(140, 255, 0, 0);
+	const Corner v[4] =
+	{
+		{ x0, y0, 0.0f, 1.0f, red }, { x1, y0, 0.0f, 1.0f, red },
+		{ x0, y1, 0.0f, 1.0f, red }, { x1, y1, 0.0f, 1.0f, red }
+	};
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_SRCBLEND, D3DRS_DESTBLEND, D3DRS_ALPHATESTENABLE,
+		D3DRS_CULLMODE, D3DRS_LIGHTING, D3DRS_FOGENABLE
+	};
+	DWORD saved[9], stencil[kMarkStateCount], stage[4], fvf = 0;
+	const D3DTEXTURESTAGESTATETYPE stages[] =
+	{
+		D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_ALPHAOP, D3DTSS_ALPHAARG1
+	};
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex = 0;
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetTexture(0, &tex);
+
+	for (int i = 0; i < 9; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->GetRenderState(kMarkStates[i], &stencil[i]);
+
+	for (int i = 0; i < 4; i++)
+		g_device->GetTextureStageState(0, stages[i], &stage[i]);
+
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_DIFFUSE);
+	g_device->SetTexture(0, 0);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+	g_device->SetRenderState(D3DRS_STENCILREF, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILMASK, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
+	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, v, sizeof(Corner));
+
+	for (int i = 0; i < 9; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->SetRenderState(kMarkStates[i], stencil[i]);
+
+	for (int i = 0; i < 4; i++)
+		g_device->SetTextureStageState(0, stages[i], stage[i]);
+
+	g_device->SetTexture(0, tex);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (tex) tex->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	return true;
+}
+
 int HDRenderWaterBodies()
 {
 	return (int)g_wbodies.size();
@@ -10686,8 +11512,11 @@ const char* HDRenderWaterSectionName(int section)
  * body (sources), the triangles of the remaster's own water art left out
  * under the sheets (art_hidden) and 1 when the sheets clip where the
  * frame's depth lies at their surface - the depth variant, so it follows
- * depth (clip), and the waterfall objects whose foot stands over a sheet
- * (falls; a line each, HDRenderWaterFallLine). A body line: its rooms (+n for
+ * depth (clip), the waterfall objects whose foot stands over a sheet
+ * (falls; a line each, HDRenderWaterFallLine), the squares whose surface is
+ * their water room's top and not their own floor (lowered) and those left
+ * out as an island or a rim (dropped), both counted per room, and the
+ * bodies of class river (river). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -10696,8 +11525,10 @@ const char* HDRenderWaterSectionName(int section)
  * force, its flipmap twins' squares, the light before gain, floor and cap,
  * 1 when a row of class none took its sheet away, whether the
  * remaster's water art over its sheets is kept or hidden (art), the
- * refraction's scale in force (bend) and whether its waterfalls get their
- * foot or a row's `swirl off` took it away (swirl). */
+ * refraction's scale in force (bend), whether its waterfalls get their
+ * foot or a row's `swirl off` took it away (swirl), its current - the way
+ * along world x and z and the speed in units a second, 0,0,0 without one
+ * (flow) - and its places whose water names a sink (sinks). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -10706,7 +11537,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 
 	if (body < 0)
 	{
-		int cls[HD_WATER_CLASSES] = { 0, 0, 0 };
+		int cls[HD_WATER_CLASSES] = {};
 		char file[16];
 
 		for (size_t b = 0; b < g_wbodies.size(); b++)
@@ -10722,7 +11553,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
 			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
-			"clip=%d falls=%d",
+			"clip=%d falls=%d lowered=%d dropped=%d river=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -10732,7 +11563,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins,
 			g_wlevel.copy, g_wlevel.depth, kRingsPerDraw,
 			g_wlevel.ringSources, g_wlevel.artHidden, g_wlevel.depth,
-			g_wlevel.falls);
+			g_wlevel.falls, g_wlevel.lowered, g_wlevel.dropped,
+			cls[HD_WATER_RIVER]);
 		return true;
 	}
 
@@ -10764,7 +11596,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
-		"swirl=%s",
+		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -10772,7 +11604,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
-		b.swirlOff ? "off" : "on");
+		b.swirlOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks);
 	return true;
 }
 
@@ -10788,6 +11620,8 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 		g_swirl_gpu_ms = 0.0;
 		g_swirl_timed = 0;
 		g_swirl_sources = 0;
+		g_river_gpu_ms = 0.0;
+		g_river_timed = 0;
 	}
 
 	if (ms)
@@ -10816,6 +11650,15 @@ void HDRenderWaterSwirlTiming(double* ms, int* draws, int* sources)
 
 	if (sources)
 		*sources = g_swirl_sources;
+}
+
+void HDRenderWaterRiverTiming(double* ms, int* draws)
+{
+	if (ms)
+		*ms = g_river_gpu_ms;
+
+	if (draws)
+		*draws = g_river_timed;
 }
 
 bool HDRenderGroupHasSheet(int group)
@@ -11297,6 +12140,122 @@ namespace
 				q[i]->Release();
 	}
 
+	/* The river's second draw (hd_room.hlsl, RiverPS): its streaks and the
+	 * foam where it ends, over the sheet just drawn, with the same blend.
+	 * c132 and c133 are the look's river constants; the rest of c92 - c123
+	 * is the sheet's, set already. Nothing while tomb5.hd_motion is off:
+	 * the streaks are the water running. */
+	void draw_river(const SheetRange& r)
+	{
+		const WaterLook& look = g_wlooks[(size_t)r.body];
+
+		if (!g_water_river_ps || !look.isRiver || g_motion[3] == 0.0f)
+			return;
+
+		g_device->SetPixelShader(g_water_river_ps);
+		g_device->SetPixelShaderConstantF(132, look.river, 2);
+
+		IDirect3DQuery9* q[3] = { 0, 0, 0 };
+
+		if (g_sheet_timing &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+			&q[0])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2])))
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+
+		g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, r.minVertex,
+			r.vertices, r.start, r.tris);
+		g_draw_calls++;
+
+		IDirect3DQuery9* freq_q = 0;
+
+		if (q[2] && SUCCEEDED(g_device->CreateQuery(
+			D3DQUERYTYPE_TIMESTAMPFREQ, &freq_q)))
+		{
+			UINT64 t0 = 0, t1 = 0, freq = 0;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			freq_q->Issue(D3DISSUE_END);
+
+			while (freq_q->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+
+			if (freq && t1 > t0)
+			{
+				g_river_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
+				g_river_timed++;
+			}
+
+			freq_q->Release();
+		}
+
+		for (int i = 0; i < 3; i++)
+			if (q[i])
+				q[i]->Release();
+	}
+
+	/* One sheet draw with the timing round it, when the tool asks. */
+	void draw_sheet_range(const SheetRange& r)
+	{
+		IDirect3DQuery9* q[3] = { 0, 0, 0 };
+
+		if (g_sheet_timing &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+			&q[0])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP,
+			&q[1])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP,
+			&q[2])))
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+
+		g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, r.minVertex,
+			r.vertices, r.start, r.tris);
+		g_draw_calls++;
+
+		IDirect3DQuery9* freq_q = 0;
+
+		if (q[2] && SUCCEEDED(g_device->CreateQuery(
+			D3DQUERYTYPE_TIMESTAMPFREQ, &freq_q)))
+		{
+			UINT64 t0 = 0, t1 = 0, freq = 0;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			freq_q->Issue(D3DISSUE_END);
+
+			while (freq_q->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+
+			if (freq && t1 > t0)
+			{
+				g_sheet_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
+				g_sheet_timed++;
+			}
+
+			freq_q->Release();
+		}
+
+		for (int i = 0; i < 3; i++)
+			if (q[i])
+				q[i]->Release();
+	}
+
 	/* The sheet of one room, in its blend phase: one draw per body, with
 	 * premultiplied alpha (ONE / INVSRCALPHA), two-sided and without a depth
 	 * write, then the states every pass of draw_pass leaves behind. */
@@ -11359,6 +12318,14 @@ namespace
 
 		g_device->SetTexture(5, g_copy_valid ? g_copy_texture : 0);
 		g_device->SetTexture(6, depth ? g_depth_texture : 0);
+
+		// The stencil states the split below sets, as it found them.
+		const bool split = depth && g_mark_frame;
+		DWORD stencil[kMarkStateCount] = {};
+
+		if (split)
+			for (int i = 0; i < kMarkStateCount; i++)
+				g_device->GetRenderState(kMarkStates[i], &stencil[i]);
 
 		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
 		{
@@ -11444,60 +12411,50 @@ namespace
 			g_device->SetVertexShaderConstantF(20, rows, 8);
 			g_device->SetPixelShaderConstantF(92, pixel, 32);
 
-			IDirect3DQuery9* q[3] = { 0, 0, 0 };
-
-			if (g_sheet_timing &&
-				SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
-				&q[0])) &&
-				SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP,
-				&q[1])) &&
-				SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP,
-				&q[2])))
+			/* The creatures' mark (HDRenderWaterMarkBegin): with the depth
+			 * variant and a frame that marked anything, the range is drawn
+			 * twice, split by the stencil - the unmarked pixels as ever, the
+			 * marked ones with the waterline's gap round Lara made endless
+			 * (gWaterLara.z), so no wet line lies on a swimming body and
+			 * everything else of the sheet is drawn there as anywhere. */
+			if (split)
 			{
-				q[0]->Issue(D3DISSUE_BEGIN);
-				q[1]->Issue(D3DISSUE_END);
+				g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+				g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+				g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+				g_device->SetRenderState(D3DRS_STENCILREF, 0);
+				g_device->SetRenderState(D3DRS_STENCILMASK,
+					kCreatureStencilBit);
+				g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
+				g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+				g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+				g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
 			}
 
-			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, r.minVertex,
-				r.vertices, r.start, r.tris);
-			g_draw_calls++;
+			draw_sheet_range(r);
 
-			IDirect3DQuery9* freq_q = 0;
-
-			if (q[2] && SUCCEEDED(g_device->CreateQuery(
-				D3DQUERYTYPE_TIMESTAMPFREQ, &freq_q)))
+			if (split)
 			{
-				UINT64 t0 = 0, t1 = 0, freq = 0;
+				const float gap[4] = { pixel[31 * 4], pixel[31 * 4 + 1],
+					1.0e9f, pixel[31 * 4 + 3] };
 
-				q[2]->Issue(D3DISSUE_END);
-				q[0]->Issue(D3DISSUE_END);
-				freq_q->Issue(D3DISSUE_END);
-
-				while (freq_q->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
-					S_FALSE) {}
-				while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) ==
-					S_FALSE) {}
-				while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) ==
-					S_FALSE) {}
-
-				if (freq && t1 > t0)
-				{
-					g_sheet_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
-					g_sheet_timed++;
-				}
-
-				freq_q->Release();
+				g_device->SetRenderState(D3DRS_STENCILREF, kCreatureStencilBit);
+				g_device->SetPixelShaderConstantF(123, gap, 1);
+				draw_sheet_range(r);
+				g_device->SetPixelShaderConstantF(123, pixel + 31 * 4, 1);
+				g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 			}
-
-			for (int i = 0; i < 3; i++)
-				if (q[i])
-					q[i]->Release();
 
 			draw_swirls(r, pixel);
+			draw_river(r);
 			g_device->SetPixelShader(!depth ? g_water_ps :
 				g_depth_view && g_water_view_ps ? g_water_view_ps :
 				g_water_depth_ps);
 		}
+
+		if (split)
+			for (int i = 0; i < kMarkStateCount; i++)
+				g_device->SetRenderState(kMarkStates[i], stencil[i]);
 
 		g_device->SetTexture(5, 0);
 		g_device->SetTexture(6, 0);

@@ -733,10 +733,19 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  *
  * A water sector is a 1024-unit square of a room that is not under water
  * and whose room below (FLOOR_INFO::pit_room) is an underwater room; its
- * surface is the square's own floor. HDRenderSetWaterSheets finds them in
+ * surface is the top of that water room there - the highest corner of its
+ * ceiling over the square, where Lara's head breaks the surface - and not
+ * the square's own floor, which a split sector raises over the water on
+ * one triangle. A square whose dry floor stands more than a click over that
+ * top at every corner is no water square (water_square in hd_render.cpp).
+ * Built with `sheets` 0, a square's surface is its own floor, none is left
+ * out and no body is a river: what moves the remaster's water art then is
+ * what moves it without the sheets.
+ * HDRenderSetWaterSheets finds them in
  * the classic level's floor data, one HDWaterRoom per room, joins them into
  * bodies - four-connected at one world height, across rooms - classes every
- * body (basin, channel, sea: WaterClassOf in hd_render.cpp), applies the
+ * body (basin, channel, sea, river: WaterClassOf in hd_render.cpp), applies
+ * the
  * override rows (the compiled table, then hd_water.txt) and builds a grid of
  * 256-unit quads over every sector that draws a sheet, for WaterVS and
  * WaterPS in the blend phase of its room. A sector of a room drawn classic,
@@ -759,7 +768,10 @@ enum
 	HD_WATER_BASIN = 0,
 	HD_WATER_CHANNEL = 1,
 	HD_WATER_SEA = 2,
-	HD_WATER_CLASSES = 3,
+	/* A body the classic level's currents pull through: any of its squares
+	 * carries a TO_SINK trigger in its water. */
+	HD_WATER_RIVER = 3,
+	HD_WATER_CLASSES = 4,
 	/* An override row's class 'none': no sheet for the bodies the row
 	 * reaches, which keep the class they have. */
 	HD_WATER_NONE = -2
@@ -785,7 +797,17 @@ enum
 
 /* One room of the classic level. The squares run x-major: square (sx, sz)
  * is entry sx * sizeZ + sz, sx along world x - ROOM_INFO's y_size squares,
- * sz along z - its x_size. */
+ * sz along z - its x_size.
+ *
+ * `slope` holds four words a square, as the floor data has them: the type
+ * word and the data word of the floor's slope entry - the first TILT,
+ * SPLIT1/2 or NOCOLF entry of the square's chain, which GetHeight adds -
+ * and of the ceiling's - the entry GetMinimumCeiling reads, the first of
+ * the chain or the second behind a floor slope, when it is a ROOF, SPLIT3/4
+ * or NOCOLC entry; 0 and 0 where there is none. `sink` is the camera
+ * entry the first TO_SINK command of the square's chain names, or -1
+ * (game\control.cpp, the triggers: lara.current_active). The three may be
+ * 0: every square is then flat and pulls nothing. */
 struct HDWaterRoom
 {
 	int originX, originY, originZ;	// r->x, r->y, r->z
@@ -795,10 +817,33 @@ struct HDWaterRoom
 	int drawn;			// 1 when the room draws its own HD group
 	const signed char* floor;	// the floor of each square, clicks
 	const short* below;		// the room below each square, or -1
+	const signed char* ceiling;	// the ceiling of each square, clicks
+	const unsigned short* slope;	// four words a square, see above
+	const short* sink;		// the sink each square names, or -1
 };
+
+/* The sinks of the classic level (the camera table, OBJECT_VECTOR): world x
+ * and z of each entry and its `data`, which a sink reads as its strength
+ * (game\laraswim.cpp, LaraWaterCurrent). Before HDRenderSetWaterSheets;
+ * the array is copied. None leaves every body without a current. */
+struct HDWaterSink
+{
+	int x, z;
+	int strength;
+};
+
+void HDRenderWaterSinks(const HDWaterSink* sinks, int count);
 
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	const char* stem, int sheets);
+
+/* The corner heights of one square out of its height byte and its slope
+ * entry, as the water squares take them: out[0..3] the world y at the
+ * corners (0, 0), (1024, 0), (0, 1024) and (1024, 1024) of the square, x
+ * first. `ceiling` 1 reads the words as a ceiling's. RoomProbe holds them
+ * against the randomizer's own Tr5Level::cornerFloor and cornerCeiling. */
+void HDRenderWaterCorners(int clicks, unsigned short type,
+	unsigned short data, int ceiling, int* out);
 
 /* The override file for the next HDRenderSetWaterSheets: hd_water.txt,
  * beside the executable, read at every level load. None or a missing file
@@ -844,6 +889,13 @@ struct HDRenderWaterBody
 	/* 1 when a row says `swirl off`: no waterfall of this body gets the
 	 * foot HDRenderWaterFalls gives it (a row's own `swirl x z r` stays). */
 	int swirlOff;
+	/* The current: a unit vector in world x and z and units a second, from
+	 * the sinks its squares name (the mean way toward them and the speed
+	 * LaraWaterCurrent gives their strength) or from a row's `flow`; 0 0 0
+	 * without either. `sinks` counts its places whose water names a sink. */
+	float flow[2];
+	float speed;
+	int sinks;
 };
 
 // What the level built, for its log line.
@@ -869,6 +921,11 @@ struct HDRenderWaterLevel
 	int artHidden;		// the remaster's water art triangles hidden
 	int falls;		// waterfall objects whose foot stands over a sheet
 	int feet;		// the sources at their feet and the rows' swirls
+	/* The squares whose surface is the water room's top and not their own
+	 * floor byte (lowered), and those left out because their dry floor
+	 * stands more than a click over it at every corner (dropped). */
+	int lowered;
+	int dropped;
 };
 
 int HDRenderWaterBodies();
@@ -890,6 +947,8 @@ void HDRenderWaterTiming(int on, double* ms, int* draws);
 void HDRenderWaterCopyTiming(double* ms, int* copies);
 // And of the swirls' draws: milliseconds, draws and the sources they held.
 void HDRenderWaterSwirlTiming(double* ms, int* draws, int* sources);
+// And of the rivers' draws (RiverPS): milliseconds and draws.
+void HDRenderWaterRiverTiming(double* ms, int* draws);
 
 /* The frame behind the sheets (hd_room.hlsl, "the frame behind the sheet").
  *
@@ -948,6 +1007,25 @@ bool HDRenderWaterSheetUnder(int x, int y, int z);
  * the level has no Lara. The engine sets it once a frame, RoomProbe for its
  * picture (-lara); a new level starts with 0. */
 void HDRenderWaterLara(int inWater, float x, float z);
+
+/* The creatures' mark (hd_render.cpp, "the creatures' mark"): what is
+ * drawn between HDRenderWaterMarkBegin and HDRenderWaterMarkEnd marks its
+ * pixels in a stencil bit of their own, and the sheets draw no waterline
+ * on them. The engine brackets the HD objects' solid draw - Lara and every
+ * creature with an HD model - inside the frame's first bracket; both do
+ * nothing unless this level built sheets that read the depth texture and
+ * the depth surface has a stencil. HDRenderWaterProbeCreature is
+ * RoomProbe's -creature: a grey box standing in for a swimming creature at
+ * world x, z on the surface of the sheet there, drawn in the frame `offX`,
+ * `offZ` (the seed room's origin) shifts the world into, inside the mark
+ * bracket - or, `mark` 0, outside it, the picture without the mark.
+ * HDRenderWaterMarkView is RoomProbe's -markview: the marked pixels in
+ * half-transparent red over the finished frame. */
+void HDRenderWaterMarkBegin();
+void HDRenderWaterMarkEnd();
+bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
+	int mark);
+bool HDRenderWaterMarkView();
 
 /* The waterfalls' feet (hd_render.cpp, "the foot of a waterfall").
  *

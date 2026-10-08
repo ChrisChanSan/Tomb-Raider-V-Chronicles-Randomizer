@@ -329,8 +329,9 @@ namespace
 	 * of a tick the drawn state stands behind it (hd_book.h, HDBookClock) -
 	 * and the blend factor it was made from. Worked out once per frame beside
 	 * the tick clock, where the frame is filled, and read by the two brackets
-	 * that draw inside that frame and never step the clock. The .TRG material
-	 * 15 books turn on it; everything else that moves stays on g_clock. */
+	 * that draw inside that frame and never step the clock. Every motion of
+	 * the HD path turns on it, the .TRG material 15 books included
+	 * (FillFrameLighting says why). */
 	double g_drawn_clock = 0.0;
 	float g_drawn_alpha = 1.0f;
 	/* The HD frames filled in this level, counted where the clock is
@@ -3986,17 +3987,25 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	// The clock is stepped once per frame, here, because this is the one
 	// function the frame path cannot skip.
 	AdvanceClock();
-	out.clock = (float)g_clock;
 	out.motion = tomb5.hd_motion ? 1 : 0;
 	out.reflect = tomb5.hd_reflect ? 1 : 0;
 
-	/* And the drawn state's time, for the books. InterpFrameAlpha is the
-	 * factor this frame's state was really blended at: 1 at fps_mode 0,
-	 * on a frame drawn live, on a camera cut and outside DrawPhaseGame
+	/* And the drawn state's time. InterpFrameAlpha is the factor this
+	 * frame's state was really blended at: 1 at fps_mode 0, on a frame
+	 * drawn live, on a camera cut and outside DrawPhaseGame
 	 * (game\interpolate.cpp, InterpBeginFrame), so there it is g_clock
-	 * itself. */
+	 * itself.
+	 *
+	 * Every motion of the HD path runs on it - the water's waves, foam and
+	 * rings, the wind, the caustic, the scroll and the flipbooks - and not on
+	 * the tick clock: on the frames between two ticks Lara and the items are
+	 * drawn at the blended pose, and a motion on the tick clock would stand
+	 * still for those frames and jump at the next tick, a thirty-hertz step
+	 * at sixty frames a second and more. With the drawn time it moves on
+	 * every frame, at the pose's own time. At fps_mode 0 it is g_clock. */
 	g_drawn_alpha = InterpFrameAlpha();
 	g_drawn_clock = HDBookClock(g_clock, g_drawn_alpha);
+	out.clock = (float)g_drawn_clock;
 	out.bookClock = g_drawn_clock;
 	g_book_presents++;
 
@@ -5511,7 +5520,7 @@ bool HDFramePickupBegin(float persp, float centreX, float centreY,
 	 * that has already had one, so stepping it here would count the frame
 	 * twice - and a material would run at double speed for as long as a
 	 * pickup icon is on the screen. */
-	frame.clock = (float)g_clock;
+	frame.clock = (float)g_drawn_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
 	frame.reflect = tomb5.hd_reflect ? 1 : 0;
 	frame.bookClock = g_drawn_clock;
@@ -5724,7 +5733,7 @@ bool HDFrameSky(const float* viewWorld)
 	frame.wibbleTable = vert_wibble_table;
 	frame.bulbs = 0;
 	frame.bulbCount = 0;
-	frame.clock = (float)g_clock;
+	frame.clock = (float)g_drawn_clock;
 	frame.motion = tomb5.hd_motion ? 1 : 0;
 	frame.reflect = tomb5.hd_reflect ? 1 : 0;
 	frame.bookClock = g_drawn_clock;

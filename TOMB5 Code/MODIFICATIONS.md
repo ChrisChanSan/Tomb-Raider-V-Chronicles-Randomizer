@@ -9686,7 +9686,10 @@ foam. The rings: every source is a ripple source of size 64, re-armed every 0.4 
 seconds by a hash of its place. The drops: on the logic tick, beside `AnimateWaterfalls`,
 two `TriggerSmallSplash` drops a tick at every source within eight squares of the camera,
 sixteen a tick at most - the engine's own splash of a rat or a shell landing in water,
-sparks thrown up about 130 units that fall back within about 60 and live 24 ticks.
+sparks thrown up at 20 to 28 units a tick and slowed by 2 to 2.5 units a tick every tick,
+so they rise about 150 to 200 units over the water within 80 of where they left it and
+live 24 ticks (the engine's own arithmetic run offline over the four feet of room 231 for
+three seconds: 184 drops alive, the highest 199 units up - RoomProbe draws no sparks).
 ANDREA2's four sources keep about 200 of the game's 1,024 sparks alive, and the cap holds
 JOBY5's 37 sources to about 380. Nothing of it runs without sheets or with `hd_motion` 0.
 The drops draw on `GetRandomControl`, the game's own random sequence, as the classic mist

@@ -75,6 +75,12 @@ rem draws with it.
  /Fh "%SHADERDIR%\hd_room_water_view_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The waterfalls' swirls: the same file's SwirlPS, a second draw over a
+rem sheet where a waterfall lands (hd_room.hlsl, "the waterfall's foot").
+"%FXC%" /nologo /T ps_3_0 /E SwirlPS /O3 /Vn kHDRoomWaterSwirlPS ^
+ /Fh "%SHADERDIR%\hd_room_water_swirl_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
 
@@ -130,6 +136,8 @@ if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_depth_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_view_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_swirl_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1

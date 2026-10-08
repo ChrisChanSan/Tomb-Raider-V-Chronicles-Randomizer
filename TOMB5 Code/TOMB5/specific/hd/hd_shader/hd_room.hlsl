@@ -680,7 +680,8 @@ float4 gWaterMisc : register(c103);
  *               the surface at rest over 64 units, 5 the bank foam's
  *               patches, green), y the slope's gain at
  *               eye level less one (the class's, see "the body at eye
- *               level" in WaterPS), w unused
+ *               level" in WaterPS), w the swirls in use (0 to 8), read by
+ *               SwirlPS alone
  *
  * Above the pixel registers of every other shader of the blend phase; the
  * shadow receive shaders' c103 - c108 are written by every one of their
@@ -709,13 +710,17 @@ float4 gWaterStage : register(c106);
  *              x and z in the frame of the sheet's world position, z the
  *              radius without a waterline, w one over the width it comes
  *              back over; x, y far away (1e7) when she is not in the
- *              water (see "the foam" in WaterPS) */
+ *              water (see "the foam" in WaterPS)
+ * gWaterSwirls c124 - c131, read by SwirlPS alone: one waterfall's foot a
+ *              register, x, z its centre in the frame of the sheet's world
+ *              position, its radius and its strength (see SwirlPS) */
 float4 gWaveP2[4] : register(c107);
 float4 gWaterLag : register(c111);
 float4 gWaterLife : register(c112);
 float4 gWaterRings[8] : register(c113);
 float4 gWaveK[2] : register(c121);
 float4 gWaterLara : register(c123);
+float4 gWaterSwirls[8] : register(c124);
 
 /* The frame behind the sheet, copied out of the render target before the
  * blend phase (HDRenderWaterCopy): linear, clamped, one level. The frame's
@@ -2435,4 +2440,111 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 #endif
 
 	return float4(col, a);
+}
+
+/* ------------------------------------------------- the waterfall's foot -- */
+
+/* Where a waterfall lands on a sheet (hd_render.cpp, "the foot of a
+ * waterfall") the water is churned white: a disc of the sheet's own foam
+ * that turns slowly, dense at the middle and lacy at its rim. A second draw
+ * of the sheet's triangles over the first, with the same blend, one source
+ * a register (gWaterSwirls, gWaterStage.w of them) - its own pixel shader
+ * because the sheet's depth variant has no room left for a loop of this
+ * size.
+ *
+ * Per source the pixel's place is turned about the centre by the clock
+ * times HD_SWIRL_SPIN and by HD_SWIRL_TWIST more toward the middle - a
+ * spiral that turns as a whole, so it never winds up however long it
+ * runs - and the bank foam's own pattern and dissolve are read there: the
+ * two drifting layers (the coarse one warping the fine one), the slow layer
+ * and the threshold that swings with it over 5 seconds, scaled by the
+ * class's grain (gWaterBase.w), each source with a phase of its own by its
+ * place. Its reach, the radius times 0.8 + 0.2 of the bank foam's patch
+ * field at this place (WaterVS, PatchField; -1 to 1, cells of thousands of
+ * units on clocks of 26 to 46 seconds) - so the disc breathes, slowly
+ * and at every foot differently. Over the reach the density is the bank
+ * foam's with the middle where the bank is: the threshold from 1.25 at the
+ * rim to -0.05 at the middle - along the square root of the way in, so the
+ * dense core fills about half the disc and the lace the ring round it -,
+ * the smoothstep round it, times 0.4 + 0.6 of the way in, times the
+ * source's strength (the body's foam scale), at most 0.75 like all foam.
+ * Then the foam's body and the distance fog exactly as WaterPS lays them
+ * on. Seen from below nothing: foam is drawn from above alone, as in
+ * WaterPS.
+ *
+ * The spin, a turn in about 18 seconds, and the twist, about a fifth of a
+ * turn from the rim to the middle, are free choices, set by eye on the
+ * round's RoomProbe pictures (a half turn drew the pattern into spiral arms
+ * like a painted sign); the square root, 0.8 and 0.2 as well. */
+#define HD_SWIRL_SPIN 0.35f
+#define HD_SWIRL_TWIST 1.2f
+
+float4 SwirlPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
+{
+	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
+	const float t = gWaterMisc.z;
+	// y counts down: the eye above the surface lies toward -y.
+	const float above = input.eye.y < 0.0f ? 1.0f : 0.0f;
+	const float reach = 0.8f + 0.2f * clamp(input.viewZ.w, -1.0f, 1.0f);
+	float foam = 0.0f;
+	float nAt = 0.5f;
+
+	[loop]
+	for (int i = 0; i < 8; i++)
+	{
+		if ((float)i >= gWaterStage.w)
+			break;
+
+		const float4 s = gWaterSwirls[i];
+		const float2 dv = world.xz - s.xy;
+		const float d = length(dv);
+		const float edge = saturate(1.0f - d / max(s.z * reach, 1.0f));
+		const float own = frac(dot(s.xy, float2(0.0013f, 0.0029f)));
+		float sn, cs;
+
+		sincos(t * HD_SWIRL_SPIN + HD_SWIRL_TWIST * edge +
+			6.2831853f * own, sn, cs);
+
+		const float2 p = s.xy + float2(dv.x * cs - dv.y * sn,
+			dv.x * sn + dv.y * cs);
+		const float2 fp = (p + own * float2(400.0f, -330.0f)) * gWaterBase.w;
+		const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
+			t * float2(0.25f, -0.18f));
+		const float2 w2 = Wave2(fp * float2(0.047f, 0.041f) + w1 * 1.7f +
+			t * float2(-0.9f, 1.1f));
+		const float2 slow = Wave2(fp * float2(0.0083f, 0.0101f) +
+			t * float2(0.11f, -0.13f) + own * 5.0f);
+		const float swing = Wave2(float2(t * 1.2566371f + slow.x * 3.1f,
+			0.0f)).x;
+		const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
+		const float thr = lerp(1.25f, -0.05f, sqrt(edge)) + 0.12f * swing;
+		// At the rim (edge 0) the threshold stands over every n: none.
+		const float f = s.w * smoothstep(thr - 0.12f, thr + 0.18f, n) *
+			(0.4f + 0.6f * edge);
+
+		nAt = f > foam ? n : nAt;
+		foam = max(foam, f);
+	}
+
+	foam = min(foam, 0.75f) * above;
+
+	// The foam's body, as WaterPS gives it (see "the foam's body" there).
+	const float2 dx = ddx(world.xz);
+	const float2 dy = ddy(world.xz);
+	const float cover = foam * (1.0f / 0.75f);
+	const float lump = cover * (0.5f + 0.5f * nAt);
+	const float det = dx.x * dy.y - dx.y * dy.x;
+	const float2 sunStep = float2(gWaterSun.x * dy.y - gWaterSun.z * dy.x,
+		gWaterSun.z * dx.x - gWaterSun.x * dx.y) * (det /
+		(det * det + 1.0e-12f));
+	const float body = max(1.0f - gWaterLife.w * dot(float2(ddx(lump),
+		ddy(lump)), sunStep), 0.3f) * (0.65f + 0.35f * lump) *
+		(1.0f - 1.4f * cover * (1.0f - cover));
+	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+	const float3 col = gWaterFoam.rgb * body * foam *
+		saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
+
+	// Premultiplied, as the sheet: the foam over what the sheet drew.
+	return float4(col, foam);
 }

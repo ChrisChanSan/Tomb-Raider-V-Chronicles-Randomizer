@@ -2885,8 +2885,9 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * square the sheet can cover - over an underwater room, in a room
 	 * drawn HD - gets this project's own water surface, with the caustic
 	 * on the floor under it, and the classic water face there is not
-	 * restored; a water plane with no underwater room below keeps its
-	 * faces. Off, no sheet is built, the caustic under it is off and the
+	 * restored, nor the remaster's own water art over it drawn (unless an
+	 * hd_water.txt row says art keep); a water plane with no underwater
+	 * room below keeps its faces. Off, no sheet is built, the caustic under it is off and the
 	 * classic faces are restored as without it; what stays is the
 	 * caustic's shape and footprint fade on the remaster's own marked
 	 * water art and the wave rows on that art, which live in the compiled

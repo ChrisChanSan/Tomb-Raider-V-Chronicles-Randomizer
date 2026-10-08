@@ -742,8 +742,12 @@ void HDRenderSetWaterMarks(const HDWaterMark* marks, int count);
  * WaterPS in the blend phase of its room. A sector of a room drawn classic,
  * or of a body an override row of class none switches off, stays in its
  * body and in the shore test and draws no sheet. Flat art the remaster lays
- * over a sector does not take its sheet away: the art draws in its own pass
- * as it does without the sheet, opaque art over it and additive art on top.
+ * over a sector does not take its sheet away. Its own water art - material
+ * 16 and the flat art its water marks name - in the sheet's plane over a
+ * sector whose sheet draws is left out, unless a row says `art keep`; any
+ * other art draws in its own pass as it does without the sheet, and where
+ * it lies at the surface's own height the depth variant of WaterPS clips
+ * the sheet, so the art shows itself.
  *
  * Called after HDRenderLevelBegin (it reads the groups' light samples) and
  * before the first frame; nothing of the arrays is kept. `sheets` 0 builds
@@ -831,6 +835,10 @@ struct HDRenderWaterBody
 	int sourceRoom;			// the room that row names, or -1
 	float tint[3];			// the applied row's numbers
 	float waves, foam;
+	/* 1 when a row says `art keep`: the remaster's own water art over its
+	 * sheet is drawn; 0, the default, hides it (HDRenderSetWaterSheets,
+	 * "the art over a sheet"). */
+	int artKeep;
 };
 
 // What the level built, for its log line.
@@ -853,6 +861,7 @@ struct HDRenderWaterLevel
 	int copy;		// 1 when the sheets read the frame's copy
 	int depth;		// 1 when they read the depth texture as well
 	int ringSources;	// ripple rows of the file that found a body
+	int artHidden;		// the remaster's water art triangles hidden
 };
 
 int HDRenderWaterBodies();

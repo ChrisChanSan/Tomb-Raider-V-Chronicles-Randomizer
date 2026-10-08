@@ -1330,6 +1330,17 @@ namespace
 		 * entry in g_glow_parts - and -1 for every other draw call. In the
 		 * sort key, because the glow shader's three registers are per part. */
 		int glow = -1;
+		/* The remaster's own water art in this draw call: its triangles that
+		 * are horizontal and either material 16 or water-marked at all three
+		 * corners (the marks RoomVS swells), the lowest and the highest y of
+		 * them and their box in room x and z. Not in the sort key - the draw
+		 * calls stay what they are; a call that is wholly such art can be
+		 * hidden under a sheet (HDRenderSetWaterSheets, "the art over a
+		 * sheet"), which sets `artHidden` for the level. */
+		int artTris = 0;
+		int artY = 0, artYMax = 0;
+		int artMinX = 0, artMaxX = 0, artMinZ = 0, artMaxZ = 0;
+		bool artHidden = false;
 		/* Which half of the room this draw call is: 0 for the open half,
 		 * and for triangles that stand inside another room one plus the
 		 * piece of the intruding art they belong to - see HDIntrusion and
@@ -4557,6 +4568,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	int marked_shimmer = 0;
 	int marked_room_shimmer = 0;
 
+	/* Which vertices carry either shimmer mark, kept for the triangle walk
+	 * below (the art over a sheet, HDRange::artTris): the vertex buffer is
+	 * write-only. */
+	std::vector<unsigned char> vertex_marked((size_t)g_vertex_count, 0);
+
 	/* --- the vertex buffer -------------------------------------------- */
 	if (FAILED(g_device->CreateVertexBuffer((UINT)(g_vertex_count * (int)sizeof(HDVertex)),
 		D3DUSAGE_WRITEONLY, 0, D3DPOOL_DEFAULT, &g_vb, 0)))
@@ -4678,6 +4694,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			out[i].wShimmer = (unsigned char)((bits >> 1) & 1);
 			out[i].wRoomShimmer = (unsigned char)((bits >> 2) & 1);
 			out[i].wSpare = 1;
+			vertex_marked[(size_t)i] = (unsigned char)((bits & 6) ? 1 : 0);
 
 			if (bits)
 				marked_vertices++;
@@ -4808,6 +4825,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		float gloss, glossPower;	// see MaterialGloss
 		int glossMat;			// see MaterialGloss
 		float ripple[3];		// see MaterialRipple
+		int water16;			// a material 16 part, still or not
 		float blend;			// see MaterialBlend
 		int clear;			// see HDRange::clear
 		int destructId;			// see HDDestructible
@@ -5917,6 +5935,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.ripple[0] = ripple[0];
 					tri.ripple[1] = ripple[1];
 					tri.ripple[2] = ripple[2];
+					tri.water16 = water ? 1 : 0;
 
 					/* A clear floor: a triangle of a room's alpha pass that is
 					 * not glass already and whose page is part-way clear in
@@ -6210,9 +6229,67 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.cull = tris[i].cull;
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
+					range.artTris = 0;
 				}
 
 				const unsigned int first = tris[i].first;
+
+				/* The remaster's water art (HDRange::artTris): horizontal,
+				 * and material 16 or marked at every corner. */
+				{
+					const unsigned int ia = trg.indices[first];
+					const unsigned int ib = trg.indices[first + 1];
+					const unsigned int ic = trg.indices[first + 2];
+
+					if (ia < trg.vertices.size() && ib < trg.vertices.size() &&
+						ic < trg.vertices.size())
+					{
+						const trf::remaster::TrgVertex& a = trg.vertices[ia];
+						const trf::remaster::TrgVertex& b = trg.vertices[ib];
+						const trf::remaster::TrgVertex& c = trg.vertices[ic];
+						const bool marked = ia < vertex_marked.size() &&
+							ib < vertex_marked.size() &&
+							ic < vertex_marked.size() && vertex_marked[ia] &&
+							vertex_marked[ib] && vertex_marked[ic];
+
+						if (a.y == b.y && b.y == c.y &&
+							(tris[i].water16 || marked))
+						{
+							auto lo = [](int p, int q)
+							{
+								return p < q ? p : q;
+							};
+							auto hi = [](int p, int q)
+							{
+								return p > q ? p : q;
+							};
+							const int x0 = lo(lo(a.x, b.x), c.x);
+							const int x1 = hi(hi(a.x, b.x), c.x);
+							const int z0 = lo(lo(a.z, b.z), c.z);
+							const int z1 = hi(hi(a.z, b.z), c.z);
+
+							if (!range.artTris)
+							{
+								range.artY = range.artYMax = (int)a.y;
+								range.artMinX = x0;
+								range.artMaxX = x1;
+								range.artMinZ = z0;
+								range.artMaxZ = z1;
+							}
+							else
+							{
+								range.artY = lo(range.artY, (int)a.y);
+								range.artYMax = hi(range.artYMax, (int)a.y);
+								range.artMinX = lo(range.artMinX, x0);
+								range.artMaxX = hi(range.artMaxX, x1);
+								range.artMinZ = lo(range.artMinZ, z0);
+								range.artMaxZ = hi(range.artMaxZ, z1);
+							}
+
+							range.artTris++;
+						}
+					}
+				}
 
 				/* The art a static's piece may take: the overhang of no
 				 * intrusion piece and the stand ranges, the parts of a group
@@ -7821,6 +7898,11 @@ namespace
 				g_destruct[(size_t)range.destructId].hidden)
 				continue;
 
+			// The remaster's water art under a sheet's place (step 8 of
+			// HDRenderSetWaterSheets) - false in every draw call without one.
+			if (range.artHidden)
+				continue;
+
 			/* The flipbook. Four pages, one of them per frame time, the
 			 * range's own page first - see MaterialFlipTime for what the
 			 * .TRG says. The clock is the same monotonic game clock the other
@@ -8509,6 +8591,7 @@ namespace
 		int file;		// 1 for a row of hd_water.txt
 		int ripple;		// 1 with a ripple source
 		float rx, rz, rsize, rperiod;
+		int art;		// 1 for `art keep`, 0 hides the art (default)
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -8675,6 +8758,12 @@ namespace
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
 		g_wlevel.fileLines = -1;
+
+		// The remaster's water art the sheets hid draws again.
+		for (HDGroup& group : g_groups)
+			for (int pass = 0; pass < 3; pass++)
+				for (HDRange& range : group.pass[pass])
+					range.artHidden = false;
 	}
 
 	/* The data rule for a body's class.
@@ -8706,6 +8795,7 @@ namespace
 	 *
 	 *   <LEVEL> <room> <class|->  [tint <r> <g> <b>] [waves <s>] [foam <s>]
 	 *                             [ripple <x> <z> <size> <seconds>]
+	 *                             [art keep|hide]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -8718,12 +8808,15 @@ namespace
 	 * ripples and trview give them) every `seconds` (0.1 to 60) while the
 	 * level runs, `size` (1 to 255) as a ripple's size - a fountain's jet
 	 * landing, where the game itself makes no ripple; the rest of the row
-	 * applies as any row's. '#' starts a comment. Returns 1 for a row, 0
-	 * for a line without one, -1 for a line that cannot be read. */
+	 * applies as any row's. art keep draws the remaster's own water art
+	 * over the sheets of the row's bodies, art hide (what a row without the
+	 * key says) leaves it out - step 8 of HDRenderSetWaterSheets. '#' starts
+	 * a comment. Returns 1 for a row, 0 for a line without one, -1 for a
+	 * line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[17];
+		char* tok[19];
 		char* next = 0;
 		int n = 0;
 
@@ -8732,14 +8825,16 @@ namespace
 		if (char* hash = std::strchr(line, '#'))
 			*hash = 0;
 
-		for (char* t = strtok_s(line, " \t", &next); t && n < 17;
+		// The longest row: the three words, tint's four, waves' and foam's
+		// two each, ripple's five and art's two - 18 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 19;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 16 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 18 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -8774,6 +8869,23 @@ namespace
 			int count = 0;
 			float rip[4];
 			const bool ripple = !_stricmp(tok[i], "ripple");
+
+			// art keep | art hide: a word, not a number.
+			if (!_stricmp(tok[i], "art"))
+			{
+				if (i + 1 >= n)
+					return -1;
+
+				if (!_stricmp(tok[i + 1], "keep"))
+					row.art = 1;
+				else if (!_stricmp(tok[i + 1], "hide"))
+					row.art = 0;
+				else
+					return -1;
+
+				i += 2;
+				continue;
+			}
 
 			if (!_stricmp(tok[i], "tint"))
 				into = row.tint, count = 3;
@@ -9142,6 +9254,7 @@ namespace
 
 			b.waves = row.waves;
 			b.foam = row.foam;
+			b.artKeep = row.art;
 			b.source = row.file ? 2 : 1;
 			b.sourceRoom = row.room;
 		}
@@ -9680,6 +9793,48 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		g_sheet_ib->Unlock();
 	}
 
+	/* 8. The art over a sheet. Where a sheet draws, the remaster's own water
+	 * art in that plane - its material 16 parts and the flat art its
+	 * vertices' water marks name (HDRange::artTris) - is left out, so a
+	 * body of water has one look and not two at once, its half under the
+	 * remaster's art and its half the sheet's. A draw call is hidden when
+	 * every triangle of it is such art, all of it within 32 units of the
+	 * sheet's surface (the slack HDRenderGroupFlatArt allows the remaster's
+	 * planes: ANDY3's water stands two and four units off the classic
+	 * height, the next plane 256 away; ANDREA2 231's material 16 grid,
+	 * whose triangles stand at more than one height, 7 to 9 units over it)
+	 * and over a square whose sheet draws; a draw call with anything else
+	 * in it is kept whole. A row's
+	 * `art keep` keeps the art of its bodies (apply_water_row). The classic
+	 * faces are not concerned: no restored face lies under a sheet. */
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		const WaterSquare& s = g_wsquares[i];
+
+		if (!s.sheet || s.room >= groups ||
+			g_wbodies[(size_t)s.body].info.artKeep ||
+			!g_sheet_at.count(SheetKey(s.room, s.sx, s.sz)))
+			continue;
+
+		const int x0 = s.sx * 1024;
+		const int z0 = s.sz * 1024;
+
+		for (int pass = 0; pass < 3; pass++)
+			for (HDRange& range : g_groups[(size_t)s.room].pass[pass])
+			{
+				if (range.artHidden || !range.artTris ||
+					(unsigned int)range.artTris * 3 != range.count ||
+					range.artY < s.wy - 32 || range.artYMax > s.wy + 32 ||
+					range.artMinX >= x0 + 1024 ||
+					range.artMaxX <= x0 || range.artMinZ >= z0 + 1024 ||
+					range.artMaxZ <= z0)
+					continue;
+
+				range.artHidden = true;
+				g_wlevel.artHidden += range.artTris;
+			}
+	}
+
 	g_wlevel.built = 1;
 	g_wlevel.vertices = (int)verts.size();
 	g_wlevel.triangles = (int)idx.size() / 3;
@@ -9829,15 +9984,19 @@ const char* HDRenderWaterSectionName(int section)
  * level was built for and the adapter offers; a bind the device refuses sets
  * depth back to 0 - the engine writes the line after its bind, RoomProbe
  * before its picture), the wave rows a sheet sums (waverows), the rings a
- * sheet draw can show (rings) and the ripple rows of the file that found a
- * body (sources). A body line: its rooms (+n for
+ * sheet draw can show (rings), the ripple rows of the file that found a
+ * body (sources), the triangles of the remaster's own water art left out
+ * under the sheets (art_hidden) and 1 when the sheets clip where the
+ * frame's depth lies at their surface - the depth variant, so it follows
+ * depth (clip). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
  * square, the light its colours are lit by, the override row that applied
  * - table or file with its room - or none, the tint, wave and foam scales in
  * force, its flipmap twins' squares, the light before gain, floor and cap,
- * and 1 when a row of class none took its sheet away. */
+ * 1 when a row of class none took its sheet away, and whether the
+ * remaster's water art over its sheets is kept or hidden (art). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -9861,7 +10020,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"sectors=%d sheets=%d built=%d bodies=%d basin=%d channel=%d "
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
-			"copy=%d depth=%d waverows=8 rings=%d sources=%d",
+			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
+			"clip=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -9870,7 +10030,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.rowsUnmatched, g_wlevel.overlaps, g_wlevel.causticRooms,
 			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins,
 			g_wlevel.copy, g_wlevel.depth, kRingsPerDraw,
-			g_wlevel.ringSources);
+			g_wlevel.ringSources, g_wlevel.artHidden, g_wlevel.depth);
 		return true;
 	}
 
@@ -9901,13 +10061,13 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	snprintf(out, size, "WATERLOG body=%d rooms=%s surface=%d sectors=%d "
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
-		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d", body, list,
+		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s", body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
 		HDRenderWaterClassName(b.cls), HDRenderWaterClassName(b.ruleCls),
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
-		b.raw[2], b.noSheet);
+		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide");
 	return true;
 }
 
@@ -9918,6 +10078,8 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 		g_sheet_timing = on ? true : false;
 		g_sheet_gpu_ms = 0.0;
 		g_sheet_timed = 0;
+		g_copy_gpu_ms = 0.0;
+		g_copy_timed = 0;
 	}
 
 	if (ms)
@@ -10782,6 +10944,9 @@ namespace
 				continue;
 
 			if (range.destructId >= 0 && g_destruct[(size_t)range.destructId].hidden)
+				continue;
+
+			if (range.artHidden)
 				continue;
 
 			// And at the depth draw_pass drew it at.

@@ -2887,13 +2887,13 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * on the floor under it, and the classic water face there is not
 	 * restored, nor the remaster's own water art over it drawn (unless an
 	 * hd_water.txt row says art keep); a water plane with no underwater
-	 * room below keeps its faces. Off, no sheet is built, the caustic under it is off and the
-	 * classic faces are restored as without it; what stays is the
-	 * caustic's shape and footprint fade on the remaster's own marked
-	 * water art and the wave rows on that art, which live in the compiled
-	 * shaders. Taken at the start of a level, like HD textures. Dead with
-	 * hd_enable off (specific\hd\hd_level.cpp, BuildWaterSheets).
-	 * Registry: hd_water. */
+	 * room below keeps its faces. Off, no sheet is built, the caustic
+	 * under it is off and the classic faces are restored as without it;
+	 * what stays is the caustic's shape and footprint fade on the
+	 * remaster's own marked water art and the wave rows on that art, which
+	 * live in the compiled shaders. Taken at the start of a level, like
+	 * HD textures. Dead with hd_enable off (specific\hd\hd_level.cpp,
+	 * BuildWaterSheets). Registry: hd_water. */
 	bool hd_water;
 };
 #pragma pack(pop)

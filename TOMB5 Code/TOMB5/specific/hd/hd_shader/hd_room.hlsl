@@ -1713,7 +1713,7 @@ struct WATER_OUT
 	float4 pos     : POSITION;
 	float4 roomPos : TEXCOORD0;	// xyz room local (as drawn), w depth
 	float4 eye     : TEXCOORD1;	// xyz toward the eye, w shore distance
-	float  viewZ   : TEXCOORD2;	// the view depth, for the fog
+	float2 viewZ   : TEXCOORD2;	// x the view depth, y the swell's lift
 };
 
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
@@ -1729,8 +1729,11 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		length(gWaveV[0].xy)), gWaveV[0], gWaveV[1], gWaveV[2], gWaveV[3],
 		gWaveV2[0], gWaveV2[1], gWaveV2[2], gWaveV2[3], slope);
 	const float taper = saturate(shore / max(gSwell.y, 1.0f));
+	// Units the vertex rises by (y counts down): the pixel shader measures
+	// the frame's depth from the surface at rest (WaterPS, the clip).
+	const float lift = gSwell.x * taper * h * gMotion.w;
 
-	pos.y -= gSwell.x * taper * h * gMotion.w;
+	pos.y -= lift;
 
 	float4 clip = mul(float4(pos, 1.0f), gWorldViewProj);
 	const float3 view = mul(float4(pos, 1.0f), gWorldView);
@@ -1754,7 +1757,7 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.pos = clip;
 	o.roomPos = float4(pos, depth);
 	o.eye = float4(gEye.xyz - pos, shore);
-	o.viewZ = view.z;
+	o.viewZ = float2(view.z, lift);
 	return o;
 }
 
@@ -1775,15 +1778,33 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * turns it with the view. Two bounds, free choices set by eye on the
  * round's RoomProbe pictures: 256 units (a quarter square) in the world,
  * against a wave scaled up by hd_water.txt, and 4 % of the screen, against
- * a footprint that collapses at a grazing view; and the place read stays
- * inside the screen.
+ * a footprint that collapses at a grazing view. RefractMove returns that
+ * move in screen units; the caller scales it by the guard below and keeps
+ * the place read inside the screen.
+ *
+ * The guard (the depth variant, seen from above). A thing at the surface -
+ * a rat, a bubble, Lara's shoulders, a post - is not under the water, and a
+ * deep pixel beside it must not read it: its bent place would show the thing
+ * a second time, torn off beside itself and smeared into the water round it.
+ * So the bent place is refused, and the pixel's own place read, where the
+ * frame there lies within HD_WATER_GUARD under the surface at rest or above
+ * it; and the move is the one the shorter of the two paths gives, the path
+ * there or here - 1 - T of the shorter over 1 - T of this pixel's own - so a
+ * deep pixel beside a shallow floor moves no further than the shallow side
+ * allows. 48 units
+ * is a free choice, set by eye on the round's RoomProbe pictures: above a
+ * thing's own waterline line (24 to 48, the foam below) and under the
+ * smallest thing that swims, a rat's back.
  *
  * The absorption per channel (gWaterAbsorb.rgb): the deep colour of the
  * section's palette is what a long path leaves of the shallow one, so the
  * channels are absorbed in the ratio of ln(shallow / deep), scaled so that
  * their mean is the class's one over the absorption length - the palette
  * keeps its meaning and the class its depth (water_look). */
-float2 RefractUV(float2 uv, float2 slope, float amount, float2 fx, float2 fy)
+#define HD_WATER_GUARD 48.0f
+#define HD_WATER_CLIP 8.0f
+
+float2 RefractMove(float2 slope, float amount, float2 fx, float2 fy)
 {
 	float2 d = slope * (gWaterAbsorb.w * amount);
 	const float len = length(d);
@@ -1797,8 +1818,13 @@ float2 RefractUV(float2 uv, float2 slope, float amount, float2 fx, float2 fy)
 	const float far = length(move);
 
 	move *= far > 0.04f ? 0.04f / far : 1.0f;
-	return clamp(uv + move, 0.5f * gWaterScreen.xy,
-		1.0f - 0.5f * gWaterScreen.xy);
+	return move;
+}
+
+// A place on the screen, kept half a pixel inside it.
+float2 ScreenClamp(float2 uv)
+{
+	return clamp(uv, 0.5f * gWaterScreen.xy, 1.0f - 0.5f * gWaterScreen.xy);
 }
 
 #ifdef HD_WATER_DEPTH
@@ -1968,8 +1994,32 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * channel - the floor's share once the copy is there. */
 	const float2 uv = (vpos + 0.5f) * gWaterScreen.xy;
 	float path;
-	const float depth = WaterDepthBelow(input.roomPos.w, input.viewZ,
+	const float depth = WaterDepthBelow(input.roomPos.w, input.viewZ.x,
 		input.eye.xyz, uv, path);
+	const float lift = input.viewZ.y;
+
+#ifdef HD_WATER_DEPTH
+	/* The clip. What the frame drew at the surface's own height - a deck, a
+	 * rim, a bank the remaster raised to the water plane inside a classic
+	 * water square, a floe's top - is not under the water: where the frame's
+	 * depth lies less than HD_WATER_CLIP under the surface at rest (the
+	 * swell's lift taken back, so a crest does not drown the deck either),
+	 * the pixel is left to the frame. clip() and not alpha 0: with the copy
+	 * the sheet writes the whole pixel, and a texkill leaves it untouched
+	 * with no colour to zero. 8 units: the depth's own error is far under it
+	 * - on JOBY2 room 66's flat pool floor at 2560 x 1440, about 2,600 units
+	 * away, `rest` is one value to a sixteenth of a unit over the whole
+	 * floor (RoomProbe, `rest` as grey), and 24 bits over the near and far
+	 * planes of 20 and 20,480 give about 1.2 units at the far plane - and 8
+	 * takes the remaster's own planes, which stand two to nine units off
+	 * the classic height (ANDY3's water 2 and 4, ANDREA2 231's 7 to 9).
+	 * RoomProbe -waterdepthview 4 shows `rest` and clips nothing. Seen from
+	 * below there is no such floor; the clip is from above alone. */
+	const float rest = depth - lift;
+
+	clip(above > 0.5f && gWaterStage.z < 3.5f ? rest - HD_WATER_CLIP : 1.0f);
+#endif
+
 	const float T = exp(-path * gWaterDeep.w);
 	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb,
 		saturate(1.0f - T));
@@ -1999,32 +2049,32 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * The pattern: two layers of Wave2 at two speeds, the coarse one
 	 * drifting slowly and the fine one, warped by it, fast, scaled by the
 	 * class's grain (gWaterBase.w); per stretch of bank (WaterVariety) moved
-	 * by up to 400 units and blended toward a second orientation of itself
-	 * turned by 57 degrees, so no two stretches look alike. A third, slow
-	 * layer gives every region of blotches a phase of its own for a
-	 * threshold that swings with a period of 5 seconds: blotches grow and
-	 * dissolve.
+	 * by up to 400 units, so no two stretches look alike. Moved, and not
+	 * turned: a turn that varies over the world multiplies its own rate of
+	 * change by the distance from the world's origin - 50,000 units out a
+	 * blend between two orientations raised the pattern's frequency fifty
+	 * times wherever it was half done and drew a comb of thin stripes along
+	 * the bank (RoomProbe, the pattern alone as grey). A third, slow layer
+	 * gives every region of blotches a phase of its own for a threshold that
+	 * swings with a period of 5 seconds: blotches grow and dissolve.
 	 *
 	 * The reach: the swash, a cycle of 4.5 seconds whose phase runs along
 	 * the bank, and the wave's own height there, so the foam runs up the
-	 * bank and draws back. With the depth texture the reach is the water's
-	 * real depth under the pixel - full where it goes to nothing, gone at
-	 * one click (256 units, the step the game's floors rise by), so the
-	 * foam follows the drawn shore, a floe, a step, and not the classic
-	 * squares - for water the classic floor data puts within three squares
-	 * of a bank (a swimmer far out is no shore); without it the class's
-	 * band from the classic shore (input.eye.w).
+	 * bank and draws back - over the class's band from the classic shore
+	 * (input.eye.w), in both variants.
 	 *
-	 * The numbers here - the speeds, the 400 units, the 57 degrees, the 5
-	 * and 4.5 seconds, the click as the reach and the density's curve - are
+	 * The waterline, with the depth texture: a thin wet line where the
+	 * frame lies within 24 units under the surface at rest, gone at 48,
+	 * broken by the same pattern - round a post, a hull, a floe, a wading or
+	 * swimming body, wherever the drawn shape meets the water, and nothing
+	 * more: a body a click under the surface is no shore.
+	 *
+	 * The numbers here - the speeds, the 400 units, the 5 and 4.5 seconds,
+	 * the 24 and 48 units and the density's curves - are
 	 * free choices, set by eye on the round's RoomProbe pictures. */
 	const float var = WaterVariety(world.xz);
-	const float2 fpA = (world.xz + var * float2(400.0f, -330.0f)) *
+	const float2 fp = (world.xz + var * float2(400.0f, -330.0f)) *
 		gWaterBase.w;
-	const float2 fpB = float2(fpA.x * 0.545f - fpA.y * 0.839f,
-		fpA.x * 0.839f + fpA.y * 0.545f);
-	const float turn = smoothstep(0.3f, 0.7f, var);
-	const float2 fp = lerp(fpA, fpB, turn);
 	const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
 		t * float2(0.25f, -0.18f));
 	const float2 w2 = Wave2(fp * float2(0.047f, 0.041f) + w1 * 1.7f +
@@ -2037,16 +2087,15 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
 	const float reach = 0.55f + 0.225f * (1.0f + cycle.y) +
 		0.35f * saturate(h / max(gWaterMisc.w, 1.0f));
-#ifdef HD_WATER_DEPTH
-	const float edge = saturate(1.0f - depth / (256.0f * reach)) *
-		saturate((3072.0f - input.eye.w) * (1.0f / 512.0f));
-#else
 	const float edge = saturate(1.0f - input.eye.w /
 		max(gWaterMisc.x * reach, 1.0f));
-#endif
 	const float thr = lerp(1.25f, -0.05f, edge) + 0.12f * cycle.x;
 	float foam = gWaterFoam.w * smoothstep(thr - 0.12f, thr + 0.18f, n) *
 		(0.4f + 0.6f * edge);
+#ifdef HD_WATER_DEPTH
+	foam = max(foam, gWaterFoam.w * (1.0f - smoothstep(24.0f, 48.0f, rest)) *
+		smoothstep(0.25f, 0.6f, n));
+#endif
 
 	/* The whitecaps of a sea: where the eight rows stand above the class's
 	 * share of their whole height now (gWaterSun.w, gWaterMisc.w), and,
@@ -2071,43 +2120,58 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	/* The distance fog (drawroom.cpp), in the light's own scale as RoomPS
 	 * takes it, as a share of the body's light - see the note over
 	 * WATER_OUT. The frame behind the sheet is fogged already. */
-	const float fog = max(0.0f, input.viewZ - gFog.x) * gFog.y *
+	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
 		(2.0f / 255.0f);
 
 	col *= saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 
 	/* With the copy: the floor read at the bent place and added with its
 	 * share, the pixel written whole. With the depth texture the bent place
-	 * is refused where the frame there lies nearer than the sheet - a leg,
-	 * a pillar or a statue standing in the water is not pulled into the
-	 * floor; the pixel's own place is read instead. */
+	 * passes the guard (over RefractMove) or is refused - from below where
+	 * the frame there lies nearer than the sheet, from above where it lies
+	 * less than HD_WATER_GUARD under the surface at rest: a leg, a pillar or
+	 * a rat in the water is not pulled into the floor beside it; the
+	 * pixel's own place is read instead. */
 	float refused = 0.0f;
 
 	if (gWaterStage.x > 0.5f)
 	{
-		float2 at = RefractUV(uv, slope, bend, dx, dy);
+		float2 move = RefractMove(slope, bend, dx, dy);
 
 #ifdef HD_WATER_DEPTH
-		refused = SceneZ(at) < input.viewZ ? 1.0f : 0.0f;
-		at = refused > 0.5f ? uv : at;
+		const float zAt = SceneZ(ScreenClamp(uv + move));
+		// The path there, along this pixel's own ray.
+		const float pathAt = max(0.0f, zAt - input.viewZ.x) *
+			length(input.eye.xyz) / max(input.viewZ.x, 1.0f);
+
+		refused = above > 0.5f ?
+			(pathAt * abs(V.y) - lift < HD_WATER_GUARD ? 1.0f : 0.0f) :
+			(zAt < input.viewZ.x ? 1.0f : 0.0f);
+		move *= above > 0.5f ? (1.0f - exp(-min(path, pathAt) *
+			gWaterDeep.w)) / max(bend, 1.0e-3f) : 1.0f;
+		move *= 1.0f - refused;
 #endif
-		col += through * tex2Dlod(sWaterCopy, float4(at, 0.0f, 0.0f)).rgb;
+		col += through * tex2Dlod(sWaterCopy,
+			float4(ScreenClamp(uv + move), 0.0f, 0.0f)).rgb;
 		a = 1.0f;
 	}
 
 #ifdef HD_WATER_DEPTH
-	/* RoomProbe -waterdepthview: 1 and 2 the depth texture as grey, 3 the
-	 * pixels whose bent place the depth refused, in red over the sheet. */
-	if (gWaterStage.z > 2.5f)
-		return float4(lerp(col, float3(1.0f, 0.0f, 0.0f), refused), 1.0f);
-
+	/* RoomProbe -waterdepthview: 1 the path through the water behind the
+	 * sheet over 16384 as grey, 2 the depth from
+	 * the frame over the vertex depth times 0.5, 3 the pixels whose bent
+	 * place the guard refused, in red over the sheet, 4 the depth under the
+	 * surface at rest over 64 units, unclipped. One block for the four. */
 	if (gWaterStage.z > 0.5f)
 	{
-		const float grey = gWaterStage.z > 1.5f ?
-			0.5f * depth / max(input.roomPos.w, 1.0f) :
-			SceneZ(uv) * (1.0f / 16384.0f);
+		const float m = gWaterStage.z;
+		const float grey = m > 3.5f ? rest * (1.0f / 64.0f) :
+			m > 1.5f ? 0.5f * depth / max(input.roomPos.w, 1.0f) :
+			path * (1.0f / 16384.0f);
 
-		return float4(saturate(grey).xxx, 1.0f);
+		return m > 2.5f && m < 3.5f ?
+			float4(lerp(col, float3(1.0f, 0.0f, 0.0f), refused), 1.0f) :
+			float4(saturate(grey).xxx, 1.0f);
 	}
 #endif
 

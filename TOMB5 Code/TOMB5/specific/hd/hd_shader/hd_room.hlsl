@@ -393,7 +393,8 @@ float4 gWaterBox : register(c15);
  *            the sheet's draw writes all eight rows in the phase form
  *            (kx, kz, phase, height) - see WaveSum8
  * gWaterView for a sheet draw alone: x, y half the render target's width
- *            and height in pixels, for the rows' fade (WaterVS); zw unused.
+ *            and height in pixels, for the rows' fade (WaterVS); zw how far
+ *            the bank foam's patches have drifted (PatchField), in units.
  *            Declared, so fxc keeps its own literals out of c19; RoomVS
  *            never reads it, and a literal another shader keeps there is
  *            its own while that shader is bound */
@@ -676,7 +677,8 @@ float4 gWaterMisc : register(c103);
  *               over 16384 units, 2 the water depth out of the depth
  *               texture over the vertex depth, times 0.5, 3 the pixels
  *               whose bent place the depth refused, red, 4 the depth under
- *               the surface at rest over 64 units), y the slope's gain at
+ *               the surface at rest over 64 units, 5 the bank foam's
+ *               patches, green), y the slope's gain at
  *               eye level less one (the class's, see "the body at eye
  *               level" in WaterPS), w unused
  *
@@ -702,12 +704,18 @@ float4 gWaterStage : register(c106);
  *              its front's radius and its strength - see RingSlope
  * gWaveK       c121, c122, the eight rows' wave numbers, radians a unit -
  *              the lengths of their (kx, kz); the first is the crests'
- *              bend's scale (WaveBend), the rows' fade is WaterVS's */
+ *              bend's scale (WaveBend), the rows' fade is WaterVS's
+ * gWaterLara   c123, where the waterline gives way to Lara: x, y her world
+ *              x and z in the frame of the sheet's world position, z the
+ *              radius without a waterline, w one over the width it comes
+ *              back over; x, y far away (1e7) when she is not in the
+ *              water (see "the foam" in WaterPS) */
 float4 gWaveP2[4] : register(c107);
 float4 gWaterLag : register(c111);
 float4 gWaterLife : register(c112);
 float4 gWaterRings[8] : register(c113);
 float4 gWaveK[2] : register(c121);
+float4 gWaterLara : register(c123);
 
 /* The frame behind the sheet, copied out of the render target before the
  * blend phase (HDRenderWaterCopy): linear, clamped, one level. The frame's
@@ -1747,7 +1755,8 @@ float4 RoomPS(VS_OUT input) : COLOR0
  *                   shallow to deep: a view from above sees the floor, a
  *                   flat one the reflection
  *   the foam        a density at the shore that runs up and draws back,
- *                   a pattern that drifts, grows and dissolves; and on
+ *                   in patches along the bank that come and go, a
+ *                   pattern that drifts, grows and dissolves; and on
  *                   the crests of a sea, trailing them
  *
  * Premultiplied: rgb is what the water adds, alpha how much of the floor it
@@ -1756,8 +1765,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
  * a place moved by the wave's slope, dims it per channel and writes the whole
  * pixel with alpha 1 - see "the frame behind the sheet" below.
  *
- * Seen from below (the camera under water), the surface shows the bright
- * window overhead within the critical angle and the deep colour outside it.
+ * Seen from below (the camera under water), the surface shows the world
+ * above through it, clear within the critical angle and under a light veil
+ * of the shallow colour outside it.
  * The distance fog darkens the water as it darkens a room: a room loses the
  * fog from its light, and is black where the fog reaches that light; the
  * water, whose colours are the body's light times the palette, loses the
@@ -1769,10 +1779,81 @@ struct WATER_OUT
 	float4 pos     : POSITION;
 	float4 roomPos : TEXCOORD0;	// xyz room local (as drawn), w depth
 	float4 eye     : TEXCOORD1;	// xyz toward the eye, w shore distance
-	float2 viewZ   : TEXCOORD2;	// x the view depth, y the swell's lift
+	float4 viewZ   : TEXCOORD2;	// x the view depth, y the swell's lift,
+					// z the variety field, w the patches'
 	float4 keepA   : TEXCOORD3;	// the rows' fade, rows one to four
 	float4 keepB   : TEXCOORD4;	// and five to eight
 };
+
+/* A smooth field of 0..1 over the world that never repeats within a level:
+ * two Wave2 layers whose periods (about 6,700 and 8,900 units) stand in no
+ * simple ratio. It gives every stretch of a bank its own offset and swash
+ * phase of the foam and its own phase of the patches - a field rather than
+ * a number per square, which would jump at every square's edge and draw a
+ * seam across the foam. Worked out per vertex: one every 256 units carries
+ * a field this slow. */
+float WaterVariety(float2 xz)
+{
+	const float2 v = Wave2(xz * float2(0.00094f, 0.00071f) +
+		float2(1.3f, 0.4f));
+
+	return saturate(0.5f + 0.25f * (v.x + v.y));
+}
+
+/* The bank foam's patches: where along a bank the foam is at all. Three
+ * layers of cells, each the product of two Wave2 along axes turned by 0.35,
+ * 1.25 and 2.20 radians (so that no layer lines up with the classic grid's
+ * banks), of periods 3,800, 5,400 and 7,400 units; each layer times a clock
+ * of its own, of 26.3, 33.7 and 45.9 seconds, whose phase turns once, twice
+ * and three times over the variety field and a quarter turn with the next
+ * layer's cell - so every stretch of a level and neighbouring cells keep
+ * different times. A cell grows in place while its clock swings up, stands
+ * and dissolves, and the cells of the other sign take over: a patch here,
+ * then one elsewhere. No two of the periods stand in a simple ratio, and
+ * the layers' sum never returns to one pattern. The sum over 1.5 lies about
+ * -1..1; the pixel shader takes the patches where it stands over
+ * HD_PATCH_FROM (WaterPS, the foam). Read at the place less the drift of a
+ * channel's current (gWaterView.zw). Periods, turns and clocks are free
+ * choices, set by eye against the reference pictures supplied for this
+ * project; what they give is counted in the note over HD_PATCH_FROM. */
+float PatchField(float2 p, float t, float var)
+{
+	const float2 q = p - gWaterView.zw;
+	const float2 a = Wave2(float2(dot(q, float2(0.00155324f, 0.00056697f)),
+		dot(q, float2(-0.00056697f, 0.00155324f))) +
+		var * float2(2.3f, -1.7f));
+	const float2 b = Wave2(float2(dot(q, float2(0.00036690f, 0.00110419f)),
+		dot(q, float2(-0.00110419f, 0.00036690f))) +
+		var * float2(2.3f, -1.7f));
+	const float2 c = Wave2(float2(dot(q, float2(-0.00049969f, 0.00068648f)),
+		dot(q, float2(-0.00068648f, -0.00049969f))) +
+		var * float2(2.3f, -1.7f));
+	const float3 cell = float3(a.x * a.y, b.x * b.y, c.x * c.y);
+	const float3 phase = t * float3(0.2389059f, 0.1864446f, 0.1368888f) +
+		6.2831853f * (var * float3(1.0f, 2.0f, 3.0f) + 0.25f * cell.yzx);
+	const float2 clockA = Wave2(phase.xy);
+	const float2 clockB = Wave2(phase.zz);
+
+	return dot(cell, float3(clockA, clockB.x)) * (1.0f / 1.5f);
+}
+
+/* A patch is where the field stands over HD_PATCH_FROM; its strength, 0 to
+ * 1, is the excess over HD_PATCH_SPAN, and the band reaches 1.5 times the
+ * square root of it into the water (WaterPS): nothing at a patch's ends,
+ * rising like a half circle where the field crosses the threshold, so a
+ * patch is a rounded lobe, and the further the field stands over it the
+ * further the lobe reaches. Counted on the same arithmetic over eight bank
+ * lines of 24,000 units for ten minutes (a script of this project, steps
+ * of 32 units and half a second): foam on 0.45 of a bank's length at any
+ * moment; a patch 320 / 864 / 2,080 units long and living 11 / 25 / 68
+ * seconds (the tenth, half and ninth tenth of all; two patches that touch
+ * count as one); where a patch is, the band reaching 0.49 / 1.17 / 1.5 of
+ * its width, a whole width or more on 0.28 of the bank. The threshold, the
+ * span and the 1.5 are free choices, set by eye against the reference
+ * pictures supplied for this project: foam on parts of a bank, in lobes of
+ * different sizes, bare bank between. */
+#define HD_PATCH_FROM 0.05f
+#define HD_PATCH_SPAN 0.4f
 
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
@@ -1860,7 +1941,13 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	o.pos = clip;
 	o.roomPos = float4(pos, depth);
 	o.eye = float4(gEye.xyz - pos, shore);
-	o.viewZ = float2(view.z, lift);
+	// The variety and the patches at the surface's place, on the clock the
+	// pixel shader's foam runs on (still while tomb5.hd_motion is off).
+	const float2 at0 = inPos.xz + gRoomOrigin.xz;
+	const float var = WaterVariety(at0);
+
+	o.viewZ = float4(view.z, lift, var,
+		PatchField(at0, gMotion.z * gMotion.w, var));
 	return o;
 }
 
@@ -1894,17 +1981,22 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * it; and the move is the one the shorter of the two paths gives, the path
  * there or here - 1 - T of the shorter over 1 - T of this pixel's own - so a
  * deep pixel beside a shallow floor moves no further than the shallow side
- * allows. 48 units
- * is a free choice, set by eye on the round's RoomProbe pictures: above a
- * thing's own waterline line (24 to 48, the foam below) and under the
- * smallest thing that swims, a rat's back.
+ * allows. 96 units: the deepest thing that swims at the surface must lie
+ * inside it. A swimming rat stands 50 units under the surface (game\rat.cpp,
+ * the underwater room's ceiling + 50) and its mesh reaches 10 below its
+ * place (y -84 to 10, the box of slot RAT in the classic ANDREA2.TRC), so
+ * its belly lies 60 units down; at 48 a neighbour's bent place that fell on
+ * the lowest 12 units read the rat and drew a piece of it beside itself.
+ * 96 takes those 60 and the swell's and a ring's lift with room to spare,
+ * and stays under every classic floor, which lies a click (256) down at the
+ * least.
  *
  * The absorption per channel (gWaterAbsorb.rgb): the deep colour of the
  * section's palette is what a long path leaves of the shallow one, so the
  * channels are absorbed in the ratio of ln(shallow / deep), scaled so that
  * their mean is the class's one over the absorption length - the palette
  * keeps its meaning and the class its depth (water_look). */
-#define HD_WATER_GUARD 48.0f
+#define HD_WATER_GUARD 96.0f
 #define HD_WATER_CLIP 8.0f
 
 float2 RefractMove(float2 slope, float amount, float2 fx, float2 fy)
@@ -2002,20 +2094,6 @@ float2 RingSlope(float2 p)
 	}
 
 	return slope;
-}
-
-/* A smooth field of 0..1 over the world that never repeats within a level:
- * two Wave2 layers whose periods (about 6,700 and 8,900 units) stand in no
- * simple ratio. It gives every stretch of a bank its own offset, turn,
- * density and swash phase of the foam - a field rather than a number per
- * square, which would jump at every square's edge and draw a seam across
- * the foam. */
-float WaterVariety(float2 xz)
-{
-	const float2 v = Wave2(xz * float2(0.00094f, 0.00071f) +
-		float2(1.3f, 0.4f));
-
-	return saturate(0.5f + 0.25f * (v.x + v.y));
 }
 
 float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
@@ -2146,22 +2224,23 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	float bend = 1.0f - T;
 
 	/* Seen from below: inside the critical angle (about 49 degrees off the
-	 * vertical, N.V above 0.66) the bright window, outside it the deep
-	 * colour mirrored back; the window's edge spread over 0.1 of N.V round
-	 * that 0.66. With the copy the window is the world above, bent by the
-	 * waves at the full slope, with a fifth of the reflection colour in it
-	 * so that a dark room above does not turn it to mud; outside it the
-	 * deep colour covers three quarters and the frame behind shows through
-	 * the rest, dimmed and tinted by that cover - a surface with the waves'
-	 * shapes in it rather than a flat plane. Without the copy the blend
-	 * shows the frame behind at the same shares. 0.75, 0.2 and the 0.1 are
-	 * free choices, set by eye on the round's RoomProbe pictures. */
+	 * vertical, N.V above 0.66) the window, outside it the rest of the
+	 * surface; the window's edge spread over 0.1 of N.V round that 0.66.
+	 * With the copy both show the world above, bent by the waves at the
+	 * full slope: the window with a tenth of the reflection colour in it,
+	 * the rest under a light veil of the shallow colour, 0.35 of it - the
+	 * surface is clear water with the waves' shapes in it, not a milky
+	 * plane, and the room's own underwater fog and the screen's wobble do
+	 * the rest, as they do for everything under water. Without the copy the
+	 * blend shows the frame behind at the same shares. 0.35, 0.1 and the
+	 * 0.1 of the edge are free choices, set by eye on the round's RoomProbe
+	 * pictures and the reference pictures supplied for this project. */
 	if (above < 0.5f)
 	{
 		const float window = smoothstep(0.61f, 0.71f, nv);
 
-		a = lerp(0.75f, 0.2f, window);
-		col = a * lerp(gWaterDeep.rgb * 1.3f, refl, window);
+		a = lerp(0.35f, 0.1f, window);
+		col = a * lerp(gWaterBase.rgb, refl, window);
 		through = 1.0f - a;
 		bend = 1.0f;
 	}
@@ -2184,18 +2263,26 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * The reach: the swash, a cycle of 4.5 seconds whose phase runs along
 	 * the bank, and the wave's own height there, so the foam runs up the
 	 * bank and draws back - over the class's band from the classic shore
-	 * (input.eye.w), in both variants.
+	 * (input.eye.w), in both variants - times the patch's lobe (PatchField,
+	 * HD_PATCH_FROM): foam on parts of a bank, in lobes of their own sizes
+	 * and lives, bare bank between, and not a rim of one width all round.
 	 *
 	 * The waterline, with the depth texture: a thin wet line where the
 	 * frame lies within 24 units under the surface at rest, gone at 48,
-	 * broken by the same pattern - round a post, a hull, a floe, a wading or
-	 * swimming body, wherever the drawn shape meets the water, and nothing
-	 * more: a body a click under the surface is no shore.
+	 * broken by the same pattern - round a post, a hull, a floe, wherever
+	 * the drawn shape meets the water, and nothing more: a body a click
+	 * under the surface is no shore. Within the band of a bank and outside
+	 * a patch it is held to 0.25, a faint broken line where the foam is
+	 * gone, so the bank is not bare; inside a patch and out in the water it
+	 * keeps the 0.75 of all foam. Round Lara it gives way (gWaterLara): a
+	 * wet line round a swimming or wading body is white paint on her legs
+	 * and shoulders; her rings stay. Without the depth texture the line is
+	 * the band's innermost 24 units, at 0.25 and broken the same way.
 	 *
 	 * The numbers here - the speeds, the 400 units, the 5 and 4.5 seconds,
-	 * the 24 and 48 units and the density's curves - are
+	 * the 24 and 48 units, the line's 0.25 and the density's curves - are
 	 * free choices, set by eye on the round's RoomProbe pictures. */
-	const float var = WaterVariety(world.xz);
+	const float var = input.viewZ.z;
 	const float2 fp = (world.xz + var * float2(400.0f, -330.0f)) *
 		gWaterBase.w;
 	const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
@@ -2210,14 +2297,25 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
 	const float reach = 0.55f + 0.225f * (1.0f + cycle.y) +
 		0.35f * saturate(h / max(gWaterMisc.w, 1.0f));
+	const float patch = saturate((input.viewZ.w - HD_PATCH_FROM) *
+		(1.0f / HD_PATCH_SPAN));
 	const float edge = saturate(1.0f - input.eye.w /
-		max(gWaterMisc.x * reach, 1.0f));
+		max(gWaterMisc.x * reach * 1.5f * sqrt(patch), 1.0f));
 	const float thr = lerp(1.25f, -0.05f, edge) + 0.12f * cycle.x;
 	float foam = gWaterFoam.w * smoothstep(thr - 0.12f, thr + 0.18f, n) *
 		(0.4f + 0.6f * edge);
+	const float wet = smoothstep(0.25f, 0.6f, n);
 #ifdef HD_WATER_DEPTH
-	foam = max(foam, gWaterFoam.w * (1.0f - smoothstep(24.0f, 48.0f, rest)) *
-		smoothstep(0.25f, 0.6f, n));
+	const float bare = (1.0f - saturate(patch * 4.0f)) *
+		saturate(1.0f - input.eye.w / max(gWaterMisc.x, 1.0f));
+	const float away = saturate((length(world.xz - gWaterLara.xy) -
+		gWaterLara.z) * gWaterLara.w);
+
+	foam = max(foam, min(gWaterFoam.w * (1.0f - smoothstep(24.0f, 48.0f,
+		rest)) * wet * away, 0.75f - 0.5f * bare));
+#else
+	foam = max(foam, min(gWaterFoam.w, 0.25f) *
+		saturate(1.0f - input.eye.w * (1.0f / 24.0f)) * wet);
 #endif
 
 	/* The whitecaps of a sea: where the eight rows stand above the class's
@@ -2316,19 +2414,22 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * sheet over 16384 as grey, 2 the depth from
 	 * the frame over the vertex depth times 0.5, 3 the pixels whose bent
 	 * place the guard refused, in red over the sheet, 4 the depth under the
-	 * surface at rest over 64 units, unclipped. One block for the four, in
-	 * a variant of its own (HD_WATER_VIEW, the depth variant with this
-	 * block): the game never draws a view, and the 16 slots it costs are
-	 * the foam's body's in the variant it does draw. */
+	 * surface at rest over 64 units, unclipped, 5 the bank foam's patches'
+	 * strength in green over the sheet, unclipped. One block for the five,
+	 * in a variant of its own (HD_WATER_VIEW, the depth variant with this
+	 * block): the game never draws a view, and the slots it costs are the
+	 * foam's body's in the variant it does draw. */
 	if (gWaterStage.z > 0.5f)
 	{
 		const float m = gWaterStage.z;
 		const float grey = m > 3.5f ? rest * (1.0f / 64.0f) :
 			m > 1.5f ? 0.5f * depth / max(input.roomPos.w, 1.0f) :
 			path * (1.0f / 16384.0f);
+		const float green = m > 4.5f ? 1.0f : 0.0f;
 
-		return m > 2.5f && m < 3.5f ?
-			float4(lerp(col, float3(1.0f, 0.0f, 0.0f), refused), 1.0f) :
+		return (m > 2.5f && m < 3.5f) || m > 4.5f ?
+			float4(lerp(col, float3(1.0f - green, green, 0.0f),
+			lerp(refused, patch, green)), 1.0f) :
 			float4(saturate(grey).xxx, 1.0f);
 	}
 #endif

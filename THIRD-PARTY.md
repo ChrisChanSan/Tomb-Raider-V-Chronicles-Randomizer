@@ -757,6 +757,57 @@ water surface", carries the tables.
     wades (`lara.water_status`); her rings stay. A rule of this project: a
     wet line round her body read as white paint on her (the play test of
     2026-10-08); 320 and 64 free choices that cover her 768 units.
+90. **The waterfall's foot** - every WATERFALL1 to 3 and WATERFALLSS1 and 2
+    object (not FISHTANK), its classic mesh placed as `DrawAnimatingItem`
+    places it (the item's place and turn, the frame's root offset); its foot
+    the vertices within 64 units of the lowest, an object no taller than that
+    a scrolling face; over a sheet where a foot point lies over a square that
+    draws one with the surface at most 256 units over the lowest vertex or
+    1,024 under it. OWN, free choice; count on our data: 31 of the fifteen
+    levels' 46 waterfall objects over a sheet, every one with a gap of 0
+    (RoomProbe `-hdwater 1 -nodraw`, the `fall=` lines).
+91. **The art's falling water as the foot** - where the room is drawn HD, the
+    lowest vertices (within 64 units) of a flow part (material 1) more than
+    512 units tall that lie within a square of the classic foot and over the
+    same sheet take its place. OWN, free choice; DATA for the reason: ANDREA2
+    room 231's curtains land about 450 units from the classic object's foot
+    (`TrgProbe -parts 231`, the `foot=` lines with and without the art), and
+    its slot WATERFALL1 is DUMMY in the level's `.MAP`
+    (`MapProbe -map ANDREA2 -v`), so the art draws that fall.
+92. **The sources along a foot** - the foot's points in order along their
+    principal axis, cut into runs of at most 1,024 units and at gaps over 384;
+    a source at each run's mean, its radius half the run's diagonal plus 256,
+    held to 384 to 768. OWN, free choice, set by eye on RoomProbe pictures.
+93. **The swirl** - a second draw of the sheet's triangles (`SwirlPS`), up to
+    eight sources a draw: the pixel's place turned about the source by 0.35
+    radians a second and 1.2 more toward the middle, the bank foam's own
+    pattern, dissolve, density (entry 68's threshold along the square root of
+    the way in) and body (entry 80) read there, the reach the radius times 0.8
+    plus 0.2 of the patch field of entry 87, the source's strength the body's
+    foam scale; nothing from below. OWN, free choice, set by eye on RoomProbe
+    pictures; a rotation of the texture coordinate, general graphics
+    knowledge.
+94. **The foot's rings** - each source a ripple source of entry 72's ring,
+    size 64, re-armed every 0.4 to 0.8 seconds by a hash of its place. OWN,
+    free choice.
+95. **The drops at the foot** - `TriggerSmallSplash` (`game/tomb4fx.cpp`), the
+    engine's own splash of a rat or a shell landing in water, on the logic
+    tick beside `AnimateWaterfalls`. CLASSIC: the effect and its sparks are
+    the classic engine's, unchanged; OWN: two drops a tick at every source
+    within eight squares of the camera and sixteen a tick at most, free
+    choices. What makes the splash of ANDREA1's fountain is no effect of the
+    engine but the remaster's own art, a spray part of material 1
+    (`TrgProbe -parts 59`, DATA); it is not copied.
+96. **No stretch of a waterfall that stops short** - a rule of this project:
+    a fall whose bottom stopped short of the surface would be stretched down
+    to it; none does (entry 90's count), and the art cannot be stretched
+    without rewriting its vertex buffer. What reads as short in ANDREA2 room
+    231, the curtain's light fading toward its foot (measured on the additive
+    pass: half its peak about 290 units over the water, a tenth 62), is met
+    by entries 93 to 95 instead.
+97. **The `swirl` key of `hd_water.txt`** - `swirl <x> <z> <radius>` (64 to
+    2,048) a source of entries 93 to 95 on the surface under that place,
+    `swirl off` no objects' sources in the row's bodies. OWN, free choice.
 
 ## Credited, but not contained here
 

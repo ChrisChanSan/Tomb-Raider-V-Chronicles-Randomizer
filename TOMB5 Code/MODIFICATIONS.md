@@ -9566,7 +9566,9 @@ sheet's look in the fountain hall. Asked for: the bank foam is far too regular, 
 of a tablecloth - it is to be broken up by other shapes and be gone in places, there or
 not at random, in different shapes, never the same; the waterline foam on Lara's body is
 to go (the posts' line is fine); the rats are still slightly torn; the surface seen from
-below is in places opaque, a milky green, and is to become clear.
+below is in places opaque, a milky green, and is to become clear; the waterfall of the
+fountain hall stops above the surface, and where it lands a swirl and a splash of drops
+are wanted.
 
 The patches (`hd_room.hlsl` :1819, :1855, :2300; `hd_render.cpp` :8548, :9262). The band
 of the bank foam reached the same width along every bank, and only the pattern inside it
@@ -9632,6 +9634,99 @@ window 0.1 of the reflection colour (0.2); the window's edge stays 0.61 to 0.71 
 the room's underwater fog and the screen's wobble are the engine's. Free choices, set by
 eye on D1, U1 and the rain pool from below.
 
+The waterfall's foot (`hd_render.cpp` :8811, :10348, :11215; `hd_level.cpp` :1712, :1792;
+`hd_room.hlsl` :2445; `game/control.cpp` :714; `RoomProbe.cpp` :4759). In the fountain
+hall of ANDREA2 the falling water stops above the surface, and the owner asked for the
+white swirl where it lands - the swirl of room 231's own water art, hidden under the sheet
+since the second play test, which he liked but which lay out of place on the moving
+sheet - and for a splash of drops like the one of ANDREA1's fountain. Measured first, with
+the classic data and the tools: nothing draws the waterfall object there. ANDREA2's `.MAP`
+binds the slot WATERFALL1 to DUMMY (`MapProbe -map ANDREA2 -v` lists every slot but Lara's
+and the DUMMY ones, and lists no line for it), so in a room drawn HD the object is drawn
+by nobody (the baked rule of `hd_object.cpp`) and the room's art draws the curtain: two
+flow parts (material 1) from y -3,356 down to 249 and 255, and at their foot a spray part
+from 47 to 281 (`TrgProbe -parts 231`). Neither the art nor the classic object stops short
+of the water - the classic mesh ends at 256 and so does the surface. What stops short is
+the curtain's light: on the additive pass alone, seen level from 100 units over the
+surface, it falls to half its peak about 290 units over the water and to a tenth 62 units
+over it, and is nothing over the last 25 or so; the spray at the foot adds nothing to that
+picture, and the art's swirls were hidden. So the foot is what is built.
+
+The rule. Every WATERFALL1 to 3 and WATERFALLSS1 and 2 object - the slots the game scrolls
+as falling water; FISHTANK is a tank's glass - has its classic mesh placed as
+`DrawAnimatingItem` places it, and its foot is the vertices within 64 units of the lowest;
+an object no taller than that is a scrolling face (ANDREA1's WATERFALLSS1, the upper basin
+of its fountain). The foot stands over a sheet where one of its points lies over a square
+that draws one, with the surface at most 256 units over the lowest vertex or 1,024 under
+it. Where the room is drawn HD and its art has falling water there - a flow part more than
+512 units tall whose lowest vertices lie within a square of the classic foot and over the
+same sheet - those take the classic foot's place: in room 231 the art's curtains land
+about 450 units nearer the room's middle than the classic mesh (x 55,518 to 55,585 against
+55,967 to 56,028, the WATERLOG `foot=` lines with and without the art), and two waterfalls
+over one sheet stand two squares apart at the least (JOBY2's room 66). The foot's points,
+in order along their own principal axis, are cut into runs no longer than 1,024 units and
+at every gap over 384; each run is a source at its mean with half its diagonal plus 256 as
+its radius, held to 384 to 768. Free choices, set by eye on the round's RoomProbe
+pictures: a disc about a square across under every square of a curtain, three quarters of
+a square under a narrow jet. ANDREA2's curtain gets four sources, two under each of its
+two strands.
+
+A source is three things. The swirl: a second draw of the sheet's triangles with a pixel
+shader of its own, `SwirlPS` (the sheet's depth variant stands at 508 of 512 slots and
+holds no loop of four Wave2 a source), up to eight sources a draw in c124 to c131, with
+the sheet's blend: per source the pixel's place turned about the centre by 0.35 radians a
+second and by 1.2 more toward the middle (the spiral turns as a whole and never winds up),
+the bank foam's own two drifting layers, slow layer and five-second dissolve read there,
+the reach the radius times 0.8 + 0.2 of the patch field (it breathes with the patches'
+clocks of 26 to 46 seconds), the bank foam's density with the middle in the bank's place
+along the square root of the way in (a dense core over about half the disc, lace round
+it), the foam's body and the fog as `WaterPS` lays them on, nothing seen from below. A
+half turn of twist drew the foam into spiral arms like a painted sign; a fifth leaves it
+foam. The rings: every source is a ripple source of size 64, re-armed every 0.4 to 0.8
+seconds by a hash of its place. The drops: on the logic tick, beside `AnimateWaterfalls`,
+two `TriggerSmallSplash` drops a tick at every source within eight squares of the camera,
+sixteen a tick at most - the engine's own splash of a rat or a shell landing in water,
+sparks thrown up about 130 units that fall back within about 60 and live 24 ticks.
+ANDREA2's four sources keep about 200 of the game's 1,024 sparks alive, and the cap holds
+JOBY5's 37 sources to about 380. Nothing of it runs without sheets or with `hd_motion` 0.
+The drops draw on `GetRandomControl`, the game's own random sequence, as the classic mist
+does: with `hd_water` 1 in a level with a foot, later random draws come out differently,
+and nothing saves or replays them. Spin, twist, the square root, 0.8, the ring's period
+and size, two drops, eight squares and sixteen are free choices, set by eye on the round's
+RoomProbe pictures.
+
+The splash of ANDREA1's fountain is not an effect of the engine. Room 59 holds a
+WATERFALL1 and a WATERFALLSS1 at one place and no emitter (`ItemCheck` on the classic
+file); the classic engine scrolls their texture and nothing more. The remaster's art draws
+the splash: a spray part of material 1, a dense mesh of 6,548 triangles that sways, its
+page scrolled at 1.5 a second (`TrgProbe -parts 59`). The same part, same page and
+parameters, stands at the foot of room 231's curtain (3,750 triangles) and shows nothing
+there - its colours come to half of ANDREA1's and its light adds nothing to the picture
+above. So the nearest effect the engine has is taken, `TriggerSmallSplash`: `SetupSplash`
+is Lara's three-ring splash with its sound, `TriggerWaterfallMist` already rises where a
+WATERFALLMIST object stands (room 231 has two) and the bubbles are under water.
+
+The text file and the tools. `swirl <x> <z> <radius>` (64 to 2,048) puts a source on the
+surface of the row's room's square under that place (a fountain's jet that has no object),
+and `swirl off` takes the objects' sources of the row's bodies away; a row holds 24 tokens
+at most. RoomProbe builds the objects' feet out of the classic `.TRC` as the engine builds
+them out of `items[]` and draws the swirls and the rings; it draws no sparks, so the drops
+are not in its pictures; `-swirl x,z,r` adds a source to a picture. WATERLOG: `falls=` at
+the end of the level line, `swirl=` at the end of a body's, a `fall=` line per waterfall
+object (its top and bottom, the surface and the gap, the sources, `art=` for the art's
+points that took the classic ones' place) and a `foot=` line per source.
+
+Room 231's own water art stays hidden: the sheet's look in the fountain hall is right. The
+swirl the owner liked in it now stands where the water lands, made of the sheet's own
+foam.
+
+Decided against the brief: no stretch. The brief asked for the falling water to be
+stretched down to the surface where its bottom stops short. All 31 waterfall objects over
+a sheet end at their surface (gap 0 on every `fall=` line of the fifteen levels), room
+231's curtains end within seven units of it, and the art could not be stretched without
+rewriting its vertex buffer, `RoomVS` being shared bytecode. What reads as short is the
+art's fading light, which the swirl, the rings and the drops now meet.
+
 **Measured.** Slots, fxc /O3: `WaterPS` 443 to 442, its depth variant 500 to 508, the view
 variant 491 to 503, `WaterVS` 206 to 266; one draw each, no split. In the depth variant
 the patches cost 4 and the line's cap 7, the gap round Lara 8, the view from below saves 1
@@ -9648,19 +9743,46 @@ change against `c9a09f2`, the seas by 1.6 to 7.0 % of their pixels, the sewer ch
 1.1 and 1.2 %, D1 by 72 % (from below), the rest by under 1 % (the guard); E3 and E4 as
 before.
 
+The waterfall's foot, measured: 46 waterfall objects in the fifteen classic levels and 31
+of them over a sheet - ANDREA2 one (4 sources), JOBY2 three (3), JOBY5 27 (37) - every one
+with a gap of 0; ANDREA1's two (a flat basin face and a fall into a fountain basin that is
+no sheet), JOBY5's eight that end at 4,864 where no sheet lies, RICH1's two, RICH2's one
+and RICH3's two stand over none (RoomProbe `-hdwater 1 -nodraw`, the `fall=` and `foot=`
+lines). Of the 31 feet 30 are placed on the art's falling water (`art=` 4 to 108 points),
+JOBY5's item 88 on its classic mesh. `SwirlPS` takes 170 slots; the sheet's own four
+shaders are unchanged (442, 508, 503, 266). The full-water timing view at 2560 x 1440,
+three runs: 0.197, 0.199, 0.199 ms against 0.198 three times at `690c533` (it has no
+foot); the swirls' draw over the whole of that picture 0.047 ms with one source, 0.104
+with four, 0.180 with eight, three runs alike to a thousandth - about 0.02 ms a source
+over a whole screen on top of about 0.03 for the draw. The fifteen cameras with
+`-hdwater 1`: five change against `690c533`, room 231's basin (A1 2.2 %, A2 1.2 %, D2 9.5
+% of the pixels), D1 from below 0.5 % (the rings) and JOBY2's room 66 3.3 % (its three
+falls).
+
 **Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
 `-hdwater 0`, 15 of 15 identical to the fix round's parity set; the shared shaders'
 bytecode identical to `c9a09f2` without the stamp lines, 12 of 12; the sweep's counts
 identical; the suites (ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and
 243) 0 failed; the engine and every tool build.
 
+**Checked** for the waterfall's foot, with the tools built after its last engine commit:
+the classic path 6 of 6 md5-identical to `8691e82`; the fifteen cameras with `-hdwater 0`
+15 of 15 identical to the fix round's parity set; the shared shaders' bytecode and the
+sheet's four shaders identical to `690c533` without the stamp lines, 16 of 16; the sweep's
+counts identical; the text file (`swirl off` takes the foot of room 231,
+`swirl 54800 42000 700` puts one there, a row with two numbers after `swirl` counts bad);
+the suites as above, 0 failed; the engine and every tool build.
+
 **Left.** The look in the game: nobody in this round could play it - the patches' amount
-and size, the faint line, Lara wading without her line, the rat, the surface from below.
-The waterfall of ANDREA2 room 231 that stops above the surface, the swirl where it lands
-and a splash of drops there, asked for in the same play test, are not this round's. The
+and size, the faint line, Lara wading without her line, the rat, the surface from below,
+and at the waterfall's foot the swirl's size, turn and brightness, the drops, which no
+picture of RoomProbe shows, and whether the curtain's fading light still reads as stopping
+short above them. The splash of ANDREA1's fountain is the remaster's own art; room 231's
+copy of it draws dark and is left as the art has it. The dive splash of the HD path. The
 reflection of the room itself, the third stage.
 
-**Commits.** After the third play test `0b1e1ca`, `a1ea812`.
+**Commits.** After the third play test `0b1e1ca`, `a1ea812`; the waterfall's foot
+`a915668`, `f4f0922`.
 
 ## 2.5 Sixty frames a second
 

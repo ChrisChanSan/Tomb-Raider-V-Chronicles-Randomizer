@@ -1813,6 +1813,19 @@ it.
   stretches are stronger and finer, so a basin seen at eye level shows its
   waves. With `hd_motion` off the water stands still and the game's own ripple
   pictures are drawn.
+- **Where a waterfall lands.** Every waterfall object of a level whose water
+  ends over a sheet - 31 in the fifteen levels: ANDREA2's fountain hall,
+  JOBY2's three in room 66 and 27 in JOBY5 - churns the water at its foot.
+  The foot is where the falling water the room's art draws ends (the
+  waterfall object's own mesh where the art has none), cut into stretches of
+  up to a square, and every stretch gets a disc of the sheet's own foam that
+  turns slowly, dense in the middle and lacy at its rim, growing and
+  shrinking a little over half a minute; rings that start from it every
+  half second or so; and drops thrown up from it, the game's own small
+  splash, two a tick at every foot within eight squares of the camera.
+  The water of a waterfall reaches its surface in every level, and the
+  fading light of a curtain's lowest stretch now ends in that foam and spray.
+  With `hd_motion` off none of it moves and no drops are thrown.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
@@ -1838,7 +1851,13 @@ it.
   ripple 55808 32768 80 0.7`; the rest of such a row applies like any row's.
   And `art keep` (or `art hide`, what a row says without it) draws the
   Remaster's own water art over the sheets of the row's bodies again, for
-  example `ANDREA2 231 - art keep`. No file means the engine's own rows alone.
+  example `ANDREA2 231 - art keep`. `swirl <x> <z> <radius>` puts the foot of
+  a waterfall (*Where a waterfall lands*) at that place with that radius (64
+  to 2048 units), for a fountain's jet that has no waterfall object (for
+  example `ANDREA2 194 - swirl 55808 32768 400`), and `swirl off` takes the
+  waterfalls' own feet in the row's bodies away, for example
+  `ANDREA2 231 - swirl off`; the `WATERLOG foot=` lines say where they are.
+  No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
   sheet, the bodies by class, `hd_water.txt`'s lines, rows and unreadable lines,
@@ -1857,8 +1876,15 @@ it.
   tuned it (`table:` the engine's, `file:` yours, with the room), the tint, wave
   and foam numbers in force, its twins' squares, the light before gain, floor
   and cap (`raw=`), `none=1` when a row of class `none` took its sheet away,
-  whether the Remaster's water art over it is kept or hidden (`art=`), and
-  the bend in force (`bend=`).
+  whether the Remaster's water art over it is kept or hidden (`art=`), the
+  bend in force (`bend=`) and whether its waterfalls keep their feet
+  (`swirl=on`) or a row took them away (`swirl=off`). The level line ends
+  with the waterfall objects whose water ends over a sheet (`falls=`); one
+  `WATERLOG fall=` line per waterfall object gives its highest and lowest
+  point, the surface under it and the gap between (0: it reaches the water),
+  its feet and how many points of the art's own falling water placed them
+  (`art=`), and one `WATERLOG foot=` line per foot its place, its radius and
+  `row=1` for a row's.
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
 

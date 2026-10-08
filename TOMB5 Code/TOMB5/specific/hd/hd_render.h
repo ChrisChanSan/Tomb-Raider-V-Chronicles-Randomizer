@@ -839,6 +839,8 @@ struct HDRenderWaterBody
 	 * sheet is drawn; 0, the default, hides it (HDRenderSetWaterSheets,
 	 * "the art over a sheet"). */
 	int artKeep;
+	// The applied row's refraction scale, `bend` (1 without one).
+	float bend;
 };
 
 // What the level built, for its log line.

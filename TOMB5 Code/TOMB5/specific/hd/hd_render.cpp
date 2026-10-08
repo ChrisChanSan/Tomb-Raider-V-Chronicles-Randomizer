@@ -36,6 +36,7 @@
 #include "hd_shader/hd_room_water_vs.inc"
 #include "hd_shader/hd_room_water_ps.inc"
 #include "hd_shader/hd_room_water_depth_ps.inc"
+#include "hd_shader/hd_room_water_view_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1634,6 +1635,9 @@ namespace
 	// Its pixel shader that reads the depth texture as well. Null when the
 	// device refused it: the sheets then draw with g_water_ps.
 	IDirect3DPixelShader9* g_water_depth_ps = 0;
+	// That one with RoomProbe's depth views (HD_WATER_VIEW), made the first
+	// time a view is asked for; the game never asks.
+	IDirect3DPixelShader9* g_water_view_ps = 0;
 	/* The projected shadow's receive shader (hd_shadow_receive.hlsl). Null
 	 * when the device refused it; the projected shadow then does not run and
 	 * the blob stays. */
@@ -3519,8 +3523,9 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	}
 
 	/* bshader.bat compiles four pixel shaders for ps_3_0, the room shader at
-	 * 477 instruction slots, the model shader at 360, the glow shader at 478
-	 * and the water sheet's at 247, and the room shader's gloss variant
+	 * 482 instruction slots, the model shader at 360, the glow shader at 483
+	 * and the water sheet's at 443 (500 with the depth texture, 491 in
+	 * RoomProbe's view variant), and the room shader's gloss variant
 	 * beside them at 502 (hd_room_gloss_ps.inc). The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
@@ -3528,7 +3533,7 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	 * at 524 slots without a warning. The shaders stay inside the guarantee
 	 * only because of their own size, so anyone who grows one has to read
 	 * the "instruction slots used" line of its .inc. The vertex shaders are
-	 * not checked here; the room's, at 412, and the water sheet's, at 153,
+	 * not checked here; the room's, at 412, and the water sheet's, at 206,
 	 * lie inside the 512 slots vs_3_0 guarantees.
 	 * A device that answers less than 512 could fail CreatePixelShader below
 	 * with nothing but an HRESULT, so it is refused here with a reason in
@@ -3759,6 +3764,7 @@ void HDRenderShutdown()
 	if (g_water_vs) { g_water_vs->Release(); g_water_vs = 0; }
 	if (g_water_ps) { g_water_ps->Release(); g_water_ps = 0; }
 	if (g_water_depth_ps) { g_water_depth_ps->Release(); g_water_depth_ps = 0; }
+	if (g_water_view_ps) { g_water_view_ps->Release(); g_water_view_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -8371,7 +8377,10 @@ namespace
 	 *            brightest band of the JOBY2 dome being its horizon
 	 *            (RoomProbe -skyonly)
 	 * baseAngle  the body's own direction for a basin and a sea; a channel
-	 *            takes its long axis */
+	 *            takes its long axis
+	 * eyeGain    how much steeper the sheet's slopes are drawn where the
+	 *            view runs flat over the water (hd_room.hlsl, "the body at
+	 *            eye level"), 1 changing nothing */
 	struct HDWaterClass
 	{
 		const char* name;
@@ -8393,6 +8402,7 @@ namespace
 		float specStrength;
 		float sunElev, sunAzim;
 		float baseAngle;
+		float eyeGain;
 	};
 
 	/* A basin is a calm fountain: short, low, slow ripples in clear water
@@ -8411,7 +8421,9 @@ namespace
 	 * Their directions keep at least 0.15 radians from every other row's.
 	 * The envelope's depth - basin 0.30, channel 0.35, sea 0.50 - and the
 	 * directions are free choices, set by eye on the round's RoomProbe
-	 * pictures. */
+	 * pictures. So are the gains at eye level, basin 3, channel 2, sea 1:
+	 * the calmer the class, the flatter it lies seen flat; the sea's rows
+	 * are high enough already. */
 	const HDWaterClass kWaterClass[HD_WATER_CLASSES] =
 	{
 		{ "basin", { 260.0f, 150.0f, 85.0f, 47.0f, 197.0f, 113.0f, 63.0f,
@@ -8420,21 +8432,21 @@ namespace
 			{ 0.0f, 1.13f, -0.79f, 2.51f, 1.87f, -1.61f, 0.41f, -2.83f },
 			0.30f,
 			0.6f, 0.0f, 0.0f, 512.0f, 4000.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f },
+			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f, 3.0f },
 		{ "channel", { 420.0f, 230.0f, 120.0f, 64.0f, 311.0f, 166.0f, 88.0f,
 			41.0f },
 			{ 3.0f, 1.8f, 0.9f, 0.45f, 1.86f, 1.02f, 0.51f, 0.23f },
 			{ 0.0f, 0.42f, -0.37f, 0.9f, -0.19f, 0.63f, -0.71f, 1.21f },
 			0.35f,
 			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
-			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f },
+			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f },
 		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f, 1025.0f, 481.0f, 222.0f,
 			98.0f },
 			{ 38.0f, 16.0f, 7.0f, 2.8f, 19.75f, 8.47f, 3.55f, 1.47f },
 			{ 0.0f, 0.61f, -0.52f, 1.37f, -0.29f, 0.97f, -1.13f, 0.27f },
 			0.50f,
 			1.0f, 0.0f, 1.0f, 1024.0f, 900.0f, 0.85f, 300.0f, 1.5f, 0.6f,
-			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f },
+			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f, 1.0f },
 	};
 
 	/* The rows' slow envelope (water_rows_now): a row's height swells and
@@ -8524,6 +8536,12 @@ namespace
 	// units standing for 1.77 m.
 	const float kWaterG = 4300.0f;
 
+	// Units: how high the thickest foam stands for its light (hd_room.hlsl,
+	// "the foam's body") - a free choice, set by eye on the round's
+	// RoomProbe pictures of 8, 24 and 48: 8 hardly shows, 48 turns the
+	// blotches' edges into a grain.
+	const float kWaterFoamRelief = 24.0f;
+
 	/* How a room's light becomes the water's: times the gain, never under
 	 * the floor and never over the cap. The mean of colour1 + colour2 over a
 	 * body's rooms, weighted by their squares, runs 0.09 to 0.55 a channel
@@ -8578,6 +8596,8 @@ namespace
 		float swell[4];		// gSwell
 		float pixel[11 * 4];	// c96 - c106, c105 and c106 per draw
 		float life[2];		// gWaterLife x, y: the stand-in's swing
+		float foamLight;	// gWaterLife w: the foam's body
+		float eyeGain;		// gWaterStage y plus one: the class's
 	};
 
 	// An override row, the compiled table's or the file's.
@@ -8588,6 +8608,7 @@ namespace
 		int cls;		// -1 keeps the class
 		float tint[3];
 		float waves, foam;
+		float bend;		// the refraction's scale
 		int file;		// 1 for a row of hd_water.txt
 		int ripple;		// 1 with a ripple source
 		float rx, rz, rsize, rperiod;
@@ -8625,18 +8646,34 @@ namespace
 	 * frame's, and lives kRingLife whatever the slot does: the game frees a
 	 * slot after about a second.
 	 *
+	 * One body makes one ring. A wading Lara sets up a ripple every four
+	 * ticks (game\effects.cpp, WadeSplash: flags 18 while she moves, 16
+	 * while she stands), a bubble train one after another; a ring for each
+	 * would be a quick train of rings, all alike. So a new ripple of the
+	 * same kind - a body's (flags 16) or a small one's (a bubble, a rat, a
+	 * shell) - whose centre lies within kRingMerge of a live ring's and its
+	 * height within kRingHeight goes into that ring: younger than
+	 * kRingRestart, the ring takes it as its own and goes on; older, the
+	 * ring starts again from the new ripple's place, size and age. A
+	 * wading Lara has one ring that starts again every 0.6 s at most, and
+	 * when she stands it runs out its life.
+	 *
 	 * A ring's front runs out from half the ripple's first size at
 	 * kRingSpeed; its strength, a slope, is kRingSlope times its first size
-	 * over 128 (a wading Lara's ripple is 112 to 127), at most 1, and falls
-	 * with what is left of its life. A sheet draw takes the
-	 * kRingsPerDraw youngest whose centre lies within kRingNear of its
-	 * squares and whose height within kRingHeight of its surface. Speed,
-	 * life, slope and the two distances are free choices, set by eye on the
-	 * round's RoomProbe pictures: a wading Lara's ring about a square
-	 * across, faded within two seconds. */
-	const double kRingLife = 2.0;		// seconds
-	const float kRingSpeed = 210.0f;	// units a second
-	const float kRingSlope = 0.5f;
+	 * over 128 (a wading Lara's ripple is 112 to 127), at most 1, times the
+	 * square of what is left of its life - a slow fade that leaves the
+	 * last second faint. A sheet draw takes the kRingsPerDraw youngest
+	 * whose centre lies within kRingNear of its squares and whose height
+	 * within kRingHeight of its surface. Speed, life, slope, the merge
+	 * distance, the restart and the two other distances are free choices,
+	 * set by eye on the round's RoomProbe pictures: a wading Lara's ring
+	 * slower and fainter than a quick splash, gone in three and a half
+	 * seconds. */
+	const double kRingLife = 3.5;		// seconds
+	const float kRingSpeed = 150.0f;	// units a second
+	const float kRingSlope = 0.35f;
+	const float kRingMerge = 192.0f;	// units
+	const double kRingRestart = 0.6;	// seconds
 	const int kRingNear = 512;		// units
 	const int kRingHeight = 256;		// units
 	const int kRingsPerDraw = 8;		// gWaterRings[8]
@@ -8647,6 +8684,7 @@ namespace
 		float x, y, z;		// world; y the water's height there
 		double born;		// on the frame clock, seconds
 		float size;		// the ripple's size when it began, units
+		int body;		// 1 for a body's ripple (flags 16), 0 small
 	};
 
 	// What a ripple slot held the frame before.
@@ -8794,6 +8832,7 @@ namespace
 	/* hd_water.txt, one row a line:
 	 *
 	 *   <LEVEL> <room> <class|->  [tint <r> <g> <b>] [waves <s>] [foam <s>]
+	 *                             [bend <s>]
 	 *                             [ripple <x> <z> <size> <seconds>]
 	 *                             [art keep|hide]
 	 *
@@ -8803,7 +8842,8 @@ namespace
 	 * none for no sheet over those bodies (they keep their class; a later
 	 * row of any other class, - included, gives the sheet back). tint
 	 * multiplies the shallow and the deep colour, waves the wave heights,
-	 * foam the shore foam and the whitecaps; each 0 to 4, 1 changing
+	 * foam the shore foam and the whitecaps, bend how far the waves move
+	 * the floor seen through them (the refraction); each 0 to 4, 1 changing
 	 * nothing. ripple starts a ring at world x, z (units, as the game's own
 	 * ripples and trview give them) every `seconds` (0.1 to 60) while the
 	 * level runs, `size` (1 to 255) as a ripple's size - a fountain's jet
@@ -8816,7 +8856,7 @@ namespace
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[19];
+		char* tok[21];
 		char* next = 0;
 		int n = 0;
 
@@ -8825,16 +8865,16 @@ namespace
 		if (char* hash = std::strchr(line, '#'))
 			*hash = 0;
 
-		// The longest row: the three words, tint's four, waves' and foam's
-		// two each, ripple's five and art's two - 18 tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 19;
+		// The longest row: the three words, tint's four, waves', foam's and
+		// bend's two each, ripple's five and art's two - 20 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 21;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 18 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 20 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -8861,7 +8901,7 @@ namespace
 			return -1;
 
 		row.tint[0] = row.tint[1] = row.tint[2] = 1.0f;
-		row.waves = row.foam = 1.0f;
+		row.waves = row.foam = row.bend = 1.0f;
 
 		for (int i = 3; i < n; )
 		{
@@ -8893,6 +8933,8 @@ namespace
 				into = &row.waves, count = 1;
 			else if (!_stricmp(tok[i], "foam"))
 				into = &row.foam, count = 1;
+			else if (!_stricmp(tok[i], "bend"))
+				into = &row.bend, count = 1;
 			else if (ripple)
 				into = rip, count = 4;
 
@@ -9191,6 +9233,12 @@ namespace
 		out.life[0] = open ? 0.25f : 0.40f;
 		out.life[1] = open ? 0.0f : 0.40f;
 
+		/* The foam's body (hd_room.hlsl): the relief times 0.45 over the
+		 * light a flat layer gets, 0.55 + 0.45 times the elevation's sine
+		 * (-sun[1]), so that a flat layer keeps the foam's colour. */
+		out.foamLight = 0.45f * kWaterFoamRelief / (0.55f - 0.45f * sun[1]);
+		out.eyeGain = c.eyeGain;
+
 		/* gWaterAbsorb: the absorption per channel in the ratio of
 		 * ln(shallow / deep) of the section's palette, its mean the class's
 		 * 1 / absorb - the deep colour is what a long path leaves of the
@@ -9204,8 +9252,9 @@ namespace
 		 * 0.92, VCI 1.31 / 1.03 / 0.66. w is the refraction's strength,
 		 * the absorption length times 1 - 1 / 1.33 (water's refractive
 		 * index, the one F0 is taken from): times 1 - T it is the refracted
-		 * move of the floor for a short path (hd_room.hlsl, RefractUV) -
-		 * 992 units for a basin, 372 for a channel, 223 for a sea. */
+		 * move of the floor for a short path (hd_room.hlsl, RefractMove) -
+		 * 992 units for a basin, 372 for a channel, 223 for a sea - times
+		 * the row's bend (1 unless hd_water.txt says otherwise). */
 		float* absorb = out.pixel + 32;
 		float r[3];
 		float mean = 0.0f;
@@ -9226,7 +9275,7 @@ namespace
 			absorb[k] = (share > 0.0625f ? share : 0.0625f) / c.absorb;
 		}
 
-		absorb[3] = c.absorb * (1.0f - 1.0f / 1.33f);
+		absorb[3] = c.absorb * (1.0f - 1.0f / 1.33f) * b.bend;
 	}
 
 	// One row applied to every body its room has water in.
@@ -9254,6 +9303,7 @@ namespace
 
 			b.waves = row.waves;
 			b.foam = row.foam;
+			b.bend = row.bend;
 			b.artKeep = row.art;
 			b.source = row.file ? 2 : 1;
 			b.sourceRoom = row.room;
@@ -9416,7 +9466,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		b.info.surfaceY = seed.wy;
 		b.info.sourceRoom = -1;
 		b.info.tint[0] = b.info.tint[1] = b.info.tint[2] = 1.0f;
-		b.info.waves = b.info.foam = 1.0f;
+		b.info.waves = b.info.foam = b.info.bend = 1.0f;
 
 		const int id = (int)g_wbodies.size();
 		std::vector<size_t> stack(1, i);
@@ -9551,6 +9601,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 		row.waves = w.waves;
 		row.foam = w.foam;
+		row.bend = 1.0f;
 		rows.push_back(row);
 	}
 
@@ -9909,11 +9960,36 @@ void HDRenderWaterRipples(const HDRenderRipple* live, int count)
 			ring.born = now - ticks / 30.0;
 			ring.size = (float)(r.size - grow_step * ticks > 1 ?
 				r.size - grow_step * ticks : 1);
+			ring.body = (r.flags & 0x10) ? 1 : 0;
 
-			if (g_rings.size() >= kRingsKept)
-				g_rings.erase(g_rings.begin());
+			// The nearest live ring of the same kind it goes into.
+			WaterRing* into = 0;
+			float best = kRingMerge * kRingMerge;
 
-			g_rings.push_back(ring);
+			for (WaterRing& g : g_rings)
+			{
+				const float dx = g.x - ring.x;
+				const float dz = g.z - ring.z;
+				const float d2 = dx * dx + dz * dz;
+
+				if (g.body == ring.body && d2 <= best &&
+					fabsf(g.y - ring.y) <= (float)kRingHeight &&
+					now - g.born <= kRingLife)
+				{
+					best = d2;
+					into = &g;
+				}
+			}
+
+			if (into && ring.born - into->born >= kRingRestart)
+				*into = ring;
+			else if (!into)
+			{
+				if (g_rings.size() >= kRingsKept)
+					g_rings.erase(g_rings.begin());
+
+				g_rings.push_back(ring);
+			}
 		}
 
 		s.alive = 1;
@@ -9995,8 +10071,9 @@ const char* HDRenderWaterSectionName(int section)
  * square, the light its colours are lit by, the override row that applied
  * - table or file with its room - or none, the tint, wave and foam scales in
  * force, its flipmap twins' squares, the light before gain, floor and cap,
- * 1 when a row of class none took its sheet away, and whether the
- * remaster's water art over its sheets is kept or hidden (art). */
+ * 1 when a row of class none took its sheet away, whether the
+ * remaster's water art over its sheets is kept or hidden (art), and the
+ * refraction's scale in force (bend). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -10061,13 +10138,14 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	snprintf(out, size, "WATERLOG body=%d rooms=%s surface=%d sectors=%d "
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
-		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s", body, list,
+		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f",
+		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
 		HDRenderWaterClassName(b.cls), HDRenderWaterClassName(b.ruleCls),
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
-		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide");
+		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend);
 	return true;
 }
 
@@ -10457,7 +10535,8 @@ namespace
 
 		for (int i = 0; i < count; i++)
 		{
-			const float life = 1.0f - (float)(found[i].age / kRingLife);
+			const float left = 1.0f - (float)(found[i].age / kRingLife);
+			const float life = left * left;
 			const float first = found[i].size / 128.0f;
 
 			// The centre in the frame the shader's world position is in.
@@ -10493,8 +10572,25 @@ namespace
 		if (depth)
 			g_depth_texture->GetLevelDesc(0, &size);
 
+		// The viewport the projection maps to, for the rows' fade.
+		D3DVIEWPORT9 view_port = {};
+
+		if (FAILED(g_device->GetViewport(&view_port)))
+		{
+			view_port.Width = size.Width;
+			view_port.Height = size.Height;
+		}
+
+		// A depth view of RoomProbe's draws with the view variant.
+		if (depth && g_depth_view && !g_water_view_ps &&
+			FAILED(g_device->CreatePixelShader(
+			(const DWORD*)kHDRoomWaterViewPS, &g_water_view_ps)))
+			g_water_view_ps = 0;
+
 		g_device->SetVertexShader(g_water_vs);
-		g_device->SetPixelShader(depth ? g_water_depth_ps : g_water_ps);
+		g_device->SetPixelShader(!depth ? g_water_ps :
+			g_depth_view && g_water_view_ps ? g_water_view_ps :
+			g_water_depth_ps);
 		g_device->SetStreamSource(0, g_sheet_vb, 0, sizeof(HDVertex));
 		g_device->SetIndices(g_sheet_ib);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -10545,10 +10641,25 @@ namespace
 			pixel[20 * 4 + 0] = look.life[0];
 			pixel[20 * 4 + 1] = look.life[1];
 			pixel[20 * 4 + 2] = (float)gather_rings(r, pixel + 21 * 4);
+			pixel[20 * 4 + 3] = look.foamLight;
 
 			for (int i = 0; i < 8; i++)
 				pixel[29 * 4 + i] = sqrtf(rows[i * 4] * rows[i * 4] +
 					rows[i * 4 + 1] * rows[i * 4 + 1]);
+
+			/* c18, gSwell for WaterVS: the class's swell and taper, and the
+			 * breaking crest's lift - a quarter of the whole height now
+			 * above the whitecaps' threshold (gWaterSun.w of that height),
+			 * where the body has whitecaps at all (gWaterMisc.y). A quarter
+			 * is a free choice, set by eye on the round's RoomProbe
+			 * pictures. */
+			float swell[4] = { look.swell[0], look.swell[1], 0.0f, 0.0f };
+
+			if (look.pixel[28 + 1] > 0.0f)
+			{
+				swell[2] = 0.25f * heights;
+				swell[3] = look.pixel[20 + 3] * heights;
+			}
 
 			// c105, gWaterScreen: the target's pixel and the projection.
 			pixel[16 + 9 * 4 + 0] = size.Width ? 1.0f / (float)size.Width :
@@ -10559,15 +10670,20 @@ namespace
 			pixel[16 + 9 * 4 + 3] = -g_proj[14];
 			// c106, gWaterStage: the copy, and RoomProbe's depth view.
 			pixel[16 + 10 * 4 + 0] = g_copy_valid ? 1.0f : 0.0f;
-			pixel[16 + 10 * 4 + 1] = 0.0f;
+			pixel[16 + 10 * 4 + 1] = look.eyeGain - 1.0f;
 			pixel[16 + 10 * 4 + 2] = depth ? (float)g_depth_view : 0.0f;
 			pixel[16 + 10 * 4 + 3] = 0.0f;
 			pixel[16 + 8 * 4 + 3] *= g_bend_scale;
 
+			// c19, gWaterView: half the viewport in pixels (the rows' fade).
+			const float view[4] = { view_port.Width * 0.5f,
+				view_port.Height * 0.5f, 0.0f, 0.0f };
+
 			/* The vertex rows in WaterVS's phase form, c20 - c27: the next
 			 * room's prepare() writes c20 - c23 back in RoomVS's form before
 			 * RoomVS draws again - the sheet is the last draw of its call. */
-			g_device->SetVertexShaderConstantF(18, look.swell, 1);
+			g_device->SetVertexShaderConstantF(18, swell, 1);
+			g_device->SetVertexShaderConstantF(19, view, 1);
 			g_device->SetVertexShaderConstantF(20, rows, 8);
 			g_device->SetPixelShaderConstantF(92, pixel, 31);
 

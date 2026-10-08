@@ -367,12 +367,14 @@
  *                     offers one (HDRenderWaterDepthBind), with or without
  *                     -hdwater, so that the classic and the HD path are
  *                     proved to draw into it unchanged.
- *     -waterdepthview 1|2|3
+ *     -waterdepthview 1|2|3|4
  *                     the sheets draw the depth texture as grey: 1 the
- *                     scene's view depth over 16384 units, 2 the water depth
- *                     out of it over the vertex depth, times 0.5 (mid grey
- *                     where the two agree); 3 the sheet with the pixels
- *                     whose bent place the depth refused in red.
+ *                     path through the water over 16384 units, 2 the water
+ *                     depth out of it over the vertex depth, times 0.5 (mid
+ *                     grey where the two agree); 3 the sheet with the pixels
+ *                     whose bent place the guard refused in red; 4 the
+ *                     depth under the surface at rest over 64 units, with
+ *                     nothing clipped - what the clip measures.
  *     -waterbend <s>  the refraction times s, for a picture that shows what
  *                     the depth texture's mask refuses; 1 is the look built.
  *     -ripple x,z,age[,size]
@@ -426,6 +428,22 @@
  *                     said, and the whole level goes back to classic instead
  *                     of half of it drawing without textures.
  *
+ *     -devicecycle    the run three times on three devices, as Alt+Enter
+ *                     does it in the game: the picture with every switch
+ *                     given (INTZ bound), then HDRenderShutdown with the
+ *                     device alive - the HD half of HDLevelDeviceLost - and
+ *                     the device released (its reference count printed: 0
+ *                     is no object of ours left on it); a new device draws
+ *                     the classic picture (-classicroom <room> -classiconly
+ *                     added); a third builds the level again and draws the
+ *                     first picture once more. _cycle1, _cycle2 and _cycle3
+ *                     after the -out prefix; the first and the third are
+ *                     compared byte for byte.
+ *     -crash <folder> the crash seam (specific/crashseam.h): the tool runs
+ *                     itself in <folder> with the seam installed and a null
+ *                     pointer read, then reads the CRASH line of crash.txt
+ *                     back and checks the minidump beside it (MDMP header).
+ *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
  */
@@ -460,6 +478,7 @@
  * cannot be compared with the game's. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
 #include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
+#include "../../../TOMB5 Code/TOMB5/specific/crashseam.h"
 /* The randomizer's own reader for the CLASSIC level, so that the water
  * survey can hold the level's own faces against the .TRG's art through the
  * engine's own gate. Nothing else in this tool needs a classic level. */
@@ -905,9 +924,22 @@ static bool MakeDevice()
 	return true;
 }
 
+// -devicecycle: say how many references the released device still had.
+static bool g_cycle_report = false;
+
 static void DropDevice()
 {
-	if (g_device) { g_device->Release(); g_device = 0; }
+	if (g_device)
+	{
+		const ULONG left = g_device->Release();
+
+		if (g_cycle_report)
+			printf("devicecycle: device released, RefCnt = %lu\n",
+				(unsigned long)left);
+
+		g_device = 0;
+	}
+
 	if (g_d3d) { g_d3d->Release(); g_d3d = 0; }
 	if (g_window) { DestroyWindow(g_window); g_window = 0; }
 }
@@ -6581,7 +6613,7 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	}
 }
 
-int main(int argc, char** argv)
+static int ProbeMain(int argc, char** argv)
 {
 	if (argc < 4)
 	{
@@ -6594,7 +6626,7 @@ int main(int argc, char** argv)
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");
-		printf("       -nocopy  -nodepth  -waterdepthview 1|2|3  "
+		printf("       -nocopy  -nodepth  -waterdepthview 1|2|3|4  "
 			"-waterbend <s>   the sheets without the frame's copy or depth "
 			"texture, the depth as grey, the refraction scaled\n");
 		printf("       -ripple x,z,age[,size]   a ring on the sheets at world "
@@ -6607,6 +6639,8 @@ int main(int argc, char** argv)
 		printf("       -stackedseas  -fastswing  -addmat <material>\n");
 		printf("       -glowblend add|screen  -aniso 0|1  -glowps 0|1\n");
 		printf("       -scissor <l,t,r,b>\n");
+		printf("       -devicecycle   the run on three devices, Alt+Enter's "
+			"way; -crash <folder>   the crash seam's own test\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -classicroom <room>   that room's classic faces, flat, "
 			"beside the art (needs -roombox)\n");
@@ -9156,4 +9190,235 @@ int main(int argc, char** argv)
 	HDRenderShutdown();
 	DropDevice();
 	return 0;
+}
+
+/* ------------------------------------------------- -crash, -devicecycle -- */
+
+// The crash seam's writer here: the CRASH line on stdout.
+static void CrashPrint(const char* line)
+{
+	printf("%s\n", line);
+	fflush(stdout);
+}
+
+/* -crash <folder>: this tool once more, in <folder>, with -crashchild - the
+ * seam installed exactly as WinMain installs it, then a read through a null
+ * pointer. Then the line in crash.txt and the dump beside it are read back:
+ * the line must begin with CRASH code=0xC0000005 (an access violation) and
+ * name a module, the dump must exist and begin with MDMP. */
+static int CrashTest(const char* self, const char* folder)
+{
+	char cmd[1024];
+	char path[MAX_PATH];
+	STARTUPINFOA si = {};
+	PROCESS_INFORMATION pi = {};
+
+	CreateDirectoryA(folder, 0);
+	_snprintf_s(path, sizeof(path), _TRUNCATE, "%s\\crash.txt", folder);
+	DeleteFileA(path);
+	si.cb = sizeof(si);
+	_snprintf_s(cmd, sizeof(cmd), _TRUNCATE, "\"%s\" -crashchild \"%s\"",
+		self, folder);
+
+	if (!CreateProcessA(0, cmd, 0, 0, FALSE, 0, 0, 0, &si, &pi))
+	{
+		printf("-crash: the child did not start\n");
+		return 1;
+	}
+
+	WaitForSingleObject(pi.hProcess, 60000);
+
+	DWORD code = 0;
+
+	GetExitCodeProcess(pi.hProcess, &code);
+	CloseHandle(pi.hThread);
+	CloseHandle(pi.hProcess);
+	printf("-crash: the child ended with 0x%08lX\n", (unsigned long)code);
+
+	FILE* in = 0;
+	char line[512] = "";
+
+	if (fopen_s(&in, path, "r") || !in || !fgets(line, sizeof(line), in))
+	{
+		if (in)
+			fclose(in);
+
+		printf("-crash: no crash.txt in %s - FAIL\n", folder);
+		return 1;
+	}
+
+	fclose(in);
+	printf("-crash: crash.txt says: %s", line);
+
+	const bool lineOk = !strncmp(line, "CRASH code=0xC0000005 at=0x", 27) &&
+		strstr(line, " module=") && !strstr(line, " module=?+");
+	const char* dump = strstr(line, " dump=");
+	bool dumpOk = false;
+
+	if (dump && strncmp(dump + 6, "none", 4))
+	{
+		char name[MAX_PATH];
+		char full[MAX_PATH];
+		size_t n = strcspn(dump + 6, "\r\n");
+
+		_snprintf_s(name, sizeof(name), _TRUNCATE, "%.*s", (int)n, dump + 6);
+		_snprintf_s(full, sizeof(full), _TRUNCATE, "%s\\%s", folder, name);
+
+		if (!fopen_s(&in, full, "rb") && in)
+		{
+			char head[4] = { 0, 0, 0, 0 };
+
+			fseek(in, 0, SEEK_END);
+			const long size = ftell(in);
+
+			fseek(in, 0, SEEK_SET);
+			dumpOk = fread(head, 1, 4, in) == 4 && !memcmp(head, "MDMP", 4);
+			fclose(in);
+			printf("-crash: %s, %ld bytes, header %s\n", name, size,
+				dumpOk ? "MDMP" : "wrong");
+		}
+	}
+
+	printf("-crash: line %s, dump %s\n", lineOk ? "ok" : "FAIL",
+		dumpOk ? "ok" : "FAIL");
+	return lineOk && dumpOk ? 0 : 1;
+}
+
+int main(int argc, char** argv)
+{
+	for (int i = 1; i + 1 < argc; i++)
+	{
+		if (!strcmp(argv[i], "-crashchild"))
+		{
+			SetCurrentDirectoryA(argv[i + 1]);
+			CrashSeamInstall(CrashPrint, true, "PCtomb5");
+
+			volatile int* nothing = 0;
+
+			return *nothing;
+		}
+
+		if (!strcmp(argv[i], "-crash"))
+			return CrashTest(argv[0], argv[i + 1]);
+	}
+
+	std::vector<char*> args;
+	bool cycle = false;
+	const char* out = ".\\roomprobe";
+
+	for (int i = 0; i < argc; i++)
+	{
+		if (!strcmp(argv[i], "-devicecycle"))
+		{
+			cycle = true;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "-out") && i + 1 < argc)
+		{
+			out = argv[++i];
+			continue;
+		}
+
+		args.push_back(argv[i]);
+	}
+
+	if (!cycle || argc < 4)
+		return ProbeMain(argc, argv);
+
+	/* Three runs, each with its own device (ProbeMain makes it and drops it
+	 * after HDRenderShutdown). The containers a run fills by push_back are
+	 * emptied before the next, so the third run starts where the first
+	 * did. */
+	static const char* const suffix[3] = { "_cycle1", "_cycle2", "_cycle3" };
+	char prefix[3][MAX_PATH];
+	int result = 0;
+
+	g_cycle_report = true;
+
+	for (int run = 0; run < 3; run++)
+	{
+		std::vector<char*> a = args;
+		char classicRoom[16];
+
+		_snprintf_s(prefix[run], MAX_PATH, _TRUNCATE, "%s%s", out,
+			suffix[run]);
+		a.push_back((char*)"-out");
+		a.push_back(prefix[run]);
+
+		if (run == 1)
+		{
+			strcpy_s(classicRoom, sizeof(classicRoom), argv[3]);
+			a.push_back((char*)"-classicroom");
+			a.push_back(classicRoom);
+			a.push_back((char*)"-classiconly");
+		}
+
+		g_ripples.clear();
+		g_classic_rooms.clear();
+		g_faces_built.clear();
+		g_cuts_built.clear();
+		g_stand_draws.clear();
+		printf("\ndevicecycle: run %d of 3 (%s)\n", run + 1,
+			run == 1 ? "classic" : "HD");
+		result |= ProbeMain((int)a.size(), &a[0]);
+	}
+
+	/* The first and the third HD picture, byte for byte: every PNG the
+	 * first run wrote under its prefix against the third's of the same
+	 * name. */
+	WIN32_FIND_DATAA found;
+	char pattern[MAX_PATH];
+	int pairs = 0;
+	int same = 0;
+
+	_snprintf_s(pattern, sizeof(pattern), _TRUNCATE, "%s*.png", prefix[0]);
+
+	HANDLE find = FindFirstFileA(pattern, &found);
+	const char* slash = strrchr(prefix[0], '\\');
+	const size_t dirLen = slash ? (size_t)(slash - prefix[0] + 1) : 0;
+	const size_t tail = strlen(slash ? slash + 1 : prefix[0]);
+
+	while (find != INVALID_HANDLE_VALUE)
+	{
+		char first[MAX_PATH];
+		char third[MAX_PATH];
+		std::vector<unsigned char> bytes[2];
+
+		_snprintf_s(first, sizeof(first), _TRUNCATE, "%.*s%s", (int)dirLen,
+			prefix[0], found.cFileName);
+		_snprintf_s(third, sizeof(third), _TRUNCATE, "%s%s", prefix[2],
+			found.cFileName + tail);
+
+		for (int k = 0; k < 2; k++)
+		{
+			FILE* f = 0;
+
+			if (!fopen_s(&f, k ? third : first, "rb") && f)
+			{
+				int c;
+
+				while ((c = fgetc(f)) != EOF)
+					bytes[k].push_back((unsigned char)c);
+
+				fclose(f);
+			}
+		}
+
+		pairs++;
+		same += !bytes[0].empty() && bytes[0] == bytes[1];
+		printf("devicecycle: %s against %s: %s\n", first, third,
+			!bytes[0].empty() && bytes[0] == bytes[1] ? "identical" :
+			"DIFFERENT");
+
+		if (!FindNextFileA(find, &found))
+		{
+			FindClose(find);
+			break;
+		}
+	}
+
+	printf("devicecycle: %d of %d HD picture(s) identical after the cycle\n",
+		same, pairs);
+	return result || !pairs || same != pairs ? 1 : 0;
 }

@@ -184,7 +184,9 @@
  * c16         gCaustic            per room   (RoomVS)
  * c17         gEye                per room   (WaterVS)
  * c18         gSwell              per room, and per sheet draw (x RoomVS
- *                                             and WaterVS, y WaterVS alone)
+ *                                             and WaterVS, y z w WaterVS
+ *                                             alone)
+ * c19         gWaterView          per sheet draw (WaterVS alone)
  * c20 - c23   gWaveV[4]           per room, and per sheet draw (RoomVS and
  *                                             WaterVS)
  * c24 - c27   gWaveV2[4]          per sheet draw (WaterVS alone)
@@ -379,17 +381,26 @@ float4 gWaterBox : register(c15);
  * gSwell     x the share of the wave height the vertex takes (0 basin),
  *            y the shore distance the swell tapers in over - read by
  *            WaterVS alone, RoomVS tapers over its flood box
- *            (HD_WATER_SHORE) - zw unused
+ *            (HD_WATER_SHORE); for a sheet draw alone z the most a
+ *            breaking crest rises by beside the swell (0 without
+ *            whitecaps) and w the height above which a crest breaks, both
+ *            in units - RoomVS's z and w stay 0 and are not read
  * gWaveV     the four wave rows (kx, kz, omega, height): wave vector in
  *            radians a unit, angular speed in radians a second, height in
  *            units - the room's largest body's, or the basin's in a room
  *            with no water square of its own
  * gWaveV2    for a sheet draw alone: the rows five to eight of its body;
  *            the sheet's draw writes all eight rows in the phase form
- *            (kx, kz, phase, height) - see WaveSum8 */
+ *            (kx, kz, phase, height) - see WaveSum8
+ * gWaterView for a sheet draw alone: x, y half the render target's width
+ *            and height in pixels, for the rows' fade (WaterVS); zw unused.
+ *            Declared, so fxc keeps its own literals out of c19; RoomVS
+ *            never reads it, and a literal another shader keeps there is
+ *            its own while that shader is bound */
 float4 gCaustic : register(c16);
 float4 gEye : register(c17);
 float4 gSwell : register(c18);
+float4 gWaterView : register(c19);
 float4 gWaveV[4] : register(c20);
 float4 gWaveV2[4] : register(c24);
 
@@ -664,7 +675,10 @@ float4 gWaterMisc : register(c103);
  *               view of the depth texture (0 off, 1 the scene's view depth
  *               over 16384 units, 2 the water depth out of the depth
  *               texture over the vertex depth, times 0.5, 3 the pixels
- *               whose bent place the depth refused, red), y and w unused
+ *               whose bent place the depth refused, red, 4 the depth under
+ *               the surface at rest over 64 units), y the slope's gain at
+ *               eye level less one (the class's, see "the body at eye
+ *               level" in WaterPS), w unused
  *
  * Above the pixel registers of every other shader of the blend phase; the
  * shadow receive shaders' c103 - c108 are written by every one of their
@@ -681,11 +695,14 @@ float4 gWaterStage : register(c106);
  *              z, w their heights then - where a crest was (the whitecaps)
  * gWaterLife   x the swing of the stand-in's pattern about its mean, y the
  *              share of its finer second pattern, z the rings in use (0 to
- *              8), w unused
+ *              8), w the foam's relief times 0.45 over the light a flat
+ *              layer of foam gets, 0.55 + 0.45 times the light's
+ *              elevation sine (see "the foam's body" in WaterPS)
  * gWaterRings  c113 - c120, one ring a register: x, z its centre (world),
  *              its front's radius and its strength - see RingSlope
  * gWaveK       c121, c122, the eight rows' wave numbers, radians a unit -
- *              the lengths of their (kx, kz), for the footprint fade */
+ *              the lengths of their (kx, kz); the first is the crests'
+ *              bend's scale (WaveBend), the rows' fade is WaterVS's */
 float4 gWaveP2[4] : register(c107);
 float4 gWaterLag : register(c111);
 float4 gWaterLife : register(c112);
@@ -963,6 +980,28 @@ float CausticOf(float2 xz, float t)
 	const float r2 = r * r;
 
 	return (r2 * r2 * r2 - HD_CAUSTIC_MEAN) * (1.0f / HD_CAUSTIC_SD);
+}
+
+/* The caustic on a face of any slope. CausticOf is a pattern of the
+ * horizontal plane: a wall reads it along one axis alone and gets vertical
+ * streaks. So the pattern is projected along the face normal's major axis
+ * - the triplanar projection of texturing, in its one-sample form: the
+ * horizontal plane (x, z) where the normal's vertical component is the
+ * largest, else the wall's own plane, (z, y) or (x, y), the one it faces.
+ * The normal is the face's, the cross product of the position's screen
+ * derivatives `fx`, `fy`, so it needs no interpolator; a face is flat, so
+ * the plane never changes inside one, and a ramp takes the plane nearer to
+ * it. One sample and not a blend of three: a second CausticOf costs about
+ * twenty of the 512 slots the room and glow shaders stand near, and the
+ * coordinates themselves are never blended - a blend of two coordinate
+ * frames raises the pattern's rate of change with the distance from the
+ * origin. Zero mean and of unit spread on every face. */
+float CausticFace(float3 world, float3 fx, float3 fy, float t)
+{
+	const float3 n = abs(cross(fx, fy));
+	const float2 wall = n.x > n.z ? world.zy : world.xy;
+
+	return CausticOf(n.y >= max(n.x, n.z) ? world.xz : wall, t);
 }
 
 VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
@@ -1601,17 +1640,34 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 *
 	 * gAdd.y is the game clock in seconds on the pixel side. With hd_motion 0
 	 * the weight waterAdd.w is already zero, because the vertex half
-	 * multiplied it by gMotion.w. */
+	 * multiplied it by gMotion.w.
+	 *
+	 * The plain variant projects it by the face (CausticFace), so a wall
+	 * under the water gets the net and not streaks, and its footprint is
+	 * the pixel's step in all three axes, which on a floor is the step in
+	 * x and z it always was. The gloss variant keeps the horizontal plane:
+	 * it stands at 502 of the 512 slots and draws the sheen ranges, the
+	 * polished floors. */
+#ifdef HD_GLOSS
 	const float2 footX = ddx(input.roomPos.xz);
 	const float2 footY = ddy(input.roomPos.xz);
+#else
+	const float3 footX = ddx(input.roomPos);
+	const float3 footY = ddy(input.roomPos);
+#endif
 	const float sharp = saturate(2.0f - sqrt(max(dot(footX, footX),
 		dot(footY, footY))) * (1.0f / HD_CAUSTIC_FOOT));
 
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
+#ifdef HD_GLOSS
 		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
 			CausticOf(world.xz, gAdd.y));
+#else
+		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
+			CausticFace(world, footX, footY, gAdd.y));
+#endif
 	}
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
@@ -1714,6 +1770,8 @@ struct WATER_OUT
 	float4 roomPos : TEXCOORD0;	// xyz room local (as drawn), w depth
 	float4 eye     : TEXCOORD1;	// xyz toward the eye, w shore distance
 	float2 viewZ   : TEXCOORD2;	// x the view depth, y the swell's lift
+	float4 keepA   : TEXCOORD3;	// the rows' fade, rows one to four
+	float4 keepB   : TEXCOORD4;	// and five to eight
 };
 
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
@@ -1729,14 +1787,59 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		length(gWaveV[0].xy)), gWaveV[0], gWaveV[1], gWaveV[2], gWaveV[3],
 		gWaveV2[0], gWaveV2[1], gWaveV2[2], gWaveV2[3], slope);
 	const float taper = saturate(shore / max(gSwell.y, 1.0f));
+	/* A crest that breaks stands higher than the sum of the sines: where
+	 * the wave stands above the whitecaps' threshold (gSwell.w, the
+	 * pixel shader's crest test in units) the vertex rises by up to
+	 * gSwell.z more, reached a quarter of the whole height above the
+	 * threshold - so the foam on a crest rides a crest. 0 without
+	 * whitecaps. */
+	const float crest = gSwell.z * saturate((h - gSwell.w) /
+		max(gSwell.z, 1.0e-3f));
 	// Units the vertex rises by (y counts down): the pixel shader measures
 	// the frame's depth from the surface at rest (WaterPS, the clip).
-	const float lift = gSwell.x * taper * h * gMotion.w;
+	const float lift = (gSwell.x * h + crest) * taper * gMotion.w;
 
 	pos.y -= lift;
 
 	float4 clip = mul(float4(pos, 1.0f), gWorldViewProj);
 	const float3 view = mul(float4(pos, 1.0f), gWorldView);
+
+	/* The rows' fade. A row whose phase moves by more than an eighth of a
+	 * turn from one pixel to the next fades out, gone at a quarter, instead
+	 * of aliasing into stripes - measured along each row's own direction:
+	 * the phase step to the next pixel right and the next pixel down, the
+	 * row's wave vector against the world step of one pixel each way. Seen
+	 * flat, a pixel spans far more water in depth than across, and a row
+	 * whose crests run toward the eye keeps its phase across the pixel; a
+	 * fade by the pixel's longest step alone would take every row from
+	 * water seen at eye level and leave it flat. The world step comes from
+	 * the projection's derivative at this vertex (a row of gWorldViewProj
+	 * is the clip position's change per unit of x or z) inverted, in
+	 * pixels through gWaterView; it varies slowly over a square and is
+	 * carried to the pixel shader per vertex. */
+	const float iw = 1.0f / max(clip.w, 1.0f);
+	const float2 at = clip.xy * iw;
+	const float2 perX = (gWorldViewProj[0].xy - at * gWorldViewProj[0].w) *
+		iw * gWaterView.xy;
+	const float2 perZ = (gWorldViewProj[2].xy - at * gWorldViewProj[2].w) *
+		iw * gWaterView.xy;
+	const float det = perX.x * perZ.y - perZ.x * perX.y;
+	const float inv = det / (det * det + 1.0e-12f);
+	const float2 right = float2(perZ.y, -perX.y) * inv;
+	const float2 down = float2(-perZ.x, perX.x) * inv;
+	const float4 kxa = float4(gWaveV[0].x, gWaveV[1].x, gWaveV[2].x,
+		gWaveV[3].x);
+	const float4 kza = float4(gWaveV[0].y, gWaveV[1].y, gWaveV[2].y,
+		gWaveV[3].y);
+	const float4 kxb = float4(gWaveV2[0].x, gWaveV2[1].x, gWaveV2[2].x,
+		gWaveV2[3].x);
+	const float4 kzb = float4(gWaveV2[0].y, gWaveV2[1].y, gWaveV2[2].y,
+		gWaveV2[3].y);
+
+	o.keepA = saturate(2.0f - 1.3f * max(abs(kxa * right.x + kza * right.y),
+		abs(kxa * down.x + kza * down.y)));
+	o.keepB = saturate(2.0f - 1.3f * max(abs(kxb * right.x + kzb * right.y),
+		abs(kxb * down.x + kzb * down.y)));
 
 	// The underwater screen wobble, as RoomVS draws it (drawroom.cpp).
 	if (gScreen.w > 0.5f && clip.w > 1.0f)
@@ -1865,14 +1968,15 @@ float WaterDepthBelow(float vertexDepth, float viewZ, float3 eye, float2 uv,
  * short train of waves behind a front that runs outward, its slope added to
  * the sheet's along the line from the ring's centre. u units behind the
  * front the slope is cos(2 pi u / HD_RING_WAVE) (Wave2's curve) under a
- * window that rises over the first quarter wavelength, holds for one and a
- * half and is gone three wavelengths in; the
+ * window that rises over the first quarter wavelength, holds to the end of
+ * the first and is gone two wavelengths in - two long, low swells rather
+ * than a quick train of narrow ones; the
  * amplitude is the ring's strength (falling with its age, on the processor)
  * over the square root of 1 + d / 256, d the distance from the centre - the
  * ring's energy spread over a growing circle. The wavelength, the train and
  * the 256 are free choices, set by eye on the round's RoomProbe pictures.
  * A loop over the registers, so the slots do not grow with the count. */
-#define HD_RING_WAVE 56.0f
+#define HD_RING_WAVE 90.0f
 
 float2 RingSlope(float2 p)
 {
@@ -1890,8 +1994,7 @@ float2 RingSlope(float2 p)
 		const float inv = rsqrt(d2);
 		const float d = d2 * inv;
 		const float x = (r.z - d) * (1.0f / HD_RING_WAVE);
-		const float window = saturate(x * 4.0f) *
-			saturate(2.0f - x * (2.0f / 3.0f));
+		const float window = saturate(x * 4.0f) * saturate(2.0f - x);
 		const float wave = Wave2(float2(x * 6.2831853f, 0.0f)).x;
 
 		slope += dv * (r.w * window * wave * inv *
@@ -1920,15 +2023,15 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
 	const float t = gWaterMisc.z;
 
-	/* A row whose wave spans fewer than eight pixels a wavelength fades out,
-	 * gone at four, instead of aliasing into stripes: the footprint of the
-	 * pixel in world units against each row's wave number (gWaveK, worked
-	 * out on the processor). */
+	/* A row whose phase moves by more than an eighth of a turn from one
+	 * pixel to the next fades out, gone at a quarter, instead of aliasing
+	 * into stripes - along its own direction, worked out per vertex
+	 * (WaterVS, the rows' fade). dx and dy, the world step of one pixel
+	 * right and one down, serve the refraction and the foam. */
 	const float2 dx = ddx(world.xz);
 	const float2 dy = ddy(world.xz);
-	const float foot = sqrt(max(dot(dx, dx), dot(dy, dy)));
-	const float4 keep = saturate(2.0f - foot * gWaveK[0] * 1.3f);
-	const float4 keep2 = saturate(2.0f - foot * gWaveK[1] * 1.3f);
+	const float4 keep = input.keepA;
+	const float4 keep2 = input.keepB;
 	const float2 pb = WaveBend(world.xz, t, gWaveK[0].x);
 	float2 slope;
 	const float h = WaveSum8(pb,
@@ -1941,11 +2044,24 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		float4(gWaveP2[2].xyz, gWaveP2[2].w * keep2.z),
 		float4(gWaveP2[3].xyz, gWaveP2[3].w * keep2.w), slope);
 
+	const float3 V = normalize(input.eye.xyz);
+
+	/* The body at eye level. Seen flat, a surface whose slopes are a few
+	 * hundredths shows one even reflection; seen from above the same slopes
+	 * already bend the floor and break the highlight. So the waves' slope
+	 * is raised by the class's gain (gWaterStage.y is the gain less one:
+	 * basin 3, channel 2, sea 1) where the view runs within about 9 degrees
+	 * of the surface (|V.y| 0.15), not at all where it looks down by 37
+	 * degrees or more (0.6), and linearly between: the water takes a body
+	 * where it lay flat, and the view from above keeps the look it has.
+	 * The gains and the two angles are free choices, set by eye on the
+	 * round's RoomProbe pictures. The rings are added after it. */
+	slope *= 1.0f + gWaterStage.y * saturate((0.6f - abs(V.y)) *
+		(1.0f / 0.45f));
 	slope += RingSlope(world.xz);
 
 	// y counts down: the surface's normal points to -y.
 	float3 N = normalize(float3(-slope.x, -1.0f, -slope.y));
-	const float3 V = normalize(input.eye.xyz);
 	const float above = V.y < 0.0f ? 1.0f : 0.0f;
 
 	N = above > 0.5f ? N : -N;
@@ -2031,13 +2147,20 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	/* Seen from below: inside the critical angle (about 49 degrees off the
 	 * vertical, N.V above 0.66) the bright window, outside it the deep
-	 * colour mirrored back. With the copy the window shows the world above,
-	 * bent by the waves at the full slope. */
+	 * colour mirrored back; the window's edge spread over 0.1 of N.V round
+	 * that 0.66. With the copy the window is the world above, bent by the
+	 * waves at the full slope, with a fifth of the reflection colour in it
+	 * so that a dark room above does not turn it to mud; outside it the
+	 * deep colour covers three quarters and the frame behind shows through
+	 * the rest, dimmed and tinted by that cover - a surface with the waves'
+	 * shapes in it rather than a flat plane. Without the copy the blend
+	 * shows the frame behind at the same shares. 0.75, 0.2 and the 0.1 are
+	 * free choices, set by eye on the round's RoomProbe pictures. */
 	if (above < 0.5f)
 	{
-		const float window = smoothstep(0.6f, 0.75f, nv);
+		const float window = smoothstep(0.61f, 0.71f, nv);
 
-		a = lerp(0.92f, 0.55f, window);
+		a = lerp(0.75f, 0.2f, window);
 		col = a * lerp(gWaterDeep.rgb * 1.3f, refl, window);
 		through = 1.0f - a;
 		bend = 1.0f;
@@ -2113,7 +2236,39 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		0.7f * trail * smoothstep(0.55f, 0.9f, n));
 	foam = min(foam, 0.75f) * above;
 
+#ifndef HD_WATER_VIEW
+	/* The foam's body. Foam is a thin layer with thickness, not paint: its
+	 * cover (the density over its 0.75 cap) times the pattern stands for a
+	 * height `lump`, 0 to 1 of the relief (hd_render.cpp, kWaterFoamRelief).
+	 * Its rise toward the class's light - the screen gradient of `lump`
+	 * against the screen step that one unit toward the light makes (the
+	 * pixel's footprint solved the way RefractMove solves it) - tilts the
+	 * layer's normal, and a soft diffuse term lights it: 0.55 + 0.45 N.L,
+	 * N.L to first order in the tilt, over what a flat layer gets - all of
+	 * it folded on the processor into gWaterLife.w, the relief times 0.45
+	 * over that flat light. A flat layer keeps the foam's colour, a blotch
+	 * is bright on the side toward the light and darker on the other, and
+	 * never under 0.3 of it. Where the layer is thin it lies low and is
+	 * shaded by what stands round it (0.65 at no thickness), and a blotch
+	 * has a darker rim where its cover is half (1 - 1.4 c (1 - c), 0.65 at
+	 * the rim). The cover still decides how much of the water it hides.
+	 * 0.3, 0.65 and 1.4 are free choices, set by eye on the round's
+	 * RoomProbe pictures. Not in the view variant, whose pictures are
+	 * grey or flag the guard. */
+	const float cover = foam * (1.0f / 0.75f);
+	const float lump = cover * (0.5f + 0.5f * n);
+	const float det = dx.x * dy.y - dx.y * dy.x;
+	const float2 sunStep = float2(gWaterSun.x * dy.y - gWaterSun.z * dy.x,
+		gWaterSun.z * dx.x - gWaterSun.x * dx.y) * (det /
+		(det * det + 1.0e-12f));
+	const float body = max(1.0f - gWaterLife.w * dot(float2(ddx(lump),
+		ddy(lump)), sunStep), 0.3f) * (0.65f + 0.35f * lump) *
+		(1.0f - 1.4f * cover * (1.0f - cover));
+
+	col = lerp(col, gWaterFoam.rgb * body, foam);
+#else
 	col = lerp(col, gWaterFoam.rgb, foam);
+#endif
 	a = lerp(a, 1.0f, foam);
 	through *= 1.0f - foam;
 
@@ -2156,12 +2311,15 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		a = 1.0f;
 	}
 
-#ifdef HD_WATER_DEPTH
+#ifdef HD_WATER_VIEW
 	/* RoomProbe -waterdepthview: 1 the path through the water behind the
 	 * sheet over 16384 as grey, 2 the depth from
 	 * the frame over the vertex depth times 0.5, 3 the pixels whose bent
 	 * place the guard refused, in red over the sheet, 4 the depth under the
-	 * surface at rest over 64 units, unclipped. One block for the four. */
+	 * surface at rest over 64 units, unclipped. One block for the four, in
+	 * a variant of its own (HD_WATER_VIEW, the depth variant with this
+	 * block): the game never draws a view, and the 16 slots it costs are
+	 * the foam's body's in the variant it does draw. */
 	if (gWaterStage.z > 0.5f)
 	{
 		const float m = gWaterStage.z;

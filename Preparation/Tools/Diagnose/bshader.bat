@@ -67,6 +67,14 @@ rem one (hd_room.hlsl, WaterDepthBelow); the plain one is the fallback.
  /Fh "%SHADERDIR%\hd_room_water_depth_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem And the depth variant with HD_WATER_VIEW as well: RoomProbe's
+rem -waterdepthview pictures (hd_room.hlsl, the view block); the game never
+rem draws with it.
+"%FXC%" /nologo /T ps_3_0 /E WaterPS /O3 /D HD_WATER_DEPTH=1 ^
+ /D HD_WATER_VIEW=1 /Vn kHDRoomWaterViewPS ^
+ /Fh "%SHADERDIR%\hd_room_water_view_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
 
@@ -121,6 +129,8 @@ call :stamp hd_room hd_room_water_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_depth_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_view_ps.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_ps.inc
@@ -148,6 +158,7 @@ for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDI
 call :size "%SHADERDIR%\hd_room_water_vs.inc"
 call :size "%SHADERDIR%\hd_room_water_ps.inc"
 call :size "%SHADERDIR%\hd_room_water_depth_ps.inc"
+call :size "%SHADERDIR%\hd_room_water_view_ps.inc"
 exit /b 0
 
 :stamp

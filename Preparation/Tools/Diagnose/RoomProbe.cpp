@@ -388,6 +388,15 @@
  *                     which leaves out the circle round her that the game
  *                     leaves out round a swimming or wading Lara; world
  *                     x, z. RoomProbe draws no Lara. Needs -hdwater 1.
+ *     -swirl x,z,r    a waterfall's foot on the sheets at world x, z with
+ *                     radius r - the turning foam and its rings, as a row's
+ *                     `swirl x z r` gives them; repeatable. The waterfall
+ *                     objects' own feet come without it: -hdwater reads
+ *                     the classic .TRC's items and meshes as the engine
+ *                     reads items[] and prints a WATERLOG line per object.
+ *                     RoomProbe draws neither the objects nor the sparks,
+ *                     so the drops are not in its pictures. Needs
+ *                     -hdwater 1.
  *     -shatter       hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
@@ -1680,6 +1689,8 @@ static std::vector<ProbeRipple> g_ripples;
 // -lara x,z: Lara's place for the waterline's gap round her.
 static bool g_lara_set = false;
 static float g_lara_x = 0.0f, g_lara_z = 0.0f;
+// -swirl x,z,r: the feet handed to every picture, as x, z, r.
+static std::vector<float> g_swirls;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
  * would leave them on the corners of one water quad. The renderer's flood
@@ -4735,6 +4746,90 @@ static void PrintPsnr(const char* root, int howMany)
 	printf("(mip 0 only; a quarter of the video memory is what is bought with it)\n");
 }
 
+/* The waterfall objects for their feet, out of the classic .TRC - the twin
+ * of hd_level.cpp's BuildWaterFalls, which reads items[]: every item of
+ * WATERFALL1 to 3 (slots 410 - 412) and WATERFALLSS1 and 2 (414, 415;
+ * game\objects.h, ItemCheck names them), its one mesh placed as
+ * DrawAnimatingItem places it - the item's place and turn through the
+ * engine's own sine table, the first frame's root offset (the moveable's
+ * frame pointer, the six shorts of the box first) - and of that mesh the
+ * highest and the lowest y and the x, z of the vertices within
+ * HD_WATER_FOOT_BAND of the lowest. A file mesh is its centre, its radius,
+ * its vertex count and then its vertices, three shorts each. */
+static void ProbeWaterFalls(const Tr5Level& level, const char* stem)
+{
+	std::vector<HDWaterFall> falls;
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+
+	for (int i = 0; i < level.itemCount(); i++)
+	{
+		Tr5Item item;
+		Tr5Level::MoveableInfo info;
+		int16_t head[6];
+		size_t at = 0;
+
+		if (!level.getItem(i, item))
+			continue;
+
+		const int slot = item.objectNumber;
+
+		if (!(slot >= 410 && slot <= 412) && !(slot >= 414 && slot <= 415))
+			continue;
+
+		if (!level.moveableInfo(slot, info) || info.nmeshes <= 0 ||
+			!level.debugMeshHeader(info.meshIndex, head) ||
+			!level.debugMeshAt(info.meshIndex, at) || head[5] <= 0 ||
+			at + 12 + (size_t)head[5] * 6 > bytes.size())
+			continue;
+
+		const long word = (long)(info.frameOffset / 2);
+		const float rootX = level.debugReadFrameShort(word + 6);
+		const float rootY = level.debugReadFrameShort(word + 7);
+		const float rootZ = level.debugReadFrameShort(word + 8);
+		const float c = enginecam::PhdCos(item.yRot) * (1.0f / 16384.0f);
+		const float s = enginecam::PhdSin(item.yRot) * (1.0f / 16384.0f);
+		HDWaterFall f = {};
+
+		f.item = i;
+		f.slot = slot;
+		f.room = item.roomNumber;
+		f.top = 1.0e9f;
+		f.bottom = -1.0e9f;
+
+		for (int pass = 0; pass < 2; pass++)
+			for (int v = 0; v < head[5]; v++)
+			{
+				int16_t p[3];
+
+				std::memcpy(p, &bytes[at + 12 + (size_t)v * 6], 6);
+
+				const float lx = p[0] + rootX;
+				const float lz = p[2] + rootZ;
+				const float y = (float)item.y + p[1] + rootY;
+
+				if (!pass)
+				{
+					f.top = y < f.top ? y : f.top;
+					f.bottom = y > f.bottom ? y : f.bottom;
+					continue;
+				}
+
+				if (y < f.bottom - (float)HD_WATER_FOOT_BAND ||
+					f.points >= HD_WATER_FOOT_POINTS)
+					continue;
+
+				f.foot[f.points * 2] = (float)item.x + lx * c + lz * s;
+				f.foot[f.points * 2 + 1] = (float)item.z + lz * c - lx * s;
+				f.points++;
+			}
+
+		falls.push_back(f);
+	}
+
+	HDRenderWaterFalls(falls.empty() ? 0 : &falls[0], (int)falls.size(),
+		stem);
+}
+
 /* The level change. HDLevelBuild frees the previous level's buffers and
  * pages before it builds the new one - so the card never holds two levels at
  * once, and the process never commits two levels' worth of transient pixels.
@@ -6643,6 +6738,8 @@ static int ProbeMain(int argc, char** argv)
 			"x, z, age seconds old (size 120), repeatable\n");
 		printf("       -lara x,z   Lara's place in the water: no waterline "
 			"round it\n");
+		printf("       -swirl x,z,r   a waterfall's foot on the sheets at "
+			"world x, z, radius r, repeatable\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
@@ -6845,6 +6942,17 @@ static int ProbeMain(int argc, char** argv)
 			if (!g_lara_set)
 				printf("RoomProbe: -lara wants x,z - '%s' ignored\n",
 					argv[at]);
+		}
+		else if (!strcmp(argv[at], "-swirl") && at + 1 < argc)
+		{
+			float s[3] = { 0.0f, 0.0f, 0.0f };
+
+			if (sscanf_s(argv[++at], "%f,%f,%f", &s[0], &s[1], &s[2]) == 3 &&
+				s[2] >= 64.0f && s[2] <= 2048.0f)
+				g_swirls.insert(g_swirls.end(), s, s + 3);
+			else
+				printf("RoomProbe: -swirl wants x,z,r (r 64 to 2048) - '%s' "
+					"ignored\n", argv[at]);
 		}
 		else if ((!strcmp(argv[at], "-plane") ||
 			!strcmp(argv[at], "-roomplane")) && at + 5 < argc)
@@ -8530,6 +8638,11 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderWaterFile(g_water_file.empty() ? 0 : g_water_file.c_str());
 			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 				g_hdwater);
+			ProbeWaterFalls(level, stem);
+
+			for (size_t i = 0; i + 2 < g_swirls.size(); i += 3)
+				HDRenderWaterSwirl(g_swirls[i], g_swirls[i + 1],
+					g_swirls[i + 2]);
 
 			for (size_t i = 0; i < g_ripples.size(); i++)
 				HDRenderWaterRing(g_ripples[i].x, g_ripples[i].z,
@@ -8544,6 +8657,14 @@ static int ProbeMain(int argc, char** argv)
 				if (HDRenderWaterLogLine(b, stem, g_hdwater, line,
 					sizeof(line)))
 					printf("%s\n", line);
+
+			for (int f = 0; HDRenderWaterFallLine(f, stem, line,
+				sizeof(line)); f++)
+				printf("%s\n", line);
+
+			for (int f = 0; HDRenderWaterFootLine(f, stem, line,
+				sizeof(line)); f++)
+				printf("%s\n", line);
 		}
 	}
 
@@ -9088,6 +9209,12 @@ static int ProbeMain(int argc, char** argv)
 		printf("-hdwater: %d frame copy(ies) %dx%d, GPU %.3f ms (timestamps "
 			"round the StretchRect), depth texture %s\n", timed, (int)width,
 			(int)height, ms, HDRenderWaterDepthBound() ? "bound" : "not bound");
+
+		int sources = 0;
+
+		HDRenderWaterSwirlTiming(&ms, &timed, &sources);
+		printf("-hdwater: %d swirl draw(s) carrying %d source(s), GPU %.3f "
+			"ms (timestamps round the swirls' draws)\n", timed, sources, ms);
 	}
 
 	if (g_roomwin_count)
@@ -9378,6 +9505,7 @@ int main(int argc, char** argv)
 
 		g_ripples.clear();
 		g_lara_set = false;
+		g_swirls.clear();
 		g_classic_rooms.clear();
 		g_faces_built.clear();
 		g_cuts_built.clear();

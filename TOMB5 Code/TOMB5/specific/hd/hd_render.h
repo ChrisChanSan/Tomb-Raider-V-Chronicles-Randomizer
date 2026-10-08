@@ -841,6 +841,9 @@ struct HDRenderWaterBody
 	int artKeep;
 	// The applied row's refraction scale, `bend` (1 without one).
 	float bend;
+	/* 1 when a row says `swirl off`: no waterfall of this body gets the
+	 * foot HDRenderWaterFalls gives it (a row's own `swirl x z r` stays). */
+	int swirlOff;
 };
 
 // What the level built, for its log line.
@@ -864,6 +867,8 @@ struct HDRenderWaterLevel
 	int depth;		// 1 when they read the depth texture as well
 	int ringSources;	// ripple rows of the file that found a body
 	int artHidden;		// the remaster's water art triangles hidden
+	int falls;		// waterfall objects whose foot stands over a sheet
+	int feet;		// the sources at their feet and the rows' swirls
 };
 
 int HDRenderWaterBodies();
@@ -883,6 +888,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 void HDRenderWaterTiming(int on, double* ms, int* draws);
 // And of the frame's copy, the same way: milliseconds and copies so far.
 void HDRenderWaterCopyTiming(double* ms, int* copies);
+// And of the swirls' draws: milliseconds, draws and the sources they held.
+void HDRenderWaterSwirlTiming(double* ms, int* draws, int* sources);
 
 /* The frame behind the sheets (hd_room.hlsl, "the frame behind the sheet").
  *
@@ -941,6 +948,43 @@ bool HDRenderWaterSheetUnder(int x, int y, int z);
  * the level has no Lara. The engine sets it once a frame, RoomProbe for its
  * picture (-lara); a new level starts with 0. */
 void HDRenderWaterLara(int inWater, float x, float z);
+
+/* The waterfalls' feet (hd_render.cpp, "the foot of a waterfall").
+ *
+ * HDRenderWaterFalls takes the level's waterfall objects after
+ * HDRenderSetWaterSheets, each with its classic mesh placed as the game
+ * places it: the highest and the lowest y and the x, z of the vertices that
+ * lie within HD_WATER_FOOT_BAND of the lowest. Where those stand over a
+ * square that draws a sheet the foot gets sources - a turning disc of foam,
+ * rings and drops - and the WATERLOG gets a line per object. The engine
+ * calls it from hd_level.cpp with items[], RoomProbe with the classic .TRC.
+ * HDRenderWaterSwirl is RoomProbe's -swirl: a source at world x, z with
+ * radius r on the surface of the square under it, until the next level.
+ * HDRenderWaterFeet and HDRenderWaterFoot hand the sources to the logic
+ * tick's drops (hd_level.cpp, HDWaterFallsTick): the place on the surface,
+ * the foot's direction and half its span. */
+#define HD_WATER_FOOT_BAND	64	// units over the lowest vertex
+#define HD_WATER_FOOT_POINTS	256	// foot points kept per object
+
+struct HDWaterFall
+{
+	int item;			// its number in items[]
+	int slot;			// WATERFALL1 ..
+	int room;
+	float top, bottom;		// world y, the highest and the lowest vertex
+	int points;			// foot points in `foot`
+	float foot[HD_WATER_FOOT_POINTS * 2];	// world x, z
+};
+
+void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem);
+void HDRenderWaterSwirl(float x, float z, float r);
+int HDRenderWaterFeet();
+bool HDRenderWaterFoot(int at, float* place, float* dir, float* half);
+/* The WATERLOG line of one waterfall object HDRenderWaterFalls was given -
+ * false past the last. */
+bool HDRenderWaterFallLine(int at, const char* stem, char* out, size_t size);
+// And of one source, the objects' and the rows' - false past the last.
+bool HDRenderWaterFootLine(int at, const char* stem, char* out, size_t size);
 /* The rooms' own boxes for the level about to be built.
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */

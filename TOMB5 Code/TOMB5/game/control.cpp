@@ -709,6 +709,9 @@ long ControlPhase(long nframes, long demo_mode)
 		UpdateLightning();
 		UpdateTwogunLasers();
 		AnimateWaterfalls();
+		/* The drops where a waterfall lands on an HD water sheet - nothing
+		 * without one, and with HD off it returns at once. */
+		HDWaterFallsTick();
 		UpdatePulseColour();
 
 		if (gfLevelId == LVL5_SINKING_SUBMARINE)

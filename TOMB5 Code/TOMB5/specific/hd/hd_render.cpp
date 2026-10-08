@@ -37,6 +37,7 @@
 #include "hd_shader/hd_room_water_ps.inc"
 #include "hd_shader/hd_room_water_depth_ps.inc"
 #include "hd_shader/hd_room_water_view_ps.inc"
+#include "hd_shader/hd_room_water_swirl_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1638,6 +1639,30 @@ namespace
 	// That one with RoomProbe's depth views (HD_WATER_VIEW), made the first
 	// time a view is asked for; the game never asks.
 	IDirect3DPixelShader9* g_water_view_ps = 0;
+	/* The waterfalls' swirls (hd_room.hlsl, SwirlPS), a second draw over a
+	 * sheet range with a foot near it. Null when the device refused it: the
+	 * sheets then draw without swirls; the rings and the drops stay. */
+	IDirect3DPixelShader9* g_water_swirl_ps = 0;
+	/* Where the art's falling water ends: per flow part (material 1) of a
+	 * room's group that stands more than kFlowFall tall, its vertices
+	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
+	 * kFlowFootKept a part - HDRenderWaterFalls puts a waterfall's foot
+	 * there when the art draws the fall (see "the foot of a waterfall").
+	 * Gathered in HDRenderLevelBegin, the only time the .TRG's vertices
+	 * are on the processor. Two clicks tall and 64 points are free
+	 * choices: ANDREA2 room 231's two curtains stand about 3,600 units,
+	 * the spray at their foot 234 (TrgProbe -matparts 1), and a part of a
+	 * river or a belt lies nearly flat; 64 points mark a curtain's foot to
+	 * a few dozen units. */
+	struct FlowFoot
+	{
+		int group;
+		float x, y, z;
+	};
+
+	std::vector<FlowFoot> g_flow_feet;
+	const float kFlowFall = 512.0f;		// units
+	const size_t kFlowFootKept = 64;
 	/* The projected shadow's receive shader (hd_shadow_receive.hlsl). Null
 	 * when the device refused it; the projected shadow then does not run and
 	 * the blob stays. */
@@ -3613,6 +3638,10 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_water_depth_ps)))
 		g_water_depth_ps = 0;
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterSwirlPS,
+		&g_water_swirl_ps)))
+		g_water_swirl_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -3765,6 +3794,7 @@ void HDRenderShutdown()
 	if (g_water_ps) { g_water_ps->Release(); g_water_ps = 0; }
 	if (g_water_depth_ps) { g_water_depth_ps->Release(); g_water_depth_ps = 0; }
 	if (g_water_view_ps) { g_water_view_ps->Release(); g_water_view_ps = 0; }
+	if (g_water_swirl_ps) { g_water_swirl_ps->Release(); g_water_swirl_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -4524,6 +4554,62 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				sway_dropped++;
 			}
 	}
+
+	/* The art's falling water, for the waterfalls' feet (g_flow_feet). Only
+	 * the rooms' groups: the sky has no water under it. */
+	g_flow_feet.clear();
+
+	for (size_t g = 0; g < trg.groups.size() && (int)g < g_room_groups; g++)
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+		{
+			if (part.material != HD_TRG_MATERIAL_FLOW)
+				continue;
+
+			int lo = 1 << 30, hi = -(1 << 30);
+			std::vector<unsigned int> foot;
+
+			for (int pass = 0; pass < 2; pass++)
+				for (int p = 0; p < 3; p++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[p];
+
+					for (unsigned int at = run.start; at < run.start +
+						run.count && at < trg.indices.size(); at++)
+					{
+						const unsigned int v = trg.indices[at];
+
+						if (v >= trg.vertices.size())
+							continue;
+
+						const int y = trg.vertices[v].y;
+
+						if (!pass)
+						{
+							lo = y < lo ? y : lo;
+							hi = y > hi ? y : hi;
+						}
+						else if (y >= hi - HD_WATER_FOOT_BAND)
+							foot.push_back(v);
+					}
+				}
+
+			if ((float)(hi - lo) <= kFlowFall)
+				continue;
+
+			// Each vertex once, then evenly over the foot's own order.
+			std::sort(foot.begin(), foot.end());
+			foot.erase(std::unique(foot.begin(), foot.end()), foot.end());
+
+			const size_t step = foot.size() / kFlowFootKept + 1;
+
+			for (size_t k = 0; k < foot.size(); k += step)
+			{
+				const trf::remaster::TrgVertex& at = trg.vertices[foot[k]];
+				FlowFoot f = { (int)g, (float)at.x, (float)at.y, (float)at.z };
+
+				g_flow_feet.push_back(f);
+			}
+		}
 
 	int marked_vertices = 0;
 	int marked_choppy = 0;
@@ -6899,6 +6985,7 @@ void HDRenderLevelEnd()
 	g_book_watch = 0;
 	g_book_watch_group = -1;
 	g_book_watch_part = -1;
+	g_flow_feet.clear();
 }
 
 /* ---------------------------------------------------------------- frame -- */
@@ -8626,6 +8713,8 @@ namespace
 		int ripple;		// 1 with a ripple source
 		float rx, rz, rsize, rperiod;
 		int art;		// 1 for `art keep`, 0 hides the art (default)
+		int swirl;		// 1 with a swirl source, -1 for `swirl off`
+		float sx, sz, sr;
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -8719,10 +8808,99 @@ namespace
 		float x, z, age, size;
 	};
 
+	/* The foot of a waterfall.
+	 *
+	 * Where a waterfall object's foot stands over a sheet (HDRenderWaterFalls)
+	 * the water it drops into is not left as calm as the rest of the body:
+	 * a source there is three things at once - a disc of the sheet's own foam
+	 * that turns slowly (hd_room.hlsl, SwirlPS), rings that start from it
+	 * again and again as a ripple row's do, and drops thrown up from it on
+	 * the logic tick (hd_level.cpp, HDWaterFallsTick, the engine's own
+	 * TriggerSmallSplash).
+	 *
+	 * Which objects: WATERFALL1 to 3 and WATERFALLSS1 and 2, whose texture
+	 * the game scrolls as falling water (game\objects.cpp,
+	 * AnimateWaterfalls) - FISHTANK, which it scrolls as well, is a tank's
+	 * glass. Its foot is where its classic mesh, placed as the game places
+	 * it, ends: the vertices within HD_WATER_FOOT_BAND of the lowest. An
+	 * object whose mesh is flat (no more than that band from its highest
+	 * vertex to its lowest) is a scrolling face and not a fall -
+	 * ANDREA1's WATERFALLSS1 is its fountain's upper basin. The foot stands
+	 * over a sheet when one of its points lies over a square that draws a
+	 * sheet with the surface no more than kFootAbove over the lowest vertex
+	 * and no more than kFootBelow under it - the gap the log line gives. In
+	 * the classic data every waterfall ends at its surface: the 31 objects of
+	 * the fifteen levels whose foot stands over a sheet all show a gap of 0
+	 * (RoomProbe -hdwater 1 -nodraw, the WATERLOG fall= lines), ANDREA2 room
+	 * 231's curtain ending at 256 over a surface at 256. 256 and 1024 are
+	 * free choices that take a fall ending a click under its surface and one
+	 * hanging a square over it.
+	 *
+	 * The sources along a foot. Its points are taken in order along the
+	 * longer side of their box and cut into runs no longer than kFootRun and
+	 * at every gap wider than kFootGap - two strands of one curtain are two
+	 * runs; a run is a source at its mean, along that side, with half the
+	 * run's length as its span and half its diagonal plus kFootPad as its
+	 * radius, held to kFootRadiusMin .. kFootRadiusMax. A curtain thus gets a
+	 * disc about a square across under every square of it, a narrow jet one
+	 * of three quarters of a square. All free choices, set by eye on the
+	 * round's RoomProbe pictures.
+	 *
+	 * A source's rings start every kFootRingMin seconds plus up to
+	 * kFootRingMore more, by a hash of its place, so two neighbouring ones do
+	 * not beat in step; kFootRingSize is the size a ripple of the game would
+	 * carry - 64, half a wading Lara's, so the rings stay low. Free choices.
+	 *
+	 * A row's `swirl x z r` is a source of its own at that place, with that
+	 * radius and no direction; `swirl off` takes the objects' sources of the
+	 * row's bodies away. RoomProbe's -swirl is a row's. */
+	const float kFootAbove = 256.0f;	// units
+	const float kFootBelow = 1024.0f;
+	const float kFootRun = 1024.0f;
+	const float kFootGap = 384.0f;
+	const float kFootPad = 256.0f;
+	const float kFootRadiusMin = 384.0f;
+	const float kFootRadiusMax = 768.0f;
+	const float kFootSnap = 1024.0f;	// see HDRenderWaterFalls
+	const float kFootRingMin = 0.4f;	// seconds
+	const float kFootRingMore = 0.4f;
+	const float kFootRingSize = 64.0f;
+	const int kSwirlsPerDraw = 8;		// gWaterSwirls[8]
+
+	struct WaterFoot
+	{
+		float x, y, z;		// world; y the surface
+		float dx, dz;		// along the foot, a unit vector (x for a row's)
+		float half;		// half its span along that (a row's: none)
+		float radius;
+		float period, phase;	// the rings
+		int body;
+		int fromRow;		// 1 for a row's or RoomProbe's
+	};
+
+	// One waterfall object as HDRenderWaterFalls found it, for its log line.
+	struct FallSeen
+	{
+		int item, slot, room;
+		float top, bottom;
+		int points;
+		int surface;		// the surface under the foot, or the lowest seen
+		int over;		// 1 when the foot stands over a sheet
+		int body;
+		int sources;
+		int off;		// 1 when a row's `swirl off` took them away
+		int art;		// the art's foot points that took the place
+	};
+
 	std::vector<WaterRing> g_rings;
 	RippleSeen g_ripple_seen[HD_WATER_RIPPLE_SLOTS] = {};
 	std::vector<WaterSource> g_wsources;
 	std::vector<ProbeRing> g_ring_probe;
+	std::vector<WaterFoot> g_wfeet;
+	std::vector<FallSeen> g_wfalls;
+	// Per room: its classic origin x and z, and 1 when it draws HD.
+	std::vector<int> g_wroom_origin;
+	std::vector<unsigned char> g_wroom_drawn;
 	// Lara's place for the waterline's gap round her (HDRenderWaterLara).
 	bool g_lara_in_water = false;
 	float g_lara_x = 0.0f, g_lara_z = 0.0f;
@@ -8740,6 +8918,10 @@ namespace
 	int g_sheet_timed = 0;
 	double g_copy_gpu_ms = 0.0;
 	int g_copy_timed = 0;
+	// And of the swirls' second draws, with the sources they carried.
+	double g_swirl_gpu_ms = 0.0;
+	int g_swirl_timed = 0;
+	int g_swirl_sources = 0;
 
 	/* The frame behind the sheets (HDRenderWaterCopy) and the depth texture
 	 * (HDRenderWaterDepthBind), both D3DPOOL_DEFAULT and released with the
@@ -8810,6 +8992,10 @@ namespace
 		g_wsources.clear();
 		g_rings.clear();
 		g_ring_probe.clear();
+		g_wfeet.clear();
+		g_wfalls.clear();
+		g_wroom_origin.clear();
+		g_wroom_drawn.clear();
 		g_lara_in_water = false;
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
@@ -8853,6 +9039,7 @@ namespace
 	 *                             [bend <s>]
 	 *                             [ripple <x> <z> <size> <seconds>]
 	 *                             [art keep|hide]
+	 *                             [swirl <x> <z> <radius> | swirl off]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -8868,13 +9055,17 @@ namespace
 	 * landing, where the game itself makes no ripple; the rest of the row
 	 * applies as any row's. art keep draws the remaster's own water art
 	 * over the sheets of the row's bodies, art hide (what a row without the
-	 * key says) leaves it out - step 8 of HDRenderSetWaterSheets. '#' starts
-	 * a comment. Returns 1 for a row, 0 for a line without one, -1 for a
-	 * line that cannot be read. */
+	 * key says) leaves it out - step 8 of HDRenderSetWaterSheets. swirl puts
+	 * the foot of a waterfall (see "the foot of a waterfall") at world x, z
+	 * with that radius (64 to 2048 units) on the surface of the row's room's
+	 * square under it - a fountain's jet that has no waterfall object -, and
+	 * swirl off takes the waterfall objects' own feet in the row's bodies
+	 * away. '#' starts a comment. Returns 1 for a row, 0 for a line without
+	 * one, -1 for a line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[21];
+		char* tok[25];
 		char* next = 0;
 		int n = 0;
 
@@ -8884,15 +9075,16 @@ namespace
 			*hash = 0;
 
 		// The longest row: the three words, tint's four, waves', foam's and
-		// bend's two each, ripple's five and art's two - 20 tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 21;
+		// bend's two each, ripple's five, art's two and swirl's four - 24
+		// tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 25;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 20 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 24 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -8927,6 +9119,15 @@ namespace
 			int count = 0;
 			float rip[4];
 			const bool ripple = !_stricmp(tok[i], "ripple");
+			const bool swirl = !_stricmp(tok[i], "swirl");
+
+			// swirl off: a word; swirl x z r: three numbers.
+			if (swirl && i + 1 < n && !_stricmp(tok[i + 1], "off"))
+			{
+				row.swirl = -1;
+				i += 2;
+				continue;
+			}
 
 			// art keep | art hide: a word, not a number.
 			if (!_stricmp(tok[i], "art"))
@@ -8955,6 +9156,8 @@ namespace
 				into = &row.bend, count = 1;
 			else if (ripple)
 				into = rip, count = 4;
+			else if (swirl)
+				into = rip, count = 3;
 
 			if (!into || i + count >= n)
 				return -1;
@@ -8964,11 +9167,13 @@ namespace
 				const char* num = tok[i + 1 + k];
 				const double v = std::strtod(num, &end);
 				// x and z anywhere in a level, the size and the seconds
-				// as above, every scale 0 to 4.
-				const double lo = !ripple ? 0.0 : k < 2 ? -1.0e7 :
-					k == 2 ? 1.0 : 0.1;
-				const double hi = !ripple ? 4.0 : k < 2 ? 1.0e7 :
-					k == 2 ? 255.0 : 60.0;
+				// as above, a swirl's radius 64 to 2048, every scale 0
+				// to 4.
+				const bool place = (ripple || swirl) && k < 2;
+				const double lo = place ? -1.0e7 : ripple ?
+					(k == 2 ? 1.0 : 0.1) : swirl ? 64.0 : 0.0;
+				const double hi = place ? 1.0e7 : ripple ?
+					(k == 2 ? 255.0 : 60.0) : swirl ? 2048.0 : 4.0;
 
 				if (*end || end == num || !(v >= lo && v <= hi))
 					return -1;
@@ -8983,6 +9188,14 @@ namespace
 				row.rz = rip[1];
 				row.rsize = rip[2];
 				row.rperiod = rip[3];
+			}
+
+			if (swirl)
+			{
+				row.swirl = 1;
+				row.sx = rip[0];
+				row.sz = rip[1];
+				row.sr = rip[2];
 			}
 
 			i += 1 + count;
@@ -9301,6 +9514,17 @@ namespace
 		absorb[3] = c.absorb * (1.0f - 1.0f / 1.33f) * b.bend;
 	}
 
+	/* A foot's rings: every kFootRingMin plus up to kFootRingMore seconds by
+	 * one hash of its place, starting at a phase by another, as a ripple
+	 * row's source starts at one of its own. */
+	void foot_clock(WaterFoot& f)
+	{
+		const float h = fmodf(fabsf(f.x * 0.0013f + f.z * 0.0029f), 1.0f);
+
+		f.period = kFootRingMin + kFootRingMore * h;
+		f.phase = fmodf(fabsf(f.x * 0.0071f + f.z * 0.0037f), 1.0f) * f.period;
+	}
+
 	// One row applied to every body its room has water in.
 	bool apply_water_row(const WaterRow& row)
 	{
@@ -9330,6 +9554,39 @@ namespace
 			b.artKeep = row.art;
 			b.source = row.file ? 2 : 1;
 			b.sourceRoom = row.room;
+
+			if (row.swirl < 0)
+				b.swirlOff = 1;
+		}
+
+		// A row's swirl: a foot of its own, placed as a ripple source is.
+		if (row.swirl > 0 && !hit.empty())
+		{
+			WaterFoot foot = {};
+
+			foot.x = row.sx;
+			foot.z = row.sz;
+			foot.y = (float)g_wbodies[(size_t)hit[0]].info.surfaceY;
+			foot.body = hit[0];
+
+			for (size_t i = 0; i < g_wsquares.size(); i++)
+			{
+				const WaterSquare& s = g_wsquares[i];
+
+				if (s.room == row.room && row.sx >= (float)s.wx &&
+					row.sx < (float)(s.wx + 1024) && row.sz >= (float)s.wz &&
+					row.sz < (float)(s.wz + 1024))
+				{
+					foot.y = (float)s.wy;
+					foot.body = s.body;
+				}
+			}
+
+			foot.radius = row.sr;
+			foot.dx = 1.0f;		// the drops scatter along x and z
+			foot.fromRow = 1;
+			foot_clock(foot);
+			g_wfeet.push_back(foot);
 		}
 
 		/* A ripple source stands at the surface of the row's room's square
@@ -9385,6 +9642,17 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	g_wlevel.section = section;
 
 	const int groups = (int)g_groups.size();
+
+	// Each room's origin and HD, for the art's falls (HDRenderWaterFalls).
+	g_wroom_origin.assign((size_t)count * 2, 0);
+	g_wroom_drawn.assign((size_t)count, 0);
+
+	for (int r = 0; r < count; r++)
+	{
+		g_wroom_origin[(size_t)r * 2] = rooms[r].originX;
+		g_wroom_origin[(size_t)r * 2 + 1] = rooms[r].originZ;
+		g_wroom_drawn[(size_t)r] = rooms[r].drawn ? 1 : 0;
+	}
 
 	g_caustic_top.assign((size_t)groups, -1.0e9f);
 	g_caustic_on = sheets != 0;
@@ -10032,11 +10300,335 @@ void HDRenderWaterRipples(const HDRenderRipple* live, int count)
 			g_rings.erase(g_rings.begin() + (std::ptrdiff_t)i);
 }
 
+namespace
+{
+	/* The squares that draw a sheet under world x, z: the nearest surface
+	 * to y within `above` over it and `below` under it, its body into
+	 * `body`; -1e9 where none lies there. */
+	float sheet_surface_near(float x, float z, float y, float above,
+		float below, int* body)
+	{
+		float best = -1.0e9f;
+		float bestGap = 1.0e9f;
+		const int wx = (int)floorf(x);
+		const int wz = (int)floorf(z);
+
+		for (size_t i = 0; i < g_wsquares.size(); i++)
+		{
+			const WaterSquare& s = g_wsquares[i];
+
+			if (!s.sheet || wx < s.wx || wx >= s.wx + 1024 || wz < s.wz ||
+				wz >= s.wz + 1024 ||
+				!g_sheet_at.count(SheetKey(s.room, s.sx, s.sz)))
+				continue;
+
+			const float gap = (float)s.wy - y;
+
+			if (gap < -above || gap > below || fabsf(gap) >= bestGap)
+				continue;
+
+			bestGap = fabsf(gap);
+			best = (float)s.wy;
+
+			if (body)
+				*body = s.body;
+		}
+
+		return best;
+	}
+}
+
 void HDRenderWaterRing(float x, float z, float age, float size)
 {
 	ProbeRing ring = { x, z, age, size };
 
 	g_ring_probe.push_back(ring);
+}
+
+void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem)
+{
+	(void)stem;
+	g_wfalls.clear();
+
+	for (size_t i = g_wfeet.size(); i-- > 0; )
+		if (!g_wfeet[i].fromRow)
+			g_wfeet.erase(g_wfeet.begin() + (std::ptrdiff_t)i);
+
+	g_wlevel.falls = 0;
+
+	for (int f = 0; falls && f < count; f++)
+	{
+		const HDWaterFall& w = falls[f];
+		FallSeen seen = {};
+		std::vector<float> px, pz;
+
+		seen.item = w.item;
+		seen.slot = w.slot;
+		seen.room = w.room;
+		seen.top = w.top;
+		seen.bottom = w.bottom;
+		seen.points = w.points;
+		seen.surface = -1000000;
+		seen.body = -1;
+
+		// A flat object is a scrolling face, not a fall: no foot.
+		if (w.bottom - w.top > (float)HD_WATER_FOOT_BAND)
+			for (int p = 0; p < w.points && p < HD_WATER_FOOT_POINTS; p++)
+			{
+				int body = -1;
+				const float wy = sheet_surface_near(w.foot[p * 2],
+					w.foot[p * 2 + 1], w.bottom, kFootAbove, kFootBelow,
+					&body);
+
+				if (wy < -1.0e8f)
+					continue;
+
+				if (!seen.over || fabsf(wy - w.bottom) <
+					fabsf((float)seen.surface - w.bottom))
+				{
+					seen.surface = (int)wy;
+					seen.body = body;
+				}
+
+				seen.over = 1;
+				px.push_back(w.foot[p * 2]);
+				pz.push_back(w.foot[p * 2 + 1]);
+			}
+
+		if (seen.over)
+			g_wlevel.falls++;
+
+		if (seen.over && seen.body >= 0 &&
+			g_wbodies[(size_t)seen.body].info.swirlOff)
+			seen.off = 1;
+
+		/* Where the art draws the fall, its water lands where the art's
+		 * falling water ends and not where the classic mesh would have: in
+		 * ANDREA2 room 231 the remaster's curtains land about 450 units
+		 * from the classic object's foot, nearer the room's middle (the
+		 * WATERLOG foot= lines with and without the art, x 55,518 to 55,585
+		 * against 55,967 to 56,028). The art's foot points of a room drawn
+		 * HD within kFootSnap of the classic foot and over the same sheet
+		 * take the classic ones' place. kFootSnap, a square, is a free
+		 * choice: it takes those 450 units, and two waterfalls over a sheet
+		 * in one room stand two squares apart at the least (ItemCheck on
+		 * the fifteen classic files: JOBY2 room 66). */
+		if (seen.over && !seen.off)
+		{
+			std::vector<float> ax, az;
+
+			for (const FlowFoot& ff : g_flow_feet)
+			{
+				if (ff.group < 0 || (size_t)ff.group >= g_wroom_drawn.size() ||
+					!g_wroom_drawn[(size_t)ff.group])
+					continue;
+
+				const float x = ff.x +
+					(float)g_wroom_origin[(size_t)ff.group * 2];
+				const float z = ff.z +
+					(float)g_wroom_origin[(size_t)ff.group * 2 + 1];
+				bool close = false;
+
+				for (size_t k = 0; k < px.size() && !close; k++)
+					close = (x - px[k]) * (x - px[k]) +
+						(z - pz[k]) * (z - pz[k]) <= kFootSnap * kFootSnap;
+
+				if (close && sheet_surface_near(x, z, ff.y, kFootAbove,
+					kFootBelow, 0) > -1.0e8f)
+				{
+					ax.push_back(x);
+					az.push_back(z);
+				}
+			}
+
+			if (!ax.empty())
+			{
+				px.swap(ax);
+				pz.swap(az);
+				seen.art = (int)px.size();
+			}
+		}
+
+		if (seen.over && !seen.off)
+		{
+			/* The runs along the foot's own direction: the principal axis
+			 * of its points, so a curtain turned by 45 degrees is cut along
+			 * itself and not along x. */
+			const size_t n = px.size();
+			float mx = 0.0f, mz = 0.0f;
+
+			for (size_t k = 0; k < n; k++)
+			{
+				mx += px[k] / (float)n;
+				mz += pz[k] / (float)n;
+			}
+
+			float cxx = 0.0f, czz = 0.0f, cxz = 0.0f;
+
+			for (size_t k = 0; k < n; k++)
+			{
+				cxx += (px[k] - mx) * (px[k] - mx);
+				czz += (pz[k] - mz) * (pz[k] - mz);
+				cxz += (px[k] - mx) * (pz[k] - mz);
+			}
+
+			const float ang = 0.5f * atan2f(2.0f * cxz, cxx - czz);
+			const float ax = cosf(ang), az = sinf(ang);
+			std::vector<std::pair<float, size_t> > along(n);
+
+			for (size_t k = 0; k < n; k++)
+				along[k] = std::make_pair((px[k] - mx) * ax + (pz[k] - mz) * az,
+					k);
+
+			std::sort(along.begin(), along.end());
+
+			for (size_t a = 0; a < n; )
+			{
+				size_t b = a + 1;
+
+				while (b < n && along[b].first - along[a].first <= kFootRun &&
+					along[b].first - along[b - 1].first <= kFootGap)
+					b++;
+
+				float sx = 0.0f, sz = 0.0f;
+				float x0 = 1.0e9f, x1 = -1.0e9f, z0 = 1.0e9f, z1 = -1.0e9f;
+
+				for (size_t k = a; k < b; k++)
+				{
+					const size_t at = along[k].second;
+
+					sx += px[at] / (float)(b - a);
+					sz += pz[at] / (float)(b - a);
+					x0 = px[at] < x0 ? px[at] : x0;
+					x1 = px[at] > x1 ? px[at] : x1;
+					z0 = pz[at] < z0 ? pz[at] : z0;
+					z1 = pz[at] > z1 ? pz[at] : z1;
+				}
+
+				WaterFoot foot = {};
+				const float diag = sqrtf((x1 - x0) * (x1 - x0) +
+					(z1 - z0) * (z1 - z0));
+				const float radius = 0.5f * diag + kFootPad;
+
+				foot.x = sx;
+				foot.z = sz;
+				foot.y = (float)seen.surface;
+				foot.dx = ax;
+				foot.dz = az;
+				foot.half = 0.5f * (along[b - 1].first - along[a].first);
+				foot.radius = radius < kFootRadiusMin ? kFootRadiusMin :
+					radius > kFootRadiusMax ? kFootRadiusMax : radius;
+				foot.body = seen.body;
+				foot_clock(foot);
+				g_wfeet.push_back(foot);
+				seen.sources++;
+				a = b;
+			}
+		}
+
+		g_wfalls.push_back(seen);
+	}
+
+	g_wlevel.feet = (int)g_wfeet.size();
+}
+
+void HDRenderWaterSwirl(float x, float z, float r)
+{
+	WaterFoot foot = {};
+	int body = -1;
+	const float wy = sheet_surface_near(x, z, 0.0f, 1.0e8f, 1.0e8f, &body);
+
+	if (wy < -1.0e8f)
+		return;
+
+	foot.x = x;
+	foot.z = z;
+	foot.y = wy;
+	foot.radius = r;
+	foot.body = body;
+	foot.dx = 1.0f;
+	foot.fromRow = 1;
+	foot_clock(foot);
+	g_wfeet.push_back(foot);
+	g_wlevel.feet = (int)g_wfeet.size();
+}
+
+int HDRenderWaterFeet()
+{
+	return HDRenderWaterSheetsBuilt() ? (int)g_wfeet.size() : 0;
+}
+
+bool HDRenderWaterFoot(int at, float* place, float* dir, float* half)
+{
+	if (at < 0 || at >= HDRenderWaterFeet())
+		return false;
+
+	const WaterFoot& f = g_wfeet[(size_t)at];
+
+	if (place)
+	{
+		place[0] = f.x;
+		place[1] = f.y;
+		place[2] = f.z;
+	}
+
+	if (dir)
+	{
+		dir[0] = f.dx;
+		dir[1] = f.dz;
+	}
+
+	// A row's foot has no span: its drops spread over a quarter of its
+	// radius, a free choice.
+	if (half)
+		*half = f.fromRow ? 0.25f * f.radius : f.half;
+
+	return true;
+}
+
+/* WATERLOG, a waterfall object: its number in items[], its slot and room,
+ * the highest and the lowest y of its classic mesh as placed, the foot
+ * points, 1 when the foot stands over a sheet, the surface there and the gap
+ * (the surface less the lowest y: over 0 the fall ends above the water, under
+ * 0 it reaches into it; -1000000 and - where no sheet lies under it), the
+ * body, the sources its foot got, 1 when a row's `swirl off` took them,
+ * and how many foot points of the art's own falling water took the classic
+ * ones' place (0: the classic mesh's foot). */
+bool HDRenderWaterFallLine(int at, const char* stem, char* out, size_t size)
+{
+	if (!out || !size || at < 0 || at >= (int)g_wfalls.size())
+		return false;
+
+	const FallSeen& f = g_wfalls[(size_t)at];
+	char gap[16];
+
+	if (f.over)
+		snprintf(gap, sizeof(gap), "%d", f.surface - (int)f.bottom);
+	else
+		snprintf(gap, sizeof(gap), "-");
+
+	snprintf(out, size, "WATERLOG level=%s fall=%d item=%d slot=%d room=%d "
+		"top=%d bottom=%d points=%d over=%d surface=%d gap=%s body=%d "
+		"sources=%d off=%d art=%d", stem ? stem : "?", at, f.item, f.slot,
+		f.room, (int)f.top, (int)f.bottom, f.points, f.over, f.surface, gap,
+		f.body, f.sources, f.off, f.art);
+	return true;
+}
+
+/* WATERLOG, a source: its world x, y (the surface) and z, its radius, half
+ * its span along the foot, its body and 1 for a row's or RoomProbe's - the
+ * places a `swirl` row needs. */
+bool HDRenderWaterFootLine(int at, const char* stem, char* out, size_t size)
+{
+	if (!out || !size || at < 0 || at >= (int)g_wfeet.size())
+		return false;
+
+	const WaterFoot& f = g_wfeet[(size_t)at];
+
+	snprintf(out, size, "WATERLOG level=%s foot=%d x=%d y=%d z=%d radius=%d "
+		"half=%d body=%d row=%d", stem ? stem : "?", at, (int)f.x, (int)f.y,
+		(int)f.z, (int)f.radius, (int)f.half, f.body, f.fromRow);
+	return true;
 }
 
 void HDRenderWaterLara(int inWater, float x, float z)
@@ -10094,7 +10686,8 @@ const char* HDRenderWaterSectionName(int section)
  * body (sources), the triangles of the remaster's own water art left out
  * under the sheets (art_hidden) and 1 when the sheets clip where the
  * frame's depth lies at their surface - the depth variant, so it follows
- * depth (clip). A body line: its rooms (+n for
+ * depth (clip), and the waterfall objects whose foot stands over a sheet
+ * (falls; a line each, HDRenderWaterFallLine). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -10102,8 +10695,9 @@ const char* HDRenderWaterSectionName(int section)
  * - table or file with its room - or none, the tint, wave and foam scales in
  * force, its flipmap twins' squares, the light before gain, floor and cap,
  * 1 when a row of class none took its sheet away, whether the
- * remaster's water art over its sheets is kept or hidden (art), and the
- * refraction's scale in force (bend). */
+ * remaster's water art over its sheets is kept or hidden (art), the
+ * refraction's scale in force (bend) and whether its waterfalls get their
+ * foot or a row's `swirl off` took it away (swirl). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -10128,7 +10722,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
 			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
-			"clip=%d",
+			"clip=%d falls=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -10137,7 +10731,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.rowsUnmatched, g_wlevel.overlaps, g_wlevel.causticRooms,
 			g_wlevel.vertices, g_wlevel.triangles, g_wlevel.twins,
 			g_wlevel.copy, g_wlevel.depth, kRingsPerDraw,
-			g_wlevel.ringSources, g_wlevel.artHidden, g_wlevel.depth);
+			g_wlevel.ringSources, g_wlevel.artHidden, g_wlevel.depth,
+			g_wlevel.falls);
 		return true;
 	}
 
@@ -10168,14 +10763,16 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	snprintf(out, size, "WATERLOG body=%d rooms=%s surface=%d sectors=%d "
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
-		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f",
+		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
+		"swirl=%s",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
 		HDRenderWaterClassName(b.cls), HDRenderWaterClassName(b.ruleCls),
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
-		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend);
+		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
+		b.swirlOff ? "off" : "on");
 	return true;
 }
 
@@ -10188,6 +10785,9 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 		g_sheet_timed = 0;
 		g_copy_gpu_ms = 0.0;
 		g_copy_timed = 0;
+		g_swirl_gpu_ms = 0.0;
+		g_swirl_timed = 0;
+		g_swirl_sources = 0;
 	}
 
 	if (ms)
@@ -10204,6 +10804,18 @@ void HDRenderWaterCopyTiming(double* ms, int* copies)
 
 	if (copies)
 		*copies = g_copy_timed;
+}
+
+void HDRenderWaterSwirlTiming(double* ms, int* draws, int* sources)
+{
+	if (ms)
+		*ms = g_swirl_gpu_ms;
+
+	if (draws)
+		*draws = g_swirl_timed;
+
+	if (sources)
+		*sources = g_swirl_sources;
 }
 
 bool HDRenderGroupHasSheet(int group)
@@ -10518,7 +11130,11 @@ namespace
 			double age;
 		};
 
-		Near found[kRingsKept + 32];
+		/* The kept rings, and room for the sources' and the feet's live
+		 * ones - a foot re-armed every 0.4 s has nine within kRingLife;
+		 * what does not fit is not drawn, the youngest first being kept
+		 * only among those that do. */
+		Near found[kRingsKept + 32 + 256];
 		int n = 0;
 		const int cap = (int)(sizeof(found) / sizeof(found[0]));
 		const double now = g_motion[2];
@@ -10552,6 +11168,12 @@ namespace
 				age <= kRingLife; age += s.period)
 				add(s.x, s.y, s.z, false, s.size, age);
 
+		// The waterfalls' feet, each a ripple source of its own.
+		for (const WaterFoot& f : g_wfeet)
+			for (double age = std::fmod(now + f.phase, (double)f.period);
+				age <= kRingLife; age += f.period)
+				add(f.x, f.y, f.z, false, kFootRingSize, age);
+
 		// RoomProbe's rings carry no height: the box alone places them.
 		for (const ProbeRing& p : g_ring_probe)
 			add(p.x, 0.0f, p.z, true, p.size, p.age);
@@ -10579,6 +11201,100 @@ namespace
 		}
 
 		return count;
+	}
+
+	/* The swirls over one sheet draw (see "the foot of a waterfall"): the
+	 * feet whose disc reaches its squares and whose surface is its own, at
+	 * most kSwirlsPerDraw, drawn as a second pass of the same triangles with
+	 * SwirlPS and the same blend. c124 - c131 hold them as (x, z, radius,
+	 * strength) in the frame the shader's world position is in, the
+	 * strength the body's foam scale (a row's `foam`); gWaterStage.w the
+	 * count, which WaterPS does not read. Nothing while tomb5.hd_motion is
+	 * off, as the rings: the water stands still. `pixel` is the draw's c92
+	 * - c123, set already. */
+	void draw_swirls(const SheetRange& r, float* pixel)
+	{
+		if (!g_water_swirl_ps || g_wfeet.empty() || g_motion[3] == 0.0f)
+			return;
+
+		float swirls[kSwirlsPerDraw * 4] = {};
+		int count = 0;
+
+		for (const WaterFoot& f : g_wfeet)
+		{
+			if (count >= kSwirlsPerDraw ||
+				fabsf(f.y - (float)r.surfaceY) > (float)kRingHeight ||
+				f.x < (float)r.minX - f.radius ||
+				f.x > (float)r.maxX + f.radius ||
+				f.z < (float)r.minZ - f.radius ||
+				f.z > (float)r.maxZ + f.radius)
+				continue;
+
+			const float foam = f.body >= 0 && f.body < (int)g_wbodies.size() ?
+				g_wbodies[(size_t)f.body].info.foam : 1.0f;
+
+			swirls[count * 4 + 0] = f.x - (float)r.originX + g_room_origin[0];
+			swirls[count * 4 + 1] = f.z - (float)r.originZ + g_room_origin[1];
+			swirls[count * 4 + 2] = f.radius;
+			swirls[count * 4 + 3] = foam;
+			count++;
+		}
+
+		if (!count)
+			return;
+
+		pixel[16 + 10 * 4 + 3] = (float)count;
+		g_device->SetPixelShader(g_water_swirl_ps);
+		g_device->SetPixelShaderConstantF(106, pixel + 16 + 10 * 4, 1);
+		g_device->SetPixelShaderConstantF(124, swirls, kSwirlsPerDraw);
+
+		IDirect3DQuery9* q[3] = { 0, 0, 0 };
+
+		if (g_sheet_timing &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+			&q[0])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2])))
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+
+		g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, r.minVertex,
+			r.vertices, r.start, r.tris);
+		g_draw_calls++;
+
+		IDirect3DQuery9* freq_q = 0;
+
+		if (q[2] && SUCCEEDED(g_device->CreateQuery(
+			D3DQUERYTYPE_TIMESTAMPFREQ, &freq_q)))
+		{
+			UINT64 t0 = 0, t1 = 0, freq = 0;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			freq_q->Issue(D3DISSUE_END);
+
+			while (freq_q->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+
+			if (freq && t1 > t0)
+			{
+				g_swirl_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
+				g_swirl_timed++;
+				g_swirl_sources += count;
+			}
+
+			freq_q->Release();
+		}
+
+		for (int i = 0; i < 3; i++)
+			if (q[i])
+				q[i]->Release();
 	}
 
 	/* The sheet of one room, in its blend phase: one draw per body, with
@@ -10776,6 +11492,11 @@ namespace
 			for (int i = 0; i < 3; i++)
 				if (q[i])
 					q[i]->Release();
+
+			draw_swirls(r, pixel);
+			g_device->SetPixelShader(!depth ? g_water_ps :
+				g_depth_view && g_water_view_ps ? g_water_view_ps :
+				g_water_depth_ps);
 		}
 
 		g_device->SetTexture(5, 0);

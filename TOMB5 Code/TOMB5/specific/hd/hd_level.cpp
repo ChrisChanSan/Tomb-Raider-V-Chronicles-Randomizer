@@ -1702,6 +1702,136 @@ bool HDWaterRippleOnSheet(long x, long y, long z, int flags)
 		HDRenderWaterSheetUnder((int)x, (int)y, (int)z);
 }
 
+/* The waterfall objects for their feet (hd_render.cpp, "the foot of a
+ * waterfall"): every item of WATERFALL1 to 3 and WATERFALLSS1 and 2, its
+ * classic mesh placed as DrawAnimatingItem places it - the item's place
+ * and turn, the frame's root offset (GetBestFrame, the six shorts of the
+ * box first) - and of that mesh the highest and the lowest y and the x, z
+ * of the vertices within HD_WATER_FOOT_BAND of the lowest. One mesh each:
+ * the five slots carry one (ModelOffset on the fifteen classic files). */
+static void BuildWaterFalls()
+{
+	std::vector<HDWaterFall> falls;
+
+	for (int i = 0; i < level_items; i++)
+	{
+		ITEM_INFO* item = &items[i];
+		const int slot = item->object_number;
+
+		if (!(slot >= WATERFALL1 && slot <= WATERFALL3) &&
+			!(slot >= WATERFALLSS1 && slot <= WATERFALLSS2))
+			continue;
+
+		const OBJECT_INFO& obj = objects[slot];
+
+		if (!obj.loaded || obj.nmeshes <= 0 || obj.mesh_index < 0 ||
+			obj.mesh_index >= num_level_meshes)
+			continue;
+
+		const MESH_DATA* mesh = mesh_vtxbuf[obj.mesh_index];
+		const short* frame = GetBestFrame(item);
+
+		if (!mesh || !mesh->nVerts || !mesh->aVtx || !frame)
+			continue;
+
+		const float c = (float)phd_cos(item->pos.y_rot) * (1.0f / 16384.0f);
+		const float s = (float)phd_sin(item->pos.y_rot) * (1.0f / 16384.0f);
+		HDWaterFall f = {};
+
+		f.item = i;
+		f.slot = slot;
+		f.room = item->room_number;
+		f.top = 1.0e9f;
+		f.bottom = -1.0e9f;
+
+		for (int pass = 0; pass < 2; pass++)
+			for (int v = 0; v < mesh->nVerts; v++)
+			{
+				const ACMESHVERTEX& at = mesh->aVtx[v];
+				const float lx = at.x + frame[6];
+				const float lz = at.z + frame[8];
+				const float y = (float)item->pos.y_pos + at.y + frame[7];
+
+				if (!pass)
+				{
+					f.top = y < f.top ? y : f.top;
+					f.bottom = y > f.bottom ? y : f.bottom;
+					continue;
+				}
+
+				if (y < f.bottom - (float)HD_WATER_FOOT_BAND ||
+					f.points >= HD_WATER_FOOT_POINTS)
+					continue;
+
+				f.foot[f.points * 2] = (float)item->pos.x_pos + lx * c + lz * s;
+				f.foot[f.points * 2 + 1] = (float)item->pos.z_pos + lz * c -
+					lx * s;
+				f.points++;
+			}
+
+		falls.push_back(f);
+	}
+
+	HDRenderWaterFalls(falls.empty() ? 0 : &falls[0], (int)falls.size(),
+		g_stem);
+}
+
+/* The drops at the waterfalls' feet, on the logic tick (game\control.cpp,
+ * beside AnimateWaterfalls): TriggerSmallSplash (game\tomb4fx.cpp), the
+ * engine's own splash of a rat or a shell landing in water, two drops a
+ * tick at every foot within kDropReach of the camera, at a random place
+ * along it and at most kDropAcross to either side, on the surface, and no
+ * more than kDropsMax a tick in all. Nothing in a level without sheets
+ * (tomb5.hd_water 0 builds none) and nothing while tomb5.hd_motion is
+ * off - the water stands still. A drop lives 24 ticks: two a tick are about
+ * 48 at a foot - ANDREA2 room 231's curtain has four feet, about 200 of the
+ * game's 1024 sparks - and the cap holds a level to about 380 (JOBY5 has 37
+ * feet, the WATERLOG foot= lines, 1,776 drops alive without it). Two, 64
+ * units, eight squares and 16 are free choices; a drop eight squares off is
+ * a dot. */
+void HDWaterFallsTick()
+{
+	const int kDropsPerTick = 2;
+	const int kDropAcross = 64;
+	const float kDropReach = 8192.0f;
+	const int kDropsMax = 16;
+
+	if (!HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+		return;
+
+	const int feet = HDRenderWaterFeet();
+	int made = 0;
+
+	for (int f = 0; f < feet && made < kDropsMax; f++)
+	{
+		float place[3], dir[2], half;
+
+		if (!HDRenderWaterFoot(f, place, dir, &half))
+			continue;
+
+		const float cx = place[0] - (float)camera.pos.x;
+		const float cy = place[1] - (float)camera.pos.y;
+		const float cz = place[2] - (float)camera.pos.z;
+
+		if (cx * cx + cy * cy + cz * cz > kDropReach * kDropReach)
+			continue;
+
+		made += kDropsPerTick;
+
+		for (int k = 0; k < kDropsPerTick; k++)
+		{
+			const float along = half * ((GetRandomControl() & 1023) *
+				(2.0f / 1023.0f) - 1.0f);
+			const float across = (float)((GetRandomControl() & 127) - 64) *
+				(kDropAcross / 64.0f);
+
+			TriggerSmallSplash((long)(place[0] + dir[0] * along -
+				dir[1] * across), (long)place[1], (long)(place[2] +
+				dir[1] * along + dir[0] * across), 1);
+		}
+	}
+}
+
 static void BuildWaterSheets()
 {
 	std::vector<HDWaterRoom> rooms((size_t)number_rooms);
@@ -1751,6 +1881,7 @@ static void BuildWaterSheets()
 	HDRenderWaterFile("hd_water.txt");
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
+	BuildWaterFalls();
 
 	/* The depth texture the sheets read (HDRenderWaterDepthBind), bound
 	 * here, between frames, only when this level built sheets - with
@@ -1784,6 +1915,12 @@ static void BuildWaterSheets()
 	for (int b = 0; b < HDRenderWaterBodies(); b++)
 		if (HDRenderWaterLogLine(b, g_stem, 0, line, sizeof(line)))
 			Log("%s", line);
+
+	for (int f = 0; HDRenderWaterFallLine(f, g_stem, line, sizeof(line)); f++)
+		Log("%s", line);
+
+	for (int f = 0; HDRenderWaterFootLine(f, g_stem, line, sizeof(line)); f++)
+		Log("%s", line);
 }
 
 /* The water surface the .TRG has no geometry for.

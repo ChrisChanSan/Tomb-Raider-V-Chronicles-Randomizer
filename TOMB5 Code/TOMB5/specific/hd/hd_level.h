@@ -243,6 +243,12 @@ bool HDWaterFrameFor(const TEXTURESTRUCT* tex, TEXTURESTRUCT* out);
  * test. */
 bool HDWaterRippleOnSheet(long x, long y, long z, int flags);
 
+/* The drops where a waterfall lands on a water sheet (hd_level.cpp; the
+ * feet are hd_render.cpp's, "the foot of a waterfall"), once a logic tick:
+ * the only caller is the tick body in game\control.cpp, beside
+ * AnimateWaterfalls. With hd_enable off it returns at its first test. */
+void HDWaterFallsTick();
+
 /* Whether a frame draws a static mesh the classic way. Worked out once at
  * level load against the .TRG's own geometry (hd_level.cpp,
  * BuildStaticTables; the rule: hd_cover.h, HDStaticAnswer);

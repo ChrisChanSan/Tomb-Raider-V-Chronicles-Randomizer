@@ -47,6 +47,7 @@
     def c29, -0.00049969001, 0.000686480023, -0.000686480023, 0
     def c30, 2.29999995, -1.70000005, 0.666666687, 8160
     def c31, 0.238905907, 0.186444595, 0.136888802, 0
+    def c32, 4080, 0, 0, 0
     dcl_position v0
     dcl_color v1
     dcl_position o0
@@ -55,6 +56,7 @@
     dcl_texcoord2 o3
     dcl_texcoord3 o4
     dcl_texcoord4 o5
+    dcl_texcoord5 o6
     mul r0.x, c4.x, v1.y
     mul r0.yz, c20.xxyw, c20.xxyw
     add r0.y, r0.z, r0.y
@@ -319,8 +321,9 @@
     add o2.xyz, -r4, c17
     mul o1.w, c30.w, v1.x
     mul o2.w, c4.x, v1.y
+    mul o6, c32.xyyy, v1.z
 
-// approximately 266 instruction slots used
+// approximately 267 instruction slots used
 #endif
 
 const BYTE kHDRoomWaterVS[] =
@@ -459,6 +462,10 @@ const BYTE kHDRoomWaterVS[] =
       0,   5,  31,   0,  15, 160, 
     192, 163, 116,  62,  85, 235, 
      62,  62, 148,  44,  12,  62, 
+      0,   0,   0,   0,  81,   0, 
+      0,   5,  32,   0,  15, 160, 
+      0,   0, 127,  69,   0,   0, 
+      0,   0,   0,   0,   0,   0, 
       0,   0,   0,   0,  31,   0, 
       0,   2,   0,   0,   0, 128, 
       0,   0,  15, 144,  31,   0, 
@@ -475,7 +482,9 @@ const BYTE kHDRoomWaterVS[] =
       0,   2,   5,   0,   3, 128, 
       4,   0,  15, 224,  31,   0, 
       0,   2,   5,   0,   4, 128, 
-      5,   0,  15, 224,   5,   0, 
+      5,   0,  15, 224,  31,   0, 
+      0,   2,   5,   0,   5, 128, 
+      6,   0,  15, 224,   5,   0, 
       0,   3,   0,   0,   1, 128, 
       4,   0,   0, 160,   1,   0, 
      85, 144,   5,   0,   0,   3, 
@@ -1166,6 +1175,9 @@ const BYTE kHDRoomWaterVS[] =
       1,   0,   0, 144,   5,   0, 
       0,   3,   2,   0,   8, 224, 
       4,   0,   0, 160,   1,   0, 
-     85, 144, 255, 255,   0,   0
+     85, 144,   5,   0,   0,   3, 
+      6,   0,  15, 224,  32,   0, 
+     84, 160,   1,   0, 170, 144, 
+    255, 255,   0,   0
 };
-// bshader-stamp be6ec7ea7b48a06ee28854461e106efc
+// bshader-stamp 9fe0dcd4359f6b7d802fd6e8f0bbbd3f

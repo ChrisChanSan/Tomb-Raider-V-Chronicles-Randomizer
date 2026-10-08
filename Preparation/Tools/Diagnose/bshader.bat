@@ -81,6 +81,12 @@ rem sheet where a waterfall lands (hd_room.hlsl, "the waterfall's foot").
  /Fh "%SHADERDIR%\hd_room_water_swirl_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The rivers' streaks and the foam where they end: the same file's RiverPS,
+rem a second draw over a river's sheet (hd_room.hlsl, "the river").
+"%FXC%" /nologo /T ps_3_0 /E RiverPS /O3 /Vn kHDRoomWaterRiverPS ^
+ /Fh "%SHADERDIR%\hd_room_water_river_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
 
@@ -138,6 +144,8 @@ if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_view_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_swirl_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_river_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1

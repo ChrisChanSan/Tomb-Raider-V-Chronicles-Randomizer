@@ -710,10 +710,15 @@ float4 gWaterStage : register(c106);
  *              x and z in the frame of the sheet's world position, z the
  *              radius without a waterline, w one over the width it comes
  *              back over; x, y far away (1e7) when she is not in the
- *              water (see "the foam" in WaterPS)
+ *              water (see "the foam" in WaterPS); z 1e9 in the draw over
+ *              the pixels the creatures' mark took (hd_render.cpp), where
+ *              no waterline is then drawn at all
  * gWaterSwirls c124 - c131, read by SwirlPS alone: one waterfall's foot a
  *              register, x, z its centre in the frame of the sheet's world
- *              position, its radius and its strength (see SwirlPS) */
+ *              position, its radius and its strength (see SwirlPS)
+ *
+ * c132 and c133, gRiverFlow and gRiverEdge, are read by RiverPS alone and
+ * declared with it ("the river"). */
 float4 gWaveP2[4] : register(c107);
 float4 gWaterLag : register(c111);
 float4 gWaterLife : register(c112);
@@ -1741,8 +1746,10 @@ float4 RoomPS(VS_OUT input) : COLOR0
  *
  * The vertex is the room vertex with its bytes read differently: colour1's
  * red is the depth down to the floor below in steps of 32 units, its green
- * the distance to the nearest square with no water in steps of 16 - both
- * counted on the classic floor data at level build. Nothing else is read.
+ * the distance to the nearest square with no water in steps of 16, its blue
+ * a river's way along its flow to the first point with no water, in steps
+ * of 16 - all three counted on the classic floor data at level build.
+ * Nothing else is read.
  *
  * Per pixel, five textbook terms - none of them a picture of anything:
  *
@@ -1788,6 +1795,7 @@ struct WATER_OUT
 					// z the variety field, w the patches'
 	float4 keepA   : TEXCOORD3;	// the rows' fade, rows one to four
 	float4 keepB   : TEXCOORD4;	// and five to eight
+	float4 flow    : TEXCOORD5;	// x a river's way to its end, units
 };
 
 /* A smooth field of 0..1 over the world that never repeats within a level:
@@ -1953,6 +1961,9 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 
 	o.viewZ = float4(view.z, lift, var,
 		PatchField(at0, gMotion.z * gMotion.w, var));
+	// A river's way ahead to its end, colour1's blue in steps of 16 units
+	// (RiverPS, "the river"); 4080 on every other body.
+	o.flow = float4(inC0.b * (255.0f * 16.0f), 0.0f, 0.0f, 0.0f);
 	return o;
 }
 
@@ -2546,5 +2557,103 @@ float4 SwirlPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 
 	// Premultiplied, as the sheet: the foam over what the sheet drew.
+	return float4(col, foam);
+}
+
+/* ------------------------------------------------------------- the river -- */
+
+/* A river (hd_render.cpp, "the rivers") is water a current pulls through.
+ * Its rows are the sheet's own, stretched along the flow; this second draw
+ * of the sheet's triangles, with the same blend, adds what a fast current
+ * carries on its skin and where it ends.
+ *
+ * The streaks: thin bright lines along the flow - two sets of ridges across
+ * it, a coarse one about 410 units apart and a fine one about 170, whose
+ * places wander slowly with the way down the river, so a line bends and
+ * does not run ruler straight; carried at gRiverFlow.z, faster than the
+ * rows, and broken along the river by a slow field whose threshold swings
+ * over the bank foam's 5 seconds, so a stretch of lines comes and
+ * dissolves. A line is where its ridge stands over 0.82 of its crest,
+ * whole at 0.98. Lit like foam, at most gRiverFlow.w of its cover: a skin
+ * on the water, not a blanket.
+ *
+ * The end: where the river runs into a wall or over a drop (input.flow.x,
+ * the way ahead to the first point with no water, hd_render.cpp) the bank
+ * foam's pattern is laid across it - its two drifting layers and its
+ * dissolve, carried toward the end at gRiverEdge.z so the blotches pile
+ * into it - dense at the end, broken further up and gone at gRiverEdge.x:
+ * the bank's own threshold, from -0.05 at the end to 1.25 at the reach,
+ * times gRiverEdge.y. Nothing at the river's upper end, which the water
+ * leaves.
+ *
+ * The ridges' spacings, the 0.82 and 0.98, the slow field's cells (about
+ * 1,340 units along the flow, 2,030 across) and its threshold of 0.35 to
+ * 0.65 are free choices, set by eye on the round's RoomProbe pictures.
+ * Seen from below nothing, as all foam.
+ *
+ * gRiverFlow  xy the way the river runs (world x, z, a unit vector), z the
+ *             streaks' speed in units a second, w their strength
+ * gRiverEdge  x the end foam's reach in units, y its strength, z the speed
+ *             that carries it into the end, units a second */
+float4 gRiverFlow : register(c132);
+float4 gRiverEdge : register(c133);
+
+float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
+{
+	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
+	const float t = gWaterMisc.z;
+	// y counts down: the eye above the surface lies toward -y.
+	const float above = input.eye.y < 0.0f ? 1.0f : 0.0f;
+	const float2 dir = gRiverFlow.xy;
+	const float across = dot(world.xz, float2(-dir.y, dir.x));
+	const float var = input.viewZ.z;
+
+	// The streaks, carried on the skin.
+	const float u = dot(world.xz, dir) - gRiverFlow.z * t;
+	const float2 wander = Wave2(float2(u * 0.0021f, u * 0.0013f) +
+		var * float2(6.0f, 3.0f));
+	const float2 ridge = Wave2(float2(across * 0.0153f + wander.x * 0.7f,
+		across * 0.0371f + wander.y * 0.9f + 1.3f));
+	const float lines = smoothstep(0.8f, 0.97f, max(ridge.x, 0.9f * ridge.y));
+	const float2 slow = Wave2(float2(u * 0.0047f, across * 0.0031f) +
+		t * float2(0.11f, -0.13f) + var * 5.0f);
+	const float swing = Wave2(float2(t * 1.2566371f + slow.x * 3.1f,
+		0.0f)).x;
+	const float streak = gRiverFlow.w * lines * smoothstep(0.35f, 0.65f,
+		0.5f + 0.5f * slow.x * slow.y + 0.1f * swing);
+
+	// The foam where it ends, the bank foam's pattern carried into it.
+	const float edge = saturate(1.0f - input.flow.x /
+		max(gRiverEdge.x, 1.0f));
+	const float2 fp = (world.xz - dir * (gRiverEdge.z * t) +
+		var * float2(400.0f, -330.0f)) * gWaterBase.w;
+	const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
+		t * float2(0.25f, -0.18f));
+	const float2 w2 = Wave2(fp * float2(0.047f, 0.041f) + w1 * 1.7f +
+		t * float2(-0.9f, 1.1f));
+	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
+	const float thr = lerp(1.25f, -0.05f, edge) + 0.12f * swing;
+	const float end = gRiverEdge.y * smoothstep(thr - 0.12f, thr + 0.18f,
+		n) * (0.4f + 0.6f * edge);
+	const float foam = min(max(end, streak), 0.75f) * above;
+	const float nAt = end > streak ? n : 0.5f + 0.5f * lines;
+
+	// The foam's body and the fog, as SwirlPS lays them on.
+	const float2 dx = ddx(world.xz);
+	const float2 dy = ddy(world.xz);
+	const float cover = foam * (1.0f / 0.75f);
+	const float lump = cover * (0.5f + 0.5f * nAt);
+	const float det = dx.x * dy.y - dx.y * dy.x;
+	const float2 sunStep = float2(gWaterSun.x * dy.y - gWaterSun.z * dy.x,
+		gWaterSun.z * dx.x - gWaterSun.x * dx.y) * (det /
+		(det * det + 1.0e-12f));
+	const float body = max(1.0f - gWaterLife.w * dot(float2(ddx(lump),
+		ddy(lump)), sunStep), 0.3f) * (0.65f + 0.35f * lump) *
+		(1.0f - 1.4f * cover * (1.0f - cover));
+	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+	const float3 col = gWaterFoam.rgb * body * foam *
+		saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
+
 	return float4(col, foam);
 }

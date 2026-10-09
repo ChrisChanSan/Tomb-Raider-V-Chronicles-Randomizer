@@ -8609,14 +8609,24 @@ namespace
 	 * A river is water a current pulls along: its rows are stretched along
 	 * the flow, every one of them 1.11 to 1.25 radians off it, so that a
 	 * crest runs along the current 2 to 3 times as far as across it (the
-	 * tangent of the angle), its heights are low (the steepest, 1.2 over
-	 * 300, a third of the channel's), its base is the body's own flow and
-	 * its current the body's speed (water_look); no bank foam and no
-	 * whitecaps - foam does not stay on a fast river; its streaks and the
-	 * foam where it ends are RiverPS's. The wavelengths are the channel's
-	 * kind of spread, moved off whole ratios; the heights, the angles and
-	 * the 240 units a second of a row's `river` without a flow are free
-	 * choices, set by eye on the round's RoomProbe strips. */
+	 * tangent of the angle), its base is the body's own flow and its
+	 * current the body's speed (water_look); no bank foam and no whitecaps
+	 * - foam does not stay on a fast river; its sheen and the foam where it
+	 * ends are RiverPS's. Its rows are carried as one: calm 0.2, a quarter
+	 * of the channel's, so their own travel (calm sqrt(g k), 362 units a
+	 * second across the flow for the 300-unit row at 0.8) stays under the
+	 * current's - at 0.8 the relief walked sideways and boiled and did not
+	 * slide downstream (RoomProbe, ANDY3's river from its bank, the motion
+	 * of its pixels from 3 to 3.1 seconds). Its heights are a channel's
+	 * steepness (height over wavelength 0.0086 at most against 0.0078) and
+	 * its highlight half the channel's, 0.4: in a quarter to one and a half squares of
+	 * water the bend of the floor is the slope times a quarter of the path,
+	 * and 1.2 over 300 moved it by one or two units; at 0.8 the highlight of
+	 * the steeper rows went white from above. The wavelengths are the
+	 * channel's kind of spread, moved off whole ratios; the heights, the
+	 * angles, the calm, the highlight and the 240 units a second of a row's
+	 * `river` without a flow are free choices, set by eye on the round's
+	 * RoomProbe strips. */
 	const HDWaterClass kWaterClass[HD_WATER_CLASSES] =
 	{
 		{ "basin", { 260.0f, 150.0f, 85.0f, 47.0f, 197.0f, 113.0f, 63.0f,
@@ -8642,11 +8652,11 @@ namespace
 			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f, 1.0f },
 		{ "river", { 300.0f, 187.0f, 117.0f, 73.0f, 237.0f, 149.0f, 93.0f,
 			47.0f },
-			{ 1.2f, 0.8f, 0.5f, 0.28f, 1.0f, 0.65f, 0.38f, 0.18f },
+			{ 2.4f, 1.6f, 1.0f, 0.56f, 2.0f, 1.3f, 0.76f, 0.36f },
 			{ 1.18f, -1.15f, 1.23f, -1.21f, 1.12f, -1.25f, 1.2f, -1.13f },
 			0.35f,
-			0.8f, 240.0f, 0.3f, 512.0f, 1500.0f, 0.0f, 300.0f, 1.5f, 0.0f,
-			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f },
+			0.2f, 240.0f, 0.3f, 512.0f, 1500.0f, 0.0f, 300.0f, 1.5f, 0.0f,
+			1.0f, 70.0f, 0.4f, 55.0f, 40.0f, 0.0f, 2.0f },
 	};
 
 	/* The rows' slow envelope (water_rows_now): a row's height swells and
@@ -8732,6 +8742,36 @@ namespace
 		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 	};
 
+	/* The compiled river rows: level and room, the way the water runs along
+	 * world x and z and its speed in units a second - a row of class river
+	 * with a flow, as hd_water.txt would say it ('ANDY3 66 river flow 0 1
+	 * 400'), applied after the override rows and before the file, whose
+	 * rows still win. The room is the water room under the stream: a
+	 * shallow stream has no sink, and its dry room holds other water too.
+	 * ANDY3's three streams beside its pond, one square wide and 256 units
+	 * deep (floors 11,264 under a surface of 11,008, the randomizer's
+	 * Tr5Level on the classic level), are bodies of their own, apart from
+	 * the pond: over water room 66 three squares of room 34 and one of 38
+	 * along z, over 70 three of room 34 along x, over 67 one of room 34
+	 * with room 96 beyond it. Their ways are the arrows of the reference
+	 * pictures supplied for this project, read against the level's axes: 66
+	 * toward room 38's square, 70 east, 67 east, away from the pond. 400
+	 * units a second: a wading stream, slower than the sink rivers' 640 and
+	 * 1,063 - a free choice, set by eye on the round's RoomProbe strips. */
+	struct HDWaterFlowRow
+	{
+		const char* stem;
+		int room;
+		float dx, dz, speed;
+	};
+
+	const HDWaterFlowRow kWaterFlow[] =
+	{
+		{ "ANDY3", 66, 0.0f, 1.0f, 400.0f },
+		{ "ANDY3", 70, 1.0f, 0.0f, 400.0f },
+		{ "ANDY3", 67, 1.0f, 0.0f, 400.0f },
+	};
+
 	// Units a second squared: 9.81 m/s^2 at 2.3 mm a unit, Lara's 768
 	// units standing for 1.77 m.
 	const float kWaterG = 4300.0f;
@@ -8764,14 +8804,17 @@ namespace
 	 * What the water shows of that speed is held to kRiverLookCap: rows of
 	 * a few hundred units carried at a square a second slide past as a
 	 * smear; the cap is a free choice, set by eye on the round's RoomProbe
-	 * strips. The streaks (hd_room.hlsl, RiverPS) run kRiverStreakRate
-	 * times as fast as the rows - the surface's skin is carried faster than
-	 * the shape of the waves - with at most kRiverStreak of the foam's
-	 * cover, and the foam where a river ends against a wall or a drop
-	 * reaches kRiverEdge upstream from that end (0.75 of a square, inside
-	 * the half to one square a weir's foam takes on the reference pictures
-	 * supplied for this project). Free choices, set by eye on the round's
-	 * RoomProbe pictures. */
+	 * strips. The sheen on the skin (hd_room.hlsl, RiverPS) adds at most
+	 * kRiverSheen of the reflection's colour on its lighter lines and takes
+	 * 0.6 of that share off on its darker ones - lighter and darker than
+	 * the water, never white -, and the foam where a river ends against a
+	 * wall or a drop reaches kRiverEdge upstream from that end (0.75 of a
+	 * square, inside the half to one square a weir's foam takes on the
+	 * reference pictures supplied for this project). Free choices, set by
+	 * eye on the round's RoomProbe pictures; the sheen's on the river's
+	 * pixels, whose brightest stayed under the bright end of the water
+	 * itself (m1.py of the round, max and the 99th percentile of their
+	 * luma). */
 	const float kSinkUnitsPerSecond = 120.0f;
 	/* Sinks lying in a body's water make it a river when their trigger
 	 * squares number at least a quarter of its own (HDRenderSetWaterSheets,
@@ -8780,8 +8823,7 @@ namespace
 	 * two, a count on our data. */
 	const double kRiverCover = 0.25;
 	const float kRiverLookCap = 720.0f;
-	const float kRiverStreakRate = 1.4f;
-	const float kRiverStreak = 0.5f;
+	const float kRiverSheen = 0.35f;
 	const float kRiverEdge = 768.0f;
 
 	/* The creatures' mark: the stencil bit HDRenderWaterMarkBegin writes
@@ -8829,6 +8871,7 @@ namespace
 		int sheet;		// it draws a sheet
 		int body;
 		int sink;		// the sink its water names, or -1
+		int pit;		// the water room under it
 	};
 
 	struct WaterBody
@@ -8892,9 +8935,13 @@ namespace
 	// (see "under the water", "the deep look").
 	WaterLook g_wlook_deep;
 	bool g_wdeep_on = false;
+	// The highest top of the level's water rooms, world y, for the deep look.
+	float g_wdeep_top = 0.0f;
 	std::vector<std::vector<SheetRange> > g_sheet_ranges;	// per group
 	std::vector<int> g_group_body;		// per group, its largest body
 	std::vector<float> g_caustic_top;	// per group, room local y
+	// Per group, 1 for a water room looked through a river's body.
+	std::vector<unsigned char> g_caustic_river;
 	/* Whether that caustic is drawn: only with the sheets. With
 	 * tomb5.hd_water 0 the floors under a surface carry no caustic, as
 	 * without the sheets. */
@@ -9243,6 +9290,7 @@ namespace
 		g_sheet_ranges.clear();
 		g_group_body.clear();
 		g_caustic_top.clear();
+		g_caustic_river.clear();
 		g_caustic_on = false;
 		g_sheet_at.clear();
 		g_sheet_world.clear();
@@ -9259,6 +9307,7 @@ namespace
 		g_wroom_fallback.clear();
 		g_wroom_air.clear();
 		g_wdeep_on = false;
+		g_wdeep_top = 0.0f;
 		g_lara_in_water = false;
 		g_mark_frame = false;
 		g_mark_sheets = 0;
@@ -9983,19 +10032,20 @@ namespace
 		out.drift[1] = kWaterPatchDrift * c.current * sinf(base);
 
 		/* RiverPS's c132 and c133 (hd_room.hlsl, "the river"): the way the
-		 * river runs, the streaks' speed and strength; the reach of the foam
-		 * where it ends, its strength and the speed that pushes it there -
-		 * the bank patches' share of the current, the water piled at a wall
-		 * running slower as the water by a bank does - both strengths times
-		 * the body's foam scale (a row's `foam`). */
+		 * river runs, its current and the sheen's strength; the reach of the
+		 * foam where it ends, its strength - times the body's foam scale (a
+		 * row's `foam`) - and the speed that pushes it there - the bank
+		 * patches' share of the current, the water piled at a wall running
+		 * slower as the water by a bank does; the last, whether the floor's
+		 * caustic is laid by RiverPS, per draw (draw_river). */
 		std::memset(out.river, 0, sizeof(out.river));
 
 		if (out.isRiver)
 		{
 			out.river[0] = cosf(base);
 			out.river[1] = sinf(base);
-			out.river[2] = current * kRiverStreakRate;
-			out.river[3] = kRiverStreak * b.foam;
+			out.river[2] = current;
+			out.river[3] = kRiverSheen;
 			out.river[4] = kRiverEdge;
 			out.river[5] = b.foam;
 			out.river[6] = current * kWaterPatchDrift;
@@ -10097,6 +10147,32 @@ namespace
 	const float kUnderNoSurface = 1.0e6f;
 	const int kUnderDeepShare = 4;		// see "the deep look"
 
+	/* The deep look under the water (JOBY4's dive, see "the deep look"):
+	 * the scattered light is the section's DEEP colour - the water where
+	 * no floor shows through, not the shallow one a pool shows over its
+	 * floor - dimmed by the eye's depth under the highest top of the
+	 * level's water rooms, exp(-depth / kDeepDim) and never under
+	 * kDeepFloor; its reach kDeepReach in place of kUnderReach and its
+	 * upward gain kDeepUp in place of kUnderUp. Measured first, at the start
+	 * cavern (room 123) and in rooms 22 and 55 along the dive (RoomProbe
+	 * -underwater): the scattered colour was the shallow one held to
+	 * kUnderLightTop, 0.27, 0.42, 0.45 - a pale cyan the far walls turned
+	 * into, while the void behind them stays black (the frame is cleared to
+	 * black and TR5's distance fog has no colour); the level's water rooms
+	 * reach from y -1,280 to 19,200 and the dive runs at 12,000 to 19,200,
+	 * 13,000 to 20,000 units under that top (the randomizer's Tr5Level,
+	 * ROOM_INFO's ceiling and floor). 20,000 units dims the start cavern's
+	 * light to about a half and the deepest rooms' to about 0.4; 0.25 keeps
+	 * a lit floor in the deepest; 0.5 takes the walls six to eight squares
+	 * off into the dark water and keeps Lara's surroundings; 0.8 brightens
+	 * the view up toward the surface 1.8 times and darkens the view down
+	 * to 0.2. Free choices, set by eye on the round's RoomProbe pictures of
+	 * the three places. */
+	const float kDeepDim = 30000.0f;
+	const float kDeepFloor = 0.25f;
+	const float kDeepReach = 0.4f;
+	const float kDeepUp = 0.8f;
+
 	// ModelProbe's -under (HDRenderWaterUnderProbe), and this frame's twelve.
 	float g_under_probe[9] = {};
 	bool g_under_probe_set = false;
@@ -10141,20 +10217,26 @@ namespace
 		const float depth = fallback ? kUnderNoSurface : f->underEyeY -
 			(float)g_wbodies[(size_t)b].info.surfaceY;
 
-		const float* lit = look.pixel + 4;
+		/* The deep look's light: its deep colour, dimmed with the eye's
+		 * depth under the water's top (kDeepDim). */
+		const float* lit = look.pixel + (g_wdeep_on ? 0 : 4);
 		const float top = lit[0] > lit[1] ? (lit[0] > lit[2] ? lit[0] :
 			lit[2]) : (lit[1] > lit[2] ? lit[1] : lit[2]);
-		const float held = top > kUnderLightTop ? kUnderLightTop / top : 1.0f;
+		const float dim = g_wdeep_on ? expf(-(f->underEyeY - g_wdeep_top >
+			0.0f ? f->underEyeY - g_wdeep_top : 0.0f) / kDeepDim) : 1.0f;
+		const float held = (top > kUnderLightTop ? kUnderLightTop / top :
+			1.0f) * (dim > kDeepFloor ? dim : kDeepFloor);
+		const float reach = g_wdeep_on ? kDeepReach : kUnderReach;
 
 		for (int k = 0; k < 3; k++)
 		{
-			out[k] = look.pixel[32 + k] * kUnderReach;
+			out[k] = look.pixel[32 + k] * reach;
 			out[4 + k] = lit[k] * held;
 			out[8 + k] = f->underUp[k];
 		}
 
-		out[3] = look.pixel[3] * kUnderReach;
-		out[7] = kUnderUp;
+		out[3] = look.pixel[3] * reach;
+		out[7] = g_wdeep_on ? kDeepUp : kUnderUp;
 		out[11] = depth > 1.0f ? depth : 1.0f;
 		out[12] = kUnderClear;
 		std::memcpy(g_under_now, out, sizeof(g_under_now));
@@ -10421,12 +10503,28 @@ namespace
 	}
 
 	// One row applied to every body its room has water in.
+	/* Whether a row's room names the square: its own room, or - for a room
+	 * that holds no square of its own, a water room - the water room under
+	 * it. A row that names a dry room with water squares binds what it
+	 * always bound; one that names the water room under a stretch binds the
+	 * bodies over that room alone (a dry room can hold a pond and its
+	 * streams, each over a water room of its own). */
+	bool water_row_names(const WaterRow& row, const WaterSquare& s, bool own)
+	{
+		return own ? s.room == row.room : s.pit == row.room;
+	}
+
 	bool apply_water_row(const WaterRow& row)
 	{
 		std::vector<int> hit;
+		bool own = false;
+
+		for (size_t i = 0; i < g_wsquares.size() && !own; i++)
+			own = g_wsquares[i].room == row.room;
 
 		for (size_t i = 0; i < g_wsquares.size(); i++)
-			if (g_wsquares[i].room == row.room && g_wsquares[i].body >= 0 &&
+			if (water_row_names(row, g_wsquares[i], own) &&
+				g_wsquares[i].body >= 0 &&
 				std::find(hit.begin(), hit.end(), g_wsquares[i].body) ==
 				hit.end())
 				hit.push_back(g_wsquares[i].body);
@@ -10476,7 +10574,7 @@ namespace
 			{
 				const WaterSquare& s = g_wsquares[i];
 
-				if (s.room == row.room && mx >= (float)s.wx &&
+				if (water_row_names(row, s, own) && mx >= (float)s.wx &&
 					mx < (float)(s.wx + 1024) && mz >= (float)s.wz &&
 					mz < (float)(s.wz + 1024))
 				{
@@ -10508,7 +10606,7 @@ namespace
 			{
 				const WaterSquare& s = g_wsquares[i];
 
-				if (s.room == row.room && row.rx >= (float)s.wx &&
+				if (water_row_names(row, s, own) && row.rx >= (float)s.wx &&
 					row.rx < (float)(s.wx + 1024) && row.rz >= (float)s.wz &&
 					row.rz < (float)(s.wz + 1024))
 					src.y = (float)s.wy;
@@ -10610,6 +10708,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				 * their rows move the remaster's water art (step 6). */
 				s.wy = rm.floor[at] * 256;
 				s.sink = -1;
+				s.pit = pit;
 
 				if (sheets && !water_square(rooms, count, r, at, pit, s.wx,
 					s.wz, &s.wy))
@@ -10957,6 +11056,27 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		rows.push_back(row);
 	}
 
+	/* The compiled river rows: class river with their flow, the rest of the
+	 * row as one that sets nothing else - with the sheets alone, as the
+	 * sinks make rivers with the sheets alone (step 4). */
+	for (size_t o = 0; sheets &&
+		o < sizeof(kWaterFlow) / sizeof(kWaterFlow[0]); o++)
+	{
+		const HDWaterFlowRow& w = kWaterFlow[o];
+		WaterRow row = {};
+
+		strcpy_s(row.stem, sizeof(row.stem), w.stem);
+		row.room = w.room;
+		row.cls = HD_WATER_RIVER;
+		row.tint[0] = row.tint[1] = row.tint[2] = 1.0f;
+		row.waves = row.foam = row.bend = 1.0f;
+		row.flow = 1;
+		row.fx = w.dx;
+		row.fz = w.dz;
+		row.fspeed = w.speed;
+		rows.push_back(row);
+	}
+
 	read_water_file(rows);
 
 	for (size_t r = 0; r < rows.size(); r++)
@@ -11124,6 +11244,19 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				}
 			}
 
+		/* The water rooms a river is seen through (upload_water_room):
+		 * their body a river's, and a sheet over them. */
+		g_caustic_river.assign((size_t)groups, 0);
+
+		for (int r = 0; r < count && r < groups; r++)
+		{
+			const int b = g_wroom_body[(size_t)r];
+
+			g_caustic_river[(size_t)r] = b >= 0 && b < (int)nb &&
+				!g_wroom_fallback[(size_t)r] &&
+				g_wbodies[(size_t)b].info.cls == HD_WATER_RIVER ? 1 : 0;
+		}
+
 		/* The deep look. Where the fallback rooms outnumber the rooms under
 		 * a sheet more than kUnderDeepShare times, the level's water is
 		 * mostly water no sheet lies over - JOBY4, 132 rooms against the
@@ -11143,6 +11276,22 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		if (g_wdeep_on)
 		{
 			WaterBody deep = g_wbodies[(size_t)largest];
+
+			/* The water's top over the dive: the highest ceiling of a
+			 * square of any water room (y counts down). */
+			g_wdeep_top = 1.0e9f;
+
+			for (int r = 0; r < count; r++)
+			{
+				const HDWaterRoom& rm = rooms[r];
+
+				for (int i = 0; rm.ceiling && rm.floor &&
+					(rm.flags & HD_WATER_ROOM_UNDERWATER) &&
+					i < rm.sizeX * rm.sizeZ; i++)
+					if (rm.floor[i] != -127 && rm.ceiling[i] != -127 &&
+						rm.ceiling[i] * 256.0f < g_wdeep_top)
+						g_wdeep_top = rm.ceiling[i] * 256.0f;
+			}
 
 			deep.info.cls = HD_WATER_SEA;
 			deep.info.openAir = 0;
@@ -12950,6 +13099,16 @@ namespace
 	 * (zero with tomb5.hd_water 0, see g_caustic_on), the eye in room
 	 * coordinates, the swell and the four rows. Called by prepare() for
 	 * every room. */
+	/* Whether the floor under a river takes its caustic from RiverPS,
+	 * carried with the current, rather than from RoomPS, standing still:
+	 * with the sheets' caustic on, the eye above the water (RiverPS draws
+	 * from above alone) and the frame's copy allowed (it reads the floor's
+	 * colour there). */
+	bool river_caustic_moves()
+	{
+		return g_caustic_on && !g_under_on && g_copy_allowed;
+	}
+
 	void upload_water_room(int group, const float* m)
 	{
 		float caustic[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -12958,7 +13117,12 @@ namespace
 			group < (int)g_caustic_top.size() &&
 			g_caustic_top[(size_t)group] > -1.0e8f)
 		{
-			caustic[0] = g_motion[3];
+			/* A water room a river is seen through leaves its floor's
+			 * caustic to the river's draw while that one lays it. */
+			const bool river = group < (int)g_caustic_river.size() &&
+				g_caustic_river[(size_t)group] && river_caustic_moves();
+
+			caustic[0] = river ? 0.0f : g_motion[3];
 			caustic[1] = g_caustic_top[(size_t)group];
 			caustic[2] = 1.0f / 2048.0f;	// gone two squares down
 		}
@@ -13210,8 +13374,15 @@ namespace
 		if (!g_water_river_ps || !look.isRiver || g_motion[3] == 0.0f)
 			return;
 
+		/* The caustic on the floor rides with the current where RoomPS's
+		 * own is off (upload_water_room): the eye above the water and the
+		 * frame's copy taken, which RiverPS reads the floor from. */
+		float river[8];
+
+		std::memcpy(river, look.river, sizeof(river));
+		river[7] = river_caustic_moves() ? 1.0f : 0.0f;
 		g_device->SetPixelShader(g_water_river_ps);
-		g_device->SetPixelShaderConstantF(132, look.river, 2);
+		g_device->SetPixelShaderConstantF(132, river, 2);
 
 		IDirect3DQuery9* q[3] = { 0, 0, 0 };
 

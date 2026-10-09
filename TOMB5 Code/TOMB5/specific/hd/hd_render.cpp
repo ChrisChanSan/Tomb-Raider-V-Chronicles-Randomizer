@@ -8675,24 +8675,57 @@ namespace
 	 * water where no floor shows through, high the highlight, foam the foam.
 	 * Rome warm green and yellow, Russia cold blue and green, Ireland a
 	 * neutral dark green and white, VCI a dark blue. All four are lit by the
-	 * body's light (water_look), so a dark sewer has dark water. */
+	 * body's light (water_look), so a dark sewer has dark water.
+	 *
+	 * night: 1 where the section's levels are night levels, indoors and out
+	 * - the Ireland levels ANDY1 to ANDY3, a project decision on how those
+	 * levels look in game. Their water takes the moon's light (water_lit,
+	 * "the night"). */
 	struct HDWaterPalette
 	{
 		const char* name;
 		unsigned char base[3], deep[3], high[3], foam[3];
+		int night;
 	};
 
 	const HDWaterPalette kWaterPalette[HD_WATER_SECTIONS] =
 	{
 		{ "Rome", { 150, 170, 90 }, { 62, 98, 50 }, { 255, 232, 170 },
-			{ 238, 232, 200 } },
+			{ 238, 232, 200 }, 0 },
 		{ "Russia", { 96, 150, 160 }, { 28, 62, 80 }, { 205, 228, 255 },
-			{ 240, 248, 255 } },
+			{ 240, 248, 255 }, 0 },
 		{ "Ireland", { 100, 125, 98 }, { 34, 60, 44 }, { 235, 240, 230 },
-			{ 248, 248, 242 } },
+			{ 248, 248, 242 }, 1 },
 		{ "VCI", { 64, 92, 150 }, { 14, 28, 70 }, { 190, 210, 255 },
-			{ 215, 225, 245 } },
+			{ 215, 225, 245 }, 0 },
 	};
+
+	/* The night. A night level's water is lit by the moon, or by a lamp the
+	 * eye sees as the moon's colour at night: the light a body's colours
+	 * take is the luma of its rooms' light (0.299, 0.587, 0.114) times
+	 * kWaterMoon, a cool tint of luma 1 (0.269 + 0.593 + 0.139), so a body
+	 * keeps its brightness and loses the gold of a torch-lit room (ANDY2's
+	 * channels stand at 0.95,0.45,0.30 and 1.06,0.48,0.30, the WATERLOG
+	 * light=). Its highlight and its foam take the same tint, and under the
+	 * sky the highlight is the moon's: kNightHigh of the class's sun.
+	 *
+	 * The caustic. RoomPS lays it on the floor and the walls under the water
+	 * as the floor's own light times the pattern, so its bright lines take
+	 * the floor's colour - on ANDY3's red-orange stream beds a gold lattice
+	 * (RoomProbe, the caustic alone taken off: the lattice goes, the beds'
+	 * hue stays at 15 to 17 degrees). A moon colour there would cost slots
+	 * RoomPS does not have, and the moon casts no caustic the eye resolves:
+	 * at night RoomPS's caustic is off (upload_water_room). A river keeps
+	 * the one it carries downstream (RiverPS), laid at kNightCaustic of the
+	 * day's strength as the floor's luma times kWaterMoon.
+	 *
+	 * The tint, kNightHigh, the foam's kNightFoam and kNightCaustic are free
+	 * choices, set by eye on the round's RoomProbe pictures of ANDY1 to
+	 * ANDY3. The sky rows (kWaterSky) are the domes as measured and stay. */
+	const float kWaterMoon[3] = { 0.90f, 1.01f, 1.22f };
+	const float kNightHigh = 0.4f;
+	const float kNightFoam = 0.6f;
+	const float kNightCaustic = 0.5f;
 
 	/* What an open-air body reflects: the sky dome's colour at the horizon
 	 * and overhead, out of RoomProbe -sky -skyonly -black pictures at 960
@@ -8745,7 +8778,7 @@ namespace
 
 	/* The compiled river rows: level and room, the way the water runs along
 	 * world x and z and its speed in units a second - a row of class river
-	 * with a flow, as hd_water.txt would say it ('ANDY3 66 river flow 0 1
+	 * with a flow, as hd_water.txt would say it ('ANDY3 66 river flow 0 -1
 	 * 400'), applied after the override rows and before the file, whose
 	 * rows still win. The room is the water room under the stream: a
 	 * shallow stream has no sink, and its dry room holds other water too.
@@ -8754,11 +8787,25 @@ namespace
 	 * Tr5Level on the classic level), are bodies of their own, apart from
 	 * the pond: over water room 66 three squares of room 34 and one of 38
 	 * along z, over 70 three of room 34 along x, over 67 one of room 34
-	 * with room 96 beyond it. Their ways are the arrows of the reference
-	 * pictures supplied for this project, read against the level's axes: 66
-	 * toward room 38's square, 70 east, 67 east, away from the pond. 400
-	 * units a second: a wading stream, slower than the sink rivers' 640 and
-	 * 1,063 - a free choice, set by eye on the round's RoomProbe strips. */
+	 * with room 96 beyond it.
+	 *
+	 * Their ways are the arrows of the reference pictures supplied for this
+	 * project, placed in the level by the editor camera each picture was
+	 * taken with: where a picture gives the camera's position, yaw and
+	 * pitch, RoomProbe draws the same view from them (the editor's yaw is
+	 * RoomProbe's, 0 along +z and 90 along +x; its pitch counts the other
+	 * way), and where it does not, the view is found among RoomProbe
+	 * cameras round the stream by the open sky and the trigger squares the
+	 * editor marks. 66 runs -z, away from room 38's square; 70 runs -x, into
+	 * the pond's water room 73 it joins at its west end; 67 runs +x, into
+	 * room 96. The floors under the three are flat (every corner at its
+	 * square's height), so they give no way of their own; the water rooms
+	 * agree with the arrows: room 59 joins the river to 66's square of
+	 * room 38 under the bank, 66 and 67 meet under the land at z 28,672 to
+	 * 29,696, and room 96's floor falls a click from x 48,128 to 49,152 -
+	 * one way down from the river through 66 and 67 to the east. 400 units
+	 * a second: a wading stream, slower than the sink rivers' 640 and 1,063
+	 * - a free choice, set by eye on the round's RoomProbe strips. */
 	struct HDWaterFlowRow
 	{
 		const char* stem;
@@ -8768,8 +8815,8 @@ namespace
 
 	const HDWaterFlowRow kWaterFlow[] =
 	{
-		{ "ANDY3", 66, 0.0f, 1.0f, 400.0f },
-		{ "ANDY3", 70, 1.0f, 0.0f, 400.0f },
+		{ "ANDY3", 66, 0.0f, -1.0f, 400.0f },
+		{ "ANDY3", 70, -1.0f, 0.0f, 400.0f },
 		{ "ANDY3", 67, 1.0f, 0.0f, 400.0f },
 	};
 
@@ -8806,16 +8853,22 @@ namespace
 	 * a few hundred units carried at a square a second slide past as a
 	 * smear; the cap is a free choice, set by eye on the round's RoomProbe
 	 * strips. The sheen on the skin (hd_room.hlsl, RiverPS) adds at most
-	 * kRiverSheen of the reflection's colour on its lighter lines and takes
+	 * kRiverSheen of the highlight's colour on its lighter lines and takes
 	 * 0.6 of that share off on its darker ones - lighter and darker than
-	 * the water, never white -, and the foam where a river ends against a
-	 * wall or a drop reaches kRiverEdge upstream from that end (0.75 of a
-	 * square, inside the half to one square a weir's foam takes on the
-	 * reference pictures supplied for this project). Free choices, set by
-	 * eye on the round's RoomProbe pictures; the sheen's on the river's
-	 * pixels, whose brightest stayed under the bright end of the water
-	 * itself (m1.py of the round, max and the 99th percentile of their
-	 * luma). */
+	 * the water, never white -; the relief's light adds kRiverRelief times
+	 * the rows' slope toward the class light of the same colour, and takes
+	 * 0.6 of it off away from it - the waves' own streaks, seen at every
+	 * angle because neither goes through the reflection; and the foam
+	 * where a river ends against a wall or a drop reaches kRiverEdge
+	 * upstream from that end (0.75 of a square, inside the half to one
+	 * square a weir's foam takes on the reference pictures supplied for
+	 * this project). Free choices, set by eye on the round's RoomProbe
+	 * pictures; the sheen's and the relief's on the river's pixels outside
+	 * its end foam, whose brightest stays well under white: with
+	 * kRiverRelief 7 and the moon's kNightHigh 0.4, ANDY3's river and
+	 * streams from the bank, from above and at eye level reach a luma of
+	 * 113 at most and 80 at the 99th percentile (RoomProbe at 960 by 540,
+	 * the clock at 3 s). */
 	const float kSinkUnitsPerSecond = 120.0f;
 	/* Sinks lying in a body's water make it a river when their trigger
 	 * squares number at least a quarter of its own (HDRenderSetWaterSheets,
@@ -8825,6 +8878,7 @@ namespace
 	const double kRiverCover = 0.25;
 	const float kRiverLookCap = 720.0f;
 	const float kRiverSheen = 0.35f;
+	const float kRiverRelief = 7.0f;
 	const float kRiverEdge = 768.0f;
 
 	/* The creatures' mark: the stencil bit HDRenderWaterMarkBegin writes
@@ -8905,7 +8959,7 @@ namespace
 		float foamLight;	// gWaterLife w: the foam's body
 		float eyeGain;		// gWaterStage y plus one: the class's
 		float drift[2];		// the patches' drift, units a second
-		float river[8];		// RiverPS's c132, c133; a river's only
+		float river[16];	// RiverPS's c132, c133, c146, c147
 		int isRiver;
 	};
 
@@ -9917,6 +9971,19 @@ namespace
 		}
 	}
 
+	// The light a body's colours take: its rooms' light, or at night the
+	// moon's at that light's luma (see "the night" over kWaterMoon).
+	void water_lit(const float* light, int section, float* out)
+	{
+		const bool night = section >= 0 && section < HD_WATER_SECTIONS &&
+			kWaterPalette[section].night;
+		const float luma = 0.299f * light[0] + 0.587f * light[1] +
+			0.114f * light[2];
+
+		for (int k = 0; k < 3; k++)
+			out[k] = night ? luma * kWaterMoon[k] : light[k];
+	}
+
 	// A body's constants out of its class, its section's colours, its light
 	// and its level's sky.
 	void water_look(WaterLook& out, const WaterBody& wb, int section,
@@ -9925,7 +9992,9 @@ namespace
 		const HDRenderWaterBody& b = wb.info;
 		const HDWaterClass& c = kWaterClass[b.cls];
 		const HDWaterPalette& pal = kWaterPalette[section];
-		const float* amb = b.light;
+		float amb[3];
+
+		water_lit(b.light, section, amb);
 
 		/* The body's own direction: a channel's long axis, a river's flow -
 		 * its long axis where it has none -, else the class's. A river's
@@ -9989,6 +10058,14 @@ namespace
 			high[k] = pal.high[k] / 255.0f * c.specStrength *
 				(open ? 1.0f : amb[k]);
 			foam[k] = pal.foam[k] / 255.0f * (open ? 0.85f : amb[k] * 0.9f);
+
+			// The moon over an open-air body at night (indoors `amb` is
+			// moonlit already).
+			if (open && pal.night)
+			{
+				high[k] *= kWaterMoon[k] * kNightHigh;
+				foam[k] *= kWaterMoon[k] * kNightFoam;
+			}
 		}
 
 		deep[3] = 1.0f / c.absorb;
@@ -10037,8 +10114,10 @@ namespace
 		 * foam where it ends, its strength - times the body's foam scale (a
 		 * row's `foam`) - and the speed that pushes it there - the bank
 		 * patches' share of the current, the water piled at a wall running
-		 * slower as the water by a bank does; the last, whether the floor's
-		 * caustic is laid by RiverPS, per draw (draw_river). */
+		 * slower as the water by a bank does; the last, the floor's caustic
+		 * laid by RiverPS, per draw (draw_river). c146: at night the moon's
+		 * tint the caustic takes and 1, by day nothing; c147.x the relief's
+		 * light (kRiverRelief). */
 		std::memset(out.river, 0, sizeof(out.river));
 
 		if (out.isRiver)
@@ -10050,6 +10129,13 @@ namespace
 			out.river[4] = kRiverEdge;
 			out.river[5] = b.foam;
 			out.river[6] = current * kWaterPatchDrift;
+
+			if (pal.night)
+				for (int k = 0; k < 3; k++)
+					out.river[8 + k] = kWaterMoon[k];
+
+			out.river[11] = pal.night ? 1.0f : 0.0f;
+			out.river[12] = kRiverRelief;
 		}
 
 		/* gWaterAbsorb: the absorption per channel in the ratio of
@@ -12684,8 +12770,9 @@ const char* HDRenderWaterSectionName(int section)
  * key swirl (old), and the underwater rooms an eye looks through a body
  * from - by the sheet over them or a room above them (under) and by the
  * level's largest body for want of one (under_fallback; see "under the
- * water"), and 1 when the level's water rooms take the deep look
- * (under_deep, the same note). A body line: its rooms (+n for
+ * water"), 1 when the level's water rooms take the deep look
+ * (under_deep, the same note) and 1 when its section is a night one
+ * (night; see "the night" over kWaterMoon). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -12698,7 +12785,8 @@ const char* HDRenderWaterSectionName(int section)
  * foot or a row's `foot off` took it away (the field keeps its name,
  * swirl), its current - the way
  * along world x and z and the speed in units a second, 0,0,0 without one
- * (flow) - and its places whose water names a sink (sinks). */
+ * (flow) - and its places whose water names a sink (sinks); last the light
+ * its colours take, its light or at night the moon's at its luma (lit). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -12724,7 +12812,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
 			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
 			"clip=%d falls=%d lowered=%d dropped=%d river=%d curtains=%d "
-			"segs=%d old=%d under=%d under_fallback=%d under_deep=%d",
+			"segs=%d old=%d under=%d under_fallback=%d under_deep=%d "
+			"night=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -12737,7 +12826,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.falls, g_wlevel.lowered, g_wlevel.dropped,
 			cls[HD_WATER_RIVER], g_curtains, (int)g_wsegs.size(),
 			g_wlevel.oldKeys, g_wlevel.underRooms, g_wlevel.underFallback,
-			g_wlevel.underDeep);
+			g_wlevel.underDeep, kWaterPalette[g_wlevel.section].night);
 		return true;
 	}
 
@@ -12747,9 +12836,11 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	const HDRenderWaterBody& b = g_wbodies[(size_t)body].info;
 	char list[128];
 	char from[24];
+	float lit[3];
 	int at = 0;
 
 	list[0] = 0;
+	water_lit(b.light, g_wlevel.section, lit);
 
 	for (int k = 0; k < b.roomCount && k < HD_WATER_BODY_ROOMS; k++)
 		at += snprintf(list + at, sizeof(list) - (size_t)at,
@@ -12769,7 +12860,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
-		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d",
+		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
+		"lit=%.2f,%.2f,%.2f",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -12778,7 +12870,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
-		b.lying, b.refused);
+		b.lying, b.refused, lit[0], lit[1], lit[2]);
 	return true;
 }
 
@@ -13119,11 +13211,13 @@ namespace
 			g_caustic_top[(size_t)group] > -1.0e8f)
 		{
 			/* A water room a river is seen through leaves its floor's
-			 * caustic to the river's draw while that one lays it. */
+			 * caustic to the river's draw while that one lays it; at night
+			 * there is none (see "the night" over kWaterMoon). */
 			const bool river = group < (int)g_caustic_river.size() &&
 				g_caustic_river[(size_t)group] && river_caustic_moves();
+			const bool night = kWaterPalette[g_wlevel.section].night != 0;
 
-			caustic[0] = river ? 0.0f : g_motion[3];
+			caustic[0] = river || night ? 0.0f : g_motion[3];
 			caustic[1] = g_caustic_top[(size_t)group];
 			caustic[2] = 1.0f / 2048.0f;	// gone two squares down
 		}
@@ -13365,8 +13459,9 @@ namespace
 
 	/* The river's second draw (hd_room.hlsl, RiverPS): its streaks and the
 	 * foam where it ends, over the sheet just drawn, with the same blend.
-	 * c132 and c133 are the look's river constants; the rest of c92 - c123
-	 * is the sheet's, set already. Nothing while tomb5.hd_motion is off:
+	 * c132, c133, c146 and c147 are the look's river constants; the rest of
+	 * c92 - c123 is the sheet's, set already - the rows the relief's light
+	 * reads among them. Nothing while tomb5.hd_motion is off:
 	 * the streaks are the water running. */
 	void draw_river(const SheetRange& r)
 	{
@@ -13377,13 +13472,16 @@ namespace
 
 		/* The caustic on the floor rides with the current where RoomPS's
 		 * own is off (upload_water_room): the eye above the water and the
-		 * frame's copy taken, which RiverPS reads the floor from. */
-		float river[8];
+		 * frame's copy taken, which RiverPS reads the floor from; at night
+		 * at kNightCaustic of its strength (river[11], the night's share). */
+		float river[16];
 
 		std::memcpy(river, look.river, sizeof(river));
-		river[7] = river_caustic_moves() ? 1.0f : 0.0f;
+		river[7] = !river_caustic_moves() ? 0.0f : river[11] > 0.5f ?
+			kNightCaustic : 1.0f;
 		g_device->SetPixelShader(g_water_river_ps);
 		g_device->SetPixelShaderConstantF(132, river, 2);
+		g_device->SetPixelShaderConstantF(146, river + 8, 2);
 
 		IDirect3DQuery9* q[3] = { 0, 0, 0 };
 

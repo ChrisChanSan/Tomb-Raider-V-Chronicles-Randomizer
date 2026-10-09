@@ -9787,6 +9787,143 @@ reflection of the room itself, the third stage.
 **Commits.** After the third play test `0b1e1ca`, `a1ea812`; the waterfall's foot
 `a915668`, `f4f0922`.
 
+**After the owner's fourth play test of 2026-10-09.** The build of `f4f0922` was played
+(reference pictures, sketches and photographs supplied for this project, not in the
+repository). Kept as they are: Lara wading, the posts' line, the view from under the
+water, the rats of ANDREA2. Asked for in this part: in RICH2 the plates at the triangles
+of a pool's corners are to move down to the height of the other water, where the level's
+geometry covers them, and so in ANDY3 is the island in the pond; the rats of ANDY1 carry
+the wet line Lara used to carry, and it is to go from them too; ANDY3's fast rivers show a
+moving texture of their own under the water and foam along their banks, and foam cannot
+stay on a fast river - only where the water ends against a wall, a foam edge as at a weir.
+The waterfall's foot and the look from under the water are other parts of this round.
+
+The water's own height (`hd_render.cpp` :9456, :9544, :10066; `hd_level.cpp` :1843;
+`RoomProbe.cpp` :4766, :4828). Measured first, over every dry square whose room below is
+an underwater room, with the classic files and `Tr5Level::cornerFloor` and `cornerCeiling`
+(a tool of this round): in ANDREA1, ANDREA2, ANDY1, JOBY2, JOBY4 and JOBY5 the square's
+floor byte is the water room's ceiling everywhere. RICH2's two corner plates (room 125
+square 2,4 and room 126 square 2,2) are split sectors whose floor byte, -1,280, is their
+highest corner: three corners lie at the water's -768, one 512 over it, and the water
+room's ceiling there is -768 at three corners and -512 at the fourth, the underside of the
+raised triangle. ANDY3 has 29 such squares, 28 of them the island's edge in the pond
+(rooms 34 and 183, all of them split sectors with a no-collision triangle, one triangle at
+the water's 11,008, the other a click or two over it) and room 12's square 13,3. ANDY2 has
+16 squares (rooms 57 and 136, 158, 159; a cross of four round a square) whose flat dry
+floor stands 1,024 over the flat ceiling of the water under it - no water at all. So the
+surface of a water square is now the top of its water room there, the highest corner of
+that room's ceiling over the square, the height Lara's head breaks the surface at, and a
+square whose dry floor stands more than a click over that top at every corner is no water
+square. A split square keeps its whole sheet at the water's top: the level's raised
+triangle covers the part under it, which is what the owner asked. The corners come out of
+the floor data's slope entries through one function, the engine's `GetHeight` and
+`GetCeiling` with the corner substitution the randomizer's `Tr5Level` makes; the engine
+hands the words of `floor_data` (walked as `GetHeight` walks a chain, the ceiling's entry
+as `GetMinimumCeiling` reads it), RoomProbe those of the classic `.TRC`. Bodies now join
+at the true height. With `tomb5.hd_water` 0 the squares stand at their floors as without
+the sheets: the bodies there move the remaster's water art, and that stays as it was.
+
+No waterline on a creature (`hd_render.cpp` :8749, :11180, :12323; `hd_level.cpp` :6819).
+A swimming rat lies 50 units under the surface and its belly 60 (`game/rat.cpp`), inside
+the 24 to 48 units the waterline paints, and only Lara had a gap in it. RAT has an HD
+model in every level (`MapProbe` on ANDY1, the owner's log:
+`HDLOG slot=94 name=RAT model=RAT hd=1`), so the HD objects' draw covers it. Two ways were
+weighed: a list of up to eight creatures uploaded like the rings and read in a loop -
+about five to nine slots more in the depth variant, which stands at 508 of 512 - or a
+stencil mark, which costs no slot. The mark: around the HD objects' solid draw of
+`HDFrameDraw` - Lara and every creature with an HD model - the stencil's bit 4 is set
+under every pixel they draw (bit 1 is the rooms' receive's, bit 2 the models'); where no
+receive cleared the stencil in that bracket the mark clears it. The sheet's depth variant
+then draws a range twice, split by the stencil: the unmarked pixels as ever, the marked
+ones with Lara's gap made endless, so no line lies on a swimming body and the rest of the
+sheet is drawn there as anywhere. Lara's gap stays as the owner approved it. The classic
+buckets, drawn between the two phases, are not marked: they hold the statics of rooms that
+stay classic, whose line is a bank's. RoomProbe draws no creature; `-creature x,z` stands
+in a grey box for one (60 units under the surface to 100 over it), `-nomark` draws it
+without the mark and `-markview` shows the mark in red.
+
+The rivers (`hd_render.cpp` :8607, :8739, :9165, :10253, :10317, :10518, :10675, :12148;
+`hd_room.hlsl` :1798, :1966, :2601). Measured: of the fifteen levels only ANDY3 has a
+`TO_SINK` trigger under a water square - in the water rooms under its two rivers, room 47
+under body 0 (rooms 0, 42, 43, 182; six places, sinks 9 and 6 of strengths 10 and 8) and
+room 50 under the body of rooms 38, 41, 184, 185 (one place, sink 7, strength 4); the rest
+of that river runs through rooms with no water square, and JOBY4's 204 and ANDREA3's 6
+sink squares lie under none. `LaraWaterCurrent` (`game/laraswim.cpp`) steers Lara's
+velocity toward strength x 4,096 / 4 in 1/256 units a tick along the way to the sink and
+moves her by a 256th of it: 4 units a tick for strength 1, 120 units a second at 30 ticks
+a second. A body whose water names a sink is of the new class *river*: its flow is the
+mean way from its places toward their sinks and its speed the mean of 120 x strength -
+ANDY3's come to -1,0 at 1,080 and 1,0 at 480 units a second. What the water shows of the
+speed is held to 720 units a second, a free choice by eye (rows of a few hundred units
+carried a square a second slide past as a smear). The river's rows run 1.11 to 1.25
+radians off the flow, so a crest runs 2 to 3 times as far along the current as across it,
+low (1.2 units on 300 the steepest), carried at that speed; no bank foam, no waterline, no
+whitecaps. A second draw over the river's sheet, `RiverPS` (152 slots), adds thin streaks
+along the flow - two sets of ridges across it about 410 and 170 units apart that wander
+slowly with the way down the river, carried 1.4 times as fast as the rows, broken by a
+slow field whose threshold swings over the bank foam's 5 seconds, at most half of the
+foam's cover - and, where the river ends against a wall or a drop, the bank foam's own
+pattern laid across it, carried into the end at 0.3 of the speed, dense at the end, broken
+further up and gone 768 units upstream (three quarters of a square, inside the half to one
+square of a weir's foam on the reference photograph), nothing at the upper end. Per
+vertex, colour1's blue holds the way along the flow to the first point with no water,
+counting a point on a bank as water when water lies a unit to either side of it. The rows'
+angles and heights, the streaks' spacings, speed, strength and threshold and the end
+foam's reach are free choices, set by eye on the round's RoomProbe pictures. What moved
+under the river was not the classic animated faces - those are the water plane's own faces
+at 11,008 (texture ranges 0 and 1), and no restored face lies under a sheet - but the
+remaster's own flowing surface: one draw call of material 1, 90 to 108 flat triangles
+three units over the water in each of rooms 38, 41, 42 and 43, scrolled at 2.5 page units
+a second (`RoomProbe -animtex`, `TrgProbe -parts`). Over a river's squares such a draw
+call, wholly flat flow-material triangles within 32 units of the surface, is now left out
+like the remaster's still water - 378 triangles in ANDY3; room 34's, over the pond, stays.
+`hd_water.txt` takes `river` as a class and `flow <dx> <dz> <speed>` (the way -1 to 1
+each, not both 0, the speed 0 to 4,000 units a second) in place of the sinks'; a row of
+class `river` without either runs along the body's long axis at 240. A row holds 28 tokens
+at most. With `tomb5.hd_water` 0 no body is a river.
+
+WATERLOG: the level line ends `lowered=<n> dropped=<n> river=<n>` (the first two counted
+per room, a flipmap pair's both), a body line `flow=<dx>,<dz>,<speed> sinks=<n>`.
+RoomProbe prints `water corners:` - the corners of every water square, and of every square
+of the level, against `Tr5Level`'s - and the rivers' draws' GPU time.
+
+**Measured.** The corners: 699 of 699 water squares and 55,760 of 55,760 squares of the
+fifteen levels (16,203 with a slope) agree with `Tr5Level` corner for corner, floor and
+ceiling. The sweep against the fix round's: lowered 2 in RICH2 and 29 in ANDY3, dropped 16
+in ANDY2, every other level 0 and 0; squares 577 to 565 (ANDY2 72 to 60), bodies 81 to 56
+(ANDY2 18 to 6; ANDY3 26 to 15 - the pond's fourteen bodies at three heights are four at
+one, of 24, 4, 3 and 1 squares, and room 12's square joins the sea of rooms 10 to 17;
+RICH2 4 to 2), twins 122 to 118, ANDY3's classes basin 5, sea 21 to sea 8 and river 2, the
+remaster's art hidden in ANDY3 0 to 378 triangles; every other count as it was. Slots, fxc
+/O3: `WaterVS` 266 to 267 (the end's distance handed on), `RiverPS` 152; `WaterPS` 442,
+its depth variant 508, the view variant 503 and `SwirlPS` 170 keep their bytecode; the
+mark and the new heights cost no slot. GPU, 2560 x 1440, three runs: the full-water view
+0.198, 0.198, 0.199 ms against 0.203, 0.199, 0.199 at `28aacff`; with three stand-ins in
+it, the split, 0.198, 0.196, 0.196 with four draws; ANDY3's river 0 from above 0.140 ms
+for 13 sheet draws and 0.033 to 0.034 for 4 river draws against 0.172 to 0.180 for 33
+sheet draws at `28aacff` (the joined bodies draw fewer ranges). The fifteen cameras with
+`-hdwater 1` are md5-identical to `28aacff`'s: none of their levels has a lowered, dropped
+or river square, and they hold no creature.
+
+**Checked.** The classic path, 3 of 3 md5-identical to `8691e82` (ANDREA2 231, JOBY2 66,
+ANDY3 34); the fifteen cameras with `-hdwater 0`, 15 of 15 identical to the fix round's
+parity set; the shared shaders' bytecode identical to `28aacff` without the stamp lines,
+12 of 12; the text file (`flow` on a kept class, `river` with and without a flow, a way of
+length 0, a speed of 5,000 and a flow with two numbers counted bad); the state bracket of
+every picture with the mark, the split and the mark view; the suites (ModernTest 14721,
+MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool
+build.
+
+**Left.** The look in the game: nobody in this round could play it - the rivers' speed on
+the screen, the streaks' amount, the end foam, the river's rows at eye level, and the rats
+of ANDY1 swimming without the line. A creature drawn by the classic buckets carries the
+line still; none swims in the fifteen levels. The other two parts of the round, the
+waterfall's foot and the look from under the water. The reflection of the room itself, the
+third stage.
+
+**Commits.** After the fourth play test, the shapes, the creatures and the rivers
+`ff4fbd8`, `cc3831d`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

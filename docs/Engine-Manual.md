@@ -1700,12 +1700,19 @@ it.
 - **The water sheets: this engine's own water surface** (`hd_water`, on by
   default). A *water square* is a 1024-unit square of a room that is not under
   water and whose room below is an underwater room - the very link Lara dives
-  through - and its surface is the square's own floor height. Every water
+  through - and its surface is the top of that water there, where Lara's head
+  breaks the surface. A square whose floor slopes or is split into two
+  triangles keeps its whole sheet at that height, under the level's own raised
+  part (the corner plates of RICH2's pools, the edge of the island in ANDY3's
+  pond), and a square whose floor stands more than a click over the water at
+  every corner is no water square at all. Every water
   square the sheet can cover - every one in a room drawn HD - gets a *sheet*: a
   fine grid that moves, reflects, lets the pool floor show through and foams at
   the bank, drawn after the room's glass. The squares are joined into
-  **bodies** of water across rooms, and every body is one of three **classes**:
-  a **sea** where any of its rooms is open to the sky (long, high waves, foam
+  **bodies** of water across rooms, and every body is one of four **classes**:
+  a **river** where the level's own currents pull Lara through its water (the
+  sinks of its triggers - ANDY3's two rivers; see *Rivers* below), a
+  **sea** where any of its rooms is open to the sky (long, high waves, foam
   at every edge and on the crests, the level's own sky in the reflection), a
   **channel** where it is indoors, 16 squares or more and narrow (a current
   along it, murky water, foam along the banks), a **basin** everywhere else
@@ -1729,8 +1736,8 @@ it.
   down it). A water plane with no
   underwater room below - all of JOBY3's and RICH3's water, ANDREA3's two
   pools, and 20 more planes - is no water square by this rule and keeps the
-  level's own faces. Fifteen levels hold 577 water squares in 81 bodies, each
-  place counted once (a flipmap pair's second room adds 122 squares at the
+  level's own faces. Fifteen levels hold 565 water squares in 56 bodies, each
+  place counted once (a flipmap pair's second room adds 118 squares at the
   same places); ANDREA3, JOBY3, RICH1, RICH3, RICHCUT2 and the title have no
   water square by this rule. Set *HD water* off and the level's own water
   faces are restored exactly as without the sheets, and the caustic under them
@@ -1767,7 +1774,10 @@ it.
   post, a hull, a floe - a thin wet line of foam runs round it (within 24
   units, gone at 48) and nothing more; not round Lara: within 320 units of
   her, while she swims at the surface or wades, the line is left out, and
-  only her rings stay. A card without it draws the same sheet with the depth
+  only her rings stay. Nor on any creature in the water - a swimming rat, or
+  Lara herself: everything drawn with an HD model marks its pixels, and the
+  sheet draws them without the line.
+  A card without it draws the same sheet with the depth
   of the level's own floor data, and cannot know a floor at the water's
   height: there a row of class `none` is the way. With *HD water* off neither
   the copy nor the depth texture is made.
@@ -1826,6 +1836,19 @@ it.
   The water of a waterfall reaches its surface in every level, and the
   fading light of a curtain's lowest stretch now ends in that foam and spray.
   With `hd_motion` off none of it moves and no drops are thrown.
+- **Rivers.** Where the level's own triggers pull Lara through the water (a
+  sink, the current that drags her along ANDY3's two rivers), the body is a
+  river: it flows the way the sinks pull, at the speed they pull her (120
+  units a second for each step of a sink's strength; ANDY3's run at 1,080
+  and 480), held on the screen to 720. Its waves are stretched along the
+  flow and carried with it, low and fast; bright thin streaks run along it,
+  faster still, and come and go; no foam lies on its banks - foam does not
+  stay on a fast river - except where the river ends against a wall or a
+  drop: there the foam piles up across it, dense at the end and broken
+  further up, three quarters of a square deep. The Remaster's own moving
+  water surface over a river is left out, as its still water is.
+  `hd_water.txt` can make any body a river and give it a current by hand.
+  With *HD water* off there are no rivers.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
@@ -1857,6 +1880,12 @@ it.
   example `ANDREA2 194 - swirl 55808 32768 400`), and `swirl off` takes the
   waterfalls' own feet in the row's bodies away, for example
   `ANDREA2 231 - swirl off`; the `WATERLOG foot=` lines say where they are.
+  The class `river` makes the row's bodies rivers (*Rivers*), and
+  `flow <dx> <dz> <speed>` gives them a current by hand - the way along world
+  x and z, -1 to 1 each and not both 0, and the speed in units a second, 0 to
+  4,000 - in place of the one their sinks give, for example
+  `ANDY3 38 - flow 1 0 300`; a river with neither runs along its longer side
+  at 240.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
@@ -1884,7 +1913,12 @@ it.
   point, the surface under it and the gap between (0: it reaches the water),
   its feet and how many points of the art's own falling water placed them
   (`art=`), and one `WATERLOG foot=` line per foot its place, its radius and
-  `row=1` for a row's.
+  `row=1` for a row's. After `falls=` the level line counts the squares whose
+  surface is their water's top and not their own floor (`lowered=`), those
+  left out as an island or a rim (`dropped=`) - both per room - and the
+  rivers (`river=`); a body line ends with its current, the way along x and
+  z and the speed (`flow=`, `0.00,0.00,0` without one), and its places whose
+  water names a sink (`sinks=`).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
 

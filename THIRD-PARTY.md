@@ -808,6 +808,74 @@ water surface", carries the tables.
 97. **The `swirl` key of `hd_water.txt`** - `swirl <x> <z> <radius>` (64 to
     2,048) a source of entries 93 to 95 on the surface under that place,
     `swirl off` no objects' sources in the row's bodies. OWN, free choice.
+98. **A water square's surface at its water's top** - the surface of entry
+    40's square is the highest corner of the water room's ceiling over it,
+    not the dry square's floor byte, which a split sector raises to its
+    highest corner. DATA: the classic floor data (RoomProbe `-hdwater 1
+    -nodraw`, `lowered=`; RICH2's two corner plates 512 over the water,
+    ANDY3's 29 split squares of the pond's island and room 12); OWN: taking
+    the ceiling's highest corner as the surface, the height
+    `GetWaterHeight` breaks Lara's head out at, and keeping a split square
+    whole under the level's raised triangle, the owner's ask of the play
+    test of 2026-10-09.
+99. **No water square over an island or a rim** - a square whose dry floor
+    stands more than a click (256) over that top at every corner is none.
+    OWN, free choice of the click; count on our data: ANDY2's 16 squares of
+    rooms 57, 136, 158 and 159 stand 1,024 over their water, every other
+    level none (`dropped=`).
+100. **The corner heights out of the slope words** - the engine's own
+    `GetHeight` and `GetCeiling` (`game/control.cpp`), evaluated at a
+    square's corners with the substitution of the randomizer's
+    `Tr5Level::cornerFloor` and `cornerCeiling`; the floor's entry as
+    `GetHeight` walks a chain, the ceiling's as `GetMinimumCeiling` reads
+    it. CLASSIC: the arithmetic is the engine's; OWN: the substitution is
+    this project's. Count on our data: 55,760 of 55,760 squares of the
+    fifteen levels agree with `Tr5Level` corner for corner (RoomProbe
+    `water corners:`).
+101. **The creatures' mark** - the HD objects' solid draw marks the stencil's
+    bit 4 under every pixel it draws, and the sheet's depth variant draws a
+    range twice, split by that bit: the marked pixels without the waterline
+    of entry 76. A rule of this project: the wet line on a swimming rat
+    read as Lara's did (the play test of 2026-10-09); the stencil split is
+    general graphics knowledge, chosen because it costs the depth variant
+    no slot where a list read in a loop would take it over 512.
+102. **The river class** - a body whose water names a `TO_SINK` trigger is
+    a river; its flow the mean way from its places toward their sinks, its
+    speed the mean of 120 units a second per strength. DATA: the sinks of
+    the classic floor data and camera table (`flow=`, `sinks=`; ANDY3's two
+    rivers only); CLASSIC: 120 units a second is `LaraWaterCurrent`'s
+    arithmetic (`game/laraswim.cpp`, 4 units a tick at 30 ticks a second);
+    OWN: the class and the mean.
+103. **The river's rows** - eight rows 1.11 to 1.25 radians off the flow
+    (crests 2 to 3 times as long along the current as across), heights at
+    most 1.2 units on 300, carried at the body's speed held to 720 units a
+    second, no bank foam, no whitecaps. OWN, free choice, set by eye on
+    RoomProbe strips; the dispersion with a current is entry 45's.
+104. **The river's streaks** - `RiverPS`: two sets of ridges across the
+    flow about 410 and 170 units apart, wandering slowly along it, carried
+    1.4 times as fast as the rows, broken by a slow field whose threshold
+    swings over 5 seconds, at most half of the foam's cover, lit as entry
+    80's foam. OWN, free choice, set by eye on RoomProbe pictures; ridges of
+    a periodic curve are general graphics knowledge.
+105. **The foam where a river ends** - the bank foam's pattern of entry 68
+    laid across a river over 768 units upstream of where its squares end
+    along the flow (colour1's blue, the way to the first point with no
+    water), carried into the end at 0.3 of the speed, dense at the end,
+    nothing at the upper end. OWN, free choice, tuned by eye on reference
+    pictures supplied for this project (a weir's foam half to one square
+    deep).
+106. **The remaster's flowing surface hidden over a river** - a draw call
+    wholly of flat material 1 triangles within 32 units of a river's
+    surface over its squares is left out, as entry 77 leaves out the still
+    water. OWN rule; DATA for the reason: ANDY3's rooms 38, 41, 42 and 43
+    carry one each, 90 to 108 triangles three units over the water,
+    scrolled at 2.5 page units a second (`RoomProbe -animtex`, `TrgProbe
+    -parts`), 378 triangles in all.
+107. **The `river` class and the `flow` key of `hd_water.txt`** - a row may
+    force the class `river`; `flow <dx> <dz> <speed>` (the way -1 to 1 each,
+    not both 0, the speed 0 to 4,000 units a second) sets a body's current
+    in place of its sinks'; a river with neither runs along its long axis at
+    240 units a second. OWN, free choice.
 
 ## Credited, but not contained here
 

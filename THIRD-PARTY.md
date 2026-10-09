@@ -1118,6 +1118,31 @@ water surface", carries the tables.
     them the other way), room 67's +x; the floors under them are flat and
     give no way, their water rooms join river, streams and room 96 in one
     chain down to the east (the randomizer's `Tr5Level`).
+133. **The lift: a body's water up to its bank** - a body's sheet stands a
+    number of units over the level's water height (the table
+    `kWaterLift`, the key `lift` of `hd_water.txt`); everything the sheet's
+    pixels decide from the depth under it follows its grid, and what the
+    game places at the water's own height keeps that height. OWN, a rule
+    of this project; the pond of ANDY3 at 96 a free choice between the
+    bank's lowest point and its median, set by eye on RoomProbe pictures,
+    with a reference picture supplied for this project as the look (the
+    water meeting the grass, no strip of the bank between); DATA: the
+    Remaster's ground over the pond's 224 shore points against the classic
+    floor (a tool of this round on the classic `.TRC` and the `.TRG`): the
+    bank a slope that leaves the water a third of a square inside the water
+    squares, 15 to 443 units over the water at the squares' edge, median
+    145, 129 on the commonest bank; no other body of the fifteen levels has
+    such a slope (walls a click or more high, or land flat at the water);
+    the bank's strip in a view over the pond 25,674 pixels at the level's
+    height, 8,742 at 96 (RoomProbe at 960 by 540, `-waterdepthview 4`).
+134. **The edge held to the land** - a grid point of a lifted sheet that
+    touches land lower than the lift takes the land's height there, the
+    classic floor's corners interpolated at the point, so the sheet's edge
+    never stands in the air over a bank that meets the water low. OWN, a
+    rule of this project; DATA: where the classic land at the pond's edge
+    lies under a click, the Remaster's ground there stands 5 under it to
+    17 over it at 8 in 10 of 152 points, 1 over it at the median; 79 of the
+    pond's 208 edge points lie under a lift of 100.
 
 ## Credited, but not contained here
 

@@ -1927,6 +1927,22 @@ it.
   water surface over a river is left out, as its still water is.
   `hd_water.txt` can make any body a river and give it a current by hand.
   With *HD water* off there are no rivers.
+- **The water up to its bank.** A body's sheet can stand some units over
+  the level's own water height - its lift. ANDY3's pond stands 96 units
+  higher: the Remaster's ground there leaves the water a third of a square
+  inside the water squares and climbs to the level's land at their edge,
+  so a sheet at the level's own height showed that slope as a dark strip
+  between the water and the grass; lifted, the water reaches up the bank.
+  Where the land beside the water meets it low - a beach, the foot of the
+  mill's stairs - the sheet's edge comes down to the land there, so no
+  edge of water stands in the air; the rest of the pond lies flat at its
+  lift. The island in the pond is a low mound and loses its foot to the
+  water. Lara still stands on the level's own floor and swims at its own
+  water height: the water simply reaches higher up her legs; the game's
+  ripples, rings and splashes keep their places. No other body is lifted:
+  everywhere else the water meets a wall a click or more high, or land
+  flat at the water. A row's `lift` in `hd_water.txt` sets or takes away
+  any body's lift.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
@@ -1971,6 +1987,11 @@ it.
   `ANDY3 66 river flow 0 1 300` turns the stream over room 66 round, and
   `ANDY3 66 basin` makes it still water again, while a row for room 34 still
   tunes every body in room 34.
+  `lift <units>` stands the row's bodies' sheets that many units over the
+  level's water height, -256 to 256 in whole units (*The water up to its
+  bank*); `lift 0` takes a lift away, and a row without the key leaves the
+  lift as it is - `ANDY3 73 - lift 64` sets the pond lower, `ANDY3 73 -
+  lift 0` puts it back at the level's own height.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
@@ -2016,8 +2037,10 @@ it.
   line
   ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), its places whose
-  water names a sink (`sinks=`) and, last, the light its colours take - its
-  rooms' light, or in a night level the moon's (`lit=`).
+  water names a sink (`sinks=`), the light its colours take - its rooms'
+  light, or in a night level the moon's (`lit=`) -, the points of its sheet
+  the land beside them holds under its lift (`held=`) and, last, its lift
+  in units (`lift=`, 0 without one).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
   The first frame of a level whose camera is in a water room writes one

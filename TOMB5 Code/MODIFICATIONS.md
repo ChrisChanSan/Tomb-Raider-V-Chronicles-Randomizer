@@ -10877,6 +10877,104 @@ that wants it back has no row for it. The pond's edge is another part.
 
 **Commits.** `c4ebe16`, `16aad52`, `680dfd9`.
 
+**The pond to its bank, after the seventh play test.** Asked for in this part: between
+ANDY3's pond and its bank a strip of the bank's side shows; in the reference picture the
+water meets the grass's edge flat, without such a strip, and the owner put what is missing
+at about 100 units.
+
+Measured first, with a tool of this round on the classic level and the `.TRG` (the water
+squares and their surface as the engine takes them, bodies joined at one height, and along
+every shore side of every square eight points, at each the Remaster's ground - the highest
+triangle over the point that is not steep - from 128 units inside the water square to 256
+outside, beside it the classic land's floor at the side, its two corners interpolated).
+The pond (room 34 over water rooms 73, 74 and 147; 24 squares, 14 of them the island's
+split squares; 224 shore points on 28 sides) has no lip: its bank is a slope of the
+ground, laid as a mesh of 341-unit steps, that leaves the water's height a third of a
+square inside the water squares and climbs through their edge. A sheet at the level's
+water height meets the ground where it reaches that height, and the slope above it, up to
+the squares' edge, is the strip. At the edge the ground stood 15 to 443 units over the
+water at the 152 points where the slope reaches into the square, median 145; 129 on the
+commonest bank, the east and south sides, whose land runs from the water's height at one
+corner to a click over it at the other. Where the classic land at the edge lies under a
+click, the ground stands 5 under it to 17 over it at 8 in 10 points, 1 over it at the
+median - it follows the classic floor; four sides meet the water flat (the classic corners
+both at the water's height: south of the lower lobe, the pebble beach east of it, the foot
+of the mill's stairs, the north side), and 79 of the 208 points on the edge lie under 100.
+The island is a mound of the same ground, rising a quarter of a unit a unit from the
+water to 248 at its middle. Every other body of ANDY1 to ANDY3, ANDREA1, ANDREA2, JOBY2,
+JOBY4, JOBY5 and RICH2: its edges are walls a click or more high or land flat at the
+water - ANDREA1's basins all 256 or at the water, ANDREA2's sewer and fountain 256,
+ANDY1's pools at the water (median 2) or a click and more, ANDY2's 256 to 737, ANDY3's
+sea, rivers
+and streams at the water or 256 and more, JOBY2's floes 0 to 705 (median 209), JOBY5's
+decks flat at the water or a deck plate 70 over it (rooms 53, 83, 117, 143, 151), RICH2's
+pool 1 to 481 (median 33, its corner plates); none has a slope inside its squares between
+the water and a click.
+
+The lift (`hd_render.cpp` `kWaterLift`, "the lift" over step 7 of
+`HDRenderSetWaterSheets`, `water_point_lift`, `water_under_constants`). A body's sheet
+stands a number of units over the level's water height: the engine's table `kWaterLift`
+and the key `lift <units>` of `hd_water.txt` (-256 to 256) set it; a row of the table sets
+the lift alone, a row of the file sets it with the rest of the row, and a row without the
+key leaves it. ANDY3's pond stands at 96, its row naming water room 73, the room under 20
+of its squares - room 34 holds the three streams too, which keep their height. 96 is a
+free choice between the bank's lowest point and its median, set on the round's RoomProbe
+pictures: in a view over the pond the strip's pixels (the band from each shore side 512
+units into the squares, projected with RoomProbe's own camera, less the pixels the sheet
+covers in `-waterdepthview 4`) fell from 25,674 at the level's height to 15,414 at 48,
+8,742 at 96, 6,375 at 128 and 5,512 at 160 of a band of 123,171; 128 takes a tenth of
+them more while the island keeps 48 % of its width instead of 61 %. The owner's own
+estimate was about 100. The grid stands at the lift and its depth colour grows by it; a
+grid point that touches land lower than the lift takes the land's height there, the
+classic floor's corners interpolated at the point, so the sheet's edge does not stand in
+the air over the bank that meets the water low - with a flat lift the edge stood as a
+lit wall of water over the pebble beach (a build made for the measurement alone); 19
+points of the pond are held so. Everything the sheet's pixels decide from the depth under
+them - the clip, the waterline, the patches, the clearness of shallow water - follows the
+grid by itself, and the eye's depth under the water counts from the drawn surface. What
+the game places at the water's own height keeps that height and the tests that match it:
+its ripples and their rings (`kRingHeight` 256), the classic ripple sprites
+(`HDRenderWaterSheetUnder`), the falls' feet and the art the sheets hide; the rings and
+the feet are drawn on the sheet's own grid and so lie on the lifted water. Lara stands on
+the level's floor and swims at its water height as before: the water reaches higher up
+her legs, her gap and the creatures' mark are the same. With `tomb5.hd_water` 0 nothing
+is lifted; a body without a lift builds the same grid as before.
+
+WATERLOG: a body line ends ` held=<n> lift=<units>`. RoomProbe `-wader x,z` stands a
+wading Lara's box, 160 across and 768 high, on the floor under the sheet, with her place.
+
+**Measured.** No shader changed: every `.inc` keeps its bytecode, 19 of 19. GPU, 2560 x
+1440, three runs: the full-water view 0.201, 0.198, 0.198 ms against 0.200, 0.197, 0.196
+at `8b6741c`; the view over the pond 0.229 to 0.231 ms against 0.214 to 0.215 (more of it
+is water). The strip in the owner's direction, from behind Lara toward the stairs, 41,665
+pixels before and 10,015 after; what is left is the bank where its ground stands higher
+than 96 at the edge (the west bank's 173 and more, the stairs' sides) and the island's
+top. The wading box's dry part 333 pixels at the level's height, 308 at 96. The sweep:
+565 squares, 56 bodies, 118 twins as at `8b6741c`; the pond's line ends `held=19
+lift=96`, every other `held=0 lift=0`; ANDY3's level line counts the table's row
+(`applied=4`).
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set; with `-hdwater 1`, 15 of
+15 identical to `8b6741c` (none shows the pond); the pond from above, from the owner's
+direction, from its banks and its island at 1, 3 and 5 seconds before and after; the text
+file (`ANDY3 73 - lift 64` over the table's 96, `ANDY3 70 river flow -1 0 400 lift 32`
+lifts the stream alone, `lift 300` refused as unreadable, `ANDREA2 144 basin lift 16`
+lifts the fountain; with `-hdwater 0` no body is lifted); the suites (ModernTest 14721,
+MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every
+tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the pond at 96, Lara
+wading in it, the island. Where the bank meets the water low the held edge slopes the
+water down to the land over a quarter of a square and draws its foam line there (the
+pebble beach east of the lower lobe shows it as a jagged line); a sheet carried on over
+the low land until the ground rises over it would lie flat, and is not built. An eye
+between the level's water height and the lifted surface sees the sheet from below without
+the underwater look (the gate is the camera room's flag). The island loses its foot to
+the water. Stage 3, light shafts under the water and the HD dive splash stay for later.
+
+**Commits.** `861a2d2`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

@@ -778,12 +778,14 @@ water surface", carries the tables.
     points come within 512 units of each other's are one curtain; its points
     in order along their principal axis, gathered every 512 units, a corner
     at the mean of every step that holds points: the footprint, a polyline;
-    a segment over a step without points bridges a gap at 0.85 of the foam;
-    the reach 614 units plus 0.3 of the longest wet stretch, held to 614 to
-    1,229 (0.6 to 1.2 squares). OWN, free choice, set by eye on RoomProbe
-    pictures; the one zone for two strands is the owner's ask of the play
-    test of 2026-10-09 (ANDREA2 room 231's two discs a strand read as two
-    crowns turning alike).
+    a segment over a step without points is a gap where no water lands and
+    draws no foam (entry 117; it bridged the gap at 0.85 of the foam until
+    the fifth play test of 2026-10-09); the reach 614 units plus 0.3 of the
+    longest wet stretch, held to 614 to 1,229 (0.6 to 1.2 squares). OWN,
+    free choice, set by eye on RoomProbe pictures; one curtain for the
+    objects of one foot is the owner's ask of the play test of 2026-10-09
+    (ANDREA2 room 231's two discs a strand read as two crowns turning
+    alike).
 93. **The foot's foam** - a second draw of the sheet's triangles (`FootPS`),
     up to eight segments a draw: per segment the pixel's distance to it, its
     way along it and its side; the reach times 0.8 plus 0.2 of entry 87's
@@ -795,7 +797,8 @@ water surface", carries the tables.
     bank foam's two layers (entry 68), the fine one at 0.55 of the speed,
     its dissolve, its density with the threshold along (1 - x) to the power
     0.75, its body (entry 80); the segment's strength times the body's foam
-    scale; nothing from below; no turn. OWN, free choices, set by eye on
+    scale; past a segment's end the way beyond it over that end's head
+    (entry 117, 1 round); nothing from below; no turn. OWN, free choices, set by eye on
     RoomProbe pictures; the push and stretch away from the curtain tuned by
     eye on reference pictures supplied for this project (the owner's sketch
     of a foot from above, a photograph of a real waterfall, as a look and
@@ -899,23 +902,26 @@ water surface", carries the tables.
     goes col exp(-L sigma_rgb) + scatter (1 - exp(-L sigma_s)), L the eye
     ray's length in the water (the whole distance under the surface, d D / h
     over it), sigma_rgb the body's per-channel absorption of entry 62,
-    sigma_s its one over the absorption length (entry 51), both times 0.35,
-    the scatter its shallow colour (entries 46 and 47) times 1 + 0.6 of the
-    ray's upward cosine. OWN: the textbook extinction and in-scattering of
-    a participating medium, general graphics knowledge; the 0.35 and the
-    0.6 free choices, tuned by eye on RoomProbe pictures and on reference
-    pictures supplied for this project (the owner's picture of the flat
-    haze, a photograph under water, as a look and no file).
+    sigma_s its one over the absorption length (entry 51), both times 0.3
+    (0.35 until the fifth play test of 2026-10-09), the scatter its shallow
+    colour (entries 46 and 47), held by entry 118, times 1 + 0.6 of the
+    ray's upward cosine; L less entry 118's clear zone. OWN: the textbook
+    extinction and in-scattering of a participating medium, general
+    graphics knowledge; the 0.3 and the 0.6 free choices, tuned by eye on
+    RoomProbe pictures and on reference pictures supplied for this project
+    (the owner's picture of the flat haze, a photograph under water, as a
+    look and no file).
 109. **Which body an eye under the water looks through** - an underwater
     room takes the body most of the sheet squares over it belong to, a room
     further down the body of the room over it (six rooms down), a water room
-    no sheet lies over the level's largest body. OWN, free choice; count on
-    our data: the level line's `under=` and `under_fallback=` (ANDREA2 19
-    and 20, JOBY2 9 and 2, JOBY4 2 and 132; RoomProbe `-hdwater 1
-    -nodraw`).
+    no sheet lies over the level's largest body, with no surface over it
+    (entry 121). OWN, free choice; count on our data: the level line's
+    `under=` and `under_fallback=` (ANDREA2 19 and 20, JOBY2 9 and 2, JOBY4
+    2 and 132; RoomProbe `-hdwater 1 -nodraw`).
 110. **What the extinction takes the place of** - under the water the
     distance fog (its start moved past any view) and the fog bulbs (none
-    that frame); the gloss variant, with no slots left, keeps the fog. DATA
+    that frame); the gloss variant, with no slots left, is not drawn under
+    the water (entry 119). DATA
     for the reason: ANDREA2's sixteen fog bulbs in its water rooms, colour
     0.81 1.00 0.87, radius 1,472 to 5,152 - the flat pale haze of the play
     test of 2026-10-09 (the rooms' headers, `nFogBulbs` and `fogbulb`, read
@@ -961,6 +967,53 @@ water surface", carries the tables.
     end; replaces entry 105's lattice. OWN, free choice, set by eye on
     RoomProbe pictures; the weir's photograph supplied for this project as a
     look and no file.
+117. **The gap between two strands** - a step of a curtain's footprint
+    without foot points draws no foam (the seg line's `wet=0.00`); in a
+    curtain with such a gap every wet stretch ends in a head: past its last
+    point the zone reaches half its reach along the line, beside a gap no
+    more than 0.4 of the gap's length over the reach, so two heads reach at
+    most 0.92 of the gap at the outline's widest swing; a corner alone
+    between gaps is a segment of 2 units with those heads; a curtain
+    without a gap keeps round ends. OWN, a rule of this project, the half
+    a reach a free choice by the owner's sketch of the foot from above
+    (two separate ovals with open water between them; reference pictures
+    supplied for this project, as a look and no file), the 0.4 a free
+    choice from the count of FootPS's spread (1.15 at the most).
+118. **The clear zone and the held scatter under the water** - entry 108's
+    path less 2,048 units (two squares, the third-person camera's reach),
+    never under 0, in `RoomPS`, `GlowPS`, the model pixel shader and the
+    `HD_WATER_UNDER` variant (c145); the scattered colour's brightest
+    channel held to 0.45. OWN: a medium clear near the eye and a bound on
+    the in-scattered light are general graphics knowledge; 2,048 and 0.45
+    free choices, set by eye on RoomProbe pictures of JOBY2's flooded base
+    and ANDREA2's corridor; DATA for the reason: the scattered colour of
+    the body of JOBY2's room 7, 0.55, 0.85, 0.94 under a light of 1.45, took
+    0.7 of the mix at three squares (RoomProbe `-underwater` with the
+    randomized level's floor data).
+119. **No gloss variant under the water** - while the frame's eye is under
+    the water the gloss variant's faces draw with `RoomPS`, without the
+    sheen, inside the extinction. OWN, a rule of this project; DATA for the
+    reason: at the owner's view of JOBY2's flooded base the walls, crates
+    and floor plates the gloss variant drew kept their colour against the
+    faded rest (RoomProbe `-underwater`, `-noreflect`, `-glossfield`).
+120. **Lara's wet nodes in water a sheet lies over** - they take the
+    ambient of the dry room that sheet lies in (the room most of the sheet
+    squares over the water room lie in, walked down with it), standing in
+    a dry room the dry answer; in water no sheet lies over and without
+    sheets the classic `LaraNodeAmbient[1]`. OWN, a rule of this project;
+    DATA for the reason: ANDREA1's pool room 26 has the ambient 16, 16, 32
+    under room 25's 27, 32, 41 (`ROOM_INFO`'s ambient read with the
+    randomizer's `Tr5Level`) - the lilac the owner saw on Lara under the
+    surface (ModelProbe `-shade r,g,b`).
+121. **A water room with no surface, and the deep look** - a water room no
+    sheet lies over sees every point in the water (no surface depth; with
+    the largest body's surface, which may lie under the eye, the scene
+    above the eye's height kept its colour along a hard line); a level
+    whose fallback rooms outnumber its rooms under a sheet more than four
+    times takes, in all its water rooms, the sea class's absorption and
+    the section's palette at a light of 1 (`under_deep=`). OWN, free
+    choices; count on our data: JOBY4 2 and 132, the next RICH2 at 1.33
+    and ANDY3 at 1.22 (RoomProbe `-hdwater 1 -nodraw`).
 
 ## Credited, but not contained here
 

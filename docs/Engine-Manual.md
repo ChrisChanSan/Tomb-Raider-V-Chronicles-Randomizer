@@ -1836,12 +1836,14 @@ it.
   JOBY2's three in room 66 and 27 in JOBY5 - churns the water at its foot.
   The foot is where the falling water the room's art draws ends (the
   waterfall object's own mesh where the art has none). Waterfall objects
-  whose feet come within half a square of each other land as one curtain,
-  and so do the strands of one curtain with a gap between them: the curtain's
-  footprint is a line along it, and round that line lies one zone of the
+  whose feet come within half a square of each other land as one curtain:
+  the curtain's footprint is a line along it, and round that line lies the
   sheet's own foam - 0.6 to 1.2 squares wide by the curtain's width, with an
-  irregular, slowly changing outline - that is pushed away from the line on
-  every side: it leaves the falling water fast, stretched into streaks that
+  irregular, slowly changing outline. Where no water lands between two
+  strands of a curtain (ANDREA2's fountain hall) the water stays open: each
+  strand gets an oval of its own, which ends half its width past the strand
+  and never comes close to the next one. The foam is pushed away from the
+  line on every side: it leaves the falling water fast, stretched into streaks that
   point away from it, slows down and breaks up into lace toward the rim,
   never turning. Rings start from points along the line every half second or
   so, and drops are thrown up from them, the game's own small splash, two a
@@ -1856,11 +1858,22 @@ it.
   lit by its light, brighter where the view looks up toward the surface and
   darker where it looks down - and red goes first, so the far turns green or
   blue. The numbers are the surface's own, so the water looks the same from
-  inside as from above it. It takes the place of the distance fog and of the
-  level's fog bulbs while the camera is under water (ANDREA2's water rooms
-  carry sixteen, a flat pale haze); polished floors keep the distance fog. A
-  water room with no sheet over it takes the water of the level's largest
-  body. The surface seen from below fades the same way over its distance.
+  inside as from above it. The first two squares round the camera stay
+  clear - Lara near the camera keeps her colour -, a room four to eight
+  squares away keeps its texture under the water's colour, and the water
+  adds no more light than a body lit from inside would (a flooded room
+  under an open sky no longer turns into flat, bright water). It takes the
+  place of the distance fog and of the level's fog bulbs while the camera
+  is under water (ANDREA2's water rooms carry sixteen, a flat pale haze);
+  polished surfaces lose their sheen there and fade like the rest. A water
+  room with no sheet over it takes the water of the level's largest body
+  and has no surface over it: everything it sees lies in the water. In a
+  level that is almost all water no sheet lies over (JOBY4, swum in the
+  diving suit), every water room takes a deep sea's water in the section's
+  colours. Lara's limbs in water a sheet lies over take the light of the
+  room above the surface, not the tinted light of the water room (the lilac
+  of ANDREA1's pool). The surface seen from below fades the same way over
+  its distance, past the same clear two squares.
 - **Rivers.** Where the level's own triggers pull Lara through the water (a
   sink, the current that drags her along ANDY3's two rivers), the body is a
   river: it flows the way the sinks pull, at the speed they pull her (120
@@ -1949,14 +1962,18 @@ it.
   line per point the rings and drops come from gives its place, its
   curtain's reach (`radius=`), `row=1` for a row's and its curtain, and one
   `WATERLOG seg=` line per segment of a curtain's footprint its ends, its
-  reach and its share of the foam (`wet=`, less over a gap). After `falls=`
+  reach, its share of the foam (`wet=`, 0.00 over a gap where no water
+  lands) and how far its foam reaches past its two ends (`head=`, 1.00 round,
+  0.50 or less at a gap). After `falls=`
   the level line counts the squares whose
   surface is their water's top and not their own floor (`lowered=`), those
   left out as an island or a rim (`dropped=`) - both per room - and the
   rivers (`river=`), then the curtains and their segments (`curtains=`,
   `segs=`), the file's rows that use `swirl` (`old=`), and the underwater
   rooms that look through a body above them (`under=`) and those that take
-  the level's largest body for want of one (`under_fallback=`); a body line
+  the level's largest body for want of one (`under_fallback=`), and 1 when
+  the level's water rooms take the deep sea's water (`under_deep=`); a body
+  line
   ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), and its places whose
   water names a sink (`sinks=`).

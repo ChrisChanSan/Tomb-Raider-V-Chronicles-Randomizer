@@ -10170,6 +10170,132 @@ itself, the third stage; light shafts under the water.
 **Commits.** After the fifth play test, the banks, the creatures and the rivers `dcf83e3`,
 `90abfac`, `f4b6809`.
 
+**The foot's gap and the depths, after the fifth play test.** Asked for in this part: the
+waterfall's foot in ANDREA2's fountain hall is to have a break between its two strands -
+one foam band joined them, which looks unnatural; the owner's sketch from above shows two
+separate ovals, one under each strand, with open water between them (reference pictures
+and a sketch supplied for this project, not in the repository). Under the water Lara stays
+near the camera and is never to change her colour, and ANDREA1's lilac on her under the
+surface is to go (the acceptance of the third play test is withdrawn); JOBY2's flooded
+base showed flat, bright cyan surfaces three and four squares away and a pale Lara; JOBY4
+is a level swum in the diving suit and is to read as a dive. The surface seen from below
+being brighter is fine.
+
+The gap (`hd_render.cpp` "the foot of a waterfall", `lay_curtain`, `draw_feet`;
+`hd_room.hlsl` `FootPS`). Measured: ANDREA2 room 231's one curtain has six segments, the
+third from z 42,805 to 41,553 (1,252 units) over a step with no foot points, drawn at 0.85
+of the foam - the band between the strands; reach 972. Now a step without points is open
+water: its segment keeps its place in the curtain's line with `wet=0.00`, so the curtain
+is still one in the log (`curtain=0`, six segments), and is left out of the draw. In a
+curtain with such a gap every wet stretch closes in a head at both its ends: past its last
+point the zone reaches half its reach along the line, and beside a gap no more than 0.4 of
+the gap's length over the reach, so two heads cover at most 0.92 of the gap at the
+outline's widest swing (FootPS's spread, 1.15 at the most): two strands touch only where
+their strands do. A corner alone between gaps is a segment of 2 units with those heads. A
+curtain without a gap keeps its round ends - JOBY5's 27 and JOBY2's 3, and every row's
+`foot`. FootPS reads the heads from `gFootReach.zw` and counts the way past an end over
+its head (1 is the round cap as before); the seg line ends `head=<start>,<end>`. Half a
+reach is a free choice by the sketch, 0.4 a free choice from that count; each strand keeps
+the push outward, the irregular outline, and its rings and drops.
+
+The flat cyan of the flooded base (`hd_render.cpp` "under the water"). Measured first: the
+owner's base is rooms 13 and 14 of the randomized JOBY2 in the game folder, flagged as
+water there and not in the untouched level, under the body of room 7 (24 squares, open
+air, light 1.45, 1.45, 1.50 - raw 0.81); RoomProbe with the classic boxes of that level
+reproduces the owner's level line (93 squares, 4 bodies) and his view. Its scattered
+colour was 0.55, 0.85, 0.94 - the Russia shallow colour times that light - and the scatter
+took 0.7 of the mix at three squares: the flat near-white cyan is the extinction's
+scatter. Drawn again with `-noreflect`, every face of the view went that colour;
+`-glossfield` showed the corridor's riveted walls, the crates and the floor plates as the
+gloss variant's, which keeps no extinction (it has no slots for it) - they kept their
+colour against the faded rest. And beside room 13, room 14 has no sheet over it: it took
+the level's largest body, whose surface (2,048) lies under the eye, so the eye's depth was
+held to 1 and every point higher than the eye kept its colour - a hard horizontal edge
+across the view at the eye's height (RoomProbe with room 13 alone and no sheet drawn: the
+edge stays, so it is the extinction's and not a sheet's). JOBY2 has no fog bulbs; TR5's
+fog has no colour.
+
+Now (`hd_room.hlsl` `UnderWater`, the `HD_WATER_UNDER` variant; `hd_model.hlsl`): the path
+in the water less a clear zone round the eye, never under 0, in c145 `gUnderClear` - 2,048
+units, two squares, the third-person camera's reach, the same for rooms, models and the
+surface seen from below; `kUnderReach` 0.35 to 0.3; the scattered colour's brightest
+channel held to 0.45 (`kUnderLightTop`), folded into its constant: ANDREA2's channel (0.30
+at the most) and JOBY2's sea of rooms 42 and 76 (0.41) keep theirs, the body of room 7 is
+scaled by 0.48. Free choices, set by eye on the round's RoomProbe pictures of the base and
+of ANDREA2's corridor: 0.35 turned the far end of the base into flat water, 0.25 thinned
+the corridor's yellow-green depth. c145 and not c137 because the foot writes c137 to c144
+per draw. While the eye is under the water the gloss variant's faces draw with `RoomPS`,
+without the sheen, inside the extinction - the variant stands at 502 slots and the
+extinction's 20 would cross 512; the cost is the sheen under the water. A water room no
+sheet lies over has no surface: its depth is 1,000,000 units, so everything it sees lies
+in the water.
+
+Lara's lilac (`hd_laradraw.cpp`; `hd_render.cpp` `HDRenderWaterAirRoom`). Measured: her
+wet nodes take `LaraNodeAmbient[1]`, the ambient of the underwater room a node is in
+(`drawlara.cpp` `SetLaraUnderwaterNodes`); ANDREA1's pool room 26 has 16, 16, 32 - blue
+twice the green, red as green, a violet - under room 25's 27, 32, 41, and the pool rooms
+of room 30 carry 16, 16, 32 to 32, 46, 61 (`ROOM_INFO`'s ambient read with the
+randomizer's `Tr5Level`, the room flags checked against it at 0 mismatches). ModelProbe
+with those two ambients: the mean of her pixels 15, 12, 19 against 26, 25, 24. Now, in
+water a sheet lies over, her wet nodes take the ambient of the dry room that sheet lies
+in, the room most of the sheet squares over the water room lie in, carried down the six
+rooms of the walk (RoomProbe `-underwater` prints it: room 26's is 25); standing in a dry
+room with nodes in the water under it, her dry answer. The water's colour reaches her
+through the extinction alone, which leaves her alone within the clear zone. Without
+sheets, in water no sheet lies over and in the inventory, the classic answer. Creatures
+keep the classic rule: their ambient is the room's lowered by shadow lights inside
+`InitObjectLighting`, and nothing here measured them.
+
+JOBY4 (`hd_render.cpp` "the deep look"). Measured: 134 of its 137 rooms are water; its one
+body is room 7's two squares, a basin lit 1.50; `under=2 under_fallback=132`. Its start
+cavern, room 123, lies under that basin and took the basin's look. Now a level whose
+fallback rooms outnumber its rooms under a sheet more than four times takes, in all its
+water rooms, a deep look: the sea class's absorption and the section's palette at a light
+of 1, the palette's own colour. 4 is a free choice between JOBY4's 66 and the next levels,
+RICH2 at 1.33 and ANDY3 at 1.22; over the fifteen levels only JOBY4 takes it. The level
+line ends `under_deep=<0/1>`. RoomProbe `-underwater` prints the air room; ModelProbe
+`-shade r,g,b` gives Lara's nodes a coloured ambient.
+
+**Measured.** Slots, fxc /O3: `RoomPS` 509 to 510, `GlowPS` 498 to 499, the model pixel
+shader 386 to 387, the `HD_WATER_UNDER` variant 335 to 337 (the clear zone), `FootPS` 203
+to 208 (the heads); the gloss variant (502), `WaterPS` and its depth and view variants,
+`WaterVS`, `RiverPS`, `RoomVS`, the model vertex shader and the shadow shaders keep their
+bytecode apart from the stamp line (14 of 19). GPU, 2560 x 1440, three runs against
+`98ebece`: the full-water view 0.197 to 0.199 ms against 0.199 to 0.200; the foot from
+above 0.141 to 0.143 ms for its draw of five segments against 0.157 to 0.160 for six;
+under the water the sheets seen from below 0.069 to 0.075 ms for the corridor's five draws
+and 0.051 to 0.053 for the sea's three, against 0.070 to 0.075 and 0.054 to 0.055; the
+rooms' and models' share of the clear zone, one slot a pixel, is not timed apart. Lara
+with the model shader at JOBY2's sea constants (ModelProbe `-dist`): the mean of her
+pixels 83, 78, 75 and 81, 76, 74 at one and two squares with the clear zone, as without
+the water (66, 78, 87 and 55, 77, 92 before); 56, 75, 89 at four (48, 75, 96 before) and
+47, 74, 96 at eight, as before.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34); the fifteen cameras with `-hdwater 0`, 15 of 15
+identical to the fix round's parity set; with `-hdwater 1`, 10 of 15 identical to
+`98ebece` - ANDREA2's fountain hall (A1, A2, D2: the gap), D1, whose camera is under the
+water (every pixel, by at most 13), and JOBY2 room 66 (E2, one pixel by one: the foot's
+new arithmetic); the foot views at 3, 11 and 19 seconds: JOBY5's deck at most 5 pixels by
+at most 4; a 20-second strip of the foot from above shows the gap open throughout; the
+sweep's counts identical to `98ebece`'s (565 squares, 56 bodies, 118 twins),
+`under_deep=1` in JOBY4 alone; the text file (`foot off` takes the hall's curtain away, a
+row's `foot` keeps round ends, a class row in JOBY4 leaves the deep look on); the suites
+(ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the
+engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the two ovals and
+their size (the reach across a strand stays the fourth play test's), the clear zone, the
+base's depth and JOBY4's dive. Rooms 13 and 14 of the base take two bodies (room 13 the
+open-air body of room 7, room 14 the level's largest), so the water's colour changes
+between them. Creatures under the water keep their rooms' ambient. The foot's draw keeps a
+segment within 1.1 of its reach of a sheet range, while FootPS's outline swings to 1.15.
+The reflection of the room itself, the third stage; light shafts under the water; the
+splash of a dive in HD.
+
+**Commits.** After the fifth play test, the foot's gap and the depths `b6e3ebf`,
+`ae5d80f`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

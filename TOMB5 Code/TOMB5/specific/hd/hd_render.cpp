@@ -8619,8 +8619,9 @@ namespace
 	 * slide downstream (RoomProbe, ANDY3's river from its bank, the motion
 	 * of its pixels from 3 to 3.1 seconds). Its heights are a channel's
 	 * steepness (height over wavelength 0.0086 at most against 0.0078) and
-	 * its highlight half the channel's, 0.4: in a quarter to one and a half squares of
-	 * water the bend of the floor is the slope times a quarter of the path,
+	 * its highlight half the channel's, 0.4: in a quarter to one and a
+	 * half squares of water the bend of the floor is the slope times a
+	 * quarter of the path,
 	 * and 1.2 over 300 moved it by one or two units; at 0.8 the highlight of
 	 * the steeper rows went white from above. The wavelengths are the
 	 * channel's kind of spread, moved off whole ratios; the heights, the

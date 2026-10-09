@@ -2884,7 +2884,8 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	/* The water sheets of the HD path: on, the default, every water
 	 * square the sheet can cover - over an underwater room, in a room
 	 * drawn HD - gets this project's own water surface, with the caustic
-	 * on the floor under it, and the classic water face there is not
+	 * on the floor under it outside the night levels (ANDY1 to ANDY3,
+	 * hd_render.cpp kWaterMoon), and the classic water face there is not
 	 * restored, nor the remaster's own water art over it drawn (unless an
 	 * hd_water.txt row says art keep); a water plane with no underwater
 	 * room below keeps its faces. Off, no sheet is built, the caustic

@@ -726,7 +726,8 @@ float4 gWaterStage : register(c106);
  * c132 and c133, gRiverFlow and gRiverEdge, are read by RiverPS alone and
  * declared with it ("the river"); c134 - c136, the eye under the water,
  * by every shader that applies it ("under the water"); c137 - c144,
- * gFootReach, by FootPS alone ("the waterfall's foot"). */
+ * gFootReach, by FootPS alone ("the waterfall's foot"); c146 and c147,
+ * gRiverNight and gRiverLight, by RiverPS alone ("the river"). */
 float4 gWaveP2[4] : register(c107);
 float4 gWaterLag : register(c111);
 float4 gWaterLife : register(c112);
@@ -2734,8 +2735,21 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * Its rows are the sheet's own, stretched along the flow and carried with
  * it as one; this second draw of the sheet's triangles, with the same
  * blend, adds what moves with the current where the eye sees it from any
- * angle - a sheen on the skin, the light on the floor - and the foam where
- * it ends.
+ * angle - the relief's light, a sheen on the skin, the light on the floor -
+ * and the foam where it ends.
+ *
+ * The relief's light: the waves' own streaks. The sheet shows its rows
+ * through the reflection, the highlight and the bend of the floor, and all
+ * three fade from above: the reflection's share is the Fresnel term's 0.02,
+ * the highlight stands at its mirror angle alone, and a stream 256 units
+ * deep bends its floor by a few units. So the rows' slope (WaveSum8 at the
+ * bent place, each row's height times WaterVS's fade, as WaterPS reads it)
+ * is lit here by the class light's way along the surface (gWaterSun.xz):
+ * facets toward it lighter by gRiverLight.x times their slope of the
+ * highlight's colour, facets away darker through alpha, 0.6 of that share,
+ * with no Fresnel and no reflection in it, so the crests read as streaks
+ * along the flow from every angle, carried with the current, swelling and
+ * fading with the rows' own envelopes.
  *
  * The sheen: long thin lines along the flow, a little lighter and a little
  * darker than the water and nothing white - the skin of a fast stream seen
@@ -2751,9 +2765,10 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * foam's 5 seconds brings a stretch of lines and dissolves it. A line
  * fades where the pixel's step across the flow passes HD_RIVER_THIN units:
  * a line thinner than a pixel or two would flicker. The lighter lines add
- * gRiverFlow.w of the reflection's colour - what a facet tilted toward the
- * sky shows -, the darker ones take 0.6 of that share of what lies behind:
- * no Fresnel weighs either, so the sheen reads from above as from the bank.
+ * gRiverFlow.w of the highlight's colour, the light on the water, the
+ * darker ones take 0.6 of that share of what lies behind: no Fresnel and
+ * no reflection weighs either, so the sheen reads from above as from the
+ * bank.
  *
  * The light on the floor: where the floor shows through the river the
  * caustic (CausticOf, the note beside HD_CAUSTIC_SCALE) is laid on it here,
@@ -2769,7 +2784,10 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * than HD_CAUSTIC_FOOT units. The floor's colour is the frame's copy at the
  * pixel, its share the part of it the sheet lets through: 1 - F (Schlick,
  * F0 0.02) times the transmission over the path. A brighter floor is added,
- * a darker one taken off through alpha. gRiverEdge.w turns it on.
+ * a darker one taken off through alpha. gRiverEdge.w is its strength, 0
+ * where RoomPS lays it. At night (gRiverNight.w 1) the light it adds is the
+ * moon's, the floor's luma times gRiverNight.rgb, and not the floor's own
+ * colour, whose torch-lit beds would turn its lines gold.
  *
  * The end: where the river runs into a wall or over a drop (input.flow.x,
  * the way ahead to the first point with no water, hd_render.cpp) one blob
@@ -2789,13 +2807,19 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * gRiverFlow  xy the way the river runs (world x, z, a unit vector), z the
  *             current in units a second, w the sheen's strength
  * gRiverEdge  x the end foam's reach in units, y its strength, z the speed
- *             that carries it into the end, units a second, w 1 to lay the
- *             caustic on the floor, 0 to leave it to RoomPS */
+ *             that carries it into the end, units a second, w the strength
+ *             of the caustic laid on the floor, 0 to leave it to RoomPS
+ * gRiverNight c146: rgb the moon's tint the caustic takes at night, w 1 at
+ *             night and 0 by day
+ * gRiverLight c147: x the relief's light, the brightness a unit of slope
+ *             toward the class light adds; y, z, w unused */
 #define HD_RIVER_SKIN 1.4f
 #define HD_RIVER_THIN 24.0f
 
 float4 gRiverFlow : register(c132);
 float4 gRiverEdge : register(c133);
+float4 gRiverNight : register(c146);
+float4 gRiverLight : register(c147);
 
 float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 {
@@ -2836,9 +2860,24 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		stretch;
 	const float3 V = normalize(input.eye.xyz);
 
-	float3 col = gRiverFlow.w * light * keepFog *
-		lerp(gWaterRefl.rgb, gWaterZen.rgb, saturate(abs(V.y)));
-	float a = 0.6f * gRiverFlow.w * dark;
+	// The relief's light: the rows' slope against the class light.
+	float2 slope;
+
+	WaveSum8(WaveBend(world.xz, t, gWaveK[0].x),
+		float4(gWaveP[0].xyz, gWaveP[0].w * input.keepA.x),
+		float4(gWaveP[1].xyz, gWaveP[1].w * input.keepA.y),
+		float4(gWaveP[2].xyz, gWaveP[2].w * input.keepA.z),
+		float4(gWaveP[3].xyz, gWaveP[3].w * input.keepA.w),
+		float4(gWaveP2[0].xyz, gWaveP2[0].w * input.keepB.x),
+		float4(gWaveP2[1].xyz, gWaveP2[1].w * input.keepB.y),
+		float4(gWaveP2[2].xyz, gWaveP2[2].w * input.keepB.z),
+		float4(gWaveP2[3].xyz, gWaveP2[3].w * input.keepB.w), slope);
+
+	const float relief = -dot(slope, gWaterSun.xz) * gRiverLight.x;
+
+	float3 col = (gRiverFlow.w * light + max(relief, 0.0f)) * keepFog *
+		gWaterHigh.rgb;
+	float a = 0.6f * (gRiverFlow.w * dark + max(-relief, 0.0f));
 
 	// The light on the floor, carried with the current.
 	const float depth = input.roomPos.w;
@@ -2857,8 +2896,10 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float2 uv = (vpos + 0.5f) * gWaterScreen.xy;
 	const float3 floorCol = tex2Dlod(sWaterCopy, float4(ScreenClamp(uv),
 		0.0f, 0.0f)).rgb;
+	const float3 causticCol = lerp(floorCol, dot(floorCol,
+		float3(0.299f, 0.587f, 0.114f)) * gRiverNight.rgb, gRiverNight.w);
 
-	col += floorCol * (share * max(m, 0.0f));
+	col += causticCol * (share * max(m, 0.0f));
 	a = 1.0f - (1.0f - a) * (1.0f - share * max(-m, 0.0f));
 
 	/* The foam where it ends: one blob the width of the river, not the

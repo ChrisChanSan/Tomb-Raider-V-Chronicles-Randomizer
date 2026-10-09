@@ -989,4 +989,4 @@ const BYTE kHDRoomWaterRiverPS[] =
       0,   0,   0, 128,   0,   0, 
     249, 128, 255, 255,   0,   0
 };
-// bshader-stamp fd885fc7e0832fd7828d54966b1236dc
+// bshader-stamp 4033b14903a21641690dc98dac822a89

@@ -421,6 +421,7 @@ float4 gWaveV2[4] : register(c24);
  * c134 - c136 gUnderSigma, gUnderLight, gUnderUp   per frame (the eye
  *                                 under the water; not in the gloss
  *                                 variant, see "under the water")
+ * c145        gUnderClear         per frame (the same, its clear zone)
  *
  * and in the gloss variant alone (compiled with HD_GLOSS, see "The sheen"
  * below):
@@ -1461,7 +1462,9 @@ float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float3 own, float da
  * L the length of the eye ray that runs in the water: the whole distance d
  * to a point under the surface, and d D / h to a point above it, D the eye's
  * depth under the surface and h the point's height over the eye along world
- * up - one expression for both, d saturate(D / h). The near stays clear, the
+ * up - one expression for both, d saturate(D / h) - less the clear zone
+ * round the eye (gUnderClear.x), never under 0: what lies within it keeps
+ * its own colour, so a figure close to the camera never changes it. The
  * far takes the water's colour; brighter where the ray looks up, toward the
  * light that comes in from above (gUnderLight.w times the ray's upward
  * cosine), darker where it looks down.
@@ -1472,26 +1475,33 @@ float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float3 own, float da
  * looks the same from inside as from above it.
  *
  * gUnderSigma  rgb sigma per channel, w sigma_s, both per unit
- * gUnderLight  rgb the scattered colour, w the gain of the upward look
+ * gUnderLight  rgb the scattered colour times its largest share of the
+ *              mix, w the gain of the upward look
  * gUnderUp     xyz world up (-y) in view space, w D in units
+ * gUnderClear  x the clear zone round the eye in units
  *
- * Per frame, written by HDRenderFrameBegin; all twelve zero unless the eye
+ * Per frame, written by HDRenderFrameBegin; all thirteen zero unless the eye
  * is in a water room of a level with sheets - and with them zero the path is
  * 0, the transmission exactly 1 and the scatter 0, so the colour comes out
- * to the bit as it went in. In RoomPS, GlowPS and ModelPS (hd_model.hlsl
- * holds the twin) and the sheet's HD_WATER_UNDER variant; the gloss variant
- * has no slots left for it and keeps the distance fog. `share` is 1 where
- * the surface scatters the water's light toward the eye and 0 in the
- * additive pass, a glow, which the water only dims. */
+ * to the bit as it went in. c145 and not c137: the waterfall's foot writes
+ * c137 - c144 per draw, and nothing writes c145 but the frame. In RoomPS,
+ * GlowPS and ModelPS (hd_model.hlsl holds the twin) and the sheet's
+ * HD_WATER_UNDER variant; the gloss variant has no slots left for it, and
+ * while the eye is under the water its faces draw with RoomPS
+ * (hd_render.cpp, "under the water"). `share` is 1 where the surface
+ * scatters the water's light toward the eye and 0 in the additive pass, a
+ * glow, which the water only dims. */
 float4 gUnderSigma : register(c134);
 float4 gUnderLight : register(c135);
 float4 gUnderUp : register(c136);
+float4 gUnderClear : register(c145);
 
 float3 UnderWater(float3 col, float3 viewPos, float share)
 {
 	const float d = length(viewPos);
 	const float h = dot(viewPos, gUnderUp.xyz);
-	const float path = d * saturate(gUnderUp.w / max(h, 1.0e-3f));
+	const float path = max(d * saturate(gUnderUp.w / max(h, 1.0e-3f)) -
+		gUnderClear.x, 0.0f);
 	const float S = 1.0f - exp(-path * gUnderSigma.w);
 	const float up = max(1.0f + gUnderLight.w * h / max(d, 1.0f), 0.0f);
 
@@ -2498,8 +2508,9 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * is the whole distance and its upward cosine V.y (y counts down, V
 	 * points to the eye). What the sheet adds of its own goes as the scene
 	 * goes, and its share of the scattered light is its own cover `a`; the
-	 * frame behind it, added below, carries its own extinction already. */
-	const float under = length(input.eye.xyz);
+	 * frame behind it, added below, carries its own extinction already. The
+	 * clear zone round the eye as in UnderWater. */
+	const float under = max(length(input.eye.xyz) - gUnderClear.x, 0.0f);
 
 	col = col * exp(-under * gUnderSigma.rgb) + gUnderLight.rgb * (a *
 		(1.0f - exp(-under * gUnderSigma.w)) *
@@ -2582,7 +2593,13 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * Per segment: the pixel's distance d to the segment, its way u along the
  * segment's line and its signed distance `across` from that line - u and
  * across run on past the segment's ends, so the pattern is one piece all
- * round them. The zone's reach R is the segment's (gFootReach.x) times
+ * round them. Past an end d counts the way beyond it divided by that
+ * end's head (gFootReach.z at the start, .w at the end): 1 is the round
+ * cap of a joint or of a curtain without a gap, and an end at a gap
+ * where no water lands stops within its head times the reach, so the
+ * foam of a strand closes in an oval's head and open water lies between
+ * two strands (hd_render.cpp, "the foot of a waterfall"). The zone's reach
+ * R is the segment's (gFootReach.x) times
  * 0.8 + 0.2 of the bank foam's patch field here (WaterVS, PatchField) and
  * times 0.85 + 0.3 of the mean of a slow lobe field's two waves: an outline
  * that is irregular and changes slowly. x = d / R runs from 0 at the line
@@ -2610,8 +2627,9 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * threshold from 1.25 at the rim to -0.05 at the line along (1 - x) to the
  * power 0.75 - dense near the line, lace over the outer half -, the
  * smoothstep round it, times 0.4 + 0.6 (1 - x), times the segment's
- * strength (gFootReach.y: the body's foam scale, less over a gap of the
- * curtain where no water lands), the most of all the segments, at most 0.75
+ * strength (gFootReach.y: the body's foam scale; a gap of the curtain
+ * where no water lands is no segment of the draw), the most of all the
+ * segments, at most 0.75
  * like all foam. Then the foam's body and the distance fog exactly as
  * WaterPS lays them on. Seen from below nothing: foam is drawn from above
  * alone, as in WaterPS.
@@ -2623,7 +2641,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * stretch of 0.45 drew a comb.
  *
  * gFootReach  c137 - c144, one segment a register: x its reach in units,
- *             y its strength */
+ *             y its strength, z and w the heads of its start and end */
 #define HD_FOOT_SPEED 220.0f
 #define HD_FOOT_STRETCH 0.75f
 #define HD_FOOT_SIDE 260.0f
@@ -2651,14 +2669,15 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 			break;
 
 		const float4 s = gFootSeg[i];
-		const float2 r = gFootReach[i].xy;
+		const float4 r = gFootReach[i];
 		const float2 ab = s.zw - s.xy;
 		const float len = max(length(ab), 1.0f);
 		const float2 dir = ab / len;
 		const float2 rel = world.xz - s.xy;
 		const float u = dot(rel, dir);
 		const float across = dir.x * rel.y - dir.y * rel.x;
-		const float d = length(rel - dir * clamp(u, 0.0f, len));
+		const float d = length(float2(across, max(-u, 0.0f) / r.z +
+			max(u - len, 0.0f) / r.w));
 		const float reach = max(r.x * spread, 1.0f);
 		const float x = saturate(d / reach);
 		const float w = 2.0f * reach * (1.0f - sqrt(1.0f - min(x, 0.98f)));

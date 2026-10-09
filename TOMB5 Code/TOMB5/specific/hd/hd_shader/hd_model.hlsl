@@ -261,6 +261,7 @@ float4 gSoft[4] : register(c163);
  * c40 - c71   gBulbs[32]          per frame  (16 bulbs, two registers each)
  * c134 - c136 gUnderSigma, gUnderLight, gUnderUp   per frame (the eye
  *                                 under the water)
+ * c145        gUnderClear         per frame (the same, its clear zone)
  *
  * The same numbers hd_room.hlsl uses, and for the same things - one table of
  * "register -> meaning" for the whole HD path. The ONE difference is the
@@ -303,7 +304,7 @@ float4 gLights[HD_MAX_LIGHTS * 2] : register(c20);
  * (r, g, b, density). */
 float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
 
-/* Under the water: the twin of hd_room.hlsl's UnderWater, the same three
+/* Under the water: the twin of hd_room.hlsl's UnderWater, the same four
  * registers written once a frame for both shaders - the note there says
  * what they hold and why all zero changes nothing. A model's pixel has its
  * view position and no room position, which is why world up comes in view
@@ -311,12 +312,14 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
 float4 gUnderSigma : register(c134);
 float4 gUnderLight : register(c135);
 float4 gUnderUp : register(c136);
+float4 gUnderClear : register(c145);
 
 float3 UnderWater(float3 col, float3 viewPos, float share)
 {
 	const float d = length(viewPos);
 	const float h = dot(viewPos, gUnderUp.xyz);
-	const float path = d * saturate(gUnderUp.w / max(h, 1.0e-3f));
+	const float path = max(d * saturate(gUnderUp.w / max(h, 1.0e-3f)) -
+		gUnderClear.x, 0.0f);
 	const float S = 1.0f - exp(-path * gUnderSigma.w);
 	const float up = max(1.0f + gUnderLight.w * h / max(d, 1.0f), 0.0f);
 

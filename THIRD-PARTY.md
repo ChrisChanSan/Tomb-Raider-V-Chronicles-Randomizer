@@ -1055,7 +1055,7 @@ water surface", carries the tables.
     and the brightest stayed under 128 of 255 (RoomProbe, the river's pixels
     found with `-waterdepthview 1`).
 127. **The river's sheen and its moving caustic** - long thin lines along
-    the flow drawn lighter (a share of the reflection's colour) and darker
+    the flow drawn lighter (a share of the highlight's colour) and darker
     (through alpha) than the water instead of white dashes, and the caustic
     laid on the floor seen through a river at the floor point under the
     pixel, carried with the current, while the floor's own standing caustic
@@ -1067,11 +1067,11 @@ water surface", carries the tables.
     water room, way, speed) applied after the override rows and before the
     file, and a row's room naming the water room under a square where the
     room holds no square of its own. OWN; the ways are the arrows of
-    reference pictures supplied for this project, read against the level's
-    axes; DATA: ANDY3's squares over water rooms 66, 70 and 67 are bodies of
-    their own, 4, 3 and 1 squares, 256 units deep (the randomizer's
-    `Tr5Level`; RoomProbe `-hdwater 1 -nodraw`); 400 units a second a free
-    choice.
+    reference pictures supplied for this project, placed in the level as
+    entry 132 says; DATA: ANDY3's squares over water rooms 66, 70 and 67
+    are bodies of their own, 4, 3 and 1 squares, 256 units deep (the
+    randomizer's `Tr5Level`; RoomProbe `-hdwater 1 -nodraw`); 400 units a
+    second a free choice.
 129. **The deep look's own light** - in a level that takes the deep look,
     the scattered light under the water is the section's deep colour, dimmed
     by the eye's depth under the highest top of the level's water rooms
@@ -1081,6 +1081,43 @@ water surface", carries the tables.
     randomizer's `Tr5Level`, `ROOM_INFO`); the far wall's mean colour at the
     start cavern went from 63, 99, 105 to 15, 33, 42 (RoomProbe
     `-underwater`).
+130. **The night's light on the water** - a section of the palette marked
+    night (Ireland: ANDY1 to ANDY3) lights its water by the moon: a body's
+    colours take the luma of its rooms' light times a cool tint of luma 1
+    (0.90, 1.01, 1.22), its highlight and foam the same tint, under the sky
+    the highlight at 0.4 and the foam at 0.6 of the day's; the floor and
+    wall caustic RoomPS lays is off at night, and a river's drifting caustic
+    is the floor's luma in the moon's tint at half strength. OWN, a rule of
+    this project; which levels are night is DATA, a project decision on how
+    those levels look in game; the tint and the shares free choices, set by
+    eye on RoomProbe pictures of ANDY1 to ANDY3; DATA: on ANDY3's river and
+    stream the gold pixels (hue 15 to 55 degrees, saturation over 0.35)
+    fell from 18.8 to 8.3 % and from 13.0 to 8.8 % of the water's pixels,
+    what is left the beds' own colour (RoomProbe, the sheet's pixels of
+    `-waterdepthview 1`; the caustic alone taken off removes the lattice and
+    leaves the hue).
+131. **The relief's light on a river** - RiverPS lights the eight rows'
+    slope against the class light's way along the surface, lighter toward
+    it and darker away, with no Fresnel and no reflection in it, so a
+    river's crests read as streaks along the flow at every angle; the
+    sheen's lighter lines take the highlight's colour for the same reason.
+    OWN, general graphics knowledge (a surface's slope lit by a light, as
+    any shaded relief), the gain of 7 set by eye on RoomProbe strips; DATA:
+    the waves' share of the picture (the mean change a test row `waves 0`
+    makes) on ANDY3's stream of room 66 seen from above rose from 0.77 to
+    5.95 of 255, at eye level from 1.48 to 5.68, the brightest river pixel
+    outside the end's foam 113 of 255 (RoomProbe, 960 by 540).
+132. **The streams' ways placed by the editor camera** - a reference
+    picture's arrow is placed in the level through the camera the editor
+    shows with it: RoomProbe draws the same view from the editor's
+    position, yaw and pitch (the editor's yaw is RoomProbe's, its pitch
+    counts the other way); without them, the view is the RoomProbe camera
+    whose open sky and trigger squares match the picture. OWN, with the
+    reference pictures supplied for this project as the measure; DATA:
+    ANDY3's stream of room 66 runs -z and that of room 70 -x (the table had
+    them the other way), room 67's +x; the floors under them are flat and
+    give no way, their water rooms join river, streams and room 96 in one
+    chain down to the east (the randomizer's `Tr5Level`).
 
 ## Credited, but not contained here
 

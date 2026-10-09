@@ -10765,6 +10765,118 @@ changed there without a fault it causes.
 
 **Commits.** `c6832f1`, `6d49f59`.
 
+**After the owner's seventh play test of 2026-10-09.** The builds of `a2e33fd` and
+`4586fc7` were played (reference pictures supplied for this project, not in the
+repository). Asked for in this part: the Andy levels are interiors, and their exteriors
+are all night - the golden light under the water has to go there; the river's flow shows
+at some angles only, as a streaky animation that is to be the standard at every angle, not
+glaring white, with the waves keeping their relief; the stream of room 66 runs the wrong
+way. Accepted: JOBY4. The pond's edge is another part of this round.
+
+The night (`hd_render.cpp` `kWaterPalette`, "the night" over `kWaterMoon`, `water_lit`,
+`water_look`, `upload_water_room`, `draw_river`; `hd_room.hlsl` `RiverPS`). Measured first
+with RoomProbe at ANDY3's river from its lower end, at a camera found to match the owner's
+picture of the two circles, at an ANDY1 pool and at ANDY2, each light term taken away in
+turn in a build made for the measurement alone: the body light to a grey of its luma, the
+highlight off, the reflection to grey, the caustic off, the river's sheen off. On the
+sheet's pixels (`-waterdepthview 1` against the picture) the chroma-weighted mean hue
+stayed at 15 to 17 degrees and the share of gold pixels (hue 15 to 55, saturation
+over 0.35, value over 0.25) at 13 to 22 % whatever was taken away: the light of ANDY3's
+river is 0.30, 0.32, 0.34 (the floor of 0.30), the sky's horizon and the highlight move
+the hue by under a degree. The warm colour is the stream beds' own art seen through 256 to
+1,024 units of clear water (with `-hdwater 0` the beds are red-orange), and the gold
+lattice on it is the caustic: RoomPS multiplies the floor's own light by 1 + 0.3 w c (up
+to 1.78 at the surface) and RiverPS lays the same on the frame's copy, so the bright lines
+take the bed's colour. With the caustic taken off the lattice goes and the hue stays.
+ANDY2's bodies take 0.95, 0.45, 0.30 and 1.06, 0.48, 0.30 (its lamps); indoors that light
+colours the water, its highlight and its foam. Now the palette's sections carry a night
+flag, Ireland's set (ANDY1 to ANDY3, a project decision on how those levels look): there a
+body's colours take the moon's light - the luma of its rooms' light
+times 0.90, 1.01, 1.22, a cool tint of luma 1 -, its highlight and foam the same tint,
+under the sky the highlight at 0.4 and the foam at 0.6 of the day's; RoomPS's caustic is
+off at night (c16.x 0: a moon colour there would cost slots RoomPS, at 510 of 512, and its
+depth twin, at 509, do not have, and the moon casts no caustic the eye resolves), and a
+river's drifting caustic stays at half strength as the floor's luma in the moon's tint
+(RiverPS c146). The sky rows are the domes as measured and stay. Rome, Russia and the VCI
+keep their look: their hue is their palette's, and no word makes them night. Free choices,
+set by eye on the round's RoomProbe pictures of ANDY1 to ANDY3.
+
+The flow as the standard (`hd_room.hlsl` `RiverPS`, "the relief's light"; `hd_render.cpp`
+`kRiverRelief`). Measured first: the owner's two circles are the river of rooms 38 and 41
+(OK) and the stream of room 66 (N.OK), seen from above beside the bank between them. The
+streaks in the OK circle are the class highlight on the stretched rows near its mirror
+angle - with the highlight off they go; the river's sheen changed nothing measurable,
+because it took the reflection's colour from horizon to zenith by the view's slope, and
+from above that is ANDY's zenith, 11, 19, 32. The rows' fade (WaterVS `keepA`, `keepB`) is
+not what flattens the water: the waves' share of the picture (the mean luma change a test
+row `waves 0` makes) on the river, the stream and at eye level was 10.44, 0.77, 1.48 with
+it and 10.55, 0.82, 1.65 without it at 960 x 540, the same to the second decimal at 1920 x
+1080; the slope gain at every angle raised it to 16.59, 1.40, 2.22 on the river alone, and
+it lives in WaterPS, whose depth variant has three slots left. The stream shows no relief
+because it is 256 units deep - the bend is 1 - T = 0.17 of the river's absorption length,
+three units for the steepest rows - and the highlight stands off its mirror angle. Now
+RiverPS lights the relief: the eight rows' slope at the bent place, with WaterVS's fade,
+against the class light's way along the surface, lighter toward it by 7 times the slope of
+the highlight's colour, darker away through alpha (0.6 of that share), with no Fresnel and
+no reflection in it, so the crests read as long streaks along the flow from every angle,
+carried with the current and swelling and fading with the rows' envelopes; the sheen's
+lighter lines take the highlight's colour too. The waves' share rose on the stream to 5.95
+(6.45 at 1920 x 1080), at eye level to 5.68, on the river 9.23 (the gold lattice that
+carried the rest is gone at night). WaterPS and the rows' fade are as they were. The gain
+of 7 and the moon's highlight of 0.4 are free choices, set by eye with the brightest river
+pixel outside the end's foam at 113 of 255.
+
+The streams (`hd_render.cpp` `kWaterFlow`). The owner's picture of room 66 shows the
+editor's camera panel: RoomProbe draws the same view from that position, yaw and pitch
+(the yaw the editor's, 0 along +z and 90 along +x; the pitch counted the other way), so
+the screen's right at a yaw of 267 is +z and his arrow, right to left, runs -z: the table
+had +z, the sixth round having read the screen's left as +z. The picture of room 70 has no
+panel; of four RoomProbe cameras round the stream only the one from the east, looking
+west, shows the open sky where the editor's picture shows it, and its far end is the land
+square 44,032, 22,528 that the randomized level marks as a trigger, magenta in the editor
+with a creature on it; the arrow runs to that end, -x, into the pond's water room 73 the
+stream joins at its west end - the table had +x. Room 67's picture is taken from room 96;
+its arrow runs toward the camera, +x, as the table had it. The floors under all three are
+flat, every corner at its square's height, so they give no way; the water rooms agree with
+the arrows: room 59 joins the river to room 66's square of room 38 under the bank, rooms
+66 and 67 meet under the land at z 28,672 to 29,696, and room 96's floor falls a click
+from x 48,128 to 49,152 - one way down from the river through 66 and 67 to the east.
+
+**Measured.** Slots, fxc /O3: `RiverPS` 299 to 379 - the relief's light 77, the night's
+colour of the caustic 3, the sheen's colour 0; every other shader keeps its bytecode apart
+from the stamp line (18 of 19). GPU, 2560 x 1440, three runs: the full-water
+view 0.199, 0.196, 0.200 ms against 0.198 three times at `4586fc7`; ANDY3's river at eye
+level 14 river draws 0.078 ms against 0.069, from above 16 draws 0.078 to 0.080
+against 0.069 to 0.070. The night views at 1, 3 and 5 seconds, the sheet's pixels: ANDY3
+from above beside the bank gold 18.8 to 8.3 % (hue 15.3 to 11.2 degrees, the lattice's
+luma left after a nine-pixel blur 7.96 to 6.81), the river from its lower end 13.0 to 8.8
+% (15.7 to 13.1 degrees), ANDY1's pool 0 % both (hue 162 to 172, the lattice 4.25
+to 2.64), ANDY2's basin of room 52 0.23 to 0 % (hue 73 to 79); ANDY2's floor caustic of
+room 158 seen without a sheet goes, the lattice 5.28 to 4.02. The river's pixels outside
+the end's foam, mean, brightest, 99th percentile and motion from 3 to 3.1 seconds: from
+above beside the bank 48.7, 163, 119, 10.89 before and 42.3, 113, 80, 9.42 after; at eye
+level 32.8, 95, 65, 6.13 and 34.6, 86, 63, 7.54; from the roof 36.2, 126, 73, 7.96
+and 36.0, 91, 67, 8.15; from the lower end 36.2, 93, 67, 6.16 and 37.7, 88, 67, 7.25. The
+sweep: 565 squares, 56 bodies, 118 twins as at `87380fb`; ANDY3's bodies 4 and 5 turn
+(`flow=-1.00,0.00,400`, `0.00,-1.00,400`), every level line ends with `night=`, every body
+line with `lit=`; nothing else moved.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set; with `-hdwater 1`, 15 of
+15 identical to `87380fb` (none shows a night level); the three streams from the editor's
+cameras with their ways drawn in; the text file (`ANDY3 66 river flow 0 1 300`, `ANDY3 70
+basin` and `ANDY3 67 none` override the table, `applied=6`, `unmatched=0`); the suites
+(ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the
+engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the moon's water in
+ANDY1 to ANDY3, the streaks at the owner's angles and his screen's size, the streams'
+ways. The stream beds' own red-orange art shows through the clear water as before; only
+its gold lines are gone. ANDY1's pools lose their caustic net with the rule; a night level
+that wants it back has no row for it. The pond's edge is another part.
+
+**Commits.** `c4ebe16`, `16aad52`, `680dfd9`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

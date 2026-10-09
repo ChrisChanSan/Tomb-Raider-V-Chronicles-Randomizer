@@ -1703,6 +1703,8 @@ static float g_seed_origin[2] = { 0.0f, 0.0f };
 // -nomark: the stand-ins without the mark (the picture before it);
 // -markview: the marked pixels in red over the finished picture.
 static bool g_creature_mark = true;
+// -twophase: the solid and the blend phase in two brackets, as the game.
+static bool g_two_phase = false;
 static bool g_mark_view = false;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
@@ -6935,6 +6937,9 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -creature x,z   a stand-in for a swimming creature at "
 			"world x, z, drawn with the creatures' mark, repeatable; "
 			"-nomark draws it without, -markview shows the mark in red\n");
+		printf("       -twophase   the solid and the blend phase in two "
+			"brackets, as the game draws them; with -creature the mark's "
+			"WATERLOG line is printed\n");
 		printf("       -foot x1,z1,x2,z2,r   a waterfall's foot on the "
 			"sheets along that line, reach r, repeatable; -swirl x,z,r one "
 			"of length 0\n");
@@ -7179,6 +7184,8 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-nomark"))
 			g_creature_mark = false;
+		else if (!strcmp(argv[at], "-twophase"))
+			g_two_phase = true;
 		else if (!strcmp(argv[at], "-markview"))
 			g_mark_view = true;
 		else if ((!strcmp(argv[at], "-plane") ||
@@ -8885,6 +8892,7 @@ static int ProbeMain(int argc, char** argv)
 					HDWaterSink k;
 
 					k.x = cams[c].x;
+					k.y = cams[c].y;
 					k.z = cams[c].z;
 					k.strength = cams[c].room;
 					table.push_back(k);
@@ -9455,6 +9463,18 @@ static int ProbeMain(int argc, char** argv)
 					printf("-creature %.0f,%.0f: no sheet there - not drawn\n",
 						g_creatures[i], g_creatures[i + 1]);
 
+			/* -twophase: the game's two brackets - HDFrameDraw closes the
+			 * first after the objects and HDFrameDrawGlow opens the second
+			 * after the classic buckets (output.cpp) - so the mark is
+			 * tested across the bracket's end as the game draws it. */
+			if (g_two_phase)
+			{
+				HDRenderScissorOff();
+				HDRenderFrameEnd();
+				HDRenderFrameBegin((const D3DMATRIX*)view, &projection,
+					&frame);
+			}
+
 			/* The frame behind the water sheets, where HDFrameDrawGlow takes
 			 * it: after everything opaque, before the glass, once, and only
 			 * when a drawn group has a sheet. */
@@ -9489,6 +9509,13 @@ static int ProbeMain(int argc, char** argv)
 
 			if (g_mark_view && !HDRenderWaterMarkView())
 				printf("-markview: the depth surface has no stencil\n");
+
+			// The mark's own line for this frame, as the engine logs it.
+			char markLine[256];
+
+			if (!g_creatures.empty() && HDRenderWaterMarkLine(stem,
+				markLine, sizeof(markLine)))
+				printf("%s\n", markLine);
 		}
 	}
 

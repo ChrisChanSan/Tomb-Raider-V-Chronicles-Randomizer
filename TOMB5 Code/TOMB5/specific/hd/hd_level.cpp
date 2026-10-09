@@ -1976,6 +1976,7 @@ static void BuildWaterSheets()
 		HDWaterSink k;
 
 		k.x = camera.fixed[c].x;
+		k.y = camera.fixed[c].y;
 		k.z = camera.fixed[c].z;
 		k.strength = camera.fixed[c].data;
 		table.push_back(k);
@@ -6847,9 +6848,17 @@ void HDFrameDraw()
 	 * Lara and the objects mark their pixels for the water sheets, which
 	 * draw no waterline on them (hd_render.cpp, "the creatures' mark");
 	 * nothing without sheets that read the depth texture. */
+	if (gLogEnabled)
+	{
+		char line[256];
+
+		if (HDRenderWaterMarkLine(g_stem, line, sizeof(line)))
+			Log("%s", line);
+	}
+
 	HDRenderWaterMarkBegin();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_SOLID);
-	HDRenderWaterMarkEnd();
+	HDRenderWaterMarkEnd(objects_here);
 
 	/* And the models take the projected shadow, on the depth they have just
 	 * written; the shadow's log line then has the whole frame's passes. */

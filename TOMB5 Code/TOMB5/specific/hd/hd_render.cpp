@@ -8764,6 +8764,12 @@ namespace
 	 * supplied for this project). Free choices, set by eye on the round's
 	 * RoomProbe pictures. */
 	const float kSinkUnitsPerSecond = 120.0f;
+	/* Sinks lying in a body's water make it a river when their trigger
+	 * squares number at least a quarter of its own (HDRenderSetWaterSheets,
+	 * "a sink in the water"): ANDY3's river of rooms 38 and 41 stands at 1.0
+	 * and its sea of rooms 10 to 17 at 0.05 - a free choice between the
+	 * two, a count on our data. */
+	const double kRiverCover = 0.25;
 	const float kRiverLookCap = 720.0f;
 	const float kRiverStreakRate = 1.4f;
 	const float kRiverStreak = 0.5f;
@@ -9105,6 +9111,19 @@ namespace
 	bool g_mark_frame = false;
 	bool g_mark_open = false;
 	DWORD g_mark_saved[kMarkStateCount] = {};
+	/* What the mark's log line (HDRenderWaterMarkLine) reports of the last
+	 * frame: why the bracket opened or not (0 open, 1 no device, 2 no sheets
+	 * built, 3 no depth texture, 4 no depth variant, 5 no stencil), whether
+	 * the depth-stencil surface the mark wrote to and the one the sheets
+	 * tested were the INTZ surface, the objects drawn in the bracket, the
+	 * sheet draws and the split draws; logged once a level. */
+	int g_mark_why = 0;
+	int g_mark_surface = 0;
+	int g_mark_objects = 0;
+	int g_mark_sheet_surface = 0;
+	int g_mark_sheets = 0;
+	int g_mark_split = 0;
+	bool g_mark_logged = false;
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
 	IDirect3DIndexBuffer9* g_sheet_ib = 0;
@@ -9205,6 +9224,9 @@ namespace
 		g_wroom_body.clear();
 		g_lara_in_water = false;
 		g_mark_frame = false;
+		g_mark_sheets = 0;
+		g_mark_split = 0;
+		g_mark_logged = false;
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
 		g_wlevel.fileLines = -1;
@@ -10652,6 +10674,97 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		lit[(size_t)s.body]++;
 	}
 
+	/* A sink in the water. A sink of the camera table - an entry a TO_SINK
+	 * command names - that lies in a body's water, inside one of its squares,
+	 * at or under its surface and above the floor there, pulls that body too,
+	 * wherever its trigger squares lie: the mean way from each of them to
+	 * the sink (the way LaraWaterCurrent steers her there) and the speed its
+	 * strength gives. A body is a river by them only when their trigger
+	 * squares number at least kRiverCover of its own squares - a current
+	 * along the body, not a drain in a pool: in ANDY3 the river of rooms 38
+	 * and 41 holds sinks 7, 8 and 18, named by 10 squares against its 10,
+	 * and the sea of rooms 10 to 17 holds sink 1, named by 2 squares
+	 * against its 42 (bank/sinks, a tool of this round's) - refused. */
+	if (sheets && !g_wsinks.empty())
+	{
+		const size_t nb = g_wbodies.size();
+		std::vector<int> body(g_wsinks.size(), -1);
+		std::vector<int> named(g_wsinks.size(), 0);
+		std::vector<int> places(nb, 0);
+		std::vector<int> cover(nb, 0);
+
+		for (size_t i = 0; i < g_wsquares.size(); i++)
+			if (at[WaterKey(g_wsquares[i].wx, g_wsquares[i].wz,
+				g_wsquares[i].wy)] == (int)i)
+				places[(size_t)g_wsquares[i].body]++;
+
+		for (int r = 0; r < count; r++)
+			for (int i = 0; rooms[r].sink && i < rooms[r].sizeX *
+				rooms[r].sizeZ; i++)
+				if (rooms[r].sink[i] >= 0 &&
+					rooms[r].sink[i] < (int)named.size())
+					named[(size_t)rooms[r].sink[i]]++;
+
+		for (size_t c = 0; c < g_wsinks.size(); c++)
+		{
+			const HDWaterSink& k = g_wsinks[c];
+
+			for (size_t i = 0; named[c] && i < g_wsquares.size(); i++)
+			{
+				const WaterSquare& s = g_wsquares[i];
+
+				if (k.x < s.wx || k.x >= s.wx + 1024 || k.z < s.wz ||
+					k.z >= s.wz + 1024 || k.y < s.wy ||
+					k.y > s.wy + s.depth)
+					continue;
+
+				body[c] = s.body;
+				cover[(size_t)s.body] += named[c];
+				break;
+			}
+		}
+
+		for (size_t c = 0; c < g_wsinks.size(); c++)
+		{
+			if (body[c] < 0)
+				continue;
+
+			const HDWaterSink& k = g_wsinks[c];
+			const size_t b = (size_t)body[c];
+			HDRenderWaterBody& info = g_wbodies[b].info;
+
+			if (cover[b] < kRiverCover * places[b])
+			{
+				info.refused++;
+				continue;
+			}
+
+			for (int r = 0; r < count; r++)
+				for (int i = 0; rooms[r].sink && i < rooms[r].sizeX *
+					rooms[r].sizeZ; i++)
+				{
+					if (rooms[r].sink[i] != (int)c)
+						continue;
+
+					const double dx = (double)k.x - (rooms[r].originX +
+						(i / rooms[r].sizeZ) * 1024 + 512);
+					const double dz = (double)k.z - (rooms[r].originZ +
+						(i % rooms[r].sizeZ) * 1024 + 512);
+					const double len = sqrt(dx * dx + dz * dz);
+
+					if (len > 1.0)
+					{
+						pull[b * 3] += dx / len;
+						pull[b * 3 + 1] += dz / len;
+					}
+				}
+
+			pull[b * 3 + 2] += kSinkUnitsPerSecond * k.strength;
+			info.sinks++;
+			info.lying++;
+		}
+	}
+
 	for (size_t b = 0; b < g_wbodies.size(); b++)
 	{
 		HDRenderWaterBody& info = g_wbodies[b].info;
@@ -11654,14 +11767,49 @@ void HDRenderWaterLara(int inWater, float x, float z)
  * marked: they hold the statics of the rooms that stay classic, whose wet
  * line is a bank's; every creature that swims in TR5 - the rat - has an HD
  * model (MapProbe, the RAT slot in every level). */
+/* Whether the depth-stencil surface now set is the sheets' INTZ surface. */
+static int depth_is_intz()
+{
+	IDirect3DSurface9* now = 0;
+
+	if (!g_device || FAILED(g_device->GetDepthStencilSurface(&now)) || !now)
+		return 0;
+
+	const int same = now == g_depth_surface ? 1 : 0;
+
+	now->Release();
+	return same;
+}
+
+bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size)
+{
+	if (!out || !size || g_mark_logged || !g_mark_sheets)
+		return false;
+
+	g_mark_logged = true;
+	snprintf(out, size, "WATERLOG level=%s mark=%d why=%d mark_intz=%d "
+		"objects=%d sheet_intz=%d sheets=%d split=%d", stem ? stem : "?",
+		g_mark_frame ? 1 : 0, g_mark_why, g_mark_surface, g_mark_objects,
+		g_mark_sheet_surface, g_mark_sheets, g_mark_split);
+	return true;
+}
+
 void HDRenderWaterMarkBegin()
 {
 	g_mark_frame = false;
 	g_mark_open = false;
+	g_mark_surface = 0;
+	g_mark_objects = 0;
+	g_mark_sheet_surface = 0;
+	g_mark_sheets = 0;
+	g_mark_split = 0;
+	g_mark_why = !g_device ? 1 : !g_wlevel.built ? 2 : !g_depth_texture ? 3 :
+		!g_water_depth_ps ? 4 : !depth_has_stencil() ? 5 : 0;
 
-	if (!g_device || !g_wlevel.built || !g_depth_texture || !g_water_depth_ps ||
-		!depth_has_stencil())
+	if (g_mark_why)
 		return;
+
+	g_mark_surface = depth_is_intz();
 
 	for (int i = 0; i < kMarkStateCount; i++)
 		g_device->GetRenderState(kMarkStates[i], &g_mark_saved[i]);
@@ -11685,10 +11833,12 @@ void HDRenderWaterMarkBegin()
 	g_mark_open = true;
 }
 
-void HDRenderWaterMarkEnd()
+void HDRenderWaterMarkEnd(int objects)
 {
 	if (!g_mark_open)
 		return;
+
+	g_mark_objects = objects;
 
 	for (int i = 0; i < kMarkStateCount; i++)
 		g_device->SetRenderState(kMarkStates[i], g_mark_saved[i]);
@@ -12081,7 +12231,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
-		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d",
+		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -12089,7 +12239,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
-		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks);
+		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
+		b.lying, b.refused);
 	return true;
 }
 
@@ -12375,8 +12526,18 @@ namespace
 
 		if (body >= 0)
 		{
-			g_device->SetVertexShaderConstantF(18, g_wlooks[(size_t)body].swell,
-				1);
+			/* z, RoomVS's flood gate: 1 where the body draws its sheet and
+			 * hides the remaster's art, so the flood lays no swell, wobble or
+			 * surface caustic on the bank (hd_room.hlsl, "the flood under a
+			 * sheet"); 0 with tomb5.hd_water 0, which builds no sheet. */
+			const HDRenderWaterBody& info = g_wbodies[(size_t)body].info;
+			float swell[4];
+
+			std::memcpy(swell, g_wlooks[(size_t)body].swell, sizeof(swell));
+			swell[2] = g_wlevel.built && !info.noSheet && !info.artKeep ?
+				1.0f : 0.0f;
+			swell[3] = 0.0f;
+			g_device->SetVertexShaderConstantF(18, swell, 1);
 			g_device->SetVertexShaderConstantF(20, g_wlooks[(size_t)body].rows,
 				4);
 			return;
@@ -12785,6 +12946,10 @@ namespace
 		if (depth)
 			g_depth_texture->GetLevelDesc(0, &size);
 
+		// For the mark's log line: the surface the split tests.
+		if (!g_mark_logged && !g_mark_sheets++)
+			g_mark_sheet_surface = depth_is_intz();
+
 		// The viewport the projection maps to, for the rows' fade.
 		D3DVIEWPORT9 view_port = {};
 
@@ -12941,14 +13106,24 @@ namespace
 
 			if (split)
 			{
+				/* On a marked body no foam at all: the line, the bank's
+				 * foam and its patches (gWaterFoam.w, c102) and the
+				 * whitecaps (gWaterMisc.y, c103) - a rat 50 to 60 units
+				 * down in a small pool lies inside the bank's band, and a
+				 * patch there would paint its back as the line did. */
 				const float gap[4] = { pixel[31 * 4], pixel[31 * 4 + 1],
 					1.0e9f, pixel[31 * 4 + 3] };
+				const float bare[8] = { pixel[40], pixel[41], pixel[42], 0.0f,
+					pixel[44], 0.0f, pixel[46], pixel[47] };
 
 				g_device->SetRenderState(D3DRS_STENCILREF, kCreatureStencilBit);
 				g_device->SetPixelShaderConstantF(123, gap, 1);
+				g_device->SetPixelShaderConstantF(102, bare, 2);
 				draw_sheet_range(r);
+				g_device->SetPixelShaderConstantF(102, pixel + 40, 2);
 				g_device->SetPixelShaderConstantF(123, pixel + 31 * 4, 1);
 				g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+				g_mark_split++;
 			}
 
 			draw_feet(r, pixel);

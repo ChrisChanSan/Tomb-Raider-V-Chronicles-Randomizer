@@ -832,14 +832,15 @@ struct HDWaterRoom
 	const short* sink;		// the sink each square names, or -1
 };
 
-/* The sinks of the classic level (the camera table, OBJECT_VECTOR): world x
- * and z of each entry and its `data`, which a sink reads as its strength
+/* The sinks of the classic level (the camera table, OBJECT_VECTOR): world x,
+ * y and z of each entry and its `data`, which a sink reads as its strength
  * (game\laraswim.cpp, LaraWaterCurrent). Before HDRenderSetWaterSheets;
  * the array is copied. None leaves every body without a current. */
 struct HDWaterSink
 {
 	int x, z;
 	int strength;
+	int y;
 };
 
 void HDRenderWaterSinks(const HDWaterSink* sinks, int count);
@@ -906,6 +907,11 @@ struct HDRenderWaterBody
 	float flow[2];
 	float speed;
 	int sinks;
+	/* Sinks of the table that lie in its water (HDRenderSetWaterSheets,
+	 * "a sink in the water"): `lying` those counted - the body is long -,
+	 * `refused` those that lie in a body too short to be a river. */
+	int lying;
+	int refused;
 };
 
 // What the level built, for its log line.
@@ -1049,9 +1055,21 @@ void HDRenderWaterLara(int inWater, float x, float z);
  * `offZ` (the seed room's origin) shifts the world into, inside the mark
  * bracket - or, `mark` 0, outside it, the picture without the mark.
  * HDRenderWaterMarkView is RoomProbe's -markview: the marked pixels in
- * half-transparent red over the finished frame. */
+ * half-transparent red over the finished frame.
+ *
+ * HDRenderWaterMarkEnd takes the number of objects drawn in the bracket.
+ * HDRenderWaterMarkLine writes, once a level and for the last frame that
+ * drew a sheet, one WATERLOG line with -log: `mark=` whether that frame's
+ * bracket marked (0/1), `why=` why it did not (0 it did, 1 no device, 2 no
+ * sheets built, 3 no depth texture, 4 no depth variant, 5 no stencil),
+ * `mark_intz=` and `sheet_intz=` whether the depth-stencil surface set at
+ * the mark and at the first sheet draw was the sheets' INTZ surface (0/1),
+ * `objects=` the objects drawn in the bracket, `sheets=` the sheet draws
+ * and `split=` the ranges drawn twice for the mark. Called before
+ * HDRenderWaterMarkBegin, which starts the next frame's count. */
 void HDRenderWaterMarkBegin();
-void HDRenderWaterMarkEnd();
+void HDRenderWaterMarkEnd(int objects = 0);
+bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size);
 bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
 	int mark);
 bool HDRenderWaterMarkView();

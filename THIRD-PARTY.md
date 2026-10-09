@@ -1014,6 +1014,39 @@ water surface", carries the tables.
     the section's palette at a light of 1 (`under_deep=`). OWN, free
     choices; count on our data: JOBY4 2 and 132, the next RICH2 at 1.33
     and ANDY3 at 1.22 (RoomProbe `-hdwater 1 -nodraw`).
+122. **The rats' mark** - a swimming rat, which the classic path draws
+    between the frame's two brackets and outside the creatures' mark, is
+    marked once more before the sheets with its own mesh and matrix,
+    pulled toward the eye by 1/512 of its distance (the stand rule's
+    fraction) so that it passes against its own depth. A rule of this
+    project; DATA for the reason: ANDY1's pool rats are drawn by `DrawRats`
+    through `phd_PutPolygons` into the classic buckets, while the mark
+    brackets the HD objects alone (the owner's mark line counts 8 objects,
+    no rat among them; RoomProbe `-creature -nomark` shows the line on an
+    unmarked stand-in, `-latemark` the same picture as the bracket's mark).
+123. **Small rings after the others** - a sheet draw takes Lara's, the
+    falls' and the rows' rings first and a small ring (a bubble, a shell, a
+    rat) after them, each group youngest first. A rule of this project;
+    count on our data: a rat ripples one tick in sixteen
+    (`game/rat.cpp`) and swims 480 units a second, so eight rats start about
+    15 rings a second against the 8 a draw can show.
+124. **No dry copy beside a sheet** - in a room whose water a sheet draws,
+    a restored classic water face over a square with no water room below
+    is left out where the art draws flat in its plane there: a second copy
+    of the art's floor (the covering rule's case). A rule of this project;
+    DATA: JOBY5 room 4, 30 faces in the plane at 256, 25 over water room
+    144 and 5 over none, the deck squares 3,2, 3,3, 4,3, 5,2 and 5,3 - the
+    5 the engine restored (the classic level read with the randomizer's
+    `Tr5Level`; RoomProbe `-classicroom 4 -classicplane 256` shows the
+    fight, `-classicwet` its end).
+125. **The mist on the art's footprint** - a WATERFALLMIST emitter whose
+    mist line's middle lies within a square of a wet stretch of a curtain
+    the art's falling water placed is moved onto the nearest point of it.
+    OWN, free choice; DATA: ANDREA2 room 231's two emitters lay their mist
+    at x 56,064 (`game/effects.cpp` `WaterFall` on the classic items) and
+    the art's strands land at x 55,518 to 55,591 (the WATERLOG `seg=`
+    lines), moved by -503, 19 and -473, 52 (RoomProbe `-hdwater 1`,
+    `mist=`).
 
 ## Credited, but not contained here
 

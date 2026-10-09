@@ -10380,6 +10380,117 @@ plays or a level loads.
 
 **Commits.** `7e93916`.
 
+**After the owner's sixth play test of 2026-10-09.** The build of `9f2d2ed` was played
+(reference pictures and a log supplied for this project, not in the repository). Asked
+for in this part: ANDY1's rats are still white though the mark line says the mark works;
+JOBY5's deck shows striped bands of a depth fight; the foam under ANDREA2's fall is to
+lie where the fall's white splash is; between ANDY3's pond and its bank a dark strip of
+the bank's side shows. Kept as they are: ANDY3's pond's strength, the gloss under the
+water left out. The rivers, Alt+Enter and JOBY4 are other parts of this round.
+
+The rats (`hd_level.cpp` `MarkWaterCreatures`; `hd_render.cpp`
+`HDRenderWaterMarkTriangles`, `gather_rings`). Measured first: the water rooms under
+ANDY1's pool (134 under 13 sheet squares of room 132, 173 under one of 142) have their
+`maxceiling` at 10,240, the body's surface, so a swimming rat's ripple (`game/rat.cpp`
+sets it at that height) passes the sprite test on every sheet square and its classic
+sprite is already left out there - as in ANDREA2's sewer, whose water rooms 44, 57, 58,
+59 and 61 have theirs at 4,864, its surface (the rooms' `ROOM_INFO` read with the
+randomizer's `Tr5Level`; RoomProbe `-rippleat` gives the answer). The white is on the
+rats themselves: `DrawRats` hands their meshes to `phd_PutPolygons`, the classic buckets,
+which draw between `HDFrameDraw` and `HDFrameDrawGlow` - outside the mark, whose bracket
+holds the HD objects alone (the owner's mark line counts 8 objects, no rat). Unmarked,
+they took the waterline and the bank's foam (RoomProbe `-creature -nomark`). Now
+`HDFrameDrawGlow` marks every live rat in a water room of the frame's rooms before the
+copy: the mesh `DrawRats` picks, placed by the engine's own matrix stack
+(`phd_TranslateAbs`, `phd_RotYXZ`, the view in `aMXPtr` as the HD objects take it), its
+points pulled toward the eye by `HD_STAND_PUSH` (1/512 of their distance, the stand
+rule's fraction) so that it passes against its own depth, drawn into the creature bit
+alone with the fixed function - no colour, no depth write, every state put back. Rats are
+the only creatures the classic path draws that swim. The mark's line ends `late=<n>`, the
+triangles marked that way. The rings: a rat ripples one tick in sixteen, not every tick,
+and swims 16 units a tick, so nearly every ripple is a ring of its own - eight rats start
+about 15 a second - and a sheet draw took its eight youngest: a wading Lara's ring,
+started again every 0.6 seconds, fell out of them within about half a second. Now a small
+ring (flags 2: a bubble, a shell, a rat) comes after every other, each kind youngest
+first. No shader changes.
+
+The deck (`hd_level.cpp` `BuildWaterSurfaces`). Measured: the owner's log has `HDLOG
+room=4 water surface restored=5 of 30 face(s) at y=256, the .TRG covers 13 of them and
+lays its own water over 6, under a water sheet 19`; of the 30 classic faces in room 4's
+plane at 256, 25 lie over the water room 144 and 5 over no room - the deck's squares 3,2,
+3,3, 4,3, 5,2 and 5,3, a floor at the water's height whose corners border the water and
+so carry the surface mark. Those five, restored by the room's majority (13 of 30 covered
+is no majority), are drawn by the classic path with the dark glint page in the HD deck
+plate's own plane: the stripes. RoomProbe with `-classicroom 4 -classicplane 256` draws
+the same faces flat into the frame and shows the same horizontal bands over the deck.
+Before the fifth play test's gate RoomVS's swell lifted the deck's flooded HD vertices
+above and under the faces, so the two never stood still in one plane. Now, in a room
+where this project's sheet takes the place of faces, a face over a square with no water
+room below, whose plane the art draws flat in there (`HDRenderGroupFlatArt`), is left
+out: no water lies under it, and it is a second copy of the art's own floor - the
+covering rule's case. The room's lines end `dry copies left out <n>`, the level's `dry
+copies left out=<n>`. With `tomb5.hd_water` 0 no face is under a sheet and nothing
+changes.
+
+The splash and the foam (`hd_level.cpp` `MoveWaterfallMist`; `hd_render.cpp`
+`HDRenderWaterFootNearest`). Measured at ANDREA2 room 231: the art's foot points stand at
+x 55,554 to 55,579, the curtain's two wet stretches from z 43,820 to 42,805 and 41,553 to
+40,358 at x 55,518 to 55,591, so the ovals' centres lie at x 55,555, z 43,312 and x
+55,570, z 40,955; the art's spray part, material 1 at the strands' foot (`TrgProbe -parts
+231`, y 47 to 281), spans x 55,210 to 55,884 - its middle 55,547, on the ovals. The white
+column of the owner's picture is the classic mist: the room's two WATERFALLMIST items
+(142 and 143) lay grey sparks along a line 1,536 units long from 512 behind them and 256
+to their side (`game/effects.cpp` `WaterFall`), at x 56,064 - the classic waterfall's
+foot, 479 and 486 units beside the art's strands; seen along the curtain from its north
+end, as the owner looked, +x is to the left, the column left of the oval. So the emitters
+move, not the foam: an emitter whose line's middle lies within a square (`kFootSnap`, the
+square that takes the art's feet) of a wet stretch the art's feet placed is moved to the
+nearest point of it - by -503, 19 and -473, 52 units. A projection, so a second build
+moves nothing further; the item's place is not saved, so a level loaded again starts from
+the classic place and is moved again. One line each, `WATERLOG level=<L> mist=<item>
+room=<r> x=<x> z=<z> moved=<dx>,<dz>`; RoomProbe `-hdwater 1` prints the same. Over the
+fifteen levels only ANDREA2 room 231 holds such emitters; JOBY5's 27 feet have none and
+are unchanged.
+
+The pond's edge: not changed. Measured over every sheet square's four sides, the land's
+floor corners along the shared edge (the randomizer's `Tr5Level`, `cornerFloor`) stand
+either at the surface or a whole click or more over it - ANDY3 4 under, 78 at 0, 187 at
+256 to 511 and 251 higher; ANDREA1, ANDREA2, ANDY1, ANDY2, JOBY2, JOBY5 and RICH2 the
+same, none between 1 and 255. The strip the owner sees is some tens of units: the art's
+bank, its grass edge modelled a little over the classic floor and its side dropping to
+the water, not the level's floor. A lift by the classic corners would lift nothing; the
+art's bank has no flat plane near the pond (`TrgProbe -flat 34`: only the material 1
+layer at 11,005 to 11,007), so a rule needs a sampler of the art's bank height along the
+shore - the next step.
+
+WATERLOG: the mark's line ends `late=<n>`; the restored faces' lines end `dry copies left
+out <n>`; the mist line is new. RoomProbe `-rippleat`, `-latemark`, `-classicplane`,
+`-classicwet`.
+
+**Measured.** No shader changed: every `.inc` keeps its bytecode, 19 of 19. GPU, 2560 x
+1440, three runs: the full-water view 0.197, 0.198, 0.198 ms. RoomProbe on ANDY1's pool
+with three stand-ins at the owner's rats' places at 3, 11 and 19 seconds: unmarked 184 to
+871 pixels of 518,400 differ by more than 16 from the marked picture (the line), and the
+late mark gives the bracket's picture byte for byte. JOBY5's deck from the owner's angle
+with room 4's plane drawn flat: the bands over the deck before, none after, at the three
+clock times. The sweep: 565 squares, 56 bodies, 118 twins, as at `3136faa`, the summary
+and the planes line for line; two mist lines in ANDREA2.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras
+with `-hdwater 0`, 15 of 15 identical to the fix round's parity set; with `-hdwater 1`,
+15 of 15 identical to `3136faa` (none of them shows a rat, a mist emitter, a restored
+face or a game ring); the text file (`foot off` takes the hall's curtain and moves no
+emitter; with `-hdwater 0` none moves); the suites (ModernTest 14721, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the rats, the deck,
+the mist inside the foam. The pond's edge: the art's bank lip. The small rings among
+themselves still drop out by age when more than eight wait. The rivers' look, Alt+Enter
+and JOBY4 belong to other parts of this round; the reflection of the room itself and
+light shafts under the water stay for later.
+
+**Commits.** `630054d`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

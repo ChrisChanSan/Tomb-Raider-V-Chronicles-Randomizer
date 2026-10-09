@@ -1776,8 +1776,10 @@ it.
   units, gone at 48) and nothing more; not round Lara: within 320 units of
   her, while she swims at the surface or wades, the line is left out, and
   only her rings stay. Nor on any creature in the water - a swimming rat, or
-  Lara herself: everything drawn with an HD model marks its pixels, and the
-  sheet draws them without the line and without any foam. On a floor that
+  Lara herself: everything drawn with an HD model marks its pixels, and so
+  does a swimming rat, which the classic path draws (its own mesh is marked
+  once more before the sheets), and the sheet draws them without the line
+  and without any foam. On a floor that
   rises gently to the bank the line does not spread into a band across the
   shallows: it is weighed by how fast the depth under the surface changes on
   the screen, whole round a post, fading over a flat shore.
@@ -1785,6 +1787,9 @@ it.
   water's height - a bank, a deck, a coping - no longer takes the Remaster
   art's swell, wobble or shimmering caustic, which used to tear it open in
   wave shapes along the water's edge; the water meets the land flat.
+  A floor at the water's height over dry ground that the art draws itself
+  (JOBY5's deck) keeps no restored classic water face once a sheet
+  carries the room's water: the two lay in one plane and fought in stripes.
   A card without it draws the same sheet with the depth
   of the level's own floor data, and cannot know a floor at the water's
   height: there a row of class `none` is the way. With *HD water* off neither
@@ -1826,7 +1831,10 @@ it.
   close to a ring of its kind that is younger than 0.6 seconds goes into it,
   and one that comes later starts it again from there, so a wading Lara has
   one ring that starts again every 0.6 seconds at most instead of a quick
-  train of rings. Rain keeps its own rings - the game's white ring pictures.
+  train of rings. When one sheet has more than its eight rings to show, a
+  small ring - a bubble, a shell, a rat - comes after Lara's and a fall's,
+  so a pool full of swimming rats does not crowd out the ring round her.
+  Rain keeps its own rings - the game's white ring pictures.
   Indoors the reflection's light and dark
   stretches are stronger and finer, so a basin seen at eye level shows its
   waves. With `hd_motion` off the water stands still and the game's own ripple
@@ -1847,7 +1855,11 @@ it.
   point away from it, slows down and breaks up into lace toward the rim,
   never turning. Rings start from points along the line every half second or
   so, and drops are thrown up from them, the game's own small splash, two a
-  tick at every point within eight squares of the camera.
+  tick at every point within eight squares of the camera. Where the art
+  draws the fall, the level's own mist emitters (ANDREA2's fountain hall
+  has two) are moved from the classic waterfall's place onto the art's
+  footprint, so the white mist rises inside the foam and not half a square
+  beside it.
   The water of a waterfall reaches its surface in every level, and the
   fading light of a curtain's lowest stretch now ends in that foam and spray.
   With `hd_motion` off none of it moves and no drops are thrown.

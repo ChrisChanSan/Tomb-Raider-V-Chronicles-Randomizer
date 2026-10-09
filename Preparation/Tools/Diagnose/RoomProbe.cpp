@@ -9357,8 +9357,9 @@ static int ProbeMain(int argc, char** argv)
 
 		HDRenderWaterUnderNow(u);
 		printf("-underwater: constants sigma %.6f %.6f %.6f s %.6f, light "
-			"%.4f %.4f %.4f up %.2f, depth %.0f\n", u[0], u[1], u[2], u[3],
-			u[4], u[5], u[6], u[7], u[11]);
+			"%.4f %.4f %.4f up %.2f, depth %.0f, air room %d\n", u[0], u[1],
+			u[2], u[3], u[4], u[5], u[6], u[7], u[11],
+			HDRenderWaterAirRoom(room));
 	}
 
 	PrintDepthTruth("(inside the HD frame)");

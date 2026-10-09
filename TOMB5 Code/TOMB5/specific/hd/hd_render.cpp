@@ -2814,14 +2814,15 @@ namespace
 		g_device->SetPixelShaderConstantF(16, fog, 1);
 		g_device->SetPixelShaderConstantF(40, bulbs, HD_MAX_BULBS * 2);
 
-		/* c134 - c136, the eye under the water (hd_room.hlsl, "under the
-		 * water"): all twelve zero but in a frame whose eye is in a water
-		 * room of a level with sheets - and all zero leave every shader's
-		 * colour as it was, to the bit. */
-		float under[12] = {};
+		/* c134 - c136 and c145, the eye under the water (hd_room.hlsl,
+		 * "under the water"): all sixteen zero but in a frame whose eye is
+		 * in a water room of a level with sheets - and all zero leave every
+		 * shader's colour as it was, to the bit. */
+		float under[16] = {};
 
 		g_under_on = water_under_constants(f, under);
 		g_device->SetPixelShaderConstantF(134, under, 3);
+		g_device->SetPixelShaderConstantF(145, under + 12, 1);
 
 		// And a room with no lighting of its own: neutral, never the last
 		// room's.
@@ -8143,7 +8144,14 @@ namespace
 			/* The gloss variant, for a draw call whose surface resolved to a
 			 * sheen (ResolveSheen), while hd_reflect is on. With hd_reflect
 			 * off no draw call takes it and every draw call is drawn as it
-			 * always was.
+			 * always was. Nor while the frame's eye is under the water
+			 * (g_under_on): the variant has no slots left for the extinction
+			 * (hd_room.hlsl, "under the water"), and its faces kept their
+			 * own colour beside the faded rest - the walls, crates and floor
+			 * plates of JOBY2's flooded base against a flat water colour
+			 * between them (RoomProbe -underwater, -noreflect and
+			 * -glossfield at the same camera). RoomPS draws them then,
+			 * without the sheen: the sheen is what the water costs.
 			 *
 			 * The order of the switch. Each variant keeps literals of its own
 			 * (fxc's `def` constants) in registers the other names, and a
@@ -8157,7 +8165,8 @@ namespace
 			 * change; and the pass ends on the plain variant, so the next
 			 * room's constants are written with the plain variant on. */
 			const bool want_sheen = range.sheen > 0.0f && g_gloss_ps &&
-				g_reflect != 0.0f && !blendOnly && !sky && !additive_pass;
+				g_reflect != 0.0f && !blendOnly && !sky && !additive_pass &&
+				!g_under_on;
 
 			if (!want_sheen && sheen_ps_on)
 			{
@@ -8879,6 +8888,10 @@ namespace
 	std::vector<WaterSquare> g_wsquares;
 	std::vector<WaterBody> g_wbodies;
 	std::vector<WaterLook> g_wlooks;
+	// The deep look of a level's water rooms, where the level takes one
+	// (see "under the water", "the deep look").
+	WaterLook g_wlook_deep;
+	bool g_wdeep_on = false;
 	std::vector<std::vector<SheetRange> > g_sheet_ranges;	// per group
 	std::vector<int> g_group_body;		// per group, its largest body
 	std::vector<float> g_caustic_top;	// per group, room local y
@@ -9001,18 +9014,30 @@ namespace
 	 * their places and gathered every kFootStep along it; the mean of every
 	 * step that holds points is a corner of the curtain's footprint, a
 	 * polyline, whose segments FootPS draws the zone round. A segment that
-	 * spans a step without points bridges a gap where no water lands -
-	 * ANDREA2 room 231's two strands, about 1,250 units apart (the WATERLOG
-	 * seg= lines) - and keeps the zone in one piece at kFootBridge of the
-	 * foam, so the two strands land in one zone; a curtain of one step is a
-	 * segment of 2 units along the axis. Its reach is kFootReachBase plus
-	 * kFootReachGrow times its longest wet stretch - a strand's width -, held
-	 * to kFootReachMin .. kFootReachMax: 0.6 of a square from a narrow jet,
-	 * 0.9 from a strand a square wide, 1.2 from one of two. kFootJoin is 512
-	 * units, half a square; the step, the bridge's 0.85 and the reach's
-	 * numbers are free choices, set by eye on the round's RoomProbe pictures
-	 * (at 0.6 the bridge left two zones, at 0.6 of the whole length the
-	 * reach covered the room).
+	 * spans a step without points is a gap where no water lands - ANDREA2
+	 * room 231's two strands, about 1,250 units apart (the WATERLOG seg=
+	 * lines) - and is open water: it keeps its place in the curtain's line
+	 * with wet=0.00 and draws no foam, so each strand lands in a zone of its
+	 * own, two ovals with water between them, as a sketch of the foot from
+	 * above shows them (reference pictures supplied for this project, not
+	 * in the repository). In a curtain with a gap every wet
+	 * stretch closes in a head at both its ends: past its last point the
+	 * zone reaches only kFootHead of its reach along the line, and beside a
+	 * gap never more than kFootHeadGap of the gap's length over the reach -
+	 * two heads then reach 0.8 of the gap, 0.92 at the outline's widest
+	 * swing of 1.15 (FootPS's spread), so two stretches touch only where
+	 * their strands do; a stretch of one corner is a segment of 2 units
+	 * along the axis with those heads. A curtain without a gap keeps round
+	 * ends, and so does a curtain of one step, a segment of 2 units along
+	 * the axis. Its reach is kFootReachBase plus kFootReachGrow times its
+	 * longest wet stretch - a strand's width -, held to kFootReachMin ..
+	 * kFootReachMax: 0.6 of a square from a narrow jet, 0.9 from a strand a
+	 * square wide, 1.2 from one of two. kFootJoin is 512 units, half a
+	 * square; the step and the reach's numbers are free choices, set by eye
+	 * on the round's RoomProbe pictures (at 0.6 of the whole length the
+	 * reach covered the room); kFootHead's half a reach is a free choice by
+	 * the sketch, kFootHeadGap a free choice that keeps an eighth of the gap
+	 * open at the widest swing.
 	 *
 	 * The rings and the drops come from points along the footprint's wet
 	 * stretches, its corners joined by segments that are no bridge: a
@@ -9034,7 +9059,8 @@ namespace
 	const float kFootBelow = 1024.0f;
 	const float kFootJoin = 512.0f;
 	const float kFootStep = 512.0f;
-	const float kFootBridge = 0.85f;
+	const float kFootHead = 0.5f;		// of the reach, past a stretch's end
+	const float kFootHeadGap = 0.4f;	// of the gap, over the reach
 	const float kFootReachBase = 614.0f;	// 0.6 of a square
 	const float kFootReachGrow = 0.3f;
 	const float kFootReachMin = 614.0f;
@@ -9065,7 +9091,8 @@ namespace
 		float x1, z1, x2, z2;	// world
 		float y;		// the surface
 		float reach;
-		float wet;		// 1, or kFootBridge over a gap
+		float wet;		// 1, or 0 over a gap where no water lands
+		float headA, headB;	// FootPS's heads at its ends, 1 round
 		int body;
 		int curtain;
 		int fromRow;
@@ -9100,6 +9127,11 @@ namespace
 	// Per room: the body an eye in that underwater room looks through, -1
 	// for none (see "under the water").
 	std::vector<int> g_wroom_body;
+	// Per room: 1 where that body is the level's largest for want of a
+	// sheet over the room; the dry room the sheet over it lies in, -1 for
+	// none (see "under the water").
+	std::vector<unsigned char> g_wroom_fallback;
+	std::vector<int> g_wroom_air;
 	// Lara's place for the waterline's gap round her (HDRenderWaterLara).
 	bool g_lara_in_water = false;
 	float g_lara_x = 0.0f, g_lara_z = 0.0f;
@@ -9222,6 +9254,9 @@ namespace
 		g_wroom_origin.clear();
 		g_wroom_drawn.clear();
 		g_wroom_body.clear();
+		g_wroom_fallback.clear();
+		g_wroom_air.clear();
+		g_wdeep_on = false;
 		g_lara_in_water = false;
 		g_mark_frame = false;
 		g_mark_sheets = 0;
@@ -10008,28 +10043,68 @@ namespace
 	 * HDRenderSetWaterSheets). The constants are that body's sheet's own:
 	 * sigma per channel its gWaterAbsorb and sigma_s its gWaterDeep.w, both
 	 * times kUnderReach; the scattered colour its shallow colour, lit by the
-	 * body's light and tinted by its row; the upward look's gain kUnderUp;
-	 * world up in view space and the eye's depth under the body's surface
-	 * from the frame - at least one unit, so that a point under the eye
-	 * always lies in the water.
+	 * body's light and tinted by its row, its brightest channel held to
+	 * kUnderLightTop; the upward look's gain kUnderUp; world up in view
+	 * space and the eye's depth under the body's surface from the frame -
+	 * at least one unit, so that a point under the eye always lies in the
+	 * water; and the clear zone kUnderClear.
+	 * A fallback room - no sheet lies over it, its body is the level's
+	 * largest - has no surface the level knows over it: its depth is
+	 * kUnderNoSurface, so every point the eye sees lies in the water. With
+	 * the body's surface there instead, a surface under the eye held the
+	 * depth to 1 and every point higher than the eye kept its colour: a
+	 * hard line across the view at the eye's height (RoomProbe -underwater
+	 * in JOBY2's room 14, whose water has no sheet over it, and every room
+	 * of JOBY4). Where the level takes the deep look (g_wdeep_on) every
+	 * water room takes that look's numbers.
 	 *
 	 * kUnderReach: the sheet's absorption lengths are those of a view down
 	 * through the water onto its floor (a basin 4,000 units, a channel
 	 * 1,500, a sea 900); a view along a flooded corridor runs ten squares
 	 * and more, and at the sheet's own numbers a channel would keep a
-	 * quarter of the light at two squares (exp(-2048 / 1500)). 0.35 keeps
-	 * the near clear and takes the far into the water's colour; a free
-	 * choice, set by eye on the round's RoomProbe pictures, as kUnderUp is:
+	 * quarter of the light at two squares (exp(-2048 / 1500)). 0.3 lets a
+	 * room four to eight squares away keep its texture under the water's
+	 * colour and takes the far into it (0.35 turned the far end of
+	 * JOBY2's flooded base into flat water, 0.25 thinned ANDREA2's
+	 * corridor's yellow-green depth); a free choice, set by eye on the
+	 * round's RoomProbe pictures, as kUnderUp is:
 	 * looking straight up 1.6 times the scattered light, straight down
-	 * 0.4. */
-	const float kUnderReach = 0.35f;
+	 * 0.4.
+	 *
+	 * kUnderClear: what lies within two squares of the eye keeps its own
+	 * colour - the third-person camera's reach, so Lara near the camera
+	 * never changes hers; the extinction runs over the rest of the way. A
+	 * free choice, the same for rooms, models and the sheet seen from
+	 * below. kUnderLightTop caps the scattered colour, the most the water
+	 * adds to a pixel: measured before it, in JOBY2's flooded base (rooms
+	 * 13 and 14 of the randomized level, under the body of room 7, lit 1.45
+	 * by the open sky) the scattered colour was 0.55, 0.85, 0.94, the
+	 * scatter took 0.7 of the mix at three squares and the crates and walls
+	 * there were a flat near-white cyan (RoomProbe -underwater). 0.45 holds
+	 * it to the brightness of a body lit from inside - ANDREA2's channel
+	 * (0.30 at the most) and JOBY2's sea of rooms 42 and 76 (0.41) keep
+	 * theirs, the body of room 7 is scaled by 0.48; a free choice, set by
+	 * eye on the round's RoomProbe pictures of that base and of ANDREA2's
+	 * flooded corridor. Folded in here, no shader slot. kUnderNoSurface:
+	 * more than any level's height, so saturate(D / h) is 1 for every
+	 * point. */
+	const float kUnderReach = 0.3f;
 	const float kUnderUp = 0.6f;
+	const float kUnderClear = 2048.0f;
+	const float kUnderLightTop = 0.45f;
+	const float kUnderNoSurface = 1.0e6f;
+	const int kUnderDeepShare = 4;		// see "the deep look"
 
 	// ModelProbe's -under (HDRenderWaterUnderProbe), and this frame's twelve.
 	float g_under_probe[9] = {};
 	bool g_under_probe_set = false;
 	float g_under_now[12] = {};
 
+	/* `out` is c134 - c136 and c145, sixteen floats: what the shaders read,
+	 * or all zero with the eye out of the water. ModelProbe's -under hands
+	 * the first nine by hand (the scattered colour already held to
+	 * kUnderLightTop, as RoomProbe -underwater prints it); the clear zone
+	 * is the engine's. */
 	bool water_under_constants(const HDFrameLighting* f, float* out)
 	{
 		if (f && f->under && g_under_probe_set)
@@ -10041,6 +10116,7 @@ namespace
 				out[8 + k] = f->underUp[k];
 
 			out[11] = g_under_probe[8] > 1.0f ? g_under_probe[8] : 1.0f;
+			out[12] = kUnderClear;
 			std::memcpy(g_under_now, out, sizeof(g_under_now));
 			return true;
 		}
@@ -10056,20 +10132,29 @@ namespace
 		if (b < 0 || b >= (int)g_wlooks.size() || b >= (int)g_wbodies.size())
 			return false;
 
-		const WaterLook& look = g_wlooks[(size_t)b];
-		const float depth = f->underEyeY -
+		const bool fallback = (size_t)f->underRoom <
+			g_wroom_fallback.size() && g_wroom_fallback[(size_t)f->underRoom];
+		const WaterLook& look = g_wdeep_on ? g_wlook_deep :
+			g_wlooks[(size_t)b];
+		const float depth = fallback ? kUnderNoSurface : f->underEyeY -
 			(float)g_wbodies[(size_t)b].info.surfaceY;
+
+		const float* lit = look.pixel + 4;
+		const float top = lit[0] > lit[1] ? (lit[0] > lit[2] ? lit[0] :
+			lit[2]) : (lit[1] > lit[2] ? lit[1] : lit[2]);
+		const float held = top > kUnderLightTop ? kUnderLightTop / top : 1.0f;
 
 		for (int k = 0; k < 3; k++)
 		{
 			out[k] = look.pixel[32 + k] * kUnderReach;
-			out[4 + k] = look.pixel[4 + k];
+			out[4 + k] = lit[k] * held;
 			out[8 + k] = f->underUp[k];
 		}
 
 		out[3] = look.pixel[3] * kUnderReach;
 		out[7] = kUnderUp;
 		out[11] = depth > 1.0f ? depth : 1.0f;
+		out[12] = kUnderClear;
 		std::memcpy(g_under_now, out, sizeof(g_under_now));
 		return true;
 	}
@@ -10153,7 +10238,7 @@ namespace
 
 	/* A curtain's footprint into FootPS's segments and its sources: `at`
 	 * its corners in order, x and z in turn, `wet` per segment 1, or 0 for
-	 * a bridge over a gap; `ax, az` its axis, a unit vector, which a
+	 * a gap where no water lands; `ax, az` its axis, a unit vector, which a
 	 * footprint of one corner is laid along. Returns the sources. */
 	int lay_curtain(const std::vector<float>& at, const std::vector<int>& wet,
 		float reach, float y, int body, int fromRow, float ax, float az)
@@ -10161,19 +10246,57 @@ namespace
 		const int curtain = g_curtains++;
 		const size_t corners = at.size() / 2;
 		int sources = 0;
+		bool gaps = false;
 
-		if (corners == 1)
+		for (size_t k = 1; k < corners; k++)
+			gaps = gaps || !wet[k - 1];
+
+		/* The head at a corner toward segment `side`, the one from corner
+		 * side - 1 to corner side: round inside a wet stretch and in a
+		 * curtain without a gap; kFootHead at the curtain's ends and,
+		 * beside a gap, no more than kFootHeadGap of that gap over the
+		 * reach (see "the foot of a waterfall"). */
+		const auto head = [&](size_t side) -> float
 		{
-			const FootSeg s = { at[0] - ax, at[1] - az, at[0] + ax,
-				at[1] + az, y, reach, 1.0f, body, curtain, fromRow };
+			if (!gaps)
+				return 1.0f;
+
+			if (side < 1 || side >= corners)
+				return kFootHead;
+
+			if (wet[side - 1])
+				return 1.0f;
+
+			const float gx = at[side * 2] - at[side * 2 - 2];
+			const float gz = at[side * 2 + 1] - at[side * 2 - 1];
+			const float fit = kFootHeadGap * sqrtf(gx * gx + gz * gz) /
+				(reach > 1.0f ? reach : 1.0f);
+
+			return fit < kFootHead ? fit : kFootHead;
+		};
+
+		for (size_t k = 0; k < corners; k++)
+		{
+			// A corner alone: no wet segment before it nor after it.
+			const bool before = k > 0 && wet[k - 1];
+			const bool after = k + 1 < corners && wet[k];
+
+			if (before || after || (corners > 1 && !gaps))
+				continue;
+
+			const FootSeg s = { at[k * 2] - ax, at[k * 2 + 1] - az,
+				at[k * 2] + ax, at[k * 2 + 1] + az, y, reach, 1.0f,
+				head(k), head(k + 1), body, curtain, fromRow };
 
 			g_wsegs.push_back(s);
 		}
 
 		for (size_t k = 1; k < corners; k++)
 		{
+			const bool w = wet[k - 1] != 0;
 			const FootSeg s = { at[k * 2 - 2], at[k * 2 - 1], at[k * 2],
-				at[k * 2 + 1], y, reach, wet[k - 1] ? 1.0f : kFootBridge, body,
+				at[k * 2 + 1], y, reach, w ? 1.0f : 0.0f,
+				w ? head(k - 1) : 1.0f, w ? head(k + 1) : 1.0f, body,
 				curtain, fromRow };
 
 			g_wsegs.push_back(s);
@@ -10911,12 +11034,17 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	 * the body most of them belong to, a room further down the body of the
 	 * room over it - walked down six rooms, as water_depth walks -, and a
 	 * water room no sheet lies over at all the level's largest body, a free
-	 * choice: its water is the level's water. */
+	 * choice: its water is the level's water. The same walk gives each such
+	 * room its air room, the dry room most of those squares lie in - where
+	 * Lara stands when she wades in that water (HDRenderWaterAirRoom). */
 	g_wroom_body.assign((size_t)count, -1);
+	g_wroom_fallback.assign((size_t)count, 0);
+	g_wroom_air.assign((size_t)count, -1);
 
 	{
 		const size_t nb = g_wbodies.size();
 		std::vector<int> votes((size_t)count * nb, 0);
+		std::map<std::pair<int, int>, int> airVotes;
 
 		for (const WaterSquare& s : g_wsquares)
 		{
@@ -10929,7 +11057,15 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 			if (pit >= 0 && pit < count &&
 				(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+			{
 				votes[(size_t)pit * nb + (size_t)s.body]++;
+
+				const int n = ++airVotes[std::make_pair(pit, s.room)];
+				const int now = g_wroom_air[(size_t)pit];
+
+				if (now < 0 || n > airVotes[std::make_pair(pit, now)])
+					g_wroom_air[(size_t)pit] = s.room;
+			}
 		}
 
 		for (int r = 0; r < count; r++)
@@ -10959,7 +11095,10 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					if (q >= 0 && q < count &&
 						(rooms[q].flags & HD_WATER_ROOM_UNDERWATER) &&
 						g_wroom_body[(size_t)q] < 0)
+					{
 						g_wroom_body[(size_t)q] = g_wroom_body[(size_t)r];
+						g_wroom_air[(size_t)q] = g_wroom_air[(size_t)r];
+					}
 				}
 			}
 
@@ -10978,9 +11117,41 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				else if (largest >= 0)
 				{
 					g_wroom_body[(size_t)r] = largest;
+					g_wroom_fallback[(size_t)r] = 1;
 					g_wlevel.underFallback++;
 				}
 			}
+
+		/* The deep look. Where the fallback rooms outnumber the rooms under
+		 * a sheet more than kUnderDeepShare times, the level's water is
+		 * mostly water no sheet lies over - JOBY4, 132 rooms against the
+		 * two under its one basin of two squares, a level swum in the
+		 * diving suit -, and the basin's look is no look for it: every one
+		 * of its water rooms, the two under the basin with them (the start
+		 * cavern, room 123, is one: RoomProbe -underwater prints its air
+		 * room 7), takes the sea class's absorption and the section's
+		 * palette at a light of 1, the palette's own colour (the basin's
+		 * 1.50 is a sunlit room's far from the dive). 4 is a free choice
+		 * between JOBY4's 66 and the 1.33 of RICH2 and 1.22 of ANDY3, the
+		 * next ones over the fifteen levels (RoomProbe -hdwater 1 -nodraw,
+		 * the level line's under= and under_fallback=). */
+		g_wdeep_on = largest >= 0 && g_wlevel.underFallback >
+			kUnderDeepShare * g_wlevel.underRooms;
+
+		if (g_wdeep_on)
+		{
+			WaterBody deep = g_wbodies[(size_t)largest];
+
+			deep.info.cls = HD_WATER_SEA;
+			deep.info.openAir = 0;
+
+			for (int k = 0; k < 3; k++)
+				deep.info.light[k] = 1.0f;
+
+			water_look(g_wlook_deep, deep, section, stem);
+		}
+
+		g_wlevel.underDeep = g_wdeep_on ? 1 : 0;
 	}
 
 	/* 7. The grid: 5 x 5 vertices a square, every 256 units, one range per
@@ -11286,6 +11457,12 @@ bool HDRenderWaterUnderOn(int room)
 {
 	return g_wlevel.built && room >= 0 &&
 		room < (int)g_wroom_body.size() && g_wroom_body[(size_t)room] >= 0;
+}
+
+int HDRenderWaterAirRoom(int room)
+{
+	return g_wlevel.built && room >= 0 && room < (int)g_wroom_air.size() ?
+		g_wroom_air[(size_t)room] : -1;
 }
 
 void HDRenderWaterUnderProbe(const float* nine)
@@ -11727,8 +11904,9 @@ bool HDRenderWaterFootLine(int at, const char* stem, char* out, size_t size)
 
 /* WATERLOG, a segment of a curtain's footprint: its number, its curtain,
  * its ends (world x and z), its surface, its curtain's reach, its share of
- * the foam (1, or kFootBridge over a gap where no water lands), its body
- * and 1 for a row's or RoomProbe's - the places a `foot` row needs. */
+ * the foam (1, or 0 over a gap where no water lands), its body, 1 for a
+ * row's or RoomProbe's - the places a `foot` row needs - and the heads at
+ * its start and end (1 round, see "the foot of a waterfall"). */
 bool HDRenderWaterSegLine(int at, const char* stem, char* out, size_t size)
 {
 	if (!out || !size || at < 0 || at >= (int)g_wsegs.size())
@@ -11737,9 +11915,10 @@ bool HDRenderWaterSegLine(int at, const char* stem, char* out, size_t size)
 	const FootSeg& s = g_wsegs[(size_t)at];
 
 	snprintf(out, size, "WATERLOG level=%s seg=%d curtain=%d x1=%d z1=%d "
-		"x2=%d z2=%d y=%d reach=%d wet=%.2f body=%d row=%d",
+		"x2=%d z2=%d y=%d reach=%d wet=%.2f body=%d row=%d head=%.2f,%.2f",
 		stem ? stem : "?", at, s.curtain, (int)s.x1, (int)s.z1, (int)s.x2,
-		(int)s.z2, (int)s.y, (int)s.reach, s.wet, s.body, s.fromRow);
+		(int)s.z2, (int)s.y, (int)s.reach, s.wet, s.body, s.fromRow, s.headA,
+		s.headB);
 	return true;
 }
 
@@ -12150,7 +12329,8 @@ const char* HDRenderWaterSectionName(int section)
  * key swirl (old), and the underwater rooms an eye looks through a body
  * from - by the sheet over them or a room above them (under) and by the
  * level's largest body for want of one (under_fallback; see "under the
- * water"). A body line: its rooms (+n for
+ * water"), and 1 when the level's water rooms take the deep look
+ * (under_deep, the same note). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -12189,7 +12369,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
 			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
 			"clip=%d falls=%d lowered=%d dropped=%d river=%d curtains=%d "
-			"segs=%d old=%d under=%d under_fallback=%d",
+			"segs=%d old=%d under=%d under_fallback=%d under_deep=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -12201,7 +12381,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.ringSources, g_wlevel.artHidden, g_wlevel.depth,
 			g_wlevel.falls, g_wlevel.lowered, g_wlevel.dropped,
 			cls[HD_WATER_RIVER], g_curtains, (int)g_wsegs.size(),
-			g_wlevel.oldKeys, g_wlevel.underRooms, g_wlevel.underFallback);
+			g_wlevel.oldKeys, g_wlevel.underRooms, g_wlevel.underFallback,
+			g_wlevel.underDeep);
 		return true;
 	}
 
@@ -12699,12 +12880,14 @@ namespace
 	 * surface is its own, at most kFootSegsPerDraw, drawn as a second pass
 	 * of the same triangles with FootPS and the same blend. c124 - c131 hold
 	 * them as (x1, z1, x2, z2) in the frame the shader's world position is
-	 * in, c137 - c144 as (reach, strength), the strength the segment's share
-	 * times the body's foam scale (a row's `foam`); gWaterStage.w the
-	 * count, which WaterPS does not read. A zone's outline reaches 1.1 of
-	 * its reach at the most (FootPS: 1.0 of the patch field times 1.1 of the
-	 * lobe field). Nothing while tomb5.hd_motion is off, as the rings: the
-	 * water stands still. `pixel` is the draw's c92 - c123, set already. */
+	 * in, c137 - c144 as (reach, strength, head at the start, head at the
+	 * end), the strength the segment's share times the body's foam scale
+	 * (a row's `foam`); a gap where no water lands is left out;
+	 * gWaterStage.w the count, which WaterPS does not read. A zone's
+	 * outline reaches 1.1 of its reach at the most (FootPS: 1.0 of the
+	 * patch field times 1.1 of the lobe field). Nothing while
+	 * tomb5.hd_motion is off, as the rings: the water stands still.
+	 * `pixel` is the draw's c92 - c123, set already. */
 	void draw_feet(const SheetRange& r, float* pixel)
 	{
 		if (!g_water_foot_ps || g_wsegs.empty() || g_motion[3] == 0.0f)
@@ -12722,7 +12905,7 @@ namespace
 			const float z0 = s.z1 < s.z2 ? s.z1 : s.z2;
 			const float z1 = s.z1 < s.z2 ? s.z2 : s.z1;
 
-			if (count >= kFootSegsPerDraw ||
+			if (count >= kFootSegsPerDraw || s.wet <= 0.0f ||
 				fabsf(s.y - (float)r.surfaceY) > (float)kRingHeight ||
 				x1 < (float)r.minX - m || x0 > (float)r.maxX + m ||
 				z1 < (float)r.minZ - m || z0 > (float)r.maxZ + m)
@@ -12739,6 +12922,8 @@ namespace
 			segs[count * 4 + 3] = s.z2 + oz;
 			reach[count * 4 + 0] = s.reach;
 			reach[count * 4 + 1] = s.wet * foam;
+			reach[count * 4 + 2] = s.headA;
+			reach[count * 4 + 3] = s.headB;
 			count++;
 		}
 

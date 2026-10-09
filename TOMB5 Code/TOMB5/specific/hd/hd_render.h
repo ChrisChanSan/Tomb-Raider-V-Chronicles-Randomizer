@@ -948,6 +948,8 @@ struct HDRenderWaterLevel
 	 * want of one (hd_render.cpp, "under the water"). */
 	int underRooms;
 	int underFallback;
+	// 1 when the level's water rooms take the deep look (the same note).
+	int underDeep;
 };
 
 int HDRenderWaterBodies();
@@ -1025,13 +1027,19 @@ bool HDRenderWaterSheetsBuilt();
  * the room is an underwater room that looks through a body (hd_render.cpp,
  * "under the water"). The frame then sets HDFrameLighting::under. */
 bool HDRenderWaterUnderOn(int room);
+/* The dry room over that underwater room's water: the room most of the
+ * sheet squares over it lie in, the same for the rooms walked down under
+ * it; -1 for a room no sheet lies over and in a level without sheets. Lara's
+ * nodes in that water take its ambient (hd_laradraw.cpp). */
+int HDRenderWaterAirRoom(int room);
 /* The diagnostic tools' side of it. HDRenderWaterUnderProbe hands in the
  * constants of an eye under the water where no level's water stands behind
  * them (ModelProbe -under): sigma r, g, b and sigma_s, the scattered colour
  * r, g, b, the upward gain and the eye's depth under the surface; a frame
  * with `under` set then takes them with its own world up. Null gives the
- * bodies back. HDRenderWaterUnderNow reads the twelve the last frame
- * uploaded (c134 - c136), all zero when its eye was not under the water. */
+ * bodies back; the clear zone round the eye is the engine's either way.
+ * HDRenderWaterUnderNow reads the twelve the last frame uploaded (c134 -
+ * c136), all zero when its eye was not under the water. */
 void HDRenderWaterUnderProbe(const float* nine);
 void HDRenderWaterUnderNow(float* twelve);
 void HDRenderWaterRipples(const HDRenderRipple* live, int count);

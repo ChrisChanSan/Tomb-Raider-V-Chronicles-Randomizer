@@ -1611,11 +1611,41 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		(float)aAmbientR, (float)aAmbientG, (float)aAmbientB
 	};
 
+	/* In water a sheet lies over (hd_render.cpp, "under the water") her wet
+	 * nodes take the ambient of the room that sheet lies in - the dry room
+	 * over the water, HDRenderWaterAirRoom - and not the water room's own:
+	 * the levels give their water rooms a tinted ambient (ANDREA1's pool
+	 * room 26 16,16,32, blue twice green, under room 25's 27,32,41 -
+	 * ROOM_INFO's ambient read with the randomizer's Tr5Level), which laid
+	 * a lilac on her under the surface. The water's colour reaches her
+	 * through the extinction instead, which leaves her own colour alone
+	 * within its clear zone round the eye. Standing in a dry room with
+	 * nodes in the water under its floor, that dry room is the room the
+	 * sheet lies in: her dry answer. Without sheets (tomb5.hd_water 0), in
+	 * a water room no sheet lies over and in a level without water, the
+	 * classic answer. */
+	long wetAmbient = LaraNodeAmbient[1];
+	bool wetIsDry = false;
+	const short lroom = lara_item->room_number;
+
+	if (HDRenderWaterSheetsBuilt() && lroom >= 0 && lroom < number_rooms)
+	{
+		if (room[lroom].flags & ROOM_UNDERWATER)
+		{
+			const int air = HDRenderWaterAirRoom(lroom);
+
+			if (air >= 0 && air < number_rooms)
+				wetAmbient = room[air].ambient;
+		}
+		else
+			wetIsDry = true;
+	}
+
 	const float wet[3] =
 	{
-		(float)CLRR(LaraNodeAmbient[1]),
-		(float)CLRG(LaraNodeAmbient[1]),
-		(float)CLRB(LaraNodeAmbient[1])
+		wetIsDry ? dry[0] : (float)CLRR(wetAmbient),
+		wetIsDry ? dry[1] : (float)CLRG(wetAmbient),
+		wetIsDry ? dry[2] : (float)CLRB(wetAmbient)
 	};
 
 	/* The per node ambient, which Lara really has and an object does not: a

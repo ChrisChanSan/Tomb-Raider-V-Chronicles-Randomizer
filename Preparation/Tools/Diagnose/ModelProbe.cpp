@@ -615,7 +615,10 @@
  *                         and no light the picture IS the bulb's own term,
  *                         intensity x colour / 255, wherever the model covers
  *                         a pixel.
- *     -shade <0..255>     the flat node AMBIENT, default 128
+ *     -shade <0..255>     the flat node AMBIENT, default 128; r,g,b gives
+ *                         Lara's nodes a coloured one (a room's ambient,
+ *                         as hd_laradraw.cpp hands her nodes), the others
+ *                         take r
  *     -out <prefix>       output path prefix, default .\modelprobe
  *
  *   Everything else:
@@ -6910,6 +6913,7 @@ struct LaraOptions
 	int threads;
 	long width, height;
 	double fov, yaw, pitch, dist, shade;
+	double shadeRgb[3];	// -shade r,g,b: Lara's nodes per channel
 	/* The head cut (a cylinder, then a plane, then
 	 * one bone weight, in that order of development): how much of the head node a
 	 * fragment has to carry to be discarded, of 1. Negative is off, which is
@@ -8681,7 +8685,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	float light[HD_LARA_NODES * 3];
 
 	for (int i = 0; i < HD_LARA_NODES * 3; i++)
-		light[i] = (float)o.shade;
+		light[i] = (float)o.shadeRgb[i % 3];
 
 	HDModelLighting lighting;
 
@@ -10568,6 +10572,7 @@ int main(int argc, char** argv)
 	long width = 1024, height = 1024;
 	double fov = 80.0, yaw = 180.0, pitch = 10.0, dist = 0.0;
 	double shade = 128.0;
+	double shadeRgb[3] = { 128.0, 128.0, 128.0 };
 
 	double turn[32][2];
 	memset(turn, 0, sizeof(turn));
@@ -11034,7 +11039,21 @@ int main(int argc, char** argv)
 					"ignored\n", argv[i]);
 		}
 		else if (!_stricmp(argv[i], "-shade") && i + 1 < argc)
-			shade = atof(argv[++i]);
+		{
+			double rgb[3];
+
+			if (sscanf_s(argv[++i], "%lf,%lf,%lf", &rgb[0], &rgb[1],
+				&rgb[2]) == 3)
+			{
+				shade = rgb[0];
+				shadeRgb[0] = rgb[0];
+				shadeRgb[1] = rgb[1];
+				shadeRgb[2] = rgb[2];
+			}
+			else
+				shade = shadeRgb[0] = shadeRgb[1] = shadeRgb[2] =
+					atof(argv[i]);
+		}
 		else if (!_stricmp(argv[i], "-bulb") && i + 5 < argc)
 		{
 			const bool coloured = i + 8 < argc && argv[i + 6][0] != '-';
@@ -11495,6 +11514,9 @@ int main(int argc, char** argv)
 		o.pitch = pitch;
 		o.dist = dist;
 		o.shade = shade;
+		o.shadeRgb[0] = shadeRgb[0];
+		o.shadeRgb[1] = shadeRgb[1];
+		o.shadeRgb[2] = shadeRgb[2];
 		o.cutS = cutS > -1.0e8 ? cutS
 			: (laraFirstPerson ? (double)HD_LARA_HEAD_CUT_WEIGHT : -1.0);
 		o.noCap = noCap;

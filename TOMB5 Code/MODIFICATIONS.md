@@ -10591,6 +10591,117 @@ shafts under the water stay for later.
 
 **Commits.** `917e968`, `7820bce`.
 
+**Alt+Enter after the sixth play test: the HD level built again, the film's texture, the
+screen capture.** The build of `9f2d2ed` was played (a log supplied for this project, not
+in the repository). Alt+Enter no longer crashed; it switched the HD art off until the next
+level, and the owner's screenshots with the system's own Print key stopped working after
+it. His log shows four toggles in ANDREA1: at the first the released device still counted
+`RefCnt = 105` and the new line said `pages=105 moved=104 ... old_device_refs=1`, at the
+three later ones `RefCnt = 104` and `old_device_refs=0`.
+
+The film's texture. The one reference that was not a page is the playback texture of the
+films (`specific/fmv.cpp`, `BinkTexture`): a managed texture made by the first film on the
+device of that moment and released only when the game ends. It is made only while none
+exists, so the start device got it with the first film and no later device ever had one,
+which is the 105 against 104; nothing moved or dropped it at a recreation, so the start
+device stayed alive for the rest of the session, and the next film would have bound a
+texture of a released device on the new one - the misuse that ended the fifth play test's
+toggle inside d3d9.dll. `FmvDeviceLost` (`fmv.cpp`) releases it in `DXClose` beside
+`HDLevelDeviceLost`, with a `Released Bink Texture` line; `PlayFmv` makes it again on the
+device of the next film.
+
+The HD level built again. `HDLevelDeviceRecreated` (`specific/hd/hd_level.cpp`) runs in
+`DXCreate` on a recreation, after `MoveTexturesToDevice` has moved the classic pages (the
+HD water frames borrow entries of `Textures[]` above the level's own, so the order is
+fixed). It builds the level that was drawing HD when the device went - `HDLevelDeviceLost`
+notes that, `HDLevelUnload` forgets it - with `HDLevelBuild` itself: everything the build
+reads is still loaded (`room[]`, the floor data, `objects[]`, `items[]`, the markers
+sidecar, the level's stem), and the art and its pages are read from the Remaster's DATA
+again as at a level load. What `HDLevelDeviceLost` released comes back by that path: the
+shaders and the declaration (`HDRenderInit`), the buffers, the page cache, the gloss field
+and the water sheets with their depth texture (`HDRenderLevelBegin`, `BuildWaterSheets`),
+the borrowed water frames (`BuildWaterFrames`), the models and Lara
+(`HDObjectLevelBuild`); the shadow targets and the frame's copy are made by the first
+frame that needs them, as after a level load; then `HDFontBuild` makes the font's texture
+again. The title is a level of its own, so its rooms, sky and font come back the same way;
+its logo and the menu pages are classic pages and were already moved. Two things differ
+from a load. The build takes group i for room i, which holds only before any flip, while
+`FlipMap` (`game/control.cpp`) swaps the rooms' records in place: the pairs whose flip
+stands set in `flip_stats` are swapped back for the build and swapped again after it,
+keeping each number's `flipped_room`, `item_number` and `fx_number` in place so that the
+second swap gives back every byte (FlipMap's own swap hands the alternate the room's item
+list and is not its own inverse), and `HDFlipRoom` then moves the art with each pair as it
+does when a savegame's flips are applied after its load. And the HD clock keeps running,
+so the scrolls, the waves and the books go on where they were. The waterfall mist the
+build moves onto the art's footprint is a projection and is not moved further. A level
+that was classic when the device went stays classic, and nothing of it runs with
+`hd_enable 0`. One new line, `HDLOG device recreated - level=<stem> rebuilt=<0|1>
+flipped_pairs=<n>`, and the `DXLOG device recreated` line ends in `hd=<rebuilt|classic>
+ms=<n>`, the build's time. The game thread waits at `BeginScene` meanwhile, before the
+frame's lists are begun, so the frame that follows starts from the new build. The reset in
+`DXShowFrame` (a lost device, which a windowed device does not see on a focus change)
+keeps its old answer: classic until the next level.
+
+The screen capture. The window code of `DXCreate`, `WinSetStyle`, `DXShowFrame` and
+`CreateMonoScreen` - the two placements, the style of the two display states, the present
+parameters, the back buffer read into a system memory surface and the 24-bit TGA - moved
+unchanged into `specific/devicewindow.h`, so that RoomProbe `-windowcycle` drives the
+engine's own code on a real window of the engine's class and styles: the start state, one
+toggle and a second, each presenting a colour of its own. Each state prints its line -
+`GWL_STYLE`, `GWL_EXSTYLE`, topmost, the window and client rectangles, the monitor, and
+the present parameters and creation flags as the device reports them - then what a GDI
+read of the screen (`BitBlt` with `CAPTUREBLT`) and the DXGI desktop duplication see at
+the client's middle, and the screenshot path's HRESULT and file. The same lines go into
+the game's log: `DXLOG window <start|toggle|mode> ...` after the start, every Alt+Enter
+and every resolution key, `DXLOG screenshot hr=<0x...> file=<TombNNNN.tga> bytes=<n>` for
+every file of the apostrophe key, and `DXLOG mono picture hr=<0x...> - no picture` when
+the inventory's picture cannot be read.
+
+**Measured.** RoomProbe `-windowcycle` on this machine (2560 x 1440): the start state
+`style=94000000` (popup, visible, clip siblings) `ex=00040000` (app window), window and
+client both the monitor's rectangle, windowed, discard, X8R8G8B8 2560 x 1440, one back
+buffer, no multisampling, interval one, refresh 0, auto depth, `behavior=00000044`
+(hardware vertex processing, multithreaded); the windowed state `style=14C20000` (caption,
+minimize box) `ex=00040100`, the window the monitor's rectangle and its client 8,31 to
+2552,1432 under a back buffer of 2560 x 1440; after the second toggle every field of the
+start state again, byte for byte. In every state the screen read and the desktop
+duplication showed the colour presented, and so did a frame of the system's window capture
+(Windows.Graphics.Capture, in a scratch tool outside the repository); with `-leak`, the
+start device kept alive by a texture as the film's texture kept it, the same - RefCnt 1 at
+the first release, every state seen. The read-back returned `S_OK` and wrote a TGA of
+11,059,218 bytes (18 + 2560 x 1440 x 3) in all three states. RoomProbe `-devicecycle` with
+`-hdwater 1` (the sheets, the depth texture, the copy and the caustic): ANDREA2 231, JOBY2
+66 and ANDY3 34 drawn on the third device md5-identical to the first, every device
+released with `RefCnt = 0`; the probe's build on the third device took 2,308, 1,644 and
+1,461 ms (2,278, 1,634 and 1,481 on the first), the order of the `built ms=` of a level
+load in the game.
+
+**Checked.** The classic path (`-classicroom` and `-classiconly` on ANDREA2 231, JOBY2 66
+and ANDY3 34) md5-identical to `8691e82`, 3 of 3, and on the second device of
+`-devicecycle`, 3 of 3; `-cycleclassic 22`, 3 of 3 identical; the fifteen cameras with
+`-hdwater 0` identical to the fix round's parity set, 15 of 15; with `-hdwater 1`
+identical to the river round's of `7820bce`, 15 of 15, and drawn on the third device of
+`-devicecycle` identical to them as well, 15 of 15 (before, three of them differed there
+because the probe kept the `-with` groups of the run before; it now empties them); no
+shader changed; the suites (ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270
+and 243) 0 failed; the engine and every tool build.
+
+**Left.** Only the game's own Alt+Enter shows the HD level built again on the owner's
+machine - its time, a level with flips standing, the title, a second toggle, a cutscene's
+faces (their lip clips close with the device and the cut plays on with the heads still).
+The probe builds its level from the files on each device; `HDLevelDeviceRecreated`'s swap
+of the flipped rooms and its kept clock run only in the game. The loss of the system's
+screen capture is not reproduced here: the window and its swap chain after two toggles
+equal the start state, and every capture tried sees every state, with the start device
+kept alive or not. The film's texture was the one difference the owner's log names, and
+with it gone the process holds one device again, as at the start; the `DXLOG window` and
+`DXLOG screenshot` lines of his next log say what his machine does. The windowed state
+keeps a client 16 x 39 pixels smaller than its back buffer (the caption is added after the
+window was placed for the popup style), which scales the picture slightly; nothing was
+changed there without a fault it causes.
+
+**Commits.** `c6832f1`, `6d49f59`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

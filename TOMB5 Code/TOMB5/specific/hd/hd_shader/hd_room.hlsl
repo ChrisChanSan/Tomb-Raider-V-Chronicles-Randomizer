@@ -384,7 +384,9 @@ float4 gWaterBox : register(c15);
  *            (HD_WATER_SHORE); for a sheet draw alone z the most a
  *            breaking crest rises by beside the swell (0 without
  *            whitecaps) and w the height above which a crest breaks, both
- *            in units - RoomVS's z and w stay 0 and are not read
+ *            in units; for a room draw z is 1 where a sheet carries the
+ *            room's water and its art is hidden (RoomVS, "the flood under
+ *            a sheet"), else 0, and w stays 0 and is not read
  * gWaveV     the four wave rows (kx, kz, omega, height): wave vector in
  *            radians a unit, angular speed in radians a second, height in
  *            units - the room's largest body's, or the basin's in a room
@@ -1134,7 +1136,17 @@ VS_OUT RoomVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float upright = lerp(1.0f, step(0.6f,
 		abs((inNormal.y - 127.0f) * (1.0f / 128.0f))), gFlat.w);
 	float surfaceOn = dot(inFlags, gSel1) * atSurface * upright;
-	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x, surfaceOn));
+	/* The flood under a sheet. Where a water sheet carries the room's water
+	 * and hides the remaster's art (gSwell.z 1, hd_render.cpp set_room_rows),
+	 * what the flood still finds at the water's height is the bank - the
+	 * land's own vertices at the surface plane inside the flood box, ANDY3's
+	 * pond banks and JOBY5's deck among them (RoomProbe, the round's
+	 * pictures) - and the swell, the wobble and the surface caustic would
+	 * tear it. So none of the three is laid on there; the colour shimmer
+	 * keeps `shimmerOn` as the classic path does. 0 in every room without a
+	 * sheet and with tomb5.hd_water 0: nothing changes there. */
+	float water = gMotion.w * saturate(max(gWaterMode.y * inFlags.x,
+		surfaceOn)) * (1.0f - gSwell.z);
 	/* The wave at this vertex - see WaveSum, with the rows of this room's
 	 * class (gWaveV). World position, so neighbouring rooms meet. */
 	float2 slope = 0.0f;
@@ -1931,6 +1943,12 @@ float PatchField(float2 p, float t, float var)
 #define HD_PATCH_FROM 0.05f
 #define HD_PATCH_SPAN 0.4f
 
+/* The change of the frame's depth under the surface per pixel above which
+ * the waterline is whole (WaterPS, "the line where a shape meets the
+ * water"), in units: a free choice, set by eye on the round's RoomProbe
+ * pictures. */
+#define HD_LINE_STEEP 6.0f
+
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
 {
@@ -2290,7 +2308,11 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * below there is no such floor; the clip is from above alone. */
 	const float rest = depth - lift;
 
+#ifdef HD_WATER_VIEW
 	clip(above > 0.5f && gWaterStage.z < 3.5f ? rest - HD_WATER_CLIP : 1.0f);
+#else
+	clip(above > 0.5f ? rest - HD_WATER_CLIP : 1.0f);
+#endif
 #endif
 
 	const float T = exp(-path * gWaterDeep.w);
@@ -2350,7 +2372,10 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * frame lies within 24 units under the surface at rest, gone at 48,
 	 * broken by the same pattern - round a post, a hull, a floe, wherever
 	 * the drawn shape meets the water, and nothing more: a body a click
-	 * under the surface is no shore. Within the band of a bank and outside
+	 * under the surface is no shore, and a floor rising gently to the bank
+	 * takes it only as far as its depth changes fast from pixel to pixel
+	 * (see "the line where a shape meets the water" below). Within the
+	 * band of a bank and outside
 	 * a patch it is held to 0.25, a faint broken line where the foam is
 	 * gone, so the bank is not bare; inside a patch and out in the water it
 	 * keeps the 0.75 of all foam. Round Lara it gives way (gWaterLara): a
@@ -2389,9 +2414,18 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		saturate(1.0f - input.eye.w / max(gWaterMisc.x, 1.0f));
 	const float away = saturate((length(world.xz - gWaterLara.xy) -
 		gWaterLara.z) * gWaterLara.w);
+	/* The line where a shape meets the water, not across the shallows.
+	 * Round a post, a hull or a swimming body the frame's depth under the
+	 * surface runs down fast from pixel to pixel; on a gently sloping bank
+	 * it changes slowly - a 1:10 shore puts the line's 48 units of depth 480
+	 * units out into the water, the thick white band round ANDY3's pond
+	 * (RoomProbe). So the line is weighed by that change per pixel
+	 * (fwidth): whole from HD_LINE_STEEP units a pixel, fading toward a
+	 * flat shore. Its fall from 24 to 48 units is a straight ramp. */
+	const float steep = saturate(fwidth(rest) * (1.0f / HD_LINE_STEEP));
 
-	foam = max(foam, min(gWaterFoam.w * (1.0f - smoothstep(24.0f, 48.0f,
-		rest)) * wet * away, 0.75f - 0.5f * bare));
+	foam = max(foam, min(gWaterFoam.w * saturate(2.0f - rest *
+		(1.0f / 24.0f)) * steep * wet * away, 0.75f - 0.5f * bare));
 #else
 	foam = max(foam, min(gWaterFoam.w, 0.25f) *
 		saturate(1.0f - input.eye.w * (1.0f / 24.0f)) * wet);
@@ -2693,12 +2727,11 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * on the water, not a blanket.
  *
  * The end: where the river runs into a wall or over a drop (input.flow.x,
- * the way ahead to the first point with no water, hd_render.cpp) the bank
- * foam's pattern is laid across it - its two drifting layers and its
- * dissolve, carried toward the end at gRiverEdge.z so the blotches pile
- * into it - dense at the end, broken further up and gone at gRiverEdge.x:
- * the bank's own threshold, from -0.05 at the end to 1.25 at the reach,
- * times gRiverEdge.y. Nothing at the river's upper end, which the water
+ * the way ahead to the first point with no water, hd_render.cpp) one blob
+ * of foam lies across it (see "the foam where it ends" below), carried
+ * toward the end at gRiverEdge.z so the blotches pile into it - dense at
+ * the end, broken further up and gone at about gRiverEdge.x, times
+ * gRiverEdge.y. Nothing at the river's upper end, which the water
  * leaves.
  *
  * The ridges' spacings, the 0.82 and 0.98, the slow field's cells (about
@@ -2734,22 +2767,51 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		t * float2(0.11f, -0.13f) + var * 5.0f);
 	const float swing = Wave2(float2(t * 1.2566371f + slow.x * 3.1f,
 		0.0f)).x;
-	const float streak = gRiverFlow.w * lines * smoothstep(0.35f, 0.65f,
-		0.5f + 0.5f * slow.x * slow.y + 0.1f * swing);
+	/* Each line is broken along the flow into dashes a few hundred units
+	 * long, carried with it (u runs with the clock): a line that runs along
+	 * the view - the bank's, Lara's - shows its motion only through its
+	 * ends. The dashes' phase is turned by the way across, so neighbouring
+	 * lines break at their own places. */
+	const float2 cut = Wave2(float2(u * 0.0109f + across * 0.0571f,
+		u * 0.0067f - across * 0.0337f + 2.1f));
+	const float dash = smoothstep(-0.25f, 0.45f, cut.x * cut.y +
+		0.35f * cut.x);
+	const float streak = gRiverFlow.w * lines * dash * smoothstep(0.35f,
+		0.65f, 0.5f + 0.5f * slow.x * slow.y + 0.1f * swing);
 
-	// The foam where it ends, the bank foam's pattern carried into it.
-	const float edge = saturate(1.0f - input.flow.x /
-		max(gRiverEdge.x, 1.0f));
-	const float2 fp = (world.xz - dir * (gRiverEdge.z * t) +
-		var * float2(400.0f, -330.0f)) * gWaterBase.w;
-	const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
-		t * float2(0.25f, -0.18f));
-	const float2 w2 = Wave2(fp * float2(0.047f, 0.041f) + w1 * 1.7f +
-		t * float2(-0.9f, 1.1f));
-	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
-	const float thr = lerp(1.25f, -0.05f, edge) + 0.12f * swing;
-	const float end = gRiverEdge.y * smoothstep(thr - 0.12f, thr + 0.18f,
-		n) * (0.4f + 0.6f * edge);
+	/* The foam where it ends: one blob the width of the river, not the
+	 * bank foam's lattice, whose two layers of products repeat every few
+	 * hundred units and laid three alike copies across a river's end.
+	 * Three layers of cells about 830, 360 and 150 units across, each read
+	 * along its own turned axes (0.6, 2.1 and 1.3 radians off the world's)
+	 * and the finer warped by the coarser, carried into the end at
+	 * gRiverEdge.z - no two of the scales in a simple ratio, so nothing
+	 * repeats across a river. Its reach swings across the river with a
+	 * field of its own (0.3 to 1.5 of gRiverEdge.x) and with the coarsest
+	 * cells, so the blob's upper rim is ragged; densest at the end, still
+	 * holed there, broken up toward the rim. The cell
+	 * sizes, the turns and the reach's swing are free choices, set by eye
+	 * on the round's RoomProbe pictures. */
+	const float2 q = world.xz - dir * (gRiverEdge.z * t) +
+		var * float2(400.0f, -330.0f);
+	const float2 c1 = Wave2(float2(dot(q, float2(0.00626f, 0.00427f)),
+		dot(q, float2(-0.00427f, 0.00626f))) + t * float2(0.07f, -0.05f));
+	const float2 c2 = Wave2(float2(dot(q, float2(-0.00881f, 0.01503f)),
+		dot(q, float2(-0.01503f, -0.00881f))) + c1 * 1.3f +
+		t * float2(-0.21f, 0.17f));
+	const float2 c3 = Wave2(float2(dot(q, float2(0.01117f, 0.04034f)),
+		dot(q, float2(-0.04034f, 0.01117f))) + c2 * 1.1f +
+		t * float2(0.6f, -0.7f));
+	const float n = saturate(0.5f + 0.5f * (0.5f * c1.x * c1.y + 0.3f *
+		c2.x * c2.y + 0.35f * c3.x * c3.y + 0.25f * c2.x));
+	const float2 rim = Wave2(float2(across * 0.0089f + var * 4.0f,
+		across * 0.0047f + 1.7f));
+	const float edge = saturate(1.0f - input.flow.x / max(gRiverEdge.x *
+		(0.9f + 0.4f * rim.x * rim.y + 0.2f * rim.x), 1.0f));
+	const float lobe = saturate(edge + 0.3f * c1.x * c1.y);
+	const float thr = lerp(1.15f, 0.3f, lobe) + 0.1f * swing;
+	const float end = gRiverEdge.y * smoothstep(thr - 0.12f, thr + 0.12f,
+		n) * (0.4f + 0.6f * lobe);
 	const float foam = min(max(end, streak), 0.75f) * above;
 	const float nAt = end > streak ? n : 0.5f + 0.5f * lines;
 

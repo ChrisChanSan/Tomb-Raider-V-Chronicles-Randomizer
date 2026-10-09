@@ -10684,7 +10684,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	 * along the body, not a drain in a pool: in ANDY3 the river of rooms 38
 	 * and 41 holds sinks 7, 8 and 18, named by 10 squares against its 10,
 	 * and the sea of rooms 10 to 17 holds sink 1, named by 2 squares
-	 * against its 42 (bank/sinks, a tool of this round's) - refused. */
+	 * against its 42 - refused (the camera table and every TO_SINK
+	 * command of the classic level, counted with the randomizer's
+	 * Tr5Level; RoomProbe -hdwater 1 -nodraw, `lying=` and `refused=`). */
 	if (sheets && !g_wsinks.empty())
 	{
 		const size_t nb = g_wbodies.size();

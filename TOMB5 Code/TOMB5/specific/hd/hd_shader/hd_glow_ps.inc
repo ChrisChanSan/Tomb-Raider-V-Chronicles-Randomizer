@@ -2123,5 +2123,5 @@ const BYTE kHDGlowPS[] =
       0,   1,   0,   0,  15, 128, 
     255, 255,   0,   0
 };
-// bshader-include hd_room 4033b14903a21641690dc98dac822a89
+// bshader-include hd_room a363d154417dd9134500dfd23a73b461
 // bshader-stamp 1eec2e4026aadbfc37e0d0a75d1f000f

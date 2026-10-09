@@ -2731,19 +2731,45 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 /* ------------------------------------------------------------- the river -- */
 
 /* A river (hd_render.cpp, "the rivers") is water a current pulls through.
- * Its rows are the sheet's own, stretched along the flow; this second draw
- * of the sheet's triangles, with the same blend, adds what a fast current
- * carries on its skin and where it ends.
+ * Its rows are the sheet's own, stretched along the flow and carried with
+ * it as one; this second draw of the sheet's triangles, with the same
+ * blend, adds what moves with the current where the eye sees it from any
+ * angle - a sheen on the skin, the light on the floor - and the foam where
+ * it ends.
  *
- * The streaks: thin bright lines along the flow - two sets of ridges across
- * it, a coarse one about 410 units apart and a fine one about 170, whose
- * places wander slowly with the way down the river, so a line bends and
- * does not run ruler straight; carried at gRiverFlow.z, faster than the
- * rows, and broken along the river by a slow field whose threshold swings
- * over the bank foam's 5 seconds, so a stretch of lines comes and
- * dissolves. A line is where its ridge stands over 0.82 of its crest,
- * whole at 0.98. Lit like foam, at most gRiverFlow.w of its cover: a skin
- * on the water, not a blanket.
+ * The sheen: long thin lines along the flow, a little lighter and a little
+ * darker than the water and nothing white - the skin of a fast stream seen
+ * from the bank, whose texture slides and whose highlights streak. Two sets
+ * of ridges across the flow, about 410 and 170 units apart, whose places
+ * wander slowly with the way down the river, so a line bends and does not
+ * run ruler straight; the coarse set lighter, the fine set darker. Each
+ * line is broken along the flow into dashes a few hundred units long,
+ * carried at gRiverFlow.z (the current) times HD_RIVER_SKIN, faster than
+ * the rows - the skin is carried faster than the shape of the waves - with
+ * their phase turned by the way across, so neighbouring lines break at
+ * their own places, and a slow field whose threshold swings over the bank
+ * foam's 5 seconds brings a stretch of lines and dissolves it. A line
+ * fades where the pixel's step across the flow passes HD_RIVER_THIN units:
+ * a line thinner than a pixel or two would flicker. The lighter lines add
+ * gRiverFlow.w of the reflection's colour - what a facet tilted toward the
+ * sky shows -, the darker ones take 0.6 of that share of what lies behind:
+ * no Fresnel weighs either, so the sheen reads from above as from the bank.
+ *
+ * The light on the floor: where the floor shows through the river the
+ * caustic (CausticOf, the note beside HD_CAUSTIC_SCALE) is laid on it here,
+ * carried with the current, in place of the one RoomPS lays on a floor
+ * standing still (hd_render.cpp, upload_water_room: the submerged weight
+ * is zero in the water rooms a river is seen through, while the eye is
+ * above the water and the frame's copy is taken). Its place is the floor
+ * point under the pixel, the view ray run on past the surface by the
+ * square's depth (input.roomPos.w) over the ray's downward cosine (at least
+ * 0.25, as WaterDepthBelow takes it), moved by the current's way; its
+ * strength RoomPS's own, 1 + HD_CAUSTIC_FLOOR w c on the floor's colour,
+ * with w gone two squares down as there and faded where a pixel spans more
+ * than HD_CAUSTIC_FOOT units. The floor's colour is the frame's copy at the
+ * pixel, its share the part of it the sheet lets through: 1 - F (Schlick,
+ * F0 0.02) times the transmission over the path. A brighter floor is added,
+ * a darker one taken off through alpha. gRiverEdge.w turns it on.
  *
  * The end: where the river runs into a wall or over a drop (input.flow.x,
  * the way ahead to the first point with no water, hd_render.cpp) one blob
@@ -2753,15 +2779,21 @@ float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
  * gRiverEdge.y. Nothing at the river's upper end, which the water
  * leaves.
  *
- * The ridges' spacings, the 0.82 and 0.98, the slow field's cells (about
- * 1,340 units along the flow, 2,030 across) and its threshold of 0.35 to
- * 0.65 are free choices, set by eye on the round's RoomProbe pictures.
- * Seen from below nothing, as all foam.
+ * The ridges' spacings, the 0.8 and 0.97 of a line's edges, the slow
+ * field's cells (about 1,340 units along the flow, 2,030 across) and its
+ * threshold of 0.35 to 0.65, HD_RIVER_SKIN, HD_RIVER_THIN and the 0.6 are
+ * free choices, set by eye on the round's RoomProbe pictures and strips.
+ * Seen from below nothing: the sheen and the end are drawn from above,
+ * and under the water RoomPS lays the caustic itself.
  *
  * gRiverFlow  xy the way the river runs (world x, z, a unit vector), z the
- *             streaks' speed in units a second, w their strength
+ *             current in units a second, w the sheen's strength
  * gRiverEdge  x the end foam's reach in units, y its strength, z the speed
- *             that carries it into the end, units a second */
+ *             that carries it into the end, units a second, w 1 to lay the
+ *             caustic on the floor, 0 to leave it to RoomPS */
+#define HD_RIVER_SKIN 1.4f
+#define HD_RIVER_THIN 24.0f
+
 float4 gRiverFlow : register(c132);
 float4 gRiverEdge : register(c133);
 
@@ -2774,29 +2806,60 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float2 dir = gRiverFlow.xy;
 	const float across = dot(world.xz, float2(-dir.y, dir.x));
 	const float var = input.viewZ.z;
+	const float2 dx = ddx(world.xz);
+	const float2 dy = ddy(world.xz);
+	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+	const float keepFog = saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 
-	// The streaks, carried on the skin.
-	const float u = dot(world.xz, dir) - gRiverFlow.z * t;
+	// The sheen, carried on the skin.
+	const float u = dot(world.xz, dir) - gRiverFlow.z * HD_RIVER_SKIN * t;
 	const float2 wander = Wave2(float2(u * 0.0021f, u * 0.0013f) +
 		var * float2(6.0f, 3.0f));
 	const float2 ridge = Wave2(float2(across * 0.0153f + wander.x * 0.7f,
 		across * 0.0371f + wander.y * 0.9f + 1.3f));
-	const float lines = smoothstep(0.8f, 0.97f, max(ridge.x, 0.9f * ridge.y));
 	const float2 slow = Wave2(float2(u * 0.0047f, across * 0.0031f) +
 		t * float2(0.11f, -0.13f) + var * 5.0f);
 	const float swing = Wave2(float2(t * 1.2566371f + slow.x * 3.1f,
 		0.0f)).x;
-	/* Each line is broken along the flow into dashes a few hundred units
-	 * long, carried with it (u runs with the clock): a line that runs along
-	 * the view - the bank's, Lara's - shows its motion only through its
-	 * ends. The dashes' phase is turned by the way across, so neighbouring
-	 * lines break at their own places. */
 	const float2 cut = Wave2(float2(u * 0.0109f + across * 0.0571f,
 		u * 0.0067f - across * 0.0337f + 2.1f));
 	const float dash = smoothstep(-0.25f, 0.45f, cut.x * cut.y +
 		0.35f * cut.x);
-	const float streak = gRiverFlow.w * lines * dash * smoothstep(0.35f,
-		0.65f, 0.5f + 0.5f * slow.x * slow.y + 0.1f * swing);
+	const float wide = max(abs(dot(dx, float2(-dir.y, dir.x))),
+		abs(dot(dy, float2(-dir.y, dir.x))));
+	const float stretch = smoothstep(0.35f, 0.65f, 0.5f + 0.5f * slow.x *
+		slow.y + 0.1f * swing) * saturate(2.0f - wide *
+		(1.0f / HD_RIVER_THIN));
+	const float light = smoothstep(0.8f, 0.97f, ridge.x) * dash * stretch;
+	const float dark = smoothstep(0.8f, 0.97f, ridge.y) * (1.0f - dash) *
+		stretch;
+	const float3 V = normalize(input.eye.xyz);
+
+	float3 col = gRiverFlow.w * light * keepFog *
+		lerp(gWaterRefl.rgb, gWaterZen.rgb, saturate(abs(V.y)));
+	float a = 0.6f * gRiverFlow.w * dark;
+
+	// The light on the floor, carried with the current.
+	const float depth = input.roomPos.w;
+	const float down = max(abs(V.y), 0.25f);
+	const float2 floorAt = world.xz - V.xz * (depth / down) -
+		dir * (gRiverFlow.z * t);
+	const float sharp = saturate(2.0f - sqrt(max(dot(dx, dx), dot(dy, dy))) *
+		(1.0f / HD_CAUSTIC_FOOT));
+	const float m = HD_CAUSTIC_FLOOR * gRiverEdge.w * gWaterStage.x *
+		saturate(1.0f - depth * (1.0f / 2048.0f)) * sharp *
+		CausticOf(floorAt, t);
+	const float g = 1.0f - abs(V.y);
+	const float g2 = g * g;
+	const float share = (1.0f - (0.02f + 0.98f * g2 * g2 * g)) *
+		exp(-(depth / down) * gWaterDeep.w);
+	const float2 uv = (vpos + 0.5f) * gWaterScreen.xy;
+	const float3 floorCol = tex2Dlod(sWaterCopy, float4(ScreenClamp(uv),
+		0.0f, 0.0f)).rgb;
+
+	col += floorCol * (share * max(m, 0.0f));
+	a = 1.0f - (1.0f - a) * (1.0f - share * max(-m, 0.0f));
 
 	/* The foam where it ends: one blob the width of the river, not the
 	 * bank foam's lattice, whose two layers of products repeat every few
@@ -2829,16 +2892,12 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		(0.9f + 0.4f * rim.x * rim.y + 0.2f * rim.x), 1.0f));
 	const float lobe = saturate(edge + 0.3f * c1.x * c1.y);
 	const float thr = lerp(1.15f, 0.3f, lobe) + 0.1f * swing;
-	const float end = gRiverEdge.y * smoothstep(thr - 0.12f, thr + 0.12f,
-		n) * (0.4f + 0.6f * lobe);
-	const float foam = min(max(end, streak), 0.75f) * above;
-	const float nAt = end > streak ? n : 0.5f + 0.5f * lines;
+	const float foam = min(gRiverEdge.y * smoothstep(thr - 0.12f,
+		thr + 0.12f, n) * (0.4f + 0.6f * lobe), 0.75f);
 
 	// The foam's body and the fog, as FootPS lays them on.
-	const float2 dx = ddx(world.xz);
-	const float2 dy = ddy(world.xz);
 	const float cover = foam * (1.0f / 0.75f);
-	const float lump = cover * (0.5f + 0.5f * nAt);
+	const float lump = cover * (0.5f + 0.5f * n);
 	const float det = dx.x * dy.y - dx.y * dy.x;
 	const float2 sunStep = float2(gWaterSun.x * dy.y - gWaterSun.z * dy.x,
 		gWaterSun.z * dx.x - gWaterSun.x * dx.y) * (det /
@@ -2846,10 +2905,9 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float body = max(1.0f - gWaterLife.w * dot(float2(ddx(lump),
 		ddy(lump)), sunStep), 0.3f) * (0.65f + 0.35f * lump) *
 		(1.0f - 1.4f * cover * (1.0f - cover));
-	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
-		(2.0f / 255.0f);
-	const float3 col = gWaterFoam.rgb * body * foam *
-		saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 
-	return float4(col, foam);
+	// Premultiplied, the foam over the sheen and the floor's light.
+	col = lerp(col, gWaterFoam.rgb * body * keepFog, foam);
+	a = lerp(a, 1.0f, foam);
+	return float4(col, a) * above;
 }

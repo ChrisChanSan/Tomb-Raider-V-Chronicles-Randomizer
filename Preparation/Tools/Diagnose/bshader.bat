@@ -75,10 +75,18 @@ rem draws with it.
  /Fh "%SHADERDIR%\hd_room_water_view_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
-rem The waterfalls' swirls: the same file's SwirlPS, a second draw over a
+rem And the depth variant with HD_WATER_UNDER as well: the surface seen from
+rem below while the eye is under the water - no foam, the extinction in the
+rem fog's place (hd_room.hlsl, "under the water").
+"%FXC%" /nologo /T ps_3_0 /E WaterPS /O3 /D HD_WATER_DEPTH=1 ^
+ /D HD_WATER_UNDER=1 /Vn kHDRoomWaterUnderPS ^
+ /Fh "%SHADERDIR%\hd_room_water_under_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
+rem The waterfalls' feet: the same file's FootPS, a second draw over a
 rem sheet where a waterfall lands (hd_room.hlsl, "the waterfall's foot").
-"%FXC%" /nologo /T ps_3_0 /E SwirlPS /O3 /Vn kHDRoomWaterSwirlPS ^
- /Fh "%SHADERDIR%\hd_room_water_swirl_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+"%FXC%" /nologo /T ps_3_0 /E FootPS /O3 /Vn kHDRoomWaterFootPS ^
+ /Fh "%SHADERDIR%\hd_room_water_foot_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
 rem The rivers' streaks and the foam where they end: the same file's RiverPS,
@@ -143,7 +151,9 @@ call :stamp hd_room hd_room_water_depth_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_view_ps.inc
 if errorlevel 1 exit /b 1
-call :stamp hd_room hd_room_water_swirl_ps.inc
+call :stamp hd_room hd_room_water_under_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_foot_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_river_ps.inc
 if errorlevel 1 exit /b 1

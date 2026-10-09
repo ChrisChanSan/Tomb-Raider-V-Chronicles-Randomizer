@@ -416,6 +416,9 @@ float4 gWaveV2[4] : register(c24);
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
  * c36         gRipple             per DRAW CALL
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
+ * c134 - c136 gUnderSigma, gUnderLight, gUnderUp   per frame (the eye
+ *                                 under the water; not in the gloss
+ *                                 variant, see "under the water")
  *
  * and in the gloss variant alone (compiled with HD_GLOSS, see "The sheen"
  * below):
@@ -680,8 +683,8 @@ float4 gWaterMisc : register(c103);
  *               the surface at rest over 64 units, 5 the bank foam's
  *               patches, green), y the slope's gain at
  *               eye level less one (the class's, see "the body at eye
- *               level" in WaterPS), w the swirls in use (0 to 8), read by
- *               SwirlPS alone
+ *               level" in WaterPS), w the footprint's segments in use (0
+ *               to 8), read by FootPS alone
  *
  * Above the pixel registers of every other shader of the blend phase; the
  * shadow receive shaders' c103 - c108 are written by every one of their
@@ -713,19 +716,21 @@ float4 gWaterStage : register(c106);
  *              water (see "the foam" in WaterPS); z 1e9 in the draw over
  *              the pixels the creatures' mark took (hd_render.cpp), where
  *              no waterline is then drawn at all
- * gWaterSwirls c124 - c131, read by SwirlPS alone: one waterfall's foot a
- *              register, x, z its centre in the frame of the sheet's world
- *              position, its radius and its strength (see SwirlPS)
+ * gFootSeg     c124 - c131, read by FootPS alone: one segment of a
+ *              waterfall's footprint a register, x1, z1, x2, z2 its ends in
+ *              the frame of the sheet's world position (see FootPS)
  *
  * c132 and c133, gRiverFlow and gRiverEdge, are read by RiverPS alone and
- * declared with it ("the river"). */
+ * declared with it ("the river"); c134 - c136, the eye under the water,
+ * by every shader that applies it ("under the water"); c137 - c144,
+ * gFootReach, by FootPS alone ("the waterfall's foot"). */
 float4 gWaveP2[4] : register(c107);
 float4 gWaterLag : register(c111);
 float4 gWaterLife : register(c112);
 float4 gWaterRings[8] : register(c113);
 float4 gWaveK[2] : register(c121);
 float4 gWaterLara : register(c123);
-float4 gWaterSwirls[8] : register(c124);
+float4 gFootSeg[8] : register(c124);
 
 /* The frame behind the sheet, copied out of the render target before the
  * blend phase (HDRenderWaterCopy): linear, clamped, one level. The frame's
@@ -1433,6 +1438,55 @@ float3 GlossSheen(VS_OUT input, float4 texel, float3 light, float3 own, float da
 }
 #endif
 
+/* -------------------------------------------------- under the water -- */
+
+/* Seen from inside a body of water, what lies further away fades toward the
+ * water's own colour - the textbook extinction and in-scattering of a
+ * participating medium, per channel:
+ *
+ *     col = col exp(-L sigma_rgb) + scatter (1 - exp(-L sigma_s))
+ *
+ * L the length of the eye ray that runs in the water: the whole distance d
+ * to a point under the surface, and d D / h to a point above it, D the eye's
+ * depth under the surface and h the point's height over the eye along world
+ * up - one expression for both, d saturate(D / h). The near stays clear, the
+ * far takes the water's colour; brighter where the ray looks up, toward the
+ * light that comes in from above (gUnderLight.w times the ray's upward
+ * cosine), darker where it looks down.
+ *
+ * The numbers are the sheet's own (hd_render.cpp, "under the water"):
+ * sigma_rgb its per-channel absorption, sigma_s its one-over-the-absorption
+ * length, scatter its shallow colour lit by the body's light - so the water
+ * looks the same from inside as from above it.
+ *
+ * gUnderSigma  rgb sigma per channel, w sigma_s, both per unit
+ * gUnderLight  rgb the scattered colour, w the gain of the upward look
+ * gUnderUp     xyz world up (-y) in view space, w D in units
+ *
+ * Per frame, written by HDRenderFrameBegin; all twelve zero unless the eye
+ * is in a water room of a level with sheets - and with them zero the path is
+ * 0, the transmission exactly 1 and the scatter 0, so the colour comes out
+ * to the bit as it went in. In RoomPS, GlowPS and ModelPS (hd_model.hlsl
+ * holds the twin) and the sheet's HD_WATER_UNDER variant; the gloss variant
+ * has no slots left for it and keeps the distance fog. `share` is 1 where
+ * the surface scatters the water's light toward the eye and 0 in the
+ * additive pass, a glow, which the water only dims. */
+float4 gUnderSigma : register(c134);
+float4 gUnderLight : register(c135);
+float4 gUnderUp : register(c136);
+
+float3 UnderWater(float3 col, float3 viewPos, float share)
+{
+	const float d = length(viewPos);
+	const float h = dot(viewPos, gUnderUp.xyz);
+	const float path = d * saturate(gUnderUp.w / max(h, 1.0e-3f));
+	const float S = 1.0f - exp(-path * gUnderSigma.w);
+	const float up = max(1.0f + gUnderLight.w * h / max(d, 1.0f), 0.0f);
+
+	return col * exp(-path * gUnderSigma.rgb) + gUnderLight.rgb * (S *
+		share * up);
+}
+
 float4 RoomPS(VS_OUT input) : COLOR0
 {
 	float2 uv = input.uv;
@@ -1544,8 +1598,14 @@ float4 RoomPS(VS_OUT input) : COLOR0
 
 	f -= fogged;
 #else
-	if (input.viewPos.z > gFog.x)
-		f -= (input.viewPos.z - gFog.x) * gFog.y;
+	/* Under the water the extinction at the end of this function takes the
+	 * fog's place: its start moves out past any view (gUnderSigma.w times
+	 * 1e30, a distance no eye ray reaches; plus exactly 0 when the eye is
+	 * not under water). */
+	const float fogFrom = gFog.x + gUnderSigma.w * 1.0e30f;
+
+	if (input.viewPos.z > fogFrom)
+		f -= (input.viewPos.z - fogFrom) * gFog.y;
 #endif
 
 	/* Back into the remaster's scale. This is the classic path's split
@@ -1724,6 +1784,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
 				gAdd.y * (6.2831853f / gAdd.z));
 
 	lit *= lerp(1.0f, weight, gPass.y);
+
+	// Under the water (see above): a glow is dimmed, a surface scatters.
+	lit = UnderWater(lit, input.viewPos, 1.0f - gPass.y);
 #endif
 
 	/* The glass. gSpec.w is this draw call's own see-through weight -
@@ -2349,6 +2412,12 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	foam += gWaterMisc.y * max(crest * smoothstep(0.45f, 0.85f, n),
 		0.7f * trail * smoothstep(0.55f, 0.9f, n));
 	foam = min(foam, 0.75f) * above;
+#ifdef HD_WATER_UNDER
+	/* The variant drawn while the eye is under the water: the surface is
+	 * seen from below, where no foam is drawn, so the foam goes and its
+	 * slots go to the extinction below. */
+	foam = 0.0f;
+#endif
 
 #ifndef HD_WATER_VIEW
 	/* The foam's body. Foam is a thin layer with thickness, not paint: its
@@ -2389,10 +2458,24 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	/* The distance fog (drawroom.cpp), in the light's own scale as RoomPS
 	 * takes it, as a share of the body's light - see the note over
 	 * WATER_OUT. The frame behind the sheet is fogged already. */
+#ifdef HD_WATER_UNDER
+	/* Under the water the extinction takes the fog's place, as in RoomPS:
+	 * the eye ray runs in the water all the way to the surface, so its path
+	 * is the whole distance and its upward cosine V.y (y counts down, V
+	 * points to the eye). What the sheet adds of its own goes as the scene
+	 * goes, and its share of the scattered light is its own cover `a`; the
+	 * frame behind it, added below, carries its own extinction already. */
+	const float under = length(input.eye.xyz);
+
+	col = col * exp(-under * gUnderSigma.rgb) + gUnderLight.rgb * (a *
+		(1.0f - exp(-under * gUnderSigma.w)) *
+		max(1.0f + gUnderLight.w * V.y, 0.0f));
+#else
 	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
 		(2.0f / 255.0f);
 
 	col *= saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
+#endif
 
 	/* With the copy: the floor read at the bent place and added with its
 	 * share, the pixel written whole. With the depth texture the bent place
@@ -2456,47 +2539,74 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 /* ------------------------------------------------- the waterfall's foot -- */
 
 /* Where a waterfall lands on a sheet (hd_render.cpp, "the foot of a
- * waterfall") the water is churned white: a disc of the sheet's own foam
- * that turns slowly, dense at the middle and lacy at its rim. A second draw
- * of the sheet's triangles over the first, with the same blend, one source
- * a register (gWaterSwirls, gWaterStage.w of them) - its own pixel shader
- * because the sheet's depth variant has no room left for a loop of this
- * size.
+ * waterfall") the water is churned white in one zone round the curtain's
+ * footprint - a polyline of up to eight segments (gFootSeg, gWaterStage.w
+ * of them) - and the foam is pushed away from it. A second draw of the
+ * sheet's triangles over the first, with the same blend; its own pixel
+ * shader because the sheet's depth variant has no room left for a loop.
  *
- * Per source the pixel's place is turned about the centre by the clock
- * times HD_SWIRL_SPIN and by HD_SWIRL_TWIST more toward the middle - a
- * spiral that turns as a whole, so it never winds up however long it
- * runs - and the bank foam's own pattern and dissolve are read there: the
- * two drifting layers (the coarse one warping the fine one), the slow layer
- * and the threshold that swings with it over 5 seconds, scaled by the
- * class's grain (gWaterBase.w), each source with a phase of its own by its
- * place. Its reach, the radius times 0.8 + 0.2 of the bank foam's patch
- * field at this place (WaterVS, PatchField; -1 to 1, cells of thousands of
- * units on clocks of 26 to 46 seconds) - so the disc breathes, slowly
- * and at every foot differently. Over the reach the density is the bank
- * foam's with the middle where the bank is: the threshold from 1.25 at the
- * rim to -0.05 at the middle - along the square root of the way in, so the
- * dense core fills about half the disc and the lace the ring round it -,
- * the smoothstep round it, times 0.4 + 0.6 of the way in, times the
- * source's strength (the body's foam scale), at most 0.75 like all foam.
- * Then the foam's body and the distance fog exactly as WaterPS lays them
- * on. Seen from below nothing: foam is drawn from above alone, as in
- * WaterPS.
+ * Per segment: the pixel's distance d to the segment, its way u along the
+ * segment's line and its signed distance `across` from that line - u and
+ * across run on past the segment's ends, so the pattern is one piece all
+ * round them. The zone's reach R is the segment's (gFootReach.x) times
+ * 0.8 + 0.2 of the bank foam's patch field here (WaterVS, PatchField) and
+ * times 0.85 + 0.3 of the mean of a slow lobe field's two waves: an outline
+ * that is irregular and changes slowly. x = d / R runs from 0 at the line
+ * to 1 at the rim.
  *
- * The spin, a turn in about 18 seconds, and the twist, about a fifth of a
- * turn from the rim to the middle, are free choices, set by eye on the
- * round's RoomProbe pictures (a half turn drew the pattern into spiral arms
- * like a painted sign); the square root, 0.8 and 0.2 as well. */
-#define HD_SWIRL_SPIN 0.35f
-#define HD_SWIRL_TWIST 1.2f
+ * The push. The foam leaves the line at HD_FOOT_SPEED and slows down to
+ * nothing at the rim, v = v0 sqrt(1 - x); a mark carried by that flow has
+ * come w = 2 R (1 - sqrt(1 - x)) from the line (the way it covered, the
+ * time integral of v), so the pattern is read at w - v0 t across the line:
+ * every blotch moves outward, slows down and gathers toward the rim. Across
+ * the line the pattern's scale is HD_FOOT_STRETCH of its scale along it, so
+ * near the line a blotch is a streak pointing away from the curtain, and
+ * dw/dd = 1 / sqrt(1 - x) shortens it on its way out into the lace of the
+ * rim. Nothing turns. The pattern is moved along the line by HD_FOOT_SIDE
+ * on one side against the other, smoothly over 160 units either side of
+ * the line, so the two sides are no mirror of each other and no seam runs
+ * anywhere - a sign of `across` would draw one along the line past the
+ * footprint's ends; and the bank foam's two layers ride at two speeds -
+ * the fine one at HD_FOOT_LAG of the coarse one's - so they slide over each
+ * other and the flow does not read as a belt. The bank foam's slow layer
+ * and the threshold that swings with it over 5 seconds make the blotches
+ * grow and dissolve.
+ *
+ * The density is the bank foam's, with the line where the bank is: the
+ * threshold from 1.25 at the rim to -0.05 at the line along (1 - x) to the
+ * power 0.75 - dense near the line, lace over the outer half -, the
+ * smoothstep round it, times 0.4 + 0.6 (1 - x), times the segment's
+ * strength (gFootReach.y: the body's foam scale, less over a gap of the
+ * curtain where no water lands), the most of all the segments, at most 0.75
+ * like all foam. Then the foam's body and the distance fog exactly as
+ * WaterPS lays them on. Seen from below nothing: foam is drawn from above
+ * alone, as in WaterPS.
+ *
+ * The speed, the stretch, the side's move, the lag, the power 0.75 and the
+ * lobe field (cells of about 900 by 1,300 units drifting at 0.05 a second)
+ * are free choices, set by eye on the round's RoomProbe pictures and
+ * strips: a power of 0.5 filled the zone, 1 and 2 left a thin line; a
+ * stretch of 0.45 drew a comb.
+ *
+ * gFootReach  c137 - c144, one segment a register: x its reach in units,
+ *             y its strength */
+#define HD_FOOT_SPEED 220.0f
+#define HD_FOOT_STRETCH 0.75f
+#define HD_FOOT_SIDE 260.0f
+#define HD_FOOT_LAG 0.55f
 
-float4 SwirlPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
+float4 gFootReach[8] : register(c137);
+
+float4 FootPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 {
 	const float3 world = input.roomPos.xyz + gRoomOrigin.xyz;
 	const float t = gWaterMisc.z;
 	// y counts down: the eye above the surface lies toward -y.
 	const float above = input.eye.y < 0.0f ? 1.0f : 0.0f;
-	const float reach = 0.8f + 0.2f * clamp(input.viewZ.w, -1.0f, 1.0f);
+	const float2 lobeW = Wave2(world.xz * float2(0.0035f, 0.0024f) +
+		t * float2(0.05f, -0.04f));
+	const float spread = (0.8f + 0.2f * clamp(input.viewZ.w, -1.0f, 1.0f)) *
+		(0.85f + 0.3f * (lobeW.x + lobeW.y) * 0.5f);
 	float foam = 0.0f;
 	float nAt = 0.5f;
 
@@ -2506,32 +2616,37 @@ float4 SwirlPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		if ((float)i >= gWaterStage.w)
 			break;
 
-		const float4 s = gWaterSwirls[i];
-		const float2 dv = world.xz - s.xy;
-		const float d = length(dv);
-		const float edge = saturate(1.0f - d / max(s.z * reach, 1.0f));
+		const float4 s = gFootSeg[i];
+		const float2 r = gFootReach[i].xy;
+		const float2 ab = s.zw - s.xy;
+		const float len = max(length(ab), 1.0f);
+		const float2 dir = ab / len;
+		const float2 rel = world.xz - s.xy;
+		const float u = dot(rel, dir);
+		const float across = dir.x * rel.y - dir.y * rel.x;
+		const float d = length(rel - dir * clamp(u, 0.0f, len));
+		const float reach = max(r.x * spread, 1.0f);
+		const float x = saturate(d / reach);
+		const float w = 2.0f * reach * (1.0f - sqrt(1.0f - min(x, 0.98f)));
 		const float own = frac(dot(s.xy, float2(0.0013f, 0.0029f)));
-		float sn, cs;
-
-		sincos(t * HD_SWIRL_SPIN + HD_SWIRL_TWIST * edge +
-			6.2831853f * own, sn, cs);
-
-		const float2 p = s.xy + float2(dv.x * cs - dv.y * sn,
-			dv.x * sn + dv.y * cs);
-		const float2 fp = (p + own * float2(400.0f, -330.0f)) * gWaterBase.w;
-		const float2 w1 = Wave2(fp.yx * float2(0.021f, 0.017f) +
-			t * float2(0.25f, -0.18f));
-		const float2 w2 = Wave2(fp * float2(0.047f, 0.041f) + w1 * 1.7f +
-			t * float2(-0.9f, 1.1f));
-		const float2 slow = Wave2(fp * float2(0.0083f, 0.0101f) +
+		const float along = u + HD_FOOT_SIDE * smoothstep(-160.0f, 160.0f,
+			across) + own * 400.0f;
+		const float2 pa = float2(along, HD_FOOT_STRETCH *
+			(w - HD_FOOT_SPEED * t)) * gWaterBase.w;
+		const float2 pb = float2(along, HD_FOOT_STRETCH *
+			(w - HD_FOOT_LAG * HD_FOOT_SPEED * t) - 330.0f) * gWaterBase.w;
+		const float2 w1 = Wave2(pa.yx * float2(0.021f, 0.017f));
+		const float2 w2 = Wave2(pb * float2(0.047f, 0.041f) + w1 * 1.7f);
+		const float2 slow = Wave2(pa * float2(0.0083f, 0.0101f) +
 			t * float2(0.11f, -0.13f) + own * 5.0f);
 		const float swing = Wave2(float2(t * 1.2566371f + slow.x * 3.1f,
 			0.0f)).x;
 		const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
-		const float thr = lerp(1.25f, -0.05f, sqrt(edge)) + 0.12f * swing;
-		// At the rim (edge 0) the threshold stands over every n: none.
-		const float f = s.w * smoothstep(thr - 0.12f, thr + 0.18f, n) *
-			(0.4f + 0.6f * edge);
+		const float thr = lerp(1.25f, -0.05f, pow(1.0f - x, 0.75f)) +
+			0.12f * swing;
+		// At the rim (x 1) the threshold stands over every n: none.
+		const float f = r.y * smoothstep(thr - 0.12f, thr + 0.18f, n) *
+			(0.4f + 0.6f * (1.0f - x));
 
 		nAt = f > foam ? n : nAt;
 		foam = max(foam, f);
@@ -2638,7 +2753,7 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float foam = min(max(end, streak), 0.75f) * above;
 	const float nAt = end > streak ? n : 0.5f + 0.5f * lines;
 
-	// The foam's body and the fog, as SwirlPS lays them on.
+	// The foam's body and the fog, as FootPS lays them on.
 	const float2 dx = ddx(world.xz);
 	const float2 dy = ddy(world.xz);
 	const float cover = foam * (1.0f / 0.75f);

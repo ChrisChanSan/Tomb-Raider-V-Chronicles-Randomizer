@@ -88,13 +88,15 @@
  * A fade that does not apply is handed as a range the pixel never leaves:
  * axis 0 and ends -1 and 1 with a length of 1, u -1 and 2 with a width of 1.
  *
- * c77 to c79 are registers no other pixel shader of this renderer reads or
- * holds a literal in: the room shader's literals sit in c0 to c15, c37 to c39
- * and c72 to c76 (hd_room_ps.inc), the model shader's in c0 to c18. This
- * shader's own literals take c0 to c15 outside c4 and c10, c36 to c39 - c36
- * is gRipple's register, which it does not read, so draw_pass writes gRipple
- * again when it puts the room shader back - and none of the registers the
- * renderer writes while it is bound (hd_glow_ps.inc). */
+ * c77 to c79 are registers no other pixel shader of this renderer reads; the
+ * room shader holds literals there (its literals sit in c0 to c15, c37 to
+ * c39 and c72 to c80, hd_room_ps.inc), which belong to it alone while it is
+ * bound, and the model shader's sit in c0 to c19 and c36 to c38. This
+ * shader's own literals take c0 to c15 outside c4 and c10, c36 to c39 and
+ * c72 to c76 - c36 is gRipple's register, which it does not read, so
+ * draw_pass writes gRipple again when it puts the room shader back - and
+ * none of the registers the renderer writes while it is bound
+ * (hd_glow_ps.inc). */
 float4 gGlowAxis : register(c77);
 float4 gGlowEnds : register(c78);
 float4 gGlowMode : register(c79);
@@ -143,8 +145,11 @@ float4 GlowPS(VS_OUT input) : COLOR0
 
 	f += input.waterAdd.xyz;
 
-	if (input.viewPos.z > gFog.x)
-		f -= (input.viewPos.z - gFog.x) * gFog.y;
+	// The fog's start, moved out under the water as in RoomPS.
+	const float fogFrom = gFog.x + gUnderSigma.w * 1.0e30f;
+
+	if (input.viewPos.z > fogFrom)
+		f -= (input.viewPos.z - fogFrom) * gFog.y;
 
 	float3 c = f * (2.0f / 255.0f);
 
@@ -189,6 +194,9 @@ float4 GlowPS(VS_OUT input) : COLOR0
 				gAdd.y * (6.2831853f / gAdd.z));
 
 	lit *= lerp(1.0f, weight, gPass.y);
+
+	// Under the water a glow is dimmed and scatters nothing (UnderWater).
+	lit = UnderWater(lit, input.viewPos, 0.0f);
 
 	/* The four fades. */
 	float d = length(input.viewPos);

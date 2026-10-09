@@ -259,6 +259,8 @@ float4 gSoft[4] : register(c163);
  * c17         gCounts             per object
  * c20 - c35   gLights[16]         per object (8 lights, two registers each)
  * c40 - c71   gBulbs[32]          per frame  (16 bulbs, two registers each)
+ * c134 - c136 gUnderSigma, gUnderLight, gUnderUp   per frame (the eye
+ *                                 under the water)
  *
  * The same numbers hd_room.hlsl uses, and for the same things - one table of
  * "register -> meaning" for the whole HD path. The ONE difference is the
@@ -300,6 +302,27 @@ float4 gLights[HD_MAX_LIGHTS * 2] : register(c20);
 /* Two registers per bulb: (x, y, z, radius) in VIEW space, then
  * (r, g, b, density). */
 float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
+
+/* Under the water: the twin of hd_room.hlsl's UnderWater, the same three
+ * registers written once a frame for both shaders - the note there says
+ * what they hold and why all zero changes nothing. A model's pixel has its
+ * view position and no room position, which is why world up comes in view
+ * space. */
+float4 gUnderSigma : register(c134);
+float4 gUnderLight : register(c135);
+float4 gUnderUp : register(c136);
+
+float3 UnderWater(float3 col, float3 viewPos, float share)
+{
+	const float d = length(viewPos);
+	const float h = dot(viewPos, gUnderUp.xyz);
+	const float path = d * saturate(gUnderUp.w / max(h, 1.0e-3f));
+	const float S = 1.0f - exp(-path * gUnderSigma.w);
+	const float up = max(1.0f + gUnderLight.w * h / max(d, 1.0f), 0.0f);
+
+	return col * exp(-path * gUnderSigma.rgb) + gUnderLight.rgb * (S *
+		share * up);
+}
 
 sampler2D sPage : register(s0);
 
@@ -703,9 +726,12 @@ float4 ModelPS(VS_OUT input) : COLOR0
 	/* The distance fog (output.cpp for a mesh, drawroom.cpp for a room - the
 	 * same three lines). Linear in the view depth from
 	 * tomb5.distance_fog blocks onwards, subtracted from all three channels.
-	 * TR5's fog darkens, it does not blend towards a colour. */
-	if (input.viewPos.z > gFog.x)
-		f -= (input.viewPos.z - gFog.x) * gFog.y;
+	 * TR5's fog darkens, it does not blend towards a colour. Under the
+	 * water its start moves out past any view, as in hd_room.hlsl. */
+	const float fogFrom = gFog.x + gUnderSigma.w * 1.0e30f;
+
+	if (input.viewPos.z > fogFrom)
+		f -= (input.viewPos.z - fogFrom) * gFog.y;
 
 	/* Back into the remaster's scale - the classic path's 128 split with its
 	 * ceiling taken off, the same line hd_room.hlsl carries and for the same
@@ -751,6 +777,9 @@ float4 ModelPS(VS_OUT input) : COLOR0
 
 	/* Additive pass only: an unweighted glow washes the whole frame out. */
 	lit *= lerp(1.0f, texel.a, gPass.y);
+
+	// Under the water: a glow is dimmed, a surface scatters (UnderWater).
+	lit = UnderWater(lit, input.viewPos, 1.0f - gPass.y);
 
 	return float4(lit, texel.a);
 }

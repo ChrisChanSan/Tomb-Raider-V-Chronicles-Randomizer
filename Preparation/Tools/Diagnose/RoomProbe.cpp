@@ -388,15 +388,18 @@
  *                     which leaves out the circle round her that the game
  *                     leaves out round a swimming or wading Lara; world
  *                     x, z. RoomProbe draws no Lara. Needs -hdwater 1.
- *     -swirl x,z,r    a waterfall's foot on the sheets at world x, z with
- *                     radius r - the turning foam and its rings, as a row's
- *                     `swirl x z r` gives them; repeatable. The waterfall
- *                     objects' own feet come without it: -hdwater reads
- *                     the classic .TRC's items and meshes as the engine
- *                     reads items[] and prints a WATERLOG line per object.
- *                     RoomProbe draws neither the objects nor the sparks,
- *                     so the drops are not in its pictures. Needs
- *                     -hdwater 1.
+ *     -foot x1,z1,x2,z2,r
+ *                     a waterfall's foot on the sheets along the line from
+ *                     world x1, z1 to x2, z2 with reach r - the foam pushed
+ *                     away from it and its rings, as a row's `foot x1 z1 x2
+ *                     z2 r` gives them; repeatable. -swirl x,z,r is a foot
+ *                     from x, z to x, z. The waterfall objects' own feet
+ *                     come without it: -hdwater reads the classic .TRC's
+ *                     items and meshes as the engine reads items[] and
+ *                     prints a WATERLOG line per object, per source and
+ *                     per segment of a footprint. RoomProbe draws neither
+ *                     the objects nor the sparks, so the drops are not in
+ *                     its pictures. Needs -hdwater 1.
  *     -shatter       hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
@@ -1689,8 +1692,9 @@ static std::vector<ProbeRipple> g_ripples;
 // -lara x,z: Lara's place for the waterline's gap round her.
 static bool g_lara_set = false;
 static float g_lara_x = 0.0f, g_lara_z = 0.0f;
-// -swirl x,z,r: the feet handed to every picture, as x, z, r.
-static std::vector<float> g_swirls;
+// -foot x1,z1,x2,z2,r and -swirl x,z,r: the feet handed to every picture,
+// five numbers each.
+static std::vector<float> g_feet;
 /* -creature x,z: stand-ins for swimming creatures, as x, z, drawn with the
  * creatures' mark where the HD objects are drawn (HDRenderWaterProbe-
  * Creature); the seed room's classic origin shifts them into the picture. */
@@ -6931,8 +6935,9 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -creature x,z   a stand-in for a swimming creature at "
 			"world x, z, drawn with the creatures' mark, repeatable; "
 			"-nomark draws it without, -markview shows the mark in red\n");
-		printf("       -swirl x,z,r   a waterfall's foot on the sheets at "
-			"world x, z, radius r, repeatable\n");
+		printf("       -foot x1,z1,x2,z2,r   a waterfall's foot on the "
+			"sheets along that line, reach r, repeatable; -swirl x,z,r one "
+			"of length 0\n");
 		printf("       -bookpage <n>   every material 15 book on page n of "
 			"its run, whatever -time says\n");
 		printf("       -with <group> <dx dy dz>   -oldorder   -black   -noshore\n");
@@ -7142,10 +7147,25 @@ static int ProbeMain(int argc, char** argv)
 
 			if (sscanf_s(argv[++at], "%f,%f,%f", &s[0], &s[1], &s[2]) == 3 &&
 				s[2] >= 64.0f && s[2] <= 2048.0f)
-				g_swirls.insert(g_swirls.end(), s, s + 3);
+			{
+				const float f[5] = { s[0], s[1], s[0], s[1], s[2] };
+
+				g_feet.insert(g_feet.end(), f, f + 5);
+			}
 			else
 				printf("RoomProbe: -swirl wants x,z,r (r 64 to 2048) - '%s' "
 					"ignored\n", argv[at]);
+		}
+		else if (!strcmp(argv[at], "-foot") && at + 1 < argc)
+		{
+			float f[5] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+			if (sscanf_s(argv[++at], "%f,%f,%f,%f,%f", &f[0], &f[1], &f[2],
+				&f[3], &f[4]) == 5 && f[4] >= 64.0f && f[4] <= 2048.0f)
+				g_feet.insert(g_feet.end(), f, f + 5);
+			else
+				printf("RoomProbe: -foot wants x1,z1,x2,z2,r (r 64 to 2048) - "
+					"'%s' ignored\n", argv[at]);
 		}
 		else if (!strcmp(argv[at], "-creature") && at + 1 < argc)
 		{
@@ -8885,9 +8905,9 @@ static int ProbeMain(int argc, char** argv)
 				g_hdwater);
 			ProbeWaterFalls(level, stem);
 
-			for (size_t i = 0; i + 2 < g_swirls.size(); i += 3)
-				HDRenderWaterSwirl(g_swirls[i], g_swirls[i + 1],
-					g_swirls[i + 2]);
+			for (size_t i = 0; i + 4 < g_feet.size(); i += 5)
+				HDRenderWaterFootAdd(g_feet[i], g_feet[i + 1], g_feet[i + 2],
+					g_feet[i + 3], g_feet[i + 4]);
 
 			for (size_t i = 0; i < g_ripples.size(); i++)
 				HDRenderWaterRing(g_ripples[i].x, g_ripples[i].z,
@@ -8909,6 +8929,10 @@ static int ProbeMain(int argc, char** argv)
 
 			for (int f = 0; HDRenderWaterFootLine(f, stem, line,
 				sizeof(line)); f++)
+				printf("%s\n", line);
+
+			for (int s = 0; HDRenderWaterSegLine(s, stem, line,
+				sizeof(line)); s++)
 				printf("%s\n", line);
 		}
 	}
@@ -9278,6 +9302,31 @@ static int ProbeMain(int argc, char** argv)
 	FillLighting(frame, lighting, (float)width * 0.5f, (float)height * 0.5f, view);
 	frame.wibbleTable = wibbleTable;
 
+	/* -underwater with sheets: the eye in the seed room under the water,
+	 * as hd_level.cpp sets it (HDFrameDraw) - the room, the eye's y (the
+	 * tool's world is room local and a room's y origin 0) and world up in
+	 * view space, the view matrix's second row negated; the fog bulbs go. */
+	if (g_underwater && HDRenderWaterUnderOn(room))
+	{
+		const float len = sqrtf(view[4] * view[4] + view[5] * view[5] +
+			view[6] * view[6]);
+
+		if (len > 0.0f)
+		{
+			frame.under = 1;
+			frame.underRoom = room;
+			frame.underEyeY = (float)cy;
+			frame.underUp[0] = -view[4] / len;
+			frame.underUp[1] = -view[5] / len;
+			frame.underUp[2] = -view[6] / len;
+			frame.bulbCount = 0;
+			printf("-underwater: the eye under the water in room %d at y "
+				"%.0f, world up in view space %.3f %.3f %.3f\n", room,
+				(float)cy, frame.underUp[0], frame.underUp[1],
+				frame.underUp[2]);
+		}
+	}
+
 	printf("lighting: %d light(s), %d bulb(s), fog start %.0f, underwater %d, "
 		"shimmer %d, wibble %d, water table row %d\n",
 		g_light_count, g_bulb_count, g_fog_start, g_underwater ? 1 : 0,
@@ -9292,6 +9341,18 @@ static int ProbeMain(int argc, char** argv)
 
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+
+	// The constants under the water this frame took - ModelProbe -under's.
+	if (frame.under)
+	{
+		float u[12];
+
+		HDRenderWaterUnderNow(u);
+		printf("-underwater: constants sigma %.6f %.6f %.6f s %.6f, light "
+			"%.4f %.4f %.4f up %.2f, depth %.0f\n", u[0], u[1], u[2], u[3],
+			u[4], u[5], u[6], u[7], u[11]);
+	}
+
 	PrintDepthTruth("(inside the HD frame)");
 	/* The sky dome, first and camera centred - the classic path's own place
 	 * for its horizon mesh. The world matrix is the translation to the
@@ -9467,11 +9528,11 @@ static int ProbeMain(int argc, char** argv)
 			"round the StretchRect), depth texture %s\n", timed, (int)width,
 			(int)height, ms, HDRenderWaterDepthBound() ? "bound" : "not bound");
 
-		int sources = 0;
+		int segs = 0;
 
-		HDRenderWaterSwirlTiming(&ms, &timed, &sources);
-		printf("-hdwater: %d swirl draw(s) carrying %d source(s), GPU %.3f "
-			"ms (timestamps round the swirls' draws)\n", timed, sources, ms);
+		HDRenderWaterFootTiming(&ms, &timed, &segs);
+		printf("-hdwater: %d foot draw(s) carrying %d segment(s), GPU %.3f "
+			"ms (timestamps round the feet's draws)\n", timed, segs, ms);
 		HDRenderWaterRiverTiming(&ms, &timed);
 		printf("-hdwater: %d river draw(s), GPU %.3f ms (timestamps round "
 			"the rivers' streak draws)\n", timed, ms);
@@ -9765,7 +9826,7 @@ int main(int argc, char** argv)
 
 		g_ripples.clear();
 		g_lara_set = false;
-		g_swirls.clear();
+		g_feet.clear();
 		g_creatures.clear();
 		g_creature_mark = true;
 		g_mark_view = false;

@@ -37,7 +37,8 @@
 #include "hd_shader/hd_room_water_ps.inc"
 #include "hd_shader/hd_room_water_depth_ps.inc"
 #include "hd_shader/hd_room_water_view_ps.inc"
-#include "hd_shader/hd_room_water_swirl_ps.inc"
+#include "hd_shader/hd_room_water_under_ps.inc"
+#include "hd_shader/hd_room_water_foot_ps.inc"
 #include "hd_shader/hd_room_water_river_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
@@ -1646,10 +1647,15 @@ namespace
 	// That one with RoomProbe's depth views (HD_WATER_VIEW), made the first
 	// time a view is asked for; the game never asks.
 	IDirect3DPixelShader9* g_water_view_ps = 0;
-	/* The waterfalls' swirls (hd_room.hlsl, SwirlPS), a second draw over a
-	 * sheet range with a foot near it. Null when the device refused it: the
-	 * sheets then draw without swirls; the rings and the drops stay. */
-	IDirect3DPixelShader9* g_water_swirl_ps = 0;
+	/* The depth variant drawn while the eye is under the water
+	 * (HD_WATER_UNDER, hd_room.hlsl "under the water"). Null when the device
+	 * refused it: the sheets then draw with g_water_depth_ps. */
+	IDirect3DPixelShader9* g_water_under_ps = 0;
+	/* The waterfalls' feet (hd_room.hlsl, FootPS), a second draw over a
+	 * sheet range with a curtain near it. Null when the device refused it:
+	 * the sheets then draw without the foot's foam; the rings and the drops
+	 * stay. */
+	IDirect3DPixelShader9* g_water_foot_ps = 0;
 	/* The rivers' streaks and the foam where they end (hd_room.hlsl,
 	 * RiverPS), a second draw over a river's sheet range. Null when the
 	 * device refused it: a river then draws its rows alone. */
@@ -2731,6 +2737,13 @@ namespace
 		g_device->SetPixelShaderConstantF(20, lights, HD_MAX_LIGHTS * 2);
 	}
 
+	/* Whether this frame's eye is under the water (see "under the water"),
+	 * which picks the sheets' HD_WATER_UNDER variant; and the constants it
+	 * takes, defined with the water. */
+	bool g_under_on = false;
+
+	bool water_under_constants(const HDFrameLighting* f, float* out);
+
 	void apply_frame_lighting(const HDFrameLighting* f)
 	{
 		float screen[4] = { 1, 1, 0, 0 };
@@ -2800,6 +2813,15 @@ namespace
 		g_device->SetVertexShaderConstantF(96, wibble, 32);
 		g_device->SetPixelShaderConstantF(16, fog, 1);
 		g_device->SetPixelShaderConstantF(40, bulbs, HD_MAX_BULBS * 2);
+
+		/* c134 - c136, the eye under the water (hd_room.hlsl, "under the
+		 * water"): all twelve zero but in a frame whose eye is in a water
+		 * room of a level with sheets - and all zero leave every shader's
+		 * colour as it was, to the bit. */
+		float under[12] = {};
+
+		g_under_on = water_under_constants(f, under);
+		g_device->SetPixelShaderConstantF(134, under, 3);
 
 		// And a room with no lighting of its own: neutral, never the last
 		// room's.
@@ -3649,9 +3671,13 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_water_depth_ps)))
 		g_water_depth_ps = 0;
 
-	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterSwirlPS,
-		&g_water_swirl_ps)))
-		g_water_swirl_ps = 0;
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterUnderPS,
+		&g_water_under_ps)))
+		g_water_under_ps = 0;
+
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterFootPS,
+		&g_water_foot_ps)))
+		g_water_foot_ps = 0;
 
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterRiverPS,
 		&g_water_river_ps)))
@@ -3809,7 +3835,8 @@ void HDRenderShutdown()
 	if (g_water_ps) { g_water_ps->Release(); g_water_ps = 0; }
 	if (g_water_depth_ps) { g_water_depth_ps->Release(); g_water_depth_ps = 0; }
 	if (g_water_view_ps) { g_water_view_ps->Release(); g_water_view_ps = 0; }
-	if (g_water_swirl_ps) { g_water_swirl_ps->Release(); g_water_swirl_ps = 0; }
+	if (g_water_under_ps) { g_water_under_ps->Release(); g_water_under_ps = 0; }
+	if (g_water_foot_ps) { g_water_foot_ps->Release(); g_water_foot_ps = 0; }
 	if (g_water_river_ps) { g_water_river_ps->Release(); g_water_river_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
@@ -8836,8 +8863,9 @@ namespace
 		int ripple;		// 1 with a ripple source
 		float rx, rz, rsize, rperiod;
 		int art;		// 1 for `art keep`, 0 hides the art (default)
-		int swirl;		// 1 with a swirl source, -1 for `swirl off`
-		float sx, sz, sr;
+		int foot;		// 1 with a foot of its own, -1 for `foot off`
+		float footAt[5];	// x1 z1 x2 z2 reach
+		int old;		// the key `swirl`, read as `foot`
 		int flow;		// 1 with `flow dx dz speed`
 		float fx, fz, fspeed;
 	};
@@ -8937,11 +8965,11 @@ namespace
 	 *
 	 * Where a waterfall object's foot stands over a sheet (HDRenderWaterFalls)
 	 * the water it drops into is not left as calm as the rest of the body:
-	 * a source there is three things at once - a disc of the sheet's own foam
-	 * that turns slowly (hd_room.hlsl, SwirlPS), rings that start from it
-	 * again and again as a ripple row's do, and drops thrown up from it on
-	 * the logic tick (hd_level.cpp, HDWaterFallsTick, the engine's own
-	 * TriggerSmallSplash).
+	 * round the curtain's footprint lies one zone of the sheet's own foam,
+	 * pushed away from the footprint and stretched as it goes (hd_room.hlsl,
+	 * FootPS); rings start from points along it again and again as a ripple
+	 * row's do, and drops are thrown up from those points on the logic tick
+	 * (hd_level.cpp, HDWaterFallsTick, the engine's own TriggerSmallSplash).
 	 *
 	 * Which objects: WATERFALL1 to 3 and WATERFALLSS1 and 2, whose texture
 	 * the game scrolls as falling water (game\objects.cpp,
@@ -8961,46 +8989,80 @@ namespace
 	 * free choices that take a fall ending a click under its surface and one
 	 * hanging a square over it.
 	 *
-	 * The sources along a foot. Its points are taken in order along the
-	 * longer side of their box and cut into runs no longer than kFootRun and
-	 * at every gap wider than kFootGap - two strands of one curtain are two
-	 * runs; a run is a source at its mean, along that side, with half the
-	 * run's length as its span and half its diagonal plus kFootPad as its
-	 * radius, held to kFootRadiusMin .. kFootRadiusMax. A curtain thus gets a
-	 * disc about a square across under every square of it, a narrow jet one
-	 * of three quarters of a square. All free choices, set by eye on the
-	 * round's RoomProbe pictures.
+	 * The curtain. The objects over one body whose foot points come within
+	 * kFootJoin of each other's are one curtain: two jets side by side land
+	 * as one. Its points are taken in order along the principal axis of
+	 * their places and gathered every kFootStep along it; the mean of every
+	 * step that holds points is a corner of the curtain's footprint, a
+	 * polyline, whose segments FootPS draws the zone round. A segment that
+	 * spans a step without points bridges a gap where no water lands -
+	 * ANDREA2 room 231's two strands, about 1,250 units apart (the WATERLOG
+	 * seg= lines) - and keeps the zone in one piece at kFootBridge of the
+	 * foam, so the two strands land in one zone; a curtain of one step is a
+	 * segment of 2 units along the axis. Its reach is kFootReachBase plus
+	 * kFootReachGrow times its longest wet stretch - a strand's width -, held
+	 * to kFootReachMin .. kFootReachMax: 0.6 of a square from a narrow jet,
+	 * 0.9 from a strand a square wide, 1.2 from one of two. kFootJoin is 512
+	 * units, half a square; the step, the bridge's 0.85 and the reach's
+	 * numbers are free choices, set by eye on the round's RoomProbe pictures
+	 * (at 0.6 the bridge left two zones, at 0.6 of the whole length the
+	 * reach covered the room).
 	 *
-	 * A source's rings start every kFootRingMin seconds plus up to
-	 * kFootRingMore more, by a hash of its place, so two neighbouring ones do
-	 * not beat in step; kFootRingSize is the size a ripple of the game would
-	 * carry - 64, half a wading Lara's, so the rings stay low. Free choices.
+	 * The rings and the drops come from points along the footprint's wet
+	 * stretches, its corners joined by segments that are no bridge: a
+	 * stretch of length L gets L / kFootSourceStep points, rounded, at least
+	 * one, at the middles of that many equal parts, each with half a part as
+	 * the span its drops scatter over (a quarter of the reach for a stretch
+	 * of one corner). A source's rings start every kFootRingMin seconds plus
+	 * up to kFootRingMore more, by a hash of its place, so two neighbouring
+	 * ones do not beat in step; kFootRingSize is the size a ripple of the
+	 * game would carry - 64, half a wading Lara's, so the rings stay low.
+	 * Free choices.
 	 *
-	 * A row's `swirl x z r` is a source of its own at that place, with that
-	 * radius and no direction; `swirl off` takes the objects' sources of the
-	 * row's bodies away. RoomProbe's -swirl is a row's. */
+	 * A row's `foot x1 z1 x2 z2 reach` is a curtain of its own, that one
+	 * segment with that reach; `foot off` takes the objects' curtains of the
+	 * row's bodies away. `swirl x z r` reads as a foot of length 0 at x, z
+	 * with reach r and `swirl off` as `foot off` (the level's log line
+	 * counts them, old=). RoomProbe's -foot and -swirl are a row's. */
 	const float kFootAbove = 256.0f;	// units
 	const float kFootBelow = 1024.0f;
-	const float kFootRun = 1024.0f;
-	const float kFootGap = 384.0f;
-	const float kFootPad = 256.0f;
-	const float kFootRadiusMin = 384.0f;
-	const float kFootRadiusMax = 768.0f;
+	const float kFootJoin = 512.0f;
+	const float kFootStep = 512.0f;
+	const float kFootBridge = 0.85f;
+	const float kFootReachBase = 614.0f;	// 0.6 of a square
+	const float kFootReachGrow = 0.3f;
+	const float kFootReachMin = 614.0f;
+	const float kFootReachMax = 1229.0f;	// 1.2 squares
+	const float kFootSourceStep = 512.0f;
 	const float kFootSnap = 1024.0f;	// see HDRenderWaterFalls
 	const float kFootRingMin = 0.4f;	// seconds
 	const float kFootRingMore = 0.4f;
 	const float kFootRingSize = 64.0f;
-	const int kSwirlsPerDraw = 8;		// gWaterSwirls[8]
+	const int kFootSegsPerDraw = 8;		// gFootSeg[8]
 
+	// A source of rings and drops along a curtain's footprint.
 	struct WaterFoot
 	{
 		float x, y, z;		// world; y the surface
-		float dx, dz;		// along the foot, a unit vector (x for a row's)
-		float half;		// half its span along that (a row's: none)
-		float radius;
+		float dx, dz;		// along the footprint, a unit vector
+		float half;		// half the stretch its drops scatter over
+		float reach;		// its curtain's
 		float period, phase;	// the rings
 		int body;
+		int curtain;
 		int fromRow;		// 1 for a row's or RoomProbe's
+	};
+
+	// One segment of a curtain's footprint, which FootPS draws round.
+	struct FootSeg
+	{
+		float x1, z1, x2, z2;	// world
+		float y;		// the surface
+		float reach;
+		float wet;		// 1, or kFootBridge over a gap
+		int body;
+		int curtain;
+		int fromRow;
 	};
 
 	// One waterfall object as HDRenderWaterFalls found it, for its log line.
@@ -9012,9 +9074,10 @@ namespace
 		int surface;		// the surface under the foot, or the lowest seen
 		int over;		// 1 when the foot stands over a sheet
 		int body;
-		int sources;
-		int off;		// 1 when a row's `swirl off` took them away
+		int sources;		// its curtain's sources
+		int off;		// 1 when a row's `foot off` took them away
 		int art;		// the art's foot points that took the place
+		int curtain;		// its curtain, or -1
 	};
 
 	std::vector<WaterRing> g_rings;
@@ -9022,10 +9085,15 @@ namespace
 	std::vector<WaterSource> g_wsources;
 	std::vector<ProbeRing> g_ring_probe;
 	std::vector<WaterFoot> g_wfeet;
+	std::vector<FootSeg> g_wsegs;
+	int g_curtains = 0;
 	std::vector<FallSeen> g_wfalls;
 	// Per room: its classic origin x and z, and 1 when it draws HD.
 	std::vector<int> g_wroom_origin;
 	std::vector<unsigned char> g_wroom_drawn;
+	// Per room: the body an eye in that underwater room looks through, -1
+	// for none (see "under the water").
+	std::vector<int> g_wroom_body;
 	// Lara's place for the waterline's gap round her (HDRenderWaterLara).
 	bool g_lara_in_water = false;
 	float g_lara_x = 0.0f, g_lara_z = 0.0f;
@@ -9051,10 +9119,10 @@ namespace
 	int g_sheet_timed = 0;
 	double g_copy_gpu_ms = 0.0;
 	int g_copy_timed = 0;
-	// And of the swirls' second draws, with the sources they carried.
-	double g_swirl_gpu_ms = 0.0;
-	int g_swirl_timed = 0;
-	int g_swirl_sources = 0;
+	// And of the feet's second draws, with the segments they carried.
+	double g_foot_gpu_ms = 0.0;
+	int g_foot_timed = 0;
+	int g_foot_segs = 0;
 	// And of the rivers' second draws.
 	double g_river_gpu_ms = 0.0;
 	int g_river_timed = 0;
@@ -9129,9 +9197,12 @@ namespace
 		g_rings.clear();
 		g_ring_probe.clear();
 		g_wfeet.clear();
+		g_wsegs.clear();
+		g_curtains = 0;
 		g_wfalls.clear();
 		g_wroom_origin.clear();
 		g_wroom_drawn.clear();
+		g_wroom_body.clear();
 		g_lara_in_water = false;
 		g_mark_frame = false;
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
@@ -9183,7 +9254,8 @@ namespace
 	 *                             [bend <s>]
 	 *                             [ripple <x> <z> <size> <seconds>]
 	 *                             [art keep|hide]
-	 *                             [swirl <x> <z> <radius> | swirl off]
+	 *                             [foot <x1> <z1> <x2> <z2> <reach> |
+	 *                              foot off]
 	 *                             [flow <dx> <dz> <speed>]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
@@ -9201,12 +9273,14 @@ namespace
 	 * landing, where the game itself makes no ripple; the rest of the row
 	 * applies as any row's. art keep draws the remaster's own water art
 	 * over the sheets of the row's bodies, art hide (what a row without the
-	 * key says) leaves it out - step 8 of HDRenderSetWaterSheets. swirl puts
-	 * the foot of a waterfall (see "the foot of a waterfall") at world x, z
-	 * with that radius (64 to 2048 units) on the surface of the row's room's
-	 * square under it - a fountain's jet that has no waterfall object -, and
-	 * swirl off takes the waterfall objects' own feet in the row's bodies
-	 * away. flow sets the bodies' current by hand: the way along world x
+	 * key says) leaves it out - step 8 of HDRenderSetWaterSheets. foot lays
+	 * the foot of a waterfall (see "the foot of a waterfall") along the line
+	 * from world x1, z1 to x2, z2 with that reach (64 to 2048 units) on the
+	 * surface of the row's room's square under its middle - a fountain's jet
+	 * that has no waterfall object -, and foot off takes the waterfall
+	 * objects' own feet in the row's bodies away; the key swirl x z r is
+	 * read as a foot from x, z to x, z with reach r and swirl off as foot
+	 * off. flow sets the bodies' current by hand: the way along world x
 	 * and z (-1 to 1 each, not both 0; it is made a unit vector) and the
 	 * speed in units a second (0 to 4000), in place of the one their sinks
 	 * give - what a river draws with (a body of another class keeps it for
@@ -9215,7 +9289,7 @@ namespace
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[29];
+		char* tok[31];
 		char* next = 0;
 		int n = 0;
 
@@ -9225,16 +9299,16 @@ namespace
 			*hash = 0;
 
 		// The longest row: the three words, tint's four, waves', foam's and
-		// bend's two each, ripple's five, art's two, swirl's four and
-		// flow's four - 28 tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 29;
+		// bend's two each, ripple's five, art's two, foot's six and flow's
+		// four - 30 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 31;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 28 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 30 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -9267,15 +9341,18 @@ namespace
 		{
 			float* into = 0;
 			int count = 0;
-			float rip[4];
+			float rip[5];
 			const bool ripple = !_stricmp(tok[i], "ripple");
 			const bool swirl = !_stricmp(tok[i], "swirl");
+			const bool foot = !_stricmp(tok[i], "foot");
 			const bool flow = !_stricmp(tok[i], "flow");
 
-			// swirl off: a word; swirl x z r: three numbers.
-			if (swirl && i + 1 < n && !_stricmp(tok[i + 1], "off"))
+			// foot off: a word; foot x1 z1 x2 z2 reach: five numbers; the
+			// key swirl the same, swirl x z r three.
+			if ((foot || swirl) && i + 1 < n && !_stricmp(tok[i + 1], "off"))
 			{
-				row.swirl = -1;
+				row.foot = -1;
+				row.old += swirl ? 1 : 0;
 				i += 2;
 				continue;
 			}
@@ -9309,6 +9386,8 @@ namespace
 				into = rip, count = 4;
 			else if (swirl)
 				into = rip, count = 3;
+			else if (foot)
+				into = rip, count = 5;
 			else if (flow)
 				into = rip, count = 3;
 
@@ -9320,17 +9399,18 @@ namespace
 				const char* num = tok[i + 1 + k];
 				const double v = std::strtod(num, &end);
 				/* x and z anywhere in a level, the size and the seconds
-				 * as above, a swirl's radius 64 to 2048, a flow's way
-				 * -1 to 1 along x and z and its speed 0 to 4000 units a
-				 * second (a sink of the classic levels' strongest, 10,
-				 * pulls at 1200), every scale 0 to 4. */
-				const bool place = (ripple || swirl) && k < 2;
+				 * as above, a foot's reach (a swirl's radius) 64 to 2048,
+				 * a flow's way -1 to 1 along x and z and its speed 0 to
+				 * 4000 units a second (a sink of the classic levels'
+				 * strongest, 10, pulls at 1200), every scale 0 to 4. */
+				const bool place = ((ripple || swirl) && k < 2) ||
+					(foot && k < 4);
 				const double lo = place ? -1.0e7 : ripple ?
-					(k == 2 ? 1.0 : 0.1) : swirl ? 64.0 : flow ?
+					(k == 2 ? 1.0 : 0.1) : swirl || foot ? 64.0 : flow ?
 					(k < 2 ? -1.0 : 0.0) : 0.0;
 				const double hi = place ? 1.0e7 : ripple ?
-					(k == 2 ? 255.0 : 60.0) : swirl ? 2048.0 : flow ?
-					(k < 2 ? 1.0 : 4000.0) : 4.0;
+					(k == 2 ? 255.0 : 60.0) : swirl || foot ? 2048.0 :
+					flow ? (k < 2 ? 1.0 : 4000.0) : 4.0;
 
 				if (*end || end == num || !(v >= lo && v <= hi))
 					return -1;
@@ -9347,12 +9427,16 @@ namespace
 				row.rperiod = rip[3];
 			}
 
-			if (swirl)
+			// swirl x z r: a foot of length 0, counted (the log's old=).
+			if (swirl || foot)
 			{
-				row.swirl = 1;
-				row.sx = rip[0];
-				row.sz = rip[1];
-				row.sr = rip[2];
+				row.foot = 1;
+				row.footAt[0] = rip[0];
+				row.footAt[1] = rip[1];
+				row.footAt[2] = swirl ? rip[0] : rip[2];
+				row.footAt[3] = swirl ? rip[1] : rip[3];
+				row.footAt[4] = swirl ? rip[2] : rip[4];
+				row.old += swirl ? 1 : 0;
 			}
 
 			// A way of length 0 has no direction: not a flow.
@@ -9424,6 +9508,7 @@ namespace
 				row.file = 1;
 				rows.push_back(row);
 				g_wlevel.fileRows++;
+				g_wlevel.oldKeys += row.old;
 			}
 
 			if (*end == '\r' && end[1] == '\n')
@@ -9896,6 +9981,77 @@ namespace
 		absorb[3] = c.absorb * (1.0f - 1.0f / 1.33f) * b.bend;
 	}
 
+	/* Under the water (hd_room.hlsl, "under the water"). An eye in a water
+	 * room looks through the body over that room (g_wroom_body, built in
+	 * HDRenderSetWaterSheets). The constants are that body's sheet's own:
+	 * sigma per channel its gWaterAbsorb and sigma_s its gWaterDeep.w, both
+	 * times kUnderReach; the scattered colour its shallow colour, lit by the
+	 * body's light and tinted by its row; the upward look's gain kUnderUp;
+	 * world up in view space and the eye's depth under the body's surface
+	 * from the frame - at least one unit, so that a point under the eye
+	 * always lies in the water.
+	 *
+	 * kUnderReach: the sheet's absorption lengths are those of a view down
+	 * through the water onto its floor (a basin 4,000 units, a channel
+	 * 1,500, a sea 900); a view along a flooded corridor runs ten squares
+	 * and more, and at the sheet's own numbers a channel would keep a
+	 * quarter of the light at two squares (exp(-2048 / 1500)). 0.35 keeps
+	 * the near clear and takes the far into the water's colour; a free
+	 * choice, set by eye on the round's RoomProbe pictures, as kUnderUp is:
+	 * looking straight up 1.6 times the scattered light, straight down
+	 * 0.4. */
+	const float kUnderReach = 0.35f;
+	const float kUnderUp = 0.6f;
+
+	// ModelProbe's -under (HDRenderWaterUnderProbe), and this frame's twelve.
+	float g_under_probe[9] = {};
+	bool g_under_probe_set = false;
+	float g_under_now[12] = {};
+
+	bool water_under_constants(const HDFrameLighting* f, float* out)
+	{
+		if (f && f->under && g_under_probe_set)
+		{
+			for (int k = 0; k < 8; k++)
+				out[k] = g_under_probe[k];
+
+			for (int k = 0; k < 3; k++)
+				out[8 + k] = f->underUp[k];
+
+			out[11] = g_under_probe[8] > 1.0f ? g_under_probe[8] : 1.0f;
+			std::memcpy(g_under_now, out, sizeof(g_under_now));
+			return true;
+		}
+
+		std::memset(g_under_now, 0, sizeof(g_under_now));
+
+		if (!f || !f->under || !g_wlevel.built || f->underRoom < 0 ||
+			f->underRoom >= (int)g_wroom_body.size())
+			return false;
+
+		const int b = g_wroom_body[(size_t)f->underRoom];
+
+		if (b < 0 || b >= (int)g_wlooks.size() || b >= (int)g_wbodies.size())
+			return false;
+
+		const WaterLook& look = g_wlooks[(size_t)b];
+		const float depth = f->underEyeY -
+			(float)g_wbodies[(size_t)b].info.surfaceY;
+
+		for (int k = 0; k < 3; k++)
+		{
+			out[k] = look.pixel[32 + k] * kUnderReach;
+			out[4 + k] = look.pixel[4 + k];
+			out[8 + k] = f->underUp[k];
+		}
+
+		out[3] = look.pixel[3] * kUnderReach;
+		out[7] = kUnderUp;
+		out[11] = depth > 1.0f ? depth : 1.0f;
+		std::memcpy(g_under_now, out, sizeof(g_under_now));
+		return true;
+	}
+
 	/* A foot's rings: every kFootRingMin plus up to kFootRingMore seconds by
 	 * one hash of its place, starting at a phase by another, as a ripple
 	 * row's source starts at one of its own. */
@@ -9905,6 +10061,216 @@ namespace
 
 		f.period = kFootRingMin + kFootRingMore * h;
 		f.phase = fmodf(fabsf(f.x * 0.0071f + f.z * 0.0037f), 1.0f) * f.period;
+	}
+
+	/* The sources along one wet stretch of a curtain's footprint (see "the
+	 * foot of a waterfall"): `at` its corners, x and z in turn, `ax, az` the
+	 * curtain's axis for a stretch of one corner. Returns how many. */
+	int stretch_sources(const std::vector<float>& at, float y, float reach,
+		int body, int curtain, int fromRow, float ax, float az)
+	{
+		const size_t corners = at.size() / 2;
+		float length = 0.0f;
+
+		for (size_t k = 1; k < corners; k++)
+			length += sqrtf((at[k * 2] - at[k * 2 - 2]) *
+				(at[k * 2] - at[k * 2 - 2]) + (at[k * 2 + 1] - at[k * 2 - 1]) *
+				(at[k * 2 + 1] - at[k * 2 - 1]));
+
+		const int rounded = (int)(length / kFootSourceStep + 0.5f);
+		const int n = rounded > 1 ? rounded : 1;
+		const float part = length / (float)n;
+
+		for (int i = 0; i < n; i++)
+		{
+			// The middle of part i, walked along the corners.
+			float want = part * ((float)i + 0.5f);
+			WaterFoot foot = {};
+
+			foot.x = at[0];
+			foot.z = at[1];
+			foot.dx = ax;
+			foot.dz = az;
+
+			for (size_t k = 1; k < corners; k++)
+			{
+				const float ex = at[k * 2] - at[k * 2 - 2];
+				const float ez = at[k * 2 + 1] - at[k * 2 - 1];
+				const float len = sqrtf(ex * ex + ez * ez);
+
+				if (len <= 0.0f)
+					continue;
+
+				foot.dx = ex / len;
+				foot.dz = ez / len;
+
+				if (want <= len || k + 1 == corners)
+				{
+					const float f = want < len ? want / len : 1.0f;
+
+					foot.x = at[k * 2 - 2] + ex * f;
+					foot.z = at[k * 2 - 1] + ez * f;
+					break;
+				}
+
+				want -= len;
+			}
+
+			foot.y = y;
+			foot.half = length > 0.0f ? 0.5f * part : 0.25f * reach;
+			foot.reach = reach;
+			foot.body = body;
+			foot.curtain = curtain;
+			foot.fromRow = fromRow;
+			foot_clock(foot);
+			g_wfeet.push_back(foot);
+		}
+
+		return n;
+	}
+
+	/* A curtain's footprint into FootPS's segments and its sources: `at`
+	 * its corners in order, x and z in turn, `wet` per segment 1, or 0 for
+	 * a bridge over a gap; `ax, az` its axis, a unit vector, which a
+	 * footprint of one corner is laid along. Returns the sources. */
+	int lay_curtain(const std::vector<float>& at, const std::vector<int>& wet,
+		float reach, float y, int body, int fromRow, float ax, float az)
+	{
+		const int curtain = g_curtains++;
+		const size_t corners = at.size() / 2;
+		int sources = 0;
+
+		if (corners == 1)
+		{
+			const FootSeg s = { at[0] - ax, at[1] - az, at[0] + ax,
+				at[1] + az, y, reach, 1.0f, body, curtain, fromRow };
+
+			g_wsegs.push_back(s);
+		}
+
+		for (size_t k = 1; k < corners; k++)
+		{
+			const FootSeg s = { at[k * 2 - 2], at[k * 2 - 1], at[k * 2],
+				at[k * 2 + 1], y, reach, wet[k - 1] ? 1.0f : kFootBridge, body,
+				curtain, fromRow };
+
+			g_wsegs.push_back(s);
+		}
+
+		// The wet stretches: corners joined by segments that are no bridge.
+		std::vector<float> stretch;
+
+		for (size_t k = 0; k < corners; k++)
+		{
+			stretch.push_back(at[k * 2]);
+			stretch.push_back(at[k * 2 + 1]);
+
+			if (k + 1 == corners || !wet[k])
+			{
+				sources += stretch_sources(stretch, y, reach, body, curtain,
+					fromRow, ax, az);
+				stretch.clear();
+			}
+		}
+
+		return sources;
+	}
+
+	/* A waterfall curtain's foot points into its footprint (see "the foot of
+	 * a waterfall"): the principal axis of the points, so a curtain turned
+	 * by 45 degrees is laid along itself and not along x; the points in
+	 * order along it, gathered every kFootStep; a corner at the mean of every
+	 * step that holds points, and a bridge where steps between two corners
+	 * hold none. Returns the sources. */
+	int lay_fall_curtain(const std::vector<float>& px,
+		const std::vector<float>& pz, float y, int body)
+	{
+		const size_t n = px.size();
+		float mx = 0.0f, mz = 0.0f;
+
+		for (size_t k = 0; k < n; k++)
+		{
+			mx += px[k] / (float)n;
+			mz += pz[k] / (float)n;
+		}
+
+		float cxx = 0.0f, czz = 0.0f, cxz = 0.0f;
+
+		for (size_t k = 0; k < n; k++)
+		{
+			cxx += (px[k] - mx) * (px[k] - mx);
+			czz += (pz[k] - mz) * (pz[k] - mz);
+			cxz += (px[k] - mx) * (pz[k] - mz);
+		}
+
+		const float ang = 0.5f * atan2f(2.0f * cxz, cxx - czz);
+		const float ax = cosf(ang), az = sinf(ang);
+		std::vector<std::pair<float, size_t> > along(n);
+
+		for (size_t k = 0; k < n; k++)
+			along[k] = std::make_pair((px[k] - mx) * ax + (pz[k] - mz) * az,
+				k);
+
+		std::sort(along.begin(), along.end());
+
+		std::vector<float> at;
+		std::vector<int> steps;
+
+		for (size_t a = 0; a < n; )
+		{
+			const int step = (int)floorf((along[a].first - along[0].first) /
+				kFootStep);
+			float sx = 0.0f, sz = 0.0f;
+			size_t b = a;
+
+			while (b < n && (int)floorf((along[b].first - along[0].first) /
+				kFootStep) == step)
+			{
+				sx += px[along[b].second];
+				sz += pz[along[b].second];
+				b++;
+			}
+
+			at.push_back(sx / (float)(b - a));
+			at.push_back(sz / (float)(b - a));
+			steps.push_back(step);
+			a = b;
+		}
+
+		// The bridges, and the longest wet stretch - a strand's width.
+		std::vector<int> wet;
+		float length = 0.0f, stretch = 0.0f;
+
+		for (size_t k = 1; k < steps.size(); k++)
+		{
+			wet.push_back(steps[k] - steps[k - 1] <= 1 ? 1 : 0);
+			stretch = wet.back() ? stretch + sqrtf((at[k * 2] -
+				at[k * 2 - 2]) * (at[k * 2] - at[k * 2 - 2]) +
+				(at[k * 2 + 1] - at[k * 2 - 1]) *
+				(at[k * 2 + 1] - at[k * 2 - 1])) : 0.0f;
+			length = stretch > length ? stretch : length;
+		}
+
+		wet.push_back(1);
+
+		const float grown = kFootReachBase + kFootReachGrow * length;
+		const float reach = grown < kFootReachMin ? kFootReachMin :
+			grown > kFootReachMax ? kFootReachMax : grown;
+
+		return lay_curtain(at, wet, reach, y, body, 0, ax, az);
+	}
+
+	// A row's foot (`foot x1 z1 x2 z2 reach`): one segment, or a footprint
+	// of one corner where its ends are one place.
+	void lay_row_foot(const float* f, float y, int body)
+	{
+		const float ex = f[2] - f[0], ez = f[3] - f[1];
+		const float len = sqrtf(ex * ex + ez * ez);
+		const std::vector<float> at(f, f + (len > 0.0f ? 4 : 2));
+		const std::vector<int> wet(2, 1);
+
+		lay_curtain(at, wet, f[4], y, body, 1, len > 0.0f ? ex / len : 1.0f,
+			len > 0.0f ? ez / len : 0.0f);
 	}
 
 	// One row applied to every body its room has water in.
@@ -9937,8 +10303,8 @@ namespace
 			b.source = row.file ? 2 : 1;
 			b.sourceRoom = row.room;
 
-			if (row.swirl < 0)
-				b.swirlOff = 1;
+			if (row.foot < 0)
+				b.footOff = 1;
 
 			if (row.flow)
 			{
@@ -9950,34 +10316,29 @@ namespace
 			}
 		}
 
-		// A row's swirl: a foot of its own, placed as a ripple source is.
-		if (row.swirl > 0 && !hit.empty())
+		/* A row's foot: a curtain of its own on the surface of the row's
+		 * room's square under its middle, or of the room's first body. */
+		if (row.foot > 0 && !hit.empty())
 		{
-			WaterFoot foot = {};
-
-			foot.x = row.sx;
-			foot.z = row.sz;
-			foot.y = (float)g_wbodies[(size_t)hit[0]].info.surfaceY;
-			foot.body = hit[0];
+			const float mx = 0.5f * (row.footAt[0] + row.footAt[2]);
+			const float mz = 0.5f * (row.footAt[1] + row.footAt[3]);
+			float y = (float)g_wbodies[(size_t)hit[0]].info.surfaceY;
+			int body = hit[0];
 
 			for (size_t i = 0; i < g_wsquares.size(); i++)
 			{
 				const WaterSquare& s = g_wsquares[i];
 
-				if (s.room == row.room && row.sx >= (float)s.wx &&
-					row.sx < (float)(s.wx + 1024) && row.sz >= (float)s.wz &&
-					row.sz < (float)(s.wz + 1024))
+				if (s.room == row.room && mx >= (float)s.wx &&
+					mx < (float)(s.wx + 1024) && mz >= (float)s.wz &&
+					mz < (float)(s.wz + 1024))
 				{
-					foot.y = (float)s.wy;
-					foot.body = s.body;
+					y = (float)s.wy;
+					body = s.body;
 				}
 			}
 
-			foot.radius = row.sr;
-			foot.dx = 1.0f;		// the drops scatter along x and z
-			foot.fromRow = 1;
-			foot_clock(foot);
-			g_wfeet.push_back(foot);
+			lay_row_foot(row.footAt, y, body);
 		}
 
 		/* A ripple source stands at the surface of the row's room's square
@@ -10430,6 +10791,83 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		}
 	}
 
+	/* The eye under the water (see "under the water"): the body each
+	 * underwater room is looked through. A room under sheet squares takes
+	 * the body most of them belong to, a room further down the body of the
+	 * room over it - walked down six rooms, as water_depth walks -, and a
+	 * water room no sheet lies over at all the level's largest body, a free
+	 * choice: its water is the level's water. */
+	g_wroom_body.assign((size_t)count, -1);
+
+	{
+		const size_t nb = g_wbodies.size();
+		std::vector<int> votes((size_t)count * nb, 0);
+
+		for (const WaterSquare& s : g_wsquares)
+		{
+			if (s.body < 0 || s.room < 0 || s.room >= count ||
+				!rooms[s.room].below)
+				continue;
+
+			const HDWaterRoom& rm = rooms[s.room];
+			const int pit = rm.below[s.sx * rm.sizeZ + s.sz];
+
+			if (pit >= 0 && pit < count &&
+				(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+				votes[(size_t)pit * nb + (size_t)s.body]++;
+		}
+
+		for (int r = 0; r < count; r++)
+			for (size_t b = 0; b < nb; b++)
+			{
+				const int now = g_wroom_body[(size_t)r];
+
+				if (votes[(size_t)r * nb + b] > 0 && (now < 0 ||
+					votes[(size_t)r * nb + b] > votes[(size_t)r * nb +
+					(size_t)now]))
+					g_wroom_body[(size_t)r] = (int)b;
+			}
+
+		for (int hop = 0; hop < 6; hop++)
+			for (int r = 0; r < count; r++)
+			{
+				const HDWaterRoom& rm = rooms[r];
+
+				if (g_wroom_body[(size_t)r] < 0 || !rm.below ||
+					!(rm.flags & HD_WATER_ROOM_UNDERWATER))
+					continue;
+
+				for (int i = 0; i < rm.sizeX * rm.sizeZ; i++)
+				{
+					const int q = rm.below[i];
+
+					if (q >= 0 && q < count &&
+						(rooms[q].flags & HD_WATER_ROOM_UNDERWATER) &&
+						g_wroom_body[(size_t)q] < 0)
+						g_wroom_body[(size_t)q] = g_wroom_body[(size_t)r];
+				}
+			}
+
+		int largest = -1;
+
+		for (size_t b = 0; b < nb; b++)
+			if (largest < 0 || g_wbodies[b].info.sectors >
+				g_wbodies[(size_t)largest].info.sectors)
+				largest = (int)b;
+
+		for (int r = 0; r < count; r++)
+			if (rooms[r].flags & HD_WATER_ROOM_UNDERWATER)
+			{
+				if (g_wroom_body[(size_t)r] >= 0)
+					g_wlevel.underRooms++;
+				else if (largest >= 0)
+				{
+					g_wroom_body[(size_t)r] = largest;
+					g_wlevel.underFallback++;
+				}
+			}
+	}
+
 	/* 7. The grid: 5 x 5 vertices a square, every 256 units, one range per
 	 * body of a group. The vertex is the room vertex with colour1 read as
 	 * the depth over 32 (red) and the distance to the nearest square with no
@@ -10729,6 +11167,26 @@ bool HDRenderWaterSheetsBuilt()
 	return g_sheet_vb && g_sheet_ib && !g_sheet_world.empty();
 }
 
+bool HDRenderWaterUnderOn(int room)
+{
+	return g_wlevel.built && room >= 0 &&
+		room < (int)g_wroom_body.size() && g_wroom_body[(size_t)room] >= 0;
+}
+
+void HDRenderWaterUnderProbe(const float* nine)
+{
+	g_under_probe_set = nine != 0;
+
+	for (int k = 0; k < 9; k++)
+		g_under_probe[k] = nine ? nine[k] : 0.0f;
+}
+
+void HDRenderWaterUnderNow(float* twelve)
+{
+	if (twelve)
+		std::memcpy(twelve, g_under_now, sizeof(g_under_now));
+}
+
 bool HDRenderWaterSheetUnder(int x, int y, int z)
 {
 	if (g_sheet_world.empty())
@@ -10874,7 +11332,14 @@ void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem)
 		if (!g_wfeet[i].fromRow)
 			g_wfeet.erase(g_wfeet.begin() + (std::ptrdiff_t)i);
 
+	for (size_t i = g_wsegs.size(); i-- > 0; )
+		if (!g_wsegs[i].fromRow)
+			g_wsegs.erase(g_wsegs.begin() + (std::ptrdiff_t)i);
+
 	g_wlevel.falls = 0;
+
+	// Each object's foot points over a sheet, for the curtains below.
+	std::vector<std::vector<float> > ptsX, ptsZ;
 
 	for (int f = 0; falls && f < count; f++)
 	{
@@ -10890,6 +11355,7 @@ void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem)
 		seen.points = w.points;
 		seen.surface = -1000000;
 		seen.body = -1;
+		seen.curtain = -1;
 
 		// A flat object is a scrolling face, not a fall: no foot.
 		if (w.bottom - w.top > (float)HD_WATER_FOOT_BAND)
@@ -10919,7 +11385,7 @@ void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem)
 			g_wlevel.falls++;
 
 		if (seen.over && seen.body >= 0 &&
-			g_wbodies[(size_t)seen.body].info.swirlOff)
+			g_wbodies[(size_t)seen.body].info.footOff)
 			seen.off = 1;
 
 		/* Where the art draws the fall, its water lands where the art's
@@ -10969,107 +11435,96 @@ void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem)
 			}
 		}
 
-		if (seen.over && !seen.off)
+		if (!seen.over || seen.off)
 		{
-			/* The runs along the foot's own direction: the principal axis
-			 * of its points, so a curtain turned by 45 degrees is cut along
-			 * itself and not along x. */
-			const size_t n = px.size();
-			float mx = 0.0f, mz = 0.0f;
+			px.clear();
+			pz.clear();
+		}
 
-			for (size_t k = 0; k < n; k++)
+		ptsX.push_back(px);
+		ptsZ.push_back(pz);
+		g_wfalls.push_back(seen);
+	}
+
+	/* The curtains: the objects over one body whose points come within
+	 * kFootJoin of each other's, joined as long as any pair of them is. */
+	const size_t objects = g_wfalls.size();
+	std::vector<int> joined(objects, -1);
+
+	for (size_t a = 0; a < objects; a++)
+	{
+		if (ptsX[a].empty() || joined[a] >= 0)
+			continue;
+
+		std::vector<size_t> curtain(1, a);
+
+		joined[a] = (int)a;
+
+		for (size_t at = 0; at < curtain.size(); at++)
+		{
+			const size_t i = curtain[at];
+
+			for (size_t j = 0; j < objects; j++)
 			{
-				mx += px[k] / (float)n;
-				mz += pz[k] / (float)n;
-			}
+				if (joined[j] >= 0 || ptsX[j].empty() ||
+					g_wfalls[j].body != g_wfalls[i].body)
+					continue;
 
-			float cxx = 0.0f, czz = 0.0f, cxz = 0.0f;
+				bool touch = false;
 
-			for (size_t k = 0; k < n; k++)
-			{
-				cxx += (px[k] - mx) * (px[k] - mx);
-				czz += (pz[k] - mz) * (pz[k] - mz);
-				cxz += (px[k] - mx) * (pz[k] - mz);
-			}
+				for (size_t p = 0; p < ptsX[i].size() && !touch; p++)
+					for (size_t q = 0; q < ptsX[j].size() && !touch; q++)
+					{
+						const float dx = ptsX[i][p] - ptsX[j][q];
+						const float dz = ptsZ[i][p] - ptsZ[j][q];
 
-			const float ang = 0.5f * atan2f(2.0f * cxz, cxx - czz);
-			const float ax = cosf(ang), az = sinf(ang);
-			std::vector<std::pair<float, size_t> > along(n);
+						touch = dx * dx + dz * dz <= kFootJoin * kFootJoin;
+					}
 
-			for (size_t k = 0; k < n; k++)
-				along[k] = std::make_pair((px[k] - mx) * ax + (pz[k] - mz) * az,
-					k);
-
-			std::sort(along.begin(), along.end());
-
-			for (size_t a = 0; a < n; )
-			{
-				size_t b = a + 1;
-
-				while (b < n && along[b].first - along[a].first <= kFootRun &&
-					along[b].first - along[b - 1].first <= kFootGap)
-					b++;
-
-				float sx = 0.0f, sz = 0.0f;
-				float x0 = 1.0e9f, x1 = -1.0e9f, z0 = 1.0e9f, z1 = -1.0e9f;
-
-				for (size_t k = a; k < b; k++)
+				if (touch)
 				{
-					const size_t at = along[k].second;
-
-					sx += px[at] / (float)(b - a);
-					sz += pz[at] / (float)(b - a);
-					x0 = px[at] < x0 ? px[at] : x0;
-					x1 = px[at] > x1 ? px[at] : x1;
-					z0 = pz[at] < z0 ? pz[at] : z0;
-					z1 = pz[at] > z1 ? pz[at] : z1;
+					joined[j] = (int)a;
+					curtain.push_back(j);
 				}
-
-				WaterFoot foot = {};
-				const float diag = sqrtf((x1 - x0) * (x1 - x0) +
-					(z1 - z0) * (z1 - z0));
-				const float radius = 0.5f * diag + kFootPad;
-
-				foot.x = sx;
-				foot.z = sz;
-				foot.y = (float)seen.surface;
-				foot.dx = ax;
-				foot.dz = az;
-				foot.half = 0.5f * (along[b - 1].first - along[a].first);
-				foot.radius = radius < kFootRadiusMin ? kFootRadiusMin :
-					radius > kFootRadiusMax ? kFootRadiusMax : radius;
-				foot.body = seen.body;
-				foot_clock(foot);
-				g_wfeet.push_back(foot);
-				seen.sources++;
-				a = b;
 			}
 		}
 
-		g_wfalls.push_back(seen);
+		std::vector<float> px, pz;
+
+		for (size_t k = 0; k < curtain.size(); k++)
+		{
+			px.insert(px.end(), ptsX[curtain[k]].begin(),
+				ptsX[curtain[k]].end());
+			pz.insert(pz.end(), ptsZ[curtain[k]].begin(),
+				ptsZ[curtain[k]].end());
+		}
+
+		const int id = g_curtains;
+		const int sources = lay_fall_curtain(px, pz,
+			(float)g_wfalls[a].surface, g_wfalls[a].body);
+
+		for (size_t k = 0; k < curtain.size(); k++)
+		{
+			g_wfalls[curtain[k]].curtain = id;
+			g_wfalls[curtain[k]].sources = sources;
+		}
 	}
 
 	g_wlevel.feet = (int)g_wfeet.size();
 }
 
-void HDRenderWaterSwirl(float x, float z, float r)
+void HDRenderWaterFootAdd(float x1, float z1, float x2, float z2,
+	float reach)
 {
-	WaterFoot foot = {};
 	int body = -1;
-	const float wy = sheet_surface_near(x, z, 0.0f, 1.0e8f, 1.0e8f, &body);
+	const float wy = sheet_surface_near(0.5f * (x1 + x2), 0.5f * (z1 + z2),
+		0.0f, 1.0e8f, 1.0e8f, &body);
+	const float at[5] = { x1, z1, x2, z2, reach };
 
 	if (wy < -1.0e8f)
 		return;
 
-	foot.x = x;
-	foot.z = z;
-	foot.y = wy;
-	foot.radius = r;
-	foot.body = body;
-	foot.dx = 1.0f;
-	foot.fromRow = 1;
-	foot_clock(foot);
-	g_wfeet.push_back(foot);
+	lay_row_foot(at, wy, body);
 	g_wlevel.feet = (int)g_wfeet.size();
 }
 
@@ -11098,10 +11553,10 @@ bool HDRenderWaterFoot(int at, float* place, float* dir, float* half)
 		dir[1] = f.dz;
 	}
 
-	// A row's foot has no span: its drops spread over a quarter of its
-	// radius, a free choice.
+	// Half the stretch its drops scatter over (see "the foot of a
+	// waterfall").
 	if (half)
-		*half = f.fromRow ? 0.25f * f.radius : f.half;
+		*half = f.half;
 
 	return true;
 }
@@ -11111,9 +11566,11 @@ bool HDRenderWaterFoot(int at, float* place, float* dir, float* half)
  * points, 1 when the foot stands over a sheet, the surface there and the gap
  * (the surface less the lowest y: over 0 the fall ends above the water, under
  * 0 it reaches into it; -1000000 and - where no sheet lies under it), the
- * body, the sources its foot got, 1 when a row's `swirl off` took them,
- * and how many foot points of the art's own falling water took the classic
- * ones' place (0: the classic mesh's foot). */
+ * body, the sources of its curtain, 1 when a row's `foot off` took them,
+ * how many foot points of the art's own falling water took the classic
+ * ones' place (0: the classic mesh's foot) and its curtain, -1 for none -
+ * objects joined into one curtain show the same number (see "the foot of a
+ * waterfall"). */
 bool HDRenderWaterFallLine(int at, const char* stem, char* out, size_t size)
 {
 	if (!out || !size || at < 0 || at >= (int)g_wfalls.size())
@@ -11129,15 +11586,16 @@ bool HDRenderWaterFallLine(int at, const char* stem, char* out, size_t size)
 
 	snprintf(out, size, "WATERLOG level=%s fall=%d item=%d slot=%d room=%d "
 		"top=%d bottom=%d points=%d over=%d surface=%d gap=%s body=%d "
-		"sources=%d off=%d art=%d", stem ? stem : "?", at, f.item, f.slot,
-		f.room, (int)f.top, (int)f.bottom, f.points, f.over, f.surface, gap,
-		f.body, f.sources, f.off, f.art);
+		"sources=%d off=%d art=%d curtain=%d", stem ? stem : "?", at, f.item,
+		f.slot, f.room, (int)f.top, (int)f.bottom, f.points, f.over,
+		f.surface, gap, f.body, f.sources, f.off, f.art, f.curtain);
 	return true;
 }
 
-/* WATERLOG, a source: its world x, y (the surface) and z, its radius, half
- * its span along the foot, its body and 1 for a row's or RoomProbe's - the
- * places a `swirl` row needs. */
+/* WATERLOG, a source of rings and drops: its world x, y (the surface) and
+ * z, its curtain's reach (the field keeps its name, radius), half the
+ * stretch its drops scatter over, its body, 1 for a row's or RoomProbe's,
+ * and its curtain. */
 bool HDRenderWaterFootLine(int at, const char* stem, char* out, size_t size)
 {
 	if (!out || !size || at < 0 || at >= (int)g_wfeet.size())
@@ -11146,8 +11604,27 @@ bool HDRenderWaterFootLine(int at, const char* stem, char* out, size_t size)
 	const WaterFoot& f = g_wfeet[(size_t)at];
 
 	snprintf(out, size, "WATERLOG level=%s foot=%d x=%d y=%d z=%d radius=%d "
-		"half=%d body=%d row=%d", stem ? stem : "?", at, (int)f.x, (int)f.y,
-		(int)f.z, (int)f.radius, (int)f.half, f.body, f.fromRow);
+		"half=%d body=%d row=%d curtain=%d", stem ? stem : "?", at, (int)f.x,
+		(int)f.y, (int)f.z, (int)f.reach, (int)f.half, f.body, f.fromRow,
+		f.curtain);
+	return true;
+}
+
+/* WATERLOG, a segment of a curtain's footprint: its number, its curtain,
+ * its ends (world x and z), its surface, its curtain's reach, its share of
+ * the foam (1, or kFootBridge over a gap where no water lands), its body
+ * and 1 for a row's or RoomProbe's - the places a `foot` row needs. */
+bool HDRenderWaterSegLine(int at, const char* stem, char* out, size_t size)
+{
+	if (!out || !size || at < 0 || at >= (int)g_wsegs.size())
+		return false;
+
+	const FootSeg& s = g_wsegs[(size_t)at];
+
+	snprintf(out, size, "WATERLOG level=%s seg=%d curtain=%d x1=%d z1=%d "
+		"x2=%d z2=%d y=%d reach=%d wet=%.2f body=%d row=%d",
+		stem ? stem : "?", at, s.curtain, (int)s.x1, (int)s.z1, (int)s.x2,
+		(int)s.z2, (int)s.y, (int)s.reach, s.wet, s.body, s.fromRow);
 	return true;
 }
 
@@ -11515,8 +11992,13 @@ const char* HDRenderWaterSectionName(int section)
  * depth (clip), the waterfall objects whose foot stands over a sheet
  * (falls; a line each, HDRenderWaterFallLine), the squares whose surface is
  * their water room's top and not their own floor (lowered) and those left
- * out as an island or a rim (dropped), both counted per room, and the
- * bodies of class river (river). A body line: its rooms (+n for
+ * out as an island or a rim (dropped), both counted per room, the
+ * bodies of class river (river), the waterfalls' curtains and the segments
+ * of their footprints (curtains, segs), the rows of the file that use the
+ * key swirl (old), and the underwater rooms an eye looks through a body
+ * from - by the sheet over them or a room above them (under) and by the
+ * level's largest body for want of one (under_fallback; see "under the
+ * water"). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -11526,7 +12008,8 @@ const char* HDRenderWaterSectionName(int section)
  * 1 when a row of class none took its sheet away, whether the
  * remaster's water art over its sheets is kept or hidden (art), the
  * refraction's scale in force (bend), whether its waterfalls get their
- * foot or a row's `swirl off` took it away (swirl), its current - the way
+ * foot or a row's `foot off` took it away (the field keeps its name,
+ * swirl), its current - the way
  * along world x and z and the speed in units a second, 0,0,0 without one
  * (flow) - and its places whose water names a sink (sinks). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
@@ -11553,7 +12036,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"sea=%d file=%s rows=%d bad=%d applied=%d unmatched=%d "
 			"overlaps=%d caustic_rooms=%d verts=%d tris=%d twins=%d "
 			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
-			"clip=%d falls=%d lowered=%d dropped=%d river=%d",
+			"clip=%d falls=%d lowered=%d dropped=%d river=%d curtains=%d "
+			"segs=%d old=%d under=%d under_fallback=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -11564,7 +12048,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.copy, g_wlevel.depth, kRingsPerDraw,
 			g_wlevel.ringSources, g_wlevel.artHidden, g_wlevel.depth,
 			g_wlevel.falls, g_wlevel.lowered, g_wlevel.dropped,
-			cls[HD_WATER_RIVER]);
+			cls[HD_WATER_RIVER], g_curtains, (int)g_wsegs.size(),
+			g_wlevel.oldKeys, g_wlevel.underRooms, g_wlevel.underFallback);
 		return true;
 	}
 
@@ -11604,7 +12089,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.depthMax, b.light[0], b.light[1], b.light[2], from, b.tint[0],
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
-		b.swirlOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks);
+		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks);
 	return true;
 }
 
@@ -11617,9 +12102,9 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 		g_sheet_timed = 0;
 		g_copy_gpu_ms = 0.0;
 		g_copy_timed = 0;
-		g_swirl_gpu_ms = 0.0;
-		g_swirl_timed = 0;
-		g_swirl_sources = 0;
+		g_foot_gpu_ms = 0.0;
+		g_foot_timed = 0;
+		g_foot_segs = 0;
 		g_river_gpu_ms = 0.0;
 		g_river_timed = 0;
 	}
@@ -11640,16 +12125,16 @@ void HDRenderWaterCopyTiming(double* ms, int* copies)
 		*copies = g_copy_timed;
 }
 
-void HDRenderWaterSwirlTiming(double* ms, int* draws, int* sources)
+void HDRenderWaterFootTiming(double* ms, int* draws, int* segs)
 {
 	if (ms)
-		*ms = g_swirl_gpu_ms;
+		*ms = g_foot_gpu_ms;
 
 	if (draws)
-		*draws = g_swirl_timed;
+		*draws = g_foot_timed;
 
-	if (sources)
-		*sources = g_swirl_sources;
+	if (segs)
+		*segs = g_foot_segs;
 }
 
 void HDRenderWaterRiverTiming(double* ms, int* draws)
@@ -12046,40 +12531,51 @@ namespace
 		return count;
 	}
 
-	/* The swirls over one sheet draw (see "the foot of a waterfall"): the
-	 * feet whose disc reaches its squares and whose surface is its own, at
-	 * most kSwirlsPerDraw, drawn as a second pass of the same triangles with
-	 * SwirlPS and the same blend. c124 - c131 hold them as (x, z, radius,
-	 * strength) in the frame the shader's world position is in, the
-	 * strength the body's foam scale (a row's `foam`); gWaterStage.w the
-	 * count, which WaterPS does not read. Nothing while tomb5.hd_motion is
-	 * off, as the rings: the water stands still. `pixel` is the draw's c92
-	 * - c123, set already. */
-	void draw_swirls(const SheetRange& r, float* pixel)
+	/* The waterfalls' feet over one sheet draw (see "the foot of a
+	 * waterfall"): the segments whose zone reaches its squares and whose
+	 * surface is its own, at most kFootSegsPerDraw, drawn as a second pass
+	 * of the same triangles with FootPS and the same blend. c124 - c131 hold
+	 * them as (x1, z1, x2, z2) in the frame the shader's world position is
+	 * in, c137 - c144 as (reach, strength), the strength the segment's share
+	 * times the body's foam scale (a row's `foam`); gWaterStage.w the
+	 * count, which WaterPS does not read. A zone's outline reaches 1.1 of
+	 * its reach at the most (FootPS: 1.0 of the patch field times 1.1 of the
+	 * lobe field). Nothing while tomb5.hd_motion is off, as the rings: the
+	 * water stands still. `pixel` is the draw's c92 - c123, set already. */
+	void draw_feet(const SheetRange& r, float* pixel)
 	{
-		if (!g_water_swirl_ps || g_wfeet.empty() || g_motion[3] == 0.0f)
+		if (!g_water_foot_ps || g_wsegs.empty() || g_motion[3] == 0.0f)
 			return;
 
-		float swirls[kSwirlsPerDraw * 4] = {};
+		float segs[kFootSegsPerDraw * 4] = {};
+		float reach[kFootSegsPerDraw * 4] = {};
 		int count = 0;
 
-		for (const WaterFoot& f : g_wfeet)
+		for (const FootSeg& s : g_wsegs)
 		{
-			if (count >= kSwirlsPerDraw ||
-				fabsf(f.y - (float)r.surfaceY) > (float)kRingHeight ||
-				f.x < (float)r.minX - f.radius ||
-				f.x > (float)r.maxX + f.radius ||
-				f.z < (float)r.minZ - f.radius ||
-				f.z > (float)r.maxZ + f.radius)
+			const float m = 1.1f * s.reach;
+			const float x0 = s.x1 < s.x2 ? s.x1 : s.x2;
+			const float x1 = s.x1 < s.x2 ? s.x2 : s.x1;
+			const float z0 = s.z1 < s.z2 ? s.z1 : s.z2;
+			const float z1 = s.z1 < s.z2 ? s.z2 : s.z1;
+
+			if (count >= kFootSegsPerDraw ||
+				fabsf(s.y - (float)r.surfaceY) > (float)kRingHeight ||
+				x1 < (float)r.minX - m || x0 > (float)r.maxX + m ||
+				z1 < (float)r.minZ - m || z0 > (float)r.maxZ + m)
 				continue;
 
-			const float foam = f.body >= 0 && f.body < (int)g_wbodies.size() ?
-				g_wbodies[(size_t)f.body].info.foam : 1.0f;
+			const float foam = s.body >= 0 && s.body < (int)g_wbodies.size() ?
+				g_wbodies[(size_t)s.body].info.foam : 1.0f;
+			const float ox = g_room_origin[0] - (float)r.originX;
+			const float oz = g_room_origin[1] - (float)r.originZ;
 
-			swirls[count * 4 + 0] = f.x - (float)r.originX + g_room_origin[0];
-			swirls[count * 4 + 1] = f.z - (float)r.originZ + g_room_origin[1];
-			swirls[count * 4 + 2] = f.radius;
-			swirls[count * 4 + 3] = foam;
+			segs[count * 4 + 0] = s.x1 + ox;
+			segs[count * 4 + 1] = s.z1 + oz;
+			segs[count * 4 + 2] = s.x2 + ox;
+			segs[count * 4 + 3] = s.z2 + oz;
+			reach[count * 4 + 0] = s.reach;
+			reach[count * 4 + 1] = s.wet * foam;
 			count++;
 		}
 
@@ -12087,9 +12583,10 @@ namespace
 			return;
 
 		pixel[16 + 10 * 4 + 3] = (float)count;
-		g_device->SetPixelShader(g_water_swirl_ps);
+		g_device->SetPixelShader(g_water_foot_ps);
 		g_device->SetPixelShaderConstantF(106, pixel + 16 + 10 * 4, 1);
-		g_device->SetPixelShaderConstantF(124, swirls, kSwirlsPerDraw);
+		g_device->SetPixelShaderConstantF(124, segs, kFootSegsPerDraw);
+		g_device->SetPixelShaderConstantF(137, reach, kFootSegsPerDraw);
 
 		IDirect3DQuery9* q[3] = { 0, 0, 0 };
 
@@ -12127,9 +12624,9 @@ namespace
 
 			if (freq && t1 > t0)
 			{
-				g_swirl_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
-				g_swirl_timed++;
-				g_swirl_sources += count;
+				g_foot_gpu_ms += (double)(t1 - t0) * 1000.0 / (double)freq;
+				g_foot_timed++;
+				g_foot_segs += count;
 			}
 
 			freq_q->Release();
@@ -12256,6 +12753,17 @@ namespace
 				q[i]->Release();
 	}
 
+	/* The sheet's pixel shader: the plain variant without the depth
+	 * texture, RoomProbe's view variant when a view is asked for, the
+	 * HD_WATER_UNDER variant while the eye is under the water (see "under
+	 * the water"), the depth variant otherwise. */
+	IDirect3DPixelShader9* sheet_ps(bool depth)
+	{
+		return !depth ? g_water_ps : g_depth_view && g_water_view_ps ?
+			g_water_view_ps : g_under_on && g_water_under_ps ?
+			g_water_under_ps : g_water_depth_ps;
+	}
+
 	/* The sheet of one room, in its blend phase: one draw per body, with
 	 * premultiplied alpha (ONE / INVSRCALPHA), two-sided and without a depth
 	 * write, then the states every pass of draw_pass leaves behind. */
@@ -12293,9 +12801,7 @@ namespace
 			g_water_view_ps = 0;
 
 		g_device->SetVertexShader(g_water_vs);
-		g_device->SetPixelShader(!depth ? g_water_ps :
-			g_depth_view && g_water_view_ps ? g_water_view_ps :
-			g_water_depth_ps);
+		g_device->SetPixelShader(sheet_ps(depth));
 		g_device->SetStreamSource(0, g_sheet_vb, 0, sizeof(HDVertex));
 		g_device->SetIndices(g_sheet_ib);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -12445,11 +12951,9 @@ namespace
 				g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 			}
 
-			draw_swirls(r, pixel);
+			draw_feet(r, pixel);
 			draw_river(r);
-			g_device->SetPixelShader(!depth ? g_water_ps :
-				g_depth_view && g_water_view_ps ? g_water_view_ps :
-				g_water_depth_ps);
+			g_device->SetPixelShader(sheet_ps(depth));
 		}
 
 		if (split)

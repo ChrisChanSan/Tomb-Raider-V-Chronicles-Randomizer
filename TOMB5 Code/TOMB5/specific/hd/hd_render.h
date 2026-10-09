@@ -121,6 +121,16 @@ struct HDFrameLighting
 	 * the page is a whole number of steps since the level began and a float
 	 * of an hour's seconds no longer tells two sixtieths apart cleanly. */
 	double bookClock;
+
+	/* The eye under the water (hd_room.hlsl, "under the water"): `under` 1
+	 * when the eye is in a water room of a level with sheets
+	 * (HDRenderWaterUnderOn), that room, the eye's world y and world up
+	 * (-y) in view space. 0 everywhere else, which leaves every shader's
+	 * colour as it was. */
+	int under;
+	int underRoom;
+	float underEyeY;
+	float underUp[3];
 };
 
 // Per room. `waterTable` is 64 records of four bytes in WATERTAB order
@@ -886,9 +896,9 @@ struct HDRenderWaterBody
 	int artKeep;
 	// The applied row's refraction scale, `bend` (1 without one).
 	float bend;
-	/* 1 when a row says `swirl off`: no waterfall of this body gets the
-	 * foot HDRenderWaterFalls gives it (a row's own `swirl x z r` stays). */
-	int swirlOff;
+	/* 1 when a row says `foot off`: no waterfall of this body gets the
+	 * foot HDRenderWaterFalls gives it (a row's own `foot` stays). */
+	int footOff;
 	/* The current: a unit vector in world x and z and units a second, from
 	 * the sinks its squares name (the mean way toward them and the speed
 	 * LaraWaterCurrent gives their strength) or from a row's `flow`; 0 0 0
@@ -920,12 +930,18 @@ struct HDRenderWaterLevel
 	int ringSources;	// ripple rows of the file that found a body
 	int artHidden;		// the remaster's water art triangles hidden
 	int falls;		// waterfall objects whose foot stands over a sheet
-	int feet;		// the sources at their feet and the rows' swirls
+	int feet;		// the sources at their feet and the rows' feet
 	/* The squares whose surface is the water room's top and not their own
 	 * floor byte (lowered), and those left out because their dry floor
 	 * stands more than a click over it at every corner (dropped). */
 	int lowered;
 	int dropped;
+	int oldKeys;		// rows of the file that use the key swirl
+	/* The underwater rooms an eye looks through a body from: by the sheet
+	 * over them or a room above them, and by the level's largest body for
+	 * want of one (hd_render.cpp, "under the water"). */
+	int underRooms;
+	int underFallback;
 };
 
 int HDRenderWaterBodies();
@@ -945,8 +961,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 void HDRenderWaterTiming(int on, double* ms, int* draws);
 // And of the frame's copy, the same way: milliseconds and copies so far.
 void HDRenderWaterCopyTiming(double* ms, int* copies);
-// And of the swirls' draws: milliseconds, draws and the sources they held.
-void HDRenderWaterSwirlTiming(double* ms, int* draws, int* sources);
+// And of the feet's draws: milliseconds, draws and the segments they held.
+void HDRenderWaterFootTiming(double* ms, int* draws, int* segs);
 // And of the rivers' draws (RiverPS): milliseconds and draws.
 void HDRenderWaterRiverTiming(double* ms, int* draws);
 
@@ -999,6 +1015,19 @@ struct HDRenderRipple
 
 // Whether this level built sheets: the frame then feeds the ripples.
 bool HDRenderWaterSheetsBuilt();
+/* Whether an eye in that room is under the water of a level with sheets:
+ * the room is an underwater room that looks through a body (hd_render.cpp,
+ * "under the water"). The frame then sets HDFrameLighting::under. */
+bool HDRenderWaterUnderOn(int room);
+/* The diagnostic tools' side of it. HDRenderWaterUnderProbe hands in the
+ * constants of an eye under the water where no level's water stands behind
+ * them (ModelProbe -under): sigma r, g, b and sigma_s, the scattered colour
+ * r, g, b, the upward gain and the eye's depth under the surface; a frame
+ * with `under` set then takes them with its own world up. Null gives the
+ * bodies back. HDRenderWaterUnderNow reads the twelve the last frame
+ * uploaded (c134 - c136), all zero when its eye was not under the water. */
+void HDRenderWaterUnderProbe(const float* nine);
+void HDRenderWaterUnderNow(float* twelve);
 void HDRenderWaterRipples(const HDRenderRipple* live, int count);
 void HDRenderWaterRing(float x, float z, float age, float size);
 bool HDRenderWaterSheetUnder(int x, int y, int z);
@@ -1033,14 +1062,18 @@ bool HDRenderWaterMarkView();
  * HDRenderSetWaterSheets, each with its classic mesh placed as the game
  * places it: the highest and the lowest y and the x, z of the vertices that
  * lie within HD_WATER_FOOT_BAND of the lowest. Where those stand over a
- * square that draws a sheet the foot gets sources - a turning disc of foam,
- * rings and drops - and the WATERLOG gets a line per object. The engine
- * calls it from hd_level.cpp with items[], RoomProbe with the classic .TRC.
- * HDRenderWaterSwirl is RoomProbe's -swirl: a source at world x, z with
- * radius r on the surface of the square under it, until the next level.
- * HDRenderWaterFeet and HDRenderWaterFoot hand the sources to the logic
- * tick's drops (hd_level.cpp, HDWaterFallsTick): the place on the surface,
- * the foot's direction and half its span. */
+ * square that draws a sheet the objects close together form one curtain,
+ * whose footprint gets a zone of foam pushed away from it and sources of
+ * rings and drops along it, and the WATERLOG gets a line per object, per
+ * source and per segment of a footprint. The engine calls it from
+ * hd_level.cpp with items[], RoomProbe with the classic .TRC.
+ * HDRenderWaterFootAdd is RoomProbe's -foot and -swirl: a curtain along the
+ * line from world x1, z1 to x2, z2 with that reach on the surface of the
+ * square under its middle, until the next level. HDRenderWaterFeet and
+ * HDRenderWaterFoot hand the sources to the logic tick's drops
+ * (hd_level.cpp, HDWaterFallsTick): the place on the surface, the
+ * footprint's direction there and half the stretch the drops scatter
+ * over. */
 #define HD_WATER_FOOT_BAND	64	// units over the lowest vertex
 #define HD_WATER_FOOT_POINTS	256	// foot points kept per object
 
@@ -1055,7 +1088,8 @@ struct HDWaterFall
 };
 
 void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem);
-void HDRenderWaterSwirl(float x, float z, float r);
+void HDRenderWaterFootAdd(float x1, float z1, float x2, float z2,
+	float reach);
 int HDRenderWaterFeet();
 bool HDRenderWaterFoot(int at, float* place, float* dir, float* half);
 /* The WATERLOG line of one waterfall object HDRenderWaterFalls was given -
@@ -1063,6 +1097,8 @@ bool HDRenderWaterFoot(int at, float* place, float* dir, float* half);
 bool HDRenderWaterFallLine(int at, const char* stem, char* out, size_t size);
 // And of one source, the objects' and the rows' - false past the last.
 bool HDRenderWaterFootLine(int at, const char* stem, char* out, size_t size);
+// And of one segment of a curtain's footprint - false past the last.
+bool HDRenderWaterSegLine(int at, const char* stem, char* out, size_t size);
 /* The rooms' own boxes for the level about to be built.
  * Same contract as the water marks: call it before HDRenderLevelBegin, the
  * pointer is only remembered for the length of that call. */

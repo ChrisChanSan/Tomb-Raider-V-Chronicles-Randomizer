@@ -457,6 +457,11 @@
  *     -yaw <deg>          camera around the model, default 180 (from the front)
  *     -pitch <deg>        default 10, looking slightly down
  *     -dist <units>       camera distance; default frames the bounding box
+ *     -under <s_r,s_g,s_b,s_s,c_r,c_g,c_b,up,depth>
+ *                         the eye under the water with these constants
+ *                         (hd_render.cpp, "under the water"; RoomProbe
+ *                         -underwater prints a body's): the picture as the
+ *                         model shader fades it with the distance
  *     -invrot <x> <y> <z> the ring's own presentation: the
  *                         three angles the item's row of
  *                         inventry_objects_list carries, raw engine units
@@ -6443,6 +6448,36 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 static HDFogBulb g_probe_bulbs[HD_MAX_BULBS];
 static int g_probe_bulb_count = 0;
 
+/* -under: the constants of an eye under the water, and whether given. */
+static float g_probe_under[9];
+static bool g_probe_under_set = false;
+
+/* -under into the frame's lighting block: the eye under the water, world up
+ * in view space out of the view's second row, and no fog bulbs, as the
+ * engine's frame has it (hd_level.cpp, HDFrameDraw). Returns the bulbs the
+ * frame keeps. */
+static int PutUnder(HDFrameLighting& frame, const float* view, int bulbs)
+{
+	HDRenderWaterUnderProbe(g_probe_under_set ? g_probe_under : 0);
+
+	if (!g_probe_under_set)
+		return bulbs;
+
+	const float len = sqrtf(view[4] * view[4] + view[5] * view[5] +
+		view[6] * view[6]);
+
+	frame.under = 1;
+	frame.underRoom = -1;
+	frame.underUp[0] = len > 0.0f ? -view[4] / len : 0.0f;
+	frame.underUp[1] = len > 0.0f ? -view[5] / len : -1.0f;
+	frame.underUp[2] = len > 0.0f ? -view[6] / len : 0.0f;
+	frame.bulbCount = 0;
+	printf("-under: world up in view space %.3f %.3f %.3f, depth %.0f\n",
+		frame.underUp[0], frame.underUp[1], frame.underUp[2],
+		g_probe_under[8]);
+	return 0;
+}
+
 /* The bulbs into the frame's lighting block. HDRenderFrameBegin uploads them
  * and HDModelFrameBegin takes the count, the two calls the engine's frame
  * makes; the return value is that count. */
@@ -9295,7 +9330,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	frame.distanceFogStart = 1.0e9f;
 	frame.wibbleTable = wibble;
 
-	const int bulbCount = PutBulbs(frame);
+	const int bulbCount = PutUnder(frame, view, PutBulbs(frame));
 
 	/* First person, the same three omissions the seam makes: the head
 	 * node off the body, no separate face, no braid. All three sit exactly
@@ -10986,6 +11021,18 @@ int main(int argc, char** argv)
 		}
 		else if (!_stricmp(argv[i], "-dist") && i + 1 < argc)
 			dist = atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-under") && i + 1 < argc)
+		{
+			float* u = g_probe_under;
+
+			g_probe_under_set = sscanf_s(argv[++i],
+				"%f,%f,%f,%f,%f,%f,%f,%f,%f", &u[0], &u[1], &u[2], &u[3],
+				&u[4], &u[5], &u[6], &u[7], &u[8]) == 9;
+
+			if (!g_probe_under_set)
+				printf("ModelProbe: -under wants nine numbers - '%s' "
+					"ignored\n", argv[i]);
+		}
 		else if (!_stricmp(argv[i], "-shade") && i + 1 < argc)
 			shade = atof(argv[++i]);
 		else if (!_stricmp(argv[i], "-bulb") && i + 5 < argc)
@@ -13026,7 +13073,7 @@ int main(int argc, char** argv)
 	frame.distanceFogStart = 1.0e9f;	// no fog in a studio picture
 	frame.wibbleTable = wibble;
 
-	const int bulbCount = PutBulbs(frame);
+	const int bulbCount = PutUnder(frame, view, PutBulbs(frame));
 
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);

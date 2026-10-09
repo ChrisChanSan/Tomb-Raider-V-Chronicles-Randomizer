@@ -2025,6 +2025,9 @@ static void BuildWaterSheets()
 
 	for (int f = 0; HDRenderWaterFootLine(f, g_stem, line, sizeof(line)); f++)
 		Log("%s", line);
+
+	for (int s = 0; HDRenderWaterSegLine(s, g_stem, line, sizeof(line)); s++)
+		Log("%s", line);
 }
 
 /* The water surface the .TRG has no geometry for.
@@ -6693,6 +6696,34 @@ void HDFrameDraw()
 	 * path, so both paths agree. */
 	if (HDObjectRingFrame())
 		frame.bulbCount = 0;
+
+	/* The eye under the water (hd_render.cpp, "under the water"): in a water
+	 * room of a level with sheets the scene fades with the distance into the
+	 * water's own colour, and that takes the place of the distance fog and
+	 * of the fog bulbs - ANDREA2's sixteen bulbs in its water rooms lay a
+	 * flat pale haze over every pixel there (the rooms' headers, read with
+	 * the randomizer's Tr5Level). Not in the inventory ring, which draws
+	 * through a view of its own. World up in view space is the second row
+	 * of a room's view matrix, negated: every room of the frame shares the
+	 * camera's turn. */
+	if (!HDObjectRingFrame() && camera.underwater && g_frame_count &&
+		HDRenderWaterUnderOn(camera.pos.room_number))
+	{
+		const D3DMATRIX& m = g_frame[0].world;
+		const float len = sqrtf(m._21 * m._21 + m._22 * m._22 +
+			m._23 * m._23);
+
+		if (len > 0.0f)
+		{
+			frame.under = 1;
+			frame.underRoom = camera.pos.room_number;
+			frame.underEyeY = (float)camera.pos.y;
+			frame.underUp[0] = -m._21 / len;
+			frame.underUp[1] = -m._22 / len;
+			frame.underUp[2] = -m._23 / len;
+			frame.bulbCount = 0;
+		}
+	}
 
 	// A destructible piece follows its own static's Flags bit.
 	UpdateDestructibles();

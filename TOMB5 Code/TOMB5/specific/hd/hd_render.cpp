@@ -9152,6 +9152,8 @@ namespace
 	int g_mark_why = 0;
 	int g_mark_surface = 0;
 	int g_mark_objects = 0;
+	// Triangles HDRenderWaterMarkTriangles marked since the last line.
+	int g_mark_late = 0;
 	int g_mark_sheet_surface = 0;
 	int g_mark_sheets = 0;
 	int g_mark_split = 0;
@@ -11922,6 +11924,53 @@ bool HDRenderWaterSegLine(int at, const char* stem, char* out, size_t size)
 	return true;
 }
 
+/* The mist over a waterfall's foot (hd_level.cpp, MoveWaterfallMist): the
+ * nearest point to world x, z on a wet segment of a curtain whose feet the
+ * art's falling water gave (see "the foot of a waterfall": the art lands
+ * apart from the classic object), within kFootSnap - the same square that
+ * takes the art's feet for the classic ones. False where none lies so near,
+ * and with no sheets (tomb5.hd_water 0 lays no curtain). */
+bool HDRenderWaterFootNearest(float x, float z, float* nx, float* nz)
+{
+	float best = kFootSnap * kFootSnap;
+	bool found = false;
+
+	for (const FootSeg& s : g_wsegs)
+	{
+		if (s.fromRow || s.wet <= 0.0f || s.curtain < 0)
+			continue;
+
+		bool art = false;
+
+		for (const FallSeen& f : g_wfalls)
+			art = art || (f.curtain == s.curtain && f.art > 0);
+
+		if (!art)
+			continue;
+
+		const float ex = s.x2 - s.x1, ez = s.z2 - s.z1;
+		const float len2 = ex * ex + ez * ez;
+		float u = len2 > 0.0f ? ((x - s.x1) * ex + (z - s.z1) * ez) / len2 :
+			0.0f;
+
+		u = u < 0.0f ? 0.0f : u > 1.0f ? 1.0f : u;
+
+		const float px = s.x1 + u * ex, pz = s.z1 + u * ez;
+		const float d2 = (px - x) * (px - x) + (pz - z) * (pz - z);
+
+		if (d2 <= best)
+		{
+			best = d2;
+			found = true;
+
+			if (nx) *nx = px;
+			if (nz) *nz = pz;
+		}
+	}
+
+	return found;
+}
+
 void HDRenderWaterLara(int inWater, float x, float z)
 {
 	g_lara_in_water = inWater != 0;
@@ -11969,9 +12018,10 @@ bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size)
 
 	g_mark_logged = true;
 	snprintf(out, size, "WATERLOG level=%s mark=%d why=%d mark_intz=%d "
-		"objects=%d sheet_intz=%d sheets=%d split=%d", stem ? stem : "?",
+		"objects=%d sheet_intz=%d sheets=%d split=%d late=%d",
+		stem ? stem : "?",
 		g_mark_frame ? 1 : 0, g_mark_why, g_mark_surface, g_mark_objects,
-		g_mark_sheet_surface, g_mark_sheets, g_mark_split);
+		g_mark_sheet_surface, g_mark_sheets, g_mark_split, g_mark_late);
 	return true;
 }
 
@@ -11981,6 +12031,7 @@ void HDRenderWaterMarkBegin()
 	g_mark_open = false;
 	g_mark_surface = 0;
 	g_mark_objects = 0;
+	g_mark_late = 0;
 	g_mark_sheet_surface = 0;
 	g_mark_sheets = 0;
 	g_mark_split = 0;
@@ -12164,6 +12215,160 @@ bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
 	if (ps) ps->Release();
 
 	return true;
+}
+
+/* The mark for what the classic buckets draw (see "the creatures' mark"):
+ * a swimming rat is no HD object - DrawRats hands its mesh to the classic
+ * path, which draws it between the two brackets, outside the mark - so its
+ * pixels took the waterline and the bank's foam. Its triangles are drawn
+ * here once more, into the creature bit alone: no colour, no depth write,
+ * the depth test against the frame's depth, which holds the classic draw's
+ * own. The caller hands them already pulled toward the eye by a fraction
+ * of their distance, so they pass against their own depth. In the frame's
+ * view (g_view), with the fixed function and every state put back. */
+int HDRenderWaterMarkTriangles(const float* xyz, int vertices)
+{
+	if (!g_device || !xyz || vertices < 3 || !g_wlevel.built ||
+		!g_depth_texture || !g_water_depth_ps || !depth_has_stencil())
+		return 0;
+
+	struct Corner
+	{
+		float x, y, z;
+		D3DCOLOR c;
+	};
+
+	std::vector<Corner> v((size_t)(vertices - vertices % 3));
+
+	for (size_t i = 0; i < v.size(); i++)
+	{
+		v[i].x = xyz[i * 3];
+		v[i].y = xyz[i * 3 + 1];
+		v[i].z = xyz[i * 3 + 2];
+		v[i].c = 0;
+	}
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex = 0;
+	DWORD fvf = 0;
+	D3DMATRIX world, view, proj;
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_LIGHTING, D3DRS_CULLMODE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_ALPHATESTENABLE, D3DRS_ZENABLE, D3DRS_ZWRITEENABLE,
+		D3DRS_ZFUNC, D3DRS_FOGENABLE, D3DRS_COLORWRITEENABLE
+	};
+	const int count = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[count], mark[kMarkStateCount];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetTexture(0, &tex);
+	g_device->GetTransform(D3DTS_WORLD, &world);
+	g_device->GetTransform(D3DTS_VIEW, &view);
+	g_device->GetTransform(D3DTS_PROJECTION, &proj);
+
+	for (int i = 0; i < count; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->GetRenderState(kMarkStates[i], &mark[i]);
+
+	D3DMATRIX identity = {};
+
+	identity._11 = identity._22 = identity._33 = identity._44 = 1.0f;
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+	g_device->SetTexture(0, 0);
+	g_device->SetTransform(D3DTS_WORLD, &identity);
+	g_device->SetTransform(D3DTS_VIEW, (const D3DMATRIX*)g_view);
+	g_device->SetTransform(D3DTS_PROJECTION, (const D3DMATRIX*)g_proj);
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+	g_device->SetRenderState(D3DRS_STENCILREF, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILMASK, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kCreatureStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+
+	const int tris = (int)v.size() / 3;
+
+	g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)tris, &v[0],
+		sizeof(Corner));
+	g_mark_late += tris;
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->SetRenderState(kMarkStates[i], mark[i]);
+
+	g_device->SetTransform(D3DTS_WORLD, &world);
+	g_device->SetTransform(D3DTS_VIEW, &view);
+	g_device->SetTransform(D3DTS_PROJECTION, &proj);
+
+	for (int i = 0; i < count; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	g_device->SetTexture(0, tex);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (tex) tex->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	return tris;
+}
+
+/* RoomProbe's -latemark: the stand-in box of -creature as a triangle list,
+ * marked through HDRenderWaterMarkTriangles - drawn where the classic
+ * buckets would draw a rat, after the HD objects' bracket. */
+bool HDRenderWaterProbeCreatureLate(float x, float z, float offX, float offZ)
+{
+	const std::unordered_multimap<unsigned long long, int>::const_iterator f =
+		g_sheet_world.find(WaterKey((int)floorf(x), (int)floorf(z), 0));
+
+	if (f == g_sheet_world.end())
+		return false;
+
+	static const unsigned short faces[36] =
+	{
+		0, 1, 3, 0, 3, 2,  4, 6, 7, 4, 7, 5,  0, 4, 5, 0, 5, 1,
+		2, 3, 7, 2, 7, 6,  0, 2, 6, 0, 6, 4,  1, 5, 7, 1, 7, 3
+	};
+	const float y = (float)f->second;
+	float corner[8][3];
+	float tris[36 * 3];
+
+	for (int i = 0; i < 8; i++)
+	{
+		corner[i][0] = x - offX + ((i & 1) ? 60.0f : -60.0f);
+		corner[i][1] = y + ((i & 2) ? 60.0f : -100.0f);
+		corner[i][2] = z - offZ + ((i & 4) ? 60.0f : -60.0f);
+	}
+
+	for (int i = 0; i < 36; i++)
+		for (int k = 0; k < 3; k++)
+			tris[i * 3 + k] = corner[faces[i]][k];
+
+	return HDRenderWaterMarkTriangles(tris, 36) > 0;
 }
 
 bool HDRenderWaterMarkView()
@@ -12793,13 +12998,20 @@ namespace
 	/* The rings one sheet draw shows (see "the rings"): the game's, the
 	 * file's sources and RoomProbe's, near its squares and its surface, the
 	 * youngest kRingsPerDraw of them, each as (x, z, radius, strength) into
-	 * `out`. None while tomb5.hd_motion is off - the water stands still. */
+	 * `out`. None while tomb5.hd_motion is off - the water stands still.
+	 *
+	 * A small ring (a bubble, a shell, a rat) comes after every other: a
+	 * swimming rat sets up a ripple one tick in sixteen (game\rat.cpp) and
+	 * swims 480 units a second, so nearly every one is a ring of its own -
+	 * eight rats in ANDY1's pool start about 15 a second - and by age alone
+	 * they pushed a wading Lara's ring, and a fall's, out of the eight. */
 	int gather_rings(const SheetRange& r, float* out)
 	{
 		struct Near
 		{
 			float x, z, size;
 			double age;
+			int later;	// 1 a small ring, drawn after the rest
 		};
 
 		/* The kept rings, and room for the sources' and the feet's live
@@ -12815,7 +13027,7 @@ namespace
 			return 0;
 
 		auto add = [&](float x, float y, float z, bool anyY, float size,
-			double age)
+			double age, int later)
 		{
 			if (n >= cap || age < 0.0 || age > kRingLife ||
 				x < (float)(r.minX - kRingNear) ||
@@ -12829,30 +13041,31 @@ namespace
 			found[n].z = z;
 			found[n].size = size;
 			found[n].age = age;
+			found[n].later = later;
 			n++;
 		};
 
 		for (const WaterRing& g : g_rings)
-			add(g.x, g.y, g.z, false, g.size, now - g.born);
+			add(g.x, g.y, g.z, false, g.size, now - g.born, g.body ? 0 : 1);
 
 		for (const WaterSource& s : g_wsources)
 			for (double age = std::fmod(now + s.phase, (double)s.period);
 				age <= kRingLife; age += s.period)
-				add(s.x, s.y, s.z, false, s.size, age);
+				add(s.x, s.y, s.z, false, s.size, age, 0);
 
 		// The waterfalls' feet, each a ripple source of its own.
 		for (const WaterFoot& f : g_wfeet)
 			for (double age = std::fmod(now + f.phase, (double)f.period);
 				age <= kRingLife; age += f.period)
-				add(f.x, f.y, f.z, false, kFootRingSize, age);
+				add(f.x, f.y, f.z, false, kFootRingSize, age, 0);
 
 		// RoomProbe's rings carry no height: the box alone places them.
 		for (const ProbeRing& p : g_ring_probe)
-			add(p.x, 0.0f, p.z, true, p.size, p.age);
+			add(p.x, 0.0f, p.z, true, p.size, p.age, 0);
 
 		std::sort(found, found + n, [](const Near& a, const Near& b)
 		{
-			return a.age < b.age;
+			return a.later != b.later ? a.later < b.later : a.age < b.age;
 		});
 
 		const int count = n < kRingsPerDraw ? n : kRingsPerDraw;

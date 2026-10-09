@@ -267,6 +267,13 @@
  *                     of those, the ones the art wins the depth test at;
  *                     -coincidemark paints the first yellow and the second
  *                     red.
+ *     -classicplane <y>  of the -classicroom faces only those with every
+ *                     corner at height y; -classicwet then leaves out
+ *                     the faces hd_level.cpp's BuildWaterSurfaces
+ *                     leaves out beside a sheet - over a square with no
+ *                     water room below, where the art draws flat in
+ *                     that plane. The two draw what the classic path
+ *                     would restore in a room's water plane.
  *     -stand          the frame's rule for a room drawn classic that another
  *                     group's art stands on (specific\hd\hd_cover.h): the
  *                     -classicroom rooms count as listed, the seed and the
@@ -384,6 +391,13 @@
  *                     game's own ripples), age seconds after it began, of
  *                     a ripple that began at size (120, a wading Lara's,
  *                     without it); repeatable. Needs -hdwater 1.
+ *     -rippleat x,y,z  whether a game ripple there loses its classic
+ *                     sprite to a sheet's ring (HDRenderWaterSheetUnder);
+ *                     repeatable, printed after the WATERLOG lines.
+ *     -latemark       -creature's stand-ins drawn outside the mark's
+ *                     bracket, as the classic path draws a rat, and
+ *                     marked before the copy as HDFrameDrawGlow marks
+ *                     the rats (HDRenderWaterMarkTriangles).
  *     -lara x,z       Lara's place in the water for the sheets' waterline,
  *                     which leaves out the circle round her that the game
  *                     leaves out round a swimming or wading Lara; world
@@ -1720,6 +1734,12 @@ static float g_seed_origin[2] = { 0.0f, 0.0f };
 static bool g_creature_mark = true;
 // -twophase: the solid and the blend phase in two brackets, as the game.
 static bool g_two_phase = false;
+// -latemark: the stand-ins drawn unmarked and marked after the bracket.
+static bool g_creature_late = false;
+// -rippleat x,y,z: HDRenderWaterSheetUnder's answer, three ints a point.
+static std::vector<int> g_ripple_at;
+// The WATERLOG mist= lines of ProbeWaterFalls.
+static std::vector<std::string> g_mist_lines;
 static bool g_mark_view = false;
 static bool g_motion = true;
 /* -plane: four surface marks at the corners of a box, as the classic path
@@ -1826,6 +1846,11 @@ static std::vector<HDCut> g_cuts_built;
  * paints the first yellow and the second red over the finished picture. */
 static std::vector<int> g_classic_rooms;
 static bool g_classic_only = false;
+// -classicplane <y>: only the faces with every corner at that height;
+// -classicwet: of those, not the dry copies BuildWaterSurfaces leaves out.
+static long g_classic_plane = 0;
+static bool g_classic_plane_set = false;
+static bool g_classic_wet = false;
 static double g_coincide = 0.0;
 static bool g_coincide_mark = false;
 
@@ -5039,6 +5064,41 @@ static void ProbeWaterFalls(const Tr5Level& level, const char* stem)
 
 	HDRenderWaterFalls(falls.empty() ? 0 : &falls[0], (int)falls.size(),
 		stem);
+
+	/* The mist emitters (WATERFALLMIST, slot 368), the twin of hd_level.cpp's
+	 * MoveWaterfallMist: the middle of each one's mist line and where the
+	 * engine moves it, one WATERLOG line each, printed after the segments. */
+	g_mist_lines.clear();
+
+	for (int i = 0; i < level.itemCount(); i++)
+	{
+		Tr5Item item;
+
+		if (!level.getItem(i, item) || item.objectNumber != 368)
+			continue;
+
+		const long ang = (long)item.yRot + 0x8000;
+		const long side = ang ? ang - 0x4000 : ang + 0x4000;
+		const long sa = (long)enginecam::PhdSin((short)ang);
+		const long ca = (long)enginecam::PhdCos((short)ang);
+		const long ss = (long)enginecam::PhdSin((short)side);
+		const long cs = (long)enginecam::PhdCos((short)side);
+		const long x = item.x - (512 * sa >> 14) + (256 * ss >> 14);
+		const long z = item.z - (512 * ca >> 14) + (256 * cs >> 14);
+		const float mx = (float)(x + (768 * sa >> 14));
+		const float mz = (float)(z + (768 * ca >> 14));
+		float nx = mx, nz = mz;
+
+		if (!HDRenderWaterFootNearest(mx, mz, &nx, &nz))
+			continue;
+
+		char line[160];
+
+		snprintf(line, sizeof(line), "WATERLOG level=%s mist=%d room=%d x=%d "
+			"z=%d moved=%d,%d", stem, i, item.roomNumber, (int)mx, (int)mz,
+			(int)floorf(nx - mx + 0.5f), (int)floorf(nz - mz + 0.5f));
+		g_mist_lines.push_back(line);
+	}
 }
 
 /* The level change. HDLevelBuild frees the previous level's buffers and
@@ -6629,11 +6689,62 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 		}
 
 		int left = 0;
+		std::vector<Tr5Level::SectorInfo> squares;
+
+		if (g_classic_wet)
+			level.sectorInfo(room, squares, error);
 
 		for (size_t f = 0; f < list.size(); f++)
 		{
 			const Tr5Level::FaceInfo& face = list[f];
 			const int corners = face.quad ? 4 : 3;
+
+			/* -classicplane: only the faces in that plane. -classicwet: of
+			 * those not the dry copies hd_level.cpp's BuildWaterSurfaces
+			 * leaves out beside a sheet - over a square with no water room
+			 * below whose plane the art draws flat there. */
+			if (g_classic_plane_set)
+			{
+				bool in = true;
+				long x0 = 1 << 30, x1 = -(1 << 30);
+				long z0 = 1 << 30, z1 = -(1 << 30);
+
+				for (int c = 0; c < corners; c++)
+				{
+					in = in && face.v[c][1] == g_classic_plane;
+					x0 = face.v[c][0] < x0 ? face.v[c][0] : x0;
+					x1 = face.v[c][0] > x1 ? face.v[c][0] : x1;
+					z0 = face.v[c][2] < z0 ? face.v[c][2] : z0;
+					z1 = face.v[c][2] > z1 ? face.v[c][2] : z1;
+				}
+
+				if (!in)
+					continue;
+
+				if (g_classic_wet)
+				{
+					const Tr5Room& rm = level.rooms()[(size_t)room];
+					const long lx0 = x0 - rm.originX, lx1 = x1 - rm.originX;
+					const long lz0 = z0 - rm.originZ, lz1 = z1 - rm.originZ;
+					const int sx = (int)((lx0 + lx1) / 2 >> 10);
+					const int sz = (int)((lz0 + lz1) / 2 >> 10);
+					bool water = false;
+
+					for (const Tr5Level::SectorInfo& q : squares)
+						if (q.sx == sx && q.sz == sz && q.roomBelow >= 0 &&
+							q.roomBelow < level.roomCount())
+							water = (level.rooms()[(size_t)q.roomBelow].flags &
+								1) != 0;
+
+					if (!water && HDRenderGroupFlatArt(room,
+						(int)g_classic_plane, (int)lx0, (int)lz0, (int)lx1,
+						(int)lz1))
+					{
+						left++;
+						continue;
+					}
+				}
+			}
 
 			// A face the carrier covers is drawn as its art (-stand).
 			if (dropped && dropped[f])
@@ -7201,6 +7312,18 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-nomark"))
 			g_creature_mark = false;
+		else if (!strcmp(argv[at], "-latemark"))
+			g_creature_late = true;
+		else if (!strcmp(argv[at], "-rippleat") && at + 1 < argc)
+		{
+			int r[3] = { 0, 0, 0 };
+
+			if (sscanf_s(argv[++at], "%d,%d,%d", &r[0], &r[1], &r[2]) == 3)
+				g_ripple_at.insert(g_ripple_at.end(), r, r + 3);
+			else
+				printf("RoomProbe: -rippleat wants x,y,z - '%s' ignored\n",
+					argv[at]);
+		}
 		else if (!strcmp(argv[at], "-twophase"))
 			g_two_phase = true;
 		else if (!strcmp(argv[at], "-markview"))
@@ -7347,6 +7470,13 @@ static int ProbeMain(int argc, char** argv)
 			g_classic_rooms.push_back(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-classiconly"))
 			g_classic_only = true;
+		else if (!strcmp(argv[at], "-classicplane") && at + 1 < argc)
+		{
+			g_classic_plane = atol(argv[++at]);
+			g_classic_plane_set = true;
+		}
+		else if (!strcmp(argv[at], "-classicwet"))
+			g_classic_wet = true;
 		else if (!strcmp(argv[at], "-coincide") && at + 1 < argc)
 			g_coincide = atof(argv[++at]);
 		else if (!strcmp(argv[at], "-coincidemark"))
@@ -8959,6 +9089,17 @@ static int ProbeMain(int argc, char** argv)
 			for (int s = 0; HDRenderWaterSegLine(s, stem, line,
 				sizeof(line)); s++)
 				printf("%s\n", line);
+
+			for (const std::string& m : g_mist_lines)
+				printf("%s\n", m.c_str());
+
+			// -rippleat: whether a ripple there loses its classic sprite.
+			for (size_t r = 0; r + 2 < g_ripple_at.size(); r += 3)
+				printf("rippleat %d,%d,%d: %s\n", g_ripple_at[r],
+					g_ripple_at[r + 1], g_ripple_at[r + 2],
+					HDRenderWaterSheetUnder(g_ripple_at[r], g_ripple_at[r + 1],
+					g_ripple_at[r + 2]) ? "a sheet draws it as a ring - no "
+					"sprite" : "no sheet within a click - the classic sprite");
 		}
 	}
 
@@ -9473,11 +9614,20 @@ static int ProbeMain(int argc, char** argv)
 			StandReceiveCount(&lighting);
 
 			/* -creature: the stand-ins where HDFrameDraw draws the HD
-			 * objects, after the rooms, with the creatures' mark. */
+			 * objects, after the rooms, with the creatures' mark. With
+			 * -latemark the bracket stays empty, as the game's does when no
+			 * HD object is near, and the stand-ins are drawn outside it, as
+			 * the classic buckets draw a rat. */
+			if (g_creature_late && !g_creatures.empty())
+			{
+				HDRenderWaterMarkBegin();
+				HDRenderWaterMarkEnd(0);
+			}
+
 			for (size_t i = 0; i + 1 < g_creatures.size(); i += 2)
 				if (!HDRenderWaterProbeCreature(g_creatures[i],
 					g_creatures[i + 1], g_seed_origin[0], g_seed_origin[1],
-					g_creature_mark ? 1 : 0))
+					g_creature_mark && !g_creature_late ? 1 : 0))
 					printf("-creature %.0f,%.0f: no sheet there - not drawn\n",
 						g_creatures[i], g_creatures[i + 1]);
 
@@ -9500,6 +9650,13 @@ static int ProbeMain(int argc, char** argv)
 
 			for (int i = 0; i < g_with_count; i++)
 				sheet = sheet || HDRenderGroupHasSheet(g_with_group[i]);
+
+			/* -latemark: the stand-ins marked where HDFrameDrawGlow marks the
+			 * rats, after the classic buckets and before the copy. */
+			for (size_t i = 0; g_creature_late && i + 1 < g_creatures.size();
+				i += 2)
+				HDRenderWaterProbeCreatureLate(g_creatures[i],
+					g_creatures[i + 1], g_seed_origin[0], g_seed_origin[1]);
 
 			if (sheet)
 				HDRenderWaterCopy();

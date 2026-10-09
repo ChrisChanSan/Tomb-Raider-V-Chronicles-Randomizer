@@ -41,6 +41,7 @@
 #include "../../game/draw.h"
 #include "../../game/effect2.h"		// dynamics, wibble
 #include "../../game/tomb4fx.h"		// ripples - the rings on the sheets
+#include "../../game/rat.h"			// Rats - the creatures' mark
 #include "../../game/gameflow.h"		// gfLevelId
 #include "../../game/lara.h"		// GfHdOutfit - data[3]; lara, lara_item
 #include "../../game/interpolate.h"	// InterpFrameAlpha - the state this frame draws
@@ -290,6 +291,7 @@ namespace
 	int g_water_face_total = 0;
 	int g_water_face_rooms = 0;
 	int g_water_face_kept = 0;	// faces the .TRG does cover - left to it
+	int g_water_face_dry = 0;	// faces over dry ground the art covers
 
 	/* The game clock, in seconds.
 	 *
@@ -1776,6 +1778,60 @@ static void BuildWaterFalls()
 		g_stem);
 }
 
+/* The mist over a waterfall's foot. A WATERFALLMIST object lays its grey
+ * sparks along a line 1,536 units long that starts 512 behind it and 256 to
+ * its side (game\effects.cpp WaterFall, game\effect2.cpp
+ * TriggerWaterfallMist) - under the classic waterfall it was placed for.
+ * Where the art draws the fall, its water lands elsewhere: in ANDREA2 room
+ * 231 the mist rose 479 and 486 units beside the art's two strands, the
+ * foot's foam and the art's own spray, a white column apart from the foam
+ * (mist lines at x 56,064, the strands' feet at x 55,518 to 55,591, the
+ * WATERLOG seg= lines). So an emitter whose line's middle lies within a
+ * square of a wet stretch the art's feet placed (HDRenderWaterFootNearest)
+ * is moved by the way from that middle to the stretch: the mist then rises
+ * where the art's water lands. A projection, so a second build moves it no
+ * further. Over the fifteen levels only ANDREA2 has such emitters, its two
+ * in room 231. Nothing without sheets (tomb5.hd_water 0 lays no curtain);
+ * the item's place is not saved (the object saves its flags alone), so a
+ * level loaded again starts from the classic place and is moved again. */
+static void MoveWaterfallMist()
+{
+	for (int i = 0; i < level_items; i++)
+	{
+		ITEM_INFO* item = &items[i];
+
+		if (item->object_number != WATERFALLMIST)
+			continue;
+
+		// The line's start and way, as WaterFall computes them.
+		const long ang = item->pos.y_rot + 0x8000;
+		long x = item->pos.x_pos - (512 * phd_sin(ang) >> W2V_SHIFT);
+		long z = item->pos.z_pos - (512 * phd_cos(ang) >> W2V_SHIFT);
+		const long side = ang ? ang - 0x4000 : ang + 0x4000;
+
+		x += 256 * phd_sin(side) >> W2V_SHIFT;
+		z += 256 * phd_cos(side) >> W2V_SHIFT;
+
+		const float mx = (float)(x + (768 * phd_sin(ang) >> W2V_SHIFT));
+		const float mz = (float)(z + (768 * phd_cos(ang) >> W2V_SHIFT));
+		float nx = mx, nz = mz;
+
+		if (!HDRenderWaterFootNearest(mx, mz, &nx, &nz))
+			continue;
+
+		const long dx = (long)floorf(nx - mx + 0.5f);
+		const long dz = (long)floorf(nz - mz + 0.5f);
+
+		item->pos.x_pos += dx;
+		item->pos.z_pos += dz;
+
+		if (gLogEnabled)
+			Log("WATERLOG level=%s mist=%d room=%d x=%d z=%d moved=%d,%d",
+				g_stem, i, item->room_number, (int)mx, (int)mz, (int)dx,
+				(int)dz);
+	}
+}
+
 /* The drops at the waterfalls' feet, on the logic tick (game\control.cpp,
  * beside AnimateWaterfalls): TriggerSmallSplash (game\tomb4fx.cpp), the
  * engine's own splash of a rat or a shell landing in water, two drops a
@@ -1987,6 +2043,7 @@ static void BuildWaterSheets()
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
 	BuildWaterFalls();
+	MoveWaterfallMist();
 
 	/* The depth texture the sheets read (HDRenderWaterDepthBind), bound
 	 * here, between frames, only when this level built sheets - with
@@ -2074,6 +2131,7 @@ static void BuildWaterSurfaces()
 	g_water_face_total = 0;
 	g_water_face_rooms = 0;
 	g_water_face_kept = 0;
+	g_water_face_dry = 0;
 
 	int underSheets = 0;	// faces a water sheet takes the place of
 
@@ -2105,6 +2163,7 @@ static void BuildWaterSurfaces()
 		int covered = 0;
 		int sheeted = 0;
 		int underSheet = 0;
+		std::vector<unsigned char> dryCopies;	// per restored face
 
 		for (int n = 0; n < r->nRoomlets; n++)
 		{
@@ -2188,12 +2247,37 @@ static void BuildWaterSurfaces()
 					continue;
 				}
 
+				/* A face over a square with no water room below it is no
+				 * water: a floor at the water's height whose corners border
+				 * the water and so carry the surface mark. Where the art
+				 * draws its own floor in that plane there, the face is a
+				 * second copy of it and the two fight for the same depth -
+				 * JOBY5 room 4's deck, five such faces beside the sheet. It
+				 * is left out once the room's water is a sheet's (dryCopy,
+				 * after the loop); with no sheet the room keeps it, as the
+				 * majority decides. */
+				const int fsx = (int)floorf((x0 + x1) * 0.5f / 1024.0f);
+				const int fsz = (int)floorf((z0 + z1) * 0.5f / 1024.0f);
+				bool dryCopy = false;
+
+				if (r->floor && fsx >= 0 && fsz >= 0 && fsx < r->y_size &&
+					fsz < r->x_size)
+				{
+					const FLOOR_INFO& below = r->floor[fsz + r->x_size * fsx];
+					const bool water = below.pit_room != NO_ROOM &&
+						(room[below.pit_room].flags & ROOM_UNDERWATER);
+
+					dryCopy = !water && HDRenderGroupFlatArt(i,
+						(int)r->minfloor, (int)x0, (int)z0, (int)x1, (int)z1);
+				}
+
 				HDRoomWaterFace entry;
 
 				entry.roomlet = (short)n;
 				entry.face = (short)(quad ? f : f - roomlet->nQuad);
 				entry.quad = quad ? 1 : 0;
 				g_water_faces[i].push_back(entry);
+				dryCopies.push_back(dryCopy ? 1 : 0);
 			}
 		}
 
@@ -2249,6 +2333,24 @@ static void BuildWaterSurfaces()
 			// A sheeted face is left to the .TRG as surely as a covered one.
 			g_water_face_kept += sheeted;
 
+		// The dry copies (see above), once a sheet draws the room's water.
+		int dryLeft = 0;
+
+		if (underSheet && dryCopies.size() == g_water_faces[i].size())
+		{
+			size_t keep = 0;
+
+			for (size_t k = 0; k < g_water_faces[i].size(); k++)
+				if (dryCopies[k])
+					dryLeft++;
+				else
+					g_water_faces[i][keep++] = g_water_faces[i][k];
+
+			g_water_faces[i].resize(keep);
+		}
+
+		g_water_face_dry += dryLeft;
+
 		if (!g_water_faces[i].empty())
 		{
 			g_water_face_rooms++;
@@ -2257,25 +2359,27 @@ static void BuildWaterSurfaces()
 
 			Log("HDLOG room=%d water surface restored=%d of %d face(s) at "
 				"y=%d, the .TRG covers %d of them and lays its own water over "
-				"%d, under a water sheet %d", i,
+				"%d, under a water sheet %d, dry copies left out %d", i,
 				(int)g_water_faces[i].size(), inPlane, (int)r->minfloor,
-				covered, sheeted, underSheet);
+				covered, sheeted, underSheet, dryLeft);
 		}
 		else if (sheeted)
 			Log("HDLOG room=%d water surface left to the .TRG, %d of its %d "
-				"face(s) under the .TRG's own sheet, under a water sheet %d",
-				i, sheeted, inPlane, underSheet);
+				"face(s) under the .TRG's own sheet, under a water sheet %d, "
+				"dry copies left out %d", i, sheeted, inPlane, underSheet,
+				dryLeft);
 		else if (underSheet)
 			Log("HDLOG room=%d water surface under a water sheet, %d of its "
-				"%d face(s)", i, underSheet, inPlane);
+				"%d face(s), dry copies left out %d", i, underSheet, inPlane,
+				dryLeft);
 
 		underSheets += underSheet;
 	}
 
 	Log("HDLOG level=%s water surfaces restored=%d in %d room(s), "
-		"left to the .TRG=%d, under a water sheet=%d", g_stem,
-		g_water_face_total, g_water_face_rooms, g_water_face_kept,
-		underSheets);
+		"left to the .TRG=%d, under a water sheet=%d, dry copies left "
+		"out=%d", g_stem, g_water_face_total, g_water_face_rooms,
+		g_water_face_kept, underSheets, g_water_face_dry);
 }
 
 
@@ -6885,6 +6989,98 @@ void HDFrameDraw()
  *
  * A frame that drew no HD room and no HD object never sets g_frame_pending
  * and this is a test and a return. */
+/* The rats for the creatures' mark (hd_render.cpp): a swimming rat is drawn
+ * by the classic path (DrawRats, phd_PutPolygons), between this frame's two
+ * brackets and outside the mark, so the sheets drew their waterline and the
+ * bank's foam over it - white rats in ANDY1's pool. Every live rat in a
+ * water room of this frame's rooms is marked here with the mesh DrawRats
+ * picks for it and the matrix it draws it with (the engine's own stack, the
+ * view in aMXPtr as the HD objects take it), its points pulled toward the
+ * eye by kMarkPull of their distance so that they pass the depth test
+ * against the classic draw of the same mesh - the fraction the stand rule
+ * pushes art back by (hd_render.h, HD_STAND_PUSH). Rats are the only
+ * creatures the classic path draws that swim; bats and spiders do not.
+ * Nothing without sheets (tomb5.hd_water 0 builds none). */
+static void MarkWaterCreatures()
+{
+	const float kMarkPull = HD_STAND_PUSH;
+
+	if (!Rats || !objects[RAT].loaded)
+		return;
+
+	std::vector<float> tris;
+
+	for (int i = 0; i < 32; i++)
+	{
+		const RAT_STRUCT* fx = &Rats[i];
+
+		if (!fx->On || fx->room_number < 0 ||
+			fx->room_number >= number_rooms ||
+			!(room[fx->room_number].flags & ROOM_UNDERWATER))
+			continue;
+
+		bool listed = false;
+
+		for (int k = 0; k < g_frame_count && !listed; k++)
+			listed = RoomOfGroup(g_frame[k].group) == fx->room_number;
+
+		if (!listed)
+			continue;
+
+		// The frame DrawRats draws (game\rat.cpp).
+		const int frame = (((wibble + (i << 2)) & 0x38) >> 2);
+		const MESH_DATA* mesh =
+			(const MESH_DATA*)meshes[objects[RAT].mesh_index + frame];
+
+		if (!mesh || !mesh->aVtx || mesh->nVerts <= 0)
+			continue;
+
+		phd_PushMatrix();
+		phd_TranslateAbs(fx->pos.x_pos, fx->pos.y_pos, fx->pos.z_pos);
+		phd_RotYXZ(fx->pos.y_rot, fx->pos.x_rot, fx->pos.z_rot);
+
+		const float* m = aMXPtr;
+		const float keep = 1.0f - kMarkPull;
+		auto put = [&](int v)
+		{
+			const ACMESHVERTEX& p = mesh->aVtx[v];
+
+			tris.push_back((m[M00] * p.x + m[M01] * p.y + m[M02] * p.z +
+				m[M03]) * keep);
+			tris.push_back((m[M10] * p.x + m[M11] * p.y + m[M12] * p.z +
+				m[M13]) * keep);
+			tris.push_back((m[M20] * p.x + m[M21] * p.y + m[M22] * p.z +
+				m[M23]) * keep);
+		};
+
+		// gt4: four corners and two words a quad; gt3: three and two.
+		const short* quad = mesh->gt4;
+
+		for (int q = 0; quad && q < mesh->ngt4; q++, quad += 6)
+		{
+			const int at[6] = { quad[0], quad[1], quad[2], quad[0], quad[2],
+				quad[3] };
+
+			for (int c = 0; c < 6; c++)
+				if (at[c] >= 0 && at[c] < mesh->nVerts)
+					put(at[c]);
+				else
+					put(0);
+		}
+
+		const short* tri = mesh->gt3;
+
+		for (int t = 0; tri && t < mesh->ngt3; t++, tri += 5)
+			for (int c = 0; c < 3; c++)
+				put(tri[c] >= 0 && tri[c] < mesh->nVerts ? tri[c] : 0);
+
+		phd_PopMatrix();
+	}
+
+	if (!tris.empty())
+		HDRenderWaterMarkTriangles(&tris[0], (int)(tris.size() / 3));
+}
+
 void HDFrameDrawGlow()
 {
 	if (!g_frame_pending)
@@ -6922,6 +7118,7 @@ void HDFrameDrawGlow()
 	{
 		FeedWaterRipples();
 		FeedWaterLara();
+		MarkWaterCreatures();
 	}
 
 	/* The glass first and the glows after it. Both are drawn without a depth

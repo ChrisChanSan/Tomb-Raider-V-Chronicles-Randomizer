@@ -1073,13 +1073,31 @@ void HDRenderWaterLara(int inWater, float x, float z);
  * `mark_intz=` and `sheet_intz=` whether the depth-stencil surface set at
  * the mark and at the first sheet draw was the sheets' INTZ surface (0/1),
  * `objects=` the objects drawn in the bracket, `sheets=` the sheet draws
- * and `split=` the ranges drawn twice for the mark. Called before
- * HDRenderWaterMarkBegin, which starts the next frame's count. */
+ * and `split=` the ranges drawn twice for the mark, `late=` the triangles
+ * HDRenderWaterMarkTriangles marked. Called before
+ * HDRenderWaterMarkBegin, which starts the next frame's count.
+ *
+ * HDRenderWaterMarkTriangles marks what the classic path draws outside the
+ * bracket - a swimming rat (hd_level.cpp, MarkWaterCreatures): a triangle
+ * list of `vertices` points, x y z each, in the frame's view as the HD
+ * objects are drawn in it, into the creature bit alone, depth tested and
+ * not written; the triangles marked, 0 where the bracket would not mark.
+ * HDRenderWaterProbeCreatureLate is RoomProbe's -latemark: -creature's box
+ * marked that way. */
+/* HDRenderWaterFootNearest: the nearest point to world x, z on a wet stretch
+ * of a waterfall's footprint that the art's falling water placed, within a
+ * square; false where none (hd_level.cpp moves the classic mist emitters
+ * onto it, MoveWaterfallMist). */
+bool HDRenderWaterFootNearest(float x, float z, float* nx, float* nz);
+
 void HDRenderWaterMarkBegin();
 void HDRenderWaterMarkEnd(int objects = 0);
 bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size);
 bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
 	int mark);
+int HDRenderWaterMarkTriangles(const float* xyz, int vertices);
+bool HDRenderWaterProbeCreatureLate(float x, float z, float offX,
+	float offZ);
 bool HDRenderWaterMarkView();
 
 /* The waterfalls' feet (hd_render.cpp, "the foot of a waterfall").

@@ -9924,6 +9924,113 @@ third stage.
 **Commits.** After the fourth play test, the shapes, the creatures and the rivers
 `ff4fbd8`, `cc3831d`.
 
+The waterfall's foot as one zone (`hd_render.cpp` :8964, :10136, :10185, :11326, :12545;
+`hd_room.hlsl` :2600; `RoomProbe.cpp`, `ModelProbe.cpp`). Asked for: the two foam crowns
+of ANDREA2's fountain hall, two discs turning alike, are to be one; the turning is to
+become a turn-stretch-move of a rectangular kind; the foam is to follow the shape of the
+falling water and spread out from it on every side, as on the owner's sketch of a foot
+from above and a photograph of a real waterfall (reference pictures supplied for this
+project, not in the repository); JOBY5's feet the same. Measured first: ANDREA2 room 231's
+one waterfall object lands on 88 points of the art's falling water in two strands about
+1,250 units apart, each cut into two discs of radius 762 and 526 - four discs; JOBY5's 27
+objects drew 35. Now the waterfall objects over one body whose foot points come within 512
+units of each other's are one curtain; its points, gathered every 512 units along their
+principal axis, give the curtain's footprint, a polyline of the steps' means, and a
+segment over a step without points bridges a gap at 0.85 of the foam, so the two strands
+land in one zone (at 0.6 the bridge left two zones on the pictures). The zone's reach is
+614 units plus 0.3 of the longest wet stretch, held to 614 to 1,229 - 0.6 of a square from
+a narrow jet, 0.9 from a strand a square wide, 1.2 from one of two (at 0.6 of the whole
+length the reach covered the room). `FootPS` takes `SwirlPS`'s place: per segment the
+pixel's distance to it, its way along it and its side; the pattern is carried outward at
+220 units a second times the square root of what is left of the reach, read at the way a
+mark has come (twice the reach times one less the square root of what is left) less the
+speed times the clock, so every blotch leaves the curtain fast, slows down and gathers at
+the rim; across the line at 0.75 of its scale along it (0.45 drew a comb), so near the
+curtain a blotch is a streak pointing away from it; the bank foam's two layers ride at two
+speeds, the fine one at 0.55, so the flow does not read as a belt; the two sides are moved
+260 units apart over 160 units either side of the line (a shear of the pattern drew a
+herringbone, a sign of the side a seam past the ends); the outline breathes with the patch
+field and a lobe field of its own; the density is the bank foam's with the threshold along
+the fall of what is left of the reach to the power 0.75 (0.5 filled the zone, 1 and 2 left
+a thin line). Nothing turns anywhere. Up to eight segments a draw, in c124 to c131 and
+c137 to c144. The rings and the drops come from a point every 512 units along the
+footprint's wet stretches (ANDREA2: four, as before). `hd_water.txt`: `foot <x1> <z1> <x2>
+<z2> <reach>` and `foot off`; `swirl <x> <z> <r>` is read as a foot of length 0 and `swirl
+off` as `foot off`, and the level line counts such rows (`old=`); a row holds 30 tokens at
+most. RoomProbe `-foot x1,z1,x2,z2,r` (and `-swirl x,z,r`). WATERLOG: `curtain=` ends the
+fall and foot lines (the foot line's `radius=` is its curtain's reach), a `seg=` line per
+segment, and the level line ends `curtains=<n> segs=<n> old=<n>`. ANDREA2 has 1 curtain of
+6 segments, JOBY2 3 of 1 each, JOBY5 27 with 36 segments (no two of its objects stand
+within 512 units).
+
+Under the water (`hd_room.hlsl` :1478, :1789, :2415, :2461; `hd_glow.hlsl` :199;
+`hd_model.hlsl` :782; `hd_render.cpp` :2823, :10011, :10794; `hd_level.cpp` :6700). Asked
+for: an extinction that changes with the distance, as under real water, in place of the
+flat haze (the owner's picture of ANDREA2's flooded sewer corridor, a photograph under
+water). Measured: that haze is not the distance fog, which only darkens - it is the
+level's fog bulbs: ANDREA2 has 17, 16 of them in water rooms (57, 58, 59, 61, 67, 77, 100,
+104, 107, 110, 120, 172, 173, 193, 227, 230), colour 0.81 1.00 0.87, radius 1,472 to 5,152
+units (the rooms' headers, `nFogBulbs` and `fogbulb`, read with the randomizer's
+`Tr5Level`); ANDREA1 has 7 in water rooms, JOBY2 none. Now, with the camera in a water
+room of a level with sheets, `RoomPS`, `GlowPS` and the model pixel shader take every
+pixel as col exp(-L sigma_rgb) + scatter (1 - exp(-L sigma_s)): L the length of the eye
+ray in the water - the whole distance to a point under the surface, the distance times the
+eye's depth over the point's height to one above it; sigma_rgb the sheet's own per-channel
+absorption, sigma_s its one over the absorption length, both times 0.35 (at the sheet's
+own numbers a channel keeps a quarter of the light at two squares; 0.2 hardly showed on
+the pictures); the scatter the body's shallow colour lit by its light, times 1 plus 0.6 of
+the ray's upward cosine, brighter looking up. A glow is only dimmed. The body is the one
+over the camera's room - the sheet squares over it, or the room above it, walked six rooms
+down - and a water room no sheet lies over takes the level's largest body (`under=` and
+`under_fallback=` at the level line's end: ANDREA2 19 and 20, JOBY2 9 and 2, JOBY4 2 and
+132). While the camera is under water the distance fog's start moves past any view and the
+frame carries no fog bulbs. The surface seen from below draws with a fifth `WaterPS`
+variant, `HD_WATER_UNDER`: the depth variant without the foam, which is drawn from above
+alone, and with the same extinction over the distance to the surface laid on the sheet's
+own colour before the frame behind it is added (that frame carries its own). Three pixel
+registers, not two: c134 sigma, c135 the scatter and the upward gain, c136 world up in
+view space and the eye's depth - the model shader has no world position. With them all
+zero, as in every frame whose camera is not under water and in every frame with
+`tomb5.hd_water` 0, each shader's colour comes out as it went in. The gloss variant stands
+at 502 slots and keeps the old distance fog. RoomProbe `-underwater` with `-hdwater 1`
+sets the same and prints the constants; ModelProbe `-under` takes them by hand.
+
+**Measured.** Slots, fxc /O3: `RoomPS` 482 to 509, `GlowPS` 483 to 498, the model pixel
+shader 360 to 386 - the extinction and the fog's moved start -; `FootPS` 203 (`SwirlPS`
+170); the `HD_WATER_UNDER` variant 339; the gloss variant 502, `WaterVS` 267, `WaterPS`
+442, its depth variant 508, the view variant 503 and `RiverPS` 152 keep their bytecode,
+and so does every shared shader but the three named, apart from the stamp line (14 of 17).
+GPU, 2560 x 1440, three runs: the full-water view 0.195, 0.198, 0.195 ms against 0.197,
+0.199, 0.199 at `826a893`; the foot from above, 0.156 to 0.159 ms for one draw of 6
+segments against 0.102 to 0.103 for 4 discs, the sheets 0.211 to 0.213 against 0.210 to
+0.212; under the water the sheets seen from below 0.069 to 0.072 ms for 5 draws (the
+corridor) and 0.054 to 0.055 for 3 (JOBY2's sea) against 0.079 to 0.081 and 0.058 to
+0.059 - the variant without foam is cheaper; the rooms' and models' share of the
+extinction, about 27 and 26 slots a pixel, is not timed apart. The model shader on Lara
+(ModelProbe, JOBY2's sea constants): the mean colour of her pixels 81, 76, 74 without and
+59, 81, 98 with the extinction at two squares, 53, 83, 107 at eight and 54, 83, 105 at
+sixteen - at eight squares she has the water's colour.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34); the fifteen cameras with `-hdwater 0`, 15 of 15
+identical to the fix round's parity set; with `-hdwater 1`, 10 of 15 identical to
+`826a893` - the five that differ are ANDREA2's fountain hall (A1, A2, D2) and JOBY2 room
+66 (E2), where the feet lie, and D1, whose camera is under the water; the sweep's counts
+identical to `826a893`'s; the text file (a foot, a swirl, `foot off`, a foot of four
+numbers and one of reach 9,000 counted bad); the suites (ModernTest 14721, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the foot's zone on
+the owner's views and on JOBY5's deck, its speed and how far it reaches, and the water's
+colour and depth of sight under ANDREA2's sewer and JOBY2's sea; JOBY4, whose 132 water
+rooms take its one small basin's water for want of a sheet over them. Light shafts under
+the water - bright columns from the surface - are not built: they would take a ray march
+or a screen-space blur of the surface's light, a pass of their own over every pixel under
+water. The splash of a dive in HD. The gloss variant's fog under the water. The reflection
+of the room itself, the third stage.
+
+**Commits.** After the fourth play test, the foot and the depths `43f61f4`, `90f9b33`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

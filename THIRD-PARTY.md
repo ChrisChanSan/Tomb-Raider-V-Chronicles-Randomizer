@@ -774,22 +774,37 @@ water surface", carries the tables.
     (`TrgProbe -parts 231`, the `foot=` lines with and without the art), and
     its slot WATERFALL1 is DUMMY in the level's `.MAP`
     (`MapProbe -map ANDREA2 -v`), so the art draws that fall.
-92. **The sources along a foot** - the foot's points in order along their
-    principal axis, cut into runs of at most 1,024 units and at gaps over 384;
-    a source at each run's mean, its radius half the run's diagonal plus 256,
-    held to 384 to 768. OWN, free choice, set by eye on RoomProbe pictures.
-93. **The swirl** - a second draw of the sheet's triangles (`SwirlPS`), up to
-    eight sources a draw: the pixel's place turned about the source by 0.35
-    radians a second and 1.2 more toward the middle, the bank foam's own
-    pattern, dissolve, density (entry 68's threshold along the square root of
-    the way in) and body (entry 80) read there, the reach the radius times 0.8
-    plus 0.2 of the patch field of entry 87, the source's strength the body's
-    foam scale; nothing from below. OWN, free choice, set by eye on RoomProbe
-    pictures; a rotation of the texture coordinate, general graphics
-    knowledge.
-94. **The foot's rings** - each source a ripple source of entry 72's ring,
-    size 64, re-armed every 0.4 to 0.8 seconds by a hash of its place. OWN,
-    free choice.
+92. **The curtain and its footprint** - the objects over one body whose foot
+    points come within 512 units of each other's are one curtain; its points
+    in order along their principal axis, gathered every 512 units, a corner
+    at the mean of every step that holds points: the footprint, a polyline;
+    a segment over a step without points bridges a gap at 0.85 of the foam;
+    the reach 614 units plus 0.3 of the longest wet stretch, held to 614 to
+    1,229 (0.6 to 1.2 squares). OWN, free choice, set by eye on RoomProbe
+    pictures; the one zone for two strands is the owner's ask of the play
+    test of 2026-10-09 (ANDREA2 room 231's two discs a strand read as two
+    crowns turning alike).
+93. **The foot's foam** - a second draw of the sheet's triangles (`FootPS`),
+    up to eight segments a draw: per segment the pixel's distance to it, its
+    way along it and its side; the reach times 0.8 plus 0.2 of entry 87's
+    patch field and 0.85 plus 0.3 of a slow lobe field; the pattern carried
+    outward at v0 sqrt(1 - x) (v0 220 units a second, x the distance over
+    the reach) by reading it at the way a mark has come, 2R (1 - sqrt(1 -
+    x)), less v0 t; across the line at 0.75 of its scale along it; the two
+    sides moved 260 units apart over 160 units either side of the line; the
+    bank foam's two layers (entry 68), the fine one at 0.55 of the speed,
+    its dissolve, its density with the threshold along (1 - x) to the power
+    0.75, its body (entry 80); the segment's strength times the body's foam
+    scale; nothing from below; no turn. OWN, free choices, set by eye on
+    RoomProbe pictures; the push and stretch away from the curtain tuned by
+    eye on reference pictures supplied for this project (the owner's sketch
+    of a foot from above, a photograph of a real waterfall, as a look and
+    no file); a pattern carried along a flow by the way it has come is
+    general graphics knowledge.
+94. **The foot's rings** - a source every 512 units along the footprint's
+    wet stretches (at least one, at the middles of equal parts), each a
+    ripple source of entry 72's ring, size 64, re-armed every 0.4 to 0.8
+    seconds by a hash of its place. OWN, free choice.
 95. **The drops at the foot** - `TriggerSmallSplash` (`game/tomb4fx.cpp`), the
     engine's own splash of a rat or a shell landing in water, on the logic
     tick beside `AnimateWaterfalls`. CLASSIC: the effect and its sparks are
@@ -805,9 +820,11 @@ water surface", carries the tables.
     231, the curtain's light fading toward its foot (measured on the additive
     pass: half its peak about 290 units over the water, a tenth 62), is met
     by entries 93 to 95 instead.
-97. **The `swirl` key of `hd_water.txt`** - `swirl <x> <z> <radius>` (64 to
-    2,048) a source of entries 93 to 95 on the surface under that place,
-    `swirl off` no objects' sources in the row's bodies. OWN, free choice.
+97. **The `foot` key of `hd_water.txt`** - `foot <x1> <z1> <x2> <z2>
+    <reach>` (64 to 2,048) a curtain of entries 92 to 95 along that line on
+    the surface under its middle, `foot off` no objects' curtains in the
+    row's bodies; `swirl <x> <z> <r>` reads as a foot of length 0 and
+    `swirl off` as `foot off` (the level line's `old=`). OWN, free choice.
 98. **A water square's surface at its water's top** - the surface of entry
     40's square is the highest corner of the water room's ceiling over it,
     not the dry square's floor byte, which a split sector raises to its
@@ -876,6 +893,33 @@ water surface", carries the tables.
     not both 0, the speed 0 to 4,000 units a second) sets a body's current
     in place of its sinks'; a river with neither runs along its long axis at
     240 units a second. OWN, free choice.
+108. **The extinction under the water** - with the eye in a water room of a
+    level with sheets, every pixel of `RoomPS`, `GlowPS` (no scatter: a
+    glow is dimmed only), `ModelPS` and the sheet's `HD_WATER_UNDER` variant
+    goes col exp(-L sigma_rgb) + scatter (1 - exp(-L sigma_s)), L the eye
+    ray's length in the water (the whole distance under the surface, d D / h
+    over it), sigma_rgb the body's per-channel absorption of entry 62,
+    sigma_s its one over the absorption length (entry 51), both times 0.35,
+    the scatter its shallow colour (entries 46 and 47) times 1 + 0.6 of the
+    ray's upward cosine. OWN: the textbook extinction and in-scattering of
+    a participating medium, general graphics knowledge; the 0.35 and the
+    0.6 free choices, tuned by eye on RoomProbe pictures and on reference
+    pictures supplied for this project (the owner's picture of the flat
+    haze, a photograph under water, as a look and no file).
+109. **Which body an eye under the water looks through** - an underwater
+    room takes the body most of the sheet squares over it belong to, a room
+    further down the body of the room over it (six rooms down), a water room
+    no sheet lies over the level's largest body. OWN, free choice; count on
+    our data: the level line's `under=` and `under_fallback=` (ANDREA2 19
+    and 20, JOBY2 9 and 2, JOBY4 2 and 132; RoomProbe `-hdwater 1
+    -nodraw`).
+110. **What the extinction takes the place of** - under the water the
+    distance fog (its start moved past any view) and the fog bulbs (none
+    that frame); the gloss variant, with no slots left, keeps the fog. DATA
+    for the reason: ANDREA2's sixteen fog bulbs in its water rooms, colour
+    0.81 1.00 0.87, radius 1,472 to 5,152 - the flat pale haze of the play
+    test of 2026-10-09 (the rooms' headers, `nFogBulbs` and `fogbulb`, read
+    with the randomizer's `Tr5Level`); OWN: the replacement.
 
 ## Credited, but not contained here
 

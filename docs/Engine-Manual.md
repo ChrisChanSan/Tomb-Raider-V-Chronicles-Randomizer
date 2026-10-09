@@ -1756,7 +1756,8 @@ it.
   colour in it, and outside the window the world above still shows through
   under a light veil of the section's shallow colour (a third of it), so the
   surface keeps the waves' shapes instead of turning into one milky plane;
-  the room's own underwater fog and the screen's wobble do the rest. Where
+  the screen's wobble and the water's own depth (*Under the water*) do the
+  rest. Where
   the graphics card offers it (the `INTZ`
   format), the frame's depth buffer becomes a texture the sheet can read, bound
   when a level with sheets loads: the water then knows how far below it
@@ -1827,15 +1828,32 @@ it.
   ends over a sheet - 31 in the fifteen levels: ANDREA2's fountain hall,
   JOBY2's three in room 66 and 27 in JOBY5 - churns the water at its foot.
   The foot is where the falling water the room's art draws ends (the
-  waterfall object's own mesh where the art has none), cut into stretches of
-  up to a square, and every stretch gets a disc of the sheet's own foam that
-  turns slowly, dense in the middle and lacy at its rim, growing and
-  shrinking a little over half a minute; rings that start from it every
-  half second or so; and drops thrown up from it, the game's own small
-  splash, two a tick at every foot within eight squares of the camera.
+  waterfall object's own mesh where the art has none). Waterfall objects
+  whose feet come within half a square of each other land as one curtain,
+  and so do the strands of one curtain with a gap between them: the curtain's
+  footprint is a line along it, and round that line lies one zone of the
+  sheet's own foam - 0.6 to 1.2 squares wide by the curtain's width, with an
+  irregular, slowly changing outline - that is pushed away from the line on
+  every side: it leaves the falling water fast, stretched into streaks that
+  point away from it, slows down and breaks up into lace toward the rim,
+  never turning. Rings start from points along the line every half second or
+  so, and drops are thrown up from them, the game's own small splash, two a
+  tick at every point within eight squares of the camera.
   The water of a waterfall reaches its surface in every level, and the
   fading light of a curtain's lowest stretch now ends in that foam and spray.
   With `hd_motion` off none of it moves and no drops are thrown.
+- **Under the water.** With the camera in a water room of a level with
+  sheets, the scene fades with the distance into the water's own colour,
+  channel by channel: what is near stays clear, what is far takes the
+  colour and light of that water - the shallow colour of the body above,
+  lit by its light, brighter where the view looks up toward the surface and
+  darker where it looks down - and red goes first, so the far turns green or
+  blue. The numbers are the surface's own, so the water looks the same from
+  inside as from above it. It takes the place of the distance fog and of the
+  level's fog bulbs while the camera is under water (ANDREA2's water rooms
+  carry sixteen, a flat pale haze); polished floors keep the distance fog. A
+  water room with no sheet over it takes the water of the level's largest
+  body. The surface seen from below fades the same way over its distance.
 - **Rivers.** Where the level's own triggers pull Lara through the water (a
   sink, the current that drags her along ANDY3's two rivers), the body is a
   river: it flows the way the sinks pull, at the speed they pull her (120
@@ -1874,12 +1892,15 @@ it.
   ripple 55808 32768 80 0.7`; the rest of such a row applies like any row's.
   And `art keep` (or `art hide`, what a row says without it) draws the
   Remaster's own water art over the sheets of the row's bodies again, for
-  example `ANDREA2 231 - art keep`. `swirl <x> <z> <radius>` puts the foot of
-  a waterfall (*Where a waterfall lands*) at that place with that radius (64
-  to 2048 units), for a fountain's jet that has no waterfall object (for
-  example `ANDREA2 194 - swirl 55808 32768 400`), and `swirl off` takes the
-  waterfalls' own feet in the row's bodies away, for example
-  `ANDREA2 231 - swirl off`; the `WATERLOG foot=` lines say where they are.
+  example `ANDREA2 231 - art keep`. `foot <x1> <z1> <x2> <z2> <reach>` lays
+  the foot of a waterfall (*Where a waterfall lands*) along the line from
+  x1, z1 to x2, z2 with that reach (64 to 2048 units), for a fountain's jet
+  that has no waterfall object (for example `ANDREA2 194 - foot 55808 32700
+  55808 32900 400`), and `foot off` takes the waterfalls' own feet in the
+  row's bodies away, for example `ANDREA2 231 - foot off`; the `WATERLOG
+  seg=` lines say where the footprints run. The older `swirl <x> <z>
+  <radius>` is read as a foot from x, z to x, z and `swirl off` as `foot
+  off`; the level line counts such rows (`old=`).
   The class `river` makes the row's bodies rivers (*Rivers*), and
   `flow <dx> <dz> <speed>` gives them a current by hand - the way along world
   x and z, -1 to 1 each and not both 0, and the speed in units a second, 0 to
@@ -1912,11 +1933,19 @@ it.
   `WATERLOG fall=` line per waterfall object gives its highest and lowest
   point, the surface under it and the gap between (0: it reaches the water),
   its feet and how many points of the art's own falling water placed them
-  (`art=`), and one `WATERLOG foot=` line per foot its place, its radius and
-  `row=1` for a row's. After `falls=` the level line counts the squares whose
+  (`art=`) and the curtain it lands in (`curtain=`); one `WATERLOG foot=`
+  line per point the rings and drops come from gives its place, its
+  curtain's reach (`radius=`), `row=1` for a row's and its curtain, and one
+  `WATERLOG seg=` line per segment of a curtain's footprint its ends, its
+  reach and its share of the foam (`wet=`, less over a gap). After `falls=`
+  the level line counts the squares whose
   surface is their water's top and not their own floor (`lowered=`), those
   left out as an island or a rim (`dropped=`) - both per room - and the
-  rivers (`river=`); a body line ends with its current, the way along x and
+  rivers (`river=`), then the curtains and their segments (`curtains=`,
+  `segs=`), the file's rows that use `swirl` (`old=`), and the underwater
+  rooms that look through a body above them (`under=`) and those that take
+  the level's largest body for want of one (`under_fallback=`); a body line
+  ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), and its places whose
   water names a sink (`sinks=`).
   The squares and the sheets count each place once, the level's and a body's

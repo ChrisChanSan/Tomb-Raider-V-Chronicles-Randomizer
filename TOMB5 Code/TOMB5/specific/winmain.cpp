@@ -31,6 +31,7 @@
 #include "setupdlg.h"
 #include "../tomb5/tomb5.h"	// load_tomb5_present_settings
 #include "crashseam.h"		// the CRASH line and the minidump
+#include "devicewindow.h"	// the style of the two display states
 #include "hd/hd_mods.h"		// the mods folder's log sink
 #include "hd/hd_wardrobe.h"	// and the wardrobe scan's
 
@@ -853,17 +854,7 @@ bool WinCreateWindow()
 
 void WinSetStyle(bool fullscreen, ulong& set)
 {
-	ulong style;
-
-	style = GetWindowLong(App.hWnd, GWL_STYLE);
-
-	if (fullscreen)
-		style = (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP;
-	else
-		style = (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW;
-
-	style &= ~(WS_THICKFRAME | WS_MAXIMIZEBOX | WS_SYSMENU);
-	SetWindowLong(App.hWnd, GWL_STYLE, style);
+	const ulong style = DeviceWindowStyle(App.hWnd, fullscreen);
 
 	if (set)
 		set = style;
@@ -1002,6 +993,7 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCmd
 
 	UpdateWindow(App.hWnd);
 	ShowWindow(App.hWnd, nShowCmd);
+	DXLogWindow("start");
 
 	if (App.dx.Flags & DXF_FULLSCREEN)
 	{

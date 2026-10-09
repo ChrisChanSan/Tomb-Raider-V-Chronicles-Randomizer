@@ -16,6 +16,8 @@
 #include "function_table.h"
 #include "texture.h"	// MoveTexturesToDevice
 #include "hd/hd_level.h"
+#include "fmv.h"			// FmvDeviceLost
+#include "devicewindow.h"
 #include "winmain.h"
 #include "input.h"
 #include "../tomb5/tomb5.h"	// tomb5.vsync
@@ -44,8 +46,6 @@ ulong DXTextureMemoryAtStart = 0;	// see dxshell.h
  * every reader downstream gets a number it can divide by. */
 static long g_vsyncActive = 0;
 static long g_displayHz = 60;
-
-static char tga_header[18] = { 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 1, 0, 1, 16, 0 };
 
 void DXReadKeyboard(char* KeyMap)
 {
@@ -184,94 +184,42 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 	return 1;
 }
 
-void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name)
+/* The apostrophe screenshot's file: <name>0000.tga, <name>0001.tga, ... in
+ * the working folder, written by DeviceSaveTga (devicewindow.h). The path
+ * comes back in `path`; returns the bytes written, 0 when nothing was. */
+long DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name, char* path,
+	size_t size)
 {
-	FILE* file;
-	D3DSURFACE_DESC desc;
-	D3DLOCKED_RECT rect;
-	uchar* pSurf;
-	uchar* pDest;
-	char* pM;
 	static long num = 0;
-	char buf[16];
 
-	if (FAILED(surf->GetDesc(&desc)))
-		return;
-
-	if (FAILED(surf->LockRect(&rect, 0, D3DLOCK_READONLY)))
-		return;
-
-	pSurf = (uchar*)rect.pBits;
-	sprintf(buf, "%s%04d.tga", name, num);
+	_snprintf_s(path, size, _TRUNCATE, "%s%04d.tga", name, num);
 	num++;
-	file = fopen(buf, "wb");
-
-	if (file)
-	{
-		// 24-bit TGA. Core's version wrote 16 bits and read the surface in
-		// short strides - that dates from the DirectDraw era, when the back
-		// buffer really was 16 bits. The D3D9 port creates it as
-		// D3DFMT_X8R8G8B8, i.e. 32 bits; the old math thus read nonsense.
-		// On top came a row bug: the start pointer stood at Height * Pitch,
-		// one row behind the buffer - the first pass read out of bounds
-		// every time. The engine's apostrophe snapshot would thus always
-		// have crashed.
-		tga_header[16] = 24;
-		*(short*)&tga_header[12] = (short)desc.Width;
-		*(short*)&tga_header[14] = (short)desc.Height;
-		fwrite(tga_header, sizeof(tga_header), 1, file);
-		pM = (char*)malloc(3 * desc.Width * desc.Height);
-		pDest = (uchar*)pM;
-
-		// TGA has its origin at the bottom left, the surface at the top
-		// left - hence backwards from the last row.
-		pSurf += (desc.Height - 1) * rect.Pitch;
-
-		for (ulong h = 0; h < desc.Height; h++)
-		{
-			for (ulong w = 0; w < desc.Width; w++)
-			{
-				// X8R8G8B8 lies in memory as B,G,R,X - exactly the order
-				// TGA wants too.
-				*pDest++ = pSurf[w * 4 + 0];
-				*pDest++ = pSurf[w * 4 + 1];
-				*pDest++ = pSurf[w * 4 + 2];
-			}
-
-			pSurf -= rect.Pitch;
-		}
-
-		fwrite(pM, 3 * desc.Width * desc.Height, 1, file);
-		fclose(file);
-		free(pM);
-	}
-
-	surf->UnlockRect();
+	return DeviceSaveTga(surf, path);
 }
 
 HRESULT DXShowFrame()
 {
 	HRESULT hr;
 
+	/* The engine's screenshot. One new -log line per file: the read-back's
+	 * HRESULT (DeviceReadBack: the first step that failed, or
+	 * GetRenderTargetData's), the file and its bytes.
+	 *   DXLOG screenshot hr=<0x...> file=<TombNNNN.tga or none> bytes=<n> */
 	if (keymap[DIK_APOSTROPHE])
 	{
-		LPDIRECT3DSURFACE9 back, sysMem;
-		D3DSURFACE_DESC desc;
+		LPDIRECT3DSURFACE9 sysMem;
+		char path[MAX_PATH] = "none";
+		long bytes = 0;
+		const HRESULT got = DeviceReadBack(G_dxptr->lpD3DDevice, &sysMem);
 
-		if (SUCCEEDED(G_dxptr->lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+		if (sysMem)
 		{
-			back->GetDesc(&desc);
-
-			if (SUCCEEDED(G_dxptr->lpD3DDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &sysMem, 0)))
-			{
-				if (SUCCEEDED(G_dxptr->lpD3DDevice->GetRenderTargetData(back, sysMem)))
-					DXSaveScreen(sysMem, "Tomb");
-
-				sysMem->Release();
-			}
-
-			back->Release();
+			bytes = DXSaveScreen(sysMem, "Tomb", path, sizeof(path));
+			sysMem->Release();
 		}
+
+		Log("DXLOG screenshot hr=0x%08lX file=%s bytes=%ld",
+			(unsigned long)got, path, bytes);
 	}
 
 	hr = G_dxptr->lpD3DDevice->Present(0, 0, 0, 0);
@@ -354,10 +302,13 @@ void DXClose()
 		// resolution change or Alt+Enter comes through here (DXChangeVideoMode
 		// / DXToggleFullScreen call DXCreate, which calls DXClose first).
 		// Letting them outlive the device would leave the HD path drawing
-		// through released interfaces on the next frame. They go now; the
-		// next level load builds them again on the new device, and until then
-		// the rooms are classic.
+		// through released interfaces on the next frame. They go now;
+		// DXCreate builds them again on the new device once the classic
+		// pages have moved (MoveTexturesToDevice, HDLevelDeviceRecreated).
+		// The film's texture was made on this device too and goes with it;
+		// the next film makes it again (PlayFmv).
 		HDLevelDeviceLost();
+		FmvDeviceLost();
 
 		Log("Released %s @ %x - RefCnt = %d", "Direct3DDevice", G_dxptr->lpD3DDevice, G_dxptr->lpD3DDevice->Release());
 		G_dxptr->lpD3DDevice = 0;
@@ -396,35 +347,16 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 
 	if (!(Flags & DXF_FULLSCREEN))
 	{
-		D3DDISPLAYMODE curMode;
-
 		Log("DXCreate: Windowed Mode");
-		r.top = 0;
-		r.left = 0;
 
 		// The enumerated exclusive-fullscreen mode list (dm->w/h) can be considerably
 		// shorter than what a monitor actually supports (seen on multi-monitor systems
 		// where the driver reports a much smaller max mode for one output than another,
 		// identical, monitor) - a window doesn't need a real exclusive-fullscreen-capable
 		// mode to exist, so size it off the adapter's actual current desktop resolution
-		// instead, sidestepping that limitation entirely.
-		if (SUCCEEDED(G_d3d->GetAdapterDisplayMode(adapter, &curMode)))
-		{
-			r.right = curMode.Width;
-			r.bottom = curMode.Height;
-		}
-		else
-		{
-			r.right = dm->w;
-			r.bottom = dm->h;
-		}
-
-		AdjustWindowRect(&r, WindowStyle, 0);
-		SetWindowPos(hWnd, 0, 0, 0, r.right - r.left, r.bottom - r.top, SWP_NOMOVE | SWP_NOZORDER);
-		GetClientRect(hWnd, &G_dxptr->rViewport);
-		GetClientRect(hWnd, &G_dxptr->rScreen);
-		ClientToScreen(hWnd, (LPPOINT)&G_dxptr->rScreen);
-		ClientToScreen(hWnd, (LPPOINT)&G_dxptr->rScreen.right);
+		// instead, sidestepping that limitation entirely (devicewindow.h).
+		DeviceWindowPlaceWindowed(hWnd, G_d3d, adapter, dm->w, dm->h,
+			WindowStyle, &G_dxptr->rViewport, &G_dxptr->rScreen);
 		G_dxptr->dwRenderWidth = G_dxptr->rViewport.right;
 		G_dxptr->dwRenderHeight = G_dxptr->rViewport.bottom;
 		Log("w %d h %d", G_dxptr->dwRenderWidth, G_dxptr->dwRenderHeight);
@@ -451,52 +383,24 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 		// same way windowed mode (above) already works.
 		Log("DXCreate: Full Screen Mode (borderless windowed)");
 
-		D3DDISPLAYMODE curMode;
-		HMONITOR hMonitor = G_d3d->GetAdapterMonitor(adapter);
-		MONITORINFO mi;
+		long w, h;
 
-		mi.cbSize = sizeof(mi);
-
-		if (hMonitor && GetMonitorInfo(hMonitor, &mi))
-			r = mi.rcMonitor;
-		else
-		{
-			r.left = 0;
-			r.top = 0;
-			r.right = dm->w;
-			r.bottom = dm->h;
-		}
-
-		if (SUCCEEDED(G_d3d->GetAdapterDisplayMode(adapter, &curMode)))
-		{
-			G_dxptr->dwRenderWidth = curMode.Width;
-			G_dxptr->dwRenderHeight = curMode.Height;
-		}
-		else
-		{
-			G_dxptr->dwRenderWidth = dm->w;
-			G_dxptr->dwRenderHeight = dm->h;
-		}
-
+		DeviceWindowFullRect(G_d3d, adapter, dm->w, dm->h, &r, &w, &h);
+		G_dxptr->dwRenderWidth = w;
+		G_dxptr->dwRenderHeight = h;
 		G_dxptr->rViewport.top = 0;
 		G_dxptr->rViewport.left = 0;
 		G_dxptr->rViewport.right = G_dxptr->dwRenderWidth;
 		G_dxptr->rViewport.bottom = G_dxptr->dwRenderHeight;
-		SetWindowPos(hWnd, HWND_TOP, r.left, r.top, G_dxptr->dwRenderWidth, G_dxptr->dwRenderHeight, SWP_SHOWWINDOW);
-		ShowWindow(hWnd, SW_SHOW);
-		SetForegroundWindow(hWnd);
+		DeviceWindowShowFull(hWnd, &r, G_dxptr->dwRenderWidth,
+			G_dxptr->dwRenderHeight);
 	}
 
-	memset(&G_dxptr->PresentParams, 0, sizeof(D3DPRESENT_PARAMETERS));
-	G_dxptr->PresentParams.Windowed = TRUE;	// always - see the border-less-windowed comment above
-	G_dxptr->PresentParams.SwapEffect = D3DSWAPEFFECT_DISCARD;
-	G_dxptr->PresentParams.hDeviceWindow = hWnd;
-	G_dxptr->PresentParams.BackBufferWidth = G_dxptr->dwRenderWidth;
-	G_dxptr->PresentParams.BackBufferHeight = G_dxptr->dwRenderHeight;
-	G_dxptr->PresentParams.BackBufferFormat = D3DFMT_X8R8G8B8;
-	G_dxptr->PresentParams.BackBufferCount = 1;
-
-	/* VSync, and the one line the whole option is.
+	/* The present parameters (devicewindow.h): windowed always - see the
+	 * border-less-windowed comment above - discard, one X8R8G8B8 back buffer
+	 * of the size just worked out, D24S8 when the Z buffer is asked for.
+	 *
+	 * VSync, and the one line the whole option is.
 	 *
 	 * The engine presented with D3DPRESENT_INTERVAL_IMMEDIATE from the day it
 	 * was ported, and the thirty frames a second came from the busy-wait in
@@ -518,8 +422,8 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	 *
 	 * The display's own rate is read here for the same reason: this is where
 	 * the adapter is at hand. The refresh-bound frame rate divides by it. */
-	G_dxptr->PresentParams.PresentationInterval =
-		tomb5.vsync ? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+	DevicePresentParams(&G_dxptr->PresentParams, hWnd, G_dxptr->dwRenderWidth,
+		G_dxptr->dwRenderHeight, tomb5.vsync != 0, (Flags & DXF_ZBUFFER) != 0);
 
 	{
 		D3DDISPLAYMODE mode;
@@ -532,12 +436,6 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 
 		Log("DXCreate: display %ld Hz, VSync %s", g_displayHz,
 			tomb5.vsync ? "on" : "off");
-	}
-
-	if (Flags & DXF_ZBUFFER)
-	{
-		G_dxptr->PresentParams.EnableAutoDepthStencil = TRUE;
-		G_dxptr->PresentParams.AutoDepthStencilFormat = D3DFMT_D24S8;
 	}
 
 	// Leave FullScreen_RefreshRateInHz at 0 (let the driver pick the display's current rate)
@@ -579,6 +477,7 @@ long DXChangeVideoMode()
 	val = DXCreate(0, 0, 0, G_dxptr->Flags, G_dxptr, G_dxptr->hWnd, G_dxptr->WindowStyle);
 	G_dxptr->Flags ^= DXF_NOFREE;
 	Log("Exited DXChangeVideoMode %d", val);
+	DXLogWindow("mode");
 	return val;
 }
 
@@ -605,7 +504,29 @@ long DXToggleFullScreen()
 	DXCreate(dm->w, dm->h, dm->bpp, G_dxptr->Flags, G_dxptr, G_dxptr->hWnd, G_dxptr->WindowStyle);
 	WinSetStyle(G_dxptr->Flags & DXF_FULLSCREEN, G_dxptr->WindowStyle);
 	G_dxptr->Flags ^= DXF_NOFREE;
+	DXLogWindow("toggle");
 	return 1;
+}
+
+/* One new -log line with the window and its swap chain as they stand
+ * (devicewindow.h): after the start, after every Alt+Enter and after every
+ * resolution change, so that the states can be held against each other.
+ *   DXLOG window <start|toggle|mode> style=<GWL_STYLE> ex=<GWL_EXSTYLE>
+ *   topmost= visible= foreground= window=<l,t,r,b> client=<l,t,r,b in
+ *   screen coordinates> monitor=<l,t,r,b> windowed= swap= format= back=<WxH>
+ *   count= multisample= interval= hz= flags= depth= behavior=<creation
+ *   flags> - the present parameters as the device reports them. */
+void DXLogWindow(const char* when)
+{
+	DeviceWindowState state;
+	char line[512];
+
+	if (!gLogEnabled || !G_dxptr || !G_dxptr->hWnd)
+		return;
+
+	DeviceWindowMeasure(G_dxptr->hWnd, G_dxptr->lpD3DDevice, &state);
+	DeviceWindowStateText(&state, line, sizeof(line));
+	Log("DXLOG window %s %s", when, line);
 }
 
 // D3D9 adapters are enumerated directly (GetAdapterCount/GetAdapterIdentifier/EnumAdapterModes) -

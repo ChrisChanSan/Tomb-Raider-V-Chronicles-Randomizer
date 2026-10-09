@@ -18,6 +18,7 @@
 #include "winmain.h"
 #include "LoadSave.h"
 #include "devicemove.h"
+#include "hd/hd_level.h"	// HDLevelDeviceRecreated
 
 // Raised from the original 64 - a Randomizer combining texture pages from
 // several source levels can plausibly need more than any single vanilla
@@ -165,10 +166,17 @@ void FreeTextures()
  * moved=<made again> dropped=<released and set to 0, drawn untextured until
  * the next level> kept=<already on the new device> picture=<1 when the mono
  * picture was there> old_device_refs=<what the old device still holds after
- * the move: 0 is nothing, -1 is no texture of it met>. */
+ * the move: 0 is nothing, -1 is no texture of it met> hd=<rebuilt when the
+ * HD level was built again on the new device, classic when it was not or
+ * there was none> ms=<what that build took, in milliseconds>.
+ *
+ * The HD level is built after the move, never before: its water frames
+ * borrow entries of Textures[] above nTextures, and the move walks the
+ * level's own entries below it. */
 void MoveTexturesToDevice()
 {
 	DeviceMoveCount count;
+	LARGE_INTEGER start, end, rate;
 	long picture;
 
 	DeviceMoveBegin(&count);
@@ -179,7 +187,15 @@ void MoveTexturesToDevice()
 	picture = MonoScreenToDevice(App.dx.lpD3DDevice, &count);
 	const long left = DeviceMoveEnd(&count);
 
+	QueryPerformanceFrequency(&rate);
+	QueryPerformanceCounter(&start);
+
+	const bool hd = HDLevelDeviceRecreated();
+
+	QueryPerformanceCounter(&end);
+
 	Log("DXLOG device recreated - pages=%ld moved=%ld dropped=%ld kept=%ld "
-		"picture=%ld old_device_refs=%ld", nTextures, count.moved,
-		count.dropped, count.kept, picture, left);
+		"picture=%ld old_device_refs=%ld hd=%s ms=%ld", nTextures, count.moved,
+		count.dropped, count.kept, picture, left, hd ? "rebuilt" : "classic",
+		(long)((end.QuadPart - start.QuadPart) * 1000 / rate.QuadPart));
 }

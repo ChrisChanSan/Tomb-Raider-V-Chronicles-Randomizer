@@ -131,8 +131,14 @@ void HDLevelUnload();
 
 // The Direct3D device is about to be released or reset (a resolution change,
 // Alt+Enter, a lost device). Every HD object lives on THAT device, so all of
-// it goes now; the next level load builds it again on the new one.
+// it goes now; HDLevelDeviceRecreated builds it again on the new one.
 void HDLevelDeviceLost();
+
+// A new device in place of the old one (DXCreate on Alt+Enter or a
+// resolution change, after the classic pages have moved): the level that
+// was drawing HD is built again from what is still loaded, and the HD font
+// with it. Returns whether the level draws HD again.
+bool HDLevelDeviceRecreated();
 
 // Whether the HD path is switched on and an installed Remaster was found.
 // Nothing else in the engine may read HD data without asking this first.

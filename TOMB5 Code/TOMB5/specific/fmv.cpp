@@ -125,6 +125,23 @@ bool LoadBinkStuff()
 	return 1;
 }
 
+/* The device is going away (DXClose: Alt+Enter, a resolution change, the
+ * end of the session). The playback texture is a MANAGED texture of that
+ * device, made by the first film (PlayFmv) and kept: left in place it holds
+ * the released device alive, and the next film would bind it on the new
+ * one - the misuse that ended a toggle in d3d9.dll (devicemove.h). It goes
+ * with its device instead; PlayFmv makes it again on the device of the next
+ * film. Alt+Enter is refused while a film plays, so none is drawing. */
+void FmvDeviceLost()
+{
+	if (!BinkTexture)
+		return;
+
+	Log("Released %s @ %x - RefCnt = %d", "Bink Texture", BinkTexture,
+		BinkTexture->Release());
+	BinkTexture = 0;
+}
+
 void FreeBinkStuff()
 {
 	if (BinkTexture)

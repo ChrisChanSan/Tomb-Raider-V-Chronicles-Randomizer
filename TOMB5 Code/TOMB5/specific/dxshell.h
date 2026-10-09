@@ -25,7 +25,8 @@ long DXAttempt(HRESULT r);
 long DIAttempt(HRESULT r);
 void* AddStruct(void* p, long num, long size);
 long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARAMETERS* pp, LPDIRECT3DDEVICE9* device);
-void DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name);
+long DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name, char* path,
+	size_t size);
 HRESULT DXShowFrame();
 void DXMove(long x, long y);
 void DXClose();
@@ -42,6 +43,7 @@ long DXDisplayHz();
 
 long DXChangeVideoMode();
 long DXToggleFullScreen();
+void DXLogWindow(const char* when);
 long DXGetInfo(DXINFO* dxinfo, HWND hwnd);
 void DXFreeInfo(DXINFO* dxinfo);
 long DXUpdateJoystick();

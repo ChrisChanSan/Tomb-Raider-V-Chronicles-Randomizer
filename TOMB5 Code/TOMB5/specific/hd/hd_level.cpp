@@ -147,6 +147,12 @@ namespace
 	// nothing until the next level starts, as the option row says.
 	bool g_level_active = false;
 
+	/* Whether the level was drawing HD when its device went (DXClose on
+	 * Alt+Enter or a resolution change), so that HDLevelDeviceRecreated
+	 * builds it again on the new device. HDLevelUnload clears it: a level
+	 * that has gone is never built again. */
+	bool g_rebuild_wanted = false;
+
 	/* Which .TRG group draws which room.
 	 *
 	 * Group i is room i until FlipMap runs. FlipMap (game\control.cpp) does
@@ -5540,6 +5546,7 @@ void HDLevelUnload()
 	 * the device, immediately before the next level's are made; and DXClose
 	 * releases them through HDLevelDeviceLost when the device itself goes. */
 	g_level_active = false;
+	g_rebuild_wanted = false;
 	g_frame_count = 0;
 	g_room_count = 0;
 	g_stem[0] = 0;
@@ -5575,6 +5582,7 @@ void HDLevelDeviceLost()
 	 * thread in every one of those cases. */
 	LevelDiagnosticsEnd();
 
+	g_rebuild_wanted = g_level_active;
 	g_level_active = false;
 	g_frame_count = 0;
 	g_room_count = 0;
@@ -5593,11 +5601,110 @@ void HDLevelDeviceLost()
 	// Shaders, declaration, both buffers and every page texture belong to the
 	// device that is going away. HDRenderShutdown drops all of it and forgets
 	// the device; the next HDLevelBuild calls HDRenderInit again on whatever
-	// device exists then. Until the next level starts the rooms are classic -
+	// device exists then - HDLevelDeviceRecreated's, once DXCreate has made
+	// the new one, or the next level's. Until then the rooms are classic,
 	// which is a picture, not a crash, and a crash is what a dangling
 	// IDirect3DVertexBuffer9 would be.
 	HDRenderShutdown();
 	Log("HDLOG device lost - HD released, classic until the next level");
+}
+
+/* The rooms FlipMap has swapped (game\control.cpp): every room with an
+ * alternate whose flip stands set in flip_stats - the same test FlipMap
+ * makes, and the same truth the savegame keeps. */
+static void FlippedPairs(std::vector<int>& pairs)
+{
+	pairs.clear();
+
+	for (int i = 0; i < number_rooms; i++)
+	{
+		const ROOM_INFO* r = &room[i];
+
+		if (r->flipped_room >= 0 && r->flipped_room < number_rooms &&
+			r->FlipNumber < 255 && flip_stats[r->FlipNumber])
+		{
+			pairs.push_back(i);
+			pairs.push_back(r->flipped_room);
+		}
+	}
+}
+
+/* The contents of two ROOM_INFO records change places as in FlipMap, while
+ * the fields FlipMap keeps with the room number - flipped_room, item_number
+ * and fx_number - stay with each number. Done twice it gives back every
+ * byte, which FlipMap's own swap does not (it hands the alternate the
+ * room's item list), so the build below can see the rooms as a level load
+ * does and leave them exactly as the game had them. */
+static void SwapRoomContents(int a, int b)
+{
+	ROOM_INFO keep;
+	const short flipA = room[a].flipped_room, flipB = room[b].flipped_room;
+	const short itemA = room[a].item_number, itemB = room[b].item_number;
+	const short fxA = room[a].fx_number, fxB = room[b].fx_number;
+
+	memcpy(&keep, &room[a], sizeof(ROOM_INFO));
+	memcpy(&room[a], &room[b], sizeof(ROOM_INFO));
+	memcpy(&room[b], &keep, sizeof(ROOM_INFO));
+	room[a].flipped_room = flipA;
+	room[b].flipped_room = flipB;
+	room[a].item_number = itemA;
+	room[b].item_number = itemB;
+	room[a].fx_number = fxA;
+	room[b].fx_number = fxB;
+}
+
+/* A new device in place of the old one (DXCreate, after the classic pages
+ * have moved): the level that was drawing HD is built again for the level
+ * still loaded, by HDLevelBuild itself - room[], the floor data, objects[]
+ * and the markers are all still in memory, and the build reads the art and
+ * its pages from the Remaster's DATA again as at a level load. Then the
+ * font. Runs on the window thread while the game thread waits at
+ * BeginScene, before the frame's lists are begun (S_InitialisePolyList).
+ *
+ * Two things differ from a load. The build takes group i for room i, which
+ * is true only before any flip, so the swapped pairs are swapped back for
+ * it and swapped again after, and HDFlipRoom then moves the art with them
+ * as it does when a savegame's flips are applied after its load. And the
+ * HD clock keeps running: a load starts it at 0, which would set every
+ * scroll, wave and book back to its start in mid-level.
+ *
+ * Returns whether the level draws HD again. A level that was classic when
+ * the device went stays classic; nothing here runs with hd_enable 0. */
+bool HDLevelDeviceRecreated()
+{
+	bool rebuilt = false;
+
+	if (g_rebuild_wanted && HDEnabled() && g_stem[0])
+	{
+		std::vector<int> pairs;
+		const double clock = g_clock;
+		const unsigned short clockLast = g_clock_last;
+		const bool clockStarted = g_clock_started;
+
+		g_rebuild_wanted = false;
+		FlippedPairs(pairs);
+
+		for (size_t i = 0; i + 1 < pairs.size(); i += 2)
+			SwapRoomContents(pairs[i], pairs[i + 1]);
+
+		HDLevelBuild();
+
+		for (size_t i = 0; i + 1 < pairs.size(); i += 2)
+		{
+			SwapRoomContents(pairs[i], pairs[i + 1]);
+			HDFlipRoom(pairs[i], pairs[i + 1]);
+		}
+
+		g_clock = clock;
+		g_clock_last = clockLast;
+		g_clock_started = clockStarted;
+		rebuilt = g_level_active;
+		Log("HDLOG device recreated - level=%s rebuilt=%d flipped_pairs=%d",
+			g_stem, rebuilt ? 1 : 0, (int)(pairs.size() / 2));
+	}
+
+	HDFontBuild();
+	return rebuilt;
 }
 
 /* The group that draws room `roomIndex` right now, or -1. The one place the

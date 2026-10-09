@@ -24,6 +24,7 @@
 #include "winmain.h"
 #include "output.h"
 #include "dxshell.h"
+#include "devicewindow.h"	// DeviceReadBack - the back buffer read back
 #include "texture.h"
 #include "function_stubs.h"
 #include "../game/savegame.h"
@@ -388,28 +389,26 @@ long SpecialFeaturesPageRun()
 
 void CreateMonoScreen()
 {
-	LPDIRECT3DSURFACE9 back, sysMem;
-	D3DSURFACE_DESC desc;
+	LPDIRECT3DSURFACE9 sysMem;
 
 	MonoScreenOn = 1;
 
-	if (FAILED(App.dx.lpD3DDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
-		return;
-
 	// A device back buffer isn't directly lockable in D3D9 (unlike the old DirectDraw
 	// primary/back surfaces) - copy it into a system-memory surface first via
-	// GetRenderTargetData, then lock that instead.
-	back->GetDesc(&desc);
+	// GetRenderTargetData, then lock that instead (DeviceReadBack,
+	// devicewindow.h, the same read as the apostrophe screenshot). A refusal
+	// is one new -log line:
+	//   DXLOG mono picture hr=<0x...> - no picture
+	const HRESULT got = DeviceReadBack(App.dx.lpD3DDevice, &sysMem);
 
-	if (SUCCEEDED(App.dx.lpD3DDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &sysMem, 0)))
+	if (!sysMem)
 	{
-		if (SUCCEEDED(App.dx.lpD3DDevice->GetRenderTargetData(back, sysMem)))
-			ConvertSurfaceToTextures(sysMem);
-
-		sysMem->Release();
+		Log("DXLOG mono picture hr=0x%08lX - no picture", (unsigned long)got);
+		return;
 	}
 
-	back->Release();
+	ConvertSurfaceToTextures(sysMem);
+	sysMem->Release();
 }
 
 void RGBM_Mono(uchar* r, uchar* g, uchar* b)

@@ -2005,6 +2005,12 @@ it.
   water names a sink (`sinks=`).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
+  The first frame of a level whose camera is in a water room writes one
+  `WATERLOG level=<stem> undergate` line: the camera's room (`room=`), that
+  room's own underwater flag, which decides (`flag=`), the classic camera's
+  underwater state, which the dive (JOBY4) never sets and which follows the
+  room a logic step late (`cam=`), 1 when that frame is drawn under the water
+  (`on=`), and 1 when the level takes the deep sea's water (`deep=`).
 
 **Text.** The title menu, the names under the inventory ring, the options
 pages, the load and save lists with their *(quicksave)* line, the statistics

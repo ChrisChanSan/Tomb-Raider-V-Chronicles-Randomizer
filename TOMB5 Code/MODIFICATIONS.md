@@ -10591,6 +10591,69 @@ shafts under the water stay for later.
 
 **Commits.** `917e968`, `7820bce`.
 
+**The eye under the water in JOBY4, after the sixth play test.** The sixth play test found
+JOBY4 no different from the build before, and the reason is a gate, not the look.
+`HDFrameDraw` (`specific/hd/hd_level.cpp`) decides once a frame whether the eye is under
+the water; only then is `frame.under` 1, and from it `water_under_constants`
+(`hd_render.cpp`) fills c134 to c136 and c145, the fog bulbs go and the sheen gives way.
+The gate asked `camera.underwater`. `CalculateCamera` (`game/camera.cpp:1433`) sets that
+flag from the camera room's `ROOM_UNDERWATER` in every level but `LVL5_DEEPSEA_DIVE`, and
+the level start clears it (`game/setup.cpp:2334`), so in JOBY4 it is 0 from the first
+frame to the last: the constants stayed zero there, and the extinction, the clear zone and
+the deep look - the last made for this level alone - never ran in it. RoomProbe
+`-underwater` sets the frame by hand, so every picture of those parts showed the shaders
+and none went through this gate. The exception covers two things in the classic engine:
+the looped `SFX_UNDERWATER`, played in the same block (`camera.cpp:1437`), and the flag,
+whose one classic reader is the screen wobble of the room vertices
+(`specific/drawroom.cpp:597`) - the dive keeps its underwater sound and its wobble out.
+The draw side keeps a flag of its own, `camera_underwater` (`game/draw.cpp:2420` and
+`:3344`), set for every frame from the room it is drawn from, with no exception; it is
+static in that file and nothing reads it.
+
+Now the gate reads the camera room's own `ROOM_UNDERWATER` flag - the test camera.cpp
+makes and the value draw.cpp's flag holds for the frame, read in `hd_level.cpp` itself
+because draw.cpp's is out of reach and stays as it is - and, as before,
+`HDRenderWaterUnderOn`, true only for a water room of a level that built its sheets.
+JOBY4's 134 water rooms all have a body (two under its one basin, 132 by the fallback;
+RoomProbe `-hdwater 1 -nodraw` prints `under=2 under_fallback=132 under_deep=1`), so every
+one of them now takes the deep look. Two things follow in the other levels from the same
+rule. camera.cpp sets its flag before the camera moves, a logic tick behind the room the
+frame is drawn from: the look now opens on the frame the camera enters the water, not a
+tick later (on leaving, the gate shut at once already - a dry room has no body). And a
+fly-by moves the camera without `CalculateCamera`: the look follows its camera into and
+out of the water, where `camera.underwater` kept the value it had before the fly-by.
+
+The screen wobble keeps `camera.underwater` (`FillFrameLighting`, `out.cameraUnderwater`).
+It is the classic's own offset on the projected vertices (`hd_room.hlsl` `RoomVS`, step
+4, the formula of `drawroom.cpp`), drawn beside classic faces that take it from that
+flag, and `ClassicFaceDrawn` repeats the classic projection with it for the corner rule.
+In the dive the classic game shows no wobble by its own exception, the owner asked for
+none, and following the room flag there would move the HD art while the classic faces of
+the same frame stand still. With `tomb5.hd_water 0` the level builds no sheets
+(`g_wlevel.built` stays 0), `HDRenderWaterUnderOn` is false and every frame is as before;
+with `hd_enable 0` `HDFrameDraw` returns before the gate.
+
+The seam: with `-log`, the first frame of a level outside the inventory ring whose camera
+room carries the flag writes `WATERLOG level=<stem> undergate room=<n> flag=<0|1>
+cam=<0|1> on=<0|1> deep=<0|1>` - the camera's room, its flag (1 on this line),
+`camera.underwater` (0 throughout JOBY4, and 0 as well on a frame the camera has just swum
+into), 1 when that frame is drawn under the water, and 1 when the level takes the deep
+look (the level line's `under_deep=`).
+
+**Checked.** No shader and no tool changed, and RoomProbe does not run the gate - it sets
+the frame itself: the fifteen cameras with `-hdwater 0`, 15 of 15 identical to the fix
+round's parity set; with `-hdwater 1`, 15 of 15 identical to the river round's of
+`7820bce`. The suites (ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and
+243) 0 failed; the engine builds, and no tool compiles `hd_level.cpp` (MenuTest reads it
+as text).
+
+**Left.** Only the game shows JOBY4 under the water: the deep look's darkness under the
+game's own gamma, its fog bulbs gone and its distance fog replaced, its fly-bys. The
+`undergate` line of the owner's next log says what each level did; JOBY4 should read
+`flag=1 cam=0 on=1 deep=1`.
+
+**Commits.** `be0c0a8`.
+
 **Alt+Enter after the sixth play test: the HD level built again, the film's texture, the
 screen capture.** The build of `9f2d2ed` was played (a log supplied for this project, not
 in the repository). Alt+Enter no longer crashed; it switched the HD art off until the next

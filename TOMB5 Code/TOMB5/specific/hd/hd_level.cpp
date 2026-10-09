@@ -1091,6 +1091,8 @@ namespace
 	bool g_matrix_checked = false;
 	// One line per level about the sky dome, and only one.
 	bool g_sky_logged = false;
+	// One WATERLOG undergate line per level (HDFrameDraw).
+	bool g_undergate_logged = false;
 	// The most water surfaces any frame of this level has drawn, which
 	// throttles the line about them - see HDFrameDrawWindowed.
 	int g_water_calls_worst = 0;
@@ -4701,6 +4703,7 @@ static void HDLevelBuildHD()
 	g_frame_dropped = 0;
 	g_matrix_checked = false;
 	g_sky_logged = false;
+	g_undergate_logged = false;
 	g_water_calls_worst = 0;
 	// The per-level window list is written again for this level.
 	g_clip_listed = false;
@@ -6917,8 +6920,22 @@ void HDFrameDraw()
 	 * the randomizer's Tr5Level). Not in the inventory ring, which draws
 	 * through a view of its own. World up in view space is the second row
 	 * of a room's view matrix, negated: every room of the frame shares the
-	 * camera's turn. */
-	if (!HDObjectRingFrame() && camera.underwater && g_frame_count &&
+	 * camera's turn.
+	 *
+	 * A water room is one whose own flags carry ROOM_UNDERWATER: the test
+	 * camera.cpp makes for the camera's room, and draw.cpp for the frame's.
+	 * camera.underwater, the answer camera.cpp keeps, is not asked. It is 0
+	 * for the whole of JOBY4 (LVL5_DEEPSEA_DIVE) - the classic engine keeps
+	 * its underwater sound and screen wobble out of the dive -, it is set
+	 * before the camera moves, a logic tick behind the room the frame is
+	 * drawn from, and a fly-by moves the camera without setting it. The
+	 * screen wobble (FillFrameLighting) reads it, as the classic faces of
+	 * the same frame do. */
+	const short eye_room = camera.pos.room_number;
+	const bool eye_wet = eye_room >= 0 && eye_room < number_rooms &&
+		(room[eye_room].flags & ROOM_UNDERWATER) != 0;
+
+	if (!HDObjectRingFrame() && eye_wet && g_frame_count &&
 		HDRenderWaterUnderOn(camera.pos.room_number))
 	{
 		const D3DMATRIX& m = g_frame[0].world;
@@ -6935,6 +6952,31 @@ void HDFrameDraw()
 			frame.underUp[2] = -m._23 / len;
 			frame.bulbCount = 0;
 		}
+	}
+
+	/* WATERLOG, with -log, once per level: the first frame outside the
+	 * inventory ring whose camera room is a water room writes
+	 *
+	 *   WATERLOG level=<stem> undergate room=<n> flag=<0|1> cam=<0|1>
+	 *            on=<0|1> deep=<0|1>
+	 *
+	 * room the camera's room; flag its ROOM_UNDERWATER, the test above (1
+	 * on this line); cam camera.underwater - 0 throughout JOBY4, and 0 as
+	 * well on a frame the camera has just swum into, a tick behind; on 1
+	 * when this frame is drawn under the water; deep 1 when the level takes
+	 * the deep look (the level line's under_deep). on=0 with flag=1: the
+	 * level built no sheets (tomb5.hd_water 0, a device without the water
+	 * shaders, a level with no water square) or the frame drew no HD
+	 * room. */
+	if (gLogEnabled && !g_undergate_logged && eye_wet && !HDObjectRingFrame())
+	{
+		HDRenderWaterLevel water;
+
+		HDRenderWaterLevelInfo(&water);
+		g_undergate_logged = true;
+		Log("WATERLOG level=%s undergate room=%d flag=%d cam=%d on=%d "
+			"deep=%d", g_stem, (int)eye_room, eye_wet ? 1 : 0,
+			camera.underwater ? 1 : 0, frame.under, water.underDeep);
 	}
 
 	// A destructible piece follows its own static's Flags bit.

@@ -485,6 +485,19 @@
  *                     the released device: the crash of Alt+Enter, its CRASH
  *                     line through the crash seam and a dump in the working
  *                     folder.
+ *     -windowcycle [-leak]
+ *                     the game window across Alt+Enter, no level needed: a
+ *                     real window of the engine's class and styles through
+ *                     the engine's own specific/devicewindow.h, the start
+ *                     state and two toggles, each state's line (styles,
+ *                     rectangles, the present parameters the device
+ *                     reports, its creation flags), what a read of the
+ *                     screen and the DXGI desktop duplication see there, and
+ *                     the screenshot path's HRESULT and file
+ *                     (_state1.._state3.tga after the -out prefix). The
+ *                     first and the third state's lines are compared. -leak
+ *                     keeps a texture of the start device alive. The window
+ *                     covers the monitor for about two seconds.
  *     -crash <folder> the crash seam (specific/crashseam.h): the tool runs
  *                     itself in <folder> with the seam installed and a null
  *                     pointer read, then reads the CRASH line of crash.txt
@@ -7081,6 +7094,8 @@ static int ProbeMain(int argc, char** argv)
 			"way; -crash <folder>   the crash seam's own test\n");
 		printf("       -cycleclassic <pages> [-nomove]   the classic pages "
 			"across three devices\n");
+		printf("       -windowcycle [-leak]   the game window and its swap "
+			"chain across two toggles\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -classicroom <room>   that room's classic faces, flat, "
 			"beside the art (needs -roombox)\n");
@@ -10250,8 +10265,361 @@ static int CycleClassic(int count, bool move, const char* out)
 	return ok ? 0 : 1;
 }
 
+/* -windowcycle [-leak] [-out <prefix>]: the game window across Alt+Enter, on
+ * a real window of the engine's class and styles, through the engine's own
+ * window code (specific/devicewindow.h): the start as WinMain makes it
+ * (WS_OVERLAPPEDWINDOW and WS_EX_APPWINDOW, hidden, then DXCreate's full
+ * screen state and WinSetStyle), one toggle to the windowed state and one
+ * back, each the way DXToggleFullScreen runs it (the old device released
+ * first, the window placed, the device made, the style set). Each state
+ * presents a colour of its own and prints its line (DeviceWindowStateText),
+ * then what the system sees at the client area's middle - a GDI read of the
+ * screen (BitBlt with CAPTUREBLT) and a frame of the DXGI desktop
+ * duplication, held against the colour only while the window is the one at
+ * that point (front=1; a program in the foreground keeps it behind) - and
+ * the engine's screenshot path: DeviceReadBack's HRESULT and DeviceSaveTga's
+ * bytes into <prefix>_state<n>.tga. -leak keeps a MANAGED texture of the
+ * start device, as a texture nobody moves keeps its device alive. The
+ * window covers the monitor for about two seconds. */
+#include <d3d11.h>
+#include <dxgi1_2.h>
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "gdi32.lib")
+#include "../../../TOMB5 Code/TOMB5/specific/devicewindow.h"
+
+static void WindowCyclePump(DWORD ms)
+{
+	const DWORD until = GetTickCount() + ms;
+	MSG msg;
+
+	do
+	{
+		while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE))
+		{
+			TranslateMessage(&msg);
+			DispatchMessageA(&msg);
+		}
+
+		Sleep(5);
+	}
+	while ((long)(until - GetTickCount()) > 0);
+}
+
+static void WindowCyclePresent(IDirect3DDevice9* device, D3DCOLOR colour,
+	int frames)
+{
+	for (int i = 0; i < frames; i++)
+	{
+		device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, colour, 1.0f,
+			0);
+		device->Present(0, 0, 0, 0);
+		WindowCyclePump(16);
+	}
+}
+
+// DXCreate's way to a device, the old one already released, then the
+// style WinSetStyle sets once DXCreate is back.
+static IDirect3DDevice9* WindowCycleDevice(IDirect3D9* d3d, HWND window,
+	bool full, DWORD* style)
+{
+	D3DPRESENT_PARAMETERS pp;
+	IDirect3DDevice9* device = 0;
+	long w = 0, h = 0;
+
+	if (full)
+	{
+		RECT monitor;
+
+		DeviceWindowFullRect(d3d, D3DADAPTER_DEFAULT, 1280, 720, &monitor, &w,
+			&h);
+		DeviceWindowShowFull(window, &monitor, w, h);
+	}
+	else
+	{
+		RECT viewport, screen;
+
+		DeviceWindowPlaceWindowed(window, d3d, D3DADAPTER_DEFAULT, 1280, 720,
+			*style, &viewport, &screen);
+		w = viewport.right;
+		h = viewport.bottom;
+	}
+
+	DevicePresentParams(&pp, window, w, h, true, true);
+
+	if (FAILED(d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, window,
+		D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED, &pp,
+		&device)))
+		return 0;
+
+	*style = DeviceWindowStyle(window, full);
+	return device;
+}
+
+// One pixel of the desktop as the DXGI duplication of the output that
+// holds it delivers it, 0xFFFFFFFF when there is none.
+static DWORD WindowCycleDuplicate(IDirect3DDevice9* device, POINT at)
+{
+	ID3D11Device* d11 = 0;
+	ID3D11DeviceContext* context = 0;
+	IDXGIDevice* dxgi = 0;
+	IDXGIAdapter* adapter = 0;
+	IDXGIOutput* output = 0;
+	IDXGIOutput1* output1 = 0;
+	IDXGIOutputDuplication* dup = 0;
+	DWORD pixel = 0xFFFFFFFF;
+	DXGI_OUTPUT_DESC desc;
+
+	if (FAILED(D3D11CreateDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, 0, 0, 0,
+		D3D11_SDK_VERSION, &d11, 0, &context)))
+		return pixel;
+
+	d11->QueryInterface(__uuidof(IDXGIDevice), (void**)&dxgi);
+
+	if (dxgi)
+		dxgi->GetAdapter(&adapter);
+
+	for (UINT i = 0; adapter && !output1; i++)
+	{
+		if (FAILED(adapter->EnumOutputs(i, &output)))
+			break;
+
+		output->GetDesc(&desc);
+
+		if (PtInRect(&desc.DesktopCoordinates, at))
+			output->QueryInterface(__uuidof(IDXGIOutput1), (void**)&output1);
+
+		output->Release();
+		output = 0;
+	}
+
+	if (output1 && SUCCEEDED(output1->DuplicateOutput(d11, &dup)))
+	{
+		for (int tries = 0; tries < 20 && pixel == 0xFFFFFFFF; tries++)
+		{
+			DXGI_OUTDUPL_FRAME_INFO info;
+			IDXGIResource* resource = 0;
+
+			// A frame of ours is presented so that the duplication has a
+			// new desktop image to hand over.
+			device->Present(0, 0, 0, 0);
+
+			if (FAILED(dup->AcquireNextFrame(100, &info, &resource)))
+				continue;
+
+			ID3D11Texture2D* frame = 0;
+
+			resource->QueryInterface(__uuidof(ID3D11Texture2D),
+				(void**)&frame);
+
+			if (frame && info.LastPresentTime.QuadPart)
+			{
+				D3D11_TEXTURE2D_DESC td;
+				ID3D11Texture2D* staging = 0;
+
+				frame->GetDesc(&td);
+				td.Usage = D3D11_USAGE_STAGING;
+				td.BindFlags = 0;
+				td.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+				td.MiscFlags = 0;
+
+				if (SUCCEEDED(d11->CreateTexture2D(&td, 0, &staging)))
+				{
+					D3D11_MAPPED_SUBRESOURCE map;
+
+					context->CopyResource(staging, frame);
+
+					if (SUCCEEDED(context->Map(staging, 0, D3D11_MAP_READ, 0,
+						&map)))
+					{
+						const long x = at.x - desc.DesktopCoordinates.left;
+						const long y = at.y - desc.DesktopCoordinates.top;
+
+						pixel = ((const DWORD*)((const BYTE*)map.pData +
+							y * map.RowPitch))[x] & 0xFFFFFF;
+						context->Unmap(staging, 0);
+					}
+
+					staging->Release();
+				}
+			}
+
+			if (frame)
+				frame->Release();
+
+			resource->Release();
+			dup->ReleaseFrame();
+		}
+
+		dup->Release();
+	}
+
+	if (output1) output1->Release();
+	if (adapter) adapter->Release();
+	if (dxgi) dxgi->Release();
+	if (context) context->Release();
+	if (d11) d11->Release();
+	return pixel;
+}
+
+// What the system sees of a state and what the engine's screenshot path
+// makes of it; true when all of it shows `colour`.
+static bool WindowCycleLook(HWND window, IDirect3DDevice9* device,
+	D3DCOLOR colour, const char* prefix, int state, std::string* text)
+{
+	DeviceWindowState s;
+	char line[1024];
+	char path[MAX_PATH];
+	const DWORD want = colour & 0xFFFFFF;
+
+	DeviceWindowMeasure(window, device, &s);
+	DeviceWindowStateText(&s, line, sizeof(line));
+	*text = line;
+	printf("windowcycle: state %d %s\n", state, line);
+
+	POINT at;
+
+	at.x = (s.client.left + s.client.right) / 2;
+	at.y = (s.client.top + s.client.bottom) / 2;
+
+	HDC screen = GetDC(0);
+	HDC mem = CreateCompatibleDC(screen);
+	HBITMAP one = CreateCompatibleBitmap(screen, 1, 1);
+	HGDIOBJ was = SelectObject(mem, one);
+
+	BitBlt(mem, 0, 0, 1, 1, screen, at.x, at.y, SRCCOPY | CAPTUREBLT);
+
+	const COLORREF g = GetPixel(mem, 0, 0);
+	const DWORD gdi = (GetRValue(g) << 16) | (GetGValue(g) << 8) | GetBValue(g);
+
+	SelectObject(mem, was);
+	DeleteObject(one);
+	DeleteDC(mem);
+	ReleaseDC(0, screen);
+
+	// The screen shows this window there only when nothing stands in front
+	// of it: another program in the foreground keeps it behind.
+	const bool front = WindowFromPoint(at) == window;
+
+	const DWORD dup = WindowCycleDuplicate(device, at);
+	IDirect3DSurface9* back = 0;
+	const HRESULT hr = DeviceReadBack(device, &back);
+	long bytes = 0;
+
+	_snprintf_s(path, sizeof(path), _TRUNCATE, "%s_state%d.tga", prefix,
+		state);
+
+	if (back)
+	{
+		bytes = DeviceSaveTga(back, path);
+		back->Release();
+	}
+
+	printf("windowcycle: state %d at %ld,%ld front=%d want %06lX gdi %06lX "
+		"duplication %06lX readback 0x%08lX file %s %ld bytes\n", state, at.x,
+		at.y, (int)front, want, gdi, dup, (unsigned long)hr, path, bytes);
+	return SUCCEEDED(hr) && bytes > 0 && (!front || (gdi == want &&
+		dup == want));
+}
+
+static int WindowCycle(bool leak, const char* prefix)
+{
+	WNDCLASSA cls;
+	static const D3DCOLOR colour[3] = { 0xFFC02020, 0xFF20C020, 0xFF2020C0 };
+	std::string text[3];
+	bool seen[3] = { false, false, false };
+
+	memset(&cls, 0, sizeof(cls));
+	cls.style = CS_VREDRAW | CS_HREDRAW;
+	cls.lpfnWndProc = DefWindowProcA;
+	cls.hInstance = GetModuleHandleA(0);
+	cls.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+	cls.hCursor = LoadCursor(0, IDC_ARROW);
+	cls.lpszClassName = "RoomProbeGameWindow";
+	RegisterClassA(&cls);
+
+	// WinCreateWindow, then WinMain's hide before the device.
+	HWND window = CreateWindowExA(WS_EX_APPWINDOW, "RoomProbeGameWindow",
+		"RoomProbe window cycle", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
+		CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, cls.hInstance, 0);
+	IDirect3D9* d3d = window ? Direct3DCreate9(D3D_SDK_VERSION) : 0;
+
+	if (!d3d)
+	{
+		printf("windowcycle: no window\n");
+		return 1;
+	}
+
+	ShowWindow(window, SW_HIDE);
+	UpdateWindow(window);
+
+	DWORD style = WS_OVERLAPPEDWINDOW;
+	IDirect3DDevice9* device = WindowCycleDevice(d3d, window, true, &style);
+	IDirect3DTexture9* kept = 0;
+
+	// WinMain after DXCreate and WinSetStyle.
+	UpdateWindow(window);
+	ShowWindow(window, SW_SHOWNORMAL);
+
+	for (int state = 0; state < 3 && device; state++)
+	{
+		WindowCyclePresent(device, colour[state], 20);
+		WindowCyclePump(300);
+		seen[state] = WindowCycleLook(window, device, colour[state], prefix,
+			state + 1, &text[state]);
+
+		if (state == 2)
+			break;
+
+		if (leak && !kept)
+			device->CreateTexture(64, 64, 1, 0, D3DFMT_A8R8G8B8,
+				D3DPOOL_MANAGED, &kept, 0);
+
+		// DXToggleFullScreen: DXCreate releases the device, then places.
+		printf("windowcycle: device released, RefCnt = %lu\n",
+			(unsigned long)device->Release());
+		device = WindowCycleDevice(d3d, window, state == 1, &style);
+	}
+
+	if (kept)
+		printf("windowcycle: the kept texture's device released, RefCnt = "
+			"%lu\n", (unsigned long)kept->Release());
+
+	const bool same = device && text[0] == text[2];
+
+	printf("windowcycle: start against after two toggles: %s\n",
+		same ? "identical" : "DIFFERENT");
+	printf("windowcycle: read back and seen where in front: start %s, one "
+		"toggle %s, two %s\n", seen[0] ? "yes" : "NO",
+		device && seen[1] ? "yes" : "NO", device && seen[2] ? "yes" : "NO");
+
+	if (device)
+		device->Release();
+
+	d3d->Release();
+	DestroyWindow(window);
+	return same && seen[0] && seen[1] && seen[2] ? 0 : 1;
+}
+
 int main(int argc, char** argv)
 {
+	for (int i = 1; i < argc; i++)
+		if (!strcmp(argv[i], "-windowcycle"))
+		{
+			bool leak = false;
+			const char* prefix = ".\roomprobe";
+
+			for (int j = 1; j < argc; j++)
+			{
+				if (!strcmp(argv[j], "-leak"))
+					leak = true;
+				else if (!strcmp(argv[j], "-out") && j + 1 < argc)
+					prefix = argv[j + 1];
+			}
+
+			return WindowCycle(leak, prefix);
+		}
+
 	for (int i = 1; i + 1 < argc; i++)
 	{
 		if (!strcmp(argv[i], "-crashchild"))
@@ -10346,6 +10714,17 @@ int main(int argc, char** argv)
 		g_faces_built.clear();
 		g_cuts_built.clear();
 		g_stand_draws.clear();
+		// The -roombox lists, filled by push_back while the level is read.
+		g_intrusions_built.clear();
+		g_stand_faces_built.clear();
+		g_stand_holders_built.clear();
+		g_stand_covered_room.clear();
+		g_stand_covered_answer.clear();
+		g_stand_carrier.clear();
+		g_stand_flags.clear();
+		// And the groups -with and -roomwin add, counted per argument.
+		g_with_count = 0;
+		g_roomwin_count = 0;
 		printf("\ndevicecycle: run %d of 3 (%s)\n", run + 1,
 			run == 1 ? "classic" : "HD");
 		result |= ProbeMain((int)a.size(), &a[0]);

@@ -10296,6 +10296,90 @@ splash of a dive in HD.
 **Commits.** After the fifth play test, the foot's gap and the depths `b6e3ebf`,
 `ae5d80f`.
 
+**Alt+Enter, the crash seam's first catch.** In the fifth play test Alt+Enter in the title
+of the build of `059a185` ended with the seam's line `CRASH code=0xC0000005 ...
+module=d3d9.dll+0x8D06F thread=game` and its minidump (a log and a dump supplied for this
+project, not in the repository). Read with the build's own symbols and no symbol server,
+the game thread died reading address 8 inside d3d9.dll's `DrawPrimitiveUP`, called from
+`HWDrawPrimitive` in `HWR_DrawSortList`'s case 4 (`specific/polyinsert.cpp` :165), the
+sky's draw type, under `DrawSortList`, `OutputSky`, `SkyDrawPhase`, `DoTitle`,
+`DoGameflow` and `GameMain`: the first classic draw after the device was released and made
+again, sent to the new device (its address is not the one the log released). That case
+binds `Textures[texture].tex`. Every page of `Textures[]` (`CreateTexturePage`,
+`specific/texture.cpp`) and the inventory's and load screen's picture are
+`D3DPOOL_MANAGED` textures of the device current when they were made, and nothing on the
+way from `WinProcessCommands` (`specific/winmain.cpp` :186) through `DXToggleFullScreen`,
+`DXCreate` and `DXClose` made them again: the 22 references the log printed at the release
+are those pages, each keeping its device alive. Everything else the classic draw needs,
+`HWInitialise` sets on the new device - the stage and sampler state, the render states,
+`D3DRS_CLIPPING` and the one FVF; `DrawPrimitiveUP` takes no stream - and the HD side had
+let go of all its objects (`HDLevelDeviceLost`; the sky dome waits for the next level, the
+text for its font texture). Inside d3d9 the null is an empty parent slot in the released
+device's bookkeeping of its managed textures, reached through the page.
+
+Reproduced here, which the second play test's reading had not: a page of a released
+device drawn on a new one does no harm when it was the only page drawn on the old device,
+and fails once the pages there differ in when they were last drawn - in the game the sky
+is drawn in every frame and most pages are not. RoomProbe `-cycleclassic 22 -nomove`
+crashes at `d3d9.dll+0x8D06F` reading address 8, and its own dump shows the d3d9 frames of
+the owner's at the same offsets under `DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2)`; with a
+single page the draw returns and the device has lost the picture (`GetRenderTargetData`
+fails with `E_FAIL`).
+
+The fix. `specific/devicemove.h` (header only, `DeviceMoveTexture` :73): a texture not
+made on the new device is made again on it, same size, levels and format, managed; every
+level is copied through `LockRect`, which needs none of the level's data because a managed
+texture keeps its texels in system memory; the old one is released. A texture that is not
+managed, of a format whose texel size the header does not know, or whose copy fails, is
+released and its pointer set to 0, which draws untextured until the next level instead of
+crashing. `DXCreate` (`specific/dxshell.cpp` :386) notes whether a device was there before
+`DXClose`, and after `DXCreateD3DDevice` succeeds on such a recreation (:554) calls
+`MoveTexturesToDevice` (`specific/texture.cpp` :169): every entry of `Textures[]`, then
+the picture (`MonoScreenToDevice`, `specific/LoadSave.cpp` :640), and one new line under
+`-log`:
+
+`DXLOG device recreated - pages=<n> moved=<m> dropped=<d> kept=<k> picture=<0|1>
+old_device_refs=<r>`
+
+`pages` is the number of entries in `Textures[]`, `moved` those made again, `dropped`
+those released and drawn untextured, `kept` those already on the new device, `picture` 1
+when the picture was there, and `old_device_refs` what the old device still holds once all
+of them have moved: 0 is nothing, and the device is gone; -1 is no texture of it met.
+Alt+Enter and the resolution keys both come through `DXCreate`; startup (no device before)
+and the reset in `DXShowFrame` (the same device, whose managed textures stay valid) do
+not. The HD path is unchanged: released at the device change, made again at the next
+level. The extra work is one texture made and one copy per page at the recreation, at most
+the 256 entries `Textures[]` holds, and nothing in any frame. RoomProbe `-cycleclassic
+<pages>` (:9990) draws pages the classic way - made as `CreateTexturePage` makes them, the
+engine's FVF, the state `HWInitialise` sets, `DrawPrimitiveUP` with 40-byte vertices, the
+last page drawn once more in a frame of its own - on one device, moves them with the same
+header to a second and then to a third, and compares the three pictures byte for byte.
+
+**Measured.** The dump: `ebx` 0 at `mov edx,[ebx+8]` (d3d9 +0x8D06F), the call
+`DrawPrimitiveUP(device, 4, 2, vertices, 40)` on a device at a different address from the
+released one, the case-4 `SetTexture` with `Textures[]` before it; a minidump holds no
+heap, so the texture's own pointer is not in it. RoomProbe `-cycleclassic`: 22 pages (the
+title's count), 1 and 256: on the second and third device `moved` equal to the pages,
+`dropped=0 kept=0 old_device_refs=0`, the released device's own count 22, 1 and 256 before
+the move.
+
+**Checked.** The classic path (`-classicroom` and `-classiconly` on ANDREA2 231, JOBY2 66
+and ANDY3 34) md5-identical to `8691e82`, 3 of 3, and the classic picture drawn on the
+second device of `-devicecycle` identical to it, 3 of 3, every device released with
+`RefCnt = 0`; the fifteen cameras with `-hdwater 0` identical to the fix round's parity
+set, 15 of 15; with `-hdwater 1` identical to the foot's-gap pictures of `3136faa`, 15 of
+15; no shader changed; the suites (ModernTest 14721, MenuTest 42627, InterpTest 729,
+LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** Only the game's own Alt+Enter shows the `DXLOG` line with a real page count, the
+title and a level drawn again on the new device, and a second toggle; the probe proves the
+classic draw's contract with the device on pages of its own, not the sort list of a level.
+The HD art still falls back to classic until the next level after a toggle. A film's
+texture and the load screen's surface are not moved: Alt+Enter is refused while a film
+plays or a level loads.
+
+**Commits.** `7e93916`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

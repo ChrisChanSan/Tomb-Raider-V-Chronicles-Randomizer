@@ -16,6 +16,8 @@
 #include "dxshell.h"
 #include "3dmath.h"
 #include "winmain.h"
+#include "LoadSave.h"
+#include "devicemove.h"
 
 // Raised from the original 64 - a Randomizer combining texture pages from
 // several source levels can plausibly need more than any single vanilla
@@ -148,4 +150,36 @@ void FreeTextures()
 		else
 			Log("%s Attempt To Release NULL Ptr", "Texture");
 	}
+}
+
+/* After DXCreate made a new device in place of an old one (Alt+Enter, a
+ * resolution change): every page of Textures[] and the mono picture are made
+ * again on the new device (specific/devicemove.h). Without it the first
+ * classic draw binds a page of the released device, and once two or more
+ * pages were drawn there that draw dies inside d3d9.dll. The level's own
+ * data is not needed: a MANAGED texture keeps its texels in system memory,
+ * and LockRect reads them back while the old device is only kept alive by
+ * its textures. Runs on the main thread while the game thread is suspended.
+ *
+ * -log line, new: DXLOG device recreated - pages=<entries of Textures[]>
+ * moved=<made again> dropped=<released and set to 0, drawn untextured until
+ * the next level> kept=<already on the new device> picture=<1 when the mono
+ * picture was there> old_device_refs=<what the old device still holds after
+ * the move: 0 is nothing, -1 is no texture of it met>. */
+void MoveTexturesToDevice()
+{
+	DeviceMoveCount count;
+	long picture;
+
+	DeviceMoveBegin(&count);
+
+	for (int i = 0; i < nTextures; i++)
+		DeviceMoveTexture(App.dx.lpD3DDevice, &Textures[i].tex, &count);
+
+	picture = MonoScreenToDevice(App.dx.lpD3DDevice, &count);
+	const long left = DeviceMoveEnd(&count);
+
+	Log("DXLOG device recreated - pages=%ld moved=%ld dropped=%ld kept=%ld "
+		"picture=%ld old_device_refs=%ld", nTextures, count.moved,
+		count.dropped, count.kept, picture, left);
 }

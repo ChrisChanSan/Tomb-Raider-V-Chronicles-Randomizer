@@ -22,6 +22,10 @@ void CreateMonoScreen();
 void RGBM_Mono(uchar* r, uchar* g, uchar* b);
 void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface);
 void FreeMonoScreen();
+
+// The picture's texture onto a new device (specific/devicemove.h).
+struct DeviceMoveCount;
+long MonoScreenToDevice(LPDIRECT3DDEVICE9 device, DeviceMoveCount* count);
 void S_DrawTile(long x, long y, long w, long h, LPDIRECT3DTEXTURE9 t, long tU, long tV, long tW, long tH, long c0, long c1, long c2, long c3, long filter);
 void S_DisplayMonoScreen();
 long S_LoadSave(long load_or_save, long mono, long inv_active);

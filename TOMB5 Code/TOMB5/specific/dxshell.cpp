@@ -14,6 +14,7 @@
 #include "dxshell.h"
 #include "function_stubs.h"
 #include "function_table.h"
+#include "texture.h"	// MoveTexturesToDevice
 #include "hd/hd_level.h"
 #include "winmain.h"
 #include "input.h"
@@ -380,6 +381,10 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 	G_dxptr->hWnd = hWnd;
 	G_dxptr->WindowStyle = WindowStyle;
 
+	// A device here already is Alt+Enter or a resolution change: the classic
+	// pages made on it move to the new one below.
+	const bool recreate = G_dxptr->lpD3DDevice != 0;
+
 	DXClose();
 
 	if (!G_d3d)
@@ -544,6 +549,9 @@ long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, lon
 		DXClose();
 		return 0;
 	}
+
+	if (recreate)
+		MoveTexturesToDevice();
 
 	return 1;
 }

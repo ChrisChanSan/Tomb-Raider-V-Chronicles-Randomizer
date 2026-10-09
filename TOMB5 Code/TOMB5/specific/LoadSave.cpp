@@ -42,6 +42,7 @@
 #include "drawbars.h"
 #include "hdscreen.h"
 #include "bc7.h"
+#include "devicemove.h"
 
 long sfx_frequencies[3] = { 11025, 22050, 44100 };
 long SoundQuality = 1;
@@ -631,6 +632,18 @@ void FreeMonoScreen()
 	}
 
 	MonoScreenOn = 0;
+}
+
+/* The inventory's and the load screen's picture onto a new device: the
+ * same texture as the pages, drawn by S_DisplayMonoScreen. 1 when a picture
+ * was there. */
+long MonoScreenToDevice(LPDIRECT3DDEVICE9 device, DeviceMoveCount* count)
+{
+	if (!MonoScreen.tex)
+		return 0;
+
+	DeviceMoveTexture(device, &MonoScreen.tex, count);
+	return 1;
 }
 
 // filter 0 keeps the original point sampling, which is what a 640x480 picture

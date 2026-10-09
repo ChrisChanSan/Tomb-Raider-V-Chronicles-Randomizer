@@ -457,6 +457,20 @@
  *                     first picture once more. _cycle1, _cycle2 and _cycle3
  *                     after the -out prefix; the first and the third are
  *                     compared byte for byte.
+ *     -cycleclassic <pages>
+ *                     the classic draw across Alt+Enter, no level needed:
+ *                     <pages> MANAGED 256 x 256 pages made the way
+ *                     CreateTexturePage makes them and drawn the way
+ *                     HWR_DrawSortList draws (the engine's FVF, the stage
+ *                     state HWInitialise sets, DrawPrimitiveUP), then the
+ *                     device released and another made, the pages moved by
+ *                     the engine's own specific/devicemove.h and drawn
+ *                     again, and once more on a third device (a second
+ *                     toggle). _classic1.._classic3 after the -out prefix,
+ *                     compared byte for byte. -nomove leaves the pages on
+ *                     the released device: the crash of Alt+Enter, its CRASH
+ *                     line through the crash seam and a dump in the working
+ *                     folder.
  *     -crash <folder> the crash seam (specific/crashseam.h): the tool runs
  *                     itself in <folder> with the seam installed and a null
  *                     pointer read, then reads the CRASH line of crash.txt
@@ -497,6 +511,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
 #include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
 #include "../../../TOMB5 Code/TOMB5/specific/crashseam.h"
+#include "../../../TOMB5 Code/TOMB5/specific/devicemove.h"
 /* The randomizer's own reader for the CLASSIC level, so that the water
  * survey can hold the level's own faces against the .TRG's art through the
  * engine's own gate. Nothing else in this tool needs a classic level. */
@@ -6953,6 +6968,8 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -scissor <l,t,r,b>\n");
 		printf("       -devicecycle   the run on three devices, Alt+Enter's "
 			"way; -crash <folder>   the crash seam's own test\n");
+		printf("       -cycleclassic <pages> [-nomove]   the classic pages "
+			"across three devices\n");
 		printf("       -roombox <folder holding the classic .TRC>\n");
 		printf("       -classicroom <room>   that room's classic faces, flat, "
 			"beside the art (needs -roombox)\n");
@@ -9782,6 +9799,300 @@ static int CrashTest(const char* self, const char* folder)
 	return lineOk && dumpOk ? 0 : 1;
 }
 
+/* -cycleclassic <pages>: see the usage at the top. One window and one
+ * IDirect3D9 for all three devices, as DXCreate keeps both across Alt+Enter;
+ * each device made with the engine's flags (DXCreateD3DDevice: hardware
+ * vertex processing, D3DCREATE_MULTITHREADED, windowed). No depth buffer:
+ * the sky's draw type, the one in the crash, turns Z off. */
+static const int kClassicSide = 256;	// the picture, one page's size
+
+// D3DTLBUMPVERTEX and FVF (global/types.h): 40 bytes a vertex.
+struct ClassicVertex
+{
+	float x, y, z, rhw;
+	DWORD colour, specular;
+	float tu, tv, tx, ty;
+};
+
+static const DWORD kClassicFvf = D3DFVF_TEX2 | D3DFVF_SPECULAR |
+	D3DFVF_DIFFUSE | D3DFVF_XYZRHW;
+
+static IDirect3DDevice9* ClassicDevice(IDirect3D9* d3d, HWND window)
+{
+	D3DPRESENT_PARAMETERS pp;
+	IDirect3DDevice9* device = 0;
+
+	memset(&pp, 0, sizeof(pp));
+	pp.Windowed = TRUE;
+	pp.SwapEffect = D3DSWAPEFFECT_DISCARD;
+	pp.BackBufferFormat = D3DFMT_X8R8G8B8;
+	pp.BackBufferWidth = kClassicSide;
+	pp.BackBufferHeight = kClassicSide;
+	pp.BackBufferCount = 1;
+	pp.hDeviceWindow = window;
+	pp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+
+	if (FAILED(d3d->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, window,
+		D3DCREATE_HARDWARE_VERTEXPROCESSING | D3DCREATE_MULTITHREADED, &pp,
+		&device)))
+		return 0;
+
+	return device;
+}
+
+// A page with a pattern of its own, so that a page drawn in the wrong cell
+// or not at all changes the picture.
+static IDirect3DTexture9* ClassicPage(IDirect3DDevice9* device, int index)
+{
+	IDirect3DTexture9* page = 0;
+	D3DLOCKED_RECT rect;
+
+	if (FAILED(device->CreateTexture(kClassicSide, kClassicSide, 1, 0,
+		D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &page, 0)))
+		return 0;
+
+	if (FAILED(page->LockRect(0, &rect, 0, 0)))
+	{
+		page->Release();
+		return 0;
+	}
+
+	for (int y = 0; y < kClassicSide; y++)
+	{
+		DWORD* row = (DWORD*)((BYTE*)rect.pBits + y * rect.Pitch);
+
+		for (int x = 0; x < kClassicSide; x++)
+			row[x] = 0xFF000000 | ((x * (index + 1)) & 0xFF) << 16 |
+				((y * (index + 3)) & 0xFF) << 8 |
+				(((x ^ y) + index * 37) & 0xFF);
+	}
+
+	page->UnlockRect(0);
+	return page;
+}
+
+/* One frame: pages[first..] each as one quad in its cell of a grid, two
+ * triangles through DrawPrimitiveUP after SetTexture(0, page), with the
+ * stage and render state HWInitialise sets (specific/function_table.cpp)
+ * and the sky's Z off. */
+static void ClassicFrame(IDirect3DDevice9* device,
+	std::vector<IDirect3DTexture9*>& pages, int first)
+{
+	const int count = (int)pages.size();
+	int grid = 1;
+
+	while (grid * grid < count)
+		grid++;
+
+	const float cell = (float)kClassicSide / (float)grid;
+
+	for (DWORD stage = 1; stage < 8; stage++)
+		device->SetTextureStageState(stage, D3DTSS_COLOROP, D3DTOP_DISABLE);
+
+	device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+	device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+	device->SetTextureStageState(0, D3DTSS_ALPHAARG2, D3DTA_DIFFUSE);
+	device->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX,
+		D3DTSS_TCI_PASSTHRU);
+	device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	device->SetRenderState(D3DRS_SPECULARENABLE, TRUE);
+	device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	device->SetRenderState(D3DRS_CLIPPING, FALSE);
+	device->SetFVF(kClassicFvf);
+
+	if (!first)
+		device->Clear(0, 0, D3DCLEAR_TARGET, 0xFF000000, 1.0f, 0);
+
+	device->BeginScene();
+
+	for (int i = first; i < count; i++)
+	{
+		const float x0 = cell * (float)(i % grid);
+		const float y0 = cell * (float)(i / grid);
+		const float x1 = x0 + cell;
+		const float y1 = y0 + cell;
+		ClassicVertex v[6] = {
+			{ x0, y0, 0.5f, 1.0f, 0xFFFFFFFF, 0, 0.0f, 0.0f, 0.0f, 0.0f },
+			{ x1, y0, 0.5f, 1.0f, 0xFFFFFFFF, 0, 1.0f, 0.0f, 0.0f, 0.0f },
+			{ x0, y1, 0.5f, 1.0f, 0xFFFFFFFF, 0, 0.0f, 1.0f, 0.0f, 0.0f },
+			{ x1, y0, 0.5f, 1.0f, 0xFFFFFFFF, 0, 1.0f, 0.0f, 0.0f, 0.0f },
+			{ x1, y1, 0.5f, 1.0f, 0xFFFFFFFF, 0, 1.0f, 1.0f, 0.0f, 0.0f },
+			{ x0, y1, 0.5f, 1.0f, 0xFFFFFFFF, 0, 0.0f, 1.0f, 0.0f, 0.0f } };
+
+		device->SetTexture(0, pages[i]);
+
+		const HRESULT drawn = device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 2,
+			v, sizeof(ClassicVertex));
+
+		if (FAILED(drawn))
+			printf("cycleclassic: page %d: DrawPrimitiveUP 0x%08lX\n", i,
+				(unsigned long)drawn);
+	}
+
+	device->EndScene();
+	device->SetTexture(0, 0);
+}
+
+// The whole picture, read back into `px` and written to `path`.
+static bool ClassicDraw(IDirect3DDevice9* device,
+	std::vector<IDirect3DTexture9*>& pages, std::vector<unsigned long>& px,
+	const char* path)
+{
+	ClassicFrame(device, pages, 0);
+
+	IDirect3DSurface9* back = 0;
+	IDirect3DSurface9* read = 0;
+	D3DLOCKED_RECT rect;
+	bool ok = false;
+	HRESULT copied = E_FAIL;
+
+	if (SUCCEEDED(device->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO,
+		&back)) && SUCCEEDED(device->CreateOffscreenPlainSurface(kClassicSide,
+		kClassicSide, D3DFMT_X8R8G8B8, D3DPOOL_SYSTEMMEM, &read, 0)) &&
+		SUCCEEDED(copied = device->GetRenderTargetData(back, read)) &&
+		SUCCEEDED(read->LockRect(&rect, 0, D3DLOCK_READONLY)))
+	{
+		px.resize(kClassicSide * kClassicSide);
+
+		for (int y = 0; y < kClassicSide; y++)
+			for (int x = 0; x < kClassicSide; x++)
+				px[y * kClassicSide + x] = ((const DWORD*)((const BYTE*)
+					rect.pBits + y * rect.Pitch))[x] & 0xFFFFFF;
+
+		read->UnlockRect();
+		ok = WritePng(path, &px[0], kClassicSide, kClassicSide);
+	}
+	else
+		printf("cycleclassic: no picture, GetRenderTargetData 0x%08lX\n",
+			(unsigned long)copied);
+
+	if (read)
+		read->Release();
+
+	if (back)
+		back->Release();
+
+	return ok;
+}
+
+static int CycleClassic(int count, bool move, const char* out)
+{
+	WNDCLASSA cls;
+	std::vector<IDirect3DTexture9*> pages;
+	std::vector<unsigned long> picture[3];
+	char path[MAX_PATH];
+	bool ok = true;
+
+	if (count < 1 || count > 256)
+	{
+		printf("cycleclassic: <pages> is 1 to 256, as Textures[] holds\n");
+		return 1;
+	}
+
+	memset(&cls, 0, sizeof(cls));
+	cls.lpfnWndProc = DefWindowProcA;
+	cls.hInstance = GetModuleHandleA(0);
+	cls.lpszClassName = "RoomProbeWindow";
+	RegisterClassA(&cls);
+
+	HWND window = CreateWindowA("RoomProbeWindow", "RoomProbe", WS_POPUP,
+		-32, -32, 16, 16, 0, 0, cls.hInstance, 0);
+	IDirect3D9* d3d = window ? Direct3DCreate9(D3D_SDK_VERSION) : 0;
+	IDirect3DDevice9* device = d3d ? ClassicDevice(d3d, window) : 0;
+
+	if (!device)
+	{
+		printf("cycleclassic: no device\n");
+		return 1;
+	}
+
+	for (int i = 0; i < count; i++)
+	{
+		pages.push_back(ClassicPage(device, i));
+		ok = ok && pages.back();
+	}
+
+	_snprintf_s(path, sizeof(path), _TRUNCATE, "%s_classic1.png", out);
+	ok = ClassicDraw(device, pages, picture[0], path) && ok;
+
+	// One frame more with the last page alone, as the game draws its sky in
+	// every frame and most pages not: the pages then differ in when they
+	// were last drawn, which the runtime's bookkeeping of MANAGED textures
+	// keeps per device.
+	ClassicFrame(device, pages, count - 1);
+	printf("cycleclassic: %d page(s) drawn on device 1: %s\n", count, path);
+
+	for (int run = 1; run < 3 && device; run++)
+	{
+		printf("cycleclassic: device %d released, RefCnt = %lu\n", run,
+			(unsigned long)device->Release());
+		device = ClassicDevice(d3d, window);
+
+		if (!device)
+		{
+			printf("cycleclassic: no device %d\n", run + 1);
+			ok = false;
+			break;
+		}
+
+		if (move)
+		{
+			DeviceMoveCount moved;
+
+			DeviceMoveBegin(&moved);
+
+			for (int i = 0; i < count; i++)
+				DeviceMoveTexture(device, &pages[i], &moved);
+
+			const long left = DeviceMoveEnd(&moved);
+
+			printf("cycleclassic: device %d: moved=%ld dropped=%ld kept=%ld "
+				"old_device_refs=%ld\n", run + 1, moved.moved, moved.dropped,
+				moved.kept, left);
+			ok = ok && moved.moved == count && left == 0;
+		}
+		else
+		{
+			CrashSeamInstall(CrashPrint, false, "RoomProbe");
+			printf("cycleclassic: -nomove, the pages stay on device %d\n",
+				run);
+			fflush(stdout);
+		}
+
+		_snprintf_s(path, sizeof(path), _TRUNCATE, "%s_classic%d.png", out,
+			run + 1);
+		ok = ClassicDraw(device, pages, picture[run], path) && ok;
+		printf("cycleclassic: drawn on device %d: %s, against device 1: %s\n",
+			run + 1, path, picture[run] == picture[0] ? "identical" :
+			"DIFFERENT");
+		ok = ok && picture[run] == picture[0];
+	}
+
+	for (int i = 0; i < count; i++)
+		if (pages[i])
+			pages[i]->Release();
+
+	if (device)
+		device->Release();
+
+	d3d->Release();
+	DestroyWindow(window);
+	printf("cycleclassic: %s\n", ok ? "ok" : "FAIL");
+	return ok ? 0 : 1;
+}
+
 int main(int argc, char** argv)
 {
 	for (int i = 1; i + 1 < argc; i++)
@@ -9798,6 +10109,22 @@ int main(int argc, char** argv)
 
 		if (!strcmp(argv[i], "-crash"))
 			return CrashTest(argv[0], argv[i + 1]);
+
+		if (!strcmp(argv[i], "-cycleclassic"))
+		{
+			bool move = true;
+			const char* prefix = ".\\roomprobe";
+
+			for (int j = 1; j < argc; j++)
+			{
+				if (!strcmp(argv[j], "-nomove"))
+					move = false;
+				else if (!strcmp(argv[j], "-out") && j + 1 < argc)
+					prefix = argv[j + 1];
+			}
+
+			return CycleClassic(atoi(argv[i + 1]), move, prefix);
+		}
 	}
 
 	std::vector<char*> args;

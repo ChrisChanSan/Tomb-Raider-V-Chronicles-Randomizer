@@ -10491,6 +10491,106 @@ light shafts under the water stay for later.
 
 **Commits.** `630054d`.
 
+**The rivers and the deep, after the sixth play test.** Asked for in this part: ANDY3's
+rivers showed their flow from a few angles only and then as a white smear; the streams
+beside its pond (the rooms named with arrows on the owner's map pictures) still showed
+still water, and they matter to the level; JOBY4 felt no different from the build before.
+Kept as it is: the pond's strength.
+
+The river's motion (`hd_render.cpp` `kWaterClass`, `draw_river`, `upload_water_room`;
+`hd_room.hlsl` `RiverPS`). Measured first with RoomProbe at three cameras found to match
+the owner's frames - the river of rooms 38 and 41 from its lower end with the stone wall
+on the right and the stream of room 66 below on the left, the same from a roof, and a
+third-person view from the bank between them - on the river's pixels (the sheet's pixels
+of `-waterdepthview 1` against the picture, the river's part of them), the mean and the
+brightest luma at 3 seconds and the mean change of each pixel from 3 to 3.1 seconds, with
+test rows of `hd_water.txt` taking one thing away at a time: without the streaks and the
+end's foam (`foam 0`) the brightest pixels fell from 200 to 222 to between 65 and 148 and
+the motion to half or less (3.6 to 1.5 at the lower end) - the white and half the motion
+were the foam-drawn dashes; without the relief (`waves 0`) a quarter to a third of the
+motion went; without the bend (`bend 0`) about a tenth. The relief did not read as flow:
+its rows lie 1.11 to 1.25 radians off the flow, so the current moves their crests mostly
+across the river, and their own travel, 0.8 times sqrt(g k) - 362 units a second for the
+300-unit row -, is as large: the pattern walked sideways and boiled. In a quarter to one
+and a half squares of water the bend of the floor is the slope times a quarter of the
+path, one or two units for the old heights; the caustic on the floor stood still. Now: the
+river's rows are carried as one (calm 0.2), at a channel's steepness (0.0086 at the most
+against 0.0078) with half its highlight (0.4; at 0.8 the steeper rows' highlight went
+white from above); RiverPS draws the same long thin lines as a sheen - the lighter ones
+add 0.35 of the reflection's colour, the darker ones take 0.6 of that share of what lies
+behind, faded where a line is narrower than 24 units a pixel - and no white but the end's
+foam; and it lays the caustic on the floor seen through a river, at the floor point under
+the pixel (the view ray run on by the square's depth), carried with the current, with
+RoomPS's own strength on the colour of the frame's copy there; a water room a river is
+seen through leaves its floor's standing caustic to it while the eye is above the water
+and the copy is allowed (c16.x 0, a constant). Under the water RoomPS lays it as before.
+The rows' fade at a grazing view is left as it was: the sheen and the moving caustic carry
+the motion there. Free choices, set by eye on the round's RoomProbe pictures and strips.
+
+The streams by table (`hd_render.cpp` `kWaterFlow`, `water_row_names`). Measured with the
+randomizer's `Tr5Level`: room 34's squares over water room 66 (three along z at x 45,056)
+and room 38's square beyond them over water room 59 are one body of 4 squares; over water
+room 70 three squares along x at z 22,528 are a body of 3; over water room 67 one square
+at 47,104, 28,672, with room 96 beyond it, a body of 1. None of them touches the pond, a
+body of 24 squares over water rooms 73, 74 and 147 - so no body had to be split, and a
+split by room would cut the stream of room 66 off its last square. The water under them is
+256 units deep (floors 11,264 under 11,008): Lara walks there. The ways are the owner's
+arrows read against the level's axes (on his map pictures the up axis stands vertical; the
+axis along the stream of room 66 is z, along room 70's x): room 66's stream runs +z toward
+room 38's square, room 70's +x, room 67's +x, away from the pond; 400 units a second, a
+wading stream slower than the sink rivers' 640 and 1,063 (a free choice). The table's rows
+are applied as compiled rows of class `river` with a flow, after the override rows and
+before the file, with the sheets alone; a row's room now names a square by its own room,
+or - where the room holds no square of its own, as a water room never does - by the water
+room under it, so every row that names a dry room binds what it bound before. The streams
+take the river's look: no bank foam and no line, the remaster's own moving surface over
+them left out, the end's foam where a stream ends against land.
+
+The deep look (`hd_render.cpp` `water_under_constants`, "the deep look"). Measured at
+JOBY4's start cavern and two places along the dive (RoomProbe `-underwater`): the
+scattered light was the Russia section's shallow colour held to 0.45, 0.27, 0.42, 0.45 - a
+pale cyan the far walls turned into, while the void beyond them stays black (the frame is
+cleared to black, TR5's distance fog has no colour). The level's water rooms reach from y
+-1,280 to 19,200, the dive runs 13,000 to 20,000 units under that top. Now the deep look's
+scattered light is the section's deep colour (28, 62, 80), dimmed by the eye's depth under
+the highest top of the level's water rooms (exp(-depth / 30,000), never under 0.25: about
+0.6 at the start cavern, 0.52 in the deepest rooms), its reach 0.4 in place of 0.3 and its
+upward gain 0.8 in place of 0.6 (looking up 1.8 times the light, down 0.2). Free choices,
+set by eye on the round's RoomProbe pictures of the three places. The far wall's mean
+colour at the start cavern went from 63, 99, 105 to 15, 33, 42, at the far view from 67,
+104, 111 to 15, 33, 42. Only a level that takes the deep look changes; ANDREA2's corridor
+and JOBY2's base keep theirs.
+
+**Measured.** Slots, fxc /O3: `RiverPS` 212 to 299 - the moving caustic 74, the sheen 70
+against the dashes' 57; `WaterVS`, `WaterPS` and its variants, `FootPS`, `RoomVS`,
+`RoomPS`, its gloss variant, `GlowPS`, the model and shadow shaders keep their bytecode
+apart from the stamp line. GPU, 2560 x 1440, three runs: the full-water view 0.198, 0.198,
+0.200 ms against 0.198, 0.196, 0.198 at `137eaf1`; ANDY3's river from its bank the river
+draws 0.068 to 0.069 ms for 14 draws against 0.031 to 0.033 for 6 (the streams are rivers
+now), the sheets 0.172 to 0.174 against 0.174 to 0.179. The river's pixels outside its
+end's foam, mean and brightest luma and motion from 3 to 3.1 seconds: lower end 33.4, 108,
+3.16 before and 32.5, 77, 5.56 after; from the roof 39.8, 138, 5.45 and 33.1, 125, 8.22
+(pixels over 128 from 16 to 0); from the bank 31.8, 111, 3.27 and 30.7, 74, 5.89. The
+sweep: 565 squares, 56 bodies, 118 twins as at `3136faa`; ANDY3 sea 8 to 5 and river 2 to
+5 (the three streams, `override=table:66`, `table:70`, `table:67`), its hidden art
+triangles 378 to 612 (the remaster's moving surface over the streams); every other level
+line for line.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set; with `-hdwater 1`, 15 of
+15 identical to `137eaf1` (none shows a river or JOBY4); the text file (a row for room 34
+still tunes every body in room 34; `ANDY3 66 river flow 0 -1 300`, `ANDY3 70 basin` and
+`ANDY3 67 none` override the table); the suites (ModernTest 14721, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the sheen and the
+moving caustic at the owner's angles, the streams' ways, the dive's darkness under the
+game's own gamma. The rows' fade at a grazing view is as it was. Alt+Enter's screen
+capture and the pond's edge are other parts; the reflection of the room itself and light
+shafts under the water stay for later.
+
+**Commits.** `917e968`, `7820bce`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

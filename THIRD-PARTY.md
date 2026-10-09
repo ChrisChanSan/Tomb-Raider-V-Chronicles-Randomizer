@@ -1047,6 +1047,40 @@ water surface", carries the tables.
     the art's strands land at x 55,518 to 55,591 (the WATERLOG `seg=`
     lines), moved by -503, 19 and -473, 52 (RoomProbe `-hdwater 1`,
     `mist=`).
+126. **A river carried as one** - the river class's rows travel at the
+    current with little travel of their own (calm 0.2 instead of 0.8), stand
+    at a channel's steepness and keep half its highlight. OWN, free choice,
+    set by eye on RoomProbe strips; DATA: on ANDY3's river from its bank the
+    mean change of its pixels from 3 to 3.1 seconds rose from 3.2 to 5.6,
+    and the brightest stayed under 128 of 255 (RoomProbe, the river's pixels
+    found with `-waterdepthview 1`).
+127. **The river's sheen and its moving caustic** - long thin lines along
+    the flow drawn lighter (a share of the reflection's colour) and darker
+    (through alpha) than the water instead of white dashes, and the caustic
+    laid on the floor seen through a river at the floor point under the
+    pixel, carried with the current, while the floor's own standing caustic
+    is switched off there. OWN, general graphics knowledge, the look of a
+    fast stream seen from its bank, tuned by eye on reference pictures
+    supplied for this project; DATA: the brightest of the river's pixels
+    outside its end's foam fell from 108 to 77 of 255 (RoomProbe).
+128. **The streams by table** - a compiled table of river rows (level,
+    water room, way, speed) applied after the override rows and before the
+    file, and a row's room naming the water room under a square where the
+    room holds no square of its own. OWN; the ways are the arrows of
+    reference pictures supplied for this project, read against the level's
+    axes; DATA: ANDY3's squares over water rooms 66, 70 and 67 are bodies of
+    their own, 4, 3 and 1 squares, 256 units deep (the randomizer's
+    `Tr5Level`; RoomProbe `-hdwater 1 -nodraw`); 400 units a second a free
+    choice.
+129. **The deep look's own light** - in a level that takes the deep look,
+    the scattered light under the water is the section's deep colour, dimmed
+    by the eye's depth under the highest top of the level's water rooms
+    (exp(-depth / 30,000), at least 0.25), with a reach of 0.4 and an upward
+    gain of 0.8. OWN, free choice, set by eye on RoomProbe pictures of
+    JOBY4; DATA: its water rooms reach from y -1,280 to 19,200 (the
+    randomizer's `Tr5Level`, `ROOM_INFO`); the far wall's mean colour at the
+    start cavern went from 63, 99, 105 to 15, 33, 42 (RoomProbe
+    `-underwater`).
 
 ## Credited, but not contained here
 

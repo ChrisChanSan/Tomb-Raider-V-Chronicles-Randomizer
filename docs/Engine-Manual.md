@@ -1882,7 +1882,11 @@ it.
   and has no surface over it: everything it sees lies in the water. In a
   level that is almost all water no sheet lies over (JOBY4, swum in the
   diving suit), every water room takes a deep sea's water in the section's
-  colours. Lara's limbs in water a sheet lies over take the light of the
+  colours - the section's deep colour, not the shallow one a pool shows over
+  its floor, so the far walls go into dark blue-green water and not into a
+  pale haze; the deeper the camera is under the highest water of the level,
+  the dimmer that light, and looking up toward the surface is brighter than
+  looking down. Lara's limbs in water a sheet lies over take the light of the
   room above the surface, not the tinted light of the water room (the lilac
   of ANDREA1's pool). The surface seen from below fades the same way over
   its distance, past the same clear two squares.
@@ -1894,9 +1898,15 @@ it.
   of a body counts as well, wherever the squares that name it lie - but only
   where those squares cover at least a quarter of the body, so a drain in a
   pool or a sea does not turn it into a river. Its waves are stretched along
-  the flow and carried with it, low and fast; bright thin streaks in short
-  dashes run along it, faster still, and come and go, so the flow shows from
-  the bank as well as from above; no foam lies on its banks - foam does not
+  the flow and carried with it as one, so the surface slides downstream and
+  the floor seen through it bends as it passes; the light on the floor under
+  it (the caustic) is carried with the current too, and long thin lines a
+  little lighter and a little darker than the water run along it, faster
+  still, and come and go - nothing on it is white, and the flow shows from
+  the bank as well as from above. ANDY3's three shallow streams beside its
+  pond - over its water rooms 66, 70 and 67, knee deep - are rivers by the
+  engine's own table, each flowing its own way at 400 units a second; no
+  sink pulls there. No foam lies on a river's banks - foam does not
   stay on a fast river - except where the river ends against a wall or a
   drop: there one ragged blob of foam lies across it, densest at the end,
   holed and broken further up, about three quarters of a square deep. The
@@ -1943,7 +1953,11 @@ it.
   x and z, -1 to 1 each and not both 0, and the speed in units a second, 0 to
   4,000 - in place of the one their sinks give, for example
   `ANDY3 38 - flow 1 0 300`; a river with neither runs along its longer side
-  at 240.
+  at 240. A row's room may also be a water room: where the room holds no
+  water square of its own, the row tunes the bodies over that water room -
+  `ANDY3 66 river flow 0 -1 300` turns the stream over room 66 round, and
+  `ANDY3 66 basin` makes it still water again, while a row for room 34 still
+  tunes every body in room 34.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a

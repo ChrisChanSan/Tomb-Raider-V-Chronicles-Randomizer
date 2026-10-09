@@ -394,6 +394,10 @@
  *     -rippleat x,y,z  whether a game ripple there loses its classic
  *                     sprite to a sheet's ring (HDRenderWaterSheetUnder);
  *                     repeatable, printed after the WATERLOG lines.
+ *     -wader x,z      a stand-in for a wading Lara at world x, z: a box
+ *                     768 high on the floor under the sheet there, drawn
+ *                     with the creatures' mark, and Lara's place there as
+ *                     -lara gives it; repeatable. Needs -hdwater 1.
  *     -latemark       -creature's stand-ins drawn outside the mark's
  *                     bracket, as the classic path draws a rat, and
  *                     marked before the copy as HDFrameDrawGlow marks
@@ -1741,6 +1745,8 @@ static std::vector<float> g_feet;
  * creatures' mark where the HD objects are drawn (HDRenderWaterProbe-
  * Creature); the seed room's classic origin shifts them into the picture. */
 static std::vector<float> g_creatures;
+// -wader x,z: stand-ins for a wading Lara, as x, z, drawn as -creature's.
+static std::vector<float> g_waders;
 static float g_seed_origin[2] = { 0.0f, 0.0f };
 // -nomark: the stand-ins without the mark (the picture before it);
 // -markview: the marked pixels in red over the finished picture.
@@ -7076,6 +7082,9 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -creature x,z   a stand-in for a swimming creature at "
 			"world x, z, drawn with the creatures' mark, repeatable; "
 			"-nomark draws it without, -markview shows the mark in red\n");
+		printf("       -wader x,z   a stand-in for a wading Lara at world x, "
+			"z, standing on the floor under the sheet, with Lara's place "
+			"there, repeatable\n");
 		printf("       -twophase   the solid and the blend phase in two "
 			"brackets, as the game draws them; with -creature the mark's "
 			"WATERLOG line is printed\n");
@@ -7323,6 +7332,21 @@ static int ProbeMain(int argc, char** argv)
 				g_creatures.insert(g_creatures.end(), c, c + 2);
 			else
 				printf("RoomProbe: -creature wants x,z - '%s' ignored\n",
+					argv[at]);
+		}
+		else if (!strcmp(argv[at], "-wader") && at + 1 < argc)
+		{
+			float c[2] = { 0.0f, 0.0f };
+
+			if (sscanf_s(argv[++at], "%f,%f", &c[0], &c[1]) == 2)
+			{
+				g_waders.insert(g_waders.end(), c, c + 2);
+				g_lara_set = true;
+				g_lara_x = c[0];
+				g_lara_z = c[1];
+			}
+			else
+				printf("RoomProbe: -wader wants x,z - '%s' ignored\n",
 					argv[at]);
 		}
 		else if (!strcmp(argv[at], "-nomark"))
@@ -9646,6 +9670,13 @@ static int ProbeMain(int argc, char** argv)
 					printf("-creature %.0f,%.0f: no sheet there - not drawn\n",
 						g_creatures[i], g_creatures[i + 1]);
 
+			for (size_t i = 0; i + 1 < g_waders.size(); i += 2)
+				if (!HDRenderWaterProbeCreature(g_waders[i], g_waders[i + 1],
+					g_seed_origin[0], g_seed_origin[1],
+					g_creature_mark ? 1 : 0, 1))
+					printf("-wader %.0f,%.0f: no sheet there - not drawn\n",
+						g_waders[i], g_waders[i + 1]);
+
 			/* -twophase: the game's two brackets - HDFrameDraw closes the
 			 * first after the objects and HDFrameDrawGlow opens the second
 			 * after the classic buckets (output.cpp) - so the mark is
@@ -10708,6 +10739,7 @@ int main(int argc, char** argv)
 		g_lara_set = false;
 		g_feet.clear();
 		g_creatures.clear();
+		g_waders.clear();
 		g_creature_mark = true;
 		g_mark_view = false;
 		g_classic_rooms.clear();

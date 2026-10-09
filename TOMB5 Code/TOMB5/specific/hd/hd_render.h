@@ -912,6 +912,11 @@ struct HDRenderWaterBody
 	 * `refused` those that lie in a body too short to be a river. */
 	int lying;
 	int refused;
+	/* How far its sheet stands over the water's top, units (a row's
+	 * `lift`; 0 without one), and the grid points of its sheet held under
+	 * that by the land beside them (HDRenderSetWaterSheets, "the lift"). */
+	int lift;
+	int held;
 };
 
 // What the level built, for its log line.
@@ -1093,8 +1098,11 @@ bool HDRenderWaterFootNearest(float x, float z, float* nx, float* nz);
 void HDRenderWaterMarkBegin();
 void HDRenderWaterMarkEnd(int objects = 0);
 bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size);
+/* RoomProbe's stand-ins: a swimming creature's box at the sheet's surface,
+ * or with `wader` 1 a wading Lara's, standing on the floor under the
+ * water. */
 bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
-	int mark);
+	int mark, int wader = 0);
 int HDRenderWaterMarkTriangles(const float* xyz, int vertices);
 bool HDRenderWaterProbeCreatureLate(float x, float z, float offX,
 	float offZ);

@@ -10031,6 +10031,145 @@ of the room itself, the third stage.
 
 **Commits.** After the fourth play test, the foot and the depths `43f61f4`, `90f9b33`.
 
+**After the owner's fifth play test of 2026-10-09.** The build of `059a185` was played
+(reference pictures, frames and a sketch supplied for this project, not in the
+repository). Kept as they are: RICH2, ANDY3's pond, the view from under the water, the
+surface seen from below. Asked for in this part: no land torn open in wave shapes at any
+bank and no white band along it, in every level with water (it had been mended in ANDREA1
+alone); no water's pattern over JOBY5's deck; the rats of ANDY1 without the line Lara's
+gap keeps off her; the flow of ANDY3's rivers seen from the bank and from a roof, not only
+from above, the foam at a river's end one blob and not three copies alike, and the pond's
+arms of rooms 66 and 70 and room 34's channel as rivers. The waterfall's foot and the look
+under the water are other parts of this round.
+
+The flood under a sheet (`hd_room.hlsl` RoomVS, `hd_render.cpp` `set_room_rows`). Measured
+first, with RoomProbe at ANDY3's pond, its island, a bank close up, JOBY5's deck,
+ANDREA1's basin and RICH2's pool at the clock times 3, 11 and 19, and on the owner's
+frames: the sheet itself does not climb a bank - `WaterVS` tapers its lift to nothing at a
+bank vertex, whose shore distance is 0, and the depth clip refuses a pixel whose scene
+lies above the surface at rest or within 8 units under it whatever the lift (cause a,
+nothing to change). What moved was the land. RoomVS's flood gives the surface bit to every
+vertex of a room at the water's height inside the box of the marked corners, and only a
+wall's normal keeps a vertex out; ANDY3's pond has no remaster water art at all (0 `.TRG`
+triangles in its classic water planes, measured in the material-16 entry), so every
+flooded vertex there is the bank's own mesh, lifted by the swell up to 36 units, its UV
+wobbled and the surface caustic laid on - the land torn in wave shapes, and the clip's
+edge and the waterline riding on it (cause c). JOBY5's deck - room 4's squares 3,2, 3,3,
+4,3, 5,2 and 5,3 at one click and 3,5, 5,5 and 5,6 at none, with no room below - is dry
+floor at the water's height inside the same kind of box and took the caustic and the
+wobble (cause d). Now `set_room_rows` hands RoomVS a gate in c18.z: 1 in a room whose body
+draws its sheet and hides the remaster's art, and there the flood lays no swell, wobble or
+surface caustic on anything; the colour shimmer keeps the classic selector as before. With
+`tomb5.hd_water` 0 no sheet is built and the gate is 0. `RoomVS` 412 to 414 slots. The
+waterline (cause b): it painted every pixel whose frame lay 24 to 48 units under the
+surface, and the pond's floor rising gently to its banks put that band hundreds of units
+out into the water - a 1:10 slope puts 48 units 480 out - at 0.25 to 0.75: the thick white
+band of the owner's frames. Now the line is weighed by how fast that depth changes from
+one pixel to the next (`fwidth`): whole from 6 units a pixel - round a post, a hull, a
+swimming body - and fading toward a flat shore, where it keeps a few pixels along the
+edge; its fall from 24 to 48 units is a straight ramp. 6 is a free choice, set by eye on
+the round's RoomProbe pictures. To stay under 512 the view variant's switch leaves the
+clip of the depth variant: `WaterPS`'s depth variant 508 to 509 slots, the view variant
+503 to 507, the under variant 339 to 335; the plain variant keeps its bytecode. No square
+is dropped as walkable floor: the deck's squares are dry squares already, and the pattern
+on them was the flood's, not a sheet's.
+
+The creatures' mark on the game's path (`hd_render.cpp` `HDRenderWaterMarkLine`,
+`draw_water_sheet`; `hd_level.cpp` `HDFrameDraw`; `RoomProbe.cpp`). Measured: on RoomProbe
+three stand-ins 60 units under ANDY1's pool (rooms 132 and 142, its bank's patches round
+them) are clean with the mark at 3, 11 and 19 and carry the line without it; on the
+owner's picture the one rat inside Lara's 320-unit gap is clean and the others white - the
+waterline, so in the game the mark did not reach the sheet. Read in order: the rooms'
+receive clears the stencil, the mark brackets the HD objects' solid draw, the models'
+receive keeps to bit 2, the bracket ends, the classic buckets draw, the glow phase opens a
+bracket of its own, takes the copy and draws the sheets; nothing between sets another
+depth-stencil surface (the shadow casts put the INTZ surface back) or clears the stencil,
+and nothing outside `hd_render.cpp` touches the stencil. RoomProbe drew both phases in one
+bracket; `-twophase` now draws them in two as the game does, and the mark holds there too
+(three stand-ins, three clock times). The cause in the game is not found by reading, so
+the mark gets its own line, once a level with `-log`, for the last frame that drew a
+sheet: `WATERLOG level=<L> mark=<0/1> why=<n> mark_intz=<0/1> objects=<n> sheet_intz=<0/1>
+sheets=<n> split=<n>` - whether that frame's bracket marked and why not (1 no device, 2 no
+sheets built, 3 no depth texture, 4 no depth variant, 5 no stencil), whether the
+depth-stencil surface at the mark and at the first sheet draw was the INTZ surface, the
+objects on the frame's list, the sheet draws and the ranges drawn twice. RoomProbe prints
+it with `-creature`. And the marked pass of a range now draws no foam at all - the line,
+the bank's foam and its patches (`gWaterFoam.w`) and the whitecaps (`gWaterMisc.y`) are 0
+in its constants - since a rat 50 to 60 units down in a small pool lies inside the bank's
+band. Lara's 320-unit gap stays.
+
+The rivers (`hd_render.cpp` "a sink in the water", `kRiverCover`; `hd_room.hlsl`
+`RiverPS`). Measured, over the camera table and every `TO_SINK` command of every square
+with the randomizer's `Tr5Level`: ANDY3's sinks are entries 1, 6, 7, 8, 9, 10, 11, 12
+and 18. None lies in rooms 66 or 70 or anywhere in room 34's pond, and no chain of those
+rooms names a sink; rooms 66 and 70 are the pond's own shallow water rooms (ceiling
+11,008, floors one to six clicks under it) under room 34, and room 34's channel is the
+body of rooms 34 and 38 (4 squares) between the pond and the river of rooms 38 and 41.
+The red spheres of the owner's map pictures are not entries of this level's camera and
+sink table, which the randomized level in the game folder shares entry for entry. Sinks
+10, 11 and 12 lie in the tunnels 53, 55, 56 and 57, water rooms with no room above them.
+Sink 1 (strength 10) lies in the sea of rooms 10 to 17 (42 squares), its two trigger
+squares under no sheet: a pull toward a drain. So the pond's arms are not rivers by any
+data of the level, and stay what they are; `hd_water.txt` can still make a body a river
+with a flow. The rule now also takes a sink that lies in a body's water - inside one of
+its squares, at or under its surface, above the floor there - whatever squares name it:
+its flow is the mean way from those squares to the sink and its speed the strength's,
+and it counts only where the squares that name the body's lying sinks number at least a
+quarter of the body's own (`kRiverCover`, a free choice between the 1.0 of the river of
+rooms 38 and 41 and the 0.05 of the sea of rooms 10 to 17). Over the fifteen levels it
+finds only ANDY3's: the river of rooms 0, 42 and 43 adds sink 6 (`flow=-1.00,0.00,1063
+sinks=7 lying=1`), the river of rooms 38 and 41 sinks 8 and 18 (`flow=1.00,0.00,640
+sinks=3 lying=2`, the speed from 480), and the sea refuses sink 1 (`refused=1`).
+`HDWaterSink` carries the sink's y. On the river's surface, the streaks ran along the
+flow and slid along their own length, so their motion showed only from above through
+their slow breaks; each line is now broken into dashes a few hundred units long, carried
+with it, their phase turned by the way across so neighbouring lines break apart
+(`RiverPS`). The end's foam was the bank foam's pattern, two layers of products of waves
+that repeat every few hundred units: across a river's end it laid copies alike side by
+side. Now it is one blob the width of the river - three layers of cells about 830, 360
+and 150 units across, each read along its own turned axes (0.6, 2.1 and 1.3 radians),
+the finer warped by the coarser, carried into the end, its reach swinging across the
+river (0.3 to 1.5 of the 768 units) and with the coarsest cells, so its upper rim is
+ragged, densest at the wall and holed there too, broken up toward the rim; the weir's
+photograph of the fourth play test as the look. Free choices, set by eye on the round's
+RoomProbe pictures. `RiverPS` 152 to 212 slots. The rows' fade and the Fresnel are as
+they were: the streaks are drawn as foam over the water and are not faded by either.
+
+WATERLOG: the body line ends `lying=<n> refused=<n>`; the mark's line is new. RoomProbe
+`-twophase`.
+
+**Measured.** Slots, fxc /O3: `RoomVS` 412 to 414, `WaterPS`'s depth variant 508 to 509,
+its view variant 503 to 507, its under variant 339 to 335, `RiverPS` 152 to 212;
+`WaterPS`, `WaterVS`, `FootPS`, `RoomPS`, its gloss variant, `GlowPS`, the model and
+shadow shaders keep their bytecode apart from the stamp line (14 of 19). GPU, 2560 x 1440,
+three runs: the full-water view 0.198, 0.198, 0.198 ms against 0.199, 0.199, 0.200 at
+`059a185`; ANDY3's river of rooms 38 and 41 at its end 0.037 to 0.038 ms for its 4 river
+draws against 0.032 to 0.033, the sheets 0.167 to 0.169 against 0.165 to 0.171. The views
+of I1 at 3, 11 and 19 seconds against `059a185`: ANDREA1's basin, RICH2's pool and JOBY5's
+water identical, ANDY3's shore view 5,032 to 5,316 pixels of 518,400 changed by more than
+16 (the band), its island and bank views 446 to 609. The sweep: 565 squares, 56 bodies,
+118 twins, as at `826a893`; rivers 2, both in ANDY3; no square dropped as walkable floor.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34); the fifteen cameras with `-hdwater 0`, 15 of 15
+identical to the fix round's parity set; with `-hdwater 1`, 9 of 15 identical to
+`059a185` - ANDREA2's sewer (B1, B2) and JOBY2's sea (C1, C2, C4) differ by at most 926
+pixels, 47 of all of them by more than 16 - the waterline on a floe's or a canal's
+sloping edge, and JOBY2 room 76 (C3) by 13,608, the band the line laid over the tunnel's
+shallow floor; the text file (`river` with a flow, a flow of length 0 and a speed of
+9,000 counted bad); the posts keep their line; the suites (ModernTest 14721, MenuTest
+42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the banks at every
+level, JOBY5's deck, the river's dashes from the bank and the roof, the end's blob. The
+creatures' mark in the game: its line in the owner's next log decides where it is lost.
+The pond's arms as rivers: no sink lies in them; a row of `hd_water.txt` can make the
+pond's body a river, but the pond is one body with its arms. The reflection of the room
+itself, the third stage; light shafts under the water.
+
+**Commits.** After the fifth play test, the banks, the creatures and the rivers `dcf83e3`,
+`90abfac`, `f4b6809`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

@@ -1777,7 +1777,14 @@ it.
   her, while she swims at the surface or wades, the line is left out, and
   only her rings stay. Nor on any creature in the water - a swimming rat, or
   Lara herself: everything drawn with an HD model marks its pixels, and the
-  sheet draws them without the line.
+  sheet draws them without the line and without any foam. On a floor that
+  rises gently to the bank the line does not spread into a band across the
+  shallows: it is weighed by how fast the depth under the surface changes on
+  the screen, whole round a post, fading over a flat shore.
+  **The banks.** Where a sheet carries a room's water, the land at the
+  water's height - a bank, a deck, a coping - no longer takes the Remaster
+  art's swell, wobble or shimmering caustic, which used to tear it open in
+  wave shapes along the water's edge; the water meets the land flat.
   A card without it draws the same sheet with the depth
   of the level's own floor data, and cannot know a floor at the water's
   height: there a row of class `none` is the way. With *HD water* off neither
@@ -1857,13 +1864,18 @@ it.
 - **Rivers.** Where the level's own triggers pull Lara through the water (a
   sink, the current that drags her along ANDY3's two rivers), the body is a
   river: it flows the way the sinks pull, at the speed they pull her (120
-  units a second for each step of a sink's strength; ANDY3's run at 1,080
-  and 480), held on the screen to 720. Its waves are stretched along the
-  flow and carried with it, low and fast; bright thin streaks run along it,
-  faster still, and come and go; no foam lies on its banks - foam does not
+  units a second for each step of a sink's strength; ANDY3's run at about
+  1,060 and 640), held on the screen to 720. A sink that lies in the water
+  of a body counts as well, wherever the squares that name it lie - but only
+  where those squares cover at least a quarter of the body, so a drain in a
+  pool or a sea does not turn it into a river. Its waves are stretched along
+  the flow and carried with it, low and fast; bright thin streaks in short
+  dashes run along it, faster still, and come and go, so the flow shows from
+  the bank as well as from above; no foam lies on its banks - foam does not
   stay on a fast river - except where the river ends against a wall or a
-  drop: there the foam piles up across it, dense at the end and broken
-  further up, three quarters of a square deep. The Remaster's own moving
+  drop: there one ragged blob of foam lies across it, densest at the end,
+  holed and broken further up, about three quarters of a square deep. The
+  Remaster's own moving
   water surface over a river is left out, as its still water is.
   `hd_water.txt` can make any body a river and give it a current by hand.
   With *HD water* off there are no rivers.

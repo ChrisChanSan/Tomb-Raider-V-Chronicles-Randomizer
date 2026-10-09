@@ -880,7 +880,7 @@ water surface", carries the tables.
     water), carried into the end at 0.3 of the speed, dense at the end,
     nothing at the upper end. OWN, free choice, tuned by eye on reference
     pictures supplied for this project (a weir's foam half to one square
-    deep).
+    deep). Its pattern is now entry 116's; the reach and the speed stay.
 106. **The remaster's flowing surface hidden over a river** - a draw call
     wholly of flat material 1 triangles within 32 units of a river's
     surface over its squares is left out, as entry 77 leaves out the still
@@ -920,6 +920,47 @@ water surface", carries the tables.
     0.81 1.00 0.87, radius 1,472 to 5,152 - the flat pale haze of the play
     test of 2026-10-09 (the rooms' headers, `nFogBulbs` and `fogbulb`, read
     with the randomizer's `Tr5Level`); OWN: the replacement.
+111. **The flood under a sheet** - in a room whose body draws its sheet and
+    hides the remaster's art, RoomVS's flood lays no swell, UV wobble or
+    surface caustic on any vertex (`gSwell.z`, set by `set_room_rows`); the
+    colour shimmer is untouched. OWN, a rule of this project; DATA for the
+    reason: ANDY3's pond has no remaster water art in its classic planes (0
+    `.TRG` triangles, entry 77's measurement), so every flooded vertex there
+    is the bank's, and JOBY5 room 4's deck squares are dry floor at the
+    water's height (RoomProbe pictures at three clock times; the squares
+    read with the randomizer's `Tr5Level`).
+112. **The waterline where a shape meets the water** - the depth variant's
+    line weighed by the change of the frame's depth under the surface from
+    pixel to pixel (`fwidth`), whole from 6 units a pixel, its fall from 24
+    to 48 units a straight ramp. OWN, free choice, set by eye on RoomProbe
+    pictures; a screen-space derivative is general graphics knowledge.
+113. **The creatures' mark's log line and its foam-free pass** - one
+    WATERLOG line a level with `-log` saying whether the frame marked and
+    why not, whether the mark and the sheets used the INTZ surface, the
+    objects, the sheet draws and the split draws; the marked pass of a range
+    draws no foam (`gWaterFoam.w` and the whitecaps 0). OWN, a rule of this
+    project; RoomProbe `-twophase` draws the two phases in two brackets as
+    the game does.
+114. **A sink in the water** - a sink of the camera table named by a
+    `TO_SINK` command that lies in a body's water (inside one of its
+    squares, at or under its surface, above the floor) pulls the body: the
+    mean way from the squares that name it to the sink, the speed of its
+    strength; counted only where those squares number at least a quarter of
+    the body's own (`kRiverCover`). OWN rule, free choice between the
+    counts; DATA: the sinks, their places and strengths and the squares that
+    name them (the camera table and the classic floor data; RoomProbe
+    `-hdwater 1 -nodraw`, `lying=` and `refused=`: ANDY3's river of rooms 38
+    and 41 at 1.0, its sea of rooms 10 to 17 at 0.05).
+115. **The river's dashes** - `RiverPS` breaks each streak into dashes a few
+    hundred units long carried with the flow, their phase turned by the way
+    across. OWN, free choice, set by eye on RoomProbe strips.
+116. **The foam blob where a river ends** - three layers of cells about 830,
+    360 and 150 units across along axes turned by 0.6, 2.1 and 1.3 radians,
+    the finer warped by the coarser, carried into the end, the reach
+    swinging across the river and with the coarsest cells, densest at the
+    end; replaces entry 105's lattice. OWN, free choice, set by eye on
+    RoomProbe pictures; the weir's photograph supplied for this project as a
+    look and no file.
 
 ## Credited, but not contained here
 

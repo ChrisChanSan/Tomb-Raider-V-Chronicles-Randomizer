@@ -928,6 +928,10 @@ struct HDRenderWaterBody
 	 * (a row's `swell`, 1 without one; 0 lays the sheet at rest - the
 	 * waves stay in its pixels). */
 	float swell;
+	/* How far its sheet's rows are short crests in a fan (a row's
+	 * `crest`, 1 without one; 0 gives the straight rows - hd_render.cpp,
+	 * "the crests" over kWaterFan). */
+	float crest;
 };
 
 // What the level built, for its log line.

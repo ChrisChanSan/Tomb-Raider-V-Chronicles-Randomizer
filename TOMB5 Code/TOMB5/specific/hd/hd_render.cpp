@@ -8558,7 +8558,7 @@ namespace
 	 *            spread so that no two rows run in step and the sum does
 	 *            not read as a grid. The first four are the rows RoomVS
 	 *            moves the remaster's marked water art with; the sheet takes
-	 *            all eight (water_rows_now)
+	 *            all eight (water_rows_now), turned into the fan (`fan`)
 	 * groups     how deep the rows' slow envelope breathes, 0..1: the share
 	 *            of a row's height that comes and goes over its period
 	 * calm       the share of the deep-water speed the rows run at,
@@ -8583,7 +8583,14 @@ namespace
 	 *            takes its long axis
 	 * eyeGain    how much steeper the sheet's slopes are drawn where the
 	 *            view runs flat over the water (hd_room.hlsl, "the body at
-	 *            eye level"), 1 changing nothing */
+	 *            eye level"), 1 changing nothing
+	 * fan        the width of the sheet's fan of directions, radians (see
+	 *            "the crests" below); `angle` stays the straight table that
+	 *            RoomVS moves the remaster's marked art with and that a
+	 *            row's `crest 0` gives the sheet back
+	 * crestLen   a crest piece's length, wavelengths of its own row
+	 * crestDepth how deep the pieces' envelope runs, 0..1 of a row's
+	 *            height either way */
 	struct HDWaterClass
 	{
 		const char* name;
@@ -8606,6 +8613,9 @@ namespace
 		float sunElev, sunAzim;
 		float baseAngle;
 		float eyeGain;
+		float fan;
+		float crestLen;
+		float crestDepth;
 	};
 
 	/* A basin is a calm fountain: short, low, slow ripples in clear water
@@ -8658,28 +8668,32 @@ namespace
 			{ 0.0f, 1.13f, -0.79f, 2.51f, 1.87f, -1.61f, 0.41f, -2.83f },
 			0.30f,
 			0.6f, 0.0f, 0.0f, 512.0f, 4000.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f, 3.0f },
+			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f, 3.0f,
+			1.5f, 2.0f, 0.8f },
 		{ "channel", { 420.0f, 230.0f, 120.0f, 64.0f, 311.0f, 166.0f, 88.0f,
 			41.0f },
 			{ 3.0f, 1.8f, 0.9f, 0.45f, 1.86f, 1.02f, 0.51f, 0.23f },
 			{ 0.0f, 0.42f, -0.37f, 0.9f, -0.19f, 0.63f, -0.71f, 1.21f },
 			0.35f,
 			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
-			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f },
+			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f,
+			1.2f, 2.0f, 0.8f },
 		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f, 1025.0f, 481.0f, 222.0f,
 			98.0f },
 			{ 38.0f, 16.0f, 7.0f, 2.8f, 19.75f, 8.47f, 3.55f, 1.47f },
 			{ 0.0f, 0.61f, -0.52f, 1.37f, -0.29f, 0.97f, -1.13f, 0.27f },
 			0.50f,
 			1.0f, 0.0f, 1.0f, 1024.0f, 900.0f, 0.85f, 300.0f, 1.5f, 0.6f,
-			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f, 1.0f },
+			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f, 1.0f,
+			1.2f, 2.0f, 0.8f },
 		{ "river", { 300.0f, 187.0f, 117.0f, 73.0f, 237.0f, 149.0f, 93.0f,
 			47.0f },
 			{ 2.4f, 1.6f, 1.0f, 0.56f, 2.0f, 1.3f, 0.76f, 0.36f },
 			{ 1.18f, -1.15f, 1.23f, -1.21f, 1.12f, -1.25f, 1.2f, -1.13f },
 			0.35f,
 			0.2f, 240.0f, 0.3f, 512.0f, 1500.0f, 0.0f, 300.0f, 1.5f, 0.0f,
-			1.0f, 70.0f, 0.4f, 55.0f, 40.0f, 0.0f, 2.0f },
+			1.0f, 70.0f, 0.4f, 55.0f, 40.0f, 0.0f, 2.0f,
+			1.2f, 2.0f, 0.8f },
 	};
 
 	/* The rows' slow envelope (water_rows_now): a row's height swells and
@@ -8692,6 +8706,60 @@ namespace
 	const float kWaterGroupPeriod[8] =
 		{ 8.0f, 13.7f, 10.3f, 15.0f, 9.1f, 11.9f, 14.3f, 12.6f };
 	const float kWaterGolden = 2.3999632f;	// radians, 2 pi (1 - 1 / phi)
+
+	/* The crests. A sum of a few straight waves crossing at fixed angles
+	 * draws a lattice of diamonds: its crests run straight over many
+	 * wavelengths, and where two rows of like height cross, the highlight
+	 * and the reflection's lobe light the same cells again and again. So
+	 * the sheet's rows are short-crested and spread:
+	 *
+	 * the pieces - every row's height runs along its own crest under an
+	 * envelope 1 + C W(e), e the place along the crest over crestLen of
+	 * the row's wavelengths (at most kCrestReach units), so a crest is a
+	 * piece of about that length, swelling and fading, the next piece
+	 * beside it; C the class's crestDepth; the envelope's phase starts
+	 * at the golden angle times
+	 * the row (no two rows' pieces line up) and drifts along the crest by
+	 * kCrestDrift turns a second, one way on the even rows and the other
+	 * on the odd, so the pieces wander along their crests;
+	 *
+	 * the fan - the rows ranked by wavelength, longest first, lie at
+	 * kWaterFan times the class's fan width round the body's own
+	 * direction: the longest on it, the shortest widest, the negative side
+	 * half a step further out than the positive, so that no two rows are
+	 * mirror images of each other about the body's direction (their
+	 * angles' sum stays an eighth of the width off 0) and no two run
+	 * within a quarter of the width of each other.
+	 *
+	 * A row's `crest s` (0 to 1) takes the body from the straight rows
+	 * (the `angle` table, s 0) to the fan (s 1) and scales the envelope's
+	 * depth, the crests' second bend (hd_room.hlsl, WaveBend) and the
+	 * highlight's glints (WaterPS) by s.
+	 *
+	 * The widths, the length, the depth and the drift are free choices,
+	 * set by eye on the round's RoomProbe pictures against the lattice
+	 * measure of the round (the share of the surface light's power in its
+	 * six strongest frequencies). Widths: basin 1.5 - a crest's line is
+	 * a direction modulo pi, so the basin's rows then lie round 171 of the
+	 * 180 degrees, ripples from all round a fountain -, channel, sea and
+	 * river 1.2: crests mostly across a canal, the wind's waves and a
+	 * river's pieces across and askew to the current, each spread over
+	 * about 70 degrees either way. 1.2 and 1.5 keep the rule above modulo
+	 * pi as well - no two crest lines within 0.30 (0.33), no mirror pair
+	 * within 0.15 (0.19); 0.64 for the sea drew its pieces as parallel
+	 * streaks, 1.6 and 2.4 broke the rule modulo pi. Length 2 wavelengths
+	 * and depth 0.8: at 3 and 0.7 the pieces still read as long streaks
+	 * at eye level. */
+	const float kWaterFan[8] =
+		{ 0.0f, 0.25f, -0.375f, 0.5f, -0.625f, 0.75f, -0.875f, 1.0f };
+	const float kCrestDrift = 0.05f;	// turns a second
+	/* The longest a piece gets, units: a sea's longest rows (1,500 and
+	 * 1,025 units) at crestLen wavelengths would draw pieces longer than
+	 * most of its bodies are wide - ANDY3's pond is about six squares
+	 * across -, straight bands over the whole body again. A square and a
+	 * half: a free choice, set by eye on the round's RoomProbe pictures of
+	 * the pond. */
+	const float kCrestReach = 1536.0f;
 
 	/* The sections' colours, RGB 0..255: base the shallow water, deep the
 	 * water where no floor shows through, high the highlight, foam the foam.
@@ -9074,11 +9142,16 @@ namespace
 		int originX, originZ;
 	};
 
-	/* A body's constants: the eight rows (the first four are RoomVS's), the
-	 * swell and the pixel rows. */
+	/* A body's constants: the sheet's eight rows, RoomVS's four, the swell
+	 * and the pixel rows. */
 	struct WaterLook
 	{
 		float rows[32];		// kx, kz, omega, height
+		// RoomVS's four on the remaster's marked art: the straight table's.
+		float artRows[16];
+		float crest;		// the body's `crest`, 0..1
+		float crestLen;		// the pieces' length, wavelengths
+		float crestDepth;	// the envelope's depth times `crest`
 		float phase0[8];	// each row's own start, radians
 		float groups;		// the envelope's depth (HDWaterClass)
 		float swell[4];		// gSwell
@@ -9115,6 +9188,8 @@ namespace
 		int clipUnits;
 		int swell;		// 1 with `swell s`
 		float swellScale;
+		int crest;		// 1 with `crest s`
+		float crestScale;
 		// 1 for a compiled bank row: sets the lift and the clip, nothing else
 		int bankOnly;
 	};
@@ -9563,6 +9638,7 @@ namespace
 	 *                              foot off]
 	 *                             [flow <dx> <dz> <speed>]
 	 *                             [lift <units>] [clip <units>]
+	 *                             [crest <s>]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -9597,13 +9673,16 @@ namespace
 	 * and runs them on over the land lower than that (see "the lift" and
 	 * "the skirt" in HDRenderSetWaterSheets); clip sets how far under the
 	 * surface at rest the frame may lie and still be left to itself (0 to
-	 * 256, whole units; see kWaterClip). A row without lift or clip leaves
-	 * that value as it is. '#' starts a comment. Returns 1 for a row, 0 for
-	 * a line without one, -1 for a line that cannot be read. */
+	 * 256, whole units; see kWaterClip); crest how far the rows are short
+	 * crests in a fan (0 to 1: 0 the straight rows, 1 what a body without
+	 * the key draws; see "the crests" over kWaterFan). A row without lift,
+	 * clip or crest leaves that value as it is. '#' starts a comment.
+	 * Returns 1 for a row, 0 for a line without one, -1 for a line that
+	 * cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[37];
+		char* tok[39];
 		char* next = 0;
 		int n = 0;
 
@@ -9614,15 +9693,15 @@ namespace
 
 		// The longest row: the three words, tint's four, waves', foam's,
 		// bend's and swell's two each, ripple's five, art's two, foot's six,
-		// flow's four, lift's two and clip's two - 36 tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 37;
+		// flow's four, lift's, clip's and crest's two - 38 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 39;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 36 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 38 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -9719,6 +9798,23 @@ namespace
 
 				row.clip = 1;
 				row.clipUnits = (int)units;
+				i += 2;
+				continue;
+			}
+
+			// crest <s>: 0 to 1, the straight rows to the short crests.
+			if (!_stricmp(tok[i], "crest"))
+			{
+				if (i + 1 >= n)
+					return -1;
+
+				const double s = std::strtod(tok[i + 1], &end);
+
+				if (*end || end == tok[i + 1] || !(s >= 0.0 && s <= 1.0))
+					return -1;
+
+				row.crest = 1;
+				row.crestScale = (float)s;
 				i += 2;
 				continue;
 			}
@@ -10179,12 +10275,28 @@ namespace
 			out[k] = (float)(sum[k] / (double)s.size());
 	}
 
+	/* Row i's place in the fan (see "the crests" over kWaterFan), radians
+	 * off the body's direction: its rank by wavelength, longest first. */
+	float water_fan(const HDWaterClass& c, int i)
+	{
+		int rank = 0;
+
+		for (int j = 0; j < 8; j++)
+			if (c.lambda[j] > c.lambda[i] || (c.lambda[j] == c.lambda[i] &&
+				j < i))
+				rank++;
+
+		return kWaterFan[rank] * c.fan;
+	}
+
 	/* The first `count` rows of a class, turned by `base`, heights times
 	 * `waves`; `total` the sum of the first four heights. The rows ride a
 	 * current along `base` of the class's speed, or of `current` where it is
-	 * not negative (a river's own). */
+	 * not negative (a river's own). `crest` takes the directions from the
+	 * straight table (0) to the fan (1). */
 	void water_rows(const HDWaterClass& c, float base, float waves,
-		float* rows, float* total, int count = 4, float current = -1.0f)
+		float* rows, float* total, int count = 4, float current = -1.0f,
+		float crest = 0.0f)
 	{
 		*total = 0.0f;
 
@@ -10193,12 +10305,14 @@ namespace
 		for (int i = 0; i < count; i++)
 		{
 			const float k = 6.2831853f / c.lambda[i];
-			const float th = base + c.angle[i];
+			const float off = c.angle[i] + crest * (water_fan(c, i) -
+				c.angle[i]);
+			const float th = base + off;
 
 			rows[i * 4 + 0] = k * cosf(th);
 			rows[i * 4 + 1] = k * sinf(th);
 			rows[i * 4 + 2] = c.calm * sqrtf(kWaterG * k) +
-				k * speed * cosf(c.angle[i]);
+				k * speed * cosf(off);
 			rows[i * 4 + 3] = c.height[i] * waves;
 			*total += i < 4 ? rows[i * 4 + 3] : 0.0f;
 		}
@@ -10285,7 +10399,14 @@ namespace
 
 		float total = 0.0f;
 
-		water_rows(c, base, b.waves, out.rows, &total, 8, current);
+		water_rows(c, base, b.waves, out.rows, &total, 8, current, b.crest);
+
+		float artTotal = 0.0f;
+
+		water_rows(c, base, b.waves, out.artRows, &artTotal, 4, current);
+		out.crest = b.crest;
+		out.crestLen = c.crestLen;
+		out.crestDepth = c.crestDepth * b.crest;
 
 		for (int i = 0; i < 8; i++)
 			out.phase0[i] = i < 4 ? 0.0f :
@@ -10896,6 +11017,9 @@ namespace
 			if (row.swell)
 				b.swell = row.swellScale;
 
+			if (row.crest)
+				b.crest = row.crestScale;
+
 			// A compiled bank row sets the lift, the clip and the swell and
 			// leaves the rest of the body as the rows before it left it.
 			if (row.bankOnly)
@@ -11161,6 +11285,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		b.info.waves = b.info.foam = b.info.bend = 1.0f;
 		b.info.clip = kWaterClip;
 		b.info.swell = 1.0f;
+		b.info.crest = 1.0f;
 
 		const int id = (int)g_wbodies.size();
 		std::vector<size_t> stack(1, i);
@@ -13285,8 +13410,9 @@ const char* HDRenderWaterSectionName(int section)
  * the land squares its level surface runs on over, each place once
  * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets), how
  * far under its surface the frame is left to itself, units (clip; see
- * kWaterClip), and the share of its class's swell its sheet's vertices
- * take (swell; see kWaterBank). */
+ * kWaterClip), the share of its class's swell its sheet's vertices
+ * take (swell; see kWaterBank), and how far its rows are short crests in
+ * a fan (crest; see "the crests" over kWaterFan). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -13361,7 +13487,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
 		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
-		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d swell=%.2f",
+		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d swell=%.2f "
+		"crest=%.2f",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -13371,7 +13498,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
 		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift,
-		b.skirt, b.clip, b.swell);
+		b.skirt, b.clip, b.swell, b.crest);
 	return true;
 }
 
@@ -13680,8 +13807,8 @@ namespace
 				1.0f : 0.0f;
 			swell[3] = 0.0f;
 			g_device->SetVertexShaderConstantF(18, swell, 1);
-			g_device->SetVertexShaderConstantF(20, g_wlooks[(size_t)body].rows,
-				4);
+			g_device->SetVertexShaderConstantF(20,
+				g_wlooks[(size_t)body].artRows, 4);
 			return;
 		}
 
@@ -14281,6 +14408,48 @@ namespace
 				(float)g_wbodies[(size_t)r.body].info.clip, 0.0f, 0.0f, 0.0f };
 
 			g_device->SetPixelShaderConstantF(148, clip, 1);
+
+			/* c149 - c155, and the vertex side's c168 - c174, the crests
+			 * (hd_room.hlsl, "the crests"; read by WaterVS, WaterPS and
+			 * RiverPS): per four rows the envelope's step along world x
+			 * and z in turns a unit - the row's crest line (-kz, kx) over
+			 * |k| times the piece's length, crestLen wavelengths of
+			 * 2 pi / k or kCrestReach units, whichever is shorter - and
+			 * its phase now, in turns:
+			 * the row times the golden angle, drifting by kCrestDrift
+			 * turns a second, the odd rows the other way; then 1 - C, 2 C
+			 * and 24 C (C the envelope's depth times the body's `crest`)
+			 * and the second bend's push, 0.2 of the longest wavelength
+			 * times `crest` (1.2566 = 0.2 x 2 pi, over the longest row's
+			 * wave number in the shader). 0.2 is a free choice, set by
+			 * eye on the round's RoomProbe pictures. */
+			float crest[7 * 4];
+
+			for (int i = 0; i < 8; i++)
+			{
+				const int at = (i < 4 ? 0 : 12) + (i & 3);
+				const double turns = (double)kWaterGolden * i /
+					6.283185307179586 + (i & 1 ? -1.0 : 1.0) *
+					(double)kCrestDrift * clock;
+				// The piece's length in units, at most kCrestReach.
+				const float k = sqrtf(rows[i * 4] * rows[i * 4] +
+					rows[i * 4 + 1] * rows[i * 4 + 1]);
+				const float own = look.crestLen * 6.2831853f /
+					(k > 1.0e-6f ? k : 1.0e-6f);
+				const float units = own < kCrestReach ? own : kCrestReach;
+				const float perTurn = k > 0.0f ? 1.0f / (units * k) : 0.0f;
+
+				crest[at] = -rows[i * 4 + 1] * perTurn;
+				crest[at + 4] = rows[i * 4 + 0] * perTurn;
+				crest[at + 8] = (float)(turns - std::floor(turns));
+			}
+
+			crest[24] = 1.0f - look.crestDepth;
+			crest[25] = 2.0f * look.crestDepth;
+			crest[26] = 24.0f * look.crestDepth;
+			crest[27] = 1.2566371f * look.crest;
+			g_device->SetPixelShaderConstantF(149, crest, 7);
+			g_device->SetVertexShaderConstantF(168, crest, 7);
 
 			draw_sheet_range(r);
 

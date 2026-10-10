@@ -408,6 +408,14 @@ float4 gWaterView : register(c19);
 float4 gWaveV[4] : register(c20);
 float4 gWaveV2[4] : register(c24);
 
+/* The crests for WaterVS's swell, per sheet draw: the same seven registers
+ * as the pixel side's c149 - c155 (gCrestA, gCrestB, gCrest), here c168 -
+ * c174 - above every vertex register of this file (the wibble table ends at
+ * c127) and of hd_model.hlsl (its last, gSoft, ends at c166). */
+float4 gCrestVA[3] : register(c168);
+float4 gCrestVB[3] : register(c171);
+float4 gCrestV : register(c174);
+
 /* -------------------------------------------------- constants, pixel side --
  *
  * c4          gPass               per pass  (the same one)
@@ -705,6 +713,23 @@ float4 gWaterStage : register(c106);
  * pixel registers end at c147, hd_model.hlsl's own begin at c160. */
 float4 gWaterClip : register(c148);
 
+/* The crests (see CrestEnv), per sheet draw, read by WaterPS (its foam
+ * variant too) and RiverPS:
+ *
+ * gCrestA     c149 - c151, rows one to four: x the envelope's step along
+ *             world x, turns a unit, one row a component; y the same
+ *             along z; z its phase now, turns
+ * gCrestB     c152 - c154, the same for rows five to eight
+ * gCrest      c155: x 1 - C, y 2 C, z 24 C (C the envelope's depth), w the
+ *             second bend's push times the longest row's wave number
+ *             (WaveBend)
+ *
+ * Named by no other shader: hd_model.hlsl's pixel registers begin at
+ * c160. */
+float4 gCrestA[3] : register(c149);
+float4 gCrestB[3] : register(c152);
+float4 gCrest : register(c155);
+
 /* What keeps the sheet alive, read by WaterPS alone:
  *
  * gWaveP2      c107 - c110, the rows five to eight (all eight rows of a
@@ -952,14 +977,44 @@ float WaveSum(float2 p, float t, float4 w0, float4 w1, float4 w2, float4 w3,
 	return dot(h, s);
 }
 
-/* The push WaveSum gives its position, as a function of its own: WaveSum8
- * and the whitecaps' earlier crest bend the crests the same way. */
-float2 WaveBend(float2 p, float t, float k0)
+/* The push WaveSum gives its position, and a second one under it: the
+ * sheet's WaveSum8, the whitecaps' earlier crest and RiverPS bend the
+ * crests by both. The second is the crests' bend at the lattice's own
+ * scale: a pattern 1.75 of the longest wavelength wide (0.57 k0) whose
+ * push, `push` over k0 - 0.2 of that wavelength times the body's `crest`
+ * (hd_render.cpp, c155.w) -, bends a crest within a few wavelengths where
+ * the slow push leaves it straight; it drifts on its own way. 1.75, 0.2
+ * and the drift are free choices, set by eye on the round's RoomProbe
+ * pictures. RoomVS's WaveSum keeps the slow push alone. */
+float2 WaveBend(float2 p, float t, float k0, float push)
 {
 	const float2 warp = Wave2(p.yx * (0.21f * k0) +
 		t * float2(0.23f, -0.19f));
+	const float2 fine = Wave2(p * (0.57f * k0) +
+		t * float2(-0.31f, 0.27f));
+	const float2 q = p + warp * (1.6f / max(k0, 1e-4f));
 
-	return p + warp * (1.6f / max(k0, 1e-4f));
+	return q + fine * (push / max(k0, 1e-4f));
+}
+
+/* The crests' pieces: the envelope four rows' heights take along their own
+ * crests (hd_render.cpp, "the crests" over kWaterFan). `cx`, `cz` the
+ * envelope's step along world x and z in turns a unit, `ph` its phase in
+ * turns, `shape` (1 - C, 2 C, 24 C) with C its depth. The curve is Wave2's:
+ * u = 2 frac(e) - 1, f = |u|, g = f f (3 - 2 f), the envelope 1 - C + 2 C g
+ * - 1 + C at the middle of a piece, 1 - C between two -, and `grow` its
+ * rise per turn along the step, 24 C u (1 - f), exact for that curve (d g
+ * / d f = 6 f (1 - f), d f / d e = 2 sign u), so the slope can take the
+ * pieces' ends. With C 0 the envelope is 1 and `grow` 0: the straight
+ * rows. */
+float4 CrestEnv(float2 p, float4 cx, float4 cz, float4 ph, float3 shape,
+	out float4 grow)
+{
+	const float4 u = frac(p.x * cx + (p.y * cz + ph)) * 2.0f - 1.0f;
+	const float4 f = abs(u);
+
+	grow = u * (1.0f - f) * shape.z;
+	return shape.x + shape.y * (f * f * (3.0f - 2.0f * f));
 }
 
 /* Wave2's curve four at a time. */
@@ -980,9 +1035,20 @@ float4 Wave4(float4 x)
  * that of the unbent sum, as there. Sine and cosine are Wave2's curve
  * (within 2 % of a cosine's amplitude, a quarter turn apart for the sine):
  * eight sincos would cost about 64 of the pixel shader's 512 slots, the
- * curve about 24. */
+ * curve about 24.
+ *
+ * The crests: each row's height times its envelope (CrestEnv; `ca`, `cb`
+ * the steps of rows one to four and five to eight, x, y and z as in
+ * gCrestA, `shape` gCrest.xyz), so its crests are pieces; the slope takes
+ * the envelope's rise along the crest as well - the height's sine times
+ * `grow` times the step -, which at a length of 2 wavelengths and a depth
+ * of 0.8 reaches 0.38 of a row's own slope (0.8 x 0.955 / 2, with 0.955 =
+ * 3 / pi the steepest rise of Wave2's curve per radian), at the ends of a
+ * piece. */
 float WaveSum8(float2 p, float4 a0, float4 a1, float4 a2, float4 a3,
-	float4 b0, float4 b1, float4 b2, float4 b3, out float2 slope)
+	float4 b0, float4 b1, float4 b2, float4 b3, float4 ca0, float4 ca1,
+	float4 ca2, float4 cb0, float4 cb1, float4 cb2, float3 shape,
+	out float2 slope)
 {
 	const float4 pa = float4(dot(p, a0.xy), dot(p, a1.xy), dot(p, a2.xy),
 		dot(p, a3.xy)) - float4(a0.z, a1.z, a2.z, a3.z);
@@ -992,14 +1058,23 @@ float WaveSum8(float2 p, float4 a0, float4 a1, float4 a2, float4 a3,
 	const float4 sa = Wave4(pa - 1.5707963f);
 	const float4 cb = Wave4(pb);
 	const float4 sb = Wave4(pb - 1.5707963f);
+	float4 growA, growB;
+	const float4 envA = CrestEnv(p, ca0, ca1, ca2, shape, growA);
+	const float4 envB = CrestEnv(p, cb0, cb1, cb2, shape, growB);
 
-	const float4 ha = float4(a0.w, a1.w, a2.w, a3.w);
-	const float4 hb = float4(b0.w, b1.w, b2.w, b3.w);
+	const float4 h0a = float4(a0.w, a1.w, a2.w, a3.w);
+	const float4 h0b = float4(b0.w, b1.w, b2.w, b3.w);
+	const float4 ha = h0a * envA;
+	const float4 hb = h0b * envB;
 	const float4 qa = ha * ca;
 	const float4 qb = hb * cb;
+	const float4 wa = h0a * sa * growA;
+	const float4 wb = h0b * sb * growB;
 
 	slope = qa.x * a0.xy + qa.y * a1.xy + qa.z * a2.xy + qa.w * a3.xy +
 		qb.x * b0.xy + qb.y * b1.xy + qb.z * b2.xy + qb.w * b3.xy;
+	slope += float2(dot(wa, ca0) + dot(wb, cb0), dot(wa, ca1) +
+		dot(wb, cb1));
 	return dot(ha, sa) + dot(hb, sb);
 }
 
@@ -1981,8 +2056,10 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	const float shore = inC0.g * (255.0f * 16.0f);
 	float2 slope;
 	const float h = WaveSum8(WaveBend(pos.xz + gRoomOrigin.xz, gMotion.z,
-		length(gWaveV[0].xy)), gWaveV[0], gWaveV[1], gWaveV[2], gWaveV[3],
-		gWaveV2[0], gWaveV2[1], gWaveV2[2], gWaveV2[3], slope);
+		length(gWaveV[0].xy), gCrestV.w), gWaveV[0], gWaveV[1], gWaveV[2],
+		gWaveV[3], gWaveV2[0], gWaveV2[1], gWaveV2[2], gWaveV2[3],
+		gCrestVA[0], gCrestVA[1], gCrestVA[2], gCrestVB[0], gCrestVB[1],
+		gCrestVB[2], gCrestV.xyz, slope);
 	const float taper = saturate(shore / max(gSwell.y, 1.0f));
 	/* A crest that breaks stands higher than the sum of the sines: where
 	 * the wave stands above the whitecaps' threshold (gSwell.w, the
@@ -2228,7 +2305,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float2 dy = ddy(world.xz);
 	const float4 keep = input.keepA;
 	const float4 keep2 = input.keepB;
-	const float2 pb = WaveBend(world.xz, t, gWaveK[0].x);
+	const float2 pb = WaveBend(world.xz, t, gWaveK[0].x, gCrest.w);
 	float2 slope;
 	const float h = WaveSum8(pb,
 		float4(gWaveP[0].xyz, gWaveP[0].w * keep.x),
@@ -2238,7 +2315,9 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		float4(gWaveP2[0].xyz, gWaveP2[0].w * keep2.x),
 		float4(gWaveP2[1].xyz, gWaveP2[1].w * keep2.y),
 		float4(gWaveP2[2].xyz, gWaveP2[2].w * keep2.z),
-		float4(gWaveP2[3].xyz, gWaveP2[3].w * keep2.w), slope);
+		float4(gWaveP2[3].xyz, gWaveP2[3].w * keep2.w),
+		gCrestA[0], gCrestA[1], gCrestA[2], gCrestB[0], gCrestB[1],
+		gCrestB[2], gCrest.xyz, slope);
 
 	const float3 V = normalize(input.eye.xyz);
 
@@ -2323,10 +2402,21 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	refl += gWaterHigh.rgb * (0.35f * t2 * t2 * t2 * t2);
 
-	// The highlight.
+	/* The highlight, broken into glints: a fine field over its strength -
+	 * not over the normal - of cells about 1.4 of the shortest row's
+	 * wavelength (0.7 of its wave number, gWaveK[1].w), drifting, from
+	 * 0.25 to 1.75 of the highlight with a mean of 1, so a lit crest line
+	 * becomes a row of glints; times the body's `crest` (gCrest.w over
+	 * 1.2566, see WaveBend), none with `crest 0`. 1.4, 0.25 to 1.75 and the
+	 * drift are free choices, set by eye on the round's RoomProbe
+	 * pictures. */
+	const float2 cells = Wave2(world.xz * (0.7f * gWaveK[1].w) +
+		t * float2(0.37f, -0.29f) + 1.1f);
+	const float glint = 1.0f + gCrest.w * (0.7957747f * 0.75f) *
+		cells.x * cells.y;
 	const float3 H = normalize(gWaterSun.xyz + V);
 	const float3 spec = gWaterHigh.rgb *
-		pow(saturate(dot(N, H)), gWaterHigh.w);
+		pow(saturate(dot(N, H)), gWaterHigh.w) * glint;
 
 	/* The water: transmitted from the floor, or scattered in its place.
 	 * `through` is what of the frame behind the sheet comes through, per
@@ -2906,7 +2996,7 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	// The relief's light: the rows' slope against the class light.
 	float2 slope;
 
-	WaveSum8(WaveBend(world.xz, t, gWaveK[0].x),
+	WaveSum8(WaveBend(world.xz, t, gWaveK[0].x, gCrest.w),
 		float4(gWaveP[0].xyz, gWaveP[0].w * input.keepA.x),
 		float4(gWaveP[1].xyz, gWaveP[1].w * input.keepA.y),
 		float4(gWaveP[2].xyz, gWaveP[2].w * input.keepA.z),
@@ -2914,7 +3004,9 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		float4(gWaveP2[0].xyz, gWaveP2[0].w * input.keepB.x),
 		float4(gWaveP2[1].xyz, gWaveP2[1].w * input.keepB.y),
 		float4(gWaveP2[2].xyz, gWaveP2[2].w * input.keepB.z),
-		float4(gWaveP2[3].xyz, gWaveP2[3].w * input.keepB.w), slope);
+		float4(gWaveP2[3].xyz, gWaveP2[3].w * input.keepB.w),
+		gCrestA[0], gCrestA[1], gCrestA[2], gCrestB[0], gCrestB[1],
+		gCrestB[2], gCrest.xyz, slope);
 
 	const float relief = -dot(slope, gWaterSun.xz) * gRiverLight.x;
 

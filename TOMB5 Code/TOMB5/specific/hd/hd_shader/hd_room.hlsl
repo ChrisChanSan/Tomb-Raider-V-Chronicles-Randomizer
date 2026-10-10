@@ -378,8 +378,9 @@ float4 gWaterBox : register(c15);
  *            y the height of that surface (room local), z one over the
  *            depth it fades out over, w unused
  * gEye       xyz the camera in this room's own coordinates (WaterVS)
- * gSwell     x the share of the wave height the vertex takes (0 basin),
- *            y the shore distance the swell tapers in over - read by
+ * gSwell     x the share of the wave height the vertex takes (0 basin;
+ *            for a sheet draw times the body's own swell, hd_render.cpp
+ *            kWaterBank), y the shore distance the swell tapers in over - read by
  *            WaterVS alone, RoomVS tapers over its flood box
  *            (HD_WATER_SHORE); for a sheet draw alone z the most a
  *            breaking crest rises by beside the swell (0 without

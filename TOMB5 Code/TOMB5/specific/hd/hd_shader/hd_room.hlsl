@@ -658,8 +658,8 @@ float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
  * gWaterFoam  rgb the foam colour, lit; w the shore foam strength
  * gWaterMisc  x the foam band in units, y the whitecap strength, z the
  *             clock in seconds (0 with hd_motion off), w the whole wave
- *             height now, the eight rows' heights summed, in units (for
- *             the crest test) */
+ *             height now, the eight rows' heights summed, in units, at
+ *             least 1 (for the crest test) */
 float4 gWaveP[4] : register(c92);
 float4 gWaterDeep : register(c96);
 float4 gWaterBase : register(c97);
@@ -2232,6 +2232,33 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	const float3 V = normalize(input.eye.xyz);
 
+	/* The water under the pixel, straight down, and the ray's path through
+	 * it (WaterDepthBelow) - the shallows below, the clip and the water's
+	 * colour further down read them. */
+	const float2 uv = (vpos + 0.5f) * gWaterScreen.xy;
+	float path;
+	const float depth = WaterDepthBelow(input.roomPos.w, input.viewZ.x,
+		input.eye.xyz, uv, path);
+	const float lift = input.viewZ.y;
+
+	/* The shallows. A wave's height is held by the depth under it: it
+	 * breaks where it passes 0.78 of the depth, so near a gently rising
+	 * bank the water lies nearly still. `shoal` is the share of the rows'
+	 * amplitude the depth allows, the depth over the depth from which the
+	 * rows keep their whole height (gWaterStage.w its inverse, see
+	 * hd_render.cpp over c106): 0 at the bank, 1 in open water. It takes
+	 * the rows' slope - the reflection, the highlight and the floor's bend
+	 * -, the bank foam's patches and the whitecaps; the waterline and the
+	 * rings keep theirs. A body without a lift has 1e9 there and keeps its
+	 * rows at every depth. Seen from below, the frame behind the sheet lies
+	 * above it and far: nothing is held; under the water the variant holds
+	 * nothing either. */
+#ifdef HD_WATER_UNDER
+	const float shoal = 1.0f;
+#else
+	const float shoal = saturate((depth + 1.0f) * gWaterStage.w);
+#endif
+
 	/* The body at eye level. Seen flat, a surface whose slopes are a few
 	 * hundredths shows one even reflection; seen from above the same slopes
 	 * already bend the floor and break the highlight. So the waves' slope
@@ -2242,8 +2269,8 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * where it lay flat, and the view from above keeps the look it has.
 	 * The gains and the two angles are free choices, set by eye on the
 	 * round's RoomProbe pictures. The rings are added after it. */
-	slope *= 1.0f + gWaterStage.y * saturate((0.6f - abs(V.y)) *
-		(1.0f / 0.45f));
+	slope *= (1.0f + gWaterStage.y * saturate((0.6f - abs(V.y)) *
+		(1.0f / 0.45f))) * shoal;
 	slope += RingSlope(world.xz);
 
 	// y counts down: the surface's normal points to -y.
@@ -2294,12 +2321,6 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	/* The water: transmitted from the floor, or scattered in its place.
 	 * `through` is what of the frame behind the sheet comes through, per
 	 * channel - the floor's share once the copy is there. */
-	const float2 uv = (vpos + 0.5f) * gWaterScreen.xy;
-	float path;
-	const float depth = WaterDepthBelow(input.roomPos.w, input.viewZ.x,
-		input.eye.xyz, uv, path);
-	const float lift = input.viewZ.y;
-
 #ifdef HD_WATER_DEPTH
 	/* The clip. What the frame drew at the surface's own height - a deck, a
 	 * rim, a bank the remaster raised to the water plane inside a classic
@@ -2411,13 +2432,16 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		dot(world.xz, float2(0.0011f, 0.0007f))));
 	const float n = saturate(0.5f + 0.5f * (w2.x * w2.y + 0.5f * w1.x));
 	const float reach = 0.55f + 0.225f * (1.0f + cycle.y) +
-		0.35f * saturate(h / max(gWaterMisc.w, 1.0f));
+		0.35f * saturate(h / gWaterMisc.w);
 	const float patch = saturate((input.viewZ.w - HD_PATCH_FROM) *
 		(1.0f / HD_PATCH_SPAN));
 	const float edge = saturate(1.0f - input.eye.w /
 		max(gWaterMisc.x * reach * 1.5f * sqrt(patch), 1.0f));
 	const float thr = lerp(1.25f, -0.05f, edge) + 0.12f * cycle.x;
-	float foam = gWaterFoam.w * smoothstep(thr - 0.12f, thr + 0.18f, n) *
+	// The bank foam's and the whitecaps' strengths, as the shallows hold
+	// them.
+	const float2 strength = float2(gWaterFoam.w, gWaterMisc.y) * shoal;
+	float foam = strength.x * smoothstep(thr - 0.12f, thr + 0.18f, n) *
 		(0.4f + 0.6f * edge);
 	const float wet = smoothstep(0.25f, 0.6f, n);
 #ifdef HD_WATER_DEPTH
@@ -2449,12 +2473,12 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * trails behind it and dissolves. */
 	const float2 lag = Wave2(float2(dot(pb, gWaveP[0].xy) - gWaterLag.x,
 		dot(pb, gWaveP[1].xy) - gWaterLag.y) - 1.5707963f);
-	const float heights = max(gWaterMisc.w, 1.0f);
+	const float heights = gWaterMisc.w;
 	const float crest = saturate((h / heights - gWaterSun.w) * 4.0f);
 	const float trail = saturate((dot(lag, gWaterLag.zw) / heights -
 		gWaterSun.w) * 3.0f) * saturate(0.5f + 0.5f * slow.y);
 
-	foam += gWaterMisc.y * max(crest * smoothstep(0.45f, 0.85f, n),
+	foam += strength.y * max(crest * smoothstep(0.45f, 0.85f, n),
 		0.7f * trail * smoothstep(0.55f, 0.9f, n));
 	foam = min(foam, 0.75f) * above;
 #ifdef HD_WATER_UNDER

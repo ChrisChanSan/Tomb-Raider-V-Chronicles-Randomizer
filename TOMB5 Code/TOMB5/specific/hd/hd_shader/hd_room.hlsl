@@ -998,23 +998,66 @@ float2 WaveBend(float2 p, float t, float k0, float push)
 	return q + fine * (push / max(k0, 1e-4f));
 }
 
+/* The two slow curves over the crests' pieces (CrestEnv): periods of 2.7
+ * pieces along the crest and 1.64 across, in no small whole ratio to each
+ * other or to the piece. 0.15 along moves e by at
+ * most a third of the place's own rate (24 x 0.15 x 0.37 / 4 = 0.33), so
+ * a piece runs from 0.75 to 1.5 times its mean length and never folds
+ * back; at 0.3 (0.6 to 3 times) the stretched pieces draw long streaks on
+ * a pond. 0.3 across moves the next crests' pieces by up to 0.6 of
+ * a piece. The starts are steps of 0.618 of a turn. The numbers are free
+ * choices, set by eye on the round's RoomProbe pictures. */
+#define HD_CREST_ALONG 0.37f
+#define HD_CREST_ACROSS 0.61f
+#define HD_CREST_WARP_A 0.15f
+#define HD_CREST_WARP_B 0.3f
+#define HD_CREST_START_A float4(0.0f, 0.618f, 0.236f, 0.854f)
+#define HD_CREST_START_B float4(0.472f, 0.09f, 0.708f, 0.326f)
+
 /* The crests' pieces: the envelope four rows' heights take along their own
  * crests (hd_render.cpp, "the crests" over kWaterFan). `cx`, `cz` the
  * envelope's step along world x and z in turns a unit, `ph` its phase in
  * turns, `shape` (1 - C, 2 C, 24 C) with C its depth. The curve is Wave2's:
  * u = 2 frac(e) - 1, f = |u|, g = f f (3 - 2 f), the envelope 1 - C + 2 C g
- * - 1 + C at the middle of a piece, 1 - C between two -, and `grow` its
- * rise per turn along the step, 24 C u (1 - f), exact for that curve (d g
- * / d f = 6 f (1 - f), d f / d e = 2 sign u), so the slope can take the
- * pieces' ends. With C 0 the envelope is 1 and `grow` 0: the straight
- * rows. */
+ * - 1 + C at the middle of a piece, 1 - C between two -, its rise per
+ * turn 24 C u (1 - f), exact for that curve (d g / d f = 6 f (1 - f),
+ * d f / d e = 2 sign u).
+ *
+ * The pieces do not repeat at one step: e is the place along the crest
+ * plus the phase plus two slow curves of the same kind (2 g, mean 1),
+ * HD_CREST_WARP_A times one along the crest at HD_CREST_ALONG of the
+ * piece's frequency and HD_CREST_WARP_B times one across the crests at
+ * HD_CREST_ACROSS of it. The first stretches and squeezes the pieces of a
+ * crest, so no two of a row are of one length; the second moves the
+ * pieces of the next crests along, so they do not stand in a line across
+ * the row. The curves are fixed in the world; the phase still walks the
+ * pieces along. `growX`, `growZ` the envelope's rise along world x and z,
+ * exact with both curves (their rise 24 u (1 - f) per turn of their own
+ * argument), so the slope takes the pieces' ends as drawn. With C 0 the
+ * envelope is 1 and its rise 0: the straight rows. */
 float4 CrestEnv(float2 p, float4 cx, float4 cz, float4 ph, float3 shape,
-	out float4 grow)
+	out float4 growX, out float4 growZ)
 {
-	const float4 u = frac(p.x * cx + (p.y * cz + ph)) * 2.0f - 1.0f;
+	const float4 along = p.x * cx + p.y * cz;
+	const float4 across = p.x * cz - p.y * cx;
+	const float4 ua = frac(along * HD_CREST_ALONG + HD_CREST_START_A) *
+		2.0f - 1.0f;
+	const float4 ub = frac(across * HD_CREST_ACROSS + HD_CREST_START_B) *
+		2.0f - 1.0f;
+	const float4 fa = abs(ua);
+	const float4 fb = abs(ub);
+	const float4 e = along + ph + HD_CREST_WARP_A * (fa * fa * (6.0f -
+		4.0f * fa)) + HD_CREST_WARP_B * (fb * fb * (6.0f - 4.0f * fb));
+	const float4 u = frac(e) * 2.0f - 1.0f;
 	const float4 f = abs(u);
+	const float4 rise = u * (1.0f - f) * shape.z;
+	const float4 da = 1.0f + (24.0f * HD_CREST_WARP_A * HD_CREST_ALONG) *
+		ua * (1.0f - fa);
+	const float4 db = (24.0f * HD_CREST_WARP_B * HD_CREST_ACROSS) * ub *
+		(1.0f - fb);
 
-	grow = u * (1.0f - f) * shape.z;
+	growX = rise * (da * cx + db * cz);
+	growZ = rise * (da * cz - db * cx);
 	return shape.x + shape.y * (f * f * (3.0f - 2.0f * f));
 }
 
@@ -1042,10 +1085,11 @@ float4 Wave4(float4 x)
  * the steps of rows one to four and five to eight, x, y and z as in
  * gCrestA, `shape` gCrest.xyz), so its crests are pieces; the slope takes
  * the envelope's rise along the crest as well - the height's sine times
- * `grow` times the step -, which at a length of 2 wavelengths and a depth
- * of 0.8 reaches 0.38 of a row's own slope (0.8 x 0.955 / 2, with 0.955 =
- * 3 / pi the steepest rise of Wave2's curve per radian), at the ends of a
- * piece. */
+ * its rise (`growX`, `growZ`) -, which at a length of 2 wavelengths and a
+ * depth of 0.8 reaches 0.38 of a row's own slope (0.8 x 0.955 / 2, with
+ * 0.955 = 3 / pi the steepest rise of Wave2's curve per radian) at the
+ * ends of a piece, and up to 1.73 times that where the two slow curves
+ * bend the pieces most (1.33 along and 1.10 across, at right angles). */
 float WaveSum8(float2 p, float4 a0, float4 a1, float4 a2, float4 a3,
 	float4 b0, float4 b1, float4 b2, float4 b3, float4 ca0, float4 ca1,
 	float4 ca2, float4 cb0, float4 cb1, float4 cb2, float3 shape,
@@ -1059,9 +1103,9 @@ float WaveSum8(float2 p, float4 a0, float4 a1, float4 a2, float4 a3,
 	const float4 sa = Wave4(pa - 1.5707963f);
 	const float4 cb = Wave4(pb);
 	const float4 sb = Wave4(pb - 1.5707963f);
-	float4 growA, growB;
-	const float4 envA = CrestEnv(p, ca0, ca1, ca2, shape, growA);
-	const float4 envB = CrestEnv(p, cb0, cb1, cb2, shape, growB);
+	float4 growAX, growAZ, growBX, growBZ;
+	const float4 envA = CrestEnv(p, ca0, ca1, ca2, shape, growAX, growAZ);
+	const float4 envB = CrestEnv(p, cb0, cb1, cb2, shape, growBX, growBZ);
 
 	const float4 h0a = float4(a0.w, a1.w, a2.w, a3.w);
 	const float4 h0b = float4(b0.w, b1.w, b2.w, b3.w);
@@ -1069,13 +1113,13 @@ float WaveSum8(float2 p, float4 a0, float4 a1, float4 a2, float4 a3,
 	const float4 hb = h0b * envB;
 	const float4 qa = ha * ca;
 	const float4 qb = hb * cb;
-	const float4 wa = h0a * sa * growA;
-	const float4 wb = h0b * sb * growB;
+	const float4 wa = h0a * sa;
+	const float4 wb = h0b * sb;
 
 	slope = qa.x * a0.xy + qa.y * a1.xy + qa.z * a2.xy + qa.w * a3.xy +
 		qb.x * b0.xy + qb.y * b1.xy + qb.z * b2.xy + qb.w * b3.xy;
-	slope += float2(dot(wa, ca0) + dot(wb, cb0), dot(wa, ca1) +
-		dot(wb, cb1));
+	slope += float2(dot(wa, growAX) + dot(wb, growBX), dot(wa, growAZ) +
+		dot(wb, growBZ));
 	return dot(ha, sa) + dot(hb, sb);
 }
 
@@ -2403,21 +2447,13 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	refl += gWaterHigh.rgb * (0.35f * t2 * t2 * t2 * t2);
 
-	/* The highlight, broken into glints: a fine field over its strength -
-	 * not over the normal - of cells about 1.4 of the shortest row's
-	 * wavelength (0.7 of its wave number, gWaveK[1].w), drifting, from
-	 * 0.25 to 1.75 of the highlight with a mean of 1, so a lit crest line
-	 * becomes a row of glints; times the body's `crest` (gCrest.w over
-	 * 1.2566, see WaveBend), none with `crest 0`. 1.4, 0.25 to 1.75 and the
-	 * drift are free choices, set by eye on the round's RoomProbe
-	 * pictures. */
-	const float2 cells = Wave2(world.xz * (0.7f * gWaveK[1].w) +
-		t * float2(0.37f, -0.29f) + 1.1f);
-	const float glint = 1.0f + gCrest.w * (0.7957747f * 0.75f) *
-		cells.x * cells.y;
+	/* The highlight: Blinn-Phong over the waves' normal, and no pattern of
+	 * its own over it - a field over the highlight's strength made of two
+	 * periodic curves along the world axes is a checkerboard of bright
+	 * dots wherever the eye comes close. */
 	const float3 H = normalize(gWaterSun.xyz + V);
 	const float3 spec = gWaterHigh.rgb *
-		pow(saturate(dot(N, H)), gWaterHigh.w) * glint;
+		pow(saturate(dot(N, H)), gWaterHigh.w);
 
 	/* The water: transmitted from the floor, or scattered in its place.
 	 * `through` is what of the frame behind the sheet comes through, per

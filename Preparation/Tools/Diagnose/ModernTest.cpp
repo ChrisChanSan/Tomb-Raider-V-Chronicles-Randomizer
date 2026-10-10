@@ -15689,9 +15689,10 @@ static void sh_figure(float x, float y, float z, float* nodes)
 static void shadow_others_box()
 {
 	ok(HD_SHADOW_OTHERS_MAP == 2048 && HD_SHADOW_OTHERS_BOX == 8192.0f &&
-		HD_SHADOW_OTHERS_DEPTH == 8192.0f && HD_SHADOW_OTHERS_FULL == 1536.0f &&
-		HD_SHADOW_OTHERS_END == 2560.0f,
-		"shadow others: the table's numbers - map 2048, box 8192, depth 8192, 1536, 2560",
+		HD_SHADOW_OTHERS_DEPTH == 8192.0f && HD_SHADOW_OTHERS_FULL == 1024.0f &&
+		HD_SHADOW_OTHERS_END == 1280.0f,
+		"shadow others: the table's numbers - map 2048, box 8192, depth 8192, "
+			"1024, 1280",
 		HD_SHADOW_OTHERS_MAP, 2048);
 	ok(HD_SHADOW_OTHERS_BOX / HD_SHADOW_OTHERS_MAP == HD_SHADOW_BOX / HD_SHADOW_MAP &&
 		HD_SHADOW_OTHERS_BOX / HD_SHADOW_OTHERS_MAP == 4.0f,
@@ -16188,9 +16189,22 @@ static void shadow_others_behind()
 		"shadow others: a head 760 above the feet at 30 degrees shadows the floor at the feet in "
 		"full", (long)headBehind, 878);
 
-	/* A floor a storey under the caster's feet - 2560 units below along the
-	 * light, 2217 straight down at 30 degrees - takes nothing of any tap:
-	 * every part of the caster lies at least that far in front of it. */
+	/* The tallest man-sized blob carrier, the sniper, 907 units tall
+	 * (Tr5Level::frameBounds): his head lies 1047 along the light in front of
+	 * the floor at his feet, 23 into the fade, so his outline is whole but
+	 * for the head's tip. */
+	const float sniperBehind = 907.0f / cosf(HD_SHADOW_FALLBACK_SLANT *
+		3.14159265f / 180.0f);
+
+	ok(sh_milli(HDShadowBehindTerm(sniperBehind)) >= 900,
+		"shadow others: the sniper's head (907 tall) shadows the floor at his "
+			"feet at 0.9 or more",
+		sh_milli(HDShadowBehindTerm(sniperBehind)), 911);
+
+	/* A floor about a storey under the caster's feet - OTHERS_END, 1280
+	 * units below along the light, 1108 straight down at 30 degrees - takes
+	 * nothing of any tap: every part of the caster lies at least that far in
+	 * front of it. */
 	int lit = 0;
 
 	for (int k = 0; k <= 100; k++)
@@ -16255,14 +16269,15 @@ static void shadow_others_lookup()
 
 	/* Two casters at different heights side by side: texels left of column
 	 * 32 hold a caster 1000 units in front of the pixel (term 1), the rest a
-	 * caster 2304 in front (term 0.25). Half way across the edge the lookup
+	 * caster 1216 in front (term 0.25). Half way across the edge the lookup
 	 * is the mean of the two. */
 	std::vector<float> two((size_t)(n * n), 0.0f);
 	const float depth = 0.6f;
 
 	for (int y = 0; y < n; y++)
 		for (int x = 0; x < n; x++)
-			two[(size_t)(y * n + x)] = depth - (x < 32 ? 1000.0f : 2304.0f) / units;
+			two[(size_t)(y * n + x)] = depth - (x < 32 ? 1000.0f :
+				1216.0f) / units;
 
 	const float mid = HDShadowLookupBehind(&two[0], n, 32.0f / n, 0.5f, depth, units);
 
@@ -17181,6 +17196,165 @@ static void shadow_mirror_engine()
  * combinations of its four facts - a drawn item walks as it always walks,
  * a clipped one only when it is HD, its blob gave way and its place lies
  * inside. */
+/* The arrival (hd_shadow.h, HDShadowArrive): the shadow's presence comes in
+ * over FADE_IN game seconds along 3 f^2 - 2 f^3, the blobs go out as 1 minus
+ * it, and a blob that does not fade keeps its colour to the bit. */
+static void shadow_arrival()
+{
+	ok(HDShadowPresence(0.0f) == 0.0f && HDShadowPresence(-1.0f) == 0.0f &&
+		HDShadowPresence(HD_SHADOW_FADE_IN) == 1.0f &&
+			HDShadowPresence(10.0f) == 1.0f &&
+		HDShadowPresence(0.5f * HD_SHADOW_FADE_IN) == 0.5f,
+		"shadow arrival: 0 at the start, 0.5 halfway, exactly 1 from FADE_IN "
+			"on",
+		sh_milli(HDShadowPresence(0.5f * HD_SHADOW_FADE_IN)), 500);
+
+	int bad = 0;
+	float last = -1.0f;
+
+	for (int i = 0; i <= 1000; i++)
+	{
+		const float p = HDShadowPresence(HD_SHADOW_FADE_IN *
+			(float)i / 1000.0f);
+
+		if (p < last || p < 0.0f || p > 1.0f)
+			bad++;
+
+		last = p;
+	}
+
+	// No slope at either end: a hundredth of the way in, 0.0003 of it.
+	ok(bad == 0 && HDShadowPresence(0.01f * HD_SHADOW_FADE_IN) < 0.001f &&
+		HDShadowPresence(0.99f * HD_SHADOW_FADE_IN) > 0.999f,
+		"shadow arrival: monotone, and flat where it leaves 0 and reaches 1",
+			bad, 0);
+
+	/* Frame by frame: the first frame it runs adds nothing (the clock starts
+	 * there), a frame it does not run sets it back. The frames with the
+	 * presence below 1, at 30, 60 and 165 frames a second. */
+	const float rates[3] = { 30.0f, 60.0f, 165.0f };
+	const long want[3] = { 8, 15, 42 };
+	long frames[3] = { 0, 0, 0 };
+	float at[3] = { 0.0f, 0.0f, 0.0f };
+
+	for (int r = 0; r < 3; r++)
+	{
+		float t = 0.0f;
+		float p = HDShadowArrive(&t, true, 0.0f);
+
+		for (int f = 0; f < 1000 && p < 1.0f; f++)
+		{
+			frames[r]++;
+			p = HDShadowArrive(&t, true, 1.0f / rates[r]);
+
+			if (fabsf((float)(f + 1) / rates[r] - 0.1f) < 0.5f / rates[r])
+				at[r] = p;
+		}
+	}
+
+	ok(frames[0] == want[0] && frames[1] == want[1] && frames[2] == want[2],
+		"shadow arrival: the frames still coming in - 8 at 30 a second, 15 at "
+			"60, 42 at 165",
+		frames[1], want[1]);
+	ok(fabsf(at[0] - at[1]) < 0.002f && fabsf(at[1] - at[2]) < 0.04f,
+		"shadow arrival: a tenth of a second in, the same presence at 30, 60 "
+			"and 165 frames a "
+		"second (within one 165th of a second's step)", sh_milli(at[1]),
+			sh_milli(at[0]));
+
+	float t = 0.2f;
+	const float stopped = HDShadowArrive(&t, false, 1.0f / 30.0f);
+	const float again = HDShadowArrive(&t, true, 0.0f);
+	float paused = 0.1f;
+	const float p1 = HDShadowArrive(&paused, true, 0.0f);
+	const float p2 = HDShadowArrive(&paused, true, -1.0f);
+
+	ok(stopped == 0.0f && again == 0.0f && t == 0.0f && p1 == p2 &&
+		paused == 0.1f,
+		"shadow arrival: a frame without the shadow sets it back to 0; a "
+			"paused frame adds nothing",
+		sh_milli(again), 0);
+
+	/* The blob and the shadow add up to one shadow at every step. */
+	int sum = 0;
+
+	for (int i = 0; i <= 100; i++)
+	{
+		const float p = HDShadowPresence(HD_SHADOW_FADE_IN * (float)i / 100.0f);
+
+		if (fabsf((1.0f - p) + p - 1.0f) > 1e-6f)
+			sum++;
+	}
+
+	ok(sum == 0,
+		"shadow arrival: the blob's weight and the shadow's presence sum to 1",
+		sum, 0);
+
+	// The blob's alpha.
+	const unsigned long colours[5] = { 0xFF000000ul, 0x4F000000ul, 0x00000000ul,
+		0x80000000ul,
+		0x7A123456ul };
+	int kept = 0;
+
+	for (int i = 0; i < 5; i++)
+		kept += HDShadowBlobAlpha(colours[i], 1.0f) == colours[i] &&
+			HDShadowBlobAlpha(colours[i], 2.0f) == colours[i] ? 1 : 0;
+
+	ok(kept == 5 && HDShadowBlobAlpha(0xFF000000ul, 0.5f) == 0x80000000ul &&
+		HDShadowBlobAlpha(0x4F000000ul, 0.0f) == 0x00000000ul &&
+		HDShadowBlobAlpha(0x7A123456ul, 0.25f) == 0x1F123456ul &&
+		HDShadowBlobAlpha(0xFF000000ul, -1.0f) == 0x00000000ul,
+		"shadow arrival: a blob's alpha times its weight, rounded, the colour "
+			"kept; weight 1 the "
+		"colour itself", kept, 5);
+}
+
+/* The cut (hd_shadow.h, FULL, END, OTHERS_FULL, OTHERS_END): what a floor
+ * straight below the feet takes at the fixed light, her part through her
+ * height term and a creature's feet tap through its distance term (the tap
+ * lies below / cos 30 in front of the floor along the light). */
+static void shadow_cut()
+{
+	const float c = cosf(HD_SHADOW_FALLBACK_SLANT * 3.14159265f / 180.0f);
+	const float below[4] = { 1024.0f, 1536.0f, 2048.0f, 2560.0f };
+	const long hers[4] = { 0, 0, 0, 0 };
+	const long theirs[4] = { 381, 0, 0, 0 };
+	int bad = 0;
+
+	for (int i = 0; i < 4; i++)
+	{
+		bad += sh_milli(HDShadowHeightTerm(below[i])) != hers[i] ? 1 : 0;
+		bad += sh_milli(HDShadowBehindTerm(below[i] / c)) != theirs[i] ? 1 : 0;
+	}
+
+	ok(bad == 0,
+		"shadow cut: a floor 1024, 1536, 2048, 2560 below the feet takes 0, "
+		"0, 0, 0 of "
+		"hers and 0.381, 0, 0, 0 of a creature's feet", bad, 0);
+	ok(HDShadowHeightTerm(0.0f) == 1.0f && HDShadowHeightTerm(512.0f) == 1.0f &&
+		sh_milli(HDShadowHeightTerm(768.0f)) == 500 &&
+			HDShadowHeightTerm(1024.0f) == 0.0f,
+		"shadow cut: her part whole down to half a block below her feet, none "
+			"from a block",
+		sh_milli(HDShadowHeightTerm(768.0f)), 500);
+
+	/* Her reach ends where her height term does: a group lying a block or
+	 * more below her lowest node is not drawn again. */
+	HDShadowBox box;
+	float nodes[3 * 3] = { 1000.0f, 5000.0f, 2000.0f, 1000.0f, 4500.0f, 2000.0f,
+		1000.0f,
+		4232.0f, 2000.0f };
+	float dir[3];
+	float mins[3], maxs[3];
+
+	HDShadowFallback(dir);
+	HDShadowBoxMake(&box, dir, nodes, 3);
+	HDShadowReach(&box, mins, maxs);
+	ok(maxs[1] == 5000.0f + HD_SHADOW_END,
+		"shadow cut: her reach ends a block below her lowest node",
+			(long)maxs[1], 6024);
+}
+
 static void shadow_walk()
 {
 	int wrong = 0, unseen = 0;
@@ -17324,6 +17498,8 @@ int main()
 	shadow_mirror_view();
 	shadow_mirror_engine();
 	shadow_walk();
+	shadow_arrival();
+	shadow_cut();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

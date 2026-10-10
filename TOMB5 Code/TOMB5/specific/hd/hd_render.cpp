@@ -40,6 +40,8 @@
 #include "hd_shader/hd_room_water_under_ps.inc"
 #include "hd_shader/hd_room_water_foot_ps.inc"
 #include "hd_shader/hd_room_water_river_ps.inc"
+#include "hd_shader/hd_room_water_foam_ps.inc"
+#include "hd_shader/hd_room_water_foam_depth_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1660,6 +1662,12 @@ namespace
 	 * RiverPS), a second draw over a river's sheet range. Null when the
 	 * device refused it: a river then draws its rows alone. */
 	IDirect3DPixelShader9* g_water_river_ps = 0;
+	/* The foam's own draw over a sheet range whose body has foam
+	 * (hd_room.hlsl, "the foam's draw"), plain and with the depth texture.
+	 * Null when the device refused one: those sheets then draw without
+	 * foam. */
+	IDirect3DPixelShader9* g_water_foam_ps = 0;
+	IDirect3DPixelShader9* g_water_foam_depth_ps = 0;
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -3684,6 +3692,14 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_water_river_ps)))
 		g_water_river_ps = 0;
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomWaterFoamPS,
+		&g_water_foam_ps)))
+		g_water_foam_ps = 0;
+
+	if (FAILED(device->CreatePixelShader(
+		(const DWORD*)kHDRoomWaterFoamDepthPS, &g_water_foam_depth_ps)))
+		g_water_foam_depth_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -3839,6 +3855,12 @@ void HDRenderShutdown()
 	if (g_water_under_ps) { g_water_under_ps->Release(); g_water_under_ps = 0; }
 	if (g_water_foot_ps) { g_water_foot_ps->Release(); g_water_foot_ps = 0; }
 	if (g_water_river_ps) { g_water_river_ps->Release(); g_water_river_ps = 0; }
+	if (g_water_foam_ps) { g_water_foam_ps->Release(); g_water_foam_ps = 0; }
+	if (g_water_foam_depth_ps)
+	{
+		g_water_foam_depth_ps->Release();
+		g_water_foam_depth_ps = 0;
+	}
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -9373,6 +9395,8 @@ namespace
 	int g_mark_sheet_surface = 0;
 	int g_mark_sheets = 0;
 	int g_mark_split = 0;
+	// The foam's own draws (draw_water_sheet) since the last line.
+	int g_mark_foam = 0;
 	bool g_mark_logged = false;
 	HDRenderWaterLevel g_wlevel = {};
 	IDirect3DVertexBuffer9* g_sheet_vb = 0;
@@ -9395,6 +9419,9 @@ namespace
 	// And of the rivers' second draws.
 	double g_river_gpu_ms = 0.0;
 	int g_river_timed = 0;
+	// And of the foam's own draws.
+	double g_foam_gpu_ms = 0.0;
+	int g_foam_timed = 0;
 
 	/* The frame behind the sheets (HDRenderWaterCopy) and the depth texture
 	 * (HDRenderWaterDepthBind), both D3DPOOL_DEFAULT and released with the
@@ -9481,6 +9508,7 @@ namespace
 		g_mark_frame = false;
 		g_mark_sheets = 0;
 		g_mark_split = 0;
+		g_mark_foam = 0;
 		g_mark_logged = false;
 		std::memset(g_ripple_seen, 0, sizeof(g_ripple_seen));
 		g_wlevel = HDRenderWaterLevel();
@@ -12701,10 +12729,11 @@ bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size)
 
 	g_mark_logged = true;
 	snprintf(out, size, "WATERLOG level=%s mark=%d why=%d mark_intz=%d "
-		"objects=%d sheet_intz=%d sheets=%d split=%d late=%d",
+		"objects=%d sheet_intz=%d sheets=%d split=%d late=%d foam=%d",
 		stem ? stem : "?",
 		g_mark_frame ? 1 : 0, g_mark_why, g_mark_surface, g_mark_objects,
-		g_mark_sheet_surface, g_mark_sheets, g_mark_split, g_mark_late);
+		g_mark_sheet_surface, g_mark_sheets, g_mark_split, g_mark_late,
+		g_mark_foam);
 	return true;
 }
 
@@ -12718,6 +12747,7 @@ void HDRenderWaterMarkBegin()
 	g_mark_sheet_surface = 0;
 	g_mark_sheets = 0;
 	g_mark_split = 0;
+	g_mark_foam = 0;
 	g_mark_why = !g_device ? 1 : !g_wlevel.built ? 2 : !g_depth_texture ? 3 :
 		!g_water_depth_ps ? 4 : !depth_has_stencil() ? 5 : 0;
 
@@ -13359,6 +13389,8 @@ void HDRenderWaterTiming(int on, double* ms, int* draws)
 		g_foot_segs = 0;
 		g_river_gpu_ms = 0.0;
 		g_river_timed = 0;
+		g_foam_gpu_ms = 0.0;
+		g_foam_timed = 0;
 	}
 
 	if (ms)
@@ -13396,6 +13428,15 @@ void HDRenderWaterRiverTiming(double* ms, int* draws)
 
 	if (draws)
 		*draws = g_river_timed;
+}
+
+void HDRenderWaterFoamTiming(double* ms, int* draws)
+{
+	if (ms)
+		*ms = g_foam_gpu_ms;
+
+	if (draws)
+		*draws = g_foam_timed;
 }
 
 bool HDRenderGroupHasSheet(int group)
@@ -14241,48 +14282,63 @@ namespace
 
 			g_device->SetPixelShaderConstantF(148, clip, 1);
 
-			/* The creatures' mark (HDRenderWaterMarkBegin): with the depth
-			 * variant and a frame that marked anything, the range is drawn
-			 * twice, split by the stencil - the unmarked pixels as ever, the
-			 * marked ones with the waterline's gap round Lara made endless
-			 * (gWaterLara.z), so no wet line lies on a swimming body and
-			 * everything else of the sheet is drawn there as anywhere. */
-			if (split)
-			{
-				g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
-				g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
-				g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
-				g_device->SetRenderState(D3DRS_STENCILREF, 0);
-				g_device->SetRenderState(D3DRS_STENCILMASK,
-					kCreatureStencilBit);
-				g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
-				g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
-				g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
-				g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
-			}
-
 			draw_sheet_range(r);
 
-			if (split)
-			{
-				/* On a marked body no foam at all: the line, the bank's
-				 * foam and its patches (gWaterFoam.w, c102) and the
-				 * whitecaps (gWaterMisc.y, c103) - a rat 50 to 60 units
-				 * down in a small pool lies inside the bank's band, and a
-				 * patch there would paint its back as the line did. */
-				const float gap[4] = { pixel[31 * 4], pixel[31 * 4 + 1],
-					1.0e9f, pixel[31 * 4 + 3] };
-				const float bare[8] = { pixel[40], pixel[41], pixel[42], 0.0f,
-					pixel[44], 0.0f, pixel[46], pixel[47] };
+			/* The foam's own draw (hd_room.hlsl, "the foam's draw"): over
+			 * the sheet just drawn, for a body with bank foam or whitecaps,
+			 * from above - seen from below a sheet has no foam - and not
+			 * under RoomProbe's depth views, which show no foam.
+			 *
+			 * The creatures' mark (HDRenderWaterMarkBegin): with the depth
+			 * variant and a frame that marked anything, the foam is drawn
+			 * on the unmarked pixels alone, split by the stencil. On a
+			 * marked body no foam at all: the line, the bank's foam and its
+			 * patches and the whitecaps - a rat 50 to 60 units down in a
+			 * small pool lies inside the bank's band, and a patch there
+			 * would paint its back as the line did. */
+			IDirect3DPixelShader9* foam_ps = depth ? g_water_foam_depth_ps :
+				g_water_foam_ps;
 
-				g_device->SetRenderState(D3DRS_STENCILREF, kCreatureStencilBit);
-				g_device->SetPixelShaderConstantF(123, gap, 1);
-				g_device->SetPixelShaderConstantF(102, bare, 2);
+			if (foam_ps && !g_under_on && !(depth && g_depth_view) &&
+				(look.pixel[24 + 3] > 0.0f || look.pixel[28 + 1] > 0.0f))
+			{
+				if (split)
+				{
+					g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+					g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE,
+						FALSE);
+					g_device->SetRenderState(D3DRS_STENCILFUNC,
+						D3DCMP_EQUAL);
+					g_device->SetRenderState(D3DRS_STENCILREF, 0);
+					g_device->SetRenderState(D3DRS_STENCILMASK,
+						kCreatureStencilBit);
+					g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
+					g_device->SetRenderState(D3DRS_STENCILPASS,
+						D3DSTENCILOP_KEEP);
+					g_device->SetRenderState(D3DRS_STENCILFAIL,
+						D3DSTENCILOP_KEEP);
+					g_device->SetRenderState(D3DRS_STENCILZFAIL,
+						D3DSTENCILOP_KEEP);
+				}
+
+				// Timed apart from the sheet's draws (RoomProbe -hdwater).
+				const double sheetMs = g_sheet_gpu_ms;
+				const int sheetTimed = g_sheet_timed;
+
+				g_device->SetPixelShader(foam_ps);
 				draw_sheet_range(r);
-				g_device->SetPixelShaderConstantF(102, pixel + 40, 2);
-				g_device->SetPixelShaderConstantF(123, pixel + 31 * 4, 1);
-				g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-				g_mark_split++;
+				g_device->SetPixelShader(sheet_ps(depth));
+				g_foam_gpu_ms += g_sheet_gpu_ms - sheetMs;
+				g_foam_timed += g_sheet_timed - sheetTimed;
+				g_sheet_gpu_ms = sheetMs;
+				g_sheet_timed = sheetTimed;
+				g_mark_foam++;
+
+				if (split)
+				{
+					g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+					g_mark_split++;
+				}
 			}
 
 			draw_feet(r, pixel);

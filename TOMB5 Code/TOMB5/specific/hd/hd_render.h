@@ -989,6 +989,8 @@ void HDRenderWaterCopyTiming(double* ms, int* copies);
 void HDRenderWaterFootTiming(double* ms, int* draws, int* segs);
 // And of the rivers' draws (RiverPS): milliseconds and draws.
 void HDRenderWaterRiverTiming(double* ms, int* draws);
+// And of the foam's own draws (hd_room.hlsl, "the foam's draw").
+void HDRenderWaterFoamTiming(double* ms, int* draws);
 
 /* The frame behind the sheets (hd_room.hlsl, "the frame behind the sheet").
  *

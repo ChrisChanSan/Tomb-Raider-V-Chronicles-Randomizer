@@ -83,6 +83,19 @@ rem fog's place (hd_room.hlsl, "under the water").
  /Fh "%SHADERDIR%\hd_room_water_under_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The foam's own draw over a sheet that has foam: the same file's WaterPS
+rem with HD_WATER_FOAM defined, plain and with the depth texture
+rem (hd_room.hlsl, "the foam's draw"); the four variants above draw none.
+"%FXC%" /nologo /T ps_3_0 /E WaterPS /O3 /D HD_WATER_FOAM=1 ^
+ /Vn kHDRoomWaterFoamPS ^
+ /Fh "%SHADERDIR%\hd_room_water_foam_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
+"%FXC%" /nologo /T ps_3_0 /E WaterPS /O3 /D HD_WATER_DEPTH=1 ^
+ /D HD_WATER_FOAM=1 /Vn kHDRoomWaterFoamDepthPS ^
+ /Fh "%SHADERDIR%\hd_room_water_foam_depth_ps.inc" "%SHADERDIR%\hd_room.hlsl"
+if errorlevel 1 exit /b 1
+
 rem The waterfalls' feet: the same file's FootPS, a second draw over a
 rem sheet where a waterfall lands (hd_room.hlsl, "the waterfall's foot").
 "%FXC%" /nologo /T ps_3_0 /E FootPS /O3 /Vn kHDRoomWaterFootPS ^
@@ -156,6 +169,10 @@ if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_foot_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_river_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_foam_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_room hd_room_water_foam_depth_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1

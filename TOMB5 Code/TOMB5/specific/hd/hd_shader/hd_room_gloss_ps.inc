@@ -2154,4 +2154,4 @@ const BYTE kHDRoomGlossPS[] =
       0,   0,  15, 128, 255, 255, 
       0,   0
 };
-// bshader-stamp e32cb52cca6d075b22697ac0e61b0e80
+// bshader-stamp 7c1d682910cf594a3c283e9279e9fb5a

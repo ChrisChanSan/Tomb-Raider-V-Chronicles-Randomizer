@@ -9784,6 +9784,9 @@ static int ProbeMain(int argc, char** argv)
 		HDRenderWaterRiverTiming(&ms, &timed);
 		printf("-hdwater: %d river draw(s), GPU %.3f ms (timestamps round "
 			"the rivers' streak draws)\n", timed, ms);
+		HDRenderWaterFoamTiming(&ms, &timed);
+		printf("-hdwater: %d foam draw(s), GPU %.3f ms (timestamps round "
+			"the foam's own draws)\n", timed, ms);
 	}
 
 	if (g_roomwin_count)

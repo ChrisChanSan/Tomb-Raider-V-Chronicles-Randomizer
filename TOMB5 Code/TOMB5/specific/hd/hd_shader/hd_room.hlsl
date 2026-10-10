@@ -1864,7 +1864,9 @@ float4 RoomPS(VS_OUT input) : COLOR0
  *   the foam        a density at the shore that runs up and draws back,
  *                   in patches along the bank that come and go, a
  *                   pattern that drifts, grows and dissolves; and on
- *                   the crests of a sea, trailing them
+ *                   the crests of a sea, trailing them - in a draw of
+ *                   its own over the sheet (HD_WATER_FOAM, "the foam's
+ *                   draw" below)
  *
  * Premultiplied: rgb is what the water adds, alpha how much of the floor it
  * hides, 1 - (1 - F) T. Without the frame's copy (gWaterStage.x 0) the floor
@@ -2383,7 +2385,11 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		bend = 1.0f;
 	}
 
-	/* The foam: a density, not a mask - lacy at its outer edge, dense at
+#ifdef HD_WATER_FOAM
+	/* The foam's own draw (HD_WATER_FOAM, see "the foam's draw" below):
+	 * everything above that the foam does not read falls away.
+	 *
+	 * The foam: a density, not a mask - lacy at its outer edge, dense at
 	 * the bank, never more than 0.75, so the water shows through it.
 	 *
 	 * The pattern: two layers of Wave2 at two speeds, the coarse one
@@ -2486,14 +2492,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	foam += strength.y * max(crest * smoothstep(0.45f, 0.85f, n),
 		0.7f * trail * smoothstep(0.55f, 0.9f, n));
 	foam = min(foam, 0.75f) * above;
-#ifdef HD_WATER_UNDER
-	/* The variant drawn while the eye is under the water: the surface is
-	 * seen from below, where no foam is drawn, so the foam goes and its
-	 * slots go to the extinction below. */
-	foam = 0.0f;
-#endif
 
-#ifndef HD_WATER_VIEW
 	/* The foam's body. Foam is a thin layer with thickness, not paint: its
 	 * cover (the density over its 0.75 cap) times the pattern stands for a
 	 * height `lump`, 0 to 1 of the relief (hd_render.cpp, kWaterFoamRelief).
@@ -2510,8 +2509,7 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * has a darker rim where its cover is half (1 - 1.4 c (1 - c), 0.65 at
 	 * the rim). The cover still decides how much of the water it hides.
 	 * 0.3, 0.65 and 1.4 are free choices, set by eye on the round's
-	 * RoomProbe pictures. Not in the view variant, whose pictures are
-	 * grey or flag the guard. */
+	 * RoomProbe pictures. */
 	const float cover = foam * (1.0f / 0.75f);
 	const float lump = cover * (0.5f + 0.5f * n);
 	const float det = dx.x * dy.y - dx.y * dy.x;
@@ -2522,12 +2520,28 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		ddy(lump)), sunStep), 0.3f) * (0.65f + 0.35f * lump) *
 		(1.0f - 1.4f * cover * (1.0f - cover));
 
-	col = lerp(col, gWaterFoam.rgb * body, foam);
-#else
-	col = lerp(col, gWaterFoam.rgb, foam);
+	/* The foam's draw. The foam lay over the water as a share `foam` of
+	 * the pixel: the water's colour times 1 - foam, the foam's times foam,
+	 * the frame behind the sheet times 1 - foam, then the fog over both
+	 * colours. With the blend ONE / INVSRCALPHA that is the sheet drawn
+	 * without foam, then this second draw of the same triangles over it,
+	 * premultiplied: the fogged foam colour times foam, alpha foam - the
+	 * same picture up to the rounding of the first draw's result to the
+	 * render target's bits. Two draws because the sheet's pixel shader has
+	 * no room for the crests beside the foam (512 slots); the bodies
+	 * without foam - a basin, a river - draw only the first
+	 * (hd_render.cpp, draw_water_sheet). The clip above is the sheet's own,
+	 * so the foam lies where the sheet does. */
+	const float fogged = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+
+	return float4(gWaterFoam.rgb * body * (foam * saturate(1.0f -
+		fogged / max(gWaterZen.w, 0.05f))), foam);
+#elif defined(HD_WATER_VIEW)
+	// RoomProbe's view 5 shows the patches' strength.
+	const float patch = saturate((input.viewZ.w - HD_PATCH_FROM) *
+		(1.0f / HD_PATCH_SPAN));
 #endif
-	a = lerp(a, 1.0f, foam);
-	through *= 1.0f - foam;
 
 	/* The distance fog (drawroom.cpp), in the light's own scale as RoomPS
 	 * takes it, as a share of the body's light - see the note over

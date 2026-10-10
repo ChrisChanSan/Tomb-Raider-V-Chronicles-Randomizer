@@ -1135,6 +1135,9 @@ water surface", carries the tables.
     such a slope (walls a click or more high, or land flat at the water);
     the bank's strip in a view over the pond 25,674 pixels at the level's
     height, 8,742 at 96 (RoomProbe at 960 by 540, `-waterdepthview 4`).
+    Kept in the code and the key, applied to no body since 2026-10-10: the
+    pond stands at the level's own height again, its row in the table
+    `kWaterBank` (entry 137).
 134. **The edge held to the land** - a grid point of a lifted sheet that
     touches land lower than the lift takes the land's height there, the
     classic floor's corners interpolated at the point, so the sheet's edge
@@ -1145,7 +1148,8 @@ water surface", carries the tables.
     pond's 208 edge points lie under a lift of 100. Superseded by entry
     135: the edge's fall to the land, 96 units over a quarter of a square
     at 38 grid points of the pond, read in the game as water standing over
-    its bank with a trench between the two; no grid point is held now.
+    its bank with a trench between the two; no grid point is held now,
+    and since 2026-10-10 no body is lifted (entry 137).
 135. **The level surface and its skirt** - a lifted body's sheet stands
     level at every grid point, and where the land beside it lies under
     that level the same surface runs on over the land, square by square up
@@ -1166,7 +1170,9 @@ water surface", carries the tables.
     ten of the 152 low edge points (a tool of this round on the classic
     `.TRC` and the `.TRG`); the classic land beside the water squares of the
     fifteen levels stands at the water's top, a click and more over it, or
-    under it, never between (the same tool).
+    under it, never between (the same tool). Kept in the code, applied to no
+    body since 2026-10-10 (no body is lifted, so none has a skirt: the sweep
+    `skirt=0` on all 56; entry 137).
 136. **The shallows** - the rows of a lifted body keep the share of their
     slope, of the bank foam and of the whitecaps that the depth under the
     pixel allows, the depth over 2.56 times the rows' whole height now; a
@@ -1179,7 +1185,45 @@ water surface", carries the tables.
     rows' slope 0.161 at the median at every point up to its edge before
     (the class table's arithmetic over 120 seconds); the white band at the
     pond's south edge seen from above 857, 494 and 766 pixels at 1, 3 and 5
-    seconds before, 0 after (RoomProbe at 960 by 540).
+    seconds before, 0 after (RoomProbe at 960 by 540). Kept in the code,
+    applied to no body since 2026-10-10: no body is lifted (entry 137).
+137. **The pond at the level's height, the clip a body's own** - ANDY3's
+    pond stands at the level's water height (lift 0), and how far under a
+    sheet's surface at rest the frame may lie and still be left to itself
+    is a property of the body: 8 units for every body as before
+    (`kWaterClip`), 0 for the pond (the table `kWaterBank`, the key `clip`
+    of `hd_water.txt`), so the pond's sheet ends where the depth test ends
+    it, on the line where the Remaster's ground comes out of the water.
+    OWN, a rule of this project; the pond at the level's height as the
+    reference pictures supplied for this project show its water (the WHAT:
+    the old heights, rounder corners); DATA: the dark band between the
+    pond's land and its water at the level's height is the sheet's own
+    clip - over the pebble beach east of the lower lobe the depth under the
+    surface runs 0.25, 2, 4, 6 and 7.8 units across the band and 9.8 where
+    the water begins (RoomProbe `-waterdepthview 4` against `2`, which
+    clips), 18,956 of 960 by 540 pixels in that view; every sheet square of
+    the pond lies at the classic water face's height (24 of 24 at 11008);
+    the Remaster bakes the ground under its water dark (the baked light of
+    the art's top triangle every 32 units over the pond, luma 67 at the
+    median under the water, 130 over it inside the squares, 96 on the land
+    beside; a tool of this round on the `.TRG`); no flat triangle of the
+    pond's squares' own groups lies within one unit over to nine under the
+    surface (the same tool, all fifteen levels: such flats lie in ANDY2's
+    52, 158 and 159, ANDY3's stream 66 and twelve bodies of JOBY5); the
+    same clip of 0 for every body would change 12 of the 15 test cameras
+    (the waterline would start at the walls' own contact).
+138. **A body's own share of the swell** - a body's sheet takes a share
+    of its class's swell at its vertices (1 for every body, the table
+    `kWaterBank` and the key `swell` of `hd_water.txt`), the pond 0: its
+    surface lies at rest and its waves play in its pixels. OWN, a rule of
+    this project; DATA: the class's swell tapers to nothing only at the
+    classic shore, while the pond's ground meets the water at a median 256
+    units inside it and round the island up to 1,539 (the art's 0-line
+    sampled every 32 units, 1,143 points); with the clip at 0 and the
+    swell whole, twelve RoomProbe views of the pond at 1, 3 and 5 seconds
+    still showed up to 17,165 pixels of ground under the water with no
+    water over them (the depth views: the sheet's swell and clip against
+    the ground at rest), with the sheet at rest none.
 
 ## Credited, but not contained here
 

@@ -11095,6 +11095,122 @@ under the water, the HD dive splash and the fish tank's spray stay for later.
 
 **Commits.** `c3db724`, `1d4ac82`.
 
+**After the owner's ninth play test of 2026-10-10.** The build of `f301e51` was played
+(reference pictures supplied for this project, not in the repository). The pond's level
+surface did not look right: Lara walked dry on the grass by the mill with the skirt's
+water drawn round her feet - the game knows the land there as land. The owner looked at
+the reference's pond at length: its water stands at the classic heights over the whole
+pond, and its corners are rounder than the classic squares - nothing more. So the pond
+goes back to the level's own water height. What was wanted from the start he showed in a
+picture of the pond at that height from before the lift: between the pebble shore and the
+water's foam lay a black sliver with hard edges, ground that belongs to the water and that
+our water did not take for water. The lift of the seventh round had hidden it by raising
+the whole surface over it - a side effect, misread then as the bank's side standing too
+high; the measure now is that at the level's height the edge does not tear open again. A
+second question: a large tree trunk in a proof picture of the stream of room 70, standing
+in front of the pond's pebble shore, which the owner never sees in the game.
+
+Measured first, with RoomProbe at the level's height (`f301e51`'s probe with a row `ANDY3
+73 - lift 0`, which draws the pond's thirteen views without a wading box md5-identical to
+the probe of `680dfd9`, the build before the lift) and with a tool of this round on the
+classic `.TRC` and the `.TRG` (the Remaster's baked light per triangle, the flat triangles
+of each water square's own group, the art's ground and its 0-line). The camera of the
+owner's picture was found: RoomProbe ANDY3 34 "5000 10700 5000 160 60", field of view 80,
+308 units over the pebble beach east of the lower lobe. Across the sliver, at one row of
+that view, the frame's depth under the surface ran 0.25, 2, 4, 6 and 7.8 units, and the
+water began at 9.8 (`-waterdepthview 4`, which clips nothing, against `2`, which clips as
+the sheet does): the sliver is the sheet's own clip. `WaterPS` leaves a pixel to the frame
+where the frame lies less than 8 units under the surface at rest, which spares a deck or a
+floe's top laid at the water's plane; where the Remaster's ground slopes through the
+surface inside the water squares, it cuts the sheet off a band of ground just under the
+water, 18,956 of the view's 960 x 540 pixels. That ground is baked dark for the water that
+should lie over it: the baked light of the art's top triangle, sampled every 32 units over
+the pond, has a luma of 67 at the median under the water's top, 130 over it inside the
+water squares and 96 on the land beside them, and the dark ends on the art's own 0-line,
+rounder than the squares. Not the cause: every one of the pond's 24 squares draws its
+sheet at the classic water face's height, 11008 (a square set too low was the first
+suspicion); the band's pixels are the same with the sheets off, so no light of ours made
+them dark. Then a second cause: with the clip at 0 (a build for the measurement alone) the
+band came back for moments - in twelve views of the pond at 1, 3 and 5 seconds, up to
+17,165 pixels of ground under the water had no water drawn over them, because the class's
+swell tapers to nothing only at the classic shore, while the ground meets the water at a
+median 256 units inside it and round the island up to 1,539 (the art's 0-line, 1,143
+points), and a trough sank the sheet under that ground. With the sheet at rest: none.
+
+The clip a body's own (`hd_render.cpp` `kWaterClip`, `HDRenderWaterBody::clip`, c148
+`gWaterClip`; `hd_room.hlsl` WaterPS, "the clip"). The clip's depth is a property of the
+body, 8 units as before for every body, and the sheet draw hands it to `WaterPS` in a
+register of its own, read in place of the literal: the same one operand, no slot more. A
+row's key `clip <units>` (0 to 256) sets it. The pond's is 0: its sheet ends where the
+depth test ends it, on the line where the ground comes out of the water. Nothing the clip
+spares lies there - no flat triangle of a pond square's own group lies within one unit
+over to nine under the surface - and no other body has such a slope (the seventh round's
+measurement); the same 0 for every body would change 12 of the 15 test cameras, the
+waterline then starting at the walls' own contact, so the other bodies keep their 8.
+
+The swell a body's own (`HDRenderWaterBody::swell`). The share of its class's swell that a
+body's sheet takes at its vertices: 1 for every body, the swell and the breaking crest's
+lift multiplied by it at the sheet draw (bit-identical at 1); a row's key `swell <s>` (0
+to 4) sets it. The pond's is 0: its surface lies at rest, and the waves play in its
+pixels: the reflection, the highlight, the foam.
+
+The pond's row (`kWaterBank`, which takes the place of `kWaterLift`): ANDY3, water room
+73, lift 0, clip 0, swell 0 - a row that sets those three and nothing else. The key `lift`
+stays, and with it the level surface, its skirt and the shallows: they draw nothing at
+lift 0 (`ANDY3 73 - lift 96` in `hd_water.txt` brings the eighth round's pond back, its
+skirt of 17 squares included, and `ANDY3 73 - clip 8 swell 1` the pond as it was before
+the lift, md5-identical in twelve views).
+
+The tree. A bisect of the proof picture's room list names room 35's art alone: the room
+stacked over room 34 in the same box (its floor 2,304 units over the pond's water, no flip
+partner). Its group's lowest triangle lies 2,198 units over the water; the trunk stands on
+the hilltop at the east edge of room 34's box, its foot 2,509 units over the water, and no
+static or moveable is there. The proof picture looked down from 4,000 units over the pond
+at 40 degrees, and a trunk standing that much higher than the beach projects onto the
+beach. In the owner's log of the eighth play test room 35 is listed in 87 of the 94 room
+lists with the eye over room 34 (the whole screen when the eye is high, the screen's upper
+part when it stands by the water), room 34's flip twin 183 in none: the game draws the
+tree whenever the eye turns up to the eastern ridge, among the wood standing there (a view
+from the beach 20 degrees up shows it on the skyline). Nothing to change.
+
+WATERLOG: a body line ends ` clip=<units> swell=<s>`.
+
+**Measured.** Slots: WaterPS's depth variant 511, the view variant 510, the under variant
+335, as before (the register in place of the literal); WaterPS 445 and WaterVS 267 keep
+their bytecode, and so does every shared shader, 16 of the 19 `.inc` files differing from
+`f301e51` in the stamp line alone. GPU at 2560 x 1440, three runs: the full-water view
+0.201, 0.200, 0.200 ms against 0.201 to 0.202 at `f301e51`; the view over the pond 0.218,
+0.219, 0.218 ms against 0.264 to 0.265 with the skirt and 0.214 to 0.215 at `8b6741c`,
+before the lift. The holes - pixels of ground under the water at rest with no water drawn
+over them, from the depth views - in twelve views of the pond at 1, 3 and 5 seconds: at
+the owner's camera 18,956, 18,956 and 18,956 at the level's height before this part, the
+other views 1,088 to 25,996; after it 0 in all 36 pictures. The sweep: 565 squares, 56
+bodies, 118 twins as before; every body `lift=0 skirt=0`, 55 `clip=8 swell=1.00`, the pond
+`clip=0 swell=0.00`; ANDY3's level line 5,300 vertices and 6,784 triangles (6,150 and
+7,872 with the skirt).
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34); the fifteen cameras with `-hdwater 0`, 15 of 15
+identical to the fix round's parity set; with `-hdwater 1`, 15 of 15 identical to
+`f301e51` (none shows the pond); the pond from the owner's camera, above, from its banks,
+its island, behind a wading Lara's box and by the mill at 1, 3 and 5 seconds, at the lift
+of 96, at the level's height before this part and after it; a top view of the pond with
+the art's 0-line and the classic squares; the text file (`ANDY3 73 - lift 96`: 17 skirt
+squares; `lift 0`: none; `clip 300` and `swell 5` refused as unreadable; `ANDY3 70 river
+flow -1 0 400 clip 0` sets the stream's clip alone; `ANDREA2 144 basin swell 0.5` halves
+the fountain's swell); the suites (ModernTest 14721, MenuTest 42627, InterpTest 729,
+LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the pond's edge at
+the water's height, the still surface, Lara wading in it. The ground under the pond's
+water is dark where the water over it is shallow and clear, as the Remaster bakes it; the
+foam's band still counts from the classic shore, so it lies partly over the ground above
+the water, where the depth test hides it. The lift, the skirt and the shallows stay in the
+code for a row of the text file and apply to no body. Stage 3, light shafts under the
+water, the HD dive splash and the fish tank's spray stay for later.
+
+**Commits.** `da9243f`, `4dee85c`, `0cb76f0`, `e816d4d`, `3ab30e9`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

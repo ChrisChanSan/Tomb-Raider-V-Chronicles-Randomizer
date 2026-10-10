@@ -1927,29 +1927,26 @@ it.
   water surface over a river is left out, as its still water is.
   `hd_water.txt` can make any body a river and give it a current by hand.
   With *HD water* off there are no rivers.
-- **The water up to its bank.** A body's sheet can stand some units over
-  the level's own water height - its lift. ANDY3's pond stands 96 units
-  higher: the Remaster's ground there leaves the water a third of a square
-  inside the water squares and climbs to the level's land at their edge,
-  so a sheet at the level's own height showed that slope as a dark strip
-  between the water and the grass; lifted, the water reaches up the bank.
-  The lifted water is level everywhere, as still water is: the bank climbs
-  out of it. Where the land beside the water lies lower than that level -
-  a beach, the foot of the mill's stairs, the grass south of the pond -
-  the same level surface runs on over the land, up to three squares out,
-  and the ground hides it wherever it rises above it, so the water's edge
-  is the line where the ground comes out of the water, with the thin wet
-  line every bank has; the shallow water over the low land lets the
-  ground show through. Near such a bank the waves calm down with the
-  depth - a wave cannot stand higher than the water under it is deep -,
-  and so do the bank foam and the whitecaps: the open pond keeps its
-  waves. The island in the pond is a low mound and loses its foot to the
-  water. Lara still stands on the level's own floor and swims at its own
-  water height: the water simply reaches higher up her legs; the game's
-  ripples, rings and splashes keep their places. No other body is lifted:
-  everywhere else the water meets a wall a click or more high, or land
-  flat at the water. A row's `lift` in `hd_water.txt` sets or takes away
-  any body's lift.
+- **The water up to its bank.** ANDY3's pond stands at the level's own
+  water height, as every body does. Its bank is the Remaster's ground
+  sloping into the water inside the water squares, so the water's edge is
+  the line where that ground comes out of the water - rounder than the
+  level's squares - and nothing else decides it: elsewhere the water gives
+  way to a deck or a coping lying up to 8 units under its surface, but at
+  the pond that would cut the water off the ground just under it and leave
+  a dark band of bare ground between the grass and the water (the ground
+  under the water is darker), and the pond's water lies still in its
+  shape: the waves play on its surface, but it does not rise and fall,
+  because a trough would open that band again for a moment. A body's sheet can also
+  stand some units over the level's water height - its lift; no body is
+  lifted. A lifted body is level everywhere, as still water is: the bank
+  climbs out of it, and where the land beside it lies lower the same level
+  surface runs on over the land, up to three squares out, with the ground
+  hiding it wherever it rises above it; near such a bank the waves calm
+  down with the depth. Lara stands on the level's own floor and swims at
+  its own water height; the game's ripples, rings and splashes keep their
+  places. A row's `lift`, `clip` and `swell` in `hd_water.txt` set these
+  for any body.
 - **`hd_water.txt` - tuning a body of water.** A text file beside the
   executable, where `hd_gloss.txt` and `SCRIPT.DAT` are, read at every level
   load. One row a line: `<LEVEL> <room> <class|-|none>` and then any of
@@ -1998,8 +1995,13 @@ it.
   level's water height, -256 to 256 in whole units, level and running on
   over the land lower than it (*The water up to its bank*); `lift 0` takes
   a lift and its skirt away, and a row without the key leaves the
-  lift as it is - `ANDY3 73 - lift 64` sets the pond lower, `ANDY3 73 -
-  lift 0` puts it back at the level's own height.
+  lift as it is - `ANDY3 73 - lift 96` stands the pond 96 units higher.
+  `clip <units>` (0 to 256, whole units) sets how far under the surface a
+  floor may lie and still be left dry - 8 for every body, 0 for the pond -
+  and `swell <s>` (0 to 4) how far the water's surface rises and falls with
+  its waves - 1 for every body, 0 for the pond, where the waves then play
+  on a still surface; a row without either key leaves it as it is.
+  `ANDY3 73 - clip 8 swell 1` gives the pond the edge every other body has.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
@@ -2048,8 +2050,10 @@ it.
   water names a sink (`sinks=`), the light its colours take - its rooms'
   light, or in a night level the moon's (`lit=`) -, `held=0` (a lifted
   sheet stands level at every point), its lift in units (`lift=`, 0
-  without one) and, last, the land squares its level surface runs on over,
-  each place once (`skirt=`, 0 without a lift).
+  without one), the land squares its level surface runs on over, each
+  place once (`skirt=`, 0 without a lift), how far under its surface a
+  floor is left dry (`clip=`, in units) and, last, how much of its class's
+  swell its surface takes (`swell=`).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
   The first frame of a level whose camera is in a water room writes one

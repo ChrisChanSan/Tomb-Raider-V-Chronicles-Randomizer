@@ -8722,7 +8722,10 @@ namespace
 	 * at the golden angle times
 	 * the row (no two rows' pieces line up) and drifts along the crest by
 	 * kCrestDrift turns a second, one way on the even rows and the other
-	 * on the odd, so the pieces wander along their crests;
+	 * on the odd, so the pieces wander along their crests; two slow
+	 * curves fixed in the world stretch and squeeze the pieces along a
+	 * crest and move them along from one crest to the next
+	 * (hd_room.hlsl, CrestEnv), so they stand at no fixed step;
 	 *
 	 * the fan - the rows ranked by wavelength, longest first, lie at
 	 * kWaterFan times the class's fan width round the body's own
@@ -8734,8 +8737,7 @@ namespace
 	 *
 	 * A row's `crest s` (0 to 1) takes the body from the straight rows
 	 * (the `angle` table, s 0) to the fan (s 1) and scales the envelope's
-	 * depth, the crests' second bend (hd_room.hlsl, WaveBend) and the
-	 * highlight's glints (WaterPS) by s.
+	 * depth and the crests' second bend (hd_room.hlsl, WaveBend) by s.
 	 *
 	 * The widths, the length, the depth and the drift are free choices,
 	 * set by eye on the round's RoomProbe pictures against the lattice

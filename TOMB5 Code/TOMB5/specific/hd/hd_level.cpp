@@ -26,6 +26,7 @@
 #include "hd_laradraw.h"		// HDShadowFrameState - whether it runs
 #include "hd_shadow.h"
 #include "hd_font.h"			// the HD font's texture goes with the device
+#include "hd_life.h"			// the water's life - floats, fish, drips
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
 #include "../output.h"			// gPresentMinTicks - the budget follows the present
@@ -5404,6 +5405,10 @@ static void HDLevelBuildHD()
 	 * which is the same answer the rooms give and one line to explain. */
 	HDObjectLevelBuild(HDInstallRoot(), g_stem);
 
+	/* The water's life, after the objects whose model list carried its
+	 * models and after the sheets whose bodies it lives on. */
+	HDLifeLevelBegin(g_stem);
+
 	/* The mark the re-dress allowance is measured from: what this level's own
 	 * build left in the page cache. Everything above it is what outfit
 	 * changes have added. */
@@ -5574,6 +5579,7 @@ void HDLevelUnload()
 	g_water_frames.clear();
 	HDMarkersFree();	// text, no device - the same rule as the objects
 	HDObjectLevelEnd();
+	HDLifeLevelEnd();	// no device either: the pool is plain memory
 }
 
 void HDLevelDeviceLost()
@@ -6870,6 +6876,13 @@ static void ReceiveStandInHolders()
  * left in the FrameRoom. */
 void HDFrameDraw()
 {
+	/* The water's life onto the frame's object list, before it is counted;
+	 * at the clock of the frame before (FillFrameLighting steps it below),
+	 * one frame's lag nobody sees. Not in the inventory ring, which draws
+	 * through a view of its own. */
+	if (!HDObjectRingFrame())
+		HDLifeFrame(g_drawn_clock);
+
 	const int objects_here = HDObjectFrameCount();
 
 	g_frame_objects = objects_here;

@@ -38,6 +38,7 @@
 #include "hd_objlight_dark.h"		// which engine lights give nothing
 #include "hd_shadow.h"			// HDShadowLight - the projected shadow's key light
 #include "hd_trl.h"			// the lips' sources, for LIPLOG
+#include "hd_life.h"			// the water's life's models
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
 #include "../d3dmatrix.h"
@@ -1992,6 +1993,9 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		for (int i = 0; i < parts; i++)
 			wanted.push_back(wardrobe[i]);
 	}
+
+	// And the water's life's models, the same way (hd_life.cpp).
+	HDLifeModelPlan(g_stem, wanted);
 
 	if (wanted.empty())
 		return;

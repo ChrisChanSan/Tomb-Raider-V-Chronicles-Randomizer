@@ -4639,9 +4639,10 @@ art out of place goes with the block beside the flag and a window frame from AND
 rooms 110 and 44 and the black bars from JOBY2 rooms 9 and 44; ANDREA1 room 228 (23,151
 pixels, 18,543 clear colour), room 154's art in room 144 seen from ANDREA1 rooms 128 to
 152, RICH2 rooms 5, 41 and 128 and ANDREA2 room 95 (2,000 to 19,000 pixels) are counted,
-not looked at one by one. Room 0's doors from ANDREA1 room 109, RICH2 rooms 106 and 108 and JOBY2 rooms 31
-and 65 now change by less than 500. ANDREA2 room 79, where room 236's art stands in the
-air, changes by 354 and 503 pixels in two directions; of the sixteen views in ANDREA3
+not looked at one by one. Room 0's doors from ANDREA1 room 109, RICH2 rooms 106 and 108
+and JOBY2 rooms 31 and 65 now change by less than 500. ANDREA2 room 79, where room 236's
+art stands in the air, changes by 354 and 503 pixels in two directions; of the sixteen
+views in ANDREA3
 rooms 115 and 80, RICH3 room 92 and JOBY3 room 190 one changes, by 3,021 pixels, the wall
 of room 16 the classic path draws in room 80 staying whole. Load cost, air_ms, median of
 three runs of the x86 tool's level build, measured while another build shared the machine

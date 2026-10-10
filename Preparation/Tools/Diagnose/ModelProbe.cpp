@@ -129,9 +129,13 @@
  *                         and after - and the cast pass's time against a
  *                         2560 x 1440 target, a mean over <frames> (300)
  *                         frames each waited for with an event query. Takes
- *                         the pages managed, which a Reset needs; a room's
- *                         pages (-withrooms) are not, and the Reset is
- *                         refused with them. With -shadowreceive and a room,
+ *                         the pages managed, which a Reset needs. The rooms'
+ *                         vertex and index buffers (-withrooms) live in
+ *                         D3DPOOL_DEFAULT, which the game drops with the whole
+ *                         HD path at a device loss and builds again with the
+ *                         level (hd_level.cpp, HDLevelDeviceLost): with rooms
+ *                         the two Resets are left out, and a line says so.
+ *                         With -shadowreceive and a room,
  *                         the device's whole state is compared before and
  *                         after the models' pass of the first picture.
  *     -shadowroom <room> <x> <z>
@@ -151,9 +155,9 @@
  *                         HDFrameDraw's models' pass has it: her parts the
  *                         second map, a creature hers, an item without a
  *                         blob both (hd_shadow.h, HDShadowReceiverTakes).
- *                         The probe draws a model's additive pass in the
- *                         same bracket as its solid ones, before the models'
- *                         pass, where the game draws it after.
+ *                         A model's additive pass is drawn after the room's
+ *                         glass and glows, in their bracket, after the
+ *                         models' pass - where HDFrameDrawGlow draws it.
  *     -shadownomodels     the same with the models' pass left out:
  *                         _nomodels, which must be the picture without the
  *                         models' pass, byte for byte.
@@ -172,6 +176,23 @@
  *                         light (negative: with it), so the creatures stand
  *                         that much nearer its far (near) side - a creature
  *                         crossing the box's side along the light, in view.
+ *     -shadowpresence <seconds>
+ *                         the receive at the strength the projected shadow
+ *                         has that many game seconds after it starts to run
+ *                         (hd_shadow.h, HDShadowPresence: none at 0, whole
+ *                         from FADE_IN on); _recv as without it. The blob the
+ *                         game fades out meanwhile is classic and not drawn.
+ *     -shadowfog <units>  the distance fog from that many units on, as the
+ *                         game's frame hands it to the rooms and the models
+ *                         (tomb5.distance_fog times 1024); with -bulb the
+ *                         picture of a shadow in fog
+ *     -shadowwith <room,room,...>
+ *                         further room groups beside the -shadowroom group,
+ *                         each moved by its room's origin against the seed
+ *                         room's: drawn solid, again in the receive (all of
+ *                         them, as the groups a frame's reach holds) and in
+ *                         the glass and glows - for -shadowtime's cost of a
+ *                         frame with many groups in the reach
  *     -shadowunseen       the -shadowcreature models cast into the second
  *                         map and drawn in no pass - neither in the picture
  *                         nor in the models' pass - as an item the picture
@@ -243,6 +264,38 @@
  *                         well: made and released alone, the device's
  *                         reference count, released with hers, the device
  *                         Reset and the map made again, the same bit for bit.
+ *     -shadowsurvey <classic .TRC>
+ *                         no picture: where the projected shadow lands behind
+ *                         another face along the light, counted on the
+ *                         classic level's own faces (Tr5Level::roomFaces) and
+ *                         floors, then stop. Lara (768 units tall) and then a
+ *                         creature (760) stand on each sector of the level's
+ *                         floor in turn, or at the -surveyplace places; three
+ *                         columns of her body (her middle and 96 units to
+ *                         either side across the light) send a ray along the
+ *                         fixed light (HDShadowFallback) from every 32 units of
+ *                         their height. The first face a ray meets takes the
+ *                         shadow as it should; every face behind it that the
+ *                         receive's terms still give a weight (her height
+ *                         term, a creature's distance term, the facing term)
+ *                         takes it through that face - through a floor when
+ *                         the first face is a floor or a ceiling, through a
+ *                         wall otherwise. Prints per level the places with
+ *                         such a face, the strongest, the rooms the faces lie
+ *                         in (joined to the place's room by a door or not),
+ *                         and the first faces' depth below her feet; with
+ *                         -surveyout <file> one line per place and ray.
+ *     -surveyplace <room> <x> <z>
+ *                         one place, room local, repeatable
+ *     -surveyrooms <r,r,...>
+ *                         every sector of those rooms only
+ *     -surveyslots <n,n,...>
+ *                         how tall those slots stand in the level, from the
+ *                         rest pose's box
+ *     -surveyterms <full> <end> <ofull> <oend>
+ *                         the survey's terms with other numbers than the
+ *                         table's FULL, END, OTHERS_FULL and OTHERS_END, so a
+ *                         cut is weighed before it is built
  *     -lara-nodes         the node table: every classic
  *                         node 0..14 against every source, and which .TRM
  *                         part covers it.
@@ -706,6 +759,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -6447,6 +6502,16 @@ static void PrintBraidAnim(const Tr5Level& level, int bodySlot,
 /* ---------------------------------------------------- Lara's composite -- */
 /* Everything the tool needs to know about one wardrobe picture;
  * a struct rather than eighteen arguments. */
+/* -shadowpresence: the projected shadow's presence the receive is drawn
+ * with (hd_shadow.h, HDShadowPresence of the switch's seconds), the strength
+ * times it; exactly 1 without the switch. -shadowfog: the distance fog's
+ * start, units (the frame's distanceFogStart); none without it. */
+static float g_probe_presence = 1.0f;
+static float g_probe_fog = 0.0f;
+
+/* -shadowwith: further room groups drawn beside the -shadowroom group. */
+static std::vector<int> g_probe_with;
+
 /* -bulb: the fog bulbs of the picture, in view space, and how many. */
 static HDFogBulb g_probe_bulbs[HD_MAX_BULBS];
 static int g_probe_bulb_count = 0;
@@ -8948,6 +9013,37 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		}
 	}
 
+	/* -shadowwith: each further group moved by its room's origin against the
+	 * seed room's, as the level places them; y is the world's in both. */
+	std::vector<std::pair<int, D3DMATRIX> > withRooms;
+
+	for (size_t w = 0; roomHas && w < g_probe_with.size(); w++)
+	{
+		const int g = g_probe_with[w];
+		float wmin[3], wmax[3];
+
+		if (g < 0 || g >= HDRenderGroupCount() ||
+			g >= (int)level.rooms().size() ||
+			!HDRenderGroupBounds(g, wmin, wmax))
+		{
+			printf("shadowwith: room %d has no HD group here - left out\n", g);
+			continue;
+		}
+
+		D3DMATRIX world = roomWorld;
+		const Tr5Room& seed = level.rooms()[(size_t)o.shadowRoom];
+		const Tr5Room& beside = level.rooms()[(size_t)g];
+
+		world._41 += (float)(beside.originX - seed.originX);
+		world._43 += (float)(beside.originZ - seed.originZ);
+		withRooms.push_back(std::make_pair(g, world));
+	}
+
+	if (!withRooms.empty())
+		printf("shadowwith: %d room groups beside room %d\n",
+			(int)withRooms.size(),
+			o.shadowRoom);
+
 	/* -shadowcreature: each creature in its slot's first animation frame
 	 * (ReadFramePose, the walk the engine measures with, plus the frame's own
 	 * offset, which puts the item's origin at its feet), turned by its yaw
@@ -9233,7 +9329,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		float regs[HD_SHADOW_RECEIVE_COUNT * 4];
 		float oregs[HD_SHADOW_RECEIVE2_COUNT * 4];
 
-		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK, regs);
+		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK *
+			g_probe_presence, regs);
 
 		if (othersDrawn)
 			HDShadowReceiveOthersConstants(&othersBox, R, t, oregs);
@@ -9254,7 +9351,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			float glass[4], Rm[9], tm[3];
 
 			HDShadowMirrorView(R, t, mirror.axis, mirrorPlane, Rm, tm);
-			HDShadowReceiveConstants(&shadowBox, Rm, tm, HD_SHADOW_DARK, mh);
+			HDShadowReceiveConstants(&shadowBox, Rm, tm, HD_SHADOW_DARK *
+				g_probe_presence, mh);
 
 			if (othersDrawn)
 				HDShadowReceiveOthersConstants(&othersBox, Rm, tm, mo);
@@ -9291,6 +9389,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		HDRenderRoomShadow(o.shadowRoom, &roomWorld, 0, HD_WINDOW_ALL);
 
+		for (size_t w = 0; w < withRooms.size(); w++)
+			HDRenderRoomShadow(withRooms[w].first, &withRooms[w].second, 0,
+				HD_WINDOW_ALL);
+
 		const int n = HDRenderShadowReceiveCalls();
 
 		HDRenderShadowReceiveEnd();
@@ -9304,6 +9406,16 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 		if (HDRenderGroupHasClear(o.shadowRoom))
 			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_CLEAR);
+
+		for (size_t w = 0; w < withRooms.size(); w++)
+		{
+			HDRenderRoomMask(withRooms[w].first, &withRooms[w].second, 0,
+				HD_PASS_SOLID);
+
+			if (HDRenderGroupHasClear(withRooms[w].first))
+				HDRenderRoomMask(withRooms[w].first, &withRooms[w].second, 0,
+					HD_PASS_CLEAR);
+		}
 	};
 
 	int receiveCalls = 0;
@@ -9331,7 +9443,7 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 	frame.centerX = (float)o.width * 0.5f;
 	frame.centerY = (float)o.height * 0.5f;
-	frame.distanceFogStart = 1.0e9f;
+	frame.distanceFogStart = g_probe_fog > 0.0f ? g_probe_fog : 1.0e9f;
 	frame.wibbleTable = wibble;
 
 	const int bulbCount = PutUnder(frame, view, PutBulbs(frame));
@@ -9620,7 +9732,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		receiveHersDrawn = shadowCastDrawn >= 0;
 		modelCalls = 0;
 
-		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK, receiveHers);
+		HDShadowReceiveConstants(&shadowBox, R, t, HD_SHADOW_DARK *
+			g_probe_presence,
+			receiveHers);
 
 		if (othersDrawn)
 			HDShadowReceiveOthersConstants(&othersBox, R, t, receiveOthers);
@@ -9642,7 +9756,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			float Rm[9], tm[3];
 
 			HDShadowMirrorView(R, t, mirror.axis, mirrorPlane, Rm, tm);
-			HDShadowReceiveConstants(&shadowBox, Rm, tm, HD_SHADOW_DARK, mirrorHers);
+			HDShadowReceiveConstants(&shadowBox, Rm, tm, HD_SHADOW_DARK *
+				g_probe_presence,
+				mirrorHers);
 
 			if (othersDrawn)
 				HDShadowReceiveOthersConstants(&othersBox, Rm, tm, mirrorOthers);
@@ -9770,9 +9886,19 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			receiveCalls = receivePass();
 
 		/* -shadowcount draws the solid passes alone, so that no glow, which
-		 * writes no depth, marks a pixel. */
-		HDModelFrameBegin(&projection, bulbCount, o.shadowCount ? HD_PASS_SOLID : HD_PASS_ALL);
+		 * writes no depth, marks a pixel. A picture whose room takes the
+		 * shadow draws them alone too, and the models' additive passes after
+		 * the room's glass and glows (below), where HDFrameDrawGlow draws them
+		 * (hd_level.cpp) - after the models' pass, which would darken a glow
+		 * on a model it ran after. */
+		const bool additiveAfter = o.shadowReceive && roomHas && !o.shadowCount;
 
+		HDModelFrameBegin(&projection, bulbCount,
+			o.shadowCount || additiveAfter ? HD_PASS_SOLID : HD_PASS_ALL);
+
+		// Every model of the picture, through the passes HDModelFrameBegin set.
+		const auto drawModels = [&]()
+		{
 		drawn = 0;
 
 		tag(1);
@@ -9905,6 +10031,9 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 			HDModelClip(0);
 		}
 
+		};
+
+		drawModels();
 		calls = HDModelDrawCalls();
 		tag(0);
 
@@ -9946,7 +10075,27 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		{
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_BLEND);
+
+			for (size_t w = 0; w < withRooms.size(); w++)
+				HDRenderRoomMask(withRooms[w].first, &withRooms[w].second, 0,
+					HD_PASS_BLEND);
+
 			HDRenderRoomMask(o.shadowRoom, &roomWorld, 0, HD_PASS_ADDITIVE);
+
+			for (size_t w = 0; w < withRooms.size(); w++)
+				HDRenderRoomMask(withRooms[w].first, &withRooms[w].second, 0,
+					HD_PASS_ADDITIVE);
+
+			// The models' glows after the room's, as HDFrameDrawGlow has them.
+			if (additiveAfter)
+			{
+				const int solid = drawn;
+
+				HDModelFrameBegin(&projection, bulbCount, HD_PASS_ADDITIVE);
+				drawModels();
+				drawn = solid;
+			}
+
 			HDRenderFrameEnd();
 		}
 
@@ -10178,26 +10327,50 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 		printf("  device references: %lu before, %lu with the map, %lu after - %s\n",
 			before, during, after, after == before ? "PASS" : "FAIL");
 
-		// The map, the device Reset, the map again.
+		/* The map, the device Reset, the map again. With -withrooms the
+		 * rooms' vertex and index buffers live in D3DPOOL_DEFAULT
+		 * (hd_render.cpp, the level's buffers), and a Reset is refused while
+		 * they do. At a device loss the game drops the whole HD path and
+		 * builds the level again on the device it then has (hd_level.cpp,
+		 * HDLevelDeviceLost, HDRenderShutdown); the probe appends its models'
+		 * pages to the rooms' cache, which that would drop with them, so it
+		 * leaves the two Resets out with rooms and says so. */
+		const bool roomsHeld = HDRenderGroupCount() > 0;
 		std::vector<float> first, second;
 		const int castFirst = mapRun(first);
 
 		HDRenderShadowTargetRelease();
 
-		const HRESULT reset = g_device->Reset(&g_present);
+		if (roomsHeld)
+			printf("  the Resets left out: the rooms (-withrooms) hold "
+				"D3DPOOL_DEFAULT "
+				"buffers, which the game drops with the whole HD path at a "
+					"device "
+				"loss and builds again with the level; run without -withrooms "
+					"for "
+				"them\n");
 
-		printf("  map before the Reset: %d models; Reset 0x%08lx (%s)\n", castFirst,
-			(unsigned long)reset, SUCCEEDED(reset) ? "ok" : "FAILED");
+		const HRESULT reset = roomsHeld ? E_ABORT : g_device->Reset(&g_present);
+
+		if (!roomsHeld)
+			printf("  map before the Reset: %d models; Reset 0x%08lx (%s)\n",
+				castFirst, (unsigned long)reset, SUCCEEDED(reset) ? "ok" :
+					"FAILED");
 
 		const int castSecond = SUCCEEDED(reset) ? mapRun(second) : -1;
-		const bool same = castFirst >= 0 && castSecond >= 0 && first.size() == second.size() &&
+		const bool same = castFirst >= 0 && castSecond >= 0 &&
+			first.size() == second.size() &&
 			!memcmp(&first[0], &second[0], first.size() * sizeof(float));
 
 		HDRenderShadowTargetInfo(&info);
-		printf("  map after the Reset: %d models, target %s, %u state changes - %s\n",
-			castSecond, info.state == HD_SHADOW_TARGET_MADE ? "made again" : "NOT made",
-			(unsigned)info.events, same ? "PASS, the same map bit for bit"
-			: "FAIL, the maps differ");
+
+		if (!roomsHeld)
+			printf("  map after the Reset: %d models, target %s, %u state "
+				"changes "
+				"- %s\n", castSecond,
+				info.state == HD_SHADOW_TARGET_MADE ? "made again" : "NOT made",
+				(unsigned)info.events, same ? "PASS, the same map bit for bit"
+				: "FAIL, the maps differ");
 
 		/* The second map the same way: made alone and released alone with
 		 * the device's count where it was; released with hers by
@@ -10249,13 +10422,8 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 
 			const bool bothGone = !HDRenderShadowMap() && !HDRenderShadowOthersMap() &&
 				oinfo.state == HD_SHADOW_TARGET_RELEASED;
-			const HRESULT oreset = g_device->Reset(&g_present);
-
-			printf("  second map before the Reset: %d models; both maps %s, both released by "
-				"HDRenderShadowTargetRelease: %s; Reset 0x%08lx (%s)\n", ocastFirst,
-				bothMade ? "made" : "NOT both made", bothGone ? "PASS" : "FAIL",
-				(unsigned long)oreset, SUCCEEDED(oreset) ? "ok" : "FAILED");
-
+			const HRESULT oreset = roomsHeld ? E_ABORT :
+				g_device->Reset(&g_present);
 			const int ocastSecond = SUCCEEDED(oreset) && !placed.empty()
 				? othersMapRun(osecond) : -1;
 			const bool osame = ocastFirst > 0 && ocastSecond > 0 &&
@@ -10263,10 +10431,31 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				!memcmp(&ofirst[0], &osecond[0], ofirst.size() * sizeof(float));
 
 			HDRenderShadowOthersInfo(&oinfo);
-			printf("  second map after the Reset: %d models, target %s, %u state changes - %s\n",
-				ocastSecond, oinfo.state == HD_SHADOW_TARGET_MADE ? "made again" : "NOT made",
-				(unsigned)oinfo.events, placed.empty() ? "no creature (-shadowcreature), no map "
-				"to compare" : osame ? "PASS, the same map bit for bit" : "FAIL, the maps differ");
+
+			if (!roomsHeld)
+			{
+				printf("  second map before the Reset: %d models; both maps "
+					"%s, both "
+					"released by HDRenderShadowTargetRelease: %s; Reset "
+						"0x%08lx (%s)\n",
+					ocastFirst, bothMade ? "made" : "NOT both made",
+					bothGone ? "PASS" : "FAIL", (unsigned long)oreset,
+					SUCCEEDED(oreset) ? "ok" : "FAILED");
+				printf("  second map after the Reset: %d models, target %s, "
+					"%u state "
+					"changes - %s\n", ocastSecond,
+					oinfo.state == HD_SHADOW_TARGET_MADE ? "made again" :
+						"NOT made",
+					(unsigned)oinfo.events, placed.empty()
+					? "no creature (-shadowcreature), no map to compare"
+					: osame ? "PASS, the same map bit for bit" :
+						"FAIL, the maps differ");
+			}
+			else
+				printf("  second map: both maps %s, both released by "
+					"HDRenderShadowTargetRelease: %s\n",
+					bothMade ? "made" : "NOT both made", bothGone ? "PASS" :
+						"FAIL");
 		}
 
 		/* The time: the bracket with the pass against the bracket alone, each
@@ -10440,6 +10629,589 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	return 0;
 }
 
+/* -------------------------------------------------------- -shadowsurvey -- */
+
+/* One triangle of the classic level's room faces, world units, y down. */
+struct SurveyTri
+{
+	double v[3][3];
+	double n[3];		// the unit normal of the side the room sees
+	double mn[3], mx[3];
+	int room;
+	bool twoSided;
+};
+
+struct SurveyPlace
+{
+	int room;
+	double x, z;		// room local
+};
+
+/* What the survey's terms use: the table's numbers unless -surveyterms gave
+ * others. */
+struct SurveyTerms
+{
+	double full, end, ofull, oend;
+};
+
+/* Moeller and Trumbore's ray-triangle test: the ray's parameter at the hit,
+ * or -1. Both sides of the triangle are hit. */
+static double SurveyHit(const SurveyTri& t, const double* o, const double* d)
+{
+	double e1[3], e2[3], p[3], q[3], s[3];
+
+	for (int i = 0; i < 3; i++)
+	{
+		e1[i] = t.v[1][i] - t.v[0][i];
+		e2[i] = t.v[2][i] - t.v[0][i];
+		s[i] = o[i] - t.v[0][i];
+	}
+
+	p[0] = d[1] * e2[2] - d[2] * e2[1];
+	p[1] = d[2] * e2[0] - d[0] * e2[2];
+	p[2] = d[0] * e2[1] - d[1] * e2[0];
+
+	const double det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+
+	if (fabs(det) < 1e-9)
+		return -1.0;
+
+	const double inv = 1.0 / det;
+	const double u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) * inv;
+
+	if (u < 0.0 || u > 1.0)
+		return -1.0;
+
+	q[0] = s[1] * e1[2] - s[2] * e1[1];
+	q[1] = s[2] * e1[0] - s[0] * e1[2];
+	q[2] = s[0] * e1[1] - s[1] * e1[0];
+
+	const double v = (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]) * inv;
+
+	if (v < 0.0 || u + v > 1.0)
+		return -1.0;
+
+	return (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv;
+}
+
+static double SurveySat(double f)
+{
+	return f > 0.0 ? (f < 1.0 ? f : 1.0) : 0.0;
+}
+
+// The key of the 1024-unit cell (x, z) of the world's x-z plane.
+static long long SurveyCell(int x, int z)
+{
+	return ((long long)x << 32) ^ (long long)(unsigned int)z;
+}
+
+/* The survey's weight of a face behind the first: her height term for one
+ * `below` units under her feet, a creature's distance term for one `behind`
+ * units along the light. */
+static double SurveyTerm(const SurveyTerms& terms, bool lara, double below,
+	double behind)
+{
+	return lara ? SurveySat((terms.end - below) / (terms.end - terms.full))
+		: SurveySat((terms.oend - behind) / (terms.oend - terms.ofull));
+}
+
+/* The survey itself; see the usage block. Returns the process's exit code. */
+static int ShadowSurvey(const std::string& trc,
+	const std::vector<SurveyPlace>& asked,
+	const std::vector<int>& onlyRooms, const std::vector<int>& slots,
+		const SurveyTerms& terms,
+	const std::string& outPath)
+{
+	Tr5Level level;
+	std::string error;
+
+	if (!level.load(ToW(trc), error))
+	{
+		printf("shadowsurvey: %s: %s\n", trc.c_str(), error.c_str());
+		return 1;
+	}
+
+	// How tall the casters are: the rest pose's box (Tr5Level::frameBounds).
+	for (size_t i = 0; i < slots.size(); i++)
+	{
+		int16_t b[6];
+
+		if (level.frameBounds(slots[i], b))
+			printf("shadowsurvey: slot %d stands %d units tall (y %d..%d), %d "
+				"along a 30 degree "
+				"light\n", slots[i], b[3] - b[2], b[2], b[3],
+					(int)((b[3] - b[2]) / 0.8660254 + 0.5));
+	}
+
+	const std::vector<Tr5Room>& rooms = level.rooms();
+	const int roomCount = (int)rooms.size();
+	std::vector<char> alternate((size_t)roomCount, 0);
+
+	/* A flipmap's second room stands where its first does, face on face:
+	 * only the rooms the level shows without a flip take part. */
+	for (int r = 0; r < roomCount; r++)
+		if (rooms[(size_t)r].altRoom >= 0 &&
+			rooms[(size_t)r].altRoom < roomCount)
+			alternate[(size_t)rooms[(size_t)r].altRoom] = 1;
+
+	std::vector<SurveyTri> tris;
+
+	for (int r = 0; r < roomCount; r++)
+	{
+		if (alternate[(size_t)r])
+			continue;
+
+		std::vector<Tr5Level::FaceInfo> faces;
+
+		if (!level.roomFaces(r, faces, error))
+			continue;
+
+		for (size_t f = 0; f < faces.size(); f++)
+		{
+			const Tr5Level::FaceInfo& fi = faces[f];
+			const int split[2][3] = { { 0, 1, 2 }, { 0, 2, 3 } };
+
+			for (int k = 0; k < (fi.quad ? 2 : 1); k++)
+			{
+				SurveyTri t;
+
+				for (int c = 0; c < 3; c++)
+					for (int i = 0; i < 3; i++)
+						t.v[c][i] = (double)fi.v[split[k][c]][i];
+
+				const double a[3] = { t.v[1][0] - t.v[0][0],
+					t.v[1][1] - t.v[0][1],
+					t.v[1][2] - t.v[0][2] };
+				const double b[3] = { t.v[2][0] - t.v[0][0],
+					t.v[2][1] - t.v[0][1],
+					t.v[2][2] - t.v[0][2] };
+
+				t.n[0] = a[1] * b[2] - a[2] * b[1];
+				t.n[1] = a[2] * b[0] - a[0] * b[2];
+				t.n[2] = a[0] * b[1] - a[1] * b[0];
+
+				const double l = sqrt(t.n[0] * t.n[0] + t.n[1] * t.n[1] +
+					t.n[2] * t.n[2]);
+
+				if (!(l > 1e-6))
+					continue;
+
+				for (int i = 0; i < 3; i++)
+				{
+					t.n[i] /= l;
+					t.mn[i] = t.v[0][i];
+					t.mx[i] = t.v[0][i];
+
+					for (int c = 1; c < 3; c++)
+					{
+						t.mn[i] = t.v[c][i] < t.mn[i] ? t.v[c][i] : t.mn[i];
+						t.mx[i] = t.v[c][i] > t.mx[i] ? t.v[c][i] : t.mx[i];
+					}
+				}
+
+				t.room = r;
+				t.twoSided = fi.doubleSided;
+				tris.push_back(t);
+			}
+		}
+	}
+
+	/* Which way round the level winds a face: the side a floor shows the
+	 * room is up (y negative). Counted on the flat faces that lie at their
+	 * sector's floor height, so the answer is the data's, not assumed. */
+	int up = 0, down = 0;
+
+	for (size_t i = 0; i < tris.size(); i++)
+	{
+		const SurveyTri& t = tris[i];
+
+		if (fabs(t.n[1]) < 0.95)
+			continue;
+
+		const Tr5Room& rm = rooms[(size_t)t.room];
+		const double cx = (t.v[0][0] + t.v[1][0] + t.v[2][0]) / 3.0;
+		const double cy = (t.v[0][1] + t.v[1][1] + t.v[2][1]) / 3.0;
+		const double cz = (t.v[0][2] + t.v[1][2] + t.v[2][2]) / 3.0;
+		const int sx = (int)floor((cx - rm.originX) / 1024.0);
+		const int sz = (int)floor((cz - rm.originZ) / 1024.0);
+		long y = 0;
+
+		if (!level.cornerFloor(t.room, sx, sz, 0, 0, y))
+			continue;
+
+		if (fabs(cy - (double)y) > 300.0)
+			continue;
+
+		(t.n[1] < 0.0 ? up : down)++;
+	}
+
+	const double wind = up >= down ? 1.0 : -1.0;
+
+	for (size_t i = 0; i < tris.size(); i++)
+		for (int k = 0; k < 3; k++)
+			tris[i].n[k] *= wind;
+
+	printf("shadowsurvey: %s, %d rooms (%d flip twins left out), %d "
+		"triangles; the floors "
+		"show the room the side %s winds (%d of %d flat floor faces)\n",
+			trc.c_str(), roomCount,
+		(int)std::count(alternate.begin(), alternate.end(), (char)1),
+			(int)tris.size(),
+		wind > 0 ? "the data" : "against the data", up >= down ? up : down, up +
+			down);
+
+	// The faces by the 1024-unit cells of the world's x-z plane they touch.
+	std::map<long long, std::vector<int> > cells;
+
+	for (size_t i = 0; i < tris.size(); i++)
+	{
+		const int x0 = (int)floor(tris[i].mn[0] / 1024.0),
+			x1 = (int)floor(tris[i].mx[0] / 1024.0);
+		const int z0 = (int)floor(tris[i].mn[2] / 1024.0),
+			z1 = (int)floor(tris[i].mx[2] / 1024.0);
+
+		for (int x = x0; x <= x1; x++)
+			for (int z = z0; z <= z1; z++)
+				cells[SurveyCell(x, z)].push_back((int)i);
+	}
+
+	// The places: those asked for, or every floor sector of the rooms.
+	std::vector<SurveyPlace> places = asked;
+
+	if (places.empty())
+		for (int r = 0; r < roomCount; r++)
+		{
+			const Tr5Room& rm = rooms[(size_t)r];
+
+			if (alternate[(size_t)r] || (rm.flags & 1))
+				continue;
+
+			if (!onlyRooms.empty() &&
+				std::find(onlyRooms.begin(), onlyRooms.end(),
+					r) == onlyRooms.end())
+				continue;
+
+			std::vector<Tr5Level::SectorInfo> sectors;
+
+			if (!level.sectorInfo(r, sectors, error))
+				continue;
+
+			for (size_t s = 0; s < sectors.size(); s++)
+			{
+				if (sectors[s].roomBelow != 255)
+					continue;
+
+				SurveyPlace p = { r, sectors[s].sx * 1024.0 + 512.0,
+					sectors[s].sz * 1024.0 + 512.0 };
+
+				places.push_back(p);
+			}
+		}
+
+	float fb[3];
+
+	HDShadowFallback(fb);
+
+	const double dir[3] = { fb[0], fb[1], fb[2] };
+	const double hl = sqrt(dir[0] * dir[0] + dir[2] * dir[2]);
+	const double side[3] = { -dir[2] / hl, 0.0, dir[0] / hl };
+	FILE* out = outPath.empty() ? 0 : fopen(outPath.c_str(), "w");
+	std::vector<int> stamp(tris.size(), -1);
+	int rayId = 0;
+
+	// [caster][kind] - kind 0 through a wall, 1 through a floor.
+	int placesAny[2][2] = { { 0, 0 }, { 0, 0 } }, placesSeen[2][2] = { { 0, 0 },
+		{ 0, 0 } };
+	long raysAny[2][2] = { { 0, 0 }, { 0, 0 } }, raysCured[2] = { 0, 0 },
+		rays = 0;
+	long belowFirst[24] = { 0 }, belowLeak[24] = { 0 };
+	double firstW[2] = { 0.0, 0.0 }, leakW[2][2] = { { 0.0, 0.0 }, { 0.0,
+		0.0 } };
+	int counted = 0;
+
+	struct Worst { double score; int room; double x, z, w; int kind,
+		leakRoom; bool joined; };
+	std::vector<Worst> worst;
+
+	for (size_t pi = 0; pi < places.size(); pi++)
+	{
+		const SurveyPlace& pl = places[pi];
+
+		if (pl.room < 0 || pl.room >= roomCount)
+			continue;
+
+		const Tr5Room& rm = rooms[(size_t)pl.room];
+		const int sx = (int)floor(pl.x / 1024.0),
+			sz = (int)floor(pl.z / 1024.0);
+		long c00, c10, c01, c11;
+
+		if (!level.cornerFloor(pl.room, sx, sz, 0, 0, c00) ||
+			!level.cornerFloor(pl.room, sx, sz, 1024, 0, c10) ||
+			!level.cornerFloor(pl.room, sx, sz, 0, 1024, c01) ||
+			!level.cornerFloor(pl.room, sx, sz, 1024, 1024, c11))
+			continue;
+
+		const double fx = (pl.x - sx * 1024.0) / 1024.0, fz = (pl.z - sz *
+			1024.0) / 1024.0;
+		const double feet = c00 * (1 - fx) * (1 - fz) + c10 * fx * (1 - fz) +
+			c01 * (1 - fx) * fz +
+			c11 * fx * fz;
+		const double wx = rm.originX + pl.x, wz = rm.originZ + pl.z;
+
+		counted++;
+
+		for (int caster = 0; caster < 2; caster++)
+		{
+			const double height = caster == 0 ? 768.0 : 760.0;
+			double maxW[2] = { 0.0, 0.0 };
+			int rayLeak[2] = { 0, 0 };
+			int maxRoom[2] = { -1, -1 };
+			bool maxJoined[2] = { false, false };
+
+			for (int col = -1; col <= 1; col++)
+				for (double h = 16.0; h <= height + 0.5; h += 32.0)
+				{
+					const double o[3] = { wx + side[0] * 96.0 * col, feet - h,
+						wz + side[2] * 96.0 * col };
+					/* How far a ray is followed: until her height term or
+					 * the creature's distance term has ended. */
+					const double reach = caster == 0 ? (feet +
+						terms.end - o[1]) / dir[1] : terms.oend;
+					const double e[3] = { o[0] + dir[0] * reach, o[1] + dir[1] *
+						reach,
+						o[2] + dir[2] * reach };
+					const int x0 = (int)floor((o[0] < e[0] ? o[0] :
+						e[0]) / 1024.0) - 1;
+					const int x1 = (int)floor((o[0] > e[0] ? o[0] :
+						e[0]) / 1024.0) + 1;
+					const int z0 = (int)floor((o[2] < e[2] ? o[2] :
+						e[2]) / 1024.0) - 1;
+					const int z1 = (int)floor((o[2] > e[2] ? o[2] :
+						e[2]) / 1024.0) + 1;
+					std::vector<std::pair<double, int> > hits;
+
+					rayId++;
+					rays += caster == 0 ? 1 : 0;
+
+					for (int x = x0; x <= x1; x++)
+						for (int z = z0; z <= z1; z++)
+						{
+							std::map<long long,
+								std::vector<int> >::const_iterator it =
+								cells.find(SurveyCell(x, z));
+
+							if (it == cells.end())
+								continue;
+
+							for (size_t k = 0; k < it->second.size(); k++)
+							{
+								const int ti = it->second[k];
+
+								if (stamp[(size_t)ti] == rayId)
+									continue;
+
+								stamp[(size_t)ti] = rayId;
+
+								const double s = SurveyHit(tris[(size_t)ti], o,
+									dir);
+
+								if (s > 0.5 && s <= reach)
+									hits.push_back(std::make_pair(s, ti));
+							}
+						}
+
+					if (hits.empty())
+						continue;
+
+					std::sort(hits.begin(), hits.end());
+
+					const SurveyTri& first = tris[(size_t)hits[0].second];
+					const int kind = fabs(first.n[1]) >= 0.5 ? 1 : 0;
+					const double firstBelow = o[1] + dir[1] *
+						hits[0].first - feet;
+
+					if (caster == 0 && firstBelow > 0.0)
+						belowFirst[firstBelow / 128.0 < 23 ?
+							(int)(firstBelow / 128.0) : 23]++;
+
+					/* The first face's own weight, where it lies below her
+					 * feet or behind the creature: the shadow a cut of the
+					 * terms would take from a face that should have it. */
+					{
+						const double nl = -(first.n[0] * dir[0] + first.n[1] *
+							dir[1] +
+							first.n[2] * dir[2]);
+						const double facing = SurveySat((first.twoSided ?
+							fabs(nl) : nl) /
+							HD_SHADOW_FACING);
+						const double term = SurveyTerm(terms, caster == 0,
+							firstBelow, hits[0].first);
+
+						if (caster == 0 ? firstBelow > 64.0 :
+							hits[0].first > 256.0)
+							firstW[caster] += facing * term;
+					}
+
+					double rayMax = 0.0;
+					int rayRoom = -1;
+
+					// Two hits closer than 2 units are one face drawn twice.
+					for (size_t k = 1; k < hits.size(); k++)
+					{
+						if (hits[k].first - hits[0].first < 2.0)
+							continue;
+
+						const SurveyTri& t = tris[(size_t)hits[k].second];
+						const double nl = -(t.n[0] * dir[0] + t.n[1] * dir[1] +
+							t.n[2] * dir[2]);
+						const double facing = SurveySat((t.twoSided ? fabs(nl) :
+							nl) /
+							HD_SHADOW_FACING);
+						const double y = o[1] + dir[1] * hits[k].first;
+						const double term = SurveyTerm(terms, caster == 0,
+							y - feet, hits[k].first);
+						const double w = facing * term;
+
+						if (!(w > 0.0))
+							continue;
+
+						if (caster == 0)
+						{
+							const double below = y - feet;
+
+							belowLeak[below / 128.0 < 23 ? (below > 0 ?
+								(int)(below / 128.0) : 0) : 23]++;
+						}
+
+						if (w > rayMax)
+						{
+							rayMax = w;
+							rayRoom = t.room;
+						}
+
+						if (out)
+							fprintf(out,
+								"%s room %d (%.0f, %.0f) %s ray %d h %.0f: "
+								"%s, face of room %d "
+								"%.0f units along the light, %.0f below the "
+									"feet, weight %.3f\n",
+								trc.c_str(), pl.room, pl.x, pl.z, caster == 0 ?
+									"lara" : "creature",
+								col, h, kind ? "through a floor" :
+									"through a wall", t.room,
+								hits[k].first, y - feet, w);
+					}
+
+					if (rayMax > 0.0)
+					{
+						const bool joined = rayRoom == pl.room ||
+							std::find(rm.portalRooms.begin(),
+								rm.portalRooms.end(), rayRoom) !=
+								rm.portalRooms.end();
+
+						rayLeak[kind]++;
+						raysAny[caster][kind]++;
+						leakW[caster][kind] += rayMax;
+
+						if (kind == 0 && !joined)
+							raysCured[caster]++;
+
+						if (rayMax > maxW[kind])
+						{
+							maxW[kind] = rayMax;
+							maxRoom[kind] = rayRoom;
+							maxJoined[kind] = joined;
+						}
+					}
+				}
+
+			for (int kind = 0; kind < 2; kind++)
+			{
+				if (rayLeak[kind])
+					placesAny[caster][kind]++;
+
+				/* 0.1 of the weight is 0.034 of a pixel's colour at the
+				 * fixed light's DARK * LOW, about the least a floor shows. */
+				if (maxW[kind] >= 0.1)
+					placesSeen[caster][kind]++;
+
+				if (caster == 0 && rayLeak[kind])
+				{
+					Worst wv = { maxW[kind] * rayLeak[kind], pl.room, pl.x,
+						pl.z, maxW[kind], kind,
+						maxRoom[kind], maxJoined[kind] };
+
+					worst.push_back(wv);
+				}
+			}
+		}
+	}
+
+	if (out)
+		fclose(out);
+
+	printf("shadowsurvey: terms full %.0f end %.0f, others full %.0f end "
+		"%.0f; %d places, %ld "
+		"rays of hers\n", terms.full, terms.end, terms.ofull, terms.oend,
+			counted, rays);
+
+	for (int caster = 0; caster < 2; caster++)
+		printf("shadowsurvey: %s - through a wall: %d places (%d with a "
+			"weight of 0.1 or "
+			"more), %ld rays, %ld of them on a room not joined to hers by a "
+				"door; through a "
+			"floor: %d places (%d), %ld rays\n", caster == 0 ? "lara" :
+				"creature",
+			placesAny[caster][0], placesSeen[caster][0], raysAny[caster][0],
+				raysCured[caster],
+			placesAny[caster][1], placesSeen[caster][1], raysAny[caster][1]);
+
+	for (int caster = 0; caster < 2; caster++)
+		printf("shadowsurvey: %s - summed weight: the first faces below her "
+			"feet (behind "
+			"the creature by more than 256) %.1f, the faces behind them "
+				"through a wall %.1f, "
+			"through a floor %.1f\n", caster == 0 ? "lara" : "creature",
+				firstW[caster],
+			leakW[caster][0], leakW[caster][1]);
+
+	printf("shadowsurvey: her first face below her feet, 128-unit bins:");
+
+	for (int i = 0; i < 24; i++)
+		printf(" %ld", belowFirst[i]);
+
+	printf("\nshadowsurvey: a face behind it below her feet, 128-unit bins:");
+
+	for (int i = 0; i < 24; i++)
+		printf(" %ld", belowLeak[i]);
+
+	printf("\n");
+
+	std::sort(worst.begin(), worst.end(), [](const Worst& a, const Worst& b) {
+		return a.score > b.score; });
+
+	for (int kind = 0; kind < 2; kind++)
+	{
+		int shown = 0;
+
+		for (size_t i = 0; i < worst.size() && shown < 3; i++)
+		{
+			if (worst[i].kind != kind)
+				continue;
+
+			printf("shadowsurvey: worst through a %s: room %d (%.0f, %.0f), "
+				"weight %.3f, the face "
+				"in room %d, %s\n", kind ? "floor" : "wall", worst[i].room,
+					worst[i].x, worst[i].z,
+				worst[i].w, worst[i].leakRoom, worst[i].joined ?
+					"joined by a door" : "not joined");
+			shown++;
+		}
+	}
+
+	return 0;
+}
+
 /* The Mods folder's notes, on stdout. hd_mods.cpp is
  * engine-free and keeps its notes until somebody says where they go; the
  * engine sends them to Log(), this tool prints them. */
@@ -10456,6 +11228,72 @@ int main(int argc, char** argv)
 			" [-level <LEVEL>] [options]\n"
 			"       see the head of ModelProbe.cpp for the whole list\n");
 		return 2;
+	}
+
+	/* -shadowsurvey runs on the classic level alone, before any device or
+	 * install is asked for. */
+	for (int i = 1; i < argc; i++)
+	{
+		if (_stricmp(argv[i], "-shadowsurvey") || i + 1 >= argc)
+			continue;
+
+		std::vector<SurveyPlace> places;
+		std::vector<int> onlyRooms, slots;
+		SurveyTerms terms = { HD_SHADOW_FULL, HD_SHADOW_END,
+			HD_SHADOW_OTHERS_FULL,
+			HD_SHADOW_OTHERS_END };
+		std::string surveyOut;
+
+		for (int k = 1; k < argc; k++)
+		{
+			if (!_stricmp(argv[k], "-surveyplace") && k + 3 < argc)
+			{
+				SurveyPlace p = { atoi(argv[k + 1]), atof(argv[k + 2]),
+					atof(argv[k + 3]) };
+
+				places.push_back(p);
+				k += 3;
+			}
+			else if (!_stricmp(argv[k], "-surveyrooms") && k + 1 < argc)
+			{
+				for (const char* c = argv[++k]; *c; )
+				{
+					onlyRooms.push_back(atoi(c));
+
+					while (*c && *c != ',')
+						c++;
+
+					if (*c == ',')
+						c++;
+				}
+			}
+			else if (!_stricmp(argv[k], "-surveyterms") && k + 4 < argc)
+			{
+				terms.full = atof(argv[k + 1]);
+				terms.end = atof(argv[k + 2]);
+				terms.ofull = atof(argv[k + 3]);
+				terms.oend = atof(argv[k + 4]);
+				k += 4;
+			}
+			else if (!_stricmp(argv[k], "-surveyslots") && k + 1 < argc)
+			{
+				for (const char* c = argv[++k]; *c; )
+				{
+					slots.push_back(atoi(c));
+
+					while (*c && *c != ',')
+						c++;
+
+					if (*c == ',')
+						c++;
+				}
+			}
+			else if (!_stricmp(argv[k], "-surveyout") && k + 1 < argc)
+				surveyOut = argv[++k];
+		}
+
+		return ShadowSurvey(argv[i + 1], places, onlyRooms, slots, terms,
+			surveyOut);
 	}
 
 	std::string root = argv[1];
@@ -10896,6 +11734,23 @@ int main(int argc, char** argv)
 			shadowReceive = shadowCount = true;
 		else if (!_stricmp(argv[i], "-shadowalong") && i + 1 < argc)
 			shadowAlong = (float)atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-shadowpresence") && i + 1 < argc)
+			g_probe_presence = HDShadowPresence((float)atof(argv[++i]));
+		else if (!_stricmp(argv[i], "-shadowfog") && i + 1 < argc)
+			g_probe_fog = (float)atof(argv[++i]);
+		else if (!_stricmp(argv[i], "-shadowwith") && i + 1 < argc)
+		{
+			for (const char* c = argv[++i]; *c; )
+			{
+				g_probe_with.push_back(atoi(c));
+
+				while (*c && *c != ',')
+					c++;
+
+				if (*c == ',')
+					c++;
+			}
+		}
 		else if (!_stricmp(argv[i], "-shadowunseen"))
 			shadowUnseen = true;
 		else if (!_stricmp(argv[i], "-shadowmirror"))

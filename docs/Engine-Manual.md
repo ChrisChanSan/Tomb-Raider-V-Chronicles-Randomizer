@@ -1806,17 +1806,18 @@ it.
   and no row runs as one straight crest: each is a train of short crest
   pieces, about two of its own wavelengths long and never more than a square
   and a half, that swell and fade along the crest and wander slowly along it,
-  with the next piece beside them. The rows lie in a fan round the body's own
-  direction - the longest on it, the shortest widest: a basin's spread round
-  nearly every direction, as ripples come from all round a fountain, a
-  channel's mostly across the canal, a sea's and a river's within about 70
-  degrees either way of their direction - and their crests are bent on two
+  with the next piece beside them - no two of a row of one length, and the
+  pieces of neighbouring crests out of line. The rows lie in a fan round the
+  body's own direction - the longest on it, the shortest widest: a basin's
+  spread round nearly every direction, as ripples come from all round a
+  fountain, a channel's mostly across the canal, a sea's and a river's
+  within about 70 degrees either way of their direction - and their crests are bent on two
   scales, a slow one and one of a couple of wavelengths, so no two rows
-  cross into a lattice of diamonds; the highlight on them breaks into
-  glints. Each row also swells and fades on its own slow cycle of 8 to 15
-  seconds, so the water breathes and never settles into one pattern; a sea
-  breathes deepest, a basin least. `crest 0` in `hd_water.txt` gives a body
-  the straight rows back. Seen flat - at eye level, or
+  cross into a lattice of diamonds; the highlight follows the waves alone,
+  with no pattern of its own. Each row also swells and fades on its own
+  slow cycle of 8 to 15 seconds, so the water breathes and never settles
+  into one pattern; a sea breathes deepest, a basin least. `crest 0` in
+  `hd_water.txt` gives a body the straight rows back. Seen flat - at eye level, or
   swimming - the waves are drawn up to three times steeper (a basin three, a
   channel two, a sea as it is), and the fine waves whose crests run toward the
   eye are kept instead of fading out with the distance, so the water has a
@@ -2018,8 +2019,8 @@ it.
   other body has. `crest <s>` (0 to 1) sets how far the row's bodies' waves
   are short crests in a fan (*The water's life*): 1, what a body without
   the key draws, changes nothing, 0 gives the straight rows that cross into
-  a lattice, and between the two the fan, the pieces, the second bend and
-  the glints come in by that share - `ANDY3 34 - crest 0` takes the pond and
+  a lattice, and between the two the fan, the pieces and the second bend
+  come in by that share - `ANDY3 34 - crest 0` takes the pond and
   ANDY3's streams back to the straight rows, to compare in the game; a
   value over 1 is a line that cannot be read.
   No file means the engine's own rows alone.

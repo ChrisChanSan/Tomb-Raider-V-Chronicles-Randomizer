@@ -11397,6 +11397,106 @@ the HD dive splash and the fish tank's spray stay open.
 
 **Commits.** `739fbd0`, `fb820c7`, `bffa951`.
 
+**The crests up close: no glints, pieces at no fixed step.** Asked for after the eleventh
+play test (reference pictures supplied for this project, not in the repository): close
+to the water it had become worse - the surface covered with a dense pattern of dots -,
+from afar better, and the fountain had turned into a pattern of squares. The pictures:
+ANDREA2's sewer canal from the walkway's edge, about 45 degrees down, its lit water under
+a dense regular grid of small bright dots; the same canal from afar at eye level, fine;
+the canal from above, the dot grid again; the fountain hall with the two waterfalls'
+white feet, a fine square pattern on the water. What the tenth part was asked for stands
+(short crest pieces in varying directions, fitting the current), and so does the far
+look; the near look must lose every regular grid.
+
+The cause, two parts. The glints: `WaterPS` multiplied the highlight by Wave2 along world
+x times Wave2 along world z - a chequerboard aligned to the world's axes, its cell 1 /
+(0.7 k) of the shortest row (58.6 units in a channel, 41 in a basin, 140 in a sea);
+from afar a cell falls under a pixel, close by it is a grid of dots. Counted on the
+pictures (each scaled to 1920 wide, the strongest bins of a 256-pixel tile's spectrum, at
+three places on the canal): the owner's dots 19.1, 22.9 and 15.5 pixels apart at 117,
+117 and 115 degrees, RoomProbe's view of that place (ANDREA2 19 "1900 3300 1000 15 50",
+field of view 80) with the glints 16.8, 21.2 and 13.9 at 113, 114 and 112 - the same
+with the waves' heights at 0, the glints alone - and the water of `2d48e83` none of
+them. The pieces: each row's envelope was periodic along its crest, every piece of a row
+of one length and the pieces of neighbouring crests in line, a fine grid of dashes of its
+own where the rows are short. And the measure of the tenth part was blind to most of
+the glints: it subtracts the picture with `waves 0` from the one with `bend 0`, and the
+cells stand in both - on the canal close the glints' own picture holds 38.4 % of its
+power in six bins (12.9 % without them), the measure read 9.7.
+
+What changed (`hd_room.hlsl`). The glints are gone; the highlight is Blinn-Phong over
+the waves' normal and nothing else. `CrestEnv` bends the place along each crest by two
+slow curves of Wave2's kind fixed in the world: 0.15 of a turn deep at 0.37 of the
+piece's frequency along the crest, 0.3 deep at 0.61 across it (`HD_CREST_ALONG`,
+`HD_CREST_ACROSS`, `HD_CREST_WARP_A`, `HD_CREST_WARP_B`, starts in steps of 0.618 of a
+turn). Along, a piece runs from 0.75 to 1.5 times its mean length and never folds back
+(the bend moves the place by at most a third of its own rate); across, the next
+crests' pieces stand up to 0.6 of a piece out of line. The envelope's rise is exact
+with both curves (`growX`, `growZ`, the rise per turn times the gradient of the bent
+place); at most 1.73 times the straight envelope's 0.38 of a row's slope. `WaterVS`'s
+swell, the foam's draw and `RiverPS` read the same `WaveSum8`. The engine keeps every
+number; its comment over `kWaterFan` names the curves and drops the glints from what
+`crest` scales. The far look is kept (the canal at eye level from afar measures 17.6
+against 16.4 and looks the same). Tried and dropped: 0.3 along (pieces up to three
+times their mean, long streaks on ANDY3's pond, the bridge's view 23.0 against 18.5);
+the four shortest rows straight (the lattice back: the canal close 15.1 against 11.1).
+At the canal at eye level no lit lines return without the glints (11.5 against 11.3),
+so nothing else was added. The fountain's basin needs no narrower fan: from above it
+reads as ripples crossing from several places (D2 below), no cell repeats.
+
+**Measured.** Slots, fxc /O3, at `062779c`, glints out, after: `WaterVS` 287, 287, 321;
+`WaterPS` 360, 344, 399; depth 406, 390, 446; view 430, 416, 472; under 408, 391, 448;
+the foam's draw 251, 251, 285 and 293, 293, 327 with the depth texture; `RiverPS` 435,
+435, 490. RoomVS, RoomPS and its gloss variant, GlowPS, FootPS, the model and shadow
+shaders keep their bytecode (13 of 21 `.inc` identical apart from the stamp lines).
+GPU, 2560 x 1440, three runs, sheets, foam, copy and rivers together: the full-water
+view 0.308 to 0.313 ms before, 0.367 to 0.368 after; the view over the pond 0.363 to
+0.366 before, 0.403 to 0.417 after - 0.04 to 0.06 ms more, the price of the two curves.
+
+The measure, the tenth part's (the share of the surface light's power in its six
+strongest bins, 75th percentile; mean of 1, 3 and 5 seconds; `2d48e83` / `062779c` /
+after), and beside it the same on the picture itself (P), which the glints do not hide
+from: the canal close (ANDREA2 19 "1900 3300 1000 15 50") 31.1 / 9.7 / 11.1, P 24.1 /
+24.8 / 9.4; from afar at eye level ("2300 4450 0 3 8") 26.0 / 16.4 / 17.6, P 19.6 /
+15.8 / 15.8; from above ("2350 3600 400 10 60") 37.4 / 15.2 / 18.6, P 22.0 / 23.8 /
+10.9; the fountain hall (ANDREA2 231 "2500 -1000 4100 90 42") 20.0 / 7.3 / 8.2, P 14.0 /
+6.7 / 6.7; all at a field of view of 80. Over 0 to 12 seconds the canal close at most
+38.5 / 11.5 / 12.9, P 31.9 / 26.6 / 11.0; the fountain at most 23.2 / 9.4 / 9.4, P 15.6 /
+7.9 / 7.5. The tenth part's four views: 22.6 / 18.5 / 19.2, 10.1 / 5.4 / 5.7, 19.2 /
+11.3 / 11.5, 15.8 / 11.0 / 10.9. The fifteen test cameras: A1 21.3 / 11.4 / 10.3, A2
+14.1 / 6.0 / 5.9, A3 8.5 / 5.6 / 5.7, B1 24.8 / 13.0 / 11.6, B2 28.4 / 12.8 / 14.3, C1
+38.8 / 19.6 / 17.0, C2 18.8 / 11.7 / 11.7, C3 32.2 / 30.2 / 23.4, C4 33.1 / 17.6 / 16.9,
+D1 14.3 / 7.9 / 7.6, D2 22.8 / 7.4 / 8.7 (P 19.8 / 14.3 / 7.9), E2 15.8 / 7.2 / 8.0. The
+references with random directions 3.2 to 13.4. Where the measure stands higher than at
+`062779c`, the glints' cells sat in both of its pictures there; on the picture itself
+every view but two lies at or under `062779c` (V2 6.1 against 5.7, A2 5.6 against 5.3).
+The dots - the maxima of the surface light over their 9 x 9 neighbourhood standing 8
+levels over its mean, per 1000 water pixels, 1920 x 1080 at 3 seconds -: the canal close
+0.26 / 0.96 / 0.60, from above 0.05 / 0.41 / 0.29, the fountain 1.34 / 2.24 / 2.13, from
+afar 0.42 / 0.63 / 0.73; counted as any pixel over its eight neighbours and 4 over the
+mean, the canal close 0.87 / 2.25 / 2.10 - that form counts every fine highlight on a
+crest, and the curves' slanted piece ends add some.
+
+The pond's edge (the ninth part's holes count, twelve views at 1, 3 and 5 seconds):
+103,497 pixels over the 36 pictures before, 86,091 after; the most in one picture
+13,780 before, 15,689 after. The sweep: 565 squares, 56 bodies, 118 twins as before;
+all 56 body lines end ` crest=1.00`.
+
+**Checked.** The classic path 3 of 3 md5-identical to `8691e82` (ANDREA2 231, JOBY2 66,
+ANDY3 34, `-classicroom` and `-classiconly`, INTZ bound); the fifteen cameras with
+`-hdwater 0` 15 of 15 identical to the fix round's parity set; with `crest 0` for every
+body (`ANDREA2 19 - crest 0` among them) the fifteen cameras and the eight views of the
+measure 23 of 23 identical to `062779c`'s - the straight rows untouched. Every changed
+pixel of the fifteen cameras lies on the water. The suites (ModernTest 14721, MenuTest
+42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game at the owner's distances and screen; whether the fine
+detail the curves add at the pieces' ends reads as life or as noise close by; the cost
+(0.04 to 0.06 ms at 2560 x 1440). Stage 3, light shafts, the HD dive splash and the
+fish tank's spray stay open.
+
+**Commits.** `30de419`, `e46e704`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

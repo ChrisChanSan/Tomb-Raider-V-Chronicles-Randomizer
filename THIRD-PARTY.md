@@ -1248,7 +1248,18 @@ water surface", carries the tables.
     frequencies against 6.1 to 12.7 % with random directions; after this
     design the owner's four views 22.6, 10.1, 19.2 and 15.8 % fall to
     18.5, 5.4, 11.3 and 11.0 % (RoomProbe pictures at 1, 3 and 5 seconds,
-    a script of this round).
+    a script of this round). The pieces stand at no fixed step: the place
+    along the crest is bent by two slow curves of Wave2's kind, 0.15 of a
+    turn deep at 0.37 of the piece's frequency along the crest and 0.3
+    deep at 0.61 across it (`HD_CREST_*`), so a piece runs from 0.75 to
+    1.5 of its mean length and the next crests' pieces stand out of line;
+    the envelope's rise is exact with both. OWN, the same design extended
+    (a domain warp of the envelope's coordinate); the scales and depths
+    are free choices, set by eye on RoomProbe pictures of the owner's near
+    views. DATA: at 0.3 along, pieces stretched to three times their mean
+    drew long streaks on ANDY3's pond (the bridge's view 23.0 % against
+    18.5 %); with the four shortest rows straight the lattice came back
+    (the canal close, 45 degrees down: 15.1 % against 11.1 %).
 140. **The foam in a draw of its own** - the sheet's foam (the bank foam,
     its patches, the waterline, the whitecaps and the foam's body) is
     drawn in a second premultiplied draw of the same triangles over the
@@ -1272,7 +1283,15 @@ water surface", carries the tables.
     and amounts are free choices, set by eye on the round's RoomProbe
     pictures. DATA: on the canal at eye level the lattice measure stood
     at 13.6 % with the pieces and the fan alone and at 11.3 % with the
-    glints (mean of 1, 3 and 5 seconds; 19.2 % before).
+    glints (mean of 1, 3 and 5 seconds; 19.2 % before). The glints are
+    taken out again: a product of two periodic curves along the world
+    axes, the field drew a regular chequerboard of bright dots wherever
+    the eye came close (reference pictures supplied for this project,
+    not in the repository);
+    the dots' period and direction in those pictures match the cells'
+    (within 10 % and 3 degrees), and the measure's gain was partly its own
+    subtraction, the cells standing in both pictures it compares. The
+    second bend stays.
 
 ## Credited, but not contained here
 

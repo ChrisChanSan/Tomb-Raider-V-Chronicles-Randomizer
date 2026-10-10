@@ -913,10 +913,13 @@ struct HDRenderWaterBody
 	int lying;
 	int refused;
 	/* How far its sheet stands over the water's top, units (a row's
-	 * `lift`; 0 without one), and the grid points of its sheet held under
-	 * that by the land beside them (HDRenderSetWaterSheets, "the lift"). */
+	 * `lift`; 0 without one); `held` 0, a lifted sheet stands level at
+	 * every grid point (the field keeps the log line's columns); and the
+	 * land squares its level surface runs on over, each place once
+	 * (HDRenderSetWaterSheets, "the lift" and "the skirt"). */
 	int lift;
 	int held;
+	int skirt;
 };
 
 // What the level built, for its log line.

@@ -8858,6 +8858,25 @@ namespace
 		{ "ANDY3", 73, 96 },
 	};
 
+	/* The skirt of a lifted sheet (HDRenderSetWaterSheets, "the skirt"):
+	 * how many land squares out from the body's squares its level surface
+	 * may run on over the land under it, and how far over the lift a land
+	 * square's lowest classic corner may stand and still carry it. 3: the
+	 * land under 96 beside ANDY3's pond reaches its last square, the hollow
+	 * east of the upper ring, three squares out (the classic corners of the
+	 * land squares round the pond, walked out square by square); at 2 the
+	 * art's ground stood under the plane at 11 of 544 points along the
+	 * drawn surface's outer edge, at 3 at the 5 where a wall stands beside
+	 * the water - 16 sample points to a side, the art's ground as the
+	 * highest flat triangle over the point. 16 units: more than the 5 units
+	 * the art's ground stands under the classic land at nine in ten of the
+	 * pond's 152 low edge points, so a square whose corner stands just over
+	 * the surface but whose art dips under it still carries the water; every
+	 * land square round the pond has its corners at the water's top or a
+	 * click and more over it, so 16 decides nothing there. */
+	const int kWaterSkirtReach = 3;
+	const int kWaterSkirtMargin = 16;
+
 	// Units a second squared: 9.81 m/s^2 at 2.3 mm a unit, Lara's 768
 	// units standing for 1.77 m.
 	const float kWaterG = 4300.0f;
@@ -8965,6 +8984,16 @@ namespace
 		int body;
 		int sink;		// the sink its water names, or -1
 		int pit;		// the water room under it
+	};
+
+	/* A land square a lifted sheet's level surface runs on over
+	 * (HDRenderSetWaterSheets, "the skirt"): the square in its land room
+	 * (room, sx, sz, localY; sheet 1, no depth, no sink) and that land's
+	 * classic corners, world y, x0 z0, x1 z0, x0 z1, x1 z1. */
+	struct SkirtSquare
+	{
+		WaterSquare s;
+		int land[4];
 	};
 
 	struct WaterBody
@@ -9958,93 +9987,80 @@ namespace
 		return 0;
 	}
 
-	/* The lift of one grid point of a lifted sheet (HDRenderSetWaterSheets,
-	 * "the lift"): the body's lift, held to the land the point touches - a
-	 * square round the point with no water at this height, whose floor
-	 * there (its corners, water_corners, interpolated at the point) stands
-	 * less than the lift over the water's top. The land is the square of
-	 * the point's own room, or of another dry room holding it within 2048
-	 * units of the surface, a square inside a room before one on its rim (a
-	 * rim square is a wall or a portal). A wall, or no room holding the
-	 * square, holds nothing; land under the water's top holds the point at
-	 * 0. A lift of 0 or less is never held. */
-	int water_point_lift(const HDWaterRoom* rooms, int count, int own,
-		const std::unordered_map<unsigned long long, int>& at, int wx,
-		int wz, int wy, int lift)
+	/* The land square at world sqx, sqz beside a lifted sheet
+	 * (HDRenderSetWaterSheets, "the skirt"): the square of the given room,
+	 * or of another dry room holding it within 2048 units of the surface, a
+	 * square inside a room before one on its rim (a rim square is a wall or
+	 * a portal), the nearer floor first. Its corners (water_corners) go to
+	 * c, world y, x0 z0, x1 z0, x0 z1, x1 z1 as the classic floor stands;
+	 * returns the room, -1 for a wall or no room holding the square. */
+	int water_land(const HDWaterRoom* rooms, int count, int own, int sqx,
+		int sqz, int wy, int* c)
 	{
-		int held = lift;
+		int best = -1, bestAt = 0, bestGap = 0;
+		bool bestInner = false;
 
-		for (int q = 0; q < 4 && lift > 0; q++)
+		for (int k = -1; k < count; k++)
 		{
-			const int px = wx + ((q & 1) ? 1 : -1);
-			const int pz = wz + ((q & 2) ? 1 : -1);
-			const int sqx = (px >= 0 ? px : px - 1023) / 1024 * 1024;
-			const int sqz = (pz >= 0 ? pz : pz - 1023) / 1024 * 1024;
+			const int r = k < 0 ? own : k;
 
-			if (at.count(WaterKey(sqx, sqz, wy)))
+			if (r < 0 || r >= count || (k >= 0 && r == own))
 				continue;
 
-			int best = -1, bestAt = 0, bestGap = 0;
-			bool bestInner = false;
+			const HDWaterRoom& rm = rooms[r];
 
-			for (int k = -1; k < count; k++)
-			{
-				const int r = k < 0 ? own : k;
-
-				if (r < 0 || r >= count || (k >= 0 && r == own))
-					continue;
-
-				const HDWaterRoom& rm = rooms[r];
-
-				if ((rm.flags & HD_WATER_ROOM_UNDERWATER) || !rm.floor)
-					continue;
-
-				const int sx = (sqx - rm.originX) >> 10;
-				const int sz = (sqz - rm.originZ) >> 10;
-
-				if (sx < 0 || sz < 0 || sx >= rm.sizeX || sz >= rm.sizeZ ||
-					rm.floor[sx * rm.sizeZ + sz] == -127)
-					continue;
-
-				const int i = sx * rm.sizeZ + sz;
-				const int gap = rm.floor[i] * 256 > wy ?
-					rm.floor[i] * 256 - wy : wy - rm.floor[i] * 256;
-				const bool inner = sx > 0 && sz > 0 && sx < rm.sizeX - 1 &&
-					sz < rm.sizeZ - 1;
-
-				if (gap > 2048 || (best >= 0 && (bestInner && !inner)) ||
-					(best >= 0 && bestInner == inner && gap >= bestGap))
-					continue;
-
-				best = r;
-				bestAt = i;
-				bestGap = gap;
-				bestInner = inner;
-			}
-
-			if (best < 0)
+			if ((rm.flags & HD_WATER_ROOM_UNDERWATER) || !rm.floor)
 				continue;
 
-			const HDWaterRoom& rm = rooms[best];
-			int c[4];
+			const int sx = (sqx - rm.originX) >> 10;
+			const int sz = (sqz - rm.originZ) >> 10;
 
-			if (rm.slope)
-				water_corners(rm.floor[bestAt], rm.slope[bestAt * 4],
-					rm.slope[bestAt * 4 + 1], 0, c);
-			else
-				c[0] = c[1] = c[2] = c[3] = rm.floor[bestAt] * 256;
+			if (sx < 0 || sz < 0 || sx >= rm.sizeX || sz >= rm.sizeZ ||
+				rm.floor[sx * rm.sizeZ + sz] == -127)
+				continue;
 
-			const float u = (float)(wx - sqx) * (1.0f / 1024.0f);
-			const float v = (float)(wz - sqz) * (1.0f / 1024.0f);
-			const float y = ((float)c[0] * (1.0f - u) + (float)c[1] * u) *
-				(1.0f - v) + ((float)c[2] * (1.0f - u) + (float)c[3] * u) * v;
-			const int over = (int)floorf((float)wy - y + 0.5f);
-			const int land = over > 0 ? over : 0;
+			const int i = sx * rm.sizeZ + sz;
+			const int gap = rm.floor[i] * 256 > wy ?
+				rm.floor[i] * 256 - wy : wy - rm.floor[i] * 256;
+			const bool inner = sx > 0 && sz > 0 && sx < rm.sizeX - 1 &&
+				sz < rm.sizeZ - 1;
 
-			held = land < held ? land : held;
+			if (gap > 2048 || (best >= 0 && (bestInner && !inner)) ||
+				(best >= 0 && bestInner == inner && gap >= bestGap))
+				continue;
+
+			best = r;
+			bestAt = i;
+			bestGap = gap;
+			bestInner = inner;
 		}
 
-		return held;
+		if (best < 0)
+			return -1;
+
+		const HDWaterRoom& rm = rooms[best];
+
+		if (rm.slope)
+			water_corners(rm.floor[bestAt], rm.slope[bestAt * 4],
+				rm.slope[bestAt * 4 + 1], 0, c);
+		else
+			c[0] = c[1] = c[2] = c[3] = rm.floor[bestAt] * 256;
+
+		return best;
+	}
+
+	/* The classic land's height over the water's top at world wx, wz of a
+	 * land square whose corners water_land gave: the corners interpolated
+	 * across the square, units. */
+	float water_land_over(const int* c, int sqx, int sqz, int wx, int wz,
+		int wy)
+	{
+		const float u = (float)(wx - sqx) * (1.0f / 1024.0f);
+		const float v = (float)(wz - sqz) * (1.0f / 1024.0f);
+		const float y = ((float)c[0] * (1.0f - u) + (float)c[1] * u) *
+			(1.0f - v) + ((float)c[2] * (1.0f - u) + (float)c[3] * u) * v;
+
+		return (float)wy - y;
 	}
 
 	// A room's own light: the mean of colour1 + colour2 over its samples,
@@ -11586,51 +11602,156 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	 * squares stop at 65535 vertices, and those left over draw no sheet.
 	 *
 	 * The lift (a row's `lift`, kWaterLift): a lifted body's grid stands
-	 * that many units over the water's top, and its depth colour is that
-	 * much deeper - where the remaster's ground leaves the water's top
-	 * inside the squares and meets their edge higher, the water rises to
-	 * that edge. Everything the sheet's pixels decide from the frame's
-	 * depth under the sheet - the clip, the waterline, the patches, the
-	 * shallow water's clearness - follows the grid by itself. A grid point
-	 * that touches land lower than the lift takes the land's height there
-	 * (water_point_lift): where the classic land at the squares' edge lies
-	 * under a click, the remaster's ground there follows it - 5 units under
-	 * it to 17 over it at 8 in 10 of the 152 such points of the edge of
-	 * ANDY3's pond, 1 over it at the median (the art's ground against the
-	 * classic floor, both sampled on the edge) -, so a flat lift would
-	 * stand the sheet's edge in the air over a bank that meets the water
-	 * low: 79 of the pond's 208 edge points lie under a lift of 100. The
-	 * body's other grid points stand at the lift. What the game itself
-	 * places at the water's top keeps its height and the tests that match
-	 * it: the game's ripples and their rings, the
+	 * level, that many units over the water's top at every point, and its
+	 * depth colour is that much deeper. The free surface of still water is
+	 * level: where the remaster's ground leaves the water's top inside the
+	 * squares and meets their edge higher, the water stands at the lift and
+	 * the bank climbs out of it. Everything the sheet's pixels decide from
+	 * the frame's depth under the sheet - the clip, the waterline, the
+	 * patches, the shallow water's clearness - follows the grid by itself.
+	 * What the game itself places at the water's top keeps its height and
+	 * the tests that match it: the game's ripples and their rings, the
 	 * classic ripple sprites, the falls' feet and the art the sheets hide
 	 * (all within kRingHeight or a few units of the data's top, and a lift
 	 * stays within a click); the rings and the feet are drawn on the
-	 * sheet's own grid, so they lie on the lifted water. The points held
-	 * under the lift are counted once each for the log (held). */
-	for (size_t b = 0; sheets && b < g_wbodies.size(); b++)
+	 * sheet's own grid, so they lie on the lifted water.
+	 *
+	 * The skirt. Where the land beside a lifted body lies under its surface,
+	 * the level water runs on over it: a land square beside the body's
+	 * squares, or beside one of its skirt squares, up to kWaterSkirtReach
+	 * squares out, whose lowest classic corner stands less than the lift
+	 * and kWaterSkirtMargin over the water's top (water_land: the square of
+	 * the neighbour's room or of a dry room holding it) carries the same
+	 * plane, the same rows and the same shader, in the range of its land
+	 * room's group, with the depth test against the room's art like every
+	 * square - where the remaster's ground rises through the plane the
+	 * sheet is hidden pixel by pixel, and the waterline runs along that line
+	 * by the rule of every bank (WaterPS, the frame's depth under the
+	 * surface). Beside ANDY3's pond the remaster's ground follows the classic
+	 * land within 5 units under it to 17 over it at 8 in 10 of the 152 low
+	 * points of its edge (the art's ground against the classic floor, both
+	 * sampled on the edge), so the classic corners stand in for it. A skirt
+	 * square draws and does nothing else: it is no water square for the
+	 * classic faces, the rings, the ripple sprites, the art the sheets hide,
+	 * the sinks, the eye under the water or the counts; its vertex depth is
+	 * the lift less the classic land under the vertex (what the sheet reads
+	 * without the depth texture) where no water square meets the vertex,
+	 * its shore distance 0. A flipmap twin of its land room that holds the
+	 * same square gets it too, counted once (skirt). A body without a lift
+	 * has none: the classic land beside a water square stands at the
+	 * water's top, a click and more over it, or under it where a floor drops
+	 * away, in all fifteen levels. `held` stays 0, the log's column. */
+	std::vector<SkirtSquare> skirts;
+
+	for (size_t b = 0; b < g_wbodies.size(); b++)
 	{
 		HDRenderWaterBody& info = g_wbodies[b].info;
-		std::unordered_set<unsigned long long> held;
+		std::unordered_set<unsigned long long> seen;
+		std::vector<WaterSquare> from;
 
-		for (size_t i = 0; info.lift > 0 && i < g_wsquares.size(); i++)
+		info.held = 0;
+		info.skirt = 0;
+
+		if (!sheets || info.lift <= 0)
+			continue;
+
+		for (size_t i = 0; i < g_wsquares.size(); i++)
+			if (g_wsquares[i].body == (int)b && g_wsquares[i].sheet)
+			{
+				from.push_back(g_wsquares[i]);
+				seen.insert(WaterKey(g_wsquares[i].wx, g_wsquares[i].wz, 0));
+			}
+
+		for (int reach = 0; reach < kWaterSkirtReach && !from.empty();
+			reach++)
 		{
-			const WaterSquare& s = g_wsquares[i];
+			std::vector<WaterSquare> next;
 
-			if (s.body != (int)b || !s.sheet)
-				continue;
+			for (size_t f = 0; f < from.size(); f++)
+				for (int n = 0; n < 4; n++)
+				{
+					const WaterSquare& s = from[f];
+					const int wx = s.wx + step[n][0];
+					const int wz = s.wz + step[n][1];
+					int c[4];
 
-			for (int j = 0; j <= 4; j++)
-				for (int k = 0; k <= 4; k++)
-					if (water_point_lift(rooms, count, s.room, at,
-						s.wx + k * 256, s.wz + j * 256, s.wy, info.lift) <
-						info.lift)
-						held.insert(WaterKey(s.wx + k * 256, s.wz + j * 256,
-							0));
+					if (seen.count(WaterKey(wx, wz, 0)) ||
+						at.count(WaterKey(wx, wz, s.wy)))
+						continue;
+
+					seen.insert(WaterKey(wx, wz, 0));
+
+					const int r = water_land(rooms, count, s.room, wx, wz,
+						s.wy, c);
+
+					if (r < 0)
+						continue;
+
+					// The lowest corner: y counts down.
+					int low = c[0];
+
+					for (int q = 1; q < 4; q++)
+						low = c[q] > low ? c[q] : low;
+
+					if (s.wy - low >= info.lift + kWaterSkirtMargin)
+						continue;
+
+					WaterSquare k = {};
+
+					k.room = r;
+					k.wx = wx;
+					k.wz = wz;
+					k.wy = s.wy;
+					k.open = s.open;
+					k.sheet = 1;
+					k.body = (int)b;
+					k.sink = -1;
+					k.pit = -1;
+					next.push_back(k);
+					info.skirt++;
+
+					// The land room and its flipmap twins, where drawn HD.
+					for (int q = -1; q < count; q++)
+					{
+						const int t = q < 0 ? r : q;
+
+						if (q >= 0 && (t == r || (rooms[r].flip != t &&
+							rooms[t].flip != r)))
+							continue;
+
+						const HDWaterRoom& rm = rooms[t];
+						const int sx = (wx - rm.originX) >> 10;
+						const int sz = (wz - rm.originZ) >> 10;
+
+						if (t >= groups || !rm.drawn || !rm.floor || sx < 0 ||
+							sz < 0 || sx >= rm.sizeX || sz >= rm.sizeZ ||
+							rm.floor[sx * rm.sizeZ + sz] == -127 ||
+							(rm.flags & HD_WATER_ROOM_UNDERWATER))
+							continue;
+
+						SkirtSquare land = {};
+
+						land.s = k;
+						land.s.room = t;
+						land.s.sx = sx;
+						land.s.sz = sz;
+						land.s.localY = k.wy - rm.originY;
+
+						for (int e = 0; e < 4; e++)
+							land.land[e] = c[e];
+
+						skirts.push_back(land);
+					}
+				}
+
+			from.swap(next);
 		}
-
-		info.held = (int)held.size();
 	}
+
+	std::vector<std::vector<int> > skirtOf((size_t)groups);
+
+	for (size_t i = 0; i < skirts.size(); i++)
+		skirtOf[(size_t)skirts[i].s.room].push_back((int)i);
 
 	if (!sheets || !g_device || !g_water_vs || !g_water_ps)
 		return;
@@ -11652,9 +11773,15 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			range.originX = g < count ? rooms[g].originX : 0;
 			range.originZ = g < count ? rooms[g].originZ : 0;
 
-			for (size_t k = 0; k < squaresOf[(size_t)g].size(); k++)
+			// The body's water squares in this group, then its skirt's.
+			const size_t water = squaresOf[(size_t)g].size();
+
+			for (size_t k = 0; k < water + skirtOf[(size_t)g].size(); k++)
 			{
-				const WaterSquare& s =
+				const bool skirt = k >= water;
+				const SkirtSquare* land = skirt ?
+					&skirts[(size_t)skirtOf[(size_t)g][k - water]] : 0;
+				const WaterSquare& s = skirt ? land->s :
 					g_wsquares[(size_t)squaresOf[(size_t)g][k]];
 
 				if (!s.sheet || s.body != (int)b || verts.size() + 25 > 65535)
@@ -11744,10 +11871,10 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 								}
 							}
 
-						const int lift = g_wbodies[b].info.lift ?
-							water_point_lift(rooms, count, s.room, at, wx, wz,
-							s.wy, g_wbodies[b].info.lift) : 0;
-						const float deep = depth + (float)lift;
+						const int lift = g_wbodies[b].info.lift;
+						const float deep = skirt && !touching ? (float)lift -
+							water_land_over(land->land, s.wx, s.wz, wx, wz,
+							s.wy) : depth + (float)lift;
 						const float dq = (deep > 0.0f ? deep : 0.0f) / 32.0f +
 							0.5f;
 						const float sq = shore / 16.0f + 0.5f;
@@ -11779,6 +11906,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 						idx.push_back((unsigned short)(a + 6));
 						idx.push_back((unsigned short)(a + 5));
 					}
+
+				if (skirt)
+					continue;
 
 				g_sheet_at.insert(SheetKey(g, s.sx, s.sz));
 				g_sheet_world.insert(std::make_pair(
@@ -13041,9 +13171,10 @@ const char* HDRenderWaterSectionName(int section)
  * along world x and z and the speed in units a second, 0,0,0 without one
  * (flow) - and its places whose water names a sink (sinks); the light
  * its colours take, its light or at night the moon's at its luma (lit);
- * last the grid points of its sheet the land beside them holds under its
- * lift (held) and the lift, units over the water's top (lift; see "the
- * lift" in HDRenderSetWaterSheets). */
+ * last `held`, always 0 - a lifted sheet stands level at every grid
+ * point -, the lift, units over the water's top (lift),
+ * and the land squares its level surface runs on over, each place once
+ * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -13118,7 +13249,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
 		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
-		"lit=%.2f,%.2f,%.2f held=%d lift=%d",
+		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -13127,7 +13258,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.tint[1], b.tint[2], b.waves, b.foam, b.twins, b.raw[0], b.raw[1],
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
-		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift);
+		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift,
+		b.skirt);
 	return true;
 }
 
@@ -13942,7 +14074,7 @@ namespace
 			std::memcpy(pixel, rows, 16 * sizeof(float));
 			std::memcpy(pixel + 16, look.pixel, sizeof(look.pixel));
 			pixel[16 + 7 * 4 + 2] = (float)clock;	// the clock
-			pixel[16 + 7 * 4 + 3] = heights;
+			pixel[16 + 7 * 4 + 3] = heights > 1.0f ? heights : 1.0f;
 			std::memcpy(pixel + 15 * 4, rows + 16, 16 * sizeof(float));
 			pixel[19 * 4 + 0] = lag[2];
 			pixel[19 * 4 + 1] = lag[6];
@@ -13979,11 +14111,20 @@ namespace
 				0.0f;
 			pixel[16 + 9 * 4 + 2] = g_proj[10];
 			pixel[16 + 9 * 4 + 3] = -g_proj[14];
-			// c106, gWaterStage: the copy, and RoomProbe's depth view.
+			/* c106, gWaterStage: the copy, and RoomProbe's depth view; w
+			 * the shallows (WaterPS, "the shallows"): one over the depth
+			 * from which a lifted body's rows keep their whole height, 2.56
+			 * times that height now - a wave breaks where its height passes
+			 * 0.78 of the depth (the breaking index of a solitary wave, the
+			 * textbook figure), so the rows' amplitude, half the height, may
+			 * reach 0.39 of it. 1e9 for a body without a lift: its rows
+			 * keep their height at every depth. FootPS's pass writes its
+			 * count over it. */
 			pixel[16 + 10 * 4 + 0] = g_copy_valid ? 1.0f : 0.0f;
 			pixel[16 + 10 * 4 + 1] = look.eyeGain - 1.0f;
 			pixel[16 + 10 * 4 + 2] = depth ? (float)g_depth_view : 0.0f;
-			pixel[16 + 10 * 4 + 3] = 0.0f;
+			pixel[16 + 10 * 4 + 3] = g_wbodies[(size_t)r.body].info.lift > 0 ?
+				1.0f / (2.56f * (heights > 1.0f ? heights : 1.0f)) : 1.0e9f;
 			pixel[16 + 8 * 4 + 3] *= g_bend_scale;
 
 			/* c123, gWaterLara: her place in the frame the shader's world

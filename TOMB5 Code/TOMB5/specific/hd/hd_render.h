@@ -1026,6 +1026,29 @@ void HDRenderWaterDepthUnbind();
 bool HDRenderWaterDepthBound();
 void HDRenderWaterStage2(int copy, int depth, int view, float bend);
 
+/* A body's squares for the water's life (hd_life.cpp, RoomProbe -life):
+ * each place once - a flipmap twin or a second room's square at a place
+ * already given is left out - in the order the build found them, at most
+ * `max` (the count of all of them comes back either way). `rise`, when
+ * given, gets the most its sheet's vertices rise over the surface, units:
+ * its class's swell share times the eight rows' heights (the envelope of
+ * water_rows_now is at most one) with the body's `waves` and `swell`, and
+ * where its class has whitecaps the crest's lift, a quarter of those heights
+ * (the c18 rule of the sheet draw). Read only; -1 for a body that does not
+ * exist. */
+struct HDRenderWaterSquare
+{
+	int x, z;	// world, the square's corner
+	int y;		// world y of its surface
+	int depth;	// down to the floor under it, units
+	int room;	// the room the square lies in
+	int sheet;	// 1 when it draws a sheet
+	int open;	// 1 when its room is open air
+};
+
+int HDRenderWaterBodySquares(int body, HDRenderWaterSquare* out, int max,
+	float* rise);
+
 /* The rings on the sheets (hd_render.cpp, "the rings"), out of the game's
  * own ripples. HDRenderWaterRipples takes the live slots of ripples[]
  * (game\tomb4fx.cpp) once a frame, after HDRenderFrameBegin, each with its

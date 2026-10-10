@@ -2902,7 +2902,7 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * portal, door or vertical link with, and that an intrusion box holds
 	 * there, is drawn only inside its own room's portal window, and not at
 	 * all when that window is empty. Off, the air is not asked and that art
-	 * is drawn on the box's answer alone, as before. Registry only, like
+	 * is drawn on the box's answer alone. Registry only, like
 	 * hd_reach; taken at the start of a level and dead with hd_enable off
 	 * (specific\hd\hd_level.cpp, BuildRoomAir). Registry: hd_air. */
 	bool hd_air;

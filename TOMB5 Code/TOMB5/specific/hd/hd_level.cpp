@@ -3199,11 +3199,12 @@ static void BuildStaticPlaces()
  * no entry's box, most of it hung far outside its own room - ANDREA2's
  * street art of rooms 10 and 236 in rooms 206 and 79, the palms of rooms
  * 117 and 127 in room 125 - where the classic frame shows it. Held to its
- * own window too, it cut a tower top, a door and palm crowns away: on the
- * 131 room-centre views of ANDREA1, ANDREA2, JOBY2 and RICH2 the air
- * changes, it took 1,379,566 pixels, 378,633 of them clear colour, against
- * 190,895 and 111,279 with the boxed art alone, and the ghosts of the five
- * places go pixel for pixel the same either way.
+ * own window as well, it removed art that stands in its place - a tower
+ * top, a door, palm crowns: on the 131 room-centre views of ANDREA1,
+ * ANDREA2, JOBY2 and RICH2 that the air changes it took 1,379,566 pixels,
+ * 378,633 of them clear colour, against 190,895 and 111,279 with the boxed
+ * art alone; the five faults named above go the same way either way, pixel
+ * for pixel.
  *
  * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the

@@ -6146,20 +6146,17 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
-					/* Art in unlinked air that an entry's box holds and the
-					 * box's answer draws with the open half - the band above,
-					 * no face claiming it outside the smaller box - keeps its
-					 * pair, as a piece of its own with no face outside the
-					 * smaller box, so that DecidePairs can hold it to its own
-					 * room's window. Art a stand range or a static's box has
-					 * keeps that answer. Art in no entry's box stays with the
-					 * open half, in unlinked air or not: it is mostly art hung
-					 * far outside its own room that stands where the classic
-					 * frame shows it - ANDREA2's street art and courtyard
-					 * palms -, and held to its window it took 1,188,671 of the
-					 * 1,379,566 pixels the air took on the room-centre views,
-					 * and no ghost of the five places needs it (hd_level.cpp,
-					 * above BuildRoomIntrusions). */
+					/* Art in unlinked air that an entry's box holds, which the
+					 * box's answer would draw with the open half (band art, no
+					 * face claiming it outside the smaller box), becomes a
+					 * piece of its own so that DecidePairs can hold it to its
+					 * own room's window. Art a stand range or a static's box
+					 * has keeps that answer. Art in no entry's box keeps the
+					 * open half: most of it hangs far outside its own room
+					 * where the classic frame shows it (ANDREA2's street art
+					 * and courtyard palms); held to its window it took
+					 * 1,188,671 of the air rule's 1,379,566 pixels on the 131
+					 * room-centre views (hd_level.cpp, BuildRoomIntrusions). */
 					const bool open_air = air && pair_at >= 0 &&
 						stand_at < 0 && box_at < 0 && face_at < 0 && !inner;
 

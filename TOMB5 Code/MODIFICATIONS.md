@@ -4710,9 +4710,10 @@ rule hides where the smaller box's answer drew it whole: RICH2 room 172's wall t
 25 seen from room 114 (55,785 pixels, all clear colour), and in ANDREA1 room 228 the art
 of rooms 38, 37 and 53 standing in the air of rooms 211, 224 and 207, the clear colour
 showing down to the ground beside a wall corner and in a barred window (23,151 pixels,
-18,543 clear colour). The smaller box's answer for an empty window is what removes the lit
-floor in the doorway and part of the black bars, so the choice between the two answers
-is open: the boxed art of an empty window hidden, as built, or the smaller box's answer
+18,543 clear colour). Hiding the boxed art of an empty window, rather than the smaller
+box's answer, is what removes the lit floor in the doorway and part of the black bars,
+so the choice between the two answers is open: the boxed art of an empty window hidden,
+as built, or the smaller box's answer
 kept for it, which brings these holes back filled and the lit floor and part of the bars
 back with them - the owner's decision, to be made at those places in the game with
 `hd_air`. And boxed art cut along its room's window: a door frame in the second edge

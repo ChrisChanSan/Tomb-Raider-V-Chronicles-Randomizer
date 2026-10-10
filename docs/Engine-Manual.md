@@ -2715,7 +2715,7 @@ enclose, off its walls and out of its doorways - and that one of the overlap box
 holds too is drawn only inside its own room's window, and not at all when that window
 is empty, whatever the answers above, unless the classic path draws a face of its room
 that claims it; such art in no box keeps the answers above. The registry setting
-`hd_air` (below) switches this off. The level line ends with
+`hd_air` (above) switches this off. The level line ends with
 `air_ms=` (the time the build spent on it), `air_tris=` (such triangles),
 `air_groups=`, `air_pairs=`, `air_boxed=` (the triangles of `air_tris` a box holds,
 the ones held to their window) and `air=` (the `hd_air` the level was built with; with

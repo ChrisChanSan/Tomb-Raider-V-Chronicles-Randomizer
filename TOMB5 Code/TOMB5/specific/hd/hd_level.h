@@ -369,7 +369,11 @@ void HDFrameDrawGlow();
  *   castOnly items cast into the second map that the picture clipped away
  *            (drawn in no pass), all frames together
  *   mirror   frames in which a mirror's image took the maps through its
- *            mirror's blocks - a mirror's room group or a reflection */
+ *            mirror's blocks - a mirror's room group or a reflection
+ *   modelsMs processor time of the models' pass, milliseconds, all frames
+ *            together
+ *   arriving frames in which the shadow was still coming in (hd_shadow.h,
+ *            HDShadowArrive: its presence below 1) */
 struct HDShadowCastStats
 {
 	int frames;
@@ -388,6 +392,8 @@ struct HDShadowCastStats
 	int modelCalls;
 	int castOnly;
 	int mirror;
+	double modelsMs;
+	int arriving;
 };
 
 void HDFrameShadowCastStats(HDShadowCastStats* out, bool clear);

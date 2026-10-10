@@ -1538,6 +1538,113 @@ namespace
 				}
 		}
 
+		/* Every room's air (HDRoomAir in specific\hd\hd_render.h), as
+		 * BuildRoomAir hands it to the renderer: per floor square its floor
+		 * and ceiling bytes and its floor data words from its index on,
+		 * read by HDSectorAir. And the same squares read the randomizer's
+		 * way - Tr5Level::cornerFloor and cornerCeiling at the four corners,
+		 * a portal square out - the randomizer's reading, held against
+		 * HDSectorAir; `airDiffer` is the squares where the two part. */
+		std::vector<HDRoomAir> air((size_t)rooms);
+		std::vector<std::vector<float> > airSquares((size_t)rooms);
+		int airSquareCount = 0, airWith = 0, airDiffer = 0;
+		// The rooms the air is not asked about: next door, a floor portal.
+		std::vector<std::set<int> > airLinked = nextDoor;
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const RoomSpace& b = box[(size_t)r];
+			std::vector<Tr5Level::SectorInfo> sect;
+			std::vector<float>& squares = airSquares[(size_t)r];
+
+			squares.clear();
+
+			for (int q = 0; q < b.numX * b.numZ; q++)
+			{
+				squares.push_back(HD_AIR_NONE);
+				squares.push_back(-HD_AIR_NONE);
+			}
+
+			if (level.sectorInfo(r, sect, error))
+				for (size_t q = 0; q < sect.size(); q++)
+				{
+					const Tr5Level::SectorInfo& si = sect[q];
+					const size_t at = ((size_t)si.sx * b.numZ + si.sz) * 2;
+					std::vector<Tr5FloorEntry> chain;
+					std::vector<unsigned short> words;
+					bool readable = true;
+
+					if (si.fdIndex && !level.readChain(si.fdIndex, chain))
+						readable = false;
+
+					for (size_t e = 0; e < chain.size(); e++)
+						for (size_t w = 0; w < chain[e].words.size(); w++)
+							words.push_back(chain[e].words[w]);
+
+					float top = HD_AIR_NONE, bottom = -HD_AIR_NONE;
+					int door = -1;
+
+					if (readable && at + 1 < squares.size())
+						HDSectorAir(si.floor, si.ceiling,
+							words.empty() ? 0 : &words[0], (int)words.size(),
+							&top, &bottom, &door);
+
+					if (door >= 0 && door < rooms)
+					{
+						airLinked[(size_t)r].insert(door);
+						airLinked[(size_t)door].insert(r);
+					}
+
+					if (at + 1 < squares.size())
+					{
+						squares[at] = top;
+						squares[at + 1] = bottom;
+					}
+
+					// The randomizer's reading of the same square.
+					long f[4], c[4];
+					bool corners = si.doorTo < 0;
+
+					for (int k = 0; k < 4 && corners; k++)
+						corners = level.cornerFloor(r, si.sx, si.sz,
+							k < 2 ? 0 : 1024, (k & 1) ? 1024 : 0, f[k]) &&
+							level.cornerCeiling(r, si.sx, si.sz,
+							k < 2 ? 0 : 1024, (k & 1) ? 1024 : 0, c[k]);
+
+					float top2 = HD_AIR_NONE, bottom2 = -HD_AIR_NONE;
+
+					if (corners)
+					{
+						const long fMin = std::min(std::min(f[0], f[1]),
+							std::min(f[2], f[3]));
+						const long fMax = std::max(std::max(f[0], f[1]),
+							std::max(f[2], f[3]));
+						const long cMin = std::min(std::min(c[0], c[1]),
+							std::min(c[2], c[3]));
+						const long cMax = std::max(std::max(c[0], c[1]),
+							std::max(c[2], c[3]));
+
+						if (fMax > cMin)
+						{
+							top2 = (float)cMax;
+							bottom2 = (float)fMin;
+						}
+					}
+
+					airSquareCount++;
+					airWith += top < bottom ? 1 : 0;
+					airDiffer += top != top2 || bottom != bottom2 ||
+						door != si.doorTo ? 1 : 0;
+				}
+
+			air[(size_t)r].x = (float)b.ox;
+			air[(size_t)r].y = (float)b.oy;
+			air[(size_t)r].z = (float)b.oz;
+			air[(size_t)r].nx = b.numX;
+			air[(size_t)r].nz = b.numZ;
+			air[(size_t)r].sectors = squares.empty() ? 0 : &squares[0];
+		}
+
 		int pairs = 0;
 		long long intruding = 0;
 		std::vector<unsigned char> windowed((size_t)rooms, 0);
@@ -1856,13 +1963,161 @@ namespace
 		/* band_unclaimed: the triangles no face claims that stand outside
 		 * the smaller box, drawn with the open half - the engine's HDLOG
 		 * level line ends with the same number. */
+		/* Art in the air of a room its own room has no link with, not even
+		 * through a flipmap twin (HDRoomAir), as the engine's build asks it of
+		 * every triangle of every room's group: per (group, host) the
+		 * triangles - the HDLOG unlinked lines, in the same order -, and
+		 * each triangle once for air_tris. `outside` is the art no entry's
+		 * box holds, which the build makes pieces of its own; listed per
+		 * pair with the reason. `squares` are the floor squares read and
+		 * `differ` those where HDSectorAir and the randomizer's corners
+		 * part. `air_boxed` counts the triangles of air_tris some entry's
+		 * box holds - the first pair above has them - as the build counts
+		 * them before a stand range or a static's box takes any: the art
+		 * the engine holds to its own room's window. */
+		long long airTris = 0, outsideTris = 0, airBoxed = 0;
+		std::map<std::pair<int, int>, long long> airPairs, outsidePairs;
+		std::set<int> airGroupSet;
+		/* The pairs not asked, row by the art's room, as BuildRoomAir makes
+		 * them: the same room, next door, a floor portal, flipmap twins, and
+		 * closed over the twins. */
+		std::vector<unsigned char> airLink((size_t)rooms * (size_t)rooms, 0);
+		std::vector<int> airTwin((size_t)rooms, -1);
+
+		for (int b = 0; b < rooms; b++)
+			for (int a = 0; a < rooms; a++)
+				if (a == b || airLinked[(size_t)a].count(b) ||
+					level.rooms()[(size_t)a].altRoom == b ||
+					level.rooms()[(size_t)b].altRoom == a)
+					airLink[(size_t)b * rooms + a] = 1;
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const int alt = level.rooms()[(size_t)r].altRoom;
+
+			if (alt >= 0 && alt < rooms)
+			{
+				airTwin[(size_t)r] = alt;
+				airTwin[(size_t)alt] = r;
+			}
+		}
+
+		{
+			const std::vector<unsigned char> direct = airLink;
+
+			for (int b = 0; b < rooms; b++)
+				for (int a = 0; a < rooms; a++)
+				{
+					const int tb = airTwin[(size_t)b];
+					const int ta = airTwin[(size_t)a];
+
+					if ((ta >= 0 && direct[(size_t)b * rooms + ta]) ||
+						(tb >= 0 && direct[(size_t)tb * rooms + a]) ||
+						(ta >= 0 && tb >= 0 && direct[(size_t)tb * rooms + ta]))
+						airLink[(size_t)b * rooms + a] = 1;
+				}
+		}
+
+		for (size_t g = 0; g < centre.size() && (int)g < rooms; g++)
+			for (size_t c = 0; c + 2 < centre[g].size(); c += 3)
+			{
+				const float wx = centre[g][c] + air[g].x;
+				const float wy = centre[g][c + 1] + air[g].y;
+				const float wz = centre[g][c + 2] + air[g].z;
+				bool any = false, missed = false;
+
+				for (int a = 0; a < rooms; a++)
+				{
+					if (airLink[g * (size_t)rooms + (size_t)a])
+						continue;
+
+					if (!HDRoomAirHolds(air[(size_t)a], wx, wy, wz,
+						HD_AIR_MARGIN))
+						continue;
+
+					any = true;
+					airPairs[std::make_pair((int)g, a)]++;
+
+					// The entry's box, as BuildRoomIntrusions makes it.
+					const RoomSpace& A = box[(size_t)a];
+					const RoomSpace& B = box[g];
+					const bool entry =
+						boxOverlap(A.x0, A.x1, B.x0, B.x1) &&
+						boxOverlap(A.z0, A.z1, B.z0, B.z1) &&
+						boxOverlap(A.y0, A.y1, B.y0, B.y1) &&
+						A.ix1 > A.ix0 && A.iz1 > A.iz0;
+					const float cx = centre[g][c];
+					const float cy = centre[g][c + 1];
+					const float cz = centre[g][c + 2];
+					const bool held = entry &&
+						cx >= (float)(A.ix0 - B.ox) &&
+						cx <= (float)(A.ix1 - B.ox) &&
+						cz >= (float)(A.iz0 - B.oz) &&
+						cz <= (float)(A.iz1 - B.oz) &&
+						cy >= (float)(A.y0 - B.oy) &&
+						cy <= (float)(A.y1 - B.oy);
+
+					if (!held)
+					{
+						missed = true;
+						outsidePairs[std::make_pair((int)g, a)]++;
+					}
+				}
+
+				if (any)
+				{
+					airTris++;
+					airGroupSet.insert((int)g);
+
+					if (g < tagged.size() && c / 3 < tagged[g].size() &&
+						tagged[g][c / 3])
+						airBoxed++;
+				}
+
+				outsideTris += missed ? 1 : 0;
+			}
+
+		for (std::map<std::pair<int, int>, long long>::const_iterator it =
+			airPairs.begin(); it != airPairs.end(); ++it)
+			std::printf("unlinked level=%s group=%d host=%d tris=%lld\n",
+				stem.c_str(), it->first.first, it->first.second, it->second);
+
+		/* air_tris air_groups air_pairs air_boxed: the engine's level line
+		 * ends with the same four (ReportRoomIntrusions) and air=, the
+		 * setting the level took; its air_ms is a time and has no
+		 * counterpart here. */
 		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d intruding "
 			"tris=%lld in %d groups  overhang tris=%lld of %lld  worst=%ld "
 			"(group %d)  holder=%s faces=%d bound=%lld unbound=%lld "
-			"band_unclaimed=%lld\n",
+			"band_unclaimed=%lld air_tris=%lld air_groups=%d air_pairs=%d "
+			"air_boxed=%lld\n",
 			stem.c_str(), rooms, (int)trg.groups.size(), pairs, intruding,
 			windowedRooms, tris_out, tris_total, worst, worst_group, holder,
-			facesClaimed, boundTris, unboundTris, bandTris);
+			facesClaimed, boundTris, unboundTris, bandTris, airTris,
+			(int)airGroupSet.size(), (int)airPairs.size(), airBoxed);
+
+		{
+			std::printf("%-9s   unlinked air outside every entry's box: "
+				"tris=%lld pairs=%d  squares=%d with_air=%d differ=%d\n",
+				stem.c_str(),
+				outsideTris, (int)outsidePairs.size(), airSquareCount, airWith,
+				airDiffer);
+
+			for (std::map<std::pair<int, int>, long long>::const_iterator it =
+				outsidePairs.begin(); it != outsidePairs.end(); ++it)
+			{
+				const RoomSpace& A = box[(size_t)it->first.second];
+				const RoomSpace& B = box[(size_t)it->first.first];
+				const char* why =
+					!boxOverlap(A.y0, A.y1, B.y0, B.y1) ? "the boxes part in y"
+					: !(A.ix1 > A.ix0 && A.iz1 > A.iz0) ? "no inside"
+					: "outside the inside";
+
+				std::printf("  unlinked outside: group %3d host %3d tris %lld "
+					"(%s)\n", it->first.first, it->first.second, it->second,
+					why);
+			}
+		}
 		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
 			"<=256 %lld, <=1024 %lld, >1024 %lld\n",
 			stem.c_str(), hist[0], hist[1], hist[2], hist[3], hist[4]);

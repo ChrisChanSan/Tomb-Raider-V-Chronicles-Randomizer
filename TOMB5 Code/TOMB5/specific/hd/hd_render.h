@@ -300,6 +300,342 @@ struct HDIntrusion
 	float maxs[3];
 };
 
+/* The air of a classic room: the space a room's own floor squares enclose,
+ * off its walls, floors and ceilings and out of its doorways.
+ *
+ * Art of room b whose centroid stands in the air of a room a that b has no
+ * portal, door or vertical link with, not even through a flipmap twin, is
+ * art in a room b cannot be seen through: the classic path draws no face of
+ * b there unless b's own window reaches it. Such art that an entry above
+ * holds too is drawn only inside b's own portal window and is left out
+ * when b has none, unless the classic path draws a face of b that claims
+ * it (hd_level.cpp, DecidePairs). Every triangle of a room's group is
+ * asked, against every room with an air square under its centroid, for
+ * the level's counts; the art no entry holds keeps the box's answer: art
+ * hung far outside its own room - ANDREA2's street art of rooms 10 and
+ * 236 in rooms 206 and 79, its courtyard palms - stands in rooms whose
+ * box its room's box never touches, where the classic frame shows it
+ * (hd_level.cpp, above BuildRoomIntrusions). With tomb5.hd_air off no
+ * room's air is handed in.
+ *
+ * A floor square has air when all four corners of its floor and of its
+ * ceiling can be read - a wall square, height byte -127, has none -, its
+ * floor data names no portal, and its floor lies below its ceiling at
+ * some corner. A point stands in the air when it and the four points
+ * HD_AIR_MARGIN from it along x and z lie on such squares, each with the
+ * point more than HD_AIR_MARGIN below the square's lowest ceiling corner
+ * and above its highest floor corner.
+ *
+ * `sectors` holds two floats per square, square (i, k) at (i * nz + k) * 2
+ * with i over the nx squares along x and k over the nz along z: the lowest
+ * ceiling corner and the highest floor corner, world y (downward), and
+ * HD_AIR_NONE and -HD_AIR_NONE for a square with no air. x, y and z are the
+ * room's origin in world units. */
+struct HDRoomAir
+{
+	float x, y, z;
+	int nx, nz;
+	const float* sectors;
+};
+
+/* A height no point reaches: a million units, past every height a floor
+ * square can name - a signed byte of 256-unit clicks, 127 at most, and a
+ * split's 16 and two tilts of 15 more: 173 clicks, 44,288 units. */
+#define HD_AIR_NONE		1.0e6f
+
+/* How far inside a room's air a point has to stand, in world units - an
+ * eighth of a click, so that art lying on a wall, floor or doorway plane
+ * of the room stays out of its air. Measured with TrgProbe -roomspace, the
+ * art in unlinked air at 32 against 16: ANDREA1 11,335 against 12,409
+ * triangles, ANDREA2 129,471 against 131,097, JOBY2 23,095 against 26,057,
+ * JOBY4 4,305 against 4,404, RICH2 62,627 against 99,623 - the lift
+ * shaft's second hull on its walls. Rendered at nineteen places, 16 draws
+ * the same picture as 32 at sixteen and takes more at three: 667 pixels
+ * more of the black bars beside a pillar, but 1,692 more of a doorway's
+ * frame in a street and 1,137 more of a palm's fronds. */
+#define HD_AIR_MARGIN	32.0f
+
+/* Whether a world point stands in a room's air - see HDRoomAir. */
+inline bool HDRoomAirHolds(const HDRoomAir& air, float x, float y, float z,
+	float margin)
+{
+	const float step[5][2] =
+	{
+		{ 0.0f, 0.0f }, { margin, 0.0f }, { -margin, 0.0f },
+		{ 0.0f, margin }, { 0.0f, -margin }
+	};
+
+	if (!air.sectors)
+		return false;
+
+	for (int k = 0; k < 5; k++)
+	{
+		const float lx = x + step[k][0] - air.x;
+		const float lz = z + step[k][1] - air.z;
+
+		if (lx < 0.0f || lz < 0.0f)
+			return false;
+
+		const int i = (int)(lx / 1024.0f);
+		const int j = (int)(lz / 1024.0f);
+
+		if (i >= air.nx || j >= air.nz)
+			return false;
+
+		const float* s = air.sectors + ((size_t)i * air.nz + j) * 2;
+
+		if (!(y > s[0] + margin && y < s[1] - margin))
+			return false;
+	}
+
+	return true;
+}
+
+/* How many words one floor data entry takes after its type word at
+ * chain[at - 1], read as GetHeight (game\control.cpp) reads them: a portal,
+ * a floor or ceiling slope one, a trigger its setup word and its command
+ * words to the one with the end bit - a camera's and a flyby's command one
+ * word more -, lava, climb, monkey and the trigger trigger none. -1 when
+ * the entry runs past `words`. The function numbers are game\types.h's
+ * floor_types and trigobj_types. */
+inline int HDFloorEntryWords(const unsigned short* chain, int at, int words,
+	int fn)
+{
+	if (fn == 1 || fn == 2 || fn == 3 || (fn >= 7 && fn <= 18))
+		return at < words ? 1 : -1;	// DOOR, TILT, ROOF, SPLIT*, NOCOL*
+
+	if (fn != 4)				// TRIGGER_TYPE
+		return 0;
+
+	int n = 1;				// the setup word
+	unsigned short trigger = 0;
+
+	do
+	{
+		if (at + n >= words)
+			return -1;
+
+		trigger = chain[at + n++];
+
+		const int kind = (trigger >> 10) & 0xF;
+
+		if (kind == 1 || kind == 12)	// TO_CAMERA, TO_FLYBY
+		{
+			if (at + n >= words)
+				return -1;
+
+			trigger = chain[at + n++];
+		}
+	} while (!(trigger & 0x8000));
+
+	return n;
+}
+
+/* One floor square's air out of its floor data - the two floats HDRoomAir
+ * keeps per square. `floorByte` and `ceilingByte` are FLOOR_INFO's floor and
+ * ceiling, `chain` the square's floor data from its index on (0 for a
+ * square with none) and `words` how many words of it may be read. False,
+ * with HD_AIR_NONE written, for a square with no air. `door` gets the room
+ * the square's floor data names a portal to, wall or not, and -1 for none.
+ *
+ * The heights are GetHeight's and GetCeiling's (game\control.cpp) at the
+ * square's corners. Those two are linear inside a square but read the
+ * offset as (v & 1023) and ((-1 - v) & 1023), so they cannot be asked at a
+ * corner; the same formula on the edge takes cv and 1024 - cv for them (cv
+ * 0 or 1024), and a split's triangle is chosen one unit inside the corner,
+ * where both triangles give the same height. That is the reading of the
+ * randomizer's level reader (Tr5Level::cornerFloor and cornerCeiling);
+ * TrgProbe -roomspace compares the two on every square. The floor walks the
+ * whole chain as GetHeight does and adds every floor slope it meets; the
+ * ceiling reads the first entry, or the second behind a floor slope, as
+ * GetCeiling does. */
+inline bool HDSectorAir(int floorByte, int ceilingByte,
+	const unsigned short* chain, int words, float* top, float* bottom,
+	int* door)
+{
+	*top = HD_AIR_NONE;
+	*bottom = -HD_AIR_NONE;
+	*door = -1;
+
+	// The portal, read before anything else: a wall square may carry one.
+	for (int at = 0; chain && at < words; )
+	{
+		const unsigned short type = chain[at++];
+		const int length = HDFloorEntryWords(chain, at, words, type & 0x1F);
+
+		if (length < 0)
+			break;
+
+		if ((type & 0x1F) == 1)		// DOOR_TYPE
+			*door = chain[at];
+
+		at += length;
+
+		if (type & 0x8000)
+			break;
+	}
+
+	if (floorByte == -127 || ceilingByte == -127 || *door >= 0)
+		return false;			// a wall square, NO_HEIGHT; a portal
+
+	long floorMin = 0, floorMax = 0, ceilMin = 0, ceilMax = 0;
+
+	for (int k = 0; k < 4; k++)
+	{
+		const int cx = k < 2 ? 0 : 1024;
+		const int cz = (k & 1) ? 1024 : 0;
+		const int px = cx ? 1023 : 1;	// the probe for a split's triangle
+		const int pz = cz ? 1023 : 1;
+		long floorY = (long)floorByte * 256;
+		long ceilY = (long)ceilingByte * 256;
+		int at = 0;
+		bool last = !chain || words <= 0;
+
+		// The floor: every floor slope of the chain.
+		while (!last)
+		{
+			if (at >= words)
+				return false;		// a chain past its end: no answer
+
+			const unsigned short type = chain[at++];
+			const int fn = type & 0x1F;
+			const int length = HDFloorEntryWords(chain, at, words, fn);
+			int xoff = 0, yoff = 0;
+			bool slope = false;
+
+			if (length < 0)
+				return false;
+
+			last = (type & 0x8000) != 0;
+
+			if (fn == 2)			// TILT_TYPE
+			{
+				const short d = (short)chain[at];
+
+				xoff = d >> 8;
+				yoff = (signed char)(d & 0xFF);
+				slope = true;
+			}
+			else if (fn == 7 || fn == 8 || (fn >= 11 && fn <= 14))
+			{				// SPLIT1/2, NOCOLF*
+				const unsigned short d = chain[at];
+				const int t0 = d & 0xF, t1 = (d >> 4) & 0xF;
+				const int t2 = (d >> 8) & 0xF, t3 = (d >> 12) & 0xF;
+				const bool first = fn == 7 || fn == 11 || fn == 12;
+				const int shift = (first ? px > 1024 - pz : px > pz) ? 5 : 10;
+				int hadj = (type >> shift) & 0x1F;
+
+				if (hadj & 0x10)
+					hadj -= 32;
+
+				floorY += hadj * 256;
+
+				if (shift == 5)
+				{
+					xoff = t3 - t0;
+					yoff = first ? t3 - t2 : t0 - t1;
+				}
+				else
+				{
+					xoff = t2 - t1;
+					yoff = first ? t0 - t1 : t3 - t2;
+				}
+
+				slope = true;
+			}
+
+			at += length;
+
+			if (slope)
+			{
+				if (xoff < 0)
+					floorY -= (xoff * cz) >> 2;
+				else
+					floorY += (xoff * (1024 - cz)) >> 2;
+
+				if (yoff < 0)
+					floorY -= (yoff * cx) >> 2;
+				else
+					floorY += (yoff * (1024 - cx)) >> 2;
+			}
+		}
+
+		// The ceiling: the first entry, or the one behind a floor slope.
+		if (chain && words > 0)
+		{
+			int fn = chain[0] & 0x1F;
+			int from = 0;
+			bool none = false;
+
+			if (fn == 2 || fn == 7 || fn == 8 || (fn >= 11 && fn <= 14))
+			{
+				none = (chain[0] & 0x8000) != 0 || words < 3;
+				from = 2;
+				fn = none ? 0 : chain[2] & 0x1F;
+			}
+
+			int h1 = 0, h2 = 0;
+
+			if (!none && fn == 3 && from + 1 < words)	// ROOF_TYPE
+			{
+				const short d = (short)chain[from + 1];
+
+				h1 = d >> 8;
+				h2 = (signed char)(d & 0xFF);
+			}
+			else if (!none && from + 1 < words &&
+				(fn == 9 || fn == 10 || (fn >= 15 && fn <= 18)))
+			{
+				const unsigned short type = chain[from];
+				const unsigned short d = chain[from + 1];
+				const int t0 = -(d & 0xF), t1 = -((d >> 4) & 0xF);
+				const int t2 = -((d >> 8) & 0xF), t3 = -((d >> 12) & 0xF);
+				const bool first = fn == 9 || fn == 15 || fn == 16;
+				const bool lowHalf = first ? px <= 1024 - pz : px <= pz;
+				int hadj = (type >> (lowHalf ? 10 : 5)) & 0x1F;
+
+				if (hadj & 0x10)
+					hadj -= 32;
+
+				ceilY += hadj * 256;
+
+				if (lowHalf)
+				{
+					h1 = t2 - t1;
+					h2 = first ? t3 - t2 : t0 - t1;
+				}
+				else
+				{
+					h1 = t3 - t0;
+					h2 = first ? t0 - t1 : t3 - t2;
+				}
+			}
+
+			if (h1 < 0)
+				ceilY += (h1 * cz) >> 2;
+			else
+				ceilY -= (h1 * (1024 - cz)) >> 2;
+
+			if (h2 < 0)
+				ceilY += (h2 * (1024 - cx)) >> 2;
+			else
+				ceilY -= (h2 * cx) >> 2;
+		}
+
+		if (!k || floorY < floorMin) floorMin = floorY;
+		if (!k || floorY > floorMax) floorMax = floorY;
+		if (!k || ceilY < ceilMin) ceilMin = ceilY;
+		if (!k || ceilY > ceilMax) ceilMax = ceilY;
+	}
+
+	if (floorMax <= ceilMin)
+		return false;				// floor and ceiling meet everywhere
+
+	*top = (float)ceilMax;
+	*bottom = (float)floorMin;
+	return true;
+}
+
 /* One classic face of a room whose art stands inside another room.
  *
  * The classic path draws a room's face whole or not at all: its corner rule
@@ -1200,6 +1536,15 @@ void HDRenderSetIntrusions(const HDIntrusion* list, int count);
  * HDPairFace. Same contract again. Without them every intruding triangle is
  * one piece per entry that no face claims, drawn inside the window. */
 void HDRenderSetPairFaces(const HDPairFace* faces, int count);
+/* Every room's air - see HDRoomAir - in room order, the group's own room at
+ * the group's number, and `links`, count * count bytes, row by the art's
+ * room: nonzero where the two rooms are not asked about - the same room,
+ * rooms with a portal or a vertical link, flipmap twins, and every pair a
+ * twin of either room joins that way. Same contract
+ * again. Without it no triangle stands in any air and every piece's `air`
+ * is 0. */
+void HDRenderSetRoomAir(const HDRoomAir* rooms, int count,
+	const unsigned char* links);
 
 /* The classic faces another group's art may stand on - see hd_cover.h.
  *
@@ -1334,7 +1679,13 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * one whose box holds the triangle, when several do), `face` the index into
  * the list handed to HDRenderSetPairFaces or -1, `inner` 1 when the triangles
  * also stand in the entry's box made one sector smaller in x and z (always 1
- * for a piece no face claims), `triangles` all three passes together. */
+ * for a piece no face claims), `triangles` all three passes together. `air`
+ * is 1 when the triangles stand in the air of a room their own room has no
+ * link with (HDRoomAir) - art held to its own room's window - and
+ * splits the pieces like the other three. Such art the open half would
+ * draw - no face claims it and it stands outside the smaller box - is a
+ * piece too, with `face` -1 and `inner` 0, which no other piece is. Art in
+ * no entry's box is in no piece, in unlinked air or not. */
 struct HDPairRange
 {
 	int intrusion;
@@ -1342,6 +1693,7 @@ struct HDPairRange
 	int face;
 	int inner;
 	int triangles;
+	int air;
 };
 int HDRenderGroupPairRanges(int group);
 bool HDRenderGroupPairRange(int group, int index, HDPairRange* out);
@@ -1379,6 +1731,19 @@ int HDRenderIntrusionHits(int at);
  * build hands to the open half, drawn over the whole screen on every frame
  * and never answered per frame. Same terms as HDRenderIntrusionHits. */
 int HDRenderIntrusionBand(int at);
+/* The (group, host) pairs whose art stands in the air of a room its own
+ * room has no link with (HDRoomAir), in the order of group and host, and
+ * per pair how many of the group's triangles do, all three passes
+ * together; a triangle in the air of two hosts counts for both. */
+int HDRenderAirPairs();
+bool HDRenderAirPair(int index, int* group, int* host, int* tris);
+/* A group's triangles that stand in such air, each counted once, those of
+ * them an intrusion entry's box holds - the art the air holds to its own
+ * room's window, but what a stand range or a static's box takes -, and the
+ * microseconds the build spent asking the air. */
+int HDRenderGroupAirTriangles(int group);
+int HDRenderGroupAirBoxed(int group);
+double HDRenderAirMicroseconds();
 // How many of a group's triangles stand inside some OTHER room, all three
 // passes together. Non-zero is the whole of "this room needs a portal
 // window"; zero is every other room in the game.

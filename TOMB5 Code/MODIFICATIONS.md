@@ -4636,17 +4636,24 @@ than 500. The largest are ANDREA2's street art and courtyard palms (the twelve l
 but two), the art of the reach-only room 172 from RICH2 room 114, the RICH2 lift shaft's
 second hull (rooms 35 to 38, no clear colour) and the room-31 pipe from JOBY2 room 33;
 art out of place goes with the block beside the flag and a window frame from ANDREA1
-rooms 110 and 44 and the black bars from JOBY2 rooms 9 and 44; ANDREA1 room 228 (23,151
-pixels, 18,543 clear colour), room 154's art in room 144 seen from ANDREA1 rooms 128 to
-152, RICH2 rooms 5, 41 and 128 and ANDREA2 room 95 (2,000 to 19,000 pixels) are counted,
-not looked at one by one. Room 0's doors from ANDREA1 room 109, RICH2 rooms 106 and 108
-and JOBY2 rooms 31 and 65 now change by less than 500. ANDREA2 room 79, where room 236's
-art stands in the air, changes by 354 and 503 pixels in two directions; of the sixteen
-views in ANDREA3
-rooms 115 and 80, RICH3 room 92 and JOBY3 room 190 one changes, by 3,021 pixels, the wall
-of room 16 the classic path draws in room 80 staying whole. Load cost, air_ms, median of
-three runs of the x86 tool's level build, measured while another build shared the machine
-(a quieter run gave 2 to 87 ms):
+rooms 110 and 44 and the black bars from JOBY2 rooms 9 and 44. ANDREA1 room 228 (23,151
+pixels, 18,543 clear colour) and RICH2 room 41 (16,916 pixels, none pure clear colour)
+were looked at and are holes (below); room 154's art in room 144 seen from ANDREA1 rooms
+128 to 152, RICH2 rooms 5 and 128 and ANDREA2 room 95 (2,000 to 19,000 pixels) are
+counted, not looked at one by one. Room 0's doors from ANDREA1 room 109, RICH2 rooms 106
+and 108 and JOBY2 rooms 31 and 65 now change by less than 500. ANDREA2 room 79, where
+room 236's art stands in the air, changes by 354 and 503 pixels in two directions; of the
+sixteen views in ANDREA3 rooms 115 and 80, RICH3 room 92 and JOBY3 room 190 one changes,
+by 3,021 pixels, 1,104 of them clear colour: a slit under a cornice seen from room 115,
+where room 16's art in room 80's air, whose pair has no claiming face, is cut away
+(below); the wall of room 16 the classic path draws in room 80 stays whole. The 32 views
+on which the window on intruding art was first checked for filled and slit art: 14
+change, by 105,421 pixels, 40,428 of them clear colour - ANDREA2 room 177 (27,221, one
+clear), ANDREA1 room 228, room 110's block beside the flag (18,444, the sky behind it),
+RICH2 room 41, JOBY2 room 33 (15,942, 3,238 clear) and nine by less than 1,000.
+
+Load cost, air_ms, median of three runs of the x86 tool's level build, measured while
+another build shared the machine (quieter runs gave 2 to 87 and 2 to 86 ms):
 
 | Level | ms | Level | ms | Level | ms |
 |---|---:|---|---:|---|---:|
@@ -4655,6 +4662,15 @@ three runs of the x86 tool's level build, measured while another build shared th
 | ANDREA3 | 71 | JOBY3 | 32 | RICH3 | 53 |
 | ANDY1 | 53 | JOBY4 | 28 | RICHCUT2 | 2 |
 | ANDY2 | 61 | JOBY5 | 41 | TITLE | 74 |
+
+A piece of a pair whose claimed face the classic path draws keeps today's answer, listed
+holder or not, a choice of this build: that face of the art's room is in sight, and the
+art bound to it - doors, frames, wall edges - stands proud of it where the window cuts;
+without it two of room 0's doors seen from ANDREA1's room 109 lose their lower half and
+RICH2's room 106 view loses 74,088 pixels of a metal wall's edge. At eight spots around
+the five places, twelve directions each, the rule with that answer and without it differ
+by one pixel once, although at some directions it draws the art of rooms 93 and 101 in
+each other's air and of room 30 in room 16 whole.
 
 ModernTest 14,721 checks, MenuTest 42,627, InterpTest 729, LipsTest 270 with the `.OBJ`
 folder and 243 without, 0 failed; every `hd_shader/*.inc` is byte-identical.
@@ -4674,6 +4690,13 @@ black bars is what removes them; and the crowns of the courtyard palms of Trajan
 (rooms 117 and 127 in room 125; 46,995 pixels in one view, fronds sliced in another).
 Smaller: most of a coiled pipe beside the stairs seen from JOBY2 room 33, room 31's art in
 room 24 (15,942 pixels, 3,238 of them clear colour). A few pixels of the black bars stay.
+Looked at since: in ANDREA1 room 228 the art of rooms 38, 37 and 53 standing in the air
+of rooms 211, 224 and 207 goes, and the clear colour shows down to the ground beside a
+wall corner and in a barred window (18,543 pixels); in RICH2 room 41 the marble floor
+takes the clear colour's tint where art seen through it goes (16,916 pixels, none of
+them pure clear colour), and rooms 5 and 128 change by 18,922 and 4,789 pixels with no
+pure clear colour either; in ANDREA3 room 115 a slit of 1,104 pixels of clear colour
+opens under a cornice.
 
 **Unchanged.** `hd_enable` 0: `HDLevelLoad` returns before any of it, and no piece exists
 for `DecidePairs` to ask. The walk and the reach, the trim, the camera, the inner-box pair
@@ -4689,22 +4712,17 @@ portal does: without it ANDY1, ANDY3 and TITLE took art seen through such doorwa
 through a flipmap twin links too: a flipmap swaps a room's contents with its twin's, so
 in one state the twin's portals lead out of the room at that place; without it 31 pairs
 of 24,936 triangles (RICH2's room 11 in room 6, whose twin 159 is linked, 15,663 of them)
-are held to their own window in every state. A piece of a pair whose claimed face the
-classic path draws keeps today's answer, listed holder or not: that face of the art's
-room is in sight, and the art bound to it - doors, frames, wall edges - stands proud of
-it where the window cuts; without it two of room 0's doors seen from ANDREA1's room 109
-lose their lower half and RICH2's room 106 view loses 74,088 pixels of a metal wall's
-edge. The static meshes keep their choice of art: without that a piece made only for the
-air took five palm statics (ANDREA1 room 136, ANDREA2 rooms 119 and 125) from their HD
-piece and drew the classic palm over the HD one. The air is asked of every triangle, not
-only of those an intrusion box holds: for 246,812 of the 355,806 the room whose air holds
-them has no box around them. No per-room visible set, no stencil fill, no duplicate-shell
-drop. The host margin is 32: at 16 the class grows by 1% to 59% (`TrgProbe -roomspace` at
-both margins: ANDREA1 11,335 to 12,409, ANDREA2 129,471 to 131,097, JOBY2 23,095 to
-26,057, JOBY4 4,305 to 4,404, RICH2 62,627 to 99,623) and the pictures differ at three of
-nineteen places, 667 pixels more of the bars against 1,692 more of a door frame and 1,137
-more of a palm. No load-time cache: the slowest level takes about 110 ms, under the 300
-ms that would call for one.
+are held to their own window in every state. The static meshes keep their choice of art:
+without that a piece made only for the air took five palm statics (ANDREA1 room 136,
+ANDREA2 rooms 119 and 125) from their HD piece and drew the classic palm over the HD one.
+The air is asked of every triangle, not only of those an intrusion box holds: for 246,812
+of the 355,806 the room whose air holds them has no box around them. No per-room visible
+set, no stencil fill, no duplicate-shell drop. The host margin is 32: at 16 the class
+grows by 1% to 59% (`TrgProbe -roomspace` at both margins: ANDREA1 11,335 to 12,409,
+ANDREA2 129,471 to 131,097, JOBY2 23,095 to 26,057, JOBY4 4,305 to 4,404, RICH2 62,627 to
+99,623) and the pictures differ at three of nineteen places, 667 pixels more of the bars
+against 1,692 more of a door frame and 1,137 more of a palm. No load-time cache: the
+slowest level takes about 110 ms, under the 300 ms that would call for one.
 
 **Commits.** `42ff30d`, `944329c`, `b09b724`
 

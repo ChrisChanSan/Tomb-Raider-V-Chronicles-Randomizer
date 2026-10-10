@@ -1345,6 +1345,15 @@ namespace
 		int artY = 0, artYMax = 0;
 		int artMinX = 0, artMaxX = 0, artMinZ = 0, artMaxZ = 0;
 		bool artHidden = false;
+		/* The floor squares that art lies over: the SectorKey of every
+		 * square an art triangle's own box covers, half open like the
+		 * flats' (HDFlatPlane), sorted and unique. The hide asks whether a
+		 * sheet's square is one of them; the box above also spans every
+		 * square between two pieces of art. `artSpared` is set where the
+		 * box reaches a sheet's square and no art triangle lies over it -
+		 * the level's art_kept. */
+		std::vector<unsigned int> artCells;
+		bool artSpared = false;
 		/* Its horizontal triangles of the flow material (1): the remaster's
 		 * moving water surface, which a river's sheet takes the place of -
 		 * counted, with their heights and box, the way artTris is. */
@@ -6366,6 +6375,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.start = (unsigned int)sorted.size();
 					range.count = 0;
 					range.artTris = 0;
+					range.artCells.clear();
+					range.artSpared = false;
 					range.flowTris = 0;
 				}
 
@@ -6424,6 +6435,26 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 
 							range.artTris++;
+
+							/* Its squares (HDRange::artCells): every one
+							 * the triangle's box touches, a box edge on a
+							 * square's line not counted. */
+							const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
+							const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
+							std::vector<unsigned int>& cells = range.artCells;
+
+							for (int cx = x0 >> 10; cx <= lastX; cx++)
+								for (int cz = z0 >> 10; cz <= lastZ; cz++)
+								{
+									const unsigned int key =
+										SectorKey(cx << 10, cz << 10);
+									const std::vector<unsigned int>::iterator
+										at = std::lower_bound(cells.begin(),
+										cells.end(), key);
+
+									if (at == cells.end() || *at != key)
+										cells.insert(at, key);
+								}
 						}
 
 						/* The flow material's flat triangles (HDRange::
@@ -9490,7 +9521,10 @@ namespace
 		for (HDGroup& group : g_groups)
 			for (int pass = 0; pass < 3; pass++)
 				for (HDRange& range : group.pass[pass])
+				{
 					range.artHidden = false;
+					range.artSpared = false;
+				}
 	}
 
 	/* The data rule for a body's class.
@@ -12053,7 +12087,20 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	 * and over a square whose sheet draws; a draw call with anything else
 	 * in it is kept whole. A row's
 	 * `art keep` keeps the art of its bodies (apply_water_row). The classic
-	 * faces are not concerned: no restored face lies under a sheet. */
+	 * faces are not concerned: no restored face lies under a sheet.
+	 *
+	 * "Over a square" is asked of the art's own triangles: the square must
+	 * be one of the call's art squares (HDRange::artCells), the squares its
+	 * art triangles' boxes cover. The call's box is the cheap test first,
+	 * and not the answer: a call whose art lies on two squares either side
+	 * of a sheet's square has a box over that square too. JOBY5's room 4
+	 * is such a call - the deck's plates on squares 3,2 and 5,2 at the
+	 * water's own height, marked as water art because their classic
+	 * corners border the water, one draw call, round the water of square
+	 * 4,2 between them (TrgProbe -squares); hidden by its box, the deck
+	 * would show two holes. A call the box reaches and no art triangle of
+	 * which lies over the square stays drawn (HDRange::artSpared, the
+	 * level line's art_kept). */
 	for (size_t i = 0; i < g_wsquares.size(); i++)
 	{
 		const WaterSquare& s = g_wsquares[i];
@@ -12076,6 +12123,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					range.artMaxX <= x0 || range.artMinZ >= z0 + 1024 ||
 					range.artMaxZ <= z0)
 					continue;
+
+				if (!std::binary_search(range.artCells.begin(),
+					range.artCells.end(), SectorKey(x0, z0)))
+				{
+					range.artSpared = true;
+					continue;
+				}
 
 				range.artHidden = true;
 				g_wlevel.artHidden += range.artTris;
@@ -12105,6 +12159,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				g_wlevel.artHidden += range.flowTris;
 			}
 	}
+
+	// The calls the box reached and the art squares kept, for the log.
+	for (int g = 0; g < groups; g++)
+		for (int pass = 0; pass < 3; pass++)
+			for (const HDRange& range : g_groups[(size_t)g].pass[pass])
+				if (range.artSpared && !range.artHidden)
+					g_wlevel.artKept++;
 
 	g_wlevel.built = 1;
 	g_wlevel.vertices = (int)verts.size();
@@ -13234,8 +13295,11 @@ const char* HDRenderWaterSectionName(int section)
  * from - by the sheet over them or a room above them (under) and by the
  * level's largest body for want of one (under_fallback; see "under the
  * water"), 1 when the level's water rooms take the deep look
- * (under_deep, the same note) and 1 when its section is a night one
- * (night; see "the night" over kWaterMoon). A body line: its rooms (+n for
+ * (under_deep, the same note), 1 when its section is a night one
+ * (night; see "the night" over kWaterMoon) and the draw calls of the
+ * remaster's water art whose box reaches a sheet's square without an art
+ * triangle over it, which stay drawn (art_kept; see "the art over a
+ * sheet" in HDRenderSetWaterSheets). A body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -13283,7 +13347,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			"copy=%d depth=%d waverows=8 rings=%d sources=%d art_hidden=%d "
 			"clip=%d falls=%d lowered=%d dropped=%d river=%d curtains=%d "
 			"segs=%d old=%d under=%d under_fallback=%d under_deep=%d "
-			"night=%d",
+			"night=%d art_kept=%d",
 			stem ? stem : "?", option,
 			HDRenderWaterSectionName(g_wlevel.section), g_wlevel.sectors,
 			g_wlevel.sheets, g_wlevel.built, g_wlevel.bodies,
@@ -13296,7 +13360,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 			g_wlevel.falls, g_wlevel.lowered, g_wlevel.dropped,
 			cls[HD_WATER_RIVER], g_curtains, (int)g_wsegs.size(),
 			g_wlevel.oldKeys, g_wlevel.underRooms, g_wlevel.underFallback,
-			g_wlevel.underDeep, kWaterPalette[g_wlevel.section].night);
+			g_wlevel.underDeep, kWaterPalette[g_wlevel.section].night,
+			g_wlevel.artKept);
 		return true;
 	}
 

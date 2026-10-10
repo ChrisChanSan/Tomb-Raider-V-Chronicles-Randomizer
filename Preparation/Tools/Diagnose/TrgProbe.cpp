@@ -606,6 +606,208 @@ namespace
 		}
 	}
 
+	/* The height of one triangle's plane at x, z, where the triangle's x/z
+	 * projection covers that point: barycentric weights, an edge counting as
+	 * inside to 1e-6 of a weight. False where the point lies outside or the
+	 * triangle stands edge on (no area in x/z). */
+	bool heightAt(const trf::remaster::TrgVertex& a,
+		const trf::remaster::TrgVertex& b, const trf::remaster::TrgVertex& c,
+		double px, double pz, double& y)
+	{
+		const double d = (double)(b.z - c.z) * (a.x - c.x) +
+			(double)(c.x - b.x) * (a.z - c.z);
+
+		if (std::fabs(d) < 1e-9)
+			return false;
+
+		const double l0 = ((b.z - c.z) * (px - c.x) +
+			(c.x - b.x) * (pz - c.z)) / d;
+		const double l1 = ((c.z - a.z) * (px - c.x) +
+			(a.x - c.x) * (pz - c.z)) / d;
+		const double l2 = 1.0 - l0 - l1;
+
+		if (l0 < -1e-6 || l1 < -1e-6 || l2 < -1e-6)
+			return false;
+
+		y = l0 * a.y + l1 * b.y + l2 * c.y;
+		return true;
+	}
+
+	/* -cell: every triangle of one group whose x/z projection covers the
+	 * room-local point x, z - its part, material, pass and page, its height
+	 * at the point, the y of its geometric normal, its first corner's two
+	 * colours and UV, its box and its three heights. What lies on one spot
+	 * of a floor, in every pass, when a picture shows a hole there. */
+	void dumpCell(const std::string& root, const std::string& stem,
+		int group, int px, int pz)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error) || group < 0 ||
+			group >= (int)trg.groups.size())
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		std::printf("cell %s group %d at x=%d z=%d\n", stem.c_str(), group,
+			px, pz);
+		int nr = 0;
+
+		for (const trf::remaster::TrgPart& part :
+			trg.groups[(size_t)group].parts)
+		{
+			for (int pass = 0; pass < 3; pass++)
+				for (uint32_t i = 0; i + 2 < part.pass[pass].count; i += 3)
+				{
+					const uint32_t index = part.pass[pass].start + i;
+
+					if (index + 2 >= trg.indices.size())
+						break;
+
+					const trf::remaster::TrgVertex& a =
+						trg.vertices[trg.indices[index]];
+					const trf::remaster::TrgVertex& b =
+						trg.vertices[trg.indices[index + 1]];
+					const trf::remaster::TrgVertex& c =
+						trg.vertices[trg.indices[index + 2]];
+					double y = 0.0;
+
+					if (!heightAt(a, b, c, px, pz, y))
+						continue;
+
+					const double ux = b.x - a.x, uy = b.y - a.y,
+						uz = b.z - a.z;
+					const double vx = c.x - a.x, vy = c.y - a.y,
+						vz = c.z - a.z;
+					const double nx = uy * vz - uz * vy;
+					const double ny = uz * vx - ux * vz;
+					const double nz = ux * vy - uy * vx;
+					const double nl = std::sqrt(nx * nx + ny * ny + nz * nz);
+					const int page = a.layer &&
+						(size_t)a.layer <= trg.textures.size() ?
+						(int)trg.textures[a.layer - 1] : -1;
+					const int bx0 = std::min(std::min(a.x, b.x), c.x);
+					const int bx1 = std::max(std::max(a.x, b.x), c.x);
+					const int bz0 = std::min(std::min(a.z, b.z), c.z);
+					const int bz1 = std::max(std::max(a.z, b.z), c.z);
+
+					std::printf("  part %2d mat %2u pass %d tri %5u page %5d"
+						" y %8.1f ny %+.3f col1 %3u %3u %3u col2 %3u %3u %3u"
+						" uv %3u,%3u box x %d..%d z %d..%d ys %d %d %d\n",
+						nr, part.material, pass, i / 3, page, y,
+						nl > 0 ? ny / nl : 0.0, a.colour1[0], a.colour1[1],
+						a.colour1[2], a.colour2[0], a.colour2[1],
+						a.colour2[2], a.u, a.v, bx0, bx1, bz0, bz1, a.y, b.y,
+						c.y);
+				}
+
+			nr++;
+		}
+	}
+
+	/* -squares: per floor square of one group, per part and pass, how many
+	 * of 8 x 8 sample points (the centres of a 128-unit grid in the 1024
+	 * square) a triangle covers whose height at the point lies within
+	 * y0..y1, the lowest and highest such height and the pages - whether a
+	 * square is wholly covered at a height, and by what. Squares sx0..sx1,
+	 * sz0..sz1, room local. */
+	void dumpSquares(const std::string& root, const std::string& stem,
+		int group, int y0, int y1, int sx0, int sx1, int sz0, int sz1)
+	{
+		const std::string path = root + "\\DATA\\" + stem + ".TRG";
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(path, trg, error) || group < 0 ||
+			group >= (int)trg.groups.size())
+		{
+			std::printf("%-9s FAILED %s\n", stem.c_str(), error.c_str());
+			return;
+		}
+
+		std::printf("squares %s group %d heights %d..%d\n", stem.c_str(),
+			group, y0, y1);
+
+		for (int sx = sx0; sx <= sx1; sx++)
+			for (int sz = sz0; sz <= sz1; sz++)
+			{
+				int nr = 0;
+				bool any = false;
+
+				std::printf(" square %d,%d:", sx, sz);
+
+				for (const trf::remaster::TrgPart& part :
+					trg.groups[(size_t)group].parts)
+				{
+					for (int pass = 0; pass < 3; pass++)
+					{
+						int hits = 0;
+						double lo = 1e9, hi = -1e9;
+						std::map<int, int> pages;
+
+						for (int k = 0; k < 64; k++)
+						{
+							const double px = sx * 1024 + 64 + (k & 7) * 128;
+							const double pz = sz * 1024 + 64 + (k >> 3) * 128;
+							bool hit = false;
+
+							for (uint32_t i = 0;
+								i + 2 < part.pass[pass].count && !hit; i += 3)
+							{
+								const uint32_t index =
+									part.pass[pass].start + i;
+
+								if (index + 2 >= trg.indices.size())
+									break;
+
+								const trf::remaster::TrgVertex& a =
+									trg.vertices[trg.indices[index]];
+								const trf::remaster::TrgVertex& b =
+									trg.vertices[trg.indices[index + 1]];
+								const trf::remaster::TrgVertex& c =
+									trg.vertices[trg.indices[index + 2]];
+								double y = 0.0;
+
+								if (!heightAt(a, b, c, px, pz, y) || y < y0 ||
+									y > y1)
+									continue;
+
+								hit = true;
+								lo = y < lo ? y : lo;
+								hi = y > hi ? y : hi;
+
+								if (a.layer &&
+									(size_t)a.layer <= trg.textures.size())
+									pages[(int)trg.textures[a.layer - 1]]++;
+							}
+
+							if (hit)
+								hits++;
+						}
+
+						if (!hits)
+							continue;
+
+						any = true;
+						std::printf(" [p%d m%u s%d %d/64 y%.0f..%.0f pg", nr,
+							part.material, pass, hits, lo, hi);
+
+						for (const std::pair<const int, int>& pg : pages)
+							std::printf(" %d", pg.first);
+
+						std::printf("]");
+					}
+
+					nr++;
+				}
+
+				std::printf("%s\n", any ? "" : " none");
+			}
+	}
+
 	/* How much of a level is on layer 0. Per level: vertices with layer 0,
 	 * triangles whose first corner carries it - which is the corner
 	 * hd_render.cpp reads - and the material those triangles belong to. The
@@ -5646,6 +5848,16 @@ int main(int argc, char** argv)
 		std::printf("                          where two rooms share vertex positions\n");
 		std::printf("       [-flat <group>]  the horizontal surfaces of one group, with\n");
 		std::printf("                        the page each of them wears (the water survey)\n");
+		std::printf("       [-cell <group> <x> <z>]  every triangle of one"
+			" group over\n");
+		std::printf("                        one room-local point, in"
+			" every pass\n");
+		std::printf("       [-squares <group> <y0> <y1> <sx0> <sx1> <sz0>"
+			" <sz1>]\n");
+		std::printf("                        per floor square, how much"
+			" of it each\n");
+		std::printf("                        part covers at a height in"
+			" y0..y1\n");
 		std::printf("       [-layer0]  how much of a level names no page at all\n");
 		std::printf("       [-gloss]  every page that shines, with its source (material,\n");
 		std::printf("                 file, seed, table) and the sheen's numbers;\n");
@@ -5716,6 +5928,8 @@ int main(int argc, char** argv)
 	int threads = 0;
 	int seam_a = -1, seam_b = -1, seam_d[3] = { 0, 0, 0 };
 	int flat_group = -1;
+	int cell_group = -1, cell_x = 0, cell_z = 0;
+	int sq_group = -1, sq_args[7] = {};
 	int parts_group = -1;
 	int surface_room = -1;
 	bool water_gap = false;
@@ -5826,6 +6040,20 @@ int main(int argc, char** argv)
 			water_gap = true;
 		else if (!_stricmp(argv[i], "-parts") && i + 1 < argc)
 			parts_group = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-cell") && i + 3 < argc)
+		{
+			cell_group = std::atoi(argv[i + 1]);
+			cell_x = std::atoi(argv[i + 2]);
+			cell_z = std::atoi(argv[i + 3]);
+			i += 3;
+		}
+		else if (!_stricmp(argv[i], "-squares") && i + 7 < argc)
+		{
+			for (int k = 0; k < 7; k++)
+				sq_args[k] = std::atoi(argv[i + 1 + k]);
+			sq_group = sq_args[0];
+			i += 7;
+		}
 		else if (!_stricmp(argv[i], "-surface") && i + 1 < argc)
 			surface_room = std::atoi(argv[++i]);
 		else if (!_stricmp(argv[i], "-flat") && i + 1 < argc)
@@ -6068,6 +6296,25 @@ int main(int argc, char** argv)
 
 		for (const std::string& stem : levels)
 			dumpWaterGap(root, stem, classic);
+
+		return 0;
+	}
+
+	if (sq_group >= 0)
+	{
+		// -squares <group> <y0> <y1> <sx0> <sx1> <sz0> <sz1>
+		for (const std::string& stem : levels)
+			dumpSquares(root, stem, sq_group, sq_args[1], sq_args[2],
+				sq_args[3], sq_args[4], sq_args[5], sq_args[6]);
+
+		return 0;
+	}
+
+	// -cell <group> <x> <z>
+	if (cell_group >= 0)
+	{
+		for (const std::string& stem : levels)
+			dumpCell(root, stem, cell_group, cell_x, cell_z);
 
 		return 0;
 	}

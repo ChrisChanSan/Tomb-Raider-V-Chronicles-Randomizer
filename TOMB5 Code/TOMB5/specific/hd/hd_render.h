@@ -955,6 +955,7 @@ struct HDRenderWaterLevel
 	int depth;		// 1 when they read the depth texture as well
 	int ringSources;	// ripple rows of the file that found a body
 	int artHidden;		// the remaster's water art triangles hidden
+	int artKept;		// its draw calls a box test alone would hide
 	int falls;		// waterfall objects whose foot stands over a sheet
 	int feet;		// the sources at their feet and the rows' feet
 	/* The squares whose surface is the water room's top and not their own

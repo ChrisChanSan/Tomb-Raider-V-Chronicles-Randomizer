@@ -1935,9 +1935,11 @@ it.
   way to a deck or a coping lying up to 8 units under its surface, but at
   the pond that would cut the water off the ground just under it and leave
   a dark band of bare ground between the grass and the water (the ground
-  under the water is darker), and the pond's water lies still in its
-  shape: the waves play on its surface, but it does not rise and fall,
-  because a trough would open that band again for a moment. A body's sheet can also
+  under the water is darker). Its surface rises and falls with its waves
+  like every body's, so a trough lets that ground show for a moment at
+  the edge now and then, as waves at a shore do; `ANDY3 73 - swell 0` in
+  `hd_water.txt` lays it still, the waves then playing in its pixels
+  alone. A body's sheet can also
   stand some units over the level's water height - its lift; no body is
   lifted. A lifted body is level everywhere, as still water is: the bank
   climbs out of it, and where the land beside it lies lower the same level
@@ -1999,9 +2001,10 @@ it.
   `clip <units>` (0 to 256, whole units) sets how far under the surface a
   floor may lie and still be left dry - 8 for every body, 0 for the pond -
   and `swell <s>` (0 to 4) how far the water's surface rises and falls with
-  its waves - 1 for every body, 0 for the pond, where the waves then play
-  on a still surface; a row without either key leaves it as it is.
-  `ANDY3 73 - clip 8 swell 1` gives the pond the edge every other body has.
+  its waves - 1 for every body, the pond included; `swell 0` lays a surface
+  still, the waves then playing in its pixels alone; a row without either
+  key leaves it as it is. `ANDY3 73 - clip 8` gives the pond the edge every
+  other body has.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a

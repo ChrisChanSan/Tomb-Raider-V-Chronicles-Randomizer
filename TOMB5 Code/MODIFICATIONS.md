@@ -11211,6 +11211,29 @@ water, the HD dive splash and the fish tank's spray stay for later.
 
 **Commits.** `da9243f`, `4dee85c`, `0cb76f0`, `e816d4d`, `3ab30e9`.
 
+**After the owner's tenth play test of 2026-10-10.** The build of `534e223` was played, and
+beside it the same build with the row `ANDY3 73 - swell 1` in `hd_water.txt`. At rest the
+pond's edge holds, with small things left that the owner can live with; with the class's
+whole swell it looked much better to him: the waves take a little from the edge now and
+then, and with the sheet's edge on the ground's own line that reads as water at a shore.
+So the pond's row takes the whole swell: `kWaterBank` ANDY3, water room 73, lift 0, clip 0,
+swell 1. The ninth part's momentary openings (up to 17,165 pixels of ground under the water
+in a view at 1, 3 and 5 seconds) are that movement, and the row `ANDY3 73 - swell 0` lays
+the sheet at rest again. With this the owner calls the pond done.
+
+**Measured.** The pond's twelve views at 1, 3 and 5 seconds with the compiled row,
+md5-identical to `3ab30e9`'s probe with the file row `ANDY3 73 - swell 1` (36 of 36) and
+to the ninth part's pictures after the clip alone (36 of 36); with the row `swell 0` they
+are the ninth part's final pictures (36 of 36). The sweep's pond line `clip=0 swell=1.00`,
+its level line as before (125 squares, 15 bodies, 5,300 vertices, 6,784 triangles). No
+shader changed: every `.inc` as at `534e223`.
+
+**Checked.** The fifteen cameras with `-hdwater 0`, 15 of 15 identical to the fix round's
+parity set; the suites (ModernTest 14721, MenuTest 42627, InterpTest 729,
+LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Commits.** `43d4938`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

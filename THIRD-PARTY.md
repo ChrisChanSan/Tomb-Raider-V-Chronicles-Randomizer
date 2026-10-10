@@ -1214,8 +1214,10 @@ water surface", carries the tables.
     (the waterline would start at the walls' own contact).
 138. **A body's own share of the swell** - a body's sheet takes a share
     of its class's swell at its vertices (1 for every body, the table
-    `kWaterBank` and the key `swell` of `hd_water.txt`), the pond 0: its
-    surface lies at rest and its waves play in its pixels. OWN, a rule of
+    `kWaterBank` and the key `swell` of `hd_water.txt`), the pond 1 as
+    well since the owner's tenth play test, his choice on the look (the
+    waves take a little from the edge now and then; 0 in the ninth round
+    laid its surface at rest, the waves in its pixels). OWN, a rule of
     this project; DATA: the class's swell tapers to nothing only at the
     classic shore, while the pond's ground meets the water at a median 256
     units inside it and round the island up to 1,539 (the art's 0-line

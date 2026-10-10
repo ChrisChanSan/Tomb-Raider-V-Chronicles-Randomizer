@@ -179,7 +179,9 @@
  *                     whose art stands in the air of a room its own room
  *                     has no link with (HDRoomAir) only inside the group's
  *                     window, under frame and face, and not at all when the
- *                     window is empty; 0 leaves those pieces the answer
+ *                     window is empty - but for a piece of a pair with a
+ *                     claimed face that survives the window, which keeps
+ *                     the answer above; 0 leaves those pieces the answer
  *                     above, out of the same build. The `decide: clip`
  *                     line ends with the engine's unlinked_ counters.
  *
@@ -1840,8 +1842,9 @@ static std::vector<unsigned char> g_air_links_built;
 static double g_air_ms = 0.0;
 /* -unlinked 0|1: 1, the engine's answer, draws the pieces whose art stands
  * in the air of a room its own has no link with only inside its own
- * window; 0 gives them the answer they would have without that, in the
- * same build - the picture to hold the engine's against. */
+ * window, unless a claimed face of the pair survives; 0 gives them the
+ * answer they would have without that, in the same build - the picture
+ * to hold the engine's against. */
 static int g_unlinked = 1;
 static int g_window_mode = HD_WINDOW_ALL;
 
@@ -4415,11 +4418,16 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		/* And with -unlinked 1, DecidePairs' last word: a piece whose art
 		 * stands in the air of a room its own room has no link with is
 		 * drawn inside the window, or not at all when the window is
-		 * empty. */
+		 * empty - but for one of a pair with a claimed face that survives
+		 * the window, listed holder or not, which keeps the answer above
+		 * (whole: a listed holder's pair is whole on that face, an
+		 * unlisted holder's on any frame). */
 		const bool unlinked = piece.air && g_unlinked && g_decide >= 2;
+		const bool claimed = !open && ask && piece.face >= 0 && answer &&
+			(g_decide == 3 ? alive : pairAlive);
 
 		if (unlinked)
-			answer = false;
+			answer = claimed;
 
 		HDRenderPairWhole(group, j, answer ? 1 : 0);
 
@@ -8457,6 +8465,38 @@ static int ProbeMain(int argc, char** argv)
 								level.rooms()[(size_t)a].altRoom == b ||
 								level.rooms()[(size_t)b].altRoom == a)
 								g_air_links_built[(size_t)b * n + a] = 1;
+
+					// Closed over the flipmap twins, as BuildRoomAir does.
+					{
+						std::vector<int> twin((size_t)n, -1);
+
+						for (int r = 0; r < n; r++)
+						{
+							const int alt = level.rooms()[(size_t)r].altRoom;
+
+							if (alt >= 0 && alt < n)
+							{
+								twin[(size_t)r] = alt;
+								twin[(size_t)alt] = r;
+							}
+						}
+
+						const std::vector<unsigned char> direct =
+							g_air_links_built;
+
+						for (int b = 0; b < n; b++)
+							for (int a = 0; a < n; a++)
+							{
+								const int tb = twin[(size_t)b];
+								const int ta = twin[(size_t)a];
+
+								if ((ta >= 0 && direct[(size_t)b * n + ta]) ||
+									(tb >= 0 && direct[(size_t)tb * n + a]) ||
+									(ta >= 0 && tb >= 0 &&
+									direct[(size_t)tb * n + ta]))
+									g_air_links_built[(size_t)b * n + a] = 1;
+							}
+					}
 
 					QueryPerformanceCounter(&to);
 					QueryPerformanceFrequency(&rate);

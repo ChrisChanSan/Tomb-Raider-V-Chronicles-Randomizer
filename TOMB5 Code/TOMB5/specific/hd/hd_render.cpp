@@ -1949,7 +1949,7 @@ namespace
 	typedef std::vector<std::pair<unsigned int, int> > AirHosts;
 
 	/* Which of group g's triangles stand in the air of a room g's room has
-	 * no portal, door or vertical link with and is not the flipmap twin of
+	 * no portal, door or vertical link with, not even through a flipmap twin
 	 * (HDRoomAir), and in whose: (first index, host) per triangle and host,
 	 * sorted. Every triangle of the group is asked, with the index fill's
 	 * own centroid put into world units; the floor square under it names
@@ -5136,6 +5136,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int glow;			// see BuildGlowParts, else -1
 		int overhang;			// see HDRoomBox
 		int intruding;			// see HDIntrusion
+		int openAir;			// a piece only for the air, see open_air
 		int stand;			// see HDStandRange
 		int cull;			// see RangeCulls
 		unsigned int first;
@@ -6264,6 +6265,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					tri.overhang = overhang;
 					tri.intruding = intruding;
+					tri.openAir = open_air ? 1 : 0;
 					tri.stand = stand;
 					tri.cull = cull;
 					tri.slot = slot;
@@ -6693,9 +6695,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				/* The art a static's piece may take: the overhang of no
 				 * intrusion piece and the stand ranges, the parts of a group
 				 * HDRenderStaticArt asks. The range is the one being filled,
-				 * pushed at this index. */
+				 * pushed at this index. A piece made only for the air counts
+				 * as no piece here: without the air the open half has its
+				 * art, and a static that takes it without the air - a palm
+				 * of a courtyard - would go classic with it, its classic
+				 * mesh drawn over the art. */
 				if (g_place_count && (tris[i].stand > 0 ||
-					(tris[i].overhang && !tris[i].intruding)))
+					(tris[i].overhang &&
+					(!tris[i].intruding || tris[i].openAir))))
 					NotePlaceTri(trg, (int)g, pass, (int)group.pass[pass].size(),
 						tris[i].stand, (unsigned int)sorted.size(), first);
 
@@ -6746,7 +6753,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							group.standCells[at].push_back(CellKey(v.x, v.y, v.z));
 						}
-						else if (!tris[i].intruding && tris[i].overhang)
+						else if ((!tris[i].intruding || tris[i].openAir) &&
+							tris[i].overhang)
 							group.cellsFree.push_back(CellKey(v.x, v.y, v.z));
 
 						if (tris[i].destructId >= 0)

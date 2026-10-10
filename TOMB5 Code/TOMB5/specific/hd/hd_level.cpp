@@ -663,8 +663,9 @@ namespace
 	int g_clip_reach_hidden = 0;
 	/* The pieces whose art stands in the air of a room its own room has no
 	 * link with (HDPairRange::air), over the rooms of this frame's list:
-	 * all of them, those drawn inside their room's window and those left
-	 * out because the window is empty. */
+	 * all of them, those drawn - inside their room's window, or whole on a
+	 * claimed face the classic path draws - and those left out because the
+	 * window is empty. */
 	int g_clip_unlinked_pieces = 0;
 	int g_clip_unlinked_drawn = 0;
 	int g_clip_unlinked_hidden = 0;
@@ -869,13 +870,20 @@ namespace
 	 * is open to the eye or the holder is not listed: a brick hull in the
 	 * sky beside a flag, a window frame in a brick loft, a marble strip
 	 * over a metal hub, black bars beside a pillar, a lit floor in a
-	 * doorway. The rule can only take art away: a piece not drawn whole is
-	 * already drawn inside that window, so it narrows the answer and never
-	 * widens it. Art in the air of a linked room keeps the answer above.
-	 * Such art the open half would draw - no face claims it and it stands
-	 * outside the smaller box, or in no entry's box at all - is a piece of
-	 * its own with no face outside the smaller box (HDPairRange), whole on
-	 * the answer above and never one of the pieces the counters ask. */
+	 * doorway. A piece of a pair with a claimed face the classic path draws
+	 * this frame keeps the answer above, listed holder or not: that face of
+	 * b is in sight, and the art bound to it is its door, frame or wall top,
+	 * which b's window cuts where it stands proud of the face: without it
+	 * two of room 0's doors seen from ANDREA1's room 109 lose their lower
+	 * half, and the edge of a metal wall seen from RICH2's room 106 goes
+	 * (74,088 pixels at 1280x720). The rule can only take art away: a
+	 * piece not drawn whole is already drawn inside that window, so it
+	 * narrows the answer and never widens it. Art in the air of a linked
+	 * room keeps the answer above. Such art the open half would draw - no
+	 * face claims it and it stands outside the smaller box, or in no
+	 * entry's box at all - is a piece of its own with no face outside the
+	 * smaller box (HDPairRange), whole on the answer above and never one
+	 * of the pieces the counters ask. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -924,24 +932,33 @@ namespace
 			if (open)
 				whole = true;
 
-			if (ask && listed && piece.face >= 0)
-			{
-				// Any claimed face of the same pair the classic path draws.
-				for (int k = 0; k < count && !whole; k++)
-				{
-					const HDPairRange& other = g_pieces[(size_t)(first + k)];
+			// Any claimed face of the same pair the classic path draws.
+			bool claimed = false;
 
-					whole = other.intrusion == piece.intrusion &&
-						other.face >= 0 &&
-						(size_t)other.face < g_face_alive.size() &&
-						g_face_alive[(size_t)other.face] != 0;
-				}
+			for (int k = 0; k < count && ask && piece.face >= 0 && !claimed;
+				k++)
+			{
+				const HDPairRange& other = g_pieces[(size_t)(first + k)];
+
+				claimed = other.intrusion == piece.intrusion &&
+					other.face >= 0 &&
+					(size_t)other.face < g_face_alive.size() &&
+					g_face_alive[(size_t)other.face] != 0;
 			}
 
-			// In unlinked air: inside the room's own window, or not at all.
+			if (ask && listed && piece.face >= 0)
+				whole = claimed;
+
+			/* In unlinked air: inside the room's own window, or not at all -
+			 * but for a piece of a pair with a claimed face the classic path
+			 * draws this frame, listed holder or not: b's wall is in sight
+			 * there, and the art bound to it is that wall's - a door, its
+			 * frame, a wall top - which b's window cuts where it stands proud
+			 * of the face. Such a piece is whole on the answer above too, so
+			 * this keeps that answer and never widens it. */
 			if (piece.air)
 			{
-				whole = false;
+				whole = claimed;
 				g_clip_unlinked_pieces++;
 
 				if (empty)
@@ -3157,23 +3174,25 @@ static void BuildStaticPlaces()
  *
  * A second test stands beside the box: whether a triangle's centroid stands
  * in the air of a room its own room has no portal, door or vertical link
- * with and is not the flipmap twin of - the space the room's floor squares
- * enclose, off its walls, floors and ceilings and out of its doorways
- * (HDRoomAir in hd_render.h, BuildRoomAir). Such art is drawn only inside
- * its own room's window and left out when that window is empty
- * (DecidePairs), whatever the box's answer. The box alone cannot tell it
+ * with, not even through a flipmap twin - the space the room's floor
+ * squares enclose, off its walls, floors and ceilings and out of its
+ * doorways (HDRoomAir in hd_render.h, BuildRoomAir). Such art is drawn
+ * only inside its own room's window and left out when that window is
+ * empty (DecidePairs), whatever the box's answer, unless the classic path
+ * draws a face of its room that claims it. The box alone cannot tell it
  * from the art of a wall two rooms share, and on the box's answer it comes
  * through a holder's walls wherever its own room's window is open to the
  * eye or the holder is not listed: a brick hull in the sky beside a flag, a
  * window frame in a brick loft, a marble strip over a metal hub, black bars
  * beside a pillar, a lit floor in a doorway. The air is asked of every
  * triangle and not only of those a box holds: over the fifteen levels,
- * for 247,947 of the 380,742 triangles in such air no entry's box of a
- * room whose air holds them holds them too, most of them hung far outside
- * their own room - ANDREA2's street art of rooms 10 and 236 in rooms 206
- * and 79 -, and 61,384 stand in a box where no face claims them outside
- * the smaller box, the black bars among them (1,607 of the 2,160
- * triangles of room 30 in room 16).
+ * for 246,812 of the 355,806 triangles in such air no entry's box of a
+ * room whose air holds them holds them too (TrgProbe -roomspace), most of
+ * them hung far outside their own room - ANDREA2's street art of rooms 10
+ * and 236 in rooms 206 and 79 -, and others stand in a box where no face
+ * claims them outside the smaller box, the black bars among them (1,607
+ * of the 2,160 triangles of room 30 in room 16): 282,090 in all are art
+ * the open half would draw (RoomProbe's level build).
  *
  * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the
@@ -3379,6 +3398,37 @@ static void BuildRoomAir()
 			if (a == b || (at < next_door.size() && next_door[at]) ||
 				room[a].flipped_room == b || room[b].flipped_room == a)
 				g_room_links[at] = 1;
+		}
+
+	/* And closed over the flipmap twins: a flipmap swaps a room's contents
+	 * with its twin's, so in one state the portals of the twin's data lead
+	 * out of the room standing at that place. Art of b in a's air is seen
+	 * through such a portal when b, or b's twin, has a link with a or with
+	 * a's twin. Without it 31 (group, host) pairs of 24,936 triangles over
+	 * the fifteen levels (TrgProbe -roomspace with and without the step)
+	 * are held to their own room's window in every flip state. */
+	std::vector<int> twin((size_t)number_rooms, -1);
+
+	for (int r = 0; r < number_rooms; r++)
+		if (room[r].flipped_room >= 0 && room[r].flipped_room < number_rooms)
+		{
+			twin[(size_t)r] = room[r].flipped_room;
+			twin[(size_t)room[r].flipped_room] = r;
+		}
+
+	const std::vector<unsigned char> direct = g_room_links;
+
+	for (int b = 0; b < number_rooms; b++)
+		for (int a = 0; a < number_rooms; a++)
+		{
+			const int tb = twin[(size_t)b];
+			const int ta = twin[(size_t)a];
+			const size_t n = (size_t)number_rooms;
+
+			if ((ta >= 0 && direct[(size_t)b * n + ta]) ||
+				(tb >= 0 && direct[(size_t)tb * n + a]) ||
+				(ta >= 0 && tb >= 0 && direct[(size_t)tb * n + ta]))
+				g_room_links[(size_t)b * n + a] = 1;
 		}
 
 	QueryPerformanceCounter(&to);
@@ -7710,9 +7760,10 @@ void HDFrameDrawGlow()
 			 *
 			 * `unlinked_pieces` are the pieces of the listed rooms whose art
 			 * stands in the air of a room their own room has no link with
-			 * (DecidePairs), `unlinked_drawn` those drawn inside their own
-			 * room's window, `unlinked_hidden` those left out because that
-			 * window is empty. */
+			 * (DecidePairs), `unlinked_drawn` those drawn - inside their own
+			 * room's window, or whole on a claimed face the classic path
+			 * draws -, `unlinked_hidden` those left out because that window
+			 * is empty. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
 				"pairs=%d whole=%d scissored=%d reach_rooms=%d "

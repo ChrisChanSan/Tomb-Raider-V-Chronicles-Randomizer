@@ -304,10 +304,11 @@ struct HDIntrusion
  * off its walls, floors and ceilings and out of its doorways.
  *
  * Art of room b whose centroid stands in the air of a room a that b has no
- * portal, door or vertical link with, and that is not b's flipmap twin, is
+ * portal, door or vertical link with, not even through a flipmap twin, is
  * art in a room b cannot be seen through: the classic path draws no face of
  * b there unless b's own window reaches it. Such art is drawn only inside
- * b's own portal window and is left out when b has none (hd_level.cpp,
+ * b's own portal window and is left out when b has none, unless the
+ * classic path draws a face of b that claims it (hd_level.cpp,
  * DecidePairs). Every triangle of a room's group is asked, against every
  * room with an air square under its centroid: the entries above do not
  * hold it all - art hung far outside its own room stands in rooms whose
@@ -342,9 +343,9 @@ struct HDRoomAir
 /* How far inside a room's air a point has to stand, in world units - an
  * eighth of a click, so that art lying on a wall, floor or doorway plane
  * of the room stays out of its air. Measured with TrgProbe -roomspace, the
- * art in unlinked air at 32 against 16: ANDREA1 11,815 against 13,369
- * triangles, ANDREA2 129,541 against 131,169, JOBY2 26,288 against 29,594,
- * JOBY4 4,305 against 4,404, RICH2 81,064 against 119,965 - the lift
+ * art in unlinked air at 32 against 16: ANDREA1 11,335 against 12,409
+ * triangles, ANDREA2 129,471 against 131,097, JOBY2 23,095 against 26,057,
+ * JOBY4 4,305 against 4,404, RICH2 62,627 against 99,623 - the lift
  * shaft's second hull on its walls. Rendered at nineteen places, 16 draws
  * the same picture as 32 at sixteen and takes more at three: 667 pixels
  * more of the black bars beside a pillar, but 1,692 more of a doorway's
@@ -1527,7 +1528,8 @@ void HDRenderSetPairFaces(const HDPairFace* faces, int count);
 /* Every room's air - see HDRoomAir - in room order, the group's own room at
  * the group's number, and `links`, count * count bytes, row by the art's
  * room: nonzero where the two rooms are not asked about - the same room,
- * rooms with a portal or a vertical link, flipmap twins. Same contract
+ * rooms with a portal or a vertical link, flipmap twins, and every pair a
+ * twin of either room joins that way. Same contract
  * again. Without it no triangle stands in any air and every piece's `air`
  * is 0. */
 void HDRenderSetRoomAir(const HDRoomAir* rooms, int count,
@@ -1668,7 +1670,7 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * also stand in the entry's box made one sector smaller in x and z (always 1
  * for a piece no face claims), `triangles` all three passes together. `air`
  * is 1 when the triangles stand in the air of a room their own room has no
- * link with (HDRoomAir) - art drawn only inside its own room's window - and
+ * link with (HDRoomAir) - art held to its own room's window - and
  * splits the pieces like the other three. Such art the open half would
  * draw - no face claims it and it stands outside the smaller box, or in no
  * entry's box at all - is a piece too, with `face` -1 and `inner` 0, which

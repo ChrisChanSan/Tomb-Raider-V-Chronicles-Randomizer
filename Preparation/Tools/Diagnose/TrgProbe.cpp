@@ -1341,8 +1341,8 @@ namespace
 		 * and ceiling bytes and its floor data words from its index on,
 		 * read by HDSectorAir. And the same squares read the randomizer's
 		 * way - Tr5Level::cornerFloor and cornerCeiling at the four corners,
-		 * a portal square out - which is how the air was first counted;
-		 * `airDiffer` is the squares where the two readings part. */
+		 * a portal square out - the randomizer's reading, held against
+		 * HDSectorAir; `airDiffer` is the squares where the two part. */
 		std::vector<HDRoomAir> air((size_t)rooms);
 		std::vector<std::vector<float> > airSquares((size_t)rooms);
 		int airSquareCount = 0, airWith = 0, airDiffer = 0;
@@ -1761,8 +1761,8 @@ namespace
 		/* band_unclaimed: the triangles no face claims that stand outside
 		 * the smaller box, drawn with the open half - the engine's HDLOG
 		 * level line ends with the same number. */
-		/* Art in the air of a room its own room has no link with and is not
-		 * the flipmap twin of (HDRoomAir), as the engine's build asks it of
+		/* Art in the air of a room its own room has no link with, not even
+		 * through a flipmap twin (HDRoomAir), as the engine's build asks it of
 		 * every triangle of every room's group: per (group, host) the
 		 * triangles - the HDLOG unlinked lines, in the same order -, and
 		 * each triangle once for air_tris. `outside` is the art no entry's
@@ -1773,6 +1773,45 @@ namespace
 		long long airTris = 0, outsideTris = 0;
 		std::map<std::pair<int, int>, long long> airPairs, outsidePairs;
 		std::set<int> airGroupSet;
+		/* The pairs not asked, row by the art's room, as BuildRoomAir makes
+		 * them: the same room, next door, a floor portal, flipmap twins, and
+		 * closed over the twins. */
+		std::vector<unsigned char> airLink((size_t)rooms * (size_t)rooms, 0);
+		std::vector<int> airTwin((size_t)rooms, -1);
+
+		for (int b = 0; b < rooms; b++)
+			for (int a = 0; a < rooms; a++)
+				if (a == b || airLinked[(size_t)a].count(b) ||
+					level.rooms()[(size_t)a].altRoom == b ||
+					level.rooms()[(size_t)b].altRoom == a)
+					airLink[(size_t)b * rooms + a] = 1;
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const int alt = level.rooms()[(size_t)r].altRoom;
+
+			if (alt >= 0 && alt < rooms)
+			{
+				airTwin[(size_t)r] = alt;
+				airTwin[(size_t)alt] = r;
+			}
+		}
+
+		{
+			const std::vector<unsigned char> direct = airLink;
+
+			for (int b = 0; b < rooms; b++)
+				for (int a = 0; a < rooms; a++)
+				{
+					const int tb = airTwin[(size_t)b];
+					const int ta = airTwin[(size_t)a];
+
+					if ((ta >= 0 && direct[(size_t)b * rooms + ta]) ||
+						(tb >= 0 && direct[(size_t)tb * rooms + a]) ||
+						(ta >= 0 && tb >= 0 && direct[(size_t)tb * rooms + ta]))
+						airLink[(size_t)b * rooms + a] = 1;
+				}
+		}
 
 		for (size_t g = 0; g < centre.size() && (int)g < rooms; g++)
 			for (size_t c = 0; c + 2 < centre[g].size(); c += 3)
@@ -1784,9 +1823,7 @@ namespace
 
 				for (int a = 0; a < rooms; a++)
 				{
-					if (a == (int)g || airLinked[(size_t)a].count((int)g) ||
-						level.rooms()[(size_t)a].altRoom == (int)g ||
-						level.rooms()[(size_t)g].altRoom == a)
+					if (airLink[g * (size_t)rooms + (size_t)a])
 						continue;
 
 					if (!HDRoomAirHolds(air[(size_t)a], wx, wy, wz,

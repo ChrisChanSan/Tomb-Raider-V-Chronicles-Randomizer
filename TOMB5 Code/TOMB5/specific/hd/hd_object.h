@@ -387,8 +387,21 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn, int* reflections
  * on every side. An item that draw.cpp clips away (its bounds outside the
  * view or the portal window) is walked for the second map alone when its
  * place lies inside that box (HDObjectCastUnseen), so its shadow lies in the
- * view before the item does. */
+ * view before the item does.
+ *
+ * While the projected shadow comes in (hd_shadow.h, HDShadowArrive) the item
+ * casts as above and the answer is false all the same: its blob is drawn
+ * beside the coming shadow, with the weight HDObjectBlobWeight gives it. */
 bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj);
+
+/* The weight a blob is drawn with, the factor of its alpha
+ * (specific\specificfx.cpp, S_PrintCircleShadow): 1 minus the projected
+ * shadow's presence for the item HDObjectBlobGivesWay was just asked about
+ * and that casts while the shadow comes in, the same for Lara
+ * (hd_laradraw.h, HDShadowFrameBlobWeight), and 1 for every other item and
+ * frame - the classic path, the stored modes 1 to 4, a shadow that has come
+ * in - so those blobs are drawn as they always are. */
+float HDObjectBlobWeight(ITEM_INFO* item);
 
 /* The node walk of an item draw.cpp has clipped away, asked between
  * HDObjectBegin and HDObjectEnd once the clip test has answered 0: true when

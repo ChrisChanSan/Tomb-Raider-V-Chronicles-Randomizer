@@ -141,6 +141,13 @@ namespace
 	bool g_shadow_others_ready = false;
 	HDShadowFollow g_shadow_follow;
 	HDSoftClock g_shadow_clock;
+	/* The arrival (hd_shadow.h, HDShadowArrive): the game seconds the
+	 * shadow has run without a break, on a clock of its own, stepped by the
+	 * decision - the first thing of a frame to ask - so her blob, drawn
+	 * before her step, and the strength her step draws read the same
+	 * presence. */
+	float g_arrival_t = 0.0f;
+	HDSoftClock g_arrival_clock;
 
 	/* The log: the strength the last HDLOG softbody line was written with,
 	 * -1 for none yet, and the second the counters of the per-second line
@@ -1003,7 +1010,8 @@ namespace
 		for (int i = 0; i < 3; i++)
 			f.dir[i] = g_shadow_follow.dir[i];
 
-		f.strength = g_shadow_follow.strength;
+		// Times the arrival's presence: exactly the following's once it is 1.
+		f.strength = g_shadow_follow.strength * f.presence;
 
 		HDShadowBoxMake(&f.box, f.dir, nodes, HD_LARA_NODES);
 		HDShadowViewToMap(&f.box, f.R, f.t, f.viewToMap);
@@ -1119,7 +1127,30 @@ bool HDShadowFrameDecide()
 		HDSoftClockForget(&g_shadow_clock);
 	}
 
+	/* The arrival: 0 in the first frame it runs after one it did not (the
+	 * clock starts there), then the frames' game time. */
+	float dt = 0.0f;
+
+	if (g_shadow_frame.runs)
+		HDSoftClockStep(&g_arrival_clock, false, GlobalCounter,
+			InterpFrameAlpha(), &dt);
+	else
+		HDSoftClockForget(&g_arrival_clock);
+
+	g_shadow_frame.presence = HDShadowArrive(&g_arrival_t,
+		g_shadow_frame.runs != 0, dt);
 	return g_shadow_frame.runs != 0;
+}
+
+bool HDShadowFrameBlob()
+{
+	return !HDShadowFrameDecide() || g_shadow_frame.presence < 1.0f;
+}
+
+float HDShadowFrameBlobWeight(ITEM_INFO* item)
+{
+	return item && item == lara_item && g_shadow_decided && g_shadow_frame.runs
+		? 1.0f - g_shadow_frame.presence : 1.0f;
 }
 
 const HDShadowFrame* HDShadowFrameState()
@@ -1389,6 +1420,9 @@ void HDLaraDrawEnd()
 	memset(&g_shadow_follow, 0, sizeof(g_shadow_follow));
 	HDSoftClockForget(&g_shadow_clock);
 	HDSoftClockFrame(&g_shadow_clock);
+	g_arrival_t = 0.0f;
+	HDSoftClockForget(&g_arrival_clock);
+	HDSoftClockFrame(&g_arrival_clock);
 	g_shadow_logged_events = -1;
 	g_others_logged_events = -1;
 	g_shadow_logged_stored = -1;
@@ -1500,8 +1534,10 @@ void HDLaraDrawFrameReset()
 	g_shadow_decided = false;
 	g_shadow_frame.runs = 0;
 	g_shadow_frame.stepped = 0;
+	g_shadow_frame.presence = 0.0f;
 	g_shadow_others_ready = false;
 	HDSoftClockFrame(&g_shadow_clock);
+	HDSoftClockFrame(&g_arrival_clock);
 
 	/* The first person and binocular log lines. They belong here because
 	 * this is the one place in the HD path that runs on every frame whether

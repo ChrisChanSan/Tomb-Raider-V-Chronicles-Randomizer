@@ -229,11 +229,17 @@ namespace
 
 	/* The second map's casters. game\draw.cpp asks HDObjectBlobGivesWay
 	 * right before an item's blob and then opens the same item with
-	 * HDObjectBegin: `g_gave_way` is the item whose blob gave way, which
+	 * HDObjectBegin: `g_gave_way` is the item whose blob gave way - or goes
+	 * out while the projected shadow comes in - and that casts, which
 	 * HDObjectBegin takes over into `g_open_casts` and clears, and
 	 * `g_open_place` is the item's world position, the place the second box
 	 * is asked about in HDObjectEnd. */
 	const ITEM_INFO* g_gave_way = 0;
+	/* The item whose blob is drawn although it gave way, because the
+	 * projected shadow is still coming in (hd_shadow.h, HDShadowArrive), and
+	 * the weight its blob is drawn with (HDObjectBlobWeight). */
+	const ITEM_INFO* g_blob_fading = 0;
+	float g_blob_weight = 1.0f;
 	bool g_open_casts = false;
 	float g_open_place[3] = { 0.0f, 0.0f, 0.0f };
 	/* The item being walked is walked for the second map alone: draw.cpp
@@ -4384,6 +4390,7 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn, int* reflections
 bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 {
 	g_gave_way = 0;
+	g_blob_fading = 0;
 
 	if (!item || !obj || !obj->shadow_size)
 		return false;
@@ -4401,8 +4408,27 @@ bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 	if (!HDShadowBlobGivesWay(runs, herStep, target, hdModel, g_reflection))
 		return false;
 
+	/* The item casts into the second map from here on; while the shadow
+	 * comes in, its blob is drawn as well, going out as the shadow comes in
+	 * (hd_shadow.h, HDShadowArrive). */
 	g_gave_way = item;
+
+	if (shadow->presence < 1.0f)
+	{
+		g_blob_fading = item;
+		g_blob_weight = 1.0f - shadow->presence;
+		return false;
+	}
+
 	return true;
+}
+
+float HDObjectBlobWeight(ITEM_INFO* item)
+{
+	if (item && item == g_blob_fading)
+		return g_blob_weight;
+
+	return HDShadowFrameBlobWeight(item);
 }
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,

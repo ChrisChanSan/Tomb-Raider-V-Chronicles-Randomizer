@@ -101,8 +101,24 @@
  *               is. Only while PULL is above 0: at 0 the lights change
  *               nothing, so nothing blends.
  *   FULL, END   below her lowest node: a receiver up to FULL units below
- *               takes the whole shadow, from END on none, smooth between - a
- *               storey under her takes none through its ceiling.
+ *               takes the whole shadow, from END on none, smooth between.
+ *               Receivers never cast, so a floor her shadow falls on cannot
+ *               hide the floor beneath it, nor a wall the floor beyond it:
+ *               END is what keeps her outline off a storey under her, and
+ *               off the floor of the room beside, which lies as deep below
+ *               her as the wall's foot. Counted on the thirteen levels'
+ *               classic faces (ModelProbe -shadowsurvey: rays along the
+ *               light from her body on every floor sector, a face behind
+ *               the first face a ray meets taking her shadow through it):
+ *               behind a face more than a block below her feet such faces
+ *               outnumber the first faces 2.4 to 1, between half a block and
+ *               a block they are as many. At 512 and 1024 half a block takes
+ *               all of it and a block none: the weight such faces take
+ *               through a wall falls by 89 per cent and through a floor by
+ *               54, the first faces below her feet lose 28 per cent of
+ *               theirs, all of them more than half a block below her - the
+ *               foot of a ledge she stands on. Larger lets her shadow follow
+ *               a drop further and a storey under her take it again.
  *   EDGE        the outer part of the box, of its half width, over which the
  *               shadow fades out, so the box's edge is never seen.
  *   FACING      the n.l from which a face takes the whole shadow; a face
@@ -162,13 +178,20 @@
  *                 thin out already on the storey above or below her.
  *   OTHERS_FULL, OTHERS_END  how far behind a caster along the light a
  *                 receiver still takes its shadow: whole up to OTHERS_FULL
- *                 units, none from OTHERS_END on, smooth between. A
- *                 creature's head (760 units above its feet, 880 along a
- *                 30 degree light) lies well inside FULL, so the floor at
- *                 its feet takes the whole shadow; a storey beneath it lies
- *                 beyond END and takes none. Larger lets the shadow reach a
- *                 lower floor, smaller cuts a tall creature's head off its
- *                 shadow. */
+ *                 units, none from OTHERS_END on, smooth between. The blob
+ *                 carriers of the thirteen levels stand 691 to 809 units
+ *                 tall in their rest pose (Tr5Level::frameBounds), the
+ *                 sniper 907 - 1047 along a 30 degree light, within 23 units
+ *                 of OTHERS_FULL - so the floor at a man's feet takes his
+ *                 whole outline; the skeleton (1199), the hydra (1249) and
+ *                 the Roman god (1546) lose its top on their own floor. A
+ *                 floor straight below a creature's feet takes nothing from
+ *                 1108 units down, about a block: through a wall or a floor
+ *                 the weight such faces take falls by 99 and 74 per cent
+ *                 against 2560 (ModelProbe -shadowsurvey, as for FULL and
+ *                 END), the first faces lose 10. Larger lets the shadow
+ *                 reach a lower floor and the room beside, smaller cuts a
+ *                 man's head off his shadow. */
 #define HD_SHADOW_MAP			512
 #define HD_SHADOW_BOX			2048.0f
 #define HD_SHADOW_DEPTH			2048.0f
@@ -180,8 +203,8 @@
 #define HD_SHADOW_FALLBACK_SLANT	30.0f
 #define HD_SHADOW_SLANT_MAX		55.0f
 #define HD_SHADOW_TAU			0.5f
-#define HD_SHADOW_FULL			1024.0f
-#define HD_SHADOW_END			2048.0f
+#define HD_SHADOW_FULL			512.0f
+#define HD_SHADOW_END			1024.0f
 #define HD_SHADOW_EDGE			0.1f
 #define HD_SHADOW_FACING		0.2f
 #define HD_SHADOW_BIAS			8.0f
@@ -190,8 +213,8 @@
 #define HD_SHADOW_OTHERS_MARGIN		0.1f
 #define HD_SHADOW_OTHERS_DEPTH		8192.0f
 #define HD_SHADOW_OTHERS_FADE		0.05f
-#define HD_SHADOW_OTHERS_FULL		1536.0f
-#define HD_SHADOW_OTHERS_END		2560.0f
+#define HD_SHADOW_OTHERS_FULL		1024.0f
+#define HD_SHADOW_OTHERS_END		1280.0f
 
 /* The machinery under the table: these keep the following honest and are
  * not a matter of taste.
@@ -704,6 +727,76 @@ inline bool HDShadowFollowStep(HDShadowFollow* f, const HDShadowKey* target, con
 		f->lag = lag;
 
 	return snap;
+}
+
+/* --------------------------------------------------------- the arrival -- */
+
+/* Where the projected shadow starts to run - the option stepped to
+ * Projected, the level drawn HD with it, Lara walking from a room drawn
+ * classic into an HD one, the map made again after a lost device - it comes
+ * in over FADE_IN game seconds, and the blobs it takes the place of go out
+ * over the same time: the drawn strength is the following's times
+ * HDShadowPresence of the time it has run without a break, every blob that
+ * gives way to it is drawn meanwhile with its alpha times 1 minus that, so
+ * the floor shows one shadow's worth at every step, never both whole and
+ * never none.
+ *
+ *   FADE_IN   0.25 seconds: 7.5 frames at 30 a second, 15 at 60, where the
+ *             change was one frame; half of TAU, so the shadow arrives
+ *             quicker than a change of the lights blends in. A free choice,
+ *             not yet seen in the game.
+ *
+ * Not on the way out: a frame the gate refuses draws no map, so there is
+ * nothing to fade out, and the blobs are drawn whole from that frame on. */
+#define HD_SHADOW_FADE_IN		0.25f
+
+/* How far the shadow has come in after `t` game seconds of running:
+ * 3 f^2 - 2 f^3 for f = t / FADE_IN held to 0..1 - the curve that leaves 0
+ * and reaches 1 with no slope, as a fog bulb's rim softens (hd_room.hlsl,
+ * BulbIntensity). HDShadowDecay's curve, exp(-t / TAU), suits a change that
+ * may be undone halfway; it reaches its end only in the limit, and a blob
+ * weighted by it would never quite go. 0 at t <= 0, exactly 1 from FADE_IN
+ * on, so a shadow that has run that long is drawn at the following's
+ * strength to the bit. */
+inline float HDShadowPresence(float t)
+{
+	const float f = hd_shadow_saturate(t / HD_SHADOW_FADE_IN);
+
+	return f * f * (3.0f - 2.0f * f);
+}
+
+/* One frame of the arrival, once per drawn frame: `t` the game seconds the
+ * shadow has run without a break, `runs` whether it runs in this frame, `dt`
+ * the frame's game time. A frame it does not run in sets `t` back to 0; one
+ * it runs in adds `dt` (a frame drawn twice and a paused game add nothing),
+ * up to FADE_IN. The presence of the frame, HDShadowPresence(t). */
+inline float HDShadowArrive(float* t, bool runs, float dt)
+{
+	if (!runs || !hd_shadow_finite(*t))
+	{
+		*t = 0.0f;
+		return 0.0f;
+	}
+
+	if (dt > 0.0f && hd_shadow_finite(dt) && *t < HD_SHADOW_FADE_IN)
+		*t += dt;
+
+	return HDShadowPresence(*t);
+}
+
+/* A blob's vertex colour with its alpha - the top byte of the engine's
+ * D3DCOLOR, which is the blob's darkness - times `weight`, rounded to the
+ * nearest byte. A weight of 1 or more gives the colour as it is, so a blob
+ * that does not fade is drawn as it always is, to the bit. */
+inline unsigned long HDShadowBlobAlpha(unsigned long colour, float weight)
+{
+	if (!(weight < 1.0f))
+		return colour;
+
+	const float w = weight > 0.0f ? weight : 0.0f;
+	const unsigned long a = (unsigned long)((float)(colour >> 24) * w + 0.5f);
+
+	return (colour & 0x00FFFFFFul) | (a << 24);
 }
 
 /* --------------------------------------------------------------- the box -- */
@@ -1517,7 +1610,8 @@ inline bool HDShadowBoxesTouch(const float* amin, const float* amax, const float
  * itself is then drawn into the second map exactly when it also has a blob
  * and stands inside the grown box (HDShadowOtherCasts) - whether the picture
  * draws it or not (HDShadowItemWalk). Inside it an item with a blob therefore
- * has always the one or the other, never both; beyond it the item has
+ * has always the one or the other, both only while the shadow comes in and
+ * the blob goes out (HDShadowArrive); beyond it the item has
  * neither, and no part of a caster up to OTHERS_MARGIN of the box from its
  * place reaches into the box, so the edge term across the light and the fade
  * along it (HDShadowFadeTerm) have faded its projected shadow out already on
@@ -1734,7 +1828,8 @@ inline bool HDShadowMirrorFaces(const float* R, const float* t, int axis, float 
  *   runs        1 when the projected shadow runs in this frame
  *   gate        HD_SHADOW_GATE_*, why it does not
  *   target      the key light's target this frame
- *   dir, strength  the drawn key light (HDShadowFollow's)
+ *   dir, strength  the drawn key light (HDShadowFollow's), the strength
+ *               times `presence`
  *   box         her map's volume
  *   viewToMap   view space -> (u, v, depth, 1) of her map, HDShadowViewToMap
  *   castClip    view space -> her map's clip space, HDShadowCastMatrix
@@ -1744,7 +1839,11 @@ inline bool HDShadowMirrorFaces(const float* R, const float* t, int axis, float 
  *               made both boxes; 0 from HDLaraDrawFrameReset on
  *   others      the second map's volume, HDShadowBoxAround her box
  *   othersViewToMap, othersCastClip  the same two matrices for the second
- *               map */
+ *               map
+ *   presence    how far the shadow has come in (HDShadowArrive): `strength`
+ *               is the following's times it, and a blob that gives way is
+ *               drawn with its alpha times 1 minus it; 0 in a frame it does
+ *               not run in */
 struct HDShadowFrame
 {
 	int runs;
@@ -1762,4 +1861,5 @@ struct HDShadowFrame
 	HDShadowBox others;
 	float othersViewToMap[16];
 	float othersCastClip[16];
+	float presence;
 };

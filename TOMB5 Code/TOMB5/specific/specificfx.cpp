@@ -45,6 +45,7 @@
 #include "../game/interpolate.h"	// the in-between frame's counters
 #include "../game/interpolate_math.h"	// InterpTrailLong - the particles
 #include "hd/hd_shadow.h"		// HDShadowBlobMode - the mode a blob is drawn with
+#include "hd/hd_object.h"		// HDObjectBlobWeight - a blob going out
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -6553,6 +6554,7 @@ static void S_PrintCircleShadow(short size, short* box, ITEM_INFO* item)
 	float fx, fy, fz;
 	long x, y, z, x1, y1, z1, x2, y2, z2, x3, y3, z3, xSize, zSize, xDist, zDist;
 	short room_number, s;
+	const float weight = HDObjectBlobWeight(item);
 
 	xSize = size * (box[1] - box[0]) / 192;	//x size of grid
 	zSize = size * (box[5] - box[4]) / 192;	//z size of grid
@@ -6681,6 +6683,12 @@ static void S_PrintCircleShadow(short size, short* box, ITEM_INFO* item)
 				v[2].color = v[0].color;
 			}
 		}
+
+		/* A blob going out while the projected shadow comes in is drawn
+		 * lighter, its alpha times its weight (hd/hd_object.h,
+		 * HDObjectBlobWeight); every other blob keeps its colour to the bit. */
+		for (int k = 0; k < 3; k++)
+			v[k].color = HDShadowBlobAlpha(v[k].color, weight);
 
 		v[0].specular = 0xFF000000;
 		v[1].specular = 0xFF000000;

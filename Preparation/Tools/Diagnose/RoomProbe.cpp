@@ -175,6 +175,13 @@
  *                     is the seed or any -with group; the engine lists only
  *                     the groups it draws in HD, so the groups the log's
  *                     HDLOG room= lines give hd=0 stay out of -with.
+ *     -unlinked 0|1   1, the default and the engine's answer, draws a piece
+ *                     whose art stands in the air of a room its own room
+ *                     has no link with (HDRoomAir) only inside the group's
+ *                     window, under frame and face, and not at all when the
+ *                     window is empty; 0 leaves those pieces the answer
+ *                     above, out of the same build. The `decide: clip`
+ *                     line ends with the engine's unlinked_ counters.
  *
  *   The portal walk (game\draw.cpp) offline, with the engine's own camera:
  *   the integer angles phd_LookAt makes of an eye and a target, the float
@@ -1824,6 +1831,18 @@ static std::vector<HDRoomBox> g_boxes_built;
 static std::vector<HDRoomGrid> g_grids_built;
 static std::vector<HDSectorFloor> g_sectors_built;
 static std::vector<HDIntrusion> g_intrusions_built;
+/* And every room's air (HDRoomAir), as hd_level.cpp's BuildRoomAir hands it
+ * over, the squares out of the same floor data words; `g_air_ms` is the
+ * time that took, the renderer's own asking added after the build. */
+static std::vector<HDRoomAir> g_air_built;
+static std::vector<float> g_air_sectors_built;
+static std::vector<unsigned char> g_air_links_built;
+static double g_air_ms = 0.0;
+/* -unlinked 0|1: 1, the engine's answer, draws the pieces whose art stands
+ * in the air of a room its own has no link with only inside its own
+ * window; 0 gives them the answer they would have without that, in the
+ * same build - the picture to hold the engine's against. */
+static int g_unlinked = 1;
 static int g_window_mode = HD_WINDOW_ALL;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
@@ -4244,6 +4263,7 @@ struct DecideCount
 	int rooms, open, full, scissored, empty;
 	int pairs, pairsWhole, pairsScissored;
 	int reachRooms, reachPieces, reachWhole, reachHidden;
+	int unlinkedPieces, unlinkedDrawn, unlinkedHidden;
 };
 
 static DecideCount g_decide_count = { 0 };
@@ -4381,12 +4401,25 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * is whole and one inside it is not drawn, whatever its holder.
 		 * face: the same with each piece on its own face alone. */
 		const bool ask = !*full && !*empty;
-		const bool answer = g_decide == 0 ? true : g_decide == 1 ? false
+		/* A piece with no face outside the smaller box is art the air took
+		 * out of the open half: whole under every answer but the air's. */
+		const bool open = piece.face < 0 && !piece.inner;
+		bool answer = g_decide == 0 ? true : g_decide == 1 ? false
+			: open ? true
 			: *empty ? piece.inner == 0
 			: !ask ? false
 			: !drawn ? true
 			: piece.face < 0 ? false
 			: g_decide == 3 ? alive : pairAlive;
+
+		/* And with -unlinked 1, DecidePairs' last word: a piece whose art
+		 * stands in the air of a room its own room has no link with is
+		 * drawn inside the window, or not at all when the window is
+		 * empty. */
+		const bool unlinked = piece.air && g_unlinked && g_decide >= 2;
+
+		if (unlinked)
+			answer = false;
 
 		HDRenderPairWhole(group, j, answer ? 1 : 0);
 
@@ -4396,7 +4429,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 			windowed++;
 
 		// The engine's clip line counters, once per group.
-		if (say && ask && drawn)
+		if (say && ask && drawn && !open)
 		{
 			g_decide_count.pairs++;
 
@@ -4406,7 +4439,17 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 				g_decide_count.pairsScissored++;
 		}
 
-		if (say && *empty)
+		if (say && unlinked)
+		{
+			g_decide_count.unlinkedPieces++;
+
+			if (*empty)
+				g_decide_count.unlinkedHidden++;
+			else
+				g_decide_count.unlinkedDrawn++;
+		}
+
+		if (say && *empty && !open)
 		{
 			g_decide_count.reachPieces++;
 
@@ -4418,10 +4461,11 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 
 		if (say)
 			printf("decide: group %3d piece %2d holder %3d face %5d tris %5d "
-				"-> %s%s%s\n", group, j, piece.holder, piece.face,
+				"-> %s%s%s%s\n", group, j, piece.holder, piece.face,
 				piece.triangles, answer ? "whole" : "window",
 				piece.face < 0 ? " (no face)" : alive ? " (face drawn)"
-					: " (face dropped)", piece.inner ? " inner" : "");
+					: " (face dropped)", piece.inner ? " inner" : "",
+				piece.air ? " air" : "");
 	}
 
 	if (say)
@@ -4448,7 +4492,18 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		else
 			g_decide_count.scissored++;
 
-		if (*empty && count > 0)
+		int asked = 0;
+
+		for (int j = 0; j < count; j++)
+		{
+			HDPairRange piece;
+
+			if (HDRenderGroupPairRange(group, j, &piece) &&
+				(piece.face >= 0 || piece.inner))
+				asked++;
+		}
+
+		if (*empty && asked > 0)
 			g_decide_count.reachRooms++;
 
 		for (int j = 0; *empty && j < count; j++)
@@ -4459,9 +4514,14 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 			if (!HDRenderGroupPairRange(group, j, &piece))
 				break;
 
+			// Art the air took out of the open half has no reach line.
+			if (piece.face < 0 && !piece.inner)
+				continue;
+
 			for (int k = 0; k < j && !seen; k++)
 				seen = HDRenderGroupPairRange(group, k, &other) &&
-					other.holder == piece.holder;
+					other.holder == piece.holder &&
+					(other.face >= 0 || other.inner);
 
 			if (seen)
 				continue;
@@ -4475,12 +4535,13 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 
 			for (int k = j; k < count; k++)
 				if (HDRenderGroupPairRange(group, k, &other) &&
-					other.holder == piece.holder)
+					other.holder == piece.holder &&
+					(other.face >= 0 || other.inner))
 				{
 					pieces++;
 					tris += other.triangles;
 
-					if (other.inner == 0)
+					if (other.inner == 0 && !(other.air && g_unlinked))
 						anyWhole = true;
 				}
 
@@ -7145,6 +7206,8 @@ static int ProbeMain(int argc, char** argv)
 			"(needs -roombox)\n");
 		printf("       -decide whole|scissor|frame|face   the pieces of intruding"
 			" art (default frame)\n");
+		printf("       -unlinked 0|1   art in an unlinked room's air inside its"
+			" own window (default 1)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
@@ -7686,6 +7749,15 @@ static int ProbeMain(int argc, char** argv)
 				q = next + 1;
 			}
 
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-unlinked") && at + 1 < argc)
+		{
+			g_unlinked = atoi(argv[at + 1]) ? 1 : 0;
+			printf("-unlinked: art in the air of a room its own room has no "
+				"link with is %s\n", g_unlinked
+				? "drawn only inside its own window (the engine's)"
+				: "answered as if it stood anywhere else");
 			at += 1;
 		}
 		else if (!strcmp(argv[at], "-decide") && at + 1 < argc)
@@ -8295,6 +8367,107 @@ static int ProbeMain(int argc, char** argv)
 				printf("-roombox: %d intrusion boxes handed in\n",
 					(int)g_intrusions_built.size());
 
+				/* And every room's air, as BuildRoomAir hands it over: per
+				 * floor square its floor and ceiling bytes and its floor
+				 * data words from its index on, read by HDSectorAir. */
+				{
+					LARGE_INTEGER from, to, rate;
+					std::vector<size_t> firstAt((size_t)n, 0);
+
+					QueryPerformanceCounter(&from);
+					g_air_built.assign((size_t)n, HDRoomAir());
+					g_air_sectors_built.clear();
+					g_air_links_built.assign((size_t)n * (size_t)n, 0);
+
+					for (int r = 0; r < n; r++)
+					{
+						const Tr5Room& rm = level.rooms()[(size_t)r];
+						HDRoomAir& air = g_air_built[(size_t)r];
+						std::vector<Tr5Level::SectorInfo> sect;
+						unsigned origin = 0;
+
+						level.headerField(r, 24, origin, error);
+						air.x = (float)rm.originX;
+						air.y = (float)(int)origin;
+						air.z = (float)rm.originZ;
+						air.nx = rm.numXSectors;
+						air.nz = rm.numZSectors;
+						air.sectors = 0;
+						firstAt[(size_t)r] = g_air_sectors_built.size();
+
+						const size_t squares =
+							(size_t)(air.nx > 0 ? air.nx : 0) *
+							(size_t)(air.nz > 0 ? air.nz : 0);
+
+						for (size_t q = 0; q < squares; q++)
+						{
+							g_air_sectors_built.push_back(HD_AIR_NONE);
+							g_air_sectors_built.push_back(-HD_AIR_NONE);
+						}
+
+						if (!level.sectorInfo(r, sect, error))
+							continue;
+
+						for (size_t q = 0; q < sect.size(); q++)
+						{
+							const Tr5Level::SectorInfo& si = sect[q];
+							const size_t at = firstAt[(size_t)r] +
+								((size_t)si.sx * air.nz + si.sz) * 2;
+							std::vector<Tr5FloorEntry> chain;
+							std::vector<unsigned short> words;
+
+							if (si.fdIndex &&
+								!level.readChain(si.fdIndex, chain))
+								continue;	// unreadable: no air
+
+							for (size_t e = 0; e < chain.size(); e++)
+								words.insert(words.end(),
+									chain[e].words.begin(),
+									chain[e].words.end());
+
+							int door = -1;
+
+							if (at + 1 < g_air_sectors_built.size())
+								HDSectorAir(si.floor, si.ceiling,
+									words.empty() ? 0 : &words[0],
+									(int)words.size(),
+									&g_air_sectors_built[at],
+									&g_air_sectors_built[at + 1], &door);
+
+							if (door >= 0 && door < n)
+							{
+								g_air_links_built[(size_t)r * n + door] = 1;
+								g_air_links_built[(size_t)door * n + r] = 1;
+							}
+						}
+					}
+
+					for (int r = 0; r < n; r++)
+						if (g_air_built[(size_t)r].nx > 0 &&
+							g_air_built[(size_t)r].nz > 0)
+							g_air_built[(size_t)r].sectors =
+								&g_air_sectors_built[firstAt[(size_t)r]];
+
+					/* The pairs not asked, row by the art's room: the same
+					 * room, next door, a floor portal (above), flipmap
+					 * twins. */
+					for (int b = 0; b < n; b++)
+						for (int a = 0; a < n; a++)
+							if (a == b || nextDoor[(size_t)b].count(a) ||
+								level.rooms()[(size_t)a].altRoom == b ||
+								level.rooms()[(size_t)b].altRoom == a)
+								g_air_links_built[(size_t)b * n + a] = 1;
+
+					QueryPerformanceCounter(&to);
+					QueryPerformanceFrequency(&rate);
+					g_air_ms = rate.QuadPart ? (double)(to.QuadPart -
+						from.QuadPart) * 1000.0 / (double)rate.QuadPart : 0.0;
+
+					if (n > 0)
+						HDRenderSetRoomAir(&g_air_built[0], n,
+							&g_air_links_built[0]);
+				}
+
 				/* And the intruders' classic faces, as BuildPairFaces hands
 				 * them over: every drawn face of every intruder room, in
 				 * the room's own frame, in the roomlets' order, the ones
@@ -8573,7 +8746,7 @@ static int ProbeMain(int argc, char** argv)
 	 * line for line against TrgProbe -roomspace, which answers the same
 	 * question out of the two files without a renderer. The two lists have
 	 * to be the same list. */
-	if (!g_intrusions_built.empty())
+	if (!g_intrusions_built.empty() || HDRenderAirPairs())
 	{
 		/* The pieces, counted the way ReportRoomIntrusions counts them for
 		 * the engine's own two lines. */
@@ -8583,6 +8756,9 @@ static int ProbeMain(int argc, char** argv)
 		// A face owns up to two pieces of a pair and is counted once.
 		std::set<std::pair<int, int> > pairClaimed;
 		int bound = 0, unbound = 0;
+		// And the air's pieces the engine's line leaves out of its counts.
+		int openAir = 0;
+		std::set<int> openGroups;
 
 		for (int g = 0; g < HDRenderGroupCount(); g++)
 			for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
@@ -8591,6 +8767,14 @@ static int ProbeMain(int argc, char** argv)
 
 				if (!HDRenderGroupPairRange(g, j, &piece))
 					break;
+
+				// Art the air took out of the open half is no intruding art.
+				if (piece.face < 0 && !piece.inner)
+				{
+					openAir += piece.triangles;
+					openGroups.insert(g);
+					continue;
+				}
 
 				if (piece.face < 0)
 				{
@@ -8617,11 +8801,40 @@ static int ProbeMain(int argc, char** argv)
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 			band += HDRenderIntrusionBand((int)i);
 
+		/* The air fields of the engine's level line (ReportRoomIntrusions):
+		 * air_ms reading the rooms' air here plus the renderer's asking. */
+		int airTris = 0, airGroups = 0;
+		const int airPairs = HDRenderAirPairs();
+		int intruding = 0, intrudingGroups = 0;
+
+		for (int g = 0; g < HDRenderGroupCount(); g++)
+		{
+			int here = HDRenderGroupIntrudingTriangles(g);
+
+			airTris += HDRenderGroupAirTriangles(g);
+			airGroups += HDRenderGroupAirTriangles(g) ? 1 : 0;
+
+			for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
+			{
+				HDPairRange piece;
+
+				if (HDRenderGroupPairRange(g, j, &piece) && piece.face < 0 &&
+					!piece.inner)
+					here -= piece.triangles;
+			}
+
+			intruding += here;
+			intrudingGroups += here ? 1 : 0;
+		}
+
 		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups "
 			"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
-			"band_unclaimed=%d\n",
-			CountIntrusionPairs(), stats.intrudingTris, stats.intrudingGroups,
-			(int)claimed.size(), bound, unbound, band);
+			"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d "
+			"air_pairs=%d\n",
+			CountIntrusionPairs(), intruding, intrudingGroups,
+			(int)claimed.size(), bound, unbound, band,
+			(int)(g_air_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
+			airTris, airGroups, airPairs);
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 		{
@@ -8634,6 +8847,20 @@ static int ProbeMain(int argc, char** argv)
 					g_intrusions_built[i].group, hits, pairFaces[i],
 					pairBound[i]);
 		}
+
+		// The engine's HDLOG unlinked lines, word for word but the prefix.
+		for (int i = 0; i < airPairs; i++)
+		{
+			int group = 0, host = 0, tris = 0;
+
+			if (HDRenderAirPair(i, &group, &host, &tris))
+				printf("unlinked level=%s group=%d host=%d tris=%d\n", stem,
+					group, host, tris);
+		}
+
+		printf("unlinked: %d triangle(s) of %d group(s) taken out of the "
+			"open half as pieces of their own\n", openAir,
+			(int)openGroups.size());
 	}
 	/* What the openings really took away, per box and per room, out of the
 	 * engine's own build. A box that caught nothing is printed too - a
@@ -9789,12 +10016,15 @@ static int ProbeMain(int argc, char** argv)
 	if (g_roomwin_count)
 		printf("decide: clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 			"pairs=%d whole=%d scissored=%d reach_rooms=%d reach_pieces=%d "
-			"reach_whole=%d reach_hidden=%d\n", g_decide_count.rooms,
+			"reach_whole=%d reach_hidden=%d unlinked_pieces=%d "
+			"unlinked_drawn=%d unlinked_hidden=%d\n", g_decide_count.rooms,
 			g_decide_count.open, g_decide_count.full, g_decide_count.scissored,
 			g_decide_count.empty, g_decide_count.pairs,
 			g_decide_count.pairsWhole, g_decide_count.pairsScissored,
 			g_decide_count.reachRooms, g_decide_count.reachPieces,
-			g_decide_count.reachWhole, g_decide_count.reachHidden);
+			g_decide_count.reachWhole, g_decide_count.reachHidden,
+			g_decide_count.unlinkedPieces, g_decide_count.unlinkedDrawn,
+			g_decide_count.unlinkedHidden);
 
 	/* Of those, the draw calls that turned a book, and the page the first
 	 * of them showed - the book the engine's bookstep line follows. */

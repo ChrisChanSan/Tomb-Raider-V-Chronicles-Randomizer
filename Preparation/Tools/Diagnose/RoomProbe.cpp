@@ -247,6 +247,14 @@
  *                     corners of one water quad. The renderer floods the
  *                     plane between them, and reports how many HD vertices
  *                     the four corners were missing.
+ *     -watermarks     the classic water marks the engine hands in at level
+ *                     load, out of -roombox's .TRC by a twin of
+ *                     hd_level.cpp's BuildWaterMarks: the art the marks name
+ *                     (the art over a sheet, the flood) as in the game, the
+ *                     count printed as the engine's log has it. With -plane
+ *                     its four marks are added. The shimmer selector stays
+ *                     off - the engine sets it per room from the room's
+ *                     flags, the probe has one set for the whole picture.
  *     -hdm            apply the .hdm sidecar beside the classic .TRC the way
  *                     hd_level.cpp does, with the engine's own reader:
  *                     every opening the randomizer cut is taken out of
@@ -1766,6 +1774,9 @@ static bool g_motion = true;
  * then stamps every HD vertex of the group inside that box at that height. */
 static HDWaterMark g_plane_marks[4];
 static bool g_plane = false;
+/* -watermarks: the classic water marks of every room out of -roombox's
+ * .TRC (probemarks, before ProbeMain), with -plane's four after them. */
+static bool g_watermarks = false;
 /* The gloss: tomb5.hd_reflect, on by default here as it is in the game, off
  * with -noreflect so that the before picture can be drawn out of the same
  * build. */
@@ -7058,6 +7069,338 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	}
 }
 
+/* -watermarks: the classic water marks the engine hands the renderer at level
+ * load (hd_level.cpp, BuildWaterMarks), read out of the -roombox .TRC. A twin
+ * of that function and of the predicate it asks per vertex, drawroom.cpp's
+ * aRoomVertexWaterMarks with IsMistVert, IsReflectionVert and IsShoreVert:
+ * those walk the engine's ROOM_INFO array and globals and cannot be linked
+ * into a tool. Same order, same tests, the same float arithmetic, so a
+ * corner matches exactly where the engine's does; the engine's log line
+ * 'water marks=<n> rooms=<n>' is printed the same way to hold the two
+ * against each other.
+ *
+ * The room blob of a .TRC is the engine's ROOM_INFO, 208 bytes, then its
+ * body, and every pointer in the header is an offset into the body
+ * (alexstuff.cpp, aFixUpRoom): the door list at +4, x at +20, z at +28,
+ * minfloor at +32, the flags at +78, the roomlets' count at +168, the
+ * roomlets at +172 and their vertices at +176 (global/types.h, ROOM_INFO).
+ * A roomlet is 56 bytes with nVtx at +0 and nWVtx at +2 (ROOMLET), and its
+ * vertices follow the previous roomlet's: seven floats each, x and z room
+ * local, y world. A door list is a short count and 32 bytes a portal - the
+ * room, the normal, four corners (ROOM_PORTAL). An odd door offset is no
+ * door list, the test aFixUpRoom makes. */
+namespace probemarks
+{
+	struct Portal
+	{
+		short rn;
+		short normal[3];
+		short v1[3], v2[3], v3[3], v4[3];
+	};
+
+	struct Roomlet
+	{
+		long nVtx;
+		long nWVtx;
+		size_t first;		// into Room::vtx, in floats
+	};
+
+	struct Room
+	{
+		long x = 0, z = 0, minfloor = 0;
+		unsigned short flags = 0;
+		bool door = false;
+		std::vector<Portal> portals;
+		std::vector<Roomlet> roomlets;
+		std::vector<float> vtx;
+	};
+
+	// global/types.h, room_flags.
+	const unsigned short kUnderwater = 0x1;
+	const unsigned short kMist = 0x100;
+	const unsigned short kReflect = 0x200;
+	const unsigned short kReflectCeiling = 0x1000;
+	// hd_level.cpp, HD_MAX_ROOMS: the rooms BuildWaterMarks walks at most.
+	const int kMaxRooms = 1024;
+
+	std::vector<Room> g_rooms;
+	std::vector<HDWaterMark> g_marks;
+
+	// One of a room's vertices at the world position x, y, z.
+	bool HasVertex(const Room& r, float x, float y, float z)
+	{
+		for (const Roomlet& l : r.roomlets)
+			for (long n = 0; n < l.nVtx; n++)
+			{
+				const float* v = &r.vtx[l.first + (size_t)n * 7];
+
+				if (x == v[0] + r.x && y == v[1] && z == v[2] + r.z)
+					return true;
+			}
+
+		return false;
+	}
+
+	bool Valid(int rn)
+	{
+		return rn >= 0 && rn < (int)g_rooms.size();
+	}
+
+	// The portal's box test the three predicates share.
+	bool Outside(const Portal& p, const float* v)
+	{
+		return v[0] < p.v1[0] || v[0] > p.v3[0] || v[2] < p.v1[2] ||
+			v[2] > p.v2[2];
+	}
+
+	// IsMistVert: no vertex at the same place behind a downward portal.
+	bool Mist(const Room& cur, const float* v)
+	{
+		if (!cur.door)
+			return false;
+
+		const float x = v[0] + cur.x, y = v[1], z = v[2] + cur.z;
+
+		for (const Portal& p : cur.portals)
+		{
+			if (p.normal[1] != -1 || Outside(p, v) || !Valid(p.rn))
+				continue;
+
+			if (HasVertex(g_rooms[(size_t)p.rn], x, y, z))
+				return false;
+		}
+
+		return true;
+	}
+
+	/* IsReflectionVert, with its side answer has_water_neighbor: an
+	 * underwater room behind a downward portal over the vertex. */
+	bool Reflection(const Room& cur, const float* v, bool& waterNeighbour)
+	{
+		waterNeighbour = false;
+
+		if (!cur.door)
+			return false;
+
+		const float x = v[0] + cur.x, y = v[1], z = v[2] + cur.z;
+		bool cont = false;
+
+		for (const Portal& p : cur.portals)
+		{
+			if (p.normal[1] != -1 || Outside(p, v) || !Valid(p.rn))
+				continue;
+
+			const Room& r = g_rooms[(size_t)p.rn];
+
+			if (r.flags & kUnderwater)
+				cont = true;
+
+			if (HasVertex(r, x, y, z))
+				return false;
+		}
+
+		if (!cont)
+			return false;
+
+		waterNeighbour = true;
+
+		for (const Portal& p : cur.portals)
+		{
+			if (!Valid(p.rn))
+				continue;
+
+			for (const Portal& np : g_rooms[(size_t)p.rn].portals)
+			{
+				if (!Valid(np.rn))
+					continue;
+
+				const Room& nr = g_rooms[(size_t)np.rn];
+
+				if ((nr.flags & kUnderwater) && HasVertex(nr, x, y, z))
+					return false;
+			}
+		}
+
+		return true;
+	}
+
+	// IsShoreVert: a vertex of an underwater room through a level portal.
+	bool Shore(const Room& cur, const float* v)
+	{
+		if (!cur.door)
+			return false;
+
+		const float x = v[0] + cur.x, y = v[1], z = v[2] + cur.z;
+
+		for (const Portal& p : cur.portals)
+		{
+			if (!Valid(p.rn) ||
+				!(g_rooms[(size_t)p.rn].flags & kUnderwater) ||
+				!p.normal[1] || Outside(p, v))
+				continue;
+
+			if (HasVertex(g_rooms[(size_t)p.rn], x, y, z))
+				return true;
+		}
+
+		return false;
+	}
+
+	// aRoomVertexWaterMarks.
+	unsigned char Bits(const Room& r, const Roomlet& l, long n)
+	{
+		const float* v = &r.vtx[l.first + (size_t)n * 7];
+		unsigned char bits = 0;
+
+		if (n < l.nWVtx)
+			bits |= 1;
+
+		if ((r.flags & kReflect) && (r.flags & kReflectCeiling))
+		{
+			if (!Mist(r, v) || std::fabs(v[1] - (float)r.minfloor) > 1536)
+				bits |= 4;		}
+		else if (r.flags & kMist)
+		{
+			if (Mist(r, v))
+				bits |= 2;
+		}
+		else if (r.flags & kReflect)
+		{
+			bool waterNeighbour = false;
+			const bool reflection = Reflection(r, v, waterNeighbour);
+
+			if (reflection || Shore(r, v) || waterNeighbour)
+				bits |= 2;
+		}
+
+		return bits;
+	}
+
+	template <typename T> T Read(const std::vector<uint8_t>& b, size_t at)
+	{
+		T value = T();
+
+		if (at + sizeof(T) <= b.size())
+			std::memcpy(&value, &b[at], sizeof(T));
+
+		return value;
+	}
+
+	/* The rooms out of the level, then BuildWaterMarks: every vertex of a
+	 * room with ROOM_MIST or ROOM_REFLECT, the water vertices (nWVtx) of
+	 * every other room. Returns the number of rooms with a mark. */
+	int Build(const Tr5Level& level)
+	{
+		const std::vector<uint8_t>& b = level.debugBytes();
+		const int count = level.roomCount() < kMaxRooms ?
+			level.roomCount() : kMaxRooms;
+
+		g_rooms.assign((size_t)count, Room());
+		g_marks.clear();
+
+		for (int i = 0; i < count; i++)
+		{
+			const size_t hdr = level.rooms()[(size_t)i].headerOffset;
+			Room& r = g_rooms[(size_t)i];
+
+			if (!hdr || hdr + 208 > b.size())
+				continue;
+
+			const size_t body = hdr + 208;
+			const uint32_t door = Read<uint32_t>(b, hdr + 4);
+			const int32_t lets = Read<int32_t>(b, hdr + 168);
+			const size_t letAt = body + Read<uint32_t>(b, hdr + 172);
+			size_t vtxAt = body + Read<uint32_t>(b, hdr + 176);
+
+			r.x = Read<int32_t>(b, hdr + 20);
+			r.z = Read<int32_t>(b, hdr + 28);
+			r.minfloor = Read<int32_t>(b, hdr + 32);
+			r.flags = Read<uint16_t>(b, hdr + 78);
+
+			if (!(door & 1) && body + door + 2 <= b.size())
+			{
+				const short n = Read<short>(b, body + door);
+
+				r.door = true;
+
+				for (short k = 0; k < n; k++)
+				{
+					const size_t at = body + door + 2 + (size_t)k * 32;
+
+					if (at + 32 > b.size())
+						break;
+
+					Portal p;
+
+					std::memcpy(&p, &b[at], 32);
+					r.portals.push_back(p);
+				}
+			}
+
+			for (int32_t k = 0; k < lets; k++)
+			{
+				const size_t at = letAt + (size_t)k * 56;
+				Roomlet l;
+
+				l.nVtx = Read<short>(b, at);
+				l.nWVtx = Read<short>(b, at + 2);
+				l.first = r.vtx.size();
+
+				if (at + 56 > b.size() || l.nVtx < 0 ||
+					vtxAt + (size_t)l.nVtx * 28 > b.size())
+					break;
+
+				r.vtx.resize(r.vtx.size() + (size_t)l.nVtx * 7);
+
+				if (l.nVtx)
+					std::memcpy(&r.vtx[l.first], &b[vtxAt],
+						(size_t)l.nVtx * 28);
+
+				vtxAt += (size_t)l.nVtx * 28;
+				r.roomlets.push_back(l);
+			}
+		}
+
+		int rooms = 0;
+
+		for (int i = 0; i < count; i++)
+		{
+			const Room& r = g_rooms[(size_t)i];
+			const bool interesting = (r.flags & (kMist | kReflect)) != 0;
+			int here = 0;
+
+			for (const Roomlet& l : r.roomlets)
+			{
+				const long last = interesting ? l.nVtx : l.nWVtx;
+
+				for (long n = 0; n < last && n < l.nVtx; n++)
+				{
+					const unsigned char bits = Bits(r, l, n);
+
+					if (!bits)
+						continue;
+
+					const float* v = &r.vtx[l.first + (size_t)n * 7];
+					HDWaterMark mark;
+
+					mark.room = (short)i;
+					mark.x = (short)v[0];
+					mark.y = (short)v[1];
+					mark.z = (short)v[2];
+					mark.bits = bits;
+					g_marks.push_back(mark);
+					here++;
+				}
+			}
+
+			if (here)
+				rooms++;
+		}
+
+		return rooms;
+	}
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	if (argc < 4)
@@ -7503,6 +7846,8 @@ static int ProbeMain(int argc, char** argv)
 			g_roombox = argv[at + 1];
 			at += 1;
 		}
+		else if (!strcmp(argv[at], "-watermarks"))
+			g_watermarks = true;
 		else if (!strcmp(argv[at], "-hdm"))
 			g_hdm = true;
 		else if (!strcmp(argv[at], "-classicroom") && at + 1 < argc)
@@ -8084,6 +8429,25 @@ static int ProbeMain(int argc, char** argv)
 
 			HDRenderSetRoomBoxes(&g_boxes_built[0],
 				(int)g_boxes_built.size());
+
+			/* -watermarks: the marks hd_level.cpp's BuildWaterMarks hands
+			 * in, and -plane's after them, borrowed for the build as the
+			 * engine lends its own. */
+			if (g_watermarks)
+			{
+				const int marked = probemarks::Build(level);
+				std::vector<HDWaterMark>& marks = probemarks::g_marks;
+
+				printf("-watermarks: level=%s water marks=%d rooms=%d\n",
+					stem, (int)marks.size(), marked);
+
+				if (g_plane)
+					marks.insert(marks.end(), g_plane_marks,
+						g_plane_marks + 4);
+
+				HDRenderSetWaterMarks(marks.empty() ? 0 : &marks[0],
+					(int)marks.size());
+			}
 			printf("-roombox: %d room boxes handed in from %s\n",
 				(int)g_boxes_built.size(), trc.c_str());
 
@@ -8513,6 +8877,10 @@ static int ProbeMain(int argc, char** argv)
 	else if (g_hdm)
 		printf("RoomProbe: -hdm needs -roombox <folder holding the classic "
 			".TRC> - that folder is where the sidecar lives\n");
+
+	if (g_watermarks && g_roombox.empty())
+		printf("RoomProbe: -watermarks needs -roombox <folder holding the "
+			"classic .TRC> - the marks come out of its rooms\n");
 
 	HDRenderGlossOverride(g_gloss_max ? 1 : 0);
 	HDRenderGlossFieldView(g_gloss_field);

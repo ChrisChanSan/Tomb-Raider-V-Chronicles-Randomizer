@@ -432,7 +432,7 @@ float4 gWaveV2[4] : register(c24);
  * s1, s2      the light field     per level (the two volume textures)
  *
  * and in WaterPS alone (the water sheet, see "the sheet" below), all
- * thirty-one uploaded before every sheet draw:
+ * thirty-two uploaded before every sheet draw:
  *
  * c92 - c95   gWaveP[4]           per DRAW CALL
  * c96 - c103  gWaterDeep .. gWaterMisc   per DRAW CALL
@@ -441,7 +441,8 @@ float4 gWaveV2[4] : register(c24);
  * c111, c112  gWaterLag, gWaterLife                     per DRAW CALL
  * c113 - c120 gWaterRings[8]      per DRAW CALL
  * c121, c122  gWaveK[2]           per DRAW CALL
- * s5          the copy of the frame behind the sheet   per frame
+ * c148        gWaterClip          per DRAW CALL (read by the depth variants)
+ * s5         the copy of the frame behind the sheet   per frame
  * s6          the frame's depth texture (the variant compiled with
  *             HD_WATER_DEPTH alone)                     per frame
  *
@@ -695,6 +696,13 @@ float4 gWaterMisc : register(c103);
 float4 gWaterAbsorb : register(c104);
 float4 gWaterScreen : register(c105);
 float4 gWaterStage : register(c106);
+
+/* gWaterClip c148, per sheet draw, read by WaterPS alone: x how far under
+ * the surface at rest the frame's depth may lie and still be left to the
+ * frame, units (the body's clip, hd_render.cpp kWaterClip; see "the clip"
+ * in WaterPS); y, z, w 0. Named by no other shader: this file's other
+ * pixel registers end at c147, hd_model.hlsl's own begin at c160. */
+float4 gWaterClip : register(c148);
 
 /* What keeps the sheet alive, read by WaterPS alone:
  *
@@ -2105,7 +2113,6 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
  * their mean is the class's one over the absorption length - the palette
  * keeps its meaning and the class its depth (water_look). */
 #define HD_WATER_GUARD 96.0f
-#define HD_WATER_CLIP 8.0f
 
 float2 RefractMove(float2 slope, float amount, float2 fx, float2 fy)
 {
@@ -2325,25 +2332,22 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	/* The clip. What the frame drew at the surface's own height - a deck, a
 	 * rim, a bank the remaster raised to the water plane inside a classic
 	 * water square, a floe's top - is not under the water: where the frame's
-	 * depth lies less than HD_WATER_CLIP under the surface at rest (the
-	 * swell's lift taken back, so a crest does not drown the deck either),
-	 * the pixel is left to the frame. clip() and not alpha 0: with the copy
-	 * the sheet writes the whole pixel, and a texkill leaves it untouched
-	 * with no colour to zero. 8 units: the depth's own error is far under it
-	 * - on JOBY2 room 66's flat pool floor at 2560 x 1440, about 2,600 units
-	 * away, `rest` is one value to a sixteenth of a unit over the whole
-	 * floor (RoomProbe, `rest` as grey), and 24 bits over the near and far
-	 * planes of 20 and 20,480 give about 1.2 units at the far plane - and 8
-	 * takes the remaster's own planes, which stand two to nine units off
-	 * the classic height (ANDY3's water 2 and 4, ANDREA2 231's 7 to 9).
+	 * depth lies less than the body's clip (gWaterClip.x) under the surface
+	 * at rest (the swell's lift taken back, so a crest does not drown the
+	 * deck either), the pixel is left to the frame. clip() and not alpha 0:
+	 * with the copy the sheet writes the whole pixel, and a texkill leaves
+	 * it untouched with no colour to zero. 8 units for every body, 0 for one
+	 * whose bank is the remaster's ground sloping through the surface
+	 * inside its squares, where 8 only cut the sheet off the ground just
+	 * under the water - hd_render.cpp kWaterClip and kWaterBank say why.
 	 * RoomProbe -waterdepthview 4 shows `rest` and clips nothing. Seen from
 	 * below there is no such floor; the clip is from above alone. */
 	const float rest = depth - lift;
 
 #ifdef HD_WATER_VIEW
-	clip(above > 0.5f && gWaterStage.z < 3.5f ? rest - HD_WATER_CLIP : 1.0f);
+	clip(above > 0.5f && gWaterStage.z < 3.5f ? rest - gWaterClip.x : 1.0f);
 #else
-	clip(above > 0.5f ? rest - HD_WATER_CLIP : 1.0f);
+	clip(above > 0.5f ? rest - gWaterClip.x : 1.0f);
 #endif
 #endif
 

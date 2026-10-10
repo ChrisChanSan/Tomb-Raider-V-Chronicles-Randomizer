@@ -1180,4 +1180,4 @@ const BYTE kHDRoomWaterVS[] =
      84, 160,   1,   0, 170, 144, 
     255, 255,   0,   0
 };
-// bshader-stamp ce301f92a7e4376c140af0dd977c7f4f
+// bshader-stamp 080dd5e7905cb9d444c9a1f94f94f21b

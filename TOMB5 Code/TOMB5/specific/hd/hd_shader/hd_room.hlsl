@@ -284,8 +284,8 @@ float4 gMotion : register(c13);
  * dispersion, omega = calm * sqrt(g k) with g = 4300 units/s^2 (9.81 m/s^2
  * at 2.3 mm a unit), and a channel adds its current. The sheet sums eight
  * such rows with a slow envelope on each, turned into a fan of directions
- * and broken into short crests along their own crest lines (WaveSum8,
- * CrestEnv); the remaster's marked art keeps the four straight rows.
+ * and broken into short crests placed by a hash (WaveSum8, CrestRows);
+ * the remaster's marked art keeps the four straight rows.
  *
  *   the swell     a marked surface rises by the class's share of that
  *                 height, tapered at the shore - a sea and a channel only
@@ -409,13 +409,16 @@ float4 gWaterView : register(c19);
 float4 gWaveV[4] : register(c20);
 float4 gWaveV2[4] : register(c24);
 
-/* The crests for WaterVS's swell, per sheet draw: the same seven registers
- * as the pixel side's c149 - c155 (gCrestA, gCrestB, gCrest), here c168 -
- * c174 - above every vertex register of this file (the wibble table ends at
- * c127) and of hd_model.hlsl (its last, gSoft, ends at c166). */
+/* The crests for WaterVS's swell, per sheet draw: the same eleven
+ * registers as the pixel side's c149 - c159 (gCrestA, gCrestB, gCrest,
+ * gCrestP, gCrestH), here c168 - c178 - above every vertex register of
+ * this file (the wibble table ends at c127) and of hd_model.hlsl (its
+ * last, gSoft, ends at c166). */
 float4 gCrestVA[3] : register(c168);
 float4 gCrestVB[3] : register(c171);
 float4 gCrestV : register(c174);
+float4 gCrestVP[2] : register(c175);
+float4 gCrestVH[2] : register(c177);
 
 /* -------------------------------------------------- constants, pixel side --
  *
@@ -714,22 +717,28 @@ float4 gWaterStage : register(c106);
  * pixel registers end at c147, hd_model.hlsl's own begin at c160. */
 float4 gWaterClip : register(c148);
 
-/* The crests (see CrestEnv), per sheet draw, read by WaterPS (its foam
+/* The crests (see CrestRows), per sheet draw, read by WaterPS (its foam
  * variant too) and RiverPS:
  *
- * gCrestA     c149 - c151, rows one to four: x the envelope's step along
- *             world x, turns a unit, one row a component; y the same
- *             along z; z its phase now, turns
+ * gCrestA     c149 - c151, rows one to four, one row a component: x the
+ *             step along the crest in cells a unit along world x; y the
+ *             same along z; z the number the row's cells across are
+ *             counted from (0 to 4095)
  * gCrestB     c152 - c154, the same for rows five to eight
- * gCrest      c155: x 1 - C, y 2 C, z 24 C (C the envelope's depth), w the
- *             second bend's push times the longest row's wave number
- *             (WaveBend)
+ * gCrest      c155: x 1 - C, y C times the pieces' gain, z C (C the
+ *             pieces' share), w the squeeze's push in units a unit of the
+ *             longest row's wave vector (WaveBend)
+ * gCrestP     c156, c157, the phases of rows one to four and five to
+ *             eight, one row a component (the rows' z, gWaveP and gWaveP2)
+ * gCrestH     c158, c159, their heights (the rows' w)
  *
  * Named by no other shader: hd_model.hlsl's pixel registers begin at
  * c160. */
 float4 gCrestA[3] : register(c149);
 float4 gCrestB[3] : register(c152);
 float4 gCrest : register(c155);
+float4 gCrestP[2] : register(c156);
+float4 gCrestH[2] : register(c158);
 
 /* What keeps the sheet alive, read by WaterPS alone:
  *
@@ -745,8 +754,8 @@ float4 gCrest : register(c155);
  * gWaterRings  c113 - c120, one ring a register: x, z its centre (world),
  *              its front's radius and its strength - see RingSlope
  * gWaveK       c121, c122, the eight rows' wave numbers, radians a unit -
- *              the lengths of their (kx, kz); the first is the crests'
- *              bend's scale (WaveBend), the rows' fade is WaterVS's
+ *              the lengths of their (kx, kz); the rows' fade is
+ *              WaterVS's
  * gWaterLara   c123, where the waterline gives way to Lara: x, y her world
  *              x and z in the frame of the sheet's world position, z the
  *              radius without a waterline, w one over the width it comes
@@ -978,149 +987,199 @@ float WaveSum(float2 p, float t, float4 w0, float4 w1, float4 w2, float4 w3,
 	return dot(h, s);
 }
 
-/* The push WaveSum gives its position, and a second one under it: the
- * sheet's WaveSum8, the whitecaps' earlier crest and RiverPS bend the
- * crests by both. The second is the crests' bend at the lattice's own
- * scale: a pattern 1.75 of the longest wavelength wide (0.57 k0) whose
- * push, `push` over k0 - 0.2 of that wavelength times the body's `crest`
- * (hd_render.cpp, c155.w) -, bends a crest within a few wavelengths where
- * the slow push leaves it straight; it drifts on its own way. 1.75, 0.2
- * and the drift are free choices, set by eye on the round's RoomProbe
- * pictures. RoomVS's WaveSum keeps the slow push alone. */
-float2 WaveBend(float2 p, float t, float k0, float push)
+/* The cells' hash: two numbers in [0, 1) for every pair of whole numbers
+ * (i, j), four pairs at a time - the fractional parts of two sums of
+ * products of the indices, crossed (a common graphics idiom for randomness
+ * without a table). The multipliers are whole numbers over 4096, exact in
+ * single precision, so the hash repeats after exactly 4096 cells either
+ * way and nowhere before; its callers give it cell numbers, never places,
+ * so the products keep their precision anywhere in a level (no sine of a
+ * large argument). The numbers used are the fractional parts of 16, 256
+ * and 4096 times the first and of 16 times the second: counted on 128 x
+ * 128 cells at the origin and round (900, 1460) and (4000, 6000) - more
+ * than a level asks: 65,536 units are 533 cells of a channel's shortest
+ * row either way, and the crests' count adds at most 4095 -, each spreads
+ * evenly over 64 bins (chi square 41 to 82 on 63 degrees of freedom), its
+ * neighbours correlate by under 0.03, its power spectrum is flat (the
+ * largest bin 8 to 14 times the mean, as for white noise), and the four
+ * correlate with each other by under 0.08. 3.71, 7.13, 5.37 and 9.11 are
+ * free choices that passed that count. */
+float4 CellHash(float4 i, float4 j, out float4 second)
 {
-	const float2 warp = Wave2(p.yx * (0.21f * k0) +
-		t * float2(0.23f, -0.19f));
-	const float2 fine = Wave2(p * (0.57f * k0) +
-		t * float2(-0.31f, 0.27f));
-	const float2 q = p + warp * (1.6f / max(k0, 1e-4f));
+	const float4 a = frac(i * (422.0f / 4096.0f) + j * (1531.0f / 4096.0f));
+	const float4 b = frac(j * (481.0f / 4096.0f) + i * (965.0f / 4096.0f));
 
-	return q + fine * (push / max(k0, 1e-4f));
+	second = frac(b * (a + 5.37f) * 9.11f + a);
+	return frac(a * (b + 3.71f) * 7.13f + b);
 }
 
-/* The two slow curves over the crests' pieces (CrestEnv): periods of 2.7
- * pieces along the crest and 1.64 across, in no small whole ratio to each
- * other or to the piece. 0.15 along moves e by at
- * most a third of the place's own rate (24 x 0.15 x 0.37 / 4 = 0.33), so
- * a piece runs from 0.75 to 1.5 times its mean length and never folds
- * back; at 0.3 (0.6 to 3 times) the stretched pieces draw long streaks on
- * a pond. 0.3 across moves the next crests' pieces by up to 0.6 of
- * a piece. The starts are steps of 0.618 of a turn. The numbers are free
- * choices, set by eye on the round's RoomProbe pictures. */
-#define HD_CREST_ALONG 0.37f
-#define HD_CREST_ACROSS 0.61f
-#define HD_CREST_WARP_A 0.15f
-#define HD_CREST_WARP_B 0.3f
-#define HD_CREST_START_A float4(0.0f, 0.618f, 0.236f, 0.854f)
-#define HD_CREST_START_B float4(0.472f, 0.09f, 0.708f, 0.326f)
+/* The squeeze: the place is pushed to and fro along the longest row's
+ * direction - `push` units a unit of its wave vector `k0` (k0 times push,
+ * at most kBendPush of that wavelength, hd_render.cpp) - along a value
+ * noise: the hash at the four corners of a square cell, blended by the
+ * smoothstep of the place within it, over cells HD_BEND_CELL of the
+ * longest wavelength wide, so its crests crowd and part, and never the
+ * same way twice: the noise has no period short of the hash's 4096 cells.
+ * It drifts with the clock by HD_BEND_DRIFT cells a second. One way and
+ * one octave, about 25 slots: a second way cost 7 more than the sheet's
+ * variants have. 1.5, the drift and the push are free choices, set by eye
+ * on the round's RoomProbe pictures. RoomVS's WaveSum keeps its own slow
+ * bend. */
+#define HD_BEND_CELL 1.5f
+#define HD_BEND_DRIFT float2(0.031f, -0.023f)
+float2 WaveBend(float2 p, float t, float2 k0, float push)
+{
+	const float2 q = p * (length(k0) * (0.15915494f / HD_BEND_CELL)) +
+		t * HD_BEND_DRIFT;
+	const float2 f = frac(q);
+	const float2 c = q - f;
+	float4 g;
+	const float4 h = frac(CellHash(c.xxxx + float4(0.0f, 1.0f, 0.0f, 1.0f),
+		c.yyyy + float4(0.0f, 0.0f, 1.0f, 1.0f), g) * 16.0f);
+	const float2 s = f * f * (3.0f - 2.0f * f);
+	const float2 e = lerp(h.xz, h.yw, s.x);
 
-/* The crests' pieces: the envelope four rows' heights take along their own
- * crests (hd_render.cpp, "the crests" over kWaterFan). `cx`, `cz` the
- * envelope's step along world x and z in turns a unit, `ph` its phase in
- * turns, `shape` (1 - C, 2 C, 24 C) with C its depth. The curve is Wave2's:
- * u = 2 frac(e) - 1, f = |u|, g = f f (3 - 2 f), the envelope 1 - C + 2 C g
- * - 1 + C at the middle of a piece, 1 - C between two -, its rise per
- * turn 24 C u (1 - f), exact for that curve (d g / d f = 6 f (1 - f),
- * d f / d e = 2 sign u).
+	return p + k0 * ((lerp(e.x, e.y, s.y) * 2.0f - 1.0f) * push);
+}
+
+/* The crests' pieces (hd_render.cpp, "the crests" over kWaterFan), four
+ * rows at a time. A row's crests are cut into cells. Across the row a cell
+ * holds HD_CREST_ACROSS crests, from trough to trough, and is numbered by
+ * the crests' own count: `m` adds the whole cells the processor took off
+ * the row's phase, so a crest keeps its cell while it travels. Along the
+ * crest a cell is crestLen of the row's wavelengths long (`cx`, `cz` the
+ * step in cells a unit along world x and z), and every other cell across
+ * is moved along by half a cell, so neighbouring cells stand staggered
+ * like bricks. The hash of a cell's two numbers (CellHash) gives its
+ * piece - a short train of crests:
  *
- * The pieces do not repeat at one step: e is the place along the crest
- * plus the phase plus two slow curves of the same kind (2 g, mean 1),
- * HD_CREST_WARP_A times one along the crest at HD_CREST_ALONG of the
- * piece's frequency and HD_CREST_WARP_B times one across the crests at
- * HD_CREST_ACROSS of it. The first stretches and squeezes the pieces of a
- * crest, so no two of a row are of one length; the second moves the
- * pieces of the next crests along, so they do not stand in a line across
- * the row. The curves are fixed in the world; the phase still walks the
- * pieces along. `growX`, `growZ` the envelope's rise along world x and z,
- * exact with both curves (their rise 24 u (1 - f) per turn of their own
- * argument), so the slope takes the pieces' ends as drawn. With C 0 the
- * envelope is 1 and its rise 0: the straight rows. */
-float4 CrestEnv(float2 p, float4 cx, float4 cz, float4 ph, float3 shape,
-	out float4 growX, out float4 growZ)
+ *   a height from 0.4 to 1 of the gain;
+ *   a length from 1 to 1 / 2 of the cell (1.5 to 3 wavelengths at a cell
+ *   of 3) at a place within it: its middle within (n - 1) / 4 of the
+ *   cell's centre (n the cell over the length), never more than
+ *   (1 - 1 / n) / 2 for n up to 2, so the piece stays in its cell;
+ *   a lean of up to HD_CREST_LEAN turns a cell either way - the crests'
+ *   line sheared along the piece, up to 15 degrees off the row at a cell
+ *   of 3 wavelengths (atan(0.8 / 3)) - and a shift across the crests of
+ *   up to HD_CREST_SHIFT of a turn either way.
+ *
+ * Its shape is the row's curve (Wave2's, 2 q - 1 of the sheared place)
+ * under two windows, each the smoothstep of a tent - along the piece (wa)
+ * and across the cell (wc) -, both 0 at the cell's edges with their
+ * slopes; the shear is taken under the same windows, so at the cell's
+ * edges the phase is the row's own and the surface is smooth everywhere.
+ * Across, the window weighs the middle crest of the three fully and its
+ * two neighbours by a quarter: a crest with its weaker fellows, not a lone
+ * bump. The height is h S (1 - C + C G A wa wc), C the pieces' share
+ * (`shape` x 1 - C, y C G, z C, G the gain hd_render.cpp kCrestGain), and
+ * the slope is exact - `fk` and `fc` its factors of k and of the step
+ * along the crest: the windows' rises (the smoothstep's 6 f (1 - f) times
+ * the tent's slope) and the shear's. With C 0 these are the straight rows.
+ * `lean` false leaves out the lean and the shift - in RiverPS, the views'
+ * and the underside's variants, for their slots, and in the foam's draw,
+ * which reads the height for its whitecaps and swash and took 0.02 ms
+ * more with it over a screen of sea (RoomProbe, 2560 x 1440). The window
+ * across one crest alone drew each piece as a round bump - from above a
+ * pitted sheet; a sixth of the cells empty left flat stretches with single
+ * dimples. 3, the lengths, the heights, the lean, the shift and the
+ * bricks' half cell are free choices, set by eye on the round's RoomProbe
+ * pictures. */
+#define HD_CREST_ACROSS 3.0f
+#define HD_CREST_LEAN 0.8f
+#define HD_CREST_SHIFT 0.1f
+// Which of WaterPS's variants lean their pieces (see `lean` above).
+#if defined(HD_WATER_VIEW) || defined(HD_WATER_UNDER)
+#define HD_CREST_LEAN_ON false
+#elif defined(HD_WATER_FOAM)
+#define HD_CREST_LEAN_ON false
+#else
+#define HD_CREST_LEAN_ON true
+#endif
+float CrestRows(float2 p, float4 pa, float4 hgt, float4 cx, float4 cz,
+	float4 m, float3 shape, bool lean, out float4 fk, out float4 fc)
 {
-	const float4 along = p.x * cx + p.y * cz;
-	const float4 across = p.x * cz - p.y * cx;
-	const float4 ua = frac(along * HD_CREST_ALONG + HD_CREST_START_A) *
-		2.0f - 1.0f;
-	const float4 ub = frac(across * HD_CREST_ACROSS + HD_CREST_START_B) *
-		2.0f - 1.0f;
-	const float4 fa = abs(ua);
-	const float4 fb = abs(ub);
-	const float4 e = along + ph + HD_CREST_WARP_A * (fa * fa * (6.0f -
-		4.0f * fa)) + HD_CREST_WARP_B * (fb * fb * (6.0f - 4.0f * fb));
-	const float4 u = frac(e) * 2.0f - 1.0f;
-	const float4 f = abs(u);
-	const float4 rise = u * (1.0f - f) * shape.z;
-	const float4 da = 1.0f + (24.0f * HD_CREST_WARP_A * HD_CREST_ALONG) *
-		ua * (1.0f - fa);
-	const float4 db = (24.0f * HD_CREST_WARP_B * HD_CREST_ACROSS) * ub *
-		(1.0f - fb);
+	const float4 v = pa * 0.15915494f + 0.25f;
+	const float4 vk = v * (1.0f / HD_CREST_ACROSS);
+	const float4 x = frac(vk);
+	const float4 j = vk - x + m;
+	const float4 along = p.x * cx + p.y * cz + frac(j * 0.5f);
+	const float4 a = frac(along);
+	float4 g;
+	const float4 h = CellHash(along - a, j, g);
+	const float4 r1 = frac(h * 16.0f);
+	const float4 r2 = frac(h * 256.0f);
+	const float4 r3 = frac(h * 4096.0f) - 0.5f;
+	const float4 n2 = 2.0f + 2.0f * r2;
+	const float4 am = a - 0.5f - r3 * r2 * 0.5f;
+	const float4 u = am * n2;
+	const float4 fa = saturate(1.0f - abs(u));
+	const float4 ux = x * 2.0f - 1.0f;
+	const float4 fx = 1.0f - abs(ux);
+	const float4 wc = fx * fx * (3.0f - 2.0f * fx);
+	const float4 dwc = -12.0f * fx * ux * (1.0f / HD_CREST_ACROSS);
+	const float4 wa = fa * fa * (3.0f - 2.0f * fa);
+	const float4 dwa = -6.0f * n2 * fa * u;
+	const float4 A = (0.4f + 0.6f * r1) * shape.y;
+	const float4 E = shape.x + A * wa * wc;
+	float4 vs = v;
+	float4 dk = 1.0f;
+	float4 dc = 0.0f;
 
-	growX = rise * (da * cx + db * cz);
-	growZ = rise * (da * cz - db * cx);
-	return shape.x + shape.y * (f * f * (3.0f - 2.0f * f));
-}
+	if (lean)
+	{
+		const float4 sigma = (frac(g * 16.0f) - 0.5f) *
+			(2.0f * HD_CREST_LEAN * shape.z);
+		const float4 J = r3 * (2.0f * HD_CREST_SHIFT * shape.z) + sigma * am;
+		const float4 W = wa * wc;
 
-/* Wave2's curve four at a time. */
-float4 Wave4(float4 x)
-{
-	const float4 f = abs(frac(x * 0.15915494f) * 2.0f - 1.0f);
+		vs += J * W;
+		dk += J * wa * dwc;
+		dc = J * dwa * wc + sigma * W;
+	}
 
-	return f * f * (3.0f - 2.0f * f) * 2.0f - 1.0f;
+	const float4 us = frac(vs) * 2.0f - 1.0f;
+	const float4 fs = 1.0f - abs(us);
+	const float4 S = 4.0f * fs * fs * (1.5f - fs) - 1.0f;
+	const float4 dS = -24.0f * fs * us * hgt * E;
+
+	fk = (dS * dk + hgt * S * A * wa * dwc) * 0.15915494f;
+	fc = dS * dc + hgt * S * A * dwa * wc;
+	return dot(hgt * E, S);
 }
 
 /* The sheet's wave: eight travelling waves, `a` the four rows of WaveSum's
- * and `b` four more, all in the phase form (kx, kz, phase, height) - the
- * phase is omega t plus the row's own offset, wrapped to one turn on the
- * processor in double precision, and the height carries the row's slow
- * envelope (hd_render.cpp, water_rows_now), so the sum breathes and does
- * not repeat. `p` comes bent by WaveBend, the bend WaveSum gives its own
- * position, so that the whitecaps can read the same place; the slope is
- * that of the unbent sum, as there. Sine and cosine are Wave2's curve
- * (within 2 % of a cosine's amplitude, a quarter turn apart for the sine):
- * eight sincos would cost about 64 of the pixel shader's 512 slots, the
- * curve about 24.
- *
- * The crests: each row's height times its envelope (CrestEnv; `ca`, `cb`
- * the steps of rows one to four and five to eight, x, y and z as in
- * gCrestA, `shape` gCrest.xyz), so its crests are pieces; the slope takes
- * the envelope's rise along the crest as well - the height's sine times
- * its rise (`growX`, `growZ`) -, which at a length of 2 wavelengths and a
- * depth of 0.8 reaches 0.38 of a row's own slope (0.8 x 0.955 / 2, with
- * 0.955 = 3 / pi the steepest rise of Wave2's curve per radian) at the
- * ends of a piece, and up to 1.73 times that where the two slow curves
- * bend the pieces most (1.33 along and 1.10 across, at right angles). */
+ * and `b` four more, all in the phase form (kx, kz, phase, height), of
+ * which the wave vectors are read here; the phases and the heights come
+ * four at a time, one row a component (`pha`, `phb`, `ha`, `hb`: gCrestP
+ * and gCrestH, the heights times the rows' fade), which spares gathering
+ * them. The phase is omega t plus the row's own offset, wrapped to three
+ * turns - one cell of crests across, see CrestRows - on the processor in
+ * double precision, and the height carries the row's slow envelope
+ * (hd_render.cpp, water_rows_now), so the sum breathes and does not repeat.
+ * `p` comes bent by WaveBend, so that the whitecaps can read the same
+ * place; the slope is that of the unbent sum. The rows' curve is Wave2's
+ * (within 2 % of a cosine's amplitude), broken into the crests' pieces
+ * (CrestRows; `ca`, `cb` the step along the crest in x and z and the
+ * cells' number offset of rows one to four and five to eight, gCrestA and
+ * gCrestB, `shape` gCrest.xyz); the slope is exact for the pieces as drawn:
+ * the factors CrestRows returns times k and times the step. */
 float WaveSum8(float2 p, float4 a0, float4 a1, float4 a2, float4 a3,
-	float4 b0, float4 b1, float4 b2, float4 b3, float4 ca0, float4 ca1,
-	float4 ca2, float4 cb0, float4 cb1, float4 cb2, float3 shape,
-	out float2 slope)
+	float4 b0, float4 b1, float4 b2, float4 b3, float4 pha, float4 phb,
+	float4 ha, float4 hb, float4 ca0, float4 ca1, float4 ca2, float4 cb0,
+	float4 cb1, float4 cb2, float3 shape, bool lean, out float2 slope)
 {
 	const float4 pa = float4(dot(p, a0.xy), dot(p, a1.xy), dot(p, a2.xy),
-		dot(p, a3.xy)) - float4(a0.z, a1.z, a2.z, a3.z);
+		dot(p, a3.xy)) - pha;
 	const float4 pb = float4(dot(p, b0.xy), dot(p, b1.xy), dot(p, b2.xy),
-		dot(p, b3.xy)) - float4(b0.z, b1.z, b2.z, b3.z);
-	const float4 ca = Wave4(pa);
-	const float4 sa = Wave4(pa - 1.5707963f);
-	const float4 cb = Wave4(pb);
-	const float4 sb = Wave4(pb - 1.5707963f);
-	float4 growAX, growAZ, growBX, growBZ;
-	const float4 envA = CrestEnv(p, ca0, ca1, ca2, shape, growAX, growAZ);
-	const float4 envB = CrestEnv(p, cb0, cb1, cb2, shape, growBX, growBZ);
+		dot(p, b3.xy)) - phb;
+	float4 ka, la, kb, lb;
+	const float h = CrestRows(p, pa, ha, ca0, ca1, ca2, shape, lean, ka,
+		la) + CrestRows(p, pb, hb, cb0, cb1, cb2, shape, lean, kb, lb);
 
-	const float4 h0a = float4(a0.w, a1.w, a2.w, a3.w);
-	const float4 h0b = float4(b0.w, b1.w, b2.w, b3.w);
-	const float4 ha = h0a * envA;
-	const float4 hb = h0b * envB;
-	const float4 qa = ha * ca;
-	const float4 qb = hb * cb;
-	const float4 wa = h0a * sa;
-	const float4 wb = h0b * sb;
-
-	slope = qa.x * a0.xy + qa.y * a1.xy + qa.z * a2.xy + qa.w * a3.xy +
-		qb.x * b0.xy + qb.y * b1.xy + qb.z * b2.xy + qb.w * b3.xy;
-	slope += float2(dot(wa, growAX) + dot(wb, growBX), dot(wa, growAZ) +
-		dot(wb, growBZ));
-	return dot(ha, sa) + dot(hb, sb);
+	slope = ka.x * a0.xy + ka.y * a1.xy + ka.z * a2.xy + ka.w * a3.xy +
+		kb.x * b0.xy + kb.y * b1.xy + kb.z * b2.xy + kb.w * b3.xy +
+		float2(dot(la, ca0) + dot(lb, cb0), dot(la, ca1) + dot(lb, cb1));
+	return h;
 }
 
 /* The caustic: thin bright lines where two domain-warped waves cancel, as a
@@ -2101,10 +2160,11 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	const float shore = inC0.g * (255.0f * 16.0f);
 	float2 slope;
 	const float h = WaveSum8(WaveBend(pos.xz + gRoomOrigin.xz, gMotion.z,
-		length(gWaveV[0].xy), gCrestV.w), gWaveV[0], gWaveV[1], gWaveV[2],
+		gWaveV[0].xy, gCrestV.w), gWaveV[0], gWaveV[1], gWaveV[2],
 		gWaveV[3], gWaveV2[0], gWaveV2[1], gWaveV2[2], gWaveV2[3],
-		gCrestVA[0], gCrestVA[1], gCrestVA[2], gCrestVB[0], gCrestVB[1],
-		gCrestVB[2], gCrestV.xyz, slope);
+		gCrestVP[0], gCrestVP[1], gCrestVH[0], gCrestVH[1], gCrestVA[0],
+		gCrestVA[1], gCrestVA[2], gCrestVB[0], gCrestVB[1], gCrestVB[2],
+		gCrestV.xyz, true, slope);
 	const float taper = saturate(shore / max(gSwell.y, 1.0f));
 	/* A crest that breaks stands higher than the sum of the sines: where
 	 * the wave stands above the whitecaps' threshold (gSwell.w, the
@@ -2350,19 +2410,13 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	const float2 dy = ddy(world.xz);
 	const float4 keep = input.keepA;
 	const float4 keep2 = input.keepB;
-	const float2 pb = WaveBend(world.xz, t, gWaveK[0].x, gCrest.w);
+	const float2 pb = WaveBend(world.xz, t, gWaveP[0].xy, gCrest.w);
 	float2 slope;
-	const float h = WaveSum8(pb,
-		float4(gWaveP[0].xyz, gWaveP[0].w * keep.x),
-		float4(gWaveP[1].xyz, gWaveP[1].w * keep.y),
-		float4(gWaveP[2].xyz, gWaveP[2].w * keep.z),
-		float4(gWaveP[3].xyz, gWaveP[3].w * keep.w),
-		float4(gWaveP2[0].xyz, gWaveP2[0].w * keep2.x),
-		float4(gWaveP2[1].xyz, gWaveP2[1].w * keep2.y),
-		float4(gWaveP2[2].xyz, gWaveP2[2].w * keep2.z),
-		float4(gWaveP2[3].xyz, gWaveP2[3].w * keep2.w),
+	const float h = WaveSum8(pb, gWaveP[0], gWaveP[1], gWaveP[2],
+		gWaveP[3], gWaveP2[0], gWaveP2[1], gWaveP2[2], gWaveP2[3],
+		gCrestP[0], gCrestP[1], gCrestH[0] * keep, gCrestH[1] * keep2,
 		gCrestA[0], gCrestA[1], gCrestA[2], gCrestB[0], gCrestB[1],
-		gCrestB[2], gCrest.xyz, slope);
+		gCrestB[2], gCrest.xyz, HD_CREST_LEAN_ON, slope);
 
 	const float3 V = normalize(input.eye.xyz);
 
@@ -3033,17 +3087,11 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	// The relief's light: the rows' slope against the class light.
 	float2 slope;
 
-	WaveSum8(WaveBend(world.xz, t, gWaveK[0].x, gCrest.w),
-		float4(gWaveP[0].xyz, gWaveP[0].w * input.keepA.x),
-		float4(gWaveP[1].xyz, gWaveP[1].w * input.keepA.y),
-		float4(gWaveP[2].xyz, gWaveP[2].w * input.keepA.z),
-		float4(gWaveP[3].xyz, gWaveP[3].w * input.keepA.w),
-		float4(gWaveP2[0].xyz, gWaveP2[0].w * input.keepB.x),
-		float4(gWaveP2[1].xyz, gWaveP2[1].w * input.keepB.y),
-		float4(gWaveP2[2].xyz, gWaveP2[2].w * input.keepB.z),
-		float4(gWaveP2[3].xyz, gWaveP2[3].w * input.keepB.w),
+	WaveSum8(world.xz, gWaveP[0], gWaveP[1], gWaveP[2], gWaveP[3],
+		gWaveP2[0], gWaveP2[1], gWaveP2[2], gWaveP2[3], gCrestP[0],
+		gCrestP[1], gCrestH[0] * input.keepA, gCrestH[1] * input.keepB,
 		gCrestA[0], gCrestA[1], gCrestA[2], gCrestB[0], gCrestB[1],
-		gCrestB[2], gCrest.xyz, slope);
+		gCrestB[2], gCrest.xyz, false, slope);
 
 	const float relief = -dot(slope, gWaterSun.xz) * gRiverLight.x;
 

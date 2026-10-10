@@ -2120,6 +2120,7 @@ values, in the same key as every other setting
 | `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing at all while `hd_enable` is off. |
 | `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |
+| `hd_air` | DWORD | The **air of the rooms**, `1` by default. Some of the Remaster's art of one room stands inside another room the first has no doorway, opening or shaft into; on `1` such art, where one of the overlap boxes holds it, is drawn only through its own room's portal window, and not at all when that room has no window this frame, so it no longer shows through a wall - a dark block beside a flag, a window frame in a brick loft, a marble strip above a metal stair opening, black bars beside a pillar, a lit floor in a doorway. Set it to `0` and that art is drawn as it was before this setting existed: those five come back, and so does art the rule hides where a room the reach lists has no window of its own. It is there to compare the two answers at the same place with the same build; the `HDLOG level=` line ends with `air=1` or `air=0`, so a log says which ran. Taken at the start of a level; no options row; nothing at all while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
@@ -2653,6 +2654,7 @@ HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
 HDLOG level=ANDREA1 overlap pairs=158 intruding tris=16718 in 89 groups
       holder=inside cull=opaque faces=558 bound=15993 unbound=725
       band_unclaimed=11020 air_ms=68 air_tris=11335 air_groups=20 air_pairs=29
+      air_boxed=5256 air=1
 HDLOG unlinked level=ANDREA1 group=93 host=101 tris=90
 HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
@@ -2709,11 +2711,15 @@ drawn one-sided and the ones drawn from both sides.
 
 Art that stands in the air of a room its own room has no portal, door or vertical
 link with, not even through a flipmap twin - the space that room's floor squares
-enclose, off its walls and out of its doorways - is drawn only inside its own room's
-window, and not at all when that window is empty, whatever the answers above, unless
-the classic path draws a face of its room that claims it. The level line ends with
+enclose, off its walls and out of its doorways - and that one of the overlap boxes
+holds too is drawn only inside its own room's window, and not at all when that window
+is empty, whatever the answers above, unless the classic path draws a face of its room
+that claims it; such art in no box keeps the answers above. The registry setting
+`hd_air` (below) switches this off. The level line ends with
 `air_ms=` (the time the build spent on it), `air_tris=` (such triangles),
-`air_groups=` and `air_pairs=`, one `unlinked` line per pair names the art's room
+`air_groups=`, `air_pairs=`, `air_boxed=` (the triangles of `air_tris` a box holds,
+the ones held to their window) and `air=` (the `hd_air` the level was built with; with
+0 every `air_` field is 0), one `unlinked` line per pair names the art's room
 (`group=`) and the room whose air it stands in (`host=`), and the `clip` line ends
 with the frame's pieces of such art, the ones drawn - inside their window or whole on
 a claimed face - and the ones left out (`unlinked_pieces=`, `unlinked_drawn=`,

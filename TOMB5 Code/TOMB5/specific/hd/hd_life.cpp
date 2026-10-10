@@ -184,6 +184,8 @@ void HDLifeLevelBegin(const char* stem)
 			HDModelBounds(slot_of(k), box, box + 3) ? 1 : 0;
 		g_pool.height[k] = g_pool.has[k] ?
 			HDLifeHeight(kHDLifeKinds[k].rest, box, box + 3) : 0.0f;
+		g_pool.reach[k] = g_pool.has[k] ?
+			HDLifeReach(kHDLifeKinds[k].rest, box, box + 3) : 0.0f;
 
 		if (g_pool.has[k])
 		{

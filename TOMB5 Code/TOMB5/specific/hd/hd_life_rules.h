@@ -138,13 +138,15 @@ static const float kHDLifeRoll = 0.0349066f;	// 2 degrees
  * under the surface - 512 down, 64 of sway and half of FISH2's box, 70
  * high - and three clicks keep the floor under it). Its centre cruises at
  * 150 units a second toward a deep square it picks again every 6 seconds
- * or on arrival; its fish ride a ring of 200 to 400 units round it, half
+ * or on arrival; its fish ride a ring of 150 to 300 units round it, half
  * as wide as long, at 20 degrees a second, with a 6 degree yaw wobble at
  * 1.5 hertz, rising and sinking 64 units at 0.7 radians a second. Lara
  * within 1024 units of the centre, a square, sends it to the deep square
  * farthest from her at twice the speed for 4 seconds. The count, the
  * speeds, the ring, the wobble and the times are free choices, set by eye
- * on the round's RoomProbe pictures. */
+ * on the round's RoomProbe pictures. The centre keeps the ring's 300 and
+ * half of FISH2's 173 long box, 387 units, from water less deep (a fish
+ * of a wider ring swam through the bank in the pictures). */
 static const int kHDLifeFishMin = 4;
 static const int kHDLifeFishSpan = 5;
 static const int kHDLifeDeepSquares = 6;
@@ -152,8 +154,8 @@ static const int kHDLifeDeep = 768;
 static const float kHDLifeFishDown = 512.0f;
 static const float kHDLifeSwim = 150.0f;
 static const float kHDLifeRetarget = 6.0f;
-static const float kHDLifeRingMin = 200.0f;
-static const float kHDLifeRingSpan = 200.0f;
+static const float kHDLifeRingMin = 150.0f;
+static const float kHDLifeRingSpan = 150.0f;
 static const float kHDLifeCircle = 0.3490659f;	// 20 degrees a second
 static const float kHDLifeWobble = 0.1047198f;	// 6 degrees
 static const float kHDLifeWobbleHz = 1.5f;
@@ -161,6 +163,7 @@ static const float kHDLifeFleeReach = 1024.0f;
 static const float kHDLifeSway = 64.0f;		// up and down, units
 static const float kHDLifeSwayRate = 0.7f;	// radians a second
 static const float kHDLifeSquash = 0.5f;	// the ring's width over length
+static const float kHDLifeSchoolReach = 387.0f;
 static const float kHDLifeFleeFor = 4.0f;
 
 /* The drips: a body with four or more squares under a ceiling (its room is
@@ -339,26 +342,26 @@ enum
 	HD_LIFE_BLOCKED		// none of it
 };
 
-/* One step of a float by dx, dz: the whole step where it stays open water,
- * else the x part alone, else the z part alone - so a float pressed
- * against a bank slides along it - else nothing. */
+/* One step of a float by dx, dz, `margin` from the banks: the whole step
+ * where it stays open water, else the x part alone, else the z part alone
+ * - so a float pressed against a bank slides along it - else nothing. */
 inline int HDLifeStep(const HDLifeBody& b, float* x, float* z, float dx,
-	float dz)
+	float dz, float margin)
 {
-	if (HDLifeOpen(b, *x + dx, *z + dz, kHDLifeEdge))
+	if (HDLifeOpen(b, *x + dx, *z + dz, margin))
 	{
 		*x += dx;
 		*z += dz;
 		return HD_LIFE_MOVED;
 	}
 
-	if (dx != 0.0f && HDLifeOpen(b, *x + dx, *z, kHDLifeEdge))
+	if (dx != 0.0f && HDLifeOpen(b, *x + dx, *z, margin))
 	{
 		*x += dx;
 		return HD_LIFE_SLID;
 	}
 
-	if (dz != 0.0f && HDLifeOpen(b, *x, *z + dz, kHDLifeEdge))
+	if (dz != 0.0f && HDLifeOpen(b, *x, *z + dz, margin))
 	{
 		*z += dz;
 		return HD_LIFE_SLID;
@@ -586,11 +589,12 @@ inline int HDLifeDeepSquare(const HDLifeBody& b, int pick)
 	return -1;
 }
 
-/* Whether world x, z is deep open water of the body for a fish: its square
- * and the squares within a quarter square of it are the body's and deep. */
+/* Whether world x, z is deep open water of the body for a school's
+ * centre: its square and the squares kHDLifeSchoolReach away along x, z
+ * and the diagonals are the body's and deep. */
 inline bool HDLifeDeepAt(const HDLifeBody& b, float x, float z)
 {
-	const float m = kHDLifeInset;
+	const float m = kHDLifeSchoolReach;
 	const float px[3] = { x, x - m, x + m }, pz[3] = { z, z - m, z + m };
 
 	for (int i = 0; i < 3; i++)
@@ -635,6 +639,19 @@ inline bool HDLifeSchoolStep(const HDLifeBody& b, HDLifeSchool* s,
 	}
 
 	return true;
+}
+
+/* How far a model laid `rest` quarter turns about z reaches out from its
+ * middle across the water at any yaw: half the diagonal of its box seen
+ * from above. A float keeps that far from a bank, kHDLifeEdge at least -
+ * ANIMATING3_ANDY1 on its side reaches 242 and poked into a bank's planks
+ * at the edge's 128 in the pictures. */
+inline float HDLifeReach(int rest, const float* mins, const float* maxs)
+{
+	const float a = (rest & 1) ? maxs[1] - mins[1] : maxs[0] - mins[0];
+	const float c = maxs[2] - mins[2];
+
+	return 0.5f * sqrtf(a * a + c * c);
 }
 
 // The floating height of a model laid `rest` quarter turns about z.
@@ -717,8 +734,9 @@ inline bool HDLifeTakes(const HDLifeLevel& level, int squares, int river,
 }
 
 /* The pool of one level: its bodies as the life sees them, the floats and
- * fish, the schools and the drips. `height` is each kind's floating height
- * (HDLifeHeight over its model's box) and `has` whether its model loaded;
+ * fish, the schools and the drips. `height` and `reach` are each kind's
+ * floating height and reach (HDLifeHeight, HDLifeReach over its model's
+ * box) and `has` whether its model loaded;
  * `ringAt` the clock of each body's last drip ring. */
 struct HDLifePool
 {
@@ -728,6 +746,7 @@ struct HDLifePool
 	std::vector<HDLifeDrip> drips;
 	std::vector<float> ringAt;
 	float height[HD_LIFE_KINDS];
+	float reach[HD_LIFE_KINDS];	// HDLifeReach
 	int has[HD_LIFE_KINDS];
 	int floats, fish;
 	int unfit;		// floats a body's rise left out
@@ -862,11 +881,25 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 			p.floats++;
 		}
 
-		if (level.fish && p.has[HD_LIFE_FISH] &&
-			HDLifeDeepCount(b) >= kHDLifeDeepSquares)
+		/* The school starts on the first deep square from the roll whose
+		 * middle holds it; none where the deep water is too narrow. */
+		const int pick = level.fish && p.has[HD_LIFE_FISH] &&
+			HDLifeDeepCount(b) >= kHDLifeDeepSquares ? draw(ctx) : -1;
+		int start = -1;
+
+		for (int k = 0; pick >= 0 && k < HDLifeDeepCount(b) && start < 0;
+			k++)
+		{
+			const int at = HDLifeDeepSquare(b, pick + k);
+
+			if (HDLifeDeepAt(b, b.squares[(size_t)at].x + 512.0f,
+				b.squares[(size_t)at].z + 512.0f))
+				start = at;
+		}
+
+		if (start >= 0)
 		{
 			HDLifeSchool s = {};
-			const int start = HDLifeDeepSquare(b, draw(ctx));
 
 			s.body = (int)bi;
 			s.fish = kHDLifeFishMin + draw(ctx) % kHDLifeFishSpan;
@@ -957,7 +990,9 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 	HDLifeVelocity(b, e.index, t, &vx, &vz);
 	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
 
-	const int how = HDLifeStep(b, &e.x, &e.z, vx * dt, vz * dt);
+	const float margin = p.reach[e.kind] > kHDLifeEdge ? p.reach[e.kind] :
+		kHDLifeEdge;
+	const int how = HDLifeStep(b, &e.x, &e.z, vx * dt, vz * dt, margin);
 
 	if (b.river && (how == HD_LIFE_BLOCKED || HDLifeAtSink(b, e.x, e.z)))
 	{

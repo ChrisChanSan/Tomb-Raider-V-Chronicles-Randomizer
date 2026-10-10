@@ -1802,10 +1802,21 @@ it.
   of the level's own floor data, and cannot know a floor at the water's
   height: there a row of class `none` is the way. With *HD water* off neither
   the copy nor the depth texture is made.
-- **The water's life.** The waves of a sheet are eight rows, long and short, in
-  directions that never line up, and each row swells and fades on its own slow
-  cycle of 8 to 15 seconds, so the water breathes and never settles into one
-  pattern; a sea breathes deepest, a basin least. Seen flat - at eye level, or
+- **The water's life.** The waves of a sheet are eight rows, long and short,
+  and no row runs as one straight crest: each is a train of short crest
+  pieces, about two of its own wavelengths long and never more than a square
+  and a half, that swell and fade along the crest and wander slowly along it,
+  with the next piece beside them. The rows lie in a fan round the body's own
+  direction - the longest on it, the shortest widest: a basin's spread round
+  nearly every direction, as ripples come from all round a fountain, a
+  channel's mostly across the canal, a sea's and a river's within about 70
+  degrees either way of their direction - and their crests are bent on two
+  scales, a slow one and one of a couple of wavelengths, so no two rows
+  cross into a lattice of diamonds; the highlight on them breaks into
+  glints. Each row also swells and fades on its own slow cycle of 8 to 15
+  seconds, so the water breathes and never settles into one pattern; a sea
+  breathes deepest, a basin least. `crest 0` in `hd_water.txt` gives a body
+  the straight rows back. Seen flat - at eye level, or
   swimming - the waves are drawn up to three times steeper (a basin three, a
   channel two, a sea as it is), and the fine waves whose crests run toward the
   eye are kept instead of fading out with the distance, so the water has a
@@ -1905,12 +1916,12 @@ it.
   1,060 and 640), held on the screen to 720. A sink that lies in the water
   of a body counts as well, wherever the squares that name it lie - but only
   where those squares cover at least a quarter of the body, so a drain in a
-  pool or a sea does not turn it into a river. Its waves are stretched along
-  the flow and carried with it as one, so the surface slides downstream and
-  the floor seen through it bends as it passes. The waves themselves are lit
-  on a river - the faces turned toward the light a little lighter, the ones
-  turned away a little darker - so their crests show as long streaks along
-  the flow from every angle, from the bank as from above and in the shallows,
+  pool or a sea does not turn it into a river. Its waves are short crests
+  across and askew to the flow, carried with it as one, so the surface slides
+  downstream and the floor seen through it bends as it passes. The waves
+  themselves are lit on a river - the faces turned toward the light a little
+  lighter, the ones turned away a little darker - so their crest pieces show
+  from every angle, from the bank as from above and in the shallows,
   and not only where the light glints off them; the light on the floor under
   it (the caustic) is carried with the current too, and long thin lines a
   little lighter and a little darker than the water run along it, faster
@@ -2004,7 +2015,13 @@ it.
   its waves - 1 for every body, the pond included; `swell 0` lays a surface
   still, the waves then playing in its pixels alone; a row without either
   key leaves it as it is. `ANDY3 73 - clip 8` gives the pond the edge every
-  other body has.
+  other body has. `crest <s>` (0 to 1) sets how far the row's bodies' waves
+  are short crests in a fan (*The water's life*): 1, what a body without
+  the key draws, changes nothing, 0 gives the straight rows that cross into
+  a lattice, and between the two the fan, the pieces, the second bend and
+  the glints come in by that share - `ANDY3 34 - crest 0` takes the pond and
+  ANDY3's streams back to the straight rows, to compare in the game; a
+  value over 1 is a line that cannot be read.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a
@@ -2055,8 +2072,9 @@ it.
   sheet stands level at every point), its lift in units (`lift=`, 0
   without one), the land squares its level surface runs on over, each
   place once (`skirt=`, 0 without a lift), how far under its surface a
-  floor is left dry (`clip=`, in units) and, last, how much of its class's
-  swell its surface takes (`swell=`).
+  floor is left dry (`clip=`, in units), how much of its class's swell its
+  surface takes (`swell=`) and, last, how far its waves are short crests in
+  a fan (`crest=`, 1.00 without a row's `crest`).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
   The first frame of a level whose camera is in a water room writes one

@@ -1226,6 +1226,53 @@ water surface", carries the tables.
     still showed up to 17,165 pixels of ground under the water with no
     water over them (the depth views: the sheet's swell and clip against
     the ground at rest), with the sheet at rest none.
+139. **Short-crested rows in a fan** - every row of a sheet's eight runs
+    along its own crest under an envelope (`CrestEnv`, `WaveSum8`): a
+    piece two of the row's wavelengths long, at most 1,536 units
+    (`kCrestReach`), 1.8 times the row's height in its middle and 0.2
+    between two (depth 0.8), its phase the golden angle times the row,
+    drifting along the crest by 0.05 turns a second; the slope takes the
+    envelope's rise. The rows ranked by wavelength lie at 0, 0.25,
+    -0.375, 0.5, -0.625, 0.75, -0.875 and 1.0 times the class's width
+    round the body's own direction (`kWaterFan`; basin 1.5, channel, sea
+    and river 1.2), no two mirrored and no two close, modulo pi as well.
+    The key `crest` of `hd_water.txt` (0 the straight rows). OWN, a
+    design of this project from general graphics knowledge: a sum of a
+    few plane waves crossing at fixed angles shows a lattice, and a finite
+    crest length and a spread of directions are the standard way out; the
+    lengths, depth, widths and drift are free choices, set by eye on the
+    round's RoomProbe pictures against the lattice measure. DATA: the
+    lattice is the light on the surface - with every body's refraction
+    off it stays, with the rows' heights 0 it is gone; the surface light
+    of six views holds 15.7 to 30.5 % of its power in its six strongest
+    frequencies against 6.1 to 12.7 % with random directions; after this
+    design the owner's four views 22.6, 10.1, 19.2 and 15.8 % fall to
+    18.5, 5.4, 11.3 and 11.0 % (RoomProbe pictures at 1, 3 and 5 seconds,
+    a script of this round).
+140. **The foam in a draw of its own** - the sheet's foam (the bank foam,
+    its patches, the waterline, the whitecaps and the foam's body) is
+    drawn in a second premultiplied draw of the same triangles over the
+    sheet drawn without it (`HD_WATER_FOAM`, `draw_water_sheet`), for the
+    bodies that have foam. OWN, a rule of this project: the blend ONE /
+    INVSRCALPHA makes the water times 1 - foam plus the foam times foam
+    the same as the two draws, up to the render target's rounding. DATA:
+    the depth variant of the sheet's pixel shader stood at 511 of 512
+    slots; split by class it fell to 334 only for the classes without
+    foam, and stood at 487 and 511 for the channel and the sea (fxc /O3
+    on a scratch copy); with the foam drawn apart it stands at 334, the
+    foam's draw at 272 (293 with the crests).
+141. **The crests' second bend and the glints** - `WaveBend` pushes the
+    place the rows are read at a second time, along a pattern 1.75 of the
+    longest wavelength wide, by 0.2 of it; the highlight's strength is
+    multiplied by a field of cells about 1.4 of the shortest row's
+    wavelength, 0.25 to 1.75 with a mean of 1; both times the body's
+    `crest`. OWN, a design of this project from general graphics
+    knowledge (a domain warp at the pattern's own scale; a highlight
+    broken by a fine field over its strength, not the normal); the scales
+    and amounts are free choices, set by eye on the round's RoomProbe
+    pictures. DATA: on the canal at eye level the lattice measure stood
+    at 13.6 % with the pieces and the fan alone and at 11.3 % with the
+    glints (mean of 1, 3 and 5 seconds; 19.2 % before).
 
 ## Credited, but not contained here
 

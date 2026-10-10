@@ -11234,6 +11234,169 @@ LipsTest 270 and 243) 0 failed; the engine and every tool build.
 
 **Commits.** `43d4938`.
 
+**The crests: short, in a fan.** Asked for after the tenth play test (reference pictures
+supplied for this project, not in the repository): the water of every body at times
+throws a chequered pattern where the waves and other things lie over each other - on
+ANDY3's stream and pond from the plank bridge, on ANDREA2's sewer canal from Lara's
+shoulder at eye level, on the pond from above by its plank bridge - while the same canal
+seen from above and behind Lara, about 35 degrees down, looks right and is the look to
+keep. His sketch beside the question: on the left the water as it was, a stack of
+straight parallel crests between two banks; in the middle the stream's course; on the
+right short crest pieces at varying angles, some bent, scattered over the water, their
+directions following the stream - waves not monotone but from several directions, fitting
+the current. That right side is what this part builds, on every body.
+
+The cause. The lattice is the light on the surface, not the floor seen through it: with
+every body's refraction off (`bend 0`) it stays as it was, with the rows' heights at 0
+(`waves 0`) it is gone. The eight rows of a body are straight plane waves whose crests
+run ruler-straight over many wavelengths, and two or three of like height crossing at
+fixed angles light the same diamond cells with the highlight, the reflection's lobe toward
+the light and the Fresnel term again and again - the channel's three highest at 0, -0.19
+and 0.42 radians, the sea's at 0, -0.29 and 0.61, the basin's nearly all round, the
+river's two mirrored families 1.12 to 1.25 radians either side of its flow; the rows'
+envelopes bring a lattice up when two of them swell together. Measured again in this
+part with the round's own measure (below): the surface light alone - the picture with
+`bend 0` less the one with `waves 0` - of the six views of that measurement holds from
+15.7 to 30.5 % of its power in its six strongest frequencies, against 6.1 to 12.7 % for
+the same power with its directions made random.
+
+The room for it. The crests cost about 45 instruction slots in the sheet's pixel
+shader, whose depth variant stood at 511 of the 512 of ps_3_0. A split of `WaterPS` by
+class was counted first on a scratch copy: without the foam and the whitecaps (a basin,
+a river) the depth variant falls to 334, with the foam alone (a channel) it stands at
+487, with both (a sea) at 511 - the split frees room only for the classes that do not
+need it. The foam is separable: the sheet wrote the water's colour times 1 - foam and
+the foam's times foam, the frame behind times 1 - foam, then the fog over both - with the
+blend ONE / INVSRCALPHA that is the sheet without foam with a second premultiplied draw
+of the same triangles over it, the fogged foam colour times foam with alpha foam. So the
+foam left `WaterPS` (`hd_room.hlsl`, "the foam's draw"; the block under `HD_WATER_FOAM`)
+and is drawn in its own pass, compiled from the same function with `HD_WATER_FOAM`
+(`hd_room_water_foam_ps.inc`, `hd_room_water_foam_depth_ps.inc`), over every range of a
+body whose bank foam or whitecap strength is above 0, from above, on the unmarked pixels
+alone where the creatures' mark split the frame (`hd_render.cpp`, `draw_water_sheet`);
+the sheet's own draw needs no split any more (its marked pixels drew without foam, and
+it has none now). The only difference is the rounding of the first draw's result to the
+render target's bits under the foam. RoomProbe's depth views draw no foam pass. The
+mark's `WATERLOG` line ends `foam=` (the foam draws); RoomProbe prints `foam draw(s),
+GPU <ms>`, which the sheet line does not count.
+
+The pieces (`hd_room.hlsl` `CrestEnv`, `WaveSum8`; `hd_render.cpp` "the crests" over
+`kWaterFan`). Every row's height runs along its own crest under an envelope (1 - C) +
+2C g, g Wave2's curve of the place along the crest: a crest is a piece about two of the
+row's wavelengths long - at most `kCrestReach`, 1,536 units, so a sea's 1,500- and
+1,025-unit rows do not lay pieces longer than the pond is wide -, 1 + C high in its
+middle and 1 - C between two, C the class's depth 0.8. The envelope's phase starts at
+the golden angle times the row, so no two rows' pieces line up, and drifts along the
+crest by 0.05 turns a second, the even rows one way and the odd the other. The slope
+takes the envelope's rise along the crest as well, exact for the curve (24 C u (1 - |u|)
+turns a unit times the step): it reaches 0.38 of a row's own slope at a piece's end
+(0.8 x 0.955 / 2), too much to leave out. `WaterVS`'s swell takes the same envelope on
+all eight rows, so the drawn crest and the lit one are one; `RiverPS`'s relief and the
+foam's draw read the same sum. The constants are seven registers per sheet draw, pixel
+c149 - c155 and vertex c168 - c174: per four rows the step along x and z in turns a unit
+and the phase now, then 1 - C, 2C, 24C and the second bend's push.
+
+The fan. The rows ranked by wavelength, longest first, lie at 0, 0.25, -0.375, 0.5,
+-0.625, 0.75, -0.875 and 1.0 times the class's width round the body's own direction - a
+channel's long axis, a river's flow, else the class's - the negative side half a step
+further out, so no two rows are mirror images (their angles' sum stays an eighth of the
+width off 0) and no two lie within a quarter of it, both also modulo pi, a crest's line
+having no way. Basin width 1.5 (crest lines round 171 of 180 degrees - ripples from all
+round a fountain): 260 at 0, 197 at 0.38, 150 at -0.56, 113 at 0.75, 85 at -0.94,
+63 at 1.125, 47 at -1.31, 29 at 1.5 radians. Channel, sea and river 1.2 (crests mostly
+across a canal, the wind's waves and a river's pieces across and askew to its current):
+the longest at 0, then 0.3, -0.45, 0.6, -0.75, 0.9, -1.05, 1.2 - the channel's 420, 311,
+230, 166, 120, 88, 64, 41, the sea's 1,500, 1,025, 700, 481, 330, 222, 150, 98, the
+river's 300, 237, 187, 149, 117, 93, 73, 47 units. The river keeps its calm 0.2, so the
+pieces slide downstream with the current; `RiverPS`'s relief light now draws pieces, and
+its sheen stays the streaks. The widths were set by eye on the owner's four views and the
+measure: a sea at 0.64 drew its pieces as parallel streaks, widths of 1.6 and 2.4 broke
+the rule modulo pi; pieces of 3 wavelengths at a depth of 0.7, then 2.5 at 0.8, still
+read as long streaks at eye level. The class table keeps its straight `angle` row:
+RoomVS moves the remaster's marked water art with the first four of those, as before -
+that art draws with `hd_water 0` too, whose pictures stay as they were.
+
+The bend and the glints. `WaveBend` gains a second push under the slow one: a pattern of
+1.75 times the longest wavelength wide (0.57 k0), pushing by 0.2 of that wavelength,
+drifting on its own way; `WaterVS`, `WaterPS`, the foam's draw (its whitecaps' crest)
+and `RiverPS` read it; RoomVS's `WaveSum` keeps the slow push alone (its bytecode is
+the shared shaders'). After the pieces and the fan the canal at eye level still showed
+some lit lines, so the highlight is broken into glints: a field of cells about 1.4 of the
+shortest row's wavelength, drifting, multiplies its strength between 0.25 and 1.75, mean
+1 - not the normal. All of these are free choices, set by eye on the round's RoomProbe
+pictures.
+
+The key. `crest <s>` in `hd_water.txt` (0 to 1) takes the row's bodies from the
+straight rows (0) to all of this (1, every body without the key): the fan by that share
+of the way, the envelope's depth, the second push and the glints times it. The
+`WATERLOG` body line ends ` crest=<s>` after `swell=`.
+
+**Measured.** Slots, fxc /O3, at `2d48e83`, after the foam's draw, after the crests:
+`WaterPS` 445, 288, 360; its depth variant 511, 334, 406; the view variant 510, 360,
+430; under the water 335, 335, 408; the foam's draw - , 230, 251 and with the depth
+texture - , 272, 293; `WaterVS` 267, 267, 287; `RiverPS` 379, 379, 435. RoomVS, RoomPS
+and its gloss variant, GlowPS, FootPS, the model and the shadow shaders keep their
+bytecode (13 of 21 `.inc` identical apart from the stamp lines).
+
+The measure of the lattice: the light on the surface alone - the picture with every
+body's `bend 0` less the one with `waves 0`, the same camera and clock -, its luma less
+a 9-pixel box blur, in tiles of 96 pixels at least 85 % on water (the pixels the sheet
+changes against `hd_water 0`), each tile's power spectrum under a Hann window between 3
+and 32 cycles; the share of that power in the tile's six strongest bins (three crossing
+wave trains are three pairs); the view's 75th percentile. A lattice puts much of its power
+there, pieces at many angles spread it; the reference with no lattice is the same power
+with random directions (6.1 to 12.7 % on the six views of the cause, 3.5 to 9.1 % on the
+owner's four). The picture alone does not serve: the canal's cobbled bed is regular
+itself, and with `waves 0` it scores higher than with the waves. The owner's four views,
+found as RoomProbe cameras (ANDY3 34 "3600 10150 5500 35 20", ANDREA2 19 "1300 3450
+1800 180 34" and "1600 3950 -800 2 7", ANDY3 34 "6300 9300 6000 270 55", all at a field
+of view of 80; the first is the pond's ring round its island from the plank bridge, the
+stream behind it), mean of 1, 3 and 5 seconds before and after: the bridge 22.6 and 18.5,
+the canal from above 10.1 and 5.4, the canal at eye level 19.2 and 11.3, the pond from
+above 15.8 and 11.0; over 0 to 12 seconds the canal at eye level at most 23.0 and 11.8
+(mean 19.7 and 10.5), the pond from above at most 21.4 and 15.9 (mean 16.1 and 11.6).
+The fifteen test cameras at 3 seconds: A1 22.0 to 11.0, A2 14.1 to 6.1, A3 9.3 to 6.1,
+B1 24.8 to 12.6, B2 26.2 to 14.4, C1 39.4 to 21.1, C2 23.6 to 12.9, C3 36.0 to 29.2,
+C4 34.5 to 19.5, D1 14.0 to 7.7, D2 22.9 to 7.4, E2 14.9 to 7.4 (E1, E3 and E4 have no
+tile of water). The canal from above keeps its look: the water's mean luma 53.0 and
+53.1, a mean change of 6.8 of 255 on its pixels.
+
+The pond's edge, the ninth part's holes count (the ground under the water at rest that
+the sheet with its swell and clip leaves bare) at its twelve views and 1, 3 and 5
+seconds: 102,076 pixels over the 36 pictures before, 103,497 after; the most in one
+picture 17,165 before, 13,780 after - the same openings of the swell at the bank, now
+where the pieces' troughs fall. GPU, 2560 x 1440, three runs: the full-water view's
+sheet 0.201, 0.383 (one outlier) and 0.200 ms before, 0.192 to 0.193 after with the foam's
+draw 0.098 to 0.099 - 0.29 ms in all, 0.09 more; the view over the pond 0.217 to 0.223
+with its rivers 0.037 to 0.038 before, 0.213 to 0.217 with the foam 0.088 to 0.090 and
+the rivers 0.043 to 0.045 after, 0.09 more in all. The sweep: 565 squares, 56 bodies, 118
+twins as before; every body line ends ` crest=1.00`, the pond's `clip=0 swell=1.00
+crest=1.00`.
+
+**Checked.** The classic path, 3 of 3 md5-identical to `8691e82` (ANDREA2 231, JOBY2 66,
+ANDY3 34, `-classicroom` and `-classiconly`, INTZ bound); the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set. The foam's draw alone,
+against `2d48e83`: the fifteen cameras 9 identical, the six with foam within one step of
+255 but for 11 pixels (up to 15); the pond's 36 pictures within one step but for the far
+waterline at a grazing view, up to 109 pixels in a picture and up to 142 of 255 there.
+The key: with `crest 0` for every body the fifteen cameras are identical to the build of
+the foam's draw (15 of 15),
+the pond's 36 pictures 30 identical and 6 within one step on 1 to 8 pixels (the foam's
+draw computes the height in its own compile); `ANDY3 73 - crest 2` is a line that cannot
+be read (`bad=1`), and a later row wins (`ANDY3 34 - crest 0.5` after `crest 0`). Every
+changed pixel of the fifteen cameras lies on the water. The suites (ModernTest 14721,
+MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool
+build.
+
+**Left.** The look in the game: nobody in this round could play it - the pieces at the
+owner's angles and his screen's size, the motion over time, the whitecaps (they break on
+the pieces' peaks, where the envelope stands higher, so a sea shows them a little more
+often). The bridge's view still scores high on the measure: its water is seen at a
+grazing angle, where every piece is stretched across the screen. Stage 3, light shafts,
+the HD dive splash and the fish tank's spray stay open.
+
+**Commits.** `739fbd0`, `fb820c7`, `bffa951`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

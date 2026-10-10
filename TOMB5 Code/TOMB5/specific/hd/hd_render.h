@@ -920,6 +920,10 @@ struct HDRenderWaterBody
 	int lift;
 	int held;
 	int skirt;
+	/* How far under its surface at rest the frame's depth may lie and still
+	 * be left to the frame, units (WaterPS, "the clip"; a row's `clip`,
+	 * kWaterClip without one). */
+	int clip;
 };
 
 // What the level built, for its log line.

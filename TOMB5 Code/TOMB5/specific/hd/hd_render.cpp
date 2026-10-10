@@ -8820,42 +8820,61 @@ namespace
 		{ "ANDY3", 67, 1.0f, 0.0f, 400.0f },
 	};
 
-	/* The compiled lift rows: level and room, and how far the sheets of
-	 * every body over that room stand over the water's top, in units - a
-	 * row as hd_water.txt would say it ('ANDY3 73 - lift 96') that sets
-	 * the lift alone, applied after the river rows and before the file,
-	 * whose rows still win.
+	/* The clip (WaterPS, "the clip"): where the frame's depth lies less
+	 * than this many units under a sheet's surface at rest, the pixel is
+	 * left to the frame - a deck, a rim, a floe's top the remaster laid at
+	 * the water's plane. 8: the depth's own error is far under it - on
+	 * JOBY2 room 66's flat pool floor at 2560 x 1440, about 2,600 units
+	 * away, `rest` is one value to a sixteenth of a unit over the whole
+	 * floor (RoomProbe, `rest` as grey), and 24 bits over the near and far
+	 * planes of 20 and 20,480 give about 1.2 units at the far plane - and 8
+	 * takes the remaster's own planes, which stand two to nine units off
+	 * the classic height (ANDY3's water 2 and 4, ANDREA2 231's 7 to 9). A
+	 * bank row's or a file row's `clip` sets it per body (kWaterBank). */
+	const int kWaterClip = 8;
+
+	/* The compiled bank rows: level and room, how far the sheets of every
+	 * body over that room stand over the water's top (the lift, units) and
+	 * their clip (units, see kWaterClip) - a row as hd_water.txt would say
+	 * it ('ANDY3 73 - lift 0 clip 0') that sets those two alone, applied
+	 * after the river rows and before the file, whose rows still win.
 	 *
-	 * The remaster's art lays the bank of ANDY3's pond as a ramp of its
+	 * ANDY3's pond. The remaster's art lays its bank as a ramp of its
 	 * ground that leaves the water's top a third of a square inside the
-	 * water squares and climbs through their edge, where it stands as high
-	 * as the classic land beside it: 129 units on the pond's commonest
-	 * bank, the east and south sides, whose land runs from the water's top
-	 * at one corner to a click over it at the other (the art's ground over
+	 * water squares and climbs through their edge (the art's ground over
 	 * the pond's 224 shore points against the classic floor there: bank
-	 * points at the edge 15 to 443 units over the water, median 145). A
-	 * sheet at the water's top shows that ramp as a strip of the bank's
-	 * side between the water and the grass. 96 is a free choice between
-	 * the lowest bank and the median, set on the round's RoomProbe pictures
-	 * of the pond: the strip's pixels in a view over the pond fall to a
-	 * third of the sheet at the water's top, 128 takes a tenth of them more
-	 * while the island in the pond, a mound rising a quarter of a unit a
-	 * unit to 248 over the water, keeps 61 % of its width at 96 and 48 % at
-	 * 128. The row names water room 73, the room under 20 of the pond's 24
-	 * squares: room 34 holds the three streams beside the pond too, which
-	 * keep their height. No other body of the fifteen levels has such a
-	 * ramp: their edges are walls a click or more high or flat at the
-	 * water. */
-	struct HDWaterLiftRow
+	 * points at the edge 15 to 443 units over the water, median 145), and
+	 * it bakes the ground under the water dark: the baked light of the
+	 * art's top triangle, sampled every 32 units over the pond, has a luma
+	 * of 67 at the median under the water's top, 130 over it inside the
+	 * water squares and 96 on the land within a square of them. The sheet
+	 * stands at the water's top, lift 0, as the reference pictures supplied
+	 * for this project show the water there. Its clip is 0: with 8 the
+	 * sheet was cut off the ground for its last 8 units under the water,
+	 * and along the whole shore that dark ground lay bare between the land
+	 * and the water (RoomProbe over the pebble beach east of the lower lobe,
+	 * the depth under the surface as grey: the pixels the clip took run
+	 * from the land's edge to where the ground lies 8 under). At 0 the
+	 * sheet ends where the depth test ends it, on the line where the ground
+	 * comes out of the water. The clip has nothing to spare there: no flat
+	 * triangle of a square's own group lies within one unit over to nine
+	 * under the surface over any of the pond's 24 squares (counted on the
+	 * .TRG), and no other body of the fifteen levels has such a ramp: their
+	 * edges are walls a click or more high or flat at the water. The row
+	 * names water room 73, the room under 20 of the pond's 24 squares: room
+	 * 34 holds the three streams beside the pond too, which keep the clip
+	 * of every body. */
+	struct HDWaterBankRow
 	{
 		const char* stem;
 		int room;
 		int lift;
+		int clip;
 	};
 
-	const HDWaterLiftRow kWaterLift[] =
+	const HDWaterBankRow kWaterBank[] =
 	{
-		{ "ANDY3", 73, 96 },
+		{ "ANDY3", 73, 0, 0 },
 	};
 
 	/* The skirt of a lifted sheet (HDRenderSetWaterSheets, "the skirt"):
@@ -9050,7 +9069,10 @@ namespace
 		float fx, fz, fspeed;
 		int lift;		// 1 with `lift units`
 		int liftUnits;
-		int liftOnly;		// 1 for a compiled lift row: sets nothing else
+		int clip;		// 1 with `clip units`
+		int clipUnits;
+		// 1 for a compiled bank row: sets the lift and the clip, nothing else
+		int bankOnly;
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -9490,7 +9512,7 @@ namespace
 	 *                             [foot <x1> <z1> <x2> <z2> <reach> |
 	 *                              foot off]
 	 *                             [flow <dx> <dz> <speed>]
-	 *                             [lift <units>]
+	 *                             [lift <units>] [clip <units>]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -9519,15 +9541,17 @@ namespace
 	 * speed in units a second (0 to 4000), in place of the one their sinks
 	 * give - what a river draws with (a body of another class keeps it for
 	 * the log). lift stands the bodies' sheets that many units over the
-	 * water's top (-256 to 256, whole units; 0 takes a lift away), the
-	 * sheet's edge held to the land beside it (see "the lift" in
-	 * HDRenderSetWaterSheets); a row without the key leaves the lift as it
-	 * is. '#' starts a comment. Returns 1 for a row, 0 for a line without
-	 * one, -1 for a line that cannot be read. */
+	 * water's top (-256 to 256, whole units; 0 takes a lift away), level,
+	 * and runs them on over the land lower than that (see "the lift" and
+	 * "the skirt" in HDRenderSetWaterSheets); clip sets how far under the
+	 * surface at rest the frame may lie and still be left to itself (0 to
+	 * 256, whole units; see kWaterClip). A row without either key leaves
+	 * that value as it is. '#' starts a comment. Returns 1 for a row, 0 for
+	 * a line without one, -1 for a line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[33];
+		char* tok[35];
 		char* next = 0;
 		int n = 0;
 
@@ -9538,15 +9562,15 @@ namespace
 
 		// The longest row: the three words, tint's four, waves', foam's and
 		// bend's two each, ripple's five, art's two, foot's six, flow's
-		// four and lift's two - 32 tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 33;
+		// four, lift's two and clip's two - 34 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 35;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 32 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 34 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -9626,6 +9650,23 @@ namespace
 
 				row.lift = 1;
 				row.liftUnits = (int)units;
+				i += 2;
+				continue;
+			}
+
+			// clip <units>: a whole number of units, 0 to 256 - a click.
+			if (!_stricmp(tok[i], "clip"))
+			{
+				if (i + 1 >= n)
+					return -1;
+
+				const long units = std::strtol(tok[i + 1], &end, 10);
+
+				if (*end || end == tok[i + 1] || units < 0 || units > 256)
+					return -1;
+
+				row.clip = 1;
+				row.clipUnits = (int)units;
 				i += 2;
 				continue;
 			}
@@ -10795,9 +10836,12 @@ namespace
 			if (row.lift)
 				b.lift = row.liftUnits;
 
-			// A compiled lift row sets the lift and leaves the rest of the
-			// body as the rows before it left it.
-			if (row.liftOnly)
+			if (row.clip)
+				b.clip = row.clipUnits;
+
+			// A compiled bank row sets the lift and the clip and leaves the
+			// rest of the body as the rows before it left it.
+			if (row.bankOnly)
 				continue;
 
 			if (row.cls >= 0)
@@ -11058,6 +11102,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		b.info.sourceRoom = -1;
 		b.info.tint[0] = b.info.tint[1] = b.info.tint[2] = 1.0f;
 		b.info.waves = b.info.foam = b.info.bend = 1.0f;
+		b.info.clip = kWaterClip;
 
 		const int id = (int)g_wbodies.size();
 		std::vector<size_t> stack(1, i);
@@ -11344,11 +11389,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		rows.push_back(row);
 	}
 
-	// The compiled lift rows, with the sheets alone like the river rows.
+	// The compiled bank rows, with the sheets alone like the river rows.
 	for (size_t o = 0; sheets &&
-		o < sizeof(kWaterLift) / sizeof(kWaterLift[0]); o++)
+		o < sizeof(kWaterBank) / sizeof(kWaterBank[0]); o++)
 	{
-		const HDWaterLiftRow& w = kWaterLift[o];
+		const HDWaterBankRow& w = kWaterBank[o];
 		WaterRow row = {};
 
 		strcpy_s(row.stem, sizeof(row.stem), w.stem);
@@ -11356,7 +11401,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		row.cls = -1;
 		row.lift = 1;
 		row.liftUnits = w.lift;
-		row.liftOnly = 1;
+		row.clip = 1;
+		row.clipUnits = w.clip;
+		row.bankOnly = 1;
 		rows.push_back(row);
 	}
 
@@ -11601,7 +11648,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	 * colour runs on across a square's edge. 16-bit indices: a level's
 	 * squares stop at 65535 vertices, and those left over draw no sheet.
 	 *
-	 * The lift (a row's `lift`, kWaterLift): a lifted body's grid stands
+	 * The lift (a row's `lift`, kWaterBank): a lifted body's grid stands
 	 * level, that many units over the water's top at every point, and its
 	 * depth colour is that much deeper. The free surface of still water is
 	 * level: where the remaster's ground leaves the water's top inside the
@@ -13173,8 +13220,10 @@ const char* HDRenderWaterSectionName(int section)
  * its colours take, its light or at night the moon's at its luma (lit);
  * last `held`, always 0 - a lifted sheet stands level at every grid
  * point -, the lift, units over the water's top (lift),
- * and the land squares its level surface runs on over, each place once
- * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets). */
+ * the land squares its level surface runs on over, each place once
+ * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets), and
+ * how far under its surface the frame is left to itself, units (clip; see
+ * kWaterClip). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -13249,7 +13298,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
 		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
-		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d",
+		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -13259,7 +13308,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
 		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift,
-		b.skirt);
+		b.skirt, b.clip);
 	return true;
 }
 
@@ -14149,6 +14198,13 @@ namespace
 			g_device->SetVertexShaderConstantF(19, view, 1);
 			g_device->SetVertexShaderConstantF(20, rows, 8);
 			g_device->SetPixelShaderConstantF(92, pixel, 32);
+
+			/* c148, gWaterClip: x the body's clip, units (kWaterClip, a
+			 * row's `clip`) - read by WaterPS alone. */
+			const float clip[4] = {
+				(float)g_wbodies[(size_t)r.body].info.clip, 0.0f, 0.0f, 0.0f };
+
+			g_device->SetPixelShaderConstantF(148, clip, 1);
 
 			/* The creatures' mark (HDRenderWaterMarkBegin): with the depth
 			 * variant and a frame that marked anything, the range is drawn

@@ -2652,7 +2652,7 @@ HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
       between them faces=6 bound=540
 HDLOG level=ANDREA1 overlap pairs=158 intruding tris=16718 in 89 groups
       holder=inside cull=opaque faces=558 bound=15993 unbound=725
-      band_unclaimed=11020 air_ms=41 air_tris=11815 air_groups=21 air_pairs=30
+      band_unclaimed=11020 air_ms=68 air_tris=11335 air_groups=20 air_pairs=29
 HDLOG unlinked level=ANDREA1 group=93 host=101 tris=90
 HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
@@ -2708,14 +2708,16 @@ whole on every frame. The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.
 
 Art that stands in the air of a room its own room has no portal, door or vertical
-link with - the space that room's floor squares enclose, off its walls and out of its
-doorways - is drawn only inside its own room's window, and not at all when that window
-is empty, whatever the answers above. The level line ends with `air_ms=` (the time the
-build spent on it), `air_tris=` (such triangles), `air_groups=` and `air_pairs=`, one
-`unlinked` line per pair names the art's room (`group=`) and the room whose air it
-stands in (`host=`), and the `clip` line ends with the frame's pieces of such art, the
-ones drawn inside their window and the ones left out (`unlinked_pieces=`,
-`unlinked_drawn=`, `unlinked_hidden=`).
+link with, not even through a flipmap twin - the space that room's floor squares
+enclose, off its walls and out of its doorways - is drawn only inside its own room's
+window, and not at all when that window is empty, whatever the answers above, unless
+the classic path draws a face of its room that claims it. The level line ends with
+`air_ms=` (the time the build spent on it), `air_tris=` (such triangles),
+`air_groups=` and `air_pairs=`, one `unlinked` line per pair names the art's room
+(`group=`) and the room whose air it stands in (`host=`), and the `clip` line ends
+with the frame's pieces of such art, the ones drawn - inside their window or whole on
+a claimed face - and the ones left out (`unlinked_pieces=`, `unlinked_drawn=`,
+`unlinked_hidden=`).
 
 The fields at the end of a room line are the classic room drawn as a
 neighbour's art (above): `stand=` the triangles of HD groups standing on its

@@ -257,10 +257,12 @@ struct HDLifeDrip
 	int fired;		// how many times it fired
 };
 
-/* The pool's own hash: two steps of the engine's draw generator
+/* The pool's own hash: three steps of the engine's draw generator
  * (specific\function_stubs.cpp, GetRandomDraw: 0x41C64E6D, 12345, bits 10
- * up) over the entry's number and a second input - a number that depends on
- * those two alone, never on the frame. 0 .. 32767. */
+ * up) over the entry's number, the second input mixed in after the first
+ * step times 0x9E3779B1 (2^32 over the golden ratio, so neighbouring inputs
+ * land far apart) - a number that depends on those two alone, never on the
+ * frame. 0 .. 32767. */
 inline unsigned HDLifeHash(unsigned a, unsigned b)
 {
 	unsigned s = a * 0x41C64E6Du + 12345u;

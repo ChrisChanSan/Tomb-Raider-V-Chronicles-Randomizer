@@ -413,7 +413,9 @@ float4 gWaveV2[4] : register(c24);
  * registers as the pixel side's c149 - c159 (gCrestA, gCrestB, gCrest,
  * gCrestP, gCrestH), here c168 - c178 - above every vertex register of
  * this file (the wibble table ends at c127) and of hd_model.hlsl (its
- * last, gSoft, ends at c166). */
+ * last, gSoft, ends at c166) -, but for gCrestV.y, the pieces' share times
+ * the swell's own gain (hd_render.cpp kCrestSwellGain): the same pieces,
+ * risen and sunk no further than their straight rows. */
 float4 gCrestVA[3] : register(c168);
 float4 gCrestVB[3] : register(c171);
 float4 gCrestV : register(c174);

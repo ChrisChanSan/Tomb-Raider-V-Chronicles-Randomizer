@@ -15116,12 +15116,14 @@ static bool receive_open(const float* constants, const float* others)
 
 	/* The picture times the factor, where the face is the one the room loop
 	 * left visible: the same depth to the bit, EQUAL, nothing written but
-	 * the colour. */
+	 * the colour. The factor comes in alpha and the fog bulbs' haze in colour
+	 * (hd_shadow_receive.hlsl, ReceiveOut), so the haze in front of a
+	 * shadowed floor keeps its own brightness. */
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCALPHA);
 	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
@@ -15400,8 +15402,8 @@ bool HDRenderShadowModelsBegin(bool hers, bool others)
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCALPHA);
 	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,

@@ -1615,7 +1615,8 @@ bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
  * cast: RoomVS with the same constants and the same ranges as their opaque
  * and alpha passes and their clear floors, the depth test EQUAL, no depth
  * write, and hd_shadow_receive.hlsl's pixel shader, whose factor multiplies
- * the picture (source ZERO, destination SRCCOLOR, colour write RGB only).
+ * the picture and whose colour gives the fog bulbs' haze back (source ONE,
+ * destination SRCALPHA, colour write RGB only).
  *
  * HDRenderShadowReceiveReady - the receive shader exists on this device;
  * HDRenderShadowReceive2Ready - its two-map variant does.
@@ -1693,8 +1694,8 @@ void HDRenderShadowReceiveMirrorEnd();
  * entries of the frame list drawn a second time after the models' solid
  * pass, with the model's own vertex shader and constants, the depth test
  * EQUAL, no depth write, and hd_shadow_receive.hlsl's ModelReceivePS, whose
- * factor multiplies the picture (source ZERO, destination SRCCOLOR, colour
- * write RGB only).
+ * factor multiplies the picture as the rooms' does (source ONE, destination
+ * SRCALPHA, colour write RGB only).
  *
  * HDRenderShadowModelsBegin, inside an open bracket and outside every other
  * receive or cast bracket, with `hers` and `others` the maps drawn in this

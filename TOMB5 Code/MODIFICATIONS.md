@@ -10975,6 +10975,126 @@ the water. Stage 3, light shafts under the water and the HD dive splash stay for
 
 **Commits.** `861a2d2`.
 
+**After the owner's eighth play test of 2026-10-10.** The build of `8cf05d1` was played
+(reference pictures and two sketches supplied for this project, not in the repository).
+Accepted: the night water of ANDY1 to ANDY3 with no caustic on still pools; the river's
+streaks; the three streams' ways; the water on Lara's legs when she wades. ANDY2's
+moon-coloured lamp water could not be placed in the game and stays as it is. Asked for:
+the pond's water met the bank, the old strip was gone, but the sheet stood over the land
+like a drop held together by its surface and fell down to the land at its edge, with a
+trench between the two, and the waves and the foam stood far too high at the shore. The
+owner's sketch of what is wanted: the ground a bowl, the water one level surface across
+it, the land rising out of the water at both banks - water climbs the bank from below.
+
+Measured first, with the tool of the seventh round extended (on the classic `.TRC` and the
+`.TRG`: the hold re-done grid point by grid point, cuts through the edge, where the
+Remaster's ground crosses the lifted level, the land squares beside the pond) and with
+RoomProbe. The hold stood 38 of the pond's 441 grid points under the lift, 27 at the
+land's 0 and 11 at 64 (the log's `held=19` counted the squares holding a held point: its
+set was keyed by square); from each the sheet fell 96 units over 256, a slope of 0.375, to
+the land at the south side, the pebble beach east of the lower lobe, the foot of the
+mill's stairs, the north side and four corners. A cut across the pebble beach: the
+Remaster's ground is one straight ramp from the pond's bed 256 under the water through 8
+over it at the classic edge to 96 at 384 units into the land and 256 at the square's far
+side, the classic land following it within 5 units; the held sheet stood up to 152 units
+over the ground in the last quarter square - the drop of the owner's sketch, and the
+trench where it met the land. The level of 96 crosses the Remaster's ground at 221 points
+of the pond's shore from 840 units inside the water squares to 1,472 outside, at the edge
+at the median, outside at 76 of them: at the four flat sides 152 to 400 units into the
+land, at the stairs' foot up to 1.4 squares. The land squares round the pond have their
+classic corners at the water's top or a click and more over it; the land under 96 reaches
+three squares out (the hollow east of the upper ring). The island's mound, 252 at its
+top, crosses 96 at a radius of 448 to 664 units. The pond is class sea (open air): its
+open water rises and falls -64.5 to 70.6 units at a vertex, tapered to 0 at the classic
+edge, but the rows' slope in the pixel shader carried no taper - 0.161 at the median at
+every point up to the bank. A camera matching the owner's picture by the mill was found
+(on the south bank looking west-north-west; RoomProbe ANDY3 34 "5572 10150 2680 282 12",
+field of view 80); the other picture, from above at the pebble beach, was not found in
+eleven searches and is stood in by views of the same edge from above.
+
+The level surface (`hd_render.cpp`, step 7 of `HDRenderSetWaterSheets`, "the lift"). The
+hold goes: a lifted body's grid stands at the data's height plus the lift at every point,
+the free surface of still water, and the bank climbs out of it. Its land search stays as
+`water_land`.
+
+The skirt (`hd_render.cpp`, "the skirt", `kWaterSkirtReach`, `kWaterSkirtMargin`,
+`SkirtSquare`, `water_land_over`). Where the land beside a lifted body lies under its
+level, the same surface runs on over it: from the body's squares outward over the four
+neighbours, up to three squares, a land square (the neighbour's room's or a dry room's
+holding it, as the hold searched) whose lowest classic corner stands less than the lift
+and 16 units over the water's top carries the same plane, rows and shader, in its land
+room's range and with the depth test against the room's art like every square, so the
+Remaster's ground hides it where it rises through the plane and the waterline runs along
+that line by the rule of every bank. 3: the pond's low land ends three squares out; at 2
+the ground stood under the plane at 11 of 544 points along the drawn surface's outer
+edge, at 3 at the 5 where a wall stands. 16: more than the 5 units the ground lies under
+the classic land at nine in ten of the pond's 152 low edge points; with the corners at 0
+or 256 it decides nothing at the pond today. A skirt square only draws: no classic face,
+ring, ripple sprite, hidden art, sink, eye-under-water test or count takes it for water;
+its vertex depth is the lift less the classic land (the reading without the depth
+texture), its shore distance 0. The pond gets 17 squares, drawn in room 34 and its flip
+twin 183 (850 vertices and 1,088 triangles more, no draw more). A body without a lift has
+no skirt; the classic land beside the water squares of all fifteen levels stands at the
+water's top, a click and more over it or under it, never between.
+
+The shallows (`hd_room.hlsl` WaterPS, "the shallows"; `hd_render.cpp` c106). A wave cannot
+stand higher than about 0.78 of the depth under it (the breaking index of a solitary wave,
+the textbook figure), so its amplitude, half its height, may reach 0.39 of the depth: the
+rows keep their whole height from 2.56 times that height. WaterPS reads the depth under
+the pixel - the frame's depth under the sheet with the depth texture, the vertex depth
+without - before the waves' slope and takes `shoal` = saturate((depth + 1) x the inverse
+of that depth, `gWaterStage.w`); it scales the rows' slope (the reflection, the highlight
+and the floor's bend), the bank foam's patches and the whitecaps; the waterline and the
+rings keep theirs. Per pixel and not per vertex: inside the pond's squares the vertex
+depth is the classic bed's 256 plus the lift at every vertex while half the bank's
+crossings lie inside the squares, so a vertex factor would leave the east, south-east and
+west banks undamped. A body without a lift has 1e9 there and draws as before to the bit -
+the sea and channel bodies elsewhere keep the look accepted in the game; the variant under
+the water holds nothing. The whole wave height's floor of 1, which WaterPS applied twice,
+comes from the processor. The waterline's own width was not changed: on the level surface
+the band at the pond's south edge seen from above went from 857, 494 and 766 white pixels
+at 1, 3 and 5 seconds to none.
+
+WATERLOG: a body line's `held=` reads 0, and the line ends ` skirt=<n>`.
+
+**Measured.** Slots: WaterPS 442 to 445, its depth variant 509 to 511, the view variant
+507 to 510, the under variant 337 to 335; WaterVS 267 and every shared shader's bytecode
+unchanged (their `.inc` differ in the stamp line alone). GPU at 2560 x 1440, three runs:
+the full-water view 0.201, 0.202, 0.201 ms against 0.200, 0.200, 0.199 at `8cf05d1`; the
+view over the pond 0.264 to 0.265 ms against 0.231 to 0.232 (the skirt's pixels; 19
+draws as before). The bank's strip in the two views over the pond: 8,742 pixels with the
+hold, 4,940 level (over the pond), 10,015 and 3,960 (from behind Lara toward the
+stairs). The white band at the shore (pixels of red 80 and more and luma 100 and more at
+960 x 540, at 1, 3 and 5 seconds): over the pebble beach from above 3,648, 1,727 and 2,003
+before, 203, 44 and 542 after; at the owner's camera by the mill 401, 407 and 431 before,
+139, 164 and 141 after; above and behind the pebble beach 2,768, 1,965 and 1,426 before,
+541, 746 and 674 after. The sheet's pixels where it stood under the level or ended short
+of the ground, at the owner's camera by the mill: 14,012 more, none fewer. The sweep: 565
+squares, 56 bodies, 118 twins as before; every body `held=0`, every body but the pond
+`skirt=0`, the pond `skirt=17`; ANDY3's level line has 6,150 vertices and 7,872 triangles
+(5,300 and 6,784 before).
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the fix round's parity set; with `-hdwater 1`, 15 of
+15 identical to `8cf05d1` (none shows the pond, and no other body is lifted); the pond
+from the owner's camera, above, from its banks, its island and from behind a wading Lara
+at 1, 3 and 5 seconds before and after; the text file (`ANDY3 73 - lift 64`, `lift 128`
+and `lift 200` give the same 17 skirt squares, since the land's corners stand at 0 or 256;
+`lift 0` none); the suites 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it. The shallow water over
+the low land shows the ground through it and the sky's reflection, flat, with a sharp
+edge where the ground comes out of it; the grass beside the pebble beach and south of the
+lower lobe, and the foot of the mill's stairs, lie under up to 96 units of water where
+Lara walks dry - the game knows nothing of that water, so she makes no ripples there. The
+bank foam's band still counts from the classic shore: on the flat sides it now lies up to
+400 units inside the drawn bank, damped to two fifths to four fifths there. An eye
+between the land and the lifted level over the skirt sees the surface from below without
+the underwater look. The shallows apply to lifted bodies alone. Stage 3, light shafts
+under the water, the HD dive splash and the fish tank's spray stay for later.
+
+**Commits.** `c3db724`, `1d4ac82`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

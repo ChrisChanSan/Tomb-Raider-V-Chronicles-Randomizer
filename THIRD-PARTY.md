@@ -1142,7 +1142,44 @@ water surface", carries the tables.
     rule of this project; DATA: where the classic land at the pond's edge
     lies under a click, the Remaster's ground there stands 5 under it to
     17 over it at 8 in 10 of 152 points, 1 over it at the median; 79 of the
-    pond's 208 edge points lie under a lift of 100.
+    pond's 208 edge points lie under a lift of 100. Superseded by entry
+    135: the edge's fall to the land, 96 units over a quarter of a square
+    at 38 grid points of the pond, read in the game as water standing over
+    its bank with a trench between the two; no grid point is held now.
+135. **The level surface and its skirt** - a lifted body's sheet stands
+    level at every grid point, and where the land beside it lies under
+    that level the same surface runs on over the land, square by square up
+    to three squares out, over land squares whose lowest classic corner
+    stands less than the lift and 16 units over the water's top; drawn
+    with the depth test against the room art, it is hidden wherever the
+    Remaster's ground rises through it, and the waterline runs along that
+    line. OWN, general physics (the free surface of still water is level;
+    the bank climbs out of it), with a sketch supplied for this project as
+    the measure; the reach of 3 and the 16 units chosen on DATA: the
+    classic land squares round ANDY3's pond have their corners at the
+    water's top or a click and more over it, and the land under 96 reaches
+    three squares out (17 squares); the Remaster's ground crosses 96 from
+    840 units inside the water squares to 1,472 outside, at the edge at the
+    median, outside at 76 of 221 points; along the drawn surface's outer
+    edge it lies under the surface at 5 of 528 points, all at the two sides
+    where a wall stands; it stands 5 units under the classic land at nine in
+    ten of the 152 low edge points (a tool of this round on the classic
+    `.TRC` and the `.TRG`); the classic land beside the water squares of the
+    fifteen levels stands at the water's top, a click and more over it, or
+    under it, never between (the same tool).
+136. **The shallows** - the rows of a lifted body keep the share of their
+    slope, of the bank foam and of the whitecaps that the depth under the
+    pixel allows, the depth over 2.56 times the rows' whole height now; a
+    body without a lift keeps its rows at every depth. OWN, general physics:
+    a shallow-water wave breaks where its height passes 0.78 of the depth
+    (the textbook breaking index of a solitary wave), so its amplitude may
+    reach 0.39 of the depth; that the classes' other bodies keep the look
+    accepted in the game is a project decision. DATA: the pond's open water
+    rises and falls -64.5 to 70.6 units at a vertex (rms 25.8) with the
+    rows' slope 0.161 at the median at every point up to its edge before
+    (the class table's arithmetic over 120 seconds); the white band at the
+    pond's south edge seen from above 857, 494 and 766 pixels at 1, 3 and 5
+    seconds before, 0 after (RoomProbe at 960 by 540).
 
 ## Credited, but not contained here
 

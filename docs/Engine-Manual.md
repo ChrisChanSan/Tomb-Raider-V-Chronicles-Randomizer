@@ -1933,10 +1933,17 @@ it.
   inside the water squares and climbs to the level's land at their edge,
   so a sheet at the level's own height showed that slope as a dark strip
   between the water and the grass; lifted, the water reaches up the bank.
-  Where the land beside the water meets it low - a beach, the foot of the
-  mill's stairs - the sheet's edge comes down to the land there, so no
-  edge of water stands in the air; the rest of the pond lies flat at its
-  lift. The island in the pond is a low mound and loses its foot to the
+  The lifted water is level everywhere, as still water is: the bank climbs
+  out of it. Where the land beside the water lies lower than that level -
+  a beach, the foot of the mill's stairs, the grass south of the pond -
+  the same level surface runs on over the land, up to three squares out,
+  and the ground hides it wherever it rises above it, so the water's edge
+  is the line where the ground comes out of the water, with the thin wet
+  line every bank has; the shallow water over the low land lets the
+  ground show through. Near such a bank the waves calm down with the
+  depth - a wave cannot stand higher than the water under it is deep -,
+  and so do the bank foam and the whitecaps: the open pond keeps its
+  waves. The island in the pond is a low mound and loses its foot to the
   water. Lara still stands on the level's own floor and swims at its own
   water height: the water simply reaches higher up her legs; the game's
   ripples, rings and splashes keep their places. No other body is lifted:
@@ -1988,8 +1995,9 @@ it.
   `ANDY3 66 basin` makes it still water again, while a row for room 34 still
   tunes every body in room 34.
   `lift <units>` stands the row's bodies' sheets that many units over the
-  level's water height, -256 to 256 in whole units (*The water up to its
-  bank*); `lift 0` takes a lift away, and a row without the key leaves the
+  level's water height, -256 to 256 in whole units, level and running on
+  over the land lower than it (*The water up to its bank*); `lift 0` takes
+  a lift and its skirt away, and a row without the key leaves the
   lift as it is - `ANDY3 73 - lift 64` sets the pond lower, `ANDY3 73 -
   lift 0` puts it back at the level's own height.
   No file means the engine's own rows alone.
@@ -2038,9 +2046,10 @@ it.
   ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), its places whose
   water names a sink (`sinks=`), the light its colours take - its rooms'
-  light, or in a night level the moon's (`lit=`) -, the points of its sheet
-  the land beside them holds under its lift (`held=`) and, last, its lift
-  in units (`lift=`, 0 without one).
+  light, or in a night level the moon's (`lit=`) -, `held=0` (a lifted
+  sheet stands level at every point), its lift in units (`lift=`, 0
+  without one) and, last, the land squares its level surface runs on over,
+  each place once (`skirt=`, 0 without a lift).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
   The first frame of a level whose camera is in a water room writes one

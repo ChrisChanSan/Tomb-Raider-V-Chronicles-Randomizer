@@ -4530,8 +4530,148 @@ walk.
 wall is not to be had from the geometry alone - a hull in the sky and a wall panel in the
 neighbour's group are the same kind of piece - and none is built; `hd_reach` stays as the
 way to see the classic walk's answer.
+The next entry supersedes this finding: the classic rooms' air and their links tell the
+two apart.
 
 **Commits.** `205eb33`
+
+### Art in the air of an unlinked room draws inside its own window
+2026-10-10
+
+**What.** Art of room b whose centroid stands in the air of a room a that b has no portal,
+floor portal or vertical link with, and that is not b's flipmap twin, is drawn only inside
+b's own classic window and left out when b's window is empty. The air of a room is the
+space its floor squares enclose: a square that is no wall and names no portal in its floor
+data, between its highest floor corner and its lowest ceiling corner, a point counting
+when it and the four points 32 units from it along x and z stand more than 32 units
+inside. Every room's air and the table of linked pairs are read at level build and handed
+to the renderer, which asks every triangle of every room's group; such art becomes a piece
+of its own and `DecidePairs` narrows today's answer with it. The level line gains `air_ms=
+air_tris= air_groups= air_pairs=`, one `HDLOG unlinked level= group= host= tris=` line per
+pair follows, and the `clip` line ends with `unlinked_pieces= unlinked_drawn=
+unlinked_hidden=`. `TrgProbe -roomspace` prints the same lines offline, `RoomProbe
+-unlinked 0|1` draws the picture without and with the rule out of one build. Reading the
+air and asking it costs 2 to 87 ms per level.
+
+**Why.** The pictures showed art of another room through a wall at five places: a dark
+block beside a flag, a window frame in a brick loft, a marble strip above a metal stair
+opening, black bars beside a pillar, a lit floor in a doorway. Measured, all five are art
+standing in the air of a room the art's own room has no portal, door or vertical link with
+(rooms 93 and 101 each in the other's air, room 215 in 44, room 24 in 30, 31 and 33, room
+30 in 16), while the palm fronds over a wall in the Streets of Rome and the five walls
+whose loss opened holes under an earlier answer are not: they stand in a linked room's air
+or on the boundary of the air. Over the fifteen levels such art comes to 380,742 triangles
+in 446 (group, host) pairs, from 136 in TITLE to 129,541 in ANDREA2. The entry before this
+one found that a rule telling art out of place from a wall is not to be had from the
+geometry alone; the geometry it asked was the room boxes, and a box holds a room's walls
+and its neighbours' overhang alike. The link status is the half it lacked: art in the air
+of a room it can be seen into belongs there, art in the air of a room it has no way into
+does not.
+
+**How.** `specific/hd/hd_render.h`: `HDRoomAir` (`:330`), `HD_AIR_MARGIN` 32 (`:352`) and
+`HDRoomAirHolds` (`:355`), the air test; `HDFloorEntryWords` (`:397`) and `HDSectorAir`
+(`:448`), one floor square's air and portal out of its floor data, the corners as
+GetHeight and GetCeiling compute them with the corner substituted for the offset (the
+randomizer's `Tr5Level::cornerFloor` reading); `HDPairRange::air` (`:1684`);
+`HDRenderSetRoomAir` (`:1533`), `HDRenderAirPairs`/`HDRenderAirPair` (`:1726`).
+`specific/hd/hd_level.cpp`: `BuildRoomAir` (`:3318`) reads the air from `FLOOR_INFO` and
+`floor_data` and the link table - `next_door` (now at file scope, `:3185`) with the floor
+portals and the flipmap twins - right after `BuildRoomIntrusions` (`:5088`); `DecidePairs`
+(`:879`) keeps today's answer for the air's own pieces with no face outside the smaller
+box (`:917`) and then answers every piece with `air` inside the window (`:941`);
+`LogReachArt` leaves those pieces out and answers `hidden` for air pieces;
+`ReportRoomIntrusions` writes the level line (`:4010`) and the `unlinked` lines (`:4025`)
+and keeps the air's pieces out of `intruding tris=` and `unbound=`.
+`specific/hd/hd_render.cpp`: `HDRenderSetRoomAir` (`:4031`) sorts every air square under
+its world floor square, `AirHostsOf` (`:1957`) asks every triangle of a room's group
+before its passes, timed per group (`:5562`), and the index fill counts the pair (`:6030`)
+and makes the piece: a band triangle in such air keeps its pair (`:6132`), one in no
+entry's box gets a piece with intrusion -1 (`:6143`); art a stand range holds keeps the
+stand answer. The clip counters reset per frame (`hd_level.cpp :7243`) and print at
+`:7720`. `Preparation/Tools/Diagnose/TrgProbe.cpp`: the air and links (`:1392`), the
+`unlinked` lines (`:1836`) and a check line with the art in such air that no entry's box
+holds and the squares where `HDSectorAir` and `Tr5Level::cornerFloor`/`cornerCeiling` part
+(`:1852`). `RoomProbe.cpp`: the air built as the engine builds it (`:8467`), `-unlinked`
+(`:7756`), the `frame` answer (`:4419`), the `unlinked` lines (`:8857`) and the counters
+on the `decide: clip` line.
+
+**Checked.** Engine, `TrgProbe` and an independent count of the art by air agree on every
+pair and every triangle in all fifteen levels; `HDSectorAir` and the randomizer's corners
+agree on every one of 91,569 floor squares. The walk and the reach are untouched: 24
+`-walk` dumps (classic and reach, three places each in ANDREA1, ANDREA2, JOBY2 and RICH2)
+and four `-reachsurvey` runs are identical with the base tool. Rendered at 2560x1440 with
+the walk's own lists and windows, `-unlinked 0` gives the base tool's picture to the pixel
+at all 22 places. Rule against no rule, pixels differing:
+
+| Place | px | new empty | unlinked pieces/drawn/hidden |
+|---|---:|---:|---|
+| block beside the flag | 41,734 | 13,078 (sky behind the block) | 17/12/5 |
+| same, the frame of the edge flash | 34,315 | 9,888 (sky) | 13/8/5 |
+| window frame in the brick loft | 18,709 | 0 | 31/10/21 |
+| marble strip over the metal hub | 14,448 | 0 | 80/66/14 |
+| black bars beside the pillar | 24,640 | 0 | 62/54/8 |
+| lit floor in the doorway | 5,396 | 0 | 31/15/16 |
+| room 101 under the flag | 0 | 0 | 17/17/0 |
+| awning, X-ray scanner | 0 | 0 | 16/14/2, 0 |
+| grating in room 19, metal hub | 22, 8,770 | 0 | 16/15/1, 79/25/54 |
+| tower, both poses | 318, 947 | 56, 76 | 42/22/20, 43/11/32 |
+| courtyard of the second edge flash | 61,528 | 9,100 | 11/7/4 |
+
+Room 101 under the flag shows no slab. The hole views: four of five unchanged, the fifth
+(ANDREA2 room 127) loses 46,995 pixels of palm crown and no pixel to the clear colour. The
+sweep - every room of ANDREA1, ANDREA2, JOBY2 and RICH2 from the centre of its box, two
+directions, 1,684 views at 1280x720 - changes 136 views by 1,541,531 pixels, 530,435 of
+them new clear colour; 78 change by more than 500. Among them the block beside the flag
+and a window frame go from ANDREA1 rooms 110 and 44 and the black bars from JOBY2 rooms 9
+and 44. ANDREA2 room 79, where room 236's art stands in the air, changes by 354 and 503
+pixels in two directions, the RICH2 lift shaft by none; the sixteen views in ANDREA3 rooms
+115 and 80, RICH3 room 92 and JOBY3 room 190 change at two, by 3,021 and 59,516 pixels.
+Load cost, air_ms, median of three runs of the x86 tool's level build:
+
+| Level | ms | Level | ms | Level | ms |
+|---|---:|---|---:|---|---:|
+| ANDREA1 | 42 | ANDY3 | 49 | RICH1 | 26 |
+| ANDREA2 | 87 | JOBY2 | 69 | RICH2 | 80 |
+| ANDREA3 | 52 | JOBY3 | 30 | RICH3 | 42 |
+| ANDY1 | 36 | JOBY4 | 24 | RICHCUT2 | 2 |
+| ANDY2 | 46 | JOBY5 | 42 | TITLE | 68 |
+
+ModernTest 14,721 checks, MenuTest 42,627, InterpTest 729, LipsTest 270 with the `.OBJ`
+folder and 243 without, 0 failed; every `hd_shader/*.inc` is byte-identical.
+
+**Found, not changed.** The rule removes art that is in its place wherever a room's own
+art stands in the air of a room its own room has no link with and the classic path shows
+it there: the crowns of the courtyard palms of Trajan's Markets (rooms 117 and 127 in room
+125, 3,272 triangles each; 86,929 pixels in one view), the street art ANDREA2 keeps in the
+groups of other rooms (room 10 in room 206, 31,176 triangles: a door frame in the second
+edge flash's courtyard, up to 192,482 pixels of palm fronds in one view; with room 222's
+tower in room 232's air, 339,392 pixels of rooftops from room 232, 164,022 of them clear
+colour), room 0's doors in room 91 (22,246 pixels of clear colour from room 109),
+ANDREA3's room 16 in room 80 (a wall the classic path draws, 59,516 pixels), holes of
+60,000 to 74,000 pixels of clear colour in RICH2 rooms 106, 108 and 114 and of 13,000 to
+29,000 in JOBY2 rooms 31 and 33, and what lies under RICH2's clear marble floors in rooms
+5, 41 and 128. Some of it is art of a claimed face the classic path draws that reaches
+past b's window, which the narrowing cuts as the rule says. A few pixels of the black bars
+stay.
+
+**Unchanged.** `hd_enable` 0: `HDLevelLoad` returns before any of it, and no piece exists
+for `DecidePairs` to ask. The walk and the reach, the trim, the camera, the inner-box pair
+list and the claimed-face rule, the reach-only and smaller-box answers, art in the air of
+a linked room, duplicate shells, the edge flashes, the shaders, the water.
+
+**Decisions.** The rule may only remove art, never add it: a piece in unlinked air is
+drawn inside its own room's window or not at all, the intersection with today's answer.
+Art in a linked neighbour's air keeps today's answer, because the palm fronds over the
+walls and the balustrade walls are of that kind. A floor-data portal links two rooms as a
+portal does: without it ANDY1, ANDY3 and TITLE took art seen through such doorways. The
+air is asked of every triangle, not only of those an intrusion box holds: for 247,947 of
+the 380,742 the room whose air holds them has no box around them. No per-room visible set,
+no stencil fill, no duplicate-shell drop. The host margin is 32: at 16 the class grows by
+1% to 48% and the pictures differ at three of nineteen places, 667 pixels more of the bars
+against 1,692 more of a door frame and 1,137 more of a palm. No load-time cache: the
+slowest level takes 87 ms.
+
+**Commits.** `42ff30d`, `944329c`
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
@@ -15536,7 +15676,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
 | #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
 | #177 | The drawn eye at a corner; The Modern eye clear of a wall |
-| #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off; The reach-only answer goes back to the smaller box |
+| #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off; The reach-only answer goes back to the smaller box; Art in the air of an unlinked room draws inside its own window |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #184 | The pad's scheme repair never displaces the Modifier |

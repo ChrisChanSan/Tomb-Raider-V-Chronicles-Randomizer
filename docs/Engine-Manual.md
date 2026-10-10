@@ -2652,12 +2652,14 @@ HDLOG overlap room=93 holds the art of room=101 - 540 triangles, no portal
       between them faces=6 bound=540
 HDLOG level=ANDREA1 overlap pairs=158 intruding tris=16718 in 89 groups
       holder=inside cull=opaque faces=558 bound=15993 unbound=725
-      band_unclaimed=11020
+      band_unclaimed=11020 air_ms=41 air_tris=11815 air_groups=21 air_pairs=30
+HDLOG unlinked level=ANDREA1 group=93 host=101 tris=90
 HDLOG cull level=ANDREA1 ranges opaque=2345 two_sided=125
 HDLOG clip rooms=... open=... full=... scissored=... empty=... windowed_tris=...
       items_spared=... view=... view_obj=... pairs=... whole=... scissored=...
       reach_rooms=... reach_pieces=... reach_whole=... reach_hidden=...
-      stand=.../.../.../.../... stand_behind=...
+      stand=.../.../.../.../... stand_behind=... unlinked_pieces=...
+      unlinked_drawn=... unlinked_hidden=...
 HDLOG reachart level=ANDREA1 room=93 reach=... holder=101 listed=1 pieces=6
       tris=108 answer=hidden band_tris=0
 HDLOG matrixcheck level=ANDREA1 room=12 group=12 samples=128 used=85 behind=43
@@ -2704,6 +2706,16 @@ group, the room of that number until a flipmap swaps it with its pair, and
 end of the level line counts the unclaimed art near the holder's wall, drawn
 whole on every frame. The `cull` line counts the draw calls
 drawn one-sided and the ones drawn from both sides.
+
+Art that stands in the air of a room its own room has no portal, door or vertical
+link with - the space that room's floor squares enclose, off its walls and out of its
+doorways - is drawn only inside its own room's window, and not at all when that window
+is empty, whatever the answers above. The level line ends with `air_ms=` (the time the
+build spent on it), `air_tris=` (such triangles), `air_groups=` and `air_pairs=`, one
+`unlinked` line per pair names the art's room (`group=`) and the room whose air it
+stands in (`host=`), and the `clip` line ends with the frame's pieces of such art, the
+ones drawn inside their window and the ones left out (`unlinked_pieces=`,
+`unlinked_drawn=`, `unlinked_hidden=`).
 
 The fields at the end of a room line are the classic room drawn as a
 neighbour's art (above): `stand=` the triangles of HD groups standing on its

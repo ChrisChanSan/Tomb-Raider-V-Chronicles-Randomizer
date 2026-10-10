@@ -306,14 +306,17 @@ struct HDIntrusion
  * Art of room b whose centroid stands in the air of a room a that b has no
  * portal, door or vertical link with, not even through a flipmap twin, is
  * art in a room b cannot be seen through: the classic path draws no face of
- * b there unless b's own window reaches it. Such art is drawn only inside
- * b's own portal window and is left out when b has none, unless the
- * classic path draws a face of b that claims it (hd_level.cpp,
- * DecidePairs). Every triangle of a room's group is asked, against every
- * room with an air square under its centroid: the entries above do not
- * hold it all - art hung far outside its own room stands in rooms whose
- * box its room's box never touches, ANDREA2's street art of rooms 10 and
- * 236 in rooms 206 and 79 among them.
+ * b there unless b's own window reaches it. Such art that an entry above
+ * holds too is drawn only inside b's own portal window and is left out
+ * when b has none, unless the classic path draws a face of b that claims
+ * it (hd_level.cpp, DecidePairs). Every triangle of a room's group is
+ * asked, against every room with an air square under its centroid, for
+ * the level's counts; the art no entry holds keeps the box's answer: art
+ * hung far outside its own room - ANDREA2's street art of rooms 10 and
+ * 236 in rooms 206 and 79, its courtyard palms - stands in rooms whose
+ * box its room's box never touches, where the classic frame shows it
+ * (hd_level.cpp, above BuildRoomIntrusions). With tomb5.hd_air off no
+ * room's air is handed in.
  *
  * A floor square has air when all four corners of its floor and of its
  * ceiling can be read - a wall square, height byte -127, has none -, its
@@ -1672,10 +1675,9 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * is 1 when the triangles stand in the air of a room their own room has no
  * link with (HDRoomAir) - art held to its own room's window - and
  * splits the pieces like the other three. Such art the open half would
- * draw - no face claims it and it stands outside the smaller box, or in no
- * entry's box at all - is a piece too, with `face` -1 and `inner` 0, which
- * no other piece is; in no box, `intrusion` is -1 and `holder` the first
- * room whose air holds it. */
+ * draw - no face claims it and it stands outside the smaller box - is a
+ * piece too, with `face` -1 and `inner` 0, which no other piece is. Art in
+ * no entry's box is in no piece, in unlinked air or not. */
 struct HDPairRange
 {
 	int intrusion;
@@ -1727,9 +1729,12 @@ int HDRenderIntrusionBand(int at);
  * together; a triangle in the air of two hosts counts for both. */
 int HDRenderAirPairs();
 bool HDRenderAirPair(int index, int* group, int* host, int* tris);
-/* A group's triangles that stand in such air, each counted once, and the
+/* A group's triangles that stand in such air, each counted once, those of
+ * them an intrusion entry's box holds - the art the air holds to its own
+ * room's window, but what a stand range or a static's box takes -, and the
  * microseconds the build spent asking the air. */
 int HDRenderGroupAirTriangles(int group);
+int HDRenderGroupAirBoxed(int group);
 double HDRenderAirMicroseconds();
 // How many of a group's triangles stand inside some OTHER room, all three
 // passes together. Non-zero is the whole of "this room needs a portal

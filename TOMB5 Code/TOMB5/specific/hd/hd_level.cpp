@@ -862,8 +862,9 @@ namespace
 	 * two.
 	 *
 	 * Art that stands in the air of a room its own room has no portal,
-	 * door or vertical link with (HDPairRange::air, BuildRoomAir) is drawn
-	 * only inside its own room's window, whatever the answer above, and
+	 * door or vertical link with, and that an intrusion box holds
+	 * (HDPairRange::air, BuildRoomAir), is drawn only inside its own room's
+	 * window, whatever the answer above, and
 	 * left out when that window is empty. Such art stands where the classic
 	 * path can show room b only through b's own window. Drawn on the answer
 	 * above alone, it comes through the holder's walls wherever b's window
@@ -879,11 +880,13 @@ namespace
 	 * (74,088 pixels at 1280x720). The rule can only take art away: a
 	 * piece not drawn whole is already drawn inside that window, so it
 	 * narrows the answer and never widens it. Art in the air of a linked
-	 * room keeps the answer above. Such art the open half would draw - no
-	 * face claims it and it stands outside the smaller box, or in no
-	 * entry's box at all - is a piece of its own with no face outside the
-	 * smaller box (HDPairRange), whole on the answer above and never one
-	 * of the pieces the counters ask. */
+	 * room keeps the answer above, and so does art in no entry's box, which
+	 * is no piece at all (BuildRoomIntrusions says why). Such art the open
+	 * half would draw - no face claims it and it stands outside the smaller
+	 * box - is a piece of its own with no face outside the smaller box
+	 * (HDPairRange), whole on the answer above and never one of the pieces
+	 * the counters ask. With tomb5.hd_air off no piece has air, and the
+	 * answer above is the whole answer. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -3176,23 +3179,31 @@ static void BuildStaticPlaces()
  * in the air of a room its own room has no portal, door or vertical link
  * with, not even through a flipmap twin - the space the room's floor
  * squares enclose, off its walls, floors and ceilings and out of its
- * doorways (HDRoomAir in hd_render.h, BuildRoomAir). Such art is drawn
- * only inside its own room's window and left out when that window is
- * empty (DecidePairs), whatever the box's answer, unless the classic path
- * draws a face of its room that claims it. The box alone cannot tell it
- * from the art of a wall two rooms share, and on the box's answer it comes
- * through a holder's walls wherever its own room's window is open to the
- * eye or the holder is not listed: a brick hull in the sky beside a flag, a
- * window frame in a brick loft, a marble strip over a metal hub, black bars
- * beside a pillar, a lit floor in a doorway. The air is asked of every
- * triangle and not only of those a box holds: over the fifteen levels,
- * for 246,812 of the 355,806 triangles in such air no entry's box of a
- * room whose air holds them holds them too (TrgProbe -roomspace), most of
- * them hung far outside their own room - ANDREA2's street art of rooms 10
- * and 236 in rooms 206 and 79 -, and others stand in a box where no face
- * claims them outside the smaller box, the black bars among them (1,607
- * of the 2,160 triangles of room 30 in room 16): 282,090 in all are art
- * the open half would draw (RoomProbe's level build).
+ * doorways (HDRoomAir in hd_render.h, BuildRoomAir). Such art that an
+ * entry's box holds too is drawn only inside its own room's window and
+ * left out when that window is empty (DecidePairs), whatever the box's
+ * answer, unless the classic path draws a face of its room that claims
+ * it. The box alone cannot tell it from the art of a wall two rooms share,
+ * and on the box's answer it comes through a holder's walls wherever its
+ * own room's window is open to the eye or the holder is not listed: a
+ * brick hull in the sky beside a flag, a window frame in a brick loft, a
+ * marble strip over a metal hub, black bars beside a pillar, a lit floor
+ * in a doorway.
+ *
+ * The air is asked of every triangle, for the level's counts, and only the
+ * art a box holds is held to the window: over the fifteen levels 109,000
+ * of the 355,806 triangles in such air stand in an entry's box (TrgProbe
+ * -roomspace, air_boxed), 40,798 of them art the open half would draw -
+ * no face claims them outside the smaller box -, the black bars among them
+ * (1,607 of the 2,160 triangles of room 30 in room 16). The rest stands in
+ * no entry's box, most of it hung far outside its own room - ANDREA2's
+ * street art of rooms 10 and 236 in rooms 206 and 79, the palms of rooms
+ * 117 and 127 in room 125 - where the classic frame shows it. Held to its
+ * own window too, it cut a tower top, a door and palm crowns away: on the
+ * 131 room-centre views of ANDREA1, ANDREA2, JOBY2 and RICH2 the air
+ * changes, it took 1,379,566 pixels, 378,633 of them clear colour, against
+ * 190,895 and 111,279 with the boxed art alone, and the ghosts of the five
+ * places go pixel for pixel the same either way.
  *
  * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the
@@ -3315,8 +3326,8 @@ static void BuildRoomIntrusions()
  * square's floor and ceiling bytes and its floor data (HDSectorAir), in the
  * order of ROOM_INFO::floor - x over y_size squares, z over x_size, as in
  * BuildRoomBoxes. The renderer asks it of every triangle of every room's
- * group; DecidePairs draws those that stand in an unlinked room's air only
- * inside their own room's window.
+ * group; DecidePairs draws those that stand in an unlinked room's air, and
+ * in an intrusion entry's box, only inside their own room's window.
  *
  * With it the pairs of rooms the air is not asked about, row by the art's
  * room: the same room, the rooms next door by portal or vertical link
@@ -3328,14 +3339,33 @@ static void BuildRoomIntrusions()
  *
  * Read at level build like BuildRoomIntrusions and after it, before any
  * flipmap, and borrowed by the renderer for the build. `g_air_build_ms` is
- * what reading it cost, for the level's line. */
+ * what reading it cost, for the level's line.
+ *
+ * Only with tomb5.hd_air on, the default, taken at the start of the level:
+ * off, no room has air for the renderer to ask, no triangle stands in
+ * unlinked air, and every piece and every answer is the box's alone, as
+ * before the air was asked. `g_air_on` is what this level took, for the
+ * level's line. */
 static std::vector<HDRoomAir> g_room_air;
 static std::vector<float> g_room_air_sectors;
 static std::vector<unsigned char> g_room_links;
 static double g_air_build_ms = 0.0;
+static int g_air_on = 0;
 
 static void BuildRoomAir()
 {
+	g_air_on = tomb5.hd_air ? 1 : 0;
+
+	if (!g_air_on)
+	{
+		g_room_air.clear();
+		g_room_air_sectors.clear();
+		g_room_links.clear();
+		g_air_build_ms = 0.0;
+		HDRenderSetRoomAir(0, 0, 0);
+		return;
+	}
+
 	LARGE_INTEGER from, to, rate;
 	std::vector<size_t> first((size_t)number_rooms, 0);
 
@@ -4038,13 +4068,18 @@ static void ReportRoomIntrusions()
 	 *   air_ms      reading the rooms' air and asking it of the triangles,
 	 *               milliseconds over the level build
 	 *   air_tris    the triangles standing in such air, each counted once,
-	 *               all three passes - every one drawn only inside its own
-	 *               room's window
+	 *               all three passes
 	 *   air_groups  the groups with at least one of them
 	 *   air_pairs   the (group, host) pairs with at least one, one HDLOG
-	 *               unlinked line each */
+	 *               unlinked line each
+	 *   air_boxed   those of air_tris an intrusion entry's box holds too:
+	 *               the art drawn only inside its own room's window, but
+	 *               what a stand range or a static's box takes
+	 *   air         tomb5.hd_air as the level took it: 1 the air asked,
+	 *               0 not asked, every air_ field 0 */
 	int airTris = 0;
 	int airGroups = 0;
+	int airBoxed = 0;
 	const int airPairs = HDRenderAirPairs();
 
 	for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
@@ -4053,14 +4088,16 @@ static void ReportRoomIntrusions()
 
 		airTris += here;
 		airGroups += here ? 1 : 0;
+		airBoxed += HDRenderGroupAirBoxed(g);
 	}
 
 	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups "
 		"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
-		"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d air_pairs=%d",
+		"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d air_pairs=%d "
+		"air_boxed=%d air=%d",
 		g_stem, pairs, tris, groups, faces, bound, unbound, g_band_unclaimed,
 		(int)(g_air_build_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
-		airTris, airGroups, airPairs);
+		airTris, airGroups, airPairs, airBoxed, g_air_on);
 
 	/* HDLOG unlinked: one line per (group, host) pair with art in the air of
 	 * a room its own room has no link with - `group` the art's room,

@@ -1463,8 +1463,10 @@ namespace
 		 * frame's answer per piece, set by HDRenderPairWhole. */
 		std::vector<HDPairRange> pairRanges;
 		std::vector<unsigned char> pairWhole;
-		// Its triangles in unlinked air (HDRoomAir), all three passes.
+		/* Its triangles in unlinked air (HDRoomAir), all three passes, and
+		 * of them those an intrusion entry's box holds. */
 		int airTris = 0;
+		int airBoxed = 0;
 		/* The stand ranges - see HDStandRange in hd_render.h. A range's
 		 * `stand` is one plus its index here. `standWith` is this frame's
 		 * answer per range (HD_STAND_OUT, _WITH or _BEHIND), set by
@@ -4102,6 +4104,14 @@ int HDRenderGroupAirTriangles(int group)
 	return g_groups[(size_t)group].airTris;
 }
 
+int HDRenderGroupAirBoxed(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return g_groups[(size_t)group].airBoxed;
+}
+
 double HDRenderAirMicroseconds()
 {
 	LARGE_INTEGER rate;
@@ -6011,10 +6021,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					/* Whether it stands in the air of a room this group's
 					 * room has no link with, out of the asking above the
-					 * passes, and in whose: counted per (group, host), and
-					 * the first host named for a piece of its own. */
+					 * passes: counted per (group, host), and once more when
+					 * an entry's box holds it too - the art the air holds to
+					 * its own room's window, but what a stand range or a
+					 * static's box takes below. */
 					int air = 0;
-					int air_host = -1;
 
 					if (!airHosts.empty())
 					{
@@ -6024,9 +6035,6 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						for (; it != airHosts.end() && it->first == first; ++it)
 						{
-							if (!air)
-								air_host = it->second;
-
 							air = 1;
 							g_air_pairs[std::make_pair((int)g, it->second)]++;
 						}
@@ -6034,6 +6042,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					if (air)
 						group.airTris++;
+
+					if (air && pair_at >= 0)
+						group.airBoxed++;
 
 					/* Does the triangle stand on a face of a room drawn classic
 					 * (HDCoverOverlaps)? The first holder whose face it stands
@@ -6135,16 +6146,24 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
-					/* Art in unlinked air that today's answer draws with the
-					 * open half - the band above, and art standing in no
-					 * entry's box at all - gets a piece of its own, with no
-					 * face and outside the smaller box, so that DecidePairs
-					 * can hold it to its own room's window. Art a stand range
-					 * has keeps the stand range's answer. */
-					const bool open_air = air && stand_at < 0 &&
-						box_at < 0 && face_at < 0 && !inner;
+					/* Art in unlinked air that an entry's box holds and the
+					 * box's answer draws with the open half - the band above,
+					 * no face claiming it outside the smaller box - keeps its
+					 * pair, as a piece of its own with no face outside the
+					 * smaller box, so that DecidePairs can hold it to its own
+					 * room's window. Art a stand range or a static's box has
+					 * keeps that answer. Art in no entry's box stays with the
+					 * open half, in unlinked air or not: it is mostly art hung
+					 * far outside its own room that stands where the classic
+					 * frame shows it - ANDREA2's street art and courtyard
+					 * palms -, and held to its window it took 1,188,671 of the
+					 * 1,379,566 pixels the air took on the room-centre views,
+					 * and no ghost of the five places needs it (hd_level.cpp,
+					 * above BuildRoomIntrusions). */
+					const bool open_air = air && pair_at >= 0 &&
+						stand_at < 0 && box_at < 0 && face_at < 0 && !inner;
 
-					if (pair_at >= 0 || open_air)
+					if (pair_at >= 0)
 					{
 						int piece = -1;
 
@@ -6163,8 +6182,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							HDPairRange made;
 
 							made.intrusion = pair_at;
-							made.holder = pair_at >= 0 ?
-								g_intrusions[pair_at].holder : air_host;
+							made.holder = g_intrusions[pair_at].holder;
 							made.face = face_at;
 							made.inner = inner;
 							made.triangles = 0;

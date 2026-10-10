@@ -2896,5 +2896,15 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * HD textures. Dead with hd_enable off (specific\hd\hd_level.cpp,
 	 * BuildWaterSheets). Registry: hd_water. */
 	bool hd_water;
+
+	/* The air of the rooms in an HD level: on, the default, the remaster's
+	 * art of a room that stands in the air of a room its own room has no
+	 * portal, door or vertical link with, and that an intrusion box holds
+	 * there, is drawn only inside its own room's portal window, and not at
+	 * all when that window is empty. Off, the air is not asked and that art
+	 * is drawn on the box's answer alone, as before. Registry only, like
+	 * hd_reach; taken at the start of a level and dead with hd_enable off
+	 * (specific\hd\hd_level.cpp, BuildRoomAir). Registry: hd_air. */
+	bool hd_air;
 };
 #pragma pack(pop)

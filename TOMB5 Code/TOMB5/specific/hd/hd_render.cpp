@@ -8804,6 +8804,14 @@ namespace
 	 * free choice set by eye on the round's RoomProbe pictures - at 4.49
 	 * the pieces read faint against the floor seen through the water. */
 	const float kCrestGain = 6.0f;
+	/* The same gain for WaterVS's swell, which lifts and sinks the sheet
+	 * itself: at 1 a piece rises and sinks no further than its straight row
+	 * does, so the sheet's edge keeps to the shallows as the clip and the
+	 * lift were set for. At 6 a long row's trough sank the pond's sheet
+	 * under the ground beside the island: of twelve RoomProbe views of
+	 * ANDY3's pond at 1, 3 and 5 seconds, the pixels where the sheet lies
+	 * under the ground, 37,416 in one picture at 6, 9,237 at most at 1. */
+	const float kCrestSwellGain = 1.0f;
 	/* How far the squeeze pushes at most, of the longest wavelength - a
 	 * free choice, set by eye on the round's RoomProbe pictures. */
 	const float kBendPush = 0.3f;
@@ -14518,7 +14526,8 @@ namespace
 			 * `crest`) and the squeeze's push, kBendPush of the longest
 			 * wavelength times `crest`, over the longest row's wave number
 			 * (the shader takes it along that row's wave vector); last the
-			 * eight phases and the eight heights four to a register. */
+			 * eight phases and the eight heights four to a register. The
+			 * vertex side takes kCrestSwellGain in place of kCrestGain. */
 			float crest[11 * 4];
 			float k0 = 1.0e-6f;
 
@@ -14553,6 +14562,7 @@ namespace
 			crest[26] = look.crestDepth;
 			crest[27] = kBendPush * 6.2831853f * look.crest / (k0 * k0);
 			g_device->SetPixelShaderConstantF(149, crest, 11);
+			crest[25] = kCrestSwellGain * look.crestDepth;
 			g_device->SetVertexShaderConstantF(168, crest, 11);
 
 			draw_sheet_range(r);

@@ -8837,7 +8837,7 @@ namespace
 	 * body over that room stand over the water's top (the lift, units),
 	 * their clip (units, see kWaterClip) and how much of the class's swell
 	 * their vertices take (1 the whole, 0 none) - a row as hd_water.txt
-	 * would say it ('ANDY3 73 - lift 0 clip 0 swell 0') that sets those
+	 * would say it ('ANDY3 73 - lift 0 clip 0 swell 1') that sets those
 	 * three alone, applied after the river rows and before the file, whose
 	 * rows still win.
 	 *
@@ -8865,16 +8865,20 @@ namespace
 	 * no other body of the fifteen levels has such a ramp: their edges are
 	 * walls a click or more high or flat at the water.
 	 *
-	 * Its swell is 0. The class's swell tapers to nothing only at the
-	 * classic shore, while the ground meets the water at a median 256 units
-	 * inside it and, round the island in the pond, up to 1,539 (the art's
-	 * 0-line sampled every 32 units, 1,143 points); so with the clip at 0 a
-	 * trough still sank the sheet under ground just under the water and
-	 * opened the band again for a moment - in twelve RoomProbe views of the
-	 * pond at 1, 3 and 5 seconds up to 17,165 pixels of ground under the
-	 * water with no water drawn over them, none with the sheet at rest (the
-	 * depth views: the sheet's swell and clip against the ground at rest).
-	 * The waves stay in its pixels: the reflection, the highlight, the foam.
+	 * Its swell is 1, the class's whole, a free choice set by eye in the
+	 * game against the sheet at rest (`swell 0`): with the clip at 0 both
+	 * edges hold, and the waves taking a little from the edge now and then
+	 * look the better water. What they take is the ground's own line
+	 * showing for a moment: the class's swell tapers to nothing only at
+	 * the classic shore, while the ground meets the water at a median 256
+	 * units inside it and, round the island in the pond, up to 1,539 (the
+	 * art's 0-line sampled every 32 units, 1,143 points), so a trough
+	 * sinks the sheet under ground lying just under the water - in twelve
+	 * RoomProbe views of the pond at 1, 3 and 5 seconds up to 17,165
+	 * pixels of that ground with no water drawn over them, none with the
+	 * sheet at rest (the depth views: the sheet's swell and clip against
+	 * the ground at rest). A row's `swell 0` lays the sheet at rest, the
+	 * waves then playing in its pixels alone.
 	 *
 	 * The row names water room 73, the room under 20 of the pond's 24
 	 * squares: room 34 holds the three streams beside the pond too, which
@@ -8890,7 +8894,7 @@ namespace
 
 	const HDWaterBankRow kWaterBank[] =
 	{
-		{ "ANDY3", 73, 0, 0, 0.0f },
+		{ "ANDY3", 73, 0, 0, 1.0f },
 	};
 
 	/* The skirt of a lifted sheet (HDRenderSetWaterSheets, "the skirt"):

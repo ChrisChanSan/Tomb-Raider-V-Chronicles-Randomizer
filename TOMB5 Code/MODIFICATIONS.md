@@ -11585,6 +11585,155 @@ sets stay comparable.
 
 **Commits.** `3aeb924`, `712a1f3`.
 
+**The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
+then small fish that flee from Lara, oil drifting through the sewers at random, and
+whatever else comes to mind. Two reference pictures supplied for this project (not in
+the repository) show what floating things mean here: JOBY5's flooded galley with small
+objects on the surface, slightly bobbing, and ANDY1's planks, which the level already
+has as HD models. The first round of it was built on 2026-10-11 beside the water
+sheets, which another round changed at the same time; nothing of the sheets' look,
+tables or draw changed here.
+
+*The thirteen questions of the design round, with the choices this round built on - to
+be confirmed or changed by the owner:*
+
+- D1 where: only dirty water - ANDREA2's sewer canal, ANDY3's river and ponds, ANDY1's
+  pools (a), with the sets chosen per section (c).
+- D2 how many: counts fixed in a table, places rolled at level load with
+  `GetRandomDraw`, no save (c).
+- D3 the bob: a float drifts with the current and bobs on a curve of its own (b); the
+  exact bob on the sheet's eight rows (a) needs their sum on the processor and is left.
+- D4 the gathering: floats collect at banks and grates on a canal or a basin (a), and
+  ride a river's conveyor from its upstream row to its end (c).
+- D5 the fish: a school of 4 to 8 `FISH2`, rigid, with a yaw wobble, fleeing Lara (a).
+- D6 oil and D7 fireflies and midges: not this round.
+- D8 the drips: rolled ceiling points that ring the sheet (a).
+- D9 the pieces: whole models only (a); the crate of ANDREA2 and the cans cut out of
+  JOBY5's shelf art are left.
+- D10 the pool: item-less, drawn through the HD objects' list (b).
+- D11 light shafts and D12 the dive's splash: another round.
+- D13 the first round: the pool with the floats, the fish and the drips in the three
+  levels (a).
+
+How. `specific/hd/hd_life_rules.h` holds the tables and every rule as pure functions,
+which the engine, RoomProbe and ModernTest share; `specific/hd/hd_life.cpp` is the
+engine's side; the water module hands a body's squares out through one read-only getter.
+
+- *The models* (`kHDLifeKinds`, `hd_life_rules.h:60`): `BOTTLE`, `WET_CLOTH`,
+  `CLOTH_RICH2_RICH1`, `ANIMATING3_ANDY1` from `5\ITEM` and `FISH2` from `4\ITEM`,
+  found by name through the model resolver into synthetic slots `0x7800` and up, put
+  into the level's one model list after Lara's wardrobe (`HDLifeModelPlan`,
+  `hd_life.cpp:131`, called at `hd_object.cpp:1998`), preloaded with every other model.
+  Their boxes give the floating heights 80 (a bottle on its side), 16 (the cloths), 326
+  (a barrel on its side) and 70 (the fish) and the reach across the water, half the
+  box's diagonal seen from above (`HDLifeReach`, 242 for the barrel).
+- *Where* (`kHDLifeLevels`, `:92`; `HDLifeTakes`): ANDREA2 the channel bodies of 16
+  squares or more (the canal, 44 squares; its fountain basins stay clean), weights
+  bottle 4, green cloth 3, ochre cloth 3, barrel 1, no fish; ANDY3 every river of three
+  squares or more and its bodies of eight squares or more, ANDY1 its bodies of eight or
+  more, both ochre cloth (a dead leaf) 4, green cloth 1, barrel 1, and a school. One
+  float for three sheet squares, twelve a body (`HDLifeCount`): twelve keeps three
+  bodies inside the 32 HD entries the life draws a frame at most, a quarter of the
+  frame's 128 (`HD_OBJ_ITEMS`), of which Lara takes 6 to 10; two barrels a body at most.
+  Places a quarter square inside their square, so a quarter square from any bank.
+- *The drift* (`HDLifeFloatTick`, `:983`): the body's current (the sheets' `flow` and
+  `speed`) plus a wander of 60 units a second, its way a hash of the float and the
+  clock's 4-second step blended over the step (never a random per frame); the yaw turns
+  toward the way at 40 degrees a second. A step that would bring the float nearer to a
+  bank than its reach (128 at least) is refused, the x or z part alone is tried - so a
+  float slides along a bank (`HDLifeStep`, `:350`) - and a float a bank holds tries
+  again after 6 to 9 seconds. On a river a float a quarter square past the downstream
+  end, or held by a bank, comes back on the upstream row with a kind rolled again.
+- *The bob* (`HDLifeBobAmp`, `:513`; `HDLifeFits`, `:503`): a sine of the clock, 2.5
+  to 4 seconds and a phase of its own, a quarter of the floating height but never more
+  than the body's sheet rises and never more than the draft leaves over that rise;
+  tilts of 3 and 2 degrees on the same curve. A kind floats on a body only where its
+  draft (bottle 0.5, cloth 0.7, barrel 0.45 of the height) reaches deeper than the
+  sheet falls. The rise comes from the getter: the class's swell share times its eight
+  rows' heights (their envelope is at most one), a quarter more where the class has
+  whitecaps - 0 in a basin, 5.9 units in a channel, 3.0 in a river, 121.3 in a sea. So
+  a basin's floats lie still and only tilt, and on a sea only the barrel stays in the
+  water.
+- *The school* (`HDLifeSchoolTick`, `:1038`): 4 to 8 `FISH2` on a ring of 150 to 300
+  units, half as wide as long, half a square down, rising and sinking 64 units, a 6
+  degree yaw wobble at 1.5 hertz, at half the body's light; its middle cruises at 150
+  units a second to a deep square it picks again every 6 seconds and keeps 387 units
+  (the ring's 300 and half the fish's 173) from water less than 768 deep (the fish's
+  lowest point lies 611 under the surface); a body needs six such squares. Lara within
+  1024 units sends it to the deep square farthest from her at 300 units a second for 4
+  seconds, renewed while she stays near.
+- *The drips* (`HDLifeTick`, `:1071`; `put_ripple`, `hd_life.cpp:67`): a body with four
+  or more squares whose room is not open air gets one drip for eight, two to six, each
+  at a period of 3 to 9 seconds; a drip rings only within six squares of Lara and at
+  most once in two seconds a body, so the eight rings a sheet draw shows are not
+  crowded. The ring goes into a free slot of the game's `ripples[]` with the fields
+  `SetupRipple` writes (flags 0x10 and 1, size 32 and up to 7 more as the engine's own
+  drip in `game\joby.cpp`, life 48 and up to 15 more, init 1) - not through
+  `SetupRipple`, which draws the life from `GetRandomControl`: the game's own random
+  sequence must not depend on what is drawn. `UpdateSplashes` ages it like any other,
+  and the sheets take it as a ring (flag 0x10).
+- *The frame* (`HDLifeFrame`, `hd_life.cpp:301`, called at the top of `HDFrameDraw`,
+  `hd_level.cpp:6884`, not in the inventory ring's frames): the tick at the drawn clock
+  of the frame before (one frame's lag), then the entries nearest the eye first, at most
+  32, each pushed through `HDObjectPush` with the matrix the stack's base gives its
+  point (as Lara's braid takes it) and its body's light as the ambient. The pool is
+  built at `hd_level.cpp:5410`, after the objects and the sheets, and freed with the
+  level (`:5582`); nothing of it runs or allocates without the sheets (`hd_water` 0,
+  `hd_enable` 0), and no savegame field exists.
+- *The getter* (`HDRenderWaterBodySquares`, `hd_render.cpp:13853`, at the end of the
+  water block's public functions): a body's squares each place once - corner, surface,
+  depth, room, sheet, open air - and its sheet's rise. Read only.
+- *`LIFELOG`* with `-log`: a level line, a line per body and a line a second of the
+  clock (the manual has the legend). RoomProbe draws the same with `-life <seed>`,
+  `-lifelara x,z[,t]` and `-lifebench` (the tools' README).
+
+**Measured.** RoomProbe `-hdwater 1 -life 1` at every level with sheets: ANDREA2 one body
+(the canal, class channel, 44 squares, rise 5.9, no current: no sink names its
+squares), 12 floats, 0 fish, 5 drips, 0 skipped; ANDY1 two bodies (14 squares each,
+class sea, rise 121.3), 4 floats (barrels; 6 lighter floats skipped), 13 fish in two
+schools, 0 drips (open air); ANDY3 seven bodies (rivers of 10, 3, 4 and 10 squares, the
+lake 42, the shallows 24, the pond of room 145 11), 19 floats, 11 fish in two schools,
+2 drips, 16 skipped. ANDREA1, ANDREA3, ANDY2, JOBY2 to JOBY5, RICH1 to RICH3: no life.
+The pool takes 1,756, 1,776 and 4,088 bytes; the four models' pages add 5.33 MiB to the
+page cache in each of the three levels (4 pages). At most 26 entries drawn in a frame of
+the probe, never above 32. The waterline at 1, 3 and 5 seconds (`under=` the surface,
+`over=` it, units): the canal's bottle 39.6 to 45.6 under and 34.7 to 40.7 over against
+a rise of 5.9, its cloths 9.2 to 15.0 under and 0.9 to 6.7 over (a crest may run over a
+cloth, which is what a cloth awash does); the river's barrel 146.2 to 149.3 under
+against 3.0; ANDY1's barrels 134.1 to 171.1 under and 154.4 to 191.4 over against
+121.3. Over 20 seconds the canal's 12 floats wander and none reaches a bank (no
+current); ANDY3's river sends 10 floats back upstream by 10 seconds and 22 by 20. The
+pond's school calm at 1.9 seconds and fleeing at 2.5, 4 and 7 with Lara at its middle
+from 2 seconds. The canal's drips with Lara near: 10 falls in 12 seconds, 4 rings
+written, the others held by the two-second gap. The cost at 2560 x 1440, `-lifebench`,
+three runs: the canal along its length, 9 drawn, GPU 0.0198 to 0.0204 ms, the poses
+and matrices 0.005 to 0.010 ms, the draws' submission 0.035 to 0.052 ms; ANDY3's river,
+12 drawn, GPU 0.0084 to 0.0087 ms; ANDY3 from room 1, 26 drawn, GPU 0.0050 to 0.0056
+ms; a step of the pool 0.0021 to 0.0043 ms. A first draw of the models in a fresh
+process costs the probe up to 225 ms of GPU time on some views; the engine preloads
+its models and pages at level load (`specific\file.cpp`), the probe its buffers only.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 231, JOBY2
+66, ANDY3 34, with and without the depth texture bound); the fifteen cameras with
+`-hdwater 0`, 15 of 15 identical to the water round's parity set, and with `-hdwater
+1` and no `-life`, 15 of 15 identical to `aed63ba`; no shader and no `.inc` changed;
+the suites (ModernTest 14746 with 25 new checks of the life, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it. The exact bob on
+the sheet's rows (D3 a), so that floats ride a sea's waves; until then ANDY1's pools,
+class sea, carry barrels only, and ANDY3's lake and shallows too. ANDREA2's canal has
+no current, so its floats wander and do not collect at the grate; a `flow` row would
+give it one. Floats drift under the piers and decks that stand over sheet squares
+(ANDY1). The fish's head is taken to face +x, which no measurement has checked. No
+falling drop is drawn, only its ring. The spring of ANDREA2 room 194 as a default ring
+source needs a compiled row inside the water module's own tables and is left. Oil (D6),
+fireflies and midges (D7), the cans of JOBY5's shelf art (D9 c), light shafts (D11),
+the dive's splash (D12).
+
+**Commits.** `9c1381a`, `0e1ea4b`, `e4f4251`, `1fc81d3`, `2a36718`, `ac81bfd`, `05a0502`,
+`6508500`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty
@@ -15902,3 +16051,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #194 | A classic room covered by another group's art is drawn as that art |
 | #194 | A place the art draws is drawn by the art alone: a classic room face by face, her shadow there, and the static meshes |
 | #196 | Where the HD rules come from, counted on our own data |
+| #198 | The water's life |

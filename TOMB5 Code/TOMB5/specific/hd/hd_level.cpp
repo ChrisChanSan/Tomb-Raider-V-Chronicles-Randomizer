@@ -661,6 +661,13 @@ namespace
 	int g_clip_reach_pieces = 0;
 	int g_clip_reach_whole = 0;
 	int g_clip_reach_hidden = 0;
+	/* The pieces whose art stands in the air of a room its own room has no
+	 * link with (HDPairRange::air), over the rooms of this frame's list:
+	 * all of them, those drawn inside their room's window and those left
+	 * out because the window is empty. */
+	int g_clip_unlinked_pieces = 0;
+	int g_clip_unlinked_drawn = 0;
+	int g_clip_unlinked_hidden = 0;
 	/* HD items whose own room's window is not the whole screen - the ones a
 	 * per-room scissor would cut and the classic path never does. Counted per
 	 * frame with -log and reported in the clip line. */
@@ -851,7 +858,24 @@ namespace
 	 * holder it opens a hole there; drawn whole it comes through a holder's
 	 * own walls at some places - a brick hull in the sky above a piazza, a
 	 * marble ceiling in a metal hub - which is the smaller fault of the
-	 * two. */
+	 * two.
+	 *
+	 * Art that stands in the air of a room its own room has no portal,
+	 * door or vertical link with (HDPairRange::air, BuildRoomAir) is drawn
+	 * only inside its own room's window, whatever the answer above, and
+	 * left out when that window is empty. Such art stands where the classic
+	 * path can show room b only through b's own window. Drawn on the answer
+	 * above alone, it comes through the holder's walls wherever b's window
+	 * is open to the eye or the holder is not listed: a brick hull in the
+	 * sky beside a flag, a window frame in a brick loft, a marble strip
+	 * over a metal hub, black bars beside a pillar, a lit floor in a
+	 * doorway. The rule can only take art away: a piece not drawn whole is
+	 * already drawn inside that window, so it narrows the answer and never
+	 * widens it. Art in the air of a linked room keeps the answer above.
+	 * Such art the open half would draw - no face claims it and it stands
+	 * outside the smaller box, or in no entry's box at all - is a piece of
+	 * its own with no face outside the smaller box (HDPairRange), whole on
+	 * the answer above and never one of the pieces the counters ask. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -863,8 +887,17 @@ namespace
 		const int count = g_piece_count[entry.group];
 		const bool empty = ClipEmpty(entry);
 		const bool ask = !entry.full && !empty;
+		int asked = 0;
 
-		if (empty && count > 0)
+		/* A piece with no face outside the smaller box is art the air took
+		 * out of the open half (HDPairRange): drawn whole without the air,
+		 * and none of the pieces the counters below are about. */
+		for (int j = 0; j < count; j++)
+			if (g_pieces[(size_t)(first + j)].face >= 0 ||
+				g_pieces[(size_t)(first + j)].inner)
+				asked++;
+
+		if (empty && asked > 0)
 			g_clip_reach_rooms++;
 
 		for (int j = 0; j < count; j++)
@@ -881,10 +914,15 @@ namespace
 			for (int i = 0; i < g_frame_count && !listed; i++)
 				listed = g_frame[i].group == piece.holder;
 
+			const bool open = piece.face < 0 && !piece.inner;
+
 			if (ask)
 				whole = !listed;
 			else if (empty)
 				whole = piece.inner == 0;
+
+			if (open)
+				whole = true;
 
 			if (ask && listed && piece.face >= 0)
 			{
@@ -900,7 +938,19 @@ namespace
 				}
 			}
 
-			if (ask && listed)
+			// In unlinked air: inside the room's own window, or not at all.
+			if (piece.air)
+			{
+				whole = false;
+				g_clip_unlinked_pieces++;
+
+				if (empty)
+					g_clip_unlinked_hidden++;
+				else
+					g_clip_unlinked_drawn++;
+			}
+
+			if (ask && listed && !open)
 			{
 				g_clip_pairs++;
 
@@ -910,7 +960,7 @@ namespace
 					g_clip_pairs_scissored++;
 			}
 
-			if (empty)
+			if (empty && !open)
 			{
 				g_clip_reach_pieces++;
 
@@ -983,11 +1033,12 @@ namespace
 	 *   pieces     the room's pieces in that holder, tris their triangles,
 	 *              all three passes together
 	 *   answer     whole when any of them stands outside the box one sector
-	 *              smaller and is drawn whole, hidden when all of them stand
-	 *              inside it and none is drawn
+	 *              smaller, in no unlinked room's air, and is drawn whole,
+	 *              hidden when none is drawn
 	 *   band_tris  the room's art in that holder no face claims that stands
 	 *              outside the smaller box - drawn with the open half on every
-	 *              frame, whatever the answer says */
+	 *              frame, whatever the answer says, but for the art in
+	 *              unlinked air, which is a piece of its own */
 	void LogReachArt()
 	{
 		for (int i = 0; i < g_frame_count; i++)
@@ -1008,9 +1059,18 @@ namespace
 				const HDPairRange& piece = g_pieces[(size_t)(first + j)];
 				bool seen = false;
 
+				// Art the air took out of the open half has no reach line.
+				if (piece.face < 0 && !piece.inner)
+					continue;
+
 				// The first piece of each holder writes the holder's line.
 				for (int k = 0; k < j && !seen; k++)
-					seen = g_pieces[(size_t)(first + k)].holder == piece.holder;
+				{
+					const HDPairRange& other = g_pieces[(size_t)(first + k)];
+
+					seen = other.holder == piece.holder &&
+						(other.face >= 0 || other.inner);
+				}
 
 				if (seen)
 					continue;
@@ -1024,12 +1084,15 @@ namespace
 					listed = g_frame[f].group == piece.holder;
 
 				for (int k = j; k < count; k++)
-					if (g_pieces[(size_t)(first + k)].holder == piece.holder)
+					if (g_pieces[(size_t)(first + k)].holder == piece.holder &&
+						(g_pieces[(size_t)(first + k)].face >= 0 ||
+						g_pieces[(size_t)(first + k)].inner))
 					{
 						pieces++;
 						tris += g_pieces[(size_t)(first + k)].triangles;
 
-						if (g_pieces[(size_t)(first + k)].inner == 0)
+						if (g_pieces[(size_t)(first + k)].inner == 0 &&
+							!g_pieces[(size_t)(first + k)].air)
 							anyWhole = true;
 					}
 
@@ -3092,12 +3155,34 @@ static void BuildStaticPlaces()
  * No count threshold: the answer is per triangle and per frame, so a stray
  * triangle costs only itself and cannot scissor a facade.
  *
+ * A second test stands beside the box: whether a triangle's centroid stands
+ * in the air of a room its own room has no portal, door or vertical link
+ * with and is not the flipmap twin of - the space the room's floor squares
+ * enclose, off its walls, floors and ceilings and out of its doorways
+ * (HDRoomAir in hd_render.h, BuildRoomAir). Such art is drawn only inside
+ * its own room's window and left out when that window is empty
+ * (DecidePairs), whatever the box's answer. The box alone cannot tell it
+ * from the art of a wall two rooms share, and on the box's answer it comes
+ * through a holder's walls wherever its own room's window is open to the
+ * eye or the holder is not listed: a brick hull in the sky beside a flag, a
+ * window frame in a brick loft, a marble strip over a metal hub, black bars
+ * beside a pillar, a lit floor in a doorway. The air is asked of every
+ * triangle and not only of those a box holds: over the fifteen levels,
+ * for 247,947 of the 380,742 triangles in such air no entry's box of a
+ * room whose air holds them holds them too, most of them hung far outside
+ * their own room - ANDREA2's street art of rooms 10 and 236 in rooms 206
+ * and 79 -, and 61,384 stand in a box where no face claims them outside
+ * the smaller box, the black bars among them (1,607 of the 2,160
+ * triangles of room 30 in room 16).
+ *
  * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the
  * classic level - room boxes, portals, floor links, the roomlets' faces - so
  * TrgProbe -roomspace answers with the very same list out of the .TRC and
  * the .TRG. */
 static std::vector<HDIntrusion> g_intrusions;
+// Who is next door, n * n - kept for BuildRoomAir, which asks the same.
+static std::vector<unsigned char> next_door;
 
 static void BuildRoomIntrusions()
 {
@@ -3106,8 +3191,6 @@ static void BuildRoomIntrusions()
 	/* Who is next door: the portal list of both rooms, and the vertical
 	 * links, which have no portal record at all - a stacked pair is joined
 	 * through FLOOR_INFO::pit_room and sky_room. */
-	static std::vector<unsigned char> next_door;
-
 	next_door.assign((size_t)number_rooms * (size_t)number_rooms, 0);
 
 	for (int r = 0; r < number_rooms; r++)
@@ -3206,6 +3289,108 @@ static void BuildRoomIntrusions()
 		HDRenderSetIntrusions(&g_intrusions[0], (int)g_intrusions.size());
 	else
 		HDRenderSetIntrusions(0, 0);
+}
+
+/* Every room's air for the renderer (HDRoomAir in hd_render.h): per floor
+ * square the lowest ceiling corner and the highest floor corner, out of the
+ * square's floor and ceiling bytes and its floor data (HDSectorAir), in the
+ * order of ROOM_INFO::floor - x over y_size squares, z over x_size, as in
+ * BuildRoomBoxes. The renderer asks it of every triangle of every room's
+ * group; DecidePairs draws those that stand in an unlinked room's air only
+ * inside their own room's window.
+ *
+ * With it the pairs of rooms the air is not asked about, row by the art's
+ * room: the same room, the rooms next door by portal or vertical link
+ * (next_door, as BuildRoomIntrusions found them), the rooms a floor
+ * square's portal leads to, and flipmap twins. The portal list does not
+ * name every floor portal: ANDY1's room 72 reaches room 2 only through
+ * its floor data, and art of 2 standing in 72's air - 1,567 triangles -
+ * is seen through that doorway.
+ *
+ * Read at level build like BuildRoomIntrusions and after it, before any
+ * flipmap, and borrowed by the renderer for the build. `g_air_build_ms` is
+ * what reading it cost, for the level's line. */
+static std::vector<HDRoomAir> g_room_air;
+static std::vector<float> g_room_air_sectors;
+static std::vector<unsigned char> g_room_links;
+static double g_air_build_ms = 0.0;
+
+static void BuildRoomAir()
+{
+	LARGE_INTEGER from, to, rate;
+	std::vector<size_t> first((size_t)number_rooms, 0);
+
+	QueryPerformanceCounter(&from);
+	g_room_air.assign((size_t)number_rooms, HDRoomAir());
+	g_room_air_sectors.clear();
+	g_room_links.assign((size_t)number_rooms * (size_t)number_rooms, 0);
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		HDRoomAir& air = g_room_air[(size_t)r];
+
+		air.x = (float)info->x;
+		air.y = (float)info->y;
+		air.z = (float)info->z;
+		air.nx = info->floor ? info->y_size : 0;
+		air.nz = info->floor ? info->x_size : 0;
+		air.sectors = 0;
+		first[(size_t)r] = g_room_air_sectors.size();
+
+		for (int sx = 0; sx < air.nx; sx++)
+			for (int sz = 0; sz < air.nz; sz++)
+			{
+				const FLOOR_INFO& f = info->floor[sz + info->x_size * sx];
+				float top, bottom;
+				int door;
+
+				/* GetHeight reads a chain to its end bit with no bound; this
+				 * one stops a broken chain at 65536 words, the reach of the
+				 * 16 bit FLOOR_INFO::index itself. */
+				HDSectorAir(f.floor, f.ceiling, f.index && floor_data ?
+					(const unsigned short*)&floor_data[f.index] : 0, 65536,
+					&top, &bottom, &door);
+				g_room_air_sectors.push_back(top);
+				g_room_air_sectors.push_back(bottom);
+
+				// A square Lara walks through into another room links the two.
+				if (door >= 0 && door < number_rooms)
+				{
+					g_room_links[(size_t)r * number_rooms + door] = 1;
+					g_room_links[(size_t)door * number_rooms + r] = 1;
+				}
+			}
+	}
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		HDRoomAir& air = g_room_air[(size_t)r];
+
+		if (air.nx > 0 && air.nz > 0)
+			air.sectors = &g_room_air_sectors[first[(size_t)r]];
+	}
+
+	for (int b = 0; b < number_rooms; b++)
+		for (int a = 0; a < number_rooms; a++)
+		{
+			const size_t at = (size_t)b * number_rooms + a;
+
+			if (a == b || (at < next_door.size() && next_door[at]) ||
+				room[a].flipped_room == b || room[b].flipped_room == a)
+				g_room_links[at] = 1;
+		}
+
+	QueryPerformanceCounter(&to);
+	QueryPerformanceFrequency(&rate);
+	g_air_build_ms = rate.QuadPart ? (double)(to.QuadPart - from.QuadPart) *
+		1000.0 / (double)rate.QuadPart : 0.0;
+
+	if (!g_room_air.empty())
+		HDRenderSetRoomAir(&g_room_air[0], (int)g_room_air.size(),
+			&g_room_links[0]);
+	else
+		HDRenderSetRoomAir(0, 0, 0);
 }
 
 /* The classic faces the intruding art is held against.
@@ -3697,6 +3882,10 @@ static void ReportRoomIntrusions()
 	{
 		const HDPairRange& piece = g_pieces[p];
 
+		// Art the air took out of the open half is no intruding art.
+		if (piece.face < 0 && !piece.inner)
+			continue;
+
 		if (piece.face < 0 || (size_t)piece.face >= claimed.size())
 		{
 			unbound += piece.triangles;
@@ -3763,15 +3952,27 @@ static void ReportRoomIntrusions()
 		}
 	}
 
+	/* A group is windowed when it has any piece; the counts of the line are
+	 * the art standing inside another room, the pieces of art the air took
+	 * out of the open half left out of them. */
 	for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
 	{
-		const int here = HDRenderGroupIntrudingTriangles(g);
+		int here = HDRenderGroupIntrudingTriangles(g);
 
 		if (!here)
 			continue;
 
 		g_group_windowed[g] = 1;
-		groups++;
+
+		for (int j = 0; j < g_piece_count[g]; j++)
+		{
+			const HDPairRange& piece = g_pieces[(size_t)(g_piece_first[g] + j)];
+
+			if (piece.face < 0 && !piece.inner)
+				here -= piece.triangles;
+		}
+
+		groups += here ? 1 : 0;
 		tris += here;
 	}
 
@@ -3782,15 +3983,57 @@ static void ReportRoomIntrusions()
 	 * no face and lies outside the box one sector smaller: the build hands
 	 * it to the open half, and it is drawn over the whole screen on every
 	 * frame, never asked. TrgProbe -roomspace prints the same number. */
+	/* The art in the air of a room its own room has no link with (HDRoomAir):
+	 *
+	 *   air_ms      reading the rooms' air and asking it of the triangles,
+	 *               milliseconds over the level build
+	 *   air_tris    the triangles standing in such air, each counted once,
+	 *               all three passes - every one drawn only inside its own
+	 *               room's window
+	 *   air_groups  the groups with at least one of them
+	 *   air_pairs   the (group, host) pairs with at least one, one HDLOG
+	 *               unlinked line each */
+	int airTris = 0;
+	int airGroups = 0;
+	const int airPairs = HDRenderAirPairs();
+
+	for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
+	{
+		const int here = HDRenderGroupAirTriangles(g);
+
+		airTris += here;
+		airGroups += here ? 1 : 0;
+	}
+
 	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups "
 		"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
-		"band_unclaimed=%d",
-		g_stem, pairs, tris, groups, faces, bound, unbound, g_band_unclaimed);
+		"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d air_pairs=%d",
+		g_stem, pairs, tris, groups, faces, bound, unbound, g_band_unclaimed,
+		(int)(g_air_build_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
+		airTris, airGroups, airPairs);
+
+	/* HDLOG unlinked: one line per (group, host) pair with art in the air of
+	 * a room its own room has no link with - `group` the art's room,
+	 * `host` the room whose air it stands in, `tris` how many of its
+	 * triangles do. TrgProbe -roomspace prints the same lines. Behind -log. */
+	if (gLogEnabled)
+		for (int i = 0; i < airPairs; i++)
+		{
+			int group = 0, host = 0, here = 0;
+
+			if (HDRenderAirPair(i, &group, &host, &here))
+				Log("HDLOG unlinked level=%s group=%d host=%d tris=%d",
+					g_stem, group, host, here);
+		}
 
 	// The lists were only borrowed for the length of the build.
 	HDRenderSetIntrusions(0, 0);
 	HDRenderSetPairFaces(0, 0);
+	HDRenderSetRoomAir(0, 0, 0);
 	g_intrusions.clear();
+	g_room_air.clear();
+	g_room_air_sectors.clear();
+	g_room_links.clear();
 }
 
 /* The openings the randomizer run made, for the renderer.
@@ -4842,6 +5085,7 @@ static void HDLevelBuildHD()
 	 * edit shows at the next one without a restart. */
 	HDRenderGlossFile("hd_gloss.txt");
 	BuildRoomIntrusions();		// the same contract
+	BuildRoomAir();			// and the rooms' air, the same contract
 	BuildPairFaces();		// and its faces, the same contract
 	BuildRoomCuts();		// the same contract again
 	BuildStandFaces();		// and once more
@@ -6996,6 +7240,9 @@ void HDFrameDraw()
 	g_clip_reach_pieces = 0;
 	g_clip_reach_whole = 0;
 	g_clip_reach_hidden = 0;
+	g_clip_unlinked_pieces = 0;
+	g_clip_unlinked_drawn = 0;
+	g_clip_unlinked_hidden = 0;
 	g_clip_items_spared = 0;	// counted by HDFrameScissorForRoom
 
 	// The stand ranges' answers, for this phase and the glow one.
@@ -7459,19 +7706,28 @@ void HDFrameDrawGlow()
 			 * in-holder draws past HD_MAX_STAND_DRAW. `stand_behind=` is how
 			 * many of those drawn with their group are drawn pushed back
 			 * (HD_STAND_BEHIND): art reaching onto faces a listed room draws
-			 * classic. */
+			 * classic.
+			 *
+			 * `unlinked_pieces` are the pieces of the listed rooms whose art
+			 * stands in the air of a room their own room has no link with
+			 * (DecidePairs), `unlinked_drawn` those drawn inside their own
+			 * room's window, `unlinked_hidden` those left out because that
+			 * window is empty. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
 				"pairs=%d whole=%d scissored=%d reach_rooms=%d "
 				"reach_pieces=%d reach_whole=%d reach_hidden=%d "
-				"stand=%d/%d/%d/%d/%d stand_behind=%d",
+				"stand=%d/%d/%d/%d/%d stand_behind=%d unlinked_pieces=%d "
+				"unlinked_drawn=%d unlinked_hidden=%d",
 				g_frame_count, g_clip_open, g_clip_full, g_clip_scissored,
 				g_clip_empty, g_clip_windowed_tris, g_clip_items_spared,
 				views, viewsObj, g_clip_pairs, g_clip_pairs_whole,
 				g_clip_pairs_scissored, g_clip_reach_rooms,
 				g_clip_reach_pieces, g_clip_reach_whole, g_clip_reach_hidden,
 				g_stand_frame_count, g_clip_stand_with, g_clip_stand_holder,
-				g_clip_stand_out, g_clip_stand_dropped, g_clip_stand_behind);
+				g_clip_stand_out, g_clip_stand_dropped, g_clip_stand_behind,
+				g_clip_unlinked_pieces, g_clip_unlinked_drawn,
+				g_clip_unlinked_hidden);
 			LogReachArt();
 			g_reachart_due = false;
 		}

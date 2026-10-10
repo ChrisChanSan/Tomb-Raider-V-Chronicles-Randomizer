@@ -1463,6 +1463,8 @@ namespace
 		 * frame's answer per piece, set by HDRenderPairWhole. */
 		std::vector<HDPairRange> pairRanges;
 		std::vector<unsigned char> pairWhole;
+		// Its triangles in unlinked air (HDRoomAir), all three passes.
+		int airTris = 0;
 		/* The stand ranges - see HDStandRange in hd_render.h. A range's
 		 * `stand` is one plus its index here. `standWith` is this frame's
 		 * answer per range (HD_STAND_OUT, _WITH or _BEHIND), set by
@@ -1917,6 +1919,87 @@ namespace
 	 * the index fill hands to the open half, never asked per frame. Counted
 	 * on the same terms as g_intrusion_hits, for the level's log line. */
 	std::vector<int> g_intrusion_band;
+	/* The rooms' air (HDRoomAir), borrowed for the build like the list, and
+	 * the pairs of rooms that are not asked (`g_air_links`, one byte per
+	 * pair, row by the art's room: the same room, rooms with a link, flipmap
+	 * twins). `g_air_cells` holds every air square by the world's 1024-unit
+	 * floor square it covers - key and room, sorted - so that a centroid
+	 * finds the rooms whose air it may stand in with one search.
+	 * `g_air_pairs` counts per (group, host) the triangles standing in the
+	 * host's air, and `g_air_ticks` is the counter ticks the build spent
+	 * asking; both for the level's log line. */
+	const HDRoomAir* g_room_air = 0;
+	int g_room_air_count = 0;
+	const unsigned char* g_air_links = 0;
+	std::vector<std::pair<long long, int> > g_air_cells;
+	std::map<std::pair<int, int>, int> g_air_pairs;
+	long long g_air_ticks = 0;
+
+	/* The key of the world's floor square (x, z), counted in 1024-unit
+	 * squares: both shifted by 65536 squares, so that any square within 64
+	 * million units of the origin - TR5's coordinates are 32 bit, a level
+	 * spans under a hundred squares - gives a positive number, and z taking
+	 * 131072 of them, so that no two squares share a key. */
+	long long AirCellKey(int x, int z)
+	{
+		return ((long long)x + 65536) * 131072 + ((long long)z + 65536);
+	}
+
+	typedef std::vector<std::pair<long long, int> > AirCells;
+	typedef std::vector<std::pair<unsigned int, int> > AirHosts;
+
+	/* Which of group g's triangles stand in the air of a room g's room has
+	 * no portal, door or vertical link with and is not the flipmap twin of
+	 * (HDRoomAir), and in whose: (first index, host) per triangle and host,
+	 * sorted. Every triangle of the group is asked, with the index fill's
+	 * own centroid put into world units; the floor square under it names
+	 * the rooms to ask (g_air_cells). */
+	void AirHostsOf(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g, AirHosts& out)
+	{
+		const HDRoomAir& own = g_room_air[g];
+		const unsigned char* links =
+			g_air_links + (size_t)g * g_room_air_count;
+
+		for (int pass = 0; pass < 3; pass++)
+			for (const trf::remaster::TrgPart& part : source.parts)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const unsigned int first = run.start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					const trf::remaster::TrgVertex& ta =
+						trg.vertices[trg.indices[first]];
+					const trf::remaster::TrgVertex& tb =
+						trg.vertices[trg.indices[first + 1]];
+					const trf::remaster::TrgVertex& tc =
+						trg.vertices[trg.indices[first + 2]];
+					const float x = ((float)ta.x + (float)tb.x +
+						(float)tc.x) / 3.0f + own.x;
+					const float y = ((float)ta.y + (float)tb.y +
+						(float)tc.y) / 3.0f + own.y;
+					const float z = ((float)ta.z + (float)tb.z +
+						(float)tc.z) / 3.0f + own.z;
+					const long long key = AirCellKey(
+						(int)floorf(x / 1024.0f), (int)floorf(z / 1024.0f));
+					AirCells::const_iterator it = std::lower_bound(
+						g_air_cells.begin(), g_air_cells.end(),
+						std::make_pair(key, -1));
+
+					for (; it != g_air_cells.end() && it->first == key; ++it)
+						if (!links[it->second] && HDRoomAirHolds(
+							g_room_air[it->second], x, y, z, HD_AIR_MARGIN))
+							out.push_back(std::make_pair(first, it->second));
+				}
+			}
+
+		std::sort(out.begin(), out.end());
+	}
 
 	/* The classic faces another group's art may stand on (HDStandRoom,
 	 * HDStandHolder, HDCoverFace in hd_render.h), borrowed for the length of
@@ -3945,6 +4028,90 @@ int HDRenderIntrusionBand(int at)
 		? g_intrusion_band[(size_t)at] : 0;
 }
 
+void HDRenderSetRoomAir(const HDRoomAir* rooms, int count,
+	const unsigned char* links)
+{
+	g_room_air = count > 0 && links ? rooms : 0;
+	g_room_air_count = g_room_air ? count : 0;
+	g_air_links = g_room_air ? links : 0;
+	g_air_cells.clear();
+	g_air_pairs.clear();
+	g_air_ticks = 0;
+
+	/* Every air square under every world floor square it covers: one for
+	 * a room whose origin lies on the 1024-unit grid, as every classic
+	 * room's does, two or four for one that does not. */
+	for (int r = 0; r < g_room_air_count; r++)
+	{
+		const HDRoomAir& air = g_room_air[r];
+
+		if (!air.sectors)
+			continue;
+
+		for (int i = 0; i < air.nx; i++)
+			for (int k = 0; k < air.nz; k++)
+			{
+				const float* s = air.sectors + ((size_t)i * air.nz + k) * 2;
+
+				if (!(s[0] < s[1]))
+					continue;
+
+				const float x0 = air.x + (float)(i << 10);
+				const float z0 = air.z + (float)(k << 10);
+				const int cx0 = (int)floorf(x0 / 1024.0f);
+				const int cx1 = (int)floorf((x0 + 1023.0f) / 1024.0f);
+				const int cz0 = (int)floorf(z0 / 1024.0f);
+				const int cz1 = (int)floorf((z0 + 1023.0f) / 1024.0f);
+
+				for (int cx = cx0; cx <= cx1; cx++)
+					for (int cz = cz0; cz <= cz1; cz++)
+						g_air_cells.push_back(std::make_pair(
+							AirCellKey(cx, cz), r));
+			}
+	}
+
+	std::sort(g_air_cells.begin(), g_air_cells.end());
+	g_air_cells.erase(std::unique(g_air_cells.begin(), g_air_cells.end()),
+		g_air_cells.end());
+}
+
+int HDRenderAirPairs()
+{
+	return (int)g_air_pairs.size();
+}
+
+bool HDRenderAirPair(int index, int* group, int* host, int* tris)
+{
+	if (index < 0 || index >= (int)g_air_pairs.size())
+		return false;
+
+	std::map<std::pair<int, int>, int>::const_iterator it = g_air_pairs.begin();
+
+	std::advance(it, index);
+	*group = it->first.first;
+	*host = it->first.second;
+	*tris = it->second;
+	return true;
+}
+
+int HDRenderGroupAirTriangles(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return g_groups[(size_t)group].airTris;
+}
+
+double HDRenderAirMicroseconds()
+{
+	LARGE_INTEGER rate;
+
+	if (!QueryPerformanceFrequency(&rate) || !rate.QuadPart)
+		return 0.0;
+
+	return (double)g_air_ticks * 1.0e6 / (double)rate.QuadPart;
+}
+
 void HDRenderSetPairFaces(const HDPairFace* faces, int count)
 {
 	g_pair_faces = count > 0 ? faces : 0;
@@ -5382,6 +5549,21 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * its passes are built. */
 		int group_parts[5] = { 0, 0, 0, 0, 0 };
 
+		/* The art of this group in unlinked air (AirHostsOf), read back by
+		 * the index fill below - asked before the passes, so that the time
+		 * it takes is one stretch per group. */
+		AirHosts airHosts;
+
+		if ((int)g < g_room_air_count && !g_air_cells.empty())
+		{
+			LARGE_INTEGER from, to;
+
+			QueryPerformanceCounter(&from);
+			AirHostsOf(trg, source, (int)g, airHosts);
+			QueryPerformanceCounter(&to);
+			g_air_ticks += to.QuadPart - from.QuadPart;
+		}
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			tris.clear();
@@ -5826,6 +6008,32 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						}
 					}
 
+					/* Whether it stands in the air of a room this group's
+					 * room has no link with, out of the asking above the
+					 * passes, and in whose: counted per (group, host), and
+					 * the first host named for a piece of its own. */
+					int air = 0;
+					int air_host = -1;
+
+					if (!airHosts.empty())
+					{
+						AirHosts::const_iterator it = std::lower_bound(
+							airHosts.begin(), airHosts.end(),
+							std::make_pair(first, -1));
+
+						for (; it != airHosts.end() && it->first == first; ++it)
+						{
+							if (!air)
+								air_host = it->second;
+
+							air = 1;
+							g_air_pairs[std::make_pair((int)g, it->second)]++;
+						}
+					}
+
+					if (air)
+						group.airTris++;
+
 					/* Does the triangle stand on a face of a room drawn classic
 					 * (HDCoverOverlaps)? The first holder whose face it stands
 					 * on takes it. Such a triangle leaves the open and the
@@ -5921,18 +6129,29 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							if ((size_t)pair_at < g_intrusion_band.size())
 								g_intrusion_band[(size_t)pair_at]++;
 
-							pair_at = -1;
+							if (!air || box_at >= 0)
+								pair_at = -1;
 						}
 					}
 
-					if (pair_at >= 0)
+					/* Art in unlinked air that today's answer draws with the
+					 * open half - the band above, and art standing in no
+					 * entry's box at all - gets a piece of its own, with no
+					 * face and outside the smaller box, so that DecidePairs
+					 * can hold it to its own room's window. Art a stand range
+					 * has keeps the stand range's answer. */
+					const bool open_air = air && stand_at < 0 &&
+						box_at < 0 && face_at < 0 && !inner;
+
+					if (pair_at >= 0 || open_air)
 					{
 						int piece = -1;
 
 						for (size_t j = 0; j < group.pairRanges.size(); j++)
 							if (group.pairRanges[j].intrusion == pair_at &&
 								group.pairRanges[j].face == face_at &&
-								group.pairRanges[j].inner == inner)
+								group.pairRanges[j].inner == inner &&
+								group.pairRanges[j].air == air)
 							{
 								piece = (int)j;
 								break;
@@ -5943,10 +6162,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							HDPairRange made;
 
 							made.intrusion = pair_at;
-							made.holder = g_intrusions[pair_at].holder;
+							made.holder = pair_at >= 0 ?
+								g_intrusions[pair_at].holder : air_host;
 							made.face = face_at;
 							made.inner = inner;
 							made.triangles = 0;
+							made.air = air;
 							piece = (int)group.pairRanges.size();
 							group.pairRanges.push_back(made);
 							group.pairWhole.push_back(0);

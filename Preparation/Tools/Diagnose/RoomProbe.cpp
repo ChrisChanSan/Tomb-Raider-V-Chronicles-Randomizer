@@ -177,13 +177,18 @@
  *                     HDLOG room= lines give hd=0 stay out of -with.
  *     -unlinked 0|1   1, the default and the engine's answer, draws a piece
  *                     whose art stands in the air of a room its own room
- *                     has no link with (HDRoomAir) only inside the group's
- *                     window, under frame and face, and not at all when the
- *                     window is empty - but for a piece of a pair with a
- *                     claimed face that survives the window, which keeps
- *                     the answer above; 0 leaves those pieces the answer
+ *                     has no link with (HDRoomAir), and that an intrusion
+ *                     box holds, only inside the group's window, under
+ *                     frame and face, and not at all when the window is
+ *                     empty - but for a piece of a pair with a claimed
+ *                     face that survives the window, which keeps the
+ *                     answer above; 0 leaves those pieces the answer
  *                     above, out of the same build. The `decide: clip`
  *                     line ends with the engine's unlinked_ counters.
+ *     -air 0|1        the engine's tomb5.hd_air: 1, the default, hands the
+ *                     rooms' air to the build; 0 hands none, and the build
+ *                     and its pictures are the box's alone, as the engine's
+ *                     with hd_air 0. The intrusion line ends with air=.
  *
  *   The portal walk (game\draw.cpp) offline, with the engine's own camera:
  *   the integer angles phd_LookAt makes of an eye and a target, the float
@@ -1846,6 +1851,10 @@ static double g_air_ms = 0.0;
  * answer they would have without that, in the same build - the picture
  * to hold the engine's against. */
 static int g_unlinked = 1;
+/* -air 0|1: the engine's tomb5.hd_air. 1, the default, hands the rooms' air
+ * to the build; 0 hands none, as BuildRoomAir does with hd_air off, so no
+ * triangle stands in unlinked air and the build is the box's alone. */
+static int g_air_option = 1;
 static int g_window_mode = HD_WINDOW_ALL;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
@@ -7216,6 +7225,8 @@ static int ProbeMain(int argc, char** argv)
 			" art (default frame)\n");
 		printf("       -unlinked 0|1   art in an unlinked room's air inside its"
 			" own window (default 1)\n");
+		printf("       -air 0|1        tomb5.hd_air: the rooms' air handed to"
+			" the build (default 1)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
@@ -7766,6 +7777,14 @@ static int ProbeMain(int argc, char** argv)
 				"link with is %s\n", g_unlinked
 				? "drawn only inside its own window (the engine's)"
 				: "answered as if it stood anywhere else");
+			at += 1;
+		}
+		else if (!strcmp(argv[at], "-air") && at + 1 < argc)
+		{
+			g_air_option = atoi(argv[at + 1]) ? 1 : 0;
+			printf("-air: the rooms' air is %s\n", g_air_option
+				? "handed to the build (tomb5.hd_air 1, the engine's default)"
+				: "not handed to the build (tomb5.hd_air 0)");
 			at += 1;
 		}
 		else if (!strcmp(argv[at], "-decide") && at + 1 < argc)
@@ -8377,7 +8396,9 @@ static int ProbeMain(int argc, char** argv)
 
 				/* And every room's air, as BuildRoomAir hands it over: per
 				 * floor square its floor and ceiling bytes and its floor
-				 * data words from its index on, read by HDSectorAir. */
+				 * data words from its index on, read by HDSectorAir. None
+				 * with -air 0, as none with tomb5.hd_air 0. */
+				if (g_air_option)
 				{
 					LARGE_INTEGER from, to, rate;
 					std::vector<size_t> firstAt((size_t)n, 0);
@@ -8842,8 +8863,9 @@ static int ProbeMain(int argc, char** argv)
 			band += HDRenderIntrusionBand((int)i);
 
 		/* The air fields of the engine's level line (ReportRoomIntrusions):
-		 * air_ms reading the rooms' air here plus the renderer's asking. */
-		int airTris = 0, airGroups = 0;
+		 * air_ms reading the rooms' air here plus the renderer's asking,
+		 * and air= the -air this build took. */
+		int airTris = 0, airGroups = 0, airBoxed = 0;
 		const int airPairs = HDRenderAirPairs();
 		int intruding = 0, intrudingGroups = 0;
 
@@ -8853,6 +8875,7 @@ static int ProbeMain(int argc, char** argv)
 
 			airTris += HDRenderGroupAirTriangles(g);
 			airGroups += HDRenderGroupAirTriangles(g) ? 1 : 0;
+			airBoxed += HDRenderGroupAirBoxed(g);
 
 			for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
 			{
@@ -8870,11 +8893,11 @@ static int ProbeMain(int argc, char** argv)
 		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups "
 			"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
 			"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d "
-			"air_pairs=%d\n",
+			"air_pairs=%d air_boxed=%d air=%d\n",
 			CountIntrusionPairs(), intruding, intrudingGroups,
 			(int)claimed.size(), bound, unbound, band,
 			(int)(g_air_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
-			airTris, airGroups, airPairs);
+			airTris, airGroups, airPairs, airBoxed, g_air_option);
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 		{

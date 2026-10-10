@@ -1769,8 +1769,11 @@ namespace
 		 * box holds, which the build makes pieces of its own; listed per
 		 * pair with the reason. `squares` are the floor squares read and
 		 * `differ` those where HDSectorAir and the randomizer's corners
-		 * part. */
-		long long airTris = 0, outsideTris = 0;
+		 * part. `air_boxed` counts the triangles of air_tris some entry's
+		 * box holds - the first pair above has them - as the build counts
+		 * them before a stand range or a static's box takes any: the art
+		 * the engine holds to its own room's window. */
+		long long airTris = 0, outsideTris = 0, airBoxed = 0;
 		std::map<std::pair<int, int>, long long> airPairs, outsidePairs;
 		std::set<int> airGroupSet;
 		/* The pairs not asked, row by the art's room, as BuildRoomAir makes
@@ -1863,6 +1866,10 @@ namespace
 				{
 					airTris++;
 					airGroupSet.insert((int)g);
+
+					if (g < tagged.size() && c / 3 < tagged[g].size() &&
+						tagged[g][c / 3])
+						airBoxed++;
 				}
 
 				outsideTris += missed ? 1 : 0;
@@ -1873,17 +1880,19 @@ namespace
 			std::printf("unlinked level=%s group=%d host=%d tris=%lld\n",
 				stem.c_str(), it->first.first, it->first.second, it->second);
 
-		/* air_tris air_groups air_pairs: the engine's level line ends with
-		 * the same three (ReportRoomIntrusions); its air_ms is a time and
-		 * has no counterpart here. */
+		/* air_tris air_groups air_pairs air_boxed: the engine's level line
+		 * ends with the same four (ReportRoomIntrusions) and air=, the
+		 * setting the level took; its air_ms is a time and has no
+		 * counterpart here. */
 		std::printf("%-9s rooms=%d groups=%d  overlap pairs=%d intruding "
 			"tris=%lld in %d groups  overhang tris=%lld of %lld  worst=%ld "
 			"(group %d)  holder=%s faces=%d bound=%lld unbound=%lld "
-			"band_unclaimed=%lld air_tris=%lld air_groups=%d air_pairs=%d\n",
+			"band_unclaimed=%lld air_tris=%lld air_groups=%d air_pairs=%d "
+			"air_boxed=%lld\n",
 			stem.c_str(), rooms, (int)trg.groups.size(), pairs, intruding,
 			windowedRooms, tris_out, tris_total, worst, worst_group, holder,
 			facesClaimed, boundTris, unboundTris, bandTris, airTris,
-			(int)airGroupSet.size(), (int)airPairs.size());
+			(int)airGroupSet.size(), (int)airPairs.size(), airBoxed);
 
 		{
 			std::printf("%-9s   unlinked air outside every entry's box: "

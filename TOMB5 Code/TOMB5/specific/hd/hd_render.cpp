@@ -3591,8 +3591,9 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 
 	/* bshader.bat compiles four pixel shaders for ps_3_0, the room shader at
 	 * 482 instruction slots, the model shader at 360, the glow shader at 483
-	 * and the water sheet's at 443 (500 with the depth texture, 491 in
-	 * RoomProbe's view variant), and the room shader's gloss variant
+	 * and the water sheet's at 360 (406 with the depth texture, 430 in
+	 * RoomProbe's view variant, 408 under the water; its foam's own draw
+	 * 251 and 293, RiverPS 435), and the room shader's gloss variant
 	 * beside them at 502 (hd_room_gloss_ps.inc). The ps_3_0 figure is
 	 * MaxPixelShader30InstructionSlots - PS20Caps is the ps_2_x one - and
 	 * shader model 3 sets its floor at D3DMIN30SHADERINSTRUCTIONS, 512. fxc
@@ -3600,7 +3601,7 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	 * at 524 slots without a warning. The shaders stay inside the guarantee
 	 * only because of their own size, so anyone who grows one has to read
 	 * the "instruction slots used" line of its .inc. The vertex shaders are
-	 * not checked here; the room's, at 412, and the water sheet's, at 206,
+	 * not checked here; the room's, at 412, and the water sheet's, at 287,
 	 * lie inside the 512 slots vs_3_0 guarantees.
 	 * A device that answers less than 512 could fail CreatePixelShader below
 	 * with nothing but an HRESULT, so it is refused here with a reason in

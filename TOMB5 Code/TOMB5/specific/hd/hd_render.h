@@ -1095,8 +1095,9 @@ void HDRenderWaterLara(int inWater, float x, float z);
  * `mark_intz=` and `sheet_intz=` whether the depth-stencil surface set at
  * the mark and at the first sheet draw was the sheets' INTZ surface (0/1),
  * `objects=` the objects drawn in the bracket, `sheets=` the sheet draws
- * and `split=` the ranges drawn twice for the mark, `late=` the triangles
- * HDRenderWaterMarkTriangles marked. Called before
+ * and `split=` the foam draws the mark split by the stencil, `late=` the
+ * triangles HDRenderWaterMarkTriangles marked, `foam=` the foam's own draws
+ * (hd_room.hlsl, "the foam's draw"). Called before
  * HDRenderWaterMarkBegin, which starts the next frame's count.
  *
  * HDRenderWaterMarkTriangles marks what the classic path draws outside the

@@ -283,8 +283,9 @@ float4 gMotion : register(c13);
  * heights and directions are chosen per class, the speeds follow deep-water
  * dispersion, omega = calm * sqrt(g k) with g = 4300 units/s^2 (9.81 m/s^2
  * at 2.3 mm a unit), and a channel adds its current. The sheet sums eight
- * such rows, the first four these, with a slow envelope on each
- * (WaveSum8).
+ * such rows with a slow envelope on each, turned into a fan of directions
+ * and broken into short crests along their own crest lines (WaveSum8,
+ * CrestEnv); the remaster's marked art keeps the four straight rows.
  *
  *   the swell     a marked surface rises by the class's share of that
  *                 height, tapered at the shore - a sea and a channel only
@@ -2695,8 +2696,8 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	 * surface at rest over 64 units, unclipped, 5 the bank foam's patches'
 	 * strength in green over the sheet, unclipped. One block for the five,
 	 * in a variant of its own (HD_WATER_VIEW, the depth variant with this
-	 * block): the game never draws a view, and the slots it costs are the
-	 * foam's body's in the variant it does draw. */
+	 * block): the game never draws a view, and the variant it does draw
+	 * does not carry the block's slots. */
 	if (gWaterStage.z > 0.5f)
 	{
 		const float m = gWaterStage.z;

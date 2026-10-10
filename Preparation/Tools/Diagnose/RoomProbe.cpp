@@ -1862,6 +1862,8 @@ static void LifeBuild(const char* root, const char* stem)
 			HDModelBounds(0x7800 + k, box, box + 3) ? 1 : 0;
 		g_life_pool.height[k] = g_life_pool.has[k] ?
 			HDLifeHeight(kHDLifeKinds[k].rest, box, box + 3) : 0.0f;
+		g_life_pool.reach[k] = g_life_pool.has[k] ?
+			HDLifeReach(kHDLifeKinds[k].rest, box, box + 3) : 0.0f;
 
 		if (g_life_pool.has[k])
 		{

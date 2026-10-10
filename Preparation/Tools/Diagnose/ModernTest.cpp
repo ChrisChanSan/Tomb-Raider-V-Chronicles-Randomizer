@@ -17241,7 +17241,7 @@ static void life_drift()
 	HDLifeBody b = life_body(3, 3, 2048);
 	float x = 1536.0f, z = 1536.0f;
 
-	ok(HDLifeStep(b, &x, &z, 100.0f, 50.0f) == HD_LIFE_MOVED &&
+	ok(HDLifeStep(b, &x, &z, 100.0f, 50.0f, kHDLifeEdge) == HD_LIFE_MOVED &&
 		x == 1636.0f && z == 1586.0f,
 		"life drift: a step in open water is taken whole", (long)x, 1636);
 
@@ -17278,20 +17278,28 @@ static void life_bank()
 	HDLifeBody b = life_body(3, 1, 2048);
 	float x = 3072.0f - kHDLifeEdge - 10.0f, z = 512.0f;
 
-	ok(HDLifeStep(b, &x, &z, 50.0f, 0.0f) == HD_LIFE_BLOCKED &&
+	ok(HDLifeStep(b, &x, &z, 50.0f, 0.0f, kHDLifeEdge) == HD_LIFE_BLOCKED &&
 		x == 3072.0f - kHDLifeEdge - 10.0f,
 		"life bank: a step nearer than the edge to a dry square is refused",
 		(long)x, 3072 - (long)kHDLifeEdge - 10);
 
 	x = 3072.0f - kHDLifeEdge - 10.0f;
 	z = 512.0f;
-	ok(HDLifeStep(b, &x, &z, 50.0f, 30.0f) == HD_LIFE_SLID && z == 542.0f,
+	ok(HDLifeStep(b, &x, &z, 50.0f, 30.0f, kHDLifeEdge) == HD_LIFE_SLID &&
+		z == 542.0f,
 		"life bank: pressed against a bank a float slides along it",
 		(long)z, 542);
 	ok(!HDLifeOpen(b, 512.0f, 1024.0f - kHDLifeEdge + 1.0f, kHDLifeEdge) &&
 		HDLifeOpen(b, 1024.0f, 512.0f, kHDLifeEdge),
 		"life bank: open water ends an edge's width before a dry square and "
 		"runs on over a wet one", 0, 0);
+
+	const float bmin[3] = { -163.0f, -302.0f, -163.0f };
+	const float bmax[3] = { 163.0f, 56.0f, 163.0f };
+
+	ok(fabsf(HDLifeReach(1, bmin, bmax) - 242.1f) < 0.1f,
+		"life bank: a barrel on its side keeps half its diagonal, 242, "
+		"from a bank", (long)HDLifeReach(1, bmin, bmax), 242);
 
 	// A corner of one square, the current pressing into it.
 	HDLifePool p = {};
@@ -17395,6 +17403,11 @@ static void life_flee()
 		fabsf(moved - 2.0f * kHDLifeSwim * 0.1f) < 0.5f,
 		"life flee: fleeing, the school swims at twice its speed for its "
 		"time", (long)moved, (long)(2.0f * kHDLifeSwim * 0.1f));
+
+	ok(!HDLifeDeepAt(life_body(1, 6, 2048), 200.0f, 3000.0f) &&
+		HDLifeDeepAt(life_body(1, 6, 2048), 512.0f, 3000.0f),
+		"life flee: a school's middle needs deep water its ring's reach "
+		"round it", 0, 0);
 
 	b = life_body(1, 1, kHDLifeDeep - 1);
 	ok(HDLifeDeepCount(b) == 0,

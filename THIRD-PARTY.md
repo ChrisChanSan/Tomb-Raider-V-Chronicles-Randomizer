@@ -1301,6 +1301,49 @@ water surface", carries the tables.
     subtraction, the cells standing in both pictures it compares. The
     second bend stays.
 
+170. **The projected shadow's arrival** - where the shadow starts to run its
+    strength is multiplied by 3f^2 - 2f^3 of f = t / 0.25 game seconds, and
+    every blob that gives way to it is drawn meanwhile with its alpha byte
+    times 1 minus that (`hd_shadow.h`, `HDShadowPresence`,
+    `HDShadowArrive`, `HDShadowBlobAlpha`). OWN, a design of this project:
+    a cross-fade on the game clock the soft motion uses; the curve is the
+    one the room shader softens a fog bulb's rim with; 0.25 seconds is a
+    free choice (7.5 frames at 30 a second, half the time constant of the
+    lights' blending), not yet seen in the game. DATA: in ModelProbe
+    (`-shadowpresence`, ANDREA1 room 0) the darkening at 1/60 s steps is
+    the presence within the 8-bit rounding, and the picture at 0.25
+    seconds is the picture without the switch, bit for bit.
+171. **The depth terms a block below the feet** - `HD_SHADOW_FULL` 512 and
+    `HD_SHADOW_END` 1024 below her lowest node, `HD_SHADOW_OTHERS_FULL`
+    1024 and `HD_SHADOW_OTHERS_END` 1280 behind a creature's tap along the
+    light. DATA: counted on the thirteen levels' classic faces with
+    ModelProbe `-shadowsurvey` (23,063 floor sectors as her place, rays
+    along the fixed light, every face behind the first that the terms
+    still weigh): the weight laid through a wall fell by 89 per cent and
+    through a floor by 54 against 1024 / 2048 (a creature's by 99 and 74
+    against 1536 / 2560), the first faces below her feet lost 28 per cent;
+    the creatures' heights from the rest pose's box
+    (`-surveyslots`, `Tr5Level::frameBounds`).
+172. **The bulbs' haze given back** - every receive variant writes the
+    factor in alpha and the fog bulbs' haze times 1 minus it in colour, and
+    the receive blends ONE / SRCALPHA, so a pixel is the surface times the
+    factor plus the haze (`hd_shadow_receive.hlsl`, `ReceiveOut`). OWN, a
+    design of this project out of the room and model shaders' own
+    composition (texel times light plus the bulbs' colour); the bulb term
+    is the room shader's `BulbIntensity`, copied. DATA: in a bulb in front
+    of her shadow (ModelProbe `-bulb`, ANDREA1 room 0) the shadowed floor
+    kept 0.575 of its brightness before and keeps 0.934 now; without a
+    bulb every picture of the earlier rounds' sets is unchanged.
+173. **The survey of the shadow behind the first face** - ModelProbe
+    `-shadowsurvey`: places on every floor sector, three columns of the
+    body, a ray every 32 units of height along the fixed light,
+    Moeller-Trumbore against the level's own room faces, the first face as
+    the receiver and every weighted face behind it counted, through a
+    floor when the first face's normal is within 60 degrees of vertical.
+    OWN, a procedure of this project from general geometry; the 0.1 weight
+    called visible (0.034 of a pixel's colour at the fixed light's
+    darkness) is a free choice.
+
 ## Credited, but not contained here
 
 trview (chreden), TRmod (b122251), TR Viewer (E. Popov) and Tomb Raider

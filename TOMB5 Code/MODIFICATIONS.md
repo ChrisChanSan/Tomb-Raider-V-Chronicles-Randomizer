@@ -11585,6 +11585,143 @@ sets stay comparable.
 
 **Commits.** `3aeb924`, `712a1f3`.
 
+**The crests placed by a hash, after the twelfth play test.** Asked for after the
+twelfth play test, with a picture of Lara swimming on ANDREA2's sewer canal seen from
+above and behind her, about 55 degrees down, a crop of it and four photographs of real
+water (reference pictures supplied for this project, not in the repository): the waves
+keep to a square of their own, a constant pattern over the water, very noticeable; the
+pattern is made of many quadrilaterals broken by squeezes; the photographs are the kind
+of look wanted. In the picture the water round a walkway's corner is covered with knots
+standing in quadrilaterals about a tenth of the picture wide, swirled together in
+places. The photographs, in words: a field of wind ripples - countless short crests one
+to three wavelengths long, nearly parallel within a patch, staggered like bricks, the
+patches turned a little against each other, no line longer than a few wavelengths;
+chop with sharp irregular crests, no two alike, its highlights broken into short
+streaks; dark water with soft criss-crossing ripples, scaly, never a straight line and
+never one cell twice; fine scaly chop. The far look of the canal at eye level stays as
+accepted, and the crests are still to come from varying directions, fitting the current.
+
+The cause. The quadrilaterals are not a square of the level's grid: seen from 2400 units
+above, the canal's light repeats at no 1024-unit step. They are the beat of the long
+rows: where two straight rows a few tens of degrees apart cross, their crests coincide
+along a lattice whose cell is the difference of their wave vectors - for the channel's
+rows 851 units (420 and 311), 411 (420 and 230) and 337 (311 and 230) -, and the
+highlight and the reflection's lobe light those coincidences as knots. Counted in the
+owner's picture (the band-passed brightness of the water left of Lara, its
+autocorrelation): cells 188 and 160 pixels of 1600, about 330 and 280 units at his
+distance - the 337 and 411 beats, the 851 one twice that, his square. The pieces of the
+eleventh part did not break it: every piece kept its row's exact direction and phase, so
+the knots stood where the straight rows put them. The squeezes are `WaveBend`'s two
+periodic pushes: RoomProbe at the owner's view (ANDREA2 19 "2452 3514 2240 -6 52",
+field of view 80) with `crest 0` shows the straight rows' lattice at its clearest, as
+drawn it shows the knots swirled, and a probe build with both pushes out shows the pieces
+standing in rows of dashes - the lattice without its squeezes; with the reflection's
+stand-in pattern held at its mean nothing changes.
+
+What changed (`hd_room.hlsl`, `hd_render.cpp`). Randomness comes from a hash of whole
+cell numbers, never from a curve: `CellHash` takes the fractional parts of two sums of
+products of two indices with multipliers n / 4096 - exact in single precision, so it
+repeats after exactly 4096 cells and nowhere before, and precise anywhere in a level
+because it is given cell numbers, not places. Each row of a sheet's eight is cut into
+cells: across, three crests from trough to trough, numbered by the crests' own count -
+the processor wraps a row's phase to three turns and hands the shader the whole cells
+it has run (`kCrestAcross`, kept modulo 4096, `kCrestOffset` 977 apart from row to
+row), so a crest keeps its cell while it travels; along, three of the row's wavelengths
+(`crestLen` 3, at most `kCrestReach`), every other cell across moved along by half a
+cell, so the cells stand like bricks. The hash of a cell gives its piece, a short train
+of crests: a height of 0.4 to 1 times `kCrestGain` (6), a length of 1.5 to 3
+wavelengths at a place in the cell, a lean of up to about 15 degrees (0.8 of a turn over
+the cell, `HD_CREST_LEAN`) and a shift of up to 0.1 of a turn. The piece is the row's own
+curve under two windows - along the piece and across the cell, each the smoothstep of a
+tent, both 0 with their slopes at the cell's edges -, the lean and shift a shear of the
+phase under the same windows (`CrestRows`); across, the middle crest weighs fully and
+its two neighbours a quarter. No sine is evaluated beyond the row's own curve, and the
+slope is exact for the pieces as drawn (checked against the numerical gradient on a
+1024-square grid in a script: largest difference 0.002 against slopes up to 0.19). The
+squeeze is one push along a value noise of the same hash (`WaveBend`): cells 1.5 of the
+longest wavelength wide, along that row's direction, by up to 0.3 of its wavelength
+(`kBendPush`), drifting 0.031 and -0.023 cells a second. With `crest 0` the pieces and
+the squeeze are gone: the straight rows, unbent. The two slow curves over the pieces,
+their drift along the crest and both periodic pushes are gone; the fan stays. The rows'
+phases and heights go to the shaders four to a register (c156 - c159, vertex c175 -
+c178), which spares gathering them. Where the slots or the time do not stretch, the
+pieces keep no lean and shift: `RiverPS` (which also takes no squeeze), the underside's
+and the views' variants and the foam's draw (0.02 ms dearer with the lean over a screen
+of sea). `WaterVS`'s swell takes the same pieces at a gain of 1 (`kCrestSwellGain`):
+at 6 a long row's trough sank ANDY3's pond under the ground beside the island.
+
+The numbers and their reasons. The cell three crests across: one crest a cell drew every
+piece as a round bump, the sheet pitted from above (the owner's view and a numerical
+model of the sum). No cell left empty: with a sixth empty the water showed flat
+stretches with single dimples. The gain: 4.49 keeps a row's mean square (0.52 the
+heights', 0.258 and 0.371 the two windows'); at 4.49 the pieces read faint against the
+floor seen through the water, 6 by eye. The lengths, the lean, the shift, the bricks'
+half cell, the squeeze's cell, push and drift are free choices, set by eye on the
+round's RoomProbe pictures. The hash's constants passed a count on 128 x 128 cells at
+three places up to (4000, 6000): even over 64 bins (chi square 41 to 82 on 63 degrees
+of freedom), neighbours correlated by under 0.03, the spectrum flat (its largest bin 8
+to 14 times the mean); a sine hash of the same cells kept an eighth of its values
+distinct.
+
+**Measured.** Slots, fxc /O3, `aed63ba` and after: `WaterVS` 321, 386; `WaterPS` 399,
+461; depth 446, 508; view 472, 494; under 448, 470; the foam's draw 285, 325 and 327,
+367; `RiverPS` 490, 482. RoomVS, RoomPS and its gloss variant, GlowPS, FootPS, the model
+and shadow shaders keep their bytecode (13 of 21 `.inc` identical apart from the stamp
+lines). GPU, 2560 x 1440, three runs, sheets, foam, copy and rivers together: the
+full-water view 0.359 to 0.361 ms before, 0.436 to 0.438 after; the view over the pond
+0.403 to 0.405 before, 0.486 to 0.490 after - 0.08 ms more, of it about 0.03 the
+sheet, 0.05 the foam's draw reading the pieces for its whitecaps, 0.01 the river.
+
+The lattice measure of this part, D: per 192-pixel tile of the surface light (the
+picture with `bend 0` less the one with `waves 0`, high-passed), the share of its power
+within 21 degrees of its two strongest directions, 75th percentile; a field with no
+direction of its own gives about 29 (the reference: every tile's power spread over
+random directions). At the owner's view at 3 seconds: `crest 0` 82.8, `aed63ba` 73.8,
+after 63.3; over 0 to 12 seconds at most 75.7 before, 66.5 after. The canal at 45
+degrees (N1, ANDREA2 19 "1900 3300 1000 15 50") 75.1 / 64.6, from above (N3, "2350 3600
+400 10 60") 80.5 / 64.5, the fountain hall (N4, ANDREA2 231 "2500 -1000 4100 90 42")
+77.9 / 75.2, `crest 0` there 79.8, 83.6, 88.9. D stays far over the reference: a sheet
+seen at a slant, with its rows in a fan, keeps preferred directions; it does not see
+the knots' period, only their straight lines. Beside it P, the tenth part's share of
+the six strongest bins on the picture itself, 75th percentile, `aed63ba` / after at 1,
+3 and 5 seconds: the owner's view 15.9 / 13.3, 16.4 / 13.1, 16.7 / 13.8 (series maximum
+17.1 / 15.2); N1 14.9 / 11.7, 15.3 / 12.2, 15.0 / 12.3; N3 14.3 / 12.0, 14.3 / 11.9, 14.0
+/ 11.7; N4 10.3 / 9.6, 10.6 / 9.7, 10.8 / 9.6; the far look at eye level (N2, "2300
+4450 0 3 8") 18.7 / 19.4, 18.1 / 18.4, 21.4 / 20.4. The tenth part's views at 3 seconds:
+the bridge over the pond 17.2 / 15.4, the canal at 35 and at 7 degrees 7.4 / 6.9 and
+14.9 / 14.8, the pond from above 11.8 / 10.7. The fifteen test cameras at 960 x 540: A1
+7.0 / 8.0, A2 5.2 / 7.2, A3 4.1 / 4.7, B1 8.0 / 8.6, B2 9.7 / 9.4, C1 15.6 / 11.8, C2 9.5
+/ 10.0, C3 16.6 / 18.6, C4 14.4 / 14.5, D1 6.1 / 6.2, D2 8.0 / 7.0, E2 9.7 / 9.3 - the
+basin from its rims and the sea's views a little higher, their chop finer and sharper.
+The standing pattern of the owner's view over 0 to 12 seconds (per pixel the time's
+mean of the high-passed brightness): spread 4.75 before, 5.13 after, against 7.89 and
+8.18 for a single picture's - the floor's cobbles seen through the water, the same in
+both.
+
+The pond's edge (twelve views of ANDY3's pond at 1, 3 and 5 seconds, the pixels where
+the sheet lies under the ground): 86,091 over the 36 pictures before, 14,783 after; the
+most in one picture 15,689 before, 9,237 after. The sweep: 565 squares, 56 bodies, 118
+twins as before; all 56 body lines end ` crest=1.00`.
+
+**Checked.** The classic path 3 of 3 md5-identical to `8691e82` (ANDREA2 231, JOBY2 66,
+ANDY3 34, `-classicroom` and `-classiconly`, INTZ bound); the fifteen cameras with
+`-hdwater 0` 15 of 15 identical to the fix round's parity set; every changed pixel of
+the fifteen cameras lies on the water. `ANDREA2 19 - crest 0` gives the straight rows,
+unbent - the lattice at its clearest -, and `bend 0` the floor seen unbent, its meaning
+unchanged (it never switched the squeeze). A crest keeps its cell across the phase's
+wrap: the owner's view rendered every 0.05 seconds from 2 to 3 seconds changes by 7.35
+to 7.61 levels a step, no jump. The suites (ModernTest 14721, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: the swimming view, the near views, the far look to
+confirm, the pond, the basin's busier chop; the gain of 6 and the lean are set on
+RoomProbe pictures. The cost, 0.08 ms at 2560 x 1440: the foam's draw could read the
+straight rows' heights for its whitecaps (0.05 ms) if the owner finds no difference. A
+river's sheet is bent by `WaterVS` and lit unbent. Stage 3, light shafts, the HD dive
+splash and the fish tank's spray stay open.
+
+**Commits.** `48d902b`, `9d68ecb`, `054b59f`, `3eb1f74`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

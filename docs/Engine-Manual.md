@@ -1806,21 +1806,26 @@ it.
   height: there a row of class `none` is the way. With *HD water* off neither
   the copy nor the depth texture is made.
 - **The water's life.** The waves of a sheet are eight rows, long and short,
-  and no row runs as one straight crest: each is a train of short crest
-  pieces, about two of its own wavelengths long and never more than a square
-  and a half, that swell and fade along the crest and wander slowly along it,
-  with the next piece beside them - no two of a row of one length, and the
-  pieces of neighbouring crests out of line. The rows lie in a fan round the
-  body's own direction - the longest on it, the shortest widest: a basin's
-  spread round nearly every direction, as ripples come from all round a
-  fountain, a channel's mostly across the canal, a sea's and a river's
-  within about 70 degrees either way of their direction - and their crests are bent on two
-  scales, a slow one and one of a couple of wavelengths, so no two rows
-  cross into a lattice of diamonds; the highlight follows the waves alone,
-  with no pattern of its own. Each row also swells and fades on its own
-  slow cycle of 8 to 15 seconds, so the water breathes and never settles
-  into one pattern; a sea breathes deepest, a basin least. `crest 0` in
-  `hd_water.txt` gives a body the straight rows back. Seen flat - at eye level, or
+  and no row runs as one straight crest: each is broken into short trains of
+  crests, one to three of its own wavelengths long, three crests deep - the
+  middle one strong, its neighbours weaker - and never more than a square and
+  a half; where a train stands, how long and high it is, how far it leans off
+  its row (up to about 15 degrees) and how far it is shifted is decided by a
+  hash of its place, so no two trains of a row are alike, neighbouring ones
+  stand staggered like bricks and nothing repeats across a level. The rows
+  lie in a fan round the body's own direction - the longest on it, the
+  shortest widest: a basin's spread round nearly every direction, as ripples
+  come from all round a fountain, a channel's mostly across the canal, a
+  sea's and a river's within about 70 degrees either way of their
+  direction -, and the crests are squeezed together and drawn apart along a
+  smooth random field a few wavelengths wide, so no two rows cross into a
+  lattice of quadrilaterals; the highlight follows the waves alone, with no
+  pattern of its own. On a river, seen from under the water and in the foam's draw
+  the trains do not lean, and a river's crests are not squeezed. Each row
+  also swells and fades on its own slow cycle of 8 to 15 seconds, so the
+  water breathes and never settles into one pattern; a sea breathes
+  deepest, a basin least. `crest 0` in `hd_water.txt` gives a body the
+  straight rows back. Seen flat - at eye level, or
   swimming - the waves are drawn up to three times steeper (a basin three, a
   channel two, a sea as it is), and the fine waves whose crests run toward the
   eye are kept instead of fading out with the distance, so the water has a
@@ -2021,11 +2026,12 @@ it.
   key leaves it as it is. `ANDY3 73 - clip 8` gives the pond the edge every
   other body has. `crest <s>` (0 to 1) sets how far the row's bodies' waves
   are short crests in a fan (*The water's life*): 1, what a body without
-  the key draws, changes nothing, 0 gives the straight rows that cross into
-  a lattice, and between the two the fan, the pieces and the second bend
-  come in by that share - `ANDY3 34 - crest 0` takes the pond and
-  ANDY3's streams back to the straight rows, to compare in the game; a
-  value over 1 is a line that cannot be read.
+  the key draws, changes nothing, 0 gives the straight rows, unsqueezed,
+  that cross into a lattice, and between the two the fan, the trains of
+  crests, their lean and the squeeze come in by that share -
+  `ANDY3 34 - crest 0` takes the pond and ANDY3's streams back to the
+  straight rows, to compare in the game; a value over 1 is a line that
+  cannot be read.
   No file means the engine's own rows alone.
 - **`WATERLOG` in the log.** With `-log`, every level writes one `WATERLOG
   level=` line - the option, the section, the water squares and those drawing a

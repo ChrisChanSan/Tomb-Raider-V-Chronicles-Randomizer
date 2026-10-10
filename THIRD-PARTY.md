@@ -1267,7 +1267,9 @@ water surface", carries the tables.
     views. DATA: at 0.3 along, pieces stretched to three times their mean
     drew long streaks on ANDY3's pond (the bridge's view 23.0 % against
     18.5 %); with the four shortest rows straight the lattice came back
-    (the canal close, 45 degrees down: 15.1 % against 11.1 %).
+    (the canal close, 45 degrees down: 15.1 % against 11.1 %). The pieces
+    are placed by a hash since entry 142: the envelope, its two slow
+    curves and the drift along the crest are gone; the fan stays.
 140. **The foam in a draw of its own** - the sheet's foam (the bank foam,
     its patches, the waterline, the whitecaps and the foam's body) is
     drawn in a second premultiplied draw of the same triangles over the
@@ -1299,7 +1301,61 @@ water surface", carries the tables.
     the dots' period and direction in those pictures match the cells'
     (within 10 % and 3 degrees), and the measure's gain was partly its own
     subtraction, the cells standing in both pictures it compares. The
-    second bend stays.
+    second bend stays. Both of the sheet's pushes - the slow one and the
+    second - give way to one push along a value noise of the cells' hash
+    of entry 142 (`WaveBend`): cells 1.5 of the longest wavelength wide,
+    along that row's direction, by up to 0.3 of its wavelength times the
+    body's `crest`, drifting 0.031 and -0.023 cells a second; RiverPS
+    takes none, RoomVS's `WaveSum` keeps its own slow push. OWN, the same
+    design with a non-periodic field (value noise: a hash at a grid's
+    corners blended smoothly, a common graphics idiom); the scale, push
+    and drift are free choices, set by eye on the round's RoomProbe
+    pictures. DATA: with every push out (a probe build of `aed63ba`) the
+    owner's swimming view shows the pieces standing in rows of dashes -
+    the periodic pushes were the swirls and squeezes, and their periods
+    brought them back.
+142. **The crests placed by a hash** - each of a sheet's eight rows is
+    cut into cells three crests across (from trough to trough, counted
+    by the crests' own number, which the processor keeps fixed as a
+    crest travels by handing each row the whole cells its phase has run,
+    `kCrestAcross`, `kCrestOffset`) and three of its wavelengths along
+    (`crestLen`, at most `kCrestReach`), every other cell across moved
+    along by half a cell; a hash of a cell's two numbers (`CellHash`:
+    the fractional parts of two sums of products of the indices with
+    multipliers n / 4096, crossed) gives its piece a height of 0.4 to 1
+    times `kCrestGain` (6), a length of 1.5 to 3 wavelengths at a place
+    in the cell, a lean of up to about 15 degrees and a shift of up to
+    0.1 of a turn; the piece is the row's curve under two smoothstep
+    windows, along the piece and across the cell, with the shear under
+    the same windows, the slope exact (`CrestRows`). The phases and
+    heights of the rows go to the shaders four to a register (c156 -
+    c159, vertex c175 - c178). The river, the underside, the views'
+    variant and the foam's draw take the pieces without the lean and the
+    shift; `WaterVS`'s swell takes them at a gain of 1
+    (`kCrestSwellGain`), never deeper than the straight rows. OWN,
+    a design of this project from general graphics knowledge:
+    randomness from a hash of whole cell numbers (a common graphics idiom)
+    in place of periodic curves, short wave trains (a wave packet's
+    finite extent) in place of endless rows; the cell's size, the
+    lengths, heights, lean, shift and gain are free choices, set by eye
+    on the round's RoomProbe pictures, the gain a third over the 4.49
+    that keeps a row's mean square (0.52 x 0.258 x 0.371, the heights'
+    and the two windows' mean squares). DATA: the hash counted on 128 x
+    128 cells at three places up to (4000, 6000): even over 64 bins (chi
+    square 41 to 82 on 63 degrees of freedom), neighbours correlated by
+    under 0.03, a flat spectrum (largest bin 8 to 14 times the mean); a
+    sine hash of the same cells kept an eighth of its values distinct. The
+    lattice the owner saw (reference pictures supplied for this project,
+    not in the repository) is the beat of the long rows - the difference
+    of two wave vectors, 337, 411 and 851 units for the channel's 311,
+    230 and 420 -: its cells in his picture, counted by autocorrelation,
+    188 and 160 pixels, about 330 and 280 units at his distance. Cells
+    one crest across drew round bumps, a pitted sheet; a sixth of the
+    cells empty left flat stretches with single dimples (RoomProbe
+    pictures of the owner's swimming view, a script of this round). The
+    swell at the gain of 6 sank ANDY3's pond under the ground beside the
+    island: 37,416 hole pixels in one of the twelve views of the holes
+    count against 9,237 at most at 1.
 
 ## Credited, but not contained here
 

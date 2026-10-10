@@ -8864,9 +8864,9 @@ namespace
 	 *            "the crests" below); `angle` stays the straight table that
 	 *            RoomVS moves the remaster's marked art with and that a
 	 *            row's `crest 0` gives the sheet back
-	 * crestLen   a crest piece's length, wavelengths of its own row
-	 * crestDepth how deep the pieces' envelope runs, 0..1 of a row's
-	 *            height either way */
+	 * crestLen   a crest cell's length, wavelengths of its own row (a
+	 *            piece fills half to all of it, see "the crests")
+	 * crestDepth the pieces' share of a row, 0..1: 0 the straight rows */
 	struct HDWaterClass
 	{
 		const char* name;
@@ -8945,7 +8945,7 @@ namespace
 			0.30f,
 			0.6f, 0.0f, 0.0f, 512.0f, 4000.0f, 0.0f, 0.0f, 1.0f, 0.0f,
 			1.0f, 90.0f, 0.8f, 55.0f, 40.0f, 0.3f, 3.0f,
-			1.5f, 2.0f, 0.8f },
+			1.5f, 3.0f, 1.0f },
 		{ "channel", { 420.0f, 230.0f, 120.0f, 64.0f, 311.0f, 166.0f, 88.0f,
 			41.0f },
 			{ 3.0f, 1.8f, 0.9f, 0.45f, 1.86f, 1.02f, 0.51f, 0.23f },
@@ -8953,7 +8953,7 @@ namespace
 			0.35f,
 			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
 			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f,
-			1.2f, 2.0f, 0.8f },
+			1.2f, 3.0f, 1.0f },
 		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f, 1025.0f, 481.0f, 222.0f,
 			98.0f },
 			{ 38.0f, 16.0f, 7.0f, 2.8f, 19.75f, 8.47f, 3.55f, 1.47f },
@@ -8961,7 +8961,7 @@ namespace
 			0.50f,
 			1.0f, 0.0f, 1.0f, 1024.0f, 900.0f, 0.85f, 300.0f, 1.5f, 0.6f,
 			0.5f, 90.0f, 0.5f, 22.0f, 200.0f, 0.6f, 1.0f,
-			1.2f, 2.0f, 0.8f },
+			1.2f, 3.0f, 1.0f },
 		{ "river", { 300.0f, 187.0f, 117.0f, 73.0f, 237.0f, 149.0f, 93.0f,
 			47.0f },
 			{ 2.4f, 1.6f, 1.0f, 0.56f, 2.0f, 1.3f, 0.76f, 0.36f },
@@ -8969,7 +8969,7 @@ namespace
 			0.35f,
 			0.2f, 240.0f, 0.3f, 512.0f, 1500.0f, 0.0f, 300.0f, 1.5f, 0.0f,
 			1.0f, 70.0f, 0.4f, 55.0f, 40.0f, 0.0f, 2.0f,
-			1.2f, 2.0f, 0.8f },
+			1.2f, 3.0f, 1.0f },
 	};
 
 	/* The rows' slow envelope (water_rows_now): a row's height swells and
@@ -8984,23 +8984,31 @@ namespace
 	const float kWaterGolden = 2.3999632f;	// radians, 2 pi (1 - 1 / phi)
 
 	/* The crests. A sum of a few straight waves crossing at fixed angles
-	 * draws a lattice of diamonds: its crests run straight over many
-	 * wavelengths, and where two rows of like height cross, the highlight
-	 * and the reflection's lobe light the same cells again and again. So
-	 * the sheet's rows are short-crested and spread:
+	 * draws a lattice: its crests run straight over many wavelengths, and
+	 * where two long rows a few tens of degrees apart cross, the highlight
+	 * and the reflection's lobe light the cells of their beat - the
+	 * difference of their wave vectors, 337 to 851 units for the
+	 * channel's 420, 311 and 230 - again and again, quadrilaterals a
+	 * tenth of the picture wide from a swimmer's view. A pattern made of
+	 * periodic curves only moves that lattice about. So the sheet's rows
+	 * are cut into pieces placed by a hash and spread:
 	 *
-	 * the pieces - every row's height runs along its own crest under an
-	 * envelope 1 + C W(e), e the place along the crest over crestLen of
-	 * the row's wavelengths (at most kCrestReach units), so a crest is a
-	 * piece of about that length, swelling and fading, the next piece
-	 * beside it; C the class's crestDepth; the envelope's phase starts
-	 * at the golden angle times
-	 * the row (no two rows' pieces line up) and drifts along the crest by
-	 * kCrestDrift turns a second, one way on the even rows and the other
-	 * on the odd, so the pieces wander along their crests; two slow
-	 * curves fixed in the world stretch and squeeze the pieces along a
-	 * crest and move them along from one crest to the next
-	 * (hd_room.hlsl, CrestEnv), so they stand at no fixed step;
+	 * the pieces - every row's crests are cut into cells, kCrestAcross
+	 * crests a cell across and crestLen of the row's wavelengths (at most
+	 * kCrestReach units) along, staggered by half a cell from one cell to
+	 * the next across; the hash of a cell's two numbers gives its piece -
+	 * a short train of crests - its height, length, place, lean and shift
+	 * (hd_room.hlsl, CellHash and CrestRows), so no two pieces of a row
+	 * stand at one distance and nothing repeats short of the hash's 4096
+	 * cells. A crest keeps its cell while it travels: the processor hands
+	 * each row the whole cells its phase has run (kCrestOffset apart from
+	 * row to row, so no two rows count alike). C, the pieces' share, is
+	 * the class's crestDepth; the pieces' heights times kCrestGain;
+	 *
+	 * the squeeze - the place is pushed along a value noise of cells 1.5
+	 * of the longest wavelength wide by up to kBendPush of that wavelength
+	 * (hd_room.hlsl, WaveBend), so crests crowd and part and never the
+	 * same way twice;
 	 *
 	 * the fan - the rows ranked by wavelength, longest first, lie at
 	 * kWaterFan times the class's fan width round the body's own
@@ -9011,27 +9019,51 @@ namespace
 	 * within a quarter of the width of each other.
 	 *
 	 * A row's `crest s` (0 to 1) takes the body from the straight rows
-	 * (the `angle` table, s 0) to the fan (s 1) and scales the envelope's
-	 * depth and the crests' second bend (hd_room.hlsl, WaveBend) by s.
+	 * (the `angle` table, s 0) to the fan (s 1) and scales the pieces'
+	 * share and the squeeze by s; at 0 the rows are straight and unbent.
 	 *
-	 * The widths, the length, the depth and the drift are free choices,
-	 * set by eye on the round's RoomProbe pictures against the lattice
-	 * measure of the round (the share of the surface light's power in its
-	 * six strongest frequencies). Widths: basin 1.5 - a crest's line is
-	 * a direction modulo pi, so the basin's rows then lie round 171 of the
-	 * 180 degrees, ripples from all round a fountain -, channel, sea and
-	 * river 1.2: crests mostly across a canal, the wind's waves and a
-	 * river's pieces across and askew to the current, each spread over
-	 * about 70 degrees either way. 1.2 and 1.5 keep the rule above modulo
-	 * pi as well - no two crest lines within 0.30 (0.33), no mirror pair
-	 * within 0.15 (0.19); 0.64 for the sea drew its pieces as parallel
-	 * streaks, 1.6 and 2.4 broke the rule modulo pi. Length 2 wavelengths
-	 * and depth 0.8: at 3 and 0.7 the pieces still read as long streaks
-	 * at eye level. */
+	 * The widths, the cell's length, the share, the gain and the push are
+	 * free choices, set by eye on the round's RoomProbe pictures against
+	 * the lattice measures of the rounds (the share of the surface light's
+	 * power in its six strongest frequencies, and in two directions).
+	 * Widths: basin 1.5 - a crest's line is a direction modulo pi, so the
+	 * basin's rows then lie round 171 of the 180 degrees, ripples from all
+	 * round a fountain -, channel, sea and river 1.2: crests mostly across
+	 * a canal, the wind's waves and a river's pieces across and askew to
+	 * the current, each spread over about 70 degrees either way. 1.2 and
+	 * 1.5 keep the rule above modulo pi as well - no two crest lines within
+	 * 0.30 (0.33), no mirror pair within 0.15 (0.19); 0.64 for the sea drew
+	 * its pieces as parallel streaks, 1.6 and 2.4 broke the rule modulo
+	 * pi. A cell of 3 wavelengths holds a piece of 1.5 to 3; at 1.6 with
+	 * pieces of 0.6 to 1.6 and one crest a cell across the pieces were
+	 * round bumps, the sheet pitted. */
 	const float kWaterFan[8] =
 		{ 0.0f, 0.25f, -0.375f, 0.5f, -0.625f, 0.75f, -0.875f, 1.0f };
-	const float kCrestDrift = 0.05f;	// turns a second
-	/* The longest a piece gets, units: a sea's longest rows (1,500 and
+	/* The gain of the pieces' heights: a piece fills part of its cell -
+	 * along half to all of it, across its middle crest fully and the two
+	 * beside it by a quarter - at 0.4 to 1 of the gain, so at 1 the rows
+	 * would keep a twentieth of their mean square. 4.49 keeps it (0.52 the
+	 * heights' mean square, 0.258 the window's along over the lengths,
+	 * 0.371 across: 1 / sqrt(0.52 x 0.258 x 0.371)); 6, a third more, a
+	 * free choice set by eye on the round's RoomProbe pictures - at 4.49
+	 * the pieces read faint against the floor seen through the water. */
+	const float kCrestGain = 6.0f;
+	/* The same gain for WaterVS's swell, which lifts and sinks the sheet
+	 * itself: at 1 a piece rises and sinks no further than its straight row
+	 * does, so the sheet's edge keeps to the shallows as the clip and the
+	 * lift were set for. At 6 a long row's trough sank the pond's sheet
+	 * under the ground beside the island: of twelve RoomProbe views of
+	 * ANDY3's pond at 1, 3 and 5 seconds, the pixels where the sheet lies
+	 * under the ground, 37,416 in one picture at 6, 9,237 at most at 1. */
+	const float kCrestSwellGain = 1.0f;
+	/* How far the squeeze pushes at most, of the longest wavelength - a
+	 * free choice, set by eye on the round's RoomProbe pictures. */
+	const float kBendPush = 0.3f;
+	// Row i's crests are counted from i times this; odd, a free choice.
+	const double kCrestOffset = 977.0;
+	// The crests a cell holds across its row (hd_room.hlsl, CrestRows).
+	const double kCrestAcross = 3.0;
+	/* The longest a cell gets, units: a sea's longest rows (1,500 and
 	 * 1,025 units) at crestLen wavelengths would draw pieces longer than
 	 * most of its bodies are wide - ANDY3's pond is about six squares
 	 * across -, straight bands over the whole body again. A square and a
@@ -9428,8 +9460,8 @@ namespace
 		// RoomVS's four on the remaster's marked art: the straight table's.
 		float artRows[16];
 		float crest;		// the body's `crest`, 0..1
-		float crestLen;		// the pieces' length, wavelengths
-		float crestDepth;	// the envelope's depth times `crest`
+		float crestLen;		// the cells' length, wavelengths
+		float crestDepth;	// the pieces' share times `crest`
 		float phase0[8];	// each row's own start, radians
 		float groups;		// the envelope's depth (HDWaterClass)
 		float swell[4];		// gSwell
@@ -10601,7 +10633,8 @@ namespace
 
 	/* The sheet's rows at the clock `t`: all eight in the phase form
 	 * (kx, kz, phase, height) WaveSum8 reads - the phase omega t plus the
-	 * row's start, wrapped to one turn in double precision; the height
+	 * row's start, wrapped to kCrestAcross turns - one cell of crests
+	 * across (hd_room.hlsl, CrestRows) - in double precision; the height
 	 * times the row's envelope, 1 - e + e (0.5 + 0.5 sin(2 pi t / P + i
 	 * golden)) with e the class's depth and P the row's period
 	 * (kWaterGroupPeriod). `heights` is the sum of the eight heights now,
@@ -10617,14 +10650,14 @@ namespace
 			const float* r = look.rows + i * 4;
 			const double turn = 6.283185307179586;
 			const double ph = std::fmod((double)r[2] * t +
-				(double)look.phase0[i], turn);
+				(double)look.phase0[i], turn * kCrestAcross);
 			const double env = 1.0 - look.groups + look.groups * (0.5 +
 				0.5 * std::sin(turn * t / (double)kWaterGroupPeriod[i] +
 				(double)kWaterGolden * i));
 
 			out[i * 4 + 0] = r[0];
 			out[i * 4 + 1] = r[1];
-			out[i * 4 + 2] = (float)(ph < 0.0 ? ph + turn : ph);
+			out[i * 4 + 2] = (float)(ph < 0.0 ? ph + turn * kCrestAcross : ph);
 			out[i * 4 + 3] = (float)((double)r[3] * env);
 			*heights += out[i * 4 + 3];
 		}
@@ -14721,47 +14754,60 @@ namespace
 
 			g_device->SetPixelShaderConstantF(148, clip, 1);
 
-			/* c149 - c155, and the vertex side's c168 - c174, the crests
-			 * (hd_room.hlsl, "the crests"; read by WaterVS, WaterPS and
-			 * RiverPS): per four rows the envelope's step along world x
-			 * and z in turns a unit - the row's crest line (-kz, kx) over
-			 * |k| times the piece's length, crestLen wavelengths of
-			 * 2 pi / k or kCrestReach units, whichever is shorter - and
-			 * its phase now, in turns:
-			 * the row times the golden angle, drifting by kCrestDrift
-			 * turns a second, the odd rows the other way; then 1 - C, 2 C
-			 * and 24 C (C the envelope's depth times the body's `crest`)
-			 * and the second bend's push, 0.2 of the longest wavelength
-			 * times `crest` (1.2566 = 0.2 x 2 pi, over the longest row's
-			 * wave number in the shader). 0.2 is a free choice, set by
-			 * eye on the round's RoomProbe pictures. */
-			float crest[7 * 4];
+			/* c149 - c159, and the vertex side's c168 - c178, the crests
+			 * (hd_room.hlsl, CrestRows and WaveBend; read by WaterVS,
+			 * WaterPS and RiverPS): per four rows the step along the
+			 * crest in cells a unit along world x and z - the row's crest
+			 * line (-kz, kx) over |k| times the cell's length, crestLen
+			 * wavelengths of 2 pi / k or kCrestReach units, whichever is
+			 * shorter - and the number its cells across are counted from:
+			 * the whole cells (kCrestAcross turns) the row's phase has
+			 * run, which water_rows_now takes off, negated, plus
+			 * kCrestOffset times the row, modulo 4096, the cells' hash's
+			 * period - so a crest keeps its cell while it travels and no
+			 * two rows count alike; then 1 - C, C kCrestGain and C (C the
+			 * pieces' share, the class's crestDepth times the body's
+			 * `crest`) and the squeeze's push, kBendPush of the longest
+			 * wavelength times `crest`, over the longest row's wave number
+			 * (the shader takes it along that row's wave vector); last the
+			 * eight phases and the eight heights four to a register. The
+			 * vertex side takes kCrestSwellGain in place of kCrestGain. */
+			float crest[11 * 4];
+			float k0 = 1.0e-6f;
 
 			for (int i = 0; i < 8; i++)
 			{
 				const int at = (i < 4 ? 0 : 12) + (i & 3);
-				const double turns = (double)kWaterGolden * i /
-					6.283185307179586 + (i & 1 ? -1.0 : 1.0) *
-					(double)kCrestDrift * clock;
-				// The piece's length in units, at most kCrestReach.
+				const double turn = 6.283185307179586;
+				const double run = std::floor(((double)look.rows[i * 4 + 2] *
+					clock + (double)look.phase0[i]) / (turn * kCrestAcross));
+				const double from = std::fmod((double)kCrestOffset * i - run,
+					4096.0);
+				// The cell's length in units, at most kCrestReach.
 				const float k = sqrtf(rows[i * 4] * rows[i * 4] +
 					rows[i * 4 + 1] * rows[i * 4 + 1]);
 				const float own = look.crestLen * 6.2831853f /
 					(k > 1.0e-6f ? k : 1.0e-6f);
 				const float units = own < kCrestReach ? own : kCrestReach;
-				const float perTurn = k > 0.0f ? 1.0f / (units * k) : 0.0f;
+				const float perCell = k > 0.0f ? 1.0f / (units * k) : 0.0f;
 
-				crest[at] = -rows[i * 4 + 1] * perTurn;
-				crest[at + 4] = rows[i * 4 + 0] * perTurn;
-				crest[at + 8] = (float)(turns - std::floor(turns));
+				crest[at] = -rows[i * 4 + 1] * perCell;
+				crest[at + 4] = rows[i * 4 + 0] * perCell;
+				crest[at + 8] = (float)(from < 0.0 ? from + 4096.0 : from);
+				crest[28 + i] = rows[i * 4 + 2];
+				crest[36 + i] = rows[i * 4 + 3];
+
+				if (i == 0 && k > k0)
+					k0 = k;
 			}
 
 			crest[24] = 1.0f - look.crestDepth;
-			crest[25] = 2.0f * look.crestDepth;
-			crest[26] = 24.0f * look.crestDepth;
-			crest[27] = 1.2566371f * look.crest;
-			g_device->SetPixelShaderConstantF(149, crest, 7);
-			g_device->SetVertexShaderConstantF(168, crest, 7);
+			crest[25] = kCrestGain * look.crestDepth;
+			crest[26] = look.crestDepth;
+			crest[27] = kBendPush * 6.2831853f * look.crest / (k0 * k0);
+			g_device->SetPixelShaderConstantF(149, crest, 11);
+			crest[25] = kCrestSwellGain * look.crestDepth;
+			g_device->SetVertexShaderConstantF(168, crest, 11);
 
 			draw_sheet_range(r);
 

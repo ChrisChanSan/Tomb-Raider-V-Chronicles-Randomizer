@@ -924,6 +924,10 @@ struct HDRenderWaterBody
 	 * be left to the frame, units (WaterPS, "the clip"; a row's `clip`,
 	 * kWaterClip without one). */
 	int clip;
+	/* How much of its class's swell its sheet's vertices rise and fall by
+	 * (a row's `swell`, 1 without one; 0 lays the sheet at rest - the
+	 * waves stay in its pixels). */
+	float swell;
 };
 
 // What the level built, for its log line.

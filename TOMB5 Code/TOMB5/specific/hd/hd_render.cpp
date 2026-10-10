@@ -8834,47 +8834,63 @@ namespace
 	const int kWaterClip = 8;
 
 	/* The compiled bank rows: level and room, how far the sheets of every
-	 * body over that room stand over the water's top (the lift, units) and
-	 * their clip (units, see kWaterClip) - a row as hd_water.txt would say
-	 * it ('ANDY3 73 - lift 0 clip 0') that sets those two alone, applied
-	 * after the river rows and before the file, whose rows still win.
+	 * body over that room stand over the water's top (the lift, units),
+	 * their clip (units, see kWaterClip) and how much of the class's swell
+	 * their vertices take (1 the whole, 0 none) - a row as hd_water.txt
+	 * would say it ('ANDY3 73 - lift 0 clip 0 swell 0') that sets those
+	 * three alone, applied after the river rows and before the file, whose
+	 * rows still win.
 	 *
 	 * ANDY3's pond. The remaster's art lays its bank as a ramp of its
-	 * ground that leaves the water's top a third of a square inside the
-	 * water squares and climbs through their edge (the art's ground over
-	 * the pond's 224 shore points against the classic floor there: bank
-	 * points at the edge 15 to 443 units over the water, median 145), and
-	 * it bakes the ground under the water dark: the baked light of the
-	 * art's top triangle, sampled every 32 units over the pond, has a luma
-	 * of 67 at the median under the water's top, 130 over it inside the
-	 * water squares and 96 on the land within a square of them. The sheet
-	 * stands at the water's top, lift 0, as the reference pictures supplied
-	 * for this project show the water there. Its clip is 0: with 8 the
-	 * sheet was cut off the ground for its last 8 units under the water,
-	 * and along the whole shore that dark ground lay bare between the land
-	 * and the water (RoomProbe over the pebble beach east of the lower lobe,
-	 * the depth under the surface as grey: the pixels the clip took run
-	 * from the land's edge to where the ground lies 8 under). At 0 the
-	 * sheet ends where the depth test ends it, on the line where the ground
-	 * comes out of the water. The clip has nothing to spare there: no flat
-	 * triangle of a square's own group lies within one unit over to nine
-	 * under the surface over any of the pond's 24 squares (counted on the
-	 * .TRG), and no other body of the fifteen levels has such a ramp: their
-	 * edges are walls a click or more high or flat at the water. The row
-	 * names water room 73, the room under 20 of the pond's 24 squares: room
-	 * 34 holds the three streams beside the pond too, which keep the clip
-	 * of every body. */
+	 * ground that leaves the water's top inside the water squares and
+	 * climbs through their edge (the art's ground over the pond's 224 shore
+	 * points against the classic floor there: bank points at the edge 15 to
+	 * 443 units over the water, median 145), and it bakes the ground under
+	 * the water dark: the baked light of the art's top triangle, sampled
+	 * every 32 units over the pond, has a luma of 67 at the median under
+	 * the water's top, 130 over it inside the water squares and 96 on the
+	 * land within a square of them. The sheet stands at the water's top,
+	 * lift 0, as the reference pictures supplied for this project show the
+	 * water there.
+	 *
+	 * Its clip is 0. With 8 the sheet was cut off the ground for its last 8
+	 * units under the water, and along the whole shore that dark ground lay
+	 * bare between the land and the water (RoomProbe, the depth under the
+	 * surface as grey: in a view over the pebble beach east of the lower
+	 * lobe, 308 units up, 18,956 of 960 x 540 pixels). At 0 the sheet ends
+	 * where the depth test ends it, on the line where the ground comes out
+	 * of the water. The clip has nothing to spare there: no flat triangle
+	 * of a square's own group lies within one unit over to nine under the
+	 * surface over any of the pond's 24 squares (counted on the .TRG), and
+	 * no other body of the fifteen levels has such a ramp: their edges are
+	 * walls a click or more high or flat at the water.
+	 *
+	 * Its swell is 0. The class's swell tapers to nothing only at the
+	 * classic shore, while the ground meets the water at a median 256 units
+	 * inside it and, round the island in the pond, up to 1,539 (the art's
+	 * 0-line sampled every 32 units, 1,143 points); so with the clip at 0 a
+	 * trough still sank the sheet under ground just under the water and
+	 * opened the band again for a moment - in twelve RoomProbe views of the
+	 * pond at 1, 3 and 5 seconds up to 17,165 pixels of ground under the
+	 * water with no water drawn over them, none with the sheet at rest (the
+	 * depth views: the sheet's swell and clip against the ground at rest).
+	 * The waves stay in its pixels: the reflection, the highlight, the foam.
+	 *
+	 * The row names water room 73, the room under 20 of the pond's 24
+	 * squares: room 34 holds the three streams beside the pond too, which
+	 * keep the clip and the swell of every body. */
 	struct HDWaterBankRow
 	{
 		const char* stem;
 		int room;
 		int lift;
 		int clip;
+		float swell;
 	};
 
 	const HDWaterBankRow kWaterBank[] =
 	{
-		{ "ANDY3", 73, 0, 0 },
+		{ "ANDY3", 73, 0, 0, 0.0f },
 	};
 
 	/* The skirt of a lifted sheet (HDRenderSetWaterSheets, "the skirt"):
@@ -9071,6 +9087,8 @@ namespace
 		int liftUnits;
 		int clip;		// 1 with `clip units`
 		int clipUnits;
+		int swell;		// 1 with `swell s`
+		float swellScale;
 		// 1 for a compiled bank row: sets the lift and the clip, nothing else
 		int bankOnly;
 	};
@@ -9506,7 +9524,7 @@ namespace
 	/* hd_water.txt, one row a line:
 	 *
 	 *   <LEVEL> <room> <class|->  [tint <r> <g> <b>] [waves <s>] [foam <s>]
-	 *                             [bend <s>]
+	 *                             [bend <s>] [swell <s>]
 	 *                             [ripple <x> <z> <size> <seconds>]
 	 *                             [art keep|hide]
 	 *                             [foot <x1> <z1> <x2> <z2> <reach> |
@@ -9522,13 +9540,15 @@ namespace
 	 * row of any other class, - included, gives the sheet back). tint
 	 * multiplies the shallow and the deep colour, waves the wave heights,
 	 * foam the shore foam and the whitecaps, bend how far the waves move
-	 * the floor seen through them (the refraction); each 0 to 4, 1 changing
-	 * nothing. ripple starts a ring at world x, z (units, as the game's own
-	 * ripples and trview give them) every `seconds` (0.1 to 60) while the
-	 * level runs, `size` (1 to 255) as a ripple's size - a fountain's jet
-	 * landing, where the game itself makes no ripple; the rest of the row
-	 * applies as any row's. art keep draws the remaster's own water art
-	 * over the sheets of the row's bodies, art hide (what a row without the
+	 * the floor seen through them (the refraction), swell how far the
+	 * sheet's vertices rise and fall with the waves (0 lays the sheet at
+	 * rest, its pixels keep the waves; a row without the key leaves it as
+	 * it is); each 0 to 4, 1 changing nothing. ripple starts a ring at world x,
+	 * z (units, as the game's own ripples and trview give them) every `seconds`
+	 * (0.1 to 60) while the level runs, `size` (1 to 255) as a ripple's size -
+	 * a fountain's jet landing, where the game itself makes no ripple; the rest
+	 * of the row applies as any row's. art keep draws the remaster's own water
+	 * art over the sheets of the row's bodies, art hide (what a row without the
 	 * key says) leaves it out - step 8 of HDRenderSetWaterSheets. foot lays
 	 * the foot of a waterfall (see "the foot of a waterfall") along the line
 	 * from world x1, z1 to x2, z2 with that reach (64 to 2048 units) on the
@@ -9545,13 +9565,13 @@ namespace
 	 * and runs them on over the land lower than that (see "the lift" and
 	 * "the skirt" in HDRenderSetWaterSheets); clip sets how far under the
 	 * surface at rest the frame may lie and still be left to itself (0 to
-	 * 256, whole units; see kWaterClip). A row without either key leaves
+	 * 256, whole units; see kWaterClip). A row without lift or clip leaves
 	 * that value as it is. '#' starts a comment. Returns 1 for a row, 0 for
 	 * a line without one, -1 for a line that cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
 	{
 		char line[256];
-		char* tok[35];
+		char* tok[37];
 		char* next = 0;
 		int n = 0;
 
@@ -9560,17 +9580,17 @@ namespace
 		if (char* hash = std::strchr(line, '#'))
 			*hash = 0;
 
-		// The longest row: the three words, tint's four, waves', foam's and
-		// bend's two each, ripple's five, art's two, foot's six, flow's
-		// four, lift's two and clip's two - 34 tokens.
-		for (char* t = strtok_s(line, " \t", &next); t && n < 35;
+		// The longest row: the three words, tint's four, waves', foam's,
+		// bend's and swell's two each, ripple's five, art's two, foot's six,
+		// flow's four, lift's two and clip's two - 36 tokens.
+		for (char* t = strtok_s(line, " \t", &next); t && n < 37;
 			t = strtok_s(0, " \t", &next))
 			tok[n++] = t;
 
 		if (!n)
 			return 0;
 
-		if (n < 3 || n > 34 || std::strlen(tok[0]) >= sizeof(out->stem))
+		if (n < 3 || n > 36 || std::strlen(tok[0]) >= sizeof(out->stem))
 			return -1;
 
 		WaterRow row = {};
@@ -9679,6 +9699,8 @@ namespace
 				into = &row.foam, count = 1;
 			else if (!_stricmp(tok[i], "bend"))
 				into = &row.bend, count = 1;
+			else if (!_stricmp(tok[i], "swell"))
+				into = &row.swellScale, count = 1, row.swell = 1;
 			else if (ripple)
 				into = rip, count = 4;
 			else if (swirl)
@@ -10839,8 +10861,11 @@ namespace
 			if (row.clip)
 				b.clip = row.clipUnits;
 
-			// A compiled bank row sets the lift and the clip and leaves the
-			// rest of the body as the rows before it left it.
+			if (row.swell)
+				b.swell = row.swellScale;
+
+			// A compiled bank row sets the lift, the clip and the swell and
+			// leaves the rest of the body as the rows before it left it.
 			if (row.bankOnly)
 				continue;
 
@@ -11103,6 +11128,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		b.info.tint[0] = b.info.tint[1] = b.info.tint[2] = 1.0f;
 		b.info.waves = b.info.foam = b.info.bend = 1.0f;
 		b.info.clip = kWaterClip;
+		b.info.swell = 1.0f;
 
 		const int id = (int)g_wbodies.size();
 		std::vector<size_t> stack(1, i);
@@ -11403,6 +11429,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		row.liftUnits = w.lift;
 		row.clip = 1;
 		row.clipUnits = w.clip;
+		row.swell = 1;
+		row.swellScale = w.swell;
 		row.bankOnly = 1;
 		rows.push_back(row);
 	}
@@ -13221,9 +13249,10 @@ const char* HDRenderWaterSectionName(int section)
  * last `held`, always 0 - a lifted sheet stands level at every grid
  * point -, the lift, units over the water's top (lift),
  * the land squares its level surface runs on over, each place once
- * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets), and
- * how far under its surface the frame is left to itself, units (clip; see
- * kWaterClip). */
+ * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets), how
+ * far under its surface the frame is left to itself, units (clip; see
+ * kWaterClip), and the share of its class's swell its sheet's vertices
+ * take (swell; see kWaterBank). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -13298,7 +13327,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
 		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
-		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d",
+		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d swell=%.2f",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -13308,7 +13337,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
 		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift,
-		b.skirt, b.clip);
+		b.skirt, b.clip, b.swell);
 	return true;
 }
 
@@ -14145,11 +14174,13 @@ namespace
 			 * where the body has whitecaps at all (gWaterMisc.y). A quarter
 			 * is a free choice, set by eye on the round's RoomProbe
 			 * pictures. */
-			float swell[4] = { look.swell[0], look.swell[1], 0.0f, 0.0f };
+			const float rise = g_wbodies[(size_t)r.body].info.swell;
+			float swell[4] = { look.swell[0] * rise, look.swell[1], 0.0f,
+				0.0f };
 
 			if (look.pixel[28 + 1] > 0.0f)
 			{
-				swell[2] = 0.25f * heights;
+				swell[2] = 0.25f * heights * rise;
 				swell[3] = look.pixel[20 + 3] * heights;
 			}
 

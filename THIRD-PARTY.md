@@ -681,6 +681,14 @@ water surface", carries the tables.
     32 is the slack of the flat-art question (`HDRenderGroupFlatArt`). Count on
     our data: 2048 triangles in ANDREA2, 2384 in ANDY2, 15906 in JOBY5, none
     elsewhere (`RoomProbe -hdwater 1 -nodraw`, WATERLOG `art_hidden`).
+    "Over a square" means over one of the squares the call's own art
+    triangles cover (`HDRange::artCells`); the call's box is only the first
+    test, because a call with art on both sides of a sheet's square has a box
+    over it too (JOBY5's deck, room 4). A correction of this rule, OWN, the
+    same free choice. Count on our data with the game's water marks
+    (`RoomProbe -hdwater 1 -nodraw -watermarks`): JOBY5 15906 triangles and
+    one call kept (WATERLOG `art_kept`), 15942 by the box alone; the other
+    fourteen levels the same either way.
 78. **The motion clock** - every motion of the HD path runs on the drawn
     state's time, the tick clock less the part of a tick the blended pose
     stands behind it (`hd_book.h`, `HDBookClock`), so it moves on every frame

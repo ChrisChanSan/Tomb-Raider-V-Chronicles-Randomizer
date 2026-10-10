@@ -1729,11 +1729,14 @@ it.
   moon's colour). The level line of the log says `night=1` there. Where a
   sheet lies, the level's own water face of
   the bullet above is not drawn. The Remaster's own water art over a sheet -
-  its still-water surfaces and the flat water art it marks - is left out, so
-  a body of water has one look and not the Remaster's in one half and the
-  sheet's in the other (ANDREA2's fountain hall, ANDY2's rooms 52 and 57,
-  fourteen rooms of JOBY5); a row with `art keep` in `hd_water.txt` puts it
-  back. Its other flat art stays and draws as it always did, and where that
+  its still-water surfaces and the flat water art it marks - is left out
+  where its own triangles lie over a square the sheet draws, so a body of
+  water has one look and not the Remaster's in one half and the sheet's in
+  the other (ANDREA2's fountain hall, ANDY2's rooms 52 and 57, fourteen rooms
+  of JOBY5), while a floor at the water's height drawn together with it
+  beside the water - JOBY5's deck round its notch of water - stays; a row
+  with `art keep` in `hd_water.txt` puts it back. Its other flat art stays
+  and draws as it always did, and where that
   art lies at the water's own height - a deck, a rim, a bank the Remaster
   raised to the water plane - the sheet leaves those pixels to it (with the
   depth texture, below); a row of class `none` in `hd_water.txt` takes the
@@ -2045,8 +2048,10 @@ it.
   `segs=`), the file's rows that use `swirl` (`old=`), and the underwater
   rooms that look through a body above them (`under=`) and those that take
   the level's largest body for want of one (`under_fallback=`), and 1 when
-  the level's water rooms take the deep sea's water (`under_deep=`), and 1 in
-  a night level (`night=`); a body
+  the level's water rooms take the deep sea's water (`under_deep=`), 1 in a
+  night level (`night=`) and, last, the draw calls of the Remaster's water
+  art whose box reaches a sheet's square with none of their triangles over
+  it, which stay drawn (`art_kept=`); a body
   line
   ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), its places whose

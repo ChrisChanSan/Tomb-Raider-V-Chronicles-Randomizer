@@ -11234,6 +11234,94 @@ LipsTest 270 and 243) 0 failed; the engine and every tool build.
 
 **Commits.** `43d4938`.
 
+**The deck's plates, after the tenth play test.** The build of `2d48e83` was played
+(reference pictures supplied for this project, not in the repository). On JOBY5's deck in
+room 4 two of the five dry squares, 3,2 and 5,2, showed the void, nothing drawn; the other
+three, 3,3, 4,3 and 5,3, showed their plates. The classic level lays faces with its water
+texture on those squares, the Remaster deck plates on all five; the look wanted is the
+plates on every square, with no stripes and no waves on the land.
+
+The cause (`hd_render.cpp`, step 8 of `HDRenderSetWaterSheets`, "the art over a sheet"
+:12077). The deck lies at the water's own height, 256, and its classic corners border the
+water, so they carry the classic surface mark (`hd_level.cpp` `BuildWaterMarks`), and the
+HD vertices at them and in their plane's flood are marked: every flat triangle of the
+deck's plates counts as the Remaster's water art (`HDRange::artTris`). The plates of 3,2
+and 5,2 are one draw call - part 0, material 0, page 537, 36 triangles, its box x 3,072 to
+6,144 and z 2,048 to 3,072 at y 256 - and the hide asked whether the call's box reaches a
+square whose sheet draws. It does: square 4,2 between the two plates is the notch of
+water over room 144, where a sheet draws, and no triangle of the call lies over it
+(`TrgProbe -squares 4 150 400 3 5 2 2`: 64 of 64 points at y 256 on 3,2 and on 5,2, none
+on 4,2). So the whole call was hidden, and with the restored classic faces left out by
+the sixth play test's dry-copy rule (the plates cover all five squares, so the faces
+are a second copy of the floor) nothing drew there. The calls of 3,3 and 5,3 (page 538)
+and of 4,3 (page 544) reach no sheet square and stayed. The hide came with the second
+play test's part; until the sixth, the restored faces covered the hole with their
+stripes.
+
+The fix. A range keeps the floor squares its art triangles cover (`HDRange::artCells`
+:1355, filled where `artTris` is counted :6439: the squares of each triangle's own box,
+an edge on a square's line not counted, the rule of the flats), and the hide takes a
+square only when it is one of them; the box stays as the first test (:12127). The deck's
+call is kept: the five squares show the Remaster's plates, the dry faces stay left out,
+and the flood's gate is unchanged, so no wave runs on the land. A call the box reaches
+over a square none of its art triangles lies over is counted (`HDRange::artSpared`,
+:12168).
+
+The probe's marks. RoomProbe had no classic water marks: only `-plane` and `-roomplane`
+hand it four, so every `-hdwater 1` picture so far counted only material 16 as water art
+and in JOBY5 hid 36 triangles fewer than the game (15,906 against 15,942) - the probe
+could not show the hole. `-watermarks` (with `-roombox`) builds the marks out of the
+classic `.TRC` with a twin of `BuildWaterMarks` and of `drawroom.cpp`'s
+`aRoomVertexWaterMarks` (the engine's functions walk `ROOM_INFO` and its globals and
+cannot be linked into a tool) and prints the engine's `water marks=<n> rooms=<n>`. Held
+against the owner's logs: JOBY5 1,531 marks in 15 rooms, 11,447 stamped and 8,358 flooded
+vertices and 15 planes dropped, as in the game; ANDREA1, ANDY1, ANDY2, ANDY3, JOBY2, JOBY4
+and RICH2 the same in all four numbers; ANDREA2 604 marks in 14 rooms where the game logs
+564 (its `art_hidden=2048` either way). The shimmer selector stays off with
+`-watermarks`: the engine sets it per room each frame, the probe has one set for the
+picture. TrgProbe `-cell` and `-squares`, the two switches the deck was measured with,
+stay as switches.
+
+WATERLOG: the level line ends ` art_kept=<n>`. RoomProbe `-watermarks`; TrgProbe `-cell`
+and `-squares`.
+
+**Measured.** The hide per level, RoomProbe `-hdwater 1 -nodraw -watermarks` with the
+engine of `2d48e83` and after this part:
+
+| Level | art_hidden before | art_hidden after | art_kept |
+|---|---|---|---|
+| JOBY5 | 15942 | 15906 | 1 |
+| ANDREA2 | 2048 | 2048 | 0 |
+| ANDY2 | 2384 | 2384 | 0 |
+| ANDY3 | 612 | 612 | 0 |
+| ANDREA1, ANDREA3, ANDY1, JOBY2, JOBY3, JOBY4, RICH1, RICH2, RICH3, RICHCUT2, TITLE | 0 | 0 | 0 |
+
+Without `-watermarks` every level hides what it hid (JOBY5 15,906 before and after,
+`art_kept=0`). The deck with the game's marks at 3 seconds, the pixel at each hole's
+centre before and after: from the owner's place (1920 x 1080) 255,0,255 (nothing drawn)
+to 20,28,30 at 595,511 and, through the right hole, room 144's 21,35,42 to the plate's
+11,17,20 at 1259,479; from higher up and further back 255,0,255 to 19,27,29 and
+50,71,90 to 12,19,23; from above 255,0,255 to 13,17,19 and to 21,28,29; with the game's
+walk windows at 2560 x 1440 255,0,255 to 19,27,28 at 797,672 and to 11,17,20 at
+1757,651. No shader changed: every `.inc` as at `2d48e83`.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34); the fifteen cameras with `-hdwater 0`, 15 of 15
+identical to the fix round's parity set; with `-hdwater 1`, 15 of 15 identical before and
+after, without and with `-watermarks` (none shows room 4's deck); the pond's twelve views
+at 1, 3 and 5 seconds, 36 of 36 identical, and at 3 seconds with `-watermarks` 12 of 12;
+the suites (ModernTest 14721, MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0
+failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it - the deck from the
+owner's place, its three other squares, the notch of water at 4,2. ANDREA2's 40 marks
+more in the probe than in the game: not found which. The river's hide of the flow
+material still asks the box alone; no call is known whose box spans a square its
+triangles miss. `-watermarks` is a switch and not the default, so the earlier picture
+sets stay comparable.
+
+**Commits.** `3aeb924`, `712a1f3`.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

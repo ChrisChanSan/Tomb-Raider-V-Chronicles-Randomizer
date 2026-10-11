@@ -149,6 +149,20 @@ namespace
 	float g_arrival_t = 0.0f;
 	HDSoftClock g_arrival_clock;
 
+	/* Her ambient (see "the per node ambient" in HDLaraDrawFrame): the dry
+	 * and the wet colour as drawn, which follow the colours the rules give
+	 * over kAmbientTween seconds of game time, on a clock of their own;
+	 * whether they hold a colour yet; and the ambient of the last room over
+	 * the water she was in or under, which a water room without a room over
+	 * it keeps. The second of the last LARALOG line. */
+	float g_amb_dry[3] = {};
+	float g_amb_wet[3] = {};
+	bool g_amb_known = false;
+	long g_amb_air = 0;
+	bool g_amb_have_air = false;
+	HDSoftClock g_amb_clock;
+	int g_amb_logged_second = -1;
+
 	/* The log: the strength the last HDLOG softbody line was written with,
 	 * -1 for none yet, and the second the counters of the per-second line
 	 * cover - GlobalCounter when it opened, and whether the state moved in
@@ -1424,6 +1438,13 @@ void HDLaraDrawEnd()
 	g_arrival_t = 0.0f;
 	HDSoftClockForget(&g_arrival_clock);
 	HDSoftClockFrame(&g_arrival_clock);
+
+	// Her ambient starts at the new level's colours, not glides into them.
+	g_amb_known = false;
+	g_amb_have_air = false;
+	HDSoftClockForget(&g_amb_clock);
+	HDSoftClockFrame(&g_amb_clock);
+	g_amb_logged_second = -1;
 	g_shadow_logged_events = -1;
 	g_others_logged_events = -1;
 	g_shadow_logged_stored = -1;
@@ -1539,6 +1560,7 @@ void HDLaraDrawFrameReset()
 	g_shadow_others_ready = false;
 	HDSoftClockFrame(&g_shadow_clock);
 	HDSoftClockFrame(&g_arrival_clock);
+	HDSoftClockFrame(&g_amb_clock);
 
 	/* The first person and binocular log lines. They belong here because
 	 * this is the one place in the HD path that runs on every frame whether
@@ -1658,24 +1680,49 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 	 * through the extinction instead, which leaves her own colour alone
 	 * within its clear zone round the eye. Standing in a dry room with
 	 * nodes in the water under its floor, that dry room is the room the
-	 * sheet lies in: her dry answer. Without sheets (tomb5.hd_water 0), in
-	 * a water room no sheet lies over and in a level without water, the
-	 * classic answer. */
+	 * sheet lies in: her dry answer. Without sheets (tomb5.hd_water 0) and
+	 * in a level without water, the classic answer; a water room no sheet
+	 * lies over, below. */
 	long wetAmbient = LaraNodeAmbient[1];
 	bool wetIsDry = false;
+	int airRoom = -1;
+	bool airKept = false;
 	const short lroom = lara_item->room_number;
+	const bool inWaterRoom = lroom >= 0 && lroom < number_rooms &&
+		(room[lroom].flags & ROOM_UNDERWATER) != 0;
 
+	/* A water room no sheet lies over - a flooded passage between two
+	 * pools, ANDREA1's room 34 between 26 and 32 - has no room over it
+	 * (HDRenderWaterAirRoom answers -1), and its wet nodes took that room's
+	 * own tinted ambient, 32, 46, 60 between 27, 32, 41 and 32, 32, 50. In
+	 * such a room they keep the ambient of the last room over the water
+	 * she was in or swam under; with none yet, her dry answer. */
 	if (HDRenderWaterSheetsBuilt() && lroom >= 0 && lroom < number_rooms)
 	{
-		if (room[lroom].flags & ROOM_UNDERWATER)
+		if (inWaterRoom)
 		{
-			const int air = HDRenderWaterAirRoom(lroom);
+			airRoom = HDRenderWaterAirRoom(lroom);
 
-			if (air >= 0 && air < number_rooms)
-				wetAmbient = room[air].ambient;
+			if (airRoom >= 0 && airRoom < number_rooms)
+			{
+				wetAmbient = room[airRoom].ambient;
+				g_amb_air = wetAmbient;
+				g_amb_have_air = true;
+			}
+			else if (g_amb_have_air)
+			{
+				wetAmbient = g_amb_air;
+				airKept = true;
+			}
+			else
+				wetIsDry = true;
 		}
 		else
+		{
 			wetIsDry = true;
+			g_amb_air = room[lroom].ambient;
+			g_amb_have_air = true;
+		}
 	}
 
 	const float wet[3] =
@@ -1685,17 +1732,48 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 		wetIsDry ? dry[2] : (float)CLRB(wetAmbient)
 	};
 
+	/* The tween. Along a swim the rules hand her a new colour at every
+	 * room: the dry room's own, a room over the water, the water rooms'
+	 * own tints - ANDREA1's chain of rooms 26, 34 and 32 gave her a luma of
+	 * 30.5, 43.4 and 34.0 within a few seconds, in one frame each. The
+	 * colours drawn follow those over kAmbientTween seconds of game time,
+	 * a share 1 - e^(-dt / kAmbientTween) a frame, dry and wet alike: at 60
+	 * frames a second 6.4 % of the jump a frame, under 1 of luma for a
+	 * jump of 13. A level's first frame, a mirror's draw and a paused game
+	 * step nothing; the first takes the colours as they are. */
+	{
+		const float kAmbientTween = 0.25f;
+		float dt = 0.0f;
+		const bool stepped = HDSoftClockStep(&g_amb_clock, mirror != 0,
+			GlobalCounter, InterpFrameAlpha(), &dt);
+		const float share = !g_amb_known ? 1.0f : stepped ?
+			1.0f - expf(-dt / kAmbientTween) : 0.0f;
+
+		for (int k = 0; k < 3; k++)
+		{
+			g_amb_dry[k] += (dry[k] - g_amb_dry[k]) * share;
+			g_amb_wet[k] += (wet[k] - g_amb_wet[k]) * share;
+		}
+
+		if (!mirror)
+			g_amb_known = true;
+	}
+
 	/* The per node ambient, which Lara really has and an object does not: a
 	 * body half in the water is lit by two rooms at once, and the classic
 	 * path switches between them per node through bLaraUnderWater. The index
 	 * is the LMX one, because LaraNodeUnderwater is filled in LMX order
-	 * (specific\drawlara.cpp, SetLaraUnderwaterNodes). */
+	 * (specific\drawlara.cpp, SetLaraUnderwaterNodes). The colours are the
+	 * tween's (above). */
+	int wetNodes = 0;
+
 	for (int node = 0; node < HD_LARA_NODES; node++)
 	{
 		const bool under = bLaraInWater != 0 &&
 			LaraNodeUnderwater[lara_lmx_of_node[node]] != 0;
-		const float* from = under ? wet : dry;
+		const float* from = under ? g_amb_wet : g_amb_dry;
 
+		wetNodes += under ? 1 : 0;
 		nodeLight[node * 3 + 0] = from[0];
 		nodeLight[node * 3 + 1] = from[1];
 		nodeLight[node * 3 + 2] = from[2];
@@ -1745,6 +1823,52 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits)
 			lightReport.curCount, lightReport.prevActive, lightReport.prevCount,
 			lightReport.dynamics, lightReport.handed, lightReport.dark,
 			lightReport.handed == 0 ? 1 : 0, lightReport.maxDark, lightReport.minLit);
+	}
+
+	/* With -log, once a second of game time while she is in a water room
+	 * (the main draw, not a mirror's):
+	 *
+	 *   LARALOG level=<stem> under room=<n> air=<n> kept=<0/1>
+	 *           wet=<r,g,b> dry=<r,g,b> drawn_wet=<r,g,b>
+	 *           drawn_dry=<r,g,b> wet_nodes=<n>/15 lights=<n>
+	 *           light=<r,g,b> under_light=<r,g,b>
+	 *
+	 * room the room she is in; air its room over the water, -1 for none;
+	 * kept 1 where that room has none and the last one's ambient stands in;
+	 * wet and dry the colours the rules give now, 0..255; drawn_ the
+	 * tween's, which her nodes take; wet_nodes how many of her fifteen
+	 * nodes are under the water; lights the lights handed to her shader and
+	 * light the brightest of them, 0,0,0 for none - the eye is then the
+	 * lamp of her sheen; under_light the water's scattered light this frame
+ * draws with, 0..1 (hd_render.cpp, "along a swim"), 0,0,0 with the eye
+ * out of the water. */
+	if (gLogEnabled && !mirror && inWaterRoom &&
+		(int)(GlobalCounter / 30) != g_amb_logged_second)
+	{
+		float best[3] = { 0.0f, 0.0f, 0.0f };
+		float underNow[12];
+
+		HDRenderWaterUnderNow(underNow);
+
+		for (int i = 0; i < lightCount; i++)
+			if (lights[i].r + lights[i].g + lights[i].b >
+				best[0] + best[1] + best[2])
+			{
+				best[0] = lights[i].r;
+				best[1] = lights[i].g;
+				best[2] = lights[i].b;
+			}
+
+		g_amb_logged_second = (int)(GlobalCounter / 30);
+		Log("LARALOG level=%s under room=%d air=%d kept=%d wet=%.0f,%.0f,%.0f "
+			"dry=%.0f,%.0f,%.0f drawn_wet=%.1f,%.1f,%.1f "
+			"drawn_dry=%.1f,%.1f,%.1f wet_nodes=%d/%d lights=%d "
+			"light=%.0f,%.0f,%.0f under_light=%.3f,%.3f,%.3f",
+			g_lights_stem[0] ? g_lights_stem : "?", (int)lroom, airRoom,
+			airKept ? 1 : 0, wet[0], wet[1], wet[2], dry[0], dry[1], dry[2],
+			g_amb_wet[0], g_amb_wet[1], g_amb_wet[2], g_amb_dry[0],
+			g_amb_dry[1], g_amb_dry[2], wetNodes, HD_LARA_NODES, lightCount,
+			best[0], best[1], best[2], underNow[4], underNow[5], underNow[6]);
 	}
 
 	/* --- the projected shadow -------------------------------------------- */

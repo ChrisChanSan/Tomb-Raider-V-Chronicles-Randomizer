@@ -269,7 +269,9 @@
  *                     load, out of -roombox's .TRC by a twin of
  *                     hd_level.cpp's BuildWaterMarks: the art the marks name
  *                     (the art over a sheet, the flood) as in the game, the
- *                     count printed as the engine's log has it. With -plane
+ *                     count printed as the engine's log has it, then the
+ *                     portals the closed doors shut first, as the level
+ *                     load does (doors_shut=). With -plane
  *                     its four marks are added. The shimmer selector stays
  *                     off - the engine sets it per room from the room's
  *                     flags, the probe has one set for the whole picture.
@@ -8001,8 +8003,9 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
  * The room blob of a .TRC is the engine's ROOM_INFO, 208 bytes, then its
  * body, and every pointer in the header is an offset into the body
  * (alexstuff.cpp, aFixUpRoom): the door list at +4, x at +20, z at +28,
- * minfloor at +32, the flags at +78, the roomlets' count at +168, the
- * roomlets at +172 and their vertices at +176 (global/types.h, ROOM_INFO).
+ * minfloor at +32, flipped_room at +76, the flags at +78, the roomlets'
+ * count at +168, the roomlets at +172 and their vertices at +176
+ * (global/types.h, ROOM_INFO).
  * A roomlet is 56 bytes with nVtx at +0 and nWVtx at +2 (ROOMLET), and its
  * vertices follow the previous roomlet's: seven floats each, x and z room
  * local, y world. A door list is a short count and 32 bytes a portal - the
@@ -8028,6 +8031,7 @@ namespace probemarks
 	{
 		long x = 0, z = 0, minfloor = 0;
 		unsigned short flags = 0;
+		short flipped = -1;		// flipped_room at +76, -1 for none
 		bool door = false;
 		std::vector<Portal> portals;
 		std::vector<Roomlet> roomlets;
@@ -8044,6 +8048,8 @@ namespace probemarks
 
 	std::vector<Room> g_rooms;
 	std::vector<HDWaterMark> g_marks;
+	// The portals the closed doors shut before the marks (ShutClosedDoors).
+	int g_shut = 0;
 
 	// One of a room's vertices at the world position x, y, z.
 	bool HasVertex(const Room& r, float x, float y, float z)
@@ -8205,9 +8211,114 @@ namespace probemarks
 		return value;
 	}
 
-	/* The rooms out of the level, then BuildWaterMarks: every vertex of a
-	 * room with ROOM_MIST or ROOM_REFLECT, the water vertices (nWVtx) of
-	 * every other room. Returns the number of rooms with a mark. */
+	/* SCDS (game\init.cpp): the last portal of room rn whose outline,
+	 * rounded to the quarter sector, holds the point ox, oz half a sector
+	 * past the door; dx and dy in units, -1 for none. */
+	int DoorPortal(int rn, long dx, long dy, long ox, long oz)
+	{
+		if (!Valid(rn) || !g_rooms[(size_t)rn].door)
+			return -1;
+
+		const Room& r = g_rooms[(size_t)rn];
+		int found = -1;
+
+		for (size_t k = 0; k < r.portals.size(); k++)
+		{
+			const Portal& p = r.portals[k];
+			long minx = r.x + (dy >> 1) + ((p.v1[0] + 128) & ~255L);
+			long maxx = r.x + (dy >> 1) + ((p.v3[0] + 128) & ~255L);
+			long minz = r.z + (dx >> 1) + ((p.v1[2] + 128) & ~255L);
+			long maxz = r.z + (dx >> 1) + ((p.v3[2] + 128) & ~255L);
+
+			if (minx > maxx)
+				std::swap(minx, maxx);
+
+			if (minz > maxz)
+				std::swap(minz, maxz);
+
+			if (ox >= minx && ox <= maxx && oz >= minz && oz <= maxz)
+				found = (int)k;
+		}
+
+		return found;
+	}
+
+	/* The closed doors as the level load leaves them, before the HD build
+	 * asks for the marks: InitialiseDoor (game\init.cpp) finds for every
+	 * CLOSED_DOOR1..LIFT_DOORS2 item the portal of its room, of the room
+	 * behind it (GetDoor) and of their flip alternates (SetupClosedDoorStuff)
+	 * and writes zero into their normals, as ShutThatDoor does. A shut
+	 * portal is no downward portal to IsMistVert: ANDREA2's door in the
+	 * floor of room 70 over room 204 leaves the 40 corners of that floor
+	 * without a twin below, and the game gives them no mark. Returns the
+	 * number of portals shut. */
+	int ShutClosedDoors(const Tr5Level& level)
+	{
+		std::string error;
+		int shut = 0;
+
+		for (int i = 0; i < level.itemCount(); i++)
+		{
+			Tr5Item item;
+
+			if (!level.getItem(i, item) ||
+				item.objectNumber < walkoff::kClosedDoor1 ||
+				item.objectNumber > walkoff::kLiftDoors2 ||
+				!Valid(item.roomNumber))
+				continue;
+
+			const Room& own = g_rooms[(size_t)item.roomNumber];
+			long dx = 0, dy = 0;
+
+			if (!item.yRot)
+				dx = -1;
+			else if (item.yRot == -0x8000)
+				dx = 1;
+			else if (item.yRot == 0x4000)
+				dy = -1;
+			else
+				dy = 1;
+
+			const long sx = ((item.x - own.x) >> 10) + dy;
+			const long sz = ((item.z - own.z) >> 10) + dx;
+			std::vector<Tr5Level::SectorInfo> sectors;
+			int behind = -1;
+
+			if (level.sectorInfo(item.roomNumber, sectors, error))
+				for (const Tr5Level::SectorInfo& s : sectors)
+					if (s.sx == sx && s.sz == sz)
+						behind = s.doorTo;
+
+			if (!Valid(behind))
+				continue;
+
+			const long ox = item.x + (dy << 10);
+			const long oz = item.z + (dx << 10);
+			const int rooms[4] = { item.roomNumber, own.flipped, behind,
+				g_rooms[(size_t)behind].flipped };
+
+			for (int k = 0; k < 4; k++)
+			{
+				const int at = DoorPortal(rooms[k], dx << 10, dy << 10, ox,
+					oz);
+
+				if (at < 0)
+					continue;
+
+				Portal& p = g_rooms[(size_t)rooms[k]].portals[(size_t)at];
+
+				p.normal[0] = p.normal[1] = p.normal[2] = 0;
+				shut++;
+			}
+		}
+
+		return shut;
+	}
+
+	/* The rooms out of the level, the closed doors shut, then
+	 * BuildWaterMarks: every vertex of a room with ROOM_MIST or
+	 * ROOM_REFLECT, the water vertices (nWVtx) of every other room. Returns
+	 * the number of rooms with a mark. */
 	int Build(const Tr5Level& level)
 	{
 		const std::vector<uint8_t>& b = level.debugBytes();
@@ -8234,6 +8345,7 @@ namespace probemarks
 			r.x = Read<int32_t>(b, hdr + 20);
 			r.z = Read<int32_t>(b, hdr + 28);
 			r.minfloor = Read<int32_t>(b, hdr + 32);
+			r.flipped = Read<int16_t>(b, hdr + 76);
 			r.flags = Read<uint16_t>(b, hdr + 78);
 
 			if (!(door & 1) && body + door + 2 <= b.size())
@@ -8279,6 +8391,8 @@ namespace probemarks
 				r.roomlets.push_back(l);
 			}
 		}
+
+		g_shut = ShutClosedDoors(level);
 
 		int rooms = 0;
 
@@ -9434,8 +9548,9 @@ static int ProbeMain(int argc, char** argv)
 				const int marked = probemarks::Build(level);
 				std::vector<HDWaterMark>& marks = probemarks::g_marks;
 
-				printf("-watermarks: level=%s water marks=%d rooms=%d\n",
-					stem, (int)marks.size(), marked);
+				printf("-watermarks: level=%s water marks=%d rooms=%d "
+					"doors_shut=%d\n", stem, (int)marks.size(), marked,
+					probemarks::g_shut);
 
 				if (g_plane)
 					marks.insert(marks.end(), g_plane_marks,

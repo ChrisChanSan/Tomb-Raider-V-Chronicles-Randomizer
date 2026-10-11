@@ -1561,6 +1561,45 @@ water surface", carries the tables.
     (0.034 of a pixel's colour at the fixed light's darkness), the
     creature's 760 units, the 32-unit step and the 64 and 256 that leave
     the floor at the feet out of the first faces are free choices.
+174. **The channel's highlight at 0.4** - entry 49's strength for the
+    channel class, 0.8 until now (`hd_render.cpp`, `kWaterClass`). OWN,
+    a free choice set by eye on RoomProbe pictures of ANDREA2's canal.
+    DATA: scratch probes leaving one term out (`-waterdepthview 1` for the
+    path): over the water that shows no floor the highlight lifted the
+    median luma from 33 to 50, the reflection by 2; at 0.4 the median is
+    45. Entry 126's river keeps its 0.4, now the channel's own and no
+    longer half of it.
+175. **A slope turned away takes the slope it mirrors** - the Fresnel term
+    of a sheet pixel whose N.V is under 0 is taken at |N.V| (`hd_room.hlsl`,
+    `WaterPS`). OWN, a design of this project: a facet hidden behind the
+    crest in front of it stands for the visible one. DATA: in JOBY2's rain
+    basin seen within 96 units of the surface 45 to 85 % of the water's
+    pixels had N.V under 0 (a scratch probe marking them).
+176. **The swell round an eye at the surface** - within 256 units of the
+    surface at rest the swell fades toward the eye over 1,536 units across,
+    smoothly (`hd_room.hlsl`, `HD_SWELL_EYE`, `HD_SWELL_EYE_Y`), and the
+    side a sheet is seen from is the eye's, in the air or under the water
+    (c148.y). OWN, a design of this project; the distances free choices:
+    the sheet's vertices 256 apart keep at most 0.14 of the swell under the
+    eye, and a click is over twice a sea's 97 units of height. DATA: the
+    eye of the play test's log (CAMLOG) held within 42 units of the
+    surface, swept with RoomProbe.
+177. **Lara's ambient along a swim** - in a water room without an air room
+    her wet nodes keep the last air room's ambient; her dry and wet
+    colours follow the rules' over 0.25 s of game time, a share
+    1 - e^(-dt / 0.25) a frame (`hd_laradraw.cpp`). OWN, a design of this
+    project; 0.25 s a free choice, the projected shadow's arrival's
+    (entry 170). DATA: the ambients of `ROOM_INFO` (the randomizer's
+    `Tr5Level`) and the air rooms of RoomProbe `-underwater` along the
+    water rooms of six levels: the worst jump between neighbours 62 of
+    luma, 16 after, 1.03 a frame at 60 frames a second.
+178. **The water's look along a swim** - a water room no sheet lies over
+    keeps the body of the last room the eye was in that has one, in place
+    of entry 109's largest body while there is one; the extinction and the
+    scattered light follow over 0.25 s of the game clock (`hd_render.cpp`,
+    "along a swim"). OWN, a design of this project; free choices. DATA:
+    the scattered light's luma (x 255) per water room, RoomProbe
+    `-underwater`: the worst jump between neighbours 59, 4.4 after.
 
 ## Credited, but not contained here
 

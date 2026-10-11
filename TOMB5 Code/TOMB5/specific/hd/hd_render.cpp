@@ -55,6 +55,8 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -6825,8 +6827,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			/* The sort key of a draw call. Sorted stably over the triangles'
 			 * numbers and not over the records themselves - a record is 33
 			 * words and std::stable_sort moves what it sorts - then laid out
-			 * once in that order: the same order a stable sort of the records
-			 * gives. */
+			 * in that order in place, one cycle of the permutation at a time:
+			 * the same order a stable sort of the records gives, without a
+			 * second list of them. */
 			const auto tri_less = [](const HDTri& a, const HDTri& b)
 				{
 					/* The unlit band of the sky before the cloud layers
@@ -6917,14 +6920,33 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						return tri_less(tris[a], tris[b]);
 					});
 
-				std::vector<HDTri> laid;
-
-				laid.reserve(tris.size());
+				// The record at i becomes the one at order[i].
+				std::vector<unsigned char> laid(order.size(), 0);
 
 				for (size_t i = 0; i < order.size(); i++)
-					laid.push_back(tris[order[i]]);
+				{
+					if (laid[i])
+						continue;
 
-				tris.swap(laid);
+					const HDTri first = tris[i];
+					size_t at = i;
+
+					for (;;)
+					{
+						const size_t from = order[at];
+
+						laid[at] = 1;
+
+						if (from == i)
+						{
+							tris[at] = first;
+							break;
+						}
+
+						tris[at] = tris[from];
+						at = from;
+					}
+				}
 			}
 
 			group.triangles[pass] = (unsigned int)tris.size();
@@ -7527,9 +7549,46 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			return fill_size[(size_t)a] > fill_size[(size_t)b];
 		});
 
+	/* The groups in flight hold their triangle records at once, a group's
+	 * about its triangle count times an HDTri and its sort list. They are
+	 * gated by bytes: a group starts when the groups running and it stay
+	 * under kFillBudget, or when nothing else runs - the page decode's batch
+	 * budget (hd_pagecache.cpp), the transient a level load already allows
+	 * itself in a 32-bit address space. Measured with RoomProbe on TITLE:
+	 * without the gate the peak commit of sixteen threads stood 160 MiB above
+	 * one thread's. The gate decides only when a group starts. */
+	const double kFillBudget = 96.0 * 1048576.0;
+	std::mutex fill_gate;
+	std::condition_variable fill_wait;
+	double fill_in_flight = 0.0;
+
 	HDPoolRun((int)fill_order.size(), threads, [&](int k)
 	{
-		fill_group((size_t)fill_order[(size_t)k]);
+		const size_t g = (size_t)fill_order[(size_t)k];
+		const double need = (double)(fill_size[g] / 3) *
+			(double)(sizeof(HDTri) + 2 * sizeof(unsigned int) + 1);
+
+		{
+			std::unique_lock<std::mutex> lock(fill_gate);
+
+			fill_wait.wait(lock, [&]()
+			{
+				return fill_in_flight == 0.0 ||
+					fill_in_flight + need <= kFillBudget;
+			});
+
+			fill_in_flight += need;
+		}
+
+		fill_group(g);
+
+		{
+			std::lock_guard<std::mutex> lock(fill_gate);
+
+			fill_in_flight -= need;
+		}
+
+		fill_wait.notify_all();
 	});
 
 	/* The join, in group order: the index runs appended with every range's

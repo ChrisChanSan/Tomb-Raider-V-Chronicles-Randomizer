@@ -255,6 +255,21 @@ bool HDWaterRippleOnSheet(long x, long y, long z, int flags);
  * AnimateWaterfalls. With hd_enable off it returns at its first test. */
 void HDWaterFallsTick();
 
+/* The water's own splash and a fish tank's spray (hd_render.cpp, "the
+ * cards"). HDWaterSplash is SetupSplash's (game\effect2.cpp), after the
+ * classic struct is filled: true when the HD form takes the splash - HD
+ * on, tomb5.hd_water and tomb5.hd_motion on, the cards ready and a drawing
+ * sheet under it -, and S_DrawSplashes then leaves that splash's sprites
+ * out (flags bit 0x10). HDWaterSpray is TriggerFishtankSpray's
+ * (game\tower.cpp), after the classic spark is made: true when the cards
+ * take it, and S_DrawSparks leaves the spark out (SF_UNUSED2). Neither
+ * writes the game's state or takes its random numbers: the splash's timers
+ * and the spark run as before. With hd_enable off both are false at their
+ * first test. */
+struct SPLASH_SETUP;
+bool HDWaterSplash(const SPLASH_SETUP* setup);
+bool HDWaterSpray(long x, long y, long z, long strength);
+
 /* Whether a frame draws a static mesh the classic way. Worked out once at
  * level load against the .TRG's own geometry (hd_level.cpp,
  * BuildStaticTables; the rule: hd_cover.h, HDStaticAnswer);

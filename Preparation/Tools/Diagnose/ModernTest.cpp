@@ -86,6 +86,9 @@
 // The level load's pool and the build's FNV-1a 64 step, header-only - the
 // group load_pool.
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
+/* The water's cards: a dive splash, a fish tank's spray and the wet film
+ * on its floor as functions of their age alone (splash_* below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include <string.h>
 #include <algorithm>
 #include <vector>
@@ -17985,6 +17988,272 @@ static void load_pool()
 		low(by_list.h), low(by_hand.h));
 }
 
+/* ------------------------------------------------------------ the splash -- */
+
+// Lara's dive into deep water (game\effects.cpp, Splash) at a fall speed.
+static HDSplashSetup splash_dive(int fall)
+{
+	HDSplashSetup s;
+
+	s.x = 1000.0f;
+	s.y = 500.0f;
+	s.z = 2000.0f;
+	s.innerRad = 32; s.innerSize = 8; s.innerRadVel = 320;
+	s.innerYVel = -40 * fall;
+	s.middleRad = 48; s.middleSize = 32; s.middleRadVel = 480;
+	s.middleYVel = -20 * fall;
+	s.outerRad = 32; s.outerSize = 128; s.outerRadVel = 544;
+	return s;
+}
+
+/* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
+ * stand where S_DrawSplashes draws them first (twice the struct's radius
+ * and size), the column rises and falls back to the surface, and the life
+ * runs out two a tick after that - a deeper dive lasts longer. Between two
+ * ticks the HD form lies between them. */
+static void splash_motion()
+{
+	printf("the splash: the classic struct, tick by tick\n");
+
+	const HDSplashSetup s = splash_dive(128);
+	const HDSplashNow at0 = HDSplashAt(s, 0.0f);
+
+	ok(at0.alive == 1, "a splash lives at its start", at0.alive, 1);
+	ok((long)at0.innerR == 80, "its inner ring stands at 2 * (32 + 8)",
+		(long)at0.innerR, 80);
+	ok((long)at0.outerR == 320, "its outer ring at 2 * (32 + 128)",
+		(long)at0.outerR, 320);
+	ok((long)(at0.life * 62.0f + 0.5f) == 62, "its life is 62",
+		(long)(at0.life * 62.0f + 0.5f), 62);
+
+	// The column: up, a highest tick, back down; then the life runs out.
+	HDSplashTick t = HDSplashStart(s);
+	int peak = 0, peakTick = 0, landed = -1, gone = -1;
+
+	for (int i = 1; i < 600 && t.alive; i++)
+	{
+		HDSplashStep(t);
+
+		if (-t.innerY > peak)
+		{
+			peak = -t.innerY;
+			peakTick = i;
+		}
+
+		if (landed < 0 && t.innerY == 0)
+			landed = i;
+
+		if (!t.alive)
+			gone = i;
+	}
+
+	ok(peakTick > 0 && landed > peakTick, "the column rises before it lands",
+		landed, peakTick);
+	ok(gone == landed + 30, "and the life runs out 31 ticks with the landing",
+		gone, landed + 30);
+
+	int deeper = -1;
+	HDSplashTick d = HDSplashStart(splash_dive(192));
+
+	for (int i = 1; i < 600 && d.alive; i++)
+	{
+		HDSplashStep(d);
+
+		if (!d.alive)
+			deeper = i;
+	}
+
+	ok(deeper > gone, "a faster fall makes a longer splash", deeper, gone);
+
+	const HDSplashNow end = HDSplashAt(s, (float)(gone + 1) / 30.0f);
+
+	ok(end.alive == 0, "after its last tick it is gone", end.alive, 0);
+
+	// Between two ticks: between their values.
+	const HDSplashNow a = HDSplashAt(s, 5.0f / 30.0f);
+	const HDSplashNow b = HDSplashAt(s, 6.0f / 30.0f);
+	const HDSplashNow m = HDSplashAt(s, 5.5f / 30.0f);
+
+	ok(m.outerR >= a.outerR && m.outerR <= b.outerR,
+		"half a tick on, the ring lies between the two ticks",
+		(long)m.outerR, (long)a.outerR);
+	ok(fabsf(m.outerR - 0.5f * (a.outerR + b.outerR)) < 0.01f,
+		"...half way", (long)(m.outerR * 100.0f),
+		(long)(50.0f * (a.outerR + b.outerR)));
+}
+
+/* The cards: 52 at the start (12 + 16 crown, 24 drops), each crown card no
+ * taller than its column, the drops gone when they are back at the
+ * surface, the same seed the same cards, another seed others. */
+static void splash_cards()
+{
+	printf("the splash: its cards\n");
+
+	const HDSplashSetup s = splash_dive(128);
+	HDCard c[kSplashCards], c2[kSplashCards];
+	const int n0 = HDSplashCards(s, 7u, 0.0f, c, kSplashCards);
+
+	ok(n0 == kSplashCards, "a new splash has all its cards", n0,
+		kSplashCards);
+
+	const float t = 0.2f;
+	const int n = HDSplashCards(s, 7u, t, c, kSplashCards);
+	const int n2 = HDSplashCards(s, 7u, t, c2, kSplashCards);
+	bool same = n == n2;
+
+	for (int i = 0; same && i < n; i++)
+		same = c[i].x == c2[i].x && c[i].y == c2[i].y && c[i].alpha ==
+			c2[i].alpha;
+
+	ok(same, "the same seed draws the same cards", n2, n);
+
+	const int n3 = HDSplashCards(s, 8u, t, c2, kSplashCards);
+	bool other = false;
+
+	for (int i = 0; i < n && i < n3; i++)
+		other = other || c[i].x != c2[i].x;
+
+	ok(other, "another seed draws other cards", n3, n);
+
+	// No crown card reaches over its column's whole height at 1.15 pace.
+	float highest = 0.0f;
+
+	for (float u = 0.0f; u < 2.0f; u += 1.0f / 60.0f)
+	{
+		const HDSplashNow now = HDSplashAt(s, u);
+
+		if (now.innerH > highest)
+			highest = now.innerH;
+	}
+
+	bool under = true;
+
+	for (int i = 0; i < kSplashCrownInner + kSplashCrownMiddle && i < n; i++)
+		under = under && s.y - c[i].y <= 0.5f * highest + 0.5f;
+
+	ok(under, "a crown card's middle stands at most half the column up",
+		(long)highest, 0);
+
+	int drops = 0;
+
+	for (int i = 0; i < n; i++)
+		drops += c[i].page == HD_CARD_DROPS;
+
+	ok(drops > 0, "drops fly while the column stands", drops, 1);
+
+	const int late = HDSplashCards(s, 7u, 0.9f, c, kSplashCards);
+	int dropsLate = 0;
+
+	for (int i = 0; i < late; i++)
+		dropsLate += c[i].page == HD_CARD_DROPS;
+
+	ok(dropsLate == 0, "and are back in the water at 0.9 s", dropsLate, 0);
+}
+
+/* The fade: a crown card's share follows the classic life - whole while
+ * the column stands, falling with the life after it lands, nothing when
+ * the splash is gone. */
+static void splash_fade()
+{
+	printf("the splash: the fade\n");
+
+	const HDSplashSetup s = splash_dive(128);
+	HDCard c[kSplashCards];
+	float last = 1.0e9f;
+	bool falls = true;
+	int steps = 0;
+
+	for (float t = 0.6f; t < 3.0f; t += 0.1f)
+	{
+		const int n = HDSplashCards(s, 3u, t, c, kSplashCards);
+
+		if (!n)
+			break;
+
+		float sum = 0.0f;
+
+		for (int i = 0; i < kSplashCrownInner && i < n; i++)
+			sum += c[i].alpha;
+
+		falls = falls && sum <= last + 1.0e-4f;
+		last = sum;
+		steps++;
+	}
+
+	ok(steps > 3 && falls, "the crown's share falls while the life runs out",
+		steps, 4);
+	ok(HDSplashCards(s, 3u, 5.0f, c, kSplashCards) == 0,
+		"and the splash draws nothing at 5 s", 0, 0);
+
+	float ring[4];
+
+	ok(HDSplashRings(s, 0.1f, ring) && ring[1] == 1.0f && ring[3] == 0.6f,
+		"the rings start at strengths 1.0 and 0.6", (long)(ring[1] * 10.0f),
+		10);
+	ok(!HDSplashRings(s, 5.0f, ring), "and are gone with the splash", 0, 0);
+}
+
+/* The tank: its spark's card lives as long as the classic spark (14 to 17
+ * ticks), rises and grows from a quarter to the whole of its size; the
+ * tank runs 105 ticks; the film comes up over 19 ticks while it sprays,
+ * dries with the lasers' count after it, and is dry before it. */
+static void splash_tank()
+{
+	printf("the splash: the fish tank\n");
+
+	int longest = 0, shortest = 99;
+	bool rises = true, grows = true;
+
+	for (unsigned int seed = 1; seed < 200; seed++)
+	{
+		HDCard c0, c1;
+		int life = 0;
+
+		for (int k = 0; k < 40; k++)
+			if (HDTankPuff(0.0f, 0.0f, 0.0f, 64, seed, (float)k / 30.0f, &c1))
+				life = k + 1;
+
+		longest = life > longest ? life : longest;
+		shortest = life < shortest ? life : shortest;
+
+		if (HDTankPuff(0.0f, 0.0f, 0.0f, 64, seed, 0.0f, &c0) &&
+			HDTankPuff(0.0f, 0.0f, 0.0f, 64, seed, 10.0f / 30.0f, &c1))
+		{
+			rises = rises && c1.y < c0.y;
+			grows = grows && c1.half > c0.half;
+		}
+	}
+
+	ok(shortest == 14 && longest == 17, "a spark's card lives 14 to 17 ticks",
+		shortest * 100 + longest, 1417);
+	ok(rises, "it rises, as the classic spark does", rises, 1);
+	ok(grows, "and grows", grows, 1);
+
+	int running = 1;
+	const int f104 = HDTankFlagsAfter(104, &running);
+
+	ok(running == 1 && f104 > 819, "the tank still runs after 104 ticks",
+		f104, 820);
+	ok(HDTankFlagsAfter(105, &running) == 810 && running == 0,
+		"and stops after the 105th, at 810", running, 0);
+
+	ok(HDFilmStrength(0, 4096, 1, 44) == 0.0f, "dry before the tank breaks",
+		0, 0);
+	ok(HDFilmStrength(1, 4096, 1, 64) == 0.0f, "...and at its first tick", 0,
+		0);
+	ok(HDFilmStrength(1, 3584, 1, 64) == 0.5f, "half wet at 3584", 1, 1);
+	ok(HDFilmStrength(1, 3072, 1, 64) == 1.0f, "wet from 3072 on", 1, 1);
+
+	const int f18 = HDTankFlagsAfter(18, 0);
+
+	ok(f18 > 3072 && HDTankFlagsAfter(19, 0) <= 3072,
+		"which the tank reaches on its 19th tick", f18, 3073);
+	ok(HDFilmStrength(2, 810, 1, 32) == 0.5f, "half dry at the lasers' 32",
+		1, 1);
+	ok(HDFilmStrength(2, 810, 1, 0) == 0.0f, "dry at their 0", 0, 0);
+	ok(HDFilmStrength(2, 810, 0, 32) == 0.0f, "and once they are gone", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -18109,6 +18378,10 @@ int main()
 	life_bob();
 	life_depth();
 	load_pool();
+	splash_motion();
+	splash_cards();
+	splash_fade();
+	splash_tank();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

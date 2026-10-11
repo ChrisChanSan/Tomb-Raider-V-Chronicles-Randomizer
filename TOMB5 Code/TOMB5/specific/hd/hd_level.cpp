@@ -50,6 +50,7 @@
 #include "../file.h"				// textinfo, aranges, nAnimUVRanges
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
 #include "hd_light.h"
+#include "hd_splash_math.h"		// the water's cards: HDFilmStrength
 
 #include <vector>
 
@@ -2082,6 +2083,199 @@ static void WaterSquareWords(const FLOOR_INFO& f, unsigned short* slope,
 	}
 }
 
+/* The water's cards (hd_render.cpp, "the cards"; hd_level.h). The hooks
+ * read the classic struct and the spark's place and touch nothing of the
+ * game: the classic splash and spark are made and run as before, only
+ * their sprites are left out where the cards draw. */
+bool HDWaterSplash(const SPLASH_SETUP* setup)
+{
+	if (!setup || !HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+		return false;
+
+	HDSplashSetup s;
+
+	s.x = (float)setup->x;
+	s.y = (float)setup->y;
+	s.z = (float)setup->z;
+	s.innerRad = setup->InnerRad;
+	s.innerSize = setup->InnerSize;
+	s.innerRadVel = setup->InnerRadVel;
+	s.innerYVel = setup->InnerYVel;
+	s.middleRad = setup->MiddleRad;
+	s.middleSize = setup->MiddleSize;
+	s.middleRadVel = setup->MiddleRadVel;
+	s.middleYVel = setup->MiddleYVel;
+	s.outerRad = setup->OuterRad;
+	s.outerSize = setup->OuterSize;
+	s.outerRadVel = setup->OuterRadVel;
+	return HDRenderWaterSplash(&s, 0.0f);
+}
+
+bool HDWaterSpray(long x, long y, long z, long strength)
+{
+	if (!HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+		return false;
+
+	return HDRenderWaterSpray((float)x, (float)y, (float)z, (int)strength,
+		0.0f);
+}
+
+/* The tanks' films (hd_render.cpp, "the tank's film"): every FLOOR_LASERS
+ * item that shares its room with a FISHTANK - the floor GetFishTank shorts
+ * out (game\lasers.cpp) - over the squares of its box as
+ * InitialiseFloorLasers lays it (game\init.cpp: v1 at -512, -512 from the
+ * item, v4 at its trigger_flags' width and height in squares less 512),
+ * at the item's floor. RICH2 has two: its two tanks. */
+struct WaterFilmItems
+{
+	short tank, laser;
+};
+
+static std::vector<WaterFilmItems> g_film_items;
+
+static void BuildWaterFilms()
+{
+	std::vector<HDWaterFilm> films;
+
+	g_film_items.clear();
+
+	for (int t = 0; t < level_items; t++)
+	{
+		if (items[t].object_number != FISHTANK)
+			continue;
+
+		for (int l = 0; l < level_items; l++)
+		{
+			const ITEM_INFO* laser = &items[l];
+			const FLOORLASER_STRUCT* box =
+				(const FLOORLASER_STRUCT*)laser->data;
+
+			if (laser->object_number != FLOOR_LASERS || !box ||
+				laser->room_number != items[t].room_number)
+				continue;
+
+			const int ax = laser->pos.x_pos + box->v1.x;
+			const int bx = laser->pos.x_pos + box->v4.x;
+			const int az = laser->pos.z_pos + box->v1.z;
+			const int bz = laser->pos.z_pos + box->v4.z;
+			HDWaterFilm f;
+
+			f.room = laser->room_number;
+			f.x0 = (ax < bx ? ax : bx) & ~1023;
+			f.x1 = ((ax < bx ? bx : ax) + 1023) & ~1023;
+			f.z0 = (az < bz ? az : bz) & ~1023;
+			f.z1 = ((az < bz ? bz : az) + 1023) & ~1023;
+			f.y = laser->pos.y_pos;
+			f.tank = t;
+			f.laser = l;
+			films.push_back(f);
+
+			WaterFilmItems w = { (short)t, (short)l };
+
+			g_film_items.push_back(w);
+		}
+	}
+
+	HDRenderWaterFilms(films.empty() ? 0 : &films[0], (int)films.size());
+}
+
+/* Each film's strength this frame, out of its tank's and its lasers' state
+ * (hd_splash_math.h, HDFilmStrength): the tank sprays while ControlFishtank
+ * runs it, and is done once KillItem cleared it; the lasers live until
+ * their own KillItem. Read only. */
+static void FeedWaterFilms()
+{
+	for (size_t f = 0; f < g_film_items.size() &&
+		(int)f < HDRenderWaterFilmCount(); f++)
+	{
+		const ITEM_INFO* tank = &items[g_film_items[f].tank];
+		const ITEM_INFO* laser = &items[g_film_items[f].laser];
+		const int state = (tank->flags & IFL_CLEARBODY) ? 2 :
+			tank->status == ITEM_ACTIVE && tank->active ? 1 : 0;
+		const int live = !(laser->flags & IFL_CLEARBODY) &&
+			laser->status == ITEM_ACTIVE && laser->active ? 1 : 0;
+
+		HDRenderWaterFilmWet((int)f, HDFilmStrength(state,
+			tank->item_flags[1], live, laser->trigger_flags));
+	}
+}
+
+/* The pages of the cards, appended to the level's page cache - with the
+ * sheets alone: tomb5.hd_water 0 loads nothing more. */
+static void AppendWaterCardPages()
+{
+	if (!tomb5.hd_water || !HDRenderWaterSheetsBuilt())
+		return;
+
+	int pages[4];
+	const int n = HDRenderWaterCardPages(pages, 4);
+	HDPageCacheStats stats;
+	const char* why = "";
+
+	if (!HDPageCacheAppend(App.dx.lpD3DDevice, HDInstallRoot(), pages, n,
+		kPagesManaged, DecodeThreads(), &stats, &why) && gLogEnabled)
+		Log("HDLOG level=%s water cards' pages refused reason=%s", g_stem,
+			why);
+}
+
+/* The cards of this frame, after the rooms' blend and additive phases:
+ * the world into view space through the engine's own matrix, which in the
+ * HD frame is the view itself (HDFrameDrawGlow hands the bracket an
+ * identity view).
+ *
+ * SPLASHLOG, with -log, once a second of game time (30 ticks) while a
+ * splash, a card or a wet film draws:
+ *
+ *   SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
+ *             tank=<item>:<state>
+ *
+ * splashes the HD splashes alive, cards the cards drawn this frame, rings
+ * the splash rings handed to the sheets (two a splash), tank the item of
+ * the first wet film's FISHTANK and that film's strength 0..1 (-1:0.00
+ * when none is wet). */
+static void DrawWaterCards()
+{
+	static long logged = -1;
+
+	if (!HDRenderWaterSheetsBuilt())
+		return;
+
+	float m[16];
+
+	phd_PushMatrix();
+	phd_TranslateAbs(0, 0, 0);
+	m[0] = aMXPtr[M00];
+	m[1] = aMXPtr[M10];
+	m[2] = aMXPtr[M20];
+	m[3] = 0.0f;
+	m[4] = aMXPtr[M01];
+	m[5] = aMXPtr[M11];
+	m[6] = aMXPtr[M21];
+	m[7] = 0.0f;
+	m[8] = aMXPtr[M02];
+	m[9] = aMXPtr[M12];
+	m[10] = aMXPtr[M22];
+	m[11] = 0.0f;
+	m[12] = aMXPtr[M03];
+	m[13] = aMXPtr[M13];
+	m[14] = aMXPtr[M23];
+	m[15] = 1.0f;
+	phd_PopMatrix();
+	HDRenderWaterCardsDraw(m);
+
+	HDRenderSplashStats st;
+
+	HDRenderSplashStatsNow(&st);
+
+	if (!gLogEnabled || (!st.cards && !st.rings && st.wet <= 0.0f) ||
+		GlobalCounter / 30 == logged)
+		return;
+
+	logged = GlobalCounter / 30;
+	Log("SPLASHLOG level=%s splashes=%d cards=%d rings=%d tank=%d:%.2f",
+		g_stem, st.splashes, st.cards, st.rings, st.tank, st.wet);
+}
+
 static void BuildWaterSheets()
 {
 	std::vector<HDWaterRoom> rooms((size_t)number_rooms);
@@ -2155,9 +2349,11 @@ static void BuildWaterSheets()
 
 	HDRenderWaterSinks(table.empty() ? 0 : &table[0], (int)table.size());
 	HDRenderWaterFile("hd_water.txt");
+	BuildWaterFilms();
 	HDRenderSetWaterSheets(rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
 		WaterSection(), g_stem, tomb5.hd_water ? 1 : 0);
 	BuildWaterFalls();
+	AppendWaterCardPages();
 	MoveWaterfallMist();
 
 	/* The depth texture the sheets read (HDRenderWaterDepthBind), bound
@@ -7745,7 +7941,11 @@ void HDFrameDrawGlow()
 	 * in the render target now - the HD rooms and objects, Lara and the
 	 * classic buckets - and nothing of the blend phase yet. One copy, and
 	 * only when a room of this frame has a sheet (none with tomb5.hd_water
-	 * 0, which builds no sheet). */
+	 * 0, which builds no sheet). A tank's film asks for it while it is
+	 * wet, so its strength is set first. */
+	if (HDRenderWaterSheetsBuilt())
+		FeedWaterFilms();
+
 	for (int i = 0; i < g_frame_count; i++)
 		if (HDRenderGroupHasSheet(g_frame[i].group))
 		{
@@ -7792,6 +7992,7 @@ void HDFrameDrawGlow()
 
 	// The rooms are done - see the same line in HDFrameDraw.
 	HDRenderScissorOff();
+	DrawWaterCards();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
 	HDRenderFrameEnd();
 

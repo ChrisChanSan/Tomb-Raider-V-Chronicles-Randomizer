@@ -3174,3 +3174,91 @@ float4 RiverPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 	a = lerp(a, 1.0f, foam);
 	return float4(col, a) * above;
 }
+
+#ifdef HD_CARD
+/* ------------------------------------------------------------- the cards --
+ *
+ * The water's splash and spray as cards (hd_render.cpp, "the cards"): a
+ * splash's crown and drops where something falls into a sheet, the spray of
+ * a breaking fish tank. Each card is a quad the processor builds in view
+ * space, facing the eye, so the vertex shader only projects it: c0 - c3 hold
+ * the projection alone. The page is the remaster's own (spray 3242 and 3243,
+ * drops 3160), a window of it per card; the card cuts it round, softly, so
+ * no quad's edge shows. Premultiplied (ONE / INVSRCALPHA), tested against
+ * the frame's depth, no depth write.
+ *
+ * Pixel registers, both uploaded before the cards' one draw, in WaterPS's
+ * per-draw block, which every sheet draw writes again before it reads it:
+ *
+ * c92  gCardScreen  x, y one over the render target's width and height, z, w
+ *                   the projection's a and b (depth = a - b / z,
+ *                   HDRenderMakeProjection)
+ * c93  gCardMode    x 1 while the frame's depth texture is bound on s6, y one
+ *                   over the depth over which a card fades into what stands
+ *                   behind it (kCardSoft)
+ *
+ * Declared only under HD_CARD, so the room and water shaders compiled from
+ * this file keep their own bytecode. */
+float4 gCardScreen : register(c92);
+float4 gCardMode : register(c93);
+sampler2D sCardDepth : register(s6);
+
+struct CARD_OUT
+{
+	float4 pos    : POSITION;
+	float4 col    : TEXCOORD2;	// the tint, a the card's share
+	float4 uv     : TEXCOORD0;	// xy the page, zw the corner, -1..1
+	float4 viewZ  : TEXCOORD1;	// x the view depth, y the fog's light
+};
+
+/* The vertex: its place in view space, the page and the corner, the tint
+ * and the share (floats: a body's foam colour may stand over 1), and the
+ * light the fog takes a share of. */
+CARD_OUT CardVS(float4 inPos : POSITION, float4 inUV : TEXCOORD0,
+	float4 inCol : TEXCOORD1, float inLight : TEXCOORD2)
+{
+	CARD_OUT o;
+
+	o.pos = mul(float4(inPos.xyz, 1.0f), gWorldViewProj);
+	o.col = inCol;
+	o.uv = inUV;
+	o.viewZ = float4(inPos.z, inLight, 0.0f, 0.0f);
+	return o;
+}
+
+float4 CardPS(CARD_OUT input, float2 vpos : VPOS) : COLOR0
+{
+	/* The round cut: full in the middle, falling to nothing at the rim as
+	 * the square of one less the squared radius - a free choice, set by eye
+	 * on the round's RoomProbe pictures. */
+	const float r2 = dot(input.uv.zw, input.uv.zw);
+	const float round = saturate(1.0f - r2);
+	const float4 page = tex2D(sPage, input.uv.xy);
+	float a = page.a * round * round * input.col.a;
+
+	/* Soft against the frame: where the card comes within kCardSoft of
+	 * what was drawn behind it - the water's surface it rises from, the
+	 * floor it falls on - it fades, so no straight line cuts it there. */
+	if (gCardMode.x > 0.5f)
+	{
+		const float2 uv = (vpos + 0.5f) * gCardScreen.xy;
+		const float d = tex2Dlod(sCardDepth, float4(uv, 0.0f, 0.0f)).r;
+		const float behind = gCardScreen.w / max(gCardScreen.z - d,
+			1.0e-6f);
+
+		a *= saturate((behind - input.viewZ.x) * gCardMode.y);
+	}
+
+	/* The distance fog as the sheet's foam takes it (FootPS), a share of
+	 * the light the card carries. */
+	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+
+	a *= saturate(1.0f - fog / max(input.viewZ.y, 0.05f));
+
+	/* The page gives the spray its shape, the body its colour: premultiplied
+	 * as the sheet's foam is drawn (FootPS), the foam colour times the
+	 * share - spray is the foam of the same water, thrown up. */
+	return float4(input.col.rgb * a, a);
+}
+#endif

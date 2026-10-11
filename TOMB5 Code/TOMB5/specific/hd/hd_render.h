@@ -1471,6 +1471,72 @@ bool HDRenderWaterSheetUnder(int x, int y, int z);
  * picture (-lara); a new level starts with 0. */
 void HDRenderWaterLara(int inWater, float x, float z);
 
+/* The cards (hd_render.cpp, "the cards"): a dive splash and a fish tank's
+ * spray drawn as the water's own, with the sheets' material.
+ *
+ * HDRenderWaterSplash takes a splash as SetupSplash makes it (the struct's
+ * numbers, hd_splash_math.h), started `age` seconds before this frame's
+ * clock; it draws its rings on the sheet under it and its crown and drops
+ * as cards for as long as the classic splash lives. False when no sheet
+ * lies under it or the cards cannot be drawn - the classic splash is then
+ * drawn as it is. HDRenderWaterSpray takes one spark of a tank's spray
+ * (TriggerFishtankSpray's place and strength) for a card of its mist;
+ * false when the cards cannot be drawn. HDRenderWaterCardsReady says
+ * whether they can: a level with sheets on a device that made the card
+ * shaders and holds the three pages.
+ *
+ * HDRenderWaterCardPages names the pages, for the level's page cache
+ * (3242 and 3243, the remaster's spray, and 3160, its drops); the cache
+ * holds them before the level's first frame or no card is drawn.
+ *
+ * HDRenderWaterCardsDraw draws every live card once, after the rooms'
+ * blend and additive phases, inside the frame's bracket: `toFrame` takes a
+ * world point (row vector, D3DMATRIX order) to the frame's world - the
+ * view itself in the engine, whose view matrix is the identity, the
+ * picture's world in RoomProbe. */
+struct HDSplashSetup;
+
+bool HDRenderWaterSplash(const HDSplashSetup* setup, float age);
+bool HDRenderWaterSpray(float x, float y, float z, int strength, float age);
+bool HDRenderWaterCardsReady();
+int HDRenderWaterCardPages(int* pages, int max);
+void HDRenderWaterCardsDraw(const float* toFrame);
+
+/* The tank's film (hd_render.cpp, "the tank's film"): a thin sheet of the
+ * water over the floor a fish tank floods. HDRenderWaterFilms hands in, before
+ * HDRenderSetWaterSheets, each film's room, its box in whole squares (world
+ * x0, z0 inclusive, x1, z1 exclusive), the floor's world y and the tank's
+ * item; the sheets build a basin body of its own for each, counted nowhere
+ * and no water square for anything but its own draw. HDRenderWaterFilmWet
+ * sets a film's strength for this frame (0 draws nothing, 1 the whole
+ * sheet); a new level starts every film dry. */
+struct HDWaterFilm
+{
+	int room;
+	int x0, z0, x1, z1;
+	int y;
+	int tank;
+	int laser;
+};
+
+void HDRenderWaterFilms(const HDWaterFilm* films, int count);
+void HDRenderWaterFilmWet(int film, float strength);
+int HDRenderWaterFilmCount();
+
+/* SPLASHLOG with -log, once a second while a card or a ring of a splash
+ * draws: the counts of the last frame drawn. */
+struct HDRenderSplashStats
+{
+	int splashes;		// HD splashes alive
+	int cards;		// cards drawn
+	int rings;		// splash rings handed to the sheets
+	int tank;		// the item of the first film that is wet, or -1
+	float wet;		// its strength
+	int sprays;		// tank sparks alive as cards
+};
+
+void HDRenderSplashStatsNow(HDRenderSplashStats* out);
+
 /* The creatures' mark (hd_render.cpp, "the creatures' mark"): what is
  * drawn between HDRenderWaterMarkBegin and HDRenderWaterMarkEnd marks its
  * pixels in a stencil bit of their own, and the sheets draw no waterline

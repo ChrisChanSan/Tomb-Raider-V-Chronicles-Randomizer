@@ -2095,6 +2095,25 @@ it.
   underwater state, which the dive (JOBY4) never sets and which follows the
   room a logic step late (`cam=`), 1 when that frame is drawn under the water
   (`on=`), and 1 when the level takes the deep sea's water (`deep=`).
+- **The dive splash and the fish tank.** With `hd_water` and `hd_motion`
+  on, a splash over a sheet - Lara diving or wading in, an explosion under
+  the water - is drawn as this water's own: two rings running out over the
+  sheet, a crown of spray standing as high as the classic splash's column
+  and drops falling back, in the water's own foam colour, on the
+  Remaster's spray and drops pages; the classic sprite rings are not drawn
+  there. A broken fish tank's spray rises as cards of the same kind
+  instead of the grey classic sparks. With `hd_water` on, the floor its
+  water floods is covered by a thin sheet of the water with a foaming rim,
+  deepest while it pours out, then sinking and drying as the floor lasers
+  run down (with `hd_motion` off it keeps its resting height); the
+  lasers' red glow stays. The splash's and the spray's timing and
+  everything the game decides are the classic ones. `hd_water` `0` draws
+  the classic splash and spray, and so does `hd_motion` `0`.
+- **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
+  it draws: `SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
+  tank=<item>:<state>` - the HD splashes alive, the cards drawn, the splash
+  rings on the sheets (two a splash), and the item of the fish tank whose
+  floor is wet with the film's strength 0 to 1 (`-1:0.00` when none is).
 - **The water's life** (with the water sheets, `hd_water`). Small things float on
   the sheets and a few fish swim under them, in three levels for now: ANDREA2's sewer
   canal gets bottles, rags and a barrel; ANDY3's rivers, its lake, its shallows and the

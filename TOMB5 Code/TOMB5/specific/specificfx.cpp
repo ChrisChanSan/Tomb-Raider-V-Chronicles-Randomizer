@@ -2123,6 +2123,12 @@ void S_DrawSparks()
 		if (!sptr->On)
 			continue;
 
+		/* A fish tank's spark the HD path draws as a card (TriggerFishtank-
+		 * Spray set SF_UNUSED2, hd_level.h HDWaterSpray). Never set on the
+		 * classic path. */
+		if (sptr->Flags & SF_UNUSED2)
+			continue;
+
 		if (sptr->Flags & SF_FX)
 		{
 			fx = &effects[sptr->FxObj];
@@ -4069,6 +4075,12 @@ void S_DrawSplashes()
 		splash = &splashes[i];
 
 		if (!(splash->flags & 1))
+			continue;
+
+		/* A splash the water sheet draws as its own (SetupSplash set 0x10,
+		 * hd_level.h HDWaterSplash): its sprites stay out. Never set on the
+		 * classic path. */
+		if (splash->flags & 0x10)
 			continue;
 
 		phd_PushMatrix();

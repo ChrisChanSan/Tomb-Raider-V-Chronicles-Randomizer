@@ -417,6 +417,21 @@
  *                     game's own ripples), age seconds after it began, of
  *                     a ripple that began at size (120, a wading Lara's,
  *                     without it); repeatable. Needs -hdwater 1.
+ *     -splash x y z t  a splash set up at world x, y (the water's surface),
+ *                     z and drawn t seconds after it began, through the
+ *                     HD form (hd_render.cpp, "the cards"): its rings on
+ *                     the sheet and its crown and drops. -splashkind 0 is
+ *                     Lara's dive (Splash, the default), 1 her wading
+ *                     splash (WadeSplash), 2 an explosion under the water
+ *                     (TriggerUnderwaterExplosion); -splashfall n her fall
+ *                     speed, or the explosion's depth (128). Needs
+ *                     -hdwater 1; off without it.
+ *     -tank item t    the fish tank `item` (FISHTANK) of the level t
+ *                     seconds after it broke: its spray as cards out of
+ *                     the points ControlFishtank sprays from, and the film
+ *                     on its room's floor with its strength of that moment
+ *                     (t under 0 the tank before it breaks). Needs -hdwater
+ *                     1; off without it.
  *     -rippleat x,y,z  whether a game ripple there loses its classic
  *                     sprite to a sheet's ring (HDRenderWaterSheetUnder);
  *                     repeatable, printed after the WATERLOG lines.
@@ -559,6 +574,7 @@
  * from both build scripts. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -2268,6 +2284,20 @@ static void LifeFrame(const float* view, const D3DMATRIX* projection,
 		HDModelDrawCalls());
 }
 
+/* -splash x y z t, -splashkind and -splashfall: one splash for the cards. */
+static bool g_splash_set = false;
+static float g_splash_at[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+static int g_splash_kind = 0;
+static int g_splash_fall = 128;
+/* -tank item t: the tank, its film and where its spray comes from - the
+ * item's place and turn and its mesh's root (its first frame's offset),
+ * which GetJointAbsPosition adds for joint 0. */
+static int g_tank_item = -1;
+static float g_tank_time = 0.0f;
+static int g_tank_film = -1;
+static float g_tank_root[3] = { 0.0f, 0.0f, 0.0f };
+static Tr5Item g_tank_place;
+static bool g_tank_found = false;
 // -nomark: the stand-ins without the mark (the picture before it);
 // -markview: the marked pixels in red over the finished picture.
 static bool g_creature_mark = true;
@@ -5588,6 +5618,319 @@ static void ProbeWaterCorners(const Tr5Level& level,
 		"with a slope)\n", equal, squares, allEqual, all, sloped);
 }
 
+/* The tanks' films out of the classic .TRC - the twin of hd_level.cpp's
+ * BuildWaterFilms: every FLOOR_LASERS item (slot 392) in the room of a
+ * FISHTANK (slot 413), its box as InitialiseFloorLasers lays it - the
+ * item's trigger_flags as width (the ones, squares along z) and height (the
+ * tens, along x), from 512 before the item's place. And for -tank, the
+ * tank's place and its mesh's root, as ProbeWaterFalls reads a fall's. */
+static void ProbeWaterFilms(const Tr5Level& level)
+{
+	std::vector<HDWaterFilm> films;
+
+	g_tank_film = -1;
+	g_tank_found = false;
+
+	for (int t = 0; t < level.itemCount(); t++)
+	{
+		Tr5Item tank;
+
+		if (!level.getItem(t, tank) || tank.objectNumber != 413)
+			continue;
+
+		if (g_tank_item >= 0)
+			printf("-tank: FISHTANK item %d room %d at %d %d %d turn %d\n", t,
+				tank.roomNumber, tank.x, tank.y, tank.z, tank.yRot);
+
+		if (t == g_tank_item)
+		{
+			Tr5Level::MoveableInfo info;
+
+			g_tank_place = tank;
+			g_tank_found = true;
+
+			if (level.moveableInfo(413, info))
+			{
+				const long word = (long)(info.frameOffset / 2);
+
+				for (int k = 0; k < 3; k++)
+					g_tank_root[k] = level.debugReadFrameShort(word + 6 + k);
+			}
+		}
+
+		for (int l = 0; l < level.itemCount(); l++)
+		{
+			Tr5Item laser;
+
+			if (!level.getItem(l, laser) || laser.objectNumber != 392 ||
+				laser.roomNumber != tank.roomNumber)
+				continue;
+
+			const int width = laser.triggerFlags % 10;
+			const int height = laser.triggerFlags / 10;
+			HDWaterFilm f;
+
+			f.room = laser.roomNumber;
+			f.x0 = (laser.x - 512) & ~1023;
+			f.x1 = f.x0 + height * 1024;
+			f.z0 = (laser.z - 512) & ~1023;
+			f.z1 = f.z0 + width * 1024;
+			f.y = laser.y;
+			f.tank = t;
+			f.laser = l;
+
+			if (t == g_tank_item)
+				g_tank_film = (int)films.size();
+
+			printf("-tank: film %d room %d x %d..%d z %d..%d y %d tank %d "
+				"laser %d (trigger_flags %d)\n", (int)films.size(), f.room,
+				f.x0, f.x1, f.z0, f.z1, f.y, t, l, laser.triggerFlags);
+			films.push_back(f);
+		}
+	}
+
+	HDRenderWaterFilms(films.empty() ? 0 : &films[0], (int)films.size());
+}
+
+// The cards' pages into the cache, with the sheets, as hd_level.cpp adds them.
+static void ProbeCardPages(const char* root, bool managed, int threads)
+{
+	if (g_hdwater != 1 || !HDRenderWaterSheetsBuilt())
+		return;
+
+	int pages[4];
+	const int n = HDRenderWaterCardPages(pages, 4);
+	HDPageCacheStats stats;
+	const char* why = "";
+
+	if (!HDPageCacheAppend(g_device, root, pages, n, managed, threads, &stats,
+		&why))
+		printf("-hdwater: the cards' pages refused - %s\n", why);
+}
+
+/* ControlFishtank's table, game\tower.cpp: the points along the tank's
+ * front the spray comes from, x and z pairs about joint 0. */
+static const short kSplashOffsets[18] = { 1072, 48, 1072, 48, 650, 280, 200,
+	320, -300, 320, -800, 320, -1200, 320, -1650, 280, -2112, 48 };
+
+/* The splash and the tank of -splash and -tank, handed to the cards at the
+ * age the picture asks for. The tank: ControlFishtank run tick by tick to
+ * the picture's time (hd_splash_math.h, HDTankFlagsAfter), each tick's
+ * points - 5 on an even tick, 4 on an odd one, the inner seven moved along
+ * their segment by this file's hash where the game rolls GetRandomControl
+ * - through the tank's place, turn and root (joint 0 as GetJointAbsPosition
+ * gives it with the joint's own turn left at 0), the strength
+ * TriggerFishtankSpray takes; the sparks of the last 18 ticks are handed
+ * in (a spark's card lives 17 at most).
+ * After the tank the lasers' count runs down from 64 a tick, and the film
+ * takes the strength HDFilmStrength gives - what hd_level.cpp's
+ * FeedWaterFilms reads off the items in the game. A tank without floor
+ * lasers in its room has no film (-1 on the line); its spray is drawn. */
+static void ProbeCardsFeed()
+{
+	if (g_hdwater != 1)
+		return;
+
+	if (g_splash_set)
+	{
+		const int fs = g_splash_fall;
+		HDSplashSetup s;
+
+		s.x = g_splash_at[0];
+		s.y = g_splash_at[1];
+		s.z = g_splash_at[2];
+
+		if (g_splash_kind == 1)
+		{
+			s.innerRad = 16; s.innerSize = 12; s.innerRadVel = 160;
+			s.innerYVel = -72 * fs;
+			s.middleRad = 24; s.middleSize = 24; s.middleRadVel = 224;
+			s.middleYVel = -36 * fs;
+			s.outerRad = 32; s.outerSize = 32; s.outerRadVel = 272;
+		}
+		else if (g_splash_kind == 2)
+		{
+			const int wh = 2048 - fs;
+
+			s.innerRadVel = 160; s.middleRadVel = 224; s.outerRadVel = 272;
+			s.innerRad = (wh >> 6) + 16; s.innerSize = (wh >> 6) + 12;
+			s.innerYVel = (-512 - wh) << 3;
+			s.middleRad = (wh >> 6) + 24; s.middleSize = (wh >> 6) + 24;
+			s.middleYVel = (-768 - wh) << 2;
+			s.outerRad = (wh >> 6) + 32; s.outerSize = (wh >> 6) + 32;
+		}
+		else
+		{
+			s.innerRad = 32; s.innerSize = 8; s.innerRadVel = 320;
+			s.innerYVel = -40 * fs;
+			s.middleRad = 48; s.middleSize = 32; s.middleRadVel = 480;
+			s.middleYVel = -20 * fs;
+			s.outerRad = 32; s.outerSize = 128; s.outerRadVel = 544;
+		}
+
+		const HDSplashNow now = HDSplashAt(s, g_splash_at[3]);
+
+		printf("-splash: kind %d fall %d at %.0f %.0f %.0f, %.2f s: %s, "
+			"rings %.0f/%.0f, column %.0f/%.0f, life %.2f\n", g_splash_kind,
+			fs, s.x, s.y, s.z, g_splash_at[3],
+			HDRenderWaterSplash(&s, g_splash_at[3]) ? "taken" :
+			"NOT taken (no sheet under it or no cards)", now.middleR,
+			now.outerR, now.innerH, now.middleH, now.life);
+	}
+
+	if (g_tank_item < 0)
+		return;
+
+	if (!g_tank_found)
+	{
+		printf("-tank: item %d is no FISHTANK - nothing\n", g_tank_item);
+		return;
+	}
+
+	const float c = enginecam::PhdCos(g_tank_place.yRot) * (1.0f / 16384.0f);
+	const float sn = enginecam::PhdSin(g_tank_place.yRot) * (1.0f / 16384.0f);
+	const int now = g_tank_time < 0.0f ? -1 : (int)(g_tank_time * 30.0f);
+	int running = 0;
+	const int flags = HDTankFlagsAfter(now < 0 ? 0 : now, &running);
+	int sprays = 0;
+	float lowest = -1.0e9f;
+
+	for (int k = now - 18; now >= 0 && k <= now; k++)
+	{
+		int on = 0;
+		const int f1 = HDTankFlagsAfter(k < 0 ? 0 : k, &on);
+
+		if (k < 0 || !on)
+			continue;
+
+		for (int i = k & 1; i < 9; i += 2)
+		{
+			int x = kSplashOffsets[2 * i];
+			int z = kSplashOffsets[2 * i + 1];
+
+			if (i && i != 8)
+			{
+				const unsigned int h = HDCardHash((unsigned int)k,
+					(unsigned int)i);
+				const int dx = abs(kSplashOffsets[2 * i + 2] - x);
+				const int dz = kSplashOffsets[2 * i + 3] - z;
+
+				x -= dx ? (int)(h % (unsigned int)dx) : 0;
+
+				if (dz)
+					z += (int)((h >> 16) % (unsigned int)abs(dz)) *
+						(dz < 0 ? -1 : 1);
+			}
+
+			const float lx = (float)x + g_tank_root[0];
+			const float lz = (float)z + g_tank_root[2];
+			const float wx = (float)g_tank_place.x + lx * c + lz * sn;
+			const float wz = (float)g_tank_place.z + lz * c - lx * sn;
+			const float wy = (float)g_tank_place.y + g_tank_root[1];
+			int strength = ((f1 - 800) >> 3) >> 1;
+
+			strength = strength > 64 ? 64 : strength;
+			lowest = wy > lowest ? wy : lowest;
+
+			if (HDRenderWaterSpray(wx, wy, wz, strength,
+				g_tank_time - (float)k / 30.0f))
+				sprays++;
+		}
+	}
+
+	// The lasers after the tank: 64 when it stops, one less a tick.
+	const int stop = 105;
+	const int state = now < 0 ? 0 : running ? 1 : 2;
+	const int count = state == 2 ? 64 - (now - stop) : 64;
+	const float wet = HDFilmStrength(state, flags, count > 0 ? 1 : 0, count);
+
+	if (g_tank_film >= 0)
+		HDRenderWaterFilmWet(g_tank_film, wet);
+
+	printf("-tank: item %d at %.2f s: %s, item_flags[1] %d, lasers %d, film "
+		"%d wet %.2f, %d sparks handed in, spray at y %.0f (root %.0f %.0f "
+		"%.0f)\n", g_tank_item, g_tank_time, state == 0 ? "before" :
+		state == 1 ? "spraying" : "done", flags, count, g_tank_film, wet,
+		sprays, lowest, g_tank_root[0], g_tank_root[1], g_tank_root[2]);
+}
+
+/* The cards drawn where HDFrameDrawGlow draws them, the picture's world
+ * shifted by the seed room's origin (the tool's world is the seed room's),
+ * timed on the GPU with a timestamp pair; the line is -hdwater's, so the
+ * timing scripts add it to the water's other phases. */
+static void ProbeCardsDraw()
+{
+	if (g_hdwater != 1 || (!g_splash_set && g_tank_item < 0))
+		return;
+
+	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
+	IDirect3DQuery9* q[3] = { 0, 0, 0 };
+	IDirect3DQuery9* freq = 0;
+
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &freq);
+
+	const bool timed = q[0] && q[1] && q[2] && freq;
+
+	if (timed)
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	HDRenderWaterCardsDraw(m);
+
+	if (timed)
+	{
+		q[2]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+		freq->Issue(D3DISSUE_END);
+	}
+
+	HDRenderSplashStats st;
+
+	HDRenderSplashStatsNow(&st);
+
+	double ms = -1.0;
+
+	if (timed)
+	{
+		UINT64 a = 0, b = 0, f = 0;
+		BOOL disjoint = TRUE;
+
+		while (q[0]->GetData(&disjoint, sizeof(disjoint), D3DGETDATA_FLUSH) ==
+			S_FALSE)
+			;
+
+		while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (freq->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		if (!disjoint && f)
+			ms = (double)(b - a) * 1000.0 / (double)f;
+	}
+
+	for (int i = 0; i < 3; i++)
+		if (q[i])
+			q[i]->Release();
+
+	if (freq)
+		freq->Release();
+
+	printf("SPLASHLOG level=probe splashes=%d cards=%d rings=%d tank=%d:%.2f\n",
+		st.splashes, st.cards, st.rings, st.tank, st.wet);
+	printf("-hdwater: cards %d cards in 3 draws at most, GPU %.4f ms\n",
+		st.cards, ms);
+}
+
 /* The waterfall objects for their feet, out of the classic .TRC - the twin
  * of hd_level.cpp's BuildWaterFalls, which reads items[]: every item of
  * WATERFALL1 to 3 (slots 410 - 412) and WATERFALLSS1 and 2 (414, 415;
@@ -8220,6 +8563,24 @@ static int ProbeMain(int argc, char** argv)
 				printf("RoomProbe: -ripple wants x,z,age[,size] - '%s' "
 					"ignored\n", argv[at]);
 		}
+		else if (!strcmp(argv[at], "-splash") && at + 4 < argc)
+		{
+			for (int k = 0; k < 4; k++)
+				g_splash_at[k] = (float)atof(argv[at + 1 + k]);
+
+			g_splash_set = true;
+			at += 4;
+		}
+		else if (!strcmp(argv[at], "-splashkind") && at + 1 < argc)
+			g_splash_kind = atoi(argv[++at]);
+		else if (!strcmp(argv[at], "-splashfall") && at + 1 < argc)
+			g_splash_fall = atoi(argv[++at]);
+		else if (!strcmp(argv[at], "-tank") && at + 2 < argc)
+		{
+			g_tank_item = atoi(argv[at + 1]);
+			g_tank_time = (float)atof(argv[at + 2]);
+			at += 2;
+		}
 		else if (!strcmp(argv[at], "-lara") && at + 1 < argc)
 		{
 			g_lara_set = sscanf_s(argv[++at], "%f,%f", &g_lara_x,
@@ -10295,9 +10656,11 @@ static int ProbeMain(int argc, char** argv)
 			char line[512];
 
 			HDRenderWaterFile(g_water_file.empty() ? 0 : g_water_file.c_str());
+			ProbeWaterFilms(level);
 			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 				g_hdwater);
 			ProbeWaterFalls(level, stem);
+			ProbeCardPages(root, managed, threads);
 
 			for (size_t i = 0; i + 4 < g_feet.size(); i += 5)
 				HDRenderWaterFootAdd(g_feet[i], g_feet[i + 1], g_feet[i + 2],
@@ -10751,6 +11114,9 @@ static int ProbeMain(int argc, char** argv)
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 
+	// -splash and -tank, on the clock the bracket now holds.
+	ProbeCardsFeed();
+
 	// The constants under the water this frame took - ModelProbe -under's.
 	if (frame.under)
 	{
@@ -10953,6 +11319,8 @@ static int ProbeMain(int argc, char** argv)
 	// The scissor rectangle, off again inside the bracket, as the engine's
 	// frame does.
 	HDRenderScissorOff();
+	// The water's cards where HDFrameDrawGlow draws them.
+	ProbeCardsDraw();
 	HDRenderFrameEnd();
 	g_device->EndScene();
 

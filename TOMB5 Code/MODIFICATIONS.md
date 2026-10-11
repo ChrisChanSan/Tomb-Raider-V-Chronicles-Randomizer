@@ -12151,6 +12151,190 @@ splash and the fish tank's spray stay open.
 
 **Commits.** `48d902b`, `9d68ecb`, `054b59f`, `3eb1f74`.
 
+**The splash and the tank, the water's own.** Asked for: an HD splash where Lara dives
+(a short burst of cards on the remaster's spray pages and one large ring on the sheet,
+the answer chosen for the dive splash, 2026-10-10), and of RICH2's fish tanks, with a
+video of the room (supplied for this project, not in the repository): the water that
+comes out - can it be HD like our water? It was still the classic look.
+
+What was classic. A dive into water (`Splash`, game\effects.cpp; Lara wading in,
+`WadeSplash`; an explosion under water, game\lara1gun.cpp) calls `SetupSplash`
+(game\effect2.cpp), whose struct `UpdateSplashes` grows tick by tick - three rings of a
+radius and a size, an inner and a middle column that rise and fall, a life of 62 that
+runs out two a tick once the inner column is back at the surface - and
+`S_DrawSplashes` (specificfx.cpp) draws as additive sprite rings at twice the struct's
+radius and an eighth of its height. A fish tank (FISHTANK, slot 413), once broken, runs
+`ControlFishtank` (game\tower.cpp): every tick 5 or 4 points of `SplashOffsets` along
+the tank's front, through joint 0, each one spark of `TriggerFishtankSpray` - grey,
+additive, 14 to 17 ticks, rising 8 to 15 units a tick (its gravity is negative), a
+radius growing from 64..95 to 256..380 units - while `item_flags[1]` falls from 4096 by
+a 64th a tick: 105 ticks, 3.5 s, then `KillItem`. The floor lasers of its room
+(FLOOR_LASERS, slot 392) hold `trigger_flags` at 64 while it runs (`GetFishTank`) and
+count it down to 0 after it (2.13 s); `S_DrawFloorLasers` draws them as red quads only,
+random while that count runs - the lasers shorting in the water, not a wet floor.
+RICH2 holds two tanks: item 33 in room 23 over floor lasers (item 34, 4 x 4 squares)
+and item 182 in room 122, which has none. The tank's mesh itself, scaled in height by
+`item_flags[1]` (`DrawScaledSpike`, game\traps.cpp), is the large dome of water in the
+video; it is not part of this round.
+
+What it is now, with `tomb5.hd_water` on (`hd_render.cpp`, "the cards" and "the tank's
+film"; the arithmetic in `hd_splash_math.h`, all of it a function of the age alone).
+The splash and the spray ask for `tomb5.hd_motion` as well: without it `HDWaterSplash`
+and `HDWaterSpray` (hd_level.cpp) return false at their first test and the classic
+sprites draw, as with `hd_water` 0; the film needs `hd_water` alone. A splash over a
+drawing sheet (the ripples' test: a sheet under it within 256 units of
+height) is taken by `HDWaterSplash` from `SetupSplash`, which marks the struct with bit
+0x10; `S_DrawSplashes` then leaves its sprites out. The struct runs on as before -
+nothing reads it but the classic draw. The HD form steps the struct's own numbers
+(`HDSplashAt`, line for line `UpdateSplashes`, drawn on linearly between ticks): two
+rings on the sheet, through the sheets' own rings (`gather_rings`), their fronts the
+classic middle and outer rings' outer edges and their strengths 1.0 and 0.6 of the
+classic life - a free choice, set by eye on the round's RoomProbe pictures, twice the
+0.5 a wading Lara's ring starts with; a crown of 12 cards on the inner ring and 16 on
+the middle one, each at its column's height times 0.7 to 1.0 and read at 0.85 to 1.15 of
+the splash's time from its own seed, as wide as the two rings' widths over two (24 to
+160 units) and as tall as its column, at least half as tall as wide - a low haze once
+the column is back -, leaning up to 0.3 radians, its share the classic life; and 24
+drops thrown from the inner ring with 0.5 to 1.1 times the column's first speed and 0.5
+to 1.5 times the ring's speed outward, under the column's own gravity (`InnerYVel`
+grows by 0x400 a tick and moves the struct by a 16th, drawn an 8th: 8 units a tick
+squared, 7200 units/s^2), gone when they are back at the surface. Counts, shares,
+widths and lean are free choices, set by eye on the round's RoomProbe pictures. Lara's
+dive at a fall speed of 128 lives 1.5 s; a faster fall a longer one, a wading splash a
+smaller one, as with the classic struct.
+
+A spark of a tank's spray is taken by `HDWaterSpray` from `TriggerFishtankSpray`,
+after the classic spark is made, which marks it `SF_UNUSED2` (set by nothing else);
+`S_DrawSparks` leaves it out. Its card moves as the classic spark does - the same
+recurrences (`HDTankPuff`) with this file's hash where the game rolls
+`GetRandomControl`, so the game's random stream is untouched - and its share is 0.35
+times the strength over 64 (a free choice, by eye). The spray points stand on the floor
+(joint 0 lies at the item's height less 1 unit), so nothing falls from them: the cards
+rise as the classic mist does.
+
+The film. The floor the tank floods gets a thin sheet of this water: per FLOOR_LASERS
+item sharing its room with a FISHTANK, its box as `InitialiseFloorLasers` lays it, a
+basin body of its own, at rest 8 units over the lasers' floor (`kFilmHair`, about 2 cm
+at 2.3 mm a unit, a free choice under the lasers' 128), 5 x 5 vertices a square, the
+shore the distance to the box's edge, in the group of the room and of its flipmap
+partner (RICH2 room 23 and 32). Its depth byte, in the sheets' 32-unit steps, is 0 (8
+over 32, rounded down); only the variant without the depth texture reads that byte,
+and to it the film has no depth. It is built after the level's own bodies and is no
+water square for anything else: not counted, not in the WATERLOG lines, no ring
+source, no ripple gate, no hidden art, no eye under it, no caustic (a room's caustic
+lights its whole floor at every moment). Its strength a frame (`HDFilmStrength`, read
+off the items by `FeedWaterFilms`, hd_level.cpp): while the tank runs (4096 -
+`item_flags[1]`) / 1024, at most 1 - up over 19 ticks, 0.63 s, as the water pours out;
+after it the lasers' own count over 64, dry with them; 0 before. The strength sets
+three things. The blend factor (SRCBLEND BLENDFACTOR, DESTBLEND INVBLENDFACTOR): with
+the frame's copy bound, `WaterPS` writes the water and the floor behind it whole, alpha
+1, so that blend is an exact cross-fade between the film and the floor; without the
+copy the film is not drawn, and a dry film asks for no copy. The height: the surface
+stands 16 units (`kFilmRise`, about 4 cm, a free choice, set by eye on the round's
+RoomProbe pictures) times the strength over its rest, through `WaterVS`'s crest lift
+(`gSwell` z, with w so low that every vertex takes all of it), tapering in from the
+edge over the basin's 512 units and still while `tomb5.hd_motion` is off - deepest
+while the tank pours, sinking as the lasers' count runs down; a deeper film bends and
+darkens the floor seen through it more. The rim: the film's edge takes a channel's bank
+foam (`kWaterClass`'s channel row, strength 0.7 and band 300 units), its strength times
+the film's, in the foam's own draw - a density, so the rim thins as the film fades. No
+shader changes for either: both are the sheets' constants. The film's clip is 0, not
+the bodies' 8: at 8, its own rest height, it lost a band in front of the tank's plinth
+where the frame lies less than 8 units under its surface (RoomProbe `-tank 33 1.5` at
+960 x 540, the film at rest: 73,132 pixels differ from the dry view with the clip 8,
+84,559 with 0). The lasers' red draw is not touched - it is the lasers', and the film
+lies under it. The tank in room 122 gets the spray and no film: it has no floor lasers.
+
+The cards (`CardVS`, `CardPS` in `hd_room.hlsl` under `HD_CARD`, which alone declares
+their constants, c92 - c93): quads built in view space on the processor, facing the
+eye, projected alone; a window of a remaster page - spray 3242 and 3243, drops 3160,
+DATA of the player's installation appended to the level's page cache with the sheets -
+cut round (one less the squared radius, squared), faded over 64 units against the
+frame's depth where the depth texture is bound and by the distance fog as the foam
+takes it; premultiplied, the body's foam colour (`gWaterFoam` of its look) times 1.5
+for the light spray catches in the air, a free choice by eye - the page gives the
+shape, the water its colour. At most 512 cards a frame: four splashes at their peak
+are 208, a tank's spray at most 85 cards (4.5 sparks a tick for 17 ticks). Drawn once
+a frame after the rooms' blend and additive phases, z tested, no z write.
+
+`SPLASHLOG` with `-log`, once a second of game time while anything of it draws:
+`SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n> tank=<item>:<state>` - the HD
+splashes alive, the cards drawn that frame, the splash rings (two a splash) and the
+first wet film's tank with its strength, `-1:0.00` when none is wet. RoomProbe
+`-splash x y z t` (with `-splashkind` and `-splashfall`) and `-tank item t` draw them
+for a picture; both are off by default.
+
+**Measured.** Slots, fxc /O3: `CardVS` 9, `CardPS` 35 (3 texture, 32 arithmetic); the
+other 21 `.inc` identical to `7e124ab` apart from the stamp lines. GPU, 2560 x 1440,
+three runs, the water's phases summed: ANDREA2's canal with Lara's dive at 0.1 s (all 52
+cards, rings at 288 and 466) 0.243 to 0.244 ms at `7e124ab`, 0.272 to 0.289 after, the
+cards 0.026 to 0.030 of it; the tank room at 1.5 s (69 cards, the film whole) 0 ms at
+`7e124ab`, which draws no water there, and after it, with the film's height and rim,
+the film 0.081 to 0.119, its rim's foam 0.050 to 0.075, the copy 0.017 to 0.033 and
+the cards 0.023 to 0.079, 0.17 to 0.31 together; at 4.4 s 0.152 in two runs of three.
+In the other run, and in 11 of 18 runs of the first builds, the film's timestamp
+bracket held 41 to 63 ms. That is no cost of the film. A scratch copy of the probe that
+reads each sheet draw's `TIMESTAMPDISJOINT` answer (0 in every run) and the processor's
+time round the draw showed the first sheet draw of the process waiting 41 to 46 ms on
+the processor in every run - the tank's 6 of 6 and the canal's 6 of 6 alike, with the
+GPU idle before it (a wait for the GPU before the bracket opened took 0.04 to 0.34 ms);
+the tank's timestamps catch that wait in about half the runs, the canal's never (0.11
+to 0.36 ms). Two more frames drawn in the same process (the copy and the blend phase
+again) put the same film draw at 0.050 to 0.052 ms of GPU and 0.09 ms of processor time
+in 5 runs of 5, and a probe built from `7e124ab` waits 41.7 to 42.6 ms at the canal's
+first sheet draw too. So it is a one-time cost of the first water sheet draw of a
+process, older than this round; in the game it would be one long frame, the first that
+draws a sheet - FPSLOG can show it. The splash at about 8 squares, the pond seen from
+its far bank: a white fleck in the first 0.3 s, then gone.
+
+**Checked.** The classic path 3 of 3 md5-identical to `8691e82` (ANDREA2 231, JOBY2 66,
+ANDY3 34, `-classicroom` and `-classiconly`, INTZ bound). With `-hdwater 0` the fifteen
+cameras 15 of 15 identical to the fix round's parity set. With `-hdwater 1` and no
+splash or tank the fifteen cameras 15 of 15 and the pond's twelve views at 1, 3 and 5
+seconds 36 of 36 identical to a RoomProbe built from `7e124ab`; the sweep's 71 WATERLOG
+lines over the fifteen levels identical too (565 squares, 56 bodies, 118 twins). The
+round's earlier probe of the crests (built before the room art round was merged) is no
+reference for this: ANDREA2's fountain views differ from `7e124ab` by up to 2 levels
+there. ModernTest's splash group (33 checks): the struct stepped tick by tick, the
+column up and back, the life out 31 ticks after the landing, a faster fall longer,
+half a tick between two ticks; the cards' seed, heights and drops; the fade; a spark's
+card 14 to 17 ticks, rising and growing; the tank's 105 ticks; the film's strength. The
+suites (ModernTest 14754, MenuTest 42627, InterpTest 729, LipsTest 270 and 243) 0
+failed; the engine and every tool build.
+
+**What the prover found.** Five findings, each answered. The film's 41 to 63 ms
+bracket, left unexplained (medium): measured to its cause, a one-time wait of the
+process's first sheet draw that is older than this round (Measured); no code change.
+The film's height did not follow the tank and its edge had no foam (medium): the
+height now rises with the strength, the rim takes a channel's bank foam, and the
+film's clip is 0 (the film, above) - the clip's band was found while measuring the
+height. The film's "8 deep" never reached the shader (low): its depth byte is 0, and
+the comment, this entry and the ledger say so. The spray in the tank view barely shows
+(low): the owner's to judge (Left). The switch named only `hd_water` where the splash
+and the spray need `hd_motion` too (low): this entry and the manual name both. The
+diff reaches past the files the round was given (low): `specificfx.cpp` (the classic
+draws the two gates skip), `hd_level.cpp` and `hd_level.h` (the hooks in
+`BuildWaterSheets` and `HDFrameDrawGlow`), the new `hd_splash_math.h`, and thirteen
+`.inc` files whose stamp line alone changed - the places a merge with the other rounds
+of the night meets first (Left). After the fix the classic path 3 of 3, `-hdwater 0`
+15 of 15, `-hdwater 1` without splash or tank 15 of 15 and the dry tank view 1 of 1
+identical as before, all 209 WATERLOG lines of the fifteen levels identical to
+`7e124ab`, no `.inc` changed, the suites as above.
+
+**Left.** The look and the timing in the game: Lara's real dive (her fall speed, the
+crown's height and colour against the canal's), and RICH2's tank as it breaks - the
+spray, the film's height and its rim are RoomProbe pictures. In the tank view the spray
+shows as two small flecks at the ends of the plinth, though 69 cards draw: whether it
+should read stronger is the owner's to judge. The first sheet draw of a process waits
+about 42 ms (Measured); a warm-up draw while the level loads would move that wait off
+the first water frame, which is a decision for the owner, not a fix on suspicion. The
+merge: `specificfx.cpp`, `HDFrameDrawGlow`'s hooks in `hd_level.cpp` and the stamp
+lines of the thirteen `.inc` files are where the other rounds' branches meet this one.
+The tank's dome of water is the classic mesh still; the tank in room 122 has no film.
+The far look reads only as a fleck. Stage 3 and the light shafts stay open.
+
+**Commits.** `28f0ea1`, `30fac41`, `8abda94`, `9f0fc44`, `ca4a69e`, `43402d2`.
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in

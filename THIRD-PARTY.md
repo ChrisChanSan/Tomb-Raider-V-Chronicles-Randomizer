@@ -1356,6 +1356,52 @@ water surface", carries the tables.
     swell at the gain of 6 sank ANDY3's pond under the ground beside the
     island: 37,416 hole pixels in one of the twelve views of the holes
     count against 9,237 at most at 1.
+143. **The splash and the tank's spray as cards** - a splash the classic
+    `SetupSplash` makes over a water sheet, and a spark of a fish tank's
+    spray, are drawn as this water's own: two rings on the sheet at the
+    classic middle and outer rings' fronts (strengths 1.0 and 0.6 of the
+    classic life), a crown of 12 + 16 cards standing at the classic
+    columns' heights (0.7 to 1.0, at 0.85 to 1.15 of the time, 24 to 160
+    units wide, leaning up to 0.3 radians) and 24 drops under the column's
+    own gravity (7200 units/s^2, 0.5 to 1.1 of its first speed); a tank
+    spark's card with the classic spark's own motion and a share of 0.35
+    of its strength over 64; quads facing the eye, a window of a page cut
+    round, soft over 64 units against the frame's depth, premultiplied
+    with the body's foam colour times 1.5 (`CardVS`, `CardPS`,
+    `hd_splash_math.h`). OWN, a design of this project from general
+    graphics knowledge (camera-facing particle cards, soft against the
+    depth buffer, the motion stepped from the classic struct's own
+    numbers); the counts, shares, widths, lean, the soft depth and the
+    light's 1.5 are free choices, set by eye on the round's RoomProbe
+    pictures. DATA: the remaster's spray pages 3242 and 3243 and its drops
+    page 3160 (5\TEX of the player's installation, read through the page
+    cache like every page); the classic numbers counted at the engine's
+    own code (`UpdateSplashes`, `TriggerFishtankSpray`, `UpdateSparks`).
+144. **The tank's film** - the floor a breaking fish tank floods gets a
+    basin body of the sheets of its own over the floor lasers' box,
+    at rest 8 units over the floor, drawn with the sheets' shaders and
+    cross-faded with the blend factor by a strength out of the tank's and
+    the lasers' state: (4096 - `item_flags[1]`) / 1024 while the tank
+    runs, the lasers' count over 64 after it. Its depth byte, in the
+    sheets' 32-unit steps, is 0 (8 over 32, rounded down): only the
+    variant without the depth texture reads it. OWN: the film, its
+    8 units and the rise's 1024 are free choices, set by eye on the
+    round's RoomProbe pictures; the timings are the engine's own (the
+    tank's 105 ticks of a 64th, the lasers' 64-tick countdown, counted at
+    `ControlFishtank` and `ControlFloorLasers`). DATA: RICH2's two tanks
+    and the floor lasers of room 23 (4 x 4 squares), read from the
+    classic level by RoomProbe.
+145. **The film's height, rim and clip** - the film's surface stands
+    `kFilmRise`, 16 units, times its strength over its rest, through the
+    sheets' crest lift in `WaterVS` (tapering in over the basin's 512
+    units from the edge); its edge takes a channel's bank foam (strength
+    0.7, band 300 units, `kWaterClass`) times its strength; its clip is 0
+    instead of the bodies' 8. OWN: the height's 16 units are a free
+    choice, set by eye on the round's RoomProbe pictures; the rim reuses
+    the channel row's own numbers (entry 52's foam rule); the clip 0 is a
+    count on our data: with the clip 8 the film in RICH2 room 23 lost a
+    band in front of the tank's plinth (RoomProbe `-tank 33 1.5`, 960 x
+    540, the film at rest: 73,132 pixels against 84,559 with 0).
 
 160. **The water's life's models** - `BOTTLE`, `WET_CLOTH`,
     `CLOTH_RICH2_RICH1` and `ANIMATING3_ANDY1` out of `5\ITEM`, `FISH2`

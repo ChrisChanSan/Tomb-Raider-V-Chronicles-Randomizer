@@ -274,8 +274,9 @@ bool HDWaterSpray(long x, long y, long z, long strength);
  * DrawScaledSpike's (game\traps.cpp) for a FISHTANK, before the classic
  * mesh is drawn - true when the HD path draws this tank's water this
  * frame (HD on, tomb5.hd_water and tomb5.hd_motion on, the cards ready
- * and the level's FISHTANK mesh known). Reads the item only. With
- * hd_enable off it is false at its first test. */
+ * and the level's FISHTANK mesh known), and the classic mesh is then left
+ * out. Reads the item only. With hd_enable off it is false at its first
+ * test. */
 struct ITEM_INFO;
 bool HDWaterTank(const ITEM_INFO* item);
 

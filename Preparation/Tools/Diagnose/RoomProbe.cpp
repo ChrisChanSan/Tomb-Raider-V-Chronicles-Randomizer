@@ -433,8 +433,9 @@
  *                     the points ControlFishtank sprays from, the film on
  *                     its room's floor with its strength of that moment and,
  *                     while the tank runs, its water ("the tank's water":
- *                     the burst out of the glass) (t under 0 the tank before
- *                     it breaks). Needs -hdwater 1; off without it.
+ *                     its FISHTANK mesh drawn as the water, the burst out
+ *                     of the glass) (t under 0 the tank before it breaks).
+ *                     Needs -hdwater 1; off without it.
  *     -tankleave spray|water  -tank without its spray, or without its
  *                     water - a part's own pixels, against the picture with
  *                     it; repeatable.

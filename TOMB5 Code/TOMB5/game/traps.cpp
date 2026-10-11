@@ -1174,11 +1174,11 @@ void DrawScaledSpike(ITEM_INFO* item)
 	if ((item->object_number == TEETH_SPIKES && !item->item_flags[1]) || item->object_number == RAISING_BLOCK1 && item->trigger_flags <= -1)
 		return;
 
-	/* A fish tank's water: the HD path adds the burst out of its broken
-	 * glass (hd_level.h, HDWaterTank) and the mesh is drawn as before.
-	 * Never true on the classic path. */
-	if (item->object_number == FISHTANK)
-		HDWaterTank(item);
+	/* A fish tank's water the HD path draws as its own (hd_level.h,
+	 * HDWaterTank): the classic mesh stays out; item_flags[1] runs on as
+	 * before. Never true on the classic path. */
+	if (item->object_number == FISHTANK && HDWaterTank(item))
+		return;
 
 	r = &room[item->room_number];
 	phd_left = r->left;

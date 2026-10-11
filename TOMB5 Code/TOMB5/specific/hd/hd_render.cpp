@@ -10561,11 +10561,18 @@ namespace
 	 * the FISHTANK's own classic mesh, scaled in y by item_flags[1] / 4096
 	 * (DrawScaledSpike, game\traps.cpp): a flat top behind the glass and a
 	 * curved apron down to the floor in front of it, whole on the first
-	 * tick, sinking for 105 ticks and gone on the 106th. The HD path adds
-	 * the burst: on the tank's first ticks its water is thrown out of the
-	 * opened glass as cards (hd_splash_math.h, HDTankBurst; spray and drops
-	 * on the cards' pages), in the tank's frame as its mesh gives it
-	 * (HDTankShapeOf), tinted as the film of that tank is.
+	 * tick, sinking for 105 ticks and gone on the 106th. The HD path draws
+	 * that water as its own, and the classic mesh is left out
+	 * (game\traps.cpp): the same mesh, scaled as the classic scales it,
+	 * its apron coming out of the glass over the first quarter second and
+	 * the whole fading over the last half second before KillItem
+	 * (hd_splash_math.h, HDTankDomeAt), drawn with the cards' shaders as a
+	 * see-through sheet - more of it where the eye looks along the surface
+	 * than where it looks through it (HDTankDomeShare), the spray page
+	 * running down it -, and the burst: on the tank's first ticks its
+	 * water is thrown out of the opened glass as cards (HDTankBurst; spray
+	 * and drops on the cards' pages). All of it in the tank's frame as its
+	 * mesh gives it (HDTankShapeOf), tinted as the film of that tank is.
 	 *
 	 * The engine hands each tank in from the classic draw of its mesh
 	 * (game\traps.cpp through hd_level.cpp, HDWaterTank), so the HD form
@@ -14246,7 +14253,7 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 		}
 	}
 
-	if (cards.empty())
+	if (cards.empty() && tanks.empty())
 		return;
 
 	/* Each card's middle into the frame's world and on into view space,
@@ -14301,6 +14308,103 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 		}
 
 		g_splash_stats.cards++;
+	}
+
+	/* The tanks' water: each quad of the classic mesh as two triangles,
+	 * every vertex at its moment (hd_splash_math.h, HDTankDomePoint) into
+	 * the world and on into view space; its share out of the angle between
+	 * the eye and the surface there (the mean of its quads' normals, taken
+	 * across their diagonals, so a quad's winding does not matter) and the
+	 * page running down the water. Drawn before the cards, which stand in
+	 * front of it. */
+	std::vector<CardVertex> dome;
+	const size_t meshVerts = g_tank_xyz.size() / 3;
+	std::vector<float> at(meshVerts * 3), way(meshVerts), normal;
+
+	for (size_t i = 0; i < tanks.size() && meshVerts; i++)
+	{
+		const LiveTank& t = tanks[i];
+		const float age = (float)(now - t.born);
+		const HDTankDome d = HDTankDomeAt(age);
+
+		if (!d.alive || d.share <= 0.0f)
+			continue;
+
+		for (size_t v = 0; v < meshVerts; v++)
+		{
+			float p[4];
+
+			HDTankDomePoint(g_tank_shape, d, &g_tank_xyz[v * 3], p);
+
+			const float wx = t.x + p[0] * t.c + p[2] * t.s;
+			const float wy = t.y + p[1];
+			const float wz = t.z + p[2] * t.c - p[0] * t.s;
+			const float fx = wx * m[0] + wy * m[4] + wz * m[8] + m[12];
+			const float fy = wx * m[1] + wy * m[5] + wz * m[9] + m[13];
+			const float fz = wx * m[2] + wy * m[6] + wz * m[10] + m[14];
+
+			for (int k = 0; k < 3; k++)
+				at[v * 3 + (size_t)k] = fx * g_view[k] + fy * g_view[4 + k] +
+					fz * g_view[8 + k] + g_view[12 + k];
+
+			way[v] = p[3];
+		}
+
+		normal.assign(meshVerts * 3, 0.0f);
+
+		for (size_t q = 0; q + 3 < g_tank_quads.size(); q += 4)
+		{
+			const float* a = &at[(size_t)g_tank_quads[q] * 3];
+			const float* b = &at[(size_t)g_tank_quads[q + 1] * 3];
+			const float* c = &at[(size_t)g_tank_quads[q + 2] * 3];
+			const float* e = &at[(size_t)g_tank_quads[q + 3] * 3];
+			const float u[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+			const float w[3] = { e[0] - b[0], e[1] - b[1], e[2] - b[2] };
+			const float n[3] = { u[1] * w[2] - u[2] * w[1],
+				u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0] };
+			const float len = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+			for (int k = 0; k < 4 && len > 0.0f; k++)
+				for (int j = 0; j < 3; j++)
+					normal[(size_t)g_tank_quads[q + (size_t)k] * 3 + j] +=
+						n[j] / len;
+		}
+
+		float tint[3], light;
+
+		card_tint(tankBody[i], tint, &light);
+
+		static const int kQuadTriangles[6] = { 0, 1, 2, 0, 2, 3 };
+
+		for (size_t q = 0; q + 3 < g_tank_quads.size(); q += 4)
+			for (int k = 0; k < 6; k++)
+			{
+				const size_t v = (size_t)g_tank_quads[q +
+					(size_t)kQuadTriangles[k]];
+				const float* p = &at[v * 3];
+				const float* n = &normal[v * 3];
+				const float pl = sqrtf(p[0] * p[0] + p[1] * p[1] +
+					p[2] * p[2]);
+				const float nl = sqrtf(n[0] * n[0] + n[1] * n[1] +
+					n[2] * n[2]);
+				const float cosine = pl > 0.0f && nl > 0.0f ? -(p[0] * n[0] +
+					p[1] * n[1] + p[2] * n[2]) / (pl * nl) : 1.0f;
+				CardVertex cv;
+
+				cv.x = p[0];
+				cv.y = p[1];
+				cv.z = p[2];
+				cv.u = g_tank_xyz[v * 3] / kTankDomeAcross;
+				cv.v = (way[v] - kTankDomeFall * age) / kTankDomeAlong;
+				cv.cx = 0.0f;
+				cv.cz = 0.0f;
+				cv.r = tint[0];
+				cv.g = tint[1];
+				cv.b = tint[2];
+				cv.a = HDTankDomeShare(d, cosine);
+				cv.light = light;
+				dome.push_back(cv);
+			}
 	}
 
 	// The device's state as the frame left it, put back below.
@@ -14388,6 +14492,13 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 	g_device->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 	g_device->SetSamplerState(6, D3DSAMP_SRGBTEXTURE, FALSE);
 	g_device->SetTexture(6, soft ? g_depth_texture : 0);
+
+	if (!dome.empty() && HDPageCacheTexture(kCardPages[HD_CARD_SPRAY2]))
+	{
+		g_device->SetTexture(0, HDPageCacheTexture(kCardPages[HD_CARD_SPRAY2]));
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(dome.size() / 3),
+			&dome[0], sizeof(CardVertex));
+	}
 
 	for (int p = 0; p < 3; p++)
 	{

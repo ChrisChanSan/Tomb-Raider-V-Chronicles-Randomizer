@@ -718,3 +718,98 @@ inline int HDTankBurst(const HDTankShape& sh, unsigned int seed,
 
 	return n;
 }
+
+/* The tank's water itself - the classic mesh's own shape drawn as this
+ * water (hd_render.cpp, "the tank's water") - at `seconds` after the tank
+ * broke:
+ *
+ *   scale  item_flags[1] / 4096, DrawScaledSpike's y scale, the tank's own
+ *          ticks (HDTankFlagsAfter) run on linearly between them: 1.0 down
+ *          to 0.198 at the 105th
+ *   reach  how far the apron has come out of the glass: 0 to 1 over
+ *          kTankDomeOut, 0.25 s - 866 units out in 0.25 s is 3,460 units/s,
+ *          the speed water leaves the glass under its whole 1,276 (the
+ *          burst's own, sqrt(2 g h) = 3,310)
+ *   share  0 to 1 over kTankDomeIn and back to 0 over kTankDomeEnd's last
+ *          kTankDomeFade: KillItem takes the tank on its 106th tick
+ *          (3.53 s), and the classic mesh is gone in that frame - the water
+ *          is gone half a second sooner instead of at once
+ *
+ * kTankDomeIn, 2 ticks, and kTankDomeFade, 0.5 s, are free choices. */
+const float kTankDomeOut = 0.25f;		// s
+const float kTankDomeIn = 2.0f / 30.0f;		// s
+const float kTankDomeEnd = 106.0f / 30.0f;	// s
+const float kTankDomeFade = 0.5f;		// s
+
+struct HDTankDome
+{
+	float scale, reach, share;
+	int alive;
+};
+
+inline HDTankDome HDTankDomeAt(float seconds)
+{
+	HDTankDome d = {};
+
+	if (seconds < 0.0f || seconds >= kTankDomeEnd)
+		return d;
+
+	const float ticks = seconds * 30.0f;
+	const int whole = (int)ticks;
+	const float a = (float)HDTankFlagsAfter(whole, 0);
+	const float b = (float)HDTankFlagsAfter(whole + 1, 0);
+	const float in = seconds / kTankDomeIn;
+	const float out = (kTankDomeEnd - seconds) / kTankDomeFade;
+	const float reach = seconds / kTankDomeOut;
+
+	d.scale = (a + (b - a) * (ticks - (float)whole)) / 4096.0f;
+	d.reach = reach < 1.0f ? reach : 1.0f;
+	d.share = (in < 1.0f ? in : 1.0f) * (out < 1.0f ? out : 1.0f);
+	d.alive = 1;
+	return d;
+}
+
+/* One vertex of the tank's mesh at that moment, in the tank's frame:
+ * scaled in y as DrawScaledSpike scales it, the apron (the part out of the
+ * glass, z over glassZ) drawn in towards the glass by its reach; and the
+ * vertex's way down the water from the glass's top - its run out of the
+ * glass plus its drop under the top, less than 0 on the top behind the
+ * glass - for the page to run down the water. out[0..3] x, y, z, way. */
+inline void HDTankDomePoint(const HDTankShape& sh, const HDTankDome& d,
+	const float* in, float* out)
+{
+	const float y = in[1] * d.scale;
+	const float z = in[2] > sh.glassZ ?
+		sh.glassZ + (in[2] - sh.glassZ) * d.reach : in[2];
+
+	out[0] = in[0];
+	out[1] = y;
+	out[2] = z;
+	out[3] = (z - sh.glassZ) + (y - sh.top * d.scale);
+}
+
+/* How the water's surface is lit as a card: a share kTankDomeBody where the
+ * eye looks straight at it and up to kTankDomeBody + kTankDomeRim where it
+ * looks along it, (1 - |cos|)^2 between - the water's edge reads as a
+ * thicker sheet, as a curved glassy surface does - times the dome's share;
+ * the page (the remaster's spray, 3243) runs down the water at
+ * kTankDomeFall, half the speed water reaches falling the dome's height
+ * (sqrt(2 g 1,282) / 2 = 1,660 units/s), stretched along the way down -
+ * one page every kTankDomeAcross across and every kTankDomeAlong down, so
+ * its foam blotches draw out into the streaks of falling water. The
+ * shares and the two lengths are free choices, set by eye on the round's
+ * RoomProbe pictures: with 0.3 and one page every 512 units both ways the
+ * water stood as a blotched cloud over the room. */
+const float kTankDomeBody = 0.15f;
+const float kTankDomeRim = 0.5f;
+const float kTankDomeFall = 1660.0f;	// units/s
+const float kTankDomeAcross = 384.0f;	// units
+const float kTankDomeAlong = 2048.0f;	// units
+
+inline float HDTankDomeShare(const HDTankDome& d, float cosine)
+{
+	const float c = cosine < 0.0f ? -cosine : cosine;
+	const float edge = 1.0f - (c > 1.0f ? 1.0f : c);
+
+	return d.share * (kTankDomeBody + kTankDomeRim * edge * edge);
+}

@@ -18470,6 +18470,64 @@ static void splash_tank_spray()
 		"and is 0.8 strong at the whole strength", (long)(most * 10.0f), 8);
 }
 
+/* The tank's water itself: the classic scale on the tank's own clock, the
+ * apron coming out of the glass, the fade before KillItem, the way down
+ * the water and the share by the eye's angle. */
+static void splash_tank_dome()
+{
+	printf("the splash: the tank's water\n");
+
+	const HDTankDome d0 = HDTankDomeAt(0.0f);
+	const HDTankDome d1 = HDTankDomeAt(1.0f);
+	const HDTankDome d105 = HDTankDomeAt(105.0f / 30.0f);
+
+	ok(d0.alive && d0.scale == 1.0f && d0.share == 0.0f && d0.reach == 0.0f,
+		"whole height, nothing drawn yet and still in the glass at 0 s",
+		(long)(d0.scale * 100.0f), 100);
+	ok(d1.scale == (float)HDTankFlagsAfter(30, 0) / 4096.0f &&
+		d1.share == 1.0f && d1.reach == 1.0f,
+		"at 1 s the tank's 30th tick, whole and out", (long)(d1.share * 10.0f),
+		10);
+	ok(d105.alive && d105.scale == 810.0f / 4096.0f && d105.share < 0.1f,
+		"at the 105th tick 0.198 high and nearly faded", (long)(d105.share *
+		100.0f), 6);
+	ok(!HDTankDomeAt(106.0f / 30.0f).alive && !HDTankDomeAt(-0.1f).alive,
+		"gone with KillItem's tick and before the break", 0, 0);
+
+	bool smooth = true;
+	float last = 1.0f;
+
+	for (float t = 0.0f; t < 3.5f; t += 1.0f / 60.0f)
+	{
+		const float s = HDTankDomeAt(t).scale;
+
+		smooth = smooth && s <= last && last - s < 0.02f;
+		last = s;
+	}
+
+	ok(smooth, "it sinks without a step at sixty frames", smooth, 1);
+
+	const HDTankShape sh = HDTankShapeOf(kTankMeshSample, 9);
+	HDTankDome half = d1;
+	float p[4], top[4], foot[4], back[4];
+
+	half.reach = 0.5f;
+	HDTankDomePoint(sh, half, &kTankMeshSample[8 * 3], p);
+	HDTankDomePoint(sh, d1, &kTankMeshSample[3 * 3], top);
+	HDTankDomePoint(sh, d1, &kTankMeshSample[8 * 3], foot);
+	HDTankDomePoint(sh, d1, &kTankMeshSample[2 * 3], back);
+	ok(p[2] == sh.glassZ + 0.5f * (350.0f - sh.glassZ) && p[1] ==
+		6.0f * d1.scale, "the apron half out at reach 0.5, y scaled",
+		(long)p[2], -83);
+	ok(fabsf(top[3]) < 1.0f && foot[3] > 0.0f && back[3] < 0.0f,
+		"the way down: 0 at the glass's top, more at the foot, less behind",
+		(long)foot[3], 1);
+	ok(HDTankDomeShare(d1, 1.0f) == kTankDomeBody &&
+		HDTankDomeShare(d1, 0.0f) == kTankDomeBody + kTankDomeRim &&
+		HDTankDomeShare(d1, -1.0f) == kTankDomeBody,
+		"seen through it the body's share, along it the rim's too", 1, 1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -18601,6 +18659,7 @@ int main()
 	splash_tank();
 	splash_tank_burst();
 	splash_tank_spray();
+	splash_tank_dome();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

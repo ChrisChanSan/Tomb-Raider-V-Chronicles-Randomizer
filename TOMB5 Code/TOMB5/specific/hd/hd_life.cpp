@@ -296,12 +296,15 @@ void HDLifeLevelBegin(const char* stem)
 		for (size_t i = 0; i < b.squares.size(); i++)
 			closed += b.squares[i].closed;
 
+		char tail[512];
+
+		HDLifeBodyTail(g_pool, (int)bi, tail, sizeof(tail));
 		Log("LIFELOG level=%s body=%d water=%d class=%s squares=%d "
 			"rise=%.1f flow=%.2f,%.2f,%.0f floats=%d fish=%d drips=%d "
-			"deep=%d closed=%d", g_stem, (int)bi, b.index,
+			"deep=%d closed=%d %s", g_stem, (int)bi, b.index,
 			b.river ? "river" : b.channel ? "channel" : "other",
 			(int)b.squares.size(), b.rise, b.flowX, b.flowZ, b.speed, floats,
-			fish, drips, HDLifeDeepCount(b), closed);
+			fish, drips, HDLifeDeepCount(b), closed, tail);
 	}
 }
 
@@ -381,14 +384,19 @@ void HDLifeFrame(double clock)
 			roll, local);
 		mul44(local, view, node);
 
-		const float share = HDLifeLightShare(e.kind);
+		/* Its kind's share of the body's light, and a river float's fade
+		 * into its slots (HDLifeDiveLightShare) on the light and the sun. */
+		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
+			g_pool.bodies[(size_t)e.body], e.x, e.z));
+		const float share = HDLifeLightShare(e.kind) * fade;
 		const float light[3] = { g_light[(size_t)e.body * 3] * share,
 			g_light[(size_t)e.body * 3 + 1] * share,
 			g_light[(size_t)e.body * 3 + 2] * share };
 
 		/* No engine lights of its own; the sun at 0.75, the share the
 		 * game's own objects take in play (hd_object.cpp, fill_lights). */
-		if (HDObjectPush(slot_of(e.kind), node, 1, light, ~0u, 0, 0, 0.75f))
+		if (HDObjectPush(slot_of(e.kind), node, 1, light, ~0u, 0, 0,
+			0.75f * fade))
 			drawn++;
 		else
 			skipped++;

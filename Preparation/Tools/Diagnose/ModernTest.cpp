@@ -17656,10 +17656,14 @@ static void life_spawn()
 	ok(sq >= 0 && b.squares[(size_t)sq].x == 0,
 		"life spawn: a river float comes back on the upstream row",
 		sq >= 0 ? b.squares[(size_t)sq].x : -1, 0);
-	ok(HDLifeAtSink(b, 4608.0f + kHDLifeSinkReach, 512.0f) &&
-		!HDLifeAtSink(b, 4000.0f, 512.0f),
-		"life spawn: a quarter square past the last row's middle is the sink",
-		0, 0);
+	ok(HDLifeAtSink(b, 5120.0f + kHDLifeSlotReach, 512.0f) &&
+		!HDLifeAtSink(b, 5120.0f + kHDLifeSlotReach - 1.0f, 512.0f),
+		"life spawn: the outlet's slot point, past the last row's edge, is "
+		"where a river float ends", 0, 0);
+	ok(b.inX == -kHDLifeSlotReach && b.inZ == 512.0f && b.outX == 5120.0f +
+		kHDLifeSlotReach && b.outZ == 512.0f,
+		"life spawn: the slot points lie past the end rows' edges along the "
+		"flow", (long)b.outX, (long)(5120.0f + kHDLifeSlotReach));
 
 	const HDLifeLevel level = { "TEST", 8, 0, 1, { 1, 0, 0, 0 }, 0, 0 };
 
@@ -17677,13 +17681,103 @@ static void life_spawn()
 	p.height[HD_LIFE_BOTTLE] = 80.0f;
 	e.kind = HD_LIFE_BOTTLE;
 	e.index = 4;
-	e.x = 4608.0f + 300.0f;
+	e.x = 5120.0f + kHDLifeSlotReach - 10.0f;
 	e.z = 512.0f;
 	p.entries.push_back(e);
 	HDLifeFloatTick(p, &level, p.entries[0], 1.0f, 0.1f);
-	ok(p.respawned == 1 && p.entries[0].gen == 1 && p.entries[0].x < 1024.0f,
-		"life spawn: a float at the sink comes back upstream", (long)
-		p.entries[0].x, 0);
+	ok(p.respawned == 1 && p.entries[0].gen == 1 &&
+		p.entries[0].x == -kHDLifeSlotReach,
+		"life spawn: a float at the outlet's slot comes back at the inlet's",
+		(long)p.entries[0].x, (long)-kHDLifeSlotReach);
+}
+
+/* The river's ends (HDLifeDiveShare, HDLifeOnRun, HDLifeComeBack): a river
+ * of ten squares along x, its floats stepped for a minute at 30 steps a
+ * second. A float is wholly under the surface (dive share 1) wherever it
+ * lies past the end rows' edges by the slot's reach, it comes back only
+ * from the outlet's slot point and only to the inlet's, and on its way it
+ * moves no more than the current takes it in a step. */
+static void life_ends()
+{
+	HDLifeBody b = life_body(10, 1, 2048);
+
+	b.river = 1;
+	b.flowX = 1.0f;
+	b.speed = 1063.0f;	// ANDY3's sink river
+	HDLifeRiverEnds(b);
+	ok(HDLifeDiveShare(b, b.inX, 512.0f) == 1.0f &&
+		HDLifeDiveShare(b, b.outX, 512.0f) == 1.0f &&
+		HDLifeDiveShare(b, 5120.0f, 512.0f) == 0.0f &&
+		HDLifeDiveShare(b, 1024.0f, 512.0f) == 0.0f &&
+		HDLifeDiveShare(b, 9216.0f, 512.0f) == 0.0f,
+		"life ends: under at the slot points, afloat from the first square's "
+		"end to the last one's start", 0, 0);
+	ok(HDLifeDiveShare(b, 0.0f, 512.0f) > 0.5f &&
+		HDLifeDiveShare(b, 10240.0f, 512.0f) > 0.5f,
+		"life ends: at the end rows' edges a float is more than half way "
+		"down", (long)(100.0f * HDLifeDiveShare(b, 0.0f, 512.0f)), 50);
+	ok(fabsf(HDLifeDiveDepth(326.0f, 0.45f) - (0.55f * 326.0f +
+		kHDLifeSlotTop)) < 0.01f && HDLifeDiveLightShare(1.0f) ==
+		kHDLifeDiveLight && HDLifeDiveLightShare(0.0f) == 1.0f,
+		"life ends: the dive takes the top under the surface and the light "
+		"down to its share", 0, 0);
+
+	const HDLifeLevel level = { "TEST", 8, 0, 1, { 1, 0, 0, 0 }, 0, 0 };
+	HDLifePool p = {};
+
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_BOTTLE] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.reach[HD_LIFE_BOTTLE] = 100.0f;
+
+	for (int i = 0; i < 4; i++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_BOTTLE;
+		e.index = i;
+		e.x = 1500.0f + 2000.0f * i;
+		e.z = 512.0f;
+		HDLifeDress(p, e);
+		p.entries.push_back(e);
+	}
+
+	int backs = 0, badBack = 0, jumps = 0, openPast = 0;
+
+	for (int s = 1; s <= 1800; s++)
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			HDLifeEntry& e = p.entries[i];
+			const float x0 = e.x, z0 = e.z;
+			const int gen = e.gen;
+
+			HDLifeFloatTick(p, &level, e, s / 30.0f, 1.0f / 30.0f);
+
+			if (e.gen != gen)
+			{
+				backs++;
+				// The step before: one step short of the slot point.
+				badBack += HDLifeDiveShare(b, x0, z0) < 0.99f ||
+					HDLifeDiveShare(b, e.x, e.z) < 1.0f ||
+					fabsf(e.x - b.inX) > 0.5f;
+				continue;
+			}
+
+			const float step = sqrtf((e.x - x0) * (e.x - x0) + (e.z - z0) *
+				(e.z - z0));
+
+			jumps += step > (b.speed + kHDLifeWander) / 30.0f + 0.01f;
+
+			const float a = HDLifeAlong(b, e.x, e.z);
+
+			openPast += (a < -kHDLifeSlotReach || a > 10240.0f +
+				kHDLifeSlotReach) && HDLifeDiveShare(b, e.x, e.z) < 1.0f;
+		}
+
+	ok(backs > 0 && badBack == 0 && jumps == 0 && openPast == 0,
+		"life ends: a minute of a river - floats come back only from slot to "
+		"slot, never jump, never afloat past an edge", backs * 1000 +
+		badBack * 100 + jumps * 10 + openPast, backs * 1000);
 }
 
 static void life_flee()
@@ -18499,6 +18593,7 @@ int main()
 	life_spring();
 	life_bank();
 	life_spawn();
+	life_ends();
 	life_flee();
 	life_bob();
 	life_depth();

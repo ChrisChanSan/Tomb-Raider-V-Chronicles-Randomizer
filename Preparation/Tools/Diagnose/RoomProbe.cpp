@@ -2004,12 +2004,15 @@ static void LifeBuild(const char* root, const char* stem)
 		for (size_t i = 0; i < b.squares.size(); i++)
 			closed += b.squares[i].closed;
 
+		char tail[512];
+
+		HDLifeBodyTail(g_life_pool, (int)bi, tail, sizeof(tail));
 		printf("LIFELOG level=%s body=%d water=%d class=%s squares=%d "
 			"rise=%.1f flow=%.2f,%.2f,%.0f floats=%d fish=%d drips=%d "
-			"deep=%d closed=%d\n", stem, (int)bi, b.index,
+			"deep=%d closed=%d %s\n", stem, (int)bi, b.index,
 			b.river ? "river" : b.channel ? "channel" : "other",
 			(int)b.squares.size(), b.rise, b.flowX, b.flowZ, b.speed, floats,
-			fish, drips, HDLifeDeepCount(b), closed);
+			fish, drips, HDLifeDeepCount(b), closed, tail);
 	}
 
 	// The game's steps from clock 0 to -time, and the tick's cost.
@@ -2077,11 +2080,13 @@ static void LifeBuild(const char* root, const char* stem)
 
 		printf("LIFELOG level=%s entry=%d kind=%s body=%d x=%.0f y=%.1f "
 			"z=%.0f yaw=%.0f banked=%d gen=%d under=%.1f over=%.1f amp=%.1f "
-			"rise=%.1f\n", stem, (int)i, kHDLifeKinds[e.kind].name, e.body,
-			x, y, z, yaw * 57.29578f, e.banked, e.gen,
+			"rise=%.1f dive=%.2f\n", stem, (int)i, kHDLifeKinds[e.kind].name,
+			e.body, x, y, z, yaw * 57.29578f, e.banked, e.gen,
 			e.kind == HD_LIFE_FISH ? 0.0f : y + 0.5f * h - surface,
 			e.kind == HD_LIFE_FISH ? 0.0f : surface - (y - 0.5f * h), e.amp,
-			g_life_pool.bodies[(size_t)e.body].rise);
+			g_life_pool.bodies[(size_t)e.body].rise,
+			e.kind == HD_LIFE_FISH ? 0.0f : HDLifeDiveShare(
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
 	}
 
 	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
@@ -2145,11 +2150,15 @@ static void LifeDrawAll(const std::vector<std::pair<float, int> >& order,
 
 		lighting.lights = 0;
 		lighting.lightCount = 0;
-		lighting.sunScale = 0.75f;
+		// A river float's fade into its slots, as the engine has it.
+		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+
+		lighting.sunScale = 0.75f * fade;
 		lighting.specStrength = 0.0f;
 		lighting.specPower = 1.0f;
 
-		const float share = HDLifeLightShare(e.kind);
+		const float share = HDLifeLightShare(e.kind) * fade;
 		const float light[3] = { g_life_light[(size_t)e.body * 3] * share,
 			g_life_light[(size_t)e.body * 3 + 1] * share,
 			g_life_light[(size_t)e.body * 3 + 2] * share };

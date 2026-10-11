@@ -2148,9 +2148,12 @@ it.
   row gives the body one (slowly, 40 units a second at the source and nothing 1536
   units out), stops at a bank and slides along it, and keeps a little apart from the
   other floats, so a current lays them side by side along a wall. ANDREA2's canal
-  runs toward its north end wall, where the water goes under it, at 90 units a second,
-  and its floats gather there; one that drifts into its side arm runs along the arm's
-  bank back into the main channel. On a river a float comes out of the slot under the
+  runs toward its north end wall at 90 units a second and carries its floats round:
+  over the last square a float dives under the surface into the drain under that
+  wall, and it comes back out of the slot under the east walkway where the side arm
+  crosses, the canal's only other opening, rising over the first square; one that
+  drifts into the side arm runs along the arm's bank back into the main channel. On a
+  river a float comes out of the slot under the
   block at the river's upper end, rises to the surface over the first square, rides
   down, and over the last square dives into the slot under the block at its lower end,
   growing dark as it goes, and comes back at the upper slot - it never appears or
@@ -2159,11 +2162,16 @@ it.
   never placed. It bobs a little on a curve of its own, never more than the sheet
   itself rises, so held level it does not hang over the drawn water (its slight tilt
   can lift an edge a few units); on a sea whose waves rise high only a barrel is heavy
-  enough to stay in it. A barrel rings the water round it every second or two, as
-  Lara does when she swims. The fish circle slowly half a square down; when Lara comes
-  within a square of any of them, or something splashes into their water, each turns
-  and darts off on a line of its own, away from her, about three squares in two
-  seconds, and after a few seconds they come back together. Under a ceiling a few
+  enough to stay in it. A barrel rings the water round it once a bob, every 2.5 to 4
+  seconds, a ring as strong as a wading Lara's that starts at the barrel's side. The
+  fish circle slowly, each rising and sinking at its own pace between 128 units under
+  the surface (more under a sea's high waves) and a little over the floor, nose up as
+  it climbs and down as it sinks; when Lara comes within a square of any of them, or
+  something splashes into their water, each turns and darts off on a line of its own,
+  away from her, about three squares in two seconds, climbing or diving to a depth of
+  its own as it goes, and after a few seconds they come back together. RICH2's tank
+  counts as whole from the level's start (its item starts invisible), until it is
+  shot. Under a ceiling a few
   drips fall: a drop falls from the ceiling and rings the sheet where it lands, near
   Lara and at most one in two seconds a body; the log names where they are
   (`drips_at=`). The models are the Remaster's own (a bottle, two cloths, a barrel, a
@@ -2180,12 +2188,13 @@ it.
   `WATERLOG body=` number, -1 for a fish tank), its class (`river`, `channel`, `tank`
   or `other`), its squares, the most its sheet rises (`rise=`, units), its current
   (`flow=` x, z and units a second), its floats, fish and drips, its squares deep
-  enough for fish (`deep=`) and under a ceiling (`closed=`), a river's slot points
-  (`in=` and `out=`, world x, y and z, y the depth a float's top reaches there; `none`
-  on other water) and its drips' points (`drips_at=x,z;x,z...` or `none`) - stand
-  under one of those and wait a few seconds. Once a second of the game's clock a line
-  sums the frames (`frames=`), the entries drawn and skipped over them (`drawn=`,
-  `skipped=`; at most 32 a frame are drawn, nearest the eye first), the rings written
+  enough for fish (`deep=`) and under a ceiling (`closed=`), a river's or ANDREA2's
+  canal's slot points (`in=` and `out=`, world x, y and z, y the depth a float's top
+  reaches there; `none` on other water) and its drips' points (`drips_at=x,z;x,z...`
+  or `none`) - stand under one of those and wait a few seconds. Once a second of the
+  game's clock a line sums the frames (`frames=`), the entries drawn and skipped over
+  them (`drawn=`, `skipped=`; at most 32 a frame are drawn, nearest the eye first; an
+  entry behind the eye, and a shot tank's fish, count in neither), the rings written
   by drips and barrels (`rings=`) and those a full ripple table refused (`full=`),
   the river floats come back so far (`respawned=`) and the schools fleeing now
   (`fleeing=`).

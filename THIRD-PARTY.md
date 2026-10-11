@@ -1525,6 +1525,18 @@ water surface", carries the tables.
     with the water going on under it at six of the eight ends, 256 high at
     four and 1024 at two (SectorCheck on the classic `ANDY3.TRC`); 384 is
     more than the 242 a barrel reaches across the water.
+    After the owner's second play test of 2026-10-11 a channel with a
+    current and an inlet named in `kHDLifeInlets` is a conveyor the same
+    way (`HDLifeConveyor`, `HDLifeInletRun`): its outlet is a river's, its
+    floats come back at the inlet's slot point across the inlet's width,
+    ride out of it the way the water comes in and rise over the first
+    square; a float that drifts onto that square without coming out of
+    the inlet floats on. OWN, a design of this project. DATA: ANDREA2's
+    canal (SectorCheck on the classic `ANDREA2.TRC`): past its +z end the
+    water room 133 goes on under the wall from the surface down; past its
+    -z end and its side arm's west end no water at the surface's height;
+    past its east bank at x 57344, z 43008 to 45056 the water rooms 58 and
+    186 under a dry floor 256 over the water - the inlet.
 165. **The bob, the fit and the depth** - a float rises and sinks on a sine of the
     clock (2.5 to 4 seconds, a phase of its own) by a quarter of its
     floating height, never more than its body's sheet rises and never more
@@ -1578,6 +1590,27 @@ water surface", carries the tables.
     times as fast in a flight (`HDLifeFishTurn`, `HDLifeSchool::beat`), so
     a dart turns no fish and jumps no wobble in one frame. OWN, free
     choices.
+    After the owner's second play test of 2026-10-11 a school swims in a
+    depth band (`HDLifeFishBand`): from 128 units under its sheet's rise
+    down to `FISH2`'s reach, 87, over the floor of its body's shallowest
+    deep square; calm, each fish rises and sinks 192 units round the
+    band's middle (less in a narrower band) at 0.45 radians a second from
+    a hashed phase (`HDLifeFishCalm`); a dart heads each fish for a hashed
+    depth in the band, its way pitched 10 to 25 degrees toward it, level
+    once there; back to its ring it climbs at most 346 units a second; the
+    model is pitched to its way, at most 30 degrees, turned at 720 degrees
+    a second. OWN, a design of this project; the numbers are free choices.
+    DATA: 128 is `FISH2`'s half thickness (35) and the 44 its nose rises at
+    30 degrees; a dart pitched straight at 25 degrees reached the edge of
+    ANDY3's pond's band (809 high) within a third of a second (RoomProbe
+    `-lifelara`). The tank is whole while its FISHTANK item is not active
+    and its status is neither active nor deactivated, its water the full
+    4096 (`HDLifeTankWhole`). CLASSIC: the states the game gives the item
+    (`game\items.cpp`, `InitialiseItem`: `IFL_INVISIBLE` starts it
+    invisible; `game\savegame.cpp`: a killed item loads deactivated with
+    the 4096 `InitialiseItem` left). DATA: RICH2's item 33 carries flags
+    0x100 in the classic level (RoomProbe `-lifetank game`), so it starts
+    invisible, which the first rule took for a shot tank.
 167. **The drips** - squares of a body whose room is not open air have a
     ceiling; four or more of them give one drip for eight, two to six,
     each at a period of 3 to 9 seconds; a drip rings the sheet within six
@@ -1621,6 +1654,18 @@ water surface", carries the tables.
     `ClipLine` and `AddPolyLine`. OWN, a free choice: the head's colour
     120, 160, 208, about one and a half times the middle of a wet Lara's
     drips (`TriggerLaraDrips`, 16 to 39 a channel, drawn four times that).
+    After the owner's second play test of 2026-10-11 a barrel rings once a
+    bob, at the bob's top, 2.5 to 4 seconds apart, at 240 and up to 15 more
+    (the hash of the float and the bob's count), the largest a ripple
+    slot's byte holds below `UpdateSplashes`' 252. OWN, a design of this
+    project. DATA: a ring of the sheets starts at half its size, runs out
+    at 150 units a second and is started again by the next of its kind
+    within 192 units after 0.6 seconds (`hd_render.cpp`, the rings); the
+    barrel reaches 163 to 179 from its middle across the water; RoomProbe
+    `-liferings game`: at ANDY3's lake a barrel's ring of 88 to 104 every 1
+    to 2 seconds changed 175 pixels at 1 second and none at 1.5, a wading
+    Lara's of 120 at the same place 637; the ring of 240 to 255 changes 697
+    and 609 there.
 168. **The life's light** - a model takes its body's light, the one its
     sheet's colours are lit by, times 255 as its classic ambient, a fish
     half of it, with no light list and the game's sun factor 0.75. OWN, a
@@ -1647,6 +1692,9 @@ water surface", carries the tables.
     phase, 907 a fish's dart. OWN, a design of this project; free choices.
     So the first sentence's rolling again after a rebuild holds only when
     the bodies come out different; with the same bodies the pool is kept.
+    After the owner's second play test of 2026-10-11: 1009 a fish's rise
+    phase, 1103 and 1109 a dart's depth and pitch, and 811 with the bob's
+    count a barrel ring's size (821 no longer used). OWN, free choices.
 170. **The projected shadow's arrival** - where the shadow starts to run its
     strength is multiplied by 3f^2 - 2f^3 of f = t / 0.25 game seconds, and
     every blob that gives way to it is drawn meanwhile with its alpha byte

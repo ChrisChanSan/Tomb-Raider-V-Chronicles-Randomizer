@@ -17784,6 +17784,7 @@ static void life_depth()
 	ok(up >= 1 && all.squares[(size_t)up].depth >= 40,
 		"life depth: a river float whose upstream row is too shallow comes "
 		"back on a square that holds it", up, 1);
+}
 
 /* The level load's pool (hd_pagecache.h): the thread-count rule, every item
  * once into its own slot whatever the thread count, the join in group order

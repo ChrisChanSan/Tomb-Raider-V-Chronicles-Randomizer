@@ -5258,32 +5258,26 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 		HDVertex* out = (HDVertex*)raw;
 
-		for (int i = 0; i < g_vertex_count; i++)
+		/* In blocks of 65,536 vertices on the pool (HDPoolRun). A vertex
+		 * reads the .TRG and the mark tables, which nothing writes any more,
+		 * and writes only its own slot of the buffer, of vertex_marked and
+		 * of vertex_bits; each block counts into its own row, and the rows
+		 * are added up after the join. The vertex is put together on the
+		 * stack and stored whole (ComposeVertex): the buffer is WRITEONLY
+		 * memory and is never read back. */
+		struct VertexCounts
+		{
+			int sway, marked, choppy, shimmer, roomShimmer, flooded, wall;
+		};
+
+		const auto one = [&](int i, VertexCounts& c)
 		{
 			const trf::remaster::TrgVertex& in = trg.vertices[(size_t)i];
-
-			out[i].x = in.x;
-			out[i].y = in.y;
-			out[i].z = in.z;
-			out[i].sway = in.sway;
 
 			// The shader reads the weight; the count is for the log and for
 			// the tool, and it is the whole level in one number.
 			if (in.sway)
-				sway_vertices++;
-
-			out[i].nx = in.nx;
-			out[i].ny = in.ny;
-			out[i].nz = in.nz;
-			out[i].layer = in.layer;
-			out[i].c1b = in.colour1[2];
-			out[i].c1g = in.colour1[1];
-			out[i].c1r = in.colour1[0];
-			out[i].u = in.u;
-			out[i].c2b = in.colour2[2];
-			out[i].c2g = in.colour2[1];
-			out[i].c2r = in.colour2[0];
-			out[i].v = in.v;
+				c.sway++;
 
 			unsigned char bits = 0;
 
@@ -5327,7 +5321,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						in.z >= plane->second.minZ && in.z <= plane->second.maxZ)
 					{
 						bits |= want;
-						flooded_vertices++;
+						c.flooded++;
 					}
 				}
 			}
@@ -5351,24 +5345,47 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				const int upright = (int)in.ny - 127;
 
 				if (upright > -77 && upright < 77)
-					marked_wall++;
+					c.wall++;
 			}
 
-			out[i].wChoppy = (unsigned char)(bits & 1);
-			out[i].wShimmer = (unsigned char)((bits >> 1) & 1);
-			out[i].wRoomShimmer = (unsigned char)((bits >> 2) & 1);
-			out[i].wSpare = 1;
+			const HDVertex vertex = ComposeVertex(in, bits);
+
+			out[i] = vertex;
 			vertex_marked[(size_t)i] = (unsigned char)((bits & 6) ? 1 : 0);
 
 			if (!vertex_bits.empty())
 				vertex_bits[(size_t)i] = bits;
 
 			if (bits)
-				marked_vertices++;
+				c.marked++;
 
-			marked_choppy += out[i].wChoppy;
-			marked_shimmer += out[i].wShimmer;
-			marked_room_shimmer += out[i].wRoomShimmer;
+			c.choppy += vertex.wChoppy;
+			c.shimmer += vertex.wShimmer;
+			c.roomShimmer += vertex.wRoomShimmer;
+		};
+
+		const int block = 65536;
+		const int blocks = (g_vertex_count + block - 1) / block;
+		std::vector<VertexCounts> counts((size_t)blocks, VertexCounts());
+
+		HDPoolRun(blocks, threads, [&](int b)
+		{
+			const int last = g_vertex_count - b * block < block
+				? g_vertex_count : b * block + block;
+
+			for (int i = b * block; i < last; i++)
+				one(i, counts[(size_t)b]);
+		});
+
+		for (const VertexCounts& c : counts)
+		{
+			sway_vertices += c.sway;
+			marked_vertices += c.marked;
+			marked_choppy += c.choppy;
+			marked_shimmer += c.shimmer;
+			marked_room_shimmer += c.roomShimmer;
+			flooded_vertices += c.flooded;
+			marked_wall += c.wall;
 		}
 
 		g_vb->Unlock();

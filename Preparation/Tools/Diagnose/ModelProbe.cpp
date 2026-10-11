@@ -688,7 +688,8 @@
  *                         of by a guess. The cache never frees a page
  *                         (hd_pagecache.cpp), so the union of two such lists
  *                         is what an in-level outfit change leaves behind.
- *     -threads <n>        page decoding threads, default 8
+ *     -threads <n>        page decoding threads (HDPoolRun), 0 = the
+ *                         machine's own count, at most 16; default 8
  *     -managed            pages in D3DPOOL_MANAGED instead of D3DPOOL_DEFAULT
  *     -nodraw             load and measure only - no window, no picture
  *
@@ -7756,9 +7757,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
-		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f)\n",
+		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f) hash=%016llx"
+		" hash_ms=%.0f\n",
 		stats.readMs, stats.buildMs, stats.findMs, stats.keyMs,
-		stats.pageMs, stats.bufferMs);
+		stats.pageMs, stats.bufferMs, stats.hash, stats.hashMs);
 	printf("trm reads          %d files opened, %d loaded with geometry, %.0f KiB read\n",
 		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 	printf("skeleton drift     %.0f mean over %d skinned parts, worst %.0f "
@@ -11912,7 +11914,7 @@ int main(int argc, char** argv)
 			ringSet = true;
 		}
 		else if (!_stricmp(argv[i], "-threads") && i + 1 < argc)
-			threads = atoi(argv[++i]);
+			threads = HDPoolThreads(atoi(argv[++i]));
 		else if (!_stricmp(argv[i], "-out") && i + 1 < argc)
 			out = argv[++i];
 		else if (!_stricmp(argv[i], "-size") && i + 2 < argc)
@@ -12332,6 +12334,9 @@ int main(int argc, char** argv)
 		DropDevice();
 		return 4;
 	}
+
+	// The model builds' fingerprint is always on in the tool.
+	HDModelBuildHash(1);
 
 	if (!HDModelInit(g_device, &why))
 	{
@@ -12805,9 +12810,10 @@ int main(int argc, char** argv)
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
-		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f)\n",
+		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f) hash=%016llx"
+		" hash_ms=%.0f\n",
 		stats.readMs, stats.buildMs, stats.findMs, stats.keyMs,
-		stats.pageMs, stats.bufferMs);
+		stats.pageMs, stats.bufferMs, stats.hash, stats.hashMs);
 	printf("trm reads          %d files opened, %d loaded with geometry, %.0f KiB read\n",
 		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 

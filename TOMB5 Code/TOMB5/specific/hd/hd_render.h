@@ -764,6 +764,32 @@ struct HDCut
 	float maxs[3];
 };
 
+/* The parts of HDRenderLevelBegin's build after the .TRG is read, in the
+ * order it runs them - HDRenderStats::phaseMs. */
+enum HDBeginPhase
+{
+	HD_BEGIN_PREP,		// the sheen field, the gloss seed, the policy
+	HD_BEGIN_PAGES,		// HDPageCacheCreate: find, decode, upload
+	HD_BEGIN_OWNERS,	// the water marks' owners, the wind, the falls
+	HD_BEGIN_VERTS,		// the vertex buffer
+	HD_BEGIN_SETUP,		// the glow parts, the shores, the stand covers
+	HD_BEGIN_FILL,		// every group's triangles, sorted and tagged
+	HD_BEGIN_INDEX,		// mirrors, sheen, windows, the index buffer
+	HD_BEGIN_PHASES
+};
+
+// The phase's name in the log: prep, pages, owners, verts, setup, fill, index.
+const char* HDRenderBeginPhaseName(int phase);
+
+/* The build's fingerprint on or off for the builds that follow: non-zero
+ * makes HDRenderLevelBegin fill HDRenderStats::hash. The FNV-1a 64 runs over
+ * the vertex buffer in blocks of 65,536 vertices (one FNV-1a 64 per block),
+ * then over every group in group order (its draw calls, the index buffer's
+ * bytes of each, its tables), then over the level tables the index fill
+ * writes - the block and group answers fed in as 8 bytes each. The engine
+ * turns it on with the log; the diagnostic tools always. */
+void HDRenderBuildHash(int on);
+
 struct HDRenderStats
 {
 	int trgVersion;
@@ -915,6 +941,15 @@ struct HDRenderStats
 	double indexBytes;
 	double readMs;			// reading and parsing the .TRG
 	double buildMs;			// sorting and filling the buffers
+	/* buildMs in its parts (HD_BEGIN_*), in the order the build runs them;
+	 * they add up to buildMs less the few counts taken at its very end. */
+	double phaseMs[HD_BEGIN_PHASES];
+	/* The FNV-1a 64 of what the build made (HDRenderBuildHash), 0 while the
+	 * hash is off, and what working it out took - after the build and not
+	 * in buildMs. Equal between two builds of one level whatever the
+	 * thread count. */
+	unsigned long long hash;
+	double hashMs;
 	HDPageCacheStats pages;
 };
 
@@ -1064,7 +1099,10 @@ bool HDRenderReady();
 // into ranges, and loads the pages through hd_pagecache. numRooms is the
 // classic level's room count: groups at or above it are the sky dome and are
 // kept out of the room table (they can still be drawn by number, which is
-// what the diagnostic tool does).
+// what the diagnostic tool does). threads is the pool's count for the page
+// decode, the vertex buffer, the index fill per group, the mirror search and
+// the hash (HDPoolRun); 1 runs all of it on the calling thread, and the
+// buffers and tables come out the same for every count.
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	bool managedPages, int threads, HDRenderStats* stats, const char** why);
 

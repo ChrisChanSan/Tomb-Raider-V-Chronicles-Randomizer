@@ -1187,7 +1187,6 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	const double batch_budget = 96.0 * 1048576.0;
 
 	std::vector<DecodedPage> batch;
-	std::atomic<int> next(0);
 
 	double decode_ms = 0, upload_ms = 0, compress_ms = 0;
 	double loaded_bytes = 0;
@@ -1221,41 +1220,19 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 			batch[i].white = plan[base + i].white;
 		}
 
-		next.store(0);
-
 		const double decode_started = now_ms();
 
-		const auto work = [&]()
+		// One page per item, each into its own slot of the batch.
+		HDPoolRun((int)here, threads, [&](int at)
 		{
-			for (;;)
-			{
-				const int at = next.fetch_add(1);
-				if (at >= (int)here)
-					break;
+			const PagePlan& page = plan[base + (size_t)at];
 
-				const PagePlan& page = plan[base + (size_t)at];
-
-				if (page.synth || page.path.empty())
-					make_white(batch[(size_t)at], g_format_used);
-				else
-					decode_one(page.path, page.firstMip, g_format_used,
-						batch[(size_t)at]);
-			}
-		};
-
-		if (threads == 1)
-			work();
-		else
-		{
-			std::vector<std::thread> pool;
-			const int use = threads > (int)here ? (int)here : threads;
-			pool.reserve((size_t)use);
-
-			for (int i = 0; i < use; i++)
-				pool.push_back(std::thread(work));
-			for (std::thread& t : pool)
-				t.join();
-		}
+			if (page.synth || page.path.empty())
+				make_white(batch[(size_t)at], g_format_used);
+			else
+				decode_one(page.path, page.firstMip, g_format_used,
+					batch[(size_t)at]);
+		});
 
 		decode_ms += now_ms() - decode_started;
 

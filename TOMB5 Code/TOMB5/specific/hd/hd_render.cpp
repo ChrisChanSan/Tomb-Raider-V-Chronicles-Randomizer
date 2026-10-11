@@ -55,6 +55,8 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1108,6 +1110,18 @@ namespace
 
 		g_book_runs.push_back(run);
 		return run.first;
+	}
+
+	/* MaterialBookSlots' answer for a run it has made already, -1 for none:
+	 * the index fill's form of it, which writes nothing - the build makes
+	 * every run before the fill, in the fill's own order. */
+	inline int MaterialBookSlotsMade(int page0, int count)
+	{
+		for (size_t i = 0; i < g_book_runs.size(); i++)
+			if (g_book_runs[i].page0 == page0 && g_book_runs[i].count == count)
+				return g_book_runs[i].first;
+
+		return -1;
 	}
 
 	/* The page a part's run begins on - the page its first triangle names
@@ -2981,7 +2995,7 @@ namespace
 			(unsigned long long)(cz & 0x1FFFFF);
 	}
 
-	void FindMirrors(const trf::remaster::Trg& trg)
+	void FindMirrors(const trf::remaster::Trg& trg, int threads)
 	{
 		g_mirrors.clear();
 
@@ -2989,14 +3003,24 @@ namespace
 			return;
 
 		const int rooms = g_box_count < g_room_groups ? g_box_count : g_room_groups;
+		const int asked = rooms < (int)trg.groups.size()
+			? rooms : (int)trg.groups.size();
 
-		for (int g = 0; g < rooms && g < (int)trg.groups.size(); g++)
+		/* One room at a time on the pool (HDPoolRun): a room reads the .TRG,
+		 * the boxes and the built groups' bounds, which nothing writes now,
+		 * and keeps its mirrors in its own row; the rows are put together in
+		 * room order after the join, so the list does not depend on the
+		 * thread count. */
+		std::vector<std::vector<HDMirror> > found(
+			(size_t)(asked > 0 ? asked : 0));
+
+		HDPoolRun(asked, threads, [&](int g)
 		{
 			const HDRoomBox& box = g_boxes[g];
 			const float origin[3] = { box.originX, 0.0f, box.originZ };
 
 			if (box.maxs[0] <= box.mins[0] || box.maxs[2] <= box.mins[2])
-				continue;
+				return;
 
 			// The four walls: west, east, south, north.
 			HDMirror wall[4];
@@ -3116,7 +3140,10 @@ namespace
 				want_min[a] = 2.0f * m.plane - m.maxs[a] - 32.0f;
 				want_max[a] = 2.0f * m.plane - m.mins[a] + 32.0f;
 
-				std::unordered_set<unsigned long long> cells;
+				/* The cells the other rooms' triangles stand in, sorted and
+				 * made unique once and asked by binary search - the answers
+				 * of a hashed set, without a hash insert per triangle. */
+				std::vector<unsigned long long> cells;
 
 				for (int o = 0; o < rooms && o < (int)trg.groups.size() &&
 					o < (int)g_groups.size(); o++)
@@ -3164,11 +3191,15 @@ namespace
 									c[2] += (float)trg.vertices[index].z + oo[2];
 								}
 
-								cells.insert(MirrorCell(c[0] / 3.0f, c[1] / 3.0f,
-									c[2] / 3.0f));
+								cells.push_back(MirrorCell(c[0] / 3.0f,
+									c[1] / 3.0f, c[2] / 3.0f));
 							}
 						}
 				}
+
+				std::sort(cells.begin(), cells.end());
+				cells.erase(std::unique(cells.begin(), cells.end()),
+					cells.end());
 
 				// And the copy's own triangles, reflected, against them.
 				for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
@@ -3211,10 +3242,12 @@ namespace
 							for (int dx = -1; dx <= 1 && !found; dx++)
 								for (int dy = -1; dy <= 1 && !found; dy++)
 									for (int dz = -1; dz <= 1 && !found; dz++)
-										found = cells.count(MirrorCell(
+										found = std::binary_search(
+											cells.begin(), cells.end(),
+											MirrorCell(
 											c[0] + 8.0f * (float)dx,
 											c[1] + 8.0f * (float)dy,
-											c[2] + 8.0f * (float)dz)) != 0;
+											c[2] + 8.0f * (float)dz));
 
 							if (found)
 								m.mirrored++;
@@ -3222,9 +3255,12 @@ namespace
 					}
 
 				if (m.mirrored * 100 >= m.behind * HD_MIRROR_MATCH)
-					g_mirrors.push_back(m);
+					found[(size_t)g].push_back(m);
 			}
-		}
+		});
+
+		for (const std::vector<HDMirror>& row : found)
+			g_mirrors.insert(g_mirrors.end(), row.begin(), row.end());
 	}
 
 	/* Why a draw call keeps the plain variant whatever its page names, or
@@ -3319,6 +3355,18 @@ namespace
 
 		g_page_gloss[page] = got;
 		return got;
+	}
+
+	/* PageGloss for the index fill, which runs on several threads and so
+	 * may not write the memory: the answer the build worked out before the
+	 * fill, or worked out again here (ResolvePage writes nothing). */
+	HDGloss PageGlossKnown(int page)
+	{
+		const std::unordered_map<int, HDGloss>::const_iterator at =
+			g_page_gloss.find(page);
+
+		return at != g_page_gloss.end() ? at->second
+			: ResolvePage(page, HDPageCacheSlotOf(page), 0);
 	}
 
 	/* Reads the override file for the build that is about to run. A file
@@ -4323,7 +4371,7 @@ static unsigned int PlaceSector(float x, float z)
  * centroid. `at` is where its first corner stands in the sorted index stream,
  * `first` where it starts in the .TRG's own. */
 static void NotePlaceTri(const trf::remaster::Trg& trg, int g, int pass, int range,
-	int stand, unsigned int at, unsigned int first)
+	int stand, unsigned int at, unsigned int first, std::vector<PlaceTri>& out)
 {
 	if (!g_place_count || g < 0 || g >= g_grid_count || !g_grids)
 		return;
@@ -4372,7 +4420,7 @@ static void NotePlaceTri(const trf::remaster::Trg& trg, int g, int pass, int ran
 		tri.stand = stand;
 		tri.at = at;
 		tri.index[0] = tri.index[1] = tri.index[2] = 0;
-		g_place_tris.push_back(tri);
+		out.push_back(tri);
 	}
 }
 
@@ -4435,6 +4483,286 @@ int HDRenderGroupIntrudingTriangles(int group)
 	return (int)(g.intruding[0] + g.intruding[1] + g.intruding[2]);
 }
 
+// HDRenderBuildHash: the fingerprint of the builds that follow, on or off.
+static int g_build_hash = 0;
+
+void HDRenderBuildHash(int on)
+{
+	g_build_hash = on ? 1 : 0;
+}
+
+/* One vertex as the vertex buffer holds it: the .TRG's vertex and the three
+ * water mark bits the build found for it (bit 0 choppy, 1 shimmer, 2 room
+ * shimmer). */
+static HDVertex ComposeVertex(const trf::remaster::TrgVertex& in,
+	unsigned char bits)
+{
+	HDVertex out;
+
+	out.x = in.x;
+	out.y = in.y;
+	out.z = in.z;
+	out.sway = in.sway;
+	out.nx = in.nx;
+	out.ny = in.ny;
+	out.nz = in.nz;
+	out.layer = in.layer;
+	out.c1b = in.colour1[2];
+	out.c1g = in.colour1[1];
+	out.c1r = in.colour1[0];
+	out.u = in.u;
+	out.c2b = in.colour2[2];
+	out.c2g = in.colour2[1];
+	out.c2r = in.colour2[0];
+	out.v = in.v;
+	out.wChoppy = (unsigned char)(bits & 1);
+	out.wShimmer = (unsigned char)((bits >> 1) & 1);
+	out.wRoomShimmer = (unsigned char)((bits >> 2) & 1);
+	out.wSpare = 1;
+	return out;
+}
+
+// One draw call's fields and the index buffer's bytes it names.
+static void HashRange(HDFnv64& f, const HDRange& r,
+	const std::vector<unsigned int>& sorted)
+{
+	f.put(r.start);
+	f.put(r.count);
+	f.put(r.pageSlot);
+	f.put(r.scrollU);
+	f.put(r.scrollV);
+	f.put(r.alphaRef);
+	f.put(r.addWeight);
+	f.put(r.addPeriod);
+	f.put(r.flatLight);
+	f.put(r.flipTime);
+	f.put(r.flipSlot);
+	f.put(r.bookTime);
+	f.put(r.bookFirst);
+	f.put(r.bookCount);
+	f.put(r.bookPhase);
+	f.put(r.bookPart);
+	f.put(r.gloss);
+	f.put(r.glossPower);
+	f.put(r.glossMat);
+	f.put(r.sheen);
+	f.put(r.sheenPower);
+	f.put(r.sheenF0);
+	f.put(r.sheenTint);
+	f.put(r.sheenMask);
+	f.put(r.sheenClass);
+	f.put(r.sheenSource);
+	f.put(r.ripple);
+	f.put(r.blend);
+	f.put(r.clear);
+	f.put(r.destructId);
+	f.put(r.material);
+	f.put(r.glow);
+	f.put(r.artTris);
+	f.put(r.artY);
+	f.put(r.artYMax);
+	f.put(r.artMinX);
+	f.put(r.artMaxX);
+	f.put(r.artMinZ);
+	f.put(r.artMaxZ);
+	f.put((int)r.artHidden);
+	f.list(r.artCells);
+	f.put((int)r.artSpared);
+	f.put(r.flowTris);
+	f.put(r.flowY);
+	f.put(r.flowYMax);
+	f.put(r.flowMinX);
+	f.put(r.flowMaxX);
+	f.put(r.flowMinZ);
+	f.put(r.flowMaxZ);
+	f.put(r.intruding);
+	f.put(r.stand);
+	f.put(r.overhang);
+	f.put(r.cull);
+	f.put(r.baseVertex);
+	f.put(r.vertexSpan);
+
+	if (r.count && (size_t)r.start + r.count <= sorted.size())
+		f.add(&sorted[r.start], (size_t)r.count * sizeof(unsigned int));
+}
+
+// One group: its draw calls and the tables the index fill made for it.
+static unsigned long long HashGroup(const HDGroup& g,
+	const std::vector<unsigned int>& sorted)
+{
+	HDFnv64 f;
+
+	for (int pass = 0; pass < 3; pass++)
+	{
+		f.put((unsigned int)g.pass[pass].size());
+
+		for (const HDRange& r : g.pass[pass])
+			HashRange(f, r, sorted);
+	}
+
+	f.put(g.clearRanges);
+	f.list(g.samples);
+	f.list(g.cells);
+	f.list(g.cellsIn);
+	f.list(g.cellsFree);
+	f.put((unsigned int)g.standCells.size());
+
+	for (const std::vector<unsigned int>& cells : g.standCells)
+		f.list(cells);
+
+	f.put(g.triangles);
+	f.put(g.overhang);
+	f.put(g.intruding);
+	f.list(g.intrusionAt);
+	f.list(g.faceAt);
+	f.list(g.pairRanges);
+	f.list(g.pairWhole);
+	f.put(g.airTris);
+	f.put(g.airBoxed);
+	f.list(g.standRanges);
+	f.list(g.standWith);
+	f.list(g.cutAt);
+	f.put(g.cutTris);
+	f.put(g.roomMins);
+	f.put(g.roomMaxs);
+	f.put((int)g.hasRoomBox);
+	f.put(g.mins);
+	f.put(g.maxs);
+	f.put((int)g.hasBounds);
+	f.put(g.motion);
+	f.put(g.waterPlanes);
+
+	for (int k = 0; k < g.waterPlanes && k < HDGroup::kMaxPlanes; k++)
+	{
+		f.put(g.waterBox[k]);
+		f.put(g.waterY[k]);
+	}
+
+	for (const std::vector<HDFlatPlane>* rows : { &g.flats, &g.waterFlats })
+	{
+		f.put((unsigned int)rows->size());
+
+		for (const HDFlatPlane& row : *rows)
+		{
+			f.put(row.y);
+			f.list(row.cells);
+		}
+	}
+
+	return f.h;
+}
+
+/* The level's fingerprint (HDRenderBuildHash): the vertex buffer out of the
+ * .TRG and the mark bits the build kept, every group, then the level tables
+ * the index fill writes and its counts. */
+static unsigned long long BuildHash(const trf::remaster::Trg& trg,
+	const std::vector<unsigned char>& bits,
+	const std::vector<unsigned int>& sorted, int threads)
+{
+	HDFnv64 level;
+	const size_t block = 65536;
+	const size_t count = (size_t)g_vertex_count;
+	const size_t blocks = (count + block - 1) / block;
+
+	/* The blocks and the groups are hashed on the pool, each into its own
+	 * slot, and fed into the level's hash in their order afterwards. */
+	std::vector<unsigned long long> part(blocks + g_groups.size(), 0);
+
+	HDPoolRun((int)part.size(), threads, [&](int at)
+	{
+		if ((size_t)at >= blocks)
+		{
+			part[(size_t)at] = HashGroup(g_groups[(size_t)at - blocks], sorted);
+			return;
+		}
+
+		HDFnv64 f;
+		const size_t first = (size_t)at * block;
+
+		for (size_t i = first; i < first + block && i < count; i++)
+			f.put(ComposeVertex(trg.vertices[i],
+				i < bits.size() ? bits[i] : (unsigned char)0));
+
+		part[(size_t)at] = f.h;
+	});
+
+	for (unsigned long long h : part)
+		level.put(h);
+
+	level.put((unsigned int)g_destruct.size());
+
+	for (const HDDestructible& d : g_destruct)
+	{
+		level.put(d.group);
+		level.put(d.material);
+		level.put(d.mins);
+		level.put(d.maxs);
+		level.put((int)d.hasBox);
+	}
+
+	level.list(g_stand_tris);
+	level.list(g_stand_tri_holder);
+	level.put((unsigned int)g_stand_covers.size());
+
+	for (const StandCoverBuilt& c : g_stand_covers)
+	{
+		level.put(c.cover.group);
+		level.put(c.cover.holder);
+		level.put(c.cover.tris);
+		level.put(c.cover.faces);
+		level.put(c.cover.facesCovered);
+		level.put(c.cover.faceCount);
+		level.put((unsigned long long)c.firstFlag);
+	}
+
+	level.list(g_stand_cover_faces);
+	level.list(g_book_parts);
+	level.list(g_book_slots);
+	level.list(g_place_tris);
+	level.list(g_clear_seen);
+	level.list(g_flow_feet);
+	level.list(g_book_runs);
+	level.list(g_intrusion_hits);
+	level.list(g_intrusion_band);
+	level.list(g_cut_hits);
+	level.put((unsigned int)g_air_pairs.size());
+
+	for (const std::pair<const std::pair<int, int>, int>& pair : g_air_pairs)
+	{
+		level.put(pair.first.first);
+		level.put(pair.first.second);
+		level.put(pair.second);
+	}
+
+	const int counts[] =
+	{
+		g_stand_kept, g_stand_from_intrusions, g_cutout_parts,
+		g_addweight_parts, g_addswing_parts, g_addstill_parts,
+		g_stacked_parts, g_stacked_tris, g_flat_parts, g_gloss_parts,
+		g_flat_planes, g_blend_parts, g_blend_ranges, g_clear_parts,
+		g_clear_pages, g_clear_ranges, g_water_parts, g_water_opaque,
+		g_water_additive, g_water_tris, g_water_subrect, g_water_still,
+		g_water_span, g_flip_parts, g_flip_dropped, g_flip_ranges,
+		g_book_ranges, g_scroll_parts
+	};
+
+	level.put(counts);
+	level.put(g_addweight_min);
+	level.put(g_water_cap);
+	level.put(g_gloss_parts_by);
+	return level.h;
+}
+
+const char* HDRenderBeginPhaseName(int phase)
+{
+	static const char* const names[HD_BEGIN_PHASES] =
+	{
+		"prep", "pages", "owners", "verts", "setup", "fill", "index"
+	};
+
+	return phase >= 0 && phase < HD_BEGIN_PHASES ? names[phase] : "?";
+}
+
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	bool managedPages, int threads, HDRenderStats* stats, const char** why)
 {
@@ -4478,6 +4806,18 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	const double read_ms = now_ms() - read_started;
 	const double build_started = now_ms();
+
+	// The build's parts for the log (HD_BEGIN_*): each lap books the time
+	// since the previous one to its phase.
+	double phase_ms[HD_BEGIN_PHASES] = {};
+	double lap_at = build_started;
+	auto lap = [&](int phase)
+	{
+		const double now = now_ms();
+
+		phase_ms[phase] += now - lap_at;
+		lap_at = now;
+	};
 
 	g_vertex_count = (int)trg.vertices.size();
 	g_room_groups = numRooms > 0 && numRooms < (int)trg.groups.size()
@@ -4570,9 +4910,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	HDPageCacheStats page_stats;
 
+	lap(HD_BEGIN_PREP);
+
 	if (!HDPageCacheCreate(g_device, installRoot, pages.empty() ? 0 : &pages[0],
 		(int)pages.size(), managedPages, threads, &page_stats, why))
 		return false;
+
+	lap(HD_BEGIN_PAGES);
 
 	/* --- which group owns which vertex --------------------------------
 	 *
@@ -4917,6 +5261,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * below (the art over a sheet, HDRange::artTris): the vertex buffer is
 	 * write-only. */
 	std::vector<unsigned char> vertex_marked((size_t)g_vertex_count, 0);
+	/* And every vertex's three mark bits, kept for the fingerprint alone
+	 * (HDRenderBuildHash) - empty while it is off. */
+	std::vector<unsigned char> vertex_bits(g_build_hash
+		? (size_t)g_vertex_count : 0, 0);
+
+	lap(HD_BEGIN_OWNERS);
 
 	/* --- the vertex buffer -------------------------------------------- */
 	if (FAILED(g_device->CreateVertexBuffer((UINT)(g_vertex_count * (int)sizeof(HDVertex)),
@@ -4939,32 +5289,26 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 		HDVertex* out = (HDVertex*)raw;
 
-		for (int i = 0; i < g_vertex_count; i++)
+		/* In blocks of 65,536 vertices on the pool (HDPoolRun). A vertex
+		 * reads the .TRG and the mark tables, which nothing writes any more,
+		 * and writes only its own slot of the buffer, of vertex_marked and
+		 * of vertex_bits; each block counts into its own row, and the rows
+		 * are added up after the join. The vertex is put together on the
+		 * stack and stored whole (ComposeVertex): the buffer is WRITEONLY
+		 * memory and is never read back. */
+		struct VertexCounts
+		{
+			int sway, marked, choppy, shimmer, roomShimmer, flooded, wall;
+		};
+
+		const auto one = [&](int i, VertexCounts& c)
 		{
 			const trf::remaster::TrgVertex& in = trg.vertices[(size_t)i];
-
-			out[i].x = in.x;
-			out[i].y = in.y;
-			out[i].z = in.z;
-			out[i].sway = in.sway;
 
 			// The shader reads the weight; the count is for the log and for
 			// the tool, and it is the whole level in one number.
 			if (in.sway)
-				sway_vertices++;
-
-			out[i].nx = in.nx;
-			out[i].ny = in.ny;
-			out[i].nz = in.nz;
-			out[i].layer = in.layer;
-			out[i].c1b = in.colour1[2];
-			out[i].c1g = in.colour1[1];
-			out[i].c1r = in.colour1[0];
-			out[i].u = in.u;
-			out[i].c2b = in.colour2[2];
-			out[i].c2g = in.colour2[1];
-			out[i].c2r = in.colour2[0];
-			out[i].v = in.v;
+				c.sway++;
 
 			unsigned char bits = 0;
 
@@ -5008,7 +5352,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						in.z >= plane->second.minZ && in.z <= plane->second.maxZ)
 					{
 						bits |= want;
-						flooded_vertices++;
+						c.flooded++;
 					}
 				}
 			}
@@ -5032,25 +5376,53 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				const int upright = (int)in.ny - 127;
 
 				if (upright > -77 && upright < 77)
-					marked_wall++;
+					c.wall++;
 			}
 
-			out[i].wChoppy = (unsigned char)(bits & 1);
-			out[i].wShimmer = (unsigned char)((bits >> 1) & 1);
-			out[i].wRoomShimmer = (unsigned char)((bits >> 2) & 1);
-			out[i].wSpare = 1;
+			const HDVertex vertex = ComposeVertex(in, bits);
+
+			out[i] = vertex;
 			vertex_marked[(size_t)i] = (unsigned char)((bits & 6) ? 1 : 0);
 
-			if (bits)
-				marked_vertices++;
+			if (!vertex_bits.empty())
+				vertex_bits[(size_t)i] = bits;
 
-			marked_choppy += out[i].wChoppy;
-			marked_shimmer += out[i].wShimmer;
-			marked_room_shimmer += out[i].wRoomShimmer;
+			if (bits)
+				c.marked++;
+
+			c.choppy += vertex.wChoppy;
+			c.shimmer += vertex.wShimmer;
+			c.roomShimmer += vertex.wRoomShimmer;
+		};
+
+		const int block = 65536;
+		const int blocks = (g_vertex_count + block - 1) / block;
+		std::vector<VertexCounts> counts((size_t)blocks, VertexCounts());
+
+		HDPoolRun(blocks, threads, [&](int b)
+		{
+			const int last = g_vertex_count - b * block < block
+				? g_vertex_count : b * block + block;
+
+			for (int i = b * block; i < last; i++)
+				one(i, counts[(size_t)b]);
+		});
+
+		for (const VertexCounts& c : counts)
+		{
+			sway_vertices += c.sway;
+			marked_vertices += c.marked;
+			marked_choppy += c.choppy;
+			marked_shimmer += c.shimmer;
+			marked_room_shimmer += c.roomShimmer;
+			flooded_vertices += c.flooded;
+			marked_wall += c.wall;
 		}
 
 		g_vb->Unlock();
 	}
+
+	lap(HD_BEGIN_VERTS);
 
 	/* --- the index buffer, sorted -------------------------------------
 	 *
@@ -5184,8 +5556,43 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		unsigned int first;
 	};
 
-	std::vector<HDTri> tris;
 	std::vector<unsigned char> sway_seen(trg.vertices.size(), 0);
+
+	/* What one group's index fill leaves for the join (see fill_group):
+	 * its index run, its entries of the level-wide lists - with the ids and
+	 * the indices into them its own until the join moves them - and its
+	 * hits and counts. */
+	struct FillOut
+	{
+		std::vector<unsigned int> sorted;
+		std::vector<HDDestructible> destruct;
+		std::vector<HDRenderBookPart> bookParts;
+		std::vector<StandCoverBuilt> standCovers;
+		std::vector<unsigned char> standCoverFaces;
+		std::vector<HDCoverTri> standTris;
+		std::vector<int> standTriHolder;
+		std::vector<PlaceTri> placeTris;
+		std::vector<unsigned int> swayHits;	// each weighted corner, in order
+		std::vector<unsigned char> clearSeen;	// per page slot, this group
+		std::vector<int> clearSlots;		// first seen here, in order
+		std::vector<int> cutHits, intrusionHits, intrusionBand, airPairs;
+		long long airTicks = 0;
+		int cutoutParts = 0, addweightParts = 0, addswingParts = 0;
+		int addstillParts = 0, stackedParts = 0, stackedTris = 0;
+		int waterParts = 0, waterTris = 0, waterOpaque = 0;
+		int waterAdditive = 0, waterStill = 0, waterSubrect = 0;
+		int waterSpan = 255;
+		float waterCap = 0.0f;
+		float addweightMin = 1.0f;
+		int flatParts = 0, glossParts = 0, blendParts = 0, flipParts = 0;
+		int flipDropped = 0, scrollParts = 0, clearParts = 0;
+		int flipRanges = 0, bookRanges = 0, blendRanges = 0, clearRanges = 0;
+		int flatPlanes = 0, standFromIntrusions = 0;
+		int splitRanges = 0, biggest = 0, fallbackTris = 0;
+		int glossPartsBy[5] = { 0, 0, 0, 0, 0 };
+	};
+
+	std::vector<FillOut> fill_out(trg.groups.size());
 
 	/* --- the holders of stand art -------------------------------------
 	 *
@@ -5299,11 +5706,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	g_stand_kept = (int)stand_keep.size();
 
-	for (size_t g = 0; g < trg.groups.size(); g++)
+	lap(HD_BEGIN_SETUP);
+
+	/* --- the index fill, one group at a time on the pool -------------
+	 *
+	 * The groups are independent: a group's fill reads the .TRG, the tables
+	 * handed in before the build (boxes, intrusions, pair faces, cuts, stand
+	 * holders, air), the vertex marks and the page cache, none of which it
+	 * or another group writes, and it writes its own slot of g_groups and
+	 * its own FillOut. The join after it puts the groups together in group
+	 * order, so the buffers, the tables and every count come out the same
+	 * whatever the thread count
+	 * (HDRenderBuildHash says so per level). */
+	const auto fill_group = [&](size_t g)
 	{
+		FillOut& o = fill_out[g];
 		HDGroup& group = g_groups[g];
 		const trf::remaster::TrgGroup& source = trg.groups[g];
+		/* The group's own index run and sort list; the join appends the runs
+		 * in group order. */
+		std::vector<unsigned int>& sorted = o.sorted;
+		std::vector<HDTri> tris;
 		const size_t group_first_index = sorted.size();
+
+		o.clearSeen.assign((size_t)HDPageCacheSlots(), 0);
 
 		/* The room's own box, if the caller handed one in.
 		 * A sky group has no room and never gets one, so a sky group is one
@@ -5565,14 +5991,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				made.cover.facesCovered = count.facesCovered;
 				made.cover.faceCount = holder.faceCount;
 				made.cover.covered = 0;
-				made.firstFlag = g_stand_cover_faces.size();
+				made.firstFlag = o.standCoverFaces.size();
 
 				for (int f = 0; f < holder.faceCount; f++)
-					g_stand_cover_faces.push_back((unsigned char)(
+					o.standCoverFaces.push_back((unsigned char)(
 						(size_t)f < count.faceShare.size() &&
 						HDCoverFaceCovered(count.faceShare[(size_t)f]) ? 1 : 0));
 
-				g_stand_covers.push_back(made);
+				o.standCovers.push_back(made);
 				stand_flags[k] = made.firstFlag;
 				stand_split[k] = HDCoverRoomState(count.faces, count.facesCovered) ==
 					HD_STAND_ROOM_PART ? 1 : 0;
@@ -5604,7 +6030,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			QueryPerformanceCounter(&from);
 			AirHostsOf(trg, source, (int)g, airHosts);
 			QueryPerformanceCounter(&to);
-			g_air_ticks += to.QuadPart - from.QuadPart;
+			o.airTicks += to.QuadPart - from.QuadPart;
 		}
 
 		for (int pass = 0; pass < 3; pass++)
@@ -5637,18 +6063,18 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				const float aperiod = pass == 2 ? MaterialAddPeriod(part) : 0.0f;
 
 				if (pass == 0 && aref != 0.0f)
-					g_cutout_parts++;
+					o.cutoutParts++;
 
 				if (pass == 2 && aweight != 1.0f)
 				{
-					g_addweight_parts++;
+					o.addweightParts++;
 
-					if (aweight < g_addweight_min)
-						g_addweight_min = aweight;
+					if (aweight < o.addweightMin)
+						o.addweightMin = aweight;
 				}
 
 				if (pass == 2 && aperiod != 0.0f)
-					g_addswing_parts++;
+					o.addswingParts++;
 
 				/* The water ripple. Material 16 in whatever pass the file
 				 * sorts it into - 25 of its 28 parts are additive and 3 are
@@ -5671,7 +6097,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if (pass == 2 && water && run.count && !g_keep_stacks &&
 					MarkStackedCopies(trg, run, stacked))
-					g_stacked_parts++;
+					o.stackedParts++;
 
 				/* An additive draw call holds one material: material 2
 				 * composes as screen and every other one as a sum (see
@@ -5690,7 +6116,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				if (pass == 2 && part.material == HD_TRG_MATERIAL_GLOW &&
 					part.param[3] >= 0.05f && part.param[3] < kAddStillBelow &&
 					aperiod == 0.0f)
-					g_addstill_parts++;
+					o.addstillParts++;
 
 				if (water && run.count)
 				{
@@ -5701,25 +6127,25 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					const int span = (int)((spanU < spanV ? spanU : spanV) *
 						255.0f + 0.5f);
 
-					g_water_parts++;
-					g_water_tris += (int)(run.count / 3);
+					o.waterParts++;
+					o.waterTris += (int)(run.count / 3);
 
 					if (pass == 0)
-						g_water_opaque++;
+						o.waterOpaque++;
 					else if (pass == 2)
-						g_water_additive++;
+						o.waterAdditive++;
 
 					if (!ripples)
-						g_water_still++;
+						o.waterStill++;
 
 					if (span < 255)
-						g_water_subrect++;
+						o.waterSubrect++;
 
-					if (span < g_water_span)
-						g_water_span = span;
+					if (span < o.waterSpan)
+						o.waterSpan = span;
 
-					if (ripple[1] > g_water_cap)
-						g_water_cap = ripple[1];
+					if (ripple[1] > o.waterCap)
+						o.waterCap = ripple[1];
 				}
 
 				/* The sky band draws at light 1 - see PartIsUnlit. Only
@@ -5729,7 +6155,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					PartIsUnlit(trg, part) ? 1.0f : 0.0f;
 
 				if (pass == 0 && flat != 0.0f)
-					g_flat_parts++;
+					o.flatParts++;
 
 				/* The flipbook. The three further pages and the frame time
 				 * of a material 13 part, or (0, -1, -1, -1) for every other
@@ -5748,7 +6174,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					MaterialGloss(part, gloss, gloss_power, gloss_mat);
 
 				if (pass == 0 && gloss != 0.0f)
-					g_gloss_parts++;
+					o.glossParts++;
 
 				/* The see-through parts of the alpha pass - material 14,
 				 * and nothing else in the game. */
@@ -5757,7 +6183,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				// A part can name a pass it puts no triangle in; counting
 				// those would say a level has glass where it has none.
 				if (blend != 0.0f && run.count)
-					g_blend_parts++;
+					o.blendParts++;
 
 				// One-sided or two-sided - see RangeCulls.
 				const int cull = RangeCulls(pass, aref, blend, water,
@@ -5770,9 +6196,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 				if (part.material & 0x8000u)
 				{
-					for (size_t at = 0; at < g_destruct.size(); at++)
-						if (g_destruct[at].group == (int)g &&
-							g_destruct[at].material == part.material)
+					for (size_t at = 0; at < o.destruct.size(); at++)
+						if (o.destruct[at].group == (int)g &&
+							o.destruct[at].material == part.material)
 						{
 							destruct_id = (int)at;
 							break;
@@ -5784,8 +6210,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						piece.group = (int)g;
 						piece.material = part.material;
-						destruct_id = (int)g_destruct.size();
-						g_destruct.push_back(piece);
+						destruct_id = (int)o.destruct.size();
+						o.destruct.push_back(piece);
 					}
 				}
 
@@ -5797,9 +6223,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					group.motion.flipbookParts++;
 
 					if (ftime != 0.0f)
-						g_flip_parts++;
+						o.flipParts++;
 					else
-						g_flip_dropped++;
+						o.flipDropped++;
 				}
 
 				/* The book. How long a page stands, where the part starts
@@ -5820,7 +6246,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				if (btime != 0.0f)
 				{
 					if (bslot0 >= 0)
-						bfirst = MaterialBookSlots(book_page0, bcount);
+						bfirst = MaterialBookSlotsMade(book_page0, bcount);
 
 					if (bfirst < 0)
 						btime = 0.0f;
@@ -5840,11 +6266,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					book.phase = bphase;
 					book.weight = draw_weight;
 					book.dropped = btime != 0.0f ? 0 : 1;
-					g_book_parts.push_back(book);
+					o.bookParts.push_back(book);
 				}
 
 				if (pass == 0 && scrolls)
-					g_scroll_parts++;
+					o.scrollParts++;
 
 				// Whether this part has been counted as a clear floor.
 				bool part_clear = false;
@@ -5899,8 +6325,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							cut = true;
 
-							if ((size_t)group.cutAt[k] < g_cut_hits.size())
-								g_cut_hits[(size_t)group.cutAt[k]]++;
+							o.cutHits.push_back(group.cutAt[k]);
 						}
 
 						if (cut)
@@ -5928,7 +6353,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							 * looks exactly like a rendering bug, and the
 							 * count below says how often it happens. */
 							slot = HDPageCacheSlotOf((int)trg.textures[0]);
-							fallback_tris++;
+							o.fallbackTris++;
 						}
 					}
 
@@ -5977,7 +6402,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * plane, and every copy is an answer to that. */
 					if (!stacked.empty() && stacked[at / 3])
 					{
-						g_stacked_tris++;
+						o.stackedTris++;
 						continue;
 					}
 
@@ -6046,8 +6471,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							if (pair_at < 0)
 								pair_at = group.intrusionAt[k];
 
-							if ((size_t)group.intrusionAt[k] < g_intrusion_hits.size())
-								g_intrusion_hits[(size_t)group.intrusionAt[k]]++;
+							o.intrusionHits.push_back(group.intrusionAt[k]);
 						}
 					}
 
@@ -6068,7 +6492,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						for (; it != airHosts.end() && it->first == first; ++it)
 						{
 							air = 1;
-							g_air_pairs[std::make_pair((int)g, it->second)]++;
+							o.airPairs.push_back(it->second);
 						}
 					}
 
@@ -6110,7 +6534,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (stand_at >= 0)
 					{
 						if (pair_at >= 0)
-							g_stand_from_intrusions++;
+							o.standFromIntrusions++;
 
 						pair_at = -1;
 					}
@@ -6170,8 +6594,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						 * that draw it whole with the smaller box. */
 						if (face_at < 0 && !inner)
 						{
-							if ((size_t)pair_at < g_intrusion_band.size())
-								g_intrusion_band[(size_t)pair_at]++;
+							o.intrusionBand.push_back(pair_at);
 
 							if (!air || box_at >= 0)
 								pair_at = -1;
@@ -6263,7 +6686,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 									HD_COVER_REACH))
 									continue;
 
-								faces |= g_stand_cover_faces[stand_flags[k] + (size_t)f]
+								faces |= o.standCoverFaces[stand_flags[k] +
+									(size_t)f]
 									? HD_STAND_FACES_COVERED : HD_STAND_FACES_KEPT;
 							}
 
@@ -6303,8 +6727,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						// The coverage test asks only the art on the faces.
 						if (stand_at >= 0)
 						{
-							g_stand_tris.push_back(cover);
-							g_stand_tri_holder.push_back(holder);
+							o.standTris.push_back(cover);
+							o.standTriHolder.push_back(holder);
 						}
 					}
 
@@ -6361,14 +6785,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						if (!part_clear)
 						{
 							part_clear = true;
-							g_clear_parts++;
+							o.clearParts++;
 						}
 
-						if ((size_t)slot < g_clear_seen.size() &&
-							!g_clear_seen[(size_t)slot])
+						if ((size_t)slot < o.clearSeen.size() &&
+							!o.clearSeen[(size_t)slot])
 						{
-							g_clear_seen[(size_t)slot] = 1;
-							g_clear_pages++;
+							o.clearSeen[(size_t)slot] = 1;
+							o.clearSlots.push_back(slot);
 						}
 					}
 
@@ -6382,7 +6806,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					if (part_sheen && gloss == 0.0f)
 					{
-						const HDGloss named = PageGloss(HDPageCachePageOfSlot(slot));
+						const HDGloss named =
+							PageGlossKnown(HDPageCachePageOfSlot(slot));
 
 						if (named.strength > 0.0f)
 							part_sources |= 1u << named.source;
@@ -6400,8 +6825,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			if (tris.empty())
 				continue;
 
-			std::stable_sort(tris.begin(), tris.end(),
-				[](const HDTri& a, const HDTri& b)
+			/* The sort key of a draw call. Sorted stably over the triangles'
+			 * numbers and not over the records themselves - a record is 33
+			 * words and std::stable_sort moves what it sorts - then laid out
+			 * in that order in place, one cycle of the permutation at a time:
+			 * the same order a stable sort of the records gives, without a
+			 * second list of them. */
+			const auto tri_less = [](const HDTri& a, const HDTri& b)
 				{
 					/* The unlit band of the sky before the cloud layers
 					 * that share its group - the sky is drawn back to front
@@ -6477,7 +6907,48 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * anything else. After everything, so a group without
 					 * one - every triangle answering 0 - sorts as before. */
 					return a.stand < b.stand;
-				});
+				};
+
+			{
+				std::vector<unsigned int> order(tris.size());
+
+				for (size_t i = 0; i < order.size(); i++)
+					order[i] = (unsigned int)i;
+
+				std::stable_sort(order.begin(), order.end(),
+					[&](unsigned int a, unsigned int b)
+					{
+						return tri_less(tris[a], tris[b]);
+					});
+
+				// The record at i becomes the one at order[i].
+				std::vector<unsigned char> laid(order.size(), 0);
+
+				for (size_t i = 0; i < order.size(); i++)
+				{
+					if (laid[i])
+						continue;
+
+					const HDTri first = tris[i];
+					size_t at = i;
+
+					for (;;)
+					{
+						const size_t from = order[at];
+
+						laid[at] = 1;
+
+						if (from == i)
+						{
+							tris[at] = first;
+							break;
+						}
+
+						tris[at] = tris[from];
+						at = from;
+					}
+				}
+			}
 
 			group.triangles[pass] = (unsigned int)tris.size();
 
@@ -6566,22 +7037,22 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					if (range.count)
 					{
 						if (same)
-							split_ranges++;
+							o.splitRanges++;
 
 						group.pass[pass].push_back(range);
 
 						if (range.flipTime != 0.0f)
-							g_flip_ranges++;
+							o.flipRanges++;
 
 						if (range.bookTime != 0.0f)
-							g_book_ranges++;
+							o.bookRanges++;
 
 						if (range.blend != 0.0f && !range.clear)
-							g_blend_ranges++;
+							o.blendRanges++;
 
 						if (range.clear)
 						{
-							g_clear_ranges++;
+							o.clearRanges++;
 							group.clearRanges++;
 						}
 
@@ -6598,8 +7069,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 						}
 
-						if ((int)(range.count / 3) > biggest)
-							biggest = (int)(range.count / 3);
+						if ((int)(range.count / 3) > o.biggest)
+							o.biggest = (int)(range.count / 3);
 					}
 
 					range.pageSlot = tris[i].slot;
@@ -6773,7 +7244,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					(tris[i].overhang &&
 					(!tris[i].intruding || tris[i].openAir))))
 					NotePlaceTri(trg, (int)g, pass, (int)group.pass[pass].size(),
-						tris[i].stand, (unsigned int)sorted.size(), first);
+						tris[i].stand, (unsigned int)sorted.size(), first,
+						o.placeTris);
 
 				for (int corner = 0; corner < 3; corner++)
 				{
@@ -6787,20 +7259,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						/* Per room: which of this room's vertices
 						 * carry a wind weight and how strong the strongest
-						 * is. Counted here because this is the one place a
+						 * is. Noted here because this is the one place a
 						 * vertex and its group are both in hand, and counted
-						 * once per vertex rather than once per triangle -
-						 * hence the seen flag. */
-						if (v.sway && index < sway_seen.size() && !sway_seen[index])
-						{
-							const int weight = v.sway < 0 ? -(int)v.sway : (int)v.sway;
-
-							sway_seen[index] = 1;
-							group.motion.swayVertices++;
-
-							if (weight > group.motion.swayMax)
-								group.motion.swayMax = weight;
-						}
+						 * once per vertex rather than once per triangle by
+						 * the join, which walks these notes in group order
+						 * with the seen flag. */
+						if (v.sway && index < sway_seen.size())
+							o.swayHits.push_back(index);
 
 						/* The group's occupancy, and the box of the
 						 * destructible piece these triangles belong to. Both
@@ -6828,7 +7293,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						if (tris[i].destructId >= 0)
 						{
-							HDDestructible& piece = g_destruct[(size_t)tris[i].destructId];
+							HDDestructible& piece =
+								o.destruct[(size_t)tris[i].destructId];
 
 							if (!piece.hasBox)
 							{
@@ -6869,17 +7335,17 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				group.pass[pass].push_back(range);
 
 				if (range.flipTime != 0.0f)
-					g_flip_ranges++;
+					o.flipRanges++;
 
 				if (range.bookTime != 0.0f)
-					g_book_ranges++;
+					o.bookRanges++;
 
 				if (range.blend != 0.0f && !range.clear)
-					g_blend_ranges++;
+					o.blendRanges++;
 
 				if (range.clear)
 				{
-					g_clear_ranges++;
+					o.clearRanges++;
 					group.clearRanges++;
 				}
 
@@ -6896,13 +7362,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					}
 				}
 
-				if ((int)(range.count / 3) > biggest)
-					biggest = (int)(range.count / 3);
+				if ((int)(range.count / 3) > o.biggest)
+					o.biggest = (int)(range.count / 3);
 			}
 		}
 
 		for (int k = 0; k < 5; k++)
-			g_gloss_parts_by[k] += group_parts[k];
+			o.glossPartsBy[k] += group_parts[k];
 
 		/* The occupancy, sorted and made unique once the group's three
 		 * passes have been walked - a query is a binary search from here on,
@@ -6954,7 +7420,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			}
 
 			group.flats.shrink_to_fit();
-			g_flat_planes += (int)group.flats.size();
+			o.flatPlanes += (int)group.flats.size();
 		}
 
 		// The same merge over the water sheets alone.
@@ -7039,7 +7505,228 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				}
 			}
 		}
+	};
+
+	/* The book runs and the plain pages' sheen, made before the groups run:
+	 * both are level-wide tables the fill asks (MaterialBookSlotsMade,
+	 * PageGlossKnown) and would otherwise make on first use. The runs are
+	 * made in the order the fill asks for them - group, pass, part - so their
+	 * numbers do not depend on the thread count. */
+	for (size_t g = 0; g < trg.groups.size(); g++)
+		for (int pass = 0; pass < 3; pass++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			{
+				const int page0 = part.material == HD_TRG_MATERIAL_BOOK
+					? RunFirstPage(trg, part.pass[pass]) : -1;
+				const float step = MaterialBookTime(part);
+
+				if (step != 0.0f && page0 >= 0 && HDPageCacheSlotOf(page0) >= 0)
+					MaterialBookSlots(page0, (int)part.param[1]);
+			}
+
+	for (unsigned short page : trg.textures)
+		PageGloss(HDPageCachePageOfSlot(HDPageCacheSlotOf((int)page)));
+
+	PageGloss(HDPageCachePageOfSlot(-1));
+
+	/* The biggest groups first, so that no thread is left alone with a big
+	 * one at the end. Only the order the work is handed out in: every group
+	 * writes its own slot, and the join below is in group order. */
+	std::vector<int> fill_order(trg.groups.size());
+	std::vector<unsigned int> fill_size(trg.groups.size(), 0);
+
+	for (size_t g = 0; g < trg.groups.size(); g++)
+	{
+		fill_order[g] = (int)g;
+
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			for (int pass = 0; pass < 3; pass++)
+				fill_size[g] += part.pass[pass].count;
 	}
+
+	std::stable_sort(fill_order.begin(), fill_order.end(),
+		[&](int a, int b)
+		{
+			return fill_size[(size_t)a] > fill_size[(size_t)b];
+		});
+
+	/* The groups in flight hold their triangle records at once, a group's
+	 * about its triangle count times an HDTri and its sort list. They are
+	 * gated by bytes: a group starts when the groups running and it stay
+	 * under kFillBudget, or when nothing else runs - the page decode's batch
+	 * budget (hd_pagecache.cpp), the transient a level load already allows
+	 * itself in a 32-bit address space. Measured with RoomProbe on TITLE:
+	 * without the gate the peak commit of sixteen threads stood 160 MiB above
+	 * one thread's. The gate decides only when a group starts. */
+	const double kFillBudget = 96.0 * 1048576.0;
+	std::mutex fill_gate;
+	std::condition_variable fill_wait;
+	double fill_in_flight = 0.0;
+
+	HDPoolRun((int)fill_order.size(), threads, [&](int k)
+	{
+		const size_t g = (size_t)fill_order[(size_t)k];
+		const double need = (double)(fill_size[g] / 3) *
+			(double)(sizeof(HDTri) + 2 * sizeof(unsigned int) + 1);
+
+		{
+			std::unique_lock<std::mutex> lock(fill_gate);
+
+			fill_wait.wait(lock, [&]()
+			{
+				return fill_in_flight == 0.0 ||
+					fill_in_flight + need <= kFillBudget;
+			});
+
+			fill_in_flight += need;
+		}
+
+		fill_group(g);
+
+		{
+			std::lock_guard<std::mutex> lock(fill_gate);
+
+			fill_in_flight -= need;
+		}
+
+		fill_wait.notify_all();
+	});
+
+	/* The join, in group order: the index runs appended with every range's
+	 * start and every static piece's index moved by the run's place, the
+	 * destructibles and the stand covers appended with the ids and first
+	 * flags that point into them moved the same way, the hits and counts
+	 * added, and each wind-weighted vertex counted for the first group that
+	 * names it, in group order whatever the thread count. */
+	for (size_t g = 0; g < trg.groups.size(); g++)
+	{
+		FillOut& o = fill_out[g];
+		HDGroup& group = g_groups[g];
+		const unsigned int base = (unsigned int)sorted.size();
+		const int destruct_base = (int)g_destruct.size();
+		const size_t flag_base = g_stand_cover_faces.size();
+
+		sorted.insert(sorted.end(), o.sorted.begin(), o.sorted.end());
+		std::vector<unsigned int>().swap(o.sorted);
+
+		for (int pass = 0; pass < 3; pass++)
+			for (HDRange& range : group.pass[pass])
+			{
+				range.start += base;
+
+				if (range.destructId >= 0)
+					range.destructId += destruct_base;
+			}
+
+		g_destruct.insert(g_destruct.end(), o.destruct.begin(),
+			o.destruct.end());
+		g_book_parts.insert(g_book_parts.end(), o.bookParts.begin(),
+			o.bookParts.end());
+
+		for (StandCoverBuilt& made : o.standCovers)
+		{
+			made.firstFlag += flag_base;
+			g_stand_covers.push_back(made);
+		}
+
+		g_stand_cover_faces.insert(g_stand_cover_faces.end(),
+			o.standCoverFaces.begin(), o.standCoverFaces.end());
+		g_stand_tris.insert(g_stand_tris.end(), o.standTris.begin(),
+			o.standTris.end());
+		g_stand_tri_holder.insert(g_stand_tri_holder.end(),
+			o.standTriHolder.begin(), o.standTriHolder.end());
+
+		for (PlaceTri& tri : o.placeTris)
+		{
+			tri.at += base;
+			g_place_tris.push_back(tri);
+		}
+
+		for (unsigned int index : o.swayHits)
+		{
+			if (sway_seen[index])
+				continue;
+
+			const short sway = trg.vertices[index].sway;
+			const int weight = sway < 0 ? -(int)sway : (int)sway;
+
+			sway_seen[index] = 1;
+			group.motion.swayVertices++;
+
+			if (weight > group.motion.swayMax)
+				group.motion.swayMax = weight;
+		}
+
+		for (int slot : o.clearSlots)
+			if (!g_clear_seen[(size_t)slot])
+			{
+				g_clear_seen[(size_t)slot] = 1;
+				g_clear_pages++;
+			}
+
+		for (int k : o.cutHits)
+			if ((size_t)k < g_cut_hits.size())
+				g_cut_hits[(size_t)k]++;
+
+		for (int k : o.intrusionHits)
+			if ((size_t)k < g_intrusion_hits.size())
+				g_intrusion_hits[(size_t)k]++;
+
+		for (int k : o.intrusionBand)
+			if ((size_t)k < g_intrusion_band.size())
+				g_intrusion_band[(size_t)k]++;
+
+		for (int host : o.airPairs)
+			g_air_pairs[std::make_pair((int)g, host)]++;
+
+		g_air_ticks += o.airTicks;
+		g_cutout_parts += o.cutoutParts;
+		g_addweight_parts += o.addweightParts;
+		g_addswing_parts += o.addswingParts;
+		g_addstill_parts += o.addstillParts;
+		g_stacked_parts += o.stackedParts;
+		g_stacked_tris += o.stackedTris;
+		g_water_parts += o.waterParts;
+		g_water_tris += o.waterTris;
+		g_water_opaque += o.waterOpaque;
+		g_water_additive += o.waterAdditive;
+		g_water_still += o.waterStill;
+		g_water_subrect += o.waterSubrect;
+		g_flat_parts += o.flatParts;
+		g_gloss_parts += o.glossParts;
+		g_blend_parts += o.blendParts;
+		g_flip_parts += o.flipParts;
+		g_flip_dropped += o.flipDropped;
+		g_scroll_parts += o.scrollParts;
+		g_clear_parts += o.clearParts;
+		g_flip_ranges += o.flipRanges;
+		g_book_ranges += o.bookRanges;
+		g_blend_ranges += o.blendRanges;
+		g_clear_ranges += o.clearRanges;
+		g_flat_planes += o.flatPlanes;
+		g_stand_from_intrusions += o.standFromIntrusions;
+		split_ranges += o.splitRanges;
+		fallback_tris += o.fallbackTris;
+
+		for (int k = 0; k < 5; k++)
+			g_gloss_parts_by[k] += o.glossPartsBy[k];
+
+		if (o.biggest > biggest)
+			biggest = o.biggest;
+
+		if (o.waterSpan < g_water_span)
+			g_water_span = o.waterSpan;
+
+		if (o.waterCap > g_water_cap)
+			g_water_cap = o.waterCap;
+
+		if (o.addweightMin < g_addweight_min)
+			g_addweight_min = o.addweightMin;
+	}
+
+	std::vector<FillOut>().swap(fill_out);
+
+	lap(HD_BEGIN_FILL);
 
 	if (sorted.empty())
 	{
@@ -7052,7 +7739,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	// The mirrors in the rooms' walls, while the .TRG and the boxes are
 	// still in hand - see FindMirrors.
-	FindMirrors(trg);
+	FindMirrors(trg, threads);
 
 	// And the sheen of every draw call - see ResolveSheen.
 	ResolveSheen();
@@ -7198,8 +7885,21 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		g_ib->Unlock();
 	}
 
+	lap(HD_BEGIN_INDEX);
+
 	if (stats)
 	{
+		for (int p = 0; p < HD_BEGIN_PHASES; p++)
+			stats->phaseMs[p] = phase_ms[p];
+
+		if (g_build_hash)
+		{
+			const double hash_started = now_ms();
+
+			stats->hash = BuildHash(trg, vertex_bits, sorted, threads);
+			stats->hashMs = now_ms() - hash_started;
+		}
+
 		stats->trgVersion = trg.version;
 		stats->groups = (int)trg.groups.size();
 		stats->rooms = numRooms;
@@ -7354,7 +8054,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			}
 		}
 
-		stats->buildMs = now_ms() - build_started;
+		stats->buildMs = now_ms() - build_started - stats->hashMs;
 	}
 
 	return true;

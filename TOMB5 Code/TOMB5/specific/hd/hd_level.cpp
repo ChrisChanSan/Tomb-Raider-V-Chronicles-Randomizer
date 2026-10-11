@@ -1366,21 +1366,44 @@ namespace
 			HD_REDRESS_ALLOWANCE / 1048576.0, g_redress_verdict.fits);
 	}
 
+	/* The clock of the load's phases, in milliseconds: GetTickCount's steps
+	 * of about 16 ms are coarser than most of the phases. */
+	double LoadClockMs()
+	{
+		LARGE_INTEGER now, rate;
+
+		QueryPerformanceCounter(&now);
+		QueryPerformanceFrequency(&rate);
+		return (double)now.QuadPart * 1000.0 / (double)rate.QuadPart;
+	}
+
+	/* The parts of a level's HD build in hd_level.cpp's own order, for the
+	 * log: the steps before HDRenderLevelBegin (on the built line, beside
+	 * the build's own parts) and the steps after it (on the hd_share line). */
+	enum LoadPhase
+	{
+		LOAD_MARKS, LOAD_BOXES, LOAD_GLOSS, LOAD_INTR, LOAD_AIR, LOAD_PAIRS,
+		LOAD_CUTS, LOAD_STAND, LOAD_PLACES, LOAD_BEGIN, LOAD_TABLES,
+		LOAD_STATICS, LOAD_SHEETS, LOAD_SURFACES, LOAD_FRAMES, LOAD_OBJECTS,
+		LOAD_PHASES
+	};
+
+	const char* const kLoadPhaseName[LOAD_PHASES] =
+	{
+		"marks", "boxes", "gloss", "intr", "air", "pairs", "cuts", "stand",
+		"places", "begin", "tables", "statics", "sheets", "surfaces",
+		"frames", "objects"
+	};
+
+	// What HDScanLevel took on the load thread, for the hd_share line.
+	double g_scan_ms = 0.0;
+
+	/* The threads of the level's HD load - the page decode, the room build
+	 * and the models' pages (HDPoolRun): tomb5.hd_threads, 0 the machine's
+	 * own count, never above 16 (HDPoolThreads). */
 	int DecodeThreads()
 	{
-		SYSTEM_INFO info;
-
-		GetSystemInfo(&info);
-
-		int threads = (int)info.dwNumberOfProcessors;
-
-		if (threads < 1)
-			threads = 1;
-
-		if (threads > 16)
-			threads = 16;
-
-		return threads;
+		return HDPoolThreads((int)tomb5.hd_threads);
 	}
 
 	// "DATA\ANDREA1.TRC" -> "ANDREA1". Not HDScreenLevelName(), which maps
@@ -4876,6 +4899,7 @@ void HDLevelLoad(const char* wadName)
 	g_stem[0] = 0;
 	g_scan_vertices = 0;
 	g_scan_indices = 0;
+	g_scan_ms = 0.0;
 
 	/* The name for the frame clock, taken before the HD guard and kept in its
 	 * own buffer: FPSLOG has nothing to do with hd_enable and has to name the
@@ -4959,6 +4983,8 @@ void HDLevelLoad(const char* wadName)
 	// measureBc7 is off: HDLevelBuild decodes every page for real a moment
 	// later and reports what that cost, so decoding them here too would only
 	// make the level load twice as slow to measure the same thing.
+	const double scan_started = LoadClockMs();
+
 	if (!HDScanLevel(HDInstallRoot(), g_stem, number_rooms, loaded, NUMBER_OBJECTS,
 		false, 1, &stats, &why))
 	{
@@ -4967,6 +4993,8 @@ void HDLevelLoad(const char* wadName)
 		return;
 	}
 
+	g_scan_ms = LoadClockMs() - scan_started;
+
 	// What the buffers of this level will cost, for the budget - see
 	// AutoBudgetBytes. This is the only moment they are known in advance.
 	g_scan_vertices = stats.vertices;
@@ -4974,12 +5002,14 @@ void HDLevelLoad(const char* wadName)
 
 	Log("HDLOG level=%s trg=v%d groups=%d rooms=%d sky=%d empty=%d pages=%d "
 		"verts=%d idx=%d ranges=%d changes=%d mixed=%d map=%d slots=%d "
-		"trm_bound=%d trm_missing=%d trm_dummy=%d trm_lara=%d heads=%d",
+		"trm_bound=%d trm_missing=%d trm_dummy=%d trm_lara=%d heads=%d "
+		"scan_ms=%d",
 		g_stem, stats.trgVersion, stats.groups, stats.rooms, stats.skyGroups,
 		stats.emptyGroups, stats.pages, stats.vertices, stats.indices,
 		stats.ranges, stats.pageChanges, stats.mixedPageTriangles,
 		stats.mapEntries, stats.slotsLoaded, stats.trmBound, stats.trmMissing,
-		stats.trmDummy, stats.trmLara, stats.headsBound);
+		stats.trmDummy, stats.trmLara, stats.headsBound,
+		(int)(g_scan_ms + 0.5));
 
 	for (int i = 0; i < HDScanMissingCount(); i++)
 		Log("HDLOG level=%s missing slot=%s model=%s.TRM",
@@ -5153,6 +5183,18 @@ static void HDLevelBuildHD()
 
 	const DWORD started = GetTickCount();
 
+	/* The steps' times for the log (LoadPhase): each lap books the time
+	 * since the previous one to its step. */
+	double load_ms[LOAD_PHASES] = {};
+	double lap_at = LoadClockMs();
+	const auto lap = [&](int phase)
+	{
+		const double now = LoadClockMs();
+
+		load_ms[phase] += now - lap_at;
+		lap_at = now;
+	};
+
 	g_clipped_lights = 0;
 	g_clipped_bulbs = 0;
 	g_clock = 0.0;
@@ -5163,22 +5205,37 @@ static void HDLevelBuildHD()
 	g_bookstep_lines = 0;
 	g_bookstep_page = -1;
 	BuildWaterMarks();
+	lap(LOAD_MARKS);
 	// No pieces until ReportRoomIntrusions has this level's.
 	memset(g_piece_count, 0, sizeof(g_piece_count));
 	g_pieces.clear();
 	BuildRoomBoxes();		// before the build, like the marks
 	BuildRoomSectors();		// the same contract
+	lap(LOAD_BOXES);
 	/* The sheen's override file: hd_gloss.txt in the game's working
 	 * directory, beside the executable and SCRIPT.DAT, where Balance.txt is
 	 * read from too. Read by the build itself, at every level load, so an
 	 * edit shows at the next one without a restart. */
 	HDRenderGlossFile("hd_gloss.txt");
+	lap(LOAD_GLOSS);
 	BuildRoomIntrusions();		// the same contract
+	lap(LOAD_INTR);
 	BuildRoomAir();			// and the rooms' air, the same contract
+	lap(LOAD_AIR);
 	BuildPairFaces();		// and its faces, the same contract
+	lap(LOAD_PAIRS);
 	BuildRoomCuts();		// the same contract again
+	lap(LOAD_CUTS);
 	BuildStandFaces();		// and once more
+	lap(LOAD_STAND);
 	BuildStaticPlaces();		// kept until BuildStaticTables
+	lap(LOAD_PLACES);
+
+	/* The fingerprints of the build and of the models (HDRenderBuildHash),
+	 * with the log: one more walk over what was built, after it and timed
+	 * apart, for the hash= fields of the built and the models lines. */
+	HDRenderBuildHash(gLogEnabled ? 1 : 0);
+	HDModelBuildHash(gLogEnabled ? 1 : 0);
 
 	if (!HDRenderLevelBegin(HDInstallRoot(), g_stem, number_rooms,
 		kPagesManaged, DecodeThreads(), &stats, &why))
@@ -5199,7 +5256,14 @@ static void HDLevelBuildHD()
 		return;
 	}
 
-	const DWORD build_ms = GetTickCount() - started;
+	/* Without the fingerprint's time (stats.hashMs, its own field on the
+	 * built line), so that built ms and the hd_share line read the same with
+	 * the log on as the load takes without it. */
+	const int build_ms = (int)(GetTickCount() - started) -
+		(int)(stats.hashMs + 0.5);
+
+	lap(LOAD_BEGIN);
+	load_ms[LOAD_BEGIN] -= stats.hashMs;
 
 	// The marks were only borrowed for the length of that call.
 	HDRenderSetWaterMarks(0, 0);
@@ -5622,6 +5686,28 @@ static void HDLevelBuildHD()
 			HDMarkersCutCount(), stats.cutTris, stats.cutGroups,
 			HDMarkersDonorCount(), HDMarkersOutfit());
 
+	/* The parts of `built ms`: the steps before HDRenderLevelBegin, then
+	 * the .TRG read and the build's own parts (HD_BEGIN_*), in the order
+	 * they ran. */
+	char phases[512];
+	{
+		int at = 0;
+
+		for (int p = LOAD_MARKS; p < LOAD_BEGIN && at >= 0 &&
+			at < (int)sizeof(phases); p++)
+			at += snprintf(phases + at, sizeof(phases) - (size_t)at,
+				"%s%s:%.1f", p ? "," : "", kLoadPhaseName[p], load_ms[p]);
+
+		if (at >= 0 && at < (int)sizeof(phases))
+			at += snprintf(phases + at, sizeof(phases) - (size_t)at,
+				",read:%.1f", stats.readMs);
+
+		for (int p = 0; p < HD_BEGIN_PHASES && at >= 0 &&
+			at < (int)sizeof(phases); p++)
+			at += snprintf(phases + at, sizeof(phases) - (size_t)at, ",%s:%.1f",
+				HDRenderBeginPhaseName(p), stats.phaseMs[p]);
+	}
+
 	/* At the end, the stand rule's counts: the rooms stand art stands on, of
 	 * those the ones drawn wholly as art (`covered`) and in part (`part`),
 	 * the triangles, and the classic-drawn rooms that count as HD for her
@@ -5633,7 +5719,8 @@ static void HDLevelBuildHD()
 		"intruding_tris=%d intruding_ranges=%d intruding_groups=%d "
 		"cut_tris=%d cut_groups=%d "
 		"vb_mib=%.1f ib_mib=%.1f read_ms=%d build_ms=%d "
-		"stand_rooms=%d covered=%d stand_tris=%d part=%d shadow_rooms=%d",
+		"stand_rooms=%d covered=%d stand_tris=%d part=%d shadow_rooms=%d"
+		" phases=%s threads=%d hash=%016llx hash_ms=%d",
 		g_stem, (int)build_ms, g_room_count, hd_rooms, classic_rooms,
 		stats.skyGroups, stats.vertices, stats.indices, stats.index32 ? 32 : 16,
 		stats.ranges, stats.splitRanges, stats.fallbackPageTris,
@@ -5642,7 +5729,8 @@ static void HDLevelBuildHD()
 		stats.cutTris, stats.cutGroups,
 		stats.vertexBytes / 1048576.0, stats.indexBytes / 1048576.0,
 		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5),
-		stand_rooms, stand_covered, stand_tris, stand_part, shadow_rooms);
+		stand_rooms, stand_covered, stand_tris, stand_part, shadow_rooms,
+		phases, DecodeThreads(), stats.hash, (int)(stats.hashMs + 0.5));
 
 	Log("HDLOG level=%s pages named=%d distinct=%d from5=%d from4=%d "
 		"white=%d failed=%d mips=%d widest=%d big=%d mib=%.1f "
@@ -5694,18 +5782,23 @@ static void HDLevelBuildHD()
 	 * the classic list but still stands in the baked art; the destructible
 	 * pairs of BuildStaticTables hide its piece. After BuildStandRanges,
 	 * whose carriers and room states BuildStaticTables asks. */
+	lap(LOAD_TABLES);
 	BuildStaticTables();
+	lap(LOAD_STATICS);
 
 	/* The water surface the .TRG has no geometry for - see the note over
 	 * BuildWaterSurfaces. After the loop above, because it asks per room
 	 * whether that room draws HD at all. The water sheets first: a face under
 	 * one is not restored. */
 	BuildWaterSheets();
+	lap(LOAD_SHEETS);
 	BuildWaterSurfaces();
+	lap(LOAD_SURFACES);
 
 	/* And the HD pictures of that water's own animation frames. After
 	 * BuildWaterSurfaces, because it asks which faces are really drawn. */
 	BuildWaterFrames();
+	lap(LOAD_FRAMES);
 
 	/* `suppressed` and `kept` count the statics of the rooms drawn HD and of
 	 * the rooms drawn classic; `art`, `by_group` and `classic` the answers of
@@ -5735,7 +5828,40 @@ static void HDLevelBuildHD()
 	 * They ride on the rooms in one more way. A level whose .TRG is missing
 	 * or empty has no page cache at all, so it has no HD objects either -
 	 * which is the same answer the rooms give and one line to explain. */
+	const double model_hash_ms = HDModelHashMs();
 	HDObjectLevelBuild(HDInstallRoot(), g_stem);
+	lap(LOAD_OBJECTS);
+	// The models' fingerprint is on the models line; the step is without it.
+	load_ms[LOAD_OBJECTS] -= HDModelHashMs() - model_hash_ms;
+
+	/* The whole of the level's HD load in one line: the .TRG scan on the
+	 * load thread and every step of this build, the build itself as one
+	 * part (its own parts are on the built line). `ms` is their sum - what
+	 * the HD path adds to a level load - and leaves out the classic load,
+	 * the waits between the two threads, the first frame and the two
+	 * fingerprints (hash_ms on the built and the models lines). */
+	{
+		const double built = load_ms[LOAD_MARKS] + load_ms[LOAD_BOXES] +
+			load_ms[LOAD_GLOSS] + load_ms[LOAD_INTR] + load_ms[LOAD_AIR] +
+			load_ms[LOAD_PAIRS] + load_ms[LOAD_CUTS] + load_ms[LOAD_STAND] +
+			load_ms[LOAD_PLACES] + load_ms[LOAD_BEGIN];
+		double total = g_scan_ms + built;
+		char share[256];
+		int at = snprintf(share, sizeof(share), "scan:%.0f,built:%.0f",
+			g_scan_ms, built);
+
+		for (int p = LOAD_TABLES; p < LOAD_PHASES; p++)
+		{
+			total += load_ms[p];
+
+			if (at > 0 && at < (int)sizeof(share))
+				at += snprintf(share + at, sizeof(share) - (size_t)at,
+					",%s:%.0f", kLoadPhaseName[p], load_ms[p]);
+		}
+
+		Log("HDLOG level=%s hd_share ms=%.0f phases=%s threads=%d", g_stem,
+			total, share, DecodeThreads());
+	}
 
 	/* The water's life, after the objects whose model list carried its
 	 * models and after the sheets whose bodies it lives on. */

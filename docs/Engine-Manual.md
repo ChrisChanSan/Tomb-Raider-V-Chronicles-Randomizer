@@ -2184,6 +2184,7 @@ values, in the same key as every other setting
 | `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |
 | `hd_air` | DWORD | The **air of the rooms**, `1` by default. Some of the Remaster's art of one room stands inside another room the first has no doorway, opening or shaft into; on `1` such art, where one of the overlap boxes holds it, is drawn only through its own room's portal window, and not at all when that room has no window this frame, so it no longer shows through a wall - a dark block beside a flag, a window frame in a brick loft, a marble strip above a metal stair opening, black bars beside a pillar, a lit floor in a doorway. Set it to `0` and that art is drawn as it was before this setting existed: those five come back, and so does art the rule hides where a room the reach lists has no window of its own. It is there to compare the two answers at the same place with the same build; the `HDLOG level=` line ends with `air=1` or `air=0`, so a log says which ran. Taken at the start of a level; no options row; nothing at all while `hd_enable` is off. |
+| `hd_threads` | DWORD | The **threads of an HD level load**, `0` by default: the machine's own count, never more than 16. The texture pages are unpacked, the rooms' buffers filled and the models' pages unpacked on that many threads; `1` does all of it on one, and any other number takes that many. The level comes out the same whatever it says - the `hash=` at the end of the `built` line is the proof (see *The loading time* below). It is there to compare, not a taste. Taken at the start of a level; no options row; nothing at all while `hd_enable` is off. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
@@ -2905,7 +2906,8 @@ The level's `models` line ends in `cut_ranges` and `cut_models`: how many
 pieces of how many models are drawn with the cut-out test described above —
 JOBY3 6 of 6, JOBY5 4 of 4, JOBY2 2 of 2, RICH2 18 of 1 (the steel door),
 RICH3 8 of 2, ANDY3 4 of 1, ANDY1 2 of 1, the title 1 of 1, and 0 in every
-other level.
+other level. After them the line ends in `hash=` and `hash_ms=`, the models'
+fingerprint and its time (see *The loading time* below).
 `itemcheck` is the object twin of `matrixcheck` — the same comparison on an
 object's pieces instead of a room's vertices — and `lightcheck` puts the
 classic lighting formula and the HD one side by side on one surface normal.
@@ -2955,6 +2957,56 @@ level that is 376 MB of texture. Kept in video memory it costs the process
 holds a second copy in main memory, it costs **545 MB**. The first is what this
 engine does. Unpacking them costs about a second of the loading time on a
 modern processor — the `built ms=` number above.
+
+**The loading time.** The HD share of a level load is its own line in the log,
+written at the end of the level's build:
+
+```
+HDLOG level=TITLE hd_share ms=1650 phases=scan:60,built:1350,tables:20,statics:30,
+      sheets:5,surfaces:2,frames:0,objects:180 threads=16
+```
+
+`ms` is the sum of the parts: `scan` is the first look at the `.TRG` on the
+loading thread (the `trg=` line ends in `scan_ms=` too), `built` the rooms'
+build, and the rest the steps after it - the stand and shadow tables with the
+room lines (`tables`), the static meshes (`statics`), the water sheets and
+surfaces (`sheets`, `surfaces`), the water's animation pages (`frames`) and the
+objects with their models and rings (`objects`; the `models` line has its own
+`build_ms` and `page_ms`). What it leaves out is the classic load, the waiting
+between the two loading threads, the first frame and the two fingerprints
+(`hash_ms`, below). (The numbers above are a format sample.)
+
+The `built` line ends in the parts of `built ms` (again a format sample):
+
+```
+... phases=marks:1.2,boxes:0.4,gloss:0.1,intr:3.0,air:40.0,pairs:2.0,cuts:0.1,
+    stand:5.0,places:1.0,read:80.0,prep:55.0,pages:750.0,owners:8.0,verts:15.0,
+    setup:0.5,fill:250.0,index:110.0 threads=16 hash=90f108bf3d786142 hash_ms=34
+```
+
+The first nine are the steps before the build (the water marks, the room boxes
+and sectors, `hd_gloss.txt`, the overlap boxes, the air, the faces they pair
+with, the openings, the stand faces, the static meshes' places), `read` is the
+`.TRG` itself, and the build's own parts follow: `prep` the sheen field and the
+gloss seed, `pages` the texture pages found, unpacked and handed to the card,
+`owners` which room owns which water mark, `verts` the vertex buffer, `setup`
+the glow parts and the stand holders, `fill` every room's triangles sorted
+into draw calls and tagged, `index` the mirror search and the index buffer.
+`pages`, `verts`, `fill` and the mirror search run on `threads` threads
+(registry `hd_threads`); each room is built on its own and the rooms are put
+together in their order afterwards, so the buffers are the same on one thread
+as on sixteen. `hash=` says so: it is the FNV-1a 64 of what the build made -
+the vertex buffer, every room's draw calls with their index bytes and tables,
+the level's tables - and two logs of the same level from the same build carry
+the same `hash=` whatever `hd_threads` was, the way the `models` line's
+`hash=` does for the models. Working it out is `hash_ms` and runs only with
+`-log`; that time is left out of `built ms` and the `built` part of the
+`hd_share` line, and the models' own (`hash_ms` at the end of the `models`
+line) out of that line's `ms`, `build_ms` and `buf_ms` and the `objects` part,
+so the numbers read the same as in a load without the log. On the machine
+this was measured on (sixteen threads) the rooms' build of the title level went
+from about 3.1 seconds to about 1.3; the texture pages are now its largest
+part.
 
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full
 screen throws the graphics device away and makes a new one. Everything the HD

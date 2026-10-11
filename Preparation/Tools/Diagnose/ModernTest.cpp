@@ -83,7 +83,11 @@
 /* The water's life: the drift, the bank, the spawn, the flight and the
  * bob - pure again (life_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_life_rules.h"
+// The level load's pool and the build's FNV-1a 64 step, header-only - the
+// group load_pool.
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include <string.h>
+#include <algorithm>
 #include <vector>
 
 static int g_fail = 0;
@@ -17780,6 +17784,204 @@ static void life_depth()
 	ok(up >= 1 && all.squares[(size_t)up].depth >= 40,
 		"life depth: a river float whose upstream row is too shallow comes "
 		"back on a square that holds it", up, 1);
+
+/* The level load's pool (hd_pagecache.h): the thread-count rule, every item
+ * once into its own slot whatever the thread count, the join in group order
+ * with every run moved by its place, the first exception on the caller, and
+ * the FNV-1a 64 step the build's fingerprint is made of. */
+// The low 31 bits of a hash, for the report line of a failed check.
+static long low(unsigned long long h)
+{
+	return (long)(h & 0x7FFFFFFF);
+}
+
+static unsigned long long hash_bytes(const char* text)
+{
+	HDFnv64 f;
+
+	f.add(text, strlen(text));
+	return f.h;
+}
+
+static void load_pool()
+{
+	// The rule: a wish of 1..16 is kept, above 16 is 16, 0 or less is the
+	// machine's own count, clamped the same way.
+	int machine = (int)std::thread::hardware_concurrency();
+
+	if (machine < 1)
+		machine = 1;
+
+	if (machine > 16)
+		machine = 16;
+
+	ok(HDPoolThreads(1) == 1, "pool: 1 thread is 1", HDPoolThreads(1), 1);
+	ok(HDPoolThreads(5) == 5, "pool: 5 threads are 5", HDPoolThreads(5), 5);
+	ok(HDPoolThreads(16) == 16, "pool: 16 threads are 16",
+		HDPoolThreads(16), 16);
+	ok(HDPoolThreads(17) == 16, "pool: 17 threads are 16",
+		HDPoolThreads(17), 16);
+	ok(HDPoolThreads(1000) == 16, "pool: 1000 threads are 16",
+		HDPoolThreads(1000), 16);
+	ok(HDPoolThreads(0) == machine, "pool: 0 is the machine's count",
+		HDPoolThreads(0), machine);
+	ok(HDPoolThreads(-3) == machine, "pool: below 0 is the machine's count",
+		HDPoolThreads(-3), machine);
+
+	// No item, no call.
+	int calls = 0;
+
+	HDPoolRun(0, 8, [&](int) { calls++; });
+	ok(calls == 0, "pool: no item, no call", calls, 0);
+
+	/* Every item exactly once, into its own slot, for every thread count -
+	 * items of very different sizes, so that they finish out of order. */
+	const int items = 997;
+
+	for (int threads = 1; threads <= 16; threads++)
+	{
+		std::vector<int> seen((size_t)items, 0);
+		std::vector<unsigned long long> slot((size_t)items, 0);
+
+		HDPoolRun(items, threads, [&](int at)
+		{
+			HDFnv64 f;
+
+			for (int k = 0; k < (at * 37) % 2000; k++)
+				f.put(k ^ at);
+
+			seen[(size_t)at]++;
+			slot[(size_t)at] = f.h;
+		});
+
+		int once_each = 0;
+		HDFnv64 joined, serial;
+
+		for (int at = 0; at < items; at++)
+		{
+			once_each += seen[(size_t)at] == 1 ? 1 : 0;
+			joined.put(slot[(size_t)at]);
+
+			HDFnv64 f;
+
+			for (int k = 0; k < (at * 37) % 2000; k++)
+				f.put(k ^ at);
+
+			serial.put(f.h);
+		}
+
+		ok(once_each == items, "pool: every item once", once_each, items);
+		ok(joined.h == serial.h,
+			"pool: the slots joined in order are the serial answer",
+			low(joined.h), low(serial.h));
+	}
+
+	/* The join of the index fill: each group makes a run of its own length
+	 * with indices of its own, handed out biggest first; the runs appended
+	 * in group order, each range's start moved by the run's place, give the
+	 * list and the starts of one loop over the groups. */
+	const int groups = 61;
+	std::vector<unsigned int> one_loop;
+	std::vector<unsigned int> one_start((size_t)groups, 0);
+
+	for (int g = 0; g < groups; g++)
+	{
+		one_start[(size_t)g] = (unsigned int)one_loop.size();
+
+		for (int i = 0; i < (g * 7919) % 300; i++)
+			one_loop.push_back((unsigned int)(g * 100000 + i));
+	}
+
+	std::vector<int> order((size_t)groups);
+
+	for (int g = 0; g < groups; g++)
+		order[(size_t)g] = g;
+
+	std::stable_sort(order.begin(), order.end(), [](int a, int b)
+	{
+		return (a * 7919) % 300 > (b * 7919) % 300;
+	});
+
+	for (int threads = 1; threads <= 16; threads *= 2)
+	{
+		std::vector<std::vector<unsigned int> > run((size_t)groups);
+		std::vector<unsigned int> start((size_t)groups, 0);
+
+		HDPoolRun(groups, threads, [&](int k)
+		{
+			const int g = order[(size_t)k];
+			std::vector<unsigned int>& mine = run[(size_t)g];
+
+			start[(size_t)g] = (unsigned int)mine.size();
+
+			for (int i = 0; i < (g * 7919) % 300; i++)
+				mine.push_back((unsigned int)(g * 100000 + i));
+		});
+
+		std::vector<unsigned int> joined;
+		int starts = 0;
+
+		for (int g = 0; g < groups; g++)
+		{
+			start[(size_t)g] += (unsigned int)joined.size();
+			joined.insert(joined.end(), run[(size_t)g].begin(),
+				run[(size_t)g].end());
+			starts += start[(size_t)g] == one_start[(size_t)g] ? 1 : 0;
+		}
+
+		ok(joined == one_loop, "pool: the runs joined in group order are the "
+			"one loop's list", (long)joined.size(), (long)one_loop.size());
+		ok(starts == groups, "pool: every start moved by its run's place",
+			starts, groups);
+	}
+
+	// An item that throws: the caller gets the exception, on one thread and
+	// on eight.
+	for (int threads = 1; threads <= 8; threads += 7)
+	{
+		bool caught = false;
+
+		try
+		{
+			HDPoolRun(100, threads, [&](int at)
+			{
+				if (at == 41)
+					throw 41;
+			});
+		}
+		catch (int thrown)
+		{
+			caught = thrown == 41;
+		}
+
+		ok(caught, "pool: an item's exception reaches the caller", caught, 1);
+	}
+
+	// FNV-1a 64: the published values of the empty string, "a" and "foobar",
+	// and put() and list() as the bytes they stand for.
+	ok(hash_bytes("") == 0xcbf29ce484222325ull, "fnv: the empty string",
+		low(hash_bytes("")), low(0xcbf29ce484222325ull));
+	ok(hash_bytes("a") == 0xaf63dc4c8601ec8cull, "fnv: \"a\"",
+		low(hash_bytes("a")), low(0xaf63dc4c8601ec8cull));
+	ok(hash_bytes("foobar") == 0x85944171f73967e8ull, "fnv: \"foobar\"",
+		low(hash_bytes("foobar")), low(0x85944171f73967e8ull));
+
+	HDFnv64 by_put, by_bytes;
+	const unsigned int word = 0x64636261u;		// "abcd" in memory order
+
+	by_put.put(word);
+	by_bytes.add("abcd", 4);
+	ok(by_put.h == by_bytes.h, "fnv: put() is the value's bytes",
+		low(by_put.h), low(by_bytes.h));
+
+	HDFnv64 by_list, by_hand;
+	const std::vector<unsigned short> shorts = { 1, 2, 3 };
+
+	by_list.list(shorts);
+	by_hand.put((unsigned int)3);
+	by_hand.add(&shorts[0], 6);
+	ok(by_list.h == by_hand.h, "fnv: list() is the count, then the elements",
+		low(by_list.h), low(by_hand.h));
 }
 
 int main()
@@ -17905,6 +18107,7 @@ int main()
 	life_flee();
 	life_bob();
 	life_depth();
+	load_pool();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

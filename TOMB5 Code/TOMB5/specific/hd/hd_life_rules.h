@@ -1079,6 +1079,39 @@ struct HDLifePool
 	int respawned;		// river floats come back upstream
 };
 
+/* Whether two lists of bodies are the same water: the same bodies in the
+ * same order, each with the same surface, class flags, current and
+ * squares. The HD level is built again when the graphics device was lost
+ * (alt-tab, alt-enter: hd_level.cpp, HDLevelDeviceLost); the water's
+ * bodies come out the same, and the pool is then kept as it was - its
+ * floats, fish and drips where they were - instead of rolled anew. */
+inline bool HDLifeSameBodies(const std::vector<HDLifeBody>& a,
+	const std::vector<HDLifeBody>& b)
+{
+	if (a.size() != b.size())
+		return false;
+
+	for (size_t i = 0; i < a.size(); i++)
+	{
+		const HDLifeBody& x = a[i];
+		const HDLifeBody& y = b[i];
+
+		if (x.index != y.index || x.surfaceY != y.surfaceY ||
+			x.river != y.river || x.channel != y.channel ||
+			x.flowX != y.flowX || x.flowZ != y.flowZ || x.speed != y.speed ||
+			x.squares.size() != y.squares.size())
+			return false;
+
+		for (size_t k = 0; k < x.squares.size(); k++)
+			if (x.squares[k].x != y.squares[k].x ||
+				x.squares[k].z != y.squares[k].z ||
+				x.squares[k].depth != y.squares[k].depth)
+				return false;
+	}
+
+	return true;
+}
+
 // The level's row of kHDLifeLevels, or 0.
 inline const HDLifeLevel* HDLifeLevelOf(const char* stem)
 {

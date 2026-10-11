@@ -17916,6 +17916,47 @@ static void life_apart()
 		(long)apart, (long)(kHDLifeApart * 484.0f));
 }
 
+static int life_draw(void* state);
+
+/* A rebuild of the level keeps the pool (HDLifeSameBodies): the same water
+ * keeps every entry where it was, other water rolls anew. */
+static void life_keep()
+{
+	HDLifePool p = {};
+	const HDLifeLevel level = { "TEST", 8, 0, 0, { 1, 0, 0, 1 }, 0, 0 };
+	unsigned state = 7;
+
+	p.bodies.push_back(life_body(4, 4, 2048));
+	p.has[HD_LIFE_BOTTLE] = p.has[HD_LIFE_BARREL] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	HDLifeBuild(p, level, life_draw, &state);
+	HDLifeTick(p, &level, 12.0f, 0, 0.0f, 0.0f, 0);
+
+	const HDLifePool before = p;
+	std::vector<HDLifeBody> again;
+
+	again.push_back(life_body(4, 4, 2048));
+
+	bool same = HDLifeSameBodies(before.bodies, again);
+	int moved = 0;
+
+	// What the engine does then (hd_life.cpp, HDLifeLevelBegin).
+	HDLifePool kept = same ? before : HDLifePool();
+
+	for (size_t i = 0; i < kept.entries.size(); i++)
+		moved += kept.entries[i].x != before.entries[i].x ||
+			kept.entries[i].z != before.entries[i].z;
+
+	again[0].squares[3].depth = 512;
+
+	ok(same && !before.entries.empty() && moved == 0 &&
+		kept.entries.size() == before.entries.size() &&
+		!HDLifeSameBodies(before.bodies, again),
+		"life keep: a rebuild of the same water keeps every entry's place, "
+		"other water does not", moved, 0);
+}
+
 static void life_flee()
 {
 	HDLifeBody b = life_body(4, 4, 2048);
@@ -18811,6 +18852,7 @@ int main()
 	life_drops();
 	life_rings();
 	life_apart();
+	life_keep();
 	life_flee();
 	life_bob();
 	life_depth();

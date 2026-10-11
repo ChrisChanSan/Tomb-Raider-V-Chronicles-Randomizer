@@ -2037,7 +2037,7 @@ static void LifeBuild(const char* root, const char* stem)
 		bytes += g_life_pool.bodies[i].squares.size() * sizeof(HDLifeSquare);
 
 	printf("LIFELOG level=%s bodies=%d floats=%d fish=%d drips=%d "
-		"skipped=%d bytes=%d models=%s\n", stem,
+		"skipped=%d bytes=%d models=%s kept=0\n", stem,
 		(int)g_life_pool.bodies.size(), g_life_pool.floats, g_life_pool.fish,
 		(int)g_life_pool.drips.size(), g_life_pool.unfit, (int)bytes,
 		models[0] ? models : "none");

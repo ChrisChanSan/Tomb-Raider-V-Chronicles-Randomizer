@@ -237,6 +237,16 @@ void HDLifeLevelEnd()
 
 void HDLifeLevelBegin(const char* stem)
 {
+	/* The same level built again - after a lost device, as HDLevelUnload
+	 * alone ends a level (HDLifeLevelEnd): its pool is kept if its water
+	 * comes out the same (HDLifeSameBodies, below). */
+	HDLifePool kept;
+	const bool again = !g_pool.bodies.empty() && stem &&
+		!_stricmp(stem, g_stem);
+
+	if (again)
+		kept = g_pool;
+
 	HDLifeLevelEnd();
 
 	const HDLifeLevel* row = HDLifeLevelOf(stem);
@@ -324,7 +334,22 @@ void HDLifeLevelBegin(const char* stem)
 			g_light.push_back(info.light[k] * 255.0f);
 	}
 
-	HDLifeBuild(g_pool, *row, draw_random, 0);
+	const bool keep = again && HDLifeSameBodies(kept.bodies, g_pool.bodies);
+
+	if (keep)
+	{
+		// Its models' sizes as loaded now; everything else as it was.
+		for (int k = 0; k < HD_LIFE_KINDS; k++)
+		{
+			kept.has[k] = g_pool.has[k];
+			kept.height[k] = g_pool.height[k];
+			kept.reach[k] = g_pool.reach[k];
+		}
+
+		g_pool = kept;
+	}
+	else
+		HDLifeBuild(g_pool, *row, draw_random, 0);
 
 	// The drips' ceilings and their drops' fall (HDLifeDropTicks).
 	for (size_t i = 0; i < g_pool.drips.size(); i++)
@@ -341,8 +366,8 @@ void HDLifeLevelBegin(const char* stem)
 
 	/* LIFELOG, the level line: the bodies the life took, its floats and
 	 * fish, the drips, the floats a body's rise, its depth or a missing
-	 * model left out (skipped), the pool's bytes and the models that
-	 * loaded. */
+	 * model left out (skipped), the pool's bytes, the models that loaded
+	 * and 1 when the pool was kept through a rebuild of the level. */
 	const size_t bytes = sizeof(g_pool) +
 		g_pool.entries.size() * sizeof(HDLifeEntry) +
 		g_pool.schools.size() * sizeof(HDLifeSchool) +
@@ -355,9 +380,10 @@ void HDLifeLevelBegin(const char* stem)
 			sizeof(HDLifeSquare);
 
 	Log("LIFELOG level=%s bodies=%d floats=%d fish=%d drips=%d skipped=%d "
-		"bytes=%d models=%s", g_stem, (int)g_pool.bodies.size(),
+		"bytes=%d models=%s kept=%d", g_stem, (int)g_pool.bodies.size(),
 		g_pool.floats, g_pool.fish, (int)g_pool.drips.size(), g_pool.unfit,
-		(int)(bytes + squaresBytes), models[0] ? models : "none");
+		(int)(bytes + squaresBytes), models[0] ? models : "none",
+		keep ? 1 : 0);
 
 	/* And a line a body: the water body it is, its class (river,
 	 * channel, other), its sheet squares, the rise its sheet's vertices

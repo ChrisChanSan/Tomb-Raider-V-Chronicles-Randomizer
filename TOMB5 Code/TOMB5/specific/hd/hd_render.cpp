@@ -2070,6 +2070,146 @@ namespace
 		std::sort(out.begin(), out.end());
 	}
 
+	/* The hulls, with tomb5.hd_air 2 (HDRenderSetAirHulls): a group whose art
+	 * in the air of a room its own room has no link with, in no entry's box,
+	 * stands mostly where that room's own art stands - a second shell of
+	 * other rooms, drawn whole wherever its own room is listed. Asked per
+	 * triangle: its centroid's 256-unit world cell (the overlap list's grid)
+	 * holds a corner of the host's own art. Measured with TrgProbe
+	 * -roomspace over the fifteen levels: 85 groups have such art; RICH2's
+	 * lift shaft, room 61, has 51,547 triangles of it, 36,285 on its hosts'
+	 * own art (0.70) - its second hull of the shaft's floors 62 to 65 -,
+	 * ANDREA1's 68 in 111 0.98, JOBY2's 110 and 135 1.00, RICH2's 26 0.68,
+	 * nine small ones 0.59 to 1.00; ANDREA2's street art bundles 10, 131,
+	 * 217 and 236 0.00 to 0.06, its palms 117 and 127 0.00, the highest
+	 * below them RICH2's 57 at 0.44. A group is a hull above one half, the
+	 * middle of the gap between 0.44 and 0.59. The share of a group's art
+	 * outside its own room does not tell them apart: 0.891 for room 61,
+	 * 0.997 and more for the bundles, 0.899 for the palms of 127.
+	 * `g_hull_air` and `g_hull_covered` are the two counts per group, for
+	 * the log. */
+	bool g_air_hulls = false;
+	std::vector<unsigned char> g_group_hull;
+	std::vector<int> g_hull_air, g_hull_covered;
+
+	long long HullCellKey(float x, float y, float z)
+	{
+		return ((long long)((int)floorf(x / 256.0f) + 32768) << 34) |
+			((long long)((int)floorf(y / 256.0f) + 32768) << 17) |
+			(long long)((int)floorf(z / 256.0f) + 32768);
+	}
+
+	/* Marks the hulls before the groups are filled: the art of every group
+	 * in world cells, then per group the triangles AirHostsOf finds that no
+	 * entry's box holds, as the fill asks a box (by the centroid, or by its
+	 * x and z with the triangle reaching into the holder's air). */
+	void MarkAirHulls(const trf::remaster::Trg& trg)
+	{
+		const size_t groups = trg.groups.size();
+
+		g_group_hull.assign(groups, 0);
+		g_hull_air.assign(groups, 0);
+		g_hull_covered.assign(groups, 0);
+
+		if (!g_air_hulls || g_air_cells.empty() || !g_boxes)
+			return;
+
+		std::vector<std::pair<long long, int> > cells;
+
+		for (size_t g = 0; g < groups && (int)g < g_box_count &&
+			(int)g < g_room_air_count; g++)
+		{
+			const HDRoomBox& own = g_boxes[g];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned int at = 0; at < run.count; at++)
+					{
+						if (run.start + at >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[run.start + at]];
+
+						cells.push_back(std::make_pair(HullCellKey(
+							(float)v.x + own.originX, (float)v.y,
+							(float)v.z + own.originZ), (int)g));
+					}
+				}
+		}
+
+		std::sort(cells.begin(), cells.end());
+		cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+
+		for (size_t g = 0; g < groups && (int)g < g_box_count &&
+			(int)g < g_room_air_count; g++)
+		{
+			AirHosts hosts;
+
+			AirHostsOf(trg, trg.groups[g], (int)g, hosts);
+
+			const HDRoomBox& own = g_boxes[g];
+
+			for (size_t i = 0; i < hosts.size(); )
+			{
+				const unsigned int first = hosts[i].first;
+				size_t end = i;
+
+				while (end < hosts.size() && hosts[end].first == first)
+					end++;
+
+				const trf::remaster::TrgVertex& ta =
+					trg.vertices[trg.indices[first]];
+				const trf::remaster::TrgVertex& tb =
+					trg.vertices[trg.indices[first + 1]];
+				const trf::remaster::TrgVertex& tc =
+					trg.vertices[trg.indices[first + 2]];
+				const float c[3] = {
+					((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
+					((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+					((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f };
+				bool boxed = false;
+
+				for (int k = 0; k < g_intrusion_count && !boxed; k++)
+				{
+					const HDIntrusion& box = g_intrusions[k];
+
+					if (box.group != (int)g)
+						continue;
+
+					if (c[0] < box.mins[0] || c[0] > box.maxs[0] ||
+						c[2] < box.mins[2] || c[2] > box.maxs[2])
+						continue;
+
+					boxed = (c[1] >= box.mins[1] && c[1] <= box.maxs[1]) ||
+						std::binary_search(hosts.begin(), hosts.end(),
+							std::make_pair(first, box.holder));
+				}
+
+				if (!boxed)
+				{
+					bool covered = false;
+					const long long key = HullCellKey(c[0] + own.originX,
+						c[1], c[2] + own.originZ);
+
+					for (size_t j = i; j < end && !covered; j++)
+						covered = std::binary_search(cells.begin(),
+							cells.end(), std::make_pair(key, hosts[j].second));
+
+					g_hull_air[g]++;
+					g_hull_covered[g] += covered ? 1 : 0;
+				}
+
+				i = end;
+			}
+
+			g_group_hull[g] = g_hull_covered[g] * 2 > g_hull_air[g] ? 1 : 0;
+		}
+	}
+
 	/* The rooms under the sky and the flipmap twins (HDRenderSetCarryHosts),
 	 * borrowed for the length of the build, the rooms under the sky in room
 	 * order, and the art the build found them carrying: triangles per
@@ -4313,6 +4453,21 @@ bool HDRenderCarryPair(int index, int* group, int* host, int* tris)
 	*host = it->first.second;
 	*tris = it->second;
 	return true;
+}
+
+void HDRenderSetAirHulls(int on)
+{
+	g_air_hulls = on != 0;
+}
+
+bool HDRenderGroupHull(int group, int* air, int* covered)
+{
+	if (group < 0 || group >= (int)g_group_hull.size())
+		return false;
+
+	*air = g_hull_air[(size_t)group];
+	*covered = g_hull_covered[(size_t)group];
+	return g_group_hull[(size_t)group] != 0;
 }
 
 bool HDRenderAirPair(int index, int* group, int* host, int* tris)
@@ -6793,6 +6948,13 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * room-centre views (hd_level.cpp, BuildRoomIntrusions). */
 					const bool open_air = air && pair_at >= 0 &&
 						stand_at < 0 && box_at < 0 && face_at < 0 && !inner;
+					/* And with tomb5.hd_air 2, a hull's art in such air that
+					 * no entry's box holds (MarkAirHulls): a piece of its own
+					 * with no entry, no holder and no face, which DecidePairs
+					 * holds to its own room's window like the one above. */
+					const bool hull_air = air && pair_at < 0 &&
+						stand_at < 0 && box_at < 0 &&
+						g < g_group_hull.size() && g_group_hull[g];
 
 					if (pair_at >= 0)
 					{
@@ -6818,6 +6980,35 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							made.inner = inner;
 							made.triangles = 0;
 							made.air = air;
+							piece = (int)group.pairRanges.size();
+							group.pairRanges.push_back(made);
+							group.pairWhole.push_back(0);
+						}
+
+						group.pairRanges[(size_t)piece].triangles++;
+						intruding = piece + 1;
+					}
+					else if (hull_air)
+					{
+						int piece = -1;
+
+						for (size_t j = 0; j < group.pairRanges.size(); j++)
+							if (group.pairRanges[j].intrusion < 0)
+							{
+								piece = (int)j;
+								break;
+							}
+
+						if (piece < 0)
+						{
+							HDPairRange made;
+
+							made.intrusion = -1;
+							made.holder = -1;
+							made.face = -1;
+							made.inner = 0;
+							made.triangles = 0;
+							made.air = 1;
 							piece = (int)group.pairRanges.size();
 							group.pairRanges.push_back(made);
 							group.pairWhole.push_back(0);
@@ -6915,7 +7106,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					tri.overhang = overhang;
 					tri.intruding = intruding;
-					tri.openAir = open_air ? 1 : 0;
+					tri.openAir = open_air || hull_air ? 1 : 0;
 					tri.stand = stand;
 					tri.cull = cull;
 					tri.slot = slot;
@@ -7692,6 +7883,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		PageGloss(HDPageCachePageOfSlot(HDPageCacheSlotOf((int)page)));
 
 	PageGloss(HDPageCachePageOfSlot(-1));
+
+	// The hulls, asked of every group before any is filled (MarkAirHulls).
+	MarkAirHulls(trg);
 
 	/* The biggest groups first, so that no thread is left alone with a big
 	 * one at the end. Only the order the work is handed out in: every group

@@ -9631,8 +9631,12 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-air") && at + 1 < argc)
 		{
-			g_air_option = atoi(argv[at + 1]) ? 1 : 0;
-			printf("-air: the rooms' air is %s\n", g_air_option
+			g_air_option = atoi(argv[at + 1]);
+			g_air_option = g_air_option == 0 || g_air_option == 2
+				? g_air_option : 1;
+			printf("-air: the rooms' air is %s\n", g_air_option == 2
+				? "handed to the build with the hulls' (tomb5.hd_air 2)"
+				: g_air_option
 				? "handed to the build (tomb5.hd_air 1, the engine's default)"
 				: "not handed to the build (tomb5.hd_air 0)");
 			at += 1;
@@ -10272,7 +10276,10 @@ static int ProbeMain(int argc, char** argv)
 				/* And every room's air, as BuildRoomAir hands it over: per
 				 * floor square its floor and ceiling bytes and its floor
 				 * data words from its index on, read by HDSectorAir. None
-				 * with -air 0, as none with tomb5.hd_air 0. */
+				 * with -air 0, as none with tomb5.hd_air 0; the hulls with
+				 * -air 2, as with tomb5.hd_air 2. */
+				HDRenderSetAirHulls(g_air_option == 2 ? 1 : 0);
+
 				if (g_air_option)
 				{
 					LARGE_INTEGER from, to, rate;
@@ -10814,6 +10821,17 @@ static int ProbeMain(int argc, char** argv)
 
 			printf("carry: pairs=%d tris=%d air=%d\n", HDRenderCarryPairs(),
 				carryTris, g_air_option);
+		}
+
+		// And its HDLOG hull lines (ReportRoomIntrusions), with -air 2.
+		for (int g = 0; g_air_option == 2 && g < HDRenderGroupCount(); g++)
+		{
+			int air = 0, covered = 0;
+			const bool hull = HDRenderGroupHull(g, &air, &covered);
+
+			if (air)
+				printf("hull: group=%d air_tris=%d host_art=%d hull=%d\n", g,
+					air, covered, hull ? 1 : 0);
 		}
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)

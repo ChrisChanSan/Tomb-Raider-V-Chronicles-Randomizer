@@ -2897,15 +2897,19 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * BuildWaterSheets). Registry: hd_water. */
 	bool hd_water;
 
-	/* The air of the rooms in an HD level: on, the default, the remaster's
+	/* The air of the rooms in an HD level: 1, the default, the remaster's
 	 * art of a room that stands in the air of a room its own room has no
 	 * portal, door or vertical link with, and that an intrusion box holds
 	 * there, is drawn only inside its own room's portal window, and not at
-	 * all when that window is empty. Off, the air is not asked and that art
-	 * is drawn on the box's answer alone. Registry only, like
+	 * all when that window is empty; and a room listed under the sky takes
+	 * in the rooms whose art stands in it (game\draw.cpp, CarryArt). 2: the
+	 * same, and a hull's art in such air that no box holds is held to its
+	 * own window too (specific\hd\hd_render.cpp, MarkAirHulls). 0: the air
+	 * is not asked, that art is drawn on the box's answer alone and no room
+	 * is taken in. Any other value reads as 1. Registry only, like
 	 * hd_reach; taken at the start of a level and dead with hd_enable off
 	 * (specific\hd\hd_level.cpp, BuildRoomAir). Registry: hd_air. */
-	bool hd_air;
+	ulong hd_air;
 
 	/* The threads of an HD level load - the page decode, the room build
 	 * and the models' pages: 0, the default, the machine's own count, 1 one

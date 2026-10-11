@@ -248,7 +248,7 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "hd_air");
 		tomb5.hd_air = 1;								//on
-		REG_WriteBool(buf, tomb5.hd_air);
+		REG_WriteLong(buf, tomb5.hd_air);
 
 		sprintf(buf, "hd_threads");
 		tomb5.hd_threads = 0;							//the machine's
@@ -473,9 +473,12 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_water");
 		REG_ReadBool(buf, tomb5.hd_water, 1);
 
-		// Absent - every older registry - reads as on.
+		// Absent - every older registry - reads as 1, the default.
 		sprintf(buf, "hd_air");
-		REG_ReadBool(buf, tomb5.hd_air, 1);
+		REG_ReadLong(buf, tomb5.hd_air, 1);
+
+		if (tomb5.hd_air > 2)
+			tomb5.hd_air = 1;
 
 		// Absent - every older registry - reads as 0, the machine's count.
 		sprintf(buf, "hd_threads");
@@ -713,7 +716,7 @@ void save_new_tomb5_settings()
 	REG_WriteBool(buf, tomb5.hd_water);
 
 	sprintf(buf, "hd_air");
-	REG_WriteBool(buf, tomb5.hd_air);
+	REG_WriteLong(buf, tomb5.hd_air);
 
 	sprintf(buf, "hd_threads");
 	REG_WriteLong(buf, tomb5.hd_threads);

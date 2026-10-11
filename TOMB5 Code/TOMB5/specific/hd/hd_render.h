@@ -1755,6 +1755,13 @@ void HDRenderSetRoomAir(const HDRoomAir* rooms, int count,
  * reads back the triangles per (group, host), every pair with one. */
 void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
 	int count);
+/* With tomb5.hd_air 2, nonzero: the hulls' art in unlinked air that no
+ * entry's box holds becomes a piece held to its own room's window (see
+ * MarkAirHulls in hd_render.cpp). Before HDRenderLevelBegin; kept until
+ * the next call. HDRenderGroupHull says afterwards whether a group is one,
+ * with its triangles of such art and those on their hosts' own art. */
+void HDRenderSetAirHulls(int on);
+bool HDRenderGroupHull(int group, int* air, int* covered);
 int HDRenderCarryPairs();
 bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 
@@ -1897,7 +1904,9 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * splits the pieces like the other three. Such art the open half would
  * draw - no face claims it and it stands outside the smaller box - is a
  * piece too, with `face` -1 and `inner` 0, which no other piece is. Art in
- * no entry's box is in no piece, in unlinked air or not. */
+ * no entry's box is in no piece, in unlinked air or not, but for a hull's
+ * with tomb5.hd_air 2 (HDRenderSetAirHulls): one piece per group with
+ * `intrusion` and `holder` -1, `face` -1, `inner` 0 and `air` 1. */
 struct HDPairRange
 {
 	int intrusion;

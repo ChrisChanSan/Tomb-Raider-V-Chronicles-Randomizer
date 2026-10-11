@@ -3637,7 +3637,8 @@ static void BuildRoomIntrusions()
  * off, no room has air for the renderer to ask, no triangle stands in
  * unlinked air, and every piece and every answer is the box's alone, as
  * before the air was asked. `g_air_on` is what this level took, for the
- * level's line. */
+ * level's line: 0, 1, or 2, which hands the renderer the hulls too
+ * (HDRenderSetAirHulls). */
 static std::vector<HDRoomAir> g_room_air;
 static std::vector<float> g_room_air_sectors;
 static std::vector<unsigned char> g_room_links;
@@ -3646,7 +3647,8 @@ static int g_air_on = 0;
 
 static void BuildRoomAir()
 {
-	g_air_on = tomb5.hd_air ? 1 : 0;
+	g_air_on = tomb5.hd_air <= 2 ? (int)tomb5.hd_air : 1;
+	HDRenderSetAirHulls(g_air_on == 2 ? 1 : 0);
 
 	if (!g_air_on)
 	{
@@ -3780,7 +3782,7 @@ static void BuildRoomCarry()
 	g_carry_twin.clear();
 	g_room_carry.clear();
 
-	if (!tomb5.hd_air || number_rooms <= 0)
+	if (!g_air_on || number_rooms <= 0)
 	{
 		HDRenderSetCarryHosts(0, 0, 0);
 		return;
@@ -3831,7 +3833,7 @@ static void ReportRoomCarry()
 
 	if (gLogEnabled)
 		Log("HDLOG carry level=%s pairs=%d tris=%d air=%d", g_stem, pairs,
-			tris, tomb5.hd_air ? 1 : 0);
+			tris, g_air_on);
 
 	HDRenderSetCarryHosts(0, 0, 0);
 	g_carry_sky.clear();
@@ -4441,7 +4443,8 @@ static void ReportRoomIntrusions()
 	 *               the art drawn only inside its own room's window, but
 	 *               what a stand range or a static's box takes
 	 *   air         tomb5.hd_air as the level took it: 1 the air asked,
-	 *               0 not asked, every air_ field 0 */
+	 *               2 the hulls' too (HDLOG hull below), 0 not asked,
+	 *               every air_ field 0 */
 	int airTris = 0;
 	int airGroups = 0;
 	int airBoxed = 0;
@@ -4476,6 +4479,22 @@ static void ReportRoomIntrusions()
 			if (HDRenderAirPair(i, &group, &host, &here))
 				Log("HDLOG unlinked level=%s group=%d host=%d tris=%d",
 					g_stem, group, host, here);
+		}
+
+	/* HDLOG hull, with tomb5.hd_air 2: one line per group whose art in
+	 * unlinked air no entry's box holds - `air_tris` those triangles,
+	 * `host_art` those standing on their host's own art, `hull` 1 when
+	 * that is more than half and the art is held to the group's own
+	 * window (MarkAirHulls in hd_render.cpp). Behind -log. */
+	if (gLogEnabled && g_air_on == 2)
+		for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
+		{
+			int air = 0, covered = 0;
+			const bool hull = HDRenderGroupHull(g, &air, &covered);
+
+			if (air)
+				Log("HDLOG hull level=%s group=%d air_tris=%d host_art=%d "
+					"hull=%d", g_stem, g, air, covered, hull ? 1 : 0);
 		}
 
 	// The lists were only borrowed for the length of the build.

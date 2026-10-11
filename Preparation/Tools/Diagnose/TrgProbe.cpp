@@ -2052,13 +2052,15 @@ namespace
 		 * them before a stand range or a static's box takes any: the art
 		 * the engine holds to its own room's window. */
 		long long airTris = 0, outsideTris = 0, airBoxed = 0;
+		std::vector<long long> outsidePerGroup(centre.size(), 0);
+		std::vector<long long> coveredPerGroup(centre.size(), 0);
 		std::map<std::pair<int, int>, long long> airPairs, outsidePairs;
 		std::set<int> airGroupSet;
 
 		for (size_t g = 0; g < centre.size() && (int)g < rooms; g++)
 			for (size_t c = 0; c + 2 < centre[g].size(); c += 3)
 			{
-				bool any = false, missed = false;
+				bool any = false, missed = false, covered = false;
 
 				for (int a = 0; a < rooms; a++)
 				{
@@ -2089,6 +2091,22 @@ namespace
 					{
 						missed = true;
 						outsidePairs[std::make_pair((int)g, a)]++;
+
+						// The host's own art in the centroid's 256-unit cell.
+						const unsigned long long key =
+							((unsigned long long)(((long)floorf(cx +
+							(float)B.ox) >> 8) + 32768) << 34) |
+							((unsigned long long)(((long)floorf(
+							centre[g][c + 1] + (float)B.oy) >> 8) + 32768)
+							<< 17) |
+							(unsigned long long)(((long)floorf(cz +
+							(float)B.oz) >> 8) + 32768);
+
+						if (std::binary_search(cells[(size_t)a].begin(),
+							cells[(size_t)a].end(), key) ||
+							std::binary_search(shell[(size_t)a].begin(),
+							shell[(size_t)a].end(), key))
+							covered = true;
 					}
 				}
 
@@ -2103,6 +2121,8 @@ namespace
 				}
 
 				outsideTris += missed ? 1 : 0;
+				outsidePerGroup[g] += missed ? 1 : 0;
+				coveredPerGroup[g] += covered ? 1 : 0;
 			}
 
 		for (std::map<std::pair<int, int>, long long>::const_iterator it =
@@ -2145,6 +2165,22 @@ namespace
 					"(%s)\n", it->first.first, it->first.second, it->second,
 					why);
 			}
+
+			/* The hull census, per group with art in unlinked air outside
+			 * every entry's box: its triangles, those whose centroid stands
+			 * outside its own room's inside (the box below, no slack), and
+			 * that art - what tomb5.hd_air 2 asks of a group (the engine's
+			 * hull line, BuildRoomAir). */
+			for (size_t g = 0; g < outsidePerGroup.size() &&
+				g < triPerGroup.size(); g++)
+				if (outsidePerGroup[g])
+					std::printf("  hull census: level=%s group=%d tris=%lld "
+						"outside=%lld share=%.3f unboxed_air=%lld "
+						"host_art=%lld\n",
+						stem.c_str(), (int)g, triPerGroup[g],
+						outAllPerGroup[g], triPerGroup[g] ? (double)
+						outAllPerGroup[g] / (double)triPerGroup[g] : 0.0,
+						outsidePerGroup[g], coveredPerGroup[g]);
 		}
 		std::printf("%-9s   overhang by distance: <=16 %lld, <=64 %lld, "
 			"<=256 %lld, <=1024 %lld, >1024 %lld\n",

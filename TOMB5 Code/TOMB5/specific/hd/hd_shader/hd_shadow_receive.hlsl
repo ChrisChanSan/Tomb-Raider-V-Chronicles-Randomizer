@@ -171,7 +171,12 @@ float BulbIntensity(float3 stash, float4 a, float4 b)
 /* What every receive writes for the factor `k` at the view-space point
  * `viewPos`: the bulbs' haze there times 1 - k in colour - the sum RoomPS
  * and ModelPS add, saturated as they saturate it, times gPass.w - and k in
- * alpha. The bulbs are summed only where the pixel is darkened at all. */
+ * alpha. The bulbs are summed only where the pixel is darkened at all. The
+ * haze goes back as summed: with the eye under water RoomPS and ModelPS
+ * pass surface plus haze through UnderWater together, so there the picture
+ * times k plus this haze differs a little from the scattered surface times
+ * k plus the scattered haze - only where a fog bulb stands in sight under
+ * water. */
 float4 ReceiveOut(float k, float3 viewPos)
 {
 	float3 haze = 0.0f;
@@ -291,11 +296,12 @@ float4 ReceivePS(RECEIVE_IN input) : COLOR0
  * with `hers` the one-map shader's lookup times its terms (HerShade, line
  * for line ReceivePS's), and `theirs` the second map's (OthersShade): the
  * same sixteen taps and weights, each casting tap weighted by how far the
- * pixel lies behind that tap's caster along the light (1 up to OTHERS_FULL,
- * 0 from OTHERS_END on - hd_shadow.h, HDShadowBehindTerm) and by the fade of
- * the tap's own depth near the second box's near and far side
- * (HDShadowFadeTerm; both in HDShadowLookupBehind), times the edge term of
- * the second box and the same facing term. A floor under two overlapping
+ * pixel lies behind the place of that tap's caster - the point at its feet,
+ * which the second map's green channel holds - along the light (1 up to
+ * OTHERS_FULL, 0 from OTHERS_END on - hd_shadow.h, HDShadowBehindTerm) and
+ * by the fade of the tap's own depth near the second box's near and far
+ * side (HDShadowFadeTerm; both in HDShadowLookupBehind), times the edge term
+ * of the second box and the same facing term. A floor under two overlapping
  * shadows is as dark as under the darker one. Where the second map gives
  * nothing the max is her own product, so the pixel is the pixel ReceivePS
  * writes.
@@ -324,9 +330,10 @@ float4 gOthersD : register(c105);
  * 1 / its side. */
 float4 gOthersMap : register(c106);
 
-/* The distance term as a line in a tap's depth difference: x the second
- * box's depth / (OTHERS_END - OTHERS_FULL), y OTHERS_END / (OTHERS_END -
- * OTHERS_FULL); z 1 / OTHERS_FADE, the fade's slope in a tap's depth. */
+/* The distance term as a line in the depth difference between the pixel
+ * and a tap's place: x the second box's depth / (OTHERS_END - OTHERS_FULL),
+ * y OTHERS_END / (OTHERS_END - OTHERS_FULL); z 1 / OTHERS_FADE, the fade's
+ * slope in a tap's depth. */
 float4 gOthersBehind : register(c107);
 
 /* Her part at the view-space point `at` for a face whose facing term is
@@ -404,18 +411,25 @@ float2 OthersShade(float4 at, float facing)
 		for (int j = 0; j < 4; j++)
 		{
 			const float y = (base.y + (float)j - 0.5f) * gOthersMap.z;
-			float4 tap;
+			const float2 t0 = tex2Dlod(sOthers,
+				float4((base.x - 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
+			const float2 t1 = tex2Dlod(sOthers,
+				float4((base.x + 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
+			const float2 t2 = tex2Dlod(sOthers,
+				float4((base.x + 1.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
+			const float2 t3 = tex2Dlod(sOthers,
+				float4((base.x + 2.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
 
-			tap.x = tex2Dlod(sOthers, float4((base.x - 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
-			tap.y = tex2Dlod(sOthers, float4((base.x + 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
-			tap.z = tex2Dlod(sOthers, float4((base.x + 1.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
-			tap.w = tex2Dlod(sOthers, float4((base.x + 2.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
+			// Red the caster's depth, green its place's (hd_shadow.hlsl).
+			const float4 tap = float4(t0.x, t1.x, t2.x, t3.x);
+			const float4 place = float4(t0.y, t1.y, t2.y, t3.y);
 
 			/* A casting tap counts with how far the pixel lies behind its
-			 * caster and with the fade of its caster's depth near the
-			 * box's two ends along the light; the clear value 1 never lies
-			 * below the limit. */
-			const float4 behind = saturate(gOthersBehind.y - gOthersBehind.x * (odepth - tap));
+			 * caster's place along the light and with the fade of its
+			 * caster's depth near the box's two ends along the light; the
+			 * clear value 1 never lies below the limit. */
+			const float4 behind = saturate(gOthersBehind.y -
+				gOthersBehind.x * (odepth - place));
 			const float4 fade = saturate(min(tap, 1.0f - tap) * gOthersBehind.z);
 			const float row = dot(wx, (tap < limit) ? behind * fade : 0.0f);
 			const float wy = j == 0 ? 1.0f - f.y : (j == 3 ? f.y : 1.0f);

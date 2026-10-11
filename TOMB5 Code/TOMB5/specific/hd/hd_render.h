@@ -303,7 +303,7 @@ struct HDIntrusion
 /* The air of a classic room: the space a room's own floor squares enclose,
  * off its walls, floors and ceilings and out of its doorways.
  *
- * Art of room b whose centroid stands in the air of a room a that b has no
+ * Art of room b that stands in the air of a room a that b has no
  * portal, door or vertical link with, not even through a flipmap twin, is
  * art in a room b cannot be seen through: the classic path draws no face of
  * b there unless b's own window reaches it. Such art that an entry above
@@ -324,7 +324,12 @@ struct HDIntrusion
  * some corner. A point stands in the air when it and the four points
  * HD_AIR_MARGIN from it along x and z lie on such squares, each with the
  * point more than HD_AIR_MARGIN below the square's lowest ceiling corner
- * and above its highest floor corner.
+ * and above its highest floor corner. A triangle stands in it when its
+ * centroid's x and z do and the heights of its corners reach that far
+ * between ceiling and floor (HDRoomAirReaches): a wall of b whose centroid
+ * is above a's ceiling can still hang its foot into a's air - ANDREA1's
+ * facade of room 101, 342 units tall over room 93's ceiling square, its
+ * centroid 28 units above it and 86 units of it below.
  *
  * `sectors` holds two floats per square, square (i, k) at (i * nz + k) * 2
  * with i over the nx squares along x and k over the nz along z: the lowest
@@ -355,9 +360,11 @@ struct HDRoomAir
  * frame in a street and 1,137 more of a palm's fronds. */
 #define HD_AIR_MARGIN	32.0f
 
-/* Whether a world point stands in a room's air - see HDRoomAir. */
-inline bool HDRoomAirHolds(const HDRoomAir& air, float x, float y, float z,
-	float margin)
+/* Whether something at world x and z whose heights run from y0 up to y1 (y
+ * downward, y0 the higher) reaches into a room's air - see HDRoomAir: a
+ * point when y0 and y1 are the same. */
+inline bool HDRoomAirReaches(const HDRoomAir& air, float x, float y0,
+	float y1, float z, float margin)
 {
 	const float step[5][2] =
 	{
@@ -384,11 +391,21 @@ inline bool HDRoomAirHolds(const HDRoomAir& air, float x, float y, float z,
 
 		const float* s = air.sectors + ((size_t)i * air.nz + j) * 2;
 
-		if (!(y > s[0] + margin && y < s[1] - margin))
+		// A square with no air between its margins is reached by nothing,
+		// however far the heights run past both of them.
+		if (!(s[0] + margin < s[1] - margin && y1 > s[0] + margin &&
+			y0 < s[1] - margin))
 			return false;
 	}
 
 	return true;
+}
+
+/* Whether a world point stands in a room's air - see HDRoomAir. */
+inline bool HDRoomAirHolds(const HDRoomAir& air, float x, float y, float z,
+	float margin)
+{
+	return HDRoomAirReaches(air, x, y, y, z, margin);
 }
 
 /* How many words one floor data entry takes after its type word at

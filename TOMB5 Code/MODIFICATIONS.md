@@ -12019,10 +12019,11 @@ owner's place, its three other squares, the notch of water at 4,2. ANDREA2's 40 
 more in the probe than in the game: found later - the corners of room 70's floor over
 room 204, whose portal the level's closed door in that floor shuts before the marks are
 made (`InitialiseDoor`), and the twin now shuts the closed doors' portals first
-(`0745db8`). The river's hide of the flow
-material still asks the box alone; no call is known whose box spans a square its
-triangles miss. `-watermarks` is a switch and not the default, so the earlier picture
-sets stay comparable.
+(`0745db8`); a rebuild after a lost device bakes the marks again with the doors as
+they stand then, in the engine and in the twin alike. The river's hide of the flow
+material asks its own squares since the night's lows (`7be021f`, the part 'The
+river's flow hide by its own squares' below). `-watermarks` is a switch and not the
+default, so the earlier picture sets stay comparable.
 
 **Commits.** `3aeb924`, `712a1f3`.
 

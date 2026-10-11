@@ -13049,6 +13049,140 @@ fifteen levels as at `b4b19fe`; only ANDY3 has flow calls over a sheet, five cal
 sixteen. The fifteen cameras and the pond's 36 pictures are md5-identical to
 `b4b19fe`'s. Commit `7be021f`.
 
+**After the thirteenth play test: the opaque water's shine, the eye at the surface.**
+The build of `4f725a8` was played on 2026-10-11. Asked for: the shine on the water one
+cannot see through a little weaker (ANDREA2's canal, "the yellow a bit too glaring"),
+the old flat reflection that came back with the camera held at the water's surface
+(JOBY2), and pictures of foam variants for JOBY2, which the owner is undecided about.
+
+*The canal's yellow* (`hd_render.cpp` `kWaterClass`). Measured with scratch builds of
+RoomProbe that leave one term of `WaterPS` out, at the play test's view of the canal
+(the end of the walkway north of channel 61's mouth, from above), a view from over the
+walkway and one along the canal at eye level; the water's pixels split by the path
+behind the sheet (`-waterdepthview 1`). The highlight makes the yellow, not the
+reflection: over the water that shows no floor it lifted the median luma from 33 to
+50 and the brightest 2 % from 66 to 103, the reflection added 2 and its broad lobe
+nothing; the walkway's stone stands at a median of 21. A channel's water hides its
+floor within a square and a half, so its waves stand at their whole height over a
+dark body and every slope that faces the highlight's light lights. The channel's
+highlight is now 0.4, the river's: the opaque water's median 45 and brightest 2 % 69,
+the water a floor shows through 43 to 42, the view at eye level unchanged (no
+highlight reaches it). ANDY2's three channel bodies and JOBY5's three take the same.
+
+*The eye at the surface* (`hd_room.hlsl` `WaterVS` "round the eye", `WaterPS` "the
+side"; `hd_render.cpp` c148). The play test's log holds the eye at 3258, 28380 in
+JOBY2's rain basin for fourteen seconds, from 10 units under the surface at rest to
+42 over it, its room flipping between 13 (the water) and 7 (the air). RoomProbe swept
+that eye from 96 under to 96 over in steps of 8 at four clock times; scratch probes
+painted one branch each. Three states, three causes: the near-white plane over the
+surface - 45 to 85 % of the water's pixels had N.V under 0, a slope turned away from
+the eye, which made the Fresnel term 1 and laid the sky's horizon colour flat over
+them; the flat blue plane - the sheet seen from above, steeply, over 3,584 units of
+water, with the eye over a trough while the game had it in the water, since a sea's
+swell moves the sheet by up to the sum of its heights, 97 units, and the game's room
+test uses the surface at rest; and a strip of veil at the horizon - a crest standing
+over an eye in the air, drawn as the sheet's underside because the side was the sign
+of V.y. A fourth thing showed at 8 units over the surface: the near plane, 20 units
+ahead, reaches 12.6 units below the eye at the game's 80 degrees (`AlterFOV` over a
+4:3 width), so a sheet within that of the eye is cut, and along the bottom of the
+picture the underwater wall showed without the water over it. Now a slope turned away
+takes the term of the slope it mirrors, |N.V|; the side is the eye's: c148.y and
+`gEye.w` are 1 while the eye is in the air, the variant drawn under the water takes
+0; and near the eye every vertex keeps at least 32 units off the eye's height on the
+eye's side (`HD_SWELL_GAP`; at any pitch the near plane reaches at most 24 units below
+or above the eye, 32 leaves room for a rolled camera): a crest under an eye in the air
+is cut down to that, a trough over an eye under the water held up to it, the hold
+fading out over a square and a half across (`HD_SWELL_EYE`). A vertex whose swell does
+not come within 32 units of the eye keeps it whole. Under the water every height of
+the sweep shows the window with the waves in it (the luma's spread after a 31-pixel
+high pass 11.5 to 11.6 at every height from 96 under to the surface at 2.5 s, where
+1.1 to 8.3 stood at 16, 8 and 0 under); over it no pixel takes the sky's flat colour,
+and at 8 units over the surface the bottom of the picture is water at 1, 2.5 and 3 s.
+Over the surface the spread is 2.7 to 4.8 at 8 units (1.1 to 1.3 at `4f725a8`, where
+the white plane and the cut strip stood) and rises with the height as before; from 72
+to 96 units it is 0.8 to 2.2 under `4f725a8`'s, because the sky's colour no longer
+lies on the far back slopes (the hold changes nothing there). Not met: at 1 and 2.5 s
+the water seen 12 to 25 degrees down, within a few hundred units of an eye at any of
+the heights over the surface, is the body's colour with the waves faint in it (the
+spread in its rows 2 to 4, as at `4f725a8`): its slopes face the eye there, N.V 0.5 to
+0.8 at 2.5 s in a scratch probe, so the Fresnel term is 0.02 to 0.05 and the
+reflection, the only term that carries the waves over 3,584 units of water, adds
+about 3 to 7 of luma to a body of about 88.
+
+*JOBY2's foam.* Pictures only: the rain basin from the play test's eye raised to 160
+units over the surface and the open sea from the shore, each at foam 1, 0.5, 0.25 and
+0 (rows of the text file) and with whitecaps and no bank foam (a scratch shader), given
+to the owner to choose from. Nothing changed.
+
+**Measured.** Slots, fxc /O3, `4f725a8` to now: `WaterVS` 386 to 407, `WaterPS` 461 to
+462, its depth variant 508 to 509, the view variant 494 to 495, the under variant 470
+to 390 (it draws the sheet from below alone), the foam's draw 325 to 321 and with the
+depth 367 to 368; `RiverPS` 482, `FootPS` 208, `RoomPS` 510 and the gloss variant 502
+keep their bytecode apart from the stamp. GPU, 2560 x 1440, three runs each: the
+full-water view 0.439 to 0.442 ms against 0.441 to 0.443, the pond 0.490 to 0.499
+against 0.495 to 0.501.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras
+with `-hdwater 0`, 15 of 15 identical to the fix round's parity set. With `-hdwater 1`
+against `4f725a8`: the canal's highlight changes B1 and B2; the side and |N.V| change
+eleven views by 15 to 6,700 pixels, where a far wave's back slope drew the sky's colour
+(A1 to A3, B1, B2, C1 to C4, E1, E2); E3, E4 and the camera under the water (D1) are
+identical. Of ANDY3's twelve pond views at 1, 3 and 5 seconds the three from above
+keep their pictures up to 3 pixels a single step off (the vertex shader's arithmetic
+in another order); nine change by 3 to 10,000 pixels where the far water's back
+slopes drew the sky's streaks. The hold at the eye changes none of the fifteen
+cameras and no pond view beyond those single steps.
+
+**Commits.** `a0d6bf4`, `b244702`, `04fabd7`, `c633e30`, `f2e7198`.
+
+**Lara's light along a swim, after the thirteenth play test.** Two things asked for:
+the violet on Lara under the water in ANDREA1 "is back", in patches on a leg and an
+arm, and in long swims the light switches back and forth hard.
+
+*Measured.* Every water room's ambient out of `ROOM_INFO` (read with the randomizer's
+`Tr5Level`), its air room and its under-water light out of RoomProbe `-underwater`,
+in ANDREA1, ANDREA2, JOBY2, JOBY4, ANDY1 and ANDY3. A water room no sheet lies over -
+ANDREA1's 34 between the pools 26 and 32, its 49, twenty in ANDREA2, 33 in ANDY3, 132
+in JOBY4 - has no air room, so her wet nodes took its own tinted ambient, and its
+look took the level's largest body. The play test's swim, rooms 26, 34 and 32, gave
+her a luma of 31.5, 43.4 and 34.1 and the water's scattered light 106, 106 and 61 (x
+255), each in one frame; over the six levels the worst jump between two water rooms a
+portal joins was 62 of luma for her and 59 for the water. The violet patches are not
+explained by the rules: the diff of `hd_laradraw.cpp` and `drawlara.cpp` since
+`2d48e83` is the shadow's arrival alone; in room 26 the log has no light handed to her
+(`handed=0 eye=1`); ModelProbe draws her dark and even at the air room's ambient (27,
+32, 41 for room 26, 19, 32, 32 for room 210), at the water rooms' own and at the game's
+under-water constants. The patches in the picture measure 41, 39, 52 on a body of
+about 15.
+
+*Now* (`hd_laradraw.cpp` "the tween", `hd_render.cpp` "along a swim"). In a water room
+without an air room her wet nodes keep the ambient of the last room over the water she
+was in or swam under, and the eye keeps the body of the last room it was in that has
+one of its own. The water's extinction and scattered light follow what the rules give
+over 0.25 s of game time, a share 1 - e^(-dt / 0.25) a frame. Her dry and wet colours
+follow theirs the same way while the level's sheets are built and she is in the water,
+where `InitObjectLighting` hands the rooms' ambients over as they are and stops the
+item's own fade, and after she leaves it until the colours drawn are within half a
+step (0.5 of 255) of the rules' on every channel; on land, without sheets
+(`tomb5.hd_water` 0) and in a level without water her nodes take the rules' colours as
+they are, and `CalcAmbientLight`'s own fade over 8 frames is the only one. A new level,
+and the eye coming out of the water, start at the new colours. The worst jump left
+between neighbours is 16 of luma for her and 4.4 for the water, at 60 frames a second
+at most 1.03 and 0.28 a frame. A new `LARALOG` line, with `-log`, once a second of game
+time while she is in a water room, writes her room, its air room, whether the last one
+stands in, the colours the rules give and the ones drawn, her wet nodes and which they
+are (`wet_mask=`, LM_ order), the brightest light handed to her, the water's scattered
+light, whether the sheets are built and whether the tween runs. The next play test's
+log shows whether the patches come from her ambients, from a split of her nodes
+between wet and dry or from a handed light; a source on a material's own path (her
+skin's sheen, the wardrobe) would not show in it. RoomProbe and ModelProbe draw one
+frame, so their pictures do not change; the tween is seen in the game alone.
+
+**Left.** The violet patches' cause; the under-water look of a fallback room seen
+first (no last body yet: the largest, as before).
+
+**Commits.** `04fabd7`, `63e8bac`, `f2e7198`.
+
 ### The level load on several cores
 2026-10-11
 

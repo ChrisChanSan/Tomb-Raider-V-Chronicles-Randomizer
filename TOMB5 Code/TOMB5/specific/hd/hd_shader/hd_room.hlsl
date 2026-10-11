@@ -378,7 +378,8 @@ float4 gWaterBox : register(c15);
  *            underwater room with a surface above it, times hd_motion),
  *            y the height of that surface (room local), z one over the
  *            depth it fades out over, w unused
- * gEye       xyz the camera in this room's own coordinates (WaterVS)
+ * gEye       xyz the camera in this room's own coordinates, w 1 while the
+ *            eye is in the air and 0 under the water (WaterVS)
  * gSwell     x the share of the wave height the vertex takes (0 basin;
  *            for a sheet draw times the body's own swell, hd_render.cpp
  *            kWaterBank), y the shore distance the swell tapers in
@@ -715,8 +716,10 @@ float4 gWaterStage : register(c106);
 /* gWaterClip c148, per sheet draw, read by WaterPS alone: x how far under
  * the surface at rest the frame's depth may lie and still be left to the
  * frame, units (the body's clip, hd_render.cpp kWaterClip; see "the clip"
- * in WaterPS); y, z, w 0. Named by no other shader: this file's other
- * pixel registers end at c147, hd_model.hlsl's own begin at c160. */
+ * in WaterPS); y 1 while the eye is in the air, 0 while it is under the
+ * water (see "the side" in WaterPS); z, w 0. Named by no other shader:
+ * this file's other pixel registers end at c147, hd_model.hlsl's own
+ * begin at c160. */
 float4 gWaterClip : register(c148);
 
 /* The crests (see CrestRows), per sheet draw, read by WaterPS (its foam
@@ -2152,6 +2155,17 @@ float PatchField(float2 p, float t, float var)
  * pictures. */
 #define HD_LINE_STEEP 6.0f
 
+/* The sheet round an eye at the surface (WaterVS, "round the eye"), units:
+ * HD_SWELL_GAP how far the sheet keeps off the eye, past the near plane -
+ * 20 units ahead (InitWindow, gamemain.cpp) at the game's 80 degrees over
+ * a 4:3 width (AlterFOV), it reaches 12.6 units up and down and at any
+ * pitch at most 24 units below or above the eye; 32 leaves room for a
+ * rolled camera. HD_SWELL_EYE the distance across over which the hold
+ * fades out, a square and a half. Free choices, set on the round's
+ * RoomProbe sweep of the eye through JOBY2's rain basin. */
+#define HD_SWELL_GAP 32.0f
+#define HD_SWELL_EYE 1536.0f
+
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
 {
@@ -2178,7 +2192,33 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 		max(gSwell.z, 1.0e-3f));
 	// Units the vertex rises by (y counts down): the pixel shader measures
 	// the frame's depth from the surface at rest (WaterPS, the clip).
-	const float lift = (gSwell.x * h + crest) * taper * gMotion.w;
+	float lift = (gSwell.x * h + crest) * taper * gMotion.w;
+
+	/* Round the eye the sheet keeps to the eye's side. The game puts the
+	 * eye in the air or under the water by the surface at rest (the
+	 * camera's room, gEye.w 1 or 0); a sea's swell moves the sheet by up to
+	 * the sum of its heights, 97 units, so near the surface a crest can
+	 * stand over an eye the game has in the air, or a trough under one it
+	 * has in the water, and the near plane cuts a sheet that passes within
+	 * its reach of the eye. Where the eye lies on its side of this vertex's
+	 * surface at rest, the vertex keeps at least HD_SWELL_GAP units off the
+	 * eye's height - a crest under an eye in the air cut down to it, a
+	 * trough over an eye in the water held up to it, at rest nearer than
+	 * that moved away - fading out smoothly over HD_SWELL_EYE units across.
+	 * Every other vertex keeps its swell. `e` is the eye's height over the
+	 * surface at rest. */
+	{
+		const float e = inPos.y - gEye.y;
+		const float air = gEye.w;
+		const float held = air > 0.5f ? min(lift, e - HD_SWELL_GAP) :
+			max(lift, e + HD_SWELL_GAP);
+		const float side = air > 0.5f ? step(0.0f, e) : step(e, 0.0f);
+		const float near = saturate(length(gEye.xz - inPos.xz) *
+			(1.0f / HD_SWELL_EYE));
+
+		lift = lerp(lift, held, side * (1.0f - near * near *
+			(3.0f - 2.0f * near)));
+	}
 
 	pos.y -= lift;
 
@@ -2465,11 +2505,27 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	// y counts down: the surface's normal points to -y.
 	float3 N = normalize(float3(-slope.x, -1.0f, -slope.y));
-	const float above = V.y < 0.0f ? 1.0f : 0.0f;
+
+	/* The side the sheet is seen from is the side the eye is on: a ray
+	 * from the air meets the water from above first, a crest standing over
+	 * the eye's height included, and a ray from the water meets it from
+	 * below. gWaterClip.y is 1 while the eye is in the air and 0 under the
+	 * water (the camera's room), and the variant drawn under the water
+	 * knows it is. */
+#ifdef HD_WATER_UNDER
+	const float above = 0.0f;
+#else
+	const float above = gWaterClip.y;
+#endif
 
 	N = above > 0.5f ? N : -N;
 
-	const float nv = saturate(dot(N, V));
+	/* A slope turned away from the eye is hidden behind the crest in front
+	 * of it; a flat sheet draws it all the same. Its N.V, under 0, would
+	 * make the Fresnel term 1 - the sky's colour, flat, over half of every
+	 * wave seen at a grazing angle. The pixel takes the term of the slope
+	 * it mirrors, |N.V|, so the waves stay readable. */
+	const float nv = abs(dot(N, V));
 	const float g = 1.0f - nv;
 	const float g2 = g * g;
 	const float F = gWaterRefl.w + (1.0f - gWaterRefl.w) * (g2 * g2 * g);

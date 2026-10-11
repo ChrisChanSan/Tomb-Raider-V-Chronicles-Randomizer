@@ -9652,6 +9652,14 @@ namespace
 	 * foam at every edge and on the crests. The foam blotches of a channel
 	 * and a sea are 1.5 times finer than the basin's scale.
 	 *
+	 * A channel's highlight is 0.4. Its water hides its floor within a
+	 * square and a half, so its waves stand at their whole height over a
+	 * dark body, and every slope that meets the highlight's light lights.
+	 * In ANDREA2's canal seen from above (RoomProbe) the water that shows
+	 * no floor has a median luma of 33 and its brightest 2 % 66 without a
+	 * highlight, 45 and 69 with 0.4, 50 and 103 with 0.8 - a yellow sheen
+	 * over the canal. A free choice, set by eye on those pictures.
+	 *
 	 * The rows five to eight fill the spectrum between and below the first
 	 * four: three wavelengths at the geometric mean of two neighbours and
 	 * one at the shortest over 1.5 (moved by two units where it came near a
@@ -9679,7 +9687,7 @@ namespace
 	 * slide downstream (RoomProbe, ANDY3's river from its bank, the motion
 	 * of its pixels from 3 to 3.1 seconds). Its heights are a channel's
 	 * steepness (height over wavelength 0.0086 at most against 0.0078) and
-	 * its highlight half the channel's, 0.4: in a quarter to one and a
+	 * its highlight 0.4, as the channel's: in a quarter to one and a
 	 * half squares of water the bend of the floor is the slope times a
 	 * quarter of the path,
 	 * and 1.2 over 300 moved it by one or two units; at 0.8 the highlight of
@@ -9704,7 +9712,7 @@ namespace
 			{ 0.0f, 0.42f, -0.37f, 0.9f, -0.19f, 0.63f, -0.71f, 1.21f },
 			0.35f,
 			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
-			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f,
+			1.0f, 70.0f, 0.4f, 55.0f, 40.0f, 0.0f, 2.0f,
 			1.2f, 3.0f, 1.0f },
 		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f, 1025.0f, 481.0f, 222.0f,
 			98.0f },
@@ -11913,6 +11921,26 @@ namespace
 	bool g_under_probe_set = false;
 	float g_under_now[12] = {};
 
+	/* Along a swim. A water room no sheet lies over has no body of its
+	 * own; the level's largest stands in, and its light can be far from
+	 * the pools' on either side: in ANDREA1 the scattered light's luma is
+	 * 61 (x 255) in room 32, 106 in room 26 and 106 in room 34 by the
+	 * largest body, 61 by room 32's (RoomProbe -underwater per room). Such
+	 * a room keeps the body of the last room the eye was in that has one
+	 * of its own (g_under_body, -1 for none yet: the largest), and the
+	 * scattered light and the extinction follow the body's over
+	 * kUnderTween seconds of the game clock, a share 1 - e^(-dt /
+	 * kUnderTween) a frame - 6.4 % at 60 frames a second, under 3 of luma
+	 * for the jump of 45. A frame with the eye out of the water forgets
+	 * the tween, so the eye going under takes the look at once, as the
+	 * classic picture does; a new level forgets both. The tween's time is a
+	 * free choice, the same as Lara's ambient's (hd_laradraw.cpp). */
+	const float kUnderTween = 0.25f;
+	int g_under_body = -1;
+	bool g_under_known = false;
+	float g_under_clock = 0.0f;
+	float g_under_drawn[8] = {};
+
 	/* `out` is c134 - c136 and c145, sixteen floats: what the shaders read,
 	 * or all zero with the eye out of the water. ModelProbe's -under hands
 	 * the first nine by hand (the scattered colour already held to
@@ -11938,15 +11966,29 @@ namespace
 
 		if (!f || !f->under || !g_wlevel.built || f->underRoom < 0 ||
 			f->underRoom >= (int)g_wroom_body.size())
+		{
+			g_under_known = false;
 			return false;
+		}
 
-		const int b = g_wroom_body[(size_t)f->underRoom];
+		int b = g_wroom_body[(size_t)f->underRoom];
 
 		if (b < 0 || b >= (int)g_wlooks.size() || b >= (int)g_wbodies.size())
+		{
+			g_under_known = false;
 			return false;
+		}
 
 		const bool fallback = (size_t)f->underRoom <
 			g_wroom_fallback.size() && g_wroom_fallback[(size_t)f->underRoom];
+
+		// A room without a body of its own keeps the last one (see "along
+		// a swim").
+		if (!fallback)
+			g_under_body = b;
+		else if (g_under_body >= 0 && g_under_body < (int)g_wlooks.size() &&
+			g_under_body < (int)g_wbodies.size())
+			b = g_under_body;
 		const WaterLook& look = g_wdeep_on ? g_wlook_deep :
 			g_wlooks[(size_t)b];
 		// The eye's depth under the water drawn: a lifted body's surface
@@ -11977,6 +12019,23 @@ namespace
 		out[7] = g_wdeep_on ? kDeepUp : kUnderUp;
 		out[11] = depth > 1.0f ? depth : 1.0f;
 		out[12] = kUnderClear;
+
+		// The tween of the extinction, the scattered light and its upward
+		// gain (see "along a swim"); a clock that stands draws as it stood.
+		const float dt = f->clock - g_under_clock;
+		const float share = !g_under_known ? 1.0f : dt > 0.0f ?
+			1.0f - expf(-dt / kUnderTween) : 0.0f;
+
+		for (int k = 0; k < 8; k++)
+		{
+			g_under_drawn[k] += (out[k] - g_under_drawn[k]) * share;
+			out[k] = g_under_drawn[k];
+		}
+
+		if (!g_under_known || dt > 0.0f)
+			g_under_clock = f->clock;
+
+		g_under_known = true;
 		std::memcpy(g_under_now, out, sizeof(g_under_now));
 		return true;
 	}
@@ -12982,6 +13041,10 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	g_wroom_body.assign((size_t)count, -1);
 	g_wroom_fallback.assign((size_t)count, 0);
 	g_wroom_air.assign((size_t)count, -1);
+	// A new level's water forgets the last body and the tween ("along a
+	// swim").
+	g_under_body = -1;
+	g_under_known = false;
 
 	{
 		const size_t nb = g_wbodies.size();
@@ -16332,6 +16395,9 @@ namespace
 					m[14] * inv[6 + j]);
 		}
 
+		// w: the side of the water the eye is on, as c148.y (WaterVS,
+		// "round the eye").
+		eye[3] = g_under_on ? 0.0f : 1.0f;
 		g_device->SetVertexShaderConstantF(16, caustic, 1);
 		g_device->SetVertexShaderConstantF(17, eye, 1);
 		set_room_rows(group);
@@ -16898,9 +16964,12 @@ namespace
 			g_device->SetPixelShaderConstantF(92, pixel, 32);
 
 			/* c148, gWaterClip: x the body's clip, units (kWaterClip, a
-			 * row's `clip`) - read by WaterPS alone. */
+			 * row's `clip`); y 1 while the eye is in the air, 0 under the
+			 * water, the side the sheet is seen from - read by WaterPS
+			 * alone. */
 			const float clip[4] = {
-				(float)g_wbodies[(size_t)r.body].info.clip, 0.0f, 0.0f, 0.0f };
+				(float)g_wbodies[(size_t)r.body].info.clip,
+				g_under_on ? 0.0f : 1.0f, 0.0f, 0.0f };
 
 			g_device->SetPixelShaderConstantF(148, clip, 1);
 

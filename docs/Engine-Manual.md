@@ -2110,8 +2110,8 @@ it.
   there. A broken fish tank's spray rises as cards of the same kind
   instead of the grey classic sparks, standing on the floor where the
   water lands. The water the tank pours out - the large dome in front of
-  its glass that the classic game draws as a mesh with a scrolled texture
-  - is drawn as this water: the same shape, sinking as the classic one
+  its glass that the classic game draws as a mesh with a scrolled texture -
+  is drawn as this water: the same shape, sinking as the classic one
   does, see-through with streaks running down it, coming out of the glass
   over the first quarter second and fading over the half second before
   the tank is done; on its first ticks a burst of spray and drops is

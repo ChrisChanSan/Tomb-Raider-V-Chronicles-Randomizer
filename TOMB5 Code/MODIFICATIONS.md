@@ -12459,21 +12459,29 @@ runs, `-tankleave spray|water` leaves a part out.
 the machine. GPU, the cards' bracket (the dome is in it): his view (`-tank 182`) 0.032,
 0.046 and 0.046 ms at `4f725a8` at 0.3, 1.0 and 2.5 s, 0.082, 0.076 and 0.067 after
 (+0.050, +0.030, +0.021); the burst alone at 0.3 s +0.028, the spray's change at 1 s
-+0.016. The room 23 tank's view at 1.5 s, the water's phases summed: 0.264 to 0.266 at
-`4f725a8` in its clean runs, 0.224 to 0.232 after (sheet 0.106 to 0.109, copy 0.018 to
-0.023, foam 0.078 to 0.079, cards 0.023 to 0.026); every run at `4f725a8` caught the
-first-draw wait in its sheet bracket (54 to 77 ms), none after. The parts' own pixels in
-his view at 1920 x 1080 (with and without `-tankleave`): the spray at 1 s 31.6 % of the
-picture at +53 (14.9 % at +24 before), at 3 s 30.1 % at +21; in the room 23 view 3.6 % at
-+63 (1.0 % at +37). The water (dome and burst) at 0.05, 0.15, 0.5, 1, 2, 3 and 3.4 s:
-34.7, 44.1, 52.4, 40.4, 32.4, 27.9 and 20.5 % of the picture, +22, +33, +29, +21, +20, +22
-and +7 over its pixels. The warm-up: the frame on the processor, BeginScene to the GPU's
-end, in the room 23 tank's view 33.2 to 49.9 ms with it against 80.8 to 116.8 without
-(`-nowarm`), at ANDREA2's canal 32.5 to 34.9 against 110.3 to 125.8, his view (no sheet in
-it) 37.6 to 44.5 against 42.1 to 51.6; the warm-up itself 56 to 82 ms - the load's growth,
-about the wait it takes off the first water frame. RoomProbe's frame also holds the rooms'
-own first draw (29 to 44 ms, the rooms' vertex shader), which the game's first water frame
-does not.
++0.016. The room 23 tank's view at 1.5 s, the water's phases summed: every run at
+`4f725a8` caught the first-draw wait in its sheet bracket (54 to 77 ms), so it has no sum
+without it; the round's own builds before the warm-up, in their runs without the wait,
+0.267 to 0.269 (burst and spray) and 0.274 to 0.276 (with the dome); the final build
+0.224 to 0.233 in twelve runs, none with the wait (sheet 0.106 to 0.112, copy 0.017 to
+0.023, foam 0.078 to 0.080, cards 0.022 to 0.026). The fall is not the draws growing
+cheaper - the round changes neither the sheet nor the foam -: the warm-up takes the rest
+of their first use out of RoomProbe's one measured frame. The final build with and
+without `-nowarm`, six runs each: the foam 0.078 to 0.080 against 0.090 to 0.091, the
+cards 0.023 to 0.026 against 0.031 to 0.037 (the sheet waited in every `-nowarm` run);
+the builds before the warm-up drew the sheet in 0.133 to 0.138 and the foam in 0.089 to
+0.091. The parts' own pixels in his view at 1920 x 1080 (with and without `-tankleave`),
+counted with the final build, the tank's water drawn in both: the spray at 1 s 31.4 % of
+the picture at +48 (14.9 % at +24 at `4f725a8`), at 3 s 29.8 % at +19; in the room 23
+view 3.5 % at +57 (1.0 % at +37). The water (dome and burst) at 0.05, 0.15, 0.5, 1, 2, 3
+and 3.4 s: 34.7, 44.1, 52.4, 40.4, 32.4, 27.9 and 20.5 % of the picture, +22, +33, +29,
++21, +20, +22 and +7 over its pixels. The warm-up: the frame on the processor,
+BeginScene to the GPU's end, in the room 23 tank's view 33.2 to 49.9 ms with it against
+80.8 to 116.8 without (`-nowarm`), at ANDREA2's canal 32.5 to 34.9 against 110.3 to
+125.8, his view (no sheet in it) 37.6 to 44.5 against 42.1 to 51.6; the warm-up itself 56
+to 82 ms - the load's growth, about the wait it takes off the first water frame.
+RoomProbe's frame also holds the rooms' own first draw (29 to 44 ms, the rooms' vertex
+shader), which the game's first water frame does not.
 
 **Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231, JOBY2
 42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`). With `-hdwater 0` the
@@ -12498,7 +12506,7 @@ made again), is for the next log to show - FPSLOG at the first water frame. The 
 `traps.cpp`, `hd_level.cpp`'s call after the depth bind, `hd_render.cpp`'s card draw and
 `RoomProbe.cpp` are where the other rounds meet this one.
 
-**Commits.** `cffe178`, `c1f2d50`, `dba5e1a`, `6d87b97`, `b6b73cd`.
+**Commits.** `cffe178`, `c1f2d50`, `dba5e1a`, `6d87b97`, `b6b73cd`, `0f6f7c5`.
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

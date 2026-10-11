@@ -1370,7 +1370,8 @@ namespace
 		 * sheet's square is one of them; the box above also spans every
 		 * square between two pieces of art. `artSpared` is set where the
 		 * box reaches a sheet's square and no art triangle lies over it -
-		 * the level's art_kept. */
+		 * or, for a call of the flow material, no flow triangle (flowCells)
+		 * - the level's art_kept. */
 		std::vector<unsigned int> artCells;
 		bool artSpared = false;
 		/* Its horizontal triangles of the flow material (1): the remaster's
@@ -1379,6 +1380,8 @@ namespace
 		int flowTris = 0;
 		int flowY = 0, flowYMax = 0;
 		int flowMinX = 0, flowMaxX = 0, flowMinZ = 0, flowMaxZ = 0;
+		// The floor squares those triangles lie over, as artCells.
+		std::vector<unsigned int> flowCells;
 		/* Which half of the room this draw call is: 0 for the open half,
 		 * and for triangles that stand inside another room one plus the
 		 * piece of the intruding art they belong to - see HDIntrusion and
@@ -1449,6 +1452,27 @@ namespace
 	{
 		return (unsigned int)((((x >> 10) + 64) & 0x7F) << 7) |
 			(unsigned int)(((z >> 10) + 64) & 0x7F);
+	}
+
+	/* Every square a triangle's box x0..x1, z0..z1 touches, a box edge on
+	 * a square's line not counted, into a sorted list of unique SectorKeys
+	 * (HDRange::artCells and flowCells). */
+	inline void NoteBoxCells(std::vector<unsigned int>& cells, int x0,
+		int x1, int z0, int z1)
+	{
+		const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
+		const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
+
+		for (int cx = x0 >> 10; cx <= lastX; cx++)
+			for (int cz = z0 >> 10; cz <= lastZ; cz++)
+			{
+				const unsigned int key = SectorKey(cx << 10, cz << 10);
+				const std::vector<unsigned int>::iterator at =
+					std::lower_bound(cells.begin(), cells.end(), key);
+
+				if (at == cells.end() || *at != key)
+					cells.insert(at, key);
+			}
 	}
 
 	struct HDGroup
@@ -4594,6 +4618,7 @@ static void HashRange(HDFnv64& f, const HDRange& r,
 	f.put(r.flowMaxX);
 	f.put(r.flowMinZ);
 	f.put(r.flowMaxZ);
+	f.list(r.flowCells);
 	f.put(r.intruding);
 	f.put(r.stand);
 	f.put(r.overhang);
@@ -7129,6 +7154,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.artCells.clear();
 					range.artSpared = false;
 					range.flowTris = 0;
+					range.flowCells.clear();
 				}
 
 				const unsigned int first = tris[i].first;
@@ -7187,25 +7213,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							range.artTris++;
 
-							/* Its squares (HDRange::artCells): every one
-							 * the triangle's box touches, a box edge on a
-							 * square's line not counted. */
-							const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
-							const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
-							std::vector<unsigned int>& cells = range.artCells;
-
-							for (int cx = x0 >> 10; cx <= lastX; cx++)
-								for (int cz = z0 >> 10; cz <= lastZ; cz++)
-								{
-									const unsigned int key =
-										SectorKey(cx << 10, cz << 10);
-									const std::vector<unsigned int>::iterator
-										at = std::lower_bound(cells.begin(),
-										cells.end(), key);
-
-									if (at == cells.end() || *at != key)
-										cells.insert(at, key);
-								}
+							// Its squares (HDRange::artCells).
+							NoteBoxCells(range.artCells, x0, x1, z0, z1);
 						}
 
 						/* The flow material's flat triangles (HDRange::
@@ -7247,6 +7256,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 
 							range.flowTris++;
+							NoteBoxCells(range.flowCells, x0, x1, z0, z1);
 						}
 					}
 				}
@@ -13572,7 +13582,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		 * flowTris) within the same 32 units of the surface. ANDY3's rivers
 		 * carry one each in rooms 38, 41, 42 and 43, three units over the
 		 * classic height (TrgProbe -parts); under the sheet it is a second
-		 * surface scrolling a texture of its own through the river's. */
+		 * surface scrolling a texture of its own through the river's. Over
+		 * a square by the same rule as the art: the box first, then the
+		 * call's own flow squares (HDRange::flowCells); a call the box
+		 * reaches and no flow triangle of which lies over the square stays
+		 * drawn and counts as kept. */
 		if (g_wbodies[(size_t)s.body].info.cls != HD_WATER_RIVER)
 			continue;
 
@@ -13586,6 +13600,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					range.flowMaxX <= x0 || range.flowMinZ >= z0 + 1024 ||
 					range.flowMaxZ <= z0)
 					continue;
+
+				if (!std::binary_search(range.flowCells.begin(),
+					range.flowCells.end(), SectorKey(x0, z0)))
+				{
+					range.artSpared = true;
+					continue;
+				}
 
 				range.artHidden = true;
 				g_wlevel.artHidden += range.flowTris;
@@ -15132,9 +15153,10 @@ const char* HDRenderWaterSectionName(int section)
  * water"), 1 when the level's water rooms take the deep look
  * (under_deep, the same note), 1 when its section is a night one
  * (night; see "the night" over kWaterMoon) and the draw calls of the
- * remaster's water art whose box reaches a sheet's square without an art
- * triangle over it, which stay drawn (art_kept; see "the art over a
- * sheet" in HDRenderSetWaterSheets). A body line: its rooms (+n for
+ * remaster's water art or a river's flow material whose box reaches a
+ * sheet's square without one of their triangles over it, which stay drawn
+ * (art_kept; see "the art over a sheet" in HDRenderSetWaterSheets). A
+ * body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest

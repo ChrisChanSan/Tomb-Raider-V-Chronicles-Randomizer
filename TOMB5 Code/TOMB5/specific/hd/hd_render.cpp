@@ -9800,16 +9800,16 @@ namespace
 	 * kCardCap cards a frame: a splash at its peak is kSplashCards (52), the
 	 * game keeps four splashes at once (splashes[4]), 208; a tank makes 4 or
 	 * 5 sparks a tick (ControlFishtank), each a mist card for 14 to 17
-	 * ticks, at most 85 live; the two tanks of RICH2 stand in rooms 23 and
-	 * 122, which no frame shows together. 208 + 85 is well under 512; past
-	 * the cap the latest wait. kCardSoft the depth over which a card fades
-	 * into what stands behind it, kSprayKept the sparks kept (the 85 with
-	 * room for 60 fps frames between ticks), kSplashesKept the splashes
-	 * (four live and four ending) - free choices that hold the counts above.
-	 */
+	 * ticks, at most 85 live, RICH2's two tanks 170 should both run at
+	 * once. 208 + 170 is under 512; past the cap the latest wait. kCardSoft
+	 * the depth over which a card fades into what stands behind it,
+	 * kSprayKept the sparks kept (a spark's card is gone after 17 ticks,
+	 * so a tank's last 0.6 s, 18 ticks of 4.5, for two tanks 162),
+	 * kSplashesKept the splashes (four live and four ending) - free choices
+	 * that hold the counts above. */
 	const int kCardCap = 512;
 	const float kCardSoft = 64.0f;		// units
-	const size_t kSprayKept = 128;
+	const size_t kSprayKept = 256;
 	const size_t kSplashesKept = 8;
 
 	struct LiveSplash
@@ -13237,7 +13237,7 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 			g_splashes.erase(g_splashes.begin() + (std::ptrdiff_t)i);
 
 	for (size_t i = g_sprays.size(); i-- > 0; )
-		if (g_sprays[i].born > now + 0.1 || now - g_sprays[i].born > 1.5)
+		if (g_sprays[i].born > now + 0.1 || now - g_sprays[i].born > 0.6)
 			g_sprays.erase(g_sprays.begin() + (std::ptrdiff_t)i);
 
 	g_splash_stats.splashes = (int)g_splashes.size();

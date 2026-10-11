@@ -247,9 +247,11 @@ struct HDCard
  *               times 0.7..1.0 and read at its own time, 0.85..1.15 of the
  *               splash's, so the crown is ragged and not one cylinder;
  *               as wide as the inner and middle rings' widths together
- *               over two, at least 24 units, and as tall as its column,
- *               leaning up to 0.3 radians either way; its share the
- *               classic life, 1.0 on the inner ring and 0.8 on the middle
+ *               over two, 24 to 160 units, as tall as its column and at
+ *               least half its width - once the column has fallen back a
+ *               low haze on the water -, leaning up to 0.3 radians either
+ *               way; its share the classic life, 1.0 on the inner ring
+ *               and 0.8 on the middle
  *   the drops   kSplashDrops cards of the drops page, thrown from the inner
  *               ring at its first width with 0.5..1.1 of the inner column's
  *               first speed and 0.5..1.5 times the inner ring's speed
@@ -297,8 +299,8 @@ inline int HDSplashCards(const HDSplashSetup& s, unsigned int seed,
 		c.x = s.x + r * sinf(angle);
 		c.z = s.z + r * cosf(angle);
 		c.y = s.y - h * 0.5f;
-		c.half = half > 24.0f ? half : 24.0f;
-		c.tall = h * 0.5f > c.half ? h * 0.5f : c.half;
+		c.half = half < 24.0f ? 24.0f : half > 160.0f ? 160.0f : half;
+		c.tall = h * 0.5f > 0.5f * c.half ? h * 0.5f : 0.5f * c.half;
 		c.alpha = (mine.alive ? mine.life : 0.0f) * (inner ? 1.0f : 0.8f);
 		c.page = HDCardShare(seed, k * 7 + 4) < 0.5f ? HD_CARD_SPRAY :
 			HD_CARD_SPRAY2;

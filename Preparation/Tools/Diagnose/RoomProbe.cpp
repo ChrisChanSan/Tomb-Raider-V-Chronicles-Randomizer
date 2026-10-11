@@ -2254,23 +2254,24 @@ static void LifeBuild(const char* root, const char* stem)
 
 	/* A line a drop: where it left its ceiling, at what clock, the ticks
 	 * it falls, and its height at the probe's clock while it falls, as
-	 * UpdateDrips steps it (y_now -1 before or after). */
+	 * UpdateDrips steps it (HDLifeDropFall; y_now -1 before or after);
+	 * held 1 while the pool holds it to be drawn (HDLifePool::falling). */
 	for (size_t i = 0; i < drops.size(); i++)
 	{
 		const HDLifeDrop& o = drops[i].first;
 		const int ticks = (int)(((float)g_time - drops[i].second) * 30.0f);
-		int y = o.y, v = 0;
+		const int y = o.y + (int)HDLifeDropFall((float)ticks, 0);
+		int held = 0;
 
-		for (int k = 0; k < ticks && k < o.ticks; k++)
-		{
-			v += kHDLifeDropGravity;
-			y += v >> 5;
-		}
+		for (size_t k = 0; k < g_life_pool.falling.size(); k++)
+			held |= g_life_pool.falling[k].x == o.x &&
+				g_life_pool.falling[k].z == o.z &&
+				g_life_pool.falling[k].at == o.at;
 
 		printf("LIFELOG level=%s drop=%d x=%d z=%d from=%d room=%d "
-			"ticks=%d at=%.2f y_now=%d\n", stem, (int)i, o.x, o.z, o.y,
-			o.room, o.ticks, drops[i].second, ticks >= 0 && ticks <
-			o.ticks ? y : -1);
+			"ticks=%d at=%.2f y_now=%d held=%d\n", stem, (int)i, o.x, o.z,
+			o.y, o.room, o.ticks, drops[i].second, ticks >= 0 && ticks <
+			o.ticks ? y : -1, held);
 	}
 
 	for (size_t i = 0; i < rings.size(); i++)

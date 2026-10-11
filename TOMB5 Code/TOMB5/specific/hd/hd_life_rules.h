@@ -276,15 +276,27 @@ static const float kHDLifeRejoinNear = 32.0f;	// units, back on the ring
  * effects.cpp, WadeSplash: 112 to 127), where the engine's own drip's 32 to
  * 39 (game\joby.cpp) gave a quarter of it and nobody saw them. A drip is a
  * drop as well (HDLifeDropTicks): it leaves the ceiling over its point
- * and its ring starts when it reaches the water. The drop is the game's
- * own drip (game\tomb4fx.cpp, Drips[], drawn by DrawDrips as a short
- * streak): the cards of the sheets take a splash and a tank's spray and
- * no single drop. It falls as UpdateDrips moves a drip, its speed growing
- * by kHDLifeDropGravity a tick and the drip moving that speed over 32 a
- * tick: 153 is 4,300 units a second squared at 30 ticks (4300 x 32 / 900),
- * the project's g (9.81 m/s^2 at 2.3 mm a unit). Its colour is a light
- * grey-blue, a free choice set by eye; the game's own wet drips off Lara
- * are 16 to 39 a channel and too dark to see against a wall. */
+ * and its ring starts when it reaches the water. The drop is drawn as the
+ * game draws its own drips (game\tomb4fx.cpp, Drips[]; specific\
+ * specificfx.cpp, DrawDrips: a short streak, a line of the sort list):
+ * the cards of the sheets take a splash and a tank's spray and no single
+ * drop. The life holds its drops itself (HDLifePool::falling) and never
+ * puts one into Drips[]: GetFreeDrip hands out the first free slot from
+ * next_drip on, so a slot the life held would move a wet Lara's next drip
+ * to another slot, and a drip of an even slot that lands calls
+ * TriggerDripSplash and its random draws - the game's random sequence
+ * would follow what the life does. It falls as UpdateDrips moves a drip,
+ * its speed growing by kHDLifeDropGravity a tick and the drip moving that
+ * speed over 32 a tick: 153 is 4,300 units a second squared at 30 ticks
+ * (4300 x 32 / 900), the project's g (9.81 m/s^2 at 2.3 mm a unit).
+ * kHDLifeDropColour is its head's colour as drawn, the tail half of it as
+ * DrawDrips draws a drip: about 1.5 times the middle of a wet Lara's
+ * drips (TriggerLaraDrips: 16 to 39 a channel, which DrawDrips takes four
+ * times - 78, 110, 142), a free choice: a drop is seen from metres away,
+ * Lara's own at arm's length. At most kHDLifeDropsMax fall at once, the
+ * size of the game's own table; a body lets one fall in two seconds
+ * (kHDLifeDripGap) and the longest fall measured is 45 ticks, so the cap
+ * is never reached in the levels. */
 static const int kHDLifeDripClosedMin = 4;
 static const int kHDLifeDripPer = 8;
 static const int kHDLifeDripMin = 2;
@@ -296,7 +308,8 @@ static const float kHDLifeDripGap = 2.0f;
 static const int kHDLifeDripSize = 96;
 static const int kHDLifeDropGravity = 153;
 static const int kHDLifeDropUnder = 32;	// under the ceiling it leaves
-static const unsigned char kHDLifeDropColour[3] = { 96, 104, 120 };
+static const unsigned char kHDLifeDropColour[3] = { 120, 160, 208 };
+static const int kHDLifeDropsMax = 32;
 
 /* The share of its body's light a model takes: a fish half a square under
  * the surface takes half - at the full light FISH2's silver reads as white
@@ -411,13 +424,14 @@ struct HDLifeDrip
 	float ringDue = -1.0f;
 };
 
-/* A drop that leaves its ceiling this tick: where, in which room, and the
- * ticks it falls. */
+/* A drop that leaves its ceiling this tick: where, in which room, the
+ * ticks it falls and the clock it leaves at. */
 struct HDLifeDrop
 {
 	int x, y, z;
 	int room;
 	int ticks;
+	float at = 0.0f;
 };
 
 /* The ticks a drop falls from world y `from` to `to` (y down), stepped as
@@ -435,6 +449,31 @@ inline int HDLifeDropTicks(int from, int to)
 	}
 
 	return n;
+}
+
+/* How far a drop has fallen `ticks` after it left (a fraction of a tick
+ * allowed): HDLifeDropTicks' steps from rest, straight between two whole
+ * ticks, so a frame between two ticks draws it between them; and in `step`
+ * the units it moves over the tick it is in. DrawDrips draws a drip's
+ * tail half a tick's move (Yvel >> 6) over its head. */
+inline float HDLifeDropFall(float ticks, float* step)
+{
+	int y = 0, v = 0;
+	const int n = ticks > 0.0f ? (int)ticks : 0;
+
+	for (int k = 0; k < n && k < 250; k++)
+	{
+		v += kHDLifeDropGravity;
+		y += v >> 5;
+	}
+
+	const int move = (v + kHDLifeDropGravity) >> 5;
+
+	if (step)
+		*step = (float)move;
+
+	return (float)y + (float)move * (ticks > (float)n ? ticks - (float)n :
+		0.0f);
 }
 
 /* The pool's own hash: three steps of the engine's draw generator
@@ -1106,6 +1145,8 @@ struct HDLifePool
 	std::vector<HDLifeEntry> entries;
 	std::vector<HDLifeSchool> schools;
 	std::vector<HDLifeDrip> drips;
+	// The drops falling now (HDLifeTick), at most kHDLifeDropsMax.
+	std::vector<HDLifeDrop> falling;
 	std::vector<float> ringAt;
 	float height[HD_LIFE_KINDS];
 	float reach[HD_LIFE_KINDS];	// HDLifeReach
@@ -1886,16 +1927,19 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
  * long frame or a probe that jumps to its clock moves the same way the
  * game's frames do. Rings asked for go into `rings` (the caller writes
  * them into the game's ripples or the probe's -ripple list), the drops
- * that leave their ceiling into `drops` (the game's drips); `laraOn`, lx,
- * lz are Lara's place, 0 without her, `splash` the live splashes' x and z
- * (HDLifeSchoolTick). */
+ * that leave their ceiling into p.falling, which holds them while they
+ * fall, and into `drops`; `laraOn`, lx, lz are Lara's place, 0 without
+ * her, `splash` the live splashes' x and z (HDLifeSchoolTick). */
 inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 	int laraOn, float lx, float lz, std::vector<HDLifeRing>* rings,
 	const float* splash = 0, int splashes = 0,
 	std::vector<HDLifeDrop>* drops = 0)
 {
 	if (p.last < 0.0f || t < p.last)
+	{
 		p.last = t;
+		p.falling.clear();
+	}
 
 	while (p.last < t)
 	{
@@ -1940,7 +1984,7 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 			// Its drop leaves the ceiling now; its ring is due on arrival.
 			d.ringDue = at + (float)d.fall / 30.0f;
 
-			if (drops && d.fall > 0)
+			if (d.fall > 0)
 			{
 				HDLifeDrop o;
 
@@ -1949,9 +1993,20 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 				o.z = (int)d.z;
 				o.room = d.ceilRoom;
 				o.ticks = d.fall;
-				drops->push_back(o);
+				o.at = at;
+
+				if ((int)p.falling.size() < kHDLifeDropsMax)
+					p.falling.push_back(o);
+
+				if (drops)
+					drops->push_back(o);
 			}
 		}
+
+		// A drop that reached the water is gone; its ring takes over.
+		for (size_t i = p.falling.size(); i-- > 0;)
+			if (at >= p.falling[i].at + (float)p.falling[i].ticks / 30.0f)
+				p.falling.erase(p.falling.begin() + (long)i);
 
 		for (size_t i = 0; i < p.drips.size(); i++)
 		{

@@ -17813,16 +17813,54 @@ static void life_drops()
 	std::vector<HDLifeRing> rings;
 	std::vector<HDLifeDrop> drops;
 	float rang = -1.0f;
+	// The pool holds the drop while it falls, and no longer.
+	int heldEarly = 0, heldFalling = 0, heldAfter = 0;
 
 	for (int k = 1; k <= 90; k++)
 	{
 		const size_t had = rings.size();
+		const float t = k / 30.0f;
 
-		HDLifeTick(p, 0, k / 30.0f, 1, 500.0f, 600.0f, &rings, 0, 0, &drops);
+		HDLifeTick(p, 0, t, 1, 500.0f, 600.0f, &rings, 0, 0, &drops);
 
 		if (rings.size() > had && rang < 0.0f)
-			rang = k / 30.0f;
+			rang = t;
+
+		const int held = (int)p.falling.size();
+
+		if (t < 0.99f)
+			heldEarly += held;
+		else if (t > 1.01f && t < 1.0f + 26.5f / 30.0f)
+			heldFalling += held == 1 && p.falling[0].at > 0.99f &&
+				p.falling[0].at < 1.01f ? 0 : 1;
+		else if (t > 1.0f + 27.5f / 30.0f)
+			heldAfter += held;
 	}
+
+	ok(heldEarly == 0 && heldFalling == 0 && heldAfter == 0,
+		"life drops: the pool holds a drop from its ceiling to the water, "
+		"none before, none after", heldEarly * 100 + heldFalling * 10 +
+		heldAfter, 0);
+
+	/* Its fall at a frame between two ticks: the steps of HDLifeDropTicks
+	 * at whole ticks, straight between them, and the water reached at the
+	 * tick HDLifeDropTicks counts. */
+	int bad = 0;
+
+	for (int k = 0; k < 40; k++)
+	{
+		const float a = HDLifeDropFall((float)k, 0);
+		const float m = HDLifeDropFall((float)k + 0.5f, 0);
+		const float n = HDLifeDropFall((float)k + 1.0f, 0);
+
+		bad += !(a <= m && m <= n && fabsf(m - 0.5f * (a + n)) < 0.01f);
+	}
+
+	ok(bad == 0 && HDLifeDropFall(27.0f, 0) >= 1760.0f &&
+		HDLifeDropFall(26.0f, 0) < 1760.0f && HDLifeDropTicks(3104, 4864) ==
+		27,
+		"life drops: the drawn fall follows the ticks, between them too",
+		(long)HDLifeDropFall(27.0f, 0), 1760);
 
 	ok(drops.size() == 1 && drops[0].room == 3 && drops[0].y == -1000 +
 		kHDLifeDropUnder && drops[0].ticks == 27 && fabsf(rang - (1.0f +

@@ -25,6 +25,9 @@
 #include "hd_object.h"
 #include "hd_render.h"
 #include "../3dmath.h"
+#include "../gamemain.h"
+#include "../output.h"
+#include "../specificfx.h"
 #include "../function_stubs.h"
 #include "../../tomb5/tomb5.h"
 #include "../../game/control.h"
@@ -88,47 +91,6 @@ namespace
 			s.x = (long)r.x;
 			s.y = (long)r.y;
 			s.z = (long)r.z;
-			return true;
-		}
-
-		return false;
-	}
-
-	/* A drip's drop into the game's drips (game\tomb4fx.cpp, Drips[32]),
-	 * which UpdateDrips moves and DrawDrips draws as a short streak. Only
-	 * an odd slot that is free: UpdateDrips calls TriggerDripSplash - and
-	 * its random draws - for a drip of an even slot that lands on a floor,
-	 * and a drop of the life must leave the game's random sequence alone
-	 * whatever happens to it; and no drip of the game's is pushed out
-	 * (GetFreeDrip would take the oldest). It falls from rest by
-	 * kHDLifeDropGravity a tick; it lives 16 ticks past its fall, so the
-	 * game's fade over a drip's last 16 ticks never starts in the air -
-	 * the water room it falls into switches it off (UpdateDrips). False
-	 * when no odd slot is free. */
-	bool put_drop(const HDLifeDrop& o)
-	{
-		for (int i = 1; i < 32; i += 2)
-		{
-			DRIP_STRUCT& d = Drips[i];
-
-			if (d.On)
-				continue;
-
-			d.On = 1;
-			d.x = o.x;
-			d.y = o.y;
-			d.z = o.z;
-			d.lnode = 0;
-			d.ox = o.x;
-			d.oy = o.y;
-			d.oz = o.z;
-			d.R = kHDLifeDropColour[0];
-			d.G = kHDLifeDropColour[1];
-			d.B = kHDLifeDropColour[2];
-			d.Yvel = 0;
-			d.Gravity = (uchar)kHDLifeDropGravity;
-			d.Life = (uchar)(o.ticks + 16 < 255 ? o.ticks + 16 : 255);
-			d.RoomNumber = (short)o.room;
 			return true;
 		}
 
@@ -243,6 +205,76 @@ namespace
 	int slot_of(int kind)
 	{
 		return HD_LIFE_SLOT_BASE + kind;
+	}
+
+	/* The drops falling at clock t (HDLifePool::falling), each drawn as
+	 * DrawDrips (specific\specificfx.cpp) draws a drip: a line of the sort
+	 * list from its head to half a tick's move over it, the tail at half
+	 * the head's colour, as wide as GetFixedScale(1), not drawn past 0x5000
+	 * units of view depth. Nothing of the game's drips is read or written
+	 * (hd_life_rules.h, the drips). Called before the frame's sort list is
+	 * sorted and drawn (S_OutputPolyList). */
+	void draw_drops(float t)
+	{
+		TEXTURESTRUCT tex;
+		D3DTLVERTEX v[2];
+
+		memset(v, 0, sizeof(v));
+		tex.drawtype = 2;
+		tex.tpage = 0;
+		tex.flag = 0;
+
+		for (size_t i = 0; i < g_pool.falling.size(); i++)
+		{
+			const HDLifeDrop& o = g_pool.falling[i];
+			const float ticks = (t - o.at) * 30.0f;
+
+			if (ticks < 0.0f || ticks >= (float)o.ticks)
+				continue;
+
+			float step, view[16];
+			const float fall = HDLifeDropFall(ticks, &step);
+			const float lift = 0.5f * step < fall ? 0.5f * step : fall;
+
+			view_at((float)o.x, (float)o.y + fall, (float)o.z, view);
+
+			const float z0 = view[14], z1 = view[14] - view[6] * lift;
+
+			if (z0 <= 0.0f || z1 <= 0.0f || z0 > (float)0x5000)
+				continue;
+
+			long x0 = long(view[12] * f_persp / z0 + f_centerx);
+			long y0 = long(view[13] * f_persp / z0 + f_centery);
+			long x1 = long((view[12] - view[4] * lift) * f_persp / z1 +
+				f_centerx);
+			long y1 = long((view[13] - view[5] * lift) * f_persp / z1 +
+				f_centery);
+
+			if (!ClipLine(x0, y0, (long)z0, x1, y1, (long)z1, phd_winxmin,
+				phd_winymin, phd_winxmax, phd_winymax))
+				continue;
+
+			const long r = kHDLifeDropColour[0], g = kHDLifeDropColour[1],
+				b = kHDLifeDropColour[2];
+
+			v[0].sx = (float)x0;
+			v[0].sy = (float)y0;
+			v[0].sz = z0;
+			v[0].rhw = f_mpersp / v[0].sz * f_moneopersp;
+			v[0].color = RGBA(r, g, b, 0xFF);
+			v[0].specular = 0xFF000000;
+			v[1].sx = (float)x1;
+			v[1].sy = (float)y1;
+			v[1].sz = z1;
+			v[1].rhw = f_mpersp / v[1].sz * f_moneopersp;
+			v[1].color = RGBA(r >> 1, g >> 1, b >> 1, 0xFF);
+			v[1].specular = 0xFF000000;
+			clipflags[0] = 0;
+			clipflags[1] = 0;
+			clipflags[2] = 0;
+			clipflags[3] = 0;
+			AddPolyLine(v, &tex, (float)GetFixedScale(1));
+		}
 	}
 }
 
@@ -518,15 +550,13 @@ void HDLifeFrame(double clock)
 			wets++;
 		}
 
-	std::vector<HDLifeDrop> drops;
-
 	// A shot tank's fish are gone.
 	for (size_t bi = 0; bi < g_pool.bodies.size() && bi < g_tank_item.size();
 		bi++)
 		if (g_pool.bodies[bi].tank)
 			g_pool.bodies[bi].gone = tank_whole(g_tank_item[bi]) ? 0 : 1;
 
-	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings, wet, wets, &drops);
+	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings, wet, wets);
 
 	for (size_t i = 0; i < rings.size(); i++)
 		if (put_ripple(rings[i]))
@@ -534,8 +564,7 @@ void HDLifeFrame(double clock)
 		else
 			g_ripple_full++;
 
-	for (size_t i = 0; i < drops.size(); i++)
-		put_drop(drops[i]);
+	draw_drops(t);
 
 	/* The draw: the entries nearest the eye first, at most kHDLifeDrawMax
 	 * of them; an entry behind the eye is not pushed. */

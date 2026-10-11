@@ -12672,10 +12672,13 @@ seconds to its ring at 9.43 (27 ticks), its head at 3,108, 3,362, 4,003 and 4,64
 (barrels and the pond's drips) hold 9 of the 128 ripple slots at once at the most,
 ANDREA2's 1, ANDY1's 5; at most 5, 2 and 7 rings lie
 within 1,024 units of a ring as it starts, of the eight a sheet draw takes. RICH2: 8
-fish, the pool 860 bytes, one model page. The cost at 2,560 x 1,440 (`-lifebench`, two
-runs, against `4f725a8`): the canal 9 drawn, GPU 0.0016 to 0.0018 ms before and 0.0018
-to 0.0020 after; the pond 8 drawn, 0.0048 to 0.0052 either way; a step of ANDY3's pool
-0.0061 ms (0.0036 before the floats kept apart).
+fish, the pool 876 bytes (860 before the pool held its drops), one model page. The
+cost at 2,560 x 1,440 (`-lifebench`, two runs, against `4f725a8`): the canal 9 drawn,
+GPU 0.0016 to 0.0018 ms before and 0.0018 to 0.0020 after; the pond 8 drawn, 0.0048 to
+0.0052 either way; a step of ANDY3's pool 0.0061 ms (0.0036 before the floats kept
+apart). After the fix pass, against `440be1b`: the canal 0.0017 to 0.0018 ms on the GPU
+(0.0020 to 0.0021 before), the pond 0.0052 (0.0053), a step of ANDY3's pool 0.0055 ms;
+the drops' lines are the sort list's and not in these figures.
 
 **Checked.** The classic path 6 of 6 md5-identical to `8691e82`; the fifteen cameras
 with `-hdwater 0` 15 of 15 identical to the water round's parity set and with

@@ -12348,6 +12348,158 @@ The far look reads only as a fleck. Stage 3 and the light shafts stay open.
 
 **Commits.** `28f0ea1`, `30fac41`, `8abda94`, `9f0fc44`, `ca4a69e`, `43402d2`.
 
+**Round 2: the shot, the spray, the dome, the warm-up.** Asked for after the play test of
+the evening of 2026-10-11 (the build of `4f725a8`): all in all a result to be very pleased
+with - but the splash when the tank is shot is still SD, while the water that comes out at
+the lasers in RICH2 is HD already and looks good. Answered that evening: the spray
+stronger, yes; the dome in HD next, yes; a warm-up draw at the load against the first
+water frame's hitch, yes.
+
+What the shot is. His pictures show the tank of RICH2 room 122 (item 182, the one without
+floor lasers), seen from in front of its glass; the log's tank shots (`SMASH_GLASS` and
+`EXPLOSION1` on one tick, at 606609, 655000 and 669406) put the first at that tank, its
+`SPLASHLOG` lines then `tank=-1:0.00` (no film). Lara's shot (`FireWeapon` ->
+`GetTargetOnLOS`, game\control.cpp) only shatters the glass, a shatter static (slot 50;
+RoomProbe `-statictable`: RICH2 room 23 mesh 0 and room 122 mesh 0): glass debris, two
+ricochet sparks, and the next tick the trigger under the glass starts the FISHTANK. The
+white cloud in front of the glass is the FISHTANK's own mesh, drawn by `DrawScaledSpike`
+(game\traps.cpp) and scaled in height by `item_flags[1]` / 4096 - the dome the previous
+part left: one mesh of 69 vertices and 104 quads (MeshDump, a script of this round, on the
+classic rich2.trc), texture 52 scrolled by `AnimateWaterfalls`, half of its quads
+additive; a flat top 1,276 over the floor behind the glass (local z -1540 to -516) and a
+curved apron from the glass's top edge down to the floor 866 units in front of it (profile
+z, y: -516, -1276; -286, -1236; -57, -1118; 115, -930; 233, -685; 307, -382; 350, 6),
+2,140 wide at the top and 3,186 at the floor - Lara, in front of the glass in his picture,
+stands inside it. Whole on the first tick, 0.198 of its height at the 105th, gone on the
+106th (3.53 s): two pops. It is not the spray: the spray is `TriggerFishtankSpray`'s
+sparks, cards since the previous part, rising from the apron's foot (`SplashOffsets` local
+z 52 to 324, under the foot at 350). So the shot's SD look and the dome are one thing;
+this part builds the dome's HD form and adds the burst at the break the classic has none
+of.
+
+The shot, the burst (`HDTankBurst`, hd_splash_math.h). On the tank's first ticks its water
+is thrown out of the opened glass: 40 spray cards and 24 drops, each leaving the glass
+(`glassZ`) at a height spread evenly over the opening and a place across the top's width,
+at its own moment within 0.2 s (6 ticks), out of the glass at the speed water leaves an
+opening under a column of its own depth, sqrt(2 g (height - h0)) (Torricelli) times 0.6 to
+1.0, up or down by up to 400 units/s, under g = 4300 units/s^2 (9.81 m/s^2 at 2.3 mm a
+unit); gone back on the floor or after 1 s. From RICH2's 1,276 the fastest leave at 3,310
+units/s and land at most 1,276 units out (2 sqrt(d h) at d = h), the apron's own reach. A
+spray card widens to 2.5 times its size as it flies and fades with the share of its flight
+left; a drop stays whole. The counts, the time, the lift, the life and the sizes are free
+choices, set by eye on the round's RoomProbe pictures. The tank's shape comes from its
+classic mesh (`HDTankShapeOf`: the top and the floor, the glass as the furthest z within
+32 units of the top - `kTankBand`, which takes RICH2's top vertices at -1276 and -1277 and
+its floor ones at 6 and none of the next rows at -1239 and -382 -, the foot's reach, the
+widths), handed to the renderer at load by the engine (`TankMeshToRenderer`, hd_level.cpp,
+out of `mesh_vtxbuf`) and by RoomProbe (out of the .TRC's bytes) alike. The tank is handed
+in each frame by the classic draw (`DrawScaledSpike` -> `HDWaterTank`), so the HD form
+draws exactly when the classic one does; its age is its ticks out of `item_flags[1]`
+(`HDTankTicksOf`, the first step count at or under it), run on smoothly by the frame's
+clock and held within the tick the game is in. A film for the laser-less tank of room 122
+out of the apron's footprint (2 x 4 squares before its glass) was built and dropped: in
+his view at 2560 x 1440 it cost 0.20 ms over `4f725a8` (sheet 0.098, copy 0.017, foam
+0.063), more than the round's bound of 0.15 (Left).
+
+The spray. In his view the spray touched 14.9 % of the picture at 1 s, the brightness of
+those pixels up by 24; in the view of room 23's tank 1 % (RoomProbe `-tank` with and
+without `-tankleave spray`, 1920 x 1080). Why so little: a card stood round its spark's
+point, and the spark starts on the floor (joint 0 lies 1 unit over the item), so half of
+each card lay under the floor and the rest within the soft edge's 64 units of it - and
+room 23's spray points lie inside the 256 high step before its glass; the share was 0.35,
+times the page's alpha (mean 0.40, DdsProbe) and the round cut (mean 0.26 over the quad):
+about 0.036. Now the card stands on its point, its lower edge there, at a share of 0.8
+(`kTankSprayShare`), the dive splash's middle crown ring's: the spray is the same water
+thrown up. The film's rise and rim are as they were.
+
+The dome (`HDTankDomeAt`, `HDTankDomePoint`, `HDTankDomeShare`; hd_render.cpp, "the tank's
+water"). The HD path draws the mesh itself and `DrawScaledSpike` leaves the classic one
+out (`if (item->object_number == FISHTANK && HDWaterTank(item)) return;`, game\traps.cpp;
+`item_flags[1]` runs on as before, nothing of the game changes): every quad as two
+triangles, every vertex scaled in y as the classic scales it, by the tank's own ticks run
+on linearly between them (1.0 down to 0.198); the apron drawn out of the glass over 0.25 s
+(866 units at 3,460 units/s, the 3,310 the burst leaves at); the whole in over 2 ticks and
+out over the 0.5 s before KillItem's tick, so it neither pops in nor out (both free
+choices). It goes through the cards' shaders as they are - no shader changes: `CardVS` 9
+slots, `CardPS` 35, every `.inc` as at `4f725a8` - with the corner at 0, so the round cut
+is whole: a see-through sheet whose share is 0.15 where the eye looks through it and up to
+0.65 where it looks along it, (1 - |cos|)^2 between, the angle out of the mean of its
+quads' normals in view space taken across their diagonals (a quad's winding does not
+matter); the remaster's spray page 3243 stretched 384 units across and 2,048 down, so its
+blotches draw out into streaks, running down the water at 1,660 units/s, half the speed of
+a fall of the dome's height (sqrt(2 g 1,282) / 2); tinted as the cards of that tank are,
+premultiplied, soft against the frame's depth, before the cards. The first look, 0.3 and a
+page every 512 units both ways, stood as a blotched cloud over the room. Shares, lengths
+and fades are free choices, set by eye on the round's RoomProbe pictures.
+
+The warm-up (`HDRenderWaterWarmUp`, hd_render.cpp, "the warm-up"). The first draw of a
+water sheet in a process waits about 42 ms (the previous part). Measured with scratch
+timers round each draw, to the GPU's end (never committed; RICH2's tank view, 2560 x
+1440): the first sheet draw 41.9, 42.7 and 43.9 ms, the next 0.36 to 0.49 and 0.10; the
+first frame copy 0.8 to 1.1, the first card draw 2.6 to 3.1. Drawn first with the rooms'
+vertex shader, the sheet's pixel shaders took 0.41 to 0.72 ms (`WaterDepthPS`) and 0.05 to
+0.16 (`WaterPS`); then the first draw with `WaterVS` 60 to 73 ms; the sheet buffers'
+upload (`PreLoad`) 0.37 to 0.91 ms. So the wait is the driver readying the water's vertex
+shader (386 slots) on its first use. Now, once a level, after the sheets are built and the
+depth texture is bound (one call in `BuildWaterSheets`, the only touch of the sheets'
+path), each of the water's seven pixel shaders draws one triangle of the level's first
+sheet range with `WaterVS` - declaration and textures as the frame binds them - and the
+cards' pair one card, into a 16 x 16 target of their own without a depth buffer, the queue
+drained after each, the device's state put back; nothing reaches the frame. A new line
+with `-log`: `HDLOG level=<stem> water warm-up <ms> ms: sheet <ms>, depth <ms>, under
+<ms>, foot <ms>, river <ms>, foam <ms>, foam depth <ms>, cards <ms>`. RoomProbe warms the
+same way after its own depth bind (`-nowarm` leaves it out) and prints its frame's time on
+the processor from BeginScene to the GPU's end.
+
+`SPLASHLOG` gains `tanks=<n>` at its end, the breaking tanks whose water the frame drew,
+and is written while one draws. RoomProbe: `-tank` draws the tank's water while the tank
+runs, `-tankleave spray|water` leaves a part out.
+
+**Measured.** RoomProbe, 2560 x 1440, three runs a view, other rounds' builds running on
+the machine. GPU, the cards' bracket (the dome is in it): his view (`-tank 182`) 0.032,
+0.046 and 0.046 ms at `4f725a8` at 0.3, 1.0 and 2.5 s, 0.082, 0.076 and 0.067 after
+(+0.050, +0.030, +0.021); the burst alone at 0.3 s +0.028, the spray's change at 1 s
++0.016. The room 23 tank's view at 1.5 s, the water's phases summed: 0.264 to 0.266 at
+`4f725a8` in its clean runs, 0.224 to 0.232 after (sheet 0.106 to 0.109, copy 0.018 to
+0.023, foam 0.078 to 0.079, cards 0.023 to 0.026); every run at `4f725a8` caught the
+first-draw wait in its sheet bracket (54 to 77 ms), none after. The parts' own pixels in
+his view at 1920 x 1080 (with and without `-tankleave`): the spray at 1 s 31.6 % of the
+picture at +53 (14.9 % at +24 before), at 3 s 30.1 % at +21; in the room 23 view 3.6 % at
++63 (1.0 % at +37). The water (dome and burst) at 0.05, 0.15, 0.5, 1, 2, 3 and 3.4 s:
+34.7, 44.1, 52.4, 40.4, 32.4, 27.9 and 20.5 % of the picture, +22, +33, +29, +21, +20, +22
+and +7 over its pixels. The warm-up: the frame on the processor, BeginScene to the GPU's
+end, in the room 23 tank's view 33.2 to 49.9 ms with it against 80.8 to 116.8 without
+(`-nowarm`), at ANDREA2's canal 32.5 to 34.9 against 110.3 to 125.8, his view (no sheet in
+it) 37.6 to 44.5 against 42.1 to 51.6; the warm-up itself 56 to 82 ms - the load's growth,
+about the wait it takes off the first water frame. RoomProbe's frame also holds the rooms'
+own first draw (29 to 44 ms, the rooms' vertex shader), which the game's first water frame
+does not.
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`). With `-hdwater 0` the
+fifteen cameras 15 of 15 identical to the fix round's parity set. With `-hdwater 1`
+against a RoomProbe built from `4f725a8`, the warm-up drawn before each picture: the
+fifteen cameras 15 of 15, the pond's twelve views at 1, 3 and 5 s 36 of 36, the canal dive
+at 0.1, 0.3, 0.6 and 1.0 s 4 of 4, the room 23 and room 122 tank views without `-tank` and
+his view before the break (`-tank 182 -1`) 3 of 3, and the sweep's 209 WATERLOG lines of
+the fifteen levels identical. No `.inc` changed. ModernTest's splash group grows by 20
+checks: the tank's ticks out of `item_flags[1]`, its shape, the burst out of the glass and
+back on the floor within 1.2 s, a spray card standing on its point at 0.8, the dome's
+scale, reach, fade, way down and share. The suites (ModernTest 14911, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look and the timing in the game: the dome's streaks and the burst are
+RoomProbe pictures, from his view without Lara in it. The laser-less tank of room 122 has
+no film (its 0.20 ms is over the bound): whether it should have one at that cost is the
+owner's to judge. The burst's debris of the glass itself (the shatter static's pieces) and
+the ricochet sparks of the shot are classic still. The warm-up runs at every level with
+sheets; its time at a later level of a session, and after the device is reset (the shaders
+made again), is for the next log to show - FPSLOG at the first water frame. The merge:
+`traps.cpp`, `hd_level.cpp`'s call after the depth bind, `hd_render.cpp`'s card draw and
+`RoomProbe.cpp` are where the other rounds meet this one.
+
+**Commits.** `cffe178`, `c1f2d50`, `dba5e1a`, `6d87b97`, `b6b73cd`.
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in

@@ -2108,18 +2108,34 @@ it.
   and drops falling back, in the water's own foam colour, on the
   Remaster's spray and drops pages; the classic sprite rings are not drawn
   there. A broken fish tank's spray rises as cards of the same kind
-  instead of the grey classic sparks. With `hd_water` on, the floor its
+  instead of the grey classic sparks, standing on the floor where the
+  water lands. The water the tank pours out - the large dome in front of
+  its glass that the classic game draws as a mesh with a scrolled texture
+  - is drawn as this water: the same shape, sinking as the classic one
+  does, see-through with streaks running down it, coming out of the glass
+  over the first quarter second and fading over the half second before
+  the tank is done; on its first ticks a burst of spray and drops is
+  thrown out of the broken glass. With `hd_water` on, the floor its
   water floods is covered by a thin sheet of the water with a foaming rim,
   deepest while it pours out, then sinking and drying as the floor lasers
   run down (with `hd_motion` off it keeps its resting height); the
   lasers' red glow stays. The splash's and the spray's timing and
   everything the game decides are the classic ones. `hd_water` `0` draws
-  the classic splash and spray, and so does `hd_motion` `0`.
+  the classic splash, spray and tank's dome, and so does `hd_motion` `0`.
 - **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
   it draws: `SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
   tank=<item>:<state>` - the HD splashes alive, the cards drawn, the splash
-  rings on the sheets (two a splash), and the item of the fish tank whose
-  floor is wet with the film's strength 0 to 1 (`-1:0.00` when none is).
+  rings on the sheets (two a splash), the item of the fish tank whose
+  floor is wet with the film's strength 0 to 1 (`-1:0.00` when none is),
+  and, last, `tanks=<n>`, the breaking tanks whose water was drawn.
+- **The water's warm-up.** When a level with water sheets has loaded, each
+  of the water's shaders draws once off the screen, so the first frame
+  that shows water does not wait for the graphics driver to ready them -
+  about 40 ms the first time in a session, now spent in the load. With
+  `-log` a line `HDLOG level=<stem> water warm-up <ms> ms: sheet <ms>,
+  depth <ms>, under <ms>, foot <ms>, river <ms>, foam <ms>, foam depth
+  <ms>, cards <ms>` gives its time, each draw's to the GPU's end. It runs
+  at every load of a level with sheets.
 - **The water's life** (with the water sheets, `hd_water`). Small things float on
   the sheets and a few fish swim under them, in three levels for now: ANDREA2's sewer
   canal gets bottles, rags and a barrel; ANDY3's rivers, its lake, its shallows and the

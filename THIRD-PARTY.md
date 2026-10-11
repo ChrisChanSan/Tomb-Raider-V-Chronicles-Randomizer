@@ -1386,6 +1386,24 @@ water surface", carries the tables.
     page 3160 (5\TEX of the player's installation, read through the page
     cache like every page); the classic numbers counted at the engine's
     own code (`UpdateSplashes`, `TriggerFishtankSpray`, `UpdateSparks`).
+    A tank spark's card stands on its spark's point, its lower edge there,
+    at a share of 0.8 of its strength over 64 (`kTankSprayShare`): OWN,
+    the dive splash's middle crown ring's share, chosen after a count on
+    our data (round its point at 0.35 the spray touched 14.9 % of the
+    room 122 tank's view at +24 and 1 % of the room 23 tank's view,
+    RoomProbe `-tank` with and without `-tankleave spray`). The burst of
+    a breaking tank's glass - 40 spray cards and 24 drops leaving the
+    glass within 0.2 s at sqrt(2 g d) times 0.6 to 1.0 under the water's
+    depth d, up or down by up to 400 units/s, under g 4300 units/s^2, for
+    at most 1 s (`HDTankBurst`) - OWN, Torricelli's law and the project's
+    g (9.81 m/s^2 at 2.3 mm a unit); the counts, time, lift, life and
+    sizes are free choices, set by eye on the round's RoomProbe pictures.
+    The warm-up - each of the water's pixel shaders and the cards' pair
+    drawing once into a 16 x 16 target of its own at the level's load
+    (`HDRenderWaterWarmUp`) - OWN, a design of this project from general
+    graphics knowledge (a shader readied by a draw before it is needed);
+    the cause it answers is a count on our data (the first draw with
+    `WaterVS` waited 42 to 73 ms, the pixel shaders under 1 ms).
 144. **The tank's film** - the floor a breaking fish tank floods gets a
     basin body of the sheets of its own over the floor lasers' box,
     at rest 8 units over the floor, drawn with the sheets' shaders and
@@ -1400,6 +1418,22 @@ water surface", carries the tables.
     `ControlFishtank` and `ControlFloorLasers`). DATA: RICH2's two tanks
     and the floor lasers of room 23 (4 x 4 squares), read from the
     classic level by RoomProbe.
+    The tank's water itself, the water a breaking tank pours out: the
+    FISHTANK's classic mesh (69 vertices, 104 quads in RICH2, a flat top
+    1,276 over the floor behind the glass and an apron reaching 866 units
+    in front of it), read from the player's classic level at load, drawn
+    with the cards' shaders as a see-through sheet (`HDTankDomeAt`,
+    `HDTankDomePoint`, `HDTankDomeShare`): scaled in y by the tank's own
+    `item_flags[1]` / 4096 between its ticks, the apron coming out of the
+    glass over 0.25 s (866 units at the 3,310 units/s the water leaves the
+    glass at), the whole in over 2 ticks and out over the 0.5 s before
+    the 106th tick, a share of 0.15 where the eye looks through it and up
+    to 0.65 where it looks along it, the remaster's spray page 3243
+    stretched 384 units across and 2,048 down, running down at 1,660
+    units/s (half the speed of a fall of the dome's height under g). OWN,
+    a design of this project; the shares, the lengths and the fades are
+    free choices, set by eye on the round's RoomProbe pictures. DATA: the
+    mesh (the player's classic level) and page 3243 (5\TEX).
 145. **The film's height, rim and clip** - the film's surface stands
     `kFilmRise`, 16 units, times its strength over its rest, through the
     sheets' crest lift in `WaterVS` (tapering in over the basin's 512

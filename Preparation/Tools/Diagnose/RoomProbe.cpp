@@ -2307,13 +2307,15 @@ static void LifeBuild(const char* root, const char* stem)
 
 		printf("LIFELOG level=%s entry=%d kind=%s body=%d x=%.0f y=%.1f "
 			"z=%.0f yaw=%.0f banked=%d gen=%d under=%.1f over=%.1f amp=%.1f "
-			"rise=%.1f dive=%.2f\n", stem, (int)i, kHDLifeKinds[e.kind].name,
+			"rise=%.1f dive=%.2f down=%.0f pitch=%.1f\n", stem, (int)i,
+			kHDLifeKinds[e.kind].name,
 			e.body, x, y, z, yaw * 57.29578f, e.banked, e.gen,
 			e.kind == HD_LIFE_FISH ? 0.0f : y + 0.5f * h - surface,
 			e.kind == HD_LIFE_FISH ? 0.0f : surface - (y - 0.5f * h), e.amp,
 			g_life_pool.bodies[(size_t)e.body].rise,
 			e.kind == HD_LIFE_FISH ? 0.0f : HDLifeDiveShare(
-			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z), y - surface,
+			(e.kind == HD_LIFE_FISH ? e.pitch : pitch) * 57.29578f);
 	}
 
 	/* A line a school: its centre, whether it is in a flight, the darts it
@@ -2350,10 +2352,31 @@ static void LifeBuild(const char* root, const char* stem)
 			spread = d > spread ? d : spread;
 		}
 
+		/* And its depth band (HDLifeFishBand), units under the surface,
+		 * and its fish's depths now, the least and the most. */
+		float top, bottom, least = 0.0f, most = 0.0f;
+		const HDLifeBody& sb = g_life_pool.bodies[(size_t)s.body];
+
+		HDLifeFishBand(g_life_pool, sb, &top, &bottom);
+
+		for (size_t i = 0, n = 0; i < g_life_pool.entries.size(); i++)
+			if (g_life_pool.entries[i].school == (int)si)
+			{
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(g_life_pool, g_life_pool.entries[i],
+					(float)g_time, &x, &y, &z, &yaw, &pitch, &roll);
+				y -= (float)sb.surfaceY;
+				least = !n || y < least ? y : least;
+				most = !n || y > most ? y : most;
+				n++;
+			}
+
 		printf("LIFELOG level=%s school=%d body=%d centre=%.0f,%.0f "
-			"darting=%d darts=%d fish_at=%.0f,%.0f spread=%.0f\n", stem,
+			"darting=%d darts=%d fish_at=%.0f,%.0f spread=%.0f "
+			"band=%.0f..%.0f down=%.0f..%.0f\n", stem,
 			(int)si, s.body, s.cx, s.cz, s.darting, s.darts, mx, mz,
-			spread);
+			spread, top, bottom, least, most);
 	}
 
 	for (size_t i = 0; i < g_life_pool.drips.size(); i++)

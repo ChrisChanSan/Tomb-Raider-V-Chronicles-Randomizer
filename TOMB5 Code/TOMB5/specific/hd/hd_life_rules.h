@@ -111,10 +111,11 @@ static const HDLifeLevel kHDLifeLevels[] =
  * (SectorCheck on the classic RICH2.TRC: the two rooms differ there
  * alone), a square deep, two wide, 1,024 high; the FISHTANK item 33 stands
  * in front of it. Its school is 8 FISH2, a free choice - a tank shows
- * more fish than a pond; they swim half a square under its top, as in a
- * pond, 448 to 576 units under it with their sway, in the middle of its
- * height. Its fish take the light of a body of light one (as a sheet's
- * light, 255 here; hd_life.cpp), a free choice: its water is clear and lit
+ * more fish than a pond; they swim in the band a pond's fish have
+ * (HDLifeFishBand), its top as the surface and its full height as the
+ * depth: 128 to 937 under the top. Its fish take the light of a body of
+ * light one (as a sheet's light, 255 here; hd_life.cpp), a free choice: its
+ * water is clear and lit
  * by the room. The tank is whole while its FISHTANK item has not been set
  * off - the shot that breaks it starts the item, which pours the water out
  * as its spray (game\tower.cpp, ControlFishtank) and the room flips to
@@ -248,14 +249,13 @@ static const float kHDLifeBobSpan = 1.5f;
 static const float kHDLifePitch = 0.0523599f;	// 3 degrees
 static const float kHDLifeRoll = 0.0349066f;	// 2 degrees
 
-/* The school: 4 to 8 fish half a square under the surface, in a body with
- * at least six squares 768 deep or more (the fish's lowest point lies 611
- * under the surface - 512 down, 64 of sway and half of FISH2's box, 70
- * high - and three clicks keep the floor under it). Its centre cruises at
+/* The school: 4 to 8 fish in a body with at least six squares 768 deep or
+ * more, each in the school's depth band (HDLifeFishBand, below). Its
+ * centre cruises at
  * 150 units a second toward a deep square it picks again every 6 seconds
  * or on arrival; its fish ride a ring of 150 to 300 units round it, half
  * as wide as long, at 20 degrees a second, with a 6 degree yaw wobble at
- * 1.5 hertz, rising and sinking 64 units at 0.7 radians a second. The
+ * 1.5 hertz. The
  * count, the speeds, the ring, the wobble and the times are free choices,
  * set by eye on the round's RoomProbe pictures. The centre keeps the
  * ring's 300 and half of FISH2's 173 long box, 387 units, from water less
@@ -284,7 +284,6 @@ static const int kHDLifeFishMin = 4;
 static const int kHDLifeFishSpan = 5;
 static const int kHDLifeDeepSquares = 6;
 static const int kHDLifeDeep = 768;
-static const float kHDLifeFishDown = 512.0f;
 static const float kHDLifeSwim = 150.0f;
 static const float kHDLifeRetarget = 6.0f;
 static const float kHDLifeRingMin = 150.0f;
@@ -293,8 +292,6 @@ static const float kHDLifeCircle = 0.3490659f;	// 20 degrees a second
 static const float kHDLifeWobble = 0.1047198f;	// 6 degrees
 static const float kHDLifeWobbleHz = 1.5f;
 static const float kHDLifeFleeReach = 1024.0f;
-static const float kHDLifeSway = 64.0f;		// up and down, units
-static const float kHDLifeSwayRate = 0.7f;	// radians a second
 static const float kHDLifeSquash = 0.5f;	// the ring's width over length
 static const float kHDLifeSchoolReach = 387.0f;
 static const float kHDLifeDartSpeed = 2800.0f;
@@ -314,6 +311,43 @@ static const float kHDLifeRejoinNear = 32.0f;	// units, back on the ring
  * that flees turns about at once, a dart is three strokes to one. */
 static const float kHDLifeFishTurn = 12.566371f;	// 720 degrees a second
 static const float kHDLifeDartBeat = 3.0f;
+
+/* The fish's depth. A school swims in a band under its body's surface
+ * (HDLifeFishBand): from kHDLifeFishTop under the highest the body's sheet
+ * rises (HDRenderWaterBodySquares' rise: a sea's crest stands 121 over the
+ * surface) down to its reach (87, half of FISH2's 173 long box) over the
+ * floor of the body's shallowest deep square (768 at the least, so the band
+ * holds wherever a fish may swim: its centre and its darts keep to deep
+ * squares). kHDLifeFishTop is FISH2's half thickness (35 of its 70 high
+ * box) and the 44 its nose rises at the steepest pitch, kHDLifeFishPitchMost
+ * of its 87 reach, with room to spare. Calm, a fish rises and sinks round
+ * the band's middle by kHDLifeFishRise, less where the band is narrower,
+ * at kHDLifeFishRiseRate radians a second from a phase of its own (the
+ * hash of the fish, 1009), so a school circles at several depths and
+ * changes them slowly - 14 s a rise and a sink. A dart climbs or dives as
+ * well, so a fleeing school breaks up in depth as it does across
+ * (kHDLifeDartScatter): each fish heads for a depth of its own in the band
+ * (the hash of the fish and the dart, 1103), its way pitched toward it by
+ * 0.4 to 1 of kHDLifeDartPitch (the hash, 1109), its climb the dart's speed
+ * times the pitch's sine, and runs on level once there. A depth anywhere in
+ * the band and not the band's edge: a dart of 2,800 units a second climbs
+ * 1,183 a second at 25 degrees and reached the edge of ANDY3's pond's band
+ * (809 high) within a third of a second, three of its four fish on the
+ * floor for three seconds (RoomProbe -lifelara series). Back to its ring a
+ * fish climbs or sinks at most kHDLifeFishPitchMost of the rejoin's 600
+ * units a second, 346. The model is pitched to its way - its climb over its
+ * run, calm its rise over the school's cruise of kHDLifeSwim - at most
+ * kHDLifeFishPitchMost, turned at kHDLifeFishTurn as its heading is
+ * (HDLifeFishTurn). The rise, its rate, the dart's pitch and the most
+ * pitch are free choices, set by eye on RoomProbe series of ANDY3's pond:
+ * a fish never stands on its head, and a calm one climbs at most at the
+ * most pitch (192 x 0.45 = 86 units a second against the cruise's 150: 30
+ * degrees). */
+static const float kHDLifeFishTop = 128.0f;
+static const float kHDLifeFishRise = 192.0f;
+static const float kHDLifeFishRiseRate = 0.45f;	// radians a second
+static const float kHDLifeDartPitch = 0.4363323f;	// 25 degrees
+static const float kHDLifeFishPitchMost = 0.5235988f;	// 30 degrees
 
 /* The drips: a body with four or more squares under a ceiling (its room is
  * not open air) gets one drip for eight such squares, two to six, each at
@@ -364,8 +398,8 @@ static const int kHDLifeDropUnder = 32;	// under the ceiling it leaves
 static const unsigned char kHDLifeDropColour[3] = { 120, 160, 208 };
 static const int kHDLifeDropsMax = 32;
 
-/* The share of its body's light a model takes: a fish half a square under
- * the surface takes half - at the full light FISH2's silver reads as white
+/* The share of its body's light a model takes: a fish under the surface
+ * takes half - at the full light FISH2's silver reads as white
  * glints through the sheet. A free choice, set by eye on the round's
  * RoomProbe pictures. */
 static const float kHDLifeFishLight = 0.5f;
@@ -439,6 +473,12 @@ struct HDLifeEntry
 	float ring, angle;	// its place on the school's ring
 	// A darting fish's way, a unit vector in x and z (HDLifeSchoolTick).
 	float wayX = 0.0f, wayZ = 0.0f;
+	/* A fish in a flight: its depth under the surface, units, its dart's
+	 * climb, the sine of its pitch, up positive, and the depth it heads
+	 * for; the pitch of its way (radians, nose up positive) and the
+	 * model's, turned toward it. */
+	float down = 0.0f, climb = 0.0f, goal = 0.0f;
+	float wayPitch = 0.0f, pitch = 0.0f;
 };
 
 struct HDLifeSchool
@@ -1295,6 +1335,61 @@ struct HDLifePool
 	int respawned;		// river floats come back upstream
 };
 
+/* A school's depth band in body `b`, units under its surface (the fish's
+ * depth): from kHDLifeFishTop under the sheet's rise down to the fish's
+ * reach over the floor of the body's shallowest deep square; one depth in
+ * the middle where the two cross. */
+inline void HDLifeFishBand(const HDLifePool& p, const HDLifeBody& b,
+	float* top, float* bottom)
+{
+	int least = 0;
+
+	for (size_t i = 0; i < b.squares.size(); i++)
+		if (b.squares[i].depth >= kHDLifeDeep &&
+			(!least || b.squares[i].depth < least))
+			least = b.squares[i].depth;
+
+	const float reach = p.reach[HD_LIFE_FISH] > 0.0f ?
+		p.reach[HD_LIFE_FISH] : 0.0f;
+
+	*top = (b.rise > 0.0f ? b.rise : 0.0f) + kHDLifeFishTop;
+	*bottom = (float)(least ? least : kHDLifeDeep) - reach;
+
+	if (*bottom < *top)
+		*top = *bottom = 0.5f * (*top + *bottom);
+}
+
+/* A calm fish's depth at clock t (HDLifeFishBand's middle, the rise and
+ * sink of kHDLifeFishRise at kHDLifeFishRiseRate from the fish's own
+ * phase) and in `up` how fast it climbs then, units a second. */
+inline float HDLifeFishCalm(const HDLifePool& p, const HDLifeEntry& e,
+	float t, float* up)
+{
+	float top, bottom;
+
+	HDLifeFishBand(p, p.bodies[(size_t)e.body], &top, &bottom);
+
+	const float half = 0.5f * (bottom - top);
+	const float a = kHDLifeFishRise < half ? kHDLifeFishRise : half;
+	const float at = kHDLifeFishRiseRate * t + 6.2831853f *
+		HDLifeUnit((unsigned)e.index, 1009u);
+
+	if (up)
+		*up = -a * kHDLifeFishRiseRate * cosf(at);
+
+	return top + half + a * sinf(at);
+}
+
+/* The pitch of a way that climbs `up` while it runs `run` (units, or units
+ * a second), nose up positive, at most kHDLifeFishPitchMost either way. */
+inline float HDLifeFishPitchOf(float up, float run)
+{
+	const float a = atan2f(up, run > 1.0f ? run : 1.0f);
+
+	return a > kHDLifeFishPitchMost ? kHDLifeFishPitchMost :
+		a < -kHDLifeFishPitchMost ? -kHDLifeFishPitchMost : a;
+}
+
 /* Whether two lists of bodies are the same water: the same bodies in the
  * same order, each with the same surface, class flags, current and
  * squares. The HD level is built again when the graphics device was lost
@@ -1957,6 +2052,19 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 				continue;
 
 			at(e, &e.x, &e.z);
+
+			if (!s.darting)
+				e.down = HDLifeFishCalm(p, e, t, 0);
+
+			// The depth it heads for, and its pitch toward it.
+			float top, bottom;
+
+			HDLifeFishBand(p, b, &top, &bottom);
+			e.goal = top + (bottom - top) * HDLifeUnit((unsigned)e.index,
+				1103u + (unsigned)s.darts);
+			e.climb = (e.goal < e.down ? 1.0f : -1.0f) * sinf(
+				kHDLifeDartPitch * (0.4f + 0.6f * HDLifeUnit(
+				(unsigned)e.index, 1109u + (unsigned)s.darts)));
 			HDLifeDartWay(e.x, e.z, sx, sz, e.index, s.darts, s.heading,
 				&e.wayX, &e.wayZ);
 		}
@@ -2011,6 +2119,10 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 			s.regrouped = 1;
 		}
 
+		float top, bottom;
+
+		HDLifeFishBand(p, b, &top, &bottom);
+
 		for (size_t i = 0; i < p.entries.size(); i++)
 		{
 			HDLifeEntry& e = p.entries[i];
@@ -2018,33 +2130,53 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 			if (e.school != si)
 				continue;
 
+			const float x0 = e.x, z0 = e.z, d0 = e.down;
+
 			if (since < kHDLifeDartFor)
 			{
 				const float v = HDLifeDartSpeed(since);
+				float d = e.down - v * e.climb * dt;
+
+				// Level once at its depth.
+				if ((e.climb > 0.0f && d < e.goal) ||
+					(e.climb < 0.0f && d > e.goal))
+					d = e.goal;
 
 				HDLifeStep(b, &e.x, &e.z, e.wayX * v * dt, e.wayZ * v * dt,
 					margin, need);
+				e.down = d < top ? top : d > bottom ? bottom : d;
+				e.wayPitch = HDLifeFishPitchOf(d0 - e.down, sqrtf((e.x - x0) *
+					(e.x - x0) + (e.z - z0) * (e.z - z0)));
 				continue;
 			}
 
-			// Back to its place on the ring.
+			// Back to its place on the ring and its calm depth.
 			float rx, rz;
 
 			HDLifeRingAt(s, e, t, &rx, &rz);
 
 			const float dx = rx - e.x, dz = rz - e.z;
 			const float len = sqrtf(dx * dx + dz * dz);
+			const float dd = HDLifeFishCalm(p, e, t, 0) - e.down;
+			const float most = kHDLifeRejoinSpeed * dt;
+			const float rise = most * tanf(kHDLifeFishPitchMost);
 
-			if (len <= kHDLifeRejoinNear)
+			if (len <= kHDLifeRejoinNear && fabsf(dd) <= kHDLifeRejoinNear)
 				continue;
 
-			const float step = kHDLifeRejoinSpeed * dt < len ?
-				kHDLifeRejoinSpeed * dt : len;
+			if (len > kHDLifeRejoinNear)
+			{
+				const float step = most < len ? most : len;
 
-			e.wayX = dx / len;
-			e.wayZ = dz / len;
-			HDLifeStep(b, &e.x, &e.z, e.wayX * step, e.wayZ * step, margin,
-				need);
+				e.wayX = dx / len;
+				e.wayZ = dz / len;
+				HDLifeStep(b, &e.x, &e.z, e.wayX * step, e.wayZ * step,
+					margin, need);
+			}
+
+			e.down += dd > rise ? rise : dd < -rise ? -rise : dd;
+			e.wayPitch = HDLifeFishPitchOf(d0 - e.down, sqrtf((e.x - x0) *
+				(e.x - x0) + (e.z - z0) * (e.z - z0)));
 			away++;
 		}
 
@@ -2072,8 +2204,11 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 }
 
 /* A fish's heading turns toward its way at kHDLifeFishTurn: in a flight
- * its own dart or rejoin way (wayX, wayZ), calm its school's heading. */
-inline void HDLifeFishTurn(const HDLifePool& p, HDLifeEntry& e, float dt)
+ * its own dart or rejoin way (wayX, wayZ), calm its school's heading; and
+ * its pitch toward its way's at the same rate: in a flight the way's
+ * (wayPitch), calm its rise over the cruise (HDLifeFishCalm at clock t). */
+inline void HDLifeFishTurn(const HDLifePool& p, HDLifeEntry& e, float t,
+	float dt)
 {
 	if (e.kind != HD_LIFE_FISH || e.school < 0)
 		return;
@@ -2087,6 +2222,18 @@ inline void HDLifeFishTurn(const HDLifePool& p, HDLifeEntry& e, float dt)
 	const float wz = s.darting ? e.wayZ : cosf(s.heading);
 
 	e.yaw = HDLifeTurnToward(e.yaw, wx, wz, kHDLifeFishTurn, dt);
+
+	float up = 0.0f;
+
+	if (!s.darting)
+		HDLifeFishCalm(p, e, t, &up);
+
+	const float want = s.darting ? e.wayPitch : HDLifeFishPitchOf(up,
+		kHDLifeSwim);
+	const float most = kHDLifeFishTurn * dt;
+	const float d = want - e.pitch;
+
+	e.pitch += d > most ? most : d < -most ? -most : d;
 }
 
 /* The pool's tick to clock t. Steps of at most a tenth of a second, so a
@@ -2131,7 +2278,7 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 
 		// Each fish turns to its way (HDLifeFishTurn).
 		for (size_t i = 0; i < p.entries.size(); i++)
-			HDLifeFishTurn(p, p.entries[i], dt);
+			HDLifeFishTurn(p, p.entries[i], at, dt);
 
 		for (size_t i = 0; i < p.drips.size(); i++)
 		{
@@ -2246,7 +2393,7 @@ inline void HDLifeBodyTail(const HDLifePool& p, int bi, char* out, size_t n)
 
 /* Where an entry is drawn at clock t: its world place (x, y, z; y down) and
  * its yaw, pitch and roll. A float rides its body's surface with its draft
- * and its bob; a fish swims half a square down on its school's ring. */
+ * and its bob; a fish swims on its school's ring in its depth band. */
 inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 	float* x, float* y, float* z, float* yaw, float* pitch, float* roll)
 {
@@ -2266,13 +2413,16 @@ inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 		else
 			HDLifeRingAt(s, e, t, x, z);
 
-		*y = (float)b.surfaceY + kHDLifeFishDown +
-			kHDLifeSway * sinf(kHDLifeSwayRate * t + e.phase);
+		// Its depth: its own in a flight, calm the band's rise and sink.
+		*y = (float)b.surfaceY + (s.darting ? e.down : HDLifeFishCalm(p, e,
+			t, 0));
 		*yaw = e.yaw - kHDLifeKinds[HD_LIFE_FISH].forward *
 			0.0174533f + kHDLifeWobble * sinf(6.2831853f *
 			kHDLifeWobbleHz * s.beat + e.phase);
+		/* Its pitch, about the model's z: its head points along its x
+		 * (kHDLifeKinds), and y grows down, so a nose up turns it back. */
 		*pitch = 0.0f;
-		*roll = 0.0f;
+		*roll = -e.pitch;
 		return;
 	}
 

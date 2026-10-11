@@ -18407,6 +18407,111 @@ static int life_draw(void* state)
 	return HDLifeDraw((unsigned*)state);
 }
 
+/* The fish's depth (HDLifeFishBand, HDLifeFishCalm): a school in a lake of
+ * five by five squares 1,024 deep under a sea's sheet (rise 121.3) for 60
+ * s, Lara at its middle from 5 to 7 s and 30 to 31 s. Every fish stays in
+ * its band, its pitch within the most and turned no faster than its turn
+ * rate; calm, a fish rises and sinks the band's swing; a dart sends fish
+ * up and down. */
+static void life_fishdepth()
+{
+	HDLifePool p = {};
+	const HDLifeLevel level = { "TEST", 1, 0, 0, { 0, 0, 0, 0 }, 1, 0 };
+	unsigned state = 3;
+	HDLifeBody b = life_body(5, 5, 1024);
+
+	b.rise = 121.3f;
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_FISH] = 1;
+	p.reach[HD_LIFE_FISH] = 87.0f;
+	p.height[HD_LIFE_FISH] = 70.0f;
+	HDLifeBuild(p, level, life_draw, &state);
+
+	float top, bottom;
+
+	HDLifeFishBand(p, p.bodies[0], &top, &bottom);
+	ok(fabsf(top - 249.3f) < 0.1f && fabsf(bottom - 937.0f) < 0.1f,
+		"life fish depth: the band runs from 128 under the sheet's rise to "
+		"the fish's reach over the floor", (long)top * 10000 + (long)bottom,
+		2490937);
+
+	int outBand = 0, overPitch = 0, overTurn = 0, ups = 0, downs = 0;
+	float calmLeast = 1.0e9f, calmMost = -1.0e9f;
+	std::vector<float> last(p.entries.size(), 0.0f);
+	const float dt = 1.0f / 30.0f;
+
+	for (int k = 1; k <= 60 * 30; k++)
+	{
+		const float t = k * dt;
+		const int lara = (t >= 5.0f && t < 7.0f) || (t >= 30.0f && t < 31.0f);
+
+		HDLifeTick(p, 0, t, lara, p.schools[0].cx, p.schools[0].cz, 0);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			const HDLifeEntry& e = p.entries[i];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			const float down = y - (float)p.bodies[0].surfaceY;
+
+			outBand += down < top - 0.01f || down > bottom + 0.01f;
+			overPitch += fabsf(e.pitch) > kHDLifeFishPitchMost + 1.0e-4f ||
+				roll != -e.pitch;
+			overTurn += fabsf(e.pitch - last[i]) > kHDLifeFishTurn * dt +
+				1.0e-4f;
+			last[i] = e.pitch;
+
+			if (i == 0 && t >= 40.0f && t < 54.0f)
+			{
+				calmLeast = down < calmLeast ? down : calmLeast;
+				calmMost = down > calmMost ? down : calmMost;
+			}
+
+			// A tenth of a second into each dart: who climbs, who dives.
+			if (k == 5 * 30 + 3 || k == 30 * 30 + 3)
+			{
+				ups += e.climb > 0.05f && e.pitch > 0.05f;
+				downs += e.climb < -0.05f && e.pitch < -0.05f;
+			}
+		}
+	}
+
+	ok(p.fish >= 4 && p.schools[0].darts >= 2 && outBand == 0,
+		"life fish depth: calm and darting, no fish leaves its band",
+		outBand, 0);
+	ok(overPitch == 0 && overTurn == 0,
+		"life fish depth: the model's pitch stays within 30 degrees and turns "
+		"at the fish's turn rate", overPitch + overTurn, 0);
+	ok(calmMost - calmLeast > 2.0f * kHDLifeFishRise - 8.0f,
+		"life fish depth: a calm fish rises and sinks the swing in 14 s",
+		(long)(calmMost - calmLeast), (long)(2.0f * kHDLifeFishRise));
+	ok(ups >= 1 && downs >= 1,
+		"life fish depth: a dart sends some fish up and some down, nose first",
+		ups * 100 + downs, 101);
+
+	// A band narrower than the swing: the swing shrinks to fit.
+	p.bodies[0] = life_body(5, 5, 768);
+	p.bodies[0].rise = 200.0f;
+	HDLifeFishBand(p, p.bodies[0], &top, &bottom);
+
+	float least = 1.0e9f, most = -1.0e9f;
+
+	for (int k = 0; k < 600; k++)
+	{
+		const float d = HDLifeFishCalm(p, p.entries[0], k * 0.05f, 0);
+
+		least = d < least ? d : least;
+		most = d > most ? d : most;
+	}
+
+	ok(least >= top - 0.01f && most <= bottom + 0.01f && most - least >
+		bottom - top - 8.0f,
+		"life fish depth: in a band of 353 a fish swings over the whole of it",
+		(long)(most - least), (long)(bottom - top));
+}
+
 static void life_depth()
 {
 	HDLifePool p = {};
@@ -19285,6 +19390,7 @@ int main()
 	life_turn();
 	life_bob();
 	life_depth();
+	life_fishdepth();
 	load_pool();
 	splash_motion();
 	splash_cards();

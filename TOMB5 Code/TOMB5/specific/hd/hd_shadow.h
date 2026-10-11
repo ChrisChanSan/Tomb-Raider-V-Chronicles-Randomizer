@@ -110,14 +110,15 @@
  *               classic faces (ModelProbe -shadowsurvey: rays along the
  *               light from her body on every floor sector, a face behind
  *               the first face a ray meets taking her shadow through it):
- *               behind a face more than a block below her feet such faces
- *               outnumber the first faces 2.4 to 1, between half a block and
- *               a block they are as many. Her lowest node, the ankle, stands
- *               58.6 units above her soles (ModelProbe -shadowroom: her
- *               nodes' lowest y 398.0, her soles at 456.6), so 576 and 1088
- *               - half a block and a block, each with that height rounded up
- *               to 64 - give a floor half a block below her soles all of it
- *               and one a block below none: the weight such faces take
+ *               more than a block below her feet such faces outnumber the
+ *               first faces 1.7 to 1 (rays, 119,310 to 70,981), between half
+ *               a block and a block they are as many. Her lowest node, the
+ *               ankle, stands 58.6 units above her soles (ModelProbe
+ *               -shadowroom: her nodes' lowest y 398.0, her soles at 456.6),
+ *               so 576 and 1088, half a block and a block each with that
+ *               height rounded up to 64, give a floor half a block below her
+ *               soles all of it and one 1030 below none: the weight such
+ *               faces take
  *               through a wall falls by 88 per cent and through a floor by
  *               52 against 1024 and 2048, the first faces below her feet
  *               lose 27 per cent of theirs, all of them more than half a

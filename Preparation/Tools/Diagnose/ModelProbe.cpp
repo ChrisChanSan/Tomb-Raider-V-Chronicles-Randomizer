@@ -277,7 +277,9 @@
  *                         their height. The first face a ray meets takes the
  *                         shadow as it should; every face behind it that the
  *                         receive's terms still give a weight (her height
- *                         term, a creature's distance term, the facing term)
+ *                         term from her lowest node, 58.6 units above her
+ *                         soles, a creature's distance term from its place,
+ *                         the facing term)
  *                         takes it through that face - through a floor when
  *                         the first face is a floor or a ceiling, through a
  *                         wall otherwise. Prints per level the places with
@@ -7148,23 +7150,33 @@ static bool LaraBodySlot(const Tr5Level& level, ClassicSlot& out, int* slotOut)
 	return false;
 }
 
-/* A projected shadow's map off the card, one float a texel - one of the
+/* A projected shadow's map off the card, the depth a texel - one of the
  * engine's own targets (hd_render.cpp, HDRenderShadowMap or
  * HDRenderShadowOthersMap), `size` texels a side, copied through a
- * system-memory surface. */
-static bool ShadowMapRead(std::vector<float>& out, IDirect3DTexture9* map, int size)
+ * system-memory surface of the target's own format. The second map is
+ * G32R32F: its red channel goes to `out`, its green - each texel's caster's
+ * place - to `places` when that is given. */
+static bool ShadowMapRead(std::vector<float>& out, IDirect3DTexture9* map,
+	int size, std::vector<float>* places = 0)
 {
 	IDirect3DSurface9* level = 0;
 	IDirect3DSurface9* copy = 0;
+	D3DSURFACE_DESC desc;
 	bool ok = false;
 
 	out.clear();
 
+	if (places)
+		places->clear();
+
 	if (!map || FAILED(map->GetSurfaceLevel(0, &level)))
 		return false;
 
+	const bool two = SUCCEEDED(level->GetDesc(&desc)) &&
+		desc.Format == D3DFMT_G32R32F;
+
 	if (SUCCEEDED(g_device->CreateOffscreenPlainSurface(size, size,
-		D3DFMT_R32F, D3DPOOL_SYSTEMMEM, &copy, 0)) &&
+		two ? D3DFMT_G32R32F : D3DFMT_R32F, D3DPOOL_SYSTEMMEM, &copy, 0)) &&
 		SUCCEEDED(g_device->GetRenderTargetData(level, copy)))
 	{
 		D3DLOCKED_RECT rect;
@@ -7173,10 +7185,22 @@ static bool ShadowMapRead(std::vector<float>& out, IDirect3DTexture9* map, int s
 		{
 			out.resize((size_t)size * size);
 
+			if (places && two)
+				places->resize((size_t)size * size);
+
 			for (int y = 0; y < size; y++)
-				memcpy(&out[(size_t)y * size],
-					(const unsigned char*)rect.pBits + (size_t)y * rect.Pitch,
-					sizeof(float) * size);
+			{
+				const float* row = (const float*)((const unsigned char*)
+					rect.pBits + (size_t)y * rect.Pitch);
+
+				for (int x = 0; x < size; x++)
+				{
+					out[(size_t)y * size + x] = row[two ? x * 2 : x];
+
+					if (places && two)
+						(*places)[(size_t)y * size + x] = row[x * 2 + 1];
+				}
+			}
 
 			copy->UnlockRect();
 			ok = true;
@@ -9300,6 +9324,13 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 				!HDShadowBoxHolds(&othersBox, placed[c].place, HD_SHADOW_OTHERS_MARGIN))
 				continue;
 
+			/* The creature's place beside every texel of it, as
+			 * HDObjectCastOthersFrame writes an item's. */
+			float uvd[3];
+
+			HDShadowMapUVD(&othersBox, placed[c].place, uvd);
+			HDRenderShadowPlace(uvd[2]);
+
 			if (HDModelCastDraw(placed[c].slot, false, &placed[c].matrices[0], placed[c].nodes,
 				~0u, -1, -1, 0))
 				n++;
@@ -10706,8 +10737,9 @@ static long long SurveyCell(int x, int z)
 }
 
 /* The survey's weight of a face behind the first: her height term for one
- * `below` units under her feet, a creature's distance term for one `behind`
- * units along the light. */
+ * `below` units under her lowest node, as HDShadowHeightTerm measures, a
+ * creature's distance term for one `behind` units along the light from the
+ * creature's place, as the second map's lookup measures. */
 static double SurveyTerm(const SurveyTerms& terms, bool lara, double below,
 	double behind)
 {
@@ -10960,23 +10992,42 @@ static int ShadowSurvey(const std::string& trc,
 
 		counted++;
 
+		/* Her height term measures from her lowest node, not from her soles:
+		 * 58.6 units above them, where -shadowroom prints her nodes' lowest
+		 * y 398.0 and her soles at 456.6 of her own space. */
+		const double node = feet - 58.6;
+
 		for (int caster = 0; caster < 2; caster++)
 		{
+			/* Her standing height, three clicks of 256 (her rest pose's box
+			 * with the HD body is 797, -shadowroom's bounds); a creature's, a
+			 * free choice inside the 691 to 809 the man-sized blob carriers
+			 * stand (-surveyslots). */
 			const double height = caster == 0 ? 768.0 : 760.0;
 			double maxW[2] = { 0.0, 0.0 };
 			int rayLeak[2] = { 0, 0 };
 			int maxRoom[2] = { -1, -1 };
 			bool maxJoined[2] = { false, false };
 
+			/* Three columns 96 units apart across the light, inside the
+			 * half width of her rest pose's box (x -133..114 in
+			 * -shadowroom's bounds); a ray every 32 units of height, a free
+			 * choice: 24 a column over her 768. */
 			for (int col = -1; col <= 1; col++)
 				for (double h = 16.0; h <= height + 0.5; h += 32.0)
 				{
 					const double o[3] = { wx + side[0] * 96.0 * col, feet - h,
 						wz + side[2] * 96.0 * col };
-					/* How far a ray is followed: until her height term or
-					 * the creature's distance term has ended. */
-					const double reach = caster == 0 ? (feet +
-						terms.end - o[1]) / dir[1] : terms.oend;
+					/* A creature's distance term measures from its place,
+					 * the point at its feet, as the second map's green
+					 * channel holds it: a face `s` along the ray lies s -
+					 * h * dir.y further along the light than the place (the
+					 * columns stand across the light and add nothing). How
+					 * far a ray is followed: until her height term or the
+					 * creature's distance term has ended. */
+					const double lift = h * dir[1];
+					const double reach = caster == 0 ? (node +
+						terms.end - o[1]) / dir[1] : terms.oend + lift;
 					const double e[3] = { o[0] + dir[0] * reach, o[1] + dir[1] *
 						reach,
 						o[2] + dir[2] * reach };
@@ -11036,7 +11087,9 @@ static int ShadowSurvey(const std::string& trc,
 
 					/* The first face's own weight, where it lies below her
 					 * feet or behind the creature: the shadow a cut of the
-					 * terms would take from a face that should have it. */
+					 * terms would take from a face that should have it. More
+					 * than 64 below her soles and 256 behind a creature, free
+					 * choices: the floor at the feet itself is left out. */
 					{
 						const double nl = -(first.n[0] * dir[0] + first.n[1] *
 							dir[1] +
@@ -11045,7 +11098,7 @@ static int ShadowSurvey(const std::string& trc,
 							fabs(nl) : nl) /
 							HD_SHADOW_FACING);
 						const double term = SurveyTerm(terms, caster == 0,
-							firstBelow, hits[0].first);
+							firstBelow + feet - node, hits[0].first - lift);
 
 						if (caster == 0 ? firstBelow > 64.0 :
 							hits[0].first > 256.0)
@@ -11069,7 +11122,7 @@ static int ShadowSurvey(const std::string& trc,
 							HD_SHADOW_FACING);
 						const double y = o[1] + dir[1] * hits[k].first;
 						const double term = SurveyTerm(terms, caster == 0,
-							y - feet, hits[k].first);
+							y - node, hits[k].first - lift);
 						const double w = facing * term;
 
 						if (!(w > 0.0))

@@ -17898,22 +17898,42 @@ static void life_rings()
 	bottle.index = 6;
 
 	std::vector<HDLifeRing> a, b;
+	std::vector<float> at;
+	int offTop = 0;
+
+	barrel.phase = 1.0f;
 
 	for (int k = 1; k <= 600; k++)
 	{
-		HDLifeFloatRings(p, barrel, 0, (k - 1) / 30.0f, k / 30.0f, &a);
-		HDLifeFloatRings(p, bottle, 1, (k - 1) / 30.0f, k / 30.0f, &b);
+		const size_t before = a.size();
+		const float t = k / 30.0f;
+
+		HDLifeFloatRings(p, barrel, 0, (k - 1) / 30.0f, t, &a);
+		HDLifeFloatRings(p, bottle, 1, (k - 1) / 30.0f, t, &b);
+
+		// A ring comes in the step its bob passes its top: sine -1.
+		if (a.size() > before)
+		{
+			at.push_back(t);
+			offTop += sinf(6.2831853f * t / barrel.period + barrel.phase) >
+				-0.98f;
+		}
 	}
 
-	int sizeBad = 0;
+	int sizeBad = 0, gapBad = 0;
 
 	for (size_t i = 0; i < a.size(); i++)
 		sizeBad += a[i].size < kHDLifeFloatRing || a[i].size >
-			kHDLifeFloatRing + kHDLifeFloatRingTop || a[i].drip != -1;
+			kHDLifeFloatRing + kHDLifeFloatRingTop || a[i].size > 255 ||
+			a[i].drip != -1;
 
-	ok(a.size() >= 10 && a.size() <= 21 && sizeBad == 0 && b.empty(),
-		"life rings: a barrel rings every 1 to 2 s at 88 to 104, a bottle "
-		"never", (long)a.size() * 100 + (long)b.size(), 1500);
+	for (size_t i = 1; i < at.size(); i++)
+		gapBad += fabsf(at[i] - at[i - 1] - barrel.period) > 0.05f;
+
+	ok(a.size() >= 6 && a.size() <= 7 && sizeBad == 0 && gapBad == 0 &&
+		offTop == 0 && b.empty(),
+		"life rings: a barrel rings once a bob at its top at 240 to 255, a "
+		"bottle never", (long)a.size() * 100 + (long)b.size(), 600);
 }
 
 /* Floats keep apart (HDLifeClear): a current that drives two floats to a

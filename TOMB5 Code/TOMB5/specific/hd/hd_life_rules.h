@@ -1643,28 +1643,38 @@ struct HDLifeRing
 
 /* The rings round a big float (HDLifeFloatRings): a float whose floating
  * height is kHDLifeRingHeight or more - the barrel, 326 - rings the sheet
- * now and then as Lara does when she swims; a bottle (80) and the cloths
- * (16) are too small to stir the water one could see, and ring never. Its
- * period is 1 to 2 seconds from the hash of the float and its comeback
- * count; its size 88, and up to 16 more at the top of its bob: a wading
- * Lara's ring is 112 to 127 (game\effects.cpp), a barrel of 82 cm makes a
- * little less than a woman of 1.77 m. A river float rings only while
- * afloat (its dive under half). The height, the period and the sizes are
- * free choices with those reasons, set by eye on RoomProbe series. */
+ * as Lara does when she wades; a bottle (80) and the cloths (16) are too
+ * small to stir the water one could see, and ring never. It rings once a
+ * bob, at the bob's top, as a body that rises and falls sends out a wave
+ * each time: 2.5 to 4 s apart (kHDLifeBobMin, kHDLifeBobSpan). A ring the
+ * sheets draw starts at half its size from the middle, runs out at 150
+ * units a second and lives 3.5 s; a ring of the same kind within 192 units
+ * that comes 0.6 s or more after it starts it again (hd_render.cpp, "the
+ * rings"). ANIMATING3_ANDY1 reaches 163 to 179 from its middle across the
+ * water (its box seen from above, 326 by 358) - so a ring of 88 to 104 every
+ * 1 to 2 s ran under the barrel for its first second and was started
+ * again by the next one just as it came out (RoomProbe -liferings game: at
+ * ANDY3's lake 175 pixels changed 1 s after a ring, none at 1.5 s, where
+ * a wading Lara's of 120 at the same place changed 637). Its size is
+ * kHDLifeFloatRing and up to kHDLifeFloatRingTop more from the hash of the
+ * float and the bob's count: the largest a ripple slot holds (a byte, and
+ * UpdateSplashes grows a size under 252), so the ring starts 120 to 127 out
+ * and is past the barrel's side in a third of a second; its strength on the
+ * sheet is the full one a wading Lara's ring of 128 has. A river float
+ * rings only while afloat (its dive under half). The height and the sizes
+ * are free choices with those reasons; the period is the bob's. */
 static const float kHDLifeRingHeight = 160.0f;
-static const float kHDLifeRingPeriodMin = 1.0f;
-static const float kHDLifeRingPeriodSpan = 1.0f;
-static const int kHDLifeFloatRing = 88;
-static const int kHDLifeFloatRingTop = 16;
+static const int kHDLifeFloatRing = 240;
+static const int kHDLifeFloatRingTop = 15;
 
-/* The rings a float asks for in a step from `t0` to `t1`: one where a
- * multiple of its period (HDLifeFloatRings over the constants) falls in
- * the step, at its place, sized by its bob. */
+/* The rings a float asks for in a step from `t0` to `t1`: one where its
+ * bob passes its top in the step (HDLifeBob: its sine's least, y growing
+ * down), at its place. */
 inline void HDLifeFloatRings(const HDLifePool& p, const HDLifeEntry& e,
 	int entry, float t0, float t1, std::vector<HDLifeRing>* rings)
 {
 	if (!rings || e.kind < 0 || e.kind >= HD_LIFE_FISH ||
-		p.height[e.kind] < kHDLifeRingHeight)
+		p.height[e.kind] < kHDLifeRingHeight || e.period <= 0.0f)
 		return;
 
 	const HDLifeBody& b = p.bodies[(size_t)e.body];
@@ -1672,24 +1682,21 @@ inline void HDLifeFloatRings(const HDLifePool& p, const HDLifeEntry& e,
 	if (HDLifeDiveShare(b, e.x, e.z) >= 0.5f)
 		return;
 
-	const float period = kHDLifeRingPeriodMin + kHDLifeRingPeriodSpan *
-		HDLifeUnit((unsigned)e.index, 811u + (unsigned)e.gen);
-	const float phase = period * HDLifeUnit((unsigned)e.index, 821u +
-		(unsigned)e.gen);
+	// The bob's turns since clock 0, counted from its top.
+	const float turn = e.phase / 6.2831853f - 0.75f;
+	const float n1 = floorf(t1 / e.period + turn);
 
-	if (floorf((t1 - phase) / period) <= floorf((t0 - phase) / period))
+	if (n1 <= floorf(t0 / e.period + turn))
 		return;
 
-	// The top of the bob is its sine's least (y grows down).
-	const float s = sinf(6.2831853f * t1 / e.period + e.phase);
 	HDLifeRing r;
 
 	r.body = e.body;
 	r.x = e.x;
 	r.z = e.z;
 	r.y = b.surfaceY;
-	r.size = kHDLifeFloatRing + (int)(kHDLifeFloatRingTop * (s < 0.0f ?
-		-s : 0.0f));
+	r.size = kHDLifeFloatRing + (int)(HDLifeHash((unsigned)e.index, 811u +
+		(unsigned)(int)n1) % (unsigned)(kHDLifeFloatRingTop + 1));
 	r.drip = -1 - entry;
 	rings->push_back(r);
 }

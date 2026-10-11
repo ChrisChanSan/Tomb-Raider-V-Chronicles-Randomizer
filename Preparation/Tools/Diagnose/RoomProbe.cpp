@@ -1870,6 +1870,8 @@ static std::vector<LifeRoom> g_life_rooms;
  * it (HDLifeTankStart) and the engine's rule (HDLifeTankWhole). */
 static bool g_life_tank_whole = true;
 static bool g_life_tank_game = false;
+// -liferings 0|game: 1 every ring alone (no switch), 0 none, 2 the game's.
+static int g_life_rings = 1;
 // The classic level's FISHTANK items: x, z and flags each.
 static std::vector<int> g_life_tank_items;
 static HDLifePool g_life_pool;
@@ -2193,7 +2195,57 @@ static void LifeBuild(const char* root, const char* stem)
 	for (size_t i = 0; i < g_life_pool.schools.size(); i++)
 		fleeing += g_life_pool.schools[i].fleeUntil > (float)g_time ? 1 : 0;
 
-	for (size_t i = 0; i < rings.size(); i++)
+	/* -liferings game: the rings as the game's sheets keep them out of the
+	 * ripple slots (hd_render.cpp, HDRenderWaterRipples and "the rings"): a
+	 * new ring within 192 units of a live one of its kind (the life's are
+	 * all a body's, flags 0x10) takes that ring's place when the live one
+	 * is 0.6 s old or more and goes into it when younger; a ring lives
+	 * 3.5 s. Those three numbers are kRingMerge, kRingRestart and kRingLife
+	 * there. -liferings 0 shows none; without the switch every ring of the
+	 * last 1.5 s is shown on its own. */
+	struct Kept
+	{
+		float x, z, born, size;
+	};
+	std::vector<Kept> kept;
+
+	for (size_t i = 0; g_life_rings == 2 && i < rings.size(); i++)
+	{
+		const Kept k = { rings[i].first.x, rings[i].first.z, rings[i].second,
+			(float)rings[i].first.size };
+		Kept* into = 0;
+		float best = 192.0f * 192.0f;
+
+		for (Kept& g : kept)
+		{
+			const float d2 = (g.x - k.x) * (g.x - k.x) + (g.z - k.z) *
+				(g.z - k.z);
+
+			if (d2 <= best && k.born - g.born <= 3.5f)
+			{
+				best = d2;
+				into = &g;
+			}
+		}
+
+		if (into && k.born - into->born >= 0.6f)
+			*into = k;
+		else if (!into)
+			kept.push_back(k);
+	}
+
+	for (const Kept& k : kept)
+	{
+		const float age = (float)g_time - k.born;
+
+		if (age > 3.5f)
+			continue;
+
+		HDRenderWaterRing(k.x, k.z, age, k.size);
+		shown++;
+	}
+
+	for (size_t i = 0; g_life_rings == 1 && i < rings.size(); i++)
 	{
 		const float age = (float)g_time - rings[i].second;
 
@@ -9103,15 +9155,22 @@ static int ProbeMain(int argc, char** argv)
 			g_life_bench = true;
 		else if (!strcmp(argv[at], "-lifeall"))
 			g_life_all = true;
-		/* -lifesplash and -lifetank share this branch: one more `else if`
-		 * passes the compiler's limit of nested blocks (C1061). */
+		/* -lifesplash, -lifetank and -liferings share this branch: one more
+		 * `else if` passes the compiler's limit of nested blocks (C1061). */
 		else if ((!strcmp(argv[at], "-lifelara") ||
 			!strcmp(argv[at], "-lifesplash") ||
-			!strcmp(argv[at], "-lifetank")) && at + 1 < argc)
+			!strcmp(argv[at], "-lifetank") ||
+			!strcmp(argv[at], "-liferings")) && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (!strcmp(argv[at], "-lifetank"))
+			if (!strcmp(argv[at], "-liferings"))
+			{
+				at++;
+				g_life_rings = !strcmp(argv[at], "game") ? 2 :
+					atoi(argv[at]) ? 1 : 0;
+			}
+			else if (!strcmp(argv[at], "-lifetank"))
 			{
 				g_life_tank_game = !strcmp(argv[++at], "game");
 				g_life_tank_whole = g_life_tank_game || atoi(argv[at]) != 0;

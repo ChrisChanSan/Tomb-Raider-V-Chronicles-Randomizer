@@ -430,10 +430,21 @@
  *                     -hdwater 1; off without it.
  *     -tank item t    the fish tank `item` (FISHTANK) of the level t
  *                     seconds after it broke: its spray as cards out of
- *                     the points ControlFishtank sprays from, and the film
- *                     on its room's floor with its strength of that moment
- *                     (t under 0 the tank before it breaks). Needs -hdwater
- *                     1; off without it.
+ *                     the points ControlFishtank sprays from, the film on
+ *                     its room's floor with its strength of that moment and,
+ *                     while the tank runs, its water ("the tank's water":
+ *                     its FISHTANK mesh drawn as the water, the burst out
+ *                     of the glass) (t under 0 the tank before it breaks).
+ *                     Needs -hdwater 1; off without it.
+ *     -tankleave spray|water  -tank without its spray, or without its
+ *                     water - a part's own pixels, against the picture with
+ *                     it; repeatable.
+ *     -nowarm         no warm-up of the water's shaders before the picture
+ *                     (HDRenderWaterWarmUp, which the engine runs once a
+ *                     level and RoomProbe once a picture by default, after
+ *                     the depth texture's bind): the first sheet draw then
+ *                     waits for the driver as a game's first water frame
+ *                     did. The warm-up prints its time per shader.
  *     -rippleat x,y,z  whether a game ripple there loses its classic
  *                     sprite to a sheet's ring (HDRenderWaterSheetUnder);
  *                     repeatable, printed after the WATERLOG lines.
@@ -1400,6 +1411,8 @@ static bool g_glow_alone = false;
 // -nocopy, -nodepth, -waterdepthview and -waterbend - see the usage above.
 static bool g_water_copy = true;
 static bool g_water_depth = true;
+// -nowarm: no warm-up of the water's shaders (HDRenderWaterWarmUp).
+static bool g_nowarm = false;
 static int g_water_depth_view = 0;
 static float g_water_bend = 1.0f;
 
@@ -1444,6 +1457,22 @@ static bool ShotBegin(Shot& shot, long w, long h)
 
 		if (g_water_depth && !HDRenderWaterDepthBind(&refused))
 			printf("water depth texture refused: %s\n", refused);
+	}
+
+	/* The water's shaders warmed once, as the engine does it at the
+	 * level's load once the depth texture is bound (hd_level.cpp,
+	 * BuildWaterSheets); -nowarm leaves it out, for the first draw's wait
+	 * it takes away. */
+	if (!g_nowarm)
+	{
+		double ms[8];
+		const double all = HDRenderWaterWarmUp(ms, 8);
+
+		if (all >= 0.0)
+			printf("-hdwater: warm-up %.2f ms: sheet %.2f, depth %.2f, under "
+				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
+				"cards %.2f\n", all, ms[0], ms[1], ms[2], ms[3], ms[4], ms[5],
+				ms[6], ms[7]);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws
@@ -2303,6 +2332,8 @@ static int g_splash_fall = 128;
  * which GetJointAbsPosition adds for joint 0. */
 static int g_tank_item = -1;
 static float g_tank_time = 0.0f;
+// -tankleave: 1 the spray, 2 the tank's water left out of the picture.
+static int g_tank_leave = 0;
 static int g_tank_film = -1;
 static float g_tank_root[3] = { 0.0f, 0.0f, 0.0f };
 static Tr5Item g_tank_place;
@@ -5631,12 +5662,74 @@ static void ProbeWaterCorners(const Tr5Level& level,
  * BuildWaterFilms: every FLOOR_LASERS item (slot 392) in the room of a
  * FISHTANK (slot 413), its box as InitialiseFloorLasers lays it - the
  * item's trigger_flags as width (the ones, squares along z) and height (the
- * tens, along x), from 512 before the item's place. And for -tank, the
- * tank's place and its mesh's root, as ProbeWaterFalls reads a fall's. */
+ * tens, along x), from 512 before the item's place. The FISHTANK mesh
+ * goes to the renderer first, as hd_level.cpp's TankMeshToRenderer hands
+ * it (vertices, quads, a triangle as a quad that repeats its third
+ * corner). And for -tank, the tank's place and its mesh's root, as
+ * ProbeWaterFalls reads a fall's. */
+static void ProbeTankMesh(const Tr5Level& level)
+{
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	Tr5Level::MoveableInfo info;
+	int16_t head[6];
+	size_t at = 0;
+	std::vector<float> xyz;
+	std::vector<int> quads;
+
+	if (level.moveableInfo(413, info) && info.nmeshes > 0 &&
+		level.debugMeshHeader(info.meshIndex, head) &&
+		level.debugMeshAt(info.meshIndex, at) && head[5] > 0)
+	{
+		// The mesh: vertices, normals or shades, quads (6 words), triangles
+		// (5 words) - the walk ProbeWaterFalls takes to its vertices.
+		size_t p = at + 12;
+		int16_t w[6];
+
+		for (int v = 0; v < head[5] && p + 6 <= bytes.size(); v++, p += 6)
+		{
+			std::memcpy(w, &bytes[p], 6);
+			xyz.push_back(w[0]);
+			xyz.push_back(w[1]);
+			xyz.push_back(w[2]);
+		}
+
+		int16_t n = 0;
+
+		if (p + 2 <= bytes.size())
+			std::memcpy(&n, &bytes[p], 2);
+
+		p += 2 + (n > 0 ? (size_t)n * 6 : (size_t)(-n) * 2);
+
+		for (int pass = 0; pass < 2 && p + 2 <= bytes.size(); pass++)
+		{
+			const size_t stride = pass ? 10 : 12;
+
+			std::memcpy(&n, &bytes[p], 2);
+			p += 2;
+
+			for (int q = 0; q < n && p + stride <= bytes.size(); q++,
+				p += stride)
+			{
+				std::memcpy(w, &bytes[p], 8);
+
+				for (int k = 0; k < 4; k++)
+					quads.push_back(w[pass && k == 3 ? 2 : k]);
+			}
+		}
+	}
+
+	HDRenderWaterTankMesh(xyz.empty() ? 0 : &xyz[0], (int)xyz.size() / 3,
+		quads.empty() ? 0 : &quads[0], (int)quads.size() / 4);
+	if (g_tank_item >= 0)
+		printf("-tank: FISHTANK mesh %d vertices %d quads\n",
+			(int)xyz.size() / 3, (int)quads.size() / 4);
+}
+
 static void ProbeWaterFilms(const Tr5Level& level)
 {
 	std::vector<HDWaterFilm> films;
 
+	ProbeTankMesh(level);
 	g_tank_film = -1;
 	g_tank_found = false;
 
@@ -5696,6 +5789,7 @@ static void ProbeWaterFilms(const Tr5Level& level)
 				f.x0, f.x1, f.z0, f.z1, f.y, t, l, laser.triggerFlags);
 			films.push_back(f);
 		}
+
 	}
 
 	HDRenderWaterFilms(films.empty() ? 0 : &films[0], (int)films.size());
@@ -5734,7 +5828,8 @@ static const short kSplashOffsets[18] = { 1072, 48, 1072, 48, 650, 280, 200,
  * After the tank the lasers' count runs down from 64 a tick, and the film
  * takes the strength HDFilmStrength gives - what hd_level.cpp's
  * FeedWaterFilms reads off the items in the game. A tank without floor
- * lasers in its room has no film (-1 on the line); its spray is drawn. */
+ * lasers in its room has no film (-1 on the line); its spray is drawn.
+ * While the tank runs, its water is handed in at the picture's age. */
 static void ProbeCardsFeed()
 {
 	if (g_hdwater != 1)
@@ -5841,8 +5936,8 @@ static void ProbeCardsFeed()
 			strength = strength > 64 ? 64 : strength;
 			lowest = wy > lowest ? wy : lowest;
 
-			if (HDRenderWaterSpray(wx, wy, wz, strength,
-				g_tank_time - (float)k / 30.0f))
+			if (!(g_tank_leave & 1) && HDRenderWaterSpray(wx, wy, wz,
+				strength, g_tank_time - (float)k / 30.0f))
 				sprays++;
 		}
 	}
@@ -5855,6 +5950,15 @@ static void ProbeCardsFeed()
 
 	if (g_tank_film >= 0)
 		HDRenderWaterFilmWet(g_tank_film, wet);
+
+	// The tank's water while ControlFishtank runs it, as DrawScaledSpike
+	// hands it in the game (hd_level.cpp, HDWaterTank).
+	const bool water = state == 1 && !(g_tank_leave & 2) &&
+		HDRenderWaterTank(g_tank_item, (float)g_tank_place.x,
+		(float)g_tank_place.y, (float)g_tank_place.z, g_tank_place.yRot,
+		flags, g_tank_time);
+
+	printf("-tank: the tank's water %s\n", water ? "drawn" : "not drawn");
 
 	printf("-tank: item %d at %.2f s: %s, item_flags[1] %d, lasers %d, film "
 		"%d wet %.2f, %d sparks handed in, spray at y %.0f (root %.0f %.0f "
@@ -5934,8 +6038,9 @@ static void ProbeCardsDraw()
 	if (freq)
 		freq->Release();
 
-	printf("SPLASHLOG level=probe splashes=%d cards=%d rings=%d tank=%d:%.2f\n",
-		st.splashes, st.cards, st.rings, st.tank, st.wet);
+	printf("SPLASHLOG level=probe splashes=%d cards=%d rings=%d tank=%d:%.2f "
+		"tanks=%d\n", st.splashes, st.cards, st.rings, st.tank, st.wet,
+		st.tanks);
 	printf("-hdwater: cards %d cards in 3 draws at most, GPU %.4f ms\n",
 		st.cards, ms);
 }
@@ -8698,11 +8803,22 @@ static int ProbeMain(int argc, char** argv)
 			g_splash_kind = atoi(argv[++at]);
 		else if (!strcmp(argv[at], "-splashfall") && at + 1 < argc)
 			g_splash_fall = atoi(argv[++at]);
-		else if (!strcmp(argv[at], "-tank") && at + 2 < argc)
+		else if ((!strcmp(argv[at], "-tank") && at + 2 < argc) ||
+			(!strcmp(argv[at], "-tankleave") && at + 1 < argc))
 		{
-			g_tank_item = atoi(argv[at + 1]);
-			g_tank_time = (float)atof(argv[at + 2]);
-			at += 2;
+			// One branch for both: the chain is at the compiler's depth.
+			if (argv[at][5])
+			{
+				at++;
+				g_tank_leave |= !strcmp(argv[at], "spray") ? 1 :
+					!strcmp(argv[at], "water") ? 2 : 0;
+			}
+			else
+			{
+				g_tank_item = atoi(argv[at + 1]);
+				g_tank_time = (float)atof(argv[at + 2]);
+				at += 2;
+			}
 		}
 		else if (!strcmp(argv[at], "-lara") && at + 1 < argc)
 		{
@@ -9296,8 +9412,10 @@ static int ProbeMain(int argc, char** argv)
 			sequence = argv[at + 1];
 			at += 1;
 		}
-		else if (!strcmp(argv[at], "-vramhog"))
-			vramHog = true;
+		// -vramhog and -nowarm share a branch: the chain is at the
+		// compiler's depth.
+		else if (!strcmp(argv[at], "-vramhog") || !strcmp(argv[at], "-nowarm"))
+			(argv[at][1] == 'v' ? vramHog : g_nowarm) = true;
 		else
 			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
 	}
@@ -11237,6 +11355,9 @@ static int ProbeMain(int argc, char** argv)
 	PrepareStand(room);
 	probestatics::PreparePieces(stem, room);
 
+	LARGE_INTEGER frameStart;
+
+	QueryPerformanceCounter(&frameStart);
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 
@@ -11449,6 +11570,31 @@ static int ProbeMain(int argc, char** argv)
 	ProbeCardsDraw();
 	HDRenderFrameEnd();
 	g_device->EndScene();
+
+	/* The frame's time on the processor from its BeginScene to the GPU's
+	 * end - what a first water frame's wait for the driver adds to
+	 * (-nowarm against the warm-up). */
+	if (g_hdwater >= 0)
+	{
+		IDirect3DQuery9* drained = 0;
+
+		if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &drained)))
+		{
+			drained->Issue(D3DISSUE_END);
+
+			while (drained->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE) {}
+
+			drained->Release();
+		}
+
+		LARGE_INTEGER f, c;
+
+		QueryPerformanceFrequency(&f);
+		QueryPerformanceCounter(&c);
+		printf("-hdwater: the frame %.2f ms on the processor, BeginScene to "
+			"the GPU's end\n", (double)(c.QuadPart - frameStart.QuadPart) *
+			1000.0 / (double)f.QuadPart);
+	}
 
 	Take(after);
 

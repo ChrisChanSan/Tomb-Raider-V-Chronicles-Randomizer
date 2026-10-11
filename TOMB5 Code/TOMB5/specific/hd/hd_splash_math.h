@@ -382,8 +382,20 @@ inline bool HDSplashRings(const HDSplashSetup& s, float seconds, float* out)
  *
  * HDTankPuff gives the card at `seconds` after the spark was made; false
  * when it is gone. `c` the strength TriggerFishtankSpray took (0..64 after
- * its halving), the share 0.35 times c over 64 - 0.35 a free choice, set by
- * eye on the round's RoomProbe pictures. */
+ * its halving), the share kTankSprayShare times c over 64. The card
+ * stands on the spark's point, its middle its half height over it: the
+ * spark starts on the floor (joint 0 lies 1 unit over the item), and a
+ * card round its point would lie half under the floor and keep the rest
+ * within the soft edge's 64 units of it.
+ *
+ * kTankSprayShare 0.8, the dive splash's crown's (1.0 on its inner ring,
+ * 0.8 on its middle one): the spray is the same water thrown up. Counted
+ * at 1 s (RoomProbe -tank with and without -tankleave spray, 1920 x
+ * 1080, the tank's water drawn in both): the spray of RICH2 room 122's
+ * tank touches 31.4 % of the picture at +48 brightness and of room 23's,
+ * whose points lie inside the 256 high step before its glass, 3.5 %. */
+const float kTankSprayShare = 0.8f;
+
 inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,
 	float seconds, HDCard* out)
 {
@@ -451,7 +463,9 @@ inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,
 	out->z = z + pz1 + ((float)pz - pz1) * part;
 	out->half = 4.0f * ((float)size0 + (float)(dSize - size0) * grow);
 	out->tall = out->half;
-	out->alpha = 0.35f * (float)c / 64.0f * (share > 0.0f ? share : 0.0f);
+	out->y -= out->tall;
+	out->alpha = kTankSprayShare * (float)c / 64.0f *
+		(share > 0.0f ? share : 0.0f);
 	out->page = (h >> 26) & 1 ? HD_CARD_SPRAY : HD_CARD_SPRAY2;
 	out->size = 0.5f;
 	out->u = 0.5f * HDCardShare(seed, 81u);
@@ -509,4 +523,292 @@ inline int HDTankFlagsAfter(int ticks, int* running)
 		*running = f > 819 ? 1 : 0;
 
 	return f;
+}
+
+/* The ticks ControlFishtank has run when item_flags[1] reads `flags1`: the
+ * first step count whose value is at or under it (0 for 4096, 105 for
+ * 810), so a frame that sees only the item's field knows the tank's age. */
+inline int HDTankTicksOf(int flags1)
+{
+	int f = 4096;
+	int t = 0;
+
+	for (; f > flags1 && t < 106; t++)
+		f -= f >> 6;
+
+	return t;
+}
+
+/* A fish tank's water as its classic mesh shapes it - the FISHTANK mesh
+ * DrawScaledSpike scales in y by item_flags[1] / 4096 (game\traps.cpp) -
+ * measured once at level load in the tank's own frame: x along the glass,
+ * y down from the item's place, z out of the glass into the room. In
+ * RICH2 that mesh is the water pouring out of the broken glass: a flat top
+ * 1,276 over the floor behind the glass and a curved apron from the glass's
+ * top edge down to the floor 866 units in front of it.
+ *
+ *   top, floor    the highest and the lowest vertex
+ *   glassZ        the front of the top: the furthest z among the vertices
+ *                 within kTankBand of the top - where the water leaves the
+ *                 tank
+ *   footZ         the furthest z of all: the apron's reach on the floor
+ *   topX0..topX1  the top's width, footX0..footX1 the foot's (the vertices
+ *                 within kTankBand of the floor)
+ *
+ * kTankBand, 32 units, takes RICH2's top vertices (y -1276 and -1277) and
+ * its floor ones (y 6) and none of the apron's next rows (y -1239 under
+ * the top, -382 over the floor) - a choice on that count. */
+const float kTankBand = 32.0f;		// units
+
+struct HDTankShape
+{
+	float top, floor;
+	float glassZ, footZ;
+	float topX0, topX1;
+	float footX0, footX1;
+	int ok;
+};
+
+// `xyz` the mesh's vertices, three floats each, in the tank's frame.
+inline HDTankShape HDTankShapeOf(const float* xyz, int n)
+{
+	HDTankShape s = {};
+
+	if (!xyz || n <= 0)
+		return s;
+
+	s.top = 1.0e9f;
+	s.floor = -1.0e9f;
+	s.footZ = -1.0e9f;
+
+	for (int i = 0; i < n; i++)
+	{
+		const float y = xyz[i * 3 + 1];
+		const float z = xyz[i * 3 + 2];
+
+		s.top = y < s.top ? y : s.top;
+		s.floor = y > s.floor ? y : s.floor;
+		s.footZ = z > s.footZ ? z : s.footZ;
+	}
+
+	s.glassZ = -1.0e9f;
+	s.topX0 = s.footX0 = 1.0e9f;
+	s.topX1 = s.footX1 = -1.0e9f;
+
+	for (int i = 0; i < n; i++)
+	{
+		const float x = xyz[i * 3];
+		const float y = xyz[i * 3 + 1];
+		const float z = xyz[i * 3 + 2];
+
+		if (y <= s.top + kTankBand)
+		{
+			s.glassZ = z > s.glassZ ? z : s.glassZ;
+			s.topX0 = x < s.topX0 ? x : s.topX0;
+			s.topX1 = x > s.topX1 ? x : s.topX1;
+		}
+
+		if (y >= s.floor - kTankBand)
+		{
+			s.footX0 = x < s.footX0 ? x : s.footX0;
+			s.footX1 = x > s.footX1 ? x : s.footX1;
+		}
+	}
+
+	s.ok = s.floor - s.top > kTankBand && s.footZ > s.glassZ ? 1 : 0;
+	return s;
+}
+
+/* The burst when the glass breaks: the tank's water thrown out of the
+ * opened glass on the tank's first ticks, before its apron stands - cards
+ * in the tank's frame (x across, y down from the item's place, z out),
+ * the caller turns them into the world.
+ *
+ *   kTankBurstSpray spray cards and kTankBurstDrops drops leave the glass
+ *   (z glassZ) at a height h0 over the floor spread evenly over the
+ *   opening (0 .. top) and a place across the top's width, each at its own
+ *   moment within the first kTankBurstTime; out of the glass at the speed
+ *   water leaves an opening under a column of its own depth,
+ *   sqrt(2 g (height - h0)) (Torricelli), times 0.6..1.0, and up or down
+ *   by up to kTankBurstLift, under g; gone when it is back on the floor
+ *   or after kTankBurstLife. A spray card widens from its size to 2.5
+ *   times it as it flies and fades with the share of its flight left; a
+ *   drop stays whole.
+ *
+ * g = 4300 units/s^2 is 9.81 m/s^2 at 2.3 mm a unit (Lara's 768 units for
+ * 1.77 m). From RICH2's 1,276 the fastest leave at 3,300 units/s and land
+ * at most 1,276 units out (2 sqrt(d h) at d = h): the apron's own reach.
+ * The counts, the time (0.2 s, 6 ticks), the lift (400 units/s), the life
+ * (1 s), the sizes and the shares are free choices, set by eye on the
+ * round's RoomProbe pictures. Returns the cards written, at most `max`. */
+const int kTankBurstSpray = 40;
+const int kTankBurstDrops = 24;
+const int kTankBurstCards = kTankBurstSpray + kTankBurstDrops;
+const float kTankBurstTime = 0.2f;	// s
+const float kTankBurstLift = 400.0f;	// units/s
+const float kTankBurstLife = 1.0f;	// s
+const float kTankG = 4300.0f;		// units/s^2
+
+inline int HDTankBurst(const HDTankShape& sh, unsigned int seed,
+	float seconds, HDCard* out, int max)
+{
+	int n = 0;
+
+	if (!sh.ok || seconds < 0.0f ||
+		seconds > kTankBurstTime + kTankBurstLife || max <= 0)
+		return 0;
+
+	const float height = sh.floor - sh.top;
+
+	for (int k = 0; k < kTankBurstCards && n < max; k++)
+	{
+		const bool drop = k >= kTankBurstSpray;
+		const unsigned int key = 2000u + (unsigned int)k * 7u;
+		const float t0 = kTankBurstTime * HDCardShare(seed, key);
+		const float t = seconds - t0;
+
+		if (t < 0.0f || t > kTankBurstLife)
+			continue;
+
+		const float h0 = height * HDCardShare(seed, key + 1);
+		const float across = HDCardShare(seed, key + 2);
+		const float speed = sqrtf(2.0f * kTankG * (height - h0)) *
+			(0.6f + 0.4f * HDCardShare(seed, key + 3));
+		const float lift = kTankBurstLift *
+			(2.0f * HDCardShare(seed, key + 4) - 1.0f);
+		const float h = h0 + lift * t - 0.5f * kTankG * t * t;
+
+		if (h < 0.0f)
+			continue;
+
+		// The flight's whole length, for the share of it left.
+		const float land = (lift + sqrtf(lift * lift + 2.0f * kTankG * h0)) /
+			kTankG;
+		const float left = land > 0.0f ? 1.0f - t / land : 0.0f;
+		HDCard& c = out[n++];
+
+		c.x = sh.topX0 + (sh.topX1 - sh.topX0) * across;
+		c.y = sh.floor - h;
+		c.z = sh.glassZ + speed * t;
+		c.size = 0.5f;
+		c.u = 0.5f * HDCardShare(seed, key + 5);
+		c.v = 0.5f * HDCardShare(seed, key + 6);
+
+		if (drop)
+		{
+			c.half = 24.0f + 24.0f * HDCardShare(seed, key + 5);
+			c.tall = 2.0f * c.half;
+			c.alpha = 1.0f;
+			c.page = HD_CARD_DROPS;
+			c.turn = 0.0f;
+		}
+		else
+		{
+			const float grow = 1.0f + 1.5f * (1.0f - left);
+
+			c.half = (96.0f + 96.0f * HDCardShare(seed, key + 6)) * grow;
+			c.tall = c.half;
+			c.alpha = 0.7f * (left > 0.0f ? left : 0.0f);
+			c.page = HDCardShare(seed, key + 4) < 0.5f ? HD_CARD_SPRAY :
+				HD_CARD_SPRAY2;
+			c.turn = 6.2831853f * HDCardShare(seed, key + 3);
+		}
+	}
+
+	return n;
+}
+
+/* The tank's water itself - the classic mesh's own shape drawn as this
+ * water (hd_render.cpp, "the tank's water") - at `seconds` after the tank
+ * broke:
+ *
+ *   scale  item_flags[1] / 4096, DrawScaledSpike's y scale, the tank's own
+ *          ticks (HDTankFlagsAfter) run on linearly between them: 1.0 down
+ *          to 0.198 at the 105th
+ *   reach  how far the apron has come out of the glass: 0 to 1 over
+ *          kTankDomeOut, 0.25 s - 866 units out in 0.25 s is 3,460 units/s,
+ *          the speed water leaves the glass under its whole 1,276 (the
+ *          burst's own, sqrt(2 g h) = 3,310)
+ *   share  0 to 1 over kTankDomeIn and back to 0 over kTankDomeEnd's last
+ *          kTankDomeFade: KillItem takes the tank on its 106th tick
+ *          (3.53 s), and the classic mesh is gone in that frame - the water
+ *          is gone half a second sooner instead of at once
+ *
+ * kTankDomeIn, 2 ticks, and kTankDomeFade, 0.5 s, are free choices. */
+const float kTankDomeOut = 0.25f;		// s
+const float kTankDomeIn = 2.0f / 30.0f;		// s
+const float kTankDomeEnd = 106.0f / 30.0f;	// s
+const float kTankDomeFade = 0.5f;		// s
+
+struct HDTankDome
+{
+	float scale, reach, share;
+	int alive;
+};
+
+inline HDTankDome HDTankDomeAt(float seconds)
+{
+	HDTankDome d = {};
+
+	if (seconds < 0.0f || seconds >= kTankDomeEnd)
+		return d;
+
+	const float ticks = seconds * 30.0f;
+	const int whole = (int)ticks;
+	const float a = (float)HDTankFlagsAfter(whole, 0);
+	const float b = (float)HDTankFlagsAfter(whole + 1, 0);
+	const float in = seconds / kTankDomeIn;
+	const float out = (kTankDomeEnd - seconds) / kTankDomeFade;
+	const float reach = seconds / kTankDomeOut;
+
+	d.scale = (a + (b - a) * (ticks - (float)whole)) / 4096.0f;
+	d.reach = reach < 1.0f ? reach : 1.0f;
+	d.share = (in < 1.0f ? in : 1.0f) * (out < 1.0f ? out : 1.0f);
+	d.alive = 1;
+	return d;
+}
+
+/* One vertex of the tank's mesh at that moment, in the tank's frame:
+ * scaled in y as DrawScaledSpike scales it, the apron (the part out of the
+ * glass, z over glassZ) drawn in towards the glass by its reach; and the
+ * vertex's way down the water from the glass's top - its run out of the
+ * glass plus its drop under the top, less than 0 on the top behind the
+ * glass - for the page to run down the water. out[0..3] x, y, z, way. */
+inline void HDTankDomePoint(const HDTankShape& sh, const HDTankDome& d,
+	const float* in, float* out)
+{
+	const float y = in[1] * d.scale;
+	const float z = in[2] > sh.glassZ ?
+		sh.glassZ + (in[2] - sh.glassZ) * d.reach : in[2];
+
+	out[0] = in[0];
+	out[1] = y;
+	out[2] = z;
+	out[3] = (z - sh.glassZ) + (y - sh.top * d.scale);
+}
+
+/* How the water's surface is lit as a card: a share kTankDomeBody where the
+ * eye looks straight at it and up to kTankDomeBody + kTankDomeRim where it
+ * looks along it, (1 - |cos|)^2 between - the water's edge reads as a
+ * thicker sheet, as a curved glassy surface does - times the dome's share;
+ * the page (the remaster's spray, 3243) runs down the water at
+ * kTankDomeFall, half the speed water reaches falling the dome's height
+ * (sqrt(2 g 1,282) / 2 = 1,660 units/s), stretched along the way down -
+ * one page every kTankDomeAcross across and every kTankDomeAlong down, so
+ * its foam blotches draw out into the streaks of falling water. The
+ * shares and the two lengths are free choices, set by eye on the round's
+ * RoomProbe pictures: 0.3 and one page every 512 units both ways draw a
+ * blotched cloud over the room. */
+const float kTankDomeBody = 0.15f;
+const float kTankDomeRim = 0.5f;
+const float kTankDomeFall = 1660.0f;	// units/s
+const float kTankDomeAcross = 384.0f;	// units
+const float kTankDomeAlong = 2048.0f;	// units
+
+inline float HDTankDomeShare(const HDTankDome& d, float cosine)
+{
+	const float c = cosine < 0.0f ? -cosine : cosine;
+	const float edge = 1.0f - (c > 1.0f ? 1.0f : c);
+
+	return d.share * (kTankDomeBody + kTankDomeRim * edge * edge);
 }

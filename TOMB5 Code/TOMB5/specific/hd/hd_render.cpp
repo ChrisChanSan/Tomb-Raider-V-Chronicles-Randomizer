@@ -10519,7 +10519,9 @@ namespace
 	 * game keeps four splashes at once (splashes[4]), 208; a tank makes 4 or
 	 * 5 sparks a tick (ControlFishtank), each a mist card for 14 to 17
 	 * ticks, at most 85 live, RICH2's two tanks 170 should both run at
-	 * once. 208 + 170 is under 512; past the cap the latest wait. kCardSoft
+	 * once, and a tank's burst is kTankBurstCards (64) over its first
+	 * 1.2 s, two tanks 128. 208 + 170 + 128 = 506 is under 512; past the
+	 * cap the latest wait. kCardSoft
 	 * the depth over which a card fades into what stands behind it,
 	 * kSprayKept the sparks kept (a spark's card is gone after 17 ticks,
 	 * so a tank's last 0.6 s, 18 ticks of 4.5, for two tanks 162),
@@ -10551,6 +10553,49 @@ namespace
 	std::vector<LiveSpray> g_sprays;
 	unsigned int g_card_seed = 0;
 	HDRenderSplashStats g_splash_stats = {};
+
+	/* The tank's water.
+	 *
+	 * When Lara shoots a fish tank's glass (a shatter static over the
+	 * trigger that starts the FISHTANK), the game draws the tank's water as
+	 * the FISHTANK's own classic mesh, scaled in y by item_flags[1] / 4096
+	 * (DrawScaledSpike, game\traps.cpp): a flat top behind the glass and a
+	 * curved apron down to the floor in front of it, whole on the first
+	 * tick, sinking for 105 ticks and gone on the 106th. The HD path draws
+	 * that water as its own, and the classic mesh is left out
+	 * (game\traps.cpp): the same mesh, scaled as the classic scales it,
+	 * its apron coming out of the glass over the first quarter second and
+	 * the whole fading over the last half second before KillItem
+	 * (hd_splash_math.h, HDTankDomeAt), drawn with the cards' shaders as a
+	 * see-through sheet - more of it where the eye looks along the surface
+	 * than where it looks through it (HDTankDomeShare), the spray page
+	 * running down it -, and the burst: on the tank's first ticks its
+	 * water is thrown out of the opened glass as cards (HDTankBurst; spray
+	 * and drops on the cards' pages). All of it in the tank's frame as its
+	 * mesh gives it (HDTankShapeOf), tinted as the film of that tank is.
+	 *
+	 * The engine hands each tank in from the classic draw of its mesh
+	 * (game\traps.cpp through hd_level.cpp, HDWaterTank), so the HD form
+	 * draws exactly when the classic would; RoomProbe's -tank hands in its
+	 * own. A tank's age is its ticks out of item_flags[1]
+	 * (HDTankTicksOf), run on smoothly between the ticks by the frame's
+	 * clock and held within the tick the game is in. */
+	struct LiveTank
+	{
+		int item;
+		float x, y, z;		// the item's place
+		float c, s;		// its turn's cosine and sine
+		int flags1;
+		double born;		// on the frame clock
+		double last;		// when it was last handed in
+		unsigned int seed;
+		bool seen;		// handed in for this frame
+	};
+
+	std::vector<LiveTank> g_tanks;
+	std::vector<float> g_tank_xyz;
+	std::vector<int> g_tank_quads;
+	HDTankShape g_tank_shape = {};
 
 	/* The tank's film.
 	 *
@@ -14008,6 +14053,316 @@ int HDRenderWaterFilmCount()
 	return (int)g_film_in.size();
 }
 
+bool HDRenderWaterTankMesh(const float* xyz, int vertices, const int* quads,
+	int count)
+{
+	g_tanks.clear();
+	g_tank_xyz.clear();
+	g_tank_quads.clear();
+	g_tank_shape = HDTankShapeOf(xyz, vertices);
+
+	if (!g_tank_shape.ok)
+		return false;
+
+	g_tank_xyz.assign(xyz, xyz + (size_t)vertices * 3);
+
+	for (int q = 0; quads && q < count; q++)
+	{
+		bool fits = true;
+
+		for (int k = 0; k < 4; k++)
+			fits = fits && quads[q * 4 + k] >= 0 &&
+				quads[q * 4 + k] < vertices;
+
+		if (fits)
+			g_tank_quads.insert(g_tank_quads.end(), quads + q * 4,
+				quads + q * 4 + 4);
+	}
+
+	return true;
+}
+
+bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
+	int flags1, float age)
+{
+	if (!g_tank_shape.ok || !HDRenderWaterCardsReady())
+		return false;
+
+	const double now = (double)g_motion[2];
+	const int ticks = HDTankTicksOf(flags1);
+	LiveTank* t = 0;
+
+	for (LiveTank& l : g_tanks)
+		if (l.item == item)
+			t = &l;
+
+	if (!t)
+	{
+		LiveTank l = {};
+
+		l.item = item;
+		l.seed = HDCardHash(++g_card_seed, 3u);
+		l.born = now - (double)ticks / 30.0;
+		g_tanks.push_back(l);
+		t = &g_tanks.back();
+	}
+
+	const float turn = (float)yRot * (6.2831853f / 65536.0f);
+
+	t->x = x;
+	t->y = y;
+	t->z = z;
+	t->c = cosf(turn);
+	t->s = sinf(turn);
+	t->flags1 = flags1;
+
+	if (age >= 0.0f)
+		t->born = now - (double)age;
+	else
+	{
+		// Within the tick the game is in: ticks / 30 .. (ticks + 1) / 30.
+		const double earliest = now - (double)(ticks + 1) / 30.0;
+		const double latest = now - (double)ticks / 30.0;
+
+		t->born = t->born < earliest ? earliest : t->born > latest ?
+			latest : t->born;
+	}
+
+	t->seen = true;
+	t->last = now;
+	return true;
+}
+
+namespace
+{
+	// Wall-clock milliseconds, and the device's queue drained to its end.
+	double warm_now_ms()
+	{
+		LARGE_INTEGER f, c;
+
+		QueryPerformanceFrequency(&f);
+		QueryPerformanceCounter(&c);
+		return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
+	}
+
+	void warm_drain()
+	{
+		IDirect3DQuery9* q = 0;
+
+		if (FAILED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &q)) || !q)
+			return;
+
+		q->Issue(D3DISSUE_END);
+
+		while (q->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE) {}
+
+		q->Release();
+	}
+}
+
+/* The warm-up.
+ *
+ * Without it the first draw of a water sheet in a process holds its frame
+ * for about 42 ms: RoomProbe with a scratch timer round each sheet draw,
+ * to the GPU's end, measured 41.9, 42.7 and 43.9 ms for the first, 0.35 to 0.49
+ * for the second and 0.10 for the third (RICH2's tank view, 2560 x 1440),
+ * with the draw call itself under a third of a millisecond. The wait is
+ * the driver readying the water's vertex shader the first time a draw uses
+ * it: drawn first with the rooms' vertex shader, the sheet's pixel shaders
+ * took 0.4 to 0.7 ms (WaterDepthPS) and 0.05 to 0.16 (WaterPS), then the
+ * first draw with WaterVS 60 to 73 ms on a busy machine; the sheet's
+ * buffers' upload (PreLoad) 0.4 to 0.9 ms; the cards' pair 2.4 to 4.4.
+ *
+ * So once a level, when its sheets are built and the depth texture is
+ * bound, each of the water's pixel shaders draws one triangle of the
+ * level's first sheet range with WaterVS - its declaration and textures
+ * bound as the frame binds them - and the cards' pair one card, into a
+ * render target of its own of 16 x 16 in the frame's format and without
+ * a depth buffer; the queue is drained after each, the device's state put
+ * back. Nothing of it reaches the frame. `ms` takes the time of each
+ * (sheet, depth, under, foot, river, foam, foam depth, cards; -1 for one
+ * not drawn). Returns the whole time, or -1 when nothing was warmed (no
+ * sheets, no device). */
+double HDRenderWaterWarmUp(double* ms, int max)
+{
+	for (int i = 0; ms && i < max; i++)
+		ms[i] = -1.0;
+
+	const SheetRange* range = 0;
+
+	for (size_t g = 0; g < g_sheet_ranges.size() && !range; g++)
+		if (!g_sheet_ranges[g].empty())
+			range = &g_sheet_ranges[g][0];
+
+	if (!g_device || !range || !g_sheet_vb || !g_sheet_ib || !g_water_vs ||
+		!g_decl)
+		return -1.0;
+
+	const double start = warm_now_ms();
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* depth = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return -1.0;
+
+	g_device->GetDepthStencilSurface(&depth);
+
+	// The target, and a second texture in the frame copy's place.
+	IDirect3DTexture9* warm = 0;
+	IDirect3DTexture9* behind = 0;
+	IDirect3DSurface9* warmSurface = 0;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		FAILED(g_device->CreateTexture(16, 16, 1, D3DUSAGE_RENDERTARGET,
+		desc.Format, D3DPOOL_DEFAULT, &warm, 0)) ||
+		FAILED(g_device->CreateTexture(16, 16, 1, D3DUSAGE_RENDERTARGET,
+		desc.Format, D3DPOOL_DEFAULT, &behind, 0)) ||
+		FAILED(warm->GetSurfaceLevel(0, &warmSurface)))
+	{
+		if (warm) warm->Release();
+		if (behind) behind->Release();
+		if (depth) depth->Release();
+		target->Release();
+		return -1.0;
+	}
+
+	// The device's state as the level left it, put back below.
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex[3] = { 0, 0, 0 };
+	const DWORD stage[3] = { 0, 5, 6 };
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* indices = 0;
+	UINT streamOffset = 0, streamStride = 0;
+	DWORD fvf = 0;
+	D3DVIEWPORT9 port = {};
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_SRCBLEND, D3DRS_DESTBLEND, D3DRS_CULLMODE, D3DRS_STENCILENABLE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[stateCount];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetIndices(&indices);
+	g_device->GetViewport(&port);
+
+	for (int i = 0; i < 3; i++)
+		g_device->GetTexture(stage[i], &tex[i]);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	g_device->SetRenderTarget(0, warmSurface);
+	g_device->SetDepthStencilSurface(0);
+	g_device->BeginScene();
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+	// The water's pixel shaders over the sheet's own vertices.
+	IDirect3DPixelShader9* const sheets[7] = { g_water_ps, g_water_depth_ps,
+		g_water_under_ps, g_water_foot_ps, g_water_river_ps, g_water_foam_ps,
+		g_water_foam_depth_ps };
+
+	g_device->SetVertexDeclaration(g_decl);
+	g_device->SetVertexShader(g_water_vs);
+	g_device->SetStreamSource(0, g_sheet_vb, 0, sizeof(HDVertex));
+	g_device->SetIndices(g_sheet_ib);
+	g_device->SetTexture(5, g_copy_texture ? g_copy_texture : behind);
+	g_device->SetTexture(6, g_depth_texture);
+	warm_drain();
+
+	for (int i = 0; i < 7; i++)
+	{
+		if (!sheets[i])
+			continue;
+
+		const double t0 = warm_now_ms();
+
+		g_device->SetPixelShader(sheets[i]);
+		g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0,
+			range->minVertex, range->vertices, range->start, 1);
+		warm_drain();
+
+		if (ms && i < max)
+			ms[i] = warm_now_ms() - t0;
+	}
+
+	// The cards' pair with one card.
+	if (g_card_vs && g_card_ps)
+	{
+		const double t0 = warm_now_ms();
+		CardVertex card[3] = {};
+
+		for (int k = 0; k < 3; k++)
+		{
+			card[k].x = (float)(k & 1);
+			card[k].y = (float)(k >> 1);
+			card[k].z = 10.0f;
+			card[k].a = 1.0f;
+			card[k].light = 1.0f;
+		}
+
+		g_device->SetTexture(6, g_depth_texture);
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_card_ps);
+		g_device->SetFVF(kCardFVF);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, card,
+			sizeof(CardVertex));
+		warm_drain();
+
+		if (ms && 7 < max)
+			ms[7] = warm_now_ms() - t0;
+	}
+
+	g_device->EndScene();
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+	g_device->SetViewport(&port);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < 3; i++)
+	{
+		g_device->SetTexture(stage[i], tex[i]);
+
+		if (tex[i])
+			tex[i]->Release();
+	}
+
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetIndices(indices);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (stream) stream->Release();
+	if (indices) indices->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+	if (depth) depth->Release();
+	target->Release();
+	warmSurface->Release();
+	warm->Release();
+	behind->Release();
+	return warm_now_ms() - start;
+}
+
 void HDRenderSplashStatsNow(HDRenderSplashStats* out)
 {
 	if (out)
@@ -14044,8 +14399,38 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 			break;
 		}
 
+	/* The tanks handed in for this frame, each with the body of its film
+	 * for its colour; the list forgets them for the next frame, and a tank
+	 * not handed in for a second goes. */
+	std::vector<LiveTank> tanks;
+	std::vector<int> tankBody;
+
+	for (size_t i = g_tanks.size(); i-- > 0; )
+	{
+		LiveTank& t = g_tanks[i];
+
+		if (t.seen)
+		{
+			int body = -1;
+
+			for (size_t f = 0; f < g_film_in.size(); f++)
+				if (g_film_in[f].tank == t.item && g_film_body[f] >= 0)
+					body = g_film_body[f];
+
+			tanks.push_back(t);
+			tankBody.push_back(body);
+		}
+
+		t.seen = false;
+
+		if (t.last > now + 0.1 || now - t.last > 1.0)
+			g_tanks.erase(g_tanks.begin() + (std::ptrdiff_t)i);
+	}
+
+	g_splash_stats.tanks = (int)tanks.size();
+
 	if (!g_device || !g_card_vs || !g_card_ps || !g_in_frame || !toFrame ||
-		(g_splashes.empty() && g_sprays.empty()))
+		(g_splashes.empty() && g_sprays.empty() && tanks.empty()))
 		return;
 
 	// Every card of the frame, with the body whose colour it wears.
@@ -14078,7 +14463,27 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 		}
 	}
 
-	if (cards.empty())
+	// The tanks' bursts, out of the tank's frame into the world.
+	for (size_t i = 0; i < tanks.size(); i++)
+	{
+		const LiveTank& t = tanks[i];
+		HDCard burst[kTankBurstCards];
+		const int n = HDTankBurst(g_tank_shape, t.seed,
+			(float)(now - t.born), burst, kTankBurstCards);
+
+		for (int k = 0; k < n && (int)cards.size() < kCardCap; k++)
+		{
+			HDCard c = burst[k];
+
+			c.x = t.x + burst[k].x * t.c + burst[k].z * t.s;
+			c.y = t.y + burst[k].y;
+			c.z = t.z + burst[k].z * t.c - burst[k].x * t.s;
+			cards.push_back(c);
+			owner.push_back(tankBody[i]);
+		}
+	}
+
+	if (cards.empty() && tanks.empty())
 		return;
 
 	/* Each card's middle into the frame's world and on into view space,
@@ -14133,6 +14538,103 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 		}
 
 		g_splash_stats.cards++;
+	}
+
+	/* The tanks' water: each quad of the classic mesh as two triangles,
+	 * every vertex at its moment (hd_splash_math.h, HDTankDomePoint) into
+	 * the world and on into view space; its share out of the angle between
+	 * the eye and the surface there (the mean of its quads' normals, taken
+	 * across their diagonals, so a quad's winding does not matter) and the
+	 * page running down the water. Drawn before the cards, which stand in
+	 * front of it. */
+	std::vector<CardVertex> dome;
+	const size_t meshVerts = g_tank_xyz.size() / 3;
+	std::vector<float> at(meshVerts * 3), way(meshVerts), normal;
+
+	for (size_t i = 0; i < tanks.size() && meshVerts; i++)
+	{
+		const LiveTank& t = tanks[i];
+		const float age = (float)(now - t.born);
+		const HDTankDome d = HDTankDomeAt(age);
+
+		if (!d.alive || d.share <= 0.0f)
+			continue;
+
+		for (size_t v = 0; v < meshVerts; v++)
+		{
+			float p[4];
+
+			HDTankDomePoint(g_tank_shape, d, &g_tank_xyz[v * 3], p);
+
+			const float wx = t.x + p[0] * t.c + p[2] * t.s;
+			const float wy = t.y + p[1];
+			const float wz = t.z + p[2] * t.c - p[0] * t.s;
+			const float fx = wx * m[0] + wy * m[4] + wz * m[8] + m[12];
+			const float fy = wx * m[1] + wy * m[5] + wz * m[9] + m[13];
+			const float fz = wx * m[2] + wy * m[6] + wz * m[10] + m[14];
+
+			for (int k = 0; k < 3; k++)
+				at[v * 3 + (size_t)k] = fx * g_view[k] + fy * g_view[4 + k] +
+					fz * g_view[8 + k] + g_view[12 + k];
+
+			way[v] = p[3];
+		}
+
+		normal.assign(meshVerts * 3, 0.0f);
+
+		for (size_t q = 0; q + 3 < g_tank_quads.size(); q += 4)
+		{
+			const float* a = &at[(size_t)g_tank_quads[q] * 3];
+			const float* b = &at[(size_t)g_tank_quads[q + 1] * 3];
+			const float* c = &at[(size_t)g_tank_quads[q + 2] * 3];
+			const float* e = &at[(size_t)g_tank_quads[q + 3] * 3];
+			const float u[3] = { c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+			const float w[3] = { e[0] - b[0], e[1] - b[1], e[2] - b[2] };
+			const float n[3] = { u[1] * w[2] - u[2] * w[1],
+				u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0] };
+			const float len = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+			for (int k = 0; k < 4 && len > 0.0f; k++)
+				for (int j = 0; j < 3; j++)
+					normal[(size_t)g_tank_quads[q + (size_t)k] * 3 + j] +=
+						n[j] / len;
+		}
+
+		float tint[3], light;
+
+		card_tint(tankBody[i], tint, &light);
+
+		static const int kQuadTriangles[6] = { 0, 1, 2, 0, 2, 3 };
+
+		for (size_t q = 0; q + 3 < g_tank_quads.size(); q += 4)
+			for (int k = 0; k < 6; k++)
+			{
+				const size_t v = (size_t)g_tank_quads[q +
+					(size_t)kQuadTriangles[k]];
+				const float* p = &at[v * 3];
+				const float* n = &normal[v * 3];
+				const float pl = sqrtf(p[0] * p[0] + p[1] * p[1] +
+					p[2] * p[2]);
+				const float nl = sqrtf(n[0] * n[0] + n[1] * n[1] +
+					n[2] * n[2]);
+				const float cosine = pl > 0.0f && nl > 0.0f ? -(p[0] * n[0] +
+					p[1] * n[1] + p[2] * n[2]) / (pl * nl) : 1.0f;
+				CardVertex cv;
+
+				cv.x = p[0];
+				cv.y = p[1];
+				cv.z = p[2];
+				cv.u = g_tank_xyz[v * 3] / kTankDomeAcross;
+				cv.v = (way[v] - kTankDomeFall * age) / kTankDomeAlong;
+				cv.cx = 0.0f;
+				cv.cz = 0.0f;
+				cv.r = tint[0];
+				cv.g = tint[1];
+				cv.b = tint[2];
+				cv.a = HDTankDomeShare(d, cosine);
+				cv.light = light;
+				dome.push_back(cv);
+			}
 	}
 
 	// The device's state as the frame left it, put back below.
@@ -14220,6 +14722,13 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 	g_device->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 	g_device->SetSamplerState(6, D3DSAMP_SRGBTEXTURE, FALSE);
 	g_device->SetTexture(6, soft ? g_depth_texture : 0);
+
+	if (!dome.empty() && HDPageCacheTexture(kCardPages[HD_CARD_SPRAY2]))
+	{
+		g_device->SetTexture(0, HDPageCacheTexture(kCardPages[HD_CARD_SPRAY2]));
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(dome.size() / 3),
+			&dome[0], sizeof(CardVertex));
+	}
 
 	for (int p = 0; p < 3; p++)
 	{

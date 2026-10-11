@@ -2125,7 +2125,14 @@ bool HDWaterSpray(long x, long y, long z, long strength)
  * out (game\lasers.cpp) - over the squares of its box as
  * InitialiseFloorLasers lays it (game\init.cpp: v1 at -512, -512 from the
  * item, v4 at its trigger_flags' width and height in squares less 512),
- * at the item's floor. RICH2 has two: its two tanks. */
+ * at the item's floor. RICH2 has two tanks; the one in room 23 has a
+ * film.
+ *
+ * The FISHTANK mesh goes to the renderer first, for the tank's water
+ * (hd_render.cpp, "the tank's water"): its vertices as DrawScaledSpike
+ * places them, at the item's place without a frame offset, and its quads
+ * and triangles (a triangle as a quad whose last corner repeats its
+ * third). */
 struct WaterFilmItems
 {
 	short tank, laser;
@@ -2133,10 +2140,42 @@ struct WaterFilmItems
 
 static std::vector<WaterFilmItems> g_film_items;
 
+static void TankMeshToRenderer()
+{
+	const OBJECT_INFO& obj = objects[FISHTANK];
+	std::vector<float> xyz;
+	std::vector<int> quads;
+
+	if (obj.loaded && obj.nmeshes > 0 && obj.mesh_index >= 0 &&
+		obj.mesh_index < num_level_meshes)
+	{
+		const MESH_DATA* mesh = mesh_vtxbuf[obj.mesh_index];
+
+		for (int v = 0; mesh && mesh->aVtx && v < mesh->nVerts; v++)
+		{
+			xyz.push_back(mesh->aVtx[v].x);
+			xyz.push_back(mesh->aVtx[v].y);
+			xyz.push_back(mesh->aVtx[v].z);
+		}
+
+		for (int q = 0; mesh && mesh->gt4 && q < mesh->ngt4; q++)
+			for (int k = 0; k < 4; k++)
+				quads.push_back(mesh->gt4[q * 6 + k]);
+
+		for (int q = 0; mesh && mesh->gt3 && q < mesh->ngt3; q++)
+			for (int k = 0; k < 4; k++)
+				quads.push_back(mesh->gt3[q * 5 + (k < 3 ? k : 2)]);
+	}
+
+	HDRenderWaterTankMesh(xyz.empty() ? 0 : &xyz[0], (int)xyz.size() / 3,
+		quads.empty() ? 0 : &quads[0], (int)quads.size() / 4);
+}
+
 static void BuildWaterFilms()
 {
 	std::vector<HDWaterFilm> films;
 
+	TankMeshToRenderer();
 	g_film_items.clear();
 
 	for (int t = 0; t < level_items; t++)
@@ -2200,6 +2239,19 @@ static void FeedWaterFilms()
 	}
 }
 
+/* A FISHTANK's mesh as the classic draw is about to draw it
+ * (game\traps.cpp, DrawScaledSpike): handed to the renderer for the tank's
+ * water of this frame. */
+bool HDWaterTank(const ITEM_INFO* item)
+{
+	if (!item || !HDLevelActive() || !tomb5.hd_water || !tomb5.hd_motion)
+		return false;
+
+	return HDRenderWaterTank((int)(item - items), (float)item->pos.x_pos,
+		(float)item->pos.y_pos, (float)item->pos.z_pos, item->pos.y_rot,
+		item->item_flags[1], -1.0f);
+}
+
 /* The pages of the cards, appended to the level's page cache - with the
  * sheets alone: tomb5.hd_water 0 loads nothing more. */
 static void AppendWaterCardPages()
@@ -2224,15 +2276,16 @@ static void AppendWaterCardPages()
  * identity view).
  *
  * SPLASHLOG, with -log, once a second of game time (30 ticks) while a
- * splash, a card or a wet film draws:
+ * splash, a card, a wet film or a breaking tank's water draws:
  *
  *   SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
- *             tank=<item>:<state>
+ *             tank=<item>:<state> tanks=<n>
  *
  * splashes the HD splashes alive, cards the cards drawn this frame, rings
  * the splash rings handed to the sheets (two a splash), tank the item of
  * the first wet film's FISHTANK and that film's strength 0..1 (-1:0.00
- * when none is wet). */
+ * when none is wet), tanks the breaking tanks whose water the frame drew
+ * ("the tank's water"). */
 static void DrawWaterCards()
 {
 	static long logged = -1;
@@ -2267,13 +2320,14 @@ static void DrawWaterCards()
 
 	HDRenderSplashStatsNow(&st);
 
-	if (!gLogEnabled || (!st.cards && !st.rings && st.wet <= 0.0f) ||
-		GlobalCounter / 30 == logged)
+	if (!gLogEnabled || (!st.cards && !st.rings && st.wet <= 0.0f &&
+		!st.tanks) || GlobalCounter / 30 == logged)
 		return;
 
 	logged = GlobalCounter / 30;
-	Log("SPLASHLOG level=%s splashes=%d cards=%d rings=%d tank=%d:%.2f",
-		g_stem, st.splashes, st.cards, st.rings, st.tank, st.wet);
+	Log("SPLASHLOG level=%s splashes=%d cards=%d rings=%d tank=%d:%.2f "
+		"tanks=%d", g_stem, st.splashes, st.cards, st.rings, st.tank, st.wet,
+		st.tanks);
 }
 
 static void BuildWaterSheets()
@@ -2372,6 +2426,18 @@ static void BuildWaterSheets()
 		gLogEnabled)
 		Log("HDLOG water depth texture refused: %s - the sheets read the "
 			"classic floor's depth", refused);
+
+	/* The water's shaders warmed once, now, so the first frame that shows
+	 * a sheet does not wait for the driver (hd_render.cpp, "the
+	 * warm-up"). A new line with -log: the whole time and each draw's. */
+	double warm[8];
+	const double warmed = HDRenderWaterWarmUp(warm, 8);
+
+	if (warmed >= 0.0 && gLogEnabled)
+		Log("HDLOG level=%s water warm-up %.2f ms: sheet %.2f, depth %.2f, "
+			"under %.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
+			"cards %.2f", g_stem, warmed, warm[0], warm[1], warm[2], warm[3],
+			warm[4], warm[5], warm[6], warm[7]);
 
 	/* WATERLOG, with -log: one level line and one line per body - the
 	 * legend is over HDRenderWaterLogLine in hd_render.cpp, which writes

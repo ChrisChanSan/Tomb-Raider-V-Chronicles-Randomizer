@@ -35,6 +35,7 @@
 #include "camera.h"
 #include "../specific/input.h"
 #include "lara.h"
+#include "../specific/hd/hd_level.h"	// HDWaterTank
 
 short SPxzoffs[8] = {0, 0, 0x200, 0, 0, 0, -0x200, 0};
 short SPyoffs[8] = {-0x400, 0, -0x200, 0, 0, 0, -0x200, 0};
@@ -1171,6 +1172,12 @@ void DrawScaledSpike(ITEM_INFO* item)
 	long clip, rate;
 
 	if ((item->object_number == TEETH_SPIKES && !item->item_flags[1]) || item->object_number == RAISING_BLOCK1 && item->trigger_flags <= -1)
+		return;
+
+	/* A fish tank's water the HD path draws as its own (hd_level.h,
+	 * HDWaterTank): the classic mesh stays out; item_flags[1] runs on as
+	 * before. Never true on the classic path. */
+	if (item->object_number == FISHTANK && HDWaterTank(item))
 		return;
 
 	r = &room[item->room_number];

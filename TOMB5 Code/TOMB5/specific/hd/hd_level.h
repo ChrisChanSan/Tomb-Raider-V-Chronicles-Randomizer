@@ -270,6 +270,16 @@ struct SPLASH_SETUP;
 bool HDWaterSplash(const SPLASH_SETUP* setup);
 bool HDWaterSpray(long x, long y, long z, long strength);
 
+/* A breaking fish tank's water (hd_render.cpp, "the tank's water"):
+ * DrawScaledSpike's (game\traps.cpp) for a FISHTANK, before the classic
+ * mesh is drawn - true when the HD path draws this tank's water this
+ * frame (HD on, tomb5.hd_water and tomb5.hd_motion on, the cards ready
+ * and the level's FISHTANK mesh known), and the classic mesh is then left
+ * out. Reads the item only. With hd_enable off it is false at its first
+ * test. */
+struct ITEM_INFO;
+bool HDWaterTank(const ITEM_INFO* item);
+
 /* Whether a frame draws a static mesh the classic way. Worked out once at
  * level load against the .TRG's own geometry (hd_level.cpp,
  * BuildStaticTables; the rule: hd_cover.h, HDStaticAnswer);

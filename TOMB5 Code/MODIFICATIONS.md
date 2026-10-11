@@ -4923,6 +4923,130 @@ the four pictures.
 
 **Commits.** `96ebca9`, `ae47055`, `8f657cd`, `ecc3c20`
 
+**Round 6: the tower with the owner's log, the hull rule, the four views, the owner's
+P2-02 choice (2026-10-12).** For the tower of ANDREA2 the owner sent a run with the log
+on and a video of the moment: Lara stands by the church gate in the alley with the
+lantern and the wheel, the camera swings, and the tower pops. For the lift of RICH2 he
+wants the rule for art far outside its own room behind a switch, to compare in the game.
+For the empty window he chose the answer as built, in his words: only there are the
+faults gone. And he wrote that JOBY2 still has trouble at the stairs: black shards in the
+air between the riveted pillar and the staircase with a hole into another area, and in
+the rainy court a few black fragments left of the bars on the container's edge.
+
+**The tower.** The video and the log share no clock; they were matched by the camera's
+swing: the lantern's place on the screen against the bearing of the logged eye to its
+fixed target (65,420, -409, 37,218), fourteen turning points in the same order and of
+the same rank, tick = 16.479 x frame + 24,832 with 27 ms between them on average and 59
+at most. The two steps the frame-difference pass found, at 6.13 and 7.20 seconds, fall
+on the log's frames 3,648 and 3,823, where room 222 leaves and joins the list. The walk
+of the probe from the logged eyes lists what the log lists at 49 of 50 frames where a
+room joins, and of all the rooms that come and go in the swing only room 222 changes the
+picture: 4,038 to 4,536 pixels at 1280 x 720, all of them clear colour without it. Room
+222's art there is the tower, 286 triangles standing over room 232, a room under the
+sky, beside the alley; room 222 itself lies 3,000 units further on and the walk lists
+it only through a portal of room 224 at the right edge of the screen, two pixels wide at
+frame 3,031 and gone a few degrees further round. The classic frame shows sky there:
+room 222's classic faces add no pixel. The camera's swing over the gate took the portal
+on and off the screen seven times in eight seconds, and the tower with it.
+
+**The rule.** A room the walk lists with a classic window and that lies under the sky
+(ROOM_OUTSIDE) takes in the rooms whose art stands in its inside, as rooms with no
+window of their own and with its reach; their portals are not followed, and the budget
+may trim them like any room the reach brings (`CarryArt` in `game\draw.cpp`,
+`HDRoomCarries` in `hd_level.cpp`, `CarryHostsOf` and `HDCarryBoxHolds` in the renderer:
+a triangle whose centroid stands outside its own room's inside and inside the inside of
+a room under the sky that is not its flipmap twin). 583 such pairs over the fifteen
+levels, from 1 triangle to 26,769; no count is asked, since a room carried for a sliver
+is drawn by the depth test like any room the reach brings. Only with `hd_air` 1 or 2.
+The ROOMWALK reach line ends in `carried=`, the rooms taken in that way over the second;
+one `HDLOG carry level= host= group= tris=` line per pair and a total line follow the
+intrusion report; RoomProbe's walk mirrors it and prints the same pairs, the same at
+ANDREA2 (40), RICH2 (28), ANDY3 (163) and JOBY2 (8) as the build counts them. At the
+seven frames of the log where room 222 left the list, it now stays, and the picture
+gains the tower: 4,052 to 4,604 pixels, all of them clear colour before. At the frame of
+the CAMLOG door line the order named (1,577) nothing changes.
+
+**The hull rule, `hd_air` 2.** Measured with `TrgProbe -roomspace` over the fifteen
+levels (the new `hull census` lines): 85 groups have art in the air of a room their own
+room has no link with that no intrusion box holds. The share of a group's art outside
+its own room does not tell the lift from the street: 0.891 for RICH2's room 61, 0.997 to
+0.998 for ANDREA2's bundles 10, 217 and 236, 0.994 for 131, 0.899 and 0.635 for the
+palms of 127 and 117. What does: whether that art stands where its host's own art
+stands, asked per 256-unit world cell. Room 61 has 51,547 such triangles, 36,285 of
+them on its hosts' own art (0.70) - a second hull of the shaft's floors 62 to 65 -;
+the bundles 0.00 to 0.06, the palms 0.00, the highest below the hulls RICH2's 57 at
+0.44, the lowest hull 0.59. A group is a hull above one half. Fourteen groups are:
+RICH2 61 (51,475 triangles in the build's count), 26 (984) and 142 (9), ANDREA1 68 in
+111 (5,120) and 82 (322), JOBY2 110 (3,690) and 135 (4,280), ANDREA2 219 (67), JOBY5 61
+(466), JOBY4 34, ANDY1 145 and 164, ANDY2 233 and TITLE 54 (3 to 21). With `hd_air` 2
+that art of a hull becomes a piece of its own, held to its room's window like the air
+art a box holds (`MarkAirHulls`, run before the groups are filled; one `HDLOG hull
+level= group= air_tris= host_art= hull=` line per group with such art). `hd_air` is a
+number now: 0, 1 (the default), 2; any other value reads as 1. RoomProbe `-air 2` draws
+it. On the lift ride rebuilt from the earlier log (40 steps, 640 x 360), `hd_air` 2
+takes 17,260 to 38,623 pixels at each of the 13 steps where room 61 is listed and none
+elsewhere, with no new clear colour; on the 12 fine steps where room 61 joins the list
+it takes 15,779 to 20,760 at each of the nine steps with room 61. Which of 1 and 2 the
+game keeps is the owner's choice.
+
+**The four views of round 5.** With the classic frame cut to each room's window (the
+new `RoomProbe -classicclip`: each room's classic faces inside its window of `-roomwin`,
+none for a room with no window), the clear colour the corner-height fix gave: RICH2 114
+at yaw 270 (4,095), ANDREA1 110 at yaw 0 (2,978) and ANDREA2 95 at yaw 90 (360) fall
+where the classic frame shows nothing - ghosts gone. JOBY2 33 at yaw 270 (395) falls on
+room 33's own classic wall, seen from inside room 33: a hole. The rays find group 31's
+art there, standing in room 24's air 1,150 units off, just behind room 33's wall plane
+at x 28,672, where group 33 draws no opaque wall; held by the box of 31 in 24 since the
+corner heights are asked, it is drawn only in room 31's window. Not changed here.
+
+**JOBY2's stairs and court.** At the stair ghost's pose and at 96 camera places round
+the stairs' foot (eight eyes in room 28, 1,900 units up, yaw every 30 degrees) the clear
+colour never falls on a classic face; the shards were not found offline. The hole of
+the view above is the nearest candidate: the same kind of art, a wall of one room drawn
+by the group of a room behind it, near the same stairs. The fragments of the bars in
+the court were not taken apart in this round.
+
+**The empty window.** The owner chose the answer as built: a group whose window is
+empty keeps none of its boxed air art. The hole it leaves in RICH2's room 114 looks out
+into the void and is never seen in play, and the shaft's art does not reach room 25,
+where it would show. `RoomProbe -unlinked 2` stays as the other answer, to compare.
+
+**Checked.** RoomProbe and TrgProbe built from this round. At the 201 views of the rounds
+before (the 22 places, the 16 mass views, the 131 sweep views, the 32 earlier views) `-air
+0` gives the picture file of the `2d48e83` tool at all 201. The default answer gives the
+picture of the `0276156c` tool, byte for byte, at 20 of the 22 places, 13 of the 16 mass
+views, 104 of the 131 sweep views and 28 of the 32 earlier views; every other view is a
+room the walk now takes in, and none gains clear colour: the tower places by 17,030 and
+27,945 pixels (the tower), ANDREA3 115 at yaw 270 and 0 by 3,328,905 and 365,833 (rooms
+16, 25, 92 and 108 fill the arena's arches over clear colour; yaw 180 below the
+comparison's threshold), and of the 131 sweep views 24, by 410,643 pixels: ANDREA2 158 at
+yaw 90 by 141,592 (room 155 fills a wall opening, 34,980 of it clear colour before),
+ANDREA1 110 at yaw 0 by 132,507 (rooms 64, 82 and 103, 126,559 over clear colour), ANDREA2
+154 at yaw 270 by 82,367 (room 10's art drawn over art - its palms and street art a second
+time, where room 10 was not listed before) and at yaw 90 by 29,437, and twenty more of
+ANDREA2 by 3 to 6,181; of the 32 earlier views also ANDREA2 205 at yaw 90 by 168,689 and
+ANDREA1 101 at yaw 270 by 36. The five places lose their ghosts by the same pixels against
+`-unlinked 0` (41,734 and 34,315, 18,709, 14,448, 24,640, 5,396); room 101 under the flag
+0. Over the 131 `-unlinked 0` against 1 gives 204,049 pixels, 112,239 clear (216,318 and
+119,107 before): the one view that changes is ANDREA2 158 at yaw 90, where room 155 now
+covers the 12,269 pixels the air rule took. With `-air 2` the 22 places and the 16 mass
+views are the default's picture, the palms of rooms 127 of both levels among them; of the
+131 sweep views 21 change, by 45,185 pixels, RICH2's shaft rooms 35 to 38 by 1,104 to
+18,352, ANDREA1 102 and 218 at yaw 270 by 712 each (101 clear), ANDREA1 70 and 68 at yaw
+90 by 569 and 233, eleven more by 1 to 102; of the 32 earlier views 3, by 1,450.
+`-classicroom -classiconly` of ANDREA2 231, JOBY2 66 and 28, ANDY3 34 and ANDREA1 93, two
+directions each, gives the bytes of the `8691e82` tool at all 10. The walk's carrying runs
+only while the reach is on, which needs an HD level; `hd_enable` 0 never reaches it, nor
+the build. ModernTest 14,934 checks, MenuTest 42,627, InterpTest 729, LipsTest 270 with
+the `.OBJ` folder and 243 without, 0 failed.
+
+**Left.** The hole at JOBY2 33's wall (group 31's art over room 33's missing wall), for
+a rule that tells a wall of a third room from art in an unlinked room's air; the black
+shards at JOBY2's stairs, for a picture with the log on at that place; the bar fragments
+of the court; whether the game keeps `hd_air` 1 or 2.
+
+**Commits.** `24636b1`, `8a01eae`, `4d618a2`
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

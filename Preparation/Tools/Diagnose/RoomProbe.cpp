@@ -430,10 +430,14 @@
  *                     -hdwater 1; off without it.
  *     -tank item t    the fish tank `item` (FISHTANK) of the level t
  *                     seconds after it broke: its spray as cards out of
- *                     the points ControlFishtank sprays from, and the film
- *                     on its room's floor with its strength of that moment
- *                     (t under 0 the tank before it breaks). Needs -hdwater
- *                     1; off without it.
+ *                     the points ControlFishtank sprays from, the film on
+ *                     its room's floor with its strength of that moment and,
+ *                     while the tank runs, its water ("the tank's water":
+ *                     the burst out of the glass) (t under 0 the tank before
+ *                     it breaks). Needs -hdwater 1; off without it.
+ *     -tankleave spray|water  -tank without its spray, or without its
+ *                     water - a part's own pixels, against the picture with
+ *                     it; repeatable.
  *     -rippleat x,y,z  whether a game ripple there loses its classic
  *                     sprite to a sheet's ring (HDRenderWaterSheetUnder);
  *                     repeatable, printed after the WATERLOG lines.
@@ -2303,6 +2307,8 @@ static int g_splash_fall = 128;
  * which GetJointAbsPosition adds for joint 0. */
 static int g_tank_item = -1;
 static float g_tank_time = 0.0f;
+// -tankleave: 1 the spray, 2 the tank's water left out of the picture.
+static int g_tank_leave = 0;
 static int g_tank_film = -1;
 static float g_tank_root[3] = { 0.0f, 0.0f, 0.0f };
 static Tr5Item g_tank_place;
@@ -5905,8 +5911,8 @@ static void ProbeCardsFeed()
 			strength = strength > 64 ? 64 : strength;
 			lowest = wy > lowest ? wy : lowest;
 
-			if (HDRenderWaterSpray(wx, wy, wz, strength,
-				g_tank_time - (float)k / 30.0f))
+			if (!(g_tank_leave & 1) && HDRenderWaterSpray(wx, wy, wz,
+				strength, g_tank_time - (float)k / 30.0f))
 				sprays++;
 		}
 	}
@@ -5922,9 +5928,10 @@ static void ProbeCardsFeed()
 
 	// The tank's water while ControlFishtank runs it, as DrawScaledSpike
 	// hands it in the game (hd_level.cpp, HDWaterTank).
-	const bool water = state == 1 && HDRenderWaterTank(g_tank_item,
-		(float)g_tank_place.x, (float)g_tank_place.y, (float)g_tank_place.z,
-		g_tank_place.yRot, flags, g_tank_time);
+	const bool water = state == 1 && !(g_tank_leave & 2) &&
+		HDRenderWaterTank(g_tank_item, (float)g_tank_place.x,
+		(float)g_tank_place.y, (float)g_tank_place.z, g_tank_place.yRot,
+		flags, g_tank_time);
 
 	printf("-tank: the tank's water %s\n", water ? "drawn" : "not drawn");
 
@@ -8771,11 +8778,22 @@ static int ProbeMain(int argc, char** argv)
 			g_splash_kind = atoi(argv[++at]);
 		else if (!strcmp(argv[at], "-splashfall") && at + 1 < argc)
 			g_splash_fall = atoi(argv[++at]);
-		else if (!strcmp(argv[at], "-tank") && at + 2 < argc)
+		else if ((!strcmp(argv[at], "-tank") && at + 2 < argc) ||
+			(!strcmp(argv[at], "-tankleave") && at + 1 < argc))
 		{
-			g_tank_item = atoi(argv[at + 1]);
-			g_tank_time = (float)atof(argv[at + 2]);
-			at += 2;
+			// One branch for both: the chain is at the compiler's depth.
+			if (argv[at][5])
+			{
+				at++;
+				g_tank_leave |= !strcmp(argv[at], "spray") ? 1 :
+					!strcmp(argv[at], "water") ? 2 : 0;
+			}
+			else
+			{
+				g_tank_item = atoi(argv[at + 1]);
+				g_tank_time = (float)atof(argv[at + 2]);
+				at += 2;
+			}
 		}
 		else if (!strcmp(argv[at], "-lara") && at + 1 < argc)
 		{

@@ -18442,6 +18442,34 @@ static void splash_tank_burst()
 		4, 4);
 }
 
+/* The tank's spray: a spark's card stands on its point (its lower edge
+ * there, not half of it under the floor) and is as strong as a crown card
+ * of the middle ring at the whole strength. */
+static void splash_tank_spray()
+{
+	printf("the splash: the tank's spray\n");
+
+	bool stands = true;
+	float most = 0.0f;
+
+	for (unsigned int seed = 1; seed < 100; seed++)
+		for (int k = 0; k < 14; k++)
+		{
+			HDCard p;
+			const float t = (float)k / 30.0f;
+
+			if (!HDTankPuff(0.0f, 0.0f, 0.0f, 64, seed, t, &p))
+				continue;
+
+			stands = stands && p.y + p.tall <= 0.5f && p.tall > 0.0f;
+			most = p.alpha > most ? p.alpha : most;
+		}
+
+	ok(stands, "a spray card stands on its spark's point", stands, 1);
+	ok(most == kTankSprayShare && kTankSprayShare == 0.8f,
+		"and is 0.8 strong at the whole strength", (long)(most * 10.0f), 8);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -18572,6 +18600,7 @@ int main()
 	splash_fade();
 	splash_tank();
 	splash_tank_burst();
+	splash_tank_spray();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

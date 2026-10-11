@@ -382,8 +382,21 @@ inline bool HDSplashRings(const HDSplashSetup& s, float seconds, float* out)
  *
  * HDTankPuff gives the card at `seconds` after the spark was made; false
  * when it is gone. `c` the strength TriggerFishtankSpray took (0..64 after
- * its halving), the share 0.35 times c over 64 - 0.35 a free choice, set by
- * eye on the round's RoomProbe pictures. */
+ * its halving), the share kTankSprayShare times c over 64. The card
+ * stands on the spark's point, its middle its half height over it: the
+ * spark starts on the floor (joint 0 lies 1 unit over the item), and a
+ * card round its point hid its lower half under the floor and kept the
+ * rest within the soft edge's 64 units of it.
+ *
+ * kTankSprayShare 0.8, the dive splash's crown's (1.0 on its inner ring,
+ * 0.8 on its middle one): the spray is the same water thrown up. At
+ * 0.35 and round its point the spray of the tank in RICH2 room 122 added
+ * 23 to the brightness of the pixels it touched at 1 s, and the one in
+ * room 23, whose points lie inside the 256 high step before its glass,
+ * showed on 1 % of the picture (RoomProbe -tank with and without
+ * -tankleave spray, 1920 x 1080). */
+const float kTankSprayShare = 0.8f;
+
 inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,
 	float seconds, HDCard* out)
 {
@@ -451,7 +464,9 @@ inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,
 	out->z = z + pz1 + ((float)pz - pz1) * part;
 	out->half = 4.0f * ((float)size0 + (float)(dSize - size0) * grow);
 	out->tall = out->half;
-	out->alpha = 0.35f * (float)c / 64.0f * (share > 0.0f ? share : 0.0f);
+	out->y -= out->tall;
+	out->alpha = kTankSprayShare * (float)c / 64.0f *
+		(share > 0.0f ? share : 0.0f);
 	out->page = (h >> 26) & 1 ? HD_CARD_SPRAY : HD_CARD_SPRAY2;
 	out->size = 0.5f;
 	out->u = 0.5f * HDCardShare(seed, 81u);

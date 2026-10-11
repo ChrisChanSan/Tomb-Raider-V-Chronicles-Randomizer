@@ -17957,6 +17957,56 @@ static void life_keep()
 		"other water does not", moved, 0);
 }
 
+/* A fish tank (HDLifeAddTank): RICH2's row gives a body of its two
+ * squares and a school of 8, which stays in the tank's box, calm and
+ * darting from Lara at the glass, and rests while the tank is gone. */
+static void life_tank()
+{
+	HDLifePool p = {};
+	unsigned state = 11;
+	const HDLifeTank& t = kHDLifeTanks[0];
+
+	p.has[HD_LIFE_FISH] = 1;
+	p.reach[HD_LIFE_FISH] = 87.0f;
+	p.last = -1.0f;
+	HDLifeAddTank(p, t, life_draw, &state);
+
+	int outside = 0;
+
+	for (int k = 1; k <= 30 * 30; k++)
+	{
+		const float s = k / 30.0f;
+
+		// Lara at the glass from 10 to 12 seconds.
+		HDLifeTick(p, 0, s, s >= 10.0f && s < 12.0f, (float)t.x1 + 200.0f,
+			0.5f * (t.z0 + t.z1), 0);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, p.entries[i], s, &x, &y, &z, &yaw, &pitch, &roll);
+			outside += x < t.x0 + 87.0f || x > t.x1 - 87.0f || z < t.z0 +
+				87.0f || z > t.z1 - 87.0f || y < t.top || y > t.bottom;
+		}
+	}
+
+	ok(p.bodies.size() == 1 && p.bodies[0].tank && p.bodies[0].index == -1 &&
+		p.bodies[0].squares.size() == 2 && p.fish == t.fish &&
+		p.schools[0].darts >= 1 && outside == 0,
+		"life tank: eight fish keep inside the tank, calm and darting from "
+		"Lara at the glass", outside, 0);
+
+	const HDLifePool before = p;
+
+	p.bodies[0].gone = 1;
+	HDLifeTick(p, 0, 40.0f, 1, (float)t.x1 + 200.0f, 0.5f * (t.z0 + t.z1),
+		0);
+	ok(p.schools[0].cx == before.schools[0].cx &&
+		p.schools[0].darts == before.schools[0].darts,
+		"life tank: a shot tank's school rests", 0, 0);
+}
+
 static void life_flee()
 {
 	HDLifeBody b = life_body(4, 4, 2048);
@@ -18853,6 +18903,7 @@ int main()
 	life_rings();
 	life_apart();
 	life_keep();
+	life_tank();
 	life_flee();
 	life_bob();
 	life_depth();

@@ -1834,6 +1834,9 @@ struct LifeRoom
 	std::vector<int> ceiling, above;
 };
 static std::vector<LifeRoom> g_life_rooms;
+/* -lifetank 0|1: a fish tank whole (1, the default) or shot (0: its fish
+ * are gone, as the engine has it once the FISHTANK item is set off). */
+static bool g_life_tank_whole = true;
 static HDLifePool g_life_pool;
 static const HDLifeLevel* g_life_row = 0;
 static float g_life_box[HD_LIFE_KINDS][6];
@@ -2017,6 +2020,18 @@ static void LifeBuild(const char* root, const char* stem)
 
 	HDLifeBuild(g_life_pool, *g_life_row, LifeDraw, &state);
 
+	// The level's fish tanks, whole or shot as -lifetank says.
+	for (size_t i = 0; i < sizeof(kHDLifeTanks) / sizeof(kHDLifeTanks[0]);
+		i++)
+		if (!_stricmp(kHDLifeTanks[i].stem, stem))
+		{
+			HDLifeAddTank(g_life_pool, kHDLifeTanks[i], LifeDraw, &state);
+			g_life_pool.bodies.back().gone = g_life_tank_whole ? 0 : 1;
+
+			for (int k = 0; k < 3; k++)
+				g_life_light.push_back(kHDLifeTankLight);
+		}
+
 	// The drips' ceilings and their drops' fall, as the engine finds them.
 	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
 	{
@@ -2064,7 +2079,8 @@ static void LifeBuild(const char* root, const char* stem)
 		printf("LIFELOG level=%s body=%d water=%d class=%s squares=%d "
 			"rise=%.1f flow=%.2f,%.2f,%.0f floats=%d fish=%d drips=%d "
 			"deep=%d closed=%d %s\n", stem, (int)bi, b.index,
-			b.river ? "river" : b.channel ? "channel" : "other",
+			b.tank ? "tank" : b.river ? "river" : b.channel ? "channel" :
+			"other",
 			(int)b.squares.size(), b.rise, b.flowX, b.flowZ, b.speed, floats,
 			fish, drips, HDLifeDeepCount(b), closed, tail);
 	}
@@ -2355,7 +2371,8 @@ static void LifeFrame(const float* view, const D3DMATRIX* projection,
 		const HDLifeEntry& e = g_life_pool.entries[i];
 		float x, y, z, yaw, pitch, roll;
 
-		if (!g_life_pool.has[e.kind])
+		if (!g_life_pool.has[e.kind] ||
+			g_life_pool.bodies[(size_t)e.body].gone)
 			continue;
 
 		HDLifePose(g_life_pool, e, t, &x, &y, &z, &yaw, &pitch, &roll);
@@ -8639,6 +8656,8 @@ static int ProbeMain(int argc, char** argv)
 			"drawn as the game draws them; LIFELOG lines\n");
 		printf("       -lifelara x,z[,t]   Lara's place for -life from clock "
 			"t: the school flees her, the drips near her ring\n");
+		printf("       -lifetank 0|1   a fish tank shot (0: its fish "
+			"gone) or whole (1, the default)\n");
 		printf("       -lifesplash x,z,t   a splash on the water at "
 			"world x, z for two seconds from clock t: the school of that "
 			"water darts off, repeatable\n");
@@ -8934,14 +8953,17 @@ static int ProbeMain(int argc, char** argv)
 			g_life_bench = true;
 		else if (!strcmp(argv[at], "-lifeall"))
 			g_life_all = true;
-		/* -lifesplash shares this branch: one more `else if` passes the
-		 * compiler's limit of nested blocks (C1061). */
+		/* -lifesplash and -lifetank share this branch: one more `else if`
+		 * passes the compiler's limit of nested blocks (C1061). */
 		else if ((!strcmp(argv[at], "-lifelara") ||
-			!strcmp(argv[at], "-lifesplash")) && at + 1 < argc)
+			!strcmp(argv[at], "-lifesplash") ||
+			!strcmp(argv[at], "-lifetank")) && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (!strcmp(argv[at], "-lifesplash"))
+			if (!strcmp(argv[at], "-lifetank"))
+				g_life_tank_whole = atoi(argv[++at]) != 0;
+			else if (!strcmp(argv[at], "-lifesplash"))
 			{
 				if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) == 3)
 					g_life_splash.insert(g_life_splash.end(), c, c + 3);

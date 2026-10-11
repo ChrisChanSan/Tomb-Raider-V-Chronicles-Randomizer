@@ -100,7 +100,39 @@ static const HDLifeLevel kHDLifeLevels[] =
 	{ "ANDREA2", 16, 1, 0, { 4, 3, 3, 1 }, 0, 1 },
 	{ "ANDY3", 8, 0, 1, { 0, 1, 4, 1 }, 1, 1 },
 	{ "ANDY1", 8, 0, 0, { 0, 1, 4, 1 }, 1, 1 },
+	// No body of RICH2 takes floats (its pool stays clean); its fish tank.
+	{ "RICH2", 100000, 0, 0, { 0, 0, 0, 0 }, 1, 0 },
 };
+
+/* A fish tank: life without a sheet, by room (HDLifeAddTank). RICH2's tank
+ * is an alcove in the wall of room 23 behind glass: the classic room 23
+ * has a wall at x 33,792 to 34,816, z 67,584 to 69,632, where its flip
+ * room 32 (the tank shot) has an empty alcove from y -3,840 to -2,816
+ * (SectorCheck on the classic RICH2.TRC: the two rooms differ there
+ * alone), a square deep, two wide, 1,024 high; the FISHTANK item 33 stands
+ * in front of it. Its school is 8 FISH2, a free choice - a tank shows
+ * more fish than a pond; they swim half a square under its top, as in a
+ * pond, 448 to 576 units under it with their sway, in the middle of its
+ * height. Its fish take the light of a body of light one (as a sheet's
+ * light, 255 here; hd_life.cpp), a free choice: its water is clear and lit
+ * by the room. The tank is whole while its FISHTANK item has not been set
+ * off - the shot that breaks it starts the item, which pours the water out
+ * as its spray (game\tower.cpp, ControlFishtank) and the room flips to
+ * the empty alcove; its fish go with that, at once. */
+struct HDLifeTank
+{
+	const char* stem;
+	int room;
+	int x0, x1, z0, z1;	// world, whole squares
+	int top, bottom;	// world y
+	int fish;
+};
+
+static const HDLifeTank kHDLifeTanks[] =
+{
+	{ "RICH2", 23, 33792, 34816, 67584, 69632, -3840, -2816, 8 },
+};
+static const float kHDLifeTankLight = 255.0f;
 
 /* The numbers of the rules. A float for three water squares and at most
  * twelve a body: twelve keeps three bodies of a level inside the
@@ -317,6 +349,11 @@ struct HDLifeBody
 	 * (HDLifeSpringPush). */
 	int spring = 0;
 	float springX = 0.0f, springZ = 0.0f;
+	/* 1 for a fish tank (HDLifeTank) - no water body of the sheets, its
+	 * index -1 -, and 1 while its life is gone: the tank was shot, its
+	 * fish are neither moved nor drawn (the caller sets it). */
+	int tank = 0;
+	int gone = 0;
 };
 
 // A float or a fish of the pool.
@@ -1344,6 +1381,75 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 	}
 }
 
+/* A fish tank's life, after HDLifeBuild: a body of its squares, each as
+ * deep as the tank is high, under a ceiling, in its room, with its top as
+ * the surface; and a school of the tank's count of fish in the middle of
+ * it, set up as a pond's (HDLifeBuild), its numbers from `draw`. */
+inline void HDLifeAddTank(HDLifePool& p, const HDLifeTank& t,
+	int (*draw)(void*), void* ctx)
+{
+	HDLifeBody b;
+
+	b.index = -1;
+	b.surfaceY = t.top;
+	b.flowX = b.flowZ = b.speed = 0.0f;
+	b.river = b.channel = 0;
+	b.rise = 0.0f;
+	b.upMin = b.upMax = 0.0f;
+	b.tank = 1;
+
+	for (int x = t.x0; x < t.x1; x += 1024)
+		for (int z = t.z0; z < t.z1; z += 1024)
+		{
+			HDLifeSquare s;
+
+			s.x = x;
+			s.z = z;
+			s.depth = t.bottom - t.top;
+			s.closed = 1;
+			s.room = t.room;
+			b.squares.push_back(s);
+		}
+
+	const int bi = (int)p.bodies.size();
+
+	p.bodies.push_back(b);
+	p.ringAt.push_back(-1.0e6f);
+
+	if (!p.has[HD_LIFE_FISH])
+		return;
+
+	HDLifeSchool s = {};
+
+	s.body = bi;
+	s.fish = t.fish;
+	s.cx = 0.5f * (float)(t.x0 + t.x1);
+	s.cz = 0.5f * (float)(t.z0 + t.z1);
+	s.target = HDLifeDeepSquare(p.bodies[(size_t)bi], draw(ctx));
+	s.retarget = kHDLifeRetarget;
+	s.heading = 0.0f;
+
+	for (int f = 0; f < s.fish; f++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_FISH;
+		e.body = bi;
+		e.index = (int)p.entries.size();
+		e.school = (int)p.schools.size();
+		e.ring = kHDLifeRingMin + kHDLifeRingSpan * (float)draw(ctx) /
+			32767.0f;
+		e.angle = 6.2831853f * (float)f / (float)s.fish;
+		e.x = s.cx;
+		e.z = s.cz;
+		e.phase = 6.2831853f * (float)draw(ctx) / 32767.0f;
+		p.entries.push_back(e);
+		p.fish++;
+	}
+
+	p.schools.push_back(s);
+}
+
 // A ring a drip asks for this tick: where, on which body, how large.
 struct HDLifeRing
 {
@@ -1804,7 +1910,8 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 			}
 
 		for (size_t i = 0; i < p.schools.size(); i++)
-			HDLifeSchoolTick(p, p.schools[i], (int)i, at, dt, laraOn, lx,
+			if (!p.bodies[(size_t)p.schools[i].body].gone)
+				HDLifeSchoolTick(p, p.schools[i], (int)i, at, dt, laraOn, lx,
 				lz, splash, splashes);
 
 		for (size_t i = 0; i < p.drips.size(); i++)

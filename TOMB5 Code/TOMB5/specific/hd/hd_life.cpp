@@ -30,6 +30,9 @@
 #include "../../game/control.h"
 #include "../../game/lara.h"
 #include "../../game/tomb4fx.h"
+#include "../../game/objects.h"
+
+#include <stdlib.h>
 
 #include <algorithm>
 #include <string.h>
@@ -44,6 +47,8 @@ namespace
 	 * HDObjectPush reads (its neutral light is 128); a body light of one
 	 * gives 255 here (HDLifeLevelBegin). */
 	std::vector<float> g_light;
+	// Per body, a tank's FISHTANK item (tank_item), -1 for none.
+	std::vector<int> g_tank_item;
 	// The per-second LIFELOG line's counts.
 	int g_second = -1;
 	int g_drawn = 0, g_skipped = 0, g_rings = 0, g_frames = 0;
@@ -160,6 +165,46 @@ namespace
 		return false;
 	}
 
+	/* The FISHTANK item in front of a tank: within two squares of its
+	 * middle, its room or not (a broken tank's item was taken off its room
+	 * by KillItem); -1 when the level has none. */
+	int tank_item(const HDLifeBody& b)
+	{
+		if (b.squares.empty())
+			return -1;
+
+		const int mx = b.squares.front().x / 2 + (b.squares.back().x +
+			1024) / 2;
+		const int mz = b.squares.front().z / 2 + (b.squares.back().z +
+			1024) / 2;
+
+		for (int i = 0; i < level_items; i++)
+		{
+			const ITEM_INFO& it = items[i];
+
+			if (it.object_number == FISHTANK && abs(it.pos.x_pos - mx) < 2048 &&
+				abs(it.pos.z_pos - mz) < 2048)
+				return i;
+		}
+
+		return -1;
+	}
+
+	/* Whether a tank is whole: its FISHTANK item has not been set off -
+	 * not active, never triggered (ITEM_INACTIVE) and its water at the
+	 * full 4,096 InitialiseFishtank gives it, which its spray takes down
+	 * (game\tower.cpp). A tank without one cannot break. */
+	bool tank_whole(int item)
+	{
+		if (item < 0)
+			return true;
+
+		const ITEM_INFO& it = items[item];
+
+		return !it.active && it.status == ITEM_INACTIVE &&
+			it.item_flags[1] >= 4096;
+	}
+
 	// a x b, 4x4 row-major, row vectors.
 	void mul44(const float* a, const float* b, float* out)
 	{
@@ -230,6 +275,7 @@ void HDLifeLevelEnd()
 {
 	g_pool = HDLifePool();
 	g_light.clear();
+	g_tank_item.clear();
 	g_row = 0;
 	g_stem[0] = 0;
 	g_second = -1;
@@ -334,7 +380,13 @@ void HDLifeLevelBegin(const char* stem)
 			g_light.push_back(info.light[k] * 255.0f);
 	}
 
-	const bool keep = again && HDLifeSameBodies(kept.bodies, g_pool.bodies);
+	std::vector<HDLifeBody> keptWater;
+
+	for (size_t i = 0; i < kept.bodies.size(); i++)
+		if (!kept.bodies[i].tank)
+			keptWater.push_back(kept.bodies[i]);
+
+	const bool keep = again && HDLifeSameBodies(keptWater, g_pool.bodies);
 
 	if (keep)
 	{
@@ -349,7 +401,29 @@ void HDLifeLevelBegin(const char* stem)
 		g_pool = kept;
 	}
 	else
+	{
 		HDLifeBuild(g_pool, *row, draw_random, 0);
+
+		for (size_t i = 0; i < sizeof(kHDLifeTanks) / sizeof(kHDLifeTanks[0]);
+			i++)
+			if (!_stricmp(kHDLifeTanks[i].stem, stem))
+				HDLifeAddTank(g_pool, kHDLifeTanks[i], draw_random, 0);
+	}
+
+	/* A tank's light (kHDLifeTankLight) and the FISHTANK item in front of
+	 * it, which a shot sets off (tank_whole). */
+	g_tank_item.assign(g_pool.bodies.size(), -1);
+
+	for (size_t bi = 0; bi < g_pool.bodies.size(); bi++)
+	{
+		if (!g_pool.bodies[bi].tank)
+			continue;
+
+		for (int k = 0; k < 3; k++)
+			g_light.push_back(kHDLifeTankLight);
+
+		g_tank_item[bi] = tank_item(g_pool.bodies[bi]);
+	}
 
 	// The drips' ceilings and their drops' fall (HDLifeDropTicks).
 	for (size_t i = 0; i < g_pool.drips.size(); i++)
@@ -410,7 +484,8 @@ void HDLifeLevelBegin(const char* stem)
 		Log("LIFELOG level=%s body=%d water=%d class=%s squares=%d "
 			"rise=%.1f flow=%.2f,%.2f,%.0f floats=%d fish=%d drips=%d "
 			"deep=%d closed=%d %s", g_stem, (int)bi, b.index,
-			b.river ? "river" : b.channel ? "channel" : "other",
+			b.tank ? "tank" : b.river ? "river" : b.channel ? "channel" :
+			"other",
 			(int)b.squares.size(), b.rise, b.flowX, b.flowZ, b.speed, floats,
 			fish, drips, HDLifeDeepCount(b), closed, tail);
 	}
@@ -445,6 +520,12 @@ void HDLifeFrame(double clock)
 
 	std::vector<HDLifeDrop> drops;
 
+	// A shot tank's fish are gone.
+	for (size_t bi = 0; bi < g_pool.bodies.size() && bi < g_tank_item.size();
+		bi++)
+		if (g_pool.bodies[bi].tank)
+			g_pool.bodies[bi].gone = tank_whole(g_tank_item[bi]) ? 0 : 1;
+
 	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings, wet, wets, &drops);
 
 	for (size_t i = 0; i < rings.size(); i++)
@@ -467,7 +548,7 @@ void HDLifeFrame(double clock)
 	{
 		const HDLifeEntry& e = g_pool.entries[i];
 
-		if (!g_pool.has[e.kind])
+		if (!g_pool.has[e.kind] || g_pool.bodies[(size_t)e.body].gone)
 			continue;
 
 		float x, y, z, yaw, pitch, roll;

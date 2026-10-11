@@ -8400,6 +8400,9 @@ static int ProbeMain(int argc, char** argv)
 		HDRenderCapOverride(capMaxTex, capNoIndex32);
 	}
 
+	// The build's fingerprint is always on in the tool (HDRenderBuildHash).
+	HDRenderBuildHash(1);
+
 	if (!HDRenderInit(g_device, &why))
 	{
 		printf("RoomProbe: HDRenderInit failed - %s\n", why);
@@ -9566,7 +9569,13 @@ static int ProbeMain(int argc, char** argv)
 			g.axis[0], g.axis[1], g.axis[2], g.lo, g.hi, g.fade);
 	}
 
-	printf("read %.0f ms, build %.0f ms\n", stats.readMs, stats.buildMs);
+	printf("read %.0f ms, build %.0f ms phases=", stats.readMs, stats.buildMs);
+
+	for (int p = 0; p < HD_BEGIN_PHASES; p++)
+		printf("%s%s:%.1f", p ? "," : "", HDRenderBeginPhaseName(p),
+			stats.phaseMs[p]);
+
+	printf(" hash=%016llx hash_ms=%.0f\n", stats.hash, stats.hashMs);
 
 	printf("\n-- the pages ------------------------------------------------\n");
 	printf("%d named, %d distinct: %d from 5, %d from 4, %d white, %d failed\n",

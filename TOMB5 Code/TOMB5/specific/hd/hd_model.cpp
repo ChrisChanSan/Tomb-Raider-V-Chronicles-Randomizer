@@ -331,6 +331,19 @@ namespace
 	 * HDModelLevelBegin and read out of it into HDModelStats::keyMs. */
 	double g_key_ms = 0;
 
+	/* HDModelBuildHash: on or off, and the FNV-1a 64 of the models built so
+	 * far in this level build - reset by HDModelLevelBegin, fed by build(). */
+	int g_model_hash_on = 0;
+	unsigned long long g_model_hash = 14695981039346656037ull;
+
+	void model_hash_add(const void* data, size_t bytes)
+	{
+		const unsigned char* p = (const unsigned char*)data;
+
+		for (size_t i = 0; i < bytes; i++)
+			g_model_hash = (g_model_hash ^ p[i]) * 1099511628211ull;
+	}
+
 	bool g_in_frame = false;
 	int g_draw_calls = 0;
 	int g_frame_bulbs = 0;
@@ -1834,6 +1847,23 @@ namespace
 			model.ib->Unlock();
 		}
 
+		if (g_model_hash_on)
+		{
+			model_hash_add(&buffer[0], vertex_bytes);
+			model_hash_add(&indices[0], index_bytes);
+
+			for (int pass = 0; pass < 3; pass++)
+				for (const Range& r : model.pass[pass])
+				{
+					const int fields[4] =
+					{
+						(int)r.start, (int)r.count, r.pageSlot, r.node
+					};
+
+					model_hash_add(fields, sizeof(fields));
+				}
+		}
+
 		if (base)
 			base->swap(buffer);
 
@@ -3034,6 +3064,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 	double trm_opens0 = 0, trm_loads0 = 0, trm_bytes0 = 0;
 
 	g_key_ms = 0;
+	g_model_hash = 14695981039346656037ull;
 	HDTrmCounters(&trm_opens0, &trm_loads0, &trm_bytes0);
 
 	if (stats)
@@ -4087,6 +4118,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		HDTrmCounters(&trm_opens1, &trm_loads1, &trm_bytes1);
 
 		stats->nodesFallback = stats->nodesTotal - stats->nodesCovered;
+		stats->hash = g_model_hash_on ? g_model_hash : 0;
 		stats->readMs = read_ms;
 		stats->buildMs = now_ms() - started - read_ms;
 
@@ -4135,6 +4167,11 @@ bool HDModelFindFile(const char* name, bool fromTr3, bool allowMods, char* out,
 
 	std::memcpy(out, path.c_str(), path.size() + 1);
 	return true;
+}
+
+void HDModelBuildHash(int on)
+{
+	g_model_hash_on = on ? 1 : 0;
 }
 
 void HDModelLevelEnd()

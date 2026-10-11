@@ -369,7 +369,17 @@ struct HDModelStats
 	double trmBytes;
 
 	HDPageCacheStats pageStats;	// what the append to the page cache did
+
+	/* The FNV-1a 64 of every model built, in build order (HDModelBuildHash):
+	 * its vertex and index bytes and its draw calls' starts, counts, page
+	 * slots and nodes. 0 while the hash is off. */
+	unsigned long long hash;
 };
+
+/* The model builds' fingerprint on or off for the builds that follow - the
+ * rooms' HDRenderBuildHash for the models. The engine turns it on with the
+ * log; the diagnostic tools always. */
+void HDModelBuildHash(int on);
 
 /* The object's lights.
  *

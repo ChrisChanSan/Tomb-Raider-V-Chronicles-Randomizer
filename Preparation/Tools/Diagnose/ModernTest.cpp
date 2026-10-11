@@ -17954,6 +17954,72 @@ static void life_apart()
 		(long)apart, (long)(kHDLifeApart * 484.0f));
 }
 
+/* The way on along a bank (HDLifeWayOn): a canal of two squares across
+ * running +z, ten long, with a side arm five squares west over its rows 5
+ * and 6 - ANDREA2's canal's shape. A float the current holds on the side
+ * arm's bank turns east; one at the end wall and one in the open channel
+ * do not; three floats on the side arm's bank reach the end row. */
+static void life_wayon()
+{
+	HDLifeBody b = life_body(0, 0, 2048);
+
+	for (int z = 0; z < 10; z++)
+		for (int x = 0; x < 7; x++)
+			if (x >= 5 || z == 5 || z == 6)
+			{
+				HDLifeSquare s = { x * 1024, z * 1024, 2048, 1 };
+
+				b.squares.push_back(s);
+			}
+
+	b.flowZ = 1.0f;
+	b.speed = 90.0f;
+
+	float vx = 0.0f, vz = 90.0f;
+
+	HDLifeWayOn(b, 2500.0f, 7168.0f - 128.0f, 128.0f, 100.0f, &vx, &vz);
+	ok(vx == 90.0f && vz == 90.0f,
+		"life way on: the side arm's bank turns a float toward the channel",
+		(long)vx, 90);
+
+	vx = 0.0f;
+	vz = 90.0f;
+	HDLifeWayOn(b, 5800.0f, 10240.0f - 128.0f, 128.0f, 100.0f, &vx, &vz);
+	HDLifeWayOn(b, 5800.0f, 3072.0f - 100.0f, 128.0f, 100.0f, &vx, &vz);
+	ok(vx == 0.0f && vz == 90.0f,
+		"life way on: the end wall and the open channel turn nothing",
+		(long)vx, 0);
+
+	HDLifePool p = {};
+
+	p.bodies.push_back(b);
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.reach[HD_LIFE_BOTTLE] = 70.0f;
+
+	for (int i = 0; i < 3; i++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_BOTTLE;
+		e.index = 40 + i;
+		e.x = 800.0f + 1500.0f * i;
+		e.z = 6900.0f;
+		p.entries.push_back(e);
+	}
+
+	int home = 0;
+
+	for (int k = 1; k <= 30 * 180; k++)
+		for (size_t i = 0; i < p.entries.size(); i++)
+			HDLifeFloatTick(p, 0, p.entries[i], k / 30.0f, 1.0f / 30.0f);
+
+	for (size_t i = 0; i < p.entries.size(); i++)
+		home += p.entries[i].z >= 9216.0f;
+
+	ok(home == 3, "life way on: three floats on the side arm's bank reach "
+		"the end row in three minutes", home, 3);
+}
+
 static int life_draw(void* state);
 
 /* A rebuild of the level keeps the pool (HDLifeSameBodies): the same water
@@ -18940,6 +19006,7 @@ int main()
 	life_drops();
 	life_rings();
 	life_apart();
+	life_wayon();
 	life_keep();
 	life_tank();
 	life_flee();

@@ -659,6 +659,88 @@ inline void HDLifeSpringPush(const HDLifeBody& b, float x, float z,
 	*vz += dz * s;
 }
 
+/* The way on along a bank. A current that drives a float square-on onto a
+ * bank - within its `margin` and kHDLifeWayNear more of its square's edge
+ * on the current's side, where the square past either end of its width
+ * (the margin each way across) does not hold it - turns along the bank
+ * toward the nearest square of the same row whose square past it does, at
+ * the current's speed: water a wall stops runs along it to where it can go
+ * on. A side arm the current crosses (ANDREA2's canal: its rows z 43008
+ * and 44032 reach five squares west of the main channel, whose +z bank
+ * held three of twelve floats against it for good, the wander of 60 units
+ * a second losing to the current's 90) so empties into the main channel.
+ * The row is searched kHDLifeWayReach squares each way as far as it holds
+ * the float; a row with no way on - the end wall of the canal - turns
+ * nothing, and the floats lie along it. The current's main axis decides
+ * which way is across. kHDLifeWayNear is an eighth of a square, a free
+ * choice: more than a step of a frame, less than a float's margin. */
+static const float kHDLifeWayNear = 128.0f;
+static const int kHDLifeWayReach = 16;
+
+inline void HDLifeWayOn(const HDLifeBody& b, float x, float z, float margin,
+	float need, float* vx, float* vz)
+{
+	if (b.speed <= 0.0f)
+		return;
+
+	const bool alongX = fabsf(b.flowX) >= fabsf(b.flowZ);
+	const int fx = alongX ? (b.flowX > 0.0f ? 1024 : -1024) : 0;
+	const int fz = alongX ? 0 : (b.flowZ > 0.0f ? 1024 : -1024);
+	const int ax = alongX ? 0 : 1024, az = alongX ? 1024 : 0;
+	const int sx = HDLifeFloor1024(x), sz = HDLifeFloor1024(z);
+	// How far the float lies from its square's edge on the current's side.
+	const float to = fx > 0 ? (float)sx + 1024.0f - x : fx < 0 ?
+		x - (float)sx : fz > 0 ? (float)sz + 1024.0f - z : z - (float)sz;
+
+	if (to > margin + kHDLifeWayNear)
+		return;
+
+	/* The squares past the two ends of its width; a unit inside them, as a
+	 * float the bank test keeps at its margin from a side wall lies there
+	 * exactly. */
+	const float a = alongX ? z : x;
+	const int lo = HDLifeFloor1024(a - margin + 1.0f);
+	const int hi = HDLifeFloor1024(a + margin - 1.0f);
+	const bool loOn = alongX ? HDLifeHolds(b, sx + fx, lo + fz, need) :
+		HDLifeHolds(b, lo + fx, sz + fz, need);
+	const bool hiOn = alongX ? HDLifeHolds(b, sx + fx, hi + fz, need) :
+		HDLifeHolds(b, hi + fx, sz + fz, need);
+
+	if (loOn && hiOn)
+		return;
+
+	// The nearest square of its row with a way on, its own one included.
+	const float own = alongX ? (float)sz : (float)sx;
+	bool open[2] = { true, true };
+
+	for (int k = 0; k <= kHDLifeWayReach; k++)
+		for (int side = 0; side < 2; side++)
+		{
+			if (!open[side] || (k == 0 && side == 1))
+				continue;
+
+			const int d = (side ? -k : k);
+			const int cx = sx + d * ax, cz = sz + d * az;
+
+			if (!HDLifeHolds(b, cx, cz, need))
+			{
+				open[side] = false;
+				continue;
+			}
+
+			if (!HDLifeHolds(b, cx + fx, cz + fz, need))
+				continue;
+
+			// Toward that square's middle along the row.
+			const float mid = own + (float)d * 1024.0f + 512.0f;
+			const float way = mid > a ? 1.0f : mid < a ? -1.0f : 0.0f;
+
+			*vx += alongX ? 0.0f : way * b.speed;
+			*vz += alongX ? way * b.speed : 0.0f;
+			return;
+		}
+}
+
 // Turns `yaw` toward the way vx, vz by at most `rate` x dt.
 inline float HDLifeTurnToward(float yaw, float vx, float vz, float rate,
 	float dt)
@@ -1655,12 +1737,13 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 	if (e.banked && t < e.retry)
 		return;
 
-	HDLifeVelocity(b, e.index, t, &vx, &vz);
-	HDLifeSpringPush(b, e.x, e.z, &vx, &vz);
-	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
-
 	const float margin = p.reach[e.kind] > kHDLifeEdge ? p.reach[e.kind] :
 		kHDLifeEdge;
+
+	HDLifeVelocity(b, e.index, t, &vx, &vz);
+	HDLifeSpringPush(b, e.x, e.z, &vx, &vz);
+	HDLifeWayOn(b, e.x, e.z, margin, HDLifeNeed(p, e.kind, b), &vx, &vz);
+	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
 	/* A river's middle: the step may run on into the last square's run
 	 * across its row's edge, which the bank test would refuse. */
 	const float nx = e.x + vx * dt, nz = e.z + vz * dt;

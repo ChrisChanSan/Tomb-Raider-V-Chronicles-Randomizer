@@ -335,6 +335,8 @@ namespace
 	 * far in this level build - reset by HDModelLevelBegin, fed by build(). */
 	int g_model_hash_on = 0;
 	unsigned long long g_model_hash = 14695981039346656037ull;
+	// The running total behind HDModelHashMs.
+	double g_model_hash_ms = 0;
 
 	void model_hash_add(const void* data, size_t bytes)
 	{
@@ -1849,6 +1851,8 @@ namespace
 
 		if (g_model_hash_on)
 		{
+			const double hash_began = now_ms();
+
 			model_hash_add(&buffer[0], vertex_bytes);
 			model_hash_add(&indices[0], index_bytes);
 
@@ -1862,6 +1866,8 @@ namespace
 
 					model_hash_add(fields, sizeof(fields));
 				}
+
+			g_model_hash_ms += now_ms() - hash_began;
 		}
 
 		if (base)
@@ -3065,6 +3071,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 	g_key_ms = 0;
 	g_model_hash = 14695981039346656037ull;
+	const double hash_ms0 = g_model_hash_ms;
 	HDTrmCounters(&trm_opens0, &trm_loads0, &trm_bytes0);
 
 	if (stats)
@@ -4119,8 +4126,9 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 
 		stats->nodesFallback = stats->nodesTotal - stats->nodesCovered;
 		stats->hash = g_model_hash_on ? g_model_hash : 0;
+		stats->hashMs = g_model_hash_ms - hash_ms0;
 		stats->readMs = read_ms;
-		stats->buildMs = now_ms() - started - read_ms;
+		stats->buildMs = now_ms() - started - read_ms - stats->hashMs;
 
 		/* The phases of buildMs. They do not
 		 * add up to it and are not meant to - what is left over is the
@@ -4130,7 +4138,7 @@ bool HDModelLevelBegin(IDirect3DDevice9* device, const char* installRoot,
 		stats->findMs = find_ms;
 		stats->keyMs = g_key_ms;
 		stats->pageMs = page_ms;
-		stats->bufferMs = now_ms() - buffers_began;
+		stats->bufferMs = now_ms() - buffers_began - stats->hashMs;
 		stats->trmOpens = trm_opens1 - trm_opens0;
 		stats->trmLoads = trm_loads1 - trm_loads0;
 		stats->trmBytes = trm_bytes1 - trm_bytes0;
@@ -4172,6 +4180,11 @@ bool HDModelFindFile(const char* name, bool fromTr3, bool allowMods, char* out,
 void HDModelBuildHash(int on)
 {
 	g_model_hash_on = on ? 1 : 0;
+}
+
+double HDModelHashMs()
+{
+	return g_model_hash_ms;
 }
 
 void HDModelLevelEnd()

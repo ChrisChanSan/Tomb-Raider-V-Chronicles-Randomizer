@@ -5255,9 +5255,14 @@ static void HDLevelBuildHD()
 		return;
 	}
 
-	const DWORD build_ms = GetTickCount() - started;
+	/* Without the fingerprint's time (stats.hashMs, its own field on the
+	 * built line), so that built ms and the hd_share line read the same with
+	 * the log on as the load takes without it. */
+	const int build_ms = (int)(GetTickCount() - started) -
+		(int)(stats.hashMs + 0.5);
 
 	lap(LOAD_BEGIN);
+	load_ms[LOAD_BEGIN] -= stats.hashMs;
 
 	// The marks were only borrowed for the length of that call.
 	HDRenderSetWaterMarks(0, 0);
@@ -5822,14 +5827,18 @@ static void HDLevelBuildHD()
 	 * They ride on the rooms in one more way. A level whose .TRG is missing
 	 * or empty has no page cache at all, so it has no HD objects either -
 	 * which is the same answer the rooms give and one line to explain. */
+	const double model_hash_ms = HDModelHashMs();
 	HDObjectLevelBuild(HDInstallRoot(), g_stem);
 	lap(LOAD_OBJECTS);
+	// The models' fingerprint is on the models line; the step is without it.
+	load_ms[LOAD_OBJECTS] -= HDModelHashMs() - model_hash_ms;
 
 	/* The whole of the level's HD load in one line: the .TRG scan on the
 	 * load thread and every step of this build, the build itself as one
 	 * part (its own parts are on the built line). `ms` is their sum - what
 	 * the HD path adds to a level load - and leaves out the classic load,
-	 * the waits between the two threads and the first frame. */
+	 * the waits between the two threads, the first frame and the two
+	 * fingerprints (hash_ms on the built and the models lines). */
 	{
 		const double built = load_ms[LOAD_MARKS] + load_ms[LOAD_BOXES] +
 			load_ms[LOAD_GLOSS] + load_ms[LOAD_INTR] + load_ms[LOAD_AIR] +

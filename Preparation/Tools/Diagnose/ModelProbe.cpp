@@ -7668,9 +7668,10 @@ static int RunLara(const LaraOptions& o, const Tr5Level& level)
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
-		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f) hash=%016llx\n",
+		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f) hash=%016llx"
+		" hash_ms=%.0f\n",
 		stats.readMs, stats.buildMs, stats.findMs, stats.keyMs,
-		stats.pageMs, stats.bufferMs, stats.hash);
+		stats.pageMs, stats.bufferMs, stats.hash, stats.hashMs);
 	printf("trm reads          %d files opened, %d loaded with geometry, %.0f KiB read\n",
 		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 	printf("skeleton drift     %.0f mean over %d skinned parts, worst %.0f "
@@ -11901,9 +11902,10 @@ int main(int argc, char** argv)
 	 * the one that grew to twenty-five seconds in the game, and the three
 	 * .TRM numbers say how much of the wardrobe a build really reads. */
 	printf("time               %.0f ms reading the .TRM files, %.0f ms building"
-		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f) hash=%016llx\n",
+		" (find %.0f, keys %.0f, pages %.0f, buffers %.0f) hash=%016llx"
+		" hash_ms=%.0f\n",
 		stats.readMs, stats.buildMs, stats.findMs, stats.keyMs,
-		stats.pageMs, stats.bufferMs, stats.hash);
+		stats.pageMs, stats.bufferMs, stats.hash, stats.hashMs);
 	printf("trm reads          %d files opened, %d loaded with geometry, %.0f KiB read\n",
 		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0);
 

@@ -17241,7 +17241,8 @@ static void life_drift()
 	HDLifeBody b = life_body(3, 3, 2048);
 	float x = 1536.0f, z = 1536.0f;
 
-	ok(HDLifeStep(b, &x, &z, 100.0f, 50.0f, kHDLifeEdge) == HD_LIFE_MOVED &&
+	ok(HDLifeStep(b, &x, &z, 100.0f, 50.0f, kHDLifeEdge, 100.0f) ==
+		HD_LIFE_MOVED &&
 		x == 1636.0f && z == 1586.0f,
 		"life drift: a step in open water is taken whole", (long)x, 1636);
 
@@ -17278,19 +17279,21 @@ static void life_bank()
 	HDLifeBody b = life_body(3, 1, 2048);
 	float x = 3072.0f - kHDLifeEdge - 10.0f, z = 512.0f;
 
-	ok(HDLifeStep(b, &x, &z, 50.0f, 0.0f, kHDLifeEdge) == HD_LIFE_BLOCKED &&
+	ok(HDLifeStep(b, &x, &z, 50.0f, 0.0f, kHDLifeEdge, 100.0f) ==
+		HD_LIFE_BLOCKED &&
 		x == 3072.0f - kHDLifeEdge - 10.0f,
 		"life bank: a step nearer than the edge to a dry square is refused",
 		(long)x, 3072 - (long)kHDLifeEdge - 10);
 
 	x = 3072.0f - kHDLifeEdge - 10.0f;
 	z = 512.0f;
-	ok(HDLifeStep(b, &x, &z, 50.0f, 30.0f, kHDLifeEdge) == HD_LIFE_SLID &&
+	ok(HDLifeStep(b, &x, &z, 50.0f, 30.0f, kHDLifeEdge, 100.0f) ==
+		HD_LIFE_SLID &&
 		z == 542.0f,
 		"life bank: pressed against a bank a float slides along it",
 		(long)z, 542);
-	ok(!HDLifeOpen(b, 512.0f, 1024.0f - kHDLifeEdge + 1.0f, kHDLifeEdge) &&
-		HDLifeOpen(b, 1024.0f, 512.0f, kHDLifeEdge),
+	ok(!HDLifeOpen(b, 512.0f, 1024.0f - kHDLifeEdge + 1.0f, kHDLifeEdge,
+		100.0f) && HDLifeOpen(b, 1024.0f, 512.0f, kHDLifeEdge, 100.0f),
 		"life bank: open water ends an edge's width before a dry square and "
 		"runs on over a wet one", 0, 0);
 
@@ -17334,14 +17337,14 @@ static void life_spawn()
 		"life spawn: a river's ends are its squares' middles along the flow",
 		(long)b.upMax, 4608);
 
-	const int sq = HDLifeUpstreamSquare(b, 5, 2);
+	const int sq = HDLifeUpstreamSquare(b, 5, 2, 100.0f);
 
 	ok(sq >= 0 && b.squares[(size_t)sq].x == 0,
 		"life spawn: a river float comes back on the upstream row",
 		sq >= 0 ? b.squares[(size_t)sq].x : -1, 0);
 	ok(HDLifeAtSink(b, 4608.0f + kHDLifeSinkReach, 512.0f) &&
 		!HDLifeAtSink(b, 4000.0f, 512.0f),
-		"life spawn: past the downstream end by a quarter square is the sink",
+		"life spawn: a quarter square past the last row's middle is the sink",
 		0, 0);
 
 	const HDLifeLevel level = { "TEST", 8, 0, 1, { 1, 0, 0, 0 }, 0, 0 };
@@ -17458,6 +17461,80 @@ static void life_bob()
 		&& fabsf(wy) < 0.01f,
 		"life bob: a bottle on its side floats 80 high, its middle on the "
 		"point", (long)wx, 78);
+}
+
+static int life_draw(void* state)
+{
+	return HDLifeDraw((unsigned*)state);
+}
+
+static void life_depth()
+{
+	HDLifePool p = {};
+	HDLifeBody b = life_body(3, 1, 256);
+
+	b.rise = 121.3f;
+	p.has[HD_LIFE_BARREL] = 1;
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	p.reach[HD_LIFE_BARREL] = 242.1f;
+
+	// 0.45 x 326 = 146.7, the 25.4 of bob the draft leaves over the sea's
+	// 121.3, the tilt's 242.1 x 3 degrees = 12.7.
+	const float need = HDLifeNeed(p, HD_LIFE_BARREL, b);
+
+	ok(fabsf(need - 184.8f) < 0.2f,
+		"life depth: a barrel on a sea reaches 185 under the surface at its "
+		"lowest", (long)need, 185);
+
+	b.squares[0].depth = 0;
+	b.squares[2].depth = 128;
+	ok(!HDLifeHolds(b, 0, 0, 1.0f) && !HDLifeHolds(b, 2048, 0, need) &&
+		HDLifeHolds(b, 1024, 0, need) && HDLifeHoldCount(b, need) == 1 &&
+		HDLifeHoldSquare(b, need, 7) == 1,
+		"life depth: a floor at the surface holds nothing, shallow water no "
+		"barrel", HDLifeHoldCount(b, need), 1);
+
+	float x = 1536.0f, z = 512.0f;
+
+	ok(HDLifeStep(b, &x, &z, 400.0f, 0.0f, kHDLifeEdge, need) ==
+		HD_LIFE_BLOCKED && x == 1536.0f,
+		"life depth: a float stops before water too shallow for it",
+		(long)x, 1536);
+
+	const HDLifeLevel level = { "TEST", 1, 0, 0, { 0, 0, 0, 1 }, 0, 0 };
+	unsigned state = 1;
+
+	p.bodies.push_back(b);
+	HDLifeBuild(p, level, life_draw, &state);
+	ok(p.floats == 1 && p.entries.size() == 1 &&
+		HDLifeFloor1024(p.entries[0].x) == 1024,
+		"life depth: two squares with water under them take one float, on "
+		"the one deep enough", p.floats, 1);
+
+	p.bodies[0] = life_body(3, 1, 0);
+	p.bodies[0].rise = 121.3f;
+	HDLifeBuild(p, level, life_draw, &state);
+	ok(p.floats == 0 && p.unfit == 0,
+		"life depth: a sheet over a floor at the surface takes no float",
+		p.floats, 0);
+
+	HDLifeBody all = life_body(5, 1, 2048);
+
+	ok(HDLifeHoldSquare(all, need, 13) == 3,
+		"life depth: where every square is deep enough the roll names the "
+		"square it named before", HDLifeHoldSquare(all, need, 13), 3);
+
+	all.river = 1;
+	all.flowX = 1.0f;
+	all.speed = 400.0f;
+	all.squares[0].depth = 0;
+	HDLifeRiverEnds(all);
+
+	const int up = HDLifeUpstreamSquare(all, 5, 2, 40.0f);
+
+	ok(up >= 1 && all.squares[(size_t)up].depth >= 40,
+		"life depth: a river float whose upstream row is too shallow comes "
+		"back on a square that holds it", up, 1);
 }
 
 int main()
@@ -17580,6 +17657,7 @@ int main()
 	life_spawn();
 	life_flee();
 	life_bob();
+	life_depth();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

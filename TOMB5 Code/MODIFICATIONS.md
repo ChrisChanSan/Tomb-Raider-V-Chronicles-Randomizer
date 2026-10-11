@@ -4836,8 +4836,9 @@ RICH2 room 114 looking west, the smaller box fills room 172's wall top (55,785 p
 of them clear colour as built); ANDREA1 room 228 looking west, 0 pixels - the hole there
 is room 38's art in room 211's air held to room 38's own window, which is not empty, and
 only room 53's pieces stand in an empty window there, which are hidden behind other art;
-ANDREA1 room 19's doorway, the lit floor comes back (1,363 pixels); JOBY2 room 153, part
-of the black bars comes back (6,158 pixels). The sentence of the entry above that names
+ANDREA1 room 19's doorway, the lit floor comes back (1,363 pixels); JOBY2 room 153, the
+black bars come back (6,158 pixels); at both the smaller box's picture is the one without
+the air rule to the pixel, so all the rule takes there comes back. The sentence of the entry above that names
 ANDREA1 room 228 among the holes of an empty window is answered by this measurement: of
 its 23,151 pixels none is the empty window's.
 

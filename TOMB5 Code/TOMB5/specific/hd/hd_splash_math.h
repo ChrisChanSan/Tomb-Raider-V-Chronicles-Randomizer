@@ -391,10 +391,9 @@ inline bool HDSplashRings(const HDSplashSetup& s, float seconds, float* out)
  * kTankSprayShare 0.8, the dive splash's crown's (1.0 on its inner ring,
  * 0.8 on its middle one): the spray is the same water thrown up. Counted
  * at 1 s (RoomProbe -tank with and without -tankleave spray, 1920 x
- * 1080): standing at 0.8 the spray of RICH2 room 122's tank touches
- * 31.6 % of the picture at +53 brightness and of room 23's, whose points
- * lie inside the 256 high step before its glass, 3.6 %; round its point
- * at 0.35, 14.9 % at +24 and 1 %. */
+ * 1080, the tank's water drawn in both): the spray of RICH2 room 122's
+ * tank touches 31.4 % of the picture at +48 brightness and of room 23's,
+ * whose points lie inside the 256 high step before its glass, 3.5 %. */
 const float kTankSprayShare = 0.8f;
 
 inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,

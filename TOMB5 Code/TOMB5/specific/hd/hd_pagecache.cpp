@@ -37,8 +37,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <exception>
-#include <mutex>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -1769,86 +1767,6 @@ IDirect3DTexture9* HDPageCacheSlotTexture(int slot)
 		return 0;
 
 	return g_textures[(size_t)slot];
-}
-
-int HDPoolThreads(int asked)
-{
-	int threads = asked;
-
-	if (threads <= 0)
-		threads = (int)std::thread::hardware_concurrency();
-
-	if (threads < 1)
-		threads = 1;
-
-	if (threads > 16)
-		threads = 16;
-
-	return threads;
-}
-
-void HDPoolRunItems(int count, int threads, void (*call)(void*, int),
-	void* context)
-{
-	if (count <= 0)
-		return;
-
-	if (threads > count)
-		threads = count;
-
-	if (threads <= 1)
-	{
-		for (int at = 0; at < count; at++)
-			call(context, at);
-
-		return;
-	}
-
-	std::atomic<int> next(0);
-	std::atomic<bool> failed(false);
-	std::exception_ptr first;
-	std::mutex guard;
-
-	/* Every thread takes the next item until none is left. After a throw
-	 * the others stop taking new ones; the exception goes to the caller. */
-	const auto run = [&]()
-	{
-		for (;;)
-		{
-			const int at = next.fetch_add(1);
-
-			if (at >= count || failed.load())
-				break;
-
-			try
-			{
-				call(context, at);
-			}
-			catch (...)
-			{
-				std::lock_guard<std::mutex> lock(guard);
-
-				if (!first)
-					first = std::current_exception();
-
-				failed.store(true);
-			}
-		}
-	};
-
-	std::vector<std::thread> helpers;
-	helpers.reserve((size_t)threads - 1);
-
-	for (int i = 1; i < threads; i++)
-		helpers.push_back(std::thread(run));
-
-	run();
-
-	for (std::thread& t : helpers)
-		t.join();
-
-	if (first)
-		std::rethrow_exception(first);
 }
 
 int HDPageCacheNoteCount()

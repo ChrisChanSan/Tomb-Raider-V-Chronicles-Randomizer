@@ -4488,34 +4488,6 @@ void HDRenderBuildHash(int on)
 	g_build_hash = on ? 1 : 0;
 }
 
-/* FNV-1a 64 over bytes, and over a value's bytes. Every value fed in is a
- * field or a struct without padding, so two equal builds give equal bytes. */
-struct HDFnv64
-{
-	unsigned long long h = 14695981039346656037ull;
-
-	void add(const void* data, size_t bytes)
-	{
-		const unsigned char* p = (const unsigned char*)data;
-
-		for (size_t i = 0; i < bytes; i++)
-			h = (h ^ p[i]) * 1099511628211ull;
-	}
-
-	template <class T> void put(const T& value)
-	{
-		add(&value, sizeof(value));
-	}
-
-	template <class T> void list(const std::vector<T>& values)
-	{
-		put((unsigned int)values.size());
-
-		if (!values.empty())
-			add(&values[0], values.size() * sizeof(T));
-	}
-};
-
 /* One vertex as the vertex buffer holds it: the .TRG's vertex and the three
  * water mark bits the build found for it (bit 0 choppy, 1 shimmer, 2 room
  * shimmer). */

@@ -18,6 +18,12 @@
  */
 #pragma once
 
+#include <atomic>
+#include <exception>
+#include <mutex>
+#include <thread>
+#include <vector>
+
 struct IDirect3DDevice9;
 struct IDirect3DTexture9;
 
@@ -327,8 +333,9 @@ int HDPageCacheNoteCount();
 const char* HDPageCacheNote(int at);
 
 /* The pool of the HD level load: the page decode, the room build's vertex
- * buffer, its index fill per group and the build's fingerprint run their
- * independent items on it.
+ * buffer, its index fill per group, its mirror search and the build's
+ * fingerprint run their independent items on it. In the header, whole, so
+ * that the suite tests it as the engine runs it (ModernTest, load_pool).
  *
  * HDPoolThreads turns a wish into a thread count: 1 or more is taken as it
  * is, 0 or less is the machine's own (std::thread::hardware_concurrency,
@@ -342,23 +349,112 @@ const char* HDPageCacheNote(int at);
  * but run in any order and at the same time, so an item may write only
  * what is its own (its slot of an output array) and read only what nothing
  * writes during the call. The first exception an item throws is thrown
- * again on the calling thread after the join. threads 1 runs everything on
- * the calling thread in index order. */
-int HDPoolThreads(int asked);
+ * again on the calling thread after the join, and no item starts after it.
+ * threads 1 runs everything on the calling thread in index order. */
+inline int HDPoolThreads(int asked)
+{
+	int threads = asked;
 
-// The engine of HDPoolRun, without the template: call(context, i).
-void HDPoolRunItems(int count, int threads, void (*call)(void*, int),
-	void* context);
+	if (threads <= 0)
+		threads = (int)std::thread::hardware_concurrency();
+
+	if (threads < 1)
+		threads = 1;
+
+	if (threads > 16)
+		threads = 16;
+
+	return threads;
+}
 
 template <class Work> void HDPoolRun(int count, int threads, const Work& work)
 {
-	struct Call
+	if (count <= 0)
+		return;
+
+	if (threads > count)
+		threads = count;
+
+	if (threads <= 1)
 	{
-		static void one(void* context, int at)
+		for (int at = 0; at < count; at++)
+			work(at);
+
+		return;
+	}
+
+	std::atomic<int> next(0);
+	std::atomic<bool> failed(false);
+	std::exception_ptr first;
+	std::mutex guard;
+
+	// Every thread takes the next item until none is left or one has thrown.
+	const auto run = [&]()
+	{
+		for (;;)
 		{
-			(*(const Work*)context)(at);
+			const int at = next.fetch_add(1);
+
+			if (at >= count || failed.load())
+				break;
+
+			try
+			{
+				work(at);
+			}
+			catch (...)
+			{
+				std::lock_guard<std::mutex> lock(guard);
+
+				if (!first)
+					first = std::current_exception();
+
+				failed.store(true);
+			}
 		}
 	};
 
-	HDPoolRunItems(count, threads, &Call::one, (void*)&work);
+	std::vector<std::thread> helpers;
+	helpers.reserve((size_t)threads - 1);
+
+	for (int i = 1; i < threads; i++)
+		helpers.push_back(std::thread(run));
+
+	run();
+
+	for (std::thread& t : helpers)
+		t.join();
+
+	if (first)
+		std::rethrow_exception(first);
 }
+
+/* FNV-1a 64 over bytes, and over a value's bytes - the build's fingerprint
+ * (HDRenderBuildHash). Every value fed in is a field or a struct without
+ * padding, so two equal builds give equal bytes; list() feeds the count
+ * first, as 4 bytes, then the elements. */
+struct HDFnv64
+{
+	unsigned long long h = 14695981039346656037ull;
+
+	void add(const void* data, size_t bytes)
+	{
+		const unsigned char* p = (const unsigned char*)data;
+
+		for (size_t i = 0; i < bytes; i++)
+			h = (h ^ p[i]) * 1099511628211ull;
+	}
+
+	template <class T> void put(const T& value)
+	{
+		add(&value, sizeof(value));
+	}
+
+	template <class T> void list(const std::vector<T>& values)
+	{
+		put((unsigned int)values.size());
+
+		if (!values.empty())
+			add(&values[0], values.size() * sizeof(T));
+	}
+};

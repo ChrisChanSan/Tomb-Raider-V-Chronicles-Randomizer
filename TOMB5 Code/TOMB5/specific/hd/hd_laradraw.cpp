@@ -1040,7 +1040,8 @@ namespace
 	 *   depth=   the map's depth surface, D24X8 or D16; "-" before it was made
 	 *   events=  changes of state on this run, a counter
 	 *
-	 * HDLOG shadow others - the second map on this device, the same fields.
+	 * HDLOG shadow others - the second map on this device, the same fields;
+	 * its format is G32R32F.
 	 * It is asked for by the decision of the first frame the projected
 	 * shadow runs in, right beside hers, so its made or refused line is
 	 * written in that very frame; its state is none until then.

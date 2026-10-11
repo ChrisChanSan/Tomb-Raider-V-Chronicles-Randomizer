@@ -152,6 +152,12 @@ namespace
 		 * projected shadow does not run in. */
 		int cast;
 		unsigned int castMask;
+		/* The depth of the item's place - its position, the point at its
+		 * feet - in the second map, 0..1 of the box along the light
+		 * (HDShadowMapUVD), for an entry marked for the second map: the
+		 * cast writes it beside every texel of the entry, and the receive
+		 * measures how far a pixel lies behind the caster from it. */
+		float castPlace;
 		/* The sheen. 0 for an item - the specular term is Lara's alone. */
 		float specStrength;
 		float specPower;
@@ -3259,6 +3265,16 @@ void HDObjectEnd()
 	entry.cast = !inside ? HD_OBJ_CAST_NONE
 		: g_open_unseen ? HD_OBJ_CAST_OTHERS_ONLY : HD_OBJ_CAST_OTHERS;
 	entry.castMask = inside ? entry.mask : 0;
+	entry.castPlace = 0.0f;
+
+	if (inside)
+	{
+		float uvd[3];
+
+		HDShadowMapUVD(&shadow->others, g_open_place, uvd);
+		entry.castPlace = uvd[2];
+	}
+
 	g_open_casts = false;
 	// No sheen on an object - the specular term is Lara's alone.
 	entry.specStrength = 0.0f;
@@ -3816,6 +3832,7 @@ void HDInvEnd()
 	memset(&entry.soft, 0, sizeof(entry.soft));
 	entry.cast = HD_OBJ_CAST_NONE;
 	entry.castMask = 0;
+	entry.castPlace = 0.0f;
 	/* No sheen, which is what an item has in the level too - the specular
 	 * term is Lara's alone. A pistol on the ring therefore shines exactly as
 	 * the same pistol shines lying on the floor. */
@@ -4140,7 +4157,10 @@ int HDObjectCastOthersFrame()
 			continue;
 
 		/* The body - or the swapped model - and the separate face, as drawn,
-		 * or as they would be drawn for an item the picture clipped away. */
+		 * or as they would be drawn for an item the picture clipped away,
+		 * each texel with the item's place beside its depth. */
+		HDRenderShadowPlace(entry.castPlace);
+
 		if (HDModelCastDraw(entry.drawSlot, false, entry.matrix, entry.nodes,
 			entry.castMask, entry.lipsTrack, entry.lipsFrame, &entry.soft))
 			drawn++;
@@ -4500,6 +4520,7 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.cast = cast == HD_OBJ_CAST_ALSO || cast == HD_OBJ_CAST_ONLY
 		? cast : HD_OBJ_CAST_NONE;
 	entry.castMask = castMask;
+	entry.castPlace = 0.0f;
 	entry.specStrength = specStrength;
 	entry.specPower = specPower;
 	/* No portal window. Everything that comes through here is a

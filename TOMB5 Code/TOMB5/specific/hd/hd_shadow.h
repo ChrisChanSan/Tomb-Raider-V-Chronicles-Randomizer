@@ -112,13 +112,18 @@
  *               the first face a ray meets taking her shadow through it):
  *               behind a face more than a block below her feet such faces
  *               outnumber the first faces 2.4 to 1, between half a block and
- *               a block they are as many. At 512 and 1024 half a block takes
- *               all of it and a block none: the weight such faces take
- *               through a wall falls by 89 per cent and through a floor by
- *               54, the first faces below her feet lose 28 per cent of
- *               theirs, all of them more than half a block below her - the
- *               foot of a ledge she stands on. Larger lets her shadow follow
- *               a drop further and a storey under her take it again.
+ *               a block they are as many. Her lowest node, the ankle, stands
+ *               58.6 units above her soles (ModelProbe -shadowroom: her
+ *               nodes' lowest y 398.0, her soles at 456.6), so 576 and 1088
+ *               - half a block and a block, each with that height rounded up
+ *               to 64 - give a floor half a block below her soles all of it
+ *               and one a block below none: the weight such faces take
+ *               through a wall falls by 88 per cent and through a floor by
+ *               52 against 1024 and 2048, the first faces below her feet
+ *               lose 27 per cent of theirs, all of them more than half a
+ *               block below her - the foot of a ledge she stands on. Larger
+ *               lets her shadow follow a drop further and a storey under her
+ *               take it again.
  *   EDGE        the outer part of the box, of its half width, over which the
  *               shadow fades out, so the box's edge is never seen.
  *   FACING      the n.l from which a face takes the whole shadow; a face
@@ -176,22 +181,28 @@
  *                 shows a harder end of the shadow where a creature climbs
  *                 or falls out of the box; larger lets a creature's shadow
  *                 thin out already on the storey above or below her.
- *   OTHERS_FULL, OTHERS_END  how far behind a caster along the light a
- *                 receiver still takes its shadow: whole up to OTHERS_FULL
- *                 units, none from OTHERS_END on, smooth between. The blob
- *                 carriers of the thirteen levels stand 691 to 809 units
- *                 tall in their rest pose (Tr5Level::frameBounds), the
- *                 sniper 907 - 1047 along a 30 degree light, within 23 units
- *                 of OTHERS_FULL - so the floor at a man's feet takes his
- *                 whole outline; the skeleton (1199), the hydra (1249) and
- *                 the Roman god (1546) lose its top on their own floor. A
- *                 floor straight below a creature's feet takes nothing from
- *                 1108 units down, about a block: through a wall or a floor
- *                 the weight such faces take falls by 99 and 74 per cent
- *                 against 2560 (ModelProbe -shadowsurvey, as for FULL and
- *                 END), the first faces lose 10. Larger lets the shadow
- *                 reach a lower floor and the room beside, smaller cuts a
- *                 man's head off his shadow. */
+ *   OTHERS_FULL, OTHERS_END  how far behind a caster's place - the point
+ *                 at its feet, the item's position, which the second map
+ *                 keeps beside every texel of the caster - a receiver still
+ *                 takes its shadow along the light: whole up to OTHERS_FULL
+ *                 units, none from OTHERS_END on, smooth between. Measured
+ *                 from the place, not from the part a texel holds, so the
+ *                 head's shadow counts as the feet's: at the fixed slant a
+ *                 part h above the feet darkens a floor d below them 1.155 d
+ *                 + 0.289 h behind the place (a part held out towards the
+ *                 light's bearing up to half its reach more). The floor at
+ *                 the feet takes the whole outline of every blob carrier of
+ *                 the thirteen levels - the tallest, the Roman god, 1546
+ *                 units in its rest pose (Tr5Level::frameBounds), reaches
+ *                 446 - and one half a block below that of every caster up
+ *                 to 1499 tall, the Roman god's top at 0.95; a floor 1108
+ *                 units or more straight below the feet takes nothing,
+ *                 about a block. Through a wall or a floor the weight such
+ *                 faces take falls by 80 and 40 per cent against 1536 and
+ *                 2560 measured from each texel's own part (ModelProbe
+ *                 -shadowsurvey, as for FULL and END), the first faces lose
+ *                 5. Larger lets the shadow reach a lower floor and the room
+ *                 beside, smaller takes it off a floor a step below. */
 #define HD_SHADOW_MAP			512
 #define HD_SHADOW_BOX			2048.0f
 #define HD_SHADOW_DEPTH			2048.0f
@@ -203,8 +214,8 @@
 #define HD_SHADOW_FALLBACK_SLANT	30.0f
 #define HD_SHADOW_SLANT_MAX		55.0f
 #define HD_SHADOW_TAU			0.5f
-#define HD_SHADOW_FULL			512.0f
-#define HD_SHADOW_END			1024.0f
+#define HD_SHADOW_FULL			576.0f
+#define HD_SHADOW_END			1088.0f
 #define HD_SHADOW_EDGE			0.1f
 #define HD_SHADOW_FACING		0.2f
 #define HD_SHADOW_BIAS			8.0f
@@ -1223,10 +1234,12 @@ inline float HDShadowFacingTerm(float ndotl)
 }
 
 /* The distance term of one tap of the second map, for a receiver `behind`
- * units further along the light than the caster that tap holds: 1 up to
+ * units further along the light than the place of the caster that tap
+ * holds - the point at its feet, the map's green channel: 1 up to
  * OTHERS_FULL, 0 from OTHERS_END on, linear between. It stands in for her
  * height term, which measures from her lowest node: the second map holds
- * many casters at many heights, so each tap measures from its own. */
+ * many casters at many heights, so each tap measures from its own caster's
+ * feet. */
 inline float HDShadowBehindTerm(float behind)
 {
 	return hd_shadow_saturate((HD_SHADOW_OTHERS_END - behind) /
@@ -1306,11 +1319,13 @@ inline float HDShadowLookup(const float* map, int size, float u, float v, float 
  * sixteen taps, weights, clamp and clear value as HDShadowLookup, the bias
  * in the units of a box `depthUnits` long (OTHERS_DEPTH for the second box),
  * and every casting tap weighted with the distance term of how far the
- * receiver lies behind that tap's caster, (depth - tap) * depthUnits units
- * (HDShadowBehindTerm), and with the fade of the tap's own depth along the
- * light (HDShadowFadeTerm). 0..1. */
+ * receiver lies behind the place of that tap's caster, (depth - place) *
+ * depthUnits units (HDShadowBehindTerm), and with the fade of the tap's own
+ * depth along the light (HDShadowFadeTerm). `places` holds the green
+ * channel beside `map`, texel for texel; without it every tap's place is
+ * its own depth, a caster with all of it at its feet. 0..1. */
 inline float HDShadowLookupBehind(const float* map, int size, float u, float v, float depth,
-	float depthUnits)
+	float depthUnits, const float* places = 0)
 {
 	if (!map || size <= 0 || !(depthUnits > 0.0f))
 		return 0.0f;
@@ -1340,9 +1355,11 @@ inline float HDShadowLookupBehind(const float* map, int size, float u, float v, 
 			y = y < 0 ? 0 : (y >= size ? size - 1 : y);
 
 			const float tap = map[y * size + x];
+			const float place = places ? places[y * size + x] : tap;
 
 			if (tap < limit)
-				sum += wx[k] * wy[j] * (HDShadowBehindTerm((depth - tap) * depthUnits) *
+				sum += wx[k] * wy[j] *
+					(HDShadowBehindTerm((depth - place) * depthUnits) *
 					HDShadowFadeTerm(tap));
 		}
 
@@ -1543,15 +1560,18 @@ inline void HDShadowReach(const HDShadowBox* b, float* mins, float* maxs)
 }
 
 /* The same for the second box: its cross-section along the light (its own
- * extent), from its near side to OTHERS_END beyond its far side - a caster
- * stands anywhere inside the box, and a receiver takes its shadow up to
- * OTHERS_END behind it along the light (HDShadowBehindTerm) - as an
- * axis-aligned box. Her height term plays no part. */
+ * extent), from its near side to OTHERS_END beyond the farthest place a
+ * caster may have - a caster's place is held up to OTHERS_MARGIN of the
+ * depth past the far side (HDShadowBoxHolds), and a receiver takes its
+ * shadow up to OTHERS_END behind that place along the light
+ * (HDShadowBehindTerm) - as an axis-aligned box. Her height term plays no
+ * part. */
 inline void HDShadowReachOthers(const HDShadowBox* b, float* mins, float* maxs)
 {
 	const float half = 0.5f * b->extent;
 	const float nearF = -0.5f * b->depth;
-	const float farF = 0.5f * b->depth + HD_SHADOW_OTHERS_END;
+	const float farF = (0.5f + HD_SHADOW_OTHERS_MARGIN) * b->depth +
+		HD_SHADOW_OTHERS_END;
 
 	for (int i = 0; i < 3; i++)
 	{

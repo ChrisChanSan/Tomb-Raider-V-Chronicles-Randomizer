@@ -2127,9 +2127,37 @@ static void LifeBuild(const char* root, const char* stem)
 		shown++;
 	}
 
+	/* The ripple slots the rings take: a ring of the life holds its slot
+	 * about 37 ticks (UpdateSplashes: init up by 4 a tick to its life of
+	 * 48 to 63, then the life down by 3) - the most held at once over the
+	 * run (slots_max, of the game's 128); and the most rings of the
+	 * sheets' 3.5 seconds within 1,024 units of a ring as it starts
+	 * (near_max, of the eight a sheet draw takes). */
+	int slotsMax = 0, nearMax = 0;
+
+	for (size_t i = 0; i < rings.size(); i++)
+	{
+		int slots = 0, close = 0;	// `near` is a macro of windows.h
+
+		for (size_t k = 0; k < rings.size(); k++)
+		{
+			const float age = rings[i].second - rings[k].second;
+			const float dx = rings[i].first.x - rings[k].first.x;
+			const float dz = rings[i].first.z - rings[k].first.z;
+
+			slots += age >= 0.0f && age < 37.0f / 30.0f ? 1 : 0;
+			close += age >= 0.0f && age < 3.5f && dx * dx + dz * dz <
+				1024.0f * 1024.0f ? 1 : 0;
+		}
+
+		slotsMax = slots > slotsMax ? slots : slotsMax;
+		nearMax = close > nearMax ? close : nearMax;
+	}
+
 	printf("LIFELOG level=%s probe clock=%.2f steps=%d tick_ms=%.4f "
-		"respawned=%d fleeing=%d rings=%d shown=%d\n", stem, g_time, steps,
-		ms, g_life_pool.respawned, fleeing, (int)rings.size(), shown);
+		"respawned=%d fleeing=%d rings=%d shown=%d slots_max=%d "
+		"near_max=%d\n", stem, g_time, steps, ms, g_life_pool.respawned,
+		fleeing, (int)rings.size(), shown, slotsMax, nearMax);
 
 	for (size_t i = 0; i < g_life_pool.entries.size(); i++)
 	{

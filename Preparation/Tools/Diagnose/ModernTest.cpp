@@ -17841,6 +17841,43 @@ static void life_drops()
 		"life drops: the body's line names its drips' points", 0, 0);
 }
 
+/* The rings round a big float (HDLifeFloatRings): a barrel rings every 1
+ * to 2 seconds at a size near a swimming Lara's, a bottle never. */
+static void life_rings()
+{
+	HDLifePool p = {};
+	HDLifeEntry barrel = {}, bottle = {};
+
+	p.bodies.push_back(life_body(3, 3, 2048));
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	barrel.kind = HD_LIFE_BARREL;
+	barrel.index = 5;
+	barrel.x = barrel.z = 1500.0f;
+	barrel.period = 3.0f;
+	bottle = barrel;
+	bottle.kind = HD_LIFE_BOTTLE;
+	bottle.index = 6;
+
+	std::vector<HDLifeRing> a, b;
+
+	for (int k = 1; k <= 600; k++)
+	{
+		HDLifeFloatRings(p, barrel, 0, (k - 1) / 30.0f, k / 30.0f, &a);
+		HDLifeFloatRings(p, bottle, 1, (k - 1) / 30.0f, k / 30.0f, &b);
+	}
+
+	int sizeBad = 0;
+
+	for (size_t i = 0; i < a.size(); i++)
+		sizeBad += a[i].size < kHDLifeFloatRing || a[i].size >
+			kHDLifeFloatRing + kHDLifeFloatRingTop || a[i].drip != -1;
+
+	ok(a.size() >= 10 && a.size() <= 21 && sizeBad == 0 && b.empty(),
+		"life rings: a barrel rings every 1 to 2 s at 88 to 104, a bottle "
+		"never", (long)a.size() * 100 + (long)b.size(), 1500);
+}
+
 static void life_flee()
 {
 	HDLifeBody b = life_body(4, 4, 2048);
@@ -18734,6 +18771,7 @@ int main()
 	life_spawn();
 	life_ends();
 	life_drops();
+	life_rings();
 	life_flee();
 	life_bob();
 	life_depth();

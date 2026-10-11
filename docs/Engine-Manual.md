@@ -2095,6 +2095,23 @@ it.
   underwater state, which the dive (JOBY4) never sets and which follows the
   room a logic step late (`cam=`), 1 when that frame is drawn under the water
   (`on=`), and 1 when the level takes the deep sea's water (`deep=`).
+- **The dive splash and the fish tank.** With `hd_water` on, a splash over
+  a sheet - Lara diving or wading in, an explosion under the water - is
+  drawn as this water's own: two rings running out over the sheet, a crown
+  of spray standing as high as the classic splash's column and drops
+  falling back, in the water's own foam colour, on the Remaster's spray and
+  drops pages; the classic sprite rings are not drawn there. A broken fish
+  tank's spray rises as cards of the same kind instead of the grey classic
+  sparks, and the floor its water floods is covered by a thin sheet of the
+  water - while it pours out, then drying as the floor lasers run down;
+  the lasers' red glow stays. The splash's and the spray's timing and
+  everything the game decides are the classic ones. `0` draws the classic
+  splash and spray.
+- **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
+  it draws: `SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
+  tank=<item>:<state>` - the HD splashes alive, the cards drawn, the splash
+  rings on the sheets (two a splash), and the item of the fish tank whose
+  floor is wet with the film's strength 0 to 1 (`-1:0.00` when none is).
 
 **Text.** The title menu, the names under the inventory ring, the options
 pages, the load and save lists with their *(quicksave)* line, the statistics

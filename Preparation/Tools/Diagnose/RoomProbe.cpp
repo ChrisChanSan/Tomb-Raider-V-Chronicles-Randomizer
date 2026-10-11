@@ -1816,6 +1816,10 @@ static unsigned g_life_seed = 0;
 static bool g_life_lara = false;
 // -lifebench: the life's draws timed on a second pass (LifeFrame).
 static bool g_life_bench = false;
+/* -lifeall: every body of the level takes floats, whatever the level's
+ * row lets in (HDLifeTakes) - a test of the rules on water the game keeps
+ * clean, such as ANDREA2's fountain basins. */
+static bool g_life_all = false;
 static float g_life_lara_x = 0.0f, g_life_lara_z = 0.0f, g_life_lara_t = 0.0f;
 static HDLifePool g_life_pool;
 static const HDLifeLevel* g_life_row = 0;
@@ -1939,6 +1943,9 @@ static void LifeBuild(const char* root, const char* stem)
 		b.channel = info.cls == HD_WATER_CHANNEL ? 1 : 0;
 		b.rise = rise;
 		b.upMin = b.upMax = 0.0f;
+		b.spring = info.spring;
+		b.springX = info.springAt[0];
+		b.springZ = info.springAt[1];
 
 		for (int i = 0; i < n; i++)
 			if (squares[(size_t)i].sheet)
@@ -1952,8 +1959,8 @@ static void LifeBuild(const char* root, const char* stem)
 				b.squares.push_back(s);
 			}
 
-		if (!HDLifeTakes(*g_life_row, (int)b.squares.size(), b.river,
-			b.channel))
+		if (!g_life_all && !HDLifeTakes(*g_life_row,
+			(int)b.squares.size(), b.river, b.channel))
 			continue;
 
 		g_life_pool.bodies.push_back(b);
@@ -8466,6 +8473,8 @@ static int ProbeMain(int argc, char** argv)
 			"t: the school flees her, the drips near her ring\n");
 		printf("       -lifebench   -life's draws timed on a second pass "
 			"(every model drawn twice: numbers, not a picture)\n");
+		printf("       -lifeall   -life on every body, whatever the "
+			"level's life row lets in\n");
 		printf("       -wader x,z   a stand-in for a wading Lara at world x, "
 			"z, standing on the floor under the sheet, with Lara's place "
 			"there, repeatable\n");
@@ -8752,6 +8761,8 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-lifebench"))
 			g_life_bench = true;
+		else if (!strcmp(argv[at], "-lifeall"))
+			g_life_all = true;
 		else if (!strcmp(argv[at], "-lifelara") && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };

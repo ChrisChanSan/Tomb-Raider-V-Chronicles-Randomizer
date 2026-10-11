@@ -223,6 +223,9 @@ void HDLifeLevelBegin(const char* stem)
 		b.channel = info.cls == HD_WATER_CHANNEL ? 1 : 0;
 		b.rise = rise;
 		b.upMin = b.upMax = 0.0f;
+		b.spring = info.spring;
+		b.springX = info.springAt[0];
+		b.springZ = info.springAt[1];
 
 		for (int i = 0; i < n; i++)
 			if (squares[(size_t)i].sheet)

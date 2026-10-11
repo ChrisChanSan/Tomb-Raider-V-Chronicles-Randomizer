@@ -129,6 +129,14 @@ static const float kHDLifeSinkReach = 256.0f;
 static const float kHDLifeUpstream = 512.0f;
 static const int kHDLifeRiverMin = 3;
 
+/* The spring's current (HDLifeSpringPush): its speed at the spring, units
+ * a second, the distance it has fallen off to nothing at, and the radius
+ * round the spring it leaves alone. Free choices, set by eye on RoomProbe
+ * -life pictures of ANDREA2 room 194's basin over 20 seconds. */
+static const float kHDLifeSpring = 40.0f;
+static const float kHDLifeSpringReach = 1536.0f;
+static const float kHDLifeSpringCore = 16.0f;
+
 /* The bob and the tilt: a sine of the clock with a period of 2.5 to 4
  * seconds and a phase of its own per float; its height is a quarter of the
  * model's floating height but never more than its body's sheet rises
@@ -224,6 +232,11 @@ struct HDLifeBody
 	std::vector<HDLifeSquare> squares;
 	// The flow's projection over the squares' middles, for a river.
 	float upMin, upMax;
+	/* 1 with a spring, the ripple source of a row in its water, at world
+	 * x and z (HDRenderWaterBody::spring): its floats drift away from it
+	 * (HDLifeSpringPush). */
+	int spring = 0;
+	float springX = 0.0f, springZ = 0.0f;
 };
 
 // A float or a fish of the pool.
@@ -420,6 +433,30 @@ inline void HDLifeVelocity(const HDLifeBody& b, int index, float t, float* vx,
 	HDLifeWanderAt(index, t, &wx, &wz);
 	*vx = b.flowX * b.speed + wx * kHDLifeWander;
 	*vz = b.flowZ * b.speed + wz * kHDLifeWander;
+}
+
+/* The spring's current: a float in a body with a spring is carried
+ * straight away from it at kHDLifeSpring units a second at the spring,
+ * falling off linearly to nothing kHDLifeSpringReach away, and not at all
+ * within kHDLifeSpringCore of it, where the way out is not yet defined.
+ * Added to the velocity (HDLifeFloatTick), so the wander still turns a
+ * float and a bank still stops it. */
+inline void HDLifeSpringPush(const HDLifeBody& b, float x, float z,
+	float* vx, float* vz)
+{
+	if (!b.spring)
+		return;
+
+	const float dx = x - b.springX, dz = z - b.springZ;
+	const float d = sqrtf(dx * dx + dz * dz);
+
+	if (d < kHDLifeSpringCore || d >= kHDLifeSpringReach)
+		return;
+
+	const float s = kHDLifeSpring * (1.0f - d / kHDLifeSpringReach) / d;
+
+	*vx += dx * s;
+	*vz += dz * s;
 }
 
 // Turns `yaw` toward the way vx, vz by at most `rate` x dt.
@@ -1078,6 +1115,7 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 		return;
 
 	HDLifeVelocity(b, e.index, t, &vx, &vz);
+	HDLifeSpringPush(b, e.x, e.z, &vx, &vz);
 	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
 
 	const float margin = p.reach[e.kind] > kHDLifeEdge ? p.reach[e.kind] :

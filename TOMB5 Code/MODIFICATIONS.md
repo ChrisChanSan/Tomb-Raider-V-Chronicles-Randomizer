@@ -8702,9 +8702,14 @@ held by ModernTest's arithmetic and a code walk: which weight the engine hands a
 (`HDObjectBlobWeight`, `HDShadowFrameBlobWeight`) no suite reaches, and the classic
 blob's byte identity at the gate's refusal (`g_blob_fading` stays 0, the weight 1,
 `HDShadowBlobAlpha` gives the colour itself) is not backed by a picture. No picture of a
-glowing model was made for the new order, and the pictures of a creature at a step
-(ANDREA1 room 2, ANDREA2 room 60) did not frame its shadow over the step; the step is held
-by ModernTest and the survey. With the eye under water and a fog bulb in sight the haze
+glowing model was made for the new order. A creature at a step, pictured later: LARSON
+on a tread of ANDREA1 room 159's stair, 228 units from its front edge, the light
+carried down the stair (ModelProbe `-shadowcreature` with `-shadowunseen` and
+`-shadowempty`, against the same picture without it, since `-shadowempty` empties her
+map alone): its shadow 3,551 pixels 14.6 of 255 darker, 2,400 on its own tread and
+1,151 on the tread a step (256 units) below, the outline whole, its head on the lower
+tread; the tools of `1c598bd` and of the night's lows draw it md5-identical.
+With the eye under water and a fog bulb in sight the haze
 the receive gives back is the bulbs' sum, not passed through the water's scattering as
 the surface's is (`ReceiveOut`'s comment). Besides the files of the shadow this part
 touches `specific/drawlara.cpp`, `specific/specificfx.cpp` and `hd_level.cpp` / `.h`
@@ -9527,7 +9532,11 @@ swings +-40 % with a finer second pattern for 0.4 of it; under the sky it keeps 
 measured sky rows and its +-25 %. `hd_water.txt` takes `ripple <x> <z> <size>
 <seconds>` on any row (world units, size 1 to 255, seconds 0.1 to 60, `ParseWaterLine`
 :8723): a ring source at that place every so many seconds, at the surface of the row's
-room's square under it (`apply_water_row` :9121). RoomProbe `-ripple x,z,age[,size]`
+room's square under it (`apply_water_row` :9121). ANDREA2 194's basin has one without a
+file: the engine's own override row for room 194 carries `ripple 55808 32768 80 0.7`
+with the sheets on, and a row of the file with a ripple for that room takes its place
+(`kWaterOverride`, `hd_render.cpp` :9909).
+RoomProbe `-ripple x,z,age[,size]`
 (repeatable, world units, `RoomProbe.cpp` :6783) puts a ring of that age in every
 picture. `WATERLOG`'s level line ends with `waverows=8 rings=8 sources=<n>`, the ripple
 rows that found a body; the key is `waverows` and not `rows`, which the line already
@@ -12007,7 +12016,10 @@ failed; the engine and every tool build.
 
 **Left.** The look in the game: nobody in this round could play it - the deck from the
 owner's place, its three other squares, the notch of water at 4,2. ANDREA2's 40 marks
-more in the probe than in the game: not found which. The river's hide of the flow
+more in the probe than in the game: found later - the corners of room 70's floor over
+room 204, whose portal the level's closed door in that floor shuts before the marks are
+made (`InitialiseDoor`), and the twin now shuts the closed doors' portals first
+(`0745db8`). The river's hide of the flow
 material still asks the box alone; no call is known whose box spans a square its
 triangles miss. `-watermarks` is a switch and not the default, so the earlier picture
 sets stay comparable.
@@ -12506,9 +12518,12 @@ the sheet's rows (D3 a), so that floats ride a sea's waves; until then ANDY1's p
 class sea, carry barrels only, and ANDY3's lake and shallows too. ANDREA2's canal has
 no current, so its floats wander and do not collect at the grate; a `flow` row would
 give it one. Floats drift under the piers and decks that stand over sheet squares
-(ANDY1). No falling drop is drawn, only its ring. The spring of ANDREA2 room 194 as a
-default ring source needs a compiled row inside the water module's own tables and is
-left. Oil (D6), fireflies and midges (D7), the cans of JOBY5's shelf art (D9 c), light
+(ANDY1). No falling drop is drawn, only its ring. The spring of ANDREA2 room 194 is in
+since the night's lows (`dd35bc6`): a default ring source in the engine's own row for
+the room, and a current away from it for the body's floats (`HDLifeSpringPush`,
+`hd_life_rules.h` :444; 40 units a second at the spring, nothing 1536 out); the basin
+takes no floats under ANDREA2's life row, so in the game the current waits for them.
+Oil (D6), fireflies and midges (D7), the cans of JOBY5's shelf art (D9 c), light
 shafts (D11), the dive's splash (D12). No picture draws through the game's own path
 (`view_at`, `HDObjectPush`): RoomProbe `-life` draws its twin with `HDModelDraw`, and
 the engine's matrices were checked by reading only. The tilt lifts a sea barrel's
@@ -12536,6 +12551,21 @@ facing: measured with ModelProbe, +x is right.
 
 **Commits.** `9c1381a`, `0e1ea4b`, `e4f4251`, `1fc81d3`, `2a36718`, `ac81bfd`, `05a0502`,
 `6508500`; after the review `8447444`, `6510ce0`, `1867877`.
+
+**The river's flow hide by its own squares.** The river's flow-material calls (material
+1, `HDRange::flowTris`) were hidden over a sheet by their box alone, where the still
+water's art asks its own squares (*the deck's plates*). They take the same rule now:
+the box first, then the call's own squares, `HDRange::flowCells` (`hd_render.cpp`
+:13651), filled by the helper the art's squares take too (`NoteBoxCells` :1460); a call
+the box reaches and no flow triangle of which lies over the square stays drawn and
+counts in `art_kept`, and the squares are in the build's fingerprint. Measured with
+RoomProbe `-hdwater 1 -nodraw`, with and without `-watermarks`: every count of the
+fifteen levels as at `b4b19fe`; only ANDY3 has flow calls over a sheet, five calls of
+612 triangles, all over their own squares (a probe that spares every flow call gives
+`art_hidden=0 art_kept=5` there). The build's hash without the new field equals
+`b4b19fe`'s on the fifteen levels, one thread and sixteen; with it, one thread equals
+sixteen. The fifteen cameras and the pond's 36 pictures are md5-identical to
+`b4b19fe`'s. Commit `7be021f`.
 
 ### The level load on several cores
 2026-10-11
@@ -12634,7 +12664,13 @@ searched by binary search instead of a hashed set built one insert per triangle.
 - The memory of the fill (`kFillBudget` :7561): a group starts when the groups running and
 it hold under 96 MiB of triangle records and sort lists, or when nothing else runs - the
 page decode's batch budget. Without it RoomProbe's peak commit on sixteen threads stood
-160 MiB over one thread's on TITLE.
+160 MiB over one thread's on TITLE. A group holds its share as an `HDByteGate::Share`
+(`hd_pagecache.h` :440, taken at `hd_render.cpp` :7600), whose destructor gives the
+bytes back and wakes the waiters however the fill ends: a fill that throws
+(`std::bad_alloc` in the 32-bit process) reaches `HDPoolRun`'s caller and leaves no
+thread waiting for room. ModernTest's `load_pool` checks it on 1, 4 and 16 threads with
+an item that throws while it holds its share (30 checks); the build's hash of the
+fifteen levels on one thread and sixteen is unchanged by it.
 
 Not a lever: overlapping the page decode with the fill. The fill asks each triangle's page
 whether it is part-way clear (`HDPageCacheSlotClear`), which the decode measures; the
@@ -12743,12 +12779,7 @@ cuts, `hd_gloss.txt`, `hd_water.txt`, `hd_reach`, `hd_air`, `hd_water` and the e
 stamp - or draw a wrong level without a word; with nobody able to play tonight that risk
 was not taken. The fill's transient memory is up to 96 MiB more than one thread's in the
 32-bit process. `air_ms` on the overlap line is now processor time summed over the
-threads. The fill's memory gate (`hd_render.cpp` :7566 to :7593) gives a group's share
-back only when its fill returns: should `fill_group` throw (in practice `std::bad_alloc`
-in the 32-bit process), `HDPoolRun` stops handing out groups, but a thread already waiting
-at the gate for room waits on, and the load hangs where the one loop crashed. Neither has
-a catch in the engine, so both are fatal; a guard that gives the share back and wakes the
-waiters on the way out is more than the one line the fix pass allowed itself.
+threads.
 
 **What the prover found.** Three findings on `a16a3de`. Medium: with `-log` the build's
 fingerprint ran inside `HDRenderLevelBegin`, so the built line's `ms=` and the `hd_share`
@@ -12768,7 +12799,7 @@ the fifteen cameras at `-hdwater 0` and `1` on one thread and sixteen against th
 10 of 10; the classic path 12 of 12; the suites as above, 0 failed.
 
 **Commits.** `8ba4a1b`, `7cfe85d`, `698c438`, `77d265c`, `2632d97`, `c1bc5c9`, `23274c4`;
-after the prover, `88b0cf2`, `25adc3f`.
+after the prover, `88b0cf2`, `25adc3f`; the gate's share on every way out, `611122a`.
 
 ## 2.5 Sixty frames a second
 

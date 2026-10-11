@@ -28,6 +28,7 @@
 #include "draw.h"
 #include "camera.h"
 #include "lara.h"
+#include "../specific/hd/hd_level.h"	// HDWaterSplash
 
 static long number_dynamics;
 DYNAMIC dynamics[64];
@@ -1025,6 +1026,13 @@ void SetupSplash(SPLASH_SETUP* setup)
 	splash->OuterRad = setup->OuterRad;
 	splash->OuterSize = setup->OuterSize;
 	splash->OuterRadVel = setup->OuterRadVel;
+
+	/* Over a water sheet the HD path draws this splash as the water's own
+	 * (hd_level.h, HDWaterSplash); the struct runs on as before and bit
+	 * 0x10 keeps its classic sprites out of S_DrawSplashes. */
+	if (HDWaterSplash(setup))
+		splash->flags |= 0x10;
+
 	SoundEffect(SFX_LARA_SPLASH, (PHD_3DPOS*)setup, SFX_DEFAULT);
 }
 

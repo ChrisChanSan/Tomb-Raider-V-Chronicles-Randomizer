@@ -36,6 +36,7 @@
 #include "../specific/gamemain.h"
 #include "../specific/specificfx.h"
 #include "../specific/function_table.h"
+#include "../specific/hd/hd_level.h"	// HDWaterSpray
 
 static PHD_VECTOR SteelDoorLensPos;
 
@@ -1333,4 +1334,10 @@ void TriggerFishtankSpray(long x, long y, long z, long c)
 	sptr->dSize = (GetRandomControl() & 0x1F) + 64;
 	sptr->Size = sptr->dSize >> 2;
 	sptr->sSize = sptr->Size;
+
+	/* The HD path draws this spray as the water's own (hd_level.h,
+	 * HDWaterSpray); the spark runs on as before and SF_UNUSED2, set by
+	 * nothing else, keeps it out of S_DrawSparks. */
+	if (HDWaterSpray(x, y, z, c))
+		sptr->Flags |= SF_UNUSED2;
 }

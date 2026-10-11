@@ -42,6 +42,8 @@
 #include "hd_shader/hd_room_water_river_ps.inc"
 #include "hd_shader/hd_room_water_foam_ps.inc"
 #include "hd_shader/hd_room_water_foam_depth_ps.inc"
+#include "hd_shader/hd_room_card_vs.inc"
+#include "hd_shader/hd_room_card_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -51,6 +53,7 @@
 #include "hd_gloss_seed.h"
 #include "hd_gloss_field.h"
 #include "hd_shadow.h"			// HD_SHADOW_MAP, the projected shadow's map
+#include "hd_splash_math.h"		// the water's cards
 
 #include <algorithm>
 #include <array>
@@ -1681,6 +1684,11 @@ namespace
 	 * foam. */
 	IDirect3DPixelShader9* g_water_foam_ps = 0;
 	IDirect3DPixelShader9* g_water_foam_depth_ps = 0;
+	/* The water's cards (hd_room.hlsl, CardVS and CardPS; "the cards"
+	 * below). Null when the device refused either: then no splash or spray
+	 * is taken from the classic path, which draws its own. */
+	IDirect3DVertexShader9* g_card_vs = 0;
+	IDirect3DPixelShader9* g_card_ps = 0;
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -3795,6 +3803,15 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		(const DWORD*)kHDRoomWaterFoamDepthPS, &g_water_foam_depth_ps)))
 		g_water_foam_depth_ps = 0;
 
+	// Nor are the cards': without them the classic splash and spray stay.
+	if (FAILED(device->CreateVertexShader((const DWORD*)kHDRoomCardVS,
+		&g_card_vs)))
+		g_card_vs = 0;
+
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDRoomCardPS,
+		&g_card_ps)))
+		g_card_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -3956,6 +3973,8 @@ void HDRenderShutdown()
 		g_water_foam_depth_ps->Release();
 		g_water_foam_depth_ps = 0;
 	}
+	if (g_card_vs) { g_card_vs->Release(); g_card_vs = 0; }
+	if (g_card_ps) { g_card_ps->Release(); g_card_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -9760,6 +9779,105 @@ namespace
 	float g_lara_x = 0.0f, g_lara_z = 0.0f;
 	// The level's sinks (HDRenderWaterSinks), for the rivers.
 	std::vector<HDWaterSink> g_wsinks;
+
+	/* The cards.
+	 *
+	 * A dive splash (SetupSplash) and a fish tank's spray
+	 * (TriggerFishtankSpray) drawn as the water's own instead of the classic
+	 * sprites: a splash is two rings on the sheet under it (gather_rings)
+	 * and a crown and drops of cards, a spark of the tank's spray a card of
+	 * its rising mist. The cards are quads facing the eye with a
+	 * window of one of the remaster's pages - its spray, 3242 and 3243, and
+	 * its drops, 3160 (DATA of the player's installation, read through the
+	 * page cache) - cut round and soft in CardPS, tinted with the foam colour
+	 * of the body they belong to, so a splash in a dark canal is a dark
+	 * canal's water. Where they stand and how they move is
+	 * hd_splash_math.h's, a function of their age alone: an HD splash or
+	 * spark is its start and its seed, and a frame works out every card
+	 * afresh. All of it is this project's own design; only the pages are the
+	 * remaster's.
+	 *
+	 * kCardCap cards a frame: a splash at its peak is kSplashCards (52), the
+	 * game keeps four splashes at once (splashes[4]), 208; a tank makes 4 or
+	 * 5 sparks a tick (ControlFishtank), each a mist card for 14 to 17
+	 * ticks, at most 85 live; the two tanks of RICH2 stand in rooms 23 and
+	 * 122, which no frame shows together. 208 + 85 is well under 512; past
+	 * the cap the latest wait. kCardSoft the depth over which a card fades
+	 * into what stands behind it, kSprayKept the sparks kept (the 85 with
+	 * room for 60 fps frames between ticks), kSplashesKept the splashes
+	 * (four live and four ending) - free choices that hold the counts above.
+	 */
+	const int kCardCap = 512;
+	const float kCardSoft = 64.0f;		// units
+	const size_t kSprayKept = 128;
+	const size_t kSplashesKept = 8;
+
+	struct LiveSplash
+	{
+		HDSplashSetup setup;
+		double born;		// on the frame clock
+		unsigned int seed;
+		int body;
+	};
+
+	struct LiveSpray
+	{
+		float x, y, z;
+		int strength;
+		double born;
+		unsigned int seed;
+		int body;		// whose foam colour it wears, or -1
+	};
+
+	std::vector<LiveSplash> g_splashes;
+	std::vector<LiveSpray> g_sprays;
+	unsigned int g_card_seed = 0;
+	HDRenderSplashStats g_splash_stats = {};
+
+	/* The tank's film.
+	 *
+	 * The water a breaking fish tank pours over its room's floor, as a
+	 * sheet of this water: a basin body of its own over the squares of the
+	 * floor lasers the tank shorts out (HDWaterFilm, hd_level.cpp builds the
+	 * list), kFilmHair over the floor and kFilmHair deep, drawn with the
+	 * sheets' own shaders in its room's blend phase - the reflection, the
+	 * highlight and the waterline round its edge are the sheet's. It is no
+	 * water square for anything else: not counted, not in the WATERLOG
+	 * lines, no ring source, no ripple gate, no hidden art, no caustic (a
+	 * room's caustic would light the whole floor at every moment), no eye
+	 * under it.
+	 *
+	 * Its strength a frame (HDRenderWaterFilmWet, hd_splash_math.h
+	 * HDFilmStrength) is the blend factor: SRCBLEND BLENDFACTOR, DESTBLEND
+	 * INVBLENDFACTOR. With the frame's copy bound the sheet's pixel shader
+	 * writes the water and the floor behind it whole, alpha 1 (WaterPS,
+	 * "with the copy"), so that blend is an exact cross-fade between the
+	 * film and the floor; without the copy the film is not drawn. A basin
+	 * draws no foam pass, so one draw is all. kFilmHair, 8 units, is about
+	 * 2 cm at 2.3 mm a unit - a film over the classic floor and well under
+	 * the lasers' 128 - a free choice. */
+	const int kFilmHair = 8;		// units
+
+	std::vector<HDWaterFilm> g_film_in;
+	// Per film of this level: its body, or -1 when it has none, and its wet.
+	std::vector<int> g_film_body;
+	std::vector<float> g_film_wet;
+	// The first film body: the bodies before it are the level's own.
+	int g_film_first = -1;
+
+	// The film a body is, or -1.
+	int film_of_body(int body)
+	{
+		if (g_film_first < 0 || body < g_film_first)
+			return -1;
+
+		for (size_t f = 0; f < g_film_body.size(); f++)
+			if (g_film_body[f] == body)
+				return (int)f;
+
+		return -1;
+	}
+
 	/* The creatures' mark: whether this frame marked anything (the sheets
 	 * then draw their second, line-less pass) and the stencil states the
 	 * bracket found, put back by HDRenderWaterMarkEnd. */
@@ -9878,6 +9996,12 @@ namespace
 		g_wsources.clear();
 		g_rings.clear();
 		g_ring_probe.clear();
+		g_splashes.clear();
+		g_sprays.clear();
+		g_film_body.clear();
+		g_film_wet.clear();
+		g_film_first = -1;
+		g_splash_stats = HDRenderSplashStats();
 		g_wfeet.clear();
 		g_wsegs.clear();
 		g_curtains = 0;
@@ -12299,6 +12423,60 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	for (size_t i = 0; i < skirts.size(); i++)
 		skirtOf[(size_t)skirts[i].s.room].push_back((int)i);
 
+	/* The tanks' films (see "the tank's film"): a basin body each, after
+	 * the level's own bodies, so every number and count of those stays as
+	 * it is. Lit as a body is, by its room's light. */
+	g_film_first = (int)g_wbodies.size();
+	g_film_body.assign(g_film_in.size(), -1);
+	g_film_wet.assign(g_film_in.size(), 0.0f);
+
+	for (size_t f = 0; sheets && f < g_film_in.size(); f++)
+	{
+		const HDWaterFilm& in = g_film_in[f];
+
+		if (in.room < 0 || in.room >= count || in.room >= groups ||
+			in.x1 <= in.x0 || in.z1 <= in.z0)
+			continue;
+
+		WaterBody b = {};
+		float l[3];
+
+		b.minX = in.x0;
+		b.maxX = in.x1 - 1024;
+		b.minZ = in.z0;
+		b.maxZ = in.z1 - 1024;
+		b.info.cls = b.info.ruleCls = HD_WATER_BASIN;
+		b.info.sectors = ((in.x1 - in.x0) >> 10) * ((in.z1 - in.z0) >> 10);
+		b.info.sheets = b.info.sectors;
+		b.info.perimeter = 2 * (((in.x1 - in.x0) >> 10) +
+			((in.z1 - in.z0) >> 10));
+		b.info.surfaceY = in.y - kFilmHair;
+		b.info.rooms[0] = in.room;
+		b.info.roomCount = 1;
+		b.info.depthMax = kFilmHair;
+		b.info.sourceRoom = -1;
+		b.info.tint[0] = b.info.tint[1] = b.info.tint[2] = 1.0f;
+		b.info.waves = b.info.foam = b.info.bend = 1.0f;
+		b.info.clip = kWaterClip;
+		b.info.swell = 1.0f;
+		b.info.crest = 1.0f;
+		group_light(in.room, l);
+
+		for (int k = 0; k < 3; k++)
+		{
+			const float lit = l[k] * kWaterLightGain;
+
+			b.info.raw[k] = l[k];
+			b.info.light[k] = lit < kWaterLightFloor ? kWaterLightFloor :
+				lit > kWaterLightCap ? kWaterLightCap : lit;
+		}
+
+		g_film_body[f] = (int)g_wbodies.size();
+		g_wbodies.push_back(b);
+		g_wlooks.push_back(WaterLook());
+		water_look(g_wlooks.back(), g_wbodies.back(), section, stem);
+	}
+
 	if (!sheets || !g_device || !g_water_vs || !g_water_ps)
 		return;
 
@@ -12474,6 +12652,105 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				g_sheet_ranges[(size_t)g].push_back(range);
 		}
 
+	// The level's own grid, for the log; the films' follow it.
+	const size_t levelVerts = verts.size();
+	const size_t levelIdx = idx.size();
+
+	/* The films' grids, the same 5 x 5 vertices a square: in the group of
+	 * the floor lasers' room and in its flipmap partner's, whichever the
+	 * frame draws; the depth kFilmHair everywhere, the shore the distance
+	 * to the film's own edge (the floor beyond it is dry). */
+	for (size_t f = 0; f < g_film_body.size(); f++)
+	{
+		const int b = g_film_body[f];
+
+		if (b < 0)
+			continue;
+
+		const HDWaterFilm& in = g_film_in[f];
+		const int partner = rooms[in.room].flip;
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			const int g = pass ? partner : in.room;
+
+			if (g < 0 || g >= groups || g >= count ||
+				(pass && partner == in.room))
+				continue;
+
+			SheetRange range = {};
+			const HDWaterRoom& rm = rooms[g];
+
+			range.start = (unsigned int)idx.size();
+			range.minVertex = (unsigned int)verts.size();
+			range.body = b;
+			range.minX = in.x0;
+			range.maxX = in.x1;
+			range.minZ = in.z0;
+			range.maxZ = in.z1;
+			range.surfaceY = g_wbodies[(size_t)b].info.surfaceY;
+			range.originX = rm.originX;
+			range.originZ = rm.originZ;
+
+			for (int wz0 = in.z0; wz0 < in.z1; wz0 += 1024)
+				for (int wx0 = in.x0; wx0 < in.x1; wx0 += 1024)
+				{
+					if (verts.size() + 25 > 65535)
+						continue;
+
+					const unsigned short first =
+						(unsigned short)verts.size();
+
+					for (int j = 0; j <= 4; j++)
+						for (int i = 0; i <= 4; i++)
+						{
+							const int wx = wx0 + i * 256;
+							const int wz = wz0 + j * 256;
+							int edge = wx - in.x0;
+
+							edge = in.x1 - wx < edge ? in.x1 - wx : edge;
+							edge = wz - in.z0 < edge ? wz - in.z0 : edge;
+							edge = in.z1 - wz < edge ? in.z1 - wz : edge;
+
+							const float dq = (float)kFilmHair / 32.0f + 0.5f;
+							const float sq = (float)edge / 16.0f + 0.5f;
+							HDVertex v = {};
+
+							v.x = (short)(wx - rm.originX);
+							v.y = (short)(range.surfaceY - rm.originY);
+							v.z = (short)(wz - rm.originZ);
+							v.nx = 127;
+							v.nz = 127;
+							v.layer = (unsigned char)HD_WATER_BASIN;
+							v.c1r = (unsigned char)dq;
+							v.c1g = (unsigned char)(sq > 255.0f ? 255.0f : sq);
+							v.c1b = 255;
+							v.wSpare = 1;
+							verts.push_back(v);
+						}
+
+					for (int j = 0; j < 4; j++)
+						for (int i = 0; i < 4; i++)
+						{
+							const int a = first + j * 5 + i;
+
+							idx.push_back((unsigned short)a);
+							idx.push_back((unsigned short)(a + 1));
+							idx.push_back((unsigned short)(a + 5));
+							idx.push_back((unsigned short)(a + 1));
+							idx.push_back((unsigned short)(a + 6));
+							idx.push_back((unsigned short)(a + 5));
+						}
+				}
+
+			range.tris = ((unsigned int)idx.size() - range.start) / 3;
+			range.vertices = (unsigned int)verts.size() - range.minVertex;
+
+			if (range.tris)
+				g_sheet_ranges[(size_t)g].push_back(range);
+		}
+	}
+
 	if (verts.empty() || idx.empty() ||
 		FAILED(g_device->CreateVertexBuffer(
 		(UINT)(verts.size() * sizeof(HDVertex)), D3DUSAGE_WRITEONLY, 0,
@@ -12601,8 +12878,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					g_wlevel.artKept++;
 
 	g_wlevel.built = 1;
-	g_wlevel.vertices = (int)verts.size();
-	g_wlevel.triangles = (int)idx.size() / 3;
+	g_wlevel.vertices = (int)levelVerts;
+	g_wlevel.triangles = (int)levelIdx / 3;
 	/* What the sheets will read: the frame's copy, and the depth texture
 	 * where the adapter offers it and the variant exists - until a bind
 	 * refuses (HDRenderWaterDepthBind). */
@@ -12792,6 +13069,404 @@ void HDRenderWaterRing(float x, float z, float age, float size)
 	ProbeRing ring = { x, z, age, size };
 
 	g_ring_probe.push_back(ring);
+}
+
+namespace
+{
+	// A card's corner: view space, the page and corner, the tint, the light.
+	struct CardVertex
+	{
+		float x, y, z;
+		float u, v, cx, cz;		// TEXCOORD0
+		float r, g, b, a;		// TEXCOORD1
+		float light;			// TEXCOORD2
+	};
+
+	const DWORD kCardFVF = D3DFVF_XYZ | D3DFVF_TEX3 |
+		D3DFVF_TEXCOORDSIZE4(0) | D3DFVF_TEXCOORDSIZE4(1) |
+		D3DFVF_TEXCOORDSIZE1(2);
+
+	// The pages by HD_CARD_SPRAY, HD_CARD_SPRAY2 and HD_CARD_DROPS.
+	const int kCardPages[3] = { 3242, 3243, 3160 };
+
+	/* A body's cards wear its foam colour (gWaterFoam, c102 of its look)
+	 * times kCardLight and its fog light (gWaterZen.w, c99): the spray of a
+	 * dark canal is that canal's foam, a little brighter for the light it
+	 * catches in the air - 1.5 a free choice, set by eye on the round's
+	 * RoomProbe pictures. White and 1 for none. */
+	const float kCardLight = 1.5f;
+
+	void card_tint(int body, float* rgb, float* light)
+	{
+		if (body >= 0 && body < (int)g_wlooks.size())
+		{
+			const WaterLook& l = g_wlooks[(size_t)body];
+
+			rgb[0] = l.pixel[24] * kCardLight;
+			rgb[1] = l.pixel[25] * kCardLight;
+			rgb[2] = l.pixel[26] * kCardLight;
+			*light = l.pixel[15];
+			return;
+		}
+
+		rgb[0] = rgb[1] = rgb[2] = 1.0f;
+		*light = 1.0f;
+	}
+}
+
+bool HDRenderWaterCardsReady()
+{
+	if (!g_device || !g_card_vs || !g_card_ps || !g_wlevel.built)
+		return false;
+
+	for (int p = 0; p < 3; p++)
+		if (!HDPageCacheTexture(kCardPages[p]))
+			return false;
+
+	return true;
+}
+
+int HDRenderWaterCardPages(int* pages, int max)
+{
+	int n = 0;
+
+	for (int p = 0; p < 3 && pages && n < max; p++)
+		pages[n++] = kCardPages[p];
+
+	return n;
+}
+
+bool HDRenderWaterSplash(const HDSplashSetup* setup, float age)
+{
+	if (!setup || !HDRenderWaterCardsReady())
+		return false;
+
+	int body = -1;
+
+	if (sheet_surface_near(setup->x, setup->z, setup->y, (float)kRingHeight,
+		(float)kRingHeight, &body) < -1.0e8f)
+		return false;
+
+	if (g_splashes.size() >= kSplashesKept)
+		g_splashes.erase(g_splashes.begin());
+
+	LiveSplash s;
+
+	s.setup = *setup;
+	s.born = (double)g_motion[2] - age;
+	s.seed = HDCardHash(++g_card_seed, 1u);
+	s.body = body;
+	g_splashes.push_back(s);
+	return true;
+}
+
+/* A spark wears the colour of the film it rises from, else of a sheet
+ * within four squares under it. */
+bool HDRenderWaterSpray(float x, float y, float z, int strength, float age)
+{
+	if (!HDRenderWaterCardsReady())
+		return false;
+
+	LiveSpray s;
+
+	s.x = x;
+	s.y = y;
+	s.z = z;
+	s.strength = strength;
+	s.born = (double)g_motion[2] - age;
+	s.seed = HDCardHash(++g_card_seed, 2u);
+	s.body = -1;
+
+	for (size_t f = 0; f < g_film_body.size(); f++)
+	{
+		const HDWaterFilm& in = g_film_in[f];
+
+		if (g_film_body[f] < 0 || x < (float)in.x0 || x >= (float)in.x1 ||
+			z < (float)in.z0 || z >= (float)in.z1)
+			continue;
+
+		s.body = g_film_body[f];
+		break;
+	}
+
+	if (s.body < 0)
+		sheet_surface_near(x, z, y, 0.0f, 4096.0f, &s.body);
+
+	if (g_sprays.size() >= kSprayKept)
+		g_sprays.erase(g_sprays.begin());
+
+	g_sprays.push_back(s);
+	return true;
+}
+
+void HDRenderWaterFilms(const HDWaterFilm* films, int count)
+{
+	g_film_in.clear();
+
+	for (int i = 0; films && i < count; i++)
+		g_film_in.push_back(films[i]);
+}
+
+void HDRenderWaterFilmWet(int film, float strength)
+{
+	if (film >= 0 && film < (int)g_film_wet.size())
+		g_film_wet[(size_t)film] = strength < 0.0f ? 0.0f :
+			strength > 1.0f ? 1.0f : strength;
+}
+
+int HDRenderWaterFilmCount()
+{
+	return (int)g_film_in.size();
+}
+
+void HDRenderSplashStatsNow(HDRenderSplashStats* out)
+{
+	if (out)
+		*out = g_splash_stats;
+}
+
+void HDRenderWaterCardsDraw(const float* toFrame)
+{
+	const double now = (double)g_motion[2];
+
+	// The splashes and sparks past their life go, all of them when the
+	// clock went back (a new level, a loaded game).
+	for (size_t i = g_splashes.size(); i-- > 0; )
+		if (g_splashes[i].born > now + 0.1 || !HDSplashAt(
+			g_splashes[i].setup, (float)(now - g_splashes[i].born)).alive)
+			g_splashes.erase(g_splashes.begin() + (std::ptrdiff_t)i);
+
+	for (size_t i = g_sprays.size(); i-- > 0; )
+		if (g_sprays[i].born > now + 0.1 || now - g_sprays[i].born > 1.5)
+			g_sprays.erase(g_sprays.begin() + (std::ptrdiff_t)i);
+
+	g_splash_stats.splashes = (int)g_splashes.size();
+	g_splash_stats.rings = 2 * (int)g_splashes.size();
+	g_splash_stats.sprays = (int)g_sprays.size();
+	g_splash_stats.cards = 0;
+	g_splash_stats.tank = -1;
+	g_splash_stats.wet = 0.0f;
+
+	for (size_t f = 0; f < g_film_wet.size(); f++)
+		if (g_film_wet[f] > 0.0f && g_film_body[f] >= 0)
+		{
+			g_splash_stats.tank = g_film_in[f].tank;
+			g_splash_stats.wet = g_film_wet[f];
+			break;
+		}
+
+	if (!g_device || !g_card_vs || !g_card_ps || !g_in_frame || !toFrame ||
+		(g_splashes.empty() && g_sprays.empty()))
+		return;
+
+	// Every card of the frame, with the body whose colour it wears.
+	std::vector<HDCard> cards;
+	std::vector<int> owner;
+	HDCard some[kSplashCards];
+
+	for (const LiveSplash& s : g_splashes)
+	{
+		const int n = HDSplashCards(s.setup, s.seed, (float)(now - s.born),
+			some, kSplashCards);
+
+		for (int k = 0; k < n && (int)cards.size() < kCardCap; k++)
+		{
+			cards.push_back(some[k]);
+			owner.push_back(s.body);
+		}
+	}
+
+	for (const LiveSpray& s : g_sprays)
+	{
+		const float age = (float)(now - s.born);
+		HDCard c;
+
+		if ((int)cards.size() < kCardCap && HDTankPuff(s.x, s.y, s.z,
+			s.strength, s.seed, age, &c))
+		{
+			cards.push_back(c);
+			owner.push_back(s.body);
+		}
+	}
+
+	if (cards.empty())
+		return;
+
+	/* Each card's middle into the frame's world and on into view space,
+	 * where it faces the eye: the corners lie in the view's own x and y. */
+	std::vector<CardVertex> verts[3];
+	const float* m = toFrame;
+
+	for (size_t i = 0; i < cards.size(); i++)
+	{
+		const HDCard& c = cards[i];
+		const float fx = c.x * m[0] + c.y * m[4] + c.z * m[8] + m[12];
+		const float fy = c.x * m[1] + c.y * m[5] + c.z * m[9] + m[13];
+		const float fz = c.x * m[2] + c.y * m[6] + c.z * m[10] + m[14];
+		const float vx = fx * g_view[0] + fy * g_view[4] + fz * g_view[8] +
+			g_view[12];
+		const float vy = fx * g_view[1] + fy * g_view[5] + fz * g_view[9] +
+			g_view[13];
+		const float vz = fx * g_view[2] + fy * g_view[6] + fz * g_view[10] +
+			g_view[14];
+
+		if (vz < 1.0f || c.alpha <= 0.0f || c.page < 0 || c.page > 2)
+			continue;
+
+		float tint[3], light;
+
+		card_tint(owner[i], tint, &light);
+
+		const float cs = cosf(c.turn);
+		const float sn = sinf(c.turn);
+		static const float corner[6][2] = { { -1, -1 }, { 1, -1 },
+			{ 1, 1 }, { -1, -1 }, { 1, 1 }, { -1, 1 } };
+
+		for (int k = 0; k < 6; k++)
+		{
+			const float a = corner[k][0];
+			const float b = corner[k][1];
+			CardVertex v;
+
+			v.x = vx + a * c.half * cs - b * c.tall * sn;
+			v.y = vy + a * c.half * sn + b * c.tall * cs;
+			v.z = vz;
+			v.u = c.u + c.size * 0.5f * (a + 1.0f);
+			v.v = c.v + c.size * 0.5f * (b + 1.0f);
+			v.cx = a;
+			v.cz = b;
+			v.r = tint[0];
+			v.g = tint[1];
+			v.b = tint[2];
+			v.a = c.alpha > 1.0f ? 1.0f : c.alpha;
+			v.light = light;
+			verts[c.page].push_back(v);
+		}
+
+		g_splash_stats.cards++;
+	}
+
+	// The device's state as the frame left it, put back below.
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex0 = 0;
+	IDirect3DBaseTexture9* tex6 = 0;
+	IDirect3DVertexBuffer9* stream = 0;
+	UINT streamOffset = 0, streamStride = 0;
+	DWORD fvf = 0;
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
+		D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND, D3DRS_DESTBLEND,
+		D3DRS_BLENDOP, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+		D3DRS_FOGENABLE, D3DRS_SEPARATEALPHABLENDENABLE,
+		D3DRS_COLORWRITEENABLE, D3DRS_STENCILENABLE
+	};
+	const D3DSAMPLERSTATETYPE samps[] =
+	{
+		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER,
+		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_SRGBTEXTURE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
+	DWORD saved[stateCount], saved0[sampCount], saved6[sampCount];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetTexture(0, &tex0);
+	g_device->GetTexture(6, &tex6);
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int i = 0; i < sampCount; i++)
+	{
+		g_device->GetSamplerState(0, samps[i], &saved0[i]);
+		g_device->GetSamplerState(6, samps[i], &saved6[i]);
+	}
+
+	D3DVIEWPORT9 vp = {};
+
+	g_device->GetViewport(&vp);
+
+	const bool soft = g_depth_texture != 0;
+	const float screen[4] = { vp.Width ? 1.0f / (float)vp.Width : 0.0f,
+		vp.Height ? 1.0f / (float)vp.Height : 0.0f, g_proj[10], -g_proj[14] };
+	const float mode[4] = { soft ? 1.0f : 0.0f, 1.0f / kCardSoft, 0.0f,
+		0.0f };
+
+	g_device->SetVertexShader(g_card_vs);
+	g_device->SetPixelShader(g_card_ps);
+	g_device->SetFVF(kCardFVF);
+	set_matrix_constant(0, g_proj);
+	g_device->SetPixelShaderConstantF(92, screen, 1);
+	g_device->SetPixelShaderConstantF(93, mode, 1);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0000000F);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+	g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+	g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+	g_device->SetSamplerState(0, D3DSAMP_SRGBTEXTURE, FALSE);
+	g_device->SetSamplerState(6, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(6, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(6, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	g_device->SetSamplerState(6, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(6, D3DSAMP_SRGBTEXTURE, FALSE);
+	g_device->SetTexture(6, soft ? g_depth_texture : 0);
+
+	for (int p = 0; p < 3; p++)
+	{
+		IDirect3DTexture9* page = HDPageCacheTexture(kCardPages[p]);
+
+		if (!page || verts[p].empty())
+			continue;
+
+		g_device->SetTexture(0, page);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+			(UINT)(verts[p].size() / 3), &verts[p][0], sizeof(CardVertex));
+	}
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < sampCount; i++)
+	{
+		g_device->SetSamplerState(0, samps[i], saved0[i]);
+		g_device->SetSamplerState(6, samps[i], saved6[i]);
+	}
+
+	g_device->SetTexture(0, tex0);
+	g_device->SetTexture(6, tex6);
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (tex0) tex0->Release();
+	if (tex6) tex6->Release();
+	if (stream) stream->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
 }
 
 void HDRenderWaterFalls(const HDWaterFall* falls, int count, const char* stem)
@@ -13672,9 +14347,12 @@ bool HDRenderWaterMarkView()
 	return true;
 }
 
+// The level's own bodies; the tanks' films that follow them are no body
+// of the log's.
 int HDRenderWaterBodies()
 {
-	return (int)g_wbodies.size();
+	return g_film_first >= 0 && g_film_first < (int)g_wbodies.size() ?
+		g_film_first : (int)g_wbodies.size();
 }
 
 bool HDRenderWaterBodyInfo(int at, HDRenderWaterBody* out)
@@ -13768,8 +14446,8 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		int cls[HD_WATER_CLASSES] = {};
 		char file[16];
 
-		for (size_t b = 0; b < g_wbodies.size(); b++)
-			cls[g_wbodies[b].info.cls]++;
+		for (int b = 0; b < HDRenderWaterBodies(); b++)
+			cls[g_wbodies[(size_t)b].info.cls]++;
 
 		if (g_wlevel.fileLines >= 0)
 			snprintf(file, sizeof(file), "%d", g_wlevel.fileLines);
@@ -13911,10 +14589,21 @@ void HDRenderWaterFoamTiming(double* ms, int* draws)
 		*draws = g_foam_timed;
 }
 
+// A tank's film counts only while it is wet: a dry one asks for no copy.
 bool HDRenderGroupHasSheet(int group)
 {
-	return group >= 0 && group < (int)g_sheet_ranges.size() &&
-		!g_sheet_ranges[(size_t)group].empty();
+	if (group < 0 || group >= (int)g_sheet_ranges.size())
+		return false;
+
+	for (const SheetRange& r : g_sheet_ranges[(size_t)group])
+	{
+		const int film = film_of_body(r.body);
+
+		if (film < 0 || g_film_wet[(size_t)film] > 0.0f)
+			return true;
+	}
+
+	return false;
 }
 
 /* The copy: render target 0 as it stands, whole and unfiltered, into a
@@ -14255,6 +14944,7 @@ namespace
 			float x, z, size;
 			double age;
 			int later;	// 1 a small ring, drawn after the rest
+			float front, slope;	// a splash's own, when slope > 0
 		};
 
 		/* The kept rings, and room for the sources' and the feet's live
@@ -14285,8 +14975,34 @@ namespace
 			found[n].size = size;
 			found[n].age = age;
 			found[n].later = later;
+			found[n].front = 0.0f;
+			found[n].slope = 0.0f;
 			n++;
 		};
+
+		/* A splash's two rings (see "the cards"), the youngest of all: its
+		 * own front and strength, out of the classic splash's numbers. */
+		for (const LiveSplash& s : g_splashes)
+		{
+			float ring[4];
+			const double age = now - s.born;
+
+			if (!HDSplashRings(s.setup, (float)age, ring))
+				continue;
+
+			for (int k = 0; k < 2; k++)
+			{
+				const int before = n;
+
+				add(s.setup.x, s.setup.y, s.setup.z, false, 128.0f, 0.0, 0);
+
+				if (n > before)
+				{
+					found[n - 1].front = ring[k * 2];
+					found[n - 1].slope = ring[k * 2 + 1];
+				}
+			}
+		}
 
 		for (const WaterRing& g : g_rings)
 			add(g.x, g.y, g.z, false, g.size, now - g.born, g.body ? 0 : 1);
@@ -14326,6 +15042,12 @@ namespace
 				kRingSpeed * (float)found[i].age;
 			out[i * 4 + 3] = kRingSlope * (first < 1.0f ? first : 1.0f) *
 				life;
+
+			if (found[i].slope > 0.0f)
+			{
+				out[i * 4 + 2] = found[i].front;
+				out[i * 4 + 3] = found[i].slope;
+			}
 		}
 
 		return count;
@@ -14654,6 +15376,15 @@ namespace
 
 		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
 		{
+			/* A tank's film: only while wet, only with the copy, and
+			 * cross-faded by the blend factor (see "the tank's film"). */
+			const int film = film_of_body(r.body);
+			const float wet = film < 0 ? 1.0f : g_film_wet[(size_t)film];
+
+			if (film >= 0 && (wet <= 0.0f || !g_copy_valid ||
+				!(g_caps.SrcBlendCaps & D3DPBLENDCAPS_BLENDFACTOR)))
+				continue;
+
 			const WaterLook& look = g_wlooks[(size_t)r.body];
 			float pixel[32 * 4] = {};
 			float rows[32];
@@ -14808,6 +15539,24 @@ namespace
 			g_device->SetPixelShaderConstantF(149, crest, 11);
 			crest[25] = kCrestSwellGain * look.crestDepth;
 			g_device->SetVertexShaderConstantF(168, crest, 11);
+
+			if (film >= 0)
+			{
+				const DWORD f = (DWORD)(wet >= 1.0f ? 255.0f : wet * 255.0f);
+
+				g_device->SetRenderState(D3DRS_BLENDFACTOR,
+					D3DCOLOR_ARGB(f, f, f, f));
+				g_device->SetRenderState(D3DRS_SRCBLEND,
+					D3DBLEND_BLENDFACTOR);
+				g_device->SetRenderState(D3DRS_DESTBLEND,
+					D3DBLEND_INVBLENDFACTOR);
+				draw_sheet_range(r);
+				g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+				g_device->SetRenderState(D3DRS_DESTBLEND,
+					D3DBLEND_INVSRCALPHA);
+				g_device->SetRenderState(D3DRS_BLENDFACTOR, 0xFFFFFFFF);
+				continue;
+			}
 
 			draw_sheet_range(r);
 

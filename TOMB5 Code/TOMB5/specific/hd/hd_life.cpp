@@ -321,8 +321,21 @@ void HDLifeFrame(double clock)
 	const float lx = laraOn ? (float)lara_item->pos.x_pos : 0.0f;
 	const float lz = laraOn ? (float)lara_item->pos.z_pos : 0.0f;
 	std::vector<HDLifeRing> rings;
+	/* The game's live splashes (SetupSplash, game\effect2.cpp: a dive, a
+	 * thing falling in), read only: one on a body's water scares its
+	 * school. */
+	float wet[8];
+	int wets = 0;
 
-	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings);
+	for (int i = 0; i < 4; i++)
+		if (splashes[i].flags & 1)
+		{
+			wet[wets * 2] = (float)splashes[i].x;
+			wet[wets * 2 + 1] = (float)splashes[i].z;
+			wets++;
+		}
+
+	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings, wet, wets);
 
 	for (size_t i = 0; i < rings.size(); i++)
 		if (put_ripple(rings[i]))

@@ -17787,33 +17787,111 @@ static void life_flee()
 	ok(HDLifeFlees(1000.0f, 1000.0f, 1000.0f + kHDLifeFleeReach - 1.0f,
 		1000.0f) && !HDLifeFlees(1000.0f, 1000.0f, 1000.0f +
 		kHDLifeFleeReach + 1.0f, 1000.0f),
-		"life flee: Lara within reach of the school's middle sends it off",
-		0, 0);
+		"life flee: Lara within a square of a fish scares it", 0, 0);
 
-	const int away = HDLifeFarthestDeep(b, 0.0f, 0.0f);
+	// The dart's speed curve: from its start falling off, three squares in
+	// the first two seconds.
+	ok(HDLifeDartSpeed(0.0f) == kHDLifeDartSpeed &&
+		HDLifeDartSpeed(kHDLifeDartFall) < 0.37f * kHDLifeDartSpeed &&
+		HDLifeDartDistance(2.0f) > 2.75f * 1024.0f &&
+		HDLifeDartDistance(2.0f) < 3.25f * 1024.0f,
+		"life flee: a dart falls off with its time and runs about three "
+		"squares in two seconds", (long)HDLifeDartDistance(2.0f), 3072);
 
-	ok(away >= 0 && b.squares[(size_t)away].x == 3072 &&
-		b.squares[(size_t)away].z == 3072,
-		"life flee: the school flees to the deep square farthest from her",
-		away, 15);
+	// The scatter: every way within its angle of straight away from her.
+	float worst = 0.0f;
+	float spreadMin = 10.0f, spreadMax = -10.0f, unit = 0.0f;
 
+	for (int i = 0; i < 64; i++)
+	{
+		float wx, wz;
+
+		HDLifeDartWay(1000.0f, 0.0f, 0.0f, 0.0f, i, 3, 0.0f, &wx, &wz);
+
+		const float a = atan2f(wz, wx);
+
+		worst = fabsf(a) > worst ? fabsf(a) : worst;
+		spreadMin = a < spreadMin ? a : spreadMin;
+		spreadMax = a > spreadMax ? a : spreadMax;
+		unit = fabsf(wx * wx + wz * wz - 1.0f) > unit ?
+			fabsf(wx * wx + wz * wz - 1.0f) : unit;
+	}
+
+	ok(worst <= kHDLifeDartScatter + 1.0e-4f && spreadMax - spreadMin >
+		kHDLifeDartScatter && unit < 1.0e-4f,
+		"life flee: 64 fish dart away from her within the scatter and spread "
+		"over more than half of it", (long)(worst * 1000.0f),
+		(long)(kHDLifeDartScatter * 1000.0f));
+
+	/* A school in a pond of four by four squares, Lara at its middle: every
+	 * fish darts off, no fish leaves the deep water or comes nearer than
+	 * the edge to a bank, the school is back together within the
+	 * flight's time. */
 	HDLifePool p = {};
 	HDLifeSchool s = {};
 
 	p.bodies.push_back(b);
-	s.cx = 600.0f;
-	s.cz = 600.0f;
+	p.reach[HD_LIFE_FISH] = 89.0f;
+	s.cx = 2048.0f;
+	s.cz = 2048.0f;
 	s.target = 0;
+	s.fish = 6;
 	p.schools.push_back(s);
-	HDLifeSchoolTick(p, p.schools[0], 0, 1.0f, 0.1f, 1, 500.0f, 500.0f);
 
-	const float moved = sqrtf((p.schools[0].cx - 600.0f) * (p.schools[0].cx -
-		600.0f) + (p.schools[0].cz - 600.0f) * (p.schools[0].cz - 600.0f));
+	for (int f = 0; f < 6; f++)
+	{
+		HDLifeEntry e = {};
 
-	ok(p.schools[0].fleeUntil == 1.0f + kHDLifeFleeFor &&
-		fabsf(moved - 2.0f * kHDLifeSwim * 0.1f) < 0.5f,
-		"life flee: fleeing, the school swims at twice its speed for its "
-		"time", (long)moved, (long)(2.0f * kHDLifeSwim * 0.1f));
+		e.kind = HD_LIFE_FISH;
+		e.index = f;
+		e.school = 0;
+		e.ring = 200.0f;
+		e.angle = 6.2831853f * f / 6.0f;
+		p.entries.push_back(e);
+	}
+
+	float far = 0.0f;
+	int outside = 0;
+
+	for (int k = 1; k <= 30 * 20; k++)
+	{
+		const float t = k / 30.0f;
+
+		HDLifeSchoolTick(p, p.schools[0], 0, t, 1.0f / 30.0f, k <= 15, 2048.0f,
+			2048.0f);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, p.entries[i], t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			if (k == 60)
+				far += sqrtf((x - 2048.0f) * (x - 2048.0f) + (z - 2048.0f) *
+					(z - 2048.0f)) / 6.0f;
+
+			outside += x < kHDLifeEdge - 1.0f || z < kHDLifeEdge - 1.0f ||
+				x > 4096.0f - kHDLifeEdge + 1.0f || z > 4096.0f -
+				kHDLifeEdge + 1.0f;
+		}
+	}
+
+	ok(far > 1000.0f && outside == 0 && p.schools[0].darting == 0 &&
+		p.schools[0].darts == 1,
+		"life flee: the fish dart off from her, keep off the banks and come "
+		"back together", (long)far * 10 + outside, 10000);
+
+	// A splash on the body's water scares it, one beside it does not.
+	HDLifePool q = p;
+	const float on[2] = { 1000.0f, 1000.0f }, off[2] = { 5000.0f, 1000.0f };
+
+	HDLifeSchoolTick(q, q.schools[0], 0, 30.0f, 0.1f, 0, 0.0f, 0.0f, off, 1);
+	ok(q.schools[0].darting == 0, "life flee: a splash off the body's water "
+		"scares nothing", q.schools[0].darting, 0);
+	HDLifeSchoolTick(q, q.schools[0], 0, 30.1f, 0.1f, 0, 0.0f, 0.0f, on, 1);
+	ok(q.schools[0].darting == 1 && q.schools[0].fleeUntil > 30.1f,
+		"life flee: a splash on the body's water scares the school",
+		q.schools[0].darting, 1);
 
 	ok(!HDLifeDeepAt(life_body(1, 6, 2048), 200.0f, 3000.0f) &&
 		HDLifeDeepAt(life_body(1, 6, 2048), 512.0f, 3000.0f),

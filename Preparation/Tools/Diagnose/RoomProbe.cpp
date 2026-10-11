@@ -1821,6 +1821,10 @@ static bool g_life_bench = false;
  * clean, such as ANDREA2's fountain basins. */
 static bool g_life_all = false;
 static float g_life_lara_x = 0.0f, g_life_lara_z = 0.0f, g_life_lara_t = 0.0f;
+/* -lifesplash x,z,t: a splash on the water at world x, z from clock t for
+ * two seconds, about the game's splash's life (62 ticks), as the engine
+ * reads the game's live splashes; repeatable. */
+static std::vector<float> g_life_splash;
 static HDLifePool g_life_pool;
 static const HDLifeLevel* g_life_row = 0;
 static float g_life_box[HD_LIFE_KINDS][6];
@@ -2029,9 +2033,18 @@ static void LifeBuild(const char* root, const char* stem)
 		const float t = (float)s / 30.0f;
 		const int on = g_life_lara && t >= g_life_lara_t ? 1 : 0;
 		std::vector<HDLifeRing> now;
+		std::vector<float> wet;
+
+		for (size_t k = 0; k + 2 < g_life_splash.size(); k += 3)
+			if (t >= g_life_splash[k + 2] && t < g_life_splash[k + 2] + 2.0f)
+			{
+				wet.push_back(g_life_splash[k]);
+				wet.push_back(g_life_splash[k + 1]);
+			}
 
 		HDLifeTick(g_life_pool, g_life_row, t, on, g_life_lara_x,
-			g_life_lara_z, &now);
+			g_life_lara_z, &now, wet.empty() ? 0 : &wet[0],
+			(int)wet.size() / 2);
 
 		for (size_t i = 0; i < now.size(); i++)
 			rings.push_back(std::make_pair(now[i], t));
@@ -2087,6 +2100,46 @@ static void LifeBuild(const char* root, const char* stem)
 			g_life_pool.bodies[(size_t)e.body].rise,
 			e.kind == HD_LIFE_FISH ? 0.0f : HDLifeDiveShare(
 			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+	}
+
+	/* A line a school: its centre, whether it is in a flight, the darts it
+	 * made, and its fish's mean place and their widest distance from it. */
+	for (size_t si = 0; si < g_life_pool.schools.size(); si++)
+	{
+		const HDLifeSchool& s = g_life_pool.schools[si];
+		float mx = 0.0f, mz = 0.0f, spread = 0.0f;
+		std::vector<std::pair<float, float> > at;
+
+		for (size_t i = 0; i < g_life_pool.entries.size(); i++)
+			if (g_life_pool.entries[i].school == (int)si)
+			{
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(g_life_pool, g_life_pool.entries[i],
+					(float)g_time, &x, &y, &z, &yaw, &pitch, &roll);
+				at.push_back(std::make_pair(x, z));
+				mx += x;
+				mz += z;
+			}
+
+		if (!at.empty())
+		{
+			mx /= (float)at.size();
+			mz /= (float)at.size();
+		}
+
+		for (size_t k = 0; k < at.size(); k++)
+		{
+			const float d = sqrtf((at[k].first - mx) * (at[k].first - mx) +
+				(at[k].second - mz) * (at[k].second - mz));
+
+			spread = d > spread ? d : spread;
+		}
+
+		printf("LIFELOG level=%s school=%d body=%d centre=%.0f,%.0f "
+			"darting=%d darts=%d fish_at=%.0f,%.0f spread=%.0f\n", stem,
+			(int)si, s.body, s.cx, s.cz, s.darting, s.darts, mx, mz,
+			spread);
 	}
 
 	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
@@ -8480,6 +8533,9 @@ static int ProbeMain(int argc, char** argv)
 			"drawn as the game draws them; LIFELOG lines\n");
 		printf("       -lifelara x,z[,t]   Lara's place for -life from clock "
 			"t: the school flees her, the drips near her ring\n");
+		printf("       -lifesplash x,z,t   a splash on the water at "
+			"world x, z for two seconds from clock t: the school of that "
+			"water darts off, repeatable\n");
 		printf("       -lifebench   -life's draws timed on a second pass "
 			"(every model drawn twice: numbers, not a picture)\n");
 		printf("       -lifeall   -life on every body, whatever the "
@@ -8772,11 +8828,22 @@ static int ProbeMain(int argc, char** argv)
 			g_life_bench = true;
 		else if (!strcmp(argv[at], "-lifeall"))
 			g_life_all = true;
-		else if (!strcmp(argv[at], "-lifelara") && at + 1 < argc)
+		/* -lifesplash shares this branch: one more `else if` passes the
+		 * compiler's limit of nested blocks (C1061). */
+		else if ((!strcmp(argv[at], "-lifelara") ||
+			!strcmp(argv[at], "-lifesplash")) && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) >= 2)
+			if (!strcmp(argv[at], "-lifesplash"))
+			{
+				if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) == 3)
+					g_life_splash.insert(g_life_splash.end(), c, c + 3);
+				else
+					printf("RoomProbe: -lifesplash wants x,z,t - '%s' "
+						"ignored\n", argv[at]);
+			}
+			else if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) >= 2)
 			{
 				g_life_lara = true;
 				g_life_lara_x = c[0];

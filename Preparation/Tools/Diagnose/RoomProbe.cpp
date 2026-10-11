@@ -8021,6 +8021,12 @@ namespace probestatics
  * note at g_classic_rooms. Its own scene and its own state block, after the
  * state bracket of the HD frame has been checked, so the check is the HD
  * path's alone. */
+/* -classicclip: each room's classic faces drawn inside that room's window
+ * of -roomwin, as the classic path draws a room inside its portal window,
+ * and not at all for a room with no window there or an empty one. Off, the
+ * faces are drawn whole over the screen. */
+static bool g_classic_clip = false;
+
 static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	const D3DMATRIX& projection, double ex, double ey, double ez, long width,
 	long height)
@@ -8063,6 +8069,8 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 	// [0] single-sided, culled like the art's opaque ranges; [1] double-sided.
 	std::vector<Vtx> faces[2];
+	// Where each room's faces begin in the two, for -classicclip.
+	std::vector<std::pair<int, size_t> > starts[2];
 	int count = 0;
 	// The static meshes of -statics and -static, both sides drawn.
 	std::vector<Vtx> statics[2];
@@ -8090,6 +8098,9 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 		int left = 0;
 		std::vector<Tr5Level::SectorInfo> squares;
+
+		starts[0].push_back(std::make_pair(room, faces[0].size()));
+		starts[1].push_back(std::make_pair(room, faces[1].size()));
 
 		if (g_classic_wet)
 			level.sectorInfo(room, squares, error);
@@ -8274,8 +8285,36 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 			g_device->SetRenderState(D3DRS_CULLMODE, sided ? D3DCULL_NONE : D3DCULL_CCW);
 			g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
-			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(moved.size() / 3),
-				&moved[0], sizeof(Vtx));
+
+			if (!g_classic_clip || set != faces)
+			{
+				g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+					(UINT)(moved.size() / 3), &moved[0], sizeof(Vtx));
+				continue;
+			}
+
+			for (size_t k = 0; k < starts[sided].size(); k++)
+			{
+				const size_t from = starts[sided][k].second;
+				const size_t to = k + 1 < starts[sided].size()
+					? starts[sided][k + 1].second : moved.size();
+				const long* win = 0;
+
+				for (int w = 0; w < g_roomwin_count && !win; w++)
+					if (g_roomwin_group[w] == starts[sided][k].first)
+						win = g_roomwin_box[w];
+
+				if (to <= from || !win || win[0] > win[2] || win[1] > win[3])
+					continue;
+
+				const RECT r = { win[0], win[1], win[2] + 1, win[3] + 1 };
+
+				g_device->SetScissorRect(&r);
+				g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+				g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+					(UINT)((to - from) / 3), &moved[from], sizeof(Vtx));
+				g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+			}
 		}
 	};
 
@@ -9435,8 +9474,9 @@ static int ProbeMain(int argc, char** argv)
 
 			g_classic_rooms.push_back(atoi(argv[++at]));
 		}
-		else if (!strcmp(argv[at], "-classiconly"))
-			g_classic_only = true;
+		else if (!strcmp(argv[at], "-classiconly") ||
+			!strcmp(argv[at], "-classicclip"))
+			(argv[at][8] == 'o' ? g_classic_only : g_classic_clip) = true;
 		else if (!strcmp(argv[at], "-classicplane") && at + 1 < argc)
 		{
 			g_classic_plane = atol(argv[++at]);

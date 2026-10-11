@@ -235,9 +235,24 @@ static const float kHDLifeRejoinNear = 32.0f;	// units, back on the ring
  * its own period of 3 to 9 seconds; a drip rings the sheet only within six
  * squares of Lara and at most once in two seconds a body, so the eight
  * rings a sheet draw shows (hd_render.cpp, kRingsPerDraw) are not crowded
- * out. Its ring is the size the engine's own drip gives (game\joby.cpp: 32
- * and up to 7 more). The counts, the periods, the reach and the gap are
- * free choices, set by eye on the round's RoomProbe pictures. */
+ * out. The counts, the periods, the reach and the gap are free choices,
+ * set by eye on the round's RoomProbe pictures.
+ *
+ * Its ring is 96 and up to 15 more: a ring's strength on the sheet is its
+ * size over 128 times a half (hd_render.cpp, "the rings"), so 96 to 111
+ * give three quarters to seven eighths of a wading Lara's ring (game\
+ * effects.cpp, WadeSplash: 112 to 127), where the engine's own drip's 32 to
+ * 39 (game\joby.cpp) gave a quarter of it and nobody saw them. A drip is a
+ * drop as well (HDLifeDropTicks): it leaves the ceiling over its point
+ * and its ring starts when it reaches the water. The drop is the game's
+ * own drip (game\tomb4fx.cpp, Drips[], drawn by DrawDrips as a short
+ * streak): the cards of the sheets take a splash and a tank's spray and
+ * no single drop. It falls as UpdateDrips moves a drip, its speed growing
+ * by kHDLifeDropGravity a tick and the drip moving that speed over 32 a
+ * tick: 153 is 4,300 units a second squared at 30 ticks (4300 x 32 / 900),
+ * the project's g (9.81 m/s^2 at 2.3 mm a unit). Its colour is a light
+ * grey-blue, a free choice set by eye; the game's own wet drips off Lara
+ * are 16 to 39 a channel and too dark to see against a wall. */
 static const int kHDLifeDripClosedMin = 4;
 static const int kHDLifeDripPer = 8;
 static const int kHDLifeDripMin = 2;
@@ -246,7 +261,10 @@ static const float kHDLifeDripPeriodMin = 3.0f;
 static const float kHDLifeDripPeriodSpan = 6.0f;
 static const float kHDLifeDripReach = 6144.0f;
 static const float kHDLifeDripGap = 2.0f;
-static const int kHDLifeDripSize = 32;
+static const int kHDLifeDripSize = 96;
+static const int kHDLifeDropGravity = 153;
+static const int kHDLifeDropUnder = 32;	// under the ceiling it leaves
+static const unsigned char kHDLifeDropColour[3] = { 96, 104, 120 };
 
 /* The share of its body's light a model takes: a fish half a square under
  * the surface takes half - at the full light FISH2's silver reads as white
@@ -273,6 +291,7 @@ struct HDLifeSquare
 	int x, z;
 	int depth;	// down to the floor under it, units
 	int closed;	// 1 when a ceiling is over it (its room is not open air)
+	int room = -1;	// the room it lies in (HDRenderWaterSquare)
 };
 
 /* One body as the life sees it: its surface, its current (a unit way in x
@@ -343,7 +362,43 @@ struct HDLifeDrip
 	float period, phase;
 	float last;		// the clock of its last ring, -1 none yet
 	int fired;		// how many times it fired
+	/* The room of its square, the world y of the ceiling over it and
+	 * the room that ceiling belongs to (the caller's, out of the classic
+	 * floor data, after HDLifeBuild), and the
+	 * ticks its drop falls (HDLifeDropTicks; 0 without a ceiling: the
+	 * ring alone, at once); the clock its ring is due at, -1 none. */
+	int room = -1;
+	int ceilY = 0;
+	int ceilRoom = -1;
+	int fall = 0;
+	float ringDue = -1.0f;
 };
+
+/* A drop that leaves its ceiling this tick: where, in which room, and the
+ * ticks it falls. */
+struct HDLifeDrop
+{
+	int x, y, z;
+	int room;
+	int ticks;
+};
+
+/* The ticks a drop falls from world y `from` to `to` (y down), stepped as
+ * UpdateDrips steps a drip from rest: its speed grows by
+ * kHDLifeDropGravity, it moves that speed over 32 (the shift of 5). */
+inline int HDLifeDropTicks(int from, int to)
+{
+	int y = from, v = 0, n = 0;
+
+	while (y < to && n < 250)
+	{
+		v += kHDLifeDropGravity;
+		y += v >> 5;
+		n++;
+	}
+
+	return n;
+}
 
 /* The pool's own hash: three steps of the engine's draw generator
  * (specific\function_stubs.cpp, GetRandomDraw: 0x41C64E6D, 12345, bits 10
@@ -1245,6 +1300,7 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 			const int ax = draw(ctx), az = draw(ctx);
 
 			k.body = (int)bi;
+			k.room = b.squares[(size_t)sq].room;
 			HDLifeInside(b.squares[(size_t)sq], ax, az, &k.x, &k.z);
 			k.period = kHDLifeDripPeriodMin + kHDLifeDripPeriodSpan *
 				(float)draw(ctx) / 32767.0f;
@@ -1582,11 +1638,14 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 /* The pool's tick to clock t. Steps of at most a tenth of a second, so a
  * long frame or a probe that jumps to its clock moves the same way the
  * game's frames do. Rings asked for go into `rings` (the caller writes
- * them into the game's ripples or the probe's -ripple list); `laraOn`,
- * lx, lz are Lara's place, 0 without her. */
+ * them into the game's ripples or the probe's -ripple list), the drops
+ * that leave their ceiling into `drops` (the game's drips); `laraOn`, lx,
+ * lz are Lara's place, 0 without her, `splash` the live splashes' x and z
+ * (HDLifeSchoolTick). */
 inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 	int laraOn, float lx, float lz, std::vector<HDLifeRing>* rings,
-	const float* splash = 0, int splashes = 0)
+	const float* splash = 0, int splashes = 0,
+	std::vector<HDLifeDrop>* drops = 0)
 {
 	if (p.last < 0.0f || t < p.last)
 		p.last = t;
@@ -1626,6 +1685,31 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 				continue;
 
 			p.ringAt[(size_t)d.body] = at;
+
+			// Its drop leaves the ceiling now; its ring is due on arrival.
+			d.ringDue = at + (float)d.fall / 30.0f;
+
+			if (drops && d.fall > 0)
+			{
+				HDLifeDrop o;
+
+				o.x = (int)d.x;
+				o.y = d.ceilY + kHDLifeDropUnder;
+				o.z = (int)d.z;
+				o.room = d.ceilRoom;
+				o.ticks = d.fall;
+				drops->push_back(o);
+			}
+		}
+
+		for (size_t i = 0; i < p.drips.size(); i++)
+		{
+			HDLifeDrip& d = p.drips[i];
+
+			if (d.ringDue < 0.0f || at < d.ringDue)
+				continue;
+
+			d.ringDue = -1.0f;
 			d.last = at;
 
 			if (rings)
@@ -1637,7 +1721,7 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 				r.z = d.z;
 				r.y = p.bodies[(size_t)d.body].surfaceY;
 				r.size = kHDLifeDripSize + (int)(HDLifeHash((unsigned)i,
-					(unsigned)d.fired) & 7);
+					(unsigned)d.fired) & 15);
 				r.drip = (int)i;
 				rings->push_back(r);
 			}
@@ -1649,17 +1733,34 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 
 /* The end of a body's LIFELOG line, the engine's and RoomProbe's alike: a
  * river's slot points, `in=x,y,z out=x,y,z` with y the depth a float's top
- * reaches there (kHDLifeSlotTop under the surface), or `in=none out=none`. */
+ * reaches there (kHDLifeSlotTop under the surface), or `in=none out=none`;
+ * then its drips' points, `drips_at=x,z;x,z...` or `drips_at=none`. */
 inline void HDLifeBodyTail(const HDLifePool& p, int bi, char* out, size_t n)
 {
 	const HDLifeBody& b = p.bodies[(size_t)bi];
+	int at = 0;
 
 	if (b.river)
-		snprintf(out, n, "in=%.0f,%.0f,%.0f out=%.0f,%.0f,%.0f", b.inX,
+		at = snprintf(out, n, "in=%.0f,%.0f,%.0f out=%.0f,%.0f,%.0f", b.inX,
 			b.surfaceY + kHDLifeSlotTop, b.inZ, b.outX, b.surfaceY +
 			kHDLifeSlotTop, b.outZ);
 	else
-		snprintf(out, n, "in=none out=none");
+		at = snprintf(out, n, "in=none out=none");
+
+	int drips = 0;
+
+	for (size_t i = 0; i < p.drips.size(); i++)
+	{
+		if (p.drips[i].body != bi || at < 0 || (size_t)at >= n)
+			continue;
+
+		at += snprintf(out + at, n - (size_t)at, "%s%.0f,%.0f", drips ? ";" :
+			" drips_at=", p.drips[i].x, p.drips[i].z);
+		drips++;
+	}
+
+	if (!drips && at >= 0 && (size_t)at < n)
+		snprintf(out + at, n - (size_t)at, " drips_at=none");
 }
 
 /* Where an entry is drawn at clock t: its world place (x, y, z; y down) and

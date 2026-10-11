@@ -17780,6 +17780,67 @@ static void life_ends()
 		badBack * 100 + jumps * 10 + openPast, backs * 1000);
 }
 
+/* The drips (HDLifeDropTicks, HDLifeTick): a drop falls as UpdateDrips
+ * steps a drip, about as the project's g has it; its ring is due when it
+ * arrives, three quarters of a wading Lara's or more; the body's line
+ * names the drips' points. */
+static void life_drops()
+{
+	const int ticks = HDLifeDropTicks(3104, 4864);
+	// 1,760 units under g = 4,300 units/s^2: sqrt(2 x 1760 / 4300) s.
+	const float want = sqrtf(2.0f * 1760.0f / 4300.0f) * 30.0f;
+
+	ok(fabsf((float)ticks - want) <= 1.5f && HDLifeDropTicks(0, 0) == 0,
+		"life drops: a drop falls as the project's g has it",
+		ticks, (long)(want + 0.5f));
+
+	HDLifePool p = {};
+	HDLifeDrip d = {};
+
+	p.bodies.push_back(life_body(2, 2, 2048));
+	p.ringAt.assign(1, -1.0e6f);
+	d.body = 0;
+	d.x = 500.0f;
+	d.z = 600.0f;
+	d.period = 5.0f;
+	d.phase = 1.0f;
+	d.last = -1.0f;
+	d.ceilY = -1000;
+	d.ceilRoom = 3;
+	d.fall = 27;
+	p.drips.push_back(d);
+
+	std::vector<HDLifeRing> rings;
+	std::vector<HDLifeDrop> drops;
+	float rang = -1.0f;
+
+	for (int k = 1; k <= 90; k++)
+	{
+		const size_t had = rings.size();
+
+		HDLifeTick(p, 0, k / 30.0f, 1, 500.0f, 600.0f, &rings, 0, 0, &drops);
+
+		if (rings.size() > had && rang < 0.0f)
+			rang = k / 30.0f;
+	}
+
+	ok(drops.size() == 1 && drops[0].room == 3 && drops[0].y == -1000 +
+		kHDLifeDropUnder && drops[0].ticks == 27 && fabsf(rang - (1.0f +
+		27.0f / 30.0f)) < 0.05f,
+		"life drops: the drop leaves the ceiling at its time, its ring is due "
+		"on arrival", (long)(rang * 100.0f), 190);
+	ok(rings.size() == 1 && rings[0].size >= kHDLifeDripSize &&
+		rings[0].size <= kHDLifeDripSize + 15 && kHDLifeDripSize * 4 >= 112 * 3,
+		"life drops: a drip's ring is three quarters of a wading Lara's or "
+		"more", rings.empty() ? 0 : rings[0].size, kHDLifeDripSize);
+
+	char tail[256];
+
+	HDLifeBodyTail(p, 0, tail, sizeof(tail));
+	ok(strstr(tail, "in=none out=none drips_at=500,600") != 0,
+		"life drops: the body's line names its drips' points", 0, 0);
+}
+
 static void life_flee()
 {
 	HDLifeBody b = life_body(4, 4, 2048);
@@ -18672,6 +18733,7 @@ int main()
 	life_bank();
 	life_spawn();
 	life_ends();
+	life_drops();
 	life_flee();
 	life_bob();
 	life_depth();

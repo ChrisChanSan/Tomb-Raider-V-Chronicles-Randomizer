@@ -89,6 +89,77 @@ namespace
 		return false;
 	}
 
+	/* A drip's drop into the game's drips (game\tomb4fx.cpp, Drips[32]),
+	 * which UpdateDrips moves and DrawDrips draws as a short streak. Only
+	 * an odd slot that is free: UpdateDrips calls TriggerDripSplash - and
+	 * its random draws - for a drip of an even slot that lands on a floor,
+	 * and a drop of the life must leave the game's random sequence alone
+	 * whatever happens to it; and no drip of the game's is pushed out
+	 * (GetFreeDrip would take the oldest). It falls from rest by
+	 * kHDLifeDropGravity a tick; it lives 16 ticks past its fall, so the
+	 * game's fade over a drip's last 16 ticks never starts in the air -
+	 * the water room it falls into switches it off (UpdateDrips). False
+	 * when no odd slot is free. */
+	bool put_drop(const HDLifeDrop& o)
+	{
+		for (int i = 1; i < 32; i += 2)
+		{
+			DRIP_STRUCT& d = Drips[i];
+
+			if (d.On)
+				continue;
+
+			d.On = 1;
+			d.x = o.x;
+			d.y = o.y;
+			d.z = o.z;
+			d.lnode = 0;
+			d.ox = o.x;
+			d.oy = o.y;
+			d.oz = o.z;
+			d.R = kHDLifeDropColour[0];
+			d.G = kHDLifeDropColour[1];
+			d.B = kHDLifeDropColour[2];
+			d.Yvel = 0;
+			d.Gravity = (uchar)kHDLifeDropGravity;
+			d.Life = (uchar)(o.ticks + 16 < 255 ? o.ticks + 16 : 255);
+			d.RoomNumber = (short)o.room;
+			return true;
+		}
+
+		return false;
+	}
+
+	/* The ceiling over world x, z from the room `at` up: the ceiling byte
+	 * of the square's sector, through the room above (sky_room) where the
+	 * ceiling is an opening, as GetCeiling walks it - the flat byte, a
+	 * sloped ceiling's tilt left out. False outside the rooms. */
+	bool ceiling_at(int at, int x, int z, int* y, int* in)
+	{
+		for (int guard = 0; guard < 16 && at >= 0 && at < number_rooms;
+			guard++)
+		{
+			const ROOM_INFO* r = &room[at];
+			const int sx = (x - (int)r->x) >> 10, sz = (z - (int)r->z) >> 10;
+
+			if (sx < 0 || sz < 0 || sx >= r->y_size || sz >= r->x_size)
+				return false;
+
+			const FLOOR_INFO* f = &r->floor[sz + sx * r->x_size];
+
+			if (f->sky_room == NO_ROOM)
+			{
+				*y = f->ceiling * 256;
+				*in = at;
+				return true;
+			}
+
+			at = f->sky_room;
+		}
+
+		return false;
+	}
+
 	// a x b, 4x4 row-major, row vectors.
 	void mul44(const float* a, const float* b, float* out)
 	{
@@ -236,6 +307,7 @@ void HDLifeLevelBegin(const char* stem)
 				s.z = squares[(size_t)i].z;
 				s.depth = squares[(size_t)i].depth;
 				s.closed = squares[(size_t)i].open ? 0 : 1;
+				s.room = squares[(size_t)i].room;
 				b.squares.push_back(s);
 			}
 
@@ -253,6 +325,16 @@ void HDLifeLevelBegin(const char* stem)
 	}
 
 	HDLifeBuild(g_pool, *row, draw_random, 0);
+
+	// The drips' ceilings and their drops' fall (HDLifeDropTicks).
+	for (size_t i = 0; i < g_pool.drips.size(); i++)
+	{
+		HDLifeDrip& d = g_pool.drips[i];
+
+		if (ceiling_at(d.room, (int)d.x, (int)d.z, &d.ceilY, &d.ceilRoom))
+			d.fall = HDLifeDropTicks(d.ceilY + kHDLifeDropUnder,
+				g_pool.bodies[(size_t)d.body].surfaceY);
+	}
 
 	if (!gLogEnabled)
 		return;
@@ -335,13 +417,18 @@ void HDLifeFrame(double clock)
 			wets++;
 		}
 
-	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings, wet, wets);
+	std::vector<HDLifeDrop> drops;
+
+	HDLifeTick(g_pool, g_row, t, laraOn, lx, lz, &rings, wet, wets, &drops);
 
 	for (size_t i = 0; i < rings.size(); i++)
 		if (put_ripple(rings[i]))
 			g_rings++;
 		else
 			g_ripple_full++;
+
+	for (size_t i = 0; i < drops.size(); i++)
+		put_drop(drops[i]);
 
 	/* The draw: the entries nearest the eye first, at most kHDLifeDrawMax
 	 * of them; an entry behind the eye is not pushed. */

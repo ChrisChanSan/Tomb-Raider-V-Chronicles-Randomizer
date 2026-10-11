@@ -10519,7 +10519,9 @@ namespace
 	 * game keeps four splashes at once (splashes[4]), 208; a tank makes 4 or
 	 * 5 sparks a tick (ControlFishtank), each a mist card for 14 to 17
 	 * ticks, at most 85 live, RICH2's two tanks 170 should both run at
-	 * once. 208 + 170 is under 512; past the cap the latest wait. kCardSoft
+	 * once, and a tank's burst is kTankBurstCards (64) over its first
+	 * 1.2 s, two tanks 128. 208 + 170 + 128 = 506 is under 512; past the
+	 * cap the latest wait. kCardSoft
 	 * the depth over which a card fades into what stands behind it,
 	 * kSprayKept the sparks kept (a spark's card is gone after 17 ticks,
 	 * so a tank's last 0.6 s, 18 ticks of 4.5, for two tanks 162),
@@ -10551,6 +10553,42 @@ namespace
 	std::vector<LiveSpray> g_sprays;
 	unsigned int g_card_seed = 0;
 	HDRenderSplashStats g_splash_stats = {};
+
+	/* The tank's water.
+	 *
+	 * When Lara shoots a fish tank's glass (a shatter static over the
+	 * trigger that starts the FISHTANK), the game draws the tank's water as
+	 * the FISHTANK's own classic mesh, scaled in y by item_flags[1] / 4096
+	 * (DrawScaledSpike, game\traps.cpp): a flat top behind the glass and a
+	 * curved apron down to the floor in front of it, whole on the first
+	 * tick, sinking for 105 ticks and gone on the 106th. The HD path adds
+	 * the burst: on the tank's first ticks its water is thrown out of the
+	 * opened glass as cards (hd_splash_math.h, HDTankBurst; spray and drops
+	 * on the cards' pages), in the tank's frame as its mesh gives it
+	 * (HDTankShapeOf), tinted as the film of that tank is.
+	 *
+	 * The engine hands each tank in from the classic draw of its mesh
+	 * (game\traps.cpp through hd_level.cpp, HDWaterTank), so the HD form
+	 * draws exactly when the classic would; RoomProbe's -tank hands in its
+	 * own. A tank's age is its ticks out of item_flags[1]
+	 * (HDTankTicksOf), run on smoothly between the ticks by the frame's
+	 * clock and held within the tick the game is in. */
+	struct LiveTank
+	{
+		int item;
+		float x, y, z;		// the item's place
+		float c, s;		// its turn's cosine and sine
+		int flags1;
+		double born;		// on the frame clock
+		double last;		// when it was last handed in
+		unsigned int seed;
+		bool seen;		// handed in for this frame
+	};
+
+	std::vector<LiveTank> g_tanks;
+	std::vector<float> g_tank_xyz;
+	std::vector<int> g_tank_quads;
+	HDTankShape g_tank_shape = {};
 
 	/* The tank's film.
 	 *
@@ -14008,6 +14046,86 @@ int HDRenderWaterFilmCount()
 	return (int)g_film_in.size();
 }
 
+bool HDRenderWaterTankMesh(const float* xyz, int vertices, const int* quads,
+	int count)
+{
+	g_tanks.clear();
+	g_tank_xyz.clear();
+	g_tank_quads.clear();
+	g_tank_shape = HDTankShapeOf(xyz, vertices);
+
+	if (!g_tank_shape.ok)
+		return false;
+
+	g_tank_xyz.assign(xyz, xyz + (size_t)vertices * 3);
+
+	for (int q = 0; quads && q < count; q++)
+	{
+		bool fits = true;
+
+		for (int k = 0; k < 4; k++)
+			fits = fits && quads[q * 4 + k] >= 0 &&
+				quads[q * 4 + k] < vertices;
+
+		if (fits)
+			g_tank_quads.insert(g_tank_quads.end(), quads + q * 4,
+				quads + q * 4 + 4);
+	}
+
+	return true;
+}
+
+bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
+	int flags1, float age)
+{
+	if (!g_tank_shape.ok || !HDRenderWaterCardsReady())
+		return false;
+
+	const double now = (double)g_motion[2];
+	const int ticks = HDTankTicksOf(flags1);
+	LiveTank* t = 0;
+
+	for (LiveTank& l : g_tanks)
+		if (l.item == item)
+			t = &l;
+
+	if (!t)
+	{
+		LiveTank l = {};
+
+		l.item = item;
+		l.seed = HDCardHash(++g_card_seed, 3u);
+		l.born = now - (double)ticks / 30.0;
+		g_tanks.push_back(l);
+		t = &g_tanks.back();
+	}
+
+	const float turn = (float)yRot * (6.2831853f / 65536.0f);
+
+	t->x = x;
+	t->y = y;
+	t->z = z;
+	t->c = cosf(turn);
+	t->s = sinf(turn);
+	t->flags1 = flags1;
+
+	if (age >= 0.0f)
+		t->born = now - (double)age;
+	else
+	{
+		// Within the tick the game is in: ticks / 30 .. (ticks + 1) / 30.
+		const double earliest = now - (double)(ticks + 1) / 30.0;
+		const double latest = now - (double)ticks / 30.0;
+
+		t->born = t->born < earliest ? earliest : t->born > latest ?
+			latest : t->born;
+	}
+
+	t->seen = true;
+	t->last = now;
+	return true;
+}
+
 void HDRenderSplashStatsNow(HDRenderSplashStats* out)
 {
 	if (out)
@@ -14044,8 +14162,38 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 			break;
 		}
 
+	/* The tanks handed in for this frame, each with the body of its film
+	 * for its colour; the list forgets them for the next frame, and a tank
+	 * not handed in for a second goes. */
+	std::vector<LiveTank> tanks;
+	std::vector<int> tankBody;
+
+	for (size_t i = g_tanks.size(); i-- > 0; )
+	{
+		LiveTank& t = g_tanks[i];
+
+		if (t.seen)
+		{
+			int body = -1;
+
+			for (size_t f = 0; f < g_film_in.size(); f++)
+				if (g_film_in[f].tank == t.item && g_film_body[f] >= 0)
+					body = g_film_body[f];
+
+			tanks.push_back(t);
+			tankBody.push_back(body);
+		}
+
+		t.seen = false;
+
+		if (t.last > now + 0.1 || now - t.last > 1.0)
+			g_tanks.erase(g_tanks.begin() + (std::ptrdiff_t)i);
+	}
+
+	g_splash_stats.tanks = (int)tanks.size();
+
 	if (!g_device || !g_card_vs || !g_card_ps || !g_in_frame || !toFrame ||
-		(g_splashes.empty() && g_sprays.empty()))
+		(g_splashes.empty() && g_sprays.empty() && tanks.empty()))
 		return;
 
 	// Every card of the frame, with the body whose colour it wears.
@@ -14075,6 +14223,26 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 		{
 			cards.push_back(c);
 			owner.push_back(s.body);
+		}
+	}
+
+	// The tanks' bursts, out of the tank's frame into the world.
+	for (size_t i = 0; i < tanks.size(); i++)
+	{
+		const LiveTank& t = tanks[i];
+		HDCard burst[kTankBurstCards];
+		const int n = HDTankBurst(g_tank_shape, t.seed,
+			(float)(now - t.born), burst, kTankBurstCards);
+
+		for (int k = 0; k < n && (int)cards.size() < kCardCap; k++)
+		{
+			HDCard c = burst[k];
+
+			c.x = t.x + burst[k].x * t.c + burst[k].z * t.s;
+			c.y = t.y + burst[k].y;
+			c.z = t.z + burst[k].z * t.c - burst[k].x * t.s;
+			cards.push_back(c);
+			owner.push_back(tankBody[i]);
 		}
 	}
 

@@ -5631,12 +5631,74 @@ static void ProbeWaterCorners(const Tr5Level& level,
  * BuildWaterFilms: every FLOOR_LASERS item (slot 392) in the room of a
  * FISHTANK (slot 413), its box as InitialiseFloorLasers lays it - the
  * item's trigger_flags as width (the ones, squares along z) and height (the
- * tens, along x), from 512 before the item's place. And for -tank, the
- * tank's place and its mesh's root, as ProbeWaterFalls reads a fall's. */
+ * tens, along x), from 512 before the item's place. The FISHTANK mesh
+ * goes to the renderer first, as hd_level.cpp's TankMeshToRenderer hands
+ * it (vertices, quads, a triangle as a quad that repeats its third
+ * corner). And for -tank, the tank's place and its mesh's root, as
+ * ProbeWaterFalls reads a fall's. */
+static void ProbeTankMesh(const Tr5Level& level)
+{
+	const std::vector<uint8_t>& bytes = level.debugBytes();
+	Tr5Level::MoveableInfo info;
+	int16_t head[6];
+	size_t at = 0;
+	std::vector<float> xyz;
+	std::vector<int> quads;
+
+	if (level.moveableInfo(413, info) && info.nmeshes > 0 &&
+		level.debugMeshHeader(info.meshIndex, head) &&
+		level.debugMeshAt(info.meshIndex, at) && head[5] > 0)
+	{
+		// The mesh: vertices, normals or shades, quads (6 words), triangles
+		// (5 words) - the walk ProbeWaterFalls takes to its vertices.
+		size_t p = at + 12;
+		int16_t w[6];
+
+		for (int v = 0; v < head[5] && p + 6 <= bytes.size(); v++, p += 6)
+		{
+			std::memcpy(w, &bytes[p], 6);
+			xyz.push_back(w[0]);
+			xyz.push_back(w[1]);
+			xyz.push_back(w[2]);
+		}
+
+		int16_t n = 0;
+
+		if (p + 2 <= bytes.size())
+			std::memcpy(&n, &bytes[p], 2);
+
+		p += 2 + (n > 0 ? (size_t)n * 6 : (size_t)(-n) * 2);
+
+		for (int pass = 0; pass < 2 && p + 2 <= bytes.size(); pass++)
+		{
+			const size_t stride = pass ? 10 : 12;
+
+			std::memcpy(&n, &bytes[p], 2);
+			p += 2;
+
+			for (int q = 0; q < n && p + stride <= bytes.size(); q++,
+				p += stride)
+			{
+				std::memcpy(w, &bytes[p], 8);
+
+				for (int k = 0; k < 4; k++)
+					quads.push_back(w[pass && k == 3 ? 2 : k]);
+			}
+		}
+	}
+
+	HDRenderWaterTankMesh(xyz.empty() ? 0 : &xyz[0], (int)xyz.size() / 3,
+		quads.empty() ? 0 : &quads[0], (int)quads.size() / 4);
+	if (g_tank_item >= 0)
+		printf("-tank: FISHTANK mesh %d vertices %d quads\n",
+			(int)xyz.size() / 3, (int)quads.size() / 4);
+}
+
 static void ProbeWaterFilms(const Tr5Level& level)
 {
 	std::vector<HDWaterFilm> films;
 
+	ProbeTankMesh(level);
 	g_tank_film = -1;
 	g_tank_found = false;
 
@@ -5696,6 +5758,7 @@ static void ProbeWaterFilms(const Tr5Level& level)
 				f.x0, f.x1, f.z0, f.z1, f.y, t, l, laser.triggerFlags);
 			films.push_back(f);
 		}
+
 	}
 
 	HDRenderWaterFilms(films.empty() ? 0 : &films[0], (int)films.size());
@@ -5734,7 +5797,8 @@ static const short kSplashOffsets[18] = { 1072, 48, 1072, 48, 650, 280, 200,
  * After the tank the lasers' count runs down from 64 a tick, and the film
  * takes the strength HDFilmStrength gives - what hd_level.cpp's
  * FeedWaterFilms reads off the items in the game. A tank without floor
- * lasers in its room has no film (-1 on the line); its spray is drawn. */
+ * lasers in its room has no film (-1 on the line); its spray is drawn.
+ * While the tank runs, its water is handed in at the picture's age. */
 static void ProbeCardsFeed()
 {
 	if (g_hdwater != 1)
@@ -5856,6 +5920,14 @@ static void ProbeCardsFeed()
 	if (g_tank_film >= 0)
 		HDRenderWaterFilmWet(g_tank_film, wet);
 
+	// The tank's water while ControlFishtank runs it, as DrawScaledSpike
+	// hands it in the game (hd_level.cpp, HDWaterTank).
+	const bool water = state == 1 && HDRenderWaterTank(g_tank_item,
+		(float)g_tank_place.x, (float)g_tank_place.y, (float)g_tank_place.z,
+		g_tank_place.yRot, flags, g_tank_time);
+
+	printf("-tank: the tank's water %s\n", water ? "drawn" : "not drawn");
+
 	printf("-tank: item %d at %.2f s: %s, item_flags[1] %d, lasers %d, film "
 		"%d wet %.2f, %d sparks handed in, spray at y %.0f (root %.0f %.0f "
 		"%.0f)\n", g_tank_item, g_tank_time, state == 0 ? "before" :
@@ -5934,8 +6006,9 @@ static void ProbeCardsDraw()
 	if (freq)
 		freq->Release();
 
-	printf("SPLASHLOG level=probe splashes=%d cards=%d rings=%d tank=%d:%.2f\n",
-		st.splashes, st.cards, st.rings, st.tank, st.wet);
+	printf("SPLASHLOG level=probe splashes=%d cards=%d rings=%d tank=%d:%.2f "
+		"tanks=%d\n", st.splashes, st.cards, st.rings, st.tank, st.wet,
+		st.tanks);
 	printf("-hdwater: cards %d cards in 3 draws at most, GPU %.4f ms\n",
 		st.cards, ms);
 }

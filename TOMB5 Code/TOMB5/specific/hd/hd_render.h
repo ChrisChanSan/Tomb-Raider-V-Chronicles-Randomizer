@@ -1528,6 +1528,22 @@ void HDRenderWaterFilms(const HDWaterFilm* films, int count);
 void HDRenderWaterFilmWet(int film, float strength);
 int HDRenderWaterFilmCount();
 
+/* A breaking fish tank's water (hd_render.cpp, "the tank's water").
+ * HDRenderWaterTankMesh hands in, at level load, the FISHTANK mesh's
+ * vertices (three floats each, the tank's frame: x along the glass, y down
+ * from the item's place, z out of the glass) and its quads (four vertex
+ * numbers each); a level without the object hands in none.
+ * HDRenderWaterTank is called once a frame for each tank the frame draws
+ * while ControlFishtank runs it: its item, place, turn and item_flags[1],
+ * and `age` the seconds since it broke - or under 0, and the renderer works
+ * the age out of item_flags[1] and its own clock. The frame's card draw
+ * draws its water once and forgets it. False when the cards cannot be
+ * drawn or the level has no tank mesh. */
+bool HDRenderWaterTankMesh(const float* xyz, int vertices, const int* quads,
+	int count);
+bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
+	int flags1, float age);
+
 /* SPLASHLOG with -log, once a second while a card or a ring of a splash
  * draws: the counts of the last frame drawn. */
 struct HDRenderSplashStats
@@ -1538,6 +1554,7 @@ struct HDRenderSplashStats
 	int tank;		// the item of the first film that is wet, or -1
 	float wet;		// its strength
 	int sprays;		// tank sparks alive as cards
+	int tanks;		// breaking tanks whose water this frame drew
 };
 
 void HDRenderSplashStatsNow(HDRenderSplashStats* out);

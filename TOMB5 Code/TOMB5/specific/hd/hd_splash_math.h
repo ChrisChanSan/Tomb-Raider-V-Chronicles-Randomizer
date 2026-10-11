@@ -510,3 +510,196 @@ inline int HDTankFlagsAfter(int ticks, int* running)
 
 	return f;
 }
+
+/* The ticks ControlFishtank has run when item_flags[1] reads `flags1`: the
+ * first step count whose value is at or under it (0 for 4096, 105 for
+ * 810), so a frame that sees only the item's field knows the tank's age. */
+inline int HDTankTicksOf(int flags1)
+{
+	int f = 4096;
+	int t = 0;
+
+	for (; f > flags1 && t < 106; t++)
+		f -= f >> 6;
+
+	return t;
+}
+
+/* A fish tank's water as its classic mesh shapes it - the FISHTANK mesh
+ * DrawScaledSpike scales in y by item_flags[1] / 4096 (game\traps.cpp) -
+ * measured once at level load in the tank's own frame: x along the glass,
+ * y down from the item's place, z out of the glass into the room. In
+ * RICH2 that mesh is the water pouring out of the broken glass: a flat top
+ * 1,276 over the floor behind the glass and a curved apron from the glass's
+ * top edge down to the floor 866 units in front of it.
+ *
+ *   top, floor    the highest and the lowest vertex
+ *   glassZ        the front of the top: the furthest z among the vertices
+ *                 within kTankBand of the top - where the water leaves the
+ *                 tank
+ *   footZ         the furthest z of all: the apron's reach on the floor
+ *   topX0..topX1  the top's width, footX0..footX1 the foot's (the vertices
+ *                 within kTankBand of the floor)
+ *
+ * kTankBand, 32 units, takes RICH2's top vertices (y -1276 and -1277) and
+ * its floor ones (y 6) and none of the apron's next rows (y -1239 under
+ * the top, -382 over the floor) - a choice on that count. */
+const float kTankBand = 32.0f;		// units
+
+struct HDTankShape
+{
+	float top, floor;
+	float glassZ, footZ;
+	float topX0, topX1;
+	float footX0, footX1;
+	int ok;
+};
+
+// `xyz` the mesh's vertices, three floats each, in the tank's frame.
+inline HDTankShape HDTankShapeOf(const float* xyz, int n)
+{
+	HDTankShape s = {};
+
+	if (!xyz || n <= 0)
+		return s;
+
+	s.top = 1.0e9f;
+	s.floor = -1.0e9f;
+	s.footZ = -1.0e9f;
+
+	for (int i = 0; i < n; i++)
+	{
+		const float y = xyz[i * 3 + 1];
+		const float z = xyz[i * 3 + 2];
+
+		s.top = y < s.top ? y : s.top;
+		s.floor = y > s.floor ? y : s.floor;
+		s.footZ = z > s.footZ ? z : s.footZ;
+	}
+
+	s.glassZ = -1.0e9f;
+	s.topX0 = s.footX0 = 1.0e9f;
+	s.topX1 = s.footX1 = -1.0e9f;
+
+	for (int i = 0; i < n; i++)
+	{
+		const float x = xyz[i * 3];
+		const float y = xyz[i * 3 + 1];
+		const float z = xyz[i * 3 + 2];
+
+		if (y <= s.top + kTankBand)
+		{
+			s.glassZ = z > s.glassZ ? z : s.glassZ;
+			s.topX0 = x < s.topX0 ? x : s.topX0;
+			s.topX1 = x > s.topX1 ? x : s.topX1;
+		}
+
+		if (y >= s.floor - kTankBand)
+		{
+			s.footX0 = x < s.footX0 ? x : s.footX0;
+			s.footX1 = x > s.footX1 ? x : s.footX1;
+		}
+	}
+
+	s.ok = s.floor - s.top > kTankBand && s.footZ > s.glassZ ? 1 : 0;
+	return s;
+}
+
+/* The burst when the glass breaks: the tank's water thrown out of the
+ * opened glass on the tank's first ticks, before its apron stands - cards
+ * in the tank's frame (x across, y down from the item's place, z out),
+ * the caller turns them into the world.
+ *
+ *   kTankBurstSpray spray cards and kTankBurstDrops drops leave the glass
+ *   (z glassZ) at a height h0 over the floor spread evenly over the
+ *   opening (0 .. top) and a place across the top's width, each at its own
+ *   moment within the first kTankBurstTime; out of the glass at the speed
+ *   water leaves an opening under a column of its own depth,
+ *   sqrt(2 g (height - h0)) (Torricelli), times 0.6..1.0, and up or down
+ *   by up to kTankBurstLift, under g; gone when it is back on the floor
+ *   or after kTankBurstLife. A spray card widens from its size to 2.5
+ *   times it as it flies and fades with the share of its flight left; a
+ *   drop stays whole.
+ *
+ * g = 4300 units/s^2 is 9.81 m/s^2 at 2.3 mm a unit (Lara's 768 units for
+ * 1.77 m). From RICH2's 1,276 the fastest leave at 3,300 units/s and land
+ * at most 1,276 units out (2 sqrt(d h) at d = h): the apron's own reach.
+ * The counts, the time (0.2 s, 6 ticks), the lift (400 units/s), the life
+ * (1 s), the sizes and the shares are free choices, set by eye on the
+ * round's RoomProbe pictures. Returns the cards written, at most `max`. */
+const int kTankBurstSpray = 40;
+const int kTankBurstDrops = 24;
+const int kTankBurstCards = kTankBurstSpray + kTankBurstDrops;
+const float kTankBurstTime = 0.2f;	// s
+const float kTankBurstLift = 400.0f;	// units/s
+const float kTankBurstLife = 1.0f;	// s
+const float kTankG = 4300.0f;		// units/s^2
+
+inline int HDTankBurst(const HDTankShape& sh, unsigned int seed,
+	float seconds, HDCard* out, int max)
+{
+	int n = 0;
+
+	if (!sh.ok || seconds < 0.0f ||
+		seconds > kTankBurstTime + kTankBurstLife || max <= 0)
+		return 0;
+
+	const float height = sh.floor - sh.top;
+
+	for (int k = 0; k < kTankBurstCards && n < max; k++)
+	{
+		const bool drop = k >= kTankBurstSpray;
+		const unsigned int key = 2000u + (unsigned int)k * 7u;
+		const float t0 = kTankBurstTime * HDCardShare(seed, key);
+		const float t = seconds - t0;
+
+		if (t < 0.0f || t > kTankBurstLife)
+			continue;
+
+		const float h0 = height * HDCardShare(seed, key + 1);
+		const float across = HDCardShare(seed, key + 2);
+		const float speed = sqrtf(2.0f * kTankG * (height - h0)) *
+			(0.6f + 0.4f * HDCardShare(seed, key + 3));
+		const float lift = kTankBurstLift *
+			(2.0f * HDCardShare(seed, key + 4) - 1.0f);
+		const float h = h0 + lift * t - 0.5f * kTankG * t * t;
+
+		if (h < 0.0f)
+			continue;
+
+		// The flight's whole length, for the share of it left.
+		const float land = (lift + sqrtf(lift * lift + 2.0f * kTankG * h0)) /
+			kTankG;
+		const float left = land > 0.0f ? 1.0f - t / land : 0.0f;
+		HDCard& c = out[n++];
+
+		c.x = sh.topX0 + (sh.topX1 - sh.topX0) * across;
+		c.y = sh.floor - h;
+		c.z = sh.glassZ + speed * t;
+		c.size = 0.5f;
+		c.u = 0.5f * HDCardShare(seed, key + 5);
+		c.v = 0.5f * HDCardShare(seed, key + 6);
+
+		if (drop)
+		{
+			c.half = 24.0f + 24.0f * HDCardShare(seed, key + 5);
+			c.tall = 2.0f * c.half;
+			c.alpha = 1.0f;
+			c.page = HD_CARD_DROPS;
+			c.turn = 0.0f;
+		}
+		else
+		{
+			const float grow = 1.0f + 1.5f * (1.0f - left);
+
+			c.half = (96.0f + 96.0f * HDCardShare(seed, key + 6)) * grow;
+			c.tall = c.half;
+			c.alpha = 0.7f * (left > 0.0f ? left : 0.0f);
+			c.page = HDCardShare(seed, key + 4) < 0.5f ? HD_CARD_SPRAY :
+				HD_CARD_SPRAY2;
+			c.turn = 6.2831853f * HDCardShare(seed, key + 3);
+		}
+	}
+
+	return n;
+}

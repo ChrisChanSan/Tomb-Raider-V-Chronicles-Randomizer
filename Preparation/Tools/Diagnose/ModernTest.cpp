@@ -18378,6 +18378,70 @@ static void splash_tank()
 	ok(HDFilmStrength(2, 810, 0, 32) == 0.0f, "and once they are gone", 0, 0);
 }
 
+/* The tank's mesh, as RICH2's FISHTANK draws it: a few of its 69 vertices
+ * (MeshDump on the classic rich2.trc, slot 413) - the top behind the
+ * glass, a row of the apron, the foot on the floor. */
+static const float kTankMeshSample[] =
+{
+	-1589.0f, -1277.0f, -545.0f,	551.0f, -1276.0f, -543.0f,
+	-1536.0f, -1276.0f, -1540.0f,	512.0f, -1276.0f, -516.0f,
+	-1022.0f, -1236.0f, -286.0f,	-2.0f, -930.0f, 115.0f,
+	-2106.0f, 6.0f, 82.0f,		1080.0f, 6.0f, 81.0f,
+	-512.0f, 6.0f, 350.0f
+};
+
+/* The tank breaking: its age out of item_flags[1], its shape out of its
+ * mesh and the burst out of its glass. */
+static void splash_tank_burst()
+{
+	printf("the splash: the tank's burst\n");
+
+	bool ticks = HDTankTicksOf(4096) == 0;
+
+	for (int k = 1; k <= 105; k++)
+		ticks = ticks && HDTankTicksOf(HDTankFlagsAfter(k, 0)) == k;
+
+	ok(ticks, "the tank's ticks come back out of item_flags[1]", ticks, 1);
+
+	const HDTankShape sh = HDTankShapeOf(kTankMeshSample, 9);
+
+	ok(sh.ok && sh.top == -1277.0f && sh.floor == 6.0f,
+		"the shape: the top at -1277 and the floor at 6", (long)sh.top, -1277);
+	ok(sh.glassZ == -516.0f && sh.footZ == 350.0f,
+		"the glass at -516 and the foot 350 out", (long)sh.glassZ, -516);
+	ok(sh.topX0 == -1589.0f && sh.topX1 == 551.0f && sh.footX0 == -2106.0f &&
+		sh.footX1 == 1080.0f, "the top 2140 wide, the foot 3186",
+		(long)(sh.footX1 - sh.footX0), 3186);
+	ok(!HDTankShapeOf(kTankMeshSample, 0).ok, "no mesh, no shape", 0, 0);
+
+	HDCard c[kTankBurstCards];
+	bool out = true, over = true, gone = true;
+	int most = 0;
+
+	for (float t = 0.0f; t < 1.3f; t += 1.0f / 60.0f)
+	{
+		const int n = HDTankBurst(sh, 11u, t, c, kTankBurstCards);
+
+		most = n > most ? n : most;
+
+		for (int i = 0; i < n; i++)
+		{
+			out = out && c[i].z >= sh.glassZ;
+			over = over && c[i].y <= sh.floor && c[i].alpha >= 0.0f &&
+				c[i].alpha <= 1.0f;
+		}
+	}
+
+	gone = HDTankBurst(sh, 11u, 1.25f, c, kTankBurstCards) == 0;
+	ok(most > kTankBurstCards / 2, "the burst throws most of its cards at once",
+		most, kTankBurstCards / 2);
+	ok(out, "out of the glass, never behind it", out, 1);
+	ok(over, "over the floor, with shares of 0..1", over, 1);
+	ok(gone, "and is over after 1.2 s", gone, 1);
+	ok(HDTankBurst(sh, 11u, 0.5f, c, 4) <= 4, "within the room it is given",
+		4, 4);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -18507,6 +18571,7 @@ int main()
 	splash_cards();
 	splash_fade();
 	splash_tank();
+	splash_tank_burst();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

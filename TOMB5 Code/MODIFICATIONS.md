@@ -12910,9 +12910,12 @@ How. All of it in `hd_life_rules.h` with the engine's side in `hd_life.cpp`.
   asserts that the rule's states are the game's (`static_assert` in `hd_life.cpp`).
 - *The barrel's ring* (`HDLifeFloatRings`). Once a bob, at the bob's top - a body that
   rises and falls sends out a wave each time - so 2.5 to 4 seconds apart, the bob's own
-  period: longer than a ring is seen, so the next does not cut it short. Its size 240
-  and up to 15 more from the hash of the float and the bob's count: the largest a
-  ripple slot's byte holds below `UpdateSplashes`' 252; the ring starts 120 to 127 out,
+  period: a ring lives 3.5 seconds, so a bob of 3.5 to 4 seconds lets it run out and
+  one of 2.5 to 3.5 starts it again at 8 percent of its strength or less
+  ((1 - 2.5/3.5) squared). Its size 240 and up to 15 more from the hash of the float
+  and the bob's count, near the 255 a ripple slot's byte holds (`UpdateSplashes`
+  grows a size only under 252; the sheets take the size they first see, as a rule at
+  `init` 1, where it is the slot's own); the ring starts 120 to 127 out,
   is past the barrel's side in a third of a second, and has the full strength of a
   wading Lara's ring (the sheets cap a ring's strength at a size of 128).
 - *The fish's depth* (`HDLifeFishBand`, `HDLifeFishCalm`, `HDLifeFishPitchOf`). A school
@@ -12980,19 +12983,26 @@ seconds md5-identical before and after the conveyor, round 2's river check 341
 samples, 33 past an edge, 26 come-backs, no jump, as before. ModernTest 14,946 checks
 (14,937 at `bba072c`): the tank's states, the ring once a bob, the fish's band, pitch
 and turn, a dart's ups and downs, the conveyor; MenuTest 42,627, InterpTest 729,
-LipsTest 270 and 243, all 0 failed; the engine and the tools build.
+LipsTest 270 and 243, all 0 failed; the engine and the tools build. A second look
+over the round found two comments in `hd_life_rules.h` that told the story of the code
+they replace; they now state what the code prevents (comment lines only, the proofs
+stand).
 
 **Left.** The look in the game - nobody in this round could play it: whether a ring
 at a barrel's full strength reads at night (if not, the lever is the sheets' ring
 amplitude, `kRingSlope` and its cap at 128 in `hd_render.cpp` and the spread in
 `RingSlope`, the water's look and not this entry's), how steep a darting fish should
-climb. The canal's -z stretch has no inlet of its own: its floats drift to the
-crossing and the drain and come back only at the east inlet, so after the first pass
-it stays empty. The conveyor's inlet is a table row: the life reads the water through
-the getters, which name no classic room past a sheet. The foam at the grate is the
-water's look.
+climb, and whether a calm fish's rise - near 25 to 30 degrees for much of its turn,
+the most pitch - is as slow as he meant. Two fish of ANDY3's pond can stand at one
+bank point at nearly one depth through a dart when both their hashed depths fall near
+the band's top (2.5 to 4.5 s in the pond series): the blocking across is round 2's,
+the depth does not part them there. The canal's -z stretch has no inlet of its own:
+its floats drift to the crossing and the drain and come back only at the east inlet,
+so after the first pass it stays empty. The conveyor's inlet is a table row: the life
+reads the water through the getters, which name no classic room past a sheet. The
+foam at the grate is the water's look.
 
-**Commits.** `3f9333c`, `be2277f`, `2485257e`, `6b2637b5`.
+**Commits.** `3f9333c`, `be2277f`, `2485257`, `6b2637b`, `443008c`.
 
 **The river's flow hide by its own squares.** The river's flow-material calls (material
 1, `HDRange::flowTris`) were hidden over a sheet by their box alone, where the still

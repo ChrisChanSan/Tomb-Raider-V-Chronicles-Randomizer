@@ -1656,8 +1656,9 @@ water surface", carries the tables.
     drips (`TriggerLaraDrips`, 16 to 39 a channel, drawn four times that).
     After the owner's second play test of 2026-10-11 a barrel rings once a
     bob, at the bob's top, 2.5 to 4 seconds apart, at 240 and up to 15 more
-    (the hash of the float and the bob's count), the largest a ripple
-    slot's byte holds below `UpdateSplashes`' 252. OWN, a design of this
+    (the hash of the float and the bob's count), near the 255 a ripple
+    slot's byte holds (`UpdateSplashes` grows a size only under 252; the
+    sheets take the size they first see). OWN, a design of this
     project. DATA: a ring of the sheets starts at half its size, runs out
     at 150 units a second and is started again by the next of its kind
     within 192 units after 0.6 seconds (`hd_render.cpp`, the rings); the

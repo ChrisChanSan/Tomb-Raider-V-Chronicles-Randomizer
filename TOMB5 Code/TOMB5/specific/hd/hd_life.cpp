@@ -255,8 +255,9 @@ void HDLifeLevelBegin(const char* stem)
 		return;
 
 	/* LIFELOG, the level line: the bodies the life took, its floats and
-	 * fish, the drips, the floats a body's rise or a missing model left
-	 * out (skipped), the pool's bytes and the models that loaded. */
+	 * fish, the drips, the floats a body's rise, its depth or a missing
+	 * model left out (skipped), the pool's bytes and the models that
+	 * loaded. */
 	const size_t bytes = sizeof(g_pool) +
 		g_pool.entries.size() * sizeof(HDLifeEntry) +
 		g_pool.schools.size() * sizeof(HDLifeSchool) +
@@ -382,9 +383,9 @@ void HDLifeFrame(double clock)
 			g_light[(size_t)e.body * 3 + 1] * share,
 			g_light[(size_t)e.body * 3 + 2] * share };
 
-		if (HDObjectPush(slot_of(e.kind), node, 1, light, ~0u, 0, 0, 0.75f))
 		/* No engine lights of its own; the sun at 0.75, the share the
 		 * game's own objects take in play (hd_object.cpp, fill_lights). */
+		if (HDObjectPush(slot_of(e.kind), node, 1, light, ~0u, 0, 0, 0.75f))
 			drawn++;
 		else
 			skipped++;

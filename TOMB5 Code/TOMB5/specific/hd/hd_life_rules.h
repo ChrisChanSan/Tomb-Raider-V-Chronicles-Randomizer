@@ -105,9 +105,10 @@ static const HDLifeLevel kHDLifeLevels[] =
  * twelve a body: twelve keeps three bodies of a level inside the
  * thirty-two the life draws at most a frame, a quarter of the frame's 128
  * HD entries (hd_object.cpp, HD_OBJ_ITEMS) - Lara takes 6 to 10 of them. A
- * float keeps a quarter square from a bank: it is placed that far inside
- * its square, and it stops where a step would bring it nearer than
- * kHDLifeEdge (an eighth) to a square without water of its body. The
+ * float is placed a quarter square inside its square, and it stops where
+ * a step would bring it nearer than its model's reach (HDLifeReach), an
+ * eighth at least (kHDLifeEdge), to a square that is not water of its
+ * body deep enough to hold it (HDLifeNeed). The
  * wander is 60 units a second, re-aimed every 4 seconds; a float turns
  * toward its way at 40 degrees a second; a banked float tries again every
  * 6 to 9 seconds. A river float rides to within a quarter square of its
@@ -314,24 +315,29 @@ inline int HDLifeSquareAt(const HDLifeBody& b, float x, float z)
 	return -1;
 }
 
-inline bool HDLifeHasSquare(const HDLifeBody& b, int sx, int sz)
+/* Whether the square at corner sx, sz is the body's and at least `need`
+ * deep. A float's need is above 0 (HDLifeNeed), so a square whose floor
+ * lies at the surface is never water to it. */
+inline bool HDLifeHolds(const HDLifeBody& b, int sx, int sz, float need)
 {
 	for (size_t i = 0; i < b.squares.size(); i++)
 		if (b.squares[i].x == sx && b.squares[i].z == sz)
-			return true;
+			return (float)b.squares[i].depth >= need;
 
 	return false;
 }
 
-/* Whether world x, z is open water of the body: its square is the body's,
- * and where it lies within `margin` of an edge or a corner of that square,
- * the square across is the body's as well. A float stops at the bank the
- * margin away from it. */
-inline bool HDLifeOpen(const HDLifeBody& b, float x, float z, float margin)
+/* Whether world x, z is open water of the body for a float that reaches
+ * `need` under the surface: its square holds it, and where it lies within
+ * `margin` of an edge or a corner of that square, the square across holds
+ * it as well. A float stops the margin away from a bank or from water too
+ * shallow for it. */
+inline bool HDLifeOpen(const HDLifeBody& b, float x, float z, float margin,
+	float need)
 {
 	const int sx = HDLifeFloor1024(x), sz = HDLifeFloor1024(z);
 
-	if (!HDLifeHasSquare(b, sx, sz))
+	if (!HDLifeHolds(b, sx, sz, need))
 		return false;
 
 	const int ox = x - sx < margin ? -1024 : x - sx > 1024.0f - margin ?
@@ -339,11 +345,11 @@ inline bool HDLifeOpen(const HDLifeBody& b, float x, float z, float margin)
 	const int oz = z - sz < margin ? -1024 : z - sz > 1024.0f - margin ?
 		1024 : 0;
 
-	if (ox && !HDLifeHasSquare(b, sx + ox, sz))
+	if (ox && !HDLifeHolds(b, sx + ox, sz, need))
 		return false;
-	if (oz && !HDLifeHasSquare(b, sx, sz + oz))
+	if (oz && !HDLifeHolds(b, sx, sz + oz, need))
 		return false;
-	if (ox && oz && !HDLifeHasSquare(b, sx + ox, sz + oz))
+	if (ox && oz && !HDLifeHolds(b, sx + ox, sz + oz, need))
 		return false;
 
 	return true;
@@ -356,26 +362,27 @@ enum
 	HD_LIFE_BLOCKED		// none of it
 };
 
-/* One step of a float by dx, dz, `margin` from the banks: the whole step
- * where it stays open water, else the x part alone, else the z part alone
- * - so a float pressed against a bank slides along it - else nothing. */
+/* One step of a float by dx, dz, `margin` from the banks, in water at least
+ * `need` deep: the whole step where it stays open water, else the x part
+ * alone, else the z part alone - so a float pressed against a bank slides
+ * along it - else nothing. */
 inline int HDLifeStep(const HDLifeBody& b, float* x, float* z, float dx,
-	float dz, float margin)
+	float dz, float margin, float need)
 {
-	if (HDLifeOpen(b, *x + dx, *z + dz, margin))
+	if (HDLifeOpen(b, *x + dx, *z + dz, margin, need))
 	{
 		*x += dx;
 		*z += dz;
 		return HD_LIFE_MOVED;
 	}
 
-	if (dx != 0.0f && HDLifeOpen(b, *x + dx, *z, margin))
+	if (dx != 0.0f && HDLifeOpen(b, *x + dx, *z, margin, need))
 	{
 		*x += dx;
 		return HD_LIFE_SLID;
 	}
 
-	if (dz != 0.0f && HDLifeOpen(b, *x, *z + dz, margin))
+	if (dz != 0.0f && HDLifeOpen(b, *x, *z + dz, margin, need))
 	{
 		*z += dz;
 		return HD_LIFE_SLID;
@@ -462,30 +469,65 @@ inline bool HDLifeAtSink(const HDLifeBody& b, float x, float z)
 	return HDLifeAlong(b, x, z) >= b.upMax + kHDLifeSinkReach;
 }
 
-/* The upstream squares of a river: those whose middle lies within
- * kHDLifeUpstream of the upstream end. The spawn rule picks one of them
- * by the hash of the float and its comeback. */
-inline int HDLifeUpstreamSquare(const HDLifeBody& b, int index, int gen)
+// How many of the body's squares are at least `need` deep.
+inline int HDLifeHoldCount(const HDLifeBody& b, float need)
 {
+	int n = 0;
+
+	for (size_t i = 0; i < b.squares.size(); i++)
+		n += (float)b.squares[i].depth >= need ? 1 : 0;
+
+	return n;
+}
+
+/* The `pick`-th of the body's squares at least `need` deep, counted round,
+ * or -1 when none is. Where every square is deep enough it is the
+ * `pick`-th square itself. */
+inline int HDLifeHoldSquare(const HDLifeBody& b, float need, int pick)
+{
+	const int n = HDLifeHoldCount(b, need);
+
+	if (!n)
+		return -1;
+
+	pick %= n;
+
+	for (size_t i = 0; i < b.squares.size(); i++)
+		if ((float)b.squares[i].depth >= need && pick-- == 0)
+			return (int)i;
+
+	return -1;
+}
+
+/* The upstream squares of a river: those whose middle lies within
+ * kHDLifeUpstream of the upstream end and that are at least `need` deep.
+ * The spawn rule picks one of them by the hash of the float and its
+ * comeback; with none, any square of the body deep enough; -1 when the
+ * body has none. */
+inline int HDLifeUpstreamSquare(const HDLifeBody& b, int index, int gen,
+	float need)
+{
+	const unsigned h = HDLifeHash((unsigned)index, 7919u + (unsigned)gen);
 	int count = 0;
 
 	for (size_t i = 0; i < b.squares.size(); i++)
 		if (HDLifeAlong(b, b.squares[i].x + 512.0f, b.squares[i].z +
-			512.0f) <= b.upMin + kHDLifeUpstream)
+			512.0f) <= b.upMin + kHDLifeUpstream &&
+			(float)b.squares[i].depth >= need)
 			count++;
 
 	if (!count)
-		return b.squares.empty() ? -1 : 0;
+		return HDLifeHoldSquare(b, need, (int)h);
 
-	int pick = (int)(HDLifeHash((unsigned)index, 7919u + (unsigned)gen) %
-		(unsigned)count);
+	int pick = (int)(h % (unsigned)count);
 
 	for (size_t i = 0; i < b.squares.size(); i++)
 		if (HDLifeAlong(b, b.squares[i].x + 512.0f, b.squares[i].z +
-			512.0f) <= b.upMin + kHDLifeUpstream && pick-- == 0)
+			512.0f) <= b.upMin + kHDLifeUpstream &&
+			(float)b.squares[i].depth >= need && pick-- == 0)
 			return (int)i;
 
-	return 0;
+	return -1;
 }
 
 /* A place inside a square, a quarter square from each of its edges, from
@@ -509,9 +551,10 @@ inline int HDLifeCount(int squares)
 
 /* Whether a kind fits a body: the share of a model `h` high under the
  * surface, `draft` x h, reaches deeper than the sheet of the body falls
- * (`rise`, HDRenderWaterBodySquares), so it never hangs over the drawn
- * water. A crest running over a flat rag is what a rag awash does, so the
- * other side is not asked. */
+ * (`rise`, HDRenderWaterBodySquares), so its bottom, held level, never
+ * hangs over the drawn water; the tilt is not counted here and lifts a
+ * corner by up to HDLifeTiltDrop. A crest running over a flat rag is what
+ * a rag awash does, so the other side is not asked. */
 inline bool HDLifeFits(float h, float draft, float rise)
 {
 	return draft * h >= rise;
@@ -520,8 +563,8 @@ inline bool HDLifeFits(float h, float draft, float rise)
 /* The bob's height: a quarter of the model, never more than the sheet's
  * own swell (a float on still water lies still and only tilts), and never
  * more than the draft leaves over the sheet's fall - a float bobbing up as
- * the sheet falls still keeps its bottom in the water. 0 for a kind that
- * does not fit. */
+ * the sheet falls still keeps its bottom, held level, in the water (the
+ * tilt left out, as in HDLifeFits). 0 for a kind that does not fit. */
 inline float HDLifeBobAmp(float h, float draft, float rise)
 {
 	float a = 0.25f * h;
@@ -540,6 +583,18 @@ inline float HDLifeBob(float t, float period, float phase, float amp)
 inline float HDLifeTiltShare(float t, float period, float phase)
 {
 	return cosf(6.2831853f * t / period + phase);
+}
+
+/* How far the tilt lowers a corner of a model that reaches `reach` from
+ * its middle across the water (HDLifeReach). The pitch, kHDLifePitch x
+ * cos, turns about x, the roll, kHDLifeRoll x sin, about z; a corner c
+ * along z and a along x drops by c sin(pitch) + a sin(roll), at most
+ * c pitch + a roll, which is at most the corner's distance times the
+ * length of the two angles (Cauchy-Schwarz), and that length is never more
+ * than the larger angle, kHDLifePitch. */
+inline float HDLifeTiltDrop(float reach)
+{
+	return reach * kHDLifePitch;
 }
 
 // Whether Lara at lx, lz sends a school with its centre at cx, cz fleeing.
@@ -763,7 +818,7 @@ struct HDLifePool
 	float reach[HD_LIFE_KINDS];	// HDLifeReach
 	int has[HD_LIFE_KINDS];
 	int floats, fish;
-	int unfit;		// floats a body's rise left out
+	int unfit;		// floats a body's rise or depth left out
 	float last;		// the clock of the last tick, -1 before the first
 	int respawned;		// river floats come back upstream
 };
@@ -787,9 +842,24 @@ inline const HDLifeLevel* HDLifeLevelOf(const char* stem)
 	return 0;
 }
 
+/* How deep under the surface at rest a float of `kind` on body `b` reaches
+ * at its lowest: its draft, its bob up to the top (the bottom then stands
+ * draft x h + amp down, HDLifeFloatY) and the drop its tilt gives a corner
+ * (HDLifeTiltDrop). A square shallower than that is no water to it -
+ * ANDY3's shallows, room 34, has 23 squares whose floor is the surface
+ * (RoomProbe -life), and a barrel there stood in the floor. */
+inline float HDLifeNeed(const HDLifePool& p, int kind, const HDLifeBody& b)
+{
+	const float h = p.height[kind], draft = kHDLifeKinds[kind].draft;
+
+	return draft * h + HDLifeBobAmp(h, draft, b.rise) +
+		HDLifeTiltDrop(p.reach[kind]);
+}
+
 /* A kind for a float of body `bi`, from the level's weights and a number
- * 0 .. 32767, among the kinds that loaded, fit the body and are not at
- * their `most` there (entry `self` not counted); -1 when none is left. */
+ * 0 .. 32767, among the kinds that loaded, fit the body, have a square of
+ * it deep enough (HDLifeNeed) and are not at their `most` there (entry
+ * `self` not counted); -1 when none is left. */
 inline int HDLifeRollKind(const HDLifePool& p, const HDLifeLevel& level,
 	int bi, int r, int self)
 {
@@ -807,6 +877,7 @@ inline int HDLifeRollKind(const HDLifePool& p, const HDLifeLevel& level,
 
 		ok[k] = p.has[k] && level.weight[k] > 0 &&
 			HDLifeFits(p.height[k], kHDLifeKinds[k].draft, b.rise) &&
+			HDLifeHoldCount(b, HDLifeNeed(p, k, b)) > 0 &&
 			(!kHDLifeKinds[k].most || there < kHDLifeKinds[k].most) ?
 			level.weight[k] : 0;
 		sum += ok[k];
@@ -848,8 +919,10 @@ inline void HDLifeDress(HDLifePool& p, HDLifeEntry& e)
 
 /* The level's pool, rolled with `draw` (0 .. 32767 a call: the engine's
  * GetRandomDraw, or RoomProbe's own copy of that generator). The bodies
- * must be in `p.bodies` and `height` and `has` set; `fishHas` says whether
- * the fish's model loaded. */
+ * must be in `p.bodies` and `height`, `reach` and `has` set. A body takes
+ * a float for kHDLifePerSquares of its squares with water under them (a
+ * floor at the surface is none), each on a square deep enough for its
+ * kind; a body with no such square for any kind takes none. */
 inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 	int (*draw)(void*), void* ctx)
 {
@@ -869,15 +942,18 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 		if (b.river)
 			HDLifeRiverEnds(b);
 
-		const int n = HDLifeCount((int)b.squares.size());
+		// Depth 1 and more: the squares with water under them.
+		const int n = HDLifeCount(HDLifeHoldCount(b, 1.0f));
 
-		for (int i = 0; i < n && !b.squares.empty(); i++)
+		for (int i = 0; i < n; i++)
 		{
 			const int kind = HDLifeRollKind(p, level, (int)bi, draw(ctx), -1);
-			const int sq = draw(ctx) % (int)b.squares.size();
+			const int pick = draw(ctx);
 			const int ax = draw(ctx), az = draw(ctx);
+			const int sq = kind < 0 ? -1 :
+				HDLifeHoldSquare(b, HDLifeNeed(p, kind, b), pick);
 
-			if (kind < 0)
+			if (sq < 0)
 			{
 				p.unfit++;
 				continue;
@@ -1006,20 +1082,15 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 
 	const float margin = p.reach[e.kind] > kHDLifeEdge ? p.reach[e.kind] :
 		kHDLifeEdge;
-	const int how = HDLifeStep(b, &e.x, &e.z, vx * dt, vz * dt, margin);
+	const int how = HDLifeStep(b, &e.x, &e.z, vx * dt, vz * dt, margin,
+		HDLifeNeed(p, e.kind, b));
 
 	if (b.river && (how == HD_LIFE_BLOCKED || HDLifeAtSink(b, e.x, e.z)))
 	{
-		const int sq = HDLifeUpstreamSquare(b, e.index, e.gen + 1);
-
 		e.gen++;
 		p.respawned++;
 
-		if (sq >= 0)
-			HDLifeInside(b.squares[(size_t)sq], (int)HDLifeHash(
-				(unsigned)e.index, 401u + (unsigned)e.gen), (int)HDLifeHash(
-				(unsigned)e.index, 503u + (unsigned)e.gen), &e.x, &e.z);
-
+		// The kind first: the square it comes back on must hold it.
 		if (level)
 		{
 			const int kind = HDLifeRollKind(p, *level, e.body, (int)HDLifeHash(
@@ -1028,6 +1099,14 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 
 			e.kind = kind >= 0 ? kind : e.kind;
 		}
+
+		const int sq = HDLifeUpstreamSquare(b, e.index, e.gen,
+			HDLifeNeed(p, e.kind, b));
+
+		if (sq >= 0)
+			HDLifeInside(b.squares[(size_t)sq], (int)HDLifeHash(
+				(unsigned)e.index, 401u + (unsigned)e.gen), (int)HDLifeHash(
+				(unsigned)e.index, 503u + (unsigned)e.gen), &e.x, &e.z);
 
 		HDLifeDress(p, e);
 		return;

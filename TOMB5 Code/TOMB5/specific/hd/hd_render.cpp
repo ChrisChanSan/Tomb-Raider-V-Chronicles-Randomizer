@@ -9839,24 +9839,43 @@ namespace
 	 * The water a breaking fish tank pours over its room's floor, as a
 	 * sheet of this water: a basin body of its own over the squares of the
 	 * floor lasers the tank shorts out (HDWaterFilm, hd_level.cpp builds the
-	 * list), kFilmHair over the floor and kFilmHair deep, drawn with the
-	 * sheets' own shaders in its room's blend phase - the reflection, the
-	 * highlight and the waterline round its edge are the sheet's. It is no
-	 * water square for anything else: not counted, not in the WATERLOG
-	 * lines, no ring source, no ripple gate, no hidden art, no caustic (a
-	 * room's caustic would light the whole floor at every moment), no eye
-	 * under it.
+	 * list), at rest kFilmHair over the floor, drawn with the sheets' own
+	 * shaders in its room's blend phase - the reflection, the highlight and
+	 * the waterline are the sheet's, and its edge takes a channel's bank
+	 * foam (strength and band of kWaterClass's channel row), a rim where
+	 * the water runs out on the dry floor. It is no water square for
+	 * anything else: not counted, not in the WATERLOG lines, no ring
+	 * source, no ripple gate, no hidden art, no caustic (a room's caustic
+	 * would light the whole floor at every moment), no eye under it.
 	 *
 	 * Its strength a frame (HDRenderWaterFilmWet, hd_splash_math.h
-	 * HDFilmStrength) is the blend factor: SRCBLEND BLENDFACTOR, DESTBLEND
-	 * INVBLENDFACTOR. With the frame's copy bound the sheet's pixel shader
-	 * writes the water and the floor behind it whole, alpha 1 (WaterPS,
-	 * "with the copy"), so that blend is an exact cross-fade between the
-	 * film and the floor; without the copy the film is not drawn. A basin
-	 * draws no foam pass, so one draw is all. kFilmHair, 8 units, is about
-	 * 2 cm at 2.3 mm a unit - a film over the classic floor and well under
-	 * the lasers' 128 - a free choice. */
+	 * HDFilmStrength) sets three things. The blend factor: SRCBLEND
+	 * BLENDFACTOR, DESTBLEND INVBLENDFACTOR - with the frame's copy bound
+	 * the sheet's pixel shader writes the water and the floor behind it
+	 * whole, alpha 1 (WaterPS, "with the copy"), so that blend is an exact
+	 * cross-fade between the film and the floor; without the copy the film
+	 * is not drawn. The height: the surface stands kFilmRise times the
+	 * strength over its rest, through WaterVS's crest lift (gSwell z, with
+	 * w so low that every vertex takes all of it), tapering in from the
+	 * edge over the basin's taper and still while tomb5.hd_motion is off -
+	 * deepest while the tank pours, sinking as the lasers' count runs
+	 * down; a deeper film bends and darkens the floor seen through it more.
+	 * The foam: its strength times the strength, a density, so the rim
+	 * thins as the film fades and the foam's own draw stays premultiplied.
+	 *
+	 * kFilmHair, 8 units, is about 2 cm at 2.3 mm a unit - a film over the
+	 * classic floor and well under the lasers' 128 - a free choice. Its
+	 * depth byte (8 over 32, rounded down) is 0: only the variant without
+	 * the depth texture reads that byte, and to it the film has no depth.
+	 * kFilmRise, 16 units more, about 4 cm, is a free choice, set by eye on
+	 * the round's RoomProbe pictures. The film's clip is 0, not kWaterClip:
+	 * with the clip at the film's own height the film in RICH2 room 23 lost
+	 * a band in front of the tank's plinth, where the frame lies less than
+	 * 8 units under its surface (RoomProbe -tank 33 1.5 at 960 x 540, the
+	 * film at rest: 73,132 pixels differ from the dry view with the clip
+	 * 8, 84,559 with 0). */
 	const int kFilmHair = 8;		// units
+	const float kFilmRise = 16.0f;	// units, at the whole strength
 
 	std::vector<HDWaterFilm> g_film_in;
 	// Per film of this level: its body, or -1 when it has none, and its wet.
@@ -12457,7 +12476,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		b.info.sourceRoom = -1;
 		b.info.tint[0] = b.info.tint[1] = b.info.tint[2] = 1.0f;
 		b.info.waves = b.info.foam = b.info.bend = 1.0f;
-		b.info.clip = kWaterClip;
+		b.info.clip = 0;	// see "the tank's film"
 		b.info.swell = 1.0f;
 		b.info.crest = 1.0f;
 		group_light(in.room, l);
@@ -12475,6 +12494,10 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		g_wbodies.push_back(b);
 		g_wlooks.push_back(WaterLook());
 		water_look(g_wlooks.back(), g_wbodies.back(), section, stem);
+
+		// The rim: a channel's bank foam, its strength and its band.
+		g_wlooks.back().pixel[24 + 3] = kWaterClass[HD_WATER_CHANNEL].foam;
+		g_wlooks.back().pixel[28 + 0] = kWaterClass[HD_WATER_CHANNEL].band;
 	}
 
 	if (!sheets || !g_device || !g_water_vs || !g_water_ps)
@@ -12658,8 +12681,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 	/* The films' grids, the same 5 x 5 vertices a square: in the group of
 	 * the floor lasers' room and in its flipmap partner's, whichever the
-	 * frame draws; the depth kFilmHair everywhere, the shore the distance
-	 * to the film's own edge (the floor beyond it is dry). */
+	 * frame draws; the depth byte kFilmHair in 32-unit steps everywhere -
+	 * 0, see "the tank's film" -, the shore the distance to the film's own
+	 * edge (the floor beyond it is dry). */
 	for (size_t f = 0; f < g_film_body.size(); f++)
 	{
 		const int b = g_film_body[f];
@@ -15432,6 +15456,15 @@ namespace
 				swell[3] = look.pixel[20 + 3] * heights;
 			}
 
+			/* A film's height and its rim's foam follow its strength (see
+			 * "the tank's film"). */
+			if (film >= 0)
+			{
+				swell[2] = kFilmRise * wet;
+				swell[3] = -1.0e6f;
+				pixel[16 + 24 + 3] *= wet;
+			}
+
 			// c105, gWaterScreen: the target's pixel and the projection.
 			pixel[16 + 9 * 4 + 0] = size.Width ? 1.0f / (float)size.Width :
 				0.0f;
@@ -15555,10 +15588,9 @@ namespace
 				g_device->SetRenderState(D3DRS_DESTBLEND,
 					D3DBLEND_INVSRCALPHA);
 				g_device->SetRenderState(D3DRS_BLENDFACTOR, 0xFFFFFFFF);
-				continue;
 			}
-
-			draw_sheet_range(r);
+			else
+				draw_sheet_range(r);
 
 			/* The foam's own draw (hd_room.hlsl, "the foam's draw"): over
 			 * the sheet just drawn, for a body with bank foam or whitecaps,
@@ -15616,6 +15648,9 @@ namespace
 					g_mark_split++;
 				}
 			}
+
+			if (film >= 0)
+				continue;	// a film has no falls' feet and is no river
 
 			draw_feet(r, pixel);
 			draw_river(r);

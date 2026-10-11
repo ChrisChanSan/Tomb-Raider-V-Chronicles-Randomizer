@@ -2867,7 +2867,8 @@ The level's `models` line ends in `cut_ranges` and `cut_models`: how many
 pieces of how many models are drawn with the cut-out test described above —
 JOBY3 6 of 6, JOBY5 4 of 4, JOBY2 2 of 2, RICH2 18 of 1 (the steel door),
 RICH3 8 of 2, ANDY3 4 of 1, ANDY1 2 of 1, the title 1 of 1, and 0 in every
-other level.
+other level. After them the line ends in `hash=` and `hash_ms=`, the models'
+fingerprint and its time (see *The loading time* below).
 `itemcheck` is the object twin of `matrixcheck` — the same comparison on an
 object's pieces instead of a room's vertices — and `lightcheck` puts the
 classic lighting formula and the HD one side by side on one surface normal.
@@ -2933,8 +2934,8 @@ room lines (`tables`), the static meshes (`statics`), the water sheets and
 surfaces (`sheets`, `surfaces`), the water's animation pages (`frames`) and the
 objects with their models and rings (`objects`; the `models` line has its own
 `build_ms` and `page_ms`). What it leaves out is the classic load, the waiting
-between the two loading threads and the first frame. (The numbers above are a
-format sample.)
+between the two loading threads, the first frame and the two fingerprints
+(`hash_ms`, below). (The numbers above are a format sample.)
 
 The `built` line ends in the parts of `built ms` (again a format sample):
 
@@ -2960,9 +2961,13 @@ the vertex buffer, every room's draw calls with their index bytes and tables,
 the level's tables - and two logs of the same level from the same build carry
 the same `hash=` whatever `hd_threads` was, the way the `models` line's
 `hash=` does for the models. Working it out is `hash_ms` and runs only with
-`-log`. On the machine this was measured on (sixteen threads) the rooms' build
-of the title level went from about 3.1 seconds to about 1.3; the texture pages
-are now its largest part.
+`-log`; that time is left out of `built ms` and the `built` part of the
+`hd_share` line, and the models' own (`hash_ms` at the end of the `models`
+line) out of that line's `ms`, `build_ms` and `buf_ms` and the `objects` part,
+so the numbers read the same as in a load without the log. On the machine
+this was measured on (sixteen threads) the rooms' build of the title level went
+from about 3.1 seconds to about 1.3; the texture pages are now its largest
+part.
 
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full
 screen throws the graphics device away and makes a new one. Everything the HD

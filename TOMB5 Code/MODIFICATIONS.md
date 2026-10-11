@@ -11824,8 +11824,9 @@ one thread as on sixteen; the models' texture pages, which decoded on one thread
 on the same pool as the rooms' pages. One new registry value, `tomb5.hd_threads` (`0` the
 machine's count, the default; never above 16), and new fields at the end of three log
 lines and one new line: the `built` line ends in `phases=`, `threads=`, `hash=` and
-`hash_ms=`, the `trg=` line in `scan_ms=`, the `models` line in `hash=`, and `HDLOG
-level=<L> hd_share ms=` sums the level's whole HD share.
+`hash_ms=`, the `trg=` line in `scan_ms=`, the `models` line in `hash=` and `hash_ms=`,
+and `HDLOG level=<L> hd_share ms=` sums the level's whole HD share. The two fingerprints'
+time is in their own `hash_ms` and in no other number of the lines.
 
 **Why.** Collected under #199, opened on 2026-10-09 with the loading bar as its first
 entry. The owner's log of the build of 2026-10-09 18:38 put the HD share of a level load
@@ -11840,7 +11841,7 @@ night of 2026-10-11 took them in parallel rounds; this is the loading bar's.
 **How.** First the measurement, then each lever, each proved by the hash below.
 
 *The phases* (`specific/hd/hd_render.cpp` `HDRenderLevelBegin`; `hd_render.h`
-`HDBeginPhase`, `HDRenderBeginPhaseName` :4755): a lap after each part books its time -
+`HDBeginPhase`, `HDRenderBeginPhaseName` :4756): a lap after each part books its time -
 `prep` (the sheen field, the gloss seed), `pages` (`HDPageCacheCreate`), `owners` (which
 group owns a water mark, the wind, the falls), `verts` (the vertex buffer), `setup` (the
 glow parts, the stand holders), `fill` (every group's triangles), `index` (mirrors, sheen,
@@ -11848,12 +11849,12 @@ windows, the index buffer). `hd_level.cpp` (`LoadPhase` :1382) times its own ste
 the build (marks, boxes, gloss, intr, air, pairs, cuts, stand, places) and after it
 (tables, statics, sheets, surfaces, frames, objects) with the performance counter, and
 `HDLevelLoad` times the `.TRG` scan on the loading thread (`scan_ms` :5005). The built
-line (:5717) carries the steps before the build, the read and the build's own parts; the
-`hd_share` line (:5852) the scan, the build as one part and every step after it.
+line (:5722) carries the steps before the build, the read and the build's own parts; the
+`hd_share` line (:5861) the scan, the build as one part and every step after it.
 
-*The fingerprint* (`hd_render.cpp` `BuildHash` :4657, `hd_model.cpp` :1850): FNV-1a 64
+*The fingerprint* (`hd_render.cpp` `BuildHash` :4658, `hd_model.cpp` :1852): FNV-1a 64
 (`HDFnv64`, `hd_pagecache.h` :436) over the vertex buffer in blocks of 65,536 vertices
-(each vertex as `ComposeVertex` :4496 puts it together out of the `.TRG` and its three
+(each vertex as `ComposeVertex` :4497 puts it together out of the `.TRG` and its three
 mark bits), then every group in group order (each draw call's fields and the index
 buffer's bytes it names, the group's cells, flats, pieces, stand ranges and samples), then
 the level tables the index fill writes (destructibles, stand covers and their face flags,
@@ -11861,7 +11862,11 @@ stand triangles, book parts and runs, static pieces, clear pages, hits, air pair
 counts). The block and group answers are fed in as 8 bytes each. On with `-log` in the
 engine, always in RoomProbe and ModelProbe; taken after the build's last lap and reported
 apart (`hash_ms`); the models' over each model's vertex and index bytes and its draw
-calls' start, count, page slot and node, in build order.
+calls' start, count, page slot and node, in build order, timed per model into a running
+total (`HDModelHashMs`, `hd_model.cpp` :4185) and reported apart as well. Neither time is
+in any other number: `built ms=` and the `begin` step lose `stats.hashMs` (`hd_level.cpp`
+:5261), the `objects` step loses the models' share (:5834), and the `models` line's `ms=`,
+`build_ms=` and `buf_ms=` lose theirs (`hd_model.cpp` :4129, `hd_object.cpp` :2025).
 
 *The pool* (`hd_pagecache.h` `HDPoolThreads` :354, `HDPoolRun` :370), header-only so that
 the suite tests it as the engine runs it: items handed out in index order from an atomic
@@ -11876,13 +11881,13 @@ of two pages per thread inside the 32-bit address space. Each lever and what it 
 own thread loop: a page decodes into its own slot of the batch, the uploads stay on the
 calling thread. The models' pages took one thread since the seam for objects - no reason
 was written down - and now take the pool's count.
-- The vertex buffer (`hd_render.cpp` :5401) in blocks of 65,536 vertices: a vertex reads
+- The vertex buffer (`hd_render.cpp` :5402) in blocks of 65,536 vertices: a vertex reads
 the `.TRG` and the mark tables, which nothing writes then, and writes its own slot of the
 buffer, of the shimmer marks and of the hash's bits; each block counts into its own row.
 The loop wrote every field into the locked WRITEONLY buffer and read three back for its
 counters - a read of write-combined memory per vertex; a vertex is now put together on the
 stack and stored whole, which alone took TITLE's `verts` from 402 to 33 ms on one thread.
-- The index fill (`fill_group` :5720, `FillOut` :5564): a group writes its own slot of
+- The index fill (`fill_group` :5721, `FillOut` :5565): a group writes its own slot of
 `g_groups` and its own `FillOut` - its index run (with `range.start` and a static piece's
 index its own until the join moves them by the run's place), its destructibles, book
 parts, stand covers and face flags, stand triangles and static pieces (ids and first flags
@@ -11892,17 +11897,17 @@ pages it sees first (counted at the join for the first group, as the one loop's 
 did). Two tables the fill used to make on first use are made before it in its own order:
 the book runs (`MaterialBookSlots` over group, pass, part; the fill asks
 `MaterialBookSlotsMade` :1118, which writes nothing) and every page's plain sheen
-(`PageGloss`; the fill asks `PageGlossKnown` :3362). Everything else it reads - the
+(`PageGloss`; the fill asks `PageGlossKnown` :3363). Everything else it reads - the
 `.TRG`, the boxes, the intrusion, pair-face, cut, stand, air and place tables, the page
 cache - is handed in before the build and written by nobody during it. The groups are
-handed out biggest first; the join (after :7560) is in group order.
-- The sort of a pass's triangles (:6833) runs stably over their numbers with the same key
+handed out biggest first; the join (after :7561) is in group order.
+- The sort of a pass's triangles (:6834) runs stably over their numbers with the same key
 and lays the 33-word records out in place, one cycle of the permutation at a time - the
 order a stable sort of the records gives.
 - The mirror search (`FindMirrors` :2998) one room at a time on the pool, each room's
 mirrors in its own row, joined in room order; the other rooms' cells are a sorted list
 searched by binary search instead of a hashed set built one insert per triangle.
-- The memory of the fill (`kFillBudget` :7560): a group starts when the groups running and
+- The memory of the fill (`kFillBudget` :7561): a group starts when the groups running and
 it hold under 96 MiB of triangle records and sort lists, or when nothing else runs - the
 page decode's batch budget. Without it RoomProbe's peak commit on sixteen threads stood
 160 MiB over one thread's on TITLE.
@@ -11971,7 +11976,10 @@ Memory: RoomProbe's peak commit of the whole run, 16 threads against 1 after (be
 290.8, 332.0, 234.5, 364.7, 208.2 MiB): TITLE 386.2 / 288.6, ANDREA2 369.6 / 325.3, JOBY2
 326.4 / 226.5, RICH2 385.9 / 380.3, ANDY3 274.7 / 205.8. The hash itself takes 7 to 217 ms
 on 16 threads (RICH2's 742,332 static-piece triangles, hashed in order, are 150 of them);
-it runs only with `-log`.
+it runs only with `-log`. Taken again after the fix below, best of three: the rooms' 7
+(JOBY4) to 175 (RICH2) ms on 16 threads, TITLE 31, ANDREA2 42, JOBY2 47; on one thread 10
+(RICHCUT2) to 322 (RICH2), TITLE 209, ANDREA2 218; the models' (ModelProbe `-all
+-withrooms`) 0 to 9 ms on either count.
 
 **Checked.** The hash: the built line's `hash=` of the one-loop build (`8ba4a1b`) against
 the final build's on all fifteen levels, one thread and sixteen, three runs each - 180 of
@@ -12011,9 +12019,32 @@ cuts, `hd_gloss.txt`, `hd_water.txt`, `hd_reach`, `hd_air`, `hd_water` and the e
 stamp - or draw a wrong level without a word; with nobody able to play tonight that risk
 was not taken. The fill's transient memory is up to 96 MiB more than one thread's in the
 32-bit process. `air_ms` on the overlap line is now processor time summed over the
-threads.
+threads. The fill's memory gate (`hd_render.cpp` :7566 to :7593) gives a group's share
+back only when its fill returns: should `fill_group` throw (in practice `std::bad_alloc`
+in the 32-bit process), `HDPoolRun` stops handing out groups, but a thread already waiting
+at the gate for room waits on, and the load hangs where the one loop crashed. Neither has
+a catch in the engine, so both are fatal; a guard that gives the share back and wakes the
+waiters on the way out is more than the one line the fix pass allowed itself.
 
-**Commits.** `8ba4a1b`, `7cfe85d`, `698c438`, `77d265c`, `2632d97`, `c1bc5c9`, `23274c4`.
+**What the prover found.** Three findings on `a16a3de`. Medium: with `-log` the build's
+fingerprint ran inside `HDRenderLevelBegin`, so the built line's `ms=` and the `hd_share`
+line's `built` part carried its time (RICH2 about 175 ms on 16 threads, 322 on one, 15 to
+18 % of its room build), and the model hash sat inside the `models` line's `ms=`,
+`build_ms=` and `buf_ms=` and the `objects` part; only the built line's `build_ms=` had
+it taken out. Fixed in `88b0cf2` as *The fingerprint* above says: both times are only in
+their own `hash_ms` fields (`HDModelStats::hashMs`, `HDModelHashMs` new, the `models` line
+and ModelProbe's `time` line end in `hash_ms=`). Low: the fill gate on an exception - not
+fixed, see *Left*. Low: six new comments told the code's history ("the one loop this
+was", "the page decode's old ceiling" and four more) - rewritten in the present tense in
+`25adc3f`. Checked after the fix with the tools built from `25adc3f`: the rooms' hash on
+all fifteen levels, one thread and sixteen, three runs each, 90 of 90 equal to the
+one-loop build's; the models' 90 of 90 equal to the one-loop tool's; the census 15 of 15;
+the fifteen cameras at `-hdwater 0` and `1` on one thread and sixteen against the
+`2c933b6` tool, 60 of 60 identical; five of the room art round's places at 2560 x 1440,
+10 of 10; the classic path 12 of 12; the suites as above, 0 failed.
+
+**Commits.** `8ba4a1b`, `7cfe85d`, `698c438`, `77d265c`, `2632d97`, `c1bc5c9`, `23274c4`;
+after the prover, `88b0cf2`, `25adc3f`.
 
 ## 2.5 Sixty frames a second
 

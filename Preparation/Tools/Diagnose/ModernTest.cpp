@@ -17656,10 +17656,14 @@ static void life_spawn()
 	ok(sq >= 0 && b.squares[(size_t)sq].x == 0,
 		"life spawn: a river float comes back on the upstream row",
 		sq >= 0 ? b.squares[(size_t)sq].x : -1, 0);
-	ok(HDLifeAtSink(b, 4608.0f + kHDLifeSinkReach, 512.0f) &&
-		!HDLifeAtSink(b, 4000.0f, 512.0f),
-		"life spawn: a quarter square past the last row's middle is the sink",
-		0, 0);
+	ok(HDLifeAtSink(b, 5120.0f + kHDLifeSlotReach, 512.0f) &&
+		!HDLifeAtSink(b, 5120.0f + kHDLifeSlotReach - 1.0f, 512.0f),
+		"life spawn: the outlet's slot point, past the last row's edge, is "
+		"where a river float ends", 0, 0);
+	ok(b.inX == -kHDLifeSlotReach && b.inZ == 512.0f && b.outX == 5120.0f +
+		kHDLifeSlotReach && b.outZ == 512.0f,
+		"life spawn: the slot points lie past the end rows' edges along the "
+		"flow", (long)b.outX, (long)(5120.0f + kHDLifeSlotReach));
 
 	const HDLifeLevel level = { "TEST", 8, 0, 1, { 1, 0, 0, 0 }, 0, 0 };
 
@@ -17677,13 +17681,514 @@ static void life_spawn()
 	p.height[HD_LIFE_BOTTLE] = 80.0f;
 	e.kind = HD_LIFE_BOTTLE;
 	e.index = 4;
-	e.x = 4608.0f + 300.0f;
+	e.x = 5120.0f + kHDLifeSlotReach - 10.0f;
 	e.z = 512.0f;
 	p.entries.push_back(e);
 	HDLifeFloatTick(p, &level, p.entries[0], 1.0f, 0.1f);
-	ok(p.respawned == 1 && p.entries[0].gen == 1 && p.entries[0].x < 1024.0f,
-		"life spawn: a float at the sink comes back upstream", (long)
-		p.entries[0].x, 0);
+	ok(p.respawned == 1 && p.entries[0].gen == 1 &&
+		p.entries[0].x == -kHDLifeSlotReach,
+		"life spawn: a float at the outlet's slot comes back at the inlet's",
+		(long)p.entries[0].x, (long)-kHDLifeSlotReach);
+}
+
+/* The river's ends (HDLifeDiveShare, HDLifeOnRun, HDLifeComeBack): a river
+ * of ten squares along x, its floats stepped for a minute at 30 steps a
+ * second. A float is wholly under the surface (dive share 1) wherever it
+ * lies past the end rows' edges by the slot's reach, it comes back only
+ * from the outlet's slot point and only to the inlet's, and on its way it
+ * moves no more than the current takes it in a step. */
+static void life_ends()
+{
+	HDLifeBody b = life_body(10, 1, 2048);
+
+	b.river = 1;
+	b.flowX = 1.0f;
+	b.speed = 1063.0f;	// ANDY3's sink river
+	HDLifeRiverEnds(b);
+	ok(HDLifeDiveShare(b, b.inX, 512.0f) == 1.0f &&
+		HDLifeDiveShare(b, b.outX, 512.0f) == 1.0f &&
+		HDLifeDiveShare(b, 5120.0f, 512.0f) == 0.0f &&
+		HDLifeDiveShare(b, 1024.0f, 512.0f) == 0.0f &&
+		HDLifeDiveShare(b, 9216.0f, 512.0f) == 0.0f,
+		"life ends: under at the slot points, afloat from the first square's "
+		"end to the last one's start", 0, 0);
+	ok(HDLifeDiveShare(b, 0.0f, 512.0f) > 0.5f &&
+		HDLifeDiveShare(b, 10240.0f, 512.0f) > 0.5f,
+		"life ends: at the end rows' edges a float is more than half way "
+		"down", (long)(100.0f * HDLifeDiveShare(b, 0.0f, 512.0f)), 50);
+	ok(fabsf(HDLifeDiveDepth(326.0f, 0.45f) - (0.55f * 326.0f +
+		kHDLifeSlotTop)) < 0.01f && HDLifeDiveLightShare(1.0f) ==
+		kHDLifeDiveLight && HDLifeDiveLightShare(0.0f) == 1.0f,
+		"life ends: the dive takes the top under the surface and the light "
+		"down to its share", 0, 0);
+
+	const HDLifeLevel level = { "TEST", 8, 0, 1, { 1, 0, 0, 0 }, 0, 0 };
+	HDLifePool p = {};
+
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_BOTTLE] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.reach[HD_LIFE_BOTTLE] = 100.0f;
+
+	for (int i = 0; i < 4; i++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_BOTTLE;
+		e.index = i;
+		e.x = 1500.0f + 2000.0f * i;
+		e.z = 512.0f;
+		HDLifeDress(p, e);
+		p.entries.push_back(e);
+	}
+
+	int backs = 0, badBack = 0, jumps = 0, openPast = 0;
+
+	for (int s = 1; s <= 1800; s++)
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			HDLifeEntry& e = p.entries[i];
+			const float x0 = e.x, z0 = e.z;
+			const int gen = e.gen;
+
+			HDLifeFloatTick(p, &level, e, s / 30.0f, 1.0f / 30.0f);
+
+			if (e.gen != gen)
+			{
+				backs++;
+				// The step before: one step short of the slot point.
+				badBack += HDLifeDiveShare(b, x0, z0) < 0.99f ||
+					HDLifeDiveShare(b, e.x, e.z) < 1.0f ||
+					fabsf(e.x - b.inX) > 0.5f;
+				continue;
+			}
+
+			const float step = sqrtf((e.x - x0) * (e.x - x0) + (e.z - z0) *
+				(e.z - z0));
+
+			jumps += step > (b.speed + kHDLifeWander) / 30.0f + 0.01f;
+
+			const float a = HDLifeAlong(b, e.x, e.z);
+
+			openPast += (a < -kHDLifeSlotReach || a > 10240.0f +
+				kHDLifeSlotReach) && HDLifeDiveShare(b, e.x, e.z) < 1.0f;
+		}
+
+	ok(backs > 0 && badBack == 0 && jumps == 0 && openPast == 0,
+		"life ends: a minute of a river - floats come back only from slot to "
+		"slot, never jump, never afloat past an edge", backs * 1000 +
+		badBack * 100 + jumps * 10 + openPast, backs * 1000);
+}
+
+/* The drips (HDLifeDropTicks, HDLifeTick): a drop falls as UpdateDrips
+ * steps a drip, about as the project's g has it; its ring is due when it
+ * arrives, three quarters of a wading Lara's or more; the body's line
+ * names the drips' points. */
+static void life_drops()
+{
+	const int ticks = HDLifeDropTicks(3104, 4864);
+	// 1,760 units under g = 4,300 units/s^2: sqrt(2 x 1760 / 4300) s.
+	const float want = sqrtf(2.0f * 1760.0f / 4300.0f) * 30.0f;
+
+	ok(fabsf((float)ticks - want) <= 1.5f && HDLifeDropTicks(0, 0) == 0,
+		"life drops: a drop falls as the project's g has it",
+		ticks, (long)(want + 0.5f));
+
+	HDLifePool p = {};
+	HDLifeDrip d = {};
+
+	p.bodies.push_back(life_body(2, 2, 2048));
+	p.ringAt.assign(1, -1.0e6f);
+	d.body = 0;
+	d.x = 500.0f;
+	d.z = 600.0f;
+	d.period = 5.0f;
+	d.phase = 1.0f;
+	d.last = -1.0f;
+	d.ceilY = -1000;
+	d.ceilRoom = 3;
+	d.fall = 27;
+	p.drips.push_back(d);
+
+	std::vector<HDLifeRing> rings;
+	std::vector<HDLifeDrop> drops;
+	float rang = -1.0f;
+	// The pool holds the drop while it falls, and no longer.
+	int heldEarly = 0, heldFalling = 0, heldAfter = 0;
+
+	for (int k = 1; k <= 90; k++)
+	{
+		const size_t had = rings.size();
+		const float t = k / 30.0f;
+
+		HDLifeTick(p, 0, t, 1, 500.0f, 600.0f, &rings, 0, 0, &drops);
+
+		if (rings.size() > had && rang < 0.0f)
+			rang = t;
+
+		const int held = (int)p.falling.size();
+
+		if (t < 0.99f)
+			heldEarly += held;
+		else if (t > 1.01f && t < 1.0f + 26.5f / 30.0f)
+			heldFalling += held == 1 && p.falling[0].at > 0.99f &&
+				p.falling[0].at < 1.01f ? 0 : 1;
+		else if (t > 1.0f + 27.5f / 30.0f)
+			heldAfter += held;
+	}
+
+	ok(heldEarly == 0 && heldFalling == 0 && heldAfter == 0,
+		"life drops: the pool holds a drop from its ceiling to the water, "
+		"none before, none after", heldEarly * 100 + heldFalling * 10 +
+		heldAfter, 0);
+
+	/* Its fall at a frame between two ticks: the steps of HDLifeDropTicks
+	 * at whole ticks, straight between them, and the water reached at the
+	 * tick HDLifeDropTicks counts. */
+	int bad = 0;
+
+	for (int k = 0; k < 40; k++)
+	{
+		const float a = HDLifeDropFall((float)k, 0);
+		const float m = HDLifeDropFall((float)k + 0.5f, 0);
+		const float n = HDLifeDropFall((float)k + 1.0f, 0);
+
+		bad += !(a <= m && m <= n && fabsf(m - 0.5f * (a + n)) < 0.01f);
+	}
+
+	ok(bad == 0 && HDLifeDropFall(27.0f, 0) >= 1760.0f &&
+		HDLifeDropFall(26.0f, 0) < 1760.0f && HDLifeDropTicks(3104, 4864) ==
+		27,
+		"life drops: the drawn fall follows the ticks, between them too",
+		(long)HDLifeDropFall(27.0f, 0), 1760);
+
+	ok(drops.size() == 1 && drops[0].room == 3 && drops[0].y == -1000 +
+		kHDLifeDropUnder && drops[0].ticks == 27 && fabsf(rang - (1.0f +
+		27.0f / 30.0f)) < 0.05f,
+		"life drops: the drop leaves the ceiling at its time, its ring is due "
+		"on arrival", (long)(rang * 100.0f), 190);
+	ok(rings.size() == 1 && rings[0].size >= kHDLifeDripSize &&
+		rings[0].size <= kHDLifeDripSize + 15 && kHDLifeDripSize * 4 >= 112 * 3,
+		"life drops: a drip's ring is three quarters of a wading Lara's or "
+		"more", rings.empty() ? 0 : rings[0].size, kHDLifeDripSize);
+
+	char tail[256];
+
+	HDLifeBodyTail(p, 0, tail, sizeof(tail));
+	ok(strstr(tail, "in=none out=none drips_at=500,600") != 0,
+		"life drops: the body's line names its drips' points", 0, 0);
+}
+
+/* The rings round a big float (HDLifeFloatRings): a barrel rings every 1
+ * to 2 seconds at a size near a swimming Lara's, a bottle never. */
+static void life_rings()
+{
+	HDLifePool p = {};
+	HDLifeEntry barrel = {}, bottle = {};
+
+	p.bodies.push_back(life_body(3, 3, 2048));
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	barrel.kind = HD_LIFE_BARREL;
+	barrel.index = 5;
+	barrel.x = barrel.z = 1500.0f;
+	barrel.period = 3.0f;
+	bottle = barrel;
+	bottle.kind = HD_LIFE_BOTTLE;
+	bottle.index = 6;
+
+	std::vector<HDLifeRing> a, b;
+
+	for (int k = 1; k <= 600; k++)
+	{
+		HDLifeFloatRings(p, barrel, 0, (k - 1) / 30.0f, k / 30.0f, &a);
+		HDLifeFloatRings(p, bottle, 1, (k - 1) / 30.0f, k / 30.0f, &b);
+	}
+
+	int sizeBad = 0;
+
+	for (size_t i = 0; i < a.size(); i++)
+		sizeBad += a[i].size < kHDLifeFloatRing || a[i].size >
+			kHDLifeFloatRing + kHDLifeFloatRingTop || a[i].drip != -1;
+
+	ok(a.size() >= 10 && a.size() <= 21 && sizeBad == 0 && b.empty(),
+		"life rings: a barrel rings every 1 to 2 s at 88 to 104, a bottle "
+		"never", (long)a.size() * 100 + (long)b.size(), 1500);
+}
+
+/* Floats keep apart (HDLifeClear): a current that drives two floats to a
+ * wall leaves them side by side, no nearer than kHDLifeApart of their
+ * reaches. */
+static void life_apart()
+{
+	HDLifePool p = {};
+
+	p.bodies.push_back(life_body(2, 4, 2048));
+	p.bodies[0].flowZ = 1.0f;
+	p.bodies[0].speed = 90.0f;
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	p.reach[HD_LIFE_BARREL] = 242.0f;
+
+	for (int i = 0; i < 2; i++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_BARREL;
+		e.index = 20 + i;
+		e.x = 900.0f + 200.0f * i;
+		e.z = 600.0f + 900.0f * i;
+		p.entries.push_back(e);
+	}
+
+	for (int k = 1; k <= 30 * 120; k++)
+		for (size_t i = 0; i < p.entries.size(); i++)
+			HDLifeFloatTick(p, 0, p.entries[i], k / 30.0f, 1.0f / 30.0f);
+
+	const float dx = p.entries[0].x - p.entries[1].x;
+	const float dz = p.entries[0].z - p.entries[1].z;
+	const float apart = sqrtf(dx * dx + dz * dz);
+
+	ok(apart >= kHDLifeApart * 484.0f - 0.5f && p.entries[0].z > 3000.0f &&
+		p.entries[1].z > 3000.0f,
+		"life apart: two barrels the current drives to the wall lie apart",
+		(long)apart, (long)(kHDLifeApart * 484.0f));
+}
+
+/* The way on along a bank (HDLifeWayOn): a canal of two squares across
+ * running +z, ten long, with a side arm five squares west over its rows 5
+ * and 6 - ANDREA2's canal's shape. A float the current holds on the side
+ * arm's bank turns east; one at the end wall and one in the open channel
+ * do not; three floats on the side arm's bank reach the end row. */
+static void life_wayon()
+{
+	HDLifeBody b = life_body(0, 0, 2048);
+
+	for (int z = 0; z < 10; z++)
+		for (int x = 0; x < 7; x++)
+			if (x >= 5 || z == 5 || z == 6)
+			{
+				HDLifeSquare s = { x * 1024, z * 1024, 2048, 1 };
+
+				b.squares.push_back(s);
+			}
+
+	b.flowZ = 1.0f;
+	b.speed = 90.0f;
+
+	float vx = 0.0f, vz = 90.0f;
+
+	HDLifeWayOn(b, 2500.0f, 7168.0f - 128.0f, 128.0f, 100.0f, &vx, &vz);
+	ok(vx == 90.0f && vz == 90.0f,
+		"life way on: the side arm's bank turns a float toward the channel",
+		(long)vx, 90);
+
+	vx = 0.0f;
+	vz = 90.0f;
+	HDLifeWayOn(b, 5800.0f, 10240.0f - 128.0f, 128.0f, 100.0f, &vx, &vz);
+	HDLifeWayOn(b, 5800.0f, 3072.0f - 100.0f, 128.0f, 100.0f, &vx, &vz);
+	ok(vx == 0.0f && vz == 90.0f,
+		"life way on: the end wall and the open channel turn nothing",
+		(long)vx, 0);
+
+	HDLifePool p = {};
+
+	p.bodies.push_back(b);
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.reach[HD_LIFE_BOTTLE] = 70.0f;
+
+	for (int i = 0; i < 3; i++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_BOTTLE;
+		e.index = 40 + i;
+		e.x = 800.0f + 1500.0f * i;
+		e.z = 6900.0f;
+		p.entries.push_back(e);
+	}
+
+	int home = 0;
+
+	for (int k = 1; k <= 30 * 180; k++)
+		for (size_t i = 0; i < p.entries.size(); i++)
+			HDLifeFloatTick(p, 0, p.entries[i], k / 30.0f, 1.0f / 30.0f);
+
+	for (size_t i = 0; i < p.entries.size(); i++)
+		home += p.entries[i].z >= 9216.0f;
+
+	ok(home == 3, "life way on: three floats on the side arm's bank reach "
+		"the end row in three minutes", home, 3);
+}
+
+/* A fish turns to its way (HDLifeFishTurn) and its tail's beat runs on
+ * (HDLifeSchool::beat): a school scared at its middle turns no fish by
+ * more in a frame than its turn and its fastest wobble allow, though the
+ * ways it darts on lie farther than that from its heading. */
+static void life_turn()
+{
+	HDLifePool p = {};
+	HDLifeSchool s = {};
+
+	p.bodies.push_back(life_body(4, 4, 2048));
+	p.reach[HD_LIFE_FISH] = 89.0f;
+	s.cx = 2048.0f;
+	s.cz = 2048.0f;
+	s.fish = 6;
+	p.schools.push_back(s);
+
+	for (int f = 0; f < 6; f++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_FISH;
+		e.index = f;
+		e.school = 0;
+		e.ring = 200.0f;
+		e.angle = 6.2831853f * f / 6.0f;
+		p.entries.push_back(e);
+	}
+
+	const float dt = 1.0f / 30.0f;
+	const float most = kHDLifeFishTurn * dt + kHDLifeWobble * 6.2831853f *
+		kHDLifeWobbleHz * kHDLifeDartBeat * dt + 1.0e-3f;
+	float worst = 0.0f, wide = 0.0f, last[6];
+
+	for (int k = 0; k <= 30 * 20; k++)
+	{
+		const float t = k * dt;
+
+		if (k)
+			HDLifeTick(p, 0, t, k <= 45 && k >= 30, 2048.0f, 2048.0f, 0);
+
+		for (int f = 0; f < 6; f++)
+		{
+			const HDLifeEntry& e = p.entries[(size_t)f];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			if (k)
+			{
+				float d = yaw - last[f];
+
+				while (d > 3.14159265f)
+					d -= 6.2831853f;
+				while (d < -3.14159265f)
+					d += 6.2831853f;
+
+				worst = fabsf(d) > worst ? fabsf(d) : worst;
+			}
+
+			last[f] = yaw;
+
+			if (p.schools[0].darting && k == 31)
+			{
+				float d = atan2f(e.wayX, e.wayZ) - p.schools[0].heading;
+
+				while (d > 3.14159265f)
+					d -= 6.2831853f;
+				while (d < -3.14159265f)
+					d += 6.2831853f;
+
+				wide = fabsf(d) > wide ? fabsf(d) : wide;
+			}
+		}
+	}
+
+	ok(p.schools[0].darts >= 1 && wide > 2.0f * most && worst <= most,
+		"life turn: a dart turns its fish within a few frames, never in one",
+		(long)(worst * 1000.0f), (long)(most * 1000.0f));
+}
+
+static int life_draw(void* state);
+
+/* A rebuild of the level keeps the pool (HDLifeSameBodies): the same water
+ * keeps every entry where it was, other water rolls anew. */
+static void life_keep()
+{
+	HDLifePool p = {};
+	const HDLifeLevel level = { "TEST", 8, 0, 0, { 1, 0, 0, 1 }, 0, 0 };
+	unsigned state = 7;
+
+	p.bodies.push_back(life_body(4, 4, 2048));
+	p.has[HD_LIFE_BOTTLE] = p.has[HD_LIFE_BARREL] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	HDLifeBuild(p, level, life_draw, &state);
+	HDLifeTick(p, &level, 12.0f, 0, 0.0f, 0.0f, 0);
+
+	const HDLifePool before = p;
+	std::vector<HDLifeBody> again;
+
+	again.push_back(life_body(4, 4, 2048));
+
+	bool same = HDLifeSameBodies(before.bodies, again);
+	int moved = 0;
+
+	// What the engine does then (hd_life.cpp, HDLifeLevelBegin).
+	HDLifePool kept = same ? before : HDLifePool();
+
+	for (size_t i = 0; i < kept.entries.size(); i++)
+		moved += kept.entries[i].x != before.entries[i].x ||
+			kept.entries[i].z != before.entries[i].z;
+
+	again[0].squares[3].depth = 512;
+
+	ok(same && !before.entries.empty() && moved == 0 &&
+		kept.entries.size() == before.entries.size() &&
+		!HDLifeSameBodies(before.bodies, again),
+		"life keep: a rebuild of the same water keeps every entry's place, "
+		"other water does not", moved, 0);
+}
+
+/* A fish tank (HDLifeAddTank): RICH2's row gives a body of its two
+ * squares and a school of 8, which stays in the tank's box, calm and
+ * darting from Lara at the glass, and rests while the tank is gone. */
+static void life_tank()
+{
+	HDLifePool p = {};
+	unsigned state = 11;
+	const HDLifeTank& t = kHDLifeTanks[0];
+
+	p.has[HD_LIFE_FISH] = 1;
+	p.reach[HD_LIFE_FISH] = 87.0f;
+	p.last = -1.0f;
+	HDLifeAddTank(p, t, life_draw, &state);
+
+	int outside = 0;
+
+	for (int k = 1; k <= 30 * 30; k++)
+	{
+		const float s = k / 30.0f;
+
+		// Lara at the glass from 10 to 12 seconds.
+		HDLifeTick(p, 0, s, s >= 10.0f && s < 12.0f, (float)t.x1 + 200.0f,
+			0.5f * (t.z0 + t.z1), 0);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, p.entries[i], s, &x, &y, &z, &yaw, &pitch, &roll);
+			outside += x < t.x0 + 87.0f || x > t.x1 - 87.0f || z < t.z0 +
+				87.0f || z > t.z1 - 87.0f || y < t.top || y > t.bottom;
+		}
+	}
+
+	ok(p.bodies.size() == 1 && p.bodies[0].tank && p.bodies[0].index == -1 &&
+		p.bodies[0].squares.size() == 2 && p.fish == t.fish &&
+		p.schools[0].darts >= 1 && outside == 0,
+		"life tank: eight fish keep inside the tank, calm and darting from "
+		"Lara at the glass", outside, 0);
+
+	const HDLifePool before = p;
+
+	p.bodies[0].gone = 1;
+	HDLifeTick(p, 0, 40.0f, 1, (float)t.x1 + 200.0f, 0.5f * (t.z0 + t.z1),
+		0);
+	ok(p.schools[0].cx == before.schools[0].cx &&
+		p.schools[0].darts == before.schools[0].darts,
+		"life tank: a shot tank's school rests", 0, 0);
 }
 
 static void life_flee()
@@ -17693,33 +18198,111 @@ static void life_flee()
 	ok(HDLifeFlees(1000.0f, 1000.0f, 1000.0f + kHDLifeFleeReach - 1.0f,
 		1000.0f) && !HDLifeFlees(1000.0f, 1000.0f, 1000.0f +
 		kHDLifeFleeReach + 1.0f, 1000.0f),
-		"life flee: Lara within reach of the school's middle sends it off",
-		0, 0);
+		"life flee: Lara within a square of a fish scares it", 0, 0);
 
-	const int away = HDLifeFarthestDeep(b, 0.0f, 0.0f);
+	// The dart's speed curve: from its start falling off, three squares in
+	// the first two seconds.
+	ok(HDLifeDartSpeed(0.0f) == kHDLifeDartSpeed &&
+		HDLifeDartSpeed(kHDLifeDartFall) < 0.37f * kHDLifeDartSpeed &&
+		HDLifeDartDistance(2.0f) > 2.75f * 1024.0f &&
+		HDLifeDartDistance(2.0f) < 3.25f * 1024.0f,
+		"life flee: a dart falls off with its time and runs about three "
+		"squares in two seconds", (long)HDLifeDartDistance(2.0f), 3072);
 
-	ok(away >= 0 && b.squares[(size_t)away].x == 3072 &&
-		b.squares[(size_t)away].z == 3072,
-		"life flee: the school flees to the deep square farthest from her",
-		away, 15);
+	// The scatter: every way within its angle of straight away from her.
+	float worst = 0.0f;
+	float spreadMin = 10.0f, spreadMax = -10.0f, unit = 0.0f;
 
+	for (int i = 0; i < 64; i++)
+	{
+		float wx, wz;
+
+		HDLifeDartWay(1000.0f, 0.0f, 0.0f, 0.0f, i, 3, 0.0f, &wx, &wz);
+
+		const float a = atan2f(wz, wx);
+
+		worst = fabsf(a) > worst ? fabsf(a) : worst;
+		spreadMin = a < spreadMin ? a : spreadMin;
+		spreadMax = a > spreadMax ? a : spreadMax;
+		unit = fabsf(wx * wx + wz * wz - 1.0f) > unit ?
+			fabsf(wx * wx + wz * wz - 1.0f) : unit;
+	}
+
+	ok(worst <= kHDLifeDartScatter + 1.0e-4f && spreadMax - spreadMin >
+		kHDLifeDartScatter && unit < 1.0e-4f,
+		"life flee: 64 fish dart away from her within the scatter and spread "
+		"over more than half of it", (long)(worst * 1000.0f),
+		(long)(kHDLifeDartScatter * 1000.0f));
+
+	/* A school in a pond of four by four squares, Lara at its middle: every
+	 * fish darts off, no fish leaves the deep water or comes nearer than
+	 * the edge to a bank, the school is back together within the
+	 * flight's time. */
 	HDLifePool p = {};
 	HDLifeSchool s = {};
 
 	p.bodies.push_back(b);
-	s.cx = 600.0f;
-	s.cz = 600.0f;
+	p.reach[HD_LIFE_FISH] = 89.0f;
+	s.cx = 2048.0f;
+	s.cz = 2048.0f;
 	s.target = 0;
+	s.fish = 6;
 	p.schools.push_back(s);
-	HDLifeSchoolTick(p, p.schools[0], 0, 1.0f, 0.1f, 1, 500.0f, 500.0f);
 
-	const float moved = sqrtf((p.schools[0].cx - 600.0f) * (p.schools[0].cx -
-		600.0f) + (p.schools[0].cz - 600.0f) * (p.schools[0].cz - 600.0f));
+	for (int f = 0; f < 6; f++)
+	{
+		HDLifeEntry e = {};
 
-	ok(p.schools[0].fleeUntil == 1.0f + kHDLifeFleeFor &&
-		fabsf(moved - 2.0f * kHDLifeSwim * 0.1f) < 0.5f,
-		"life flee: fleeing, the school swims at twice its speed for its "
-		"time", (long)moved, (long)(2.0f * kHDLifeSwim * 0.1f));
+		e.kind = HD_LIFE_FISH;
+		e.index = f;
+		e.school = 0;
+		e.ring = 200.0f;
+		e.angle = 6.2831853f * f / 6.0f;
+		p.entries.push_back(e);
+	}
+
+	float far = 0.0f;
+	int outside = 0;
+
+	for (int k = 1; k <= 30 * 20; k++)
+	{
+		const float t = k / 30.0f;
+
+		HDLifeSchoolTick(p, p.schools[0], 0, t, 1.0f / 30.0f, k <= 15, 2048.0f,
+			2048.0f);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, p.entries[i], t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			if (k == 60)
+				far += sqrtf((x - 2048.0f) * (x - 2048.0f) + (z - 2048.0f) *
+					(z - 2048.0f)) / 6.0f;
+
+			outside += x < kHDLifeEdge - 1.0f || z < kHDLifeEdge - 1.0f ||
+				x > 4096.0f - kHDLifeEdge + 1.0f || z > 4096.0f -
+				kHDLifeEdge + 1.0f;
+		}
+	}
+
+	ok(far > 1000.0f && outside == 0 && p.schools[0].darting == 0 &&
+		p.schools[0].darts == 1,
+		"life flee: the fish dart off from her, keep off the banks and come "
+		"back together", (long)far * 10 + outside, 10000);
+
+	// A splash on the body's water scares it, one beside it does not.
+	HDLifePool q = p;
+	const float on[2] = { 1000.0f, 1000.0f }, off[2] = { 5000.0f, 1000.0f };
+
+	HDLifeSchoolTick(q, q.schools[0], 0, 30.0f, 0.1f, 0, 0.0f, 0.0f, off, 1);
+	ok(q.schools[0].darting == 0, "life flee: a splash off the body's water "
+		"scares nothing", q.schools[0].darting, 0);
+	HDLifeSchoolTick(q, q.schools[0], 0, 30.1f, 0.1f, 0, 0.0f, 0.0f, on, 1);
+	ok(q.schools[0].darting == 1 && q.schools[0].fleeUntil > 30.1f,
+		"life flee: a splash on the body's water scares the school",
+		q.schools[0].darting, 1);
 
 	ok(!HDLifeDeepAt(life_body(1, 6, 2048), 200.0f, 3000.0f) &&
 		HDLifeDeepAt(life_body(1, 6, 2048), 512.0f, 3000.0f),
@@ -18649,7 +19232,15 @@ int main()
 	life_spring();
 	life_bank();
 	life_spawn();
+	life_ends();
+	life_drops();
+	life_rings();
+	life_apart();
+	life_wayon();
+	life_keep();
+	life_tank();
 	life_flee();
+	life_turn();
 	life_bob();
 	life_depth();
 	load_pool();

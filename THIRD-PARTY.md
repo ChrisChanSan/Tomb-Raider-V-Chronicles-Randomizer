@@ -1483,13 +1483,48 @@ water surface", carries the tables.
     set by eye on RoomProbe `-life -lifeall` pictures of ANDREA2 194's basin
     over 20 seconds; over twelve seeds its floats' mean distance from the
     spring goes from 1055 to 1127 units in 20 seconds, to 911 without it.
+    After the owner's play test of 2026-10-11: floats keep apart, no nearer
+    than 0.75 of their two reaches unless they part (`HDLifeClear`), so a
+    current lays them side by side along a wall. OWN, a free choice set on
+    RoomProbe series of ANDREA2's canal (two barrels side by side take 326
+    of their 484). ANDREA2's canal gets a current, +z at 90 units a second,
+    through a compiled flow row that keeps its class (`kWaterFlow`, its
+    new `cls` column -1). OWN, a free choice: half the 180 its rows run at,
+    one and a half times the wander. DATA: the way - a channel's rows run
+    along its longer side, 15 squares along z against 7 along x, toward +z
+    (`water_look`, `WaveSum8`), and past the +z end wall the water goes on
+    under it (water room 133, SectorCheck on the classic `ANDREA2.TRC`);
+    RoomProbe `-life`: 8 of the 12 floats lie along that wall by 180 seconds.
+    In that round's fix pass: where the current holds a float square-on
+    against a bank, within its margin and an eighth of a square of its
+    square's edge, the float turns along the bank toward the nearest
+    square of its row with a way on, at the current's speed
+    (`HDLifeWayOn`); a row with no way on turns nothing. OWN, a design of
+    this project; the eighth a free choice. DATA: the canal's side arm,
+    rows z 43008 and 44032 five squares west of the main channel, held
+    three of the 12 floats on its bank to 300 seconds; with the way on all
+    12 lie along the end wall by 170 seconds (RoomProbe `-life`).
 164. **The river's conveyor** - on a body of class river a float that
     reaches a quarter square past the middle of the last row downstream,
     or that a bank holds, comes back with a kind rolled again on the
     upstream row (the squares whose middle lies within half a square of
     the first row's middle), on one of them deep enough for that kind -
     any square of the body that is, when none upstream is. OWN, a design
-    of this project; free choices.
+    of this project; free choices. After the owner's play test of
+    2026-10-11 the float neither appears nor vanishes in open water: it
+    comes back at the inlet's slot point, 384 units past the first row's
+    edge along the flow, its top 64 under the surface, rises over the first
+    square, rides, dives over the last square into the outlet's slot point
+    (as far past the last row's edge) and comes back only there; over the
+    two end squares it rides straight with the current, and its light falls
+    to a quarter over the dive (`HDLifeDiveShare`, `HDLifeOnRun`,
+    `HDLifeComeBack`, `HDLifeDiveLightShare`). OWN, a design of this
+    project; the reach, the depth, the runs and the light are free
+    choices. DATA: past every end row of ANDY3's four rivers the classic
+    level has a dry floor 256 to 768 units over the surface or a wall,
+    with the water going on under it at six of the eight ends, 256 high at
+    four and 1024 at two (SectorCheck on the classic `ANDY3.TRC`); 384 is
+    more than the 242 a barrel reaches across the water.
 165. **The bob, the fit and the depth** - a float rises and sinks on a sine of the
     clock (2.5 to 4 seconds, a phase of its own) by a quarter of its
     floating height, never more than its body's sheet rises and never more
@@ -1519,6 +1554,30 @@ water surface", carries the tables.
     speed for 4 seconds. OWN, a design of this project; the counts,
     speeds and times are free choices. DATA: 768 and 387 from `FISH2`'s
     box (173 long, 70 high): its lowest point lies 611 under the surface.
+    After the owner's play test of 2026-10-11: Lara within 1024 units of
+    any fish, or a live splash of the game on the body's water, sends
+    every fish on a dart of its own, away from the scare and turned by up
+    to 25 degrees by a hash, at 2800 units a second falling off with a
+    time of 1.5 seconds (3093 units in two), sliding along the deep water's
+    edge; after 4 seconds the centre goes where the fish are and they swim
+    back to the ring at 600 units a second; a new dart 1.5 seconds after
+    the last at the earliest (`HDLifeDartSpeed`, `HDLifeDartWay`,
+    `HDLifeSchoolTick`). OWN, a design of this project; the numbers are
+    free choices. DATA: the school before it swam 110 units in the two
+    seconds after Lara came and stopped at the first bank (RoomProbe
+    `-lifelara`, ANDY3's pond and lake); the splashes are read from the
+    game's `splashes[]` (`game\effect2.cpp`, `SetupSplash`), never written.
+    A fish tank (`kHDLifeTanks`, `HDLifeAddTank`) holds a school of 8 by
+    the same rules while its FISHTANK item has not been set off. OWN, the
+    count a free choice. DATA: RICH2's tank, x 33792 to 34816, z 67584 to
+    69632, y -3840 to -2816, where the classic room 23 and its flip 32
+    differ (SectorCheck on the classic `RICH2.TRC`); the item's water,
+    4096 at start (`game\init.cpp`, `InitialiseFishtank`).
+    In that round's fix pass a fish turns to its way at 720 degrees a
+    second, and its school's tail beat runs on a clock of its own, three
+    times as fast in a flight (`HDLifeFishTurn`, `HDLifeSchool::beat`), so
+    a dart turns no fish and jumps no wobble in one frame. OWN, free
+    choices.
 167. **The drips** - squares of a body whose room is not open air have a
     ceiling; four or more of them give one drip for eight, two to six,
     each at a period of 3 to 9 seconds; a drip rings the sheet within six
@@ -1529,12 +1588,48 @@ water surface", carries the tables.
     the counts, periods and reach are free choices. CLASSIC: the fields
     (`game\effect2.cpp`, `SetupRipple`), the ring size 32 and up to 7 more
     of the engine's own drip (`game\joby.cpp`), the eight rings a sheet
-    draw shows (`hd_render.cpp`, `kRingsPerDraw`).
+    draw shows (`hd_render.cpp`, `kRingsPerDraw`). After the owner's play
+    test of 2026-10-11: a drip's ring is 96 and up to 15 more - three
+    quarters of a wading Lara's or more (`game\effects.cpp`, 112 to 127),
+    where the engine's drip size gave a quarter of her ring's strength -
+    and it starts when its drop arrives: the drop leaves the ceiling over
+    the drip (the classic sector's ceiling byte, through the rooms above)
+    and falls as the game's own drip, its speed growing by 153 a tick
+    (4300 units a second squared at 30 ticks, the project's g) and the
+    drip moving that over 32. OWN, the sizes and the colour free choices.
+    CLASSIC: the drop is the game's own drip, `Drips[]` (`game\tomb4fx.cpp`),
+    moved by `UpdateDrips` and drawn by `DrawDrips` as a short streak, put
+    into a free odd slot only (an even slot's drip that lands on a floor
+    calls `TriggerDripSplash`); the drops page 3160 of the remaster's data
+    is not used here - the cards take a splash and a spray, no single drop.
+    A float whose floating height is 160 or more (the barrel) rings the
+    water round it every 1 to 2 seconds (the hash of the float), 88 and up
+    to 16 more at the top of its bob, through the same slot fill
+    (`HDLifeFloatRings`). OWN, a design of this project, free choices;
+    RoomProbe over 60 seconds: ANDY3's rings hold 9 of the 128 slots at
+    once at the most, ANDY1's 5.
+    In that round's fix pass the drop is no longer put into `Drips[]` - the
+    free odd slot above held for its first build only: `GetFreeDrip`
+    (`game\tomb4fx.cpp`) hands out the first free slot from `next_drip`
+    on, so a slot the life held moved a wet Lara's next drip to another,
+    and the game's random sequence followed the life. The pool holds its
+    drops itself (`HDLifePool::falling`, at most 32, the size of the
+    game's table) and draws each between two ticks (`HDLifeDropFall`).
+    CLASSIC: the line's form, as `DrawDrips` (`specific\specificfx.cpp`)
+    draws a drip - from its head to half a tick's move over it, the tail
+    at half the head's colour, as wide as `GetFixedScale(1)`, through
+    `ClipLine` and `AddPolyLine`. OWN, a free choice: the head's colour
+    120, 160, 208, about one and a half times the middle of a wet Lara's
+    drips (`TriggerLaraDrips`, 16 to 39 a channel, drawn four times that).
 168. **The life's light** - a model takes its body's light, the one its
     sheet's colours are lit by, times 255 as its classic ambient, a fish
     half of it, with no light list and the game's sun factor 0.75. OWN, a
     free choice set by eye on the round's RoomProbe pictures: at the full
-    light `FISH2`'s silver reads as white glints through the sheet.
+    light `FISH2`'s silver reads as white glints through the sheet. After
+    the owner's play test of 2026-10-11: a river float's light and sun fall
+    to a quarter over its dive into a slot (the push takes no alpha), and a
+    fish tank's fish take the light of a body of light one (255). OWN, free
+    choices.
 169. **The pool's random and its hash** - the places are rolled at level
     load, and again when the HD level is rebuilt after the device was
     recreated, with `GetRandomDraw`, never `GetRandomControl`; a float's own
@@ -1544,7 +1639,14 @@ water surface", carries the tables.
     `specific\function_stubs.cpp`). OWN, general knowledge: `0x9E3779B1`
     is 2^32 over the golden ratio, the usual multiplier that spreads
     neighbouring inputs. OWN, free choices: the second inputs' constants
-    (101, 211, 307, 401, 503, 601, 7919 and a school's 7).
+    (101, 211, 307, 401, 503, 601, 7919 and a school's 7). After the
+    owner's play test of 2026-10-11 the pool is kept when the HD level is
+    built again for the same level and its bodies come out the same
+    (`HDLifeSameBodies`), so nothing is rolled anew after a lost device;
+    and three more second inputs: 811 and 821 a barrel's ring period and
+    phase, 907 a fish's dart. OWN, a design of this project; free choices.
+    So the first sentence's rolling again after a rebuild holds only when
+    the bodies come out different; with the same bodies the pool is kept.
 170. **The projected shadow's arrival** - where the shadow starts to run its
     strength is multiplied by 3f^2 - 2f^3 of f = t / 0.25 game seconds, and
     every blob that gives way to it is drawn meanwhile with its alpha byte

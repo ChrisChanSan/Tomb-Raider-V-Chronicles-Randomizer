@@ -1850,6 +1850,22 @@ static bool g_life_bench = false;
  * clean, such as ANDREA2's fountain basins. */
 static bool g_life_all = false;
 static float g_life_lara_x = 0.0f, g_life_lara_z = 0.0f, g_life_lara_t = 0.0f;
+/* -lifesplash x,z,t: a splash on the water at world x, z from clock t for
+ * two seconds, about the game's splash's life (62 ticks), as the engine
+ * reads the game's live splashes; repeatable. */
+static std::vector<float> g_life_splash;
+/* The classic rooms' ceilings for the drips' drops: each room's origin,
+ * squares and per square its ceiling byte and the room above, -1 none
+ * (Tr5Level::SectorInfo), as the engine's ceiling_at reads ROOM_INFO. */
+struct LifeRoom
+{
+	int x, z, sizeX, sizeZ;
+	std::vector<int> ceiling, above;
+};
+static std::vector<LifeRoom> g_life_rooms;
+/* -lifetank 0|1: a fish tank whole (1, the default) or shot (0: its fish
+ * are gone, as the engine has it once the FISHTANK item is set off). */
+static bool g_life_tank_whole = true;
 static HDLifePool g_life_pool;
 static const HDLifeLevel* g_life_row = 0;
 static float g_life_box[HD_LIFE_KINDS][6];
@@ -1865,6 +1881,36 @@ static int LifeDraw(void* state)
  * drips' rings that are still running then (a ring of the sheets runs about
  * a second and a half; RoomProbe -ripple draws it at its age). The LIFELOG
  * lines are the engine's. */
+/* The ceiling over world x, z from room `at` up, through the room above
+ * where the ceiling is an opening - the engine's ceiling_at (hd_life.cpp)
+ * on the tool's copy of the classic rooms. */
+static bool LifeCeilingAt(int at, int x, int z, int* y, int* in)
+{
+	for (int guard = 0; guard < 16 && at >= 0 &&
+		at < (int)g_life_rooms.size(); guard++)
+	{
+		const LifeRoom& r = g_life_rooms[(size_t)at];
+		const int sx = (x - r.x) >> 10, sz = (z - r.z) >> 10;
+
+		if (sx < 0 || sz < 0 || sx >= r.sizeX || sz >= r.sizeZ ||
+			r.ceiling.empty())
+			return false;
+
+		const size_t k = (size_t)(sx * r.sizeZ + sz);
+
+		if (r.above[k] < 0)
+		{
+			*y = r.ceiling[k] * 256;
+			*in = at;
+			return true;
+		}
+
+		at = r.above[k];
+	}
+
+	return false;
+}
+
 static void LifeBuild(const char* root, const char* stem)
 {
 	g_life_row = HDLifeLevelOf(stem);
@@ -1985,6 +2031,7 @@ static void LifeBuild(const char* root, const char* stem)
 				s.z = squares[(size_t)i].z;
 				s.depth = squares[(size_t)i].depth;
 				s.closed = squares[(size_t)i].open ? 0 : 1;
+				s.room = squares[(size_t)i].room;
 				b.squares.push_back(s);
 			}
 
@@ -2002,6 +2049,28 @@ static void LifeBuild(const char* root, const char* stem)
 
 	HDLifeBuild(g_life_pool, *g_life_row, LifeDraw, &state);
 
+	// The level's fish tanks, whole or shot as -lifetank says.
+	for (size_t i = 0; i < sizeof(kHDLifeTanks) / sizeof(kHDLifeTanks[0]);
+		i++)
+		if (!_stricmp(kHDLifeTanks[i].stem, stem))
+		{
+			HDLifeAddTank(g_life_pool, kHDLifeTanks[i], LifeDraw, &state);
+			g_life_pool.bodies.back().gone = g_life_tank_whole ? 0 : 1;
+
+			for (int k = 0; k < 3; k++)
+				g_life_light.push_back(kHDLifeTankLight);
+		}
+
+	// The drips' ceilings and their drops' fall, as the engine finds them.
+	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
+	{
+		HDLifeDrip& d = g_life_pool.drips[i];
+
+		if (LifeCeilingAt(d.room, (int)d.x, (int)d.z, &d.ceilY, &d.ceilRoom))
+			d.fall = HDLifeDropTicks(d.ceilY + kHDLifeDropUnder,
+				g_life_pool.bodies[(size_t)d.body].surfaceY);
+	}
+
 	size_t bytes = sizeof(g_life_pool) +
 		g_life_pool.entries.size() * sizeof(HDLifeEntry) +
 		g_life_pool.schools.size() * sizeof(HDLifeSchool) +
@@ -2012,7 +2081,7 @@ static void LifeBuild(const char* root, const char* stem)
 		bytes += g_life_pool.bodies[i].squares.size() * sizeof(HDLifeSquare);
 
 	printf("LIFELOG level=%s bodies=%d floats=%d fish=%d drips=%d "
-		"skipped=%d bytes=%d models=%s\n", stem,
+		"skipped=%d bytes=%d models=%s kept=0\n", stem,
 		(int)g_life_pool.bodies.size(), g_life_pool.floats, g_life_pool.fish,
 		(int)g_life_pool.drips.size(), g_life_pool.unfit, (int)bytes,
 		models[0] ? models : "none");
@@ -2033,17 +2102,22 @@ static void LifeBuild(const char* root, const char* stem)
 		for (size_t i = 0; i < b.squares.size(); i++)
 			closed += b.squares[i].closed;
 
+		char tail[512];
+
+		HDLifeBodyTail(g_life_pool, (int)bi, tail, sizeof(tail));
 		printf("LIFELOG level=%s body=%d water=%d class=%s squares=%d "
 			"rise=%.1f flow=%.2f,%.2f,%.0f floats=%d fish=%d drips=%d "
-			"deep=%d closed=%d\n", stem, (int)bi, b.index,
-			b.river ? "river" : b.channel ? "channel" : "other",
+			"deep=%d closed=%d %s\n", stem, (int)bi, b.index,
+			b.tank ? "tank" : b.river ? "river" : b.channel ? "channel" :
+			"other",
 			(int)b.squares.size(), b.rise, b.flowX, b.flowZ, b.speed, floats,
-			fish, drips, HDLifeDeepCount(b), closed);
+			fish, drips, HDLifeDeepCount(b), closed, tail);
 	}
 
 	// The game's steps from clock 0 to -time, and the tick's cost.
 	LARGE_INTEGER f, t0, t1;
 	std::vector<std::pair<HDLifeRing, float> > rings;
+	std::vector<std::pair<HDLifeDrop, float> > drops;
 	const int steps = (int)(g_time * 30.0 + 0.5);
 
 	QueryPerformanceFrequency(&f);
@@ -2055,9 +2129,23 @@ static void LifeBuild(const char* root, const char* stem)
 		const float t = (float)s / 30.0f;
 		const int on = g_life_lara && t >= g_life_lara_t ? 1 : 0;
 		std::vector<HDLifeRing> now;
+		std::vector<float> wet;
+
+		for (size_t k = 0; k + 2 < g_life_splash.size(); k += 3)
+			if (t >= g_life_splash[k + 2] && t < g_life_splash[k + 2] + 2.0f)
+			{
+				wet.push_back(g_life_splash[k]);
+				wet.push_back(g_life_splash[k + 1]);
+			}
+
+		std::vector<HDLifeDrop> fell;
 
 		HDLifeTick(g_life_pool, g_life_row, t, on, g_life_lara_x,
-			g_life_lara_z, &now);
+			g_life_lara_z, &now, wet.empty() ? 0 : &wet[0],
+			(int)wet.size() / 2, &fell);
+
+		for (size_t i = 0; i < fell.size(); i++)
+			drops.push_back(std::make_pair(fell[i], t));
 
 		for (size_t i = 0; i < now.size(); i++)
 			rings.push_back(std::make_pair(now[i], t));
@@ -2084,9 +2172,37 @@ static void LifeBuild(const char* root, const char* stem)
 		shown++;
 	}
 
+	/* The ripple slots the rings take: a ring of the life holds its slot
+	 * about 37 ticks (UpdateSplashes: init up by 4 a tick to its life of
+	 * 48 to 63, then the life down by 3) - the most held at once over the
+	 * run (slots_max, of the game's 128); and the most rings of the
+	 * sheets' 3.5 seconds within 1,024 units of a ring as it starts
+	 * (near_max, of the eight a sheet draw takes). */
+	int slotsMax = 0, nearMax = 0;
+
+	for (size_t i = 0; i < rings.size(); i++)
+	{
+		int slots = 0, close = 0;	// `near` is a macro of windows.h
+
+		for (size_t k = 0; k < rings.size(); k++)
+		{
+			const float age = rings[i].second - rings[k].second;
+			const float dx = rings[i].first.x - rings[k].first.x;
+			const float dz = rings[i].first.z - rings[k].first.z;
+
+			slots += age >= 0.0f && age < 37.0f / 30.0f ? 1 : 0;
+			close += age >= 0.0f && age < 3.5f && dx * dx + dz * dz <
+				1024.0f * 1024.0f ? 1 : 0;
+		}
+
+		slotsMax = slots > slotsMax ? slots : slotsMax;
+		nearMax = close > nearMax ? close : nearMax;
+	}
+
 	printf("LIFELOG level=%s probe clock=%.2f steps=%d tick_ms=%.4f "
-		"respawned=%d fleeing=%d rings=%d shown=%d\n", stem, g_time, steps,
-		ms, g_life_pool.respawned, fleeing, (int)rings.size(), shown);
+		"respawned=%d fleeing=%d rings=%d shown=%d slots_max=%d "
+		"near_max=%d\n", stem, g_time, steps, ms, g_life_pool.respawned,
+		fleeing, (int)rings.size(), shown, slotsMax, nearMax);
 
 	for (size_t i = 0; i < g_life_pool.entries.size(); i++)
 	{
@@ -2106,11 +2222,53 @@ static void LifeBuild(const char* root, const char* stem)
 
 		printf("LIFELOG level=%s entry=%d kind=%s body=%d x=%.0f y=%.1f "
 			"z=%.0f yaw=%.0f banked=%d gen=%d under=%.1f over=%.1f amp=%.1f "
-			"rise=%.1f\n", stem, (int)i, kHDLifeKinds[e.kind].name, e.body,
-			x, y, z, yaw * 57.29578f, e.banked, e.gen,
+			"rise=%.1f dive=%.2f\n", stem, (int)i, kHDLifeKinds[e.kind].name,
+			e.body, x, y, z, yaw * 57.29578f, e.banked, e.gen,
 			e.kind == HD_LIFE_FISH ? 0.0f : y + 0.5f * h - surface,
 			e.kind == HD_LIFE_FISH ? 0.0f : surface - (y - 0.5f * h), e.amp,
-			g_life_pool.bodies[(size_t)e.body].rise);
+			g_life_pool.bodies[(size_t)e.body].rise,
+			e.kind == HD_LIFE_FISH ? 0.0f : HDLifeDiveShare(
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+	}
+
+	/* A line a school: its centre, whether it is in a flight, the darts it
+	 * made, and its fish's mean place and their widest distance from it. */
+	for (size_t si = 0; si < g_life_pool.schools.size(); si++)
+	{
+		const HDLifeSchool& s = g_life_pool.schools[si];
+		float mx = 0.0f, mz = 0.0f, spread = 0.0f;
+		std::vector<std::pair<float, float> > at;
+
+		for (size_t i = 0; i < g_life_pool.entries.size(); i++)
+			if (g_life_pool.entries[i].school == (int)si)
+			{
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(g_life_pool, g_life_pool.entries[i],
+					(float)g_time, &x, &y, &z, &yaw, &pitch, &roll);
+				at.push_back(std::make_pair(x, z));
+				mx += x;
+				mz += z;
+			}
+
+		if (!at.empty())
+		{
+			mx /= (float)at.size();
+			mz /= (float)at.size();
+		}
+
+		for (size_t k = 0; k < at.size(); k++)
+		{
+			const float d = sqrtf((at[k].first - mx) * (at[k].first - mx) +
+				(at[k].second - mz) * (at[k].second - mz));
+
+			spread = d > spread ? d : spread;
+		}
+
+		printf("LIFELOG level=%s school=%d body=%d centre=%.0f,%.0f "
+			"darting=%d darts=%d fish_at=%.0f,%.0f spread=%.0f\n", stem,
+			(int)si, s.body, s.cx, s.cz, s.darting, s.darts, mx, mz,
+			spread);
 	}
 
 	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
@@ -2118,8 +2276,31 @@ static void LifeBuild(const char* root, const char* stem)
 		const HDLifeDrip& d = g_life_pool.drips[i];
 
 		printf("LIFELOG level=%s drip=%d body=%d x=%.0f z=%.0f period=%.2f "
-			"phase=%.2f fired=%d last=%.2f\n", stem, (int)i, d.body, d.x, d.z,
-			d.period, d.phase, d.fired, d.last);
+			"phase=%.2f fired=%d last=%.2f ceil=%d room=%d fall=%d\n", stem,
+			(int)i, d.body, d.x, d.z, d.period, d.phase, d.fired, d.last,
+			d.ceilY, d.ceilRoom, d.fall);
+	}
+
+	/* A line a drop: where it left its ceiling, at what clock, the ticks
+	 * it falls, and its height at the probe's clock while it falls, as
+	 * UpdateDrips steps it (HDLifeDropFall; y_now -1 before or after);
+	 * held 1 while the pool holds it to be drawn (HDLifePool::falling). */
+	for (size_t i = 0; i < drops.size(); i++)
+	{
+		const HDLifeDrop& o = drops[i].first;
+		const int ticks = (int)(((float)g_time - drops[i].second) * 30.0f);
+		const int y = o.y + (int)HDLifeDropFall((float)ticks, 0);
+		int held = 0;
+
+		for (size_t k = 0; k < g_life_pool.falling.size(); k++)
+			held |= g_life_pool.falling[k].x == o.x &&
+				g_life_pool.falling[k].z == o.z &&
+				g_life_pool.falling[k].at == o.at;
+
+		printf("LIFELOG level=%s drop=%d x=%d z=%d from=%d room=%d "
+			"ticks=%d at=%.2f y_now=%d held=%d\n", stem, (int)i, o.x, o.z,
+			o.y, o.room, o.ticks, drops[i].second, ticks >= 0 && ticks <
+			o.ticks ? y : -1, held);
 	}
 
 	for (size_t i = 0; i < rings.size(); i++)
@@ -2174,11 +2355,15 @@ static void LifeDrawAll(const std::vector<std::pair<float, int> >& order,
 
 		lighting.lights = 0;
 		lighting.lightCount = 0;
-		lighting.sunScale = 0.75f;
+		// A river float's fade into its slots, as the engine has it.
+		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+
+		lighting.sunScale = 0.75f * fade;
 		lighting.specStrength = 0.0f;
 		lighting.specPower = 1.0f;
 
-		const float share = HDLifeLightShare(e.kind);
+		const float share = HDLifeLightShare(e.kind) * fade;
 		const float light[3] = { g_life_light[(size_t)e.body * 3] * share,
 			g_life_light[(size_t)e.body * 3 + 1] * share,
 			g_life_light[(size_t)e.body * 3 + 2] * share };
@@ -2216,7 +2401,8 @@ static void LifeFrame(const float* view, const D3DMATRIX* projection,
 		const HDLifeEntry& e = g_life_pool.entries[i];
 		float x, y, z, yaw, pitch, roll;
 
-		if (!g_life_pool.has[e.kind])
+		if (!g_life_pool.has[e.kind] ||
+			g_life_pool.bodies[(size_t)e.body].gone)
 			continue;
 
 		HDLifePose(g_life_pool, e, t, &x, &y, &z, &yaw, &pitch, &roll);
@@ -8576,6 +8762,11 @@ static int ProbeMain(int argc, char** argv)
 			"drawn as the game draws them; LIFELOG lines\n");
 		printf("       -lifelara x,z[,t]   Lara's place for -life from clock "
 			"t: the school flees her, the drips near her ring\n");
+		printf("       -lifetank 0|1   a fish tank shot (0: its fish "
+			"gone) or whole (1, the default)\n");
+		printf("       -lifesplash x,z,t   a splash on the water at "
+			"world x, z for two seconds from clock t: the school of that "
+			"water darts off, repeatable\n");
 		printf("       -lifebench   -life's draws timed on a second pass "
 			"(every model drawn twice: numbers, not a picture)\n");
 		printf("       -lifeall   -life on every body, whatever the "
@@ -8879,11 +9070,25 @@ static int ProbeMain(int argc, char** argv)
 			g_life_bench = true;
 		else if (!strcmp(argv[at], "-lifeall"))
 			g_life_all = true;
-		else if (!strcmp(argv[at], "-lifelara") && at + 1 < argc)
+		/* -lifesplash and -lifetank share this branch: one more `else if`
+		 * passes the compiler's limit of nested blocks (C1061). */
+		else if ((!strcmp(argv[at], "-lifelara") ||
+			!strcmp(argv[at], "-lifesplash") ||
+			!strcmp(argv[at], "-lifetank")) && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) >= 2)
+			if (!strcmp(argv[at], "-lifetank"))
+				g_life_tank_whole = atoi(argv[++at]) != 0;
+			else if (!strcmp(argv[at], "-lifesplash"))
+			{
+				if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) == 3)
+					g_life_splash.insert(g_life_splash.end(), c, c + 3);
+				else
+					printf("RoomProbe: -lifesplash wants x,z,t - '%s' "
+						"ignored\n", argv[at]);
+			}
+			else if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) >= 2)
 			{
 				g_life_lara = true;
 				g_life_lara_x = c[0];
@@ -10841,6 +11046,20 @@ static int ProbeMain(int argc, char** argv)
 
 				w.sizeX = rm.numXSectors;
 				w.sizeZ = rm.numZSectors;
+
+				if (g_life)
+				{
+					g_life_rooms.resize((size_t)nr);
+
+					LifeRoom& lr = g_life_rooms[(size_t)r];
+
+					lr.x = rm.originX;
+					lr.z = rm.originZ;
+					lr.sizeX = w.sizeX;
+					lr.sizeZ = w.sizeZ;
+					lr.ceiling.assign(sec.size(), -127);
+					lr.above.assign(sec.size(), -1);
+				}
 				floors[(size_t)r].assign(sec.size(), (signed char)-127);
 				below[(size_t)r].assign(sec.size(), (short)-1);
 				ceilings[(size_t)r].assign(sec.size(), (signed char)-127);
@@ -10853,6 +11072,15 @@ static int ProbeMain(int argc, char** argv)
 
 					if (at >= sec.size())
 						continue;
+
+					if (g_life)
+					{
+						LifeRoom& lr = g_life_rooms[(size_t)r];
+
+						lr.ceiling[at] = sec[i].ceiling;
+						lr.above[at] = sec[i].roomAbove >= 255 ? -1 :
+							sec[i].roomAbove;
+					}
 
 					floors[(size_t)r][at] = (signed char)sec[i].floor;
 					below[(size_t)r][at] = (short)(sec[i].roomBelow >= 255 ||

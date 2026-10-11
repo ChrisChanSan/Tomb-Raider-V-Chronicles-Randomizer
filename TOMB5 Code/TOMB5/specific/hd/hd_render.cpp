@@ -9942,19 +9942,37 @@ namespace
 	 * 29,696, and room 96's floor falls a click from x 48,128 to 49,152 -
 	 * one way down from the river through 66 and 67 to the east. 400 units
 	 * a second: a wading stream, slower than the sink rivers' 640 and 1,063
-	 * - a free choice, set by eye on the round's RoomProbe strips. */
+	 * - a free choice, set by eye on the round's RoomProbe strips.
+	 *
+	 * `cls` is the class a row gives its body: the three streams are
+	 * rivers; -1 keeps the body's class and gives it the current alone.
+	 * ANDREA2's sewer canal (rooms 14, 19, 20, 60 and 171, a channel of 44
+	 * squares) runs +z: a channel's rows run along its longer side
+	 * (water_look; the canal is 15 squares along z, 7 along x), toward +z
+	 * (WaveSum8's phase falls with the clock, so a crest moves along its
+	 * row's way), and its bank foam drifts the same way. At the +z end the
+	 * water goes on under the end wall (water room 133, its ceiling at the
+	 * surface - SectorCheck on the classic ANDREA2.TRC): the drain. A
+	 * channel's look reads no flow (water_look), so the row moves its
+	 * floats alone (hd_life.cpp) and names the current in the WATERLOG
+	 * line. 90 units a second, about 0.2 m/s at 2.3 mm a unit, a slow sewer:
+	 * half the 180 its rows run at, and half again the floats' own wander
+	 * of 60, so they are seen to drift with the water - a free choice with
+	 * those reasons, set on RoomProbe series. */
 	struct HDWaterFlowRow
 	{
 		const char* stem;
 		int room;
 		float dx, dz, speed;
+		int cls;
 	};
 
 	const HDWaterFlowRow kWaterFlow[] =
 	{
-		{ "ANDY3", 66, 0.0f, -1.0f, 400.0f },
-		{ "ANDY3", 70, -1.0f, 0.0f, 400.0f },
-		{ "ANDY3", 67, 1.0f, 0.0f, 400.0f },
+		{ "ANDY3", 66, 0.0f, -1.0f, 400.0f, HD_WATER_RIVER },
+		{ "ANDY3", 70, -1.0f, 0.0f, 400.0f, HD_WATER_RIVER },
+		{ "ANDY3", 67, 1.0f, 0.0f, 400.0f, HD_WATER_RIVER },
+		{ "ANDREA2", 60, 0.0f, 1.0f, 90.0f, -1 },
 	};
 
 	/* The clip (WaterPS, "the clip"): where the frame's depth lies less
@@ -12796,9 +12814,10 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		rows.push_back(row);
 	}
 
-	/* The compiled river rows: class river with their flow, the rest of the
-	 * row as one that sets nothing else - with the sheets alone, as the
-	 * sinks make rivers with the sheets alone (step 4). */
+	/* The compiled river rows: their class (river, or -1 to keep it) with
+	 * their flow, the rest of the row as one that sets nothing else - with
+	 * the sheets alone, as the sinks make rivers with the sheets alone
+	 * (step 4). */
 	for (size_t o = 0; sheets &&
 		o < sizeof(kWaterFlow) / sizeof(kWaterFlow[0]); o++)
 	{
@@ -12807,7 +12826,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 		strcpy_s(row.stem, sizeof(row.stem), w.stem);
 		row.room = w.room;
-		row.cls = HD_WATER_RIVER;
+		row.cls = w.cls;
 		row.tint[0] = row.tint[1] = row.tint[2] = 1.0f;
 		row.waves = row.foam = row.bend = 1.0f;
 		row.flow = 1;

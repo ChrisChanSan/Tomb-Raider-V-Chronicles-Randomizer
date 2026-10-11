@@ -24,6 +24,7 @@
  */
 
 #include <math.h>
+#include <stdio.h>
 #include <vector>
 
 enum
@@ -99,7 +100,39 @@ static const HDLifeLevel kHDLifeLevels[] =
 	{ "ANDREA2", 16, 1, 0, { 4, 3, 3, 1 }, 0, 1 },
 	{ "ANDY3", 8, 0, 1, { 0, 1, 4, 1 }, 1, 1 },
 	{ "ANDY1", 8, 0, 0, { 0, 1, 4, 1 }, 1, 1 },
+	// No body of RICH2 takes floats (its pool stays clean); its fish tank.
+	{ "RICH2", 100000, 0, 0, { 0, 0, 0, 0 }, 1, 0 },
 };
+
+/* A fish tank: life without a sheet, by room (HDLifeAddTank). RICH2's tank
+ * is an alcove in the wall of room 23 behind glass: the classic room 23
+ * has a wall at x 33,792 to 34,816, z 67,584 to 69,632, where its flip
+ * room 32 (the tank shot) has an empty alcove from y -3,840 to -2,816
+ * (SectorCheck on the classic RICH2.TRC: the two rooms differ there
+ * alone), a square deep, two wide, 1,024 high; the FISHTANK item 33 stands
+ * in front of it. Its school is 8 FISH2, a free choice - a tank shows
+ * more fish than a pond; they swim half a square under its top, as in a
+ * pond, 448 to 576 units under it with their sway, in the middle of its
+ * height. Its fish take the light of a body of light one (as a sheet's
+ * light, 255 here; hd_life.cpp), a free choice: its water is clear and lit
+ * by the room. The tank is whole while its FISHTANK item has not been set
+ * off - the shot that breaks it starts the item, which pours the water out
+ * as its spray (game\tower.cpp, ControlFishtank) and the room flips to
+ * the empty alcove; its fish go with that, at once. */
+struct HDLifeTank
+{
+	const char* stem;
+	int room;
+	int x0, x1, z0, z1;	// world, whole squares
+	int top, bottom;	// world y
+	int fish;
+};
+
+static const HDLifeTank kHDLifeTanks[] =
+{
+	{ "RICH2", 23, 33792, 34816, 67584, 69632, -3840, -2816, 8 },
+};
+static const float kHDLifeTankLight = 255.0f;
 
 /* The numbers of the rules. A float for three water squares and at most
  * twelve a body: twelve keeps three bodies of a level inside the
@@ -111,10 +144,11 @@ static const HDLifeLevel kHDLifeLevels[] =
  * body deep enough to hold it (HDLifeNeed). The
  * wander is 60 units a second, re-aimed every 4 seconds; a float turns
  * toward its way at 40 degrees a second; a banked float tries again every
- * 6 to 9 seconds. A river float rides to within a quarter square of its
- * downstream end and comes back at the upstream row; a river shorter than
- * three squares takes none, as a float would come back every second there.
- * All free choices, set by eye on the round's RoomProbe pictures. */
+ * 6 to 9 seconds. A river float comes out of the slot under its upstream
+ * end, rides, and goes into the slot under its downstream end (the
+ * river's ends, below); a river shorter than three squares takes none, as
+ * a float would come back every second there. All free choices, set by
+ * eye on the round's RoomProbe pictures. */
 static const int kHDLifePerSquares = 3;
 static const int kHDLifeBodyMax = 12;
 static const int kHDLifeDrawMax = 32;
@@ -125,9 +159,32 @@ static const float kHDLifeWanderEvery = 4.0f;
 static const float kHDLifeTurn = 0.6981317f;	// 40 degrees, radians a second
 static const float kHDLifeRetryMin = 6.0f;
 static const float kHDLifeRetrySpan = 3.0f;
-static const float kHDLifeSinkReach = 256.0f;
 static const float kHDLifeUpstream = 512.0f;
 static const int kHDLifeRiverMin = 3;
+
+/* The river's ends. Past the last sheet row of every river the life takes
+ * (ANDY3's four), along its flow, the classic level has a dry floor 256 to
+ * 768 over the surface or a wall, and at six of the eight ends the water
+ * goes on under it - the slot the water comes out of and goes into, 256
+ * units high at four ends, 1024 at two (SectorCheck on the classic
+ * ANDY3.TRC). A float comes out of that slot and goes back into it: its
+ * slot point lies kHDLifeSlotReach past the end row's edge, under the
+ * block, more than the 242 a barrel on its side reaches across the water
+ * (HDLifeReach), so the whole of it is under the block there; its top
+ * stands kHDLifeSlotTop under the surface. It rises to its floating place
+ * over the first square and dives over the last one (kHDLifeRiseRun,
+ * kHDLifeDiveRun), riding straight with the current over those two, and
+ * comes back at the inlet once it has reached the outlet's slot point.
+ * Its light falls to kHDLifeDiveLight of its own over the dive: a model's
+ * push takes no alpha (hd_object.h, HDObjectPush), its light is the only
+ * thing that fades it, and the water's own absorption does the same to
+ * anything under it. The run, the depth and the light are free choices,
+ * set by eye on the round's RoomProbe pictures. */
+static const float kHDLifeSlotReach = 384.0f;
+static const float kHDLifeSlotTop = 64.0f;
+static const float kHDLifeRiseRun = 1024.0f;
+static const float kHDLifeDiveRun = 1024.0f;
+static const float kHDLifeDiveLight = 0.25f;
 
 /* The spring's current (HDLifeSpringPush): its speed at the spring, units
  * a second, the distance it has fallen off to nothing at, and the radius
@@ -154,13 +211,31 @@ static const float kHDLifeRoll = 0.0349066f;	// 2 degrees
  * 150 units a second toward a deep square it picks again every 6 seconds
  * or on arrival; its fish ride a ring of 150 to 300 units round it, half
  * as wide as long, at 20 degrees a second, with a 6 degree yaw wobble at
- * 1.5 hertz, rising and sinking 64 units at 0.7 radians a second. Lara
- * within 1024 units of the centre, a square, sends it to the deep square
- * farthest from her at twice the speed for 4 seconds. The count, the
- * speeds, the ring, the wobble and the times are free choices, set by eye
- * on the round's RoomProbe pictures. The centre keeps the ring's 300 and
- * half of FISH2's 173 long box, 387 units, from water less deep (a fish
- * of a wider ring swam through the bank in the pictures). */
+ * 1.5 hertz, rising and sinking 64 units at 0.7 radians a second. The
+ * count, the speeds, the ring, the wobble and the times are free choices,
+ * set by eye on the round's RoomProbe pictures. The centre keeps the
+ * ring's 300 and half of FISH2's 173 long box, 387 units, from water less
+ * deep (a fish of a wider ring swam through the bank in the pictures).
+ *
+ * The flight (HDLifeSchoolTick). Lara within a square, 1024 units, of any
+ * fish, or a splash on the body's water, scares the school: every fish
+ * darts off on a line of its own, away from her or the splash and turned
+ * by up to 25 degrees by a hash of the fish and the flight, so the school
+ * breaks up a little. A dart starts at 2,800 units a second and falls off
+ * with a time of 1.5 seconds: 3,093 units, three squares, in the first two
+ * seconds - a swimmer sees a fish shoot off, where the school's straight
+ * swim of 300 units a second stopped at the first bank it met (RoomProbe
+ * -lifelara: 110 units two seconds after Lara came, in ANDY3's pond and
+ * lake alike). A fish keeps kHDLifeEdge, more than its own reach (87,
+ * FISH2's box), from water less than 768 deep and slides along it like a
+ * float along a bank (HDLifeStep). After
+ * 4 seconds the school's centre goes where its fish are (or to the
+ * nearest deep square that holds a school) and the fish swim back to
+ * their places on the ring at 600 units a second, the flight's end when
+ * all are back (8 seconds at the most). A new scare starts a new dart 1.5
+ * seconds after the last one at the earliest, so a swimmer who stays near
+ * keeps them darting. The speed, the fall-off, the scatter and the times
+ * are free choices with those reasons, set by eye on RoomProbe series. */
 static const int kHDLifeFishMin = 4;
 static const int kHDLifeFishSpan = 5;
 static const int kHDLifeDeepSquares = 6;
@@ -178,16 +253,59 @@ static const float kHDLifeSway = 64.0f;		// up and down, units
 static const float kHDLifeSwayRate = 0.7f;	// radians a second
 static const float kHDLifeSquash = 0.5f;	// the ring's width over length
 static const float kHDLifeSchoolReach = 387.0f;
-static const float kHDLifeFleeFor = 4.0f;
+static const float kHDLifeDartSpeed = 2800.0f;
+static const float kHDLifeDartFall = 1.5f;	// seconds, the fall-off's time
+static const float kHDLifeDartScatter = 0.4363323f;	// 25 degrees
+static const float kHDLifeDartFor = 4.0f;
+static const float kHDLifeDartRenew = 1.5f;
+static const float kHDLifeRejoinSpeed = 600.0f;
+static const float kHDLifeRejoinMost = 8.0f;
+static const float kHDLifeRejoinNear = 32.0f;	// units, back on the ring
+
+/* A fish turns to its way at kHDLifeFishTurn, half a turn in a quarter of
+ * a second, so a dart's start and a flight's end turn it within a few
+ * frames instead of in one; its tail beats kHDLifeDartBeat times as fast
+ * in a flight, the beat's clock running that much faster (HDLifeSchool::
+ * beat), so the wobble speeds up without a jump. Free choices: a fish
+ * that flees turns about at once, a dart is three strokes to one. */
+static const float kHDLifeFishTurn = 12.566371f;	// 720 degrees a second
+static const float kHDLifeDartBeat = 3.0f;
 
 /* The drips: a body with four or more squares under a ceiling (its room is
  * not open air) gets one drip for eight such squares, two to six, each at
  * its own period of 3 to 9 seconds; a drip rings the sheet only within six
  * squares of Lara and at most once in two seconds a body, so the eight
  * rings a sheet draw shows (hd_render.cpp, kRingsPerDraw) are not crowded
- * out. Its ring is the size the engine's own drip gives (game\joby.cpp: 32
- * and up to 7 more). The counts, the periods, the reach and the gap are
- * free choices, set by eye on the round's RoomProbe pictures. */
+ * out. The counts, the periods, the reach and the gap are free choices,
+ * set by eye on the round's RoomProbe pictures.
+ *
+ * Its ring is 96 and up to 15 more: a ring's strength on the sheet is its
+ * size over 128 times a half (hd_render.cpp, "the rings"), so 96 to 111
+ * give three quarters to seven eighths of a wading Lara's ring (game\
+ * effects.cpp, WadeSplash: 112 to 127), where the engine's own drip's 32 to
+ * 39 (game\joby.cpp) gave a quarter of it and nobody saw them. A drip is a
+ * drop as well (HDLifeDropTicks): it leaves the ceiling over its point
+ * and its ring starts when it reaches the water. The drop is drawn as the
+ * game draws its own drips (game\tomb4fx.cpp, Drips[]; specific\
+ * specificfx.cpp, DrawDrips: a short streak, a line of the sort list):
+ * the cards of the sheets take a splash and a tank's spray and no single
+ * drop. The life holds its drops itself (HDLifePool::falling) and never
+ * puts one into Drips[]: GetFreeDrip hands out the first free slot from
+ * next_drip on, so a slot the life held would move a wet Lara's next drip
+ * to another slot, and a drip of an even slot that lands calls
+ * TriggerDripSplash and its random draws - the game's random sequence
+ * would follow what the life does. It falls as UpdateDrips moves a drip,
+ * its speed growing by kHDLifeDropGravity a tick and the drip moving that
+ * speed over 32 a tick: 153 is 4,300 units a second squared at 30 ticks
+ * (4300 x 32 / 900), the project's g (9.81 m/s^2 at 2.3 mm a unit).
+ * kHDLifeDropColour is its head's colour as drawn, the tail half of it as
+ * DrawDrips draws a drip: about 1.5 times the middle of a wet Lara's
+ * drips (TriggerLaraDrips: 16 to 39 a channel, which DrawDrips takes four
+ * times - 78, 110, 142), a free choice: a drop is seen from metres away,
+ * Lara's own at arm's length. At most kHDLifeDropsMax fall at once, the
+ * size of the game's own table; a body lets one fall in two seconds
+ * (kHDLifeDripGap) and the longest fall measured is 45 ticks, so the cap
+ * is never reached in the levels. */
 static const int kHDLifeDripClosedMin = 4;
 static const int kHDLifeDripPer = 8;
 static const int kHDLifeDripMin = 2;
@@ -196,7 +314,11 @@ static const float kHDLifeDripPeriodMin = 3.0f;
 static const float kHDLifeDripPeriodSpan = 6.0f;
 static const float kHDLifeDripReach = 6144.0f;
 static const float kHDLifeDripGap = 2.0f;
-static const int kHDLifeDripSize = 32;
+static const int kHDLifeDripSize = 96;
+static const int kHDLifeDropGravity = 153;
+static const int kHDLifeDropUnder = 32;	// under the ceiling it leaves
+static const unsigned char kHDLifeDropColour[3] = { 120, 160, 208 };
+static const int kHDLifeDropsMax = 32;
 
 /* The share of its body's light a model takes: a fish half a square under
  * the surface takes half - at the full light FISH2's silver reads as white
@@ -209,12 +331,21 @@ inline float HDLifeLightShare(int kind)
 	return kind == HD_LIFE_FISH ? kHDLifeFishLight : 1.0f;
 }
 
+/* The share of its light a float takes at a dive's share `dive` (0 at
+ * its floating place, 1 at a river's slot point): falling linearly to
+ * kHDLifeDiveLight (the river's ends, over kHDLifeSlotReach). */
+inline float HDLifeDiveLightShare(float dive)
+{
+	return 1.0f - (1.0f - kHDLifeDiveLight) * dive;
+}
+
 // One water square of a body: its corner, world x and z, multiples of 1024.
 struct HDLifeSquare
 {
 	int x, z;
 	int depth;	// down to the floor under it, units
 	int closed;	// 1 when a ceiling is over it (its room is not open air)
+	int room = -1;	// the room it lies in (HDRenderWaterSquare)
 };
 
 /* One body as the life sees it: its surface, its current (a unit way in x
@@ -232,11 +363,19 @@ struct HDLifeBody
 	std::vector<HDLifeSquare> squares;
 	// The flow's projection over the squares' middles, for a river.
 	float upMin, upMax;
+	/* A river's slot points, world x and z: where its floats come out of
+	 * the inlet's slot and go into the outlet's (HDLifeRiverEnds). */
+	float inX = 0.0f, inZ = 0.0f, outX = 0.0f, outZ = 0.0f;
 	/* 1 with a spring, the ripple source of a row in its water, at world
 	 * x and z (HDRenderWaterBody::spring): its floats drift away from it
 	 * (HDLifeSpringPush). */
 	int spring = 0;
 	float springX = 0.0f, springZ = 0.0f;
+	/* 1 for a fish tank (HDLifeTank) - no water body of the sheets, its
+	 * index -1 -, and 1 while its life is gone: the tank was shot, its
+	 * fish are neither moved nor drawn (the caller sets it). */
+	int tank = 0;
+	int gone = 0;
 };
 
 // A float or a fish of the pool.
@@ -254,6 +393,8 @@ struct HDLifeEntry
 	float retry;		// the clock it tries again at
 	int school;		// its school, or -1
 	float ring, angle;	// its place on the school's ring
+	// A darting fish's way, a unit vector in x and z (HDLifeSchoolTick).
+	float wayX = 0.0f, wayZ = 0.0f;
 };
 
 struct HDLifeSchool
@@ -262,9 +403,18 @@ struct HDLifeSchool
 	float cx, cz;		// the centre, world
 	int target;		// the square it swims to
 	float retarget;		// the clock it picks again at
-	float fleeUntil;	// the clock its flight ends at, 0 calm
+	float fleeUntil;	// past the clock while it flees, 0 calm
 	float heading;		// radians
 	int fish;
+	/* Its flight: the clock the last dart started at, how many it made,
+	 * and whether the centre has gone where the fish are. */
+	int darting = 0;
+	float dartAt = 0.0f;
+	int darts = 0;
+	int regrouped = 0;
+	/* The clock of its fish's tail beat, seconds: kHDLifeDartBeat of them
+	 * a second in a flight, one calm (HDLifeSchoolTick). */
+	float beat = 0.0f;
 };
 
 struct HDLifeDrip
@@ -274,7 +424,69 @@ struct HDLifeDrip
 	float period, phase;
 	float last;		// the clock of its last ring, -1 none yet
 	int fired;		// how many times it fired
+	/* The room of its square, the world y of the ceiling over it and
+	 * the room that ceiling belongs to (the caller's, out of the classic
+	 * floor data, after HDLifeBuild), and the
+	 * ticks its drop falls (HDLifeDropTicks; 0 without a ceiling: the
+	 * ring alone, at once); the clock its ring is due at, -1 none. */
+	int room = -1;
+	int ceilY = 0;
+	int ceilRoom = -1;
+	int fall = 0;
+	float ringDue = -1.0f;
 };
+
+/* A drop that leaves its ceiling this tick: where, in which room, the
+ * ticks it falls and the clock it leaves at. */
+struct HDLifeDrop
+{
+	int x, y, z;
+	int room;
+	int ticks;
+	float at = 0.0f;
+};
+
+/* The ticks a drop falls from world y `from` to `to` (y down), stepped as
+ * UpdateDrips steps a drip from rest: its speed grows by
+ * kHDLifeDropGravity, it moves that speed over 32 (the shift of 5). */
+inline int HDLifeDropTicks(int from, int to)
+{
+	int y = from, v = 0, n = 0;
+
+	while (y < to && n < 250)
+	{
+		v += kHDLifeDropGravity;
+		y += v >> 5;
+		n++;
+	}
+
+	return n;
+}
+
+/* How far a drop has fallen `ticks` after it left (a fraction of a tick
+ * allowed): HDLifeDropTicks' steps from rest, straight between two whole
+ * ticks, so a frame between two ticks draws it between them; and in `step`
+ * the units it moves over the tick it is in. DrawDrips draws a drip's
+ * tail half a tick's move (Yvel >> 6) over its head. */
+inline float HDLifeDropFall(float ticks, float* step)
+{
+	int y = 0, v = 0;
+	const int n = ticks > 0.0f ? (int)ticks : 0;
+
+	for (int k = 0; k < n && k < 250; k++)
+	{
+		v += kHDLifeDropGravity;
+		y += v >> 5;
+	}
+
+	const int move = (v + kHDLifeDropGravity) >> 5;
+
+	if (step)
+		*step = (float)move;
+
+	return (float)y + (float)move * (ticks > (float)n ? ticks - (float)n :
+		0.0f);
+}
 
 /* The pool's own hash: three steps of the engine's draw generator
  * (specific\function_stubs.cpp, GetRandomDraw: 0x41C64E6D, 12345, bits 10
@@ -459,6 +671,88 @@ inline void HDLifeSpringPush(const HDLifeBody& b, float x, float z,
 	*vz += dz * s;
 }
 
+/* The way on along a bank. A current that drives a float square-on onto a
+ * bank - within its `margin` and kHDLifeWayNear more of its square's edge
+ * on the current's side, where the square past either end of its width
+ * (the margin each way across) does not hold it - turns along the bank
+ * toward the nearest square of the same row whose square past it does, at
+ * the current's speed: water a wall stops runs along it to where it can go
+ * on. A side arm the current crosses (ANDREA2's canal: its rows z 43008
+ * and 44032 reach five squares west of the main channel, whose +z bank
+ * held three of twelve floats against it for good, the wander of 60 units
+ * a second losing to the current's 90) so empties into the main channel.
+ * The row is searched kHDLifeWayReach squares each way as far as it holds
+ * the float; a row with no way on - the end wall of the canal - turns
+ * nothing, and the floats lie along it. The current's main axis decides
+ * which way is across. kHDLifeWayNear is an eighth of a square, a free
+ * choice: more than a step of a frame, less than a float's margin. */
+static const float kHDLifeWayNear = 128.0f;
+static const int kHDLifeWayReach = 16;
+
+inline void HDLifeWayOn(const HDLifeBody& b, float x, float z, float margin,
+	float need, float* vx, float* vz)
+{
+	if (b.speed <= 0.0f)
+		return;
+
+	const bool alongX = fabsf(b.flowX) >= fabsf(b.flowZ);
+	const int fx = alongX ? (b.flowX > 0.0f ? 1024 : -1024) : 0;
+	const int fz = alongX ? 0 : (b.flowZ > 0.0f ? 1024 : -1024);
+	const int ax = alongX ? 0 : 1024, az = alongX ? 1024 : 0;
+	const int sx = HDLifeFloor1024(x), sz = HDLifeFloor1024(z);
+	// How far the float lies from its square's edge on the current's side.
+	const float to = fx > 0 ? (float)sx + 1024.0f - x : fx < 0 ?
+		x - (float)sx : fz > 0 ? (float)sz + 1024.0f - z : z - (float)sz;
+
+	if (to > margin + kHDLifeWayNear)
+		return;
+
+	/* The squares past the two ends of its width; a unit inside them, as a
+	 * float the bank test keeps at its margin from a side wall lies there
+	 * exactly. */
+	const float a = alongX ? z : x;
+	const int lo = HDLifeFloor1024(a - margin + 1.0f);
+	const int hi = HDLifeFloor1024(a + margin - 1.0f);
+	const bool loOn = alongX ? HDLifeHolds(b, sx + fx, lo + fz, need) :
+		HDLifeHolds(b, lo + fx, sz + fz, need);
+	const bool hiOn = alongX ? HDLifeHolds(b, sx + fx, hi + fz, need) :
+		HDLifeHolds(b, hi + fx, sz + fz, need);
+
+	if (loOn && hiOn)
+		return;
+
+	// The nearest square of its row with a way on, its own one included.
+	const float own = alongX ? (float)sz : (float)sx;
+	bool open[2] = { true, true };
+
+	for (int k = 0; k <= kHDLifeWayReach; k++)
+		for (int side = 0; side < 2; side++)
+		{
+			if (!open[side] || (k == 0 && side == 1))
+				continue;
+
+			const int d = (side ? -k : k);
+			const int cx = sx + d * ax, cz = sz + d * az;
+
+			if (!HDLifeHolds(b, cx, cz, need))
+			{
+				open[side] = false;
+				continue;
+			}
+
+			if (!HDLifeHolds(b, cx + fx, cz + fz, need))
+				continue;
+
+			// Toward that square's middle along the row.
+			const float mid = own + (float)d * 1024.0f + 512.0f;
+			const float way = mid > a ? 1.0f : mid < a ? -1.0f : 0.0f;
+
+			*vx += alongX ? 0.0f : way * b.speed;
+			*vz += alongX ? way * b.speed : 0.0f;
+			return;
+		}
+}
+
 // Turns `yaw` toward the way vx, vz by at most `rate` x dt.
 inline float HDLifeTurnToward(float yaw, float vx, float vz, float rate,
 	float dt)
@@ -484,7 +778,10 @@ inline float HDLifeAlong(const HDLifeBody& b, float x, float z)
 	return x * b.flowX + z * b.flowZ;
 }
 
-// A river's ends: the projection of its squares' middles.
+/* A river's ends: the projection of its squares' middles, and its slot
+ * points - the middle of the end row's squares moved along the flow past
+ * that row's edge by kHDLifeSlotReach, out of the water upstream and into
+ * it downstream (the river's ends, over kHDLifeSlotReach). */
 inline void HDLifeRiverEnds(HDLifeBody& b)
 {
 	b.upMin = 1.0e30f;
@@ -498,12 +795,87 @@ inline void HDLifeRiverEnds(HDLifeBody& b)
 		b.upMin = p < b.upMin ? p : b.upMin;
 		b.upMax = p > b.upMax ? p : b.upMax;
 	}
+
+	float ix = 0.0f, iz = 0.0f, ox = 0.0f, oz = 0.0f;
+	int in = 0, out = 0;
+
+	for (size_t i = 0; i < b.squares.size(); i++)
+	{
+		const float mx = b.squares[i].x + 512.0f;
+		const float mz = b.squares[i].z + 512.0f;
+		const float p = HDLifeAlong(b, mx, mz);
+
+		if (p <= b.upMin + 1.0f)
+		{
+			ix += mx;
+			iz += mz;
+			in++;
+		}
+
+		if (p >= b.upMax - 1.0f)
+		{
+			ox += mx;
+			oz += mz;
+			out++;
+		}
+	}
+
+	const float past = 512.0f + kHDLifeSlotReach;
+
+	b.inX = in ? ix / in - b.flowX * past : 0.0f;
+	b.inZ = in ? iz / in - b.flowZ * past : 0.0f;
+	b.outX = out ? ox / out + b.flowX * past : 0.0f;
+	b.outZ = out ? oz / out + b.flowZ * past : 0.0f;
 }
 
-// Whether a river float has reached its sink: past the downstream end.
+/* Whether a river float has reached the outlet's slot point: past the
+ * downstream row's edge by kHDLifeSlotReach, under the block there. */
 inline bool HDLifeAtSink(const HDLifeBody& b, float x, float z)
 {
-	return HDLifeAlong(b, x, z) >= b.upMax + kHDLifeSinkReach;
+	return HDLifeAlong(b, x, z) >= b.upMax + 512.0f + kHDLifeSlotReach;
+}
+
+/* How far a river float stands into its rise or its dive at world x, z: 1
+ * at a slot point and on, 0 over the river's middle - a smooth step over
+ * the slot's reach and the first square (rising) or the last square and
+ * the slot's reach (diving). 0 on every other body. */
+inline float HDLifeDiveShare(const HDLifeBody& b, float x, float z)
+{
+	if (!b.river)
+		return 0.0f;
+
+	const float a = HDLifeAlong(b, x, z);
+	const float edgeIn = b.upMin - 512.0f, edgeOut = b.upMax + 512.0f;
+	auto smooth = [](float v)
+	{
+		v = v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
+		return v * v * (3.0f - 2.0f * v);
+	};
+	const float rise = 1.0f - smooth((a - (edgeIn - kHDLifeSlotReach)) /
+		(kHDLifeSlotReach + kHDLifeRiseRun));
+	const float dive = smooth((a - (edgeOut - kHDLifeDiveRun)) /
+		(kHDLifeDiveRun + kHDLifeSlotReach));
+
+	return rise > dive ? rise : dive;
+}
+
+/* How far a float of floating height h and draft goes down at a slot
+ * point: from its floating place until its top stands kHDLifeSlotTop
+ * under the surface. */
+inline float HDLifeDiveDepth(float h, float draft)
+{
+	return (1.0f - draft) * h + kHDLifeSlotTop;
+}
+
+/* Whether a river float rides straight with the current here: over its
+ * first square and its last one and in the slots past them, where it
+ * rises and dives (no wander, no bank, the way of the flow). */
+inline bool HDLifeOnRun(const HDLifeBody& b, float x, float z)
+{
+	const float a = HDLifeAlong(b, x, z);
+
+	return b.river && (a < b.upMin - 512.0f + kHDLifeRiseRun ||
+		a > b.upMax + 512.0f - kHDLifeDiveRun);
 }
 
 // How many of the body's squares are at least `need` deep.
@@ -634,38 +1006,55 @@ inline float HDLifeTiltDrop(float reach)
 	return reach * kHDLifePitch;
 }
 
-// Whether Lara at lx, lz sends a school with its centre at cx, cz fleeing.
-inline bool HDLifeFlees(float lx, float lz, float cx, float cz)
+// Whether Lara at lx, lz scares a fish at fx, fz: within a square of it.
+inline bool HDLifeFlees(float lx, float lz, float fx, float fz)
 {
-	const float dx = lx - cx, dz = lz - cz;
+	const float dx = lx - fx, dz = lz - fz;
 
 	return dx * dx + dz * dz < kHDLifeFleeReach * kHDLifeFleeReach;
 }
 
-/* The deep square farthest from lx, lz - where a school flees to; -1 when
- * the body has none. */
-inline int HDLifeFarthestDeep(const HDLifeBody& b, float lx, float lz)
+/* A dart's speed `s` seconds after it started, units a second, and the way
+ * it has taken by then: kHDLifeDartSpeed falling off with the time
+ * kHDLifeDartFall. */
+inline float HDLifeDartSpeed(float s)
 {
-	int best = -1;
-	float most = -1.0f;
+	return kHDLifeDartSpeed * expf(-s / kHDLifeDartFall);
+}
 
-	for (size_t i = 0; i < b.squares.size(); i++)
+inline float HDLifeDartDistance(float s)
+{
+	return kHDLifeDartSpeed * kHDLifeDartFall * (1.0f - expf(-s /
+		kHDLifeDartFall));
+}
+
+/* A fish's dart's way, a unit vector: away from the scare at sx, sz,
+ * turned by up to kHDLifeDartScatter either way by the hash of the fish's
+ * number and the school's dart count; along `heading` when the fish lies
+ * on the scare. */
+inline void HDLifeDartWay(float fx, float fz, float sx, float sz, int index,
+	int dart, float heading, float* wx, float* wz)
+{
+	float dx = fx - sx, dz = fz - sz;
+	const float len = sqrtf(dx * dx + dz * dz);
+
+	if (len < 1.0f)
 	{
-		if (b.squares[i].depth < kHDLifeDeep)
-			continue;
-
-		const float dx = b.squares[i].x + 512.0f - lx;
-		const float dz = b.squares[i].z + 512.0f - lz;
-		const float d = dx * dx + dz * dz;
-
-		if (d > most)
-		{
-			most = d;
-			best = (int)i;
-		}
+		dx = sinf(heading);
+		dz = cosf(heading);
+	}
+	else
+	{
+		dx /= len;
+		dz /= len;
 	}
 
-	return best;
+	const float turn = kHDLifeDartScatter * (2.0f * HDLifeUnit(
+		(unsigned)index, 907u + (unsigned)dart) - 1.0f);
+	const float c = cosf(turn), s = sinf(turn);
+
+	*wx = dx * c + dz * s;
+	*wz = -dx * s + dz * c;
 }
 
 inline int HDLifeDeepCount(const HDLifeBody& b)
@@ -850,6 +1239,8 @@ struct HDLifePool
 	std::vector<HDLifeEntry> entries;
 	std::vector<HDLifeSchool> schools;
 	std::vector<HDLifeDrip> drips;
+	// The drops falling now (HDLifeTick), at most kHDLifeDropsMax.
+	std::vector<HDLifeDrop> falling;
 	std::vector<float> ringAt;
 	float height[HD_LIFE_KINDS];
 	float reach[HD_LIFE_KINDS];	// HDLifeReach
@@ -859,6 +1250,39 @@ struct HDLifePool
 	float last;		// the clock of the last tick, -1 before the first
 	int respawned;		// river floats come back upstream
 };
+
+/* Whether two lists of bodies are the same water: the same bodies in the
+ * same order, each with the same surface, class flags, current and
+ * squares. The HD level is built again when the graphics device was lost
+ * (alt-tab, alt-enter: hd_level.cpp, HDLevelDeviceLost); the water's
+ * bodies come out the same, and the pool is then kept as it was - its
+ * floats, fish and drips where they were - instead of rolled anew. */
+inline bool HDLifeSameBodies(const std::vector<HDLifeBody>& a,
+	const std::vector<HDLifeBody>& b)
+{
+	if (a.size() != b.size())
+		return false;
+
+	for (size_t i = 0; i < a.size(); i++)
+	{
+		const HDLifeBody& x = a[i];
+		const HDLifeBody& y = b[i];
+
+		if (x.index != y.index || x.surfaceY != y.surfaceY ||
+			x.river != y.river || x.channel != y.channel ||
+			x.flowX != y.flowX || x.flowZ != y.flowZ || x.speed != y.speed ||
+			x.squares.size() != y.squares.size())
+			return false;
+
+		for (size_t k = 0; k < x.squares.size(); k++)
+			if (x.squares[k].x != y.squares[k].x ||
+				x.squares[k].z != y.squares[k].z ||
+				x.squares[k].depth != y.squares[k].depth)
+				return false;
+	}
+
+	return true;
+}
 
 // The level's row of kHDLifeLevels, or 0.
 inline const HDLifeLevel* HDLifeLevelOf(const char* stem)
@@ -1049,6 +1473,7 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 				e.angle = 6.2831853f * (float)f / (float)s.fish;
 				e.x = s.cx;
 				e.z = s.cz;
+				e.yaw = s.heading;
 				e.phase = 6.2831853f * (float)draw(ctx) / 32767.0f;
 				p.entries.push_back(e);
 				p.fish++;
@@ -1081,6 +1506,7 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 			const int ax = draw(ctx), az = draw(ctx);
 
 			k.body = (int)bi;
+			k.room = b.squares[(size_t)sq].room;
 			HDLifeInside(b.squares[(size_t)sq], ax, az, &k.x, &k.z);
 			k.period = kHDLifeDripPeriodMin + kHDLifeDripPeriodSpan *
 				(float)draw(ctx) / 32767.0f;
@@ -1091,6 +1517,76 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 	}
 }
 
+/* A fish tank's life, after HDLifeBuild: a body of its squares, each as
+ * deep as the tank is high, under a ceiling, in its room, with its top as
+ * the surface; and a school of the tank's count of fish in the middle of
+ * it, set up as a pond's (HDLifeBuild), its numbers from `draw`. */
+inline void HDLifeAddTank(HDLifePool& p, const HDLifeTank& t,
+	int (*draw)(void*), void* ctx)
+{
+	HDLifeBody b;
+
+	b.index = -1;
+	b.surfaceY = t.top;
+	b.flowX = b.flowZ = b.speed = 0.0f;
+	b.river = b.channel = 0;
+	b.rise = 0.0f;
+	b.upMin = b.upMax = 0.0f;
+	b.tank = 1;
+
+	for (int x = t.x0; x < t.x1; x += 1024)
+		for (int z = t.z0; z < t.z1; z += 1024)
+		{
+			HDLifeSquare s;
+
+			s.x = x;
+			s.z = z;
+			s.depth = t.bottom - t.top;
+			s.closed = 1;
+			s.room = t.room;
+			b.squares.push_back(s);
+		}
+
+	const int bi = (int)p.bodies.size();
+
+	p.bodies.push_back(b);
+	p.ringAt.push_back(-1.0e6f);
+
+	if (!p.has[HD_LIFE_FISH])
+		return;
+
+	HDLifeSchool s = {};
+
+	s.body = bi;
+	s.fish = t.fish;
+	s.cx = 0.5f * (float)(t.x0 + t.x1);
+	s.cz = 0.5f * (float)(t.z0 + t.z1);
+	s.target = HDLifeDeepSquare(p.bodies[(size_t)bi], draw(ctx));
+	s.retarget = kHDLifeRetarget;
+	s.heading = 0.0f;
+
+	for (int f = 0; f < s.fish; f++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_FISH;
+		e.body = bi;
+		e.index = (int)p.entries.size();
+		e.school = (int)p.schools.size();
+		e.ring = kHDLifeRingMin + kHDLifeRingSpan * (float)draw(ctx) /
+			32767.0f;
+		e.angle = 6.2831853f * (float)f / (float)s.fish;
+		e.x = s.cx;
+		e.z = s.cz;
+		e.yaw = s.heading;
+		e.phase = 6.2831853f * (float)draw(ctx) / 32767.0f;
+		p.entries.push_back(e);
+		p.fish++;
+	}
+
+	p.schools.push_back(s);
+}
+
 // A ring a drip asks for this tick: where, on which body, how large.
 struct HDLifeRing
 {
@@ -1098,56 +1594,204 @@ struct HDLifeRing
 	float x, z;
 	int y;
 	int size;
-	int drip;
+	int drip;		// the drip, or -1 less the float's entry for a float
 };
 
+/* The rings round a big float (HDLifeFloatRings): a float whose floating
+ * height is kHDLifeRingHeight or more - the barrel, 326 - rings the sheet
+ * now and then as Lara does when she swims; a bottle (80) and the cloths
+ * (16) are too small to stir the water one could see, and ring never. Its
+ * period is 1 to 2 seconds from the hash of the float and its comeback
+ * count; its size 88, and up to 16 more at the top of its bob: a wading
+ * Lara's ring is 112 to 127 (game\effects.cpp), a barrel of 82 cm makes a
+ * little less than a woman of 1.77 m. A river float rings only while
+ * afloat (its dive under half). The height, the period and the sizes are
+ * free choices with those reasons, set by eye on RoomProbe series. */
+static const float kHDLifeRingHeight = 160.0f;
+static const float kHDLifeRingPeriodMin = 1.0f;
+static const float kHDLifeRingPeriodSpan = 1.0f;
+static const int kHDLifeFloatRing = 88;
+static const int kHDLifeFloatRingTop = 16;
+
+/* The rings a float asks for in a step from `t0` to `t1`: one where a
+ * multiple of its period (HDLifeFloatRings over the constants) falls in
+ * the step, at its place, sized by its bob. */
+inline void HDLifeFloatRings(const HDLifePool& p, const HDLifeEntry& e,
+	int entry, float t0, float t1, std::vector<HDLifeRing>* rings)
+{
+	if (!rings || e.kind < 0 || e.kind >= HD_LIFE_FISH ||
+		p.height[e.kind] < kHDLifeRingHeight)
+		return;
+
+	const HDLifeBody& b = p.bodies[(size_t)e.body];
+
+	if (HDLifeDiveShare(b, e.x, e.z) >= 0.5f)
+		return;
+
+	const float period = kHDLifeRingPeriodMin + kHDLifeRingPeriodSpan *
+		HDLifeUnit((unsigned)e.index, 811u + (unsigned)e.gen);
+	const float phase = period * HDLifeUnit((unsigned)e.index, 821u +
+		(unsigned)e.gen);
+
+	if (floorf((t1 - phase) / period) <= floorf((t0 - phase) / period))
+		return;
+
+	// The top of the bob is its sine's least (y grows down).
+	const float s = sinf(6.2831853f * t1 / e.period + e.phase);
+	HDLifeRing r;
+
+	r.body = e.body;
+	r.x = e.x;
+	r.z = e.z;
+	r.y = b.surfaceY;
+	r.size = kHDLifeFloatRing + (int)(kHDLifeFloatRingTop * (s < 0.0f ?
+		-s : 0.0f));
+	r.drip = -1 - entry;
+	rings->push_back(r);
+}
+
+/* Floats keep apart: no nearer than kHDLifeApart of their two reaches
+ * (HDLifeReach, half the diagonal of a box seen from above, which is more
+ * than the two need side by side: two barrels lying side by side take 326
+ * of their 484) - 0.75 leaves barrels a hand apart, a free choice set by
+ * eye on RoomProbe series of ANDREA2's canal, where the current drives
+ * twelve floats to one wall. */
+static const float kHDLifeApart = 0.75f;
+
+/* Whether float `e` at world x, z keeps clear of its body's other floats:
+ * not nearer to one than kHDLifeApart of their reaches, or at least not
+ * nearer than it is now - two that came to lie too near may part. */
+inline bool HDLifeClear(const HDLifePool& p, const HDLifeEntry& e, float x,
+	float z)
+{
+	for (size_t i = 0; i < p.entries.size(); i++)
+	{
+		const HDLifeEntry& o = p.entries[i];
+
+		if (&o == &e || o.kind == HD_LIFE_FISH || o.body != e.body)
+			continue;
+
+		const float least = kHDLifeApart * (p.reach[e.kind] +
+			p.reach[o.kind]);
+		const float dn = (x - o.x) * (x - o.x) + (z - o.z) * (z - o.z);
+
+		if (dn >= least * least)
+			continue;
+
+		if (dn < (e.x - o.x) * (e.x - o.x) + (e.z - o.z) * (e.z - o.z))
+			return false;
+	}
+
+	return true;
+}
+
+/* A river float comes back: a kind rolled again, and its place at the
+ * inlet's slot point, across the flow where a square of the upstream row
+ * deep enough for that kind puts it (HDLifeUpstreamSquare, HDLifeInside),
+ * along the flow at the slot point - under the block, out of sight. */
+inline void HDLifeComeBack(HDLifePool& p, const HDLifeLevel* level,
+	HDLifeEntry& e)
+{
+	const HDLifeBody& b = p.bodies[(size_t)e.body];
+
+	e.gen++;
+	p.respawned++;
+
+	// The kind first: the square it comes back on must hold it.
+	if (level)
+	{
+		const int kind = HDLifeRollKind(p, *level, e.body, (int)HDLifeHash(
+			(unsigned)e.index, 601u + (unsigned)e.gen),
+			(int)(&e - &p.entries[0]));
+
+		e.kind = kind >= 0 ? kind : e.kind;
+	}
+
+	const int sq = HDLifeUpstreamSquare(b, e.index, e.gen,
+		HDLifeNeed(p, e.kind, b));
+
+	if (sq >= 0)
+		HDLifeInside(b.squares[(size_t)sq], (int)HDLifeHash(
+			(unsigned)e.index, 401u + (unsigned)e.gen), (int)HDLifeHash(
+			(unsigned)e.index, 503u + (unsigned)e.gen), &e.x, &e.z);
+
+	const float back = HDLifeAlong(b, b.inX, b.inZ) - HDLifeAlong(b, e.x,
+		e.z);
+
+	e.x += b.flowX * back;
+	e.z += b.flowZ * back;
+	HDLifeDress(p, e);
+	e.yaw = atan2f(b.flowX, b.flowZ);
+}
+
 /* One float's step for `dt` seconds at clock t (the end of the step). A
- * river float that reaches its sink, or is held by a bank, comes back at
- * the upstream row with a new kind; a float of a channel or a basin that a
- * bank holds stays there and tries its wander again now and then. */
+ * river float rides straight with the current over its first and last
+ * squares (HDLifeOnRun) and comes back at the inlet once it has gone into
+ * the outlet's slot; a float a bank holds stays there and tries its wander
+ * again now and then. */
 inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 	HDLifeEntry& e, float t, float dt)
 {
 	const HDLifeBody& b = p.bodies[(size_t)e.body];
 	float vx, vz;
 
+	if (b.river && HDLifeOnRun(b, e.x, e.z))
+	{
+		e.x += b.flowX * b.speed * dt;
+		e.z += b.flowZ * b.speed * dt;
+		e.yaw = HDLifeTurnToward(e.yaw, b.flowX, b.flowZ, kHDLifeTurn, dt);
+		e.banked = 0;
+
+		if (HDLifeAtSink(b, e.x, e.z))
+			HDLifeComeBack(p, level, e);
+
+		return;
+	}
+
 	if (e.banked && t < e.retry)
 		return;
 
-	HDLifeVelocity(b, e.index, t, &vx, &vz);
-	HDLifeSpringPush(b, e.x, e.z, &vx, &vz);
-	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
-
 	const float margin = p.reach[e.kind] > kHDLifeEdge ? p.reach[e.kind] :
 		kHDLifeEdge;
-	const int how = HDLifeStep(b, &e.x, &e.z, vx * dt, vz * dt, margin,
-		HDLifeNeed(p, e.kind, b));
 
-	if (b.river && (how == HD_LIFE_BLOCKED || HDLifeAtSink(b, e.x, e.z)))
+	HDLifeVelocity(b, e.index, t, &vx, &vz);
+	HDLifeSpringPush(b, e.x, e.z, &vx, &vz);
+	HDLifeWayOn(b, e.x, e.z, margin, HDLifeNeed(p, e.kind, b), &vx, &vz);
+	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
+	/* A river's middle: the step may run on into the last square's run
+	 * across its row's edge, which the bank test would refuse. */
+	const float nx = e.x + vx * dt, nz = e.z + vz * dt;
+
+	if (b.river && HDLifeOnRun(b, nx, nz) && HDLifeAlong(b, nx, nz) >
+		HDLifeAlong(b, e.x, e.z))
 	{
-		e.gen++;
-		p.respawned++;
-
-		// The kind first: the square it comes back on must hold it.
-		if (level)
-		{
-			const int kind = HDLifeRollKind(p, *level, e.body, (int)HDLifeHash(
-				(unsigned)e.index, 601u + (unsigned)e.gen),
-				(int)(&e - &p.entries[0]));
-
-			e.kind = kind >= 0 ? kind : e.kind;
-		}
-
-		const int sq = HDLifeUpstreamSquare(b, e.index, e.gen,
-			HDLifeNeed(p, e.kind, b));
-
-		if (sq >= 0)
-			HDLifeInside(b.squares[(size_t)sq], (int)HDLifeHash(
-				(unsigned)e.index, 401u + (unsigned)e.gen), (int)HDLifeHash(
-				(unsigned)e.index, 503u + (unsigned)e.gen), &e.x, &e.z);
-
-		HDLifeDress(p, e);
+		e.x = nx;
+		e.z = nz;
+		e.banked = 0;
 		return;
+	}
+
+	/* HDLifeStep's three tries - the whole step, its x part, its z part -
+	 * each also clear of the body's other floats (HDLifeClear), so floats
+	 * a current drives to a bank lie side by side along it. */
+	const float need = HDLifeNeed(p, e.kind, b);
+	const float sx[3] = { vx * dt, vx * dt, 0.0f };
+	const float sz[3] = { vz * dt, 0.0f, vz * dt };
+	int how = HD_LIFE_BLOCKED;
+
+	for (int k = 0; k < 3; k++)
+	{
+		if ((k == 1 && sx[k] == 0.0f) || (k == 2 && sz[k] == 0.0f))
+			continue;
+
+		if (HDLifeOpen(b, e.x + sx[k], e.z + sz[k], margin, need) &&
+			HDLifeClear(p, e, e.x + sx[k], e.z + sz[k]))
+		{
+			e.x += sx[k];
+			e.z += sz[k];
+			how = k ? HD_LIFE_SLID : HD_LIFE_MOVED;
+			break;
+		}
 	}
 
 	if (how == HD_LIFE_BLOCKED)
@@ -1160,48 +1804,257 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 		e.banked = 0;
 }
 
-/* One school's step: calm, it cruises to its target and picks another on
- * arrival or every kHDLifeRetarget seconds; Lara within reach sends it to
- * the deep square farthest from her at twice the speed for
- * kHDLifeFleeFor seconds. `laraOn` 0 has no Lara in the water. */
-inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
-	float dt, int laraOn, float lx, float lz)
+/* A fish's place on its school's ring at clock t, world x and z: the ring
+ * turns at kHDLifeCircle and is squeezed along the school's heading, so
+ * the school is long. */
+inline void HDLifeRingAt(const HDLifeSchool& s, const HDLifeEntry& e,
+	float t, float* x, float* z)
 {
-	const HDLifeBody& b = p.bodies[(size_t)s.body];
+	const float a = e.angle + kHDLifeCircle * t;
+	const float rx = e.ring * kHDLifeSquash * sinf(a);
+	const float rz = e.ring * cosf(a);
+	const float ch = cosf(s.heading), sh = sinf(s.heading);
 
-	if (laraOn && HDLifeFlees(lx, lz, s.cx, s.cz))
+	*x = s.cx + rx * ch + rz * sh;
+	*z = s.cz - rx * sh + rz * ch;
+}
+
+/* The deep square nearest to x, z whose middle holds a school
+ * (HDLifeDeepAt), or -1. */
+inline int HDLifeNearestSchoolSquare(const HDLifeBody& b, float x, float z)
+{
+	int best = -1;
+	float least = 1.0e30f;
+
+	for (size_t i = 0; i < b.squares.size(); i++)
 	{
-		if (s.fleeUntil <= t)
-			s.target = HDLifeFarthestDeep(b, lx, lz);
+		const float mx = b.squares[i].x + 512.0f;
+		const float mz = b.squares[i].z + 512.0f;
+		const float d = (mx - x) * (mx - x) + (mz - z) * (mz - z);
 
-		s.fleeUntil = t + kHDLifeFleeFor;
+		if (d < least && HDLifeDeepAt(b, mx, mz))
+		{
+			least = d;
+			best = (int)i;
+		}
 	}
 
-	const bool fleeing = s.fleeUntil > t;
-	const bool there = HDLifeSchoolStep(b, &s, kHDLifeSwim *
-		(fleeing ? 2.0f : 1.0f), dt);
+	return best;
+}
 
-	if (!fleeing && (there || t >= s.retarget))
+/* One school's step (the flight, over kHDLifeDartSpeed). Calm, its centre
+ * cruises to its target and picks another on arrival or every
+ * kHDLifeRetarget seconds. Lara within a square of any of its fish, or a
+ * splash on its body's water (`splash`, x and z pairs), starts a dart;
+ * `laraOn` 0 has no Lara in the water. */
+inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
+	float dt, int laraOn, float lx, float lz, const float* splash = 0,
+	int splashes = 0)
+{
+	const HDLifeBody& b = p.bodies[(size_t)s.body];
+	const float margin = p.reach[HD_LIFE_FISH] > kHDLifeEdge ?
+		p.reach[HD_LIFE_FISH] : kHDLifeEdge;
+	const float need = (float)kHDLifeDeep;
+	int scared = 0;
+	float sx = 0.0f, sz = 0.0f;
+
+	// Where its fish are now: on the ring, or their own place in a flight.
+	auto at = [&](const HDLifeEntry& e, float* x, float* z)
+	{
+		if (s.darting)
+		{
+			*x = e.x;
+			*z = e.z;
+		}
+		else
+			HDLifeRingAt(s, e, t, x, z);
+	};
+
+	for (size_t i = 0; laraOn && !scared && i < p.entries.size(); i++)
+	{
+		const HDLifeEntry& e = p.entries[i];
+		float fx, fz;
+
+		if (e.school != si)
+			continue;
+
+		at(e, &fx, &fz);
+
+		if (HDLifeFlees(lx, lz, fx, fz))
+		{
+			scared = 1;
+			sx = lx;
+			sz = lz;
+		}
+	}
+
+	for (int k = 0; !scared && k < splashes; k++)
+		if (HDLifeSquareAt(b, splash[k * 2], splash[k * 2 + 1]) >= 0)
+		{
+			scared = 1;
+			sx = splash[k * 2];
+			sz = splash[k * 2 + 1];
+		}
+
+	if (scared && (!s.darting || t - s.dartAt >= kHDLifeDartRenew))
+	{
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			HDLifeEntry& e = p.entries[i];
+
+			if (e.school != si)
+				continue;
+
+			at(e, &e.x, &e.z);
+			HDLifeDartWay(e.x, e.z, sx, sz, e.index, s.darts, s.heading,
+				&e.wayX, &e.wayZ);
+		}
+
+		s.darting = 1;
+		s.dartAt = t;
+		s.darts++;
+		s.regrouped = 0;
+	}
+
+	if (s.darting)
+	{
+		const float since = t - s.dartAt;
+		int away = 0;
+
+		s.fleeUntil = t + 1.0f;
+
+		if (since >= kHDLifeDartFor && !s.regrouped)
+		{
+			// The centre goes where the fish are, into water that holds it.
+			float mx = 0.0f, mz = 0.0f, wx = 0.0f, wz = 0.0f;
+
+			for (size_t i = 0; i < p.entries.size(); i++)
+				if (p.entries[i].school == si)
+				{
+					mx += p.entries[i].x / s.fish;
+					mz += p.entries[i].z / s.fish;
+					wx += p.entries[i].wayX;
+					wz += p.entries[i].wayZ;
+				}
+
+			if (!HDLifeDeepAt(b, mx, mz))
+			{
+				const int sq = HDLifeNearestSchoolSquare(b, mx, mz);
+
+				if (sq >= 0)
+				{
+					mx = b.squares[(size_t)sq].x + 512.0f;
+					mz = b.squares[(size_t)sq].z + 512.0f;
+				}
+				else
+				{
+					mx = s.cx;
+					mz = s.cz;
+				}
+			}
+
+			s.cx = mx;
+			s.cz = mz;
+			s.heading = wx * wx + wz * wz > 1.0e-4f ? atan2f(wx, wz) :
+				s.heading;
+			s.regrouped = 1;
+		}
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			HDLifeEntry& e = p.entries[i];
+
+			if (e.school != si)
+				continue;
+
+			if (since < kHDLifeDartFor)
+			{
+				const float v = HDLifeDartSpeed(since);
+
+				HDLifeStep(b, &e.x, &e.z, e.wayX * v * dt, e.wayZ * v * dt,
+					margin, need);
+				continue;
+			}
+
+			// Back to its place on the ring.
+			float rx, rz;
+
+			HDLifeRingAt(s, e, t, &rx, &rz);
+
+			const float dx = rx - e.x, dz = rz - e.z;
+			const float len = sqrtf(dx * dx + dz * dz);
+
+			if (len <= kHDLifeRejoinNear)
+				continue;
+
+			const float step = kHDLifeRejoinSpeed * dt < len ?
+				kHDLifeRejoinSpeed * dt : len;
+
+			e.wayX = dx / len;
+			e.wayZ = dz / len;
+			HDLifeStep(b, &e.x, &e.z, e.wayX * step, e.wayZ * step, margin,
+				need);
+			away++;
+		}
+
+		if (since >= kHDLifeDartFor && (!away || since >= kHDLifeDartFor +
+			kHDLifeRejoinMost))
+		{
+			s.darting = 0;
+			s.fleeUntil = 0.0f;
+			s.target = HDLifeDeepSquare(b, (int)HDLifeHash(7u + (unsigned)si,
+				(unsigned)(int)t));
+			s.retarget = t + kHDLifeRetarget;
+		}
+
+		return;
+	}
+
+	const bool there = HDLifeSchoolStep(b, &s, kHDLifeSwim, dt);
+
+	if (there || t >= s.retarget)
 	{
 		s.target = HDLifeDeepSquare(b, (int)HDLifeHash(7u + (unsigned)si,
 			(unsigned)(int)t));
 		s.retarget = t + kHDLifeRetarget;
 	}
+}
 
-	if (!fleeing && s.fleeUntil > 0.0f)
-		s.fleeUntil = 0.0f;
+/* A fish's heading turns toward its way at kHDLifeFishTurn: in a flight
+ * its own dart or rejoin way (wayX, wayZ), calm its school's heading. */
+inline void HDLifeFishTurn(const HDLifePool& p, HDLifeEntry& e, float dt)
+{
+	if (e.kind != HD_LIFE_FISH || e.school < 0)
+		return;
+
+	const HDLifeSchool& s = p.schools[(size_t)e.school];
+
+	if (p.bodies[(size_t)s.body].gone)
+		return;
+
+	const float wx = s.darting ? e.wayX : sinf(s.heading);
+	const float wz = s.darting ? e.wayZ : cosf(s.heading);
+
+	e.yaw = HDLifeTurnToward(e.yaw, wx, wz, kHDLifeFishTurn, dt);
 }
 
 /* The pool's tick to clock t. Steps of at most a tenth of a second, so a
  * long frame or a probe that jumps to its clock moves the same way the
  * game's frames do. Rings asked for go into `rings` (the caller writes
- * them into the game's ripples or the probe's -ripple list); `laraOn`,
- * lx, lz are Lara's place, 0 without her. */
+ * them into the game's ripples or the probe's -ripple list), the drops
+ * that leave their ceiling into p.falling, which holds them while they
+ * fall, and into `drops`; `laraOn`, lx, lz are Lara's place, 0 without
+ * her, `splash` the live splashes' x and z (HDLifeSchoolTick). */
 inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
-	int laraOn, float lx, float lz, std::vector<HDLifeRing>* rings)
+	int laraOn, float lx, float lz, std::vector<HDLifeRing>* rings,
+	const float* splash = 0, int splashes = 0,
+	std::vector<HDLifeDrop>* drops = 0)
 {
 	if (p.last < 0.0f || t < p.last)
+	{
 		p.last = t;
+		p.falling.clear();
+	}
 
 	while (p.last < t)
 	{
@@ -1210,11 +2063,24 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 
 		for (size_t i = 0; i < p.entries.size(); i++)
 			if (p.entries[i].kind != HD_LIFE_FISH)
+			{
 				HDLifeFloatTick(p, level, p.entries[i], at, dt);
+				HDLifeFloatRings(p, p.entries[i], (int)i, p.last, at, rings);
+			}
 
 		for (size_t i = 0; i < p.schools.size(); i++)
-			HDLifeSchoolTick(p, p.schools[i], (int)i, at, dt, laraOn, lx,
-				lz);
+			if (!p.bodies[(size_t)p.schools[i].body].gone)
+			{
+				HDLifeSchool& s = p.schools[i];
+
+				s.beat += dt * (s.darting ? kHDLifeDartBeat : 1.0f);
+				HDLifeSchoolTick(p, s, (int)i, at, dt, laraOn, lx, lz, splash,
+					splashes);
+			}
+
+		// Each fish turns to its way (HDLifeFishTurn).
+		for (size_t i = 0; i < p.entries.size(); i++)
+			HDLifeFishTurn(p, p.entries[i], dt);
 
 		for (size_t i = 0; i < p.drips.size(); i++)
 		{
@@ -1238,6 +2104,42 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 				continue;
 
 			p.ringAt[(size_t)d.body] = at;
+
+			// Its drop leaves the ceiling now; its ring is due on arrival.
+			d.ringDue = at + (float)d.fall / 30.0f;
+
+			if (d.fall > 0)
+			{
+				HDLifeDrop o;
+
+				o.x = (int)d.x;
+				o.y = d.ceilY + kHDLifeDropUnder;
+				o.z = (int)d.z;
+				o.room = d.ceilRoom;
+				o.ticks = d.fall;
+				o.at = at;
+
+				if ((int)p.falling.size() < kHDLifeDropsMax)
+					p.falling.push_back(o);
+
+				if (drops)
+					drops->push_back(o);
+			}
+		}
+
+		// A drop that reached the water is gone; its ring takes over.
+		for (size_t i = p.falling.size(); i-- > 0;)
+			if (at >= p.falling[i].at + (float)p.falling[i].ticks / 30.0f)
+				p.falling.erase(p.falling.begin() + (long)i);
+
+		for (size_t i = 0; i < p.drips.size(); i++)
+		{
+			HDLifeDrip& d = p.drips[i];
+
+			if (d.ringDue < 0.0f || at < d.ringDue)
+				continue;
+
+			d.ringDue = -1.0f;
 			d.last = at;
 
 			if (rings)
@@ -1249,7 +2151,7 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 				r.z = d.z;
 				r.y = p.bodies[(size_t)d.body].surfaceY;
 				r.size = kHDLifeDripSize + (int)(HDLifeHash((unsigned)i,
-					(unsigned)d.fired) & 7);
+					(unsigned)d.fired) & 15);
 				r.drip = (int)i;
 				rings->push_back(r);
 			}
@@ -1257,6 +2159,38 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 
 		p.last = at;
 	}
+}
+
+/* The end of a body's LIFELOG line, the engine's and RoomProbe's alike: a
+ * river's slot points, `in=x,y,z out=x,y,z` with y the depth a float's top
+ * reaches there (kHDLifeSlotTop under the surface), or `in=none out=none`;
+ * then its drips' points, `drips_at=x,z;x,z...` or `drips_at=none`. */
+inline void HDLifeBodyTail(const HDLifePool& p, int bi, char* out, size_t n)
+{
+	const HDLifeBody& b = p.bodies[(size_t)bi];
+	int at = 0;
+
+	if (b.river)
+		at = snprintf(out, n, "in=%.0f,%.0f,%.0f out=%.0f,%.0f,%.0f", b.inX,
+			b.surfaceY + kHDLifeSlotTop, b.inZ, b.outX, b.surfaceY +
+			kHDLifeSlotTop, b.outZ);
+	else
+		at = snprintf(out, n, "in=none out=none");
+
+	int drips = 0;
+
+	for (size_t i = 0; i < p.drips.size(); i++)
+	{
+		if (p.drips[i].body != bi || at < 0 || (size_t)at >= n)
+			continue;
+
+		at += snprintf(out + at, n - (size_t)at, "%s%.0f,%.0f", drips ? ";" :
+			" drips_at=", p.drips[i].x, p.drips[i].z);
+		drips++;
+	}
+
+	if (!drips && at >= 0 && (size_t)at < n)
+		snprintf(out + at, n - (size_t)at, " drips_at=none");
 }
 
 /* Where an entry is drawn at clock t: its world place (x, y, z; y down) and
@@ -1270,32 +2204,38 @@ inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 	if (e.kind == HD_LIFE_FISH && e.school >= 0)
 	{
 		const HDLifeSchool& s = p.schools[(size_t)e.school];
-		const float fleeing = s.fleeUntil > t ? 2.0f : 1.0f;
-		const float a = e.angle + kHDLifeCircle * fleeing * t;
-		// The ring is squeezed along the heading, so the school is long.
-		const float rx = e.ring * kHDLifeSquash * sinf(a);
-		const float rz = e.ring * cosf(a);
-		const float ch = cosf(s.heading), sh = sinf(s.heading);
+		/* Its own heading (HDLifeFishTurn) and its school's beat: in a
+		 * flight it swims its own way, its tail beating faster. */
 
-		*x = s.cx + rx * ch + rz * sh;
-		*z = s.cz - rx * sh + rz * ch;
+		if (s.darting)
+		{
+			*x = e.x;
+			*z = e.z;
+		}
+		else
+			HDLifeRingAt(s, e, t, x, z);
+
 		*y = (float)b.surfaceY + kHDLifeFishDown +
 			kHDLifeSway * sinf(kHDLifeSwayRate * t + e.phase);
-		*yaw = s.heading - kHDLifeKinds[HD_LIFE_FISH].forward *
+		*yaw = e.yaw - kHDLifeKinds[HD_LIFE_FISH].forward *
 			0.0174533f + kHDLifeWobble * sinf(6.2831853f *
-			kHDLifeWobbleHz * t + e.phase);
+			kHDLifeWobbleHz * s.beat + e.phase);
 		*pitch = 0.0f;
 		*roll = 0.0f;
 		return;
 	}
 
 	const float h = p.height[e.kind];
-	const float bob = HDLifeBob(t, e.period, e.phase, e.amp);
+	const float draft = kHDLifeKinds[e.kind].draft;
+	// Rising out of a river's inlet or diving into its outlet: no bob.
+	const float dive = HDLifeDiveShare(b, e.x, e.z);
+	const float bob = (1.0f - dive) * HDLifeBob(t, e.period, e.phase, e.amp);
 	const float share = HDLifeTiltShare(t, e.period, e.phase);
 
 	*x = e.x;
 	*z = e.z;
-	*y = HDLifeFloatY(b.surfaceY, h, kHDLifeKinds[e.kind].draft, bob);
+	*y = HDLifeFloatY(b.surfaceY, h, draft, bob) + dive * HDLifeDiveDepth(h,
+		draft);
 	*yaw = e.yaw;
 	*pitch = kHDLifePitch * share;
 	*roll = kHDLifeRoll * sinf(6.2831853f * t / e.period + e.phase);

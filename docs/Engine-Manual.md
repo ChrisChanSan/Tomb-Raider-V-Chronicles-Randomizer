@@ -2137,40 +2137,58 @@ it.
   <ms>, cards <ms>` gives its time, each draw's to the GPU's end. It runs
   at every load of a level with sheets.
 - **The water's life** (with the water sheets, `hd_water`). Small things float on
-  the sheets and a few fish swim under them, in three levels for now: ANDREA2's sewer
+  the sheets and a few fish swim under them, in four levels for now: ANDREA2's sewer
   canal gets bottles, rags and a barrel; ANDY3's rivers, its lake, its shallows and the
   pond of room 145, and ANDY1's two pools get dead leaves, a rag and barrels, and a
-  school of fish where the water is deep enough. The places are rolled anew at every
-  level load, and again when the game rebuilds its HD level after the graphics device
-  was lost (an alt-tab can do it), and never saved. A float drifts with its body's
+  school of fish where the water is deep enough; RICH2's fish tank holds a school of
+  eight while it is whole. The places are rolled anew at every level load and never
+  saved; when the game builds its HD level again after the graphics device was lost
+  (an alt-tab can do it), they stay where they were. A float drifts with its body's
   current and a slow wander of its own, and away from its body's ripple source if a
   row gives the body one (slowly, 40 units a second at the source and nothing 1536
-  units out), stops at a bank and slides along it; on a river
-  it rides down to the river's end and comes back upstream. It keeps to water deep
-  enough to hold it: where the floor comes up to the surface, as in ANDY3's shallows,
-  it stops as at a bank and is never placed. It bobs a little on a curve of its own,
-  never more than the sheet itself rises, so held level it does not hang over the drawn
-  water (its slight tilt can lift an edge a few units); on a sea whose waves rise high
-  only a barrel is heavy enough to stay in it. The fish circle
-  slowly half a square down and flee when Lara comes within a square of them. Under a
-  ceiling a few drips ring the sheet now and then, near Lara and at most one ring in
-  two seconds a body. The models are the Remaster's own (a bottle, two cloths, a
-  barrel, a fish), drawn as HD objects - with `hd_objects` off nothing floats, the drips
-  stay. Without the sheets (`hd_water` 0, `hd_enable` 0) none of it runs.
+  units out), stops at a bank and slides along it, and keeps a little apart from the
+  other floats, so a current lays them side by side along a wall. ANDREA2's canal
+  runs toward its north end wall, where the water goes under it, at 90 units a second,
+  and its floats gather there; one that drifts into its side arm runs along the arm's
+  bank back into the main channel. On a river a float comes out of the slot under the
+  block at the river's upper end, rises to the surface over the first square, rides
+  down, and over the last square dives into the slot under the block at its lower end,
+  growing dark as it goes, and comes back at the upper slot - it never appears or
+  vanishes in open water. A float keeps to water deep enough to hold it: where the
+  floor comes up to the surface, as in ANDY3's shallows, it stops as at a bank and is
+  never placed. It bobs a little on a curve of its own, never more than the sheet
+  itself rises, so held level it does not hang over the drawn water (its slight tilt
+  can lift an edge a few units); on a sea whose waves rise high only a barrel is heavy
+  enough to stay in it. A barrel rings the water round it every second or two, as
+  Lara does when she swims. The fish circle slowly half a square down; when Lara comes
+  within a square of any of them, or something splashes into their water, each turns
+  and darts off on a line of its own, away from her, about three squares in two
+  seconds, and after a few seconds they come back together. Under a ceiling a few
+  drips fall: a drop falls from the ceiling and rings the sheet where it lands, near
+  Lara and at most one in two seconds a body; the log names where they are
+  (`drips_at=`). The models are the Remaster's own (a bottle, two cloths, a barrel, a
+  fish), drawn as HD objects: with `hd_objects` off nothing floats, the drips and
+  their rings stay; the drop is drawn as the game draws its own falling drips, and
+  leaves the game's own drips alone. Without the sheets (`hd_water` 0, `hd_enable` 0)
+  none of it runs.
 - **`LIFELOG` in the log.** With `-log`, every level with life writes one `LIFELOG
   level=<stem>` line at its load: the bodies that took life (`bodies=`), the floats
   (`floats=`), the fish (`fish=`), the drips (`drips=`), the floats a body's swell, its
-  depth or a missing model left out (`skipped=`), the pool's bytes (`bytes=`) and the
-  models that loaded (`models=`). Then one line per body: the water body it is
-  (`water=`, the `WATERLOG body=` number), its class (`river`, `channel` or
-  `other`), its sheet squares, the most its sheet rises (`rise=`, units), its current
-  (`flow=` x, z and units a second), its floats, fish and drips, and its squares deep
-  enough for fish (`deep=`) and under a ceiling (`closed=`). Once a second of the
-  game's clock a line sums the frames (`frames=`), the entries drawn and skipped over
-  them (`drawn=`, `skipped=`; at most 32 a frame are drawn, nearest the eye first),
-  the drip rings written (`rings=`) and those a full ripple table refused (`full=`),
-  the river floats come back upstream so far (`respawned=`) and the schools fleeing
-  now (`fleeing=`).
+  depth or a missing model left out (`skipped=`), the pool's bytes (`bytes=`), the
+  models that loaded (`models=`) and 1 when the pool was kept through a rebuild of the
+  HD level (`kept=`). Then one line per body: the water body it is (`water=`, the
+  `WATERLOG body=` number, -1 for a fish tank), its class (`river`, `channel`, `tank`
+  or `other`), its squares, the most its sheet rises (`rise=`, units), its current
+  (`flow=` x, z and units a second), its floats, fish and drips, its squares deep
+  enough for fish (`deep=`) and under a ceiling (`closed=`), a river's slot points
+  (`in=` and `out=`, world x, y and z, y the depth a float's top reaches there; `none`
+  on other water) and its drips' points (`drips_at=x,z;x,z...` or `none`) - stand
+  under one of those and wait a few seconds. Once a second of the game's clock a line
+  sums the frames (`frames=`), the entries drawn and skipped over them (`drawn=`,
+  `skipped=`; at most 32 a frame are drawn, nearest the eye first), the rings written
+  by drips and barrels (`rings=`) and those a full ripple table refused (`full=`),
+  the river floats come back so far (`respawned=`) and the schools fleeing now
+  (`fleeing=`).
 
 **Text.** The title menu, the names under the inventory ring, the options
 pages, the load and save lists with their *(quicksave)* line, the statistics

@@ -5222,10 +5222,12 @@ static const short kSplashOffsets[18] = { 1072, 48, 1072, 48, 650, 280, 200,
  * their segment by this file's hash where the game rolls GetRandomControl
  * - through the tank's place, turn and root (joint 0 as GetJointAbsPosition
  * gives it with the joint's own turn left at 0), the strength
- * TriggerFishtankSpray takes; the sparks of the last 1.5 s are handed in.
+ * TriggerFishtankSpray takes; the sparks of the last 18 ticks are handed
+ * in (a spark's card lives 17 at most).
  * After the tank the lasers' count runs down from 64 a tick, and the film
  * takes the strength HDFilmStrength gives - what hd_level.cpp's
- * FeedWaterFilms reads off the items in the game. */
+ * FeedWaterFilms reads off the items in the game. A tank without floor
+ * lasers in its room has no film (-1 on the line); its spray is drawn. */
 static void ProbeCardsFeed()
 {
 	if (g_hdwater != 1)
@@ -5281,10 +5283,9 @@ static void ProbeCardsFeed()
 	if (g_tank_item < 0)
 		return;
 
-	if (!g_tank_found || g_tank_film < 0)
+	if (!g_tank_found)
 	{
-		printf("-tank: item %d is no FISHTANK with floor lasers in its room "
-			"- nothing\n", g_tank_item);
+		printf("-tank: item %d is no FISHTANK - nothing\n", g_tank_item);
 		return;
 	}
 
@@ -5296,7 +5297,7 @@ static void ProbeCardsFeed()
 	int sprays = 0;
 	float lowest = -1.0e9f;
 
-	for (int k = now - 45; now >= 0 && k <= now; k++)
+	for (int k = now - 18; now >= 0 && k <= now; k++)
 	{
 		int on = 0;
 		const int f1 = HDTankFlagsAfter(k < 0 ? 0 : k, &on);
@@ -5345,7 +5346,9 @@ static void ProbeCardsFeed()
 	const int count = state == 2 ? 64 - (now - stop) : 64;
 	const float wet = HDFilmStrength(state, flags, count > 0 ? 1 : 0, count);
 
-	HDRenderWaterFilmWet(g_tank_film, wet);
+	if (g_tank_film >= 0)
+		HDRenderWaterFilmWet(g_tank_film, wet);
+
 	printf("-tank: item %d at %.2f s: %s, item_flags[1] %d, lasers %d, film "
 		"%d wet %.2f, %d sparks handed in, spray at y %.0f (root %.0f %.0f "
 		"%.0f)\n", g_tank_item, g_tank_time, state == 0 ? "before" :

@@ -1313,16 +1313,22 @@ water surface", carries the tables.
     (`-shadowpresence`, ANDREA1 room 0) the darkening at 1/60 s steps is
     the presence within the 8-bit rounding, and the picture at 0.25
     seconds is the picture without the switch, bit for bit.
-171. **The depth terms a block below the feet** - `HD_SHADOW_FULL` 512 and
-    `HD_SHADOW_END` 1024 below her lowest node, `HD_SHADOW_OTHERS_FULL`
-    1024 and `HD_SHADOW_OTHERS_END` 1280 behind a creature's tap along the
-    light. DATA: counted on the thirteen levels' classic faces with
-    ModelProbe `-shadowsurvey` (23,063 floor sectors as her place, rays
-    along the fixed light, every face behind the first that the terms
-    still weigh): the weight laid through a wall fell by 89 per cent and
-    through a floor by 54 against 1024 / 2048 (a creature's by 99 and 74
-    against 1536 / 2560), the first faces below her feet lost 28 per cent;
-    the creatures' heights from the rest pose's box
+171. **The depth terms a block below the feet** - `HD_SHADOW_FULL` 576 and
+    `HD_SHADOW_END` 1088 below her lowest node, `HD_SHADOW_OTHERS_FULL`
+    1024 and `HD_SHADOW_OTHERS_END` 1280 behind a creature's place along
+    the light, the place's depth kept beside the caster's in the second
+    map's green channel (`hd_shadow.hlsl`, `CastPS`; `hd_object.cpp`,
+    `castPlace`). OWN, a design of this project: a creature's term
+    measured from its feet as hers is from her lowest node. DATA: her
+    lowest node stands 58.6 units above her soles (ModelProbe
+    `-shadowroom`), rounded up to 64 on half a block and a block; counted
+    on the thirteen levels' classic faces with ModelProbe `-shadowsurvey`
+    (23,063 floor sectors as her place, rays along the fixed light, every
+    face behind the first that the terms still weigh, measured as the
+    engine measures): the weight laid through a wall fell by 88 per cent
+    and through a floor by 52 against 1024 / 2048 (a creature's by 80 and
+    40 against 1536 / 2560 per tap), the first faces below her feet lost
+    27 per cent; the creatures' heights from the rest pose's box
     (`-surveyslots`, `Tr5Level::frameBounds`).
 172. **The bulbs' haze given back** - every receive variant writes the
     factor in alpha and the fog bulbs' haze times 1 minus it in colour, and
@@ -1339,10 +1345,12 @@ water surface", carries the tables.
     body, a ray every 32 units of height along the fixed light,
     Moeller-Trumbore against the level's own room faces, the first face as
     the receiver and every weighted face behind it counted, through a
-    floor when the first face's normal is within 60 degrees of vertical.
-    OWN, a procedure of this project from general geometry; the 0.1 weight
-    called visible (0.034 of a pixel's colour at the fixed light's
-    darkness) is a free choice.
+    floor when the first face's normal is within 60 degrees of vertical,
+    the terms measured as the engine measures them. OWN, a procedure of
+    this project from general geometry; the 0.1 weight called visible
+    (0.034 of a pixel's colour at the fixed light's darkness), the
+    creature's 760 units, the 32-unit step and the 64 and 256 that leave
+    the floor at the feet out of the first faces are free choices.
 
 ## Credited, but not contained here
 

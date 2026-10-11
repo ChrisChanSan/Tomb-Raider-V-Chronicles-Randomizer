@@ -9627,6 +9627,15 @@ namespace
 	 * foam at every edge and on the crests. The foam blotches of a channel
 	 * and a sea are 1.5 times finer than the basin's scale.
 	 *
+	 * A channel's highlight is 0.4. Its water hides its floor within a
+	 * square and a half, so its waves stand at their whole height over a
+	 * dark body, and every slope that meets the highlight's light lights:
+	 * at 0.8, in ANDREA2's canal seen from above (RoomProbe, three views),
+	 * the highlight lifted the median luma of the water that shows no
+	 * floor from 33 to 50 and its brightest 2 % from 66 to 103, a yellow
+	 * sheen over the canal; at 0.4 to 45 and 69, the water a floor shows
+	 * through moving by 2. A free choice, set by eye on those pictures.
+	 *
 	 * The rows five to eight fill the spectrum between and below the first
 	 * four: three wavelengths at the geometric mean of two neighbours and
 	 * one at the shortest over 1.5 (moved by two units where it came near a
@@ -9654,7 +9663,7 @@ namespace
 	 * slide downstream (RoomProbe, ANDY3's river from its bank, the motion
 	 * of its pixels from 3 to 3.1 seconds). Its heights are a channel's
 	 * steepness (height over wavelength 0.0086 at most against 0.0078) and
-	 * its highlight half the channel's, 0.4: in a quarter to one and a
+	 * its highlight 0.4, as the channel's: in a quarter to one and a
 	 * half squares of water the bend of the floor is the slope times a
 	 * quarter of the path,
 	 * and 1.2 over 300 moved it by one or two units; at 0.8 the highlight of
@@ -9679,7 +9688,7 @@ namespace
 			{ 0.0f, 0.42f, -0.37f, 0.9f, -0.19f, 0.63f, -0.71f, 1.21f },
 			0.35f,
 			0.8f, 180.0f, 0.6f, 512.0f, 1500.0f, 0.7f, 300.0f, 1.5f, 0.0f,
-			1.0f, 70.0f, 0.8f, 55.0f, 40.0f, 0.0f, 2.0f,
+			1.0f, 70.0f, 0.4f, 55.0f, 40.0f, 0.0f, 2.0f,
 			1.2f, 3.0f, 1.0f },
 		{ "sea", { 1500.0f, 700.0f, 330.0f, 150.0f, 1025.0f, 481.0f, 222.0f,
 			98.0f },

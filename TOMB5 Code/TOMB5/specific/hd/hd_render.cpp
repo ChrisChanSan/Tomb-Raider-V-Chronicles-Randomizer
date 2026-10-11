@@ -14162,9 +14162,9 @@ namespace
 
 /* The warm-up.
  *
- * The first draw of a water sheet in a process held the frame for about
- * 42 ms: RoomProbe with a scratch timer round each sheet draw, to the
- * GPU's end, measured 41.9, 42.7 and 43.9 ms for the first, 0.35 to 0.49
+ * Without it the first draw of a water sheet in a process holds its frame
+ * for about 42 ms: RoomProbe with a scratch timer round each sheet draw,
+ * to the GPU's end, measured 41.9, 42.7 and 43.9 ms for the first, 0.35 to 0.49
  * for the second and 0.10 for the third (RICH2's tank view, 2560 x 1440),
  * with the draw call itself under a third of a millisecond. The wait is
  * the driver readying the water's vertex shader the first time a draw uses

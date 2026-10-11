@@ -385,16 +385,16 @@ inline bool HDSplashRings(const HDSplashSetup& s, float seconds, float* out)
  * its halving), the share kTankSprayShare times c over 64. The card
  * stands on the spark's point, its middle its half height over it: the
  * spark starts on the floor (joint 0 lies 1 unit over the item), and a
- * card round its point hid its lower half under the floor and kept the
- * rest within the soft edge's 64 units of it.
+ * card round its point would lie half under the floor and keep the rest
+ * within the soft edge's 64 units of it.
  *
  * kTankSprayShare 0.8, the dive splash's crown's (1.0 on its inner ring,
- * 0.8 on its middle one): the spray is the same water thrown up. At
- * 0.35 and round its point the spray of the tank in RICH2 room 122 added
- * 23 to the brightness of the pixels it touched at 1 s, and the one in
- * room 23, whose points lie inside the 256 high step before its glass,
- * showed on 1 % of the picture (RoomProbe -tank with and without
- * -tankleave spray, 1920 x 1080). */
+ * 0.8 on its middle one): the spray is the same water thrown up. Counted
+ * at 1 s (RoomProbe -tank with and without -tankleave spray, 1920 x
+ * 1080): standing at 0.8 the spray of RICH2 room 122's tank touches
+ * 31.6 % of the picture at +53 brightness and of room 23's, whose points
+ * lie inside the 256 high step before its glass, 3.6 %; round its point
+ * at 0.35, 14.9 % at +24 and 1 %. */
 const float kTankSprayShare = 0.8f;
 
 inline bool HDTankPuff(float x, float y, float z, int c, unsigned int seed,
@@ -798,8 +798,8 @@ inline void HDTankDomePoint(const HDTankShape& sh, const HDTankDome& d,
  * one page every kTankDomeAcross across and every kTankDomeAlong down, so
  * its foam blotches draw out into the streaks of falling water. The
  * shares and the two lengths are free choices, set by eye on the round's
- * RoomProbe pictures: with 0.3 and one page every 512 units both ways the
- * water stood as a blotched cloud over the room. */
+ * RoomProbe pictures: 0.3 and one page every 512 units both ways draw a
+ * blotched cloud over the room. */
 const float kTankDomeBody = 0.15f;
 const float kTankDomeRim = 0.5f;
 const float kTankDomeFall = 1660.0f;	// units/s

@@ -649,7 +649,12 @@ water surface", carries the tables.
     on any row: a ring at that world place every so many seconds, its phase
     from the place, at the surface of the row's room's square under it. OWN,
     free choice; for a fountain where the game makes no ripple of its own
-    (ANDREA2 194: no item in it or in room 120 below, `ItemCheck`).
+    (ANDREA2 194: no item in it or in room 120 below, `ItemCheck`). The
+    compiled row of entry 59 for ANDREA2 194 carries one (x 55,808, z 32,768,
+    the middle of the basin's six squares; size 80, 0.7 seconds, a free
+    choice set by eye in the game with a row of the file), with the sheets
+    alone; a row of the file with a ripple for the same room takes its
+    place. The body a source stands in keeps it as its spring (entry 163).
 74. **The clip** - with the depth texture and the camera above the water, a
     sheet pixel is not drawn (`clip()`) where the frame lies less than 8 units
     under the surface at rest (the swell's lift handed from `WaterVS` and taken
@@ -688,7 +693,11 @@ water surface", carries the tables.
     same free choice. Count on our data with the game's water marks
     (`RoomProbe -hdwater 1 -nodraw -watermarks`): JOBY5 15906 triangles and
     one call kept (WATERLOG `art_kept`), 15942 by the box alone; the other
-    fourteen levels the same either way.
+    fourteen levels the same either way. The river's flow-material calls of
+    entry 106 take the same test with their own squares
+    (`HDRange::flowCells`), the same free choice; count on our data: ANDY3's
+    five such calls, 612 triangles, all over their own squares, so every
+    level's counts stay as they were.
 78. **The motion clock** - every motion of the HD path runs on the drawn
     state's time, the tick clock less the part of a tick the blended pose
     stands behind it (`hd_book.h`, `HDBookClock`), so it moves on every frame
@@ -1433,7 +1442,13 @@ water surface", carries the tables.
     along it; held by a bank it tries again after 6 to 9 seconds. OWN, a
     design of this project; the numbers are free choices, set by eye on
     the round's RoomProbe pictures. DATA: `ANIMATING3_ANDY1` on its side
-    reaches 242 units and poked into a bank's planks at a margin of 128.
+    reaches 242 units and poked into a bank's planks at a margin of 128. In
+    a body with a spring (entry 73) a current straight away from it is
+    added: 40 units a second at the spring, falling off linearly to nothing
+    1536 units out, none within 16 (`HDLifeSpringPush`). OWN, free choices,
+    set by eye on RoomProbe `-life -lifeall` pictures of ANDREA2 194's basin
+    over 20 seconds; over twelve seeds its floats' mean distance from the
+    spring goes from 1055 to 1127 units in 20 seconds, to 911 without it.
 164. **The river's conveyor** - on a body of class river a float that
     reaches a quarter square past the middle of the last row downstream,
     or that a bank holds, comes back with a kind rolled again on the

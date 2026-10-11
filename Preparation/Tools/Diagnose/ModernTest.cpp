@@ -91,6 +91,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include <string.h>
 #include <algorithm>
+#include <chrono>
+#include <new>
 #include <vector>
 
 static int g_fail = 0;
@@ -17526,6 +17528,66 @@ static void life_drift()
 		HDLifeCount(44), kHDLifeBodyMax);
 }
 
+/* The spring's current (HDLifeSpringPush): straight away from the spring,
+ * kHDLifeSpring at it and falling off linearly to nothing at
+ * kHDLifeSpringReach, nothing inside kHDLifeSpringCore and nothing in a
+ * body without a spring; a float left to the current alone drifts out
+ * along its line from the spring, ever slower: from 112 units out it is
+ * 1536 - 1424 e^(-20 / 38.4), about 690, after 20 seconds. */
+static void life_spring()
+{
+	HDLifeBody b = life_body(3, 3, 2048);
+	float vx = 0.0f, vz = 0.0f;
+
+	HDLifeSpringPush(b, 2048.0f, 1536.0f, &vx, &vz);
+	ok(vx == 0.0f && vz == 0.0f, "life spring: no spring, no current",
+		(long)vx, 0);
+
+	b.spring = 1;
+	b.springX = 1536.0f;
+	b.springZ = 1536.0f;
+
+	const float half = 0.5f * kHDLifeSpringReach;
+
+	vx = vz = 0.0f;
+	HDLifeSpringPush(b, 1536.0f + half, 1536.0f, &vx, &vz);
+	ok(fabsf(vx - 0.5f * kHDLifeSpring) < 1.0e-3f && vz == 0.0f,
+		"life spring: half the speed half the reach out, away from it",
+		(long)(vx * 100.0f), (long)(50.0f * kHDLifeSpring));
+
+	vx = vz = 0.0f;
+	HDLifeSpringPush(b, 1536.0f - 300.0f, 1536.0f - 400.0f, &vx, &vz);
+	const float want = kHDLifeSpring * (1.0f - 500.0f / kHDLifeSpringReach);
+	ok(fabsf(vx + 0.6f * want) < 1.0e-3f && fabsf(vz + 0.8f * want) < 1.0e-3f,
+		"life spring: the way is the line from the spring, any side",
+		(long)(vz * 100.0f), (long)(-80.0f * want));
+
+	vx = vz = 1.0f;
+	HDLifeSpringPush(b, 1536.0f + kHDLifeSpringReach, 1536.0f, &vx, &vz);
+	HDLifeSpringPush(b, 1536.0f + 0.5f * kHDLifeSpringCore, 1536.0f, &vx,
+		&vz);
+	ok(vx == 1.0f && vz == 1.0f, "life spring: nothing at the reach and "
+		"nothing in the core; added to the velocity", (long)vx, 1);
+
+	// Thirty steps a second for 20 s, the current alone.
+	float x = 1536.0f + 100.0f, z = 1536.0f + 50.0f;
+
+	for (int s = 0; s < 600; s++)
+	{
+		vx = vz = 0.0f;
+		HDLifeSpringPush(b, x, z, &vx, &vz);
+		HDLifeStep(b, &x, &z, vx / 30.0f, vz / 30.0f, kHDLifeEdge, 100.0f);
+	}
+
+	const float d = sqrtf((x - 1536.0f) * (x - 1536.0f) +
+		(z - 1536.0f) * (z - 1536.0f));
+
+	ok(fabsf(d - 690.0f) < 15.0f &&
+		fabsf((z - 1536.0f) * 2.0f - (x - 1536.0f)) < 1.0f,
+		"life spring: a float drifts out along its line, about 690 units "
+		"in 20 s", (long)d, 690);
+}
+
 static void life_bank()
 {
 	HDLifeBody b = life_body(3, 1, 2048);
@@ -17791,8 +17853,9 @@ static void life_depth()
 
 /* The level load's pool (hd_pagecache.h): the thread-count rule, every item
  * once into its own slot whatever the thread count, the join in group order
- * with every run moved by its place, the first exception on the caller, and
- * the FNV-1a 64 step the build's fingerprint is made of. */
+ * with every run moved by its place, the first exception on the caller, the
+ * byte gate that gives a throwing item's share back, and the FNV-1a 64 step
+ * the build's fingerprint is made of. */
 // The low 31 bits of a hash, for the report line of a failed check.
 static long low(unsigned long long h)
 {
@@ -17959,6 +18022,67 @@ static void load_pool()
 		}
 
 		ok(caught, "pool: an item's exception reaches the caller", caught, 1);
+	}
+
+	/* The byte gate of the index fill (HDByteGate), as the fill holds it:
+	 * every item takes a share of 60 under a budget of 96, so no two run at
+	 * once. Without a throw, every item runs and the peak stays the one
+	 * share. With item 0 throwing while it holds its share, the items that
+	 * already wait for room must still start and finish, the exception must
+	 * reach the caller, and the gate must hold nothing afterwards; a share
+	 * kept by the throw would leave a waiting item waiting and the join
+	 * would never return. */
+	for (int threads = 1; threads <= 16; threads *= 4)
+	{
+		for (int throws = 0; throws <= 1; throws++)
+		{
+			HDByteGate gate(96.0);
+			std::mutex seen_lock;
+			double peak = 0.0;
+			int started = 0, finished = 0;
+			bool caught = false;
+
+			try
+			{
+				HDPoolRun(24, threads, [&](int at)
+				{
+					const HDByteGate::Share share(gate, 60.0);
+
+					{
+						std::lock_guard<std::mutex> lock(seen_lock);
+
+						started++;
+						peak = std::max(peak, gate.InFlight());
+					}
+
+					if (throws && at == 0)
+					{
+						std::this_thread::sleep_for(
+							std::chrono::milliseconds(20));
+						throw std::bad_alloc();
+					}
+
+					std::lock_guard<std::mutex> lock(seen_lock);
+
+					finished++;
+				});
+			}
+			catch (const std::bad_alloc&)
+			{
+				caught = true;
+			}
+
+			ok(caught == (throws != 0), "gate: a throw under the gate reaches "
+				"the caller", caught, throws);
+			ok(started == finished + throws, "gate: every started item but "
+				"the thrower finishes", started, finished + throws);
+			ok(throws || started == 24, "gate: without a throw every item "
+				"runs", started, 24);
+			ok(gate.InFlight() == 0.0, "gate: nothing held after the join",
+				(long)gate.InFlight(), 0);
+			ok(peak == 60.0, "gate: one share of 60 at a time under 96",
+				(long)peak, 60);
+		}
 	}
 
 	// FNV-1a 64: the published values of the empty string, "a" and "foobar",
@@ -18372,6 +18496,7 @@ int main()
 	shadow_arrival();
 	shadow_cut();
 	life_drift();
+	life_spring();
 	life_bank();
 	life_spawn();
 	life_flee();

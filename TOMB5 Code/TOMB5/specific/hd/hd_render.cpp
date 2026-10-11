@@ -1370,7 +1370,8 @@ namespace
 		 * sheet's square is one of them; the box above also spans every
 		 * square between two pieces of art. `artSpared` is set where the
 		 * box reaches a sheet's square and no art triangle lies over it -
-		 * the level's art_kept. */
+		 * or, for a call of the flow material, no flow triangle (flowCells)
+		 * - the level's art_kept. */
 		std::vector<unsigned int> artCells;
 		bool artSpared = false;
 		/* Its horizontal triangles of the flow material (1): the remaster's
@@ -1379,6 +1380,8 @@ namespace
 		int flowTris = 0;
 		int flowY = 0, flowYMax = 0;
 		int flowMinX = 0, flowMaxX = 0, flowMinZ = 0, flowMaxZ = 0;
+		// The floor squares those triangles lie over, as artCells.
+		std::vector<unsigned int> flowCells;
 		/* Which half of the room this draw call is: 0 for the open half,
 		 * and for triangles that stand inside another room one plus the
 		 * piece of the intruding art they belong to - see HDIntrusion and
@@ -1449,6 +1452,27 @@ namespace
 	{
 		return (unsigned int)((((x >> 10) + 64) & 0x7F) << 7) |
 			(unsigned int)(((z >> 10) + 64) & 0x7F);
+	}
+
+	/* Every square a triangle's box x0..x1, z0..z1 touches, a box edge on
+	 * a square's line not counted, into a sorted list of unique SectorKeys
+	 * (HDRange::artCells and flowCells). */
+	inline void NoteBoxCells(std::vector<unsigned int>& cells, int x0,
+		int x1, int z0, int z1)
+	{
+		const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
+		const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
+
+		for (int cx = x0 >> 10; cx <= lastX; cx++)
+			for (int cz = z0 >> 10; cz <= lastZ; cz++)
+			{
+				const unsigned int key = SectorKey(cx << 10, cz << 10);
+				const std::vector<unsigned int>::iterator at =
+					std::lower_bound(cells.begin(), cells.end(), key);
+
+				if (at == cells.end() || *at != key)
+					cells.insert(at, key);
+			}
 	}
 
 	struct HDGroup
@@ -4594,6 +4618,7 @@ static void HashRange(HDFnv64& f, const HDRange& r,
 	f.put(r.flowMaxX);
 	f.put(r.flowMinZ);
 	f.put(r.flowMaxZ);
+	f.list(r.flowCells);
 	f.put(r.intruding);
 	f.put(r.stand);
 	f.put(r.overhang);
@@ -7129,6 +7154,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.artCells.clear();
 					range.artSpared = false;
 					range.flowTris = 0;
+					range.flowCells.clear();
 				}
 
 				const unsigned int first = tris[i].first;
@@ -7187,25 +7213,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							range.artTris++;
 
-							/* Its squares (HDRange::artCells): every one
-							 * the triangle's box touches, a box edge on a
-							 * square's line not counted. */
-							const int lastX = (x1 > x0 ? x1 - 1 : x0) >> 10;
-							const int lastZ = (z1 > z0 ? z1 - 1 : z0) >> 10;
-							std::vector<unsigned int>& cells = range.artCells;
-
-							for (int cx = x0 >> 10; cx <= lastX; cx++)
-								for (int cz = z0 >> 10; cz <= lastZ; cz++)
-								{
-									const unsigned int key =
-										SectorKey(cx << 10, cz << 10);
-									const std::vector<unsigned int>::iterator
-										at = std::lower_bound(cells.begin(),
-										cells.end(), key);
-
-									if (at == cells.end() || *at != key)
-										cells.insert(at, key);
-								}
+							// Its squares (HDRange::artCells).
+							NoteBoxCells(range.artCells, x0, x1, z0, z1);
 						}
 
 						/* The flow material's flat triangles (HDRange::
@@ -7247,6 +7256,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							}
 
 							range.flowTris++;
+							NoteBoxCells(range.flowCells, x0, x1, z0, z1);
 						}
 					}
 				}
@@ -7576,39 +7586,20 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * budget (hd_pagecache.cpp), the transient a level load already allows
 	 * itself in a 32-bit address space. Measured with RoomProbe on TITLE:
 	 * without the gate the peak commit of sixteen threads stood 160 MiB above
-	 * one thread's. The gate decides only when a group starts. */
+	 * one thread's. The gate decides only when a group starts; a group's
+	 * share is given back however its fill ends (HDByteGate::Share), so a
+	 * throw reaches the caller and leaves no thread waiting for room. */
 	const double kFillBudget = 96.0 * 1048576.0;
-	std::mutex fill_gate;
-	std::condition_variable fill_wait;
-	double fill_in_flight = 0.0;
+	HDByteGate fill_gate(kFillBudget);
 
 	HDPoolRun((int)fill_order.size(), threads, [&](int k)
 	{
 		const size_t g = (size_t)fill_order[(size_t)k];
 		const double need = (double)(fill_size[g] / 3) *
 			(double)(sizeof(HDTri) + 2 * sizeof(unsigned int) + 1);
-
-		{
-			std::unique_lock<std::mutex> lock(fill_gate);
-
-			fill_wait.wait(lock, [&]()
-			{
-				return fill_in_flight == 0.0 ||
-					fill_in_flight + need <= kFillBudget;
-			});
-
-			fill_in_flight += need;
-		}
+		const HDByteGate::Share share(fill_gate, need);
 
 		fill_group(g);
-
-		{
-			std::lock_guard<std::mutex> lock(fill_gate);
-
-			fill_in_flight -= need;
-		}
-
-		fill_wait.notify_all();
 	});
 
 	/* The join, in group order: the index runs appended with every range's
@@ -9892,7 +9883,15 @@ namespace
 	 * deep colour, the scale of the wave heights and of the foam. A row
 	 * tunes every body its room has water in. The rows below pin the
 	 * classes the rule gives today, so that a later change of the rule
-	 * cannot move these places. */
+	 * cannot move these places.
+	 *
+	 * `ripple`, where its size is above 0, is a row's ripple source as
+	 * hd_water.txt says it ('ripple x z size period'), with the sheets
+	 * alone; a row of the file with a ripple for the same room takes its
+	 * place. ANDREA2 room 194's fountain basin, over water room 120 (six
+	 * squares, x 54,272 to 57,344 and z 31,744 to 33,792), has its spring
+	 * in the middle of the six: rings of size 80 every 0.7 seconds, a free
+	 * choice set by eye in the game with a row of the file. */
 	struct HDWaterOverride
 	{
 		const char* stem;
@@ -9901,12 +9900,14 @@ namespace
 		float tint[3];
 		float waves;
 		float foam;
+		float ripple[4];	// world x, z, size, period; size 0 for none
 	};
 
 	const HDWaterOverride kWaterOverride[] =
 	{
 		{ "ANDREA2", 144, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
-		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f,
+			{ 55808.0f, 32768.0f, 80.0f, 0.7f } },
 		{ "ANDREA2", 60, HD_WATER_CHANNEL, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 		{ "JOBY2", 42, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
@@ -12255,10 +12256,12 @@ namespace
 		/* A ripple source stands at the surface of the row's room's square
 		 * under it, or at the surface of the room's first body; its rings
 		 * start at a phase of their own, so two sources do not beat in
-		 * step. */
+		 * step. The body it stands in keeps the first such source as its
+		 * spring (HDRenderWaterBody::spring). */
 		if (row.ripple && !hit.empty())
 		{
 			WaterSource src = {};
+			int body = hit[0];
 
 			src.x = row.rx;
 			src.z = row.rz;
@@ -12275,11 +12278,23 @@ namespace
 				if (water_row_names(row, s, own) && row.rx >= (float)s.wx &&
 					row.rx < (float)(s.wx + 1024) && row.rz >= (float)s.wz &&
 					row.rz < (float)(s.wz + 1024))
+				{
 					src.y = (float)s.wy;
+					body = s.body >= 0 ? s.body : body;
+				}
 			}
 
 			g_wsources.push_back(src);
 			g_wlevel.ringSources++;
+
+			HDRenderWaterBody& spring = g_wbodies[(size_t)body].info;
+
+			if (!spring.spring)
+			{
+				spring.spring = 1;
+				spring.springAt[0] = row.rx;
+				spring.springAt[1] = row.rz;
+			}
 		}
 
 		return !hit.empty();
@@ -12722,6 +12737,17 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		row.waves = w.waves;
 		row.foam = w.foam;
 		row.bend = 1.0f;
+
+		// Its ripple source with the sheets alone, like the river rows.
+		if (sheets && w.ripple[2] > 0.0f)
+		{
+			row.ripple = 1;
+			row.rx = w.ripple[0];
+			row.rz = w.ripple[1];
+			row.rsize = w.ripple[2];
+			row.rperiod = w.ripple[3];
+		}
+
 		rows.push_back(row);
 	}
 
@@ -12767,6 +12793,17 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	}
 
 	read_water_file(rows);
+
+	/* A row of the file with a ripple for a room takes the place of the
+	 * compiled row's source there, so the two do not ring twice at one
+	 * place. */
+	for (size_t r = 0; r < rows.size(); r++)
+		for (size_t f = 0; rows[r].ripple && !rows[r].file &&
+			f < rows.size(); f++)
+			if (rows[f].file && rows[f].ripple &&
+				rows[f].room == rows[r].room &&
+				!_stricmp(rows[f].stem, rows[r].stem))
+				rows[r].ripple = 0;
 
 	for (size_t r = 0; r < rows.size(); r++)
 	{
@@ -13591,7 +13628,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		 * flowTris) within the same 32 units of the surface. ANDY3's rivers
 		 * carry one each in rooms 38, 41, 42 and 43, three units over the
 		 * classic height (TrgProbe -parts); under the sheet it is a second
-		 * surface scrolling a texture of its own through the river's. */
+		 * surface scrolling a texture of its own through the river's. Over
+		 * a square by the same rule as the art: the box first, then the
+		 * call's own flow squares (HDRange::flowCells); a call the box
+		 * reaches and no flow triangle of which lies over the square stays
+		 * drawn and counts as kept. */
 		if (g_wbodies[(size_t)s.body].info.cls != HD_WATER_RIVER)
 			continue;
 
@@ -13605,6 +13646,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					range.flowMaxX <= x0 || range.flowMinZ >= z0 + 1024 ||
 					range.flowMaxZ <= z0)
 					continue;
+
+				if (!std::binary_search(range.flowCells.begin(),
+					range.flowCells.end(), SectorKey(x0, z0)))
+				{
+					range.artSpared = true;
+					continue;
+				}
 
 				range.artHidden = true;
 				g_wlevel.artHidden += range.flowTris;
@@ -15135,10 +15183,11 @@ const char* HDRenderWaterSectionName(int section)
  * level was built for and the adapter offers; a bind the device refuses sets
  * depth back to 0 - the engine writes the line after its bind, RoomProbe
  * before its picture), the wave rows a sheet sums (waverows), the rings a
- * sheet draw can show (rings), the ripple rows of the file that found a
- * body (sources), the triangles of the remaster's own water art left out
- * under the sheets (art_hidden) and 1 when the sheets clip where the
- * frame's depth lies at their surface - the depth variant, so it follows
+ * sheet draw can show (rings), the ripple rows, the table's or the
+ * file's, that found a body (sources), the triangles of the remaster's
+ * own water art left out under the sheets (art_hidden) and 1 when the
+ * sheets clip where the frame's depth lies at their surface - the
+ * depth variant, so it follows
  * depth (clip), the waterfall objects whose foot stands over a sheet
  * (falls; a line each, HDRenderWaterFallLine), the squares whose surface is
  * their water room's top and not their own floor (lowered) and those left
@@ -15151,9 +15200,10 @@ const char* HDRenderWaterSectionName(int section)
  * water"), 1 when the level's water rooms take the deep look
  * (under_deep, the same note), 1 when its section is a night one
  * (night; see "the night" over kWaterMoon) and the draw calls of the
- * remaster's water art whose box reaches a sheet's square without an art
- * triangle over it, which stay drawn (art_kept; see "the art over a
- * sheet" in HDRenderSetWaterSheets). A body line: its rooms (+n for
+ * remaster's water art or a river's flow material whose box reaches a
+ * sheet's square without one of their triangles over it, which stay drawn
+ * (art_kept; see "the art over a sheet" in HDRenderSetWaterSheets). A
+ * body line: its rooms (+n for
  * more than sixteen), the world y of its surface, its squares (each place
  * once) and of those places the ones drawing a sheet, twice the area over
  * the perimeter, open air, the class drawn and the rule's, the deepest
@@ -15174,8 +15224,10 @@ const char* HDRenderWaterSectionName(int section)
  * (skirt; see "the lift" and "the skirt" in HDRenderSetWaterSheets), how
  * far under its surface the frame is left to itself, units (clip; see
  * kWaterClip), the share of its class's swell its sheet's vertices
- * take (swell; see kWaterBank), and how far its rows are short crests in
- * a fan (crest; see "the crests" over kWaterFan). */
+ * take (swell; see kWaterBank), how far its rows are short crests in
+ * a fan (crest; see "the crests" over kWaterFan), and the world x and z
+ * of the ripple source its floats drift away from, none without one
+ * (spring; HDRenderWaterBody::spring). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -15246,13 +15298,21 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	else
 		snprintf(from, sizeof(from), "none");
 
+	char spring[32];
+
+	if (b.spring)
+		snprintf(spring, sizeof(spring), "%.0f,%.0f", b.springAt[0],
+			b.springAt[1]);
+	else
+		snprintf(spring, sizeof(spring), "none");
+
 	snprintf(out, size, "WATERLOG body=%d rooms=%s surface=%d sectors=%d "
 		"sheets=%d shape=%.2f open=%d class=%s rule=%s depth=%d "
 		"light=%.2f,%.2f,%.2f override=%s tint=%.2f,%.2f,%.2f waves=%.2f "
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
 		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
 		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d swell=%.2f "
-		"crest=%.2f",
+		"crest=%.2f spring=%s",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -15262,7 +15322,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
 		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift,
-		b.skirt, b.clip, b.swell, b.crest);
+		b.skirt, b.clip, b.swell, b.crest, spring);
 	return true;
 }
 

@@ -1991,7 +1991,10 @@ it.
   many seconds while the level runs, as big as a game ripple of that size
   (1 to 255; a wading Lara's is about 120) and every 0.1 to 60 seconds - for a
   fountain the game gives no ripple of its own, for example `ANDREA2 194 -
-  ripple 55808 32768 80 0.7`; the rest of such a row applies like any row's.
+  ripple 56000 32500 60 1.1`; the rest of such a row applies like any row's.
+  ANDREA2 194's basin has one by default, `ripple 55808 32768 80 0.7` in the
+  engine's own row for that room, with the water sheets on; a row of the file
+  with a `ripple` for the same room takes its place.
   And `art keep` (or `art hide`, what a row says without it) draws the
   Remaster's own water art over the sheets of the row's bodies again, for
   example `ANDREA2 231 - art keep`. `foot <x1> <z1> <x2> <z2> <reach>` lays
@@ -2040,7 +2043,8 @@ it.
   squares of a flipmap twin, and whether the sheets read the copy of the
   picture (`copy=1`) and the depth texture (`depth=1`), the wave rows a sheet
   sums (`waverows=8`), the rings one sheet can show at once (`rings=8`), the
-  ripple rows of the file that found their water (`sources=`), the triangles
+  ripple rows, the engine's and the file's, that found their water
+  (`sources=`), the triangles
   of the Remaster's water art left out under the sheets (`art_hidden=`) and
   whether the sheets give way to a floor at the water's height (`clip=1`, with
   the depth texture) - and one
@@ -2074,8 +2078,8 @@ it.
   the level's largest body for want of one (`under_fallback=`), and 1 when
   the level's water rooms take the deep sea's water (`under_deep=`), 1 in a
   night level (`night=`) and, last, the draw calls of the Remaster's water
-  art whose box reaches a sheet's square with none of their triangles over
-  it, which stay drawn (`art_kept=`); a body
+  art or of a river's moving surface whose box reaches a sheet's square with
+  none of their triangles over it, which stay drawn (`art_kept=`); a body
   line
   ends with its current, the way along x and
   z and the speed (`flow=`, `0.00,0.00,0` without one), its places whose
@@ -2085,8 +2089,10 @@ it.
   without one), the land squares its level surface runs on over, each
   place once (`skirt=`, 0 without a lift), how far under its surface a
   floor is left dry (`clip=`, in units), how much of its class's swell its
-  surface takes (`swell=`) and, last, how far its waves are short crests in
-  a fan (`crest=`, 1.00 without a row's `crest`).
+  surface takes (`swell=`), how far its waves are short crests in a fan
+  (`crest=`, 1.00 without a row's `crest`) and, last, the place of the
+  ripple source its floats drift away from (`spring=x,z`, `none` without
+  one).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
   The first frame of a level whose camera is in a water room writes one
@@ -2121,7 +2127,9 @@ it.
   school of fish where the water is deep enough. The places are rolled anew at every
   level load, and again when the game rebuilds its HD level after the graphics device
   was lost (an alt-tab can do it), and never saved. A float drifts with its body's
-  current and a slow wander of its own, stops at a bank and slides along it; on a river
+  current and a slow wander of its own, and away from its body's ripple source if a
+  row gives the body one (slowly, 40 units a second at the source and nothing 1536
+  units out), stops at a bank and slides along it; on a river
   it rides down to the river's end and comes back upstream. It keeps to water deep
   enough to hold it: where the floor comes up to the surface, as in ANDY3's shallows,
   it stops as at a bank and is never placed. It bobs a little on a curve of its own,

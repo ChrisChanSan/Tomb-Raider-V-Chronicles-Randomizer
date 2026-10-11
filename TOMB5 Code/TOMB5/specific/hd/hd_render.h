@@ -1306,6 +1306,11 @@ struct HDRenderWaterBody
 	 * `crest`, 1 without one; 0 gives the straight rows - hd_render.cpp,
 	 * "the crests" over kWaterFan). */
 	float crest;
+	/* 1 when a row's ripple source stands in its water, and that source's
+	 * world x and z - the first such row's (the life's spring current,
+	 * hd_life_rules.h HDLifeSpringPush). */
+	int spring;
+	float springAt[2];
 };
 
 // What the level built, for its log line.
@@ -1327,7 +1332,7 @@ struct HDRenderWaterLevel
 	int vertices, triangles;
 	int copy;		// 1 when the sheets read the frame's copy
 	int depth;		// 1 when they read the depth texture as well
-	int ringSources;	// ripple rows of the file that found a body
+	int ringSources;	// ripple rows, the table's or the file's, with a body
 	int artHidden;		// the remaster's water art triangles hidden
 	int artKept;		// its draw calls a box test alone would hide
 	int falls;		// waterfall objects whose foot stands over a sheet

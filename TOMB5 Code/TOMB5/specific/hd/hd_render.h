@@ -401,6 +401,33 @@ inline bool HDRoomAirReaches(const HDRoomAir& air, float x, float y0,
 	return true;
 }
 
+/* Art a room carries for another: a triangle of room b's group whose
+ * centroid stands outside b's own inside (HDRoomBox, no slack) and inside
+ * the inside of a room a under the sky (ROOM_OUTSIDE) that is not b's
+ * flipmap twin. Seen through a's sky, such art is drawn only when b is on
+ * the frame's list, and the portal walk lists b by b's own portals, which
+ * may lie far off the screen while its art stands in the middle of it -
+ * ANDREA2's brick tower of room 222 over room 232, with 222 listed through
+ * a portal of room 224 two pixels wide at the screen's edge, and gone
+ * with it as the camera swings. A room a listed with a classic window
+ * takes in every room b it carries any art of (game\draw.cpp, CarryArt),
+ * as a room with no window of its own: 583 such pairs over the fifteen
+ * levels, from 1 triangle to 26,769, ANDREA2's tower 286. No count is
+ * asked: a room carried for a sliver of art is drawn whole by the depth
+ * test like any room the reach brings, and every room taken in that way
+ * is one the reach's budget may trim again. */
+
+/* Whether a box holds a point, room local or world as the box is - the
+ * test of the carried art above, bounds included. */
+inline bool HDCarryBoxHolds(const HDRoomBox& box, const float* p)
+{
+	for (int axis = 0; axis < 3; axis++)
+		if (p[axis] < box.mins[axis] || p[axis] > box.maxs[axis])
+			return false;
+
+	return true;
+}
+
 /* Whether a world point stands in a room's air - see HDRoomAir. */
 inline bool HDRoomAirHolds(const HDRoomAir& air, float x, float y, float z,
 	float margin)
@@ -1721,6 +1748,15 @@ void HDRenderSetPairFaces(const HDPairFace* faces, int count);
  * is 0. */
 void HDRenderSetRoomAir(const HDRoomAir* rooms, int count,
 	const unsigned char* links);
+/* The rooms under the sky and the flipmap twins, for the carried art (see
+ * HDCarryBoxHolds): `sky` count bytes, nonzero for a ROOM_OUTSIDE room,
+ * and `twin` each room's flipmap twin or -1, in room order. Same contract
+ * again; without them no art is carried. After the build HDRenderCarryPair
+ * reads back the triangles per (group, host), every pair with one. */
+void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
+	int count);
+int HDRenderCarryPairs();
+bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 
 /* The classic faces another group's art may stand on - see hd_cover.h.
  *

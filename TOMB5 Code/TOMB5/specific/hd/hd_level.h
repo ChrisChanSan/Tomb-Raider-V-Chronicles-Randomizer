@@ -188,6 +188,13 @@ bool HDRoomIsHD(int roomIndex);
  * false. */
 bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount);
 
+/* The rooms whose art stands under room `roomIndex`'s sky (HDCarryBoxHolds
+ * in hd_render.h): their count, and in `*rooms` the room numbers. The room
+ * walk (game\draw.cpp, CarryArt) takes them in with a room it lists with a
+ * classic window. None with tomb5.hd_air 0, for a room not under the sky,
+ * and for every room while HDLevelActive() is false. */
+int HDRoomCarries(int roomIndex, const short** rooms);
+
 /* The classic faces InsertRoomlet (specific\drawroom.cpp) leaves out of one
  * roomlet of a room drawn classic that another group's art covers in part:
  * one flag per face in the order of its loops - the quads, then the

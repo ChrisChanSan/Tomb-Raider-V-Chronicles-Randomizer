@@ -2070,6 +2070,78 @@ namespace
 		std::sort(out.begin(), out.end());
 	}
 
+	/* The rooms under the sky and the flipmap twins (HDRenderSetCarryHosts),
+	 * borrowed for the length of the build, the rooms under the sky in room
+	 * order, and the art the build found them carrying: triangles per
+	 * (group, host). */
+	const unsigned char* g_carry_sky = 0;
+	const short* g_carry_twin = 0;
+	int g_carry_count = 0;
+	std::vector<int> g_carry_hosts;
+	std::map<std::pair<int, int>, int> g_carry_pairs;
+
+	/* Which rooms under the sky group g's art stands in (HDCarryBoxHolds):
+	 * one host per triangle and room, for every triangle whose centroid
+	 * stands outside g's own inside and inside the inside of a room under
+	 * the sky that is not g's flipmap twin. */
+	void CarryHostsOf(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g, std::vector<int>& out)
+	{
+		if (g_carry_hosts.empty() || !g_boxes || g >= g_box_count ||
+			g >= g_carry_count)
+			return;
+
+		const HDRoomBox& own = g_boxes[g];
+
+		for (int pass = 0; pass < 3; pass++)
+			for (const trf::remaster::TrgPart& part : source.parts)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const unsigned int first = run.start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					const trf::remaster::TrgVertex& ta =
+						trg.vertices[trg.indices[first]];
+					const trf::remaster::TrgVertex& tb =
+						trg.vertices[trg.indices[first + 1]];
+					const trf::remaster::TrgVertex& tc =
+						trg.vertices[trg.indices[first + 2]];
+					float c[3] = {
+						((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
+						((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+						((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f };
+
+					if (HDCarryBoxHolds(own, c))
+						continue;
+
+					c[0] += own.originX;
+					c[2] += own.originZ;
+
+					for (int a : g_carry_hosts)
+					{
+						if (a == g || a >= g_box_count ||
+							g_carry_twin[a] == g || g_carry_twin[g] == a)
+							continue;
+
+						HDRoomBox host = g_boxes[a];
+
+						host.mins[0] += host.originX;
+						host.maxs[0] += host.originX;
+						host.mins[2] += host.originZ;
+						host.maxs[2] += host.originZ;
+
+						if (HDCarryBoxHolds(host, c))
+							out.push_back(a);
+					}
+				}
+			}
+	}
+
 	/* The classic faces another group's art may stand on (HDStandRoom,
 	 * HDStandHolder, HDCoverFace in hd_render.h), borrowed for the length of
 	 * the build like the lists above, and what the build made of them: the
@@ -4209,6 +4281,40 @@ int HDRenderAirPairs()
 	return (int)g_air_pairs.size();
 }
 
+void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
+	int count)
+{
+	g_carry_sky = count > 0 && twin ? sky : 0;
+	g_carry_twin = g_carry_sky ? twin : 0;
+	g_carry_count = g_carry_sky ? count : 0;
+	g_carry_hosts.clear();
+	g_carry_pairs.clear();
+
+	for (int r = 0; r < g_carry_count; r++)
+		if (g_carry_sky[r])
+			g_carry_hosts.push_back(r);
+}
+
+int HDRenderCarryPairs()
+{
+	return (int)g_carry_pairs.size();
+}
+
+bool HDRenderCarryPair(int index, int* group, int* host, int* tris)
+{
+	if (index < 0 || index >= (int)g_carry_pairs.size())
+		return false;
+
+	std::map<std::pair<int, int>, int>::const_iterator it =
+		g_carry_pairs.begin();
+
+	std::advance(it, index);
+	*group = it->first.first;
+	*host = it->first.second;
+	*tris = it->second;
+	return true;
+}
+
 bool HDRenderAirPair(int index, int* group, int* host, int* tris)
 {
 	if (index < 0 || index >= (int)g_air_pairs.size())
@@ -5624,6 +5730,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		std::vector<unsigned char> clearSeen;	// per page slot, this group
 		std::vector<int> clearSlots;		// first seen here, in order
 		std::vector<int> cutHits, intrusionHits, intrusionBand, airPairs;
+		std::vector<int> carryHosts;		// CarryHostsOf, one per triangle
 		long long airTicks = 0;
 		int cutoutParts = 0, addweightParts = 0, addswingParts = 0;
 		int addstillParts = 0, stackedParts = 0, stackedTris = 0;
@@ -6080,6 +6187,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			QueryPerformanceCounter(&to);
 			o.airTicks += to.QuadPart - from.QuadPart;
 		}
+
+		// And the rooms under the sky its art stands in (CarryHostsOf).
+		CarryHostsOf(trg, source, (int)g, o.carryHosts);
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -7713,6 +7823,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 		for (int host : o.airPairs)
 			g_air_pairs[std::make_pair((int)g, host)]++;
+
+		for (int host : o.carryHosts)
+			g_carry_pairs[std::make_pair((int)g, host)]++;
 
 		g_air_ticks += o.airTicks;
 		g_cutout_parts += o.cutoutParts;

@@ -191,6 +191,8 @@ static int g_reach_capped = 0;
 static int g_reach_trimmed = 0;
 // And rooms the reach found that the .TRG has no art for - see ReachTrimRooms.
 static int g_reach_noart = 0;
+// And rooms taken in for the art they stand under a listed sky - CarryArt.
+static int g_reach_carried = 0;
 
 short* GetBoundsAccurate(ITEM_INFO* item)
 {
@@ -1377,6 +1379,7 @@ namespace
 	 * reach - and `reach` the ones that have none. */
 	long g_walkRoomsSum = 0;
 	long g_walkReachSum = 0;
+	long g_walkCarriedSum = 0;	// of the reach's, those CarryArt took in
 	int g_walkRoomsFrames = 0;
 	int g_walkRoomsMax = 0;
 	int g_walkClassicMax = 0;
@@ -1741,6 +1744,7 @@ static void ReachBeginWalk(short seed)
 	g_reach_added = 0;
 	g_reach_trimmed = 0;
 	g_reach_noart = 0;
+	g_reach_carried = 0;
 
 	if (seed >= 0 && seed < 256)
 	{
@@ -1801,6 +1805,65 @@ static void ReachBeginWalk(short seed)
  * which is what clears that byte at the end of a drawn room - will not run
  * for a room that is no longer in the list. */
 static const long kReachBudget = 128;
+
+/* The rooms whose art stands under the sky of a room the walk listed with a
+ * classic window (hd_level.h, HDRoomCarries; hd_render.h, HDCarryBoxHolds
+ * says which art), taken in as rooms with no window of their own, with that
+ * room's reach. The walk lists a room by its own portals, and the art of a
+ * room can stand far from them: ANDREA2's brick tower of room 222 stands
+ * over room 232, beside the alley at the church gate, while 222's one way
+ * in is a portal of room 224 at the screen's edge - two pixels of it on
+ * the screen, none a few degrees further round, and the tower came and
+ * went with it as the camera swung (seven times in eight seconds). Run
+ * after the walk and before the trim, which may take them out again like
+ * any room the reach brought; their portals are not followed. */
+static void CarryArt()
+{
+	const long listed = number_draw_rooms;
+
+	for (long i = 0; i < listed; i++)
+	{
+		const short which = draw_rooms[i];
+		const ROOM_INFO* a = &room[which];
+		const short* carried = 0;
+
+		if (a->left >= a->right || a->top >= a->bottom)
+			continue;
+
+		const int count = HDRoomCarries(which, &carried);
+
+		for (int k = 0; k < count; k++)
+		{
+			const short b = carried[k];
+
+			if (b < 0 || b >= number_rooms || (room[b].bound_active & 1))
+				continue;
+
+			// The draw_rooms guard of GetRoomBounds.
+			if (number_draw_rooms >= (long)(sizeof(draw_rooms) /
+				sizeof(draw_rooms[0])))
+			{
+				g_reach_capped++;
+				return;
+			}
+
+			draw_rooms[number_draw_rooms] = b;
+			number_draw_rooms++;
+			room[b].bound_active |= 1;
+
+			if (b < 256 && which < 256)
+			{
+				g_reach_state[b] |= REACH_SEEN;
+				g_reach_box[b][0] = g_reach_box[which][0];
+				g_reach_box[b][1] = g_reach_box[which][1];
+				g_reach_box[b][2] = g_reach_box[which][2];
+				g_reach_box[b][3] = g_reach_box[which][3];
+			}
+
+			g_reach_carried++;
+		}
+	}
+}
 
 /* Takes off the list every reach-only room whose place the art does not draw
  * (the paragraph in ReachTrimRooms says why) and returns how many it took. */
@@ -1999,6 +2062,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	g_walkRoomsSum += note.count;
 	g_walkRoomsFrames++;
 	g_walkReachSum += g_reach_added;
+	g_walkCarriedSum += g_reach_carried;
 	g_reach_trimmed_second += g_reach_trimmed;
 	g_reach_noart_second += g_reach_noart;
 
@@ -2292,12 +2356,13 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		if (g_walkLineEver && g_reach_on && g_walkRoomsFrames)
 			Log("ROOMWALK reach rooms added=%d of %d (mean %.1f of %.1f, max "
 				"%d classic %d reach %d), budget=%d trimmed=%d no_art=%d "
-				"cap hit=%d",
+				"cap hit=%d carried=%d",
 				(int)g_walkReachSum, (int)g_walkRoomsSum,
 				(double)g_walkReachSum / g_walkRoomsFrames,
 				(double)g_walkRoomsSum / g_walkRoomsFrames, g_walkRoomsMax,
 				g_walkClassicMax, g_walkReachMax, (int)kReachBudget,
-				g_reach_trimmed_second, g_reach_noart_second, g_reach_capped);
+				g_reach_trimmed_second, g_reach_noart_second, g_reach_capped,
+				(int)g_walkCarriedSum);
 
 		g_walkLineAt = GlobalCounter;
 		g_walkLineEver = true;
@@ -2308,6 +2373,7 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 		g_listLines = 0;
 		g_walkRoomsSum = 0;
 		g_walkReachSum = 0;
+		g_walkCarriedSum = 0;
 		g_walkRoomsFrames = 0;
 		g_walkRoomsMax = 0;
 		g_walkClassicMax = 0;
@@ -2449,6 +2515,9 @@ void DrawRooms(short current_room)
 		ReachBeginWalk(walk_room);
 
 	GetRoomBounds();
+
+	if (g_reach_on)
+		CarryArt();
 
 	/* And the budget, over the eye the walk really used - w2v_matrix M03/M13/
 	 * M23 is the camera position (specific\3dmath.cpp), the same three
@@ -3370,6 +3439,9 @@ void RenderIt(short current_room)
 		ReachBeginWalk(current_room);
 
 	GetRoomBounds();
+
+	if (g_reach_on)
+		CarryArt();
 
 	if (g_reach_on)
 		ReachTrimRooms((long)w2v_matrix[M03], (long)w2v_matrix[M13],

@@ -624,10 +624,11 @@ void HDLifeFrame(double clock)
 			roll, local);
 		mul44(local, view, node);
 
-		/* Its kind's share of the body's light, and a river float's fade
-		 * into its slots (HDLifeDiveLightShare) on the light and the sun. */
+		/* Its kind's share of the body's light, and a river's or a
+		 * conveyor's float's fade into its slots (HDLifeDiveLightShare) on
+		 * the light and the sun. */
 		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
-			g_pool.bodies[(size_t)e.body], e.x, e.z));
+			g_pool.bodies[(size_t)e.body], e.x, e.z, e.entering));
 		const float share = HDLifeLightShare(e.kind) * fade;
 		const float light[3] = { g_light[(size_t)e.body * 3] * share,
 			g_light[(size_t)e.body * 3 + 1] * share,

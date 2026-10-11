@@ -18407,6 +18407,90 @@ static int life_draw(void* state)
 	return HDLifeDraw((unsigned*)state);
 }
 
+/* A channel's conveyor (HDLifeConveyor): the main channel of ANDREA2's
+ * canal from its crossing to its drain - x 55,296 to 57,344, z 43,008 to
+ * 50,176, current +z at 90 - with the inlet kHDLifeInlets names on its east
+ * bank. Five minutes of twelve floats: the count holds, floats come back
+ * only at the inlet's slot point, off the sheet, and only under the
+ * surface is a float off the sheet; one that drifts onto the inlet's
+ * square without coming out of it floats on. */
+static void life_conveyor()
+{
+	HDLifePool p = {};
+	HDLifeBody b = life_body(0, 0, 2048);
+	const HDLifeLevel level = { "ANDREA2", 16, 1, 0, { 1, 0, 0, 0 }, 0, 0 };
+
+	for (int x = 55296; x < 57344; x += 1024)
+		for (int z = 43008; z < 50176; z += 1024)
+		{
+			HDLifeSquare s = { x, z, 2048, 1 };
+
+			b.squares.push_back(s);
+		}
+
+	b.surfaceY = 4864;
+	b.channel = 1;
+	b.flowZ = 1.0f;
+	b.speed = 90.0f;
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_BOTTLE] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.reach[HD_LIFE_BOTTLE] = 92.0f;
+
+	unsigned state = 5;
+
+	HDLifeBuild(p, level, life_draw, &state);
+
+	const HDLifeBody& c = p.bodies[0];
+
+	ok(c.ends && c.inX == 57728.0f && c.inZ == 44032.0f &&
+		c.outX == 55808.0f + 512.0f && c.outZ == 50560.0f &&
+		c.inWayX == -1.0f && c.inHalf == 1024.0f,
+		"life conveyor: ANDREA2's canal comes in at its east bank's slot and "
+		"leaves under its +z end", (long)c.inX, 57728);
+
+	const size_t count = p.entries.size();
+	int openBack = 0, overOff = 0, backs = 0;
+	std::vector<int> gen(count, 0);
+
+	for (int k = 1; k <= 300 * 10; k++)
+	{
+		const float t = k * 0.1f;
+
+		HDLifeTick(p, &level, t, 0, 0.0f, 0.0f, 0);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			const HDLifeEntry& e = p.entries[i];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			const bool on = HDLifeSquareAt(c, x, z) >= 0;
+
+			overOff += !on && y - 0.5f * p.height[e.kind] < (float)c.surfaceY;
+
+			if (e.gen != gen[i])
+			{
+				openBack += on || x < 57344.0f;
+				backs += e.gen - gen[i];
+				gen[i] = e.gen;
+			}
+		}
+	}
+
+	ok(p.entries.size() == count && count > 0 && backs > 0 &&
+		openBack == 0 && overOff == 0,
+		"life conveyor: the floats go round, back only in the inlet's slot, "
+		"under the surface off the sheet", openBack * 1000 + overOff, 0);
+
+	ok(HDLifeDiveShare(c, 56900.0f, 44032.0f, 0) == 0.0f &&
+		HDLifeDiveShare(c, 56900.0f, 44032.0f, 1) > 0.25f &&
+		HDLifeDiveShare(c, 56900.0f, 46000.0f, 1) == 0.0f,
+		"life conveyor: only a float out of the inlet rises on its square",
+		0, 0);
+}
+
 /* The fish's depth (HDLifeFishBand, HDLifeFishCalm): a school in a lake of
  * five by five squares 1,024 deep under a sea's sheet (rise 121.3) for 60
  * s, Lara at its middle from 5 to 7 s and 30 to 31 s. Every fish stays in
@@ -19391,6 +19475,7 @@ int main()
 	life_bob();
 	life_depth();
 	life_fishdepth();
+	life_conveyor();
 	load_pool();
 	splash_motion();
 	splash_cards();

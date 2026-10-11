@@ -231,6 +231,37 @@ static const float kHDLifeRiseRun = 1024.0f;
 static const float kHDLifeDiveRun = 1024.0f;
 static const float kHDLifeDiveLight = 0.25f;
 
+/* A channel's conveyor. A channel with a current carries its floats like
+ * a river: into the slot under its downstream end and back out of its
+ * inlet's slot, its ends found as a river's are (HDLifeRiverEnds) - save
+ * the inlet, which this table names where it does not lie at the upstream
+ * end: the middle of the inlet's edge (world x, z), the way the water
+ * comes in through it (a unit step in x or z) and half the slot's width.
+ * ANDREA2's sewer canal (SectorCheck on the classic ANDREA2.TRC, 44
+ * squares, x 50,176 to 57,344, z 34,816 to 50,176, surface 4,864, its
+ * current +z at 90, kWaterFlow): past its +z end, z 50,176, the canal's
+ * rooms are wall and the water room 133 goes on under it from the surface
+ * down to 6,912 - the drain, two squares wide, where the river's outlet
+ * rule puts its slot point; past its -z end and the side arm's west end
+ * every room is wall or dry at the surface's height - no slot; past its
+ * east bank at x 57,344, z 43,008 to 45,056, the water rooms 58 and 186 go
+ * on under a dry floor 256 over the water (room 19), from the surface
+ * down to 6,144 - the only opening it has besides the drain, and the
+ * water's way in. Its floats come out there, ride west over the first
+ * square, rising, join the current and dive into the drain. */
+struct HDLifeInlet
+{
+	const char* stem;
+	int x, z;	// world, the middle of the inlet's edge
+	int wayX, wayZ;	// the way the water comes in
+	int half;	// half the slot's width, units
+};
+
+static const HDLifeInlet kHDLifeInlets[] =
+{
+	{ "ANDREA2", 57344, 44032, -1, 0, 1024 },
+};
+
 /* The spring's current (HDLifeSpringPush): its speed at the spring, units
  * a second, the distance it has fallen off to nothing at, and the radius
  * round the spring it leaves alone. Free choices, set by eye on RoomProbe
@@ -444,6 +475,12 @@ struct HDLifeBody
 	/* A river's slot points, world x and z: where its floats come out of
 	 * the inlet's slot and go into the outlet's (HDLifeRiverEnds). */
 	float inX = 0.0f, inZ = 0.0f, outX = 0.0f, outZ = 0.0f;
+	/* 1 for a body with ends - a river, or a channel with a current and
+	 * an inlet (kHDLifeInlets) -, the way its water comes in at the inlet
+	 * (a river's: its current) and half the inlet's width, 0 for the whole
+	 * of the river's upstream row. */
+	int ends = 0;
+	float inWayX = 0.0f, inWayZ = 0.0f, inHalf = 0.0f;
 	/* 1 with a spring, the ripple source of a row in its water, at world
 	 * x and z (HDRenderWaterBody::spring): its floats drift away from it
 	 * (HDLifeSpringPush). */
@@ -479,6 +516,9 @@ struct HDLifeEntry
 	 * model's, turned toward it. */
 	float down = 0.0f, climb = 0.0f, goal = 0.0f;
 	float wayPitch = 0.0f, pitch = 0.0f;
+	/* 1 while a conveyor's float comes out of its inlet (HDLifeComeBack),
+	 * until it has ridden past the inlet's run (HDLifeFloatTick). */
+	int entering = 0;
 };
 
 struct HDLifeSchool
@@ -910,22 +950,58 @@ inline void HDLifeRiverEnds(HDLifeBody& b)
 	b.inZ = in ? iz / in - b.flowZ * past : 0.0f;
 	b.outX = out ? ox / out + b.flowX * past : 0.0f;
 	b.outZ = out ? oz / out + b.flowZ * past : 0.0f;
+	b.ends = 1;
+	b.inWayX = b.flowX;
+	b.inWayZ = b.flowZ;
+	b.inHalf = 0.0f;
 }
 
-/* Whether a river float has reached the outlet's slot point: past the
+/* Whether a float has reached the outlet's slot point: past the
  * downstream row's edge by kHDLifeSlotReach, under the block there. */
 inline bool HDLifeAtSink(const HDLifeBody& b, float x, float z)
 {
 	return HDLifeAlong(b, x, z) >= b.upMax + 512.0f + kHDLifeSlotReach;
 }
 
-/* How far a river float stands into its rise or its dive at world x, z: 1
- * at a slot point and on, 0 over the river's middle - a smooth step over
- * the slot's reach and the first square (rising) or the last square and
- * the slot's reach (diving). 0 on every other body. */
-inline float HDLifeDiveShare(const HDLifeBody& b, float x, float z)
+/* How far world x, z lies from a conveyor's inlet slot point along the way
+ * the water comes in, units; 1e30 beside the inlet's width. */
+inline float HDLifeInletRun(const HDLifeBody& b, float x, float z)
 {
-	if (!b.river)
+	const float dx = x - b.inX, dz = z - b.inZ;
+	const float across = dx * b.inWayZ - dz * b.inWayX;
+
+	return fabsf(across) <= b.inHalf ? dx * b.inWayX + dz * b.inWayZ :
+		1.0e30f;
+}
+
+/* Whether a float at world x, z rides out of the inlet's slot: over a
+ * river's first square, over a conveyor's first square along its inlet;
+ * and whether it rides into the outlet's slot, over the last square. */
+inline bool HDLifeInRun(const HDLifeBody& b, float x, float z)
+{
+	if (b.river)
+		return HDLifeAlong(b, x, z) < b.upMin - 512.0f + kHDLifeRiseRun;
+
+	return b.ends && HDLifeInletRun(b, x, z) < kHDLifeSlotReach +
+		kHDLifeRiseRun;
+}
+
+inline bool HDLifeOutRun(const HDLifeBody& b, float x, float z)
+{
+	return b.ends && HDLifeAlong(b, x, z) > b.upMax + 512.0f -
+		kHDLifeDiveRun;
+}
+
+/* How far a float stands into its rise or its dive at world x, z: 1
+ * at a slot point and on, 0 over the water's middle - a smooth step over
+ * the slot's reach and the first square (rising) or the last square and
+ * the slot's reach (diving). `entering` 0 leaves a conveyor's rise out:
+ * there only a float that came out of the inlet rises, and one that drifts
+ * to the inlet's square floats on. 0 on a body without ends. */
+inline float HDLifeDiveShare(const HDLifeBody& b, float x, float z,
+	int entering = 1)
+{
+	if (!b.ends)
 		return 0.0f;
 
 	const float a = HDLifeAlong(b, x, z);
@@ -935,8 +1011,10 @@ inline float HDLifeDiveShare(const HDLifeBody& b, float x, float z)
 		v = v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
 		return v * v * (3.0f - 2.0f * v);
 	};
-	const float rise = 1.0f - smooth((a - (edgeIn - kHDLifeSlotReach)) /
-		(kHDLifeSlotReach + kHDLifeRiseRun));
+	const float from = b.river ? a - (edgeIn - kHDLifeSlotReach) :
+		entering ? HDLifeInletRun(b, x, z) : 1.0e30f;
+	const float rise = 1.0f - smooth(from / (kHDLifeSlotReach +
+		kHDLifeRiseRun));
 	const float dive = smooth((a - (edgeOut - kHDLifeDiveRun)) /
 		(kHDLifeDiveRun + kHDLifeSlotReach));
 
@@ -951,15 +1029,48 @@ inline float HDLifeDiveDepth(float h, float draft)
 	return (1.0f - draft) * h + kHDLifeSlotTop;
 }
 
-/* Whether a river float rides straight with the current here: over its
- * first square and its last one and in the slots past them, where it
- * rises and dives (no wander, no bank, the way of the flow). */
-inline bool HDLifeOnRun(const HDLifeBody& b, float x, float z)
+/* Whether a float rides straight with the water here: out of the inlet's
+ * slot over the first square and into the outlet's over the last one,
+ * where it rises and dives (no wander, no bank); `entering` as for
+ * HDLifeDiveShare. */
+inline bool HDLifeOnRun(const HDLifeBody& b, float x, float z,
+	int entering = 1)
 {
-	const float a = HDLifeAlong(b, x, z);
+	return b.ends && (((entering || b.river) && HDLifeInRun(b, x, z)) ||
+		HDLifeOutRun(b, x, z));
+}
 
-	return b.river && (a < b.upMin - 512.0f + kHDLifeRiseRun ||
-		a > b.upMax + 512.0f - kHDLifeDiveRun);
+/* A conveyor's inlet out of kHDLifeInlets: the row of level `stem` whose
+ * inlet edge has a square of the body inside it. The slot point lies
+ * kHDLifeSlotReach out past the edge, a river's (HDLifeRiverEnds). */
+inline void HDLifeConveyor(HDLifeBody& b, const char* stem)
+{
+	if (!b.channel || b.speed <= 0.0f || !stem)
+		return;
+
+	for (size_t i = 0; i < sizeof(kHDLifeInlets) / sizeof(kHDLifeInlets[0]);
+		i++)
+	{
+		const HDLifeInlet& t = kHDLifeInlets[i];
+		const char* a = t.stem;
+		const char* c = stem;
+
+		while (*a && *c && ((*a | 0x20) == (*c | 0x20)))
+			a++, c++;
+
+		if (*a || *c || HDLifeSquareAt(b, (float)(t.x + t.wayX * 512),
+			(float)(t.z + t.wayZ * 512)) < 0)
+			continue;
+
+		HDLifeRiverEnds(b);
+		b.ends = 1;
+		b.inWayX = (float)t.wayX;
+		b.inWayZ = (float)t.wayZ;
+		b.inHalf = (float)t.half;
+		b.inX = (float)t.x - b.inWayX * kHDLifeSlotReach;
+		b.inZ = (float)t.z - b.inWayZ * kHDLifeSlotReach;
+		return;
+	}
 }
 
 // How many of the body's squares are at least `need` deep.
@@ -1541,6 +1652,8 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 
 		if (b.river)
 			HDLifeRiverEnds(b);
+		else
+			HDLifeConveyor(b, level.stem);
 
 		// Depth 1 and more: the squares with water under them.
 		const int n = HDLifeCount(HDLifeHoldCount(b, 1.0f));
@@ -1774,7 +1887,7 @@ inline void HDLifeFloatRings(const HDLifePool& p, const HDLifeEntry& e,
 
 	const HDLifeBody& b = p.bodies[(size_t)e.body];
 
-	if (HDLifeDiveShare(b, e.x, e.z) >= 0.5f)
+	if (HDLifeDiveShare(b, e.x, e.z, e.entering) >= 0.5f)
 		return;
 
 	// The bob's turns since clock 0, counted from its top.
@@ -1834,7 +1947,8 @@ inline bool HDLifeClear(const HDLifePool& p, const HDLifeEntry& e, float x,
 /* A river float comes back: a kind rolled again, and its place at the
  * inlet's slot point, across the flow where a square of the upstream row
  * deep enough for that kind puts it (HDLifeUpstreamSquare, HDLifeInside),
- * along the flow at the slot point - under the block, out of sight. */
+ * along the flow at the slot point - under the block, out of sight. A
+ * conveyor's comes back at its inlet's slot point (HDLifeConveyor). */
 inline void HDLifeComeBack(HDLifePool& p, const HDLifeLevel* level,
 	HDLifeEntry& e)
 {
@@ -1851,6 +1965,24 @@ inline void HDLifeComeBack(HDLifePool& p, const HDLifeLevel* level,
 			(int)(&e - &p.entries[0]));
 
 		e.kind = kind >= 0 ? kind : e.kind;
+	}
+
+	/* A conveyor's float: at the inlet's slot point, across its width less
+	 * the float's reach by the hash, heading in with the water. */
+	if (!b.river)
+	{
+		const float reach = p.reach[e.kind] > kHDLifeEdge ? p.reach[e.kind] :
+			kHDLifeEdge;
+		const float half = b.inHalf > reach ? b.inHalf - reach : 0.0f;
+		const float u = 2.0f * HDLifeUnit((unsigned)e.index, 401u +
+			(unsigned)e.gen) - 1.0f;
+
+		e.x = b.inX + b.inWayZ * u * half;
+		e.z = b.inZ - b.inWayX * u * half;
+		HDLifeDress(p, e);
+		e.yaw = atan2f(b.inWayX, b.inWayZ);
+		e.entering = 1;
+		return;
 	}
 
 	const int sq = HDLifeUpstreamSquare(b, e.index, e.gen,
@@ -1873,7 +2005,8 @@ inline void HDLifeComeBack(HDLifePool& p, const HDLifeLevel* level,
 /* One float's step for `dt` seconds at clock t (the end of the step). A
  * river float rides straight with the current over its first and last
  * squares (HDLifeOnRun) and comes back at the inlet once it has gone into
- * the outlet's slot; a float a bank holds stays there and tries its wander
+ * the outlet's slot - a conveyor's the same, out of its inlet the way the
+ * water comes in; a float a bank holds stays there and tries its wander
  * again now and then. */
 inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 	HDLifeEntry& e, float t, float dt)
@@ -1881,11 +2014,16 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 	const HDLifeBody& b = p.bodies[(size_t)e.body];
 	float vx, vz;
 
-	if (b.river && HDLifeOnRun(b, e.x, e.z))
+	if (HDLifeOnRun(b, e.x, e.z, e.entering))
 	{
-		e.x += b.flowX * b.speed * dt;
-		e.z += b.flowZ * b.speed * dt;
-		e.yaw = HDLifeTurnToward(e.yaw, b.flowX, b.flowZ, kHDLifeTurn, dt);
+		// Out of a conveyor's inlet the way the water comes in.
+		const bool in = !b.river && e.entering && HDLifeInRun(b, e.x, e.z);
+		const float wx = in ? b.inWayX : b.flowX;
+		const float wz = in ? b.inWayZ : b.flowZ;
+
+		e.x += wx * b.speed * dt;
+		e.z += wz * b.speed * dt;
+		e.yaw = HDLifeTurnToward(e.yaw, wx, wz, kHDLifeTurn, dt);
 		e.banked = 0;
 
 		if (HDLifeAtSink(b, e.x, e.z))
@@ -1893,6 +2031,9 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 
 		return;
 	}
+
+	// Past its inlet's run a conveyor's float floats like any other.
+	e.entering = 0;
 
 	if (e.banked && t < e.retry)
 		return;
@@ -1904,11 +2045,12 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 	HDLifeSpringPush(b, e.x, e.z, &vx, &vz);
 	HDLifeWayOn(b, e.x, e.z, margin, HDLifeNeed(p, e.kind, b), &vx, &vz);
 	e.yaw = HDLifeTurnToward(e.yaw, vx, vz, kHDLifeTurn, dt);
-	/* A river's middle: the step may run on into the last square's run
-	 * across its row's edge, which the bank test would refuse. */
+	/* A river's or a conveyor's middle: the step may run on into the last
+	 * square's run across its row's edge, which the bank test would
+	 * refuse. */
 	const float nx = e.x + vx * dt, nz = e.z + vz * dt;
 
-	if (b.river && HDLifeOnRun(b, nx, nz) && HDLifeAlong(b, nx, nz) >
+	if (HDLifeOnRun(b, nx, nz, 0) && HDLifeAlong(b, nx, nz) >
 		HDLifeAlong(b, e.x, e.z))
 	{
 		e.x = nx;
@@ -2368,7 +2510,7 @@ inline void HDLifeBodyTail(const HDLifePool& p, int bi, char* out, size_t n)
 	const HDLifeBody& b = p.bodies[(size_t)bi];
 	int at = 0;
 
-	if (b.river)
+	if (b.ends)
 		at = snprintf(out, n, "in=%.0f,%.0f,%.0f out=%.0f,%.0f,%.0f", b.inX,
 			b.surfaceY + kHDLifeSlotTop, b.inZ, b.outX, b.surfaceY +
 			kHDLifeSlotTop, b.outZ);
@@ -2429,7 +2571,7 @@ inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 	const float h = p.height[e.kind];
 	const float draft = kHDLifeKinds[e.kind].draft;
 	// Rising out of a river's inlet or diving into its outlet: no bob.
-	const float dive = HDLifeDiveShare(b, e.x, e.z);
+	const float dive = HDLifeDiveShare(b, e.x, e.z, e.entering);
 	const float bob = (1.0f - dive) * HDLifeBob(t, e.period, e.phase, e.amp);
 	const float share = HDLifeTiltShare(t, e.period, e.phase);
 

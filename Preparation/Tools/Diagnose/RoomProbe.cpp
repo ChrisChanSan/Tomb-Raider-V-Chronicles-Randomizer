@@ -2314,7 +2314,8 @@ static void LifeBuild(const char* root, const char* stem)
 			e.kind == HD_LIFE_FISH ? 0.0f : surface - (y - 0.5f * h), e.amp,
 			g_life_pool.bodies[(size_t)e.body].rise,
 			e.kind == HD_LIFE_FISH ? 0.0f : HDLifeDiveShare(
-			g_life_pool.bodies[(size_t)e.body], e.x, e.z), y - surface,
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z, e.entering),
+			y - surface,
 			(e.kind == HD_LIFE_FISH ? e.pitch : pitch) * 57.29578f);
 	}
 
@@ -2463,9 +2464,9 @@ static void LifeDrawAll(const std::vector<std::pair<float, int> >& order,
 
 		lighting.lights = 0;
 		lighting.lightCount = 0;
-		// A river float's fade into its slots, as the engine has it.
+		// A float's fade into its slots, as the engine has it.
 		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
-			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z, e.entering));
 
 		lighting.sunScale = 0.75f * fade;
 		lighting.specStrength = 0.0f;

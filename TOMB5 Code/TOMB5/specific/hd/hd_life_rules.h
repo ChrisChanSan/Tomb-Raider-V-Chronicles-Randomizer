@@ -134,6 +134,50 @@ static const HDLifeTank kHDLifeTanks[] =
 };
 static const float kHDLifeTankLight = 255.0f;
 
+/* The FISHTANK item's states the tank rule reads, the game's item status
+ * (global\types.h, ITEM_INACTIVE to ITEM_INVISIBLE, 0 to 3), the flags its
+ * level start reads (IFL_INVISIBLE, IFL_CODEBITS) and the water
+ * InitialiseFishtank gives it (game\init.cpp). */
+static const int kHDLifeItemActive = 1;
+static const int kHDLifeItemDeactivated = 2;
+static const int kHDLifeItemInvisible = 3;
+static const int kHDLifeFlagInvisible = 0x100;
+static const int kHDLifeFlagCodebits = 0x3E00;
+static const int kHDLifeTankFull = 4096;
+
+/* Whether a tank is whole, from its FISHTANK item: not active, its status
+ * neither active nor deactivated, and its water still the full 4,096 that
+ * ControlFishtank pours out. Any other status is whole: RICH2's item 33
+ * carries IFL_INVISIBLE (flags 0x100 in the classic level and in a
+ * randomized one), so the game starts it ITEM_INVISIBLE, not ITEM_INACTIVE.
+ * A shot tank is active while it pours, keeps ITEM_ACTIVE with its water
+ * at 819 or less once KillItem took it, and comes out of a loaded game
+ * ITEM_DEACTIVATED with the 4,096 InitialiseItem left (game\savegame.cpp,
+ * a killed item). `found` 0, a level without the item, is whole. */
+inline bool HDLifeTankWhole(int found, int active, int status, int water)
+{
+	return !found || (!active && status != kHDLifeItemActive &&
+		status != kHDLifeItemDeactivated && water >= kHDLifeTankFull);
+}
+
+/* The state a level's start gives an item of these flags, as InitialiseItem
+ * sets it (game\items.cpp): IFL_INVISIBLE starts it invisible, all five
+ * code bits start it active; and a FISHTANK's full water. For RoomProbe,
+ * which reads the item out of the classic level, and the suite. */
+inline void HDLifeTankStart(int flags, int* active, int* status, int* water)
+{
+	*active = 0;
+	*status = (flags & kHDLifeFlagInvisible) ? kHDLifeItemInvisible : 0;
+
+	if ((flags & kHDLifeFlagCodebits) == kHDLifeFlagCodebits)
+	{
+		*active = 1;
+		*status = kHDLifeItemActive;
+	}
+
+	*water = kHDLifeTankFull;
+}
+
 /* The numbers of the rules. A float for three water squares and at most
  * twelve a body: twelve keeps three bodies of a level inside the
  * thirty-two the life draws at most a frame, a quarter of the frame's 128

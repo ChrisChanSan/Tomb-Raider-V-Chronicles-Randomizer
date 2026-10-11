@@ -1863,9 +1863,15 @@ struct LifeRoom
 	std::vector<int> ceiling, above;
 };
 static std::vector<LifeRoom> g_life_rooms;
-/* -lifetank 0|1: a fish tank whole (1, the default) or shot (0: its fish
- * are gone, as the engine has it once the FISHTANK item is set off). */
+/* -lifetank 0|1|game: a fish tank whole (1, the default) or shot (0: its
+ * fish are gone, as the engine has it once the FISHTANK item is set off);
+ * game: as the game's level start leaves it - the FISHTANK item read out
+ * of the classic level (-roombox), its start state as InitialiseItem sets
+ * it (HDLifeTankStart) and the engine's rule (HDLifeTankWhole). */
 static bool g_life_tank_whole = true;
+static bool g_life_tank_game = false;
+// The classic level's FISHTANK items: x, z and flags each.
+static std::vector<int> g_life_tank_items;
 static HDLifePool g_life_pool;
 static const HDLifeLevel* g_life_row = 0;
 static float g_life_box[HD_LIFE_KINDS][6];
@@ -2056,6 +2062,33 @@ static void LifeBuild(const char* root, const char* stem)
 		{
 			HDLifeAddTank(g_life_pool, kHDLifeTanks[i], LifeDraw, &state);
 			g_life_pool.bodies.back().gone = g_life_tank_whole ? 0 : 1;
+
+			/* The game's state: the FISHTANK item within two squares of the
+			 * tank's middle, as hd_life.cpp's tank_item finds it. */
+			if (g_life_tank_game)
+			{
+				const HDLifeTank& t = kHDLifeTanks[i];
+				const int mx = (t.x0 + t.x1) / 2, mz = (t.z0 + t.z1) / 2;
+				int found = 0, active = 0, status = 0, water = 0, flags = 0;
+
+				for (size_t k = 0; k + 2 < g_life_tank_items.size(); k += 3)
+					if (abs(g_life_tank_items[k] - mx) < 2048 &&
+						abs(g_life_tank_items[k + 1] - mz) < 2048)
+					{
+						found = 1;
+						flags = g_life_tank_items[k + 2];
+						HDLifeTankStart(flags, &active, &status, &water);
+						break;
+					}
+
+				const bool whole = HDLifeTankWhole(found, active, status,
+					water);
+
+				g_life_pool.bodies.back().gone = whole ? 0 : 1;
+				printf("LIFELOG level=%s tank=%d game_state found=%d "
+					"flags=0x%X active=%d status=%d water=%d whole=%d\n", stem,
+					(int)i, found, flags, active, status, water, whole ? 1 : 0);
+			}
 
 			for (int k = 0; k < 3; k++)
 				g_life_light.push_back(kHDLifeTankLight);
@@ -9079,7 +9112,10 @@ static int ProbeMain(int argc, char** argv)
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
 			if (!strcmp(argv[at], "-lifetank"))
-				g_life_tank_whole = atoi(argv[++at]) != 0;
+			{
+				g_life_tank_game = !strcmp(argv[++at], "game");
+				g_life_tank_whole = g_life_tank_game || atoi(argv[at]) != 0;
+			}
 			else if (!strcmp(argv[at], "-lifesplash"))
 			{
 				if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) == 3)
@@ -11025,6 +11061,19 @@ static int ProbeMain(int argc, char** argv)
 			{
 				g_seed_origin[0] = (float)level.rooms()[(size_t)room].originX;
 				g_seed_origin[1] = (float)level.rooms()[(size_t)room].originZ;
+			}
+
+			// -lifetank game: the level's FISHTANK items (slot 413).
+			for (int t = 0; g_life_tank_game && t < level.itemCount(); t++)
+			{
+				Tr5Item it;
+
+				if (level.getItem(t, it) && it.objectNumber == 413)
+				{
+					g_life_tank_items.push_back(it.x);
+					g_life_tank_items.push_back(it.z);
+					g_life_tank_items.push_back((int)(unsigned short)it.flags);
+				}
 			}
 
 			for (int r = 0; r < nr; r++)

@@ -18189,6 +18189,28 @@ static void life_tank()
 	ok(p.schools[0].cx == before.schools[0].cx &&
 		p.schools[0].darts == before.schools[0].darts,
 		"life tank: a shot tank's school rests", 0, 0);
+
+	// RICH2's item 33 carries IFL_INVISIBLE (0x100).
+	int active = 0, status = 0, water = 0;
+
+	HDLifeTankStart(0x100, &active, &status, &water);
+	ok(status == kHDLifeItemInvisible && !active && water == 4096 &&
+		HDLifeTankWhole(1, active, status, water),
+		"life tank: an invisible FISHTANK at the level's start is whole",
+		status, kHDLifeItemInvisible);
+
+	HDLifeTankStart(0, &active, &status, &water);
+	ok(HDLifeTankWhole(1, active, status, water) &&
+		HDLifeTankWhole(0, 1, kHDLifeItemActive, 0),
+		"life tank: an inactive FISHTANK is whole, and no item at all", 0, 0);
+
+	HDLifeTankStart(0x3E00, &active, &status, &water);
+	ok(active && !HDLifeTankWhole(1, active, status, water) &&
+		!HDLifeTankWhole(1, 0, kHDLifeItemActive, 800) &&
+		!HDLifeTankWhole(1, 0, kHDLifeItemDeactivated, 4096) &&
+		!HDLifeTankWhole(1, 0, kHDLifeItemInvisible, 4000),
+		"life tank: pouring, poured, shot in a loaded game or drained is "
+		"gone", 0, 0);
 }
 
 static void life_flee()

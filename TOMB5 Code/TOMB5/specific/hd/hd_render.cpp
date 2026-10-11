@@ -9629,12 +9629,11 @@ namespace
 	 *
 	 * A channel's highlight is 0.4. Its water hides its floor within a
 	 * square and a half, so its waves stand at their whole height over a
-	 * dark body, and every slope that meets the highlight's light lights:
-	 * at 0.8, in ANDREA2's canal seen from above (RoomProbe, three views),
-	 * the highlight lifted the median luma of the water that shows no
-	 * floor from 33 to 50 and its brightest 2 % from 66 to 103, a yellow
-	 * sheen over the canal; at 0.4 to 45 and 69, the water a floor shows
-	 * through moving by 2. A free choice, set by eye on those pictures.
+	 * dark body, and every slope that meets the highlight's light lights.
+	 * In ANDREA2's canal seen from above (RoomProbe) the water that shows
+	 * no floor has a median luma of 33 and its brightest 2 % 66 without a
+	 * highlight, 45 and 69 with 0.4, 50 and 103 with 0.8 - a yellow sheen
+	 * over the canal. A free choice, set by eye on those pictures.
 	 *
 	 * The rows five to eight fill the spectrum between and below the first
 	 * four: three wavelengths at the geometric mean of two neighbours and
@@ -11834,11 +11833,11 @@ namespace
 	bool g_under_probe_set = false;
 	float g_under_now[12] = {};
 
-	/* Along a swim. A water room no sheet lies over takes the level's
-	 * largest body, so a flooded passage between two pools of another body
-	 * changed the water's light twice: in ANDREA1 rooms 32, 34 and 26 the
-	 * scattered light's luma ran 61, 106, 106 (x 255), 48, 49 and 50 ran
-	 * 61, 106, 75, each in one frame (RoomProbe -underwater per room). Such
+	/* Along a swim. A water room no sheet lies over has no body of its
+	 * own; the level's largest stands in, and its light can be far from
+	 * the pools' on either side: in ANDREA1 the scattered light's luma is
+	 * 61 (x 255) in room 32, 106 in room 26 and 106 in room 34 by the
+	 * largest body, 61 by room 32's (RoomProbe -underwater per room). Such
 	 * a room keeps the body of the last room the eye was in that has one
 	 * of its own (g_under_body, -1 for none yet: the largest), and the
 	 * scattered light and the extinction follow the body's over

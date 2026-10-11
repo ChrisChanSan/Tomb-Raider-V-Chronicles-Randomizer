@@ -1813,8 +1813,8 @@ static const long kReachBudget = 128;
  * room can stand far from them: ANDREA2's brick tower of room 222 stands
  * over room 232, beside the alley at the church gate, while 222's one way
  * in is a portal of room 224 at the screen's edge - two pixels of it on
- * the screen, none a few degrees further round, and the tower came and
- * went with it as the camera swung (seven times in eight seconds). Run
+ * the screen, none a few degrees further round, so that without this the
+ * tower comes and goes with that portal as the camera swings. Run
  * after the walk and before the trim, which may take them out again like
  * any room the reach brought; their portals are not followed. */
 static void CarryArt()

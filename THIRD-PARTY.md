@@ -1379,16 +1379,29 @@ water surface", carries the tables.
     own code (`UpdateSplashes`, `TriggerFishtankSpray`, `UpdateSparks`).
 144. **The tank's film** - the floor a breaking fish tank floods gets a
     basin body of the sheets of its own over the floor lasers' box,
-    8 units over the floor and 8 deep, drawn with the sheets' shaders and
+    at rest 8 units over the floor, drawn with the sheets' shaders and
     cross-faded with the blend factor by a strength out of the tank's and
     the lasers' state: (4096 - `item_flags[1]`) / 1024 while the tank
-    runs, the lasers' count over 64 after it. OWN: the film, its depth
-    and the rise's 1024 are free choices, set by eye on the round's
-    RoomProbe pictures; the timings are the engine's own (the tank's 105
-    ticks of a 64th, the lasers' 64-tick countdown, counted at
+    runs, the lasers' count over 64 after it. Its depth byte, in the
+    sheets' 32-unit steps, is 0 (8 over 32, rounded down): only the
+    variant without the depth texture reads it. OWN: the film, its
+    8 units and the rise's 1024 are free choices, set by eye on the
+    round's RoomProbe pictures; the timings are the engine's own (the
+    tank's 105 ticks of a 64th, the lasers' 64-tick countdown, counted at
     `ControlFishtank` and `ControlFloorLasers`). DATA: RICH2's two tanks
     and the floor lasers of room 23 (4 x 4 squares), read from the
     classic level by RoomProbe.
+145. **The film's height, rim and clip** - the film's surface stands
+    `kFilmRise`, 16 units, times its strength over its rest, through the
+    sheets' crest lift in `WaterVS` (tapering in over the basin's 512
+    units from the edge); its edge takes a channel's bank foam (strength
+    0.7, band 300 units, `kWaterClass`) times its strength; its clip is 0
+    instead of the bodies' 8. OWN: the height's 16 units are a free
+    choice, set by eye on the round's RoomProbe pictures; the rim reuses
+    the channel row's own numbers (entry 52's foam rule); the clip 0 is a
+    count on our data: with the clip 8 the film in RICH2 room 23 lost a
+    band in front of the tank's plinth (RoomProbe `-tank 33 1.5`, 960 x
+    540, the film at rest: 73,132 pixels against 84,559 with 0).
 
 ## Credited, but not contained here
 

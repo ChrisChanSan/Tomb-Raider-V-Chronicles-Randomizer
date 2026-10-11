@@ -1099,7 +1099,10 @@ bool HDRenderReady();
 // into ranges, and loads the pages through hd_pagecache. numRooms is the
 // classic level's room count: groups at or above it are the sky dome and are
 // kept out of the room table (they can still be drawn by number, which is
-// what the diagnostic tool does).
+// what the diagnostic tool does). threads is the pool's count for the page
+// decode, the vertex buffer, the index fill per group, the mirror search and
+// the hash (HDPoolRun); 1 runs all of it on the calling thread, and the
+// buffers and tables come out the same for every count.
 bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	bool managedPages, int threads, HDRenderStats* stats, const char** why);
 

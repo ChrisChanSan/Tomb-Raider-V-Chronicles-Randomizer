@@ -2993,7 +2993,7 @@ namespace
 			(unsigned long long)(cz & 0x1FFFFF);
 	}
 
-	void FindMirrors(const trf::remaster::Trg& trg)
+	void FindMirrors(const trf::remaster::Trg& trg, int threads)
 	{
 		g_mirrors.clear();
 
@@ -3001,14 +3001,23 @@ namespace
 			return;
 
 		const int rooms = g_box_count < g_room_groups ? g_box_count : g_room_groups;
+		const int asked = rooms < (int)trg.groups.size()
+			? rooms : (int)trg.groups.size();
 
-		for (int g = 0; g < rooms && g < (int)trg.groups.size(); g++)
+		/* One room at a time on the pool (HDPoolRun): a room reads the .TRG,
+		 * the boxes and the built groups' bounds, which nothing writes now,
+		 * and keeps its mirrors in its own row; the rows are put together in
+		 * room order after the join, the order of the one loop this was. */
+		std::vector<std::vector<HDMirror> > found(
+			(size_t)(asked > 0 ? asked : 0));
+
+		HDPoolRun(asked, threads, [&](int g)
 		{
 			const HDRoomBox& box = g_boxes[g];
 			const float origin[3] = { box.originX, 0.0f, box.originZ };
 
 			if (box.maxs[0] <= box.mins[0] || box.maxs[2] <= box.mins[2])
-				continue;
+				return;
 
 			// The four walls: west, east, south, north.
 			HDMirror wall[4];
@@ -3128,7 +3137,10 @@ namespace
 				want_min[a] = 2.0f * m.plane - m.maxs[a] - 32.0f;
 				want_max[a] = 2.0f * m.plane - m.mins[a] + 32.0f;
 
-				std::unordered_set<unsigned long long> cells;
+				/* The cells the other rooms' triangles stand in, sorted and
+				 * made unique once and asked by binary search - the answers
+				 * of a hashed set, without a hash insert per triangle. */
+				std::vector<unsigned long long> cells;
 
 				for (int o = 0; o < rooms && o < (int)trg.groups.size() &&
 					o < (int)g_groups.size(); o++)
@@ -3176,11 +3188,15 @@ namespace
 									c[2] += (float)trg.vertices[index].z + oo[2];
 								}
 
-								cells.insert(MirrorCell(c[0] / 3.0f, c[1] / 3.0f,
-									c[2] / 3.0f));
+								cells.push_back(MirrorCell(c[0] / 3.0f,
+									c[1] / 3.0f, c[2] / 3.0f));
 							}
 						}
 				}
+
+				std::sort(cells.begin(), cells.end());
+				cells.erase(std::unique(cells.begin(), cells.end()),
+					cells.end());
 
 				// And the copy's own triangles, reflected, against them.
 				for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
@@ -3223,10 +3239,12 @@ namespace
 							for (int dx = -1; dx <= 1 && !found; dx++)
 								for (int dy = -1; dy <= 1 && !found; dy++)
 									for (int dz = -1; dz <= 1 && !found; dz++)
-										found = cells.count(MirrorCell(
+										found = std::binary_search(
+											cells.begin(), cells.end(),
+											MirrorCell(
 											c[0] + 8.0f * (float)dx,
 											c[1] + 8.0f * (float)dy,
-											c[2] + 8.0f * (float)dz)) != 0;
+											c[2] + 8.0f * (float)dz));
 
 							if (found)
 								m.mirrored++;
@@ -3234,9 +3252,12 @@ namespace
 					}
 
 				if (m.mirrored * 100 >= m.behind * HD_MIRROR_MATCH)
-					g_mirrors.push_back(m);
+					found[(size_t)g].push_back(m);
 			}
-		}
+		});
+
+		for (const std::vector<HDMirror>& row : found)
+			g_mirrors.insert(g_mirrors.end(), row.begin(), row.end());
 	}
 
 	/* Why a draw call keeps the plain variant whatever its page names, or
@@ -4661,26 +4682,37 @@ static unsigned long long HashGroup(const HDGroup& g,
  * the index fill writes and its counts. */
 static unsigned long long BuildHash(const trf::remaster::Trg& trg,
 	const std::vector<unsigned char>& bits,
-	const std::vector<unsigned int>& sorted)
+	const std::vector<unsigned int>& sorted, int threads)
 {
 	HDFnv64 level;
 	const size_t block = 65536;
-
 	const size_t count = (size_t)g_vertex_count;
+	const size_t blocks = (count + block - 1) / block;
 
-	for (size_t first = 0; first < count; first += block)
+	/* The blocks and the groups are hashed on the pool, each into its own
+	 * slot, and fed into the level's hash in their order afterwards. */
+	std::vector<unsigned long long> part(blocks + g_groups.size(), 0);
+
+	HDPoolRun((int)part.size(), threads, [&](int at)
 	{
+		if ((size_t)at >= blocks)
+		{
+			part[(size_t)at] = HashGroup(g_groups[(size_t)at - blocks], sorted);
+			return;
+		}
+
 		HDFnv64 f;
+		const size_t first = (size_t)at * block;
 
 		for (size_t i = first; i < first + block && i < count; i++)
 			f.put(ComposeVertex(trg.vertices[i],
 				i < bits.size() ? bits[i] : (unsigned char)0));
 
-		level.put(f.h);
-	}
+		part[(size_t)at] = f.h;
+	});
 
-	for (const HDGroup& g : g_groups)
-		level.put(HashGroup(g, sorted));
+	for (unsigned long long h : part)
+		level.put(h);
 
 	level.put((unsigned int)g_destruct.size());
 
@@ -6818,8 +6850,12 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			if (tris.empty())
 				continue;
 
-			std::stable_sort(tris.begin(), tris.end(),
-				[](const HDTri& a, const HDTri& b)
+			/* The sort key of a draw call. Sorted stably over the triangles'
+			 * numbers and not over the records themselves - a record is 33
+			 * words and std::stable_sort moves what it sorts - then laid out
+			 * once in that order: the same order a stable sort of the records
+			 * gives. */
+			const auto tri_less = [](const HDTri& a, const HDTri& b)
 				{
 					/* The unlit band of the sky before the cloud layers
 					 * that share its group - the sky is drawn back to front
@@ -6895,7 +6931,29 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * anything else. After everything, so a group without
 					 * one - every triangle answering 0 - sorts as before. */
 					return a.stand < b.stand;
-				});
+				};
+
+			{
+				std::vector<unsigned int> order(tris.size());
+
+				for (size_t i = 0; i < order.size(); i++)
+					order[i] = (unsigned int)i;
+
+				std::stable_sort(order.begin(), order.end(),
+					[&](unsigned int a, unsigned int b)
+					{
+						return tri_less(tris[a], tris[b]);
+					});
+
+				std::vector<HDTri> laid;
+
+				laid.reserve(tris.size());
+
+				for (size_t i = 0; i < order.size(); i++)
+					laid.push_back(tris[order[i]]);
+
+				tris.swap(laid);
+			}
 
 			group.triangles[pass] = (unsigned int)tris.size();
 
@@ -7649,7 +7707,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	// The mirrors in the rooms' walls, while the .TRG and the boxes are
 	// still in hand - see FindMirrors.
-	FindMirrors(trg);
+	FindMirrors(trg, threads);
 
 	// And the sheen of every draw call - see ResolveSheen.
 	ResolveSheen();
@@ -7806,7 +7864,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		{
 			const double hash_started = now_ms();
 
-			stats->hash = BuildHash(trg, vertex_bits, sorted);
+			stats->hash = BuildHash(trg, vertex_bits, sorted, threads);
 			stats->hashMs = now_ms() - hash_started;
 		}
 

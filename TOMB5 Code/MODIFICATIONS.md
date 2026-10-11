@@ -8076,18 +8076,19 @@ beyond it as well, because receivers never cast; the height term stops a storey 
 nothing stops a room beside. A face turned away from the light is not darkened even where
 the room's baked light lights it. If the frame list is full and her body cannot be pushed,
 the frame has neither shadow nor blob (the blob gave way, the map stays empty). The change
-between the blob and the projected shadow is not blended: at the border between an HD room
-and a classic one, on a step of the row and when the map is lost, one gives way to the
-other within a single frame, the shadow at its full strength. The shadow multiplies the
-finished colour of the room, so it darkens the distance fog and the fog bulbs that stand
-in front of the floor as well. With a pull above 0, whatever changes her two light lists
-while she walks, a light that enters or leaves them or a brightness the engine fades,
-counts as a change of the lights and is blended, so `lag=` above 0 while she only moves
-says that her lists changed under her; at pull 0 `lag=` stays 0. What cannot be proven
-without playing: how the fixed shadow looks in motion and in the levels' rooms, its slant
-and darkness against taste, a pull between 0 and 1, cutscenes, first person, and whether
-the frame's world-to-view (`aW2VMx`) is the camera her main draw's matrices stand on at
-sixty frames a second as well.
+from the blob to the projected shadow is a cross-fade of a quarter second since the fourth
+part below; back to the blob - at the border between an HD room and a classic one, on a
+step of the row and when the map is lost - one gives way to the other within a single
+frame. The shadow multiplies the finished colour of the room: the distance fog takes light
+towards black, so the shadow fades with the floor, and since the fourth part the fog
+bulbs' haze in front of a floor is given back. With a pull above 0, whatever changes her
+two light lists while she walks, a light that enters or leaves them or a brightness the
+engine fades, counts as a change of the lights and is blended, so `lag=` above 0 while she
+only moves says that her lists changed under her; at pull 0 `lag=` stays 0. What cannot be
+proven without playing: how the fixed shadow looks in motion and in the levels' rooms, its
+slant and darkness against taste, a pull between 0 and 1, cutscenes, first person, and
+whether the frame's world-to-view (`aW2VMx`) is the camera her main draw's matrices stand
+on at sixty frames a second as well.
 
 **Commits.** 'Round 188 (#188): the projected shadow's arithmetic', 'Round 188 (#188): the
 cast shaders and the cast draw of a model', 'Round 188 (#188): the shadow map's target and
@@ -8302,25 +8303,25 @@ shadow lies in the view before it does. The play test should watch first for cre
 entering the view and for a creature walking four sectors away from her. A creature that
 stands in a room the HD level draws classic loses its blob and takes the projected shadow
 only where HD groups receive. A floor less than OTHERS_END behind a creature's feet along
-the light takes the lower part of its shadow, faintly - at the fixed slant a floor 2048
-units below the feet takes the feet's part at 0.19 of the strength, one 1792 below at
-0.48, and only a floor 2217 or more below takes nothing; no storey beneath was pictured,
-because the probe draws one room group. Receivers never cast, so a creature's shadow, like
-hers, passes through a floor or a wall. In a frame with the second map the receive draws
-every group within the second reach again, up to about four sectors round her and further
-along the light; its cost was measured on one room group only. The HD models take neither
-her shadow nor theirs here; the next entry draws them again for both maps. The mirror's
-image has no blobs - the HD level's mirror zeroes `shadow_size` around its draws - and
-takes the projected shadows from the next entry on. If the frame list is full, an item is
-drawn classic and keeps its blob. What cannot be proven without playing: how the
-creatures' shadows look in motion, in a fight, on a dying or exploding creature and under
-mesh swaps (the cast draws the swapped model and the item's `mesh_bits`), and which
-creatures of which levels show it. The object slots with a `shadow_size`
-(`game/setup.cpp`) are DARTS (drawn by `S_DrawDarts`, which prints no blob), LARA (her
-own), SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA, SCIENTIST, CRANE_GUY, BLUE_GUARD2,
-ATTACK_SUB, LION, DOG, HUSKIE, CROW, REAPER, MAFIA2, PIERRE, LARSON, HITMAN, CYBORG,
-SNIPER, CHEF, TWOGUN, HYDRA, IMP, WILLOWISP, MAZE_MONSTER, SKELETON, GLADIATOR, ROMAN_GOD
-and ROMAN_GOD2 at 128, SAILOR at 85 and GREEN_TEETH at 256; only those drawn by
+the light takes the lower part of its shadow, faintly - at this part's numbers (1536 and
+2560) a floor 2048 units below the feet took the feet's part at 0.19 of the strength, one
+1792 below at 0.48, and only a floor 2217 or more below nothing; the fourth part cuts the
+terms to 1024 and 1280, and a floor 1108 or more below takes nothing. Receivers never
+cast, so a creature's shadow, like hers, passes through a floor or a wall. In a frame with
+the second map the receive draws every group within the second reach again, up to about
+four sectors round her and further along the light; its cost was measured on one room
+group only. The HD models take neither her shadow nor theirs here; the next entry draws
+them again for both maps. The mirror's image has no blobs - the HD level's mirror zeroes
+`shadow_size` around its draws - and takes the projected shadows from the next entry on.
+If the frame list is full, an item is drawn classic and keeps its blob. What cannot be
+proven without playing: how the creatures' shadows look in motion, in a fight, on a dying
+or exploding creature and under mesh swaps (the cast draws the swapped model and the
+item's `mesh_bits`), and which creatures of which levels show it. The object slots with a
+`shadow_size` (`game/setup.cpp`) are DARTS (drawn by `S_DrawDarts`, which prints no blob),
+LARA (her own), SAS, BLUE_GUARD, SWAT, SWAT_PLUS, MAFIA, SCIENTIST, CRANE_GUY,
+BLUE_GUARD2, ATTACK_SUB, LION, DOG, HUSKIE, CROW, REAPER, MAFIA2, PIERRE, LARSON, HITMAN,
+CYBORG, SNIPER, CHEF, TWOGUN, HYDRA, IMP, WILLOWISP, MAZE_MONSTER, SKELETON, GLADIATOR,
+ROMAN_GOD and ROMAN_GOD2 at 128, SAILOR at 85 and GREEN_TEETH at 256; only those drawn by
 `DrawAnimatingItem` ever had a blob. Of the Tomb Raider III imports only the vulture's
 slot, CROW 43, carries one.
 
@@ -8530,6 +8531,206 @@ walking into view from the side their shadow points to.
 clipped creature casts unseen', 'Round 188 (#188): the suites', 'Round 188 (#188): the
 record follows', 'Round 188 (#188): the second box's depth comment names the part that
 casts', 'Round 188 (#188): the record follows'.
+
+### The projected shadow: its arrival, a block's depth and the fog bulbs' haze
+2026-10-11
+
+**What.** The rest of round two of the projected shadow. Where the shadow starts to run -
+the Shadow mode row stepped to Projected, HD switched on with it, Lara walking from a room
+drawn classic into an HD one, the map made again after a lost device - it comes in over a
+quarter second of game time instead of in one frame, and her blob and every creature's
+blob that gives way to it go out over the same quarter second. The depth terms are cut so
+that a floor a block or more below her soles, or about a block below a creature's feet,
+takes nothing of the shadow - a storey under it, and the floor of the room beside behind
+a wall - while the floor a creature stands on, a step and half a block below it take its
+whole outline: the creatures' map keeps each creature's feet beside its outline.
+The receive gives the fog bulbs' haze back: a shadow no longer stands dark inside a
+glowing bulb. The shadow's log line times the models' pass and counts the arrival.
+ModelProbe surveys where the shadow lands behind a face, draws the models' glows after
+their receive and leaves its Resets out with rooms.
+
+**Why.** Round two's Left: the switch between blob and projection inside one picture, the
+shadow through walls and floors, the fog, and the probe's two lows.
+
+**How.** The arrival: `HDShadowPresence` (`specific/hd/hd_shadow.h:773`) is 3f^2 - 2f^3 of
+f = t / `HD_SHADOW_FADE_IN` 0.25, exactly 1 from there on; `HDShadowArrive` (`:785`) sets
+t back to 0 in a frame the shadow does not run in and adds the frame's game time in one it
+runs in; `HDShadowBlobAlpha` (`:803`) scales a blob vertex's alpha byte, and a weight of 1
+gives the colour itself. `HDShadowFrameDecide` steps it on a clock of its own
+(`specific/hd/hd_laradraw.cpp:1136`), so her blob, drawn before her step, and the strength
+the step draws (`:1014`, the following's strength times the presence) read the same value;
+`HDShadowFrameBlob` (`:1146`) draws her blob while the presence is below 1, the three
+`DrawLara` variants ask it (`specific/drawlara.cpp:137`, `:396`, `:664`), and
+`HDShadowFrameBlobWeight` (`:1151`) gives her blob's weight. A creature:
+`HDObjectBlobGivesWay` (`specific/hd/hd_object.cpp:4410`) lets it cast as before and
+answers false while the presence is below 1, remembering the item and 1 minus the presence
+for `HDObjectBlobWeight` (`:4446`), which `S_PrintCircleShadow` reads for the alpha of
+every vertex (`specific/specificfx.cpp:6691`). The way back is not faded: a frame the gate
+refuses draws no map. The cut: `HD_SHADOW_FULL` 576 and `HD_SHADOW_END` 1088 below her
+lowest node, `HD_SHADOW_OTHERS_FULL` 1024 and `HD_SHADOW_OTHERS_END` 1280 behind a
+creature's place (`hd_shadow.h:218` to `:229`); her reach shrinks with hers, and the
+second reach (`HDShadowReachOthers`, `:1570`) runs OTHERS_END past the farthest place a
+caster may have, OTHERS_MARGIN of the depth beyond the far side. A creature's place is
+its position, the point at its feet: `HDObjectEnd` keeps its depth in the second box
+(`hd_object.cpp:3275`), `HDObjectCastOthersFrame` hands it to the cast (`:4162`) through
+`HDRenderShadowPlace` (`hd_render.cpp:7766`, pixel c18, which the cast bracket saves and
+puts back, `:7732`), `CastPS` writes it into the green channel
+(`hd_shader/hd_shadow.hlsl:91`) of the second map, a G32R32F target now
+(`hd_render.cpp:7668`; hers stays R32F), and `OthersShade` measures each tap's distance
+from it (`hd_shader/hd_shadow_receive.hlsl:425`), as `HDShadowLookupBehind` does with
+the places beside the depths (`hd_shadow.h:1328`); the second part's measure from each
+tap's own caster is replaced. The fog: every receive variant ends in `ReceiveOut`
+(`hd_shader/hd_shadow_receive.hlsl:180`) - the bulbs' haze, `BulbIntensity`
+copied from the room shader, summed and saturated as RoomPS sums it, times gPass.w, times
+1 - k in colour, k in alpha - and the two receive brackets blend ONE / SRCALPHA
+(`specific/hd/hd_render.cpp`, `HDRenderShadowReceiveBegin` and
+`HDRenderShadowModelsBegin`), so a pixel is surface * k + haze; without a bulb the colour
+is 0 and the picture is the picture times k. The log: `ShadowModelsPass`
+(`specific/hd/hd_level.cpp:6535`) times itself, and `HDLOG shadow second` gains `mms=` and
+`arrive=` at its end. ModelProbe (`Preparation/Tools/Diagnose/ModelProbe.cpp`):
+`-shadowsurvey` with `-surveyplace`, `-surveyrooms`, `-surveyterms`, `-surveyslots` and
+`-surveyout`, her term measured from her lowest node and a creature's from its place;
+the creatures' cast hands each place to the map, and `ShadowMapRead` reads the G32R32F
+map; `-shadowpresence`, `-shadowfog`, `-shadowwith`; a receive picture draws the
+models' additive passes after the room's glass and glows, where `HDFrameDrawGlow` draws
+them (`hd_level.cpp:7321`, after `ShadowModelsPass` at `:7137`); `-shadowdevice` leaves
+its two Resets out when rooms hold `D3DPOOL_DEFAULT` buffers (the rooms' vertex and index
+buffers, which the game drops with the whole HD path at a device loss,
+`HDLevelDeviceLost`).
+
+**Measured.** Through walls and floors (ModelProbe `-shadowsurvey` on the thirteen levels'
+classic originals, 23,063 floor sectors as the place, Lara 768 and a creature 760 units
+tall, a ray along the fixed light from every 32 units of three columns of the body; the
+first face it meets takes the shadow, every face behind it that the terms still weigh
+takes it through that face; her term measured from her lowest node, 58.6 units above her
+soles, a creature's from its place, as the engine measures them): at the old terms her
+shadow went through a wall at 1,107 places (1,090 with a weight of 0.1 or more) and
+through a floor at 4,160 (4,128), a creature's at 1,244 and 4,481; a third of the rays
+through a wall landed in a room not joined to hers by a door. Below her feet such faces
+and the faces that should take the shadow were as many between half a block and a block
+(93,268 rays to 96,927), and more than a block below the wrong ones outnumbered the right
+1.7 to 1 (119,310 to 70,981). At the places the #181 record names and the seed rooms of
+the fifteen water cameras (494 sectors in 30 rooms) her shadow went through a wall at 42
+places and through a floor at 104; after the cut at 15 (8 with a weight of 0.1 or more)
+and 66; a creature's at 45 and 104, after it 17 (15) and 68. Over all levels the weight
+laid through a wall fell by 88 per cent and through a floor by 52 (a creature's by 80 and
+40), and the faces below her feet that should take it lost 27 per cent of theirs, all
+more than half a block below her (a creature's first faces lost 5). The worst places at
+the old terms were ANDREA1 room 127 (2560, 512), (2560, 3584) and (1536, 512) through a
+wall, faces of her own room, and room 10 (512, 3584) and (1536, 3584) through a floor onto
+room 214; after the cut room 65 (2560, 3584) through a wall of her own room and room 10
+onto room 214 still, the first face there less than half a block below her. What a floor
+1024, 1536, 2048 and 2560 below the feet takes: of her part 0.94, 0.44, 0, 0 before and
+0.011, 0, 0, 0 after; of a creature's feet 1, 0.77, 0.19, 0 before and 0.38, 0, 0, 0
+after. A creature's part h above its feet darkens a floor d below them 1.155 d + 0.289 h
+behind its place at the fixed slant: every blob carrier keeps its whole outline on its own
+floor and a step below, every one up to 1,499 units tall half a block below, the Roman
+god's top there 0.95 where the old terms gave 0.18. The blob carriers stand 691 to 809
+units tall in their rest pose, the sniper 907, the skeleton 1199, the Hydra 1249 and the
+Roman god 1546 (`-surveyslots`). The other numbers weighed: from the place, 1152 / 1408
+and 1280 / 1536 cut a creature's wall weight by 54 and 22 per cent; per tap with
+OTHERS_FULL 1536, OTHERS_END 1792, 2048 or 2304 cut it by 46, 25 and 11 per cent and the
+floor's by 17, 9 and 5. The fog (ModelProbe, ANDREA1 room 0, the 19,664 pixels her shadow
+darkens): the distance fog left the shadow's share at 0.578 of the floor's brightness at
+every depth and took it to nothing where the floor turned black; in a fog bulb in front of
+the shadow the floor kept 0.575 before and keeps 0.934. The arrival (`-shadowpresence` at
+1/60 s steps, her and a creature): the darkening follows the presence within the 8-bit
+rounding, and at 0.25 seconds the picture is the picture without the switch, bit for bit.
+Times at 2560 x 1440 (`-shadowtime 300`, event queries, three runs, the card shared with
+other builds): one group, her and two creatures, the three passes 0.154 / 0.146 / 0.120 ms
+at aed63ba and 0.118 / 0.137 / 0.124 ms now, the models' pass 0.116 / 0.092 / 0.100 and
+0.120 / 0.104 / 0.110 ms; eight groups (`-shadowwith`) and two creatures 0.212 / 0.175 /
+0.212 ms with 75 receive draw calls. The second target made in 0.09 to 0.33 ms
+(`-shadowdevice`). Slots: the one-map receive 125 to 330, the two-map 260 to 480, the
+mirror's 262 to 482, the models' 269 to 488; the cast pixel shader 5 to 6.
+
+**Checked.** The engine builds (`be.bat`, the stamps and the include checks), and with it
+ModelProbe, RoomProbe, TrgProbe, MapProbe, MenuTest, InterpTest and LipsTest. ModernTest
+14,734 (14,721, 12 in `shadow_arrival` and `shadow_cut` and the place's lookup in
+`shadow_others_lookup`), MenuTest 42,627, InterpTest 729, LipsTest 270 and 243,
+none failed; a lookup that ignores the places and a second reach without the margin each
+fail a check. The classic path: RoomProbe -classicroom and -classiconly on ANDREA2 231,
+JOBY2 66 and ANDY3 34 the same bytes as at aed63ba. The earlier rounds' pictures: the
+nineteen of k/p1b, k/p2 and j/p1 rendered with the new tools are those of aed63ba's
+tools, bit for bit, the creature's shadow in them included; sixteen of them are the
+pictures saved by their rounds, three (RICH2 134 and two pictures without a room) differed
+from those already before this part. The Roman god (slot 61, its first frame) on its own
+floor in ANDREA2 room 231 beside her: the picture is aed63ba's, bit for bit, where the
+part's first cut took 889 of the 54,272 summed darkening of its shadow. On this machine
+the second target is G32R32F 2048 x 2048 with D24X8, made, released, the device Reset and
+made again, the same map bit for bit, the device's reference count back where it was;
+the device's state after the models' pass is the state before it (2,197 values). Of the
+shaders the cast pixel shader and the three two-map receive variants changed; the one-map
+receive and the cast vertex shader in their stamps only.
+
+**Unchanged.** The classic path, the stored blob modes, the light and its following, the
+boxes, the gate's rule, the models' classes, the mirror and her map. A frame without a
+transition, without a bulb, without a floor more than half a block below her soles and
+without a receiver more than OTHERS_FULL behind a creature's place or more than the old
+1536 behind the part that shadows it draws what it drew; the nineteen pictures of the
+earlier rounds are among them.
+
+**Decisions.** The way back from the projected shadow to the blob is not faded, because
+the frame that cannot draw the shadow has no map. The cut is the table's four depth
+numbers, not a rule by room: after it the room beside behind a wall took the shadow at 15
+of the 494 sector places, and a rule asking each range for a door to her room could have
+cured at most 116 of those 243 rays and never a wall of her own room, where the worst
+three stand. A creature's term measures from its feet, which the second map keeps beside
+its outline: measured from each texel's own part, a cut of a block took a tall creature's
+top off its own floor and a man's head off a floor a step below, and keeping the old
+OTHERS_FULL of 1536 with a shorter OTHERS_END left a floor half again a block below in the
+shadow and cut the creatures' wall weight by 46 per cent where the place cuts it by 80;
+the place costs 16 MiB more of map and one register. Her cut counts from her soles: half a
+block and a block each with her ankle's 58.6 units rounded up to 64. A face turned away
+from the light takes no shadow - the second light for such walls is declined (2026-10-04),
+and the shadow through a wall is not taken for the hanging picture. No self-shadow on Lara
+(declined). The log's times stay processor times, as `ms=` and `oms=` are; the cards'
+times are the probe's.
+
+**Left.** Nobody played it: how the arrival looks, where the cut takes a shadow off a
+ledge's foot, and a bulb's haze over a shadow, in the game. Faces turned away from the
+fixed light take no shadow even where the room's baked light lights them (ANDREA1 room
+159's risers): the second wall light is declined. Classic rooms keep the blob and the
+classic statics of an HD room do not receive: by design, HD only. The receivers still
+never cast: a shadow reaches through a step or a low ledge onto the floor in front of it
+and through a wall onto a floor less than a block below the feet. A creature's part held
+far out towards the light's bearing measures up to half its reach further than the place
+(an arm 400 units out, 200), and a part below its place (the Hydra's 212) nearer. A
+creature whose HD draw falls back to classic for one frame (a full frame list) switches
+without a fade. The probe draws no classic blob, so the blob's half of the cross-fade is
+held by ModernTest's arithmetic and a code walk: which weight the engine hands a blob
+(`HDObjectBlobWeight`, `HDShadowFrameBlobWeight`) no suite reaches, and the classic
+blob's byte identity at the gate's refusal (`g_blob_fading` stays 0, the weight 1,
+`HDShadowBlobAlpha` gives the colour itself) is not backed by a picture. No picture of a
+glowing model was made for the new order, and the pictures of a creature at a step
+(ANDREA1 room 2, ANDREA2 room 60) did not frame its shadow over the step; the step is held
+by ModernTest and the survey. With the eye under water and a fog bulb in sight the haze
+the receive gives back is the bulbs' sum, not passed through the water's scattering as
+the surface's is (`ReceiveOut`'s comment). Besides the files of the shadow this part
+touches `specific/drawlara.cpp`, `specific/specificfx.cpp` and `hd_level.cpp` / `.h`
+(the passes and the log live there), which the room art's round edits too.
+
+**What the review found.** A creature's cut measured from each texel's own part took a
+tall creature's top off its own floor and a man's head off a floor a step below: the
+second map keeps each caster's feet, and the term measures from them. The survey measured
+her term from her soles where the engine measures from her lowest node: the survey now
+measures as the engine does, and FULL and END move up by her ankle's height, to 576
+and 1088. The part had no date line and its Unchanged sentence was wrong: both written.
+The haze under water: stated in `ReceiveOut`'s comment. The survey's numbers without a
+reason: given. The arrival's blob check summed 1 - p and p: it now sums a blob's alpha at
+1 - presence with the presence. The files beyond the shadow's own and the classic blob's
+picture: under Left.
+
+**Commits.** 'Round 188 (#188): the receive gives the fog bulbs' haze back', 'Round 188
+(#188): the shadow comes in over a quarter second, and stops a block down', 'Round 188
+(#188): the shadow's log line times the models' pass and counts the arrival', 'Round 188
+(#188): the probe surveys the shadow behind the first face, and draws glows last', 'Round
+188 (#188): the suites', 'Round 188 (#188): the record follows', 'Round 188 (#188): the
+second map keeps each caster's place, and the receive measures from it', 'Round 188
+(#188): a creature's shadow is cut from its feet, hers from her soles', 'Round 188 (#188):
+the survey measures as the engine does, and the probe casts each place', 'Round 188
+(#188): the suites', 'Round 188 (#188): the cut's comment counts the rays the survey
+measures', 'Round 188 (#188): the record follows'.
 
 ### The Mods folder: models, texture pages and sounds from a mod
 2026-09-13 - 2026-09-14
@@ -16258,7 +16459,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #184 | The pad's scheme repair never displaces the Modifier |
 | #186 | A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items; The reflection stays behind the glass |
 | #187 | A seam for the poison sway; A tick is never a tween frame |
-| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light; The projected shadow: the creatures cast as well, into a second map; The projected shadow on the HD models, in a mirror and from a creature out of view |
+| #188 | The projected shadow: Lara's outline on the HD rooms, cast by one fixed light; The projected shadow: the creatures cast as well, into a second map; The projected shadow on the HD models, in a mirror and from a creature out of view; The projected shadow: its arrival, a block's depth and the fog bulbs' haze |
 | #189 | A shine on metal, marble and ice; The shine belongs to the place, not to the draw call; The sheen at a strength that shows |
 | #190 | Wire mesh on an HD object is cut out |
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |

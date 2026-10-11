@@ -24,15 +24,27 @@
  * the depth test EQUAL and no depth write, and this shader in place of
  * RoomPS. The same vertex shader with the same constants gives the same
  * depth to the bit, so EQUAL keeps exactly the pixels that face left
- * visible. What this shader writes is a factor, and the blend (source ZERO,
- * destination SRCCOLOR, colour write RGB only) multiplies the picture with
- * it:
+ * visible. What this shader writes is a factor in alpha, and the blend
+ * (source ONE, destination SRCALPHA, colour write RGB only) multiplies the
+ * picture with it:
  *
- *     1 - strength * lookup * edge * height * facing
+ *     k = 1 - strength * lookup * edge * height * facing
  *
  * hd_shadow.h holds every term as a function of its own (HDShadowLookup,
  * HDShadowEdgeTerm, HDShadowHeightTerm, HDShadowFacingTerm) and the register
  * block (HDShadowReceiveConstants); this file is their transcription.
+ *
+ * The fog bulbs. RoomPS and ModelPS draw a surface as texel * light + haze,
+ * the haze the bulbs' own colour added in front of it (hd_room.hlsl, "The
+ * fog bulbs"): the shadow belongs to the surface and not to the haze in
+ * front of it. So the colour this shader writes is the haze times 1 - k,
+ * which the blend adds to the picture times k: (surface + haze) * k +
+ * haze * (1 - k) = surface * k + haze. Where no bulb stands, the haze and
+ * the colour are 0 and the picture is the picture times k, as a blend of
+ * ZERO and SRCCOLOR made it. The distance fog needs nothing: it takes light
+ * off the surface towards black (no colour is added), and the picture times
+ * k fades the shadow out with the surface it lies on, to nothing where the
+ * fog has made the surface black.
  *
  * A pixel shader reads the vertex shader's outputs by semantic, so this one
  * declares the three it needs - the texture coordinate (TEXCOORD0), the
@@ -57,13 +69,132 @@
  * later draw expects one of them to have kept its value. The water sheet's
  * WaterPS names c92 - c103 and so overlaps c96 - c102, but it writes all of
  * them before each of its draws, and no sheet is drawn inside a receive
- * pass, so neither shader relies on what the other left there. */
+ * pass, so neither shader relies on what the other left there. The bulbs'
+ * count in c17 (y) and the bulbs in c40 - c71, as the room's or the model's
+ * draw set them - the frame's, the same for every room and model - and
+ * gPass.w, the range's switch of the added colour. */
 
 sampler2D sPage : register(s0);
 sampler2D sMap : register(s3);
 
-/* x the alpha reference of the range, as the room's passes set it. */
+/* x the alpha reference of the range, as the room's passes set it; w 1 where
+ * the range adds the bulbs' colour (hd_room.hlsl, gPass). */
 float4 gPass : register(c4);
+
+/* y the fog bulbs of the frame (hd_room.hlsl and hd_model.hlsl, gCounts). */
+float4 gCounts : register(c17);
+
+/* The bulbs, two registers each, hd_room.hlsl's and hd_model.hlsl's gBulbs:
+ * (x, y, z, radius) in view space, then (r, g, b, density). */
+#define HD_MAX_BULBS  16
+float4 gBulbs[HD_MAX_BULBS * 2] : register(c40);
+
+/* One fog bulb's contribution, line for line hd_room.hlsl's BulbIntensity
+ * (and hd_model.hlsl's, which is the same): the length of the piece of the
+ * eye ray inside the bulb's sphere times its density, its rim softened by a
+ * smoothstep over the outer 0.35 of its own share of the diameter. A copy,
+ * because this file stands alone beside the room shader; it must stay the
+ * room's, or the haze this shader gives back would not be the haze the
+ * picture holds. */
+float BulbIntensity(float3 stash, float4 a, float4 b)
+{
+	float3 P = a.xyz;
+	float rad = a.w;
+	float sqrad = rad * rad;
+	float sqlen = dot(P, P);
+
+	if (P.z + rad <= 0.0f)
+		return 0.0f;
+
+	float3 vec = 0.0f;
+	float3 vec2 = 0.0f;
+	float3 d = P - stash;
+	float val = dot(d, d);
+
+	if (sqlen < sqrad)
+	{
+		if (val < sqrad)
+			vec2 = stash;
+		else
+		{
+			float3 u = stash * rsqrt(max(dot(stash, stash), 1e-12f));
+			float val2 = dot(P, u);
+			vec2 = u * (val2 + sqrt(max(sqrad - (sqlen - val2 * val2), 0.0f)));
+		}
+	}
+	else if (val < sqrad)
+	{
+		vec2 = stash;
+		float3 u = stash * rsqrt(max(dot(stash, stash), 1e-12f));
+		float val2 = dot(P, u);
+		vec = u * (val2 - sqrt(max(sqrad - (sqlen - val2 * val2), 0.0f)));
+	}
+	else
+	{
+		float len2 = dot(stash, stash);
+		float3 u = stash * rsqrt(max(len2, 1e-12f));
+		float val2 = dot(P, u);
+
+		vec = u;
+
+		if (val2 > 0.0f)
+		{
+			float val3 = val2 * val2;
+
+			if (len2 > val3)
+			{
+				float perp = sqlen - val3;
+
+				if (perp < sqrad)
+				{
+					float chord = sqrt(max(sqrad - perp, 0.0f));
+					vec2 = u * (val2 - chord);
+					vec = u * (val2 + chord);
+				}
+				else
+				{
+					vec = 0.0f;
+					vec2 = 0.0f;
+				}
+			}
+		}
+	}
+
+	const float kRim = 0.35f;
+
+	float chord = length(vec2 - vec);
+	float t = saturate(chord / max(2.0f * rad, 1e-4f));
+
+	return chord * b.w * smoothstep(0.0f, kRim, t);
+}
+
+/* What every receive writes for the factor `k` at the view-space point
+ * `viewPos`: the bulbs' haze there times 1 - k in colour - the sum RoomPS
+ * and ModelPS add, saturated as they saturate it, times gPass.w - and k in
+ * alpha. The bulbs are summed only where the pixel is darkened at all. The
+ * haze goes back as summed: with the eye under water RoomPS and ModelPS
+ * pass surface plus haze through UnderWater together, so there the picture
+ * times k plus this haze differs a little from the scattered surface times
+ * k plus the scattered haze - only where a fog bulb stands in sight under
+ * water. */
+float4 ReceiveOut(float k, float3 viewPos)
+{
+	float3 haze = 0.0f;
+
+	[branch]
+	if (k < 1.0f)
+	{
+		[loop]
+		for (int j = 0; j < (int)gCounts.y; j++)
+			haze += BulbIntensity(viewPos, gBulbs[j * 2 + 0], gBulbs[j * 2 +
+				1]) *
+				gBulbs[j * 2 + 1].rgb * (1.0f / 255.0f);
+
+		haze = saturate(haze) * gPass.w;
+	}
+
+	return float4(haze * (1.0f - k), k);
+}
 
 /* u, v and the depth along the light, each dot(float4(viewPos, 1), row). */
 float4 gMapU : register(c96);
@@ -151,7 +282,7 @@ float4 ReceivePS(RECEIVE_IN input) : COLOR0
 		shade = sum * (1.0f / 9.0f);
 	}
 
-	return float4((1.0f - gShadow.x * shade * terms).xxx, 1.0f);
+	return ReceiveOut(1.0f - gShadow.x * shade * terms, input.viewPos);
 }
 
 /* The two-map variant, Receive2PS: the one-map shader above and the second
@@ -165,11 +296,12 @@ float4 ReceivePS(RECEIVE_IN input) : COLOR0
  * with `hers` the one-map shader's lookup times its terms (HerShade, line
  * for line ReceivePS's), and `theirs` the second map's (OthersShade): the
  * same sixteen taps and weights, each casting tap weighted by how far the
- * pixel lies behind that tap's caster along the light (1 up to OTHERS_FULL,
- * 0 from OTHERS_END on - hd_shadow.h, HDShadowBehindTerm) and by the fade of
- * the tap's own depth near the second box's near and far side
- * (HDShadowFadeTerm; both in HDShadowLookupBehind), times the edge term of
- * the second box and the same facing term. A floor under two overlapping
+ * pixel lies behind the place of that tap's caster - the point at its feet,
+ * which the second map's green channel holds - along the light (1 up to
+ * OTHERS_FULL, 0 from OTHERS_END on - hd_shadow.h, HDShadowBehindTerm) and
+ * by the fade of the tap's own depth near the second box's near and far
+ * side (HDShadowFadeTerm; both in HDShadowLookupBehind), times the edge term
+ * of the second box and the same facing term. A floor under two overlapping
  * shadows is as dark as under the darker one. Where the second map gives
  * nothing the max is her own product, so the pixel is the pixel ReceivePS
  * writes.
@@ -198,9 +330,10 @@ float4 gOthersD : register(c105);
  * 1 / its side. */
 float4 gOthersMap : register(c106);
 
-/* The distance term as a line in a tap's depth difference: x the second
- * box's depth / (OTHERS_END - OTHERS_FULL), y OTHERS_END / (OTHERS_END -
- * OTHERS_FULL); z 1 / OTHERS_FADE, the fade's slope in a tap's depth. */
+/* The distance term as a line in the depth difference between the pixel
+ * and a tap's place: x the second box's depth / (OTHERS_END - OTHERS_FULL),
+ * y OTHERS_END / (OTHERS_END - OTHERS_FULL); z 1 / OTHERS_FADE, the fade's
+ * slope in a tap's depth. */
 float4 gOthersBehind : register(c107);
 
 /* Her part at the view-space point `at` for a face whose facing term is
@@ -278,18 +411,25 @@ float2 OthersShade(float4 at, float facing)
 		for (int j = 0; j < 4; j++)
 		{
 			const float y = (base.y + (float)j - 0.5f) * gOthersMap.z;
-			float4 tap;
+			const float2 t0 = tex2Dlod(sOthers,
+				float4((base.x - 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
+			const float2 t1 = tex2Dlod(sOthers,
+				float4((base.x + 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
+			const float2 t2 = tex2Dlod(sOthers,
+				float4((base.x + 1.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
+			const float2 t3 = tex2Dlod(sOthers,
+				float4((base.x + 2.5f) * gOthersMap.z, y, 0.0f, 0.0f)).rg;
 
-			tap.x = tex2Dlod(sOthers, float4((base.x - 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
-			tap.y = tex2Dlod(sOthers, float4((base.x + 0.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
-			tap.z = tex2Dlod(sOthers, float4((base.x + 1.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
-			tap.w = tex2Dlod(sOthers, float4((base.x + 2.5f) * gOthersMap.z, y, 0.0f, 0.0f)).r;
+			// Red the caster's depth, green its place's (hd_shadow.hlsl).
+			const float4 tap = float4(t0.x, t1.x, t2.x, t3.x);
+			const float4 place = float4(t0.y, t1.y, t2.y, t3.y);
 
 			/* A casting tap counts with how far the pixel lies behind its
-			 * caster and with the fade of its caster's depth near the
-			 * box's two ends along the light; the clear value 1 never lies
-			 * below the limit. */
-			const float4 behind = saturate(gOthersBehind.y - gOthersBehind.x * (odepth - tap));
+			 * caster's place along the light and with the fade of its
+			 * caster's depth near the box's two ends along the light; the
+			 * clear value 1 never lies below the limit. */
+			const float4 behind = saturate(gOthersBehind.y -
+				gOthersBehind.x * (odepth - place));
 			const float4 fade = saturate(min(tap, 1.0f - tap) * gOthersBehind.z);
 			const float row = dot(wx, (tap < limit) ? behind * fade : 0.0f);
 			const float wy = j == 0 ? 1.0f - f.y : (j == 3 ? f.y : 1.0f);
@@ -325,7 +465,7 @@ float4 Receive2PS(RECEIVE_IN input) : COLOR0
 	const float herFactor = 1.0f - gShadow.x * hers.x * hers.y;
 	const float theirFactor = 1.0f - gShadow.x * theirs.x * theirs.y;
 
-	return float4(min(herFactor, theirFactor).xxx, 1.0f);
+	return ReceiveOut(min(herFactor, theirFactor), input.viewPos);
 }
 
 /* The mirror's variant, MirrorReceivePS: Receive2PS on the copy behind a
@@ -377,7 +517,7 @@ float4 MirrorReceivePS(RECEIVE_IN input) : COLOR0
 	const float herFactor = 1.0f - gShadow.x * hers.x * hers.y;
 	const float theirFactor = 1.0f - gShadow.x * theirs.x * theirs.y;
 
-	return float4(min(herFactor, theirFactor).xxx, 1.0f);
+	return ReceiveOut(min(herFactor, theirFactor), input.viewPos);
 }
 
 /* The models' variant, ModelReceivePS: the two-map body above on an HD
@@ -450,5 +590,5 @@ float4 ModelReceivePS(MODEL_RECEIVE_IN input) : COLOR0
 	const float herFactor = 1.0f - gShadow.x * hers.x * hers.y;
 	const float theirFactor = 1.0f - gShadow.x * theirs.x * theirs.y;
 
-	return float4(min(herFactor, theirFactor).xxx, 1.0f);
+	return ReceiveOut(min(herFactor, theirFactor), input.viewPos);
 }

@@ -11,9 +11,10 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* The projected shadow's map: the cast shaders. hd_model.cpp draws Lara's
- * composite with them into a D3DFMT_R32F target as seen along the key light
- * (hd_shadow.h has the arithmetic, hd_render.cpp the target).
+/* The projected shadow's maps: the cast shaders. hd_model.cpp draws Lara's
+ * composite with them into a D3DFMT_R32F target as seen along the key light,
+ * and the creatures into the second map, a D3DFMT_G32R32F target (hd_shadow.h
+ * has the arithmetic, hd_render.cpp the targets).
  *
  * This file includes hd_model.hlsl and calls ModelVS as a function, so the
  * map is skinned by the very lines that skin the picture - the bind fold,
@@ -35,9 +36,18 @@
  * Registers: the vertex side reads what ModelVS reads (c0 - c3 the map's
  * clip matrix, c8 - c103 the joints, c163 - c166 the soft motion), the pixel
  * side gPass in c4 (x: the alpha test, set per range exactly as for the
- * picture) and the page in s0. */
+ * picture), gCasterPlace in c18 and the page in s0. */
 
 #include "hd_model.hlsl"
+
+/* x: the depth of the caster's place - the point at its feet, the item's
+ * position - in the map being drawn, on the scale of `depth` below.
+ * hd_render.cpp sets it per entry for the second map (HDRenderShadowPlace),
+ * whose green channel keeps it, so the receive measures how far a pixel
+ * lies behind a creature from its feet, whatever part of it the texel holds;
+ * her map has no green channel and drops it. c18 is no register of
+ * hd_model.hlsl's pixel side; the cast bracket puts the frame's back. */
+float4 gCasterPlace : register(c18);
 
 struct CAST_OUT
 {
@@ -67,15 +77,16 @@ CAST_OUT CastVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	return o;
 }
 
-/* The depth into the red channel, where the alpha test of the part's page
- * lets the fragment through - a cut-out leaves its holes out of the map as
- * it leaves them out of the picture. No head cut: in first person the map
- * still holds her whole body. */
+/* The depth into the red channel and the caster's place into the green,
+ * where the alpha test of the part's page lets the fragment through - a
+ * cut-out leaves its holes out of the map as it leaves them out of the
+ * picture. No head cut: in first person the map still holds her whole
+ * body. */
 float4 CastPS(CAST_IN input) : COLOR0
 {
 	float4 texel = tex2D(sPage, input.uv);
 
 	clip(gPass.x * (texel.a - 0.5f));
 
-	return float4(input.depth, 0.0f, 0.0f, 1.0f);
+	return float4(input.depth, gCasterPlace.x, 0.0f, 1.0f);
 }

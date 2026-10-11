@@ -1829,12 +1829,15 @@ void HDRenderScissorOff();
  * HDRenderShadowCastBegin, inside an open bracket: remembers the render
  * target, the depth surface, the viewport, the scissor rectangle, the render
  * states the pass sets, the shaders, the declaration, stream 0, the indices,
- * texture 0 and the constants c0 - c166 of the vertex file and c4 of the pixel
- * file; sets the map and its depth surface; clears the colour to 1 (nothing
- * cast) and the depth to 1. False, with nothing changed, when the target does
- * not exist or no bracket is open. HDRenderShadowCastEnd puts every one of
- * them back and releases every reference the Get calls added. The map is
- * never bound as a texture between the two. */
+ * texture 0 and the constants c0 - c166 of the vertex file and c4 and c18 of
+ * the pixel file; sets the map and its depth surface; clears the colour to 1
+ * (nothing cast) and the depth to 1. False, with nothing changed, when the
+ * target does not exist or no bracket is open. HDRenderShadowCastEnd puts
+ * every one of them back and releases every reference the Get calls added.
+ * The map is never bound as a texture between the two. HDRenderShadowPlace,
+ * inside the bracket, sets the depth of the caster's place in the map being
+ * drawn (pixel c18, hd_shadow.hlsl) for the draws that follow; the second
+ * map keeps it per texel, her map has no channel for it. */
 struct IDirect3DTexture9;
 
 enum
@@ -1846,10 +1849,11 @@ enum
 };
 
 /* What the target is, for the log. `reason` is "ok" or what refused it:
- * no_device, format (R32F as a render target texture), depth (neither D24X8
- * nor D16), match (CheckDepthStencilMatch), create (CreateTexture), surface
- * (GetSurfaceLevel), depth_create (CreateDepthStencilSurface). `events`
- * grows by one with every change of state. */
+ * no_device, format (R32F, or G32R32F for the second map, as a render target
+ * texture), depth (neither D24X8 nor D16), match (CheckDepthStencilMatch),
+ * create (CreateTexture), surface (GetSurfaceLevel), depth_create
+ * (CreateDepthStencilSurface). `events` grows by one with every change of
+ * state. */
 struct HDShadowTargetInfo
 {
 	int state;
@@ -1865,11 +1869,13 @@ void HDRenderShadowTargetRelease();
 void HDRenderShadowTargetInfo(HDShadowTargetInfo* out);
 bool HDRenderShadowCastBegin();
 void HDRenderShadowCastEnd();
+void HDRenderShadowPlace(float depth);
 IDirect3DTexture9* HDRenderShadowMap();
 
 /* The second map, the one the other casters are drawn into: the same kind of
- * pair, HD_SHADOW_OTHERS_MAP texels a side (hd_shadow.h), with a life of its
- * own beside hers.
+ * pair, HD_SHADOW_OTHERS_MAP texels a side (hd_shadow.h), in D3DFMT_G32R32F -
+ * the red channel the caster's depth as in hers, the green its place's - with
+ * a life of its own beside hers.
  *
  * HDRenderShadowOthersReady makes it when it does not exist yet and answers
  * whether it exists; a device that refuses it is not asked again until the
@@ -1980,7 +1986,8 @@ bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
  * cast: RoomVS with the same constants and the same ranges as their opaque
  * and alpha passes and their clear floors, the depth test EQUAL, no depth
  * write, and hd_shadow_receive.hlsl's pixel shader, whose factor multiplies
- * the picture (source ZERO, destination SRCCOLOR, colour write RGB only).
+ * the picture and whose colour gives the fog bulbs' haze back (source ONE,
+ * destination SRCALPHA, colour write RGB only).
  *
  * HDRenderShadowReceiveReady - the receive shader exists on this device;
  * HDRenderShadowReceive2Ready - its two-map variant does.
@@ -2058,8 +2065,8 @@ void HDRenderShadowReceiveMirrorEnd();
  * entries of the frame list drawn a second time after the models' solid
  * pass, with the model's own vertex shader and constants, the depth test
  * EQUAL, no depth write, and hd_shadow_receive.hlsl's ModelReceivePS, whose
- * factor multiplies the picture (source ZERO, destination SRCCOLOR, colour
- * write RGB only).
+ * factor multiplies the picture as the rooms' does (source ONE, destination
+ * SRCALPHA, colour write RGB only).
  *
  * HDRenderShadowModelsBegin, inside an open bracket and outside every other
  * receive or cast bracket, with `hers` and `others` the maps drawn in this

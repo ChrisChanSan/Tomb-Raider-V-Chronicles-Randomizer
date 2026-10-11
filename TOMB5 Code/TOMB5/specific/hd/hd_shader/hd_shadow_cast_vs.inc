@@ -299,4 +299,4 @@ const BYTE kHDShadowCastVS[] =
       2,   0, 255, 144, 255, 255, 
       0,   0
 };
-// bshader-stamp cbecf38eacbd9e00aeae349426d0fe06
+// bshader-stamp 4c75654519fdb1e5ec58acfd6b3b79d3

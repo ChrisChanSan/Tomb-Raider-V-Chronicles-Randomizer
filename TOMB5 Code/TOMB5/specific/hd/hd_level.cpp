@@ -6566,7 +6566,7 @@ bool HDFrameSky(const float* viewWorld)
  * HDRenderShadowCastBegin and End leave it as they found it. Nothing at all
  * happens in a frame the projected shadow does not run in. */
 static HDShadowCastStats g_shadow_stats = { 0, 0, 0, 0.0, 0, 0, 0.0, 0, 0, 0, 0.0, 0, 0, 0, 0,
-	0 };
+	0, 0.0, 0 };
 
 /* Whether this frame's map was drawn: the receive pass reads the map only
  * then, never a map an earlier frame left behind. */
@@ -6597,6 +6597,9 @@ static void ShadowCastPass()
 		return;
 
 	g_shadow_stats.frames++;
+
+	if (shadow->presence < 1.0f)
+		g_shadow_stats.arriving++;
 
 	if (!HDObjectCastCount())
 		return;
@@ -6864,6 +6867,9 @@ static void ShadowReceivePass()
 static void ShadowModelsPass()
 {
 	int models = 0, calls = 0, reflections = 0;
+	LARGE_INTEGER from, to, rate;
+
+	QueryPerformanceCounter(&from);
 
 	if (g_receive_now && HDModelReceiveReady() &&
 		HDRenderShadowModelsBegin(g_shadow_cast_now, g_receive_others_now))
@@ -6876,8 +6882,15 @@ static void ShadowModelsPass()
 		HDRenderShadowModelsEnd();
 	}
 
+	QueryPerformanceCounter(&to);
+	QueryPerformanceFrequency(&rate);
+
 	g_shadow_stats.models += models;
 	g_shadow_stats.modelCalls += calls;
+
+	if (g_receive_now && rate.QuadPart)
+		g_shadow_stats.modelsMs += (double)(to.QuadPart - from.QuadPart) *
+			1000.0 / (double)rate.QuadPart;
 
 	if (g_receive_mirror_now || reflections)
 		g_shadow_stats.mirror++;
@@ -6925,7 +6938,12 @@ static void ShadowModelsPass()
  *              a frame (the same mean)
  *   mirror=    frames in which a mirror's image took the maps through its
  *              mirror's blocks (its room group's copy or a reflection) /
- *              frames the shadow ran */
+ *              frames the shadow ran
+ *   mms=       processor time of the models' pass, a frame (the mean over the
+ *              frames the shadow ran)
+ *   arrive=    frames in which the shadow was still coming in and the blobs
+ *              going out (hd_shadow.h, HDShadowArrive) / frames the shadow ran:
+ *              the first quarter second after it starts to run */
 static bool g_shadow_window = false;
 static unsigned short g_shadow_window_at = 0;
 
@@ -6970,7 +6988,7 @@ static void ShadowSecond()
 			"strength=%.3f/%.3f lights=%d weight=%.3f slant=%.1f snaps=%d cast=%d/%d "
 			"parts=%.1f rooms=%.1f calls=%.1f ms=%.3f stencil=%d lag=%.2f "
 			"others=%.1f omap=%d/%d orooms=%.1f oms=%.3f models=%.1f mcalls=%.1f "
-			"castonly=%.1f mirror=%d/%d",
+			"castonly=%.1f mirror=%d/%d mms=%.3f arrive=%d/%d",
 			shadow->dir[0], shadow->dir[1], shadow->dir[2], shadow->target.dir[0],
 			shadow->target.dir[1], shadow->target.dir[2], shadow->strength,
 			shadow->target.strength, shadow->target.lights, shadow->target.weight,
@@ -6979,7 +6997,8 @@ static void ShadowSecond()
 			(s.ms + s.receiveMs) / frames, HDRenderShadowReceiveStencil() ? 1 : 0,
 			follow->lag, (double)s.othersItems / ocast, s.othersCast, s.frames,
 			(double)s.othersRooms / ocast, s.othersMs / frames, (double)s.models / frames,
-			(double)s.modelCalls / frames, (double)s.castOnly / frames, s.mirror, s.frames);
+			(double)s.modelCalls / frames, (double)s.castOnly / frames,
+			s.mirror, s.frames, s.modelsMs / frames, s.arriving, s.frames);
 	}
 
 	follow->snaps = 0;

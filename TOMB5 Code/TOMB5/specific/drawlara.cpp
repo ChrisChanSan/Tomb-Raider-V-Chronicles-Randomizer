@@ -127,12 +127,14 @@ static void DrawLara__1(ITEM_INFO* item, long mirror)
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
 	/* Her blob, unless the projected shadow throws her outline in this frame
-	 * (hd/hd_laradraw.h, HDShadowFrameDecide - the one decision the two
-	 * passes obey as well): never both, never neither. A mirror's draw does
-	 * not ask: the HD level's mirror zeroes her slot's shadow size around her
-	 * reflection (game\mirror.cpp), so the reflection's blob has no size, and
-	 * the script mirror, which no level of the game sets, keeps it. */
-	if (mirror || !HDShadowFrameDecide())
+	 * (hd/hd_laradraw.h, HDShadowFrameBlob, out of HDShadowFrameDecide - the
+	 * one decision the two passes obey as well): never neither, and both
+	 * only while the shadow comes in, the blob going out as it does
+	 * (HDShadowFrameBlobWeight). A mirror's draw does not ask: the HD level's
+	 * mirror zeroes her slot's shadow size around her reflection
+	 * (game\mirror.cpp), so the reflection's blob has no size, and the script
+	 * mirror, which no level of the game sets, keeps it. */
+	if (mirror || HDShadowFrameBlob())
 		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 
 	if (!mirror)
@@ -384,12 +386,14 @@ static void DrawLara__4(ITEM_INFO* item, long mirror)
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
 	/* Her blob, unless the projected shadow throws her outline in this frame
-	 * (hd/hd_laradraw.h, HDShadowFrameDecide - the one decision the two
-	 * passes obey as well): never both, never neither. A mirror's draw does
-	 * not ask: the HD level's mirror zeroes her slot's shadow size around her
-	 * reflection (game\mirror.cpp), so the reflection's blob has no size, and
-	 * the script mirror, which no level of the game sets, keeps it. */
-	if (mirror || !HDShadowFrameDecide())
+	 * (hd/hd_laradraw.h, HDShadowFrameBlob, out of HDShadowFrameDecide - the
+	 * one decision the two passes obey as well): never neither, and both
+	 * only while the shadow comes in, the blob going out as it does
+	 * (HDShadowFrameBlobWeight). A mirror's draw does not ask: the HD level's
+	 * mirror zeroes her slot's shadow size around her reflection
+	 * (game\mirror.cpp), so the reflection's blob has no size, and the script
+	 * mirror, which no level of the game sets, keeps it. */
+	if (mirror || HDShadowFrameBlob())
 		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 
 	if (!mirror)
@@ -650,12 +654,14 @@ static void DrawLara__5(ITEM_INFO* item, long mirror)
 	phd_PushMatrix();
 	obj = &objects[item->object_number];
 	/* Her blob, unless the projected shadow throws her outline in this frame
-	 * (hd/hd_laradraw.h, HDShadowFrameDecide - the one decision the two
-	 * passes obey as well): never both, never neither. A mirror's draw does
-	 * not ask: the HD level's mirror zeroes her slot's shadow size around her
-	 * reflection (game\mirror.cpp), so the reflection's blob has no size, and
-	 * the script mirror, which no level of the game sets, keeps it. */
-	if (mirror || !HDShadowFrameDecide())
+	 * (hd/hd_laradraw.h, HDShadowFrameBlob, out of HDShadowFrameDecide - the
+	 * one decision the two passes obey as well): never neither, and both
+	 * only while the shadow comes in, the blob going out as it does
+	 * (HDShadowFrameBlobWeight). A mirror's draw does not ask: the HD level's
+	 * mirror zeroes her slot's shadow size around her reflection
+	 * (game\mirror.cpp), so the reflection's blob has no size, and the script
+	 * mirror, which no level of the game sets, keeps it. */
+	if (mirror || HDShadowFrameBlob())
 		S_PrintShadow(obj->shadow_size, GLaraShadowframe, item);
 	CalculateObjectLightingLara();
 

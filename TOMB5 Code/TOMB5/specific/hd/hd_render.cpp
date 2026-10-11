@@ -7710,6 +7710,8 @@ namespace
 		IDirect3DBaseTexture9* texture = 0;
 		float vertex[kShadowVertexRegisters * 4] = {};
 		float pixel[4] = {};
+		// c18 of the pixel file, the caster's place (HDRenderShadowPlace).
+		float place[4] = {};
 	};
 
 	ShadowSaved g_shadow_saved;
@@ -7755,18 +7757,20 @@ namespace
 		return false;
 	}
 
-	/* One pair made: an R32F render target texture `size` texels a side and
-	 * a depth surface of its own beside it, both D3DPOOL_DEFAULT. 0 when
-	 * both were made, otherwise the word for what refused - the caller
-	 * releases what was made and refuses with it. `depthName` comes back
-	 * with the depth format's name.
+	/* One pair made: a render target texture of `format` `size` texels a
+	 * side - R32F for her map, G32R32F for the second, whose green channel
+	 * holds each caster's place (hd_shadow.hlsl) - and a depth surface of its
+	 * own beside it, both D3DPOOL_DEFAULT. 0 when both were made, otherwise
+	 * the word for what refused - the caller releases what was made and
+	 * refuses with it. `depthName` comes back with the depth format's name.
 	 *
-	 * The format first, of the adapter the device runs on: R32F as a render
-	 * target texture, then a depth format that goes with it. The adapter
-	 * format is the display mode's, which is the back buffer's family on a
-	 * windowed device. */
-	const char* shadow_pair_make(int size, IDirect3DTexture9*& texture,
-		IDirect3DSurface9*& colour, IDirect3DSurface9*& depthSurface, const char** depthName)
+	 * The format first, of the adapter the device runs on: `format` as a
+	 * render target texture, then a depth format that goes with it. The
+	 * adapter format is the display mode's, which is the back buffer's family
+	 * on a windowed device. */
+	const char* shadow_pair_make(int size, D3DFORMAT format,
+		IDirect3DTexture9*& texture, IDirect3DSurface9*& colour,
+		IDirect3DSurface9*& depthSurface, const char** depthName)
 	{
 		if (!g_device)
 			return "no_device";
@@ -7786,7 +7790,7 @@ namespace
 		if (!known)
 			refused = "no_device";
 		else if (FAILED(d3d->CheckDeviceFormat(made.AdapterOrdinal, made.DeviceType,
-			mode.Format, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, D3DFMT_R32F)))
+			mode.Format, D3DUSAGE_RENDERTARGET, D3DRTYPE_TEXTURE, format)))
 			refused = "format";
 		else
 		{
@@ -7800,7 +7804,7 @@ namespace
 			if (depth == D3DFMT_UNKNOWN)
 				refused = "depth";
 			else if (FAILED(d3d->CheckDepthStencilMatch(made.AdapterOrdinal,
-				made.DeviceType, mode.Format, D3DFMT_R32F, depth)))
+				made.DeviceType, mode.Format, format, depth)))
 				refused = "match";
 		}
 
@@ -7810,7 +7814,7 @@ namespace
 			return refused;
 
 		if (FAILED(g_device->CreateTexture(size, size, 1, D3DUSAGE_RENDERTARGET,
-			D3DFMT_R32F, D3DPOOL_DEFAULT, &texture, 0)))
+			format, D3DPOOL_DEFAULT, &texture, 0)))
 		{
 			texture = 0;
 			return "create";
@@ -7845,8 +7849,8 @@ bool HDRenderShadowTargetReady()
 		return false;
 
 	const char* depth = "-";
-	const char* refused = shadow_pair_make(HD_SHADOW_MAP, g_shadow_texture, g_shadow_colour,
-		g_shadow_depth, &depth);
+	const char* refused = shadow_pair_make(HD_SHADOW_MAP, D3DFMT_R32F,
+		g_shadow_texture, g_shadow_colour, g_shadow_depth, &depth);
 
 	if (refused)
 		return shadow_refuse(refused);
@@ -7905,13 +7909,13 @@ bool HDRenderShadowOthersReady()
 		return false;
 
 	const char* depth = "-";
-	const char* refused = shadow_pair_make(HD_SHADOW_OTHERS_MAP, g_others_texture,
-		g_others_colour, g_others_depth, &depth);
+	const char* refused = shadow_pair_make(HD_SHADOW_OTHERS_MAP, D3DFMT_G32R32F,
+		g_others_texture, g_others_colour, g_others_depth, &depth);
 
 	if (refused)
 		return others_refuse(refused);
 
-	g_others_info.format = "R32F";
+	g_others_info.format = "G32R32F";
 	g_others_info.depth = depth;
 	g_others_info.size = HD_SHADOW_OTHERS_MAP;
 	others_state(HD_SHADOW_TARGET_MADE, "ok");
@@ -7969,6 +7973,7 @@ static bool ShadowCastOpen(IDirect3DTexture9* texture, IDirect3DSurface9* colour
 	g_device->GetTexture(0, &s.texture);
 	g_device->GetVertexShaderConstantF(0, s.vertex, kShadowVertexRegisters);
 	g_device->GetPixelShaderConstantF(4, s.pixel, 1);
+	g_device->GetPixelShaderConstantF(18, s.place, 1);
 	s.open = true;
 
 	/* SetRenderTarget puts the viewport and the scissor rectangle to the
@@ -7996,9 +8001,20 @@ static bool ShadowCastOpen(IDirect3DTexture9* texture, IDirect3DSurface9* colour
 	g_device->SetRenderState(D3DRS_FILLMODE, D3DFILL_SOLID);
 	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
 
-	// White is 1.0 in the red channel of an R32F target: nothing cast.
+	/* White is 1.0 in every channel of a float target: nothing cast, and a
+	 * place no lookup reads, since only a casting texel's place counts. */
 	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, 0xFFFFFFFF, 1.0f, 0);
 	return true;
+}
+
+void HDRenderShadowPlace(float depth)
+{
+	if (!g_device || !g_shadow_saved.open)
+		return;
+
+	const float c[4] = { depth, 0.0f, 0.0f, 0.0f };
+
+	g_device->SetPixelShaderConstantF(18, c, 1);
 }
 
 bool HDRenderShadowCastBegin()
@@ -8031,6 +8047,7 @@ void HDRenderShadowCastEnd()
 
 	g_device->SetVertexShaderConstantF(0, s.vertex, kShadowVertexRegisters);
 	g_device->SetPixelShaderConstantF(4, s.pixel, 1);
+	g_device->SetPixelShaderConstantF(18, s.place, 1);
 	g_device->SetTexture(0, s.texture);
 	g_device->SetIndices(s.indices);
 	g_device->SetStreamSource(0, s.stream, s.streamOffset, s.streamStride);
@@ -15406,12 +15423,14 @@ static bool receive_open(const float* constants, const float* others)
 
 	/* The picture times the factor, where the face is the one the room loop
 	 * left visible: the same depth to the bit, EQUAL, nothing written but
-	 * the colour. */
+	 * the colour. The factor comes in alpha and the fog bulbs' haze in colour
+	 * (hd_shadow_receive.hlsl, ReceiveOut), so the haze in front of a
+	 * shadowed floor keeps its own brightness. */
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCALPHA);
 	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
@@ -15690,8 +15709,8 @@ bool HDRenderShadowModelsBegin(bool hers, bool others)
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_EQUAL);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ZERO);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCCOLOR);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_SRCALPHA);
 	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
 	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,

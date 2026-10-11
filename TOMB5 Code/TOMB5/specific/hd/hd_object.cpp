@@ -152,6 +152,12 @@ namespace
 		 * projected shadow does not run in. */
 		int cast;
 		unsigned int castMask;
+		/* The depth of the item's place - its position, the point at its
+		 * feet - in the second map, 0..1 of the box along the light
+		 * (HDShadowMapUVD), for an entry marked for the second map: the
+		 * cast writes it beside every texel of the entry, and the receive
+		 * measures how far a pixel lies behind the caster from it. */
+		float castPlace;
 		/* The sheen. 0 for an item - the specular term is Lara's alone. */
 		float specStrength;
 		float specPower;
@@ -229,11 +235,17 @@ namespace
 
 	/* The second map's casters. game\draw.cpp asks HDObjectBlobGivesWay
 	 * right before an item's blob and then opens the same item with
-	 * HDObjectBegin: `g_gave_way` is the item whose blob gave way, which
+	 * HDObjectBegin: `g_gave_way` is the item whose blob gave way - or goes
+	 * out while the projected shadow comes in - and that casts, which
 	 * HDObjectBegin takes over into `g_open_casts` and clears, and
 	 * `g_open_place` is the item's world position, the place the second box
 	 * is asked about in HDObjectEnd. */
 	const ITEM_INFO* g_gave_way = 0;
+	/* The item whose blob is drawn although it gave way, because the
+	 * projected shadow is still coming in (hd_shadow.h, HDShadowArrive), and
+	 * the weight its blob is drawn with (HDObjectBlobWeight). */
+	const ITEM_INFO* g_blob_fading = 0;
+	float g_blob_weight = 1.0f;
 	bool g_open_casts = false;
 	float g_open_place[3] = { 0.0f, 0.0f, 0.0f };
 	/* The item being walked is walked for the second map alone: draw.cpp
@@ -3253,6 +3265,16 @@ void HDObjectEnd()
 	entry.cast = !inside ? HD_OBJ_CAST_NONE
 		: g_open_unseen ? HD_OBJ_CAST_OTHERS_ONLY : HD_OBJ_CAST_OTHERS;
 	entry.castMask = inside ? entry.mask : 0;
+	entry.castPlace = 0.0f;
+
+	if (inside)
+	{
+		float uvd[3];
+
+		HDShadowMapUVD(&shadow->others, g_open_place, uvd);
+		entry.castPlace = uvd[2];
+	}
+
 	g_open_casts = false;
 	// No sheen on an object - the specular term is Lara's alone.
 	entry.specStrength = 0.0f;
@@ -3810,6 +3832,7 @@ void HDInvEnd()
 	memset(&entry.soft, 0, sizeof(entry.soft));
 	entry.cast = HD_OBJ_CAST_NONE;
 	entry.castMask = 0;
+	entry.castPlace = 0.0f;
 	/* No sheen, which is what an item has in the level too - the specular
 	 * term is Lara's alone. A pistol on the ring therefore shines exactly as
 	 * the same pistol shines lying on the floor. */
@@ -4134,7 +4157,10 @@ int HDObjectCastOthersFrame()
 			continue;
 
 		/* The body - or the swapped model - and the separate face, as drawn,
-		 * or as they would be drawn for an item the picture clipped away. */
+		 * or as they would be drawn for an item the picture clipped away,
+		 * each texel with the item's place beside its depth. */
+		HDRenderShadowPlace(entry.castPlace);
+
 		if (HDModelCastDraw(entry.drawSlot, false, entry.matrix, entry.nodes,
 			entry.castMask, entry.lipsTrack, entry.lipsFrame, &entry.soft))
 			drawn++;
@@ -4384,6 +4410,7 @@ int HDObjectShadowReceiveFrame(bool herDrawn, bool othersDrawn, int* reflections
 bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 {
 	g_gave_way = 0;
+	g_blob_fading = 0;
 
 	if (!item || !obj || !obj->shadow_size)
 		return false;
@@ -4401,8 +4428,27 @@ bool HDObjectBlobGivesWay(ITEM_INFO* item, OBJECT_INFO* obj)
 	if (!HDShadowBlobGivesWay(runs, herStep, target, hdModel, g_reflection))
 		return false;
 
+	/* The item casts into the second map from here on; while the shadow
+	 * comes in, its blob is drawn as well, going out as the shadow comes in
+	 * (hd_shadow.h, HDShadowArrive). */
 	g_gave_way = item;
+
+	if (shadow->presence < 1.0f)
+	{
+		g_blob_fading = item;
+		g_blob_weight = 1.0f - shadow->presence;
+		return false;
+	}
+
 	return true;
+}
+
+float HDObjectBlobWeight(ITEM_INFO* item)
+{
+	if (item && item == g_blob_fading)
+		return g_blob_weight;
+
+	return HDShadowFrameBlobWeight(item);
 }
 
 bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
@@ -4474,6 +4520,7 @@ bool HDObjectPush(int slot, const float* matrix, int nodes, const float* light,
 	entry.cast = cast == HD_OBJ_CAST_ALSO || cast == HD_OBJ_CAST_ONLY
 		? cast : HD_OBJ_CAST_NONE;
 	entry.castMask = castMask;
+	entry.castPlace = 0.0f;
 	entry.specStrength = specStrength;
 	entry.specPower = specPower;
 	/* No portal window. Everything that comes through here is a

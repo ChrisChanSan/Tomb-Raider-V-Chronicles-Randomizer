@@ -158,6 +158,19 @@ void HDLaraDrawFrame(long mirror, bool honourMeshBits);
  * key light afresh: no glide out of an old direction. */
 bool HDShadowFrameDecide();
 
+/* Whether her blob is drawn in this frame: in every frame the projected
+ * shadow does not run in, and while it comes in (hd_shadow.h,
+ * HDShadowArrive) - decided by HDShadowFrameDecide, which it asks. */
+bool HDShadowFrameBlob();
+
+/* Her blob's weight in this frame, 1 minus the projected shadow's presence
+ * while it comes in and 1 in every other frame - and 1 for any item that is
+ * not her: the factor of the blob's alpha (hd_object.h, HDObjectBlobWeight,
+ * asks it). */
+struct ITEM_INFO;
+
+float HDShadowFrameBlobWeight(ITEM_INFO* item);
+
 /* The frame's state (hd_shadow.h, HDShadowFrame), filled by Lara's main draw
  * when the projected shadow runs: the key light as drawn, her box and the
  * second map's, the view-to-map and the cast matrices of each, the frame's

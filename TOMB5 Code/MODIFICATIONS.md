@@ -13034,6 +13034,138 @@ entry 169 now says which of its two sentences holds when.
 **Commits.** `d8f061f`, `0c54020`, `60ad906`, `5712057`, `b6925f2`, `c9c35f9`,
 `0f76a5c`; the fix pass `e801c4f`, `fea1fe7`, `95d7b2f`.
 
+**Round 3, after the owner's second play test.** The owner played round 2 on
+2026-10-11 (the build of 23:11:47) and wrote, put into English: the river ends are fine.
+The fish flee only in a horizontal plane, the vertical is missing. The drips now come
+from the ceiling and look good. The barrels made no rings on the water surface for him.
+The aquarium has no fish. In ANDREA2 the floats may vanish under the water surface
+through the grate as in ANDY3 (the foam he asked for on top of it is the water's look,
+not this entry's).
+
+What his log showed, and the causes found before anything changed:
+
+- *The tank.* RICH2's level line held the school (`fish=8`, `models=fish`), and every
+  seconds line read `drawn=0 skipped=0`. An entry is left out without a count when its
+  body is gone or its point lies behind the eye. The `ITEMLOG` of the same log gives the
+  FISHTANK item 33 the flags 0x100, `IFL_INVISIBLE`, and so does the classic
+  `RICH2.TRC`: `InitialiseItem` starts it `ITEM_INVISIBLE`, while the tank rule asked for
+  `ITEM_INACTIVE` - the tank counted as shot from the level's start, and its fish were
+  neither moved nor drawn wherever he stood. Round 2's pictures set the tank's state in
+  the probe and never met the item. In this log his eye was at x 46,779 to 48,303,
+  about 12,000 units east of the tank and looking east (`CAMLOG`), so the seconds lines
+  would have read 0 there in any case.
+- *The barrels' rings.* They were written (ANDY3 `rings=80` in 19 seconds) and did not
+  show. A ring of the sheets starts at half its size from its middle, runs out at 150
+  units a second, lives 3.5 seconds, and is started again by the next ring of its kind
+  within 192 units once it is 0.6 seconds old (*the rings*, `HDRenderWaterRipples`).
+  `ANIMATING3_ANDY1` reaches 163 to 179 units from its middle across the water; its ring
+  of 88 to 104 started 44 to 52 out, ran under the barrel for its first second, and the
+  barrel's next ring, 1 to 2 seconds later, started it again just as it came out. Not
+  the eight-ring cut (one ring a barrel after the merge), not the slot or its height.
+
+How. All of it in `hd_life_rules.h` with the engine's side in `hd_life.cpp`.
+
+- *The tank's state* (`HDLifeTankWhole`, `HDLifeTankStart`). Whole while the item is
+  not active, its status neither `ITEM_ACTIVE` (pouring, or poured and taken off by
+  `KillItem`) nor `ITEM_DEACTIVATED` (a shot tank out of a loaded game, whose water
+  stays at the 4,096 `InitialiseItem` left), and its water the full 4,096; the engine
+  asserts that the rule's states are the game's (`static_assert` in `hd_life.cpp`).
+- *The barrel's ring* (`HDLifeFloatRings`). Once a bob, at the bob's top - a body that
+  rises and falls sends out a wave each time - so 2.5 to 4 seconds apart, the bob's own
+  period: a ring lives 3.5 seconds, so a bob of 3.5 to 4 seconds lets it run out and
+  one of 2.5 to 3.5 starts it again at 8 percent of its strength or less
+  ((1 - 2.5/3.5) squared). Its size 240 and up to 15 more from the hash of the float
+  and the bob's count, near the 255 a ripple slot's byte holds (`UpdateSplashes`
+  grows a size only under 252; the sheets take the size they first see, as a rule at
+  `init` 1, where it is the slot's own); the ring starts 120 to 127 out,
+  is past the barrel's side in a third of a second, and has the full strength of a
+  wading Lara's ring (the sheets cap a ring's strength at a size of 128).
+- *The fish's depth* (`HDLifeFishBand`, `HDLifeFishCalm`, `HDLifeFishPitchOf`). A school
+  swims in a band from 128 units under its sheet's rise (a sea's crest stands 121 over
+  the surface) down to `FISH2`'s reach, 87, over the floor of its body's shallowest deep
+  square: 128 is the fish's half thickness, 35, and the 44 its nose rises at the
+  steepest pitch, 30 degrees. Calm, each fish rises and sinks 192 units round the
+  band's middle (less in a narrower band) at 0.45 radians a second, 14 seconds a turn,
+  from a phase of its own (the hash, 1009), so a school circles at several depths. A
+  dart heads each fish for a depth of its own in the band (1103), its way pitched 10
+  to 25 degrees toward it (1109), and levels there: a dart pitched straight at 25
+  degrees climbs 1,183 units a second at the dart's start and reached the edge of the
+  pond's band, 809 high, within a third of a second, three of four fish on the floor
+  for three seconds. Back to its ring a fish climbs at most 346 units a second, the 30
+  degrees of the rejoin's 600. The model is pitched to its way - its climb over its run,
+  calm its rise over the cruise's 150 (at most 86 units a second, 30 degrees) - at
+  most 30 degrees, turned at the 720 degrees a second its heading turns at
+  (`HDLifeFishTurn`), as a turn of the model about its own z, since its head points
+  along its x. The tank's fish swim in the same band, its top as the surface.
+- *The canal's conveyor* (`kHDLifeInlets`, `HDLifeConveyor`, `HDLifeInletRun`).
+  SectorCheck on the classic `ANDREA2.TRC`: past the canal's +z end the water room 133
+  goes on under the wall from the surface down to 6,912 - the drain under the grate,
+  two squares wide; past the -z end and the side arm's west end every room is wall or
+  dry at the surface's height - no slot; past the east bank at x 57,344, z 43,008 to
+  45,056 the water rooms 58 and 186 go on under room 19's floor, 256 over the water,
+  from the surface down to 6,144 - the only other opening, the water's way in. A
+  channel with a current and an inlet in the table is a conveyor: its outlet is a
+  river's (the dive over the last square into a slot point 384 past the end row's
+  edge, its light falling to a quarter), its floats come back at the inlet's slot
+  point (384 past the inlet's edge, across its width less the float's reach by the
+  hash), ride west out of it at the current's 90 units a second and rise over the
+  first square; a float that drifts onto that square without coming out of the inlet
+  floats on (`HDLifeEntry::entering`). The gathering along the end wall is gone; the
+  way on along the side arm's bank stays. The body's line names `in=` and `out=`.
+
+**Measured.** RoomProbe `-lifetank game` on RICH2: `found=1 flags=0x100 status=3
+water=4096 whole=1`, 8 drawn at both of round 2's tank cameras (0 with the tank gone,
+the owner's line). The barrels' rings with `-liferings game` against `-liferings 0`,
+pixels changed by more than 4 of 255 at 960 x 540, 0.1, 0.5, 1, 1.5 and 2 seconds after
+a ring, beside a wading Lara's ring of 120 at the same place and age: before, ANDY3's
+lake 0, 0, 175, 0, 3 (Lara 0, 0, 295, 637, 128), its pond 88, 536, 600, 1,041, 30
+(Lara 115 to 1,583), ANDREA2's canal 0, 0, 5, 47, 862 (Lara up to 1,646); after, the
+lake 813, 521, 697, 609, 166 (Lara 324, 397, 418, 189, 347), the pond 549 to 3,264
+(Lara 164 to 1,615), the canal 586, 130, 668, 2,472, 3,682 (Lara 0 to 1,600). A ring
+at full strength changes a pixel by about 10 levels in the mean at the bank, at most
+60 to 70 at night. The bands: ANDY3's lake 249 to 937, its pond and RICH2's tank 128 to
+937, ANDY1's pools 249 to 681 (the fish 448 to 576 before). The pond with Lara at its
+school from 1 second: the fish at 345 to 677 calm, 130 to 481 in the flight, 356 to
+653 back on the ring by 6 seconds, pitched up to 30 degrees either way. The canal over
+180 seconds at two-second steps: 12 floats always, 17 come-backs, 70 samples off the
+sheet, every one with its top 37.7 units or more under the surface, none come back in
+open water, the last row holding 0 to 4 (round 2: all 12 by 170 seconds). Over 60
+seconds ANDY3's rings hold 7 of the 128 ripple slots at once at the most, ANDREA2's 1,
+ANDY1's 4. RICH2's pool 1,084 bytes (876 before: the fish's depth and pitch, the
+conveyor's fields). At 2,560 x 1,440 (`-lifebench`, two runs, against `bba072c`): the
+canal 9 drawn, on the GPU 0.0017 ms in both runs (0.0013 and 0.0017 before); the pond
+8 drawn, on the GPU 0.0052 and 0.0055 ms (0.0052 and 0.0053); a step of ANDY3's
+pool takes 0.0065 ms (0.0046 before the depth band).
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 231, JOBY2
+66, ANDY3 34, plain and with `-hdwater 1`); the fifteen cameras with `-hdwater 0` 15 of
+15 identical to the water round's parity set, and with `-hdwater 1` and no `-life` 15
+of 15 identical to `bba072c`. The rivers unchanged: RoomProbe's ANDY3 lines at 30
+seconds md5-identical before and after the conveyor, round 2's river check 341
+samples, 33 past an edge, 26 come-backs, no jump, as before. ModernTest 14,946 checks
+(14,937 at `bba072c`): the tank's states, the ring once a bob, the fish's band, pitch
+and turn, a dart's ups and downs, the conveyor; MenuTest 42,627, InterpTest 729,
+LipsTest 270 and 243, all 0 failed; the engine and the tools build. A second look
+over the round found two comments in `hd_life_rules.h` that told the story of the code
+they replace; they now state what the code prevents (comment lines only, the proofs
+stand).
+
+**Left.** The look in the game - nobody in this round could play it: whether a ring
+at a barrel's full strength reads at night (if not, the lever is the sheets' ring
+amplitude, `kRingSlope` and its cap at 128 in `hd_render.cpp` and the spread in
+`RingSlope`, the water's look and not this entry's), how steep a darting fish should
+climb, and whether a calm fish's rise - near 25 to 30 degrees for much of its turn,
+the most pitch - is as slow as he meant. Two fish of ANDY3's pond can stand at one
+bank point at nearly one depth through a dart when both their hashed depths fall near
+the band's top (2.5 to 4.5 s in the pond series): the blocking across is round 2's,
+the depth does not part them there. The canal's -z stretch has no inlet of its own:
+its floats drift to the crossing and the drain and come back only at the east inlet,
+so after the first pass it stays empty. The conveyor's inlet is a table row: the life
+reads the water through the getters, which name no classic room past a sheet. The
+foam at the grate is the water's look.
+
+**Commits.** `3f9333c`, `be2277f`, `2485257`, `6b2637b`, `443008c`.
+
 **The river's flow hide by its own squares.** The river's flow-material calls (material
 1, `HDRange::flowTris`) were hidden over a sheet by their box alone, where the still
 water's art asks its own squares (*the deck's plates*). They take the same rule now:

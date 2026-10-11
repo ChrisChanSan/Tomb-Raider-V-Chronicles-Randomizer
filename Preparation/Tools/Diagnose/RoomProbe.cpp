@@ -1867,9 +1867,17 @@ struct LifeRoom
 	std::vector<int> ceiling, above;
 };
 static std::vector<LifeRoom> g_life_rooms;
-/* -lifetank 0|1: a fish tank whole (1, the default) or shot (0: its fish
- * are gone, as the engine has it once the FISHTANK item is set off). */
+/* -lifetank 0|1|game: a fish tank whole (1, the default) or shot (0: its
+ * fish are gone, as the engine has it once the FISHTANK item is set off);
+ * game: as the game's level start leaves it - the FISHTANK item read out
+ * of the classic level (-roombox), its start state as InitialiseItem sets
+ * it (HDLifeTankStart) and the engine's rule (HDLifeTankWhole). */
 static bool g_life_tank_whole = true;
+static bool g_life_tank_game = false;
+// -liferings 0|game: 1 every ring alone (no switch), 0 none, 2 the game's.
+static int g_life_rings = 1;
+// The classic level's FISHTANK items: x, z and flags each.
+static std::vector<int> g_life_tank_items;
 static HDLifePool g_life_pool;
 static const HDLifeLevel* g_life_row = 0;
 static float g_life_box[HD_LIFE_KINDS][6];
@@ -2061,6 +2069,33 @@ static void LifeBuild(const char* root, const char* stem)
 			HDLifeAddTank(g_life_pool, kHDLifeTanks[i], LifeDraw, &state);
 			g_life_pool.bodies.back().gone = g_life_tank_whole ? 0 : 1;
 
+			/* The game's state: the FISHTANK item within two squares of the
+			 * tank's middle, as hd_life.cpp's tank_item finds it. */
+			if (g_life_tank_game)
+			{
+				const HDLifeTank& t = kHDLifeTanks[i];
+				const int mx = (t.x0 + t.x1) / 2, mz = (t.z0 + t.z1) / 2;
+				int found = 0, active = 0, status = 0, water = 0, flags = 0;
+
+				for (size_t k = 0; k + 2 < g_life_tank_items.size(); k += 3)
+					if (abs(g_life_tank_items[k] - mx) < 2048 &&
+						abs(g_life_tank_items[k + 1] - mz) < 2048)
+					{
+						found = 1;
+						flags = g_life_tank_items[k + 2];
+						HDLifeTankStart(flags, &active, &status, &water);
+						break;
+					}
+
+				const bool whole = HDLifeTankWhole(found, active, status,
+					water);
+
+				g_life_pool.bodies.back().gone = whole ? 0 : 1;
+				printf("LIFELOG level=%s tank=%d game_state found=%d "
+					"flags=0x%X active=%d status=%d water=%d whole=%d\n", stem,
+					(int)i, found, flags, active, status, water, whole ? 1 : 0);
+			}
+
 			for (int k = 0; k < 3; k++)
 				g_life_light.push_back(kHDLifeTankLight);
 		}
@@ -2164,7 +2199,57 @@ static void LifeBuild(const char* root, const char* stem)
 	for (size_t i = 0; i < g_life_pool.schools.size(); i++)
 		fleeing += g_life_pool.schools[i].fleeUntil > (float)g_time ? 1 : 0;
 
-	for (size_t i = 0; i < rings.size(); i++)
+	/* -liferings game: the rings as the game's sheets keep them out of the
+	 * ripple slots (hd_render.cpp, HDRenderWaterRipples and "the rings"): a
+	 * new ring within 192 units of a live one of its kind (the life's are
+	 * all a body's, flags 0x10) takes that ring's place when the live one
+	 * is 0.6 s old or more and goes into it when younger; a ring lives
+	 * 3.5 s. Those three numbers are kRingMerge, kRingRestart and kRingLife
+	 * there. -liferings 0 shows none; without the switch every ring of the
+	 * last 1.5 s is shown on its own. */
+	struct Kept
+	{
+		float x, z, born, size;
+	};
+	std::vector<Kept> kept;
+
+	for (size_t i = 0; g_life_rings == 2 && i < rings.size(); i++)
+	{
+		const Kept k = { rings[i].first.x, rings[i].first.z, rings[i].second,
+			(float)rings[i].first.size };
+		Kept* into = 0;
+		float best = 192.0f * 192.0f;
+
+		for (Kept& g : kept)
+		{
+			const float d2 = (g.x - k.x) * (g.x - k.x) + (g.z - k.z) *
+				(g.z - k.z);
+
+			if (d2 <= best && k.born - g.born <= 3.5f)
+			{
+				best = d2;
+				into = &g;
+			}
+		}
+
+		if (into && k.born - into->born >= 0.6f)
+			*into = k;
+		else if (!into)
+			kept.push_back(k);
+	}
+
+	for (const Kept& k : kept)
+	{
+		const float age = (float)g_time - k.born;
+
+		if (age > 3.5f)
+			continue;
+
+		HDRenderWaterRing(k.x, k.z, age, k.size);
+		shown++;
+	}
+
+	for (size_t i = 0; g_life_rings == 1 && i < rings.size(); i++)
 	{
 		const float age = (float)g_time - rings[i].second;
 
@@ -2226,13 +2311,16 @@ static void LifeBuild(const char* root, const char* stem)
 
 		printf("LIFELOG level=%s entry=%d kind=%s body=%d x=%.0f y=%.1f "
 			"z=%.0f yaw=%.0f banked=%d gen=%d under=%.1f over=%.1f amp=%.1f "
-			"rise=%.1f dive=%.2f\n", stem, (int)i, kHDLifeKinds[e.kind].name,
+			"rise=%.1f dive=%.2f down=%.0f pitch=%.1f\n", stem, (int)i,
+			kHDLifeKinds[e.kind].name,
 			e.body, x, y, z, yaw * 57.29578f, e.banked, e.gen,
 			e.kind == HD_LIFE_FISH ? 0.0f : y + 0.5f * h - surface,
 			e.kind == HD_LIFE_FISH ? 0.0f : surface - (y - 0.5f * h), e.amp,
 			g_life_pool.bodies[(size_t)e.body].rise,
 			e.kind == HD_LIFE_FISH ? 0.0f : HDLifeDiveShare(
-			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z, e.entering),
+			y - surface,
+			(e.kind == HD_LIFE_FISH ? e.pitch : pitch) * 57.29578f);
 	}
 
 	/* A line a school: its centre, whether it is in a flight, the darts it
@@ -2269,10 +2357,31 @@ static void LifeBuild(const char* root, const char* stem)
 			spread = d > spread ? d : spread;
 		}
 
+		/* And its depth band (HDLifeFishBand), units under the surface,
+		 * and its fish's depths now, the least and the most. */
+		float top, bottom, least = 0.0f, most = 0.0f;
+		const HDLifeBody& sb = g_life_pool.bodies[(size_t)s.body];
+
+		HDLifeFishBand(g_life_pool, sb, &top, &bottom);
+
+		for (size_t i = 0, n = 0; i < g_life_pool.entries.size(); i++)
+			if (g_life_pool.entries[i].school == (int)si)
+			{
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(g_life_pool, g_life_pool.entries[i],
+					(float)g_time, &x, &y, &z, &yaw, &pitch, &roll);
+				y -= (float)sb.surfaceY;
+				least = !n || y < least ? y : least;
+				most = !n || y > most ? y : most;
+				n++;
+			}
+
 		printf("LIFELOG level=%s school=%d body=%d centre=%.0f,%.0f "
-			"darting=%d darts=%d fish_at=%.0f,%.0f spread=%.0f\n", stem,
+			"darting=%d darts=%d fish_at=%.0f,%.0f spread=%.0f "
+			"band=%.0f..%.0f down=%.0f..%.0f\n", stem,
 			(int)si, s.body, s.cx, s.cz, s.darting, s.darts, mx, mz,
-			spread);
+			spread, top, bottom, least, most);
 	}
 
 	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
@@ -2359,9 +2468,9 @@ static void LifeDrawAll(const std::vector<std::pair<float, int> >& order,
 
 		lighting.lights = 0;
 		lighting.lightCount = 0;
-		// A river float's fade into its slots, as the engine has it.
+		// A float's fade into its slots, as the engine has it.
 		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
-			g_life_pool.bodies[(size_t)e.body], e.x, e.z));
+			g_life_pool.bodies[(size_t)e.body], e.x, e.z, e.entering));
 
 		lighting.sunScale = 0.75f * fade;
 		lighting.specStrength = 0.0f;
@@ -9083,16 +9192,26 @@ static int ProbeMain(int argc, char** argv)
 			g_life_bench = true;
 		else if (!strcmp(argv[at], "-lifeall"))
 			g_life_all = true;
-		/* -lifesplash and -lifetank share this branch: one more `else if`
-		 * passes the compiler's limit of nested blocks (C1061). */
+		/* -lifesplash, -lifetank and -liferings share this branch: one more
+		 * `else if` passes the compiler's limit of nested blocks (C1061). */
 		else if ((!strcmp(argv[at], "-lifelara") ||
 			!strcmp(argv[at], "-lifesplash") ||
-			!strcmp(argv[at], "-lifetank")) && at + 1 < argc)
+			!strcmp(argv[at], "-lifetank") ||
+			!strcmp(argv[at], "-liferings")) && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (!strcmp(argv[at], "-lifetank"))
-				g_life_tank_whole = atoi(argv[++at]) != 0;
+			if (!strcmp(argv[at], "-liferings"))
+			{
+				at++;
+				g_life_rings = !strcmp(argv[at], "game") ? 2 :
+					atoi(argv[at]) ? 1 : 0;
+			}
+			else if (!strcmp(argv[at], "-lifetank"))
+			{
+				g_life_tank_game = !strcmp(argv[++at], "game");
+				g_life_tank_whole = g_life_tank_game || atoi(argv[at]) != 0;
+			}
 			else if (!strcmp(argv[at], "-lifesplash"))
 			{
 				if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) == 3)
@@ -11049,6 +11168,19 @@ static int ProbeMain(int argc, char** argv)
 			{
 				g_seed_origin[0] = (float)level.rooms()[(size_t)room].originX;
 				g_seed_origin[1] = (float)level.rooms()[(size_t)room].originZ;
+			}
+
+			// -lifetank game: the level's FISHTANK items (slot 413).
+			for (int t = 0; g_life_tank_game && t < level.itemCount(); t++)
+			{
+				Tr5Item it;
+
+				if (level.getItem(t, it) && it.objectNumber == 413)
+				{
+					g_life_tank_items.push_back(it.x);
+					g_life_tank_items.push_back(it.z);
+					g_life_tank_items.push_back((int)(unsigned short)it.flags);
+				}
 			}
 
 			for (int r = 0; r < nr; r++)

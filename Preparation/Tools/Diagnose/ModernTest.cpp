@@ -17898,22 +17898,42 @@ static void life_rings()
 	bottle.index = 6;
 
 	std::vector<HDLifeRing> a, b;
+	std::vector<float> at;
+	int offTop = 0;
+
+	barrel.phase = 1.0f;
 
 	for (int k = 1; k <= 600; k++)
 	{
-		HDLifeFloatRings(p, barrel, 0, (k - 1) / 30.0f, k / 30.0f, &a);
-		HDLifeFloatRings(p, bottle, 1, (k - 1) / 30.0f, k / 30.0f, &b);
+		const size_t before = a.size();
+		const float t = k / 30.0f;
+
+		HDLifeFloatRings(p, barrel, 0, (k - 1) / 30.0f, t, &a);
+		HDLifeFloatRings(p, bottle, 1, (k - 1) / 30.0f, t, &b);
+
+		// A ring comes in the step its bob passes its top: sine -1.
+		if (a.size() > before)
+		{
+			at.push_back(t);
+			offTop += sinf(6.2831853f * t / barrel.period + barrel.phase) >
+				-0.98f;
+		}
 	}
 
-	int sizeBad = 0;
+	int sizeBad = 0, gapBad = 0;
 
 	for (size_t i = 0; i < a.size(); i++)
 		sizeBad += a[i].size < kHDLifeFloatRing || a[i].size >
-			kHDLifeFloatRing + kHDLifeFloatRingTop || a[i].drip != -1;
+			kHDLifeFloatRing + kHDLifeFloatRingTop || a[i].size > 255 ||
+			a[i].drip != -1;
 
-	ok(a.size() >= 10 && a.size() <= 21 && sizeBad == 0 && b.empty(),
-		"life rings: a barrel rings every 1 to 2 s at 88 to 104, a bottle "
-		"never", (long)a.size() * 100 + (long)b.size(), 1500);
+	for (size_t i = 1; i < at.size(); i++)
+		gapBad += fabsf(at[i] - at[i - 1] - barrel.period) > 0.05f;
+
+	ok(a.size() >= 6 && a.size() <= 7 && sizeBad == 0 && gapBad == 0 &&
+		offTop == 0 && b.empty(),
+		"life rings: a barrel rings once a bob at its top at 240 to 255, a "
+		"bottle never", (long)a.size() * 100 + (long)b.size(), 600);
 }
 
 /* Floats keep apart (HDLifeClear): a current that drives two floats to a
@@ -18189,6 +18209,28 @@ static void life_tank()
 	ok(p.schools[0].cx == before.schools[0].cx &&
 		p.schools[0].darts == before.schools[0].darts,
 		"life tank: a shot tank's school rests", 0, 0);
+
+	// RICH2's item 33 carries IFL_INVISIBLE (0x100).
+	int active = 0, status = 0, water = 0;
+
+	HDLifeTankStart(0x100, &active, &status, &water);
+	ok(status == kHDLifeItemInvisible && !active && water == 4096 &&
+		HDLifeTankWhole(1, active, status, water),
+		"life tank: an invisible FISHTANK at the level's start is whole",
+		status, kHDLifeItemInvisible);
+
+	HDLifeTankStart(0, &active, &status, &water);
+	ok(HDLifeTankWhole(1, active, status, water) &&
+		HDLifeTankWhole(0, 1, kHDLifeItemActive, 0),
+		"life tank: an inactive FISHTANK is whole, and no item at all", 0, 0);
+
+	HDLifeTankStart(0x3E00, &active, &status, &water);
+	ok(active && !HDLifeTankWhole(1, active, status, water) &&
+		!HDLifeTankWhole(1, 0, kHDLifeItemActive, 800) &&
+		!HDLifeTankWhole(1, 0, kHDLifeItemDeactivated, 4096) &&
+		!HDLifeTankWhole(1, 0, kHDLifeItemInvisible, 4000),
+		"life tank: pouring, poured, shot in a loaded game or drained is "
+		"gone", 0, 0);
 }
 
 static void life_flee()
@@ -18363,6 +18405,195 @@ static void life_bob()
 static int life_draw(void* state)
 {
 	return HDLifeDraw((unsigned*)state);
+}
+
+/* A channel's conveyor (HDLifeConveyor): the main channel of ANDREA2's
+ * canal from its crossing to its drain - x 55,296 to 57,344, z 43,008 to
+ * 50,176, current +z at 90 - with the inlet kHDLifeInlets names on its east
+ * bank. Five minutes of twelve floats: the count holds, floats come back
+ * only at the inlet's slot point, off the sheet, and only under the
+ * surface is a float off the sheet; one that drifts onto the inlet's
+ * square without coming out of it floats on. */
+static void life_conveyor()
+{
+	HDLifePool p = {};
+	HDLifeBody b = life_body(0, 0, 2048);
+	const HDLifeLevel level = { "ANDREA2", 16, 1, 0, { 1, 0, 0, 0 }, 0, 0 };
+
+	for (int x = 55296; x < 57344; x += 1024)
+		for (int z = 43008; z < 50176; z += 1024)
+		{
+			HDLifeSquare s = { x, z, 2048, 1 };
+
+			b.squares.push_back(s);
+		}
+
+	b.surfaceY = 4864;
+	b.channel = 1;
+	b.flowZ = 1.0f;
+	b.speed = 90.0f;
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_BOTTLE] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	p.reach[HD_LIFE_BOTTLE] = 92.0f;
+
+	unsigned state = 5;
+
+	HDLifeBuild(p, level, life_draw, &state);
+
+	const HDLifeBody& c = p.bodies[0];
+
+	ok(c.ends && c.inX == 57728.0f && c.inZ == 44032.0f &&
+		c.outX == 55808.0f + 512.0f && c.outZ == 50560.0f &&
+		c.inWayX == -1.0f && c.inHalf == 1024.0f,
+		"life conveyor: ANDREA2's canal comes in at its east bank's slot and "
+		"leaves under its +z end", (long)c.inX, 57728);
+
+	const size_t count = p.entries.size();
+	int openBack = 0, overOff = 0, backs = 0;
+	std::vector<int> gen(count, 0);
+
+	for (int k = 1; k <= 300 * 10; k++)
+	{
+		const float t = k * 0.1f;
+
+		HDLifeTick(p, &level, t, 0, 0.0f, 0.0f, 0);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			const HDLifeEntry& e = p.entries[i];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			const bool on = HDLifeSquareAt(c, x, z) >= 0;
+
+			overOff += !on && y - 0.5f * p.height[e.kind] < (float)c.surfaceY;
+
+			if (e.gen != gen[i])
+			{
+				openBack += on || x < 57344.0f;
+				backs += e.gen - gen[i];
+				gen[i] = e.gen;
+			}
+		}
+	}
+
+	ok(p.entries.size() == count && count > 0 && backs > 0 &&
+		openBack == 0 && overOff == 0,
+		"life conveyor: the floats go round, back only in the inlet's slot, "
+		"under the surface off the sheet", openBack * 1000 + overOff, 0);
+
+	ok(HDLifeDiveShare(c, 56900.0f, 44032.0f, 0) == 0.0f &&
+		HDLifeDiveShare(c, 56900.0f, 44032.0f, 1) > 0.25f &&
+		HDLifeDiveShare(c, 56900.0f, 46000.0f, 1) == 0.0f,
+		"life conveyor: only a float out of the inlet rises on its square",
+		0, 0);
+}
+
+/* The fish's depth (HDLifeFishBand, HDLifeFishCalm): a school in a lake of
+ * five by five squares 1,024 deep under a sea's sheet (rise 121.3) for 60
+ * s, Lara at its middle from 5 to 7 s and 30 to 31 s. Every fish stays in
+ * its band, its pitch within the most and turned no faster than its turn
+ * rate; calm, a fish rises and sinks the band's swing; a dart sends fish
+ * up and down. */
+static void life_fishdepth()
+{
+	HDLifePool p = {};
+	const HDLifeLevel level = { "TEST", 1, 0, 0, { 0, 0, 0, 0 }, 1, 0 };
+	unsigned state = 3;
+	HDLifeBody b = life_body(5, 5, 1024);
+
+	b.rise = 121.3f;
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_FISH] = 1;
+	p.reach[HD_LIFE_FISH] = 87.0f;
+	p.height[HD_LIFE_FISH] = 70.0f;
+	HDLifeBuild(p, level, life_draw, &state);
+
+	float top, bottom;
+
+	HDLifeFishBand(p, p.bodies[0], &top, &bottom);
+	ok(fabsf(top - 249.3f) < 0.1f && fabsf(bottom - 937.0f) < 0.1f,
+		"life fish depth: the band runs from 128 under the sheet's rise to "
+		"the fish's reach over the floor", (long)top * 10000 + (long)bottom,
+		2490937);
+
+	int outBand = 0, overPitch = 0, overTurn = 0, ups = 0, downs = 0;
+	float calmLeast = 1.0e9f, calmMost = -1.0e9f;
+	std::vector<float> last(p.entries.size(), 0.0f);
+	const float dt = 1.0f / 30.0f;
+
+	for (int k = 1; k <= 60 * 30; k++)
+	{
+		const float t = k * dt;
+		const int lara = (t >= 5.0f && t < 7.0f) || (t >= 30.0f && t < 31.0f);
+
+		HDLifeTick(p, 0, t, lara, p.schools[0].cx, p.schools[0].cz, 0);
+
+		for (size_t i = 0; i < p.entries.size(); i++)
+		{
+			const HDLifeEntry& e = p.entries[i];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			const float down = y - (float)p.bodies[0].surfaceY;
+
+			outBand += down < top - 0.01f || down > bottom + 0.01f;
+			overPitch += fabsf(e.pitch) > kHDLifeFishPitchMost + 1.0e-4f ||
+				roll != -e.pitch;
+			overTurn += fabsf(e.pitch - last[i]) > kHDLifeFishTurn * dt +
+				1.0e-4f;
+			last[i] = e.pitch;
+
+			if (i == 0 && t >= 40.0f && t < 54.0f)
+			{
+				calmLeast = down < calmLeast ? down : calmLeast;
+				calmMost = down > calmMost ? down : calmMost;
+			}
+
+			// A tenth of a second into each dart: who climbs, who dives.
+			if (k == 5 * 30 + 3 || k == 30 * 30 + 3)
+			{
+				ups += e.climb > 0.05f && e.pitch > 0.05f;
+				downs += e.climb < -0.05f && e.pitch < -0.05f;
+			}
+		}
+	}
+
+	ok(p.fish >= 4 && p.schools[0].darts >= 2 && outBand == 0,
+		"life fish depth: calm and darting, no fish leaves its band",
+		outBand, 0);
+	ok(overPitch == 0 && overTurn == 0,
+		"life fish depth: the model's pitch stays within 30 degrees and turns "
+		"at the fish's turn rate", overPitch + overTurn, 0);
+	ok(calmMost - calmLeast > 2.0f * kHDLifeFishRise - 8.0f,
+		"life fish depth: a calm fish rises and sinks the swing in 14 s",
+		(long)(calmMost - calmLeast), (long)(2.0f * kHDLifeFishRise));
+	ok(ups >= 1 && downs >= 1,
+		"life fish depth: a dart sends some fish up and some down, nose first",
+		ups * 100 + downs, 101);
+
+	// A band narrower than the swing: the swing shrinks to fit.
+	p.bodies[0] = life_body(5, 5, 768);
+	p.bodies[0].rise = 200.0f;
+	HDLifeFishBand(p, p.bodies[0], &top, &bottom);
+
+	float least = 1.0e9f, most = -1.0e9f;
+
+	for (int k = 0; k < 600; k++)
+	{
+		const float d = HDLifeFishCalm(p, p.entries[0], k * 0.05f, 0);
+
+		least = d < least ? d : least;
+		most = d > most ? d : most;
+	}
+
+	ok(least >= top - 0.01f && most <= bottom + 0.01f && most - least >
+		bottom - top - 8.0f,
+		"life fish depth: in a band of 353 a fish swings over the whole of it",
+		(long)(most - least), (long)(bottom - top));
 }
 
 static void life_depth()
@@ -19243,6 +19474,8 @@ int main()
 	life_turn();
 	life_bob();
 	life_depth();
+	life_fishdepth();
+	life_conveyor();
 	load_pool();
 	splash_motion();
 	splash_cards();

@@ -152,10 +152,15 @@ namespace
 		return -1;
 	}
 
-	/* Whether a tank is whole: its FISHTANK item has not been set off -
-	 * not active, never triggered (ITEM_INACTIVE) and its water at the
-	 * full 4,096 InitialiseFishtank gives it, which its spray takes down
-	 * (game\tower.cpp). A tank without one cannot break. */
+	static_assert(ITEM_ACTIVE == kHDLifeItemActive &&
+		ITEM_DEACTIVATED == kHDLifeItemDeactivated &&
+		ITEM_INVISIBLE == kHDLifeItemInvisible &&
+		IFL_INVISIBLE == kHDLifeFlagInvisible &&
+		IFL_CODEBITS == kHDLifeFlagCodebits,
+		"the tank rule reads the game's item states");
+
+	/* Whether a tank is whole: its FISHTANK item has not been set off
+	 * (HDLifeTankWhole). A tank without one cannot break. */
 	bool tank_whole(int item)
 	{
 		if (item < 0)
@@ -163,8 +168,7 @@ namespace
 
 		const ITEM_INFO& it = items[item];
 
-		return !it.active && it.status == ITEM_INACTIVE &&
-			it.item_flags[1] >= 4096;
+		return HDLifeTankWhole(1, it.active, it.status, it.item_flags[1]);
 	}
 
 	// a x b, 4x4 row-major, row vectors.
@@ -620,10 +624,11 @@ void HDLifeFrame(double clock)
 			roll, local);
 		mul44(local, view, node);
 
-		/* Its kind's share of the body's light, and a river float's fade
-		 * into its slots (HDLifeDiveLightShare) on the light and the sun. */
+		/* Its kind's share of the body's light, and a river's or a
+		 * conveyor's float's fade into its slots (HDLifeDiveLightShare) on
+		 * the light and the sun. */
 		const float fade = HDLifeDiveLightShare(HDLifeDiveShare(
-			g_pool.bodies[(size_t)e.body], e.x, e.z));
+			g_pool.bodies[(size_t)e.body], e.x, e.z, e.entering));
 		const float share = HDLifeLightShare(e.kind) * fade;
 		const float light[3] = { g_light[(size_t)e.body * 3] * share,
 			g_light[(size_t)e.body * 3 + 1] * share,

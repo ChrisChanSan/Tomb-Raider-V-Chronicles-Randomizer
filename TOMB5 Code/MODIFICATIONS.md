@@ -4761,6 +4761,109 @@ slowest level takes about 110 ms, under the 300 ms that would call for one.
 
 **Commits.** `42ff30d`, `944329c`, `b09b724`, `12fc789`, `0fb1409`
 
+**Round 5, after the owner's play test of the air rule (2026-10-11).** The build of
+`4f725a8` was played with `hd_air` 1. What he found, in his words: the room art looks good
+except RICH2's lift; ANDREA1 still has one artifact - standing on the place he marked in
+room 93, beside the room's white light in front of its door to the street, he sees a
+256-unit slit of room 101's facade texture above the doorway; the tower in ANDREA2 still
+partly pops in, as always; and in the lift of RICH2 the textures flicker and pop in, shown
+in a video of the ride up and down the shaft. He also asked what the empty-window choice
+of the round before is, and decides it on pictures.
+
+**ANDREA1, room 101's facade from room 93.** Measured from the place (the square in front
+of room 93's door to room 70, eye 762 over the floor) at 60 directions, yaw 75 to 210 and
+pitch -60 to 15 in 15-degree steps, and from five camera places (the place itself and four
+around it, up to a square away and 254 units higher) at 24 directions each, 640 x 360:
+room 101 is listed with a classic window at 47 of the first and 37 of the second. A new
+switch, `RoomProbe -classicmark <room>`, draws one room's classic faces red, so a picture
+of the classic faces says whose face each pixel is; held against the art with group 101
+skipped, room 101's art shows where the classic frame shows another room's face at no
+pixel of the 47 views from the place and at 896 pixels of the 37 from the camera places,
+222 of 230,400 in one view at most, and nowhere is the clear colour where the classic
+frame shows a face of 101. In the slit the place looks through - room 101's window at the
+right edge of the screen looking east, 605..639 at 640 x 360 - the classic frame shows a
+face of room 101 itself, and the art draws that wall there: 3,929 pixels of 101's art, the
+same with `hd_air` 0 and with the tool of `2d48e83`, before the air rule. Room 101's art
+that stands in room 93's own air (510 triangles, the pieces 6 to 9 of the pair 101 in 93:
+a thin wall of 101's facade, x about 52,300, z 40,960 to 42,660) is never in sight from
+the place: drawing it nowhere changed no pixel at the two directions that show the slit,
+and that try is not part of this round. What the place shows is room 101's wall through a
+real gap of the classic rooms, which the classic frame shows too; no rule of the room art
+draws it there that the classic frame would not, so nothing was changed. Whether the slit
+is the one in the picture, or another view of the same place, takes the game: the log of
+the play test holds no frame from room 93.
+
+**ANDREA2, the tower.** The tower of the church street is the brick block of rooms 78, 183
+and 84 at the end of the alley. A walk of 24 steps from room 236 through 81 into 78 (x
+62,000 to 68,200) at Lara's eye height looking at the block, and a second walk at the
+height and direction of the two earlier poses: the three rooms are on the list with a
+classic window at all 48 steps, their art grows with their classic faces from step to step
+(2,890 to 174,261 pixels), and nowhere does the clear colour stand where the classic frame
+shows a face of the block. `hd_air` 0 against 1 along the first walk: the same pictures at
+all 24 steps. At the two poses of the earlier pictures the rooms the alley shows - 91, 90,
+78, 84, 203, 183, 224, 12, 205 - are listed with classic windows in both. The pop-in was
+not reproduced offline: neither the walk, nor the air rule, nor a window cuts the tower at
+these places.
+
+**RICH2, the lift.** The ride was taken out of the log's CAMLOG lines of the second RICH2
+session, ticks 552,400 to 584,100 (eye, target and the eye's room per tick: up through
+rooms 67, 65 and 64, then down through 105, 114, 115 and 113), and drawn as 40 steps with
+the walk's list per step. `hd_air` 0 against 1: 0 pixels at all 40 steps. In the video the
+strongest steps of a frame-difference pass are the sweep of a rotating red light over the
+walls, a light of the level and not the room art. The list changes at 30 of the 39 steps,
+mostly through classic windows (40 rooms come in through one, 16 through the reach alone):
+the floors of the shaft and its top, rooms 35 to 38 and 61, enter and leave as the camera
+turns. At a step of 94 milliseconds of the log (ticks 559,859 to 559,953), rooms 37 and 61
+come onto the list through a classic window of 126 x 9 pixels at the top of the screen,
+and the picture changes by 52,497 pixels of 230,400: group 61 alone draws 52,470 of them,
+a second set of girders, lamps and wall panels over the shaft beside the camera. TrgProbe
+counts group 61 at 284,006 triangles, 252,976 of them outside room 61: a second hull of
+the whole shaft. 50,407 of them stand in the air of rooms 62 to 65, which room 61 has no
+link with, in no intrusion entry's box (the boxes part in y), and so they keep the box's
+answer and are drawn whole whenever room 61 is listed; the first rule of the round before,
+which held all art in such air to its own window, takes 19,393 of the 52,470 pixels and
+leaves 37,772. The lift's flicker is that hull, coming and going with room 61 on the list.
+Neither the air rule nor any rule of this entry touches it: it is the duplicate shell this
+entry left out of its scope, and a rule for it - drawing a group's art that stands far
+outside its own room only inside that room's window, or dropping a second hull where the
+first one is drawn - changes the decision that art in no entry's box keeps the box's
+answer, which the street art and the palms of ANDREA2 rest on. Not changed in this round.
+
+**The empty-window choice, in pictures.** `RoomProbe -unlinked 2` draws the engine's
+answer but for a room whose window is empty, whose pieces in unlinked air keep the smaller
+box's answer: the other answer, out of the same build. At the four places, 1280 x 720:
+RICH2 room 114 looking west, the smaller box fills room 172's wall top (55,785 pixels, all
+of them clear colour as built); ANDREA1 room 228 looking west, 0 pixels - the hole there
+is room 38's art in room 211's air held to room 38's own window, which is not empty, and
+only room 53's pieces stand in an empty window there, which are hidden behind other art;
+ANDREA1 room 19's doorway, the lit floor comes back (1,363 pixels); JOBY2 room 153, part
+of the black bars comes back (6,158 pixels). The sentence of the entry above that names
+ANDREA1 room 228 among the holes of an empty window is answered by this measurement: of
+its 23,151 pixels none is the empty window's.
+
+**Checked.** No engine file changed in this round: `git diff --stat 4f725a8..HEAD` names
+RoomProbe.cpp, this record and the Tools README alone, so `hd_enable` 0, the classic path
+and `hd_air` 0 are the bytes of `4f725a8`. RoomProbe built from this round: `-classicroom
+-classiconly` of ANDREA2 231, JOBY2 66 and ANDY3 34, two directions each, gives the same
+bytes (md5) as the tool built at `8691e82`; at the 201 views of the round before (the 22
+places, the 131 sweep views, the 16 mass views, the 32 earlier views) `-air 0` gives the
+picture file of the `2d48e83` tool byte for byte at all 201, and the default answer the
+picture of the `4f725a8` tool at all 201, so every count of the entry above stands: the
+five places lose their ghosts by the same pixels against `-unlinked 0` (the block beside
+the flag 41,734 and 34,315, the window frame 18,709, the marble strip 14,448, the black
+bars 24,640, the lit floor 5,396), room 101 under the flag 0, and of the 131 sweep views
+34 change, by 190,895 pixels, 111,279 of them clear colour, 21 by more than 500.
+ModernTest 14,891 checks, MenuTest 42,627, InterpTest 729, LipsTest 270 with the `.OBJ`
+folder and 243 without, 0 failed.
+
+**Left.** The slit in ANDREA1 for a picture from the game with `-log` at the place, so
+that the frame's camera and room list can be drawn again; the tower of ANDREA2 the same
+way, a log of the frames where it pops; the lift's second hull for a decision on a rule
+for art far outside its own room; the empty-window choice for the owner, on the four
+pictures.
+
+**Commits.** `96ebca9`
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

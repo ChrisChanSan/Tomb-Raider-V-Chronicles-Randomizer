@@ -91,6 +91,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include <string.h>
 #include <algorithm>
+#include <chrono>
+#include <new>
 #include <vector>
 
 static int g_fail = 0;
@@ -17791,8 +17793,9 @@ static void life_depth()
 
 /* The level load's pool (hd_pagecache.h): the thread-count rule, every item
  * once into its own slot whatever the thread count, the join in group order
- * with every run moved by its place, the first exception on the caller, and
- * the FNV-1a 64 step the build's fingerprint is made of. */
+ * with every run moved by its place, the first exception on the caller, the
+ * byte gate that gives a throwing item's share back, and the FNV-1a 64 step
+ * the build's fingerprint is made of. */
 // The low 31 bits of a hash, for the report line of a failed check.
 static long low(unsigned long long h)
 {
@@ -17959,6 +17962,67 @@ static void load_pool()
 		}
 
 		ok(caught, "pool: an item's exception reaches the caller", caught, 1);
+	}
+
+	/* The byte gate of the index fill (HDByteGate), as the fill holds it:
+	 * every item takes a share of 60 under a budget of 96, so no two run at
+	 * once. Without a throw, every item runs and the peak stays the one
+	 * share. With item 0 throwing while it holds its share, the items that
+	 * already wait for room must still start and finish, the exception must
+	 * reach the caller, and the gate must hold nothing afterwards; a share
+	 * kept by the throw would leave a waiting item waiting and the join
+	 * would never return. */
+	for (int threads = 1; threads <= 16; threads *= 4)
+	{
+		for (int throws = 0; throws <= 1; throws++)
+		{
+			HDByteGate gate(96.0);
+			std::mutex seen_lock;
+			double peak = 0.0;
+			int started = 0, finished = 0;
+			bool caught = false;
+
+			try
+			{
+				HDPoolRun(24, threads, [&](int at)
+				{
+					const HDByteGate::Share share(gate, 60.0);
+
+					{
+						std::lock_guard<std::mutex> lock(seen_lock);
+
+						started++;
+						peak = std::max(peak, gate.InFlight());
+					}
+
+					if (throws && at == 0)
+					{
+						std::this_thread::sleep_for(
+							std::chrono::milliseconds(20));
+						throw std::bad_alloc();
+					}
+
+					std::lock_guard<std::mutex> lock(seen_lock);
+
+					finished++;
+				});
+			}
+			catch (const std::bad_alloc&)
+			{
+				caught = true;
+			}
+
+			ok(caught == (throws != 0), "gate: a throw under the gate reaches "
+				"the caller", caught, throws);
+			ok(started == finished + throws, "gate: every started item but "
+				"the thrower finishes", started, finished + throws);
+			ok(throws || started == 24, "gate: without a throw every item "
+				"runs", started, 24);
+			ok(gate.InFlight() == 0.0, "gate: nothing held after the join",
+				(long)gate.InFlight(), 0);
+			ok(peak == 60.0, "gate: one share of 60 at a time under 96",
+				(long)peak, 60);
+		}
 	}
 
 	// FNV-1a 64: the published values of the empty string, "a" and "foobar",

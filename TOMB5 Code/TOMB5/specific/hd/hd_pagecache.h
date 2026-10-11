@@ -19,6 +19,7 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <exception>
 #include <mutex>
 #include <thread>
@@ -428,6 +429,71 @@ template <class Work> void HDPoolRun(int count, int threads, const Work& work)
 	if (first)
 		std::rethrow_exception(first);
 }
+
+/* A gate by bytes for the pool's items: a Share waits until the shares held
+ * and its own stay within the budget, or until no share is held, and then
+ * holds its bytes for as long as it lives. Its destructor gives them back
+ * and wakes the waiters on every way out of the item, a throw included -
+ * without that, an item that throws (std::bad_alloc in the 32-bit process)
+ * keeps its bytes, and an item already waiting for room waits on, so the
+ * pool's join never returns. The gate decides only when an item starts. */
+class HDByteGate
+{
+public:
+	explicit HDByteGate(double budget) : budget_(budget) {}
+
+	HDByteGate(const HDByteGate&) = delete;
+	HDByteGate& operator=(const HDByteGate&) = delete;
+
+	// The bytes the shares hold now.
+	double InFlight()
+	{
+		std::lock_guard<std::mutex> lock(mutex_);
+
+		return in_flight_;
+	}
+
+	class Share
+	{
+	public:
+		Share(HDByteGate& gate, double need) : gate_(gate), need_(need)
+		{
+			std::unique_lock<std::mutex> lock(gate_.mutex_);
+
+			gate_.wait_.wait(lock, [&]()
+			{
+				return gate_.in_flight_ == 0.0 ||
+					gate_.in_flight_ + need_ <= gate_.budget_;
+			});
+
+			gate_.in_flight_ += need_;
+		}
+
+		~Share()
+		{
+			{
+				std::lock_guard<std::mutex> lock(gate_.mutex_);
+
+				gate_.in_flight_ -= need_;
+			}
+
+			gate_.wait_.notify_all();
+		}
+
+		Share(const Share&) = delete;
+		Share& operator=(const Share&) = delete;
+
+	private:
+		HDByteGate& gate_;
+		const double need_;
+	};
+
+private:
+	const double budget_;
+	double in_flight_ = 0.0;
+	std::mutex mutex_;
+	std::condition_variable wait_;
+};
 
 /* FNV-1a 64 over bytes, and over a value's bytes - the build's fingerprint
  * (HDRenderBuildHash). Every value fed in is a field or a struct without

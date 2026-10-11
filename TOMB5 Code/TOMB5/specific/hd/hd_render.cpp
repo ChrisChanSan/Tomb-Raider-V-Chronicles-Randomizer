@@ -7576,39 +7576,20 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * budget (hd_pagecache.cpp), the transient a level load already allows
 	 * itself in a 32-bit address space. Measured with RoomProbe on TITLE:
 	 * without the gate the peak commit of sixteen threads stood 160 MiB above
-	 * one thread's. The gate decides only when a group starts. */
+	 * one thread's. The gate decides only when a group starts; a group's
+	 * share is given back however its fill ends (HDByteGate::Share), so a
+	 * throw reaches the caller and leaves no thread waiting for room. */
 	const double kFillBudget = 96.0 * 1048576.0;
-	std::mutex fill_gate;
-	std::condition_variable fill_wait;
-	double fill_in_flight = 0.0;
+	HDByteGate fill_gate(kFillBudget);
 
 	HDPoolRun((int)fill_order.size(), threads, [&](int k)
 	{
 		const size_t g = (size_t)fill_order[(size_t)k];
 		const double need = (double)(fill_size[g] / 3) *
 			(double)(sizeof(HDTri) + 2 * sizeof(unsigned int) + 1);
-
-		{
-			std::unique_lock<std::mutex> lock(fill_gate);
-
-			fill_wait.wait(lock, [&]()
-			{
-				return fill_in_flight == 0.0 ||
-					fill_in_flight + need <= kFillBudget;
-			});
-
-			fill_in_flight += need;
-		}
+		const HDByteGate::Share share(fill_gate, need);
 
 		fill_group(g);
-
-		{
-			std::lock_guard<std::mutex> lock(fill_gate);
-
-			fill_in_flight -= need;
-		}
-
-		fill_wait.notify_all();
 	});
 
 	/* The join, in group order: the index runs appended with every range's

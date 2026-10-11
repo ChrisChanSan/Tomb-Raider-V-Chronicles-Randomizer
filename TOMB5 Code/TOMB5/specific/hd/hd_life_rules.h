@@ -45,8 +45,10 @@ enum
  * limit. The drafts are free choices, set by eye on the round's RoomProbe
  * pictures: glass with air in it half under, soaked cloth low, wood a
  * little high; so are two barrels a body at most (one is 326 units
- * across, ANIMATING3_ANDY1's box) and the fish's head toward +x, which
- * no measurement has checked. */
+ * across, ANIMATING3_ANDY1's box). The fish's head points toward +x:
+ * ModelProbe -name FISH2 seen from the side and from above (-yaw 0 with
+ * -pitch 0 and 90, +x to the right) shows the eye on the +x end and the
+ * forked tail on the other. */
 struct HDLifeKind
 {
 	const char* name;	// the LIFELOG's word
@@ -74,10 +76,13 @@ static const HDLifeKind kHDLifeKinds[HD_LIFE_KINDS] =
  * follow the levels' own water: ANDREA2's sewer canal, a channel of 44
  * squares, gets the debris and no fish, and its fountain basins stay
  * clean; ANDY3's rivers, its lake (42 squares), its shallows (24) and its
- * pond of room 145 (11), and ANDY1's two pools (14 each) get dead leaves,
- * a rag and a barrel, and a school where the water is deep enough (counts
- * of RoomProbe -hdwater 1 -life). The weights and the least squares are
- * free choices, set by eye on the round's RoomProbe pictures. */
+ * pond of room 145 (11), and ANDY1's two pools (14 each) are offered dead
+ * leaves, a rag and a barrel, and get a school where the water is deep
+ * enough (counts of RoomProbe -hdwater 1 -life). A sea's sheet rises 121
+ * units (HDRenderWaterBodySquares), more than the 11 a cloth reaches under
+ * the surface (0.7 of its box's 16), so ANDY1's pools and ANDY3's lake
+ * and shallows take barrels alone (HDLifeFits). The weights and the least
+ * squares are free choices, set by eye on the round's RoomProbe pictures. */
 struct HDLifeLevel
 {
 	const char* stem;
@@ -262,7 +267,14 @@ struct HDLifeDrip
  * up) over the entry's number, the second input mixed in after the first
  * step times 0x9E3779B1 (2^32 over the golden ratio, so neighbouring inputs
  * land far apart) - a number that depends on those two alone, never on the
- * frame. 0 .. 32767. */
+ * frame. 0 .. 32767. A number that changes with time takes a clock step or
+ * a count as its second input (the wander's step, a retry's or a school's
+ * whole second, a drip's rings); one fixed per float takes a constant of
+ * its own plus the float's comeback count: 101 the bob's period, 211 its
+ * phase, 307 the yaw, 401 and 503 a comeback's x and z, 601 its kind,
+ * 7919 its upstream square; a school's number is shifted by 7 off the
+ * floats' first numbers. The constants are free choices - any that differ
+ * serve, the mixer spreads them. */
 inline unsigned HDLifeHash(unsigned a, unsigned b)
 {
 	unsigned s = a * 0x41C64E6Du + 12345u;

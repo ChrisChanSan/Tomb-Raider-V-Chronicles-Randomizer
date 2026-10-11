@@ -40,7 +40,9 @@ namespace
 	const HDLifeLevel* g_row = 0;
 	char g_stem[16] = { 0 };
 	float g_box[HD_LIFE_KINDS][6];
-	// The light each body's models take, classic 0..255 (128 is one).
+	/* The light each body's models take, the classic 0..255 triple
+	 * HDObjectPush reads (its neutral light is 128); a body light of one
+	 * gives 255 here (HDLifeLevelBegin). */
 	std::vector<float> g_light;
 	// The per-second LIFELOG line's counts.
 	int g_second = -1;
@@ -240,8 +242,9 @@ void HDLifeLevelBegin(const char* stem)
 		g_pool.bodies.push_back(b);
 
 		/* The body's light, the one its sheet's colours are lit by, as the
-		 * models' ambient: 255 for a light of one. A free choice, set by
-		 * eye on the round's RoomProbe pictures. */
+		 * models' ambient: 255 for a body light of one, twice the push's
+		 * neutral 128. A free choice, set by eye on the round's RoomProbe
+		 * pictures. */
 		for (int k = 0; k < 3; k++)
 			g_light.push_back(info.light[k] * 255.0f);
 	}
@@ -380,6 +383,8 @@ void HDLifeFrame(double clock)
 			g_light[(size_t)e.body * 3 + 2] * share };
 
 		if (HDObjectPush(slot_of(e.kind), node, 1, light, ~0u, 0, 0, 0.75f))
+		/* No engine lights of its own; the sun at 0.75, the share the
+		 * game's own objects take in play (hd_object.cpp, fill_lights). */
 			drawn++;
 		else
 			skipped++;

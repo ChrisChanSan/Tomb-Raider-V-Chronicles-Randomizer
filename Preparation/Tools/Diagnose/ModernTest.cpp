@@ -17878,6 +17878,44 @@ static void life_rings()
 		"never", (long)a.size() * 100 + (long)b.size(), 1500);
 }
 
+/* Floats keep apart (HDLifeClear): a current that drives two floats to a
+ * wall leaves them side by side, no nearer than kHDLifeApart of their
+ * reaches. */
+static void life_apart()
+{
+	HDLifePool p = {};
+
+	p.bodies.push_back(life_body(2, 4, 2048));
+	p.bodies[0].flowZ = 1.0f;
+	p.bodies[0].speed = 90.0f;
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	p.reach[HD_LIFE_BARREL] = 242.0f;
+
+	for (int i = 0; i < 2; i++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_BARREL;
+		e.index = 20 + i;
+		e.x = 900.0f + 200.0f * i;
+		e.z = 600.0f + 900.0f * i;
+		p.entries.push_back(e);
+	}
+
+	for (int k = 1; k <= 30 * 120; k++)
+		for (size_t i = 0; i < p.entries.size(); i++)
+			HDLifeFloatTick(p, 0, p.entries[i], k / 30.0f, 1.0f / 30.0f);
+
+	const float dx = p.entries[0].x - p.entries[1].x;
+	const float dz = p.entries[0].z - p.entries[1].z;
+	const float apart = sqrtf(dx * dx + dz * dz);
+
+	ok(apart >= kHDLifeApart * 484.0f - 0.5f && p.entries[0].z > 3000.0f &&
+		p.entries[1].z > 3000.0f,
+		"life apart: two barrels the current drives to the wall lie apart",
+		(long)apart, (long)(kHDLifeApart * 484.0f));
+}
+
 static void life_flee()
 {
 	HDLifeBody b = life_body(4, 4, 2048);
@@ -18772,6 +18810,7 @@ int main()
 	life_ends();
 	life_drops();
 	life_rings();
+	life_apart();
 	life_flee();
 	life_bob();
 	life_depth();

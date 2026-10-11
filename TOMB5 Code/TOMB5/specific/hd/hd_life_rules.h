@@ -1374,6 +1374,41 @@ inline void HDLifeFloatRings(const HDLifePool& p, const HDLifeEntry& e,
 	rings->push_back(r);
 }
 
+/* Floats keep apart: no nearer than kHDLifeApart of their two reaches
+ * (HDLifeReach, half the diagonal of a box seen from above, which is more
+ * than the two need side by side: two barrels lying side by side take 326
+ * of their 484) - 0.75 leaves barrels a hand apart, a free choice set by
+ * eye on RoomProbe series of ANDREA2's canal, where the current drives
+ * twelve floats to one wall. */
+static const float kHDLifeApart = 0.75f;
+
+/* Whether float `e` at world x, z keeps clear of its body's other floats:
+ * not nearer to one than kHDLifeApart of their reaches, or at least not
+ * nearer than it is now - two that came to lie too near may part. */
+inline bool HDLifeClear(const HDLifePool& p, const HDLifeEntry& e, float x,
+	float z)
+{
+	for (size_t i = 0; i < p.entries.size(); i++)
+	{
+		const HDLifeEntry& o = p.entries[i];
+
+		if (&o == &e || o.kind == HD_LIFE_FISH || o.body != e.body)
+			continue;
+
+		const float least = kHDLifeApart * (p.reach[e.kind] +
+			p.reach[o.kind]);
+		const float dn = (x - o.x) * (x - o.x) + (z - o.z) * (z - o.z);
+
+		if (dn >= least * least)
+			continue;
+
+		if (dn < (e.x - o.x) * (e.x - o.x) + (e.z - o.z) * (e.z - o.z))
+			return false;
+	}
+
+	return true;
+}
+
 /* A river float comes back: a kind rolled again, and its place at the
  * inlet's slot point, across the flow where a square of the upstream row
  * deep enough for that kind puts it (HDLifeUpstreamSquare, HDLifeInside),
@@ -1459,8 +1494,28 @@ inline void HDLifeFloatTick(HDLifePool& p, const HDLifeLevel* level,
 		return;
 	}
 
-	const int how = HDLifeStep(b, &e.x, &e.z, vx * dt, vz * dt, margin,
-		HDLifeNeed(p, e.kind, b));
+	/* HDLifeStep's three tries - the whole step, its x part, its z part -
+	 * each also clear of the body's other floats (HDLifeClear), so floats
+	 * a current drives to a bank lie side by side along it. */
+	const float need = HDLifeNeed(p, e.kind, b);
+	const float sx[3] = { vx * dt, vx * dt, 0.0f };
+	const float sz[3] = { vz * dt, 0.0f, vz * dt };
+	int how = HD_LIFE_BLOCKED;
+
+	for (int k = 0; k < 3; k++)
+	{
+		if ((k == 1 && sx[k] == 0.0f) || (k == 2 && sz[k] == 0.0f))
+			continue;
+
+		if (HDLifeOpen(b, e.x + sx[k], e.z + sz[k], margin, need) &&
+			HDLifeClear(p, e, e.x + sx[k], e.z + sz[k]))
+		{
+			e.x += sx[k];
+			e.z += sz[k];
+			how = k ? HD_LIFE_SLID : HD_LIFE_MOVED;
+			break;
+		}
+	}
 
 	if (how == HD_LIFE_BLOCKED)
 	{

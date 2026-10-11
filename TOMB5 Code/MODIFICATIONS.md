@@ -12553,6 +12553,134 @@ facing: measured with ModelProbe, +x is right.
 **Commits.** `9c1381a`, `0e1ea4b`, `e4f4251`, `1fc81d3`, `2a36718`, `ac81bfd`, `05a0502`,
 `6508500`; after the review `8447444`, `6510ce0`, `1867877`.
 
+**Round 2, after the owner's play test.** The owner played the first round on
+2026-10-11 and was content with it as a whole; for the life he asked for seven things,
+here in his words put into English. The river floats pop up in the middle of the
+water and vanish at the end with a pop; every river has a slot 256 high where the
+water comes from and goes to - the floats should come out of the hole, surface, drift
+on the surface and at the end go down into the drain and fade away, which masks it a
+little. The fish do not flee from Lara, they only hang about in their school. The
+drips from the ceiling stone: where are they - he saw none. The barrel is fine; big
+things in the water should make the round rings Lara makes when she swims. The canal
+of ANDREA2 should carry its floats to the grate (his "yes, with small extra
+adjustments" - the adjustments are his to come; this round built the plain current).
+The floats jump to new places after alt-enter; fix it if that is simple. And there
+are no fish in RICH2's aquarium yet. The thirteen questions above stay as built.
+
+How. All of it in `hd_life_rules.h` as pure functions with the engine's side in
+`hd_life.cpp`; the canal's current is a row of the water module's compiled river
+table.
+
+- *The river's ends* (`HDLifeRiverEnds`, `HDLifeDiveShare`, `HDLifeOnRun`,
+  `HDLifeComeBack`). Measured first, with SectorCheck on the classic `ANDY3.TRC`: past
+  the last sheet row of each of the four rivers, along the flow, lies a dry floor 256
+  to 768 units over the surface or a wall, and at six of the eight ends the water goes
+  on under it - 256 high at four (the sink river's inlet, the 640-river's outlet, the
+  two streams' slots over rooms 70 and 66), 1024 at two; the stream over room 70 is fed
+  from the side (a wall along its flow), the one over room 66 ends in water closed by
+  its height byte. Today's float came back on the first square and left a quarter
+  square past the last row's middle, both over the sheet. Now a float comes back at the
+  inlet's slot point, 384 units past the first row's edge (more than the 242 a barrel
+  reaches across the water, so all of it is under the block), its top 64 under the
+  surface; over the first square it rises to its floating place and over the last
+  square it dives, both on a smooth step, riding straight with the current there (no
+  wander, no bank test); it comes back only once past the outlet's slot point, as far
+  past the last row's edge. A model's push takes no alpha (`HDObjectPush`), so the
+  light and the sun of a diving float fall to a quarter over the dive - the water's own
+  absorption does the same - and the geometry hides the rest. The body's `LIFELOG` line
+  ends in `in=` and `out=`, the slot points.
+- *The flight* (`HDLifeDartSpeed`, `HDLifeDartWay`, `HDLifeSchoolTick`). Measured
+  first with RoomProbe `-lifelara`: the fleeing school swam straight at the deep square
+  farthest from Lara at 300 units a second and stopped for good at the first place its
+  3x3 test left deep water - 110 units in the two seconds after she came, in ANDY3's
+  pond and lake alike; its ring also jumped when the flight doubled its turn. In the
+  owner's log the school that fled from second 90 to 103 of ANDY3 was the lake's (Lara
+  swam in room 3; she came no nearer than 34,508 units to the pond). Now Lara within a
+  square of any fish, or a live splash of the game on the body's water (`splashes[]`,
+  read only), sends every fish on a dart of its own: away from the scare, turned by up
+  to 25 degrees by a hash so the school breaks up a little, 2,800 units a second
+  falling off with a time of 1.5 seconds - 3,093 units, three squares, in the first
+  two, a dart a swimmer sees; sliding along the deep water's edge (128 units off it,
+  more than `FISH2`'s 87 reach). After 4 seconds the centre goes where the fish are
+  (or to the nearest square that holds a school) and they swim back to the ring at 600
+  units a second; a new scare 1.5 seconds after the last starts a new dart.
+- *The drips one can see* (`HDLifeDropTicks`, `put_drop`). The ring was the engine's
+  drip size, 32 to 39 - a ring's strength on the sheet is its size over 128 times a
+  half, so a quarter of a wading Lara's (112 to 127). The card path has callers for a
+  splash and a tank's spray only, so the drop is the classic one: the game's own drip
+  (`Drips[]`, drawn by `DrawDrips` as a short streak), put into a free odd slot only -
+  an even slot's drip that lands on a floor calls `TriggerDripSplash` and its random
+  draws, and no game drip is pushed out. It leaves the ceiling over the drip point (the
+  classic sector's ceiling byte, through the rooms above), falls from rest by 153 a tick
+  (the project's 4,300 units a second squared at 30 ticks) as `UpdateDrips` moves it,
+  and its ring of 96 to 111 - three quarters of a wading Lara's or more - starts when it
+  arrives: 27 ticks from the canal's ceiling at 3,072, 45 from the pond's sky room at
+  6,144. The reach of six squares round Lara and the two seconds a body stay; the
+  body's line ends in `drips_at=`. ANDY3's drips rang 0 times in the owner's 111
+  seconds because Lara never came near the pond.
+- *The rings round the barrels* (`HDLifeFloatRings`). A float 160 units high or more -
+  the barrel, 326; a bottle is 80, a cloth 16 - writes a ring into the ripples every
+  1 to 2 seconds (a hash of the float), 88 and up to 16 more at the top of its bob,
+  through the life's own slot fill; a diving river float rings no more.
+- *The canal's current* (`kWaterFlow`, a `cls` column). The canal's rows run along its
+  longer side, 15 squares along z against 7 along x, toward +z (`water_look`; a crest
+  of `WaveSum8` moves along its row's way), its bank foam drifts the same way, and past
+  its +z end wall the water goes on under it (water room 133): the drain. A compiled
+  river row with class -1 (keep) gives the canal +z at 90 units a second - half its
+  rows' 180, one and a half times the floats' wander, a slow sewer of 0.2 m/s; a
+  channel's look reads no flow, so only the floats and the `flow=` fields change.
+  Floats now keep apart (`HDLifeClear`, 0.75 of their two reaches), so the current lays
+  them side by side along the wall.
+- *The pool kept through a rebuild* (`HDLifeSameBodies`). `HDLevelUnload` alone ends a
+  level, so a begin for the same stem with a pool standing is a rebuild after a lost
+  device; when the bodies the water module hands out are the same, the pool is kept
+  with the models' sizes as loaded now. The level line ends in `kept=`.
+- *The fish tank* (`kHDLifeTanks`, `HDLifeAddTank`). RICH2 room 23's tank is an
+  alcove behind glass, x 33,792 to 34,816, z 67,584 to 69,632, y -3,840 to -2,816 -
+  the only squares where room 23 and its flip 32 differ - with the FISHTANK item 33 in
+  front of it. It gets a body of its two squares (class `tank`, `water=-1`) and a school
+  of 8 by the pond's rules, half a square under its top; RICH2 gets a life row that
+  offers no floats. Whole while the item has not been set off (inactive, its water at
+  the 4,096 `InitialiseFishtank` gives it); the shot sets it off, the room flips to the
+  empty alcove, and the fish go at once - the classic state has no water level in the
+  alcove to fall with, only the spray and the dome over the floor.
+
+**Measured.** RoomProbe `-life 1`, the slot points: ANDY3's sink river in at 43,392
+and out at 32,384 (z 19,968), the 640-river 35,456 and 46,464 (z 36,352), the streams
+over room 70 48,512 and 44,672 (z 23,040) and over room 66 z 35,200 and 30,336 (x
+45,568). Over 30 seconds at one-second steps, 341 river samples: 33 past an edge, every
+one with its top 41 units or more under the surface, 26 come-backs, no jump. The
+pond's school with Lara at its middle: spread 223 calm, 1,299 half a second after her,
+2,900 by three seconds; with a splash at one second it is back together (spread 228)
+by twelve. The canal: 0 of 12 floats in the last row at 0 seconds, 5 by 60, 6 by 120,
+8 by 180, side by side along the wall; three of them slide along the bank of the side
+arm. The drips: 5 in the canal under ceilings at 3,072 and 2,304, 2 in the pond from
+6,144. Over 60 seconds ANDY3's rings (barrels and the pond's drips) hold 9 of the 128
+ripple slots at once at the most, ANDREA2's 1, ANDY1's 5; at most 5, 2 and 7 rings lie
+within 1,024 units of a ring as it starts, of the eight a sheet draw takes. RICH2: 8
+fish, the pool 860 bytes, one model page. The cost at 2,560 x 1,440 (`-lifebench`, two
+runs, against `4f725a8`): the canal 9 drawn, GPU 0.0016 to 0.0018 ms before and 0.0018
+to 0.0020 after; the pond 8 drawn, 0.0048 to 0.0052 either way; a step of ANDY3's pool
+0.0061 ms (0.0036 before the floats kept apart).
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82`; the fifteen cameras
+with `-hdwater 0` 15 of 15 identical to the water round's parity set and with
+`-hdwater 1` and no `-life` 15 of 15 identical to `4f725a8`; ModernTest's life groups
+grown (the river's ends, the drops, the rings, keeping apart, the keep, the tank, the
+flight), the suites 0 failed; the engine and the tools build.
+
+**Left.** The look in the game - nobody in this round could play it: how dark a
+diving float should get, whether 2,800 units a second reads as a fish's dart, whether
+the drop's streak is seen at the canal's light. The stream over room 70 is fed from
+the side, so its floats come back inside the wall past its upper end. The canal's
+side arm keeps a few floats sliding along its bank for minutes. RoomProbe draws no
+classic drip, so no picture shows the falling drop - only its numbers and its ring;
+and it builds its water once, so the rebuild is proven by ModernTest alone. A tank's
+fish vanish at the shot rather than spill. The owner's adjustments to the canal.
+
+**Commits.** `d8f061f`, `0c54020`, `60ad906`, `5712057`, `b6925f2`, `c9c35f9`,
+`0f76a5c`.
+
 **The river's flow hide by its own squares.** The river's flow-material calls (material
 1, `HDRange::flowTris`) were hidden over a sheet by their box alone, where the still
 water's art asks its own squares (*the deck's plates*). They take the same rule now:

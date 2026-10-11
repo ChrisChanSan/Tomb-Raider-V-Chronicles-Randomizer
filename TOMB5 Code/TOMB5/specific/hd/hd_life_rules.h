@@ -362,9 +362,9 @@ static const float kHDLifeDartBeat = 3.0f;
  * 0.4 to 1 of kHDLifeDartPitch (the hash, 1109), its climb the dart's speed
  * times the pitch's sine, and runs on level once there. A depth anywhere in
  * the band and not the band's edge: a dart of 2,800 units a second climbs
- * 1,183 a second at 25 degrees and reached the edge of ANDY3's pond's band
- * (809 high) within a third of a second, three of its four fish on the
- * floor for three seconds (RoomProbe -lifelara series). Back to its ring a
+ * 1,183 a second at 25 degrees and crosses ANDY3's pond's band (809 high)
+ * within a third of a second, so a dart held to that pitch would leave its
+ * fish lying on the band's floor for the rest of the dart. Back to its ring a
  * fish climbs or sinks at most kHDLifeFishPitchMost of the rejoin's 600
  * units a second, 346. The model is pitched to its way - its climb over its
  * run, calm its rise over the school's cruise of kHDLifeSwim - at most
@@ -1859,16 +1859,20 @@ struct HDLifeRing
  * units a second and lives 3.5 s; a ring of the same kind within 192 units
  * that comes 0.6 s or more after it starts it again (hd_render.cpp, "the
  * rings"). ANIMATING3_ANDY1 reaches 163 to 179 from its middle across the
- * water (its box seen from above, 326 by 358) - so a ring of 88 to 104 every
- * 1 to 2 s ran under the barrel for its first second and was started
- * again by the next one just as it came out (RoomProbe -liferings game: at
- * ANDY3's lake 175 pixels changed 1 s after a ring, none at 1.5 s, where
- * a wading Lara's of 120 at the same place changed 637). Its size is
- * kHDLifeFloatRing and up to kHDLifeFloatRingTop more from the hash of the
- * float and the bob's count: the largest a ripple slot holds (a byte, and
- * UpdateSplashes grows a size under 252), so the ring starts 120 to 127 out
- * and is past the barrel's side in a third of a second; its strength on the
- * sheet is the full one a wading Lara's ring of 128 has. A river float
+ * water (its box seen from above, 326 by 358): a ring that starts inside
+ * that runs under the barrel, unseen, and a ring from the same barrel within
+ * about a second starts it again before it is out. So the ring comes once a
+ * bob, and the next one that comes 2.5 to 3.5 s after it (the life is
+ * 3.5 s) starts it again at 8 percent of its strength or less
+ * ((1 - 2.5/3.5) squared). Its size is kHDLifeFloatRing and up to
+ * kHDLifeFloatRingTop more from the hash of the float and the bob's count,
+ * near the 255 a ripple slot's byte holds: the ring starts 120 to 127 out
+ * and is past the barrel's side in a third of a second, and its strength
+ * on the sheet is the full one a wading Lara's ring of 128 has. A slot of
+ * 252 to 255 does not grow (UpdateSplashes grows a size only under 252);
+ * the sheets take a ring's size when they first see its slot, as a rule at
+ * init 1, where it is the slot's own; a sheet that first sees it a tick or
+ * more later counts it 4 units smaller for each tick. A river float
  * rings only while afloat (its dive under half). The height and the sizes
  * are free choices with those reasons; the period is the bob's. */
 static const float kHDLifeRingHeight = 160.0f;

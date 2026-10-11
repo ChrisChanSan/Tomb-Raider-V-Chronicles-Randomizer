@@ -3461,12 +3461,15 @@ static void BuildStaticPlaces()
  * No count threshold: the answer is per triangle and per frame, so a stray
  * triangle costs only itself and cannot scissor a facade.
  *
- * A second test stands beside the box: whether a triangle's centroid stands
- * in the air of a room its own room has no portal, door or vertical link
- * with, not even through a flipmap twin - the space the room's floor
- * squares enclose, off its walls, floors and ceilings and out of its
- * doorways (HDRoomAir in hd_render.h, BuildRoomAir). Such art that an
- * entry's box holds too is drawn only inside its own room's window and
+ * A second test stands beside the box: whether a triangle stands - its
+ * centroid's x and z, the heights its corners span - in the air of a room
+ * its own room has no portal, door or vertical link with, not even
+ * through a flipmap twin - the space the room's floor squares enclose,
+ * off its walls, floors and ceilings and out of its doorways (HDRoomAir
+ * in hd_render.h, BuildRoomAir). Such art that an entry's box holds too -
+ * by its centroid, or by the centroid's x and z when it reaches into the
+ * holder's air (hd_render.cpp, the pair_at loop of the index fill) - is
+ * drawn only inside its own room's window and
  * left out when that window is empty (DecidePairs), whatever the box's
  * answer, unless the classic path draws a face of its room that claims
  * it. The box alone cannot tell it from the art of a wall two rooms share,
@@ -3477,10 +3480,11 @@ static void BuildStaticPlaces()
  * in a doorway.
  *
  * The air is asked of every triangle, for the level's counts, and only the
- * art a box holds is held to the window: over the fifteen levels 109,000
- * of the 355,806 triangles in such air stand in an entry's box (TrgProbe
- * -roomspace, air_boxed), 40,798 of them art the open half would draw -
- * no face claims them outside the smaller box -, the black bars among them
+ * art a box holds is held to the window: over the fifteen levels 112,265
+ * of the 364,423 triangles in such air stand in an entry's box (TrgProbe
+ * -roomspace, air_boxed; asked by the centroid's height alone, 109,000 of
+ * 355,806, and 40,798 of those art the open half would draw - no face
+ * claims them outside the smaller box -), the black bars among them
  * (1,607 of the 2,160 triangles of room 30 in room 16). The rest stands in
  * no entry's box, most of it hung far outside its own room - ANDREA2's
  * street art of rooms 10 and 236 in rooms 206 and 79, the palms of rooms
@@ -3489,8 +3493,9 @@ static void BuildStaticPlaces()
  * top, a door, palm crowns: on the 131 room-centre views of ANDREA1,
  * ANDREA2, JOBY2 and RICH2 that the air changes it took 1,379,566 pixels,
  * 378,633 of them clear colour, against 190,895 and 111,279 with the boxed
- * art alone; the five faults named above go the same way either way, pixel
- * for pixel.
+ * art alone, both with the air asked by the centroid's height (216,318 and
+ * 119,107 by the corners' heights); the five faults named above go the
+ * same way either way, pixel for pixel.
  *
  * It runs before the build, beside BuildRoomBoxes, because the renderer tags
  * the triangles as it fills the index buffer. Everything it reads is the

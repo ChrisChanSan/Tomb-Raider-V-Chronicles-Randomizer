@@ -179,7 +179,7 @@
  *                     is the seed or any -with group; the engine lists only
  *                     the groups it draws in HD, so the groups the log's
  *                     HDLOG room= lines give hd=0 stay out of -with.
- *     -unlinked 0|1   1, the default and the engine's answer, draws a piece
+ *     -unlinked 0|1|2 1, the default and the engine's answer, draws a piece
  *                     whose art stands in the air of a room its own room
  *                     has no link with (HDRoomAir), and that an intrusion
  *                     box holds, only inside the group's window, under
@@ -187,7 +187,10 @@
  *                     empty - but for a piece of a pair with a claimed
  *                     face that survives the window, which keeps the
  *                     answer above; 0 leaves those pieces the answer
- *                     above, out of the same build. The `decide: clip`
+ *                     above, out of the same build; 2 is 1 but for a
+ *                     group whose window is empty, whose pieces keep the
+ *                     smaller box's answer - the other answer for such a
+ *                     room, out of the same build. The `decide: clip`
  *                     line ends with the engine's unlinked_ counters.
  *     -air 0|1        the engine's tomb5.hd_air: 1, the default, hands the
  *                     rooms' air to the build; 0 hands none, and the build
@@ -286,8 +289,9 @@
  *                     lives in. Without the switch the very same files draw
  *                     with every room whole and the doorway still shut,
  *                     the before picture out of the same build.
- *     -classicroom <room>
- *                     that room's classic faces out of the .TRC, flat grey,
+ *     -classicroom <room>  -classicmark <room>
+ *                     that room's classic faces out of the .TRC, flat grey
+ *                     (red with -classicmark, which says whose they are),
  *                     in the same depth buffer as the art; repeat for more
  *                     rooms. Needs -roombox. -classiconly draws them
  *                     alone; -coincide <units> counts the pixels at which
@@ -2610,11 +2614,13 @@ static std::vector<HDRoomAir> g_air_built;
 static std::vector<float> g_air_sectors_built;
 static std::vector<unsigned char> g_air_links_built;
 static double g_air_ms = 0.0;
-/* -unlinked 0|1: 1, the engine's answer, draws the pieces whose art stands
+/* -unlinked 0|1|2: 1, the engine's answer, draws the pieces whose art stands
  * in the air of a room its own has no link with only inside its own
  * window, unless a claimed face of the pair survives; 0 gives them the
  * answer they would have without that, in the same build - the picture
- * to hold the engine's against. */
+ * to hold the engine's against. 2 is the engine's answer but for a room
+ * whose window is empty, whose pieces keep the smaller box's answer: the
+ * other answer for such a room, to hold against the engine's. */
 static int g_unlinked = 1;
 /* -air 0|1: the engine's tomb5.hd_air. 1, the default, hands the rooms' air
  * to the build; 0 hands none, as BuildRoomAir does with hd_air off, so no
@@ -2661,6 +2667,9 @@ static std::vector<HDCut> g_cuts_built;
  * paints the first yellow and the second red over the finished picture. */
 static std::vector<int> g_classic_rooms;
 static bool g_classic_only = false;
+/* -classicmark <room>: that room's classic faces red instead of grey, so a
+ * picture of the classic faces says which room each pixel belongs to. */
+static std::set<int> g_classic_mark;
 // -classicplane <y>: only the faces with every corner at that height;
 // -classicwet: of those, not the dry copies BuildWaterSurfaces leaves out.
 static long g_classic_plane = 0;
@@ -5200,7 +5209,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		const bool claimed = !open && ask && piece.face >= 0 && answer &&
 			(g_decide == 3 ? alive : pairAlive);
 
-		if (unlinked)
+		if (unlinked && !(g_unlinked == 2 && *empty))
 			answer = claimed;
 
 		HDRenderPairWhole(group, j, answer ? 1 : 0);
@@ -5225,7 +5234,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		{
 			g_decide_count.unlinkedPieces++;
 
-			if (*empty)
+			if (*empty && !answer)
 				g_decide_count.unlinkedHidden++;
 			else
 				g_decide_count.unlinkedDrawn++;
@@ -5323,7 +5332,8 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 					pieces++;
 					tris += other.triangles;
 
-					if (other.inner == 0 && !(other.air && g_unlinked))
+					if (other.inner == 0 &&
+						!(other.air && g_unlinked == 1))
 						anyWhole = true;
 				}
 
@@ -8032,7 +8042,9 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 				const double l[3] = { 0.35, -0.8, 0.48 };
 				const double lit = fabs((n[0] * l[0] + n[1] * l[1] + n[2] * l[2]) / length);
 				const int grey = 70 + (int)(150.0 * lit);
-				const DWORD colour = D3DCOLOR_XRGB(grey, grey, grey - 20 > 0 ? grey - 20 : 0);
+				const DWORD colour = g_classic_mark.count(room)
+					? D3DCOLOR_XRGB(grey, 0, 0)
+					: D3DCOLOR_XRGB(grey, grey, grey - 20 > 0 ? grey - 20 : 0);
 
 				for (int c = 0; c < 3; c++)
 				{
@@ -8834,8 +8846,9 @@ static int ProbeMain(int argc, char** argv)
 			"(needs -roombox)\n");
 		printf("       -decide whole|scissor|frame|face   the pieces of intruding"
 			" art (default frame)\n");
-		printf("       -unlinked 0|1   art in an unlinked room's air inside its"
-			" own window (default 1)\n");
+		printf("       -unlinked 0|1|2   art in an unlinked room's air inside"
+			" its own window (default 1; 2 keeps the smaller box's answer in"
+			" an empty window)\n");
 		printf("       -air 0|1        tomb5.hd_air: the rooms' air handed to"
 			" the build (default 1)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
@@ -9272,8 +9285,15 @@ static int ProbeMain(int argc, char** argv)
 			g_watermarks = true;
 		else if (!strcmp(argv[at], "-hdm"))
 			g_hdm = true;
-		else if (!strcmp(argv[at], "-classicroom") && at + 1 < argc)
+		else if ((!strcmp(argv[at], "-classicroom") ||
+			!strcmp(argv[at], "-classicmark")) && at + 1 < argc)
+		{
+			// -classicmark is a -classicroom drawn red.
+			if (!strcmp(argv[at], "-classicmark"))
+				g_classic_mark.insert(atoi(argv[at + 1]));
+
 			g_classic_rooms.push_back(atoi(argv[++at]));
+		}
 		else if (!strcmp(argv[at], "-classiconly"))
 			g_classic_only = true;
 		else if (!strcmp(argv[at], "-classicplane") && at + 1 < argc)
@@ -9457,9 +9477,13 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-unlinked") && at + 1 < argc)
 		{
-			g_unlinked = atoi(argv[at + 1]) ? 1 : 0;
+			g_unlinked = atoi(argv[at + 1]);
+			g_unlinked = g_unlinked < 0 ? 0 : g_unlinked > 2 ? 2 : g_unlinked;
 			printf("-unlinked: art in the air of a room its own room has no "
-				"link with is %s\n", g_unlinked
+				"link with is %s\n", g_unlinked == 2
+				? "drawn only inside its own window, but where that window is "
+				"empty, which keeps the smaller box's answer"
+				: g_unlinked
 				? "drawn only inside its own window (the engine's)"
 				: "answered as if it stood anywhere else");
 			at += 1;

@@ -1502,6 +1502,10 @@ namespace
 		 * truncation against a box edge - so this averages in floats to
 		 * agree with the engine exactly. */
 		std::vector<std::vector<float> > centre(trg.groups.size());
+		/* And the heights its corners span, two per triangle, room local:
+		 * the air is asked of them (HDRoomAirReaches), as AirHostsOf in
+		 * hd_render.cpp asks it. */
+		std::vector<std::vector<float> > span(trg.groups.size());
 
 		for (size_t g = 0; g < trg.groups.size() && (int)g < rooms; g++)
 		{
@@ -1520,6 +1524,7 @@ namespace
 							break;
 
 						long qx = 0, qy = 0, qz = 0;
+						long lo = 0, hi = 0;
 
 						for (int c = 0; c < 3; c++)
 						{
@@ -1529,11 +1534,19 @@ namespace
 							qx += v.x;
 							qy += v.y;
 							qz += v.z;
+
+							if (c == 0 || v.y < lo)
+								lo = v.y;
+
+							if (c == 0 || v.y > hi)
+								hi = v.y;
 						}
 
 						out.push_back((float)qx / 3.0f);
 						out.push_back((float)qy / 3.0f);
 						out.push_back((float)qz / 3.0f);
+						span[g].push_back((float)lo);
+						span[g].push_back((float)hi);
 					}
 				}
 		}
@@ -1645,6 +1658,62 @@ namespace
 			air[(size_t)r].sectors = squares.empty() ? 0 : &squares[0];
 		}
 
+		/* The pairs not asked, row by the art's room, as BuildRoomAir makes
+		 * them: the same room, next door, a floor portal, flipmap twins, and
+		 * closed over the twins. */
+		std::vector<unsigned char> airLink((size_t)rooms * (size_t)rooms, 0);
+		std::vector<int> airTwin((size_t)rooms, -1);
+
+		for (int b = 0; b < rooms; b++)
+			for (int a = 0; a < rooms; a++)
+				if (a == b || airLinked[(size_t)a].count(b) ||
+					level.rooms()[(size_t)a].altRoom == b ||
+					level.rooms()[(size_t)b].altRoom == a)
+					airLink[(size_t)b * rooms + a] = 1;
+
+		for (int r = 0; r < rooms; r++)
+		{
+			const int alt = level.rooms()[(size_t)r].altRoom;
+
+			if (alt >= 0 && alt < rooms)
+			{
+				airTwin[(size_t)r] = alt;
+				airTwin[(size_t)alt] = r;
+			}
+		}
+
+		{
+			const std::vector<unsigned char> direct = airLink;
+
+			for (int b = 0; b < rooms; b++)
+				for (int a = 0; a < rooms; a++)
+				{
+					const int tb = airTwin[(size_t)b];
+					const int ta = airTwin[(size_t)a];
+
+					if ((ta >= 0 && direct[(size_t)b * rooms + ta]) ||
+						(tb >= 0 && direct[(size_t)tb * rooms + a]) ||
+						(ta >= 0 && tb >= 0 && direct[(size_t)tb * rooms + ta]))
+						airLink[(size_t)b * rooms + a] = 1;
+				}
+		}
+
+		/* Whether triangle t of room b reaches into the air of room a that
+		 * b has no link with (HDRoomAirReaches): the index fill's second
+		 * way into a's box, and the air test of air_tris below. */
+		const auto airReach = [&](int b, size_t t, int a) -> bool
+		{
+			if (airLink[(size_t)b * rooms + (size_t)a])
+				return false;
+
+			const float* c = &centre[(size_t)b][t * 3];
+			const float* s = &span[(size_t)b][t * 2];
+
+			return HDRoomAirReaches(air[(size_t)a], c[0] + air[(size_t)b].x,
+				s[0] + air[(size_t)b].y, s[1] + air[(size_t)b].y,
+				c[2] + air[(size_t)b].z, HD_AIR_MARGIN);
+		};
+
 		int pairs = 0;
 		long long intruding = 0;
 		std::vector<unsigned char> windowed((size_t)rooms, 0);
@@ -1719,16 +1788,24 @@ namespace
 
 				int hits = 0;
 
-				for (size_t c = 0; c + 2 < centre[(size_t)b].size(); c += 3)
+				/* In the box by the centroid, or by the centroid's x and z
+				 * with the triangle reaching into a's air: the engine's
+				 * index fill takes both (hd_render.cpp, the pair_at loop). */
+				const auto holds = [&](size_t c) -> bool
 				{
 					const float cx = centre[(size_t)b][c];
 					const float cy = centre[(size_t)b][c + 1];
 					const float cz = centre[(size_t)b][c + 2];
 
-					if (cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 &&
-						cy >= y0 && cy <= y1)
+					if (!(cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1))
+						return false;
+
+					return (cy >= y0 && cy <= y1) || airReach(b, c / 3, a);
+				};
+
+				for (size_t c = 0; c + 2 < centre[(size_t)b].size(); c += 3)
+					if (holds(c))
 						hits++;
-				}
 
 				if (hits < shareMin)
 					continue;
@@ -1781,8 +1858,7 @@ namespace
 					const float cy = centre[(size_t)b][c + 1];
 					const float cz = centre[(size_t)b][c + 2];
 
-					if (!(cx >= x0 && cx <= x1 && cz >= z0 && cz <= z1 &&
-						cy >= y0 && cy <= y1))
+					if (!holds(c))
 						continue;
 
 					if (tagged[(size_t)b][t])
@@ -1978,61 +2054,15 @@ namespace
 		long long airTris = 0, outsideTris = 0, airBoxed = 0;
 		std::map<std::pair<int, int>, long long> airPairs, outsidePairs;
 		std::set<int> airGroupSet;
-		/* The pairs not asked, row by the art's room, as BuildRoomAir makes
-		 * them: the same room, next door, a floor portal, flipmap twins, and
-		 * closed over the twins. */
-		std::vector<unsigned char> airLink((size_t)rooms * (size_t)rooms, 0);
-		std::vector<int> airTwin((size_t)rooms, -1);
-
-		for (int b = 0; b < rooms; b++)
-			for (int a = 0; a < rooms; a++)
-				if (a == b || airLinked[(size_t)a].count(b) ||
-					level.rooms()[(size_t)a].altRoom == b ||
-					level.rooms()[(size_t)b].altRoom == a)
-					airLink[(size_t)b * rooms + a] = 1;
-
-		for (int r = 0; r < rooms; r++)
-		{
-			const int alt = level.rooms()[(size_t)r].altRoom;
-
-			if (alt >= 0 && alt < rooms)
-			{
-				airTwin[(size_t)r] = alt;
-				airTwin[(size_t)alt] = r;
-			}
-		}
-
-		{
-			const std::vector<unsigned char> direct = airLink;
-
-			for (int b = 0; b < rooms; b++)
-				for (int a = 0; a < rooms; a++)
-				{
-					const int tb = airTwin[(size_t)b];
-					const int ta = airTwin[(size_t)a];
-
-					if ((ta >= 0 && direct[(size_t)b * rooms + ta]) ||
-						(tb >= 0 && direct[(size_t)tb * rooms + a]) ||
-						(ta >= 0 && tb >= 0 && direct[(size_t)tb * rooms + ta]))
-						airLink[(size_t)b * rooms + a] = 1;
-				}
-		}
 
 		for (size_t g = 0; g < centre.size() && (int)g < rooms; g++)
 			for (size_t c = 0; c + 2 < centre[g].size(); c += 3)
 			{
-				const float wx = centre[g][c] + air[g].x;
-				const float wy = centre[g][c + 1] + air[g].y;
-				const float wz = centre[g][c + 2] + air[g].z;
 				bool any = false, missed = false;
 
 				for (int a = 0; a < rooms; a++)
 				{
-					if (airLink[g * (size_t)rooms + (size_t)a])
-						continue;
-
-					if (!HDRoomAirHolds(air[(size_t)a], wx, wy, wz,
-						HD_AIR_MARGIN))
+					if (!airReach((int)g, c / 3, a))
 						continue;
 
 					any = true;
@@ -2046,16 +2076,14 @@ namespace
 						boxOverlap(A.z0, A.z1, B.z0, B.z1) &&
 						boxOverlap(A.y0, A.y1, B.y0, B.y1) &&
 						A.ix1 > A.ix0 && A.iz1 > A.iz0;
+					// In a's air, the box holds it by its centroid's x and z.
 					const float cx = centre[g][c];
-					const float cy = centre[g][c + 1];
 					const float cz = centre[g][c + 2];
 					const bool held = entry &&
 						cx >= (float)(A.ix0 - B.ox) &&
 						cx <= (float)(A.ix1 - B.ox) &&
 						cz >= (float)(A.iz0 - B.oz) &&
-						cz <= (float)(A.iz1 - B.oz) &&
-						cy >= (float)(A.y0 - B.oy) &&
-						cy <= (float)(A.y1 - B.oy);
+						cz <= (float)(A.iz1 - B.oz);
 
 					if (!held)
 					{

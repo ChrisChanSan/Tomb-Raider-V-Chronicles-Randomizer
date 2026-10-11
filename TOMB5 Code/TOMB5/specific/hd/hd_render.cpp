@@ -2017,8 +2017,9 @@ namespace
 	 * no portal, door or vertical link with, not even through a flipmap twin
 	 * (HDRoomAir), and in whose: (first index, host) per triangle and host,
 	 * sorted. Every triangle of the group is asked, with the index fill's
-	 * own centroid put into world units; the floor square under it names
-	 * the rooms to ask (g_air_cells). */
+	 * own centroid put into world units for x and z and the heights of its
+	 * corners for y (HDRoomAirReaches); the floor square under the centroid
+	 * names the rooms to ask (g_air_cells). */
 	void AirHostsOf(const trf::remaster::Trg& trg,
 		const trf::remaster::TrgGroup& source, int g, AirHosts& out)
 	{
@@ -2046,10 +2047,12 @@ namespace
 						trg.vertices[trg.indices[first + 2]];
 					const float x = ((float)ta.x + (float)tb.x +
 						(float)tc.x) / 3.0f + own.x;
-					const float y = ((float)ta.y + (float)tb.y +
-						(float)tc.y) / 3.0f + own.y;
 					const float z = ((float)ta.z + (float)tb.z +
 						(float)tc.z) / 3.0f + own.z;
+					const float y0 = (float)(ta.y < tb.y ? (ta.y < tc.y ?
+						ta.y : tc.y) : (tb.y < tc.y ? tb.y : tc.y)) + own.y;
+					const float y1 = (float)(ta.y > tb.y ? (ta.y > tc.y ?
+						ta.y : tc.y) : (tb.y > tc.y ? tb.y : tc.y)) + own.y;
 					const long long key = AirCellKey(
 						(int)floorf(x / 1024.0f), (int)floorf(z / 1024.0f));
 					AirCells::const_iterator it = std::lower_bound(
@@ -2057,8 +2060,9 @@ namespace
 						std::make_pair(key, -1));
 
 					for (; it != g_air_cells.end() && it->first == key; ++it)
-						if (!links[it->second] && HDRoomAirHolds(
-							g_room_air[it->second], x, y, z, HD_AIR_MARGIN))
+						if (!links[it->second] && HDRoomAirReaches(
+							g_room_air[it->second], x, y0, y1, z,
+							HD_AIR_MARGIN))
 							out.push_back(std::make_pair(first, it->second));
 				}
 			}
@@ -6496,7 +6500,19 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 *
 					 * The first entry whose box holds the centroid is the
 					 * triangle's pair; every entry that holds it counts it,
-					 * which is what the level's log line says per pair. */
+					 * which is what the level's log line says per pair.
+					 *
+					 * A box holds a triangle as well when the centroid lies
+					 * in it in x and z and the triangle reaches into the
+					 * holder's air (AirHostsOf, HDRoomAirReaches) with its
+					 * centroid above or below the box: the foot of a wall
+					 * whose centroid stands over the holder's ceiling. Held
+					 * by its centroid alone, ANDREA1's facade of room 101
+					 * hangs 86 units of it into room 93 below its ceiling,
+					 * drawn with the open half - a strip of facade seen from
+					 * room 93 where the classic frame shows room 93's own
+					 * ceiling. With tomb5.hd_air off no air is asked and
+					 * the centroid alone decides. */
 					int pair_at = -1;
 
 					for (size_t k = 0; k < group.intrusionAt.size(); k++)
@@ -6509,6 +6525,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							if (centre[axis] < box.mins[axis] ||
 								centre[axis] > box.maxs[axis])
 								in = false;
+
+						if (!in && !airHosts.empty() &&
+							centre[0] >= box.mins[0] &&
+							centre[0] <= box.maxs[0] &&
+							centre[2] >= box.mins[2] &&
+							centre[2] <= box.maxs[2])
+							in = std::binary_search(airHosts.begin(),
+								airHosts.end(), std::make_pair(first,
+									box.holder));
 
 						if (in)
 						{

@@ -456,6 +456,11 @@
  *                     768 high on the floor under the sheet there, drawn
  *                     with the creatures' mark, and Lara's place there as
  *                     -lara gives it; repeatable. Needs -hdwater 1.
+ *     -swimmer x,z,below
+ *                     a stand-in for a body swimming under the surface at
+ *                     world x, z: a box 160 across and 200 deep, its top
+ *                     `below` units under the sheet there, drawn with the
+ *                     creatures' mark; repeatable. Needs -hdwater 1.
  *     -latemark       -creature's stand-ins drawn outside the mark's
  *                     bracket, as the classic path draws a rat, and
  *                     marked before the copy as HDFrameDrawGlow marks
@@ -1834,6 +1839,9 @@ static std::vector<float> g_feet;
 static std::vector<float> g_creatures;
 // -wader x,z: stand-ins for a wading Lara, as x, z, drawn as -creature's.
 static std::vector<float> g_waders;
+/* -swimmer x,z,below: stand-ins for a body swimming under the surface, as
+ * x, z, below, drawn as -creature's. */
+static std::vector<float> g_swimmers;
 static float g_seed_origin[2] = { 0.0f, 0.0f };
 
 /* -life <seed>: the water's life (hd_life_rules.h) on the level's water
@@ -9112,11 +9120,22 @@ static int ProbeMain(int argc, char** argv)
 				printf("RoomProbe: -lifelara wants x,z[,t] - '%s' "
 					"ignored\n", argv[at]);
 		}
-		else if (!strcmp(argv[at], "-wader") && at + 1 < argc)
+		/* -swimmer shares this branch, for the compiler's limit of nested
+		 * blocks (C1061) - see -lifesplash. */
+		else if ((!strcmp(argv[at], "-wader") ||
+			!strcmp(argv[at], "-swimmer")) && at + 1 < argc)
 		{
-			float c[2] = { 0.0f, 0.0f };
+			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (sscanf_s(argv[++at], "%f,%f", &c[0], &c[1]) == 2)
+			if (!strcmp(argv[at], "-swimmer"))
+			{
+				if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) == 3)
+					g_swimmers.insert(g_swimmers.end(), c, c + 3);
+				else
+					printf("RoomProbe: -swimmer wants x,z,below - '%s' "
+						"ignored\n", argv[at]);
+			}
+			else if (sscanf_s(argv[++at], "%f,%f", &c[0], &c[1]) == 2)
 			{
 				g_waders.insert(g_waders.end(), c, c + 2);
 				g_lara_set = true;
@@ -11746,6 +11765,13 @@ static int ProbeMain(int argc, char** argv)
 					printf("-wader %.0f,%.0f: no sheet there - not drawn\n",
 						g_waders[i], g_waders[i + 1]);
 
+			for (size_t i = 0; i + 2 < g_swimmers.size(); i += 3)
+				if (!HDRenderWaterProbeCreature(g_swimmers[i],
+					g_swimmers[i + 1], g_seed_origin[0], g_seed_origin[1],
+					g_creature_mark ? 1 : 0, 2, g_swimmers[i + 2]))
+					printf("-swimmer %.0f,%.0f: no sheet there - not "
+						"drawn\n", g_swimmers[i], g_swimmers[i + 1]);
+
 			// -life: the floats and the fish, where the HD objects go.
 			if (g_life)
 				LifeFrame(view, &projection, frame.bulbCount, (float)cx,
@@ -12847,6 +12873,7 @@ int main(int argc, char** argv)
 		g_feet.clear();
 		g_creatures.clear();
 		g_waders.clear();
+		g_swimmers.clear();
 		g_creature_mark = true;
 		g_mark_view = false;
 		g_classic_rooms.clear();

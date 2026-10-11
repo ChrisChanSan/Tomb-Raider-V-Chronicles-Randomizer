@@ -15342,9 +15342,12 @@ void HDRenderWaterMarkEnd(int objects)
  * function in the frame's view and projection - everything it sets is put
  * back. A wader's box stands on the floor under the square, the water's top
  * and the square's depth down, 768 units high as Lara stands and 160
- * across (a free choice, about her hips' width). */
+ * across (a free choice, about her hips' width). A swimmer's box (`wader`
+ * 2) lies wholly under the water, its top `below` units under the surface,
+ * 160 across and 200 deep (free choices, a body swimming under the
+ * surface). */
 bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
-	int mark, int wader)
+	int mark, int wader, float below)
 {
 	if (!g_device)
 		return false;
@@ -15364,7 +15367,7 @@ bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
 	if (!found)
 		return false;
 
-	for (size_t i = 0; wader && i < g_wsquares.size(); i++)
+	for (size_t i = 0; wader == 1 && i < g_wsquares.size(); i++)
 	{
 		const WaterSquare& s = g_wsquares[i];
 
@@ -15388,7 +15391,8 @@ bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
 	for (int i = 0; i < 8; i++)
 	{
 		v[i].x = lx + ((i & 1) ? half : -half);
-		v[i].y = wader ? floorY - ((i & 2) ? 0.0f : 768.0f) :
+		v[i].y = wader == 2 ? y + below + ((i & 2) ? 200.0f : 0.0f) :
+			wader ? floorY - ((i & 2) ? 0.0f : 768.0f) :
 			y + ((i & 2) ? 60.0f : -100.0f);
 		v[i].z = lz + ((i & 4) ? half : -half);
 		v[i].c = D3DCOLOR_XRGB(120, 112, 100);

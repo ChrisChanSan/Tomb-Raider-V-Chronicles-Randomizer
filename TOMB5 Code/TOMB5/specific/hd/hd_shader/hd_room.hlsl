@@ -2593,14 +2593,56 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 #endif
 #endif
 
-	const float T = exp(-path * gWaterDeep.w);
-	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb,
-		saturate(1.0f - T));
+	/* The bent place first, because its path decides the water this pixel
+	 * shows. With the depth texture the bent place passes the guard (over
+	 * RefractMove) or is refused - from below where the frame there lies
+	 * nearer than the sheet, from above where it lies less than
+	 * HD_WATER_GUARD under the surface at rest: a leg, a pillar or a rat in
+	 * the water is not pulled into the floor beside it; the pixel's own
+	 * place is read instead.
+	 *
+	 * Seen from above, a bent place that lies deeper than this pixel's own
+	 * is seen through the longer of the two paths, `far`. The copy holds
+	 * the frame as it was drawn - lit, hazed by the fog bulbs, under no
+	 * water yet - and a pixel on a body just under the surface whose bent
+	 * place falls on the deep floor beside it otherwise shows that floor
+	 * through its own few units of water: a rim of the floor's raw colour
+	 * round the body, violet in ANDREA1's pool room 32, whose fog bulb
+	 * (191, 143, 239) stands on its floor. With the longer path the rim is
+	 * the water the floor's own pixels show. A bent place nearer the
+	 * surface keeps this pixel's path; without the copy nothing is bent and
+	 * the path is the pixel's own. */
+	float bend = 1.0f - above * exp(-path * gWaterDeep.w);
+	float refused = 0.0f;
+	float2 move = 0.0f;
+	float far = path;
+
+	{
+		move = RefractMove(slope, bend, dx, dy);
+
+#ifdef HD_WATER_DEPTH
+		const float zAt = SceneZ(ScreenClamp(uv + move));
+		// The path there, along this pixel's own ray.
+		const float pathAt = max(0.0f, zAt - input.viewZ.x) *
+			length(input.eye.xyz) / max(input.viewZ.x, 1.0f);
+
+		refused = above > 0.5f ?
+			(pathAt * abs(V.y) - lift < HD_WATER_GUARD ? 1.0f : 0.0f) :
+			(zAt < input.viewZ.x ? 1.0f : 0.0f);
+		move *= above > 0.5f ? (1.0f - exp(-min(path, pathAt) *
+			gWaterDeep.w)) / max(bend, 1.0e-3f) : 1.0f;
+		move *= 1.0f - refused;
+		far = max(path, pathAt * above * (1.0f - refused) * gWaterStage.x);
+#endif
+	}
+
+	// 1 - T of an exp of a path of 0 or more lies in 0..1 by itself.
+	const float T = exp(-far * gWaterDeep.w);
+	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb, 1.0f - T);
 
 	float3 col = F * refl + (1.0f - F) * (1.0f - T) * scatter + spec * above;
 	float a = 1.0f - (1.0f - F) * T;
-	float3 through = (1.0f - F) * exp(-path * gWaterAbsorb.rgb);
-	float bend = 1.0f - T;
+	float3 through = (1.0f - F) * exp(-far * gWaterAbsorb.rgb);
 
 	/* Seen from below: inside the critical angle (about 49 degrees off the
 	 * vertical, N.V above 0.66) the window, outside it the rest of the
@@ -2621,7 +2663,6 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		a = lerp(0.35f, 0.1f, window);
 		col = a * lerp(gWaterBase.rgb, refl, window);
 		through = 1.0f - a;
-		bend = 1.0f;
 	}
 
 #ifdef HD_WATER_FOAM
@@ -2799,38 +2840,17 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		(1.0f - exp(-under * gUnderSigma.w)) *
 		max(1.0f + gUnderLight.w * V.y, 0.0f));
 #else
-	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
-		(2.0f / 255.0f);
+	/* Nearer than the fog's start the term is negative, and the saturate
+	 * holds the share at 1 there. */
+	const float fog = (input.viewZ.x - gFog.x) * gFog.y * (2.0f / 255.0f);
 
 	col *= saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 #endif
 
-	/* With the copy: the floor read at the bent place and added with its
-	 * share, the pixel written whole. With the depth texture the bent place
-	 * passes the guard (over RefractMove) or is refused - from below where
-	 * the frame there lies nearer than the sheet, from above where it lies
-	 * less than HD_WATER_GUARD under the surface at rest: a leg, a pillar or
-	 * a rat in the water is not pulled into the floor beside it; the
-	 * pixel's own place is read instead. */
-	float refused = 0.0f;
-
+	/* With the copy: the floor read at the bent place (see "the bent place
+	 * first" above) and added with its share, the pixel written whole. */
 	if (gWaterStage.x > 0.5f)
 	{
-		float2 move = RefractMove(slope, bend, dx, dy);
-
-#ifdef HD_WATER_DEPTH
-		const float zAt = SceneZ(ScreenClamp(uv + move));
-		// The path there, along this pixel's own ray.
-		const float pathAt = max(0.0f, zAt - input.viewZ.x) *
-			length(input.eye.xyz) / max(input.viewZ.x, 1.0f);
-
-		refused = above > 0.5f ?
-			(pathAt * abs(V.y) - lift < HD_WATER_GUARD ? 1.0f : 0.0f) :
-			(zAt < input.viewZ.x ? 1.0f : 0.0f);
-		move *= above > 0.5f ? (1.0f - exp(-min(path, pathAt) *
-			gWaterDeep.w)) / max(bend, 1.0e-3f) : 1.0f;
-		move *= 1.0f - refused;
-#endif
 		col += through * tex2Dlod(sWaterCopy,
 			float4(ScreenClamp(uv + move), 0.0f, 0.0f)).rgb;
 		a = 1.0f;

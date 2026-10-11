@@ -1631,9 +1631,10 @@ void HDRenderWaterMarkEnd(int objects = 0);
 bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size);
 /* RoomProbe's stand-ins: a swimming creature's box at the sheet's surface,
  * or with `wader` 1 a wading Lara's, standing on the floor under the
- * water. */
+ * water, or with `wader` 2 a swimmer's, wholly under the water with its
+ * top `below` units under the surface. */
 bool HDRenderWaterProbeCreature(float x, float z, float offX, float offZ,
-	int mark, int wader = 0);
+	int mark, int wader = 0, float below = 0.0f);
 int HDRenderWaterMarkTriangles(const float* xyz, int vertices);
 bool HDRenderWaterProbeCreatureLate(float x, float z, float offX,
 	float offZ);

@@ -12601,32 +12601,45 @@ water, with the eye over a trough while the game had it in the water, since a se
 swell moves the sheet by up to the sum of its heights, 97 units, and the game's room
 test uses the surface at rest; and a strip of veil at the horizon - a crest standing
 over an eye in the air, drawn as the sheet's underside because the side was the sign
-of V.y. Now a slope turned away takes the term of the slope it mirrors, |N.V|; while
-the eye is within a click of the surface the swell fades toward it over a square and
-a half (the sheet's vertices round the eye, 256 units apart, keep at most 0.14 of the
-swell), so the sheet at the eye lies where the room test puts it; and the side is the
-eye's: c148.y is 1 while the eye is in the air, the variant drawn under the water
-takes 0. Under the water every height of the sweep now shows the window with the
-waves in it (the luma's spread after a 31-pixel high pass 11.5 to 11.6 at every
-height from 96 under to the surface, where 1.1 to 8.3 stood at 16, 8 and 0 under);
-over it no pixel takes the sky's flat colour. Left: 8 to 16 units over calm deep water
-the eye sees some tens of units of the sheet, under a third of the sea's shortest row,
-and the colour changes slowly across the picture (the spread 1.1 to 2.8 there, as
-before); and the strip under the near plane's cut, where the underwater wall shows
-without the water over it.
+of V.y. A fourth thing showed at 8 units over the surface: the near plane, 20 units
+ahead, reaches 12.6 units below the eye at the game's 80 degrees (`AlterFOV` over a
+4:3 width), so a sheet within that of the eye is cut, and along the bottom of the
+picture the underwater wall showed without the water over it. Now a slope turned away
+takes the term of the slope it mirrors, |N.V|; the side is the eye's: c148.y and
+`gEye.w` are 1 while the eye is in the air, the variant drawn under the water takes
+0; and near the eye every vertex keeps at least 32 units off the eye's height on the
+eye's side (`HD_SWELL_GAP`; at any pitch the near plane reaches at most 24 units below
+or above the eye, 32 leaves room for a rolled camera): a crest under an eye in the air
+is cut down to that, a trough over an eye under the water held up to it, the hold
+fading out over a square and a half across (`HD_SWELL_EYE`). A vertex whose swell does
+not come within 32 units of the eye keeps it whole. Under the water every height of
+the sweep shows the window with the waves in it (the luma's spread after a 31-pixel
+high pass 11.5 to 11.6 at every height from 96 under to the surface at 2.5 s, where
+1.1 to 8.3 stood at 16, 8 and 0 under); over it no pixel takes the sky's flat colour,
+and at 8 units over the surface the bottom of the picture is water at 1, 2.5 and 3 s.
+Over the surface the spread is 2.7 to 4.8 at 8 units (1.1 to 1.3 at `4f725a8`, where
+the white plane and the cut strip stood) and rises with the height as before; from 72
+to 96 units it is 0.8 to 2.2 under `4f725a8`'s, because the sky's colour no longer
+lies on the far back slopes (the hold changes nothing there). Not met: at 1 and 2.5 s
+the water seen 12 to 25 degrees down, within a few hundred units of an eye at any of
+the heights over the surface, is the body's colour with the waves faint in it (the
+spread in its rows 2 to 4, as at `4f725a8`): its slopes face the eye there, N.V 0.5 to
+0.8 at 2.5 s in a scratch probe, so the Fresnel term is 0.02 to 0.05 and the
+reflection, the only term that carries the waves over 3,584 units of water, adds
+about 3 to 7 of luma to a body of about 88.
 
 *JOBY2's foam.* Pictures only: the rain basin from the play test's eye raised to 160
 units over the surface and the open sea from the shore, each at foam 1, 0.5, 0.25 and
 0 (rows of the text file) and with whitecaps and no bank foam (a scratch shader), given
 to the owner to choose from. Nothing changed.
 
-**Measured.** Slots, fxc /O3, `4f725a8` to now: `WaterVS` 386 to 399, `WaterPS` 461 to
+**Measured.** Slots, fxc /O3, `4f725a8` to now: `WaterVS` 386 to 407, `WaterPS` 461 to
 462, its depth variant 508 to 509, the view variant 494 to 495, the under variant 470
 to 390 (it draws the sheet from below alone), the foam's draw 325 to 321 and with the
 depth 367 to 368; `RiverPS` 482, `FootPS` 208, `RoomPS` 510 and the gloss variant 502
 keep their bytecode apart from the stamp. GPU, 2560 x 1440, three runs each: the
-full-water view 0.442 ms against 0.440 to 0.446, the pond 0.492 to 0.499 against 0.490
-to 0.501.
+full-water view 0.439 to 0.442 ms against 0.441 to 0.443, the pond 0.490 to 0.499
+against 0.495 to 0.501.
 
 **Checked.** The classic path, 6 of 6 md5-identical to `8691e82`; the fifteen cameras
 with `-hdwater 0`, 15 of 15 identical to the fix round's parity set. With `-hdwater 1`
@@ -12634,10 +12647,12 @@ against `4f725a8`: the canal's highlight changes B1 and B2; the side and |N.V| c
 eleven views by 15 to 6,700 pixels, where a far wave's back slope drew the sky's colour
 (A1 to A3, B1, B2, C1 to C4, E1, E2); E3, E4 and the camera under the water (D1) are
 identical. Of ANDY3's twelve pond views at 1, 3 and 5 seconds the three from above
-keep their pictures; nine change by 3 to 10,000 pixels where the far water's back
-slopes drew the sky's streaks.
+keep their pictures up to 3 pixels a single step off (the vertex shader's arithmetic
+in another order); nine change by 3 to 10,000 pixels where the far water's back
+slopes drew the sky's streaks. The hold at the eye changes none of the fifteen
+cameras and no pond view beyond those single steps.
 
-**Commits.** `a0d6bf4`, `b244702`, `04fabd7`.
+**Commits.** `a0d6bf4`, `b244702`, `04fabd7`, `c633e30`, `f2e7198`.
 
 **Lara's light along a swim, after the thirteenth play test.** Two things asked for:
 the violet on Lara under the water in ANDREA1 "is back", in patches on a leg and an
@@ -12662,21 +12677,30 @@ about 15.
 *Now* (`hd_laradraw.cpp` "the tween", `hd_render.cpp` "along a swim"). In a water room
 without an air room her wet nodes keep the ambient of the last room over the water she
 was in or swam under, and the eye keeps the body of the last room it was in that has
-one of its own. Her dry and wet colours, and the water's extinction and scattered
-light, follow what the rules give over 0.25 s of game time, a share 1 - e^(-dt / 0.25)
-a frame; a new level, and the eye coming out of the water, start at the new colours.
-The worst jump left between neighbours is 16 of luma for her and 4.4 for the water, at
-60 frames a second at most 1.03 and 0.28 a frame. A new `LARALOG` line, with `-log`,
-once a second of game time while she is in a water room, writes her room, its air room,
-whether the last one stands in, the colours the rules give and the ones drawn, her wet
-nodes, the brightest light handed to her and the water's scattered light - the next
-play test's log shows where the patches come from. RoomProbe draws one frame, so its
-pictures do not change; the tween is seen in the game alone.
+one of its own. The water's extinction and scattered light follow what the rules give
+over 0.25 s of game time, a share 1 - e^(-dt / 0.25) a frame. Her dry and wet colours
+follow theirs the same way while the level's sheets are built and she is in the water,
+where `InitObjectLighting` hands the rooms' ambients over as they are and stops the
+item's own fade, and after she leaves it until the colours drawn are within half a
+step (0.5 of 255) of the rules' on every channel; on land, without sheets
+(`tomb5.hd_water` 0) and in a level without water her nodes take the rules' colours as
+they are, and `CalcAmbientLight`'s own fade over 8 frames is the only one. A new level,
+and the eye coming out of the water, start at the new colours. The worst jump left
+between neighbours is 16 of luma for her and 4.4 for the water, at 60 frames a second
+at most 1.03 and 0.28 a frame. A new `LARALOG` line, with `-log`, once a second of game
+time while she is in a water room, writes her room, its air room, whether the last one
+stands in, the colours the rules give and the ones drawn, her wet nodes and which they
+are (`wet_mask=`, LM_ order), the brightest light handed to her, the water's scattered
+light, whether the sheets are built and whether the tween runs. The next play test's
+log shows whether the patches come from her ambients, from a split of her nodes
+between wet and dry or from a handed light; a source on a material's own path (her
+skin's sheen, the wardrobe) would not show in it. RoomProbe and ModelProbe draw one
+frame, so their pictures do not change; the tween is seen in the game alone.
 
 **Left.** The violet patches' cause; the under-water look of a fallback room seen
 first (no last body yet: the largest, as before).
 
-**Commits.** `04fabd7`.
+**Commits.** `04fabd7`, `63e8bac`, `f2e7198`.
 
 ### The level load on several cores
 2026-10-11

@@ -1575,21 +1575,27 @@ water surface", carries the tables.
     crest in front of it stands for the visible one. DATA: in JOBY2's rain
     basin seen within 96 units of the surface 45 to 85 % of the water's
     pixels had N.V under 0 (a scratch probe marking them).
-176. **The swell round an eye at the surface** - within 256 units of the
-    surface at rest the swell fades toward the eye over 1,536 units across,
-    smoothly (`hd_room.hlsl`, `HD_SWELL_EYE`, `HD_SWELL_EYE_Y`), and the
-    side a sheet is seen from is the eye's, in the air or under the water
-    (c148.y). OWN, a design of this project; the distances free choices:
-    the sheet's vertices 256 apart keep at most 0.14 of the swell under the
-    eye, and a click is over twice a sea's 97 units of height. DATA: the
-    eye of the play test's log (CAMLOG) held within 42 units of the
-    surface, swept with RoomProbe.
+176. **The sheet held off an eye at the surface** - near the eye every
+    vertex of a sheet keeps at least 32 units off the eye's height on the
+    side the game puts the eye, a crest under an eye in the air cut down,
+    a trough over an eye under the water held up, the hold fading out over
+    1,536 units across (`hd_room.hlsl`, `HD_SWELL_GAP`, `HD_SWELL_EYE`);
+    and the side a sheet is seen from is the eye's, in the air or under
+    the water (c148.y, `gEye.w`). OWN, a design of this project; the
+    distances free choices: the near plane, 20 units ahead at the game's
+    80 degrees over a 4:3 width, reaches at most 24 units below or above
+    the eye at any pitch. DATA: the eye of the play test's log (CAMLOG)
+    held within 42 units of the surface, swept with RoomProbe.
 177. **Lara's ambient along a swim** - in a water room without an air room
-    her wet nodes keep the last air room's ambient; her dry and wet
-    colours follow the rules' over 0.25 s of game time, a share
-    1 - e^(-dt / 0.25) a frame (`hd_laradraw.cpp`). OWN, a design of this
+    her wet nodes keep the last air room's ambient; with the level's
+    sheets built and while she is in the water her dry and wet colours
+    follow the rules' over 0.25 s of game time, a share
+    1 - e^(-dt / 0.25) a frame, and after she leaves it until they are
+    within 0.5 of 255 (`hd_laradraw.cpp`). OWN, a design of this
     project; 0.25 s a free choice, the projected shadow's arrival's
-    (entry 170). DATA: the ambients of `ROOM_INFO` (the randomizer's
+    (entry 170), 0.5 half a step of the colour. DATA: in the water the
+    classic path takes the rooms' ambients unfaded (`InitObjectLighting`,
+    `lighting.cpp`); the ambients of `ROOM_INFO` (the randomizer's
     `Tr5Level`) and the air rooms of RoomProbe `-underwater` along the
     water rooms of six levels: the worst jump between neighbours 62 of
     luma, 16 after, 1.03 a frame at 60 frames a second.

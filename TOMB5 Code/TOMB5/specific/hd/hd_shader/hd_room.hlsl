@@ -1936,32 +1936,25 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * the weight waterAdd.w is already zero, because the vertex half
 	 * multiplied it by gMotion.w.
 	 *
-	 * The plain variant projects it by the face (CausticFace), so a wall
-	 * under the water gets the net and not streaks, and its footprint is
-	 * the pixel's step in all three axes, which on a floor is the step in
-	 * x and z it always was. The gloss variant keeps the horizontal plane:
-	 * it stands at 502 of the 512 slots and draws the sheen ranges, the
-	 * polished floors. */
-#ifdef HD_GLOSS
-	const float2 footX = ddx(input.roomPos.xz);
-	const float2 footY = ddy(input.roomPos.xz);
-#else
+	 * Both variants project it by the face (CausticFace), so a wall under
+	 * the water gets the net and not streaks, and its footprint is the
+	 * pixel's step in all three axes, which on a floor is the step in x and
+	 * z. The gloss variant draws the sheen ranges, and a range with a sheen
+	 * is not only a polished floor: the riveted walls of JOBY2's rain basin
+	 * carry one, and with the horizontal plane alone their part under the
+	 * water read the net along one axis - vertical streaks under the
+	 * waterline wherever the eye is above the water (under it the plain
+	 * variant draws them). 507 of the 512 slots. */
 	const float3 footX = ddx(input.roomPos);
 	const float3 footY = ddy(input.roomPos);
-#endif
 	const float sharp = saturate(2.0f - sqrt(max(dot(footX, footX),
 		dot(footY, footY))) * (1.0f / HD_CAUSTIC_FOOT));
 
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
-#ifdef HD_GLOSS
-		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
-			CausticOf(world.xz, gAdd.y));
-#else
 		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
 			CausticFace(world, footX, footY, gAdd.y));
-#endif
 	}
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
@@ -2619,6 +2612,21 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	{
 		move = RefractMove(slope, bend, dx, dy);
+#ifdef HD_WATER_UNDER
+		/* Seen from below, outside the window (see "seen from below")
+		 * water turns the light back and nothing of the world above comes
+		 * through; the sheet shows it there all the same, under its veil,
+		 * so the waves keep their shapes. Bent as hard as inside the
+		 * window, the bottom of that picture - walls and stairs standing
+		 * on the far bank - swung by the 4 % of the screen RefractMove
+		 * allows in wide bands: near the surface every place outside the
+		 * window lies at that bound (JOBY2's rain basin, the eye 8 to 32
+		 * units under the surface: a median 31.7 pixels of 960). Outside
+		 * the window the move is a quarter, inside it whole, over the
+		 * window's own edge. A quarter is a free choice: the waves still
+		 * move the picture. */
+		move *= lerp(0.25f, 1.0f, smoothstep(0.61f, 0.71f, nv));
+#endif
 
 #ifdef HD_WATER_DEPTH
 		const float zAt = SceneZ(ScreenClamp(uv + move));

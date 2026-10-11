@@ -12603,14 +12603,22 @@ table.
   two, a dart a swimmer sees; sliding along the deep water's edge (128 units off it,
   more than `FISH2`'s 87 reach). After 4 seconds the centre goes where the fish are
   (or to the nearest square that holds a school) and they swim back to the ring at 600
-  units a second; a new scare 1.5 seconds after the last starts a new dart.
-- *The drips one can see* (`HDLifeDropTicks`, `put_drop`). The ring was the engine's
-  drip size, 32 to 39 - a ring's strength on the sheet is its size over 128 times a
-  half, so a quarter of a wading Lara's (112 to 127). The card path has callers for a
-  splash and a tank's spray only, so the drop is the classic one: the game's own drip
-  (`Drips[]`, drawn by `DrawDrips` as a short streak), put into a free odd slot only -
-  an even slot's drip that lands on a floor calls `TriggerDripSplash` and its random
-  draws, and no game drip is pushed out. It leaves the ceiling over the drip point (the
+  units a second; a new scare 1.5 seconds after the last starts a new dart. Each fish
+  turns to its way at 720 degrees a second (`HDLifeFishTurn`) and its school's tail
+  beat has a clock of its own, three times as fast in a flight, so neither a dart's
+  start nor its end turns a fish or jumps its wobble in one frame.
+- *The drips one can see* (`HDLifeDropTicks`, `HDLifeDropFall`, `draw_drops`). The
+  ring was the engine's drip size, 32 to 39 - a ring's strength on the sheet is its
+  size over 128 times a half, so a quarter of a wading Lara's (112 to 127). The card
+  path has callers for a splash and a tank's spray only, so the drop is drawn the
+  classic way: as `DrawDrips` draws the game's drips (`Drips[]`), a line of the sort
+  list from its head to half a tick's move over it, the tail at half the head's colour
+  (120, 160, 208, about one and a half times the middle of a wet Lara's drips). The
+  pool holds its drops itself (`HDLifePool::falling`, at most 32) and puts none into
+  `Drips[]`: `GetFreeDrip` hands out the first free slot from `next_drip` on, so a
+  held slot would move a wet Lara's next drip to another one, and a drip of an even
+  slot that lands calls `TriggerDripSplash` and its random draws. It leaves the
+  ceiling over the drip point (the
   classic sector's ceiling byte, through the rooms above), falls from rest by 153 a tick
   (the project's 4,300 units a second squared at 30 ticks) as `UpdateDrips` moves it,
   and its ring of 96 to 111 - three quarters of a wading Lara's or more - starts when it
@@ -12630,7 +12638,11 @@ table.
   rows' 180, one and a half times the floats' wander, a slow sewer of 0.2 m/s; a
   channel's look reads no flow, so only the floats and the `flow=` fields change.
   Floats now keep apart (`HDLifeClear`, 0.75 of their two reaches), so the current lays
-  them side by side along the wall.
+  them side by side along the wall. Where the current holds a float square-on against
+  a bank - the side arm five squares west of the main channel, its rows z 43,008 and
+  44,032 - the float turns along the bank toward the nearest square of its row with a
+  way on, at the current's speed (`HDLifeWayOn`), as water a wall stops runs along
+  it; the end wall has no way on, so the floats lie along it.
 - *The pool kept through a rebuild* (`HDLifeSameBodies`). `HDLevelUnload` alone ends a
   level, so a begin for the same stem with a pool standing is a rebuild after a lost
   device; when the bodies the water module hands out are the same, the pool is kept
@@ -12652,11 +12664,13 @@ over room 70 48,512 and 44,672 (z 23,040) and over room 66 z 35,200 and 30,336 (
 one with its top 41 units or more under the surface, 26 come-backs, no jump. The
 pond's school with Lara at its middle: spread 223 calm, 1,299 half a second after her,
 2,900 by three seconds; with a splash at one second it is back together (spread 228)
-by twelve. The canal: 0 of 12 floats in the last row at 0 seconds, 5 by 60, 6 by 120,
-8 by 180, side by side along the wall; three of them slide along the bank of the side
-arm. The drips: 5 in the canal under ceilings at 3,072 and 2,304, 2 in the pond from
-6,144. Over 60 seconds ANDY3's rings (barrels and the pond's drips) hold 9 of the 128
-ripple slots at once at the most, ANDREA2's 1, ANDY1's 5; at most 5, 2 and 7 rings lie
+by twelve. The canal: 0 of 12 floats in the last row at 0 seconds, 5 by 60, 8 by 120,
+all 12 by 170, side by side along the wall. The drips: 5 in the canal under ceilings
+at 3,072 and 2,304, 2 in the pond from 6,144; a canal drop the pool holds from 8.53
+seconds to its ring at 9.43 (27 ticks), its head at 3,108, 3,362, 4,003 and 4,645 at
+8.6, 8.9, 9.2 and 9.4 seconds over the surface at 4,864. Over 60 seconds ANDY3's rings
+(barrels and the pond's drips) hold 9 of the 128 ripple slots at once at the most,
+ANDREA2's 1, ANDY1's 5; at most 5, 2 and 7 rings lie
 within 1,024 units of a ring as it starts, of the eight a sheet draw takes. RICH2: 8
 fish, the pool 860 bytes, one model page. The cost at 2,560 x 1,440 (`-lifebench`, two
 runs, against `4f725a8`): the canal 9 drawn, GPU 0.0016 to 0.0018 ms before and 0.0018
@@ -12666,20 +12680,34 @@ to 0.0020 after; the pond 8 drawn, 0.0048 to 0.0052 either way; a step of ANDY3'
 **Checked.** The classic path 6 of 6 md5-identical to `8691e82`; the fifteen cameras
 with `-hdwater 0` 15 of 15 identical to the water round's parity set and with
 `-hdwater 1` and no `-life` 15 of 15 identical to `4f725a8`; ModernTest's life groups
-grown (the river's ends, the drops, the rings, keeping apart, the keep, the tank, the
-flight), the suites 0 failed; the engine and the tools build.
+grown (the river's ends, the drops, the rings, keeping apart, the way on, the keep, the
+tank, the flight, the turn), the suites 0 failed; the engine and the tools build.
 
 **Left.** The look in the game - nobody in this round could play it: how dark a
 diving float should get, whether 2,800 units a second reads as a fish's dart, whether
 the drop's streak is seen at the canal's light. The stream over room 70 is fed from
-the side, so its floats come back inside the wall past its upper end. The canal's
-side arm keeps a few floats sliding along its bank for minutes. RoomProbe draws no
-classic drip, so no picture shows the falling drop - only its numbers and its ring;
-and it builds its water once, so the rebuild is proven by ModernTest alone. A tank's
-fish vanish at the shot rather than spill. The owner's adjustments to the canal.
+the side, so its floats come back inside the wall past its upper end. RoomProbe draws
+no classic line, so no picture shows the falling drop - only its numbers and its
+ring; and it builds its water once, so the rebuild is proven by ModernTest alone. A
+flight that its 8-second cap ends with a fish still away from its ring puts that fish
+there at once; in the probe's series every flight ended with all its fish back within
+32 units, and a fish the cap leaves behind is one a bank holds, which a smooth way
+back would draw through the bank. A tank's fish vanish at the shot rather than spill.
+The owner's adjustments to the canal.
+
+**The fix pass.** The prover found that the life's drop, held in a free odd slot of
+`Drips[]`, still moved the game's random sequence: `GetFreeDrip` takes the first free
+slot from `next_drip` on, so with a life drop in slot 1 a wet Lara's next drip went to
+slot 2 instead of 1, and an even slot's drip that lands calls `TriggerDripSplash` (a
+re-statement of `GetFreeDrip` shows it). The pool now holds and draws its drops itself
+(above). He also found three of the canal's twelve floats on the side arm's bank still
+at 300 seconds, the wander (60 units a second) losing to the current (90): the way on
+along a bank (above). And a fish's yaw snapped to its dart's way and its wobble's phase
+jumped when the beat tripled: the turn and the beat's own clock (above). The ledger's
+entry 169 now says which of its two sentences holds when.
 
 **Commits.** `d8f061f`, `0c54020`, `60ad906`, `5712057`, `b6925f2`, `c9c35f9`,
-`0f76a5c`.
+`0f76a5c`; the fix pass `e801c4f`, `fea1fe7`, `95d7b2f`.
 
 **The river's flow hide by its own squares.** The river's flow-material calls (material
 1, `HDRange::flowTris`) were hidden over a sheet by their box alone, where the still

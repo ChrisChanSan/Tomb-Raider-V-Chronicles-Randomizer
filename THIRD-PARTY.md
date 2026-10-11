@@ -1461,6 +1461,15 @@ water surface", carries the tables.
     (`water_look`, `WaveSum8`), and past the +z end wall the water goes on
     under it (water room 133, SectorCheck on the classic `ANDREA2.TRC`);
     RoomProbe `-life`: 8 of the 12 floats lie along that wall by 180 seconds.
+    In that round's fix pass: where the current holds a float square-on
+    against a bank, within its margin and an eighth of a square of its
+    square's edge, the float turns along the bank toward the nearest
+    square of its row with a way on, at the current's speed
+    (`HDLifeWayOn`); a row with no way on turns nothing. OWN, a design of
+    this project; the eighth a free choice. DATA: the canal's side arm,
+    rows z 43008 and 44032 five squares west of the main channel, held
+    three of the 12 floats on its bank to 300 seconds; with the way on all
+    12 lie along the end wall by 170 seconds (RoomProbe `-life`).
 164. **The river's conveyor** - on a body of class river a float that
     reaches a quarter square past the middle of the last row downstream,
     or that a bank holds, comes back with a kind rolled again on the
@@ -1530,6 +1539,11 @@ water surface", carries the tables.
     69632, y -3840 to -2816, where the classic room 23 and its flip 32
     differ (SectorCheck on the classic `RICH2.TRC`); the item's water,
     4096 at start (`game\init.cpp`, `InitialiseFishtank`).
+    In that round's fix pass a fish turns to its way at 720 degrees a
+    second, and its school's tail beat runs on a clock of its own, three
+    times as fast in a flight (`HDLifeFishTurn`, `HDLifeSchool::beat`), so
+    a dart turns no fish and jumps no wobble in one frame. OWN, free
+    choices.
 167. **The drips** - squares of a body whose room is not open air have a
     ceiling; four or more of them give one drip for eight, two to six,
     each at a period of 3 to 9 seconds; a drip rings the sheet within six
@@ -1560,6 +1574,19 @@ water surface", carries the tables.
     (`HDLifeFloatRings`). OWN, a design of this project, free choices;
     RoomProbe over 60 seconds: ANDY3's rings hold 9 of the 128 slots at
     once at the most, ANDY1's 5.
+    In that round's fix pass the drop is no longer put into `Drips[]` - the
+    free odd slot above held for its first build only: `GetFreeDrip`
+    (`game\tomb4fx.cpp`) hands out the first free slot from `next_drip`
+    on, so a slot the life held moved a wet Lara's next drip to another,
+    and the game's random sequence followed the life. The pool holds its
+    drops itself (`HDLifePool::falling`, at most 32, the size of the
+    game's table) and draws each between two ticks (`HDLifeDropFall`).
+    CLASSIC: the line's form, as `DrawDrips` (`specific\specificfx.cpp`)
+    draws a drip - from its head to half a tick's move over it, the tail
+    at half the head's colour, as wide as `GetFixedScale(1)`, through
+    `ClipLine` and `AddPolyLine`. OWN, a free choice: the head's colour
+    120, 160, 208, about one and a half times the middle of a wet Lara's
+    drips (`TriggerLaraDrips`, 16 to 39 a channel, drawn four times that).
 168. **The life's light** - a model takes its body's light, the one its
     sheet's colours are lit by, times 255 as its classic ambient, a fish
     half of it, with no light list and the game's sun factor 0.75. OWN, a
@@ -1584,6 +1611,8 @@ water surface", carries the tables.
     (`HDLifeSameBodies`), so nothing is rolled anew after a lost device;
     and three more second inputs: 811 and 821 a barrel's ring period and
     phase, 907 a fish's dart. OWN, a design of this project; free choices.
+    So the first sentence's rolling again after a rebuild holds only when
+    the bodies come out different; with the same bodies the pool is kept.
 170. **The projected shadow's arrival** - where the shadow starts to run its
     strength is multiplied by 3f^2 - 2f^3 of f = t / 0.25 game seconds, and
     every blob that gives way to it is drawn meanwhile with its alpha byte

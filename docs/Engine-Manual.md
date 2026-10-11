@@ -2133,7 +2133,8 @@ it.
   units out), stops at a bank and slides along it, and keeps a little apart from the
   other floats, so a current lays them side by side along a wall. ANDREA2's canal
   runs toward its north end wall, where the water goes under it, at 90 units a second,
-  and its floats gather there. On a river a float comes out of the slot under the
+  and its floats gather there; one that drifts into its side arm runs along the arm's
+  bank back into the main channel. On a river a float comes out of the slot under the
   block at the river's upper end, rises to the surface over the first square, rides
   down, and over the last square dives into the slot under the block at its lower end,
   growing dark as it goes, and comes back at the upper slot - it never appears or
@@ -2144,15 +2145,16 @@ it.
   can lift an edge a few units); on a sea whose waves rise high only a barrel is heavy
   enough to stay in it. A barrel rings the water round it every second or two, as
   Lara does when she swims. The fish circle slowly half a square down; when Lara comes
-  within a square of any of them, or something splashes into their water, each darts
-  off on a line of its own, away from her, about three squares in two seconds, and
-  after a few seconds they come back together. Under a ceiling a few drips fall: a
-  drop falls from the ceiling and rings the sheet where it lands, near Lara and at most
-  one in two seconds a body; the log names where they are (`drips_at=`). The models
-  are the Remaster's own (a bottle, two cloths, a barrel, a fish), drawn as HD
-  objects: with `hd_objects` off nothing floats, the drips and their rings stay; the
-  drop is the game's own falling drip. Without the sheets (`hd_water` 0, `hd_enable`
-  0) none of it runs.
+  within a square of any of them, or something splashes into their water, each turns
+  and darts off on a line of its own, away from her, about three squares in two
+  seconds, and after a few seconds they come back together. Under a ceiling a few
+  drips fall: a drop falls from the ceiling and rings the sheet where it lands, near
+  Lara and at most one in two seconds a body; the log names where they are
+  (`drips_at=`). The models are the Remaster's own (a bottle, two cloths, a barrel, a
+  fish), drawn as HD objects: with `hd_objects` off nothing floats, the drips and
+  their rings stay; the drop is drawn as the game draws its own falling drips, and
+  leaves the game's own drips alone. Without the sheets (`hd_water` 0, `hd_enable` 0)
+  none of it runs.
 - **`LIFELOG` in the log.** With `-log`, every level with life writes one `LIFELOG
   level=<stem>` line at its load: the bodies that took life (`bodies=`), the floats
   (`floats=`), the fish (`fish=`), the drips (`drips=`), the floats a body's swell, its

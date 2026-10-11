@@ -262,6 +262,15 @@ static const float kHDLifeRejoinSpeed = 600.0f;
 static const float kHDLifeRejoinMost = 8.0f;
 static const float kHDLifeRejoinNear = 32.0f;	// units, back on the ring
 
+/* A fish turns to its way at kHDLifeFishTurn, half a turn in a quarter of
+ * a second, so a dart's start and a flight's end turn it within a few
+ * frames instead of in one; its tail beats kHDLifeDartBeat times as fast
+ * in a flight, the beat's clock running that much faster (HDLifeSchool::
+ * beat), so the wobble speeds up without a jump. Free choices: a fish
+ * that flees turns about at once, a dart is three strokes to one. */
+static const float kHDLifeFishTurn = 12.566371f;	// 720 degrees a second
+static const float kHDLifeDartBeat = 3.0f;
+
 /* The drips: a body with four or more squares under a ceiling (its room is
  * not open air) gets one drip for eight such squares, two to six, each at
  * its own period of 3 to 9 seconds; a drip rings the sheet only within six
@@ -403,6 +412,9 @@ struct HDLifeSchool
 	float dartAt = 0.0f;
 	int darts = 0;
 	int regrouped = 0;
+	/* The clock of its fish's tail beat, seconds: kHDLifeDartBeat of them
+	 * a second in a flight, one calm (HDLifeSchoolTick). */
+	float beat = 0.0f;
 };
 
 struct HDLifeDrip
@@ -1461,6 +1473,7 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 				e.angle = 6.2831853f * (float)f / (float)s.fish;
 				e.x = s.cx;
 				e.z = s.cz;
+				e.yaw = s.heading;
 				e.phase = 6.2831853f * (float)draw(ctx) / 32767.0f;
 				p.entries.push_back(e);
 				p.fish++;
@@ -1565,6 +1578,7 @@ inline void HDLifeAddTank(HDLifePool& p, const HDLifeTank& t,
 		e.angle = 6.2831853f * (float)f / (float)s.fish;
 		e.x = s.cx;
 		e.z = s.cz;
+		e.yaw = s.heading;
 		e.phase = 6.2831853f * (float)draw(ctx) / 32767.0f;
 		p.entries.push_back(e);
 		p.fish++;
@@ -2006,6 +2020,24 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 	}
 }
 
+/* A fish's heading turns toward its way at kHDLifeFishTurn: in a flight
+ * its own dart or rejoin way (wayX, wayZ), calm its school's heading. */
+inline void HDLifeFishTurn(const HDLifePool& p, HDLifeEntry& e, float dt)
+{
+	if (e.kind != HD_LIFE_FISH || e.school < 0)
+		return;
+
+	const HDLifeSchool& s = p.schools[(size_t)e.school];
+
+	if (p.bodies[(size_t)s.body].gone)
+		return;
+
+	const float wx = s.darting ? e.wayX : sinf(s.heading);
+	const float wz = s.darting ? e.wayZ : cosf(s.heading);
+
+	e.yaw = HDLifeTurnToward(e.yaw, wx, wz, kHDLifeFishTurn, dt);
+}
+
 /* The pool's tick to clock t. Steps of at most a tenth of a second, so a
  * long frame or a probe that jumps to its clock moves the same way the
  * game's frames do. Rings asked for go into `rings` (the caller writes
@@ -2038,8 +2070,17 @@ inline void HDLifeTick(HDLifePool& p, const HDLifeLevel* level, float t,
 
 		for (size_t i = 0; i < p.schools.size(); i++)
 			if (!p.bodies[(size_t)p.schools[i].body].gone)
-				HDLifeSchoolTick(p, p.schools[i], (int)i, at, dt, laraOn, lx,
-				lz, splash, splashes);
+			{
+				HDLifeSchool& s = p.schools[i];
+
+				s.beat += dt * (s.darting ? kHDLifeDartBeat : 1.0f);
+				HDLifeSchoolTick(p, s, (int)i, at, dt, laraOn, lx, lz, splash,
+					splashes);
+			}
+
+		// Each fish turns to its way (HDLifeFishTurn).
+		for (size_t i = 0; i < p.entries.size(); i++)
+			HDLifeFishTurn(p, p.entries[i], dt);
 
 		for (size_t i = 0; i < p.drips.size(); i++)
 		{
@@ -2163,10 +2204,8 @@ inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 	if (e.kind == HD_LIFE_FISH && e.school >= 0)
 	{
 		const HDLifeSchool& s = p.schools[(size_t)e.school];
-		// In a flight a fish swims its own way, its tail beating faster.
-		const float heading = s.darting ? atan2f(e.wayX, e.wayZ) :
-			s.heading;
-		const float beat = s.darting ? 3.0f : 1.0f;
+		/* Its own heading (HDLifeFishTurn) and its school's beat: in a
+		 * flight it swims its own way, its tail beating faster. */
 
 		if (s.darting)
 		{
@@ -2178,9 +2217,9 @@ inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 
 		*y = (float)b.surfaceY + kHDLifeFishDown +
 			kHDLifeSway * sinf(kHDLifeSwayRate * t + e.phase);
-		*yaw = heading - kHDLifeKinds[HD_LIFE_FISH].forward *
+		*yaw = e.yaw - kHDLifeKinds[HD_LIFE_FISH].forward *
 			0.0174533f + kHDLifeWobble * sinf(6.2831853f *
-			kHDLifeWobbleHz * beat * t + e.phase);
+			kHDLifeWobbleHz * s.beat + e.phase);
 		*pitch = 0.0f;
 		*roll = 0.0f;
 		return;

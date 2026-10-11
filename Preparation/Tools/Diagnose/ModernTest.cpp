@@ -18020,6 +18020,86 @@ static void life_wayon()
 		"the end row in three minutes", home, 3);
 }
 
+/* A fish turns to its way (HDLifeFishTurn) and its tail's beat runs on
+ * (HDLifeSchool::beat): a school scared at its middle turns no fish by
+ * more in a frame than its turn and its fastest wobble allow, though the
+ * ways it darts on lie farther than that from its heading. */
+static void life_turn()
+{
+	HDLifePool p = {};
+	HDLifeSchool s = {};
+
+	p.bodies.push_back(life_body(4, 4, 2048));
+	p.reach[HD_LIFE_FISH] = 89.0f;
+	s.cx = 2048.0f;
+	s.cz = 2048.0f;
+	s.fish = 6;
+	p.schools.push_back(s);
+
+	for (int f = 0; f < 6; f++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_FISH;
+		e.index = f;
+		e.school = 0;
+		e.ring = 200.0f;
+		e.angle = 6.2831853f * f / 6.0f;
+		p.entries.push_back(e);
+	}
+
+	const float dt = 1.0f / 30.0f;
+	const float most = kHDLifeFishTurn * dt + kHDLifeWobble * 6.2831853f *
+		kHDLifeWobbleHz * kHDLifeDartBeat * dt + 1.0e-3f;
+	float worst = 0.0f, wide = 0.0f, last[6];
+
+	for (int k = 0; k <= 30 * 20; k++)
+	{
+		const float t = k * dt;
+
+		if (k)
+			HDLifeTick(p, 0, t, k <= 45 && k >= 30, 2048.0f, 2048.0f, 0);
+
+		for (int f = 0; f < 6; f++)
+		{
+			const HDLifeEntry& e = p.entries[(size_t)f];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			if (k)
+			{
+				float d = yaw - last[f];
+
+				while (d > 3.14159265f)
+					d -= 6.2831853f;
+				while (d < -3.14159265f)
+					d += 6.2831853f;
+
+				worst = fabsf(d) > worst ? fabsf(d) : worst;
+			}
+
+			last[f] = yaw;
+
+			if (p.schools[0].darting && k == 31)
+			{
+				float d = atan2f(e.wayX, e.wayZ) - p.schools[0].heading;
+
+				while (d > 3.14159265f)
+					d -= 6.2831853f;
+				while (d < -3.14159265f)
+					d += 6.2831853f;
+
+				wide = fabsf(d) > wide ? fabsf(d) : wide;
+			}
+		}
+	}
+
+	ok(p.schools[0].darts >= 1 && wide > 2.0f * most && worst <= most,
+		"life turn: a dart turns its fish within a few frames, never in one",
+		(long)(worst * 1000.0f), (long)(most * 1000.0f));
+}
+
 static int life_draw(void* state);
 
 /* A rebuild of the level keeps the pool (HDLifeSameBodies): the same water
@@ -19010,6 +19090,7 @@ int main()
 	life_keep();
 	life_tank();
 	life_flee();
+	life_turn();
 	life_bob();
 	life_depth();
 	load_pool();

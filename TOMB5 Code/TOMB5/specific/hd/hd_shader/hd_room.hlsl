@@ -378,7 +378,8 @@ float4 gWaterBox : register(c15);
  *            underwater room with a surface above it, times hd_motion),
  *            y the height of that surface (room local), z one over the
  *            depth it fades out over, w unused
- * gEye       xyz the camera in this room's own coordinates (WaterVS)
+ * gEye       xyz the camera in this room's own coordinates, w 1 while the
+ *            eye is in the air and 0 under the water (WaterVS)
  * gSwell     x the share of the wave height the vertex takes (0 basin;
  *            for a sheet draw times the body's own swell, hd_render.cpp
  *            kWaterBank), y the shore distance the swell tapers in
@@ -2154,14 +2155,16 @@ float PatchField(float2 p, float t, float var)
  * pictures. */
 #define HD_LINE_STEEP 6.0f
 
-/* The swell round an eye at the surface (WaterVS, "round the eye"), units:
- * HD_SWELL_EYE across, a square and a half, so that the sheet's vertices
- * round the eye, 256 units apart, keep at most 0.14 of the swell under
- * it; HD_SWELL_EYE_Y up or down, a click, over two and a half times the
- * sea's 97 units of height. Free choices, set on the round's RoomProbe
- * sweep of the eye through JOBY2's rain basin. */
+/* The sheet round an eye at the surface (WaterVS, "round the eye"), units:
+ * HD_SWELL_GAP how far the sheet keeps off the eye, past the near plane -
+ * 20 units ahead (InitWindow, gamemain.cpp) at the game's 80 degrees over
+ * a 4:3 width (AlterFOV), it reaches 12.6 units up and down and at any
+ * pitch at most 24 units below or above the eye; 32 leaves room for a
+ * rolled camera. HD_SWELL_EYE the distance across over which the hold
+ * fades out, a square and a half. Free choices, set on the round's
+ * RoomProbe sweep of the eye through JOBY2's rain basin. */
+#define HD_SWELL_GAP 32.0f
 #define HD_SWELL_EYE 1536.0f
-#define HD_SWELL_EYE_Y 256.0f
 
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
@@ -2187,22 +2190,35 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * whitecaps. */
 	const float crest = gSwell.z * saturate((h - gSwell.w) /
 		max(gSwell.z, 1.0e-3f));
-	/* Round the eye the sheet lies at rest. The game puts the eye under the
-	 * water or over it by the surface at rest (the camera's room); a sea's
-	 * swell moves the sheet by up to the sum of its heights, 97 units, so
-	 * an eye held within that of the surface lay over a trough while the
-	 * game had it in the water and looked down into one flat colour. While
-	 * the eye is within HD_SWELL_EYE_Y units of the surface at rest, the
-	 * swell fades to nothing toward it over HD_SWELL_EYE units across,
-	 * smoothly; an eye further off the surface sees the whole swell. */
-	const float across = length(gEye.xz - inPos.xz);
-	const float up = abs(gEye.y - inPos.y);
-	const float near = saturate(max(across * (1.0f / HD_SWELL_EYE),
-		up * (1.0f / HD_SWELL_EYE_Y)));
 	// Units the vertex rises by (y counts down): the pixel shader measures
 	// the frame's depth from the surface at rest (WaterPS, the clip).
-	const float lift = (gSwell.x * h + crest) * taper * gMotion.w *
-		(near * near * (3.0f - 2.0f * near));
+	float lift = (gSwell.x * h + crest) * taper * gMotion.w;
+
+	/* Round the eye the sheet keeps to the eye's side. The game puts the
+	 * eye in the air or under the water by the surface at rest (the
+	 * camera's room, gEye.w 1 or 0); a sea's swell moves the sheet by up to
+	 * the sum of its heights, 97 units, so near the surface a crest can
+	 * stand over an eye the game has in the air, or a trough under one it
+	 * has in the water, and the near plane cuts a sheet that passes within
+	 * its reach of the eye. Where the eye lies on its side of this vertex's
+	 * surface at rest, the vertex keeps at least HD_SWELL_GAP units off the
+	 * eye's height - a crest under an eye in the air cut down to it, a
+	 * trough over an eye in the water held up to it, at rest nearer than
+	 * that moved away - fading out smoothly over HD_SWELL_EYE units across.
+	 * Every other vertex keeps its swell. `e` is the eye's height over the
+	 * surface at rest. */
+	{
+		const float e = inPos.y - gEye.y;
+		const float air = gEye.w;
+		const float held = air > 0.5f ? min(lift, e - HD_SWELL_GAP) :
+			max(lift, e + HD_SWELL_GAP);
+		const float side = air > 0.5f ? step(0.0f, e) : step(e, 0.0f);
+		const float near = saturate(length(gEye.xz - inPos.xz) *
+			(1.0f / HD_SWELL_EYE));
+
+		lift = lerp(lift, held, side * (1.0f - near * near *
+			(3.0f - 2.0f * near)));
+	}
 
 	pos.y -= lift;
 

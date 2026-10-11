@@ -15843,6 +15843,9 @@ namespace
 					m[14] * inv[6 + j]);
 		}
 
+		// w: the side of the water the eye is on, as c148.y (WaterVS,
+		// "round the eye").
+		eye[3] = g_under_on ? 0.0f : 1.0f;
 		g_device->SetVertexShaderConstantF(16, caustic, 1);
 		g_device->SetVertexShaderConstantF(17, eye, 1);
 		set_room_rows(group);

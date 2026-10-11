@@ -2092,4 +2092,4 @@ const BYTE kHDRoomWaterViewPS[] =
       0,   1,   0,   0,  15, 128, 
     255, 255,   0,   0
 };
-// bshader-stamp 31f9d38fb00f99ac6eb980607f6f3f6c
+// bshader-stamp 6771d82d5b3cd97c48fac9aa8c4262e6

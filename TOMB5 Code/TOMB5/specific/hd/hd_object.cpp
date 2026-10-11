@@ -1998,8 +1998,12 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	const DWORD started = GetTickCount();
 
+	/* The models' pages decode on the level load's threads (HDPoolRun,
+	 * tomb5.hd_threads) like the rooms' pages: a page is decoded on its own
+	 * and lands in its own slot, and the uploads stay on this thread. */
 	if (!HDModelLevelBegin(App.dx.lpD3DDevice, installRoot, &wanted[0],
-		(int)wanted.size(), false, 1, &stats, &why))
+		(int)wanted.size(), false, HDPoolThreads((int)tomb5.hd_threads),
+		&stats, &why))
 	{
 		Log("HDLOG level=%s objects refused reason=%s", g_stem, why);
 		return;

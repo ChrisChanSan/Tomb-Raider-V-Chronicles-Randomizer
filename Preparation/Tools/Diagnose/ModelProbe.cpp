@@ -633,7 +633,8 @@
  *                         of by a guess. The cache never frees a page
  *                         (hd_pagecache.cpp), so the union of two such lists
  *                         is what an in-level outfit change leaves behind.
- *     -threads <n>        page decoding threads, default 8
+ *     -threads <n>        page decoding threads (HDPoolRun), 0 = the
+ *                         machine's own count, at most 16; default 8
  *     -managed            pages in D3DPOOL_MANAGED instead of D3DPOOL_DEFAULT
  *     -nodraw             load and measure only - no window, no picture
  *
@@ -11004,7 +11005,7 @@ int main(int argc, char** argv)
 			ringSet = true;
 		}
 		else if (!_stricmp(argv[i], "-threads") && i + 1 < argc)
-			threads = atoi(argv[++i]);
+			threads = HDPoolThreads(atoi(argv[++i]));
 		else if (!_stricmp(argv[i], "-out") && i + 1 < argc)
 			out = argv[++i];
 		else if (!_stricmp(argv[i], "-size") && i + 2 < argc)

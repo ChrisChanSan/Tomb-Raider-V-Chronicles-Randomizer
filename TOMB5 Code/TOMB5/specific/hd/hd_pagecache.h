@@ -325,3 +325,40 @@ int HDPageCacheKeyOf(int key);
 // caller's log. Valid until the next Create or Destroy.
 int HDPageCacheNoteCount();
 const char* HDPageCacheNote(int at);
+
+/* The pool of the HD level load: the page decode, the room build's vertex
+ * buffer, its index fill per group and the build's fingerprint run their
+ * independent items on it.
+ *
+ * HDPoolThreads turns a wish into a thread count: 1 or more is taken as it
+ * is, 0 or less is the machine's own (std::thread::hardware_concurrency,
+ * 1 when the library cannot tell), and the answer is never above 16 - the
+ * page decode's old ceiling, which kept the transient decode batches
+ * (2 pages per thread) inside the 32-bit address space.
+ *
+ * HDPoolRun calls work(i) once for every i in [0, count) on up to `threads`
+ * threads, the calling thread one of them, and returns when every item is
+ * done; no thread outlives the call. Items are handed out in index order,
+ * but run in any order and at the same time, so an item may write only
+ * what is its own (its slot of an output array) and read only what nothing
+ * writes during the call. The first exception an item throws is thrown
+ * again on the calling thread after the join. threads 1 runs everything on
+ * the calling thread in index order. */
+int HDPoolThreads(int asked);
+
+// The engine of HDPoolRun, without the template: call(context, i).
+void HDPoolRunItems(int count, int threads, void (*call)(void*, int),
+	void* context);
+
+template <class Work> void HDPoolRun(int count, int threads, const Work& work)
+{
+	struct Call
+	{
+		static void one(void* context, int at)
+		{
+			(*(const Work*)context)(at);
+		}
+	};
+
+	HDPoolRunItems(count, threads, &Call::one, (void*)&work);
+}

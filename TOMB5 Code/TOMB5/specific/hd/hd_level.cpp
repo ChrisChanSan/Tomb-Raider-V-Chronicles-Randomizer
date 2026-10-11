@@ -1397,21 +1397,12 @@ namespace
 	// What HDScanLevel took on the load thread, for the hd_share line.
 	double g_scan_ms = 0.0;
 
+	/* The threads of the level's HD load - the page decode, the room build
+	 * and the models' pages (HDPoolRun): tomb5.hd_threads, 0 the machine's
+	 * own count, never above 16 (HDPoolThreads). */
 	int DecodeThreads()
 	{
-		SYSTEM_INFO info;
-
-		GetSystemInfo(&info);
-
-		int threads = (int)info.dwNumberOfProcessors;
-
-		if (threads < 1)
-			threads = 1;
-
-		if (threads > 16)
-			threads = 16;
-
-		return threads;
+		return HDPoolThreads((int)tomb5.hd_threads);
 	}
 
 	// "DATA\ANDREA1.TRC" -> "ANDREA1". Not HDScreenLevelName(), which maps

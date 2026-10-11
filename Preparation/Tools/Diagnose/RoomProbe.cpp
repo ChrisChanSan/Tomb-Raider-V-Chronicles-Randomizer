@@ -62,7 +62,11 @@
  *     -fov <deg>      default 80, the engine's own
  *     -all            three more PNGs, one per pass (opaque, alpha, additive)
  *     -managed        pages in D3DPOOL_MANAGED instead of D3DPOOL_DEFAULT
- *     -threads <n>    decoding threads, default 8
+ *     -threads <n>    the level load's threads (HDPoolRun): the page
+ *                     decode, the vertex buffer, the index fill per
+ *                     group, the mirror search; 0 = the machine's own
+ *                     count, at most 16; default 8. The build's hash
+ *                     is the same for every n
  *     -rooms <n>      the classic room count, so groups beyond it count as sky
  *     -out <prefix>   output path prefix, default .\roomprobe
  *     -groups         list every group's triangles and ranges, then stop
@@ -7665,7 +7669,7 @@ static int ProbeMain(int argc, char** argv)
 		else if (!strcmp(argv[at], "-fov") && at + 1 < argc)
 			fov = atof(argv[++at]);
 		else if (!strcmp(argv[at], "-threads") && at + 1 < argc)
-			threads = atoi(argv[++at]);
+			threads = HDPoolThreads(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-rooms") && at + 1 < argc)
 			rooms = atoi(argv[++at]);
 		else if (!strcmp(argv[at], "-out") && at + 1 < argc)

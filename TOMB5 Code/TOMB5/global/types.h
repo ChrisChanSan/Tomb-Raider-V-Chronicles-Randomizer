@@ -2906,5 +2906,13 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * hd_reach; taken at the start of a level and dead with hd_enable off
 	 * (specific\hd\hd_level.cpp, BuildRoomAir). Registry: hd_air. */
 	bool hd_air;
+
+	/* The threads of an HD level load - the page decode, the room build
+	 * and the models' pages: 0, the default, the machine's own count, 1 one
+	 * thread, n that many; never more than 16 (specific\hd\hd_pagecache.cpp,
+	 * HDPoolThreads). The build comes out the same whatever it says - the
+	 * built line's hash proves it per level. Registry only; taken at the
+	 * start of a level and dead with hd_enable off. Registry: hd_threads. */
+	ulong hd_threads;
 };
 #pragma pack(pop)

@@ -3009,7 +3009,8 @@ namespace
 		/* One room at a time on the pool (HDPoolRun): a room reads the .TRG,
 		 * the boxes and the built groups' bounds, which nothing writes now,
 		 * and keeps its mirrors in its own row; the rows are put together in
-		 * room order after the join, the order of the one loop this was. */
+		 * room order after the join, so the list does not depend on the
+		 * thread count. */
 		std::vector<std::vector<HDMirror> > found(
 			(size_t)(asked > 0 ? asked : 0));
 
@@ -5714,16 +5715,16 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * holders, air), the vertex marks and the page cache, none of which it
 	 * or another group writes, and it writes its own slot of g_groups and
 	 * its own FillOut. The join after it puts the groups together in group
-	 * order - the order this build has always had - so the buffers, the
-	 * tables and every count come out the same whatever the thread count
+	 * order, so the buffers, the tables and every count come out the same
+	 * whatever the thread count
 	 * (HDRenderBuildHash says so per level). */
 	const auto fill_group = [&](size_t g)
 	{
 		FillOut& o = fill_out[g];
 		HDGroup& group = g_groups[g];
 		const trf::remaster::TrgGroup& source = trg.groups[g];
-		/* The group's own index run and sort list, under the names the fill
-		 * has always used; the join appends the runs in group order. */
+		/* The group's own index run and sort list; the join appends the runs
+		 * in group order. */
 		std::vector<unsigned int>& sorted = o.sorted;
 		std::vector<HDTri> tris;
 		const size_t group_first_index = sorted.size();
@@ -7509,8 +7510,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	/* The book runs and the plain pages' sheen, made before the groups run:
 	 * both are level-wide tables the fill asks (MaterialBookSlotsMade,
 	 * PageGlossKnown) and would otherwise make on first use. The runs are
-	 * made in the order the fill asks for them - group, pass, part - so they
-	 * are numbered as they always were. */
+	 * made in the order the fill asks for them - group, pass, part - so their
+	 * numbers do not depend on the thread count. */
 	for (size_t g = 0; g < trg.groups.size(); g++)
 		for (int pass = 0; pass < 3; pass++)
 			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
@@ -7596,7 +7597,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	 * destructibles and the stand covers appended with the ids and first
 	 * flags that point into them moved the same way, the hits and counts
 	 * added, and each wind-weighted vertex counted for the first group that
-	 * names it, as the seen flag did in one loop. */
+	 * names it, in group order whatever the thread count. */
 	for (size_t g = 0; g < trg.groups.size(); g++)
 	{
 		FillOut& o = fill_out[g];

@@ -339,9 +339,9 @@ const char* HDPageCacheNote(int at);
  *
  * HDPoolThreads turns a wish into a thread count: 1 or more is taken as it
  * is, 0 or less is the machine's own (std::thread::hardware_concurrency,
- * 1 when the library cannot tell), and the answer is never above 16 - the
- * page decode's old ceiling, which kept the transient decode batches
- * (2 pages per thread) inside the 32-bit address space.
+ * 1 when the library cannot tell), and the answer is never above 16, which
+ * keeps the page decode's transient batches (2 pages per thread) inside the
+ * 32-bit address space.
  *
  * HDPoolRun calls work(i) once for every i in [0, count) on up to `threads`
  * threads, the calling thread one of them, and returns when every item is

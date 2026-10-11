@@ -16354,9 +16354,12 @@ namespace
 			g_device->SetPixelShaderConstantF(92, pixel, 32);
 
 			/* c148, gWaterClip: x the body's clip, units (kWaterClip, a
-			 * row's `clip`) - read by WaterPS alone. */
+			 * row's `clip`); y 1 while the eye is in the air, 0 under the
+			 * water, the side the sheet is seen from - read by WaterPS
+			 * alone. */
 			const float clip[4] = {
-				(float)g_wbodies[(size_t)r.body].info.clip, 0.0f, 0.0f, 0.0f };
+				(float)g_wbodies[(size_t)r.body].info.clip,
+				g_under_on ? 0.0f : 1.0f, 0.0f, 0.0f };
 
 			g_device->SetPixelShaderConstantF(148, clip, 1);
 

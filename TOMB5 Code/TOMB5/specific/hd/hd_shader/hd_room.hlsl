@@ -715,8 +715,10 @@ float4 gWaterStage : register(c106);
 /* gWaterClip c148, per sheet draw, read by WaterPS alone: x how far under
  * the surface at rest the frame's depth may lie and still be left to the
  * frame, units (the body's clip, hd_render.cpp kWaterClip; see "the clip"
- * in WaterPS); y, z, w 0. Named by no other shader: this file's other
- * pixel registers end at c147, hd_model.hlsl's own begin at c160. */
+ * in WaterPS); y 1 while the eye is in the air, 0 while it is under the
+ * water (see "the side" in WaterPS); z, w 0. Named by no other shader:
+ * this file's other pixel registers end at c147, hd_model.hlsl's own
+ * begin at c160. */
 float4 gWaterClip : register(c148);
 
 /* The crests (see CrestRows), per sheet draw, read by WaterPS (its foam
@@ -2152,6 +2154,15 @@ float PatchField(float2 p, float t, float var)
  * pictures. */
 #define HD_LINE_STEEP 6.0f
 
+/* The swell round an eye at the surface (WaterVS, "round the eye"), units:
+ * HD_SWELL_EYE across, a square and a half, so that the sheet's vertices
+ * round the eye, 256 units apart, keep at most 0.14 of the swell under
+ * it; HD_SWELL_EYE_Y up or down, a click, over two and a half times the
+ * sea's 97 units of height. Free choices, set on the round's RoomProbe
+ * sweep of the eye through JOBY2's rain basin. */
+#define HD_SWELL_EYE 1536.0f
+#define HD_SWELL_EYE_Y 256.0f
+
 WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	float4 inC0 : COLOR0, float4 inC1 : COLOR1, float4 inFlags : TEXCOORD0)
 {
@@ -2176,9 +2187,22 @@ WATER_OUT WaterVS(float4 inPos : POSITION, float4 inNormal : NORMAL,
 	 * whitecaps. */
 	const float crest = gSwell.z * saturate((h - gSwell.w) /
 		max(gSwell.z, 1.0e-3f));
+	/* Round the eye the sheet lies at rest. The game puts the eye under the
+	 * water or over it by the surface at rest (the camera's room); a sea's
+	 * swell moves the sheet by up to the sum of its heights, 97 units, so
+	 * an eye held within that of the surface lay over a trough while the
+	 * game had it in the water and looked down into one flat colour. While
+	 * the eye is within HD_SWELL_EYE_Y units of the surface at rest, the
+	 * swell fades to nothing toward it over HD_SWELL_EYE units across,
+	 * smoothly; an eye further off the surface sees the whole swell. */
+	const float across = length(gEye.xz - inPos.xz);
+	const float up = abs(gEye.y - inPos.y);
+	const float near = saturate(max(across * (1.0f / HD_SWELL_EYE),
+		up * (1.0f / HD_SWELL_EYE_Y)));
 	// Units the vertex rises by (y counts down): the pixel shader measures
 	// the frame's depth from the surface at rest (WaterPS, the clip).
-	const float lift = (gSwell.x * h + crest) * taper * gMotion.w;
+	const float lift = (gSwell.x * h + crest) * taper * gMotion.w *
+		(near * near * (3.0f - 2.0f * near));
 
 	pos.y -= lift;
 
@@ -2465,11 +2489,27 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 
 	// y counts down: the surface's normal points to -y.
 	float3 N = normalize(float3(-slope.x, -1.0f, -slope.y));
-	const float above = V.y < 0.0f ? 1.0f : 0.0f;
+
+	/* The side the sheet is seen from is the side the eye is on: a ray
+	 * from the air meets the water from above first, a crest standing over
+	 * the eye's height included, and a ray from the water meets it from
+	 * below. gWaterClip.y is 1 while the eye is in the air and 0 under the
+	 * water (the camera's room), and the variant drawn under the water
+	 * knows it is. */
+#ifdef HD_WATER_UNDER
+	const float above = 0.0f;
+#else
+	const float above = gWaterClip.y;
+#endif
 
 	N = above > 0.5f ? N : -N;
 
-	const float nv = saturate(dot(N, V));
+	/* A slope turned away from the eye is hidden behind the crest in front
+	 * of it; a flat sheet draws it all the same. Its N.V, under 0, would
+	 * make the Fresnel term 1 - the sky's colour, flat, over half of every
+	 * wave seen at a grazing angle. The pixel takes the term of the slope
+	 * it mirrors, |N.V|, so the waves stay readable. */
+	const float nv = abs(dot(N, V));
 	const float g = 1.0f - nv;
 	const float g2 = g * g;
 	const float F = gWaterRefl.w + (1.0f - gWaterRefl.w) * (g2 * g2 * g);

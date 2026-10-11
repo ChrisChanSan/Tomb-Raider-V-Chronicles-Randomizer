@@ -1544,6 +1544,16 @@ bool HDRenderWaterTankMesh(const float* xyz, int vertices, const int* quads,
 bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
 	int flags1, float age);
 
+/* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
+ * shaders and the cards' pair draws once into a target of its own, so the
+ * frame that first shows a sheet does not wait for the driver to ready
+ * them. Called once a level, outside a scene, after the sheets are built
+ * and the depth texture is bound; `ms` (up to `max`) takes each draw's
+ * time - the sheet's variants (plain, depth, under, foot, river, foam,
+ * foam depth) and the cards -, -1 for one not drawn. Returns the whole
+ * time in milliseconds, or -1 when the level has no sheet. */
+double HDRenderWaterWarmUp(double* ms, int max);
+
 /* SPLASHLOG with -log, once a second while a card or a ring of a splash
  * draws: the counts of the last frame drawn. */
 struct HDRenderSplashStats

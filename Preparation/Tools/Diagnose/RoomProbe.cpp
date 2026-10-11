@@ -439,6 +439,12 @@
  *     -tankleave spray|water  -tank without its spray, or without its
  *                     water - a part's own pixels, against the picture with
  *                     it; repeatable.
+ *     -nowarm         no warm-up of the water's shaders before the picture
+ *                     (HDRenderWaterWarmUp, which the engine runs once a
+ *                     level and RoomProbe once a picture by default, after
+ *                     the depth texture's bind): the first sheet draw then
+ *                     waits for the driver as a game's first water frame
+ *                     did. The warm-up prints its time per shader.
  *     -rippleat x,y,z  whether a game ripple there loses its classic
  *                     sprite to a sheet's ring (HDRenderWaterSheetUnder);
  *                     repeatable, printed after the WATERLOG lines.
@@ -1405,6 +1411,8 @@ static bool g_glow_alone = false;
 // -nocopy, -nodepth, -waterdepthview and -waterbend - see the usage above.
 static bool g_water_copy = true;
 static bool g_water_depth = true;
+// -nowarm: no warm-up of the water's shaders (HDRenderWaterWarmUp).
+static bool g_nowarm = false;
 static int g_water_depth_view = 0;
 static float g_water_bend = 1.0f;
 
@@ -1449,6 +1457,22 @@ static bool ShotBegin(Shot& shot, long w, long h)
 
 		if (g_water_depth && !HDRenderWaterDepthBind(&refused))
 			printf("water depth texture refused: %s\n", refused);
+	}
+
+	/* The water's shaders warmed once, as the engine does it at the
+	 * level's load once the depth texture is bound (hd_level.cpp,
+	 * BuildWaterSheets); -nowarm leaves it out, for the first draw's wait
+	 * it takes away. */
+	if (!g_nowarm)
+	{
+		double ms[8];
+		const double all = HDRenderWaterWarmUp(ms, 8);
+
+		if (all >= 0.0)
+			printf("-hdwater: warm-up %.2f ms: sheet %.2f, depth %.2f, under "
+				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
+				"cards %.2f\n", all, ms[0], ms[1], ms[2], ms[3], ms[4], ms[5],
+				ms[6], ms[7]);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws
@@ -9388,8 +9412,10 @@ static int ProbeMain(int argc, char** argv)
 			sequence = argv[at + 1];
 			at += 1;
 		}
-		else if (!strcmp(argv[at], "-vramhog"))
-			vramHog = true;
+		// -vramhog and -nowarm share a branch: the chain is at the
+		// compiler's depth.
+		else if (!strcmp(argv[at], "-vramhog") || !strcmp(argv[at], "-nowarm"))
+			(argv[at][1] == 'v' ? vramHog : g_nowarm) = true;
 		else
 			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
 	}
@@ -11329,6 +11355,9 @@ static int ProbeMain(int argc, char** argv)
 	PrepareStand(room);
 	probestatics::PreparePieces(stem, room);
 
+	LARGE_INTEGER frameStart;
+
+	QueryPerformanceCounter(&frameStart);
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 
@@ -11541,6 +11570,31 @@ static int ProbeMain(int argc, char** argv)
 	ProbeCardsDraw();
 	HDRenderFrameEnd();
 	g_device->EndScene();
+
+	/* The frame's time on the processor from its BeginScene to the GPU's
+	 * end - what a first water frame's wait for the driver adds to
+	 * (-nowarm against the warm-up). */
+	if (g_hdwater >= 0)
+	{
+		IDirect3DQuery9* drained = 0;
+
+		if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &drained)))
+		{
+			drained->Issue(D3DISSUE_END);
+
+			while (drained->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE) {}
+
+			drained->Release();
+		}
+
+		LARGE_INTEGER f, c;
+
+		QueryPerformanceFrequency(&f);
+		QueryPerformanceCounter(&c);
+		printf("-hdwater: the frame %.2f ms on the processor, BeginScene to "
+			"the GPU's end\n", (double)(c.QuadPart - frameStart.QuadPart) *
+			1000.0 / (double)f.QuadPart);
+	}
 
 	Take(after);
 

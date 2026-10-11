@@ -2427,6 +2427,18 @@ static void BuildWaterSheets()
 		Log("HDLOG water depth texture refused: %s - the sheets read the "
 			"classic floor's depth", refused);
 
+	/* The water's shaders warmed once, now, so the first frame that shows
+	 * a sheet does not wait for the driver (hd_render.cpp, "the
+	 * warm-up"). A new line with -log: the whole time and each draw's. */
+	double warm[8];
+	const double warmed = HDRenderWaterWarmUp(warm, 8);
+
+	if (warmed >= 0.0 && gLogEnabled)
+		Log("HDLOG level=%s water warm-up %.2f ms: sheet %.2f, depth %.2f, "
+			"under %.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
+			"cards %.2f", g_stem, warmed, warm[0], warm[1], warm[2], warm[3],
+			warm[4], warm[5], warm[6], warm[7]);
+
 	/* WATERLOG, with -log: one level line and one line per body - the
 	 * legend is over HDRenderWaterLogLine in hd_render.cpp, which writes
 	 * RoomProbe -hdwater's lines too. */

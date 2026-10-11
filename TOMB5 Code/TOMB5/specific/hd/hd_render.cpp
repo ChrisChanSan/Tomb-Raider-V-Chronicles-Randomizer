@@ -14133,6 +14133,236 @@ bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
 	return true;
 }
 
+namespace
+{
+	// Wall-clock milliseconds, and the device's queue drained to its end.
+	double warm_now_ms()
+	{
+		LARGE_INTEGER f, c;
+
+		QueryPerformanceFrequency(&f);
+		QueryPerformanceCounter(&c);
+		return (double)c.QuadPart * 1000.0 / (double)f.QuadPart;
+	}
+
+	void warm_drain()
+	{
+		IDirect3DQuery9* q = 0;
+
+		if (FAILED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &q)) || !q)
+			return;
+
+		q->Issue(D3DISSUE_END);
+
+		while (q->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE) {}
+
+		q->Release();
+	}
+}
+
+/* The warm-up.
+ *
+ * The first draw of a water sheet in a process held the frame for about
+ * 42 ms: RoomProbe with a scratch timer round each sheet draw, to the
+ * GPU's end, measured 41.9, 42.7 and 43.9 ms for the first, 0.35 to 0.49
+ * for the second and 0.10 for the third (RICH2's tank view, 2560 x 1440),
+ * with the draw call itself under a third of a millisecond. The wait is
+ * the driver readying the water's vertex shader the first time a draw uses
+ * it: drawn first with the rooms' vertex shader, the sheet's pixel shaders
+ * took 0.4 to 0.7 ms (WaterDepthPS) and 0.05 to 0.16 (WaterPS), then the
+ * first draw with WaterVS 60 to 73 ms on a busy machine; the sheet's
+ * buffers' upload (PreLoad) 0.4 to 0.9 ms; the cards' pair 2.4 to 4.4.
+ *
+ * So once a level, when its sheets are built and the depth texture is
+ * bound, each of the water's pixel shaders draws one triangle of the
+ * level's first sheet range with WaterVS - its declaration and textures
+ * bound as the frame binds them - and the cards' pair one card, into a
+ * render target of its own of 16 x 16 in the frame's format and without
+ * a depth buffer; the queue is drained after each, the device's state put
+ * back. Nothing of it reaches the frame. `ms` takes the time of each
+ * (sheet, depth, under, foot, river, foam, foam depth, cards; -1 for one
+ * not drawn). Returns the whole time, or -1 when nothing was warmed (no
+ * sheets, no device). */
+double HDRenderWaterWarmUp(double* ms, int max)
+{
+	for (int i = 0; ms && i < max; i++)
+		ms[i] = -1.0;
+
+	const SheetRange* range = 0;
+
+	for (size_t g = 0; g < g_sheet_ranges.size() && !range; g++)
+		if (!g_sheet_ranges[g].empty())
+			range = &g_sheet_ranges[g][0];
+
+	if (!g_device || !range || !g_sheet_vb || !g_sheet_ib || !g_water_vs ||
+		!g_decl)
+		return -1.0;
+
+	const double start = warm_now_ms();
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* depth = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return -1.0;
+
+	g_device->GetDepthStencilSurface(&depth);
+
+	// The target, and a second texture in the frame copy's place.
+	IDirect3DTexture9* warm = 0;
+	IDirect3DTexture9* behind = 0;
+	IDirect3DSurface9* warmSurface = 0;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		FAILED(g_device->CreateTexture(16, 16, 1, D3DUSAGE_RENDERTARGET,
+		desc.Format, D3DPOOL_DEFAULT, &warm, 0)) ||
+		FAILED(g_device->CreateTexture(16, 16, 1, D3DUSAGE_RENDERTARGET,
+		desc.Format, D3DPOOL_DEFAULT, &behind, 0)) ||
+		FAILED(warm->GetSurfaceLevel(0, &warmSurface)))
+	{
+		if (warm) warm->Release();
+		if (behind) behind->Release();
+		if (depth) depth->Release();
+		target->Release();
+		return -1.0;
+	}
+
+	// The device's state as the level left it, put back below.
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex[3] = { 0, 0, 0 };
+	const DWORD stage[3] = { 0, 5, 6 };
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* indices = 0;
+	UINT streamOffset = 0, streamStride = 0;
+	DWORD fvf = 0;
+	D3DVIEWPORT9 port = {};
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_SRCBLEND, D3DRS_DESTBLEND, D3DRS_CULLMODE, D3DRS_STENCILENABLE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[stateCount];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetIndices(&indices);
+	g_device->GetViewport(&port);
+
+	for (int i = 0; i < 3; i++)
+		g_device->GetTexture(stage[i], &tex[i]);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	g_device->SetRenderTarget(0, warmSurface);
+	g_device->SetDepthStencilSurface(0);
+	g_device->BeginScene();
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+	// The water's pixel shaders over the sheet's own vertices.
+	IDirect3DPixelShader9* const sheets[7] = { g_water_ps, g_water_depth_ps,
+		g_water_under_ps, g_water_foot_ps, g_water_river_ps, g_water_foam_ps,
+		g_water_foam_depth_ps };
+
+	g_device->SetVertexDeclaration(g_decl);
+	g_device->SetVertexShader(g_water_vs);
+	g_device->SetStreamSource(0, g_sheet_vb, 0, sizeof(HDVertex));
+	g_device->SetIndices(g_sheet_ib);
+	g_device->SetTexture(5, g_copy_texture ? g_copy_texture : behind);
+	g_device->SetTexture(6, g_depth_texture);
+	warm_drain();
+
+	for (int i = 0; i < 7; i++)
+	{
+		if (!sheets[i])
+			continue;
+
+		const double t0 = warm_now_ms();
+
+		g_device->SetPixelShader(sheets[i]);
+		g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0,
+			range->minVertex, range->vertices, range->start, 1);
+		warm_drain();
+
+		if (ms && i < max)
+			ms[i] = warm_now_ms() - t0;
+	}
+
+	// The cards' pair with one card.
+	if (g_card_vs && g_card_ps)
+	{
+		const double t0 = warm_now_ms();
+		CardVertex card[3] = {};
+
+		for (int k = 0; k < 3; k++)
+		{
+			card[k].x = (float)(k & 1);
+			card[k].y = (float)(k >> 1);
+			card[k].z = 10.0f;
+			card[k].a = 1.0f;
+			card[k].light = 1.0f;
+		}
+
+		g_device->SetTexture(6, g_depth_texture);
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_card_ps);
+		g_device->SetFVF(kCardFVF);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, card,
+			sizeof(CardVertex));
+		warm_drain();
+
+		if (ms && 7 < max)
+			ms[7] = warm_now_ms() - t0;
+	}
+
+	g_device->EndScene();
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+	g_device->SetViewport(&port);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < 3; i++)
+	{
+		g_device->SetTexture(stage[i], tex[i]);
+
+		if (tex[i])
+			tex[i]->Release();
+	}
+
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetIndices(indices);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (stream) stream->Release();
+	if (indices) indices->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+	if (depth) depth->Release();
+	target->Release();
+	warmSurface->Release();
+	warm->Release();
+	behind->Release();
+	return warm_now_ms() - start;
+}
+
 void HDRenderSplashStatsNow(HDRenderSplashStats* out)
 {
 	if (out)

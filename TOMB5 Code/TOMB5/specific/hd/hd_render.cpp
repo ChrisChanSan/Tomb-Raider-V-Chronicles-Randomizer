@@ -14144,6 +14144,62 @@ void HDRenderWaterStage2(int copy, int depth, int view, float bend)
 	g_bend_scale = bend;
 }
 
+int HDRenderWaterBodySquares(int body, HDRenderWaterSquare* out, int max,
+	float* rise)
+{
+	if (body < 0 || body >= (int)g_wbodies.size())
+		return -1;
+
+	const HDRenderWaterBody& b = g_wbodies[(size_t)body].info;
+
+	if (rise)
+	{
+		const HDWaterClass& c = kWaterClass[b.cls];
+		float heights = 0.0f;
+
+		for (int i = 0; i < 8; i++)
+			heights += c.height[i] * b.waves;
+
+		*rise = c.swell * heights * b.swell +
+			(c.caps > 0.0f ? 0.25f * heights * b.swell : 0.0f);
+	}
+
+	int count = 0;
+	std::vector<long long> seen;
+
+	for (size_t i = 0; i < g_wsquares.size(); i++)
+	{
+		const WaterSquare& s = g_wsquares[i];
+
+		if (s.body != body)
+			continue;
+
+		const long long key = ((long long)s.wx << 32) ^ (unsigned)s.wz;
+
+		if (std::find(seen.begin(), seen.end(), key) != seen.end())
+			continue;
+
+		seen.push_back(key);
+
+		if (out && count < max)
+		{
+			HDRenderWaterSquare& o = out[count];
+
+			o.x = s.wx;
+			o.z = s.wz;
+			o.y = s.wy;
+			o.depth = s.depth;
+			o.room = s.room;
+			o.sheet = s.sheet;
+			o.open = s.open;
+		}
+
+		count++;
+	}
+
+	return count;
+}
+
 namespace
 {
 	/* The wave rows and the swell RoomVS reads for a room: its largest

@@ -562,6 +562,16 @@
  * has to answer a version 2 file the way the game does or its pictures
  * cannot be compared with the game's. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_markers.h"
+/* The object path for -life - the engine's own, as ModelProbe links it -
+ * and the water's life's rules, the engine's own as well. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_life_rules.h"
+#include <algorithm>
+/* hd_install.cpp reads the two registry overrides out of these, which the
+ * engine defines in tomb5\tomb5.cpp; ModelProbe brings the same pair. Left
+ * empty, so the search runs as it does for a player who never set them. */
+char tomb5_hd_install[260];
+char tomb5_hd_install_tr3[260];
 #include "../../../TOMB5 Code/TOMB5/specific/bc7.h"
 #include "../../../TOMB5 Code/TOMB5/specific/crashseam.h"
 #include "../../../TOMB5 Code/TOMB5/specific/devicemove.h"
@@ -1770,6 +1780,490 @@ static std::vector<float> g_creatures;
 // -wader x,z: stand-ins for a wading Lara, as x, z, drawn as -creature's.
 static std::vector<float> g_waders;
 static float g_seed_origin[2] = { 0.0f, 0.0f };
+
+/* -life <seed>: the water's life (hd_life_rules.h) on the level's water
+ * bodies, built as the game builds it (hd_life.cpp, HDLifeLevelBegin) and
+ * rolled with the engine's draw generator started at <seed>, stepped from
+ * clock 0 to -time at thirty steps a second - the game's tick - and drawn
+ * where HDFrameDraw draws the HD objects. -lifelara x,z[,t]: Lara's place
+ * for the school's flight and the drips' rings from clock t on (0 without);
+ * without it no school flees and no drip rings. Off by default: every
+ * picture without it is the picture it was. */
+static bool g_life = false;
+static unsigned g_life_seed = 0;
+static bool g_life_lara = false;
+// -lifebench: the life's draws timed on a second pass (LifeFrame).
+static bool g_life_bench = false;
+static float g_life_lara_x = 0.0f, g_life_lara_z = 0.0f, g_life_lara_t = 0.0f;
+static HDLifePool g_life_pool;
+static const HDLifeLevel* g_life_row = 0;
+static float g_life_box[HD_LIFE_KINDS][6];
+static std::vector<float> g_life_light;
+
+static int LifeDraw(void* state)
+{
+	return HDLifeDraw((unsigned*)state);
+}
+
+/* The level's pool: its models through the engine's model path, its bodies
+ * through the water module's getters, the roll, the steps to -time and the
+ * drips' rings that are still running then (a ring of the sheets runs about
+ * a second and a half; RoomProbe -ripple draws it at its age). The LIFELOG
+ * lines are the engine's. */
+static void LifeBuild(const char* root, const char* stem)
+{
+	g_life_row = HDLifeLevelOf(stem);
+
+	if (!g_life_row)
+	{
+		printf("LIFELOG level=%s no life in this level\n", stem);
+		return;
+	}
+
+	const char* why = "";
+	static bool modelUp = false;
+
+	if (!modelUp && !HDModelInit(g_device, &why))
+	{
+		printf("-life: HDModelInit failed - %s\n", why);
+		return;
+	}
+
+	modelUp = true;
+
+	std::vector<HDModelSlot> slots;
+
+	for (int k = 0; k < HD_LIFE_KINDS; k++)
+	{
+		const bool used = k == HD_LIFE_FISH ? g_life_row->fish != 0 :
+			g_life_row->weight[k] > 0;
+
+		if (!used)
+			continue;
+
+		HDModelSlot one;
+
+		one.slot = 0x7800 + k;
+		one.nodes = 1;
+		one.name = kHDLifeKinds[k].model;
+		one.rigidNode = 0;
+		slots.push_back(one);
+	}
+
+	HDModelStats stats;
+
+	if (slots.empty() || !HDModelLevelBegin(g_device, root, &slots[0],
+		(int)slots.size(), false, 1, &stats, &why))
+	{
+		printf("-life: HDModelLevelBegin failed - %s\n", why);
+		return;
+	}
+
+	// The models' cost: what their pages added to the page cache. And the
+	// warm-up the engine's level build gives its models (HDModelPreload).
+	printf("LIFELOG level=%s models loaded=%d (5:%d 4:%d) pages=%d "
+		"page_mib=%.2f verts=%d preloaded=%d\n", stem, stats.loaded,
+		stats.fromGame5, stats.fromGame4, stats.pageStats.slots,
+		stats.pageStats.bytes / 1048576.0, stats.vertices, HDModelPreload());
+
+	char models[160] = { 0 };
+
+	for (int k = 0; k < HD_LIFE_KINDS; k++)
+	{
+		float* box = g_life_box[k];
+
+		g_life_pool.has[k] = HDModelHas(0x7800 + k) &&
+			HDModelBounds(0x7800 + k, box, box + 3) ? 1 : 0;
+		g_life_pool.height[k] = g_life_pool.has[k] ?
+			HDLifeHeight(kHDLifeKinds[k].rest, box, box + 3) : 0.0f;
+		g_life_pool.reach[k] = g_life_pool.has[k] ?
+			HDLifeReach(kHDLifeKinds[k].rest, box, box + 3) : 0.0f;
+
+		if (g_life_pool.has[k])
+		{
+			strcat_s(models, models[0] ? "," : "");
+			strcat_s(models, kHDLifeKinds[k].name);
+			printf("-life: %s %s box %.0f %.0f %.0f .. %.0f %.0f %.0f "
+				"floating height %.0f\n", kHDLifeKinds[k].name,
+				kHDLifeKinds[k].model, box[0], box[1], box[2], box[3], box[4],
+				box[5], g_life_pool.height[k]);
+		}
+	}
+
+	g_life_pool.bodies.clear();
+	g_life_light.clear();
+
+	for (int w = 0; w < HDRenderWaterBodies(); w++)
+	{
+		HDRenderWaterBody info;
+		float rise = 0.0f;
+		const int n = HDRenderWaterBodySquares(w, 0, 0, 0);
+
+		if (n <= 0 || !HDRenderWaterBodyInfo(w, &info) || info.noSheet)
+			continue;
+
+		std::vector<HDRenderWaterSquare> squares((size_t)n);
+
+		HDRenderWaterBodySquares(w, &squares[0], n, &rise);
+
+		HDLifeBody b;
+
+		b.index = w;
+		b.surfaceY = info.surfaceY;
+		b.flowX = info.flow[0];
+		b.flowZ = info.flow[1];
+		b.speed = info.speed;
+		b.river = info.cls == HD_WATER_RIVER ? 1 : 0;
+		b.channel = info.cls == HD_WATER_CHANNEL ? 1 : 0;
+		b.rise = rise;
+		b.upMin = b.upMax = 0.0f;
+
+		for (int i = 0; i < n; i++)
+			if (squares[(size_t)i].sheet)
+			{
+				HDLifeSquare s;
+
+				s.x = squares[(size_t)i].x;
+				s.z = squares[(size_t)i].z;
+				s.depth = squares[(size_t)i].depth;
+				s.closed = squares[(size_t)i].open ? 0 : 1;
+				b.squares.push_back(s);
+			}
+
+		if (!HDLifeTakes(*g_life_row, (int)b.squares.size(), b.river,
+			b.channel))
+			continue;
+
+		g_life_pool.bodies.push_back(b);
+
+		for (int k = 0; k < 3; k++)
+			g_life_light.push_back(info.light[k] * 255.0f);
+	}
+
+	unsigned state = g_life_seed;
+
+	HDLifeBuild(g_life_pool, *g_life_row, LifeDraw, &state);
+
+	size_t bytes = sizeof(g_life_pool) +
+		g_life_pool.entries.size() * sizeof(HDLifeEntry) +
+		g_life_pool.schools.size() * sizeof(HDLifeSchool) +
+		g_life_pool.drips.size() * sizeof(HDLifeDrip) +
+		g_life_pool.bodies.size() * sizeof(HDLifeBody);
+
+	for (size_t i = 0; i < g_life_pool.bodies.size(); i++)
+		bytes += g_life_pool.bodies[i].squares.size() * sizeof(HDLifeSquare);
+
+	printf("LIFELOG level=%s bodies=%d floats=%d fish=%d drips=%d "
+		"skipped=%d bytes=%d models=%s\n", stem,
+		(int)g_life_pool.bodies.size(), g_life_pool.floats, g_life_pool.fish,
+		(int)g_life_pool.drips.size(), g_life_pool.unfit, (int)bytes,
+		models[0] ? models : "none");
+
+	for (size_t bi = 0; bi < g_life_pool.bodies.size(); bi++)
+	{
+		const HDLifeBody& b = g_life_pool.bodies[bi];
+		int floats = 0, fish = 0, drips = 0, closed = 0;
+
+		for (size_t i = 0; i < g_life_pool.entries.size(); i++)
+			if (g_life_pool.entries[i].body == (int)bi)
+				(g_life_pool.entries[i].kind == HD_LIFE_FISH ? fish :
+					floats)++;
+
+		for (size_t i = 0; i < g_life_pool.drips.size(); i++)
+			drips += g_life_pool.drips[i].body == (int)bi ? 1 : 0;
+
+		for (size_t i = 0; i < b.squares.size(); i++)
+			closed += b.squares[i].closed;
+
+		printf("LIFELOG level=%s body=%d water=%d class=%s squares=%d "
+			"rise=%.1f flow=%.2f,%.2f,%.0f floats=%d fish=%d drips=%d "
+			"deep=%d closed=%d\n", stem, (int)bi, b.index,
+			b.river ? "river" : b.channel ? "channel" : "other",
+			(int)b.squares.size(), b.rise, b.flowX, b.flowZ, b.speed, floats,
+			fish, drips, HDLifeDeepCount(b), closed);
+	}
+
+	// The game's steps from clock 0 to -time, and the tick's cost.
+	LARGE_INTEGER f, t0, t1;
+	std::vector<std::pair<HDLifeRing, float> > rings;
+	const int steps = (int)(g_time * 30.0 + 0.5);
+
+	QueryPerformanceFrequency(&f);
+	QueryPerformanceCounter(&t0);
+	HDLifeTick(g_life_pool, g_life_row, 0.0f, 0, 0.0f, 0.0f, 0);
+
+	for (int s = 1; s <= steps; s++)
+	{
+		const float t = (float)s / 30.0f;
+		const int on = g_life_lara && t >= g_life_lara_t ? 1 : 0;
+		std::vector<HDLifeRing> now;
+
+		HDLifeTick(g_life_pool, g_life_row, t, on, g_life_lara_x,
+			g_life_lara_z, &now);
+
+		for (size_t i = 0; i < now.size(); i++)
+			rings.push_back(std::make_pair(now[i], t));
+	}
+
+	QueryPerformanceCounter(&t1);
+
+	const double ms = steps ? (double)(t1.QuadPart - t0.QuadPart) * 1000.0 /
+		(double)f.QuadPart / steps : 0.0;
+	int fleeing = 0, shown = 0;
+
+	for (size_t i = 0; i < g_life_pool.schools.size(); i++)
+		fleeing += g_life_pool.schools[i].fleeUntil > (float)g_time ? 1 : 0;
+
+	for (size_t i = 0; i < rings.size(); i++)
+	{
+		const float age = (float)g_time - rings[i].second;
+
+		if (age > 1.5f)
+			continue;
+
+		HDRenderWaterRing(rings[i].first.x, rings[i].first.z, age,
+			(float)rings[i].first.size);
+		shown++;
+	}
+
+	printf("LIFELOG level=%s probe clock=%.2f steps=%d tick_ms=%.4f "
+		"respawned=%d fleeing=%d rings=%d shown=%d\n", stem, g_time, steps,
+		ms, g_life_pool.respawned, fleeing, (int)rings.size(), shown);
+
+	for (size_t i = 0; i < g_life_pool.entries.size(); i++)
+	{
+		const HDLifeEntry& e = g_life_pool.entries[i];
+		float x, y, z, yaw, pitch, roll;
+
+		HDLifePose(g_life_pool, e, (float)g_time, &x, &y, &z, &yaw, &pitch,
+			&roll);
+		/* And a float's waterline at this clock: its bottom under the
+		 * surface at rest and its top over it (the floating height about
+		 * the middle; tilt left out), its bob's height and the most the
+		 * body's sheet rises - the float hangs over the drawn water only
+		 * if `under` falls short of `rise`. */
+		const float h = g_life_pool.height[e.kind];
+		const float surface =
+			(float)g_life_pool.bodies[(size_t)e.body].surfaceY;
+
+		printf("LIFELOG level=%s entry=%d kind=%s body=%d x=%.0f y=%.1f "
+			"z=%.0f yaw=%.0f banked=%d gen=%d under=%.1f over=%.1f amp=%.1f "
+			"rise=%.1f\n", stem, (int)i, kHDLifeKinds[e.kind].name, e.body,
+			x, y, z, yaw * 57.29578f, e.banked, e.gen,
+			e.kind == HD_LIFE_FISH ? 0.0f : y + 0.5f * h - surface,
+			e.kind == HD_LIFE_FISH ? 0.0f : surface - (y - 0.5f * h), e.amp,
+			g_life_pool.bodies[(size_t)e.body].rise);
+	}
+
+	for (size_t i = 0; i < g_life_pool.drips.size(); i++)
+	{
+		const HDLifeDrip& d = g_life_pool.drips[i];
+
+		printf("LIFELOG level=%s drip=%d body=%d x=%.0f z=%.0f period=%.2f "
+			"phase=%.2f fired=%d last=%.2f\n", stem, (int)i, d.body, d.x, d.z,
+			d.period, d.phase, d.fired, d.last);
+	}
+
+	for (size_t i = 0; i < rings.size(); i++)
+		printf("LIFELOG level=%s ring=%d drip=%d x=%.0f z=%.0f size=%d "
+			"at=%.2f\n", stem, (int)i, rings[i].first.drip, rings[i].first.x,
+			rings[i].first.z, rings[i].first.size, rings[i].second);
+}
+
+/* The drawn entries in `order`, nearest first, at most kHDLifeDrawMax;
+ * an entry behind the eye is not drawn. */
+static void LifeDrawAll(const std::vector<std::pair<float, int> >& order,
+	const float* view, float t, int* drawnOut, int* skippedOut)
+{
+	int drawn = 0, skipped = 0;
+
+	for (size_t k = 0; k < order.size(); k++)
+	{
+		if (drawn >= kHDLifeDrawMax)
+		{
+			skipped++;
+			continue;
+		}
+
+		const HDLifeEntry& e = g_life_pool.entries[(size_t)order[k].second];
+		float x, y, z, yaw, pitch, roll;
+
+		HDLifePose(g_life_pool, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+		float local[16], world[16], node[16];
+		const float* box = g_life_box[e.kind];
+
+		HDLifeMatrix(kHDLifeKinds[e.kind].rest, box, box + 3, yaw, pitch,
+			roll, local);
+		memcpy(world, local, sizeof(world));
+		world[12] += x - g_seed_origin[0];
+		world[13] += y;
+		world[14] += z - g_seed_origin[1];
+
+		for (int r = 0; r < 4; r++)
+			for (int c = 0; c < 4; c++)
+				node[r * 4 + c] = world[r * 4 + 0] * view[0 * 4 + c] +
+					world[r * 4 + 1] * view[1 * 4 + c] +
+					world[r * 4 + 2] * view[2 * 4 + c] +
+					world[r * 4 + 3] * view[3 * 4 + c];
+
+		// Behind the eye: its point's view depth, as the engine tests it.
+		if ((x - g_seed_origin[0]) * view[2] + y * view[6] +
+			(z - g_seed_origin[1]) * view[10] + view[14] < 0.0f)
+			continue;
+
+		HDModelLighting lighting;
+
+		lighting.lights = 0;
+		lighting.lightCount = 0;
+		lighting.sunScale = 0.75f;
+		lighting.specStrength = 0.0f;
+		lighting.specPower = 1.0f;
+
+		const float share = HDLifeLightShare(e.kind);
+		const float light[3] = { g_life_light[(size_t)e.body * 3] * share,
+			g_life_light[(size_t)e.body * 3 + 1] * share,
+			g_life_light[(size_t)e.body * 3 + 2] * share };
+
+		if (HDModelDraw(0x7800 + e.kind, node, 1, light, ~0u, &lighting))
+			drawn++;
+		else
+			skipped++;
+	}
+
+	*drawnOut = drawn;
+	*skippedOut = skipped;
+}
+
+/* The pool drawn as the game draws it: nearest the eye first, at most
+ * kHDLifeDrawMax, each model at its pose with its body's light; the frame's
+ * world is the seed room's (x and z less its origin). The draws' GPU time
+ * goes to the LIFELOG probe line (a timestamp pair, waited for). */
+static void LifeFrame(const float* view, const D3DMATRIX* projection,
+	int bulbs, float eyeX, float eyeY, float eyeZ)
+{
+	if (!g_life_row || g_life_pool.entries.empty())
+		return;
+
+	LARGE_INTEGER cf, c0, c1;
+
+	QueryPerformanceFrequency(&cf);
+	QueryPerformanceCounter(&c0);
+
+	const float t = (float)g_time;
+	std::vector<std::pair<float, int> > order;
+
+	for (size_t i = 0; i < g_life_pool.entries.size(); i++)
+	{
+		const HDLifeEntry& e = g_life_pool.entries[i];
+		float x, y, z, yaw, pitch, roll;
+
+		if (!g_life_pool.has[e.kind])
+			continue;
+
+		HDLifePose(g_life_pool, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+		const float dx = x - g_seed_origin[0] - eyeX, dy = y - eyeY;
+		const float dz = z - g_seed_origin[1] - eyeZ;
+
+		order.push_back(std::make_pair(dx * dx + dy * dy + dz * dz, (int)i));
+	}
+
+	std::sort(order.begin(), order.end());
+
+	/* The processor's side as the engine's frame has it: the poses, the
+	 * order above and the matrices of the drawn entries, timed apart from
+	 * the draws (whose first one pays the device's own uploads here). */
+	for (size_t k = 0; k < order.size() && (int)k < kHDLifeDrawMax; k++)
+	{
+		const HDLifeEntry& e = g_life_pool.entries[(size_t)order[k].second];
+		float x, y, z, yaw, pitch, roll, local[16];
+		const float* box = g_life_box[e.kind];
+
+		HDLifePose(g_life_pool, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+		HDLifeMatrix(kHDLifeKinds[e.kind].rest, box, box + 3, yaw, pitch,
+			roll, local);
+	}
+
+	QueryPerformanceCounter(&c1);
+
+	const double cpuMs = (double)(c1.QuadPart - c0.QuadPart) * 1000.0 /
+		(double)cf.QuadPart;
+
+	/* -lifebench: one untimed pass first, so the timed one pays no first
+	 * use of a model or its pages (the engine's frames after the first
+	 * do not); it draws every model twice, so it is for the numbers and
+	 * not for a picture. */
+	if (g_life_bench)
+	{
+		int d = 0, k = 0;
+
+		HDModelFrameBegin(projection, bulbs, HD_PASS_ALL);
+		HDModelClip(0);
+		LifeDrawAll(order, view, t, &d, &k);
+	}
+
+	IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]);
+
+	if (q[0] && q[1] && q[2] && q[3])
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	// Inside the creatures' mark, as HDFrameDraw draws the objects' list.
+	HDRenderWaterMarkBegin();
+	HDModelFrameBegin(projection, bulbs, HD_PASS_ALL);
+	HDModelClip(0);
+
+	int drawn = 0, skipped = 0;
+
+	// The draws' own submission on the processor (draw_ms).
+	LARGE_INTEGER d0, d1;
+
+	QueryPerformanceCounter(&d0);
+	LifeDrawAll(order, view, t, &drawn, &skipped);
+	QueryPerformanceCounter(&d1);
+
+	HDRenderWaterMarkEnd(drawn);
+
+	double gpu = -1.0;
+
+	if (q[0] && q[1] && q[2] && q[3])
+	{
+		q[2]->Issue(D3DISSUE_END);
+		q[3]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+
+		BOOL disjoint = TRUE;
+		UINT64 a = 0, b = 0, freq = 0;
+
+		while (q[0]->GetData(&disjoint, sizeof(disjoint), D3DGETDATA_FLUSH) ==
+			S_FALSE) {}
+		while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE) {}
+		while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE) {}
+		while (q[3]->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+			S_FALSE) {}
+
+		if (!disjoint && freq)
+			gpu = (double)(b - a) * 1000.0 / (double)freq;
+	}
+
+	for (int i = 0; i < 4; i++)
+		if (q[i])
+			q[i]->Release();
+
+	printf("LIFELOG probe drawn=%d skipped=%d gpu_ms=%.4f cpu_ms=%.4f "
+		"draw_ms=%.4f calls=%d\n", drawn, skipped, gpu, cpuMs,
+		(double)(d1.QuadPart - d0.QuadPart) * 1000.0 / (double)cf.QuadPart,
+		HDModelDrawCalls());
+}
+
 // -nomark: the stand-ins without the mark (the picture before it);
 // -markview: the marked pixels in red over the finished picture.
 static bool g_creature_mark = true;
@@ -7503,6 +7997,14 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -creature x,z   a stand-in for a swimming creature at "
 			"world x, z, drawn with the creatures' mark, repeatable; "
 			"-nomark draws it without, -markview shows the mark in red\n");
+		printf("       -life <seed>   the water's life on the sheets "
+			"(with -hdwater 1): the floats, the fish and the drips' rings "
+			"the game builds, rolled from <seed>, stepped to -time and "
+			"drawn as the game draws them; LIFELOG lines\n");
+		printf("       -lifelara x,z[,t]   Lara's place for -life from clock "
+			"t: the school flees her, the drips near her ring\n");
+		printf("       -lifebench   -life's draws timed on a second pass "
+			"(every model drawn twice: numbers, not a picture)\n");
 		printf("       -wader x,z   a stand-in for a wading Lara at world x, "
 			"z, standing on the floor under the sheet, with Lara's place "
 			"there, repeatable\n");
@@ -7758,6 +8260,33 @@ static int ProbeMain(int argc, char** argv)
 			else
 				printf("RoomProbe: -creature wants x,z - '%s' ignored\n",
 					argv[at]);
+		}
+		else if (!strcmp(argv[at], "-life") && at + 1 < argc)
+		{
+			g_life = true;
+			g_life_seed = (unsigned)strtoul(argv[++at], 0, 10);
+			/* And the game's two brackets (-twophase): the models' draws
+			 * leave their constants in registers the sheets read, and the
+			 * game's second bracket uploads the frame's again before the
+			 * sheets draw (hd_level.cpp, HDFrameDrawGlow). */
+			g_two_phase = true;
+		}
+		else if (!strcmp(argv[at], "-lifebench"))
+			g_life_bench = true;
+		else if (!strcmp(argv[at], "-lifelara") && at + 1 < argc)
+		{
+			float c[3] = { 0.0f, 0.0f, 0.0f };
+
+			if (sscanf_s(argv[++at], "%f,%f,%f", &c[0], &c[1], &c[2]) >= 2)
+			{
+				g_life_lara = true;
+				g_life_lara_x = c[0];
+				g_life_lara_z = c[1];
+				g_life_lara_t = c[2];
+			}
+			else
+				printf("RoomProbe: -lifelara wants x,z[,t] - '%s' "
+					"ignored\n", argv[at]);
 		}
 		else if (!strcmp(argv[at], "-wader") && at + 1 < argc)
 		{
@@ -9790,6 +10319,10 @@ static int ProbeMain(int argc, char** argv)
 			for (const std::string& m : g_mist_lines)
 				printf("%s\n", m.c_str());
 
+			// -life: the water's life on the bodies just built.
+			if (g_life && g_hdwater)
+				LifeBuild(root, stem);
+
 			// -rippleat: whether a ripple there loses its classic sprite.
 			for (size_t r = 0; r + 2 < g_ripple_at.size(); r += 3)
 				printf("rippleat %d,%d,%d: %s\n", g_ripple_at[r],
@@ -10334,6 +10867,11 @@ static int ProbeMain(int argc, char** argv)
 					g_creature_mark ? 1 : 0, 1))
 					printf("-wader %.0f,%.0f: no sheet there - not drawn\n",
 						g_waders[i], g_waders[i + 1]);
+
+			// -life: the floats and the fish, where the HD objects go.
+			if (g_life)
+				LifeFrame(view, &projection, frame.bulbCount, (float)cx,
+					(float)cy, (float)cz);
 
 			/* -twophase: the game's two brackets - HDFrameDraw closes the
 			 * first after the objects and HDFrameDrawGlow opens the second

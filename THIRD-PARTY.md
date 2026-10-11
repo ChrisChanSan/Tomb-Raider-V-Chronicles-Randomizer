@@ -1357,6 +1357,99 @@ water surface", carries the tables.
     island: 37,416 hole pixels in one of the twelve views of the holes
     count against 9,237 at most at 1.
 
+160. **The water's life's models** - `BOTTLE`, `WET_CLOTH`,
+    `CLOTH_RICH2_RICH1` and `ANIMATING3_ANDY1` out of `5\ITEM`, `FISH2`
+    out of `4\ITEM`, found by name through the engine's model resolver
+    (`hd_life_rules.h`, `kHDLifeKinds`). DATA: the player's own files,
+    read at level load; their boxes give the floating heights 80, 16, 16,
+    326 and 70 units and the reaches across the water (`RoomProbe -life`
+    prints both). Nothing of their contents is in this repository.
+161. **Which water takes life, how much, and what kinds** - ANDREA2's
+    channel bodies of 16 squares or more, ANDY3's rivers of three squares
+    or more and its bodies of eight, ANDY1's bodies of eight; the kinds'
+    weights; one float for three sheet squares with water under them
+    (a floor at the surface counts none), twelve a body at most,
+    thirty-two drawn a frame at most, nearest the eye first (`kHDLifeLevels`,
+    `HDLifeTakes`, `HDLifeCount`). OWN, a design of this project; the
+    numbers are free choices, set by eye on the round's RoomProbe
+    pictures. DATA: the bodies, their squares and classes are the water
+    sheets' own (`RoomProbe -hdwater 1 -life`, the `LIFELOG body=` lines).
+162. **The drafts and the floating poses** - a bottle and a barrel laid on
+    their side, the cloths flat; half a bottle under the surface, 0.7 of
+    a cloth, 0.45 of a barrel; two barrels a body at most. OWN, free
+    choices, set by eye on the round's RoomProbe pictures.
+163. **The drift** - a float moves with its body's current (the sheets'
+    `flow` and `speed`) plus a wander of 60 units a second whose way comes
+    from a hash of the float and the clock's 4-second step, blended over
+    the step; it turns toward its way at 40 degrees a second; it stops
+    where a step would bring it nearer to a bank than its model's reach
+    (half the box's diagonal seen from above, 128 at least) and slides
+    along it; held by a bank it tries again after 6 to 9 seconds. OWN, a
+    design of this project; the numbers are free choices, set by eye on
+    the round's RoomProbe pictures. DATA: `ANIMATING3_ANDY1` on its side
+    reaches 242 units and poked into a bank's planks at a margin of 128.
+164. **The river's conveyor** - on a body of class river a float that
+    reaches a quarter square past the middle of the last row downstream,
+    or that a bank holds, comes back with a kind rolled again on the
+    upstream row (the squares whose middle lies within half a square of
+    the first row's middle), on one of them deep enough for that kind -
+    any square of the body that is, when none upstream is. OWN, a design
+    of this project; free choices.
+165. **The bob, the fit and the depth** - a float rises and sinks on a sine of the
+    clock (2.5 to 4 seconds, a phase of its own) by a quarter of its
+    floating height, never more than its body's sheet rises and never more
+    than its draft leaves over that rise, and tilts 3 and 2 degrees on the
+    same curve; a kind floats on a body only where its draft reaches
+    deeper than the sheet falls (`HDLifeBobAmp`, `HDLifeFits`). OWN, a
+    design of this project. DATA: the rise is counted from the water's own
+    class table - the swell share times the eight rows' heights, a quarter
+    more where the class has whitecaps (`HDRenderWaterBodySquares`): 0
+    units in a basin, 5.9 in a channel, 3.0 in a river, 121.3 in a sea;
+    the waterlines of `RoomProbe -life` at 1, 3 and 5 seconds keep every
+    float's bottom, held level, under that rise - the tilt is left out
+    and lifts a corner by up to its reach x 3 degrees (`HDLifeTiltDrop`,
+    an upper bound by Cauchy-Schwarz: 12.7 units for the barrel). The
+    depth: a float keeps to squares at least as deep as its lowest point
+    (its draft, its bob and that tilt drop; `HDLifeNeed`) where it is
+    placed, where it drifts and where it comes back; a square whose floor
+    lies at the surface is water to none. OWN, a design of this project.
+    DATA: ANDY3's shallows, room 34, has 23 of its 24 sheet squares with
+    the floor at the surface (the sheets' `depth`, printed per square by
+    a copy of `RoomProbe -life`), where a barrel stood in the floor.
+166. **The school** - 4 to 8 `FISH2` on a ring of 150 to 300 units, half
+    as wide as long, half a square under the surface, rising and sinking
+    64 units, a 6 degree yaw wobble; its middle cruises at 150 units a
+    second and keeps 387 units from water less than 768 deep; Lara within
+    1024 units sends it to the deep square farthest from her at twice the
+    speed for 4 seconds. OWN, a design of this project; the counts,
+    speeds and times are free choices. DATA: 768 and 387 from `FISH2`'s
+    box (173 long, 70 high): its lowest point lies 611 under the surface.
+167. **The drips** - squares of a body whose room is not open air have a
+    ceiling; four or more of them give one drip for eight, two to six,
+    each at a period of 3 to 9 seconds; a drip rings the sheet within six
+    squares of Lara and at most once in two seconds a body. Its ring is
+    written into the game's ripples with the fields `SetupRipple` writes
+    (flags 0x10 and 1, size, life 48 and up to 15 more, init 1) but its
+    life's spread from the pool's hash. OWN, a design of this project;
+    the counts, periods and reach are free choices. CLASSIC: the fields
+    (`game\effect2.cpp`, `SetupRipple`), the ring size 32 and up to 7 more
+    of the engine's own drip (`game\joby.cpp`), the eight rings a sheet
+    draw shows (`hd_render.cpp`, `kRingsPerDraw`).
+168. **The life's light** - a model takes its body's light, the one its
+    sheet's colours are lit by, times 255 as its classic ambient, a fish
+    half of it, with no light list and the game's sun factor 0.75. OWN, a
+    free choice set by eye on the round's RoomProbe pictures: at the full
+    light `FISH2`'s silver reads as white glints through the sheet.
+169. **The pool's random and its hash** - the places are rolled at level
+    load, and again when the HD level is rebuilt after the device was
+    recreated, with `GetRandomDraw`, never `GetRandomControl`; a float's own
+    numbers come from three steps of the same generator over its number,
+    a second input mixed in times `0x9E3779B1`. CLASSIC: the generator's
+    constants (`0x41C64E6D`, 12345, bits 10 up;
+    `specific\function_stubs.cpp`). OWN, general knowledge: `0x9E3779B1`
+    is 2^32 over the golden ratio, the usual multiplier that spreads
+    neighbouring inputs. OWN, free choices: the second inputs' constants
+    (101, 211, 307, 401, 503, 601, 7919 and a school's 7).
 170. **The projected shadow's arrival** - where the shadow starts to run its
     strength is multiplied by 3f^2 - 2f^3 of f = t / 0.25 game seconds, and
     every blob that gives way to it is drawn meanwhile with its alpha byte

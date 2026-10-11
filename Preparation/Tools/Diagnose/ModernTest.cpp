@@ -80,6 +80,9 @@
  * a face, whether it covers the room, and which of the two a frame draws -
  * pure again (stand_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_cover.h"
+/* The water's life: the drift, the bank, the spawn, the flight and the
+ * bob - pure again (life_* below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_life_rules.h"
 #include <string.h>
 #include <vector>
 
@@ -17454,6 +17457,331 @@ static void shadow_walk()
 		"clipped", 0, 0);
 }
 
+/* The water's life (hd_life_rules.h): a body of squares, w by d, from the
+ * world's origin, every square `depth` deep and under a ceiling. */
+static HDLifeBody life_body(int w, int d, int depth)
+{
+	HDLifeBody b;
+
+	b.index = 0;
+	b.surfaceY = 1000;
+	b.flowX = b.flowZ = b.speed = 0.0f;
+	b.river = b.channel = 0;
+	b.rise = 0.0f;
+	b.upMin = b.upMax = 0.0f;
+
+	for (int x = 0; x < w; x++)
+		for (int z = 0; z < d; z++)
+		{
+			HDLifeSquare s = { x * 1024, z * 1024, depth, 1 };
+
+			b.squares.push_back(s);
+		}
+
+	return b;
+}
+
+static void life_drift()
+{
+	HDLifeBody b = life_body(3, 3, 2048);
+	float x = 1536.0f, z = 1536.0f;
+
+	ok(HDLifeStep(b, &x, &z, 100.0f, 50.0f, kHDLifeEdge, 100.0f) ==
+		HD_LIFE_MOVED &&
+		x == 1636.0f && z == 1586.0f,
+		"life drift: a step in open water is taken whole", (long)x, 1636);
+
+	b.flowX = 1.0f;
+	b.speed = 400.0f;
+
+	float vx, vz;
+
+	HDLifeVelocity(b, 7, 2.5f, &vx, &vz);
+	ok(fabsf(vx - 400.0f) <= kHDLifeWander + 0.01f &&
+		fabsf(vz) <= kHDLifeWander + 0.01f,
+		"life drift: the velocity is the current plus at most the wander",
+		(long)vx, 400);
+
+	float a1, b1, a2, b2;
+
+	HDLifeWanderAt(7, 9.25f, &a1, &b1);
+	HDLifeWanderAt(7, 9.25f, &a2, &b2);
+	ok(a1 == a2 && b1 == b2 && fabsf(a1 * a1 + b1 * b1 - 1.0f) < 1.0e-3f,
+		"life drift: the wander is a unit way that depends on the float and "
+		"the clock alone", (long)(a1 * 1000.0f), (long)(a2 * 1000.0f));
+
+	ok(fabsf(HDLifeTurnToward(0.0f, 1.0f, 0.0f, kHDLifeTurn, 0.1f) -
+		kHDLifeTurn * 0.1f) < 1.0e-5f,
+		"life drift: the yaw turns toward the way at the turn rate", 0, 0);
+	ok(HDLifeCount(1) == 1 && HDLifeCount(3) == 1 && HDLifeCount(4) == 2 &&
+		HDLifeCount(44) == kHDLifeBodyMax,
+		"life drift: one float for three squares, twelve at most",
+		HDLifeCount(44), kHDLifeBodyMax);
+}
+
+static void life_bank()
+{
+	HDLifeBody b = life_body(3, 1, 2048);
+	float x = 3072.0f - kHDLifeEdge - 10.0f, z = 512.0f;
+
+	ok(HDLifeStep(b, &x, &z, 50.0f, 0.0f, kHDLifeEdge, 100.0f) ==
+		HD_LIFE_BLOCKED &&
+		x == 3072.0f - kHDLifeEdge - 10.0f,
+		"life bank: a step nearer than the edge to a dry square is refused",
+		(long)x, 3072 - (long)kHDLifeEdge - 10);
+
+	x = 3072.0f - kHDLifeEdge - 10.0f;
+	z = 512.0f;
+	ok(HDLifeStep(b, &x, &z, 50.0f, 30.0f, kHDLifeEdge, 100.0f) ==
+		HD_LIFE_SLID &&
+		z == 542.0f,
+		"life bank: pressed against a bank a float slides along it",
+		(long)z, 542);
+	ok(!HDLifeOpen(b, 512.0f, 1024.0f - kHDLifeEdge + 1.0f, kHDLifeEdge,
+		100.0f) && HDLifeOpen(b, 1024.0f, 512.0f, kHDLifeEdge, 100.0f),
+		"life bank: open water ends an edge's width before a dry square and "
+		"runs on over a wet one", 0, 0);
+
+	const float bmin[3] = { -163.0f, -302.0f, -163.0f };
+	const float bmax[3] = { 163.0f, 56.0f, 163.0f };
+
+	ok(fabsf(HDLifeReach(1, bmin, bmax) - 242.1f) < 0.1f,
+		"life bank: a barrel on its side keeps half its diagonal, 242, "
+		"from a bank", (long)HDLifeReach(1, bmin, bmax), 242);
+
+	// A corner of one square, the current pressing into it.
+	HDLifePool p = {};
+	HDLifeEntry e = {};
+
+	p.bodies.push_back(life_body(1, 1, 2048));
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	e.kind = HD_LIFE_BOTTLE;
+	e.x = 1024.0f - kHDLifeEdge - 1.0f;
+	e.z = 1024.0f - kHDLifeEdge - 1.0f;
+	e.index = 3;
+	p.bodies[0].flowX = 0.7071f;
+	p.bodies[0].flowZ = 0.7071f;
+	p.bodies[0].speed = 400.0f;
+	p.entries.push_back(e);
+	HDLifeFloatTick(p, 0, p.entries[0], 1.0f, 0.1f);
+	ok(p.entries[0].banked == 1 && p.entries[0].retry >= 1.0f +
+		kHDLifeRetryMin && p.respawned == 0,
+		"life bank: a channel's float the bank holds stays and tries again "
+		"later", p.entries[0].banked, 1);
+}
+
+static void life_spawn()
+{
+	HDLifeBody b = life_body(5, 1, 2048);
+
+	b.river = 1;
+	b.flowX = 1.0f;
+	b.speed = 400.0f;
+	HDLifeRiverEnds(b);
+	ok(b.upMin == 512.0f && b.upMax == 4608.0f,
+		"life spawn: a river's ends are its squares' middles along the flow",
+		(long)b.upMax, 4608);
+
+	const int sq = HDLifeUpstreamSquare(b, 5, 2, 100.0f);
+
+	ok(sq >= 0 && b.squares[(size_t)sq].x == 0,
+		"life spawn: a river float comes back on the upstream row",
+		sq >= 0 ? b.squares[(size_t)sq].x : -1, 0);
+	ok(HDLifeAtSink(b, 4608.0f + kHDLifeSinkReach, 512.0f) &&
+		!HDLifeAtSink(b, 4000.0f, 512.0f),
+		"life spawn: a quarter square past the last row's middle is the sink",
+		0, 0);
+
+	const HDLifeLevel level = { "TEST", 8, 0, 1, { 1, 0, 0, 0 }, 0, 0 };
+
+	ok(HDLifeTakes(level, kHDLifeRiverMin, 1, 0) &&
+		!HDLifeTakes(level, kHDLifeRiverMin - 1, 1, 0) &&
+		!HDLifeTakes(level, 7, 0, 0) && HDLifeTakes(level, 8, 0, 0),
+		"life spawn: a river of three squares takes floats, a pond from the "
+		"level's least", 0, 0);
+
+	HDLifePool p = {};
+	HDLifeEntry e = {};
+
+	p.bodies.push_back(b);
+	p.has[HD_LIFE_BOTTLE] = 1;
+	p.height[HD_LIFE_BOTTLE] = 80.0f;
+	e.kind = HD_LIFE_BOTTLE;
+	e.index = 4;
+	e.x = 4608.0f + 300.0f;
+	e.z = 512.0f;
+	p.entries.push_back(e);
+	HDLifeFloatTick(p, &level, p.entries[0], 1.0f, 0.1f);
+	ok(p.respawned == 1 && p.entries[0].gen == 1 && p.entries[0].x < 1024.0f,
+		"life spawn: a float at the sink comes back upstream", (long)
+		p.entries[0].x, 0);
+}
+
+static void life_flee()
+{
+	HDLifeBody b = life_body(4, 4, 2048);
+
+	ok(HDLifeFlees(1000.0f, 1000.0f, 1000.0f + kHDLifeFleeReach - 1.0f,
+		1000.0f) && !HDLifeFlees(1000.0f, 1000.0f, 1000.0f +
+		kHDLifeFleeReach + 1.0f, 1000.0f),
+		"life flee: Lara within reach of the school's middle sends it off",
+		0, 0);
+
+	const int away = HDLifeFarthestDeep(b, 0.0f, 0.0f);
+
+	ok(away >= 0 && b.squares[(size_t)away].x == 3072 &&
+		b.squares[(size_t)away].z == 3072,
+		"life flee: the school flees to the deep square farthest from her",
+		away, 15);
+
+	HDLifePool p = {};
+	HDLifeSchool s = {};
+
+	p.bodies.push_back(b);
+	s.cx = 600.0f;
+	s.cz = 600.0f;
+	s.target = 0;
+	p.schools.push_back(s);
+	HDLifeSchoolTick(p, p.schools[0], 0, 1.0f, 0.1f, 1, 500.0f, 500.0f);
+
+	const float moved = sqrtf((p.schools[0].cx - 600.0f) * (p.schools[0].cx -
+		600.0f) + (p.schools[0].cz - 600.0f) * (p.schools[0].cz - 600.0f));
+
+	ok(p.schools[0].fleeUntil == 1.0f + kHDLifeFleeFor &&
+		fabsf(moved - 2.0f * kHDLifeSwim * 0.1f) < 0.5f,
+		"life flee: fleeing, the school swims at twice its speed for its "
+		"time", (long)moved, (long)(2.0f * kHDLifeSwim * 0.1f));
+
+	ok(!HDLifeDeepAt(life_body(1, 6, 2048), 200.0f, 3000.0f) &&
+		HDLifeDeepAt(life_body(1, 6, 2048), 512.0f, 3000.0f),
+		"life flee: a school's middle needs deep water its ring's reach "
+		"round it", 0, 0);
+
+	b = life_body(1, 1, kHDLifeDeep - 1);
+	ok(HDLifeDeepCount(b) == 0,
+		"life flee: water shallower than the fish's depth holds no school",
+		HDLifeDeepCount(b), 0);
+}
+
+static void life_bob()
+{
+	ok(HDLifeBobAmp(80.0f, 0.5f, 5.9f) == 5.9f &&
+		HDLifeBobAmp(16.0f, 0.7f, 5.9f) == 4.0f &&
+		HDLifeBobAmp(80.0f, 0.5f, 0.0f) == 0.0f,
+		"life bob: a quarter of the model, never more than the sheet rises",
+		(long)(HDLifeBobAmp(80.0f, 0.5f, 5.9f) * 10.0f), 59);
+	ok(fabsf(HDLifeBobAmp(326.0f, 0.45f, 121.3f) - (0.45f * 326.0f -
+		121.3f)) < 0.01f,
+		"life bob: on a high sea the bob shrinks to what the draft leaves",
+		(long)HDLifeBobAmp(326.0f, 0.45f, 121.3f), 25);
+	ok(HDLifeFits(326.0f, 0.45f, 121.3f) && !HDLifeFits(16.0f, 0.7f, 121.3f) &&
+		HDLifeFits(16.0f, 0.7f, 5.9f),
+		"life bob: a float fits where its draft reaches under the sheet's "
+		"fall", 0, 0);
+
+	float most = 0.0f;
+
+	for (int i = 0; i < 400; i++)
+	{
+		const float v = fabsf(HDLifeBob((float)i * 0.01f, 3.0f, 0.4f, 5.0f));
+
+		most = v > most ? v : most;
+	}
+
+	ok(most <= 5.0f && most > 4.9f && HDLifeBob(0.0f, 3.0f, 0.0f, 5.0f) == 0.0f,
+		"life bob: the bob is a sine of the clock within its height",
+		(long)(most * 100.0f), 500);
+
+	const float mins[3] = { -40.0f, -155.0f, -40.0f };
+	const float maxs[3] = { 40.0f, 0.0f, 40.0f };
+	float m[16];
+
+	HDLifeMatrix(1, mins, maxs, 0.0f, 0.0f, 0.0f, m);
+
+	// The box's top middle (0, -155, 0) lands half the length to the side.
+	const float wx = 0.0f * m[0] + -155.0f * m[4] + 0.0f * m[8] + m[12];
+	const float wy = 0.0f * m[1] + -155.0f * m[5] + 0.0f * m[9] + m[13];
+
+	ok(HDLifeHeight(1, mins, maxs) == 80.0f && fabsf(fabsf(wx) - 77.5f) < 0.01f
+		&& fabsf(wy) < 0.01f,
+		"life bob: a bottle on its side floats 80 high, its middle on the "
+		"point", (long)wx, 78);
+}
+
+static int life_draw(void* state)
+{
+	return HDLifeDraw((unsigned*)state);
+}
+
+static void life_depth()
+{
+	HDLifePool p = {};
+	HDLifeBody b = life_body(3, 1, 256);
+
+	b.rise = 121.3f;
+	p.has[HD_LIFE_BARREL] = 1;
+	p.height[HD_LIFE_BARREL] = 326.0f;
+	p.reach[HD_LIFE_BARREL] = 242.1f;
+
+	// 0.45 x 326 = 146.7, the 25.4 of bob the draft leaves over the sea's
+	// 121.3, the tilt's 242.1 x 3 degrees = 12.7.
+	const float need = HDLifeNeed(p, HD_LIFE_BARREL, b);
+
+	ok(fabsf(need - 184.8f) < 0.2f,
+		"life depth: a barrel on a sea reaches 185 under the surface at its "
+		"lowest", (long)need, 185);
+
+	b.squares[0].depth = 0;
+	b.squares[2].depth = 128;
+	ok(!HDLifeHolds(b, 0, 0, 1.0f) && !HDLifeHolds(b, 2048, 0, need) &&
+		HDLifeHolds(b, 1024, 0, need) && HDLifeHoldCount(b, need) == 1 &&
+		HDLifeHoldSquare(b, need, 7) == 1,
+		"life depth: a floor at the surface holds nothing, shallow water no "
+		"barrel", HDLifeHoldCount(b, need), 1);
+
+	float x = 1536.0f, z = 512.0f;
+
+	ok(HDLifeStep(b, &x, &z, 400.0f, 0.0f, kHDLifeEdge, need) ==
+		HD_LIFE_BLOCKED && x == 1536.0f,
+		"life depth: a float stops before water too shallow for it",
+		(long)x, 1536);
+
+	const HDLifeLevel level = { "TEST", 1, 0, 0, { 0, 0, 0, 1 }, 0, 0 };
+	unsigned state = 1;
+
+	p.bodies.push_back(b);
+	HDLifeBuild(p, level, life_draw, &state);
+	ok(p.floats == 1 && p.entries.size() == 1 &&
+		HDLifeFloor1024(p.entries[0].x) == 1024,
+		"life depth: two squares with water under them take one float, on "
+		"the one deep enough", p.floats, 1);
+
+	p.bodies[0] = life_body(3, 1, 0);
+	p.bodies[0].rise = 121.3f;
+	HDLifeBuild(p, level, life_draw, &state);
+	ok(p.floats == 0 && p.unfit == 0,
+		"life depth: a sheet over a floor at the surface takes no float",
+		p.floats, 0);
+
+	HDLifeBody all = life_body(5, 1, 2048);
+
+	ok(HDLifeHoldSquare(all, need, 13) == 3,
+		"life depth: where every square is deep enough the roll names the "
+		"square it named before", HDLifeHoldSquare(all, need, 13), 3);
+
+	all.river = 1;
+	all.flowX = 1.0f;
+	all.speed = 400.0f;
+	all.squares[0].depth = 0;
+	HDLifeRiverEnds(all);
+
+	const int up = HDLifeUpstreamSquare(all, 5, 2, 40.0f);
+
+	ok(up >= 1 && all.squares[(size_t)up].depth >= 40,
+		"life depth: a river float whose upstream row is too shallow comes "
+		"back on a square that holds it", up, 1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -17571,6 +17899,12 @@ int main()
 	shadow_walk();
 	shadow_arrival();
 	shadow_cut();
+	life_drift();
+	life_bank();
+	life_spawn();
+	life_flee();
+	life_bob();
+	life_depth();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

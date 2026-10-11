@@ -2095,6 +2095,39 @@ it.
   underwater state, which the dive (JOBY4) never sets and which follows the
   room a logic step late (`cam=`), 1 when that frame is drawn under the water
   (`on=`), and 1 when the level takes the deep sea's water (`deep=`).
+- **The water's life** (with the water sheets, `hd_water`). Small things float on
+  the sheets and a few fish swim under them, in three levels for now: ANDREA2's sewer
+  canal gets bottles, rags and a barrel; ANDY3's rivers, its lake, its shallows and the
+  pond of room 145, and ANDY1's two pools get dead leaves, a rag and barrels, and a
+  school of fish where the water is deep enough. The places are rolled anew at every
+  level load, and again when the game rebuilds its HD level after the graphics device
+  was lost (an alt-tab can do it), and never saved. A float drifts with its body's
+  current and a slow wander of its own, stops at a bank and slides along it; on a river
+  it rides down to the river's end and comes back upstream. It keeps to water deep
+  enough to hold it: where the floor comes up to the surface, as in ANDY3's shallows,
+  it stops as at a bank and is never placed. It bobs a little on a curve of its own,
+  never more than the sheet itself rises, so held level it does not hang over the drawn
+  water (its slight tilt can lift an edge a few units); on a sea whose waves rise high
+  only a barrel is heavy enough to stay in it. The fish circle
+  slowly half a square down and flee when Lara comes within a square of them. Under a
+  ceiling a few drips ring the sheet now and then, near Lara and at most one ring in
+  two seconds a body. The models are the Remaster's own (a bottle, two cloths, a
+  barrel, a fish), drawn as HD objects - with `hd_objects` off nothing floats, the drips
+  stay. Without the sheets (`hd_water` 0, `hd_enable` 0) none of it runs.
+- **`LIFELOG` in the log.** With `-log`, every level with life writes one `LIFELOG
+  level=<stem>` line at its load: the bodies that took life (`bodies=`), the floats
+  (`floats=`), the fish (`fish=`), the drips (`drips=`), the floats a body's swell, its
+  depth or a missing model left out (`skipped=`), the pool's bytes (`bytes=`) and the
+  models that loaded (`models=`). Then one line per body: the water body it is
+  (`water=`, the `WATERLOG body=` number), its class (`river`, `channel` or
+  `other`), its sheet squares, the most its sheet rises (`rise=`, units), its current
+  (`flow=` x, z and units a second), its floats, fish and drips, and its squares deep
+  enough for fish (`deep=`) and under a ceiling (`closed=`). Once a second of the
+  game's clock a line sums the frames (`frames=`), the entries drawn and skipped over
+  them (`drawn=`, `skipped=`; at most 32 a frame are drawn, nearest the eye first),
+  the drip rings written (`rings=`) and those a full ripple table refused (`full=`),
+  the river floats come back upstream so far (`respawned=`) and the schools fleeing
+  now (`fleeing=`).
 
 **Text.** The title menu, the names under the inventory ring, the options
 pages, the load and save lists with their *(quicksave)* line, the statistics

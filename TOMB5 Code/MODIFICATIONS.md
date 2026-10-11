@@ -4772,26 +4772,55 @@ of the round before is, and decides it on pictures.
 
 **ANDREA1, room 101's facade from room 93.** Measured from the place (the square in front
 of room 93's door to room 70, eye 762 over the floor) at 60 directions, yaw 75 to 210 and
-pitch -60 to 15 in 15-degree steps, and from five camera places (the place itself and four
-around it, up to a square away and 254 units higher) at 24 directions each, 640 x 360:
-room 101 is listed with a classic window at 47 of the first and 37 of the second. A new
-switch, `RoomProbe -classicmark <room>`, draws one room's classic faces red, so a picture
-of the classic faces says whose face each pixel is; held against the art with group 101
-skipped, room 101's art shows where the classic frame shows another room's face at no
-pixel of the 47 views from the place and at 896 pixels of the 37 from the camera places,
-222 of 230,400 in one view at most, and nowhere is the clear colour where the classic
-frame shows a face of 101. In the slit the place looks through - room 101's window at the
-right edge of the screen looking east, 605..639 at 640 x 360 - the classic frame shows a
-face of room 101 itself, and the art draws that wall there: 3,929 pixels of 101's art, the
-same with `hd_air` 0 and with the tool of `2d48e83`, before the air rule. Room 101's art
-that stands in room 93's own air (510 triangles, the pieces 6 to 9 of the pair 101 in 93:
-a thin wall of 101's facade, x about 52,300, z 40,960 to 42,660) is never in sight from
-the place: drawing it nowhere changed no pixel at the two directions that show the slit,
-and that try is not part of this round. What the place shows is room 101's wall through a
-real gap of the classic rooms, which the classic frame shows too; no rule of the room art
-draws it there that the classic frame would not, so nothing was changed. Whether the slit
-is the one in the picture, or another view of the same place, takes the game: the log of
-the play test holds no frame from room 93.
+pitch -60 to 15 in 15-degree steps, and from five camera places (the place itself and
+four around it, up to a square away and 254 units higher) at 24 directions each, 640 x
+360: room 101 is listed with a classic window at 47 of the first and 37 of the second. A
+new switch, `RoomProbe -classicmark <room>`, draws one room's classic faces red, so a
+picture of the classic faces says whose face each pixel is; held against the art with
+group 101 skipped, room 101's art shows where the classic frame shows another room's face
+at no pixel of the 47 views from the place and at 896 pixels of the 37 from the camera
+places, 222 of 230,400 in one view at most, and nowhere is the clear colour where the
+classic frame shows a face of 101. In the slit the place looks through - room 101's
+window at the right edge of the screen looking east, 605..639 at 640 x 360 - the classic
+frame shows a face of room 101 itself, and the art draws that wall there: 3,929 pixels of
+101's art, the same with `hd_air` 0 and with the tool of `2d48e83`, before the air rule.
+Room 101's art that stands in room 93's own air (510 triangles, the pieces 6 to 9 of the
+pair 101 in 93: a thin wall of 101's facade, x about 52,300, z 40,960 to 42,660) is never
+in sight from the place: drawing it nowhere changed no pixel at the two directions that
+show the slit, and that try is not part of this round. What the place shows is room 101's
+wall through a real gap of the classic rooms, which the classic frame shows too. The
+strip is seen from behind it, where the game's camera stands: from the square west of the
+place, 254 units higher, looking east along the arrow of the picture, room 101's art
+draws a sliver of facade just under room 93's ceiling, outside room 101's window - 403
+pixels of 640 x 360 at yaw 90. The check above did not see it: `-classicmark` draws a
+room's classic faces whole, not cut to the room's window as the classic path draws them,
+so art over a face of room 101 that stands inside room 93 counted as room 101's own. The
+sliver is the foot of room 101's facade band at z 43,008, x 52,224 to 53,248: triangles
+from y -5,632 down to -5,290 with their centroid at -5,404, 28 units above room 93's
+ceiling at -5,376. The box of the pair 101 in 93 asks the centroid and its top is that
+ceiling, so no box held them and they were drawn with the open half, whole; 86 units of
+them hang below the ceiling, in front of room 93's own ceiling art. The air asked the
+centroid as well, which stands above room 93's air. It is older than the air rule:
+`hd_air` 0 and the tool of `2d48e83` draw it the same.
+
+**The fix.** The air of a room is asked of a triangle by its centroid's x and z and the
+heights its corners span (`HDRoomAirReaches` in hd_render.h, `AirHostsOf` in
+hd_render.cpp): the triangle stands in the air when it reaches more than `HD_AIR_MARGIN`
+below the ceiling and above the floor at every point the test reads, and a square with no
+air between its margins is reached by nothing. And an intrusion entry's box holds a
+triangle as well when its centroid lies in the box in x and z and the triangle reaches
+into the holder's air with its centroid above or below the box (the `pair_at` loop of the
+index fill); such art is held to its own room's window like every boxed piece in unlinked
+air (DecidePairs). With `hd_air` 0 no air is asked and the box asks the centroid alone.
+Over the fifteen levels the art in unlinked air grows from 355,806 to 364,423 triangles
+and the boxed part of it from 109,000 to 112,265 (ANDREA1 5,256 to 5,460, ANDREA2 4,130 to
+4,314, JOBY2 13,184 to 13,547, RICH2 6,151 to 6,522). TrgProbe -roomspace asks the air the
+same way; its level lines equal the engine's (RoomProbe -roombox) at eleven levels and
+differ at ANDREA2, ANDY3, RICH2 and TITLE by exactly what they differed before the change.
+A first build of the test let a square whose ceiling lies below its floor be reached by a
+triangle spanning both, which the engine's square list never offers at the centroid but
+the margin points did: 43 triangles of ANDY1 and a few at five more levels apart from
+TrgProbe; the square's own air between its margins is asked first since.
 
 **ANDREA2, the tower.** The tower of the church street is the brick block of rooms 78, 183
 and 84 at the end of the alley. A walk of 24 steps from room 236 through 81 into 78 (x
@@ -4822,12 +4851,16 @@ the whole shaft. 50,407 of them stand in the air of rooms 62 to 65, which room 6
 link with, in no intrusion entry's box (the boxes part in y), and so they keep the box's
 answer and are drawn whole whenever room 61 is listed; the first rule of the round before,
 which held all art in such air to its own window, takes 19,393 of the 52,470 pixels and
-leaves 37,772. The lift's flicker is that hull, coming and going with room 61 on the list.
-Neither the air rule nor any rule of this entry touches it: it is the duplicate shell this
-entry left out of its scope, and a rule for it - drawing a group's art that stands far
-outside its own room only inside that room's window, or dropping a second hull where the
-first one is drawn - changes the decision that art in no entry's box keeps the box's
-answer, which the street art and the palms of ANDREA2 rest on. Not changed in this round.
+leaves 37,772. In the probe that hull comes and goes with room 61 on the list. That it is
+the flicker of the video is not shown: the video and the log share no clock, so no frame
+of the video is matched to a step of the ride; the frames where wall panels change (about
+6.0 and 8.5 seconds into it) show a panel drawn twice, as the step does, but not from the
+same place. Neither the air rule nor any rule of this entry touches it: it is the
+duplicate shell this entry left out of its scope, and a rule for it - drawing a group's
+art that stands far outside its own room only inside that room's window, or dropping a
+second hull where the first one is drawn - changes the decision that art in no entry's box
+keeps the box's answer, which the street art and the palms of ANDREA2 rest on. Not changed
+in this round.
 
 **The empty-window choice, in pictures.** `RoomProbe -unlinked 2` draws the engine's
 answer but for a room whose window is empty, whose pieces in unlinked air keep the smaller
@@ -4842,28 +4875,53 @@ the air rule to the pixel, so all the rule takes there comes back. The sentence 
 entry above that names ANDREA1 room 228 among the holes of an empty window is answered by
 this measurement: of its 23,151 pixels none is the empty window's.
 
-**Checked.** No engine file changed in this round: `git diff --stat 4f725a8..HEAD` names
-RoomProbe.cpp, this record and the Tools README alone, so `hd_enable` 0, the classic path
-and `hd_air` 0 are the bytes of `4f725a8`. RoomProbe built from this round: `-classicroom
--classiconly` of ANDREA2 231, JOBY2 66 and ANDY3 34, two directions each, gives the same
-bytes (md5) as the tool built at `8691e82`; at the 201 views of the round before (the 22
-places, the 131 sweep views, the 16 mass views, the 32 earlier views) `-air 0` gives the
-picture file of the `2d48e83` tool byte for byte at all 201, and the default answer the
-picture of the `4f725a8` tool at all 201, so every count of the entry above stands: the
-five places lose their ghosts by the same pixels against `-unlinked 0` (the block beside
-the flag 41,734 and 34,315, the window frame 18,709, the marble strip 14,448, the black
-bars 24,640, the lit floor 5,396), room 101 under the flag 0, and of the 131 sweep views
-34 change, by 190,895 pixels, 111,279 of them clear colour, 21 by more than 500.
-ModernTest 14,891 checks, MenuTest 42,627, InterpTest 729, LipsTest 270 with the `.OBJ`
-folder and 243 without, 0 failed.
+**Checked, before the fix.** No engine file changed up to `2d984a1`: the diff names
+RoomProbe.cpp, this record and the Tools README alone, so `hd_enable` 0, the classic
+path and `hd_air` 0 are the bytes of `4f725a8`. RoomProbe built from this round:
+`-classicroom -classiconly` of ANDREA2 231, JOBY2 66 and ANDY3 34, two directions each,
+gives the same bytes (md5) as the tool built at `8691e82`; at the 201 views of the
+round before (the 22 places, the 131 sweep views, the 16 mass views, the 32 earlier
+views) `-air 0` gives the picture file of the `2d48e83` tool byte for byte at all 201,
+and the default answer the picture of the `4f725a8` tool at all 201, so every count of
+the entry above stands: the five places lose their ghosts by the same pixels against
+`-unlinked 0` (the block beside the flag 41,734 and 34,315, the window frame 18,709,
+the marble strip 14,448, the black bars 24,640, the lit floor 5,396), room 101 under
+the flag 0, and of the 131 sweep views 34 change, by 190,895 pixels, 111,279 of them
+clear colour, 21 by more than 500. ModernTest 14,891 checks, MenuTest 42,627,
+InterpTest 729, LipsTest 270 with the `.OBJ` folder and 243 without, 0 failed.
 
-**Left.** The slit in ANDREA1 for a picture from the game with `-log` at the place, so
-that the frame's camera and room list can be drawn again; the tower of ANDREA2 the same
-way, a log of the frames where it pops; the lift's second hull for a decision on a rule
-for art far outside its own room; the empty-window choice for the owner, on the four
-pictures.
+**Checked, the fix.** From the camera place west of the place, 128 directions (yaw 60 to
+135 and pitch -35 to 0, in 5-degree steps), 640 x 360, against `2d984a1`: 73 change, by
+28,455 pixels, 697 at most in one view, every one of them room 101's art (the same view
+with group 101 skipped is the same in both builds) and every one now showing what the
+frame shows without group 101; no new clear colour. From the place itself the same 128
+directions: no pixel changes (room 101 listed at 86). At the 22 places of the round before
+the picture is the one of `4f725a8` at all 22 - the five places lose their ghosts by the
+same pixels against `-unlinked 0` (41,734 and 34,315, 18,709, 14,448, 24,640, 5,396), room
+101 under the flag 0 -, and so at the 16 mass views. Of the 131 sweep views 7 change
+against `4f725a8`, by 25,757 pixels: ANDREA2 177 at yaw 270 by 17,357, the dark art of
+rooms 205, 220 and 246 in room 177 gone in front of the facade's arch, no clear colour;
+ANDREA2 183 and 188 at yaw 90 by 12 and 11; and four where art goes to the clear colour,
+7,828 pixels in all: RICH2 114 at yaw 270 (room 25's art over room 172's wall top, the
+place of the empty-window choice, 4,095), ANDREA1 110 at yaw 0 (art of rooms 64 and 192 at
+z 35,840, 2,978), JOBY2 33 at yaw 270 (546, 395 clear) and ANDREA2 95 at yaw 90 (room 60's
+art, 758, 360 clear). Over the 131 `-unlinked 0` against 1 now gives 216,318 pixels,
+119,107 clear (190,895 and 111,279 before), and over the 32 earlier views 106,481 and
+43,599 (85,911 and 40,226), since the art the box now holds is asked at both settings.
+`-air 0` gives the picture file of the `2d48e83` tool at all 201 views. `-classicroom
+-classiconly` of ANDREA2 231, JOBY2 66 and 28, ANDY3 34 and ANDREA1 93, two directions
+each, gives the bytes of the `8691e82` tool at all 10 (JOBY2 66 draws two colours from its
+room centre and says little). `hd_enable` 0 builds no HD art and never reaches the changed
+code. ModernTest 14,891 checks, MenuTest 42,627, InterpTest 729, LipsTest 270 with the
+`.OBJ` folder and 243 without, 0 failed.
 
-**Commits.** `96ebca9`
+**Left.** The four sweep views where the fix takes art to the clear colour, for pictures
+from the game; the tower of ANDREA2 for a log of the frames where it pops; the lift's
+second hull for a decision on a rule for art far outside its own room, and the lift's
+pictures from the cabin at its stops, not made; the empty-window choice for the owner, on
+the four pictures.
+
+**Commits.** `96ebca9`, `ae47055`, `8f657cd`, `ecc3c20`
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

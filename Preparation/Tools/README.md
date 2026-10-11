@@ -146,11 +146,13 @@ place in the world and how far that art is from its own room's box - which is
 how "a tower that is in no room's box" was turned from a guess into a number.
 It also prints one `unlinked level= group= host= tris=` line per pair whose art
 stands in the air of a room its own room has no portal, door or vertical link
-with, not even through a flipmap twin (`HDRoomAir` in `hd_render.h`), the
-engine's `HDLOG unlinked` lines word for
+with, not even through a flipmap twin (`HDRoomAir` in `hd_render.h`) - asked
+of a triangle by its centroid's x and z and the heights its corners span
+(`HDRoomAirReaches`), as the build asks it -, the engine's `HDLOG unlinked`
+lines word for
 word, and ends its level line with the engine's `air_tris= air_groups= air_pairs=
 air_boxed=` - the last the art of `air_tris` an entry's box holds too, the art the
-engine holds to its own room's window (109,000 of 355,806 triangles over the fifteen
+engine holds to its own room's window (112,265 of 364,423 triangles over the fifteen
 levels, equal to the engine's in every one);
 a line after it counts that art standing in no entry's box and the floor squares
 where the engine's reading of the floor data and the randomizer's corners part

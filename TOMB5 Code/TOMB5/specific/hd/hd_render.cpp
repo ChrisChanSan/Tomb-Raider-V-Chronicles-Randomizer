@@ -10238,6 +10238,7 @@ namespace
 		int body;
 		int minX, maxX, minZ, maxZ, surfaceY;
 		int originX, originZ;
+		int endNear;	// a vertex sees the body's end ahead (draw_river)
 	};
 
 	/* A body's constants: the sheet's eight rows, RoomVS's four, the swell
@@ -10260,6 +10261,7 @@ namespace
 		float drift[2];		// the patches' drift, units a second
 		float river[16];	// RiverPS's c132, c133, c146, c147
 		int isRiver;
+		int hasEnd;		// a channel with a current: its end's foam
 	};
 
 	// An override row, the compiled table's or the file's.
@@ -11657,6 +11659,15 @@ namespace
 
 		out.isRiver = b.cls == HD_WATER_RIVER ? 1 : 0;
 
+		/* A channel with a current of its own (a flow row: ANDREA2's
+		 * canal, whose water runs on under its +z end wall through a grate
+		 * into water room 133) ends where that current meets a wall, and
+		 * there it takes a river's end foam: RiverPS with the end alone
+		 * (river[] below, draw_river). A channel without a current has no
+		 * end and keeps its look. */
+		out.hasEnd = b.cls == HD_WATER_CHANNEL &&
+			(b.flow[0] != 0.0f || b.flow[1] != 0.0f) ? 1 : 0;
+
 		if (out.isRiver)
 		{
 			const bool own = b.flow[0] != 0.0f || b.flow[1] != 0.0f;
@@ -11792,6 +11803,23 @@ namespace
 
 			out.river[11] = pal.night ? 1.0f : 0.0f;
 			out.river[12] = kRiverRelief;
+		}
+		else if (out.hasEnd)
+		{
+			/* The end alone: the way and the current (held to
+			 * kRiverLookCap as a river's), the end foam's reach, strength
+			 * and carry as a river's; no sheen (w), no relief (c147.x), no
+			 * caustic of its own (c133.w, draw_river) - the channel's own
+			 * sheet draws its water. */
+			const float current = b.speed < kRiverLookCap ? b.speed :
+				kRiverLookCap;
+
+			out.river[0] = b.flow[0];
+			out.river[1] = b.flow[1];
+			out.river[2] = current;
+			out.river[4] = kRiverEdge;
+			out.river[5] = b.foam;
+			out.river[6] = current * kWaterPatchDrift;
 		}
 
 		/* gWaterAbsorb: the absorption per channel in the ratio of
@@ -13412,6 +13440,32 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	std::vector<HDVertex> verts;
 	std::vector<unsigned short> idx;
 
+	/* A channel's end (WaterLook::hasEnd) lies downstream, where its
+	 * current leaves it: under ANDREA2's canal's +z end wall. A bank that
+	 * faces the current elsewhere - the south bank of the canal's west arm,
+	 * which a current in +z meets as well - is no end. So a channel's end
+	 * ahead counts only where it falls within the body's last square along
+	 * its current: `downstream`, the furthest any of its squares reaches
+	 * along the way. */
+	std::vector<float> downstream(g_wbodies.size(), -1.0e30f);
+
+	for (const WaterSquare& s : g_wsquares)
+		if (s.sheet && s.body >= 0 && s.body < (int)g_wlooks.size() &&
+			g_wlooks[(size_t)s.body].hasEnd)
+		{
+			const WaterLook& wl = g_wlooks[(size_t)s.body];
+
+			for (int c = 0; c < 4; c++)
+			{
+				const float along = (float)(s.wx + ((c & 1) ? 1024 : 0)) *
+					wl.river[0] + (float)(s.wz + ((c & 2) ? 1024 : 0)) *
+					wl.river[1];
+				float& d = downstream[(size_t)s.body];
+
+				d = along > d ? along : d;
+			}
+		}
+
 	for (int g = 0; g < groups; g++)
 		for (size_t b = 0; b < g_wbodies.size(); b++)
 		{
@@ -13496,11 +13550,13 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 						 * (RiverPS, the foam where it ends). A vertex on a
 						 * bank runs along the edge between water and land,
 						 * so a point counts as water when water lies a unit
-						 * to either side of it. 4080 for every other body. */
+						 * to either side of it. The same for a channel with
+						 * a current (WaterLook::hasEnd); 4080 for every
+						 * other body. */
 						float ahead = 4080.0f;
 						const WaterLook& wl = g_wlooks[b];
 
-						if (wl.isRiver)
+						if (wl.isRiver || wl.hasEnd)
 							for (float u = 1.0f; u < 4080.0f; u += 32.0f)
 							{
 								bool wet = false;
@@ -13524,6 +13580,12 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 								}
 							}
 
+						if (wl.hasEnd && ahead < 4080.0f &&
+							((float)wx + wl.river[0] * ahead) * wl.river[0] +
+							((float)wz + wl.river[1] * ahead) * wl.river[1] <
+							downstream[b] - 1024.0f)
+							ahead = 4080.0f;
+
 						const int lift = g_wbodies[b].info.lift;
 						const float deep = skirt && !touching ? (float)lift -
 							water_land_over(land->land, s.wx, s.wz, wx, wz,
@@ -13532,6 +13594,11 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 							0.5f;
 						const float sq = shore / 16.0f + 0.5f;
 						const float aq = ahead / 16.0f + 0.5f;
+
+						/* The end foam reaches 1.5 kRiverEdge up at most
+						 * (RiverPS, the reach's swing): a room whose sheet
+						 * lies further from the end takes no end draw. */
+						range.endNear |= ahead < 2.0f * kRiverEdge ? 1 : 0;
 						HDVertex v = {};
 
 						v.x = (short)lx;
@@ -16648,12 +16715,16 @@ namespace
 	 * c132, c133, c146 and c147 are the look's river constants; the rest of
 	 * c92 - c123 is the sheet's, set already - the rows the relief's light
 	 * reads among them. Nothing while tomb5.hd_motion is off:
-	 * the streaks are the water running. */
+	 * the streaks are the water running. A channel with a current
+	 * (WaterLook::hasEnd) takes the same draw with its end foam alone, in
+	 * the rooms whose sheet sees the end ahead (SheetRange::endNear).
+	 */
 	void draw_river(const SheetRange& r)
 	{
 		const WaterLook& look = g_wlooks[(size_t)r.body];
 
-		if (!g_water_river_ps || !look.isRiver || g_motion[3] == 0.0f)
+		if (!g_water_river_ps || (!look.isRiver && !(look.hasEnd &&
+			r.endNear)) || g_motion[3] == 0.0f)
 			return;
 
 		/* The caustic on the floor rides with the current where RoomPS's
@@ -16663,8 +16734,8 @@ namespace
 		float river[16];
 
 		std::memcpy(river, look.river, sizeof(river));
-		river[7] = !river_caustic_moves() ? 0.0f : river[11] > 0.5f ?
-			kNightCaustic : 1.0f;
+		river[7] = !look.isRiver || !river_caustic_moves() ? 0.0f :
+			river[11] > 0.5f ? kNightCaustic : 1.0f;
 		g_device->SetPixelShader(g_water_river_ps);
 		g_device->SetPixelShaderConstantF(132, river, 2);
 		g_device->SetPixelShaderConstantF(146, river + 8, 2);

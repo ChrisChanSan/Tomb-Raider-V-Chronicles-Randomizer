@@ -412,7 +412,9 @@ inline bool HDRoomAirReaches(const HDRoomAir& air, float x, float y0,
  * with it as the camera swings. A room a listed with a classic window
  * takes in every room b it carries any art of (game\draw.cpp, CarryArt),
  * as a room with no window of its own: 583 such pairs over the fifteen
- * levels, from 1 triangle to 26,769, ANDREA2's tower 286. No count is
+ * levels, from 1 triangle to 26,769, ANDREA2's tower 286, of which the
+ * 132 whose art there is more than half copies of another group's faces
+ * are dropped (HDCarryCopyKey), leaving 451. No count is
  * asked: a room carried for a sliver of art is drawn whole by the depth
  * test like any room the reach brings, and every room taken in that way
  * is one the reach's budget may trim again. */
@@ -426,6 +428,20 @@ inline bool HDCarryBoxHolds(const HDRoomBox& box, const float* p)
 			return false;
 
 	return true;
+}
+
+/* The 8-unit world cell of a triangle's centroid, x and z with the room's
+ * origin added, y as the art holds it: the test of a copy among the carried
+ * art. A triangle of another group whose centroid falls in the same cell
+ * stands there already - the same face twice, which a carried room would
+ * draw over the first and both fight for the depth. Each part shifted by
+ * 2^20 cells, so that any point within eight million units of the origin
+ * gives a positive part, 21 bits each. */
+inline long long HDCarryCopyKey(float x, float y, float z)
+{
+	return ((long long)((int)floorf(x / 8.0f) + 1048576) << 42) |
+		((long long)((int)floorf(y / 8.0f) + 1048576) << 21) |
+		(long long)((int)floorf(z / 8.0f) + 1048576);
 }
 
 /* Whether a world point stands in a room's air - see HDRoomAir. */

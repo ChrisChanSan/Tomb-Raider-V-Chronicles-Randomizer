@@ -192,10 +192,12 @@
  *                     smaller box's answer - the other answer for such a
  *                     room, out of the same build. The `decide: clip`
  *                     line ends with the engine's unlinked_ counters.
- *     -air 0|1        the engine's tomb5.hd_air: 1, the default, hands the
+ *     -air 0|1|2      the engine's tomb5.hd_air: 1, the default, hands the
  *                     rooms' air to the build; 0 hands none, and the build
  *                     and its pictures are the box's alone, as the engine's
- *                     with hd_air 0. The intrusion line ends with air=.
+ *                     with hd_air 0; 2 holds the hulls' art in air no
+ *                     box holds to their own windows too (MarkAirHulls).
+ *                     The intrusion line ends with air=.
  *
  *   The portal walk (game\draw.cpp) offline, with the engine's own camera:
  *   the integer angles phd_LookAt makes of an eye and a target, the float
@@ -2622,9 +2624,10 @@ static double g_air_ms = 0.0;
  * whose window is empty, whose pieces keep the smaller box's answer: the
  * other answer for such a room, to hold against the engine's. */
 static int g_unlinked = 1;
-/* -air 0|1: the engine's tomb5.hd_air. 1, the default, hands the rooms' air
+/* -air 0|1|2: the engine's tomb5.hd_air. 1, the default, hands the rooms' air
  * to the build; 0 hands none, as BuildRoomAir does with hd_air off, so no
- * triangle stands in unlinked air and the build is the box's alone. */
+ * triangle stands in unlinked air and the build is the box's alone; 2 is 1
+ * with the hulls (MarkAirHulls in hd_render.cpp). */
 static int g_air_option = 1;
 static int g_window_mode = HD_WINDOW_ALL;
 
@@ -3598,13 +3601,48 @@ namespace walkoff
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
 		 * them: a triangle whose centroid stands outside its own room's
 		 * inside and inside the inside of a room under the sky that is not
-		 * its flipmap twin counts for that pair. */
+		 * its flipmap twin counts for that pair, and a pair more than half
+		 * of whose triangles another group has a copy of (HDCarryCopyKey)
+		 * is none. */
 		g_carry.assign(g_room.size(), std::vector<short>());
 
 		if (!g_air_option)
 			return true;
 
-		std::map<std::pair<int, int>, int> pairs;
+		std::map<std::pair<int, int>, int> pairs, copies;
+		std::vector<std::pair<long long, int> > cents;
+
+		// Every triangle's world centroid cell, for the copies.
+		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& ta =
+							trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& tb =
+							trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& tc =
+							trg.vertices[trg.indices[first + 2]];
+
+						cents.push_back(std::make_pair(HDCarryCopyKey(
+							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f +
+							(float)g_room[g].x,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f +
+							(float)g_room[g].z), (int)g));
+					}
+				}
+
+		std::sort(cents.begin(), cents.end());
 
 		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
 		{
@@ -3666,8 +3704,24 @@ namespace walkoff
 							hb.maxs[2] = (float)(host.z +
 								((long)(host.zs - 1) << 10));
 
-							if (HDCarryBoxHolds(hb, c))
-								pairs[std::make_pair((int)a, (int)g)]++;
+							if (!HDCarryBoxHolds(hb, c))
+								continue;
+
+							pairs[std::make_pair((int)a, (int)g)]++;
+
+							const long long key = HDCarryCopyKey(c[0], c[1],
+								c[2]);
+							std::vector<std::pair<long long, int> >::
+								const_iterator it = std::lower_bound(
+								cents.begin(), cents.end(),
+								std::make_pair(key, -1));
+
+							for (; it != cents.end() && it->first == key; ++it)
+								if (it->second != (int)g)
+								{
+									copies[std::make_pair((int)a, (int)g)]++;
+									break;
+								}
 						}
 					}
 				}
@@ -3676,10 +3730,13 @@ namespace walkoff
 		for (std::map<std::pair<int, int>, int>::const_iterator it =
 			pairs.begin(); it != pairs.end(); ++it)
 		{
-			g_carry[(size_t)it->first.first].push_back(
-				(short)it->first.second);
-			printf("-walk: carry host=%d group=%d tris=%d\n",
-				it->first.first, it->first.second, it->second);
+			if (copies[it->first] * 2 <= it->second)
+				g_carry[(size_t)it->first.first].push_back(
+					(short)it->first.second);
+
+			printf("-walk: carry host=%d group=%d tris=%d copies=%d\n",
+				it->first.first, it->first.second, it->second,
+				copies[it->first]);
 		}
 
 		return true;
@@ -9029,8 +9086,8 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -unlinked 0|1|2   art in an unlinked room's air inside"
 			" its own window (default 1; 2 keeps the smaller box's answer in"
 			" an empty window)\n");
-		printf("       -air 0|1        tomb5.hd_air: the rooms' air handed to"
-			" the build (default 1)\n");
+		printf("       -air 0|1|2      tomb5.hd_air: the rooms' air handed to"
+			" the build (default 1; 2 the hulls too)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");

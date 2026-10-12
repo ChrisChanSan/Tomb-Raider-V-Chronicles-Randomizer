@@ -2213,19 +2213,70 @@ namespace
 	/* The rooms under the sky and the flipmap twins (HDRenderSetCarryHosts),
 	 * borrowed for the length of the build, the rooms under the sky in room
 	 * order, and the art the build found them carrying: triangles per
-	 * (group, host). */
+	 * (group, host), and how many of them are copies (HDCarryCopyKey).
+	 * `g_carry_cells` is every triangle's centroid cell with its group,
+	 * sorted, made before the groups are filled (MarkCarryCells). */
 	const unsigned char* g_carry_sky = 0;
 	const short* g_carry_twin = 0;
 	int g_carry_count = 0;
 	std::vector<int> g_carry_hosts;
-	std::map<std::pair<int, int>, int> g_carry_pairs;
+	std::map<std::pair<int, int>, int> g_carry_pairs, g_carry_copies;
+	std::vector<std::pair<long long, int> > g_carry_cells;
+
+	/* Every triangle's centroid cell (HDCarryCopyKey) with its group, for
+	 * the copies among the carried art. Only when a room carries. */
+	void MarkCarryCells(const trf::remaster::Trg& trg)
+	{
+		g_carry_cells.clear();
+
+		if (g_carry_hosts.empty() || !g_boxes)
+			return;
+
+		for (size_t g = 0; g < trg.groups.size() && (int)g < g_box_count; g++)
+		{
+			const HDRoomBox& own = g_boxes[g];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned int at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned int first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& ta =
+							trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& tb =
+							trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& tc =
+							trg.vertices[trg.indices[first + 2]];
+
+						g_carry_cells.push_back(std::make_pair(HDCarryCopyKey(
+							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f +
+							own.originX,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f +
+							own.originZ), (int)g));
+					}
+				}
+		}
+
+		std::sort(g_carry_cells.begin(), g_carry_cells.end());
+	}
 
 	/* Which rooms under the sky group g's art stands in (HDCarryBoxHolds):
 	 * one host per triangle and room, for every triangle whose centroid
 	 * stands outside g's own inside and inside the inside of a room under
-	 * the sky that is not g's flipmap twin. */
+	 * the sky that is not g's flipmap twin; in `copies` the same host once
+	 * more for such a triangle another group has a copy of (MarkCarryCells).
+	 */
 	void CarryHostsOf(const trf::remaster::Trg& trg,
-		const trf::remaster::TrgGroup& source, int g, std::vector<int>& out)
+		const trf::remaster::TrgGroup& source, int g, std::vector<int>& out,
+		std::vector<int>& copies)
 	{
 		if (g_carry_hosts.empty() || !g_boxes || g >= g_box_count ||
 			g >= g_carry_count)
@@ -2262,6 +2313,9 @@ namespace
 					c[0] += own.originX;
 					c[2] += own.originZ;
 
+					const long long key = HDCarryCopyKey(c[0], c[1], c[2]);
+					int copy = -1;
+
 					for (int a : g_carry_hosts)
 					{
 						if (a == g || a >= g_box_count ||
@@ -2275,8 +2329,27 @@ namespace
 						host.mins[2] += host.originZ;
 						host.maxs[2] += host.originZ;
 
-						if (HDCarryBoxHolds(host, c))
-							out.push_back(a);
+						if (!HDCarryBoxHolds(host, c))
+							continue;
+
+						out.push_back(a);
+
+						if (copy < 0)
+						{
+							std::vector<std::pair<long long, int> >::
+								const_iterator it = std::lower_bound(
+								g_carry_cells.begin(), g_carry_cells.end(),
+								std::make_pair(key, -1));
+
+							copy = 0;
+
+							for (; it != g_carry_cells.end() &&
+								it->first == key && !copy; ++it)
+								copy = it->second != g ? 1 : 0;
+						}
+
+						if (copy)
+							copies.push_back(a);
 					}
 				}
 			}
@@ -4429,6 +4502,7 @@ void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
 	g_carry_count = g_carry_sky ? count : 0;
 	g_carry_hosts.clear();
 	g_carry_pairs.clear();
+	g_carry_copies.clear();
 
 	for (int r = 0; r < g_carry_count; r++)
 		if (g_carry_sky[r])
@@ -5886,6 +5960,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		std::vector<int> clearSlots;		// first seen here, in order
 		std::vector<int> cutHits, intrusionHits, intrusionBand, airPairs;
 		std::vector<int> carryHosts;		// CarryHostsOf, one per triangle
+		std::vector<int> carryCopies;		// and those that are copies
 		long long airTicks = 0;
 		int cutoutParts = 0, addweightParts = 0, addswingParts = 0;
 		int addstillParts = 0, stackedParts = 0, stackedTris = 0;
@@ -6344,7 +6419,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		}
 
 		// And the rooms under the sky its art stands in (CarryHostsOf).
-		CarryHostsOf(trg, source, (int)g, o.carryHosts);
+		CarryHostsOf(trg, source, (int)g, o.carryHosts, o.carryCopies);
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -7886,6 +7961,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	// The hulls, asked of every group before any is filled (MarkAirHulls).
 	MarkAirHulls(trg);
+	// And the copies among the carried art (MarkCarryCells).
+	MarkCarryCells(trg);
 
 	/* The biggest groups first, so that no thread is left alone with a big
 	 * one at the end. Only the order the work is handed out in: every group
@@ -8021,6 +8098,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		for (int host : o.carryHosts)
 			g_carry_pairs[std::make_pair((int)g, host)]++;
 
+		for (int host : o.carryCopies)
+			g_carry_copies[std::make_pair((int)g, host)]++;
+
 		g_air_ticks += o.airTicks;
 		g_cutout_parts += o.cutoutParts;
 		g_addweight_parts += o.addweightParts;
@@ -8067,6 +8147,21 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	}
 
 	std::vector<FillOut>().swap(fill_out);
+
+	/* A pair whose art in its host is more than half copies of another
+	 * group's faces carries nothing the frame lacks: the street art bundles
+	 * of ANDREA2 hold the same faces as one another (room 10 in room 153,
+	 * 1,635 of 1,866), and drawn again over them they fight for the depth.
+	 * The brick tower, room 222 in room 232, is 20 of 286. 132 of the 583
+	 * pairs of the fifteen levels go. */
+	for (std::map<std::pair<int, int>, int>::iterator it =
+		g_carry_pairs.begin(); it != g_carry_pairs.end(); )
+		if (g_carry_copies[it->first] * 2 > it->second)
+			it = g_carry_pairs.erase(it);
+		else
+			++it;
+
+	std::vector<std::pair<long long, int> >().swap(g_carry_cells);
 
 	lap(HD_BEGIN_FILL);
 

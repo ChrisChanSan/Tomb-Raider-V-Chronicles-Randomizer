@@ -6614,10 +6614,8 @@ bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount)
 	return false;
 }
 
-/* The one question the room walk asks of the HD path. g_level_active is
- * false with hd_enable off, before a level is built, after HDLevelUnload and
- * in a level whose .TRG had no rooms - and in every one of those the walk in
- * game\draw.cpp carries no reach and is the classic walk. */
+/* The rooms a room under the sky carries (hd_level.h), out of the list the
+ * build made of the renderer's carry pairs. */
 int HDRoomCarries(int roomIndex, const short** rooms)
 {
 	*rooms = 0;
@@ -6631,6 +6629,10 @@ int HDRoomCarries(int roomIndex, const short** rooms)
 	return (int)g_room_carry[(size_t)roomIndex].size();
 }
 
+/* The one question the room walk asks of the HD path. g_level_active is
+ * false with hd_enable off, before a level is built, after HDLevelUnload and
+ * in a level whose .TRG had no rooms - and in every one of those the walk in
+ * game\draw.cpp carries no reach and is the classic walk. */
 bool HDLevelActive()
 {
 	return g_level_active && HDEnabled();

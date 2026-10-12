@@ -1742,6 +1742,61 @@ water surface", carries the tables.
     "along a swim"). OWN, a design of this project; free choices. DATA:
     the scattered light's luma (x 255) per water room, RoomProbe
     `-underwater`: the worst jump between neighbours 59, 4.4 after.
+179. **A deeper bent place seen through its own path** - seen from above,
+    the bent place of the copy (entry 61) is found before the water's
+    colour, and one that lies deeper than the pixel's own and passes the
+    guard (entry 75) is seen through the longer path: its extinction and its
+    scattered light are the ones the floor's own pixels show
+    (`hd_room.hlsl`, `WaterPS`, "the bent place first"). OWN, a design of
+    this project. DATA: RoomProbe `-swimmer` (a box 30 units under the
+    surface) at a logged camera over ANDREA1's pool room 32 with the
+    level's three fog bulbs: 296 violet pixels at its rim, all of them
+    where the read lay more than 96 units deeper (a scratch probe marking
+    them), none without the bulbs or with `-waterbend 0`; 0 after.
+180. **Fog bulbs of a water room under a sheet left out** - with sheets
+    built, a fog bulb whose room is a water room a sheet lies over is not
+    handed to the frame over the water either, as entry 110 leaves every
+    bulb out under it (`hd_level.cpp`, `BulbUnderSheet`). OWN, a design of
+    this project. DATA: the classic `.TRC` files' rooms: ANDREA1 has seven
+    such bulbs, ANDREA2 sixteen, no other level any; the excess of a
+    swimming Lara over the canal's water in a video of the game, 13, 18,
+    15, stands in the ratio of the canal bulbs' colour 207, 255, 223;
+    RoomProbe over the canal with and without them: 12.6 to 13.9, 17.5 to
+    19.3, 16.3 to 18.0 over the whole frame.
+181. **The world above bent a quarter outside the window** - seen from
+    below, the move of entry 61 is whole inside the window of entry 85
+    and a quarter outside it, over the window's edge (`hd_room.hlsl`,
+    `WaterPS`, the under-water variant). OWN, a free choice set by eye on
+    RoomProbe pictures. DATA: JOBY2's rain basin, the eye 8 to 32 units
+    under the surface: the move stood at its 4 % bound over nearly the
+    whole surface, a median of 31.7 pixels of 960 (a scratch probe drawing
+    it); 8.9 after.
+182. **The gloss variant's caustic projected by the face** - entry 82's
+    projection in the gloss variant of `RoomPS` too, which kept the
+    horizontal plane (`hd_room.hlsl`). OWN, entry 82's design. DATA: the
+    riveted walls of JOBY2's rain basin are sheen ranges; under the
+    waterline they showed vertical streaks with the eye over the water
+    (gone with the caustic off, still there with the bend off): 9 and 13
+    columns at two views, 4 and 6 after.
+183. **The under look on the drawn eye's room** - the frame's under look
+    (entry 110) asks the room the drawn eye stands in, `InterpEyeRoom`,
+    not the logic room (`hd_level.cpp`). OWN, a design of this project.
+    DATA: the camera's tick eyes of a logged ANDREA1 run: 11 of the 16
+    frames a 60 Hz draw blends between the tick pairs that cross the
+    surface, 32 of 48 at 120 Hz, drew the eye on the other side of the
+    surface from the logic room.
+184. **A channel's end foam** - a channel with a current of its own takes
+    entry 116's blob at its downstream end: the way ahead along the
+    current within the body's last square along it, RiverPS with the end
+    alone, only in the rooms whose sheet lies within twice `kRiverEdge` of
+    the end (`hd_render.cpp`, `WaterLook::hasEnd`, `SheetRange::endNear`).
+    OWN, entry 105's and 116's design for a channel. DATA: ANDREA2's
+    canal, its current from the flow row of room 60, runs on under its +z
+    end wall into water room 133 (`SectorCheck`, classic `.TRC`).
+185. **JOBY2's seas at half the foam** - the pinned rows of rooms 42 and
+    143 and a row for room 7 (the rain basin) give foam 0.5
+    (`hd_render.cpp`, `kWaterOverride`). OWN, a project decision of
+    2026-10-12, chosen on RoomProbe pictures at foam 1, 0.5, 0.25 and 0.
 
 ## Credited, but not contained here
 

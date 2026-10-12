@@ -1744,7 +1744,7 @@ it.
   floor and the
   walls of a pool under a sheet catch a moving caustic, a net of light on the
   walls as on the floor (projected along the wall's own face, not streaked
-  down it). A water plane with no
+  down it - on a polished wall too). A water plane with no
   underwater room below - all of JOBY3's and RICH3's water, ANDREA3's two
   pools, and 20 more planes - is no water square by this rule and keeps the
   level's own faces. Fifteen levels hold 565 water squares in 56 bodies, each
@@ -1765,8 +1765,10 @@ it.
   the surface. Seen from below, the surface is clear: the window overhead
   shows the world above, bent the same way, with a tenth of the reflection's
   colour in it, and outside the window the world above still shows through
-  under a light veil of the section's shallow colour (a third of it), so the
-  surface keeps the waves' shapes instead of turning into one milky plane;
+  under a light veil of the section's shallow colour (a third of it), bent a
+  quarter as far as in the window, so the surface keeps the waves' shapes
+  instead of turning into one milky plane and the world above does not swing
+  in wide bands;
   the screen's wobble and the water's own depth (*Under the water*) do the
   rest. Where
   the graphics card offers it (the `INTZ`
@@ -1905,6 +1907,12 @@ it.
   under an open sky no longer turns into flat, bright water). It takes the
   place of the distance fog and of the level's fog bulbs while the camera
   is under water (ANDREA2's water rooms carry sixteen, a flat pale haze);
+  the bulbs that stand in a water room a sheet lies over are left out over
+  the water as well (ANDREA1's seven and ANDREA2's sixteen), where the
+  sheet's own depth stands for them, so a body swimming just under the
+  surface is not hazed pale; the look follows the room the camera is drawn
+  in, frame by frame, so a dive shows no frame of the look on the other side
+  of the surface;
   polished surfaces lose their sheen there and fade like the rest. A water
   room with no sheet over it takes the water of the level's largest body
   and has no surface over it: everything it sees lies in the water. In a
@@ -1942,7 +1950,10 @@ it.
   sink pulls there. No foam lies on a river's banks - foam does not
   stay on a fast river - except where the river ends against a wall or a
   drop: there one ragged blob of foam lies across it, densest at the end,
-  holed and broken further up, about three quarters of a square deep. The
+  holed and broken further up, about three quarters of a square deep. A
+  channel with a current of its own (ANDREA2's sewer canal, by the engine's
+  own table) takes the same blob at its downstream end, where its water runs
+  on under the end wall through the grate; its bank foam stays. The
   Remaster's own moving
   water surface over a river is left out, as its still water is.
   `hd_water.txt` can make any body a river and give it a current by hand.
@@ -1982,8 +1993,11 @@ it.
   heights, foam the shore foam and the whitecaps, bend how far the waves bend
   the floor seen through them (`bend 1.5` half as much again) - every number 0
   to 4, where 1 changes nothing. `#` starts a comment; a line that cannot be
-  read is counted and skipped. The rows apply after the engine's own pinned
-  rows, so a row of the file wins, and a later row wins over an earlier one -
+  read is counted and skipped. The engine's own pinned rows give JOBY2's
+  three seas - the rain basin, the open sea and the sea by the ship - half
+  the foam (`foam 0.5`, a project decision of 2026-10-12). The rows apply
+  after the engine's own pinned rows, so a row of the file wins, and a later
+  row wins over an earlier one -
   for example
   `ANDREA2 144 - tint 1.1 1.0 0.85 waves 0.7`, `JOBY2 42 - foam 0.6` or
   `ANDY2 57 none`. Any row may also carry `ripple <x> <z> <size> <seconds>`: a

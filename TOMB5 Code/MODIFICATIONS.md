@@ -13183,6 +13183,146 @@ first (no last body yet: the largest, as before).
 
 **Commits.** `04fabd7`, `63e8bac`, `f2e7198`.
 
+**After the fifteenth play test: the world above from below, the walls' net, the canal's
+end, JOBY2's foam, the dive.** The build of `0276156c` was played on 2026-10-12. Taken:
+the canal's highlight at 0.4 and the glide of Lara's light. Asked for: JOBY2's foam at
+0.5 (the choice out of the thirteenth play test's pictures), JOBY2's two views again
+(the world above bent into wide bands seen from under the rain basin's surface, a
+bright streaked band on the basin's wall under the waterline seen from over it),
+ANDREA2's canal's end at the grate with the foam a river's end has, and the dive into
+the canal: for a moment the room's old look with its old fog, sometimes the whole
+picture light blue.
+
+*The world above from below* (`hd_room.hlsl`, `WaterPS`, the under-water variant). At
+the play test's eye in JOBY2's rain basin, 8 to 32 units under the surface, a scratch
+probe that draws the move of the copy's read showed it at `RefractMove`'s bound of 4 %
+of the screen over nearly the whole surface: a median of 31.7 pixels of 960, the 90th
+percentile 37.5; the window covers 15 to 31 % of it. Outside the window, where water
+turns the light back, the sheet shows the world above under its veil, and bent as hard
+as inside it the walls and stairs standing on the far bank swung in wide bands. Taking
+the bend from the eye's distance or without the eye-level gain left the move at the
+bound (medians 27.6 to 31.7): the bound is what was seen. Now the move outside the
+window is a quarter, inside it whole, over the window's own edge: a median of 8.9
+pixels, the 90th percentile 25.4. A quarter is a free choice; at 0 the world above
+stands still behind the veil (pictures of 1, 0.25 and 0 for the owner).
+
+*The walls' net* (`hd_room.hlsl`, `RoomPS`'s gloss variant). The streaks under the
+waterline are the caustic - gone with a scratch shader that leaves it out, there with
+the bend off -: the basin's riveted walls are sheen ranges, which the gloss variant
+draws while the eye is over the water, and it read the caustic in the horizontal plane
+alone, so a wall took the net along one axis. Under the water the plain variant draws
+them, the net the eye sees there. The gloss variant now projects it by the face as the
+plain one does (`CausticFace`): columns standing 4 of luma over their neighbourhood in
+the band under the waterline 9 to 4 and 13 to 6 at two views (4 with the caustic off),
+the band's mean luma 98.0 to 97.9.
+
+*The canal's end* (`hd_render.cpp`, `WaterLook::hasEnd`, `SheetRange::endNear`,
+`draw_river`). A channel with a current of its own - ANDREA2's canal, +z at 90 units a
+second by the flow row of room 60, its water running on under the +z end wall through
+the grate into water room 133 - takes the river's end blob: its vertices carry the
+way ahead along the current to the first point without water, counted only where that
+point lies within the body's last square along the current (so the south bank of the
+canal's west arm, which a current in +z also meets, takes none), and `RiverPS` is
+drawn over the sheet with the end alone - no sheen, no relief, no caustic of its own,
+the end's reach, strength and carry a river's. Only the rooms whose sheet lies within
+twice `kRiverEdge` of the end take the draw: one, room 20. The bank foam stays. GPU at
+2560 x 1440 at three views of the grate 0.044 to 0.090 ms for that draw.
+
+*JOBY2's foam* (`hd_render.cpp`, `kWaterOverride`). The pinned rows of rooms 42 and 143
+and a new one for room 7, the rain basin, give foam 0.5 - a project decision of
+2026-10-12 on the thirteenth play test's pictures; room 7's row keeps the class the
+rule gives. With the level as the game loads it the WATERLOG lines of bodies 0 (room
+7), 1 (42, 76) and 2 (45, 143) read `foam=0.50` and `override=table:7`, `table:42`,
+`table:143`; the basin over room 66 keeps 1.00. With data/Backup's classic level room
+7's row matches nothing (`unmatched=1`).
+
+*The dive* (`hd_level.cpp`, the under gate). The frame switched its under look on the
+camera's logic room, which is not interpolated, while the eye is drawn between the two
+tick eyes: at a dive the drawn eye still stood over the surface while the room said
+water, and on the way out under it while the room said air - one frame of the under
+look in the open air, or of the classic look with the water rooms' fog bulbs round an
+eye in the water. The log of this play test has no dive of the eye into the canal; in
+its ANDREA1 swims 16 tick pairs cross the surface, and 11 of the 16 frames a 60 Hz draw
+blends between them, 32 of 48 at 120 Hz, put the drawn eye on the other side of the
+surface from the logic room. The gate now asks `InterpEyeRoom`, the room holding the
+drawn eye, from which the frame's portal walk already starts; on every frame not
+blended that is the logic room. RoomProbe's sweep at the canal, 96 units over the
+surface to 96 under at 1, 2.5 and 3 s, shows the two looks such a frame drew beside
+the look the eye's own room gives.
+
+**Measured.** Slots, fxc /O3, `0276156c` to now: `WaterVS` 407, `WaterPS` 462 to 458,
+its depth variant 509 to 512, the view variant 495 to 498, the under variant 390 to
+392, the foam's draw 321 and with the depth 368, `RiverPS` 482, `FootPS` 208, `RoomPS`
+510, its gloss variant 502 to 507. GPU at 2560 x 1440, three runs each: the full-water
+view 0.405, 0.405, 0.405 ms against 0.407, 0.404, 0.405 now, the pond 0.439, 0.440,
+0.437 against 0.436, 0.438, 0.437.
+
+**Checked.** The classic path, 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`); the fifteen
+cameras with `-hdwater 0`, 15 of 15 identical to the fix round's parity set. With
+`-hdwater 1` against `0276156c`: E3 and E4 identical; the deeper bent place (the next
+part) changes A1, A2, D2 and the pond's 36 views by at most 26 of luma, and A3, B1, B2,
+E1 and E2 by up to 261 where a near-surface floor or wall read a deeper one; the
+canal's end adds to B1 and B2; the gloss variant's caustic and the foam change C1 to
+C4; the bend from below changes D1. The suites (ModernTest 14934, MenuTest 42627,
+InterpTest 729, LipsTest 270 and 243) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game: nobody in this round could play it. The quarter of the
+bend outside the window and the canal end's look in the game's light are the owner's
+to judge; the end's draw costs up to 0.09 ms in the canal views. The dive's two looks
+are gone by the rule; whether the dive shows anything else of the old look is the next
+log's to show (WATERLOG `undergate` names the room the gate asked).
+
+**Commits.** `6dc94e4`, `0434457`, `b08c2cb`, `a81fe93`.
+
+**Lara's light under and over the water, after the fifteenth play test.** Two things:
+the violet patches on Lara under the water in ANDREA1 (the thirteenth play test's,
+still open), with the owner's reading of a picture of the level in a viewer - room
+32's fog bulb, light 39, against the water's bending in that room -, and from
+ANDREA2's dive video, Lara at the canal's surface a pale flat shape with a dark shape
+on her jumping from frame to frame.
+
+*The violet* (`hd_room.hlsl`, `WaterPS`, "the bent place first"). ANDREA1's pool rooms
+carry fog bulbs - room 32's at 20992, -1024, 20992 on the pool's floor, radius 1,440,
+191, 143, 239, room 26's 191, 143, 207, room 34's 191, 223, 143 (the classic `.TRC`'s
+room data; `aRoomInit` makes all three 1/72 dense). The frame drops every bulb with
+the eye under the water, keeps them with the eye over it, and the play test's
+`LARALOG` shows the eye over the water for most of the room-32 swim (`under_light`
+0). RoomProbe `-swimmer` stands a box under the surface; at a logged camera of that
+swim, the box 30 units under the surface and the three bulbs handed in: 296 violet
+pixels round the box (mean 29, 27, 40, the hue of the play test's patches, 40, 38,
+52), none without the bulbs, none with `-waterbend 0`, and every one of them, in a
+scratch shader that marks the reads, a pixel whose bent place lay more than 96 units
+deeper than its own. So: the copy holds the deep floor as the frame drew it - lit,
+hazed by the bulb on it, under no water -, and a pixel on a body just under the
+surface whose bent place fell on that floor took the floor's colour through its own
+few units of water. Lara's thin bare parts carry the most silhouette for their area.
+Now the bent place is found before the water's colour, and one that lies deeper than
+the pixel's own (and passes the guard) is seen through the longer path, its
+extinction and its scattered light the floor's own: 296 to 0, and 173 to 0 with the
+box 300 units down. To stay in the depth variant's 512 slots two terms that clamp
+nothing were dropped, a saturate of 1 - exp and the max under the fog's saturate.
+
+*The pale Lara* (`hd_level.cpp`, `BulbUnderSheet`). In the video's frame her pale
+pixels stand 13, 18, 15 over the canal's water round her - the canal bulbs' colour
+207, 255, 223 in the same ratio, not the water's scattered light (64, 64, 27); the eye
+stood just over the surface (the near plane's strip at the picture's foot). RoomProbe
+over the canal with the six bulbs of its water rooms against none: 12.6 to 13.9,
+17.5 to 19.3 and 16.3 to 18.0 over the whole frame; ModelProbe with Lara inside a
+canal bulb's sphere 24.8, 17.7, 12.0 without it, 30.3, 27.0, 21.0 with it. A bulb in a
+water room is the classic path's stand-in for that water's murk; under the water the
+under look already takes its place. With sheets built, a bulb whose room is a water
+room a sheet lies over is no longer handed to the frame over the water either, found
+by its place, which `drawroom.cpp` copies unchanged: ANDREA1's seven and ANDREA2's
+sixteen, no other level has any. Without sheets every bulb is handed on as before.
+
+**Left.** The dark shape that jumps on her in the dive video (twelve frames in a row):
+not reproduced - RoomProbe draws no Lara, ModelProbe one frame and no swimming pose.
+Without the bulbs' haze on her the pale body it stood against is gone; whether the
+shape itself stays is the next play test's to show.
+
+**Commits.** `8697749`, `169c24a`.
+
 ### The level load on several cores
 2026-10-11
 

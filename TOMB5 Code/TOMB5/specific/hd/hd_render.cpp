@@ -9924,7 +9924,14 @@ namespace
 	 * place. ANDREA2 room 194's fountain basin, over water room 120 (six
 	 * squares, x 54,272 to 57,344 and z 31,744 to 33,792), has its spring
 	 * in the middle of the six: rings of size 80 every 0.7 seconds, a free
-	 * choice set by eye in the game with a row of the file. */
+	 * choice set by eye in the game with a row of the file.
+	 *
+	 * JOBY2's three seas - the open sea over rooms 42 and 76, the one over
+	 * 143 and its flip twin 45, and the rain basin over room 7 (room 13
+	 * under it, water in the level as the game loads it) - take half the
+	 * foam, bank foam and whitecaps alike: chosen on RoomProbe pictures of
+	 * the rain basin and the open sea with foam 1, 0.5, 0.25 and 0. Room
+	 * 7's row keeps the class the rule gives. */
 	struct HDWaterOverride
 	{
 		const char* stem;
@@ -9942,8 +9949,9 @@ namespace
 		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f,
 			{ 55808.0f, 32768.0f, 80.0f, 0.7f } },
 		{ "ANDREA2", 60, HD_WATER_CHANNEL, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
-		{ "JOBY2", 42, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
-		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
+		{ "JOBY2", 42, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
+		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
+		{ "JOBY2", 7, -1, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
 	};
 
 	/* The compiled river rows: level and room, the way the water runs along

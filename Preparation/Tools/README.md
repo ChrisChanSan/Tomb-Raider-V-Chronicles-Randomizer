@@ -134,7 +134,12 @@ stands inside whose room's own inside, with no portal between the two, each
 pair with `faces=` and `bound=`, the classic faces of the intruder its art
 belongs to and the triangles they claim (the engine's own face test, compiled
 in from `hd_render.h`) - the overhang
-histogram by distance and by side, and the hollow groups; `-room <n>` takes one
+histogram by distance and by side, and the hollow groups, and per group with art
+in unlinked air that no box holds a
+`hull census: level= group= tris= outside= share= unboxed_air= host_art=` line -
+`outside` its triangles outside its own room's inside, `host_art` those of
+`unboxed_air` standing in a 256-unit cell of its host's own art, the measure of
+`hd_air` 2; `-room <n>` takes one
 room apart (box, portals, vertical links, whose art is inside it), `-statics` /
 `-slot <n>` every static mesh with how much art stands in its box, `-slack` and
 `-deep` move the two thresholds so that a rule can be re-measured rather than
@@ -177,9 +182,18 @@ other pieces whole, as the engine does.
 A `decide: reachart` line per holder of such a group and a `decide: clip` line
 after the picture give the engine's `reachart` fields and its `clip` counters
 over the named groups, so a picture can be held against the log of the same
-view; `-air 0|1` (default 1) is the engine's `hd_air` setting - 0 hands the build
+view; `-air 0|1|2` (default 1) is the engine's `hd_air` setting - 0 hands the build
 no room's air, and the picture is the box's alone, byte for byte the one before the
-air was asked; `-unlinked 0|1` (default 1, the engine's) draws a piece of art
+air was asked; 2 holds a hull's art in unlinked air that no box holds to its own
+window too, and prints the engine's `hull: group= air_tris= host_art= hull=` lines;
+with 1 and 2 `-walk` takes in the rooms whose art stands under a listed room's sky
+(the engine's CarryArt) and prints `-walk: carry host= group= tris= copies=` per
+pair, `copies` the triangles another group has at the same place (a pair with more
+than half of them is not carried), and
+the build prints the engine's `carry:` lines; `-classicclip` draws each
+`-classicroom` (and `-classicmark`) room's faces inside its window of `-roomwin`
+only, none without one, as the classic path draws a room;
+`-unlinked 0|1` (default 1, the engine's) draws a piece of art
 standing in an unlinked room's air, held by an entry's box, only inside its group's
 window, unless a claimed face of
 its pair survives the window, or answers it as before with

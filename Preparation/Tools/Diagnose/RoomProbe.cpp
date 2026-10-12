@@ -192,10 +192,12 @@
  *                     smaller box's answer - the other answer for such a
  *                     room, out of the same build. The `decide: clip`
  *                     line ends with the engine's unlinked_ counters.
- *     -air 0|1        the engine's tomb5.hd_air: 1, the default, hands the
+ *     -air 0|1|2      the engine's tomb5.hd_air: 1, the default, hands the
  *                     rooms' air to the build; 0 hands none, and the build
  *                     and its pictures are the box's alone, as the engine's
- *                     with hd_air 0. The intrusion line ends with air=.
+ *                     with hd_air 0; 2 holds the hulls' art in air no
+ *                     box holds to their own windows too (MarkAirHulls).
+ *                     The intrusion line ends with air=.
  *
  *   The portal walk (game\draw.cpp) offline, with the engine's own camera:
  *   the integer angles phd_LookAt makes of an eye and a target, the float
@@ -2731,9 +2733,10 @@ static double g_air_ms = 0.0;
  * whose window is empty, whose pieces keep the smaller box's answer: the
  * other answer for such a room, to hold against the engine's. */
 static int g_unlinked = 1;
-/* -air 0|1: the engine's tomb5.hd_air. 1, the default, hands the rooms' air
+/* -air 0|1|2: the engine's tomb5.hd_air. 1, the default, hands the rooms' air
  * to the build; 0 hands none, as BuildRoomAir does with hd_air off, so no
- * triangle stands in unlinked air and the build is the box's alone. */
+ * triangle stands in unlinked air and the build is the box's alone; 2 is 1
+ * with the hulls (MarkAirHulls in hd_render.cpp). */
 static int g_air_option = 1;
 static int g_window_mode = HD_WINDOW_ALL;
 
@@ -2887,6 +2890,7 @@ namespace walkoff
 		bool reach_first;
 		char bound_active;
 		std::vector<Tr5Level::PortalRecord> doors;
+		int alt;			// the flipmap twin, -1 for none
 	};
 
 	static std::vector<Room> g_room;
@@ -2928,6 +2932,12 @@ namespace walkoff
 
 	// -reach: the two-rectangle walk. Off, this is the plain classic walk.
 	static bool g_reach = false;
+	/* HDRoomCarries (hd_level.h) as the .TRG and the .TRC answer it: per
+	 * room under the sky, the rooms whose art stands in its inside - see
+	 * CarryArt in game\draw.cpp. Built by LoadHd, empty with -air 0;
+	 * g_carried counts the rooms the last walk took in that way. */
+	static std::vector<std::vector<short> > g_carry;
+	static int g_carried = 0;
 	/* The walk's own brake. ANDREA3 and ANDY2 ran the tool out of memory:
 	 * with the parent gone from the child's rectangle, a ring of rooms whose
 	 * portals all face the eye can be walked round and round, each lap
@@ -3550,6 +3560,7 @@ namespace walkoff
 				r.floor = rm.yBottom;
 			}
 			r.flags = rm.flags;
+			r.alt = rm.altRoom;
 			level.portalRecords(i, r.doors, error);
 		}
 
@@ -3695,7 +3706,188 @@ namespace walkoff
 
 		printf("-walk: %d of %d rooms have HD art in %s\n", hd,
 			(int)g_hd.size(), path.c_str());
+
+		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
+		 * them: a triangle whose centroid stands outside its own room's
+		 * inside and inside the inside of a room under the sky that is not
+		 * its flipmap twin counts for that pair, and a pair more than half
+		 * of whose triangles another group has a copy of (HDCarryCopyKey)
+		 * is none. */
+		g_carry.assign(g_room.size(), std::vector<short>());
+
+		if (!g_air_option)
+			return true;
+
+		std::map<std::pair<int, int>, int> pairs, copies;
+		std::vector<std::pair<long long, int> > cents;
+
+		// Every triangle's world centroid cell, for the copies.
+		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& ta =
+							trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& tb =
+							trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& tc =
+							trg.vertices[trg.indices[first + 2]];
+
+						cents.push_back(std::make_pair(HDCarryCopyKey(
+							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f +
+							(float)g_room[g].x,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f +
+							(float)g_room[g].z), (int)g));
+					}
+				}
+
+		std::sort(cents.begin(), cents.end());
+
+		for (size_t g = 0; g < g_room.size() && g < trg.groups.size(); g++)
+		{
+			const Room& own = g_room[g];
+
+			for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+				for (int pass = 0; pass < 3; pass++)
+				{
+					const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+					for (unsigned at = 0; at + 2 < run.count; at += 3)
+					{
+						const unsigned first = run.start + at;
+
+						if (first + 2 >= trg.indices.size())
+							break;
+
+						const trf::remaster::TrgVertex& ta =
+							trg.vertices[trg.indices[first]];
+						const trf::remaster::TrgVertex& tb =
+							trg.vertices[trg.indices[first + 1]];
+						const trf::remaster::TrgVertex& tc =
+							trg.vertices[trg.indices[first + 2]];
+						float c[3] = {
+							((float)ta.x + (float)tb.x + (float)tc.x) / 3.0f,
+							((float)ta.y + (float)tb.y + (float)tc.y) / 3.0f,
+							((float)ta.z + (float)tb.z + (float)tc.z) / 3.0f };
+						HDRoomBox ob;
+
+						ob.mins[0] = 1024.0f;
+						ob.maxs[0] = (float)((own.xs - 1) << 10);
+						ob.mins[1] = (float)(own.ceiling - own.y);
+						ob.maxs[1] = (float)(own.floor - own.y);
+						ob.mins[2] = 1024.0f;
+						ob.maxs[2] = (float)((own.zs - 1) << 10);
+
+						if (HDCarryBoxHolds(ob, c))
+							continue;
+
+						c[0] += (float)own.x;
+						c[2] += (float)own.z;
+
+						for (size_t a = 0; a < g_room.size(); a++)
+						{
+							const Room& host = g_room[a];
+
+							if (a == g || !(host.flags & 0x8) ||
+								host.alt == (int)g || own.alt == (int)a)
+								continue;
+
+							HDRoomBox hb;
+
+							hb.mins[0] = (float)(host.x + 1024);
+							hb.maxs[0] = (float)(host.x +
+								((long)(host.xs - 1) << 10));
+							hb.mins[1] = (float)(host.ceiling - host.y);
+							hb.maxs[1] = (float)(host.floor - host.y);
+							hb.mins[2] = (float)(host.z + 1024);
+							hb.maxs[2] = (float)(host.z +
+								((long)(host.zs - 1) << 10));
+
+							if (!HDCarryBoxHolds(hb, c))
+								continue;
+
+							pairs[std::make_pair((int)a, (int)g)]++;
+
+							const long long key = HDCarryCopyKey(c[0], c[1],
+								c[2]);
+							std::vector<std::pair<long long, int> >::
+								const_iterator it = std::lower_bound(
+								cents.begin(), cents.end(),
+								std::make_pair(key, -1));
+
+							for (; it != cents.end() && it->first == key; ++it)
+								if (it->second != (int)g)
+								{
+									copies[std::make_pair((int)a, (int)g)]++;
+									break;
+								}
+						}
+					}
+				}
+		}
+
+		for (std::map<std::pair<int, int>, int>::const_iterator it =
+			pairs.begin(); it != pairs.end(); ++it)
+		{
+			if (copies[it->first] * 2 <= it->second)
+				g_carry[(size_t)it->first.first].push_back(
+					(short)it->first.second);
+
+			printf("-walk: carry host=%d group=%d tris=%d copies=%d\n",
+				it->first.first, it->first.second, it->second,
+				copies[it->first]);
+		}
+
 		return true;
+	}
+
+	/* CarryArt (game\draw.cpp) over the last walk: every room with a
+	 * classic window takes in, as a room with no window of its own, the
+	 * rooms whose art stands in its inside, with its own reach. */
+	static void CarryArt()
+	{
+		const size_t listed = g_drawn.size();
+
+		g_carried = 0;
+
+		for (size_t i = 0; i < listed; i++)
+		{
+			const Room& a = g_room[(size_t)g_drawn[i]];
+
+			if (a.left >= a.right || a.top >= a.bottom ||
+				(size_t)g_drawn[i] >= g_carry.size())
+				continue;
+
+			const std::vector<short>& carried = g_carry[(size_t)g_drawn[i]];
+
+			for (size_t k = 0; k < carried.size(); k++)
+			{
+				Room& b = g_room[(size_t)carried[k]];
+				bool held = false;
+
+				for (size_t j = 0; j < g_drawn.size() && !held; j++)
+					held = g_drawn[j] == carried[k];
+
+				if (held)
+					continue;
+
+				for (int e = 0; e < 4; e++)
+					b.box[e] = a.box[e];
+
+				g_drawn.push_back(carried[k]);
+				g_carried++;
+			}
+		}
 	}
 
 	// One frame of the walk. Returns the room list.
@@ -3790,6 +3982,11 @@ namespace walkoff
 		}
 
 		GetRoomBounds();
+
+		g_carried = 0;
+
+		if (g_reach)
+			CarryArt();
 
 		// A room with no classic window at all: the reach alone brought it.
 		if (g_reach)
@@ -3923,7 +4120,8 @@ namespace walkoff
 				}
 
 			if (!noted)
-				printf("      room %d is in the list (seed)\n", want);
+				printf("      room %d is in the list (%s)\n", want,
+					want == g_list[0] ? "seed" : "carried");
 
 			Final(want, "      ");
 			return;
@@ -7989,6 +8187,12 @@ namespace probestatics
  * note at g_classic_rooms. Its own scene and its own state block, after the
  * state bracket of the HD frame has been checked, so the check is the HD
  * path's alone. */
+/* -classicclip: each room's classic faces drawn inside that room's window
+ * of -roomwin, as the classic path draws a room inside its portal window,
+ * and not at all for a room with no window there or an empty one. Off, the
+ * faces are drawn whole over the screen. */
+static bool g_classic_clip = false;
+
 static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	const D3DMATRIX& projection, double ex, double ey, double ez, long width,
 	long height)
@@ -8031,6 +8235,8 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 	// [0] single-sided, culled like the art's opaque ranges; [1] double-sided.
 	std::vector<Vtx> faces[2];
+	// Where each room's faces begin in the two, for -classicclip.
+	std::vector<std::pair<int, size_t> > starts[2];
 	int count = 0;
 	// The static meshes of -statics and -static, both sides drawn.
 	std::vector<Vtx> statics[2];
@@ -8058,6 +8264,9 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 		int left = 0;
 		std::vector<Tr5Level::SectorInfo> squares;
+
+		starts[0].push_back(std::make_pair(room, faces[0].size()));
+		starts[1].push_back(std::make_pair(room, faces[1].size()));
 
 		if (g_classic_wet)
 			level.sectorInfo(room, squares, error);
@@ -8242,8 +8451,36 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 
 			g_device->SetRenderState(D3DRS_CULLMODE, sided ? D3DCULL_NONE : D3DCULL_CCW);
 			g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
-			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)(moved.size() / 3),
-				&moved[0], sizeof(Vtx));
+
+			if (!g_classic_clip || set != faces)
+			{
+				g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+					(UINT)(moved.size() / 3), &moved[0], sizeof(Vtx));
+				continue;
+			}
+
+			for (size_t k = 0; k < starts[sided].size(); k++)
+			{
+				const size_t from = starts[sided][k].second;
+				const size_t to = k + 1 < starts[sided].size()
+					? starts[sided][k + 1].second : moved.size();
+				const long* win = 0;
+
+				for (int w = 0; w < g_roomwin_count && !win; w++)
+					if (g_roomwin_group[w] == starts[sided][k].first)
+						win = g_roomwin_box[w];
+
+				if (to <= from || !win || win[0] > win[2] || win[1] > win[3])
+					continue;
+
+				const RECT r = { win[0], win[1], win[2] + 1, win[3] + 1 };
+
+				g_device->SetScissorRect(&r);
+				g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+				g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+					(UINT)((to - from) / 3), &moved[from], sizeof(Vtx));
+				g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+			}
 		}
 	};
 
@@ -8958,8 +9195,8 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -unlinked 0|1|2   art in an unlinked room's air inside"
 			" its own window (default 1; 2 keeps the smaller box's answer in"
 			" an empty window)\n");
-		printf("       -air 0|1        tomb5.hd_air: the rooms' air handed to"
-			" the build (default 1)\n");
+		printf("       -air 0|1|2      tomb5.hd_air: the rooms' air handed to"
+			" the build (default 1; 2 the hulls too)\n");
 		printf("       -clipgroup <group> <l,t,r,b>   one group's own window\n");
 		printf("       -tround <group> <l,t,r,b>      one group in two halves\n");
 		printf("       -walk <seed room> <x y z>      the classic portal walk,\n");
@@ -9413,8 +9650,9 @@ static int ProbeMain(int argc, char** argv)
 
 			g_classic_rooms.push_back(atoi(argv[++at]));
 		}
-		else if (!strcmp(argv[at], "-classiconly"))
-			g_classic_only = true;
+		else if (!strcmp(argv[at], "-classiconly") ||
+			!strcmp(argv[at], "-classicclip"))
+			(argv[at][8] == 'o' ? g_classic_only : g_classic_clip) = true;
 		else if (!strcmp(argv[at], "-classicplane") && at + 1 < argc)
 		{
 			g_classic_plane = atol(argv[++at]);
@@ -9609,8 +9847,12 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-air") && at + 1 < argc)
 		{
-			g_air_option = atoi(argv[at + 1]) ? 1 : 0;
-			printf("-air: the rooms' air is %s\n", g_air_option
+			g_air_option = atoi(argv[at + 1]);
+			g_air_option = g_air_option == 0 || g_air_option == 2
+				? g_air_option : 1;
+			printf("-air: the rooms' air is %s\n", g_air_option == 2
+				? "handed to the build with the hulls' (tomb5.hd_air 2)"
+				: g_air_option
 				? "handed to the build (tomb5.hd_air 1, the engine's default)"
 				: "not handed to the build (tomb5.hd_air 0)");
 			at += 1;
@@ -10250,7 +10492,10 @@ static int ProbeMain(int argc, char** argv)
 				/* And every room's air, as BuildRoomAir hands it over: per
 				 * floor square its floor and ceiling bytes and its floor
 				 * data words from its index on, read by HDSectorAir. None
-				 * with -air 0, as none with tomb5.hd_air 0. */
+				 * with -air 0, as none with tomb5.hd_air 0; the hulls with
+				 * -air 2, as with tomb5.hd_air 2. */
+				HDRenderSetAirHulls(g_air_option == 2 ? 1 : 0);
+
 				if (g_air_option)
 				{
 					LARGE_INTEGER from, to, rate;
@@ -10380,6 +10625,25 @@ static int ProbeMain(int argc, char** argv)
 					if (n > 0)
 						HDRenderSetRoomAir(&g_air_built[0], n,
 							&g_air_links_built[0]);
+
+					/* And the rooms under the sky with the flipmap twins,
+					 * as BuildRoomCarry hands them over. */
+					static std::vector<unsigned char> sky;
+					static std::vector<short> twin;
+
+					sky.assign((size_t)n, 0);
+					twin.assign((size_t)n, -1);
+
+					for (int r = 0; r < n; r++)
+					{
+						sky[(size_t)r] = (level.rooms()[(size_t)r].flags &
+							0x8) ? 1 : 0;
+						twin[(size_t)r] =
+							(short)level.rooms()[(size_t)r].altRoom;
+					}
+
+					if (n > 0)
+						HDRenderSetCarryHosts(&sky[0], &twin[0], n);
 				}
 
 				/* And the intruders' classic faces, as BuildPairFaces hands
@@ -10755,6 +11019,36 @@ static int ProbeMain(int argc, char** argv)
 			(int)claimed.size(), bound, unbound, band,
 			(int)(g_air_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
 			airTris, airGroups, airPairs, airBoxed, g_air_option);
+
+		// The engine's HDLOG carry lines (ReportRoomCarry), from the build.
+		{
+			int carryTris = 0;
+
+			for (int i = 0; i < HDRenderCarryPairs(); i++)
+			{
+				int group = -1, host = -1, n = 0;
+
+				if (!HDRenderCarryPair(i, &group, &host, &n))
+					continue;
+
+				carryTris += n;
+				printf("carry: host=%d group=%d tris=%d\n", host, group, n);
+			}
+
+			printf("carry: pairs=%d tris=%d air=%d\n", HDRenderCarryPairs(),
+				carryTris, g_air_option);
+		}
+
+		// And its HDLOG hull lines (ReportRoomIntrusions), with -air 2.
+		for (int g = 0; g_air_option == 2 && g < HDRenderGroupCount(); g++)
+		{
+			int air = 0, covered = 0;
+			const bool hull = HDRenderGroupHull(g, &air, &covered);
+
+			if (air)
+				printf("hull: group=%d air_tris=%d host_art=%d hull=%d\n", g,
+					air, covered, hull ? 1 : 0);
+		}
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 		{

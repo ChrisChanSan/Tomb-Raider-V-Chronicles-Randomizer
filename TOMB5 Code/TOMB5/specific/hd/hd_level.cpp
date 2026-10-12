@@ -3637,7 +3637,8 @@ static void BuildRoomIntrusions()
  * off, no room has air for the renderer to ask, no triangle stands in
  * unlinked air, and every piece and every answer is the box's alone, as
  * before the air was asked. `g_air_on` is what this level took, for the
- * level's line. */
+ * level's line: 0, 1, or 2, which hands the renderer the hulls too
+ * (HDRenderSetAirHulls). */
 static std::vector<HDRoomAir> g_room_air;
 static std::vector<float> g_room_air_sectors;
 static std::vector<unsigned char> g_room_links;
@@ -3646,7 +3647,8 @@ static int g_air_on = 0;
 
 static void BuildRoomAir()
 {
-	g_air_on = tomb5.hd_air ? 1 : 0;
+	g_air_on = tomb5.hd_air <= 2 ? (int)tomb5.hd_air : 1;
+	HDRenderSetAirHulls(g_air_on == 2 ? 1 : 0);
 
 	if (!g_air_on)
 	{
@@ -3763,6 +3765,79 @@ static void BuildRoomAir()
 			&g_room_links[0]);
 	else
 		HDRenderSetRoomAir(0, 0, 0);
+}
+
+/* The carried art (HDCarryBoxHolds in hd_render.h): the rooms under the sky
+ * and the flipmap twins handed to the build, and after it, per room under
+ * the sky, the rooms whose art the build found standing in it - what
+ * HDRoomCarries answers the room walk. Only with tomb5.hd_air on: with it
+ * off the walk is the one before the air rule, room for room. */
+static std::vector<unsigned char> g_carry_sky;
+static std::vector<short> g_carry_twin;
+static std::vector<std::vector<short> > g_room_carry;
+
+static void BuildRoomCarry()
+{
+	g_carry_sky.clear();
+	g_carry_twin.clear();
+	g_room_carry.clear();
+
+	if (!g_air_on || number_rooms <= 0)
+	{
+		HDRenderSetCarryHosts(0, 0, 0);
+		return;
+	}
+
+	g_carry_sky.resize((size_t)number_rooms);
+	g_carry_twin.resize((size_t)number_rooms);
+
+	for (int i = 0; i < number_rooms; i++)
+	{
+		g_carry_sky[(size_t)i] = (room[i].flags & ROOM_OUTSIDE) ? 1 : 0;
+		g_carry_twin[(size_t)i] = room[i].flipped_room;
+	}
+
+	HDRenderSetCarryHosts(&g_carry_sky[0], &g_carry_twin[0], number_rooms);
+}
+
+/* HDLOG carry: what the build found, read back before the borrowed lists
+ * go back - one line per (host, group) pair and the level's total. Behind
+ * -log for the lines; the table is kept either way.
+ *
+ *   host    a room under the sky, as ROOMLIST prints rooms
+ *   group   the room whose art stands in it, taken in with it
+ *   tris    that art's triangles, all three passes together */
+static void ReportRoomCarry()
+{
+	g_room_carry.assign((size_t)(number_rooms > 0 ? number_rooms : 0),
+		std::vector<short>());
+
+	int tris = 0;
+	const int pairs = HDRenderCarryPairs();
+
+	for (int i = 0; i < pairs; i++)
+	{
+		int group = -1, host = -1, n = 0;
+
+		if (!HDRenderCarryPair(i, &group, &host, &n) || host < 0 ||
+			host >= number_rooms || group < 0 || group >= number_rooms)
+			continue;
+
+		g_room_carry[(size_t)host].push_back((short)group);
+		tris += n;
+
+		if (gLogEnabled)
+			Log("HDLOG carry level=%s host=%d group=%d tris=%d", g_stem, host,
+				group, n);
+	}
+
+	if (gLogEnabled)
+		Log("HDLOG carry level=%s pairs=%d tris=%d air=%d", g_stem, pairs,
+			tris, g_air_on);
+
+	HDRenderSetCarryHosts(0, 0, 0);
+	g_carry_sky.clear();
+	g_carry_twin.clear();
 }
 
 /* The classic faces the intruding art is held against.
@@ -4368,7 +4443,8 @@ static void ReportRoomIntrusions()
 	 *               the art drawn only inside its own room's window, but
 	 *               what a stand range or a static's box takes
 	 *   air         tomb5.hd_air as the level took it: 1 the air asked,
-	 *               0 not asked, every air_ field 0 */
+	 *               2 the hulls' too (HDLOG hull below), 0 not asked,
+	 *               every air_ field 0 */
 	int airTris = 0;
 	int airGroups = 0;
 	int airBoxed = 0;
@@ -4403,6 +4479,22 @@ static void ReportRoomIntrusions()
 			if (HDRenderAirPair(i, &group, &host, &here))
 				Log("HDLOG unlinked level=%s group=%d host=%d tris=%d",
 					g_stem, group, host, here);
+		}
+
+	/* HDLOG hull, with tomb5.hd_air 2: one line per group whose art in
+	 * unlinked air no entry's box holds - `air_tris` those triangles,
+	 * `host_art` those standing on their host's own art, `hull` 1 when
+	 * that is more than half and the art is held to the group's own
+	 * window (MarkAirHulls in hd_render.cpp). Behind -log. */
+	if (gLogEnabled && g_air_on == 2)
+		for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
+		{
+			int air = 0, covered = 0;
+			const bool hull = HDRenderGroupHull(g, &air, &covered);
+
+			if (air)
+				Log("HDLOG hull level=%s group=%d air_tris=%d host_art=%d "
+					"hull=%d", g_stem, g, air, covered, hull ? 1 : 0);
 		}
 
 	// The lists were only borrowed for the length of the build.
@@ -5488,6 +5580,7 @@ static void HDLevelBuildHD()
 	BuildRoomIntrusions();		// the same contract
 	lap(LOAD_INTR);
 	BuildRoomAir();			// and the rooms' air, the same contract
+	BuildRoomCarry();		// and the rooms under the sky
 	lap(LOAD_AIR);
 	BuildPairFaces();		// and its faces, the same contract
 	lap(LOAD_PAIRS);
@@ -5546,6 +5639,8 @@ static void HDLevelBuildHD()
 	 * standing inside another room, and how much. It reads the counts the
 	 * build left behind and gives the borrowed list back. */
 	ReportRoomIntrusions();
+	// And the art the rooms under the sky carry (HDRoomCarries).
+	ReportRoomCarry();
 	// And the same for the openings. Before the room lines below, so the log
 	// reads in the order the build ran.
 	ReportRoomCuts();
@@ -6517,6 +6612,21 @@ bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount)
 			return true;
 
 	return false;
+}
+
+/* The rooms a room under the sky carries (hd_level.h), out of the list the
+ * build made of the renderer's carry pairs. */
+int HDRoomCarries(int roomIndex, const short** rooms)
+{
+	*rooms = 0;
+
+	if (!g_level_active || roomIndex < 0 ||
+		roomIndex >= (int)g_room_carry.size() ||
+		g_room_carry[(size_t)roomIndex].empty())
+		return 0;
+
+	*rooms = &g_room_carry[(size_t)roomIndex][0];
+	return (int)g_room_carry[(size_t)roomIndex].size();
 }
 
 /* The one question the room walk asks of the HD path. g_level_active is

@@ -1936,32 +1936,25 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * the weight waterAdd.w is already zero, because the vertex half
 	 * multiplied it by gMotion.w.
 	 *
-	 * The plain variant projects it by the face (CausticFace), so a wall
-	 * under the water gets the net and not streaks, and its footprint is
-	 * the pixel's step in all three axes, which on a floor is the step in
-	 * x and z it always was. The gloss variant keeps the horizontal plane:
-	 * it stands at 502 of the 512 slots and draws the sheen ranges, the
-	 * polished floors. */
-#ifdef HD_GLOSS
-	const float2 footX = ddx(input.roomPos.xz);
-	const float2 footY = ddy(input.roomPos.xz);
-#else
+	 * Both variants project it by the face (CausticFace), so a wall under
+	 * the water gets the net and not streaks, and its footprint is the
+	 * pixel's step in all three axes, which on a floor is the step in x and
+	 * z. The gloss variant draws the sheen ranges, and a range with a sheen
+	 * is not only a polished floor: the riveted walls of JOBY2's rain basin
+	 * carry one, and with the horizontal plane alone their part under the
+	 * water read the net along one axis - vertical streaks under the
+	 * waterline wherever the eye is above the water (under it the plain
+	 * variant draws them). 507 of the 512 slots. */
 	const float3 footX = ddx(input.roomPos);
 	const float3 footY = ddy(input.roomPos);
-#endif
 	const float sharp = saturate(2.0f - sqrt(max(dot(footX, footX),
 		dot(footY, footY))) * (1.0f / HD_CAUSTIC_FOOT));
 
 	if (input.waterAdd.w > 0.002f)
 	{
 		float3 world = input.roomPos + gRoomOrigin.xyz;
-#ifdef HD_GLOSS
-		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
-			CausticOf(world.xz, gAdd.y));
-#else
 		c *= max(0.0f, 1.0f + HD_CAUSTIC_FLOOR * input.waterAdd.w * sharp *
 			CausticFace(world, footX, footY, gAdd.y));
-#endif
 	}
 
 	/* texel * multiply + add - the shape of the fixed function pipeline the
@@ -2593,14 +2586,71 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 #endif
 #endif
 
-	const float T = exp(-path * gWaterDeep.w);
-	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb,
-		saturate(1.0f - T));
+	/* The bent place first, because its path decides the water this pixel
+	 * shows. With the depth texture the bent place passes the guard (over
+	 * RefractMove) or is refused - from below where the frame there lies
+	 * nearer than the sheet, from above where it lies less than
+	 * HD_WATER_GUARD under the surface at rest: a leg, a pillar or a rat in
+	 * the water is not pulled into the floor beside it; the pixel's own
+	 * place is read instead.
+	 *
+	 * Seen from above, a bent place that lies deeper than this pixel's own
+	 * is seen through the longer of the two paths, `far`. The copy holds
+	 * the frame as it was drawn - lit, hazed by the fog bulbs, under no
+	 * water yet - and a pixel on a body just under the surface whose bent
+	 * place falls on the deep floor beside it otherwise shows that floor
+	 * through its own few units of water: a rim of the floor's raw colour
+	 * round the body, violet in ANDREA1's pool room 32, whose fog bulb
+	 * (191, 143, 239) stands on its floor. With the longer path the rim is
+	 * the water the floor's own pixels show. A bent place nearer the
+	 * surface keeps this pixel's path; without the copy nothing is bent and
+	 * the path is the pixel's own. */
+	float bend = 1.0f - above * exp(-path * gWaterDeep.w);
+	float refused = 0.0f;
+	float2 move = 0.0f;
+	float far = path;
+
+	{
+		move = RefractMove(slope, bend, dx, dy);
+#ifdef HD_WATER_UNDER
+		/* Seen from below, outside the window (see "seen from below")
+		 * water turns the light back and nothing of the world above comes
+		 * through; the sheet shows it there all the same, under its veil,
+		 * so the waves keep their shapes. Bent as hard as inside the
+		 * window, the bottom of that picture - walls and stairs standing
+		 * on the far bank - swung by the 4 % of the screen RefractMove
+		 * allows in wide bands: near the surface every place outside the
+		 * window lies at that bound (JOBY2's rain basin, the eye 8 to 32
+		 * units under the surface: a median 31.7 pixels of 960). Outside
+		 * the window the move is a quarter, inside it whole, over the
+		 * window's own edge. A quarter is a free choice: the waves still
+		 * move the picture. */
+		move *= lerp(0.25f, 1.0f, smoothstep(0.61f, 0.71f, nv));
+#endif
+
+#ifdef HD_WATER_DEPTH
+		const float zAt = SceneZ(ScreenClamp(uv + move));
+		// The path there, along this pixel's own ray.
+		const float pathAt = max(0.0f, zAt - input.viewZ.x) *
+			length(input.eye.xyz) / max(input.viewZ.x, 1.0f);
+
+		refused = above > 0.5f ?
+			(pathAt * abs(V.y) - lift < HD_WATER_GUARD ? 1.0f : 0.0f) :
+			(zAt < input.viewZ.x ? 1.0f : 0.0f);
+		move *= above > 0.5f ? (1.0f - exp(-min(path, pathAt) *
+			gWaterDeep.w)) / max(bend, 1.0e-3f) : 1.0f;
+		move *= 1.0f - refused;
+		far = max(path, pathAt * above * (1.0f - refused) * gWaterStage.x);
+#endif
+	}
+
+	// 1 - T of an exp of a path of 0 or more lies in 0..1 by itself.
+	const float T = exp(-far * gWaterDeep.w);
+	const float3 scatter = lerp(gWaterBase.rgb, gWaterDeep.rgb, 1.0f - T);
 
 	float3 col = F * refl + (1.0f - F) * (1.0f - T) * scatter + spec * above;
 	float a = 1.0f - (1.0f - F) * T;
-	float3 through = (1.0f - F) * exp(-path * gWaterAbsorb.rgb);
-	float bend = 1.0f - T;
+	float3 through = (1.0f - F) * exp(-far * gWaterAbsorb.rgb);
 
 	/* Seen from below: inside the critical angle (about 49 degrees off the
 	 * vertical, N.V above 0.66) the window, outside it the rest of the
@@ -2621,7 +2671,6 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		a = lerp(0.35f, 0.1f, window);
 		col = a * lerp(gWaterBase.rgb, refl, window);
 		through = 1.0f - a;
-		bend = 1.0f;
 	}
 
 #ifdef HD_WATER_FOAM
@@ -2799,38 +2848,17 @@ float4 WaterPS(WATER_OUT input, float2 vpos : VPOS) : COLOR0
 		(1.0f - exp(-under * gUnderSigma.w)) *
 		max(1.0f + gUnderLight.w * V.y, 0.0f));
 #else
-	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
-		(2.0f / 255.0f);
+	/* Nearer than the fog's start the term is negative, and the saturate
+	 * holds the share at 1 there. */
+	const float fog = (input.viewZ.x - gFog.x) * gFog.y * (2.0f / 255.0f);
 
 	col *= saturate(1.0f - fog / max(gWaterZen.w, 0.05f));
 #endif
 
-	/* With the copy: the floor read at the bent place and added with its
-	 * share, the pixel written whole. With the depth texture the bent place
-	 * passes the guard (over RefractMove) or is refused - from below where
-	 * the frame there lies nearer than the sheet, from above where it lies
-	 * less than HD_WATER_GUARD under the surface at rest: a leg, a pillar or
-	 * a rat in the water is not pulled into the floor beside it; the
-	 * pixel's own place is read instead. */
-	float refused = 0.0f;
-
+	/* With the copy: the floor read at the bent place (see "the bent place
+	 * first" above) and added with its share, the pixel written whole. */
 	if (gWaterStage.x > 0.5f)
 	{
-		float2 move = RefractMove(slope, bend, dx, dy);
-
-#ifdef HD_WATER_DEPTH
-		const float zAt = SceneZ(ScreenClamp(uv + move));
-		// The path there, along this pixel's own ray.
-		const float pathAt = max(0.0f, zAt - input.viewZ.x) *
-			length(input.eye.xyz) / max(input.viewZ.x, 1.0f);
-
-		refused = above > 0.5f ?
-			(pathAt * abs(V.y) - lift < HD_WATER_GUARD ? 1.0f : 0.0f) :
-			(zAt < input.viewZ.x ? 1.0f : 0.0f);
-		move *= above > 0.5f ? (1.0f - exp(-min(path, pathAt) *
-			gWaterDeep.w)) / max(bend, 1.0e-3f) : 1.0f;
-		move *= 1.0f - refused;
-#endif
 		col += through * tex2Dlod(sWaterCopy,
 			float4(ScreenClamp(uv + move), 0.0f, 0.0f)).rgb;
 		a = 1.0f;

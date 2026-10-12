@@ -187,7 +187,9 @@ no room's air, and the picture is the box's alone, byte for byte the one before 
 air was asked; 2 holds a hull's art in unlinked air that no box holds to its own
 window too, and prints the engine's `hull: group= air_tris= host_art= hull=` lines;
 with 1 and 2 `-walk` takes in the rooms whose art stands under a listed room's sky
-(the engine's CarryArt) and prints `-walk: carry host= group= tris=` per pair, and
+(the engine's CarryArt) and prints `-walk: carry host= group= tris= copies=` per
+pair, `copies` the triangles another group has at the same place (a pair with more
+than half of them is not carried), and
 the build prints the engine's `carry:` lines; `-classicclip` draws each
 `-classicroom` (and `-classicmark`) room's faces inside its window of `-roomwin`
 only, none without one, as the classic path draws a room;

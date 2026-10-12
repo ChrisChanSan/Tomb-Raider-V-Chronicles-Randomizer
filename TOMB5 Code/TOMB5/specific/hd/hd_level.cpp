@@ -4958,6 +4958,43 @@ static void UpdateDestructibles()
 	}
 }
 
+/* A fog bulb the level puts in a water room a sheet lies over
+ * (HDRenderWaterUnderOn): ANDREA1 has seven, ANDREA2 sixteen, no other
+ * level any (the classic .TRC files' room data). It is the classic path's
+ * stand-in for the murk of that water, and with sheets the water's own look
+ * takes its place on both sides of the surface - under the water the under
+ * look (HDFrameDraw drops every bulb then), over it the sheet's extinction
+ * along the path through the water. Handed to the frame over the water, its
+ * haze lay on whatever the eye ray reached inside its sphere and the sheet
+ * then passed it on as the frame had it: a body swimming just under the
+ * surface - a few units of water in front of it - kept the haze whole, pale
+ * against the dark water round it (ANDREA2's canal: Lara's excess over the
+ * water 13, 18, 15, the canal bulbs' own colour 207, 255, 223 in the same
+ * ratio). Found by the bulb's place: LevelFogBulbs and ActiveFogBulbs copy
+ * it from the room's list unchanged (drawroom.cpp). */
+static bool BulbUnderSheet(const FOGBULB_STRUCT& b)
+{
+	if (!HDRenderWaterSheetsBuilt())
+		return false;
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO& ri = room[r];
+
+		if (!(ri.flags & ROOM_UNDERWATER) || ri.nFogBulbs <= 0 ||
+			!ri.fogbulb || !HDRenderWaterUnderOn(r))
+			continue;
+
+		for (int k = 0; k < ri.nFogBulbs; k++)
+			if (ri.fogbulb[k].px == b.world.x &&
+				ri.fogbulb[k].py == b.world.y &&
+				ri.fogbulb[k].pz == b.world.z)
+				return true;
+	}
+
+	return false;
+}
+
 /* What the whole frame shares. Every one of these is the engine's own global,
  * read where the classic path reads it: the fog bulb list that draw.cpp built
  * behind `if (tomb5.fog)` - so with fog off the count is 0 and the HD rooms
@@ -5008,7 +5045,7 @@ static void FillFrameLighting(HDFrameLighting& out, HDFogBulb* bulbs)
 	{
 		const FOGBULB_STRUCT& in = ActiveFogBulbs[i];
 
-		if (!in.visible)
+		if (!in.visible || BulbUnderSheet(in))
 			continue;
 
 		// Counted to the end rather than left at the cap: "one bulb was

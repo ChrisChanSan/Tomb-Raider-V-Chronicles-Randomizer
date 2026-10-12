@@ -7687,13 +7687,26 @@ void HDFrameDraw()
 	 * before the camera moves, a logic tick behind the room the frame is
 	 * drawn from, and a fly-by moves the camera without setting it. The
 	 * screen wobble (FillFrameLighting) reads it, as the classic faces of
-	 * the same frame do. */
-	const short eye_room = camera.pos.room_number;
+	 * the same frame do.
+	 *
+	 * The room asked is the one the drawn eye stands in (InterpEyeRoom), the
+	 * room the frame's portal walk starts from, and not the logic room. On a
+	 * frame blended between two ticks the eye is drawn between the two tick
+	 * eyes while the logic room is already the newer one's: at a dive the
+	 * eye still stands over the surface while the room says water, and on
+	 * the way out it is still under while the room says air - one frame of
+	 * the other look, the under look over the open air or the classic fog
+	 * bulbs' pale haze round an eye in the water. In the camera's swims of
+	 * an ANDREA1 run (16 tick pairs crossing the surface) 11 of the 16
+	 * frames a 60 Hz draw blends between them, and 32 of 48 at 120 Hz, put
+	 * the eye on the other side of the surface from the logic room. On
+	 * every frame not blended InterpEyeRoom answers the logic room. */
+	const short eye_room = InterpEyeRoom(camera.pos.room_number);
 	const bool eye_wet = eye_room >= 0 && eye_room < number_rooms &&
 		(room[eye_room].flags & ROOM_UNDERWATER) != 0;
 
 	if (!HDObjectRingFrame() && eye_wet && g_frame_count &&
-		HDRenderWaterUnderOn(camera.pos.room_number))
+		HDRenderWaterUnderOn(eye_room))
 	{
 		const D3DMATRIX& m = g_frame[0].world;
 		const float len = sqrtf(m._21 * m._21 + m._22 * m._22 +
@@ -7702,7 +7715,7 @@ void HDFrameDraw()
 		if (len > 0.0f)
 		{
 			frame.under = 1;
-			frame.underRoom = camera.pos.room_number;
+			frame.underRoom = eye_room;
 			frame.underEyeY = (float)camera.pos.y;
 			frame.underUp[0] = -m._21 / len;
 			frame.underUp[1] = -m._22 / len;
@@ -7717,8 +7730,10 @@ void HDFrameDraw()
 	 *   WATERLOG level=<stem> undergate room=<n> flag=<0|1> cam=<0|1>
 	 *            on=<0|1> deep=<0|1>
 	 *
-	 * room the camera's room; flag its ROOM_UNDERWATER, the test above (1
-	 * on this line); cam camera.underwater - 0 throughout JOBY4, and 0 as
+	 * room the room the drawn eye stands in, which the test above asks (the
+	 * camera's logic room on a frame not blended); flag its ROOM_UNDERWATER,
+	 * the test above (1 on this line); cam camera.underwater - 0 throughout
+	 * JOBY4, and 0 as
 	 * well on a frame the camera has just swum into, a tick behind; on 1
 	 * when this frame is drawn under the water; deep 1 when the level takes
 	 * the deep look (the level line's under_deep). on=0 with flag=1: the

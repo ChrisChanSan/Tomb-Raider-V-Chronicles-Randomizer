@@ -119,6 +119,12 @@ if errorlevel 1 exit /b 1
  /Fh "%SHADERDIR%\hd_room_card_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The wet floor a breaking fish tank leaves: a file of its own, drawn with
+rem the cards' vertex shader (hd_wet.hlsl, hd_render.cpp "the wet floor").
+"%FXC%" /nologo /T ps_3_0 /E WetPS /O3 /Vn kHDWetPS ^
+ /Fh "%SHADERDIR%\hd_wet_ps.inc" "%SHADERDIR%\hd_wet.hlsl"
+if errorlevel 1 exit /b 1
+
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
 
@@ -189,6 +195,8 @@ call :stamp hd_room hd_room_card_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_card_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_wet hd_wet_ps.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_ps.inc
@@ -219,6 +227,7 @@ call :size "%SHADERDIR%\hd_room_water_depth_ps.inc"
 call :size "%SHADERDIR%\hd_room_water_view_ps.inc"
 call :size "%SHADERDIR%\hd_room_card_vs.inc"
 call :size "%SHADERDIR%\hd_room_card_ps.inc"
+call :size "%SHADERDIR%\hd_wet_ps.inc"
 exit /b 0
 
 :stamp

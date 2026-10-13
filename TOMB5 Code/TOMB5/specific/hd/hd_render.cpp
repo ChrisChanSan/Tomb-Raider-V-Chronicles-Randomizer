@@ -44,6 +44,7 @@
 #include "hd_shader/hd_room_water_foam_depth_ps.inc"
 #include "hd_shader/hd_room_card_vs.inc"
 #include "hd_shader/hd_room_card_ps.inc"
+#include "hd_shader/hd_wet_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -64,6 +65,7 @@
 #include <cstdio>
 #include <cstring>
 #include <map>
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -1727,6 +1729,10 @@ namespace
 	 * is taken from the classic path, which draws its own. */
 	IDirect3DVertexShader9* g_card_vs = 0;
 	IDirect3DPixelShader9* g_card_ps = 0;
+	/* The wet floor's pixel half (hd_wet.hlsl, WetPS; "the wet floor"
+	 * below), drawn with CardVS. Null when the device refused it: then no
+	 * floor is drawn wet. */
+	IDirect3DPixelShader9* g_wet_ps = 0;
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -4173,6 +4179,10 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_card_ps)))
 		g_card_ps = 0;
 
+	// Nor is the wet floor's: without it no floor is drawn wet.
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDWetPS, &g_wet_ps)))
+		g_wet_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -4336,6 +4346,7 @@ void HDRenderShutdown()
 	}
 	if (g_card_vs) { g_card_vs->Release(); g_card_vs = 0; }
 	if (g_card_ps) { g_card_ps->Release(); g_card_ps = 0; }
+	if (g_wet_ps) { g_wet_ps->Release(); g_wet_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -11123,6 +11134,99 @@ namespace
 		return -1;
 	}
 
+	/* The wet floor.
+	 *
+	 * When a fish tank breaks, its water runs out over the floor in front
+	 * of it, and the floor stays wet: darker, and a mirror at a grazing
+	 * view (hd_wet.hlsl). Which floor: the classic squares the water would
+	 * reach, out of the floor data of every room (HDWaterRoom). It lands
+	 * on the squares under the dome's foot - the apron's footprint on the
+	 * floor in the tank's frame, between the glass and the foot, as wide
+	 * as the foot (HDTankShapeOf) - and runs on from square to square, to
+	 * a flat square at the same height or one step lower (kWetStep, one
+	 * click: water runs down a step and never up one, nor down a drop it
+	 * would fall into another room through), never behind the glass, into
+	 * the tank. A room with a higher dry part keeps it dry; the run goes
+	 * through doors and into every room whose floor goes on level, which
+	 * is the classic floor's own answer to where water on it would run.
+	 *
+	 * Drawn as a layer kWetLift over the floor - a grid of points every
+	 * 256 units, five by five a square, shared between squares - once a
+	 * frame over the opaque frame, which it mirrors (HDRenderWaterWetDraw
+	 * takes the frame's copy). Each point keeps its way: how far the water runs
+	 * from the glass to it, through the grid (the shortest way along
+	 * neighbours, diagonals at their own length, a step down at no cost),
+	 * pushed back by up to kWetRagged out of a hash of its place; and how
+	 * deep the water stands there, a damp place mirroring kWetDamp of a
+	 * pool, the rest out of a second hash. How wet it is at a moment is
+	 * HDWetAt over HDWetFront (hd_splash_math.h): under the dome as the
+	 * apron comes out, past it at a shallow flood's speed. Once the tank
+	 * is shot the floor stays wet; a tank that is first seen shot (a
+	 * loaded game) is wet all over at once.
+	 *
+	 * The numbers. kWetLift, 4 units (about 1 cm), stays over the floor in
+	 * the depth buffer to the far plane (24 bits over 20 to 20,480 units
+	 * resolve about 1.2 units at 20,000). Where the frame lies more than
+	 * kWetHole under the layer - a drain, a gap of the art - the water
+	 * fades out over the next kWetHole. kWetF0 is water's, as the sheets'.
+	 * kWetWalls and kWetCap are the polished walls' own (hd_room.hlsl,
+	 * HD_GLOSS_ENV and HD_GLOSS_CAP). The lamps' highlight is sharper than
+	 * polished marble's (exponent 64) and as much brighter at its peak as
+	 * its lobe is narrower: kWetHighlight is the textbook normalisation of
+	 * the Blinn-Phong lobe, (n + 8) / 8, at kWetPower. The mirror's march
+	 * takes HD_WET_STEPS (12) steps from kWetFirstStep, each kWetGrowth
+	 * times the last: 32 units past the floor's own depth step, out to
+	 * about 8,200 units, eight squares. kWetDark, kWetPower, kWetDamp,
+	 * kWetHole and the march are free choices, set by eye on the round's
+	 * RoomProbe pictures. */
+	const float kWetLift = 4.0f;		// units
+	const float kWetHole = 32.0f;		// units
+	const int kWetStep = 256;		// units
+	const float kWetDark = 0.3f;
+	const float kWetF0 = 0.02f;
+	const float kWetWalls = 0.35f;
+	const float kWetPower = 128.0f;
+	const float kWetHighlight = (kWetPower + 8.0f) / 8.0f;
+	const float kWetCap = 0.75f;
+	const float kWetDamp = 0.5f;
+	const float kWetFirstStep = 32.0f;	// units
+	const float kWetGrowth = 1.5f;
+
+	struct WetPoint
+	{
+		float x, y, z;		// world
+		float way;		// units from the glass along the water's way
+		float puddle;		// the share of the mirror there
+		float light;		// its room's light, for the fog
+		float field[3];		// the light field's texture coordinate
+	};
+
+	// A floor's numbers, for its SPLASHLOG line (HDRenderWaterWetLine).
+	struct WetInfo
+	{
+		int item;		// the FISHTANK
+		int squares;		// wet squares
+		int vertices, triangles;
+		int rooms[16];		// the rooms whose floor they are, -1 past them
+		int heights;		// distinct floor heights among them
+		float reach;		// the dome's foot from the glass, units
+		float furthest;		// the furthest point along the water's way
+	};
+
+	struct WetFloor
+	{
+		WetInfo info;
+		std::vector<WetPoint> points;
+		std::vector<unsigned short> tris;
+		int state;		// 0 whole, 1 pouring, 2 shot and done
+		bool started;		// born is known
+		double born;		// on the frame clock
+	};
+
+	std::vector<HDWaterWetTank> g_wet_in;
+	std::vector<WetFloor> g_wet;
+	float g_wet_fixed = -1.0f;
+
 	/* The creatures' mark: whether this frame marked anything (the sheets
 	 * then draw their second, line-less pass) and the stencil states the
 	 * bracket found, put back by HDRenderWaterMarkEnd. */
@@ -11246,6 +11350,7 @@ namespace
 		g_film_body.clear();
 		g_film_wet.clear();
 		g_film_first = -1;
+		g_wet.clear();
 		g_splash_stats = HDRenderSplashStats();
 		g_wfeet.clear();
 		g_wsegs.clear();
@@ -11955,6 +12060,346 @@ namespace
 
 		for (int k = 0; k < 3; k++)
 			out[k] = (float)(sum[k] / (double)s.size());
+	}
+
+	/* The wet floor of every tank handed in (see "the wet floor"), out of
+	 * the classic floor of every room: the squares, then the points and
+	 * their way from the glass. */
+	void build_wet_floors(const HDWaterRoom* rooms, int count)
+	{
+		g_wet.clear();
+
+		if (!g_tank_shape.ok || g_wet_in.empty())
+			return;
+
+		// Every flat floor of every room by world square: height and room.
+		struct Floor
+		{
+			int y, room;
+		};
+
+		const auto square = [](int sx, int sz)
+		{
+			return ((unsigned long long)(unsigned int)sx << 32) |
+				(unsigned long long)(unsigned int)sz;
+		};
+		// A square or a point at one floor's height.
+		const auto level = [](int sx, int sz, int y)
+		{
+			return ((unsigned long long)(sx & 0xFFFF) << 48) |
+				((unsigned long long)(sz & 0xFFFF) << 32) |
+				(unsigned long long)(unsigned int)y;
+		};
+		std::unordered_map<unsigned long long, std::vector<Floor> > floors;
+
+		for (int r = 0; rooms && r < count; r++)
+		{
+			const HDWaterRoom& w = rooms[r];
+
+			for (int sx = 0; w.floor && sx < w.sizeX; sx++)
+				for (int sz = 0; sz < w.sizeZ; sz++)
+				{
+					const int at = sx * w.sizeZ + sz;
+
+					// A wall (NO_HEIGHT), or a floor that slopes.
+					if (w.floor[at] == -127 || (w.slope && w.slope[at * 4]))
+						continue;
+
+					floors[square((w.originX >> 10) + sx,
+						(w.originZ >> 10) + sz)].push_back(
+						{ (int)w.floor[at] * 256, r });
+				}
+		}
+
+		const HDTankShape& sh = g_tank_shape;
+
+		for (const HDWaterWetTank& t : g_wet_in)
+		{
+			const float turn = (float)t.yRot * (6.2831853f / 65536.0f);
+			const float c = cosf(turn), s = sinf(turn);
+
+			// A world place in the tank's frame (x along the glass, z out).
+			const auto local = [&](float wx, float wz, float* lx, float* lz)
+			{
+				const float dx = wx - (float)t.x, dz = wz - (float)t.z;
+
+				*lx = dx * c - dz * s;
+				*lz = dx * s + dz * c;
+			};
+			const auto inside = [&](float lx, float lz)
+			{
+				return lx >= sh.footX0 && lx <= sh.footX1 &&
+					lz >= sh.glassZ && lz <= sh.footZ;
+			};
+			const auto behind = [&](int sx, int sz)
+			{
+				float lx, lz;
+
+				local((float)(sx * 1024 + 512), (float)(sz * 1024 + 512),
+					&lx, &lz);
+				return lz < sh.glassZ && lx >= sh.footX0 && lx <= sh.footX1;
+			};
+
+			/* The squares under the dome's foot, at the floor the tank
+			 * stands on or a step either side of it. */
+			struct Wet
+			{
+				int sx, sz, y, room;
+			};
+
+			std::vector<Wet> wet;
+			std::unordered_set<unsigned long long> seen;
+			const int tx = t.x >> 10, tz = t.z >> 10;
+			const int span = 1 + (int)((fabsf(sh.footX0) + fabsf(sh.footX1) +
+				fabsf(sh.footZ)) / 1024.0f);
+
+			for (int sx = tx - span; sx <= tx + span; sx++)
+				for (int sz = tz - span; sz <= tz + span; sz++)
+				{
+					bool under = false;
+
+					for (int k = 0; k < 25 && !under; k++)
+					{
+						float lx, lz;
+
+						local((float)(sx * 1024 + (k % 5) * 256),
+							(float)(sz * 1024 + (k / 5) * 256), &lx, &lz);
+						under = inside(lx, lz);
+					}
+
+					const auto at = floors.find(square(sx, sz));
+
+					if (!under || behind(sx, sz) || at == floors.end())
+						continue;
+
+					for (const Floor& f : at->second)
+						if (abs(f.y - t.y) <= kWetStep &&
+							seen.insert(level(sx, sz, f.y)).second)
+							wet.push_back({ sx, sz, f.y, f.room });
+				}
+
+			// On over the floor: level, or one step down.
+			for (size_t i = 0; i < wet.size(); i++)
+			{
+				static const int step[4][2] =
+				{
+					{ 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }
+				};
+
+				for (int k = 0; k < 4; k++)
+				{
+					const Wet from = wet[i];
+					const int nx = from.sx + step[k][0];
+					const int nz = from.sz + step[k][1];
+					const auto at = floors.find(square(nx, nz));
+
+					if (at == floors.end() || behind(nx, nz))
+						continue;
+
+					for (const Floor& f : at->second)
+						if (f.y >= from.y && f.y - from.y <= kWetStep &&
+							seen.insert(level(nx, nz, f.y)).second)
+							wet.push_back({ nx, nz, f.y, f.room });
+				}
+			}
+
+			if (wet.empty())
+				continue;
+
+			// The points, five by five a square, shared.
+			WetFloor w = {};
+			std::unordered_map<unsigned long long, int> pointAt;
+			std::unordered_map<unsigned long long, std::vector<int> > column;
+			std::vector<std::array<int, 25> > grid;
+			std::vector<int> heights;
+
+			w.info.item = t.item;
+			w.info.reach = sh.footZ - sh.glassZ;
+
+			for (int k = 0; k < 16; k++)
+				w.info.rooms[k] = -1;
+
+			for (const Wet& q : wet)
+			{
+				std::array<int, 25> g;
+				float l[3];
+
+				group_light(q.room, l);
+
+				for (int k = 0; k < 25; k++)
+				{
+					const int px = q.sx * 4 + k % 5, pz = q.sz * 4 + k / 5;
+					const unsigned long long key = level(px, pz, q.y);
+					const auto found = pointAt.find(key);
+
+					if (found != pointAt.end())
+					{
+						g[(size_t)k] = found->second;
+						continue;
+					}
+
+					WetPoint p = {};
+
+					p.x = (float)(px * 256);
+					p.y = (float)q.y - kWetLift;
+					p.z = (float)(pz * 256);
+					p.way = 1.0e9f;
+					p.light = l[0] > l[1] ? (l[0] > l[2] ? l[0] : l[2]) :
+						(l[1] > l[2] ? l[1] : l[2]);
+
+					const unsigned int place = (unsigned int)px * 73856093u ^
+						(unsigned int)pz * 19349663u ^ (unsigned int)q.y;
+
+					p.puddle = kWetDamp + (1.0f - kWetDamp) *
+						HDCardShare(place, 2u);
+
+					for (int a = 0; a < 3; a++)
+					{
+						const float pos = a == 0 ? p.x : a == 1 ? p.y : p.z;
+						const float side = (float)g_field_grid.dims[a] *
+							HD_GLOSS_FIELD_CELL;
+
+						p.field[a] = side > 0.0f ?
+							(pos - g_field_grid.origin[a]) / side : 0.0f;
+					}
+
+					float lx, lz;
+
+					local(p.x, p.z, &lx, &lz);
+
+					if (inside(lx, lz))
+						p.way = lz - sh.glassZ;
+
+					g[(size_t)k] = (int)w.points.size();
+					pointAt[key] = g[(size_t)k];
+					column[square(px, pz)].push_back(g[(size_t)k]);
+					w.points.push_back(p);
+				}
+
+				grid.push_back(g);
+
+				// Every room whose floor this square is, for the log.
+				for (const Floor& f : floors[square(q.sx, q.sz)])
+				{
+					bool listed = f.y != q.y;
+
+					for (int k = 0; k < 16 && w.info.rooms[k] >= 0; k++)
+						listed = listed || w.info.rooms[k] == f.room;
+
+					for (int k = 0; k < 16 && !listed; k++)
+						if (w.info.rooms[k] < 0)
+						{
+							w.info.rooms[k] = f.room;
+							listed = true;
+						}
+				}
+
+				if (std::find(heights.begin(), heights.end(), q.y) ==
+					heights.end())
+					heights.push_back(q.y);
+			}
+
+			/* The way: the shortest run from the dome's footprint over the
+			 * grid - neighbours, diagonals at their own length, and a step
+			 * down between two points at one place at no cost. */
+			std::vector<std::vector<std::pair<int, float> > > next(
+				w.points.size());
+			const auto link = [&](int a, int b, float cost)
+			{
+				next[(size_t)a].push_back({ b, cost });
+				next[(size_t)b].push_back({ a, cost });
+			};
+
+			for (const std::array<int, 25>& g : grid)
+				for (int k = 0; k < 25; k++)
+				{
+					const int i = k % 5, j = k / 5;
+					const size_t at = (size_t)k;
+
+					if (i < 4)
+						link(g[at], g[at + 1], 256.0f);
+
+					if (j < 4)
+						link(g[at], g[at + 5], 256.0f);
+
+					if (i < 4 && j < 4)
+					{
+						link(g[at], g[at + 6], 362.0f);
+						link(g[at + 1], g[at + 5], 362.0f);
+					}
+				}
+
+			for (const auto& col : column)
+				for (size_t a = 0; a < col.second.size(); a++)
+					for (size_t b = a + 1; b < col.second.size(); b++)
+						link(col.second[a], col.second[b], 0.0f);
+
+			typedef std::pair<float, int> Reach;
+			std::priority_queue<Reach, std::vector<Reach>,
+				std::greater<Reach> > open;
+
+			for (size_t i = 0; i < w.points.size(); i++)
+				if (w.points[i].way < 1.0e9f)
+					open.push({ w.points[i].way, (int)i });
+
+			while (!open.empty())
+			{
+				const Reach r = open.top();
+
+				open.pop();
+
+				if (r.first > w.points[(size_t)r.second].way)
+					continue;
+
+				for (const std::pair<int, float>& e :
+					next[(size_t)r.second])
+					if (r.first + e.second < w.points[(size_t)e.first].way)
+					{
+						w.points[(size_t)e.first].way = r.first + e.second;
+						open.push({ w.points[(size_t)e.first].way, e.first });
+					}
+			}
+
+			// The ragged edge, and the triangles while the points fit.
+			for (WetPoint& p : w.points)
+			{
+				const unsigned int place =
+					(unsigned int)(int)(p.x / 256.0f) * 73856093u ^
+					(unsigned int)(int)(p.z / 256.0f) * 19349663u ^
+					(unsigned int)(int)(p.y + kWetLift);
+
+				p.way += kWetRagged * HDCardShare(place, 1u);
+				w.info.furthest = p.way > w.info.furthest ? p.way :
+					w.info.furthest;
+			}
+
+			if (w.points.size() > 65535)
+				continue;
+
+			for (const std::array<int, 25>& g : grid)
+				for (int j = 0; j < 4; j++)
+					for (int i = 0; i < 4; i++)
+					{
+						const int a = g[(size_t)(j * 5 + i)];
+						const int b = g[(size_t)(j * 5 + i + 1)];
+						const int d = g[(size_t)(j * 5 + i + 5)];
+						const int e = g[(size_t)(j * 5 + i + 6)];
+						const unsigned short tri[6] =
+						{
+							(unsigned short)a, (unsigned short)b,
+							(unsigned short)e, (unsigned short)a,
+							(unsigned short)e, (unsigned short)d
+						};
+
+						w.tris.insert(w.tris.end(), tri, tri + 6);
+					}
+
+			w.info.squares = (int)wet.size();
+			w.info.vertices = (int)w.points.size();
+			w.info.triangles = (int)w.tris.size() / 3;
+			w.info.heights = (int)heights.size();
+			g_wet.push_back(w);
+		}
 	}
 
 	/* Row i's place in the fan (see "the crests" over kWaterFan), radians
@@ -13844,6 +14289,12 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		g_wlooks.back().pixel[28 + 0] = kWaterClass[HD_WATER_CHANNEL].band;
 	}
 
+	// The tanks' wet floors (see "the wet floor"), with the sheets alone.
+	g_wet.clear();
+
+	if (sheets)
+		build_wet_floors(rooms, count);
+
 	if (!sheets || !g_device || !g_water_vs || !g_water_ps)
 		return;
 
@@ -14717,6 +15168,77 @@ bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
 	return true;
 }
 
+void HDRenderWaterWetTanks(const HDWaterWetTank* tanks, int count)
+{
+	g_wet_in.assign(tanks && count > 0 ? tanks : 0,
+		tanks && count > 0 ? tanks + count : 0);
+}
+
+void HDRenderWaterWet(int item, int state, int flags1, float age)
+{
+	const double now = (double)g_motion[2];
+
+	for (WetFloor& w : g_wet)
+	{
+		if (w.info.item != item)
+			continue;
+
+		// The clock went back: a new level or a loaded game.
+		if (w.started && w.born > now + 0.1)
+			w.started = false;
+
+		w.state = state > 0 ? state : 0;
+
+		if (state <= 0)
+			w.started = false;
+		else if (age >= 0.0f)
+		{
+			w.born = now - (double)age;
+			w.started = true;
+		}
+		else if (!w.started)
+		{
+			// Pouring: its own ticks. Done when first seen: long done.
+			w.born = state == 1 ?
+				now - (double)HDTankTicksOf(flags1) / 30.0 : now - 1.0e6;
+			w.started = true;
+		}
+	}
+}
+
+void HDRenderWaterWetFixed(float strength)
+{
+	g_wet_fixed = strength;
+}
+
+/* SPLASHLOG, a tank's wet floor, once at the level's load: the tank, the
+ * squares its water reaches, the rooms whose floor they are (the first
+ * sixteen), how many floor heights among them, the points and triangles of
+ * its grid, the dome's foot from the glass and the furthest point along
+ * the water's way (units, the ragged push included). */
+bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size)
+{
+	if (!out || !size || at < 0 || at >= (int)g_wet.size())
+		return false;
+
+	const WetInfo& w = g_wet[(size_t)at].info;
+	char rooms[128] = "";
+
+	for (int k = 0; k < 16 && w.rooms[k] >= 0; k++)
+	{
+		const size_t used = strlen(rooms);
+
+		snprintf(rooms + used, sizeof(rooms) - used, k ? ",%d" : "%d",
+			w.rooms[k]);
+	}
+
+	snprintf(out, size, "SPLASHLOG level=%s wet tank=%d squares=%d rooms=%s "
+		"heights=%d points=%d tris=%d reach=%.0f far=%.0f",
+		stem ? stem : "?", w.item, w.squares, rooms, w.heights, w.vertices,
+		w.triangles, w.reach, w.furthest);
+	return true;
+}
+
 namespace
 {
 	// Wall-clock milliseconds, and the device's queue drained to its end.
@@ -15346,6 +15868,265 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 	if (tex0) tex0->Release();
 	if (tex6) tex6->Release();
 	if (stream) stream->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+}
+
+/* The frame's wet floors (see "the wet floor"): every point of a shot
+ * tank's floor at this moment into view space, as the cards' are, and the
+ * triangles with any wet corner in one draw - CardVS and WetPS, the light
+ * field on s1 and s2, the frame's copy on s5 and its depth texture on s6.
+ * The copy is taken here, the first of the frame, so the sheets drawn
+ * after the floor read that same copy: a sheet over a wet floor - only a
+ * tank's film, while it lasts - sees the floor under it dry. */
+void HDRenderWaterWetDraw(const float* toFrame)
+{
+	const double now = (double)g_motion[2];
+
+	g_splash_stats.floor = -1;
+	g_splash_stats.floorWet = 0.0f;
+
+	if (!g_device || !g_card_vs || !g_wet_ps || !g_in_frame || !toFrame ||
+		g_wet.empty())
+		return;
+
+	// The world to view: toFrame, then the frame's view.
+	float m[16];
+
+	for (int r = 0; r < 4; r++)
+		for (int k = 0; k < 4; k++)
+			m[r * 4 + k] = toFrame[r * 4 + 0] * g_view[k] +
+				toFrame[r * 4 + 1] * g_view[4 + k] +
+				toFrame[r * 4 + 2] * g_view[8 + k] +
+				toFrame[r * 4 + 3] * g_view[12 + k];
+
+	/* The world's axes in view space, each row made a unit long: the light
+	 * field's direction and the floor's up into view space (WetPS). */
+	float axes[12] = { 0.0f };
+
+	for (int r = 0; r < 3; r++)
+	{
+		const float l = sqrtf(m[r * 4] * m[r * 4] +
+			m[r * 4 + 1] * m[r * 4 + 1] + m[r * 4 + 2] * m[r * 4 + 2]);
+
+		for (int k = 0; k < 3 && l > 0.0f; k++)
+			axes[r * 4 + k] = m[r * 4 + k] / l;
+	}
+
+	std::vector<CardVertex> verts;
+	std::vector<unsigned short> tris;
+	std::vector<float> wet;
+
+	for (const WetFloor& w : g_wet)
+	{
+		if (w.state <= 0 || !w.started || w.points.empty())
+			continue;
+
+		const float front = HDWetFront((float)(now - w.born), w.info.reach);
+		const size_t base = verts.size();
+		double sum = 0.0;
+
+		if (base + w.points.size() > 65535)
+			break;
+
+		wet.resize(w.points.size());
+
+		/* The sides of the view every point lies past - behind the eye,
+		 * left, right, above, below; a floor wholly past one is not in the
+		 * frame and is left out, its copy and its draw with it. */
+		unsigned int past = 31u;
+
+		for (size_t i = 0; i < w.points.size(); i++)
+		{
+			const WetPoint& p = w.points[i];
+			CardVertex v;
+
+			wet[i] = g_wet_fixed >= 0.0f ? g_wet_fixed : HDWetAt(front, p.way);
+			sum += wet[i];
+			v.x = p.x * m[0] + p.y * m[4] + p.z * m[8] + m[12];
+			v.y = p.x * m[1] + p.y * m[5] + p.z * m[9] + m[13];
+			v.z = p.x * m[2] + p.y * m[6] + p.z * m[10] + m[14];
+
+			const float cx = v.x * g_proj[0] + v.z * g_proj[8];
+			const float cy = v.y * g_proj[5] + v.z * g_proj[9];
+
+			past &= (v.z < 1.0f ? 1u : 0u) | (cx < -v.z ? 2u : 0u) |
+				(cx > v.z ? 4u : 0u) | (cy < -v.z ? 8u : 0u) |
+				(cy > v.z ? 16u : 0u);
+			v.u = v.x;
+			v.v = v.y;
+			v.cx = v.z;
+			v.cz = wet[i];
+			v.r = p.field[0];
+			v.g = p.field[1];
+			v.b = p.field[2];
+			v.a = p.puddle;
+			v.light = p.light;
+			verts.push_back(v);
+		}
+
+		if (g_splash_stats.floor < 0 && sum > 0.0)
+		{
+			g_splash_stats.floor = w.info.item;
+			g_splash_stats.floorWet = (float)(sum / (double)w.points.size());
+		}
+
+		if (past)
+		{
+			verts.resize(base);
+			continue;
+		}
+
+		for (size_t i = 0; i + 2 < w.tris.size(); i += 3)
+			if (wet[w.tris[i]] > 0.0f || wet[w.tris[i + 1]] > 0.0f ||
+				wet[w.tris[i + 2]] > 0.0f)
+				for (int j = 0; j < 3; j++)
+					tris.push_back((unsigned short)(base + w.tris[i + j]));
+	}
+
+	if (tris.empty())
+		return;
+
+	// The frame behind the floor, for the mirror.
+	HDRenderWaterCopy();
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex[4] = { 0, 0, 0, 0 };
+	const DWORD stage[4] = { 1, 2, 5, 6 };
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* index = 0;
+	UINT streamOffset = 0, streamStride = 0;
+	DWORD fvf = 0;
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
+		D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND, D3DRS_DESTBLEND,
+		D3DRS_BLENDOP, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+		D3DRS_FOGENABLE, D3DRS_SEPARATEALPHABLENDENABLE,
+		D3DRS_COLORWRITEENABLE, D3DRS_STENCILENABLE
+	};
+	const D3DSAMPLERSTATETYPE samps[] =
+	{
+		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER,
+		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_ADDRESSW,
+		D3DSAMP_SRGBTEXTURE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
+	DWORD saved[stateCount], savedSamp[4][sampCount];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetIndices(&index);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int s = 0; s < 4; s++)
+	{
+		g_device->GetTexture(stage[s], &tex[s]);
+
+		for (int i = 0; i < sampCount; i++)
+			g_device->GetSamplerState(stage[s], samps[i], &savedSamp[s][i]);
+	}
+
+	D3DVIEWPORT9 vp = {};
+
+	g_device->GetViewport(&vp);
+
+	const bool soft = g_depth_texture != 0;
+	const float screen[4] = { vp.Width ? 1.0f / (float)vp.Width : 0.0f,
+		vp.Height ? 1.0f / (float)vp.Height : 0.0f, g_proj[10], -g_proj[14] };
+	const float mode[4] = { soft ? 1.0f : 0.0f, kWetLift + kWetHole,
+		1.0f / kWetHole, kWetDark };
+	const float look[4] = { kWetF0, kWetWalls, kWetHighlight, kWetPower };
+	const bool copy = g_copy_valid && g_copy_texture;
+	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f, kWetFirstStep,
+		kWetGrowth };
+	const float proj[4] = { g_proj[0], g_proj[5], g_proj[8], g_proj[9] };
+
+	g_device->SetVertexShader(g_card_vs);
+	g_device->SetPixelShader(g_wet_ps);
+	g_device->SetFVF(kCardFVF);
+	set_matrix_constant(0, g_proj);
+	g_device->SetPixelShaderConstantF(92, screen, 1);
+	g_device->SetPixelShaderConstantF(93, mode, 1);
+	g_device->SetPixelShaderConstantF(94, look, 1);
+	g_device->SetPixelShaderConstantF(95, march, 1);
+	g_device->SetPixelShaderConstantF(96, axes, 3);
+	g_device->SetPixelShaderConstantF(99, proj, 1);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0000000F);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+
+	for (int s = 0; s < 3; s++)
+	{
+		g_device->SetSamplerState(stage[s], D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		g_device->SetSamplerState(stage[s], D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		g_device->SetSamplerState(stage[s], D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSU,
+			D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSV,
+			D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSW,
+			D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(stage[s], D3DSAMP_SRGBTEXTURE, FALSE);
+	}
+
+	g_device->SetTexture(1, g_field_dir);
+	g_device->SetTexture(2, g_field_rgb);
+	g_device->SetTexture(5, copy ? g_copy_texture : 0);
+	g_device->SetSamplerState(6, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(6, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(6, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	g_device->SetSamplerState(6, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(6, D3DSAMP_SRGBTEXTURE, FALSE);
+	g_device->SetTexture(6, soft ? g_depth_texture : 0);
+	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)verts.size(),
+		(UINT)(tris.size() / 3), &tris[0], D3DFMT_INDEX16, &verts[0],
+		sizeof(CardVertex));
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int s = 0; s < 4; s++)
+	{
+		for (int i = 0; i < sampCount; i++)
+			g_device->SetSamplerState(stage[s], samps[i], savedSamp[s][i]);
+
+		g_device->SetTexture(stage[s], tex[s]);
+
+		if (tex[s])
+			tex[s]->Release();
+	}
+
+	// DrawIndexedPrimitiveUP leaves stream 0 and the indices unset.
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetIndices(index);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (stream) stream->Release();
+	if (index) index->Release();
 	if (decl) decl->Release();
 	if (vs) vs->Release();
 	if (ps) ps->Release();

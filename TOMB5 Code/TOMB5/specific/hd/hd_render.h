@@ -1604,6 +1604,37 @@ bool HDRenderWaterTankMesh(const float* xyz, int vertices, const int* quads,
 bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
 	int flags1, float age);
 
+/* The wet floor (hd_render.cpp, "the wet floor"): the floor a breaking fish
+ * tank's water runs over. HDRenderWaterWetTanks hands in, before
+ * HDRenderSetWaterSheets, every FISHTANK of the level - its item, room,
+ * place and turn; the sheets' build lays the floor its water would reach
+ * (with the sheets alone: tomb5.hd_water 0 lays none), after
+ * HDRenderWaterTankMesh. HDRenderWaterWet sets a tank's state each frame:
+ * 0 whole, 1 pouring (ControlFishtank runs it), 2 shot and done; `flags1`
+ * its item_flags[1]; `age` the seconds since it broke, or under 0, and the
+ * renderer works the age out of item_flags[1] and its own clock - a tank
+ * first seen done (a loaded game) is wet all over at once.
+ * HDRenderWaterWetFixed holds every wet point of every shot tank at one
+ * strength (RoomProbe -tankwet; under 0, the default, the water's own
+ * way). HDRenderWaterWetDraw draws the frame's wet floors, before the
+ * frame's copy for the sheets, `toFrame` as HDRenderWaterCardsDraw takes
+ * it. HDRenderWaterWetLine writes floor `at`'s SPLASHLOG line for the
+ * level's load (the legend is over it in hd_render.cpp); false past the
+ * last. */
+struct HDWaterWetTank
+{
+	int item;
+	int room;
+	int x, y, z;
+	int yRot;
+};
+
+void HDRenderWaterWetTanks(const HDWaterWetTank* tanks, int count);
+void HDRenderWaterWet(int item, int state, int flags1, float age);
+void HDRenderWaterWetFixed(float strength);
+void HDRenderWaterWetDraw(const float* toFrame);
+bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size);
+
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the
  * frame that first shows a sheet does not wait for the driver to ready
@@ -1625,6 +1656,8 @@ struct HDRenderSplashStats
 	float wet;		// its strength
 	int sprays;		// tank sparks alive as cards
 	int tanks;		// breaking tanks whose water this frame drew
+	int floor;		// the first tank whose floor is wet, or -1
+	float floorWet;		// the mean wet over that floor's points
 };
 
 void HDRenderSplashStatsNow(HDRenderSplashStats* out);

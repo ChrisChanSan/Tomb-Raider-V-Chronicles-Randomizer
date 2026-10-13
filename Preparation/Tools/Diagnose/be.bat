@@ -63,6 +63,7 @@ call :onestamp hd_room hd_room_water_foam_ps.inc
 call :onestamp hd_room hd_room_water_foam_depth_ps.inc
 call :onestamp hd_room hd_room_card_vs.inc
 call :onestamp hd_room hd_room_card_ps.inc
+call :onestamp hd_wet hd_wet_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
@@ -102,6 +103,7 @@ call :onestamp hd_room hd_room_water_foam_ps.inc
 call :onestamp hd_room hd_room_water_foam_depth_ps.inc
 call :onestamp hd_room hd_room_card_vs.inc
 call :onestamp hd_room hd_room_card_ps.inc
+call :onestamp hd_wet hd_wet_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc

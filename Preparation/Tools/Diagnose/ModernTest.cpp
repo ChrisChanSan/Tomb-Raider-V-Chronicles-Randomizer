@@ -19342,6 +19342,54 @@ static void splash_tank_dome()
 		"seen through it the body's share, along it the rim's too", 1, 1);
 }
 
+/* The wet floor (hd_splash_math.h, HDWetFront and HDWetAt): the water's
+ * front out of the glass under the dome and past it, and the wet behind. */
+static void splash_tank_wet()
+{
+	printf("the splash: the tank's wet floor\n");
+
+	const float reach = 866.0f;
+
+	ok(HDWetFront(0.0f, reach) < -1.0e8f && HDWetFront(-1.0f, reach) <
+		-1.0e8f, "no water on the floor before the tank breaks", 0, 0);
+	ok(HDWetFront(kTankDomeOut * 0.5f, reach) == reach * 0.5f &&
+		HDWetFront(kTankDomeOut, reach) == reach,
+		"under the dome as its apron comes out: half at half its time",
+		(long)HDWetFront(kTankDomeOut, reach), 866);
+	ok(fabsf(HDWetFront(kTankDomeOut + 1.0f, reach) - (reach + 321.0f)) <
+		0.01f, "past the foot 321 units a second",
+		(long)HDWetFront(kTankDomeOut + 1.0f, reach), 1187);
+	ok(fabsf(sqrtf(kTankG * 24.0f) - kWetSpread) < 1.0f,
+		"321 is sqrt(g h) at the film's 24 units", (long)sqrtf(kTankG * 24.0f),
+		321);
+
+	bool rising = true;
+	float last = HDWetFront(1.0f / 60.0f, reach);
+
+	for (float t = 2.0f / 60.0f; t < 10.0f; t += 1.0f / 60.0f)
+	{
+		const float f = HDWetFront(t, reach);
+
+		rising = rising && f >= last && f - last < 3460.0f / 60.0f + 1.0f;
+		last = f;
+	}
+
+	ok(rising, "the front only runs on, no faster than the apron", rising, 1);
+	ok(HDWetAt(1000.0f, 1001.0f) == 0.0f &&
+		HDWetAt(1000.0f, 1000.0f - kWetRamp) == 1.0f &&
+		HDWetAt(1000.0f, 1000.0f - kWetRamp * 0.5f) == 0.5f,
+		"dry ahead of the front, wet a ramp behind it, half between",
+		(long)(HDWetAt(1000.0f, 872.0f) * 100.0f), 50);
+
+	// RICH2's furthest point of tank 182 (SPLASHLOG wet far=19749).
+	const float far19749 = (19749.0f - reach) / kWetSpread + kTankDomeOut +
+		kWetRamp / kWetSpread;
+
+	ok(HDWetAt(HDWetFront(far19749, reach), 19749.0f) == 1.0f &&
+		HDWetAt(HDWetFront(far19749 - 1.0f, reach), 19749.0f) < 1.0f,
+		"the corridor's far end wet in about a minute", (long)far19749, 60);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -19484,6 +19532,7 @@ int main()
 	splash_tank_burst();
 	splash_tank_spray();
 	splash_tank_dome();
+	splash_tank_wet();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

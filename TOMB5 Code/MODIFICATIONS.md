@@ -12860,6 +12860,157 @@ made again), is for the next log to show - FPSLOG at the first water frame. The 
 
 **Commits.** `cffe178`, `c1f2d50`, `dba5e1a`, `6d87b97`, `b6b73cd`, `0f6f7c5`.
 
+**Round 3: the wet floor and the barrel's rings.** Asked for, put into English: an idea
+for the aquariums - room 23's lowered area and rooms 122, 121, 45 and 46: after the shot
+the floor gets a gloss, to show that it is wet (proposed on 2026-10-11, ordered on
+2026-10-13: the wet gloss, yes, let us do it). And after the play test of 2026-10-13: the
+barrel's rings are barely visible; he had to look from very close, at one angle, to see
+that they had arrived at all.
+
+What the classic game does to those floors. Nothing: `ControlFishtank` sprays for 105
+ticks and `KillItem` takes the tank (`IFL_CLEARBODY`, its status left `ITEM_ACTIVE`); a
+loaded game kills a shot tank with `ITEM_DEACTIVATED`. The floors (`SectorCheck` on the
+classic `rich2.trc`): room 122 has a 2 x 2 floor at y 0 between doors, its east column the
+tank's own room 22 at -256; rooms 121 and 45 have y 0 squares beside raised blocks at -768
+and stairs at -256 and -512; room 46 is a corridor of 2 x 18 squares at y 0 (a drop of
+1,536 into room 42 in its south wall row), room 113 two squares off it at y 0. Room 23 has
+its lowered area at -2560 (the 4 x 4 middle and two more squares), the plinth step at
+-2816 before the glass and -2816 doors and steps round it; its flipmap twin 32 opens the
+tank's side. The dome's apron (the previous part) lands on the floor in the tank's frame
+between the glass and its foot: at tank 182 world x 48,290 to 49,156 and z 67,014 to
+70,200, four squares at y 0 of rooms 122, 45 and 121.
+
+Which floor gets wet (`hd_render.cpp`, "the wet floor", `build_wet_floors`). The squares
+under the apron's foot, and from there every flat square at the same height or one click
+lower, across rooms by world square - water runs level and down a step, never up one,
+never down a drop into another room, never behind the glass into the tank. So a room with
+a higher dry part keeps it dry. RICH2: tank 182 wets 50 squares at y 0 of rooms 122, 121,
+45, 46 and 113 (the raised blocks and stairs of 121 and 45 stay dry; the `rooms=` list of
+the load line also names the rooms whose door squares lie there), tank 33 its plinth and
+the lowered area of room 23, 14 squares at two heights.
+
+When. A grid of points every 256 units over those squares (25 a square, shared), each with
+its way from the glass - the shortest run over the grid, diagonals at their length, a step
+down at no cost - pushed back by up to 384 units out of a hash of its place, so the front
+is ragged; a second hash sets how much of the mirror the water's depth there gives (0.5 to
+1). The front (`HDWetFront`, hd_splash_math.h) comes out with the apron (866 units in 0.25
+s) and runs on at 321 units/s, sqrt(g h) at the tank's film's 24 units (8 at rest and 16
+of rise) - the speed a wave runs in water that shallow, 0.74 m/s; a point is wet a quarter
+square behind it (`HDWetAt`). Tank 182's furthest point lies 19,749 units along the way:
+the corridor's far end is wet after about a minute. The state each frame (`FeedWaterWet`,
+hd_level.cpp, as the films read the tank): 1 while `ControlFishtank` runs it, its age out
+of `item_flags[1]`; 2 once `KillItem` took it - the floor stays wet; a tank first seen
+shot, as a loaded game has it, is wet all over at once. 0 whole. It does not dry (a
+question for the owner, under Left). With `tomb5.hd_motion` 0 nothing runs: the front
+stands past every point and the floor is wet all over from the frame the tank breaks. The
+run is motion, the wet floor is the game's state - the tank is shot - as the film's
+strength is, which with motion off keeps following the tank and its lasers while only its
+rise stands still; the dome is the classic one then, and the floor under it is wet.
+
+How it is drawn. Once a frame in `HDFrameDrawGlow`, over the opaque frame and before the
+sheets' copy, a layer 4 units over the floor (about 1 cm; the depth buffer resolves 1.2
+units at 20,000) through the cards' vertex shader and a pixel shader of its own
+(`hd_wet.hlsl`, `WetPS`, 178 slots, `hd_wet_ps.inc`), premultiplied: the floor behind kept
+by one less 0.3 times the wet, and a mirror weighted by Schlick's Fresnel at water's F0 of
+0.02. The mirror is the frame itself where a ray reflected in the floor, marched in screen
+space (12 steps from 32 units, each 1.5 times the last, about 8,200 units), finds what the
+frame drew - the copy of the opaque frame the sheets read, taken here, its clip at 1
+undone as Reinhard's curve x / (1 - x) held at 8, since a mirror of a few hundredths shows
+a bright source and little else -, else the light field's colour times the polished walls'
+0.35; over both the lamps as the field's Blinn-Phong highlight at exponent 128 with the
+textbook normalisation (n + 8) / 8, all held softly under the walls' cap of 0.75, and the
+distance fog as the cards take it. Where the frame lies more than 32 units under the layer
+(a drain, a gap of the art) it fades out over the next 32. A floor wholly out of the view
+is left out, its copy with it. The first look without the mirror only darkened the floor:
+in his view the field's highlight is nothing, the lamps overhead and his eye 25 to 38
+degrees over the floor put the half vector 26 to 32 degrees off its normal ((cos)^128
+about 1e-6); with the mirror and the clip kept, the vending machines' reflection changed
+the floor by 8 levels at most; undone, by up to 66.
+
+Why not the gloss variant. Measured: the floors' pages (1047, 1049, 1053, 1079, 1029) name
+no sheen (`TrgProbe -gloss`), 1047 is a clear page and room 46's floor is a clear floor of
+the blend phase, which the gloss variant never draws; a wet strength there needed the room
+build's ranges split by face, two more slots for the darkening (507 to 509), a whole
+range's strength at once (no front), and its sheen is held under 2.5 times the surface's
+own lit colour - a dark marble floor cannot take a water mirror that way. The tank's film
+over the same floor cost 0.20 ms in his view (the previous part).
+
+`SPLASHLOG` gains `floor=<item>:<wet>` at its end (the first tank whose floor is wet, the
+mean wet of its points), and the line comes once a second while that water still runs out;
+the load writes one `SPLASHLOG level=<stem> wet tank=<item> squares=<n> rooms=<list>
+heights=<n> points=<n> tris=<n> reach=<units> far=<units>` line a tank. RoomProbe draws
+the wet floor with `-tank` and holds it at a strength with `-tankwet <0..1>`. With
+`tomb5.hd_water` 0 nothing of it is built.
+
+The barrel's rings (`hd_render.cpp`, "the rings", `kRingBody`; `HDRingStrength`,
+hd_splash_math.h). Measured first with RoomProbe `-life 1 -liferings game` at ANDY3's lake
+at night, a barrel's ring of 249 seen from the bank at 700, 1,500 and 3,000 units and 450
+to 1,600 over the water, 960 x 540, 0.1 to 2 s after it starts: 0 to 3,074 pixels changed
+by more than 4 of 255, against 0 to 2,575 for a wading Lara's ring of 120 at the same
+place and age. Why so faint: a ring is a slope, and at night the water mirrors a dark sky
+nearly alike at every slope - the ring showed only where its slope turned the mirror to
+the brighter horizon; its strength was capped at a size of 128 (240 to 255 counted as 128)
+and falls with the square of its life (0.51 of it at 1 s), where a wading Lara's ring is
+started again every 0.6 s and stays young. Now a ring that starts over 128 - only the
+water's life's floats start one - counts its size past 128 and is 4 times stronger; at 2
+the ring did not read from Lara's camera, at 4 it does at 1.5 and 2 s. At the ring's start
+its slope stands far steeper than a real wave's, so near the barrel it reads as an
+outline. A ring that starts at 128 or less keeps its strength to the bit; nothing of the
+water's life changes, and no shader.
+
+**Measured.** His view (RICH2 room 122, the eye of pictures 137 and 138, `-tank 182`),
+2560 x 1440, five runs, the water's phases and the wet floor summed: at 0.3, 1, 3 and 10 s
+0.075, 0.073, 0.069 and 0 ms at `ba89a58f`, 0.137, 0.137, 0.140 and 0.070 after (+0.062 to
++0.071; the floor 0.044 to 0.055 of it, the copy 0.017). The room 23 tank's view: at 1.5
+and 10 s 0.227 and 0 ms at `ba89a58f`, 0.67 to 1.49 and 0.30 to 0.80 after, the floor's
+bracket 0.27 to 1.26. A scratch timer round the floor's draw call alone (never committed):
+its first draw of the frame 0.33 to 0.78 ms there, the same draw again right after it
+0.031 ms; in his view 0.035 to 0.044 ms the first time. Not the copy (the first draw with
+no copy bound as slow), not the shader's first use alone (a warm-up draw with the march
+running cut it to 0.20 to 0.33); without the march (`-nocopy`) 0.027 ms. Pixels at 960 x
+540, the lower half: his view at 10 s 124,231 changed by more than 4 (116,686 darker,
+7,545 brighter, up to +63), its luma 52.2 to 46.4; the room 23 view at 10 s 77,350 (70,969
+darker, 6,381 brighter); at 1 and 3 s there the tank's film still covers the floor. The
+barrel's ring after: 242 to 20,334 pixels over 4 (lake, the six views), the wading Lara's
+ring's 30 counts identical. Slots: `WetPS` 178 (8 texture, 170 arithmetic); every other
+`.inc` byte-identical; `RoomPS` and its gloss variant 510 and 507 as they were.
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`). With `-hdwater 0` the
+fifteen cameras 15 of 15 identical to the fix round's parity set. With `-hdwater 1`
+against a RoomProbe built from `ba89a58f`: the fifteen cameras 15 of 15, the pond's twelve
+views at 1, 3 and 5 s 36 of 36, the canal dive 4 of 4, the tank views without `-tank` and
+his view before the break 3 of 3, the sweep's 209 WATERLOG lines; with `-life 1 -liferings
+game` at 9 s the pond's twelve views 5 identical and 7 changed where a barrel's ring is.
+ModernTest grows by 11 checks (the front, the wet, the corridor's minute; Lara's ring as
+before, the barrel's past 128 and four times); the suites 0 failed; the engine and every
+tool build. The motion rule, his view and the room 23 view at 0, 1, 3 and 10 s: with
+motion on 8 of 8 pictures md5-identical to the build before it; with `-nomotion` 8 of 8
+identical to the same build held at `-tankwet 1`, and against the build before it his
+view at the break 124,231 pixels wetter by more than 4 (the floor that ran out over ten
+seconds there before), at 10 s identical.
+
+**Left.** The look and the timing in the game - nobody in this round could play it. The
+floor does not dry: whether it should, over minutes, is the owner's to say. The room 23
+view's first floor draw of a frame took 0.3 to 0.8 ms in RoomProbe, a second one 0.03;
+the cost is not the same in every process: in five fresh RoomProbe runs at 2560 x 1440
+the room 23 view at 10 s drew its floor in 0.631, 0.467, 0.384, 0.062 and 0.437 ms, the
+corridor of room 46 at 120 s in 0.496, 0.084, 0.328, 0.084 and 0.427 - a cost of the
+process's first use or the card's clock rather than of each frame, which only the game's
+FPSLOG in rooms 23 and 46 after the shot can settle; if the game pays it every frame, the
+march can be cut to the pixels it can change. The mirror shows only what the frame shows:
+what stands off the screen does not mirror, and toward the screen's edge it fades. A
+tank's film over the floor reads the copy taken before the floor was drawn wet, and so
+shows the floor under it dry while it lasts. The barrel's ring at 3,000 units stays small;
+its strength and the outline near the barrel are the owner's to judge. For the water's
+life: the comment over the barrel's ring in `hd_life_rules.h` (at line 1867 to 1871) still
+says its strength on the sheet is that of a wading Lara's ring of 128; since `kRingBody` a
+ring of 240 to 255 draws 7.5 to 8 times that (`HDRingStrength` 3.75 against 0.5 for a
+ring of 240 at its start). The file is that part's, so its comment is left to it.
+
+**Commits.** `4d8b54ce`, `95bf8151`, `584642bd` (the wet floor with `hd_motion` off),
+`bf7d5a30` (a shader comment, the bytecode unchanged).
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in

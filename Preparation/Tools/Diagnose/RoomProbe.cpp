@@ -2707,6 +2707,9 @@ static int g_tank_item = -1;
 static float g_tank_time = 0.0f;
 // -tankleave: 1 the spray, 2 the tank's water left out of the picture.
 static int g_tank_leave = 0;
+/* -tankwet s: the shot tank's wet floor held at s everywhere it reaches
+ * (HDRenderWaterWetFixed), under 0 the water's own way at the tank's age. */
+static float g_tank_wet = -1.0f;
 static int g_tank_film = -1;
 static float g_tank_root[3] = { 0.0f, 0.0f, 0.0f };
 static Tr5Item g_tank_place;
@@ -6303,6 +6306,7 @@ static void ProbeTankMesh(const Tr5Level& level)
 static void ProbeWaterFilms(const Tr5Level& level)
 {
 	std::vector<HDWaterFilm> films;
+	std::vector<HDWaterWetTank> tanks;
 
 	ProbeTankMesh(level);
 	g_tank_film = -1;
@@ -6314,6 +6318,12 @@ static void ProbeWaterFilms(const Tr5Level& level)
 
 		if (!level.getItem(t, tank) || tank.objectNumber != 413)
 			continue;
+
+		// Every tank for its wet floor, as hd_level.cpp hands them in.
+		const HDWaterWetTank wet = { t, tank.roomNumber, tank.x, tank.y,
+			tank.z, tank.yRot };
+
+		tanks.push_back(wet);
 
 		if (g_tank_item >= 0)
 			printf("-tank: FISHTANK item %d room %d at %d %d %d turn %d\n", t,
@@ -6368,6 +6378,7 @@ static void ProbeWaterFilms(const Tr5Level& level)
 	}
 
 	HDRenderWaterFilms(films.empty() ? 0 : &films[0], (int)films.size());
+	HDRenderWaterWetTanks(tanks.empty() ? 0 : &tanks[0], (int)tanks.size());
 }
 
 // The cards' pages into the cache, with the sheets, as hd_level.cpp adds them.
@@ -6526,6 +6537,10 @@ static void ProbeCardsFeed()
 	if (g_tank_film >= 0)
 		HDRenderWaterFilmWet(g_tank_film, wet);
 
+	// Its wet floor at the picture's age, or held at -tankwet's strength.
+	HDRenderWaterWet(g_tank_item, state, flags, g_tank_time);
+	HDRenderWaterWetFixed(g_tank_wet);
+
 	// The tank's water while ControlFishtank runs it, as DrawScaledSpike
 	// hands it in the game (hd_level.cpp, HDWaterTank).
 	const bool water = state == 1 && !(g_tank_leave & 2) &&
@@ -6614,10 +6629,91 @@ static void ProbeCardsDraw()
 		freq->Release();
 
 	printf("SPLASHLOG level=probe splashes=%d cards=%d rings=%d tank=%d:%.2f "
-		"tanks=%d\n", st.splashes, st.cards, st.rings, st.tank, st.wet,
-		st.tanks);
+		"tanks=%d floor=%d:%.2f\n", st.splashes, st.cards, st.rings, st.tank,
+		st.wet, st.tanks, st.floor, st.floorWet);
 	printf("-hdwater: cards %d cards in 3 draws at most, GPU %.4f ms\n",
 		st.cards, ms);
+}
+
+/* The tanks' wet floors where HDFrameDrawGlow draws them, before the
+ * frame's copy, the picture's world shifted by the seed room's origin as
+ * the cards' is, timed on the GPU with a timestamp pair; the line is
+ * -hdwater's, so the timing scripts add it to the water's other phases. */
+static void ProbeWetDraw()
+{
+	if (g_hdwater != 1 || g_tank_item < 0)
+		return;
+
+	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
+	IDirect3DQuery9* q[3] = { 0, 0, 0 };
+	IDirect3DQuery9* freq = 0;
+
+	/* The frame's copy the floor's mirror reads, taken before the bracket:
+	 * the copy waits for its own timestamps (its own line), and that wait
+	 * inside the bracket would count as the floor's. */
+	if (g_tank_time >= 0.0f)
+		HDRenderWaterCopy();
+
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &freq);
+
+	const bool timed = q[0] && q[1] && q[2] && freq;
+
+	if (timed)
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	HDRenderWaterWetDraw(m);
+
+	if (timed)
+	{
+		q[2]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+		freq->Issue(D3DISSUE_END);
+	}
+
+	double ms = -1.0;
+
+	if (timed)
+	{
+		UINT64 a = 0, b = 0, f = 0;
+		BOOL disjoint = TRUE;
+
+		while (q[0]->GetData(&disjoint, sizeof(disjoint), D3DGETDATA_FLUSH) ==
+			S_FALSE)
+			;
+
+		while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (freq->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		if (!disjoint && f)
+			ms = (double)(b - a) * 1000.0 / (double)f;
+	}
+
+	for (int i = 0; i < 3; i++)
+		if (q[i])
+			q[i]->Release();
+
+	if (freq)
+		freq->Release();
+
+	HDRenderSplashStats st;
+
+	HDRenderSplashStatsNow(&st);
+	printf("-hdwater: %d wet floor draw(s), GPU %.4f ms (timestamps round the "
+		"wet floor's draw), floor %d wet %.3f\n", st.floor >= 0 ? 1 : 0, ms,
+		st.floor, st.floorWet);
 }
 
 /* The waterfall objects for their feet, out of the classic .TRC - the twin
@@ -9478,10 +9574,13 @@ static int ProbeMain(int argc, char** argv)
 		else if (!strcmp(argv[at], "-splashfall") && at + 1 < argc)
 			g_splash_fall = atoi(argv[++at]);
 		else if ((!strcmp(argv[at], "-tank") && at + 2 < argc) ||
-			(!strcmp(argv[at], "-tankleave") && at + 1 < argc))
+			(!strcmp(argv[at], "-tankleave") && at + 1 < argc) ||
+			(!strcmp(argv[at], "-tankwet") && at + 1 < argc))
 		{
-			// One branch for both: the chain is at the compiler's depth.
-			if (argv[at][5])
+			// One branch for all: the chain is at the compiler's depth.
+			if (argv[at][5] == 'w')
+				g_tank_wet = (float)atof(argv[++at]);
+			else if (argv[at][5])
 			{
 				at++;
 				g_tank_leave |= !strcmp(argv[at], "spray") ? 1 :
@@ -11752,6 +11851,10 @@ static int ProbeMain(int argc, char** argv)
 				sizeof(line)); s++)
 				printf("%s\n", line);
 
+			for (int w = 0; HDRenderWaterWetLine(w, stem, line,
+				sizeof(line)); w++)
+				printf("%s\n", line);
+
 			for (const std::string& m : g_mist_lines)
 				printf("%s\n", m.c_str());
 
@@ -12348,6 +12451,9 @@ static int ProbeMain(int argc, char** argv)
 				i += 2)
 				HDRenderWaterProbeCreatureLate(g_creatures[i],
 					g_creatures[i + 1], g_seed_origin[0], g_seed_origin[1]);
+
+			// A shot tank's wet floor, before the copy, as the engine has it.
+			ProbeWetDraw();
 
 			if (sheet)
 				HDRenderWaterCopy();

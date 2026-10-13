@@ -19970,6 +19970,88 @@ static void splash_tank_dome()
 		"seen through it the body's share, along it the rim's too", 1, 1);
 }
 
+/* The wet floor (hd_splash_math.h, HDWetFront and HDWetAt): the water's
+ * front out of the glass under the dome and past it, and the wet behind. */
+static void splash_tank_wet()
+{
+	printf("the splash: the tank's wet floor\n");
+
+	const float reach = 866.0f;
+
+	ok(HDWetFront(0.0f, reach) < -1.0e8f && HDWetFront(-1.0f, reach) <
+		-1.0e8f, "no water on the floor before the tank breaks", 0, 0);
+	ok(HDWetFront(kTankDomeOut * 0.5f, reach) == reach * 0.5f &&
+		HDWetFront(kTankDomeOut, reach) == reach,
+		"under the dome as its apron comes out: half at half its time",
+		(long)HDWetFront(kTankDomeOut, reach), 866);
+	ok(fabsf(HDWetFront(kTankDomeOut + 1.0f, reach) - (reach + 321.0f)) <
+		0.01f, "past the foot 321 units a second",
+		(long)HDWetFront(kTankDomeOut + 1.0f, reach), 1187);
+	ok(fabsf(sqrtf(kTankG * 24.0f) - kWetSpread) < 1.0f,
+		"321 is sqrt(g h) at the film's 24 units", (long)sqrtf(kTankG * 24.0f),
+		321);
+
+	bool rising = true;
+	float last = HDWetFront(1.0f / 60.0f, reach);
+
+	for (float t = 2.0f / 60.0f; t < 10.0f; t += 1.0f / 60.0f)
+	{
+		const float f = HDWetFront(t, reach);
+
+		rising = rising && f >= last && f - last < 3460.0f / 60.0f + 1.0f;
+		last = f;
+	}
+
+	ok(rising, "the front only runs on, no faster than the apron", rising, 1);
+	ok(HDWetAt(1000.0f, 1001.0f) == 0.0f &&
+		HDWetAt(1000.0f, 1000.0f - kWetRamp) == 1.0f &&
+		HDWetAt(1000.0f, 1000.0f - kWetRamp * 0.5f) == 0.5f,
+		"dry ahead of the front, wet a ramp behind it, half between",
+		(long)(HDWetAt(1000.0f, 872.0f) * 100.0f), 50);
+
+	// RICH2's furthest point of tank 182 (SPLASHLOG wet far=19749).
+	const float far19749 = (19749.0f - reach) / kWetSpread + kTankDomeOut +
+		kWetRamp / kWetSpread;
+
+	ok(HDWetAt(HDWetFront(far19749, reach), 19749.0f) == 1.0f &&
+		HDWetAt(HDWetFront(far19749 - 1.0f, reach), 19749.0f) < 1.0f,
+		"the corridor's far end wet in about a minute", (long)far19749, 60);
+}
+
+/* The rings' strength on the sheets (hd_splash_math.h, HDRingStrength, at
+ * hd_render.cpp's kRingSlope 0.5 and kRingBody 4): a wading Lara's ring as
+ * it always was, a barrel's past the old cap of 128 and four times more. */
+static void splash_rings()
+{
+	printf("the splash: the rings' strength\n");
+
+	bool lara = true;
+
+	for (int size = 112; size <= 128; size++)
+		for (float left = 0.0f; left <= 1.0f; left += 0.125f)
+		{
+			const float first = (float)size / 128.0f;
+			const float old = 0.5f * (first < 1.0f ? first : 1.0f) *
+				left * left;
+
+			lara = lara && HDRingStrength(0.5f, 4.0f, (float)size, left) ==
+				old;
+		}
+
+	ok(lara, "a wading Lara's ring (112 to 127) and 128 as before", lara, 1);
+	ok(HDRingStrength(0.5f, 4.0f, 240.0f, 1.0f) == 0.5f * 1.875f * 4.0f &&
+		HDRingStrength(0.5f, 4.0f, 255.0f, 1.0f) ==
+		0.5f * (255.0f / 128.0f) * 4.0f,
+		"a barrel's ring of 240 to 255: its size past 128, four times",
+		(long)(HDRingStrength(0.5f, 4.0f, 240.0f, 1.0f) * 100.0f), 375);
+	ok(HDRingStrength(0.5f, 4.0f, 240.0f, 0.5f) ==
+		HDRingStrength(0.5f, 4.0f, 240.0f, 1.0f) * 0.25f &&
+		HDRingStrength(0.5f, 4.0f, 240.0f, 0.0f) == 0.0f,
+		"and it fades with the square of its life left as every ring", 1, 1);
+	ok(HDRingStrength(0.5f, 4.0f, 80.0f, 1.0f) == 0.5f * 80.0f / 128.0f,
+		"a small ring (a source of 80) keeps its share", 1, 1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -20115,6 +20197,8 @@ int main()
 	splash_tank_burst();
 	splash_tank_spray();
 	splash_tank_dome();
+	splash_tank_wet();
+	splash_rings();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

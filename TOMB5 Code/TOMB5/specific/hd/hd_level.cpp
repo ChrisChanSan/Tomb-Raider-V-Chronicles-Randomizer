@@ -2139,6 +2139,8 @@ struct WaterFilmItems
 };
 
 static std::vector<WaterFilmItems> g_film_items;
+// The FISHTANK items, for their wet floors.
+static std::vector<short> g_wet_items;
 
 static void TankMeshToRenderer()
 {
@@ -2174,14 +2176,24 @@ static void TankMeshToRenderer()
 static void BuildWaterFilms()
 {
 	std::vector<HDWaterFilm> films;
+	std::vector<HDWaterWetTank> tanks;
 
 	TankMeshToRenderer();
 	g_film_items.clear();
+	g_wet_items.clear();
 
 	for (int t = 0; t < level_items; t++)
 	{
 		if (items[t].object_number != FISHTANK)
 			continue;
+
+		// Every tank for its wet floor (hd_render.cpp, "the wet floor").
+		const HDWaterWetTank wet = { t, items[t].room_number,
+			items[t].pos.x_pos, items[t].pos.y_pos, items[t].pos.z_pos,
+			items[t].pos.y_rot };
+
+		tanks.push_back(wet);
+		g_wet_items.push_back((short)t);
 
 		for (int l = 0; l < level_items; l++)
 		{
@@ -2216,6 +2228,7 @@ static void BuildWaterFilms()
 	}
 
 	HDRenderWaterFilms(films.empty() ? 0 : &films[0], (int)films.size());
+	HDRenderWaterWetTanks(tanks.empty() ? 0 : &tanks[0], (int)tanks.size());
 }
 
 /* Each film's strength this frame, out of its tank's and its lasers' state
@@ -2237,6 +2250,48 @@ static void FeedWaterFilms()
 		HDRenderWaterFilmWet((int)f, HDFilmStrength(state,
 			tank->item_flags[1], live, laser->trigger_flags));
 	}
+}
+
+/* Each tank's state for its wet floor this frame, as the films read it: 2
+ * once KillItem took it - in the game, or as a loaded game kills a shot
+ * tank (game\savegame.cpp) -, 1 while ControlFishtank runs it, 0 whole.
+ * Read only. */
+static void FeedWaterWet()
+{
+	for (size_t i = 0; i < g_wet_items.size(); i++)
+	{
+		const ITEM_INFO* tank = &items[g_wet_items[i]];
+		const int state = (tank->flags & IFL_CLEARBODY) ? 2 :
+			tank->status == ITEM_ACTIVE && tank->active ? 1 : 0;
+
+		HDRenderWaterWet(g_wet_items[i], state, tank->item_flags[1], -1.0f);
+	}
+}
+
+/* The world into the HD frame's view space: the engine's own matrix, which
+ * in the HD frame is the view itself (HDFrameDrawGlow hands the bracket an
+ * identity view). Row vectors, as the renderer's matrices are. */
+static void WorldToFrame(float* m)
+{
+	phd_PushMatrix();
+	phd_TranslateAbs(0, 0, 0);
+	m[0] = aMXPtr[M00];
+	m[1] = aMXPtr[M10];
+	m[2] = aMXPtr[M20];
+	m[3] = 0.0f;
+	m[4] = aMXPtr[M01];
+	m[5] = aMXPtr[M11];
+	m[6] = aMXPtr[M21];
+	m[7] = 0.0f;
+	m[8] = aMXPtr[M02];
+	m[9] = aMXPtr[M12];
+	m[10] = aMXPtr[M22];
+	m[11] = 0.0f;
+	m[12] = aMXPtr[M03];
+	m[13] = aMXPtr[M13];
+	m[14] = aMXPtr[M23];
+	m[15] = 1.0f;
+	phd_PopMatrix();
 }
 
 /* A FISHTANK's mesh as the classic draw is about to draw it
@@ -2276,16 +2331,19 @@ static void AppendWaterCardPages()
  * identity view).
  *
  * SPLASHLOG, with -log, once a second of game time (30 ticks) while a
- * splash, a card, a wet film or a breaking tank's water draws:
+ * splash, a card, a wet film or a breaking tank's water draws, or while a
+ * tank's water still runs out over its floor:
  *
  *   SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>
- *             tank=<item>:<state> tanks=<n>
+ *             tank=<item>:<state> tanks=<n> floor=<item>:<wet>
  *
  * splashes the HD splashes alive, cards the cards drawn this frame, rings
  * the splash rings handed to the sheets (two a splash), tank the item of
  * the first wet film's FISHTANK and that film's strength 0..1 (-1:0.00
  * when none is wet), tanks the breaking tanks whose water the frame drew
- * ("the tank's water"). */
+ * ("the tank's water"), floor the first tank whose floor is wet and the
+ * mean wet over its points, 0..1 (-1:0.00 when none is; "the wet
+ * floor"). */
 static void DrawWaterCards()
 {
 	static long logged = -1;
@@ -2295,39 +2353,24 @@ static void DrawWaterCards()
 
 	float m[16];
 
-	phd_PushMatrix();
-	phd_TranslateAbs(0, 0, 0);
-	m[0] = aMXPtr[M00];
-	m[1] = aMXPtr[M10];
-	m[2] = aMXPtr[M20];
-	m[3] = 0.0f;
-	m[4] = aMXPtr[M01];
-	m[5] = aMXPtr[M11];
-	m[6] = aMXPtr[M21];
-	m[7] = 0.0f;
-	m[8] = aMXPtr[M02];
-	m[9] = aMXPtr[M12];
-	m[10] = aMXPtr[M22];
-	m[11] = 0.0f;
-	m[12] = aMXPtr[M03];
-	m[13] = aMXPtr[M13];
-	m[14] = aMXPtr[M23];
-	m[15] = 1.0f;
-	phd_PopMatrix();
+	WorldToFrame(m);
 	HDRenderWaterCardsDraw(m);
 
 	HDRenderSplashStats st;
 
 	HDRenderSplashStatsNow(&st);
 
+	const bool running = st.floor >= 0 && st.floorWet > 0.0f &&
+		st.floorWet < 0.999f;
+
 	if (!gLogEnabled || (!st.cards && !st.rings && st.wet <= 0.0f &&
-		!st.tanks) || GlobalCounter / 30 == logged)
+		!st.tanks && !running) || GlobalCounter / 30 == logged)
 		return;
 
 	logged = GlobalCounter / 30;
 	Log("SPLASHLOG level=%s splashes=%d cards=%d rings=%d tank=%d:%.2f "
-		"tanks=%d", g_stem, st.splashes, st.cards, st.rings, st.tank, st.wet,
-		st.tanks);
+		"tanks=%d floor=%d:%.2f", g_stem, st.splashes, st.cards, st.rings,
+		st.tank, st.wet, st.tanks, st.floor, st.floorWet);
 }
 
 static void BuildWaterSheets()
@@ -2462,6 +2505,9 @@ static void BuildWaterSheets()
 		Log("%s", line);
 
 	for (int s = 0; HDRenderWaterSegLine(s, g_stem, line, sizeof(line)); s++)
+		Log("%s", line);
+
+	for (int w = 0; HDRenderWaterWetLine(w, g_stem, line, sizeof(line)); w++)
 		Log("%s", line);
 }
 
@@ -8178,6 +8224,18 @@ void HDFrameDrawGlow()
 	 * wet, so its strength is set first. */
 	if (HDRenderWaterSheetsBuilt())
 		FeedWaterFilms();
+
+	/* The tanks' wet floors, over the opaque frame. The draw takes the
+	 * frame's copy first, so the sheets drawn after it read that same copy
+	 * and see the floor under them dry (hd_render.cpp, "the wet floor"). */
+	if (HDRenderWaterSheetsBuilt())
+	{
+		float m[16];
+
+		FeedWaterWet();
+		WorldToFrame(m);
+		HDRenderWaterWetDraw(m);
+	}
 
 	for (int i = 0; i < g_frame_count; i++)
 		if (HDRenderGroupHasSheet(g_frame[i].group))

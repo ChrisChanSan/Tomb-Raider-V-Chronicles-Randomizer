@@ -812,3 +812,55 @@ inline float HDTankDomeShare(const HDTankDome& d, float cosine)
 
 	return d.share * (kTankDomeBody + kTankDomeRim * edge * edge);
 }
+
+/* The wet floor (hd_render.cpp, "the wet floor"): how far a breaking
+ * tank's water has run over the floor at `seconds` after it broke, along
+ * its way out of the glass, and how wet a point `way` along it is then.
+ *
+ *   the front  under the dome its apron's own reach (`reach`, the foot's
+ *              distance from the glass, 866 units in RICH2), which it
+ *              comes out to over kTankDomeOut; past the foot the edge of
+ *              a shallow flood, at the speed a wave runs in water of the
+ *              depth the tank's film stands at while it pours (8 + 16
+ *              units, hd_render.cpp kFilmHair and kFilmRise):
+ *              sqrt(g h) = sqrt(4300 x 24) = 321 units/s, 0.74 m/s
+ *   the wet    0 ahead of the front and 1 kWetRamp behind it, linear
+ *              between - the front's edge a quarter square wide
+ *
+ * kWetRagged pushes each point of the grid back along the way by up to
+ * 384 units, out of a hash of its place (hd_render.cpp), so the front's
+ * edge is ragged rather than a ring round the glass; 256 and 384 (a
+ * quarter square and one and a half of the grid's 256-unit steps) are free
+ * choices, set by eye on the round's RoomProbe pictures. */
+const float kWetSpread = 321.0f;	// units/s
+const float kWetRamp = 256.0f;		// units
+const float kWetRagged = 384.0f;	// units
+
+inline float HDWetFront(float seconds, float reach)
+{
+	if (seconds <= 0.0f)
+		return -1.0e9f;
+
+	if (seconds < kTankDomeOut)
+		return reach * seconds / kTankDomeOut;
+
+	return reach + kWetSpread * (seconds - kTankDomeOut);
+}
+
+/* A ring's strength on the sheets (hd_render.cpp, "the rings"): `slope`
+ * times its first size over 128, and `body` times more for a ring that
+ * starts over 128 (a floating body's), times the square of `left`, the
+ * share of its life left. */
+inline float HDRingStrength(float slope, float body, float size, float left)
+{
+	const float first = size / 128.0f;
+
+	return slope * first * (first > 1.0f ? body : 1.0f) * left * left;
+}
+
+inline float HDWetAt(float front, float way)
+{
+	const float w = (front - way) / kWetRamp;
+
+	return w < 0.0f ? 0.0f : w > 1.0f ? 1.0f : w;
+}

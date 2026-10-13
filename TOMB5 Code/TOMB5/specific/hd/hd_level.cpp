@@ -3788,12 +3788,17 @@ static void BuildRoomAir()
 static std::vector<unsigned char> g_carry_sky;
 static std::vector<short> g_carry_twin;
 static std::vector<std::vector<short> > g_room_carry;
+/* Per room, the room of its flipmap pair the portals lead to - the one
+ * whose flipped_room names the other, which FlipMap leaves in place - or
+ * -1 for a room with no twin (HDCarriedRoom). */
+static std::vector<short> g_carry_main;
 
 static void BuildRoomCarry()
 {
 	g_carry_sky.clear();
 	g_carry_twin.clear();
 	g_room_carry.clear();
+	g_carry_main.clear();
 
 	if (!g_air_on || number_rooms <= 0)
 	{
@@ -3804,10 +3809,18 @@ static void BuildRoomCarry()
 	g_carry_sky.resize((size_t)number_rooms);
 	g_carry_twin.resize((size_t)number_rooms);
 
+	g_carry_main.assign((size_t)number_rooms, -1);
+
 	for (int i = 0; i < number_rooms; i++)
 	{
 		g_carry_sky[(size_t)i] = (room[i].flags & ROOM_OUTSIDE) ? 1 : 0;
 		g_carry_twin[(size_t)i] = room[i].flipped_room;
+
+		if (room[i].flipped_room >= 0 && room[i].flipped_room < number_rooms)
+		{
+			g_carry_main[(size_t)i] = (short)i;
+			g_carry_main[(size_t)room[i].flipped_room] = (short)i;
+		}
 	}
 
 	HDRenderSetCarryHosts(&g_carry_sky[0], &g_carry_twin[0], number_rooms);
@@ -4494,12 +4507,14 @@ static void ReportRoomIntrusions()
 					g_stem, group, host, here);
 		}
 
-	/* HDLOG hull, with tomb5.hd_air 2: one line per group whose art in
-	 * unlinked air no entry's box holds - `air_tris` those triangles,
+	/* HDLOG hull, with tomb5.hd_air 1 or 2: one line per group whose art
+	 * in unlinked air no entry's box holds - `air_tris` those triangles,
 	 * `host_art` those standing on their host's own art, `hull` 1 when
-	 * that is more than half and the art is held to the group's own
-	 * window (MarkAirHulls in hd_render.cpp). Behind -log. */
-	if (gLogEnabled && g_air_on == 2)
+	 * that is more than half, and then the art is drawn pushed back in
+	 * depth and, with hd_air 2, held to the group's own window
+	 * (MarkAirHulls in hd_render.cpp); `behind` the triangles drawn pushed
+	 * back, all three passes. Behind -log. */
+	if (gLogEnabled && g_air_on)
 		for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
 		{
 			int air = 0, covered = 0;
@@ -4507,7 +4522,8 @@ static void ReportRoomIntrusions()
 
 			if (air)
 				Log("HDLOG hull level=%s group=%d air_tris=%d host_art=%d "
-					"hull=%d", g_stem, g, air, covered, hull ? 1 : 0);
+					"hull=%d behind=%d", g_stem, g, air, covered,
+					hull ? 1 : 0, HDRenderGroupHullBehind(g));
 		}
 
 	// The lists were only borrowed for the length of the build.
@@ -6677,6 +6693,27 @@ int HDRoomCarries(int roomIndex, const short** rooms)
 
 	*rooms = &g_room_carry[(size_t)roomIndex][0];
 	return (int)g_room_carry[(size_t)roomIndex].size();
+}
+
+/* CarryArt takes in room numbers, and after a flip the number of a pair's
+ * room no longer names its art: FlipMap swaps the two records and
+ * HDFlipRoom the groups, so the art of the twin the portals do not lead to
+ * - out of the world in this state - is drawn by whichever of the two
+ * numbers holds it. Taken in by its number, ANDY1's room 48 draws the
+ * alternate art of room 179 (group 215, the room 215 is) beside room 179's
+ * own while unflipped, and RICH3's room 176 the alternate of room 170
+ * (group 174): art of a state the level is not in. */
+int HDCarriedRoom(int group)
+{
+	if (!g_level_active || group < 0 || group >= (int)g_carry_main.size())
+		return -1;
+
+	const int main = g_carry_main[(size_t)group];
+
+	if (main < 0)
+		return group;
+
+	return GroupOfRoom(main) == group ? main : -1;
 }
 
 /* The one question the room walk asks of the HD path. g_level_active is

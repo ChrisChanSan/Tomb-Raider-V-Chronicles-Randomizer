@@ -1776,9 +1776,12 @@ void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
  * entry's box holds becomes a piece held to its own room's window (see
  * MarkAirHulls in hd_render.cpp). Before HDRenderLevelBegin; kept until
  * the next call. HDRenderGroupHull says afterwards whether a group is one,
- * with its triangles of such art and those on their hosts' own art. */
+ * with its triangles of such art and those on their hosts' own art - asked
+ * whenever the rooms' air is handed in, since that art is drawn pushed back
+ * at hd_air 1 and 2 alike; HDRenderGroupHullBehind how many triangles are. */
 void HDRenderSetAirHulls(int on);
 bool HDRenderGroupHull(int group, int* air, int* covered);
+int HDRenderGroupHullBehind(int group);
 int HDRenderCarryPairs();
 bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 

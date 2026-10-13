@@ -1834,7 +1834,8 @@ static void CarryArt()
 
 		for (int k = 0; k < count; k++)
 		{
-			const short b = carried[k];
+			// The room drawing that art in this flip state, if any.
+			const int b = HDCarriedRoom(carried[k]);
 
 			if (b < 0 || b >= number_rooms || (room[b].bound_active & 1))
 				continue;
@@ -1847,7 +1848,7 @@ static void CarryArt()
 				return;
 			}
 
-			draw_rooms[number_draw_rooms] = b;
+			draw_rooms[number_draw_rooms] = (short)b;
 			number_draw_rooms++;
 			room[b].bound_active |= 1;
 

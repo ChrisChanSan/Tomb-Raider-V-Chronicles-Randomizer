@@ -195,6 +195,14 @@ bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount);
  * and for every room while HDLevelActive() is false. */
 int HDRoomCarries(int roomIndex, const short** rooms);
 
+/* The room that draws the carried art of room `group` - a number out of
+ * HDRoomCarries, which keeps the numbers of the level as built - in the
+ * flipmap state of this moment: the room itself when it has no twin; of a
+ * pair, the one of the two that the portals lead to, when the flip state
+ * has it drawn by that group; -1 when the group's art is out of the world
+ * in this state (FlipMap swapped its room away). */
+int HDCarriedRoom(int group);
+
 /* The classic faces InsertRoomlet (specific\drawroom.cpp) leaves out of one
  * roomlet of a room drawn classic that another group's art covers in part:
  * one flag per face in the order of its loops - the quads, then the

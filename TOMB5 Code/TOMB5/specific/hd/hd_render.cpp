@@ -1406,6 +1406,11 @@ namespace
 		 * faces culled - see RangeCulls below. In the sort key, because the
 		 * cull mode is one render state per draw call. */
 		int cull = 0;
+		/* 1 where the triangles are a hull's art in unlinked air that no
+		 * entry's box holds (MarkAirHulls), drawn pushed back in depth as a
+		 * stand range answered HD_STAND_BEHIND is (set_stand_matrix). In
+		 * the sort key, because the matrix is one constant per draw call. */
+		int behind = 0;
 		/* The lowest vertex number this range names and how many it reaches
 		 * over. With a 32 bit index buffer they are only a measurement; with
 		 * a 16 bit one they are the draw call - the indices
@@ -1519,6 +1524,8 @@ namespace
 		 * of them those an intrusion entry's box holds. */
 		int airTris = 0;
 		int airBoxed = 0;
+		// Of them a hull's drawn pushed back (HDRange::behind).
+		int hullBehind = 0;
 		/* The stand ranges - see HDStandRange in hd_render.h. A range's
 		 * `stand` is one plus its index here. `standWith` is this frame's
 		 * answer per range (HD_STAND_OUT, _WITH or _BEHIND), set by
@@ -2102,7 +2109,9 @@ namespace
 	/* Marks the hulls before the groups are filled: the art of every group
 	 * in world cells, then per group the triangles AirHostsOf finds that no
 	 * entry's box holds, as the fill asks a box (by the centroid, or by its
-	 * x and z with the triangle reaching into the holder's air). */
+	 * x and z with the triangle reaching into the holder's air). With the
+	 * air on, whatever g_air_hulls says: a hull's such art is drawn pushed
+	 * back at tomb5.hd_air 1 and 2 alike (HDRange::behind). */
 	void MarkAirHulls(const trf::remaster::Trg& trg)
 	{
 		const size_t groups = trg.groups.size();
@@ -2111,7 +2120,7 @@ namespace
 		g_hull_air.assign(groups, 0);
 		g_hull_covered.assign(groups, 0);
 
-		if (!g_air_hulls || g_air_cells.empty() || !g_boxes)
+		if (g_air_cells.empty() || !g_boxes)
 			return;
 
 		std::vector<std::pair<long long, int> > cells;
@@ -4544,6 +4553,14 @@ bool HDRenderGroupHull(int group, int* air, int* covered)
 	return g_group_hull[(size_t)group] != 0;
 }
 
+int HDRenderGroupHullBehind(int group)
+{
+	if (group < 0 || group >= (int)g_groups.size())
+		return 0;
+
+	return g_groups[(size_t)group].hullBehind;
+}
+
 bool HDRenderAirPair(int index, int* group, int* host, int* tris)
 {
 	if (index < 0 || index >= (int)g_air_pairs.size())
@@ -5936,6 +5953,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int openAir;			// a piece only for the air, see open_air
 		int stand;			// see HDStandRange
 		int cull;			// see RangeCulls
+		int behind;			// see HDRange::behind
 		unsigned int first;
 	};
 
@@ -7023,13 +7041,29 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * room-centre views (hd_level.cpp, BuildRoomIntrusions). */
 					const bool open_air = air && pair_at >= 0 &&
 						stand_at < 0 && box_at < 0 && face_at < 0 && !inner;
-					/* And with tomb5.hd_air 2, a hull's art in such air that
-					 * no entry's box holds (MarkAirHulls): a piece of its own
+					/* A hull (MarkAirHulls) is for the most part a second
+					 * copy of its hosts' own faces, cut into other
+					 * triangles, its walls as well as the art in their air:
+					 * where both are drawn the two fight for the depth in a
+					 * speckle that moves with the eye (RICH2's shaft from
+					 * room 63: 61's art lies within 4 units of rooms 62 to
+					 * 65's at 140,401 of the 219,084 pixels both draw at
+					 * 640x360; the eye moved one unit changes 45,146 pixels
+					 * at 1280x720, 9,019 without 61). So all of a hull's art
+					 * outside its own room, or in unlinked air, is drawn
+					 * pushed back as a stand range answered HD_STAND_BEHIND
+					 * is: the host's faces win wherever the two lie within
+					 * the push, and the hull's art stays where it stands
+					 * alone or in front (10,552 pixels at that step; with
+					 * the air's art alone pushed, 33,503). */
+					const bool hull = g < g_group_hull.size() &&
+						g_group_hull[g];
+					const bool hull_back = hull && (air || overhang);
+					/* And with tomb5.hd_air 2 that art is a piece of its own
 					 * with no entry, no holder and no face, which DecidePairs
 					 * holds to its own room's window like the one above. */
-					const bool hull_air = air && pair_at < 0 &&
-						stand_at < 0 && box_at < 0 &&
-						g < g_group_hull.size() && g_group_hull[g];
+					const bool hull_air = hull && air && pair_at < 0 &&
+						stand_at < 0 && box_at < 0 && g_air_hulls;
 
 					if (pair_at >= 0)
 					{
@@ -7184,6 +7218,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.openAir = open_air || hull_air ? 1 : 0;
 					tri.stand = stand;
 					tri.cull = cull;
+					tri.behind = hull_back ? 1 : 0;
+
+					if (hull_back)
+						group.hullBehind++;
 					tri.slot = slot;
 					tri.scrollU = su;
 					tri.scrollV = sv;
@@ -7351,7 +7389,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					/* And a stand range never shares a draw call with
 					 * anything else. After everything, so a group without
 					 * one - every triangle answering 0 - sorts as before. */
-					return a.stand < b.stand;
+					if (a.stand != b.stand)
+						return a.stand < b.stand;
+
+					// The same for a hull's art drawn pushed back.
+					return a.behind < b.behind;
 				};
 
 			{
@@ -7438,6 +7480,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.glow = tris[0].glow;
 			range.intruding = tris[0].intruding;
 			range.stand = tris[0].stand;
+			range.behind = tris[0].behind;
 			range.overhang = tris[0].overhang;
 			range.cull = tris[0].cull;
 			range.start = (unsigned int)sorted.size();
@@ -7473,6 +7516,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].glow == range.glow &&
 					tris[i].intruding == range.intruding &&
 					tris[i].stand == range.stand &&
+					tris[i].behind == range.behind &&
 					tris[i].cull == range.cull &&
 					(!g_split_overhang ||
 						tris[i].overhang == range.overhang);
@@ -7547,6 +7591,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.glow = tris[i].glow;
 					range.intruding = tris[i].intruding;
 					range.stand = tris[i].stand;
+					range.behind = tris[i].behind;
 					range.overhang = tris[i].overhang;
 					range.cull = tris[i].cull;
 					range.start = (unsigned int)sorted.size();
@@ -9833,8 +9878,10 @@ namespace
 
 			// Pushed back in depth where this frame's answer says so - see
 			// set_stand_matrix; a range drawn alone as HDRenderRoomStand asks.
-			const bool want_behind = window == HD_WINDOW_STAND ? g_stand_pick_behind :
-				range.stand && group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+			const bool stand_behind = range.stand &&
+				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+			const bool want_behind = window == HD_WINDOW_STAND ?
+				g_stand_pick_behind : range.behind || stand_behind;
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
@@ -17930,8 +17977,10 @@ namespace
 				continue;
 
 			// And at the depth draw_pass drew it at.
-			const bool want_behind = window == HD_WINDOW_STAND ? g_stand_pick_behind :
-				range.stand && group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+			const bool stand_behind = range.stand &&
+				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+			const bool want_behind = window == HD_WINDOW_STAND ?
+				g_stand_pick_behind : range.behind || stand_behind;
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
@@ -19252,6 +19301,7 @@ static void MakeStaticPiece(int place, int group, const std::vector<unsigned cha
 			range.count = 0;
 			range.intruding = 0;
 			range.stand = 0;
+			range.behind = 0;
 			list.push_back(range);
 
 			if (range.clear)

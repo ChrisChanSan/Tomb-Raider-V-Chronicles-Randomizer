@@ -31,6 +31,7 @@
 #include "../game/modern_move.h"	// the radial dead zone and its two widths
 #include "../game/modern_camera.h"	// the mouse's gain, as arithmetic
 #include "../game/key_scheme.h"		// the two keyboard sets, as arithmetic
+#include "hd/hd_switch.h"		// the HD/SD switch's press
 #include "../tomb5/tomb5.h"
 #include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank
 
@@ -2245,6 +2246,16 @@ long S_UpdateInput()
 		if (Key(KEY_ROLE_LOAD) || (ControlMethod == 1 && JoyRole(12)))
 			linput |= IN_LOAD;
 	}
+
+	/* The HD/SD switch: its key or its pad chord, read on every call so the
+	 * press edge is seen wherever the key goes down (hd/hd_switch.h). It
+	 * switches in a level only and under no menu - the ring, the pause menu,
+	 * load and save, the outfit window and the Key bindings page all set
+	 * InventoryActive - so the press that binds F12 there switches nothing.
+	 * It sets no input bit: nothing of the game's own state hears it. */
+	HDSwitchInput(Key(KEY_ROLE_HD_SWITCH) != 0,
+		ControlMethod == 1 && JoyRole(JOY_ROLE_HD_SWITCH),
+		!gfGameMode && !InventoryActive);
 
 	if (Gameflow->CheatEnabled)
 	{

@@ -48,6 +48,8 @@
 
 #include "../../../TOMB5 Code/TOMB5/game/modern_move.h"
 #include "../../../TOMB5 Code/TOMB5/game/modern_camera.h"
+// The HD/SD switch's press rule, pure (hd_switch below).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.h"
 /* The 60 fps cut detection's own thresholds and its own rule, so that
  * camera_camcut() measures the orbit against the tree rather than against a
  * number copied out of it. It costs nothing: this header includes stdlib.h
@@ -10574,6 +10576,107 @@ static void camera_mouse()
 	ok(b.mouse_yaw == 0 && b.mouse_pitch == 0, "mouse: a reset clears the hand-over", b.mouse_yaw, 0);
 }
 
+/* The HD/SD switch (specific\hd\hd_switch.h): one flip per press, none for
+ * a held key, none outside a level or under a menu, nothing without HD
+ * data, and a state that holds for the session - across the loads of
+ * levels with and without HD data - because nothing but a press moves it.
+ * `run` feeds a picture of the readings: 'k' down live, '.' up live, 'm'
+ * down under a menu, ',' up under a menu. */
+static int hd_switch_run(HDSwitchState* s, const char* run, int hd,
+	int* flips, int* nothing)
+{
+	*flips = 0;
+	*nothing = 0;
+
+	for (const char* p = run; *p; p++)
+	{
+		const int down = *p == 'k' || *p == 'm';
+		const int live = *p == 'k' || *p == '.';
+		const int what = HDSwitchStep(s, down, live, hd);
+
+		*flips += what == HD_SWITCH_FLIPPED;
+		*nothing += what == HD_SWITCH_NOTHING;
+	}
+
+	return s->drawn;
+}
+
+static void hd_switch()
+{
+	HDSwitchState s = HD_SWITCH_START;
+	int flips, nothing;
+
+	ok(s.drawn == 1 && s.held == 0, "hd switch: a game starts drawn HD",
+		s.drawn, 1);
+
+	// One press, one flip; a key held for a while is still one press.
+	hd_switch_run(&s, ".kkkkkk.", 1, &flips, &nothing);
+	ok(flips == 1 && s.drawn == 0, "hd switch: a held key flips once",
+		flips, 1);
+
+	// Two presses, two flips, and the draw is classic again.
+	hd_switch_run(&s, "k.k.", 1, &flips, &nothing);
+	ok(flips == 2 && s.drawn == 0, "hd switch: two presses, two flips",
+		flips, 2);
+
+	// Under a menu a press switches nothing, and a key still down when the
+	// menu closes is no new press.
+	hd_switch_run(&s, ",mmmkkk.", 1, &flips, &nothing);
+	ok(flips == 0 && s.drawn == 0, "hd switch: no flip from under a menu",
+		flips, 0);
+
+	// Key and pad are one reading: down on either, then both, is one press.
+	{
+		HDSwitchState t = HD_SWITCH_START;
+		int key = 0, pad = 0, n = 0;
+		const int seq[6][2] = { { 1, 0 }, { 1, 1 }, { 0, 1 }, { 0, 0 },
+			{ 0, 1 }, { 0, 0 } };
+
+		for (int i = 0; i < 6; i++)
+		{
+			key = seq[i][0];
+			pad = seq[i][1];
+			n += HDSwitchStep(&t, key || pad, 1, 1) == HD_SWITCH_FLIPPED;
+		}
+
+		ok(n == 2 && t.drawn == 1, "hd switch: key and pad share one edge",
+			n, 2);
+	}
+
+	// Without HD data a press flips nothing and says so, once per press.
+	hd_switch_run(&s, "k.kk.", 0, &flips, &nothing);
+	ok(flips == 0 && nothing == 2 && s.drawn == 0,
+		"hd switch: no HD data, nothing to switch", nothing, 2);
+
+	/* The session, from a fresh start: drawn classic in one level, a level
+	 * loaded with hd_enable 0 in between (a press there changes nothing),
+	 * and the next HD level is still drawn classic until a press. */
+	s = HDSwitchState HD_SWITCH_START;
+	hd_switch_run(&s, "k.", 1, &flips, &nothing);
+	ok(s.drawn == 0, "hd switch: classic in the first level", s.drawn, 0);
+	hd_switch_run(&s, "....", 1, &flips, &nothing);
+	ok(s.drawn == 0, "hd switch: a load does not move it", s.drawn, 0);
+	hd_switch_run(&s, "k.", 0, &flips, &nothing);
+	ok(s.drawn == 0, "hd switch: a level without HD keeps it", s.drawn, 0);
+	hd_switch_run(&s, "....", 1, &flips, &nothing);
+	ok(s.drawn == 0, "hd switch: the next HD level is classic still",
+		s.drawn, 0);
+	hd_switch_run(&s, "k.", 1, &flips, &nothing);
+	ok(s.drawn == 1, "hd switch: and a press brings HD back", s.drawn, 1);
+
+	// A sweep: n presses leave the draw at HD exactly when n is even.
+	for (int n = 0; n < 9; n++)
+	{
+		HDSwitchState t = HD_SWITCH_START;
+
+		for (int i = 0; i < n; i++)
+			hd_switch_run(&t, "kk.", 1, &flips, &nothing);
+
+		ok(t.drawn == !(n & 1), "hd switch: n presses, n flips", t.drawn,
+			!(n & 1));
+	}
+}
+
 /* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
  * alpha-pass pages are drawn as a clear floor, out of the smallest and the
  * largest alpha of the page's top mip. The pairs are the measured ones where
@@ -19397,6 +19500,7 @@ int main()
 	camera_wall_clear();
 	camera_flip();
 	camera_mouse();
+	hd_switch();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

@@ -574,7 +574,9 @@
  *     -hddrawn 0|1    the HD level built, drawn HD (1, the default) or
  *                     classic (0): the classic faces of the seed room and of
  *                     every -with room in place of the art, as -classicroom
- *                     for each with -classiconly. Needs -roombox.
+ *                     for each with -classiconly. Needs -roombox. The faces
+ *                     come from the .TRC, not from the build, so the
+ *                     picture is that of the explicit list.
  *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
@@ -9102,15 +9104,16 @@ namespace probemarks
 	}
 }
 
-/* -hddrawn 0|1: the third state beside hd_enable 0 and 1 - the HD level
- * built, the world drawn classic. 1, the default, is the picture as ever. 0
- * draws the classic faces of the seed room and of every -with room in place
- * of the art (an implied -classicroom for each, with -classiconly), after the
- * whole HD build has run; held against a picture of the same -classicroom
- * list it shows whether the build leaves the classic rooms as the .TRC has
- * them. A branch of its own in the option chain would pass the compiler's
- * nesting limit (C1061), so the chain's last else calls this, and this
- * reports any other argument as unknown. */
+/* -hddrawn 0|1: the switch's classic state as far as the tool can draw one.
+ * 1, the default, is the picture as ever. 0 is a shorthand for -classicroom
+ * of the seed room and of every -with room, with -classiconly: the rooms'
+ * faces read fresh from the .TRC in -roombox and drawn flat grey, after the
+ * whole HD build has run. The build does not reach those faces, so the
+ * picture equals that of the explicit list by construction and says nothing
+ * about what the build changes in the game's classic draw; that is read from
+ * the engine's code. A branch of its own in the option chain would pass the
+ * compiler's nesting limit (C1061), so the chain's last else calls this, and
+ * this reports any other argument as unknown. */
 static void HDDrawnSwitch(int argc, char** argv, int& at)
 {
 	if (strcmp(argv[at], "-hddrawn") || at + 1 >= argc)

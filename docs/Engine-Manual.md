@@ -2187,11 +2187,14 @@ it.
   gets there, and after a few seconds they come back together, within ten seconds of
   the last dart, where the whole school keeps off the edge. A Lara who stands still
   where she scared them does not scare them again until she has moved a quarter
-  square. In a big body - ANDY3's deep-sea basin, whose deep water spans more than
-  eight squares - the school swims from one far waypoint to the next, square by
-  square, about a fish's length a second; the pond and ANDY1's pools keep their slow
-  circling. The fish of RICH2's tank never flee: each swims to and fro along the tank
-  on a line of its own, there and back in 20 to 30 seconds, turning about at each end.
+  square; once she has, coming back there scares them again. In a big body - ANDY3's
+  deep-sea basin, whose deep water spans more than eight squares - the school swims
+  from one far waypoint to the next, square by square, about a fish's length a
+  second, each time along the water it has not swum through yet or swam through
+  longest ago: a third of the basin in its first minute, three quarters in five. The
+  pond and ANDY1's pools keep their slow circling. The fish of RICH2's tank never
+  flee: each swims to and fro along the tank on a line of its own, there and back in
+  20 to 30 seconds, turning about at each end.
   RICH2's tank counts as whole from the level's start (its item starts invisible),
   until it is shot. Under a ceiling a few
   drips fall: a drop falls from the ceiling and rings the sheet where it lands, near

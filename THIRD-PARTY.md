@@ -1611,12 +1611,12 @@ water surface", carries the tables.
     the 4096 `InitialiseItem` left). DATA: RICH2's item 33 carries flags
     0x100 in the classic level (RoomProbe `-lifetank game`), so it starts
     invisible, which the first rule took for a shot tank.
-    After the owner's sixteenth play test of 2026-10-13 (life round 4) a dart
-    turns off the deep water's edge, the school regroups off it within 10
-    seconds, a still Lara scares a school once, a tank's school never flees
-    and a big body's school roams: entries 186 to 189. The first sentence's
-    ring and the regroup "where the fish are" stand; the tank's school no
-    longer follows "the same rules".
+    After the owner's sixteenth play test of 2026-10-13, his third of the life
+    (life round 4), a dart turns off the deep water's edge, the school
+    regroups off it within 10 seconds, a still Lara scares a school once, a
+    tank's school never flees and a big body's school roams: entries 186
+    to 189. The first sentence's ring and the regroup "where the fish are"
+    stand; the tank's school no longer follows "the same rules".
 167. **The drips** - squares of a body whose room is not open air have a
     ceiling; four or more of them give one drip for eight, two to six,
     each at a period of 3 to 9 seconds; a drip rings the sheet within six
@@ -1702,10 +1702,10 @@ water surface", carries the tables.
     After the owner's second play test of 2026-10-11: 1009 a fish's rise
     phase, 1103 and 1109 a dart's depth and pitch, and 811 with the bob's
     count a barrel ring's size (821 no longer used). OWN, free choices.
-    After the owner's sixteenth play test of 2026-10-13 (life round 4): 1201
-    the side a fish turns along an edge, 1301, 1303 and 1307 a tank fish's
-    line, period and phase, 1311 with a school's count of legs a roaming
-    school's waypoint. OWN, free choices.
+    After the owner's sixteenth play test of 2026-10-13, his third of the life
+    (life round 4): 1201 the side a fish turns along an edge, 1301, 1303 and
+    1307 a tank fish's line, period and phase, 1311 with a school's count of
+    legs the tie between a roaming school's waypoints. OWN, free choices.
 170. **The projected shadow's arrival** - where the shadow starts to run its
     strength is multiplied by 3f^2 - 2f^3 of f = t / 0.25 game seconds, and
     every blob that gives way to it is drawn meanwhile with its alpha byte
@@ -1875,7 +1875,8 @@ water surface", carries the tables.
     than 96 units a tick in a flight.
 187. **A Lara who stands still** (life round 4) - a school she scared is not
     scared by her again until she has moved 256 units from where she stood at
-    that dart; a splash scares it wherever she stands (`HDLifeSchool::seen`,
+    that dart, and that place is then forgotten; a splash scares it wherever
+    she stands (`HDLifeSchool::seen`,
     `HDLifeSchoolTick`). OWN, a design of this project; the distance a free
     choice. DATA: with the edge turn the schools of ANDY1's pools darted 7 and
     12 times in 30 seconds and without end with Lara on a bank (RoomProbe
@@ -1891,17 +1892,21 @@ water surface", carries the tables.
     within a square of its near fish, and the school there darted six times in
     30 seconds (RoomProbe `-lifeseries`).
 189. **A big body's roam** (life round 4) - a school whose body's deep squares
-    span more than 8 squares picks a waypoint, a deep square's middle, by a
-    hash among the farther half of the squares it can reach (3 steps at least)
-    and swims there square by square on the shortest way over deep squares, a
+    span more than 8 squares picks a waypoint, a deep square's middle 3 steps
+    off at least, whose way runs over the most squares its centre never came
+    to, then over those it came to longest ago, a hash deciding a tie, the
+    first from the first square it comes to (`HDLifeSchool::been`), and swims
+    there square by square on the shortest way over deep squares, a
     diagonal step only between two deep squares, at one `FISH2` length a
     second, its heading turned at 45 degrees a second (`HDLifeRoams`,
     `HDLifeRoamSteps`, `HDLifeRoamNext`, `HDLifeRoamPick`, `HDLifeRoamStep`).
     OWN, a design of this project; the numbers are free choices. DATA: ANDY3's
     deep-sea basin, 42 deep squares (a block of 8 by 3, two arms a square
-    wide): its school's fish saw 4 to 7 of them in a minute over eight rolls,
-    7 to 17 with the roam; ANDY3's pond and ANDY1's pools, 4 to 7 squares
-    across, saw 54 to 64 percent of theirs and keep their cruise (RoomProbe
+    wide): its school's fish saw 4 to 9 of them in a minute over twelve rolls,
+    7 to 17 with a waypoint by the hash alone, which sent the centre back along
+    the way it came by, and 14 to 20 with this pick (24 to 32 and 32 to 39 in
+    five minutes); ANDY3's pond and ANDY1's pools, 4 to 7 squares across, saw
+    54 to 64 percent of theirs and keep their cruise (RoomProbe
     `-lifeseries`).
 
 ## Credited, but not contained here

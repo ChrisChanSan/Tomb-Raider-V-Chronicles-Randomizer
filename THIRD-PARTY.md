@@ -644,7 +644,9 @@ water surface", carries the tables.
     root of 1 + d / 256; the eight youngest within 512 units of a sheet draw's
     squares and 256 of its surface. OWN, free choice, set by eye on RoomProbe
     pictures (`RoomProbe -ripple`) against the play test of 2026-10-08 (too
-    restless, too quick, fading too soon).
+    restless, too quick, fading too soon). A ring that starts over 128 (a
+    floating body's) keeps its size past the cap and is 4 times stronger:
+    entry 189.
 73. **The ripple row of `hd_water.txt`** - `ripple <x> <z> <size> <seconds>`
     on any row: a ring at that world place every so many seconds, its phase
     from the place, at the surface of the row's room's square under it. OWN,
@@ -1403,7 +1405,9 @@ water surface", carries the tables.
     (`HDRenderWaterWarmUp`) - OWN, a design of this project from general
     graphics knowledge (a shader readied by a draw before it is needed);
     the cause it answers is a count on our data (the first draw with
-    `WaterVS` waited 42 to 73 ms, the pixel shaders under 1 ms).
+    `WaterVS` waited 42 to 73 ms, the pixel shaders under 1 ms). The
+    cards' vertex shader also projects a shot tank's wet floor (entry
+    188).
 144. **The tank's film** - the floor a breaking fish tank floods gets a
     basin body of the sheets of its own over the floor lasers' box,
     at rest 8 units over the floor, drawn with the sheets' shaders and
@@ -1433,7 +1437,9 @@ water surface", carries the tables.
     units/s (half the speed of a fall of the dome's height under g). OWN,
     a design of this project; the shares, the lengths and the fades are
     free choices, set by eye on the round's RoomProbe pictures. DATA: the
-    mesh (the player's classic level) and page 3243 (5\TEX).
+    mesh (the player's classic level) and page 3243 (5\TEX). After the
+    film, and at the tank without one, the floor its water reaches stays
+    wet: entries 186 to 188.
 145. **The film's height, rim and clip** - the film's surface stands
     `kFilmRise`, 16 units, times its strength over its rest, through the
     sheets' crest lift in `WaterVS` (tapering in over the basin's 512
@@ -1846,6 +1852,58 @@ water surface", carries the tables.
     143 and a row for room 7 (the rain basin) give foam 0.5
     (`hd_render.cpp`, `kWaterOverride`). OWN, a project decision of
     2026-10-12, chosen on RoomProbe pictures at foam 1, 0.5, 0.25 and 0.
+186. **Where a shot tank's water runs** - the classic squares under the
+    dome's foot (the apron's footprint on the floor in the tank's frame,
+    between the glass and the foot, as wide as the foot), and from there
+    every flat square at the same height or one click (256 units) lower,
+    across rooms by world square, never up a step, never down a drop,
+    never behind the glass (`hd_render.cpp`, `build_wet_floors`). OWN, a
+    design of this project: water on a floor runs level and down a step;
+    the step of one click is the classic floor's own unit. DATA: RICH2's
+    floors out of the classic level (`SectorCheck`): tank 182 reaches 50
+    squares at y 0 of rooms 122, 121, 45, 46 and 113 (the raised blocks
+    and stairs of 121 and 45 stay dry), tank 33 its plinth and the
+    lowered area of room 23, 14 squares at two heights.
+187. **The water's front over the floor** - a point of a 256-unit grid
+    over those squares is wet once the front has passed its way from the
+    glass (the shortest run over the grid, diagonals at their length, a
+    step down at no cost), over a quarter square; the front comes out
+    with the dome's apron (its 866 units in 0.25 s) and runs on at 321
+    units/s, sqrt(g h) at the tank's film's 24 units; each point's way is
+    pushed back by up to 384 units and its share of the mirror set
+    between 0.5 and 1 out of two hashes of its place; once shot the floor
+    stays wet, and a tank first seen shot is wet at once (`HDWetFront`,
+    `HDWetAt`, `HDRenderWaterWet`). OWN: the shallow-water wave speed is
+    textbook physics with the project's g; the ramp, the push and the
+    damp share are free choices, set by eye on the round's RoomProbe
+    pictures. DATA: the furthest point of tank 182's floor lies 19,749
+    units along the way (RoomProbe's `SPLASHLOG ... wet` line).
+188. **The wet floor's look** - a layer 4 units over the floor, one draw a
+    frame through the cards' vertex shader and its own pixel shader
+    (`hd_wet.hlsl`, `WetPS`): the floor behind kept by one less 0.3 times
+    the wet; Schlick's Fresnel with water's F0 0.02 weighting a mirror -
+    the frame's copy where a ray reflected in the floor and marched in
+    screen space (12 steps from 32 units, each 1.5 times the last) finds
+    the frame, the copy's clip undone as Reinhard's curve x / (1 - x)
+    held at 8, else the light field's colour times the polished walls'
+    0.35 - and the light field's Blinn-Phong highlight at exponent 128
+    with the textbook normalisation (n + 8) / 8, all held softly under the
+    walls' cap of 0.75 and taking the distance fog as the cards do; it
+    fades out where the frame lies more than 32 units under it. OWN, a
+    design of this project from general graphics knowledge (a decal over
+    the floor, Fresnel, a reflection in screen space, the inverse of a
+    tone curve); the darkening, the exponent, the march and the 8 are
+    free choices, set by eye on the round's RoomProbe pictures. DATA: the
+    level's light field (the sheen's, `hd_gloss_field.h`) and the frame
+    itself.
+189. **A floating body's ring** - a ring that starts over 128 units (the
+    water's life's barrel, 240 to 255) keeps its size past the cap of
+    128 and is 4 times stronger (`hd_render.cpp`, `kRingBody`;
+    `hd_splash_math.h`, `HDRingStrength`). OWN, a free choice, set by
+    eye on RoomProbe pictures of ANDY3's lake at night from the bank at
+    700, 1,500 and 3,000 units: at 4 the ring reads from a wading Lara's
+    camera at 1.5 and 2 s, at 2 it does not. A ring that starts at 128
+    or less keeps entry 72's strength to the bit.
 
 ## Credited, but not contained here
 

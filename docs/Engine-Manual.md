@@ -2133,7 +2133,16 @@ it.
   water floods is covered by a thin sheet of the water with a foaming rim,
   deepest while it pours out, then sinking and drying as the floor lasers
   run down (with `hd_motion` off it keeps its resting height); the
-  lasers' red glow stays. The splash's and the spray's timing and
+  lasers' red glow stays. Once a tank is shot - either tank, with
+  `hd_water` on - the floor its water reaches stays wet: from the squares
+  under the dome out over every level square and down one step, never up
+  a step (in RICH2 the floors of rooms 122, 121, 45, 46 and 113 at the
+  tank of room 122, the plinth and the lowered area of room 23 at the
+  other), the water arriving as the dome comes out and running on at
+  about 0.7 m/s. The wet floor is darker and mirrors what stands on it -
+  the vending machines, Lara, a lit screen - and the lamps, most where
+  the eye looks along the floor; a game loaded with the tank shot starts
+  with the floor wet, and it does not dry. The splash's and the spray's timing and
   everything the game decides are the classic ones. `hd_water` `0` draws
   the classic splash, spray and tank's dome, and so does `hd_motion` `0`.
 - **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
@@ -2141,7 +2150,14 @@ it.
   tank=<item>:<state>` - the HD splashes alive, the cards drawn, the splash
   rings on the sheets (two a splash), the item of the fish tank whose
   floor is wet with the film's strength 0 to 1 (`-1:0.00` when none is),
-  and, last, `tanks=<n>`, the breaking tanks whose water was drawn.
+  `tanks=<n>`, the breaking tanks whose water was drawn, and, last,
+  `floor=<item>:<wet>`, the tank whose floor is wet and how much of it,
+  0 to 1 - the line comes once a second while that water still runs out.
+  At the level's load one line a tank, `SPLASHLOG level=<stem> wet
+  tank=<item> squares=<n> rooms=<list> heights=<n> points=<n> tris=<n>
+  reach=<units> far=<units>`: the squares its water would reach, the
+  rooms whose floor they are, and the furthest point along the water's
+  way.
 - **The water's warm-up.** When a level with water sheets has loaded, each
   of the water's shaders draws once off the screen, so the first frame
   that shows water does not wait for the graphics driver to ready them -
@@ -2177,7 +2193,8 @@ it.
   itself rises, so held level it does not hang over the drawn water (its slight tilt
   can lift an edge a few units); on a sea whose waves rise high only a barrel is heavy
   enough to stay in it. A barrel rings the water round it once a bob, every 2.5 to 4
-  seconds, a ring as strong as a wading Lara's that starts at the barrel's side. The
+  seconds, a ring that starts at the barrel's side, four times as strong as a wading
+  Lara's of its size, so it reads from the bank at night as well. The
   fish circle slowly, each rising and sinking at its own pace between 128 units under
   the surface (more under a sea's high waves) and a little over the floor, nose up as
   it climbs and down as it sinks; when Lara comes within a square of any of them, or

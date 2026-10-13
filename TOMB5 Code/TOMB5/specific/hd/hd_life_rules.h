@@ -135,6 +135,27 @@ static const HDLifeTank kHDLifeTanks[] =
 };
 static const float kHDLifeTankLight = 255.0f;
 
+/* A tank's fish do not flee - Lara before the glass stands within a square
+ * of them wherever they swim, and a school that took the flight there
+ * darted for as long as she stood (RoomProbe -lifeseries, Lara at the
+ * glass: six darts in 30 seconds, every fish at the stop). They swim to and
+ * fro along the tank's long side (HDLifeTankAt): each on a line of its own
+ * across the tank - the school's fish set apart evenly over its width less
+ * kHDLifeEdge each side, in the order of a hash of the fish (1301), so no
+ * two share one - from kHDLifeTankEnd off one end to as far off the other
+ * and back in kHDLifeTankPeriod and up to kHDLifeTankPeriodSpan more (the
+ * hash, 1303), from a phase of its own (1307), slowing to its turn at each
+ * end, where it turns about at its own rate (kHDLifeFishTurn); its depth
+ * rises and sinks in the tank's band as a pond fish's does. kHDLifeTankEnd
+ * is the stop and FISH2's reach (128 and 87): the nose stays off the end
+ * as the fish turns. RICH2's tank, 2,048 long: a run of 1,618 there and
+ * back in 20 to 30 seconds, 108 to 162 units a second on the mean - the
+ * school's cruise of 150 at the quickest, two thirds of it at the slowest.
+ * Free choices with those reasons. */
+static const float kHDLifeTankEnd = 215.0f;
+static const float kHDLifeTankPeriod = 20.0f;
+static const float kHDLifeTankPeriodSpan = 10.0f;
+
 /* The FISHTANK item's states the tank rule reads, the game's item status
  * (global\types.h, ITEM_INACTIVE to ITEM_INVISIBLE, 0 to 3), the flags its
  * level start reads (IFL_INVISIBLE, IFL_CODEBITS) and the water
@@ -558,7 +579,9 @@ struct HDLifeEntry
 	int banked;		// 1 while a bank holds it
 	float retry;		// the clock it tries again at
 	int school;		// its school, or -1
-	float ring, angle;	// its place on the school's ring
+	/* Its place on the school's ring; a tank's fish its line across the
+	 * tank and its phase (HDLifeTankAt). */
+	float ring, angle;
 	// A darting fish's way, a unit vector in x and z (HDLifeSchoolTick).
 	float wayX = 0.0f, wayZ = 0.0f;
 	/* A fish in a flight: its depth under the surface, units, its dart's
@@ -1940,10 +1963,56 @@ inline void HDLifeBuild(HDLifePool& p, const HDLifeLevel& level,
 	}
 }
 
+/* A tank's box, world x and z, out of its squares; true when it runs
+ * along z. */
+inline bool HDLifeTankBox(const HDLifeBody& b, float* x0, float* x1,
+	float* z0, float* z1)
+{
+	*x0 = *z0 = 1.0e30f;
+	*x1 = *z1 = -1.0e30f;
+
+	for (size_t i = 0; i < b.squares.size(); i++)
+	{
+		const float sx = (float)b.squares[i].x, sz = (float)b.squares[i].z;
+
+		*x0 = sx < *x0 ? sx : *x0;
+		*z0 = sz < *z0 ? sz : *z0;
+		*x1 = sx + 1024.0f > *x1 ? sx + 1024.0f : *x1;
+		*z1 = sz + 1024.0f > *z1 ? sz + 1024.0f : *z1;
+	}
+
+	return *z1 - *z0 >= *x1 - *x0;
+}
+
+/* A tank fish's place at clock t (kHDLifeTankEnd): across the tank on its
+ * line (the entry's `ring`, set by HDLifeAddTank), along it on a cosine
+ * between kHDLifeTankEnd off either end with the entry's `period` and its
+ * phase (`angle`); in wx, wz the way it swims, a unit step along the long
+ * side, or 0 0 where it turns. */
+inline void HDLifeTankAt(const HDLifeBody& b, const HDLifeEntry& e, float t,
+	float* x, float* z, float* wx, float* wz)
+{
+	float x0, x1, z0, z1;
+	const bool alongZ = HDLifeTankBox(b, &x0, &x1, &z0, &z1);
+	const float lo = (alongZ ? z0 : x0) + kHDLifeTankEnd;
+	const float hi = (alongZ ? z1 : x1) - kHDLifeTankEnd;
+	const float a = 6.2831853f * t / (e.period > 0.0f ? e.period : 1.0f) +
+		e.angle;
+	const float along = 0.5f * (lo + hi) + 0.5f * (hi - lo) * cosf(a);
+	const float v = -sinf(a);
+	const float way = v > 1.0e-3f ? 1.0f : v < -1.0e-3f ? -1.0f : 0.0f;
+
+	*x = alongZ ? e.ring : along;
+	*z = alongZ ? along : e.ring;
+	*wx = alongZ ? 0.0f : way;
+	*wz = alongZ ? way : 0.0f;
+}
+
 /* A fish tank's life, after HDLifeBuild: a body of its squares, each as
  * deep as the tank is high, under a ceiling, in its room, with its top as
  * the surface; and a school of the tank's count of fish in the middle of
- * it, set up as a pond's (HDLifeBuild), its numbers from `draw`. */
+ * it, set up as a pond's (HDLifeBuild), its numbers from `draw`, and each
+ * fish's line of the to and fro (kHDLifeTankEnd) from the hash. */
 inline void HDLifeAddTank(HDLifePool& p, const HDLifeTank& t,
 	int (*draw)(void*), void* ctx)
 {
@@ -2005,6 +2074,35 @@ inline void HDLifeAddTank(HDLifePool& p, const HDLifeTank& t,
 		e.phase = 6.2831853f * (float)draw(ctx) / 32767.0f;
 		p.entries.push_back(e);
 		p.fish++;
+	}
+
+	/* Each fish's line (HDLifeTankAt): `ring` its place across the tank,
+	 * the school's lines evenly apart in the order of the hash (1301);
+	 * `period` and `angle` its to and fro's period and phase. */
+	float x0, x1, z0, z1;
+	const bool alongZ = HDLifeTankBox(p.bodies[(size_t)bi], &x0, &x1, &z0,
+		&z1);
+	const float lo = (alongZ ? x0 : z0) + kHDLifeEdge;
+	const float hi = (alongZ ? x1 : z1) - kHDLifeEdge;
+	const size_t first = p.entries.size() - (size_t)s.fish;
+
+	for (size_t i = first; i < p.entries.size(); i++)
+	{
+		HDLifeEntry& e = p.entries[i];
+		const unsigned h = HDLifeHash((unsigned)e.index, 1301u);
+		int rank = 0;
+
+		for (size_t k = first; k < p.entries.size(); k++)
+		{
+			const unsigned g = HDLifeHash((unsigned)p.entries[k].index, 1301u);
+
+			rank += g < h || (g == h && k < i) ? 1 : 0;
+		}
+
+		e.ring = lo + (hi - lo) * ((float)rank + 0.5f) / (float)s.fish;
+		e.period = kHDLifeTankPeriod + kHDLifeTankPeriodSpan *
+			HDLifeUnit((unsigned)e.index, 1303u);
+		e.angle = 6.2831853f * HDLifeUnit((unsigned)e.index, 1307u);
 	}
 
 	p.schools.push_back(s);
@@ -2309,7 +2407,8 @@ inline int HDLifeNearestSchoolSquare(const HDLifeBody& b, float x, float z)
  * cruises to its target and picks another on arrival or every
  * kHDLifeRetarget seconds. Lara within a square of any of its fish, or a
  * splash on its body's water (`splash`, x and z pairs), starts a dart;
- * `laraOn` 0 has no Lara in the water. */
+ * `laraOn` 0 has no Lara in the water. A tank's school does neither: its
+ * fish swim their lines (HDLifeTankAt). */
 inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 	float dt, int laraOn, float lx, float lz, const float* splash = 0,
 	int splashes = 0)
@@ -2320,6 +2419,14 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 	const float need = (float)kHDLifeDeep;
 	int scared = 0;
 	float sx = 0.0f, sz = 0.0f;
+
+	// A tank's fish swim their lines and never flee (kHDLifeTankEnd).
+	if (b.tank)
+	{
+		s.darting = 0;
+		s.fleeUntil = 0.0f;
+		return;
+	}
 
 	// Where its fish are now: on the ring, or their own place in a flight.
 	auto at = [&](const HDLifeEntry& e, float* x, float* z)
@@ -2576,11 +2683,21 @@ inline void HDLifeFishTurn(const HDLifePool& p, HDLifeEntry& e, float t,
 
 	const HDLifeSchool& s = p.schools[(size_t)e.school];
 
-	if (p.bodies[(size_t)s.body].gone)
+	const HDLifeBody& b = p.bodies[(size_t)s.body];
+
+	if (b.gone)
 		return;
 
-	const float wx = s.darting ? e.wayX : sinf(s.heading);
-	const float wz = s.darting ? e.wayZ : cosf(s.heading);
+	float wx = s.darting ? e.wayX : sinf(s.heading);
+	float wz = s.darting ? e.wayZ : cosf(s.heading);
+
+	// A tank's fish: the way it swims its line, none where it turns.
+	if (b.tank)
+	{
+		float x, z;
+
+		HDLifeTankAt(b, e, t, &x, &z, &wx, &wz);
+	}
 
 	e.yaw = HDLifeTurnToward(e.yaw, wx, wz, kHDLifeFishTurn, dt);
 
@@ -2754,7 +2871,8 @@ inline void HDLifeBodyTail(const HDLifePool& p, int bi, char* out, size_t n)
 
 /* Where an entry is drawn at clock t: its world place (x, y, z; y down) and
  * its yaw, pitch and roll. A float rides its body's surface with its draft
- * and its bob; a fish swims on its school's ring in its depth band. */
+ * and its bob; a fish swims on its school's ring in its depth band, a
+ * tank's fish on its line (HDLifeTankAt). */
 inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 	float* x, float* y, float* z, float* yaw, float* pitch, float* roll)
 {
@@ -2766,11 +2884,15 @@ inline void HDLifePose(const HDLifePool& p, const HDLifeEntry& e, float t,
 		/* Its own heading (HDLifeFishTurn) and its school's beat: in a
 		 * flight it swims its own way, its tail beating faster. */
 
+		float wx, wz;
+
 		if (s.darting)
 		{
 			*x = e.x;
 			*z = e.z;
 		}
+		else if (b.tank)
+			HDLifeTankAt(b, e, t, x, z, &wx, &wz);
 		else
 			HDLifeRingAt(s, e, t, x, z);
 

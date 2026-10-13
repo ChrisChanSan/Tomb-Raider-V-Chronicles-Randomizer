@@ -18175,40 +18175,97 @@ static void life_tank()
 	p.last = -1.0f;
 	HDLifeAddTank(p, t, life_draw, &state);
 
-	int outside = 0;
+	int outside = 0, fled = 0, facing = 0, faced = 0;
+	float zMin[8], zMax[8];
 
-	for (int k = 1; k <= 30 * 30; k++)
+	for (int f = 0; f < 8; f++)
+	{
+		zMin[f] = 1.0e30f;
+		zMax[f] = -1.0e30f;
+	}
+
+	/* A minute; Lara at the glass, within a square of every fish, from 10
+	 * to 40 seconds. */
+	for (int k = 1; k <= 30 * 60; k++)
 	{
 		const float s = k / 30.0f;
 
-		// Lara at the glass from 10 to 12 seconds.
-		HDLifeTick(p, 0, s, s >= 10.0f && s < 12.0f, (float)t.x1 + 200.0f,
+		HDLifeTick(p, 0, s, s >= 10.0f && s < 40.0f, (float)t.x1 + 200.0f,
 			0.5f * (t.z0 + t.z1), 0);
+		fled += p.schools[0].darting || p.schools[0].fleeUntil > s;
 
 		for (size_t i = 0; i < p.entries.size(); i++)
 		{
-			float x, y, z, yaw, pitch, roll;
+			const HDLifeEntry& e = p.entries[i];
+			float x, y, z, yaw, pitch, roll, wx, wz;
 
-			HDLifePose(p, p.entries[i], s, &x, &y, &z, &yaw, &pitch, &roll);
-			outside += x < t.x0 + 87.0f || x > t.x1 - 87.0f || z < t.z0 +
-				87.0f || z > t.z1 - 87.0f || y < t.top || y > t.bottom;
+			HDLifePose(p, e, s, &x, &y, &z, &yaw, &pitch, &roll);
+			outside += x < t.x0 + kHDLifeEdge - 1.0f || x > t.x1 -
+				kHDLifeEdge + 1.0f || z < t.z0 + kHDLifeTankEnd - 1.0f ||
+				z > t.z1 - kHDLifeTankEnd + 1.0f || y < t.top || y > t.bottom;
+			zMin[i] = z < zMin[i] ? z : zMin[i];
+			zMax[i] = z > zMax[i] ? z : zMax[i];
+
+			/* Half way along its run it faces the way it swims (the model's
+			 * head along its yaw, kHDLifeKinds' forward). */
+			HDLifeTankAt(p.bodies[0], e, s, &x, &z, &wx, &wz);
+
+			if (fabsf(z - 0.5f * (t.z0 + t.z1)) < 64.0f && wz != 0.0f)
+			{
+				faced++;
+				facing += cosf(e.yaw) * wz > 0.9f;
+			}
 		}
 	}
 
+	float run = 1.0e30f;
+
+	for (int f = 0; f < 8; f++)
+		run = zMax[f] - zMin[f] < run ? zMax[f] - zMin[f] : run;
+
 	ok(p.bodies.size() == 1 && p.bodies[0].tank && p.bodies[0].index == -1 &&
 		p.bodies[0].squares.size() == 2 && p.fish == t.fish &&
-		p.schools[0].darts >= 1 && outside == 0,
-		"life tank: eight fish keep inside the tank, calm and darting from "
-		"Lara at the glass", outside, 0);
+		p.schools[0].darts == 0 && fled == 0 && outside == 0,
+		"life tank: eight fish keep inside the tank and never flee, Lara at "
+		"the glass for half a minute", outside + fled, 0);
+
+	ok(run >= (float)(t.z1 - t.z0) - 2.0f * kHDLifeTankEnd - 8.0f &&
+		faced > 0 && facing == faced,
+		"life tank: each fish swims the whole run to and fro in a minute and "
+		"turns about at the ends", facing, faced);
+
+	// Eight lines across the tank, none shared, the stop off the glass.
+	float across[8];
+
+	for (int f = 0; f < 8; f++)
+		across[f] = p.entries[(size_t)f].ring;
+
+	std::sort(across, across + 8);
+
+	float gap = 1.0e30f;
+
+	for (int f = 1; f < 8; f++)
+		gap = across[f] - across[f - 1] < gap ? across[f] - across[f - 1] :
+			gap;
+
+	ok(gap >= 90.0f && across[0] >= t.x0 + kHDLifeEdge &&
+		across[7] <= t.x1 - kHDLifeEdge,
+		"life tank: every fish on a line of its own, 96 apart", (long)gap, 96);
 
 	const HDLifePool before = p;
 
 	p.bodies[0].gone = 1;
-	HDLifeTick(p, 0, 40.0f, 1, (float)t.x1 + 200.0f, 0.5f * (t.z0 + t.z1),
+	HDLifeTick(p, 0, 70.0f, 1, (float)t.x1 + 200.0f, 0.5f * (t.z0 + t.z1),
 		0);
+
+	int turned = 0;
+
+	for (size_t i = 0; i < p.entries.size(); i++)
+		turned += p.entries[i].yaw != before.entries[i].yaw;
+
 	ok(p.schools[0].cx == before.schools[0].cx &&
-		p.schools[0].darts == before.schools[0].darts,
-		"life tank: a shot tank's school rests", 0, 0);
+		p.schools[0].darts == before.schools[0].darts && turned == 0,
+		"life tank: a shot tank's school rests", turned, 0);
 
 	// RICH2's item 33 carries IFL_INVISIBLE (0x100).
 	int active = 0, status = 0, water = 0;

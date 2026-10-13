@@ -11177,7 +11177,9 @@ namespace
 	 * HDWetAt over HDWetFront (hd_splash_math.h): under the dome as the
 	 * apron comes out, past it at a shallow flood's speed. Once the tank
 	 * is shot the floor stays wet; a tank that is first seen shot (a
-	 * loaded game) is wet all over at once.
+	 * loaded game) is wet all over at once, and so is every tank's floor
+	 * from its break while tomb5.hd_motion is off - the water's run is
+	 * motion, the wet floor is the game's state.
 	 *
 	 * The numbers. kWetLift, 4 units (about 1 cm), stays over the floor in
 	 * the depth buffer to the far plane (24 bits over 20 to 20,480 units
@@ -15938,7 +15940,12 @@ void HDRenderWaterWetDraw(const float* toFrame)
 		if (w.state <= 0 || !w.started || w.points.empty())
 			continue;
 
-		const float front = HDWetFront((float)(now - w.born), w.info.reach);
+		/* The front runs on the frame clock while tomb5.hd_motion is on;
+		 * with it off it stands past every point, and the floor is wet all
+		 * over from the frame the tank breaks: the run is motion, the wet
+		 * the game's state, as the film's strength is. */
+		const float front = g_motion[3] != 0.0f ?
+			HDWetFront((float)(now - w.born), w.info.reach) : 1.0e9f;
 		const size_t base = verts.size();
 		double sum = 0.0;
 

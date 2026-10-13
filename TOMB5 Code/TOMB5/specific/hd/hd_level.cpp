@@ -8225,8 +8225,9 @@ void HDFrameDrawGlow()
 	if (HDRenderWaterSheetsBuilt())
 		FeedWaterFilms();
 
-	/* The tanks' wet floors, over the opaque frame and before its copy, so
-	 * a sheet over one sees it wet (hd_render.cpp, "the wet floor"). */
+	/* The tanks' wet floors, over the opaque frame. The draw takes the
+	 * frame's copy first, so the sheets drawn after it read that same copy
+	 * and see the floor under them dry (hd_render.cpp, "the wet floor"). */
 	if (HDRenderWaterSheetsBuilt())
 	{
 		float m[16];

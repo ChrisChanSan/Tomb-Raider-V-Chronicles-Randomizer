@@ -39,22 +39,24 @@ static const char* const JoySplitRegNames[JOY_ROLES] =
 	// Appended: the Modifier, the six weapon hotkeys in DoWeaponHotkey's
 	// order, the five cheats.
 	"SJMod", "SJWp1", "SJWp2", "SJWp3", "SJWp4", "SJWp5", "SJWp6",
-	"SJCt1", "SJCt2", "SJCt3", "SJCt4", "SJCt5"
+	"SJCt1", "SJCt2", "SJCt3", "SJCt4", "SJCt5",
+	// And the HD/SD switch.
+	"SJHd"
 };
 
-/* The same twelve for the One-key set. JDck..JSec are Core's own suffixes
+/* The same thirteen for the One-key set. JDck..JSec are Core's own suffixes
  * and stay unrolled REG_ReadLong lines below, because that is the shape
- * they have had since base; the twelve behind them are new, so they get a
- * table and a loop - one place for a typo instead of twelve. They are the
+ * they have had since base; the thirteen behind them are new, so they get a
+ * table and a loop - one place for a typo instead of thirteen. They are the
  * One-key names, which is why they have no S. */
 static const char* const JoyOneRegNames[JOY_ROLES - JOY_ROLE_MODIFIER] =
 {
 	"JMod", "JWp1", "JWp2", "JWp3", "JWp4", "JWp5", "JWp6",
-	"JCt1", "JCt2", "JCt3", "JCt4", "JCt5"
+	"JCt1", "JCt2", "JCt3", "JCt4", "JCt5", "JHd"
 };
 
-/* The chord flags are one value per set: 28 roles fit in a long, so a mask
- * says it all and the registry gains two names rather than 28.
+/* The chord flags are one value per set: 29 roles fit in a long, so a mask
+ * says it all and the registry gains two names rather than 29.
  *
  * Each set's chord mask has a name of its own rather than a bit hidden in
  * a binding. Every J* and SJ* value keeps its plain meaning - a button bit
@@ -434,13 +436,15 @@ bool LoadSettings()
 	REG_ReadLong((char*)"Key18", key, layout[0][18]);
 	layout[1][18] = (short)key;
 
-	/* The fifteen hotkey slots, in the same shape again and for the same
-	 * reason: a registry written by an older build has no Key19..Key33, so
+	/* The sixteen hotkey slots, in the same shape again and for the same
+	 * reason: a registry written by an older build has no Key19..Key34, so
 	 * each one reads as its row's default - which is the key
 	 * specific/input.cpp used to read directly, so an untouched registry
-	 * answers to exactly the keys it answered to before. A loop and not
-	 * unrolled lines, like the MKey block below: the names are new, so
-	 * there is no Core original whose shape has to be kept. */
+	 * answers to exactly the keys it answered to before; Key34, the HD/SD
+	 * switch, reads F12 (game/key_scheme.h says why no stored set holds
+	 * it). A loop and not unrolled lines, like the MKey block below: the
+	 * names are new, so there is no Core original whose shape has to be
+	 * kept. */
 	{
 		short* cset = KeySchemeSet(0);
 
@@ -517,7 +521,7 @@ bool LoadSettings()
 	// pad set is where a sixteenth button belongs (specific\input.cpp).
 	REG_ReadLong((char*)"JSec", (ulong&)jLayout[JOY_ROLE_SECOND], (ulong)-1);
 
-	/* The twelve new One-key roles, and every one of them defaults to
+	/* The thirteen new One-key roles, and every one of them defaults to
 	 * unbound. That also makes this set byte-identical at the default:
 	 * with no Modifier bound no chord can fire, and PadRoleFires collapses
 	 * to the bit test every producer used before (game/pad_scheme.h). A
@@ -604,8 +608,33 @@ bool LoadSettings()
 				sset[i] = -1;
 		}
 
-		for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
+		for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLE_HD_SWITCH; i++)
 			REG_ReadLong((char*)JoySplitRegNames[i], (ulong&)sset[i], (ulong)sset[i]);
+
+		/* The HD/SD switch's SJHd. A set stored without it carries an
+		 * SJChord without its bit, so its default button read alone would
+		 * be a plain Options - a second pause. PadSeatAppended
+		 * (game/pad_scheme.h) seats the default pair whole or leaves the
+		 * role unbound, and both values are written back at once, so the
+		 * next start reads them as they are now. A set the block above
+		 * stripped of its chords has -1 here and stays unbound. */
+		{
+			const long hd = JOY_ROLE_HD_SWITCH;
+			const long def = sset[hd];
+			long fresh[JOY_ROLES];
+			long freshChord = 0;
+
+			JoySplitDefaults(fresh, &freshChord);
+
+			if (!REG_ReadLong((char*)JoySplitRegNames[hd], (ulong&)sset[hd],
+				(ulong)def))
+			{
+				PadSeatAppended(sset, schord, hd, def,
+					(freshChord >> hd) & 1);
+				REG_WriteLong((char*)JoySplitRegNames[hd], sset[hd]);
+				REG_WriteLong((char*)JoyChordRegNames[1], *schord);
+			}
+		}
 
 		REG_ReadLong((char*)JoyYieldRegNames[1], (ulong&)*JoyYieldSet(1), 0);
 	}
@@ -664,7 +693,7 @@ void SaveSettings()
 	REG_WriteLong((char*)"Key17", cset[17]);
 	REG_WriteLong((char*)"Key18", cset[18]);	// the Secondary action
 
-	// And the fifteen hotkey slots beside them, under names an older build
+	// And the sixteen hotkey slots beside them, under names an older build
 	// does not look for - so a registry this build writes still loads
 	// there, with the hotkeys back to hard-wired keys, which is what that
 	// build does anyway.
@@ -713,8 +742,8 @@ void SaveSettings()
 	REG_WriteLong((char*)"JBmd", oneset[14]);
 	REG_WriteLong((char*)"JSec", oneset[JOY_ROLE_SECOND]);
 
-	// The twelve new roles behind them, from the same set. A loop and not
-	// twelve lines for the reason the table above gives.
+	// The thirteen new roles behind them, from the same set. A loop and not
+	// thirteen lines for the reason the table above gives.
 	for (long i = JOY_ROLE_MODIFIER; i < JOY_ROLES; i++)
 		REG_WriteLong((char*)JoyOneRegNames[i - JOY_ROLE_MODIFIER], oneset[i]);
 

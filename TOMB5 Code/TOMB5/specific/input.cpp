@@ -31,6 +31,7 @@
 #include "../game/modern_move.h"	// the radial dead zone and its two widths
 #include "../game/modern_camera.h"	// the mouse's gain, as arithmetic
 #include "../game/key_scheme.h"		// the two keyboard sets, as arithmetic
+#include "hd/hd_switch.h"		// the HD/SD switch's press
 #include "../tomb5/tomb5.h"
 #include "function_stubs.h"		// Log, gLogEnabled - MODERNLOG mode=tank
 
@@ -41,19 +42,19 @@ const char* KeyboardButtons[272] =
 	"Tab", "q", "w", "e", "r", "t", "y", "u", "i", "o", "p", "<", ">", "Return",
 	"Ctrl", "a", "s", "d", "f", "g", "h", "j", "k", "l", ";", "'", "`",
 	"Shift", "#", "z", "x", "c", "v", "b", "n", "m", ",", ".", "/", "Shift",
-	/* Only the eight F keys the hotkey roles default to have names. An unnamed
+	/* Only the nine F keys the hotkey roles default to have names. An unnamed
 	 * key cannot be shown by MenuValBinding nor bound by MenuCaptureBinding,
-	 * which binds only named keys. F1, F2, F5, F6, F7, F8, F9 and F11 are what
-	 * the two default rows use; F3 and F4 (the outfit changer), F10 (IN_E) and
-	 * F12 (specific\output.cpp) stay nameless on purpose, so the capture refuses
-	 * them and no role can land on a key the engine already answers to. */
+	 * which binds only named keys. F1, F2, F5, F6, F7, F8, F9, F11 and F12 are
+	 * what the two default rows use; F3 and F4 (the outfit changer) and F10
+	 * (IN_E) stay nameless on purpose, so the capture refuses them and no
+	 * role can land on a key the engine already answers to. */
 	"Padx", "Alt", "Space", "Caps", "F1", "F2", 0, 0, "F5", "F6", "F7", "F8", "F9", 0,
 	"Nmlk", 0,
 	"Pad7", "Pad8", "Pad9", "Pad-",
 	"Pad4", "Pad5", "Pad6", "Pad+",
 	"Pad1", "Pad2", "Pad3",
 	"Pad0", "Pad.", 0, 0, "\\", "F11",	// F11 is the heal cheat's default key
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	"F12", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	"Enter", "Ctrl", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -73,7 +74,7 @@ const char* GermanKeyboard[272] =
 	"Tab", "Q", "W", "E", "R", "T", "Z", "U", "I", "O", "P", "~u", "x", "Enter",
 	"Strg", "A", "S", "D", "F", "G", "H", "J", "K", "L", "~o", "~a", "( ",
 	"Shift", "#", "Y", "X", "C", "V", "B", "N", "M", ",", ".", "-", "Shift",
-	// The same eight F keys as in the English table above, and for the same
+	// The same nine F keys as in the English table above, and for the same
 	// reason - a German keyboard calls them F1..F12 as well.
 	"Num x", "Alt", "Leert.", "Caps", "F1", "F2", 0, 0, "F5", "F6", "F7", "F8", "F9", 0,
 	"Nmlk", 0,
@@ -81,7 +82,7 @@ const char* GermanKeyboard[272] =
 	"Num4", "Num5", "Num6", "Num+",
 	"Num1", "Num2", "Num3",
 	"Num0", "Num.", 0, 0, ">", "F11",
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	"F12", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	"Enter", "Strg", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -210,7 +211,7 @@ static const long jDefGeneric[15] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 
  * The medipacks (13, 14) are what the One-key tables give them for the page,
  * so the Modern move to the d-pad happens in one place (JoyDefaultRecord).
  *
- * The rows live in game\pad_scheme.h, 28 roles each with a chord mask: the
+ * The rows live in game\pad_scheme.h, 29 roles each with a chord mask: the
  * header holds the numbers, this file instantiates them, and
  * Preparation\Tools\Diagnose\MenuTest instantiates the same macros - so the
  * check that no two roles share a pair runs on the rows a player gets. */
@@ -240,7 +241,7 @@ static const long jSepGeneric[JOY_ROLES] = JOY_SEP_GENERIC;
  * the right stick. This is what notices. */
 static long joy_scheme_seated = -1;
 
-/* The chord flags, one bit per role, one long per set (28 roles fit in 32
+/* The chord flags, one bit per role, one long per set (29 roles fit in 32
  * bits). `jChord` belongs to whichever Action setting is seated in jLayout and
  * `jSplitParkedChord` to the one parked in jSplitParked, as the two binding
  * arrays do; ApplyJoySplit exchanges both pairs together.
@@ -264,7 +265,7 @@ static long jSplitParkedChord = JOY_SEP_CHORD_DINPUT;
 static long jYield = 0;
 static long jSplitParkedYield = 0;
 
-/* The one place that produces a 28-role default record and its chord mask, for
+/* The one place that produces a 29-role default record and its chord mask, for
  * either scheme and either Action setting (`split`: 0 One key, 1 Separate). The
  * active style's own table is the source in all four cases, so the roles the
  * schemes share cannot drift apart. */
@@ -310,7 +311,7 @@ static void JoyDefaultRecord(long modern, long split, long* out, long* chord)
 	for (int i = 0; i < 15; i++)
 		out[i] = source[i];
 
-	/* At "One key" the Secondary role and the twelve roles behind it have no
+	/* At "One key" the Secondary role and the thirteen roles behind it have no
 	 * default: the Secondary role is inert and the binding page does not offer
 	 * it, the Modifier is unbound so no chord can exist, and the hotkey roles
 	 * start unbound. Under Separate the tables of game\pad_scheme.h carry all
@@ -588,16 +589,17 @@ static long JoyBitIsDpad(long bit)
 	return (bit >= 0 && bit <= 23 && ((1L << bit) & JOY_DPAD_BITS) != 0) ? 1 : 0;
 }
 
-/* The active pad set, 28 roles. Slots 0-14 are the classic roles, 15 the
+/* The active pad set, 29 roles. Slots 0-14 are the classic roles, 15 the
  * Secondary action, 16 the Modifier, 17-22 the six weapon hotkeys, 23-27 the
- * five cheats. Whichever set the Action row has seated lives here
- * (JoySplitSet).
+ * five cheats, 28 the HD/SD switch. Whichever set the Action row has seated
+ * lives here (JoySplitSet).
  *
  * The initialiser is the One-key PS5 DirectInput row with -1 behind it, only a
  * fallback for a registry that cannot be opened: LoadSettings overwrites the
  * whole array before the first frame. -1 is what Key() and PadRoleFires read
  * as "unbound"; 0 would be a real button bit (Square on that page). */
-long jLayout[JOY_ROLES] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
+long jLayout[JOY_ROLES] = { 5, 3, 4, 0, 1, 2, 9, 6, 7, 8, 10, 11, 12, 13, 14,
+	-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
 /* The Modern row's scan codes live in game\key_scheme.h, so that MenuTest
  * checks the row the engine really uses. The header cannot include dinput.h,
@@ -646,6 +648,8 @@ static_assert(kModernRow[KEY_ROLE_CHEAT_GUNS] == DIK_F7, "modern row: all weapon
 static_assert(kModernRow[KEY_ROLE_CHEAT_ITEMS] == DIK_F8, "modern row: all items is F8");
 static_assert(kModernRow[KEY_ROLE_CHEAT_HEAL] == DIK_F11, "modern row: heal is F11");
 static_assert(kModernRow[KEY_ROLE_CHEAT_SKIP] == DIK_F1, "modern row: skip level is F1");
+static_assert(kModernRow[KEY_ROLE_HD_SWITCH] == DIK_F12,
+	"modern row: the HD/SD switch is F12");
 
 /* The keyboard rows. Every reader and writer in the tree uses row 1, so the
  * second keyboard set is seated into it rather than read from somewhere new -
@@ -660,22 +664,25 @@ static_assert(kModernRow[KEY_ROLE_CHEAT_SKIP] == DIK_F1, "modern row: skip level
  * Row 3 starts as the Modern defaults because row 1 starts as the Tank set and
  * Tank is the seated scheme at startup (key_scheme_seated below).
  *
- * 34 columns. Slot 18 is the Secondary action; Tank's is DIK_HOME, since Core's
+ * 35 columns. Slot 18 is the Secondary action; Tank's is DIK_HOME, since Core's
  * cluster uses End, Delete, Page Down and the arrows but never Home, so the row
  * keeps every slot bound and no key twice (KeySchemeRowSound,
  * game\key_scheme.h) without taking a key off an existing role. Slots 19-33
  * are the hotkeys Core reads as fixed keys - the medipacks' 0 and 9, save's F5,
  * load's F6, the weapon keys 1..6 - plus the five free F keys the cheat roles
- * take. The Modern row differs from Tank's there in one slot: quick load, F9. */
+ * take. The Modern row differs from Tank's there in one slot: quick load, F9.
+ * Slot 34 is the HD/SD switch, F12 in both rows. */
 short layout[4][KEY_SCHEME_ROLES] =
 {
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
 	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME,
-	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6, DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1 },
+	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6,
+	DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1, DIK_F12 },
 
 	{ DIK_UP, DIK_DOWN, DIK_LEFT, DIK_RIGHT, DIK_PERIOD, DIK_SLASH, DIK_RSHIFT, DIK_RALT, DIK_RCONTROL,
 	DIK_SPACE, DIK_COMMA, DIK_NUMPAD0, DIK_END, DIK_ESCAPE, DIK_DELETE, DIK_PGDN, DIK_P, DIK_RETURN, DIK_HOME,
-	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6, DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1 },
+	DIK_0, DIK_9, DIK_F5, DIK_F6, DIK_1, DIK_2, DIK_3, DIK_4, DIK_5, DIK_6,
+	DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1, DIK_F12 },
 
 	KEY_SCHEME_MODERN_ROW,
 
@@ -2239,6 +2246,16 @@ long S_UpdateInput()
 		if (Key(KEY_ROLE_LOAD) || (ControlMethod == 1 && JoyRole(12)))
 			linput |= IN_LOAD;
 	}
+
+	/* The HD/SD switch: its key or its pad chord, read on every call so the
+	 * press edge is seen wherever the key goes down (hd/hd_switch.h). It
+	 * switches in a level only and under no menu - the ring, the pause menu,
+	 * load and save, the outfit window and the Key bindings page all set
+	 * InventoryActive - so the press that binds F12 there switches nothing.
+	 * It sets no input bit: nothing of the game's own state hears it. */
+	HDSwitchInput(Key(KEY_ROLE_HD_SWITCH) != 0,
+		ControlMethod == 1 && JoyRole(JOY_ROLE_HD_SWITCH),
+		!gfGameMode && !InventoryActive);
 
 	if (Gameflow->CheatEnabled)
 	{

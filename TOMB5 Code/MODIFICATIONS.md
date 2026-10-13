@@ -17655,6 +17655,165 @@ flyby), `specific/alexstuff.cpp` (the credits roll and the intro videos).
 
 **Commits.** `bdf95ad`, `e980790`, `790f4f2`, `6176647`, `be95b08`
 
+### The HD/SD switch: F12 and a pad chord (#202)
+2026-10-13 - 2026-10-14
+
+**What.** A switch between the HD draw and the classic draw, for comparing the two at
+one spot. The request, 2026-10-13: a key to switch HD/SD "on the fly, without delay", for
+the play tests - the same spot, one key, the HD look against the classic look - and "F3
+was planned for the photo mode; take F12, and provide a keybind for the controllers as
+well." This change brings the key, the pad chord, the switch's state, its log line and a
+probe switch; the switch is complete only after the wiring pass below, which waits for
+the merges of the rounds that hold the HD path's files now. Until then a press flips the
+state and logs it, and the picture stays HD.
+
+**Design.** A third state beside `hd_enable` 0 and 1: the HD level built at its load as
+with 1, and drawn HD or classic as the switch says. The build stays at the load because
+it is the slow part and the switch must cost nothing - a `-log` run of 2026-10-12 reads
+`HDLOG level=TITLE built ms=1970` and `HDLOG level=ANDREA1 built ms=1009`, the models
+after that - while the classic data are resident anyway, so both draws have what they
+need for the whole level. `HDDrawn()` is true at the start of every game; a press is the
+edge from up to down of the role's key or its pad chord, read as one `down`, so a held
+key flips once and key and pad together are one press. The held state is kept on every
+reading, so a key still down when a menu closes is no new press. A press switches only
+in a level and under no menu (`!gfGameMode && !InventoryActive`: the ring, the pause
+menu, load and save, the outfit window and the Key bindings page), so binding F12 there
+switches nothing. The state lives as long as the process and holds across level loads;
+it is not saved, because the registry's `hd_enable` decides how a game starts. With
+`hd_enable` 0, or with no installation found, there is no HD data and a press changes
+nothing. What is to switch is the world: the rooms, the statics, the items and enemies,
+Lara, the water and its life, the splashes and the tank, the shadows and the fog bulbs.
+What stays as `hd_enable` says: the HUD, the inventory ring and the pickup display, the
+fonts, the loading screens and the F4 outfit changer.
+
+**How.** `game/key_scheme.h`: `KEY_SCHEME_ROLES` 35, `KEY_ROLE_HD_SWITCH` 34 (`:80`), F12
+(0x58) at the end of `KEY_SCHEME_MODERN_ROW` (`:177`). `specific/input.cpp`: F12 at the
+end of both Tank rows (`:680`, `:685`), a `static_assert` that the Modern slot is
+`DIK_F12` (`:651`), "F12" named in both key-name tables (`:57`, `:85`) so the page shows
+and captures it, and the one call `HDSwitchInput(Key(KEY_ROLE_HD_SWITCH) != 0,
+ControlMethod == 1 && JoyRole(JOY_ROLE_HD_SWITCH), !gfGameMode && !InventoryActive)` in
+`S_UpdateInput` (`:2256`); it sets no input bit. `game/pad_scheme.h`: `JOY_ROLES` 29,
+`JOY_ROLE_HD_SWITCH` 28 (`:75`); the two DirectInput-numbered Separate rows end in 9,
+Options, and `JOY_SEP_CHORD_DINPUT` (`:175`) carries the role's bit, so the default is
+Modifier+Options; the XInput-ordered rows and every One-key set leave it unbound, as they
+do every chord. The chords in use before were Modifier+R1 (flare), +R3 (save), +L3
+(load) and +Cross/Circle/Triangle/Square (the first four weapons); of the buttons no
+chord used, Options is the game's own system button, the PS button may belong to the
+system, and the d-pad and the right stick are each blocked by one scheme; plain Options
+stays pause, because a plain role stands aside while the Modifier is held.
+`PadSeatAppended` (`:348`) seats a role a stored set has no value for: the default pair
+whole, or unbound when the pair has no button, is the Modifier's own button or is already
+another role's. `specific/registry.cpp`: `JHd` and `SJHd` at the end of the two name
+tables (`:44`, `:55`); a set stored without `SJHd` carries an `SJChord` without the
+role's bit, so its default button read alone would be a second plain pause - the load
+seats it through `PadSeatAppended` and writes `SJHd` and `SJChord` back at once
+(`:614`-`:637`); a set the load strips of its chords keeps the role unbound until *Reset
+to defaults*. A keyboard set without `Key34`/`MKey34` reads F12, which no stored set can
+hold: the page had no name for F12, so no capture could put it on a role.
+`game/menu_frame.cpp`: the row *HD / SD* last in both lists (`:1704`, `:1747`), and the
+cheat filter of `MenuResolveKeybinds` named at both ends (`:1811`), so the row is always
+shown. `specific/output.cpp`: Core's F12 toggle of `App.BumpMapping` in
+`S_OutputPolyList` and its counter are gone - a debug leftover, F12 has a job now, and
+no picture depends on it: the registry load sets `App.BumpMapping` to 0
+(`specific/registry.cpp:350`) and the toggle was its only other writer. New,
+`specific/hd/hd_switch.h`: the rule as pure arithmetic, `HDSwitchStep` (`:59`) on an
+`HDSwitchState` that starts at `HD_SWITCH_START`; `hd_switch.cpp`: the session's one
+state, `HDDrawn()` (`:71`) and `HDSwitchInput` (`:90`), carried in `tomb5.vcxproj` like
+every `hd_*` unit. Behind `-log`, a new line per press that reaches a level:
+`HDLOG switch drawn=0|1 level=<stem> tick=<GlobalCounter> frame=<GnFrameCounter>
+by=key|pad`; with no HD data the same line ends in the cause, `hd_enable=0 nothing to
+switch` with the option off and `hd_enable=1 install=none nothing to switch` with it on
+and no installation found. `level` is the stem of the one file of the table whose
+identity (`LevelIdFromFile`) is `gfLevelId`, `?` when none or more than one is.
+`Preparation/Tools/Diagnose/RoomProbe.cpp`: `-hddrawn 0|1` (`HDDrawnSwitch`, `:9117`), 0
+a shorthand for `-classicroom` of the seed room and every `-with` room with
+`-classiconly`, after the whole HD build: the faces come fresh from the `.TRC` in
+`-roombox`, flat grey, so the picture is that of the explicit list by construction and
+cannot show what the build changes in the game's classic draw; the option chain is at
+the compiler's nesting limit (C1061), so the chain's last `else` calls the switch's
+function, which also reports any other argument as unknown.
+
+**The gates.** The HD path asks whether it draws in many places, and only some of them
+ask `HDLevelActive()` (`specific/hd/hd_level.cpp:6673`). Central means through it; own
+means a question of its own, with the one-line change the wiring pass makes. Line
+numbers are those of `ba89a58f`.
+
+| gate | asked at | central or own | wiring after the merges |
+|---|---|---|---|
+| the reach of the walk | `game/draw.cpp:2512`, `:3436` | central | follows W1 |
+| the mirrors | `game/draw.cpp:2628`, `game/mirror.cpp:367` -> `hd_level.cpp:6683`, `:6690` | central | follows W1 |
+| the projected shadow's gate | `hd_laradraw.cpp:1123` | central (and `HDLaraDrawActive`) | follows W1, W9 |
+| the item blob, the second map | `draw.cpp:783` -> `hd_object.cpp:4422` | out of the shadow gate and the items' | follows W1, W8, W9 |
+| Lara's blob | `drawlara.cpp:137`, `:396`, `:664` -> `hd_laradraw.cpp:1162` | out of the shadow gate | follows W1, W9, W11 |
+| classic water faces of an HD room | `drawroom.cpp:88` -> `hd_level.cpp:6712` | inside the HD-room branch | follows W2 |
+| ripples on a sheet | `specificfx.cpp:4221` -> `hd_level.cpp:1818` | central | follows W1 |
+| waterfall mist | `control.cpp:714` -> `hd_level.cpp:1971` | central | follows W1 |
+| splash flag 0x10 | `effect2.cpp:1033` -> `hd_level.cpp:2092` | central | follows W1 |
+| spray flag | `tower.cpp:1341` -> `hd_level.cpp:2116` | central | follows W1 |
+| the fish tank's mesh | `traps.cpp:1180` -> `hd_level.cpp:2247` | central | follows W1 |
+| the switch itself | `hd_level.cpp:6675` | - | W1: `return g_level_active && HDEnabled() && HDDrawn();` |
+| rooms | `drawroom.cpp:199` -> `hd_level.cpp:6580` `GroupOfRoom` | own (`g_level_active`) | W2: `!g_level_active` -> `!HDLevelActive()` |
+| stand-in holders | `hd_level.cpp:6907` `StandHolderRoom` | own | W3: the same |
+| dropped classic faces | `drawroom.cpp:247` -> `hd_level.cpp:6600` | own | W4: the same |
+| carried rooms | `draw.cpp:1833` -> `hd_level.cpp:6660` | own | W5: the same |
+| statics | `draw.cpp:3639` -> `hd_level.cpp:5006` | own | W6: the same |
+| the sky | `draw.cpp:649` -> `hd_level.cpp:7065` | own (`HDEnabled && g_level_active`) | W7: `!HDLevelActive()` |
+| items, cutscene actors | `draw.cpp:806`, `deltapak.cpp:3111` -> `hd_object.cpp:2921` | own (`g_active`, `hd_objects`) | W8: `\|\| !HDDrawn()` |
+| Lara, braid, arm path | `drawlara.cpp:154`, `:420`, `:682`, `hair.cpp:151`, `:880`, `delstuff.cpp:278` -> `hd_laradraw.cpp:1459` | own | W9: `&& HDDrawn()` |
+| the life | `hd_level.cpp:7773` -> `hd_life.cpp:67` `life_on` | own (`hd_water`, sheets built) | W10: `&& HDDrawn()` |
+| shadow room, art-listed room | `hd_level.cpp:6624`, `:6637` | own, second test | W11, W12: the same as W2 |
+| sheets, glow parts, bulb rule | `hd_level.cpp:8155`, `:5067`, `:5096` | follow the rooms recorded | follows W2 |
+| inventory ring, pickup display | `newinv2.cpp:1203` -> `hd_object.cpp:3523` | stays | none |
+| fonts | `text.cpp:155`, `polyinsert.cpp:82` | stays | none |
+| loading screens | `file.cpp:2006`-`:2031` | stays | none |
+| F4 outfit changer | `control.cpp:443` -> `hd_outfitmenu.cpp:240` | stays | none |
+
+So `HDLevelActive()` is not the one question: the rooms, the statics, the items, Lara and
+the life ask their own. Its return line alone would switch the reach, the mirrors, the
+shadow gate and the water's flags and leave every room, item and Lara drawn HD - half a
+switch. This change therefore touches no line of `hd_level.cpp`, `hd_object.cpp`,
+`hd_laradraw.cpp` or `hd_life.cpp`; W1 to W12 are the wiring pass after the merges. Two
+things to look at in that pass: the splash flag 0x10 and the spray flag are set when a
+splash is born, so one born in the HD draw keeps its classic sprites out for its life,
+under a second; and the projected shadow fades in again through its arrival clock.
+
+**Measured.** The probe cannot measure the classic draw after an HD build: its classic
+faces are read fresh from the `.TRC` and drawn flat grey, and nothing the build does
+reaches them. So at the 15 cameras of the water parity set `-hddrawn 0` is
+byte-identical to the same rooms drawn through an explicit `-classicroom` list with
+`-classiconly`, in this build and in the build of `ba89a58f` (15 of 15 each), by
+construction - the run shows that the switch is wired to that list and to nothing else.
+The 6 classic views (`-classicroom N -classiconly`, ANDREA2 19 and 231, JOBY2 42 and 66,
+ANDY3 17 and 34) are identical across `8691e82`, `ba89a58f` and this build, and
+`-hddrawn 0` alone gives the same 6. What the game's frame would differ in after an HD
+load is a reading of the code: the water faces `BuildWaterSurfaces` restores and their
+HD frames (`drawroom.cpp:88`, `:142`) are drawn only inside the HD-room branch, the fish
+tank's mesh is copied for the renderer and not swapped (`hd_level.cpp:2143`), the bulb
+rule reads the classic bulb list and never writes it (`:5067`-`:5160`), and the classic
+Lara is the `else` of `drawlara.cpp:154` - each comes back with the gate that owns it.
+
+**Checked.** MenuTest 42,627 -> 44,216, 0 failed: the slot numbers, the chord mask and
+the default rows, the two bind lists and their sizes out of `game/menu_frame.cpp` (27
+and 23 rows at *One key* without *Cheats*, 33 and 29 with both), F12 named and closing
+both Tank rows, and the layout round trips under `registry.cpp`'s value names - a set
+saved with the role reads it back, a set without `Key34`/`MKey34` reads F12, a Separate
+set without `SJHd` gets Modifier+Options with its chord flag (plain Options still pause,
+the chord the switch), a taken pair or a Modifier on Options leaves the role unbound, a
+stripped set keeps it unbound. The round trips run on the suite's own store and on its
+copy of the `SJHd` block of `LoadSettings`, tied to the engine by a string check of that
+block, not on `registry.cpp`'s loops themselves; those run to `KEY_SCHEME_ROLES` and
+`JOY_ROLES`, read by hand. ModernTest 14,946 -> 14,966, 0 failed: one flip per press, none
+for a held key or from under a menu, key and pad on one edge, none without HD data, and
+the session hold across loads with and without HD data. InterpTest 729 and LipsTest
+270 / 243 unchanged. The HD pictures at `hd_water` 0 are unchanged at the 15 cameras.
+Not measured: the game.
+
+**Left.** The wiring W1 to W12 above, after the merges; until then the switch flips its
+state and logs it, and the picture stays HD. On the XInput-ordered pages and at *One
+key* the pad has no default chord, as for every chord: no Modifier there.
+
+**Commits.** `d502c8c`, `65f7d68`, `c6431e3`, `6c0036b`, `9f89b19`, `b98a2a3`
+
 ## 2.7 First person view, cheats and the -log seams
 
 Three things that share one property: they are switched on by the player and are off in
@@ -18356,3 +18515,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #196 | Where the HD rules come from, counted on our own data |
 | #198 | The water's life |
 | #199 | The level load on several cores |
+| #202 | The HD/SD switch: F12 and a pad chord (#202) |

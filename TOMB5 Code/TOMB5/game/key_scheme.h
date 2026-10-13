@@ -33,20 +33,20 @@
  * two".
  */
 
-/* Thirty-four roles, and every one of the first nineteen keeps its
+/* Thirty-five roles, and every one of the first nineteen keeps its
  * number. Slot 18 is the Secondary action and slots 19..33 are the
  * hotkeys that used to be hard-wired scan codes in specific/input.cpp -
  * the two medipacks, quick save and quick load, the six weapons of
- * DoWeaponHotkey, and the five cheats.
+ * DoWeaponHotkey, and the five cheats. Slot 34 is the HD/SD switch.
  *
  * New roles are always appended, never inserted, because every slot is
- * addressed by number - in the registry (Key0..Key33, MKey0..MKey33), in
+ * addressed by number - in the registry (Key0..Key34, MKey0..MKey34), in
  * the engine's own Key(n) calls and in the bind rows of menu_frame.cpp -
  * so a set written before a role was added reads back unchanged, with
  * only the new slots missing from it; those then take their row's
  * default, which is the key that was hard-wired there before the role
  * existed. */
-#define KEY_SCHEME_ROLES	34
+#define KEY_SCHEME_ROLES	35
 
 /* The Secondary role's slot, so that the one number lives in one place. It
  * was the last slot while there were nineteen roles; since the hotkeys
@@ -71,6 +71,13 @@
 #define KEY_ROLE_CHEAT_ITEMS	31
 #define KEY_ROLE_CHEAT_HEAL	32
 #define KEY_ROLE_CHEAT_SKIP	33
+
+/* The HD/SD switch: one press draws the world classic, the next HD again
+ * (specific/hd/hd_switch.h). Live in every game, not only with Cheats on,
+ * and F12 in both default rows. A set stored before the slot existed has no
+ * Key34/MKey34 and reads F12, which no older set can hold: the binding page
+ * named no F12, so no capture could put it on another role. */
+#define KEY_ROLE_HD_SWITCH	34
 
 /* The mouse's five buttons as key codes. A key code is a DIK_ scan code,
  * 0x01..0xFF, and indexes keymap[256]; the buttons sit just above that range,
@@ -150,9 +157,9 @@ inline const char* KeySchemeMouseName(long code, int german)
  * The one deliberate difference: quick load is F9 under Modern (matching
  * the Remaster's own binding page) and stays F6 under Tank, which is
  * Core's. F1/F2/F7/F8/F11 are the five cheat roles; they are the free F
- * keys once F4 (the outfit changer, hd_outfitmenu.cpp), F10 (IN_E) and
- * F12 (specific/output.cpp) are left alone, and F5/F6/F9 belong to save
- * and load. F3 was also considered, but the outfit changer reads F4
+ * keys once F4 (the outfit changer, hd_outfitmenu.cpp) and F10 (IN_E) are
+ * left alone, and F5/F6/F9 belong to save and load. F12 is the HD/SD
+ * switch (slot 34). F3 was also considered, but the outfit changer reads F4
  * alone, and the one DIK_F3 in the whole tree is Core's level skip in the
  * _DEBUG branch of LaraCheatyBits (laramisc.cpp), which no release build
  * contains. F3 is still left unassigned here, so a debug build keeps it. */
@@ -166,7 +173,8 @@ inline const char* KeySchemeMouseName(long code, int german)
 	0x0B, 0x0A, 0x3F, 0x43,	/* 0 9 F5 F9 - medipacks, save, load */	\
 	0x02, 0x03, 0x04, 0x05,	/* 1 2 3 4 - pistols shotgun uzi revolver */	\
 	0x06, 0x07,				/* 5 6 - HK crossbow       */	\
-	0x3C, 0x41, 0x42, 0x57, 0x3B	/* F2 F7 F8 F11 F1 - the five cheats */	\
+	0x3C, 0x41, 0x42, 0x57, 0x3B,	/* F2 F7 F8 F11 F1 - five cheats */	\
+	0x58					/* F12 - the HD/SD switch  */	\
 }
 
 /* One measured collision in this row, named here rather than quietly

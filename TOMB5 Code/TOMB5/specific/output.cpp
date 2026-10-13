@@ -1744,7 +1744,6 @@ void S_InitialisePolyList()
 void S_OutputPolyList()
 {
 	D3DRECT r;
-	static long c;
 	long h;
 	char buf[128];
 
@@ -1884,21 +1883,6 @@ void S_OutputPolyList()
 		InitialiseSortList();
 		DoScreenFade();
 		DrawSortList();
-	}
-
-	// The F12 bump-mapping toggle's own debounce - every second drawn
-	// frame, which at 60 Hz would flip it twice as fast while the key is
-	// held. A debug key, but still a per-frame counter, and it costs one
-	// test to keep it at the rate it was written for.
-	if (!InterpIsTweenFrame())
-		c++;
-
-	if (c == 2)
-	{
-		if (keymap[DIK_F12])
-			App.BumpMapping = App.BumpMapping != 1;
-
-		c = 0;
 	}
 }
 

@@ -390,7 +390,7 @@ static const short kModern[KEY_SCHEME_ROLES] = KEY_SCHEME_MODERN_ROW;
 /* A row that shares no key with the Modern one, to play the part of "some
  * other binding" wherever a second row is needed. The numbers are scan
  * codes of keys neither default row uses - letters, the two spare digits,
- * the four F keys the engine keeps for itself, the numeric keypad and
+ * the three F keys the engine keeps for itself, the numeric keypad and
  * Insert - and nothing else about them matters. */
 static const short kOther[KEY_SCHEME_ROLES] =
 {
@@ -398,11 +398,11 @@ static const short kOther[KEY_SCHEME_ROLES] =
 	0x22, 0x23, 0x24, 0x25, 0x26,	/* G H J K L           */
 	0x2F, 0x30, 0x31, 0x32,			/* V B N M             */
 	0x08, 0x09,						/* 7 8                 */
-	0x3D, 0x3E, 0x44, 0x58,			/* F3 F4 F10 F12       */
+	0x3D, 0x3E, 0x44, 0x13,			/* F3 F4 F10 R         */
 	0x45, 0x47, 0x48, 0x49, 0x4A,	/* NumLock Num7 Num8 Num9 Num- */
 	0x4B, 0x4C, 0x4D, 0x4E,			/* Num4 Num5 Num6 Num+ */
 	0x4F, 0x50, 0x51, 0x53,			/* Num1 Num2 Num3 Num. */
-	0xD2							/* Insert              */
+	0xD2, 0x10						/* Insert Q            */
 };
 
 /* Every slot is addressed by number in the registry, so a number that
@@ -412,7 +412,7 @@ static const short kOther[KEY_SCHEME_ROLES] =
  * derivable from the count, which is why it is checked directly. */
 static void key_secondary_slot()
 {
-	check(KEY_SCHEME_ROLES, 34, "thirty-four roles since the hotkeys");
+	check(KEY_SCHEME_ROLES, 35, "thirty-five roles with the HD/SD switch");
 	check(KEY_ROLE_SECOND, 18, "the Secondary role is still slot 18");
 	check(kModern[KEY_ROLE_SECOND], KEY_MOUSE_LEFT, "the Modern row's Secondary key is the left mouse button");
 
@@ -451,7 +451,11 @@ static void key_hotkey_slots()
 	check(KEY_ROLE_CHEAT_ITEMS, KEY_ROLE_CHEAT_GUNS + 1, "all items follows all weapons");
 	check(KEY_ROLE_CHEAT_HEAL, KEY_ROLE_CHEAT_ITEMS + 1, "heal follows all items");
 	check(KEY_ROLE_CHEAT_SKIP, KEY_ROLE_CHEAT_HEAL + 1, "skip level follows heal");
-	check(KEY_ROLE_CHEAT_SKIP, KEY_SCHEME_ROLES - 1, "and skip level is the last slot");
+	check(KEY_ROLE_HD_SWITCH, KEY_ROLE_CHEAT_SKIP + 1,
+		"the HD/SD switch follows skip level");
+	check(KEY_ROLE_HD_SWITCH, KEY_SCHEME_ROLES - 1,
+		"and the HD/SD switch is the last slot");
+	check(kModern[KEY_ROLE_HD_SWITCH], 0x58, "the Modern HD/SD key is F12");
 
 	for (i = 0; i < 15; i++)
 		check(kModern[KEY_ROLE_MEDI_SMALL + i], want[i], "the Modern row's hotkey keys are the old hard-wired ones");
@@ -884,7 +888,7 @@ static void pad_seat()
  * would be a player's binding that moved with it. */
 static void pad_role_slots(void)
 {
-	check(JOY_ROLES, 28, "twenty-eight pad roles");
+	check(JOY_ROLES, 29, "twenty-nine pad roles");
 	check(JOY_ROLE_SECOND, 15, "the Secondary pad role is still slot 15");
 	// Core's own three: a registry calls these slots JFlr/JSav/JLod and
 	// SJFlr/SJSav/SJLod, so the numbers are not ours to move, and the
@@ -900,7 +904,10 @@ static void pad_role_slots(void)
 	check(JOY_ROLE_CHEAT_ITEMS, 25, "all items is slot 25");
 	check(JOY_ROLE_CHEAT_HEAL, 26, "heal is slot 26");
 	check(JOY_ROLE_CHEAT_SKIP, 27, "skip level is slot 27");
-	check(JOY_ROLE_CHEAT_SKIP, JOY_ROLES - 1, "and the cheats are the last of the roles");
+	check(JOY_ROLE_HD_SWITCH, JOY_ROLE_CHEAT_SKIP + 1,
+		"the HD/SD switch follows the cheats");
+	check(JOY_ROLE_HD_SWITCH, JOY_ROLES - 1, "and is the last of the roles");
+	check(JOY_ROLE_HD_SWITCH, 28, "the HD/SD switch is slot 28");
 	check(JOY_ROLE_WEAPON_FIRST + JOY_ROLE_WEAPONS, JOY_ROLE_CHEAT_FLY, "the weapons end where the cheats begin");
 	check(JOY_BIT_MAX, 23, "23 is the highest bit either joystick path writes");
 }
@@ -1062,9 +1069,11 @@ static void pad_default_tables(void)
 	for (i = 0; i < JOY_ROLES; i++)
 	{
 		const int want = (i == 6 || i == 11 || i == 12 ||
+			i == JOY_ROLE_HD_SWITCH ||
 			(i >= JOY_ROLE_WEAPON_FIRST && i < JOY_ROLE_WEAPON_FIRST + 4)) ? 1 : 0;
 
-		check((int)((JOY_SEP_CHORD_DINPUT >> i) & 1), want, "and all seven of them are chords");
+		check((int)((JOY_SEP_CHORD_DINPUT >> i) & 1), want,
+			"and all eight of them are chords");
 		check((int)((JOY_SEP_CHORD_XINPUT >> i) & 1), 0, "the XInput rows have no chord at all");
 	}
 
@@ -1079,6 +1088,14 @@ static void pad_default_tables(void)
 	check((int)kSepXbox[6], 5, "so the flare stays a plain R1");
 	check((int)kSepXbox[13], 18, "and the medipacks stay where they were");
 	check((int)kSepXbox[14], 19, "both of them");
+
+	// The HD/SD switch: Modifier+Options on the two DirectInput-numbered
+	// rows, where plain Options (bit 9) is pause; none on the XInput rows.
+	check((int)kSepPS5DInput[JOY_ROLE_HD_SWITCH], 9, "HD/SD: Modifier+Options");
+	check((int)kSepGeneric[JOY_ROLE_HD_SWITCH], 9, "the generic row the same");
+	check((int)kSepPS5DInput[10], 9, "beside plain Options, pause");
+	check((int)kSepPS5XInput[JOY_ROLE_HD_SWITCH], -1, "PS5 XInput: no HD/SD");
+	check((int)kSepXbox[JOY_ROLE_HD_SWITCH], -1, "Xbox: no HD/SD either");
 }
 
 /* ----------------------------------------------------- the mouse's rows -- */
@@ -2359,6 +2376,386 @@ static void graphics_shadow_row()
 	free(draw);
 }
 
+/* ------------------------------------------------- the HD/SD switch row -- */
+
+/* A role's number out of a bind row's third argument as menu_frame.cpp
+ * writes it: a plain number, a role name, or a role name plus a number. */
+static long bind_role(const char* text)
+{
+	static const struct { const char* name; long value; } names[] =
+	{
+		{ "KEY_ROLE_SECOND", KEY_ROLE_SECOND },
+		{ "KEY_ROLE_MEDI_SMALL", KEY_ROLE_MEDI_SMALL },
+		{ "KEY_ROLE_MEDI_LARGE", KEY_ROLE_MEDI_LARGE },
+		{ "KEY_ROLE_SAVE", KEY_ROLE_SAVE },
+		{ "KEY_ROLE_LOAD", KEY_ROLE_LOAD },
+		{ "KEY_ROLE_WEAPON_FIRST", KEY_ROLE_WEAPON_FIRST },
+		{ "KEY_ROLE_CHEAT_FLY", KEY_ROLE_CHEAT_FLY },
+		{ "KEY_ROLE_CHEAT_GUNS", KEY_ROLE_CHEAT_GUNS },
+		{ "KEY_ROLE_CHEAT_ITEMS", KEY_ROLE_CHEAT_ITEMS },
+		{ "KEY_ROLE_CHEAT_HEAL", KEY_ROLE_CHEAT_HEAL },
+		{ "KEY_ROLE_CHEAT_SKIP", KEY_ROLE_CHEAT_SKIP },
+		{ "KEY_ROLE_HD_SWITCH", KEY_ROLE_HD_SWITCH },
+		{ "JOY_ROLE_SECOND", JOY_ROLE_SECOND },
+		{ "JOY_ROLE_MODIFIER", JOY_ROLE_MODIFIER },
+		{ "JOY_ROLE_WEAPON_FIRST", JOY_ROLE_WEAPON_FIRST },
+		{ "JOY_ROLE_CHEAT_FLY", JOY_ROLE_CHEAT_FLY },
+		{ "JOY_ROLE_CHEAT_GUNS", JOY_ROLE_CHEAT_GUNS },
+		{ "JOY_ROLE_CHEAT_ITEMS", JOY_ROLE_CHEAT_ITEMS },
+		{ "JOY_ROLE_CHEAT_HEAL", JOY_ROLE_CHEAT_HEAL },
+		{ "JOY_ROLE_CHEAT_SKIP", JOY_ROLE_CHEAT_SKIP },
+		{ "JOY_ROLE_HD_SWITCH", JOY_ROLE_HD_SWITCH }
+	};
+
+	while (*text == ' ')
+		text++;
+
+	if (*text >= '0' && *text <= '9')
+		return atol(text);
+
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+	{
+		const size_t n = strlen(names[i].name);
+
+		if (strncmp(text, names[i].name, n) || text[n] == '_' ||
+			(text[n] >= 'A' && text[n] <= 'Z'))
+			continue;
+
+		const char* plus = strchr(text + n, '+');
+		const char* close = strchr(text + n, ')');
+		const int add = plus && (!close || plus < close);
+
+		return names[i].value + (add ? atol(plus + 1) : 0);
+	}
+
+	return -100;
+}
+
+/* The bind rows of one list: the label and the role of every MENU_BIND line
+ * between `head` and the table's closing brace. */
+static int bind_rows(const char* frame, const char* head, char label[][64],
+	long* role, int max)
+{
+	const char* p = strstr(frame, head);
+	const char* end = p ? strstr(p, "};") : 0;
+	int n = 0;
+
+	while (p && end && p < end && n < max)
+	{
+		const char* s = p;
+		const char* nl = strchr(p, '\n');
+
+		while (*s == '\t' || *s == ' ')
+			s++;
+
+		if (!strncmp(s, "MENU_BIND(", 10) && s < end)
+		{
+			char q[2][64];
+			const char* comma = s;
+
+			tree_quoted(s, q, 1);
+			strcpy_s(label[n], 64, q[0]);
+
+			// The role is the third argument: past the second comma.
+			for (int c = 0; c < 2 && comma; c++)
+				comma = strchr(comma + 1, ',');
+
+			role[n++] = comma ? bind_role(comma + 1) : -100;
+		}
+
+		p = nl ? nl + 1 : 0;
+	}
+
+	return n;
+}
+
+/* The rows MenuResolveKeybinds hands out: Secondary only under Separate, the
+ * five cheats only with Cheats on - and nothing else held back. */
+static int bind_shown(const long* role, int n, long second, long first,
+	long last, int split, int cheats)
+{
+	int shown = 0;
+
+	for (int i = 0; i < n; i++)
+	{
+		if (role[i] == second && !split)
+			continue;
+
+		if (role[i] >= first && role[i] <= last && !cheats)
+			continue;
+
+		shown++;
+	}
+
+	return shown;
+}
+
+/* A registry key in miniature: REG_ReadLong's contract (a miss writes the
+ * default and says so) and REG_WriteLong, over names. */
+struct TestStore
+{
+	char name[96][16];
+	long value[96];
+	int count;
+};
+
+static int store_read(TestStore* s, const char* name, long* value, long def)
+{
+	for (int i = 0; i < s->count; i++)
+		if (!strcmp(s->name[i], name))
+		{
+			*value = s->value[i];
+			return 1;
+		}
+
+	if (s->count < 96)
+	{
+		strcpy_s(s->name[s->count], 16, name);
+		s->value[s->count++] = def;
+	}
+
+	*value = def;
+	return 0;
+}
+
+static void store_write(TestStore* s, const char* name, long value)
+{
+	for (int i = 0; i < s->count; i++)
+		if (!strcmp(s->name[i], name))
+		{
+			s->value[i] = value;
+			return;
+		}
+
+	if (s->count < 96)
+	{
+		strcpy_s(s->name[s->count], 16, name);
+		s->value[s->count++] = value;
+	}
+}
+
+/* specific\registry.cpp's read of the Separate set from the Modifier on:
+ * the twelve names with the set's own value as default, then SJHd through
+ * PadSeatAppended. `defs` and `defChord` are JoySplitDefaults' answer. */
+static void load_split(TestStore* s, long* set, long* chord,
+	const long* defs, long defChord)
+{
+	static const char* const names[JOY_ROLES - JOY_ROLE_MODIFIER] =
+	{
+		"SJMod", "SJWp1", "SJWp2", "SJWp3", "SJWp4", "SJWp5", "SJWp6",
+		"SJCt1", "SJCt2", "SJCt3", "SJCt4", "SJCt5", "SJHd"
+	};
+	const long hd = JOY_ROLE_HD_SWITCH;
+	const char* hdName = names[hd - JOY_ROLE_MODIFIER];
+	long i;
+
+	for (i = 0; i < JOY_ROLES; i++)
+		set[i] = defs[i];
+
+	*chord = defChord;
+	store_read(s, "SJChord", chord, *chord);
+
+	for (i = JOY_ROLE_MODIFIER; i < hd; i++)
+		store_read(s, names[i - JOY_ROLE_MODIFIER], &set[i], set[i]);
+
+	const long def = set[hd];
+
+	if (!store_read(s, hdName, &set[hd], def))
+	{
+		PadSeatAppended(set, chord, hd, def, (defChord >> hd) & 1);
+		store_write(s, hdName, set[hd]);
+		store_write(s, "SJChord", *chord);
+	}
+}
+
+// Whether the role fires on this reading, out of a loaded set.
+static int set_fires(const long* set, long chord, long role, unsigned long fire)
+{
+	return PadRoleFires(fire, set[role], (int)((chord >> role) & 1),
+		set[JOY_ROLE_MODIFIER]);
+}
+
+/* The two lists of the Key bindings page out of game\menu_frame.cpp: one
+ * HD / SD row each, the last, on its role, and the page's sizes. One key and
+ * Cheats off is 27 keyboard rows (sixteen base rows, ten hotkeys, HD / SD)
+ * and 23 pad rows (fifteen, the Modifier, six weapons, HD / SD). */
+static void hd_rows_lists(const char* frame)
+{
+	const long ks = KEY_ROLE_SECOND, kf = KEY_ROLE_CHEAT_FLY;
+	const long kl = KEY_ROLE_CHEAT_SKIP;
+	const long js = JOY_ROLE_SECOND, jf = JOY_ROLE_CHEAT_FLY;
+	const long jl = JOY_ROLE_CHEAT_SKIP;
+	char label[48][64];
+	long role[48];
+	int n, i;
+
+	n = bind_rows(frame, "static const menu_row menu_rows_keybinds_kbd[] =",
+		label, role, 48);
+	// Every role but pause and select (16, 17), which the page never offers.
+	check(n, KEY_SCHEME_ROLES - 2, "hd rows: one keyboard row per role");
+	check(n > 0 && !strcmp(label[n - 1], "HD / SD"), 1,
+		"hd rows: HD / SD is the keyboard list's last row");
+	check(n > 0 ? (int)role[n - 1] : -1, KEY_ROLE_HD_SWITCH,
+		"hd rows: on KEY_ROLE_HD_SWITCH");
+
+	for (i = 0; i < n; i++)
+		check(role[i] >= 0 && role[i] < KEY_SCHEME_ROLES, 1,
+			"hd rows: every keyboard role resolves");
+
+	check(bind_shown(role, n, ks, kf, kl, 0, 0), 27, "hd rows: keyboard 27");
+	check(bind_shown(role, n, ks, kf, kl, 1, 0), 28, "hd rows: Separate 28");
+	check(bind_shown(role, n, ks, kf, kl, 0, 1), 32, "hd rows: Cheats 32");
+	check(bind_shown(role, n, ks, kf, kl, 1, 1), 33, "hd rows: both 33");
+
+	n = bind_rows(frame, "static const menu_row menu_rows_keybinds_joy[] =",
+		label, role, 48);
+	check(n, JOY_ROLES, "hd rows: one pad row per role");
+	check(n > 0 && !strcmp(label[n - 1], "HD / SD"), 1,
+		"hd rows: HD / SD is the pad list's last row");
+	check(n > 0 ? (int)role[n - 1] : -1, JOY_ROLE_HD_SWITCH,
+		"hd rows: on JOY_ROLE_HD_SWITCH");
+	check(bind_shown(role, n, js, jf, jl, 0, 0), 23, "hd rows: pad 23");
+	check(bind_shown(role, n, js, jf, jl, 1, 0), 24, "hd rows: Separate 24");
+	check(bind_shown(role, n, js, jf, jl, 0, 1), 28, "hd rows: Cheats 28");
+	check(bind_shown(role, n, js, jf, jl, 1, 1), 29, "hd rows: both 29");
+
+	// The resolve's own filter is named at both ends, as bind_shown is.
+	check(tree_count(frame,
+		"row->param >= cheat && row->param <= cheat_last &&"), 1,
+		"hd rows: the resolve holds back the five cheats and no more");
+}
+
+/* The keyboard layouts in registry.cpp's names: a set saved with the role
+ * reads its key back; a set saved by a build without it has no Key34 or
+ * MKey34 and reads the row's default, F12, and the miss writes it. */
+static void hd_rows_keyboard(const char* input)
+{
+	TestStore s;
+	long v;
+
+	// F12 has a name in both key-name tables (a nameless key is neither
+	// shown nor captured) and closes both Tank rows.
+	check(tree_count(input, "\t\"F12\", 0, 0,"), 2,
+		"hd rows: F12 named in both key-name tables");
+	check(tree_count(input,
+		"DIK_F2, DIK_F7, DIK_F8, DIK_F11, DIK_F1, DIK_F12 },"), 2,
+		"hd rows: F12 closes both Tank rows");
+
+	s.count = 0;
+	store_write(&s, "Key34", 0x13);
+	store_write(&s, "MKey34", 0x10);
+	store_read(&s, "Key34", &v, 0x58);
+	check((int)v, 0x13, "round trip: the saved Tank key reads back");
+	store_read(&s, "MKey34", &v, kModern[KEY_ROLE_HD_SWITCH]);
+	check((int)v, 0x10, "round trip: the saved Modern key reads back");
+
+	s.count = 0;
+	store_write(&s, "Key33", 0x3B);
+	store_write(&s, "MKey33", 0x3B);
+	check(store_read(&s, "Key34", &v, 0x58), 0, "older set: no Key34");
+	check((int)v, 0x58, "older set: the Tank slot reads F12");
+	check(store_read(&s, "MKey34", &v, kModern[KEY_ROLE_HD_SWITCH]), 0,
+		"older set: no MKey34");
+	check((int)v, 0x58, "older set: the Modern slot reads F12");
+	check(store_read(&s, "Key34", &v, 0), 1,
+		"older set: the miss wrote the default back");
+}
+
+/* The pad's Separate set in each state a registry can hold it in. */
+static void hd_rows_pad(const char* reg)
+{
+	const long hd = JOY_ROLE_HD_SWITCH;
+	const long without = JOY_SEP_CHORD_DINPUT & ~(1L << hd);
+	const unsigned long opt = 1UL << 9, both = (1UL << 9) | (1UL << 13);
+	long set[JOY_ROLES], chord, v, i;
+	TestStore s;
+
+	check(tree_count(reg, "\"SJHd\""), 1, "hd rows: the Separate set's name");
+	check(tree_count(reg, "\"JHd\""), 1, "hd rows: the One-key set's name");
+	check(tree_count(reg, "PadSeatAppended(sset, schord, hd, def,"), 1,
+		"hd rows: registry.cpp seats a missing SJHd with PadSeatAppended");
+
+	// No SJ* at all: the whole default row, HD/SD on Modifier+Options.
+	s.count = 0;
+	load_split(&s, set, &chord, kSepPS5DInput, JOY_SEP_CHORD_DINPUT);
+	check((int)set[hd], 9, "pad, new registry: HD/SD on Options");
+	check((int)((chord >> hd) & 1), 1, "pad, new registry: as a chord");
+
+	// Saved by a build without the role: an SJChord without its bit and no
+	// SJHd. The pair is seated whole and both names are written back.
+	s.count = 0;
+	store_write(&s, "SJChord", without);
+	store_write(&s, "SJMod", 13);
+	load_split(&s, set, &chord, kSepPS5DInput, JOY_SEP_CHORD_DINPUT);
+	check((int)set[hd], 9, "pad, older set: the default button");
+	check((int)((chord >> hd) & 1), 1, "pad, older set: and its chord flag");
+	check(set_fires(set, chord, hd, opt), 0, "pad: plain Options: no switch");
+	check(set_fires(set, chord, 10, opt), 1, "pad: plain Options: pause");
+	check(set_fires(set, chord, hd, both), 1, "pad: Mod+Options: the switch");
+	check(set_fires(set, chord, 10, both), 0, "pad: Mod+Options: no pause");
+	check(store_read(&s, "SJHd", &v, -7), 1, "pad, older set: SJHd written");
+	check((int)v, 9, "pad, older set: as Options");
+	store_read(&s, "SJChord", &v, 0);
+	check((int)((v >> hd) & 1), 1, "pad, older set: SJChord with the bit");
+
+	// The pair already the player's own: the role stays unbound.
+	s.count = 0;
+	store_write(&s, "SJChord", without | (1L << JOY_ROLE_CHEAT_FLY));
+	store_write(&s, "SJCt1", 9);
+	load_split(&s, set, &chord, kSepPS5DInput, JOY_SEP_CHORD_DINPUT);
+	check((int)set[JOY_ROLE_CHEAT_FLY], 9, "pad, taken pair: player's kept");
+	check((int)set[hd], -1, "pad, taken pair: HD/SD unbound");
+	check((int)((chord >> hd) & 1), 0, "pad, taken pair: with no flag");
+
+	// The Modifier moved onto Options: a chord on it can never fire.
+	s.count = 0;
+	store_write(&s, "SJChord", without);
+	store_write(&s, "SJMod", 9);
+	load_split(&s, set, &chord, kSepPS5DInput, JOY_SEP_CHORD_DINPUT);
+	check((int)set[hd], -1, "pad, Modifier on Options: HD/SD unbound");
+
+	// A set registry.cpp stripped of its chords has -1 from the Modifier on.
+	{
+		long stripped[JOY_ROLES];
+
+		for (i = 0; i < JOY_ROLES; i++)
+			stripped[i] = i >= JOY_ROLE_MODIFIER ? -1 : kSepPS5DInput[i];
+
+		s.count = 0;
+		store_write(&s, "SJChord", 0);
+		load_split(&s, set, &chord, stripped, 0);
+		check((int)set[hd], -1, "pad, stripped set: HD/SD stays unbound");
+	}
+
+	// Saved with the role on Modifier+L1, read back as saved.
+	s.count = 0;
+	store_write(&s, "SJChord", JOY_SEP_CHORD_DINPUT);
+	store_write(&s, "SJHd", 4);
+	load_split(&s, set, &chord, kSepPS5DInput, JOY_SEP_CHORD_DINPUT);
+	check((int)set[hd], 4, "pad, round trip: the saved button");
+	check((int)((chord >> hd) & 1), 1, "pad, round trip: its chord flag");
+}
+
+static void hd_switch_rows()
+{
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* input = tree_file("../../../TOMB5 Code/TOMB5/specific/input.cpp");
+	char* reg = tree_file("../../../TOMB5 Code/TOMB5/specific/registry.cpp");
+
+	check(frame && input && reg, 1, "hd rows: the three files are readable");
+
+	if (frame && input && reg)
+	{
+		hd_rows_lists(frame);
+		hd_rows_keyboard(input);
+		hd_rows_pad(reg);
+	}
+
+	free(frame);
+	free(input);
+	free(reg);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -2387,6 +2784,7 @@ int main()
 	graphics_softbody_row();
 	graphics_water_row();
 	graphics_shadow_row();
+	hd_switch_rows();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

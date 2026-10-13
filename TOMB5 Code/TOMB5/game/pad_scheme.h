@@ -20,7 +20,7 @@
  * the same tables the engine uses, with no copy to keep in step.
  *
  * The swap is not done by calling the keyboard's KeySchemeSeat twice: the
- * keyboard set is thirty-four shorts (scan codes), the pad set is twenty-eight
+ * keyboard set is thirty-five shorts (scan codes), the pad set is twenty-nine
  * longs (bit indices, where -1 means unbound). Two small functions matched to
  * each array are simpler than one generic one.
  *
@@ -33,15 +33,16 @@
  * engine's) so that MenuTest checks the same number the engine uses.
  *
  * The first sixteen slots keep their original numbers, as the keyboard's
- * thirty-four do (game\key_scheme.h): slot 16 is the Modifier, 17-22 the six
- * weapon hotkeys in DoWeaponHotkey's own order, 23-27 the five cheats.
+ * thirty-five do (game\key_scheme.h): slot 16 is the Modifier, 17-22 the six
+ * weapon hotkeys in DoWeaponHotkey's own order, 23-27 the five cheats, 28
+ * the HD/SD switch.
  *
  * jLayout holds only the active set. It previously also held an unread
  * snapshot of the other scheme's set (`long[32]`, sixteen roles plus a copy
  * written by ApplyJoyScheme but never read); that snapshot is gone. Should
  * something need to show the other scheme's set, ApplyJoyScheme can compute
  * it directly (JoyDefaultRecord) rather than reading a stored copy. */
-#define JOY_ROLES		28
+#define JOY_ROLES		29
 
 /* The Secondary role's slot. Fixed at 15: the registry stores this slot under
  * the names JSec/SJSec for the Secondary action, so the index cannot move even
@@ -70,6 +71,8 @@
 #define JOY_ROLE_CHEAT_ITEMS	25
 #define JOY_ROLE_CHEAT_HEAL	26
 #define JOY_ROLE_CHEAT_SKIP	27
+// The HD/SD switch, the twin of the keyboard's KEY_ROLE_HD_SWITCH.
+#define JOY_ROLE_HD_SWITCH	28
 
 /* The highest bit either joystick path writes: 0-11 the face buttons, 12-15
  * whatever the path has there, 16-19 the right stick and 20-23 the d-pad
@@ -126,13 +129,13 @@ inline int PadRoleFires(unsigned long fire, long button, int chord, long modifie
  * same macros, so the check runs on the exact rows a player gets.
  *
  * The One-key tables (jDef*) are a separate, fifteen-entry default layout and
- * are untouched by this file; JoyDefaultRecord fills their roles 15..27 with
- * -1 and their chord mask with 0, meaning all twelve added roles are unbound
- * on every pad path.
+ * are untouched by this file; JoyDefaultRecord fills their roles 15..28 with
+ * -1 and their chord mask with 0, meaning all thirteen added roles are
+ * unbound on every pad path.
  *
  * Role order: duck dash walk jump action draw flare look roll inventory pause
  * save load smallmedi largemedi secondary | modifier | pistols shotgun uzi
- * revolver HK crossbow | fly guns items heal skip. -1 is unbound.
+ * revolver HK crossbow | fly guns items heal skip | HD/SD. -1 is unbound.
  *
  * The two DirectInput-numbered rows bind: Modifier = bit 13 (the DualSense's
  * touchpad click; bit 14 is its mute button), quick save Modifier+R3, quick
@@ -141,23 +144,39 @@ inline int PadRoleFires(unsigned long fire, long button, int chord, long modifie
  * previous plain R1 flare and PS-button save default are replaced by these
  * chords, and both medipacks are left unbound (the small one sat on bit 13,
  * now the Modifier's button); under Modern control JoyDefaultRecord still
- * places them on the d-pad.
+ * places them on the d-pad. The HD/SD switch is Modifier+Options (bit 9):
+ * of the buttons no chord uses yet - L1, L2, R2, Share, Options, the PS
+ * button, the mute button, the d-pad and the right stick - Options is the
+ * game's own system button, the PS button may belong to the system itself,
+ * and the d-pad and the stick are taken by a scheme (JOY_DPAD_BITS and
+ * JOY_RSTICK_BITS, specific\input.cpp). Plain Options stays pause: a plain
+ * role stands aside while the Modifier is held (PadRoleFires).
  *
  * The two XInput-ordered rows get no Modifier: those pad paths name nothing
  * past bit 11 (specific\input.cpp), leaving no spare button, so flare stays
- * on R1, save and load stay unbound, and the twelve added roles are -1. */
-#define JOY_SEP_PS5_DINPUT	{ 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 11, 10, -1, -1, 7, 13, 1, 2, 3, 0, -1, -1, -1, -1, -1, -1, -1 }
-#define JOY_SEP_PS5_XINPUT	{ 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, -1, -1, 18, 19, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
-#define JOY_SEP_XBOX		{ 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, -1, -1, 18, 19, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 }
-#define JOY_SEP_GENERIC		{ 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, 11, 10, -1, -1, 7, 13, 1, 2, 3, 0, -1, -1, -1, -1, -1, -1, -1 }
+ * on R1, save and load stay unbound, and the thirteen added roles are -1. */
+#define JOY_SEP_PS5_DINPUT	{ 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, \
+				  11, 10, -1, -1, 7, 13, 1, 2, 3, 0, \
+				  -1, -1, -1, -1, -1, -1, -1, 9 }
+#define JOY_SEP_PS5_XINPUT	{ 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, \
+				  -1, -1, 18, 19, 11, -1, -1, -1, -1, -1, \
+				  -1, -1, -1, -1, -1, -1, -1, -1 }
+#define JOY_SEP_XBOX		{ 4, 8, 2, 0, 3, 10, 5, 9, 1, 6, 7, \
+				  -1, -1, 18, 19, 11, -1, -1, -1, -1, -1, \
+				  -1, -1, -1, -1, -1, -1, -1, -1 }
+#define JOY_SEP_GENERIC		{ 4, 10, 0, 1, 3, 6, 5, 11, 2, 8, 9, \
+				  11, 10, -1, -1, 7, 13, 1, 2, 3, 0, \
+				  -1, -1, -1, -1, -1, -1, -1, 9 }
 
 /* Which roles of the rows above are chords. Written out of the role names
  * rather than as a hex number, so that a role moving would move its bit with
- * it: flare, quick save, quick load and the first four weapons - the seven
- * roles bound as chords above, and nothing else. */
+ * it: flare, quick save, quick load, the first four weapons and the HD/SD
+ * switch - the eight roles bound as chords above, and nothing else. */
 #define JOY_SEP_CHORD_DINPUT	((1L << JOY_ROLE_FLARE) | (1L << JOY_ROLE_SAVE) | (1L << JOY_ROLE_LOAD) | \
 				 (1L << (JOY_ROLE_WEAPON_FIRST + 0)) | (1L << (JOY_ROLE_WEAPON_FIRST + 1)) | \
-				 (1L << (JOY_ROLE_WEAPON_FIRST + 2)) | (1L << (JOY_ROLE_WEAPON_FIRST + 3)))
+				 (1L << (JOY_ROLE_WEAPON_FIRST + 2)) | \
+				 (1L << (JOY_ROLE_WEAPON_FIRST + 3)) | \
+				 (1L << JOY_ROLE_HD_SWITCH))
 #define JOY_SEP_CHORD_XINPUT	0L
 
 /* Swaps which Action setting's role set sits in `active` (jLayout - the table
@@ -317,4 +336,26 @@ inline void PadSchemeRepair(long* layout, long* chord, long* yield, const long* 
 		*yield &= ~(1L << r);
 		*seated |= 1L << r;
 	}
+}
+
+/* A role a stored set has no value for, given its default pair on load
+ * (specific\registry.cpp). A stored set's chord mask has no bit for a role
+ * it never held, so the default button alone would land as a plain binding:
+ * the HD/SD switch's Options would become a second pause. The pair is seated
+ * whole, or the role stays unbound where the pair cannot be: no default, the
+ * Modifier's own button (PadRoleFires refuses it), or a pair another role of
+ * the set already holds - that binding is the player's own and is kept. */
+inline void PadSeatAppended(long* layout, long* chord, long role, long def,
+	long defChord)
+{
+	if (def < 0 || def > JOY_BIT_MAX || def == layout[JOY_ROLE_MODIFIER] ||
+		PadPairTaken(layout, *chord, def, defChord, role))
+	{
+		layout[role] = -1;
+		PadChordSet(chord, role, 0);
+		return;
+	}
+
+	layout[role] = def;
+	PadChordSet(chord, role, defChord);
 }

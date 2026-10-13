@@ -19,6 +19,7 @@
 #include "hd_switch.h"
 #include "hd_level.h"			// HDEnabled - whether there is HD data
 #include "../function_stubs.h"		// Log, gLogEnabled
+#include "../../tomb5/tomb5.h"		// tomb5.hd_enable - the log's cause
 #include "../../game/gameflow.h"	// the level's file name
 #include "../../game/control.h"		// GlobalCounter
 #include "../../game/text.h"		// GnFrameCounter
@@ -31,13 +32,32 @@ namespace
 	 * the process, so it holds across every level load. */
 	HDSwitchState g_state = HD_SWITCH_START;
 
-	// The level's file stem, "ANDREA2" out of "DATA\ANDREA2".
+	/* The level's file stem, "ANDREA2" out of "DATA\ANDREA2". gfLevelId is
+	 * the level's identity, not its place in the file table, so the table
+	 * is searched for the one file whose identity it is; a level that no
+	 * file or more than one file answers for is named "?". */
 	const char* LevelStem()
 	{
-		if (!gfFilenameWad || !gfFilenameOffset)
+		if (!gfFilenameWad || !gfFilenameOffset || !Gameflow)
 			return "?";
 
-		const char* name = &gfFilenameWad[gfFilenameOffset[gfLevelId]];
+		int found = -1;
+
+		for (int i = 0; i < Gameflow->nFileNames; i++)
+		{
+			if (LevelIdFromFile((uchar)i) != gfLevelId)
+				continue;
+
+			if (found >= 0)
+				return "?";
+
+			found = i;
+		}
+
+		if (found < 0)
+			return "?";
+
+		const char* name = &gfFilenameWad[gfFilenameOffset[found]];
 		const char* slash = strrchr(name, '\\');
 		const char* other = strrchr(name, '/');
 
@@ -62,8 +82,11 @@ bool HDDrawn()
  *          that is not an in-between frame)
  *   by     key or pad - the keyboard role or the pad chord
  *
- * A press with hd_enable 0 writes the same line with the state it left
- * alone and "nothing to switch" at the end. */
+ * A press with no HD data writes the same line with the state it left
+ * alone and the cause at the end: "hd_enable=0 nothing to switch" with the
+ * option off, "hd_enable=1 install=none nothing to switch" with the option
+ * on and no installation found (HDEnabled asks both; the install is not
+ * looked for here, so with the option off none is searched). */
 void HDSwitchInput(bool key, bool pad, bool live)
 {
 	const int what = HDSwitchStep(&g_state, (key || pad) ? 1 : 0,
@@ -72,8 +95,13 @@ void HDSwitchInput(bool key, bool pad, bool live)
 	if (what == HD_SWITCH_NONE || !gLogEnabled)
 		return;
 
+	const char* tail = "";
+
+	if (what == HD_SWITCH_NOTHING)
+		tail = tomb5.hd_enable ? " hd_enable=1 install=none nothing to switch" :
+			" hd_enable=0 nothing to switch";
+
 	Log("HDLOG switch drawn=%d level=%s tick=%ld frame=%ld by=%s%s",
 		g_state.drawn, LevelStem(), (long)GlobalCounter, (long)GnFrameCounter,
-		key ? "key" : "pad",
-		what == HD_SWITCH_NOTHING ? " hd_enable=0 nothing to switch" : "");
+		key ? "key" : "pad", tail);
 }

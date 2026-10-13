@@ -18639,8 +18639,10 @@ static HDLifeBody life_map(const char* const* rows, int n)
 /* The roam of a big body's school (HDLifeRoams, HDLifeRoamPick,
  * HDLifeRoamNext, HDLifeRoamStep): ANDY3's basin's shape - a block of 8 by
  * 3 squares and two arms a square wide - roams, a pond does not; the
- * waypoints and every step keep 512 off the edge; the pace holds; the
- * school sees two fifths of the basin in two minutes; a pond's school
+ * waypoints and every step keep 512 off the edge; the next way runs over a
+ * square never come to; the pace holds; from any square the school sees a
+ * third of the basin in a minute and three quarters in five - the least
+ * over the 42 starts is 14 and 32, both on the bound; a pond's school
  * cruises as it did. */
 static void life_roam()
 {
@@ -18671,11 +18673,12 @@ static void life_roam()
 	// Waypoints from every square, and the way there step by step.
 	int picks = 0, bad = 0, near = 0;
 	float clear = 1.0e9f;
+	const std::vector<int> none;
 
 	for (int from = 0; from < (int)lake.squares.size(); from++)
 		for (int leg = 0; leg < 4; leg++)
 		{
-			const int to = HDLifeRoamPick(lake, 0, leg, from);
+			const int to = HDLifeRoamPick(lake, 0, leg, from, none, 1);
 			std::vector<int> steps;
 
 			HDLifeRoamSteps(lake, from, steps);
@@ -18724,53 +18727,106 @@ static void life_roam()
 		"every step of the way there keeps 512 off the edge", bad * 1000 +
 		near, 0);
 
-	/* Two minutes of a school of six in the basin's west arm: the pace,
-	 * the edge, the squares its fish see. */
-	HDLifePool p = life_school(lake, 1536.0f, 9728.0f, 6);
-	const float dt = 1.0f / 30.0f;
-	const float pace = kHDLifeRoamLengths * 2.0f * p.reach[HD_LIFE_FISH];
-	float fast = 0.0f, least = 1.0e9f;
-	std::vector<int> seen(lake.squares.size(), 0);
+	/* A square the centre never came to, all others come to: from every
+	 * square three steps or more off it, the next way runs over it. */
+	const int n = (int)lake.squares.size();
+	int missed = 0;
 
-	p.schools[0].roam = HDLifeRoams(lake) ? 1 : 0;
-
-	for (int k = 1; k <= 30 * 120; k++)
+	for (int from = 0; from < n; from++)
 	{
-		const float t = k * dt;
-		const float cx = p.schools[0].cx, cz = p.schools[0].cz;
+		std::vector<int> off;
 
-		HDLifeTick(p, 0, t, 0, 0.0f, 0.0f, 0);
+		HDLifeRoamSteps(lake, from, off);
 
-		const float m = sqrtf((p.schools[0].cx - cx) * (p.schools[0].cx -
-			cx) + (p.schools[0].cz - cz) * (p.schools[0].cz - cz));
-		const float d = HDLifeEdgeDistance(lake, p.schools[0].cx,
-			p.schools[0].cz, (float)kHDLifeDeep, 1);
-
-		fast = m > fast ? m : fast;
-		least = d < least ? d : least;
-
-		for (size_t i = 0; i < p.entries.size(); i++)
+		for (int fresh = 0; fresh < n; fresh++)
 		{
-			float x, y, z, yaw, pitch, roll;
+			if (off[(size_t)fresh] < kHDLifeRoamFar)
+				continue;
 
-			HDLifePose(p, p.entries[i], t, &x, &y, &z, &yaw, &pitch, &roll);
+			std::vector<int> been((size_t)n, 1);
 
-			const int at = HDLifeSquareAt(lake, x, z);
+			been[(size_t)fresh] = 0;
 
-			if (at >= 0)
-				seen[(size_t)at] = 1;
+			const int to = HDLifeRoamPick(lake, 0, fresh, from, been, 2);
+			int over = 0;
+
+			for (int at = from, guard = 0; to >= 0 && at != to && guard < 64;
+				guard++)
+			{
+				at = HDLifeRoamNext(lake, at, to);
+				over |= at == fresh ? 1 : 0;
+
+				if (at < 0)
+					break;
+			}
+
+			missed += over ? 0 : 1;
 		}
 	}
 
-	int saw = 0;
+	ok(missed == 0, "life roam: the next way runs over a square the school "
+		"never came to", missed, 0);
 
-	for (size_t i = 0; i < seen.size(); i++)
-		saw += seen[i];
+	/* Five minutes of a school of six from every square of the basin: the
+	 * pace, the edge, the squares its fish see by one minute and by five. */
+	const float dt = 1.0f / 30.0f;
+	float fast = 0.0f, least = 1.0e9f;
+	int minute = n, five = n, legs = 1000;
 
-	ok(fast <= pace * dt + 0.01f && least >= kHDLifeRingClear &&
-		saw * 5 >= (int)lake.squares.size() * 2 && p.schools[0].legs >= 2,
-		"life roam: at a length a second, its ring off the edge, the school "
-		"sees two fifths of the basin in two minutes", saw, 17);
+	for (int start = 0; start < n; start++)
+	{
+		HDLifePool p = life_school(lake, lake.squares[(size_t)start].x + 512.0f,
+			lake.squares[(size_t)start].z + 512.0f, 6);
+		p.schools[0].roam = HDLifeRoams(lake) ? 1 : 0;
+
+		const float pace = kHDLifeRoamLengths * 2.0f * p.reach[HD_LIFE_FISH];
+		std::vector<int> seen((size_t)n, 0);
+		int saw = 0;
+
+		for (int k = 1; k <= 30 * 300; k++)
+		{
+			const float t = k * dt;
+			const float cx = p.schools[0].cx, cz = p.schools[0].cz;
+
+			HDLifeTick(p, 0, t, 0, 0.0f, 0.0f, 0);
+
+			const float m = sqrtf((p.schools[0].cx - cx) * (p.schools[0].cx -
+				cx) + (p.schools[0].cz - cz) * (p.schools[0].cz - cz));
+			const float d = HDLifeEdgeDistance(lake, p.schools[0].cx,
+				p.schools[0].cz, (float)kHDLifeDeep, 1);
+
+			fast = m - pace * dt > fast ? m - pace * dt : fast;
+			least = d < least ? d : least;
+
+			for (size_t i = 0; i < p.entries.size(); i++)
+			{
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(p, p.entries[i], t, &x, &y, &z, &yaw, &pitch,
+					&roll);
+
+				const int at = HDLifeSquareAt(lake, x, z);
+
+				if (at >= 0 && !seen[(size_t)at])
+				{
+					seen[(size_t)at] = 1;
+					saw++;
+				}
+			}
+
+			if (k == 30 * 60)
+				minute = saw < minute ? saw : minute;
+		}
+
+		five = saw < five ? saw : five;
+		legs = p.schools[0].legs < legs ? p.schools[0].legs : legs;
+	}
+
+	ok(fast <= 0.01f && least >= kHDLifeRingClear && minute * 3 >= n &&
+		five * 4 >= n * 3 && legs >= 2,
+		"life roam: at a length a second, its ring off the edge, from any "
+		"square the school sees a third of the basin in a minute and three "
+		"quarters in five", minute * 100 + five, 14 * 100 + 32);
 
 	/* A pond's school cruises as it did: its centre and heading tick by
 	 * tick as HDLifeSchoolStep and the retarget alone move them. */

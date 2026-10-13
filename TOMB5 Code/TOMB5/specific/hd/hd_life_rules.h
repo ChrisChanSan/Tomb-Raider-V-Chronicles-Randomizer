@@ -425,9 +425,12 @@ static const float kHDLifeSchoolTurn = 0.7853982f;	// 45 degrees a second
  * the 42 squares, 10 to 17 percent, over eight rolls (RoomProbe
  * -lifeseries), the school in an arm going up and down it. A school whose
  * body's deep squares span more than kHDLifeRoamSpan, 8 squares, roams
- * instead: it picks a waypoint - a deep square's middle, the hash of the
- * school and its count of legs (1311) choosing among those at least
- * kHDLifeRoamFar steps off - and swims there square by square on the
+ * instead: it picks a waypoint - a deep square's middle at least
+ * kHDLifeRoamFar steps off whose way runs over the most squares it never
+ * came to, then over those it came to longest ago (HDLifeRoamPick; the
+ * basin's arms are dead ends and its block three squares across, so a
+ * waypoint drawn without that memory sends it back along the row it came
+ * by) - and swims there square by square on the
  * shortest way over deep squares (HDLifeRoamNext; a step to a diagonal
  * square only where both squares beside it are deep, so every step keeps
  * 512 off the edge), its heading turned to its way at kHDLifeSchoolTurn,
@@ -651,6 +654,11 @@ struct HDLifeSchool
 	int roam = 0;
 	int node = -1;
 	int legs = 0;
+	/* A roaming school's count of squares its centre came to the middle
+	 * of, and for each of its body's squares that count when it last came
+	 * there, 0 never (HDLifeRoamPick). */
+	int walk = 0;
+	std::vector<int> been;
 };
 
 struct HDLifeDrip
@@ -1618,42 +1626,178 @@ inline int HDLifeRoamNext(const HDLifeBody& b, int from, int to)
 	return -1;
 }
 
-/* A roaming school's next waypoint from square `from`: by the hash of the
- * school `si` and its count of legs (1311), one of the deep squares at
- * least kHDLifeRoamFar steps off, or of any it can reach when none is that
- * far; -1 when it reaches none. */
-inline int HDLifeRoamPick(const HDLifeBody& b, int si, int legs, int from)
+/* A roaming school's next waypoint from square `from`: of the deep squares
+ * at least kHDLifeRoamFar steps off, or of any it can reach when none is
+ * that far, the one whose way there (HDLifeRoamNext) runs over the squares
+ * its centre came to longest ago - the sum over the way's squares of the
+ * squares come to since (`walk` less `been`, a square never come to
+ * counting all of `walk`) - and among those that tie the hash of the
+ * school `si` and its count of legs (1311); -1 when it reaches none. The
+ * longest way wins while every square is new, so the first leg runs to
+ * the far end of the body. The ways are walked on a table of each
+ * square's steps, the same steps and the same order as HDLifeRoamSteps and
+ * HDLifeRoamNext. */
+inline int HDLifeRoamPick(const HDLifeBody& b, int si, int legs, int from,
+	const std::vector<int>& been, int walk)
 {
-	std::vector<int> steps;
+	const int n = (int)b.squares.size();
 
-	HDLifeRoamSteps(b, from, steps);
+	if (from < 0 || from >= n || b.squares[(size_t)from].depth < kHDLifeDeep)
+		return -1;
 
-	// The farther half of the way it can go, kHDLifeRoamFar at the least.
-	int most = 0;
+	/* Each square's eight neighbours in HDLifeRoamNext's order, -1 none,
+	 * looked up on a grid of the body's box. */
+	int x0 = b.squares[0].x, z0 = b.squares[0].z, x1 = x0, z1 = z0;
 
-	for (size_t i = 0; i < steps.size(); i++)
-		most = steps[i] > most ? steps[i] : most;
-
-	const int tries[2] = { most / 2 > kHDLifeRoamFar ? most / 2 :
-		kHDLifeRoamFar, 1 };
-
-	for (int k = 0; k < 2; k++)
+	for (int i = 1; i < n; i++)
 	{
-		const int least = tries[k];
-		int n = 0;
+		const HDLifeSquare& s = b.squares[(size_t)i];
 
-		for (size_t i = 0; i < steps.size(); i++)
-			n += steps[i] >= least ? 1 : 0;
+		x0 = s.x < x0 ? s.x : x0;
+		z0 = s.z < z0 ? s.z : z0;
+		x1 = s.x > x1 ? s.x : x1;
+		z1 = s.z > z1 ? s.z : z1;
+	}
 
-		if (!n)
+	const int w = (x1 - x0) / 1024 + 1, h = (z1 - z0) / 1024 + 1;
+	std::vector<int> grid((size_t)w * h, -1);
+
+	// The first square at a place, as HDLifeSquareAt finds it.
+	for (int i = n - 1; i >= 0; i--)
+		grid[(size_t)((b.squares[(size_t)i].z - z0) / 1024 * w +
+			(b.squares[(size_t)i].x - x0) / 1024)] = i;
+
+	auto deep = [&](int x, int z)
+	{
+		if (x < x0 || x > x1 || z < z0 || z > z1)
+			return -1;
+
+		const int at = grid[(size_t)((z - z0) / 1024 * w + (x - x0) / 1024)];
+
+		return at >= 0 && b.squares[(size_t)at].depth >= kHDLifeDeep ? at : -1;
+	};
+	std::vector<int> nb((size_t)n * 8, -1);
+
+	for (int i = 0; i < n; i++)
+	{
+		const HDLifeSquare& s = b.squares[(size_t)i];
+		int k = 0;
+
+		if (s.depth < kHDLifeDeep)
+			continue;
+
+		for (int dx = -1; dx <= 1; dx++)
+			for (int dz = -1; dz <= 1; dz++)
+			{
+				if (!dx && !dz)
+					continue;
+
+				const int at = deep(s.x + dx * 1024, s.z + dz * 1024);
+
+				// A diagonal step only where both squares beside it are deep.
+				const bool side = !(dx && dz) ||
+					(deep(s.x + dx * 1024, s.z) >= 0 &&
+					deep(s.x, s.z + dz * 1024) >= 0);
+
+				if (at >= 0 && side)
+					nb[(size_t)i * 8 + k] = at;
+
+				k++;
+			}
+	}
+
+	// The steps from square `to` to every square, -1 where none leads.
+	std::vector<int> queue((size_t)n);
+
+	auto stepsTo = [&](int to, std::vector<int>& steps)
+	{
+		size_t end = 1;
+
+		queue[0] = to;
+		steps.assign((size_t)n, -1);
+		steps[(size_t)to] = 0;
+
+		for (size_t q = 0; q < end; q++)
+			for (int k = 0; k < 8; k++)
+			{
+				const int at = nb[(size_t)queue[q] * 8 + k];
+
+				if (at >= 0 && steps[(size_t)at] < 0)
+				{
+					steps[(size_t)at] = steps[(size_t)queue[q]] + 1;
+					queue[end++] = at;
+				}
+			}
+	};
+	std::vector<int> off, steps;
+	std::vector<long long> score((size_t)n, -1);
+
+	stepsTo(from, off);
+
+	for (int c = 0; c < n; c++)
+	{
+		if (off[(size_t)c] < 1)
+			continue;
+
+		stepsTo(c, steps);
+
+		long long sum = 0, news = 0;
+
+		for (int at = from, guard = 0; at != c && guard < n; guard++)
+		{
+			int next = -1;
+
+			for (int k = 0; k < 8 && next < 0; k++)
+			{
+				const int v = nb[(size_t)at * 8 + k];
+
+				next = v >= 0 && steps[(size_t)v] == steps[(size_t)at] - 1 ?
+					v : -1;
+			}
+
+			if (next < 0)
+				break;
+
+			const int last = (size_t)next < been.size() ?
+				been[(size_t)next] : 0;
+
+			sum += walk - last;
+			news += last ? 0 : 1;
+			at = next;
+		}
+
+		score[(size_t)c] = news * (long long)(n + 1) * (walk + 1) + sum;
+	}
+
+	for (int least = kHDLifeRoamFar; least >= 1; least = least > 1 ? 1 : 0)
+	{
+		long long best = -1;
+		int ties = 0;
+
+		for (int c = 0; c < n; c++)
+		{
+			if (off[(size_t)c] < least)
+				continue;
+
+			if (score[(size_t)c] > best)
+			{
+				best = score[(size_t)c];
+				ties = 0;
+			}
+
+			ties += score[(size_t)c] == best ? 1 : 0;
+		}
+
+		if (!ties)
 			continue;
 
 		int pick = (int)(HDLifeHash(7u + (unsigned)si, 1311u +
-			(unsigned)legs) % (unsigned)n);
+			(unsigned)legs) % (unsigned)ties);
 
-		for (size_t i = 0; i < steps.size(); i++)
-			if (steps[i] >= least && pick-- == 0)
-				return (int)i;
+		for (int c = 0; c < n; c++)
+			if (off[(size_t)c] >= least && score[(size_t)c] == best &&
+				pick-- == 0)
+				return c;
 	}
 
 	return -1;
@@ -2621,10 +2765,19 @@ inline void HDLifeRoamStep(const HDLifePool& p, const HDLifeBody& b,
 		s.cx = tx;
 		s.cz = tz;
 
-		if (s.target == s.node || s.target < 0 || s.target >= n)
+		if (s.been.size() != (size_t)n)
+			s.been.assign((size_t)n, 0);
+
+		s.walk++;
+		s.been[(size_t)s.node] = s.walk;
+
+		// The first square it comes to picks its first waypoint too.
+		if (s.walk == 1 || s.target == s.node || s.target < 0 ||
+			s.target >= n)
 		{
 			s.legs++;
-			s.target = HDLifeRoamPick(b, si, s.legs, s.node);
+			s.target = HDLifeRoamPick(b, si, s.legs, s.node, s.been,
+				s.walk);
 		}
 
 		const int next = HDLifeRoamNext(b, s.node, s.target);

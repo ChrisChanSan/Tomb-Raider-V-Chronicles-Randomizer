@@ -693,7 +693,7 @@ void SaveSettings()
 	REG_WriteLong((char*)"Key17", cset[17]);
 	REG_WriteLong((char*)"Key18", cset[18]);	// the Secondary action
 
-	// And the fifteen hotkey slots beside them, under names an older build
+	// And the sixteen hotkey slots beside them, under names an older build
 	// does not look for - so a registry this build writes still loads
 	// there, with the hotkeys back to hard-wired keys, which is what that
 	// build does anyway.

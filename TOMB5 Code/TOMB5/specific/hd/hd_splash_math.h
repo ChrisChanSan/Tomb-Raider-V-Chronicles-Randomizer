@@ -847,6 +847,17 @@ inline float HDWetFront(float seconds, float reach)
 	return reach + kWetSpread * (seconds - kTankDomeOut);
 }
 
+/* A ring's strength on the sheets (hd_render.cpp, "the rings"): `slope`
+ * times its first size over 128, and `body` times more for a ring that
+ * starts over 128 (a floating body's), times the square of `left`, the
+ * share of its life left. */
+inline float HDRingStrength(float slope, float body, float size, float left)
+{
+	const float first = size / 128.0f;
+
+	return slope * first * (first > 1.0f ? body : 1.0f) * left * left;
+}
+
 inline float HDWetAt(float front, float way)
 {
 	const float w = (front - way) / kWetRamp;

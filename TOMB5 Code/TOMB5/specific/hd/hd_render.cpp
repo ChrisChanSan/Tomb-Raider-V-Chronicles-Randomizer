@@ -10768,11 +10768,25 @@ namespace
 	 *
 	 * A ring's front runs out from half the ripple's first size at
 	 * kRingSpeed; its strength, a slope, is kRingSlope times its first size
-	 * over 128 (a wading Lara's ripple is 112 to 127), at most 1, times the
-	 * square of what is left of its life - a slow fade that leaves the
-	 * last second faint. A sheet draw takes the kRingsPerDraw youngest
-	 * whose centre lies within kRingNear of its squares and whose height
-	 * within kRingHeight of its surface. Speed, life, slope, the merge
+	 * over 128 (a wading Lara's ripple is 112 to 127), times the square of
+	 * what is left of its life - a slow fade that leaves the last second
+	 * faint. A ripple that starts over 128 is a floating body's (the
+	 * water's life rings a barrel once a bob at 240 to 255, hd_life_rules.h;
+	 * nothing of the game starts one so big, and a ripple row of
+	 * hd_water.txt over 128 is taken as one): its size counts on past 128,
+	 * and the strength is kRingBody times more. A body's ring is one wave
+	 * sent out a bob, where a wading Lara's is started again every 0.6 s
+	 * and stays young; at night the water round it mirrors a dark sky
+	 * nearly alike at every slope, and a ring shows only where its slope
+	 * turns the mirror to the brighter horizon. kRingBody, 4, is a free
+	 * choice, set by eye on the round's RoomProbe pictures of ANDY3's lake
+	 * at night from the bank: at 4 a barrel's ring reads from a wading
+	 * Lara's camera at 1.5 and 2 s, at 2 it does not; its slope at the
+	 * ring's start stands far steeper than a real wave's, so near the
+	 * barrel it reads as an outline (hd_splash_math.h, HDRingStrength). A
+	 * sheet draw takes the kRingsPerDraw youngest whose centre lies within
+	 * kRingNear of its squares and whose height within kRingHeight of its
+	 * surface. Speed, life, slope, the merge
 	 * distance, the restart and the two other distances are free choices,
 	 * set by eye on the round's RoomProbe pictures: a wading Lara's ring
 	 * slower than a quick splash, as strong at one second as a ring with a
@@ -10781,6 +10795,7 @@ namespace
 	const double kRingLife = 3.5;		// seconds
 	const float kRingSpeed = 150.0f;	// units a second
 	const float kRingSlope = 0.5f;
+	const float kRingBody = 4.0f;
 	const float kRingMerge = 192.0f;	// units
 	const double kRingRestart = 0.6;	// seconds
 	const int kRingNear = 512;		// units
@@ -17770,16 +17785,14 @@ namespace
 		for (int i = 0; i < count; i++)
 		{
 			const float left = 1.0f - (float)(found[i].age / kRingLife);
-			const float life = left * left;
-			const float first = found[i].size / 128.0f;
 
 			// The centre in the frame the shader's world position is in.
 			out[i * 4 + 0] = found[i].x - (float)r.originX + g_room_origin[0];
 			out[i * 4 + 1] = found[i].z - (float)r.originZ + g_room_origin[1];
 			out[i * 4 + 2] = found[i].size * 0.5f +
 				kRingSpeed * (float)found[i].age;
-			out[i * 4 + 3] = kRingSlope * (first < 1.0f ? first : 1.0f) *
-				life;
+			out[i * 4 + 3] = HDRingStrength(kRingSlope, kRingBody,
+				found[i].size, left);
 
 			if (found[i].slope > 0.0f)
 			{

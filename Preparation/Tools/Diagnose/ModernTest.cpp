@@ -19390,6 +19390,40 @@ static void splash_tank_wet()
 		"the corridor's far end wet in about a minute", (long)far19749, 60);
 }
 
+/* The rings' strength on the sheets (hd_splash_math.h, HDRingStrength, at
+ * hd_render.cpp's kRingSlope 0.5 and kRingBody 4): a wading Lara's ring as
+ * it always was, a barrel's past the old cap of 128 and four times more. */
+static void splash_rings()
+{
+	printf("the splash: the rings' strength\n");
+
+	bool lara = true;
+
+	for (int size = 112; size <= 128; size++)
+		for (float left = 0.0f; left <= 1.0f; left += 0.125f)
+		{
+			const float first = (float)size / 128.0f;
+			const float old = 0.5f * (first < 1.0f ? first : 1.0f) *
+				left * left;
+
+			lara = lara && HDRingStrength(0.5f, 4.0f, (float)size, left) ==
+				old;
+		}
+
+	ok(lara, "a wading Lara's ring (112 to 127) and 128 as before", lara, 1);
+	ok(HDRingStrength(0.5f, 4.0f, 240.0f, 1.0f) == 0.5f * 1.875f * 4.0f &&
+		HDRingStrength(0.5f, 4.0f, 255.0f, 1.0f) ==
+		0.5f * (255.0f / 128.0f) * 4.0f,
+		"a barrel's ring of 240 to 255: its size past 128, four times",
+		(long)(HDRingStrength(0.5f, 4.0f, 240.0f, 1.0f) * 100.0f), 375);
+	ok(HDRingStrength(0.5f, 4.0f, 240.0f, 0.5f) ==
+		HDRingStrength(0.5f, 4.0f, 240.0f, 1.0f) * 0.25f &&
+		HDRingStrength(0.5f, 4.0f, 240.0f, 0.0f) == 0.0f,
+		"and it fades with the square of its life left as every ring", 1, 1);
+	ok(HDRingStrength(0.5f, 4.0f, 80.0f, 1.0f) == 0.5f * 80.0f / 128.0f,
+		"a small ring (a source of 80) keeps its share", 1, 1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -19533,6 +19567,7 @@ int main()
 	splash_tank_spray();
 	splash_tank_dome();
 	splash_tank_wet();
+	splash_rings();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

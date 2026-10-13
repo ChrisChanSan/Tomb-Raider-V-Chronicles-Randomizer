@@ -147,15 +147,16 @@ tilts can be bound like buttons.
 
 **How long the list really is.** The hotkeys sit on the same page (below), so
 those blocks are not the whole of it. With *Action* at *One key* and *Cheats*
-off the page holds **26** bindable rows on the keyboard and **22** on a pad;
+off the page holds **27** bindable rows on the keyboard and **23** on a pad;
 *Separate* adds the *Secondary* row and *Cheats* adds five more, so with both
-on it is **32** and **28**. The list is a page of its own rather than part of
+on it is **33** and **29**. The list is a page of its own rather than part of
 *Controls* itself, so it can page left and right with the arrows when the rows
 do not fit one screen — the same paging *tomb5 options* uses.
 
 **The hotkeys are on the same page.** There is no second binding screen for
 "combination" keys: the small and large medipack, quick save, quick load, the
-six weapons and (while *Cheats* is on) the five cheat hotkeys are rows on the
+six weapons, (while *Cheats* is on) the five cheat hotkeys and the *HD / SD*
+switch are rows on the
 SAME *Key bindings* list, keyboard and pad alike — nothing extra to open, only
 more pages of the one list. A centred **"1/N"** sits between the paging arrows
 whenever the list needs more than one page, so it is always clear how many
@@ -239,11 +240,13 @@ bound to another row, and *Reset to defaults* puts the buttons in their place.
 
 ### The hotkey rows
 
-Fifteen more rows follow the nineteen above, on the same *Key bindings* list
+Sixteen more rows follow the nineteen above, on the same *Key bindings* list
 and under the same *Reset to defaults*: the two medipacks, quick save, quick
-load, the six weapons (in the order the number keys always drew them), and —
-only while *Cheats* is on, see **Cheats and the cheat hotkeys** below — five
-cheat rows. Where the original had a key for one of these jobs, that key was
+load, the six weapons (in the order the number keys always drew them), five
+cheat rows — only while *Cheats* is on, see **Cheats and the cheat hotkeys**
+below — and last, always, *HD / SD*: the switch between the HD draw and the
+classic draw (see **The HD/SD switch** under **HD from the Remaster**).
+Where the original had a key for one of these jobs, that key was
 hard-wired; here each is a role like any other, so it can be rebound like any
 other.
 Defaults, both key sets, the one difference between them named:
@@ -265,12 +268,13 @@ Defaults, both key sets, the one difference between them named:
 | All items (cheat) | F8 |
 | Heal (cheat) | F11 |
 | Skip level (cheat) | F1 |
+| HD / SD | F12 |
 
 > **F4 is not on that list and cannot be bound.** It opens the outfit changer
 > and is read as a plain key, because it means nothing to the game and a pad
 > could not reach it anyway — see **The outfit changer, Mods and footsteps**.
-> F10 and F12 are likewise left alone, which is why the five cheat rows
-> default to the F keys they do.
+> F10 is likewise left alone, which is why the five cheat rows default to the
+> F keys they do.
 
 Quick load's Modern default is the one deliberate departure: every other
 default key, in either scheme, is the key the engine answers to for that job
@@ -381,12 +385,14 @@ you left them.
 | Load | **Modifier+L3** on the PS5 DirectInput and generic pages; unbound elsewhere |
 | Small medipack / Large medipack | wherever this pad's own One-key table already puts them — except on the PS5 DirectInput and generic Tank rows, where the small medipack's usual button is the Modifier and both medipacks go unbound there instead of sharing it (0 and 9 on the keyboard still reach them; the Modern d-pad rows are untouched) |
 | Secondary | R2 |
+| HD / SD | **Modifier+Options** on the PS5 DirectInput and generic pages; unbound on the two XInput-ordered pages |
 
 ### The pad's Modifier and its chords
 
-A pad has a **Modifier** role and twelve chorded roles behind it —
-weapon 1-6 and, while *Cheats* is on, the five cheat rows — the pad's own
-version of the keyboard's F-key hotkeys, on the SAME *Key bindings* list. A
+A pad has a **Modifier** role and thirteen chorded roles behind it —
+weapon 1-6, *HD / SD* and, while *Cheats* is on, the five cheat rows — the
+pad's own version of the keyboard's F-key hotkeys, on the SAME *Key bindings*
+list. A
 **chord** is the Modifier held down together with a second button; the value
 column shows it as `Mod+<Button>`, or `---+<Button>` if the Modifier is not
 bound to anything yet. Binding a chord: hold the Modifier and press the other
@@ -408,6 +414,15 @@ Defaults, decoded back to button names:
 | Revolver | Modifier+Square | unbound |
 | HK / Crossbow | unbound | unbound |
 | Fly mode / All weapons / All items / Heal / Skip level (cheats) | unbound | unbound |
+| HD / SD | Modifier+Options | unbound |
+
+*HD / SD* takes Options because, of the buttons no chord used, it is the
+game's own system button; the PS button may belong to the system, and the
+d-pad and the right stick each serve one of the schemes. Plain Options stays
+*Pause*: a plain role stands aside while the Modifier is held. A Separate set
+stored by a build without the switch gets Modifier+Options at its next start,
+unless that pair is already one of your own bindings or the Modifier itself
+sits on Options — then the row stays `---` until you bind it.
 
 "PS5 DirectInput / generic" above means the two tables whose buttons are
 numbered the DirectInput way: the *PS5* page on a pad the engine is reading
@@ -2260,7 +2275,7 @@ values, in the same key as every other setting
 
 | Value | Type | Meaning |
 |---|---|---|
-| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. |
+| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. With `1`, the *HD / SD* key (F12) is the switch between the HD and the classic draw of a built HD level, without a load (**The HD/SD switch** below says how far it reaches in this build); it is not saved, so every game starts at what this value says. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
@@ -2275,6 +2290,47 @@ values, in the same key as every other setting
 | `hd_texture_format` | String | `rgba`, the default, keeps every page exactly as the Remaster drew it. `dxt5` compresses them and uses a quarter of the video memory for a small, measurable loss. Anything else reads as `rgba`. |
 | `hd_outfit` | String | Which body Lara wears, written by the **F4 outfit changer** and read at every level start. Empty — the default — means *Level facts*: the level and the rolled run decide. There is no options row for it; set it in the changer. See **The outfit changer, Mods and footsteps**. |
 | `hd_footsteps` | subkey | Not a value but a key of its own, `…\tomb5\hd_footsteps`, holding one DWORD per outfit: the value's **name** is the outfit's own key and its value is `1` for bare feet or `2` for boots. Written by the changer's *Footsteps* row, one entry per outfit you have set, and read at every level start. |
+
+### The HD/SD switch
+
+One key between the HD draw and the classic draw, for comparing the two at the
+same spot: **F12** on the keyboard in both control types, **Modifier+Options**
+on a pad's *Separate* set on the PS5 DirectInput and generic pages. Both are
+the *HD / SD* row of *Key bindings*, shown whatever *Cheats* says, and both can
+be bound elsewhere like any hotkey.
+
+It is a third state beside `hd_enable` `0` and `1`: the level is built HD at
+its load exactly as with `1`, and the switch only chooses which of the two
+draws you see. Both sets of data stay in memory for the whole level, so a
+press costs no load and no wait. One press is one switch — holding the key
+does not repeat — and a press in the title, in the inventory ring, the pause
+menu, the load and save screens, the outfit changer or on the *Key bindings*
+page switches nothing, so binding F12 there does not also switch the picture.
+The choice holds for the whole session, across level loads, so the same spot
+can be compared before and after a load. It is never saved: every game starts
+drawn HD. With `hd_enable` at `0` there is no HD data to switch to, and the
+key does nothing.
+
+What it is to switch is the **world**: the rooms, the static meshes, the
+items and enemies, Lara, the water, its life and its splashes, the shadows and
+the fog bulbs. What stays as `hd_enable` says: the HUD, the inventory ring and
+the pickup display, the fonts, the loading screens and the F4 outfit changer.
+
+> **In this build the key is wired to the switch and the log, not yet to the
+> picture.** The HD path decides what it draws in several places, and those
+> places are being worked on in other changes at the same time; the switch is
+> connected to them once those are in. Until then a press changes the
+> switch's state and writes the log line below, and the picture stays HD.
+
+Behind `-log`, every press that reaches a level writes one line:
+
+    HDLOG switch drawn=0|1 level=<name> tick=<n> frame=<n> by=key|pad
+
+`drawn` is the draw after the press (`1` HD, `0` classic), `level` the
+level's file name, `tick` the logic tick, `frame` the drawn-frame clock and
+`by` whether the keyboard role or the pad chord pressed it. A press with
+`hd_enable` at `0` writes the same line with `hd_enable=0 nothing to switch`
+at its end.
 
 ### What the HD art asks of your graphics card
 

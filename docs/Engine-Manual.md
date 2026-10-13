@@ -2183,9 +2183,20 @@ it.
   it climbs and down as it sinks; when Lara comes within a square of any of them, or
   something splashes into their water, each turns and darts off on a line of its own,
   away from her, about three squares in two seconds, climbing or diving to a depth of
-  its own as it goes, and after a few seconds they come back together. RICH2's tank
-  counts as whole from the level's start (its item starts invisible), until it is
-  shot. Under a ceiling a few
+  its own as it goes; a fish that meets the bank or a wall turns along it before it
+  gets there, and after a few seconds they come back together, within ten seconds of
+  the last dart, where the whole school keeps off the edge. A Lara who stands still
+  where she scared them does not scare them again until she has moved a quarter
+  square; once she has, coming back there scares them again. In a big body - ANDY3's
+  deep-sea basin, whose deep water spans more than eight squares - the school swims
+  from one far waypoint to the next, square by square, about a fish's length a
+  second, each time along the water it has not swum through yet or swam through
+  longest ago: a third of the basin in its first minute, three quarters in five. The
+  pond and ANDY1's pools keep their slow circling. The fish of RICH2's tank never
+  flee: each swims to and fro along the tank on a line of its own, there and back in
+  20 to 30 seconds, turning about at each end.
+  RICH2's tank counts as whole from the level's start (its item starts invisible),
+  until it is shot. Under a ceiling a few
   drips fall: a drop falls from the ceiling and rings the sheet where it lands, near
   Lara and at most one in two seconds a body; the log names where they are
   (`drips_at=`). The models are the Remaster's own (a bottle, two cloths, a barrel, a
@@ -2205,7 +2216,8 @@ it.
   enough for fish (`deep=`) and under a ceiling (`closed=`), a river's or ANDREA2's
   canal's slot points (`in=` and `out=`, world x, y and z, y the depth a float's top
   reaches there; `none` on other water) and its drips' points (`drips_at=x,z;x,z...`
-  or `none`) - stand under one of those and wait a few seconds. Once a second of the
+  or `none`) - stand under one of those and wait a few seconds - and `roam=1` when
+  its school roams the body, else `roam=0`. Once a second of the
   game's clock a line sums the frames (`frames=`), the entries drawn and skipped over
   them (`drawn=`, `skipped=`; at most 32 a frame are drawn, nearest the eye first; an
   entry behind the eye, and a shot tank's fish, count in neither), the rings written

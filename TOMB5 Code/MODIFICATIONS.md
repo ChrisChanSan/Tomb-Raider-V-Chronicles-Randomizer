@@ -13356,6 +13356,164 @@ foam at the grate is the water's look.
 
 **Commits.** `3f9333c`, `be2277f`, `2485257`, `6b2637b`, `443008c`.
 
+**Round 4, after the owner's third play test.** The owner played round 3 on 2026-10-13
+(the build of 02:57:04; his third play test of the life, his sixteenth in all) and wrote,
+put into English: fish are still a problem in general - they flee as far as the wall and
+stay stuck there. In RICH2 they are only in an aquarium, and in the aquarium they have
+the flight mode too; in there they should simply swim to and fro a little. And on a
+trview picture of ANDY3's deep-sea basin (rooms 3 over 1, seen from under its surface):
+the fish have a big basin after all, and they hardly move to and fro.
+
+What his log showed, and the causes found before anything changed (RoomProbe
+`-lifeseries`, a new switch that prints every fish's place and its distance to the edge of
+the water 768 deep, with Lara placed at the banks from the first second):
+
+- *Stuck at the wall.* His ANDY3 seconds lines read `fleeing=1` for 25 seconds without a
+  break while he swam in the basin and then stood on its bank. In the probe every fish of
+  every flight - ANDY3's pond from its north and east banks, the basin's west arm from
+  both its banks, ANDY1's two pools - ended 128 to 131 units from the edge and stayed
+  within 192 of it for 3.4 to 6 seconds, until the regroup; in the pond all four fish
+  stood in one corner. The dart's way is fixed at its start, straight away from Lara, and
+  `HDLifeStep` refuses every step nearer than 128 to the edge, whole and in both parts
+  when the way is square on to it: the fish stands at the stop and its way never turns. A
+  renewed dart 1.5 seconds later, with Lara still within a square, sends it at the same
+  wall again. Not the regroup point (a square's middle 512 off both walls in the pond) and
+  not a point behind Lara. Beside it: the flight's end turned the school's heading to its
+  next target in one tick, and the ring, squeezed along the heading, moved every fish 250
+  to 500 units at once.
+- *The tank's flight.* Lara before the glass, where he stood (x 35,329, z 68,453), lies
+  within a square of the tank's near fish (x 33,792 to 34,816); nothing makes the glass a
+  wall for the rule. The probe there: six darts in 30 seconds and `fleeing=1` at the end,
+  every fish at the stop of the far wall and end; calm, the school circled a centre that
+  cruised a little along the tank and its fish covered 1,116 of the tank's 2,048 units of
+  length.
+- *The basin.* ANDY3's body 1 has 42 squares, all deep: a block of 8 by 3 and two arms a
+  square wide, 8 and 9 long. The calm cruise heads for a deep square the hash picks, picks
+  again every 6 seconds and stops where the next point would leave deep water (387 round
+  it): at 150 units a second it never got 900 units toward a target before the next one,
+  and a line off an arm's middle stopped at once. Over eight rolls its fish saw 4 to 7 of
+  the 42 squares in a minute (10 to 17 percent), 11 in two minutes; a school that started
+  in an arm went up and down it. The swing of 192 units at 0.45 radians a second the
+  question named is the depth's rise of round 3; the motion across is the ring of 150 to
+  300 round the cruising centre. The same cruise turned its heading in one tick at every
+  new target: jumps of 85 to 564 units in a tick.
+
+How. All of it in `hd_life_rules.h`; `hd_life.cpp` builds it unchanged.
+
+- *The edge in a flight* (`HDLifeEdgeDistance`, `HDLifeEdgeWay`, `HDLifeTurnWay`). At d
+  units from the edge the share of a dart's way that points away from it is at least
+  (384 - d) / 512: any way from 896 units off, along the edge at 384, half away from it at
+  the stop's 128, so a dart square on to a wall bends along it over its last square and a
+  fish the edge holds turns out of it. Along which way: the side its way leans to by more
+  than the sine of the dart's 25-degree scatter, square on the side of a hash of the fish
+  and the dart (1201). The way turns at the fish's own 720 degrees a second: a first build
+  that set it at once turned 95 degrees in one tick in a corner, where the nearest edge
+  goes from one wall to the other. A fish whose way back to its ring the edge refuses
+  rounds it the same way. 384 is `FISH2`'s 173-unit length and more off the stop.
+- *The regroup.* The school regroups where its whole ring keeps the stop, 428 off the edge
+  (its widest ring, 300, and the stop), else at the nearest deep square's middle, 512 off
+  any edge. The rejoin runs at 600 units a second or faster where a place lies farther
+  than that reaches in the time left, and the flight ends within 10 seconds of its last
+  dart (6 seconds of rejoin, 8 before): two halves of a school that fled both ways along
+  the basin's arm stood 5,300 units apart, the 8 seconds ran out and the last fish jumped
+  660 units to its place. After a flight the heading turns to its cruise at 45 degrees a
+  second (`HDLifeSchool::steady`): a fish on the widest ring runs 236 units a second more
+  as it turns, less than the rejoin's 600.
+- *A Lara who stands still* (`HDLifeSchool::seen`). With the edge turn the fish of a pool
+  a square or two wide stay in the water's middle, within a square of a bank Lara stands
+  on, and darted on without end (7 and 12 darts in 30 seconds on ANDY1's banks in a first
+  build): a school she scared is not scared by her again until she has moved 256 units, a
+  quarter square, from where she stood at that dart, and once she has, that place is
+  forgotten: back at it after she swam off, she scares them again. A swimmer who follows
+  keeps them darting; a splash scares them wherever she stands.
+- *The tank* (`HDLifeTankBox`, `HDLifeTankAt`). A tank's school never flees. Each fish
+  swims a line of its own along the tank's long side: the eight lines set evenly over the
+  tank's width less the stop each side, 96 apart (`FISH2` is 26 wide), in the order of a
+  hash of the fish (1301), so no two share one; along it a cosine from 215 off one end -
+  the stop and `FISH2`'s reach, so the nose stays off the end as it turns - to as far off
+  the other, there and back in 20 to 30 seconds by the hash (1303), from a phase of its
+  own (1307): 108 to 162 units a second on the mean, the school's cruise of 150 at the
+  quickest. It slows to its turn at each end and turns about at its own rate; its depth
+  keeps the band's rise and sink.
+- *The roam* (`HDLifeRoams`, `HDLifeRoamSteps`, `HDLifeRoamNext`, `HDLifeRoamPick`,
+  `HDLifeRoamStep`). A school whose body's deep squares span more than 8 squares roams: it
+  keeps for each square of its body when its centre last came to it
+  (`HDLifeSchool::been`, counted in squares come to), and picks as its waypoint the deep
+  square's middle, 3 steps off at least, whose way runs over the most squares it never
+  came to, then over those it came to longest ago; the hash of the school and its count
+  of legs (1311) decides between ways that tie. The first square it comes to picks the
+  first waypoint, so it starts with the longest way, to the body's far end. It swims
+  there square by square on the shortest way over deep squares - a diagonal step
+  only where both squares beside it are deep, so every step keeps 512 off the edge - at
+  one `FISH2` length a second (175, the pond's cruise of 150 at one length a second), its
+  heading turned to its way at 45 degrees a second; the ring and the depth's rise stay
+  round it. ANDY3's pond (4 squares), ANDY1's pools (6 and 7), whose schools saw 54 to 64
+  percent of their squares in a minute, and the tank keep their cruise. The body's
+  `LIFELOG` line ends with `roam=1` or `roam=0`.
+
+**Measured.** RoomProbe `-lifeseries` every 8 ticks over 30 seconds, Lara from 1 second at
+12 bank places (`HEAD` `ba89a58f` against this round): fish within 192 of the edge for
+more than 2 seconds 0 in every run (before: pond 3 of 4 and 4 of 4, basin arm 4 of 4
+twice, ANDY1 7 of 7, 3 of 6 and 6 of 6); within 256 for more than 2 seconds 0 as well;
+one dart each; the flights over 5.0 to 10.1 seconds
+after they started; every tick of three flights no fish moved more than 96 units (the
+dart's 93 and the ring's own motion), where the basin's flight ended with a jump of 502.
+The tank with Lara at the glass for 29 seconds: no dart, `fleeing=0`, each fish on its own
+line, its run 67,799 to 69,417 (2,048 less 215 each end) in full, at most 9 units a tick.
+The basin over twelve rolls without Lara, the squares its fish saw of its 42 by one, two
+and five minutes (the least to the most, the median after the colon):
+
+| Build                                  | 1 minute      | 2 minutes      | 5 minutes      |
+|----------------------------------------|---------------|----------------|----------------|
+| `ba89a58f`, the cruise                 | 4 to 9: 6     | 7 to 14: 9     | 14 to 24: 18.5 |
+| the waypoint by the hash alone         | 7 to 17: 14   | 16 to 28: 19   | 24 to 32: 30.5 |
+| the waypoint over squares never seen   | 14 to 20: 16.5| 16 to 29: 21.5 | 32 to 39: 35   |
+
+The hash alone sent the centre back along the way it came by: in roll 3 it went to and
+fro along the block's north row, and rolls 2 to 5 saw only 1 to 4 squares more in the
+second minute (found on the round's first build). With the waypoint over squares
+never seen every roll sees a third of the basin in a minute and three quarters in five.
+Two minutes stay 16 to 29: at 175 units a second the centre comes to about 20 squares in
+two minutes, and a school whose first way runs down an arm, a dead end 8 or 9 squares
+long, comes back up it. No fish moved more than 14 units a tick (564 before).
+
+Over 60 seconds ANDY3's rings hold 7 of the 128 ripple slots at the most, ANDREA2's 1,
+ANDY1's 4; a step of ANDY3's pool 0.0078 ms (0.0081 at `ba89a58f`), RICH2's 0.0019
+(0.0014); `-lifebench` at 2,560 x 1,440, two runs: the canal 9 drawn, the pond 8, the
+basin 19, the tank 8, on the GPU within 0.0007 ms of `ba89a58f` and on the processor
+within 0.0054 ms where the noise allows a reading (one run of the basin read 0.2024 at
+`ba89a58f`).
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 231, JOBY2 66,
+ANDY3 34, plain and with `-hdwater 1`); the fifteen cameras with `-hdwater 0` 15 of 15
+identical to the water round's parity set, and with `-hdwater 1` and no `-life` 15 of 15
+identical to `ba89a58f`. ANDY3's pond at three cameras and four clocks without Lara 12 of
+12 identical to `ba89a58f`; the pond's and ANDY1's calm series 60 seconds long line for
+line identical. The `LIFELOG` body lines of ANDREA2, ANDY3, ANDY1 and RICH2 as before with
+`roam=` at their end; ANDREA1 has no life (no row in `kHDLifeLevels`). The level line's
+`bytes` grow by 16 a school for the roam's memory (ANDY3 5,640, RICH2 1,128). ModernTest
+14,960 checks (14,946 at `ba89a58f`): the edge's distance and way, a dart along a far
+bank, the regroup off the edge, a fish the bank held, a still Lara and a place she left;
+the tank's school never fleeing, its run and turn, a line each; the roam's span rule,
+waypoints and steps, a way over a square never come to, pace, a third of the basin in a
+minute and three quarters in five from each of its 42 squares (the least is 14 and 32,
+both on the bound), and a pond unchanged. A pick takes 0.02 ms on the basin, about as
+long as a step's way (`HDLifeRoamNext`), once a waypoint. MenuTest, InterpTest and
+LipsTest 0 failed; the engine and the tools build.
+
+**Left.** The look in the game - nobody in this round could play it: the margins (the 384
+a fish runs along a wall at, the 256 a still Lara may move), the roam's pace and whether
+its square-by-square way reads as a school's wandering, and the tank's pace of 20 to 30
+seconds a run. The calm cruise of a small body still turns its heading at once at every
+new target, every 6 seconds or on arrival, and its ring moves every fish 200 to 570 units
+in that tick (ANDY3's pond, ANDY1's pools); the turn at 45 degrees a second the roam and a
+flight's end take would mend it, and would change the pond's calm pictures, which this
+round keeps as they were. The roam's centre runs on the squares' middle lines, so its
+path through the basin's block is a few straight rails; whether that reads as wandering
+is the game's to show.
+
+**Commits.** `a364208`, `5b0d9bd`, `501b3e9`, `f87f1b5`, `70b3581`, `598c411`.
+
 **The river's flow hide by its own squares.** The river's flow-material calls (material
 1, `HDRange::flowTris`) were hidden over a sheet by their box alone, where the still
 water's art asks its own squares (*the deck's plates*). They take the same rule now:

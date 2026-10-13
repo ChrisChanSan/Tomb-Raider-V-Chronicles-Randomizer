@@ -18175,40 +18175,97 @@ static void life_tank()
 	p.last = -1.0f;
 	HDLifeAddTank(p, t, life_draw, &state);
 
-	int outside = 0;
+	int outside = 0, fled = 0, facing = 0, faced = 0;
+	float zMin[8], zMax[8];
 
-	for (int k = 1; k <= 30 * 30; k++)
+	for (int f = 0; f < 8; f++)
+	{
+		zMin[f] = 1.0e30f;
+		zMax[f] = -1.0e30f;
+	}
+
+	/* A minute; Lara at the glass, within a square of every fish, from 10
+	 * to 40 seconds. */
+	for (int k = 1; k <= 30 * 60; k++)
 	{
 		const float s = k / 30.0f;
 
-		// Lara at the glass from 10 to 12 seconds.
-		HDLifeTick(p, 0, s, s >= 10.0f && s < 12.0f, (float)t.x1 + 200.0f,
+		HDLifeTick(p, 0, s, s >= 10.0f && s < 40.0f, (float)t.x1 + 200.0f,
 			0.5f * (t.z0 + t.z1), 0);
+		fled += p.schools[0].darting || p.schools[0].fleeUntil > s;
 
 		for (size_t i = 0; i < p.entries.size(); i++)
 		{
-			float x, y, z, yaw, pitch, roll;
+			const HDLifeEntry& e = p.entries[i];
+			float x, y, z, yaw, pitch, roll, wx, wz;
 
-			HDLifePose(p, p.entries[i], s, &x, &y, &z, &yaw, &pitch, &roll);
-			outside += x < t.x0 + 87.0f || x > t.x1 - 87.0f || z < t.z0 +
-				87.0f || z > t.z1 - 87.0f || y < t.top || y > t.bottom;
+			HDLifePose(p, e, s, &x, &y, &z, &yaw, &pitch, &roll);
+			outside += x < t.x0 + kHDLifeEdge - 1.0f || x > t.x1 -
+				kHDLifeEdge + 1.0f || z < t.z0 + kHDLifeTankEnd - 1.0f ||
+				z > t.z1 - kHDLifeTankEnd + 1.0f || y < t.top || y > t.bottom;
+			zMin[i] = z < zMin[i] ? z : zMin[i];
+			zMax[i] = z > zMax[i] ? z : zMax[i];
+
+			/* Half way along its run it faces the way it swims (the model's
+			 * head along its yaw, kHDLifeKinds' forward). */
+			HDLifeTankAt(p.bodies[0], e, s, &x, &z, &wx, &wz);
+
+			if (fabsf(z - 0.5f * (t.z0 + t.z1)) < 64.0f && wz != 0.0f)
+			{
+				faced++;
+				facing += cosf(e.yaw) * wz > 0.9f;
+			}
 		}
 	}
 
+	float run = 1.0e30f;
+
+	for (int f = 0; f < 8; f++)
+		run = zMax[f] - zMin[f] < run ? zMax[f] - zMin[f] : run;
+
 	ok(p.bodies.size() == 1 && p.bodies[0].tank && p.bodies[0].index == -1 &&
 		p.bodies[0].squares.size() == 2 && p.fish == t.fish &&
-		p.schools[0].darts >= 1 && outside == 0,
-		"life tank: eight fish keep inside the tank, calm and darting from "
-		"Lara at the glass", outside, 0);
+		p.schools[0].darts == 0 && fled == 0 && outside == 0,
+		"life tank: eight fish keep inside the tank and never flee, Lara at "
+		"the glass for half a minute", outside + fled, 0);
+
+	ok(run >= (float)(t.z1 - t.z0) - 2.0f * kHDLifeTankEnd - 8.0f &&
+		faced > 0 && facing == faced,
+		"life tank: each fish swims the whole run to and fro in a minute and "
+		"turns about at the ends", facing, faced);
+
+	// Eight lines across the tank, none shared, the stop off the glass.
+	float across[8];
+
+	for (int f = 0; f < 8; f++)
+		across[f] = p.entries[(size_t)f].ring;
+
+	std::sort(across, across + 8);
+
+	float gap = 1.0e30f;
+
+	for (int f = 1; f < 8; f++)
+		gap = across[f] - across[f - 1] < gap ? across[f] - across[f - 1] :
+			gap;
+
+	ok(gap >= 90.0f && across[0] >= t.x0 + kHDLifeEdge &&
+		across[7] <= t.x1 - kHDLifeEdge,
+		"life tank: every fish on a line of its own, 96 apart", (long)gap, 96);
 
 	const HDLifePool before = p;
 
 	p.bodies[0].gone = 1;
-	HDLifeTick(p, 0, 40.0f, 1, (float)t.x1 + 200.0f, 0.5f * (t.z0 + t.z1),
+	HDLifeTick(p, 0, 70.0f, 1, (float)t.x1 + 200.0f, 0.5f * (t.z0 + t.z1),
 		0);
+
+	int turned = 0;
+
+	for (size_t i = 0; i < p.entries.size(); i++)
+		turned += p.entries[i].yaw != before.entries[i].yaw;
+
 	ok(p.schools[0].cx == before.schools[0].cx &&
-		p.schools[0].darts == before.schools[0].darts,
-		"life tank: a shot tank's school rests", 0, 0);
+		p.schools[0].darts == before.schools[0].darts && turned == 0,
+		"life tank: a shot tank's school rests", turned, 0);
 
 	// RICH2's item 33 carries IFL_INVISIBLE (0x100).
 	int active = 0, status = 0, water = 0;
@@ -18355,6 +18412,474 @@ static void life_flee()
 	ok(HDLifeDeepCount(b) == 0,
 		"life flee: water shallower than the fish's depth holds no school",
 		HDLifeDeepCount(b), 0);
+}
+
+/* A school of `n` fish on a ring of 200 round cx, cz in body `b`. */
+static HDLifePool life_school(const HDLifeBody& b, float cx, float cz, int n)
+{
+	HDLifePool p = {};
+	HDLifeSchool s = {};
+
+	p.bodies.push_back(b);
+	p.reach[HD_LIFE_FISH] = 87.0f;
+	p.last = -1.0f;
+	s.cx = cx;
+	s.cz = cz;
+	s.target = HDLifeSquareAt(b, cx, cz);
+	s.retarget = kHDLifeRetarget;
+	s.fish = n;
+	p.schools.push_back(s);
+
+	for (int f = 0; f < n; f++)
+	{
+		HDLifeEntry e = {};
+
+		e.kind = HD_LIFE_FISH;
+		e.index = f;
+		e.school = 0;
+		e.ring = 200.0f;
+		e.angle = 6.2831853f * f / (float)n;
+		e.x = cx;
+		e.z = cz;
+		p.entries.push_back(e);
+	}
+
+	return p;
+}
+
+/* The edge in a flight (HDLifeEdgeDistance, HDLifeEdgeWay, kHDLifeEdgeRun):
+ * a fish turns off the edge before it meets it and out of it when it is
+ * there, a school regroups where its ring keeps off the edge within ten
+ * seconds and without a jump, and a Lara who stands still lets it settle. */
+static void life_edge()
+{
+	const HDLifeBody b3 = life_body(3, 3, 2048);
+	const float need = (float)kHDLifeDeep;
+	float nx = 0.0f, nz = 0.0f;
+	const float mid = HDLifeEdgeDistance(b3, 1536.0f, 1536.0f, need, 1);
+	const float west = HDLifeEdgeDistance(b3, 100.0f, 1536.0f, need, 1, &nx,
+		&nz);
+	const float corner = HDLifeEdgeDistance(b3, 3000.0f, 3000.0f, need, 2);
+
+	ok(mid == 1024.0f && west == 100.0f && nx == 1.0f && nz == 0.0f &&
+		fabsf(corner - 72.0f) < 0.01f,
+		"life edge: the distance to the nearest square that does not hold "
+		"the fish, and the way off it", (long)west, 100);
+
+	// Square on to the west bank 300 off: turned to the least share off it.
+	int sides[2] = { 0, 0 };
+	float worstOff = 1.0f, worstUnit = 0.0f;
+
+	for (int i = 0; i < 16; i++)
+	{
+		float wx = -1.0f, wz = 0.0f;
+		const bool turned = HDLifeEdgeWay(b3, 300.0f, 1536.0f, need, i, 1201u,
+			&wx, &wz);
+		const float least = (kHDLifeEdgeRun - 300.0f) / kHDLifeEdgeSpan;
+
+		worstOff = turned && wx - least < worstOff ? wx - least : worstOff;
+		worstUnit = fabsf(wx * wx + wz * wz - 1.0f) > worstUnit ?
+			fabsf(wx * wx + wz * wz - 1.0f) : worstUnit;
+		sides[wz > 0.0f ? 1 : 0]++;
+
+		// The same fish and dart turn the same way every time.
+		float ax = -1.0f, az = 0.0f;
+
+		HDLifeEdgeWay(b3, 300.0f, 1536.0f, need, i, 1201u, &ax, &az);
+		worstUnit += ax != wx || az != wz ? 1.0f : 0.0f;
+	}
+
+	float lx = -0.8f, lz = 0.6f;
+
+	HDLifeEdgeWay(b3, 300.0f, 1536.0f, need, 0, 1201u, &lx, &lz);
+	ok(fabsf(worstOff) < 1.0e-4f && worstUnit < 1.0e-4f && sides[0] &&
+		sides[1] && lz > 0.0f,
+		"life edge: square on to a bank a way turns to its least share off "
+		"it, to the side of its hash; a leaning way keeps its side",
+		sides[1], 8);
+
+	/* A dart square on to the east bank of a pool 4 by 3 squares: Lara on
+	 * its west bank. No fish comes within the stop, none stays within
+	 * kHDLifeEdgeKeep for two seconds, the way turns at most what the
+	 * model turns in a tick, and the school is back within ten seconds. */
+	HDLifePool p = life_school(life_body(4, 3, 2048), 1800.0f, 1536.0f, 6);
+	const float dt = 1.0f / 30.0f;
+	float leastEdge = 1.0e9f, turnMost = 0.0f, moveMost = 0.0f;
+	float under[6] = { 0 }, underMost = 0.0f, last[12] = { 0 };
+	float ended = -1.0f;
+
+	for (int k = 1; k <= 30 * 20; k++)
+	{
+		const float t = k * dt;
+		float wayX[6], wayZ[6];
+
+		for (int f = 0; f < 6; f++)
+		{
+			wayX[f] = p.entries[(size_t)f].wayX;
+			wayZ[f] = p.entries[(size_t)f].wayZ;
+		}
+
+		HDLifeTick(p, 0, t, 1, 700.0f, 1536.0f, 0);
+
+		for (int f = 0; f < 6; f++)
+		{
+			const HDLifeEntry& e = p.entries[(size_t)f];
+			float x, y, z, yaw, pitch, roll;
+
+			HDLifePose(p, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+
+			const float d = HDLifeEdgeDistance(p.bodies[0], x, z, need, 1);
+
+			leastEdge = d < leastEdge ? d : leastEdge;
+			under[f] = d < kHDLifeEdgeKeep ? under[f] + dt : 0.0f;
+			underMost = under[f] > underMost ? under[f] : underMost;
+
+			// No jump in the flight and over its end, a second after.
+			if (k > 1 && (ended < 0.0f || t < ended + 1.0f))
+			{
+				const float m = sqrtf((x - last[f * 2]) * (x - last[f * 2]) +
+					(z - last[f * 2 + 1]) * (z - last[f * 2 + 1]));
+
+				moveMost = m > moveMost ? m : moveMost;
+			}
+
+			last[f * 2] = x;
+			last[f * 2 + 1] = z;
+
+			// The edge's turn: in a dart, after the tick it started in.
+			if (p.schools[0].darting && t - p.schools[0].dartAt > dt &&
+				t - p.schools[0].dartAt < kHDLifeDartFor)
+			{
+				const float c = wayX[f] * e.wayX + wayZ[f] * e.wayZ;
+				const float a = acosf(c > 1.0f ? 1.0f : c < -1.0f ? -1.0f : c);
+
+				turnMost = a > turnMost ? a : turnMost;
+			}
+		}
+
+		if (ended < 0.0f && p.schools[0].darts && !p.schools[0].darting)
+			ended = t;
+	}
+
+	ok(leastEdge >= kHDLifeEdge - 1.0f && underMost <= 2.0f &&
+		turnMost <= kHDLifeFishTurn * dt + 1.0e-4f &&
+		p.schools[0].darts == 1 &&
+		ended > 0.0f && ended <= p.schools[0].dartAt + 10.0f &&
+		moveMost <= (kHDLifeDartSpeed + kHDLifeSwim + kHDLifeCircle *
+		(kHDLifeRingMin + kHDLifeRingSpan)) * dt,
+		"life edge: a dart turns along the far bank, no fish stays at it, the "
+		"school is back within ten seconds and no fish jumps",
+		(long)(underMost * 1000.0f), 2000);
+
+	ok(HDLifeEdgeDistance(p.bodies[0], p.schools[0].cx, p.schools[0].cz,
+		need, 1) >= kHDLifeRingClear,
+		"life edge: the school regroups where its whole ring keeps off the "
+		"edge", (long)HDLifeEdgeDistance(p.bodies[0], p.schools[0].cx,
+		p.schools[0].cz, need, 1), (long)kHDLifeRingClear);
+
+	/* A fish the edge holds, a second into its dart, square on to the west
+	 * bank at the stop: past kHDLifeEdgeKeep within half a second. */
+	HDLifePool q = life_school(life_body(4, 3, 2048), 2048.0f, 1536.0f, 1);
+	HDLifeSchool& s = q.schools[0];
+	HDLifeEntry& e = q.entries[0];
+
+	s.darting = 1;
+	s.darts = 1;
+	s.dartAt = 9.0f;
+	e.x = kHDLifeEdge;
+	e.z = 1536.0f;
+	e.wayX = -1.0f;
+	e.wayZ = 0.0f;
+
+	for (int k = 1; k <= 15; k++)
+		HDLifeSchoolTick(q, s, 0, 10.0f + k * dt, dt, 0, 0.0f, 0.0f);
+
+	ok(HDLifeEdgeDistance(q.bodies[0], e.x, e.z, need, 1) >= kHDLifeEdgeKeep,
+		"life edge: a fish the bank held turns out past the keep within a "
+		"half a second", (long)HDLifeEdgeDistance(q.bodies[0], e.x, e.z,
+		need, 1), (long)kHDLifeEdgeKeep);
+
+	/* Lara standing on the bank: one flight; once she moves a quarter
+	 * square, another. */
+	HDLifePool w = life_school(life_body(2, 2, 2048), 1024.0f, 1024.0f, 4);
+
+	for (int k = 1; k <= 30 * 30; k++)
+		HDLifeTick(w, 0, k * dt, 1, -200.0f, 1024.0f, 0);
+
+	const int still = w.schools[0].darts;
+	const int calm = w.schools[0].darting;
+
+	for (int k = 30 * 30 + 1; k <= 30 * 32; k++)
+		HDLifeTick(w, 0, k * dt, 1, 1024.0f + kHDLifeStill + 8.0f, 1024.0f,
+			0);
+
+	ok(still == 1 && !calm && w.schools[0].darts == 2,
+		"life edge: Lara standing still scares a school once; moving a "
+		"quarter square, again", still * 10 + w.schools[0].darts, 12);
+
+	/* She swims off out of its reach for 20 seconds and comes back to the
+	 * place of that second dart: the place is forgotten, a third. */
+	for (int k = 30 * 32 + 1; k <= 30 * 52; k++)
+		HDLifeTick(w, 0, k * dt, 1, 9000.0f, 1024.0f, 0);
+
+	const int away = w.schools[0].darts;
+
+	for (int k = 30 * 52 + 1; k <= 30 * 54; k++)
+		HDLifeTick(w, 0, k * dt, 1, 1024.0f + kHDLifeStill + 8.0f, 1024.0f,
+			0);
+
+	ok(away == 2 && w.schools[0].darts == 3,
+		"life edge: a place she has left is forgotten - back at it, she "
+		"scares the school again", away * 10 + w.schools[0].darts, 23);
+}
+
+/* A body drawn as rows of '#' (2048 deep) and '.' (none), one square a
+ * character, x along a row from 0, z down the rows from 0. */
+static HDLifeBody life_map(const char* const* rows, int n)
+{
+	HDLifeBody b = life_body(0, 0, 2048);
+
+	for (int z = 0; z < n; z++)
+		for (int x = 0; rows[z][x]; x++)
+			if (rows[z][x] == '#')
+			{
+				HDLifeSquare s = { x * 1024, z * 1024, 2048, 0 };
+
+				b.squares.push_back(s);
+			}
+
+	return b;
+}
+
+/* The roam of a big body's school (HDLifeRoams, HDLifeRoamPick,
+ * HDLifeRoamNext, HDLifeRoamStep): ANDY3's basin's shape - a block of 8 by
+ * 3 squares and two arms a square wide - roams, a pond does not; the
+ * waypoints and every step keep 512 off the edge; the next way runs over a
+ * square never come to; the pace holds; from any square the school sees a
+ * third of the basin in a minute and three quarters in five - the least
+ * over the 42 starts is 14 and 32, both on the bound; a pond's school
+ * cruises as it did. */
+static void life_roam()
+{
+	static const char* const basin[] = {
+		".########",
+		"#########",
+		".########",
+		".###....#",
+		".#......#",
+		".#......#",
+		".#......#",
+		".#......#",
+		".#......#",
+		".#......#",
+		"........#",
+	};
+	const HDLifeBody lake = life_map(basin, 11);
+
+	ok(lake.squares.size() == 42 && HDLifeRoams(lake) &&
+		HDLifeRoams(life_body(9, 1, 2048)) &&
+		!HDLifeRoams(life_body(4, 4, 2048)) &&
+		!HDLifeRoams(life_body(3, 7, 2048)) &&
+		!HDLifeRoams(life_body(1, 2, 2048)) &&
+		!HDLifeRoams(life_body(9, 1, kHDLifeDeep - 1)),
+		"life roam: a body whose deep squares span more than 8 squares roams",
+		(long)lake.squares.size(), 42);
+
+	// Waypoints from every square, and the way there step by step.
+	int picks = 0, bad = 0, near = 0;
+	float clear = 1.0e9f;
+	const std::vector<int> none;
+
+	for (int from = 0; from < (int)lake.squares.size(); from++)
+		for (int leg = 0; leg < 4; leg++)
+		{
+			const int to = HDLifeRoamPick(lake, 0, leg, from, none, 1);
+			std::vector<int> steps;
+
+			HDLifeRoamSteps(lake, from, steps);
+			picks++;
+
+			if (to < 0 || to == from || steps[(size_t)to] < 0)
+			{
+				bad++;
+				continue;
+			}
+
+			near += steps[(size_t)to] < kHDLifeRoamFar;
+
+			for (int at = from, guard = 0; at != to && guard < 64; guard++)
+			{
+				const int next = HDLifeRoamNext(lake, at, to);
+
+				if (next < 0 || abs(lake.squares[(size_t)next].x -
+					lake.squares[(size_t)at].x) > 1024 ||
+					abs(lake.squares[(size_t)next].z -
+					lake.squares[(size_t)at].z) > 1024)
+				{
+					bad++;
+					break;
+				}
+
+				for (int k = 0; k <= 8; k++)
+				{
+					const float u = k / 8.0f;
+					const HDLifeSquare& a = lake.squares[(size_t)at];
+					const HDLifeSquare& c = lake.squares[(size_t)next];
+					const float x = 512.0f + a.x * (1.0f - u) + c.x * u;
+					const float z = 512.0f + a.z * (1.0f - u) + c.z * u;
+					const float d = HDLifeEdgeDistance(lake, x, z,
+						(float)kHDLifeDeep, 1);
+
+					clear = d < clear ? d : clear;
+				}
+
+				at = next;
+			}
+		}
+
+	ok(bad == 0 && near == 0 && clear >= 511.0f,
+		"life roam: every waypoint is a deep square three steps off or more, "
+		"every step of the way there keeps 512 off the edge", bad * 1000 +
+		near, 0);
+
+	/* A square the centre never came to, all others come to: from every
+	 * square three steps or more off it, the next way runs over it. */
+	const int n = (int)lake.squares.size();
+	int missed = 0;
+
+	for (int from = 0; from < n; from++)
+	{
+		std::vector<int> off;
+
+		HDLifeRoamSteps(lake, from, off);
+
+		for (int fresh = 0; fresh < n; fresh++)
+		{
+			if (off[(size_t)fresh] < kHDLifeRoamFar)
+				continue;
+
+			std::vector<int> been((size_t)n, 1);
+
+			been[(size_t)fresh] = 0;
+
+			const int to = HDLifeRoamPick(lake, 0, fresh, from, been, 2);
+			int over = 0;
+
+			for (int at = from, guard = 0; to >= 0 && at != to && guard < 64;
+				guard++)
+			{
+				at = HDLifeRoamNext(lake, at, to);
+				over |= at == fresh ? 1 : 0;
+
+				if (at < 0)
+					break;
+			}
+
+			missed += over ? 0 : 1;
+		}
+	}
+
+	ok(missed == 0, "life roam: the next way runs over a square the school "
+		"never came to", missed, 0);
+
+	/* Five minutes of a school of six from every square of the basin: the
+	 * pace, the edge, the squares its fish see by one minute and by five. */
+	const float dt = 1.0f / 30.0f;
+	float fast = 0.0f, least = 1.0e9f;
+	int minute = n, five = n, legs = 1000;
+
+	for (int start = 0; start < n; start++)
+	{
+		HDLifePool p = life_school(lake, lake.squares[(size_t)start].x + 512.0f,
+			lake.squares[(size_t)start].z + 512.0f, 6);
+		p.schools[0].roam = HDLifeRoams(lake) ? 1 : 0;
+
+		const float pace = kHDLifeRoamLengths * 2.0f * p.reach[HD_LIFE_FISH];
+		std::vector<int> seen((size_t)n, 0);
+		int saw = 0;
+
+		for (int k = 1; k <= 30 * 300; k++)
+		{
+			const float t = k * dt;
+			const float cx = p.schools[0].cx, cz = p.schools[0].cz;
+
+			HDLifeTick(p, 0, t, 0, 0.0f, 0.0f, 0);
+
+			const float m = sqrtf((p.schools[0].cx - cx) * (p.schools[0].cx -
+				cx) + (p.schools[0].cz - cz) * (p.schools[0].cz - cz));
+			const float d = HDLifeEdgeDistance(lake, p.schools[0].cx,
+				p.schools[0].cz, (float)kHDLifeDeep, 1);
+
+			fast = m - pace * dt > fast ? m - pace * dt : fast;
+			least = d < least ? d : least;
+
+			for (size_t i = 0; i < p.entries.size(); i++)
+			{
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(p, p.entries[i], t, &x, &y, &z, &yaw, &pitch,
+					&roll);
+
+				const int at = HDLifeSquareAt(lake, x, z);
+
+				if (at >= 0 && !seen[(size_t)at])
+				{
+					seen[(size_t)at] = 1;
+					saw++;
+				}
+			}
+
+			if (k == 30 * 60)
+				minute = saw < minute ? saw : minute;
+		}
+
+		five = saw < five ? saw : five;
+		legs = p.schools[0].legs < legs ? p.schools[0].legs : legs;
+	}
+
+	ok(fast <= 0.01f && least >= kHDLifeRingClear && minute * 3 >= n &&
+		five * 4 >= n * 3 && legs >= 2,
+		"life roam: at a length a second, its ring off the edge, from any "
+		"square the school sees a third of the basin in a minute and three "
+		"quarters in five", minute * 100 + five, 14 * 100 + 32);
+
+	/* A pond's school cruises as it did: its centre and heading tick by
+	 * tick as HDLifeSchoolStep and the retarget alone move them. */
+	HDLifePool q = life_school(life_body(4, 4, 2048), 1536.0f, 1536.0f, 4);
+	HDLifeSchool r = q.schools[0];
+	int differ = 0;
+	float last = 0.0f;
+
+	q.schools[0].roam = HDLifeRoams(q.bodies[0]) ? 1 : 0;
+	HDLifeTick(q, 0, 0.0f, 0, 0.0f, 0.0f, 0);
+
+	for (int k = 1; k <= 30 * 60; k++)
+	{
+		const float t = k * dt;
+
+		HDLifeTick(q, 0, t, 0, 0.0f, 0.0f, 0);
+
+		// The tick's own step and clock (HDLifeTick).
+		const float step = t - last;
+		const float at = last + step;
+		const bool there = HDLifeSchoolStep(q.bodies[0], &r, kHDLifeSwim,
+			step);
+
+		if (there || at >= r.retarget)
+		{
+			r.target = HDLifeDeepSquare(q.bodies[0], (int)HDLifeHash(7u,
+				(unsigned)(int)at));
+			r.retarget = at + kHDLifeRetarget;
+		}
+
+		last = at;
+
+		differ += r.cx != q.schools[0].cx || r.cz != q.schools[0].cz ||
+			r.heading != q.schools[0].heading;
+	}
+
+	ok(!q.schools[0].roam && differ == 0,
+		"life roam: a pond's school keeps its cruise", differ, 0);
 }
 
 static void life_bob()
@@ -19471,6 +19996,8 @@ int main()
 	life_keep();
 	life_tank();
 	life_flee();
+	life_edge();
+	life_roam();
 	life_turn();
 	life_bob();
 	life_depth();

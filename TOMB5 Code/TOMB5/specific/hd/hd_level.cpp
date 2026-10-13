@@ -879,8 +879,11 @@ namespace
 	 * which b's window cuts where it stands proud of the face: without it
 	 * two of room 0's doors seen from ANDREA1's room 109 lose their lower
 	 * half, and the edge of a metal wall seen from RICH2's room 106 goes
-	 * (74,088 pixels at 1280x720). The rule can only take art away: a
-	 * piece not drawn whole is already drawn inside that window, so it
+	 * (74,088 pixels at 1280x720). So does a piece of that pair no face
+	 * claims whose holder is not drawn this frame: it stands with those
+	 * faces, and whole is its answer without the air. The rule can only
+	 * take art away: a piece not drawn whole is already drawn inside that
+	 * window, so it
 	 * narrows the answer and never widens it. Art in the air of a linked
 	 * room keeps the answer above, and so does art in no entry's box, which
 	 * is no piece at all (BuildRoomIntrusions says why). Such art the open
@@ -937,11 +940,17 @@ namespace
 			if (open)
 				whole = true;
 
-			// Any claimed face of the same pair the classic path draws.
+			/* Any claimed face of the same pair the classic path draws -
+			 * asked for a claimed piece, and for a piece in unlinked air
+			 * that no face claims while its holder is not drawn: that art
+			 * stands with the pair's faces, as a pipe stands in the
+			 * hollow of a pillar whose face it is drawn on, and the
+			 * answer whole is the one it has without the air. */
 			bool claimed = false;
+			const bool askPair = piece.face >= 0 ||
+				(piece.air && !listed);
 
-			for (int k = 0; k < count && ask && piece.face >= 0 && !claimed;
-				k++)
+			for (int k = 0; k < count && ask && askPair && !claimed; k++)
 			{
 				const HDPairRange& other = g_pieces[(size_t)(first + k)];
 
@@ -960,7 +969,11 @@ namespace
 			 * there, and the art bound to it is that wall's - a door, its
 			 * frame, a wall top - which b's window cuts where it stands proud
 			 * of the face. Such a piece is whole on the answer above too, so
-			 * this keeps that answer and never widens it. */
+			 * this keeps that answer and never widens it. So is a piece no
+			 * face claims whose holder is not drawn (askPair): cut to the
+			 * window, the coiled pipe in the hollow of JOBY2's broken
+			 * pillar by the stairs falls into shards seen from room 33
+			 * (16,177 pixels at 1280x720). */
 			if (piece.air)
 			{
 				whole = claimed;

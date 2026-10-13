@@ -5519,10 +5519,12 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * empty - but for one of a pair with a claimed face that survives
 		 * the window, listed holder or not, which keeps the answer above
 		 * (whole: a listed holder's pair is whole on that face, an
-		 * unlisted holder's on any frame). */
+		 * unlisted holder's on any frame); and so does one no face claims
+		 * whose holder is not drawn, on its pair's surviving faces. */
 		const bool unlinked = piece.air && g_unlinked && g_decide >= 2;
-		const bool claimed = !open && ask && piece.face >= 0 && answer &&
-			(g_decide == 3 ? alive : pairAlive);
+		const bool claimed = piece.face >= 0
+			? !open && ask && answer && (g_decide == 3 ? alive : pairAlive)
+			: ask && !drawn && pairAlive;
 
 		if (unlinked && !(g_unlinked == 2 && *empty))
 			answer = claimed;

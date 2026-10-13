@@ -2142,8 +2142,10 @@ it.
   about 0.7 m/s. The wet floor is darker and mirrors what stands on it -
   the vending machines, Lara, a lit screen - and the lamps, most where
   the eye looks along the floor; a game loaded with the tank shot starts
-  with the floor wet, and it does not dry. The splash's and the spray's timing and
-  everything the game decides are the classic ones. `hd_water` `0` draws
+  with the floor wet, and it does not dry. With `hd_motion` off the water
+  does not run out: the whole floor is wet from the moment of the shot.
+  The splash's and the spray's timing and everything the game decides
+  are the classic ones. `hd_water` `0` draws
   the classic splash, spray and tank's dome, and so does `hd_motion` `0`.
 - **`SPLASHLOG` in the log.** With `-log`, once a second while anything of
   it draws: `SPLASHLOG level=<stem> splashes=<n> cards=<n> rings=<n>

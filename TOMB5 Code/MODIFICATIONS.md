@@ -12901,7 +12901,11 @@ the corridor's far end is wet after about a minute. The state each frame (`FeedW
 hd_level.cpp, as the films read the tank): 1 while `ControlFishtank` runs it, its age out
 of `item_flags[1]`; 2 once `KillItem` took it - the floor stays wet; a tank first seen
 shot, as a loaded game has it, is wet all over at once. 0 whole. It does not dry (a
-question for the owner, under Left).
+question for the owner, under Left). With `tomb5.hd_motion` 0 nothing runs: the front
+stands past every point and the floor is wet all over from the frame the tank breaks. The
+run is motion, the wet floor is the game's state - the tank is shot - as the film's
+strength is, which with motion off keeps following the tank and its lasers while only its
+rise stands still; the dome is the classic one then, and the floor under it is wet.
 
 How it is drawn. Once a frame in `HDFrameDrawGlow`, over the opaque frame and before the
 sheets' copy, a layer 4 units over the floor (about 1 cm; the depth buffer resolves 1.2
@@ -12980,19 +12984,32 @@ his view before the break 3 of 3, the sweep's 209 WATERLOG lines; with `-life 1 
 game` at 9 s the pond's twelve views 5 identical and 7 changed where a barrel's ring is.
 ModernTest grows by 11 checks (the front, the wet, the corridor's minute; Lara's ring as
 before, the barrel's past 128 and four times); the suites 0 failed; the engine and every
-tool build.
+tool build. The motion rule, his view and the room 23 view at 0, 1, 3 and 10 s: with
+motion on 8 of 8 pictures md5-identical to the build before it; with `-nomotion` 8 of 8
+identical to the same build held at `-tankwet 1`, and against the build before it his
+view at the break 124,231 pixels wetter by more than 4 (the floor that ran out over ten
+seconds there before), at 10 s identical.
 
 **Left.** The look and the timing in the game - nobody in this round could play it. The
 floor does not dry: whether it should, over minutes, is the owner's to say. The room 23
-view's first floor draw of a frame took 0.3 to 0.8 ms in RoomProbe, a second one 0.03:
-whether the game pays that every frame or once is for its FPSLOG to show; if it does, the
+view's first floor draw of a frame took 0.3 to 0.8 ms in RoomProbe, a second one 0.03;
+the cost is not the same in every process: in five fresh RoomProbe runs at 2560 x 1440
+the room 23 view at 10 s drew its floor in 0.631, 0.467, 0.384, 0.062 and 0.437 ms, the
+corridor of room 46 at 120 s in 0.496, 0.084, 0.328, 0.084 and 0.427 - a cost of the
+process's first use or the card's clock rather than of each frame, which only the game's
+FPSLOG in rooms 23 and 46 after the shot can settle; if the game pays it every frame, the
 march can be cut to the pixels it can change. The mirror shows only what the frame shows:
 what stands off the screen does not mirror, and toward the screen's edge it fades. A
 tank's film over the floor reads the copy taken before the floor was drawn wet, and so
 shows the floor under it dry while it lasts. The barrel's ring at 3,000 units stays small;
-its strength and the outline near the barrel are the owner's to judge.
+its strength and the outline near the barrel are the owner's to judge. For the water's
+life: the comment over the barrel's ring in `hd_life_rules.h` (at line 1867 to 1871) still
+says its strength on the sheet is that of a wading Lara's ring of 128; since `kRingBody` a
+ring of 240 to 255 draws 7.5 to 8 times that (`HDRingStrength` 3.75 against 0.5 for a
+ring of 240 at its start). The file is that part's, so its comment is left to it.
 
-**Commits.** `4d8b54ce`, `95bf8151`.
+**Commits.** `4d8b54ce`, `95bf8151`, `584642bd` (the wet floor with `hd_motion` off),
+`bf7d5a30` (a shader comment, the bytecode unchanged).
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

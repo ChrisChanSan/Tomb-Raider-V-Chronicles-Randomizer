@@ -1872,8 +1872,11 @@ water surface", carries the tables.
     units/s, sqrt(g h) at the tank's film's 24 units; each point's way is
     pushed back by up to 384 units and its share of the mirror set
     between 0.5 and 1 out of two hashes of its place; once shot the floor
-    stays wet, and a tank first seen shot is wet at once (`HDWetFront`,
-    `HDWetAt`, `HDRenderWaterWet`). OWN: the shallow-water wave speed is
+    stays wet, and a tank first seen shot is wet at once, as is every
+    tank's floor from its break while `tomb5.hd_motion` is off - the run
+    is motion, the wet the game's state (`HDWetFront`, `HDWetAt`,
+    `HDRenderWaterWet`, `HDRenderWaterWetDraw`). OWN: the shallow-water
+    wave speed is
     textbook physics with the project's g; the ramp, the push and the
     damp share are free choices, set by eye on the round's RoomProbe
     pictures. DATA: the furthest point of tank 182's floor lies 19,749

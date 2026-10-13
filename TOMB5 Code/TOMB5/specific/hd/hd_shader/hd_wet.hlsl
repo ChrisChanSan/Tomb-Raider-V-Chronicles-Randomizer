@@ -41,8 +41,8 @@
  *                  space in steps that grow by a fixed factor, each step's
  *                  point projected and held against the frame's depth
  *                  there; the first point that lies behind what the frame
- *                  drew, by no more than the step's own length, takes the
- *                  frame's colour there (the copy of the opaque frame the
+ *                  drew, by less than twice the step's own length, takes
+ *                  the frame's colour there (the copy of the opaque frame the
  *                  sheets read) - a reflection in screen space, the common
  *                  real-time technique for a plane. Where the ray leaves
  *                  the screen or finds nothing, the light round the place

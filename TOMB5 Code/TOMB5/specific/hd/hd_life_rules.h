@@ -609,7 +609,7 @@ struct HDLifeEntry
 	float retry;		// the clock it tries again at
 	int school;		// its school, or -1
 	/* Its place on the school's ring; a tank's fish its line across the
-	 * tank and its phase (HDLifeTankAt). */
+	 * tank and its phase, with `period` its to-and-fro's (HDLifeTankAt). */
 	float ring, angle;
 	// A darting fish's way, a unit vector in x and z (HDLifeSchoolTick).
 	float wayX = 0.0f, wayZ = 0.0f;

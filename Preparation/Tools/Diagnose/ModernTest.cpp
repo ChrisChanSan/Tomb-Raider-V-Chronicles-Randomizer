@@ -18616,6 +18616,21 @@ static void life_edge()
 	ok(still == 1 && !calm && w.schools[0].darts == 2,
 		"life edge: Lara standing still scares a school once; moving a "
 		"quarter square, again", still * 10 + w.schools[0].darts, 12);
+
+	/* She swims off out of its reach for 20 seconds and comes back to the
+	 * place of that second dart: the place is forgotten, a third. */
+	for (int k = 30 * 32 + 1; k <= 30 * 52; k++)
+		HDLifeTick(w, 0, k * dt, 1, 9000.0f, 1024.0f, 0);
+
+	const int away = w.schools[0].darts;
+
+	for (int k = 30 * 52 + 1; k <= 30 * 54; k++)
+		HDLifeTick(w, 0, k * dt, 1, 1024.0f + kHDLifeStill + 8.0f, 1024.0f,
+			0);
+
+	ok(away == 2 && w.schools[0].darts == 3,
+		"life edge: a place she has left is forgotten - back at it, she "
+		"scares the school again", away * 10 + w.schools[0].darts, 23);
 }
 
 /* A body drawn as rows of '#' (2048 deep) and '.' (none), one square a

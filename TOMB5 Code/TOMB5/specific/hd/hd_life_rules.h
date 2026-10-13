@@ -397,13 +397,13 @@ static const float kHDLifeRingClear = 428.0f;
 
 /* A Lara who stands still: a school she scared is not scared by her again
  * until she has moved kHDLifeStill, a quarter square, from where she stood
- * at that dart - a swimmer who follows keeps them darting, one who waits
- * on the bank lets them settle. A dart that ran along the edge keeps a
- * fish in the water's middle, and in a pool a square or two wide the
- * whole of it lies within a square of the bank: RoomProbe -lifeseries with
- * Lara on ANDY1's banks counted 7 and 12 darts in 30 seconds and a flight
- * without end. A splash scares it wherever she stands. A free choice with
- * that reason. */
+ * at that dart, and that place is forgotten once she has - a swimmer who
+ * follows keeps them darting, one who waits on the bank lets them settle.
+ * A dart that ran along the edge keeps a fish in the water's middle, and
+ * in a pool a square or two wide the whole of it lies within a square of
+ * the bank: RoomProbe -lifeseries with Lara on ANDY1's banks counted 7 and
+ * 12 darts in 30 seconds and a flight without end. A splash scares it
+ * wherever she stands. A free choice with that reason. */
 static const float kHDLifeStill = 256.0f;
 
 /* A school's heading after a flight turns to its cruise's way at
@@ -2861,9 +2861,14 @@ inline void HDLifeSchoolTick(HDLifePool& p, HDLifeSchool& s, int si, float t,
 		}
 	}
 
-	// Lara where she last scared it (kHDLifeStill) scares it no more.
-	if (scared && s.seen && (lx - s.laraX) * (lx - s.laraX) + (lz -
-		s.laraZ) * (lz - s.laraZ) < kHDLifeStill * kHDLifeStill)
+	/* Lara where she last scared it (kHDLifeStill) scares it no more; the
+	 * place is forgotten once she is that far from it, whether or not she
+	 * is near its fish then. */
+	if (s.seen && laraOn && (lx - s.laraX) * (lx - s.laraX) + (lz -
+		s.laraZ) * (lz - s.laraZ) >= kHDLifeStill * kHDLifeStill)
+		s.seen = 0;
+
+	if (scared && s.seen)
 		scared = 0;
 
 	const int byLara = scared;

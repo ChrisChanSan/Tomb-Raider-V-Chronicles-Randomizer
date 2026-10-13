@@ -1782,6 +1782,10 @@ void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
 void HDRenderSetAirHulls(int on);
 bool HDRenderGroupHull(int group, int* air, int* covered);
 int HDRenderGroupHullBehind(int group);
+/* How many pair faces the build found inside a larger face of a room their
+ * room intrudes in (MarkCoveredFaces in hd_render.cpp), whose art is drawn
+ * pushed back; 0 with the rooms' air off. */
+int HDRenderCoveredFaces();
 int HDRenderCarryPairs();
 bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 
@@ -1935,6 +1939,10 @@ struct HDPairRange
 	int inner;
 	int triangles;
 	int air;
+	/* 1 when the classic face this piece's art stands on lies inside a
+	 * larger face of the holder in the same plane (MarkCoveredFaces in
+	 * hd_render.cpp): the piece is drawn pushed back in depth. */
+	int behind;
 };
 int HDRenderGroupPairRanges(int group);
 bool HDRenderGroupPairRange(int group, int index, HDPairRange* out);

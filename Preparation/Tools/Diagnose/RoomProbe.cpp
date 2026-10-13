@@ -11115,11 +11115,12 @@ static int ProbeMain(int argc, char** argv)
 		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups "
 			"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
 			"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d "
-			"air_pairs=%d air_boxed=%d air=%d\n",
+			"air_pairs=%d air_boxed=%d air=%d covered=%d\n",
 			CountIntrusionPairs(), intruding, intrudingGroups,
 			(int)claimed.size(), bound, unbound, band,
 			(int)(g_air_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
-			airTris, airGroups, airPairs, airBoxed, g_air_option);
+			airTris, airGroups, airPairs, airBoxed, g_air_option,
+			HDRenderCoveredFaces());
 
 		// The engine's HDLOG carry lines (ReportRoomCarry), from the build.
 		{

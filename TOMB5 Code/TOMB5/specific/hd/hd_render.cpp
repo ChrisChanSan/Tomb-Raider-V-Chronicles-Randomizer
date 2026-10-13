@@ -1978,6 +1978,11 @@ namespace
 	 * distance for all but a few faces per triangle. */
 	const HDPairFace* g_pair_faces = 0;
 	int g_pair_face_count = 0;
+	/* Per pair face, 1 when it lies inside a larger face of a room its room
+	 * intrudes in, in the same plane and facing the same way - two classic
+	 * rooms with no portal between them that share a stretch of wall
+	 * (MarkCoveredFaces). */
+	std::vector<unsigned char> g_face_behind;
 	std::vector<float> g_pair_face_box;
 	// The diagnostic inside/overhang split - see HDRenderSplitOverhang.
 	int g_split_overhang = 0;
@@ -2104,6 +2109,156 @@ namespace
 		return ((long long)((int)floorf(x / 256.0f) + 32768) << 34) |
 			((long long)((int)floorf(y / 256.0f) + 32768) << 17) |
 			(long long)((int)floorf(z / 256.0f) + 32768);
+	}
+
+	/* The pair faces that lie inside a larger face of the holder of an
+	 * entry their room intrudes in: the same plane within a unit, facing
+	 * the same way, every corner within the larger face's outline. Two
+	 * rooms with no portal between them that stand in one another can
+	 * share a stretch of wall, each with a classic face on it and art for
+	 * it in its group: both are drawn and fight for the depth, on two
+	 * pages, in the classic frame as in this one (ANDREA1's room 12 has a
+	 * face of 1024 by 1024 inside room 212's of 1024 by 1280 at z 27,648,
+	 * x 37,888 to 38,912 - the flicker on room 212's sector x1/z0 - and
+	 * their groups' art lies within a unit of each other on 25,142 of the
+	 * pixels both draw there at 640x360, page 126 against page 146). The
+	 * art standing on the smaller face is drawn pushed back as a stand
+	 * range answered HD_STAND_BEHIND is, so the larger face's art wins;
+	 * two faces alike in size keep both, there being no larger one. Only
+	 * with the air on: tomb5.hd_air 0 is the answer before the air rule. */
+	void MarkCoveredFaces()
+	{
+		g_face_behind.assign((size_t)g_pair_face_count, 0);
+
+		if (g_air_cells.empty() || !g_boxes || g_pair_face_count <= 0)
+			return;
+
+		std::vector<float> world((size_t)g_pair_face_count * 12, 0.0f);
+		std::vector<float> normal((size_t)g_pair_face_count * 4, 0.0f);
+		std::vector<float> area((size_t)g_pair_face_count, 0.0f);
+
+		for (int f = 0; f < g_pair_face_count; f++)
+		{
+			const HDPairFace& face = g_pair_faces[f];
+			float* w = &world[(size_t)f * 12];
+
+			if (face.group < 0 || face.group >= g_box_count)
+				continue;
+
+			for (int c = 0; c < 4; c++)
+			{
+				w[c * 3] = face.v[c][0] + g_boxes[face.group].originX;
+				w[c * 3 + 1] = face.v[c][1];
+				w[c * 3 + 2] = face.v[c][2] + g_boxes[face.group].originZ;
+			}
+
+			// The plane by the corners' cross product, the area with it.
+			float n[3] = { 0.0f, 0.0f, 0.0f };
+
+			for (int c = 1; c + 1 < face.corners; c++)
+			{
+				const float a[3] = { w[c * 3] - w[0], w[c * 3 + 1] - w[1],
+					w[c * 3 + 2] - w[2] };
+				const float b[3] = { w[c * 3 + 3] - w[0],
+					w[c * 3 + 4] - w[1], w[c * 3 + 5] - w[2] };
+
+				n[0] += a[1] * b[2] - a[2] * b[1];
+				n[1] += a[2] * b[0] - a[0] * b[2];
+				n[2] += a[0] * b[1] - a[1] * b[0];
+			}
+
+			const float len = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+			if (len <= 0.0f)
+				continue;
+
+			area[(size_t)f] = len * 0.5f;
+
+			for (int k = 0; k < 3; k++)
+				normal[(size_t)f * 4 + k] = n[k] / len;
+
+			normal[(size_t)f * 4 + 3] = (n[0] * w[0] + n[1] * w[1] +
+				n[2] * w[2]) / len;
+		}
+
+		for (int f = 0; f < g_pair_face_count; f++)
+		{
+			const int b = g_pair_faces[f].group;
+			const float* nf = &normal[(size_t)f * 4];
+
+			if (area[(size_t)f] <= 0.0f)
+				continue;
+
+			for (int h = 0; h < g_pair_face_count && !g_face_behind[(size_t)f];
+				h++)
+			{
+				const int a = g_pair_faces[h].group;
+				const float* nh = &normal[(size_t)h * 4];
+
+				if (a == b || area[(size_t)h] <= area[(size_t)f] + 1.0f ||
+					nf[0] * nh[0] + nf[1] * nh[1] + nf[2] * nh[2] < 0.999f ||
+					fabsf(nf[3] - nh[3]) > 1.0f)
+					continue;
+
+				bool entry = false;
+
+				for (int k = 0; k < g_intrusion_count && !entry; k++)
+					entry = g_intrusions[k].group == b &&
+						g_intrusions[k].holder == a;
+
+				if (!entry)
+					continue;
+
+				// Every corner of f within h's outline, a unit's slack.
+				int drop = 0;
+
+				for (int axis = 1; axis < 3; axis++)
+					if (fabsf(nh[axis]) > fabsf(nh[drop]))
+						drop = axis;
+
+				const int u = drop == 0 ? 1 : 0;
+				const int v = drop == 2 ? 1 : 2;
+				const float* wf = &world[(size_t)f * 12];
+				const float* wh = &world[(size_t)h * 12];
+				const int nhc = g_pair_faces[h].corners;
+				bool inside = true;
+
+				for (int c = 0; c < g_pair_faces[f].corners && inside; c++)
+				{
+					const float pu = wf[c * 3 + u], pv = wf[c * 3 + v];
+					float lo = 0.0f, hi = 0.0f;
+					bool first = true;
+
+					// Convex outline: every edge's side test agrees.
+					for (int e = 0; e < nhc && inside; e++)
+					{
+						const int e1 = (e + 1) % nhc;
+						const float eu = wh[e1 * 3 + u] - wh[e * 3 + u];
+						const float ev = wh[e1 * 3 + v] - wh[e * 3 + v];
+						const float el = sqrtf(eu * eu + ev * ev);
+
+						if (el <= 0.0f)
+							continue;
+
+						const float side = (eu * (pv - wh[e * 3 + v]) -
+							ev * (pu - wh[e * 3 + u])) / el;
+
+						if (first)
+						{
+							lo = hi = side;
+							first = false;
+						}
+
+						lo = side < lo ? side : lo;
+						hi = side > hi ? side : hi;
+						inside = !(lo < -1.0f && hi > 1.0f);
+					}
+				}
+
+				if (inside)
+					g_face_behind[(size_t)f] = 1;
+			}
+		}
 	}
 
 	/* Marks the hulls before the groups are filled: the art of every group
@@ -4551,6 +4706,16 @@ bool HDRenderGroupHull(int group, int* air, int* covered)
 	*air = g_hull_air[(size_t)group];
 	*covered = g_hull_covered[(size_t)group];
 	return g_group_hull[(size_t)group] != 0;
+}
+
+int HDRenderCoveredFaces()
+{
+	int n = 0;
+
+	for (size_t f = 0; f < g_face_behind.size(); f++)
+		n += g_face_behind[f] ? 1 : 0;
+
+	return n;
 }
 
 int HDRenderGroupHullBehind(int group)
@@ -7089,6 +7254,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							made.inner = inner;
 							made.triangles = 0;
 							made.air = air;
+							made.behind = face_at >= 0 &&
+								(size_t)face_at < g_face_behind.size()
+								? g_face_behind[(size_t)face_at] : 0;
 							piece = (int)group.pairRanges.size();
 							group.pairRanges.push_back(made);
 							group.pairWhole.push_back(0);
@@ -7118,6 +7286,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							made.inner = 0;
 							made.triangles = 0;
 							made.air = 1;
+							made.behind = 0;
 							piece = (int)group.pairRanges.size();
 							group.pairRanges.push_back(made);
 							group.pairWhole.push_back(0);
@@ -8006,6 +8175,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 	// The hulls, asked of every group before any is filled (MarkAirHulls).
 	MarkAirHulls(trg);
+	// And the pair faces a larger face of the holder covers.
+	MarkCoveredFaces();
 	// And the copies among the carried art (MarkCarryCells).
 	MarkCarryCells(trg);
 
@@ -9880,8 +10051,12 @@ namespace
 			// set_stand_matrix; a range drawn alone as HDRenderRoomStand asks.
 			const bool stand_behind = range.stand &&
 				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+			const bool piece_behind = range.intruding > 0 &&
+				(size_t)range.intruding <= group.pairRanges.size() &&
+				group.pairRanges[(size_t)range.intruding - 1].behind;
 			const bool want_behind = window == HD_WINDOW_STAND ?
-				g_stand_pick_behind : range.behind || stand_behind;
+				g_stand_pick_behind
+				: range.behind || stand_behind || piece_behind;
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
@@ -17979,8 +18154,12 @@ namespace
 			// And at the depth draw_pass drew it at.
 			const bool stand_behind = range.stand &&
 				group.standWith[(size_t)range.stand - 1] == HD_STAND_BEHIND;
+			const bool piece_behind = range.intruding > 0 &&
+				(size_t)range.intruding <= group.pairRanges.size() &&
+				group.pairRanges[(size_t)range.intruding - 1].behind;
 			const bool want_behind = window == HD_WINDOW_STAND ?
-				g_stand_pick_behind : range.behind || stand_behind;
+				g_stand_pick_behind
+				: range.behind || stand_behind || piece_behind;
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);

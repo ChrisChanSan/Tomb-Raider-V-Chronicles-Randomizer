@@ -4488,10 +4488,11 @@ static void ReportRoomIntrusions()
 	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups "
 		"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
 		"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d air_pairs=%d "
-		"air_boxed=%d air=%d",
+		"air_boxed=%d air=%d covered=%d",
 		g_stem, pairs, tris, groups, faces, bound, unbound, g_band_unclaimed,
 		(int)(g_air_build_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
-		airTris, airGroups, airPairs, airBoxed, g_air_on);
+		airTris, airGroups, airPairs, airBoxed, g_air_on,
+		HDRenderCoveredFaces());
 
 	/* HDLOG unlinked: one line per (group, host) pair with art in the air of
 	 * a room its own room has no link with - `group` the art's room,

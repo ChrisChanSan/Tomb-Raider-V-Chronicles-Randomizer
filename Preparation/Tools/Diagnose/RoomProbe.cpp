@@ -571,6 +571,10 @@
  *                     itself in <folder> with the seam installed and a null
  *                     pointer read, then reads the CRASH line of crash.txt
  *                     back and checks the minidump beside it (MDMP header).
+ *     -hddrawn 0|1    the HD level built, drawn HD (1, the default) or
+ *                     classic (0): the classic faces of the seed room and of
+ *                     every -with room in place of the art, as -classicroom
+ *                     for each with -classiconly. Needs -roombox.
  *
  * Everything outside the pixels goes to stdout, so a run can be pasted into a
  * report as it stands.
@@ -9098,6 +9102,54 @@ namespace probemarks
 	}
 }
 
+/* -hddrawn 0|1: the third state beside hd_enable 0 and 1 - the HD level
+ * built, the world drawn classic. 1, the default, is the picture as ever. 0
+ * draws the classic faces of the seed room and of every -with room in place
+ * of the art (an implied -classicroom for each, with -classiconly), after the
+ * whole HD build has run; held against a picture of the same -classicroom
+ * list it shows whether the build leaves the classic rooms as the .TRC has
+ * them. A branch of its own in the option chain would pass the compiler's
+ * nesting limit (C1061), so the chain's last else calls this, and this
+ * reports any other argument as unknown. */
+static void HDDrawnSwitch(int argc, char** argv, int& at)
+{
+	if (strcmp(argv[at], "-hddrawn") || at + 1 >= argc)
+	{
+		printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
+		return;
+	}
+
+	if (atoi(argv[++at]))
+		return;
+
+	std::vector<int> want(1, atoi(argv[3]));
+
+	for (int k = 4; k + 1 < argc; k++)
+		if (!strcmp(argv[k], "-with"))
+			want.push_back(atoi(argv[k + 1]));
+
+	// A room named twice, or by -classicroom itself, is drawn once.
+	for (size_t w = 0; w < want.size(); w++)
+	{
+		bool named = false;
+
+		for (size_t v = 0; v < w; v++)
+			named = named || want[v] == want[w];
+
+		for (int k = 4; k + 1 < argc; k++)
+			named = named || ((!strcmp(argv[k], "-classicroom") ||
+				!strcmp(argv[k], "-classicmark")) &&
+				atoi(argv[k + 1]) == want[w]);
+
+		if (!named)
+			g_classic_rooms.push_back(want[w]);
+	}
+
+	g_classic_only = true;
+	printf("hddrawn: 0 - the classic faces of %d room(s) in place of the art\n",
+		(int)want.size());
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	if (argc < 4)
@@ -10026,7 +10078,7 @@ static int ProbeMain(int argc, char** argv)
 		else if (!strcmp(argv[at], "-vramhog") || !strcmp(argv[at], "-nowarm"))
 			(argv[at][1] == 'v' ? vramHog : g_nowarm) = true;
 		else
-			printf("RoomProbe: ignoring unknown argument \"%s\"\n", argv[at]);
+			HDDrawnSwitch(argc, argv, at);
 	}
 
 	/* One knob for all the motion. -time is the game clock the scroll and

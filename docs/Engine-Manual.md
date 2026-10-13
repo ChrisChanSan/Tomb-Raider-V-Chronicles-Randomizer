@@ -2308,8 +2308,8 @@ menu, the load and save screens, the outfit changer or on the *Key bindings*
 page switches nothing, so binding F12 there does not also switch the picture.
 The choice holds for the whole session, across level loads, so the same spot
 can be compared before and after a load. It is never saved: every game starts
-drawn HD. With `hd_enable` at `0` there is no HD data to switch to, and the
-key does nothing.
+drawn HD. With `hd_enable` at `0`, or with no installation found, there is no
+HD data to switch to, and the key does nothing.
 
 What it is to switch is the **world**: the rooms, the static meshes, the
 items and enemies, Lara, the water, its life and its splashes, the shadows and
@@ -2328,9 +2328,10 @@ Behind `-log`, every press that reaches a level writes one line:
 
 `drawn` is the draw after the press (`1` HD, `0` classic), `level` the
 level's file name, `tick` the logic tick, `frame` the drawn-frame clock and
-`by` whether the keyboard role or the pad chord pressed it. A press with
-`hd_enable` at `0` writes the same line with `hd_enable=0 nothing to switch`
-at its end.
+`by` whether the keyboard role or the pad chord pressed it. A press with no
+HD data writes the same line with the cause at its end: `hd_enable=0 nothing
+to switch` with `hd_enable` at `0`, `hd_enable=1 install=none nothing to
+switch` with it at `1` and no installation found.
 
 ### What the HD art asks of your graphics card
 

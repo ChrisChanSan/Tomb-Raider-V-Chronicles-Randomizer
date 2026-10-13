@@ -1886,6 +1886,11 @@ static bool g_life_tank_whole = true;
 static bool g_life_tank_game = false;
 // -liferings 0|game: 1 every ring alone (no switch), 0 none, 2 the game's.
 static int g_life_rings = 1;
+/* -lifeseries <s>: every s seconds of the run a LIFESERIES line a school -
+ * its state and each fish's place, depth and distance to the edge of the
+ * deep water (HDLifeEdgeDistance) - and once the life's bodies' squares;
+ * 0 without. */
+static float g_life_series = 0.0f;
 // The classic level's FISHTANK items: x, z and flags each.
 static std::vector<int> g_life_tank_items;
 static HDLifePool g_life_pool;
@@ -2163,6 +2168,25 @@ static void LifeBuild(const char* root, const char* stem)
 			fish, drips, HDLifeDeepCount(b), closed, tail);
 	}
 
+	/* -lifeseries: the bodies' squares, `x,z,depth` each, for the maps the
+	 * series' places are read against. */
+	for (size_t bi = 0; g_life_series > 0.0f &&
+		bi < g_life_pool.bodies.size(); bi++)
+	{
+		const HDLifeBody& b = g_life_pool.bodies[bi];
+
+		printf("LIFESQUARES level=%s body=%d", stem, (int)bi);
+
+		for (size_t i = 0; i < b.squares.size(); i++)
+			printf("%s%d,%d,%d", i ? ";" : " ", b.squares[i].x,
+				b.squares[i].z, b.squares[i].depth);
+
+		printf("\n");
+	}
+
+	const int every = g_life_series > 0.0f ? (int)(g_life_series * 30.0f +
+		0.5f) : 0;
+
 	// The game's steps from clock 0 to -time, and the tick's cost.
 	LARGE_INTEGER f, t0, t1;
 	std::vector<std::pair<HDLifeRing, float> > rings;
@@ -2198,6 +2222,40 @@ static void LifeBuild(const char* root, const char* stem)
 
 		for (size_t i = 0; i < now.size(); i++)
 			rings.push_back(std::make_pair(now[i], t));
+
+		/* -lifeseries: a line a school - its centre, flight and darts, and
+		 * each fish's entry, place, depth under the surface and distance to
+		 * the edge of the water 768 deep (HDLifeEdgeDistance, 2048 at most).
+		 * Printed inside the timed steps: a series' tick_ms is not a cost. */
+		if (!every || s % every)
+			continue;
+
+		for (size_t si = 0; si < g_life_pool.schools.size(); si++)
+		{
+			const HDLifeSchool& sc = g_life_pool.schools[si];
+			const HDLifeBody& sb = g_life_pool.bodies[(size_t)sc.body];
+
+			printf("LIFESERIES level=%s t=%.2f school=%d body=%d lara=%d "
+				"centre=%.0f,%.0f darting=%d darts=%d fish=", stem, t,
+				(int)si, sc.body, on, sc.cx, sc.cz, sc.darting, sc.darts);
+
+			for (size_t i = 0, n = 0; i < g_life_pool.entries.size(); i++)
+			{
+				const HDLifeEntry& e = g_life_pool.entries[i];
+
+				if (e.school != (int)si)
+					continue;
+
+				float x, y, z, yaw, pitch, roll;
+
+				HDLifePose(g_life_pool, e, t, &x, &y, &z, &yaw, &pitch, &roll);
+				printf("%s%d:%.0f,%.0f,%.0f,%.0f", n++ ? ";" : "", (int)i, x,
+					z, y - (float)sb.surfaceY, HDLifeEdgeDistance(sb, x, z,
+					(float)kHDLifeDeep, 2));
+			}
+
+			printf("\n");
+		}
 	}
 
 	QueryPerformanceCounter(&t1);
@@ -9137,6 +9195,9 @@ static int ProbeMain(int argc, char** argv)
 			"(every model drawn twice: numbers, not a picture)\n");
 		printf("       -lifeall   -life on every body, whatever the "
 			"level's life row lets in\n");
+		printf("       -lifeseries <s>   with -life: a LIFESERIES line a "
+			"school every s seconds (each fish's place, depth and distance "
+			"to the deep water's edge) and the bodies' LIFESQUARES\n");
 		printf("       -wader x,z   a stand-in for a wading Lara at world x, "
 			"z, standing on the floor under the sheet, with Lara's place "
 			"there, repeatable\n");
@@ -9442,11 +9503,14 @@ static int ProbeMain(int argc, char** argv)
 		else if ((!strcmp(argv[at], "-lifelara") ||
 			!strcmp(argv[at], "-lifesplash") ||
 			!strcmp(argv[at], "-lifetank") ||
+			!strcmp(argv[at], "-lifeseries") ||
 			!strcmp(argv[at], "-liferings")) && at + 1 < argc)
 		{
 			float c[3] = { 0.0f, 0.0f, 0.0f };
 
-			if (!strcmp(argv[at], "-liferings"))
+			if (!strcmp(argv[at], "-lifeseries"))
+				g_life_series = (float)atof(argv[++at]);
+			else if (!strcmp(argv[at], "-liferings"))
 			{
 				at++;
 				g_life_rings = !strcmp(argv[at], "game") ? 2 :

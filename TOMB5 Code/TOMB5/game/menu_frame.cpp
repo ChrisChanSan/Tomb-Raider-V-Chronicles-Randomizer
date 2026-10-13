@@ -1696,7 +1696,12 @@ static const menu_row menu_rows_keybinds_kbd[] =
 	MENU_BIND("All weapons", -1, KEY_ROLE_CHEAT_GUNS),
 	MENU_BIND("All items", -1, KEY_ROLE_CHEAT_ITEMS),
 	MENU_BIND("Heal", -1, KEY_ROLE_CHEAT_HEAL),
-	MENU_BIND("Skip level", -1, KEY_ROLE_CHEAT_SKIP)
+	MENU_BIND("Skip level", -1, KEY_ROLE_CHEAT_SKIP),
+	/* The HD/SD switch, shown whatever Cheats says: it is a comparison
+	 * of the two draws, not a cheat. Its consumer is HDSwitchInput
+	 * (specific/hd/hd_switch.cpp). The label is the same in every
+	 * language, so CustomText hands it back unchanged. */
+	MENU_BIND("HD / SD", -1, KEY_ROLE_HD_SWITCH)
 };
 
 static const menu_row menu_rows_keybinds_joy[] =
@@ -1719,13 +1724,13 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("Large Medipack", TXT_Large_Medipack, 14),
 	MENU_BIND("Secondary", -1, JOY_ROLE_SECOND),
 
-	/* These twelve rows are in the order of the four Separate default
-	 * tables. The Modifier comes first because it is what the eleven
+	/* These thirteen rows are in the order of the four Separate default
+	 * tables. The Modifier comes first because it is what the twelve
 	 * below can be chorded against: with it unbound, every row under it
 	 * can still be bound plainly, and no chord exists anywhere.
 	 *
 	 * The labels are the keyboard list's own - the same CustomText and
-	 * the same script ids - because they name the same eleven things.
+	 * the same script ids - because they name the same twelve things.
 	 * Only "Modifier" is new, and only the pad has it. */
 	MENU_BIND("Modifier", -1, JOY_ROLE_MODIFIER),
 	MENU_BIND("Pistols", TXT_Pistols, JOY_ROLE_WEAPON_FIRST + 0),
@@ -1738,7 +1743,8 @@ static const menu_row menu_rows_keybinds_joy[] =
 	MENU_BIND("All weapons", -1, JOY_ROLE_CHEAT_GUNS),
 	MENU_BIND("All items", -1, JOY_ROLE_CHEAT_ITEMS),
 	MENU_BIND("Heal", -1, JOY_ROLE_CHEAT_HEAL),
-	MENU_BIND("Skip level", -1, JOY_ROLE_CHEAT_SKIP)
+	MENU_BIND("Skip level", -1, JOY_ROLE_CHEAT_SKIP),
+	MENU_BIND("HD / SD", -1, JOY_ROLE_HD_SWITCH)
 };
 
 /* The keyboard's list is built at runtime rather than kept static. Two
@@ -1755,9 +1761,9 @@ static const menu_row menu_rows_keybinds_joy[] =
  * function did while Secondary was last - no longer works, because the
  * hotkeys sit behind it. The pad's list is built the same way, and for
  * the same reason: Secondary is no longer last there either. The
- * Modifier and the six weapons are always offered - the Modifier is how
- * a chord is made at all, and a weapon role the player has not bound
- * simply says "---".
+ * Modifier, the six weapons and the HD/SD switch are always offered -
+ * the Modifier is how a chord is made at all, and a role the player has
+ * not bound simply says "---".
  *
  * One buffer serves both lists, sized by the longer of the two so that
  * neither can outgrow it whichever way the tables move. */
@@ -1770,7 +1776,7 @@ static menu_row menu_keybinds_built[MENU_KEYBINDS_KBD_ROWS > MENU_KEYBINDS_JOY_R
 static void MenuResolveKeybinds(const menu_row** rows, long* num)
 {
 	const menu_row* src;
-	long i, out, total, second, cheat;
+	long i, out, total, second, cheat, cheat_last;
 
 	if (ControlMethod == 1)
 	{
@@ -1778,6 +1784,7 @@ static void MenuResolveKeybinds(const menu_row** rows, long* num)
 		total = MENU_KEYBINDS_JOY_ROWS;
 		second = JOY_ROLE_SECOND;
 		cheat = JOY_ROLE_CHEAT_FLY;
+		cheat_last = JOY_ROLE_CHEAT_SKIP;
 	}
 	else
 	{
@@ -1785,6 +1792,7 @@ static void MenuResolveKeybinds(const menu_row** rows, long* num)
 		total = MENU_KEYBINDS_KBD_ROWS;
 		second = KEY_ROLE_SECOND;
 		cheat = KEY_ROLE_CHEAT_FLY;
+		cheat_last = KEY_ROLE_CHEAT_SKIP;
 	}
 
 	out = 0;
@@ -1798,7 +1806,10 @@ static void MenuResolveKeybinds(const menu_row** rows, long* num)
 			if (row->param == second && !tomb5.action_split)
 				continue;
 
-			if (row->param >= cheat && !tomb5.enable_cheats)
+			// Named at both ends: the HD/SD row behind the five is always
+			// shown.
+			if (row->param >= cheat && row->param <= cheat_last &&
+				!tomb5.enable_cheats)
 				continue;
 		}
 

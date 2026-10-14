@@ -12,16 +12,17 @@
  */
 
 /*
- * The HD/SD switch's state and its log line; hd_switch.h says what the
+ * The HD/SD switch's setter and its log line; hd_switch.h says what the
  * switch is and holds its rule.
  */
 #include "../../tomb5/pch.h"
 #include "hd_switch.h"
-#include "hd_level.h"			// HDEnabled - whether there is HD data
+#include "hd_level.h"			// HDEnabled, HDLevelBuilt - the HD data
 #include "hd_object.h"			// HDObjectActive - the level's HD objects
 #include "hd_lara.h"			// HDLaraActive - the level's HD Lara
 #include "../function_stubs.h"		// Log, gLogEnabled
-#include "../../tomb5/tomb5.h"		// tomb5.hd_enable - the log's cause
+#include "../registry.h"		// a press saves the draw
+#include "../../tomb5/tomb5.h"		// tomb5.hd_enable - the draw itself
 #include "../../game/gameflow.h"	// the level's file name
 #include "../../game/control.h"		// GlobalCounter
 #include "../../game/text.h"		// GnFrameCounter
@@ -30,9 +31,38 @@
 
 namespace
 {
-	/* The one switch of the session. Nothing resets it: it lives as long as
-	 * the process, so it holds across every level load. */
-	HDSwitchState g_state = HD_SWITCH_START;
+	/* The key's half of the switch that is not the setting: whether the
+	 * role was down at the last reading. It lives as long as the process. */
+	int g_held = 0;
+
+	// The switch as the rule sees it: the draw is the setting hd_enable.
+	HDSwitchState Current()
+	{
+		HDSwitchState s = { tomb5.hd_enable ? 1 : 0, g_held };
+
+		return s;
+	}
+
+	/* The one setter: the rule's answer written back, the draw into the
+	 * setting itself, so that the HD textures row shows it when it is next
+	 * drawn and every gate reads it on the next frame. */
+	void Commit(const HDSwitchState& s)
+	{
+		tomb5.hd_enable = s.drawn != 0;
+		g_held = s.held;
+	}
+
+	/* A press keeps the new draw as a step of the row keeps it: the tomb5
+	 * settings are written when one of them changes (game\menu_frame.cpp,
+	 * MenuAfterChange) and not again at the game's exit, so a flip that is
+	 * not written now would be lost. One value and not the whole block,
+	 * which is what changed. */
+	void SaveDrawn()
+	{
+		OpenRegistry("tomb5");
+		REG_WriteBool((char*)"hd_enable", tomb5.hd_enable);
+		CloseRegistry();
+	}
 
 	/* The level's file stem, "ANDREA2" out of "DATA\ANDREA2". gfLevelId is
 	 * the level's identity, not its place in the file table, so the table
@@ -69,25 +99,43 @@ namespace
 		return slash ? slash + 1 : name;
 	}
 
+	/* Why there is nothing to switch, in the order the build asks: the
+	 * build gate's setting, the installation, the level's own data. */
+	const char* NothingCause()
+	{
+		if (!tomb5.hd_build)
+			return " hd_build=0 nothing to switch";
+
+		if (!HDEnabled())
+			return " install=none nothing to switch";
+
+		return " built=none nothing to switch";
+	}
+
 	// The HDLOG switch line, described at HDSwitchInput below.
-	void SwitchLog(const char* by, const char* tail)
+	void SwitchLog(const char* by, int what)
 	{
 		Log("HDLOG switch drawn=%d level=%s tick=%ld frame=%ld by=%s%s",
-			g_state.drawn, LevelStem(), (long)GlobalCounter,
-			(long)GnFrameCounter, by, tail);
+			tomb5.hd_enable ? 1 : 0, LevelStem(), (long)GlobalCounter,
+			(long)GnFrameCounter, by,
+			what == HD_SWITCH_NOTHING ? NothingCause() : "");
 	}
 }
 
-/* The draw asks the row as well: HDEnabled is the build gate and does not
- * read hd_enable, so the HD textures row decides the draw here. */
 bool HDDrawn()
 {
-	return g_state.drawn != 0 && tomb5.hd_enable;
+	return tomb5.hd_enable;
 }
 
-/* HDLOG switch, behind -log, one line per press that reached a level:
+bool HDSwitchHasData()
+{
+	return HDLevelBuilt() || HDObjectActive() || HDLaraActive();
+}
+
+/* HDLOG switch, behind -log, one line per press that reached a level and
+ * per step of the HD textures row:
  *
- *   drawn  the draw after the press: 1 HD, 0 classic
+ *   drawn  the draw after it: 1 HD, 0 classic
  *   level  the level's file stem
  *   tick   GlobalCounter, the logic tick
  *   frame  GnFrameCounter, the drawn-frame clock (one step per drawn frame
@@ -95,67 +143,40 @@ bool HDDrawn()
  *   by     key or pad - the keyboard role or the pad chord; option - the
  *          HD textures row (HDSwitchOption below)
  *
- * A press with no HD data writes the same line with the state it left
- * alone and the cause at the end: "hd_enable=0 nothing to switch" with the
- * option off, "hd_enable=1 install=none nothing to switch" with the option
- * on and no installation found (HDEnabled asks both; the install is not
- * looked for here, so with the option off none is searched). */
+ * With no HD data in the level on screen the same line ends in the cause:
+ * "hd_build=0 nothing to switch" with the build gate's setting at 0,
+ * "install=none nothing to switch" with no installation found, and
+ * "built=none nothing to switch" for a level the .TRG had nothing for. */
 void HDSwitchInput(bool key, bool pad, bool live)
 {
-	const int what = HDSwitchStep(&g_state, (key || pad) ? 1 : 0,
-		live ? 1 : 0, tomb5.hd_enable && HDEnabled() ? 1 : 0);
+	HDSwitchState s = Current();
+	const int what = HDSwitchStep(&s, (key || pad) ? 1 : 0, live ? 1 : 0,
+		HDSwitchHasData() ? 1 : 0);
+
+	Commit(s);
+
+	if (what == HD_SWITCH_FLIPPED)
+		SaveDrawn();
 
 	if (what == HD_SWITCH_NONE || !gLogEnabled)
 		return;
 
-	const char* tail = "";
-
-	if (what == HD_SWITCH_NOTHING)
-		tail = tomb5.hd_enable ? " hd_enable=1 install=none nothing to switch" :
-			" hd_enable=0 nothing to switch";
-
-	SwitchLog(key ? "key" : "pad", tail);
+	SwitchLog(key ? "key" : "pad", what);
 }
 
-/* The row's step. Whether the level on screen has HD data is whether its
- * load built HD rooms, HD objects or an HD Lara. The objects and Lara keep
- * flags of their own, which neither the row nor the state touch. The rooms
- * answer only through HDLevelActive, which asks the row and the state as
- * well, so they are asked where both stand at HD: by the menu before its
- * write for a step to off (`roomsBefore`), here after the state took the
- * row's value for a step to on. So every step that changes the draw knows
- * its level's data. A step to off that finds the state classic already
- * changes no draw; in a level with HD rooms and neither HD objects nor an
- * HD Lara its line says there is nothing to switch, which is so.
- *
- * The line's cause when there is nothing to switch: with the row off as
- * for a press, "hd_enable=0 nothing to switch"; with it on and no
- * installation found "hd_enable=1 install=none nothing to switch"; with it
- * on, an installation found and a level that was loaded without HD data,
- * "hd_enable=1 built=none nothing to switch" - the state is then how the
- * next level, built HD, starts. */
-void HDSwitchOption(bool on, bool roomsBefore)
+/* The row's step: the draw flips as a press flips it, and the row's value
+ * is that draw. Without HD data the value moves all the same - the row is
+ * the setting a level built HD is drawn by - and the line says there is
+ * nothing to switch. */
+void HDSwitchOption()
 {
-	const HDSwitchState was = g_state;
+	HDSwitchState s = Current();
+	const int what = HDSwitchSet(&s, !s.drawn, HDSwitchHasData() ? 1 : 0);
 
-	HDSwitchSet(&g_state, on ? 1 : 0, 1);
-
-	const bool hd = roomsBefore || HDLevelActive() || HDObjectActive() ||
-		HDLaraActive();
-
-	g_state = was;
-
-	const int what = HDSwitchSet(&g_state, on ? 1 : 0, hd ? 1 : 0);
+	Commit(s);
 
 	if (what == HD_SWITCH_NONE || !gLogEnabled)
 		return;
 
-	const char* tail = "";
-
-	if (what == HD_SWITCH_NOTHING)
-		tail = !tomb5.hd_enable ? " hd_enable=0 nothing to switch" :
-			!HDEnabled() ? " hd_enable=1 install=none nothing to switch" :
-			" hd_enable=1 built=none nothing to switch";
-
-	SwitchLog("option", tail);
+	SwitchLog("option", what);
 }

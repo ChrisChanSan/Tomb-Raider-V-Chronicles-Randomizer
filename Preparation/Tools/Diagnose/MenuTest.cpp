@@ -2764,18 +2764,17 @@ static void hd_switch_rows()
 /* -------------------------------------------------- the HD textures row -- */
 
 /* The row's step as game\menu_frame.cpp's MenuStepHdTextures does it,
- * stated again because that file cannot be linked: the stored option
- * flips, and the HD/SD switch takes the new value through
- * specific\hd\hd_switch.h's own HDSwitchSet, included. `hd` is whether the
- * level on screen was built HD. graphics_hd_row holds the engine's lines
- * against it. */
-static int hd_row_step(unsigned long* stored, HDSwitchState* s, int hd)
+ * stated again because that file cannot be linked: the row's value is the
+ * HD/SD switch's state, and a step sets it to the other value through
+ * specific\hd\hd_switch.h's own HDSwitchSet, included - one value, not an
+ * option beside a state. `hd` is whether the level on screen has HD data.
+ * graphics_hd_row holds the engine's lines against it. */
+static int hd_row_step(HDSwitchState* s, int hd)
 {
-	*stored = !*stored;
-	return HDSwitchSet(s, (int)*stored, hd);
+	return HDSwitchSet(s, !s->drawn, hd);
 }
 
-static const char* hd_row_text(unsigned long stored)
+static const char* hd_row_text(int stored)
 {
 	return stored ? "on" : "off";
 }
@@ -2783,8 +2782,9 @@ static const char* hd_row_text(unsigned long stored)
 /* The HD textures row on the Graphics page: one table line, saved with the
  * tomb5 settings, reached by the title's and the pause menu's options alike
  * (both call DoOptions, which runs the one table); its text and its stored
- * value as before; its step moving the value AND the switch's state, swept
- * over both values, both states and both answers of the level's data. */
+ * value as before; its step the switch's own setter, so the value and the
+ * state are one thing, swept over both values, both held states and both
+ * answers of the level's data. */
 static void graphics_hd_row()
 {
 	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
@@ -2819,59 +2819,75 @@ static void graphics_hd_row()
 		check(strstr(opts, "REG_ReadBool(buf, tomb5.hd_enable, 0);") != 0,
 			1, "hd textures row: a registry without it reads as off");
 
-		// The step: the rooms' answer, the write, the switch - in order.
+		// The build gate beside it: registry only, 1 when absent.
+		check(tree_count(opts, "sprintf(buf, \"hd_build\");"), 3,
+			"hd textures row: hd_build written first, read and saved");
+		check(strstr(opts, "REG_ReadLong(buf, tomb5.hd_build, 1);") != 0,
+			1, "hd textures row: a registry without hd_build builds");
+		check(tree_count(frame, "hd_build"), 1,
+			"hd textures row: hd_build has no row (named once, in a note)");
+
+		// The step: the switch's own setter, and no write of its own.
 		{
 			const char* fn = strstr(frame,
 				"static bool MenuStepHdTextures(long, long dir)");
 			const char* end = fn ? strstr(fn, "\n}") : 0;
-			const char* rooms = fn ? strstr(fn,
-				"const bool rooms = HDLevelActive();") : 0;
-			const char* write = fn ? strstr(fn,
-				"tomb5.hd_enable = !tomb5.hd_enable;") : 0;
-			const char* set = fn ? strstr(fn,
-				"HDSwitchOption(tomb5.hd_enable != 0, rooms);") : 0;
+			const char* set = fn ? strstr(fn, "\tHDSwitchOption();") : 0;
 
-			check(fn && end && rooms && write && set && rooms < write &&
-				write < set && set < end, 1, "hd textures row: the step asks "
-				"the rooms, writes, then sets the switch");
+			check(fn && end && set && set < end, 1, "hd textures row: the "
+				"step is the switch's setter");
 			check(tree_count(frame, "HDSwitchOption("), 1,
 				"hd textures row: the one caller of the switch's setter");
+			check(tree_count(frame, "tomb5.hd_enable ="), 0,
+				"hd textures row: the menu writes no draw of its own");
 		}
 	}
 
-	// The step's table: the value flips, the state follows it, held alone.
-	for (unsigned long v = 0; v < 2; v++)
-		for (int drawn = 0; drawn < 2; drawn++)
+	// The step's table: the value flips, it is the state, held alone.
+	for (int v = 0; v < 2; v++)
+		for (int held = 0; held < 2; held++)
 			for (int hd = 0; hd < 2; hd++)
 			{
-				unsigned long stored = v;
-				HDSwitchState s = { drawn, 1 };
-				const int what = hd_row_step(&stored, &s, hd);
-				const int want = !hd ? HD_SWITCH_NOTHING :
-					drawn != (int)stored ? HD_SWITCH_FLIPPED : HD_SWITCH_NONE;
+				HDSwitchState s = { v, held };
+				const int what = hd_row_step(&s, hd);
+				const int want = hd ? HD_SWITCH_FLIPPED : HD_SWITCH_NOTHING;
 
-				check((int)stored, (int)!v,
+				check(s.drawn, !v,
 					"hd textures row: a step either way toggles the value");
-				check(strcmp(hd_row_text(stored), v ? "off" : "on"), 0,
+				check(strcmp(hd_row_text(s.drawn), v ? "off" : "on"), 0,
 					"hd textures row: and the text shows the new value");
-				check(s.drawn, (int)stored,
-					"hd textures row: the switch takes the row's value");
-				check(what, want, "hd textures row: a flip on a change, "
-					"nothing to switch without data");
-				check(s.held, 1,
+				check(what, want, "hd textures row: a flip with data, "
+					"nothing to switch without, the value moved either way");
+				check(s.held, held,
 					"hd textures row: the key's held state untouched");
 			}
 
-	// Two steps give the value and the state back.
+	// Two steps give the value back, with and without data.
+	for (int hd = 0; hd < 2; hd++)
 	{
-		unsigned long stored = 1;
 		HDSwitchState s = HD_SWITCH_START;
 
-		hd_row_step(&stored, &s, 1);
-		hd_row_step(&stored, &s, 1);
-		check((int)stored * 10 + s.drawn, 11,
-			"hd textures row: two steps, the value and the draw as before");
+		hd_row_step(&s, hd);
+		hd_row_step(&s, hd);
+		check(s.drawn, 1, "hd textures row: two steps, the value as before");
 	}
+
+	/* After a press of the key the row reads the key's value - there is no
+	 * other value to read - and a step of the row goes on from there. */
+	for (int v = 0; v < 2; v++)
+		for (int hd = 0; hd < 2; hd++)
+		{
+			HDSwitchState s = { v, 0 };
+			const int pressed = hd ? !v : v;
+
+			HDSwitchStep(&s, 1, 1, hd);
+			HDSwitchStep(&s, 0, 1, hd);
+			check(strcmp(hd_row_text(s.drawn), pressed ? "on" : "off"), 0,
+				"hd textures row: after a press it reads the key's value");
+			hd_row_step(&s, hd);
+			check(s.drawn, !pressed,
+				"hd textures row: a step goes on from the key's value");
+		}
 
 	free(frame);
 	free(save);

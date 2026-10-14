@@ -9498,12 +9498,15 @@ namespace probemarks
 }
 
 /* The HD/SD switch in the tool. Its state moves by the engine's own rule
- * (hd_switch.h, HDSwitchStep) from the engine's own start, HD_SWITCH_START,
- * and HDDrawn() answers from it as the engine's does. The engine's HDDrawn
- * lives in hd_switch.cpp, which needs the game and is not linked here; the
- * gates that ask it in the game (hd_level.cpp, hd_object.cpp,
- * hd_laradraw.cpp, hd_life.cpp) are not linked either, so the tool asks
- * HDDrawn() once, where its frame's rooms are listed. */
+ * (hd_switch.h, HDSwitchStep) from HD_SWITCH_START, drawn HD, and HDDrawn()
+ * answers from it; in the game the state is the setting hd_enable, read by
+ * the engine's HDDrawn in hd_switch.cpp, which needs the game and is not
+ * linked here. The gates that ask it in the game (hd_level.cpp,
+ * hd_object.cpp, hd_laradraw.cpp, hd_life.cpp) are not linked either, so
+ * the tool asks HDDrawn() once, where its frame's rooms are listed. The
+ * tool builds the level HD in every run and links no build gate (HDEnabled,
+ * hd_level.cpp), so its classic views (-classicroom with -classiconly) need
+ * no switch for hd_build: their faces come from the .TRC. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.h"
 
 static HDSwitchState g_hd_switch = HD_SWITCH_START;

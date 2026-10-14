@@ -10583,8 +10583,8 @@ static void camera_mouse()
 
 /* The HD/SD switch (specific\hd\hd_switch.h): one flip per press, none for
  * a held key, none outside a level or under a menu, nothing without HD
- * data, and a state that holds for the session - across the loads of
- * levels with and without HD data - because nothing but a press moves it.
+ * data, and a state that holds across the loads of levels with and
+ * without HD data - because nothing but a press or the row moves it.
  * `run` feeds a picture of the readings: 'k' down live, '.' up live, 'm'
  * down under a menu, ',' up under a menu. */
 static int hd_switch_run(HDSwitchState* s, const char* run, int hd,
@@ -10611,7 +10611,7 @@ static void hd_switch()
 	HDSwitchState s = HD_SWITCH_START;
 	int flips, nothing;
 
-	ok(s.drawn == 1 && s.held == 0, "hd switch: a game starts drawn HD",
+	ok(s.drawn == 1 && s.held == 0, "hd switch: the tools' start is HD",
 		s.drawn, 1);
 
 	// One press, one flip; a key held for a while is still one press.
@@ -10653,9 +10653,9 @@ static void hd_switch()
 	ok(flips == 0 && nothing == 2 && s.drawn == 0,
 		"hd switch: no HD data, nothing to switch", nothing, 2);
 
-	/* The session, from a fresh start: drawn classic in one level, a level
-	 * loaded with hd_enable 0 in between (a press there changes nothing),
-	 * and the next HD level is still drawn classic until a press. */
+	/* Across loads, from a fresh start: drawn classic in one level, a level
+	 * without HD data in between (a press there changes nothing), and the
+	 * next HD level is still drawn classic until a press. */
 	s = HDSwitchState HD_SWITCH_START;
 	hd_switch_run(&s, "k.", 1, &flips, &nothing);
 	ok(s.drawn == 0, "hd switch: classic in the first level", s.drawn, 0);
@@ -10682,51 +10682,49 @@ static void hd_switch()
 	}
 }
 
-/* The HD textures row's half of the switch (hd_switch.h, HDSwitchSet): the
- * draw takes the row's new value whatever it was, a flip only when the draw
- * changed, nothing to switch without HD data - the state is set all the
- * same - and the key's held state never touched. Then the whole table of
- * row and key as the engine composes them: HDEnabled is the row and an
- * installation found, the key's `hd` is HDEnabled at the press, the row's
- * `hd` is whether the level's load built HD data, and the room gates'
- * HDLevelActive is that build, HDEnabled and the state together. */
+/* The HD textures row and the key as one state (hd_switch.h): the state is
+ * the setting hd_enable, a press flips it by HDSwitchStep and a step of the
+ * row by HDSwitchSet to the other value, each with `hd` the one data test,
+ * HDSwitchHasData. The data are built at the load whenever the build gate
+ * is open - hd_build and an installation found - and the level's .TRG has
+ * something for it; the row (the draw) is no part of that. Then the world
+ * the room gates draw: HDLevelActive is the rooms' build and the state. */
 struct hd_option_world
 {
-	int row;		// tomb5.hd_enable
+	int build;		// tomb5.hd_build
 	int install;	// an installation found
-	int built;		// the level on screen was built HD at its load
-	HDSwitchState s;
+	int level;		// the level's .TRG has HD rooms for it
+	HDSwitchState s;	// s.drawn is tomb5.hd_enable, the row
 };
 
-static int hd_option_enabled(const hd_option_world* w)
+static int hd_option_data(const hd_option_world* w)
 {
-	return w->row && w->install;
+	return w->build && w->install && w->level;
 }
 
 static int hd_option_level_active(const hd_option_world* w)
 {
-	return w->built && hd_option_enabled(w) && w->s.drawn;
+	return hd_option_data(w) && w->s.drawn;
 }
 
 // One press of the key, live: down, then up.
 static int hd_option_press(hd_option_world* w)
 {
-	const int what = HDSwitchStep(&w->s, 1, 1, hd_option_enabled(w));
+	const int what = HDSwitchStep(&w->s, 1, 1, hd_option_data(w));
 
-	HDSwitchStep(&w->s, 0, 1, hd_option_enabled(w));
+	HDSwitchStep(&w->s, 0, 1, hd_option_data(w));
 	return what;
 }
 
-// One step of the row: the option flips, the state takes its new value.
+// One step of the row: the state, which is the row's value, to the other.
 static int hd_option_step(hd_option_world* w)
 {
-	w->row = !w->row;
-	return HDSwitchSet(&w->s, w->row, w->built && w->install);
+	return HDSwitchSet(&w->s, !w->s.drawn, hd_option_data(w));
 }
 
 static void hd_switch_option()
 {
-	// The helper alone: every state, both values, with and without data.
+	// The setter alone: every state, both values, with and without data.
 	for (int was = 0; was < 2; was++)
 		for (int on = 0; on < 2; on++)
 			for (int hd = 0; hd < 2; hd++)
@@ -10745,132 +10743,141 @@ static void hd_switch_option()
 						"left alone", s.held, held);
 				}
 
-	// The level built HD, the row on: the start draws HD.
+	/* The new default: the row off (hd_enable 0), the data built because
+	 * an installation is found. The game starts classic; the key flips it
+	 * HD at once, the row then reads on; the row steps it back. */
 	{
-		hd_option_world w = { 1, 1, 1, HD_SWITCH_START };
+		hd_option_world w = { 1, 1, 1, { 0, 0 } };
 
-		ok(hd_option_level_active(&w) == 1, "hd option: row on, data, "
-			"the start draws HD", hd_option_level_active(&w), 1);
-
-		// The row to off: the whole world classic, as a press.
+		ok(hd_option_level_active(&w) == 0, "hd option: row off, the "
+			"game starts classic", hd_option_level_active(&w), 0);
+		ok(hd_option_press(&w) == HD_SWITCH_FLIPPED && w.s.drawn == 1 &&
+			hd_option_level_active(&w) == 1, "hd option: the key with the "
+			"row off draws HD", w.s.drawn, 1);
 		ok(hd_option_step(&w) == HD_SWITCH_FLIPPED && w.s.drawn == 0 &&
-			hd_option_level_active(&w) == 0, "hd option: row off flips "
-			"the world classic", w.s.drawn, 0);
-
-		// The key with the row off: nothing to switch, the state stays.
-		ok(hd_option_press(&w) == HD_SWITCH_NOTHING && w.s.drawn == 0,
-			"hd option: the key with the row off does nothing", w.s.drawn,
-			0);
-
-		// The row back on: HD at once.
+			hd_option_level_active(&w) == 0, "hd option: the row after the "
+			"key steps it classic", w.s.drawn, 0);
 		ok(hd_option_step(&w) == HD_SWITCH_FLIPPED && w.s.drawn == 1 &&
-			hd_option_level_active(&w) == 1, "hd option: row on flips "
-			"the world HD", w.s.drawn, 1);
-
-		// The key with the row on flips as before, both ways.
+			hd_option_level_active(&w) == 1, "hd option: the row on draws "
+			"HD", w.s.drawn, 1);
 		ok(hd_option_press(&w) == HD_SWITCH_FLIPPED &&
 			hd_option_level_active(&w) == 0, "hd option: the key with the "
-			"row on flips", w.s.drawn, 0);
-
-		// The row to off while the key has the world classic: no flip.
-		ok(hd_option_step(&w) == HD_SWITCH_NONE && w.s.drawn == 0,
-			"hd option: row off over a classic world is no flip",
-			w.s.drawn, 0);
-
-		// And on again: HD, whatever the key had chosen.
-		ok(hd_option_step(&w) == HD_SWITCH_FLIPPED && w.s.drawn == 1,
-			"hd option: row on brings HD back after the key", w.s.drawn,
-			1);
+			"row on flips classic", w.s.drawn, 0);
 	}
 
-	// A level loaded with the row off: no data. The row on sets the state
-	// and says there is nothing to switch; the next level built HD starts
-	// drawn HD.
+	/* No hidden state: a level loaded with the row off has its data, so
+	 * a press there switches, and the row shows it. The case of a press in
+	 * a level loaded without HD data while the row said on cannot be made
+	 * any more: the row is not asked by the build. */
+	for (int drawn = 0; drawn < 2; drawn++)
 	{
-		hd_option_world w = { 0, 1, 0, HD_SWITCH_START };
+		hd_option_world w = { 1, 1, 1, { drawn, 0 } };
 
-		w.s.drawn = 0;
-		ok(hd_option_step(&w) == HD_SWITCH_NOTHING && w.s.drawn == 1 &&
-			hd_option_level_active(&w) == 0, "hd option: no data, the row "
-			"sets the state, nothing drawn", w.s.drawn, 1);
-
-		w.built = 1;
-		ok(hd_option_level_active(&w) == 1, "hd option: the next level "
-			"built HD starts drawn HD", hd_option_level_active(&w), 1);
-
-		// And the row off with no data: classic for the next load too.
-		w.built = 0;
-		ok(hd_option_step(&w) == HD_SWITCH_NOTHING && w.s.drawn == 0,
-			"hd option: no data, the row off sets classic", w.s.drawn, 0);
+		hd_option_press(&w);
+		ok(hd_option_level_active(&w) == w.s.drawn, "hd option: the world "
+			"is the row after a press", hd_option_level_active(&w),
+			w.s.drawn);
+		ok(w.s.drawn == !drawn, "hd option: a level loaded with either "
+			"value switches", w.s.drawn, !drawn);
 	}
 
-	// No installation: the row moves the state, the key does nothing, and
-	// nothing is ever drawn HD.
+	// The build gate off: the key does nothing, the row moves the setting.
 	{
-		hd_option_world w = { 1, 0, 0, HD_SWITCH_START };
+		hd_option_world w = { 0, 1, 1, { 1, 0 } };
+
+		ok(hd_option_press(&w) == HD_SWITCH_NOTHING && w.s.drawn == 1,
+			"hd option: hd_build 0, the key does nothing", w.s.drawn, 1);
+		ok(hd_option_step(&w) == HD_SWITCH_NOTHING && w.s.drawn == 0 &&
+			hd_option_level_active(&w) == 0, "hd option: hd_build 0, the "
+			"row moves the setting, nothing drawn HD", w.s.drawn, 0);
+	}
+
+	// No installation: the same.
+	{
+		hd_option_world w = { 1, 0, 1, { 1, 0 } };
 
 		ok(hd_option_press(&w) == HD_SWITCH_NOTHING && w.s.drawn == 1,
 			"hd option: no install, the key does nothing", w.s.drawn, 1);
 		ok(hd_option_step(&w) == HD_SWITCH_NOTHING && w.s.drawn == 0,
-			"hd option: no install, the row sets the state", w.s.drawn, 0);
+			"hd option: no install, the row moves the setting", w.s.drawn,
+			0);
 		ok(hd_option_level_active(&w) == 0, "hd option: no install, no "
 			"HD level", hd_option_level_active(&w), 0);
 	}
 
+	/* A level the .TRG has nothing for: nothing to switch there; the next
+	 * level with HD data is drawn as the setting stands. */
+	{
+		hd_option_world w = { 1, 1, 0, { 0, 0 } };
+
+		ok(hd_option_press(&w) == HD_SWITCH_NOTHING && w.s.drawn == 0,
+			"hd option: a level without data, the key does nothing",
+			w.s.drawn, 0);
+		ok(hd_option_step(&w) == HD_SWITCH_NOTHING && w.s.drawn == 1,
+			"hd option: a level without data, the row sets HD", w.s.drawn,
+			1);
+		w.level = 1;
+		ok(hd_option_level_active(&w) == 1, "hd option: the next level with "
+			"data is drawn HD", hd_option_level_active(&w), 1);
+	}
+
 	// A held key and the row's step are two edges, never one: the key
-	// flips at its edge, the row's step sets, the key still down is no new
-	// press, and only the next press flips again.
+	// flips at its edge, the row's steps flip, the key still down is no
+	// new press, and only the next press flips again.
 	{
 		hd_option_world w = { 1, 1, 1, HD_SWITCH_START };
 		int n = 0;
 
 		n += HDSwitchStep(&w.s, 1, 1, 1) == HD_SWITCH_FLIPPED;
-		w.row = 0;
-		HDSwitchSet(&w.s, 0, 1);
-		w.row = 1;
-		HDSwitchSet(&w.s, 1, 1);
+		hd_option_step(&w);
+		hd_option_step(&w);
 		n += HDSwitchStep(&w.s, 1, 1, 1) == HD_SWITCH_FLIPPED;
 		n += HDSwitchStep(&w.s, 1, 0, 1) == HD_SWITCH_FLIPPED;
-		ok(n == 1 && w.s.drawn == 1, "hd option: a held key across the "
+		ok(n == 1 && w.s.drawn == 0, "hd option: a held key across the "
 			"row's steps is one press", n, 1);
 		HDSwitchStep(&w.s, 0, 1, 1);
 		n += HDSwitchStep(&w.s, 1, 1, 1) == HD_SWITCH_FLIPPED;
-		ok(n == 2 && w.s.drawn == 0, "hd option: the next press flips",
+		ok(n == 2 && w.s.drawn == 1, "hd option: the next press flips",
 			n, 2);
 	}
 
-	/* The table, swept: every row value, installation, build and state,
-	 * then a step of the row and a press. After the row's step the draw is
-	 * the row; HDLevelActive is HD exactly when the row is on, the level
-	 * built and an installation found; the press then flips exactly when
-	 * the row is on and an installation found. */
-	for (int row = 0; row < 2; row++)
+	/* The truth table, swept: hd_build, installation, the level's data and
+	 * the row, then a step of the row and a press of the key. The row's
+	 * step always moves the value; the world is HD exactly with the data
+	 * and the value; the press flips exactly with the data, and the world
+	 * follows it there. */
+	for (int build = 0; build < 2; build++)
 		for (int install = 0; install < 2; install++)
-			for (int built = 0; built <= install; built++)
-				for (int drawn = 0; drawn < 2; drawn++)
+			for (int level = 0; level < 2; level++)
+				for (int row = 0; row < 2; row++)
 				{
-					hd_option_world w = { row, install, built,
-						HD_SWITCH_START };
+					hd_option_world w = { build, install, level, { row, 0 } };
+					const int data = build && install && level;
 
-					w.s.drawn = drawn;
-					hd_option_step(&w);
+					ok(hd_option_level_active(&w) == (data && row), "hd "
+						"option table: the start draws the row where there "
+						"are data", hd_option_level_active(&w), data && row);
 
-					ok(w.s.drawn == w.row, "hd option table: the draw is "
-						"the row", w.s.drawn, w.row);
-					ok(hd_option_level_active(&w) ==
-						(w.row && install && built), "hd option table: HD "
-						"exactly with row, install and build",
-						hd_option_level_active(&w), w.row && install && built);
+					const int set = hd_option_step(&w);
+
+					ok(w.s.drawn == !row && set == (data ? HD_SWITCH_FLIPPED :
+						HD_SWITCH_NOTHING), "hd option table: the row's step "
+						"moves the value, a flip with data", w.s.drawn, !row);
+					ok(hd_option_level_active(&w) == (data && !row), "hd "
+						"option table: the world is the row where there are "
+						"data", hd_option_level_active(&w), data && !row);
 
 					const int what = hd_option_press(&w);
-					const int flips = w.row && install;
 
-					ok((what == HD_SWITCH_FLIPPED) == flips, "hd option "
-						"table: the key flips with row and install",
-						what, flips ? HD_SWITCH_FLIPPED : HD_SWITCH_NOTHING);
-					ok(w.s.drawn == (flips ? !w.row : w.row), "hd option "
-						"table: the state after the key", w.s.drawn,
-						flips ? !w.row : w.row);
+					ok((what == HD_SWITCH_FLIPPED) == data, "hd option "
+						"table: the key flips exactly with data",
+						what, data ? HD_SWITCH_FLIPPED : HD_SWITCH_NOTHING);
+					ok(w.s.drawn == (data ? row : !row), "hd option table: "
+						"the value after the key", w.s.drawn,
+						data ? row : !row);
+					ok(hd_option_level_active(&w) == (data && w.s.drawn),
+						"hd option table: the world follows the key",
+						hd_option_level_active(&w), data && w.s.drawn);
 				}
 }
 
@@ -11049,6 +11056,28 @@ static void hd_build_gate()
 	ok(n == 3, "hd build gate: hd_build written, read and saved", n, 3);
 	n = hd_switch_count(opts, "REG_ReadLong(buf, tomb5.hd_build, 1);");
 	ok(n == 1, "hd build gate: absent reads as 1", n, 1);
+
+	// The switch's state is the setting: read by HDDrawn, written by the
+	// one setter, saved by a flip; the data test is the one for all three.
+	{
+		char* sw = hd_switch_text("hd_switch.cpp");
+
+		ok(sw != 0, "hd build gate: hd_switch.cpp is read", !!sw, 1);
+		n = hd_switch_count(sw, "\treturn tomb5.hd_enable;");
+		ok(n == 1, "hd build gate: HDDrawn is hd_enable", n, 1);
+		n = hd_switch_count(sw, "tomb5.hd_enable =");
+		ok(n == 1, "hd build gate: one writer of the draw", n, 1);
+		n = hd_switch_count(sw, "tomb5.hd_enable = s.drawn != 0;");
+		ok(n == 1, "hd build gate: the writer is the setter", n, 1);
+		n = hd_switch_count(sw,
+			"return HDLevelBuilt() || HDObjectActive() || HDLaraActive();");
+		ok(n == 1, "hd build gate: one data test", n, 1);
+		n = hd_switch_count(sw, "HDSwitchHasData() ? 1 : 0");
+		ok(n == 2, "hd build gate: the key and the row ask it", n, 2);
+		n = hd_switch_count(sw, "\t\tSaveDrawn();");
+		ok(n == 1, "hd build gate: a flip of the key is saved", n, 1);
+		free(sw);
+	}
 
 	free(level);
 	free(font);

@@ -2927,10 +2927,11 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	/* The build gate of the HD path: 1, the default, builds a level's HD
 	 * data at its load whenever an installation is found, whatever the HD
 	 * textures row (hd_enable, the draw state) says, so that the row and
-	 * the HD/SD switch flip between two resident draws. 0 looks for no
-	 * installation, opens and builds nothing HD, and the engine is the
-	 * classic one; the switch then has nothing to switch. Any other value
-	 * reads as 1. Registry only, read at the game's start
+	 * the HD/SD switch flip between two resident draws. 0 opens and builds
+	 * nothing of the HD art and the engine is the classic one - the HQ sound
+	 * bank, which asks neither setting (specific\hqsfx.cpp), still looks
+	 * for the installation; the switch then has nothing to switch. Any
+	 * other value reads as 1. Registry only, read at the game's start
 	 * (specific\hd\hd_level.cpp, HDEnabled). Registry: hd_build. */
 	ulong hd_build;
 };

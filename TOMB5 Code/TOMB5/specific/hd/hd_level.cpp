@@ -5431,7 +5431,10 @@ void HDLevelLoad(const char* wadName)
 	 * HDMarkersFree is in HDLevelUnload, which is not gated either. The load
 	 * thread runs this before LoadSamples calls HQSfxBuildMap (specific
 	 * \file.cpp, LoadLevel), so the list is there when the bridge is built. */
+	const double loadlog_markers = LoadClockMs();
 	const bool markers = HDMarkersLoad(wadName);
+	Log("LOADLOG level=%s step=markers ms=%.1f", g_log_stem,
+		LoadClockMs() - loadlog_markers);
 
 	if (!HDEnabled())
 	{
@@ -5518,6 +5521,7 @@ void HDLevelLoad(const char* wadName)
 		stats.mapEntries, stats.slotsLoaded, stats.trmBound, stats.trmMissing,
 		stats.trmDummy, stats.trmLara, stats.headsBound,
 		(int)(g_scan_ms + 0.5));
+	Log("LOADLOG level=%s step=scan ms=%.1f", g_stem, g_scan_ms);
 
 	for (int i = 0; i < HDScanMissingCount(); i++)
 		Log("HDLOG level=%s missing slot=%s model=%s.TRM",
@@ -5567,6 +5571,7 @@ static void HDLevelBuildHD()
 	int classic_rooms = 0;
 	int suppressed_statics = 0;
 	int kept_statics = 0;
+	const double loadlog_at = LoadClockMs();
 
 	g_level_active = false;
 	g_frame_count = 0;
@@ -5622,6 +5627,7 @@ static void HDLevelBuildHD()
 		HDRenderLevelEnd();
 		Log("HDLOG the previous level's HD objects are released");
 	}
+	const double loadlog_released = LoadClockMs();
 
 	if (!HDEnabled() || !g_stem[0])
 		return;
@@ -5689,6 +5695,7 @@ static void HDLevelBuildHD()
 			HD_REDRESS_ADDRESS_RESERVE / 1048576.0, room.walkMs);
 	}
 
+	const double loadlog_budget = LoadClockMs();
 	const DWORD started = GetTickCount();
 
 	/* The steps' times for the log (LoadPhase): each lap books the time
@@ -6377,6 +6384,7 @@ static void HDLevelBuildHD()
 	/* The water's life, after the objects whose model list carried its
 	 * models and after the sheets whose bodies it lives on. */
 	HDLifeLevelBegin(g_stem);
+	const double loadlog_life = LoadClockMs();
 
 	/* The mark the re-dress allowance is measured from: what this level's own
 	 * build left in the page cache. Everything above it is what outfit
@@ -6403,6 +6411,49 @@ static void HDLevelBuildHD()
 
 	g_redress_said_unknown = false;
 	RefreshRedress("the level build", true);
+
+	/* LOADLOG, with -log: every step of this build on a line of its own, in
+	 * the order it ran, with its milliseconds - the steps of the hd_share
+	 * line and of the built line's phases, and the parts no other line
+	 * books: the release of the level before, the budget, the two
+	 * fingerprints only -log computes, the water's life and the re-dress
+	 * rule. trg_read, the build's own parts and hash follow `begin` and are
+	 * its parts; hash and models_hash are in no other step. A way out of
+	 * the build above returns before this and writes none of it. */
+	if (gLogEnabled)
+	{
+		const double loadlog_end = LoadClockMs();
+
+		Log("LOADLOG level=%s step=release ms=%.1f", g_stem,
+			loadlog_released - loadlog_at);
+		Log("LOADLOG level=%s step=budget ms=%.1f", g_stem,
+			loadlog_budget - loadlog_released);
+
+		for (int p = 0; p < LOAD_PHASES; p++)
+		{
+			Log("LOADLOG level=%s step=%s ms=%.1f", g_stem,
+				kLoadPhaseName[p], load_ms[p]);
+
+			if (p != LOAD_BEGIN)
+				continue;
+
+			Log("LOADLOG level=%s step=trg_read ms=%.1f", g_stem,
+				stats.readMs);
+
+			for (int b = 0; b < HD_BEGIN_PHASES; b++)
+				Log("LOADLOG level=%s step=%s ms=%.1f", g_stem,
+					HDRenderBeginPhaseName(b), stats.phaseMs[b]);
+
+			Log("LOADLOG level=%s step=hash ms=%.1f", g_stem, stats.hashMs);
+		}
+
+		Log("LOADLOG level=%s step=models_hash ms=%.1f", g_stem,
+			HDModelHashMs() - model_hash_ms);
+		Log("LOADLOG level=%s step=life ms=%.1f", g_stem,
+			loadlog_life - lap_at);
+		Log("LOADLOG level=%s step=redress ms=%.1f", g_stem,
+			loadlog_end - loadlog_life);
+	}
 }
 
 bool HDLevelRedressAllowed()

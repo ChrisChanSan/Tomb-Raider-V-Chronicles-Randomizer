@@ -1717,6 +1717,52 @@ bool LoadSamples()
 	return 1;
 }
 
+/* LOADLOG, with -log: the steps of a level load, one line each with the
+ * milliseconds since the step before - the load thread's steps out of
+ * LoadLevel, the main thread's out of S_LoadLevelFile, and the HD build's
+ * own from hd_level.cpp and hd_object.cpp in the same form. The tick in
+ * front of a log line moves in steps of about 16 ms, coarser than most
+ * steps, so the clock is QueryPerformanceCounter's. Each thread keeps its
+ * own lap; the main thread only waits while the load thread runs. Without
+ * -log no clock is read and nothing is written. */
+static char g_loadlog_level[32];
+static double g_loadlog_thread;
+
+static void LoadLogStep(double* at, const char* step)
+{
+	if (!gLogEnabled)
+		return;
+
+	LARGE_INTEGER now, rate;
+
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&rate);
+
+	const double ms = (double)now.QuadPart * 1000.0 / (double)rate.QuadPart;
+
+	if (step)
+		Log("LOADLOG level=%s step=%s ms=%.1f", g_loadlog_level, step,
+			ms - *at);
+
+	*at = ms;
+}
+
+// The level's name for those lines: the file name without folder or .TRC.
+static void LoadLogLevel(const char* wad)
+{
+	const char* slash = strrchr(wad, '\\');
+	const char* name = slash ? slash + 1 : wad;
+	size_t n = 0;
+
+	while (name[n] && name[n] != '.' && n + 1 < sizeof(g_loadlog_level))
+	{
+		g_loadlog_level[n] = name[n];
+		n++;
+	}
+
+	g_loadlog_level[n] = 0;
+}
+
 unsigned int __stdcall LoadLevel(void* name)
 {
 	OBJECT_INFO* obj;
@@ -1730,7 +1776,9 @@ unsigned int __stdcall LoadLevel(void* name)
 	short data[16];
 
 	Log("Begin " __FUNCTION__);
+	LoadLogStep(&g_loadlog_thread, 0);
 	FreeLevel();
+	LoadLogStep(&g_loadlog_thread, "free");
 	nTextures = 1;
 	Textures[0].tex = 0;
 	Textures[0].width = 0;
@@ -1751,6 +1799,7 @@ unsigned int __stdcall LoadLevel(void* name)
 		S_LoadBar();
 
 		LoadTextures(RTPages, OTPages, BTPages);
+		LoadLogStep(&g_loadlog_thread, "textures");
 
 		fread(data, 1, 32, level_fp);
 		LaraDrawType = data[0] + LARA_NORMAL;
@@ -1775,30 +1824,39 @@ unsigned int __stdcall LoadLevel(void* name)
 		fread(FileData, size, 1, level_fp);
 
 		pData = FileData;
+		LoadLogStep(&g_loadlog_thread, "read");
 
 		LoadRooms();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "rooms");
 
 		LoadObjects();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "moveables");
 
 		LoadSprites();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "sprites");
 
 		LoadCameras();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "cameras");
 
 		LoadSoundEffects();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "sound_fx");
 
 		LoadBoxes();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "boxes");
 
 		LoadAnimatedTextures();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "anim_tex");
 
 		LoadTextureInfos();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "tex_infos");
 
 		// The HD side of the level. Here and not earlier because this is the
 		// first moment the rooms, the meshes and the object slots are all in
@@ -1809,6 +1867,7 @@ unsigned int __stdcall LoadLevel(void* name)
 		// HDEnabled in specific\hd\hd_level.cpp.
 		HDLevelLoad((const char*)name);
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "hd_load");
 
 		pBefore = FileData;
 		size = ReadLong();		//nItems
@@ -1816,6 +1875,7 @@ unsigned int __stdcall LoadLevel(void* name)
 
 		LoadAIInfo();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "ai");
 
 		pAfter = FileData;
 		FileData = pBefore;
@@ -1823,12 +1883,15 @@ unsigned int __stdcall LoadLevel(void* name)
 		LoadItems();
 		S_LoadBar();
 		FileData = pAfter;
+		LoadLogStep(&g_loadlog_thread, "items");
 
 		LoadCinematic();
 		S_LoadBar();
+		LoadLogStep(&g_loadlog_thread, "cinematic");
 
 		if (acm_ready && !App.SoundDisabled)
 			LoadSamples();
+		LoadLogStep(&g_loadlog_thread, "samples");
 
 		free(pData);
 		S_LoadBar();
@@ -1880,6 +1943,7 @@ unsigned int __stdcall LoadLevel(void* name)
 		}
 
 		FileClose(level_fp);
+		LoadLogStep(&g_loadlog_thread, "game_setup");
 		// aInit() and aMakeCutsceneResident() are not called here on the load
 		// thread: both work on the D3D device (room vertex buffers, cutscene
 		// textures) while the main thread presents the load bar, and two
@@ -1981,8 +2045,12 @@ long S_LoadLevelFile(long num)
 	long chosen_screen;
 	long hd_logo;
 	char name[80];
+	double loadlog_at = 0.0;
+	double loadlog_start = 0.0;
 
 	Log(__FUNCTION__);
+	LoadLogStep(&loadlog_at, 0);
+	LoadLogStep(&loadlog_start, 0);
 
 	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
 	{
@@ -2034,6 +2102,7 @@ long S_LoadLevelFile(long num)
 	}
 
 	strcpy(name, &gfFilenameWad[gfFilenameOffset[num]]);
+	LoadLogLevel(name);
 	loadbar_on = 0;
 	strcat(name, ".TRC");
 
@@ -2054,6 +2123,7 @@ long S_LoadLevelFile(long num)
 			ReleaseScreen();
 	}
 
+	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;
 	LevelLoadingThread.ended = 0;
 	LevelLoadingThread.handle = _beginthreadex(0, 0, LoadLevel, name, 0, (unsigned int*)&LevelLoadingThread.address);
@@ -2076,6 +2146,7 @@ long S_LoadLevelFile(long num)
 	}
 
 	Log("S_LoadLevelFile: load thread joined");
+	LoadLogStep(&loadlog_at, "thread");
 
 	// Here and not on the load thread (see the comment in LoadLevel): room
 	// vertex buffers and resident cutscenes belong to the main thread,
@@ -2085,6 +2156,7 @@ long S_LoadLevelFile(long num)
 	{
 		aInit();
 		Log("S_LoadLevelFile: aInit done");
+		LoadLogStep(&loadlog_at, "ainit");
 
 		// The HD geometry and its texture pages. Here on the main thread,
 		// not in HDLevelLoad on the load thread, for the same reason as
@@ -2094,23 +2166,28 @@ long S_LoadLevelFile(long num)
 		// is 0.
 		HDLevelBuild();
 		Log("S_LoadLevelFile: HD build done");
+		LoadLogStep(&loadlog_at, "hd_build");
 
 		// The HD font's own texture, on the same thread for the same
 		// reason. It is made once and kept for the whole
 		// session - the atlas does not change from level to level - so after
 		// the first level this is a comparison and a return.
 		HDFontBuild();
+		LoadLogStep(&loadlog_at, "font");
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
+	LoadLogStep(&loadlog_at, "cutscenes");
 
 	// The level's textures and buffers onto the card before the first frame
 	// asks for them - see the note over WarmUpLevel.
 	WarmUpLevel();
+	LoadLogStep(&loadlog_at, "warmup");
 
 	// PROFLOG counts a level's seconds from here. The name still carries its
 	// .TRC; the profile strips it.
 	ProfileLevel(name);
+	LoadLogStep(&loadlog_at, "profile");
 
 	// The load thread has joined, so loading is done whatever the step
 	// counting says. S_FinishLoadBar puts the bar at 100% (Core's completion
@@ -2123,5 +2200,7 @@ long S_LoadLevelFile(long num)
 			Sleep(1);
 
 	Log("S_LoadLevelFile: load bar finished");
+	LoadLogStep(&loadlog_at, "bar");
+	LoadLogStep(&loadlog_start, "total");
 	return 1;
 }

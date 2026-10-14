@@ -2368,8 +2368,11 @@ minutes, in the levels with the most life). A splash or a spray that is still
 in the air when you press keeps the look it was born with for the rest of its
 life, under a second. And a ripple on an HD water that began while the classic
 draw was on can come back without its ring and show nothing for the rest of its
-life, at most about two seconds. The *HD textures* row of the pause menu's
-options now takes the rooms, the statics and the sky with it at once, as it
+life, at most about two seconds. The crowd of rings and the ripple without
+its ring stay as they are, by decision: the switch is meant for a short
+before-and-after comparison, not for long stretches in the classic draw.
+The *HD textures* row of the pause menu's options now takes the rooms, the
+statics and the sky with it at once, as it
 already did the water's hooks, the mirrors and the projected shadow; the items
 and Lara follow it at the next level, as before.
 

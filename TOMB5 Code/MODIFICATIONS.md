@@ -18278,17 +18278,18 @@ path at `hd_enable` 0 is untouched by construction: every changed gate adds `HDD
 true until a press, to a test that `hd_enable` 0 already answers false, and the 6 classic
 views say the same.
 
-**Left.** The water's life after a stretch drawn classic: its tick runs inside
+**Left.** Two things the switch leaves are closed by a project decision of 2026-10-14,
+with no fix: the water's life after a stretch drawn classic - its tick runs inside
 `HDLifeFrame` (`hd_life.cpp:536`), which the switch skips, so the first HD frame ticks the
-whole stretch and writes every ring of it into the game's ripples at once, and after ten
-minutes it takes 8 to 21 ms more (Measured). The fix belongs to the life's own code
-(`hd_life.cpp`, `hd_life_rules.h` `HDLifeTick`): tick on while the world is drawn classic
-without writing rings, or drop a ring that fell due more than a ring's life before the
-clock. The sheets' ring tracker after a stretch drawn classic (While classic is drawn,
-(b)): a ripple whose slot was taken again during the stretch can come back with no ring
-and no sprite for up to two seconds; the fix belongs to the water's own code
-(`g_ripple_seen`, `hd_render.cpp:11373`, fed only from `HDFrameDrawGlow`), not to a gate
-line. Seven comments describe the gates without the switch, and this pass changed gate
+whole stretch and writes every ring of it into the game's ripples at once, 8 to 21 ms more
+after ten minutes (Measured) - and the sheets' ring tracker after such a stretch (While
+classic is drawn, (b)), where a ripple whose slot was taken again can come back with no
+ring and no sprite for up to two seconds (`g_ripple_seen`, `hd_render.cpp:11373`, fed only
+from `HDFrameDrawGlow`). The decision, in the words given for it: "No, in practice the
+mode is only used for a short before-and-after comparison." Neither is handed to the
+life's or the water's own code.
+
+Seven comments describe the gates without the switch, and this pass changed gate
 lines only, in files the other rounds work in: the comments over `HDLevelActive`
 (`hd_level.cpp:6812`), over the items' guard (`hd_object.cpp:2919`) and `hd_level.h`'s
 note on `HDLevelActive` (`:147`) name the cases without the switch; and four say that

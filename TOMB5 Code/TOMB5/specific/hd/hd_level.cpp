@@ -20,6 +20,8 @@
 #include "hd_lara.h"			// HD_LARA_OUTFIT_* - the data[3] agreement
 #include "hd_markers.h"
 #include "hd_scan.h"
+#include "hd_levelkey.h"		// the HD data kept across a same-level load
+#include "../registry.h"		// REG_PeekString - the outfit in the key
 #include "hd_render.h"
 #include "hd_book.h"			// HDBookClock - the time the material 15 books turn on
 #include "hd_object.h"
@@ -5399,6 +5401,93 @@ bool HDEnabled()
 	return HDInstallRoot()[0] != 0;
 }
 
+/* The HD data kept across a load of the same level (hd_levelkey.h).
+ *
+ * LoadLevel names the level it is about to read (HDLevelKeyNext) before
+ * FreeLevel, and HDLevelUnload holds that key against the key of the data in
+ * memory: when the two are equal it keeps them, HDLevelLoad skips the .TRG
+ * scan and HDLevelBuildHD the build (HDLevelBuildResident). The classic level
+ * read again is the one the data were made from, so the room art, its pages,
+ * the room and static tables and the models are what a build would make
+ * again; what ties into the classic level or changes in play is made again.
+ * With hd_enable off no key is stored and nothing is ever kept. */
+static HDLevelKey g_key_next;		// the level LoadLevel is about to read
+static HDLevelKey g_key_loading;	// the level being loaded or drawn now
+static HDLevelKey g_key_built;		// the level the HD data in memory are of
+static bool g_keep = false;		// HDLevelUnload kept them for this load
+// The kept level's scan counts, for the texture budget (AutoBudgetBytes).
+static int g_kept_vertices = 0;
+static int g_kept_indices = 0;
+
+// One file's size and last write time, both -1 when it is not there.
+static void FileStampOf(const char* path, HDLevelFileStamp* out)
+{
+	WIN32_FILE_ATTRIBUTE_DATA a;
+
+	out->size = -1;
+	out->written = -1;
+
+	if (!path || !*path || !GetFileAttributesExA(path, GetFileExInfoStandard,
+		&a) || (a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+		return;
+
+	out->size = ((long long)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+	out->written = ((long long)a.ftLastWriteTime.dwHighDateTime << 32) |
+		a.ftLastWriteTime.dwLowDateTime;
+}
+
+/* Every path is the one its reader opens: the .TRC as LoadLevel's FileOpen,
+ * the sidecar as HDMarkersLoad finds it beside it, the .TRG as
+ * HDRenderLevelBegin reads it, the two text files in the working folder as
+ * their readers do. */
+void HDLevelKeyNext(const char* wadName)
+{
+	HDLevelKey& k = g_key_next;
+
+	memset(&k, 0, sizeof(k));
+
+	if (!wadName || !*wadName || !HDEnabled())
+		return;
+
+	LevelStem(wadName, k.name, sizeof(k.name));
+
+	if (!k.name[0])
+		return;
+
+	std::string sidecar = wadName;
+	const size_t slash = sidecar.find_last_of("/\\");
+	const size_t dot = sidecar.find_last_of('.');
+
+	if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+		sidecar.erase(dot);
+
+	std::string trg = HDInstallRoot();
+
+	while (!trg.empty() && (trg.back() == '\\' || trg.back() == '/'))
+		trg.pop_back();
+
+	trg += std::string("\\DATA\\") + k.name + ".TRG";
+
+	k.level = (int)gfLevelId;
+	FileStampOf(wadName, &k.trc);
+	FileStampOf((sidecar + ".hdm").c_str(), &k.hdm);
+	FileStampOf(trg.c_str(), &k.trg);
+	FileStampOf("hd_gloss.txt", &k.glossFile);
+	FileStampOf("hd_water.txt", &k.waterFile);
+	snprintf(k.install, sizeof(k.install), "%s", HDInstallRoot());
+	snprintf(k.installTr3, sizeof(k.installTr3), "%s", HDInstallRootTr3());
+	k.air = (int)tomb5.hd_air;
+	k.water = tomb5.hd_water ? 1 : 0;
+	k.objects = tomb5.hd_objects ? 1 : 0;
+	k.budgetMb = (long)tomb5.hd_texture_budget_mb;
+	snprintf(k.format, sizeof(k.format), "%s", tomb5_hd_texture_format);
+
+	if (!REG_PeekString("tomb5", "hd_outfit", k.outfit, sizeof(k.outfit)))
+		k.outfit[0] = 0;
+
+	k.valid = 1;
+}
+
 void HDLevelLoad(const char* wadName)
 {
 	static unsigned char loaded[NUMBER_OBJECTS];
@@ -5489,6 +5578,17 @@ void HDLevelLoad(const char* wadName)
 		Log("HDLOG level=%s markers line this engine has no rule for: %s",
 			g_stem, HDMarkersUnknown(i));
 
+	/* The HD data of this very level are still in memory (HDLevelUnload
+	 * kept them): the scan would read the same .TRG and bind the same slots
+	 * to measure what is already built. Its counts are the kept level's. */
+	if (g_keep)
+	{
+		g_scan_vertices = g_kept_vertices;
+		g_scan_indices = g_kept_indices;
+		Log("LOADLOG level=%s step=scan ms=0.0 skipped=1", g_stem);
+		return;
+	}
+
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 		loaded[i] = objects[i].loaded ? 1 : 0;
 
@@ -5564,6 +5664,117 @@ void HDLevelBuild()
 		HDOutfitMenuFollowFeet();
 }
 
+/* The build of a level whose HD data HDLevelUnload kept for this load
+ * (hd_levelkey.h). Kept as built: the room art and its pages, the room
+ * tables (g_group_hd, the stand rule), the static tables and the models -
+ * made of the level's files and settings, which the key holds equal, and of
+ * the classic level read again from the same file. Made again, as a build
+ * makes them at every level start: the frame counters and the clocks, the
+ * flip table (each room drawn by its own group again, so that sgRestoreGame
+ * flips a savegame's rooms from there through HDFlipRoom), the water sheets
+ * with their splashes, rings, wet films, tanks and falls, the restored water
+ * faces (HDFlipRoom swaps them in play), the water frames' borrowed pages in
+ * the classic Textures[] the load has filled again, the objects' binding to
+ * the classic slots (HDObjectLevelRebind), the water's life and the
+ * re-dress rule. False when the data are not there any more. */
+static bool HDLevelBuildResident(double loadlog_at)
+{
+	if (!HDEnabled() || !g_stem[0] || !HDRenderReady() ||
+		HDRenderGroupCount() <= 0 || number_rooms <= 0 ||
+		number_rooms > HD_MAX_ROOMS)
+		return false;
+
+	g_stand_frame_count = 0;
+	g_flips_done = 0;
+	g_redress_count = 0;
+	g_redress_bytes0 = 0;
+
+	for (int i = 0; i < HD_MAX_ROOMS; i++)
+		g_room_group[i] = (short)i;
+
+	LevelDiagnosticsEnd();
+	strcpy(g_fps_level, g_log_stem);
+
+	g_clipped_lights = 0;
+	g_clipped_bulbs = 0;
+	g_clock = 0.0;
+	g_clock_started = false;
+	g_drawn_clock = 0.0;
+	g_drawn_alpha = 1.0f;
+	g_book_presents = 0;
+	g_bookstep_lines = 0;
+	g_bookstep_page = -1;
+	g_room_count = number_rooms;
+	g_level_active = true;
+
+	const double started = LoadClockMs();
+
+	BuildWaterSheets();
+	const double sheets = LoadClockMs();
+	BuildWaterSurfaces();
+	const double surfaces = LoadClockMs();
+	// Given back on this thread, which owns the device, and borrowed again.
+	ReleaseWaterFramePages();
+	BuildWaterFrames();
+	const double frames = LoadClockMs();
+	HDObjectLevelRebind(HDInstallRoot(), g_stem);
+	const double objects = LoadClockMs();
+	HDLifeLevelBegin(g_stem);
+	const double life = LoadClockMs();
+
+	g_redress_bytes0 = HDPageCacheBytes();
+
+	{
+		HDPageCachePolicy policy;
+
+		HDPageCachePolicyNow(&policy);
+
+		const int side = policy.maxSide > 0 && policy.maxSide < kWidestPage
+			? policy.maxSide : kWidestPage;
+
+		g_redress_page_block =
+			HDRedressPageBlock(policy.format == HD_PAGE_FORMAT_DXT5, side);
+	}
+
+	g_redress_said_unknown = false;
+	RefreshRedress("the level build", true);
+
+	const double ended = LoadClockMs();
+
+	Log("HDLOG level=%s resident build ms=%.1f - the room art, %d page(s), "
+		"the tables and the models kept from the load before", g_stem,
+		ended - loadlog_at, HDPageCacheSlots());
+
+	/* LOADLOG, with -log: the build's steps in the order and under the names
+	 * of a full build's, each step that did not run at 0 with skipped=1. */
+	if (gLogEnabled)
+	{
+		static const char* const skipped[] =
+		{
+			"release", "budget", "marks", "boxes", "gloss", "intr", "air",
+			"pairs", "cuts", "stand", "places", "begin", "trg_read", "prep",
+			"pages", "owners", "verts", "setup", "fill", "index", "hash",
+			"tables", "statics"
+		};
+
+		for (const char* step : skipped)
+			Log("LOADLOG level=%s step=%s ms=0.0 skipped=1", g_stem, step);
+
+		Log("LOADLOG level=%s step=sheets ms=%.1f", g_stem, sheets - started);
+		Log("LOADLOG level=%s step=surfaces ms=%.1f", g_stem,
+			surfaces - sheets);
+		Log("LOADLOG level=%s step=frames ms=%.1f", g_stem,
+			frames - surfaces);
+		Log("LOADLOG level=%s step=objects ms=%.1f", g_stem,
+			objects - frames);
+		Log("LOADLOG level=%s step=models_hash ms=0.0 skipped=1", g_stem);
+		Log("LOADLOG level=%s step=life ms=%.1f", g_stem, life - objects);
+		Log("LOADLOG level=%s step=redress ms=%.1f", g_stem, ended - life);
+	}
+
+	return true;
+}
+
 static void HDLevelBuildHD()
 {
 	HDRenderStats stats;
@@ -5584,6 +5795,22 @@ static void HDLevelBuildHD()
 	// The per-level window list is written again for this level.
 	g_clip_listed = false;
 	g_clip_line_ever = false;
+
+	/* The level whose HD data HDLevelUnload kept for this load: no build,
+	 * only what ties into the classic level and what play changes is made
+	 * again. A keep the device no longer allows falls through to the build,
+	 * whose release below gives back whatever is left. */
+	if (g_keep)
+	{
+		g_keep = false;
+
+		if (HDLevelBuildResident(loadlog_at))
+			return;
+	}
+
+	// Released below, and built again or not at all.
+	g_key_built.valid = 0;
+
 	memset(g_group_hd, 0, sizeof(g_group_hd));
 	memset(g_group_windowed, 0, sizeof(g_group_windowed));
 	memset(g_group_stand, 0, sizeof(g_group_stand));
@@ -6455,6 +6682,11 @@ static void HDLevelBuildHD()
 		Log("LOADLOG level=%s step=redress ms=%.1f", g_stem,
 			loadlog_end - loadlog_life);
 	}
+
+	// The data of this level, for the next load of it to keep.
+	g_key_built = g_key_loading;
+	g_kept_vertices = g_scan_vertices;
+	g_kept_indices = g_scan_indices;
 }
 
 bool HDLevelRedressAllowed()
@@ -6579,10 +6811,30 @@ void HDLevelUnload()
 	g_frame_count = 0;
 	g_room_count = 0;
 	g_stem[0] = 0;
+
+	/* The level about to be read is the one the HD data in memory are of:
+	 * they stay (hd_levelkey.h, HDLevelBuildResident), and so do the static
+	 * tables, which number this same level's rooms and statics. Otherwise
+	 * everything goes as for any other level. A FreeLevel with no load after
+	 * it (GameClose) finds no key and keeps nothing. */
+	const char* refused = HDLevelKeepRefused(&g_key_built, &g_key_next,
+		g_redress_count);
+
+	g_keep = !refused;
+	g_key_loading = g_key_next;
+	memset(&g_key_next, 0, sizeof(g_key_next));
+
+	if (g_key_loading.valid)
+		Log("HDLOG level=%s resident=%d%s%s", g_key_loading.name,
+			g_keep ? 1 : 0, refused ? " refused=" : "", refused ? refused : "");
+
 	/* The static tables point into this level's rooms. */
-	g_static_art.clear();
-	g_static_first.clear();
-	g_destruct_pairs.clear();
+	if (!g_keep)
+	{
+		g_static_art.clear();
+		g_static_first.clear();
+		g_destruct_pairs.clear();
+	}
 
 	/* And so does the water surface table - a roomlet number and a face
 	 * number in the room that is being freed. */
@@ -6616,6 +6868,8 @@ void HDLevelDeviceLost()
 	g_level_active = false;
 	g_frame_count = 0;
 	g_room_count = 0;
+	// The HD data go with the device, so no later load can keep them.
+	g_key_built.valid = 0;
 	// The borrowed water frame pages are references on cache textures that
 	// HDRenderShutdown is about to drop.
 	ReleaseWaterFramePages();

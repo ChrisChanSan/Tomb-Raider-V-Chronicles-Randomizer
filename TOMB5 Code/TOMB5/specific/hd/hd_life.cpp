@@ -21,6 +21,7 @@
 #include "../../tomb5/pch.h"
 #include "hd_life.h"
 #include "hd_life_rules.h"
+#include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
 #include "hd_model.h"
 #include "hd_object.h"
 #include "hd_render.h"
@@ -532,7 +533,7 @@ void HDLifeFrame(double clock)
 	if (g_pool.entries.empty() && g_pool.drips.empty())
 		return;
 
-	if (!life_on())
+	if (!life_on() || !HDDrawn())
 		return;
 
 	const float t = (float)clock;

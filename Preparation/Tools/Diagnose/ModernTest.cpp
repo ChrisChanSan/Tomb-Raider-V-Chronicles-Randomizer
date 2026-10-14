@@ -10677,6 +10677,112 @@ static void hd_switch()
 	}
 }
 
+/* The switch's wiring, in the engine's own text. The gates that ask
+ * HDDrawn() live in hd_level.cpp, hd_object.cpp, hd_laradraw.cpp and
+ * hd_life.cpp, which need the game and are not linked here, so their lines
+ * are counted where they stand: the central question with HDDrawn() in it,
+ * every gate of the HD world asking it, and the readers that must not
+ * switch - the build, the flips, the F4 changer's rebuild, the inventory
+ * ring, the life built at the load - still asking what they asked. A gate
+ * that a later change takes back shows here as a count. */
+static char* hd_switch_text(const char* name)
+{
+	char path[256];
+	FILE* f = 0;
+
+	snprintf(path, sizeof(path), "../../../TOMB5 Code/TOMB5/specific/hd/%s",
+		name);
+
+	if (fopen_s(&f, path, "rb") || !f)
+		return 0;
+
+	fseek(f, 0, SEEK_END);
+
+	const long size = ftell(f);
+	char* text = (char*)malloc((size_t)size + 1);
+
+	fseek(f, 0, SEEK_SET);
+
+	if (text)
+		text[fread(text, 1, (size_t)size, f)] = 0;
+
+	fclose(f);
+	return text;
+}
+
+static int hd_switch_count(const char* text, const char* what)
+{
+	int n = 0;
+
+	for (const char* p = text ? strstr(text, what) : 0; p;
+		p = strstr(p + 1, what))
+		n++;
+
+	return n;
+}
+
+static void hd_switch_wiring()
+{
+	char* level = hd_switch_text("hd_level.cpp");
+	char* object = hd_switch_text("hd_object.cpp");
+	char* lara = hd_switch_text("hd_laradraw.cpp");
+	char* life = hd_switch_text("hd_life.cpp");
+	int n;
+
+	ok(level && object && lara && life, "hd switch wiring: the four files "
+		"are read", !!level + !!object + !!lara + !!life, 4);
+
+	n = hd_switch_count(level,
+		"return g_level_active && HDEnabled() && HDDrawn();");
+	ok(n == 1, "hd switch wiring: HDLevelActive asks HDDrawn", n, 1);
+
+	// GroupOfRoom, HDRoomletDropped, HDRoomShadowHD, HDRoomArtListed,
+	// HDRoomCarries, HDStaticDrawnClassic, StandHolderRoom.
+	n = hd_switch_count(level,
+		"if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)");
+	ok(n == 7, "hd switch wiring: seven room gates ask HDLevelActive", n, 7);
+
+	n = hd_switch_count(level, "if (!HDLevelActive() || group < 0 ||") +
+		hd_switch_count(level, "if (!viewWorld || !HDLevelActive())");
+	ok(n == 2, "hd switch wiring: HDCarriedRoom and HDFrameSky ask it", n,
+		2);
+
+	// The build, the F4 changer's rebuild (three), HDRoomWaterFaceCount
+	// (read in the HD-room branch only) and HDFlipRoom.
+	n = hd_switch_count(level, "!g_level_active");
+	ok(n == 6, "hd switch wiring: six readers keep g_level_active", n, 6);
+
+	n = hd_switch_count(object,
+		"if (!g_active || !tomb5.hd_objects || !HDDrawn())");
+	ok(n == 1, "hd switch wiring: the items' gate asks HDDrawn", n, 1);
+
+	// HDInvBegin, the inventory ring and the pickup display, stays HD.
+	n = hd_switch_count(object, "if (!g_active || !tomb5.hd_objects)\r") +
+		hd_switch_count(object, "if (!g_active || !tomb5.hd_objects)\n");
+	ok(n == 1, "hd switch wiring: the ring's gate does not", n, 1);
+
+	n = hd_switch_count(object,
+		"if (!g_active && !HDLaraDrawActive() && HDDrawn())");
+	ok(n == 1, "hd switch wiring: no release decided while classic", n, 1);
+
+	n = hd_switch_count(lara,
+		"tomb5.hd_objects && HDLaraActive() && HDDrawn();");
+	ok(n == 1, "hd switch wiring: Lara's HD draw asks HDDrawn", n, 1);
+
+	n = hd_switch_count(life, "if (!life_on() || !HDDrawn())");
+	ok(n == 1, "hd switch wiring: the life's frame asks HDDrawn", n, 1);
+
+	n = hd_switch_count(life,
+		"return tomb5.hd_water && HDRenderWaterSheetsBuilt();");
+	ok(n == 1, "hd switch wiring: the life built at the load does not", n,
+		1);
+
+	free(level);
+	free(object);
+	free(lara);
+	free(life);
+}
+
 /* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
  * alpha-pass pages are drawn as a clear floor, out of the smallest and the
  * largest alpha of the page's top mip. The pairs are the measured ones where
@@ -20108,6 +20214,7 @@ int main()
 	camera_flip();
 	camera_mouse();
 	hd_switch();
+	hd_switch_wiring();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

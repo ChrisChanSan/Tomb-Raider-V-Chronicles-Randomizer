@@ -2306,7 +2306,7 @@ values, in the same key as every other setting
 
 | Value | Type | Meaning |
 |---|---|---|
-| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. With `1`, the *HD / SD* key (F12) is the switch between the HD and the classic draw of a built HD level, without a load (**The HD/SD switch** below says how far it reaches in this build); it is not saved, so every game starts at what this value says. |
+| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. With `1`, the *HD / SD* key (F12) is the switch between the HD and the classic draw of a built HD level, without a load (**The HD/SD switch** below says what it switches); it is not saved, so every game starts at what this value says. That makes a third state beside `0` and `1`: the level built HD at its load as with `1`, and the world drawn classic until the key is pressed again. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
@@ -2347,11 +2347,31 @@ items and enemies, Lara, the water, its life and its splashes, the shadows and
 the fog bulbs. What stays as `hd_enable` says: the HUD, the inventory ring and
 the pickup display, the fonts, the loading screens and the F4 outfit changer.
 
-> **In this build the key is wired to the switch and the log, not yet to the
-> picture.** The HD path decides what it draws in several places, and those
-> places are being worked on in other changes at the same time; the switch is
-> connected to them once those are in. Until then a press changes the
-> switch's state and writes the log line below, and the picture stays HD.
+A press shows the change on the next frame: the classic rooms, statics and sky,
+the classic items, enemies and Lara, the level's own water faces, splashes and
+ripples, the fish tank's classic model and the round shadows under everyone;
+press again and the HD world is back as it was. Nothing is loaded, freed or
+rebuilt for it. While the world is drawn classic the HD water's waves, the fish
+tank's water and its wet floor keep time with the game, so the HD picture after
+the second press is, as the engine's code reads (nobody has pressed it in a
+game yet), the one you would have seen had you never pressed, but for the few
+things below. Four things start again or settle when the HD draw comes back:
+Lara's projected shadow fades in over a quarter of a second while her round
+shadow goes out, the soft motion of her chest starts from rest, her braid
+settles back onto her backpack over a few frames (in the classic draw it swings
+against the classic body), and the water's life - the floats, the fish and the
+drips - is brought up to the time in that first frame: its floats and fish
+stand where they would have, but after a long stretch in the classic draw the
+rings they would have made in it all appear at once on that water, and the
+first frame takes a little longer (about 12 to 21 milliseconds after ten
+minutes, in the levels with the most life). A splash or a spray that is still
+in the air when you press keeps the look it was born with for the rest of its
+life, under a second. And a ripple on an HD water that began while the classic
+draw was on can come back without its ring and show nothing for the rest of its
+life, at most about two seconds. The *HD textures* row of the pause menu's
+options now takes the rooms, the statics and the sky with it at once, as it
+already did the water's hooks, the mirrors and the projected shadow; the items
+and Lara follow it at the next level, as before.
 
 Behind `-log`, every press that reaches a level writes one line:
 

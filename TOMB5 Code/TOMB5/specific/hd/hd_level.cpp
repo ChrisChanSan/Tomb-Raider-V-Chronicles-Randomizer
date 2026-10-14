@@ -3722,6 +3722,13 @@ static void BuildRoomIntrusions()
 {
 	g_intrusions.clear();
 
+	// None with the visibility path (BuildRoomVis).
+	if (g_vis_level)
+	{
+		HDRenderSetIntrusions(0, 0);
+		return;
+	}
+
 	/* Who is next door: the portal list of both rooms, and the vertical
 	 * links, which have no portal record at all - a stacked pair is joined
 	 * through FLOOR_INFO::pit_room and sky_room. */
@@ -3860,6 +3867,7 @@ static int g_air_on = 0;
 static void BuildRoomAir()
 {
 	g_air_on = tomb5.hd_air <= 2 ? (int)tomb5.hd_air : 1;
+	g_air_on = g_vis_level ? 0 : g_air_on;	// none with BuildRoomVis' path
 	HDRenderSetAirHulls(g_air_on == 2 ? 1 : 0);
 
 	if (!g_air_on)

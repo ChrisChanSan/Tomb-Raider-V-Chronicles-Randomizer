@@ -2831,6 +2831,12 @@ static int g_unlinked = 1;
  * triangle stands in unlinked air and the build is the box's alone; 2 is 1
  * with the hulls (MarkAirHulls in hd_render.cpp). */
 static int g_air_option = 1;
+/* -vis 1: the engine's tomb5.hd_vis 1 - the build hands no intrusion list
+ * (and so no pair faces), no air and no carried rooms, as BuildRoomVis turns
+ * BuildRoomIntrusions and BuildRoomAir off. */
+static bool g_vis_option = false;
+// -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
+static int g_gpu_runs = 0;
 static int g_window_mode = HD_WINDOW_ALL;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
@@ -10050,8 +10056,10 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out)
  *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
  *                     portals (7, the default, all three)
  *   -visreach <units> -visbare <share> -visguest <triangles>
- *   -visguestrule 0|1 -visoverhang <units>   the tables' numbers in place
- *                     of HDVisDefaults' */
+ *   -visguestrule 0|1|2 -visoverhang <units>   the tables' numbers in place
+ *                     of HDVisDefaults'
+ *   -gpu <n>          the frame's solid room draws timed n times on the GPU
+ *                     after the picture (the print beside the draw calls) */
 static bool VisArg(int argc, char** argv, int* at)
 {
 	const char* a = argv[*at];
@@ -10062,7 +10070,12 @@ static bool VisArg(int argc, char** argv, int* at)
 	if (!strcmp(a, "-vis"))
 	{
 		walkoff::g_vis = atoi(argv[*at + 1]) == 1;
-		printf("-vis: %s\n", walkoff::g_vis ? "the visibility path"
+		g_vis_option = walkoff::g_vis;
+
+		if (g_vis_option)
+			g_air_option = 0;
+
+		printf("-vis: %s\n", g_vis_option ? "the visibility path"
 			: "the room-art rules (default)");
 	}
 	else if (!strcmp(a, "-vissrc"))
@@ -10077,6 +10090,8 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.guestRule = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visoverhang"))
 		walkoff::g_vis_params.overhang = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-gpu"))
+		g_gpu_runs = atoi(argv[*at + 1]);
 	else
 		return false;
 
@@ -11550,7 +11565,7 @@ static int ProbeMain(int argc, char** argv)
 							(long)(ra.numZSectors - 1) * 1024 - rb.originZ);
 
 						if (box.maxs[0] <= box.mins[0] ||
-							box.maxs[2] <= box.mins[2])
+							box.maxs[2] <= box.mins[2] || g_vis_option)
 							continue;
 
 						g_intrusions_built.push_back(box);
@@ -13505,6 +13520,79 @@ static int ProbeMain(int argc, char** argv)
 
 	sprintf(path, "%s_%s_r%d.png", out, stem, room);
 	ShotWrite(shot, path);
+
+	/* -gpu <n>: the GPU's time of the frame's solid room draws - every
+	 * group of the frame, HD_PASS_SOLID, the passes that write depth and
+	 * cost the most - drawn n times after one warm-up draw and timed with
+	 * timestamps, after the picture is written so that the picture is the one
+	 * without it; the median and the worst in ms, the draw calls of one
+	 * draw, and the triangles of the groups drawn, all three passes. */
+	if (g_gpu_runs > 0 && !skyOnly)
+	{
+		IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+		std::vector<double> times;
+		int gpuCalls = 0;
+		long long tris = HDRenderGroupTriangles(room, -1);
+
+		for (int i = 0; i < g_with_count; i++)
+			tris += HDRenderGroupTriangles(g_with_group[i], -1);
+
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]);
+
+		for (int run = 0; run <= g_gpu_runs && q[0] && q[1] && q[2] && q[3];
+			run++)
+		{
+			g_device->BeginScene();
+			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+			DrawOneGroup(room, 0, &lighting, HD_PASS_SOLID);
+
+			for (int i = 0; i < g_with_count; i++)
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					HD_PASS_SOLID);
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			q[3]->Issue(D3DISSUE_END);
+			gpuCalls = HDRenderDrawCalls();
+			HDRenderFrameEnd();
+			g_device->EndScene();
+
+			UINT64 a = 0, b = 0, f = 0;
+			BOOL disjoint = TRUE;
+
+			while (q[0]->GetData(&disjoint, sizeof(disjoint),
+				D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[3]->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			if (run > 0 && !disjoint && f)
+				times.push_back((double)(b - a) * 1000.0 / (double)f);
+		}
+
+		for (int i = 0; i < 4; i++)
+			if (q[i])
+				q[i]->Release();
+
+		std::sort(times.begin(), times.end());
+		printf("-gpu: %d run(s) of the solid room draws, median %.3f ms, worst "
+			"%.3f ms, %d draw call(s), %lld triangle(s) in %d group(s)\n",
+			(int)times.size(), times.empty() ? -1.0 : times[times.size() / 2],
+			times.empty() ? -1.0 : times.back(), gpuCalls, tris,
+			g_with_count + 1);
+	}
 
 	/* -glow: the additive pass of every drawn group again, alone, onto
 	 * black - first over the depth the full frame has just left behind, then

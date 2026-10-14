@@ -145,9 +145,10 @@ namespace
 
 	char g_stem[64] = { 0 };
 
-	// Set by HDLevelBuild and by nothing else. Every frame-path function
-	// tests it first, so switching hd_enable while a level runs changes
-	// nothing until the next level starts, as the option row says.
+	// Set by HDLevelBuild and by nothing else: this level was built HD at
+	// its load. The frame path asks it through HDLevelActive, together with
+	// the HD textures row and the HD/SD switch, which change that answer in
+	// a running level; the build itself follows the row at a load only.
 	bool g_level_active = false;
 
 	/* Whether the level was drawing HD when its device went (DXClose on
@@ -6860,10 +6861,14 @@ int HDCarriedRoom(int group)
 	return GroupOfRoom(main) == group ? main : -1;
 }
 
-/* The one question the room walk asks of the HD path. g_level_active is
- * false with hd_enable off, before a level is built, after HDLevelUnload and
- * in a level whose .TRG had no rooms - and in every one of those the walk in
- * game\draw.cpp carries no reach and is the classic walk. */
+/* The one question the room walk asks of the HD path: a level built HD
+ * (g_level_active), the HD textures row on with an installation found
+ * (HDEnabled) and the HD/SD switch at HD (hd_switch.h, HDDrawn).
+ * g_level_active is false with hd_enable off at the load, before a level is
+ * built, after HDLevelUnload and in a level whose .TRG had no rooms. The row
+ * and the switch are read on every call, so either turns a running level
+ * classic from the next frame on, and back. Whenever this answers false the
+ * walk in game\draw.cpp carries no reach and is the classic walk. */
 bool HDLevelActive()
 {
 	return g_level_active && HDEnabled() && HDDrawn();

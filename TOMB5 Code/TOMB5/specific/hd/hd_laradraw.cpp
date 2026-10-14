@@ -823,7 +823,7 @@ namespace
 	 *   outfit=   the body's model stem, "-" with none
 	 *   state=    on or off
 	 *   reason=   ok, or why it is off: young (a young-Lara level), classic
-	 *             (no HD Lara), option (switched off), or the region's own
+	 *             (no HD Lara drawn), option (turned off), or the region's own
 	 *             refusal - no_body, and in the finder's order no_axes,
 	 *             no_front, no_torso, band_empty, band_edge, flat,
 	 *             asymmetric, radius, deep, sparse

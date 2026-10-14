@@ -31,6 +31,7 @@
 #include "../specific/function_stubs.h"	// Log, gLogEnabled - the MENULOG seam
 #include "../specific/hd/hd_level.h"		// HDEnabled - the Shadow mode row's fifth state
 #include "../specific/hd/hd_shadow.h"		// HDShadowBlobMode - what a stored 5 draws without HD
+#include "../specific/hd/hd_switch.h"	// HDSwitchOption - HD textures
 #include "../tomb5/tomb5.h"
 #include "../tomb5/troyestuff.h"
 
@@ -762,10 +763,17 @@ static bool MenuStepHdTextures(long, long dir)
 		return 0;
 
 	// The Remaster's room art, read from the player's own installation.
-	// It is taken at the start of a level (base troyestuff.cpp Page0), so
-	// this row shows what the next level will do, not the level on screen.
+	// The row is the option and the HD/SD switch in one: the HD data are
+	// built at a level's load as the option says, and the world of the
+	// level on screen follows the row on the next drawn frame, whole, when
+	// its load built them (specific/hd/hd_switch.h, HDSwitchOption). The
+	// rooms' answer is taken before the write: HDLevelActive answers only
+	// while the row is on.
+	const bool rooms = HDLevelActive();
+
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
 	tomb5.hd_enable = !tomb5.hd_enable;
+	HDSwitchOption(tomb5.hd_enable != 0, rooms);
 	return 1;
 }
 
@@ -807,9 +815,10 @@ static bool MenuStepBodyPhysics(long, long dir)
 /* HD water, tomb5.hd_water: this project's water surface over every water
  * square of an HD level the sheet can cover - over an underwater room, in a
  * room drawn HD - or the level's own restored water faces in its place.
- * Like HD textures it is taken at the start of a level
- * (specific/hd/hd_level.cpp, BuildWaterSheets), so the row shows what the
- * next level will do, and it is offered whatever the level on screen draws. */
+ * It is taken at the start of a level (specific/hd/hd_level.cpp,
+ * BuildWaterSheets), so the row shows what the next level will do - unlike
+ * HD textures, which switches the world on screen at once - and it is
+ * offered whatever the level on screen draws. */
 static const char* MenuValHdWater(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.hd_water ? "on" : "off"));

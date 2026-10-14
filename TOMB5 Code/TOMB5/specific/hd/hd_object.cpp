@@ -2953,9 +2953,10 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 			return BEGIN_BAKED;
 	}
 
-	// The guard. With hd_objects off, or before a level built its models,
-	// this is where DrawAnimatingItem turns round and draws what it always
-	// drew.
+	// The guard. With hd_objects off, before a level built its models, or
+	// while the HD/SD switch or the HD textures row has the world drawn
+	// classic (hd_switch.h, HDDrawn), this is where DrawAnimatingItem turns
+	// round and draws what it always drew.
 	if (!g_active || !tomb5.hd_objects || !HDDrawn())
 		return BEGIN_NONE;
 

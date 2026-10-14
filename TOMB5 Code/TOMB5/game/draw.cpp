@@ -3616,9 +3616,9 @@ void DrawStaticObjects(short room_number)
 	 * art at every angle; such a static with no piece is drawn here while no
 	 * holder is listed. A static the .TRG has nothing for
 	 * is still drawn here (103 of the game's 2,845), in any room. The answer
-	 * follows the level as it was built, not the hd_enable option: switched
-	 * off in a running level, the art goes on drawing its rooms until the
-	 * next level, and the statics it holds stay out with it.
+	 * follows the level as it was built and, on every frame, the HD textures
+	 * row and the HD/SD switch (HDLevelActive): while they have the world
+	 * drawn classic the art draws no room, and every static is drawn here.
 	 *
 	 * A static the game destroys at run time is handled on the other side:
 	 * the .TRG's own destructible pieces are switched off with their

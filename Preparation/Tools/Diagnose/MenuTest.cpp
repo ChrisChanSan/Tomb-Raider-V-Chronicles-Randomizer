@@ -13,10 +13,11 @@
 
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
- * Build with bmenu.bat, run with no arguments from this folder: the last five
- * families (pad_scheme_repair, controls_mouse_rows, graphics_softbody_row,
- * graphics_water_row and graphics_shadow_row) read engine files as text, by
- * their paths relative to it, because the tables and rows they check live in
+ * Build with bmenu.bat, run with no arguments from this folder: the last
+ * seven families (pad_scheme_repair, controls_mouse_rows,
+ * graphics_softbody_row, graphics_water_row, graphics_shadow_row,
+ * hd_switch_rows and graphics_hd_row) read engine files as text, by their
+ * paths relative to it, because the tables and rows they check live in
  * files that cannot be linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
@@ -45,6 +46,7 @@
 #include "../../../TOMB5 Code/TOMB5/game/key_scheme.h"
 #include "../../../TOMB5 Code/TOMB5/game/pad_scheme.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"	// the Shadow mode row's numbers and blob mode
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.h"	// HDSwitchSet
 
 static int g_checks;
 static int g_fail;
@@ -2756,6 +2758,124 @@ static void hd_switch_rows()
 	free(reg);
 }
 
+/* -------------------------------------------------- the HD textures row -- */
+
+/* The row's step as game\menu_frame.cpp's MenuStepHdTextures does it,
+ * stated again because that file cannot be linked: the stored option
+ * flips, and the HD/SD switch takes the new value through
+ * specific\hd\hd_switch.h's own HDSwitchSet, included. `hd` is whether the
+ * level on screen was built HD. graphics_hd_row holds the engine's lines
+ * against it. */
+static int hd_row_step(unsigned long* stored, HDSwitchState* s, int hd)
+{
+	*stored = !*stored;
+	return HDSwitchSet(s, (int)*stored, hd);
+}
+
+static const char* hd_row_text(unsigned long stored)
+{
+	return stored ? "on" : "off";
+}
+
+/* The HD textures row on the Graphics page: one table line, saved with the
+ * tomb5 settings, reached by the title's and the pause menu's options alike
+ * (both call DoOptions, which runs the one table); its text and its stored
+ * value as before; its step moving the value AND the switch's state, swept
+ * over both values, both states and both answers of the level's data. */
+static void graphics_hd_row()
+{
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* save = tree_file("../../../TOMB5 Code/TOMB5/specific/LoadSave.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+
+	check(frame && save && flow && opts, 1,
+		"hd textures row: the four engine files are readable from here");
+
+	if (frame && save && flow && opts)
+	{
+		check(tree_count(frame, "MENU_VALUE(\"HD textures\", "
+			"MenuValHdTextures, MenuStepHdTextures, MENU_SAVE_TOMB5),"), 1,
+			"hd textures row: one value row, saved with the tomb5 settings");
+		check(tree_count(frame, "\"HD textures\""), 1,
+			"hd textures row: and no second row of that name");
+
+		// Both menus run the one table.
+		check(strstr(save, "void DoOptions()\r\n{\r\n\tMenuFrameRun();") !=
+			0 || strstr(save, "void DoOptions()\n{\n\tMenuFrameRun();") != 0,
+			1, "hd textures row: DoOptions runs the one table");
+		check(tree_count(save, "\t\tDoOptions();") + tree_count(flow,
+			"\t\tDoOptions();"), 2,
+			"hd textures row: the pause menu and the title both call it");
+
+		// The text and the stored value, as before.
+		check(strstr(frame, "CustomText(tomb5.hd_enable ? \"on\" : \"off\")")
+			!= 0, 1, "hd textures row: it shows the option's on and off");
+		check(tree_count(opts, "sprintf(buf, \"hd_enable\");"), 3,
+			"hd textures row: hd_enable written first, read and saved");
+		check(strstr(opts, "REG_ReadBool(buf, tomb5.hd_enable, 0);") != 0,
+			1, "hd textures row: a registry without it reads as off");
+
+		// The step: the rooms' answer, the write, the switch - in order.
+		{
+			const char* fn = strstr(frame,
+				"static bool MenuStepHdTextures(long, long dir)");
+			const char* end = fn ? strstr(fn, "\n}") : 0;
+			const char* rooms = fn ? strstr(fn,
+				"const bool rooms = HDLevelActive();") : 0;
+			const char* write = fn ? strstr(fn,
+				"tomb5.hd_enable = !tomb5.hd_enable;") : 0;
+			const char* set = fn ? strstr(fn,
+				"HDSwitchOption(tomb5.hd_enable != 0, rooms);") : 0;
+
+			check(fn && end && rooms && write && set && rooms < write &&
+				write < set && set < end, 1, "hd textures row: the step asks "
+				"the rooms, writes, then sets the switch");
+			check(tree_count(frame, "HDSwitchOption("), 1,
+				"hd textures row: the one caller of the switch's setter");
+		}
+	}
+
+	// The step's table: the value flips, the state follows it, held alone.
+	for (unsigned long v = 0; v < 2; v++)
+		for (int drawn = 0; drawn < 2; drawn++)
+			for (int hd = 0; hd < 2; hd++)
+			{
+				unsigned long stored = v;
+				HDSwitchState s = { drawn, 1 };
+				const int what = hd_row_step(&stored, &s, hd);
+				const int want = !hd ? HD_SWITCH_NOTHING :
+					drawn != (int)stored ? HD_SWITCH_FLIPPED : HD_SWITCH_NONE;
+
+				check((int)stored, (int)!v,
+					"hd textures row: a step either way toggles the value");
+				check(strcmp(hd_row_text(stored), v ? "off" : "on"), 0,
+					"hd textures row: and the text shows the new value");
+				check(s.drawn, (int)stored,
+					"hd textures row: the switch takes the row's value");
+				check(what, want, "hd textures row: a flip on a change, "
+					"nothing to switch without data");
+				check(s.held, 1,
+					"hd textures row: the key's held state untouched");
+			}
+
+	// Two steps give the value and the state back.
+	{
+		unsigned long stored = 1;
+		HDSwitchState s = HD_SWITCH_START;
+
+		hd_row_step(&stored, &s, 1);
+		hd_row_step(&stored, &s, 1);
+		check((int)stored * 10 + s.drawn, 11,
+			"hd textures row: two steps, the value and the draw as before");
+	}
+
+	free(frame);
+	free(save);
+	free(flow);
+	free(opts);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -2785,6 +2905,7 @@ int main()
 	graphics_water_row();
 	graphics_shadow_row();
 	hd_switch_rows();
+	graphics_hd_row();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

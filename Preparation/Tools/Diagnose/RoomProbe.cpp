@@ -581,7 +581,9 @@
  *                     pointer read, then reads the CRASH line of crash.txt
  *                     back and checks the minidump beside it (MDMP header).
  *     -hddrawn 0|1    the HD level built, drawn HD (1, the default) or
- *                     classic (0): the classic faces of the seed room and of
+ *                     classic (0), as the tool's HDDrawn() answers after the
+ *                     switch's own press rule (hd_switch.h): while it answers
+ *                     false the classic faces of the seed room and of
  *                     every -with room in place of the art, as -classicroom
  *                     for each with -classiconly. Needs -roombox. The faces
  *                     come from the .TRC, not from the build, so the
@@ -9329,16 +9331,35 @@ namespace probemarks
 	}
 }
 
-/* -hddrawn 0|1: the switch's classic state as far as the tool can draw one.
- * 1, the default, is the picture as ever. 0 is a shorthand for -classicroom
- * of the seed room and of every -with room, with -classiconly: the rooms'
- * faces read fresh from the .TRC in -roombox and drawn flat grey, after the
- * whole HD build has run. The build does not reach those faces, so the
- * picture equals that of the explicit list by construction and says nothing
- * about what the build changes in the game's classic draw; that is read from
- * the engine's code. A branch of its own in the option chain would pass the
- * compiler's nesting limit (C1061), so the chain's last else calls this, and
- * this reports any other argument as unknown. */
+/* The HD/SD switch in the tool. Its state moves by the engine's own rule
+ * (hd_switch.h, HDSwitchStep) from the engine's own start, HD_SWITCH_START,
+ * and HDDrawn() answers from it as the engine's does. The engine's HDDrawn
+ * lives in hd_switch.cpp, which needs the game and is not linked here; the
+ * gates that ask it in the game (hd_level.cpp, hd_object.cpp,
+ * hd_laradraw.cpp, hd_life.cpp) are not linked either, so the tool asks
+ * HDDrawn() once, where its frame's rooms are listed. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.h"
+
+static HDSwitchState g_hd_switch = HD_SWITCH_START;
+
+bool HDDrawn()
+{
+	return g_hd_switch.drawn != 0;
+}
+
+/* -hddrawn 0|1: the switch pressed until HDDrawn() answers 1 (the default,
+ * the picture as ever) or 0. A press is a key-down edge read live with HD
+ * data, then the key up again, so 0 is one press from the start. While
+ * HDDrawn() answers false the frame draws, in place of the art, the
+ * classic faces of every room it lists - the seed room and every -with
+ * room -, as InsertRoom draws a room's roomlets when its HD question
+ * answers false: -classicroom for each, with -classiconly, after the whole
+ * HD build has run. The tool's classic faces are read fresh from the .TRC
+ * in -roombox and drawn flat grey, so this picture is the one the explicit
+ * list gives; what the game's classic frame draws after an HD load is read
+ * from the engine's code. A branch of its own in the option chain would
+ * pass the compiler's nesting limit (C1061), so the chain's last else calls
+ * this, and this reports any other argument as unknown. */
 static void HDDrawnSwitch(int argc, char** argv, int& at)
 {
 	if (strcmp(argv[at], "-hddrawn") || at + 1 >= argc)
@@ -9347,7 +9368,17 @@ static void HDDrawnSwitch(int argc, char** argv, int& at)
 		return;
 	}
 
-	if (atoi(argv[++at]))
+	const int drawn = atoi(argv[++at]) ? 1 : 0;
+
+	if (drawn != (HDDrawn() ? 1 : 0))
+	{
+		HDSwitchStep(&g_hd_switch, 1, 1, 1);
+		HDSwitchStep(&g_hd_switch, 0, 1, 1);
+	}
+
+	printf("hddrawn: HDDrawn() %d\n", HDDrawn() ? 1 : 0);
+
+	if (HDDrawn())
 		return;
 
 	std::vector<int> want(1, atoi(argv[3]));

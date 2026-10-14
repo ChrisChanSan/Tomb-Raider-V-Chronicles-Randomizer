@@ -2051,8 +2051,11 @@ water surface", carries the tables.
     pictures, the spread from the textbook round jet. Since `996e85a6`
     the noise's lattice values are a 64 x 64 table filled with the life's
     mixer (`HDSpringNoiseTexel`) and read with wrap and a linear filter -
-    the column's first version took them from a published third-party
-    shader hash without crediting it, and no line of that hash is left;
+    the column's first version took them from a published third-party shader
+    hash without crediting it - that hash was 'Hash without Sine' by David
+    Hoskins (2014), published under the MIT licence according to its own
+    header, and it stands only in the commits de4cce39 to 58b3e8fb of the
+    round's branch history - and no line of that hash is left;
     rgb and alpha are the share a, whole from half the weight up, the
     bend at most 96 units on cells 24 across and 96 along the line: OWN,
     set by eye on RoomProbe pictures from under the water.

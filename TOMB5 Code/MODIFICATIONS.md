@@ -14453,27 +14453,33 @@ the same level, started from `invalidated: load menu`): `log_test16` line 92151 
 3,219 ms against the fresh RICH2 before it 3,172; `log_test18` line 18254 RICH2, 4,094
 against 4,047. A load inside the level costs what a fresh load of it costs.
 
-*FILL, split* (the scaffold, `RoomProbe -loadtime -threads 16`, three runs each over the
-fifteen levels at `hd_air` 1 and 2, medians). This machine is slower than the owner's; the
-fair scale is the pages, whose code did not change between his builds and this one: the
-probe's pages over his are 1.8 to 3.6 per level, RICH2 at `hd_air 2` 3.16 - and there
-the probe's fill over his (`log_test18`) is 3.17. RICH2, `hd_air 2`, probe ms / 3.16
-(his own in brackets): fill 1,281 [1,277] = `MarkAirHulls` 685 (53 %), the pool's
-`fill_group` 332 (26 %), `MarkCarryCells` 134, the join 44, `MarkCoveredFaces` 8; the
-pool keeps 4.4 of its 16 threads busy on average (4,653 processor ms in 1,048 wall ms on
-the probe), held by the largest group. At `hd_air 1` RICH2's fill is 1,842 probe ms
-against 4,049: the second setting doubles it, through the hulls (x 2.6) and the pool
-(x 1.7). `MarkAirHulls` is the largest part of fill on 12 of the 15 levels; the pool on
-ANDREA2, JOBY4 and RICHCUT2. The owner's air-1 logs are of the build of 2026-10-12,
-before the hulls: their `fill` cannot be scaled.
+*FILL, split* (the scaffold, `RoomProbe -loadtime -threads 16`, three runs each over
+the fifteen levels at `hd_air` 1 and 2, medians, on a quiet machine - a first sweep
+taken while three other rounds built on it came out two to two and a half times
+slower and was discarded). The fair scale between this machine and the owner's is
+the pages, whose code did not change between his builds and this one: the probe's
+pages over his lie between 0.93 and 1.65 per level, RICH2 at `hd_air 2` 1.33; where
+he has an `hd_air 2` log the fill agrees with that within about 10 % (RICH2 1.26,
+ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). RICH2, `hd_air 2`, probe ms / 1.33 (his own
+in brackets): fill 1,205 [1,277] = `MarkAirHulls` 512 (42 %), the pool's
+`fill_group` 419 (35 %), `MarkCarryCells` 173 (14 %), the join 47,
+`MarkCoveredFaces` 11; the pool keeps 5.2 of its 16 threads busy on average (2,869
+processor ms in 557 wall ms on the probe), held by the largest group. At this build
+`hd_air 1` costs nearly what 2 does (RICH2 fill 1,445 against 1,603), because
+`MarkAirHulls` runs whenever the air is on; the owner's `hd_air 1` logs are of the
+build of 2026-10-12, before that, and their `fill` is no guide to this one.
+`MarkAirHulls` is the largest part of fill on 12 of the 15 levels; the pool on
+ANDREA2, RICHCUT2 and TITLE.
 
-*The three largest parts of `built`* (RICH2, `hd_air 2`): `MarkAirHulls` 685 ms - serial
-on the main thread, every index's world cell sorted (O(I log I), I = 4,736,961) and
-`AirHostsOf` asked of every triangle (O(T log C), T = 1,578,987), which the fill asks
-again per group; the pages 580 (his line: read 32, decode 408 on 16 threads, upload 132;
-linear in 319.9 MiB); the pool's fill 332 + join 44 (O(T x boxes), held by the largest
-group). The steps before the build are 0.0 to 3.4 ms each (`BuildRoomIntrusions` and the
-air's links O(R^2) over 179 rooms, `BuildPairFaces` O(R x faces x boxes)).
+*The three largest parts of `built`* (RICH2, `hd_air 2`): the pages 580 ms (his line: read
+32, decode 408 on 16 threads, upload 132; linear in 319.9 MiB of texels, the BC7 decoder's
+throughput); `MarkAirHulls` 512 - serial on the main thread, every index's world cell
+sorted (O(I log I), I = 4,736,961) and `AirHostsOf` asked of every triangle (O(T log C), T
+= 1,578,987), which the fill asks again per group; the pool's fill 419 + join 47 (O(T x
+boxes), held by the largest group). The pages are the largest part of `built` on 14 of the
+15 levels (ANDREA2: the pool). The steps before the build take between 0.0 and 3.4 ms each
+(`BuildRoomIntrusions` and the air's links O(R^2) over 179 rooms, `BuildPairFaces` O(R x
+faces x boxes)).
 
 *The seam's cost* (`RoomProbe -loadtime` against `-nodraw`, read + build ms, five runs
 each, `hd_air 2`): RICH2 3,000 -> 3,034 (+1.1 %), ANDREA2 3,033 -> 2,915 (-3.9 %), JOBY2
@@ -14538,8 +14544,8 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
   split into its binding and its models; the build hash proves a resident level equal to
   a fresh one.
 - *C - the HD build faster for every load*, at most (RICH2, `hd_air 2`): the hulls per
-  group on the pool and their answers reused by the fill, 685; the largest groups split
-  across the pool, about 250 of 332; `MarkCarryCells` on the pool, 134; the `.TRG` read
+  group on the pool and their answers reused by the fill, 512; the largest groups split
+  across the pool, about 300 of 419; `MarkCarryCells` on the pool, 173; the `.TRG` read
   once instead of twice, 67 (the parsed file, about 45 MiB, lives longer in a 32-bit
   process); the pages decoded on the loading thread while the classic level loads,
   about 150; the models' 999 `.TRM` opens, at most 241; a sidecar of the whole room

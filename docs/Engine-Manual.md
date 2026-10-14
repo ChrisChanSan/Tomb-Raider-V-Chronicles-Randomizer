@@ -3188,8 +3188,8 @@ the HD build is 50 to 72 percent, the loading thread with the classic level 5
 to 15, and the loading bar running up to its end after the work is done 12 to
 40 (0.34 to 0.72 seconds every load). In the HD build of RICH2 at `hd_air 2`
 the room build is about 2.1 seconds, and inside it the three largest parts are
-the air's hulls asked of every triangle on one thread (about 0.7), the texture
-pages (0.6) and every room's triangles on the pool (0.4); the objects add 0.6.
+the texture pages (about 0.6), the air's hulls asked of every triangle on one
+thread (0.5) and every room's triangles on the pool (0.5); the objects add 0.6.
 A load of a savegame inside the level you are in costs exactly what a fresh
 load of that level costs. The `LOADLOG` lines (*When something looks wrong*)
 time every step of a load on your machine.

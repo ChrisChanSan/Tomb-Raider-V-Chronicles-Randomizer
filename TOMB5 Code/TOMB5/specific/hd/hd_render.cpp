@@ -25,6 +25,7 @@
 #include <d3d9.h>
 
 #include "hd_render.h"
+#include "hd_vis.h"
 #include "hd_pagecache.h"
 #include "hd_book.h"
 
@@ -8386,6 +8387,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	MarkCoveredFaces(trg);
 	// And the copies among the carried art (MarkCarryCells).
 	MarkCarryCells(trg);
+	// The visibility path's tables, when the level asks for them (hd_vis.h).
+	HDVisLevelBuild(trg);
 
 	/* The biggest groups first, so that no thread is left alone with a big
 	 * one at the end. Only the order the work is handed out in: every group

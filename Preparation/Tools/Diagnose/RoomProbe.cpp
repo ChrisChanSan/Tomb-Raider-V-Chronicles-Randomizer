@@ -641,6 +641,8 @@ char tomb5_hd_install_tr3[260];
  * survey can hold the level's own faces against the .TRG's art through the
  * engine's own gate. Nothing else in this tool needs a classic level. */
 #include "core/Tr5Level.h"
+// The visibility path's tables and their classic side (-vis).
+#include "VisInput.h"
 /* The vendored .TRG reader, for the one thing the walk asks of the art
  * without building it: which groups have any triangle (walkoff::LoadHd). */
 #include "trf_remaster/Trg.h"
@@ -3496,10 +3498,265 @@ namespace walkoff
 		Note(fromRoom, rn, classicOk ? "reached" : "reach", aL, aT, aR, aB);
 	}
 
+	/* -vis 1: the visibility path's walk (game\draw.cpp, VisExtend and
+	 * VisFollowPortal) over the tables hd_vis.cpp builds out of the .TRG and
+	 * the .TRC (LoadHd), with the reach off. `g_vis_sources` (-vissrc) lets
+	 * the walk ask the three tables one by one: bit 0 the guests, bit 1 the
+	 * openings, bit 2 the wide portals. `g_vis_why` is per room the source
+	 * that queued it first, as VISLOG prints it: 0 the portals or the seed,
+	 * 1 a guest, 2 an opening, 3 a wide portal, 0xff not queued. */
+	static bool g_vis = false;
+	static int g_vis_sources = 7;
+	static HDVisParams g_vis_params = HDVisDefaults();
+	static HDVisTables g_vis_tables;
+	static std::vector<HDVisRoom> g_vis_rooms;
+	static std::vector<HDCoverFace> g_vis_faces;
+	static std::vector<HDVisPortal> g_vis_portals;
+	static std::vector<int> g_vis_links;
+	static std::vector<unsigned char> g_vis_why;
+	static int g_vis_count[4] = { 0, 0, 0, 0 };
+
+	// The group a room holds now, as hd_level.cpp's g_room_group.
+	static int VisContents(int room)
+	{
+		return room >= 0 && (size_t)room < g_group_of.size()
+			? g_group_of[(size_t)room] : room;
+	}
+
+	// HDVisRoomOfGroup (hd_level.cpp) over -flip's mapping.
+	static int VisRoomOfGroup(int group)
+	{
+		if (group < 0 || (size_t)group >= g_room.size())
+			return -1;
+
+		const int main = (size_t)group < g_main_of.size()
+			? g_main_of[(size_t)group] : -1;
+
+		if (main < 0)
+			return group;
+
+		return g_group_of[(size_t)main] == group ? main : -1;
+	}
+
+	static void VisNote(int rn, int why, char before)
+	{
+		if (rn < 0 || (size_t)rn >= g_vis_why.size() || (before & 3) ||
+			!(g_room[(size_t)rn].bound_active & 2) ||
+			g_vis_why[(size_t)rn] != 0xff)
+			return;
+
+		g_vis_why[(size_t)rn] = (unsigned char)why;
+		g_vis_count[why]++;
+	}
+
+	// VisQueue (game\draw.cpp).
+	static void VisQueue(int rn, Room& actualRoom, float tL, float tT,
+		float tR, float tB, int fromRoom)
+	{
+		Room& r = g_room[(size_t)rn];
+
+		if (tL < actualRoom.test_left) tL = actualRoom.test_left;
+		if (tR > actualRoom.test_right) tR = actualRoom.test_right;
+		if (tT < actualRoom.test_top) tT = actualRoom.test_top;
+		if (tB > actualRoom.test_bottom) tB = actualRoom.test_bottom;
+
+		if (tL >= tR || tT >= tB)
+		{
+			Note(fromRoom, rn, "empty", tL, tT, tR, tB);
+			return;
+		}
+
+		if (r.left <= tL && r.right >= tR && r.top <= tT && r.bottom >= tB)
+		{
+			Note(fromRoom, rn, "covered", r.left, r.top, r.right, r.bottom);
+			return;
+		}
+
+		if (r.bound_active & 2)
+		{
+			if (tL < r.test_left) r.test_left = (short)tL;
+			if (tT < r.test_top) r.test_top = (short)tT;
+			if (tR > r.test_right) r.test_right = (short)tR;
+			if (tB > r.test_bottom) r.test_bottom = (short)tB;
+			Note(fromRoom, rn, "widened", tL, tT, tR, tB);
+			return;
+		}
+
+		g_list[g_end % kRing] = rn;
+		g_end++;
+
+		if (g_end - g_start > g_queue_peak)
+			g_queue_peak = g_end - g_start;
+
+		r.bound_active |= 2;
+		r.test_left = (short)tL;
+		r.test_right = (short)tR;
+		r.test_top = (short)tT;
+		r.test_bottom = (short)tB;
+		Note(fromRoom, rn, "reached", tL, tT, tR, tB);
+	}
+
+	// VisGuestBounds (game\draw.cpp).
+	static void VisGuestBounds(const HDVisGuest& guest, int rn, Room& r,
+		const float* mx, int fromRoom)
+	{
+		float tL = 1e30f, tR = -1e30f, tT = 1e30f, tB = -1e30f;
+		int behind = 0;
+
+		for (int c = 0; c < 8; c++)
+		{
+			const float lx = ((c & 1) ? guest.hi[0] : guest.lo[0]) - (float)r.x;
+			const float ly = ((c & 2) ? guest.hi[1] : guest.lo[1]) - (float)r.y;
+			const float lz = ((c & 4) ? guest.hi[2] : guest.lo[2]) - (float)r.z;
+			float x = mx[0] * lx + mx[1] * ly + mx[2] * lz + mx[3];
+			float y = mx[4] * lx + mx[5] * ly + mx[6] * lz + mx[7];
+			float z = mx[8] * lx + mx[9] * ly + mx[10] * lz + mx[11];
+
+			if (z <= 0)
+			{
+				behind++;
+				continue;
+			}
+
+			z /= g_persp;
+
+			if (!z)
+			{
+				behind++;
+				continue;
+			}
+
+			x = x / z + g_centerx;
+			y = y / z + g_centery;
+
+			if (x - 1 < tL) tL = x - 1;
+			if (x + 1 > tR) tR = x + 1;
+			if (y - 1 < tT) tT = y - 1;
+			if (y + 1 > tB) tB = y + 1;
+		}
+
+		if (behind == 8)
+		{
+			Note(fromRoom, rn, "toonear", 8, 0, 0, 0);
+			return;
+		}
+
+		if (behind)
+		{
+			tL = 0;
+			tT = 0;
+			tR = (float)g_winxmax;
+			tB = (float)g_winymax;
+		}
+
+		VisQueue(rn, r, tL, tT, tR, tB, fromRoom);
+	}
+
+	// A portal record out of an opening's or a wide portal's corners.
+	static Tr5Level::PortalRecord VisRecord(int to, const short n[3],
+		const short v[4][3])
+	{
+		Tr5Level::PortalRecord p;
+
+		p.toRoom = to;
+		p.nx = n[0];
+		p.ny = n[1];
+		p.nz = n[2];
+
+		for (int c = 0; c < 4; c++)
+			for (int k = 0; k < 3; k++)
+				p.v[c][k] = v[c][k];
+
+		return p;
+	}
+
+	// VisExtend (game\draw.cpp).
+	static void VisExtend(int here, Room& r, const float* mx)
+	{
+		const int c = VisContents(here);
+		const HDVisTables& t = g_vis_tables;
+
+		if (c < 0 || c >= t.rooms)
+			return;
+
+		for (int k = 0; (g_vis_sources & 1) && k < t.guestCount[(size_t)c]; k++)
+		{
+			const HDVisGuest& g =
+				t.guests[(size_t)(t.guestFirst[(size_t)c] + k)];
+			const int b = VisRoomOfGroup(g.group);
+
+			if (b < 0 || (size_t)b >= g_room.size() || b == here)
+				continue;
+
+			const char before = g_room[(size_t)b].bound_active;
+
+			VisGuestBounds(g, b, r, mx, here);
+			VisNote(b, 1, before);
+		}
+
+		for (int k = 0; (g_vis_sources & 2) && k < t.openCount[(size_t)c]; k++)
+		{
+			const HDVisOpening& o =
+				t.openings[(size_t)(t.openFirst[(size_t)c] + k)];
+			const float ex = (float)(g_eye[0] - r.x);
+			const float ey = (float)(g_eye[1] - r.y);
+			const float ez = (float)(g_eye[2] - r.z);
+			const float side = o.n[0] * ((float)o.v[0][0] - ex) +
+				o.n[1] * ((float)o.v[0][1] - ey) +
+				o.n[2] * ((float)o.v[0][2] - ez);
+
+			if (side >= 0 || o.behind < 0 ||
+				(size_t)o.behind >= g_room.size() || o.behind == here)
+				continue;
+
+			const char before = g_room[(size_t)o.behind].bound_active;
+
+			SetRoomBounds(VisRecord(o.behind, o.n, o.v), o.behind, r, mx, here);
+			VisNote(o.behind, 2, before);
+		}
+	}
+
+	// VisFollowPortal (game\draw.cpp): `d` is the portal's index in the room.
+	static void VisFollow(const Tr5Level::PortalRecord& p, size_t d, int to,
+		Room& r, const float* mx, int fromRoom)
+	{
+		char before = g_room[(size_t)to].bound_active;
+
+		SetRoomBounds(p, to, r, mx, fromRoom);
+		VisNote(to, 0, before);
+
+		const int c = VisContents(fromRoom);
+		const HDVisTables& t = g_vis_tables;
+
+		if (!(g_vis_sources & 4) || c < 0 || c >= t.rooms)
+			return;
+
+		for (int k = 0; k < t.wideCount[(size_t)c]; k++)
+		{
+			const HDVisWide& w = t.wides[(size_t)(t.wideFirst[(size_t)c] + k)];
+
+			if (w.portal != (int)d)
+				continue;
+
+			const short n[3] = { (short)p.nx, (short)p.ny, (short)p.nz };
+
+			before = g_room[(size_t)to].bound_active;
+			SetRoomBounds(VisRecord(to, n, w.v), to, r, mx, fromRoom);
+			VisNote(to, 3, before);
+			break;
+		}
+	}
+
 	// Which of the two SetRoomBounds this run is walking with.
 	static void Follow(const Tr5Level::PortalRecord& p, int to, Room& r,
 		const float* mx, int fromRoom)
 	{
+		if (g_vis)
+		{
+			VisFollow(p, (size_t)(&p - &r.doors[0]), to, r, mx, fromRoom);
+			return;
+		}
+
 		if (g_reach)
 			SetRoomBoundsReach(p, to, r, mx, fromRoom);
 		else
@@ -3616,6 +3873,9 @@ namespace walkoff
 					}
 				}
 			}
+
+			if (g_vis)
+				VisExtend((int)rn, r, mx);
 		}
 	}
 
@@ -3765,6 +4025,11 @@ namespace walkoff
 
 		printf("-walk: %d rooms out of %s, %d closed door(s) with a portal\n",
 			(int)g_room.size(), trc.c_str(), (int)g_doors.size());
+
+		if (g_vis)
+			VisInputFromLevel(level, g_vis_rooms, g_vis_faces, g_vis_portals,
+				g_vis_links);
+
 		return true;
 	}
 
@@ -3818,6 +4083,28 @@ namespace walkoff
 
 		printf("-walk: %d of %d rooms have HD art in %s\n", hd,
 			(int)g_hd.size(), path.c_str());
+
+		if (g_vis)
+		{
+			HDVisBuild(trg, g_vis_rooms.empty() ? 0 : &g_vis_rooms[0],
+				(int)g_vis_rooms.size(),
+				g_vis_faces.empty() ? 0 : &g_vis_faces[0],
+				(int)g_vis_faces.size(),
+				g_vis_portals.empty() ? 0 : &g_vis_portals[0],
+				(int)g_vis_portals.size(),
+				g_vis_links.empty() ? 0 : &g_vis_links[0],
+				(int)g_vis_links.size(), g_vis_params, &g_vis_tables);
+
+			const HDVisTables& t = g_vis_tables;
+
+			printf("-vis: tables rooms=%d art_rooms=%d walls=%d bare=%d "
+				"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f "
+				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d\n",
+				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
+				t.guestPairs, t.guestTris, t.widePortals, t.ms,
+				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
+				g_vis_sources);
+		}
 
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
 		 * them: a triangle whose centroid stands outside its own room's
@@ -4078,6 +4365,8 @@ namespace walkoff
 		g_start = 0;
 		g_end = 1;
 		g_list[0] = seed;
+		g_vis_why.assign(g_room.size(), 0xff);
+		g_vis_count[0] = g_vis_count[1] = g_vis_count[2] = g_vis_count[3] = 0;
 		g_queue_peak = 1;
 		g_reach_only = 0;
 		g_dequeues = 0;
@@ -4215,10 +4504,16 @@ namespace walkoff
 	{
 		const Room& r = g_room[(size_t)which];
 
-		printf("%sroom %d final=%d,%d..%d,%d reach=%d,%d..%d,%d %s\n", lead,
+		static const char* const kWhy[4] = { "walk", "box", "opening",
+			"portal" };
+		const int why = g_vis && (size_t)which < g_vis_why.size() &&
+			g_vis_why[(size_t)which] < 4 ? g_vis_why[(size_t)which] : 0;
+
+		printf("%sroom %d final=%d,%d..%d,%d reach=%d,%d..%d,%d %s%s%s\n", lead,
 			which, r.left, r.top, r.right, r.bottom, r.box[0], r.box[1],
 			r.box[2], r.box[3],
-			(r.left >= r.right || r.top >= r.bottom) ? "REACH" : "classic");
+			(r.left >= r.right || r.top >= r.bottom) ? "REACH" : "classic",
+			g_vis ? " vis=" : "", g_vis ? kWhy[why] : "");
 	}
 
 	static void Why(int want)
@@ -4291,8 +4586,13 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 		return 5;
 	}
 
-	// The reach's list is trimmed as the engine trims it, so the art is asked.
-	if (reach)
+	/* The reach's list is trimmed as the engine trims it, so the art is
+	 * asked; -vis 1 builds its tables out of it, and walks with the reach
+	 * off, as the engine does (game\draw.cpp, VisBeginWalk). */
+	if (walkoff::g_vis)
+		reach = false;
+
+	if (reach || walkoff::g_vis)
 		walkoff::LoadHd(root, stem);
 
 	// -walkshut: those doors shut, every other one open.
@@ -4563,6 +4863,15 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			if (reach && (walkoff::g_trim_noart || walkoff::g_trim_budget))
 				printf("      trimmed no_art=%d budget=%d\n",
 					walkoff::g_trim_noart, walkoff::g_trim_budget);
+
+			// -vis 1: the sources, as VISLOG counts them.
+			if (walkoff::g_vis)
+				printf("      vis rooms=%d walk=%d box=%d opening=%d portal=%d "
+					"dequeues=%ld\n", (int)walkoff::g_drawn.size(),
+					(int)walkoff::g_drawn.size() - walkoff::g_vis_count[1] -
+					walkoff::g_vis_count[2] - walkoff::g_vis_count[3],
+					walkoff::g_vis_count[1], walkoff::g_vis_count[2],
+					walkoff::g_vis_count[3], walkoff::g_dequeues);
 
 			// -walkfinal: every listed room's answer, as -walkwant gives one.
 			if (finals)
@@ -9731,6 +10040,50 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out)
 		}
 }
 
+/* The visibility path's switches, out of ProbeMain's chain of else-ifs:
+ *
+ *   -vis 0|1          tomb5.hd_vis: 1 walks the portals' list extended by
+ *                     the three tables (hd_vis.h) with the reach off, and
+ *                     builds the level with no intrusion list, no air, no
+ *                     carried rooms and no pair faces, so every group drawn
+ *                     is one whole draw; 0, the default, changes nothing
+ *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
+ *                     portals (7, the default, all three)
+ *   -visreach <units> -visbare <share> -visguest <triangles>
+ *   -visguestrule 0|1 -visoverhang <units>   the tables' numbers in place
+ *                     of HDVisDefaults' */
+static bool VisArg(int argc, char** argv, int* at)
+{
+	const char* a = argv[*at];
+
+	if (*at + 1 >= argc)
+		return false;
+
+	if (!strcmp(a, "-vis"))
+	{
+		walkoff::g_vis = atoi(argv[*at + 1]) == 1;
+		printf("-vis: %s\n", walkoff::g_vis ? "the visibility path"
+			: "the room-art rules (default)");
+	}
+	else if (!strcmp(a, "-vissrc"))
+		walkoff::g_vis_sources = atoi(argv[*at + 1]) & 7;
+	else if (!strcmp(a, "-visreach"))
+		walkoff::g_vis_params.reach = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-visbare"))
+		walkoff::g_vis_params.bare = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-visguest"))
+		walkoff::g_vis_params.guestTris = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visguestrule"))
+		walkoff::g_vis_params.guestRule = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visoverhang"))
+		walkoff::g_vis_params.overhang = atof(argv[*at + 1]);
+	else
+		return false;
+
+	(*at)++;
+	return true;
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	/* -loadtime is taken out of the list here, ahead of the switch chain
@@ -9952,6 +10305,9 @@ static int ProbeMain(int argc, char** argv)
 		// The springs' switches: the chain below is at the compiler's limit
 		// of nested blocks (C1061).
 		if (SpringArg(argc, argv, &at))
+			continue;
+
+		if (VisArg(argc, argv, &at))
 			continue;
 
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)

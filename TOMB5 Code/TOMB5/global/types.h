@@ -2911,6 +2911,17 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * (specific\hd\hd_level.cpp, BuildRoomAir). Registry: hd_air. */
 	ulong hd_air;
 
+	/* Which rooms an HD frame draws: 0, the default, the portal walk with
+	 * the reach and the room-art rules above (hd_air and the windows of
+	 * intruding art); 1, the visibility path - the portal walk extended by
+	 * the art's guests, its bare wall faces and its wide openings, every
+	 * listed room's art drawn whole and the depth buffer alone deciding
+	 * what hides what, none of the room-art rules (specific\hd\hd_vis.h).
+	 * Any other value reads as 0. Registry only; taken at the start of a
+	 * level and dead with hd_enable off (specific\hd\hd_level.cpp,
+	 * BuildRoomVis). Registry: hd_vis. */
+	ulong hd_vis;
+
 	/* The threads of an HD level load - the page decode, the room build
 	 * and the models' pages: 0, the default, the machine's own count, 1 one
 	 * thread, n that many; never more than 16 (specific\hd\hd_pagecache.cpp,

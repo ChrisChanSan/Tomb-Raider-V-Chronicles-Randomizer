@@ -206,6 +206,24 @@ int HDRoomCarries(int roomIndex, const short** rooms);
  * in this state (FlipMap swapped its room away). */
 int HDCarriedRoom(int group);
 
+/* The visibility path (tomb5.hd_vis 1, hd_vis.h), as the room walk
+ * (game\draw.cpp) asks it. HDVisWalkOn: the level was built with the path
+ * and HDLevelActive() holds - the walk then extends the portals' list and
+ * the reach is off. The three tables of the group room `roomIndex` holds
+ * now: its guests and its openings (the count, the entries in `*out`) and
+ * the wide opening round its portal `portal` (null for none). And the room
+ * that draws group `group` in the flipmap state of this moment, -1 while
+ * the group is out of the world (as HDCarriedRoom). The walk asks the four
+ * only while HDVisWalkOn() holds; with no tables they answer 0 or null. */
+struct HDVisGuest;
+struct HDVisOpening;
+struct HDVisWide;
+bool HDVisWalkOn();
+int HDVisRoomGuests(int roomIndex, const HDVisGuest** out);
+int HDVisRoomOpenings(int roomIndex, const HDVisOpening** out);
+const HDVisWide* HDVisRoomWide(int roomIndex, int portal);
+int HDVisRoomOfGroup(int group);
+
 /* The classic faces InsertRoomlet (specific\drawroom.cpp) leaves out of one
  * roomlet of a room drawn classic that another group's art covers in part:
  * one flag per face in the order of its loops - the quads, then the

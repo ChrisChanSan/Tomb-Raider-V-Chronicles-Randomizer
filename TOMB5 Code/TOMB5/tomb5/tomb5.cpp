@@ -250,6 +250,10 @@ void init_tomb5_stuff()
 		tomb5.hd_air = 1;								//on
 		REG_WriteLong(buf, tomb5.hd_air);
 
+		sprintf(buf, "hd_vis");
+		tomb5.hd_vis = 0;								//the portal walk's
+		REG_WriteLong(buf, tomb5.hd_vis);
+
 		sprintf(buf, "hd_threads");
 		tomb5.hd_threads = 0;							//the machine's
 		REG_WriteLong(buf, tomb5.hd_threads);
@@ -479,6 +483,13 @@ void init_tomb5_stuff()
 
 		if (tomb5.hd_air > 2)
 			tomb5.hd_air = 1;
+
+		// Absent - every older registry - reads as 0, the portal walk's.
+		sprintf(buf, "hd_vis");
+		REG_ReadLong(buf, tomb5.hd_vis, 0);
+
+		if (tomb5.hd_vis > 1)
+			tomb5.hd_vis = 0;
 
 		// Absent - every older registry - reads as 0, the machine's count.
 		sprintf(buf, "hd_threads");
@@ -717,6 +728,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_air");
 	REG_WriteLong(buf, tomb5.hd_air);
+
+	sprintf(buf, "hd_vis");
+	REG_WriteLong(buf, tomb5.hd_vis);
 
 	sprintf(buf, "hd_threads");
 	REG_WriteLong(buf, tomb5.hd_threads);

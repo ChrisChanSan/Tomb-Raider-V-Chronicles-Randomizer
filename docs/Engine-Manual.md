@@ -3202,6 +3202,19 @@ this was measured on (sixteen threads) the rooms' build of the title level went
 from about 3.1 seconds to about 1.3; the texture pages are now its largest
 part.
 
+Where a whole load goes, measured in 64 logged loads on one machine (2560 x
+1440, sixteen threads, `-log`): 1.8 to 4.8 seconds a load, of which the HD
+build is 50 to 77 percent, the loading thread with the classic level 2 to 30,
+and the loading bar running up to its end after the work is done 6 to 42
+(0.31 to 0.80 seconds every load). In the HD build of RICH2 at `hd_air 2`
+the room build is about 2.1 seconds, and inside it the three largest parts are
+the texture pages (about 0.6), the air's hulls asked of every triangle on one
+thread (0.5) and every room's triangles on the pool (0.5); the objects add 0.6.
+A load of a savegame inside the level you are in costs about what a fresh load
+of that level costs: 0.42 seconds less to 0.11 more over thirteen levels, half
+a second at most either way. The `LOADLOG` lines (*When something looks wrong*)
+time every step of a load on your machine.
+
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full
 screen throws the graphics device away and makes a new one. Everything the HD
 path owns lived on the old one, so it is released at that moment; the classic
@@ -4128,6 +4141,7 @@ wrote it, and each seam answers a different question:
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |
+| a level takes long to load, or loading a save inside a level takes as long as a new level | `LOADLOG` — one line per step of the load with its milliseconds (below) |
 | at *Frame rate 60* the motion is no smoother than at 30, or something jerks | `INTERPLOG` — per second: how many frames were interpolated, how far Lara moved per picture, how many bodies had their **limbs** blended too, how many **particles** moved between two game steps and of which kinds, and every place the engine deliberately snapped |
 | the poison sway is missing or faint at *Frame rate 60* or *Display* | `POISONLOG` — only while Lara is poisoned: a `view` line whenever the view is built, saying who built it (`who=`), whether the frame was an in-between one (`tween=`), how strong the sway is (`poisoned=`) and how strong it is heading for (`dpoisoned=`), and the stretch applied (`scale=`, 16384 is none); and a `frame` line per drawn picture with the stretch the picture really starts from (`base=`, 10000 is none). A `poisoned=` that stands still while `dpoisoned=` moves is a sway that never builds up; a `base=` of 10000 on the in-between pictures only is a sway those pictures lose |
 | at *Frame rate 60* or *Display* a cut scene steps at thirty, jumps, or an actor or Lara flicks for a frame | `CUTLOG` — `open` when a cut scene starts (its number, frames, actors, nodes and the frame rate setting); a `cut` line for every game step drawn wholly or partly live, with the frame and the reason (`why=camera` with how far the eye and the target jumped, `actor` with how far that actor's position jumped, `halfturn` with the joint, `open`, `skip`, `close`); and `close` when it ends: pictures drawn, game steps, how many pictures were blended and how many live, the cuts, the actor cuts, the half turns, `hair=` how often the braid was swung (one per game step), `eye_rooms=` the blended pictures whose room walk started in another room than the game step's, and `hair_lag=` how far the braid stood behind her at most. `CutseqProbe -cutlog <n>` (`Preparation\Tools`) prints the lines the scene's own file says a run at 60 must write |
@@ -4393,6 +4407,41 @@ were offered and how long it took. The same step also writes once through the
 five megabytes of sort and bucket buffers the classic renderer works in —
 Windows only really hands those pages over on the first write, and every one
 of those small faults would otherwise fall in the level's first drawn frame.
+
+**`LOADLOG`.** One line per step of every level load, with the milliseconds
+that step took (the counter in front of a log line moves in steps of about
+16 ms, so the steps carry their own clock):
+
+```
+LOADLOG level=RICH2 step=rooms ms=3.1
+LOADLOG level=RICH2 step=fill ms=1276.7
+LOADLOG level=RICH2 step=bar ms=594.0
+```
+
+(The numbers are a format sample.) In the order the work ends:
+
+- the loading thread: `free` (the level before), `textures`, `read` (the
+  level's data block), `rooms`, `moveables`, `sprites`, `cameras`,
+  `sound_fx`, `boxes`, `anim_tex`, `tex_infos`, `hd_load` (with its own
+  `markers` and `scan`, the first look at the `.TRG`), `ai`, `items`,
+  `cinematic`, `samples` and `game_setup`;
+- the HD objects, as their build runs: `obj_end`, `obj_map`, `obj_mods`,
+  `obj_plan`, `obj_ring`, `obj_wardrobe`, `obj_models` (the `models` line
+  splits it), `obj_bind` and `obj_lara`;
+- the HD build, in one block at its end: `release` (the level before's HD
+  objects), `budget`, the steps of the `hd_share` and `built` lines (`marks`
+  to `places`, `begin` and its parts `trg_read`, `prep`, `pages`, `owners`,
+  `verts`, `setup`, `fill`, `index`, then `tables` to `objects`), the two
+  fingerprints `hash` and `models_hash` (only with `-log`, in no other
+  step), `life` and `redress`;
+- the main thread: `screen` (the load picture), `thread` (the wait for the
+  loading thread), `ainit`, `hd_build`, `font`, `cutscenes`, `warmup`,
+  `profile`, `bar` (the bar running up to its end) and `total`.
+
+A build that gives up on the way (no `.TRG`, no room drawn HD) writes no
+block. Without `-log` nothing is written. `RoomProbe -loadtime`
+(`Preparation\Tools`) prints the HD build's steps in the same form without
+starting the game.
 
 **For a complete report, attach four things:** `log.txt`, `spoiler.txt` from
 beside the randomizer, the `PCtomb5 build <date>` line from the setup dialog,

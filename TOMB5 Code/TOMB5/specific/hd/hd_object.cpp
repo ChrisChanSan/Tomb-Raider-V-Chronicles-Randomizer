@@ -1539,14 +1539,40 @@ namespace
 
 /* ---------------------------------------------------------- the level -- */
 
+/* LOADLOG, with -log: the steps of the objects' level build, one line each
+ * with the milliseconds since the step before - the same line the level
+ * load writes for its own steps (specific\file.cpp, hd_level.cpp), so that
+ * the objects' share of a load is read in one place. Without -log no clock
+ * is read and nothing is written. */
+static void ObjectLoadStep(double* at, const char* step)
+{
+	if (!gLogEnabled)
+		return;
+
+	LARGE_INTEGER now, rate;
+
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&rate);
+
+	const double ms = (double)now.QuadPart * 1000.0 / (double)rate.QuadPart;
+
+	if (step)
+		Log("LOADLOG level=%s step=%s ms=%.1f", g_stem, step, ms - *at);
+
+	*at = ms;
+}
+
 void HDObjectLevelBuild(const char* installRoot, const char* stem)
 {
 	std::vector<HDModelSlot> wanted;
 	std::vector<float> binds;
 	HDModelStats stats;
 	const char* why = "";
+	double loadlog_at = 0.0;
 
+	ObjectLoadStep(&loadlog_at, 0);
 	HDObjectLevelEnd();
+	ObjectLoadStep(&loadlog_at, "obj_end");
 
 	for (int i = 0; i < (int)sizeof(g_stem) - 1; i++)
 	{
@@ -1628,6 +1654,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	Log("HDLOG level=%s map=%s lines=%d baked_slots=%d", g_stem,
 		haveMap ? "read" : "none", HDMapCount(), g_baked_slots);
+	ObjectLoadStep(&loadlog_at, "obj_map");
 
 	/* The swap plans are filled further down, once the slot list exists; the
 	 * counters are cleared here so that a level that returns early below
@@ -1663,6 +1690,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * what keeps the two from disagreeing about which mods are active. Its
 	 * notes reach the log through the sink winmain installs. */
 	HDModsScan();
+	ObjectLoadStep(&loadlog_at, "obj_mods");
 
 	/* The bind poses first and in one block, because HDModelLevelBegin keeps
 	 * a pointer into it while it runs and a std::vector that grows moves. */
@@ -1909,6 +1937,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		g_swap_plans++;
 	}
 
+	ObjectLoadStep(&loadlog_at, "obj_plan");
+
 	/* A mod's inventory model, planned in the same list and on a pseudo slot
 	 * like every other extra model in this file.
 	 *
@@ -1988,6 +2018,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	Log("HDLOG level=%s ring asked=%d of %d slots, found=%d, ms=%d", g_stem,
 		ringAsked, (int)slots.size(), g_ring_models,
 		(int)(GetTickCount() - ringBegan));
+	ObjectLoadStep(&loadlog_at, "obj_ring");
 
 	/* Lara's wardrobe, in the same HDModelLevelBegin. Her parts are models
 	 * like any other - the same page cache, the same buffers, the same
@@ -2009,6 +2040,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	// And the water's life's models, the same way (hd_life.cpp).
 	HDLifeModelPlan(g_stem, wanted);
+	ObjectLoadStep(&loadlog_at, "obj_wardrobe");
 
 	if (wanted.empty())
 		return;
@@ -2025,6 +2057,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		Log("HDLOG level=%s objects refused reason=%s", g_stem, why);
 		return;
 	}
+
+	ObjectLoadStep(&loadlog_at, "obj_models");
 
 	/* The phases at the end of the line split the models time, so a slow
 	 * level build names the part that grew (key_ms: see HDPageCacheKeyOf).
@@ -2705,10 +2739,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			seen, hd, used ? classic : "-");
 	}
 
+	ObjectLoadStep(&loadlog_at, "obj_bind");
+
 	/* Lara's verdict, after the objects and out of the
 	 * models that were just built: which parts arrived, what they cover, how
 	 * far they drift. It writes its own HDLOG lines. */
 	HDLaraDrawBuild(g_stem);
+	ObjectLoadStep(&loadlog_at, "obj_lara");
 
 	/* Released only when neither side has anything to draw. A level whose
 	 * every object stayed classic can still have an HD Lara - the two

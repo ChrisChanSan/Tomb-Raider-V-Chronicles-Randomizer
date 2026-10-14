@@ -14374,6 +14374,241 @@ the fifteen cameras at `-hdwater 0` and `1` on one thread and sixteen against th
 **Commits.** `8ba4a1b`, `7cfe85d`, `698c438`, `77d265c`, `2632d97`, `c1bc5c9`, `23274c4`;
 after the prover, `88b0cf2`, `25adc3f`; the gate's share on every way out, `611122a`.
 
+### The level load measured, and the save-load path (#203)
+2026-10-14
+
+**What.** Every step of a level load has a time in the log, and the load is written down
+from the owner's logs: where the seconds go, what a load inside the same level does, and
+three ways to shorten it, measured and not built. This entry changes no behaviour and no
+picture. New: the `LOADLOG level=<L> step=<step> ms=<n>` lines behind `-log` and
+`RoomProbe -loadtime`.
+
+**Why.** On 2026-10-14 the owner asked to shorten the load of a savegame inside a level,
+and, before anything is changed, for the measurement of the load's phases. His five logs
+of 2026-10-12 to 14 (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and, recorded for
+this round, `19_alllevels`; 2560 x 1440, `hd_enable 1`, `hd_air` 1 and 2) are the in-game
+numbers; nobody could play in this round.
+
+**How.** *The seam.* One step is a clock read (`QueryPerformanceCounter`) and a `Log`
+call on lines of their own beside the call they time; no call changed and no existing
+line was touched. `specific/file.cpp` `LoadLogStep` and `LoadLogLevel` (:1731, :1751):
+the load thread's steps in `LoadLevel` (`free` around `FreeLevel`, `textures`, `read`,
+`rooms`, `moveables`, `sprites`, `cameras`, `sound_fx`, `boxes`, `anim_tex`, `tex_infos`,
+`hd_load`, `ai`, `items`, `cinematic`, `samples`, `game_setup`) and the main thread's in
+`S_LoadLevelFile` (`screen`, `thread`, `ainit`, `hd_build`, `font`, `cutscenes`, `warmup`,
+`profile`, `bar`, `total`), one lap per thread. `specific/hd/hd_level.cpp`: `HDLevelLoad`
+writes `markers` and `scan`; `HDLevelBuildHD` reads the clock at its top, after the
+release of the level before and after the budget, and writes at its end `release`,
+`budget`, every `LoadPhase` step out of the existing `load_ms[]` with `begin`'s parts out
+of `HDRenderStats` (`trg_read`, `prep`, `pages`, `owners`, `verts`, `setup`, `fill`,
+`index`, `hash`), then `models_hash`, `life` and `redress` (:6415). `specific/hd/
+hd_object.cpp` `ObjectLoadStep` (:1546): `obj_end`, `obj_map`, `obj_mods`, `obj_plan`,
+`obj_ring`, `obj_wardrobe`, `obj_models`, `obj_bind`, `obj_lara`. Without `-log` every
+line returns in `Log`; `file.cpp` and `hd_object.cpp` read no clock either, `hd_level.cpp`
+reads it six times a load. The `S_LoadLevelFile:` lines stay; no HDLOG line changed.
+
+*The probe.* `RoomProbe -loadtime` (`Preparation/Tools/Diagnose/RoomProbe.cpp`,
+`LoadTimeStep`, `LoadTimeScan`, `LoadTimeBuild`) prints the same lines for the tool's
+twins of the steps before the build, the game's `HDScanLevel` call (the level's slots out
+of the classic file) and the build's parts, and takes no picture. It is taken out of the
+argument list ahead of the switch chain, which stands at the compiler's nesting depth.
+The tool has no `hd_level.cpp`: it skips the classic load, `aInit`, the static tables, the
+water's steps, the objects (`hd_object.cpp` is not linked), the font, `life` and
+`redress`.
+
+*FILL's own parts* were timed with a scaffold outside the repository: a copy of
+`hd_render.cpp` with clock reads around the parts of `HD_BEGIN_FILL`, linked into a
+second RoomProbe. `hd_render.cpp` is not this round's file (the room art and the splash
+rounds work in it), so the engine's `LOADLOG` has `fill` as one step.
+
+**Measured.** *Per level, the owner's logs.* `log_test19_alllevels` (built 2026-10-14
+02:30:36, `hd_air 2`) loads every level fresh and then a save of it inside it, 34 loads;
+medians in ms out of the tick in front of the `S_LoadLevelFile:` lines (steps of 15.6 ms)
+and the QPC fields of the HDLOG lines; `gap` is the HD build's tick span less every QPC
+field that books it:
+
+| Level | loads | total (min) | screen | load thread | of it scan | HD build | of it built | fill | pages | objects | hash (-log) | gap | font+cuts | bar tail |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ANDREA1 | 2 | 2742 (2688) | 86 | 290 | 119 | 1710 | 1044 | 454 | 486 | 572 | 26 | 2 | 0 | 656 |
+| ANDREA2 | 3 | 3984 (3719) | 79 | 234 | 105 | 2984 | 2159 | 1404 | 558 | 492 | 45 | 2 | 0 | 656 |
+| ANDREA3 | 2 | 2922 (2906) | 86 | 234 | 99 | 1914 | 1322 | 743 | 453 | 510 | 22 | 12 | 0 | 687 |
+| ANDY1 | 2 | 2828 (2781) | 86 | 234 | 80 | 1804 | 1058 | 452 | 525 | 590 | 36 | 16 | 0 | 703 |
+| ANDY2 | 2 | 2836 (2656) | 94 | 250 | 110 | 1828 | 1170 | 431 | 648 | 566 | 17 | 4 | 0 | 664 |
+| ANDY3 | 2 | 3054 (3000) | 78 | 242 | 108 | 2054 | 1308 | 618 | 566 | 612 | 51 | 0 | 0 | 680 |
+| JOBY2 | 2 | 2898 (2875) | 78 | 242 | 102 | 1898 | 1291 | 723 | 433 | 496 | 44 | 7 | 0 | 680 |
+| JOBY3 | 3 | 2313 (2312) | 78 | 188 | 50 | 1328 | 653 | 345 | 237 | 590 | 19 | 12 | 0 | 719 |
+| JOBY4 | 2 | 1992 (1860) | 86 | 62 | 38 | 1078 | 758 | 266 | 453 | 256 | 8 | 18 | 0 | 766 |
+| JOBY5 | 2 | 2789 (2578) | 94 | 375 | 212 | 1758 | 930 | 551 | 269 | 724 | 24 | 8 | 0 | 562 |
+| RICH1 | 3 | 2641 (2453) | 94 | 172 | 50 | 1641 | 907 | 292 | 510 | 653 | 13 | 10 | 0 | 734 |
+| RICH2 | 3 | 3985 (3953) | 79 | 281 | 112 | 2969 | 2079 | 1273 | 567 | 635 | 171 | 8 | 0 | 656 |
+| RICH3 | 2 | 2586 (2562) | 86 | 226 | 96 | 1586 | 882 | 413 | 393 | 611 | 24 | 8 | 0 | 688 |
+| RICHCUT2 | 1 | 2141 (2141) | 94 | 47 | 23 | 1203 | 945 | 310 | 631 | 214 | 8 | 11 | 0 | 797 |
+| TITLE | 3 | 3422 (3282) | 94 | 203 | 109 | 2500 | 2172 | 1017 | 866 | 254 | 31 | 14 | 0 | 625 |
+
+Over all 64 loads of the five logs (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and
+`19_alllevels`; the four older ones hold 18 + 5 + 3 + 4 loads of the builds of 2026-10-12
+and 14): 1.8 to 4.8 s a load, the HD build 50 to 77 % of it, the loading thread 2 to 30 %,
+the bar's tail 6 to 42 % (0.31 to 0.80 s). The existing lines already account for the HD
+build to within the tick (`gap` -2 to 28 ms): the built line's `phases=` and the
+`hd_share` line split it, and `pages` is a part of `built`. The one block left is `fill`.
+`hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG` scan depends on the file
+cache: RICH2 404 ms cold, 88 to 176 warm.
+
+*Savegame loads.* The mark is `INTERPLOG ... invalidated: savegame loaded` after the bar;
+a load inside the same level is one whose load before it was the same level and which
+started from `invalidated: load menu`. `log_test19` has one for 13 levels (fresh load
+first, then the save inside it; ms):
+
+| Level | fresh | inside it | difference | thread fresh / inside | HD build fresh / inside | bar tail fresh / inside |
+|---|---|---|---|---|---|---|
+| ANDREA2 | 3984 | 4016 | +32 | 594 / 234 | 2984 / 3047 | 328 / 656 |
+| ANDREA1 | 2797 | 2688 | -109 | 344 / 235 | 1750 / 1671 | 609 / 704 |
+| ANDY2 | 3015 | 2656 | -359 | 312 / 187 | 2016 / 1641 | 593 / 734 |
+| ANDY3 | 3000 | 3109 | +109 | 281 / 203 | 2000 / 2109 | 640 / 719 |
+| JOBY5 | 3000 | 2578 | -422 | 547 / 203 | 1953 / 1563 | 406 / 719 |
+| RICH2 | 3953 | 3985 | +32 | 485 / 281 | 2953 / 2969 | 422 / 656 |
+| RICH1 | 2750 | 2453 | -297 | 297 / 156 | 1750 / 1469 | 625 / 734 |
+| JOBY2 | 2922 | 2875 | -47 | 282 / 203 | 1906 / 1891 | 656 / 703 |
+| JOBY4 | 2125 | 1860 | -265 | 78 / 47 | 1203 / 953 | 750 / 782 |
+| RICH3 | 2610 | 2562 | -48 | 282 / 171 | 1609 / 1563 | 641 / 734 |
+| ANDY1 | 2781 | 2875 | +94 | 266 / 203 | 1750 / 1859 | 672 / 734 |
+| ANDREA3 | 2906 | 2937 | +31 | 281 / 188 | 1875 / 1953 | 656 / 718 |
+| JOBY3 | 2313 | 2406 | +93 | 219 / 188 | 1328 / 1421 | 688 / 719 |
+
+A load inside the level costs what a fresh load of it costs: -422 to +109 ms, the median
+-47. The loading thread is shorter the second time (the files are in the cache), the bar's
+tail longer, and on four levels (ANDY2, JOBY4, JOBY5, RICH1) the HD build is 250 to 390 ms
+shorter (the pages and the models' files cached as well). The two older ones: `log_test16`
+line 92151 RICH2 3,219 against 3,172, `log_test18` line 18254 RICH2 4,094 against 4,047.
+
+*FILL, split* (the scaffold, `RoomProbe -loadtime -threads 16`, three runs each over
+the fifteen levels at `hd_air` 1 and 2, medians, on a quiet machine - a first sweep
+taken while three other rounds built on it came out two to two and a half times
+slower and was discarded). The fair scale between this machine and the owner's is
+the pages, whose code did not change between his builds and this one: the probe's
+pages over his lie between 0.93 and 1.65 per level, RICH2 at `hd_air 2` 1.33; where
+he has an `hd_air 2` log the fill agrees with that within about 10 % (RICH2 1.26,
+ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). Against `log_test19` (every level, `hd_air
+2`, the build of 2026-10-14 02:30) the pages factor is 0.86 to 1.82 and the fill
+factor 1.02 to 1.67; with RICH2's 1.35 from that log the parts below come out within
+2 % of these (hulls 503, pool and join 457, carry cells 170). RICH2, `hd_air 2`,
+probe ms / 1.33 (his own in brackets): fill 1,205 [1,277] = `MarkAirHulls` 512 (42
+%), the pool's `fill_group` 419 (35 %), `MarkCarryCells` 173 (14 %), the join 47,
+`MarkCoveredFaces` 11; the pool keeps 5.2 of its 16 threads busy on average (2,869
+processor ms in 557 wall ms on the probe), held by the largest group. At this build
+`hd_air 1` costs nearly what 2 does (RICH2 fill 1,445 against 1,603), because
+`MarkAirHulls` runs whenever the air is on; the owner's `hd_air 1` logs are of the
+build of 2026-10-12, before that, and their `fill` is no guide to this one.
+`MarkAirHulls` is the largest part of fill on 12 of the 15 levels; the pool on
+ANDREA2, RICHCUT2 and TITLE.
+
+*The three largest parts of `built`* (RICH2, `hd_air 2`): the pages 580 ms (his line: read
+32, decode 408 on 16 threads, upload 132; linear in 319.9 MiB of texels, the BC7 decoder's
+throughput); `MarkAirHulls` 512 - serial on the main thread, every index's world cell
+sorted (O(I log I), I = 4,736,961) and `AirHostsOf` asked of every triangle (O(T log C), T
+= 1,578,987), which the fill asks again per group; the pool's fill 419 + join 47 (O(T x
+boxes), held by the largest group). The pages are the largest part of `built` on 14 of the
+15 levels (ANDREA2: the pool). The steps before the build take between 0.0 and 3.4 ms each
+(`BuildRoomIntrusions` and the air's links O(R^2) over 179 rooms, `BuildPairFaces` O(R x
+faces x boxes)).
+
+*The seam's cost* (`RoomProbe -loadtime` against `-nodraw`, read + build ms, five runs
+each, `hd_air 2`): RICH2 3,000 -> 3,034 (+1.1 %), ANDREA2 3,033 -> 2,915 (-3.9 %), JOBY2
+1,843 -> 1,899 (+3.0 %), run spread up to 25 %: within the noise.
+
+**Checked.** With the tools built from `1ca85c7`: the classic path, `-classicroom N
+-classiconly` at ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34, 6 of 6 identical
+to `8691e82`'s tool and to `28c358eb`'s; the fifteen parity cameras of the water's fix
+round 15 of 15 identical to the `28c358eb` tool (`git archive`) and to that round's own
+pictures. Suites: ModernTest 14,991, MenuTest 44,216, InterpTest 729, LipsTest 270 and
+243, 0 failed; the engine and RoomProbe, TrgProbe, ModelProbe and MapProbe build. No
+suite reads HDLOG or LOADLOG lines, so none needed a group. After `6529af0` (two laps of
+`hd_object.cpp` moved above their comments; no tool links that file, so the pictures
+above stand) the four suites ran again with the same counts, 0 failed.
+
+**Left - the owner's decision.** *(a) What a load inside the same level does.* Load menu,
+`S_LoadGame` reads the file (`specific/gamemain.cpp` :186), `DoLevel` runs
+`S_LoadLevelFile` whatever level is loaded (`game/gameflow.cpp` :1015), `FreeLevel`
+resets the pool, everything is made again, then `InitialiseFXArray(1)`,
+`InitialiseLOTarray(1)` and `sgRestoreGame` (`game/savegame.cpp` :1151). The restore
+assumes a fresh level: it re-flips the rooms from the unflipped state (`FlipMap` per set
+bit), and every item without save flags keeps the state it was loaded in.
+*(b) The mutable data.* Restored by the save: the saved items' state, the flips, the
+shattered statics, `cd_flags`, the cameras' flags, Lara, the swarms. Only a fresh load
+restores: the unflipped room structs (`FlipMap` swaps them in place, `game/control.cpp`
+:2720), the floors and boxes under the doors (`ShutThatDoor`, `game/door.cpp` :46), the
+unsaved items, the creatures' data and the doors' and lasers' data (game_malloc'd,
+`game/init.cpp` :302, :1110, :1370), the texture animation (`textinfo` rotated in place,
+`AnimatingWaterfallsV`), the monitor screen's face flag, the cutscene data, the HD flip
+state (`HDFlipRoom` swaps `g_room_group`, `hd_level.cpp` :6939). Re-made by an
+initialiser: the LOT and the effects (both game_malloc again), the camera, the flip
+globals (`SetupGame`).
+*(c) The HD data's ties.* Pointers into the pool kept between frames: `hd_feet.cpp` :33
+and :34 (cleared in `FreeLevel`), `hd_object.cpp` :244 and :248 (compared by address,
+reset every frame). Borrowed for the build and zeroed after it: `hd_render.cpp` :1918,
+:1931, :1979, :1985, :2014, :2544, :2696, :2730, :2751. Everything else holds indices or
+values (`hd_level.cpp` :191, :226, :298, :2153, :2155, :2901, :3348 to :3350) or device
+objects. So the HD data can stay across `FreeLevel` if the level read again is the same.
+*(d) Memory.* The HD data of a level is 246 to 539 MiB (RICH2 537); the classic level
+block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,000 bytes).
+
+*The three candidates* (RICH2 inside RICH2: 4,094 ms with `-log`):
+- *A - the whole level resident.* Saves the loading thread and the HD build, RICH2 3,390
+  of 4,094 (other levels 1.1 to 3.2 s); costs a copy of the used pool after the load
+  (a few MiB) and of the globals the load sets. It replaces the load on the classic path,
+  `hd_enable 0` included, so classic parity needs state dumps of fresh against resident
+  loads. Risk high, the class of the joby3 load crash of 2026-08-25: the pool goes back to
+  its mark after the load, every pool allocation made in play dies with it, and every
+  pointer to it (creatures' data, LOT, effects, Lara's mesh pointers) must be made again
+  as a fresh load makes it; state outside the pool that only a fresh load sets has to be
+  found to the last field. Needs: a copy at the end of `LoadLevel` with a key (file, size,
+  time, the hd settings); in `DoLevel` on a same-level save: the copy back, the pool's
+  mark, `SetupGame`'s resets, the HD flips back and the HD level starts, then the
+  initialisers and `sgRestoreGame` as today.
+- *B - the HD data resident, the classic reload as today.* Saves the HD build less the
+  re-bind, the steps B still runs (the static tables, the statics, the water's sheets,
+  surfaces and frames, the objects' binding and Lara, the life, the re-dress; and the
+  flips back, new work that no load does today and that no bound below holds). The
+  re-bind is an estimate: no owner log times its parts one by one. Its bound out of the
+  RICH2 load above (`log_test18` line 18254, its `hd_share` line 20331): tables 4,
+  statics 17, sheets 19, surfaces and frames 0; the objects less their models and ring,
+  617 - 576 - 32 = 9, hold the binding and Lara; the build's `gap`, 24, holds the
+  release, the budget, the life, the re-dress and the tick's rounding - 73 ms if all of
+  them run again. RICH2's nine loads in the five logs give 36 to 73, the 53 loads that
+  are not TITLE 5 to 161 (median 35; TITLE's objects carry 34 to 366 ms more on the
+  session's first load). So B saves on RICH2 about 2.75 s without `-log` (3,109 less
+  287 of `-log` hashes less 73) and 3.04 s with it, on the other levels about the HD
+  build column above (with `-log`) less 35, and the `.TRG` scan (88 to 404). The
+  owner's next `-log` run delivers the parts: the `LOADLOG` steps `tables`, `statics`,
+  `sheets`, `surfaces`, `frames`, `obj_bind`, `obj_lara`, `release`, `budget`, `life`
+  and `redress`. No extra memory. `hd_enable 0` untouched: every change sits behind
+  the HD gate. Risk medium: the stale-pointer class only through the two pointer
+  families of (c), both cleared already; the real risks are a level changed under the
+  same name (key on the `.TRC`, `.hdm` and `.TRG`, the hd settings and the outfit) and
+  the flip state, set back before `sgRestoreGame` flips again. Needs: `HDLevelUnload`
+  keeping or rebuilding its cheap tables, `HDLevelLoad` skipping the scan,
+  `HDLevelBuildHD` checking the key at its top, `HDObjectLevelBuild` split into its
+  binding and its models; the build hash proves a resident level equal to a fresh one.
+- *C - the HD build faster for every load*, at most (RICH2, `hd_air 2`): the hulls per
+  group on the pool and their answers reused by the fill, 512; the largest groups split
+  across the pool, about 300 of 419; `MarkCarryCells` on the pool, 173; the `.TRG` read
+  once instead of twice, 67 (the parsed file, about 45 MiB, lives longer in a 32-bit
+  process); the pages decoded on the loading thread while the classic level loads,
+  about 150; the models' 999 `.TRM` opens, at most 241; a sidecar of the whole room
+  build, about 1,400, whose key the round of *The level load on several cores* declined.
+  None touches `hd_enable 0`; each is proven by the build hash. Risk low, the sidecar
+  medium.
+
+Also measured and not a candidate of this round: the bar's tail, 312 to 797 ms of every
+load (`load bar finished` less `Cutscenes resident`, the 64 loads of the five logs; the
+`WARMUP` line inside it takes 5 to 34 of them) - the bar running up from where the
+loading thread left it at 2 per frame (`specific/drawbars.cpp` :473) - classic-path
+code, so shortening it changes the load's timing at `hd_enable 0` too. Fill's split
+exists only offline; the engine's `fill` step stays one number until `hd_render.cpp` is
+free for clock reads.
+
+**Commits.** `728dd11`, `1ca85c7`, `d78d66d`, `8b0d22a`, `c2d3d37`, `4a3896f`, `6529af0`
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty
@@ -19013,3 +19248,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #198 | The water's life |
 | #199 | The level load on several cores |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
+| #203 | The level load measured, and the save-load path (#203) |

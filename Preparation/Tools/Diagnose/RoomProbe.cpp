@@ -3557,14 +3557,20 @@ namespace walkoff
 
 	// VisQueue (game\draw.cpp).
 	static void VisQueue(int rn, Room& actualRoom, float tL, float tT,
-		float tR, float tB, int fromRoom)
+		float tR, float tB, int fromRoom, bool toScreen = false)
 	{
 		Room& r = g_room[(size_t)rn];
+		const float l = toScreen ? 0.0f : (float)actualRoom.test_left;
+		const float t = toScreen ? 0.0f : (float)actualRoom.test_top;
+		const float rr = toScreen ? (float)g_winxmax :
+			(float)actualRoom.test_right;
+		const float b = toScreen ? (float)g_winymax :
+			(float)actualRoom.test_bottom;
 
-		if (tL < actualRoom.test_left) tL = actualRoom.test_left;
-		if (tR > actualRoom.test_right) tR = actualRoom.test_right;
-		if (tT < actualRoom.test_top) tT = actualRoom.test_top;
-		if (tB > actualRoom.test_bottom) tB = actualRoom.test_bottom;
+		if (tL < l) tL = l;
+		if (tR > rr) tR = rr;
+		if (tT < t) tT = t;
+		if (tB > b) tB = b;
 
 		if (tL >= tR || tT >= tB)
 		{
@@ -3723,10 +3729,79 @@ namespace walkoff
 	}
 
 	// VisFollowPortal (game\draw.cpp): `d` is the portal's index in the room.
+	// VisPortalRect (game\draw.cpp).
+	static bool VisPortalRect(const Tr5Level::PortalRecord& p, const float* mx,
+		float* rect)
+	{
+		float vx[4], vy[4], vz[4];
+		int tooNear = 0;
+
+		rect[0] = rect[1] = 1e30f;
+		rect[2] = rect[3] = -1e30f;
+
+		for (int i = 0; i < 4; i++)
+		{
+			const float dx = (float)p.v[i][0];
+			const float dy = (float)p.v[i][1];
+			const float dz = (float)p.v[i][2];
+
+			vx[i] = mx[0] * dx + mx[1] * dy + mx[2] * dz + mx[3];
+			vy[i] = mx[4] * dx + mx[5] * dy + mx[6] * dz + mx[7];
+			vz[i] = mx[8] * dx + mx[9] * dy + mx[10] * dz + mx[11];
+
+			if (vz[i] <= 0)
+			{
+				tooNear++;
+				continue;
+			}
+
+			const float z = vz[i] / g_persp;
+			float x = vx[i] < 0 ? 0.0f : (float)g_winxmax;
+			float y = vy[i] < 0 ? 0.0f : (float)g_winymax;
+
+			if (z)
+			{
+				x = vx[i] / z + g_centerx;
+				y = vy[i] / z + g_centery;
+			}
+
+			if (x - 1 < rect[0]) rect[0] = x - 1;
+			if (y - 1 < rect[1]) rect[1] = y - 1;
+			if (x + 1 > rect[2]) rect[2] = x + 1;
+			if (y + 1 > rect[3]) rect[3] = y + 1;
+		}
+
+		if (tooNear == 4)
+			return false;
+
+		for (int i = 0, last = 3; tooNear && i < 4; last = i, i++)
+		{
+			if ((vz[last] <= 0) == (vz[i] <= 0))
+				continue;
+
+			if (!(vx[i] > 0 && vx[last] > 0))
+				rect[0] = 0;
+
+			if (!(vx[i] < 0 && vx[last] < 0))
+				rect[2] = (float)g_winxmax;
+
+			if (!(vy[i] > 0 && vy[last] > 0))
+				rect[1] = 0;
+
+			if (!(vy[i] < 0 && vy[last] < 0))
+				rect[3] = (float)g_winymax;
+		}
+
+		return true;
+	}
+
 	static void VisFollow(const Tr5Level::PortalRecord& p, size_t d, int to,
 		Room& r, const float* mx, int fromRoom)
 	{
 		char before = g_room[(size_t)to].bound_active;
+		Tr5Level::PortalRecord open = p;
+		bool wide = false;
+		float rect[4];
 
 		SetRoomBounds(p, to, r, mx, fromRoom);
 		VisNote(to, 0, before);
@@ -3746,11 +3821,24 @@ namespace walkoff
 
 			const short n[3] = { (short)p.nx, (short)p.ny, (short)p.nz };
 
+			open = VisRecord(to, n, w.v);
+			wide = true;
 			before = g_room[(size_t)to].bound_active;
-			SetRoomBounds(VisRecord(to, n, w.v), to, r, mx, fromRoom);
+			SetRoomBounds(open, to, r, mx, fromRoom);
 			VisNote(to, 3, before);
 			break;
 		}
+
+		if (!wide || !VisPortalRect(open, mx, rect))
+			return;
+
+		if (rect[0] < r.test_right && rect[2] > r.test_left &&
+			rect[1] < r.test_bottom && rect[3] > r.test_top)
+			return;
+
+		before = g_room[(size_t)to].bound_active;
+		VisQueue(to, r, rect[0], rect[1], rect[2], rect[3], fromRoom, true);
+		VisNote(to, 3, before);
 	}
 
 	// Which of the two SetRoomBounds this run is walking with.

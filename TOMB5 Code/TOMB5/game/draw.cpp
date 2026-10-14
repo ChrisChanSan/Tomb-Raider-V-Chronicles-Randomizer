@@ -4462,25 +4462,32 @@ static void VisNote(long rn, int why, char before)
 }
 
 /* SetRoomBounds' tail for a rectangle the visibility path worked out itself:
- * clamped to the window `actualRoom` is seen through in this dequeue, then
- * left alone when the room's own window already holds it, and otherwise
- * queued or widened exactly as a portal's rectangle is. */
+ * clamped to the window `actualRoom` is seen through in this dequeue (or,
+ * with `toScreen`, to the screen alone), then left alone when the room's
+ * own window already holds it, and otherwise queued or widened exactly as a
+ * portal's rectangle is. */
 static void VisQueue(long rn, ROOM_INFO* actualRoom, float tL, float tT,
-	float tR, float tB)
+	float tR, float tB, bool toScreen = false)
 {
 	ROOM_INFO* r = &room[rn];
+	const float l = toScreen ? 0.0f : (float)actualRoom->test_left;
+	const float t = toScreen ? 0.0f : (float)actualRoom->test_top;
+	const float rr = toScreen ? (float)phd_winxmax :
+		(float)actualRoom->test_right;
+	const float b = toScreen ? (float)phd_winymax :
+		(float)actualRoom->test_bottom;
 
-	if (tL < actualRoom->test_left)
-		tL = actualRoom->test_left;
+	if (tL < l)
+		tL = l;
 
-	if (tR > actualRoom->test_right)
-		tR = actualRoom->test_right;
+	if (tR > rr)
+		tR = rr;
 
-	if (tT < actualRoom->test_top)
-		tT = actualRoom->test_top;
+	if (tT < t)
+		tT = t;
 
-	if (tB > actualRoom->test_bottom)
-		tB = actualRoom->test_bottom;
+	if (tB > b)
+		tB = b;
 
 	if (tL >= tR || tT >= tB)
 		return;
@@ -4641,27 +4648,115 @@ static void VisExtend(ROOM_INFO* r)
 	}
 }
 
+/* A portal's corners (the words after its normal) projected as
+ * SetRoomBounds projects them, one pixel out, the behind-the-eye fixup
+ * taking the screen's edges; false when all four lie behind the eye. */
+static bool VisPortalRect(const short* door, float* rect)
+{
+	float vx[4], vz[4], vy[4];
+	int tooNear = 0;
+
+	rect[0] = rect[1] = 1e30f;
+	rect[2] = rect[3] = -1e30f;
+
+	for (int i = 0; i < 4; i++)
+	{
+		const short* c = &door[3 + i * 3];
+
+		vx[i] = aMXPtr[M00] * c[0] + aMXPtr[M01] * c[1] + aMXPtr[M02] * c[2] +
+			aMXPtr[M03];
+		vy[i] = aMXPtr[M10] * c[0] + aMXPtr[M11] * c[1] + aMXPtr[M12] * c[2] +
+			aMXPtr[M13];
+		vz[i] = aMXPtr[M20] * c[0] + aMXPtr[M21] * c[1] + aMXPtr[M22] * c[2] +
+			aMXPtr[M23];
+
+		if (vz[i] <= 0)
+		{
+			tooNear++;
+			continue;
+		}
+
+		const float z = vz[i] / f_mpersp;
+		float x = vx[i] < 0 ? 0.0f : (float)phd_winxmax;
+		float y = vy[i] < 0 ? 0.0f : (float)phd_winymax;
+
+		if (z)
+		{
+			x = vx[i] / z + f_centerx;
+			y = vy[i] / z + f_centery;
+		}
+
+		if (x - 1 < rect[0]) rect[0] = x - 1;
+		if (y - 1 < rect[1]) rect[1] = y - 1;
+		if (x + 1 > rect[2]) rect[2] = x + 1;
+		if (y + 1 > rect[3]) rect[3] = y + 1;
+	}
+
+	if (tooNear == 4)
+		return false;
+
+	for (int i = 0, last = 3; tooNear && i < 4; last = i, i++)
+	{
+		if ((vz[last] <= 0) == (vz[i] <= 0))
+			continue;
+
+		if (!(vx[i] > 0 && vx[last] > 0))
+			rect[0] = 0;
+
+		if (!(vx[i] < 0 && vx[last] < 0))
+			rect[2] = (float)phd_winxmax;
+
+		if (!(vy[i] > 0 && vy[last] > 0))
+			rect[1] = 0;
+
+		if (!(vy[i] < 0 && vy[last] < 0))
+			rect[3] = (float)phd_winymax;
+	}
+
+	return true;
+}
+
 /* A portal on the visibility path: the classic rectangle, and where the art
  * opens wider round the portal (HDVisRoomWide) the rectangle of that
  * opening too, so that the room behind gets the window the art shows it
- * in. */
+ * in. And where that wider opening has no part inside the window the room
+ * is seen through, but lands on the screen, the room behind is listed with
+ * the opening's rectangle clamped to the screen alone: the window is the
+ * classic geometry's, and the art opens beside it. A portal the art opens
+ * no wider than the classic level keeps the classic answer: from JOBY2's
+ * court, room 30's portal lands on the screen beside the window, and taken
+ * in, the stairwell's pipes in the court's wall came back (24,640 pixels). */
 static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
 {
 	const int portal = (int)((door - 1 - (r->door + 1)) / 16);
 	const HDVisWide* wide = HDVisRoomWide((int)(r - room), portal);
 	char before = room[rn].bound_active;
+	short corners[15];
+	const short* open = door;
+	float rect[4];
 
 	SetRoomBounds(door, rn, r);
 	VisNote(rn, 0, before);
 
-	if (!wide)
+	if (wide)
+	{
+		VisDoor(&door[0], wide->v, corners);
+		before = room[rn].bound_active;
+		SetRoomBounds(corners, rn, r);
+		VisNote(rn, 3, before);
+		open = corners;
+	}
+
+	if (!wide || !VisPortalRect(open, rect))
 		return;
 
-	short corners[15];
+	// Some of it inside the window: the classic rectangle has it.
+	if (rect[0] < r->test_right && rect[2] > r->test_left &&
+		rect[1] < r->test_bottom && rect[3] > r->test_top)
+		return;
 
-	VisDoor(&door[0], wide->v, corners);
 	before = room[rn].bound_active;
-	SetRoomBounds(corners, rn, r);
+	VisQueue(rn, r, rect[0], rect[1], rect[2], rect[3], true);
 	VisNote(rn, 3, before);
 }
 

@@ -13,4 +13,4 @@ rem modern_camera.cpp (the orbit) includes an engine header at all, which is
 rem why they link here with a compiler and nothing else.
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul 2>&1
 cd /d "%~dp0"
-cl /nologo /EHsc /O2 /std:c++17 /W4 /Fe:ModernTest.exe ModernTest.cpp "..\..\..\TOMB5 Code\TOMB5\game\modern_move.cpp" "..\..\..\TOMB5 Code\TOMB5\game\modern_camera.cpp"
+cl /nologo /EHsc /O2 /std:c++17 /W4 /Fe:ModernTest.exe ModernTest.cpp "..\..\..\TOMB5 Code\TOMB5\game\modern_move.cpp" "..\..\..\TOMB5 Code\TOMB5\game\modern_camera.cpp" "..\..\..\TOMB5 Code\TOMB5\specific\hd\hd_vis.cpp"

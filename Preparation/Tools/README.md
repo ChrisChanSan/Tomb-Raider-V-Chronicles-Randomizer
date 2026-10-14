@@ -209,7 +209,8 @@ flipped room shows its twin's art only when they name the `now group=` of its
 after the solid art, each room whose inside overlaps a drawn room's in volume with no
 portal between them (`backdrop: pairs= holders= faces= air=` at the build) on the
 pixels where that drawn room's classic faces stand in its `-roomwin` window and
-nothing has been drawn yet, `backdrop: N room(s) drawn` per picture, and 0 leaves it
+nothing of the world has been drawn yet (with `-sky` the dome's pixels count as such,
+as in the engine's frame), `backdrop: N room(s) drawn` per picture, and 0 leaves it
 out; the build's `covered:` lines end in `why=owner|classic|larger winner=` (the
 engine's `HDLOG covered` line the same); `-classicclip` draws each
 `-classicroom` (and `-classicmark`) room's faces inside its window of `-roomwin`

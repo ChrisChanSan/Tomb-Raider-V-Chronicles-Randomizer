@@ -5336,14 +5336,22 @@ on the second way's pixels. At the level's build, with the air on, every intrusi
 whose two insides overlap in volume is a backdrop pair (`BuildBackdrops`; JOBY2 has 10).
 Per frame, after the solid art, each listed holder of such a pair with a window marks
 in a stencil bit of its own the pixels where its classic faces stand in that window and
-the depth is still the cleared one; every room of its pairs not on the list is drawn
-there alone, with its own depth, the holder's matrix moved to its origin and its own
-lighting, a flipped room by the room that draws its group now (`DrawBackdrops`,
-`HDRenderBackdropMask`, `HDRenderBackdropRoom`). It cannot put art where the classic
-frame shows none. The faces mark at the last step of a 24 bit depth range: a range of no
-width marked nothing on the card the pictures were made with. RoomProbe mirrors it,
-`-backdrop 0` leaves it out; `HDLOG backdrop level= pairs= holders= faces= air=` is a
-new level line and the clip line ends in `backdrop=`.
+nothing of the world is drawn yet (the sky may be); every room of its pairs not on the
+list is drawn there alone, with its own depth, the holder's matrix moved to its origin
+and its own lighting, a flipped room by the room that draws its group now
+(`DrawBackdrops`, `HDRenderBackdropMask`, `HDRenderBackdropRoom`). It cannot put art
+where the classic frame shows none. The faces mark in a thin depth range, 0.99598 to
+0.99599, between the world and the sky: the world's depth `a - b / z` (near 20, far
+20,480) stays below a = 0.99597 at any distance, pushed art included, and the HD sky,
+which the frame draws before the rooms, writes its own slice from 0.996 to 1 - so a
+pixel where only the sky stands is still marked (a range of no width marked nothing on
+the card the pictures were made with). The builder's first range, the last step below
+1, passed only where nothing at all had been drawn; with the sky drawn, as the game
+draws it wherever a room under the sky is listed (six of the thirteen at this pose),
+the sky filled all 22,166 pixels of the hole instead of room 24's ceiling - found by
+the round's prover. RoomProbe mirrors it, `-backdrop 0` leaves it out;
+`HDLOG backdrop level= pairs= holders= faces= air=` is a new level line and the clip
+line ends in `backdrop=`.
 
 **The wall's thickness.** Built as a measure, offline (the round's `t2census`): per
 intrusion pair and per wall plane of the holder's inside that the intruder's box spans,
@@ -5351,13 +5359,33 @@ the intruder's sheets parallel to the plane on the holder's side, 16 to 1,024 un
 it and a sector's face in area, the deepest of them the wall's far face, and the
 intruder's art between it and the plane. At the court (room 16) and the stairwell
 (group 30) at x 24,576: the far face at 344 units (x 24,232, page 452, 7.1 million
-square units), and 3,764 of group 30's triangles between, the pipes (page 3,184) among
-them at 64 to 80 units, in front of the court's own wall at the plane. Over the fifteen
-levels the measure finds 87 such slabs on ten levels, 27,784 triangles in them, 32 to
+square units), and 3,764 of group 30's triangles between; the pipes (page 3,184) are
+3,664 of them, 12 to 269 units off the plane (median 150; their sheets parallel to the
+plane at 64 and 80), in front of the court's own wall at the plane. Over the fifteen
+levels the measure finds 87 such slabs on ten levels, 27,784 triangles in them, 24 to
 1,024 units thick (RICH1 room 13 in 11 7,044, RICH1 68 in 83, 84 and 86 1,464 each,
-RICH2 65 in 167 1,230). Not built: the slabs at a sector's depth are rooms' far walls
-rather than a wall's two faces, and each would need its own views before a rule holds
-art to its room's window there; the court's 829 near-black pixels stay.
+RICH2 65 in 167 1,230): 59 of them, 18,800 triangles, 24 to 360 units thick - a wall's
+two faces -, and 28, 8,984 triangles, 848 to 1,024 - a sector's depth, a room's far
+wall rather than a wall. Where that art shows today (the fix pass's `t2views`: per view
+an offline z-buffer of the groups the frame draws, a pixel counted where a slab's
+triangle is nearest and the frame is not the clear colour): at 14 of the 201 views,
+68,490 pixels. The court's slab at 4 (the court seen from room 153, 5,400; from room 9,
+401 twice; from 151, 7), with the court's own wall behind at 5,633 of its 6,209 pixels
+and other art at the rest; JOBY2's room 24 in 30 at the stair place (3,998, room 30's
+art behind every one); ANDREA1's room 0 in 91 (96 thick) at two views, 15,239 pixels
+with nothing behind at 14,003; and RICH2's room 3, seen from inside itself, whose own
+walls at 944 and 912 units the measure takes for slabs, 68,737 pixels counted per slab
+with nothing behind at 48,045. Along the camera path at the stairs' foot the court's
+slab shows at 24 of the 32 views, 20,722 pixels: the stairwell's wall panels seen
+through the broken pillar from room 33. Taking the slabs' art away at every view would
+open 62,074 pixels with nothing behind at the 201 views (48,045 of them RICH2's room 3
+from inside itself); kept wherever the eye stands in the intruder, still 14,029 (ANDREA1's
+room 0 in 91 at 14,003), and the panels go out of that path. A rule that holds the
+art to its room's window has to know per slab that the window is the way it is meant
+to be seen; the census says where the art shows, not which way is meant - the pipes
+the owner named, the stairwell's panels along the stairs and RICH2's own walls are
+slabs alike. Not built in this round: the court's 829 near-black pixels stay, and the
+choice is put to the owner with these numbers.
 
 **The covered faces, face by face.** For each of the 40 faces: the floor square half a
 sector off its centre on its open side, in each of the two rooms (the classic floor
@@ -5374,11 +5402,15 @@ face. The loser's art is drawn pushed back - the larger face's when the smaller 
 room wins. The holder wins at all 40, 18 by the floor and 22 by the larger face, so the
 pictures are those of `28c358eb`; the `HDLOG covered` line and RoomProbe's `covered:`
 line end in `why=owner|classic|larger winner=`. ANDREA3's face 110 (room 16's face
-inside room 80's): both rooms own the floor and the classic frame flickers, so the rule
-keeps room 80's wall over room 16's sandstone pillar; nothing in the data picks the
-pillar. Three answers disagree with one of the measures and are left to the owner: face
-110 (above), face 339 (room 16 owns the floor, the mass view's eye stands in room 80),
-RICH1 face 564 (room 85 owns the floor, the classic frame shows room 94's face).
+inside room 80's), the owner's question: both rooms own the floor, the classic frame
+flickers, and the mass views that see the face have their eye in room 80 - the one
+measure that decides agrees with the rule, which keeps room 80's wall over room 16's
+sandstone pillar. Three answers disagree with one of the measures and are left to the
+owner: ANDREA3's face 335 (room 80's face inside room 108's; both rooms own the floor,
+the classic frame flickers, the mass views' eye stands in room 80, and room 108 wins on
+size alone), face 339 (room 16 owns the floor, the mass views' eye stands in room 80),
+and RICH1's face 564 (room 85 owns the floor, the classic frame shows room 94's face).
+ANDREA1's face 86 is seen only from room 19, a third room, so its eye decides nothing.
 
 | Level | Face | Room | Holder | Floor owner | Classic alone | Eye in | Winner, why |
 |---|---|---|---|---|---|---|---|
@@ -5451,11 +5483,25 @@ flag too. `-classicroom -classiconly` of ANDREA2 231, JOBY2 66 and 28, ANDY3 34,
 the HD build, the backdrop is drawn in the HD frame). ModernTest 14,991 checks, MenuTest
 44,216, InterpTest 729, LipsTest 270 with the `.OBJ` folder and 243 without, 0 failed.
 
-**Left.** The court's pipes (the wall's thickness is measured, the rule not built). The
-look at the three faces above. Which of `hd_air` 1 and 2 the game keeps.
+**Checked with the sky.** The engine draws the HD sky before the rooms; RoomProbe
+`-sky` does the same. With the sky drawn, from room 33 at yaw 270 the hole shows the
+sky with the builder's mask on all 22,166 pixels and room 24's ceiling with the fix
+pass's on all of them; the nine views 195,368 of 195,368, the camera path 24,165 of
+24,165; over the 131 views only that one view changes (22,001 pixels; the other 165
+of the ceiling match the sky's colour), and art where the classic frame shows none
+stays at 0 at all 201 views with and without the sky. Without the sky the fix pass's
+pictures are the builder's, byte for byte, at all 201 views and the 43 of the corner;
+`-air 0` gives the `2d48e83` tool's at 201 of 201; `-air 2` at the five places with
+art in the wrong room, the place of the earlier corner ghost and camera E the
+builder's, with and without the sky.
+
+**Left.** The court's pipes (the wall's thickness is measured and counted per view,
+the rule not built). The look at the three faces above. Which of `hd_air` 1 and 2 the
+game keeps.
 
 **Commits.** `dd51477` (the backdrop), `120561f` (the covered faces' winner
-and its reason) and this record.
+and its reason), the first record, `85dd3b8` (the backdrop's mask under the sky) and
+the fix pass's record.
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

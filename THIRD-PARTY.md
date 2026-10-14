@@ -1963,8 +1963,8 @@ water surface", carries the tables.
     level's light field (the sheen's, `hd_gloss_field.h`) and the frame
     itself. The darkening and the mirror's weight stand a third higher
     (entry 195), the march halves its crossings and asks the depth to fit
-    (entry 196), and the mirror is drawn at the frame's end out of the
-    whole frame (entry 197).
+    (entry 196), and the mirror is drawn after the rooms' glass and glows
+    out of a copy of the frame there (entry 197).
 193. **A floating body's ring** - a ring that starts over 128 units (the
     water's life's barrel, 240 to 255) keeps its size past the cap of
     128 and is 4 times stronger (`hd_render.cpp`, `kRingBody`;
@@ -2004,14 +2004,17 @@ water surface", carries the tables.
     a march of 8-unit steps halved ten times, which matches the scene
     seen from the eye mirrored in the floor: 93 to 98 per cent of the
     hits within 2 pixels of its, at RICH2's tank eyes.
-197. **The mirror at the frame's end** - the wet floor draws twice a
+197. **The mirror's place in the frame** - the wet floor draws twice a
     frame: its darkening over the opaque frame, where the sheets' copy is
-    taken first, and its mirror after the glass, the glows, the cards and
-    the objects' glows, out of a copy of that whole frame
-    (`HDRenderWaterWetMirror`); under a tank's film the mirror gives up
-    the film's strength. OWN, a design of this project: the order the
-    pictures needed, measured with the debugger (the glows' triangles and
-    what the glass shows reached no mirror out of the opaque frame's copy).
+    taken first, and its mirror after the rooms' glass and glows and
+    before the cards and the objects' glows, out of a copy of the frame
+    there (`HDRenderWaterWetMirror`); under a tank's film the mirror gives
+    up the film's strength. OWN, a design of this project: the order the
+    pictures needed, measured with the debugger - the glows' triangles and
+    what the glass shows reached no mirror out of the opaque frame's copy,
+    and a mirror drawn after the cards lay over the dome and the spray
+    (every wet pixel covered after the opaque copy at the burst of RICH2's
+    tank 182 was the cards').
 
 ## Credited, but not contained here
 

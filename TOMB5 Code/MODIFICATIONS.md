@@ -13264,33 +13264,56 @@ round 3's march. The three faults' causes:
 - *The glows' triangles.* The copy the mirror read was taken before the glass and the
   glows, so no glow reached the mirror: with a copy of the whole frame 10,739 and 10,809
   of the mirror's hits in room 23's two views show what it adds, 1 to 337 in the other
-  views. That copy also holds the cards, the dome and the film; a ray reflected up off
-  the floor cannot meet the floor itself.
-- *The half-see-through.* In the corridor view nothing drawn after the opaque copy lies
-  over the wet floor in RoomProbe (0 pixels; 158 and 92 in room 23's views): a
-  see-through surface stands over the floor in the frame but not in the copy the mirror
-  read, so its mirror showed what lies behind it. The surface in his picture, by its look
-  the torn doors of the lift in the corridor's wall, is drawn by the object path, which
-  RoomProbe does not draw, so its pixels are not counted here.
+  views. A copy of the whole frame also holds the cards, the dome and the film; a ray
+  reflected up off the floor cannot meet the floor itself.
+- *The half-see-through.* Not found and not counted. In the corridor view nothing drawn
+  after the opaque copy lies over the wet floor in RoomProbe (0 pixels at 60 s; 158 and
+  92 in room 23's views), and RoomProbe draws no objects: a see-through object of his
+  picture - the torn doors of the lift in the corridor's wall are a guess by their look,
+  and whether their faces are drawn blended at all was not looked up - is not in its
+  frame. The cause of what he saw is unknown; it stays a question for his next test.
 
 Mended. The march takes 16 steps from 32 units, each 1.3 times the last (about 7,000
 units), halves every crossing from in front of the frame to behind it 5 times, and takes
 it where the frame's depth fits the ray's within 32 units and 2 per cent of the depth,
 fading out toward that tolerance; past it the ray went behind an edge and the march goes
 on. And the wet floor draws twice: its darkening over the opaque frame as before (the
-sheets' copy taken first), its mirror at the frame's end, after the glass, the glows,
-the cards and the objects' glows, out of a copy of that whole frame
-(`HDRenderWaterWetMirror`, called last in `HDFrameDrawGlow`). Under a tank's film the
-mirror gives up the film's strength, so a film over the floor still covers it. Now 93 to
-98 per cent of the hits lie within 2 pixels of the fine march's, and the mirror is as near
-the true one as the fine march's (13.5 at round 3's tank eye). Lara is not drawn by
-RoomProbe; the vending machine stands for a tall thing on the wet floor.
+sheets' copy taken first), its mirror after the rooms' glass and glows and before the
+cards and the objects' glows, out of a copy of the frame as it stands there
+(`HDRenderWaterWetMirror` in `HDFrameDrawGlow`). Under a tank's film the mirror gives up
+the film's strength, so a film over the floor still covers it. Now 93 to 98 per cent of
+the hits lie within 2 pixels of the fine march's, and the mirror is as near the true one
+as the fine march's (13.5 at round 3's tank eye). Lara is not drawn by RoomProbe; the
+vending machine stands for a tall thing on the wet floor.
+
+The mirror's place, mended in the fix pass. First built at the frame's end, after the
+cards, the mirror was added over the dome and the spray wherever they stand over the wet
+floor - the same kind of order fault as a mirror over a see-through surface. Counted
+with the debugger (map 5, a wet pixel changed between the opaque copy and the mirror's
+own) and with the cards left out (`-tankleave spray`, `-tankleave water`): at tank 182,
+his tank view and round 3's, 92,677 to 109,758 wet pixels from 0.3 to 2 s, every one of
+them the cards' (0 without them), none at 4 and 60 s; at tank 33 3,752 to 6,453, all
+but 3,120 and 196 in the first 0.3 s the cards' (the rest is the film, whose share the
+mirror already gave up). So the mirror now draws before the cards: the copy it reads
+still holds the rooms' glass and glows, the glows' triangles stay mirrored, and the
+dome and the spray lie over it as over the floor. The objects' additive pass comes after
+it too, which is the right order for their glows (a screen blend over what they shine
+through); they are not in the copy. Between the opaque copy and the mirror nothing of
+the cards lies over the floor any more (0 at tank 182 at every moment); the pictures
+change only on the wet floor under the cards (53,943 to 94,757 pixels at tank 182, a mean
+of 1.1 to 5.4 levels, at most 99; at tank 33 3,286 and 3,826 in the first 0.3 s, a mean
+of 18 and 19, at most 132 - the mirror no longer over the dome and the spray) and where
+the mirror showed the dome (292 to 10,275 pixels); at 4 and 60 s every picture is
+md5-identical to the round's first build.
 
 **Measured.** GPU at 2560 x 1440, five runs, the water's phases and both wet draws
 summed, 60 s after the shot: his tank view 0.091 ms at `28c358eb`, 0.153 after (+0.062;
 the wet floor 0.075 to 0.136, the second copy in it); round 3's tank eye 0.074 to 0.130
 (+0.056); the room 23 view varies from run to run as round 3 found (0.07 to 0.70 at
-`28c358eb`, 0.28 to 0.66 after). The look alone: his view 0.0857 to 0.0867 ms. Slots:
+`28c358eb`, 0.28 to 0.66 after). With the mirror before the cards (four runs): his view
+0.090 to 0.149 ms at 60 s, round 3's tank eye 0.073 to 0.127; at 1 s, the burst, 0.174
+and 0.190 with the mirror at the frame's end, 0.184 and 0.191 before the cards - the same
+draws in another place. The look alone: his view 0.0857 to 0.0867 ms. Slots:
 `WetPS` 178 to 255 (12 texture, 243 arithmetic), the debugger 508; every other `.inc`
 byte-identical. Pixels at 960 x 540, 60 s, changed by more than 4 against the dry
 floor: his tank view 244,365 before, 252,520 after; the corridor 133,086 and 116,977;
@@ -13302,20 +13325,27 @@ fifteen cameras 15 of 15 identical to the fix round's parity set. With `-hdwater
 against a RoomProbe built from `28c358eb`: the fifteen cameras 15 of 15, the pond's twelve
 views at 1, 3 and 5 s 36 of 36, the canal dive (the cards) 4 of 4, the tank views without
 `-tank` and his view before the break 3 of 3, the sweep's 209 WATERLOG lines; only the
-RICH2 tank views with `-tank` change. `-tankwetall` gives round 3's floor to the
-md5. ModernTest grows by 3 checks (the radius, its moment, a loaded game); the suites 0
+RICH2 tank views with `-tank` change. `-tankwetall` gives round 3's floor: its pictures
+md5-identical to `28c358eb` at `cc32285a`, and at the round's head, whose look and mirror
+differ, the same 50 squares (925 points, 1,600 triangles, the furthest at 19,749 units).
+ModernTest grows by 3 checks (the radius, its moment, a loaded game); the suites 0
 failed; the engine and every tool build.
 
 **Left.** The look in the game - nobody in this round could play it, and RoomProbe draws
 no Lara. The radius is one constant: at 3,072 units the corridor would keep a second
 square and room 23's lowered area would be wet whole. The question of round 3 stands:
 with `hd_motion` off the floor is wet all at once, as built, or should there be no wet
-floor at all. The see-through surface of his corridor picture is not drawn by RoomProbe;
-whether its mirror now reads right is for the game to show. The room 23 view's cost
-still varies from process to process.
+floor at all. The half-see-through of his corridor picture is neither found nor counted
+(above): what it is, and whether it still shows, is a question for his next test. What
+the rooms' glass and glows lay in front of the wet floor is still drawn before the
+mirror, which is added over it: the round's count found 158 and 92 such pixels in room
+23's two views, the fix pass's at 60 s none at the four tank views it took, and what
+those pixels are was not looked into. An object's glow is drawn over the mirror but is
+not in it. The room 23 view's cost still varies from process to process.
 
 **Commits.** `cc32285a` (the rooms and the radius), `268f9160` (the look), `e315e47d`
-(the march and the mirror at the frame's end).
+(the march and the mirror at the frame's end), `714a4ae6` (the fix pass: the mirror
+before the cards).
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

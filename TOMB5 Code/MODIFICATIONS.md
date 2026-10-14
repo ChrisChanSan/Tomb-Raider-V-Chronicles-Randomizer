@@ -5299,6 +5299,164 @@ and 3 by 11,824 and 2,700 pixels (704 to 715, 1,579 to 1,582), the frame of the 
 (every covered face measured and logged), `fbe31af` (a carrying room's list is its present
 group's) and its record.
 
+**Round 8: the hole behind the corner, the wall's thickness, the covered faces face by
+face, the ride (2026-10-14).** The owner had round 7 merged and ordered the four things
+it left from the pipeline, in his words of the play test before: JOBY2's broken-out
+corner by the stairs, where the wall becomes half see-through and the rooms standing in
+one another make it worse - the corner is to show what the classic wall shows; the
+stairwell's pipes, which belong to rooms 28, 32 and 30 only and from the court should be
+invisible and never seen, with the new depth the walls have, and not by cutting the back
+faces; on a shared wall the HD path draws one of the two faces - the face of the room
+that owns the sector, the one the classic game draws on top, or the one whose room the
+eye is in - measured, with the reason named; and the lift ride drawn as the engine maps
+the flipped rooms.
+
+**The hole behind the corner.** From room 33 at yaw 270 (eye 29,696/-3,840/43,520,
+1280 x 720) the frame of `28c358eb` shows the clear colour on 22,166 pixels where the
+cut classic frame shows room 33's face. An offline z-buffer of every triangle of the
+level finds room 24's ceiling (group 24, part 0, y -4,352, pages 491 and 15,077) first
+at 22,163 of them and the pipe's edge at 3; no pixel is void. 53 of the ceiling's
+triangles close it, most with their centroid in room 31's inside, some in 33's, some in
+the wall between. Over the nine views five degrees round it the clear colour on a
+classic face is 195,368 pixels, all of it room 24's; along the camera path of the stairs'
+foot (32 eyes, 640 x 360) 24,165 in 28 views; over the 131 room-centre views 42,446 in
+47 views, of which only JOBY2 33 at yaw 270 is an unlisted room's art - the rest is
+listed art the alpha test or a window takes, or nothing at all (ANDREA2 211 at yaw 270
+10,049 pixels, ANDREA1 206 at 180 3,810, the far end of long views). Two ways were
+drawn. The rooms whose inside overlaps a listed room's in volume, with no portal between
+them, drawn behind everything on every pixel the frame leaves empty, close all of the
+hole and put art where the classic frame shows nothing - the sky and doorways: 36,676
+pixels along the camera path, 953,798 over the 131 views (ANDREA2 204 at yaw 90 467,635,
+JOBY2 151 at 180 307,002), 22,966 at the places (two of the five places the air rule
+cleared); kept to their art inside a listed room's inside, still 28,326 and 615,261.
+The listed room's own classic faces behind its art close every hole and add nothing,
+being the classic frame itself, but they put a classic texture into the HD wall, and the
+classic path draws a room's roomlets or its art, not both. **The fix:** the first way,
+on the second way's pixels. At the level's build, with the air on, every intrusion entry
+whose two insides overlap in volume is a backdrop pair (`BuildBackdrops`; JOBY2 has 10).
+Per frame, after the solid art, each listed holder of such a pair with a window marks
+in a stencil bit of its own the pixels where its classic faces stand in that window and
+the depth is still the cleared one; every room of its pairs not on the list is drawn
+there alone, with its own depth, the holder's matrix moved to its origin and its own
+lighting, a flipped room by the room that draws its group now (`DrawBackdrops`,
+`HDRenderBackdropMask`, `HDRenderBackdropRoom`). It cannot put art where the classic
+frame shows none. The faces mark at the last step of a 24 bit depth range: a range of no
+width marked nothing on the card the pictures were made with. RoomProbe mirrors it,
+`-backdrop 0` leaves it out; `HDLOG backdrop level= pairs= holders= faces= air=` is a
+new level line and the clip line ends in `backdrop=`.
+
+**The wall's thickness.** Built as a measure, offline (the round's `t2census`): per
+intrusion pair and per wall plane of the holder's inside that the intruder's box spans,
+the intruder's sheets parallel to the plane on the holder's side, 16 to 1,024 units off
+it and a sector's face in area, the deepest of them the wall's far face, and the
+intruder's art between it and the plane. At the court (room 16) and the stairwell
+(group 30) at x 24,576: the far face at 344 units (x 24,232, page 452, 7.1 million
+square units), and 3,764 of group 30's triangles between, the pipes (page 3,184) among
+them at 64 to 80 units, in front of the court's own wall at the plane. Over the fifteen
+levels the measure finds 87 such slabs on ten levels, 27,784 triangles in them, 32 to
+1,024 units thick (RICH1 room 13 in 11 7,044, RICH1 68 in 83, 84 and 86 1,464 each,
+RICH2 65 in 167 1,230). Not built: the slabs at a sector's depth are rooms' far walls
+rather than a wall's two faces, and each would need its own views before a rule holds
+art to its room's window there; the court's 829 near-black pixels stay.
+
+**The covered faces, face by face.** For each of the 40 faces: the floor square half a
+sector off its centre on its open side, in each of the two rooms (the classic floor
+data); the classic faces of the two rooms alone from two eyes 768 units off the face,
+256 aside and 128 up, each drawn three times a unit apart; the room of the eye at the
+views that see the face. One room's square has air over the face's whole height at 18
+faces, the holder's every time; both rooms' at 22. Every pair of faces lies in one
+plane; the classic faces alone fight at both eyes at 36 faces - the classic game
+flickers there as it does at room 212 - and stand still at both at one, RICH1's face 564,
+where room 94's own face shows alone while room 85 owns the floor. **The rule:** at the
+level's build, the one room that owns the floor wins; with both or neither, the face in
+front along the open side in the classic frame; with the two in one plane, the larger
+face. The loser's art is drawn pushed back - the larger face's when the smaller face's
+room wins. The holder wins at all 40, 18 by the floor and 22 by the larger face, so the
+pictures are those of `28c358eb`; the `HDLOG covered` line and RoomProbe's `covered:`
+line end in `why=owner|classic|larger winner=`. ANDREA3's face 110 (room 16's face
+inside room 80's): both rooms own the floor and the classic frame flickers, so the rule
+keeps room 80's wall over room 16's sandstone pillar; nothing in the data picks the
+pillar. Three answers disagree with one of the measures and are left to the owner: face
+110 (above), face 339 (room 16 owns the floor, the mass view's eye stands in room 80),
+RICH1 face 564 (room 85 owns the floor, the classic frame shows room 94's face).
+
+| Level | Face | Room | Holder | Floor owner | Classic alone | Eye in | Winner, why |
+|---|---|---|---|---|---|---|---|
+| ANDREA1 | 86 | 12 | 212 | 212 | flicker | 19 | 212, owner |
+| ANDREA3 | 110 | 16 | 80 | 80 and 16 | flicker | 80 | 80, larger |
+| ANDREA3 | 335 | 80 | 108 | 108 and 80 | flicker | 80 | 108, larger |
+| ANDREA3 | 339 | 80 | 16 | 16 | flicker | 80 | 16, owner |
+| ANDY2 | 264 | 41 | 55 | 55 | flicker | - | 55, owner |
+| ANDY2 | 266 | 41 | 55 | 55 | flicker | - | 55, owner |
+| ANDY2 | 1121 | 134 | 55 | 55 | flicker | - | 55, owner |
+| ANDY2 | 1123 | 134 | 55 | 55 | flicker | - | 55, owner |
+| JOBY3 | 27 | 4 | 13 | 13 | flicker at one eye | - | 13, owner |
+| JOBY3 | 35 | 4 | 13 | 13 | flicker | - | 13, owner |
+| JOBY3 | 37 | 4 | 13 | 13 | flicker | - | 13, owner |
+| JOBY3 | 39 | 4 | 13 | 13 | flicker | - | 13, owner |
+| JOBY3 | 78 | 26 | 190 | 190 and 26 | flicker | 190 | 190, larger |
+| JOBY3 | 79 | 26 | 190 | 190 and 26 | flicker | 190 | 190, larger |
+| JOBY3 | 80 | 26 | 190 | 190 and 26 | flicker at one eye | 190 | 190, larger |
+| JOBY3 | 87 | 26 | 190 | 190 and 26 | flicker | 190 | 190, larger |
+| JOBY3 | 88 | 26 | 190 | 190 and 26 | flicker | 190 | 190, larger |
+| JOBY3 | 89 | 26 | 190 | 190 and 26 | flicker | 190 | 190, larger |
+| JOBY3 | 124 | 63 | 104 | 104 and 63 | flicker | - | 104, larger |
+| JOBY3 | 125 | 63 | 104 | 104 and 63 | flicker | - | 104, larger |
+| JOBY3 | 127 | 63 | 104 | 104 and 63 | flicker | - | 104, larger |
+| JOBY3 | 128 | 63 | 104 | 104 and 63 | flicker | - | 104, larger |
+| JOBY3 | 133 | 63 | 104 | 104 and 63 | flicker | - | 104, larger |
+| JOBY3 | 134 | 63 | 104 | 104 and 63 | flicker | - | 104, larger |
+| JOBY3 | 474 | 150 | 89 | 89 | flicker | - | 89, owner |
+| JOBY3 | 476 | 150 | 89 | 89 | flicker at one eye | - | 89, owner |
+| JOBY3 | 562 | 191 | 70 | 70 and 191 | flicker | - | 70, larger |
+| JOBY3 | 564 | 191 | 70 | 70 and 191 | flicker | - | 70, larger |
+| RICH1 | 137 | 17 | 11 | 11 and 17 | flicker | - | 11, larger |
+| RICH1 | 139 | 17 | 11 | 11 and 17 | flicker | - | 11, larger |
+| RICH1 | 312 | 52 | 10 | 10 and 52 | flicker | - | 10, larger |
+| RICH1 | 314 | 52 | 10 | 10 and 52 | flicker | - | 10, larger |
+| RICH1 | 442 | 80 | 11 | 11 | flicker | - | 11, owner |
+| RICH1 | 444 | 80 | 11 | 11 and 80 | flicker | - | 11, larger |
+| RICH1 | 564 | 94 | 85 | 85 | 94 alone | - | 85, owner |
+| RICH2 | 991 | 106 | 3 | 3 | flicker | - | 3, owner |
+| RICH2 | 999 | 106 | 3 | 3 | flicker | - | 3, owner |
+| RICH2 | 1021 | 108 | 3 | 3 | flicker | - | 3, owner |
+| RICH2 | 1025 | 108 | 3 | 3 | flicker | - | 3, owner |
+| RICH2 | 1029 | 108 | 3 | 3 and 108 | flicker | - | 3, larger |
+
+**The ride with the engine's mapping.** The 40 steps and the 12 fine steps again, the
+walk with the ten flips of the log's load and every flipped room drawn by the group the
+engine maps it to, both ways. A one-unit eye step changes 161,117 pixels over the ride
+with `ba89a58f`, 73,314 with `28c358eb` and with this round's tools, step for step the
+same; over the fine steps 109,929 and 54,926, as before (no flipped room on them). The
+flipped steps keep their counts under the hull push (step 0 684, step 1 715, step 3
+1,582); 13 steps change, none for the worse; the backdrop and the covered rule change no
+step.
+
+**Checked.** With the tools built from `120561f`: from room 33 at yaw 270 the clear colour
+on a classic face goes from 22,166 pixels to 0 and exactly those 22,166 change; the nine
+views round it from 195,368 to 0, the 32 eyes of the camera path from 24,165 to 0, with as
+many pixels changed and no other; the two level-viewer cameras change nothing (their eyes
+stand outside the rooms). At all 201 views (22 places, 16 mass views, 131 sweep views, 32
+earlier views) `-air 0` gives the picture file of the `2d48e83` tool, 201 of 201, and the
+default gives that of the `28c358eb` tool at 198: JOBY2 33 at yaw 270 in the sweep and
+among the earlier views (the hole, 22,166 pixels) and ANDREA3 80 at yaw 180 (25 pixels
+of clear colour on room 80's classic face, now room 16's art). Over the 131 views the
+clear colour on a classic face goes from 42,446 pixels in 47 views to 20,280; nowhere does
+art appear where the classic frame shows none (0 pixels at all 201 views). `-air 2`
+changes the sweep by the 11,247 pixels of round 7 and the 22,166 of the hole. The five
+places with art in the wrong room keep their pictures byte for byte, room 101 under the
+flag too. `-classicroom -classiconly` of ANDREA2 231, JOBY2 66 and 28, ANDY3 34, ANDREA1
+93 and 212, two directions each, gives the bytes of the `8691e82` tool at all 12;
+`hd_enable` 0 never reaches the changed code (the pairs and the covered faces are made by
+the HD build, the backdrop is drawn in the HD frame). ModernTest 14,991 checks, MenuTest
+44,216, InterpTest 729, LipsTest 270 with the `.OBJ` folder and 243 without, 0 failed.
+
+**Left.** The court's pipes (the wall's thickness is measured, the rule not built). The
+look at the three faces above. Which of `hd_air` 1 and 2 the game keeps.
+
+**Commits.** `dd51477` (the backdrop), `120561f` (the covered faces' winner
+and its reason) and this record.
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

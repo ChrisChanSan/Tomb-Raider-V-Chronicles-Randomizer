@@ -1511,6 +1511,16 @@ struct HDRenderSpringFrame
 	int motion;
 };
 
+/* The level's `spring` rows of hd_water.txt (hd_render.cpp, ParseWaterLine):
+ * the room each names and its numbers, x, z, strength and seconds (0 for
+ * none), in the file's order; the count is returned. */
+struct HDRenderSpringRow
+{
+	int room;
+	float key[4];
+};
+
+int HDRenderWaterSpringRows(HDRenderSpringRow* out, int max);
 void HDRenderWaterRingAdd(float x, float y, float z, float size, double born,
 	int little);
 void HDRenderWaterBodySpring(int body, float x, float z);

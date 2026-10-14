@@ -91,6 +91,8 @@
 /* The water's cards: a dive splash, a fish tank's spray and the wet film
  * on its floor as functions of their age alone (splash_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
+// The springs: the table, the file's key, the hashed clock (spring_*).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -20052,6 +20054,163 @@ static void splash_rings()
 		"a small ring (a source of 80) keeps its share", 1, 1);
 }
 
+/* The springs (hd_spring.h): the table, the file's `spring` key, the
+ * hashed clock of the rings and the bubbles - pure functions of the
+ * spring's numbers and the clock, so the same moment gives the same
+ * picture every time. */
+static HDSpring spring_of(float strength)
+{
+	HDSpring s = {};
+
+	strcpy(s.stem, "ANDREA2");
+	s.room = 194;
+	s.x = 55808.0f;
+	s.z = 32768.0f;
+	s.floorY = 2560;
+	s.surfaceY = 256;
+	s.strength = strength;
+	s.period = 0.7f;
+	s.seed = HDSpringSeed(s.stem, s.x, s.z);
+	return s;
+}
+
+static void spring_table()
+{
+	const HDSpringRow& r = kHDSprings[0];
+
+	ok(!strcmp(r.stem, "ANDREA2") && r.room == 194 && r.x == 55808.0f &&
+		r.z == 32768.0f && r.floorY == 2560 && r.strength == 1.0f &&
+		r.period == 0.7f,
+		"spring table: ANDREA2 194's fountain, the middle of its six "
+		"squares, the floor 2304 under the sheet at 256, 0.7 s", r.room, 194);
+	ok(HDSpringRingSize(1.0f) == 80.0f && HDSpringRingSize(0.5f) == 40.0f &&
+		HDSpringRingSize(0.1f) == kHDSpringRingLeast,
+		"spring table: the ring 80 at strength 1, in step below, 16 at the "
+		"least", (long)HDSpringRingSize(0.5f), 40);
+	ok(HDSpringStemHash("andrea2") == HDSpringStemHash("ANDREA2") &&
+		HDSpringStemHash("ANDREA2") != HDSpringStemHash("ANDREA1"),
+		"spring table: the level's number is blind to case", 1, 1);
+}
+
+static void spring_file()
+{
+	char line[] = "ANDREA2 194 - spring 55500 32500 0.5 1.25";
+	char* tok[8];
+	int n = 0;
+
+	for (char* t = strtok(line, " "); t && n < 8; t = strtok(0, " "))
+		tok[n++] = t;
+
+	float key[4];
+	const int took = HDSpringParseKey(tok, n, 3, key);
+
+	ok(took == 5 && key[0] == 55500.0f && key[1] == 32500.0f &&
+		key[2] == 0.5f && key[3] == 1.25f,
+		"spring file: x, z, strength and seconds - five tokens", took, 5);
+
+	char line2[] = "ANDREA2 194 - spring 55500 32500 0.5 foam 2";
+	n = 0;
+
+	for (char* t = strtok(line2, " "); t && n < 8; t = strtok(0, " "))
+		tok[n++] = t;
+
+	ok(HDSpringParseKey(tok, n, 3, key) == 4 && key[3] == 0.0f,
+		"spring file: without the seconds the next key stays a key", 1, 1);
+
+	char line3[] = "ANDREA2 194 - spring 55500 32500 1.5";
+	n = 0;
+
+	for (char* t = strtok(line3, " "); t && n < 8; t = strtok(0, " "))
+		tok[n++] = t;
+
+	ok(HDSpringParseKey(tok, n, 3, key) == -1,
+		"spring file: a strength over 1 is a line that cannot be read", 1, 1);
+
+	std::vector<HDSpring> springs(1, spring_of(1.0f));
+	springs[0].how = HD_SPRING_TABLE;
+
+	const float change[4] = { 55500.0f, 32500.0f, 0.5f, 0.0f };
+
+	HDSpringFileApply(springs, "ANDREA2", 194, change);
+	ok(springs.size() == 1 && springs[0].x == 55500.0f &&
+		springs[0].strength == 0.5f && springs[0].period == 0.7f &&
+		springs[0].how == HD_SPRING_FILE,
+		"spring file: a row of the table's room changes the entry and keeps "
+		"its period", (long)springs.size(), 1);
+
+	const float more[4] = { 50000.0f, 40000.0f, 0.8f, 0.0f };
+
+	HDSpringFileApply(springs, "ANDREA2", 144, more);
+	ok(springs.size() == 2 && springs[1].room == 144 &&
+		fabsf(springs[1].period - 0.7f / 0.8f) < 1.0e-5f,
+		"spring file: a row of another room adds a spring, 0.7 s over its "
+		"strength", (long)springs.size(), 2);
+
+	const float off[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+	HDSpringFileApply(springs, "ANDREA2", 194, off);
+	ok(springs.size() == 1 && springs[0].room == 144,
+		"spring file: strength 0 takes the room's spring away",
+		(long)springs.size(), 1);
+}
+
+static void spring_clock()
+{
+	const HDSpring s = spring_of(1.0f);
+	int order = 0, jitter = 0;
+
+	for (int j = 0; j < 2000; j++)
+	{
+		const double a = HDSpringRingBorn(s, j);
+		const double b = HDSpringRingBorn(s, j + 1);
+
+		order += b > a ? 1 : 0;
+		jitter += fabs(a - j * 0.7) <= 0.7 * kHDSpringJitter * 0.5 + 1e-9 ?
+			1 : 0;
+	}
+
+	ok(order == 2000 && jitter == 2000,
+		"spring clock: one ring a period, each within a fifth of its "
+		"moment, in order", order, 2000);
+
+	HDSpringBubbleAt a, b;
+	int same = 0, alive = 0, pops = 0, inside = 0;
+
+	for (int k = 0; k < 3000; k++)
+	{
+		const double t = HDSpringBubbleBorn(s, k) + 2.0;
+		const bool live = HDSpringBubble(s, k, t, &a);
+
+		same += live == HDSpringBubble(s, k, t, &b) && (!live ||
+			(a.x == b.x && a.y == b.y && a.z == b.z)) ? 1 : 0;
+		alive += live ? 1 : 0;
+		inside += live && a.y < (float)s.floorY && a.y > (float)s.surfaceY &&
+			fabsf(a.x - s.x) < 200.0f && fabsf(a.z - s.z) < 200.0f ? 1 : 0;
+
+		float size;
+
+		pops += HDSpringBubblePops(s, k, &size) && size >= 48.0f &&
+			size <= 63.0f ? 1 : 0;
+	}
+
+	ok(same == 3000, "spring clock: a bubble at a moment is the same every "
+		"time", same, 3000);
+	ok(alive == 3000 && inside == 3000,
+		"spring clock: two seconds old every bubble is in the jet, between "
+		"the floor and the sheet, near its line", inside, 3000);
+	ok(pops > 900 && pops < 1100,
+		"spring clock: one bubble in three leaves a ring of 48 to 63", pops,
+		1000);
+	ok(fabs(HDSpringBubbleBorn(s, 3000) - 1000.0) < 0.34 &&
+		HDSpringBubbleRate(spring_of(0.5f)) == 1.5f,
+		"spring clock: three bubbles a second at strength 1, in step below",
+		(long)HDSpringBubbleBorn(s, 3000), 1000);
+	ok(!HDSpringBubble(s, 0, HDSpringBubbleBorn(s, 0) - 0.01, &a) &&
+		!HDSpringBubble(s, 0, HDSpringBubbleBorn(s, 0) + 12.0, &a),
+		"spring clock: none before its birth, none once it reached the sheet "
+		"(2304 at 200 a second is 11.5 s)", 1, 1);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -20199,6 +20358,9 @@ int main()
 	splash_tank_dome();
 	splash_tank_wet();
 	splash_rings();
+	spring_table();
+	spring_file();
+	spring_clock();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

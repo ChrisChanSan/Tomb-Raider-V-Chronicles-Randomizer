@@ -6794,7 +6794,9 @@ static void ProbeWetDraw()
  * water's cards, timed on the GPU. -spring x,z,s adds one at world x, z of
  * strength s, 0 to 1 (repeatable); -nospring builds none - the picture as
  * the water drew it before the springs; -springparts 1 draws the columns
- * alone, 2 the bubbles alone, for their pixel counts. */
+ * alone, 2 the bubbles alone, for their pixel counts. The SPRINGLOG lines
+ * list the springs as the engine builds them; -springs is -hdwater 1, for
+ * that list (with -nodraw, no picture). */
 static bool g_spring_off = false;
 static std::vector<float> g_spring_add;
 
@@ -6804,6 +6806,12 @@ static bool SpringArg(int argc, char** argv, int* at)
 	if (!strcmp(argv[*at], "-nospring"))
 	{
 		g_spring_off = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-springs"))
+	{
+		g_hdwater = 1;
 		return true;
 	}
 
@@ -6843,17 +6851,10 @@ static void SpringBuild(const char* stem)
 			printf("-spring: no sheet over %.0f %.0f - no spring\n",
 				g_spring_add[i], g_spring_add[i + 1]);
 
-	static const char* kHow[3] = { "table", "file", "rule" };
+	char line[256];
 
-	for (int i = 0; i < HDSpringCount(); i++)
-	{
-		const HDSpring* s = HDSpringAt(i);
-
-		printf("spring %d: x %.0f z %.0f floor %d surface %d strength %.2f "
-			"period %.2f body %d rings %s how %s\n", i, s->x, s->z, s->floorY,
-			s->surfaceY, s->strength, s->period, s->body, s->rings ? "own" :
-			"row", kHow[s->how]);
-	}
+	for (int i = -1; HDSpringLogLine(i, line, sizeof(line)); i++)
+		printf("%s\n", line);
 }
 
 static void SpringRings(double cx, double cy, double cz)
@@ -9604,6 +9605,9 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -spring x,z,s   one more spring at world x, z of "
 			"strength s (0..1), with -hdwater 1, repeatable; -nospring "
 			"none; -springparts 1|2 the columns or the bubbles alone\n");
+		printf("       -springs   the level's springs as the engine builds "
+			"them, their SPRINGLOG lines (-hdwater 1; with -nodraw no "
+			"picture)\n");
 		return 1;
 	}
 

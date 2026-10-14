@@ -45,6 +45,10 @@ namespace
 	std::vector<double> g_fed;
 	// The clock the bubbles stand at while tomb5.hd_motion is off.
 	double g_held = 0.0;
+	// The level's counts for its SPRINGLOG line.
+	char g_stem[16] = "";
+	int g_rows = 0;
+	int g_dropped = 0;
 
 	IDirect3DDevice9* g_made_on = 0;
 	IDirect3DVertexShader9* g_vs = 0;
@@ -168,11 +172,16 @@ namespace
 				m[14] * inv[6 + j]);
 	}
 
-	/* The square of a body that holds world x, z and draws a sheet: its
-	 * body, surface and depth. */
-	bool square_under(float x, float z, int* body, int* surface, int* depth)
+	/* The square that holds world x, z and draws a sheet: its body,
+	 * surface and depth. Where sheets of two heights lie over the place -
+	 * ANDREA2's fountain over its sewer - the one in `room` wins, else the
+	 * highest. */
+	bool square_under(float x, float z, int room, int* body, int* surface,
+		int* depth)
 	{
 		std::vector<HDRenderWaterSquare> squares;
+		bool found = false;
+		bool own = false;
 
 		for (int b = 0; b < HDRenderWaterBodies(); b++)
 		{
@@ -185,17 +194,25 @@ namespace
 			HDRenderWaterBodySquares(b, &squares[0], n, 0);
 
 			for (const HDRenderWaterSquare& q : squares)
-				if (q.sheet && x >= (float)q.x && x < (float)(q.x + 1024) &&
-					z >= (float)q.z && z < (float)(q.z + 1024))
-				{
-					*body = b;
-					*surface = q.y;
-					*depth = q.depth;
-					return true;
-				}
+			{
+				if (!q.sheet || x < (float)q.x || x >= (float)(q.x + 1024) ||
+					z < (float)q.z || z >= (float)(q.z + 1024))
+					continue;
+
+				const bool mine = room >= 0 && q.room == room;
+
+				if (found && (own || (!mine && q.y >= *surface)))
+					continue;
+
+				*body = b;
+				*surface = q.y;
+				*depth = q.depth;
+				found = true;
+				own = mine;
+			}
 		}
 
-		return false;
+		return found;
 	}
 
 	/* A spring onto its water: its body, the sheet over it and the floor
@@ -208,7 +225,7 @@ namespace
 	{
 		int body = -1, surface = 0, depth = 0;
 
-		if (!square_under(s.x, s.z, &body, &surface, &depth))
+		if (!square_under(s.x, s.z, s.room, &body, &surface, &depth))
 			return false;
 
 		s.body = body;
@@ -245,16 +262,23 @@ void HDSpringClear()
 	g_springs.clear();
 	g_fed.clear();
 	g_held = 0.0;
+	g_stem[0] = 0;
+	g_rows = 0;
+	g_dropped = 0;
 }
 
-/* The level's springs: the table's rows for this level, each laid onto
- * its water; a row whose place has no sheet is left out. */
+/* The level's springs: the table's rows for this level, then the `spring`
+ * rows of hd_water.txt (HDSpringFileApply), each laid onto its water; a
+ * spring whose place has no sheet is left out and counted. */
 void HDSpringBuild(const char* stem)
 {
 	HDSpringClear();
 
 	if (!stem)
 		return;
+
+	strncpy(g_stem, stem, sizeof(g_stem) - 1);
+	g_stem[sizeof(g_stem) - 1] = 0;
 
 	std::vector<HDSpring> springs;
 
@@ -278,13 +302,69 @@ void HDSpringBuild(const char* stem)
 		springs.push_back(s);
 	}
 
+	g_rows = HDRenderWaterSpringRows(0, 0);
+
+	std::vector<HDRenderSpringRow> rows((size_t)g_rows);
+
+	if (g_rows > 0)
+		HDRenderWaterSpringRows(&rows[0], g_rows);
+
+	for (const HDRenderSpringRow& r : rows)
+		HDSpringFileApply(springs, stem, r.room, r.key);
+
 	std::vector<int> marked;
 
 	for (HDSpring& s : springs)
 		if (place(s, marked))
 			g_springs.push_back(s);
+		else
+			g_dropped++;
 
 	g_fed.assign(g_springs.size(), -1.0e30);
+}
+
+/* SPRINGLOG, with -log, at the level's build: one line for the level and
+ * one for each spring (`at` -1 and 0 up; false past the last).
+ *
+ *   SPRINGLOG level=<stem> springs=<n> table=<n> file=<n> rows=<n>
+ *             dropped=<n>
+ *   SPRINGLOG level=<stem> spring=<i> room=<r> x=<x> z=<z> floor=<y>
+ *             surface=<y> strength=<s> period=<seconds> body=<b>
+ *             how=table|file|rule rings=own|row
+ *
+ * springs the level's springs and how many came from each source, rows the
+ * file's `spring` rows of the level, dropped the springs left out for want
+ * of a sheet over them; per spring the room its row names (-1 for none),
+ * the place, the floor it rises from and the sheet over it (world y), its
+ * strength and ring period, its water body, where it came from and whether
+ * it rings the sheet itself or a ripple row rings its place. */
+bool HDSpringLogLine(int at, char* out, size_t size)
+{
+	static const char* kHow[3] = { "table", "file", "rule" };
+
+	if (at < 0)
+	{
+		int n[3] = { 0, 0, 0 };
+
+		for (const HDSpring& s : g_springs)
+			n[s.how]++;
+
+		snprintf(out, size, "SPRINGLOG level=%s springs=%d table=%d file=%d "
+			"rows=%d dropped=%d", g_stem, (int)g_springs.size(), n[0], n[1],
+			g_rows, g_dropped);
+		return true;
+	}
+
+	if (at >= (int)g_springs.size())
+		return false;
+
+	const HDSpring& s = g_springs[(size_t)at];
+
+	snprintf(out, size, "SPRINGLOG level=%s spring=%d room=%d x=%.0f z=%.0f "
+		"floor=%d surface=%d strength=%.2f period=%.2f body=%d how=%s "
+		"rings=%s", g_stem, at, s.room, s.x, s.z, s.floorY, s.surfaceY,
+		s.strength, s.period, s.body, kHow[s.how], s.rings ? "own" : "row");
+	return true;
 }
 
 // RoomProbe -spring: one more spring at world x, z, laid as the others.
@@ -792,6 +872,12 @@ void HDSpringLevelBegin(const char* stem)
 		return;
 
 	HDSpringBuild(stem);
+
+	char line[256];
+
+	for (int i = -1; gLogEnabled && HDSpringLogLine(i, line, sizeof(line));
+		i++)
+		Log("%s", line);
 }
 
 void HDSpringLevelEnd()

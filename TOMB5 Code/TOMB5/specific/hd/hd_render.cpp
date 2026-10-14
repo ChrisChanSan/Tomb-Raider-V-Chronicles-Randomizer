@@ -55,6 +55,7 @@
 #include "hd_gloss_field.h"
 #include "hd_shadow.h"			// HD_SHADOW_MAP, the projected shadow's map
 #include "hd_splash_math.h"		// the water's cards
+#include "hd_spring.h"			// a row's `spring` key
 
 #include <algorithm>
 #include <array>
@@ -11118,6 +11119,12 @@ namespace
 		float crestScale;
 		// 1 for a compiled bank row: sets the lift and the clip, nothing else
 		int bankOnly;
+		/* 1 with `spring x z strength [seconds]`, its numbers as
+		 * HDSpringParseKey reads them, and 1 when it is the row's one key
+		 * and its class is -: the row tunes no body then. */
+		int spring;
+		float springKey[4];
+		int springOnly;
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -11370,6 +11377,8 @@ namespace
 	std::vector<WaterRing> g_rings;
 	RippleSeen g_ripple_seen[HD_WATER_RIPPLE_SLOTS] = {};
 	std::vector<WaterSource> g_wsources;
+	// The level's `spring` rows of hd_water.txt (HDRenderWaterSpringRows).
+	std::vector<HDRenderSpringRow> g_wspring_rows;
 	std::vector<ProbeRing> g_ring_probe;
 	std::vector<WaterFoot> g_wfeet;
 	std::vector<FootSeg> g_wsegs;
@@ -11765,6 +11774,7 @@ namespace
 		g_sheet_at.clear();
 		g_sheet_world.clear();
 		g_wsources.clear();
+		g_wspring_rows.clear();
 		g_rings.clear();
 		g_ring_probe.clear();
 		g_splashes.clear();
@@ -11848,6 +11858,7 @@ namespace
 	 *                             [flow <dx> <dz> <speed>]
 	 *                             [lift <units>] [clip <units>]
 	 *                             [crest <s>]
+	 *                             [spring <x> <z> <strength> [<seconds>]]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -11885,7 +11896,12 @@ namespace
 	 * 256, whole units; see kWaterClip); crest how far the rows are short
 	 * crests in a fan (0 to 1: 0 the straight rows, 1 what a body without
 	 * the key draws; see "the crests" over kWaterFan). A row without lift,
-	 * clip or crest leaves that value as it is. '#' starts a comment.
+	 * clip or crest leaves that value as it is. spring sets a spring at
+	 * world x, z with that strength (0 to 1; 0 takes away the table's
+	 * spring of the row's room) ringing every `seconds` (0.1 to 60; without
+	 * them the table's, else 0.7 over the strength) - a row whose one key it
+	 * is, with class -, tunes no body (hd_spring.h, HDSpringFileApply). '#'
+	 * starts a comment.
 	 * Returns 1 for a row, 0 for a line without one, -1 for a line that
 	 * cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
@@ -12025,6 +12041,21 @@ namespace
 				row.crest = 1;
 				row.crestScale = (float)s;
 				i += 2;
+				continue;
+			}
+
+			/* spring x z strength [seconds]: a spring at world x, z for the
+			 * springs (hd_spring.h, HDSpringParseKey and HDSpringFileApply). */
+			if (!_stricmp(tok[i], "spring"))
+			{
+				const int took = HDSpringParseKey(tok, n, i, row.springKey);
+
+				if (took < 0)
+					return -1;
+
+				row.spring = 1;
+				row.springOnly = i == 3 && i + took == n && row.cls == -1;
+				i += took;
 				continue;
 			}
 
@@ -14261,6 +14292,18 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	for (size_t r = 0; r < rows.size(); r++)
 	{
 		if (!stem || _stricmp(stem, rows[r].stem))
+			continue;
+
+		if (rows[r].spring)
+		{
+			HDRenderSpringRow s;
+
+			s.room = rows[r].room;
+			std::memcpy(s.key, rows[r].springKey, sizeof(s.key));
+			g_wspring_rows.push_back(s);
+		}
+
+		if (rows[r].springOnly)
 			continue;
 
 		if (apply_water_row(rows[r]))
@@ -17994,6 +18037,16 @@ void HDRenderWaterRingAdd(float x, float y, float z, float size, double born,
 		g_rings.erase(g_rings.begin());
 
 	g_rings.push_back(ring);
+}
+
+int HDRenderWaterSpringRows(HDRenderSpringRow* out, int max)
+{
+	const int n = (int)g_wspring_rows.size();
+
+	for (int i = 0; out && i < n && i < max; i++)
+		out[i] = g_wspring_rows[(size_t)i];
+
+	return n;
 }
 
 void HDRenderWaterBodySpring(int body, float x, float z)

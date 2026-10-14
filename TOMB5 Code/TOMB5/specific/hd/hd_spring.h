@@ -14,15 +14,16 @@
 /* The springs: a jet of water that rises from the floor of a pool to its
  * sheet - its rings on the sheet, a few small bubbles in the jet and the
  * rising current, a column that bends what stands behind it. This file
- * holds the rules alone: the table, the hashed clock and the bubbles'
- * path, without the engine and without Direct3D, so the engine, RoomProbe
- * and ModernTest share them.
- * hd_spring.cpp builds a level's springs, rings the sheets and draws them.
- * This project's own design; every random choice is a hash of the
+ * holds the rules alone: the table, the hashed clock, the bubbles' path
+ * and the file row's numbers, without the engine and without Direct3D,
+ * so the engine, RoomProbe and ModernTest share them. hd_spring.cpp
+ * builds a level's springs, rings the sheets and draws them. This
+ * project's own design; every random choice is a hash of the
  * spring's or the body's numbers, never a draw of a generator. */
 #pragma once
 
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 #include <vector>
 
@@ -54,7 +55,8 @@ struct HDSpring
  * to 33,792), the floor 2,304 under the surface at 256 under all six
  * (RoomProbe -life LIFESQUARES on the classic level), a ring every 0.7
  * seconds - the period tuned in the game with a ripple row of
- * hd_water.txt. */
+ * hd_water.txt. A `spring` row of the file for the same level and room
+ * changes the entry (HDSpringFileApply). */
 struct HDSpringRow
 {
 	const char* stem;
@@ -279,14 +281,101 @@ inline bool HDSpringBubblePops(const HDSpring& s, int k, float* size)
 	return (h >> 4) % (unsigned)kHDSpringPopEvery == 0;
 }
 
+/* A `spring` key of hd_water.txt: 'spring <x> <z> <strength> [<period>]'
+ * after the row's level, room and class. tok[at] is the key; the numbers
+ * follow. x and z anywhere in a level, the strength 0 to 1 (0 takes the
+ * spring away), the period 0.1 to 60 seconds - without it, 0 into
+ * out[3], the table's or the rule's. Returns the tokens taken, the key
+ * among them, or -1 for a key that cannot be read. */
+inline int HDSpringParseKey(char* const* tok, int n, int at, float* out)
+{
+	if (at + 3 >= n)
+		return -1;
+
+	static const double lo[4] = { -1.0e7, -1.0e7, 0.0, 0.1 };
+	static const double hi[4] = { 1.0e7, 1.0e7, 1.0, 60.0 };
+	int count = 3;
+
+	out[3] = 0.0f;
+
+	if (at + 4 < n)
+	{
+		char* end = 0;
+
+		strtod(tok[at + 4], &end);
+		count = (*end == 0 && end != tok[at + 4]) ? 4 : 3;
+	}
+
+	for (int k = 0; k < count; k++)
+	{
+		char* end = 0;
+		const double v = strtod(tok[at + 1 + k], &end);
+
+		if (*end || end == tok[at + 1 + k] || !(v >= lo[k] && v <= hi[k]))
+			return -1;
+
+		out[k] = (float)v;
+	}
+
+	return count + 1;
+}
+
+/* What a row of the file does to the level's springs: one for the level
+ * and room of a spring already there changes its place, strength and
+ * period (a period of 0 keeps it) and a strength of 0 takes it away; any
+ * other adds a spring. The caller finds the floor and the sheet after. */
+inline void HDSpringFileApply(std::vector<HDSpring>& springs, const char* stem,
+	int room, const float* key)
+{
+	for (size_t i = 0; i < springs.size(); i++)
+	{
+		HDSpring& s = springs[i];
+
+		if (s.room != room || s.how == HD_SPRING_RULE)
+			continue;
+
+		if (key[2] <= 0.0f)
+		{
+			springs.erase(springs.begin() + (std::ptrdiff_t)i);
+			return;
+		}
+
+		s.x = key[0];
+		s.z = key[1];
+		s.strength = key[2];
+		s.period = key[3] > 0.0f ? key[3] : s.period;
+		s.floorY = 0;
+		s.how = HD_SPRING_FILE;
+		s.seed = HDSpringSeed(stem, s.x, s.z);
+		return;
+	}
+
+	if (key[2] <= 0.0f)
+		return;
+
+	HDSpring s = {};
+
+	strncpy(s.stem, stem, sizeof(s.stem) - 1);
+	s.room = room;
+	s.x = key[0];
+	s.z = key[1];
+	s.strength = key[2];
+	s.period = key[3] > 0.0f ? key[3] : HDSpringRulePeriod(key[2]);
+	s.body = -1;
+	s.how = HD_SPRING_FILE;
+	s.rings = 1;
+	s.seed = HDSpringSeed(stem, s.x, s.z);
+	springs.push_back(s);
+}
+
 /* hd_spring.cpp. HDSpringBuild lays the level's springs onto its water
  * after the sheets are built; HDSpringRings hands their rings to the
  * sheets once a frame before they draw (the eye's world place picks the
  * springs near enough); HDSpringFrameDraw draws the columns and the
  * bubbles after the sheets. HDSpringAdd is RoomProbe's -spring,
  * HDSpringTiming and HDSpringDrawn its numbers, HDSpringParts its
- * -springparts. The engine calls the five
- * after them (HDLevelBuild, HDLevelUnload, FeedWaterRipples,
+ * -springparts; HDSpringLogLine writes the SPRINGLOG lines. The engine
+ * calls the five after them (HDLevelBuild, HDLevelUnload, FeedWaterRipples,
  * DrawWaterCards, HDLevelDeviceLost). */
 void HDSpringClear();
 void HDSpringBuild(const char* stem);
@@ -298,6 +387,7 @@ void HDSpringFrameDraw(const float* toFrame);
 void HDSpringTiming(int on, double* ms);
 void HDSpringDrawn(int* columns, int* bubbles);
 void HDSpringParts(int mask);
+bool HDSpringLogLine(int at, char* out, size_t size);
 void HDSpringRelease();
 
 void HDSpringLevelBegin(const char* stem);

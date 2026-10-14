@@ -831,10 +831,20 @@ inline float HDTankDomeShare(const HDTankDome& d, float cosine)
  * 384 units, out of a hash of its place (hd_render.cpp), so the front's
  * edge is ragged rather than a ring round the glass; 256 and 384 (a
  * quarter square and one and a half of the grid's 256-unit steps) are free
- * choices, set by eye on the round's RoomProbe pictures. */
+ * choices, set by eye on the round's RoomProbe pictures.
+ *
+ * kWetRadius: the front stops this far past the dome's foot, along the
+ * way. The water that lands is the dome's, 3186 units wide at the floor
+ * in RICH2 (the foot's width, HDTankShapeOf); it spreads past the foot by
+ * half that width, 1593, taken up to the run's whole squares: 2048, two
+ * squares. A free choice on that ground: in RICH2 it wets room 122 in
+ * front of the glass, 45 and 121 as far as their floors run level, the
+ * corridor 46 one square into its mouth, and room 23's lowered floor but
+ * its far two squares (RoomProbe -tankwetmap). */
 const float kWetSpread = 321.0f;	// units/s
 const float kWetRamp = 256.0f;		// units
 const float kWetRagged = 384.0f;	// units
+const float kWetRadius = 2048.0f;	// units past the dome's foot
 
 inline float HDWetFront(float seconds, float reach)
 {

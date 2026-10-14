@@ -11569,8 +11569,9 @@ namespace
 	 * click: water runs down a step and never up one, nor down a drop it
 	 * would fall into another room through), never behind the glass, into
 	 * the tank. A room with a higher dry part keeps it dry; the run goes
-	 * through doors and into every room whose floor goes on level, which
-	 * is the classic floor's own answer to where water on it would run.
+	 * through doors into the rooms the tank's row names (kWetRooms) while
+	 * their floor goes on level, the classic floor's own answer to where
+	 * water on it would run, and stops kWetRadius past the dome's foot.
 	 *
 	 * Drawn as a layer kWetLift over the floor - a grid of points every
 	 * 256 units, five by five a square, shared between squares - once a
@@ -11584,7 +11585,7 @@ namespace
 	 * HDWetAt over HDWetFront (hd_splash_math.h): under the dome as the
 	 * apron comes out, past it at a shallow flood's speed. Once the tank
 	 * is shot the floor stays wet; a tank that is first seen shot (a
-	 * loaded game) is wet all over at once, and so is every tank's floor
+	 * loaded game) is wet out to the radius at once, and so is every floor
 	 * from its break while tomb5.hd_motion is off - the water's run is
 	 * motion, the wet floor is the game's state.
 	 *
@@ -11616,6 +11617,32 @@ namespace
 	const float kWetFirstStep = 32.0f;	// units
 	const float kWetGrowth = 1.5f;
 
+	/* Where a tank's water may run: the rooms its row names, by level and
+	 * the room the tank stands in - a square is theirs when it lies inside
+	 * one of them or its flip twin, off its ring of walls and doors, at that
+	 * floor's height - and no further from the glass, along the water's
+	 * way, than the dome's foot and kWetRadius past it. A tank without a row
+	 * keeps to its own room. The front stops there, so the edge is the
+	 * front's own: kWetRamp wide and ragged by kWetRagged (kWetRadius and
+	 * its reason are in hd_splash_math.h, with the front's other numbers).
+	 *
+	 * The rows. RICH2's tank in room 122 runs over 122 and the rooms round
+	 * it, 121, 45 and the corridor 46; the lasers' tank in room 23 over that
+	 * room's lowered floor and its plinth (the run never leaves room 23
+	 * there). A row names the rooms; the radius keeps the water near. */
+	struct WetRooms
+	{
+		const char* stem;	// the level file's stem
+		int tank;		// the room the tank stands in
+		int rooms[6];		// the rooms its water runs over, -1 past them
+	};
+
+	const WetRooms kWetRooms[] =
+	{
+		{ "RICH2", 122, { 122, 121, 45, 46, -1, -1 } },
+		{ "RICH2", 23, { 23, -1, -1, -1, -1, -1 } },
+	};
+
 	struct WetPoint
 	{
 		float x, y, z;		// world
@@ -11635,6 +11662,17 @@ namespace
 		int heights;		// distinct floor heights among them
 		float reach;		// the dome's foot from the glass, units
 		float furthest;		// the furthest point along the water's way
+		int found;		// the squares the run found before the radius
+	};
+
+	/* A square of a wet floor for RoomProbe's map (HDRenderWaterWetSquare):
+	 * its corner, floor, room, its nearest point's way from the glass before
+	 * the ragged push, and whether the radius keeps it. */
+	struct WetSquare
+	{
+		int x, z, y, room;
+		float way;
+		bool kept;
 	};
 
 	struct WetFloor
@@ -11642,6 +11680,8 @@ namespace
 		WetInfo info;
 		std::vector<WetPoint> points;
 		std::vector<unsigned short> tris;
+		std::vector<WetSquare> squares;
+		float limit;		// the furthest the front runs, along the way
 		int state;		// 0 whole, 1 pouring, 2 shot and done
 		bool started;		// born is known
 		double born;		// on the frame clock
@@ -11650,6 +11690,8 @@ namespace
 	std::vector<HDWaterWetTank> g_wet_in;
 	std::vector<WetFloor> g_wet;
 	float g_wet_fixed = -1.0f;
+	// RoomProbe's -tankwetall: the run without its rooms and radius.
+	bool g_wet_limited = true;
 
 	/* The creatures' mark: whether this frame marked anything (the sheets
 	 * then draw their second, line-less pass) and the stencil states the
@@ -12489,17 +12531,20 @@ namespace
 	/* The wet floor of every tank handed in (see "the wet floor"), out of
 	 * the classic floor of every room: the squares, then the points and
 	 * their way from the glass. */
-	void build_wet_floors(const HDWaterRoom* rooms, int count)
+	void build_wet_floors(const HDWaterRoom* rooms, int count,
+		const char* stem)
 	{
 		g_wet.clear();
 
 		if (!g_tank_shape.ok || g_wet_in.empty())
 			return;
 
-		// Every flat floor of every room by world square: height and room.
+		/* Every flat floor of every room by world square: height, room, and
+		 * whether the square lies inside the room, off its ring. */
 		struct Floor
 		{
 			int y, room;
+			bool inner;
 		};
 
 		const auto square = [](int sx, int sz)
@@ -12531,7 +12576,8 @@ namespace
 
 					floors[square((w.originX >> 10) + sx,
 						(w.originZ >> 10) + sz)].push_back(
-						{ (int)w.floor[at] * 256, r });
+						{ (int)w.floor[at] * 256, r, sx > 0 && sz > 0 &&
+						sx < w.sizeX - 1 && sz < w.sizeZ - 1 });
 				}
 		}
 
@@ -12562,6 +12608,36 @@ namespace
 				local((float)(sx * 1024 + 512), (float)(sz * 1024 + 512),
 					&lx, &lz);
 				return lz < sh.glassZ && lx >= sh.footX0 && lx <= sh.footX1;
+			};
+
+			// The rooms this tank's water may run over (kWetRooms).
+			int own[6] = { t.room, -1, -1, -1, -1, -1 };
+			const int* list = own;
+
+			for (const WetRooms& row : kWetRooms)
+				if (stem && !_stricmp(row.stem, stem) && row.tank == t.room)
+					list = row.rooms;
+
+			const auto listed = [&](int room)
+			{
+				for (int k = 0; k < 6 && list[k] >= 0; k++)
+					if (list[k] == room || (list[k] < count &&
+						rooms[list[k]].flip == room))
+						return true;
+
+				return false;
+			};
+			// A floor at height y of square sx, sz inside a listed room.
+			const auto allowed = [&](const std::vector<Floor>& at, int y)
+			{
+				if (!g_wet_limited)
+					return true;
+
+				for (const Floor& f : at)
+					if (f.y == y && f.inner && listed(f.room))
+						return true;
+
+				return false;
 			};
 
 			/* The squares under the dome's foot, at the floor the tank
@@ -12598,6 +12674,7 @@ namespace
 
 					for (const Floor& f : at->second)
 						if (abs(f.y - t.y) <= kWetStep &&
+							allowed(at->second, f.y) &&
 							seen.insert(level(sx, sz, f.y)).second)
 							wet.push_back({ sx, sz, f.y, f.room });
 				}
@@ -12622,6 +12699,7 @@ namespace
 
 					for (const Floor& f : at->second)
 						if (f.y >= from.y && f.y - from.y <= kWetStep &&
+							allowed(at->second, f.y) &&
 							seen.insert(level(nx, nz, f.y)).second)
 							wet.push_back({ nx, nz, f.y, f.room });
 				}
@@ -12701,26 +12779,6 @@ namespace
 				}
 
 				grid.push_back(g);
-
-				// Every room whose floor this square is, for the log.
-				for (const Floor& f : floors[square(q.sx, q.sz)])
-				{
-					bool listed = f.y != q.y;
-
-					for (int k = 0; k < 16 && w.info.rooms[k] >= 0; k++)
-						listed = listed || w.info.rooms[k] == f.room;
-
-					for (int k = 0; k < 16 && !listed; k++)
-						if (w.info.rooms[k] < 0)
-						{
-							w.info.rooms[k] = f.room;
-							listed = true;
-						}
-				}
-
-				if (std::find(heights.begin(), heights.end(), q.y) ==
-					heights.end())
-					heights.push_back(q.y);
 			}
 
 			/* The way: the shortest run from the dome's footprint over the
@@ -12784,7 +12842,19 @@ namespace
 					}
 			}
 
-			// The ragged edge, and the triangles while the points fit.
+			// Each square's nearest point along the way, for the map.
+			std::vector<float> nearest(grid.size(), 1.0e9f);
+
+			for (size_t s = 0; s < grid.size(); s++)
+				for (int k = 0; k < 25; k++)
+				{
+					const float way =
+						w.points[(size_t)grid[s][(size_t)k]].way;
+
+					nearest[s] = way < nearest[s] ? way : nearest[s];
+				}
+
+			// The ragged edge.
 			for (WetPoint& p : w.points)
 			{
 				const unsigned int place =
@@ -12793,21 +12863,87 @@ namespace
 					(unsigned int)(int)(p.y + kWetLift);
 
 				p.way += kWetRagged * HDCardShare(place, 1u);
-				w.info.furthest = p.way > w.info.furthest ? p.way :
-					w.info.furthest;
 			}
 
 			if (w.points.size() > 65535)
 				continue;
 
-			for (const std::array<int, 25>& g : grid)
+			/* The radius: a square stays while a point of it is wet with the
+			 * front at the limit; its points and triangles, renumbered. */
+			w.limit = g_wet_limited ? w.info.reach + kWetRadius : 1.0e9f;
+
+			std::vector<int> renumber(w.points.size(), -1);
+			std::vector<WetPoint> kept;
+
+			for (size_t s = 0; s < grid.size(); s++)
+			{
+				const std::array<int, 25>& g = grid[s];
+				const Wet& q = wet[s];
+				const std::vector<Floor>& here = floors[square(q.sx, q.sz)];
+				WetSquare map = { q.sx * 1024, q.sz * 1024, q.y, q.room,
+					nearest[s], false };
+
+				for (int k = 0; k < 25; k++)
+					map.kept = map.kept ||
+						w.points[(size_t)g[(size_t)k]].way < w.limit;
+
+				for (const Floor& f : here)
+					if (f.y == q.y && f.inner)
+					{
+						map.room = f.room;
+						break;
+					}
+
+				w.squares.push_back(map);
+
+				if (!map.kept)
+					continue;
+
+				w.info.squares++;
+
+				// Every room whose floor this square is, for the log.
+				for (const Floor& f : here)
+				{
+					bool known = f.y != q.y;
+
+					for (int k = 0; k < 16 && w.info.rooms[k] >= 0; k++)
+						known = known || w.info.rooms[k] == f.room;
+
+					for (int k = 0; k < 16 && !known; k++)
+						if (w.info.rooms[k] < 0)
+						{
+							w.info.rooms[k] = f.room;
+							known = true;
+						}
+				}
+
+				if (std::find(heights.begin(), heights.end(), q.y) ==
+					heights.end())
+					heights.push_back(q.y);
+
+				for (int k = 0; k < 25; k++)
+				{
+					const size_t at = (size_t)g[(size_t)k];
+
+					if (renumber[at] >= 0)
+						continue;
+
+					renumber[at] = (int)kept.size();
+					kept.push_back(w.points[at]);
+					w.info.furthest = w.points[at].way > w.info.furthest ?
+						w.points[at].way : w.info.furthest;
+				}
+
 				for (int j = 0; j < 4; j++)
 					for (int i = 0; i < 4; i++)
 					{
-						const int a = g[(size_t)(j * 5 + i)];
-						const int b = g[(size_t)(j * 5 + i + 1)];
-						const int d = g[(size_t)(j * 5 + i + 5)];
-						const int e = g[(size_t)(j * 5 + i + 6)];
+						const int a = renumber[(size_t)g[(size_t)(j * 5 + i)]];
+						const int b =
+							renumber[(size_t)g[(size_t)(j * 5 + i + 1)]];
+						const int d =
+							renumber[(size_t)g[(size_t)(j * 5 + i + 5)]];
+						const int e =
+							renumber[(size_t)g[(size_t)(j * 5 + i + 6)]];
 						const unsigned short tri[6] =
 						{
 							(unsigned short)a, (unsigned short)b,
@@ -12817,8 +12953,10 @@ namespace
 
 						w.tris.insert(w.tris.end(), tri, tri + 6);
 					}
+			}
 
-			w.info.squares = (int)wet.size();
+			w.points.swap(kept);
+			w.info.found = (int)wet.size();
 			w.info.vertices = (int)w.points.size();
 			w.info.triangles = (int)w.tris.size() / 3;
 			w.info.heights = (int)heights.size();
@@ -14717,7 +14855,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	g_wet.clear();
 
 	if (sheets)
-		build_wet_floors(rooms, count);
+		build_wet_floors(rooms, count, stem);
 
 	if (!sheets || !g_device || !g_water_vs || !g_water_ps)
 		return;
@@ -15635,11 +15773,39 @@ void HDRenderWaterWetFixed(float strength)
 	g_wet_fixed = strength;
 }
 
+void HDRenderWaterWetLimited(int on)
+{
+	g_wet_limited = on != 0;
+}
+
+bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
+{
+	if (!out || floor < 0 || floor >= (int)g_wet.size() || at < 0 ||
+		at >= (int)g_wet[(size_t)floor].squares.size())
+		return false;
+
+	const WetFloor& w = g_wet[(size_t)floor];
+	const WetSquare& s = w.squares[(size_t)at];
+
+	out->item = w.info.item;
+	out->x = s.x;
+	out->z = s.z;
+	out->y = s.y;
+	out->room = s.room;
+	out->way = s.way;
+	out->kept = s.kept ? 1 : 0;
+	out->reach = w.info.reach;
+	out->limit = w.limit;
+	return true;
+}
+
 /* SPLASHLOG, a tank's wet floor, once at the level's load: the tank, the
  * squares its water reaches, the rooms whose floor they are (the first
  * sixteen), how many floor heights among them, the points and triangles of
  * its grid, the dome's foot from the glass and the furthest point along
- * the water's way (units, the ragged push included). */
+ * the water's way (units, the ragged push included); then the squares the
+ * run found in its rooms before the radius dropped the far ones, and the
+ * furthest along the way the front runs (the foot and kWetRadius). */
 bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size)
 {
 	if (!out || !size || at < 0 || at >= (int)g_wet.size())
@@ -15657,9 +15823,10 @@ bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size)
 	}
 
 	snprintf(out, size, "SPLASHLOG level=%s wet tank=%d squares=%d rooms=%s "
-		"heights=%d points=%d tris=%d reach=%.0f far=%.0f",
-		stem ? stem : "?", w.item, w.squares, rooms, w.heights, w.vertices,
-		w.triangles, w.reach, w.furthest);
+		"heights=%d points=%d tris=%d reach=%.0f far=%.0f found=%d "
+		"limit=%.0f", stem ? stem : "?", w.item, w.squares, rooms, w.heights,
+		w.vertices, w.triangles, w.reach, w.furthest, w.found,
+		g_wet[(size_t)at].limit);
 	return true;
 }
 
@@ -16351,8 +16518,10 @@ void HDRenderWaterWetDraw(const float* toFrame)
 		 * with it off it stands past every point, and the floor is wet all
 		 * over from the frame the tank breaks: the run is motion, the wet
 		 * the game's state, as the film's strength is. */
-		const float front = g_motion[3] != 0.0f ?
+		const float run = g_motion[3] != 0.0f ?
 			HDWetFront((float)(now - w.born), w.info.reach) : 1.0e9f;
+		// And it stops at the radius (see "the wet floor").
+		const float front = run < w.limit ? run : w.limit;
 		const size_t base = verts.size();
 		double sum = 0.0;
 
@@ -16371,7 +16540,8 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			const WetPoint& p = w.points[i];
 			CardVertex v;
 
-			wet[i] = g_wet_fixed >= 0.0f ? g_wet_fixed : HDWetAt(front, p.way);
+			wet[i] = g_wet_fixed >= 0.0f ?
+				g_wet_fixed * HDWetAt(w.limit, p.way) : HDWetAt(front, p.way);
 			sum += wet[i];
 			v.x = p.x * m[0] + p.y * m[4] + p.z * m[8] + m[12];
 			v.y = p.x * m[1] + p.y * m[5] + p.z * m[9] + m[13];

@@ -1613,7 +1613,7 @@ bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
  * 0 whole, 1 pouring (ControlFishtank runs it), 2 shot and done; `flags1`
  * its item_flags[1]; `age` the seconds since it broke, or under 0, and the
  * renderer works the age out of item_flags[1] and its own clock - a tank
- * first seen done (a loaded game) is wet all over at once.
+ * first seen done (a loaded game) is wet out to its radius at once.
  * HDRenderWaterWetFixed holds every wet point of every shot tank at one
  * strength (RoomProbe -tankwet; under 0, the default, the water's own
  * way). HDRenderWaterWetDraw draws the frame's wet floors, before the
@@ -1634,6 +1634,25 @@ void HDRenderWaterWet(int item, int state, int flags1, float age);
 void HDRenderWaterWetFixed(float strength);
 void HDRenderWaterWetDraw(const float* toFrame);
 bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size);
+
+/* RoomProbe's map of the wet floors (-tankwetmap): square `at` of floor
+ * `floor` - its corner (world x, z), its floor's y, the room it lies in,
+ * its nearest point's way from the glass (units, before the ragged push),
+ * whether the radius keeps it, and the floor's dome foot and the furthest
+ * the front runs; false past the last. HDRenderWaterWetLimited 0 lays the
+ * next build's floors without the rooms and the radius (-tankwetall), the
+ * run over every flat floor as far as it goes. */
+struct HDWaterWetSquare
+{
+	int item;
+	int x, z, y, room;
+	float way;
+	int kept;
+	float reach, limit;
+};
+
+bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
+void HDRenderWaterWetLimited(int on);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

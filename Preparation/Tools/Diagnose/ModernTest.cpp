@@ -20009,13 +20009,33 @@ static void splash_tank_wet()
 		"dry ahead of the front, wet a ramp behind it, half between",
 		(long)(HDWetAt(1000.0f, 872.0f) * 100.0f), 50);
 
-	// RICH2's furthest point of tank 182 (SPLASHLOG wet far=19749).
+	/* RICH2's furthest point of tank 182 without the rooms and the radius
+	 * (RoomProbe -tankwetall, SPLASHLOG wet far=19749). */
 	const float far19749 = (19749.0f - reach) / kWetSpread + kTankDomeOut +
 		kWetRamp / kWetSpread;
 
 	ok(HDWetAt(HDWetFront(far19749, reach), 19749.0f) == 1.0f &&
 		HDWetAt(HDWetFront(far19749 - 1.0f, reach), 19749.0f) < 1.0f,
-		"the corridor's far end wet in about a minute", (long)far19749, 60);
+		"without the radius the corridor's far end in about a minute",
+		(long)far19749, 60);
+
+	/* The radius: half the dome's foot, 3186 units wide, up to the run's
+	 * whole squares; the front held there from about 6.6 s on, and a
+	 * loaded game's long-done front held at the same place. */
+	const float limit = reach + kWetRadius;
+	const float held = (kWetRadius) / kWetSpread + kTankDomeOut;
+	const float late = HDWetFront(1.0e6f, reach);
+
+	ok(kWetRadius == 1024.0f * ceilf(3186.0f * 0.5f / 1024.0f),
+		"the radius is half the foot's width in whole squares",
+		(long)kWetRadius, 2048);
+	ok(fabsf(HDWetFront(held, reach) - limit) < 0.5f,
+		"the front reaches the radius at about 6.6 s",
+		(long)(held * 10.0f), 66);
+	ok((late < limit ? late : limit) == limit &&
+		HDWetAt(limit, limit - kWetRamp) == 1.0f &&
+		HDWetAt(limit, limit) == 0.0f,
+		"a loaded game wet to the radius, dry past it", (long)limit, 2914);
 }
 
 /* The rings' strength on the sheets (hd_splash_math.h, HDRingStrength, at

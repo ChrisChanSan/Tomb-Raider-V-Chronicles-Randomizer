@@ -15206,17 +15206,22 @@ the classic read into the pool, `HDLevelBuildResident`, `HDObjectLevelRebind`, t
 table set back before `sgRestoreGame`'s flips - is shown by no tool; only his next `-log`
 run shows it, with the resident load's own steps (`HDLOG ... resident=1` and the
 `skipped=1` lines), how far the read and the decode ahead run beside his classic read
-(`trg_ahead waited=`, `pages_ahead taken=`, `prep`), whether sixteen decoding threads
-slow the classic read, and the `budget=` line's address space. The read ahead holds the
-next level's parse and up to 96 MiB of its pages beside the level before's HD data at a
-level change (*Memory*): whether that is acceptable, or the pages ahead should wait for
-the release, is his decision. A merge with the round that adds a call to the level
-build's sequence: that call runs in `HDLevelBuildHD`'s full build; if it starts something
-a level start has to start, `HDLevelBuildResident` needs the same call. A file changed
-inside the Remaster's installation or a mod between two loads of the same level is not
-in the key (the session already takes the mods as fixed); a level built again needs a
-load of another level, a changed setting or a new graphics device. The kept data are
-freed at the next build of another level, as before.
+(`trg_ahead waited=`, `pages_ahead taken=`, `prep`), whether sixteen decoding threads slow
+the classic read, and the `budget=` line's address space. The read ahead holds the next
+level's parse and up to 96 MiB of its pages beside the level before's HD data at a level
+change (*Memory*): whether that is acceptable, or the pages ahead should wait for the
+release, is his decision. He decided after his first run with this build: the read ahead
+stays as built, since the address space has the room and nothing of it reaches the level's
+pool. That run also showed the keep path: sixteen save loads inside their levels at
+resident=1 with 27 skipped steps each, 1,066 ms the median load where 3,594 stood before,
+the HD build at 19 ms, `trg_ahead waited=0.0` everywhere and all 72 pages ahead taken. A
+merge with the round that adds a call to the level build's sequence: that call runs in
+`HDLevelBuildHD`'s full build; if it starts something a level start has to start,
+`HDLevelBuildResident` needs the same call. A file changed inside the Remaster's
+installation or a mod between two loads of the same level is not in the key (the session
+already takes the mods as fixed); a level built again needs a load of another level, a
+changed setting or a new graphics device. The kept data are freed at the next build of
+another level, as before.
 
 **Commits.** `bcf7fd6`, `636422d`, `2163672`, `5024414`, `0fe49fb`, `27f8bd4`, `68826a2`,
 `5164802`, `eb23c5a`, `9689393`, `3a25e00`

@@ -6848,15 +6848,26 @@ static void ProbeWetDraw(int part)
  * alone, 2 the bubbles alone, for their pixel counts. The SPRINGLOG lines
  * list the springs as the engine builds them; -springs is -hdwater 1, for
  * that list (with -nodraw, no picture), with a SPRINGRULE line for each
- * body; -springkey n builds them with the key hd_springs at n. */
+ * body; -springkey n builds them with the key hd_springs at n. Each spring
+ * has its crack (hd_spring.cpp, "the crack"), drawn where HDFrameDrawGlow
+ * draws it, before the copy; -springcrack 0 builds none, as the key
+ * hd_springcrack at 0 does; -springs lists each crack and the points of
+ * its outline (SPRINGCRACK lines), -springcrackmap draws the outline over
+ * its body's squares as text. */
 static bool g_spring_off = false;
 static std::vector<float> g_spring_add;
 /* -springs: also what the rule saw in each body (SPRINGRULE lines);
  * -springkey n: the key hd_springs as the engine would read it (1). */
 static bool g_spring_list = false;
 static int g_spring_key = 1;
+// -springcrack n: the key hd_springcrack (1); -springcrackmap: the map.
+static int g_spring_crack = 1;
+static bool g_spring_crack_map = false;
+// The picture's seed room, which the cracks' draw counts as drawn.
+static int g_spring_seed_room = -1;
 
-static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out);
+static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
+	std::vector<HDSpringRoom>* rooms);
 
 // The springs' switches, apart from ProbeMain's chain of them.
 static bool SpringArg(int argc, char** argv, int* at)
@@ -6886,6 +6897,19 @@ static bool SpringArg(int argc, char** argv, int* at)
 		return true;
 	}
 
+	if (!strcmp(argv[*at], "-springcrack") && *at + 1 < argc)
+	{
+		g_spring_crack = atoi(argv[++*at]) ? 1 : 0;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-springcrackmap"))
+	{
+		g_hdwater = 1;
+		g_spring_crack_map = true;
+		return true;
+	}
+
 	if (strcmp(argv[*at], "-spring") || *at + 1 >= argc)
 		return false;
 
@@ -6901,16 +6925,90 @@ static bool SpringArg(int argc, char** argv, int* at)
 	return true;
 }
 
-static void SpringBuild(const char* stem)
+/* -springcrackmap: spring i's crack over its body's squares, a character
+ * for each 16 units from 256 short of the outline's corners: '#'
+ * inside the outline, '+' the spring's own point, '.' a square of the body
+ * with deep water under it (hd_spring.h, kHDSpringDeep), '-' a shallower
+ * one, ' ' none of the body's. */
+static void SpringCrackMap(int i)
+{
+	const HDSpring* s = HDSpringAt(i);
+	const HDSpringCrackShape* c = HDSpringCrackAt(i);
+
+	if (!s || !c || s->body < 0)
+		return;
+
+	const int n = HDRenderWaterBodySquares(s->body, 0, 0, 0);
+	std::vector<HDRenderWaterSquare> squares((size_t)(n > 0 ? n : 0));
+
+	if (n > 0)
+		HDRenderWaterBodySquares(s->body, &squares[0], n, 0);
+
+	float x0 = 1.0e9f, z0 = 1.0e9f, x1 = -1.0e9f, z1 = -1.0e9f;
+
+	for (int p = 0; p < c->points; p++)
+	{
+		x0 = fminf(x0, c->x[p]);
+		z0 = fminf(z0, c->z[p]);
+		x1 = fmaxf(x1, c->x[p]);
+		z1 = fmaxf(z1, c->z[p]);
+	}
+
+	x0 = floorf(x0 / 256.0f) * 256.0f - 256.0f;
+	z0 = floorf(z0 / 256.0f) * 256.0f - 256.0f;
+	x1 = ceilf(x1 / 256.0f) * 256.0f + 256.0f;
+	z1 = ceilf(z1 / 256.0f) * 256.0f + 256.0f;
+	printf("SPRINGCRACKMAP spring=%d x %.0f..%.0f z %.0f..%.0f, 16 units a "
+		"character, z down the lines\n", i, x0, x1, z0, z1);
+	// And the body's squares the map meets: x,z,depth each.
+	printf("SPRINGCRACKMAP spring=%d squares", i);
+
+	for (const HDRenderWaterSquare& q : squares)
+		if ((float)q.x + 1024.0f > x0 && (float)q.x < x1 &&
+			(float)q.z + 1024.0f > z0 && (float)q.z < z1)
+			printf(" %d,%d,%d", q.x, q.z, q.depth);
+
+	printf("\n");
+
+	for (float z = z0 + 8.0f; z < z1; z += 16.0f)
+	{
+		std::string row;
+
+		for (float x = x0 + 8.0f; x < x1; x += 16.0f)
+		{
+			char ch = ' ';
+
+			for (const HDRenderWaterSquare& q : squares)
+				if (x >= (float)q.x && x < (float)(q.x + 1024) &&
+					z >= (float)q.z && z < (float)(q.z + 1024))
+					ch = q.depth >= kHDSpringDeep ? '.' : '-';
+
+			if (HDSpringCrackHolds(*c, x, z))
+				ch = '#';
+
+			if (s->x >= x - 8.0f && s->x < x + 8.0f && s->z >= z - 8.0f &&
+				s->z < z + 8.0f)
+				ch = '+';
+
+			row.push_back(ch);
+		}
+
+		printf("SPRINGCRACKMAP |%s|\n", row.c_str());
+	}
+}
+
+static void SpringBuild(const char* root, const char* stem, int seed)
 {
 	HDSpringClear();
+	g_spring_seed_room = seed;
 
 	if (g_spring_off)
 		return;
 
 	std::vector<HDSpringBlock> blocks;
+	std::vector<HDSpringRoom> rooms;
 
-	SpringBlocks(stem, blocks);
+	SpringBlocks(stem, blocks, &rooms);
 	HDSpringBuild(stem, blocks, g_spring_key);
 
 	for (size_t i = 0; i + 2 < g_spring_add.size(); i += 3)
@@ -6918,6 +7016,11 @@ static void SpringBuild(const char* stem)
 			g_spring_add[i + 2]))
 			printf("-spring: no sheet over %.0f %.0f - no spring\n",
 				g_spring_add[i], g_spring_add[i + 1]);
+
+	// The cracks out of the installation's .TRG, as the engine reads it.
+	const std::string trg = std::string(root) + "\\DATA\\" + stem + ".TRG";
+
+	HDSpringCrackBuild(trg.c_str(), rooms, g_spring_crack);
 
 	char line[256];
 
@@ -6927,6 +7030,13 @@ static void SpringBuild(const char* stem)
 	for (int i = 0; g_spring_list && HDSpringRuleLine(i, line, sizeof(line));
 		i++)
 		printf("%s\n", line);
+
+	for (int i = 0; g_spring_list && i < HDSpringCount(); i++)
+		for (int p = -1; HDSpringCrackLine(i, p, line, sizeof(line)); p++)
+			printf("%s\n", line);
+
+	for (int i = 0; g_spring_crack_map && i < HDSpringCount(); i++)
+		SpringCrackMap(i);
 }
 
 static void SpringRings(double cx, double cy, double cz)
@@ -6953,6 +7063,40 @@ static void SpringDraw()
 	printf("-hdwater: %d spring draw(s) carrying %d column(s) and %d "
 		"bubble(s), GPU %.4f ms (timestamps round the springs' draws)\n",
 		(columns ? 1 : 0) + (bubbles ? 1 : 0), columns, bubbles, ms);
+}
+
+// Whether the picture draws a room: the seed's or one of -with's.
+static bool SpringRoomDrawn(int room)
+{
+	if (room == g_spring_seed_room)
+		return true;
+
+	for (int i = 0; i < g_with_count; i++)
+		if (g_with_group[i] == room)
+			return true;
+
+	return false;
+}
+
+/* The springs' cracks, where HDFrameDrawGlow draws them, timed on the GPU,
+ * those whose floor's room the picture draws, as the engine's walk. */
+static void SpringCrackDraw()
+{
+	if (g_hdwater != 1 || !HDSpringCount())
+		return;
+
+	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
+	double ms = -1.0;
+	int cracks = 0;
+
+	HDSpringTiming(1, 0);
+	HDSpringCrackFrameDraw(m, SpringRoomDrawn);
+	HDSpringTiming(0, 0);
+	HDSpringCrackNumbers(&cracks, &ms);
+	printf("-hdwater: %d spring crack draw(s) carrying %d crack(s), GPU "
+		"%.4f ms (timestamps round the cracks' draws)\n", cracks ? 1 : 0,
+		cracks, ms);
 }
 
 /* The waterfall objects for their feet, out of the classic .TRC - the twin
@@ -9654,8 +9798,10 @@ static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
  * hd_spring.cpp's LevelBlocks reads it out of the engine: every portal
  * through a wall (normal y 0) of every room, its corners from the room's
  * origin; the start of Lara's item (slot 0); every static (probestatics,
- * world x, z). */
-static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out)
+ * world x, z). And into `rooms` each room's box, as hd_spring.cpp's
+ * LevelRooms reads it. */
+static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
+	std::vector<HDSpringRoom>* rooms)
 {
 	Tr5Level level;
 	std::string error;
@@ -9676,6 +9822,16 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out)
 		const Tr5Room& rm = level.rooms()[(size_t)r];
 		std::vector<Tr5Level::PortalRecord> recs;
 		unsigned yOrigin = 0;
+
+		// The room's box for the cracks' floor (hd_spring.h, HDSpringRoom).
+		if (rooms)
+		{
+			const HDSpringRoom q = { r, (float)rm.originX, (float)rm.originZ,
+				(float)(rm.originX + rm.numXSectors * 1024),
+				(float)(rm.originZ + rm.numZSectors * 1024) };
+
+			rooms->push_back(q);
+		}
 
 		level.headerField(r, 24, yOrigin, error);
 
@@ -9881,6 +10037,10 @@ static int ProbeMain(int argc, char** argv)
 			"them, their SPRINGLOG lines and the rule's SPRINGRULE line per "
 			"body (-hdwater 1; with -nodraw no picture); -springkey <n> the "
 			"key hd_springs (1)\n");
+		printf("       -springcrack 0|1   the springs' cracks, as the key "
+			"hd_springcrack (1); -springs lists each crack and its outline "
+			"(SPRINGCRACK lines); -springcrackmap the outline over its "
+			"body's squares as text (-hdwater 1)\n");
 		return 1;
 	}
 
@@ -12394,7 +12554,7 @@ static int ProbeMain(int argc, char** argv)
 			/* The springs, after the sheets and before the life, which reads
 			 * them as its bodies' springs - the engine's order. */
 			if (g_hdwater == 1)
-				SpringBuild(stem);
+				SpringBuild(root, stem, room);
 
 			// -life: the water's life on the bodies just built.
 			if (g_life && g_hdwater)
@@ -12990,6 +13150,9 @@ static int ProbeMain(int argc, char** argv)
 				i += 2)
 				HDRenderWaterProbeCreatureLate(g_creatures[i],
 					g_creatures[i + 1], g_seed_origin[0], g_seed_origin[1]);
+
+			// The springs' cracks, where HDFrameDrawGlow draws them.
+			SpringCrackDraw();
 
 			// A shot tank's wet floor, before the copy, as the engine has it.
 			ProbeWetDraw(0);

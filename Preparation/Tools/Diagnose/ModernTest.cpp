@@ -20614,6 +20614,219 @@ static void spring_levels()
 		"key's 1 (ANDREA1, ANDREA2, JOBY2), two at 2", placed, 3);
 }
 
+/* The crack at a spring's foot (hd_spring.h, HDSpringCrackMake): a hash of
+ * the spring's level and place, so the same spring has the same outline in
+ * every build; two to four branches a third of the main line long; one
+ * simple polygon whatever the hash; on its body's deep squares; and its
+ * bubbles born inside it, on its bottom. */
+static bool crack_edges_cross(const HDSpringCrackShape& c)
+{
+	const int n = c.points;
+
+	for (int i = 0; i < n; i++)
+		for (int j = i + 2; j < n; j++)
+		{
+			if (i == 0 && j == n - 1)
+				continue;
+
+			const double ax = c.x[i], az = c.z[i];
+			const double bx = c.x[(i + 1) % n], bz = c.z[(i + 1) % n];
+			const double cx = c.x[j], cz = c.z[j];
+			const double dx = c.x[(j + 1) % n], dz = c.z[(j + 1) % n];
+			const double d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+			const double d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+			const double d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx);
+			const double d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+
+			if (((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0)))
+				return true;
+		}
+
+	return false;
+}
+
+// The outline as a number: FNV-1a over its points in sixteenths of a unit.
+static unsigned crack_print(const HDSpringCrackShape& c)
+{
+	unsigned h = 2166136261u;
+
+	for (int i = 0; i < c.points; i++)
+	{
+		const long v[2] = { lround(c.x[i] * 16.0f), lround(c.z[i] * 16.0f) };
+
+		for (int k = 0; k < 2; k++)
+			for (int s = 0; s < 32; s += 8)
+				h = (h ^ (unsigned)((v[k] >> s) & 0xFF)) * 16777619u;
+	}
+
+	return h;
+}
+
+static void spring_crack()
+{
+	printf("the springs: the crack\n");
+
+	// The fountain's crack, made twice, and pinned to its outline.
+	const HDSpring s = spring_of(1.0f);
+	HDSpringCrackShape a, b;
+
+	HDSpringCrackMake(s, 1.0f, &a);
+	HDSpringCrackMake(s, 1.0f, &b);
+	ok(memcmp(&a, &b, sizeof(a)) == 0, "spring crack: the same spring makes "
+		"the same crack", 1, 1);
+	ok(crack_print(a) == 0xDA93C1A4u && a.points == 60 && a.branches == 4 &&
+		a.round == 0, "spring crack: the fountain's outline as every build "
+		"makes it (60 points, 4 branches, the first round)",
+		(long)crack_print(a), (long)0xDA93C1A4u);
+
+	// Any spring: the counts and sizes in range, one simple polygon.
+	int counts = 0, lengths = 0, sizes = 0, simple = 0, total = 0, later = 0;
+
+	for (int k = 0; k < 4000; k++)
+	{
+		HDSpring r = s;
+
+		r.x = 1024.0f + (float)(HDSpringHash(77u, (unsigned)k) * 3);
+		r.z = 1024.0f + (float)(HDSpringHash(78u, (unsigned)k) * 3);
+		r.strength = (float)(k % 11) / 10.0f;
+		r.seed = HDSpringSeed(k & 1 ? "JOBY2" : "ANDREA1", r.x, r.z);
+
+		HDSpringCrackShape c;
+
+		HDSpringCrackMake(r, 1.0f, &c);
+		total++;
+		counts += c.branches >= 2 && c.branches <= 4 &&
+			c.points == 2 * kHDSpringCrackSteps + 2 *
+			kHDSpringCrackBranchSteps * c.branches ? 1 : 0;
+
+		bool within = true;
+
+		for (int j = 0; j < c.branches; j++)
+			within = within && c.branchLength[j] >= c.length / 3.0f * 0.8f -
+				0.01f && c.branchLength[j] <= c.length / 3.0f * 1.2f + 0.01f;
+
+		lengths += within ? 1 : 0;
+
+		const float scale = 0.5f + 0.5f * r.strength;
+
+		sizes += c.length >= 256.0f * scale - 0.01f && c.length <= 512.0f *
+			scale + 0.01f && c.width >= 32.0f * scale - 0.01f &&
+			c.width <= 96.0f * scale + 0.01f && c.depth >= 64.0f * scale -
+			0.01f && c.depth <= 128.0f * scale + 0.01f ? 1 : 0;
+		simple += crack_edges_cross(c) ? 0 : 1;
+		later += c.round > 0 ? 1 : 0;
+	}
+
+	ok(counts == total, "spring crack: two to four branches, each in place "
+		"of one point as a spike of 2 x 4 + 1", counts, total);
+	ok(lengths == total, "spring crack: every branch a third of the main "
+		"line long, 0.8 to 1.2 of it", lengths, total);
+	ok(sizes == total, "spring crack: 256 to 512 long, 32 to 96 wide, 64 to "
+		"128 deep, scaled by the strength from half to whole", sizes, total);
+	ok(simple == total, "spring crack: the outline never crosses itself",
+		simple, total);
+	ok(later == 660, "spring crack: 660 of the 4,000 draw their branches "
+		"again in a later round of the hash", later, 660);
+
+	/* The four springs of the classic levels (the table's and the rule's,
+	 * RoomProbe -springs): each crack at its whole size, every point of it
+	 * on the deep squares its map meets (RoomProbe -springcrackmap). */
+	struct Place
+	{
+		const char* stem;
+		float x, z;
+		unsigned first;		// the rule's body key, 0 for the table's
+		int candidates;
+		int squares;
+		int sq[2][3];
+	};
+
+	static const Place place[] =
+	{
+		{ "ANDREA2", 55808.0f, 32768.0f, 0u, 0, 2,
+			{ { 55296, 31744, 2304 }, { 55296, 32768, 2304 } } },
+		{ "ANDREA2", 60928.0f, 40448.0f, 3473499u, 22, 1,
+			{ { 60416, 39936, 768 } } },
+		{ "ANDREA1", 62976.0f, 64000.0f, 3866745u, 6, 1,
+			{ { 62464, 63488, 1792 } } },
+		{ "JOBY2", 12800.0f, 37376.0f, 720934u, 14, 1,
+			{ { 12288, 36864, 768 } } },
+	};
+	int laid = 0, on = 0, points = 0;
+
+	for (const Place& p : place)
+	{
+		HDSpring r = s;
+		int pick = -1;
+
+		strcpy(r.stem, p.stem);
+		r.x = p.x;
+		r.z = p.z;
+		r.strength = 1.0f;
+
+		if (p.first)
+			HDSpringRulePick(p.stem, p.first, p.candidates, 0, 0, 1, &pick,
+				&r.strength);
+
+		r.seed = HDSpringSeed(r.stem, r.x, r.z);
+
+		std::vector<HDSpringSquare> body;
+
+		for (int q = 0; q < p.squares; q++)
+		{
+			const HDSpringSquare sq = { p.sq[q][0], p.sq[q][1], p.sq[q][2],
+				1 };
+
+			body.push_back(sq);
+		}
+
+		HDSpringCrackShape c;
+
+		laid += HDSpringCrackChoose(r, body, &c) && c.fit == 1.0f ? 1 : 0;
+
+		for (int i = 0; i < c.points; i++, points++)
+			for (const HDSpringSquare& q : body)
+				if (c.x[i] >= (float)q.x && c.x[i] < (float)(q.x + 1024) &&
+					c.z[i] >= (float)q.z && c.z[i] < (float)(q.z + 1024) &&
+					q.depth >= kHDSpringDeep)
+				{
+					on++;
+					break;
+				}
+	}
+
+	ok(laid == 4, "spring crack: the four springs' cracks lie whole on their "
+		"water", laid, 4);
+	ok(on == points, "spring crack: every outline point on a deep square of "
+		"its body", on, points);
+
+	// The bubbles: born inside the slit, on its bottom, rising out of it.
+	a.bottomY = 2641.0f;
+
+	int inside = 0, born = 0, out = 0;
+
+	for (int k = 0; k < 3000; k++)
+	{
+		float x, z;
+		HDSpringBubbleAt at;
+
+		HDSpringCrackBirth(a, s.seed, k, &x, &z);
+		inside += HDSpringCrackHolds(a, x, z) ? 1 : 0;
+		born += HDSpringBubble(s, k, HDSpringBubbleBorn(s, k) + 1.0e-4, &at,
+			&a) && fabsf(at.x - x) < 1.0f && fabsf(at.z - z) < 1.0f &&
+			fabsf(at.y - a.bottomY) < 1.0f ? 1 : 0;
+		out += HDSpringBubble(s, k, HDSpringBubbleBorn(s, k) + 3.0, &at, &a) &&
+			at.y < (float)s.floorY ? 1 : 0;
+	}
+
+	ok(inside == 3000, "spring crack: every bubble is born inside the "
+		"outline", inside, 3000);
+	ok(born == 3000, "spring crack: a bubble starts at its birth place on "
+		"the crack's bottom", born, 3000);
+	ok(out == 3000, "spring crack: three seconds on every bubble has risen "
+		"out of the crack", out, 3000);
+}
+
 static void spring_clock()
 {
 	printf("the springs: the hashed clock\n");
@@ -20876,6 +21089,7 @@ int main()
 	spring_clock();
 	spring_rule();
 	spring_levels();
+	spring_crack();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

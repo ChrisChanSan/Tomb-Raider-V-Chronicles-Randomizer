@@ -2194,15 +2194,16 @@ long S_LoadLevelFile(long num)
 	ProfileLevel(name);
 	LoadLogStep(&loadlog_at, "profile");
 
-	// The load thread has joined, so loading is done whatever the step
-	// counting says. S_FinishLoadBar puts the bar at 100% (Core's completion
-	// criterion loops forever from ~75 texture pages on, see drawbars.cpp),
-	// and the catch-up loop is bounded as well so it can never hang here.
+	// The work is done, so the bar is shown full in one frame and the level
+	// starts: the bar may take no longer than the load itself. While the
+	// load thread runs, the loop above moves it by 2 per drawn frame; it
+	// stands still while the main thread works after the join.
+	// S_FinishLoadBar puts target and position at 100, so this one draw shows
+	// the full bar (see drawbars.cpp).
 	S_FinishLoadBar();
 
-	if (App.dx.Flags & DXF_HWR && !S_DrawLoadBar())
-		for (int i = 0; i < 200 && !S_DrawLoadBar(); ++i)
-			Sleep(1);
+	if (App.dx.Flags & DXF_HWR)
+		S_DrawLoadBar();
 
 	Log("S_LoadLevelFile: load bar finished");
 	LoadLogStep(&loadlog_at, "bar");

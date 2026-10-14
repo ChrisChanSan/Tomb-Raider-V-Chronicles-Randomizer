@@ -18003,6 +18003,9 @@ well." The first part brought the key, the pad chord, the switch's state, its lo
 and a probe switch; the wiring pass (2026-10-14, after the merges of the rounds that held
 the HD path's files) connects the switch to every gate of the HD world. The switch is
 complete after this pass: a press draws the world classic or HD from the next frame on.
+The options pass (2026-10-14, evening) makes the *HD textures* row set the switch, so the
+row too takes the whole world at once, records two decisions on what the switch leaves,
+reads the first play test of F12, and brings the comments up to date.
 
 **Design.** A third state beside `hd_enable` 0 and 1: the HD level built at its load as
 with 1, and drawn HD or classic as the switch says. The build stays at the load because
@@ -18134,7 +18137,8 @@ drawn would lose its HD Lara until the next load, so no release is decided while
 is drawn. And the room gates ask `HDLevelActive()`, which asks `HDEnabled()` too: the *HD
 textures* row of the pause menu's options now takes the rooms, the statics, the carried
 art and the sky with it at once, as it already took the reach, the mirrors, the water's
-hooks and the projected shadow; the items and Lara follow it at the next load as before.
+hooks and the projected shadow; the items and Lara followed it at the next load until the
+options pass made the row set the switch (The option row).
 
 The classic draws the HD path leaves out come back, each through a gate that now answers
 false: `InsertRoom` draws every roomlet when `HDFrameRoom` answers false
@@ -18213,6 +18217,56 @@ on a water with floats or drips at the first HD frame, Lara's projected shadow f
 over a quarter second, her braid settling onto her pack, and now and then a ripple on an
 HD water that shows no ring for up to two seconds.
 
+**The option row.** The *HD textures* row is `hd_enable`, read live by `HDEnabled()` and
+through it by the room gates; its step now sets the switch as well, so the row takes the
+whole world at once in both directions, as a press does. The half state - the rooms,
+statics and sky following the row while the items, Lara and the water's life kept the
+state until the next load - is gone (a project decision of 2026-10-14, asked whether the
+row should act at the next level or at once and whole: "Immediately."). New in
+`specific/hd/hd_switch.h`: `HDSwitchSet(s, on, hd)` beside `HDSwitchStep`. The state
+takes the row's new value whatever it was; the answer is a flip only when the draw
+changed, and nothing to switch when the level has no HD data, the state set all the same;
+`held` is not touched, so the row's step is never an edge of the key, and a key held
+across it is no new press. `specific/hd/hd_switch.cpp`: `HDSwitchOption(on, roomsBefore)`
+asks whether the level on screen has HD data - HD rooms, HD objects (`HDObjectActive`) or
+an HD Lara (`HDLaraActive`) built at its load - and writes the `HDLOG switch` line with
+`by=option` for a flip and for a step with nothing to switch, whose cause is `hd_enable=0
+nothing to switch` (the row off), `hd_enable=1 install=none nothing to switch` or, new,
+`hd_enable=1 built=none nothing to switch` for a level loaded without HD. The rooms' build
+flag has no accessor of its own, and `HDLevelActive` answers it only with the
+row on and the state at HD, so `MenuStepHdTextures` (`game/menu_frame.cpp`) asks it before
+its write (`roomsBefore`, for a step to off) and `HDSwitchOption` again once the state
+took the row's value (for a step to on): every step that changes the draw knows its
+level's data. The row's value, its text and its save through `MENU_SAVE_TOMB5` are as
+before; the title's options and the pause menu's reach the one row through `DoOptions`.
+No gate expression changed. The table, with the row as `hd_enable` and "data" for a level
+built HD at its load:
+
+| row | data | event | `HDDrawn()` after | `HDLevelActive()` | the world | `HDLOG switch` |
+|---|---|---|---|---|---|---|
+| on | yes | a game starts | 1 | 1 | HD | - |
+| on | yes | F12 | 0 | 0 | classic | `drawn=0 by=key` |
+| on | yes | row to off | 0 | 0 | classic | `drawn=0 by=option` |
+| off | yes | F12 | 0, as it stood | 0 | classic | `hd_enable=0 nothing to switch` |
+| off | yes | row to on | 1 | 1 | HD | `drawn=1 by=option` |
+| on | yes | F12, then row to off | 0 | 0 | classic | `by=key`; the step writes none |
+| off | no | row to on | 1 | 0 | classic; the next load starts HD | `built=none nothing to switch` |
+| on | no | F12 | flipped | 0 | classic; the next load starts as the state | `drawn=0\|1 by=key` |
+| on | no install | F12 | as it stood | 0 | classic | `install=none nothing to switch` |
+| on | no install | row to off | 0 | 0 | classic | `hd_enable=0 nothing to switch` |
+| off | no install | row to on | 1 | 0 | classic | `install=none nothing to switch` |
+
+The items, Lara and the water's life draw HD exactly when `HDDrawn()` and their own load
+flags say so, so with the row setting the state they go with the rooms in every row of
+the table. What the row reaches beyond the switch, as before: whatever asks `HDEnabled()`
+live - the HD fonts, the fifth state of *Shadow mode* - and at the next load the build.
+The rows beside it: *Body physics* asks Lara's gate on every frame, so the row off stops
+the motion at once and the row on starts it from rest; *HD water* is taken at the next
+load; *Shadow mode* asks `HDEnabled()` and no level; `hd_objects` has no row. One line
+says less than it might: a step to off over a state already classic, in a level with HD
+rooms and neither an HD object nor an HD Lara (`hd_objects` 0), says nothing to switch,
+which is so, as the draw does not change.
+
 **Measured.** The game's frame is a reading of the code above; nobody could play. The
 probe measures its own side: at the 15 cameras of the water parity set (`-hdwater 0` as
 they stand), at the same 15 with the sheets on, and at twelve views over six levels (a
@@ -18277,6 +18331,29 @@ MenuTest 44,216, InterpTest 729 and LipsTest 270 / 243 unchanged, 0 failed. The 
 path at `hd_enable` 0 is untouched by construction: every changed gate adds `HDDrawn()`,
 true until a press, to a test that `hd_enable` 0 already answers false, and the 6 classic
 views say the same.
+The options pass: ModernTest 15,002 -> 15,113, 0 failed - `HDSwitchSet` over every state,
+value, data answer and held state (48 checks), the row and the key together as the engine
+puts them (the row to off flips the world classic, the key with the row off does nothing,
+the row to on flips it HD, the key with the row on flips, a step to off over a classic
+world is no flip, a level without HD data, no installation, a key held across the row's
+steps is one press; 15 checks) and a sweep over every row value, installation, build and
+state with a step of the row and a press after it (48). MenuTest 44,216 -> 44,267, 0
+failed - the row's one table line saved through `MENU_SAVE_TOMB5`, the title's and the
+pause menu's `DoOptions` running the one table, its text and its registry value as
+before, the step's three lines in their order in the engine's text, and the step's table
+over both values, both states and both data answers (51). InterpTest 729 and LipsTest 270
+/ 243 unchanged, 0 failed. The comments that described the gates without the switch now
+say that the row and the switch act in a running level: over `g_level_active` and
+`HDLevelActive` (`hd_level.cpp`), over the items' guard (`hd_object.cpp`), on
+`HDLevelActive`, `HDRoomIsHD` and `HDStaticDrawnClassic` (`hd_level.h`), the statics' note
+in `game/draw.cpp`, and the *HD textures* and *HD water* rows' notes in
+`game/menu_frame.cpp`; those of *Shadow mode* and *Body physics* are true as they stand.
+Every changed line of the comment commit is a comment line. The probe built from this
+pass's last commit draws the 6 classic views (`-classicroom N -classiconly`) as `8691e82`
+and `ed676ba` do (6 of 6), and the 15 cameras of the water parity set at `hd_water` 0, the
+same 15 with the sheets on, the twelve views of the wiring pass and the 6 views drawn HD
+as `ed676ba`'s tool does (15, 15, 12 and 6, the first 15 also equal to the stored parity
+pictures): this pass changes no picture.
 
 **The owner's first F12 test.** A `-log` play test of 2026-10-14 with the build of
 `ed676ba` (`PCtomb5 built Oct 14 2026 20:06:54`) in ANDREA2, ANDREA1 and ANDY3 at 165 Hz,
@@ -18333,28 +18410,29 @@ from `HDFrameDrawGlow`). The decision, in the words given for it: "No, in practi
 mode is only used for a short before-and-after comparison." Neither is handed to the
 life's or the water's own code.
 
-Seven comments describe the gates without the switch, and this pass changed gate
-lines only, in files the other rounds work in: the comments over `HDLevelActive`
-(`hd_level.cpp:6812`), over the items' guard (`hd_object.cpp:2919`) and `hd_level.h`'s
-note on `HDLevelActive` (`:147`) name the cases without the switch; and four say that
-`hd_enable` switched off in a running level changes no room answer until the next level,
-or that the room answer is decided once at the load, while the room, static and
-carried-art gates now ask `HDLevelActive` on every frame - the comment over
-`g_level_active` (`hd_level.cpp:148`-`:150`), the statics' note in
-`game/draw.cpp:3619`-`:3622`, `hd_level.h:173` on `HDRoomIsHD` and `hd_level.h:313`-`:315`
-on `HDStaticDrawnClassic`. With `-log`, a level loaded while classic is drawn writes its
-`HDLOG softbody` line with `state=off reason=classic` (`HDLaraDrawBuild`,
-`hd_laradraw.cpp:1289` and `:1294`, through `soft_gate`, `:796`), although the HD Lara is
-built and her soft motion runs after the flip back; the line is diagnostic only, and
-`soft_gate` is the frame's soft-body gate as well, so it stays. The *HD textures* row's
-comment (`game/menu_frame.cpp:762`) says the row shows what the next level will do; with
-the room gates on `HDLevelActive` the row takes the rooms, the statics and the sky at
-once, as it took the water's hooks, the mirrors and the projected shadow before, and the
-items and Lara at the next load. On the XInput-ordered pages and at *One key* the pad has
-no default chord, as for every chord: no Modifier there.
+A press keeps `HDEnabled()` as its answer to whether there is HD data, as it was (the
+request for this pass: F12 with the row on flips as before). So with the row turned on in
+a level that was loaded with it off, a press flips the state and writes a line like a
+flip, although nothing is drawn HD before the next load, which then starts as the state
+says. With `-log`, a level loaded while classic is drawn writes its `HDLOG softbody` line
+with `state=off reason=classic` (`HDLaraDrawBuild`, `hd_laradraw.cpp:1289` and `:1294`,
+through `soft_gate`, `:796`) - the play test shows it at the loads of ANDREA1 and ANDY3 -
+although the HD Lara is built and her soft motion runs after the flip back. The value
+stays: a text that tells the two cases apart needs a new reader of the switch in
+`hd_laradraw.cpp` beside its gate lines, a new value for every case changes an existing
+log line in its middle, and `soft_gate` is the frame's soft-body gate as well; the line's
+documentation now gives `classic` as "no HD Lara drawn", which both cases are. Twice in
+the play test a short pause opened within 100 ms of a press of the pad chord (Checked);
+whether the chord's Options button opened it - the Modifier let go before Options, say -
+or a press of its own did, the log cannot tell, and the input path was not read in this
+pass. `Preparation/Tools/Diagnose/bmenu.bat` names in its comment the four engine headers
+MenuTest includes; `specific/hd/hd_switch.h` is a fifth since this pass. On the
+XInput-ordered pages and at *One key* the pad has no default chord, as for every chord: no
+Modifier there.
 
 **Commits.** `d502c8c`, `65f7d68`, `c6431e3`, `6c0036b`, `9f89b19`, `b98a2a3`; the wiring
-pass `9b9520c`, `f28f6ef`, `5262f98`, `67cd411`; its fix pass the record's own commit.
+pass `9b9520c`, `f28f6ef`, `5262f98`, `67cd411`; its fix pass the record's own commit;
+the options pass `7887938`, `27ab9e6`, `ed14c79`, `f717d38` and the record's own commit.
 
 ## 2.7 First person view, cheats and the -log seams
 

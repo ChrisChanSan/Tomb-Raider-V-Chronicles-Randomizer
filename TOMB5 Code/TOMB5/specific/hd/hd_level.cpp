@@ -879,16 +879,18 @@ namespace
 	 * which b's window cuts where it stands proud of the face: without it
 	 * two of room 0's doors seen from ANDREA1's room 109 lose their lower
 	 * half, and the edge of a metal wall seen from RICH2's room 106 goes
-	 * (74,088 pixels at 1280x720). The rule can only take art away: a
-	 * piece not drawn whole is already drawn inside that window, so it
-	 * narrows the answer and never widens it. Art in the air of a linked
-	 * room keeps the answer above, and so does art in no entry's box, which
-	 * is no piece at all (BuildRoomIntrusions says why). Such art the open
-	 * half would draw - no face claims it and it stands outside the smaller
-	 * box - is a piece of its own with no face outside the smaller box
-	 * (HDPairRange), whole on the answer above and never one of the pieces
-	 * the counters ask. With tomb5.hd_air off no piece has air, and the
-	 * answer above is the whole answer. */
+	 * (74,088 pixels at 1280x720). So does a piece of that pair no face
+	 * claims whose holder is not drawn this frame: it stands with those
+	 * faces, and whole is its answer without the air. The rule can only
+	 * take art away: a piece not drawn whole is already drawn inside that
+	 * window, so it narrows the answer and never widens it. Art in the air
+	 * of a linked room keeps the answer above, and so does art in no
+	 * entry's box, which is no piece at all (BuildRoomIntrusions says why).
+	 * Such art the open half would draw - no face claims it and it stands
+	 * outside the smaller box - is a piece of its own with no face outside
+	 * the smaller box (HDPairRange), whole on the answer above and never one
+	 * of the pieces the counters ask. With tomb5.hd_air off no piece has
+	 * air, and the answer above is the whole answer. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -937,11 +939,17 @@ namespace
 			if (open)
 				whole = true;
 
-			// Any claimed face of the same pair the classic path draws.
+			/* Any claimed face of the same pair the classic path draws -
+			 * asked for a claimed piece, and for a piece in unlinked air
+			 * that no face claims while its holder is not drawn: that art
+			 * stands with the pair's faces, as a pipe stands in the
+			 * hollow of a pillar whose face it is drawn on, and the
+			 * answer whole is the one it has without the air. */
 			bool claimed = false;
+			const bool askPair = piece.face >= 0 ||
+				(piece.air && !listed);
 
-			for (int k = 0; k < count && ask && piece.face >= 0 && !claimed;
-				k++)
+			for (int k = 0; k < count && ask && askPair && !claimed; k++)
 			{
 				const HDPairRange& other = g_pieces[(size_t)(first + k)];
 
@@ -960,7 +968,11 @@ namespace
 			 * there, and the art bound to it is that wall's - a door, its
 			 * frame, a wall top - which b's window cuts where it stands proud
 			 * of the face. Such a piece is whole on the answer above too, so
-			 * this keeps that answer and never widens it. */
+			 * this keeps that answer and never widens it. So is a piece no
+			 * face claims whose holder is not drawn (askPair): cut to the
+			 * window, the coiled pipe in the hollow of JOBY2's broken
+			 * pillar by the stairs falls into shards seen from room 33
+			 * (16,177 pixels at 1280x720). */
 			if (piece.air)
 			{
 				whole = claimed;
@@ -3821,12 +3833,17 @@ static void BuildRoomAir()
 static std::vector<unsigned char> g_carry_sky;
 static std::vector<short> g_carry_twin;
 static std::vector<std::vector<short> > g_room_carry;
+/* Per room, the room of its flipmap pair the portals lead to - the one
+ * whose flipped_room names the other, which FlipMap leaves in place - or
+ * -1 for a room with no twin (HDCarriedRoom). */
+static std::vector<short> g_carry_main;
 
 static void BuildRoomCarry()
 {
 	g_carry_sky.clear();
 	g_carry_twin.clear();
 	g_room_carry.clear();
+	g_carry_main.clear();
 
 	if (!g_air_on || number_rooms <= 0)
 	{
@@ -3837,10 +3854,18 @@ static void BuildRoomCarry()
 	g_carry_sky.resize((size_t)number_rooms);
 	g_carry_twin.resize((size_t)number_rooms);
 
+	g_carry_main.assign((size_t)number_rooms, -1);
+
 	for (int i = 0; i < number_rooms; i++)
 	{
 		g_carry_sky[(size_t)i] = (room[i].flags & ROOM_OUTSIDE) ? 1 : 0;
 		g_carry_twin[(size_t)i] = room[i].flipped_room;
+
+		if (room[i].flipped_room >= 0 && room[i].flipped_room < number_rooms)
+		{
+			g_carry_main[(size_t)i] = (short)i;
+			g_carry_main[(size_t)room[i].flipped_room] = (short)i;
+		}
 	}
 
 	HDRenderSetCarryHosts(&g_carry_sky[0], &g_carry_twin[0], number_rooms);
@@ -4508,10 +4533,11 @@ static void ReportRoomIntrusions()
 	Log("HDLOG level=%s overlap pairs=%d intruding tris=%d in %d groups "
 		"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
 		"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d air_pairs=%d "
-		"air_boxed=%d air=%d",
+		"air_boxed=%d air=%d covered=%d",
 		g_stem, pairs, tris, groups, faces, bound, unbound, g_band_unclaimed,
 		(int)(g_air_build_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
-		airTris, airGroups, airPairs, airBoxed, g_air_on);
+		airTris, airGroups, airPairs, airBoxed, g_air_on,
+		HDRenderCoveredFaces());
 
 	/* HDLOG unlinked: one line per (group, host) pair with art in the air of
 	 * a room its own room has no link with - `group` the art's room,
@@ -4527,12 +4553,14 @@ static void ReportRoomIntrusions()
 					g_stem, group, host, here);
 		}
 
-	/* HDLOG hull, with tomb5.hd_air 2: one line per group whose art in
-	 * unlinked air no entry's box holds - `air_tris` those triangles,
+	/* HDLOG hull, with tomb5.hd_air 1 or 2: one line per group whose art
+	 * in unlinked air no entry's box holds - `air_tris` those triangles,
 	 * `host_art` those standing on their host's own art, `hull` 1 when
-	 * that is more than half and the art is held to the group's own
-	 * window (MarkAirHulls in hd_render.cpp). Behind -log. */
-	if (gLogEnabled && g_air_on == 2)
+	 * that is more than half, and then the art is drawn pushed back in
+	 * depth and, with hd_air 2, held to the group's own window
+	 * (MarkAirHulls in hd_render.cpp); `behind` the triangles drawn pushed
+	 * back, all three passes. Behind -log. */
+	if (gLogEnabled && g_air_on)
 		for (int g = 0; g < HDRenderGroupCount() && g < HD_MAX_ROOMS; g++)
 		{
 			int air = 0, covered = 0;
@@ -4540,7 +4568,45 @@ static void ReportRoomIntrusions()
 
 			if (air)
 				Log("HDLOG hull level=%s group=%d air_tris=%d host_art=%d "
-					"hull=%d", g_stem, g, air, covered, hull ? 1 : 0);
+					"hull=%d behind=%d", g_stem, g, air, covered,
+					hull ? 1 : 0, HDRenderGroupHullBehind(g));
+		}
+
+	/* HDLOG covered, with the air on: one line per pair face found inside
+	 * a larger face of its holder (HDRenderCoveredFace) - `face` its index
+	 * in the pair-face list, `group` its room, `holder` the larger face's,
+	 * `area` its area in square units, then per room the art over it in
+	 * percent of that area: `own` the face's room's, `held` the holder's,
+	 * each as on/n/back (within a unit of the plane, all corners on the
+	 * side its normal points to, all on the other), `airs` in which rooms'
+	 * air the point 128 units off its centre stands (1 and 2 its room's on
+	 * the normal's side and the other, 4 and 8 the holder's), `centre` and
+	 * `normal` (in thousandths) where it is; `behind` 1 when its art is
+	 * drawn pushed back. Behind -log. */
+	if (gLogEnabled && g_air_on)
+		for (int i = 0; ; i++)
+		{
+			int face = 0, group = 0, holder = 0, behind = 0, airs = 0;
+			float area = 0.0f, own[3], held[3];
+			float centre[3], normal[3];
+
+			if (!HDRenderCoveredFace(i, &face, &group, &holder, &area, own,
+				held, &airs, centre, normal, &behind))
+				break;
+
+			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+
+			Log("HDLOG covered level=%s face=%d group=%d holder=%d area=%d "
+				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
+				"normal=%d,%d,%d behind=%d", g_stem, face, group,
+				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
+				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
+				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
+				(int)(held[2] * to + 0.5f), airs, (int)floorf(centre[0] + 0.5f),
+				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
+				(int)floorf(normal[0] * 1000.0f + 0.5f),
+				(int)floorf(normal[1] * 1000.0f + 0.5f),
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
 		}
 
 	// The lists were only borrowed for the length of the build.
@@ -6698,18 +6764,48 @@ bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount)
 }
 
 /* The rooms a room under the sky carries (hd_level.h), out of the list the
- * build made of the renderer's carry pairs. */
+ * build made of the renderer's carry pairs. The list is the art's, kept by
+ * the numbers of the level as built: after a flip a room's number holds its
+ * twin's group (HDFlipRoom), and what stands under its sky is that group's
+ * list - ANDY1's rooms 48 and 151 carry 215 and 177, their alternates 214
+ * and 213 nothing, the only two hosts of the fifteen levels whose two
+ * states carry different rooms. */
 int HDRoomCarries(int roomIndex, const short** rooms)
 {
 	*rooms = 0;
 
-	if (!g_level_active || roomIndex < 0 ||
-		roomIndex >= (int)g_room_carry.size() ||
-		g_room_carry[(size_t)roomIndex].empty())
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
 		return 0;
 
-	*rooms = &g_room_carry[(size_t)roomIndex][0];
-	return (int)g_room_carry[(size_t)roomIndex].size();
+	const int key = g_room_group[roomIndex] >= 0 ? g_room_group[roomIndex]
+		: roomIndex;
+
+	if (key >= (int)g_room_carry.size() || g_room_carry[(size_t)key].empty())
+		return 0;
+
+	*rooms = &g_room_carry[(size_t)key][0];
+	return (int)g_room_carry[(size_t)key].size();
+}
+
+/* CarryArt takes in room numbers, and after a flip the number of a pair's
+ * room no longer names its art: FlipMap swaps the two records and
+ * HDFlipRoom the groups, so the art of the twin the portals do not lead to
+ * - out of the world in this state - is drawn by whichever of the two
+ * numbers holds it. Taken in by its number, ANDY1's room 48 draws the
+ * alternate art of room 179 (group 215, the room 215 is) beside room 179's
+ * own while unflipped, and RICH3's room 176 the alternate of room 170
+ * (group 174): art of a state the level is not in. */
+int HDCarriedRoom(int group)
+{
+	if (!g_level_active || group < 0 || group >= (int)g_carry_main.size())
+		return -1;
+
+	const int main = g_carry_main[(size_t)group];
+
+	if (main < 0)
+		return group;
+
+	return GroupOfRoom(main) == group ? main : -1;
 }
 
 /* The one question the room walk asks of the HD path. g_level_active is

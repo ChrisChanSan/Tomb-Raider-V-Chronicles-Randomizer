@@ -5113,6 +5113,192 @@ measured at a flip room.
 **Commits.** `24636b1`, `8a01eae`, `4d618a2`, `ebd8d7f`, `13623d2`, `f8b6e73`, `dce8aac`
 and the fix pass's record.
 
+**Round 7: the broken corner, the court's pipes, the lift shaft's fight, room 212
+(2026-10-13).** The owner played the build of `ba89a58f` with `hd_air` 1. In his words:
+the black shards at JOBY2's stairs are the broken-out corner, which belongs to rooms 31
+and 33, room 24 being the room below, and those rooms stand in one another on the global
+axis - in principle the problem of rooms 123 and 124 earlier, a wall that becomes half
+see-through, made worse by the rooms standing in one another. The pipes in the court
+belong only to the stairwell, rooms 28, 32 and 30; they should never clip through the
+wall and never be seen from the court. In RICH2's lift he sees, on the ladder, lamps
+turned into speckled silhouettes and a grating turned into a noisy block, and asks
+whether textures fight at the same place or the flip maps are mixed up. ANDREA1 looks
+almost perfect but for room 212, sector x1/z0, whose wall texture flickers in the game
+and in a level viewer alike, seen best from room 19 through the grating.
+
+**The broken corner.** The case of rooms 123 and 124 was settled by the reach (`351803f`):
+a room whose portal lands on the screen beside its parent's window is listed. Rooms 24 and
+33 have no portal, so it does not apply. From room 33 at yaw 270, 1280 x 720, an offline
+z-buffer of every triangle of the level with the probe's camera finds what the art shows
+through the broken corner: at 21,879 of the 25,799 clear-colour pixels on room 33's
+classic face, room 24's ceiling (y -4,352, x 27,022 to 28,785), and with room 24 left out
+no opaque art of any room at 21,961 of the 22,166 pixels the hole has with the pipe whole.
+Room 24's box (y -4,352 to -1,280) and room 33's (-5,376 to -3,072) share 1,280 units of
+height: its ceiling runs through room 33's space, which is why drawing it puts that
+ceiling over room 33's pillar. Listed with any window, room 24's open half is drawn whole
+and changes 256,281 pixels of room 33's art. Drawn two-sided the view loses 2,996 clear
+pixels, the inside of the pipe, not the hole. The shards are group 31's coiled pipe in
+the pillar's hollow: 2,887 triangles of band art in room 24's unlinked air that no face
+claims, held to room 31's window while the classic path draws faces of their pair.
+**The fix:** such a piece, whose holder is not drawn, takes the pair's claimed answer -
+whole when a claimed face of its pair is drawn - which is its answer without the air
+rule, so the rule still only narrows (`DecidePairs`; RoomProbe mirrors it).
+
+**The court's pipes.** At the court's pose (img10) 829 near-black pixels at 1280 x 720
+are group 30's; drawn front-facing (the facing measured on the view: 884,526 of the
+885,017 drawn pixels are front faces by the same test), a two-sided draw adds 7 of them,
+and 763 are band art drawn with the open half, 66 a piece. Along x at y -3,000: group
+30's stairwell wall at x 24,234, seen from the court from behind; the pipes at 24,317 to
+24,474; group 16's court wall at 24,576, the classic plane. The stairwell's wall stands
+342 units into the court's classic room and the pipes 102 to 259 units in front of the
+court's wall, hidden from the court only by a wall it sees from behind. The classic frame
+shows room 16's face on all 829 pixels. On the same ray group 16's court wall and a second
+wall of group 30, facing the court, stand back to back at 24,576: the stairwell's HD wall
+is 342 units thick, and the pipes lie inside that thickness, on the court's side of the
+classic plane - the owner's sketch in numbers. Not changed: the cure is a rule that holds
+art lying inside a wall's thickness to the room on whose side it stands, and the build
+does not know a wall's thickness - it would have to find, per wall, the two sheets of art
+of two groups facing away from each other and what lies between them, a new measure for
+every level and every open half; and the band art of a room with an empty window is the
+open half the boxed rule keeps whole.
+
+**The lift shaft.** `RoomProbe -flip <rooms>` walks with flipmaps swapped as FlipMap swaps
+them; with the ten pairs the log's load swapped, the walk at the log's frame 61,830 (eye
+41,210/-14,158/70,768 in room 63 looking up at Lara on the ladder) lists the log's 12
+rooms with the log's windows. Rooms 61 to 65 have no twin, and no flip happened in play.
+Room 61 is listed (window 987,0..1975,331 at 2560 x 1440), and group 61 is a hull: a
+second copy of the shaft's floors 62 to 65, cut into other triangles, within 4 units of
+their art at 140,401 of the 219,084 pixels both draw at 640 x 360. Drawn twice with the
+eye one unit apart, 45,146 pixels of 1280 x 720 change; with group 61 left out 9,019,
+with 62 to 65 left out 12,456, with `hd_air` 2 36,971: the two copies fight for the depth.
+**The fix:** all of a hull's art outside its own room or in unlinked air is drawn pushed
+back as a stand range answered `HD_STAND_BEHIND` is (`HDRange::behind`), at `hd_air` 1
+and 2: 10,552 pixels at that step (33,503 with the air's art alone pushed). The hulls are
+marked whenever the air is on; the `HDLOG hull` line prints at 1 too and ends in
+`behind=`. The carried art was keyed by the build's room numbers: CarryArt took in the
+carried number, which after a flip names the twin's art, and in the unflipped state the
+number of an alternate room draws art of a state the level is not in. Over the fifteen
+levels 23 carry pairs touch a flip room; two carry an alternate - ANDY1's room 48 room 215
+(the other state of room 179: the fallen bell's pieces, 40,207 and 79,545 pixels from room
+48 at yaw 90 and 180) and RICH3's room 176 room 174 (0 and 1 pixel). `HDCarriedRoom`
+answers the room of the pair the portals lead to when the flip state has the carried group
+drawn there, and none when its art is out of the world; the probe's carry asks the same.
+
+**The shaft in play.** No trigger in the shaft's rooms (33, 35 to 39, 61 to 65, 107) flips
+a map: not one FLIPMAP, FLIPON or FLIPOFF action. Room 63, the ladder room of the two
+pictures, fires the fixed camera 5 (room 62, x 39,424, y -21,504, z 71,168, looking down
+the shaft); room 33 fires flyby 3, room 39 flyby 4 and the cues 1, 27 and 14. Flyby 3 runs
+from room 65 at y -4,736 up to room 39 at y -27,776; flyby 4 stays in room 62 at y -19,968
+to -22,400. Five of their eleven cameras test the triggers of the sector they pass, two in
+room 39, whose heavy triggers start objects 64, 65, 67, 68 and 69 and the cues 1 and 14,
+three in room 62, which has none: no flip either. The level's flips are fired elsewhere
+(rooms 7 to 11, 17, 23, 26, 34, 42, 43, 52, 58, 59, 81, 85, 87 to 89, 100, 102, 104, 120,
+122, 129, 145 and 151), and rooms 61 to 65 have no twin, so the shaft's art is the same in
+every state; the carry list's flip rooms are the hosts 18 and 19 (twins 97 and 95), far
+from it. The log's session ran no fixed camera and no flyby. The hulls the push takes,
+with their triangles pushed back at `hd_air` 1: ANDREA1 68 (5,123) and 82 (414), ANDREA2
+219 (245), JOBY2 110 (18,494) and 135 (17,814), RICH2 26 (66,874), 61 (237,865) and 142
+(63; nine triangles of air art, eight on their hosts' art); only 61 was measured as a copy
+of its hosts, the others change the sweep by 1 to 724 pixels with no clear colour. **The
+host's list after a flip:** the carry list was still looked up by the listed room's
+number; after a flip that number holds the twin's group, and the list is now that group's
+(`HDRoomCarries`). The main and the alternate host carry different rooms only in ANDY1:
+rooms 48 and 151 carry 215 and 177, their alternates 214 and 213 nothing. At the room-48
+views the walk lists the same rooms in all four flip states of 48 and 179, room 179 being
+listed by its own portals.
+
+**Room 212.** Rooms 12 and 212 have no portal between them and intrusion entries both
+ways. At z 27,648, x 37,888 to 38,912, room 12's classic face (y -4,096 to -3,072) lies
+inside room 212's (y -4,352 to -3,072), same plane, same facing - the flicker of the
+classic frame - and the two groups' art lies within a unit of each other on 25,142
+pixels at 640 x 360, on pages 126 and 146. **The fix:** `MarkCoveredFaces` finds the pair
+faces that lie inside a larger face of the holder of an entry their room intrudes in
+(the same plane within a unit, the same facing, every corner within the outline); the
+pieces bound to them are drawn pushed back, so the larger face's art wins. 40 faces over
+the fifteen levels (ANDREA1 1, ANDREA3 3, ANDY2 4, JOBY3 20, RICH1 7, RICH2 5), only with
+the air on; the intrusion level line ends in `covered=`. **Every face asked:** each of the
+40 now has its own `HDLOG covered` line - each room's art over it in three layers along
+its normal, in which room's air the point 128 units off its centre stands, its centre and
+normal. At every face both rooms' art lies on the plane within a unit; the art of the two
+is never the same triangles. At 16 faces only the holder's air stands in front - the
+holder's floor - and at 24 both rooms'. An eye 768 units off each face on its open side,
+256 aside, both rooms drawn whole, the eye moved one unit along x and along z: over the
+pixels the push changes, 582,474 change with the eye before and 1,562 after. The fight
+ends at 27 faces; at JOBY3's face 78 it goes from 15 to 19 pixels; at twelve no fight
+showed where the push changes the picture, seven under 600 pixels, five 9,744 to 113,537
+(JOBY3's faces 87, 562 and 564, RICH1's 139 and 444). The four mass views the push changed
+(ANDREA3 room 80 at yaw 0 and 90, JOBY3 room 190 at 90 and 270) look from the middle of
+one room through the mass of the other with only the two groups drawn; there the smaller
+face's art won by the order of the draw alone, and six eyes round each show it: JOBY3 190
+no fight before and 52 and 7 pixels after at two of the six; ANDREA3 80 at yaw 0 9,641
+before and 16,696 after, all of it face 339 (room 80's face inside room 16's, where room
+16's art stands up to 32 units in front of the face over 65 % of it), whose own view goes
+from 32,364 to 78. Two narrowings were measured and dropped: faces with art in layers off
+the plane left unpushed keep the fight at 12 of the 17 faces they leave out, and face 339
+left unpushed keeps its 32,364.
+
+**Checked.** Proven before each commit at the places named above: from room 33 at yaw 270
+the pipe whole (16,177 pixels at 1280 x 720, the clear colour on room 33's classic face
+from 25,799 to 22,166); nine views 5 degrees round it 229,113 clear pixels on a classic
+face before, 195,368 after; 32 views along the camera path of the stairs' foot (eyes
+behind Lara, 640 x 360) 62,563 before, 24,165 after, every one changed, none with new
+clear colour; the three level-viewer cameras (yaw as given, the pitch negated, a 45 degree
+vertical field of view, which frames the art as the viewer frames it) change 0 pixels -
+their eyes are outside the rooms, so they prove nothing of the fix, which is shown at the
+pose, the five-degree sweep and the camera path. RICH2 3 at yaw 0 gives back 291 pixels,
+169 of them where the cut classic frame is empty, dark on dark. The lift: the 40 steps of
+the ride and the 12 fine steps, the flip state applied: a one-unit eye step changes
+160,830 pixels before and 73,027 after over the ride, 109,929 and 54,926 over the fine
+steps, 13 and 9 steps changing, no new clear colour. Room 212 from room 19: the eye step
+1,805, 1,124 and 255 pixels before, 336, 738 and 246 after; from room 212 itself no pixel
+changes. With the tools built from `19b3144`: `-air 0` gives the picture file of the
+`2d48e83` tool at all 201 views (22 places, 16 mass views, 131 sweep views, 32 earlier
+views). The default gives the `ba89a58f` tool's picture byte for byte at 20 of the 22
+places, 11 of the 16 mass views, 102 of the 131 sweep views and 26 of the 32 earlier
+views; no view gains clear colour. The pipe rule changes eight sweep views by 18,004
+pixels (JOBY2 33 at yaw 270 16,177, ANDREA1 57 and 58 at yaw 270 1,049 and 458, RICH2 3 at
+yaw 0 291, four more by 2 to 10); the pushed-back hulls nineteen views where a hull is
+listed (RICH2's shaft rooms 35 to 38 and 61 by 3,892 to 167,583, RICH2 0 to 4 and ANDREA1
+68 to 84, 102 and 218 and JOBY2 22 and 132 by 1 to 724); the covered faces the two places
+in room 19 (3,559 and 2,419, room 212's wall) and four mass views in ANDREA3 room 80 and
+JOBY3 room 190 (107 to 1,023,023: a coincident pair of faces resolved the other way, the
+textured wall now in front of a dark one); two views differ in their draw calls alone. The
+five places lose their ghosts by the same pixels against `-unlinked 0` (41,734 and 34,315,
+18,709, 14,448, 24,640, 5,396), room 101 under the flag 0, the same with `-air 2`. Over
+the 131 `-unlinked 0` against 1 gives 186,045 pixels, 108,604 clear (204,049 and 112,239
+before): the pipe rule gives back art the boxed rule took. `-air 2` against 1: 19 views,
+11,247 pixels, 218 clear; of the 32 earlier views 2 by 1,076. `-classicroom -classiconly`
+of ANDREA2 231, JOBY2 66 and 28, ANDY3 34, ANDREA1 93 and 212, two directions each, gives
+the bytes of the `8691e82` tool at all 12. `hd_enable` 0 never reaches the changed code:
+the pieces, the hulls and the covered faces are made by the HD build, and CarryArt runs
+only with the reach, which needs an HD level. ModernTest 14,946 checks, MenuTest 42,627,
+InterpTest 729, LipsTest 270 with the `.OBJ` folder and 243 without, 0 failed.
+
+**Checked, the fix pass.** With the tools built from `fbe31af`: at all 201 views (22
+places, 16 mass views, 131 sweep views, 32 earlier views) the pictures at `-unlinked 0`
+and 1 and at `-air 0` and 2 are byte for byte those of the round's own tools, 748
+pictures; the numbers above stand. The `-classiconly` renders of the six rooms in two
+directions give the bytes of the `8691e82` tool, 12 of 12. ModernTest 14,946 checks,
+MenuTest 42,627, InterpTest 729, LipsTest 270 and 243, 0 failed.
+
+**Left.** The hole behind JOBY2's broken corner (22,166 pixels from room 33 at yaw 270,
+195,368 over the five-degree sweep): no art of the listed rooms stands there, only room
+24's ceiling, which stands in room 33's space. The look is set - the corner shows what the
+classic wall shows - and the way is the classic face drawn behind the art where the art
+has none; the HD path has no such draw today (a room is drawn as its art or as its classic
+faces, never both), and drawn behind every room's art it would show the classic faces
+through every opening the art makes on purpose, so it needs its own rule and its own
+sweep. The court's pipe fragments, for the wall-thickness rule above. The lift ride of the
+fix steps took the walk with the flip state but drew the walk's room numbers as groups, so
+the steps showing a flipped room drew the other state; drawn as the engine maps them, step
+0 changes 162,000 of 230,400 pixels and its eye-step count goes from 412 to 684, steps 1
+and 3 by 11,824 and 2,700 pixels (704 to 715, 1,579 to 1,582), the frame of the pictures
+61,830 none. Which of `hd_air` 1 and 2 the game keeps.
+
+**Commits.** `250d6aa`, `a06d54f`, `19b3144` and this record; the fix pass `6a69447`
+(every covered face measured and logged), `fbe31af` (a carrying room's list is its present
+group's) and its record.
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

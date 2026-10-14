@@ -1809,9 +1809,29 @@ void HDRenderSetCarryHosts(const unsigned char* sky, const short* twin,
  * entry's box holds becomes a piece held to its own room's window (see
  * MarkAirHulls in hd_render.cpp). Before HDRenderLevelBegin; kept until
  * the next call. HDRenderGroupHull says afterwards whether a group is one,
- * with its triangles of such art and those on their hosts' own art. */
+ * with its triangles of such art and those on their hosts' own art - asked
+ * whenever the rooms' air is handed in, since that art is drawn pushed back
+ * at hd_air 1 and 2 alike; HDRenderGroupHullBehind how many triangles are. */
 void HDRenderSetAirHulls(int on);
 bool HDRenderGroupHull(int group, int* air, int* covered);
+int HDRenderGroupHullBehind(int group);
+/* How many pair faces the build found inside a larger face of a room their
+ * room intrudes in (MarkCoveredFaces in hd_render.cpp), whose art is drawn
+ * pushed back; 0 with the rooms' air off. */
+int HDRenderCoveredFaces();
+/* Each such face found, whether pushed back or not: the pair face, its room
+ * and the holder's, its area, and the area of each room's art over it in
+ * three layers - on the plane within a unit, in front, behind, both up to
+ * HD_COVER_SIDE - and the area of its room's art there that the holder's
+ * repeats triangle for triangle (HDCoveredFace in hd_render.cpp). False
+ * past the last. */
+bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
+	float* area, float own[3], float held[3], int* airs, float centre[3],
+	float normal[3], int* behind);
+/* How far off a covered face its rooms' art is still counted, in front of
+ * it or behind: an eighth of a click, past the push HD_STAND_PUSH gives at
+ * the distances the rooms are seen from (16 units at 8,192). */
+#define HD_COVER_SIDE		32.0f
 int HDRenderCarryPairs();
 bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 
@@ -1965,6 +1985,10 @@ struct HDPairRange
 	int inner;
 	int triangles;
 	int air;
+	/* 1 when the classic face this piece's art stands on lies inside a
+	 * larger face of the holder in the same plane (MarkCoveredFaces in
+	 * hd_render.cpp): the piece is drawn pushed back in depth. */
+	int behind;
 };
 int HDRenderGroupPairRanges(int group);
 bool HDRenderGroupPairRange(int group, int index, HDPairRange* out);

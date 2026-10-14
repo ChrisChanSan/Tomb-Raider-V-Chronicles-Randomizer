@@ -229,6 +229,15 @@
  *                     walk with those closed doors shut (CLOSED_DOOR1 ..
  *                     LIFT_DOORS2 items, whose shutting zeroes the normals
  *                     of the portal they stand in); every other door open
+ *     -flip <room,room,...>
+ *                     walk with those rooms' flipmaps swapped, as FlipMap
+ *                     swaps them (game\control.cpp): each named room - the
+ *                     one whose flipped_room names its twin, as the log's
+ *                     HDLOG flip lines name it first - takes its twin's
+ *                     record and is drawn by the twin's group (HDFlipRoom).
+ *                     One `-flip:` line per pair names the state; the
+ *                     walk's lists stay room numbers, each drawn by the
+ *                     group the line names
  *     -walkdump <log> [frame]
  *                     every ROOMLIST whole-list dump of a -log run, or the
  *                     one of that frame, walked again - see RunWalkDump.
@@ -2991,6 +3000,13 @@ namespace walkoff
 	/* -walkshut: the door items -walk walks with shut, as -walkdump
 	 * prints them (doors_shut=); -1 alone shuts every one of them. */
 	static std::vector<int> g_shut_items;
+	// -flip: the rooms whose flipmap is swapped, as FlipMap names them.
+	static std::vector<int> g_flip_rooms;
+	/* Per room the group that draws it (HDFlipRoom), and the room of its
+	 * flipmap pair the portals lead to, -1 for none: what HDCarriedRoom
+	 * (hd_level.cpp) asks. Set by Load, swapped by -flip. */
+	static std::vector<int> g_group_of;
+	static std::vector<int> g_main_of;
 	/* The engine's ring is draw_room_list[kRoomListRing] (512) and its list
 	 * is draw_rooms[kDrawRoomsMax] (256), see the note over both in
 	 * game\draw.cpp. The tool's is deliberately wider than either, because
@@ -3726,6 +3742,20 @@ namespace walkoff
 				g_doors.push_back(door);
 		}
 
+		g_group_of.resize(g_room.size());
+		g_main_of.assign(g_room.size(), -1);
+
+		for (size_t i = 0; i < g_room.size(); i++)
+		{
+			g_group_of[i] = (int)i;
+
+			if (g_room[i].alt >= 0 && g_room[i].alt < (int)g_room.size())
+			{
+				g_main_of[i] = (int)i;
+				g_main_of[(size_t)g_room[i].alt] = (int)i;
+			}
+		}
+
 		printf("-walk: %d rooms out of %s, %d closed door(s) with a portal\n",
 			(int)g_room.size(), trc.c_str(), (int)g_doors.size());
 		return true;
@@ -3938,20 +3968,32 @@ namespace walkoff
 		for (size_t i = 0; i < listed; i++)
 		{
 			const Room& a = g_room[(size_t)g_drawn[i]];
+			// HDRoomCarries: the list of the group the room draws now.
+			const size_t key = (size_t)g_drawn[i] < g_group_of.size() &&
+				g_group_of[(size_t)g_drawn[i]] >= 0
+				? (size_t)g_group_of[(size_t)g_drawn[i]] : (size_t)g_drawn[i];
 
-			if (a.left >= a.right || a.top >= a.bottom ||
-				(size_t)g_drawn[i] >= g_carry.size())
+			if (a.left >= a.right || a.top >= a.bottom || key >= g_carry.size())
 				continue;
 
-			const std::vector<short>& carried = g_carry[(size_t)g_drawn[i]];
+			const std::vector<short>& carried = g_carry[key];
 
 			for (size_t k = 0; k < carried.size(); k++)
 			{
-				Room& b = g_room[(size_t)carried[k]];
+				// HDCarriedRoom: the room drawing that art in this state.
+				const int main = (size_t)carried[k] < g_main_of.size()
+					? g_main_of[(size_t)carried[k]] : -1;
+				const int at = main < 0 ? carried[k]
+					: g_group_of[(size_t)main] == carried[k] ? main : -1;
+
+				if (at < 0)
+					continue;
+
+				Room& b = g_room[(size_t)at];
 				bool held = false;
 
 				for (size_t j = 0; j < g_drawn.size() && !held; j++)
-					held = g_drawn[j] == carried[k];
+					held = g_drawn[j] == at;
 
 				if (held)
 					continue;
@@ -3959,7 +4001,7 @@ namespace walkoff
 				for (int e = 0; e < 4; e++)
 					b.box[e] = a.box[e];
 
-				g_drawn.push_back(carried[k]);
+				g_drawn.push_back((short)at);
 				g_carried++;
 			}
 		}
@@ -4263,6 +4305,33 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 
 		walkoff::ShutDoors(shut);
 		printf("-walkshut: %d door(s) shut\n", count);
+	}
+
+	/* -flip: FlipMap's three memcpy lines, after the doors are shut as the
+	 * engine shuts them at load, before any flip - a flip carries a room's
+	 * zeroed portals with it. A room with no twin is named and left. */
+	for (size_t k = 0; k < walkoff::g_flip_rooms.size(); k++)
+	{
+		const int a = walkoff::g_flip_rooms[k];
+		const int b = a >= 0 && a < (int)walkoff::g_room.size()
+			? walkoff::g_room[(size_t)a].alt : -1;
+
+		if (b < 0 || b >= (int)walkoff::g_room.size())
+		{
+			printf("-flip: room %d has no flipmap twin, not flipped\n", a);
+			continue;
+		}
+
+		const walkoff::Room keep = walkoff::g_room[(size_t)a];
+
+		walkoff::g_room[(size_t)a] = walkoff::g_room[(size_t)b];
+		walkoff::g_room[(size_t)b] = keep;
+		walkoff::g_room[(size_t)a].alt = b;
+		walkoff::g_room[(size_t)b].alt = -1;
+		std::swap(walkoff::g_group_of[(size_t)a],
+			walkoff::g_group_of[(size_t)b]);
+		printf("-flip: room=%d <-> room=%d now group=%d / group=%d\n", a, b,
+			b, a);
 	}
 
 	/* -walktarget: one direction, the one phd_LookAt builds from the eye and
@@ -5586,10 +5655,12 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * empty - but for one of a pair with a claimed face that survives
 		 * the window, listed holder or not, which keeps the answer above
 		 * (whole: a listed holder's pair is whole on that face, an
-		 * unlisted holder's on any frame). */
+		 * unlisted holder's on any frame); and so does one no face claims
+		 * whose holder is not drawn, on its pair's surviving faces. */
 		const bool unlinked = piece.air && g_unlinked && g_decide >= 2;
-		const bool claimed = !open && ask && piece.face >= 0 && answer &&
-			(g_decide == 3 ? alive : pairAlive);
+		const bool claimed = piece.face >= 0
+			? !open && ask && answer && (g_decide == 3 ? alive : pairAlive)
+			: ask && !drawn && pairAlive;
 
 		if (unlinked && !(g_unlinked == 2 && *empty))
 			answer = claimed;
@@ -9972,11 +10043,25 @@ static int ProbeMain(int argc, char** argv)
 		}
 		else if (!strcmp(argv[at], "-walkfinal"))
 			walkFinal = true;
-		else if (!strcmp(argv[at], "-walkshut") && at + 1 < argc)
+		else if ((!strcmp(argv[at], "-walkshut") ||
+			!strcmp(argv[at], "-flip")) && at + 1 < argc)
 		{
+			const bool flip = !strcmp(argv[at], "-flip");
 			const char* q = argv[++at];
 
-			if (!strcmp(q, "all"))
+			// -flip shares this branch: the chain is at the nesting limit.
+			if (flip)
+				for (; *q; )
+				{
+					walkoff::g_flip_rooms.push_back(atoi(q));
+
+					while (*q && *q != ',')
+						q++;
+
+					if (*q)
+						q++;
+				}
+			else if (!strcmp(q, "all"))
 				walkoff::g_shut_items.push_back(-1);
 			else
 				for (; *q; q++)
@@ -11251,11 +11336,12 @@ static int ProbeMain(int argc, char** argv)
 		printf("intrusion: overlap pairs=%d intruding tris=%d in %d groups "
 			"holder=inside cull=opaque faces=%d bound=%d unbound=%d "
 			"band_unclaimed=%d air_ms=%d air_tris=%d air_groups=%d "
-			"air_pairs=%d air_boxed=%d air=%d\n",
+			"air_pairs=%d air_boxed=%d air=%d covered=%d\n",
 			CountIntrusionPairs(), intruding, intrudingGroups,
 			(int)claimed.size(), bound, unbound, band,
 			(int)(g_air_ms + HDRenderAirMicroseconds() / 1000.0 + 0.5),
-			airTris, airGroups, airPairs, airBoxed, g_air_option);
+			airTris, airGroups, airPairs, airBoxed, g_air_option,
+			HDRenderCoveredFaces());
 
 		// The engine's HDLOG carry lines (ReportRoomCarry), from the build.
 		{
@@ -11276,15 +11362,42 @@ static int ProbeMain(int argc, char** argv)
 				carryTris, g_air_option);
 		}
 
-		// And its HDLOG hull lines (ReportRoomIntrusions), with -air 2.
-		for (int g = 0; g_air_option == 2 && g < HDRenderGroupCount(); g++)
+		// And its HDLOG hull lines (ReportRoomIntrusions), with -air 1 or 2.
+		for (int g = 0; g_air_option && g < HDRenderGroupCount(); g++)
 		{
 			int air = 0, covered = 0;
 			const bool hull = HDRenderGroupHull(g, &air, &covered);
 
 			if (air)
-				printf("hull: group=%d air_tris=%d host_art=%d hull=%d\n", g,
-					air, covered, hull ? 1 : 0);
+				printf("hull: group=%d air_tris=%d host_art=%d hull=%d "
+					"behind=%d\n", g, air, covered, hull ? 1 : 0,
+					HDRenderGroupHullBehind(g));
+		}
+
+		// And its HDLOG covered lines (ReportRoomIntrusions), the same.
+		for (int i = 0; g_air_option; i++)
+		{
+			int face = 0, group = 0, holder = 0, behind = 0, airs = 0;
+			float area = 0.0f, own[3], held[3];
+			float centre[3], normal[3];
+
+			if (!HDRenderCoveredFace(i, &face, &group, &holder, &area, own,
+				held, &airs, centre, normal, &behind))
+				break;
+
+			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+
+			printf("covered: face=%d group=%d holder=%d area=%d "
+				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
+				"normal=%d,%d,%d behind=%d\n", face, group,
+				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
+				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
+				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
+				(int)(held[2] * to + 0.5f), airs, (int)floorf(centre[0] + 0.5f),
+				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
+				(int)floorf(normal[0] * 1000.0f + 0.5f),
+				(int)floorf(normal[1] * 1000.0f + 0.5f),
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
 		}
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)

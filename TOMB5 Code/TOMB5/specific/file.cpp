@@ -15,6 +15,7 @@
 #include "hqsfx.h"
 #include "hdscreen.h"
 #include "hd/hd_level.h"
+#include "hd/hd_levelkey.h"		// HDLevelKeyNext - the HD data kept
 #include "hd/hd_font.h"			// the HD font
 #include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up
 #include "hd/hd_model.h"		// HDModelPreload
@@ -1777,6 +1778,10 @@ unsigned int __stdcall LoadLevel(void* name)
 
 	Log("Begin " __FUNCTION__);
 	LoadLogStep(&g_loadlog_thread, 0);
+	// The level about to be read, for HDLevelUnload inside FreeLevel: the HD
+	// data of the same level stay in memory (hd_levelkey.h). Nothing with
+	// hd_enable off.
+	HDLevelKeyNext((const char*)name);
 	FreeLevel();
 	LoadLogStep(&g_loadlog_thread, "free");
 	nTextures = 1;

@@ -33,6 +33,7 @@
 #include "hd_markers.h"			// the .hdm sidecar - the donor slots
 #include "hd_mods.h"			// HDModsScan - the mods folder
 #include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
+#include "hd_folderlist.h"		// the model folders listed, for the log
 #include "hd_render.h"
 #include "hd_level.h"
 #include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
@@ -1562,7 +1563,81 @@ static void ObjectLoadStep(double* at, const char* step)
 	*at = ms;
 }
 
-void HDObjectLevelBuild(const char* installRoot, const char* stem)
+/* The floor rule's answers of the level's last full build, per slot: the
+ * lift of a pickup drawn HD and of a mod's inventory model, and how far the
+ * latter sank. The rule measures on the models' vertices, which the build
+ * gives back once it has measured (HDModelReleasePoints); a rebind keeps
+ * those models, so its answers are these. */
+struct FloorMemo
+{
+	float lift;
+	float sank;
+};
+
+static FloorMemo g_floor_memo[NUMBER_OBJECTS];
+
+/* The models' lines of a full build. The phases at the end of the first
+ * split the models time, so a slow level build names the part that grew
+ * (key_ms: see HDPageCacheKeyOf). The three .TRM counters beside them say how
+ * much of the wardrobe a level change reads. cut_ranges and cut_models are
+ * the opaque draw ranges the alpha test runs on and the models they belong
+ * to (hd_model_cut.h) - 0 on a level without such a model. hash= is the
+ * models' fingerprint (HDModelBuildHash) and hash_ms= its time, which ms,
+ * build_ms and buf_ms leave out. `ms` is the build's time with the
+ * fingerprint. */
+static void LogModels(const HDModelStats& stats, int ms)
+{
+	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d) "
+		"mod:%d heads=%d lara=%d dummy=%d missing=%d refused=%d "
+		"verts=%d idx=%d ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f "
+		"read_ms=%d build_ms=%d find_ms=%d key_ms=%d page_ms=%d "
+		"buf_ms=%d trm_open=%d trm_load=%d trm_kib=%.0f "
+		"cut_ranges=%d cut_models=%d hash=%016llx hash_ms=%d listings=%d",
+		g_stem, ms - (int)(stats.hashMs + 0.5),
+		stats.slots, stats.loaded,
+		stats.fromGame5, stats.fromGame4, stats.fromMod, stats.heads,
+		stats.lara, stats.dummy, stats.missing, stats.refused,
+		stats.vertices, stats.indices, stats.ranges, stats.pages,
+		stats.vertexBytes / 1024.0, stats.indexBytes / 1024.0,
+		(int)(stats.readMs + 0.5), (int)(stats.buildMs + 0.5),
+		(int)(stats.findMs + 0.5), (int)(stats.keyMs + 0.5),
+		(int)(stats.pageMs + 0.5), (int)(stats.bufferMs + 0.5),
+		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0,
+		stats.cutRanges, stats.cutModels, stats.hash,
+		(int)(stats.hashMs + 0.5), HDFolderListings());
+
+	/* The models' half of the texture budget. They arrive
+	 * after the rooms and into the same cache, so `have` is what the rooms
+	 * already put on the card and `budget` is the same number the rooms were
+	 * measured against - one cap for the level, not one per caller. Most of
+	 * a level's model pages are pages its rooms already wear, so `need` is
+	 * usually a fraction of the rooms' and drops are rare. */
+	Log("HDLOG level=%s models budget=%.0f need=%.0f have=%.0f got=%.0f MiB "
+		"pages=%d frommod=%d dropped_mip0=%d levels=%d caps=%d format=%s "
+		"oom=%d cache=%.0f MiB",
+		g_stem, stats.pageStats.budgetBytes / 1048576.0,
+		stats.pageStats.needBytes / 1048576.0,
+		stats.pageStats.haveBytes / 1048576.0,
+		stats.pageStats.bytes / 1048576.0, stats.pageStats.slots,
+		stats.pageStats.fromMod,
+		stats.pageStats.droppedMip0, stats.pageStats.droppedLevels,
+		stats.pageStats.clampedByCaps,
+		stats.pageStats.formatUsed == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",
+		stats.pageStats.outOfMemory, HDPageCacheBytes() / 1048576.0);
+
+	for (int i = 0; i < HDModelNoteCount(); i++)
+		Log("HDLOG level=%s model note: %s", g_stem, HDModelNote(i));
+
+	// The speaking faces' track files, one line each - see HDModelLipsLine.
+	for (int i = 0; i < HDModelLipsLineCount(); i++)
+		Log("HDLOG level=%s lips %s", g_stem, HDModelLipsLine(i));
+}
+
+/* The level's objects: the plan, the models when `models` is true, and the
+ * binding of every slot to them. Without `models` the models in memory are
+ * the ones a full build of the same level made (HDObjectLevelRebind). */
+static void ObjectLevelBuild(const char* installRoot, const char* stem,
+	bool models)
 {
 	std::vector<HDModelSlot> wanted;
 	std::vector<float> binds;
@@ -2049,68 +2124,27 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 	/* The models' pages decode on the level load's threads (HDPoolRun,
 	 * tomb5.hd_threads) like the rooms' pages: a page is decoded on its own
-	 * and lands in its own slot, and the uploads stay on this thread. */
-	if (!HDModelLevelBegin(App.dx.lpD3DDevice, installRoot, &wanted[0],
-		(int)wanted.size(), false, HDPoolThreads((int)tomb5.hd_threads),
-		&stats, &why))
+	 * and lands in its own slot, and the uploads stay on this thread. A
+	 * rebind reads and builds no model: the models in memory are the ones
+	 * this call would make. */
+	if (models && !HDModelLevelBegin(App.dx.lpD3DDevice, installRoot,
+		&wanted[0], (int)wanted.size(), false,
+		HDPoolThreads((int)tomb5.hd_threads), &stats, &why))
 	{
 		Log("HDLOG level=%s objects refused reason=%s", g_stem, why);
 		return;
 	}
 
-	ObjectLoadStep(&loadlog_at, "obj_models");
-
-	/* The phases at the end of the line split the models time, so a slow
-	 * level build names the part that grew (key_ms: see HDPageCacheKeyOf).
-	 * The three .TRM counters beside them say how much of the wardrobe a
-	 * level change reads. cut_ranges and cut_models are the opaque draw
-	 * ranges the alpha test runs on and the models they belong to
-	 * (hd_model_cut.h) - 0 on a level without such a model. hash= is the
-	 * models' fingerprint (HDModelBuildHash) and hash_ms= its time, which
-	 * ms, build_ms and buf_ms leave out. */
-	Log("HDLOG level=%s models ms=%d slots=%d loaded=%d (5:%d 4:%d) "
-		"mod:%d heads=%d lara=%d dummy=%d missing=%d refused=%d verts=%d idx=%d "
-		"ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f read_ms=%d build_ms=%d "
-		"find_ms=%d key_ms=%d page_ms=%d buf_ms=%d trm_open=%d trm_load=%d trm_kib=%.0f "
-		"cut_ranges=%d cut_models=%d hash=%016llx hash_ms=%d",
-		g_stem, (int)(GetTickCount() - started) - (int)(stats.hashMs + 0.5),
-		stats.slots, stats.loaded,
-		stats.fromGame5, stats.fromGame4, stats.fromMod, stats.heads,
-		stats.lara, stats.dummy, stats.missing, stats.refused, stats.vertices,
-		stats.indices, stats.ranges, stats.pages, stats.vertexBytes / 1024.0,
-		stats.indexBytes / 1024.0, (int)(stats.readMs + 0.5),
-		(int)(stats.buildMs + 0.5), (int)(stats.findMs + 0.5),
-		(int)(stats.keyMs + 0.5),
-		(int)(stats.pageMs + 0.5), (int)(stats.bufferMs + 0.5),
-		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0,
-		stats.cutRanges, stats.cutModels, stats.hash,
-		(int)(stats.hashMs + 0.5));
-
-	/* The models' half of the texture budget. They arrive
-	 * after the rooms and into the same cache, so `have` is what the rooms
-	 * already put on the card and `budget` is the same number the rooms were
-	 * measured against - one cap for the level, not one per caller. Most of a
-	 * level's model pages are pages its rooms already wear, so `need` is
-	 * usually a fraction of the rooms' and drops are rare. */
-	Log("HDLOG level=%s models budget=%.0f need=%.0f have=%.0f got=%.0f MiB "
-		"pages=%d frommod=%d dropped_mip0=%d levels=%d caps=%d format=%s oom=%d "
-		"cache=%.0f MiB",
-		g_stem, stats.pageStats.budgetBytes / 1048576.0,
-		stats.pageStats.needBytes / 1048576.0,
-		stats.pageStats.haveBytes / 1048576.0,
-		stats.pageStats.bytes / 1048576.0, stats.pageStats.slots,
-		stats.pageStats.fromMod,
-		stats.pageStats.droppedMip0, stats.pageStats.droppedLevels,
-		stats.pageStats.clampedByCaps,
-		stats.pageStats.formatUsed == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba",
-		stats.pageStats.outOfMemory, HDPageCacheBytes() / 1048576.0);
-
-	for (int i = 0; i < HDModelNoteCount(); i++)
-		Log("HDLOG level=%s model note: %s", g_stem, HDModelNote(i));
-
-	/* The speaking faces' track files, one line each - see HDModelLipsLine. */
-	for (int i = 0; i < HDModelLipsLineCount(); i++)
-		Log("HDLOG level=%s lips %s", g_stem, HDModelLipsLine(i));
+	if (models)
+	{
+		ObjectLoadStep(&loadlog_at, "obj_models");
+		LogModels(stats, (int)(GetTickCount() - started));
+	}
+	else
+	{
+		Log("LOADLOG level=%s step=obj_models ms=0.0 skipped=1", g_stem);
+		ObjectLoadStep(&loadlog_at, 0);
+	}
 
 	/* The verdict per slot. One line each, so that a wrong picture in the game
 	 * can be looked up rather than guessed at. */
@@ -2533,9 +2567,13 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * Once, here. The lift is a property of two models, of the mesh tree and
 	 * of one animation frame, all of them level data, so nothing of this is
 	 * left for a frame to work out; the draw adds one translation to a matrix
-	 * it already has. */
+	 * it already has. A rebind takes the answers of the full build whose
+	 * models it keeps (g_floor_memo); their vertices are given back below. */
+	if (models)
 	{
 		float pose[HD_OBJ_NODES * 12];
+
+		memset(g_floor_memo, 0, sizeof(g_floor_memo));
 
 		for (int i = 0; i < g_ring_models; i++)
 		{
@@ -2565,6 +2603,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 
 			ring.lift = lift;
 			ring.sank = lowest - classic;
+			g_floor_memo[slot].lift = ring.lift;
+			g_floor_memo[slot].sank = ring.sank;
 
 			Log("HDLOG level=%s ring floor slot=%d name=%s takes the fitted "
 				"%s on the floor, lifted by %.1f units (its lowest point "
@@ -2611,6 +2651,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			}
 
 			g_slot[slot].lift = lift;
+			g_floor_memo[slot].lift = lift;
 
 			const float sank = lowest - classic;
 			char verdict[64];
@@ -2639,6 +2680,23 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		 * the folder keeps 57,378 of them, which is 746 KB; the install's own
 		 * eighteen models are 18,526 points and 241 KB. */
 		HDModelReleasePoints();
+	}
+	else
+	{
+		for (int i = 0; i < g_ring_models; i++)
+		{
+			const int slot = g_ring_model[i].slot;
+
+			if (slot < 0 || slot >= NUMBER_OBJECTS)
+				continue;
+
+			g_ring_model[i].lift = g_floor_memo[slot].lift;
+			g_ring_model[i].sank = g_floor_memo[slot].sank;
+		}
+
+		for (int slot = 0; slot < NUMBER_OBJECTS; slot++)
+			if (g_slot[slot].hd && HDSlotIsPickup(slot) && !ring_model_of(slot))
+				g_slot[slot].lift = g_floor_memo[slot].lift;
 	}
 
 	/* The donor slots, one line each, after the verdicts because `hd` is
@@ -2756,6 +2814,23 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			"the models are released again", g_stem);
 		HDModelLevelEnd();
 	}
+}
+
+void HDObjectLevelBuild(const char* installRoot, const char* stem)
+{
+	ObjectLevelBuild(installRoot, stem, true);
+}
+
+/* A level whose HD data were kept across its load (hd_levelkey.h): the plan
+ * and the binding as a build makes them - the map, the slots' verdicts, the
+ * swaps, the ring, the floor, Lara's parts - over the models in memory. A
+ * cut that was speaking when the level was loaded is over: its clips close
+ * here, as the models' release closes them at a build. */
+void HDObjectLevelRebind(const char* installRoot, const char* stem)
+{
+	HDModelLipsClose();
+	HDModelLipsEventsClear();
+	ObjectLevelBuild(installRoot, stem, false);
 }
 
 void HDObjectRelease()

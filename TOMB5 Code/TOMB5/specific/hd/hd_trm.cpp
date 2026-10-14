@@ -21,6 +21,7 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 #include "hd_trm.h"
+#include "hd_folderlist.h"	// a model's file found by a folder listing
 
 #include <cstdio>
 #include <cstdlib>
@@ -593,6 +594,13 @@ bool HDTrmExists(const char* path)
 {
 	if (!path || !*path)
 		return false;
+
+	/* Out of one listing of the folder (hd_folderlist.h), which opens no
+	 * file; the file is opened only where the folder cannot be listed. */
+	const int listed = HDFolderHas(path, false);
+
+	if (listed >= 0)
+		return listed != 0;
 
 	g_opens++;
 

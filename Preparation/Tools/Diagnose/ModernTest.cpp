@@ -93,6 +93,9 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 // The springs: the table, the file's key, the hashed clock (spring_*).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
+/* The level's HD key: which load of a level keeps the HD data of the one
+ * before (level_key below). */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_levelkey.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -20722,6 +20725,130 @@ static void spring_clock()
 		lround(fabs(cross) * 1000.0) + lround(fabs(row) * 1000.0), 0);
 }
 
+/* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD
+ * data, every field changed alone refuses with that field's name, and a
+ * load with HD off, with nothing built or after an outfit change refuses
+ * before any field is compared. */
+// A key's text field, cut to its size.
+template <size_t N> static void key_set(char (&out)[N], const char* text)
+{
+	snprintf(out, N, "%s", text);
+}
+
+static void level_key_base(HDLevelKey* k)
+{
+	memset(k, 0, sizeof(*k));
+	k->valid = 1;
+	k->level = 12;
+	key_set(k->name, "RICH2");
+	k->trc.size = 1310720;
+	k->trc.written = 134050000000000000LL;
+	k->hdm.size = -1;
+	k->hdm.written = -1;
+	k->trg.size = 47185920;
+	k->trg.written = 133900000000000000LL;
+	k->glossFile.size = -1;
+	k->glossFile.written = -1;
+	k->waterFile.size = 2048;
+	k->waterFile.written = 134040000000000000LL;
+	key_set(k->install, "D:\\Remastered\\5");
+	k->air = 2;
+	k->water = 1;
+	k->objects = 1;
+	key_set(k->format, "rgba");
+}
+
+static void level_key()
+{
+	printf("the level key: keep the HD data or build them again\n");
+
+	struct Row
+	{
+		const char* what;
+		void (*change)(HDLevelKey*);
+		const char* refused;		// 0 keeps
+	};
+
+	static const Row rows[] =
+	{
+		{ "the same level, nothing changed", [](HDLevelKey*) {}, 0 },
+		{ "another level", [](HDLevelKey* k) { k->level = 13; }, "level" },
+		{ "another file name", [](HDLevelKey* k)
+			{ key_set(k->name, "RICH3"); }, "name" },
+		{ "the .TRC rewritten, same size", [](HDLevelKey* k)
+			{ k->trc.written++; }, "trc" },
+		{ "the .TRC another size", [](HDLevelKey* k)
+			{ k->trc.size += 2; }, "trc" },
+		{ "a sidecar where there was none", [](HDLevelKey* k)
+			{ k->hdm.size = 96; k->hdm.written = 1; }, "hdm" },
+		{ "the .TRG replaced", [](HDLevelKey* k)
+			{ k->trg.written += 10; }, "trg" },
+		{ "hd_gloss.txt written", [](HDLevelKey* k)
+			{ k->glossFile.size = 10; k->glossFile.written = 5; },
+			"gloss_file" },
+		{ "hd_water.txt edited", [](HDLevelKey* k)
+			{ k->waterFile.written++; }, "water_file" },
+		{ "another installation", [](HDLevelKey* k)
+			{ key_set(k->install, "E:\\Remastered\\5"); }, "install" },
+		{ "the I-III bundle found", [](HDLevelKey* k)
+			{ key_set(k->installTr3, "E:\\I-III\\3"); }, "install_tr3" },
+		{ "hd_air 2 to 1", [](HDLevelKey* k) { k->air = 1; }, "hd_air" },
+		{ "hd_water off", [](HDLevelKey* k) { k->water = 0; }, "hd_water" },
+		{ "hd_objects off", [](HDLevelKey* k) { k->objects = 0; },
+			"hd_objects" },
+		{ "a texture budget set", [](HDLevelKey* k) { k->budgetMb = 2048; },
+			"hd_texture_budget_mb" },
+		{ "the pages as dxt5", [](HDLevelKey* k)
+			{ key_set(k->format, "dxt5"); }, "hd_texture_format" },
+		{ "another outfit chosen", [](HDLevelKey* k)
+			{ key_set(k->outfit, "mod10:OUTFIT_LEGEND"); }, "hd_outfit" },
+	};
+
+	for (const Row& row : rows)
+	{
+		HDLevelKey built, next;
+
+		level_key_base(&built);
+		level_key_base(&next);
+		row.change(&next);
+
+		const char* got = HDLevelKeepRefused(&built, &next, 0);
+		const bool same = row.refused ? got && !strcmp(got, row.refused)
+			: !got;
+		char what[96];
+
+		snprintf(what, sizeof(what), "level key: %s", row.what);
+		ok(same, what, got ? 1 : 0, row.refused ? 1 : 0);
+	}
+
+	// The three refusals before any field, and their order.
+	HDLevelKey built, next;
+
+	level_key_base(&built);
+	level_key_base(&next);
+	next.valid = 0;
+	ok(!strcmp(HDLevelKeepRefused(&built, &next, 0), "no_key"),
+		"level key: HD off at this load keeps nothing", 0, 0);
+
+	next.valid = 1;
+	built.valid = 0;
+	ok(!strcmp(HDLevelKeepRefused(&built, &next, 0), "nothing_built"),
+		"level key: built with HD off, or released, keeps nothing", 0, 0);
+
+	built.valid = 1;
+	ok(!strcmp(HDLevelKeepRefused(&built, &next, 1), "redressed"),
+		"level key: an outfit change in the level builds again", 1, 0);
+
+	next.level = 13;
+	ok(!strcmp(HDLevelKeepRefused(&built, &next, 2), "redressed"),
+		"level key: the outfit change is named before a field", 2, 0);
+
+	// A key that is not valid is not equal to itself either.
+	built.valid = 0;
+	ok(!strcmp(HDLevelKeyDiffers(&built, &built), "no_key"),
+		"level key: no key is the same as nothing", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -20876,6 +21003,7 @@ int main()
 	spring_clock();
 	spring_rule();
 	spring_levels();
+	level_key();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

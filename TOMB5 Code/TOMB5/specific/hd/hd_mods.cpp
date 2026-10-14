@@ -12,6 +12,7 @@
  */
 #include "hd_mods.h"
 #include "hd_pagecache.h"	// HD_PAGE_MOD_MAX - the real cap on the count
+#include "hd_folderlist.h"	// a mod's model found by a folder listing
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -154,6 +155,17 @@ namespace
 	{
 		std::error_code ec;
 		return fs::is_regular_file(fs::u8path(path), ec);
+	}
+
+	/* A model's file, out of one listing of its ITEM folder
+	 * (hd_folderlist.h): every name a level asks for is asked of every
+	 * active mod's two folders. Asked of the file itself where the folder
+	 * cannot be listed. */
+	bool model_there(const std::string& path)
+	{
+		const int listed = HDFolderHas(path, true);
+
+		return listed >= 0 ? listed != 0 : file_there(path);
 	}
 
 	bool folder_there(const std::string& path)
@@ -716,7 +728,7 @@ const char* HDModsFindModel(const char* name, int* modIndex, char* buffer, int s
 			const std::string path = join(join(join(mods[i].path,
 				game == 5 ? "5" : "4"), "ITEM"), upper_name + ".TRM");
 
-			if (!file_there(path))
+			if (!model_there(path))
 				continue;
 
 			if (modIndex)

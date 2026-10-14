@@ -68,7 +68,12 @@ struct OBJECT_INFO;
 //   HDObjectLevelEnd    inside HDLevelUnload, which runs on the load thread:
 //                       flags only, not one Direct3D call, as for the rooms.
 //   HDObjectDeviceLost  the device is going: release and forget it.
+//   HDObjectLevelRebind inside HDLevelBuild, for a level whose HD data
+//                       HDLevelUnload kept (hd_levelkey.h): the binding to
+//                       the classic slots made again over the models in
+//                       memory, which are not read or built again.
 void HDObjectLevelBuild(const char* installRoot, const char* stem);
+void HDObjectLevelRebind(const char* installRoot, const char* stem);
 void HDObjectRelease();
 void HDObjectLevelEnd();
 void HDObjectDeviceLost();

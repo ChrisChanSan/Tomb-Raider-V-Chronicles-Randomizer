@@ -225,6 +225,29 @@ bool HDPageCacheAppend(IDirect3DDevice9* device, const char* installRoot,
 	const int* pages, int count, bool managed, int threads,
 	HDPageCacheStats* stats, const char** why);
 
+// The first pages of a level decoded ahead of its build, on threads of their
+// own, from the load thread while the classic level still loads: at most one
+// batch budget of them, in the list's order, each with the first level and
+// the format the build would give it. The next Create takes every page that
+// is ready instead of decoding it (no Direct3D call here; the upload stays
+// with the Create). HDPageCacheAheadDrop stops the threads, waits for them
+// and frees what they decoded. HDPageCacheAheadInfo: how many pages the last
+// one decoded, how many the last Create took, and its own wall time, which
+// overlaps the load and is no part of the build's.
+void HDPageCacheAhead(const char* installRoot, const int* pages, int count,
+	int threads);
+void HDPageCacheAheadDrop();
+void HDPageCacheAheadInfo(int* pages, int* taken, double* ms);
+// The diagnostic tools' wait, never called by the engine: until every page
+// is decoded, none stopped early - the most the pages ahead ever hold, which
+// RoomProbe -reloadas -ahead measures beside the level before's build.
+void HDPageCacheAheadFinish();
+// The diagnostic tools' check, off in the engine: with it on, every page a
+// Create takes is decoded again and compared byte for byte, and
+// HDPageCacheAheadDiffer counts the pages that came out different.
+void HDPageCacheAheadVerify(bool on);
+int HDPageCacheAheadDiffer();
+
 void HDPageCacheDestroy();
 
 // The texture of a page number, or null when the level never named it.

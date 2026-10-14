@@ -13,6 +13,7 @@
 #include "hd_scan.h"
 #include "hd_bind.h"
 #include "hd_trm.h"
+#include "hd_folderlist.h"	// the model folders, listed again a level
 #include "../bc7.h"
 
 #include "../../vendor/trforge/src/trf_remaster/Trg.h"
@@ -23,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -34,6 +36,12 @@ namespace
 	std::vector<MissingEntry> missing;
 	std::vector<int> scan_pages;
 	std::string scan_error;
+
+	// The parse kept for the level's build (HDScanKeepTrg) and its file.
+	bool keep_trg = false;
+	std::unique_ptr<trf::remaster::Trg> kept_trg;
+	std::string kept_path;
+	bool trg_taken = false;
 
 	bool read_whole(const std::string& path, std::vector<unsigned char>& out)
 	{
@@ -202,6 +210,11 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	scan_pages.clear();
 	scan_error.clear();
 
+	/* The model folders are listed again at every level's scan, the first
+	 * to ask them (hd_folderlist.h): a file put into the install or a mod
+	 * between two level loads is found. */
+	HDFolderListForget();
+
 	if (out)
 		std::memset(out, 0, sizeof(*out));
 
@@ -216,9 +229,12 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	const std::string map_path = join(data, std::string(stem) + ".MAP");
 	const std::string item = join(installRoot, "ITEM");
 
+	/* A parse of this file read ahead of the scan (HDScanReadTrg) is the
+	 * scan's own; any other kept parse goes. */
 	trf::remaster::Trg trg;
 	std::string error;
-	if (!trf::remaster::read_trg(trg_path, trg, error))
+	if (!HDScanTakeTrg(trg_path.c_str(), &trg) &&
+		!trf::remaster::read_trg(trg_path, trg, error))
 	{
 		scan_error = error;
 		*why = scan_error.c_str();
@@ -374,7 +390,76 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 		out->bc7Pages = (int)scan_pages.size();
 	}
 
+	if (keep_trg)
+	{
+		kept_trg.reset(new trf::remaster::Trg(std::move(trg)));
+		kept_path = trg_path;
+	}
+
 	return true;
+}
+
+void HDScanKeepTrg(bool keep)
+{
+	keep_trg = keep;
+
+	if (!keep)
+		HDScanDropTrg();
+}
+
+bool HDScanTakeTrg(const char* path, trf::remaster::Trg* out)
+{
+	trg_taken = kept_trg && out && path && !_stricmp(path, kept_path.c_str());
+
+	if (trg_taken)
+		*out = std::move(*kept_trg);
+
+	HDScanDropTrg();
+	return trg_taken;
+}
+
+bool HDScanTrgTaken()
+{
+	return trg_taken;
+}
+
+bool HDScanReadTrg(const char* installRoot, const char* stem)
+{
+	HDScanDropTrg();
+
+	if (!installRoot || !*installRoot || !stem || !*stem)
+		return false;
+
+	const std::string trg_path = join(join(installRoot, "DATA"),
+		std::string(stem) + ".TRG");
+	std::unique_ptr<trf::remaster::Trg> trg(new trf::remaster::Trg());
+	std::string error;
+
+	if (!trf::remaster::read_trg(trg_path, *trg, error))
+		return false;
+
+	kept_trg = std::move(trg);
+	kept_path = trg_path;
+	return true;
+}
+
+int HDScanKeptPageCount()
+{
+	return kept_trg ? (int)kept_trg->textures.size() : 0;
+}
+
+int HDScanKeptPage(int at)
+{
+	if (!kept_trg || at < 0 || at >= (int)kept_trg->textures.size())
+		return -1;
+
+	return (int)kept_trg->textures[(size_t)at];
+}
+
+void HDScanDropTrg()
+{
+	kept_trg.reset();
+	kept_path.clear();
 }
 
 int HDScanMissingCount()

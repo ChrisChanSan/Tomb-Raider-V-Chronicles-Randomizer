@@ -3254,10 +3254,25 @@ and the loading bar running up to its end after the work is done 6 to 42
 the room build is about 2.1 seconds, and inside it the three largest parts are
 the texture pages (about 0.6), the air's hulls asked of every triangle on one
 thread (0.5) and every room's triangles on the pool (0.5); the objects add 0.6.
-A load of a savegame inside the level you are in costs about what a fresh load
-of that level costs: 0.42 seconds less to 0.11 more over thirteen levels, half
-a second at most either way. The `LOADLOG` lines (*When something looks wrong*)
-time every step of a load on your machine.
+A savegame loaded inside the level you are in keeps the level's HD data. The
+classic level is read again as always, but the room art, its texture pages, the
+room and static tables and the models stay as they are; made again is only what
+ties into the classic level or changes in play - the water sheets with their
+splashes and rings, the restored water faces and their animation pages, the
+objects' binding to their slots, the water's life and the outfit rule. The HD
+part of such a load is meant to take about a tenth of a second where a fresh
+build takes two to three. The data are built again when the level's files
+changed (its `.TRC`, its `.hdm`, the Remaster's `.TRG`, `hd_gloss.txt`,
+`hd_water.txt`), when `hd_air`, `hd_water`, `hd_objects`, the texture budget or
+format or the chosen outfit changed, after an outfit change made in the level,
+after the graphics device was made new (Alt+Enter, a resolution change), and for
+every other level; the log's `HDLOG level=<L> resident=1` line, or `resident=0
+refused=<what>`, says which. A fresh load reads the level's `.TRG` once, decodes
+its first texture pages while the classic level is still being read, and finds
+the models by one look into each model folder. Until the new level's build gives
+the previous level's HD data back, that `.TRG` and those pages (about 115 to 155
+MiB) are held beside them. The `LOADLOG` lines (*When
+something looks wrong*) time every step of a load on your machine.
 
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full
 screen throws the graphics device away and makes a new one. Everything the HD
@@ -4468,8 +4483,10 @@ LOADLOG level=RICH2 step=bar ms=594.0
 - the loading thread: `free` (the level before), `textures`, `read` (the
   level's data block), `rooms`, `moveables`, `sprites`, `cameras`,
   `sound_fx`, `boxes`, `anim_tex`, `tex_infos`, `hd_load` (with its own
-  `markers` and `scan`, the first look at the `.TRG`), `ai`, `items`,
-  `cinematic`, `samples` and `game_setup`;
+  `markers`, `trg_ahead` - the `.TRG` read beside the classic level from the
+  start of the load, and `waited=` what of it the scan still waited for - and
+  `scan`, the first look at the `.TRG`), `ai`, `items`, `cinematic`,
+  `samples` and `game_setup`;
 - the HD objects, as their build runs: `obj_end`, `obj_map`, `obj_mods`,
   `obj_plan`, `obj_ring`, `obj_wardrobe`, `obj_models` (the `models` line
   splits it), `obj_bind` and `obj_lara`;
@@ -4478,15 +4495,22 @@ LOADLOG level=RICH2 step=bar ms=594.0
   to `places`, `begin` and its parts `trg_read`, `prep`, `pages`, `owners`,
   `verts`, `setup`, `fill`, `index`, then `tables` to `objects`), the two
   fingerprints `hash` and `models_hash` (only with `-log`, in no other
-  step), `life` and `redress`;
+  step), `pages_ahead` (the first pages decoded beside the load: `pages=`
+  decoded, `taken=` of them by `pages`; its time ran beside the other steps
+  and is in none of them), `life` and `redress`;
 - the main thread: `screen` (the load picture), `thread` (the wait for the
   loading thread), `ainit`, `hd_build`, `font`, `cutscenes`, `warmup`,
   `profile`, `bar` (the bar running up to its end) and `total`.
 
-A build that gives up on the way (no `.TRG`, no room drawn HD) writes no
-block. Without `-log` nothing is written. `RoomProbe -loadtime`
-(`Preparation\Tools`) prints the HD build's steps in the same form without
-starting the game.
+A step a load does not run is written with `ms=0.0 skipped=1` - for a
+savegame loaded inside the level, `scan`, every step of the room build and
+`obj_models`, while `sheets`, `surfaces`, `frames`, `objects`, `life` and
+`redress` carry their time. `trg_read` ends in `kept=1` when the build took
+the parse the scan read. A build that gives up on the way (no `.TRG`, no room
+drawn HD) writes no block. Without `-log` nothing is written.
+`RoomProbe -loadtime` (`Preparation\Tools`) prints the HD build's steps in the
+same form without starting the game, with `-reload` those of a savegame
+loaded inside the level as far as the tool follows them.
 
 **For a complete report, attach four things:** `log.txt`, `spoiler.txt` from
 beside the randomizer, the `PCtomb5 build <date>` line from the setup dialog,

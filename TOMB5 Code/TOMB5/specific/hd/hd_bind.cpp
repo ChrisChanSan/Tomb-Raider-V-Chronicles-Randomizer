@@ -36,6 +36,7 @@
  */
 #include "hd_bind.h"
 #include "hd_mods.h"		// the EXTRA prefix rule counts a mod's file
+#include "hd_folderlist.h"	// a model's file found by a folder listing
 
 #include <cstdio>
 #include <cstdlib>
@@ -403,6 +404,12 @@ namespace
 	 * neither drags in hd_model.cpp's Direct3D dependency for six lines. */
 	bool file_exists(const std::string& path)
 	{
+		// Out of one listing of the folder; opened where it cannot be listed.
+		const int listed = HDFolderHas(path, false);
+
+		if (listed >= 0)
+			return listed != 0;
+
 		std::FILE* file = std::fopen(path.c_str(), "rb");
 
 		if (!file)

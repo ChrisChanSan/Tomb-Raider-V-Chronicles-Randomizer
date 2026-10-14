@@ -1926,7 +1926,8 @@ water surface", carries the tables.
     squares at y 0 of rooms 122, 121, 45, 46 and 113 (the raised blocks
     and stairs of 121 and 45 stay dry), tank 33 its plinth and the
     lowered area of room 23, 14 squares at two heights. The run keeps to
-    the rooms of its tank's row and stops at a radius: entry 194.
+    the rooms of its tank's row and stops at a radius: entry 194. It runs
+    over sloping squares as far as they lie level or fall: entry 199.
 191. **The water's front over the floor** - a point of a 256-unit grid
     over those squares is wet once the front has passed its way from the
     glass (the shortest run over the grid, diagonals at their length, a
@@ -1986,7 +1987,8 @@ water surface", carries the tables.
     squares - a free choice on that ground. DATA: RICH2's floors out of
     the classic level (RoomProbe `-tankwetmap`): tank 182 keeps 16 of the
     50 squares (room 113 and corridor 46 past its mouth dry), tank 33 12
-    of 14.
+    of 14. The run also takes sloping squares (entry 199): tank 182 keeps
+    22 squares of 55 found.
 195. **The wet look's two strengths** - the darkening 0.4 (`kWetDark`)
     and a factor of 4/3 on the mirror's weight (`kWetMirror`, `WetPS`
     `gWetGain`). OWN, free choices, a third over the first look's 0.3 and
@@ -2003,7 +2005,9 @@ water surface", carries the tables.
     numbers are set on RoomProbe's march debugger (`-tankmarch`) against
     a march of 8-unit steps halved ten times, which matches the scene
     seen from the eye mirrored in the floor: 93 to 98 per cent of the
-    hits within 2 pixels of its, at RICH2's tank eyes.
+    hits within 2 pixels of its, at RICH2's tank eyes. The march does not
+    run where the art carries its own copy of the room under the floor
+    (entry 198).
 197. **The mirror's place in the frame** - the wet floor draws twice a
     frame: its darkening over the opaque frame, where the sheets' copy is
     taken first, and its mirror after the rooms' glass and glows and
@@ -2015,6 +2019,44 @@ water surface", carries the tables.
     and a mirror drawn after the cards lay over the dome and the spray
     (every wet pixel covered after the opaque copy at the burst of RICH2's
     tank 182 was the cards').
+198. **The art's own mirror under a wet floor** - a wet square under
+    whose floor the art carries a copy of the room upside down takes no
+    march mirror, only the darkening (`hd_render.cpp`, `wet_copied`,
+    `kWetCopyDepth`, `kWetCopyCells`; `WetPS` skips the march where the
+    share is 0): in the column of the square, the art's 256-unit cells
+    (`HDGroup::cells`) down to 2,048 units under the floor of every room
+    with a flat floor there at that height, mirrored when a cell of any
+    of them lies at the mirrored height over it; copied at 8 mirrored and
+    a third of those under. OWN: the rule and its two numbers are free
+    choices in the gap the count found. DATA: RICH2's corridor 46 (and
+    its twin 75) carries such a copy for its whole length, 1,536 units
+    deep (RoomProbe `-tankart`, every triangle of the .TRG: 24 to 874
+    under each square, 40 to 100 per cent mirrored), and it reaches under
+    room 122's two squares at its mouth; the corridor's 36 squares 12 to
+    34 mirrored cells, room 122's two 15 and 16, every other square of
+    either tank none (`-tankwetmap`, copy=). The mirror marched there out
+    of the frame showed the ceiling glows as yellow bands (1,446 to 5,194
+    pixels at the eyes of his pictures, 0 after).
+199. **The sloping floors under a wet floor** - the run crosses an edge
+    where the next square's edge stands level or a click under the one
+    it comes from at both corners (`hd_splash_math.h`, `HDWetPasses`),
+    flat or sloping (`HDWetSlope`: a TILT, SPLIT1/2 or NOCOLF entry); a
+    point lies on its square's own floor (`HDWetHeight`, the plane of its
+    triangle as the engine's GetHeight divides a split), is dry where it
+    stands over the edge the water came in by (`kWetSlopeRise`, 8 units,
+    the corners' rounding), and the run goes on only across wet edges.
+    OWN: water runs level and down, never up - the rule of entry 190
+    carried onto slopes. DATA: the corner heights out of the classic
+    floor data (`HDRenderWaterCorners`); RICH2 by tank 182 holds six
+    splits round the raised blocks of rooms 45 and 121 (RoomProbe
+    `-tankslopes`), each wet on its flat half now.
+200. **No water's life over a menu's picture** - while a menu stands over
+    a picture of the world (`MonoScreenOn`: the pause menu, the
+    inventory, the load and save screens) the water's life is not put on
+    the frame's object list (`hd_level.cpp`, `HDFrameDraw`). OWN, the
+    engine's own frame order read: those menus draw no room, so nothing
+    in the depth buffer hid RICH2's room 23 school, which was drawn over
+    the picture at its true place behind the corridor's ceiling.
 
 ## Credited, but not contained here
 

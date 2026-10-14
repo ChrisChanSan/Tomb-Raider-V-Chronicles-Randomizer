@@ -13551,6 +13551,128 @@ not in it. The room 23 view's cost still varies from process to process.
 (the march and the mirror at the frame's end), `714a4ae6` (the fix pass: the mirror
 before the cards).
 
+**Round 5: the mirrored room under the floor, the march on models, the pause, the
+slopes.** Asked for after the play test of round 4 on 2026-10-14, put into English: all
+of this still belongs to the splash round. The corridor has, in HD, partly rebuilt the
+room mirrored under the map, and when the water gets there three yellow graphic errors
+show, because the half-see-through floor and the water bite each other. It still has
+many bugs, all depending on the camera's angle: Lara is cut into small boxes with
+ripples; other textures and objects have ripples, streaks, cracks; the vending machine
+is cut away with black at some angles. In the pause menu the fish fly around the
+corridor. The sloped floors have no wet effect yet. The dome looks good. The floor wet
+at once.
+
+The decisions. With `hd_motion` off the floor is wet all at once, as built - his answer
+to round 3's question, settled. The dome stays as it is. Round 4's open question on the
+half-see-through of his corridor picture is answered by the measure below: it is the art's
+copy of the corridor under its floor, which shows through the corridor's clear floor west
+of its mouth; the wet floor's own mirror beside it was the second picture.
+
+The eyes. His log holds no mark of a picture's moment, so his eyes were found by
+content: `CAMLOG` runs after the shot rendered with RoomProbe beside his pictures. The
+corridor from room 122's side with the yellow bands (the eye of the pause picture, tick
+615,797, among them), Lara crawling by the vending machine (tick 185,984) and down the
+corridor (234,984), the machine from above (550,000) and the pillar by the lower floor
+in room 45 (492,609 and 513,359). No eye of the first picture was found with certainty;
+its view, the corridor from room 122's side looking west and down, lies among them.
+
+The art's own mirror (`hd_render.cpp`, "the art's own mirror", `wet_copied`). Measured
+first with the new `-tankart`, every triangle of the .TRG in a wet square's column: the
+corridor 46 and its twin 75 carry a copy of the corridor upside down under its floor
+for its whole length, 1,536 units deep, 24 to 874 triangles under each square, 40 to
+100 per cent of them mirroring one over it within 32 units; the copy reaches under room
+122's two squares at the corridor's mouth (120 and 134 triangles, 99 mirrored each). The
+corridor's floor lies in the alpha pass on a part-way clear page from x 41,984 west, so
+there the copy shows through as the room's reflection; at its mouth, x 44,032 to 48,127,
+the floor is opaque. Rooms 121, 45, room 122's east column and room 23 carry none (room
+23's cells under it are the corridor below, none mirrored). The yellow errors are the wet
+floor's own mirror there: the march's debugger finds the same mirror as its fine march
+(the march is right), and what it mirrors are the corridor's ceiling glows, which hold no
+depth and so land where the march meets the ceiling behind them - yellow bands across the
+floor, 1,446 to 5,194 pixels at the eyes that show them (wet against dry, R over 140, G
+over 120, B under 0.7 G). Now a square whose art carries such a copy takes no march
+mirror and keeps the darkening; the floor at the mouth is opaque, so there is no clear
+floor whose alpha the water could open. The rule asks what the level keeps of its art,
+the 256-unit cells of `HDGroup::cells`: under the floor of every room with a flat floor
+at that square and height, down to 2,048 units, and of those the ones mirrored over it
+by any of them; copied at 8 mirrored and a third of those under (`kWetCopyCells`): the
+corridor's 36 squares 21 to 38 cells under and 12 to 34 mirrored, room 122's two 30/15
+and 32/16, every other square of either tank none under but one of room 23's, 3/1. Tank
+182 keeps the march on its other squares, tank 33 on all 12 of room 23's. `WetPS`
+skips the march where its share is 0 (255 to 256 slots).
+
+The march on models. Measured at his eyes: Lara crawling by the machine and down the
+corridor lies on the copied squares, where the march no longer runs - at those two eyes
+39 and 91 per cent of the wet floor's pixels lose the march's mirror, and at the corridor
+eyes 18 to 92 per cent. RoomProbe draws no Lara, so her boxes were not counted; on the
+squares where the march stays the vending machine's reflection was held against the true
+mirror (the scene seen from the eye mirrored in the floor, turned upside down): the green
+fragment of his picture of the machine is the reflection of its lit screen, at the place
+the true mirror puts it, of which only the bright screen reads on the dark marble. The
+march never reads outside the frame's copy (`WetOn`, the screen's last tenth faded), so
+its black is not a sample off the screen; what cuts the machine was not found in
+RoomProbe's frame. Not
+built: a planar mirror of the models (the engine's mirrored draw is `game\mirror.cpp`'s,
+outside this round), a tighter fit for model hits and other edge handling - no measure in
+RoomProbe's frame asked for them.
+
+The fish in the pause menu (`hd_level.cpp`, `HDFrameDraw`). The pause menu
+(`S_PauseMenu`, `specific\LoadSave.cpp`) shows a picture of the last frame
+(`CreateMonoScreen`) and draws no room: `S_InitialisePolyList` clears the depth buffer
+and empties the frame's rooms each menu frame, and `S_OutputPolyList` still runs
+`HDFrameDraw`, which put the water's life onto the object list - the frame then went on
+for those objects alone. The school is room 23's (`kHDLifeTanks`; tank 33, never shot in
+his log, so its 8 fish drawn 165 times a second, `LIFELOG drawn=1320`, are right; tank
+182 has no school). Projected from the `CAMLOG` eye of his pause at tick 615,797 the
+school lies at x 0.09 to 0.21 and y 0.11 to 0.24 of the screen, where his picture shows
+it: at its true place behind the corridor's ceiling, which in play hides it and in the
+menu is only a picture. Now the life is not drawn while `MonoScreenOn` holds such a
+picture (the pause menu, the inventory, the load and save screens); the classic game's
+pause shows the world frozen, and so does this one.
+
+The sloping floors (`hd_render.cpp`, "the sloping floors"; `hd_splash_math.h`,
+`HDWetSlope`, `HDWetHeight`, `HDWetPasses`). Measured first with the new `-tankslopes`:
+by tank 182 six squares round the raised blocks of rooms 45 and 121 are splits with one
+corner 768 up and their other half flat at the wet floor's height; the run took only flat
+squares, so they stayed dry whole and the wet floor and its mirror ended at their
+square's straight edge - the hard cut of his pictures by the pillar. Now the run crosses
+an edge where the next square's edge stands level or a click under the one it comes from
+at both corners, each point lies on its square's own floor (the plane of its triangle,
+as the engine's GetHeight divides a split), a point higher than the edge the water came
+in by stays dry, and it runs on only across wet edges: a ramp rising from the floor keeps
+its head dry, a slope falling away is wet to its foot and passes the water on. Tank 182
+wets 22 squares (16 before; 55 found in its rooms, 48 before), tank 33 its 12. RoomProbe
+`-tankwetmap` ends its lines in `slope=<function>`, a sloping square's y then its highest
+corner, and the load line's `heights=` counts that corner.
+
+**Measured.** GPU at 2560 x 1440, three runs each, the water's phases and both wet draws
+summed, 60 s after the shot, `783bca2c` against the round's head: the corridor eye of
+the pause picture 0.140 to 0.110 ms, Lara by the machine 0.145 to 0.103, the pillar's
+view 0.124 to 0.119, round 4's tank eye 0.152 to 0.144 - the march left out where the
+copy is.
+Slots: `WetPS` 256 (12 texture, 244 arithmetic), the debugger 508; every other `.inc`
+byte-identical. The yellow bands at the eyes that show them, 1,446 to 5,194 pixels before,
+0 after.
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`). With `-hdwater 0` the
+fifteen cameras 15 of 15 identical to the fix round's parity set. With `-hdwater 1`
+against a RoomProbe built from `783bca2c`: the fifteen cameras 15 of 15, the pond's twelve
+views at 1, 3 and 5 s 36 of 36, the canal dive 4 of 4, the tank views without `-tank` and
+his view before the break 3 of 3, the sweep's 209 WATERLOG lines; only the RICH2 tank
+views with `-tank 182` change; room 23's with `-tank 33` are byte-identical. ModernTest
+grows by 5 checks (the slopes); the suites 0 failed; the engine and every tool build.
+
+**Left.** The look in the game - nobody in this round could play it, and RoomProbe draws
+no Lara and no objects: whether Lara's boxes, the streaks on objects and the machine's
+black cut remain where the march still runs (room 122's east column, 121, 45 and room
+23) is for his next test. A planar mirror of the models was not built. No eye of his
+first picture was found with certainty. The march still mirrors the glows where no copy
+lies under the floor.
+
+**Commits.** `fab9d80f` (the art's own mirror), `6ae16824` (the life under a menu's
+picture), `5fc97db8` (the sloping floors).
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in

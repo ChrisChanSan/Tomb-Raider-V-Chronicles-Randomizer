@@ -625,6 +625,7 @@
  * and the water's life's rules, the engine's own as well. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_life_rules.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
 #include <algorithm>
 /* hd_install.cpp reads the two registry overrides out of these, which the
  * engine defines in tomb5\tomb5.cpp; ModelProbe brings the same pair. Left
@@ -6787,6 +6788,100 @@ static void ProbeWetDraw()
 		st.floor, st.floorWet);
 }
 
+/* The springs (hd_spring.h): with -hdwater 1 the level's springs, built as
+ * the engine builds them after the sheets, ringing the sheets from the
+ * frame's start and drawn where HDFrameDrawGlow draws them, after the
+ * water's cards, timed on the GPU. -spring x,z,s adds one at world x, z of
+ * strength s, 0 to 1 (repeatable); -nospring builds none - the picture as
+ * the water drew it before the springs; -springparts 1 draws the columns
+ * alone, 2 the bubbles alone, for their pixel counts. */
+static bool g_spring_off = false;
+static std::vector<float> g_spring_add;
+
+// The springs' switches, apart from ProbeMain's chain of them.
+static bool SpringArg(int argc, char** argv, int* at)
+{
+	if (!strcmp(argv[*at], "-nospring"))
+	{
+		g_spring_off = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-springparts") && *at + 1 < argc)
+	{
+		HDSpringParts(atoi(argv[++*at]));
+		return true;
+	}
+
+	if (strcmp(argv[*at], "-spring") || *at + 1 >= argc)
+		return false;
+
+	float v[3];
+
+	if (sscanf_s(argv[++*at], "%f,%f,%f", &v[0], &v[1], &v[2]) == 3 &&
+		v[2] >= 0.0f && v[2] <= 1.0f)
+		g_spring_add.insert(g_spring_add.end(), v, v + 3);
+	else
+		printf("RoomProbe: -spring wants x,z,strength (0..1) - '%s' "
+			"ignored\n", argv[*at]);
+
+	return true;
+}
+
+static void SpringBuild(const char* stem)
+{
+	HDSpringClear();
+
+	if (g_spring_off)
+		return;
+
+	HDSpringBuild(stem);
+
+	for (size_t i = 0; i + 2 < g_spring_add.size(); i += 3)
+		if (!HDSpringAdd(stem, g_spring_add[i], g_spring_add[i + 1],
+			g_spring_add[i + 2]))
+			printf("-spring: no sheet over %.0f %.0f - no spring\n",
+				g_spring_add[i], g_spring_add[i + 1]);
+
+	static const char* kHow[3] = { "table", "file", "rule" };
+
+	for (int i = 0; i < HDSpringCount(); i++)
+	{
+		const HDSpring* s = HDSpringAt(i);
+
+		printf("spring %d: x %.0f z %.0f floor %d surface %d strength %.2f "
+			"period %.2f body %d rings %s how %s\n", i, s->x, s->z, s->floorY,
+			s->surfaceY, s->strength, s->period, s->body, s->rings ? "own" :
+			"row", kHow[s->how]);
+	}
+}
+
+static void SpringRings(double cx, double cy, double cz)
+{
+	if (g_hdwater == 1)
+		HDSpringRings((float)(g_seed_origin[0] + cx), (float)cy,
+			(float)(g_seed_origin[1] + cz));
+}
+
+static void SpringDraw()
+{
+	if (g_hdwater != 1 || !HDSpringCount())
+		return;
+
+	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
+	double ms = -1.0;
+	int columns = 0, bubbles = 0;
+
+	HDSpringTiming(1, 0);
+	HDSpringFrameDraw(m);
+	HDSpringTiming(0, &ms);
+	HDSpringDrawn(&columns, &bubbles);
+	printf("-hdwater: %d spring draw(s) carrying %d column(s) and %d "
+		"bubble(s), GPU %.4f ms (timestamps round the springs' draws)\n",
+		(columns ? 1 : 0) + (bubbles ? 1 : 0), columns, bubbles, ms);
+}
+
 /* The waterfall objects for their feet, out of the classic .TRC - the twin
  * of hd_level.cpp's BuildWaterFalls, which reads items[]: every item of
  * WATERFALL1 to 3 (slots 410 - 412) and WATERFALLSS1 and 2 (414, 415;
@@ -9506,6 +9601,9 @@ static int ProbeMain(int argc, char** argv)
 		printf("                             eye, both rules, one line\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
+		printf("       -spring x,z,s   one more spring at world x, z of "
+			"strength s (0..1), with -hdwater 1, repeatable; -nospring "
+			"none; -springparts 1|2 the columns or the bubbles alone\n");
 		return 1;
 	}
 
@@ -9574,6 +9672,11 @@ static int ProbeMain(int argc, char** argv)
 
 	for (; at < argc; at++)
 	{
+		// The springs' switches: the chain below is at the compiler's limit
+		// of nested blocks (C1061).
+		if (SpringArg(argc, argv, &at))
+			continue;
+
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)
 		{
 			width = atol(argv[at + 1]);
@@ -11971,6 +12074,11 @@ static int ProbeMain(int argc, char** argv)
 			for (const std::string& m : g_mist_lines)
 				printf("%s\n", m.c_str());
 
+			/* The springs, after the sheets and before the life, which reads
+			 * them as its bodies' springs - the engine's order. */
+			if (g_hdwater == 1)
+				SpringBuild(stem);
+
 			// -life: the water's life on the bodies just built.
 			if (g_life && g_hdwater)
 				LifeBuild(root, stem);
@@ -12395,6 +12503,7 @@ static int ProbeMain(int argc, char** argv)
 
 	// -splash and -tank, on the clock the bracket now holds.
 	ProbeCardsFeed();
+	SpringRings(cx, cy, cz);
 
 	// The constants under the water this frame took - ModelProbe -under's.
 	if (frame.under)
@@ -12608,8 +12717,9 @@ static int ProbeMain(int argc, char** argv)
 	// The scissor rectangle, off again inside the bracket, as the engine's
 	// frame does.
 	HDRenderScissorOff();
-	// The water's cards where HDFrameDrawGlow draws them.
+	// The water's cards where HDFrameDrawGlow draws them, and the springs.
 	ProbeCardsDraw();
+	SpringDraw();
 	HDRenderFrameEnd();
 	g_device->EndScene();
 

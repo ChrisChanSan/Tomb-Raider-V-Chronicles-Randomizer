@@ -10743,8 +10743,7 @@ namespace
 	 * alone; a row of the file with a ripple for the same room takes its
 	 * place. ANDREA2 room 194's fountain basin, over water room 120 (six
 	 * squares, x 54,272 to 57,344 and z 31,744 to 33,792), has its spring
-	 * in the middle of the six: rings of size 80 every 0.7 seconds, a free
-	 * choice set by eye in the game with a row of the file.
+	 * in the springs' table (hd_spring.h, kHDSprings), which rings it.
 	 *
 	 * JOBY2's three seas - the open sea over rooms 42 and 76, the one over
 	 * 143 and its flip twin 45, and the rain basin over room 7 (room 13
@@ -10766,8 +10765,7 @@ namespace
 	const HDWaterOverride kWaterOverride[] =
 	{
 		{ "ANDREA2", 144, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
-		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f,
-			{ 55808.0f, 32768.0f, 80.0f, 0.7f } },
+		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 		{ "ANDREA2", 60, HD_WATER_CHANNEL, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 		{ "JOBY2", 42, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
 		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
@@ -17533,8 +17531,8 @@ const char* HDRenderWaterSectionName(int section)
  * kWaterClip), the share of its class's swell its sheet's vertices
  * take (swell; see kWaterBank), how far its rows are short crests in
  * a fan (crest; see "the crests" over kWaterFan), and the world x and z
- * of the ripple source its floats drift away from, none without one
- * (spring; HDRenderWaterBody::spring). */
+ * of the ripple source or the spring its floats drift away from, none
+ * without one (spring; HDRenderWaterBody::spring). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -17978,6 +17976,75 @@ int HDRenderWaterBodySquares(int body, HDRenderWaterSquare* out, int max,
 	}
 
 	return count;
+}
+
+void HDRenderWaterRingAdd(float x, float y, float z, float size, double born,
+	int little)
+{
+	WaterRing ring;
+
+	ring.x = x;
+	ring.y = y;
+	ring.z = z;
+	ring.born = born;
+	ring.size = size;
+	ring.body = little ? 0 : 1;
+
+	if (g_rings.size() >= kRingsKept)
+		g_rings.erase(g_rings.begin());
+
+	g_rings.push_back(ring);
+}
+
+void HDRenderWaterBodySpring(int body, float x, float z)
+{
+	if (body < 0 || body >= (int)g_wbodies.size())
+		return;
+
+	HDRenderWaterBody& b = g_wbodies[(size_t)body].info;
+
+	if (!b.spring)
+	{
+		b.spring = 1;
+		b.springAt[0] = x;
+		b.springAt[1] = z;
+	}
+}
+
+bool HDRenderWaterSpringFrame(HDRenderSpringFrame* out)
+{
+	if (!out || !g_device || !g_in_frame || !g_wlevel.built)
+		return false;
+
+	D3DVIEWPORT9 vp = {};
+
+	g_device->GetViewport(&vp);
+	out->device = g_device;
+	std::memcpy(out->view, g_view, sizeof(out->view));
+	std::memcpy(out->proj, g_proj, sizeof(out->proj));
+	out->copy = g_copy_valid ? g_copy_texture : 0;
+	out->depth = g_depth_texture;
+	out->width = (int)vp.Width;
+	out->height = (int)vp.Height;
+	out->clock = g_motion[2];
+	out->motion = g_motion[3] != 0.0f ? 1 : 0;
+	return true;
+}
+
+bool HDRenderWaterSpringLook(int body, float* rgb, float* light,
+	float* absorb)
+{
+	if (body < 0 || body >= (int)g_wlooks.size())
+		return false;
+
+	const WaterLook& l = g_wlooks[(size_t)body];
+
+	card_tint(body, rgb, light);
+
+	for (int k = 0; k < 3; k++)
+		absorb[k] = l.pixel[32 + k];
+
+	return true;
 }
 
 namespace

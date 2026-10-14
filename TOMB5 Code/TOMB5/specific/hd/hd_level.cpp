@@ -27,6 +27,7 @@
 #include "hd_shadow.h"
 #include "hd_font.h"			// the HD font's texture goes with the device
 #include "hd_life.h"			// the water's life - floats, fish, drips
+#include "hd_spring.h"			// the springs - rings, bubbles, column
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
 #include "../output.h"			// gPresentMinTicks - the budget follows the present
@@ -1809,6 +1810,7 @@ static void FeedWaterRipples()
 	}
 
 	HDRenderWaterRipples(live, count);
+	HDSpringFeed();
 }
 
 /* Lara's place for the sheets' waterline, which leaves her out: a thin wet
@@ -2367,6 +2369,7 @@ static void DrawWaterCards()
 
 	WorldToFrame(m);
 	HDRenderWaterCardsDraw(m);
+	HDSpringDraw(m);
 
 	HDRenderSplashStats st;
 
@@ -6376,6 +6379,7 @@ static void HDLevelBuildHD()
 
 	/* The water's life, after the objects whose model list carried its
 	 * models and after the sheets whose bodies it lives on. */
+	HDSpringLevelBegin(g_stem);
 	HDLifeLevelBegin(g_stem);
 
 	/* The mark the re-dress allowance is measured from: what this level's own
@@ -6549,6 +6553,7 @@ void HDLevelUnload()
 	HDMarkersFree();	// text, no device - the same rule as the objects
 	HDObjectLevelEnd();
 	HDLifeLevelEnd();	// no device either: the pool is plain memory
+	HDSpringLevelEnd();
 }
 
 void HDLevelDeviceLost()
@@ -6568,6 +6573,7 @@ void HDLevelDeviceLost()
 	// HDRenderShutdown is about to drop.
 	ReleaseWaterFramePages();
 	HDObjectDeviceLost();
+	HDSpringDeviceLost();
 
 	// The font atlas was made on this device too. Its match table survives;
 	// only the texture goes.

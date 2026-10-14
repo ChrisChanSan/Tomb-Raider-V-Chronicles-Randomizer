@@ -12777,10 +12777,12 @@ namespace
 	 * beside it, a slope falling from it is wet to its foot and passes the
 	 * water on to the floor there. Each point lies on the square's own
 	 * floor, the plane of its triangle (HDWetHeight, over the corners
-	 * water_corners makes). RICH2's rooms by tank 182 hold six such squares
-	 * round its raised blocks in rooms 45 and 121, splits with one corner
-	 * 768 up and their other half flat at the wet floor's height (RoomProbe
-	 * -tankslopes); left out, their flat halves stayed dry beside it. */
+	 * water_corners makes), and its cells are halved along the diagonal
+	 * its crease follows (HDWetCell), so the layer lies on the floor and a
+	 * split's wet half is covered to its crease. RICH2's rooms by tank 182
+	 * hold six such squares round its raised blocks in rooms 45 and 121,
+	 * splits with one corner 768 up and their other half flat at the wet
+	 * floor's height (RoomProbe -tankslopes). */
 	/* The two corners of a square's edge toward step k of the run (+x,
 	 * -x, +z, -z), z0 or x0 first; `facing` the neighbour's edge that
 	 * faces it. */
@@ -13295,22 +13297,13 @@ namespace
 				for (int j = 0; j < 4; j++)
 					for (int i = 0; i < 4; i++)
 					{
-						const int a = number(j * 5 + i);
-						const int b = number(j * 5 + i + 1);
-						const int d = number(j * 5 + i + 5);
-						const int e = number(j * 5 + i + 6);
-						const unsigned short tri[6] =
-						{
-							(unsigned short)a, (unsigned short)b,
-							(unsigned short)e, (unsigned short)a,
-							(unsigned short)e, (unsigned short)d
-						};
+						int tri[6];
+						const int n = HDWetCell(q.fn, number(j * 5 + i),
+							number(j * 5 + i + 1), number(j * 5 + i + 5),
+							number(j * 5 + i + 6), tri);
 
-						if (a >= 0 && b >= 0 && e >= 0)
-							w.tris.insert(w.tris.end(), tri, tri + 3);
-
-						if (a >= 0 && e >= 0 && d >= 0)
-							w.tris.insert(w.tris.end(), tri + 3, tri + 6);
+						for (int k = 0; k < n; k++)
+							w.tris.push_back((unsigned short)tri[k]);
 					}
 			}
 

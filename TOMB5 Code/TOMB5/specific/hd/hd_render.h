@@ -1647,7 +1647,7 @@ bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size);
  * floor's slope function, 0 for a flat one, its y then the highest
  * corner; false past the last. HDRenderWaterWetLimited 0 lays the
  * next build's floors without the rooms and the radius (-tankwetall), the
- * run over every flat floor as far as it goes. */
+ * run over every floor it passes as far as it goes. */
 struct HDWaterWetSquare
 {
 	int item;

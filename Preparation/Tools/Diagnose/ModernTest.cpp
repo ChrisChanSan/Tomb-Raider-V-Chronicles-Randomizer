@@ -20366,6 +20366,48 @@ static void splash_tank_slopes()
 	ok(HDWetPasses(0, 0, 0, 0, 256) && !HDWetPasses(-768, 0, -768, -768,
 		256) && -768 < 0 - kWetSlopeRise,
 		"into the split's flat edge; not from its ramp onto the block", 1, 1);
+
+	/* The cells over a square, as build_wet_floors lays them: a point dry
+	 * where it stands over the flat edge by more than kWetSlopeRise. The
+	 * split's flat half is half the square, 16 of its 32 triangles, for
+	 * either crease (room 121's function 8 split: 0, 0, -768, 0); a flat
+	 * square's cells are halved from a to e, a, b, e first. */
+	const int other[4] = { 0, 0, -768, 0 };
+	const int flat[4] = { 0, 0, 0, 0 };
+	const int* const squares[3] = { split, other, flat };
+	const int fns[3] = { 7, 8, 0 };
+	int counts[3] = { 0, 0, 0 }, first[6] = { 0 };
+
+	for (int s = 0; s < 3; s++)
+	{
+		int number[25];
+
+		for (int k = 0; k < 25; k++)
+			number[k] = HDWetHeight(fns[s], squares[s], (float)(k % 5 * 256),
+				(float)(k / 5 * 256)) < (float)-kWetSlopeRise ? -1 : k;
+
+		for (int j = 0; j < 4; j++)
+			for (int i = 0; i < 4; i++)
+			{
+				int tri[6];
+				const int n = HDWetCell(fns[s], number[j * 5 + i],
+					number[j * 5 + i + 1], number[j * 5 + i + 5],
+					number[j * 5 + i + 6], tri);
+
+				for (int k = 0; s == 2 && !i && !j && k < n; k++)
+					first[k] = tri[k];
+
+				counts[s] += n / 3;
+			}
+	}
+
+	ok(counts[0] == 16, "a split's flat half covered whole (crease 1 to 2)",
+		counts[0], 16);
+	ok(counts[1] == 16, "a split's flat half covered whole (crease 0 to 3)",
+		counts[1], 16);
+	ok(counts[2] == 32 && first[0] == 0 && first[1] == 1 && first[2] == 6 &&
+		first[3] == 0 && first[4] == 6 && first[5] == 5,
+		"a flat square: 32 triangles, halved from a to e", counts[2], 32);
 }
 
 /* The rings' strength on the sheets (hd_splash_math.h, HDRingStrength, at

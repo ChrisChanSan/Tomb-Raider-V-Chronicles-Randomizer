@@ -888,7 +888,15 @@ inline float HDWetAt(float front, float way)
  * comes from and b0, b1 on the other: at each corner level or lower by
  * `step` at most (y counts down). kWetSlopeRise: how far a point of a
  * slope may stand over the edge the water came in by and still be wet,
- * the corners' rounding to whole units. */
+ * the corners' rounding to whole units. HDWetCrease: whether a split's
+ * crease runs from corner 1 to corner 2 (7, 11, 12) and not from corner 0
+ * to corner 3. HDWetCell: the triangles of one 256-unit cell of the wet
+ * layer, whose grid points a (x0z0), b (x1z0), d (x0z1) and e (x1z1) are
+ * numbered or -1 where dry; the cell is halved along the diagonal its
+ * square's crease follows, so no triangle crosses the crease and a
+ * split's wet half is covered whole, and a half is drawn where its three
+ * points are wet. It writes up to six numbers to `tri` and returns how
+ * many. */
 const int kWetSlopeRise = 8;		// units
 
 inline bool HDWetSlope(int fn)
@@ -896,10 +904,33 @@ inline bool HDWetSlope(int fn)
 	return fn == 2 || fn == 7 || fn == 8 || (fn >= 11 && fn <= 14);
 }
 
+inline bool HDWetCrease(int fn)
+{
+	return fn == 7 || fn == 11 || fn == 12;
+}
+
+inline int HDWetCell(int fn, int a, int b, int d, int e, int* tri)
+{
+	const bool cross = HDWetCrease(fn);
+	const int half[6] =
+	{
+		a, b, cross ? d : e,
+		cross ? b : a, e, d
+	};
+	int n = 0;
+
+	for (int h = 0; h < 6; h += 3)
+		if (half[h] >= 0 && half[h + 1] >= 0 && half[h + 2] >= 0)
+			for (int k = 0; k < 3; k++)
+				tri[n++] = half[h + k];
+
+	return n;
+}
+
 inline float HDWetHeight(int fn, const int* c, float px, float pz)
 {
 	const float u = px / 1024.0f, v = pz / 1024.0f;
-	const bool fam1 = fn == 7 || fn == 11 || fn == 12;
+	const bool fam1 = HDWetCrease(fn);
 
 	if (fn == 2 || !fn)
 		return (float)c[0] + (float)(c[1] - c[0]) * u +

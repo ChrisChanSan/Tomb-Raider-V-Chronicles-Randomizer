@@ -1925,7 +1925,8 @@ water surface", carries the tables.
     floors out of the classic level (`SectorCheck`): tank 182 reaches 50
     squares at y 0 of rooms 122, 121, 45, 46 and 113 (the raised blocks
     and stairs of 121 and 45 stay dry), tank 33 its plinth and the
-    lowered area of room 23, 14 squares at two heights.
+    lowered area of room 23, 14 squares at two heights. The run keeps to
+    the rooms of its tank's row and stops at a radius: entry 194.
 191. **The water's front over the floor** - a point of a 256-unit grid
     over those squares is wet once the front has passed its way from the
     glass (the shortest run over the grid, diagonals at their length, a
@@ -1960,7 +1961,10 @@ water surface", carries the tables.
     tone curve); the darkening, the exponent, the march and the 8 are
     free choices, set by eye on the round's RoomProbe pictures. DATA: the
     level's light field (the sheen's, `hd_gloss_field.h`) and the frame
-    itself.
+    itself. The darkening and the mirror's weight stand a third higher
+    (entry 195), the march halves its crossings and asks the depth to fit
+    (entry 196), and the mirror is drawn after the rooms' glass and glows
+    out of a copy of the frame there (entry 197).
 193. **A floating body's ring** - a ring that starts over 128 units (the
     water's life's barrel, 240 to 255) keeps its size past the cap of
     128 and is 4 times stronger (`hd_render.cpp`, `kRingBody`;
@@ -1969,6 +1973,48 @@ water surface", carries the tables.
     700, 1,500 and 3,000 units: at 4 the ring reads from a wading Lara's
     camera at 1.5 and 2 s, at 2 it does not. A ring that starts at 128
     or less keeps entry 72's strength to the bit.
+194. **A shot tank's rooms and radius** - a tank's water runs only over
+    squares that lie inside the rooms its row names, or their flip twins,
+    off those rooms' rings of walls and doors (`hd_render.cpp`,
+    `kWetRooms`; a tank without a row keeps to its own room), and its
+    front stops `kWetRadius`, 2,048 units, past the dome's foot along the
+    water's way (`hd_splash_math.h`); a square stays while a point of it
+    is wet with the front there, so the edge is the front's own, ramped
+    and ragged. OWN: the rows follow the rooms named for the wet floor
+    (RICH2 122, 121, 45, 46 for tank 182; 23 for tank 33); the radius is
+    half the dome's foot, 3,186 units wide, taken up to the run's whole
+    squares - a free choice on that ground. DATA: RICH2's floors out of
+    the classic level (RoomProbe `-tankwetmap`): tank 182 keeps 16 of the
+    50 squares (room 113 and corridor 46 past its mouth dry), tank 33 12
+    of 14.
+195. **The wet look's two strengths** - the darkening 0.4 (`kWetDark`)
+    and a factor of 4/3 on the mirror's weight (`kWetMirror`, `WetPS`
+    `gWetGain`). OWN, free choices, a third over the first look's 0.3 and
+    1, set by eye on RoomProbe pictures of RICH2's two tanks so that the
+    dark marble (a luma of 37 to 58 dry) still reads as wet stone.
+196. **The mirror's march** - 16 steps from 32 units, each 1.3 times the
+    last; a step that passes from in front of the frame's depth to behind
+    it has its crossing halved 5 times and is the mirror's hit where the
+    frame's depth there fits the ray's within 32 units and 2 per cent of
+    the depth, fading out toward that tolerance; past it the ray went
+    behind an edge and the march goes on (`hd_wet.hlsl`, `WetMarch`).
+    OWN, a design of this project from general graphics knowledge (a
+    screen-space march with a binary search and a thickness test); the
+    numbers are set on RoomProbe's march debugger (`-tankmarch`) against
+    a march of 8-unit steps halved ten times, which matches the scene
+    seen from the eye mirrored in the floor: 93 to 98 per cent of the
+    hits within 2 pixels of its, at RICH2's tank eyes.
+197. **The mirror's place in the frame** - the wet floor draws twice a
+    frame: its darkening over the opaque frame, where the sheets' copy is
+    taken first, and its mirror after the rooms' glass and glows and
+    before the cards and the objects' glows, out of a copy of the frame
+    there (`HDRenderWaterWetMirror`); under a tank's film the mirror gives
+    up the film's strength. OWN, a design of this project: the order the
+    pictures needed, measured with the debugger - the glows' triangles and
+    what the glass shows reached no mirror out of the opaque frame's copy,
+    and a mirror drawn after the cards lay over the dome and the spray
+    (every wet pixel covered after the opaque copy at the burst of RICH2's
+    tank 182 was the cards').
 
 ## Credited, but not contained here
 

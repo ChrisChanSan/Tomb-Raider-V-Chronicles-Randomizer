@@ -13197,6 +13197,156 @@ ring of 240 at its start). The file is that part's, so its comment is left to it
 **Commits.** `4d8b54ce`, `95bf8151`, `584642bd` (the wet floor with `hd_motion` off),
 `bf7d5a30` (a shader comment, the bytecode unchanged).
 
+**Round 4: the run-off's rooms and radius, the look, the mirror mended.** Asked for after
+the play test of 2026-10-14, put into English: the floor stays wet; it can be a little
+bit stronger; please limit it to my rooms, only in the small radius; in the corridor
+there are already conflicts with the half-see-through, the triangles are not mirrored
+yet, and the reflections are still a bit buggy - the vending machine and Lara are
+distorted like a graphics glitch. So the drying is settled: the floor stays wet. His
+rooms are those of the wet floor's first order: RICH2 rooms 122, 121, 45 and 46 at the
+tank of room 122, the lowered area of room 23 at the other.
+
+The eyes. His five pictures' cameras are the `CAMLOG` eyes his log holds still for 20
+ticks and more after the shot (the tank's view in room 122, the view down by the vending
+machine in room 45, the corridor 46 from room 122's door, and two in room 23's lowered
+area, one low over the floor); RoomProbe takes them with round 3's two tank eyes, seven
+in all, and a close view of the machine.
+
+The rooms and the radius (`hd_render.cpp`, `kWetRooms`, `build_wet_floors`;
+`hd_splash_math.h`, `kWetRadius`). Measured first with the new `-tankwetmap` and with
+`-tankwetall`, which lays round 3's run (its pictures md5-identical to `28c358eb` at all
+the eyes): tank 182's 50 squares lie under the dome's foot (a way of 4 to 516 units from
+the glass), one square further (1,028) and, in rooms 45 and 121, two (1,540, reached at
+2.35 s); then the corridor 46, 36 squares in 18 columns from 2,052 units (3.9 s) to
+18,436 (55 s), and room 113's two squares at 11,268 and 12,292 (33 and 36 s). Tank 33's
+14 squares all lie in room 23: the plinth and the lowered area, its far column at 3,076.
+Now a tank's row names its rooms; a square counts as a room's when it lies inside it or
+its flip twin, off its ring of walls and doors, at that floor's height - so a door
+square of the corridor that lies in room 113 is 113's; a tank without a row keeps to its
+own room. And the front stops `kWetRadius`, 2,048 units, past the dome's foot along the
+water's way: the water that lands is the dome's, 3,186 units wide at the floor; it
+spreads past the foot by half that width, 1,593, taken up to the run's whole squares - a
+free choice on that ground, one constant to move. A square stays while a point of it is
+wet with the front held there, so the edge is the front's own, a quarter square wide and
+ragged by the same hash; the front's speed and the hash are unchanged. Tank 182 keeps 16
+of 50 squares (its run finds 48 in its rooms; room 113's two are not its rooms, the
+corridor keeps one square into its mouth), tank 33 keeps 12 of 14 (the lowered area's far
+two squares stay dry). A loaded game wets the same squares, the build reading only the
+floors. The load line ends in `found=<n> limit=<units>`.
+
+The look (`kWetDark`, `kWetMirror`). Measured first at the seven eyes against the same
+eyes dry: the wet pixels' luma 50.2 to 37.3 at his tank view with the darkening of 0.3,
+the mirror's own share (the picture less 0.7 times the dry one) over 4 of 255 at 19,921
+pixels and over 16 at 3,003 there, 48,582 and 13,437 in the corridor; Fresnel's weight
+over the wet pixels 0.020 to 0.049 at his tank view, 0.06 to 0.25 in the corridor, 0.22
+to 0.82 in room 23 (5th to 95th percentile). Both a third stronger: the darkening 0.4,
+and the mirror's weight times 4/3 (`WetPS` `gWetGain`); the dark marble (a luma of 37 to
+58 dry) reads as wet stone, not as a black floor. After: 50.2 to 33.0 at his tank view,
+the mirror over 4 at 30,880 pixels there and 66,416 in the corridor.
+
+The mirror, measured with a march debugger (`hd_wet.hlsl` built a second time with
+`HD_WET_DEBUG`, `hd_wet_debug_ps.inc`, RoomProbe `-tankmarch 5` to `8`): each wet pixel's
+march held against a fine march of 8-unit steps, every crossing halved ten times, which
+itself matches the true mirror - the scene from the eye mirrored in the floor, turned
+upside down: a mean difference of 12.4 levels at round 3's tank eye, against 33.8 for
+round 3's march. The three faults' causes:
+
+- *The distortion.* Round 3's march took the first point behind the frame by less than
+  two of its steps, which grow by 1.5 to 2,768 units, and never halved the crossing: its
+  hit slid along the surface the ray met, so a tall thing's foot and head came from
+  different places (the vending machine's mirror sheared and stepped), or landed on
+  another surface whose depth does not fit the mirrored point. Of its hits at the eyes
+  only 7 to 27 per cent lay within 2 pixels of the fine march's; on the same surface but
+  further off 13,493 to 115,513 pixels an eye (his tank view 36,924, the corridor 80,924,
+  the close view 115,513), on another surface 5,089 to 36,958, a hit where there is none
+  17 to 4,616; rays leaving the copy (the screen's edge, over the horizon) 0 to 200,059 -
+  most of the steep views.
+- *The glows' triangles.* The copy the mirror read was taken before the glass and the
+  glows, so no glow reached the mirror: with a copy of the whole frame 10,739 and 10,809
+  of the mirror's hits in room 23's two views show what it adds, 1 to 337 in the other
+  views. A copy of the whole frame also holds the cards, the dome and the film; a ray
+  reflected up off the floor cannot meet the floor itself.
+- *The half-see-through.* Not found and not counted. In the corridor view nothing drawn
+  after the opaque copy lies over the wet floor in RoomProbe (0 pixels at 60 s; 158 and
+  92 in room 23's views), and RoomProbe draws no objects: a see-through object of his
+  picture - the torn doors of the lift in the corridor's wall are a guess by their look,
+  and whether their faces are drawn blended at all was not looked up - is not in its
+  frame. The cause of what he saw is unknown; it stays a question for his next test.
+
+Mended. The march takes 16 steps from 32 units, each 1.3 times the last (about 7,000
+units), halves every crossing from in front of the frame to behind it 5 times, and takes
+it where the frame's depth fits the ray's within 32 units and 2 per cent of the depth,
+fading out toward that tolerance; past it the ray went behind an edge and the march goes
+on. And the wet floor draws twice: its darkening over the opaque frame as before (the
+sheets' copy taken first), its mirror after the rooms' glass and glows and before the
+cards and the objects' glows, out of a copy of the frame as it stands there
+(`HDRenderWaterWetMirror` in `HDFrameDrawGlow`). Under a tank's film the mirror gives up
+the film's strength, so a film over the floor still covers it. Now 93 to 98 per cent of
+the hits lie within 2 pixels of the fine march's, and the mirror is as near the true one
+as the fine march's (13.5 at round 3's tank eye). Lara is not drawn by RoomProbe; the
+vending machine stands for a tall thing on the wet floor.
+
+The mirror's place, mended in the fix pass. First built at the frame's end, after the
+cards, the mirror was added over the dome and the spray wherever they stand over the wet
+floor - the same kind of order fault as a mirror over a see-through surface. Counted
+with the debugger (map 5, a wet pixel changed between the opaque copy and the mirror's
+own) and with the cards left out (`-tankleave spray`, `-tankleave water`): at tank 182,
+his tank view and round 3's, 92,677 to 109,758 wet pixels from 0.3 to 2 s, every one of
+them the cards' (0 without them), none at 4 and 60 s; at tank 33 3,752 to 6,453, all
+but 3,120 and 196 in the first 0.3 s the cards' (the rest is the film, whose share the
+mirror already gave up). So the mirror now draws before the cards: the copy it reads
+still holds the rooms' glass and glows, the glows' triangles stay mirrored, and the
+dome and the spray lie over it as over the floor. The objects' additive pass comes after
+it too, which is the right order for their glows (a screen blend over what they shine
+through); they are not in the copy. Between the opaque copy and the mirror nothing of
+the cards lies over the floor any more (0 at tank 182 at every moment); the pictures
+change only on the wet floor under the cards (53,943 to 94,757 pixels at tank 182, a mean
+of 1.1 to 5.4 levels, at most 99; at tank 33 3,286 and 3,826 in the first 0.3 s, a mean
+of 18 and 19, at most 132 - the mirror no longer over the dome and the spray) and where
+the mirror showed the dome (292 to 10,275 pixels); at 4 and 60 s every picture is
+md5-identical to the round's first build.
+
+**Measured.** GPU at 2560 x 1440, five runs, the water's phases and both wet draws
+summed, 60 s after the shot: his tank view 0.091 ms at `28c358eb`, 0.153 after (+0.062;
+the wet floor 0.075 to 0.136, the second copy in it); round 3's tank eye 0.074 to 0.130
+(+0.056); the room 23 view varies from run to run as round 3 found (0.07 to 0.70 at
+`28c358eb`, 0.28 to 0.66 after). With the mirror before the cards (four runs): his view
+0.090 to 0.149 ms at 60 s, round 3's tank eye 0.073 to 0.127; at 1 s, the burst, 0.174
+and 0.190 with the mirror at the frame's end, 0.184 and 0.191 before the cards - the same
+draws in another place. The look alone: his view 0.0857 to 0.0867 ms. Slots:
+`WetPS` 178 to 255 (12 texture, 243 arithmetic), the debugger 508; every other `.inc`
+byte-identical. Pixels at 960 x 540, 60 s, changed by more than 4 against the dry
+floor: his tank view 244,365 before, 252,520 after; the corridor 133,086 and 116,977;
+room 23's two views 62,983 and 54,019, 107,380 and 93,202.
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` (ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`). With `-hdwater 0` the
+fifteen cameras 15 of 15 identical to the fix round's parity set. With `-hdwater 1`
+against a RoomProbe built from `28c358eb`: the fifteen cameras 15 of 15, the pond's twelve
+views at 1, 3 and 5 s 36 of 36, the canal dive (the cards) 4 of 4, the tank views without
+`-tank` and his view before the break 3 of 3, the sweep's 209 WATERLOG lines; only the
+RICH2 tank views with `-tank` change. `-tankwetall` gives round 3's floor: its pictures
+md5-identical to `28c358eb` at `cc32285a`, and at the round's head, whose look and mirror
+differ, the same 50 squares (925 points, 1,600 triangles, the furthest at 19,749 units).
+ModernTest grows by 3 checks (the radius, its moment, a loaded game); the suites 0
+failed; the engine and every tool build.
+
+**Left.** The look in the game - nobody in this round could play it, and RoomProbe draws
+no Lara. The radius is one constant: at 3,072 units the corridor would keep a second
+square and room 23's lowered area would be wet whole. The question of round 3 stands:
+with `hd_motion` off the floor is wet all at once, as built, or should there be no wet
+floor at all. The half-see-through of his corridor picture is neither found nor counted
+(above): what it is, and whether it still shows, is a question for his next test. What
+the rooms' glass and glows lay in front of the wet floor is still drawn before the
+mirror, which is added over it: the round's count found 158 and 92 such pixels in room
+23's two views, the fix pass's at 60 s none at the four tank views it took, and what
+those pixels are was not looked into. An object's glow is drawn over the mirror but is
+not in it. The room 23 view's cost still varies from process to process.
+
+**Commits.** `cc32285a` (the rooms and the radius), `268f9160` (the look), `e315e47d`
+(the march and the mirror at the frame's end), `714a4ae6` (the fix pass: the mirror
+before the cards).
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in

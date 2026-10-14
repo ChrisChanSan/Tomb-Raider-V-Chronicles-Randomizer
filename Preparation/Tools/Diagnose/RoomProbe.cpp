@@ -2721,6 +2721,10 @@ static int g_tank_leave = 0;
 /* -tankwet s: the shot tank's wet floor held at s everywhere it reaches
  * (HDRenderWaterWetFixed), under 0 the water's own way at the tank's age. */
 static float g_tank_wet = -1.0f;
+/* -tankwetmap: every wet floor's squares as text, room by room, after its
+ * SPLASHLOG line (HDRenderWaterWetSquare). -tankwetall lays the floors
+ * without their rooms and radius (HDRenderWaterWetLimited). */
+static bool g_tank_wet_map = false;
 static int g_tank_film = -1;
 static float g_tank_root[3] = { 0.0f, 0.0f, 0.0f };
 static Tr5Item g_tank_place;
@@ -6708,11 +6712,47 @@ static void ProbeCardsDraw()
 		st.cards, ms);
 }
 
-/* The tanks' wet floors where HDFrameDrawGlow draws them, before the
- * frame's copy, the picture's world shifted by the seed room's origin as
- * the cards' is, timed on the GPU with a timestamp pair; the line is
- * -hdwater's, so the timing scripts add it to the water's other phases. */
-static void ProbeWetDraw()
+/* -tankwetmap: floor `floor`'s squares, room by room, one line each: the
+ * square's corner, its floor, its nearest point's way from the glass in
+ * units and in squares, the moment the front first reaches it (the dome's
+ * own out to its foot, the flood's speed past it) and whether the radius
+ * keeps it. */
+static void ProbeWetMap(int floor)
+{
+	if (!g_tank_wet_map)
+		return;
+
+	std::vector<HDWaterWetSquare> all;
+	HDWaterWetSquare s;
+
+	for (int at = 0; HDRenderWaterWetSquare(floor, at, &s); at++)
+		all.push_back(s);
+
+	std::stable_sort(all.begin(), all.end(),
+		[](const HDWaterWetSquare& a, const HDWaterWetSquare& b)
+		{
+			return a.room < b.room;
+		});
+
+	for (const HDWaterWetSquare& q : all)
+	{
+		const float t = q.way <= q.reach ?
+			kTankDomeOut * q.way / (q.reach > 0.0f ? q.reach : 1.0f) :
+			kTankDomeOut + (q.way - q.reach) / kWetSpread;
+
+		printf("wetmap tank=%d room=%d x=%d z=%d y=%d way=%.0f squares=%.2f "
+			"t=%.2f %s\n", q.item, q.room, q.x, q.z, q.y, q.way,
+			q.way / 1024.0f, t, q.kept ? "kept" : "dropped");
+	}
+}
+
+/* The tanks' wet floors where HDFrameDrawGlow draws them: part 0 the
+ * darkening before the frame's copy, part 1 the mirror before the cards
+ * (its own copy inside the bracket), the picture's world shifted by
+ * the seed room's origin as the cards' is, timed on the GPU with a
+ * timestamp pair; the lines are -hdwater's, so the timing scripts add
+ * them to the water's other phases. */
+static void ProbeWetDraw(int part)
 {
 	if (g_hdwater != 1 || g_tank_item < 0)
 		return;
@@ -6722,10 +6762,10 @@ static void ProbeWetDraw()
 	IDirect3DQuery9* q[3] = { 0, 0, 0 };
 	IDirect3DQuery9* freq = 0;
 
-	/* The frame's copy the floor's mirror reads, taken before the bracket:
+	/* The opaque frame's copy the sheets read, taken before the bracket:
 	 * the copy waits for its own timestamps (its own line), and that wait
 	 * inside the bracket would count as the floor's. */
-	if (g_tank_time >= 0.0f)
+	if (part == 0 && g_tank_time >= 0.0f)
 		HDRenderWaterCopy();
 
 	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
@@ -6741,7 +6781,10 @@ static void ProbeWetDraw()
 		q[1]->Issue(D3DISSUE_END);
 	}
 
-	HDRenderWaterWetDraw(m);
+	if (part == 0)
+		HDRenderWaterWetDraw(m);
+	else
+		HDRenderWaterWetMirror();
 
 	if (timed)
 	{
@@ -6784,9 +6827,15 @@ static void ProbeWetDraw()
 	HDRenderSplashStats st;
 
 	HDRenderSplashStatsNow(&st);
-	printf("-hdwater: %d wet floor draw(s), GPU %.4f ms (timestamps round the "
-		"wet floor's draw), floor %d wet %.3f\n", st.floor >= 0 ? 1 : 0, ms,
-		st.floor, st.floorWet);
+
+	if (part == 0)
+		printf("-hdwater: %d wet floor draw(s), GPU %.4f ms (timestamps round "
+			"the wet floor's draw), floor %d wet %.3f\n", st.floor >= 0 ? 1 : 0,
+			ms, st.floor, st.floorWet);
+	else
+		printf("-hdwater: %d wet floor mirror draw(s), GPU %.4f ms (timestamps "
+			"round the later copy and the mirror's draw)\n",
+			st.floor >= 0 ? 1 : 0, ms);
 }
 
 /* The waterfall objects for their feet, out of the classic .TRC - the twin
@@ -9767,10 +9816,19 @@ static int ProbeMain(int argc, char** argv)
 			g_splash_fall = atoi(argv[++at]);
 		else if ((!strcmp(argv[at], "-tank") && at + 2 < argc) ||
 			(!strcmp(argv[at], "-tankleave") && at + 1 < argc) ||
-			(!strcmp(argv[at], "-tankwet") && at + 1 < argc))
+			(!strcmp(argv[at], "-tankwet") && at + 1 < argc) ||
+			(!strcmp(argv[at], "-tankmarch") && at + 1 < argc) ||
+			!strcmp(argv[at], "-tankwetmap") ||
+			!strcmp(argv[at], "-tankwetall"))
 		{
 			// One branch for all: the chain is at the compiler's depth.
-			if (argv[at][5] == 'w')
+			if (!strcmp(argv[at], "-tankwetmap"))
+				g_tank_wet_map = true;
+			else if (!strcmp(argv[at], "-tankwetall"))
+				HDRenderWaterWetLimited(0);
+			else if (!strcmp(argv[at], "-tankmarch"))
+				HDRenderWaterWetMarch(atoi(argv[++at]));
+			else if (argv[at][5] == 'w')
 				g_tank_wet = (float)atof(argv[++at]);
 			else if (argv[at][5])
 			{
@@ -12115,7 +12173,10 @@ static int ProbeMain(int argc, char** argv)
 
 			for (int w = 0; HDRenderWaterWetLine(w, stem, line,
 				sizeof(line)); w++)
+			{
 				printf("%s\n", line);
+				ProbeWetMap(w);
+			}
 
 			for (const std::string& m : g_mist_lines)
 				printf("%s\n", m.c_str());
@@ -12715,7 +12776,7 @@ static int ProbeMain(int argc, char** argv)
 					g_creatures[i + 1], g_seed_origin[0], g_seed_origin[1]);
 
 			// A shot tank's wet floor, before the copy, as the engine has it.
-			ProbeWetDraw();
+			ProbeWetDraw(0);
 
 			if (sheet)
 				HDRenderWaterCopy();
@@ -12757,6 +12818,8 @@ static int ProbeMain(int argc, char** argv)
 	// The scissor rectangle, off again inside the bracket, as the engine's
 	// frame does.
 	HDRenderScissorOff();
+	// The wet floor's mirror before the cards, as the engine has it.
+	ProbeWetDraw(1);
 	// The water's cards where HDFrameDrawGlow draws them.
 	ProbeCardsDraw();
 	HDRenderFrameEnd();

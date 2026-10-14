@@ -15221,6 +15221,114 @@ freed at the next build of another level, as before.
 **Commits.** `bcf7fd6`, `636422d`, `2163672`, `5024414`, `0fe49fb`, `27f8bd4`, `68826a2`,
 `5164802`, `eb23c5a`, `9689393`, `3a25e00`
 
+#### Round 3: the bar full at once
+2026-10-15
+
+**What.** Once the work of a level load is done, the loading bar is shown full in one
+frame and the level starts. Before this part the bar ran from where the loading thread had
+left it to its end at 2 percent per drawn frame, after all the work: 206 to 804 ms of
+every load in the owner's logs. This is a change of the classic path, ordered by the
+owner for `hd_enable 0` as well: the load's timing changes, no picture does - the bar is
+part of no room picture.
+
+**Why.** On 2026-10-14 the owner decided round 1's open question of the bar's tail
+(*Left* of round 1): "The bar full at once, at hd_enable 0 too. The bar must take only
+as long as it really takes; it must not be a bottleneck." ("Balken sofort voll, auch bei
+hd_enable 0. Der Balken soll nur so lange dauern wie es wirklich ist, der soll kein
+Bottleneck sein.")
+
+**How.** *The tail's mechanism.* `LoadLevel` (`specific/file.cpp`) on the loading thread
+starts the bar with `S_InitLoadBar(OTPages + BTPages + RTPages + 20)`, which also lets the
+main thread draw it, and calls `S_LoadBar` after each step: once after the header, once
+per texture page and once after each page block (pages + 3; `BTPages` is 0 in every
+logged load), once after each of the twelve blocks `rooms` to `cinematic`, four times at
+its end - pages + 20 calls, the count it starts with, so the counted target
+`loadbar_steps` reaches 100 before the thread ends. While the thread runs,
+`S_LoadLevelFile` draws the bar once a turn (`S_DrawLoadBar`: one whole frame and one
+Present) and sleeps 1 ms; each drawn frame moves the drawn position by 2 while it is
+below the target. After the join the main thread runs `aInit`, the HD build, the font,
+the resident cutscenes, `WarmUpLevel` and `ProfileLevel` with the bar standing still.
+Then `S_FinishLoadBar` set the target to 100 and a loop drew turn after turn until the
+drawn position reached 100: (100 - p) / 2 + 1 turns from the position p of the join, at
+about 16 ms a turn. *The change.* `S_FinishLoadBar` (`specific/drawbars.cpp`) sets the
+drawn position to 100 beside the target and keeps its cap of `loadbar_maxpos` at 100
+(the done test `loadbar_maxpos <= loadbar_steps` cannot hold by counting alone from
+about 80 texture pages on). It is the existing function extended, not a new setter: it
+has one caller, and "the load is done" is what it stands for. `S_LoadLevelFile` draws
+the bar once under the same `DXF_HWR` test and returns; the loop is gone. The loop while
+the thread runs, the loading picture's four frames, `WarmUpLevel`, `ProfileLevel` and
+every `LOADLOG` step stay as they were; the step `bar` keeps its name and times the one
+frame. At position 100 and target 100 `S_DrawLoadBar` draws the full bar, finds
+`loadbar_pos >= loadbar_steps` and returns done, so nothing after the work can loop or
+wait any more.
+
+**Measured.** The owner's four logs with `LOADLOG` lines (built 2026-10-14 20:48 to
+2026-10-15 00:15; 48 loads; display 165 Hz, VSync on). *The turn.* On a load whose
+counted target runs ahead of the drawn bar - TITLE, JOBY4 and RICHCUT2 with 9 to 16
+pages, 100 / 29 to 100 / 36 per call - every turn from the bar's start to the join moves
+the bar, and so does every turn of the tail: (`thread` - `free`) + `bar` = 51 turns.
+Over those 13 loads one turn is 15.87 / 16.15 / 16.53 ms (min / median / max): the
+`Sleep(1)` waking at the system timer's 15.6 ms tick (the engine asks for no finer timer)
+plus the draw. The display's refresh (6.1 ms) is not what paces it; 51 turns of 15.6 ms
+are round 1's largest tail, 797 ms. On the levels with 79 to 109 pages the same sum is 4
+to 10 turns longer: turns in which the bar waited on the counted target during the
+thread. *The tail.* Turns = `bar` / 16.15 ms; the bar's position at the join = 100 - 2 x
+(turns - 1):
+
+| Level | loads | pages | maxpos | thread ms (median) | bar ms min / median / max | tail turns (median) | bar at the join |
+|---|---|---|---|---|---|---|---|
+| ANDREA1 | 4 | 101 | 121 | 268 | 306 / 675 / 731 | 41.8 | 18 % |
+| ANDREA2 | 3 | 83 | 103 | 185 | 666 / 731 / 748 | 45.3 | 11 % |
+| ANDREA3 | 3 | 89 | 109 | 219 | 575 / 711 / 757 | 44.0 | 14 % |
+| ANDY1 | 3 | 109 | 129 | 201 | 714 / 730 / 757 | 45.2 | 12 % |
+| ANDY2 | 3 | 85 | 105 | 169 | 713 / 745 / 745 | 46.2 | 10 % |
+| ANDY3 | 2 | 79 | 99 | 185 | 729 / 736 / 742 | 45.6 | 11 % |
+| JOBY2 | 3 | 91 | 111 | 234 | 471 / 673 / 749 | 41.7 | 19 % |
+| JOBY3 | 3 | 88 | 108 | 135 | 752 / 760 / 760 | 47.1 | 8 % |
+| JOBY4 | 2 | 9 | 29 | 43 | 776 / 790 / 804 | 48.9 | 4 % |
+| JOBY5 | 3 | 97 | 117 | 185 | 708 / 740 / 750 | 45.9 | 10 % |
+| RICH1 | 2 | 84 | 104 | 193 | 712 / 724 / 736 | 44.8 | 12 % |
+| RICH2 | 4 | 98 | 118 | 252 | 358 / 675 / 743 | 41.8 | 18 % |
+| RICH3 | 2 | 91 | 111 | 210 | 705 / 721 / 736 | 44.6 | 13 % |
+| RICHCUT2 | 1 | 12 | 32 | 51 | 775 / 775 / 775 | 48.0 | 6 % |
+| TITLE | 10 | 16 | 36 | 268 | 206 / 556 / 711 | 34.4 | 33 % |
+
+Pages are the game's own `.TRC` as `LoadTextures` logs them. Over all 48 loads `bar` is
+206 / 712 / 804 ms; no load had the bar at 100 at the join. The shortest tails belong to
+the longest threads (TITLE 619 ms -> 206, ANDREA1 619 -> 306, RICH2 535 -> 358): the
+longer the thread, the further the bar got before the work after it. TITLE's cold first
+load joined at about 76 %, where its counted target stands (28 of 36 calls) during the
+HD scan. *The saving.* Every load loses its tail: the step `bar` goes from 206 to 804 ms
+(round 1's 64 loads: 312 to 797) to one frame - 31 seconds over these 48 loads. One
+frame is a draw and a Present: with VSync on it waits at most one refresh, 6.1 ms at the
+165 Hz of these logs; that is the manual's `step=bar ms=6.1` sample. His next `-log` run
+shows the real value.
+
+**Checked.** With the tools built from the bar's commit and from `git archive` of
+`fe1d4e31`: the six classic views `-classicroom N -classiconly` 6 of 6 identical to
+`8691e82`'s tool and `fe1d4e31`'s; the fifteen parity cameras 15 of 15 and the six views
+drawn HD 6 of 6 identical to `fe1d4e31`'s tool; the build fingerprints of the fifteen
+levels at `hd_air 1` and `2`, 30 of 30 equal. No tool compiles `file.cpp` or
+`drawbars.cpp`, so these runs show that nothing else moved. The diff of `file.cpp`
+against `fe1d4e31` is the tail's block alone; `LoadLevel`, the loop while the thread
+runs and every `LOADLOG` step are unchanged. Suites: ModernTest 15,165, MenuTest 44,267,
+InterpTest 729, LipsTest 270 and 243, 0 failed; the engine, RoomProbe, TrgProbe,
+ModelProbe and MapProbe build.
+
+**Left - the owner's questions.** *(a) The bar during the HD build.* While the main thread
+builds the HD data (1.1 to 3.8 s in these logs) the bar stands where the loading thread
+left it - 4 to 33 percent by the levels' medians, 76 at most - and then jumps to full.
+It moves there only if frames are drawn between the build's parts; each is a whole
+frame and a Present, the same as one turn of the old tail, so a bar that moves
+smoothly through the build would cost what the tail cost. Whether it should move is his
+decision. *(b) The `screen` step* (74 / 108 / 192 ms over the 48 loads) is the HD loading
+picture's file read and decode (`LoadScreenHD`; the title's logo screen reads two
+pictures and blends them; `LoadScreen` with `SCREENS.STR` only without an HD picture,
+which no logged load took) - 31 / 62 / 141 ms by the log's tick - and then the four
+frames of the picture and its release, 31 / 47 / 79 ms. Nothing there is changed.
+
+**Commits.** `852395f`
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty
@@ -19984,4 +20092,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #199 | The level load on several cores |
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
-| #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C |
+| #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once |

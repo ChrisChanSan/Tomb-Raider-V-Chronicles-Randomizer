@@ -35,7 +35,8 @@
  *                  under its film
  *   the weight     Schlick's approximation of Fresnel for water,
  *                  F0 + (1 - F0) (1 - N.V)^5, F0 0.02: nearly nothing seen
- *                  from above, a mirror seen along the floor
+ *                  from above, a mirror seen along the floor; times the
+ *                  mirror's strength (gWetGain)
  *   the mirror     what the water reflects. The frame itself where the
  *                  reflected ray finds it: the ray is marched through view
  *                  space in steps that grow by a fixed factor, each step's
@@ -84,7 +85,8 @@
  *                  x row 0 + y row 1 + z row 2; the world's up is -row 1
  * c99  gWetProj    the projection's x and y scales and its x and y
  *                  offsets (the third row's x and y): a view-space point
- *                  is on the screen at x' = (x s.x + z s.z) / z */
+ *                  is on the screen at x' = (x s.x + z s.z) / z
+ * c100 gWetGain    x the mirror's strength, a factor on its weight */
 float4 gFog : register(c16);
 float4 gWetScreen : register(c92);
 float4 gWetMode : register(c93);
@@ -92,6 +94,7 @@ float4 gWetLook : register(c94);
 float4 gWetMarch : register(c95);
 float4 gWetAxes[3] : register(c96);
 float4 gWetProj : register(c99);
+float4 gWetGain : register(c100);
 
 /* The light field: the direction towards the light biased into bytes with
  * the one-sidedness in alpha, and its colour (hd_room.hlsl, "The sheen"). */
@@ -220,7 +223,7 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 	}
 
 	float3 mirror = (seen * input.field.w + colour *
-		(toward.a * saturate(len) * lobe * gWetLook.z)) * F;
+		(toward.a * saturate(len) * lobe * gWetLook.z)) * F * gWetGain.x;
 
 	// The cap, softly, keeping the hue.
 	const float t = max(mirror.r, max(mirror.g, mirror.b)) / gWetMarch.x;

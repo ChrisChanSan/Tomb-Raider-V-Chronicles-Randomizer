@@ -11601,13 +11601,21 @@ namespace
 	 * the Blinn-Phong lobe, (n + 8) / 8, at kWetPower. The mirror's march
 	 * takes HD_WET_STEPS (12) steps from kWetFirstStep, each kWetGrowth
 	 * times the last: 32 units past the floor's own depth step, out to
-	 * about 8,200 units, eight squares. kWetDark, kWetPower, kWetDamp,
-	 * kWetHole and the march are free choices, set by eye on the round's
-	 * RoomProbe pictures. */
+	 * about 8,200 units, eight squares. kWetPower, kWetDamp, kWetHole and
+	 * the march are free choices, set by eye on the round's RoomProbe
+	 * pictures.
+	 *
+	 * The look's two strengths. kWetDark, the share of the floor's light
+	 * the water keeps back, and kWetMirror, a factor on the mirror's
+	 * weight, stand a third over 0.3 and 1, set by eye on RoomProbe
+	 * pictures of RICH2's two tanks: at 0.4 the dark marble there (a luma
+	 * of 37 to 58 dry under the wet) still reads as wet stone and not as a
+	 * black floor, and the mirror at 4/3 stays under kWetCap's soft hold. */
 	const float kWetLift = 4.0f;		// units
 	const float kWetHole = 32.0f;		// units
 	const int kWetStep = 256;		// units
-	const float kWetDark = 0.3f;
+	const float kWetDark = 0.4f;
+	const float kWetMirror = 4.0f / 3.0f;
 	const float kWetF0 = 0.02f;
 	const float kWetWalls = 0.35f;
 	const float kWetPower = 128.0f;
@@ -16649,6 +16657,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f, kWetFirstStep,
 		kWetGrowth };
 	const float proj[4] = { g_proj[0], g_proj[5], g_proj[8], g_proj[9] };
+	const float gain[4] = { kWetMirror, 0.0f, 0.0f, 0.0f };
 
 	g_device->SetVertexShader(g_card_vs);
 	g_device->SetPixelShader(g_wet_ps);
@@ -16660,6 +16669,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	g_device->SetPixelShaderConstantF(95, march, 1);
 	g_device->SetPixelShaderConstantF(96, axes, 3);
 	g_device->SetPixelShaderConstantF(99, proj, 1);
+	g_device->SetPixelShaderConstantF(100, gain, 1);
 	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);

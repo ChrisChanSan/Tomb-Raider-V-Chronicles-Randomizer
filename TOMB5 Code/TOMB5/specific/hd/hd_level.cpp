@@ -5446,6 +5446,16 @@ static void AheadReadWait()
 		g_ahead_read.t.join();
 }
 
+/* What was read and decoded ahead and no build takes: the parse (RICH2
+ * about 45 MiB) and up to one batch of decoded pages (96 MiB), given back
+ * by a build that stops before HDRenderLevelBegin takes them. */
+static void AheadDrop()
+{
+	AheadReadWait();
+	HDScanDropTrg();
+	HDPageCacheAheadDrop();
+}
+
 // One file's size and last write time, both -1 when it is not there.
 static void FileStampOf(const char* path, HDLevelFileStamp* out)
 {
@@ -5871,6 +5881,15 @@ static void HDLevelBuildHD()
 	g_clip_listed = false;
 	g_clip_line_ever = false;
 
+	/* The key of the load this build follows, taken once: a build with no
+	 * load in front of it (HDLevelDeviceRecreated) reads the settings and
+	 * the files as they are by then, which the load's key need not name any
+	 * more, so its data are recorded without a key and the next load of the
+	 * level builds them again. */
+	const HDLevelKey loaded = g_key_loading;
+
+	memset(&g_key_loading, 0, sizeof(g_key_loading));
+
 	/* The level whose HD data HDLevelUnload kept for this load: no build,
 	 * only what ties into the classic level and what play changes is made
 	 * again. A keep the device no longer allows falls through to the build,
@@ -5932,12 +5951,19 @@ static void HDLevelBuildHD()
 	}
 	const double loadlog_released = LoadClockMs();
 
+	/* A scan that failed (HDLevelLoad clears the stem) leaves what was read
+	 * ahead for it; a load with HD off read nothing ahead, and its unload
+	 * gave back what a level before left. */
+	if (tomb5.hd_enable && !g_stem[0])
+		AheadDrop();
+
 	if (!HDEnabled() || !g_stem[0])
 		return;
 
 	if (number_rooms <= 0 || number_rooms > HD_MAX_ROOMS)
 	{
 		Log("HDLOG level=%s build refused reason=room_count(%d)", g_stem, (int)number_rooms);
+		AheadDrop();
 		return;
 	}
 
@@ -5949,6 +5975,7 @@ static void HDLevelBuildHD()
 		if (!HDRenderInit(App.dx.lpD3DDevice, &why))
 		{
 			Log("HDLOG level=%s build refused reason=%s", g_stem, why);
+			AheadDrop();
 			return;
 		}
 
@@ -6072,6 +6099,7 @@ static void HDLevelBuildHD()
 		// "never empty the page cache with a borrowed reference still out".
 		ReleaseWaterFramePages();
 		HDRenderLevelEnd();
+		AheadDrop();
 		return;
 	}
 
@@ -6770,7 +6798,7 @@ static void HDLevelBuildHD()
 	}
 
 	// The data of this level, for the next load of it to keep.
-	g_key_built = g_key_loading;
+	g_key_built = loaded;
 	g_kept_vertices = g_scan_vertices;
 	g_kept_indices = g_scan_indices;
 }

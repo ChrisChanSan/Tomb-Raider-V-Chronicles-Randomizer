@@ -1729,9 +1729,14 @@ With one option switched on, the engine reads the art of an installed *Tomb Raid
 Remastered* out of the player's own installation at run time and draws the levels with
 it: a second, shader-based renderer beside the classic fixed-function one, sharing the
 back buffer and the depth buffer and nothing else. Nothing of that art is copied into
-this repository or shipped with it; with the option off, or with no installation found,
-every path here returns on its first line and the picture is the one the classic engine
-draws. The file formats are read against TRForge's published format description (MIT,
+this repository or shipped with it; with the build gate `hd_build` at 0, or with no
+installation found, every path here returns on its first line and the picture is the one
+the classic engine draws, and with the row *HD textures* (`hd_enable`) off the art is
+built and the classic picture drawn until the row or F12 turns it on (chapter 2.6, The
+HD/SD switch). The entries below that prove the classic engine "with `hd_enable` 0"
+were measured when that value was the build and the draw in one; they read as
+`hd_build` 0 since 2026-10-15. The file formats are read against TRForge's published
+format description (MIT,
 `vendor/trforge/LICENSE`), and three passages follow TRForge's own code closely - the
 facial-rig rescan and the byte reader in `hd_trm.cpp`, and `read_map_file` in
 `hd_bind.cpp`; the design of the HD renderer, the installation walk and the water effect
@@ -1762,8 +1767,10 @@ it to the level's rooms and object slots, and writes the counts into the log.
 returns before any folder is searched or any file is opened, and the two calls in
 `specific/file.cpp` are the only way into the new code at all. The switch is the row
 **HD textures** (on/off) on the *Graphics* page of the options frame, saved with its
-neighbouring rows, and it takes effect at the next level start - the frame path tests a
-flag that only `HDLevelBuild` sets. Ten settings steer the path in all: `hd_enable`,
+neighbouring rows. Since 2026-10-15 the row is the draw and not the build: the build is
+`hd_build` (registry only, 1 by default), which `HDEnabled()` asks in the row's place, and
+the row and F12 switch the level on screen at once (chapter 2.6, The HD/SD switch, Built
+when found). Ten settings steer the path in all: `hd_enable`,
 `hd_objects`, `hd_motion`, `hd_reflect`, `hd_texture_budget_mb`, `hd_install`,
 `hd_install_tr3`, `hd_texture_format`, `hd_outfit` and the `hd_footsteps` subkey, and the
 manual lists those ten and no others. The four Tomb
@@ -18840,7 +18847,7 @@ flyby), `specific/alexstuff.cpp` (the credits roll and the intro videos).
 **Commits.** `bdf95ad`, `e980790`, `790f4f2`, `6176647`, `be95b08`
 
 ### The HD/SD switch: F12 and a pad chord (#202)
-2026-10-13 - 2026-10-14
+2026-10-13 - 2026-10-15
 
 **What.** A switch between the HD draw and the classic draw, for comparing the two at
 one spot. The request, 2026-10-13: a key to switch HD/SD "on the fly, without delay", for
@@ -18852,7 +18859,10 @@ the HD path's files) connects the switch to every gate of the HD world. The swit
 complete after this pass: a press draws the world classic or HD from the next frame on.
 The options pass (2026-10-14, evening) makes the *HD textures* row set the switch, so the
 row too takes the whole world at once, records two decisions on what the switch leaves,
-reads the first play test of F12, and brings the comments up to date.
+reads the first play test of F12, and brings the comments up to date. The fourth round
+(2026-10-15) builds a level's HD data whenever an installation is found, whatever the
+row says, and makes the row the switch's state, with the interface following it (Built
+when found, at the end of this part).
 
 **Design.** A third state beside `hd_enable` 0 and 1: the HD level built at its load as
 with 1, and drawn HD or classic as the switch says. The build stays at the load because
@@ -19280,6 +19290,225 @@ Modifier there.
 **Commits.** `d502c8c`, `65f7d68`, `c6431e3`, `6c0036b`, `9f89b19`, `b98a2a3`; the wiring
 pass `9b9520c`, `f28f6ef`, `5262f98`, `67cd411`; its fix pass the record's own commit;
 the options pass `7887938`, `27ab9e6`, `ed14c79`, `f717d38` and the record's own commit.
+
+**Built when found: the build gate and the draw state.** 2026-10-14 (late evening) -
+2026-10-15. The request, in the words given for it: "Can we do it so that, when the
+Remaster has been detected at game start, the HD textures are loaded in the background
+even if SD is selected, and the switch with F12 is always possible without intermediate
+states? That would automatically disable the switch in that case [no installation]. And we
+would have no what-if state. The HD/SD textures are always available and the user can
+always switch the textures on the fly, everywhere. Or do we get conflicts or other
+problems then?" Told the costs - a player with the Remaster who plays classic pays the HD
+build at every load and its memory, and a build in the background during play would bring
+a stretch with nothing to switch to and upload hitches, so the build stays at the load -
+the answer was: "Yes, order it like that, synchronously at the load." Asked whether the
+interface should switch as well: "The interface too, please. Then it is uniform." Told
+that the sounds are loaded into the sample memory at the load and cannot follow a state
+that changes from frame to frame: "No, the sounds are fine. That can stay." Project
+decisions of 2026-10-14.
+
+*Design.* (1) The build gate: a level's HD data are built at its load whenever the
+installation is found and the new registry setting `hd_build` - a DWORD beside `hd_air`, 1
+by default, no row in the options - is on, whatever the *HD textures* row says; with
+`hd_build` 0 nothing of the HD art is opened or built and the engine is the classic one.
+`HDEnabled()` is that gate, `hd_build` and the installation found. (2) The draw state:
+`tomb5.hd_enable` keeps its registry name and its row *HD textures* (on/off), and it is
+the draw, HD or classic; F12 and the pad chord flip the same value through one setter, the
+row shows every flip, and a flip is saved as a step of the row is. (3) Nothing to switch
+only where the level on screen has no HD data - `hd_build` 0, no installation, or a level
+the `.TRG` has nothing for - by one test for the key, the pad chord and the row: HD rooms,
+HD objects or an HD Lara built at the load. (4) The interface follows the draw as the
+world does: the inventory ring and the pickup display, the HD font, the loading screens
+and the F4 outfit changer are built when found and drawn HD only while the draw is HD; the
+sounds stay as built - the HQ samples and the barefoot set, both loaded into the sample
+memory at the load. (5) Migration: no new value for the player. A saved `hd_enable` 0
+draws classic and now builds HD when found, so F12 works at once; a saved 1 draws HD; the
+default stays 0, so a new player with the Remaster starts classic, presses F12 and sees
+HD. `hd_build` is written into the registry with its default the first time the game reads
+the settings, as `hd_air` was. (6) Synchronous: the build runs at the load on the threads
+it ran on before; there is no background build and no stretch with nothing to switch to.
+
+What this replaces. The paragraphs above describe the switch as each earlier pass left it:
+a state of its own for the session, drawn HD at every game's start and never saved, a
+third state beside `hd_enable` 0 and 1 (Design); a stay group that kept the HUD, the ring,
+the fonts, the loading screens and F4 as `hd_enable` said (the wiring table, (e) of While
+classic is drawn, What a press shows); and the row as `hd_enable` read through
+`HDEnabled()` beside the state (The option row and its table). Since this round the state
+is `hd_enable`, the interface follows it, and `HDEnabled()` no longer asks it.
+
+*How.* `global/types.h:2936` `hd_build` (`ulong`, at the end of the options); its default,
+read and save in `tomb5/tomb5.cpp` beside `hd_air` (`:258`, `:494` with `REG_ReadLong(buf,
+tomb5.hd_build, 1)`, `:741`), and a new line behind `-log` at the end of
+`init_tomb5_stuff` (`:611`): `HDLOG settings hd_enable=<0|1> hd_build=<n>`, once at the
+start, the draw a game starts with and the gate. `specific/hd/hd_level.cpp:5397`
+`HDEnabled()`: `if (!tomb5.hd_build) return false; return HDInstallRoot()[0] != 0;`.
+`:5409` `HDLevelBuilt()`, new: the rooms' build flag `g_level_active` alone, for the
+switch's data test. `:7265` `HDLevelActive()`: `g_level_active && HDDrawn()` - the
+`HDEnabled()` term is inside `g_level_active`, which is set only past an `HDEnabled()`
+test of the same load (`:5803` after `:5777`, `:6506` after `:5970`, the device's rebuild
+after `:7097`), and `HDEnabled()` cannot change in a session: `hd_build` is read once
+(`init_tomb5_stuff`) and has no row, and the installation is searched once
+(`hd_install.cpp`, `HDInstallForget` has no caller). `specific/hd/hd_switch.cpp`: the
+key's held state is the only state of its own; `Current()` reads `{hd_enable, held}`,
+`Commit()` (`:49`) is the one setter, `HDDrawn()` (`:125`) returns `tomb5.hd_enable`,
+`HDSwitchHasData()` (`:130`) is `HDLevelBuilt() || HDObjectActive() || HDLaraActive()`,
+and `HDSwitchInput` (`:150`) and `HDSwitchOption` (`:171`) run the pure rule of
+`hd_switch.h` (`HDSwitchStep` `:64`, `HDSwitchSet` `:87`) on `Current()` and commit it;
+`game/menu_frame.cpp:775` `MenuStepHdTextures` is the sound and `HDSwitchOption()`, and
+`MenuAfterChange` saves the value with the tomb5 settings as for every row. The `HDLOG
+switch` line keeps its fields; its causes are new values at its end: `hd_build=0 nothing
+to switch`, `install=none nothing to switch`, `built=none nothing to switch`. The save of
+a press: the brief that ordered this round had the settings written at the game's exit,
+and they are not - `save_new_tomb5_settings` has one caller, `MenuAfterChange`, at every
+step of a row, and `WinClose` writes the Game key's bindings alone
+(`specific/registry.cpp`, `SaveSettings`). A flip left to the exit would be lost, so a
+press writes the one value it changed at once (`SaveDrawn`, `hd_switch.cpp:60`: the tomb5
+key opened, one `REG_WriteBool`, closed); a crash then loses no flip, as it loses no step
+of a row. The row with nothing to switch still moves its value, as a step of an option
+does, and says nothing to switch; the key does not move it.
+
+The census at `fe1d4e31`, every reader of `HDEnabled()`, `tomb5.hd_enable` and `HDDrawn()`
+in the engine, the probes and the suites, split into BUILD (whether HD data exist or are
+to be built) and DRAW (whether HD is drawn). Lines are those of this round's last commit.
+
+| reader | where | class | change |
+|---|---|---|---|
+| `HDEnabled()` itself | `hd_level.cpp:5397` | build gate | `tomb5.hd_enable` -> `tomb5.hd_build` |
+| the #203 key's `valid` | `hd_level.cpp:5496` `HDLevelKeyNext` | build | none: the key now follows `hd_build`, not the draw |
+| the scan | `hd_level.cpp:5610` `HDLevelLoad` | build | none |
+| the feet's menu rule | `hd_level.cpp:5758` `HDLevelBuild` | build | none (comment) |
+| the kept build | `hd_level.cpp:5777` `HDLevelBuildResident` | build | none |
+| the read-ahead's drop | `hd_level.cpp:5967` `HDLevelBuildHD` | build | `tomb5.hd_enable` -> `tomb5.hd_build` |
+| the build | `hd_level.cpp:5970` `HDLevelBuildHD` | build | none |
+| F4's rebuild | `hd_level.cpp:6819`, `:6830`, `:6843` | build | none (reached through F4 only) |
+| the device's rebuild | `hd_level.cpp:7097` | build | none |
+| the HQ samples' lut | `file.cpp:1454` `feet_sample` | build (a sound) | none (comment) |
+| sixteen spare sample infos | `file.cpp:1508` `LoadSamples` | build | none (comment): only with the gate on |
+| the barefoot set | `hd_feet.cpp:121` | build (a sound) | none (comment) |
+| the HD font's page and atlas | `hd_font.cpp:229`, `:267` | build | none (comment) |
+| the models' release | `hd_object.cpp:2811` (W14) | was a load-time reader of the draw | `!HDLaraDrawActive() && HDDrawn()` -> `!(tomb5.hd_objects && HDLaraActive())` |
+| the springs at the load | `hd_spring.cpp:1084` | a load-time reader of the draw (#200) | not this round's file: Left |
+| the soft body's log reason | `hd_laradraw.cpp:796` `soft_gate` at the load | a log line | none |
+| the press's data | `hd_switch.cpp:104` at `fe1d4e31` | build | `HDEnabled()` -> `HDSwitchHasData()` |
+| the switch's causes | `hd_switch.cpp:112`, `:154` at `fe1d4e31` | log | `hd_build=0`, `install=none`, `built=none` |
+| F4's log reason | `hd_outfitmenu.cpp:248` | log | by `hd_build`, the installation, the draw |
+| the setting | `tomb5.cpp:221`, `:451`, `:698` at `fe1d4e31` | the setting | unchanged in form; `hd_build` beside `hd_air` |
+| the room walk's question | `hd_level.cpp:7265` `HDLevelActive` (W1) | draw | `&& HDEnabled()` dropped |
+| rooms, statics, sky, carried art | W2-W7, W11-W13 | draw | none (they ask `HDLevelActive`) |
+| items, cutscene actors | `hd_object.cpp:3035` (W8) | draw | none |
+| Lara | `hd_laradraw.cpp:1460` (W9) | draw | none |
+| the life's frame | `hd_life.cpp:536` (W10) | draw | none |
+| the springs' frame | `hd_spring.cpp:1111`, `:1121` | draw | none |
+| the ring and the pickup display | `hd_object.cpp:3637` `HDInvBegin` | draw (was: stay) | `\|\| !HDDrawn()` |
+| the HD font per character | `hd_font.cpp:396` `HDFontGlyphAt` | draw (was: stay) | `\|\| !HDDrawn()` |
+| the loading screens | `file.cpp:2106` | draw (was: no reader) | `!tomb5.hd_enable \|\|` |
+| F4 | `hd_outfitmenu.cpp:243` | draw (was: stay) | `\|\| !HDDrawn()` |
+| Shadow mode's fifth state | `menu_frame.cpp:709`, `:718` | draw | `HDEnabled()` -> `HDEnabled() && HDDrawn()` |
+| the row's value | `menu_frame.cpp:757` | the state | none |
+| the row's step | `menu_frame.cpp:775` | the state | `HDSwitchOption()` |
+| `HDDrawn()` | `hd_switch.cpp:125` | the state | `g_state.drawn` (`:81` at `fe1d4e31`) -> `tomb5.hd_enable` |
+| the probe's own state | `RoomProbe.cpp:9514` | the tool | none |
+| the suites' text checks | ModernTest, MenuTest | tests | rewritten with the lines |
+
+The loading screens were no reader: they follow the files in `screens\HD` alone, which
+need no installation, so their gate is the draw only - a player with the files and no
+installation found still sees them with the row on. The title menu's HD wordmark, read
+from the same folder at the title's load (`file.cpp:779`, `LoadTitleLogoHD`), is not
+gated: Left. The HUD has no HD bars or icons; its HD parts are the font and the pickup
+display.
+
+The truth table, with "data" for HD rooms, objects or Lara built for the level on screen
+(`hd_build` on, the installation found and the `.TRG` holding something for it); the row
+is the state:
+
+| `hd_build` | install | level data | row | world at the start | F12 / the pad chord | a step of the row |
+|---|---|---|---|---|---|---|
+| 0 | any | any | 0 | classic | nothing, `hd_build=0` | row 1, classic, `hd_build=0` |
+| 0 | any | any | 1 | classic | nothing, `hd_build=0` | row 0, classic, `hd_build=0` |
+| 1 | none | - | 0 | classic | nothing, `install=none` | row 1, classic, `install=none` |
+| 1 | none | - | 1 | classic | nothing, `install=none` | row 0, classic, `install=none` |
+| 1 | found | none | 0 | classic | nothing, `built=none` | row 1, classic, `built=none` |
+| 1 | found | none | 1 | classic | nothing, `built=none` | row 0, classic, `built=none` |
+| 1 | found | yes | 0 | classic | row 1, HD, `drawn=1` | row 1, HD, `drawn=1` |
+| 1 | found | yes | 1 | HD | row 0, classic, `drawn=0` | row 0, classic, `drawn=0` |
+
+In every row the world and the interface are HD exactly with data and the row at 1, and
+the row shows the state because it is the state. The hidden case the options pass left -
+the row turned on in a level loaded with it off, a press flipping a state nobody saw until
+the next load - needs a level loaded without data while data exist for it; the build no
+longer asks the row, so a level loaded with the row off has its data and a press shows its
+flip at once.
+
+The parity principle moves from `hd_enable` 0 to `hd_build` 0: with the gate off every
+reader of the load returns where it returned with `hd_enable` 0 before - no installation
+is looked for by the HD path, no file opened, no HD data built, the sixteen spare sample
+infos not allocated - and every draw reader answers classic because nothing was built
+(`g_level_active` false, no objects, no Lara, no font texture). The record's entries
+before this round that prove "`hd_enable` 0" measured the engine when that value was the
+build and the draw in one; they read as `hd_build` 0 now (chapter 2.4's introduction says
+so). With `hd_build` 1 and the row at 0, the HD data are built and the world and the
+interface are drawn classic: the wiring's classic draw, now also for the interface.
+
+*Measured.* The probe links none of the engine files this round changes, so its pictures
+are the tool's own: built from this round's last commit, its 6 classic views
+(`-classicroom N -classiconly`, ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34) are
+those of `8691e82` and `fe1d4e31` byte for byte, and `-hddrawn 0` alone gives the same 6;
+the HD picture at the draw HD - the 15 cameras of the water parity set as they stand, the
+same 15 with the sheets on, the wiring pass's twelve views and the 6 rooms drawn HD - is
+that of `fe1d4e31` at 15, 15, 12 and 6, and `-hddrawn 1` gives the same; the room art's
+201-view set of its round 4b at `hd_air` 1: `-hddrawn 1` byte-identical to `fe1d4e31` at
+201 of 201; the SD picture with the data built, `-hddrawn 0`, equals the `fe1d4e31` tool's
+explicit classic list (`-classicroom` for every listed room with `-classiconly`) at 15,
+15, 12 and 6. The #203 key with the draw flipped before the second load: `-reload` and
+`-hddrawn 0 -reload` both print `resident=1` with the same build hash at ANDREA2 231,
+JOBY2 66 and RICH2 23, and the HD picture after the reload is the same (the tool's key
+holds no draw; the engine's is proven by reading, the key's `valid` is set only past
+`HDEnabled()`, which reads no row). The font's test: the glyph test with a call into
+another unit that reads one bool, built without whole-program optimisation (the engine
+links with it, so the call may be inlined there), costs 0.8 to 2.9 ns a character on this
+machine, 1.7 ns the median of six passes over 10^8 characters each; a page of 1,000
+characters is about 2 microseconds a frame. Not measured: the cost of a press's
+registry write (this run may not write the registry) and the game's frame; nobody could
+play.
+
+*Checked.* ModernTest 15,165 -> 15,238, 0 failed: a new group reads the engine's text -
+`HDEnabled` asks `hd_build` and `hd_level.cpp` reads no row, the read-ahead's drop asks
+`hd_build`, `HDLevelBuilt`, the key's gate, the font built behind the gate and drawn with
+the draw, the feet and the spare infos behind the gate, the loading screens and F4 with
+the draw, `hd_build` written, read with 1 and saved, `HDDrawn` is `hd_enable`, one writer
+of the draw and it is the setter, one data test asked by the key and the row, a key's flip
+saved (22 checks); the wiring group's object counts rewritten (the items' and the ring's
+gate ask `HDDrawn`, no object gate without it, the release asks the build); the option
+group rewritten for the one state - the setter's 48 checks, the new default (the row off,
+F12 to HD, the row back), no hidden state, `hd_build` 0, no installation, a level without
+data, a held key across two row steps, and the truth table over `hd_build`, installation,
+level data and row with a step of the row and a press (16 x 6). MenuTest 44,267 -> 44,272,
+0 failed: the shadow row's two tests, the row's step is the switch's setter and the menu
+writes no draw of its own, `hd_build`'s three lines and no row of its own, the step's
+table over value, held state and data, and after a press the row reads the key's value and
+a step goes on from it. InterpTest 729 and LipsTest 270 / 243 unchanged, 0 failed. Read:
+every load-time reader asks the build gate and none the draw but `hd_spring.cpp:1084`
+(Left); the spare sample infos exist only with the gate on.
+
+*Left.* The springs: `HDSpringLevelBegin` (`hd_spring.cpp:1084`), merged with #200 after
+the wiring, asks `HDLevelActive()` at the load, so a level loaded while the draw is
+classic builds no spring, and F12 shows none there until a load drawn HD; with the default
+row at 0 that is every level of a new player. The one-line change, for the spring's own
+round: drop `!HDLevelActive() ||` (the sheets it also asks are built only inside an HD
+build). The title menu's HD wordmark follows the files alone (`file.cpp:779`); the
+one-line change is `gfLevelId == LVL5_TITLE && tomb5.hd_enable ?`. Comments that name
+`hd_enable` for the build and are false now, outside the lines this round could touch:
+`footprnt.cpp:60`, `lara.h:259`, `drawroom.cpp:129`, `file.cpp:751`, `:1783`, `:1869`,
+`:2013`, `:2173`, `hd_level.cpp:2885`, `:3270`, `:5584`, `:5595`-`:5596`, `:5737`,
+`:7092`, `hd_life.h:20`, `hd_font.h:64`, `hd_feet.h:133` - for the comment pass after the
+merges. A player who copied the loading screens into `screens\HD` and keeps the row at 0
+now sees the classic loading screens until F12 or the row (the uniform rule). A build in
+the background, so that a player who plays classic does not wait for the HD build at the
+load, is a possible later order; it brings a stretch after the load with nothing to switch
+to and the uploads in play.
+
+*Commits.* `d3cc638` (the build gate and the draw's gates), `6366176` (the row and the
+switch as one state), `5d9da2f` (the build gate's comment), and the record's own commit.
 
 ## 2.7 First person view, cheats and the -log seams
 

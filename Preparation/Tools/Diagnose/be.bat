@@ -77,6 +77,8 @@ call :onestamp hd_shadow_receive hd_shadow_receive_model_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_mirror_ps.inc
 call :onestamp hd_spring hd_spring_column_ps.inc
 call :onestamp hd_spring hd_spring_bubble_ps.inc
+call :onestamp hd_spring hd_spring_crack_ps.inc
+call :onestamp hd_spring hd_spring_hole_ps.inc
 
 if not defined STALE (
 	endlocal
@@ -120,6 +122,8 @@ call :onestamp hd_shadow_receive hd_shadow_receive_model_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_mirror_ps.inc
 call :onestamp hd_spring hd_spring_column_ps.inc
 call :onestamp hd_spring hd_spring_bubble_ps.inc
+call :onestamp hd_spring hd_spring_crack_ps.inc
+call :onestamp hd_spring hd_spring_hole_ps.inc
 
 if defined STALE (
 	echo be: shaders STILL out of step after bshader -!STALE!

@@ -12,10 +12,11 @@
  */
 
 /* The springs: a jet of water that rises from the floor of a pool to its
- * sheet - its rings on the sheet, a few small bubbles in the jet and the
- * rising current, a column that bends what stands behind it. This file
- * holds the rules alone: the table, the hashed clock, the bubbles' path,
- * the file row's numbers and the placement rule, without the engine and
+ * sheet - its rings on the sheet, a few small bubbles in the jet, the
+ * rising current, a column that bends what stands behind it, and the crack
+ * in the floor it rises out of. This file holds the rules alone: the table,
+ * the hashed clock, the bubbles' path, the crack's shape, the file row's
+ * numbers and the placement rule, without the engine and
  * without Direct3D, so the engine, RoomProbe and ModernTest share them.
  * hd_spring.cpp builds a level's springs, rings the sheets and draws
  * them. This project's own design; every random choice is a hash of the
@@ -264,6 +265,337 @@ inline float HDSpringHalfWidth(const HDSpring& s, float h)
 		kHDSpringSpread * h;
 }
 
+/* The crack at the spring's foot: a jagged slit in the floor the jet rises
+ * out of, its walls the floor's own page carried over the lip and down,
+ * its bottom black. Every choice is a hash of the spring's seed - its level
+ * and its place -, the same every time:
+ *
+ *   the main line   256 to 512 units long, turned any way, bowed by up to
+ *                   8 % of its length to one side and jagged by up to 4 %
+ *                   at each of its 14 steps
+ *   its width       32 to 96 units at the widest; each side's half at a
+ *                   step 0.6 to 1 of the profile sin(pi t)^0.6, the two
+ *                   sides apart, so the rim is torn and the slit closes to
+ *                   a point at both ends
+ *   its branches    two to four fine side cracks a third of the main line
+ *                   long (0.8 to 1.2 of that), rooted at a step between a
+ *                   fifth and four fifths of the way, the sides taking
+ *                   turns, leaning 20 to 45 degrees off square to the line
+ *                   (one lean a side, so a side's branches never cross), a
+ *                   third of the side's half wide at the root and closing
+ *                   to a point in four steps
+ *   its depth       64 to 128 units under the floor
+ *
+ * The strength scales all of it from half (strength 0) to whole: a weaker
+ * jet opens less ground. A crack that does not lie on its body's deep
+ * squares (kHDSpringDeep) is made again at 0.8, 0.64 and 0.5 of its size
+ * (HDSpringCrackChoose). The sizes are free choices against the jet: the
+ * column is 64 units across at the floor at strength 0 and 256 at 1
+ * (HDSpringHalfWidth), the slit one to two jets long and narrower than the
+ * jet, set by eye on RoomProbe pictures of ANDREA2's fountain. */
+static const float kHDSpringCrackLength = 256.0f;
+static const float kHDSpringCrackLengthSpan = 256.0f;
+static const float kHDSpringCrackWidth = 32.0f;
+static const float kHDSpringCrackWidthSpan = 64.0f;
+static const float kHDSpringCrackDepth = 64.0f;
+static const float kHDSpringCrackDepthSpan = 64.0f;
+static const float kHDSpringCrackBow = 0.08f;	// of the length
+static const float kHDSpringCrackJag = 0.04f;	// of the length
+static const float kHDSpringCrackTear = 0.6f;	// a side's least share
+static const float kHDSpringCrackSlide = 0.3f;	// of a step, along it
+static const float kHDSpringCrackLeanMin = 20.0f;	// degrees
+static const float kHDSpringCrackLeanSpan = 25.0f;
+static const float kHDSpringCrackRoot = 1.0f / 3.0f;	// of the side's half
+static const int kHDSpringCrackSteps = 14;
+static const int kHDSpringCrackBranchSteps = 4;
+static const int kHDSpringCrackBranchesMin = 2;
+static const int kHDSpringCrackBranchesMax = 4;
+static const int kHDSpringCrackRounds = 16;
+// The outline: the slit's two sides, and each branch in place of one point.
+static const int kHDSpringCrackMax = 2 * kHDSpringCrackSteps +
+	kHDSpringCrackBranchesMax * 2 * kHDSpringCrackBranchSteps;
+
+struct HDSpringCrackShape
+{
+	float fit;		// the share of its size it was made at
+	float length, width, depth;
+	float dirX, dirZ;	// the main line's way
+	float sideX, sideZ;	// its left, square to it
+	int branches;
+	int round;		// the round of the branches' hash taken
+	float branchLength[kHDSpringCrackBranchesMax];
+	int branchAt[kHDSpringCrackBranchesMax];	// the step it roots at
+	int branchSide[kHDSpringCrackBranchesMax];	// 1 left, -1 right
+	int points;		// of the outline, world x and z
+	float x[kHDSpringCrackMax], z[kHDSpringCrackMax];
+	// The main line's steps and each side's half-width there.
+	float midX[kHDSpringCrackSteps + 1], midZ[kHDSpringCrackSteps + 1];
+	float left[kHDSpringCrackSteps + 1], right[kHDSpringCrackSteps + 1];
+	float bottomY;		// world y of its bottom, its build's (hd_spring.cpp)
+};
+
+/* Whether two edges of the outline that do not meet cross: a pair of
+ * edges whose ends lie on both sides of each other. */
+inline bool HDSpringCrackCrosses(const HDSpringCrackShape& c)
+{
+	const int n = c.points;
+
+	for (int i = 0; i < n; i++)
+		for (int j = i + 2; j < n; j++)
+		{
+			if (i == 0 && j == n - 1)
+				continue;
+
+			const double ax = c.x[i], az = c.z[i];
+			const double bx = c.x[(i + 1) % n], bz = c.z[(i + 1) % n];
+			const double cx = c.x[j], cz = c.z[j];
+			const double dx = c.x[(j + 1) % n], dz = c.z[(j + 1) % n];
+			const double d1 = (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+			const double d2 = (bx - ax) * (dz - az) - (bz - az) * (dx - ax);
+			const double d3 = (dx - cx) * (az - cz) - (dz - cz) * (ax - cx);
+			const double d4 = (dx - cx) * (bz - cz) - (dz - cz) * (bx - cx);
+
+			if ((d1 > 0.0) != (d2 > 0.0) && (d3 > 0.0) != (d4 > 0.0))
+				return true;
+		}
+
+	return false;
+}
+
+// A hash of the crack's own as 0..1: a field of it and a count in it.
+inline float HDSpringCrackUnit(unsigned seed, int count, unsigned field)
+{
+	return HDSpringUnit(seed, count, 20u + field);
+}
+
+/* The crack's outline at `fit` of its size: the slit's left side from its
+ * first tip to its last, then its right side back, each branch a spike in
+ * place of the side's point at its root - out along one edge, the tip,
+ * back along the other - so the outline is one simple polygon. */
+inline void HDSpringCrackMake(const HDSpring& s, float fit,
+	HDSpringCrackShape* out)
+{
+	HDSpringCrackShape& c = *out;
+	const unsigned seed = s.seed;
+	const int n = kHDSpringCrackSteps, k = kHDSpringCrackBranchSteps;
+	const float pi = 3.14159265f;
+	const float scale = (0.5f + 0.5f * s.strength) * fit;
+	const float turn = 2.0f * pi * HDSpringCrackUnit(seed, 0, 0u);
+
+	memset(&c, 0, sizeof(c));
+	c.fit = fit;
+	c.length = (kHDSpringCrackLength + kHDSpringCrackLengthSpan *
+		HDSpringCrackUnit(seed, 1, 0u)) * scale;
+	c.width = (kHDSpringCrackWidth + kHDSpringCrackWidthSpan *
+		HDSpringCrackUnit(seed, 2, 0u)) * scale;
+	c.depth = (kHDSpringCrackDepth + kHDSpringCrackDepthSpan *
+		HDSpringCrackUnit(seed, 3, 0u)) * scale;
+	c.dirX = cosf(turn);
+	c.dirZ = sinf(turn);
+	c.sideX = -c.dirZ;
+	c.sideZ = c.dirX;
+
+	const float bow = kHDSpringCrackBow * c.length *
+		(2.0f * HDSpringCrackUnit(seed, 4, 0u) - 1.0f);
+	const float step = c.length / (float)n;
+	float lx[kHDSpringCrackSteps + 1], lz[kHDSpringCrackSteps + 1];
+	float rx[kHDSpringCrackSteps + 1], rz[kHDSpringCrackSteps + 1];
+
+	for (int i = 0; i <= n; i++)
+	{
+		const float t = (float)i / (float)n;
+		const bool end = i == 0 || i == n;
+		const float jag = end ? 0.0f : kHDSpringCrackJag * c.length *
+			(2.0f * HDSpringCrackUnit(seed, i, 1u) - 1.0f);
+		const float lat = bow * sinf(pi * t) + jag;
+		const float along = (t - 0.5f) * c.length;
+		const float profile = end ? 0.0f : 0.5f * c.width *
+			powf(sinf(pi * t), 0.6f);
+
+		c.midX[i] = s.x + c.dirX * along + c.sideX * lat;
+		c.midZ[i] = s.z + c.dirZ * along + c.sideZ * lat;
+		c.left[i] = profile * (kHDSpringCrackTear + (1.0f -
+			kHDSpringCrackTear) * HDSpringCrackUnit(seed, i, 2u));
+		c.right[i] = profile * (kHDSpringCrackTear + (1.0f -
+			kHDSpringCrackTear) * HDSpringCrackUnit(seed, i, 3u));
+
+		const float slideL = end ? 0.0f : kHDSpringCrackSlide * step *
+			(2.0f * HDSpringCrackUnit(seed, i, 4u) - 1.0f);
+		const float slideR = end ? 0.0f : kHDSpringCrackSlide * step *
+			(2.0f * HDSpringCrackUnit(seed, i, 5u) - 1.0f);
+
+		lx[i] = c.midX[i] + c.sideX * c.left[i] + c.dirX * slideL;
+		lz[i] = c.midZ[i] + c.sideZ * c.left[i] + c.dirZ * slideL;
+		rx[i] = c.midX[i] - c.sideX * c.right[i] + c.dirX * slideR;
+		rz[i] = c.midZ[i] - c.sideZ * c.right[i] + c.dirZ * slideR;
+	}
+
+	/* The branches, drawn by the hash; where their spikes would cross the
+	 * rim or each other the branches alone are drawn again with the next
+	 * round of the hash (`round` in every branch hash), up to
+	 * kHDSpringCrackRounds times - the same spring takes the same round
+	 * every time. 16.5 % of 4,000 cracks of any spring cross in the first
+	 * round (ModernTest, the crack's group); sixteen rounds leave none. */
+	const int count = kHDSpringCrackBranchesMin + (int)(HDSpringHash(seed ^
+		0x2C1B3C6Du, 7u) % (unsigned)(kHDSpringCrackBranchesMax -
+		kHDSpringCrackBranchesMin + 1));
+	const int first = (int)(HDSpringHash(seed ^ 0x2C1B3C6Du, 8u) & 1u);
+
+	c.branches = count;
+
+	for (int round = 0; round < kHDSpringCrackRounds; round++)
+	{
+		float lean[2], ahead[2];
+
+		for (int side = 0; side < 2; side++)
+		{
+			lean[side] = (kHDSpringCrackLeanMin + kHDSpringCrackLeanSpan *
+				HDSpringCrackUnit(seed, side + 2 * round, 6u)) * pi / 180.0f;
+			ahead[side] = HDSpringCrackUnit(seed, side + 2 * round, 7u) < 0.5f ?
+				1.0f : -1.0f;
+		}
+
+		for (int b = 0; b < count; b++)
+		{
+			const int h = b + 8 * round;
+			const float t = 0.2f + 0.6f * ((float)b + 0.2f + 0.6f *
+				HDSpringCrackUnit(seed, h, 8u)) / (float)count;
+			int at = (int)(t * (float)n + 0.5f);
+
+			at = at < 2 ? 2 : at > n - 2 ? n - 2 : at;
+			c.branchAt[b] = at;
+			c.branchSide[b] = ((b + first) & 1) ? 1 : -1;
+			c.branchLength[b] = c.length / 3.0f * (0.8f + 0.4f *
+				HDSpringCrackUnit(seed, h, 10u));
+		}
+
+		// The outline, point by point.
+		int m = 0;
+
+		auto put = [&](float x, float z)
+		{
+			if (m < kHDSpringCrackMax)
+			{
+				c.x[m] = x;
+				c.z[m] = z;
+				m++;
+			}
+		};
+
+		auto spike = [&](int b, float x, float z)
+		{
+			const int h = b + 8 * round;
+			const int sd = c.branchSide[b];
+			const int si = sd > 0 ? 0 : 1;
+			const float a = lean[si] + (HDSpringCrackUnit(seed, h, 9u) - 0.5f) *
+				10.0f * pi / 180.0f;
+			const float ox = c.sideX * (float)sd, oz = c.sideZ * (float)sd;
+			const float bx = ox * cosf(a) + c.dirX * sinf(a) * ahead[si];
+			const float bz = oz * cosf(a) + c.dirZ * sinf(a) * ahead[si];
+			const float px = -bz, pz = bx;
+			const float len = c.branchLength[b];
+			const float root = kHDSpringCrackRoot * (sd > 0 ?
+				c.left[c.branchAt[b]] : c.right[c.branchAt[b]]);
+			// The side is walked forward on the left, back on the right.
+			const float wx = c.dirX * (float)sd, wz = c.dirZ * (float)sd;
+			const float e = (px * wx + pz * wz) < 0.0f ? 1.0f : -1.0f;
+			float qx[kHDSpringCrackBranchSteps + 1];
+			float qz[kHDSpringCrackBranchSteps + 1];
+			float hw[kHDSpringCrackBranchSteps + 1];
+
+			for (int j = 0; j <= k; j++)
+			{
+				const float jag = j > 0 && j < k ? 0.06f * len * (2.0f *
+					HDSpringCrackUnit(seed, h * 8 + j, 11u) - 1.0f) : 0.0f;
+
+				qx[j] = x + bx * len * (float)j / (float)k + px * jag;
+				qz[j] = z + bz * len * (float)j / (float)k + pz * jag;
+				hw[j] = root * (1.0f - (float)j / (float)k);
+			}
+
+			for (int j = 0; j < k; j++)
+				put(qx[j] + e * px * hw[j], qz[j] + e * pz * hw[j]);
+
+			put(qx[k], qz[k]);
+
+			for (int j = k - 1; j >= 0; j--)
+				put(qx[j] - e * px * hw[j], qz[j] - e * pz * hw[j]);
+		};
+
+		auto branch_at = [&](int i, int sd)
+		{
+			for (int b = 0; b < count; b++)
+				if (c.branchAt[b] == i && c.branchSide[b] == sd)
+					return b;
+
+			return -1;
+		};
+
+		put(c.midX[0], c.midZ[0]);
+
+		for (int i = 1; i < n; i++)
+		{
+			const int b = branch_at(i, 1);
+
+			if (b >= 0)
+				spike(b, lx[i], lz[i]);
+			else
+				put(lx[i], lz[i]);
+		}
+
+		put(c.midX[n], c.midZ[n]);
+
+		for (int i = n - 1; i >= 1; i--)
+		{
+			const int b = branch_at(i, -1);
+
+			if (b >= 0)
+				spike(b, rx[i], rz[i]);
+			else
+				put(rx[i], rz[i]);
+		}
+
+		c.points = m;
+		c.round = round;
+
+		if (!HDSpringCrackCrosses(c))
+			break;
+	}
+}
+
+// Whether world x, z lies inside the outline (the even-odd rule).
+inline bool HDSpringCrackHolds(const HDSpringCrackShape& c, float x, float z)
+{
+	bool in = false;
+
+	for (int i = 0, j = c.points - 1; i < c.points; j = i++)
+		if ((c.z[i] > z) != (c.z[j] > z) && x < c.x[j] + (c.x[i] - c.x[j]) *
+			(z - c.z[j]) / (c.z[i] - c.z[j]))
+			in = !in;
+
+	return in;
+}
+
+/* Where bubble `k` is born in the crack: on the main line between a
+ * quarter and three quarters of its way, and across it at most half the
+ * side's half-width there - inside the slit whatever the tear. */
+inline void HDSpringCrackBirth(const HDSpringCrackShape& c, unsigned seed,
+	int k, float* x, float* z)
+{
+	const float at = (0.25f + 0.5f * HDSpringUnit(seed, k, 40u)) *
+		(float)kHDSpringCrackSteps;
+	const int i = (int)at < kHDSpringCrackSteps - 1 ? (int)at :
+		kHDSpringCrackSteps - 1;
+	const float f = at - (float)i;
+	const float across = 2.0f * HDSpringUnit(seed, k, 41u) - 1.0f;
+	const float half = across > 0.0f ? c.left[i] + f * (c.left[i + 1] -
+		c.left[i]) : c.right[i] + f * (c.right[i + 1] - c.right[i]);
+	const float off = 0.5f * across * half;
+
+	*x = c.midX[i] + f * (c.midX[i + 1] - c.midX[i]) + c.sideX * off;
+	*z = c.midZ[i] + f * (c.midZ[i + 1] - c.midZ[i]) + c.sideZ * off;
+}
+
 // A bubble at a moment: world place, radius and its share 0..1.
 struct HDSpringBubbleAt
 {
@@ -275,12 +607,17 @@ struct HDSpringBubbleAt
 
 /* Bubble `k` at clock `t`: false before its birth and after it reached
  * the sheet. Its line starts within kHDSpringBubbleSpread of the jet's
- * half-width at the floor and widens with the column. */
+ * half-width at the floor and widens with the column. With a crack it is
+ * born on the crack's bottom at its own place in the slit
+ * (HDSpringCrackBirth), and its spread and sway grow from nothing there to
+ * whole at the floor, so it rises out of the slit and not through its
+ * walls. */
 inline bool HDSpringBubble(const HDSpring& s, int k, double t,
-	HDSpringBubbleAt* out)
+	HDSpringBubbleAt* out, const HDSpringCrackShape* crack = 0)
 {
 	const double born = HDSpringBubbleBorn(s, k);
-	const float depth = (float)(s.floorY - s.surfaceY);
+	const float foot = crack ? crack->bottomY : (float)s.floorY;
+	const float depth = foot - (float)s.surfaceY;
 	const float speed = kHDSpringRiseMin + kHDSpringRiseSpan *
 		HDSpringUnit(s.seed, k, 3u);
 	const float age = (float)(t - born);
@@ -291,9 +628,10 @@ inline bool HDSpringBubble(const HDSpring& s, int k, double t,
 		return false;
 
 	const float h = speed * age;
+	const float grow = crack && h < crack->depth ? h / crack->depth : 1.0f;
 	const float way = 6.2831853f * HDSpringUnit(s.seed, k, 4u);
 	const float off = kHDSpringBubbleSpread * HDSpringUnit(s.seed, k, 5u) *
-		HDSpringHalfWidth(s, h);
+		HDSpringHalfWidth(s, h) * grow;
 	const float sway = kHDSpringSwayMin + kHDSpringSwaySpan *
 		HDSpringUnit(s.seed, k, 6u);
 	const float period = kHDSpringSwayPeriod + kHDSpringSwayPeriodSpan *
@@ -301,11 +639,16 @@ inline bool HDSpringBubble(const HDSpring& s, int k, double t,
 	const float phase = 6.2831853f * (age / period +
 		HDSpringUnit(s.seed, k, 8u));
 	const float c = cosf(way), n = sinf(way);
-	const float a = sway * sinf(phase), b = sway / 3.0f * cosf(phase);
+	const float a = sway * sinf(phase) * grow;
+	const float b = sway / 3.0f * cosf(phase) * grow;
+	float x = s.x, z = s.z;
 
-	out->x = s.x + c * off + a * c - b * n;
-	out->z = s.z + n * off + a * n + b * c;
-	out->y = (float)s.floorY - h;
+	if (crack)
+		HDSpringCrackBirth(*crack, s.seed, k, &x, &z);
+
+	out->x = x + c * off + a * c - b * n;
+	out->z = z + n * off + a * n + b * c;
+	out->y = foot - h;
 	out->radius = kHDSpringBubbleMin + kHDSpringBubbleSpan *
 		HDSpringUnit(s.seed, k, 9u);
 	out->share = age < kHDSpringBubbleIn ? age / kHDSpringBubbleIn : 1.0f;
@@ -527,6 +870,54 @@ inline int HDSpringCandidates(const HDSpringBody& body,
 	return n;
 }
 
+// Whether world x, z lies on a square of the body with deep water under it.
+inline bool HDSpringOnDeep(const std::vector<HDSpringSquare>& squares,
+	float x, float z)
+{
+	for (const HDSpringSquare& q : squares)
+		if (q.depth >= kHDSpringDeep && x >= (float)q.x &&
+			x < (float)(q.x + 1024) && z >= (float)q.z &&
+			z < (float)(q.z + 1024))
+			return true;
+
+	return false;
+}
+
+/* Whether a crack lies on its body's deep squares: every point of its
+ * outline and the middle of every edge. */
+inline bool HDSpringCrackFits(const HDSpringCrackShape& c,
+	const std::vector<HDSpringSquare>& squares)
+{
+	for (int i = 0; i < c.points; i++)
+	{
+		const int j = (i + 1) % c.points;
+
+		if (!HDSpringOnDeep(squares, c.x[i], c.z[i]) ||
+			!HDSpringOnDeep(squares, 0.5f * (c.x[i] + c.x[j]),
+			0.5f * (c.z[i] + c.z[j])))
+			return false;
+	}
+
+	return c.points > 2;
+}
+
+// The crack at the first size that fits its body; false when none does.
+inline bool HDSpringCrackChoose(const HDSpring& s,
+	const std::vector<HDSpringSquare>& squares, HDSpringCrackShape* out)
+{
+	static const float kFit[4] = { 1.0f, 0.8f, 0.64f, 0.5f };
+
+	for (int i = 0; i < 4; i++)
+	{
+		HDSpringCrackMake(s, kFit[i], out);
+
+		if (HDSpringCrackFits(*out, squares))
+			return true;
+	}
+
+	return false;
+}
+
 /* The body's first square - the least z, then the least x -, whatever
  * order the squares come in. */
 inline unsigned HDSpringBodyKey(const HDSpringBody& body)
@@ -577,7 +968,32 @@ inline bool HDSpringRulePick(const char* stem, unsigned bodyKey,
  * HDSpringTiming and HDSpringDrawn its numbers, HDSpringParts its
  * -springparts; HDSpringLogLine writes the SPRINGLOG lines. The engine
  * calls the five after them (HDLevelBuild, HDLevelUnload, FeedWaterRipples,
- * DrawWaterCards, HDLevelDeviceLost). */
+ * DrawWaterCards, HDLevelDeviceLost).
+ *
+ * HDSpringCrackBuild gives each spring its crack once the springs are laid
+ * (`on` 0 builds none: the key hd_springcrack), reading the floor under it
+ * out of the level's .TRG `trg` within the rooms `rooms` name;
+ * HDSpringCrackAt is a spring's crack (0 for none), HDSpringCrackLine
+ * RoomProbe's listing of its outline, HDSpringCrackFrameDraw draws the
+ * cracks in view at the start of the blend phase, before the frame's copy
+ * and the sheets, those whose floor's room `drawn` says the frame drew (0
+ * asks nothing), and HDSpringCrackNumbers says what the last draw drew and
+ * its GPU time (HDSpringTiming). The engine calls HDSpringCrackDraw. */
+struct HDSpringRoom
+{
+	int room;
+	float x0, z0;		// world, its origin and its box's least corner
+	float x1, z1;
+};
+
+void HDSpringCrackBuild(const char* trg, const std::vector<HDSpringRoom>& rooms,
+	int on);
+const HDSpringCrackShape* HDSpringCrackAt(int i);
+bool HDSpringCrackLine(int i, int at, char* out, size_t size);
+void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room));
+void HDSpringCrackNumbers(int* drawn, double* ms);
+void HDSpringCrackDraw();
+
 void HDSpringClear();
 void HDSpringBuild(const char* stem, const std::vector<HDSpringBlock>& blocks,
 	int thin);

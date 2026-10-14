@@ -12,17 +12,21 @@
  */
 
 /* The springs (hd_spring.cpp): the rising current, a column that bends what
- * stands behind it, and the bubbles in the jet. Both are quads the
- * processor builds in view space, as the water's cards are, projected by
- * the cards' own vertex shader (hd_room.hlsl, CardVS); this file holds the
- * two pixel halves and declares only what they read.
+ * stands behind it, the bubbles in the jet and the crack at its foot. All
+ * are triangles the processor builds in view space, as the water's cards
+ * are, projected by the cards' own vertex shader (hd_room.hlsl, CardVS);
+ * this file holds the pixel halves and declares only what they read.
  *
- * Build. bshader.bat compiles it twice:
+ * Build. bshader.bat compiles it four times:
  *
  *     fxc /nologo /T ps_3_0 /E ColumnPS /O3 /Vn kHDSpringColumnPS
  *         /Fh hd_spring_column_ps.inc hd_spring.hlsl
  *     fxc /nologo /T ps_3_0 /E BubblePS /O3 /Vn kHDSpringBubblePS
  *         /Fh hd_spring_bubble_ps.inc hd_spring.hlsl
+ *     fxc /nologo /T ps_3_0 /E CrackPS /O3 /Vn kHDSpringCrackPS
+ *         /Fh hd_spring_crack_ps.inc hd_spring.hlsl
+ *     fxc /nologo /T ps_3_0 /E HolePS /O3 /Vn kHDSpringHolePS
+ *         /Fh hd_spring_hole_ps.inc hd_spring.hlsl
  *
  * and stamps each .inc with the MD5 of this file.
  *
@@ -52,15 +56,32 @@
  *                    the weight from which the column's share is whole
  * c94  gSpringCell   x, y one over the column's cell across and along its
  *                    line, units, z one over the noise table's side
- * c134 gUnderSigma   the water's extinction while the eye is under the
- * c145 gUnderClear   water, the frame's own (hd_room.hlsl, UnderWater) */
+ * c95  gCrackRay     the view ray through a pixel: x, y of the ray at depth
+ *                    1 are vpos.x times x plus z and vpos.y times y plus w
+ * c96  gCrackFloor   the crack's bottom as a plane in view space: xyz its
+ *                    normal, w its distance (dot(n, p) = w on it)
+ * c97  gCrackLook    x one over the height of the dark band over the
+ *                    bottom, units: one over the crack's depth
+ * c134 gUnderSigma   the water while the eye is under it, the frame's own
+ * c135 gUnderLight   (hd_room.hlsl, UnderWater); gUnderSigma.w also moves
+ * c136 gUnderUp      the distance fog out of reach there, as RoomPS does
+ * c145 gUnderClear
+ *
+ * c92 - c97 and the vertex shader's c0 - c3 are put back after the crack's
+ * draw, which comes before the rooms' blend phase. */
 float4 gFog : register(c16);
 float4 gSpringScreen : register(c92);
 float4 gSpringMode : register(c93);
 float4 gSpringCell : register(c94);
+float4 gCrackRay : register(c95);
+float4 gCrackFloor : register(c96);
+float4 gCrackLook : register(c97);
 float4 gUnderSigma : register(c134);
+float4 gUnderLight : register(c135);
+float4 gUnderUp : register(c136);
 float4 gUnderClear : register(c145);
 
+sampler2D sCrackPage : register(s0);
 sampler2D sSpringCopy : register(s5);
 sampler2D sSpringDepth : register(s6);
 sampler2D sSpringNoise : register(s7);
@@ -187,4 +208,88 @@ float4 BubblePS(SPRING_IN input, float2 vpos : VPOS) : COLOR0
 
 	return float4((input.col.rgb * (rim * 0.75f + body) + spot) * keep,
 		saturate(rim * 0.75f + body + spot * 0.6f) * keep);
+}
+
+/* The crack at the spring's foot (hd_spring.cpp, "the crack"): its walls
+ * carry the floor's own page, its bottom is black. Neither the rooms' pixel
+ * shader nor the cards' can draw it: the walls are built per frame in view
+ * space, outside the rooms' buffer and its per-room constants, and they
+ * darken toward the bottom; the bottom writes a depth of its own.
+ *
+ * The view place of a pixel at view depth z: its ray at depth 1 times z. */
+float3 CrackView(float2 vpos, float z)
+{
+	return float3(vpos * gCrackRay.xy + gCrackRay.zw, 1.0f) * z;
+}
+
+/* The water round an eye under it, as the rooms take it (hd_room.hlsl,
+ * UnderWater, the same lines): all thirteen numbers zero over the water,
+ * where the colour comes out as it went in. */
+float3 CrackUnder(float3 col, float3 viewPos)
+{
+	const float d = length(viewPos);
+	const float h = dot(viewPos, gUnderUp.xyz);
+	const float path = max(d * saturate(gUnderUp.w / max(h, 1.0e-3f)) -
+		gUnderClear.x, 0.0f);
+	const float S = 1.0f - exp(-path * gUnderSigma.w);
+	const float up = max(1.0f + gUnderLight.w * h / max(d, 1.0f), 0.0f);
+
+	return col * exp(-path * gUnderSigma.rgb) + gUnderLight.rgb * (S * up);
+}
+
+/* A wall. The vertex as a card's: uv.xy the page (the floor's own place
+ * carried down the wall, hd_spring.cpp), uv.z the way down from the lip and
+ * uv.w the height over the bottom, units; col.rgb the floor's light at the
+ * rim (colour1 + colour2, as RoomVS sums them), col.a the slit's width
+ * across from the wall; viewZ.x the view depth.
+ *
+ * texel times light, as the floor beside it is drawn, times the share of
+ * that light a wall of the slit still sees: the floor's light falls from
+ * above, and a wall d units down sees the open sky only above the far lip,
+ * w units across - in the slit's cross-section the cosine-weighted share
+ * 0.5 (1 - sin a) of a level floor's, a the far lip's height over the
+ * wall's horizon, sin a = d / sqrt(d^2 + w^2): a half at the lip, falling
+ * as the slit narrows and deepens. Then the dark band from the bottom
+ * (gCrackLook): no light of its own reaches into the crack, black at the
+ * bottom. Then the distance fog, subtracted as RoomPS subtracts it, and the
+ * water round an eye under it. */
+float4 CrackPS(SPRING_IN input, float2 vpos : VPOS) : COLOR0
+{
+	const float3 texel = tex2D(sCrackPage, input.uv.xy).rgb;
+	const float d = input.uv.z;
+	const float sky = 0.5f * (1.0f - d * rsqrt(d * d + input.col.a *
+		input.col.a + 1.0f));
+	const float up = saturate(input.uv.w * gCrackLook.x);
+	const float fogFrom = gFog.x + gUnderSigma.w * 1.0e30f;
+	const float fog = max(0.0f, input.viewZ.x - fogFrom) * gFog.y *
+		(2.0f / 255.0f);
+	const float3 c = max(input.col.rgb - fog, 0.0f) * (sky * up);
+
+	return float4(CrackUnder(texel * c, CrackView(vpos, input.viewZ.x)),
+		1.0f);
+}
+
+/* The bottom: black, at the depth of the bottom's plane along the pixel's
+ * own ray (gCrackFloor), whatever triangle of the crack's volume is drawn
+ * over the pixel - the depth the sheets read there and the walls are tested
+ * against. A ray that does not reach the plane in front of the eye takes
+ * the far plane's 0.995 (hd_room.hlsl, SceneZ). */
+struct HOLE_OUT
+{
+	float4 col : COLOR0;
+	float depth : DEPTH;
+};
+
+HOLE_OUT HolePS(SPRING_IN input, float2 vpos : VPOS)
+{
+	HOLE_OUT o;
+	const float3 ray = CrackView(vpos, 1.0f);
+	const float along = dot(gCrackFloor.xyz, ray);
+	const float z = along > 1.0e-4f ? gCrackFloor.w / along : -1.0f;
+	const float depth = z > 1.0f ? gSpringScreen.z - gSpringScreen.w / z :
+		0.995f;
+
+	o.col = float4(CrackUnder(0.0f, ray * max(z, 1.0f)), 1.0f);
+	o.depth = clamp(depth, 0.0f, 0.995f);
+	return o;
 }

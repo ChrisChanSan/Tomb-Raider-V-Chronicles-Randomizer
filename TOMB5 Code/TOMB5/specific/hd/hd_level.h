@@ -144,10 +144,12 @@ bool HDLevelDeviceRecreated();
 // Nothing else in the engine may read HD data without asking this first.
 bool HDEnabled();
 
-/* Whether an HD level is built and drawing: HDEnabled() and a .TRG that had
- * rooms in it. The portal walk carries its second rectangle (the HD reach)
- * only while this is true, so a level the remaster has nothing for walks the
- * classic way. */
+/* Whether an HD level is built and drawn HD now: a .TRG that had rooms in
+ * it, HDEnabled() and the HD/SD switch at HD (hd_switch.h, HDDrawn). The
+ * last two are read on every call, so the HD textures row and the switch
+ * change the answer in a running level. The portal walk carries its second
+ * rectangle (the HD reach) only while this is true, so a level the remaster
+ * has nothing for, and a level drawn classic, walks the classic way. */
 bool HDLevelActive();
 
 /* A mirror in a room's wall, as the game side needs it: the room, the plane
@@ -170,11 +172,12 @@ int HDLevelMirrorCount();
 bool HDLevelMirrorAt(int at, HDLevelMirror* out);
 
 // Whether room `roomIndex` of the level now loaded is drawn by its own group
-// of HD art. Decided once at level load, not per frame. False for every room
-// while HD is off, while no HD level is built, for every room the .TRG has
-// nothing for, and for a room drawn as another group's art (hd_cover.h) -
-// HDRoomShadowHD, HDRoomArtListed and HDStaticDrawnClassic answer for such a
-// room what is drawn there.
+// of HD art. The groups are decided at level load; the answer asks
+// HDLevelActive on every call. False for every room while HD is off or the
+// world is drawn classic, while no HD level is built, for every room the
+// .TRG has nothing for, and for a room drawn as another group's art
+// (hd_cover.h) - HDRoomShadowHD, HDRoomArtListed and HDStaticDrawnClassic
+// answer for such a room what is drawn there.
 bool HDRoomIsHD(int roomIndex);
 
 /* Whether the art draws room `roomIndex` in a frame whose room list is
@@ -310,9 +313,10 @@ bool HDWaterTank(const ITEM_INFO* item);
  * where the art has nothing for it (103 of the game's 2,845 statics, which
  * would otherwise vanish), where other groups hold it but none is listed and
  * it has no piece or its piece cannot be drawn, for an index out of range,
- * before a level is built and in a level built with HD off. It reads the
- * level as built, like HDRoomIsHD, so hd_enable switched off in a running
- * level changes no answer until the next level.
+ * before a level is built, in a level built with HD off, and while the
+ * world is drawn classic. It reads the level as built and asks
+ * HDLevelActive, like HDRoomIsHD, so the HD textures row and the HD/SD
+ * switch change the answer from the next frame on.
  *
  * `meshIndex` counts ROOM_INFO::mesh from zero. */
 bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,

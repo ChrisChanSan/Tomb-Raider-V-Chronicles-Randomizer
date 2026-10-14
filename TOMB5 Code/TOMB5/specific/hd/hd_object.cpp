@@ -33,6 +33,7 @@
 #include "hd_markers.h"			// the .hdm sidecar - the donor slots
 #include "hd_mods.h"			// HDModsScan - the mods folder
 #include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
+#include "hd_folderlist.h"		// the model folders listed, for the log
 #include "hd_render.h"
 #include "hd_level.h"
 #include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
@@ -1591,7 +1592,7 @@ static void LogModels(const HDModelStats& stats, int ms)
 		"verts=%d idx=%d ranges=%d pages=%d vb_kib=%.0f ib_kib=%.0f "
 		"read_ms=%d build_ms=%d find_ms=%d key_ms=%d page_ms=%d "
 		"buf_ms=%d trm_open=%d trm_load=%d trm_kib=%.0f "
-		"cut_ranges=%d cut_models=%d hash=%016llx hash_ms=%d",
+		"cut_ranges=%d cut_models=%d hash=%016llx hash_ms=%d listings=%d",
 		g_stem, ms - (int)(stats.hashMs + 0.5),
 		stats.slots, stats.loaded,
 		stats.fromGame5, stats.fromGame4, stats.fromMod, stats.heads,
@@ -1603,7 +1604,7 @@ static void LogModels(const HDModelStats& stats, int ms)
 		(int)(stats.pageMs + 0.5), (int)(stats.bufferMs + 0.5),
 		(int)stats.trmOpens, (int)stats.trmLoads, stats.trmBytes / 1024.0,
 		stats.cutRanges, stats.cutModels, stats.hash,
-		(int)(stats.hashMs + 0.5));
+		(int)(stats.hashMs + 0.5), HDFolderListings());
 
 	/* The models' half of the texture budget. They arrive
 	 * after the rooms and into the same cache, so `have` is what the rooms

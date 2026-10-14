@@ -13,6 +13,7 @@
 #include "hd_scan.h"
 #include "hd_bind.h"
 #include "hd_trm.h"
+#include "hd_folderlist.h"	// the model folders, listed again a level
 #include "../bc7.h"
 
 #include "../../vendor/trforge/src/trf_remaster/Trg.h"
@@ -208,6 +209,11 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	missing.clear();
 	scan_pages.clear();
 	scan_error.clear();
+
+	/* The model folders are listed again at every level's scan, the first
+	 * to ask them (hd_folderlist.h): a file put into the install or a mod
+	 * between two level loads is found. */
+	HDFolderListForget();
 
 	if (out)
 		std::memset(out, 0, sizeof(*out));

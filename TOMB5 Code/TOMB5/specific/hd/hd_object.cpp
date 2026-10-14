@@ -35,6 +35,7 @@
 #include "hd_pagecache.h"		// HDPageCacheAltRoot, for a guest's own pages
 #include "hd_render.h"
 #include "hd_level.h"
+#include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
 #include "hd_objlight_dark.h"		// which engine lights give nothing
 #include "hd_shadow.h"			// HDShadowLight - the projected shadow's key light
 #include "hd_trl.h"			// the lips' sources, for LIPLOG
@@ -2712,7 +2713,7 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	/* Released only when neither side has anything to draw. A level whose
 	 * every object stayed classic can still have an HD Lara - the two
 	 * verdicts are separate and the models are one buffer. */
-	if (!g_active && !HDLaraDrawActive())
+	if (!g_active && !HDLaraDrawActive() && HDDrawn())
 	{
 		Log("HDLOG level=%s no slot and no wardrobe part draws HD - "
 			"the models are released again", g_stem);
@@ -2918,7 +2919,7 @@ static int begin_decision(const ITEM_INFO* item, const OBJECT_INFO* obj)
 	// The guard. With hd_objects off, or before a level built its models,
 	// this is where DrawAnimatingItem turns round and draws what it always
 	// drew.
-	if (!g_active || !tomb5.hd_objects)
+	if (!g_active || !tomb5.hd_objects || !HDDrawn())
 		return BEGIN_NONE;
 
 	const int slot = (int)item->object_number;

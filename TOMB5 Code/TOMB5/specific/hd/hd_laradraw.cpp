@@ -49,6 +49,7 @@
 #include "../../game/deltapak.h"	// the cutscene her lips speak in
 #include "hd_shadow.h"			// the projected shadow's arithmetic
 #include "hd_level.h"			// HDLevelActive, HDRoomShadowHD - its gate
+#include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
 
 #include <math.h>
 
@@ -1456,7 +1457,7 @@ void HDLaraDrawEnd()
 
 bool HDLaraDrawActive()
 {
-	return g_active && tomb5.hd_objects && HDLaraActive();
+	return g_active && tomb5.hd_objects && HDLaraActive() && HDDrawn();
 }
 
 int HDLaraDrawOutfit()

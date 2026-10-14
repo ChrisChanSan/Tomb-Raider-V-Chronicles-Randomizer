@@ -2037,6 +2037,9 @@ water surface", carries the tables.
     speed from the textbook rise of small air bubbles (about 0.25 m/s);
     the sway's form, the radius range and the pop ring's size measured on
     the classic bubble (`game/tomb4fx.cpp`, `specific/specificfx.cpp`).
+    With a crack (entry 203) a bubble is born on the crack's bottom at a
+    hashed place in the slit, its spread and sway growing from nothing there
+    to whole at the crack's depth: OWN, a free choice.
 200. **The rising current** - a quad turned to the eye from the floor to
     the sheet, half-width 32 + 96 times the strength widening by a tenth of
     its height (a round jet's spread), drawn after the sheets as a multiply
@@ -2058,7 +2061,8 @@ water surface", carries the tables.
     round's branch history - and no line of that hash is left;
     rgb and alpha are the share a, whole from half the weight up, the
     bend at most 96 units on cells 24 across and 96 along the line: OWN,
-    set by eye on RoomProbe pictures from under the water.
+    set by eye on RoomProbe pictures from under the water. With a crack
+    (entry 203) the column stands on the crack's bottom: OWN.
 201. **The file's spring row** - `spring <x> <z> <strength> [<seconds>]`
     in `hd_water.txt`: changes the table's spring of its level and room,
     takes it away at strength 0, else adds one; a row whose one key it is
@@ -2074,6 +2078,43 @@ water surface", carries the tables.
     life's deep water and school size (`hd_life_rules.h`), one in two chosen
     on the counts of the fifteen levels (RoomProbe `-springs`: five bodies
     fit, three springs; one in three gave one).
+203. **The spring's crack** (`hd_spring.h`, `HDSpringCrackMake`) - a slit
+    whose every choice is a hash of the spring's seed: a main line 256 to
+    512 units long turned any way, bowed by up to 8 % and jagged by up to
+    4 % at 14 steps, 32 to 96 wide, each side's half 0.6 to 1 of the
+    profile sin(pi t)^0.6 and slid by up to 0.3 of a step; two to four
+    branches a third of its length (0.8 to 1.2 of that), rooted between a
+    fifth and four fifths of the way, the sides taking turns, leaning 20 to
+    45 degrees (one lean a side, 5 either way more), a third of the side's
+    half wide, closing in four steps, each a spike in the outline; the
+    branches drawn again by the next round of the hash where the outline
+    would cross itself (16 rounds); 64 to 128 deep; all scaled from half to
+    whole by the strength and remade at 0.8, 0.64, 0.5 to lie on its body's
+    deep squares. OWN: the sizes the request's, the rest free choices set by
+    eye on RoomProbe pictures of ANDREA2's fountain against reference
+    pictures supplied for this project; the hash is the life's mixer.
+204. **The crack in the frame** (`hd_spring.cpp`, `HDSpringCrackFrameDraw`;
+    `hd_spring.hlsl`, `HolePS`) - drawn at the start of the blend phase,
+    before the copy and the sheets: a volume over the outline (8 units over
+    the floor to 8 under the bottom, two fans and the edges' quads) marks
+    with stencil bit 8 the pixels whose surface lies inside it by an odd
+    count of faces in front of the frame's depth, the hole writes the
+    bottom plane's depth along each pixel's ray there in black, the walls
+    follow with the depth test; not drawn without a stencil, with the eye
+    under the floor, at the near plane, past half the far plane's distance,
+    off the screen or while its floor's room is off the frame's draw list.
+    OWN, a design of this project from general graphics knowledge (stencil
+    parity of a closed volume, a depth written by the pixel shader).
+205. **The crack's walls** (`hd_spring.hlsl`, `CrackPS`) - the floor's page
+    folded over the lip (a place d down the wall takes the floor's page d
+    further in along the edge's inward normal, wrapped), the floor's light
+    at the rim times the share 0.5 (1 - d / sqrt(d^2 + w^2)) of the slit's
+    cross-section (w the width across from the edge) times a band from
+    black at the bottom to whole at the crack's depth over it, then the
+    rooms' distance fog and under-water look. OWN, the share a textbook
+    view factor; the floor (its height, light, page and page map per
+    outline point, out of the level's `.TRG` by the layout TRForge's reader
+    documents) is DATA of the player's installation, read, never copied.
 
 ## Credited, but not contained here
 

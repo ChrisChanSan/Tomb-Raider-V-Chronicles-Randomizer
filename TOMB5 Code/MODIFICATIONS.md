@@ -14200,31 +14200,53 @@ picture.
   highlight), soft against the depth texture over 32 units, the cards' distance fog,
   under the water the frame's extinction, from over the water the water's own
   absorption per channel along the eye's path under the surface; its colour the body's
-  spray colour as the cards wear it. The classic sprite (`DEFAULT_SPRITES` + 13,
-  additive grey to 144) was not taken: it lies on the classic sprite page, the card
-  path binds the Remaster's pages by number, and an additive grey ring washes out over
-  a bright floor where a premultiplied one keeps it.
+  spray colour as the cards wear it. Both looks were drawn at the fountain's two eyes
+  with the same places, sizes and fades: the own card, and the classic sprite
+  (`DEFAULT_SPRITES` + 13, sprite 17 of ANDREA2's classic `.TRC`, a 32 x 32 window of
+  its page 10 - a dark disc with a bright crescent - times the classic shade 144,
+  additive) through the same card path in a probe built for the comparison. They cover
+  the same pixels (under the water 368 and 375 at 1 s); the own rim reads brighter
+  (the mean change in those pixels 28.4 and 29.3 at 1 and 2 s against 19.5 and 21.2;
+  from over the water 22.0 and 20.7 against 19.7 and 17.3) and it takes the body's
+  colour and the water's absorption as the cards do, without a classic page in the HD
+  path - so the own card stays.
 - *The rising current.* A quad on the jet's line from the floor to the sheet, turned to
   the eye in eight rows, half as wide at the floor as 32 units and 96 per step of
   strength (128 at 1) and widening by a tenth of its height as a round jet does. It is
   drawn after the sheets, with the cards, as a multiply: the blend `DESTCOLOR` /
-  `INVSRCALPHA` with rgb `w r` and alpha `w`, `r` the ratio of the frame's copy at the
-  bent place to the copy at the pixel (floor 0.02, at most 2), `w` at most 0.5 - the
-  target becomes `target (1 + w (r - 1))`. Under the water, where the target is the
+  `INVSRCALPHA` with rgb `a r` and alpha `a`, `r` the ratio of the frame's copy at the
+  bent place to the copy at the pixel (floor 0.02, at most 2), `a` the share, whole from
+  half the column's weight up - the target becomes `target (1 + a (r - 1))`. Under the
+  water, where the target is the
   copy, that is the copy at the bent place: the refraction itself. From over the water
   the sheet writes its pixel whole from the copy (`a = 1`), so a column drawn before it
   would be hidden and one drawn after it in the usual way would paint the floor without
   its water; the multiply moves the floor's pattern inside the sheet's colour and keeps
   its tint and mirror, and adds no light (no milk, no beam). It reuses the copy the
-  frame took for the sheets - no second copy. The bend: two cells of hashed value noise
-  (48 units a cell and half that), rising at 400 units a second, at most 32 units of
-  view space at strength 1, strongest on the line and gone at the edge as `(1 - u^2)^2`,
-  falling with height as 1,200 over 1,200 plus the height, faded over the last eighth
-  at each end; a bent place nearer than the column keeps the pixel's own. It fades as
-  the eye looks along its line and as its half-width at mid height falls from 16 to 6
-  pixels. The bend 32 and the 1,200 replace a first 12 and 600, at which the column did
-  not read under the water. With `hd_motion` 0 the bubbles and the column stand at the
-  clock motion last had, and the sheets draw no ring, as for every ring.
+  frame took for the sheets - no second copy. The bend: two octaves of value noise
+  (cells 24 units across the line and 96 along it, and half that), rising at 400 units
+  a second, at most 96 units of view space at strength 1, strongest on the line and gone
+  at the edge as `(1 - u^2)^2`, falling with height as 1,200 over 1,200 plus the height,
+  faded over the last eighth at each end; the weight scales the bend, the share follows
+  it. A bent place nearer than the column keeps the pixel's own. It fades as the eye
+  looks along its line and as its half-width at mid height falls from 16 to 6 pixels.
+  The noise's lattice values are a table of 64 by 64 texels the processor fills with the
+  life's mixer (`HDSpringNoiseTexel`, a salt per channel; means 127.0 and 128.1, spread
+  73.9 and 73.6, neighbours and channels uncorrelated under 0.03), bound with wrap and a
+  linear filter, so the shader reads each octave in one fetch at the cell's corner plus
+  its smoothed fraction; the rise wraps at 64 cells along, where the table repeats, so
+  the pattern never jumps. The first column took its lattice values from a published
+  third-party shader hash, uncredited, and took its weight on the bend and on the share
+  both, each held under 0.5, at a bend of 32 on square cells of 48: under the water it
+  changed 276 to 370 pixels by 8 levels or more and could not be told from the water
+  without it. The streaks and the bend of 96 make a band that wavers; 128 on cells of 32
+  by 128 smeared the wall. From over the water the column stays faint: it moves the
+  floor's pattern inside the sheet's colour, and the basin's floor behind it is dark and
+  flat (luminance 20.9, spread 7.9 levels without the water); a bend of the floor as the
+  sheet sees it would need a second copy or the sheet's own shader (its depth variant at
+  512 slots), and light of its own would be milk. From above the jet shows by its rings
+  and its bubbles. With `hd_motion` 0 the bubbles and the column stand at the clock
+  motion last had, and the sheets draw no ring, as for every ring.
 - *The table.* `kHDSprings`: ANDREA2, room 194, x 55,808, z 32,768, floor y 2,560 (the
   six squares are 2,304 deep under the sheet at 256, RoomProbe `-life` LIFESQUARES),
   strength 1, period 0.7 s. The compiled override row for room 194 keeps its class and
@@ -14268,16 +14290,18 @@ picture.
   bubbles alone); `-springs` prints the SPRINGLOG lines and a SPRINGRULE line per body,
   `-springkey <n>` the key.
 
-**Measured.** At the fountain (960 x 540, against `-nospring` and `-springparts`):
-from the basin's edge the rings change 9,000 to 10,200 pixels (1,300 to 1,700 by 8
-levels or more; the old source 9,200 to 9,800), the bubbles 61 to 121 and the column
-3,000 to 3,300 (10 to 34 by 8 or more - the floor through the sheet barely moves); under
-the water the column 18,500 to 19,700 (276 to 432), the bubbles 343 to 398 (268 to 300).
-GPU at 2560 x 1440, the water's brackets and the springs', mean of five runs: the
-edge 0.1008 to 0.1251 ms (+0.024, the springs 0.0219), under the water 0.0616 to 0.0913
-ms (+0.030, 0.0263). Slots, fxc /O3: `ColumnPS` 150 (8 texture, 142 arithmetic; with a
-sine hash 339), `BubblePS` 62; no water variant changed (every `.inc` but the two new
-ones byte-identical, the depth variant at 512). The rule on the fifteen classic levels
+**Measured.** At the fountain (960 x 540, at 0, 0.5, 1, 2 and 5 s, the column and the
+bubbles against `-springparts 0`): from the basin's edge the rings change 9,000 to
+10,200 pixels (1,300 to 1,700 by 8 levels or more; the old source 9,200 to 9,800), the
+bubbles 61 to 121 (40 to 79) and the column 7,700 to 7,950 (389 to 469 - the floor
+through the sheet moves little); under the water the column 29,800 to 31,200 (3,756 to
+4,586), the bubbles 343 to 398 (268 to 300). GPU at 2560 x 1440, the water's brackets
+and the springs', mean of five runs against `28c358eb`: the edge 0.0984 to 0.1388 ms
+(+0.040, the springs 0.037), under the water 0.0616 (seven runs) to 0.1024 ms (+0.041,
+0.040); the wider bend reads the copy over more texels. Slots, fxc /O3: `ColumnPS` 90
+(12 texture, 78 arithmetic), `BubblePS` 62; no water variant changed (every `.inc` but
+the two new ones byte-identical, the depth variant at 512). The rule on the fifteen
+classic levels
 (RoomProbe `-springs`):
 
 | level | bodies | candidates | fit | springs, one in two | one in three |
@@ -14307,13 +14331,16 @@ springs drawn.
 **Left.** The look in the game: nobody in this round could play it - the column's
 strength, the bubbles' rate and size, the rule's one in two and its springs in a sea
 (JOBY2) and in 768 units of water (ANDREA2 room 144) are the owner's to judge. The
-springs' shaders are not in the water's warm-up, so their first draw in a level may
-wait once. The column's pattern wraps every 491 s of clock (its rise held under 4,096
-cells), a jump in one frame. JOBY2's spring names room 45, the flip twin of 143, whose
-square the body lists first. The classic bubble sprite was not drawn through the card
-path for a picture beside the own bubble.
+owner's look reference, a photograph under water, shows its jets by what they carry -
+streams of fine bright bubbles widening as they rise - more of them than the few asked
+for; a denser stream is the one number `kHDSpringRate`. From over the water the column
+stays faint (above). The springs' shaders are not in the water's warm-up, so their
+first draw in a level may wait once. JOBY2's spring names room 45, the flip twin of
+143, whose square the body lists first. WATERLOG's level line counts `sources=0` and
+body 5 `spring=none` at the fountain, written before the springs mark theirs; SPRINGLOG
+names the spring. A static blocks only the square its origin stands on.
 
-**Commits.** `de4cce39`, `14c36eda`, `58b3e8fb`.
+**Commits.** `de4cce39`, `14c36eda`, `58b3e8fb`, `996e85a6`.
 
 ### The level load on several cores
 2026-10-11

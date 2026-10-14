@@ -2002,7 +2002,14 @@ water surface", carries the tables.
     from 16 to 6 pixels of half-width. OWN, a design of this project from
     general graphics knowledge (refraction through the frame's copy, value
     noise); the numbers free choices set by eye on the round's RoomProbe
-    pictures, the spread from the textbook round jet.
+    pictures, the spread from the textbook round jet. Since `996e85a6`
+    the noise's lattice values are a 64 x 64 table filled with the life's
+    mixer (`HDSpringNoiseTexel`) and read with wrap and a linear filter -
+    the column's first version took them from a published third-party
+    shader hash without crediting it, and no line of that hash is left;
+    rgb and alpha are the share a, whole from half the weight up, the
+    bend at most 96 units on cells 24 across and 96 along the line: OWN,
+    set by eye on RoomProbe pictures from under the water.
 197. **The file's spring row** - `spring <x> <z> <strength> [<seconds>]`
     in `hd_water.txt`: changes the table's spring of its level and room,
     takes it away at strength 0, else adds one; a row whose one key it is

@@ -2265,8 +2265,9 @@ it.
 - **The springs** (with the water sheets, `hd_water`). A spring is a jet of water
   rising from the floor of a pool: rings on the sheet over it, a few small bubbles
   rising in its jet (three a second at full strength, one in three leaving a small
-  ring at the surface) and a rising current that bends what stands behind it, seen
-  through the sheet and under the water. ANDREA2's fountain basin over room 120 has
+  ring at the surface) and a rising current that bends what stands behind it: under
+  the water a band that wavers, from over it faint, since a deep basin's floor is dark.
+  ANDREA2's fountain basin over room 120 has
   one by default; elsewhere a rule places one now and then, in a pool of six deep
   squares or more, away from its openings, Lara's start and the statics - three in
   the fifteen levels (ANDREA1, ANDREA2 and JOBY2), the same every time. `hd_water.txt`

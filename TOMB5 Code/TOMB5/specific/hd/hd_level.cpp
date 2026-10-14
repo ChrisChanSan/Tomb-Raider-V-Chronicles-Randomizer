@@ -8021,7 +8021,8 @@ static void ReceiveStandInHolders()
 /* The backdrop of this frame (BuildBackdrops), after every room's solid
  * art and before the clear floors: the classic faces of each listed room
  * that holds such art and has a window mark the pixels the art has left
- * empty, and each group that stands in it and is not on the list is drawn
+ * empty - the HD sky, drawn before the rooms, counts as empty -, and each
+ * group that stands in it and is not on the list is drawn
  * there alone - its opaque and alpha-tested art with its own depth, the
  * matrix of the listed room moved to its own origin, its own lighting. A
  * group is asked by the room that draws it now (HDCarriedRoom), so the art

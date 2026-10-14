@@ -19047,14 +19047,18 @@ bool HDRenderBackdropMask(const float* corners, int triangles, int oneSided,
 		g_receive_cleared = true;
 	}
 
-	/* Every corner in the last step of a 24 bit depth range, 2^-24 below
-	 * 1, tested less or equal against the frame's depth: it passes only
-	 * where nothing has been drawn, the depth still the cleared 1. A range
-	 * of no width, MinZ and MaxZ both 1, marked no pixel at all on the
-	 * device the pictures were made with. */
+	/* Every corner in a thin range behind the world and in front of the
+	 * sky, tested less or equal against the frame's depth: it passes where
+	 * nothing of the world has been drawn - the depth the cleared 1, or the
+	 * HD sky's (HDRenderSky), which the frame draws first in its own slice
+	 * from HD_SKY_MINZ, 0.996, to 1. The world never reaches the range:
+	 * depth = a - b / z (HDRenderZConstants, near 20, far 20480) stays
+	 * below a = 0.99597 at any distance, and a stand range pushed back
+	 * (HD_STAND_PUSH) only moves a point further off. A range of no width
+	 * marked no pixel at all on the device the pictures were made with. */
 	far_port = port;
-	far_port.MinZ = 1.0f - 1.0f / 16777216.0f;
-	far_port.MaxZ = 1.0f;
+	far_port.MinZ = 0.99598f;
+	far_port.MaxZ = 0.99599f;
 
 	const RECT window = { x0, y0, x1, y1 };
 

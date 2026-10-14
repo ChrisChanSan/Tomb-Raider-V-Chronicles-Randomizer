@@ -1847,7 +1847,8 @@ bool HDRenderCoveredFaceWhy(int index, int* why, int* winner);
  * in the frame of `world`, the first `oneSided` triangles culled as the
  * art's opaque ranges are, the rest drawn from both sides, inside the
  * window x0, y0 (the first pixel drawn) to x1, y1 (the first one that is
- * not); a pixel is marked when its depth is still the cleared one.
+ * not); a pixel is marked when no world depth stands there yet - the
+ * cleared one or the HD sky's.
  * HDRenderBackdropRoom then draws a group's opaque and alpha-tested art on
  * the marked pixels alone, with its own depth. Both answer false and draw
  * nothing on a depth buffer with no stencil or outside the frame. */

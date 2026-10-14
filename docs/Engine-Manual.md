@@ -3248,12 +3248,16 @@ part.
 
 Where a whole load goes, measured in 64 logged loads on one machine (2560 x
 1440, sixteen threads, `-log`): 1.8 to 4.8 seconds a load, of which the HD
-build is 50 to 77 percent, the loading thread with the classic level 2 to 30,
-and the loading bar running up to its end after the work is done 6 to 42
-(0.31 to 0.80 seconds every load). In the HD build of RICH2 at `hd_air 2`
-the room build is about 2.1 seconds, and inside it the three largest parts are
-the texture pages (about 0.6), the air's hulls asked of every triangle on one
-thread (0.5) and every room's triangles on the pool (0.5); the objects add 0.6.
+build is 50 to 77 percent, the loading thread with the classic level 2 to 30.
+Those loads still let the loading bar run up to its end after the work, 0.31
+to 0.80 seconds of each. Now the bar follows the loading thread while it reads
+the classic level, stands still while the HD data are built, and is shown full
+in one frame once the work is done: a load takes as long as its work, and the
+bar adds one frame, with `hd_enable` on or off. In the HD build of RICH2
+at `hd_air 2` the room build is about 2.1 seconds, and inside it the three
+largest parts are the texture pages (about 0.6), the air's hulls asked of every
+triangle on one thread (0.5) and every room's triangles on the pool (0.5); the
+objects add 0.6.
 A savegame loaded inside the level you are in keeps the level's HD data. The
 classic level is read again as always, but the room art, its texture pages, the
 room and static tables and the models stay as they are; made again is only what
@@ -4475,7 +4479,7 @@ that step took (the counter in front of a log line moves in steps of about
 ```
 LOADLOG level=RICH2 step=rooms ms=3.1
 LOADLOG level=RICH2 step=fill ms=1276.7
-LOADLOG level=RICH2 step=bar ms=594.0
+LOADLOG level=RICH2 step=bar ms=6.1
 ```
 
 (The numbers are a format sample.) In the order the work ends:
@@ -4500,7 +4504,7 @@ LOADLOG level=RICH2 step=bar ms=594.0
   and is in none of them), `life` and `redress`;
 - the main thread: `screen` (the load picture), `thread` (the wait for the
   loading thread), `ainit`, `hd_build`, `font`, `cutscenes`, `warmup`,
-  `profile`, `bar` (the bar running up to its end) and `total`.
+  `profile`, `bar` (the one frame of the full bar) and `total`.
 
 A step a load does not run is written with `ms=0.0 skipped=1` - for a
 savegame loaded inside the level, `scan`, every step of the room build and

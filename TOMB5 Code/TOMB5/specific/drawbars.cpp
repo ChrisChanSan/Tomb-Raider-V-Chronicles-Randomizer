@@ -526,17 +526,17 @@ void S_LoadBar()
 	S_UpdateLoadBar();
 }
 
-// Set the bar to "done". Needed because Core's completion criterion in
-// S_DrawLoadBar (loadbar_maxpos <= loadbar_steps) tips over arithmetically:
-// steps grows by 100/maxpos per step and reaches at most ~100 - from about 75
-// texture pages on (maxpos = pages + 20, file.cpp) the condition becomes
-// unreachable and the catch-up loop after the load thread spins forever.
-// andy1 (79 pages) and joby5 (82 pages) freeze at a full bar this way; vanilla
-// levels sit at 9-17 pages and never reach the threshold. The caller knows
-// better than the counting: once the load thread has joined, loading is done.
+// Puts the bar at its end, target and drawn position both, so the next
+// S_DrawLoadBar draws a full bar and reports done. The caller knows better
+// than the counting: once the load is done, loading is done. Core's done
+// test in S_DrawLoadBar (loadbar_maxpos <= loadbar_steps) cannot hold by
+// counting alone from about 80 texture pages on: steps grows by 100/maxpos
+// per step and reaches at most about 100, while maxpos is pages + 20
+// (file.cpp LoadLevel). The cap on maxpos makes the test hold at 100.
 void S_FinishLoadBar()
 {
 	loadbar_steps = 100.0F;
+	loadbar_pos = 100.0F;
 
 	if (loadbar_maxpos > 100)
 		loadbar_maxpos = 100;

@@ -9764,6 +9764,7 @@ static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
 		"pages_decode=%.1f pages_upload=%.1f threads=%d\n", stem,
 		stats.readMs + stats.buildMs, stats.pages.readMs,
 		stats.pages.decodeMs, stats.pages.uploadMs, stats.pages.threads);
+}
 
 /* What the springs' rule keeps clear of, out of the classic .TRC, as
  * hd_spring.cpp's LevelBlocks reads it out of the engine: every portal

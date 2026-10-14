@@ -18278,6 +18278,50 @@ path at `hd_enable` 0 is untouched by construction: every changed gate adds `HDD
 true until a press, to a test that `hd_enable` 0 already answers false, and the 6 classic
 views say the same.
 
+**The owner's first F12 test.** A `-log` play test of 2026-10-14 with the build of
+`ed676ba` (`PCtomb5 built Oct 14 2026 20:06:54`) in ANDREA2, ANDREA1 and ANDY3 at 165 Hz,
+felt with no frame drops or hitches. It writes 79 `HDLOG switch` lines: 66 flips (ANDREA2
+59, ANDY3 6, ANDREA1 1; 26 by the key, 53 by the pad chord) and 13 presses that answer
+`hd_enable=0 nothing to switch`, all made while the *HD textures* row stood off (83.4 to
+94.3 s and 203.9 to 227.9 s); between two presses in one level the median is 235 ms and
+the least 156 ms. The lines agree with the design: every flip is one line and the flips
+alternate `drawn`; a press with nothing to switch leaves `drawn` as it stood; `frame`, the
+30 Hz frame clock, steps by 5 or more from line to line; no `HDLOG ... built` line stands
+between two presses of one level's run but the test's own load from the load menu at 386
+s in ANDY3, and the classic state held across it as across the load from ANDREA2 to
+ANDREA1; no device line is in the log. The cost of a flip: `FPSLOG` writes one line a
+second, so a flip's frame is bounded by its second's `max_ms`. The 26 seconds with a flip
+and no pause or menu read a median of 8.3 ms and at worst 13.1 ms, the 342 seconds with
+neither 8.1 ms, 11.0 ms at the 95th percentile and 47.1 ms at worst: a flip does not show
+in the frame times. The three seconds with a flip and 78 to 86 ms are pauses. At 74.7 s
+the log falls silent 94 ms after the flip of 73.8 s, for 812 ms, and the pause menu closes
+at 74.8 s (`TIME_Init`, `invalidated: pause menu`; the second reads `frames=58
+logic_ticks=7 budget=33.3`). The second ending at 220.7 s holds no flip, only two presses
+with nothing to switch, and is silent for 593 ms before the pause menu closes. At 254.7 s
+the frames after the flip of 254.1 s run on at the timer's step for 440 ms, and the 84 ms
+frame is the entry of the pause that lasts to 256.3 s. Seconds with a pause or the ring
+and no flip reach 80 to 90 ms the same way (at 80.7, 200.7 and 251.7 s). The flips back
+after a long stretch drawn classic, with the stretch in game time out of `tick`: after
+34.6 s (ANDREA2, 68.6 s) the line that closes the life's open second reads 10 rings, where
+the three seconds before read none - ANDREA2's one body with life is the sewer channel, 12
+floats and 5 drips - and the life's clock goes on from 18 to 53; that second's `max_ms` is
+8.4 (the catch-up, at the probe's 0.0020 ms a step, about 0.7 ms). After 13.1 s (ANDREA2,
+95.5 s; 21.6 s on the wall, with pauses and the row off in between) 5 rings, and `max_ms`
+33.4 for a menu frame at the pause's end 650 ms before the flip. After 15.4 s (ANDY3,
+429.2 s) 28 rings over its seven bodies, against 0 to 3 a second before (the line names no
+body; `full=0`, the game's ripple slots took every one), `max_ms` 7.3. After 48.1 s in
+ANDY3 (404.2 s) nothing caught up: the level was loaded again at 386 to 390 s while
+classic was drawn, and the HD clock starts at the first HD frame after a build
+(`hd_level.cpp:5710`, `AdvanceClock`), so the life started at its second 0, 3 rings in its
+first second, `max_ms` 10.1. The press at 218.7 s that the first reading took for a flip
+back after 123 s is none: it is the first of the five presses with nothing to switch, the
+state stood at HD from 95.5 s, and the row was off from 203.9 s. In that stretch the log
+shows the half state of the row this round removes (The option row): every second from
+203.9 s to 227.9 s reads `hd_rooms=0` with `hd_items` 20 to 30, the rooms classic and
+the items and Lara HD. Twice a short pause with no page of the options opened 63 and 94 ms
+after a press of the pad chord (73.9 s, after a flip, and 220.1 s); the log cannot say
+which button opened it (Left).
+
 **Left.** Two things the switch leaves are closed by a project decision of 2026-10-14,
 with no fix: the water's life after a stretch drawn classic - its tick runs inside
 `HDLifeFrame` (`hd_life.cpp:536`), which the switch skips, so the first HD frame ticks the

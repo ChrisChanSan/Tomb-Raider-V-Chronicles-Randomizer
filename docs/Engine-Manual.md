@@ -2351,23 +2351,27 @@ A press shows the change on the next frame: the classic rooms, statics and sky,
 the classic items, enemies and Lara, the level's own water faces, splashes and
 ripples, the fish tank's classic model and the round shadows under everyone;
 press again and the HD world is back as it was. Nothing is loaded, freed or
-rebuilt for it. While the world is drawn classic the HD water's waves, the
-fish tank's water and its wet floor keep time with the game, so the HD
-picture after the second press is the one you would have seen had you never
-pressed. Three things start again when the HD draw comes back, as they do
-whenever it opens: Lara's projected shadow fades in over a quarter of a
-second while her round shadow goes out, the soft motion of her chest starts
-from rest, and the water's life - the floats, the fish and the drips - is
-brought up to the time in that first frame: its floats and fish stand where
-they would have, but after a long stretch in the classic draw the rings they
-would have made in it all appear at once on that water, and the first frame
-takes a little longer (about 12 to 21 milliseconds after ten minutes, in
-the levels with the most life). A splash or a spray that is still in the
-air when you press keeps the look it was born with for the rest of its
-life, under a second. The *HD textures* row of the pause menu's options now
-takes the rooms, the statics and the sky with it at once, as it already did
-the water's hooks, the mirrors and the projected shadow; the items and Lara
-follow it at the next level, as before.
+rebuilt for it. While the world is drawn classic the HD water's waves, the fish
+tank's water and its wet floor keep time with the game, so the HD picture after
+the second press is, as the engine's code reads (nobody has pressed it in a
+game yet), the one you would have seen had you never pressed, but for the few
+things below. Four things start again or settle when the HD draw comes back:
+Lara's projected shadow fades in over a quarter of a second while her round
+shadow goes out, the soft motion of her chest starts from rest, her braid
+settles back onto her backpack over a few frames (in the classic draw it swings
+against the classic body), and the water's life - the floats, the fish and the
+drips - is brought up to the time in that first frame: its floats and fish
+stand where they would have, but after a long stretch in the classic draw the
+rings they would have made in it all appear at once on that water, and the
+first frame takes a little longer (about 12 to 21 milliseconds after ten
+minutes, in the levels with the most life). A splash or a spray that is still
+in the air when you press keeps the look it was born with for the rest of its
+life, under a second. And a ripple on an HD water that began while the classic
+draw was on can come back without its ring and show nothing for the rest of its
+life, at most about two seconds. The *HD textures* row of the pause menu's
+options now takes the rooms, the statics and the sky with it at once, as it
+already did the water's hooks, the mirrors and the projected shadow; the items
+and Lara follow it at the next level, as before.
 
 Behind `-log`, every press that reaches a level writes one line:
 

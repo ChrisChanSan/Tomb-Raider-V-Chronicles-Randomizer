@@ -18171,30 +18171,47 @@ frame (`ControlFishtank`'s ticks, `IFL_CLEARBODY`), so the water stands where it
 have, poured or not. The flips go on through `HDFlipRoom` (it keeps `g_level_active`).
 What starts again, as it does whenever its gate opens: the projected shadow fades in over
 0.25 s (`HD_SHADOW_FADE_IN`) while the blob goes out, and its following of the light
-starts afresh; the soft motion of Lara's chest starts from rest. What catches up in one
-frame: the water's life, whose tick runs inside `HDLifeFrame`, which W10 now skips; the
-first HD frame ticks the whole stretch in steps of a tenth of a second (`HDLifeTick`) -
-measured, see below - so the floats and fish stand where they would have, within 23 units,
-but every ring of the stretch is written into the game's ripples at once (Left). And short
-ones: a splash or a spray born in the HD draw keeps its classic sprites out for the rest
-of its life, under a second; one born in the classic draw shows its sprites in the HD draw
-for its life; the waterfall drops already in the air when the switch goes to classic live
-out their 24 ticks. (c) The switch back draws what the HD draw would have drawn: the HD
-data were never touched, the clock and the tank are as above, and the probe's HD picture
-after a classic pass equals the one without it (Measured). (d) The log line and the probe
-agree: both move the state by `HDSwitchStep`; `drawn=0` in the log is `HDDrawn()` 0, and
-the probe prints `hddrawn: HDDrawn() 0` for its classic picture. (e) What stays HD while
-the world is drawn classic: the inventory ring and the pickup display (HD models), the
-fonts, the loading and save screens and the logo, the F4 outfit changer (its window and
-Lara's rebuild, ready for the flip back) and the barefoot footstep sound.
+starts afresh; the soft motion of Lara's chest starts from rest; and Lara's braid settles:
+its backpack box and its root follow W9 (`game/hair.cpp:151`, `:487`; the root at -33
+against the classic -48, `hd_lara.h:156` and `:101`), so while classic is drawn the braid
+swings against the classic body, and on the switch back its root moves 15 units and the
+chain is pushed out of the pack's box over the next frames. What catches up in one frame:
+the water's life, whose tick runs inside `HDLifeFrame`, which W10 now skips; the first HD
+frame ticks the whole stretch in steps of a tenth of a second (`HDLifeTick`) - measured,
+see below - so the floats and fish stand where they would have, within 23 units, but every
+ring of the stretch is written into the game's ripples at once (Left). And short ones: a
+splash or a spray born in the HD draw keeps its classic sprites out for the rest of its
+life, under a second; one born in the classic draw shows its sprites in the HD draw for
+its life; the waterfall drops already in the air when the switch goes to classic live out
+their 24 ticks. And one machine is fed by the HD frame alone and does not catch up: the
+sheets' ring tracker (`HDRenderWaterRipples`, `hd_render.cpp:15245`), which
+`FeedWaterRipples` (`hd_level.cpp:1788`) feeds from `HDFrameDrawGlow` only. While classic
+is drawn it keeps every ripple slot as the last HD frame saw it; a slot that a new ripple
+took during the stretch, one already past its fade-in (`init` 0) and larger than the one
+remembered, is not taken for new (`hd_render.cpp:15258`), so it gets no ring, and as
+`HDWaterRippleOnSheet` keeps its classic sprite out, that ripple shows nothing for the
+rest of its life, at most about two seconds (`SetupRipple`, a life of 48 to 63 ticks)
+(Left). (c) The switch back, read from the code, draws what the HD draw would have drawn,
+but for what (b) names as starting again, settling, catching up or missing: the HD data
+were never touched, and the clock and the tank are as above. It is not measured: the probe
+draws its HD frame in every run and lays the classic faces over the finished picture
+(`RoomProbe.cpp:12750`), so it has no frame in which the HD path is skipped, and its
+`-devicecycle` builds the level anew on a new device between its runs (Measured). The flip
+in place can only be seen in the game. (d) The log line and the probe agree: both move the
+state by `HDSwitchStep`; `drawn=0` in the log is `HDDrawn()` 0, and the probe prints
+`hddrawn: HDDrawn() 0` for its classic picture. (e) What stays HD while the world is drawn
+classic: the inventory ring and the pickup display (HD models), the fonts, the loading and
+save screens and the logo, the F4 outfit changer (its window and Lara's rebuild, ready for
+the flip back) and the barefoot footstep sound.
 
 **What a press shows.** F12 (or Modifier+Options) in a level: the next frame shows the
 classic world - rooms, statics, sky, items and enemies, Lara, the water faces, the classic
 splashes and ripples, the fish tank's classic mesh, the round blobs - with no pause; F12
 again, and the HD world is back as it was. Not seen: any wait, any change to the HUD, the
 inventory or the fonts. Seen, briefly: after a long stretch in classic, a crowd of rings
-on a water with floats or drips at the first HD frame, and Lara's projected shadow fading
-in over a quarter second.
+on a water with floats or drips at the first HD frame, Lara's projected shadow fading in
+over a quarter second, her braid settling onto her pack, and now and then a ripple on an
+HD water that shows no ring for up to two seconds.
 
 **Measured.** The game's frame is a reading of the code above; nobody could play. The
 probe measures its own side: at the 15 cameras of the water parity set (`-hdwater 0` as
@@ -18214,9 +18231,13 @@ reads), and reads the fog bulbs without writing them (`FillFrameLighting`);
 `SwapRoomContents` gives every byte back. So none of the four is a difference a player
 will see. Three of the 45 cameras' runs wrote no picture the first time - the card refused
 `GetRenderTargetData` with three tools on it at once - and gave the same answers run
-alone. The switch back: `-devicecycle` with `-hddrawn 1` - HD, classic, HD in one
-process - gives the same first and third picture at 15 of 15 cameras, and the third equals
-`28c358eb`'s. The room art's 201-view set of its round 4b at `hd_air` 1: `-hddrawn 1`
+alone. `-devicecycle` with `-hddrawn 1` - HD, the classic faces over HD, HD, each run on
+its own device with the level built anew - gives the same first and third picture at 15 of
+15 cameras, and the third equals `28c358eb`'s: a level built anew on a new device draws
+the same bytes, whatever was drawn before it. That is not the switch back: the switch
+rebuilds nothing, and the probe's `HDDrawn()` reads 1 in all three runs (the middle run is
+`-devicecycle`'s own `-classicroom` list); the flip in place is read from the code, (c)
+above. The room art's 201-view set of its round 4b at `hd_air` 1: `-hddrawn 1`
 byte-identical to `28c358eb` at 201 of 201 views. The 6 classic views (`-classicroom N
 -classiconly`, ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34) are identical across
 `8691e82`, `28c358eb` and this build, and `-hddrawn 0` alone gives the same 6. The life's
@@ -18263,18 +18284,32 @@ whole stretch and writes every ring of it into the game's ripples at once, and a
 minutes it takes 8 to 21 ms more (Measured). The fix belongs to the life's own code
 (`hd_life.cpp`, `hd_life_rules.h` `HDLifeTick`): tick on while the world is drawn classic
 without writing rings, or drop a ring that fell due more than a ring's life before the
-clock. The comments
-over `HDLevelActive` (`hd_level.cpp:6812`), over the items' guard (`hd_object.cpp:2919`)
-and `hd_level.h`'s note on `HDLevelActive` name the cases without the switch; this pass
-changed gate lines only. The *HD textures* row's comment (`game/menu_frame.cpp:762`) says
-the row shows what the next level will do; with the room gates on `HDLevelActive` the row
-takes the rooms, the statics and the sky at once, as it took the water's hooks, the
-mirrors and the projected shadow before, and the items and Lara at the next load. On the
-XInput-ordered pages and at *One key* the pad has no default chord, as for every chord: no
-Modifier there.
+clock. The sheets' ring tracker after a stretch drawn classic (While classic is drawn,
+(b)): a ripple whose slot was taken again during the stretch can come back with no ring
+and no sprite for up to two seconds; the fix belongs to the water's own code
+(`g_ripple_seen`, `hd_render.cpp:11373`, fed only from `HDFrameDrawGlow`), not to a gate
+line. Seven comments describe the gates without the switch, and this pass changed gate
+lines only, in files the other rounds work in: the comments over `HDLevelActive`
+(`hd_level.cpp:6812`), over the items' guard (`hd_object.cpp:2919`) and `hd_level.h`'s
+note on `HDLevelActive` (`:147`) name the cases without the switch; and four say that
+`hd_enable` switched off in a running level changes no room answer until the next level,
+or that the room answer is decided once at the load, while the room, static and
+carried-art gates now ask `HDLevelActive` on every frame - the comment over
+`g_level_active` (`hd_level.cpp:148`-`:150`), the statics' note in
+`game/draw.cpp:3619`-`:3622`, `hd_level.h:173` on `HDRoomIsHD` and `hd_level.h:313`-`:315`
+on `HDStaticDrawnClassic`. With `-log`, a level loaded while classic is drawn writes its
+`HDLOG softbody` line with `state=off reason=classic` (`HDLaraDrawBuild`,
+`hd_laradraw.cpp:1289` and `:1294`, through `soft_gate`, `:796`), although the HD Lara is
+built and her soft motion runs after the flip back; the line is diagnostic only, and
+`soft_gate` is the frame's soft-body gate as well, so it stays. The *HD textures* row's
+comment (`game/menu_frame.cpp:762`) says the row shows what the next level will do; with
+the room gates on `HDLevelActive` the row takes the rooms, the statics and the sky at
+once, as it took the water's hooks, the mirrors and the projected shadow before, and the
+items and Lara at the next load. On the XInput-ordered pages and at *One key* the pad has
+no default chord, as for every chord: no Modifier there.
 
 **Commits.** `d502c8c`, `65f7d68`, `c6431e3`, `6c0036b`, `9f89b19`, `b98a2a3`; the wiring
-pass `9b9520c`, `f28f6ef`, `5262f98` and the record's own commit.
+pass `9b9520c`, `f28f6ef`, `5262f98`, `67cd411`; its fix pass the record's own commit.
 
 ## 2.7 First person view, cheats and the -log seams
 

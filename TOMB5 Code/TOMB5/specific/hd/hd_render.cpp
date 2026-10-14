@@ -18894,6 +18894,179 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
 	return drew;
 }
 
+namespace
+{
+	/* The backdrop's stencil bit: the rooms' receive owns bit 1, the
+	 * models' bit 2, the creatures' mark bit 4, so this is the next. The
+	 * mask clears the stencil when nothing has this frame
+	 * (g_receive_cleared); the rooms' receive, after every room's solid
+	 * art, clears it whole again, and the backdrop is drawn before it. */
+	const DWORD kBackdropStencilBit = 8;
+}
+
+bool HDRenderBackdropMask(const float* corners, int triangles, int oneSided,
+	const D3DMATRIX* world, int x0, int y0, int x1, int y1)
+{
+	if (!g_device || !g_in_frame || !corners || triangles <= 0 ||
+		x1 <= x0 || y1 <= y0 || !depth_has_stencil())
+		return false;
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	DWORD fvf = 0;
+	D3DMATRIX was[3];
+	D3DVIEWPORT9 port, far_port;
+	RECT clip;
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_LIGHTING, D3DRS_CULLMODE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_ALPHATESTENABLE, D3DRS_ZENABLE, D3DRS_ZWRITEENABLE,
+		D3DRS_ZFUNC, D3DRS_FOGENABLE, D3DRS_COLORWRITEENABLE,
+		D3DRS_SCISSORTESTENABLE, D3DRS_CLIPPING
+	};
+	const int count = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[sizeof(states) / sizeof(states[0])];
+	DWORD mark[kMarkStateCount];
+	/* DrawPrimitiveUP leaves stream 0 unset, and the room draws that follow
+	 * read the level's vertex buffer from it: it is put back. */
+	IDirect3DVertexBuffer9* stream = 0;
+	UINT streamOffset = 0, streamStride = 0;
+
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetTransform(D3DTS_WORLD, &was[0]);
+	g_device->GetTransform(D3DTS_VIEW, &was[1]);
+	g_device->GetTransform(D3DTS_PROJECTION, &was[2]);
+	g_device->GetViewport(&port);
+	g_device->GetScissorRect(&clip);
+
+	for (int i = 0; i < count; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->GetRenderState(kMarkStates[i], &mark[i]);
+
+	if (!g_receive_cleared)
+	{
+		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
+		g_receive_cleared = true;
+	}
+
+	/* Every corner in the last step of a 24 bit depth range, 2^-24 below
+	 * 1, tested less or equal against the frame's depth: it passes only
+	 * where nothing has been drawn, the depth still the cleared 1. A range
+	 * of no width, MinZ and MaxZ both 1, marked no pixel at all on the
+	 * device the pictures were made with. */
+	far_port = port;
+	far_port.MinZ = 1.0f - 1.0f / 16777216.0f;
+	far_port.MaxZ = 1.0f;
+
+	const RECT window = { x0, y0, x1, y1 };
+
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetFVF(D3DFVF_XYZ);
+	g_device->SetTransform(D3DTS_WORLD, world);
+	g_device->SetTransform(D3DTS_VIEW, (const D3DMATRIX*)g_view);
+	g_device->SetTransform(D3DTS_PROJECTION, (const D3DMATRIX*)g_proj);
+	g_device->SetViewport(&far_port);
+	g_device->SetScissorRect(&window);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_CLIPPING, TRUE);
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+	g_device->SetRenderState(D3DRS_STENCILREF, kBackdropStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILMASK, kBackdropStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kBackdropStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+
+	if (oneSided > 0)
+	{
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)oneSided,
+			corners, 3 * sizeof(float));
+	}
+
+	if (triangles > oneSided)
+	{
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+			(UINT)(triangles - oneSided), corners + (size_t)oneSided * 9,
+			3 * sizeof(float));
+	}
+
+	g_device->SetViewport(&port);
+	g_device->SetScissorRect(&clip);
+	g_device->SetTransform(D3DTS_WORLD, &was[0]);
+	g_device->SetTransform(D3DTS_VIEW, &was[1]);
+	g_device->SetTransform(D3DTS_PROJECTION, &was[2]);
+
+	for (int i = 0; i < count; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->SetRenderState(kMarkStates[i], mark[i]);
+
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+
+	if (stream) stream->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	return true;
+}
+
+bool HDRenderBackdropRoom(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting)
+{
+	if (!g_device || !g_in_frame || !depth_has_stencil())
+		return false;
+
+	DWORD mark[kMarkStateCount];
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->GetRenderState(kMarkStates[i], &mark[i]);
+
+	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+	g_device->SetRenderState(D3DRS_STENCILREF, kBackdropStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILMASK, kBackdropStencilBit);
+	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
+	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+	HDRenderScissorOff();
+
+	const bool drew = HDRenderRoomMask(group, world, lighting, HD_PASS_SOLID,
+		HD_WINDOW_ALL);
+
+	for (int i = 0; i < kMarkStateCount; i++)
+		g_device->SetRenderState(kMarkStates[i], mark[i]);
+
+	return drew;
+}
+
 /* The sky dome.
  *
  * Every .TRG whose level has a sky ends in one group past the

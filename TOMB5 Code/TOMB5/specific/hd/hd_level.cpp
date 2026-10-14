@@ -12,6 +12,7 @@
  */
 #include "../../tomb5/pch.h"
 #include "hd_level.h"
+#include "hd_switch.h"			// HDDrawn - the world drawn HD or classic
 #include "hd_memory.h"			// the address space, and the rule that spends it
 #include "hd_outfitmenu.h"		// the footsteps follow the outfit
 #include "hd_install.h"
@@ -5115,7 +5116,7 @@ static bool NoteStaticPiece(int roomIndex, int group, const HDStaticEntry& entry
 bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
 	int listedCount)
 {
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return true;
 
 	const int group = g_room_group[roomIndex];
@@ -6689,7 +6690,7 @@ bool HDLevelDeviceRecreated()
  * flip table is read; everything else asks this. */
 static int GroupOfRoom(int roomIndex)
 {
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return -1;
 
 	const int group = g_room_group[roomIndex];
@@ -6709,7 +6710,7 @@ bool HDRoomIsHD(int roomIndex)
  * a room's roomlets swaps its flags with them. */
 const unsigned char* HDRoomletDropped(int roomIndex, int roomlet)
 {
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return 0;
 
 	const int group = g_room_group[roomIndex];
@@ -6733,7 +6734,7 @@ bool HDRoomShadowHD(int roomIndex)
 	if (HDRoomIsHD(roomIndex))
 		return true;
 
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return false;
 
 	const int group = g_room_group[roomIndex];
@@ -6746,7 +6747,7 @@ bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount)
 	if (HDRoomIsHD(roomIndex))
 		return true;
 
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return false;
 
 	const int group = g_room_group[roomIndex];
@@ -6774,7 +6775,7 @@ int HDRoomCarries(int roomIndex, const short** rooms)
 {
 	*rooms = 0;
 
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return 0;
 
 	const int key = g_room_group[roomIndex] >= 0 ? g_room_group[roomIndex]
@@ -6797,7 +6798,7 @@ int HDRoomCarries(int roomIndex, const short** rooms)
  * (group 174): art of a state the level is not in. */
 int HDCarriedRoom(int group)
 {
-	if (!g_level_active || group < 0 || group >= (int)g_carry_main.size())
+	if (!HDLevelActive() || group < 0 || group >= (int)g_carry_main.size())
 		return -1;
 
 	const int main = g_carry_main[(size_t)group];
@@ -6814,7 +6815,7 @@ int HDCarriedRoom(int group)
  * game\draw.cpp carries no reach and is the classic walk. */
 bool HDLevelActive()
 {
-	return g_level_active && HDEnabled();
+	return g_level_active && HDEnabled() && HDDrawn();
 }
 
 /* The mirrors the room build found, handed to the game side in the engine's
@@ -7046,7 +7047,7 @@ void HDFramePickupEnd()
 static bool StandHolderRoom(int roomIndex, const float* viewWorld,
 	int left, int top, int right, int bottom)
 {
-	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
+	if (!HDLevelActive() || roomIndex < 0 || roomIndex >= g_room_count)
 		return false;
 
 	const int group = g_room_group[roomIndex];
@@ -7204,7 +7205,7 @@ void HDFrameScissorForRoom(int roomIndex)
  * nPolyType 6, which is none of those either. */
 bool HDFrameSky(const float* viewWorld)
 {
-	if (!viewWorld || !HDEnabled() || !g_level_active)
+	if (!viewWorld || !HDLevelActive())
 		return false;
 
 	if (!HDRenderSkyGroups())

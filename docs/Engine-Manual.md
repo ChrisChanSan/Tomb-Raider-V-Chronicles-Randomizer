@@ -3190,8 +3190,9 @@ and the loading bar running up to its end after the work is done 6 to 42
 the room build is about 2.1 seconds, and inside it the three largest parts are
 the texture pages (about 0.6), the air's hulls asked of every triangle on one
 thread (0.5) and every room's triangles on the pool (0.5); the objects add 0.6.
-A load of a savegame inside the level you are in costs exactly what a fresh
-load of that level costs. The `LOADLOG` lines (*When something looks wrong*)
+A load of a savegame inside the level you are in costs about what a fresh load
+of that level costs: 0.42 seconds less to 0.11 more over thirteen levels, half
+a second at most either way. The `LOADLOG` lines (*When something looks wrong*)
 time every step of a load on your machine.
 
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full

@@ -14522,7 +14522,9 @@ to `8691e82`'s tool and to `28c358eb`'s; the fifteen parity cameras of the water
 round 15 of 15 identical to the `28c358eb` tool (`git archive`) and to that round's own
 pictures. Suites: ModernTest 14,991, MenuTest 44,216, InterpTest 729, LipsTest 270 and
 243, 0 failed; the engine and RoomProbe, TrgProbe, ModelProbe and MapProbe build. No
-suite reads HDLOG or LOADLOG lines, so none needed a group.
+suite reads HDLOG or LOADLOG lines, so none needed a group. After `6529af0` (two laps of
+`hd_object.cpp` moved above their comments; no tool links that file, so the pictures
+above stand) the four suites ran again with the same counts, 0 failed.
 
 **Left - the owner's decision.** *(a) What a load inside the same level does.* Load menu,
 `S_LoadGame` reads the file (`specific/gamemain.cpp` :186), `DoLevel` runs
@@ -14563,18 +14565,30 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
   time, the hd settings); in `DoLevel` on a same-level save: the copy back, the pool's
   mark, `SetupGame`'s resets, the HD flips back and the HD level starts, then the
   initialisers and `sgRestoreGame` as today.
-- *B - the HD data resident, the classic reload as today.* Saves the HD build less a
-  re-bind of about 30 to 80 ms (the static tables, the water faces and frames, the
-  objects' binding, the life, the flips back), RICH2 about 2.8 to 3.0 s, other levels
-  1.0 to 2.9 s, and the `.TRG` scan (88 to 404). No extra memory. `hd_enable 0`
-  untouched: every change sits behind the HD gate. Risk medium: the stale-pointer class
-  only through the two pointer families of (c), both cleared already; the real risks are
-  a level changed under the same name (key on the `.TRC`, `.hdm` and `.TRG`, the hd
-  settings and the outfit) and the flip state, set back before `sgRestoreGame` flips
-  again. Needs: `HDLevelUnload` keeping or rebuilding its cheap tables, `HDLevelLoad`
-  skipping the scan, `HDLevelBuildHD` checking the key at its top, `HDObjectLevelBuild`
-  split into its binding and its models; the build hash proves a resident level equal to
-  a fresh one.
+- *B - the HD data resident, the classic reload as today.* Saves the HD build less the
+  re-bind, the steps B still runs (the static tables, the statics, the water's sheets,
+  surfaces and frames, the objects' binding and Lara, the life, the re-dress; and the
+  flips back, new work that no load does today and that no bound below holds). The
+  re-bind is an estimate: no owner log times its parts one by one. Its bound out of the
+  RICH2 load above (`log_test18` line 18254, its `hd_share` line 20331): tables 4,
+  statics 17, sheets 19, surfaces and frames 0; the objects less their models and ring,
+  617 - 576 - 32 = 9, hold the binding and Lara; the build's `gap`, 24, holds the
+  release, the budget, the life, the re-dress and the tick's rounding - 73 ms if all of
+  them run again. RICH2's nine loads in the five logs give 36 to 73, the 53 loads that
+  are not TITLE 5 to 161 (median 35; TITLE's objects carry 34 to 366 ms more on the
+  session's first load). So B saves on RICH2 about 2.75 s without `-log` (3,109 less
+  287 of `-log` hashes less 73) and 3.04 s with it, on the other levels about the HD
+  build column above (with `-log`) less 35, and the `.TRG` scan (88 to 404). The
+  owner's next `-log` run delivers the parts: the `LOADLOG` steps `tables`, `statics`,
+  `sheets`, `surfaces`, `frames`, `obj_bind`, `obj_lara`, `release`, `budget`, `life`
+  and `redress`. No extra memory. `hd_enable 0` untouched: every change sits behind
+  the HD gate. Risk medium: the stale-pointer class only through the two pointer
+  families of (c), both cleared already; the real risks are a level changed under the
+  same name (key on the `.TRC`, `.hdm` and `.TRG`, the hd settings and the outfit) and
+  the flip state, set back before `sgRestoreGame` flips again. Needs: `HDLevelUnload`
+  keeping or rebuilding its cheap tables, `HDLevelLoad` skipping the scan,
+  `HDLevelBuildHD` checking the key at its top, `HDObjectLevelBuild` split into its
+  binding and its models; the build hash proves a resident level equal to a fresh one.
 - *C - the HD build faster for every load*, at most (RICH2, `hd_air 2`): the hulls per
   group on the pool and their answers reused by the fill, 512; the largest groups split
   across the pool, about 300 of 419; `MarkCarryCells` on the pool, 173; the `.TRG` read
@@ -14585,13 +14599,15 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
   None touches `hd_enable 0`; each is proven by the build hash. Risk low, the sidecar
   medium.
 
-Also measured and not a candidate of this round: the bar's tail, 344 to 718 ms of every
-load - the bar running up from where the loading thread left it at 2 per frame
-(`specific/drawbars.cpp` :473) - classic-path code, so shortening it changes the load's
-timing at `hd_enable 0` too. Fill's split exists only offline; the engine's `fill` step
-stays one number until `hd_render.cpp` is free for clock reads.
+Also measured and not a candidate of this round: the bar's tail, 312 to 797 ms of every
+load (`load bar finished` less `Cutscenes resident`, the 64 loads of the five logs; the
+`WARMUP` line inside it takes 5 to 34 of them) - the bar running up from where the
+loading thread left it at 2 per frame (`specific/drawbars.cpp` :473) - classic-path
+code, so shortening it changes the load's timing at `hd_enable 0` too. Fill's split
+exists only offline; the engine's `fill` step stays one number until `hd_render.cpp` is
+free for clock reads.
 
-**Commits.** `728dd11` (the seam), `1ca85c7` (`RoomProbe -loadtime`), and the record's.
+**Commits.** `728dd11`, `1ca85c7`, `d78d66d`, `8b0d22a`, `c2d3d37`, `4a3896f`, `6529af0`
 
 ## 2.5 Sixty frames a second
 

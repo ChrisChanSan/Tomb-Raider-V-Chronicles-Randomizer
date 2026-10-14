@@ -3225,7 +3225,9 @@ after the graphics device was made new (Alt+Enter, a resolution change), and for
 every other level; the log's `HDLOG level=<L> resident=1` line, or `resident=0
 refused=<what>`, says which. A fresh load reads the level's `.TRG` once, decodes
 its first texture pages while the classic level is still being read, and finds
-the models by one look into each model folder. The `LOADLOG` lines (*When
+the models by one look into each model folder. Until the new level's build gives
+the previous level's HD data back, that `.TRG` and those pages (about 115 to 155
+MiB) are held beside them. The `LOADLOG` lines (*When
 something looks wrong*) time every step of a load on your machine.
 
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full

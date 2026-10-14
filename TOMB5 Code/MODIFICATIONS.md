@@ -14655,7 +14655,14 @@ clears for every level - the restored water faces, the water frames, the markers
 objects' level state, the life - but not the static tables, which number this same
 level's rooms and statics. Otherwise it frees as before, and the Direct3D objects of the
 level before are still released on the main thread at the next build, as they always
-were: there are never two levels' HD data at once.
+were: B never holds one level's data through the load of another. The read ahead below
+does put the next level's parse and first pages beside them until that build (*Memory*).
+The key a full build records is the key of its load, taken once at the build's top: a
+rebuild with no load in front of it - `HDLevelDeviceRecreated` after Alt+Enter or a
+resolution change, which reads the settings and files as they are by then - records
+none, so the next load of the level builds again. A build that stops before the room
+build takes the parse and the pages read ahead (a failed scan, the room count, no shader
+model 3, a failed begin) gives them back (`AheadDrop`).
 
 *The skip.* `HDLevelLoad` reads the sidecar as before and skips the scan
 (`LOADLOG step=scan ms=0.0 skipped=1`; the budget takes the kept level's scan counts).
@@ -14680,19 +14687,20 @@ are the sheets' (`HDRenderSetWaterSheets`), the life's is `HDLifeLevelBegin` (af
 has no level start in either path, and the HD/SD switch keeps its state for the session.
 A keep the device no longer allows falls through to the full build.
 
-*The ties.* Every pointer the HD units keep, read off their globals: `hd_feet.cpp` :33,
-:34 point into the pool, are cleared in `FreeLevel` and made again by `LoadSamples` -
-untouched by this. `hd_object.cpp` :245, :248 hold item addresses compared and never
-read, reset every frame. Borrowed for the build and zeroed after it, all into
-`hd_level.cpp`'s own vectors: `hd_render.cpp` :1918 `g_marks`, :1931 `g_boxes`, :1937
-`g_grids`, :1939 `g_sectors`, :1979 `g_intrusions`, :1985 `g_pair_faces`, :2014
-`g_room_air`, :2016 `g_air_links`, :2543 `g_carry_sky`, :2544 `g_carry_twin`, :2692
-`g_stand_rooms`, :2694 `g_stand_holders`, :2696 `g_stand_faces`, :2730 `g_places`, :2751
-`g_cuts` (six more than the inventory named; the zeroing is `hd_level.cpp`'s, after the
-build, in `ReportRoomIntrusions`, `ReportRoomCarry`, `ReportRoomCuts` and
-`BuildStaticTables`). Kept with the data they point into: `hd_render.cpp` :1890
-`g_book_watch` (a range of its own groups, for the log). Compared only: :3273
-`g_water_table_up` (the classic `WaterTable`, a global array; forced every frame).
+*The ties.* Every pointer the HD units keep, read off their globals (line numbers of
+this part's last commit): `hd_feet.cpp` :33, :34 point into the pool, are cleared in
+`FreeLevel` and made again by `LoadSamples` - untouched by this. `hd_object.cpp` :246,
+:250 (`g_gave_way`, `g_blob_fading`) hold item addresses compared and never read, reset
+every frame. Borrowed for the build and zeroed after it, all into `hd_level.cpp`'s own
+vectors: `hd_render.cpp` :1919 `g_marks`, :1932 `g_boxes`, :1938 `g_grids`, :1940
+`g_sectors`, :1980 `g_intrusions`, :1986 `g_pair_faces`, :2015 `g_room_air`, :2017
+`g_air_links`, :2544 `g_carry_sky`, :2545 `g_carry_twin`, :2693 `g_stand_rooms`, :2695
+`g_stand_holders`, :2697 `g_stand_faces`, :2731 `g_places`, :2752 `g_cuts` (six more
+than the inventory named; the zeroing is `hd_level.cpp`'s, after the build, in
+`ReportRoomIntrusions`, `ReportRoomCarry`, `ReportRoomCuts` and `BuildStaticTables`).
+Kept with the data they point into: `hd_render.cpp` :1891 `g_book_watch` (a range of its
+own groups, for the log). Compared only: :3274 `g_water_table_up` (the classic
+`WaterTable`, a global array; forced every frame).
 Values only: `g_room_group`, `g_group_hd`, the water faces, the film and wet items, the
 water frames, the static tables. One tie the inventory did not name: the water frames'
 borrowed pages sit in the classic `Textures[]` above `nTextures` - made again by the
@@ -14718,14 +14726,23 @@ lists again. The callers ask in their own order, so the same folder's file wins;
 
 *The probe.* `RoomProbe -reload` builds the level, takes it as read again, keeps the build
 by the engine's key comparison, sets the water sheets a second time over it with a ring
-of the first left on them and draws; the pictures must equal a run without it.
-`-reloadas <LEVEL>` gives the borrowed lists back, builds that level and prints its
-fingerprint. `-loadtime -reload` writes the resident load's steps as `LOADLOG` lines.
-`-ahead` reads ahead and decodes ahead in a run that draws; `-aheadverify` decodes every
-page taken again and counts the ones that differ. What the tool cannot follow: the
-classic load into the game's pool, `FreeLevel`, the objects' rebind, the life, the
-re-dress rule and `sgRestoreGame`'s own flips (its `-flip` acts on its walk from the rooms
-read again), and a classic load for the read ahead to run beside.
+of the first left on them and draws; the pictures must equal a run without it. Nothing
+of the build is released or made again, so its room art is equal by construction, as
+the engine's keep makes it; what the run tests is the sheets set again and the walk under
+`-flip`. `-reloadas <LEVEL>` gives the borrowed lists back, shuts the build down and makes
+the run again for that level in the same process (`ProbeReloadOther`), with that level's
+own room inputs out of `-roombox` and its statics read again, and prints its
+fingerprint; with `-ahead` that level's `.TRG` is read and its first pages decoded while
+the first level's build is still in memory, the engine's order at a level change, and
+the commit is printed at each step. `-loadtime -reload` writes the resident load's steps
+as `LOADLOG` lines. `-ahead` reads ahead and decodes ahead in a run that draws;
+`-aheadverify` decodes every page taken again and counts the ones that differ. What the
+tool cannot follow: the classic load into the game's pool, `FreeLevel`,
+`HDLevelBuildResident` itself, the objects' rebind, the life, the re-dress rule,
+`sgRestoreGame`'s own flips (its `-flip` acts on its walk from the rooms read again), the
+device (kept across levels by the engine, made again by `-reloadas`), and a classic load
+for the read ahead to run beside. The engine's keep path has no executed proof here: it
+rests on reading the code, and the owner's next `-log` run is its test.
 
 **Measured.** *B.* The owner's ANDREA1 save load: `hd_build` 2,507 ms, of which the steps
 B runs again took 50 (`release` 6 and `budget` 6 now skipped; `sheets` 18, `surfaces` 0,
@@ -14736,69 +14753,121 @@ classic thread, the load picture and the bar's tail remain. On RICH2 (`log_test1
 inside it 3,985 ms, HD build 2,969, scan 112) about 3 seconds. The `obj_ring` part
 shrinks with the folder listing below.
 *C1, RoomProbe and ModelProbe on this machine*, the afbb6f6b tool alternating with the
-new one, three runs each, medians, 16 threads, `hd_air 2`:
+head's, three runs each, medians, `-loadtime`, 16 threads, `hd_air 2` (the fix pass's
+runs; the machine was shared with other work, so a step's spread between runs is tens of
+milliseconds):
 
-| Level | `trg_read` before / after | scan before / after (read moved ahead) | `pages` before / after (72 taken) | model find before / after, files opened |
-|---|---|---|---|---|
-| RICH2 | 113.8 / 0.0 | 121.6 / 94.7 | 550.0 / 499.3 | 455 / 45, 570 / 58 |
-| ANDREA1 | 61.3 / 0.0 | 86.2 / 48.9 | 564.6 / 516.4 | 330 / 34, 483 / 54 |
-| ANDREA2 | 86.2 / 0.0 | 159.3 / 74.0 | 703.1 / 581.6 | - |
-| JOBY2 | 67.9 / 0.0 | 102.1 / 69.2 | 467.2 / 397.5 | 359 / 37, 450 / 55 |
+| Level | `trg_read` | scan | `prep` | `pages` (72 taken) | `begin` | the tool's whole load | model find, files opened |
+|---|---|---|---|---|---|---|---|
+| RICH2 | 67.6 / 0.0 | 137.8 / 84.2 + 23.2 | 55.7 / 72.1 | 693.1 / 503.1 | 2,099.2 / 1,962.6 | 2,443.0 / 2,279.5 | 455 / 45, 570 / 58 |
+| ANDREA1 | 40.5 / 0.0 | 86.1 / 42.9 + 15.6 | 37.4 / 46.6 | 518.4 / 444.3 | 1,074.6 / 964.7 | 1,204.4 / 1,093.1 | 330 / 34, 483 / 54 |
+| ANDREA2 | 73.0 / 0.0 | 131.2 / 82.7 + 25.2 | 61.8 / 78.6 | 568.2 / 487.1 | 2,122.2 / 1,979.4 | 2,315.2 / 2,194.9 | - |
+| JOBY2 | 53.1 / 0.0 | 103.0 / 56.4 + 22.0 | 52.2 / 73.0 | 485.3 / 396.8 | 1,400.1 / 1,282.9 | 1,583.2 / 1,441.2 | 359 / 37, 450 / 55 |
 
-The scan and pages columns hold the read ahead against the tool of the `.TRG`-once
-commit; the find column ModelProbe `-all` with the owner's Mods folder (17 mods; without
-it RICH2 74 / 6 ms); the files opened are then the files read and no more. The tool has
-no classic load, so its scan waits for the read (RICH2 75 ms); in the game the read runs
-beside the classic level's (ANDREA1: `free` 2, `textures` 168, the level's data block to
-`tex_infos` about 7 ms before the scan) and the decode beside the rest of the loading
-thread and the main thread's steps before the pages (about 85 ms in his fresh ANDREA1
-load). A decode started only after the scan was measured first: the pages step 34 to 81
-ms shorter, `prep` 16 to 40 longer beside sixteen decoding threads - so the read and the
-decode were moved to the start of the load. Expected in the game per fresh load: the
-`trg_read` (64 to 132 ms in his logs), the scan's own read (most of his 50 to 212 ms
-scan), the pages of 72 decoded beforehand (50 to 120 ms) and the model find (his 58 to
-309 ms) to about a tenth. *Memory.* B adds none: the data kept are the data that were
-there. The read ahead holds the parse (RICH2 about 45 MiB) and at most 96 MiB of decoded
-texels from the start of the load while the level before's HD data still exist; the
-tool's peak commit, in the build, is unchanged (RICH2 424.2 / 422.6 MiB, ANDREA2 429.4 /
-429.1); the owner's next `budget=` line (`avail_virtual`, `largest_free`) shows it in the
-game.
+Before / after; the scan after is what it waited for the read plus its own time; the
+tool's whole load runs from its classic read to the build's end (its steps
+`classic_read`, the scan with that wait, the room inputs and `begin_wall`). The `pages`
+column alone overstates the gain: `prep` grows by 9 to 21 ms, because in the tool the 72
+pages are still being decoded (`pages_ahead` 81 to 103 ms) while the scan, the room
+inputs and `prep` run, and `begin` moves by less than `pages` - in the prover's three
+runs on ANDREA1 not at all (1,063.4 / 1,064.0, with `trg_read` 46.2 / 0). The tool's
+net is the whole load: 111 to 164 ms shorter. The find column is ModelProbe `-all` with
+the owner's Mods folder (17 mods; without it RICH2 74 / 6 ms); the files opened are then
+the files read and no more. The game's net differs from the tool's for one reason: the
+tool has no classic load, so its scan waits for the whole read and the decode runs beside
+some 65 to 110 ms of the tool's own steps; in the game the read runs beside the classic
+level's (ANDREA1 fresh: `free` 2, `textures` 168, the data block to `tex_infos` about 7
+ms before the scan) and the decode beside the rest of the loading thread and the main
+thread's steps before the pages (about 85 ms), so `prep` grows only where the decode
+outlasts that window. A decode started only after the scan was measured first: `pages`
+34 to 81 ms shorter, `prep` 16 to 40 longer beside sixteen decoding threads - so the read
+and the decode were moved to the start of the load. Expected in the game per fresh load:
+the `trg_read` (64 to 132 ms in his logs), the scan's own read (most of his 50 to 212 ms
+scan), the pages of 72 decoded beforehand (50 to 120 ms, less any growth of `prep`) and
+the model find (his 58 to 309 ms) to about a tenth; his next `-log` run shows `prep`,
+`pages_ahead` and `trg_ahead waited=` beside each other.
+*Memory.* B adds none: the data kept are the data that were there. The read ahead
+starts at the top of `LoadLevel`, while the level before's HD data are still in memory -
+they are released at the next build on the main thread - so at a level change the next
+level's parse and up to 96 MiB of its decoded pages sit beside them until that build; at
+afbb6f6b only the scan's parse did, for the scan's length. `RoomProbe -reloadas <B>
+-ahead` measures that moment (every page decoded, the most it holds) against each
+level's own build peak (`RoomProbe -nodraw`, a fresh process), process commit in MiB:
 
-**Checked.** With the tools built from `68826a2` (no tool links the last engine commit's
-file): the classic path, the six views `-classicroom N -classiconly`, 6 of 6 identical
-to `8691e82`'s tool and afbb6f6b's; the classic load's steps keep their order
-(`HDLevelKeyNext` returns at its first line with `hd_enable 0`). The HD picture: the
-fifteen parity cameras 15 of 15, the six views drawn HD 6 of 6 and the 201-view room-art
-set at `hd_air 1` 201 of 201 - each identical to afbb6f6b's tool; the build fingerprint
-of all fifteen levels at `hd_air 1` and `2` 30 of 30 equal, also with the parse kept and
-the pages ahead. B's identity: `-reload` 15 of 15 parity cameras, 6 of 6 views, the
-201-view set's RICH2 and ANDREA2 views 115 of 115 (RICH2 21, ANDREA2 94), and six views
-under a flip state (RICH2's save flips 80,42,43,44,46,66,67,68,69,70 in the shaft, ANDY1
-with 179 flipped at three yaws, RICH3 with 170 flipped at two) 6 of 6 identical to the
-fresh build; `-reloadas` RICH2 -> ANDREA2, ANDREA1 -> JOBY2, TITLE -> RICH3 each the
-other level's fresh fingerprint. C1b: `-aheadverify` 72 of 72 pages byte-identical on
-RICH2, ANDREA1, ANDREA2, JOBY2, JOBY5 and TITLE, and the parity cameras, the six views
-and the classic views with it identical. C1c: the models' fingerprint and the slot table
-equal on six levels. Suites: ModernTest 15,024 (22 more than at afbb6f6b, 15,002: the
-level key's table), MenuTest 44,216, InterpTest 729, LipsTest 270 and 243, 0 failed; the
-engine, RoomProbe, TrgProbe, ModelProbe, MapProbe, SfxProbe and LipsTest build.
+| Level before -> next | before's build in memory | + next's parse (afbb6f6b's most) | + its pages ahead (now) | before's build peak | next's build peak |
+|---|---|---|---|---|---|
+| RICH2 -> ANDREA2 | 230.8 | 286.6 | 385.8 | 422.9 | 427.9 |
+| ANDREA2 -> RICH2 | 171.7 | 217.2 | 317.0 | 429.4 | 421.4 |
+| RICH1 -> RICH2 | 125.0 | 170.5 | 270.2 | 220.8 | 421.4 |
+| JOBY5 -> ANDY3 | 135.9 | 160.8 | 260.0 | 268.7 | 272.4 |
+| ANDY1 -> RICH1 | 139.4 | 157.4 | 255.3 | 243.7 | 218.1 |
+| ANDREA1 -> JOBY2 | 142.0 | 180.3 | 279.1 | 256.6 | 334.8 |
+| TITLE -> RICH3 | 166.5 | 188.8 | 288.3 | 406.2 | 262.7 |
+| TITLE -> ANDREA1 | 165.2 | 194.7 | 294.1 | 428.7 | 257.7 |
+
+The parse costs 18 to 56 MiB, the pages 98 to 100. In seven of the eight changes the
+moment stays below both builds' own peaks (by 12 to 140 MiB), so the process peak is the
+build's as at afbb6f6b; in one, ANDY1 -> RICH1, it is 11.6 MiB above the larger of the
+two (255.3 against 243.7). The tool's commit counts the page textures in the default pool
+the way the engine's process does (the same renderer and driver), but not the classic
+level the game holds beside them. In the owner's log of the seam's build the `budget=`
+lines read `avail_virtual` 3,447 to 3,618 MiB and `largest_free` 2,034 MiB with
+`pool=default`; the next `budget=` line is taken after the release and so with the parse
+and the pages ahead already in it - about 115 to 155 MiB less `avail_virtual` than the
+same load at afbb6f6b, where the build reads the same parse and decodes the same batch a
+moment later.
+
+**Checked.** With the tools built from this part's last commit: the classic path, the six
+views `-classicroom N -classiconly`, 6 of 6 identical to `8691e82`'s tool and
+afbb6f6b's; the classic load's steps keep their order (`HDLevelKeyNext` returns at its
+first line with `hd_enable 0`, and the build's new `AheadDrop` line stands behind
+`tomb5.hd_enable`). The HD picture: the fifteen parity cameras 15 of 15 and the six views
+drawn HD 6 of 6, identical to afbb6f6b's tool, also with `-aheadverify` (72 of 72 pages
+taken, 0 different, on all fifteen); the build fingerprint of all fifteen levels at
+`hd_air 1` and `2` 30 of 30 equal, also with the parse kept and the pages ahead
+(`-loadtime`). The 201-view room-art set at `hd_air 1`, 201 of 201, and the flip views
+below were run with the tools of `68826a2` and again by the prover with the tools of
+`eb23c5ae`; the fix pass changed only `-reloadas` and the run's dispatch in the tool,
+which every run above passes through. `-reload` with the same key: 15 of 15 parity
+cameras, 6 of 6 views, the 201-view set's RICH2 and ANDREA2 views 115 of 115, and six
+views under a flip state (RICH2's save flips 80,42,43,44,46,66,67,68,69,70 in the shaft,
+ANDY1 with 179 flipped at three yaws, RICH3 with 170 flipped at two) identical to the
+fresh build - equal by construction for the room art, a test of the sheets set again
+and of the walk (*The probe*). `-reloadas` with `-roombox`: RICH2 -> ANDREA2, ANDREA2 ->
+RICH2, RICH1 -> RICH2, JOBY5 -> ANDY3, ANDY1 -> RICH1, ANDREA1 -> JOBY2, TITLE -> RICH3
+and TITLE -> ANDREA1, 8 of 8 the other level's fresh fingerprint, with and without the
+read ahead (then 72 pages taken, 0 different, the parse taken). Before the fix pass the
+same runs gave other fingerprints: the rebuild had none of the room inputs, and once it
+had them the first level's statics, which the tool reads once a process, went into the
+second level's build - a fault of the tool, not of the engine: the owner's log shows
+TITLE built after ANDREA1 with TITLE's fresh fingerprint. C1c: the models' fingerprint
+and the slot table equal on six levels. Suites: ModernTest 15,024 (22 more than at
+afbb6f6b, 15,002: the level key's table), MenuTest 44,216, InterpTest 729, LipsTest 270
+and 243, 0 failed; the engine, RoomProbe, TrgProbe, ModelProbe, MapProbe, SfxProbe and
+LipsTest build.
 
 **Left.** The bar's tail (312 to 797 ms of every load) is the owner's own question, not
 this part's. C2 - the hulls per group on the pool and their answers reused by the fill,
 the largest groups split, `MarkCarryCells` on the pool, the sidecar of the whole room
-build - follows the room art's merge. Only his next `-log` run shows: the resident load's
-own steps (`HDLOG ... resident=1` and the `skipped=1` lines), how far the read and the
-decode ahead run beside his classic read (`trg_ahead waited=`, `pages_ahead taken=`),
-whether sixteen decoding threads slow the classic read, and the `budget=` line's address
-space. A merge with the round that adds a call to the level build's sequence: that call
-runs in `HDLevelBuildHD`'s full build; if it starts something a level start has to start,
-`HDLevelBuildResident` needs the same call. A file changed inside the Remaster's
-installation or a mod between two loads of the same level is not in the key (the session
-already takes the mods as fixed); a level built again needs a load of another level or a
-changed setting. The kept data are freed at the next build of another level, as before.
+build - follows the room art's merge. The engine's keep path - `FreeLevel` with the keep,
+the classic read into the pool, `HDLevelBuildResident`, `HDObjectLevelRebind`, the flip
+table set back before `sgRestoreGame`'s flips - is shown by no tool; only his next `-log`
+run shows it, with the resident load's own steps (`HDLOG ... resident=1` and the
+`skipped=1` lines), how far the read and the decode ahead run beside his classic read
+(`trg_ahead waited=`, `pages_ahead taken=`, `prep`), whether sixteen decoding threads
+slow the classic read, and the `budget=` line's address space. The read ahead holds the
+next level's parse and up to 96 MiB of its pages beside the level before's HD data at a
+level change (*Memory*): whether that is acceptable, or the pages ahead should wait for
+the release, is his decision. A merge with the round that adds a call to the level
+build's sequence: that call runs in `HDLevelBuildHD`'s full build; if it starts something
+a level start has to start, `HDLevelBuildResident` needs the same call. A file changed
+inside the Remaster's installation or a mod between two loads of the same level is not
+in the key (the session already takes the mods as fixed); a level built again needs a
+load of another level, a changed setting or a new graphics device. The kept data are
+freed at the next build of another level, as before.
 
 **Commits.** `bcf7fd6`, `636422d`, `2163672`, `5024414`, `0fe49fb`, `27f8bd4`, `68826a2`,
-`5164802`
+`5164802`, `eb23c5a`, `9689393`, `3a25e00`
 
 ## 2.5 Sixty frames a second
 

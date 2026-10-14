@@ -4026,139 +4026,6 @@ static void BuildPairFaces()
 		HDRenderSetPairFaces(0, 0);
 }
 
-/* The backdrop: art of a room that stands in one another with a listed
- * room, drawn where that room's classic faces stand and its art has left
- * the frame empty (DrawBackdrops). A room a whose inside overlaps the
- * inside of a room b in volume - every axis, TR5's inside, the boxes of
- * BuildRoomIntrusions - with no portal or link between them stands in b's
- * space and b in a's: JOBY2's room 33 stands in room 24, whose ceiling at
- * y -4,352 runs through 33's height (-5,376 to -3,072). Where a's art is
- * open on purpose and a's classic face is not - room 33's broken corner by
- * the stairs - the classic frame shows a's face and the art shows nothing:
- * from 33 at yaw 270 22,166 pixels of 1280x720 in the clear colour, every
- * one of them covered by room 24's ceiling when every group is drawn.
- * Room 24 is on no list there (no portal leads to it) and drawn whole it
- * stands in front of 33's pillar over 256,281 pixels, and drawn behind
- * everything on every pixel the frame leaves empty it fills the sky and
- * doorways with art where the classic frame shows nothing: 953,798 such
- * pixels over the 131 room-centre views of ANDREA1, ANDREA2, JOBY2 and
- * RICH2, 615,261 with only its art inside a listed room's inside. On the
- * listed room's classic faces alone it adds none, as the classic frame
- * shows a face on every one of them.
- *
- * Per holder group a, with the air on: the groups b of the intrusion
- * entries (b in a) whose inside overlaps a's in volume, and a's classic
- * faces, the roomlets' quads and triangles in a's frame, the one-sided
- * ones first. Kept for the level and keyed by group, like the pieces. */
-static std::vector<std::vector<short> > g_backdrop_of;
-static std::vector<std::vector<float> > g_backdrop_faces;
-static std::vector<int> g_backdrop_one;
-static int g_backdrop_pairs = 0;
-// The backdrop rooms drawn this frame, for the clip line.
-static int g_frame_backdrops = 0;
-
-static void BuildBackdrops()
-{
-	g_backdrop_of.clear();
-	g_backdrop_faces.clear();
-	g_backdrop_one.clear();
-	g_backdrop_pairs = 0;
-
-	if (!g_air_on || number_rooms <= 0)
-		return;
-
-	g_backdrop_of.assign((size_t)number_rooms, std::vector<short>());
-	g_backdrop_faces.assign((size_t)number_rooms, std::vector<float>());
-	g_backdrop_one.assign((size_t)number_rooms, 0);
-
-	for (size_t k = 0; k < g_intrusions.size(); k++)
-	{
-		const int a = g_intrusions[k].holder;
-		const int b = g_intrusions[k].group;
-
-		if (a < 0 || a >= number_rooms || b < 0 || b >= number_rooms)
-			continue;
-
-		const ROOM_INFO* ra = &room[a];
-		const ROOM_INFO* rb = &room[b];
-
-		if (ra->x + 1024 >= rb->x + ((rb->y_size - 1) << 10) ||
-			rb->x + 1024 >= ra->x + ((ra->y_size - 1) << 10) ||
-			ra->z + 1024 >= rb->z + ((rb->x_size - 1) << 10) ||
-			rb->z + 1024 >= ra->z + ((ra->x_size - 1) << 10) ||
-			ra->maxceiling >= rb->minfloor || rb->maxceiling >= ra->minfloor)
-			continue;
-
-		g_backdrop_of[(size_t)a].push_back((short)b);
-		g_backdrop_pairs++;
-	}
-
-	int holders = 0;
-	int faces = 0;
-
-	for (int a = 0; a < number_rooms; a++)
-	{
-		const ROOM_INFO* r = &room[a];
-
-		if (g_backdrop_of[(size_t)a].empty() || !r->pRoomlets)
-			continue;
-
-		std::vector<float> one, two;
-
-		for (int i = 0; i < r->nRoomlets; i++)
-		{
-			const ROOMLET* roomlet = &r->pRoomlets[i];
-			const ROOMLET_VERTEX* vtx = (const ROOMLET_VERTEX*)roomlet->pSVtx;
-			const short* ptr = roomlet->pFac;
-
-			if (!vtx || !ptr || roomlet->nVtx <= 0)
-				continue;
-
-			for (int q = 0; q < roomlet->nQuad + roomlet->nTri; q++)
-			{
-				const int corners = q < roomlet->nQuad ? 4 : 3;
-				bool good = true;
-
-				for (int c = 0; c < corners; c++)
-					good = good && ptr[c] >= 0 && ptr[c] < roomlet->nVtx;
-
-				// The texture word's top bit: drawn from both sides.
-				std::vector<float>& out =
-					(ptr[corners] & 0x8000) ? two : one;
-
-				// A quad as the classic path splits it, 0 1 2 and 0 2 3.
-				for (int half = 0; good && half + 2 < corners; half++)
-				{
-					const int at[3] = { 0, half + 1, half + 2 };
-
-					for (int c = 0; c < 3; c++)
-					{
-						const ROOMLET_VERTEX& v = vtx[ptr[at[c]]];
-
-						out.push_back(v.x);
-						out.push_back(v.y);
-						out.push_back(v.z);
-					}
-				}
-
-				faces += good ? 1 : 0;
-				ptr += corners + 2;
-			}
-		}
-
-		g_backdrop_one[(size_t)a] = (int)(one.size() / 9);
-		one.insert(one.end(), two.begin(), two.end());
-		g_backdrop_faces[(size_t)a].swap(one);
-		holders++;
-	}
-
-	/* HDLOG backdrop, with the air on: the pairs found, the holders and
-	 * their classic faces. */
-	if (gLogEnabled)
-		Log("HDLOG backdrop level=%s pairs=%d holders=%d faces=%d air=%d",
-			g_stem, g_backdrop_pairs, holders, faces, g_air_on);
-}
-
 /* The classic faces another group's art may stand on (hd_cover.h).
  *
  * A room drawn classic can have its floor and walls modelled in another
@@ -4720,8 +4587,7 @@ static void ReportRoomIntrusions()
 	 * air the point 128 units off its centre stands (1 and 2 its room's on
 	 * the normal's side and the other, 4 and 8 the holder's), `centre` and
 	 * `normal` (in thousandths) where it is; `behind` 1 when its art is
-	 * drawn pushed back; `why` owner, classic or larger and `winner` the
-	 * room whose art wins on it (HDRenderCoveredFaceWhy). Behind -log. */
+	 * drawn pushed back. Behind -log. */
 	if (gLogEnabled && g_air_on)
 		for (int i = 0; ; i++)
 		{
@@ -4734,15 +4600,10 @@ static void ReportRoomIntrusions()
 				break;
 
 			const float to = area > 0.0f ? 100.0f / area : 0.0f;
-			int why = 0, winner = -1;
-			static const char* const kWhy[4] =
-				{ "?", "owner", "classic", "larger" };
 
-			HDRenderCoveredFaceWhy(i, &why, &winner);
 			Log("HDLOG covered level=%s face=%d group=%d holder=%d area=%d "
 				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
-				"normal=%d,%d,%d behind=%d why=%s winner=%d", g_stem, face,
-				group,
+				"normal=%d,%d,%d behind=%d", g_stem, face, group,
 				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
 				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
 				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
@@ -4750,8 +4611,7 @@ static void ReportRoomIntrusions()
 				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
 				(int)floorf(normal[0] * 1000.0f + 0.5f),
 				(int)floorf(normal[1] * 1000.0f + 0.5f),
-				(int)floorf(normal[2] * 1000.0f + 0.5f), behind,
-				kWhy[why >= 0 && why < 4 ? why : 0], winner);
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
 		}
 
 	// The lists were only borrowed for the length of the build.
@@ -5884,7 +5744,6 @@ static void HDLevelBuildHD()
 	BuildRoomCarry();		// and the rooms under the sky
 	lap(LOAD_AIR);
 	BuildPairFaces();		// and its faces, the same contract
-	BuildBackdrops();		// and the rooms standing in one another
 	lap(LOAD_PAIRS);
 	BuildRoomCuts();		// the same contract again
 	lap(LOAD_CUTS);
@@ -8081,104 +7940,6 @@ static void ReceiveStandInHolders()
 	}
 }
 
-/* The backdrop of this frame (BuildBackdrops), after every room's solid
- * art and before the clear floors: the classic faces of each listed room
- * that holds such art and has a window mark the pixels the art has left
- * empty - the HD sky, drawn before the rooms, counts as empty -, and each
- * group that stands in it and is not on the list is drawn
- * there alone - its opaque and alpha-tested art with its own depth, the
- * matrix of the listed room moved to its own origin, its own lighting. A
- * group is asked by the room that draws it now (HDCarriedRoom), so the art
- * of a flipmap state the level is not in is never drawn. */
-static void DrawBackdrops()
-{
-	g_frame_backdrops = 0;
-
-	if (!g_air_on || g_backdrop_of.empty())
-		return;
-
-	short draw_group[HD_MAX_FRAME];
-	int draw_from[HD_MAX_FRAME];
-	int draws = 0;
-	bool marked = false;
-
-	for (int i = 0; i < g_frame_count; i++)
-	{
-		const FrameRoom& entry = g_frame[i];
-
-		if (entry.group < 0 || (size_t)entry.group >= g_backdrop_of.size() ||
-			g_backdrop_of[(size_t)entry.group].empty() || ClipEmpty(entry))
-			continue;
-
-		const std::vector<short>& of = g_backdrop_of[(size_t)entry.group];
-		bool any = false;
-
-		for (size_t k = 0; k < of.size(); k++)
-		{
-			const int group = of[k];
-			const int at = HDCarriedRoom(group);
-			bool taken = at < 0 || GroupOfRoom(at) != group;
-
-			for (int f = 0; f < g_frame_count && !taken; f++)
-				taken = g_frame[f].group == group;
-
-			for (int d = 0; d < draws && !taken; d++)
-				taken = draw_group[d] == group;
-
-			if (at >= 0 && GroupOfRoom(at) == group)
-				any = true;
-
-			if (taken || draws >= HD_MAX_FRAME)
-				continue;
-
-			draw_group[draws] = (short)group;
-			draw_from[draws++] = i;
-		}
-
-		const std::vector<float>& faces =
-			g_backdrop_faces[(size_t)entry.group];
-
-		if (any && !faces.empty() && HDRenderBackdropMask(&faces[0],
-			(int)(faces.size() / 9), g_backdrop_one[(size_t)entry.group],
-			&entry.world, entry.x0, entry.y0, entry.x1, entry.y1))
-			marked = true;
-	}
-
-	// No mask drawn this frame, no stencil to test: nothing is drawn.
-	if (!marked)
-		return;
-
-	static HDRoomLighting lighting;
-	static HDLightSource lights[HD_MAX_LIGHTS];
-
-	for (int d = 0; d < draws; d++)
-	{
-		const FrameRoom& from = g_frame[draw_from[d]];
-		const int at = HDCarriedRoom(draw_group[d]);
-		const float off[3] =
-		{
-			(float)(room[at].x - room[from.room].x),
-			(float)(room[at].y - room[from.room].y),
-			(float)(room[at].z - room[from.room].z)
-		};
-		D3DMATRIX world = from.world;
-
-		// The listed room's matrix, moved by the offset of the two origins.
-		world._41 += off[0] * from.world._11 + off[1] * from.world._21 +
-			off[2] * from.world._31;
-		world._42 += off[0] * from.world._12 + off[1] * from.world._22 +
-			off[2] * from.world._32;
-		world._43 += off[0] * from.world._13 + off[1] * from.world._23 +
-			off[2] * from.world._33;
-		world._44 += off[0] * from.world._14 + off[1] * from.world._24 +
-			off[2] * from.world._34;
-		FillRoomLighting(at, draw_group[d], lighting, lights);
-
-		if (HDRenderBackdropRoom(draw_group[d], &world, &lighting))
-			g_frame_backdrops++;
-	}
-}
-
 /* The frame in two phases.
  *
  * The first two passes write depth and the third does not (hd_render.cpp,
@@ -8404,8 +8165,6 @@ void HDFrameDraw()
 	// and the statics' pieces whose holders are not.
 	DrawStandInHolders(HD_PASS_SOLID);
 	DrawStaticPieces(HD_PASS_SOLID, false);
-	// The rooms standing in a listed one, where its art left the frame empty.
-	DrawBackdrops();
 
 	/* The clear floors, once every room's solid art is in, so that whatever
 	 * lies behind a floor - the copy of the room beneath RICH2's marble, and
@@ -8861,14 +8620,13 @@ void HDFrameDrawGlow()
 			 * (DecidePairs), `unlinked_drawn` those drawn - inside their own
 			 * room's window, or whole on a claimed face the classic path
 			 * draws -, `unlinked_hidden` those left out because that window
-			 * is empty. `backdrop` the groups drawn on the classic faces of
-			 * a listed room they stand in (DrawBackdrops). */
+			 * is empty. */
 			Log("HDLOG clip rooms=%d open=%d full=%d scissored=%d empty=%d "
 				"windowed_tris=%d items_spared=%d view=%s view_obj=%s "
 				"pairs=%d whole=%d scissored=%d reach_rooms=%d "
 				"reach_pieces=%d reach_whole=%d reach_hidden=%d "
 				"stand=%d/%d/%d/%d/%d stand_behind=%d unlinked_pieces=%d "
-				"unlinked_drawn=%d unlinked_hidden=%d backdrop=%d",
+				"unlinked_drawn=%d unlinked_hidden=%d",
 				g_frame_count, g_clip_open, g_clip_full, g_clip_scissored,
 				g_clip_empty, g_clip_windowed_tris, g_clip_items_spared,
 				views, viewsObj, g_clip_pairs, g_clip_pairs_whole,
@@ -8877,7 +8635,7 @@ void HDFrameDrawGlow()
 				g_stand_frame_count, g_clip_stand_with, g_clip_stand_holder,
 				g_clip_stand_out, g_clip_stand_dropped, g_clip_stand_behind,
 				g_clip_unlinked_pieces, g_clip_unlinked_drawn,
-				g_clip_unlinked_hidden, g_frame_backdrops);
+				g_clip_unlinked_hidden);
 			LogReachArt();
 			g_reachart_due = false;
 		}

@@ -2141,10 +2141,6 @@ namespace
 		float centre[3], normal[3];
 		int airs;
 		int behind;
-		/* Which room's art wins on the face and why (HD_COVER_WHY_*):
-		 * the holder's or the face's own room's. */
-		int why;
-		int winner;
 	};
 
 	std::vector<HDCoveredFace> g_cover_faces;
@@ -2234,10 +2230,9 @@ namespace
 	 * x 37,888 to 38,912 - the flicker on room 212's sector x1/z0 - and
 	 * their groups' art lies within a unit of each other on 25,142 of the
 	 * pixels both draw there at 640x360, page 126 against page 146). The
-	 * art standing on the face that loses (the rule at its end) is drawn
-	 * pushed back as a stand range answered HD_STAND_BEHIND is, so the
-	 * other face's art wins; two faces alike in size keep both, there
-	 * being no larger one. With the larger face winning everywhere, asked
+	 * art standing on the smaller face is drawn pushed back as a stand
+	 * range answered HD_STAND_BEHIND is, so the larger face's art wins;
+	 * two faces alike in size keep both, there being no larger one. Asked
 	 * at all 40 such faces of the fifteen levels (an eye 768 units off
 	 * each on its open side, both rooms drawn whole, the eye moved one unit
 	 * along x and along z): 582,474 of the pixels the push changes fight
@@ -2425,84 +2420,8 @@ namespace
 
 				CoveredFaceArt(trg, a, f, nf, made.held);
 				CoveredFaceArt(trg, b, f, nf, made.own);
-
-				/* Who wins on the face. Each room's floor square half a
-				 * sector off its centre on its open side - the side whose
-				 * point 128 off stands in air, against the normal for bits
-				 * 2 and 8 -: the room owns the face when that square has
-				 * air from above the face's top to below its foot, the
-				 * room Lara stands in at that wall. One owner wins. Two,
-				 * or none, ask the classic frame: the face standing in
-				 * front along the open side wins there, and two in one
-				 * plane fight in the classic frame too, so the larger
-				 * face wins, the holder's. Measured at all 40 faces: one
-				 * owner at 18, the holder every time, both rooms at 22;
-				 * every pair in one plane; the classic faces alone, two
-				 * eyes 768 units off each face, fight at both eyes at 36
-				 * faces and stand still at both at one (RICH1's face 564,
-				 * its own room's, where room 85 owns the floor). */
-				const int side = (made.airs & 10) ? -1
-					: (made.airs & 5) ? 1 : 0;
-				float top = wf[1], foot = wf[1];
-				bool owns[2] = { false, false };
-
-				for (int k = 1; k < g_pair_faces[f].corners; k++)
-				{
-					top = wf[k * 3 + 1] < top ? wf[k * 3 + 1] : top;
-					foot = wf[k * 3 + 1] > foot ? wf[k * 3 + 1] : foot;
-				}
-
-				for (int s = 0; s < 2 && side; s++)
-				{
-					const int r = s ? b : a;
-
-					if (r >= g_room_air_count || !g_room_air[r].sectors)
-						continue;
-
-					const HDRoomAir& air = g_room_air[r];
-					const float lx = made.centre[0] + nf[0] * 512.0f *
-						(float)side - air.x;
-					const float lz = made.centre[2] + nf[2] * 512.0f *
-						(float)side - air.z;
-
-					const int sx = (int)(lx / 1024.0f);
-					const int sz = (int)(lz / 1024.0f);
-
-					if (lx < 0.0f || lz < 0.0f || sx >= air.nx || sz >= air.nz)
-						continue;
-
-					const float* q = air.sectors +
-						((size_t)sx * air.nz + (size_t)sz) * 2;
-
-					owns[s] = q[0] < q[1] && q[0] <= top && q[1] >= foot;
-				}
-
-				const float ahead = (float)side * (nh[3] - nf[3]);
-
-				if (owns[0] != owns[1])
-				{
-					made.why = HD_COVER_WHY_OWNER;
-					made.winner = owns[0] ? a : b;
-				}
-				else if (side && fabsf(ahead) >= 1.0f)
-				{
-					made.why = HD_COVER_WHY_CLASSIC;
-					made.winner = ahead > 0.0f ? a : b;
-				}
-				else
-				{
-					made.why = HD_COVER_WHY_LARGER;
-					made.winner = a;
-				}
-
-				/* The loser's art is pushed back: the face's own when the
-				 * holder wins, the holder's larger face's when it loses. */
-				made.behind = made.winner == a ? 1 : 0;
-				g_face_behind[(size_t)f] |= (unsigned char)made.behind;
-
-				if (made.winner != a)
-					g_face_behind[(size_t)h] = 1;
-
+				made.behind = 1;
+				g_face_behind[(size_t)f] = made.behind;
 				g_cover_faces.push_back(made);
 			}
 		}
@@ -5003,16 +4922,6 @@ bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
 		held[k] = one.held[k];
 	}
 
-	return true;
-}
-
-bool HDRenderCoveredFaceWhy(int index, int* why, int* winner)
-{
-	if (index < 0 || index >= (int)g_cover_faces.size())
-		return false;
-
-	*why = g_cover_faces[(size_t)index].why;
-	*winner = g_cover_faces[(size_t)index].winner;
 	return true;
 }
 
@@ -19462,183 +19371,6 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
 
 	g_stand_pick = -1;
 	g_stand_pick_behind = false;
-	return drew;
-}
-
-namespace
-{
-	/* The backdrop's stencil bit: the rooms' receive owns bit 1, the
-	 * models' bit 2, the creatures' mark bit 4, so this is the next. The
-	 * mask clears the stencil when nothing has this frame
-	 * (g_receive_cleared); the rooms' receive, after every room's solid
-	 * art, clears it whole again, and the backdrop is drawn before it. */
-	const DWORD kBackdropStencilBit = 8;
-}
-
-bool HDRenderBackdropMask(const float* corners, int triangles, int oneSided,
-	const D3DMATRIX* world, int x0, int y0, int x1, int y1)
-{
-	if (!g_device || !g_in_frame || !corners || triangles <= 0 ||
-		x1 <= x0 || y1 <= y0 || !depth_has_stencil())
-		return false;
-
-	IDirect3DVertexShader9* vs = 0;
-	IDirect3DPixelShader9* ps = 0;
-	IDirect3DVertexDeclaration9* decl = 0;
-	DWORD fvf = 0;
-	D3DMATRIX was[3];
-	D3DVIEWPORT9 port, far_port;
-	RECT clip;
-	const D3DRENDERSTATETYPE states[] =
-	{
-		D3DRS_LIGHTING, D3DRS_CULLMODE, D3DRS_ALPHABLENDENABLE,
-		D3DRS_ALPHATESTENABLE, D3DRS_ZENABLE, D3DRS_ZWRITEENABLE,
-		D3DRS_ZFUNC, D3DRS_FOGENABLE, D3DRS_COLORWRITEENABLE,
-		D3DRS_SCISSORTESTENABLE, D3DRS_CLIPPING
-	};
-	const int count = (int)(sizeof(states) / sizeof(states[0]));
-	DWORD saved[sizeof(states) / sizeof(states[0])];
-	DWORD mark[kMarkStateCount];
-	/* DrawPrimitiveUP leaves stream 0 unset, and the room draws that follow
-	 * read the level's vertex buffer from it: it is put back. */
-	IDirect3DVertexBuffer9* stream = 0;
-	UINT streamOffset = 0, streamStride = 0;
-
-	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
-	g_device->GetVertexShader(&vs);
-	g_device->GetPixelShader(&ps);
-	g_device->GetVertexDeclaration(&decl);
-	g_device->GetFVF(&fvf);
-	g_device->GetTransform(D3DTS_WORLD, &was[0]);
-	g_device->GetTransform(D3DTS_VIEW, &was[1]);
-	g_device->GetTransform(D3DTS_PROJECTION, &was[2]);
-	g_device->GetViewport(&port);
-	g_device->GetScissorRect(&clip);
-
-	for (int i = 0; i < count; i++)
-		g_device->GetRenderState(states[i], &saved[i]);
-
-	for (int i = 0; i < kMarkStateCount; i++)
-		g_device->GetRenderState(kMarkStates[i], &mark[i]);
-
-	if (!g_receive_cleared)
-	{
-		g_device->Clear(0, 0, D3DCLEAR_STENCIL, 0, 1.0f, 0);
-		g_receive_cleared = true;
-	}
-
-	/* Every corner in a thin range behind the world and in front of the
-	 * sky, tested less or equal against the frame's depth: it passes where
-	 * nothing of the world has been drawn - the depth the cleared 1, or the
-	 * HD sky's (HDRenderSky), which the frame draws first in its own slice
-	 * from HD_SKY_MINZ, 0.996, to 1. The world never reaches the range:
-	 * depth = a - b / z (HDRenderZConstants, near 20, far 20480) stays
-	 * below a = 0.99597 at any distance, and a stand range pushed back
-	 * (HD_STAND_PUSH) only moves a point further off. A range of no width
-	 * marked no pixel at all on the device the pictures were made with. */
-	far_port = port;
-	far_port.MinZ = 0.99598f;
-	far_port.MaxZ = 0.99599f;
-
-	const RECT window = { x0, y0, x1, y1 };
-
-	g_device->SetVertexShader(0);
-	g_device->SetPixelShader(0);
-	g_device->SetFVF(D3DFVF_XYZ);
-	g_device->SetTransform(D3DTS_WORLD, world);
-	g_device->SetTransform(D3DTS_VIEW, (const D3DMATRIX*)g_view);
-	g_device->SetTransform(D3DTS_PROJECTION, (const D3DMATRIX*)g_proj);
-	g_device->SetViewport(&far_port);
-	g_device->SetScissorRect(&window);
-	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_CLIPPING, TRUE);
-	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
-	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
-	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
-	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
-	g_device->SetRenderState(D3DRS_STENCILREF, kBackdropStencilBit);
-	g_device->SetRenderState(D3DRS_STENCILMASK, kBackdropStencilBit);
-	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kBackdropStencilBit);
-	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
-	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
-	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
-
-	if (oneSided > 0)
-	{
-		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_CCW);
-		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, (UINT)oneSided,
-			corners, 3 * sizeof(float));
-	}
-
-	if (triangles > oneSided)
-	{
-		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
-			(UINT)(triangles - oneSided), corners + (size_t)oneSided * 9,
-			3 * sizeof(float));
-	}
-
-	g_device->SetViewport(&port);
-	g_device->SetScissorRect(&clip);
-	g_device->SetTransform(D3DTS_WORLD, &was[0]);
-	g_device->SetTransform(D3DTS_VIEW, &was[1]);
-	g_device->SetTransform(D3DTS_PROJECTION, &was[2]);
-
-	for (int i = 0; i < count; i++)
-		g_device->SetRenderState(states[i], saved[i]);
-
-	for (int i = 0; i < kMarkStateCount; i++)
-		g_device->SetRenderState(kMarkStates[i], mark[i]);
-
-	g_device->SetFVF(fvf);
-	g_device->SetVertexDeclaration(decl);
-	g_device->SetVertexShader(vs);
-	g_device->SetPixelShader(ps);
-	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
-
-	if (stream) stream->Release();
-	if (decl) decl->Release();
-	if (vs) vs->Release();
-	if (ps) ps->Release();
-
-	return true;
-}
-
-bool HDRenderBackdropRoom(int group, const D3DMATRIX* world,
-	const HDRoomLighting* lighting)
-{
-	if (!g_device || !g_in_frame || !depth_has_stencil())
-		return false;
-
-	DWORD mark[kMarkStateCount];
-
-	for (int i = 0; i < kMarkStateCount; i++)
-		g_device->GetRenderState(kMarkStates[i], &mark[i]);
-
-	g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
-	g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
-	g_device->SetRenderState(D3DRS_STENCILREF, kBackdropStencilBit);
-	g_device->SetRenderState(D3DRS_STENCILMASK, kBackdropStencilBit);
-	g_device->SetRenderState(D3DRS_STENCILWRITEMASK, 0);
-	g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_KEEP);
-	g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
-	g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
-	HDRenderScissorOff();
-
-	const bool drew = HDRenderRoomMask(group, world, lighting, HD_PASS_SOLID,
-		HD_WINDOW_ALL);
-
-	for (int i = 0; i < kMarkStateCount; i++)
-		g_device->SetRenderState(kMarkStates[i], mark[i]);
-
 	return drew;
 }
 

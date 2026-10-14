@@ -29,12 +29,12 @@
  * The column adds no light: clear water rising through clear water shows
  * only as what stands behind it, moved. It is drawn after the sheets with
  * the blend DESTCOLOR / INVSRCALPHA - the target times rgb plus the target
- * times one less alpha - and writes rgb w r, alpha w for a bend's weight w
- * and the ratio r of the frame's copy at the bent place to the copy at the
- * pixel. The target becomes target (1 + w (r - 1)): under the water, where
+ * times one less alpha - and writes rgb a r, alpha a for a share a and
+ * the ratio r of the frame's copy at the bent place to the copy at the
+ * pixel. The target becomes target (1 + a (r - 1)): under the water, where
  * the target is the copy, the copy at the bent place; over the water, the
  * sheet's colour with the floor's pattern in it moved and its tint and
- * mirror kept. Where w is 0 the target stays as it was, to the bit.
+ * mirror kept. Where a is 0 the target stays as it was, to the bit.
  *
  * The bubble is premultiplied, ONE / INVSRCALPHA, as the cards are: a thin
  * bright rim (the light the bubble's wall turns toward the eye at a
@@ -48,18 +48,22 @@
  *                    projection's a and b (depth = a - b / z)
  * c93  gSpringMode   x 1 while the frame's depth texture is bound on s6,
  *                    y one over the depth over which a quad fades into what
- *                    stands behind it, z the ratio's floor, w the column's
- *                    pattern scale, units a cell
+ *                    stands behind it, z the ratio's floor, w one over
+ *                    the weight from which the column's share is whole
+ * c94  gSpringCell   x, y one over the column's cell across and along its
+ *                    line, units, z one over the noise table's side
  * c134 gUnderSigma   the water's extinction while the eye is under the
  * c145 gUnderClear   water, the frame's own (hd_room.hlsl, UnderWater) */
 float4 gFog : register(c16);
 float4 gSpringScreen : register(c92);
 float4 gSpringMode : register(c93);
+float4 gSpringCell : register(c94);
 float4 gUnderSigma : register(c134);
 float4 gUnderClear : register(c145);
 
 sampler2D sSpringCopy : register(s5);
 sampler2D sSpringDepth : register(s6);
+sampler2D sSpringNoise : register(s7);
 
 struct SPRING_IN
 {
@@ -76,30 +80,21 @@ float SpringDepth(float2 uv)
 	return gSpringScreen.w / max(gSpringScreen.z - d, 1.0e-6f);
 }
 
-/* Two hashes of a lattice point, 0..1 each, by multiplying and folding
- * its coordinates without a sine (a common shader hash), and the value
- * noise between the four points round a place: their hashed values
- * blended with a smooth step, the textbook construction - two noises at
- * once, one for each way of the bend. */
-float2 SpringHash(float2 p)
-{
-	float3 q = frac(p.xyx * float3(0.1031f, 0.1030f, 0.0973f));
-
-	q += dot(q, q.yzx + 33.33f);
-	return frac((q.xx + q.yz) * q.zy);
-}
-
+/* Value noise, two at once, one for each way of the bend: the hashed
+ * values of the lattice points round a place, blended with a smooth step
+ * (the textbook construction). The values are the noise table's texels
+ * (hd_spring.h, HDSpringNoiseTexel: the life's mixer of the texel's
+ * number, one salt a channel), bound on s7 with wrap and a linear filter;
+ * reading at the cell's corner plus the smoothed fraction lets the
+ * filter do the blend in one fetch. The table repeats every 64 cells. */
 float2 SpringNoise(float2 p)
 {
 	const float2 i = floor(p);
 	const float2 f = p - i;
 	const float2 u = f * f * (3.0f - 2.0f * f);
-	const float2 a = SpringHash(i);
-	const float2 b = SpringHash(i + float2(1.0f, 0.0f));
-	const float2 c = SpringHash(i + float2(0.0f, 1.0f));
-	const float2 d = SpringHash(i + float2(1.0f, 1.0f));
 
-	return lerp(lerp(a, b, u.x), lerp(c, d, u.x), u.y);
+	return tex2Dlod(sSpringNoise, float4((i + u + 0.5f) * gSpringCell.z,
+		0.0f, 0.0f)).rg;
 }
 
 /* The column. The vertex:
@@ -117,32 +112,30 @@ float4 ColumnPS(SPRING_IN input, float2 vpos : VPOS) : COLOR0
 
 	/* On the line full, at the edge nothing; falling with height as the
 	 * jet's speed falls; faded over the last eighth at each end, so the
-	 * quad's ends do not show. */
+	 * quad's ends do not show; soft where the column meets the floor and
+	 * the sheet behind it. The weight scales the bend. */
 	float core = saturate(1.0f - across * across);
 
 	core *= core;
 
 	float w = core * input.col.y * input.col.w / (input.col.w + input.uv.w) *
 		saturate(along * 8.0f) * saturate((1.0f - along) * 8.0f);
-
-	// Two cells of the pattern, the second twice as fine, rising.
-	const float2 p = float2(input.uv.z, input.uv.w - input.col.z) /
-		gSpringMode.w;
-	const float2 bend = (SpringNoise(p) + 0.5f * SpringNoise(p * 2.0f +
-		7.31f)) * (2.0f / 1.5f) - 1.0f;
 	const float2 uv = (vpos + 0.5f) * gSpringScreen.xy;
-	float2 moved = uv + bend * input.col.x * w * gSpringScreen.xy;
 
 	if (gSpringMode.x > 0.5f)
-	{
-		/* What lies in front of the column is not seen through it: a
-		 * bent place nearer than the column keeps the pixel's own. Soft
-		 * where the column meets the floor and the sheet behind it. */
-		if (SpringDepth(moved) < input.viewZ.x)
-			moved = uv;
-
 		w *= saturate((SpringDepth(uv) - input.viewZ.x) * gSpringMode.y);
-	}
+
+	// Two cells of the pattern, the second twice as fine, rising.
+	const float2 p = float2(input.uv.z, input.uv.w - input.col.z) *
+		gSpringCell.xy;
+	const float2 bend = (SpringNoise(p) + 0.5f * SpringNoise(p * 2.0f +
+		7.31f)) * (2.0f / 1.5f) - 1.0f;
+	float2 moved = uv + bend * input.col.x * w * gSpringScreen.xy;
+
+	/* What lies in front of the column is not seen through it: a bent
+	 * place nearer than the column keeps the pixel's own. */
+	if (gSpringMode.x > 0.5f && SpringDepth(moved) < input.viewZ.x)
+		moved = uv;
 
 	const float3 here = tex2Dlod(sSpringCopy, float4(uv, 0.0f, 0.0f)).rgb;
 	const float3 there = tex2Dlod(sSpringCopy, float4(moved, 0.0f,
@@ -150,8 +143,12 @@ float4 ColumnPS(SPRING_IN input, float2 vpos : VPOS) : COLOR0
 	const float3 ratio = min((there + gSpringMode.z) / (here + gSpringMode.z),
 		2.0f);
 
-	w = min(w, 0.5f);
-	return float4(w * ratio, w);
+	/* The share of the moved picture: whole from gSpringMode.w of the
+	 * weight up, none at 0, so where the column ends the target stays as
+	 * it was, to the bit. */
+	const float a = saturate(w * gSpringMode.w);
+
+	return float4(a * ratio, a);
 }
 
 /* The bubble. The vertex as a card's: uv.zw the corner, -1..1, col.rgb its

@@ -128,15 +128,21 @@ static const int kHDSpringPopSize = 48;
  * on its line and gone at its edge, falling with height as a jet's speed
  * falls, as kHDSpringNear over kHDSpringNear plus the height. The bend is
  * at most kHDSpringBend units of view space at strength 1, its pattern
- * rising at kHDSpringJet units a second. Seen from far the column is
- * thin: it fades out while its half-width at mid height falls from 16 to
- * 6 pixels, where a bend of a few pixels cannot be read. Free choices,
- * set by eye on the round's RoomProbe pictures of the fountain. */
+ * cells 24 units across and 96 along the line (hd_spring.cpp), rising at
+ * kHDSpringJet units a second: streaks that rise. Seen from far the column
+ * is thin: it fades out while its half-width at mid height falls from 16
+ * to 6 pixels, where a bend of a few pixels cannot be read. Free choices,
+ * set by eye on RoomProbe pictures of the fountain from under the water
+ * (960 x 540, the column alone, pixels changed by 8 levels or more at 1
+ * and 2 s): a bend of 32 with square cells of 48 and the weight taken on
+ * the bend and on the share both, 276 to 370, not told from the water
+ * without it; 96 with the streaks, 3,919 to 4,586, a band that wavers;
+ * 128 with cells of 32 by 128, 5,236 to 5,718, the wall smeared. */
 static const float kHDSpringCore = 32.0f;
 static const float kHDSpringCoreGain = 96.0f;
 static const float kHDSpringSpread = 0.1f;
 static const float kHDSpringNear = 1200.0f;
-static const float kHDSpringBend = 32.0f;
+static const float kHDSpringBend = 96.0f;
 static const float kHDSpringJet = 400.0f;
 static const float kHDSpringFadeFrom = 16.0f;	// pixels, fully drawn
 static const float kHDSpringFadeTo = 6.0f;	// pixels, gone
@@ -173,6 +179,20 @@ inline unsigned HDSpringHash(unsigned a, unsigned b)
 	return (s >> 10) & 0x7FFF;
 }
 
+/* The column's noise table (hd_spring.hlsl, SpringNoise): 64 by 64
+ * texels, red and green each the mixer of the texel's number and a salt of
+ * its own, 0..255. Over the table the two channels measure a mean of 127.0
+ * and 128.1, a spread of 73.9 and 73.6 (a uniform byte 73.9) and a
+ * correlation of neighbours and of the two channels under 0.03. */
+static const int kHDSpringNoiseSide = 64;
+static const unsigned kHDSpringNoiseSalt[2] = { 0x5A17u, 0xC0DEu };
+
+inline unsigned char HDSpringNoiseTexel(int x, int y, int channel)
+{
+	return (unsigned char)(HDSpringHash((unsigned)(y * kHDSpringNoiseSide +
+		x), kHDSpringNoiseSalt[channel & 1]) >> 7);
+}
+
 // A hash as 0..1: a number of the spring's, a count, a salt per choice.
 inline float HDSpringUnit(unsigned seed, int count, unsigned salt)
 {
@@ -180,7 +200,7 @@ inline float HDSpringUnit(unsigned seed, int count, unsigned salt)
 		(unsigned)count) / 32767.0f;
 }
 
-// A level's name as a number, its letters case-blind.
+// A level's name as a number, its letters case-blind (FNV-1a, 32 bits).
 inline unsigned HDSpringStemHash(const char* stem)
 {
 	unsigned h = 2166136261u;

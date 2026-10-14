@@ -63,6 +63,7 @@ namespace
 	IDirect3DVertexShader9* g_vs = 0;
 	IDirect3DPixelShader9* g_column_ps = 0;
 	IDirect3DPixelShader9* g_bubble_ps = 0;
+	IDirect3DTexture9* g_noise = 0;
 
 	// RoomProbe's timing of the draw, and what the last draw drew.
 	bool g_timing = false;
@@ -79,10 +80,14 @@ namespace
 	/* The ratio's floor (hd_spring.hlsl, ColumnPS): a dark texel moved
 	 * next to a black one would make a ratio of thousands; at 0.02 of
 	 * white the bend of a dark floor stays a bend. And the pattern's cell,
-	 * 48 units: two to five cells across the column. Free choices, set by
-	 * eye on the round's RoomProbe pictures. */
+	 * 24 units across the jet's line and 96 along it: two to ten cells
+	 * across the column, streaks that rise (hd_spring.h, the rising
+	 * current). The column's share of the moved picture is whole from half
+	 * its weight up. Free choices, set by eye on RoomProbe pictures. */
 	const float kRatioFloor = 0.02f;
-	const float kCell = 48.0f;
+	const float kCellAcross = 24.0f;
+	const float kCellAlong = 96.0f;
+	const float kShareFrom = 2.0f;	// one over the weight
 	/* The bubbles' share over the water's own, and how far the rings
 	 * go back when a spring first rings or the clock jumps: past the
 	 * rings' 3.5 s life (hd_render.cpp, kRingLife), so a picture at a
@@ -107,6 +112,7 @@ namespace
 		if (g_vs) { g_vs->Release(); g_vs = 0; }
 		if (g_column_ps) { g_column_ps->Release(); g_column_ps = 0; }
 		if (g_bubble_ps) { g_bubble_ps->Release(); g_bubble_ps = 0; }
+		if (g_noise) { g_noise->Release(); g_noise = 0; }
 		g_made_on = 0;
 	}
 
@@ -129,10 +135,38 @@ namespace
 				(const DWORD*)kHDSpringBubblePS, &g_bubble_ps)))
 				g_bubble_ps = 0;
 
+			/* The column's noise table, managed like the classic pages: it
+			 * survives a reset, and only a released device takes it. */
+			const int n = kHDSpringNoiseSide;
+			D3DLOCKED_RECT r;
+
+			if (FAILED(device->CreateTexture(n, n, 1, 0, D3DFMT_A8R8G8B8,
+				D3DPOOL_MANAGED, &g_noise, 0)))
+				g_noise = 0;
+			else if (SUCCEEDED(g_noise->LockRect(0, &r, 0, 0)))
+			{
+				for (int y = 0; y < n; y++)
+				{
+					DWORD* row = (DWORD*)((char*)r.pBits + y * r.Pitch);
+
+					for (int x = 0; x < n; x++)
+						row[x] = 0xFF000000u |
+							((DWORD)HDSpringNoiseTexel(x, y, 0) << 16) |
+							((DWORD)HDSpringNoiseTexel(x, y, 1) << 8);
+				}
+
+				g_noise->UnlockRect(0);
+			}
+			else
+			{
+				g_noise->Release();
+				g_noise = 0;
+			}
+
 			g_made_on = device;
 		}
 
-		return g_vs && g_column_ps && g_bubble_ps;
+		return g_vs && g_column_ps && g_bubble_ps && g_noise;
 	}
 
 	// Row vectors: a point through a 4x4 that keeps w at one.
@@ -692,7 +726,8 @@ void HDSpringFrameDraw(const float* toFrame)
 						v.r = kHDSpringBend * s.strength * focal /
 							fmaxf(v.z, 1.0f);
 						v.g = weight;
-						v.b = (float)fmod(t * kHDSpringJet, 4096.0 * kCell);
+						v.b = (float)fmod(t * kHDSpringJet,
+							(double)kHDSpringNoiseSide * kCellAlong);
 						v.a = kHDSpringNear;
 						v.light = 1.0f;
 					}
@@ -792,7 +827,7 @@ void HDSpringFrameDraw(const float* toFrame)
 	IDirect3DVertexShader9* vs = 0;
 	IDirect3DPixelShader9* ps = 0;
 	IDirect3DVertexDeclaration9* decl = 0;
-	IDirect3DBaseTexture9* tex[2] = { 0, 0 };
+	IDirect3DBaseTexture9* tex[3] = { 0, 0, 0 };
 	IDirect3DVertexBuffer9* stream = 0;
 	UINT streamOffset = 0, streamStride = 0;
 	DWORD fvf = 0;
@@ -809,10 +844,10 @@ void HDSpringFrameDraw(const float* toFrame)
 		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER,
 		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_SRGBTEXTURE
 	};
-	const DWORD stage[2] = { 5, 6 };
+	const DWORD stage[3] = { 5, 6, 7 };
 	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
-	DWORD saved[stateCount], savedSamp[2][sampCount];
+	DWORD saved[stateCount], savedSamp[3][sampCount];
 
 	d->GetVertexShader(&vs);
 	d->GetPixelShader(&ps);
@@ -823,7 +858,7 @@ void HDSpringFrameDraw(const float* toFrame)
 	for (int i = 0; i < stateCount; i++)
 		d->GetRenderState(states[i], &saved[i]);
 
-	for (int k = 0; k < 2; k++)
+	for (int k = 0; k < 3; k++)
 	{
 		d->GetTexture(stage[k], &tex[k]);
 
@@ -854,13 +889,16 @@ void HDSpringFrameDraw(const float* toFrame)
 	const float screen[4] = { 1.0f / (float)f.width, 1.0f / (float)f.height,
 		f.proj[10], -f.proj[14] };
 	const float mode[4] = { soft ? 1.0f : 0.0f, 1.0f / kSoft, kRatioFloor,
-		kCell };
+		kShareFrom };
+	const float cell[4] = { 1.0f / kCellAcross, 1.0f / kCellAlong,
+		1.0f / (float)kHDSpringNoiseSide, 0.0f };
 
 	d->SetVertexShader(g_vs);
 	d->SetFVF(kFVF);
 	d->SetVertexShaderConstantF(0, columns, 4);
 	d->SetPixelShaderConstantF(92, screen, 1);
 	d->SetPixelShaderConstantF(93, mode, 1);
+	d->SetPixelShaderConstantF(94, cell, 1);
 	d->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	d->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	d->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
@@ -873,20 +911,23 @@ void HDSpringFrameDraw(const float* toFrame)
 	d->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0000000F);
 	d->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 
-	for (int k = 0; k < 2; k++)
+	// The copy and the noise filtered, the depth not; the noise repeats.
+	for (int k = 0; k < 3; k++)
 	{
-		const DWORD filter = k ? D3DTEXF_POINT : D3DTEXF_LINEAR;
+		const DWORD filter = k == 1 ? D3DTEXF_POINT : D3DTEXF_LINEAR;
+		const DWORD address = k == 2 ? D3DTADDRESS_WRAP : D3DTADDRESS_CLAMP;
 
 		d->SetSamplerState(stage[k], D3DSAMP_MINFILTER, filter);
 		d->SetSamplerState(stage[k], D3DSAMP_MAGFILTER, filter);
 		d->SetSamplerState(stage[k], D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-		d->SetSamplerState(stage[k], D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-		d->SetSamplerState(stage[k], D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+		d->SetSamplerState(stage[k], D3DSAMP_ADDRESSU, address);
+		d->SetSamplerState(stage[k], D3DSAMP_ADDRESSV, address);
 		d->SetSamplerState(stage[k], D3DSAMP_SRGBTEXTURE, FALSE);
 	}
 
 	d->SetTexture(5, f.copy);
 	d->SetTexture(6, f.depth);
+	d->SetTexture(7, g_noise);
 
 	if (!column.empty())
 	{
@@ -933,7 +974,7 @@ void HDSpringFrameDraw(const float* toFrame)
 	for (int i = 0; i < stateCount; i++)
 		d->SetRenderState(states[i], saved[i]);
 
-	for (int k = 0; k < 2; k++)
+	for (int k = 0; k < 3; k++)
 	{
 		for (int i = 0; i < sampCount; i++)
 			d->SetSamplerState(stage[k], samps[i], savedSamp[k][i]);

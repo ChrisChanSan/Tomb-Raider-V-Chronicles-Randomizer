@@ -20353,6 +20353,55 @@ static void spring_clock()
 		!HDSpringBubble(s, 0, HDSpringBubbleBorn(s, 0) + 12.0, &a),
 		"spring clock: none before its birth, none once it reached the sheet "
 		"(2304 at 200 a second is 11.5 s)", 1, 1);
+
+	/* The column's noise table: the mixer's bytes, every value of a byte
+	 * in each channel, means of 127.0 and 128.1 (tenths), neighbours along
+	 * a row and the two channels uncorrelated (under 0.03, thousandths). */
+	const int side = kHDSpringNoiseSide;
+	long sum[2] = { 0, 0 };
+	bool seen[2][256] = {};
+	int values[2] = { 0, 0 };
+	double cross = 0.0, row = 0.0;
+
+	for (int y = 0; y < side; y++)
+		for (int x = 0; x < side; x++)
+			for (int c = 0; c < 2; c++)
+			{
+				const int v = HDSpringNoiseTexel(x, y, c);
+
+				sum[c] += v;
+				values[c] += seen[c][v] ? 0 : 1;
+				seen[c][v] = true;
+			}
+
+	const double m0 = (double)sum[0] / (side * side);
+	const double m1 = (double)sum[1] / (side * side);
+	double v0 = 0.0, v1 = 0.0;
+
+	for (int y = 0; y < side; y++)
+		for (int x = 0; x < side; x++)
+		{
+			const double a0 = HDSpringNoiseTexel(x, y, 0) - m0;
+			const double a1 = HDSpringNoiseTexel(x, y, 1) - m1;
+			const double n0 = HDSpringNoiseTexel((x + 1) % side, y, 1) - m1;
+
+			v0 += a0 * a0;
+			v1 += a1 * a1;
+			cross += a0 * a1;
+			row += a1 * n0;
+		}
+
+	cross /= sqrt(v0 * v1);
+	row /= v1;
+	ok(values[0] == 256 && values[1] == 256,
+		"spring noise: every byte value in each channel", values[0] +
+		values[1], 512);
+	ok(lround(m0 * 10.0) == 1270 && lround(m1 * 10.0) == 1281,
+		"spring noise: the channels' means 127.0 and 128.1",
+		lround(m0 * 10.0) * 10000 + lround(m1 * 10.0), 12701281);
+	ok(fabs(cross) < 0.03 && fabs(row) < 0.03,
+		"spring noise: the channels and the neighbours uncorrelated",
+		lround(fabs(cross) * 1000.0) + lround(fabs(row) * 1000.0), 0);
 }
 
 int main()

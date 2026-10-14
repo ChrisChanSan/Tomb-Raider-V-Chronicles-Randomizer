@@ -1936,6 +1936,8 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 		g_swap_plans++;
 	}
 
+	ObjectLoadStep(&loadlog_at, "obj_plan");
+
 	/* A mod's inventory model, planned in the same list and on a pseudo slot
 	 * like every other extra model in this file.
 	 *
@@ -1945,7 +1947,6 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 	 * root - which is what an inventory object does anyway. No bind pose, for
 	 * the same reason: the model comes in its own frame and `fix` below is what
 	 * puts it into the ring's. */
-	ObjectLoadStep(&loadlog_at, "obj_plan");
 	std::vector<std::string> optionNames;
 	const DWORD ringBegan = GetTickCount();
 	int ringAsked = 0;
@@ -2737,10 +2738,11 @@ void HDObjectLevelBuild(const char* installRoot, const char* stem)
 			seen, hd, used ? classic : "-");
 	}
 
+	ObjectLoadStep(&loadlog_at, "obj_bind");
+
 	/* Lara's verdict, after the objects and out of the
 	 * models that were just built: which parts arrived, what they cover, how
 	 * far they drift. It writes its own HDLOG lines. */
-	ObjectLoadStep(&loadlog_at, "obj_bind");
 	HDLaraDrawBuild(g_stem);
 	ObjectLoadStep(&loadlog_at, "obj_lara");
 

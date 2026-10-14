@@ -50,6 +50,7 @@
 #include "../drawroom.h"			// ActiveFogBulbs, aRoomVertexWaterMarks
 #include "../file.h"				// textinfo, aranges, nAnimUVRanges
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
+#include "../LoadSave.h"			// MonoScreenOn - a menu over a picture
 #include "hd_light.h"
 #include "hd_splash_math.h"		// the water's cards: HDFilmStrength
 
@@ -8208,8 +8209,12 @@ void HDFrameDraw()
 	/* The water's life onto the frame's object list, before it is counted;
 	 * at the clock of the frame before (FillFrameLighting steps it below),
 	 * one frame's lag nobody sees. Not in the inventory ring, which draws
-	 * through a view of its own. */
-	if (!HDObjectRingFrame())
+	 * through a view of its own, and not while a menu stands over a picture
+	 * of the world (MonoScreenOn, specific\LoadSave.cpp, CreateMonoScreen:
+	 * the pause menu, the inventory, the load and save screens): the world
+	 * stands still there and no room is drawn, so nothing in the depth
+	 * buffer would hide a school behind the walls of the picture under it. */
+	if (!HDObjectRingFrame() && !MonoScreenOn)
 		HDLifeFrame(g_drawn_clock);
 
 	const int objects_here = HDObjectFrameCount();

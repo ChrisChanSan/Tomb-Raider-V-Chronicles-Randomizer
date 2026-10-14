@@ -2007,7 +2007,15 @@ water surface", carries the tables.
     seen from the eye mirrored in the floor: 93 to 98 per cent of the
     hits within 2 pixels of its, at RICH2's tank eyes. The march does not
     run where the art carries its own copy of the room under the floor
-    (entry 198).
+    (entry 198). Since the splash's fifth round: 22 steps, each 1.2 times
+    the last (8,700 units), the crossing halved 8 times - a longer step
+    passed a thin thing by, a machine's foot or a bench's rail, and took
+    what lay behind it; set on the same debugger and on the true mirror
+    at the owner's eyes of the corridor and a 10-degree fan round two of
+    them: 0 to 2.2 per cent of the fine march's hits more than 2 pixels
+    off where the game marches (0 to 3.5 at 16 steps of 1.3 halved 5
+    times), a tighter tolerance or the first crossing taken behind an
+    edge no better.
 197. **The mirror's place in the frame** - the wet floor draws twice a
     frame: its darkening over the opaque frame, where the sheets' copy is
     taken first, and its mirror after the rooms' glass and glows and
@@ -2033,8 +2041,14 @@ water surface", carries the tables.
     deep (RoomProbe `-tankart`, every triangle of the .TRG: 24 to 874
     under each square, 40 to 100 per cent mirrored), and it reaches under
     room 122's two squares at its mouth; the corridor's 36 squares 12 to
-    34 mirrored cells, room 122's two 15 and 16, every other square of
-    either tank none (`-tankwetmap`, copy=). The mirror marched there out
+    34 mirrored cells, room 122's two 15 and 16 (`-tankwetmap`, copy=).
+    It reaches on under room 122's next column (58 and 74 triangles, 22
+    mirrored), where no floor of the corridor lies: the rule asks only
+    the art of the rooms whose floor the square is, and that column keeps
+    the march. Every other square of either tank has none. A copied
+    square loses the light field's stand-in for the march too and keeps
+    the darkening and the lamps' highlight; at the corridor's mouth its
+    floor is opaque, so the copy does not show there. The mirror marched there out
     of the frame showed the ceiling glows as yellow bands (1,446 to 5,194
     pixels at the eyes of his pictures, 0 after).
 199. **The sloping floors under a wet floor** - the run crosses an edge
@@ -2049,7 +2063,11 @@ water surface", carries the tables.
     carried onto slopes. DATA: the corner heights out of the classic
     floor data (`HDRenderWaterCorners`); RICH2 by tank 182 holds six
     splits round the raised blocks of rooms 45 and 121 (RoomProbe
-    `-tankslopes`), each wet on its flat half now.
+    `-tankslopes`), each wet on its flat half now. The layer's cells are
+    halved along the diagonal the square's crease follows (`HDWetCell`),
+    so no triangle crosses the crease and the wet half is covered to it:
+    room 45's three splits, creased from corner 1 to corner 2, had lost
+    a half-cell on each of the crease's cells.
 200. **No water's life over a menu's picture** - while a menu stands over
     a picture of the world (`MonoScreenOn`: the pause menu, the
     inventory, the load and save screens) the water's life is not put on

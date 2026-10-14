@@ -2163,9 +2163,11 @@ it.
   mirrors what stands on it - the
   vending machines, Lara, a lit screen, the lamps and their glows - most
   where the eye looks along the floor; where the level's art already
-  carries the room's own reflection, a copy of the room upside down
-  under the floor (RICH2's corridor 46 and its mouth), the wet floor is
-  only darker. A game loaded with the tank shot
+  carries a copy of the room upside down under the floor (RICH2's
+  corridor 46 and its mouth), the wet floor mirrors nothing and is only
+  darker, with the lamps' highlight - at the corridor's mouth, where the
+  tank's water reaches, the floor over that copy is opaque. A game
+  loaded with the tank shot
   starts with the floor wet, and it does not dry. With `hd_motion` off
   the water does not run out: the whole floor is wet from the moment of
   the shot.

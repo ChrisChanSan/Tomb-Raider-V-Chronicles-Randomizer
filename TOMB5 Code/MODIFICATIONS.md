@@ -13584,15 +13584,21 @@ for its whole length, 1,536 units deep, 24 to 874 triangles under each square, 4
 122's two squares at the corridor's mouth (120 and 134 triangles, 99 mirrored each). The
 corridor's floor lies in the alpha pass on a part-way clear page from x 41,984 west, so
 there the copy shows through as the room's reflection; at its mouth, x 44,032 to 48,127,
-the floor is opaque. Rooms 121, 45, room 122's east column and room 23 carry none (room
-23's cells under it are the corridor below, none mirrored). The yellow errors are the wet
+the floor is opaque. Rooms 121 and 45 and room 23 carry none (room 23's cells under it
+are the corridor below, none mirrored). Under room 122's east column, x 48,128, the
+corridor's copy reaches on (58 and 74 triangles, 22 mirrored), but no floor of the
+corridor lies there, and the rule below asks only the art of the rooms whose floor the
+square is - room 122's, with none under it - so that column keeps the march. The
+yellow errors are the wet
 floor's own mirror there: the march's debugger finds the same mirror as its fine march
 (the march is right), and what it mirrors are the corridor's ceiling glows, which hold no
 depth and so land where the march meets the ceiling behind them - yellow bands across the
 floor, 1,446 to 5,194 pixels at the eyes that show them (wet against dry, R over 140, G
 over 120, B under 0.7 G). Now a square whose art carries such a copy takes no march
-mirror and keeps the darkening; the floor at the mouth is opaque, so there is no clear
-floor whose alpha the water could open. The rule asks what the level keeps of its art,
+mirror, and with it none of the light field's stand-in for it: it keeps the darkening
+and the lamps' highlight alone. The floor at the mouth, where the tank's water reaches,
+is opaque, so the copy does not show there either, and there is no clear floor whose
+alpha the water could open. The rule asks what the level keeps of its art,
 the 256-unit cells of `HDGroup::cells`: under the floor of every room with a flat floor
 at that square and height, down to 2,048 units, and of those the ones mirrored over it
 by any of them; copied at 8 mirrored and a third of those under (`kWetCopyCells`): the
@@ -13601,20 +13607,36 @@ and 32/16, every other square of either tank none under but one of room 23's, 3/
 182 keeps the march on its other squares, tank 33 on all 12 of room 23's. `WetPS`
 skips the march where its share is 0 (255 to 256 slots).
 
-The march on models. Measured at his eyes: Lara crawling by the machine and down the
-corridor lies on the copied squares, where the march no longer runs - at those two eyes
-39 and 91 per cent of the wet floor's pixels lose the march's mirror, and at the corridor
-eyes 18 to 92 per cent. RoomProbe draws no Lara, so her boxes were not counted; on the
-squares where the march stays the vending machine's reflection was held against the true
-mirror (the scene seen from the eye mirrored in the floor, turned upside down): the green
-fragment of his picture of the machine is the reflection of its lit screen, at the place
-the true mirror puts it, of which only the bright screen reads on the dark marble. The
-march never reads outside the frame's copy (`WetOn`, the screen's last tenth faded), so
-its black is not a sample off the screen; what cuts the machine was not found in
-RoomProbe's frame. Not
-built: a planar mirror of the models (the engine's mirrored draw is `game\mirror.cpp`'s,
-outside this round), a tighter fit for model hits and other edge handling - no measure in
-RoomProbe's frame asked for them.
+The march on models. Lara by the machine (tick 185,984: her braid at x 47,800, z
+68,619) and down the corridor (234,984: x 47,800, z 68,038) lies on the squares of the
+corridor's mouth, which carry the copy: there the march no longer runs, 39 and 91 per
+cent of the wet floor's pixels at the two eyes. RoomProbe draws no Lara, but it draws
+the art's vending machine and bench, so the march was measured on them: at his four
+eyes of the corridor (the two above, the machine from above, the corridor from room
+122) and a 10-degree yaw and pitch fan round the first two, over the wet pixels where
+the game still marches (the round's head picture as `783bca2c`'s), against the fine
+march (`-tankmarch 5`) and the true mirror, the scene from the eye mirrored in the
+layer's plane, turned upside down. Of the fine march's 379,565 hits there, this
+march's lay more than 2 pixels off for 4,830, on one side only for 15,792, and 8,735
+pixels showed a colour off the true mirror's by more than 48 where the fine march's was
+not - the speckles and torn edges at the machine's foot and along the bench's rail. The
+trials (`-tankmarch map,fit,growth,first`, the debugger's draw with other constants):
+half and a quarter of the tolerance 10,108 and 16,510 such pixels, the first crossing
+taken behind an edge instead of going on 8,735, a smaller growth (1.2 over 16 steps) or
+first step (16) 20,519 and 9,889 with the reach lost - one side only 81,681 and 52,256.
+Smaller steps found what the fine march finds: a step longer than a thin thing passes
+it by and the march takes what lies behind it. Built: 22 steps growing by 1.2 (8,700
+units against 7,000) and each crossing halved 8 times: off by more than 2 pixels 2,788,
+one side only 9,862, off the true mirror 5,751; per eye 0 to 2.2 per cent of the fine
+march's hits more than 2 pixels off (0 to 3.5 before). 28 steps gave no more where the
+game marches. The black: no wet pixel under a luma of 10 where the dry picture is over
+40, at any of the 22 eyes, before or after; the march never reads outside the frame's
+copy (`WetOn`, the screen's last tenth faded), so a black cut is not a sample off the
+screen, and what cut his machine was not found without Lara. The green fragment of his
+picture of the machine is the reflection of its lit screen, at the place the true mirror
+puts it, of which only the bright screen reads on the dark marble. Not built: a planar
+mirror of the models (the engine's mirrored draw is `game\mirror.cpp`'s, outside this
+round).
 
 The fish in the pause menu (`hd_level.cpp`, `HDFrameDraw`). The pause menu
 (`S_PauseMenu`, `specific\LoadSave.cpp`) shows a picture of the last frame
@@ -13641,15 +13663,20 @@ at both corners, each point lies on its square's own floor (the plane of its tri
 as the engine's GetHeight divides a split), a point higher than the edge the water came
 in by stays dry, and it runs on only across wet edges: a ramp rising from the floor keeps
 its head dry, a slope falling away is wet to its foot and passes the water on. Tank 182
-wets 22 squares (16 before; 55 found in its rooms, 48 before), tank 33 its 12. RoomProbe
-`-tankwetmap` ends its lines in `slope=<function>`, a sloping square's y then its highest
-corner, and the load line's `heights=` counts that corner.
+wets 22 squares (16 before; 55 found in its rooms, 48 before), tank 33 its 12. Each
+256-unit cell of the layer is halved along the diagonal its square's crease follows
+(`HDWetCell`): the splits of room 45 crease from corner 1 to corner 2, across the cells'
+first diagonal, and lost a half-cell on each of the crease's four cells - a wet edge in
+steps along the pillar's chamfer - until the cells followed the crease (596 to 608
+triangles, the flat squares laid as before). RoomProbe `-tankwetmap` ends its lines in
+`slope=<function>`, a sloping square's y then its highest corner, and the load line's
+`heights=` counts that corner.
 
 **Measured.** GPU at 2560 x 1440, three runs each, the water's phases and both wet draws
-summed, 60 s after the shot, `783bca2c` against the round's head: the corridor eye of
-the pause picture 0.140 to 0.110 ms, Lara by the machine 0.145 to 0.103, the pillar's
-view 0.124 to 0.119, round 4's tank eye 0.152 to 0.144 - the march left out where the
-copy is.
+summed, 60 s after the shot, `783bca2c` against the round's head after its fix pass:
+the corridor eye of the pause picture 0.140 to 0.117 ms, Lara by the machine 0.147 to
+0.114, the pillar's view 0.123 to 0.129, round 4's tank eye 0.150 to 0.168 - the march
+left out where the copy is, its six more steps where it runs.
 Slots: `WetPS` 256 (12 texture, 244 arithmetic), the debugger 508; every other `.inc`
 byte-identical. The yellow bands at the eyes that show them, 1,446 to 5,194 pixels before,
 0 after.
@@ -13660,18 +13687,22 @@ fifteen cameras 15 of 15 identical to the fix round's parity set. With `-hdwater
 against a RoomProbe built from `783bca2c`: the fifteen cameras 15 of 15, the pond's twelve
 views at 1, 3 and 5 s 36 of 36, the canal dive 4 of 4, the tank views without `-tank` and
 his view before the break 3 of 3, the sweep's 209 WATERLOG lines; only the RICH2 tank
-views with `-tank 182` change; room 23's with `-tank 33` are byte-identical. ModernTest
-grows by 5 checks (the slopes); the suites 0 failed; the engine and every tool build.
+views with `-tank 182` and `-tank 33` change, the march's steps. ModernTest grows by 8
+checks (the slopes and the cells); the suites 0 failed; the engine and every tool build.
 
 **Left.** The look in the game - nobody in this round could play it, and RoomProbe draws
-no Lara and no objects: whether Lara's boxes, the streaks on objects and the machine's
-black cut remain where the march still runs (room 122's east column, 121, 45 and room
-23) is for his next test. A planar mirror of the models was not built. No eye of his
+no Lara: whether her boxes and the machine's black cut remain where the march still runs
+(room 122's east column, 121, 45 and room 23) is for his next test; 2,788 hits more than
+2 pixels off the fine march's and 5,751 pixels off the true mirror remain at the eyes
+measured. A planar mirror of the models was not built. A split whose two triangles step
+apart along the crease would take one triangle's corners for both (`water_corners`);
+RICH2's six meet at one height. No eye of his
 first picture was found with certainty. The march still mirrors the glows where no copy
 lies under the floor.
 
 **Commits.** `fab9d80f` (the art's own mirror), `6ae16824` (the life under a menu's
-picture), `5fc97db8` (the sloping floors).
+picture), `5fc97db8` (the sloping floors); the fix pass `cd8adc07` (the cells along a
+split's crease), `97bb452f` (the march's steps).
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

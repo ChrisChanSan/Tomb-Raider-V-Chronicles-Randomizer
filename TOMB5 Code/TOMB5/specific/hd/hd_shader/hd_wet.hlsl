@@ -82,8 +82,9 @@
  *   TEXCOORD2  xyz the light field's texture coordinate, w the share of
  *              the mirror the water's depth there gives (a damp patch
  *              darkens and mirrors less than a pool), 0 where the art
- *              carries its own copy of the room under the floor - no
- *              march there (hd_render.cpp, "the art's own mirror")
+ *              carries its own copy of the room under the floor: no
+ *              march there and no light field in its place, the lamps'
+ *              highlight alone (hd_render.cpp, "the art's own mirror")
  *
  * Pixel registers, written before each draw, in the block the sheets'
  * and the cards' draws write again before they read it:

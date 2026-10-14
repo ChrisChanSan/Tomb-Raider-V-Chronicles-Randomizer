@@ -3182,11 +3182,11 @@ this was measured on (sixteen threads) the rooms' build of the title level went
 from about 3.1 seconds to about 1.3; the texture pages are now its largest
 part.
 
-Where a whole load goes, measured in 30 logged loads on one machine (2560 x
-1440, sixteen threads, `-log`): 1.8 to 4.6 seconds a load, of which
-the HD build is 50 to 72 percent, the loading thread with the classic level 5
-to 15, and the loading bar running up to its end after the work is done 12 to
-40 (0.34 to 0.72 seconds every load). In the HD build of RICH2 at `hd_air 2`
+Where a whole load goes, measured in 64 logged loads on one machine (2560 x
+1440, sixteen threads, `-log`): 1.8 to 4.8 seconds a load, of which the HD
+build is 50 to 77 percent, the loading thread with the classic level 2 to 30,
+and the loading bar running up to its end after the work is done 6 to 42
+(0.31 to 0.80 seconds every load). In the HD build of RICH2 at `hd_air 2`
 the room build is about 2.1 seconds, and inside it the three largest parts are
 the texture pages (about 0.6), the air's hulls asked of every triangle on one
 thread (0.5) and every room's triangles on the pool (0.5); the objects add 0.6.

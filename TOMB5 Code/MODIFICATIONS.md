@@ -14384,9 +14384,10 @@ picture. New: the `LOADLOG level=<L> step=<step> ms=<n>` lines behind `-log` and
 `RoomProbe -loadtime`.
 
 **Why.** On 2026-10-14 the owner asked to shorten the load of a savegame inside a level,
-and, before anything is changed, for the measurement of the load's phases. His four logs
-of 2026-10-12 to 14 (`log_test16`, `16b_air2`, `17_andy3`, `18_wet`; 2560 x 1440,
-`hd_enable 1`, `hd_air` 1 and 2) are the in-game numbers; nobody could play in this round.
+and, before anything is changed, for the measurement of the load's phases. His five logs
+of 2026-10-12 to 14 (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and, recorded for
+this round, `19_alllevels`; 2560 x 1440, `hd_enable 1`, `hd_air` 1 and 2) are the in-game
+numbers; nobody could play in this round.
 
 **How.** *The seam.* One step is a clock read (`QueryPerformanceCounter`) and a `Log`
 call on lines of their own beside the call they time; no call changed and no existing
@@ -14420,38 +14421,65 @@ water's steps, the objects (`hd_object.cpp` is not linked), the font, `life` and
 second RoomProbe. `hd_render.cpp` is not this round's file (the room art and the splash
 rounds work in it), so the engine's `LOADLOG` has `fill` as one step.
 
-**Measured.** *Per level, the owner's logs* - 30 loads (the four logs hold 18 + 5 + 3 + 4;
-`log_test19` was not there at the time of this round), medians in ms, out of the tick in
-front of the `S_LoadLevelFile:` lines (steps of 15.6 ms) and the QPC fields of the HDLOG
-lines; `gap` is the HD build's tick span less every QPC field that books it:
+**Measured.** *Per level, the owner's logs.* `log_test19_alllevels` (built 2026-10-14
+02:30:36, `hd_air 2`) loads every level fresh and then a save of it inside it, 34 loads;
+medians in ms out of the tick in front of the `S_LoadLevelFile:` lines (steps of 15.6 ms)
+and the QPC fields of the HDLOG lines; `gap` is the HD build's tick span less every QPC
+field that books it:
 
 | Level | loads | total (min) | screen | load thread | of it scan | HD build | of it built | fill | pages | objects | hash (-log) | gap | font+cuts | bar tail |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ANDREA1 | 3 | 2453 (2313) | 78 | 312 | 165 | 1438 | 838 | 174 | 500 | 480 | 22 | 18 | 0 | 609 |
-| ANDREA2 | 3 | 3047 (3000) | 78 | 219 | 104 | 2078 | 1516 | 734 | 582 | 449 | 43 | 11 | 0 | 672 |
-| ANDREA3 | 1 | 2406 (2406) | 94 | 281 | 146 | 1390 | 920 | 277 | 518 | 417 | 17 | 1 | 0 | 641 |
-| ANDY1 | 1 | 2453 (2453) | 93 | 266 | 100 | 1438 | 782 | 172 | 531 | 526 | 31 | 8 | 0 | 656 |
-| ANDY2 | 1 | 2500 (2500) | 93 | 266 | 136 | 1516 | 907 | 145 | 683 | 512 | 15 | 16 | 0 | 625 |
-| ANDY3 | 2 | 3078 (2546) | 94 | 328 | 196 | 2086 | 1262 | 485 | 653 | 618 | 59 | 13 | 0 | 570 |
-| JOBY2 | 2 | 2688 (2547) | 78 | 298 | 144 | 1694 | 1134 | 493 | 507 | 450 | 45 | 5 | 0 | 618 |
-| JOBY4 | 1 | 1828 (1828) | 78 | 94 | 58 | 922 | 617 | 134 | 452 | 239 | 8 | 14 | 0 | 734 |
-| JOBY5 | 1 | 2359 (2359) | 94 | 359 | 222 | 1344 | 652 | 200 | 359 | 605 | 20 | 10 | 0 | 562 |
-| RICH1 | 1 | 2328 (2328) | 78 | 266 | 123 | 1328 | 660 | 118 | 485 | 594 | 12 | 5 | 0 | 656 |
-| RICH2 | 6 | 3375 (3141) | 86 | 296 | 154 | 2360 | 1574 | 839 | 582 | 548 | 173 | 11 | 0 | 610 |
-| TITLE | 8 | 3742 (3219) | 125 | 344 | 179 | 2711 | 2218 | 1068 | 892 | 265 | 32 | 18 | 55 | 500 |
+| ANDREA1 | 2 | 2742 (2688) | 86 | 290 | 119 | 1710 | 1044 | 454 | 486 | 572 | 26 | 2 | 0 | 656 |
+| ANDREA2 | 3 | 3984 (3719) | 79 | 234 | 105 | 2984 | 2159 | 1404 | 558 | 492 | 45 | 2 | 0 | 656 |
+| ANDREA3 | 2 | 2922 (2906) | 86 | 234 | 99 | 1914 | 1322 | 743 | 453 | 510 | 22 | 12 | 0 | 687 |
+| ANDY1 | 2 | 2828 (2781) | 86 | 234 | 80 | 1804 | 1058 | 452 | 525 | 590 | 36 | 16 | 0 | 703 |
+| ANDY2 | 2 | 2836 (2656) | 94 | 250 | 110 | 1828 | 1170 | 431 | 648 | 566 | 17 | 4 | 0 | 664 |
+| ANDY3 | 2 | 3054 (3000) | 78 | 242 | 108 | 2054 | 1308 | 618 | 566 | 612 | 51 | 0 | 0 | 680 |
+| JOBY2 | 2 | 2898 (2875) | 78 | 242 | 102 | 1898 | 1291 | 723 | 433 | 496 | 44 | 7 | 0 | 680 |
+| JOBY3 | 3 | 2313 (2312) | 78 | 188 | 50 | 1328 | 653 | 345 | 237 | 590 | 19 | 12 | 0 | 719 |
+| JOBY4 | 2 | 1992 (1860) | 86 | 62 | 38 | 1078 | 758 | 266 | 453 | 256 | 8 | 18 | 0 | 766 |
+| JOBY5 | 2 | 2789 (2578) | 94 | 375 | 212 | 1758 | 930 | 551 | 269 | 724 | 24 | 8 | 0 | 562 |
+| RICH1 | 3 | 2641 (2453) | 94 | 172 | 50 | 1641 | 907 | 292 | 510 | 653 | 13 | 10 | 0 | 734 |
+| RICH2 | 3 | 3985 (3953) | 79 | 281 | 112 | 2969 | 2079 | 1273 | 567 | 635 | 171 | 8 | 0 | 656 |
+| RICH3 | 2 | 2586 (2562) | 86 | 226 | 96 | 1586 | 882 | 413 | 393 | 611 | 24 | 8 | 0 | 688 |
+| RICHCUT2 | 1 | 2141 (2141) | 94 | 47 | 23 | 1203 | 945 | 310 | 631 | 214 | 8 | 11 | 0 | 797 |
+| TITLE | 3 | 3422 (3282) | 94 | 203 | 109 | 2500 | 2172 | 1017 | 866 | 254 | 31 | 14 | 0 | 625 |
 
-JOBY3, RICH3 and RICHCUT2 are not in the four logs. The HD build is 50 to 72 % of a load,
-the loading thread 5 to 15 %, the bar's tail 12 to 40 %. The existing lines already
-account for the HD build to within the tick (`gap` 1 to 24 ms): the built line's
-`phases=` and the `hd_share` line split it, and `pages` is a part of `built`. The one
-block left is `fill`. `hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG`
-scan depends on the file cache: RICH2 404 ms cold, 88 to 176 warm.
+Over all 64 loads of the five logs (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and
+`19_alllevels`; the four older ones hold 18 + 5 + 3 + 4 loads of the builds of 2026-10-12
+and 14): 1.8 to 4.8 s a load, the HD build 50 to 77 % of it, the loading thread 2 to 30 %,
+the bar's tail 6 to 42 % (0.31 to 0.80 s). The existing lines already account for the HD
+build to within the tick (`gap` -2 to 28 ms): the built line's `phases=` and the
+`hd_share` line split it, and `pages` is a part of `built`. The one block left is `fill`.
+`hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG` scan depends on the file
+cache: RICH2 404 ms cold, 88 to 176 warm.
 
 *Savegame loads.* The mark is `INTERPLOG ... invalidated: savegame loaded` after the bar;
-22 of the 30 loads restored a save, two of them inside the same level (the previous load
-the same level, started from `invalidated: load menu`): `log_test16` line 92151 RICH2,
-3,219 ms against the fresh RICH2 before it 3,172; `log_test18` line 18254 RICH2, 4,094
-against 4,047. A load inside the level costs what a fresh load of it costs.
+a load inside the same level is one whose load before it was the same level and which
+started from `invalidated: load menu`. `log_test19` has one for 13 levels (fresh load
+first, then the save inside it; ms):
+
+| Level | fresh | inside it | difference | thread fresh / inside | HD build fresh / inside | bar tail fresh / inside |
+|---|---|---|---|---|---|---|
+| ANDREA2 | 3984 | 4016 | +32 | 594 / 234 | 2984 / 3047 | 328 / 656 |
+| ANDREA1 | 2797 | 2688 | -109 | 344 / 235 | 1750 / 1671 | 609 / 704 |
+| ANDY2 | 3015 | 2656 | -359 | 312 / 187 | 2016 / 1641 | 593 / 734 |
+| ANDY3 | 3000 | 3109 | +109 | 281 / 203 | 2000 / 2109 | 640 / 719 |
+| JOBY5 | 3000 | 2578 | -422 | 547 / 203 | 1953 / 1563 | 406 / 719 |
+| RICH2 | 3953 | 3985 | +32 | 485 / 281 | 2953 / 2969 | 422 / 656 |
+| RICH1 | 2750 | 2453 | -297 | 297 / 156 | 1750 / 1469 | 625 / 734 |
+| JOBY2 | 2922 | 2875 | -47 | 282 / 203 | 1906 / 1891 | 656 / 703 |
+| JOBY4 | 2125 | 1860 | -265 | 78 / 47 | 1203 / 953 | 750 / 782 |
+| RICH3 | 2610 | 2562 | -48 | 282 / 171 | 1609 / 1563 | 641 / 734 |
+| ANDY1 | 2781 | 2875 | +94 | 266 / 203 | 1750 / 1859 | 672 / 734 |
+| ANDREA3 | 2906 | 2937 | +31 | 281 / 188 | 1875 / 1953 | 656 / 718 |
+| JOBY3 | 2313 | 2406 | +93 | 219 / 188 | 1328 / 1421 | 688 / 719 |
+
+A load inside the level costs what a fresh load of it costs: -422 to +109 ms, the median
+-47. The loading thread is shorter the second time (the files are in the cache), the bar's
+tail longer, and on four levels (ANDY2, JOBY4, JOBY5, RICH1) the HD build is 250 to 390 ms
+shorter (the pages and the models' files cached as well). The two older ones: `log_test16`
+line 92151 RICH2 3,219 against 3,172, `log_test18` line 18254 RICH2 4,094 against 4,047.
 
 *FILL, split* (the scaffold, `RoomProbe -loadtime -threads 16`, three runs each over
 the fifteen levels at `hd_air` 1 and 2, medians, on a quiet machine - a first sweep
@@ -14460,9 +14488,12 @@ slower and was discarded). The fair scale between this machine and the owner's i
 the pages, whose code did not change between his builds and this one: the probe's
 pages over his lie between 0.93 and 1.65 per level, RICH2 at `hd_air 2` 1.33; where
 he has an `hd_air 2` log the fill agrees with that within about 10 % (RICH2 1.26,
-ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). RICH2, `hd_air 2`, probe ms / 1.33 (his own
-in brackets): fill 1,205 [1,277] = `MarkAirHulls` 512 (42 %), the pool's
-`fill_group` 419 (35 %), `MarkCarryCells` 173 (14 %), the join 47,
+ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). Against `log_test19` (every level, `hd_air
+2`, the build of 2026-10-14 02:30) the pages factor is 0.86 to 1.82 and the fill
+factor 1.02 to 1.67; with RICH2's 1.35 from that log the parts below come out within
+2 % of these (hulls 503, pool and join 457, carry cells 170). RICH2, `hd_air 2`,
+probe ms / 1.33 (his own in brackets): fill 1,205 [1,277] = `MarkAirHulls` 512 (42
+%), the pool's `fill_group` 419 (35 %), `MarkCarryCells` 173 (14 %), the join 47,
 `MarkCoveredFaces` 11; the pool keeps 5.2 of its 16 threads busy on average (2,869
 processor ms in 557 wall ms on the probe), held by the largest group. At this build
 `hd_air 1` costs nearly what 2 does (RICH2 fill 1,445 against 1,603), because
@@ -14521,7 +14552,7 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
 
 *The three candidates* (RICH2 inside RICH2: 4,094 ms with `-log`):
 - *A - the whole level resident.* Saves the loading thread and the HD build, RICH2 3,390
-  of 4,094 (other levels 1.0 to 2.9 s); costs a copy of the used pool after the load
+  of 4,094 (other levels 1.1 to 3.2 s); costs a copy of the used pool after the load
   (a few MiB) and of the globals the load sets. It replaces the load on the classic path,
   `hd_enable 0` included, so classic parity needs state dumps of fresh against resident
   loads. Risk high, the class of the joby3 load crash of 2026-08-25: the pool goes back to
@@ -14535,7 +14566,7 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
 - *B - the HD data resident, the classic reload as today.* Saves the HD build less a
   re-bind of about 30 to 80 ms (the static tables, the water faces and frames, the
   objects' binding, the life, the flips back), RICH2 about 2.8 to 3.0 s, other levels
-  0.9 to 2.7 s, and the `.TRG` scan (88 to 404). No extra memory. `hd_enable 0`
+  1.0 to 2.9 s, and the `.TRG` scan (88 to 404). No extra memory. `hd_enable 0`
   untouched: every change sits behind the HD gate. Risk medium: the stale-pointer class
   only through the two pointer families of (c), both cleared already; the real risks are
   a level changed under the same name (key on the `.TRC`, `.hdm` and `.TRG`, the hd

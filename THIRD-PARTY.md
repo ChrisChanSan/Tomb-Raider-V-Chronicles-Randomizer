@@ -646,7 +646,8 @@ water surface", carries the tables.
     pictures (`RoomProbe -ripple`) against the play test of 2026-10-08 (too
     restless, too quick, fading too soon). A ring that starts over 128 (a
     floating body's) keeps its size past the cap and is 4 times stronger:
-    entry 193.
+    entry 193. A spring's rings (entry 194) go into the live rings as they
+    are, without entry 79's merge, and take this strength.
 73. **The ripple row of `hd_water.txt`** - `ripple <x> <z> <size> <seconds>`
     on any row: a ring at that world place every so many seconds, its phase
     from the place, at the surface of the row's room's square under it. OWN,
@@ -657,6 +658,8 @@ water surface", carries the tables.
     choice set by eye in the game with a row of the file), with the sheets
     alone; a row of the file with a ripple for the same room takes its
     place. The body a source stands in keeps it as its spring (entry 163).
+    The compiled row's source is the springs' table's since #200 (entry
+    194); a row of the file within 256 units of a spring rings its place.
 74. **The clip** - with the depth texture and the camera above the water, a
     sheet pixel is not drawn (`clip()`) where the frame lies less than 8 units
     under the surface at rest (the swell's lift handed from `WaterVS` and taken
@@ -1969,6 +1972,52 @@ water surface", carries the tables.
     700, 1,500 and 3,000 units: at 4 the ring reads from a wading Lara's
     camera at 1.5 and 2 s, at 2 it does not. A ring that starts at 128
     or less keeps entry 72's strength to the bit.
+194. **The spring** (`hd_spring.h`, `hd_spring.cpp`) - a point under water
+    with a hashed clock: a ring a period (0.7 s at the table's), each up to
+    a fifth of a period early or late by hash, size 80 times the strength
+    (at least 16), into the live rings unmerged, only within 6,144 units of
+    the eye; a ripple row within 256 units rings the place instead. The
+    compiled table's one row, ANDREA2 194 at x 55,808, z 32,768, floor
+    2,560. OWN: the size and the period tuned by eye in the game with a
+    file row, the place and the floor DATA (RoomProbe `-life`
+    LIFESQUARES), the jitter and the reach free choices.
+195. **The spring's bubbles** - three a second at strength 1 by hashed
+    birth, 200 to 300 units a second, a sway of 8 to 20 units and a third
+    across at 1.0 to 1.8 s, radius 5 to 12, one in three ringing the sheet
+    at 48 to 63; premultiplied cards (`hd_spring.hlsl`, `BubblePS`) with a
+    rim, a body and a highlight, soft over 32 units, the cards' fog, the
+    under look's extinction and the sheet's absorption along the eye's path.
+    OWN, free choices set by eye on the round's RoomProbe pictures; the
+    speed from the textbook rise of small air bubbles (about 0.25 m/s);
+    the sway's form, the radius range and the pop ring's size measured on
+    the classic bubble (`game/tomb4fx.cpp`, `specific/specificfx.cpp`).
+196. **The rising current** - a quad turned to the eye from the floor to
+    the sheet, half-width 32 + 96 times the strength widening by a tenth of
+    its height (a round jet's spread), drawn after the sheets as a multiply
+    (`DESTCOLOR` / `INVSRCALPHA`, rgb w r, alpha w; r the frame's copy at a
+    place bent by two cells of hashed value noise rising at 400 units a
+    second over the copy at the pixel, floor 0.02, at most 2; w at most
+    0.5), the bend at most 32 units at strength 1, `(1 - u^2)^2` across and
+    1,200 over 1,200 plus the height; faded by the angle to its line and
+    from 16 to 6 pixels of half-width. OWN, a design of this project from
+    general graphics knowledge (refraction through the frame's copy, value
+    noise); the numbers free choices set by eye on the round's RoomProbe
+    pictures, the spread from the textbook round jet.
+197. **The file's spring row** - `spring <x> <z> <strength> [<seconds>]`
+    in `hd_water.txt`: changes the table's spring of its level and room,
+    takes it away at strength 0, else adds one; a row whose one key it is
+    tunes no body; the sheet of the row's room, else the highest. OWN.
+198. **The springs' placement rule** - a candidate square draws a sheet
+    over 768 units or more, lies 3,072 units or more from Lara's start and
+    from every portal through a wall that reaches into the water and has
+    the body's squares on one side only, and under no static; a body that
+    is no river and has no current, no spring of its own and six
+    candidates or more holds one in two (the key `hd_springs` n: one in two
+    times n, 0 none) by the hash of its level and first square, at a hashed
+    candidate's middle, strength 0.5 to 1 by hash. OWN: 768 and six the
+    life's deep water and school size (`hd_life_rules.h`), one in two chosen
+    on the counts of the fifteen levels (RoomProbe `-springs`: five bodies
+    fit, three springs; one in three gave one).
 
 ## Credited, but not contained here
 

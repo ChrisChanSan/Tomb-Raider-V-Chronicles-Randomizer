@@ -1786,6 +1786,19 @@ int HDRenderGroupHullBehind(int group);
  * room intrudes in (MarkCoveredFaces in hd_render.cpp), whose art is drawn
  * pushed back; 0 with the rooms' air off. */
 int HDRenderCoveredFaces();
+/* Each such face found, whether pushed back or not: the pair face, its room
+ * and the holder's, its area, and the area of each room's art over it in
+ * three layers - on the plane within a unit, in front, behind, both up to
+ * HD_COVER_SIDE - and the area of its room's art there that the holder's
+ * repeats triangle for triangle (HDCoveredFace in hd_render.cpp). False
+ * past the last. */
+bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
+	float* area, float own[3], float held[3], int* airs, float centre[3],
+	float normal[3], int* behind);
+/* How far off a covered face its rooms' art is still counted, in front of
+ * it or behind: an eighth of a click, past the push HD_STAND_PUSH gives at
+ * the distances the rooms are seen from (16 units at 8,192). */
+#define HD_COVER_SIDE		32.0f
 int HDRenderCarryPairs();
 bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 

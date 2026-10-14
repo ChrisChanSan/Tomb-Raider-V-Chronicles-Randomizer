@@ -2111,6 +2111,102 @@ namespace
 			(long long)((int)floorf(z / 256.0f) + 32768);
 	}
 
+	/* One pair face inside a larger face of its holder (MarkCoveredFaces):
+	 * the face, its room and the holder's, the face's area, and the area of
+	 * each room's art over the face - its centroid within the face's
+	 * outline - in three layers along the face's normal: [0] every corner
+	 * within a unit of the plane, [1] all on the normal's side, [2] all on
+	 * the other, both within HD_COVER_SIDE. Then its centre and unit normal,
+	 * in which of the two rooms' air the point 128 units off its centre
+	 * stands (bit 1 the face's room on the normal's side, 2 on the other,
+	 * 4 and 8 the holder's), and whether its art is pushed back. For the
+	 * rule and the HDLOG covered lines. */
+	struct HDCoveredFace
+	{
+		int face, group, holder;
+		float area;
+		float own[3], held[3];
+		float centre[3], normal[3];
+		int airs;
+		int behind;
+	};
+
+	std::vector<HDCoveredFace> g_cover_faces;
+
+	/* Group g's art over pair face f, in the three layers of HDCoveredFace;
+	 * `n` the face's world plane (unit normal, then n.p of its points). */
+	void CoveredFaceArt(const trf::remaster::Trg& trg, int g, int f,
+		const float* n, float* out)
+	{
+		out[0] = out[1] = out[2] = 0.0f;
+
+		if (g < 0 || g >= (int)trg.groups.size() || g >= g_box_count)
+			return;
+
+		const HDRoomBox& own = g_boxes[g];
+		const HDPairFace& face = g_pair_faces[f];
+		const HDRoomBox& at = g_boxes[face.group];
+
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned int k = 0; k + 2 < run.count; k += 3)
+				{
+					const unsigned int first = run.start + k;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					float p[3][3];
+					float lo = 0.0f, hi = 0.0f;
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[first + c]];
+
+						p[c][0] = (float)v.x + own.originX;
+						p[c][1] = (float)v.y;
+						p[c][2] = (float)v.z + own.originZ;
+
+						const float d = n[0] * p[c][0] + n[1] * p[c][1] +
+							n[2] * p[c][2] - n[3];
+
+						lo = c == 0 || d < lo ? d : lo;
+						hi = c == 0 || d > hi ? d : hi;
+					}
+
+					const float mid[3] =
+					{
+						(p[0][0] + p[1][0] + p[2][0]) / 3.0f - at.originX,
+						(p[0][1] + p[1][1] + p[2][1]) / 3.0f,
+						(p[0][2] + p[1][2] + p[2][2]) / 3.0f - at.originZ
+					};
+
+					if (HDPairFaceDistance(face, mid) < 0.0)
+						continue;
+
+					const float a[3] = { p[1][0] - p[0][0],
+						p[1][1] - p[0][1], p[1][2] - p[0][2] };
+					const float b[3] = { p[2][0] - p[0][0],
+						p[2][1] - p[0][1], p[2][2] - p[0][2] };
+					const float x = a[1] * b[2] - a[2] * b[1];
+					const float y = a[2] * b[0] - a[0] * b[2];
+					const float z = a[0] * b[1] - a[1] * b[0];
+					const float size = 0.5f * sqrtf(x * x + y * y + z * z);
+
+					if (lo >= -1.0f && hi <= 1.0f)
+						out[0] += size;
+					else if (lo > 1.0f && hi <= HD_COVER_SIDE)
+						out[1] += size;
+					else if (hi < -1.0f && lo >= -HD_COVER_SIDE)
+						out[2] += size;
+				}
+			}
+	}
+
 	/* The pair faces that lie inside a larger face of the holder of an
 	 * entry their room intrudes in: the same plane within a unit, facing
 	 * the same way, every corner within the larger face's outline. Two
@@ -2124,11 +2220,22 @@ namespace
 	 * pixels both draw there at 640x360, page 126 against page 146). The
 	 * art standing on the smaller face is drawn pushed back as a stand
 	 * range answered HD_STAND_BEHIND is, so the larger face's art wins;
-	 * two faces alike in size keep both, there being no larger one. Only
-	 * with the air on: tomb5.hd_air 0 is the answer before the air rule. */
-	void MarkCoveredFaces()
+	 * two faces alike in size keep both, there being no larger one. Asked
+	 * at all 40 such faces of the fifteen levels (an eye 768 units off
+	 * each on its open side, both rooms drawn whole, the eye moved one unit
+	 * along x and along z): 582,474 of the pixels the push changes fight
+	 * without it and 1,562 with it. It ends the fight at 27 faces and adds
+	 * 4 pixels to one; at twelve no fight showed where it changes the
+	 * picture, seven of them under 600 pixels, five 9,744 to 113,537
+	 * (JOBY3's faces 87, 562 and 564, RICH1's 139 and 444).
+	 * Every face's art lies on the plane within a unit for both rooms (the
+	 * HDLOG covered lines); 16 faces have only the holder's air in front of
+	 * them - the holder's floor - and 24 both rooms'. Only with the air on:
+	 * tomb5.hd_air 0 is the answer before the air rule. */
+	void MarkCoveredFaces(const trf::remaster::Trg& trg)
 	{
 		g_face_behind.assign((size_t)g_pair_face_count, 0);
+		g_cover_faces.clear();
 
 		if (g_air_cells.empty() || !g_boxes || g_pair_face_count <= 0)
 			return;
@@ -2189,8 +2296,9 @@ namespace
 			if (area[(size_t)f] <= 0.0f)
 				continue;
 
-			for (int h = 0; h < g_pair_face_count && !g_face_behind[(size_t)f];
-				h++)
+			bool found = false;
+
+			for (int h = 0; h < g_pair_face_count && !found; h++)
 			{
 				const int a = g_pair_faces[h].group;
 				const float* nh = &normal[(size_t)h * 4];
@@ -2255,8 +2363,54 @@ namespace
 					}
 				}
 
-				if (inside)
-					g_face_behind[(size_t)f] = 1;
+				if (!inside)
+					continue;
+
+				HDCoveredFace made;
+
+				found = true;
+
+				made.face = f;
+				made.group = b;
+				made.holder = a;
+				made.area = area[(size_t)f];
+				made.airs = 0;
+
+				{
+					float c[3] = { 0.0f, 0.0f, 0.0f };
+
+					for (int k = 0; k < g_pair_faces[f].corners; k++)
+						for (int i = 0; i < 3; i++)
+							c[i] += wf[k * 3 + i] / g_pair_faces[f].corners;
+
+					for (int i = 0; i < 3; i++)
+					{
+						made.centre[i] = c[i];
+						made.normal[i] = nf[i];
+					}
+
+					for (int s = 0; s < 2; s++)
+					{
+						const float o = s ? -128.0f : 128.0f;
+						const float px = c[0] + nf[0] * o;
+						const float py = c[1] + nf[1] * o;
+						const float pz = c[2] + nf[2] * o;
+
+						if (b < g_room_air_count && HDRoomAirReaches(
+							g_room_air[b], px, py, py, pz, 0.0f))
+							made.airs |= 1 << s;
+
+						if (a < g_room_air_count && HDRoomAirReaches(
+							g_room_air[a], px, py, py, pz, 0.0f))
+							made.airs |= 4 << s;
+					}
+				}
+
+				CoveredFaceArt(trg, a, f, nf, made.held);
+				CoveredFaceArt(trg, b, f, nf, made.own);
+				made.behind = 1;
+				g_face_behind[(size_t)f] = made.behind;
+				g_cover_faces.push_back(made);
 			}
 		}
 	}
@@ -4716,6 +4870,37 @@ int HDRenderCoveredFaces()
 		n += g_face_behind[f] ? 1 : 0;
 
 	return n;
+}
+
+bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
+	float* area, float own[3], float held[3], int* airs, float centre[3],
+	float normal[3], int* behind)
+{
+	if (index < 0 || index >= (int)g_cover_faces.size())
+		return false;
+
+	const HDCoveredFace& one = g_cover_faces[(size_t)index];
+
+	*face = one.face;
+	*group = one.group;
+	*holder = one.holder;
+	*area = one.area;
+	*airs = one.airs;
+
+	for (int k = 0; k < 3; k++)
+	{
+		centre[k] = one.centre[k];
+		normal[k] = one.normal[k];
+	}
+	*behind = one.behind;
+
+	for (int k = 0; k < 3; k++)
+	{
+		own[k] = one.own[k];
+		held[k] = one.held[k];
+	}
+
+	return true;
 }
 
 int HDRenderGroupHullBehind(int group)
@@ -8176,7 +8361,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	// The hulls, asked of every group before any is filled (MarkAirHulls).
 	MarkAirHulls(trg);
 	// And the pair faces a larger face of the holder covers.
-	MarkCoveredFaces();
+	MarkCoveredFaces(trg);
 	// And the copies among the carried art (MarkCarryCells).
 	MarkCarryCells(trg);
 

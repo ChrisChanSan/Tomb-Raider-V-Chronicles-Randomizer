@@ -11153,6 +11153,32 @@ static int ProbeMain(int argc, char** argv)
 					HDRenderGroupHullBehind(g));
 		}
 
+		// And its HDLOG covered lines (ReportRoomIntrusions), the same.
+		for (int i = 0; g_air_option; i++)
+		{
+			int face = 0, group = 0, holder = 0, behind = 0, airs = 0;
+			float area = 0.0f, own[3], held[3];
+			float centre[3], normal[3];
+
+			if (!HDRenderCoveredFace(i, &face, &group, &holder, &area, own,
+				held, &airs, centre, normal, &behind))
+				break;
+
+			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+
+			printf("covered: face=%d group=%d holder=%d area=%d "
+				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
+				"normal=%d,%d,%d behind=%d\n", face, group,
+				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
+				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
+				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
+				(int)(held[2] * to + 0.5f), airs, (int)floorf(centre[0] + 0.5f),
+				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
+				(int)floorf(normal[0] * 1000.0f + 0.5f),
+				(int)floorf(normal[1] * 1000.0f + 0.5f),
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
+		}
+
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
 		{
 			const int hits = HDRenderIntrusionHits((int)i);

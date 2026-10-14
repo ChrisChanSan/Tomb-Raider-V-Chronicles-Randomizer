@@ -883,15 +883,14 @@ namespace
 	 * claims whose holder is not drawn this frame: it stands with those
 	 * faces, and whole is its answer without the air. The rule can only
 	 * take art away: a piece not drawn whole is already drawn inside that
-	 * window, so it
-	 * narrows the answer and never widens it. Art in the air of a linked
-	 * room keeps the answer above, and so does art in no entry's box, which
-	 * is no piece at all (BuildRoomIntrusions says why). Such art the open
-	 * half would draw - no face claims it and it stands outside the smaller
-	 * box - is a piece of its own with no face outside the smaller box
-	 * (HDPairRange), whole on the answer above and never one of the pieces
-	 * the counters ask. With tomb5.hd_air off no piece has air, and the
-	 * answer above is the whole answer. */
+	 * window, so it narrows the answer and never widens it. Art in the air
+	 * of a linked room keeps the answer above, and so does art in no
+	 * entry's box, which is no piece at all (BuildRoomIntrusions says why).
+	 * Such art the open half would draw - no face claims it and it stands
+	 * outside the smaller box - is a piece of its own with no face outside
+	 * the smaller box (HDPairRange), whole on the answer above and never one
+	 * of the pieces the counters ask. With tomb5.hd_air off no piece has
+	 * air, and the answer above is the whole answer. */
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -4525,6 +4524,43 @@ static void ReportRoomIntrusions()
 				Log("HDLOG hull level=%s group=%d air_tris=%d host_art=%d "
 					"hull=%d behind=%d", g_stem, g, air, covered,
 					hull ? 1 : 0, HDRenderGroupHullBehind(g));
+		}
+
+	/* HDLOG covered, with the air on: one line per pair face found inside
+	 * a larger face of its holder (HDRenderCoveredFace) - `face` its index
+	 * in the pair-face list, `group` its room, `holder` the larger face's,
+	 * `area` its area in square units, then per room the art over it in
+	 * percent of that area: `own` the face's room's, `held` the holder's,
+	 * each as on/n/back (within a unit of the plane, all corners on the
+	 * side its normal points to, all on the other), `airs` in which rooms'
+	 * air the point 128 units off its centre stands (1 and 2 its room's on
+	 * the normal's side and the other, 4 and 8 the holder's), `centre` and
+	 * `normal` (in thousandths) where it is; `behind` 1 when its art is
+	 * drawn pushed back. Behind -log. */
+	if (gLogEnabled && g_air_on)
+		for (int i = 0; ; i++)
+		{
+			int face = 0, group = 0, holder = 0, behind = 0, airs = 0;
+			float area = 0.0f, own[3], held[3];
+			float centre[3], normal[3];
+
+			if (!HDRenderCoveredFace(i, &face, &group, &holder, &area, own,
+				held, &airs, centre, normal, &behind))
+				break;
+
+			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+
+			Log("HDLOG covered level=%s face=%d group=%d holder=%d area=%d "
+				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
+				"normal=%d,%d,%d behind=%d", g_stem, face, group,
+				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
+				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
+				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
+				(int)(held[2] * to + 0.5f), airs, (int)floorf(centre[0] + 0.5f),
+				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
+				(int)floorf(normal[0] * 1000.0f + 0.5f),
+				(int)floorf(normal[1] * 1000.0f + 0.5f),
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
 		}
 
 	// The lists were only borrowed for the length of the build.

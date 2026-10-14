@@ -8321,9 +8321,10 @@ void HDFrameDrawGlow()
 	if (HDRenderWaterSheetsBuilt())
 		FeedWaterFilms();
 
-	/* The tanks' wet floors, over the opaque frame. The draw takes the
-	 * frame's copy first, so the sheets drawn after it read that same copy
-	 * and see the floor under them dry (hd_render.cpp, "the wet floor"). */
+	/* The tanks' wet floors' darkening, over the opaque frame; their mirror
+	 * comes at the frame's end. The draw takes the frame's copy first, so
+	 * the sheets drawn after it read that same copy and see the floor under
+	 * them dry (hd_render.cpp, "the wet floor"). */
 	if (HDRenderWaterSheetsBuilt())
 	{
 		float m[16];
@@ -8381,6 +8382,13 @@ void HDFrameDrawGlow()
 	HDRenderScissorOff();
 	DrawWaterCards();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
+
+	/* The wet floors' mirror, now the frame is whole: the glass, the glows
+	 * and the cards are in the copy it reads (hd_render.cpp, "the wet
+	 * floor"). */
+	if (HDRenderWaterSheetsBuilt())
+		HDRenderWaterWetMirror();
+
 	HDRenderFrameEnd();
 
 	g_frame_room_calls += HDRenderDrawCalls();

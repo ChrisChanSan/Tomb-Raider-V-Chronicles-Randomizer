@@ -1616,11 +1616,12 @@ bool HDRenderWaterTank(int item, float x, float y, float z, int yRot,
  * first seen done (a loaded game) is wet out to its radius at once.
  * HDRenderWaterWetFixed holds every wet point of every shot tank at one
  * strength (RoomProbe -tankwet; under 0, the default, the water's own
- * way). HDRenderWaterWetDraw draws the frame's wet floors, before the
- * frame's copy for the sheets, `toFrame` as HDRenderWaterCardsDraw takes
- * it. HDRenderWaterWetLine writes floor `at`'s SPLASHLOG line for the
- * level's load (the legend is over it in hd_render.cpp); false past the
- * last. */
+ * way). HDRenderWaterWetDraw draws the frame's wet floors' darkening, the
+ * opaque frame's copy for the sheets taken first, `toFrame` as
+ * HDRenderWaterCardsDraw takes it, and keeps them for the mirror
+ * (HDRenderWaterWetMirror, below). HDRenderWaterWetLine writes floor
+ * `at`'s SPLASHLOG line for the level's load (the legend is over it in
+ * hd_render.cpp); false past the last. */
 struct HDWaterWetTank
 {
 	int item;
@@ -1653,6 +1654,15 @@ struct HDWaterWetSquare
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
 void HDRenderWaterWetLimited(int on);
+
+/* The wet floors' second draw, once the frame is whole - after the glass,
+ * the glows, the cards and the objects' glows: the mirror out of a copy of
+ * that frame, over the darkening HDRenderWaterWetDraw laid. Nothing when
+ * the first draw drew nothing this frame. HDRenderWaterWetMarch is
+ * RoomProbe's march debugger (-tankmarch): the second draw writes the map
+ * `map` names in the mirror's place (hd_wet.hlsl, gWetDebug); 0 none. */
+void HDRenderWaterWetMirror();
+void HDRenderWaterWetMarch(int map);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

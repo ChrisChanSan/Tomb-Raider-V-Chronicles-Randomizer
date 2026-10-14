@@ -45,6 +45,7 @@
 #include "hd_shader/hd_room_card_vs.inc"
 #include "hd_shader/hd_room_card_ps.inc"
 #include "hd_shader/hd_wet_ps.inc"
+#include "hd_shader/hd_wet_debug_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1740,6 +1741,10 @@ namespace
 	 * below), drawn with CardVS. Null when the device refused it: then no
 	 * floor is drawn wet. */
 	IDirect3DPixelShader9* g_wet_ps = 0;
+	/* RoomProbe's march debugger (hd_wet.hlsl built with HD_WET_DEBUG) and
+	 * the map it draws in the mirror's place (-tankmarch), 0 none. */
+	IDirect3DPixelShader9* g_wet_debug_ps = 0;
+	int g_wet_debug = 0;
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -4501,6 +4506,10 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDWetPS, &g_wet_ps)))
 		g_wet_ps = 0;
 
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDWetDebugPS,
+		&g_wet_debug_ps)))
+		g_wet_debug_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -4665,6 +4674,7 @@ void HDRenderShutdown()
 	if (g_card_vs) { g_card_vs->Release(); g_card_vs = 0; }
 	if (g_card_ps) { g_card_ps->Release(); g_card_ps = 0; }
 	if (g_wet_ps) { g_wet_ps->Release(); g_wet_ps = 0; }
+	if (g_wet_debug_ps) { g_wet_debug_ps->Release(); g_wet_debug_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
 	if (g_shadow_receive_mirror_ps)
@@ -11574,9 +11584,11 @@ namespace
 	 * water on it would run, and stops kWetRadius past the dome's foot.
 	 *
 	 * Drawn as a layer kWetLift over the floor - a grid of points every
-	 * 256 units, five by five a square, shared between squares - once a
-	 * frame over the opaque frame, which it mirrors (HDRenderWaterWetDraw
-	 * takes the frame's copy). Each point keeps its way: how far the water runs
+	 * 256 units, five by five a square, shared between squares - twice a
+	 * frame: the darkening over the opaque frame (HDRenderWaterWetDraw),
+	 * the mirror once the frame is whole (HDRenderWaterWetMirror), out of a
+	 * copy of that whole frame, so the glows, the glass and the cards are
+	 * mirrored too. Each point keeps its way: how far the water runs
 	 * from the glass to it, through the grid (the shortest way along
 	 * neighbours, diagonals at their own length, a step down at no cost),
 	 * pushed back by up to kWetRagged out of a hash of its place; and how
@@ -11598,12 +11610,22 @@ namespace
 	 * HD_GLOSS_ENV and HD_GLOSS_CAP). The lamps' highlight is sharper than
 	 * polished marble's (exponent 64) and as much brighter at its peak as
 	 * its lobe is narrower: kWetHighlight is the textbook normalisation of
-	 * the Blinn-Phong lobe, (n + 8) / 8, at kWetPower. The mirror's march
-	 * takes HD_WET_STEPS (12) steps from kWetFirstStep, each kWetGrowth
-	 * times the last: 32 units past the floor's own depth step, out to
-	 * about 8,200 units, eight squares. kWetPower, kWetDamp, kWetHole and
-	 * the march are free choices, set by eye on the round's RoomProbe
-	 * pictures.
+	 * the Blinn-Phong lobe, (n + 8) / 8, at kWetPower. kWetPower, kWetDamp
+	 * and kWetHole are free choices, set by eye on RoomProbe pictures.
+	 *
+	 * The mirror's march (hd_wet.hlsl) takes HD_WET_STEPS (16) steps from
+	 * kWetFirstStep, each kWetGrowth times the last - 32 units past the
+	 * floor's own depth step, out to about 7,000 units, seven squares -,
+	 * halves each crossing HD_WET_REFINE (5) times and takes it where the
+	 * frame's depth fits the ray's within kWetFit and kWetFitShare of the
+	 * depth. Set on RoomProbe's march debugger (-tankmarch 5) against a
+	 * march of 8-unit steps halved ten times, which itself matches the true
+	 * mirror - the scene seen from the eye mirrored in the floor - at
+	 * RICH2's tank eyes: there this march's hit lies within 2 pixels of
+	 * the fine one's for 93 to 98 per cent of its hits (7 to 27 per cent
+	 * with a growth of 1.5 over 12 steps and the first point behind the
+	 * frame by less than two steps taken, unhalved), and its mirror is as
+	 * near the true one as the fine march's.
 	 *
 	 * The look's two strengths. kWetDark, the share of the floor's light
 	 * the water keeps back, and kWetMirror, a factor on the mirror's
@@ -11623,7 +11645,9 @@ namespace
 	const float kWetCap = 0.75f;
 	const float kWetDamp = 0.5f;
 	const float kWetFirstStep = 32.0f;	// units
-	const float kWetGrowth = 1.5f;
+	const float kWetGrowth = 1.3f;
+	const float kWetFit = 32.0f;		// units
+	const float kWetFitShare = 0.02f;	// of the view depth
 
 	/* Where a tank's water may run: the rooms its row names, by level and
 	 * the room the tank stands in - a square is theirs when it lies inside
@@ -11771,17 +11795,42 @@ namespace
 
 	const D3DFORMAT kIntz = (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z');
 
+	/* The whole frame's copy the wet floor's mirror reads (wet_copy_late),
+	 * of the frame's size and format, D3DPOOL_DEFAULT as the opaque frame's
+	 * and released with it; g_wet_ready while the frame owes the wet
+	 * floors their second draw (HDRenderWaterWetMirror). */
+	IDirect3DTexture9* g_wet_late = 0;
+	IDirect3DSurface9* g_wet_late_surface = 0;
+	D3DSURFACE_DESC g_wet_late_desc = {};
+	bool g_wet_late_valid = false;
+	bool g_wet_ready = false;
+
+	void release_wet_late()
+	{
+		if (g_wet_late_surface)
+		{
+			g_wet_late_surface->Release();
+			g_wet_late_surface = 0;
+		}
+
+		if (g_wet_late) { g_wet_late->Release(); g_wet_late = 0; }
+		g_wet_late_valid = false;
+	}
+
 	void release_water_copy()
 	{
 		if (g_copy_surface) { g_copy_surface->Release(); g_copy_surface = 0; }
 		if (g_copy_texture) { g_copy_texture->Release(); g_copy_texture = 0; }
 		g_copy_valid = false;
+		release_wet_late();
 	}
 
-	// The copy belongs to the bracket it was taken in (HDRenderFrameEnd).
+	// The copies belong to the bracket they were taken in (HDRenderFrameEnd).
 	void water_bracket_end()
 	{
 		g_copy_valid = false;
+		g_wet_late_valid = false;
+		g_wet_ready = false;
 	}
 
 	// A world square and a surface height, as one key.
@@ -15525,6 +15574,60 @@ namespace
 		D3DFVF_TEXCOORDSIZE4(0) | D3DFVF_TEXCOORDSIZE4(1) |
 		D3DFVF_TEXCOORDSIZE1(2);
 
+	/* The wet floors of this frame (HDRenderWaterWetDraw): their points in
+	 * view space, their triangles and the world's axes there, kept from the
+	 * first draw for the second. */
+	std::vector<CardVertex> g_wet_verts;
+	std::vector<unsigned short> g_wet_tris;
+	float g_wet_axes[12] = {};
+
+	/* The render target as it stands into g_wet_late, as HDRenderWaterCopy
+	 * takes the opaque frame: StretchRect between two surfaces of one size
+	 * and format is a plain copy. */
+	bool wet_copy_late()
+	{
+		IDirect3DSurface9* target = 0;
+		D3DSURFACE_DESC desc;
+
+		g_wet_late_valid = false;
+
+		if (!g_device || FAILED(g_device->GetRenderTarget(0, &target)) ||
+			!target)
+			return false;
+
+		if (FAILED(target->GetDesc(&desc)) ||
+			desc.MultiSampleType != D3DMULTISAMPLE_NONE)
+		{
+			target->Release();
+			return false;
+		}
+
+		if (g_wet_late && (g_wet_late_desc.Width != desc.Width ||
+			g_wet_late_desc.Height != desc.Height ||
+			g_wet_late_desc.Format != desc.Format))
+			release_wet_late();
+
+		if (!g_wet_late)
+		{
+			if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+				D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT,
+				&g_wet_late, 0)) ||
+				FAILED(g_wet_late->GetSurfaceLevel(0, &g_wet_late_surface)))
+			{
+				release_wet_late();
+				target->Release();
+				return false;
+			}
+
+			g_wet_late_desc = desc;
+		}
+
+		g_wet_late_valid = SUCCEEDED(g_device->StretchRect(target, 0,
+			g_wet_late_surface, 0, D3DTEXF_NONE));
+		target->Release();
+		return g_wet_late_valid;
+	}
+
 	// The pages by HD_CARD_SPRAY, HD_CARD_SPRAY2 and HD_CARD_DROPS.
 	const int kCardPages[3] = { 3242, 3243, 3160 };
 
@@ -15784,6 +15887,11 @@ void HDRenderWaterWetFixed(float strength)
 void HDRenderWaterWetLimited(int on)
 {
 	g_wet_limited = on != 0;
+}
+
+void HDRenderWaterWetMarch(int map)
+{
+	g_wet_debug = map > 0 ? map : 0;
 }
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
@@ -16472,19 +16580,27 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 	if (ps) ps->Release();
 }
 
+static void wet_layer(int part);
+
 /* The frame's wet floors (see "the wet floor"): every point of a shot
  * tank's floor at this moment into view space, as the cards' are, and the
- * triangles with any wet corner in one draw - CardVS and WetPS, the light
- * field on s1 and s2, the frame's copy on s5 and its depth texture on s6.
- * The copy is taken here, the first of the frame, so the sheets drawn
- * after the floor read that same copy: a sheet over a wet floor - only a
- * tank's film, while it lasts - sees the floor under it dry. */
+ * triangles with any wet corner, kept for the frame's two draws - CardVS
+ * and WetPS, the light field on s1 and s2, a copy of the frame on s5 and
+ * its depth texture on s6. This first draws the darkening over the opaque
+ * frame. The opaque frame's copy is taken here, the first of the frame,
+ * so the sheets drawn after the floor read that same copy: a sheet over a
+ * wet floor - only a tank's film, while it lasts - sees the floor under
+ * it dry. Where a film lies over the floor its strength takes its share
+ * off the mirror, which the second draw lays over the film. */
 void HDRenderWaterWetDraw(const float* toFrame)
 {
 	const double now = (double)g_motion[2];
 
 	g_splash_stats.floor = -1;
 	g_splash_stats.floorWet = 0.0f;
+	g_wet_ready = false;
+	g_wet_verts.clear();
+	g_wet_tris.clear();
 
 	if (!g_device || !g_card_vs || !g_wet_ps || !g_in_frame || !toFrame ||
 		g_wet.empty())
@@ -16502,7 +16618,10 @@ void HDRenderWaterWetDraw(const float* toFrame)
 
 	/* The world's axes in view space, each row made a unit long: the light
 	 * field's direction and the floor's up into view space (WetPS). */
-	float axes[12] = { 0.0f };
+	float* axes = g_wet_axes;
+
+	for (int r = 0; r < 12; r++)
+		axes[r] = 0.0f;
 
 	for (int r = 0; r < 3; r++)
 	{
@@ -16513,9 +16632,29 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			axes[r * 4 + k] = m[r * 4 + k] / l;
 	}
 
-	std::vector<CardVertex> verts;
-	std::vector<unsigned short> tris;
+	std::vector<CardVertex>& verts = g_wet_verts;
+	std::vector<unsigned short>& tris = g_wet_tris;
 	std::vector<float> wet;
+
+	// The share of the mirror a film over a point leaves (see above).
+	const auto open = [](const WetPoint& p)
+	{
+		float share = 1.0f;
+
+		for (size_t f = 0; f < g_film_in.size() && f < g_film_wet.size();
+			f++)
+		{
+			const HDWaterFilm& film = g_film_in[f];
+			const float s = g_film_wet[f];
+
+			if (p.x >= (float)film.x0 && p.x <= (float)film.x1 &&
+				p.z >= (float)film.z0 && p.z <= (float)film.z1 &&
+				fabsf(p.y - (float)film.y) <= 1024.0f)
+				share *= 1.0f - (s < 0.0f ? 0.0f : s > 1.0f ? 1.0f : s);
+		}
+
+		return share;
+	};
 
 	for (const WetFloor& w : g_wet)
 	{
@@ -16568,7 +16707,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			v.r = p.field[0];
 			v.g = p.field[1];
 			v.b = p.field[2];
-			v.a = p.puddle;
+			v.a = p.puddle * open(p);
 			v.light = p.light;
 			verts.push_back(v);
 		}
@@ -16595,14 +16734,39 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	if (tris.empty())
 		return;
 
-	// The frame behind the floor, for the mirror.
+	// The opaque frame, for the sheets (and the march debugger).
 	HDRenderWaterCopy();
+	g_wet_ready = true;
+	wet_layer(0);
+}
 
+/* The frame's second wet-floor draw (see HDRenderWaterWetDraw), once the
+ * frame is whole: a copy of it, and the mirror out of that copy. */
+void HDRenderWaterWetMirror()
+{
+	if (!g_wet_ready || !g_device || !g_in_frame || g_wet_tris.empty())
+		return;
+
+	g_wet_ready = false;
+	wet_copy_late();
+	wet_layer(1);
+}
+
+/* One of the wet floors' two draws over the frame's kept points: part 0
+ * the darkening, part 1 the mirror out of the whole frame's copy - or,
+ * with RoomProbe's -tankmarch, the march debugger's colours in its place,
+ * written whole, the opaque frame's copy on s7. */
+static void wet_layer(int part)
+{
+	std::vector<CardVertex>& verts = g_wet_verts;
+	std::vector<unsigned short>& tris = g_wet_tris;
+	const float* axes = g_wet_axes;
+	const bool debug = part == 1 && g_wet_debug > 0 && g_wet_debug_ps;
 	IDirect3DVertexShader9* vs = 0;
 	IDirect3DPixelShader9* ps = 0;
 	IDirect3DVertexDeclaration9* decl = 0;
-	IDirect3DBaseTexture9* tex[4] = { 0, 0, 0, 0 };
-	const DWORD stage[4] = { 1, 2, 5, 6 };
+	IDirect3DBaseTexture9* tex[5] = { 0, 0, 0, 0, 0 };
+	const DWORD stage[5] = { 1, 2, 5, 6, 7 };
 	IDirect3DVertexBuffer9* stream = 0;
 	IDirect3DIndexBuffer9* index = 0;
 	UINT streamOffset = 0, streamStride = 0;
@@ -16623,7 +16787,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	};
 	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
-	DWORD saved[stateCount], savedSamp[4][sampCount];
+	DWORD saved[stateCount], savedSamp[5][sampCount];
 
 	g_device->GetVertexShader(&vs);
 	g_device->GetPixelShader(&ps);
@@ -16635,7 +16799,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	for (int i = 0; i < stateCount; i++)
 		g_device->GetRenderState(states[i], &saved[i]);
 
-	for (int s = 0; s < 4; s++)
+	for (int s = 0; s < 5; s++)
 	{
 		g_device->GetTexture(stage[s], &tex[s]);
 
@@ -16653,14 +16817,16 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	const float mode[4] = { soft ? 1.0f : 0.0f, kWetLift + kWetHole,
 		1.0f / kWetHole, kWetDark };
 	const float look[4] = { kWetF0, kWetWalls, kWetHighlight, kWetPower };
-	const bool copy = g_copy_valid && g_copy_texture;
+	const bool copy = g_wet_late_valid && g_wet_late;
 	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f, kWetFirstStep,
 		kWetGrowth };
 	const float proj[4] = { g_proj[0], g_proj[5], g_proj[8], g_proj[9] };
-	const float gain[4] = { kWetMirror, 0.0f, 0.0f, 0.0f };
+	const float gain[4] = { kWetMirror, (float)part, kWetFit, kWetFitShare };
+	const float mapped[4] = { (float)g_wet_debug, 0.0f, 0.0f, 0.0f };
 
 	g_device->SetVertexShader(g_card_vs);
-	g_device->SetPixelShader(g_wet_ps);
+	g_device->SetPixelShader(debug ? g_wet_debug_ps : g_wet_ps);
+	g_device->SetPixelShaderConstantF(101, mapped, 1);
 	g_device->SetFVF(kCardFVF);
 	set_matrix_constant(0, g_proj);
 	g_device->SetPixelShaderConstantF(92, screen, 1);
@@ -16673,7 +16839,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, debug ? FALSE : TRUE);
 	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
 	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
@@ -16684,8 +16850,11 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0000000F);
 	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 
-	for (int s = 0; s < 3; s++)
+	for (int s = 0; s < 5; s++)
 	{
+		if (s == 3)
+			continue;
+
 		g_device->SetSamplerState(stage[s], D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 		g_device->SetSamplerState(stage[s], D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
 		g_device->SetSamplerState(stage[s], D3DSAMP_MIPFILTER, D3DTEXF_NONE);
@@ -16700,7 +16869,8 @@ void HDRenderWaterWetDraw(const float* toFrame)
 
 	g_device->SetTexture(1, g_field_dir);
 	g_device->SetTexture(2, g_field_rgb);
-	g_device->SetTexture(5, copy ? g_copy_texture : 0);
+	g_device->SetTexture(5, copy ? g_wet_late : 0);
+	g_device->SetTexture(7, debug && g_copy_valid ? g_copy_texture : 0);
 	g_device->SetSamplerState(6, D3DSAMP_MINFILTER, D3DTEXF_POINT);
 	g_device->SetSamplerState(6, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
 	g_device->SetSamplerState(6, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
@@ -16715,7 +16885,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	for (int i = 0; i < stateCount; i++)
 		g_device->SetRenderState(states[i], saved[i]);
 
-	for (int s = 0; s < 4; s++)
+	for (int s = 0; s < 5; s++)
 	{
 		for (int i = 0; i < sampCount; i++)
 			g_device->SetSamplerState(stage[s], samps[i], savedSamp[s][i]);

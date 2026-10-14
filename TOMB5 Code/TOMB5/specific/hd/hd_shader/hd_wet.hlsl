@@ -13,19 +13,23 @@
 
 /* The wet floor (hd_render.cpp, "the wet floor"): the floor a breaking fish
  * tank's water runs over, drawn as a thin layer over it - the floor seen
- * through water: darker, and a mirror at a grazing view. One draw a frame
+ * through water: darker, and a mirror at a grazing view. Two draws a frame
  * of a grid over the wet squares, a few units over the floor, built by the
  * processor in view space as the cards are and projected by the cards'
  * own vertex shader (hd_room.hlsl, CardVS); this file holds the pixel half
  * alone and declares only what it reads, so no other shader's bytecode
  * moves with it.
  *
- * Build. bshader.bat compiles it with
+ * Build. bshader.bat compiles it twice,
  *
  *     fxc /nologo /T ps_3_0 /E WetPS /O3 /Vn kHDWetPS /Fh hd_wet_ps.inc
  *         hd_wet.hlsl
+ *     fxc /nologo /T ps_3_0 /E WetPS /O3 /D HD_WET_DEBUG=1
+ *         /Vn kHDWetDebugPS /Fh hd_wet_debug_ps.inc hd_wet.hlsl
  *
- * and stamps the .inc with the MD5 of this file.
+ * and stamps both .inc files with the MD5 of this file. The second is
+ * RoomProbe's march debugger (-tankmarch): the mirror's march held against
+ * a fine one, as colours; the game never draws it.
  *
  * Per pixel, textbook terms over a flat surface whose normal is the
  * world's up:
@@ -41,23 +45,34 @@
  *                  reflected ray finds it: the ray is marched through view
  *                  space in steps that grow by a fixed factor, each step's
  *                  point projected and held against the frame's depth
- *                  there; the first point that lies behind what the frame
- *                  drew, by less than twice the step's own length, takes
- *                  the frame's colour there (the copy of the opaque frame the
- *                  sheets read) - a reflection in screen space, the common
- *                  real-time technique for a plane. Where the ray leaves
- *                  the screen or finds nothing, the light round the place
- *                  stands in: the level's light field (hd_gloss_field.h),
- *                  whose colour is the lamps' light there, as the walls it
- *                  lights. Over both, the lamps as a Blinn-Phong highlight
- *                  toward the field's direction, as the polished walls'
- *                  sheen has it (hd_room.hlsl, "The sheen").
+ *                  there. Where a step passes from in front of what the
+ *                  frame drew to behind it, the crossing is halved down
+ *                  HD_WET_REFINE times; the frame's colour there is the
+ *                  mirror's when the frame's depth at that place fits the
+ *                  ray's within the depth tolerance - a surface the ray
+ *                  meets. Past that tolerance the ray went behind a thing
+ *                  that stands nearer (its edge), and the march goes on
+ *                  until the ray comes out in front again. A reflection in
+ *                  screen space, the common real-time technique for a
+ *                  plane. Where the ray leaves the screen or finds nothing,
+ *                  the light round the place stands in: the level's light
+ *                  field (hd_gloss_field.h), whose colour is the lamps'
+ *                  light there, as the walls it lights; a hit near the
+ *                  tolerance or near the screen's edge fades into it. Over
+ *                  both, the lamps as a Blinn-Phong highlight toward the
+ *                  field's direction, as the polished walls' sheen has it
+ *                  (hd_room.hlsl, "The sheen").
  *
- * Premultiplied, ONE / INVSRCALPHA: rgb the mirror, alpha the darkening.
- * The mirror is not bounded by the floor's own colour as the walls' sheen
- * is: water reflects as much off dark stone as off pale. It is held under
- * the walls' cap instead, softly, B (1 - e^(-t / B)) for its largest
- * channel t, so no floor turns white.
+ * The two draws. The first, over the opaque frame, keeps the floor back
+ * by the darkening and adds nothing. The second, once the frame is whole -
+ * the glass, the glows and the cards drawn - adds the mirror out of a copy
+ * of that whole frame, so the glows and what the glass shows are in it.
+ * Premultiplied, ONE / INVSRCALPHA, both: rgb 0 and alpha the darkening,
+ * then rgb the mirror and alpha 0. The mirror is not bounded by the
+ * floor's own colour as the walls' sheen is: water reflects as much off
+ * dark stone as off pale. It is held under the walls' cap instead,
+ * softly, B (1 - e^(-t / B)) for its largest channel t, so no floor turns
+ * white.
  *
  * The vertex (CardVS hands its inputs on):
  *
@@ -67,7 +82,7 @@
  *              the mirror the water's depth there gives (a damp patch
  *              darkens and mirrors less than a pool)
  *
- * Pixel registers, written before the one draw, in the block the sheets'
+ * Pixel registers, written before each draw, in the block the sheets'
  * and the cards' draws write again before they read it:
  *
  * c92  gWetScreen  x, y one over the target's width and height, z, w the
@@ -86,7 +101,11 @@
  * c99  gWetProj    the projection's x and y scales and its x and y
  *                  offsets (the third row's x and y): a view-space point
  *                  is on the screen at x' = (x s.x + z s.z) / z
- * c100 gWetGain    x the mirror's strength, a factor on its weight */
+ * c100 gWetGain    x the mirror's strength, a factor on its weight; y 0 for
+ *                  the first draw, 1 for the second; z the depth tolerance
+ *                  in units, w its share of the view depth on top
+ * c101 gWetDebug   (the debugger only) x the map, 5 to 8 (WetPS, "the
+ *                  march debugger's maps") */
 float4 gFog : register(c16);
 float4 gWetScreen : register(c92);
 float4 gWetMode : register(c93);
@@ -97,14 +116,18 @@ float4 gWetProj : register(c99);
 float4 gWetGain : register(c100);
 
 /* The light field: the direction towards the light biased into bytes with
- * the one-sidedness in alpha, and its colour (hd_room.hlsl, "The sheen"). */
+ * the one-sidedness in alpha, and its colour (hd_room.hlsl, "The sheen").
+ * The copy on s5 is the whole frame's for the second draw. */
 sampler3D sFieldDir : register(s1);
 sampler3D sFieldRgb : register(s2);
 sampler2D sWetCopy : register(s5);
 sampler2D sWetDepth : register(s6);
 
-// The steps of the march: 12 at a growth of 1.5 from 32 reach 8,200 units.
-#define HD_WET_STEPS 12
+/* The steps of the march: 16 at a growth of 1.3 from 32 reach about 7,000
+ * units, seven squares, and the crossing halved 5 times lies within a
+ * thirty-second of its step. */
+#define HD_WET_STEPS 16
+#define HD_WET_REFINE 5
 /* The brightest a reflected texel stands for, eight times the frame's white
  * (a free choice: a texel of 0.89 and over). */
 #define HD_WET_BRIGHT 8.0f
@@ -132,6 +155,210 @@ float WetDepth(float2 uv)
 	return gWetScreen.w / max(gWetScreen.z - d, 1.0e-6f);
 }
 
+// Whether a place lies on the screen.
+bool WetOn(float2 uv)
+{
+	return all(uv >= 0.0f) && all(uv <= 1.0f);
+}
+
+/* The march: from P along R, the place the ray meets the frame, and how
+ * sure: 1 for a crossing whose depth fits exactly, down to 0 at the
+ * tolerance; 0 for none. `why` 0 a hit, 1 off the screen, 2 behind the
+ * eye, 3 out of steps; `steps` the steps taken. */
+float WetMarch(float3 P, float3 R, out float2 at, out float why,
+	out float steps)
+{
+	float step = gWetMarch.z;
+	float s = 0.0f;
+	bool front = true;
+
+	at = float2(0.0f, 0.0f);
+	why = 3.0f;
+	steps = HD_WET_STEPS;
+
+	[loop]
+	for (int i = 0; i < HD_WET_STEPS; i++)
+	{
+		const float last = s;
+
+		s += step;
+		step *= gWetMarch.w;
+
+		const float3 q = P + R * s;
+
+		if (q.z < 1.0f)
+		{
+			why = 2.0f;
+			steps = i + 1;
+			return 0.0f;
+		}
+
+		const float2 uv = WetScreen(q);
+
+		if (!WetOn(uv))
+		{
+			why = 1.0f;
+			steps = i + 1;
+			return 0.0f;
+		}
+
+		const bool behind = q.z > WetDepth(uv);
+
+		if (behind && front)
+		{
+			// The crossing, halved down between the last step and this.
+			float a = last, b = s;
+
+			[loop]
+			for (int k = 0; k < HD_WET_REFINE; k++)
+			{
+				const float m = (a + b) * 0.5f;
+				const float3 qm = P + R * m;
+
+				if (qm.z > WetDepth(WetScreen(qm)))
+					b = m;
+				else
+					a = m;
+			}
+
+			const float3 qb = P + R * b;
+			const float2 ub = WetScreen(qb);
+			const float gap = qb.z - WetDepth(ub);
+			const float tol = gWetGain.z + gWetGain.w * qb.z;
+
+			if (gap < tol)
+			{
+				at = ub;
+				why = 0.0f;
+				steps = i + 1;
+				return saturate(2.0f - 2.0f * gap / tol);
+			}
+		}
+
+		front = !behind;
+	}
+
+	return 0.0f;
+}
+
+#if HD_WET_DEBUG
+float4 gWetDebug : register(c101);
+// The opaque frame's copy, the one the sheets read.
+sampler2D sWetOpaque : register(s7);
+
+/* Round three's march, kept here only to be measured: steps growing by
+ * gWetMarch.w, the first point behind the frame by less than twice the
+ * step taken, no halving, no depth fit. */
+float WetMarchOld(float3 P, float3 R, out float2 at, out float why)
+{
+	float step = gWetMarch.z;
+	float s = 0.0f;
+
+	at = float2(0.0f, 0.0f);
+	why = 3.0f;
+
+	[loop]
+	for (int i = 0; i < 12; i++)
+	{
+		s += step;
+
+		const float3 q = P + R * s;
+
+		if (q.z < 1.0f)
+		{
+			why = 2.0f;
+			return 0.0f;
+		}
+
+		const float2 uv = WetScreen(q);
+
+		if (!WetOn(uv))
+		{
+			why = 1.0f;
+			return 0.0f;
+		}
+
+		const float frame = WetDepth(uv);
+
+		if (q.z > frame && q.z - frame < step * 2.0f)
+		{
+			at = uv;
+			why = 0.0f;
+			return 1.0f;
+		}
+
+		step *= 1.5f;
+	}
+
+	return 0.0f;
+}
+
+/* The fine march, the measure: 8-unit steps out to 10,240 units, every
+ * crossing halved ten times, a hit where the frame's depth fits the ray's
+ * within 16 units and a hundredth of the depth. */
+float WetMarchFine(float3 P, float3 R, out float2 at)
+{
+	float s = 0.0f;
+	bool front = true;
+
+	at = float2(0.0f, 0.0f);
+
+	[loop]
+	for (int j = 0; j < 5; j++)
+	{
+		[loop]
+		for (int i = 0; i < 256; i++)
+		{
+			const float last = s;
+
+			s += 8.0f;
+
+			const float3 q = P + R * s;
+
+			if (q.z < 1.0f)
+				return 0.0f;
+
+			const float2 uv = WetScreen(q);
+
+			if (!WetOn(uv))
+				return 0.0f;
+
+			const bool behind = q.z > WetDepth(uv);
+
+			if (behind && front)
+			{
+				float a = last, b = s;
+
+				[loop]
+				for (int k = 0; k < 10; k++)
+				{
+					const float m = (a + b) * 0.5f;
+					const float3 qm = P + R * m;
+
+					if (qm.z > WetDepth(WetScreen(qm)))
+						b = m;
+					else
+						a = m;
+				}
+
+				const float3 qb = P + R * b;
+				const float2 ub = WetScreen(qb);
+
+				if (qb.z - WetDepth(ub) < 16.0f + 0.01f * qb.z)
+				{
+					at = ub;
+					return 1.0f;
+				}
+			}
+
+			front = !behind;
+		}
+	}
+
+	return 0.0f;
+}
+#endif
+
 float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 {
 	const float3 P = input.view.xyz;
@@ -158,6 +385,84 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 		wet *= saturate(1.0f - (under - gWetMode.y) * gWetMode.z);
 	}
 
+#if HD_WET_DEBUG
+	/* The march debugger's maps (gWetDebug.x), wet pixels only:
+	 *   5  red round three's and green this march's distance in pixels
+	 *      from the fine march's hit (255: a hit on one side only); blue
+	 *      flags over 255: 1 the fine march hits, 2 round three's leaves
+	 *      the screen or passes the eye, 4 this one does, 8 round three's
+	 *      hit lies on the fine hit's surface (depths within 5 per cent),
+	 *      16 this one's does, 32 this one's hit shows what the whole
+	 *      frame adds over the opaque one (s7), 64 something lies over
+	 *      this pixel since the opaque copy
+	 *   6, 7, 8  what the fine march, this one and round three's show,
+	 *      unweighted, black where they find nothing */
+	{
+		const float3 R = reflect(-V, N);
+		const float2 here = (vpos + 0.5f) * gWetScreen.xy;
+		const float map = gWetDebug.x;
+
+		if (wet <= 0.0f)
+			discard;
+
+		float2 at, old, ref;
+		float why, steps, whyOld;
+		const float found = WetMarch(P, R, at, why, steps);
+
+		const float hitOld = WetMarchOld(P, R, old, whyOld);
+		const float fine = WetMarchFine(P, R, ref);
+
+		if (map > 5.5f)
+		{
+			float2 uv = old;
+			float hit = hitOld;
+
+			if (map < 6.5f)
+			{
+				uv = ref;
+				hit = fine;
+			}
+			else if (map < 7.5f)
+			{
+				uv = at;
+				hit = found;
+			}
+
+			return float4(hit > 0.0f ? tex2Dlod(sWetCopy,
+				float4(uv, 0.0f, 0.0f)).rgb : float3(0.0f, 0.0f, 0.0f), 1.0f);
+		}
+
+		const float2 px = 1.0f / gWetScreen.xy;
+		const float offOld = hitOld > 0.0f && fine > 0.0f ?
+			length((old - ref) * px) : hitOld > 0.0f || fine > 0.0f ?
+			255.0f : 0.0f;
+		const float offNew = found > 0.0f && fine > 0.0f ?
+			length((at - ref) * px) : found > 0.0f || fine > 0.0f ?
+			255.0f : 0.0f;
+		const float dr = WetDepth(ref);
+		const float3 d = abs(tex2Dlod(sWetCopy, float4(at, 0, 0)).rgb -
+			tex2Dlod(sWetOpaque, float4(at, 0, 0)).rgb);
+		const float3 e = abs(tex2Dlod(sWetCopy, float4(here, 0, 0)).rgb -
+			tex2Dlod(sWetOpaque, float4(here, 0, 0)).rgb *
+			(1.0f - wet * gWetMode.w));
+		const float flags = (fine > 0.0f ? 1.0f : 0.0f) +
+			(found > 0.0f && max(d.r, max(d.g, d.b)) > 4.0f / 255.0f ?
+			32.0f : 0.0f) +
+			(max(e.r, max(e.g, e.b)) > 4.0f / 255.0f ? 64.0f : 0.0f) +
+			(whyOld > 0.5f && whyOld < 2.5f ? 2.0f : 0.0f) +
+			(why > 0.5f && why < 2.5f ? 4.0f : 0.0f) +
+			(abs(WetDepth(old) - dr) < 0.05f * dr ? 8.0f : 0.0f) +
+			(abs(WetDepth(at) - dr) < 0.05f * dr ? 16.0f : 0.0f);
+
+		return float4(min(offOld, 255.0f) / 255.0f,
+			min(offNew, 255.0f) / 255.0f, flags / 255.0f, 1.0f);
+	}
+#endif
+
+	// The first draw: the darkening alone.
+	if (gWetGain.y < 0.5f)
+		return float4(0.0f, 0.0f, 0.0f, wet * gWetMode.w);
+
 	// The light round the place, and where it comes from, in view space.
 	const float4 toward = tex3D(sFieldDir, input.field.xyz);
 	const float3 colour = tex3D(sFieldRgb, input.field.xyz).rgb;
@@ -179,46 +484,25 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 
 	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f)
 	{
-		const float3 R = reflect(-V, N);
-		float step = gWetMarch.z;
-		float s = 0.0f;
+		float2 at;
+		float why, steps;
+		const float sure = WetMarch(P, reflect(-V, N), at, why, steps);
 
-		[loop]
-		for (int i = 0; i < HD_WET_STEPS; i++)
+		if (sure > 0.0f)
 		{
-			s += step;
+			/* The frame holds its light clipped at one: a texel near
+			 * white stands for a lamp or a lit screen far brighter
+			 * than the frame can hold, and a mirror of a few hundredths
+			 * shows such a source and little else. The clip is undone
+			 * as Reinhard's curve x / (1 + x) is, x / (1 - x), held at
+			 * HD_WET_BRIGHT. Fades out toward the screen's edge, over
+			 * its last tenth. */
+			const float2 edge = saturate(min(at, 1.0f - at) * 10.0f);
+			const float3 held = min(tex2Dlod(sWetCopy,
+				float4(at, 0.0f, 0.0f)).rgb, HD_WET_BRIGHT /
+				(1.0f + HD_WET_BRIGHT));
 
-			const float3 q = P + R * s;
-
-			if (q.z < 1.0f)
-				break;
-
-			const float2 uv = WetScreen(q);
-
-			if (any(uv < 0.0f) || any(uv > 1.0f))
-				break;
-
-			const float frame = WetDepth(uv);
-
-			if (q.z > frame && q.z - frame < step * 2.0f)
-			{
-				/* The frame holds its light clipped at one: a texel near
-				 * white stands for a lamp or a lit screen far brighter
-				 * than the frame can hold, and a mirror of a few hundredths
-				 * shows such a source and little else. The clip is undone
-				 * as Reinhard's curve x / (1 + x) is, x / (1 - x), held at
-				 * HD_WET_BRIGHT. Fades out toward the screen's edge, over
-				 * its last tenth. */
-				const float2 edge = saturate(min(uv, 1.0f - uv) * 10.0f);
-				const float3 held = min(tex2Dlod(sWetCopy,
-					float4(uv, 0.0f, 0.0f)).rgb, HD_WET_BRIGHT /
-					(1.0f + HD_WET_BRIGHT));
-
-				seen = lerp(seen, held / (1.0f - held), edge.x * edge.y);
-				break;
-			}
-
-			step *= gWetMarch.w;
+			seen = lerp(seen, held / (1.0f - held), sure * edge.x * edge.y);
 		}
 	}
 
@@ -238,5 +522,5 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 
 	mirror *= saturate(1.0f - fog / max(input.viewZ.y, 0.05f));
 
-	return float4(mirror * wet, wet * gWetMode.w);
+	return float4(mirror * wet, 0.0f);
 }

@@ -8380,14 +8380,16 @@ void HDFrameDrawGlow()
 
 	// The rooms are done - see the same line in HDFrameDraw.
 	HDRenderScissorOff();
-	DrawWaterCards();
-	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
 
-	/* The wet floors' mirror, now the frame is whole: the glass, the glows
-	 * and the cards are in the copy it reads (hd_render.cpp, "the wet
-	 * floor"). */
+	/* The wet floors' mirror, after the rooms' glass and glows and before
+	 * the cards and the objects' glows: the rooms' glows are in the copy it
+	 * reads, and the dome, the spray and a glow drawn after it lie over it
+	 * as over the floor (hd_render.cpp, "the wet floor"). */
 	if (HDRenderWaterSheetsBuilt())
 		HDRenderWaterWetMirror();
+
+	DrawWaterCards();
+	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
 
 	HDRenderFrameEnd();
 

@@ -64,9 +64,10 @@
  *                  (hd_room.hlsl, "The sheen").
  *
  * The two draws. The first, over the opaque frame, keeps the floor back
- * by the darkening and adds nothing. The second, once the frame is whole -
- * the glass, the glows and the cards drawn - adds the mirror out of a copy
- * of that whole frame, so the glows and what the glass shows are in it.
+ * by the darkening and adds nothing. The second, after the rooms' glass
+ * and glows and before the cards, adds the mirror out of a copy of the
+ * frame as it stands, so the glows and what the glass shows are in it and
+ * the dome and the spray are drawn over it.
  * Premultiplied, ONE / INVSRCALPHA, both: rgb 0 and alpha the darkening,
  * then rgb the mirror and alpha 0. The mirror is not bounded by the
  * floor's own colour as the walls' sheen is: water reflects as much off
@@ -117,7 +118,7 @@ float4 gWetGain : register(c100);
 
 /* The light field: the direction towards the light biased into bytes with
  * the one-sidedness in alpha, and its colour (hd_room.hlsl, "The sheen").
- * The copy on s5 is the whole frame's for the second draw. */
+ * The copy on s5 is the later one, for the second draw. */
 sampler3D sFieldDir : register(s1);
 sampler3D sFieldRgb : register(s2);
 sampler2D sWetCopy : register(s5);
@@ -392,8 +393,8 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 	 *      flags over 255: 1 the fine march hits, 2 round three's leaves
 	 *      the screen or passes the eye, 4 this one does, 8 round three's
 	 *      hit lies on the fine hit's surface (depths within 5 per cent),
-	 *      16 this one's does, 32 this one's hit shows what the whole
-	 *      frame adds over the opaque one (s7), 64 something lies over
+	 *      16 this one's does, 32 this one's hit shows what the later
+	 *      copy adds over the opaque one (s7), 64 something lies over
 	 *      this pixel since the opaque copy
 	 *   6, 7, 8  what the fine march, this one and round three's show,
 	 *      unweighted, black where they find nothing */

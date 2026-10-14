@@ -11586,9 +11586,11 @@ namespace
 	 * Drawn as a layer kWetLift over the floor - a grid of points every
 	 * 256 units, five by five a square, shared between squares - twice a
 	 * frame: the darkening over the opaque frame (HDRenderWaterWetDraw),
-	 * the mirror once the frame is whole (HDRenderWaterWetMirror), out of a
-	 * copy of that whole frame, so the glows, the glass and the cards are
-	 * mirrored too. Each point keeps its way: how far the water runs
+	 * the mirror after the rooms' glass and glows and before the cards
+	 * (HDRenderWaterWetMirror), out of a copy of the frame as it stands
+	 * there, so the rooms' glows and what the glass shows are mirrored too,
+	 * and the dome, the spray and the objects' glows lie over the mirror as
+	 * over the floor. Each point keeps its way: how far the water runs
 	 * from the glass to it, through the grid (the shortest way along
 	 * neighbours, diagonals at their own length, a step down at no cost),
 	 * pushed back by up to kWetRagged out of a hash of its place; and how
@@ -11795,7 +11797,7 @@ namespace
 
 	const D3DFORMAT kIntz = (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z');
 
-	/* The whole frame's copy the wet floor's mirror reads (wet_copy_late),
+	/* The later copy the wet floor's mirror reads (wet_copy_late),
 	 * of the frame's size and format, D3DPOOL_DEFAULT as the opaque frame's
 	 * and released with it; g_wet_ready while the frame owes the wet
 	 * floors their second draw (HDRenderWaterWetMirror). */
@@ -15917,7 +15919,10 @@ bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
 
 /* SPLASHLOG, a tank's wet floor, once at the level's load: the tank, the
  * squares its water reaches, the rooms whose floor they are (the first
- * sixteen), how many floor heights among them, the points and triangles of
+ * sixteen: every room whose floor data holds such a square at its height,
+ * so a room whose ring of walls and doors or whose flip twin lies on it
+ * is named too, though the square is the tank's rooms'), how many floor
+ * heights among them, the points and triangles of
  * its grid, the dome's foot from the glass and the furthest point along
  * the water's way (units, the ragged push included); then the squares the
  * run found in its rooms before the radius dropped the far ones, and the
@@ -16636,7 +16641,10 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	std::vector<unsigned short>& tris = g_wet_tris;
 	std::vector<float> wet;
 
-	// The share of the mirror a film over a point leaves (see above).
+	/* The share of the mirror a film over a point leaves (see above). The
+	 * film's box holds whole squares, x1 and z1 the first past them; a
+	 * point on x1 or z1 is a corner of the film's last square and lies
+	 * under it, as one on x0 or z0 does, so both edges count it in. */
 	const auto open = [](const WetPoint& p)
 	{
 		float share = 1.0f;
@@ -16740,8 +16748,9 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	wet_layer(0);
 }
 
-/* The frame's second wet-floor draw (see HDRenderWaterWetDraw), once the
- * frame is whole: a copy of it, and the mirror out of that copy. */
+/* The frame's second wet-floor draw (see HDRenderWaterWetDraw), after the
+ * rooms' glass and glows and before the cards: a copy of the frame as it
+ * stands, and the mirror out of that copy. */
 void HDRenderWaterWetMirror()
 {
 	if (!g_wet_ready || !g_device || !g_in_frame || g_wet_tris.empty())
@@ -16753,7 +16762,7 @@ void HDRenderWaterWetMirror()
 }
 
 /* One of the wet floors' two draws over the frame's kept points: part 0
- * the darkening, part 1 the mirror out of the whole frame's copy - or,
+ * the darkening, part 1 the mirror out of the later copy - or,
  * with RoomProbe's -tankmarch, the march debugger's colours in its place,
  * written whole, the opaque frame's copy on s7. */
 static void wet_layer(int part)

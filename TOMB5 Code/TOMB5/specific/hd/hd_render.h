@@ -1655,9 +1655,9 @@ struct HDWaterWetSquare
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
 void HDRenderWaterWetLimited(int on);
 
-/* The wet floors' second draw, once the frame is whole - after the glass,
- * the glows, the cards and the objects' glows: the mirror out of a copy of
- * that frame, over the darkening HDRenderWaterWetDraw laid. Nothing when
+/* The wet floors' second draw, after the rooms' glass and glows and before
+ * the cards and the objects' glows: the mirror out of a copy of the frame
+ * as it stands, over the darkening HDRenderWaterWetDraw laid. Nothing when
  * the first draw drew nothing this frame. HDRenderWaterWetMarch is
  * RoomProbe's march debugger (-tankmarch): the second draw writes the map
  * `map` names in the mirror's place (hd_wet.hlsl, gWetDebug); 0 none. */

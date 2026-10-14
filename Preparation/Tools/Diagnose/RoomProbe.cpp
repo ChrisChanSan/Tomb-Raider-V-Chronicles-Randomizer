@@ -6745,8 +6745,8 @@ static void ProbeWetMap(int floor)
 }
 
 /* The tanks' wet floors where HDFrameDrawGlow draws them: part 0 the
- * darkening before the frame's copy, part 1 the mirror at the frame's
- * end (its own copy inside the bracket), the picture's world shifted by
+ * darkening before the frame's copy, part 1 the mirror before the cards
+ * (its own copy inside the bracket), the picture's world shifted by
  * the seed room's origin as the cards' is, timed on the GPU with a
  * timestamp pair; the lines are -hdwater's, so the timing scripts add
  * them to the water's other phases. */
@@ -6832,7 +6832,7 @@ static void ProbeWetDraw(int part)
 			ms, st.floor, st.floorWet);
 	else
 		printf("-hdwater: %d wet floor mirror draw(s), GPU %.4f ms (timestamps "
-			"round the whole frame's copy and the mirror's draw)\n",
+			"round the later copy and the mirror's draw)\n",
 			st.floor >= 0 ? 1 : 0, ms);
 }
 
@@ -12669,10 +12669,10 @@ static int ProbeMain(int argc, char** argv)
 	// The scissor rectangle, off again inside the bracket, as the engine's
 	// frame does.
 	HDRenderScissorOff();
+	// The wet floor's mirror before the cards, as the engine has it.
+	ProbeWetDraw(1);
 	// The water's cards where HDFrameDrawGlow draws them.
 	ProbeCardsDraw();
-	// And the wet floor's mirror at the frame's end, as the engine has it.
-	ProbeWetDraw(1);
 	HDRenderFrameEnd();
 	g_device->EndScene();
 

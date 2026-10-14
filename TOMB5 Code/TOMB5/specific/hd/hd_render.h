@@ -1643,8 +1643,9 @@ bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size);
  * the front runs; and the art's copy of the room under it (hd_render.cpp,
  * "the art's own mirror"): the 256-unit cells of art under the floor in
  * its column, how many of them the art mirrors over it, and whether the
- * square counts as copied (the march mirror then leaves it); false past
- * the last. HDRenderWaterWetLimited 0 lays the
+ * square counts as copied (the march mirror then leaves it); and its
+ * floor's slope function, 0 for a flat one, its y then the highest
+ * corner; false past the last. HDRenderWaterWetLimited 0 lays the
  * next build's floors without the rooms and the radius (-tankwetall), the
  * run over every flat floor as far as it goes. */
 struct HDWaterWetSquare
@@ -1655,6 +1656,7 @@ struct HDWaterWetSquare
 	int kept;
 	float reach, limit;
 	int under, mirrored, copied;
+	int slope;
 };
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);

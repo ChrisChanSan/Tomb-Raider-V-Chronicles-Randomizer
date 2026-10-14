@@ -874,3 +874,50 @@ inline float HDWetAt(float front, float way)
 
 	return w < 0.0f ? 0.0f : w > 1.0f ? 1.0f : w;
 }
+
+/* The sloping floors under a wet floor (hd_render.cpp, "the sloping
+ * floors"). HDWetSlope: whether a floor entry's function (the type word's
+ * low five bits) is one the water runs over - a TILT (2), a SPLIT1/2 (7,
+ * 8) or a NOCOLF (11 to 14). HDWetHeight: a floor's height at px, pz (0 to
+ * 1024) inside its square, out of its corners' heights c[4] - x0z0, x1z0,
+ * x0z1, x1z1 - on the plane of the triangle the point lies in, as the
+ * engine's GetHeight divides a split: functions 7, 11 and 12 along the
+ * diagonal from corner 1 to corner 2, 8, 13 and 14 from corner 0 to
+ * corner 3; a tilt and a flat floor are one plane. HDWetPasses: whether
+ * water crosses an edge whose corners stand at a0, a1 on the side it
+ * comes from and b0, b1 on the other: at each corner level or lower by
+ * `step` at most (y counts down). kWetSlopeRise: how far a point of a
+ * slope may stand over the edge the water came in by and still be wet,
+ * the corners' rounding to whole units. */
+const int kWetSlopeRise = 8;		// units
+
+inline bool HDWetSlope(int fn)
+{
+	return fn == 2 || fn == 7 || fn == 8 || (fn >= 11 && fn <= 14);
+}
+
+inline float HDWetHeight(int fn, const int* c, float px, float pz)
+{
+	const float u = px / 1024.0f, v = pz / 1024.0f;
+	const bool fam1 = fn == 7 || fn == 11 || fn == 12;
+
+	if (fn == 2 || !fn)
+		return (float)c[0] + (float)(c[1] - c[0]) * u +
+			(float)(c[2] - c[0]) * v;
+
+	if (fam1)
+		return px > 1024.0f - pz ?
+			(float)c[3] + (float)(c[2] - c[3]) * (1.0f - u) +
+			(float)(c[1] - c[3]) * (1.0f - v) :
+			(float)c[0] + (float)(c[1] - c[0]) * u +
+			(float)(c[2] - c[0]) * v;
+
+	return px > pz ?
+		(float)c[0] + (float)(c[1] - c[0]) * u + (float)(c[3] - c[1]) * v :
+		(float)c[0] + (float)(c[2] - c[0]) * v + (float)(c[3] - c[2]) * u;
+}
+
+inline bool HDWetPasses(int a0, int a1, int b0, int b1, int step)
+{
+	return b0 >= a0 && b0 - a0 <= step && b1 >= a1 && b1 - a1 <= step;
+}

@@ -6828,6 +6828,58 @@ static void ProbeCardsDraw()
 		st.cards, ms);
 }
 
+/* -tankslopes: every square of the classic level within 4,096 units of a
+ * kept square of any wet floor whose floor slopes (a TILT, SPLIT1/2 or
+ * NOCOLF entry), one line each: its room, corner, the four corners' y
+ * (HDRenderWaterCorners: x0z0, x1z0, x0z1, x1z1) and the entry's function.
+ * What the wet floor's rule then makes of them is -tankwetmap's. */
+static bool g_tank_slopes = false;
+
+static void ProbeWetSlopes(const std::vector<HDWaterRoom>& rooms)
+{
+	if (!g_tank_slopes)
+		return;
+
+	int x0 = 0x7FFFFFFF, z0 = 0x7FFFFFFF, x1 = -0x7FFFFFFF, z1 = -0x7FFFFFFF;
+	HDWaterWetSquare s;
+
+	for (int f = 0; f < 8; f++)
+		for (int at = 0; HDRenderWaterWetSquare(f, at, &s); at++)
+			if (s.kept)
+			{
+				x0 = s.x < x0 ? s.x : x0;
+				z0 = s.z < z0 ? s.z : z0;
+				x1 = s.x + 1024 > x1 ? s.x + 1024 : x1;
+				z1 = s.z + 1024 > z1 ? s.z + 1024 : z1;
+			}
+
+	for (size_t r = 0; r < rooms.size(); r++)
+	{
+		const HDWaterRoom& w = rooms[r];
+
+		for (int sx = 0; w.floor && w.slope && sx < w.sizeX; sx++)
+			for (int sz = 0; sz < w.sizeZ; sz++)
+			{
+				const int at = sx * w.sizeZ + sz;
+				const int fn = w.slope[at * 4] & 0x1F;
+				const int wx = w.originX + sx * 1024;
+				const int wz = w.originZ + sz * 1024;
+
+				if (w.floor[at] == -127 || !(fn == 2 || fn == 7 || fn == 8 ||
+					(fn >= 11 && fn <= 14)) || wx < x0 - 4096 ||
+					wx >= x1 + 4096 || wz < z0 - 4096 || wz >= z1 + 4096)
+					continue;
+
+				int c[4];
+
+				HDRenderWaterCorners(w.floor[at], w.slope[at * 4],
+					w.slope[at * 4 + 1], 0, c);
+				printf("wetslope room=%d x=%d z=%d corners=%d,%d,%d,%d "
+					"fn=%d\n", (int)r, wx, wz, c[0], c[1], c[2], c[3], fn);
+			}
+	}
+}
+
 /* -tankart: the .TRG's art over and under every kept square of floor
  * `floor`, group by group, one line each: the triangles whose centroid lies
  * in the square's column within 16 units of its floor (flat ones, and the
@@ -7028,9 +7080,9 @@ static void ProbeWetMap(int floor)
 			kTankDomeOut + (q.way - q.reach) / kWetSpread;
 
 		printf("wetmap tank=%d room=%d x=%d z=%d y=%d way=%.0f squares=%.2f "
-			"t=%.2f %s copy=%d/%d/%s\n", q.item, q.room, q.x, q.z, q.y,
-			q.way, q.way / 1024.0f, t, q.kept ? "kept" : "dropped", q.under,
-			q.mirrored, q.copied ? "yes" : "no");
+			"t=%.2f %s copy=%d/%d/%s slope=%d\n", q.item, q.room, q.x, q.z,
+			q.y, q.way, q.way / 1024.0f, t, q.kept ? "kept" : "dropped",
+			q.under, q.mirrored, q.copied ? "yes" : "no", q.slope);
 	}
 }
 
@@ -10108,6 +10160,7 @@ static int ProbeMain(int argc, char** argv)
 			(!strcmp(argv[at], "-tankmarch") && at + 1 < argc) ||
 			!strcmp(argv[at], "-tankwetmap") ||
 			!strcmp(argv[at], "-tankart") ||
+			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
 		{
 			// One branch for all: the chain is at the compiler's depth.
@@ -10115,6 +10168,8 @@ static int ProbeMain(int argc, char** argv)
 				g_tank_wet_map = true;
 			else if (!strcmp(argv[at], "-tankart"))
 				g_tank_art = true;
+			else if (!strcmp(argv[at], "-tankslopes"))
+				g_tank_slopes = true;
 			else if (!strcmp(argv[at], "-tankwetall"))
 				HDRenderWaterWetLimited(0);
 			else if (!strcmp(argv[at], "-tankmarch"))
@@ -12532,6 +12587,7 @@ static int ProbeMain(int argc, char** argv)
 			ProbeWaterFilms(level);
 			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 				g_hdwater);
+			ProbeWetSlopes(rooms);
 			ProbeWaterFalls(level, stem);
 			ProbeCardPages(root, managed, threads);
 

@@ -858,6 +858,272 @@ namespace
 	}
 }
 
+/* --------------------------------------------------- the pages ahead -----
+ *
+ * The first pages of a level decoded before the build asks for them. The
+ * load thread reads the classic level while the main thread waits, and the
+ * room build on the main thread opens with its pages (HD_BEGIN_PAGES, the
+ * largest part of the build on fourteen of the fifteen levels). So from the
+ * moment the .TRG's page list is read, beside the classic level's read
+ * (hd_level.cpp, HDLevelKeyNext), the first of them are decoded on threads of
+ * their own, and the build's Create takes every page that is ready instead
+ * of decoding it again. The upload stays on the thread that owns the device.
+ *
+ * The same file, the same decoder and the same first level the build gives
+ * the page, so the texels are the same: a page is taken only where its path,
+ * its first level and its format are the build's own, and any other is
+ * decoded by the build as before. The pages are the first of the build's own
+ * order and at most one batch budget of them, so the address space never
+ * holds more decoded texels than the build's batches do. */
+namespace
+{
+	/* The build's transient budget for one batch of decoded pages (see the
+	 * batch in build_cache), and the bound of the pages decoded ahead. */
+	const double kBatchBudget = 96.0 * 1048576.0;
+
+	struct AheadPage
+	{
+		int page = 0;
+		std::string path;
+		DecodedPage out;
+	};
+
+	/* Joined at the latest when the process ends: a thread still joinable
+	 * when its std::thread goes would end the process (std::terminate), and
+	 * a tool may leave before a build has taken the pages. */
+	struct AheadThread
+	{
+		std::thread t;
+
+		~AheadThread()
+		{
+			if (t.joinable())
+				t.join();
+		}
+	};
+
+	std::vector<AheadPage> g_ahead;
+	std::atomic<bool> g_ahead_stop(false);
+	int g_ahead_format = HD_PAGE_FORMAT_RGBA;
+	double g_ahead_ms = 0.0;	// its own wall time, overlapping the load
+	int g_ahead_pages = 0;		// how many it decoded
+	int g_ahead_taken = 0;		// how many the last Create took
+	/* The diagnostic tools' check (HDPageCacheAheadVerify): every page taken
+	 * decoded again by the Create's own call and compared byte for byte. */
+	bool g_ahead_verify = false;
+	int g_ahead_differ = 0;
+	// After everything it writes, so that it goes first at the end.
+	AheadThread g_ahead_thread;
+
+	// Waits for the decoding threads; what they decoded stays.
+	void ahead_wait()
+	{
+		g_ahead_stop = true;
+
+		if (g_ahead_thread.t.joinable())
+			g_ahead_thread.t.join();
+	}
+
+	void ahead_free()
+	{
+		for (AheadPage& one : g_ahead)
+			one.out.free_all();
+
+		g_ahead.clear();
+	}
+
+	/* The page decoded ahead for this one of the build's, moved into `into`
+	 * with everything the decode measured; false leaves `into` alone. */
+	bool ahead_take(int page, const std::string& path, int firstMip,
+		int format, DecodedPage& into)
+	{
+		if (format != g_ahead_format)
+			return false;
+
+		for (AheadPage& one : g_ahead)
+		{
+			if (one.page != page || !one.out.ok || one.path != path ||
+				one.out.firstMip != firstMip)
+				continue;
+
+			into.mips.swap(one.out.mips);
+			into.firstMip = one.out.firstMip;
+			into.compressMs = one.out.compressMs;
+			into.ok = true;
+			into.cutout = one.out.cutout;
+			into.cutoutLow = one.out.cutoutLow;
+			into.cutoutZero = one.out.cutoutZero;
+			into.cutoutTexels = one.out.cutoutTexels;
+			into.alphaMin = one.out.alphaMin;
+			into.alphaMax = one.out.alphaMax;
+			one.out.ok = false;
+
+			if (g_ahead_verify)
+			{
+				DecodedPage again;
+				bool same = true;
+
+				decode_one(path, firstMip, format, again);
+				same = again.ok && again.mips.size() == into.mips.size() &&
+					again.cutout == into.cutout &&
+					again.cutoutLow == into.cutoutLow &&
+					again.alphaMin == into.alphaMin &&
+					again.alphaMax == into.alphaMax;
+
+				for (size_t m = 0; same && m < into.mips.size(); m++)
+				{
+					const DecodedMip& a = into.mips[m];
+					const DecodedMip& b = again.mips[m];
+
+					same = a.w == b.w && a.h == b.h;
+
+					if (same && a.pixels && b.pixels)
+						same = !std::memcmp(a.pixels, b.pixels,
+							(size_t)a.w * (size_t)a.h * 4);
+					else if (same && a.blocks && b.blocks)
+						same = !std::memcmp(a.blocks, b.blocks,
+							(size_t)DXT5Size(a.w, a.h));
+					else
+						same = same && !a.pixels == !b.pixels &&
+							!a.blocks == !b.blocks;
+				}
+
+				g_ahead_differ += same ? 0 : 1;
+				again.free_all();
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+}
+
+void HDPageCacheAhead(const char* installRoot, const int* pages, int count,
+	int threads)
+{
+	HDPageCacheAheadDrop();
+
+	if (!installRoot || !*installRoot || !pages || count <= 0)
+		return;
+
+	/* The policy as it stands, read here on the load thread while the main
+	 * thread waits for it: the format and the device's size limit the last
+	 * build left. The budget is not asked - a page it starts lower is a page
+	 * the build decodes itself. */
+	const std::string root5 = installRoot;
+	const std::vector<int> list(pages, pages + count);
+	const int format = g_policy.format == HD_PAGE_FORMAT_DXT5
+		? HD_PAGE_FORMAT_DXT5 : HD_PAGE_FORMAT_RGBA;
+	const int maxSide = g_policy.maxSide;
+
+	g_ahead_stop = false;
+	g_ahead_format = format;
+	g_ahead_pages = 0;
+	g_ahead_ms = 0.0;
+
+	g_ahead_thread.t = std::thread([root5, list, format, maxSide, threads]()
+	{
+		const double started = now_ms();
+		const std::string bundle = parent_of(root5);
+		std::vector<AheadPage> plan;
+		double bytes = 0;
+
+		// The build's order, its duplicates skipped as the build skips them.
+		for (size_t i = 0; i < list.size(); i++)
+		{
+			const int page = list[i];
+			bool twice = false;
+
+			for (size_t k = 0; k < i && !twice; k++)
+				twice = list[k] == page;
+
+			if (twice || HDPageModIndex(page) >= 0 || page >= HD_PAGE_ALT_BASE)
+				continue;
+
+			int origin = 5;
+			bool white = false;
+			long w = 0, h = 0, mips = 0;
+			const std::string path = resolve_page(root5, bundle, page,
+				&origin, &white);
+
+			if (path.empty() || white || !page_shape(path, &w, &h, &mips))
+				continue;
+
+			int first = 0;
+
+			if (maxSide > 0)
+				while ((w >> first) > maxSide || (h >> first) > maxSide)
+				{
+					if (usable_levels(w, h, mips, first + 1) <= 0)
+						break;
+
+					first++;
+				}
+
+			const double cost = level_bytes(w, h, mips, first,
+				HD_PAGE_FORMAT_RGBA);
+
+			if (!plan.empty() && bytes + cost > kBatchBudget)
+				break;
+
+			bytes += cost;
+
+			AheadPage one;
+
+			one.page = page;
+			one.path = path;
+			one.out.firstMip = first;
+			plan.push_back(one);
+		}
+
+		HDPoolRun((int)plan.size(), threads < 1 ? 1 : threads, [&](int at)
+		{
+			if (!g_ahead_stop)
+				decode_one(plan[(size_t)at].path,
+					plan[(size_t)at].out.firstMip, format,
+					plan[(size_t)at].out);
+		});
+
+		int decoded = 0;
+
+		for (const AheadPage& one : plan)
+			decoded += one.out.ok ? 1 : 0;
+
+		g_ahead.swap(plan);
+		g_ahead_pages = decoded;
+		g_ahead_ms = now_ms() - started;
+	});
+}
+
+void HDPageCacheAheadDrop()
+{
+	ahead_wait();
+	ahead_free();
+	g_ahead_taken = 0;
+}
+
+void HDPageCacheAheadInfo(int* pages, int* taken, double* ms)
+{
+	if (pages)
+		*pages = g_ahead_pages;
+	if (taken)
+		*taken = g_ahead_taken;
+	if (ms)
+		*ms = g_ahead_ms;
+}
+
+void HDPageCacheAheadVerify(bool on)
+{
+	g_ahead_verify = on;
+	g_ahead_differ = 0;
+}
+
+int HDPageCacheAheadDiffer()
+{
+	return g_ahead_differ;
+}
+
 /* The one builder. Create empties the cache first and Append does not; every
  * other line is the same, and a second copy of the batching, the decoding and
  * the two upload paths would be a second place for the big pages' budget to be
@@ -1184,7 +1450,16 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 	 * DXT5: the decode goes through the full pixels either way, and it is
 	 * the transient peak that has to fit, not the result. */
 	const size_t batch_pages = (size_t)threads * 2 + 2;
-	const double batch_budget = 96.0 * 1048576.0;
+	const double batch_budget = kBatchBudget;
+
+	/* A Create takes the pages decoded ahead (HDPageCacheAhead): the
+	 * threads are stopped at the next page and waited for first, so that
+	 * nothing is decoded twice at once. */
+	if (!append)
+	{
+		ahead_wait();
+		g_ahead_taken = 0;
+	}
 
 	std::vector<DecodedPage> batch;
 
@@ -1221,11 +1496,28 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 		}
 
 		const double decode_started = now_ms();
+		std::vector<unsigned char> ready(here, 0);
+
+		for (size_t i = 0; !append && i < here; i++)
+		{
+			const PagePlan& page = plan[base + i];
+
+			if (!page.synth && !page.path.empty() &&
+				ahead_take(unique[base + i], page.path, page.firstMip,
+				g_format_used, batch[i]))
+			{
+				ready[i] = 1;
+				g_ahead_taken++;
+			}
+		}
 
 		// One page per item, each into its own slot of the batch.
 		HDPoolRun((int)here, threads, [&](int at)
 		{
 			const PagePlan& page = plan[base + (size_t)at];
+
+			if (ready[(size_t)at])
+				return;
 
 			if (page.synth || page.path.empty())
 				make_white(batch[(size_t)at], g_format_used);
@@ -1433,6 +1725,10 @@ static bool build_cache(IDirect3DDevice9* device, const char* installRoot,
 
 		base += here;
 	}
+
+	// The pages decoded ahead that this build did not take.
+	if (!append)
+		ahead_free();
 
 	if (g_staging)
 	{

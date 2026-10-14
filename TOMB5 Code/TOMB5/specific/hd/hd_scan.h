@@ -145,10 +145,19 @@ int HDScanLevelTextures(const char* installRoot, const char* stem,
  * HDScanTakeTrg moves the kept parse of `path` into `out` and is true, or
  * leaves `out` alone and is false when none of that file is kept - the
  * caller reads it then. Either way nothing is kept after it.
- * HDScanTrgTaken says whether the last take found one, for the log. */
+ * HDScanTrgTaken says whether the last take found one, for the log.
+ *
+ * HDScanReadTrg reads and keeps the level's parse ahead of its scan, on a
+ * thread of the level load's own (hd_level.cpp, HDLevelKeyNext), so that the
+ * read runs beside the classic level's; the scan takes it as its own read.
+ * HDScanKeptPageCount and HDScanKeptPage hand out the kept parse's page
+ * numbers in the file's order, for the pages decoded ahead. */
 namespace trf { namespace remaster { struct Trg; } }
 
 void HDScanKeepTrg(bool keep);
 bool HDScanTakeTrg(const char* path, trf::remaster::Trg* out);
 bool HDScanTrgTaken();
 void HDScanDropTrg();
+bool HDScanReadTrg(const char* installRoot, const char* stem);
+int HDScanKeptPageCount();
+int HDScanKeptPage(int at);

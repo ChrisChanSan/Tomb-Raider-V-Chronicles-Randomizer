@@ -5419,6 +5419,33 @@ static bool g_keep = false;		// HDLevelUnload kept them for this load
 static int g_kept_vertices = 0;
 static int g_kept_indices = 0;
 
+/* A level the load does not keep: its .TRG read and its first pages decoded
+ * ahead, on a thread of their own from the moment LoadLevel names the level
+ * (HDLevelKeyNext) and beside the classic level's read - HDScanReadTrg, then
+ * HDPageCacheAhead, which decodes on threads of its own. The scan waits for
+ * the read (HDLevelLoad) and takes the parse; the build's Create takes the
+ * pages. Joined at the latest when the process ends: a std::thread still
+ * joinable when it goes would end the process. */
+struct AheadRead
+{
+	std::thread t;
+
+	~AheadRead()
+	{
+		if (t.joinable())
+			t.join();
+	}
+};
+
+static double g_ahead_read_ms = 0.0;	// the read's own time
+static AheadRead g_ahead_read;		// after what it writes
+
+static void AheadReadWait()
+{
+	if (g_ahead_read.t.joinable())
+		g_ahead_read.t.join();
+}
+
 // One file's size and last write time, both -1 when it is not there.
 static void FileStampOf(const char* path, HDLevelFileStamp* out)
 {
@@ -5486,6 +5513,40 @@ void HDLevelKeyNext(const char* wadName)
 		k.outfit[0] = 0;
 
 	k.valid = 1;
+
+	/* Whatever of the level before no build took goes first; a level the
+	 * load keeps needs nothing read (HDLevelUnload decides the same from
+	 * the same keys). */
+	AheadReadWait();
+	HDScanDropTrg();
+	HDPageCacheAheadDrop();
+
+	if (!HDLevelKeepRefused(&g_key_built, &k, g_redress_count))
+		return;
+
+	const std::string root = HDInstallRoot();
+	const std::string stem = k.name;
+	const int threads = DecodeThreads();
+
+	g_ahead_read_ms = 0.0;
+	g_ahead_read.t = std::thread([root, stem, threads]()
+	{
+		const double started = LoadClockMs();
+		const bool read = HDScanReadTrg(root.c_str(), stem.c_str());
+
+		g_ahead_read_ms = LoadClockMs() - started;
+
+		if (!read)
+			return;
+
+		std::vector<int> pages((size_t)HDScanKeptPageCount());
+
+		for (int i = 0; i < (int)pages.size(); i++)
+			pages[(size_t)i] = HDScanKeptPage(i);
+
+		HDPageCacheAhead(root.c_str(), pages.empty() ? 0 : &pages[0],
+			(int)pages.size(), threads);
+	});
 }
 
 void HDLevelLoad(const char* wadName)
@@ -5591,6 +5652,16 @@ void HDLevelLoad(const char* wadName)
 
 	for (int i = 0; i < NUMBER_OBJECTS; i++)
 		loaded[i] = objects[i].loaded ? 1 : 0;
+
+	/* The .TRG read ahead of the scan (HDLevelKeyNext): waited for here, and
+	 * the scan takes its parse as its own read. `ms` is the read's own time,
+	 * which ran beside the classic level's steps; `waited` what of it this
+	 * thread still had to wait for. */
+	const double ahead_at = LoadClockMs();
+
+	AheadReadWait();
+	Log("LOADLOG level=%s step=trg_ahead ms=%.1f waited=%.1f", g_stem,
+		g_ahead_read_ms, LoadClockMs() - ahead_at);
 
 	// measureBc7 is off: HDLevelBuild decodes every page for real a moment
 	// later and reports what that cost, so decoding them here too would only
@@ -5758,7 +5829,7 @@ static bool HDLevelBuildResident(double loadlog_at)
 			"release", "budget", "marks", "boxes", "gloss", "intr", "air",
 			"pairs", "cuts", "stand", "places", "begin", "trg_read", "prep",
 			"pages", "owners", "verts", "setup", "fill", "index", "hash",
-			"tables", "statics"
+			"pages_ahead", "tables", "statics"
 		};
 
 		for (const char* step : skipped)
@@ -6677,6 +6748,17 @@ static void HDLevelBuildHD()
 					HDRenderBeginPhaseName(b), stats.phaseMs[b]);
 
 			Log("LOADLOG level=%s step=hash ms=%.1f", g_stem, stats.hashMs);
+
+			/* The pages decoded ahead on the load side (HDPageCacheAhead):
+			 * their own time, which ran beside the load thread's and this
+			 * thread's steps and is in none of them; `taken` of them spared
+			 * the step `pages` its decode. */
+			int ahead = 0, taken = 0;
+			double ahead_ms = 0.0;
+
+			HDPageCacheAheadInfo(&ahead, &taken, &ahead_ms);
+			Log("LOADLOG level=%s step=pages_ahead ms=%.1f pages=%d taken=%d",
+				g_stem, ahead_ms, ahead, taken);
 		}
 
 		Log("LOADLOG level=%s step=models_hash ms=%.1f", g_stem,
@@ -6827,8 +6909,15 @@ void HDLevelUnload()
 	g_keep = !refused;
 	g_key_loading = g_key_next;
 	memset(&g_key_next, 0, sizeof(g_key_next));
-	// A parse of the level before that no build took (HDScanKeepTrg).
-	HDScanDropTrg();
+	/* No load follows (GameClose, or HD off): what was read or decoded
+	 * ahead and never taken goes. A load's own was started for it by
+	 * HDLevelKeyNext and stays. */
+	if (!g_key_loading.valid)
+	{
+		AheadReadWait();
+		HDScanDropTrg();
+		HDPageCacheAheadDrop();
+	}
 
 	if (g_key_loading.valid)
 		Log("HDLOG level=%s resident=%d%s%s", g_key_loading.name,

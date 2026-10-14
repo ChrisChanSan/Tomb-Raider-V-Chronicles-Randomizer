@@ -9424,6 +9424,73 @@ static void HDDrawnSwitch(int argc, char** argv, int& at)
 static bool g_loadtime = false;
 static double g_loadtime_at = 0.0;
 
+/* The engine's read ahead (hd_level.cpp, HDLevelKeyNext): the .TRG read and
+ * the first pages decoded on a thread of its own from the start of the load,
+ * beside this tool's twins of the steps before the scan. */
+static double g_loadtime_read_ms = 0.0;
+
+// Joined at the latest at the end: a joinable std::thread would abort it.
+static struct LoadTimeAhead
+{
+	std::thread t;
+
+	~LoadTimeAhead()
+	{
+		if (t.joinable())
+			t.join();
+	}
+} g_loadtime_ahead;
+/* -ahead: the same read ahead, scan and pages ahead in a run that goes on to
+ * its pictures, which must equal a run without; -aheadverify decodes every
+ * page the build takes again and counts those that differ. */
+static bool g_ahead_pics = false;
+static bool g_ahead_verify = false;
+
+static void LoadTimeAheadStart(const char* root, const char* stem, int threads)
+{
+	const std::string r = root, s = stem;
+
+	g_loadtime_ahead.t = std::thread([r, s, threads]()
+	{
+		LARGE_INTEGER a, b, rate;
+
+		QueryPerformanceCounter(&a);
+
+		const bool read = HDScanReadTrg(r.c_str(), s.c_str());
+
+		QueryPerformanceCounter(&b);
+		QueryPerformanceFrequency(&rate);
+		g_loadtime_read_ms = (double)(b.QuadPart - a.QuadPart) * 1000.0 /
+			(double)rate.QuadPart;
+
+		if (!read)
+			return;
+
+		std::vector<int> pages((size_t)HDScanKeptPageCount());
+
+		for (int i = 0; i < (int)pages.size(); i++)
+			pages[(size_t)i] = HDScanKeptPage(i);
+
+		HDPageCacheAhead(r.c_str(), pages.empty() ? 0 : &pages[0],
+			(int)pages.size(), threads);
+	});
+}
+
+// What the scan waited for the read, in milliseconds.
+static double LoadTimeAheadWait()
+{
+	LARGE_INTEGER a, b, rate;
+
+	QueryPerformanceCounter(&a);
+
+	if (g_loadtime_ahead.t.joinable())
+		g_loadtime_ahead.t.join();
+
+	QueryPerformanceCounter(&b);
+	QueryPerformanceFrequency(&rate);
+	return (double)(b.QuadPart - a.QuadPart) * 1000.0 / (double)rate.QuadPart;
+}
+
 static void LoadTimeStep(const char* stem, const char* step)
 {
 	if (!g_loadtime)
@@ -9447,7 +9514,7 @@ static void LoadTimeStep(const char* stem, const char* step)
 static void LoadTimeScan(const char* root, const char* stem,
 	const Tr5Level& level)
 {
-	if (!g_loadtime)
+	if (!g_loadtime && !g_ahead_pics)
 		return;
 
 	std::vector<unsigned char> loaded(HD_SLOT_COUNT, 0);
@@ -9458,7 +9525,14 @@ static void LoadTimeScan(const char* root, const char* stem,
 		if (slot >= 0 && slot < HD_SLOT_COUNT)
 			loaded[(size_t)slot] = 1;
 
-	// The parse kept for the build, as HDLevelLoad keeps it.
+	// The read ahead waited for and the parse kept, as HDLevelLoad does.
+	const double waited = LoadTimeAheadWait();
+
+	if (g_loadtime)
+		printf("LOADLOG level=%s step=trg_ahead ms=%.1f waited=%.1f\n", stem,
+			g_loadtime_read_ms, waited);
+
+	LoadTimeStep(stem, 0);
 	HDScanKeepTrg(true);
 
 	if (!HDScanLevel(root, stem, level.roomCount(), &loaded[0], HD_SLOT_COUNT,
@@ -9481,11 +9555,17 @@ static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
 			HDRenderBeginPhaseName(b), stats.phaseMs[b]);
 
 	printf("LOADLOG level=%s step=hash ms=%.1f\n", stem, stats.hashMs);
+	int ahead = 0, taken = 0;
+	double ahead_ms = 0.0;
+
+	HDPageCacheAheadInfo(&ahead, &taken, &ahead_ms);
 	printf("LOADLOG level=%s step=begin ms=%.1f pages_read=%.1f "
 		"pages_decode=%.1f pages_upload=%.1f threads=%d trg_kept=%d "
-		"hash=%016llx\n", stem, stats.readMs + stats.buildMs,
-		stats.pages.readMs, stats.pages.decodeMs, stats.pages.uploadMs,
-		stats.pages.threads, HDScanTrgTaken() ? 1 : 0, stats.hash);
+		"hash=%016llx ahead=%d taken=%d ahead_ms=%.1f peak_mib=%.1f\n", stem,
+		stats.readMs + stats.buildMs, stats.pages.readMs,
+		stats.pages.decodeMs, stats.pages.uploadMs, stats.pages.threads,
+		HDScanTrgTaken() ? 1 : 0, stats.hash, ahead, taken, ahead_ms,
+		PeakCommitMiB());
 }
 
 /* -reload: the HD side of a savegame loaded inside the level, as far as this
@@ -9606,6 +9686,12 @@ static int ProbeMain(int argc, char** argv)
 			g_loadtime = true;
 		else if (!strcmp(argv[i], "-reload"))
 			g_reload = true;
+		else if (!strcmp(argv[i], "-ahead") ||
+			!strcmp(argv[i], "-aheadverify"))
+		{
+			g_ahead_pics = true;
+			g_ahead_verify = g_ahead_verify || !strcmp(argv[i], "-aheadverify");
+		}
 		else if (!strcmp(argv[i], "-reloadas") && i + 1 < argc)
 		{
 			g_reload = true;
@@ -9749,6 +9835,10 @@ static int ProbeMain(int argc, char** argv)
 			"build kept by the engine's key, the sheets set again, then the "
 			"pictures; -reloadas <LEVEL> another level's key: that level "
 			"built and its fingerprint printed, no picture\n");
+		printf("       -ahead   the engine's .TRG read and first pages "
+			"decoded ahead of the build (with -roombox), then the pictures; "
+			"-aheadverify also decodes every page taken again and counts "
+			"those that differ\n");
 		return 1;
 	}
 
@@ -10778,6 +10868,12 @@ static int ProbeMain(int argc, char** argv)
 	if (g_tround_group >= 0)
 		HDRenderSplitOverhang(1);
 
+	if ((g_loadtime || g_ahead_pics) && !g_roombox.empty())
+	{
+		HDPageCacheAheadVerify(g_ahead_verify);
+		LoadTimeAheadStart(root, stem, threads);
+	}
+
 	LoadTimeStep(stem, 0);
 
 	/* The rooms' own boxes out of the classic level, the same arithmetic
@@ -11469,6 +11565,7 @@ static int ProbeMain(int argc, char** argv)
 		for (int i = 0; i < HDPageCacheNoteCount(); i++)
 			printf("  note: %s\n", HDPageCacheNote(i));
 
+		LoadTimeAheadWait();
 		HDRenderShutdown();
 		DropDevice();
 		return 4;
@@ -11479,9 +11576,22 @@ static int ProbeMain(int argc, char** argv)
 
 	if (g_loadtime)
 	{
+		LoadTimeAheadWait();
+		HDPageCacheAheadDrop();
 		HDRenderShutdown();
 		DropDevice();
 		return 0;
+	}
+
+	if (g_ahead_pics)
+	{
+		int ahead = 0, taken = 0;
+		double ahead_ms = 0.0;
+
+		HDPageCacheAheadInfo(&ahead, &taken, &ahead_ms);
+		printf("-ahead: pages=%d taken=%d trg_kept=%d differ=%d%s\n", ahead,
+			taken, HDScanTrgTaken() ? 1 : 0, HDPageCacheAheadDiffer(),
+			g_ahead_verify ? "" : " (not verified)");
 	}
 
 	if (g_reload && !ProbeReload(root, stem, rooms, managed, threads,

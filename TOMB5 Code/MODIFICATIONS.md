@@ -14489,8 +14489,9 @@ each, `hd_air 2`): RICH2 3,000 -> 3,034 (+1.1 %), ANDREA2 3,033 -> 2,915 (-3.9 %
 -classiconly` at ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34, 6 of 6 identical
 to `8691e82`'s tool and to `28c358eb`'s; the fifteen parity cameras of the water's fix
 round 15 of 15 identical to the `28c358eb` tool (`git archive`) and to that round's own
-pictures. The suites, the engine and the tools: see the commits. No suite reads HDLOG or
-LOADLOG lines, so none needed a group.
+pictures. Suites: ModernTest 14,991, MenuTest 44,216, InterpTest 729, LipsTest 270 and
+243, 0 failed; the engine and RoomProbe, TrgProbe, ModelProbe and MapProbe build. No
+suite reads HDLOG or LOADLOG lines, so none needed a group.
 
 **Left - the owner's decision.** *(a) What a load inside the same level does.* Load menu,
 `S_LoadGame` reads the file (`specific/gamemain.cpp` :186), `DoLevel` runs

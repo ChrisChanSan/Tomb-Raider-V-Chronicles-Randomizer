@@ -6718,18 +6718,27 @@ bool HDRoomArtListed(int roomIndex, const short* listed, int listedCount)
 }
 
 /* The rooms a room under the sky carries (hd_level.h), out of the list the
- * build made of the renderer's carry pairs. */
+ * build made of the renderer's carry pairs. The list is the art's, kept by
+ * the numbers of the level as built: after a flip a room's number holds its
+ * twin's group (HDFlipRoom), and what stands under its sky is that group's
+ * list - ANDY1's rooms 48 and 151 carry 215 and 177, their alternates 214
+ * and 213 nothing, the only two hosts of the fifteen levels whose two
+ * states carry different rooms. */
 int HDRoomCarries(int roomIndex, const short** rooms)
 {
 	*rooms = 0;
 
-	if (!g_level_active || roomIndex < 0 ||
-		roomIndex >= (int)g_room_carry.size() ||
-		g_room_carry[(size_t)roomIndex].empty())
+	if (!g_level_active || roomIndex < 0 || roomIndex >= g_room_count)
 		return 0;
 
-	*rooms = &g_room_carry[(size_t)roomIndex][0];
-	return (int)g_room_carry[(size_t)roomIndex].size();
+	const int key = g_room_group[roomIndex] >= 0 ? g_room_group[roomIndex]
+		: roomIndex;
+
+	if (key >= (int)g_room_carry.size() || g_room_carry[(size_t)key].empty())
+		return 0;
+
+	*rooms = &g_room_carry[(size_t)key][0];
+	return (int)g_room_carry[(size_t)key].size();
 }
 
 /* CarryArt takes in room numbers, and after a flip the number of a pair's

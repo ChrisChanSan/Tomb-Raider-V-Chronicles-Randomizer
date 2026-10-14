@@ -3901,12 +3901,15 @@ namespace walkoff
 		for (size_t i = 0; i < listed; i++)
 		{
 			const Room& a = g_room[(size_t)g_drawn[i]];
+			// HDRoomCarries: the list of the group the room draws now.
+			const size_t key = (size_t)g_drawn[i] < g_group_of.size() &&
+				g_group_of[(size_t)g_drawn[i]] >= 0
+				? (size_t)g_group_of[(size_t)g_drawn[i]] : (size_t)g_drawn[i];
 
-			if (a.left >= a.right || a.top >= a.bottom ||
-				(size_t)g_drawn[i] >= g_carry.size())
+			if (a.left >= a.right || a.top >= a.bottom || key >= g_carry.size())
 				continue;
 
-			const std::vector<short>& carried = g_carry[(size_t)g_drawn[i]];
+			const std::vector<short>& carried = g_carry[key];
 
 			for (size_t k = 0; k < carried.size(); k++)
 			{

@@ -1857,10 +1857,34 @@ int HDRenderCoveredFaces();
 bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
 	float* area, float own[3], float held[3], int* airs, float centre[3],
 	float normal[3], int* behind);
+/* Which of the two rooms' art wins on such a face, and why: `winner` the
+ * holder's or the face's own room's, `why` OWNER (the one room whose floor
+ * square spans it), CLASSIC (the face in front in the classic frame) or
+ * LARGER (neither: the larger face, the holder's). False past the last. */
+#define HD_COVER_WHY_OWNER		1
+#define HD_COVER_WHY_CLASSIC	2
+#define HD_COVER_WHY_LARGER		3
+bool HDRenderCoveredFaceWhy(int index, int* why, int* winner);
 /* How far off a covered face its rooms' art is still counted, in front of
  * it or behind: an eighth of a click, past the push HD_STAND_PUSH gives at
  * the distances the rooms are seen from (16 units at 8,192). */
 #define HD_COVER_SIDE		32.0f
+/* The backdrop (hd_level.cpp, DrawBackdrops): art of a room no portal
+ * lists, drawn only on the pixels where a listed room's classic faces stand
+ * and the frame has drawn nothing yet. HDRenderBackdropMask marks those
+ * pixels in a stencil bit of its own: `corners` holds 9 floats per triangle
+ * in the frame of `world`, the first `oneSided` triangles culled as the
+ * art's opaque ranges are, the rest drawn from both sides, inside the
+ * window x0, y0 (the first pixel drawn) to x1, y1 (the first one that is
+ * not); a pixel is marked when no world depth stands there yet - the
+ * cleared one or the HD sky's.
+ * HDRenderBackdropRoom then draws a group's opaque and alpha-tested art on
+ * the marked pixels alone, with its own depth. Both answer false and draw
+ * nothing on a depth buffer with no stencil or outside the frame. */
+bool HDRenderBackdropMask(const float* corners, int triangles, int oneSided,
+	const D3DMATRIX* world, int x0, int y0, int x1, int y1);
+bool HDRenderBackdropRoom(int group, const D3DMATRIX* world,
+	const HDRoomLighting* lighting);
 int HDRenderCarryPairs();
 bool HDRenderCarryPair(int index, int* group, int* host, int* tris);
 

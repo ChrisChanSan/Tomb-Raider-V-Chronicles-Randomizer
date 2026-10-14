@@ -605,6 +605,7 @@
 
 #include <vector>
 #include <set>
+#include <map>
 
 #include "zlib.h"
 
@@ -2829,6 +2830,18 @@ static int g_unlinked = 1;
  * with the hulls (MarkAirHulls in hd_render.cpp). */
 static int g_air_option = 1;
 static int g_window_mode = HD_WINDOW_ALL;
+/* The backdrop, as hd_level.cpp's BuildBackdrops and DrawBackdrops make
+ * it: per holder room a the rooms b of the intrusion boxes (b in a) whose
+ * inside overlaps a's in volume, a's classic faces out of the .TRC (world
+ * units, the one-sided ones first) and every room's origin. Built with the
+ * air on, as the engine's; -backdrop 0 leaves it out of the picture, the
+ * answer without it. `g_backdrop_drawn` is the groups drawn, for the line. */
+static std::map<int, std::vector<int> > g_backdrop_of_built;
+static std::map<int, std::vector<float> > g_backdrop_faces_built;
+static std::map<int, int> g_backdrop_one_built;
+static std::vector<float> g_backdrop_origin;
+static int g_backdrop = 1;
+static int g_backdrop_drawn = 0;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
  * hd_level.cpp's BuildRoomCuts does.
@@ -5560,6 +5573,109 @@ static bool FaceSurvives(const HDPairFace& face, const float* offset,
 /* The group's -roomwin entry, answered: false when it has none. Sets the
  * scissor rectangle, whether it covers the screen or nothing, and every
  * piece's HDRenderPairWhole, and prints the answers once per group. */
+/* The backdrop of the picture, as DrawBackdrops draws the frame's: each
+ * drawn group with a -roomwin window that holds such rooms marks its
+ * classic faces, in the window as ClipWindow widens it, and each room it
+ * holds that is not drawn is drawn on the marked pixels alone - after the
+ * solid art, before the clear floors. The seed's frame is the faces' (world
+ * units less the seed's origin) and the rooms' (their origin less it). */
+static void DrawBackdrop(const HDRoomLighting* lighting)
+{
+	g_backdrop_drawn = 0;
+
+	if (!g_backdrop || !g_air_option || g_backdrop_of_built.empty() ||
+		g_room_probe_seed < 0 ||
+		(size_t)g_room_probe_seed * 3 + 2 >= g_backdrop_origin.size())
+		return;
+
+	std::vector<int> drawn(1, g_room_probe_seed);
+
+	for (int i = 0; i < g_with_count; i++)
+		drawn.push_back(g_with_group[i]);
+
+	const float* seed = &g_backdrop_origin[(size_t)g_room_probe_seed * 3];
+	D3DMATRIX identity;
+
+	memset(&identity, 0, sizeof(identity));
+	identity._11 = identity._22 = identity._33 = identity._44 = 1.0f;
+
+	std::vector<int> want;
+	bool marked = false;
+
+	for (size_t i = 0; i < drawn.size(); i++)
+	{
+		const std::map<int, std::vector<int> >::const_iterator of =
+			g_backdrop_of_built.find(drawn[i]);
+		int at = -1;
+
+		for (int w = 0; w < g_roomwin_count; w++)
+			if (g_roomwin_group[w] == drawn[i])
+				at = w;
+
+		if (of == g_backdrop_of_built.end() || at < 0)
+			continue;
+
+		const long* win = g_roomwin_box[at];
+
+		if (win[2] <= win[0] || win[3] <= win[1])
+			continue;
+
+		bool any = false;
+
+		for (size_t k = 0; k < of->second.size(); k++)
+		{
+			const int b = of->second[k];
+
+			if (std::find(drawn.begin(), drawn.end(), b) != drawn.end())
+				continue;
+
+			any = true;
+
+			if (std::find(want.begin(), want.end(), b) == want.end())
+				want.push_back(b);
+		}
+
+		std::vector<float> faces = g_backdrop_faces_built[drawn[i]];
+
+		if (!any || faces.empty())
+			continue;
+
+		for (size_t v = 0; v < faces.size(); v++)
+			faces[v] -= seed[v % 3];
+
+		const int x0 = win[0] - 1 < 0 ? 0 : (int)win[0] - 1;
+		const int y0 = win[1] - 1 < 0 ? 0 : (int)win[1] - 1;
+		const int x1 = win[2] + 2 > g_decide_width ? (int)g_decide_width
+			: (int)win[2] + 2;
+		const int y1 = win[3] + 2 > g_decide_height ? (int)g_decide_height
+			: (int)win[3] + 2;
+
+		if (HDRenderBackdropMask(&faces[0], (int)(faces.size() / 9),
+			g_backdrop_one_built[drawn[i]], &identity, x0, y0, x1, y1))
+			marked = true;
+	}
+
+	for (size_t k = 0; marked && k < want.size(); k++)
+	{
+		const int b = want[k];
+
+		if ((size_t)b * 3 + 2 >= g_backdrop_origin.size())
+			continue;
+
+		D3DMATRIX world = identity;
+
+		world._41 = g_backdrop_origin[(size_t)b * 3] - seed[0];
+		world._42 = g_backdrop_origin[(size_t)b * 3 + 1] - seed[1];
+		world._43 = g_backdrop_origin[(size_t)b * 3 + 2] - seed[2];
+
+		if (HDRenderBackdropRoom(b, &world, lighting))
+			g_backdrop_drawn++;
+	}
+
+	printf("backdrop: %d room(s) drawn on the classic faces of the drawn "
+		"ones\n", g_backdrop_drawn);
+}
+
 static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 {
 	int at = -1;
@@ -10333,8 +10449,19 @@ static int ProbeMain(int argc, char** argv)
 
 			at += 1;
 		}
-		else if (!strcmp(argv[at], "-unlinked") && at + 1 < argc)
+		else if ((!strcmp(argv[at], "-unlinked") ||
+			!strcmp(argv[at], "-backdrop")) && at + 1 < argc)
 		{
+			// -backdrop shares this branch: the chain is at the nesting limit.
+			if (!strcmp(argv[at], "-backdrop"))
+			{
+				g_backdrop = atoi(argv[++at]) ? 1 : 0;
+				printf("-backdrop: the rooms standing in a drawn one are %s\n",
+					g_backdrop ? "drawn on its classic faces where the art "
+					"left the picture empty (the engine's)" : "left out");
+				continue;
+			}
+
 			g_unlinked = atoi(argv[at + 1]);
 			g_unlinked = g_unlinked < 0 ? 0 : g_unlinked > 2 ? 2 : g_unlinked;
 			printf("-unlinked: art in the air of a room its own room has no "
@@ -11000,6 +11127,93 @@ static int ProbeMain(int argc, char** argv)
 
 				LoadTimeStep(stem, "intr");
 
+				/* The backdrop's pairs and faces (BuildBackdrops): the
+				 * boxes whose two insides overlap in volume, with the air
+				 * on. The origins for every room, y the header's. */
+				g_backdrop_of_built.clear();
+				g_backdrop_faces_built.clear();
+				g_backdrop_one_built.clear();
+				g_backdrop_origin.assign((size_t)n * 3, 0.0f);
+
+				for (int r = 0; r < n; r++)
+				{
+					unsigned y = 0;
+
+					level.headerField(r, 24, y, error);
+					g_backdrop_origin[(size_t)r * 3] =
+						(float)level.rooms()[(size_t)r].originX;
+					g_backdrop_origin[(size_t)r * 3 + 1] = (float)(int)y;
+					g_backdrop_origin[(size_t)r * 3 + 2] =
+						(float)level.rooms()[(size_t)r].originZ;
+				}
+
+				int backPairs = 0, backFaces = 0;
+
+				for (size_t k = 0; k < g_intrusions_built.size() &&
+					g_air_option; k++)
+				{
+					const int a = g_intrusions_built[k].holder;
+					const int b = g_intrusions_built[k].group;
+					const Tr5Room& ra = level.rooms()[(size_t)a];
+					const Tr5Room& rb = level.rooms()[(size_t)b];
+					unsigned aTop = 0, bTop = 0;
+
+					level.headerField(a, 36, aTop, error);
+					level.headerField(b, 36, bTop, error);
+
+					if (ra.originX + 1024 >= rb.originX +
+						(long)(rb.numXSectors - 1) * 1024 ||
+						rb.originX + 1024 >= ra.originX +
+						(long)(ra.numXSectors - 1) * 1024 ||
+						ra.originZ + 1024 >= rb.originZ +
+						(long)(rb.numZSectors - 1) * 1024 ||
+						rb.originZ + 1024 >= ra.originZ +
+						(long)(ra.numZSectors - 1) * 1024 ||
+						(long)(int)aTop >= rb.yBottom ||
+						(long)(int)bTop >= ra.yBottom)
+						continue;
+
+					g_backdrop_of_built[a].push_back(b);
+					backPairs++;
+				}
+
+				for (std::map<int, std::vector<int> >::const_iterator it =
+					g_backdrop_of_built.begin();
+					it != g_backdrop_of_built.end(); ++it)
+				{
+					std::vector<Tr5Level::FaceInfo> list;
+					std::vector<float> one, two;
+
+					if (!level.roomFaces(it->first, list, error))
+						continue;
+
+					for (size_t f = 0; f < list.size(); f++)
+					{
+						const Tr5Level::FaceInfo& face = list[f];
+						std::vector<float>& out = face.doubleSided ? two : one;
+
+						for (int half = 0; half + 2 < (face.quad ? 4 : 3);
+							half++)
+						{
+							const int at[3] = { 0, half + 1, half + 2 };
+
+							for (int c = 0; c < 3; c++)
+								for (int axis = 0; axis < 3; axis++)
+									out.push_back((float)face.v[at[c]][axis]);
+						}
+
+						backFaces++;
+					}
+
+					g_backdrop_one_built[it->first] = (int)(one.size() / 9);
+					one.insert(one.end(), two.begin(), two.end());
+					g_backdrop_faces_built[it->first].swap(one);
+				}
+
+				printf("backdrop: pairs=%d holders=%d faces=%d air=%d\n",
+					backPairs, (int)g_backdrop_of_built.size(), backFaces,
+					g_air_option);
+
 				/* And every room's air, as BuildRoomAir hands it over: per
 				 * floor square its floor and ceiling bytes and its floor
 				 * data words from its index on, read by HDSectorAir. None
@@ -11593,10 +11807,14 @@ static int ProbeMain(int argc, char** argv)
 				break;
 
 			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+			int why = 0, winner = -1;
+			static const char* const kWhy[4] =
+				{ "?", "owner", "classic", "larger" };
 
+			HDRenderCoveredFaceWhy(i, &why, &winner);
 			printf("covered: face=%d group=%d holder=%d area=%d "
 				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
-				"normal=%d,%d,%d behind=%d\n", face, group,
+				"normal=%d,%d,%d behind=%d why=%s winner=%d\n", face, group,
 				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
 				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
 				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
@@ -11604,7 +11822,8 @@ static int ProbeMain(int argc, char** argv)
 				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
 				(int)floorf(normal[0] * 1000.0f + 0.5f),
 				(int)floorf(normal[1] * 1000.0f + 0.5f),
-				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind,
+				kWhy[why >= 0 && why < 4 ? why : 0], winner);
 		}
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)
@@ -12697,6 +12916,7 @@ static int ProbeMain(int argc, char** argv)
 			// pieces of -statics new.
 			DrawStandInHolders(&lighting, HD_PASS_SOLID);
 			probestatics::DrawPieces(&lighting, HD_PASS_SOLID);
+			DrawBackdrop(&lighting);
 
 			/* The clear floors, once every group's solid art is in - the
 			 * place HDFrameDraw gives them, before the models and the

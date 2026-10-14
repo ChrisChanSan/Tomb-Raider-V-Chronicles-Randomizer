@@ -5504,8 +5504,8 @@ void HDLevelKeyNext(const char* wadName)
 	snprintf(k.install, sizeof(k.install), "%s", HDInstallRoot());
 	snprintf(k.installTr3, sizeof(k.installTr3), "%s", HDInstallRootTr3());
 	k.air = (int)tomb5.hd_air;
-	k.water = tomb5.hd_water ? 1 : 0;
-	k.objects = tomb5.hd_objects ? 1 : 0;
+	k.water = (int)tomb5.hd_water;
+	k.objects = (int)tomb5.hd_objects;
 	k.budgetMb = (long)tomb5.hd_texture_budget_mb;
 	snprintf(k.format, sizeof(k.format), "%s", tomb5_hd_texture_format);
 

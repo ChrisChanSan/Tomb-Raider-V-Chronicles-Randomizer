@@ -1366,9 +1366,10 @@ struct HDRenderWaterBody
 	 * `crest`, 1 without one; 0 gives the straight rows - hd_render.cpp,
 	 * "the crests" over kWaterFan). */
 	float crest;
-	/* 1 when a row's ripple source stands in its water, and that source's
-	 * world x and z - the first such row's (the life's spring current,
-	 * hd_life_rules.h HDLifeSpringPush). */
+	/* 1 when a row's ripple source or a spring (hd_spring.cpp) stands in
+	 * its water, and its world x and z - the first such row's, else the
+	 * first spring's (the life's spring current, hd_life_rules.h
+	 * HDLifeSpringPush). */
 	int spring;
 	float springAt[2];
 };
@@ -1487,6 +1488,45 @@ struct HDRenderWaterSquare
 
 int HDRenderWaterBodySquares(int body, HDRenderWaterSquare* out, int max,
 	float* rise);
+
+/* The springs (hd_spring.cpp). HDRenderWaterRingAdd puts a ring that
+ * started at `born` on the frame's clock into the sheets' live rings as
+ * it is, without the merge a game ripple goes through (little 1 for
+ * a small one's, drawn after the rest). HDRenderWaterBodySpring makes world
+ * x, z the body's spring (HDRenderWaterBody::spring) unless a ripple row
+ * made one there already, so the life's floats drift away from it.
+ * HDRenderWaterSpringFrame hands out the bracket's device, matrices, the
+ * frame's copy (0 unless taken) and depth texture (0 unless bound), the
+ * viewport and the clock, false outside a bracket or without sheets;
+ * HDRenderWaterSpringLook a body's spray colour as the cards wear it, the
+ * share of its light the fog takes and its absorption a unit, rgb. */
+struct HDRenderSpringFrame
+{
+	IDirect3DDevice9* device;
+	float view[16], proj[16];	// row vectors
+	IDirect3DTexture9* copy;
+	IDirect3DTexture9* depth;
+	int width, height;
+	float clock;
+	int motion;
+};
+
+/* The level's `spring` rows of hd_water.txt (hd_render.cpp, ParseWaterLine):
+ * the room each names and its numbers, x, z, strength and seconds (0 for
+ * none), in the file's order; the count is returned. */
+struct HDRenderSpringRow
+{
+	int room;
+	float key[4];
+};
+
+int HDRenderWaterSpringRows(HDRenderSpringRow* out, int max);
+void HDRenderWaterRingAdd(float x, float y, float z, float size, double born,
+	int little);
+void HDRenderWaterBodySpring(int body, float x, float z);
+bool HDRenderWaterSpringFrame(HDRenderSpringFrame* out);
+bool HDRenderWaterSpringLook(int body, float* rgb, float* light,
+	float* absorb);
 
 /* The rings on the sheets (hd_render.cpp, "the rings"), out of the game's
  * own ripples. HDRenderWaterRipples takes the live slots of ripples[]

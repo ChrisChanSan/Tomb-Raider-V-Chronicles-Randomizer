@@ -171,6 +171,17 @@ rem MirrorReceivePS). Stamped with the same .hlsl's MD5 as the other three.
 "%FXC%" /nologo /T ps_3_0 /E MirrorReceivePS /O3 /Vn kHDShadowReceiveMirrorPS /Fh "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc" "%SHADERDIR%\hd_shadow_receive.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The springs: a file of their own with two pixel shaders, the column and
+rem the bubble, drawn with the cards' vertex shader (hd_spring.hlsl,
+rem hd_spring.cpp). Both stamped with the same .hlsl's MD5.
+"%FXC%" /nologo /T ps_3_0 /E ColumnPS /O3 /Vn kHDSpringColumnPS ^
+ /Fh "%SHADERDIR%\hd_spring_column_ps.inc" "%SHADERDIR%\hd_spring.hlsl"
+if errorlevel 1 exit /b 1
+
+"%FXC%" /nologo /T ps_3_0 /E BubblePS /O3 /Vn kHDSpringBubblePS ^
+ /Fh "%SHADERDIR%\hd_spring_bubble_ps.inc" "%SHADERDIR%\hd_spring.hlsl"
+if errorlevel 1 exit /b 1
+
 call :stamp hd_room hd_room_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
@@ -225,6 +236,10 @@ call :stamp hd_shadow_receive hd_shadow_receive_model_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_shadow_receive hd_shadow_receive_mirror_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_spring hd_spring_column_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_spring hd_spring_bubble_ps.inc
+if errorlevel 1 exit /b 1
 
 for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 call :size "%SHADERDIR%\hd_room_water_vs.inc"
@@ -235,6 +250,8 @@ call :size "%SHADERDIR%\hd_room_card_vs.inc"
 call :size "%SHADERDIR%\hd_room_card_ps.inc"
 call :size "%SHADERDIR%\hd_wet_ps.inc"
 call :size "%SHADERDIR%\hd_wet_debug_ps.inc"
+call :size "%SHADERDIR%\hd_spring_column_ps.inc"
+call :size "%SHADERDIR%\hd_spring_bubble_ps.inc"
 exit /b 0
 
 :stamp

@@ -14494,6 +14494,208 @@ shape itself stays is the next play test's to show.
 
 **Commits.** `8697749`, `169c24a`.
 
+### The spring (#200)
+2026-10-14
+
+**What.** Asked for on 2026-10-09: "In ANDREA2 we have an underwater spring, I find
+that quite nice. Could we have, under the spring, a kind of visible rising current, and
+build a few small bubbles into the jet? Then the spring would be complete, and we could
+scatter it sporadically under water in all levels where it would fit." The spring is
+the ring source of ANDREA2 room 194's fountain basin over water room 120 (the middle of
+its six water squares, x 54,272 to 57,344, z 31,744 to 33,792): the game itself makes
+no ripple there and no item stands there. Since this round a spring is the engine's
+own: a point under water with its own hashed clock that rings the sheet over it, sends
+a few small bubbles up its jet and bends what stands behind its rising current; the
+fountain is the first entry of a compiled table, `hd_water.txt` can change, add or take
+away springs, and a hashed rule places a spring now and then in the levels' other
+water.
+
+**Why.** Before it the place rang through the ripple field of the compiled override
+row for ANDREA2 194 (`kWaterOverride`, put there by the water's life, `dd35bc62`), a
+ring of size 80 every 0.7 s with no current and no bubbles; the owner's tuning file
+carries the same ring as a `ripple` row. Rings alone read as rain on a pond, not as a
+jet.
+
+**How.** `specific/hd/hd_spring.h` holds the rules as pure functions, without the
+engine and Direct3D (ModernTest includes it); `hd_spring.cpp` builds a level's
+springs, hands their rings to the sheets and draws them - its first part reads the
+level only through `hd_render.h` and is linked by RoomProbe (`/D HD_SPRING_TOOL`), its
+last part is the engine's. `hd_shader/hd_spring.hlsl` holds two pixel shaders,
+`ColumnPS` and `BubblePS`, drawn with the cards' vertex shader (`CardVS`'s bytecode,
+`hd_room_card_vs.inc`). Every random choice is a hash of the spring's level and place
+(the life's mixer), never a generator's draw: the same level and clock give the same
+picture.
+
+- *The rings.* One a period, each up to a fifth of a period early or late by hash, so
+  the train does not tick; size 80 times the strength (at least 16), the size and the
+  period 0.7 s tuned by the owner with his file row - a ring's slope is its size over
+  128, so a jet's landing stays under a wading Lara's 112 to 127. They go into the
+  sheets' live rings as they are (`HDRenderWaterRingAdd`, without the merge a game
+  ripple goes through), from `FeedWaterRipples` once a frame, only for springs within
+  6,144 units of the eye (the drips' reach), so far springs do not crowd the 64 kept
+  rings; at a spring's first frame or after a jump of the clock the rings of the last
+  four seconds go in at their own ages (a ring lives 3.5 s). A `ripple` row of the
+  file within a quarter of a square of a spring rings that place already: the spring
+  then rings no more, so his present file does not ring twice.
+- *The bubbles.* Three a second at strength 1 (the request said two to four: the
+  middle), each born at a hashed moment in its slot, over the jet's core within 0.4 of
+  the column's half-width. They rise at 200 to 300 units a second by hash: a few
+  millimetres of air rise at about 0.25 m/s in still water (110 units at 2.3 mm a
+  unit), and the jet carries them faster. The classic bubble (`game/tomb4fx.cpp`,
+  `UpdateBubbles`) speeds up a tick at a time without a cap - 883 units a second after
+  the basin's 2,304 units, 5.1 s for the rise -, which a bubble in a steady jet does
+  not, so its law is not used. They sway in the classic bubble's form (measured there:
+  about 20 units one way and 7 the other at 1.42 s), here 8 to 20 units and a third of
+  it across at 1.0 to 1.8 s by hash; radius 5 to 12 units, the classic breath bubble's
+  drawn size over its rise (`DrawBubbles`: 4 to 7.5 at birth, growing). One in three
+  by hash leaves a small ring where it reaches the sheet, 48 to 63 like the classic
+  bubble's (`SetupRipple`, flags 2). A bubble is a card facing the eye, premultiplied
+  (`BubblePS`: a bright rim from 0.55 to 0.9 of its radius, a faint body, a small
+  highlight), soft against the depth texture over 32 units, the cards' distance fog,
+  under the water the frame's extinction, from over the water the water's own
+  absorption per channel along the eye's path under the surface; its colour the body's
+  spray colour as the cards wear it. Both looks were drawn at the fountain's two eyes
+  with the same places, sizes and fades: the own card, and the classic sprite
+  (`DEFAULT_SPRITES` + 13, sprite 17 of ANDREA2's classic `.TRC`, a 32 x 32 window of
+  its page 10 - a dark disc with a bright crescent - times the classic shade 144,
+  additive) through the same card path in a probe built for the comparison. They cover
+  the same pixels (under the water 368 and 375 at 1 s); the own rim reads brighter
+  (the mean change in those pixels 28.4 and 29.3 at 1 and 2 s against 19.5 and 21.2;
+  from over the water 22.0 and 20.7 against 19.7 and 17.3) and it takes the body's
+  colour and the water's absorption as the cards do, without a classic page in the HD
+  path - so the own card stays.
+- *The rising current.* A quad on the jet's line from the floor to the sheet, turned to
+  the eye in eight rows, half as wide at the floor as 32 units and 96 per step of
+  strength (128 at 1) and widening by a tenth of its height as a round jet does. It is
+  drawn after the sheets, with the cards, as a multiply: the blend `DESTCOLOR` /
+  `INVSRCALPHA` with rgb `a r` and alpha `a`, `r` the ratio of the frame's copy at the
+  bent place to the copy at the pixel (floor 0.02, at most 2), `a` the share, whole from
+  half the column's weight up - the target becomes `target (1 + a (r - 1))`. Under the
+  water, where the target is the
+  copy, that is the copy at the bent place: the refraction itself. From over the water
+  the sheet writes its pixel whole from the copy (`a = 1`), so a column drawn before it
+  would be hidden and one drawn after it in the usual way would paint the floor without
+  its water; the multiply moves the floor's pattern inside the sheet's colour and keeps
+  its tint and mirror, and adds no light (no milk, no beam). It reuses the copy the
+  frame took for the sheets - no second copy. The bend: two octaves of value noise
+  (cells 24 units across the line and 96 along it, and half that), rising at 400 units
+  a second, at most 96 units of view space at strength 1, strongest on the line and gone
+  at the edge as `(1 - u^2)^2`, falling with height as 1,200 over 1,200 plus the height,
+  faded over the last eighth at each end; the weight scales the bend, the share follows
+  it. A bent place nearer than the column keeps the pixel's own. It fades as the eye
+  looks along its line and as its half-width at mid height falls from 16 to 6 pixels.
+  The noise's lattice values are a table of 64 by 64 texels the processor fills with the
+  life's mixer (`HDSpringNoiseTexel`, a salt per channel; means 127.0 and 128.1, spread
+  73.9 and 73.6, neighbours and channels uncorrelated under 0.03), bound with wrap and a
+  linear filter, so the shader reads each octave in one fetch at the cell's corner plus
+  its smoothed fraction; the rise wraps at 64 cells along, where the table repeats, so
+  the pattern never jumps. The first column took its lattice values from a published
+  third-party shader hash, uncredited, and took its weight on the bend and on the share
+  both, each held under 0.5, at a bend of 32 on square cells of 48: under the water it
+  changed 276 to 370 pixels by 8 levels or more and could not be told from the water
+  without it. The streaks and the bend of 96 make a band that wavers; 128 on cells of 32
+  by 128 smeared the wall. From over the water the column stays faint: it moves the
+  floor's pattern inside the sheet's colour, and the basin's floor behind it is dark and
+  flat (luminance 20.9, spread 7.9 levels without the water); a bend of the floor as the
+  sheet sees it would need a second copy or the sheet's own shader (its depth variant at
+  512 slots), and light of its own would be milk. From above the jet shows by its rings
+  and its bubbles. With `hd_motion` 0 the bubbles and the column stand at the clock
+  motion last had, and the sheets draw no ring, as for every ring.
+- *The table.* `kHDSprings`: ANDREA2, room 194, x 55,808, z 32,768, floor y 2,560 (the
+  six squares are 2,304 deep under the sheet at 256, RoomProbe `-life` LIFESQUARES),
+  strength 1, period 0.7 s. The compiled override row for room 194 keeps its class and
+  no longer carries the ripple; a spring marks its body's spring
+  (`HDRenderWaterBodySpring`) unless a ripple row marked it, so the life's floats still
+  drift away from the fountain.
+- *The file row.* `<LEVEL> <room> - spring <x> <z> <strength> [<seconds>]` in
+  `hd_water.txt` (`ParseWaterLine`, the numbers read by `HDSpringParseKey`). A row for
+  the level and room of a spring of the table changes it - place, strength, and the
+  period where it gives one -, strength 0 takes it away; any other row adds a spring,
+  whose period is 0.7 s over its strength without seconds. A row whose one key is
+  `spring`, with class `-`, tunes no body, so it cannot reset a compiled row's foam.
+  Where two sheets lie over one place (the fountain over the sewer), the spring takes
+  the one in the row's room, else the highest. The owner's `ripple` row keeps its
+  meaning; to have the spring ring his line becomes `ANDREA2 194 - spring 55808 32768
+  1.0 0.7`, or goes.
+- *The placement rule* (`HDSpringRulePick`). A candidate square draws a sheet over 768
+  units of water or more (the life's deep water), lies three squares or more from
+  Lara's start and from every opening of its water - a portal through a wall that
+  reaches into the water and leads out of the body; a portal with the body's squares
+  on both sides only parts two rooms of one water (JOBY2's sea over rooms 42 and 76) -
+  and under no static. A body that is no river, has no current, holds no spring of the
+  table or the file and has six candidates or more (the life's school size) holds one
+  spring in two, by the hash of its level and its first square (least z, then least
+  x), at the middle of a candidate the hash picks, strength 0.5 to 1 by hash. One in
+  three placed one spring in the fifteen levels, one in two places three in three
+  levels - a spring found now and then, not one per pond. The level's facts come from
+  the engine as loaded (the build runs before a saved game is restored, so Lara's item
+  stands at the level's start) and in RoomProbe from the classic `.TRC`.
+- *The key.* `hd_springs`, a DWORD beside the options, read at the level's build with
+  `REG_PeekLong` and never written: absent the rule as built, `0` no spring of the
+  rule (the table's and the file's stay), `n` one body in two times n.
+- *The seam.* `SPRINGLOG` behind `-log` at the level's build, nothing per frame: one
+  line for the level (`springs=`, `table=`, `file=`, `rows=` the file's spring rows,
+  `dropped=` springs with no sheet over them, `rule=`, `bodies=`, `fit=`,
+  `candidates=`, `key=`) and one per spring (`room=`, `x=`, `z=`, `floor=`,
+  `surface=`, `strength=`, `period=`, `body=`, `how=table|file|rule`,
+  `rings=own|row`). WATERLOG's `spring=` is written before the springs mark theirs.
+- *RoomProbe.* With `-hdwater 1` the springs are built and drawn as the engine does
+  (`-spring x,z,s` adds one, `-nospring` none, `-springparts 1|2` the columns or the
+  bubbles alone); `-springs` prints the SPRINGLOG lines and a SPRINGRULE line per body,
+  `-springkey <n>` the key.
+
+**Measured.** At the fountain (960 x 540, at 0, 0.5, 1, 2 and 5 s, the column and the
+bubbles against `-springparts 0`): from the basin's edge the rings change 9,000 to
+10,200 pixels (1,300 to 1,700 by 8 levels or more; the old source 9,200 to 9,800), the
+bubbles 61 to 121 (40 to 79) and the column 7,700 to 7,950 (389 to 469 - the floor
+through the sheet moves little); under the water the column 29,800 to 31,200 (3,756 to
+4,586), the bubbles 343 to 398 (268 to 300). GPU at 2560 x 1440, the water's brackets
+and the springs', mean of five runs against `28c358eb`: the edge 0.0984 to 0.1388 ms
+(+0.040, the springs 0.037), under the water 0.0616 (seven runs) to 0.1024 ms (+0.041,
+0.040); the wider bend reads the copy over more texels. Slots, fxc /O3: `ColumnPS` 90
+(12 texture, 78 arithmetic), `BubblePS` 62; no water variant changed (every `.inc` but
+the two new ones byte-identical, the depth variant at 512). The rule on the fifteen
+classic levels
+(RoomProbe `-springs`):
+
+| level | bodies | candidates | fit | springs, one in two | one in three |
+|---|---|---|---|---|---|
+| ANDREA1 | 4 | 7 | 1 | 1 (room 209, strength 0.96) | 0 |
+| ANDREA2 | 7 | 44 | 1 | 1 (room 144, 0.96) and the table's | the table's |
+| ANDY1 | 4 | 11 | 1 | 0 | 1 |
+| ANDY2 | 6 | 2 | 0 | 0 | 0 |
+| ANDY3 | 15 (5 rivers) | 11 | 0 | 0 | 0 |
+| JOBY2 | 3 | 28 | 2 | 1 (the sea over 143, 0.79) | 0 |
+| JOBY4 | 1 | 0 | 0 | 0 | 0 |
+| JOBY5 | 14 | 0 | 0 | 0 | 0 |
+| RICH2 | 2 | 0 | 0 | 0 | 0 |
+| the six others | 0 | 0 | 0 | 0 | 0 |
+
+Without the opening test every portal of the water counted and ANDREA2 kept 11
+candidates of 90, JOBY2 2 of 28; Lara's start and the statics take 2 and 5 more.
+
+**Checked.** The classic path (`-classicroom` and `-classiconly` on ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34), 6 of 6 md5-identical to `8691e82`; the fifteen
+cameras with `-hdwater 0`, 15 of 15 identical to the parity set; with `-hdwater 1` 14 of
+15 identical to `28c358eb`, the fountain camera showing the table's spring; the twelve
+pond views at 1, 3 and 5 s, 36 of 36 identical. The suites, the tools and the engine
+build; ModernTest's spring groups 24 checks. RoomProbe's state bracket passes with the
+springs drawn.
+
+**Left.** The look in the game: nobody in this round could play it - the column's
+strength, the bubbles' rate and size, the rule's one in two and its springs in a sea
+(JOBY2) and in 768 units of water (ANDREA2 room 144) are the owner's to judge. The
+owner's look reference, a photograph under water, shows its jets by what they carry -
+streams of fine bright bubbles widening as they rise - more of them than the few asked
+for; a denser stream is the one number `kHDSpringRate`. From over the water the column
+stays faint (above). The springs' shaders are not in the water's warm-up, so their
+first draw in a level may wait once. JOBY2's spring names room 45, the flip twin of
+143, whose square the body lists first. WATERLOG's level line counts `sources=0` and
+body 5 `spring=none` at the fountain, written before the springs mark theirs; SPRINGLOG
+names the spring. A static blocks only the square its origin stands on.
+
+**Commits.** `de4cce39`, `14c36eda`, `58b3e8fb`, `996e85a6`.
+
 ### The level load on several cores
 2026-10-11
 
@@ -19724,5 +19926,6 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #196 | Where the HD rules come from, counted on our own data |
 | #198 | The water's life |
 | #199 | The level load on several cores |
+| #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203) |

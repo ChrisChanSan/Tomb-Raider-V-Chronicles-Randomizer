@@ -56,6 +56,7 @@
 #include "hd_gloss_field.h"
 #include "hd_shadow.h"			// HD_SHADOW_MAP, the projected shadow's map
 #include "hd_splash_math.h"		// the water's cards
+#include "hd_spring.h"			// a row's `spring` key
 
 #include <algorithm>
 #include <array>
@@ -10844,8 +10845,7 @@ namespace
 	 * alone; a row of the file with a ripple for the same room takes its
 	 * place. ANDREA2 room 194's fountain basin, over water room 120 (six
 	 * squares, x 54,272 to 57,344 and z 31,744 to 33,792), has its spring
-	 * in the middle of the six: rings of size 80 every 0.7 seconds, a free
-	 * choice set by eye in the game with a row of the file.
+	 * in the springs' table (hd_spring.h, kHDSprings), which rings it.
 	 *
 	 * JOBY2's three seas - the open sea over rooms 42 and 76, the one over
 	 * 143 and its flip twin 45, and the rain basin over room 7 (room 13
@@ -10867,8 +10867,7 @@ namespace
 	const HDWaterOverride kWaterOverride[] =
 	{
 		{ "ANDREA2", 144, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
-		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f,
-			{ 55808.0f, 32768.0f, 80.0f, 0.7f } },
+		{ "ANDREA2", 194, HD_WATER_BASIN, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 		{ "ANDREA2", 60, HD_WATER_CHANNEL, { 1.0f, 1.0f, 1.0f }, 1.0f, 1.0f },
 		{ "JOBY2", 42, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
 		{ "JOBY2", 143, HD_WATER_SEA, { 1.0f, 1.0f, 1.0f }, 1.0f, 0.5f },
@@ -11221,6 +11220,12 @@ namespace
 		float crestScale;
 		// 1 for a compiled bank row: sets the lift and the clip, nothing else
 		int bankOnly;
+		/* 1 with `spring x z strength [seconds]`, its numbers as
+		 * HDSpringParseKey reads them, and 1 when it is the row's one key
+		 * and its class is -: the row tunes no body then. */
+		int spring;
+		float springKey[4];
+		int springOnly;
 	};
 
 	std::vector<WaterSquare> g_wsquares;
@@ -11473,6 +11478,8 @@ namespace
 	std::vector<WaterRing> g_rings;
 	RippleSeen g_ripple_seen[HD_WATER_RIPPLE_SLOTS] = {};
 	std::vector<WaterSource> g_wsources;
+	// The level's `spring` rows of hd_water.txt (HDRenderWaterSpringRows).
+	std::vector<HDRenderSpringRow> g_wspring_rows;
 	std::vector<ProbeRing> g_ring_probe;
 	std::vector<WaterFoot> g_wfeet;
 	std::vector<FootSeg> g_wsegs;
@@ -11959,6 +11966,7 @@ namespace
 		g_sheet_at.clear();
 		g_sheet_world.clear();
 		g_wsources.clear();
+		g_wspring_rows.clear();
 		g_rings.clear();
 		g_ring_probe.clear();
 		g_splashes.clear();
@@ -12042,6 +12050,7 @@ namespace
 	 *                             [flow <dx> <dz> <speed>]
 	 *                             [lift <units>] [clip <units>]
 	 *                             [crest <s>]
+	 *                             [spring <x> <z> <strength> [<seconds>]]
 	 *
 	 * LEVEL is the level file's name without its extension (ANDREA2), room
 	 * a room with water of the bodies the row tunes - every body the room
@@ -12079,7 +12088,12 @@ namespace
 	 * 256, whole units; see kWaterClip); crest how far the rows are short
 	 * crests in a fan (0 to 1: 0 the straight rows, 1 what a body without
 	 * the key draws; see "the crests" over kWaterFan). A row without lift,
-	 * clip or crest leaves that value as it is. '#' starts a comment.
+	 * clip or crest leaves that value as it is. spring sets a spring at
+	 * world x, z with that strength (0 to 1; 0 takes away the table's
+	 * spring of the row's room) ringing every `seconds` (0.1 to 60; without
+	 * them the table's, else 0.7 over the strength) - a row whose one key it
+	 * is, with class -, tunes no body (hd_spring.h, HDSpringFileApply). '#'
+	 * starts a comment.
 	 * Returns 1 for a row, 0 for a line without one, -1 for a line that
 	 * cannot be read. */
 	int ParseWaterLine(const char* text, WaterRow* out)
@@ -12219,6 +12233,21 @@ namespace
 				row.crest = 1;
 				row.crestScale = (float)s;
 				i += 2;
+				continue;
+			}
+
+			/* spring x z strength [seconds]: a spring at world x, z for the
+			 * springs (hd_spring.h, HDSpringParseKey and HDSpringFileApply). */
+			if (!_stricmp(tok[i], "spring"))
+			{
+				const int took = HDSpringParseKey(tok, n, i, row.springKey);
+
+				if (took < 0)
+					return -1;
+
+				row.spring = 1;
+				row.springOnly = i == 3 && i + took == n && row.cls == -1;
+				i += took;
 				continue;
 			}
 
@@ -14551,6 +14580,18 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	for (size_t r = 0; r < rows.size(); r++)
 	{
 		if (!stem || _stricmp(stem, rows[r].stem))
+			continue;
+
+		if (rows[r].spring)
+		{
+			HDRenderSpringRow s;
+
+			s.room = rows[r].room;
+			std::memcpy(s.key, rows[r].springKey, sizeof(s.key));
+			g_wspring_rows.push_back(s);
+		}
+
+		if (rows[r].springOnly)
 			continue;
 
 		if (apply_water_row(rows[r]))
@@ -17983,8 +18024,9 @@ const char* HDRenderWaterSectionName(int section)
  * kWaterClip), the share of its class's swell its sheet's vertices
  * take (swell; see kWaterBank), how far its rows are short crests in
  * a fan (crest; see "the crests" over kWaterFan), and the world x and z
- * of the ripple source its floats drift away from, none without one
- * (spring; HDRenderWaterBody::spring). */
+ * of the ripple row's source its floats drift away from, none without one
+ * (spring; HDRenderWaterBody::spring - the line is written before the
+ * springs of hd_spring.cpp mark theirs, which their SPRINGLOG lines name). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {
@@ -18428,6 +18470,85 @@ int HDRenderWaterBodySquares(int body, HDRenderWaterSquare* out, int max,
 	}
 
 	return count;
+}
+
+void HDRenderWaterRingAdd(float x, float y, float z, float size, double born,
+	int little)
+{
+	WaterRing ring;
+
+	ring.x = x;
+	ring.y = y;
+	ring.z = z;
+	ring.born = born;
+	ring.size = size;
+	ring.body = little ? 0 : 1;
+
+	if (g_rings.size() >= kRingsKept)
+		g_rings.erase(g_rings.begin());
+
+	g_rings.push_back(ring);
+}
+
+int HDRenderWaterSpringRows(HDRenderSpringRow* out, int max)
+{
+	const int n = (int)g_wspring_rows.size();
+
+	for (int i = 0; out && i < n && i < max; i++)
+		out[i] = g_wspring_rows[(size_t)i];
+
+	return n;
+}
+
+void HDRenderWaterBodySpring(int body, float x, float z)
+{
+	if (body < 0 || body >= (int)g_wbodies.size())
+		return;
+
+	HDRenderWaterBody& b = g_wbodies[(size_t)body].info;
+
+	if (!b.spring)
+	{
+		b.spring = 1;
+		b.springAt[0] = x;
+		b.springAt[1] = z;
+	}
+}
+
+bool HDRenderWaterSpringFrame(HDRenderSpringFrame* out)
+{
+	if (!out || !g_device || !g_in_frame || !g_wlevel.built)
+		return false;
+
+	D3DVIEWPORT9 vp = {};
+
+	g_device->GetViewport(&vp);
+	out->device = g_device;
+	std::memcpy(out->view, g_view, sizeof(out->view));
+	std::memcpy(out->proj, g_proj, sizeof(out->proj));
+	out->copy = g_copy_valid ? g_copy_texture : 0;
+	out->depth = g_depth_texture;
+	out->width = (int)vp.Width;
+	out->height = (int)vp.Height;
+	out->clock = g_motion[2];
+	out->motion = g_motion[3] != 0.0f ? 1 : 0;
+	return true;
+}
+
+bool HDRenderWaterSpringLook(int body, float* rgb, float* light,
+	float* absorb)
+{
+	if (body < 0 || body >= (int)g_wlooks.size())
+		return false;
+
+	const WaterLook& l = g_wlooks[(size_t)body];
+
+	card_tint(body, rgb, light);
+
+	for (int k = 0; k < 3; k++)
+		absorb[k] = l.pixel[32 + k];
+
+	return true;
 }
 
 namespace

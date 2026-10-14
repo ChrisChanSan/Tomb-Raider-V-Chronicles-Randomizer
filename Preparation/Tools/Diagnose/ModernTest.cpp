@@ -91,6 +91,8 @@
 /* The water's cards: a dive splash, a fish tank's spray and the wet film
  * on its floor as functions of their age alone (splash_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
+// The springs: the table, the file's key, the hashed clock (spring_*).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -20370,6 +20372,356 @@ static void splash_rings()
 		"a small ring (a source of 80) keeps its share", 1, 1);
 }
 
+/* The springs (hd_spring.h): the table, the file's `spring` key, the
+ * hashed clock of the rings and the bubbles - pure functions of the
+ * spring's numbers and the clock, so the same moment gives the same
+ * picture every time. */
+static HDSpring spring_of(float strength)
+{
+	HDSpring s = {};
+
+	strcpy(s.stem, "ANDREA2");
+	s.room = 194;
+	s.x = 55808.0f;
+	s.z = 32768.0f;
+	s.floorY = 2560;
+	s.surfaceY = 256;
+	s.strength = strength;
+	s.period = 0.7f;
+	s.seed = HDSpringSeed(s.stem, s.x, s.z);
+	return s;
+}
+
+static void spring_table()
+{
+	printf("the springs: the table\n");
+
+	const HDSpringRow& r = kHDSprings[0];
+
+	ok(!strcmp(r.stem, "ANDREA2") && r.room == 194 && r.x == 55808.0f &&
+		r.z == 32768.0f && r.floorY == 2560 && r.strength == 1.0f &&
+		r.period == 0.7f,
+		"spring table: ANDREA2 194's fountain, the middle of its six "
+		"squares, the floor 2304 under the sheet at 256, 0.7 s", r.room, 194);
+	ok(HDSpringRingSize(1.0f) == 80.0f && HDSpringRingSize(0.5f) == 40.0f &&
+		HDSpringRingSize(0.1f) == kHDSpringRingLeast,
+		"spring table: the ring 80 at strength 1, in step below, 16 at the "
+		"least", (long)HDSpringRingSize(0.5f), 40);
+	ok(HDSpringStemHash("andrea2") == HDSpringStemHash("ANDREA2") &&
+		HDSpringStemHash("ANDREA2") != HDSpringStemHash("ANDREA1"),
+		"spring table: the level's number is blind to case", 1, 1);
+}
+
+static void spring_file()
+{
+	printf("the springs: the file's key\n");
+
+	char line[] = "ANDREA2 194 - spring 55500 32500 0.5 1.25";
+	char* tok[8];
+	int n = 0;
+
+	for (char* t = strtok(line, " "); t && n < 8; t = strtok(0, " "))
+		tok[n++] = t;
+
+	float key[4];
+	const int took = HDSpringParseKey(tok, n, 3, key);
+
+	ok(took == 5 && key[0] == 55500.0f && key[1] == 32500.0f &&
+		key[2] == 0.5f && key[3] == 1.25f,
+		"spring file: x, z, strength and seconds - five tokens", took, 5);
+
+	char line2[] = "ANDREA2 194 - spring 55500 32500 0.5 foam 2";
+	n = 0;
+
+	for (char* t = strtok(line2, " "); t && n < 8; t = strtok(0, " "))
+		tok[n++] = t;
+
+	ok(HDSpringParseKey(tok, n, 3, key) == 4 && key[3] == 0.0f,
+		"spring file: without the seconds the next key stays a key", 1, 1);
+
+	char line3[] = "ANDREA2 194 - spring 55500 32500 1.5";
+	n = 0;
+
+	for (char* t = strtok(line3, " "); t && n < 8; t = strtok(0, " "))
+		tok[n++] = t;
+
+	ok(HDSpringParseKey(tok, n, 3, key) == -1,
+		"spring file: a strength over 1 is a line that cannot be read", 1, 1);
+
+	std::vector<HDSpring> springs(1, spring_of(1.0f));
+	springs[0].how = HD_SPRING_TABLE;
+
+	const float change[4] = { 55500.0f, 32500.0f, 0.5f, 0.0f };
+
+	HDSpringFileApply(springs, "ANDREA2", 194, change);
+	ok(springs.size() == 1 && springs[0].x == 55500.0f &&
+		springs[0].strength == 0.5f && springs[0].period == 0.7f &&
+		springs[0].how == HD_SPRING_FILE,
+		"spring file: a row of the table's room changes the entry and keeps "
+		"its period", (long)springs.size(), 1);
+
+	const float more[4] = { 50000.0f, 40000.0f, 0.8f, 0.0f };
+
+	HDSpringFileApply(springs, "ANDREA2", 144, more);
+	ok(springs.size() == 2 && springs[1].room == 144 &&
+		fabsf(springs[1].period - 0.7f / 0.8f) < 1.0e-5f,
+		"spring file: a row of another room adds a spring, 0.7 s over its "
+		"strength", (long)springs.size(), 2);
+
+	const float off[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+	HDSpringFileApply(springs, "ANDREA2", 194, off);
+	ok(springs.size() == 1 && springs[0].room == 144,
+		"spring file: strength 0 takes the room's spring away",
+		(long)springs.size(), 1);
+}
+
+
+/* The springs' rule: candidates on a body of squares, w by d, from the
+ * world's origin, every square `depth` deep under a sheet at y 0. */
+static HDSpringBody spring_body(int w, int d, int depth)
+{
+	HDSpringBody body;
+
+	body.index = 0;
+	body.surfaceY = 0;
+	body.river = 0;
+	body.taken = 0;
+
+	for (int x = 0; x < w; x++)
+		for (int z = 0; z < d; z++)
+		{
+			const HDSpringSquare q = { x * 1024, z * 1024, depth, 1 };
+
+			body.squares.push_back(q);
+		}
+
+	return body;
+}
+
+static void spring_rule()
+{
+	printf("the springs: the placement rule\n");
+
+	HDSpringBody body = spring_body(8, 8, 1024);
+	std::vector<HDSpringBlock> blocks;
+
+	ok(HDSpringCandidates(body, blocks, 0) == 64,
+		"spring rule: every deep square of a pool is a candidate",
+		HDSpringCandidates(body, blocks, 0), 64);
+	ok(HDSpringCandidates(spring_body(8, 8, 512), blocks, 0) == 0,
+		"spring rule: none under 768 units of water", 0, 0);
+
+	// An opening in the west wall, x 0, z 3072..4096, down to the floor.
+	const HDSpringBlock west = { HD_SPRING_PORTAL, 0.0f, 3072.0f, 0.0f,
+		4096.0f, -512.0f, 1024.0f };
+
+	blocks.push_back(west);
+
+	const int open = HDSpringCandidates(body, blocks, 0);
+
+	/* 19 squares lie within 3072 of it, centre to the portal's edge:
+	 * 7, 7 and 5 in the three columns next to it. */
+	ok(open == 45,
+		"spring rule: three squares clear of an opening of the water",
+		open, 45);
+
+	// The same portal over the water's top reaches nothing.
+	blocks[0].y0 = -2048.0f;
+	blocks[0].y1 = 0.0f;
+	ok(HDSpringCandidates(body, blocks, 0) == 64,
+		"spring rule: a portal over the water is no opening of it", 1, 1);
+
+	// A portal between two rooms of one water, x 4096 across the pool.
+	const HDSpringBlock inside = { HD_SPRING_PORTAL, 4096.0f, 0.0f, 4096.0f,
+		8192.0f, -512.0f, 1024.0f };
+
+	blocks.assign(1, inside);
+	ok(!HDSpringOpening(body, inside) &&
+		HDSpringCandidates(body, blocks, 0) == 64,
+		"spring rule: a portal inside one water parts no candidate", 1, 1);
+
+	const HDSpringBlock start = { HD_SPRING_START, 512.0f, 512.0f, 512.0f,
+		512.0f, -1.0e9f, 1.0e9f };
+	const HDSpringBlock statue = { HD_SPRING_STATIC, 7000.0f, 7000.0f,
+		7000.0f, 7000.0f, -1.0e9f, 1.0e9f };
+
+	blocks.assign(1, start);
+	blocks.push_back(statue);
+	ok(HDSpringCandidates(body, blocks, 0) == 64 - 9 - 1,
+		"spring rule: three squares clear of Lara's start, none under a "
+		"static", HDSpringCandidates(body, blocks, 0), 64 - 9 - 1);
+
+	int pick = -1;
+	float strength = 0.0f;
+
+	ok(!HDSpringRulePick("ANDREA1", 3866745u, 5, 0, 0, 1, &pick, &strength) &&
+		!HDSpringRulePick("ANDREA1", 3866745u, 6, 1, 0, 1, &pick, &strength) &&
+		!HDSpringRulePick("ANDREA1", 3866745u, 6, 0, 1, 1, &pick, &strength) &&
+		!HDSpringRulePick("ANDREA1", 3866745u, 6, 0, 0, 0, &pick, &strength),
+		"spring rule: no spring with five candidates, in a river, beside a "
+		"table's spring or with the key at 0", 1, 1);
+	ok(HDSpringBodyKey(spring_body(3, 2, 1024)) == 0u &&
+		HDSpringBodyKey(body) == HDSpringBodyKey(spring_body(8, 8, 2048)),
+		"spring rule: a body's number is its first square's", 1, 1);
+}
+
+/* The rule's guard on the fifteen levels: the bodies with six candidates or
+ * more (RoomProbe -springs on the classic levels, SPRINGRULE first= and
+ * candidates=), each with what the hash gives it at the key's 1 and 2.
+ * Only these five bodies of the fifteen levels hold six; the rest of the
+ * levels place no spring of the rule. */
+static void spring_levels()
+{
+	printf("the springs: the rule on the fifteen levels\n");
+
+	struct Fit
+	{
+		const char* stem;
+		unsigned first;
+		int candidates;
+		int pick1;		// at key 1, -1 for none
+		int pick2;		// at key 2
+	};
+
+	static const Fit fit[] =
+	{
+		{ "ANDREA1", 3866745u, 6, 4, -1 },
+		{ "ANDREA2", 3473499u, 22, 3, 3 },
+		{ "ANDY1", 5111944u, 9, -1, -1 },
+		{ "JOBY2", 720953u, 13, -1, -1 },
+		{ "JOBY2", 720934u, 14, 13, 13 },
+	};
+	int wrong = 0, placed = 0, placed2 = 0;
+
+	for (const Fit& f : fit)
+		for (int thin = 1; thin <= 2; thin++)
+		{
+			int pick = -1;
+			float strength = 0.0f;
+			const bool got = HDSpringRulePick(f.stem, f.first, f.candidates,
+				0, 0, thin, &pick, &strength);
+			const int want = thin == 1 ? f.pick1 : f.pick2;
+
+			wrong += (got ? pick : -1) != want ||
+				(got && (strength < 0.5f || strength > 1.0f)) ? 1 : 0;
+			placed += got && thin == 1 ? 1 : 0;
+			placed2 += got && thin == 2 ? 1 : 0;
+		}
+
+	ok(wrong == 0 && placed == 3 && placed2 == 2,
+		"spring levels: three springs of the rule in three levels at the "
+		"key's 1 (ANDREA1, ANDREA2, JOBY2), two at 2", placed, 3);
+}
+
+static void spring_clock()
+{
+	printf("the springs: the hashed clock\n");
+
+	const HDSpring s = spring_of(1.0f);
+	int order = 0, jitter = 0;
+
+	for (int j = 0; j < 2000; j++)
+	{
+		const double a = HDSpringRingBorn(s, j);
+		const double b = HDSpringRingBorn(s, j + 1);
+
+		order += b > a ? 1 : 0;
+		jitter += fabs(a - j * 0.7) <= 0.7 * kHDSpringJitter * 0.5 + 1e-9 ?
+			1 : 0;
+	}
+
+	ok(order == 2000 && jitter == 2000,
+		"spring clock: one ring a period, each within a fifth of its "
+		"moment, in order", order, 2000);
+
+	HDSpringBubbleAt a, b;
+	int same = 0, alive = 0, pops = 0, inside = 0;
+
+	for (int k = 0; k < 3000; k++)
+	{
+		const double t = HDSpringBubbleBorn(s, k) + 2.0;
+		const bool live = HDSpringBubble(s, k, t, &a);
+
+		same += live == HDSpringBubble(s, k, t, &b) && (!live ||
+			(a.x == b.x && a.y == b.y && a.z == b.z)) ? 1 : 0;
+		alive += live ? 1 : 0;
+		inside += live && a.y < (float)s.floorY && a.y > (float)s.surfaceY &&
+			fabsf(a.x - s.x) < 200.0f && fabsf(a.z - s.z) < 200.0f ? 1 : 0;
+
+		float size;
+
+		pops += HDSpringBubblePops(s, k, &size) && size >= 48.0f &&
+			size <= 63.0f ? 1 : 0;
+	}
+
+	ok(same == 3000, "spring clock: a bubble at a moment is the same every "
+		"time", same, 3000);
+	ok(alive == 3000 && inside == 3000,
+		"spring clock: two seconds old every bubble is in the jet, between "
+		"the floor and the sheet, near its line", inside, 3000);
+	ok(pops > 900 && pops < 1100,
+		"spring clock: one bubble in three leaves a ring of 48 to 63", pops,
+		1000);
+	ok(fabs(HDSpringBubbleBorn(s, 3000) - 1000.0) < 0.34 &&
+		HDSpringBubbleRate(spring_of(0.5f)) == 1.5f,
+		"spring clock: three bubbles a second at strength 1, in step below",
+		(long)HDSpringBubbleBorn(s, 3000), 1000);
+	ok(!HDSpringBubble(s, 0, HDSpringBubbleBorn(s, 0) - 0.01, &a) &&
+		!HDSpringBubble(s, 0, HDSpringBubbleBorn(s, 0) + 12.0, &a),
+		"spring clock: none before its birth, none once it reached the sheet "
+		"(2304 at 200 a second is 11.5 s)", 1, 1);
+
+	/* The column's noise table: the mixer's bytes, every value of a byte
+	 * in each channel, means of 127.0 and 128.1 (tenths), neighbours along
+	 * a row and the two channels uncorrelated (under 0.03, thousandths). */
+	const int side = kHDSpringNoiseSide;
+	long sum[2] = { 0, 0 };
+	bool seen[2][256] = {};
+	int values[2] = { 0, 0 };
+	double cross = 0.0, row = 0.0;
+
+	for (int y = 0; y < side; y++)
+		for (int x = 0; x < side; x++)
+			for (int c = 0; c < 2; c++)
+			{
+				const int v = HDSpringNoiseTexel(x, y, c);
+
+				sum[c] += v;
+				values[c] += seen[c][v] ? 0 : 1;
+				seen[c][v] = true;
+			}
+
+	const double m0 = (double)sum[0] / (side * side);
+	const double m1 = (double)sum[1] / (side * side);
+	double v0 = 0.0, v1 = 0.0;
+
+	for (int y = 0; y < side; y++)
+		for (int x = 0; x < side; x++)
+		{
+			const double a0 = HDSpringNoiseTexel(x, y, 0) - m0;
+			const double a1 = HDSpringNoiseTexel(x, y, 1) - m1;
+			const double n0 = HDSpringNoiseTexel((x + 1) % side, y, 1) - m1;
+
+			v0 += a0 * a0;
+			v1 += a1 * a1;
+			cross += a0 * a1;
+			row += a1 * n0;
+		}
+
+	cross /= sqrt(v0 * v1);
+	row /= v1;
+	ok(values[0] == 256 && values[1] == 256,
+		"spring noise: every byte value in each channel", values[0] +
+		values[1], 512);
+	ok(lround(m0 * 10.0) == 1270 && lround(m1 * 10.0) == 1281,
+		"spring noise: the channels' means 127.0 and 128.1",
+		lround(m0 * 10.0) * 10000 + lround(m1 * 10.0), 12701281);
+	ok(fabs(cross) < 0.03 && fabs(row) < 0.03,
+		"spring noise: the channels and the neighbours uncorrelated",
+		lround(fabs(cross) * 1000.0) + lround(fabs(row) * 1000.0), 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -20519,6 +20871,11 @@ int main()
 	splash_tank_dome();
 	splash_tank_wet();
 	splash_rings();
+	spring_table();
+	spring_file();
+	spring_clock();
+	spring_rule();
+	spring_levels();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -1745,6 +1745,8 @@ namespace
 	 * the map it draws in the mirror's place (-tankmarch), 0 none. */
 	IDirect3DPixelShader9* g_wet_debug_ps = 0;
 	int g_wet_debug = 0;
+	// The debugger's trial: fit, growth, first step (0: the game's).
+	float g_wet_try[3] = { 0.0f, 0.0f, 0.0f };
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -11708,19 +11710,26 @@ namespace
 	 * the Blinn-Phong lobe, (n + 8) / 8, at kWetPower. kWetPower, kWetDamp
 	 * and kWetHole are free choices, set by eye on RoomProbe pictures.
 	 *
-	 * The mirror's march (hd_wet.hlsl) takes HD_WET_STEPS (16) steps from
+	 * The mirror's march (hd_wet.hlsl) takes HD_WET_STEPS (22) steps from
 	 * kWetFirstStep, each kWetGrowth times the last - 32 units past the
-	 * floor's own depth step, out to about 7,000 units, seven squares -,
-	 * halves each crossing HD_WET_REFINE (5) times and takes it where the
+	 * floor's own depth step, out to about 8,700 units, eight squares -,
+	 * halves each crossing HD_WET_REFINE (8) times and takes it where the
 	 * frame's depth fits the ray's within kWetFit and kWetFitShare of the
 	 * depth. Set on RoomProbe's march debugger (-tankmarch 5) against a
 	 * march of 8-unit steps halved ten times, which itself matches the true
 	 * mirror - the scene seen from the eye mirrored in the floor - at
-	 * RICH2's tank eyes: there this march's hit lies within 2 pixels of
-	 * the fine one's for 93 to 98 per cent of its hits (7 to 27 per cent
-	 * with a growth of 1.5 over 12 steps and the first point behind the
-	 * frame by less than two steps taken, unhalved), and its mirror is as
-	 * near the true one as the fine march's.
+	 * RICH2's tank eyes. A step longer than a thin thing - a machine's foot,
+	 * a bench's rail - passes it by, and the march takes what lies behind
+	 * it: steps that grow less find it. Over the floor the march runs on,
+	 * at four eyes of the tank's corridor and a 10-degree fan round two of
+	 * them, this march's hit lies more than 2 pixels from the fine one's
+	 * for 0 to 2.2 per cent of the fine march's hits (0 to 3.5 with 16
+	 * steps of 1.3 halved five times), and the pixels whose mirror is off
+	 * the true one where the fine march's is not number 5,751 (8,735); a
+	 * tighter tolerance (half, a quarter) or a march that takes the first
+	 * crossing behind an edge lowered neither (RoomProbe -tankmarch
+	 * map,fit,growth,first; round three's march, 12 steps of 1.5 unhalved,
+	 * lay within 2 pixels for only 7 to 27 per cent of its hits).
 	 *
 	 * The look's two strengths. kWetDark, the share of the floor's light
 	 * the water keeps back, and kWetMirror, a factor on the mirror's
@@ -11740,7 +11749,7 @@ namespace
 	const float kWetCap = 0.75f;
 	const float kWetDamp = 0.5f;
 	const float kWetFirstStep = 32.0f;	// units
-	const float kWetGrowth = 1.3f;
+	const float kWetGrowth = 1.2f;
 	const float kWetFit = 32.0f;		// units
 	const float kWetFitShare = 0.02f;	// of the view depth
 
@@ -16184,9 +16193,12 @@ void HDRenderWaterWetLimited(int on)
 	g_wet_limited = on != 0;
 }
 
-void HDRenderWaterWetMarch(int map)
+void HDRenderWaterWetMarch(int map, const float* trial)
 {
 	g_wet_debug = map > 0 ? map : 0;
+
+	for (int i = 0; i < 3; i++)
+		g_wet_try[i] = trial ? trial[i] : 0.0f;
 }
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
@@ -17125,10 +17137,13 @@ static void wet_layer(int part)
 		1.0f / kWetHole, kWetDark };
 	const float look[4] = { kWetF0, kWetWalls, kWetHighlight, kWetPower };
 	const bool copy = g_wet_late_valid && g_wet_late;
-	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f, kWetFirstStep,
-		kWetGrowth };
+	const float fit = debug && g_wet_try[0] > 0.0f ? g_wet_try[0] : 1.0f;
+	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f,
+		debug && g_wet_try[2] > 0.0f ? g_wet_try[2] : kWetFirstStep,
+		debug && g_wet_try[1] > 0.0f ? g_wet_try[1] : kWetGrowth };
 	const float proj[4] = { g_proj[0], g_proj[5], g_proj[8], g_proj[9] };
-	const float gain[4] = { kWetMirror, (float)part, kWetFit, kWetFitShare };
+	const float gain[4] = { kWetMirror, (float)part, kWetFit * fit,
+		kWetFitShare * fit };
 	const float mapped[4] = { (float)g_wet_debug, 0.0f, 0.0f, 0.0f };
 
 	g_device->SetVertexShader(g_card_vs);

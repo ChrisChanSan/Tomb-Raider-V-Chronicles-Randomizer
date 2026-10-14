@@ -126,11 +126,11 @@ sampler3D sFieldRgb : register(s2);
 sampler2D sWetCopy : register(s5);
 sampler2D sWetDepth : register(s6);
 
-/* The steps of the march: 16 at a growth of 1.3 from 32 reach about 7,000
- * units, seven squares, and the crossing halved 5 times lies within a
- * thirty-second of its step. */
-#define HD_WET_STEPS 16
-#define HD_WET_REFINE 5
+/* The steps of the march: 22 at a growth of 1.2 from 32 reach about 8,700
+ * units, eight squares, and the crossing halved 8 times lies within a
+ * 256th of its step. */
+#define HD_WET_STEPS 22
+#define HD_WET_REFINE 8
 /* The brightest a reflected texel stands for, eight times the frame's white
  * (a free choice: a texel of 0.89 and over). */
 #define HD_WET_BRIGHT 8.0f

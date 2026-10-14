@@ -1667,9 +1667,13 @@ void HDRenderWaterWetLimited(int on);
  * as it stands, over the darkening HDRenderWaterWetDraw laid. Nothing when
  * the first draw drew nothing this frame. HDRenderWaterWetMarch is
  * RoomProbe's march debugger (-tankmarch): the second draw writes the map
- * `map` names in the mirror's place (hd_wet.hlsl, gWetDebug); 0 none. */
+ * `map` names in the mirror's place (hd_wet.hlsl, gWetDebug); 0 none.
+ * `trial`, when given, three numbers the debugger's draw takes in place of
+ * the game's: a factor on the depth tolerance (kWetFit, kWetFitShare), the
+ * growth a step (kWetGrowth) and the first step (kWetFirstStep), each 0
+ * for the game's. */
 void HDRenderWaterWetMirror();
-void HDRenderWaterWetMarch(int map);
+void HDRenderWaterWetMarch(int map, const float* trial = 0);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

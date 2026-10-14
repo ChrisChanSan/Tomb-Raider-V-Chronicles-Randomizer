@@ -10173,7 +10173,14 @@ static int ProbeMain(int argc, char** argv)
 			else if (!strcmp(argv[at], "-tankwetall"))
 				HDRenderWaterWetLimited(0);
 			else if (!strcmp(argv[at], "-tankmarch"))
-				HDRenderWaterWetMarch(atoi(argv[++at]));
+			{
+				// map[,fit,growth,first]: a trial of the march.
+				float t[3] = { 0.0f, 0.0f, 0.0f };
+				const int map = atoi(argv[++at]);
+
+				sscanf_s(argv[at], "%*d,%f,%f,%f", &t[0], &t[1], &t[2]);
+				HDRenderWaterWetMarch(map, t);
+			}
 			else if (argv[at][5] == 'w')
 				g_tank_wet = (float)atof(argv[++at]);
 			else if (argv[at][5])

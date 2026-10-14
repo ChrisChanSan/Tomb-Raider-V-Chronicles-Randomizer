@@ -17999,10 +17999,10 @@ flyby), `specific/alexstuff.cpp` (the credits roll and the intro videos).
 one spot. The request, 2026-10-13: a key to switch HD/SD "on the fly, without delay", for
 the play tests - the same spot, one key, the HD look against the classic look - and "F3
 was planned for the photo mode; take F12, and provide a keybind for the controllers as
-well." This change brings the key, the pad chord, the switch's state, its log line and a
-probe switch; the switch is complete only after the wiring pass below, which waits for
-the merges of the rounds that hold the HD path's files now. Until then a press flips the
-state and logs it, and the picture stays HD.
+well." The first part brought the key, the pad chord, the switch's state, its log line
+and a probe switch; the wiring pass (2026-10-14, after the merges of the rounds that held
+the HD path's files) connects the switch to every gate of the HD world. The switch is
+complete after this pass: a press draws the world classic or HD from the next frame on.
 
 **Design.** A third state beside `hd_enable` 0 and 1: the HD level built at its load as
 with 1, and drawn HD or classic as the switch says. The build stays at the load because
@@ -18062,94 +18062,219 @@ by=key|pad`; with no HD data the same line ends in the cause, `hd_enable=0 nothi
 switch` with the option off and `hd_enable=1 install=none nothing to switch` with it on
 and no installation found. `level` is the stem of the one file of the table whose
 identity (`LevelIdFromFile`) is `gfLevelId`, `?` when none or more than one is.
-`Preparation/Tools/Diagnose/RoomProbe.cpp`: `-hddrawn 0|1` (`HDDrawnSwitch`, `:9117`), 0
-a shorthand for `-classicroom` of the seed room and every `-with` room with
-`-classiconly`, after the whole HD build: the faces come fresh from the `.TRC` in
-`-roombox`, flat grey, so the picture is that of the explicit list by construction and
-cannot show what the build changes in the game's classic draw; the option chain is at
-the compiler's nesting limit (C1061), so the chain's last `else` calls the switch's
-function, which also reports any other argument as unknown.
+`Preparation/Tools/Diagnose/RoomProbe.cpp`: `-hddrawn 0|1` (`HDDrawnSwitch`, `:9363`).
+The tool keeps the switch's state as the engine does - an `HDSwitchState` from
+`HD_SWITCH_START`, moved by `HDSwitchStep` - and its own `HDDrawn()` answers from it
+(`:9345`; the engine's lives in `hd_switch.cpp`, which needs the game and is not linked
+there). `-hddrawn 0` is one press; while `HDDrawn()` answers false the frame draws, in
+place of the art, the classic faces of every room it lists - the seed room and every
+`-with` room - as `-classicroom` with `-classiconly`, after the whole HD build. The tool
+links none of the engine's gates, so it asks `HDDrawn()` once, where its frame's rooms
+are listed; its classic faces come fresh from the `.TRC` in `-roombox`, flat grey, so
+the picture is that of the explicit list by construction and cannot show what the build
+changes in the game's classic draw. The option chain is at the compiler's nesting limit
+(C1061), so the chain's last `else` calls the switch's function, which also reports any
+other argument as unknown.
 
-**The gates.** The HD path asks whether it draws in many places, and only some of them
-ask `HDLevelActive()` (`specific/hd/hd_level.cpp:6673`). Central means through it; own
-means a question of its own, with the one-line change the wiring pass makes. Line
-numbers are those of `ba89a58f`.
+**The gates and the wiring.** The HD path asks whether it draws in many places. Central
+means through `HDLevelActive()` (`specific/hd/hd_level.cpp:6816`); own means a question of
+its own, with the one-line change the wiring pass made; derived means out of a central or
+own answer. Line numbers are those of this pass's last commit.
 
-| gate | asked at | central or own | wiring after the merges |
+| gate | asked at | class | this pass |
 |---|---|---|---|
-| the reach of the walk | `game/draw.cpp:2512`, `:3436` | central | follows W1 |
-| the mirrors | `game/draw.cpp:2628`, `game/mirror.cpp:367` -> `hd_level.cpp:6683`, `:6690` | central | follows W1 |
-| the projected shadow's gate | `hd_laradraw.cpp:1123` | central (and `HDLaraDrawActive`) | follows W1, W9 |
-| the item blob, the second map | `draw.cpp:783` -> `hd_object.cpp:4422` | out of the shadow gate and the items' | follows W1, W8, W9 |
-| Lara's blob | `drawlara.cpp:137`, `:396`, `:664` -> `hd_laradraw.cpp:1162` | out of the shadow gate | follows W1, W9, W11 |
-| classic water faces of an HD room | `drawroom.cpp:88` -> `hd_level.cpp:6712` | inside the HD-room branch | follows W2 |
-| ripples on a sheet | `specificfx.cpp:4221` -> `hd_level.cpp:1818` | central | follows W1 |
-| waterfall mist | `control.cpp:714` -> `hd_level.cpp:1971` | central | follows W1 |
-| splash flag 0x10 | `effect2.cpp:1033` -> `hd_level.cpp:2092` | central | follows W1 |
-| spray flag | `tower.cpp:1341` -> `hd_level.cpp:2116` | central | follows W1 |
-| the fish tank's mesh | `traps.cpp:1180` -> `hd_level.cpp:2247` | central | follows W1 |
-| the switch itself | `hd_level.cpp:6675` | - | W1: `return g_level_active && HDEnabled() && HDDrawn();` |
-| rooms | `drawroom.cpp:199` -> `hd_level.cpp:6580` `GroupOfRoom` | own (`g_level_active`) | W2: `!g_level_active` -> `!HDLevelActive()` |
-| stand-in holders | `hd_level.cpp:6907` `StandHolderRoom` | own | W3: the same |
-| dropped classic faces | `drawroom.cpp:247` -> `hd_level.cpp:6600` | own | W4: the same |
-| carried rooms | `draw.cpp:1833` -> `hd_level.cpp:6660` | own | W5: the same |
-| statics | `draw.cpp:3639` -> `hd_level.cpp:5006` | own | W6: the same |
-| the sky | `draw.cpp:649` -> `hd_level.cpp:7065` | own (`HDEnabled && g_level_active`) | W7: `!HDLevelActive()` |
-| items, cutscene actors | `draw.cpp:806`, `deltapak.cpp:3111` -> `hd_object.cpp:2921` | own (`g_active`, `hd_objects`) | W8: `\|\| !HDDrawn()` |
-| Lara, braid, arm path | `drawlara.cpp:154`, `:420`, `:682`, `hair.cpp:151`, `:880`, `delstuff.cpp:278` -> `hd_laradraw.cpp:1459` | own | W9: `&& HDDrawn()` |
-| the life | `hd_level.cpp:7773` -> `hd_life.cpp:67` `life_on` | own (`hd_water`, sheets built) | W10: `&& HDDrawn()` |
-| shadow room, art-listed room | `hd_level.cpp:6624`, `:6637` | own, second test | W11, W12: the same as W2 |
-| sheets, glow parts, bulb rule | `hd_level.cpp:8155`, `:5067`, `:5096` | follow the rooms recorded | follows W2 |
-| inventory ring, pickup display | `newinv2.cpp:1203` -> `hd_object.cpp:3523` | stays | none |
-| fonts | `text.cpp:155`, `polyinsert.cpp:82` | stays | none |
-| loading screens | `file.cpp:2006`-`:2031` | stays | none |
-| F4 outfit changer | `control.cpp:443` -> `hd_outfitmenu.cpp:240` | stays | none |
+| the question itself | `hd_level.cpp:6818` | W1 | done: `return g_level_active && HDEnabled() && HDDrawn();` |
+| rooms | `drawroom.cpp:199` -> `hd_level.cpp:6693` `GroupOfRoom` | own | W2 done: `!g_level_active` -> `!HDLevelActive()` |
+| rooms drawn as art | `hd_level.cpp:7050` `StandHolderRoom` | own | W3 done: the same |
+| dropped classic faces | `drawroom.cpp:247` -> `hd_level.cpp:6713` | own | W4 done: the same |
+| carried rooms | `draw.cpp:1833` -> `hd_level.cpp:6778` | own | W5 done: the same |
+| statics | `draw.cpp:3640` -> `hd_level.cpp:5119` | own | W6 done: the same |
+| the sky | `draw.cpp:649` -> `hd_level.cpp:7208` | own | W7 done: `!HDEnabled() \|\| !g_level_active` -> `!HDLevelActive()` |
+| items, cutscene actors | `draw.cpp:806`, `deltapak.cpp:3111` -> `hd_object.cpp:2922` | own | W8 done: `\|\| !HDDrawn()` |
+| Lara, braid, arm path | `drawlara.cpp:154`, `:420`, `:682`, `hair.cpp:151`, `:880`, `delstuff.cpp:278` -> `hd_laradraw.cpp:1460` | own | W9 done: `&& HDDrawn()` |
+| the life's frame | `hd_level.cpp:7918` -> `hd_life.cpp:536` `HDLifeFrame` | own | W10 done: `\|\| !HDDrawn()` (not in `life_on`, see below) |
+| shadow room | `hd_laradraw.cpp:1124` -> `hd_level.cpp:6737` | own, second test | W11 done: as W2 |
+| art-listed room | `draw.cpp:1881` -> `hd_level.cpp:6750` | own, second test | W12 done: as W2 |
+| the room drawing carried art | `draw.cpp:1838` -> `hd_level.cpp:6801` `HDCarriedRoom` | own, new since the first part | W13 done: as W2 |
+| the models' release at the load | `hd_level.cpp` build -> `hd_object.cpp:2716` | own, found by this census | W14 done: `&& HDDrawn()` |
+| the reach of the walk | `draw.cpp:2513`, `:3437` | central | done through W1 |
+| the mirrors | `draw.cpp:2629`, `mirror.cpp:367` -> `hd_level.cpp:6826`, `:6833` | central | done through W1 |
+| the projected shadow's gate | `hd_laradraw.cpp:1124` | central, with W9 and W11 | done through W1 |
+| ripples on a sheet | `specificfx.cpp:4221` -> `hd_level.cpp:1831` | central | done through W1 |
+| waterfall drops | `control.cpp:714` -> `hd_level.cpp:1984` | central | done through W1 |
+| splash flag 0x10 | `effect2.cpp:1033` -> `hd_level.cpp:2105` | central | done through W1 |
+| spray flag | `tower.cpp:1341` -> `hd_level.cpp:2129` | central | done through W1 |
+| the fish tank's mesh | `traps.cpp:1180` -> `hd_level.cpp:2315` | central | done through W1 |
+| the item blob, the second map | `draw.cpp:783` -> `hd_object.cpp:4423` | derived | done through W1, W8, W9 |
+| Lara's blob | `drawlara.cpp:137`, `:396`, `:664` -> `hd_laradraw.cpp:1163` | derived | done through W1, W9, W11 |
+| classic water faces of an HD room | `drawroom.cpp:88` -> `hd_level.cpp:6855` | derived (HD-room branch) | done through W2 |
+| sheets, glow parts, bulb rule | `hd_level.cpp:7911`, `:8298`, `:5180`, `:5209` | follow the rooms | done: nothing on the frame |
+| the wet floor | `hd_level.cpp:2272` `FeedWaterWet` in `HDFrameDrawGlow` | follows the rooms | done: nothing on the frame |
+| the roam, the covered faces, the hull push | `HDLifeTick`; the groups' ranges | follow W10, the rooms | done |
+| the flips | `control.cpp:2747` -> `hd_level.cpp:6882` | state | stays: the groups follow every flip |
+| the build, the device | `hd_level.cpp:6159`, `:6326`, `:6564`, `:6680` | data | stays |
+| the life built at the load | `hd_life.cpp:290`, `:337` (`life_on`) | data | stays |
+| inventory ring, pickup display | `newinv2.cpp:1203` -> `hd_object.cpp:3524` | stays as `hd_enable` says | stays |
+| fonts | `text.cpp:155`, `polyinsert.cpp:82` | stays | stays |
+| loading and save screens | `file.cpp:2006`, `LoadSave.cpp:1026` | stays | stays |
+| F4 outfit changer | `control.cpp:443` -> `hd_outfitmenu.cpp:240`; `hd_level.cpp:6411`, `:6422`, `:6435` | stays | stays |
+| the barefoot footsteps | `footprnt.cpp:63` -> `hd_feet.cpp:119` | stays (a sound) | stays |
 
-So `HDLevelActive()` is not the one question: the rooms, the statics, the items, Lara and
-the life ask their own. Its return line alone would switch the reach, the mirrors, the
-shadow gate and the water's flags and leave every room, item and Lara drawn HD - half a
-switch. This change therefore touches no line of `hd_level.cpp`, `hd_object.cpp`,
-`hd_laradraw.cpp` or `hd_life.cpp`; W1 to W12 are the wiring pass after the merges. Two
-things to look at in that pass: the splash flag 0x10 and the spray flag are set when a
-splash is born, so one born in the HD draw keeps its classic sprites out for its life,
-under a second; and the projected shadow fades in again through its arrival clock.
+Each changed line is the gate's own line, changed in place; four files gained one
+`#include "hd_switch.h"` for `HDDrawn`. Four rows differ from the first part's plan. W10
+sits in `HDLifeFrame` and not in `life_on`: `HDLifeModelPlan` and `HDLifeLevelBegin` ask
+`life_on` at the load, and a level loaded while classic is drawn must still build its life
+for the flip back. W13 is `HDCarriedRoom`, which the room art's round 7 added; it is
+reached only after `HDRoomCarries` answered, so it followed W5 already, and asks the same
+question now so that no reader of the HD world answers from `g_level_active` alone. W14:
+`HDObjectLevelBuild` releases the models when neither the objects nor Lara draw HD, and it
+asks `HDLaraDrawActive` at the load, which W9 makes answer the switch; a level with an HD
+Lara and no HD object - the case `HDObjectPush`'s comment names - loaded while classic is
+drawn would lose its HD Lara until the next load, so no release is decided while classic
+is drawn. And the room gates ask `HDLevelActive()`, which asks `HDEnabled()` too: the *HD
+textures* row of the pause menu's options now takes the rooms, the statics, the carried
+art and the sky with it at once, as it already took the reach, the mirrors, the water's
+hooks and the projected shadow; the items and Lara follow it at the next load as before.
 
-**Measured.** The probe cannot measure the classic draw after an HD build: its classic
-faces are read fresh from the `.TRC` and drawn flat grey, and nothing the build does
-reaches them. So at the 15 cameras of the water parity set `-hddrawn 0` is
-byte-identical to the same rooms drawn through an explicit `-classicroom` list with
-`-classiconly`, in this build and in the build of `ba89a58f` (15 of 15 each), by
-construction - the run shows that the switch is wired to that list and to nothing else.
-The 6 classic views (`-classicroom N -classiconly`, ANDREA2 19 and 231, JOBY2 42 and 66,
-ANDY3 17 and 34) are identical across `8691e82`, `ba89a58f` and this build, and
-`-hddrawn 0` alone gives the same 6. What the game's frame would differ in after an HD
-load is a reading of the code: the water faces `BuildWaterSurfaces` restores and their
-HD frames (`drawroom.cpp:88`, `:142`) are drawn only inside the HD-room branch, the fish
-tank's mesh is copied for the renderer and not swapped (`hd_level.cpp:2143`), the bulb
-rule reads the classic bulb list and never writes it (`:5067`-`:5160`), and the classic
-Lara is the `else` of `drawlara.cpp:154` - each comes back with the gate that owns it.
+The classic draws the HD path leaves out come back, each through a gate that now answers
+false: `InsertRoom` draws every roomlet when `HDFrameRoom` answers false
+(`drawroom.cpp:199`, `:215`-`:223`), with no face dropped (`HDRoomletDropped` null,
+`:247`) and the classic water faces among them; the statics when `HDStaticDrawnClassic`
+answers true (`hd_level.cpp:5119`, `draw.cpp:3640`); the horizon and both colour layers
+when `HDFrameSky` answers false (`draw.cpp:649`-`:652`); every item and cutscene actor by
+its classic mesh when `begin_decision` answers `BEGIN_NONE` (`hd_object.cpp:2922`; the
+baked copy at `:2915` needs `HDRoomIsHD`, which W2 answers false); Lara's classic
+composite and braid when `HDLaraDrawActive` answers false (`drawlara.cpp:154`,
+`hair.cpp:151`); the fish tank's classic mesh, the ripple sprites, the splash and spray
+sprites when `HDWaterTank`, `HDWaterRippleOnSheet`, `HDWaterSplash` and `HDWaterSpray`
+answer false (`traps.cpp:1180`, `specificfx.cpp:4221`, `effect2.cpp:1033`,
+`tower.cpp:1341`); Lara's and the items' blobs at the option's own mode when the projected
+shadow's gate answers `hd_off` (`hd_laradraw.cpp:1124`, `hd_shadow.h` `HDShadowGate`).
+With nothing HD on the frame `HDFrameDraw` returns at its first test (`hd_level.cpp:7928`)
+and `HDFrameDrawGlow` at its own, so no sheet, glow part, wet floor or bulb is drawn.
 
-**Checked.** MenuTest 42,627 -> 44,216, 0 failed: the slot numbers, the chord mask and
-the default rows, the two bind lists and their sizes out of `game/menu_frame.cpp` (27
-and 23 rows at *One key* without *Cheats*, 33 and 29 with both), F12 named and closing
-both Tank rows, and the layout round trips under `registry.cpp`'s value names - a set
-saved with the role reads it back, a set without `Key34`/`MKey34` reads F12, a Separate
-set without `SJHd` gets Modifier+Options with its chord flag (plain Options still pause,
-the chord the switch), a taken pair or a Modifier on Options leaves the role unbound, a
-stripped set keeps it unbound. The round trips run on the suite's own store and on its
-copy of the `SJHd` block of `LoadSettings`, tied to the engine by a string check of that
-block, not on `registry.cpp`'s loops themselves; those run to `KEY_SCHEME_ROLES` and
-`JOY_ROLES`, read by hand. ModernTest 14,946 -> 14,966, 0 failed: one flip per press, none
-for a held key or from under a menu, key and pad on one edge, none without HD data, and
-the session hold across loads with and without HD data. InterpTest 729 and LipsTest
-270 / 243 unchanged. The HD pictures at `hd_water` 0 are unchanged at the 15 cameras.
-Not measured: the game.
+**While classic is drawn.** (a) A flip changes one integer and nothing else: the press is
+`HDSwitchStep` on the session's state and, with `-log`, one `HDLOG switch` line; the next
+frame takes the other branch at each gate. No HD data is freed or rebuilt, nothing is
+uploaded and no shader changes: the HD pages, buffers, models and sheets stay resident as
+the load built them (the page cache frees only at the level's end), and the one D3D object
+the HD frame makes on demand, the projected shadow's map, lives as long as the device - it
+is made on a flip back only if no frame of this device has run the shadow yet. With `-log`
+the flip's frame may add the projected shadow's `HDLOG shadow` lines, as at any change of
+its gate. (b) What runs on: the water's motion, the book pages and every other
+clock-driven thing ride the HD clock, which steps by the difference of `GlobalCounter`
+since its last frame (`hd_level.cpp:324`-`:336`), so the first HD frame after a stretch
+drawn classic is at the time it would have been - exact for stretches under 36 minutes,
+where the ushort counter turns over, and a jump in the waves' phase after that. The fish
+tank's film, its burst and its wet floor are worked out from the tank's own item every
+frame (`ControlFishtank`'s ticks, `IFL_CLEARBODY`), so the water stands where it would
+have, poured or not. The flips go on through `HDFlipRoom` (it keeps `g_level_active`).
+What starts again, as it does whenever its gate opens: the projected shadow fades in over
+0.25 s (`HD_SHADOW_FADE_IN`) while the blob goes out, and its following of the light
+starts afresh; the soft motion of Lara's chest starts from rest. What catches up in one
+frame: the water's life, whose tick runs inside `HDLifeFrame`, which W10 now skips; the
+first HD frame ticks the whole stretch in steps of a tenth of a second (`HDLifeTick`) -
+measured, see below - so the floats and fish stand where they would have, within 23 units,
+but every ring of the stretch is written into the game's ripples at once (Left). And short
+ones: a splash or a spray born in the HD draw keeps its classic sprites out for the rest
+of its life, under a second; one born in the classic draw shows its sprites in the HD draw
+for its life; the waterfall drops already in the air when the switch goes to classic live
+out their 24 ticks. (c) The switch back draws what the HD draw would have drawn: the HD
+data were never touched, the clock and the tank are as above, and the probe's HD picture
+after a classic pass equals the one without it (Measured). (d) The log line and the probe
+agree: both move the state by `HDSwitchStep`; `drawn=0` in the log is `HDDrawn()` 0, and
+the probe prints `hddrawn: HDDrawn() 0` for its classic picture. (e) What stays HD while
+the world is drawn classic: the inventory ring and the pickup display (HD models), the
+fonts, the loading and save screens and the logo, the F4 outfit changer (its window and
+Lara's rebuild, ready for the flip back) and the barefoot footstep sound.
 
-**Left.** The wiring W1 to W12 above, after the merges; until then the switch flips its
-state and logs it, and the picture stays HD. On the XInput-ordered pages and at *One
-key* the pad has no default chord, as for every chord: no Modifier there.
+**What a press shows.** F12 (or Modifier+Options) in a level: the next frame shows the
+classic world - rooms, statics, sky, items and enemies, Lara, the water faces, the classic
+splashes and ripples, the fish tank's classic mesh, the round blobs - with no pause; F12
+again, and the HD world is back as it was. Not seen: any wait, any change to the HUD, the
+inventory or the fonts. Seen, briefly: after a long stretch in classic, a crowd of rings
+on a water with floats or drips at the first HD frame, and Lara's projected shadow fading
+in over a quarter second.
 
-**Commits.** `d502c8c`, `65f7d68`, `c6431e3`, `6c0036b`, `9f89b19`, `b98a2a3`
+**Measured.** The game's frame is a reading of the code above; nobody could play. The
+probe measures its own side: at the 15 cameras of the water parity set (`-hdwater 0` as
+they stand), at the same 15 with the sheets on, and at twelve views over six levels (a
+tank room, mirror, water, life, sky and art rooms of RICH2, ANDREA2, JOBY2, ANDY1, JOBY5
+and ANDREA1), `-hddrawn 1` is byte-identical to the default picture and to the tool of
+`28c358eb` (15 of 15, 15 of 15, 12 of 12), and `-hddrawn 0` to the same rooms drawn
+through an explicit `-classicroom` list with `-classiconly` (15, 15 and 12 again) -
+identical by construction, as the How paragraph says; the probe has no classic renderer of
+its own, so the differences the first part expected (classic pages replaced at the load, a
+mesh swapped, Lara's model, the fog bulbs) are read in the code instead: the HD build
+writes no classic page (the water's frame pages are lent into `Textures[]` above
+`nTextures`, `hd_level.cpp:3183`, and drawn only by `InsertRoomWater`, inside the HD-room
+branch), copies the fish tank's mesh and leaves it in place (`HDRenderWaterTankMesh`),
+does not touch the classic Lara (her HD outfit is chosen from `LaraDrawType`, which it
+reads), and reads the fog bulbs without writing them (`FillFrameLighting`);
+`SwapRoomContents` gives every byte back. So none of the four is a difference a player
+will see. Three of the 45 cameras' runs wrote no picture the first time - the card refused
+`GetRenderTargetData` with three tools on it at once - and gave the same answers run
+alone. The switch back: `-devicecycle` with `-hddrawn 1` - HD, classic, HD in one
+process - gives the same first and third picture at 15 of 15 cameras, and the third equals
+`28c358eb`'s. The room art's 201-view set of its round 4b at `hd_air` 1: `-hddrawn 1`
+byte-identical to `28c358eb` at 201 of 201 views. The 6 classic views (`-classicroom N
+-classiconly`, ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34) are identical across
+`8691e82`, `28c358eb` and this build, and `-hddrawn 0` alone gives the same 6. The life's
+catch-up, with `HDLifeTick` itself on a pool of one body, one barrel (a ring every 3 s)
+and one drip near Lara (every 5 s), ticked at 30 Hz, then not for a stretch, then once:
+after 60 s the one call takes 0.12 ms and writes 32 rings (12 from the drip, 20 from the
+barrel), after 600 s 1.2 ms and 320 rings, after 1,800 s 3.7 ms and 960 rings; the barrel
+then stands within 23 units of where 30 Hz all along puts it. Over the probe's own steps a
+level's tick costs 0.0020 ms (ANDREA2, 12 floats and 5 drips), 0.0035 ms (ANDY1, 4 floats
+and 13 fish) and 0.0013 ms (RICH2, 8 fish) per step, so ten minutes drawn classic cost
+about 12, 21 and 8 ms in the first HD frame, and ANDY1 asks for about 770 rings there, of
+which the game's 128 ripple slots take what is free.
+
+**Checked.** MenuTest 42,627 -> 44,216, 0 failed: the slot numbers, the chord mask and the
+default rows, the two bind lists and their sizes out of `game/menu_frame.cpp` (27 and 23
+rows at *One key* without *Cheats*, 33 and 29 with both), F12 named and closing both Tank
+rows, and the layout round trips under `registry.cpp`'s value names - a set saved with the
+role reads it back, a set without `Key34`/`MKey34` reads F12, a Separate set without
+`SJHd` gets Modifier+Options with its chord flag (plain Options still pause, the chord the
+switch), a taken pair or a Modifier on Options leaves the role unbound, a stripped set
+keeps it unbound. The round trips run on the suite's own store and on its copy of the
+`SJHd` block of `LoadSettings`, tied to the engine by a string check of that block, not on
+`registry.cpp`'s loops themselves; those run to `KEY_SCHEME_ROLES` and `JOY_ROLES`, read
+by hand. ModernTest 14,946 -> 14,966, 0 failed: one flip per press, none for a held key or
+from under a menu, key and pad on one edge, none without HD data, and the session hold
+across loads with and without HD data. InterpTest 729 and LipsTest 270 / 243 unchanged.
+The HD pictures at `hd_water` 0 are unchanged at the 15 cameras. Not measured: the game.
+The wiring pass: ModernTest 14,991 -> 15,002, 0 failed - eleven checks that read
+`hd_level.cpp`, `hd_object.cpp`, `hd_laradraw.cpp` and `hd_life.cpp` and count the gate
+lines (`HDLevelActive` with `HDDrawn`, the seven room gates, `HDCarriedRoom` and
+`HDFrameSky` asking it, the six readers that keep `g_level_active`, the items', Lara's and
+the life frame's gates, the models' release, and the ring's guard and the life's load-time
+question as they were), so a later change that takes a gate back shows as a count.
+`hd_switch.cpp` and the four files need the game and are not linked into the suite, so the
+gates' truth table is not run there; the code reading and the probe above stand for it.
+MenuTest 44,216, InterpTest 729 and LipsTest 270 / 243 unchanged, 0 failed. The classic
+path at `hd_enable` 0 is untouched by construction: every changed gate adds `HDDrawn()`,
+true until a press, to a test that `hd_enable` 0 already answers false, and the 6 classic
+views say the same.
+
+**Left.** The water's life after a stretch drawn classic: its tick runs inside
+`HDLifeFrame` (`hd_life.cpp:536`), which the switch skips, so the first HD frame ticks the
+whole stretch and writes every ring of it into the game's ripples at once, and after ten
+minutes it takes 8 to 21 ms more (Measured). The fix belongs to the life's own code
+(`hd_life.cpp`, `hd_life_rules.h` `HDLifeTick`): tick on while the world is drawn classic
+without writing rings, or drop a ring that fell due more than a ring's life before the
+clock. The comments
+over `HDLevelActive` (`hd_level.cpp:6812`), over the items' guard (`hd_object.cpp:2919`)
+and `hd_level.h`'s note on `HDLevelActive` name the cases without the switch; this pass
+changed gate lines only. The *HD textures* row's comment (`game/menu_frame.cpp:762`) says
+the row shows what the next level will do; with the room gates on `HDLevelActive` the row
+takes the rooms, the statics and the sky at once, as it took the water's hooks, the
+mirrors and the projected shadow before, and the items and Lara at the next load. On the
+XInput-ordered pages and at *One key* the pad has no default chord, as for every chord: no
+Modifier there.
+
+**Commits.** `d502c8c`, `65f7d68`, `c6431e3`, `6c0036b`, `9f89b19`, `b98a2a3`; the wiring
+pass `9b9520c`, `f28f6ef`, `5262f98` and the record's own commit.
 
 ## 2.7 First person view, cheats and the -log seams
 

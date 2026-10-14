@@ -2135,6 +2135,10 @@ namespace
 		float centre[3], normal[3];
 		int airs;
 		int behind;
+		/* Which room's art wins on the face and why (HD_COVER_WHY_*):
+		 * the holder's or the face's own room's. */
+		int why;
+		int winner;
 	};
 
 	std::vector<HDCoveredFace> g_cover_faces;
@@ -2224,9 +2228,10 @@ namespace
 	 * x 37,888 to 38,912 - the flicker on room 212's sector x1/z0 - and
 	 * their groups' art lies within a unit of each other on 25,142 of the
 	 * pixels both draw there at 640x360, page 126 against page 146). The
-	 * art standing on the smaller face is drawn pushed back as a stand
-	 * range answered HD_STAND_BEHIND is, so the larger face's art wins;
-	 * two faces alike in size keep both, there being no larger one. Asked
+	 * art standing on the face that loses (the rule at its end) is drawn
+	 * pushed back as a stand range answered HD_STAND_BEHIND is, so the
+	 * other face's art wins; two faces alike in size keep both, there
+	 * being no larger one. With the larger face winning everywhere, asked
 	 * at all 40 such faces of the fifteen levels (an eye 768 units off
 	 * each on its open side, both rooms drawn whole, the eye moved one unit
 	 * along x and along z): 582,474 of the pixels the push changes fight
@@ -2414,8 +2419,84 @@ namespace
 
 				CoveredFaceArt(trg, a, f, nf, made.held);
 				CoveredFaceArt(trg, b, f, nf, made.own);
-				made.behind = 1;
-				g_face_behind[(size_t)f] = made.behind;
+
+				/* Who wins on the face. Each room's floor square half a
+				 * sector off its centre on its open side - the side whose
+				 * point 128 off stands in air, against the normal for bits
+				 * 2 and 8 -: the room owns the face when that square has
+				 * air from above the face's top to below its foot, the
+				 * room Lara stands in at that wall. One owner wins. Two,
+				 * or none, ask the classic frame: the face standing in
+				 * front along the open side wins there, and two in one
+				 * plane fight in the classic frame too, so the larger
+				 * face wins, the holder's. Measured at all 40 faces: one
+				 * owner at 18, the holder every time, both rooms at 22;
+				 * every pair in one plane; the classic faces alone, two
+				 * eyes 768 units off each face, fight at both eyes at 36
+				 * faces and stand still at both at one (RICH1's face 564,
+				 * its own room's, where room 85 owns the floor). */
+				const int side = (made.airs & 10) ? -1
+					: (made.airs & 5) ? 1 : 0;
+				float top = wf[1], foot = wf[1];
+				bool owns[2] = { false, false };
+
+				for (int k = 1; k < g_pair_faces[f].corners; k++)
+				{
+					top = wf[k * 3 + 1] < top ? wf[k * 3 + 1] : top;
+					foot = wf[k * 3 + 1] > foot ? wf[k * 3 + 1] : foot;
+				}
+
+				for (int s = 0; s < 2 && side; s++)
+				{
+					const int r = s ? b : a;
+
+					if (r >= g_room_air_count || !g_room_air[r].sectors)
+						continue;
+
+					const HDRoomAir& air = g_room_air[r];
+					const float lx = made.centre[0] + nf[0] * 512.0f *
+						(float)side - air.x;
+					const float lz = made.centre[2] + nf[2] * 512.0f *
+						(float)side - air.z;
+
+					const int sx = (int)(lx / 1024.0f);
+					const int sz = (int)(lz / 1024.0f);
+
+					if (lx < 0.0f || lz < 0.0f || sx >= air.nx || sz >= air.nz)
+						continue;
+
+					const float* q = air.sectors +
+						((size_t)sx * air.nz + (size_t)sz) * 2;
+
+					owns[s] = q[0] < q[1] && q[0] <= top && q[1] >= foot;
+				}
+
+				const float ahead = (float)side * (nh[3] - nf[3]);
+
+				if (owns[0] != owns[1])
+				{
+					made.why = HD_COVER_WHY_OWNER;
+					made.winner = owns[0] ? a : b;
+				}
+				else if (side && fabsf(ahead) >= 1.0f)
+				{
+					made.why = HD_COVER_WHY_CLASSIC;
+					made.winner = ahead > 0.0f ? a : b;
+				}
+				else
+				{
+					made.why = HD_COVER_WHY_LARGER;
+					made.winner = a;
+				}
+
+				/* The loser's art is pushed back: the face's own when the
+				 * holder wins, the holder's larger face's when it loses. */
+				made.behind = made.winner == a ? 1 : 0;
+				g_face_behind[(size_t)f] |= (unsigned char)made.behind;
+
+				if (made.winner != a)
+					g_face_behind[(size_t)h] = 1;
+
 				g_cover_faces.push_back(made);
 			}
 		}
@@ -4911,6 +4992,16 @@ bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
 		held[k] = one.held[k];
 	}
 
+	return true;
+}
+
+bool HDRenderCoveredFaceWhy(int index, int* why, int* winner)
+{
+	if (index < 0 || index >= (int)g_cover_faces.size())
+		return false;
+
+	*why = g_cover_faces[(size_t)index].why;
+	*winner = g_cover_faces[(size_t)index].winner;
 	return true;
 }
 

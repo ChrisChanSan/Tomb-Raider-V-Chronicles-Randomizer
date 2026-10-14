@@ -4715,7 +4715,8 @@ static void ReportRoomIntrusions()
 	 * air the point 128 units off its centre stands (1 and 2 its room's on
 	 * the normal's side and the other, 4 and 8 the holder's), `centre` and
 	 * `normal` (in thousandths) where it is; `behind` 1 when its art is
-	 * drawn pushed back. Behind -log. */
+	 * drawn pushed back; `why` owner, classic or larger and `winner` the
+	 * room whose art wins on it (HDRenderCoveredFaceWhy). Behind -log. */
 	if (gLogEnabled && g_air_on)
 		for (int i = 0; ; i++)
 		{
@@ -4728,10 +4729,15 @@ static void ReportRoomIntrusions()
 				break;
 
 			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+			int why = 0, winner = -1;
+			static const char* const kWhy[4] =
+				{ "?", "owner", "classic", "larger" };
 
+			HDRenderCoveredFaceWhy(i, &why, &winner);
 			Log("HDLOG covered level=%s face=%d group=%d holder=%d area=%d "
 				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
-				"normal=%d,%d,%d behind=%d", g_stem, face, group,
+				"normal=%d,%d,%d behind=%d why=%s winner=%d", g_stem, face,
+				group,
 				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
 				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
 				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
@@ -4739,7 +4745,8 @@ static void ReportRoomIntrusions()
 				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
 				(int)floorf(normal[0] * 1000.0f + 0.5f),
 				(int)floorf(normal[1] * 1000.0f + 0.5f),
-				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind,
+				kWhy[why >= 0 && why < 4 ? why : 0], winner);
 		}
 
 	// The lists were only borrowed for the length of the build.

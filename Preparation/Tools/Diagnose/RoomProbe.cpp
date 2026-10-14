@@ -11600,10 +11600,14 @@ static int ProbeMain(int argc, char** argv)
 				break;
 
 			const float to = area > 0.0f ? 100.0f / area : 0.0f;
+			int why = 0, winner = -1;
+			static const char* const kWhy[4] =
+				{ "?", "owner", "classic", "larger" };
 
+			HDRenderCoveredFaceWhy(i, &why, &winner);
 			printf("covered: face=%d group=%d holder=%d area=%d "
 				"own=%d/%d/%d held=%d/%d/%d airs=%d centre=%d,%d,%d "
-				"normal=%d,%d,%d behind=%d\n", face, group,
+				"normal=%d,%d,%d behind=%d why=%s winner=%d\n", face, group,
 				holder, (int)(area + 0.5f), (int)(own[0] * to + 0.5f),
 				(int)(own[1] * to + 0.5f), (int)(own[2] * to + 0.5f),
 				(int)(held[0] * to + 0.5f), (int)(held[1] * to + 0.5f),
@@ -11611,7 +11615,8 @@ static int ProbeMain(int argc, char** argv)
 				(int)floorf(centre[1] + 0.5f), (int)floorf(centre[2] + 0.5f),
 				(int)floorf(normal[0] * 1000.0f + 0.5f),
 				(int)floorf(normal[1] * 1000.0f + 0.5f),
-				(int)floorf(normal[2] * 1000.0f + 0.5f), behind);
+				(int)floorf(normal[2] * 1000.0f + 0.5f), behind,
+				kWhy[why >= 0 && why < 4 ? why : 0], winner);
 		}
 
 		for (size_t i = 0; i < g_intrusions_built.size(); i++)

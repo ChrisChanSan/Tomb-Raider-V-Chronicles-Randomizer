@@ -1828,6 +1828,14 @@ int HDRenderCoveredFaces();
 bool HDRenderCoveredFace(int index, int* face, int* group, int* holder,
 	float* area, float own[3], float held[3], int* airs, float centre[3],
 	float normal[3], int* behind);
+/* Which of the two rooms' art wins on such a face, and why: `winner` the
+ * holder's or the face's own room's, `why` OWNER (the one room whose floor
+ * square spans it), CLASSIC (the face in front in the classic frame) or
+ * LARGER (neither: the larger face, the holder's). False past the last. */
+#define HD_COVER_WHY_OWNER		1
+#define HD_COVER_WHY_CLASSIC	2
+#define HD_COVER_WHY_LARGER		3
+bool HDRenderCoveredFaceWhy(int index, int* why, int* winner);
 /* How far off a covered face its rooms' art is still counted, in front of
  * it or behind: an eighth of a click, past the push HD_STAND_PUSH gives at
  * the distances the rooms are seen from (16 units at 8,192). */

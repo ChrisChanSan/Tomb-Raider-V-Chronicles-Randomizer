@@ -187,7 +187,11 @@ no room's air, and the picture is the box's alone, byte for byte the one before 
 air was asked; 1 and 2 draw a hull's art outside its own room pushed back in depth,
 and the art on a classic face that lies inside a larger face of the room it stands
 in, and print the engine's `hull: group= air_tris= host_art= hull= behind=` lines
-and `covered=` (those faces) at the end of the intrusion line; 2 holds a hull's art
+and `covered=` (those faces) at the end of the intrusion line, then one `covered:
+face= group= holder= area= own= held= airs= centre= normal= behind=` line per such
+face (the engine's `HDLOG covered`: each room's art over it in percent of its area,
+on the plane/on the normal's side/on the other, and in which room's air the point
+128 units off its centre stands); 2 holds a hull's art
 in unlinked air that no box holds to its own window too;
 with 1 and 2 `-walk` takes in the rooms whose art stands under a listed room's sky
 (the engine's CarryArt) and prints `-walk: carry host= group= tris= copies=` per
@@ -198,7 +202,10 @@ those flipmaps swapped as FlipMap swaps them, the rooms named as the log's `HDLO
 flip` lines name them first, one `-flip: room= <-> room= now group= / group=` line
 each, and takes in a carried room as the engine's HDCarriedRoom does in that state
 (the room of the pair the portals lead to, or none when the art is out of the
-world); `-classicclip` draws each
+world), a listed room's carry list being its present group's (HDRoomCarries) -
+the walk alone: the draw takes the groups `-with` and `-roomwin` name, so a
+flipped room shows its twin's art only when they name the `now group=` of its
+`-flip:` line; `-classicclip` draws each
 `-classicroom` (and `-classicmark`) room's faces inside its window of `-roomwin`
 only, none without one, as the classic path draws a room;
 `-unlinked 0|1` (default 1, the engine's) draws a piece of art

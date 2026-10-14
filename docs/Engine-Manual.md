@@ -3253,7 +3253,7 @@ Those loads still let the loading bar run up to its end after the work, 0.31
 to 0.80 seconds of each. Now the bar follows the loading thread while it reads
 the classic level, stands still while the HD data are built, and is shown full
 in one frame once the work is done: a load takes as long as its work, and the
-bar adds nothing to it, with `hd_enable` on or off. In the HD build of RICH2
+bar adds one frame, with `hd_enable` on or off. In the HD build of RICH2
 at `hd_air 2` the room build is about 2.1 seconds, and inside it the three
 largest parts are the texture pages (about 0.6), the air's hulls asked of every
 triangle on one thread (0.5) and every room's triangles on the pool (0.5); the

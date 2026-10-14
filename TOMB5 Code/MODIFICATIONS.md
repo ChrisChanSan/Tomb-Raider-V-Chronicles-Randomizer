@@ -15246,63 +15246,82 @@ its end - pages + 20 calls, the count it starts with, so the counted target
 `loadbar_steps` reaches 100 before the thread ends. While the thread runs,
 `S_LoadLevelFile` draws the bar once a turn (`S_DrawLoadBar`: one whole frame and one
 Present) and sleeps 1 ms; each drawn frame moves the drawn position by 2 while it is
-below the target. After the join the main thread runs `aInit`, the HD build, the font,
-the resident cutscenes, `WarmUpLevel` and `ProfileLevel` with the bar standing still.
-Then `S_FinishLoadBar` set the target to 100 and a loop drew turn after turn until the
-drawn position reached 100: (100 - p) / 2 + 1 turns from the position p of the join, at
-about 16 ms a turn. *The change.* `S_FinishLoadBar` (`specific/drawbars.cpp`) sets the
-drawn position to 100 beside the target and keeps its cap of `loadbar_maxpos` at 100
-(the done test `loadbar_maxpos <= loadbar_steps` cannot hold by counting alone from
+below the target. The Present goes through `S_DumpScreenFrame` (`specific/output.cpp`),
+which first waits until `Sync()` (`specific/time.cpp`) can hand out a whole 1/60 s tick
+since the last one it handed out, so frames drawn one after the other are 1/60 s apart,
+however long the `Sleep(1)` took. After the join the main thread runs `aInit`, the HD
+build, the font, the resident cutscenes, `WarmUpLevel` and `ProfileLevel` with the bar
+standing still. Then `S_FinishLoadBar` set the target to 100 and a loop drew frame after
+frame until the drawn position reached 100: (100 - p) / 2 + 1 frames from the position
+p of the join, 1/60 s apart. *The change.* `S_FinishLoadBar` (`specific/drawbars.cpp`)
+sets the drawn position to 100 beside the target and keeps its cap of `loadbar_maxpos`
+at 100 (the done test `loadbar_maxpos <= loadbar_steps` cannot hold by counting alone from
 about 80 texture pages on). It is the existing function extended, not a new setter: it
 has one caller, and "the load is done" is what it stands for. `S_LoadLevelFile` draws
 the bar once under the same `DXF_HWR` test and returns; the loop is gone. The loop while
 the thread runs, the loading picture's four frames, `WarmUpLevel`, `ProfileLevel` and
 every `LOADLOG` step stay as they were; the step `bar` keeps its name and times the one
 frame. At position 100 and target 100 `S_DrawLoadBar` draws the full bar, finds
-`loadbar_pos >= loadbar_steps` and returns done, so nothing after the work can loop or
-wait any more.
+`loadbar_pos >= loadbar_steps` and returns done, so nothing after the work can loop any
+more.
 
 **Measured.** The owner's four logs with `LOADLOG` lines (built 2026-10-14 20:48 to
-2026-10-15 00:15; 48 loads; display 165 Hz, VSync on). *The turn.* On a load whose
+2026-10-15 00:15; 48 loads; display 165 Hz, VSync on). *The pace.* On a load whose
 counted target runs ahead of the drawn bar - TITLE, JOBY4 and RICHCUT2 with 9 to 16
-pages, 100 / 29 to 100 / 36 per call - every turn from the bar's start to the join moves
-the bar, and so does every turn of the tail: (`thread` - `free`) + `bar` = 51 turns.
-Over those 13 loads one turn is 15.87 / 16.15 / 16.53 ms (min / median / max): the
-`Sleep(1)` waking at the system timer's 15.6 ms tick (the engine asks for no finer timer)
-plus the draw. The display's refresh (6.1 ms) is not what paces it; 51 turns of 15.6 ms
-are round 1's largest tail, 797 ms. On the levels with 79 to 109 pages the same sum is 4
-to 10 turns longer: turns in which the bar waited on the counted target during the
-thread. *The tail.* Turns = `bar` / 16.15 ms; the bar's position at the join = 100 - 2 x
-(turns - 1):
+pages, 100 / 29 to 100 / 36 per call - every frame from the bar's start to the join moves
+the bar, and so does every frame of the tail: 51 frames for the positions 0 to 100.
+Between them lie 49 intervals of 1/60 s - the gap across the work after the join is not
+one, and the tail's first frame does not wait, since many ticks have passed by then - so
+(`thread` - `free`) + `bar` is 49 x 16.67 = 817 ms plus the rests at the bar's start and
+at the join. Over those 13 loads it is 49 x 16.52 / 16.80 / 17.21 ms (min / median /
+max), 7 ms under to 27 ms over 817. The 1/60 s wait paces the frames; the `Sleep(1)`
+(the engine asks for no finer timer, so it wakes on the system timer's 15.6 ms tick,
+inside the 1/60 s) does not, nor does the display's refresh (6.1 ms). The longest tail,
+from 4 percent, is 48 intervals or 800 ms; round 1's largest was 797. On the levels with
+79 to 109 pages the same sum is 4 to 10 ticks longer: frames in which the bar waited on
+the counted target during the thread. The place is `LoadTextures`: it reads and
+decompresses the whole texture block before its first `S_LoadBar`, while the target
+stands at 100 / maxpos, under 1 percent, so the bar stops at 2. In ANDREA1's four loads
+that block takes 109 to 156 ms by the log's counter (`free` to the `RTPages` line), 7 to
+9 ticks, against 6 to 8 ticks of excess. *The tail.* Its frames = `bar` / 16.67 ms + 1.5
+(the tail's first interval is shorter by the phase of the tick, 0 to 1 tick, taken at its
+middle); the bar's position at the join = 100 - 2 x (frames - 1), give or take 1 percent:
 
-| Level | loads | pages | maxpos | thread ms (median) | bar ms min / median / max | tail turns (median) | bar at the join |
+| Level | loads | pages | maxpos | thread ms (median) | bar ms min / median / max | tail frames (median) | bar at the join |
 |---|---|---|---|---|---|---|---|
-| ANDREA1 | 4 | 101 | 121 | 268 | 306 / 675 / 731 | 41.8 | 18 % |
-| ANDREA2 | 3 | 83 | 103 | 185 | 666 / 731 / 748 | 45.3 | 11 % |
-| ANDREA3 | 3 | 89 | 109 | 219 | 575 / 711 / 757 | 44.0 | 14 % |
-| ANDY1 | 3 | 109 | 129 | 201 | 714 / 730 / 757 | 45.2 | 12 % |
-| ANDY2 | 3 | 85 | 105 | 169 | 713 / 745 / 745 | 46.2 | 10 % |
-| ANDY3 | 2 | 79 | 99 | 185 | 729 / 736 / 742 | 45.6 | 11 % |
-| JOBY2 | 3 | 91 | 111 | 234 | 471 / 673 / 749 | 41.7 | 19 % |
-| JOBY3 | 3 | 88 | 108 | 135 | 752 / 760 / 760 | 47.1 | 8 % |
-| JOBY4 | 2 | 9 | 29 | 43 | 776 / 790 / 804 | 48.9 | 4 % |
-| JOBY5 | 3 | 97 | 117 | 185 | 708 / 740 / 750 | 45.9 | 10 % |
-| RICH1 | 2 | 84 | 104 | 193 | 712 / 724 / 736 | 44.8 | 12 % |
-| RICH2 | 4 | 98 | 118 | 252 | 358 / 675 / 743 | 41.8 | 18 % |
-| RICH3 | 2 | 91 | 111 | 210 | 705 / 721 / 736 | 44.6 | 13 % |
-| RICHCUT2 | 1 | 12 | 32 | 51 | 775 / 775 / 775 | 48.0 | 6 % |
-| TITLE | 10 | 16 | 36 | 268 | 206 / 556 / 711 | 34.4 | 33 % |
+| ANDREA1 | 4 | 101 | 121 | 268 | 306 / 675 / 731 | 42 | 18 % |
+| ANDREA2 | 3 | 83 | 103 | 185 | 666 / 731 / 748 | 45 | 11 % |
+| ANDREA3 | 3 | 89 | 109 | 219 | 575 / 711 / 757 | 44 | 14 % |
+| ANDY1 | 3 | 109 | 129 | 201 | 714 / 730 / 757 | 45 | 11 % |
+| ANDY2 | 3 | 85 | 105 | 169 | 713 / 745 / 745 | 46 | 10 % |
+| ANDY3 | 2 | 79 | 99 | 185 | 729 / 736 / 742 | 46 | 11 % |
+| JOBY2 | 3 | 91 | 111 | 234 | 471 / 673 / 749 | 42 | 18 % |
+| JOBY3 | 3 | 88 | 108 | 135 | 752 / 760 / 760 | 47 | 8 % |
+| JOBY4 | 2 | 9 | 29 | 43 | 776 / 790 / 804 | 49 | 4 % |
+| JOBY5 | 3 | 97 | 117 | 185 | 708 / 740 / 750 | 46 | 10 % |
+| RICH1 | 2 | 84 | 104 | 193 | 712 / 724 / 736 | 45 | 12 % |
+| RICH2 | 4 | 98 | 118 | 252 | 358 / 675 / 743 | 42 | 18 % |
+| RICH3 | 2 | 91 | 111 | 210 | 705 / 721 / 736 | 45 | 13 % |
+| RICHCUT2 | 1 | 12 | 32 | 51 | 775 / 775 / 775 | 48 | 6 % |
+| TITLE | 10 | 16 | 36 | 268 | 206 / 556 / 711 | 35 | 32 % |
 
 Pages are the game's own `.TRC` as `LoadTextures` logs them. Over all 48 loads `bar` is
 206 / 712 / 804 ms; no load had the bar at 100 at the join. The shortest tails belong to
 the longest threads (TITLE 619 ms -> 206, ANDREA1 619 -> 306, RICH2 535 -> 358): the
 longer the thread, the further the bar got before the work after it. TITLE's cold first
-load joined at about 76 %, where its counted target stands (28 of 36 calls) during the
-HD scan. *The saving.* Every load loses its tail: the step `bar` goes from 206 to 804 ms
-(round 1's 64 loads: 312 to 797) to one frame - 31 seconds over these 48 loads. One
-frame is a draw and a Present: with VSync on it waits at most one refresh, 6.1 ms at the
-165 Hz of these logs; that is the manual's `step=bar ms=6.1` sample. His next `-log` run
-shows the real value.
+load joined at about 74 %, just below its counted target (28 of 36 calls, 77.8 %): the
+target stood there through the 394 ms HD scan while the bar was still climbing towards
+it, one step a tick. *The saving.* Every load loses its tail: the step `bar` goes from
+206 to 804 ms (round 1's 64 loads: 312 to 797) to one frame - 31 seconds over these 48
+loads. One frame is the draw, the rest of `Sync()`'s 1/60 s tick and a Present. The tick
+counts from the boundary at or before the last frame the loop drew while the thread ran.
+When the work after the join takes a tick or more - every fresh HD load (the HD build
+alone takes 1.1 to 3.8 s) and 47 of these 48 loads - nothing is left to wait for and only
+the Present remains: with VSync on at most one refresh, 6.1 ms at 165 Hz, the manual's
+`step=bar ms=6.1` sample. When it is shorter - a load that keeps the level's HD data
+(11 to 29 ms after the join in these logs) or `hd_enable 0` (`warmup` alone 2 to 35 ms)
+- the frame first waits out the rest of that tick: at most one tick and one refresh,
+about 23 ms. His next `-log` run shows the real value.
 
 **Checked.** With the tools built from the bar's commit and from `git archive` of
 `fe1d4e31`: the six classic views `-classicroom N -classiconly` 6 of 6 identical to
@@ -15317,10 +15336,14 @@ ModelProbe and MapProbe build.
 
 **Left - the owner's questions.** *(a) The bar during the HD build.* While the main thread
 builds the HD data (1.1 to 3.8 s in these logs) the bar stands where the loading thread
-left it - 4 to 33 percent by the levels' medians, 76 at most - and then jumps to full.
-It moves there only if frames are drawn between the build's parts; each is a whole
-frame and a Present, the same as one turn of the old tail, so a bar that moves
-smoothly through the build would cost what the tail cost. Whether it should move is his
+left it - 4 to 32 percent by the levels' medians, 74 at most - and then jumps to full.
+It moves there only if frames are drawn between the build's parts. Such a frame costs
+less than a frame of the old tail: those came one after the other and each waited out
+its 1/60 s tick, while frames between parts that lie more than a tick apart find their
+tick passed and cost only the draw and a Present - at most one refresh with VSync on,
+6.1 ms at 165 Hz, the draw itself not measured apart. A bar moving in some 50 steps
+through the build would cost 50 such frames, at most about 0.3 s and the draws; a handful
+of frames at fixed points of the build a few tens of ms. Whether it should move is his
 decision. *(b) The `screen` step* (74 / 108 / 192 ms over the 48 loads) is the HD loading
 picture's file read and decode (`LoadScreenHD`; the title's logo screen reads two
 pictures and blends them; `LoadScreen` with `SCREENS.STR` only without an HD picture,

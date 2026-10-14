@@ -81,7 +81,10 @@
  *   TEXCOORD1  x the view depth, y the light the fog takes its share of
  *   TEXCOORD2  xyz the light field's texture coordinate, w the share of
  *              the mirror the water's depth there gives (a damp patch
- *              darkens and mirrors less than a pool)
+ *              darkens and mirrors less than a pool), 0 where the art
+ *              carries its own copy of the room under the floor: no
+ *              march there and no light field in its place, the lamps'
+ *              highlight alone (hd_render.cpp, "the art's own mirror")
  *
  * Pixel registers, written before each draw, in the block the sheets'
  * and the cards' draws write again before they read it:
@@ -124,11 +127,11 @@ sampler3D sFieldRgb : register(s2);
 sampler2D sWetCopy : register(s5);
 sampler2D sWetDepth : register(s6);
 
-/* The steps of the march: 16 at a growth of 1.3 from 32 reach about 7,000
- * units, seven squares, and the crossing halved 5 times lies within a
- * thirty-second of its step. */
-#define HD_WET_STEPS 16
-#define HD_WET_REFINE 5
+/* The steps of the march: 22 at a growth of 1.2 from 32 reach about 8,700
+ * units, eight squares, and the crossing halved 8 times lies within a
+ * 256th of its step. */
+#define HD_WET_STEPS 22
+#define HD_WET_REFINE 8
 /* The brightest a reflected texel stands for, eight times the frame's white
  * (a free choice: a texel of 0.89 and over). */
 #define HD_WET_BRIGHT 8.0f
@@ -483,7 +486,7 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 	// What the reflected ray finds: the frame, or the walls' light.
 	float3 seen = colour * gWetLook.y;
 
-	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f)
+	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f && input.field.w > 0.0f)
 	{
 		float2 at;
 		float why, steps;

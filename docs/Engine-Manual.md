@@ -2161,9 +2161,17 @@ it.
   the near ends of 45 and 121 and one square into the corridor's mouth;
   the plinth and the lowered area of room 23 but its far two squares -,
   the water arriving as the dome comes out and running on at about 0.7
-  m/s. The wet floor is darker and mirrors what stands on it - the
+  m/s. It runs over a sloping floor as far as that lies level or falls,
+  never up a ramp: the flat halves of the splits round RICH2's raised
+  blocks are wet with the floor beside them. The wet floor is darker and
+  mirrors what stands on it - the
   vending machines, Lara, a lit screen, the lamps and their glows - most
-  where the eye looks along the floor; a game loaded with the tank shot
+  where the eye looks along the floor; where the level's art already
+  carries a copy of the room upside down under the floor (RICH2's
+  corridor 46 and its mouth), the wet floor mirrors nothing and is only
+  darker, with the lamps' highlight - at the corridor's mouth, where the
+  tank's water reaches, the floor over that copy is opaque. A game
+  loaded with the tank shot
   starts with the floor wet, and it does not dry. With `hd_motion` off
   the water does not run out: the whole floor is wet from the moment of
   the shot.

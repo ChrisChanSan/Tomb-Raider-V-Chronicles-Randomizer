@@ -1747,6 +1747,8 @@ namespace
 	 * the map it draws in the mirror's place (-tankmarch), 0 none. */
 	IDirect3DPixelShader9* g_wet_debug_ps = 0;
 	int g_wet_debug = 0;
+	// The debugger's trial: fit, growth, first step (0: the game's).
+	float g_wet_try[3] = { 0.0f, 0.0f, 0.0f };
 	/* Where the art's falling water ends: per flow part (material 1) of a
 	 * room's group that stands more than kFlowFall tall, its vertices
 	 * within HD_WATER_FOOT_BAND of its lowest, room local, at most
@@ -11588,7 +11590,9 @@ namespace
 	 * a flat square at the same height or one step lower (kWetStep, one
 	 * click: water runs down a step and never up one, nor down a drop it
 	 * would fall into another room through), never behind the glass, into
-	 * the tank. A room with a higher dry part keeps it dry; the run goes
+	 * the tank - and over a sloping square as far as its floor runs level
+	 * or down ("the sloping floors" below). A room with a higher dry part
+	 * keeps it dry; the run goes
 	 * through doors into the rooms the tank's row names (kWetRooms) while
 	 * their floor goes on level, the classic floor's own answer to where
 	 * water on it would run, and stops kWetRadius past the dome's foot.
@@ -11625,19 +11629,26 @@ namespace
 	 * the Blinn-Phong lobe, (n + 8) / 8, at kWetPower. kWetPower, kWetDamp
 	 * and kWetHole are free choices, set by eye on RoomProbe pictures.
 	 *
-	 * The mirror's march (hd_wet.hlsl) takes HD_WET_STEPS (16) steps from
+	 * The mirror's march (hd_wet.hlsl) takes HD_WET_STEPS (22) steps from
 	 * kWetFirstStep, each kWetGrowth times the last - 32 units past the
-	 * floor's own depth step, out to about 7,000 units, seven squares -,
-	 * halves each crossing HD_WET_REFINE (5) times and takes it where the
+	 * floor's own depth step, out to about 8,700 units, eight squares -,
+	 * halves each crossing HD_WET_REFINE (8) times and takes it where the
 	 * frame's depth fits the ray's within kWetFit and kWetFitShare of the
 	 * depth. Set on RoomProbe's march debugger (-tankmarch 5) against a
 	 * march of 8-unit steps halved ten times, which itself matches the true
 	 * mirror - the scene seen from the eye mirrored in the floor - at
-	 * RICH2's tank eyes: there this march's hit lies within 2 pixels of
-	 * the fine one's for 93 to 98 per cent of its hits (7 to 27 per cent
-	 * with a growth of 1.5 over 12 steps and the first point behind the
-	 * frame by less than two steps taken, unhalved), and its mirror is as
-	 * near the true one as the fine march's.
+	 * RICH2's tank eyes. A step longer than a thin thing - a machine's foot,
+	 * a bench's rail - passes it by, and the march takes what lies behind
+	 * it: steps that grow less find it. Over the floor the march runs on,
+	 * at four eyes of the tank's corridor and a 10-degree fan round two of
+	 * them, this march's hit lies more than 2 pixels from the fine one's
+	 * for 0 to 2.2 per cent of the fine march's hits (0 to 3.5 with 16
+	 * steps of 1.3 halved five times), and the pixels whose mirror is off
+	 * the true one where the fine march's is not number 5,751 (8,735); a
+	 * tighter tolerance (half, a quarter) or a march that takes the first
+	 * crossing behind an edge lowered neither (RoomProbe -tankmarch
+	 * map,fit,growth,first; round three's march, 12 steps of 1.5 unhalved,
+	 * lay within 2 pixels for only 7 to 27 per cent of its hits).
 	 *
 	 * The look's two strengths. kWetDark, the share of the floor's light
 	 * the water keeps back, and kWetMirror, a factor on the mirror's
@@ -11657,7 +11668,7 @@ namespace
 	const float kWetCap = 0.75f;
 	const float kWetDamp = 0.5f;
 	const float kWetFirstStep = 32.0f;	// units
-	const float kWetGrowth = 1.3f;
+	const float kWetGrowth = 1.2f;
 	const float kWetFit = 32.0f;		// units
 	const float kWetFitShare = 0.02f;	// of the view depth
 
@@ -11692,6 +11703,7 @@ namespace
 		float x, y, z;		// world
 		float way;		// units from the glass along the water's way
 		float puddle;		// the share of the mirror there
+		float march;		// 0 where the art mirrors the room itself
 		float light;		// its room's light, for the fog
 		float field[3];		// the light field's texture coordinate
 	};
@@ -11717,6 +11729,9 @@ namespace
 		int x, z, y, room;
 		float way;
 		bool kept;
+		int under, mirrored;	// the art's cells (see wet_copied)
+		bool copied;
+		int slope;		// its floor's slope function, 0 flat
 	};
 
 	struct WetFloor
@@ -12622,6 +12637,117 @@ namespace
 	/* The wet floor of every tank handed in (see "the wet floor"), out of
 	 * the classic floor of every room: the squares, then the points and
 	 * their way from the glass. */
+	/* The art's own mirror. A room's art can carry a copy of the room
+	 * upside down under its floor, so that a floor drawn part-way clear
+	 * shows it as the room's reflection: RICH2's corridor, room 46 and its
+	 * flip twin 75, does so for its whole length, 1,536 units deep, and its
+	 * copy reaches under room 122's two squares at the corridor's mouth
+	 * (RoomProbe -tankart, every triangle of the .TRG: 24 to 874 under each
+	 * of the corridor's squares, 40 to 100 per cent of them mirroring one
+	 * over it within 32 units; 120 and 134 under room 122's, 99 each). Its
+	 * floor lets the copy through from x 41,984 west, where it lies in the
+	 * alpha pass on a part-way clear page; at the mouth it is opaque. There
+	 * the water adds no mirror of its own: the art's is the room's
+	 * reflection, and one marched out of the frame is another picture of
+	 * it - the corridor's ceiling glows, which no depth holds, land in it
+	 * as yellow bands across the floor. The wet floor keeps its darkening.
+	 *
+	 * Asked of what the level keeps of its art, the 256-unit cells that
+	 * hold a vertex of a group (HDGroup::cells): in a square's column, the
+	 * cells under its floor - down to kWetCopyDepth - of every room whose
+	 * flat floor lies there at that height, and of those the ones with a
+	 * cell over the floor at the mirrored height. A square is copied when
+	 * at least kWetCopyCells of them are mirrored and they are a third of
+	 * what lies under it. Counted on RICH2 (-tankwetmap -tankwetall, the
+	 * copy= field): the corridor's 36 squares 21 to 38 cells under, 12 to
+	 * 34 of them mirrored; room 122's two at its mouth 30 and 32 under, 15
+	 * and 16 mirrored; every other square of either tank none under but
+	 * one of room 23's, 3 under and 1 mirrored. 2,048 units hold the
+	 * corridor's 1,536 with room to spare; kWetCopyCells, two of each of a
+	 * square's four rows of cells, and the third are free choices in the
+	 * wide gap between the two kinds of square. */
+	const int kWetCopyDepth = 8;		// cells, 2,048 units
+	const int kWetCopyCells = 8;
+
+	// Whether a group has a vertex in a cell, cell indices room local.
+	bool wet_cell(const std::vector<unsigned int>& cells, int cx, int cy,
+		int cz)
+	{
+		return std::binary_search(cells.begin(), cells.end(),
+			CellKey(cx * 256, cy * 256, cz * 256));
+	}
+
+	/* The cells of the art of `list`'s rooms under square sx, sz at floor
+	 * y, and of those the ones mirrored by any of them, into the counts
+	 * (see above): the copy under a room's floor can belong to the group of
+	 * another room that shares the square - room 46's copy runs under room
+	 * 122's floor at the corridor's mouth, where room 122 draws what it
+	 * mirrors. A point y0 + d under the floor mirrors to y0 - d over it: a
+	 * cell j under the floor's own to cell j + 1 over it, or j at its top
+	 * edge. */
+	void wet_copied(const HDWaterRoom* rooms, const std::vector<int>& list,
+		int sx, int sz, int y, int* under, int* mirrored)
+	{
+		const int fy = y / 256;
+		// Whether any listed room has art in a world cell of the column.
+		const auto any = [&](int i, int cy, int k)
+		{
+			for (int r : list)
+				if (wet_cell(g_groups[(size_t)r].cells,
+					(sx * 1024 - rooms[r].originX) / 256 + i, cy,
+					(sz * 1024 - rooms[r].originZ) / 256 + k))
+					return true;
+
+			return false;
+		};
+
+		for (int i = 0; i < 4; i++)
+			for (int k = 0; k < 4; k++)
+				for (int j = 1; j <= kWetCopyDepth; j++)
+				{
+					if (!any(i, fy + j, k))
+						continue;
+
+					(*under)++;
+
+					if (any(i, fy - j, k) || any(i, fy - j - 1, k))
+						(*mirrored)++;
+				}
+	}
+
+	/* The sloping floors. A square whose floor entry is a TILT, a SPLIT1/2
+	 * or a NOCOLF (HDWetSlope, hd_splash_math.h) takes the water across an
+	 * edge as a flat one does: where that edge lies at the height of the
+	 * edge it comes from, or a click under it, at both corners
+	 * (HDWetPasses). Water runs down a slope and never up one: of the
+	 * square, the points no higher than the edge it came in by (within
+	 * kWetSlopeRise) are wet, and it runs on only across an edge whose
+	 * corners are wet - a ramp rising from a wet floor keeps its foot wet
+	 * and its head dry, the flat half of a split stays as wet as the floor
+	 * beside it, a slope falling from it is wet to its foot and passes the
+	 * water on to the floor there. Each point lies on the square's own
+	 * floor, the plane of its triangle (HDWetHeight, over the corners
+	 * water_corners makes), and its cells are halved along the diagonal
+	 * its crease follows (HDWetCell), so the layer lies on the floor and a
+	 * split's wet half is covered to its crease. RICH2's rooms by tank 182
+	 * hold six such squares round its raised blocks in rooms 45 and 121,
+	 * splits with one corner 768 up and their other half flat at the wet
+	 * floor's height (RoomProbe -tankslopes). */
+	/* The two corners of a square's edge toward step k of the run (+x,
+	 * -x, +z, -z), z0 or x0 first; `facing` the neighbour's edge that
+	 * faces it. */
+	void wet_edge(const int* c, int k, bool facing, int* a, int* b)
+	{
+		static const int side[4][2][2] =
+		{
+			{ { 1, 3 }, { 0, 2 } }, { { 0, 2 }, { 1, 3 } },
+			{ { 2, 3 }, { 0, 1 } }, { { 0, 1 }, { 2, 3 } }
+		};
+
+		*a = c[side[k][facing ? 1 : 0][0]];
+		*b = c[side[k][facing ? 1 : 0][1]];
+	}
+
 	void build_wet_floors(const HDWaterRoom* rooms, int count,
 		const char* stem)
 	{
@@ -12630,12 +12756,16 @@ namespace
 		if (!g_tank_shape.ok || g_wet_in.empty())
 			return;
 
-		/* Every flat floor of every room by world square: height, room, and
-		 * whether the square lies inside the room, off its ring. */
+		/* Every floor of every room by world square, flat or sloping: its
+		 * highest point, room, whether the square lies inside the room, off
+		 * its ring, the slope entry's function (0 flat) and the corners'
+		 * heights (HDRenderWaterCorners' order). */
 		struct Floor
 		{
 			int y, room;
 			bool inner;
+			int fn;
+			int c[4];
 		};
 
 		const auto square = [](int sx, int sz)
@@ -12660,15 +12790,30 @@ namespace
 				for (int sz = 0; sz < w.sizeZ; sz++)
 				{
 					const int at = sx * w.sizeZ + sz;
+					const int fn = w.slope ? w.slope[at * 4] & 0x1F : 0;
 
-					// A wall (NO_HEIGHT), or a floor that slopes.
-					if (w.floor[at] == -127 || (w.slope && w.slope[at * 4]))
+					// A wall (NO_HEIGHT), or a floor of another kind.
+					if (w.floor[at] == -127 || (fn && !HDWetSlope(fn)))
 						continue;
 
+					Floor f = { (int)w.floor[at] * 256, r, sx > 0 &&
+						sz > 0 && sx < w.sizeX - 1 && sz < w.sizeZ - 1, fn };
+
+					for (int k = 0; k < 4; k++)
+						f.c[k] = f.y;
+
+					if (fn)
+					{
+						water_corners(w.floor[at], w.slope[at * 4],
+							w.slope[at * 4 + 1], 0, f.c);
+						f.y = f.c[0];
+
+						for (int k = 1; k < 4; k++)
+							f.y = f.c[k] < f.y ? f.c[k] : f.y;
+					}
+
 					floors[square((w.originX >> 10) + sx,
-						(w.originZ >> 10) + sz)].push_back(
-						{ (int)w.floor[at] * 256, r, sx > 0 && sz > 0 &&
-						sx < w.sizeX - 1 && sz < w.sizeZ - 1 });
+						(w.originZ >> 10) + sz)].push_back(f);
 				}
 		}
 
@@ -12736,6 +12881,8 @@ namespace
 			struct Wet
 			{
 				int sx, sz, y, room;
+				int fn, c[4];
+				int top;	// the edge it came in by, its highest corner
 			};
 
 			std::vector<Wet> wet;
@@ -12764,13 +12911,16 @@ namespace
 						continue;
 
 					for (const Floor& f : at->second)
-						if (abs(f.y - t.y) <= kWetStep &&
+						if (!f.fn && abs(f.y - t.y) <= kWetStep &&
 							allowed(at->second, f.y) &&
 							seen.insert(level(sx, sz, f.y)).second)
-							wet.push_back({ sx, sz, f.y, f.room });
+							wet.push_back({ sx, sz, f.y, f.room, 0,
+								{ f.y, f.y, f.y, f.y }, f.y });
 				}
 
-			// On over the floor: level, or one step down.
+			/* On over the floor: across an edge level with the one the
+			 * water comes from or a step under it, from an edge that is
+			 * wet (see "the sloping floors"). */
 			for (size_t i = 0; i < wet.size(); i++)
 			{
 				static const int step[4][2] =
@@ -12784,15 +12934,28 @@ namespace
 					const int nx = from.sx + step[k][0];
 					const int nz = from.sz + step[k][1];
 					const auto at = floors.find(square(nx, nz));
+					int a0, a1;
 
-					if (at == floors.end() || behind(nx, nz))
+					wet_edge(from.c, k, false, &a0, &a1);
+
+					if (at == floors.end() || behind(nx, nz) ||
+						a0 < from.top - kWetSlopeRise ||
+						a1 < from.top - kWetSlopeRise)
 						continue;
 
 					for (const Floor& f : at->second)
-						if (f.y >= from.y && f.y - from.y <= kWetStep &&
+					{
+						int b0, b1;
+
+						wet_edge(f.c, k, true, &b0, &b1);
+
+						if (HDWetPasses(a0, a1, b0, b1, kWetStep) &&
 							allowed(at->second, f.y) &&
 							seen.insert(level(nx, nz, f.y)).second)
-							wet.push_back({ nx, nz, f.y, f.room });
+							wet.push_back({ nx, nz, f.y, f.room, f.fn,
+								{ f.c[0], f.c[1], f.c[2], f.c[3] },
+								b0 < b1 ? b0 : b1 });
+					}
 				}
 			}
 
@@ -12822,7 +12985,17 @@ namespace
 				for (int k = 0; k < 25; k++)
 				{
 					const int px = q.sx * 4 + k % 5, pz = q.sz * 4 + k / 5;
-					const unsigned long long key = level(px, pz, q.y);
+					// On the square's own floor; dry over a slope's entry.
+					const int y = q.fn ? (int)lroundf(HDWetHeight(q.fn, q.c,
+						(float)(k % 5 * 256), (float)(k / 5 * 256))) : q.y;
+
+					if (y < q.top - kWetSlopeRise)
+					{
+						g[(size_t)k] = -1;
+						continue;
+					}
+
+					const unsigned long long key = level(px, pz, y);
 					const auto found = pointAt.find(key);
 
 					if (found != pointAt.end())
@@ -12834,17 +13007,18 @@ namespace
 					WetPoint p = {};
 
 					p.x = (float)(px * 256);
-					p.y = (float)q.y - kWetLift;
+					p.y = (float)y - kWetLift;
 					p.z = (float)(pz * 256);
 					p.way = 1.0e9f;
 					p.light = l[0] > l[1] ? (l[0] > l[2] ? l[0] : l[2]) :
 						(l[1] > l[2] ? l[1] : l[2]);
 
 					const unsigned int place = (unsigned int)px * 73856093u ^
-						(unsigned int)pz * 19349663u ^ (unsigned int)q.y;
+						(unsigned int)pz * 19349663u ^ (unsigned int)y;
 
 					p.puddle = kWetDamp + (1.0f - kWetDamp) *
 						HDCardShare(place, 2u);
+					p.march = 1.0f;
 
 					for (int a = 0; a < 3; a++)
 					{
@@ -12879,6 +13053,10 @@ namespace
 				w.points.size());
 			const auto link = [&](int a, int b, float cost)
 			{
+				// A dry point of a slope (-1) is no point.
+				if (a < 0 || b < 0)
+					return;
+
 				next[(size_t)a].push_back({ b, cost });
 				next[(size_t)b].push_back({ a, cost });
 			};
@@ -12939,6 +13117,9 @@ namespace
 			for (size_t s = 0; s < grid.size(); s++)
 				for (int k = 0; k < 25; k++)
 				{
+					if (grid[s][(size_t)k] < 0)
+						continue;
+
 					const float way =
 						w.points[(size_t)grid[s][(size_t)k]].way;
 
@@ -12966,17 +13147,20 @@ namespace
 			std::vector<int> renumber(w.points.size(), -1);
 			std::vector<WetPoint> kept;
 
+			/* The squares the radius keeps, and the art's own mirror under
+			 * them: a copied square's points take no march mirror, so the
+			 * march fades out over the grid's step next to it. */
 			for (size_t s = 0; s < grid.size(); s++)
 			{
 				const std::array<int, 25>& g = grid[s];
 				const Wet& q = wet[s];
 				const std::vector<Floor>& here = floors[square(q.sx, q.sz)];
 				WetSquare map = { q.sx * 1024, q.sz * 1024, q.y, q.room,
-					nearest[s], false };
+					nearest[s], false, 0, 0, false, q.fn };
 
 				for (int k = 0; k < 25; k++)
-					map.kept = map.kept ||
-						w.points[(size_t)g[(size_t)k]].way < w.limit;
+					map.kept = map.kept || (g[(size_t)k] >= 0 &&
+						w.points[(size_t)g[(size_t)k]].way < w.limit);
 
 				for (const Floor& f : here)
 					if (f.y == q.y && f.inner)
@@ -12985,9 +13169,37 @@ namespace
 						break;
 					}
 
-				w.squares.push_back(map);
+				std::vector<int> list;
 
-				if (!map.kept)
+				for (const Floor& f : here)
+					if (f.y == q.y && f.room >= 0 && f.room < count &&
+						f.room < (int)g_groups.size() &&
+						std::find(list.begin(), list.end(), f.room) ==
+						list.end())
+						list.push_back(f.room);
+
+				// A copy lies under a flat floor (see "the art's own mirror").
+				if (!q.fn)
+					wet_copied(rooms, list, q.sx, q.sz, q.y, &map.under,
+						&map.mirrored);
+
+				map.copied = map.mirrored >= kWetCopyCells &&
+					map.mirrored * 3 >= map.under;
+
+				for (int k = 0; k < 25 && map.kept && map.copied; k++)
+					if (g[(size_t)k] >= 0)
+						w.points[(size_t)g[(size_t)k]].march = 0.0f;
+
+				w.squares.push_back(map);
+			}
+
+			for (size_t s = 0; s < grid.size(); s++)
+			{
+				const std::array<int, 25>& g = grid[s];
+				const Wet& q = wet[s];
+				const std::vector<Floor>& here = floors[square(q.sx, q.sz)];
+
+				if (!w.squares[s].kept)
 					continue;
 
 				w.info.squares++;
@@ -13016,7 +13228,7 @@ namespace
 				{
 					const size_t at = (size_t)g[(size_t)k];
 
-					if (renumber[at] >= 0)
+					if (g[(size_t)k] < 0 || renumber[at] >= 0)
 						continue;
 
 					renumber[at] = (int)kept.size();
@@ -13025,24 +13237,23 @@ namespace
 						w.points[at].way : w.info.furthest;
 				}
 
+				// A grid point's new number, -1 for a slope's dry one.
+				const auto number = [&](int k)
+				{
+					return g[(size_t)k] < 0 ? -1 :
+						renumber[(size_t)g[(size_t)k]];
+				};
+
 				for (int j = 0; j < 4; j++)
 					for (int i = 0; i < 4; i++)
 					{
-						const int a = renumber[(size_t)g[(size_t)(j * 5 + i)]];
-						const int b =
-							renumber[(size_t)g[(size_t)(j * 5 + i + 1)]];
-						const int d =
-							renumber[(size_t)g[(size_t)(j * 5 + i + 5)]];
-						const int e =
-							renumber[(size_t)g[(size_t)(j * 5 + i + 6)]];
-						const unsigned short tri[6] =
-						{
-							(unsigned short)a, (unsigned short)b,
-							(unsigned short)e, (unsigned short)a,
-							(unsigned short)e, (unsigned short)d
-						};
+						int tri[6];
+						const int n = HDWetCell(q.fn, number(j * 5 + i),
+							number(j * 5 + i + 1), number(j * 5 + i + 5),
+							number(j * 5 + i + 6), tri);
 
-						w.tris.insert(w.tris.end(), tri, tri + 6);
+						for (int k = 0; k < n; k++)
+							w.tris.push_back((unsigned short)tri[k]);
 					}
 			}
 
@@ -15935,9 +16146,12 @@ void HDRenderWaterWetLimited(int on)
 	g_wet_limited = on != 0;
 }
 
-void HDRenderWaterWetMarch(int map)
+void HDRenderWaterWetMarch(int map, const float* trial)
 {
 	g_wet_debug = map > 0 ? map : 0;
+
+	for (int i = 0; i < 3; i++)
+		g_wet_try[i] = trial ? trial[i] : 0.0f;
 }
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
@@ -15956,6 +16170,10 @@ bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
 	out->room = s.room;
 	out->way = s.way;
 	out->kept = s.kept ? 1 : 0;
+	out->under = s.under;
+	out->mirrored = s.mirrored;
+	out->copied = s.copied ? 1 : 0;
+	out->slope = s.slope;
 	out->reach = w.info.reach;
 	out->limit = w.limit;
 	return true;
@@ -15966,7 +16184,8 @@ bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
  * sixteen: every room whose floor data holds such a square at its height,
  * so a room whose ring of walls and doors or whose flip twin lies on it
  * is named too, though the square is the tank's rooms'), how many floor
- * heights among them, the points and triangles of
+ * heights among them (a sloping square's its highest corner's), the
+ * points and triangles of
  * its grid, the dome's foot from the glass and the furthest point along
  * the water's way (units, the ragged push included); then the squares the
  * run found in its rooms before the radius dropped the far ones, and the
@@ -16759,7 +16978,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			v.r = p.field[0];
 			v.g = p.field[1];
 			v.b = p.field[2];
-			v.a = p.puddle * open(p);
+			v.a = p.puddle * p.march * open(p);
 			v.light = p.light;
 			verts.push_back(v);
 		}
@@ -16871,10 +17090,13 @@ static void wet_layer(int part)
 		1.0f / kWetHole, kWetDark };
 	const float look[4] = { kWetF0, kWetWalls, kWetHighlight, kWetPower };
 	const bool copy = g_wet_late_valid && g_wet_late;
-	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f, kWetFirstStep,
-		kWetGrowth };
+	const float fit = debug && g_wet_try[0] > 0.0f ? g_wet_try[0] : 1.0f;
+	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f,
+		debug && g_wet_try[2] > 0.0f ? g_wet_try[2] : kWetFirstStep,
+		debug && g_wet_try[1] > 0.0f ? g_wet_try[1] : kWetGrowth };
 	const float proj[4] = { g_proj[0], g_proj[5], g_proj[8], g_proj[9] };
-	const float gain[4] = { kWetMirror, (float)part, kWetFit, kWetFitShare };
+	const float gain[4] = { kWetMirror, (float)part, kWetFit * fit,
+		kWetFitShare * fit };
 	const float mapped[4] = { (float)g_wet_debug, 0.0f, 0.0f, 0.0f };
 
 	g_device->SetVertexShader(g_card_vs);

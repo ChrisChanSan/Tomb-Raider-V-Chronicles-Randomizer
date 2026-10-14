@@ -20341,6 +20341,80 @@ static void splash_tank_wet()
 		"a loaded game wet to the radius, dry past it", (long)limit, 2914);
 }
 
+/* The wet floor over sloping squares (hd_splash_math.h, HDWetSlope,
+ * HDWetHeight, HDWetPasses): RICH2's split by the raised block in room 45
+ * (corners -768, 0, 0, 0, function 7; RoomProbe -tankslopes) and a tilt
+ * of room 71 (0, 256, 0, 256). */
+static void splash_tank_slopes()
+{
+	printf("the splash: the wet floor's slopes\n");
+
+	const int split[4] = { -768, 0, 0, 0 };
+	const int tilt[4] = { 0, 256, 0, 256 };
+
+	ok(HDWetSlope(2) && HDWetSlope(7) && HDWetSlope(8) && HDWetSlope(11) &&
+		HDWetSlope(14) && !HDWetSlope(0) && !HDWetSlope(3) &&
+		!HDWetSlope(9), "the floor entries the water runs over", 1, 1);
+	ok(HDWetHeight(7, split, 1024.0f, 1024.0f) == 0.0f &&
+		HDWetHeight(7, split, 768.0f, 512.0f) == 0.0f &&
+		HDWetHeight(7, split, 0.0f, 0.0f) == -768.0f &&
+		HDWetHeight(7, split, 256.0f, 256.0f) == -384.0f,
+		"a split: its flat half level, its ramp up to the raised corner",
+		(long)HDWetHeight(7, split, 256.0f, 256.0f), -384);
+	ok(HDWetHeight(2, tilt, 512.0f, 0.0f) == 128.0f &&
+		HDWetHeight(2, tilt, 512.0f, 1024.0f) == 128.0f,
+		"a tilt: one plane", (long)HDWetHeight(2, tilt, 512.0f, 0.0f), 128);
+	ok(HDWetPasses(0, 0, 0, 0, 256) && HDWetPasses(0, 0, 256, 256, 256) &&
+		!HDWetPasses(0, 0, -256, -256, 256) &&
+		!HDWetPasses(0, 0, 512, 512, 256),
+		"level or a step down, never up, never a drop", 1, 1);
+	ok(HDWetPasses(0, 0, 0, 0, 256) && !HDWetPasses(-768, 0, -768, -768,
+		256) && -768 < 0 - kWetSlopeRise,
+		"into the split's flat edge; not from its ramp onto the block", 1, 1);
+
+	/* The cells over a square, as build_wet_floors lays them: a point dry
+	 * where it stands over the flat edge by more than kWetSlopeRise. The
+	 * split's flat half is half the square, 16 of its 32 triangles, for
+	 * either crease (room 121's function 8 split: 0, 0, -768, 0); a flat
+	 * square's cells are halved from a to e, a, b, e first. */
+	const int other[4] = { 0, 0, -768, 0 };
+	const int flat[4] = { 0, 0, 0, 0 };
+	const int* const squares[3] = { split, other, flat };
+	const int fns[3] = { 7, 8, 0 };
+	int counts[3] = { 0, 0, 0 }, first[6] = { 0 };
+
+	for (int s = 0; s < 3; s++)
+	{
+		int number[25];
+
+		for (int k = 0; k < 25; k++)
+			number[k] = HDWetHeight(fns[s], squares[s], (float)(k % 5 * 256),
+				(float)(k / 5 * 256)) < (float)-kWetSlopeRise ? -1 : k;
+
+		for (int j = 0; j < 4; j++)
+			for (int i = 0; i < 4; i++)
+			{
+				int tri[6];
+				const int n = HDWetCell(fns[s], number[j * 5 + i],
+					number[j * 5 + i + 1], number[j * 5 + i + 5],
+					number[j * 5 + i + 6], tri);
+
+				for (int k = 0; s == 2 && !i && !j && k < n; k++)
+					first[k] = tri[k];
+
+				counts[s] += n / 3;
+			}
+	}
+
+	ok(counts[0] == 16, "a split's flat half covered whole (crease 1 to 2)",
+		counts[0], 16);
+	ok(counts[1] == 16, "a split's flat half covered whole (crease 0 to 3)",
+		counts[1], 16);
+	ok(counts[2] == 32 && first[0] == 0 && first[1] == 1 && first[2] == 6 &&
+		first[3] == 0 && first[4] == 6 && first[5] == 5,
+		"a flat square: 32 triangles, halved from a to e", counts[2], 32);
+}
+
 /* The rings' strength on the sheets (hd_splash_math.h, HDRingStrength, at
  * hd_render.cpp's kRingSlope 0.5 and kRingBody 4): a wading Lara's ring as
  * it always was, a barrel's past the old cap of 128 and four times more. */
@@ -20997,6 +21071,7 @@ int main()
 	splash_tank_spray();
 	splash_tank_dome();
 	splash_tank_wet();
+	splash_tank_slopes();
 	splash_rings();
 	spring_table();
 	spring_file();

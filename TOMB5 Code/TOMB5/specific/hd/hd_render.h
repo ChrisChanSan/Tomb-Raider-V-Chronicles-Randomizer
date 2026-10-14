@@ -1680,9 +1680,14 @@ bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size);
  * `floor` - its corner (world x, z), its floor's y, the room it lies in,
  * its nearest point's way from the glass (units, before the ragged push),
  * whether the radius keeps it, and the floor's dome foot and the furthest
- * the front runs; false past the last. HDRenderWaterWetLimited 0 lays the
+ * the front runs; and the art's copy of the room under it (hd_render.cpp,
+ * "the art's own mirror"): the 256-unit cells of art under the floor in
+ * its column, how many of them the art mirrors over it, and whether the
+ * square counts as copied (the march mirror then leaves it); and its
+ * floor's slope function, 0 for a flat one, its y then the highest
+ * corner; false past the last. HDRenderWaterWetLimited 0 lays the
  * next build's floors without the rooms and the radius (-tankwetall), the
- * run over every flat floor as far as it goes. */
+ * run over every floor it passes as far as it goes. */
 struct HDWaterWetSquare
 {
 	int item;
@@ -1690,6 +1695,8 @@ struct HDWaterWetSquare
 	float way;
 	int kept;
 	float reach, limit;
+	int under, mirrored, copied;
+	int slope;
 };
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
@@ -1700,9 +1707,13 @@ void HDRenderWaterWetLimited(int on);
  * as it stands, over the darkening HDRenderWaterWetDraw laid. Nothing when
  * the first draw drew nothing this frame. HDRenderWaterWetMarch is
  * RoomProbe's march debugger (-tankmarch): the second draw writes the map
- * `map` names in the mirror's place (hd_wet.hlsl, gWetDebug); 0 none. */
+ * `map` names in the mirror's place (hd_wet.hlsl, gWetDebug); 0 none.
+ * `trial`, when given, three numbers the debugger's draw takes in place of
+ * the game's: a factor on the depth tolerance (kWetFit, kWetFitShare), the
+ * growth a step (kWetGrowth) and the first step (kWetFirstStep), each 0
+ * for the game's. */
 void HDRenderWaterWetMirror();
-void HDRenderWaterWetMarch(int map);
+void HDRenderWaterWetMarch(int map, const float* trial = 0);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

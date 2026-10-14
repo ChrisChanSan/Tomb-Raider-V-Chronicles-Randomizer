@@ -10929,8 +10929,7 @@ static void hd_switch_wiring()
 	ok(level && object && lara && life, "hd switch wiring: the four files "
 		"are read", !!level + !!object + !!lara + !!life, 4);
 
-	n = hd_switch_count(level,
-		"return g_level_active && HDEnabled() && HDDrawn();");
+	n = hd_switch_count(level, "return g_level_active && HDDrawn();");
 	ok(n == 1, "hd switch wiring: HDLevelActive asks HDDrawn", n, 1);
 
 	// GroupOfRoom, HDRoomletDropped, HDRoomShadowHD, HDRoomArtListed,
@@ -10949,18 +10948,21 @@ static void hd_switch_wiring()
 	n = hd_switch_count(level, "!g_level_active");
 	ok(n == 6, "hd switch wiring: six readers keep g_level_active", n, 6);
 
+	// begin_decision, the items, and HDInvBegin, the inventory ring and
+	// the pickup display: both ask the draw.
 	n = hd_switch_count(object,
 		"if (!g_active || !tomb5.hd_objects || !HDDrawn())");
-	ok(n == 1, "hd switch wiring: the items' gate asks HDDrawn", n, 1);
+	ok(n == 2, "hd switch wiring: the items' and the ring's gates ask "
+		"HDDrawn", n, 2);
 
-	// HDInvBegin, the inventory ring and the pickup display, stays HD.
 	n = hd_switch_count(object, "if (!g_active || !tomb5.hd_objects)\r") +
 		hd_switch_count(object, "if (!g_active || !tomb5.hd_objects)\n");
-	ok(n == 1, "hd switch wiring: the ring's gate does not", n, 1);
+	ok(n == 0, "hd switch wiring: no object gate without it", n, 0);
 
+	// The models' release at the load asks what was built, not the draw.
 	n = hd_switch_count(object,
-		"if (!g_active && !HDLaraDrawActive() && HDDrawn())");
-	ok(n == 1, "hd switch wiring: no release decided while classic", n, 1);
+		"if (!g_active && !(tomb5.hd_objects && HDLaraActive()))");
+	ok(n == 1, "hd switch wiring: the release asks the build", n, 1);
 
 	n = hd_switch_count(lara,
 		"tomb5.hd_objects && HDLaraActive() && HDDrawn();");
@@ -10978,6 +10980,82 @@ static void hd_switch_wiring()
 	free(object);
 	free(lara);
 	free(life);
+}
+
+/* The build gate and the draw, in the engine's own text. HDEnabled() is
+ * the build gate - hd_build and the installation - and every reader that
+ * builds or loads at the load asks it; hd_enable, the HD textures row, is
+ * the draw, and the interface asks it as the world does: the ring and the
+ * pickup display (counted above), the HD font per character, the loading
+ * screens and the F4 changer. No load-time reader asks the draw. */
+static void hd_build_gate()
+{
+	char* level = hd_switch_text("hd_level.cpp");
+	char* font = hd_switch_text("hd_font.cpp");
+	char* feet = hd_switch_text("hd_feet.cpp");
+	char* outfit = hd_switch_text("hd_outfitmenu.cpp");
+	char* file = hd_switch_text("../file.cpp");
+	char* opts = hd_switch_text("../../tomb5/tomb5.cpp");
+	int n;
+
+	ok(level && font && feet && outfit && file && opts, "hd build gate: "
+		"the six files are read", !!level + !!font + !!feet + !!outfit +
+		!!file + !!opts, 6);
+
+	// HDEnabled asks hd_build and never the row.
+	n = hd_switch_count(level, "if (!tomb5.hd_build)");
+	ok(n == 1, "hd build gate: HDEnabled asks hd_build", n, 1);
+	n = hd_switch_count(level, "if (!tomb5.hd_enable)") +
+		hd_switch_count(level, "if (tomb5.hd_enable") +
+		hd_switch_count(level, "&& tomb5.hd_enable") +
+		hd_switch_count(level, "|| tomb5.hd_enable");
+	ok(n == 0, "hd build gate: hd_level.cpp reads no row", n, 0);
+	n = hd_switch_count(level, "if (tomb5.hd_build && !g_stem[0])");
+	ok(n == 1, "hd build gate: the read-ahead's drop asks hd_build", n, 1);
+	n = hd_switch_count(level, "return g_level_active;");
+	ok(n == 1, "hd build gate: HDLevelBuilt is the rooms' build", n, 1);
+
+	// The #203 key: valid only past the build gate.
+	n = hd_switch_count(level,
+		"if (!wadName || !*wadName || !HDEnabled())");
+	ok(n == 1, "hd build gate: the level's key asks the build gate", n, 1);
+
+	// The font: built behind the gate, drawn per character with the draw.
+	n = hd_switch_count(font, "if (!page || !HDEnabled())") +
+		hd_switch_count(font, "if (!HDEnabled() || !g_matched || g_atlas < 0)");
+	ok(n == 2, "hd build gate: the font is built behind it", n, 2);
+	n = hd_switch_count(font,
+		"if (!g_tex || !g_matched || !HDDrawn() || index < 0");
+	ok(n == 1, "hd build gate: a glyph asks the draw", n, 1);
+
+	// The sounds stay as built: the feet and the spare sample infos.
+	n = hd_switch_count(feet, "\tif (!HDEnabled())\r") +
+		hd_switch_count(feet, "\tif (!HDEnabled())\n");
+	ok(n == 1, "hd build gate: the barefoot set is built behind it", n, 1);
+	n = hd_switch_count(file,
+		"const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;") +
+		hd_switch_count(file,
+		"if (!HDEnabled() || !sample_lut || !sample_infos)");
+	ok(n == 2, "hd build gate: the samples ask the build gate", n, 2);
+
+	// The loading screens and the F4 changer ask the draw.
+	n = hd_switch_count(file, "if (!tomb5.hd_enable ||");
+	ok(n == 1, "hd build gate: a loading screen asks the draw", n, 1);
+	n = hd_switch_count(outfit, "if (!HDEnabled() || !HDDrawn())");
+	ok(n == 1, "hd build gate: F4 asks the build and the draw", n, 1);
+
+	// The setting: written first, read with 1 as its default, saved.
+	n = hd_switch_count(opts, "sprintf(buf, \"hd_build\");");
+	ok(n == 3, "hd build gate: hd_build written, read and saved", n, 3);
+	n = hd_switch_count(opts, "REG_ReadLong(buf, tomb5.hd_build, 1);");
+	ok(n == 1, "hd build gate: absent reads as 1", n, 1);
+
+	free(level);
+	free(font);
+	free(feet);
+	free(outfit);
+	free(file);
+	free(opts);
 }
 
 /* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
@@ -20907,6 +20985,7 @@ int main()
 	hd_switch();
 	hd_switch_option();
 	hd_switch_wiring();
+	hd_build_gate();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

@@ -2152,8 +2152,9 @@ static const char* shadow_row_text_four(unsigned long v)
 
 /* The Shadow mode row on the Graphics page and its fifth state, Projected.
  * Read from the tree: the row's table line, the three functions' lines in
- * game\menu_frame.cpp (HD is HDEnabled, a stored 5 shown and stepped through
- * HDShadowBlobMode without HD, the top 5 with HD and 4 without, the sound,
+ * game\menu_frame.cpp (HD is HDEnabled and HDDrawn, a stored 5 shown and
+ * stepped through HDShadowBlobMode without HD, the top 5 with HD and 4
+ * without, the sound,
  * no write but the two steps), the new string's five columns in
  * game\gameflow.cpp, and specific\hd\hd_laradraw.cpp's per-frame decision,
  * which reads the option every frame and forgets the following in a frame
@@ -2207,8 +2208,9 @@ static void graphics_shadow_row()
 
 			check(strstr(show, "return hd ? tomb5.shadow_mode : (ulong)HDShadowBlobMode((long)tomb5.shadow_mode);") != 0, 1,
 				"shadow row: with HD the stored value is shown, without it what the blob draws");
-			check(strstr(show, "const ulong shown = MenuShadowModeShown(HDEnabled());") != 0, 1,
-				"shadow row: the shown value asks HDEnabled");
+			check(strstr(show, "const ulong shown = "
+				"MenuShadowModeShown(HDEnabled() && HDDrawn());") != 0, 1,
+				"shadow row: the shown value asks the build and the draw");
 			check(strstr(show, "CustomText(shown == 1 ? \"Original\" : shown == 2 ? \"Circle\" :") != 0, 1,
 				"shadow row: 1 shows Original and 2 Circle, through CustomText");
 			check(strstr(show, "shown == 3 ? \"Faded circle\" : shown == 5 ? \"Projected\" : \"PSX\"));") != 0, 1,
@@ -2216,7 +2218,8 @@ static void graphics_shadow_row()
 			check(tree_count(show, "tomb5.shadow_mode ="), 0,
 				"shadow row: showing the row writes nothing, so a stored 5 survives a visit with HD off");
 
-			check(strstr(walk, "const bool hd = HDEnabled();") != 0, 1, "shadow row: a step asks HDEnabled once");
+			check(strstr(walk, "const bool hd = HDEnabled() && HDDrawn();")
+				!= 0, 1, "shadow row: a step asks the build and the draw once");
 			check(strstr(walk, "const ulong shown = MenuShadowModeShown(hd);") != 0, 1,
 				"shadow row: and steps from the value it shows");
 			check(strstr(walk, "const ulong top = hd ? HD_SHADOW_MODE_PROJECTED : HD_SHADOW_MODE_PSX;") != 0, 1,

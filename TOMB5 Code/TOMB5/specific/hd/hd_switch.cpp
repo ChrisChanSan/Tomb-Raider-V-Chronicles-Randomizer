@@ -78,9 +78,11 @@ namespace
 	}
 }
 
+/* The draw asks the row as well: HDEnabled is the build gate and does not
+ * read hd_enable, so the HD textures row decides the draw here. */
 bool HDDrawn()
 {
-	return g_state.drawn != 0;
+	return g_state.drawn != 0 && tomb5.hd_enable;
 }
 
 /* HDLOG switch, behind -log, one line per press that reached a level:
@@ -101,7 +103,7 @@ bool HDDrawn()
 void HDSwitchInput(bool key, bool pad, bool live)
 {
 	const int what = HDSwitchStep(&g_state, (key || pad) ? 1 : 0,
-		live ? 1 : 0, HDEnabled() ? 1 : 0);
+		live ? 1 : 0, tomb5.hd_enable && HDEnabled() ? 1 : 0);
 
 	if (what == HD_SWITCH_NONE || !gLogEnabled)
 		return;

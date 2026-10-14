@@ -2684,8 +2684,13 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	ulong first_person_smooth;	//0 off, 1 light, 2 medium, 3 strong
 	bool first_person_body_still;	//on off, hold the body on one frame while she stands still
 	bool level_select;			//on off, shows the "Level Select" row in the title menu
-	bool hd_enable;				//on off, HD art from an installed Remaster. The path is a
-								//string and therefore not in here - see tomb5_hd_install.
+	bool hd_enable;				//on off, the HD textures row: the world and
+								//the interface drawn HD (on) or classic
+								//(off). The HD/SD switch flips it, and it is
+								//saved as every row is. The HD data are built
+								//whatever it says - see hd_build. The path
+								//is a string and therefore not in here - see
+								//tomb5_hd_install.
 	bool hd_objects;			//on off, HD models for enemies, doors and switches.
 								//Registry only and on by default: it is not a taste but a way
 								//back for one level whose objects go wrong, and it does nothing
@@ -2892,8 +2897,8 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * under it is off and the classic faces are restored as without it;
 	 * what stays is the caustic's shape and footprint fade on the
 	 * remaster's own marked water art and the wave rows on that art, which
-	 * live in the compiled shaders. Taken at the start of a level, like
-	 * HD textures. Dead with hd_enable off (specific\hd\hd_level.cpp,
+	 * live in the compiled shaders. Taken at the start of a level. Dead
+	 * with hd_build 0 (specific\hd\hd_level.cpp,
 	 * BuildWaterSheets). Registry: hd_water. */
 	bool hd_water;
 
@@ -2907,7 +2912,7 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * own window too (specific\hd\hd_render.cpp, MarkAirHulls). 0: the air
 	 * is not asked, that art is drawn on the box's answer alone and no room
 	 * is taken in. Any other value reads as 1. Registry only, like
-	 * hd_reach; taken at the start of a level and dead with hd_enable off
+	 * hd_reach; taken at the start of a level and dead with hd_build 0
 	 * (specific\hd\hd_level.cpp, BuildRoomAir). Registry: hd_air. */
 	ulong hd_air;
 
@@ -2916,7 +2921,17 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * thread, n that many; never more than 16 (specific\hd\hd_pagecache.cpp,
 	 * HDPoolThreads). The build comes out the same whatever it says - the
 	 * built line's hash proves it per level. Registry only; taken at the
-	 * start of a level and dead with hd_enable off. Registry: hd_threads. */
+	 * start of a level and dead with hd_build 0. Registry: hd_threads. */
 	ulong hd_threads;
+
+	/* The build gate of the HD path: 1, the default, builds a level's HD
+	 * data at its load whenever an installation is found, whatever the HD
+	 * textures row (hd_enable, the draw state) says, so that the row and
+	 * the HD/SD switch flip between two resident draws. 0 looks for no
+	 * installation, opens and builds nothing HD, and the engine is the
+	 * classic one; the switch then has nothing to switch. Any other value
+	 * reads as 1. Registry only, read at the game's start
+	 * (specific\hd\hd_level.cpp, HDEnabled). Registry: hd_build. */
+	ulong hd_build;
 };
 #pragma pack(pop)

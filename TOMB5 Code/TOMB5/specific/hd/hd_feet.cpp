@@ -112,8 +112,10 @@ void HDFeetLevelBuild(short* lut, SAMPLE_INFO* infos, int infoCount, int spare,
 	HDFeetLevelEnd();
 
 	/* The HD gate: everything this file adds is behind it, so a player with
-	 * hd_enable off hears exactly what he heard before - a sound mod's own
-	 * footsteps included. Silent: an unasked-for line every level for a
+	 * hd_build 0 hears exactly what he heard before - a sound mod's own
+	 * footsteps included. Not the draw: the set is loaded into the sample
+	 * memory at the level's load and stays whatever the HD/SD switch draws
+	 * (hd_switch.h). Silent: an unasked-for line every level for a
 	 * feature that is switched off is noise, and the option's own state is
 	 * in the log already. */
 	if (!HDEnabled())

@@ -2805,10 +2805,10 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 	HDLaraDrawBuild(g_stem);
 	ObjectLoadStep(&loadlog_at, "obj_lara");
 
-	/* Released only when neither side has anything to draw. A level whose
+	/* Released only when neither side was built HD. A level whose
 	 * every object stayed classic can still have an HD Lara - the two
 	 * verdicts are separate and the models are one buffer. */
-	if (!g_active && !HDLaraDrawActive() && HDDrawn())
+	if (!g_active && !(tomb5.hd_objects && HDLaraActive()))
 	{
 		Log("HDLOG level=%s no slot and no wardrobe part draws HD - "
 			"the models are released again", g_stem);
@@ -3634,7 +3634,7 @@ bool HDInvBegin(ITEM_INFO* item, OBJECT_INFO* obj, float x, float y, long color)
 	 * shared by both callers except where it says otherwise. */
 	const bool pickup = !InventoryActive;
 
-	if (!g_active || !tomb5.hd_objects)
+	if (!g_active || !tomb5.hd_objects || !HDDrawn())
 		return false;
 
 	const int slot = (int)item->object_number;

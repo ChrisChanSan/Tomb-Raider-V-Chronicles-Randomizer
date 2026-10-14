@@ -685,8 +685,9 @@ static bool MenuStepFootprints(long, long dir)
 
 /* Shadow mode: base's four blobs, 1 Original, 2 Circle, 3 Faded circle and
  * 4 PSX, and a fifth state, 5 Projected - the HD Lara's projected shadow
- * (specific/hd/hd_shadow.h). The fifth state is offered only while HD is on,
- * HDEnabled(): the HD textures row and an installed Remaster found. It asks
+ * (specific/hd/hd_shadow.h). The fifth state is offered only while HD is
+ * built and drawn: HDEnabled(), the build gate with an installed Remaster
+ * found, and HDDrawn(), the HD textures row (specific/hd/hd_switch.h). It asks
  * no level, so it answers the same in the title screen and in a running
  * level. Without HD the engine draws a stored 5 as the faded circle
  * (HDShadowBlobMode), so then the row is the four-state row and a stored 5
@@ -705,7 +706,7 @@ static ulong MenuShadowModeShown(bool hd)
 
 static const char* MenuValShadowMode(long, char* buf)
 {
-	const ulong shown = MenuShadowModeShown(HDEnabled());
+	const ulong shown = MenuShadowModeShown(HDEnabled() && HDDrawn());
 
 	strcpy(buf, CustomText(shown == 1 ? "Original" : shown == 2 ? "Circle" :
 	           shown == 3 ? "Faded circle" : shown == 5 ? "Projected" : "PSX"));
@@ -714,7 +715,7 @@ static const char* MenuValShadowMode(long, char* buf)
 
 static bool MenuStepShadowMode(long, long dir)
 {
-	const bool hd = HDEnabled();
+	const bool hd = HDEnabled() && HDDrawn();
 	const ulong shown = MenuShadowModeShown(hd);
 	const ulong top = hd ? HD_SHADOW_MODE_PROJECTED : HD_SHADOW_MODE_PSX;
 
@@ -764,7 +765,7 @@ static bool MenuStepHdTextures(long, long dir)
 
 	// The Remaster's room art, read from the player's own installation.
 	// The row is the option and the HD/SD switch in one: the HD data are
-	// built at a level's load as the option says, and the world of the
+	// built at a level's load whatever it says (hd_build), and the world of the
 	// level on screen follows the row on the next drawn frame, whole, when
 	// its load built them (specific/hd/hd_switch.h, HDSwitchOption). The
 	// rooms' answer is taken before the write: HDLevelActive answers only

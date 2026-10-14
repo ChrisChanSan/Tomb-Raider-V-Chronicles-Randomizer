@@ -19,9 +19,11 @@
 
 // The seam between the engine and the HD path.
 //
-// Everything behind these calls is off unless the registry setting hd_enable
-// is 1, which it is not by default: an unchanged installation reads no extra
-// byte and draws the same frame as the classic engine.
+// Everything behind these calls is off unless the build gate is open - the
+// registry setting hd_build, 1 by default, and an installed Remaster found
+// (HDEnabled). With hd_build 0 the engine reads no extra byte and draws the
+// same frame as the classic engine. What is drawn, HD or classic, is the HD
+// textures row (hd_enable), which the HD/SD switch flips.
 //
 // Level bracket:
 //   HDLevelLoad   specific\file.cpp, LoadLevel, after LoadTextureInfos, on
@@ -140,13 +142,18 @@ void HDLevelDeviceLost();
 // with it. Returns whether the level draws HD again.
 bool HDLevelDeviceRecreated();
 
-// Whether the HD path is switched on and an installed Remaster was found.
-// Nothing else in the engine may read HD data without asking this first.
+// The build gate: hd_build on and an installed Remaster found. Nothing else
+// in the engine may read or build HD data without asking this first. The
+// draw - the HD textures row, hd_enable - is not part of it.
 bool HDEnabled();
 
+// Whether the level on screen was built with HD rooms, whatever is drawn:
+// the HD/SD switch's question whether there is anything to switch.
+bool HDLevelBuilt();
+
 /* Whether an HD level is built and drawn HD now: a .TRG that had rooms in
- * it, HDEnabled() and the HD/SD switch at HD (hd_switch.h, HDDrawn). The
- * last two are read on every call, so the HD textures row and the switch
+ * it, built past HDEnabled(), and the draw at HD (hd_switch.h, HDDrawn).
+ * The draw is read on every call, so the HD textures row and the switch
  * change the answer in a running level. The portal walk carries its second
  * rectangle (the HD reach) only while this is true, so a level the remaster
  * has nothing for, and a level drawn classic, walks the classic way. */

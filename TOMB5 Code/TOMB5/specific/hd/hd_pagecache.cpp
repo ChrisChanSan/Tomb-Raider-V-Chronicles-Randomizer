@@ -1103,6 +1103,12 @@ void HDPageCacheAheadDrop()
 	g_ahead_taken = 0;
 }
 
+void HDPageCacheAheadFinish()
+{
+	if (g_ahead_thread.t.joinable())
+		g_ahead_thread.t.join();
+}
+
 void HDPageCacheAheadInfo(int* pages, int* taken, double* ms)
 {
 	if (pages)

@@ -9576,17 +9576,28 @@ static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
  * nothing of the build is released or made again; the water sheets (-hdwater)
  * are set a second time over it, with a ring left from the first, as the
  * resident build sets them; the walk applies -flip to the rooms it reads
- * from the file. -reloadas <LEVEL> names another level: the key differs, the
- * build is released and that level built, with the room lists the build
- * borrowed given back first as the engine gives them back; the run prints
- * that build's fingerprint and draws nothing. Not followed: the classic load
- * into the game's pool, the objects' rebind, the water's life, the re-dress
- * rule and sgRestoreGame's flips - the tool has none of them. */
+ * from the file. So the room art is equal by construction, as the engine's
+ * keep makes it; what the run tests is the sheets set again and the walk.
+ * -reloadas <LEVEL> names another level: the key differs, this level's
+ * build is shut down and the run is made again for that level in the same
+ * process (ProbeReloadOther), with its own room inputs out of -roombox as
+ * any run hands them in; it prints that build's fingerprint and draws
+ * nothing. With -ahead the other level's .TRG is read and its first pages
+ * decoded while this level's build is still in memory, the engine's order
+ * at a level change, and the commit is printed at each step. Not followed:
+ * the classic load into the game's pool, FreeLevel, the objects' rebind,
+ * the water's life, the re-dress rule and sgRestoreGame's flips - the tool
+ * has none of them - and the device, which the engine keeps across levels
+ * and the tool makes again. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_levelkey.h"
 
 static bool g_reload = false;
 static std::string g_reload_as;
 static bool g_reload_kept = false;
+// The key differed: main runs the other level's build after this run.
+static bool g_reload_refused = false;
+// This run is that build: its fingerprint, then the end of the run.
+static bool g_reload_rebuild = false;
 
 static void ProbeFileStamp(const std::string& path, HDLevelFileStamp* out)
 {
@@ -9651,6 +9662,11 @@ static bool ProbeReload(const char* root, const char* stem, int rooms,
 		return true;
 	}
 
+	g_reload_refused = true;
+
+	/* The room lists the build borrowed, given back as hd_level.cpp gives
+	 * them back after every build: a list the next level's run does not
+	 * hand in would otherwise still name this level's. */
 	HDRenderSetWaterMarks(0, 0);
 	HDRenderSetRoomBoxes(0, 0);
 	HDRenderSetSectors(0, 0, 0, 0);
@@ -9661,15 +9677,41 @@ static bool ProbeReload(const char* root, const char* stem, int rooms,
 	HDRenderSetCarryHosts(0, 0, 0);
 	HDRenderSetCuts(0, 0);
 	HDRenderSetStaticPlaces(0, 0);
-	HDRenderLevelEnd();
 
-	HDRenderStats stats;
-	const char* why = "";
+	/* -ahead: what the engine holds at a level change before the release
+	 * (hd_level.cpp, HDLevelKeyNext at the top of LoadLevel; the build
+	 * before is released at the next build): this build, then beside it
+	 * the other level's parse - all the scan held beside it at afbb6f6b -
+	 * and then its pages decoded ahead, every one of them (the most they
+	 * hold; the engine's build stops the decode where it starts). The
+	 * other level's run takes both, as the engine's build does. */
+	if (g_ahead_pics)
+	{
+		const double peak = PeakCommitMiB();
+		const double alone = CommitMiB();
+		const bool read = HDScanReadTrg(root, as);
+		const double parse = CommitMiB();
 
-	if (!HDRenderLevelBegin(root, as, rooms, managed, threads, &stats, &why))
-		printf("-reload: the build of %s failed - %s\n", as, why);
-	else
-		printf("-reload: rebuilt level=%s hash=%016llx\n", as, stats.hash);
+		if (read)
+		{
+			std::vector<int> pages((size_t)HDScanKeptPageCount());
+
+			for (int i = 0; i < (int)pages.size(); i++)
+				pages[(size_t)i] = HDScanKeptPage(i);
+
+			HDPageCacheAhead(root, pages.empty() ? 0 : &pages[0],
+				(int)pages.size(), threads);
+			HDPageCacheAheadFinish();
+		}
+
+		int ahead = 0;
+
+		HDPageCacheAheadInfo(&ahead, 0, 0);
+		printf("-reload: commit with the build of %s %.1f MiB (its peak "
+			"%.1f), %s's .TRG read beside it %.1f (+%.1f), its %d page(s) "
+			"decoded ahead too %.1f (+%.1f)\n", stem, alone, peak, as, parse,
+			parse - alone, ahead, CommitMiB(), CommitMiB() - parse);
+	}
 
 	return false;
 }
@@ -9875,8 +9917,10 @@ static int ProbeMain(int argc, char** argv)
 			"lines, no picture (with -roombox)\n");
 		printf("       -reload   a savegame loaded inside the level: the "
 			"build kept by the engine's key, the sheets set again, then the "
-			"pictures; -reloadas <LEVEL> another level's key: that level "
-			"built and its fingerprint printed, no picture\n");
+			"pictures; -reloadas <LEVEL> another level's key: the run made "
+			"again for that level in this process, its fingerprint printed, "
+			"no picture (with -ahead: its .TRG and first pages read ahead "
+			"beside this level's build, the commit printed)\n");
 		printf("       -ahead   the engine's .TRG read and first pages "
 			"decoded ahead of the build (with -roombox), then the pictures; "
 			"-aheadverify also decodes every page taken again and counts "
@@ -11638,6 +11682,22 @@ static int ProbeMain(int argc, char** argv)
 		printf("-ahead: pages=%d taken=%d trg_kept=%d differ=%d%s\n", ahead,
 			taken, HDScanTrgTaken() ? 1 : 0, HDPageCacheAheadDiffer(),
 			g_ahead_verify ? "" : " (not verified)");
+	}
+
+	/* -reloadas: the other level's build after the first level's, with
+	 * what was read and decoded ahead for it taken, and the run's peak. */
+	if (g_reload_rebuild)
+	{
+		int taken = 0;
+
+		HDPageCacheAheadInfo(0, &taken, 0);
+		printf("-reload: rebuilt level=%s hash=%016llx trg_kept=%d taken=%d "
+			"differ=%d peak_mib=%.1f\n", stem, stats.hash,
+			HDScanTrgTaken() ? 1 : 0, taken, HDPageCacheAheadDiffer(),
+			PeakCommitMiB());
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
 	}
 
 	if (g_reload && !ProbeReload(root, stem, rooms, managed, threads,
@@ -14004,6 +14064,84 @@ static int WindowCycle(bool leak, const char* prefix)
 	return same && seen[0] && seen[1] && seen[2] ? 0 : 1;
 }
 
+/* -reloadas: after a run whose key the other level's refused
+ * (ProbeReload), the same run again for that level in this process -
+ * the switches as given, the level replaced, the reload switches left out -
+ * so that its build gets the room inputs any run hands in out of -roombox
+ * and starts where the engine's next build starts, after the release of
+ * the level before. The containers a run fills by push_back or resize are
+ * emptied first, as -devicecycle empties them between its runs. */
+static int ProbeReloadOther(int result, int argc, char** argv)
+{
+	if (!g_reload_refused || argc < 4)
+		return result;
+
+	const std::string other = g_reload_as;
+	std::vector<char*> a;
+
+	for (int i = 0; i < argc; i++)
+	{
+		if (!strcmp(argv[i], "-reloadas") && i + 1 < argc)
+		{
+			i++;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "-reload") || !strcmp(argv[i], "-ahead") ||
+			!strcmp(argv[i], "-aheadverify") || !strcmp(argv[i], "-loadtime"))
+			continue;
+
+		a.push_back(i == 2 ? (char*)other.c_str() : argv[i]);
+	}
+
+	g_reload = false;
+	g_reload_as.clear();
+	g_reload_kept = false;
+	g_reload_refused = false;
+	g_reload_rebuild = true;
+	g_loadtime = false;
+	g_ahead_pics = false;
+
+	g_ripples.clear();
+	g_lara_set = false;
+	g_feet.clear();
+	g_creatures.clear();
+	g_waders.clear();
+	g_swimmers.clear();
+	g_creature_mark = true;
+	g_mark_view = false;
+	g_classic_rooms.clear();
+	g_faces_built.clear();
+	g_cuts_built.clear();
+	g_stand_draws.clear();
+	g_intrusions_built.clear();
+	g_stand_faces_built.clear();
+	g_stand_holders_built.clear();
+	g_stand_covered_room.clear();
+	g_stand_covered_answer.clear();
+	g_stand_carrier.clear();
+	g_stand_flags.clear();
+	g_with_count = 0;
+	g_roomwin_count = 0;
+	// And the lists the -roombox read sizes per room, emptied whole.
+	g_boxes_built.clear();
+	g_grids_built.clear();
+	g_sectors_built.clear();
+	g_air_built.clear();
+	g_air_links_built.clear();
+	g_air_sectors_built.clear();
+	g_stand_rooms_built.clear();
+	/* And the statics, which a run reads once (probestatics::Load): read
+	 * again for the other level, and -static's pairs parsed again. */
+	probestatics::g_list.clear();
+	probestatics::g_forced.clear();
+	probestatics::g_loaded = false;
+	probestatics::g_answered = false;
+
+	printf("\n-reload: the run again for %s in this process\n", other.c_str());
+	return ProbeMain((int)a.size(), &a[0]);
+}
+
 int main(int argc, char** argv)
 {
 	for (int i = 1; i < argc; i++)
@@ -14077,7 +14215,7 @@ int main(int argc, char** argv)
 	}
 
 	if (!cycle || argc < 4)
-		return ProbeMain(argc, argv);
+		return ProbeReloadOther(ProbeMain(argc, argv), argc, argv);
 
 	/* Three runs, each with its own device (ProbeMain makes it and drops it
 	 * after HDRenderShutdown). The containers a run fills by push_back are

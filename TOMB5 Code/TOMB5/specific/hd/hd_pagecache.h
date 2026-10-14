@@ -238,6 +238,10 @@ void HDPageCacheAhead(const char* installRoot, const int* pages, int count,
 	int threads);
 void HDPageCacheAheadDrop();
 void HDPageCacheAheadInfo(int* pages, int* taken, double* ms);
+// The diagnostic tools' wait, never called by the engine: until every page
+// is decoded, none stopped early - the most the pages ahead ever hold, which
+// RoomProbe -reloadas -ahead measures beside the level before's build.
+void HDPageCacheAheadFinish();
 // The diagnostic tools' check, off in the engine: with it on, every page a
 // Create takes is decoded again and compared byte for byte, and
 // HDPageCacheAheadDiffer counts the pages that came out different.

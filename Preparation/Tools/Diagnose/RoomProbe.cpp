@@ -9484,17 +9484,131 @@ static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
 		stats.pages.decodeMs, stats.pages.uploadMs, stats.pages.threads);
 }
 
+/* -reload: the HD side of a savegame loaded inside the level, as far as this
+ * tool follows the engine (hd_level.cpp, HDLevelUnload and
+ * HDLevelBuildResident). After the build the level counts as read again: the
+ * key of the level about to be read is held against the key of the build
+ * with the engine's own comparison (hd_levelkey.h). With the same key
+ * nothing of the build is released or made again; the water sheets (-hdwater)
+ * are set a second time over it, with a ring left from the first, as the
+ * resident build sets them; the walk applies -flip to the rooms it reads
+ * from the file. -reloadas <LEVEL> names another level: the key differs, the
+ * build is released and that level built, with the room lists the build
+ * borrowed given back first as the engine gives them back; the run prints
+ * that build's fingerprint and draws nothing. Not followed: the classic load
+ * into the game's pool, the objects' rebind, the water's life, the re-dress
+ * rule and sgRestoreGame's flips - the tool has none of them. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_levelkey.h"
+
+static bool g_reload = false;
+static std::string g_reload_as;
+static bool g_reload_kept = false;
+
+static void ProbeFileStamp(const std::string& path, HDLevelFileStamp* out)
+{
+	WIN32_FILE_ATTRIBUTE_DATA a;
+
+	out->size = -1;
+	out->written = -1;
+
+	if (path.empty() || !GetFileAttributesExA(path.c_str(),
+		GetFileExInfoStandard, &a) || (a.dwFileAttributes &
+		FILE_ATTRIBUTE_DIRECTORY))
+		return;
+
+	out->size = ((long long)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+	out->written = ((long long)a.ftLastWriteTime.dwHighDateTime << 32) |
+		a.ftLastWriteTime.dwLowDateTime;
+}
+
+// The engine's key (HDLevelKeyNext) out of this tool's files and switches.
+static void ProbeLevelKey(const char* root, const char* stem, double budgetMiB,
+	int pageFormat, HDLevelKey* k)
+{
+	memset(k, 0, sizeof(*k));
+	k->valid = 1;
+	snprintf(k->name, sizeof(k->name), "%s", stem);
+
+	const std::string classic = g_roombox.empty() ? std::string()
+		: g_roombox + "\\" + stem;
+
+	ProbeFileStamp(classic.empty() ? classic : classic + ".TRC", &k->trc);
+	ProbeFileStamp(classic.empty() ? classic : classic + ".hdm", &k->hdm);
+	ProbeFileStamp(std::string(root) + "\\DATA\\" + stem + ".TRG", &k->trg);
+	ProbeFileStamp(g_gloss_file, &k->glossFile);
+	ProbeFileStamp(g_water_file, &k->waterFile);
+	snprintf(k->install, sizeof(k->install), "%s", root);
+	k->air = g_air_option;
+	k->water = g_hdwater == 1 ? 1 : 0;
+	k->budgetMb = (long)budgetMiB;
+	snprintf(k->format, sizeof(k->format), "%s",
+		pageFormat == HD_PAGE_FORMAT_DXT5 ? "dxt5" : "rgba");
+}
+
+/* True when the run goes on to its pictures over the kept build, false when
+ * the key differed and the other level was built in its place. */
+static bool ProbeReload(const char* root, const char* stem, int rooms,
+	bool managed, int threads, double budgetMiB, int pageFormat)
+{
+	const char* as = g_reload_as.empty() ? stem : g_reload_as.c_str();
+	HDLevelKey built, next;
+
+	ProbeLevelKey(root, stem, budgetMiB, pageFormat, &built);
+	ProbeLevelKey(root, as, budgetMiB, pageFormat, &next);
+
+	const char* refused = HDLevelKeepRefused(&built, &next, 0);
+
+	printf("-reload: level=%s resident=%d%s%s\n", as, refused ? 0 : 1,
+		refused ? " refused=" : "", refused ? refused : "");
+
+	if (!refused)
+	{
+		g_reload_kept = true;
+		return true;
+	}
+
+	HDRenderSetWaterMarks(0, 0);
+	HDRenderSetRoomBoxes(0, 0);
+	HDRenderSetSectors(0, 0, 0, 0);
+	HDRenderSetStandFaces(0, 0, 0, 0, 0, 0);
+	HDRenderSetIntrusions(0, 0);
+	HDRenderSetPairFaces(0, 0);
+	HDRenderSetRoomAir(0, 0, 0);
+	HDRenderSetCarryHosts(0, 0, 0);
+	HDRenderSetCuts(0, 0);
+	HDRenderSetStaticPlaces(0, 0);
+	HDRenderLevelEnd();
+
+	HDRenderStats stats;
+	const char* why = "";
+
+	if (!HDRenderLevelBegin(root, as, rooms, managed, threads, &stats, &why))
+		printf("-reload: the build of %s failed - %s\n", as, why);
+	else
+		printf("-reload: rebuilt level=%s hash=%016llx\n", as, stats.hash);
+
+	return false;
+}
+
 static int ProbeMain(int argc, char** argv)
 {
-	/* -loadtime is taken out of the list here, ahead of the switch chain
-	 * below, which stands at the compiler's nesting depth. */
+	/* -loadtime, -reload and -reloadas are taken out of the list here, ahead
+	 * of the switch chain below, which stands at the compiler's nesting
+	 * depth. */
 	std::vector<char*> kept;
 
 	for (int i = 0; i < argc; i++)
-		if (strcmp(argv[i], "-loadtime"))
-			kept.push_back(argv[i]);
-		else
+		if (!strcmp(argv[i], "-loadtime"))
 			g_loadtime = true;
+		else if (!strcmp(argv[i], "-reload"))
+			g_reload = true;
+		else if (!strcmp(argv[i], "-reloadas") && i + 1 < argc)
+		{
+			g_reload = true;
+			g_reload_as = argv[++i];
+		}
+		else
+			kept.push_back(argv[i]);
 
 	argc = (int)kept.size();
 	argv = &kept[0];
@@ -9627,6 +9741,10 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		printf("       -loadtime   the HD build step by step as LOADLOG "
 			"lines, no picture (with -roombox)\n");
+		printf("       -reload   a savegame loaded inside the level: the "
+			"build kept by the engine's key, the sheets set again, then the "
+			"pictures; -reloadas <LEVEL> another level's key: that level "
+			"built and its fingerprint printed, no picture\n");
 		return 1;
 	}
 
@@ -11362,6 +11480,14 @@ static int ProbeMain(int argc, char** argv)
 		return 0;
 	}
 
+	if (g_reload && !ProbeReload(root, stem, rooms, managed, threads,
+		budgetMiB, pageFormat))
+	{
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
 	/* -statictable: the answers, and no picture. */
 	if (probestatics::g_table)
 	{
@@ -12082,6 +12208,39 @@ static int ProbeMain(int argc, char** argv)
 				g_hdwater);
 			ProbeWaterFalls(level, stem);
 			ProbeCardPages(root, managed, threads);
+
+			/* -reload: the sheets set again over the kept build, as the
+			 * resident build sets them, with a ring of the first set left on
+			 * the first water square - the second set starts from nothing. */
+			if (g_reload_kept)
+			{
+				bool ringed = false;
+
+				for (int r = 0; r < nr && !ringed; r++)
+					for (int at = 0; rooms[r].below &&
+						at < rooms[r].sizeX * rooms[r].sizeZ && !ringed; at++)
+					{
+						const int pit = rooms[r].below[at];
+
+						if (pit < 0 || pit >= nr ||
+							!(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+							continue;
+
+						HDRenderWaterRing((float)(rooms[r].originX +
+							(at / rooms[r].sizeZ) * 1024 + 512),
+							(float)(rooms[r].originZ + (at % rooms[r].sizeZ) *
+							1024 + 512), 0.5f, 120.0f);
+						ringed = true;
+					}
+
+				ProbeWaterFilms(level);
+				HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
+					g_hdwater);
+				ProbeWaterFalls(level, stem);
+				ProbeCardPages(root, managed, threads);
+				printf("-reload: the sheets set again over the kept build%s\n",
+					ringed ? " (a ring of the first set on them before)" : "");
+			}
 
 			for (size_t i = 0; i + 4 < g_feet.size(); i += 5)
 				HDRenderWaterFootAdd(g_feet[i], g_feet[i + 1], g_feet[i + 2],

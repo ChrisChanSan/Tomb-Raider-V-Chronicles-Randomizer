@@ -9674,6 +9674,48 @@ static bool ProbeReload(const char* root, const char* stem, int rooms,
 	return false;
 }
 
+/* -loadtime -reload: the same level read again after the build, as LOADLOG
+ * lines - the tool's classic read, the key and its answer, and every step
+ * the engine's resident load does not run at 0 with skipped=1 (hd_level.cpp,
+ * HDLevelLoad and HDLevelBuildResident). The engine's own steps of that
+ * load (the sheets, the objects' rebind, the life, the re-dress) are not
+ * in this tool. */
+static void LoadTimeReload(const char* root, const char* stem,
+	double budgetMiB, int pageFormat)
+{
+	LoadTimeStep(stem, 0);
+
+	Tr5Level level;
+	std::string error;
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	std::wstring wide(trc.begin(), trc.end());
+
+	level.load(wide, error);
+	LoadTimeStep(stem, "classic_read");
+
+	HDLevelKey built, next;
+
+	ProbeLevelKey(root, stem, budgetMiB, pageFormat, &built);
+	ProbeLevelKey(root, stem, budgetMiB, pageFormat, &next);
+
+	const char* refused = HDLevelKeepRefused(&built, &next, 0);
+
+	LoadTimeStep(stem, "key");
+	printf("LOADLOG level=%s step=resident ms=0.0 kept=%d%s%s\n", stem,
+		refused ? 0 : 1, refused ? " refused=" : "", refused ? refused : "");
+
+	static const char* const skipped[] =
+	{
+		"trg_ahead", "scan", "boxes", "sectors", "intr", "air", "pairs",
+		"stand", "places", "begin", "trg_read", "prep", "pages", "owners",
+		"verts", "setup", "fill", "index", "hash", "pages_ahead"
+	};
+
+	for (const char* step : skipped)
+		if (!refused)
+			printf("LOADLOG level=%s step=%s ms=0.0 skipped=1\n", stem, step);
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	/* -loadtime, -reload and -reloadas are taken out of the list here, ahead
@@ -11578,6 +11620,10 @@ static int ProbeMain(int argc, char** argv)
 	{
 		LoadTimeAheadWait();
 		HDPageCacheAheadDrop();
+
+		if (g_reload && !g_roombox.empty())
+			LoadTimeReload(root, stem, budgetMiB, pageFormat);
+
 		HDRenderShutdown();
 		DropDevice();
 		return 0;
@@ -12347,13 +12393,20 @@ static int ProbeMain(int argc, char** argv)
 						ringed = true;
 					}
 
+				LARGE_INTEGER a, b, rate;
+
+				QueryPerformanceCounter(&a);
 				ProbeWaterFilms(level);
 				HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 					g_hdwater);
 				ProbeWaterFalls(level, stem);
 				ProbeCardPages(root, managed, threads);
-				printf("-reload: the sheets set again over the kept build%s\n",
-					ringed ? " (a ring of the first set on them before)" : "");
+				QueryPerformanceCounter(&b);
+				QueryPerformanceFrequency(&rate);
+				printf("-reload: the sheets set again over the kept build%s "
+					"ms=%.1f\n", ringed ? " (a ring of the first set on them "
+					"before)" : "", (double)(b.QuadPart - a.QuadPart) * 1000.0 /
+					(double)rate.QuadPart);
 			}
 
 			for (size_t i = 0; i + 4 < g_feet.size(); i += 5)

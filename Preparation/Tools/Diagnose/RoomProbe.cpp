@@ -9378,8 +9378,96 @@ static void HDDrawnSwitch(int argc, char** argv, int& at)
 		(int)want.size());
 }
 
+/* -loadtime: the level's HD build timed step by step, one line per step in
+ * the form of the game's LOADLOG lines (specific\file.cpp,
+ * specific\hd\hd_level.cpp), so that a level's steps on this machine can be
+ * held against a game log's. The steps before the build are this tool's
+ * twins of hd_level.cpp's (they need -roombox); the build's own parts come
+ * out of HDRenderStats exactly as the game's built line takes them. The
+ * .TRG scan of the game's load thread runs too, with the level's slots out
+ * of the classic file. What the tool does not run: the classic load, aInit,
+ * the static tables, the water's steps, the objects and the font. A
+ * -loadtime run takes no picture. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
+
+static bool g_loadtime = false;
+static double g_loadtime_at = 0.0;
+
+static void LoadTimeStep(const char* stem, const char* step)
+{
+	if (!g_loadtime)
+		return;
+
+	LARGE_INTEGER now, rate;
+
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&rate);
+
+	const double ms = (double)now.QuadPart * 1000.0 / (double)rate.QuadPart;
+
+	if (step)
+		printf("LOADLOG level=%s step=%s ms=%.1f\n", stem, step,
+			ms - g_loadtime_at);
+
+	g_loadtime_at = ms;
+}
+
+// The game's HDScanLevel call (HDLevelLoad): pages not decoded, one thread.
+static void LoadTimeScan(const char* root, const char* stem,
+	const Tr5Level& level)
+{
+	if (!g_loadtime)
+		return;
+
+	std::vector<unsigned char> loaded(HD_SLOT_COUNT, 0);
+	HDScanStats scan;
+	const char* why = "";
+
+	for (int slot : level.moveableSlots())
+		if (slot >= 0 && slot < HD_SLOT_COUNT)
+			loaded[(size_t)slot] = 1;
+
+	if (!HDScanLevel(root, stem, level.roomCount(), &loaded[0], HD_SLOT_COUNT,
+		false, 1, &scan, &why))
+		printf("LOADLOG level=%s scan failed: %s\n", stem, why);
+
+	LoadTimeStep(stem, "scan");
+}
+
+// The build's own parts, in the order and under the names of hd_level.cpp.
+static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
+{
+	if (!g_loadtime)
+		return;
+
+	printf("LOADLOG level=%s step=trg_read ms=%.1f\n", stem, stats.readMs);
+
+	for (int b = 0; b < HD_BEGIN_PHASES; b++)
+		printf("LOADLOG level=%s step=%s ms=%.1f\n", stem,
+			HDRenderBeginPhaseName(b), stats.phaseMs[b]);
+
+	printf("LOADLOG level=%s step=hash ms=%.1f\n", stem, stats.hashMs);
+	printf("LOADLOG level=%s step=begin ms=%.1f pages_read=%.1f "
+		"pages_decode=%.1f pages_upload=%.1f threads=%d\n", stem,
+		stats.readMs + stats.buildMs, stats.pages.readMs,
+		stats.pages.decodeMs, stats.pages.uploadMs, stats.pages.threads);
+}
+
 static int ProbeMain(int argc, char** argv)
 {
+	/* -loadtime is taken out of the list here, ahead of the switch chain
+	 * below, which stands at the compiler's nesting depth. */
+	std::vector<char*> kept;
+
+	for (int i = 0; i < argc; i++)
+		if (strcmp(argv[i], "-loadtime"))
+			kept.push_back(argv[i]);
+		else
+			g_loadtime = true;
+
+	argc = (int)kept.size();
+	argv = &kept[0];
+
 	if (argc < 4)
 	{
 		printf("usage: RoomProbe <5-folder> <LEVEL> <room> [x y z yaw pitch] [options]\n");
@@ -9506,6 +9594,8 @@ static int ProbeMain(int argc, char** argv)
 		printf("                             eye, both rules, one line\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
+		printf("       -loadtime   the HD build step by step as LOADLOG "
+			"lines, no picture (with -roombox)\n");
 		return 1;
 	}
 
@@ -10535,6 +10625,8 @@ static int ProbeMain(int argc, char** argv)
 	if (g_tround_group >= 0)
 		HDRenderSplitOverhang(1);
 
+	LoadTimeStep(stem, 0);
+
 	/* The rooms' own boxes out of the classic level, the same arithmetic
 	 * game\draw.cpp uses and hd_level.cpp copies. */
 	if (!g_roombox.empty())
@@ -10552,6 +10644,8 @@ static int ProbeMain(int argc, char** argv)
 				trc.c_str(), error.c_str());
 		else
 		{
+			LoadTimeStep(stem, "classic_read");
+			LoadTimeScan(root, stem, level);
 			g_boxes_built.resize((size_t)level.roomCount());
 
 			for (int i = 0; i < level.roomCount(); i++)
@@ -10602,6 +10696,8 @@ static int ProbeMain(int argc, char** argv)
 			}
 			printf("-roombox: %d room boxes handed in from %s\n",
 				(int)g_boxes_built.size(), trc.c_str());
+
+			LoadTimeStep(stem, "boxes");
 
 			/* And the floor squares, as hd_level.cpp's BuildRoomSectors
 			 * hands them in: the light cubes and the lamps of the sheen, and
@@ -10707,6 +10803,8 @@ static int ProbeMain(int argc, char** argv)
 				printf("-fieldsight: the light field takes the sight test by the rooms\n");
 			}
 
+			LoadTimeStep(stem, "sectors");
+
 			/* And the rooms that may hold another room's art. The rule is
 			 * BuildRoomIntrusions' (specific\hd\hd_level.cpp), read out of
 			 * the same file: not next door by portal or by a vertical floor
@@ -10810,6 +10908,8 @@ static int ProbeMain(int argc, char** argv)
 
 				printf("-roombox: %d intrusion boxes handed in\n",
 					(int)g_intrusions_built.size());
+
+				LoadTimeStep(stem, "intr");
 
 				/* And every room's air, as BuildRoomAir hands it over: per
 				 * floor square its floor and ceiling bytes and its floor
@@ -10968,6 +11068,8 @@ static int ProbeMain(int argc, char** argv)
 						HDRenderSetCarryHosts(&sky[0], &twin[0], n);
 				}
 
+				LoadTimeStep(stem, "air");
+
 				/* And the intruders' classic faces, as BuildPairFaces hands
 				 * them over: every drawn face of every intruder room, in
 				 * the room's own frame, in the roomlets' order, the ones
@@ -11045,6 +11147,8 @@ static int ProbeMain(int argc, char** argv)
 				printf("-roombox: %d classic faces handed in\n",
 					(int)g_faces_built.size());
 
+				LoadTimeStep(stem, "pairs");
+
 				/* And the faces another group's art may stand on, as
 				 * BuildStandFaces hands them over: every room's origin and
 				 * twin, every room with a classic face that -hdm does not
@@ -11117,6 +11221,8 @@ static int ProbeMain(int argc, char** argv)
 					"the stand ranges\n", (int)g_stand_holders_built.size(),
 					(int)g_stand_faces_built.size());
 			}
+
+			LoadTimeStep(stem, "stand");
 
 			/* -hdm: the openings the randomizer cut, out of the sidecar
 			 * beside that very .TRC, in the shape hd_level.cpp's
@@ -11199,6 +11305,8 @@ static int ProbeMain(int argc, char** argv)
 	if (!g_roombox.empty())
 		probestatics::HandPlaces(stem);
 
+	LoadTimeStep(stem, "places");
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -11211,6 +11319,16 @@ static int ProbeMain(int argc, char** argv)
 		HDRenderShutdown();
 		DropDevice();
 		return 4;
+	}
+
+	LoadTimeStep(stem, "begin_wall");
+	LoadTimeBuild(stem, stats);
+
+	if (g_loadtime)
+	{
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
 	}
 
 	/* -statictable: the answers, and no picture. */

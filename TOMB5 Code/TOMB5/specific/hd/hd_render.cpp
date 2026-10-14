@@ -27,6 +27,7 @@
 #include "hd_render.h"
 #include "hd_pagecache.h"
 #include "hd_book.h"
+#include "hd_scan.h"		// HDScanTakeTrg - the .TRG read once a load
 
 #include "../../vendor/trforge/src/trf_remaster/Trg.h"
 
@@ -5558,7 +5559,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	trf::remaster::Trg trg;
 	std::string error;
 
-	if (!trf::remaster::read_trg(trg_path, trg, error))
+	// The parse of the load thread's scan, when it kept one of this file.
+	if (!HDScanTakeTrg(trg_path.c_str(), &trg) &&
+		!trf::remaster::read_trg(trg_path, trg, error))
 	{
 		g_error = error;
 		*why = g_error.c_str();

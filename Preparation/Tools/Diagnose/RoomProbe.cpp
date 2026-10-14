@@ -9458,6 +9458,9 @@ static void LoadTimeScan(const char* root, const char* stem,
 		if (slot >= 0 && slot < HD_SLOT_COUNT)
 			loaded[(size_t)slot] = 1;
 
+	// The parse kept for the build, as HDLevelLoad keeps it.
+	HDScanKeepTrg(true);
+
 	if (!HDScanLevel(root, stem, level.roomCount(), &loaded[0], HD_SLOT_COUNT,
 		false, 1, &scan, &why))
 		printf("LOADLOG level=%s scan failed: %s\n", stem, why);
@@ -9479,9 +9482,10 @@ static void LoadTimeBuild(const char* stem, const HDRenderStats& stats)
 
 	printf("LOADLOG level=%s step=hash ms=%.1f\n", stem, stats.hashMs);
 	printf("LOADLOG level=%s step=begin ms=%.1f pages_read=%.1f "
-		"pages_decode=%.1f pages_upload=%.1f threads=%d\n", stem,
-		stats.readMs + stats.buildMs, stats.pages.readMs,
-		stats.pages.decodeMs, stats.pages.uploadMs, stats.pages.threads);
+		"pages_decode=%.1f pages_upload=%.1f threads=%d trg_kept=%d "
+		"hash=%016llx\n", stem, stats.readMs + stats.buildMs,
+		stats.pages.readMs, stats.pages.decodeMs, stats.pages.uploadMs,
+		stats.pages.threads, HDScanTrgTaken() ? 1 : 0, stats.hash);
 }
 
 /* -reload: the HD side of a savegame loaded inside the level, as far as this

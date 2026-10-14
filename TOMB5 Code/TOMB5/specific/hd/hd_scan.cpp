@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -34,6 +35,12 @@ namespace
 	std::vector<MissingEntry> missing;
 	std::vector<int> scan_pages;
 	std::string scan_error;
+
+	// The parse kept for the level's build (HDScanKeepTrg) and its file.
+	bool keep_trg = false;
+	std::unique_ptr<trf::remaster::Trg> kept_trg;
+	std::string kept_path;
+	bool trg_taken = false;
 
 	bool read_whole(const std::string& path, std::vector<unsigned char>& out)
 	{
@@ -201,6 +208,7 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 	missing.clear();
 	scan_pages.clear();
 	scan_error.clear();
+	HDScanDropTrg();
 
 	if (out)
 		std::memset(out, 0, sizeof(*out));
@@ -374,7 +382,43 @@ bool HDScanLevel(const char* installRoot, const char* stem, int numRooms,
 		out->bc7Pages = (int)scan_pages.size();
 	}
 
+	if (keep_trg)
+	{
+		kept_trg.reset(new trf::remaster::Trg(std::move(trg)));
+		kept_path = trg_path;
+	}
+
 	return true;
+}
+
+void HDScanKeepTrg(bool keep)
+{
+	keep_trg = keep;
+
+	if (!keep)
+		HDScanDropTrg();
+}
+
+bool HDScanTakeTrg(const char* path, trf::remaster::Trg* out)
+{
+	trg_taken = kept_trg && out && path && !_stricmp(path, kept_path.c_str());
+
+	if (trg_taken)
+		*out = std::move(*kept_trg);
+
+	HDScanDropTrg();
+	return trg_taken;
+}
+
+bool HDScanTrgTaken()
+{
+	return trg_taken;
+}
+
+void HDScanDropTrg()
+{
+	kept_trg.reset();
+	kept_path.clear();
 }
 
 int HDScanMissingCount()

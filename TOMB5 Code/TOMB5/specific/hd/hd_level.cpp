@@ -5597,6 +5597,10 @@ void HDLevelLoad(const char* wadName)
 	// make the level load twice as slow to measure the same thing.
 	const double scan_started = LoadClockMs();
 
+	/* The parse is kept for the build, which takes it instead of reading
+	 * the file a second time (HDRenderLevelBegin). */
+	HDScanKeepTrg(true);
+
 	if (!HDScanLevel(HDInstallRoot(), g_stem, number_rooms, loaded, NUMBER_OBJECTS,
 		false, 1, &stats, &why))
 	{
@@ -6665,8 +6669,8 @@ static void HDLevelBuildHD()
 			if (p != LOAD_BEGIN)
 				continue;
 
-			Log("LOADLOG level=%s step=trg_read ms=%.1f", g_stem,
-				stats.readMs);
+			Log("LOADLOG level=%s step=trg_read ms=%.1f%s", g_stem,
+				stats.readMs, HDScanTrgTaken() ? " kept=1" : "");
 
 			for (int b = 0; b < HD_BEGIN_PHASES; b++)
 				Log("LOADLOG level=%s step=%s ms=%.1f", g_stem,
@@ -6823,6 +6827,8 @@ void HDLevelUnload()
 	g_keep = !refused;
 	g_key_loading = g_key_next;
 	memset(&g_key_next, 0, sizeof(g_key_next));
+	// A parse of the level before that no build took (HDScanKeepTrg).
+	HDScanDropTrg();
 
 	if (g_key_loading.valid)
 		Log("HDLOG level=%s resident=%d%s%s", g_key_loading.name,

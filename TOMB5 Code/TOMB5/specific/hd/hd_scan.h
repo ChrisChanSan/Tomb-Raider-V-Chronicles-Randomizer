@@ -17,12 +17,13 @@
 // Reads <5>\DATA\<STEM>.TRG and <5>\DATA\<STEM>.MAP, counts what is in them,
 // binds every loaded slot to its .TRM and looks whether that file is there.
 // It draws nothing and builds no GPU object, and it frees everything again
-// before it returns.
+// before it returns - but the parsed .TRG, while HDScanKeepTrg asks for it.
 //
 // Engine-free on purpose: this is the translation unit the vendored TRForge
 // reader lives in (C++17, <filesystem>), and it is the same code the
 // diagnostic tools TrgProbe and MapProbe run, so what they measure is what the
-// game measures. The interface is plain C shapes only.
+// game measures. The interface is plain C shapes only, but for the kept
+// parse, which is the reader's own type.
 
 struct HDScanStats
 {
@@ -133,3 +134,21 @@ double HDScanDecodePages(const char* installRoot, const int* pages, int count,
  * (which is not an error - the water then keeps the classic tile). */
 int HDScanLevelTextures(const char* installRoot, const char* stem,
 	unsigned short* out, int maxTiles);
+
+/* The parsed .TRG of a scan, kept for the level's build so that a level load
+ * reads the file once: the scan on the load thread reads it, the build on
+ * the main thread takes the parse (hd_render.cpp, HDRenderLevelBegin) and
+ * frees it with its own data. One parse at most is kept, with the path it
+ * came from; the next scan replaces it. Off by default, so that a tool that
+ * only scans keeps nothing.
+ *
+ * HDScanTakeTrg moves the kept parse of `path` into `out` and is true, or
+ * leaves `out` alone and is false when none of that file is kept - the
+ * caller reads it then. Either way nothing is kept after it.
+ * HDScanTrgTaken says whether the last take found one, for the log. */
+namespace trf { namespace remaster { struct Trg; } }
+
+void HDScanKeepTrg(bool keep);
+bool HDScanTakeTrg(const char* path, trf::remaster::Trg* out);
+bool HDScanTrgTaken();
+void HDScanDropTrg();

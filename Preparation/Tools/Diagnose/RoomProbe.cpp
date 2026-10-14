@@ -6828,11 +6828,182 @@ static void ProbeCardsDraw()
 		st.cards, ms);
 }
 
+/* -tankart: the .TRG's art over and under every kept square of floor
+ * `floor`, group by group, one line each: the triangles whose centroid lies
+ * in the square's column within 16 units of its floor (flat ones, and the
+ * pages and passes they are on), under it and over it; of those under it,
+ * the ones whose centroid mirrored in the floor lands within 32 units of
+ * the centroid of a triangle over it (any group) - the copy of a room
+ * under its floor - and how deep the deepest lies. */
+static bool g_tank_art = false;
+
+static void ProbeWetArt(int floor, const char* root, const char* stem)
+{
+	if (!g_tank_art)
+		return;
+
+	static trf::remaster::Trg trg;
+	static bool read = false;
+
+	if (!read)
+	{
+		std::string error;
+
+		read = true;
+
+		if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" +
+			stem + ".TRG", trg, error))
+			printf("wetart: no .TRG (%s)\n", error.c_str());
+	}
+
+	struct Tri
+	{
+		int group, pass, page;
+		float x, y, z, ny;
+	};
+
+	std::map<long long, std::vector<Tri> > column;
+	const auto key = [](int sx, int sz)
+	{
+		return ((long long)sx << 32) ^ (long long)(unsigned int)sz;
+	};
+	const auto cell = [](float x, float y, float z)
+	{
+		return ((long long)((int)floorf(x / 32.0f) & 0xFFFFF) << 40) |
+			((long long)((int)floorf(y / 32.0f) & 0xFFFFF) << 20) |
+			(long long)((int)floorf(z / 32.0f) & 0xFFFFF);
+	};
+	HDWaterWetSquare s;
+	std::set<long long> wanted;
+
+	for (int at = 0; HDRenderWaterWetSquare(floor, at, &s); at++)
+		if (s.kept)
+			wanted.insert(key(s.x >> 10, s.z >> 10));
+
+	for (size_t g = 0; g < trg.groups.size() && g < g_boxes_built.size(); g++)
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			for (int pass = 0; pass < 3; pass++)
+				for (unsigned int i = 0; i + 2 < part.pass[pass].count; i += 3)
+				{
+					const unsigned int first = part.pass[pass].start + i;
+					float p[3][3];
+					int page = 0;
+
+					for (int v = 0; v < 3; v++)
+					{
+						const trf::remaster::TrgVertex& tv =
+							trg.vertices[trg.indices[first + v]];
+
+						p[v][0] = (float)tv.x + (float)g_boxes_built[g].originX;
+						p[v][1] = (float)tv.y;
+						p[v][2] = (float)tv.z + (float)g_boxes_built[g].originZ;
+						page = tv.layer && tv.layer <= trg.textures.size() ?
+							trg.textures[tv.layer - 1u] : -1;
+					}
+
+					Tri t = { (int)g, pass, page,
+						(p[0][0] + p[1][0] + p[2][0]) / 3.0f,
+						(p[0][1] + p[1][1] + p[2][1]) / 3.0f,
+						(p[0][2] + p[1][2] + p[2][2]) / 3.0f, 0.0f };
+					const float ax = p[1][0] - p[0][0], ay = p[1][1] - p[0][1];
+					const float az = p[1][2] - p[0][2], bx = p[2][0] - p[0][0];
+					const float by = p[2][1] - p[0][1], bz = p[2][2] - p[0][2];
+					const float nx = ay * bz - az * by, ny = az * bx - ax * bz;
+					const float nz = ax * by - ay * bx;
+					const float l = sqrtf(nx * nx + ny * ny + nz * nz);
+
+					t.ny = l > 0.0f ? fabsf(ny) / l : 0.0f;
+
+					const long long k = key((int)floorf(t.x / 1024.0f),
+						(int)floorf(t.z / 1024.0f));
+
+					if (wanted.count(k))
+						column[k].push_back(t);
+				}
+
+	for (int at = 0; HDRenderWaterWetSquare(floor, at, &s); at++)
+	{
+		if (!s.kept)
+			continue;
+
+		const std::vector<Tri>& all = column[key(s.x >> 10, s.z >> 10)];
+		std::set<long long> over;
+		std::map<int, int> groups;
+
+		for (const Tri& t : all)
+		{
+			groups[t.group]++;
+
+			if (t.y < (float)s.y - 16.0f)
+				over.insert(cell(t.x, t.y, t.z));
+		}
+
+		for (const auto& gr : groups)
+		{
+			int flat = 0, under = 0, mirrored = 0, above = 0;
+			float deep = 0.0f;
+			std::map<std::pair<int, int>, int> pages;
+
+			for (const Tri& t : all)
+			{
+				if (t.group != gr.first)
+					continue;
+
+				if (fabsf(t.y - (float)s.y) <= 16.0f)
+				{
+					if (t.ny > 0.95f)
+					{
+						flat++;
+						pages[std::make_pair(t.page, t.pass)]++;
+					}
+				}
+				else if (t.y > (float)s.y)
+				{
+					const float my = 2.0f * (float)s.y - t.y;
+					bool found = false;
+
+					under++;
+					deep = t.y - (float)s.y > deep ? t.y - (float)s.y : deep;
+
+					for (int d = 0; d < 27 && !found; d++)
+						found = over.count(cell(
+							t.x + 32.0f * (float)(d % 3 - 1),
+							my + 32.0f * (float)(d / 3 % 3 - 1),
+							t.z + 32.0f * (float)(d / 9 - 1))) != 0;
+
+					mirrored += found ? 1 : 0;
+				}
+				else
+					above++;
+			}
+
+			std::string list;
+
+			for (const auto& p : pages)
+			{
+				char b[32];
+
+				snprintf(b, sizeof(b), "%s%d/%d:%d", list.empty() ? "" : ",",
+					p.first.first, p.first.second, p.second);
+				list += b;
+			}
+
+			printf("wetart tank=%d room=%d x=%d z=%d y=%d group=%d flat=%d "
+				"pages=%s under=%d mirrored=%d deep=%.0f over=%d\n", s.item,
+				s.room, s.x, s.z, s.y, gr.first, flat,
+				list.empty() ? "-" : list.c_str(), under, mirrored, deep,
+				above);
+		}
+	}
+}
+
 /* -tankwetmap: floor `floor`'s squares, room by room, one line each: the
  * square's corner, its floor, its nearest point's way from the glass in
  * units and in squares, the moment the front first reaches it (the dome's
- * own out to its foot, the flood's speed past it) and whether the radius
- * keeps it. */
+ * own out to its foot, the flood's speed past it), whether the radius
+ * keeps it and, as copy=, the art's copy of the room under it: the cells
+ * of art under the floor, the mirrored ones and whether the square counts
+ * as copied (HDWaterWetSquare). */
 static void ProbeWetMap(int floor)
 {
 	if (!g_tank_wet_map)
@@ -6857,8 +7028,9 @@ static void ProbeWetMap(int floor)
 			kTankDomeOut + (q.way - q.reach) / kWetSpread;
 
 		printf("wetmap tank=%d room=%d x=%d z=%d y=%d way=%.0f squares=%.2f "
-			"t=%.2f %s\n", q.item, q.room, q.x, q.z, q.y, q.way,
-			q.way / 1024.0f, t, q.kept ? "kept" : "dropped");
+			"t=%.2f %s copy=%d/%d/%s\n", q.item, q.room, q.x, q.z, q.y,
+			q.way, q.way / 1024.0f, t, q.kept ? "kept" : "dropped", q.under,
+			q.mirrored, q.copied ? "yes" : "no");
 	}
 }
 
@@ -9935,11 +10107,14 @@ static int ProbeMain(int argc, char** argv)
 			(!strcmp(argv[at], "-tankwet") && at + 1 < argc) ||
 			(!strcmp(argv[at], "-tankmarch") && at + 1 < argc) ||
 			!strcmp(argv[at], "-tankwetmap") ||
+			!strcmp(argv[at], "-tankart") ||
 			!strcmp(argv[at], "-tankwetall"))
 		{
 			// One branch for all: the chain is at the compiler's depth.
 			if (!strcmp(argv[at], "-tankwetmap"))
 				g_tank_wet_map = true;
+			else if (!strcmp(argv[at], "-tankart"))
+				g_tank_art = true;
 			else if (!strcmp(argv[at], "-tankwetall"))
 				HDRenderWaterWetLimited(0);
 			else if (!strcmp(argv[at], "-tankmarch"))
@@ -12395,6 +12570,7 @@ static int ProbeMain(int argc, char** argv)
 			{
 				printf("%s\n", line);
 				ProbeWetMap(w);
+				ProbeWetArt(w, root, stem);
 			}
 
 			for (const std::string& m : g_mist_lines)

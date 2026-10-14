@@ -81,7 +81,9 @@
  *   TEXCOORD1  x the view depth, y the light the fog takes its share of
  *   TEXCOORD2  xyz the light field's texture coordinate, w the share of
  *              the mirror the water's depth there gives (a damp patch
- *              darkens and mirrors less than a pool)
+ *              darkens and mirrors less than a pool), 0 where the art
+ *              carries its own copy of the room under the floor - no
+ *              march there (hd_render.cpp, "the art's own mirror")
  *
  * Pixel registers, written before each draw, in the block the sheets'
  * and the cards' draws write again before they read it:
@@ -483,7 +485,7 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 	// What the reflected ray finds: the frame, or the walls' light.
 	float3 seen = colour * gWetLook.y;
 
-	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f)
+	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f && input.field.w > 0.0f)
 	{
 		float2 at;
 		float why, steps;

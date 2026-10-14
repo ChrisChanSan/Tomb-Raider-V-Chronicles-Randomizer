@@ -11773,6 +11773,7 @@ namespace
 		float x, y, z;		// world
 		float way;		// units from the glass along the water's way
 		float puddle;		// the share of the mirror there
+		float march;		// 0 where the art mirrors the room itself
 		float light;		// its room's light, for the fog
 		float field[3];		// the light field's texture coordinate
 	};
@@ -11798,6 +11799,8 @@ namespace
 		int x, z, y, room;
 		float way;
 		bool kept;
+		int under, mirrored;	// the art's cells (see wet_copied)
+		bool copied;
 	};
 
 	struct WetFloor
@@ -12681,6 +12684,84 @@ namespace
 	/* The wet floor of every tank handed in (see "the wet floor"), out of
 	 * the classic floor of every room: the squares, then the points and
 	 * their way from the glass. */
+	/* The art's own mirror. A room's art can carry a copy of the room
+	 * upside down under its floor, so that a floor drawn part-way clear
+	 * shows it as the room's reflection: RICH2's corridor, room 46 and its
+	 * flip twin 75, does so for its whole length, 1,536 units deep, and its
+	 * copy reaches under room 122's two squares at the corridor's mouth
+	 * (RoomProbe -tankart, every triangle of the .TRG: 24 to 874 under each
+	 * of the corridor's squares, 40 to 100 per cent of them mirroring one
+	 * over it within 32 units; 120 and 134 under room 122's, 99 each). Its
+	 * floor lets the copy through from x 41,984 west, where it lies in the
+	 * alpha pass on a part-way clear page; at the mouth it is opaque. There
+	 * the water adds no mirror of its own: the art's is the room's
+	 * reflection, and one marched out of the frame is another picture of
+	 * it - the corridor's ceiling glows, which no depth holds, land in it
+	 * as yellow bands across the floor. The wet floor keeps its darkening.
+	 *
+	 * Asked of what the level keeps of its art, the 256-unit cells that
+	 * hold a vertex of a group (HDGroup::cells): in a square's column, the
+	 * cells under its floor - down to kWetCopyDepth - of every room whose
+	 * flat floor lies there at that height, and of those the ones with a
+	 * cell over the floor at the mirrored height. A square is copied when
+	 * at least kWetCopyCells of them are mirrored and they are a third of
+	 * what lies under it. Counted on RICH2 (-tankwetmap -tankwetall, the
+	 * copy= field): the corridor's 36 squares 21 to 38 cells under, 12 to
+	 * 34 of them mirrored; room 122's two at its mouth 30 and 32 under, 15
+	 * and 16 mirrored; every other square of either tank none under but
+	 * one of room 23's, 3 under and 1 mirrored. 2,048 units hold the
+	 * corridor's 1,536 with room to spare; kWetCopyCells, two of each of a
+	 * square's four rows of cells, and the third are free choices in the
+	 * wide gap between the two kinds of square. */
+	const int kWetCopyDepth = 8;		// cells, 2,048 units
+	const int kWetCopyCells = 8;
+
+	// Whether a group has a vertex in a cell, cell indices room local.
+	bool wet_cell(const std::vector<unsigned int>& cells, int cx, int cy,
+		int cz)
+	{
+		return std::binary_search(cells.begin(), cells.end(),
+			CellKey(cx * 256, cy * 256, cz * 256));
+	}
+
+	/* The cells of the art of `list`'s rooms under square sx, sz at floor
+	 * y, and of those the ones mirrored by any of them, into the counts
+	 * (see above): the copy under a room's floor can belong to the group of
+	 * another room that shares the square - room 46's copy runs under room
+	 * 122's floor at the corridor's mouth, where room 122 draws what it
+	 * mirrors. A point y0 + d under the floor mirrors to y0 - d over it: a
+	 * cell j under the floor's own to cell j + 1 over it, or j at its top
+	 * edge. */
+	void wet_copied(const HDWaterRoom* rooms, const std::vector<int>& list,
+		int sx, int sz, int y, int* under, int* mirrored)
+	{
+		const int fy = y / 256;
+		// Whether any listed room has art in a world cell of the column.
+		const auto any = [&](int i, int cy, int k)
+		{
+			for (int r : list)
+				if (wet_cell(g_groups[(size_t)r].cells,
+					(sx * 1024 - rooms[r].originX) / 256 + i, cy,
+					(sz * 1024 - rooms[r].originZ) / 256 + k))
+					return true;
+
+			return false;
+		};
+
+		for (int i = 0; i < 4; i++)
+			for (int k = 0; k < 4; k++)
+				for (int j = 1; j <= kWetCopyDepth; j++)
+				{
+					if (!any(i, fy + j, k))
+						continue;
+
+					(*under)++;
+
+					if (any(i, fy - j, k) || any(i, fy - j - 1, k))
+						(*mirrored)++;
+				}
+	}
+
 	void build_wet_floors(const HDWaterRoom* rooms, int count,
 		const char* stem)
 	{
@@ -12904,6 +12985,7 @@ namespace
 
 					p.puddle = kWetDamp + (1.0f - kWetDamp) *
 						HDCardShare(place, 2u);
+					p.march = 1.0f;
 
 					for (int a = 0; a < 3; a++)
 					{
@@ -13025,13 +13107,16 @@ namespace
 			std::vector<int> renumber(w.points.size(), -1);
 			std::vector<WetPoint> kept;
 
+			/* The squares the radius keeps, and the art's own mirror under
+			 * them: a copied square's points take no march mirror, so the
+			 * march fades out over the grid's step next to it. */
 			for (size_t s = 0; s < grid.size(); s++)
 			{
 				const std::array<int, 25>& g = grid[s];
 				const Wet& q = wet[s];
 				const std::vector<Floor>& here = floors[square(q.sx, q.sz)];
 				WetSquare map = { q.sx * 1024, q.sz * 1024, q.y, q.room,
-					nearest[s], false };
+					nearest[s], false, 0, 0, false };
 
 				for (int k = 0; k < 25; k++)
 					map.kept = map.kept ||
@@ -13044,9 +13129,34 @@ namespace
 						break;
 					}
 
-				w.squares.push_back(map);
+				std::vector<int> list;
 
-				if (!map.kept)
+				for (const Floor& f : here)
+					if (f.y == q.y && f.room >= 0 && f.room < count &&
+						f.room < (int)g_groups.size() &&
+						std::find(list.begin(), list.end(), f.room) ==
+						list.end())
+						list.push_back(f.room);
+
+				wet_copied(rooms, list, q.sx, q.sz, q.y, &map.under,
+					&map.mirrored);
+
+				map.copied = map.mirrored >= kWetCopyCells &&
+					map.mirrored * 3 >= map.under;
+
+				for (int k = 0; k < 25 && map.kept && map.copied; k++)
+					w.points[(size_t)g[(size_t)k]].march = 0.0f;
+
+				w.squares.push_back(map);
+			}
+
+			for (size_t s = 0; s < grid.size(); s++)
+			{
+				const std::array<int, 25>& g = grid[s];
+				const Wet& q = wet[s];
+				const std::vector<Floor>& here = floors[square(q.sx, q.sz)];
+
+				if (!w.squares[s].kept)
 					continue;
 
 				w.info.squares++;
@@ -16003,6 +16113,9 @@ bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
 	out->room = s.room;
 	out->way = s.way;
 	out->kept = s.kept ? 1 : 0;
+	out->under = s.under;
+	out->mirrored = s.mirrored;
+	out->copied = s.copied ? 1 : 0;
 	out->reach = w.info.reach;
 	out->limit = w.limit;
 	return true;
@@ -16806,7 +16919,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			v.r = p.field[0];
 			v.g = p.field[1];
 			v.b = p.field[2];
-			v.a = p.puddle * open(p);
+			v.a = p.puddle * p.march * open(p);
 			v.light = p.light;
 			verts.push_back(v);
 		}

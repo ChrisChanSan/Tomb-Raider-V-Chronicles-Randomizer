@@ -6796,9 +6796,16 @@ static void ProbeWetDraw()
  * the water drew it before the springs; -springparts 1 draws the columns
  * alone, 2 the bubbles alone, for their pixel counts. The SPRINGLOG lines
  * list the springs as the engine builds them; -springs is -hdwater 1, for
- * that list (with -nodraw, no picture). */
+ * that list (with -nodraw, no picture), with a SPRINGRULE line for each
+ * body; -springkey n builds them with the key hd_springs at n. */
 static bool g_spring_off = false;
 static std::vector<float> g_spring_add;
+/* -springs: also what the rule saw in each body (SPRINGRULE lines);
+ * -springkey n: the key hd_springs as the engine would read it (1). */
+static bool g_spring_list = false;
+static int g_spring_key = 1;
+
+static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out);
 
 // The springs' switches, apart from ProbeMain's chain of them.
 static bool SpringArg(int argc, char** argv, int* at)
@@ -6812,6 +6819,13 @@ static bool SpringArg(int argc, char** argv, int* at)
 	if (!strcmp(argv[*at], "-springs"))
 	{
 		g_hdwater = 1;
+		g_spring_list = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-springkey") && *at + 1 < argc)
+	{
+		g_spring_key = atoi(argv[++*at]);
 		return true;
 	}
 
@@ -6843,7 +6857,10 @@ static void SpringBuild(const char* stem)
 	if (g_spring_off)
 		return;
 
-	HDSpringBuild(stem);
+	std::vector<HDSpringBlock> blocks;
+
+	SpringBlocks(stem, blocks);
+	HDSpringBuild(stem, blocks, g_spring_key);
 
 	for (size_t i = 0; i + 2 < g_spring_add.size(); i += 3)
 		if (!HDSpringAdd(stem, g_spring_add[i], g_spring_add[i + 1],
@@ -6854,6 +6871,10 @@ static void SpringBuild(const char* stem)
 	char line[256];
 
 	for (int i = -1; HDSpringLogLine(i, line, sizeof(line)); i++)
+		printf("%s\n", line);
+
+	for (int i = 0; g_spring_list && HDSpringRuleLine(i, line, sizeof(line));
+		i++)
 		printf("%s\n", line);
 }
 
@@ -9474,6 +9495,87 @@ static void HDDrawnSwitch(int argc, char** argv, int& at)
 		(int)want.size());
 }
 
+/* What the springs' rule keeps clear of, out of the classic .TRC, as
+ * hd_spring.cpp's LevelBlocks reads it out of the engine: every portal
+ * through a wall (normal y 0) of every room, its corners from the room's
+ * origin; the start of Lara's item (slot 0); every static (probestatics,
+ * world x, z). */
+static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out)
+{
+	Tr5Level level;
+	std::string error;
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	std::wstring wide;
+
+	for (size_t i = 0; i < trc.size(); i++)
+		wide.push_back((wchar_t)(unsigned char)trc[i]);
+
+	if (g_roombox.empty() || !level.load(wide, error))
+	{
+		printf("-springs: %s could not be read - no blocks\n", trc.c_str());
+		return;
+	}
+
+	for (int r = 0; r < level.roomCount(); r++)
+	{
+		const Tr5Room& rm = level.rooms()[(size_t)r];
+		std::vector<Tr5Level::PortalRecord> recs;
+		unsigned yOrigin = 0;
+
+		level.headerField(r, 24, yOrigin, error);
+
+		if (!level.portalRecords(r, recs, error))
+			continue;
+
+		for (const Tr5Level::PortalRecord& p : recs)
+		{
+			if (p.ny)
+				continue;
+
+			HDSpringBlock b = { HD_SPRING_PORTAL, 1.0e9f, 1.0e9f, -1.0e9f,
+				-1.0e9f, 1.0e9f, -1.0e9f };
+
+			for (int k = 0; k < 4; k++)
+			{
+				const float x = (float)(rm.originX + p.v[k][0]);
+				const float y = (float)((int)yOrigin + p.v[k][1]);
+				const float z = (float)(rm.originZ + p.v[k][2]);
+
+				b.x0 = fminf(b.x0, x);
+				b.x1 = fmaxf(b.x1, x);
+				b.y0 = fminf(b.y0, y);
+				b.y1 = fmaxf(b.y1, y);
+				b.z0 = fminf(b.z0, z);
+				b.z1 = fmaxf(b.z1, z);
+			}
+
+			out.push_back(b);
+		}
+	}
+
+	for (int i = 0; i < level.itemCount(); i++)
+	{
+		Tr5Item it;
+
+		if (level.getItem(i, it) && it.objectNumber == 0)
+		{
+			const HDSpringBlock b = { HD_SPRING_START, (float)it.x,
+				(float)it.z, (float)it.x, (float)it.z, -1.0e9f, 1.0e9f };
+
+			out.push_back(b);
+		}
+	}
+
+	if (probestatics::Load(stem))
+		for (const probestatics::Static& s : probestatics::g_list)
+		{
+			const HDSpringBlock b = { HD_SPRING_STATIC, (float)s.x,
+				(float)s.z, (float)s.x, (float)s.z, -1.0e9f, 1.0e9f };
+
+			out.push_back(b);
+		}
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	if (argc < 4)
@@ -9606,8 +9708,9 @@ static int ProbeMain(int argc, char** argv)
 			"strength s (0..1), with -hdwater 1, repeatable; -nospring "
 			"none; -springparts 1|2 the columns or the bubbles alone\n");
 		printf("       -springs   the level's springs as the engine builds "
-			"them, their SPRINGLOG lines (-hdwater 1; with -nodraw no "
-			"picture)\n");
+			"them, their SPRINGLOG lines and the rule's SPRINGRULE line per "
+			"body (-hdwater 1; with -nodraw no picture); -springkey <n> the "
+			"key hd_springs (1)\n");
 		return 1;
 	}
 

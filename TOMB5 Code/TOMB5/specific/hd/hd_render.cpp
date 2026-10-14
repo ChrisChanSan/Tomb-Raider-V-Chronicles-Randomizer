@@ -17574,8 +17574,9 @@ const char* HDRenderWaterSectionName(int section)
  * kWaterClip), the share of its class's swell its sheet's vertices
  * take (swell; see kWaterBank), how far its rows are short crests in
  * a fan (crest; see "the crests" over kWaterFan), and the world x and z
- * of the ripple source or the spring its floats drift away from, none
- * without one (spring; HDRenderWaterBody::spring). */
+ * of the ripple row's source its floats drift away from, none without one
+ * (spring; HDRenderWaterBody::spring - the line is written before the
+ * springs of hd_spring.cpp mark theirs, which their SPRINGLOG lines name). */
 bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 	size_t size)
 {

@@ -37,6 +37,7 @@
 
 #include <algorithm>
 #include <stdio.h>
+#include <string>
 
 namespace
 {
@@ -49,6 +50,14 @@ namespace
 	char g_stem[16] = "";
 	int g_rows = 0;
 	int g_dropped = 0;
+	/* The rule's counts: the bodies it saw, those neither river nor taken
+	 * with kHDSpringSquares candidates or more (fit), the candidate squares
+	 * of all bodies, and the key's value; one line per body for RoomProbe. */
+	int g_bodies = 0;
+	int g_fit = 0;
+	int g_candidates = 0;
+	int g_thin = 0;
+	std::vector<std::string> g_rule_lines;
 
 	IDirect3DDevice9* g_made_on = 0;
 	IDirect3DVertexShader9* g_vs = 0;
@@ -265,12 +274,18 @@ void HDSpringClear()
 	g_stem[0] = 0;
 	g_rows = 0;
 	g_dropped = 0;
+	g_bodies = g_fit = g_candidates = g_thin = 0;
+	g_rule_lines.clear();
 }
 
 /* The level's springs: the table's rows for this level, then the `spring`
  * rows of hd_water.txt (HDSpringFileApply), each laid onto its water; a
- * spring whose place has no sheet is left out and counted. */
-void HDSpringBuild(const char* stem)
+ * spring whose place has no sheet is left out and counted. Then the rule
+ * (hd_spring.h, HDSpringRulePick) on every body none of them is in: its
+ * squares, their candidates against `blocks`, one spring at the middle of
+ * the candidate the hash picks, on the floor under it. */
+void HDSpringBuild(const char* stem, const std::vector<HDSpringBlock>& blocks,
+	int thin)
 {
 	HDSpringClear();
 
@@ -320,21 +335,111 @@ void HDSpringBuild(const char* stem)
 		else
 			g_dropped++;
 
+	g_thin = thin;
+
+	std::vector<HDRenderWaterSquare> squares;
+
+	for (int b = 0; b < HDRenderWaterBodies(); b++)
+	{
+		HDRenderWaterBody info;
+		const int n = HDRenderWaterBodySquares(b, 0, 0, 0);
+
+		if (n <= 0 || !HDRenderWaterBodyInfo(b, &info))
+			continue;
+
+		squares.resize((size_t)n);
+		HDRenderWaterBodySquares(b, &squares[0], n, 0);
+
+		HDSpringBody body;
+
+		body.index = b;
+		body.surfaceY = info.surfaceY;
+		body.river = info.cls == HD_WATER_RIVER || info.speed > 0.0f ||
+			info.sinks > 0;
+		body.taken = 0;
+
+		for (const HDSpring& s : g_springs)
+			body.taken |= s.body == b ? 1 : 0;
+
+		for (const HDRenderWaterSquare& q : squares)
+		{
+			const HDSpringSquare sq = { q.x, q.z, q.depth, q.sheet };
+
+			body.squares.push_back(sq);
+		}
+
+		std::vector<int> cand;
+		const int c = HDSpringCandidates(body, blocks, &cand);
+		const unsigned key = HDSpringBodyKey(body);
+		int pick = -1;
+		float strength = 0.0f;
+		const bool chosen = HDSpringRulePick(stem, key, c, body.river,
+			body.taken, thin, &pick, &strength);
+
+		g_bodies++;
+		g_candidates += c;
+		g_fit += !body.river && !body.taken && c >= kHDSpringSquares ? 1 : 0;
+
+		char line[160];
+
+		snprintf(line, sizeof(line), "SPRINGRULE level=%s body=%d squares=%d "
+			"candidates=%d river=%d taken=%d first=%u hash=%u picked=%d", stem,
+			b, n, c, body.river, body.taken, key,
+			HDSpringHash(HDSpringStemHash(stem), key), chosen ? pick : -1);
+		g_rule_lines.push_back(line);
+
+		if (!chosen)
+			continue;
+
+		const HDRenderWaterSquare& q = squares[(size_t)cand[(size_t)pick]];
+		HDSpring s = {};
+
+		strncpy(s.stem, stem, sizeof(s.stem) - 1);
+		s.room = q.room;
+		s.x = (float)q.x + 512.0f;
+		s.z = (float)q.z + 512.0f;
+		s.floorY = q.y + q.depth;
+		s.strength = strength;
+		s.period = HDSpringRulePeriod(strength);
+		s.body = -1;
+		s.how = HD_SPRING_RULE;
+		s.seed = HDSpringSeed(stem, s.x, s.z);
+
+		if (place(s, marked))
+			g_springs.push_back(s);
+		else
+			g_dropped++;
+	}
+
 	g_fed.assign(g_springs.size(), -1.0e30);
+}
+
+// RoomProbe -springs: what the rule saw in each body (`at` 0 up).
+bool HDSpringRuleLine(int at, char* out, size_t size)
+{
+	if (at < 0 || at >= (int)g_rule_lines.size())
+		return false;
+
+	snprintf(out, size, "%s", g_rule_lines[(size_t)at].c_str());
+	return true;
 }
 
 /* SPRINGLOG, with -log, at the level's build: one line for the level and
  * one for each spring (`at` -1 and 0 up; false past the last).
  *
  *   SPRINGLOG level=<stem> springs=<n> table=<n> file=<n> rows=<n>
- *             dropped=<n>
+ *             dropped=<n> rule=<n> bodies=<n> fit=<n> candidates=<n>
+ *             key=<n>
  *   SPRINGLOG level=<stem> spring=<i> room=<r> x=<x> z=<z> floor=<y>
  *             surface=<y> strength=<s> period=<seconds> body=<b>
  *             how=table|file|rule rings=own|row
  *
  * springs the level's springs and how many came from each source, rows the
  * file's `spring` rows of the level, dropped the springs left out for want
- * of a sheet over them; per spring the room its row names (-1 for none),
+ * of a sheet over them, the rule's springs, the bodies it saw, those that
+ * could hold one (fit), their candidate squares and the key hd_springs as
+ * the level took it; per spring the room its row names (the rule's: its
+ * square's),
  * the place, the floor it rises from and the sheet over it (world y), its
  * strength and ring period, its water body, where it came from and whether
  * it rings the sheet itself or a ripple row rings its place. */
@@ -350,8 +455,9 @@ bool HDSpringLogLine(int at, char* out, size_t size)
 			n[s.how]++;
 
 		snprintf(out, size, "SPRINGLOG level=%s springs=%d table=%d file=%d "
-			"rows=%d dropped=%d", g_stem, (int)g_springs.size(), n[0], n[1],
-			g_rows, g_dropped);
+			"rows=%d dropped=%d rule=%d bodies=%d fit=%d candidates=%d key=%d",
+			g_stem, (int)g_springs.size(), n[0], n[1], g_rows, g_dropped, n[2],
+			g_bodies, g_fit, g_candidates, g_thin);
 		return true;
 	}
 
@@ -861,9 +967,75 @@ void HDSpringRelease()
 #include "../function_stubs.h"		// Log, gLogEnabled
 #include "../../tomb5/tomb5.h"		// tomb5.hd_water
 #include "../../game/camera.h"		// camera.pos, the eye
+#include "../../game/objects.h"		// LARA
+#include "../../game/control.h"		// items, level_items
+#include "../registry.h"		// REG_PeekLong - the key hd_springs
+
+/* What the rule keeps clear of, out of the level as loaded - the build
+ * runs before a saved game is restored, so Lara's item stands at the
+ * level's start: every portal through a wall (normal y 0) of every room,
+ * its corners from the room's origin; Lara's start; every static. */
+static void LevelBlocks(std::vector<HDSpringBlock>& out)
+{
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		const short* door = info->door;
+
+		for (int i = 0, count = door ? *door++ : 0; i < count; i++,
+			door += 16)
+		{
+			if (door[2])
+				continue;
+
+			HDSpringBlock b = { HD_SPRING_PORTAL, 1.0e9f, 1.0e9f, -1.0e9f,
+				-1.0e9f, 1.0e9f, -1.0e9f };
+
+			for (int k = 0; k < 4; k++)
+			{
+				const float x = (float)(info->x + door[4 + k * 3]);
+				const float y = (float)(info->y + door[5 + k * 3]);
+				const float z = (float)(info->z + door[6 + k * 3]);
+
+				b.x0 = fminf(b.x0, x);
+				b.x1 = fmaxf(b.x1, x);
+				b.y0 = fminf(b.y0, y);
+				b.y1 = fmaxf(b.y1, y);
+				b.z0 = fminf(b.z0, z);
+				b.z1 = fmaxf(b.z1, z);
+			}
+
+			out.push_back(b);
+		}
+
+		for (int m = 0; info->mesh && m < info->num_meshes; m++)
+		{
+			const float x = (float)info->mesh[m].x;
+			const float z = (float)info->mesh[m].z;
+			const HDSpringBlock b = { HD_SPRING_STATIC, x, z, x, z,
+				-1.0e9f, 1.0e9f };
+
+			out.push_back(b);
+		}
+	}
+
+	for (int i = 0; i < level_items; i++)
+		if (items[i].object_number == LARA)
+		{
+			const float x = (float)items[i].pos.x_pos;
+			const float z = (float)items[i].pos.z_pos;
+			const HDSpringBlock b = { HD_SPRING_START, x, z, x, z,
+				-1.0e9f, 1.0e9f };
+
+			out.push_back(b);
+		}
+}
 
 /* At the level's build, after the sheets and before the life, which
- * reads the springs as its bodies' springs (HDRenderWaterBody::spring). */
+ * reads the springs as its bodies' springs (HDRenderWaterBody::spring).
+ * The key hd_springs (a DWORD beside the options, read here, never
+ * written): absent the rule's own one body in kHDSpringEvery, 0 no spring
+ * of the rule, n one in kHDSpringEvery times n. */
 void HDSpringLevelBegin(const char* stem)
 {
 	HDSpringClear();
@@ -871,7 +1043,14 @@ void HDSpringLevelBegin(const char* stem)
 	if (!HDLevelActive() || !tomb5.hd_water || !HDRenderWaterSheetsBuilt())
 		return;
 
-	HDSpringBuild(stem);
+	ulong thin = 1;
+	std::vector<HDSpringBlock> blocks;
+
+	if (!REG_PeekLong("tomb5", "hd_springs", thin))
+		thin = 1;
+
+	LevelBlocks(blocks);
+	HDSpringBuild(stem, blocks, (int)(thin > 1000 ? 1000 : thin));
 
 	char line[256];
 

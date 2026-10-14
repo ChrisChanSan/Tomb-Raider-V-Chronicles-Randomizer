@@ -14,11 +14,11 @@
 /* The springs: a jet of water that rises from the floor of a pool to its
  * sheet - its rings on the sheet, a few small bubbles in the jet and the
  * rising current, a column that bends what stands behind it. This file
- * holds the rules alone: the table, the hashed clock, the bubbles' path
- * and the file row's numbers, without the engine and without Direct3D,
- * so the engine, RoomProbe and ModernTest share them. hd_spring.cpp
- * builds a level's springs, rings the sheets and draws them. This
- * project's own design; every random choice is a hash of the
+ * holds the rules alone: the table, the hashed clock, the bubbles' path,
+ * the file row's numbers and the placement rule, without the engine and
+ * without Direct3D, so the engine, RoomProbe and ModernTest share them.
+ * hd_spring.cpp builds a level's springs, rings the sheets and draws
+ * them. This project's own design; every random choice is a hash of the
  * spring's or the body's numbers, never a draw of a generator. */
 #pragma once
 
@@ -140,6 +140,26 @@ static const float kHDSpringBend = 32.0f;
 static const float kHDSpringJet = 400.0f;
 static const float kHDSpringFadeFrom = 16.0f;	// pixels, fully drawn
 static const float kHDSpringFadeTo = 6.0f;	// pixels, gone
+
+/* The placement rule ("sporadically under water where it fits"). A
+ * candidate square draws a sheet, has 768 units of water or more under it
+ * (the life's deep water, hd_life_rules.h kHDLifeDeep), lies three squares
+ * or more from every opening of the water (a portal through a wall that
+ * reaches into the water and leads out of the body, HDSpringOpening) and
+ * from Lara's start, and under no static. A
+ * body that is no river, has no current and holds kHDSpringSquares such
+ * squares or more is one in kHDSpringEvery times the key's value
+ * (HDSpringRulePick) to hold one spring, at a hashed candidate square's
+ * middle, its strength 0.5 to 1 by hash. Six squares: a body the life
+ * gives a school of fish (hd_life_rules.h, kHDLifeDeepSquares). One in
+ * two: in the fifteen levels five bodies hold six candidates, and the
+ * hash picks three of them in three levels at one in two, one at one in
+ * three (RoomProbe -springs on the classic levels) - a spring found now
+ * and then, not one per pond. */
+static const int kHDSpringDeep = 768;
+static const float kHDSpringClear = 3072.0f;	// three squares
+static const int kHDSpringSquares = 6;
+static const int kHDSpringEvery = 2;
 
 /* The life's mixer (hd_life_rules.h, HDLifeHash), 0 .. 32767: two numbers
  * in, a spread value out. */
@@ -368,17 +388,180 @@ inline void HDSpringFileApply(std::vector<HDSpring>& springs, const char* stem,
 	springs.push_back(s);
 }
 
+// The placement rule's view of a body and its squares.
+struct HDSpringSquare
+{
+	int x, z;	// world, the square's corner
+	int depth;	// down to the floor under it
+	int sheet;	// 1 when it draws a sheet
+};
+
+struct HDSpringBody
+{
+	int index;
+	int surfaceY;
+	int river;	// 1 for a river or a body with a current
+	int taken;	// 1 when a spring of the table or the file is in it
+	std::vector<HDSpringSquare> squares;
+};
+
+/* What a candidate keeps clear of: a portal through a wall (its box in
+ * world x, z and the height it spans, which must reach into the body's
+ * water), Lara's start and a static (a point, at any height). */
+enum
+{
+	HD_SPRING_PORTAL,
+	HD_SPRING_START,
+	HD_SPRING_STATIC
+};
+
+struct HDSpringBlock
+{
+	int kind;
+	float x0, z0, x1, z1;
+	float y0, y1;		// world, the portal's span; any for the rest
+};
+
+// How far the middle of a square lies from a block's box, x and z.
+inline float HDSpringGap(const HDSpringSquare& q, const HDSpringBlock& b)
+{
+	const float mx = (float)q.x + 512.0f, mz = (float)q.z + 512.0f;
+	const float dx = mx < b.x0 ? b.x0 - mx : mx > b.x1 ? mx - b.x1 : 0.0f;
+	const float dz = mz < b.z0 ? b.z0 - mz : mz > b.z1 ? mz - b.z1 : 0.0f;
+
+	return sqrtf(dx * dx + dz * dz);
+}
+
+// Whether a square of the body holds world x, z.
+inline bool HDSpringHolds(const HDSpringBody& body, float x, float z)
+{
+	for (const HDSpringSquare& q : body.squares)
+		if (x >= (float)q.x && x < (float)(q.x + 1024) && z >= (float)q.z &&
+			z < (float)(q.z + 1024))
+			return true;
+
+	return false;
+}
+
+/* Whether a portal is an opening of the body's water: a portal through a
+ * wall stands in a plane of x or of z; where the body's squares lie on
+ * both sides of its middle, it only parts two rooms of one water (JOBY2's
+ * sea runs on over rooms 42 and 76) and is no way in or out. */
+inline bool HDSpringOpening(const HDSpringBody& body, const HDSpringBlock& b)
+{
+	const float mx = 0.5f * (b.x0 + b.x1), mz = 0.5f * (b.z0 + b.z1);
+	const bool alongZ = b.x1 - b.x0 < 1.0f;
+	const float dx = alongZ ? 512.0f : 0.0f, dz = alongZ ? 0.0f : 512.0f;
+
+	return !(HDSpringHolds(body, mx - dx, mz - dz) &&
+		HDSpringHolds(body, mx + dx, mz + dz));
+}
+
+// Whether a square of a body is a candidate (see kHDSpringDeep).
+inline bool HDSpringCandidate(const HDSpringBody& body,
+	const HDSpringSquare& q, const std::vector<HDSpringBlock>& blocks)
+{
+	if (!q.sheet || q.depth < kHDSpringDeep)
+		return false;
+
+	for (const HDSpringBlock& b : blocks)
+	{
+		if (b.kind == HD_SPRING_STATIC)
+		{
+			if (b.x0 >= (float)q.x && b.x0 < (float)(q.x + 1024) &&
+				b.z0 >= (float)q.z && b.z0 < (float)(q.z + 1024))
+				return false;
+
+			continue;
+		}
+
+		/* A portal counts where its span reaches into this body's water
+		 * and it is an opening of it. */
+		if (b.kind == HD_SPRING_PORTAL && (b.y1 <= (float)body.surfaceY ||
+			b.y0 >= (float)(body.surfaceY + q.depth) ||
+			!HDSpringOpening(body, b)))
+			continue;
+
+		if (HDSpringGap(q, b) < kHDSpringClear)
+			return false;
+	}
+
+	return true;
+}
+
+// A body's candidates, their indices into its squares.
+inline int HDSpringCandidates(const HDSpringBody& body,
+	const std::vector<HDSpringBlock>& blocks, std::vector<int>* out)
+{
+	int n = 0;
+
+	for (size_t i = 0; i < body.squares.size(); i++)
+		if (HDSpringCandidate(body, body.squares[i], blocks))
+		{
+			if (out)
+				out->push_back((int)i);
+
+			n++;
+		}
+
+	return n;
+}
+
+/* The body's first square - the least z, then the least x -, whatever
+ * order the squares come in. */
+inline unsigned HDSpringBodyKey(const HDSpringBody& body)
+{
+	int bx = 0, bz = 0;
+	bool any = false;
+
+	for (const HDSpringSquare& q : body.squares)
+		if (!any || q.z < bz || (q.z == bz && q.x < bx))
+		{
+			bx = q.x;
+			bz = q.z;
+			any = true;
+		}
+
+	return (unsigned)(bx >> 10) * 65537u + (unsigned)(bz >> 10);
+}
+
+/* The rule for one body with `candidates` candidate squares: whether it
+ * holds a spring, which candidate (0 .. candidates - 1) and how strong.
+ * `thin` is the key's value: 0 places none, n one body in
+ * kHDSpringEvery times n. The hash of the level and of the body's first
+ * square decides; the same level gives the same springs every time. */
+inline bool HDSpringRulePick(const char* stem, unsigned bodyKey,
+	int candidates, int river, int taken, int thin, int* pick,
+	float* strength)
+{
+	if (thin <= 0 || river || taken || candidates < kHDSpringSquares)
+		return false;
+
+	const unsigned h = HDSpringHash(HDSpringStemHash(stem), bodyKey);
+
+	if (h % (unsigned)(kHDSpringEvery * thin) != 0)
+		return false;
+
+	*pick = (int)(HDSpringHash(h, 2u) % (unsigned)candidates);
+	*strength = 0.5f + 0.5f * (float)HDSpringHash(h, 3u) / 32767.0f;
+	return true;
+}
+
 /* hd_spring.cpp. HDSpringBuild lays the level's springs onto its water
- * after the sheets are built; HDSpringRings hands their rings to the
- * sheets once a frame before they draw (the eye's world place picks the
- * springs near enough); HDSpringFrameDraw draws the columns and the
- * bubbles after the sheets. HDSpringAdd is RoomProbe's -spring,
+ * after the sheets are built, the rule's with the level's blocks and the
+ * key's value `thin` (HDSpringRulePick); HDSpringRuleLine lists what the
+ * rule saw in each body, for RoomProbe -springs; HDSpringRings hands
+ * their rings to the sheets once a frame before they draw (the eye's
+ * world place picks the springs near enough); HDSpringFrameDraw draws the
+ * columns and the bubbles after the sheets. HDSpringAdd is RoomProbe's -spring,
  * HDSpringTiming and HDSpringDrawn its numbers, HDSpringParts its
  * -springparts; HDSpringLogLine writes the SPRINGLOG lines. The engine
  * calls the five after them (HDLevelBuild, HDLevelUnload, FeedWaterRipples,
  * DrawWaterCards, HDLevelDeviceLost). */
 void HDSpringClear();
-void HDSpringBuild(const char* stem);
+void HDSpringBuild(const char* stem, const std::vector<HDSpringBlock>& blocks,
+	int thin);
+bool HDSpringRuleLine(int at, char* out, size_t size);
 bool HDSpringAdd(const char* stem, float x, float z, float strength);
 int HDSpringCount();
 const HDSpring* HDSpringAt(int i);

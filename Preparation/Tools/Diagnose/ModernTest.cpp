@@ -20076,6 +20076,8 @@ static HDSpring spring_of(float strength)
 
 static void spring_table()
 {
+	printf("the springs: the table\n");
+
 	const HDSpringRow& r = kHDSprings[0];
 
 	ok(!strcmp(r.stem, "ANDREA2") && r.room == 194 && r.x == 55808.0f &&
@@ -20094,6 +20096,8 @@ static void spring_table()
 
 static void spring_file()
 {
+	printf("the springs: the file's key\n");
+
 	char line[] = "ANDREA2 194 - spring 55500 32500 0.5 1.25";
 	char* tok[8];
 	int n = 0;
@@ -20154,8 +20158,148 @@ static void spring_file()
 		(long)springs.size(), 1);
 }
 
+
+/* The springs' rule: candidates on a body of squares, w by d, from the
+ * world's origin, every square `depth` deep under a sheet at y 0. */
+static HDSpringBody spring_body(int w, int d, int depth)
+{
+	HDSpringBody body;
+
+	body.index = 0;
+	body.surfaceY = 0;
+	body.river = 0;
+	body.taken = 0;
+
+	for (int x = 0; x < w; x++)
+		for (int z = 0; z < d; z++)
+		{
+			const HDSpringSquare q = { x * 1024, z * 1024, depth, 1 };
+
+			body.squares.push_back(q);
+		}
+
+	return body;
+}
+
+static void spring_rule()
+{
+	printf("the springs: the placement rule\n");
+
+	HDSpringBody body = spring_body(8, 8, 1024);
+	std::vector<HDSpringBlock> blocks;
+
+	ok(HDSpringCandidates(body, blocks, 0) == 64,
+		"spring rule: every deep square of a pool is a candidate",
+		HDSpringCandidates(body, blocks, 0), 64);
+	ok(HDSpringCandidates(spring_body(8, 8, 512), blocks, 0) == 0,
+		"spring rule: none under 768 units of water", 0, 0);
+
+	// An opening in the west wall, x 0, z 3072..4096, down to the floor.
+	const HDSpringBlock west = { HD_SPRING_PORTAL, 0.0f, 3072.0f, 0.0f,
+		4096.0f, -512.0f, 1024.0f };
+
+	blocks.push_back(west);
+
+	const int open = HDSpringCandidates(body, blocks, 0);
+
+	/* 19 squares lie within 3072 of it, centre to the portal's edge:
+	 * 7, 7 and 5 in the three columns next to it. */
+	ok(open == 45,
+		"spring rule: three squares clear of an opening of the water",
+		open, 45);
+
+	// The same portal over the water's top reaches nothing.
+	blocks[0].y0 = -2048.0f;
+	blocks[0].y1 = 0.0f;
+	ok(HDSpringCandidates(body, blocks, 0) == 64,
+		"spring rule: a portal over the water is no opening of it", 1, 1);
+
+	// A portal between two rooms of one water, x 4096 across the pool.
+	const HDSpringBlock inside = { HD_SPRING_PORTAL, 4096.0f, 0.0f, 4096.0f,
+		8192.0f, -512.0f, 1024.0f };
+
+	blocks.assign(1, inside);
+	ok(!HDSpringOpening(body, inside) &&
+		HDSpringCandidates(body, blocks, 0) == 64,
+		"spring rule: a portal inside one water parts no candidate", 1, 1);
+
+	const HDSpringBlock start = { HD_SPRING_START, 512.0f, 512.0f, 512.0f,
+		512.0f, -1.0e9f, 1.0e9f };
+	const HDSpringBlock statue = { HD_SPRING_STATIC, 7000.0f, 7000.0f,
+		7000.0f, 7000.0f, -1.0e9f, 1.0e9f };
+
+	blocks.assign(1, start);
+	blocks.push_back(statue);
+	ok(HDSpringCandidates(body, blocks, 0) == 64 - 9 - 1,
+		"spring rule: three squares clear of Lara's start, none under a "
+		"static", HDSpringCandidates(body, blocks, 0), 64 - 9 - 1);
+
+	int pick = -1;
+	float strength = 0.0f;
+
+	ok(!HDSpringRulePick("ANDREA1", 3866745u, 5, 0, 0, 1, &pick, &strength) &&
+		!HDSpringRulePick("ANDREA1", 3866745u, 6, 1, 0, 1, &pick, &strength) &&
+		!HDSpringRulePick("ANDREA1", 3866745u, 6, 0, 1, 1, &pick, &strength) &&
+		!HDSpringRulePick("ANDREA1", 3866745u, 6, 0, 0, 0, &pick, &strength),
+		"spring rule: no spring with five candidates, in a river, beside a "
+		"table's spring or with the key at 0", 1, 1);
+	ok(HDSpringBodyKey(spring_body(3, 2, 1024)) == 0u &&
+		HDSpringBodyKey(body) == HDSpringBodyKey(spring_body(8, 8, 2048)),
+		"spring rule: a body's number is its first square's", 1, 1);
+}
+
+/* The rule's guard on the fifteen levels: the bodies with six candidates or
+ * more (RoomProbe -springs on the classic levels, SPRINGRULE first= and
+ * candidates=), each with what the hash gives it at the key's 1 and 2.
+ * Only these five bodies of the fifteen levels hold six; the rest of the
+ * levels place no spring of the rule. */
+static void spring_levels()
+{
+	printf("the springs: the rule on the fifteen levels\n");
+
+	struct Fit
+	{
+		const char* stem;
+		unsigned first;
+		int candidates;
+		int pick1;		// at key 1, -1 for none
+		int pick2;		// at key 2
+	};
+
+	static const Fit fit[] =
+	{
+		{ "ANDREA1", 3866745u, 6, 4, -1 },
+		{ "ANDREA2", 3473499u, 22, 3, 3 },
+		{ "ANDY1", 5111944u, 9, -1, -1 },
+		{ "JOBY2", 720953u, 13, -1, -1 },
+		{ "JOBY2", 720934u, 14, 13, 13 },
+	};
+	int wrong = 0, placed = 0, placed2 = 0;
+
+	for (const Fit& f : fit)
+		for (int thin = 1; thin <= 2; thin++)
+		{
+			int pick = -1;
+			float strength = 0.0f;
+			const bool got = HDSpringRulePick(f.stem, f.first, f.candidates,
+				0, 0, thin, &pick, &strength);
+			const int want = thin == 1 ? f.pick1 : f.pick2;
+
+			wrong += (got ? pick : -1) != want ||
+				(got && (strength < 0.5f || strength > 1.0f)) ? 1 : 0;
+			placed += got && thin == 1 ? 1 : 0;
+			placed2 += got && thin == 2 ? 1 : 0;
+		}
+
+	ok(wrong == 0 && placed == 3 && placed2 == 2,
+		"spring levels: three springs of the rule in three levels at the "
+		"key's 1 (ANDREA1, ANDREA2, JOBY2), two at 2", placed, 3);
+}
+
 static void spring_clock()
 {
+	printf("the springs: the hashed clock\n");
+
 	const HDSpring s = spring_of(1.0f);
 	int order = 0, jitter = 0;
 
@@ -20361,6 +20505,8 @@ int main()
 	spring_table();
 	spring_file();
 	spring_clock();
+	spring_rule();
+	spring_levels();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

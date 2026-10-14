@@ -2150,15 +2150,19 @@ it.
   run down (with `hd_motion` off it keeps its resting height); the
   lasers' red glow stays. Once a tank is shot - either tank, with
   `hd_water` on - the floor its water reaches stays wet: from the squares
-  under the dome out over every level square and down one step, never up
-  a step (in RICH2 the floors of rooms 122, 121, 45, 46 and 113 at the
-  tank of room 122, the plinth and the lowered area of room 23 at the
-  other), the water arriving as the dome comes out and running on at
-  about 0.7 m/s. The wet floor is darker and mirrors what stands on it -
-  the vending machines, Lara, a lit screen - and the lamps, most where
-  the eye looks along the floor; a game loaded with the tank shot starts
-  with the floor wet, and it does not dry. With `hd_motion` off the water
-  does not run out: the whole floor is wet from the moment of the shot.
+  under the dome out over level squares and down one step, never up a
+  step, only in the tank's own rooms (in RICH2 rooms 122, 121, 45 and 46
+  at the tank of room 122, room 23 at the other) and no further than two
+  squares past the dome's foot - in RICH2 the floor in front of the glass,
+  the near ends of 45 and 121 and one square into the corridor's mouth;
+  the plinth and the lowered area of room 23 but its far two squares -,
+  the water arriving as the dome comes out and running on at about 0.7
+  m/s. The wet floor is darker and mirrors what stands on it - the
+  vending machines, Lara, a lit screen, the lamps and their glows - most
+  where the eye looks along the floor; a game loaded with the tank shot
+  starts with the floor wet, and it does not dry. With `hd_motion` off
+  the water does not run out: the whole floor is wet from the moment of
+  the shot.
   The splash's and the spray's timing and everything the game decides
   are the classic ones. `hd_water` `0` draws
   the classic splash, spray and tank's dome, and so does `hd_motion` `0`.
@@ -2172,9 +2176,10 @@ it.
   0 to 1 - the line comes once a second while that water still runs out.
   At the level's load one line a tank, `SPLASHLOG level=<stem> wet
   tank=<item> squares=<n> rooms=<list> heights=<n> points=<n> tris=<n>
-  reach=<units> far=<units>`: the squares its water would reach, the
-  rooms whose floor they are, and the furthest point along the water's
-  way.
+  reach=<units> far=<units> found=<n> limit=<units>`: the squares its
+  water reaches, the rooms whose floor they are, the furthest point along
+  the water's way, the squares the run found in the tank's rooms before
+  the radius, and how far along the way the front stops.
 - **The water's warm-up.** When a level with water sheets has loaded, each
   of the water's shaders draws once off the screen, so the first frame
   that shows water does not wait for the graphics driver to ready them -

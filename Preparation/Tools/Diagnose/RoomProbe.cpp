@@ -15390,8 +15390,171 @@ static int ProbeReloadOther(int result, int argc, char** argv)
 	return ProbeMain((int)a.size(), &a[0]);
 }
 
+/* -viscams <file>: the walk at every camera of a camera file, a set in one
+ * call - RoomProbe <5-folder> -viscams <file> -roombox <folder> [switches].
+ * A line of the file: <name> <LEVEL> <room> <x> <y> <z> (world, the room
+ * the eye stands in), then `yaw <degrees> <pitch>` or `target <x> <y> <z>`,
+ * then `size <w> <h>` (1280 720) and `flip <room,...>` if wanted; `#`
+ * starts a comment. Per camera the tool runs itself on the walk (-walk,
+ * -walkfinal, -walkeach, -nodraw, -fov 80 and every switch after the
+ * file, -vis 1 among them) and prints
+ *
+ *   viscams: <name> <LEVEL> rooms=<n> list=<room>:<source>,...
+ *
+ * the source the walk names per room, in -walkfinal's words: walk, box (a
+ * guest), opening, portal (a wide portal), edge.
+ * The lines of two builds side by side name every camera a rule changes;
+ * the pictures are drawn with -roomwin from the same lists. */
+static int VisCams(int argc, char** argv, int at)
+{
+	FILE* f = fopen(argv[at + 1], "r");
+	char exe[MAX_PATH];
+	char line[1024];
+	int cams = 0, failed = 0;
+
+	if (!f || argc < 2)
+	{
+		printf("viscams: cannot read %s\n", argv[at + 1]);
+		return 1;
+	}
+
+	GetModuleFileNameA(0, exe, sizeof(exe));
+
+	// Every switch but the file's own two words goes to each walk.
+	std::string rest;
+
+	for (int i = 2; i < argc; i++)
+		if (i != at && i != at + 1)
+			rest += std::string(" \"") + argv[i] + "\"";
+
+	while (fgets(line, sizeof(line), f))
+	{
+		char* hash = strchr(line, '#');
+
+		if (hash)
+			*hash = 0;
+
+		char name[64], level[32], kind[16];
+		int room = 0, w = 1280, h = 720, used = 0;
+		double x, y, z, a, b, c = 0.0;
+
+		if (sscanf(line, "%63s %31s %d %lf %lf %lf %15s %n", name, level,
+			&room, &x, &y, &z, kind, &used) != 7)
+			continue;
+
+		std::string cam;
+		const char* more = line + used;
+		int n = 0;
+
+		if (!strcmp(kind, "target") &&
+			sscanf(more, "%lf %lf %lf %n", &a, &b, &c, &n) == 3)
+			cam = " -walktarget " + std::to_string((long)a) + " " +
+				std::to_string((long)b) + " " + std::to_string((long)c);
+		else if (!strcmp(kind, "yaw") &&
+			sscanf(more, "%lf %lf %n", &a, &b, &n) == 2)
+			cam = " -walkyaw " + std::to_string(a) + " " +
+				std::to_string(a) + " 1 -walkpitch " + std::to_string(b);
+		else
+		{
+			printf("viscams: %s: no camera\n", name);
+			failed++;
+			continue;
+		}
+
+		more += n;
+
+		char word[16], flips[256];
+		std::string flip;
+
+		while (sscanf(more, "%15s %n", word, &n) == 1)
+		{
+			more += n;
+
+			if (!strcmp(word, "size") &&
+				sscanf(more, "%d %d %n", &w, &h, &n) == 2)
+				more += n;
+			else if (!strcmp(word, "flip") &&
+				sscanf(more, "%255s %n", flips, &n) == 1)
+			{
+				flip = std::string(" -flip ") + flips;
+				more += n;
+			}
+			else
+				break;
+		}
+
+		const std::string cmd = std::string("\"\"") + exe + "\" \"" + argv[1] +
+			"\" " + level + " " + std::to_string(room) + rest + " -walk " +
+			std::to_string(room) + " " + std::to_string((long)x) + " " +
+			std::to_string((long)y) + " " + std::to_string((long)z) +
+			" -size " + std::to_string(w) + " " + std::to_string(h) +
+			" -fov 80 -walkfinal -walkeach -nodraw" + cam + flip + "\"";
+		FILE* p = _popen(cmd.c_str(), "r");
+		std::vector<int> order;
+		std::vector<std::string> source(32768);
+		char out[2048];
+
+		cams++;
+
+		while (p && fgets(out, sizeof(out), p))
+		{
+			const char* rooms = strstr(out, " rooms=");
+			int r = 0, got = 0;
+			char vis[16];
+
+			if (!strncmp(out, "  yaw", 5) && rooms && strchr(rooms, ':'))
+			{
+				const char* s = strchr(rooms, ':') + 1;
+
+				order.clear();
+
+				while (sscanf(s, "%d %n", &r, &n) == 1)
+				{
+					order.push_back(r);
+					s += n;
+				}
+			}
+			else if (sscanf(out, " room %d final=%n", &r, &got) == 1 &&
+				got > 0 && r >= 0 && r < (int)source.size())
+			{
+				const char* v = strstr(out, " vis=");
+
+				source[(size_t)r] = v && sscanf(v + 5, "%15s", vis) == 1 ?
+					vis : "-";
+			}
+		}
+
+		if (p)
+			_pclose(p);
+
+		if (order.empty())
+		{
+			printf("viscams: %s %s no walk\n", name, level);
+			failed++;
+			continue;
+		}
+
+		printf("viscams: %s %s rooms=%d list=", name, level, (int)order.size());
+
+		for (size_t k = 0; k < order.size(); k++)
+			printf("%s%d:%s", k ? "," : "", order[k],
+				source[(size_t)order[k]].empty() ? "-" :
+				source[(size_t)order[k]].c_str());
+
+		printf("\n");
+	}
+
+	fclose(f);
+	printf("viscams: %d cameras, %d without a walk\n", cams, failed);
+	return failed ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
+	for (int i = 2; i + 1 < argc; i++)
+		if (!strcmp(argv[i], "-viscams"))
+			return VisCams(argc, argv, i);
+
 	for (int i = 1; i < argc; i++)
 		if (!strcmp(argv[i], "-windowcycle"))
 		{

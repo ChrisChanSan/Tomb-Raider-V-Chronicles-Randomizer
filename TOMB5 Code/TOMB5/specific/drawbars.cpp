@@ -25,6 +25,12 @@
 #include "winmain.h"
 #include "texture.h"
 #include "LoadSave.h"	// DrawLoadingScreen - the picture under the load bar
+#include "loadbar_math.h"	// LOADBAR_*, the brake, the fade of the row's off
+#include "time.h"		// TIME_SubTick - a tick passed, without waiting
+#include "profile.h"		// ProfPresent - the held present
+#include "../game/text.h"	// GnFrameCounter
+#include "../game/interpolate.h"	// InterpNoteClassicPresent
+#include "hd/hd_level.h"	// HDFramePresented - the frame clock of -log
 
 static GouraudBarColourSet healthBarColourSet =
 {
@@ -90,6 +96,124 @@ long loadbar_on;
 static float loadbar_steps;
 static float loadbar_pos;
 static long loadbar_maxpos;
+
+/* The loading screen of the load under way (S_LoadScreenBegin): the
+ * Loadbar style row as it stood when the load began, and with the row off
+ * the fade of the last frame to black - whether it runs, since when and
+ * over how long - and the frames drawn. */
+static long loadbar_mode;
+static long loadbar_fading;
+static double loadbar_fade_at;
+static double loadbar_fade_ms;
+static long loadbar_frames;
+
+/* The brake's inputs (loadbar_math.h): while a level load's screen is up,
+ * its first frame's time, the least time it stands (loadbar_min_ms), the
+ * loading thread's share of the work and the HD build's part done; and
+ * for the LOADLOG lines the frames the build's laps drew, their time, and
+ * the time from the work's end to the last frame. */
+static long loadbar_loading;
+static double loadbar_start;
+static double loadbar_min_ms;
+static float loadbar_share;
+static float loadbar_build;
+static long loadbar_build_frames;
+static double loadbar_build_ms;
+static double loadbar_wait_ms;
+
+/* The main thread's reports (S_LoadBarBuild, S_LoadScreenStep): how many
+ * steps the HD build has of its own and how many points are done. */
+static long loadbar_build_total;
+static long loadbar_build_done;
+
+/* From the loading thread's join to the tail (S_LoadScreenJoin,
+ * S_LoadScreenEnd) the frames present held: a lost device is noted and
+ * not reset (loadbar_lost), and no further frame is drawn until the
+ * tail, whose present resets it as every other frame's does. */
+static long loadbar_held;
+static long loadbar_lost;
+
+/* The clock of the loading screen, in ms: QueryPerformanceCounter, the
+ * counter Sync() paces the frames by and the LOADLOG lines read. */
+static double LoadScreenClockMs()
+{
+	LARGE_INTEGER now, rate;
+
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&rate);
+	return rate.QuadPart ?
+		(double)now.QuadPart * 1000.0 / (double)rate.QuadPart : 0.0;
+}
+
+/* The same clock on Sync()'s grid: the last 1/60 s tick boundary now
+ * stands past, in ms. The brake's time is the span between two of them. */
+static double LoadScreenTickMs()
+{
+	const double sub = TIME_SubTick();
+
+	return LoadScreenClockMs() - (sub - floor(sub)) * kLoadBarTickMs;
+}
+
+/* A frame's present between the join and the tail: what S_DumpScreenFrame
+ * and DXShowFrame do, without the screenshot key, and without the reset
+ * of a lost device. That reset releases the HD path's objects
+ * (HDLevelDeviceLost) while the HD build, which these frames interleave,
+ * still has steps to run on them; a lost device stays lost until reset,
+ * so the tail's first present finds it again after the build and resets
+ * it there. The tick was waited out by S_DrawLoadBar; Sync() hands it out
+ * here, as in S_DumpScreenFrame. */
+static void LoadBarPresentHeld()
+{
+	InterpNoteClassicPresent();
+	Sync();
+	GnFrameCounter++;
+	_EndScene();
+
+	const HRESULT hr = App.dx.lpD3DDevice->Present(0, 0, 0, 0);
+
+	HDFramePresented();
+	ProfPresent();
+	App.dx.DoneBlit = 1;
+
+	if (hr == D3DERR_DEVICELOST)
+		loadbar_lost = 1;
+}
+
+/* Black over the whole window at `alpha`, into the sort list: the same
+ * quad and draw type as the screen fade's (DoScreenFade), so the third
+ * state's fade looks as the engine's own fades do. */
+static void LoadFadeQuad(long alpha)
+{
+	D3DTLVERTEX v[4];
+	TEXTURESTRUCT tex;
+	const ulong c = (ulong)alpha << 24;
+
+	v[0].sx = 0;
+	v[0].sy = 0;
+	v[1].sx = float(phd_winxmax + 1);
+	v[1].sy = (float)phd_winymin;
+	v[2].sx = float(phd_winxmax + 1);
+	v[2].sy = float(phd_winymax + 1);
+	v[3].sx = (float)phd_winxmin;
+	v[3].sy = float(phd_winymax + 1);
+
+	for (int i = 0; i < 4; i++)
+	{
+		v[i].sz = 0;
+		v[i].rhw = f_moneoznear;
+		v[i].color = c;
+		v[i].specular = 0xFF000000;
+	}
+
+	tex.drawtype = 3;
+	tex.flag = 0;
+	tex.tpage = 0;
+	clipflags[0] = 0;
+	clipflags[1] = 0;
+	clipflags[2] = 0;
+	clipflags[3] = 0;
+	AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
+}
 
 static void DrawColoredRect(float x0, float y0, float x1, float y1, float z, ulong c0, ulong c1, ulong c2, ulong c3, TEXTURESTRUCT* tex)
 {
@@ -458,6 +582,155 @@ void S_DrawEnemyBar(long pos)
 		DoBar(x, y, w, h, pos, 0xA00000, 0xA0A000);
 }
 
+/* A level load's loading screen begins, right after its first frame (the
+ * picture, in the TR5 and TR4 states): `mode` is the Loadbar style row
+ * (LOADBAR_*); with LOADBAR_OFF, `fade` says whether the last frame is
+ * faded to black over `fadeMs` (0 a cut), from now on. `minMs` is the
+ * brake, the least time the screen stands; `hd` says whether an HD build
+ * follows the loading thread, which then has its share of the bar
+ * (kLoadBarThreadShare) and otherwise all of it. The brake's clock starts
+ * on the tick of the first frame. */
+void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
+	long hd)
+{
+	loadbar_mode = mode;
+	loadbar_fading = mode == LOADBAR_OFF && fade;
+	loadbar_fade_at = LoadScreenClockMs();
+	loadbar_fade_ms = fadeMs;
+	loadbar_frames = mode != LOADBAR_OFF;
+	loadbar_loading = 1;
+	loadbar_start = LoadScreenTickMs();
+	loadbar_min_ms = minMs;
+	loadbar_share = hd ? kLoadBarThreadShare : 1.0F;
+	loadbar_build = 0;
+	loadbar_build_total = kLoadBarBuildLaps;
+	loadbar_build_done = 0;
+	loadbar_build_frames = 0;
+	loadbar_build_ms = 0;
+	loadbar_wait_ms = 0;
+	loadbar_held = 0;
+	loadbar_lost = 0;
+}
+
+/* A frame of the main thread's work after the join, only when a whole
+ * 1/60 s tick has passed since the last one Sync() handed out, so that it
+ * never waits: the work goes on at once. `build` counts it as the HD
+ * build's for the LOADLOG line. */
+static void LoadScreenFrameDue(long build)
+{
+	if (!(App.dx.Flags & DXF_HWR) || !loadbar_on || !S_LoadScreenDraws() ||
+		loadbar_lost || TIME_SubTick() < 1.0)
+		return;
+
+	const double at = LoadScreenClockMs();
+
+	S_DrawLoadBar();
+
+	if (build)
+	{
+		loadbar_build_frames++;
+		loadbar_build_ms += LoadScreenClockMs() - at;
+	}
+}
+
+/* The HD build's progress, from its laps or the resident build's steps
+ * (hd_level.cpp): `done` of its `total` steps, and a frame if one is due.
+ * Nothing outside a level load's screen (the rebuild after a new device
+ * runs the same build). */
+void S_LoadBarBuild(long done, long total)
+{
+	if (!loadbar_loading)
+		return;
+
+	loadbar_build_total = total;
+	loadbar_build_done = done;
+	loadbar_build = LoadBarBuildShare(done, total);
+	LoadScreenFrameDue(1);
+}
+
+/* A step of the main thread's work after the join has ended (file.cpp,
+ * S_LoadLevelFile; LOADSTEP_*), and a frame if one is due. The build's
+ * end, the font and the cutscenes are points of the work's table
+ * (loadbar_math.h) and move the bar; aInit and the warmup only give a
+ * frame its chance. */
+void S_LoadScreenStep(long step)
+{
+	if (!loadbar_loading)
+		return;
+
+	if (step == LOADSTEP_BUILD || step == LOADSTEP_FONT ||
+		step == LOADSTEP_CUTSCENES)
+	{
+		const long done = loadbar_build_total + 1 + step - LOADSTEP_BUILD;
+
+		if (done > loadbar_build_done)
+		{
+			loadbar_build_done = done;
+			loadbar_build = LoadBarBuildShare(done, loadbar_build_total);
+		}
+	}
+
+	LoadScreenFrameDue(step == LOADSTEP_BUILD);
+}
+
+/* The loading thread has joined; from here to the tail the frames present
+ * held (LoadBarPresentHeld). With the row off, a fade still running - a
+ * thread shorter than loadfade_ms - ends here in one black frame: the HD
+ * build after it draws a frame only at the ends of its steps, the longest
+ * of which take most of a second, and the half faded frame would stand
+ * that long. That frame waits for its tick, at most 1/60 s. In the TR5
+ * and TR4 states a frame is drawn if one is due. */
+void S_LoadScreenJoin()
+{
+	loadbar_held = loadbar_loading;
+
+	if (!loadbar_fading || !(App.dx.Flags & DXF_HWR))
+	{
+		S_LoadScreenStep(LOADSTEP_JOIN);
+		return;
+	}
+
+	loadbar_fade_ms = 0;
+	S_DrawLoadBar();
+}
+
+/* The work is done: the brake's tail and the last frame. The bar runs on
+ * with the clock, one frame a tick, until the screen has stood minMs; the
+ * last frame is the full bar - at minMs, or at the next tick when the work
+ * took longer. Then the screen is over and the build's frames stop. The
+ * tail presents as every frame does again: a device lost in the work is
+ * reset by its first present. */
+void S_LoadScreenEnd()
+{
+	const double from = LoadScreenClockMs();
+
+	loadbar_held = 0;
+	S_FinishLoadBar();
+
+	if (App.dx.Flags & DXF_HWR && loadbar_mode != LOADBAR_OFF)
+		while (!S_DrawLoadBar());
+
+	loadbar_wait_ms = LoadScreenClockMs() - from;
+	loadbar_loading = 0;
+}
+
+// What this load's screen drew, for the LOADLOG lines.
+void S_LoadScreenStatsGet(LoadScreenStats* out)
+{
+	out->frames = loadbar_frames;
+	out->build_frames = loadbar_build_frames;
+	out->build_ms = loadbar_build_ms;
+	out->wait_ms = loadbar_wait_ms;
+}
+
+/* Whether the load draws a frame now: the bar in the TR5 and TR4 states,
+ * and with the row off only while the fade runs. */
+long S_LoadScreenDraws()
+{
+	return loadbar_mode != LOADBAR_OFF || loadbar_fading;
+}
+
+
 void S_InitLoadBar(long max)
 {
 	loadbar_steps = 0;
@@ -471,9 +744,26 @@ void S_UpdateLoadBar()
 	loadbar_steps = 100.0F / loadbar_maxpos + loadbar_steps;
 }
 
+/* One frame of the loading screen, at the next 1/60 s tick: the picture,
+ * and over it the bar or, with the row off, the fade. The tick is waited
+ * out first, so that the bar's position is the one at the Present:
+ * S_DumpScreenFrame then finds its tick and does not wait again. The
+ * position is the brake's (loadbar_math.h) out of the work done - the
+ * loading thread's S_LoadBar calls and the main thread's points - and the
+ * ticks since the screen's first frame. Returns 1 when the work is done
+ * and the screen has stood its time: this frame showed the full bar. */
 long S_DrawLoadBar()
 {
 	long x, y, w, h;
+
+	while (TIME_SubTick() < 1.0);
+
+	const float work = LoadBarWork(loadbar_steps / 100.0F, loadbar_build,
+		loadbar_share);
+	const double elapsed = LoadBarTicksMs(LoadScreenTickMs() -
+		loadbar_start);
+
+	loadbar_pos = LoadBarPosition(work, elapsed, loadbar_min_ms);
 
 	_BeginScene();
 	InitBuckets();
@@ -492,7 +782,21 @@ long S_DrawLoadBar()
 	TextureStageLock();
 	DrawLoadingScreen();
 
-	if (tomb5.tr4_loadbar)
+	/* With the row off there is no bar: the frame is the last frame of the
+	 * game (the picture above, captured by S_LoadLevelFile) under black
+	 * that thickens with the time since the fade began; the frame at full
+	 * black ends the fade, and nothing is drawn after it. */
+	if (loadbar_mode == LOADBAR_OFF)
+	{
+		const long alpha = LoadFadeAlpha(LoadScreenClockMs() -
+			loadbar_fade_at, loadbar_fade_ms);
+
+		LoadFadeQuad(alpha);
+
+		if (alpha >= 255)
+			loadbar_fading = 0;
+	}
+	else if (tomb5.tr4_loadbar)
 	{
 		x = GetFixedScale(20);
 		w = phd_winwidth - (x << 1);
@@ -524,13 +828,14 @@ long S_DrawLoadBar()
 	SortPolyList(SortCount, SortList);
 	DrawSortList();
 	TextureStageUnlock();
-	S_DumpScreenFrame();
 
-	if (loadbar_pos >= loadbar_steps)
-		return loadbar_maxpos <= loadbar_steps;
+	if (loadbar_held)
+		LoadBarPresentHeld();
+	else
+		S_DumpScreenFrame();
 
-	loadbar_pos += 2;
-	return 0;
+	loadbar_frames++;
+	return LoadBarDone(work, elapsed, loadbar_min_ms);
 }
 
 void S_LoadBar()
@@ -538,17 +843,15 @@ void S_LoadBar()
 	S_UpdateLoadBar();
 }
 
-// Puts the bar at its end, target and drawn position both, so the next
-// S_DrawLoadBar draws a full bar and reports done. The caller knows better
-// than the counting: once the load is done, loading is done. Core's done
-// test in S_DrawLoadBar (loadbar_maxpos <= loadbar_steps) cannot hold by
-// counting alone from about 80 texture pages on: steps grows by 100/maxpos
-// per step and reaches at most about 100, while maxpos is pages + 20
-// (file.cpp LoadLevel). The cap on maxpos makes the test hold at 100.
+// Puts the work at its end, the loading thread's count and the HD build's
+// part both: the caller knows better than the counting - once the load is
+// done, loading is done. The count alone can fall short of 100: it grows by
+// 100/maxpos per call and adds up in floats, while maxpos is pages + 20
+// (file.cpp LoadLevel). The bar's position follows from the brake.
 void S_FinishLoadBar()
 {
 	loadbar_steps = 100.0F;
-	loadbar_pos = 100.0F;
+	loadbar_build = 1.0F;
 
 	if (loadbar_maxpos > 100)
 		loadbar_maxpos = 100;

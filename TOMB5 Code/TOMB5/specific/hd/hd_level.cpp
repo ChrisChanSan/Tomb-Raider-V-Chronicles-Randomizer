@@ -55,6 +55,7 @@
 #include "../file.h"				// textinfo, aranges, nAnimUVRanges
 #include "../gamemain.h"			// WaterTable, vert_wibble_table
 #include "../LoadSave.h"			// MonoScreenOn - a menu over a picture
+#include "../drawbars.h"			// S_LoadBarBuild - the loading bar
 #include "hd_light.h"
 #include "hd_splash_math.h"		// the water's cards: HDFilmStrength
 
@@ -5972,20 +5973,25 @@ static bool HDLevelBuildResident(double loadlog_at)
 
 	BuildWaterSheets();
 	const double sheets = LoadClockMs();
+	S_LoadBarBuild(1, 5);		// the loading bar, as the full build's laps
 	BuildWaterSurfaces();
 	const double surfaces = LoadClockMs();
+	S_LoadBarBuild(2, 5);
 	// Given back on this thread, which owns the device, and borrowed again.
 	ReleaseWaterFramePages();
 	BuildWaterFrames();
 	const double frames = LoadClockMs();
+	S_LoadBarBuild(3, 5);
 	HDObjectLevelRebind(HDInstallRoot(), g_stem);
 	const double objects = LoadClockMs();
+	S_LoadBarBuild(4, 5);
 	/* The springs, as the full build begins them: after the sheets set again
 	 * above, whose bodies they mark, and before the life, which reads those
 	 * marks. HDLevelUnload ended them, as it does at every load. */
 	HDSpringLevelBegin(g_stem);
 	HDLifeLevelBegin(g_stem);
 	const double life = LoadClockMs();
+	S_LoadBarBuild(5, 5);
 
 	g_redress_bytes0 = HDPageCacheBytes();
 
@@ -6218,6 +6224,8 @@ static void HDLevelBuildHD()
 
 		load_ms[phase] += now - lap_at;
 		lap_at = now;
+		// The loading screen's bar moves with the laps (drawbars.cpp).
+		S_LoadBarBuild(phase + 1, LOAD_PHASES);
 	};
 
 	g_clipped_lights = 0;

@@ -20,6 +20,7 @@
 #include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up
 #include "hd/hd_model.h"		// HDModelPreload
 #include "hd/hd_feet.h"		// the two footstep sets
+#include "hd/hd_install.h"		// HDInstallRoot - an HD build follows
 #include "file.h"
 #include "function_stubs.h"
 #include "profile.h"			// ProfileLevel - PROFLOG counts from the load
@@ -34,6 +35,7 @@
 #include "drawroom.h"
 #include "dxsound.h"
 #include "LoadSave.h"
+#include "loadbar_math.h"		// LOADBAR_OFF - the load without a screen
 #include "function_table.h"
 #include "polyinsert.h"
 #include "winmain.h"
@@ -1908,6 +1910,38 @@ static void LoadLogStepKept(double* at, const char* step, long kept)
 		*at - before);
 }
 
+/* The step bar with what the loading screen drew, at the line's end: all
+ * its frames and the ms from the work's end to its last frame - the
+ * brake's wait plus that frame (drawbars.cpp, S_LoadScreenEnd). */
+static void LoadLogStepBar(double* at)
+{
+	LoadScreenStats screen;
+
+	if (!gLogEnabled)
+		return;
+
+	const double before = *at;
+
+	S_LoadScreenStatsGet(&screen);
+	LoadLogStep(at, 0);
+	Log("LOADLOG level=%s step=bar ms=%.1f frames=%ld wait=%.1f",
+		g_loadlog_level, *at - before, screen.frames, screen.wait_ms);
+}
+
+/* The frames the HD build's laps drew and their ms, on a line of their own
+ * after the step hd_build, which holds them: not a step of its own. */
+static void LoadLogBuildFrames()
+{
+	LoadScreenStats screen;
+
+	if (!gLogEnabled)
+		return;
+
+	S_LoadScreenStatsGet(&screen);
+	Log("LOADLOG level=%s step=hd_frames ms=%.1f frames=%ld",
+		g_loadlog_level, screen.build_ms, screen.build_frames);
+}
+
 // The level's name for those lines: the file name without folder or .TRC.
 static void LoadLogLevel(const char* wad)
 {
@@ -2215,6 +2249,11 @@ static void WarmUpLevel()
 		hd_buffers, ms);
 }
 
+/* Whether the screen is black as the next level load begins, noted by
+ * game\gameflow.cpp (LoadEntryNoteBlack) before the level's own fade-in
+ * is set: the load without a loading screen then draws nothing at all. */
+long LoadEntryBlack;
+
 long S_LoadLevelFile(long num)
 {
 	static long lscreen = 0;
@@ -2226,11 +2265,34 @@ long S_LoadLevelFile(long num)
 	double loadlog_at = 0.0;
 	double loadlog_start = 0.0;
 
+	/* The Loadbar style row as the load begins. Off (LOADBAR_OFF) there is
+	 * no loading screen: no picture is read or rendered, no bar is drawn and
+	 * this load presents no frame of its own. Only where the screen still
+	 * shows the game's last frame - a level's end, a movie - is that frame
+	 * read back and faded to black while the loading thread works
+	 * (loadfade_ms; 0 one black frame); over a black screen nothing is
+	 * drawn. The level's own fade-in from black (DoLevel, DoTitle) follows
+	 * in every state. */
+	const long mode = (long)tomb5.loadbar;
+	const long shown = mode != LOADBAR_OFF;
+	const long black = LoadEntryBlack;
+	long fade = 0;
+	long view = 0;
+
+	LoadEntryBlack = 0;
 	Log(__FUNCTION__);
 	LoadLogStep(&loadlog_at, 0);
 	LoadLogStep(&loadlog_start, 0);
 
-	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	if (!shown && !black)
+	{
+		fade = 1;
+
+		if (tomb5.loadfade_ms && !MonoScreenOn)
+			CaptureLoadingScreen();
+	}
+
+	if (shown && (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus)))
 	{
 		if (!MonoScreenOn)
 		{
@@ -2282,6 +2344,16 @@ long S_LoadLevelFile(long num)
 		}
 	}
 
+	/* No picture was read: with TR4 loadscreens on, the screen shows the
+	 * level's view as RenderLoadPic drew it, its last frame (after the
+	 * credits the frame before). It is read back once into the mono
+	 * picture, as the inventory keeps its background, so that every frame
+	 * of the bar draws it under the bar: the windowed swap chain's single
+	 * back buffer is not trusted to keep it from frame to frame. A picture
+	 * already up (MonoScreenOn) stays as it is. */
+	if (shown && !MonoScreenOn)
+		view = CaptureLoadingScreen();
+
 	strcpy(name, &gfFilenameWad[gfFilenameOffset[num]]);
 	LoadLogLevel(name);
 	loadbar_on = 0;
@@ -2290,13 +2362,27 @@ long S_LoadLevelFile(long num)
 	/* The picture is shown at once, in one frame. Every frame of the bar
 	 * draws it again under the bar (S_DrawLoadBar), so it is released only
 	 * after the bar's last frame, below. */
-	_BeginScene();
-	InitBuckets();
-	InitialiseSortList();
-	DrawLoadingScreen();
-	SortPolyList(SortCount, SortList);
-	DrawSortList();
-	S_DumpScreenFrame();
+	if (shown)
+	{
+		_BeginScene();
+		InitBuckets();
+		InitialiseSortList();
+		DrawLoadingScreen();
+		SortPolyList(SortCount, SortList);
+		DrawSortList();
+		S_DumpScreenFrame();
+	}
+
+	/* The screen's clock starts with its first frame: the brake keeps it up
+	 * for loadbar_min_ms from here. An HD build follows the loading thread
+	 * when the build is chosen (hd_build) and an installation was found -
+	 * with hd_build 0 none is looked for; the thread then has its share of
+	 * the bar and the main thread's work the rest, otherwise the thread has
+	 * all of it. */
+	const long hd = tomb5.hd_build && HDInstallRoot()[0];
+
+	S_LoadScreenBegin(mode, fade, (double)tomb5.loadfade_ms,
+		(double)tomb5.loadbar_min_ms, hd);
 
 	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;
@@ -2305,7 +2391,7 @@ long S_LoadLevelFile(long num)
 
 	while (LevelLoadingThread.active)
 	{
-		if (App.dx.Flags & DXF_HWR && loadbar_on)
+		if (App.dx.Flags & DXF_HWR && loadbar_on && S_LoadScreenDraws())
 			S_DrawLoadBar();
 
 
@@ -2321,6 +2407,7 @@ long S_LoadLevelFile(long num)
 	}
 
 	Log("S_LoadLevelFile: load thread joined");
+	S_LoadScreenJoin();
 	LoadLogStep(&loadlog_at, "thread");
 
 	// Here and not on the load thread (see the comment in LoadLevel): room
@@ -2331,6 +2418,7 @@ long S_LoadLevelFile(long num)
 	{
 		aInit();
 		Log("S_LoadLevelFile: aInit done");
+		S_LoadScreenStep(LOADSTEP_AINIT);
 		LoadLogStep(&loadlog_at, "ainit");
 
 		// The HD geometry and its texture pages. Here on the main thread,
@@ -2341,22 +2429,27 @@ long S_LoadLevelFile(long num)
 		// is 0.
 		HDLevelBuild();
 		Log("S_LoadLevelFile: HD build done");
+		S_LoadScreenStep(LOADSTEP_BUILD);
 		LoadLogStep(&loadlog_at, "hd_build");
+		LoadLogBuildFrames();
 
 		// The HD font's own texture, on the same thread for the same
 		// reason. It is made once and kept for the whole
 		// session - the atlas does not change from level to level - so after
 		// the first level this is a comparison and a return.
 		HDFontBuild();
+		S_LoadScreenStep(LOADSTEP_FONT);
 		LoadLogStep(&loadlog_at, "font");
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
+	S_LoadScreenStep(LOADSTEP_CUTSCENES);
 	LoadLogStep(&loadlog_at, "cutscenes");
 
 	// The level's textures and buffers onto the card before the first frame
 	// asks for them - see the note over WarmUpLevel.
 	WarmUpLevel();
+	S_LoadScreenStep(LOADSTEP_WARMUP);
 	LoadLogStep(&loadlog_at, "warmup");
 
 	// PROFLOG counts a level's seconds from here. The name still carries its
@@ -2364,25 +2457,24 @@ long S_LoadLevelFile(long num)
 	ProfileLevel(name);
 	LoadLogStep(&loadlog_at, "profile");
 
-	// The work is done, so the bar is shown full in one frame and the level
-	// starts: the bar may take no longer than the load itself. While the
-	// load thread runs, the loop above moves it by 2 per drawn frame; it
-	// stands still while the main thread works after the join.
-	// S_FinishLoadBar puts target and position at 100, so this one draw shows
-	// the full bar (see drawbars.cpp).
-	S_FinishLoadBar();
+	/* The work is done. The bar has followed it - the loop above while the
+	 * loading thread runs, the HD build's laps and the steps after it, a
+	 * frame at each step's end where a tick has passed - and the brake
+	 * holds the screen until it has stood loadbar_min_ms, the bar running on
+	 * with the clock; its last frame is the full bar. A load longer than
+	 * that ends in one frame at once (drawbars.cpp, S_LoadScreenEnd). With
+	 * the row off nothing is drawn here. */
+	S_LoadScreenEnd();
 
-	if (App.dx.Flags & DXF_HWR)
-		S_DrawLoadBar();
-
-	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	if (fade || view || !tomb5.tr4_loadscreens ||
+		(!num && !bDoCredits && !gfStatus))
 	{
 		if (MonoScreenOn == 2)
 			ReleaseScreen();
 	}
 
 	Log("S_LoadLevelFile: load bar finished");
-	LoadLogStep(&loadlog_at, "bar");
+	LoadLogStepBar(&loadlog_at);
 	LoadLogStep(&loadlog_start, "total");
 	return 1;
 }

@@ -46,6 +46,7 @@
 #include "lara.h"
 #include "cutseq.h"
 #include "../tomb5/tomb5.h"
+#include "../specific/loadbar_math.h"	// LOADBAR_OFF
 
 GAMEFLOW* Gameflow;
 PHD_VECTOR gfLensFlare;
@@ -814,10 +815,27 @@ static bool TitleInputShadow()
 	return repeat && ActiveFpsMode() != 0;
 }
 
+/* An FMV's last picture stands on the screen after it: the movie clears
+ * and draws every frame itself, so a fade to black before it does not
+ * cover what it leaves. */
+static long fmv_on_screen;
+
+/* What the screen shows as a level load begins, for the load without a
+ * loading screen (file.cpp, S_LoadLevelFile): black when the last screen
+ * fade ran to black - a game chosen in the title or the load menu, a
+ * death, the pause menu's exit - and no movie played after it. Asked
+ * before the level's own fade-in is set, which resets the fade. */
+static void LoadEntryNoteBlack()
+{
+	LoadEntryBlack = !fmv_on_screen && ScreenFadedToBlack();
+	fmv_on_screen = 0;
+}
+
 void DoTitle(uchar name, uchar audio)
 {
 	gfLevelId = LVL5_TITLE;
 	DoFrontEndOneShotStuff();
+	LoadEntryNoteBlack();
 	SetFade(255, 0);
 	savegame.Level.Timer = 0;
 	savegame.Game.Timer = 0;
@@ -936,9 +954,14 @@ void DoTitle(uchar name, uchar audio)
 	// New game: the intro of the section lying on slot 1 (vanilla Rome =
 	// FMV 2, formerly hard-wired here).
 	if (gfLevelComplete == 1 && gfStatus != 2 && IntroFmv(gfIdFromSlot[1]))
+	{
 		PlayFmv(IntroFmv(gfIdFromSlot[1]));
+		fmv_on_screen = 1;
+	}
 
-	if (gfStatus != 4 && tomb5.tr4_loadscreens)
+	// The level's view as the loading picture - not when there is no
+	// loading screen to show it (the Loadbar style row's off).
+	if (gfStatus != 4 && tomb5.tr4_loadscreens && tomb5.loadbar != LOADBAR_OFF)
 		RenderLoadPic(0);
 
 	input = 0;
@@ -1000,6 +1023,7 @@ void DoLevel(uchar Name, uchar Audio)
 
 	gamestatus = 0;
 	gfLevelId = LevelIdFromFile(Name);	// identity BEFORE loading - everything level-specific asks gfLevelId from here on
+	LoadEntryNoteBlack();
 	SetFade(255, 0);
 
 	if (gfGameMode != 4)
@@ -1216,14 +1240,20 @@ void DoLevel(uchar Name, uchar Audio)
 		const uchar outro = (gfCurrentLevel == gfLastSlot) ? FINALE_FMV : OutroFmv(gfLevelId);
 
 		if (outro)
+		{
 			PlayFmv(outro);
+			fmv_on_screen = 1;
+		}
 
 		if (gamestatus != 2 && gfCurrentLevel != gfLastSlot && gfCurrentLevel + 1 < 18)
 		{
 			const uchar intro = IntroFmv(gfIdFromSlot[gfCurrentLevel + 1]);
 
 			if (intro)
+			{
 				PlayFmv(intro);
+				fmv_on_screen = 1;
+			}
 		}
 	}
 
@@ -1234,7 +1264,7 @@ void DoLevel(uchar Name, uchar Audio)
 	lara.examine2 = 0;
 	lara.examine3 = 0;
 
-	if (tomb5.tr4_loadscreens)
+	if (tomb5.tr4_loadscreens && tomb5.loadbar != LOADBAR_OFF)
 		RenderLoadPic(0);
 
 	// Credits after the last campaign slot - in vanilla that is Red Alert,

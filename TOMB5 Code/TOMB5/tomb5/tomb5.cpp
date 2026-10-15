@@ -14,6 +14,7 @@
 #include "tomb5.h"
 #include "../specific/registry.h"
 #include "../specific/function_stubs.h"	// Log - the HDLOG settings line
+#include "../specific/loadbar_math.h"	// the Loadbar style row's state
 
 //----------------------------------------------------------------------------
 // Discord Rich Presence: switched off in this fork.
@@ -158,6 +159,18 @@ void init_tomb5_stuff()
 		sprintf(buf, "tr4LB");
 		tomb5.tr4_loadbar = 1;							//on
 		REG_WriteBool(buf, tomb5.tr4_loadbar);
+
+		sprintf(buf, "loadbar");
+		tomb5.loadbar = LOADBAR_TR4;					//the TR4 bar, as tr4LB
+		REG_WriteLong(buf, tomb5.loadbar);
+
+		sprintf(buf, "loadfade_ms");
+		tomb5.loadfade_ms = 150;						//off's fade to black
+		REG_WriteLong(buf, tomb5.loadfade_ms);
+
+		sprintf(buf, "loadbar_min_ms");
+		tomb5.loadbar_min_ms = 500;						//the brake
+		REG_WriteLong(buf, tomb5.loadbar_min_ms);
 
 		sprintf(buf, "inv_bgM");
 		tomb5.inv_bg_mode = 1;							//original
@@ -404,6 +417,26 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "tr4LB");
 		REG_ReadBool(buf, tomb5.tr4_loadbar, 1);
+
+		/* The row's three states. Absent - every older registry - it reads
+		 * as tr4LB said, and that is written as its value; tr4LB follows
+		 * it from here on (the TR4 bar's look and the loading text). */
+		sprintf(buf, "loadbar");
+		{
+			const bool found = REG_ReadLong(buf, tomb5.loadbar,
+				LoadBarModeOf(false, 0, tomb5.tr4_loadbar));
+
+			tomb5.loadbar = LoadBarModeOf(found, tomb5.loadbar,
+				tomb5.tr4_loadbar);
+			tomb5.tr4_loadbar = tomb5.loadbar == LOADBAR_TR4;
+		}
+
+		sprintf(buf, "loadfade_ms");
+		REG_ReadLong(buf, tomb5.loadfade_ms, 150);
+
+		// The brake: the loading screen stands at least this long.
+		sprintf(buf, "loadbar_min_ms");
+		REG_ReadLong(buf, tomb5.loadbar_min_ms, 500);
 
 		sprintf(buf, "inv_bgM");
 		REG_ReadLong(buf, tomb5.inv_bg_mode, 1);
@@ -675,6 +708,15 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "tr4LB");
 	REG_WriteBool(buf, tomb5.tr4_loadbar);
+
+	sprintf(buf, "loadbar");
+	REG_WriteLong(buf, tomb5.loadbar);
+
+	sprintf(buf, "loadfade_ms");
+	REG_WriteLong(buf, tomb5.loadfade_ms);
+
+	sprintf(buf, "loadbar_min_ms");
+	REG_WriteLong(buf, tomb5.loadbar_min_ms);
 
 	sprintf(buf, "inv_bgM");
 	REG_WriteLong(buf, tomb5.inv_bg_mode);

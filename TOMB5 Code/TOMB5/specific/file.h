@@ -25,6 +25,8 @@ bool LoadCinematic();
 bool LoadSamples();
 long S_LoadLevelFile(long num);
 
+extern long LoadEntryBlack;
+
 extern TEXTURESTRUCT* textinfo;
 extern SPRITESTRUCT* spriteinfo;
 extern CHANGE_STRUCT* changes;

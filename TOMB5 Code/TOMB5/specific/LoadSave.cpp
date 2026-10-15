@@ -60,6 +60,9 @@ char MonoScreenOn;
 // a square MonoScreenPicSide texture, and is drawn with its own aspect ratio
 // instead of being stretched onto the window. See LoadScreenHD().
 static char MonoScreenHD;
+// The picture is the screen read back for a load (CaptureLoadingScreen):
+// window-sized, so ReleaseScreen gives it back as it does an HD picture.
+static char MonoScreenView;
 static long MonoScreenPicW;
 static long MonoScreenPicH;
 static long MonoScreenPicSide;
@@ -616,6 +619,108 @@ void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface)
 
 	MonoScreen.tex = tex9;
 	MonoScreenHD = 0;	// whatever came in here fills the window, as before
+	MonoScreenView = 0;
+}
+
+/* The read back screen into a texture of its size, pixel for pixel: the
+ * back buffer is X8R8G8B8 (or A8R8G8B8), the texture A8R8G8B8, so a pixel
+ * is the same 32 bits made opaque - what ConvertSurfaceToTextures makes of
+ * it in colour, without its per-pixel mask arithmetic, which takes about 30
+ * of its 41 ms at 2560 x 1440 (a harness outside the repository with this
+ * file's conversion, a D3D9 device like the engine's, nine runs). */
+static LPDIRECT3DTEXTURE9 LoadingScreenTexture(LPDIRECT3DSURFACE9 surface,
+	const D3DSURFACE_DESC* desc)
+{
+	D3DLOCKED_RECT src, dst;
+	LPDIRECT3DTEXTURE9 tex9;
+
+	if (FAILED(surface->LockRect(&src, 0, D3DLOCK_READONLY)))
+		return 0;
+
+	tex9 = CreateTexturePage(desc->Width, desc->Height, 0, NULL, 0, -1);
+
+	if (!tex9 || FAILED(tex9->LockRect(0, &dst, 0, 0)))
+	{
+		if (tex9)
+			tex9->Release();
+
+		surface->UnlockRect();
+		return 0;
+	}
+
+	for (ulong y = 0; y < desc->Height; y++)
+	{
+		const ulong* s = (const ulong*)((uchar*)src.pBits + y * src.Pitch);
+		ulong* d = (ulong*)((uchar*)dst.pBits + y * dst.Pitch);
+
+		for (ulong x = 0; x < desc->Width; x++)
+			d[x] = s[x] | 0xFF000000;
+	}
+
+	tex9->UnlockRect(0);
+	surface->UnlockRect();
+	return tex9;
+}
+
+/* What stands on the screen, as the loading picture: the back buffer read
+ * back once into the mono picture, in colour and at full brightness
+ * (MonoScreenOn 2, as a loaded picture - RGBM_Mono leaves it as it is),
+ * the same read as the inventory's background (CreateMonoScreen). Every
+ * frame of the load then draws it again (DrawLoadingScreen) instead of
+ * relying on the back buffer, whose contents a D3DSWAPEFFECT_DISCARD swap
+ * chain does not promise after a Present. Read once, as the load begins,
+ * when that buffer still holds the frame the player sees. ReleaseScreen
+ * gives it back after the load's last frame. 1 when a picture was made;
+ * 0 leaves no picture up, as before. */
+long CaptureLoadingScreen()
+{
+	LPDIRECT3DSURFACE9 sysMem;
+	LPDIRECT3DTEXTURE9 before;
+	D3DSURFACE_DESC desc;
+
+	MonoScreenOn = 2;
+	before = MonoScreen.tex;
+
+	const HRESULT got = DeviceReadBack(App.dx.lpD3DDevice, &sysMem);
+
+	if (!sysMem)
+	{
+		Log("DXLOG loading picture hr=0x%08lX - no picture",
+			(unsigned long)got);
+		MonoScreenOn = 0;
+		return 0;
+	}
+
+	sysMem->GetDesc(&desc);
+
+	if (desc.Format == D3DFMT_X8R8G8B8 || desc.Format == D3DFMT_A8R8G8B8)
+	{
+		LPDIRECT3DTEXTURE9 tex9 = LoadingScreenTexture(sysMem, &desc);
+
+		if (tex9)
+		{
+			if (MonoScreen.tex)
+				MonoScreen.tex->Release();
+
+			MonoScreen.tex = tex9;
+			MonoScreenHD = 0;
+		}
+	}
+	else
+		ConvertSurfaceToTextures(sysMem);
+
+	sysMem->Release();
+
+	// Neither way out leaves another texture than the one before when it
+	// makes none.
+	if (!MonoScreen.tex || MonoScreen.tex == before)
+	{
+		MonoScreenOn = 0;
+		return 0;
+	}
+
+	MonoScreenView = 1;
+	return 1;
 }
 
 void FreeMonoScreen()
@@ -1095,12 +1200,14 @@ void ReleaseScreen()
 {
 	MonoScreenOn = 0;
 
-	// An HD picture is a 2048x2048 texture, sixteen megabytes; the original
-	// path leaves its 640x480 one standing until the next picture replaces it,
-	// which would be a lot to leave lying around here.
-	if (MonoScreenHD)
+	// An HD picture is a 2048x2048 texture, sixteen megabytes, and a screen
+	// read back is the window's size; the original path leaves its 640x480
+	// one standing until the next picture replaces it, which would be a lot
+	// to leave lying around here.
+	if (MonoScreenHD || MonoScreenView)
 	{
 		MonoScreenHD = 0;
+		MonoScreenView = 0;
 
 		if (MonoScreen.tex)
 		{

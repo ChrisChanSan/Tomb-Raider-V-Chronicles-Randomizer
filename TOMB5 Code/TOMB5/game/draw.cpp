@@ -4729,10 +4729,12 @@ static bool VisPortalRect(const short* door, float* rect)
  * is seen through, but lands on the screen, the room behind is listed with
  * the opening's rectangle clamped to the screen alone: the window is the
  * classic geometry's, and the art opens beside it. A portal the art opens
- * no wider than the classic level keeps the classic answer: from JOBY2's
- * court, room 30's portal lands on the screen beside the window, and
- * listing room 30 there draws the stairwell's pipes into the court's wall
- * (24,640 pixels at the court's camera). */
+ * no wider than the classic level lists its room beside the window only
+ * where it meets the window or stands within g_vis_edge of it (below);
+ * farther off it keeps the classic answer: from JOBY2's court, room 30's
+ * portal lands on the screen beside the window, and listing room 30 there
+ * draws the stairwell's pipes into the court's wall (24,640 pixels at the
+ * court's camera). */
 static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
 {
 	const int portal = (int)((door - 1 - (r->door + 1)) / 16);

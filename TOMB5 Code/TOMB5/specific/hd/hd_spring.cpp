@@ -99,6 +99,8 @@ namespace
 		float gap[kHDSpringCrackMax];
 		float middleY;		// the floor at the main line's middle
 		int room;		// the room whose floor it opens
+		// The floor under the outline and its middle, for the eye's gate.
+		HDSpringCrackFloor floor;
 	};
 
 	/* The cracks, one for each spring in g_springs' order, and what the
@@ -1603,6 +1605,22 @@ void HDSpringCrackBuild(const char* trg, const std::vector<HDSpringRoom>& rooms,
 		}
 
 		c.bottomY = hi + c.depth;
+
+		// The floor under the outline and its middle, as a plane.
+		float px[kHDSpringCrackMax + 1], pz[kHDSpringCrackMax + 1],
+			py[kHDSpringCrackMax + 1];
+
+		for (int p = 0; p < c.points; p++)
+		{
+			px[p] = c.x[p];
+			pz[p] = c.z[p];
+			py[p] = k.rimY[p];
+		}
+
+		px[c.points] = c.midX[half];
+		pz[c.points] = c.midZ[half];
+		py[c.points] = k.middleY;
+		k.floor = HDSpringCrackFloorFit(px, pz, py, c.points + 1);
 	}
 }
 
@@ -1692,8 +1710,9 @@ void HDSpringCrackNumbers(int* drawn, double* ms)
  *               lie in front of the bottom, elsewhere behind the floor
  *
  * The bottom the walls leave open is the hole's own black. Nothing when
- * the frame's depth has no stencil, the eye is under the floor or the
- * volume reaches the near plane, where the count would be cut; and only
+ * the frame's depth has no stencil, the eye does not look into the slit
+ * (HDSpringCrackSeen: under the bottom or behind the floor) or the volume
+ * reaches the near plane, where the count would be cut; and only
  * while `drawn` says the room of the crack's floor is drawn this frame:
  * a ray to the crack then meets the floor or what stands in front of it,
  * never an empty place of the frame whose depth the count would meet
@@ -1762,13 +1781,8 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 			!drawn(k.room)))
 			continue;
 
-		float lowest = k.middleY;
-
-		for (int p = 0; p < c.points; p++)
-			lowest = fminf(lowest, k.rimY[p]);
-
-		// The eye over the floor (y down), else the crack is not seen.
-		if (eye[1] >= lowest - kCrackLift)
+		// The eye over the bottom and the floor, else the slit is not seen.
+		if (!HDSpringCrackSeen(eye, k.floor, c.bottomY, kCrackLift))
 			continue;
 
 		Draw dr;

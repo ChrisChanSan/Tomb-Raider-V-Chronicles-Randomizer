@@ -34,9 +34,11 @@
  *                  plane, and 128 is the stand rule's reach
  *   step 64        HD_COVER_STEP
  *   bare 0.5       a free choice: a face half bare or more is an opening
- *   guestTris 8    2,671 (holder, group) pairs have a triangle in the
- *                  holder's inside, 2,377 eight or more; the 294 under
- *                  eight are stray triangles - a free choice
+ *   guestTris 8    the count TROne's TR2 visibility prototype names a
+ *                  guest by (see hd_vis.h); here 2,671 (holder, group)
+ *                  pairs have a triangle in the holder's inside, 2,377
+ *                  eight or more, and the 294 under eight are stray
+ *                  triangles
  *   guestRule 2    art reaching out of its own room, into a room under
  *                  the sky or a linked one - see the guests below
  *   overhang 128   HD_OVERHANG_SLACK: the relief of a wall stands within
@@ -178,10 +180,10 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * link with b or b's twin. Rooms that stand in one another with no link
 	 * - JOBY2's room 24 in rooms 30, 31 and 33 - are never seen together in
 	 * the classic game, whose walk only follows links, and drawn together
-	 * their art fills the same space: listed by an opening, room 24's
-	 * marble covered the stairwell's art at all ten of the owner's stair
-	 * cameras (5,316,516 pixels at 2560x1440). The openings keep a room
-	 * only when it is linked with the room that lists it.
+	 * their art fills the same space: an opening that listed room 24 would
+	 * draw its marble over the stairwell's art at ten stair cameras
+	 * (5,316,516 pixels at 2560x1440). The openings keep a room only when
+	 * it is linked with the room that lists it.
 	 *
 	 * The guests (`guestRule` 2): a group's art counts for a holder only
 	 * where it reaches out of its own room - farther than `overhang` past
@@ -190,8 +192,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * (rule 0, linked guests only) brings JOBY2's room 24 into rooms 30 and
 	 * 31 by the slabs of its ceiling and walls; the art reaching out of its
 	 * room alone (rule 1) brings room 92's beam into ANDREA3's room 63, an
-	 * enclosed room it has no link with (400,730 pixels at one of the
-	 * owner's cameras), while ANDREA2's brick tower of room 222 stands over
+	 * enclosed room it has no link with (400,730 pixels at one camera of
+	 * its courtyard), while ANDREA2's brick tower of room 222 stands over
 	 * room 232, a courtyard under the sky it has no link with either, and
 	 * is seen from it. */
 	const size_t n = (size_t)roomCount;

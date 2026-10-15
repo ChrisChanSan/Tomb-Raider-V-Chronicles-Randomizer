@@ -28,6 +28,13 @@
  * A room any of them lists walks on through its own portals with the window
  * it was listed with, as a room the portals list does.
  *
+ * The approach - the walk as the list, every listed room's art drawn whole,
+ * a group listed by its art in a listed room's box, eight triangles making
+ * it a guest - is re-derived from the TR2 visibility prototype of TROne
+ * (GPLv3) by Todesengel1931 - https://github.com/todesengel1931. No TROne
+ * source is in this file or in hd_vis.cpp; the tables and their rules are
+ * this engine's own.
+ *
  * No engine header, like hd_cover.h: the engine, RoomProbe and TrgProbe make
  * the same tables out of the same .TRG and the same classic faces. World
  * units with TR5's y down, unless a field says room-local. */

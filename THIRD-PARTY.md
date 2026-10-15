@@ -2082,23 +2082,29 @@ water surface", carries the tables.
     room's window its art's box covers. THIRD: TROne (GPLv3) by Todesengel1931
     - https://github.com/todesengel1931 - its TR2 visibility prototype
     (`host/render/hd_visibility_tr2.inc`, the copy handed over on 2026-10-14),
-    read for the approach; no code was taken, the walk, the tables and the
-    rules below are this project's own. Its known failure, a room listed by
-    its art box without passing the walk on, is what entry 207 answers.
+    read for the approach; no code was taken. Taken from it: the approach
+    above and the guests' count of eight triangles (entry 204); the walk,
+    the tables and the other rules below are this project's own. Its known
+    failure, a room listed by its art box without passing the walk on, is
+    what entry 207 answers.
 204. **The guests' rule** (`hd_vis.cpp`, `guestRule` 2) - a group's triangles
     count for a room when their centroid stands in the room's inside and more
     than 128 units outside the group's own room's box; eight such triangles
     make the group a guest, and a guest of a room not under the sky must be
     linked with it (a portal either way or a floor link, closed over the
-    flipmap twins). OWN. DATA (TrgProbe `-vistable`, RoomProbe `-vis 1
-    -visguestrule`): 2,671 (holder, group) pairs have a triangle in the
+    flipmap twins). THIRD for the count of eight: TROne (GPLv3) by
+    Todesengel1931 - https://github.com/todesengel1931 - names a guest by
+    eight or more triangles in a room's box (`host/render/
+    hd_visibility_tr2.inc`, the guest table's comment); the centroid test,
+    the 128 units and the link test OWN. DATA (TrgProbe `-vistable`,
+    RoomProbe `-vis 1 -visguestrule`): 2,671 (holder, group) pairs have a triangle in the
     holder's inside, 2,377 eight or more; every such triangle counted lists
     JOBY2's room 24 in rooms 30, 31 and 33 by the slabs of its ceiling (32
     units over its box) and covers the stairwell's art with its marble at
     all ten of the owner's stair cameras; with no link test ANDREA3's room
     92 puts a beam into room 63 (400,730 pixels at one camera); 128 is
-    `HD_OVERHANG_SLACK`, eight a free choice (the 294 pairs under it are
-    stray triangles). Under the rule: 430 guests over the fifteen levels,
+    `HD_OVERHANG_SLACK`; under the count of eight lie 294 pairs, stray
+    triangles. Under the rule: 430 guests over the fifteen levels,
     175 more taken out by the link test.
 205. **The openings** (`hd_vis.cpp`) - a classic wall face of a room whose
     own art covers half its wall samples or more is an opening when its art

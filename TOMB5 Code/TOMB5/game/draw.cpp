@@ -2019,7 +2019,9 @@ static void VisBeginWalk()
  * walk the rooms the portals queued first (and the eye's room), guest,
  * opening and wide those the three tables queued first, dequeues the walk's
  * whole work; the list every listed room with the letter of its source:
- * w portals, g guest, o opening, p wide portal. */
+ * w portals, g guest, o opening, p wide portal. A table that only widens
+ * the window of a room already queued is credited nothing, and the rooms
+ * the wider window lets the portals reach read w. */
 static void VisEndWalk(short walkRoom)
 {
 	static DWORD last = 0;
@@ -4724,8 +4726,9 @@ static bool VisPortalRect(const short* door, float* rect)
  * the opening's rectangle clamped to the screen alone: the window is the
  * classic geometry's, and the art opens beside it. A portal the art opens
  * no wider than the classic level keeps the classic answer: from JOBY2's
- * court, room 30's portal lands on the screen beside the window, and taken
- * in, the stairwell's pipes in the court's wall came back (24,640 pixels). */
+ * court, room 30's portal lands on the screen beside the window, and
+ * listing room 30 there draws the stairwell's pipes into the court's wall
+ * (24,640 pixels at the court's camera). */
 static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
 {
 	const int portal = (int)((door - 1 - (r->door + 1)) / 16);

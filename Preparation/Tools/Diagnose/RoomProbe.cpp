@@ -7381,7 +7381,13 @@ static void ProbeWetArt(int floor, const char* root, const char* stem)
  * engine's own numbers (hd_render.cpp, kWetCopyCells) asked of triangles.
  * One `census` line a room - inner squares only, off the ring of walls and
  * doors - and a `censussq` line for every square of a room that has one
- * copied, and for every square any wet floor holds. */
+ * copied, and for every square any wet floor holds. Where an inner square
+ * has no flat face of the art within 16 units of the classic floor, the
+ * art's floor stands elsewhere: the flat face nearest to the classic floor
+ * within 512 units (two clicks, a free choice) is taken as the floor
+ * instead and the square measured again about it - the census line's
+ * unseen= (such squares), refit= (an art floor found), refitcopied= (a
+ * copy about it) and refitclear= (one under a clear floor). */
 static bool g_tank_census = false;
 
 static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
@@ -7477,6 +7483,46 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
 		bool inner, copied, listed;
 	};
 
+	/* The column's art against a floor at fy: the floor's own faces, and
+	 * what lies under it, mirrored or not (as -tankart). */
+	auto measure = [&](const std::vector<Tri>& all, float fy, Square& s)
+	{
+		std::set<long long> over;
+
+		for (const Tri& t : all)
+			if (t.y < fy - 16.0f && t.y >= fy - 2048.0f - 64.0f)
+				over.insert(cell(t.x, t.y, t.z));
+
+		for (const Tri& t : all)
+		{
+			if (fabsf(t.y - fy) <= 16.0f)
+			{
+				if (t.kind >= 0)
+					s.faces[t.kind]++;
+			}
+			else if (t.y > fy && t.y <= fy + 2048.0f)
+			{
+				const float my = 2.0f * fy - t.y;
+				bool found = false;
+
+				s.under++;
+				s.deep = (int)(t.y - fy) > s.deep ? (int)(t.y - fy) :
+					s.deep;
+
+				for (int d = 0; d < 27 && !found; d++)
+					found = over.count(cell(
+						t.x + 32.0f * (float)(d % 3 - 1),
+						my + 32.0f * (float)(d / 3 % 3 - 1),
+						t.z + 32.0f * (float)(d / 9 - 1))) != 0;
+
+				s.mirrored += found ? 1 : 0;
+			}
+		}
+
+		s.copied = s.mirrored >= 8 && s.mirrored * 3 >= s.under;
+	};
+	int unseen_all = 0, refit_all = 0, refit_copied_all = 0;
+
 	int rooms_copied = 0, squares_all = 0, copied_all = 0, clear_all = 0;
 
 	printf("census level=%s triangles=%u\n", stem, (unsigned)total);
@@ -7499,40 +7545,8 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
 					sx > 0 && sz > 0 && sx < w.sizeX - 1 && sz < w.sizeZ - 1,
 					false, false };
 				const std::vector<Tri>& all = column[key(s.x >> 10, s.z >> 10)];
-				std::set<long long> over;
-				const float fy = (float)s.y;
 
-				for (const Tri& t : all)
-					if (t.y < fy - 16.0f && t.y >= fy - 2048.0f - 64.0f)
-						over.insert(cell(t.x, t.y, t.z));
-
-				for (const Tri& t : all)
-				{
-					if (fabsf(t.y - fy) <= 16.0f)
-					{
-						if (t.kind >= 0)
-							s.faces[t.kind]++;
-					}
-					else if (t.y > fy && t.y <= fy + 2048.0f)
-					{
-						const float my = 2.0f * fy - t.y;
-						bool found = false;
-
-						s.under++;
-						s.deep = (int)(t.y - fy) > s.deep ? (int)(t.y - fy) :
-							s.deep;
-
-						for (int d = 0; d < 27 && !found; d++)
-							found = over.count(cell(
-								t.x + 32.0f * (float)(d % 3 - 1),
-								my + 32.0f * (float)(d / 3 % 3 - 1),
-								t.z + 32.0f * (float)(d / 9 - 1))) != 0;
-
-						s.mirrored += found ? 1 : 0;
-					}
-				}
-
-				s.copied = s.mirrored >= 8 && s.mirrored * 3 >= s.under;
+				measure(all, (float)s.y, s);
 				s.listed = wet.count(key(s.x >> 10, s.z >> 10) ^
 					((long long)s.y << 48)) != 0;
 				sq.push_back(s);
@@ -7540,7 +7554,45 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
 
 		int squares = 0, copied = 0, clear = 0, under = 0, mirrored = 0;
 		int deep = 0, faces[4] = { 0, 0, 0, 0 }, kinds[4] = { 0, 0, 0, 0 };
+		int unseen = 0, refit = 0, refitCopied = 0, refitClear = 0;
 		bool any = false;
+
+		// The inner squares the art's floor faces were not found at.
+		for (const Square& s : sq)
+		{
+			if (!s.inner || s.faces[0] || s.faces[1] || s.faces[2] ||
+				s.faces[3])
+				continue;
+
+			const std::vector<Tri>& all = column[key(s.x >> 10, s.z >> 10)];
+			float best = 1.0e9f;
+
+			for (const Tri& t : all)
+				if (t.kind >= 0 && fabsf(t.y - (float)s.y) <= 512.0f &&
+					fabsf(t.y - (float)s.y) < fabsf(best - (float)s.y))
+					best = t.y;
+
+			unseen++;
+
+			if (best > 1.0e8f)
+				continue;
+
+			Square again = s;
+
+			again.under = again.mirrored = again.deep = 0;
+
+			for (int k = 0; k < 4; k++)
+				again.faces[k] = 0;
+
+			measure(all, best, again);
+			refit++;
+			refitCopied += again.copied ? 1 : 0;
+			refitClear += again.copied && again.faces[1] ? 1 : 0;
+		}
+
+		unseen_all += unseen;
+		refit_all += refit;
+		refit_copied_all += refitCopied;
 
 		for (const Square& s : sq)
 		{
@@ -7572,10 +7624,11 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
 		rooms_copied += copied ? 1 : 0;
 		printf("census room=%d drawn=%d squares=%d copied=%d copiedclear=%d "
 			"under=%d mirrored=%d deep=%d floor=opaque:%d,clear:%d,cut:%d,"
-			"add:%d squaresby=opaque:%d,clear:%d,cut:%d,add:%d\n", (int)r,
-			w.drawn, squares, copied, clear, under, mirrored, deep, faces[0],
+			"add:%d squaresby=opaque:%d,clear:%d,cut:%d,add:%d unseen=%d "
+			"refit=%d refitcopied=%d refitclear=%d\n", (int)r, w.drawn,
+			squares, copied, clear, under, mirrored, deep, faces[0],
 			faces[1], faces[2], faces[3], kinds[0], kinds[1], kinds[2],
-			kinds[3]);
+			kinds[3], unseen, refit, refitCopied, refitClear);
 
 		for (const Square& s : sq)
 			if (any || s.listed)
@@ -7588,8 +7641,9 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
 	}
 
 	printf("census level=%s rooms=%d squares=%d copied=%d copiedclear=%d "
-		"roomscopied=%d\n", stem, (int)rooms.size(), squares_all, copied_all,
-		clear_all, rooms_copied);
+		"roomscopied=%d unseen=%d refit=%d refitcopied=%d\n", stem,
+		(int)rooms.size(), squares_all, copied_all, clear_all, rooms_copied,
+		unseen_all, refit_all, refit_copied_all);
 }
 
 /* -tankwetmap: floor `floor`'s squares, room by room, one line each: the

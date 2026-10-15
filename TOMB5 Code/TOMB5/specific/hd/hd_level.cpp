@@ -5642,10 +5642,14 @@ static void FileStampOf(const char* path, HDLevelFileStamp* out)
 		a.ftLastWriteTime.dwLowDateTime;
 }
 
-/* Every path is the one its reader opens: the .TRC as LoadLevel's FileOpen,
- * the sidecar as HDMarkersLoad finds it beside it, the .TRG as
- * HDRenderLevelBegin reads it, the two text files in the working folder as
- * their readers do. */
+/* The key stamped before the loading thread starts (HDLevelKeyEarly) and
+ * the file it is of: LoadLevel's HDLevelKeyNext takes it for that file, so
+ * the loading screen's decision and the keep stand on one key. */
+static HDLevelKey g_key_early;
+static char g_key_early_wad[HD_LEVEL_KEY_PATH];
+
+static int KeyStampOf(const char* wadName, HDLevelKey& k);
+
 void HDLevelKeyNext(const char* wadName)
 {
 	HDLevelKey& k = g_key_next;
@@ -5655,43 +5659,18 @@ void HDLevelKeyNext(const char* wadName)
 	if (!wadName || !*wadName || !HDEnabled())
 		return;
 
-	LevelStem(wadName, k.name, sizeof(k.name));
+	// The key S_LoadLevelFile stamped for this file, else a stamp now.
+	const int early = g_key_early.valid &&
+		!strcmp(g_key_early_wad, wadName);
 
-	if (!k.name[0])
+	if (early)
+		k = g_key_early;
+
+	memset(&g_key_early, 0, sizeof(g_key_early));
+	g_key_early_wad[0] = 0;
+
+	if (!early && !KeyStampOf(wadName, k))
 		return;
-
-	std::string sidecar = wadName;
-	const size_t slash = sidecar.find_last_of("/\\");
-	const size_t dot = sidecar.find_last_of('.');
-
-	if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
-		sidecar.erase(dot);
-
-	std::string trg = HDInstallRoot();
-
-	while (!trg.empty() && (trg.back() == '\\' || trg.back() == '/'))
-		trg.pop_back();
-
-	trg += std::string("\\DATA\\") + k.name + ".TRG";
-
-	k.level = (int)gfLevelId;
-	FileStampOf(wadName, &k.trc);
-	FileStampOf((sidecar + ".hdm").c_str(), &k.hdm);
-	FileStampOf(trg.c_str(), &k.trg);
-	FileStampOf("hd_gloss.txt", &k.glossFile);
-	FileStampOf("hd_water.txt", &k.waterFile);
-	snprintf(k.install, sizeof(k.install), "%s", HDInstallRoot());
-	snprintf(k.installTr3, sizeof(k.installTr3), "%s", HDInstallRootTr3());
-	k.air = (int)tomb5.hd_air;
-	k.water = (int)tomb5.hd_water;
-	k.objects = (int)tomb5.hd_objects;
-	k.budgetMb = (long)tomb5.hd_texture_budget_mb;
-	snprintf(k.format, sizeof(k.format), "%s", tomb5_hd_texture_format);
-
-	if (!REG_PeekString("tomb5", "hd_outfit", k.outfit, sizeof(k.outfit)))
-		k.outfit[0] = 0;
-
-	k.valid = 1;
 
 	/* Whatever of the level before no build took goes first; a level the
 	 * load keeps needs nothing read (HDLevelUnload decides the same from
@@ -5734,6 +5713,79 @@ void HDLevelKeyNext(const char* wadName)
 bool HDLevelKeepsNext()
 {
 	return !HDLevelKeepRefused(&g_key_built, &g_key_next, g_redress_count);
+}
+
+/* The level's key into `k`, 0 when the file name gives no level. Every
+ * path is the one its reader opens: the .TRC as LoadLevel's FileOpen,
+ * the sidecar as HDMarkersLoad finds it beside it, the .TRG as
+ * HDRenderLevelBegin reads it, the two text files in the working folder as
+ * their readers do. */
+static int KeyStampOf(const char* wadName, HDLevelKey& k)
+{
+	memset(&k, 0, sizeof(k));
+	LevelStem(wadName, k.name, sizeof(k.name));
+
+	if (!k.name[0])
+		return 0;
+
+	std::string sidecar = wadName;
+	const size_t slash = sidecar.find_last_of("/\\");
+	const size_t dot = sidecar.find_last_of('.');
+
+	if (dot != std::string::npos && (slash == std::string::npos || dot > slash))
+		sidecar.erase(dot);
+
+	std::string trg = HDInstallRoot();
+
+	while (!trg.empty() && (trg.back() == '\\' || trg.back() == '/'))
+		trg.pop_back();
+
+	trg += std::string("\\DATA\\") + k.name + ".TRG";
+
+	k.level = (int)gfLevelId;
+	FileStampOf(wadName, &k.trc);
+	FileStampOf((sidecar + ".hdm").c_str(), &k.hdm);
+	FileStampOf(trg.c_str(), &k.trg);
+	FileStampOf("hd_gloss.txt", &k.glossFile);
+	FileStampOf("hd_water.txt", &k.waterFile);
+	snprintf(k.install, sizeof(k.install), "%s", HDInstallRoot());
+	snprintf(k.installTr3, sizeof(k.installTr3), "%s", HDInstallRootTr3());
+	k.air = (int)tomb5.hd_air;
+	k.water = (int)tomb5.hd_water;
+	k.objects = (int)tomb5.hd_objects;
+	k.budgetMb = (long)tomb5.hd_texture_budget_mb;
+	snprintf(k.format, sizeof(k.format), "%s", tomb5_hd_texture_format);
+
+	if (!REG_PeekString("tomb5", "hd_outfit", k.outfit, sizeof(k.outfit)))
+		k.outfit[0] = 0;
+
+	k.valid = 1;
+	return 1;
+}
+
+/* The coming level's key, stamped now in S_LoadLevelFile, and what the
+ * load will do with it: the comparison is HDLevelKeepRefused on the key
+ * LoadLevel's HDLevelKeepsNext and HDLevelUnload will hold. */
+void HDLevelKeyEarly(const char* wadName, HDLevelNextLoad* out)
+{
+	memset(out, 0, sizeof(*out));
+	memset(&g_key_early, 0, sizeof(g_key_early));
+	g_key_early_wad[0] = 0;
+
+	if (!wadName || !*wadName)
+		return;
+
+	if (!HDEnabled())
+		return;
+
+	if (!KeyStampOf(wadName, g_key_early))
+		return;
+
+	snprintf(g_key_early_wad, sizeof(g_key_early_wad), "%s", wadName);
+	out->gate = 1;
+	out->art = g_key_early.trg.size >= 0;
+	out->kept = !HDLevelKeepRefused(&g_key_built, &g_key_early,
+		g_redress_count);
 }
 
 void HDLevelLoad(const char* wadName)

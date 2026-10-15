@@ -2276,6 +2276,7 @@ long S_LoadLevelFile(long num)
 	const long shown = mode != LOADBAR_OFF;
 	const long black = LoadEntryBlack;
 	long fade = 0;
+	long view = 0;
 
 	LoadEntryBlack = 0;
 	Log(__FUNCTION__);
@@ -2341,6 +2342,16 @@ long S_LoadLevelFile(long num)
 				LoadScreen(chosen_screen + 2, 4);
 		}
 	}
+
+	/* No picture was read: with TR4 loadscreens on, the screen shows the
+	 * level's view as RenderLoadPic drew it, its last frame (after the
+	 * credits the frame before). It is read back once into the mono
+	 * picture, as the inventory keeps its background, so that every frame
+	 * of the bar draws it under the bar: the windowed swap chain's single
+	 * back buffer is not trusted to keep it from frame to frame. A picture
+	 * already up (MonoScreenOn) stays as it is. */
+	if (shown && !MonoScreenOn)
+		view = CaptureLoadingScreen();
 
 	strcpy(name, &gfFilenameWad[gfFilenameOffset[num]]);
 	LoadLogLevel(name);
@@ -2442,7 +2453,8 @@ long S_LoadLevelFile(long num)
 	 * the row off nothing is drawn here. */
 	S_LoadScreenEnd();
 
-	if (fade || !tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	if (fade || view || !tomb5.tr4_loadscreens ||
+		(!num && !bDoCredits && !gfStatus))
 	{
 		if (MonoScreenOn == 2)
 			ReleaseScreen();

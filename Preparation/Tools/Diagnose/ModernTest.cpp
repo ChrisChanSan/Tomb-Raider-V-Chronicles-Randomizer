@@ -11368,8 +11368,23 @@ static void load_mode()
 	// The picture read back is released with the load's last frame.
 	n = hd_switch_count(save, "if (MonoScreenHD || MonoScreenView)");
 	ok(n == 1, "load mode: a screen read back is given back", n, 1);
-	n = hd_switch_count(file, "if (fade || !tomb5.tr4_loadscreens ||");
-	ok(n == 1, "load mode: the fade's picture goes after the load", n, 1);
+	n = hd_switch_count(file, "if (fade || view || !tomb5.tr4_loadscreens ||");
+	ok(n == 1, "load mode: a picture read back goes after the load", n, 1);
+
+	// TR4 loadscreens: the level's view read back once, before the first
+	// frame, when no picture was read; drawn under every frame from then on.
+	a = load_keep_at(file, "if (shown && !MonoScreenOn)",
+		"view = CaptureLoadingScreen();");
+	b = load_keep_at(file, "if (shown && !MonoScreenOn)",
+		"DrawLoadingScreen();");
+	ok(a >= 0 && a < b, "load mode: the TR4 view read back before the first "
+		"frame", a < b, 1);
+	a = load_keep_at(file, "if (shown && (!tomb5.tr4_loadscreens ||",
+		"if (shown && !MonoScreenOn)");
+	ok(a >= 0, "load mode: the view only where no picture was read", a >= 0,
+		1);
+	n = hd_switch_count(save, "d[x] = s[x] | 0xFF000000;");
+	ok(n == 1, "load mode: the screen read back pixel for pixel", n, 1);
 
 	free(file);
 	free(bars);

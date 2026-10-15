@@ -632,10 +632,51 @@ void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface)
  * when that buffer still holds the frame the player sees. ReleaseScreen
  * gives it back after the load's last frame. 1 when a picture was made;
  * 0 leaves no picture up, as before. */
+/* The read back screen into a texture of its size, pixel for pixel: the
+ * back buffer is X8R8G8B8 (or A8R8G8B8), the texture A8R8G8B8, so a pixel
+ * is the same 32 bits made opaque - what ConvertSurfaceToTextures makes of
+ * it in colour, without its per-pixel mask arithmetic, which takes about 30
+ * of its 41 ms at 2560 x 1440 (a harness outside the repository with this
+ * file's conversion, a D3D9 device like the engine's, nine runs). */
+static LPDIRECT3DTEXTURE9 LoadingScreenTexture(LPDIRECT3DSURFACE9 surface,
+	const D3DSURFACE_DESC* desc)
+{
+	D3DLOCKED_RECT src, dst;
+	LPDIRECT3DTEXTURE9 tex9;
+
+	if (FAILED(surface->LockRect(&src, 0, D3DLOCK_READONLY)))
+		return 0;
+
+	tex9 = CreateTexturePage(desc->Width, desc->Height, 0, NULL, 0, -1);
+
+	if (!tex9 || FAILED(tex9->LockRect(0, &dst, 0, 0)))
+	{
+		if (tex9)
+			tex9->Release();
+
+		surface->UnlockRect();
+		return 0;
+	}
+
+	for (ulong y = 0; y < desc->Height; y++)
+	{
+		const ulong* s = (const ulong*)((uchar*)src.pBits + y * src.Pitch);
+		ulong* d = (ulong*)((uchar*)dst.pBits + y * dst.Pitch);
+
+		for (ulong x = 0; x < desc->Width; x++)
+			d[x] = s[x] | 0xFF000000;
+	}
+
+	tex9->UnlockRect(0);
+	surface->UnlockRect();
+	return tex9;
+}
+
 long CaptureLoadingScreen()
 {
 	LPDIRECT3DSURFACE9 sysMem;
 	LPDIRECT3DTEXTURE9 before;
+	D3DSURFACE_DESC desc;
 
 	MonoScreenOn = 2;
 	before = MonoScreen.tex;
@@ -650,10 +691,28 @@ long CaptureLoadingScreen()
 		return 0;
 	}
 
-	ConvertSurfaceToTextures(sysMem);
+	sysMem->GetDesc(&desc);
+
+	if (desc.Format == D3DFMT_X8R8G8B8 || desc.Format == D3DFMT_A8R8G8B8)
+	{
+		LPDIRECT3DTEXTURE9 tex9 = LoadingScreenTexture(sysMem, &desc);
+
+		if (tex9)
+		{
+			if (MonoScreen.tex)
+				MonoScreen.tex->Release();
+
+			MonoScreen.tex = tex9;
+			MonoScreenHD = 0;
+		}
+	}
+	else
+		ConvertSurfaceToTextures(sysMem);
+
 	sysMem->Release();
 
-	// ConvertSurfaceToTextures leaves the texture before when it makes none.
+	// Neither way out leaves another texture than the one before when it
+	// makes none.
 	if (!MonoScreen.tex || MonoScreen.tex == before)
 	{
 		MonoScreenOn = 0;

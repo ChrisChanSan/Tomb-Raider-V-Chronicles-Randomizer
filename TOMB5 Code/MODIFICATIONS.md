@@ -13870,8 +13870,10 @@ a clear floor. `-tankwetmap` ends its lines in `clear=`. At picture 9's eye 40,2
 pixels of 1,920 x 1,080 change: the mouth squares mirror the wall and the bench again.
 
 The yellow bands. Round 5 named the corridor's ceiling glows, drawn without depth, as
-their cause. Measured now: the additive pass alone (`-glow`) is black at the band eyes
-and at his pictures' eyes; the glass left as an alpha test (`-noblend`) changes no pixel;
+their cause. Measured now: the additive pass alone (`-glow`) is black at the band eyes;
+at his pictures 3's and 9's eyes it holds 4,422 and 1,331 pixels drawn without depth, at
+most 28 of 255 bright and away from the mouth's floor; the glass left as an alpha test
+(`-noblend`) changes no pixel;
 the corridor's cove lights are opaque art that writes its depth. Of the bands' yellow
 pixels (wet against dry, R over 140, G over 120, B under 0.7 G) at four eyes, 5,733 of
 5,794, 1,873 of 1,984, 2,323 of 2,457 and 4,367 of 4,584 lie within 2 pixels of the fine
@@ -13883,13 +13885,20 @@ c601 1,984, e360 719, k229 5,794, k458 4,584, v510 108, the rest 0 (0 at all in 
 5's build). Nothing drawn without depth lies in the march's way there, so no remedy for
 one was built; whether the cove's mirror should be weaker is a question of the look.
 
-Picture 4. At its eye the march lies more than 2 pixels off the fine march for 79 of
-101,382 wet pixels, on one side only for 4,196, off the fine colour by more than 48 for
-1,143: the yellow light is the lift's lit wall and the cove strip mirrored. Its ripples
-and cracks were not measured to a cause; two parts of the design lie under a bright
-mirror: the share of the mirror each 256-unit grid point takes out of a hash (0.5 to 1,
-a damp place against a pool), which a bright reflection shows as a pattern, and the
-floor's own veins and inlays, over which the mirror is added. Left as a question.
+Picture 4. The yellow light is the lit room beyond the lift's door mirrored. Measured at
+its eye (1,920 x 1,080) against the fine march (`-tankmarch 6`, 8-unit steps, the
+measure): the light's region - the pixels the fine march finds lit, 36,482 - holds 3,484
+pixels this march finds black, every one a ray that left the screen, and 14,192 that it
+finds on one side only. The fine march itself draws the light as rows: 790 pixels it
+finds black lie between lit rows above and below. The lit room stands in the frame only
+as a sliver along the door's post, and the floor's rows alternate between rays that meet
+the sliver and rays that pass it - the ripples and cracks across his light are that, and
+no march over the screen can draw it whole. Two changes to the march were built and
+measured and taken out again: going on from the edge a failed halving closed on changed
+no pixel there, and taking a step that leaves the screen again in quarters turned 2,498
+of the black pixels lit but put 2,032 off the fine colour by more than 40, a bright
+block on the floor. What would draw the light whole is the room art mirrored as
+geometry (class 3 below).
 
 The models in the mirror (`hd_render.cpp`, "the models in the mirror",
 `HDRenderWaterWetModels`). The cause classes, at his eyes with a stand-in for Lara:
@@ -13918,7 +13927,17 @@ stand at. `WetPS`'s march goes past a model's place as past a hole in the frame;
 mirrored model under a pixel - on that plane within the layer's 4 and a corner's 8
 units, under the floor, nearer than the march's hit - is the mirror's, its clip undone
 as the frame's is, weighted, held and fogged as the march's. The engine hands in
-`HDObjectFrameDraw` (one line in `HDFrameDrawGlow`), RoomProbe its stand-ins. No game
+`HDObjectFrameDraw` (one line in `HDFrameDrawGlow`), RoomProbe its stand-ins. The place
+mask is written with both alpha blend factors zero over a clear alpha of 1, so every pixel
+a model draws leaves 0 whatever alpha its shader returns: a model's shader returns its
+page's alpha, a gloss mask, which on her body page lies under 64 on a tenth of the
+texels, and the mask taken from it lost those pixels. The mirrored draw is clipped by
+five planes to what stands over the wet floor: above the plane, and inside the drawn wet
+points' box grown by one square on every side (`HDWetPlaneTo` carries them from the
+world through the view into the mirrored projection's clip space), so another room's
+object behind a wall - which the mirror took wherever the march's ray left the screen
+before meeting the wall - and a part under the floor are not mirrored. The statics (the
+machine, the bench) are not on the frame's object list: they stay in the march. No game
 code changes and nothing of `game\mirror.cpp` is used: a planar reflection through the
 projection is the textbook form. A planar mirror of the room art as well, for class 3,
 was measured and not built: the solid passes of the four wet rooms (122, 121, 45, 46)
@@ -13931,12 +13950,14 @@ summed, tank 182 60 s after the shot, medians, `dd6b559a` against the round's he
 5's eyes c601 0.117 to 0.175 ms, k185 0.110 to 0.183, v510 0.129 to 0.157, and E158 0.163
 to 0.186; his eyes 3 to 9 0.106 to 0.134 against 0.118 to 0.171 - the march on the mouth
 squares and the larger shader; with a two-box stand-in drawn through the models'
-mirror 0.121 to 0.181. Lara's own two extra draws the probe cannot draw: the four rooms'
-15,670 triangles take 0.1 ms, so her mesh twice is of that order. Memory: the target and
+mirror 0.121 to 0.181. Her own two extra draws, which RoomProbe cannot make, measured
+with ModelProbe `-shadowtime` (her RICH2 outfit, every part, and a medipack, solid pass,
+2,560 x 1,440, each frame waited for, 300 frames, CPU and GPU together): 0.054 to 0.086
+ms a draw at 900 and 2,600 units, so 0.11 to 0.17 ms for the two. Memory: the target and
 its depth, 8 bytes a pixel, 28.1 MiB at 2,560 x 1,440, against the 3,886 MiB budget of his
 log's `HDLOG` line (0.7 per cent), made at the first wet mirror and released with the
 later copy. Slots: `WetPS` 256 to 320 (20 texture, 300 arithmetic), the debugger 508 to
-472 (round three's march left out of it, map 8 the models' places); every other `.inc`
+471 (round three's march left out of it, map 8 the models' places); every other `.inc`
 byte-identical.
 
 **Checked.** The classic path 6 of 6 md5-identical to `8691e82`, `dd6b559a` and the head
@@ -13955,18 +13976,49 @@ InterpTest, LipsTest) 0 failed; the engine and every tool build.
 **Left.** The look in the game - nobody in this round could play it, and RoomProbe
 draws no Lara: her real mesh in the mirror, the pictures of a dark box are the proof.
 The machine's tip at the frame's top edge (class 3) stays cut until the room art is
-mirrored as geometry too. The cove lights' mirror at the corridor's mouth is their true
-reflection; whether it should read weaker is the owner's. Picture 4's ripples and
-cracks are not measured to a cause. The models are mirrored in one plane a frame - the
-height most wet points stand at - so on tank 33's plinth, a click under room 23's
-lowered floor, they do not show. A model drawn in a classic mirror room's reflection
-would be mirrored again; a speaking face over a wet floor would write its `LIPLOG`
-line again for each extra draw. The pictures of round 5 the owner asked about (160) and
-Lara's boxes: the boxes are class 1, built against; picture 160's half-see-through was
-the art's copy (round 5).
+mirrored as geometry too: at picture 3's eye 14,937 of the 42,112 wet pixels under the
+machine's columns find nothing in either march (960 x 540). The same mirror would draw
+picture 4's light whole. The cove lights' mirror at the corridor's mouth is their true
+reflection; whether it should read weaker is the owner's. The models are mirrored in
+one plane a frame - the height most wet points stand at - so on tank 33's plinth, a
+click under room 23's lowered floor, they do not show. A model drawn in a classic
+mirror room's reflection would be mirrored again; a speaking face over a wet floor
+would write its `LIPLOG` line again for each extra draw. The pictures of round 5 the
+owner asked about (160) and Lara's boxes: the boxes are class 1, built against;
+picture 160's half-see-through was the art's copy (round 5).
+
+**The fix pass.** The review found the place mask hanging on the models' alpha, the
+picture 4 cause unmeasured, the real model's cost and the census's reach unstated, and
+every listed object mirrored; all five are answered above and here.
+
+- The mask: RoomProbe's `-wetstand` takes the alpha its box writes (`x,z,h,a`). With the
+  round's mask a box writing 32 of 255 left no place in the mask at all 20 views (his
+  pictures 5 to 8 and the 10-degree fan round 5 and 6); with the blend the pictures, map
+  7 and map 8 at alpha 32 are byte-identical to alpha 255 at 20 of 20, and alpha 255
+  byte-identical to the round's head.
+- The clip planes: at the 20 views the box's mirror changes by 1 or 2 of 255 on up to 104
+  pixels at its foot, where it meets the plane; the models' place map 8 is unchanged.
+  ModernTest carries a side's distance through a view and a mirrored projection.
+- The census's reach: an inner square whose art floor lies more than 16 units from the
+  classic floor was not classed. `-tankcensus` now measures such a square again about the
+  flat art face nearest within 512 units (`unseen=`, `refit=`, `refitcopied=`,
+  `refitclear=`): RICH2 695 of 1,759 squares unseen, 181 refit, 50 copied about the art's
+  own floor, 2 of them under a clear floor (room 153, which has 28 already); room 126 18
+  unseen, 7 refit, none copied. The other fourteen levels (116 s): under a clear floor
+  only RICHCUT2 room 0 gains 2 (it has 5). No room gains a copy that shows; the answer
+  stands.
+- The GPU with the blend and the planes, three runs, medians, against `dd6b559a`: c601
+  +0.055 ms, k185 +0.069, v510 +0.032, E158 +0.022, his eyes 3 to 9 +0.008 to +0.024;
+  with the two-box stand-in +0.037 to +0.051. With her real draws (above) the frame stays
+  under +0.25 ms; a frame list as crowded as ANDREA1's six-creature test (0.154 ms a
+  draw) would take about +0.4 ms.
+- The frame's draw count (`HDLOG` frame line, `object_calls`) counts the last of the two
+  extra draws, since a solid draw of the list starts the count anew; `LIPLOG` and the
+  object profile are counted three times. Left: the count belongs to `hd_object.cpp`.
 
 **Commits.** `f30f7b2b` (the census), `e247a29b` (the copy under a clear floor only),
-`4ff5742c` (the models in the mirror).
+`4ff5742c` (the models in the mirror), `4d58f085` (the models' mask and clip planes),
+`cd8e8548` (the census's refit).
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

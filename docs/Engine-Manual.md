@@ -2181,8 +2181,9 @@ it.
   blocks are wet with the floor beside them. The wet floor is darker and
   mirrors what stands on it - the vending machines, Lara, a lit screen,
   the lamps and the corridor's cove lights - most where the eye looks
-  along the floor. Lara and the objects are mirrored as themselves, drawn
-  once more through the floor; the room's art is mirrored out of the
+  along the floor. Lara and the objects that stand over the wet floor are
+  mirrored as themselves, drawn once more through the floor; the room's
+  art and its fixed pieces (the machines, the benches) are mirrored out of the
   picture on the screen, so what lies off the screen's edge does not
   show in it. Where the level's art carries a copy of the room upside down
   under a see-through floor (RICH2's corridor 46 west of its mouth, and

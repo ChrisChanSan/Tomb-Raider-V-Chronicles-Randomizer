@@ -2246,12 +2246,18 @@ water surface", carries the tables.
     measuring rule of this project (entry 203's numbers asked of
     triangles). DATA: RICH2 387 copied squares under a clear floor in 55
     rooms, RICHCUT2 5, TITLE 74, no other level; RICH2's tank rooms 121, 45
-    and 23 carry none, room 122 one under an opaque floor.
+    and 23 carry none, room 122 one under an opaque floor. A square whose
+    art floor lies off the classic floor is measured again about the flat
+    art face nearest within 512 units (a free choice): RICH2 695 such
+    squares, 50 copied about the art's floor, 2 under a clear floor in a
+    room that has 28; over all levels no room gains a copy that shows.
 215. **The cove lights in the wet floor's mirror** - the march keeps
     mirroring what the frame holds with depth; the yellow bands at RICH2's
     corridor mouth are the mirror of the corridor's cove lights, opaque art
     that writes its depth. OWN, a decision on a measurement: the additive
-    pass alone draws nothing at those eyes, the glass left as an alpha test
+    pass alone draws nothing at those eyes (at two eyes of the owner's
+    pictures it holds a few pixels, at most 28 of 255, away from the
+    mouth's floor), the glass left as an alpha test
     changes no pixel, and of the bands' pixels 94 to 99 per cent lie within
     2 pixels of the fine march's hit (`-tankmarch`), on its surface, none
     showing what the later copy adds over the opaque frame.
@@ -2268,7 +2274,18 @@ water surface", carries the tables.
     not drawn on. The plane - the height most drawn wet points stand at -
     and the 8 units of slack (a sloping corner's rounding, `kWetSlopeRise`)
     are free choices. DATA: the march's hits on a stand-in at Lara's place
-    of the owner's pictures, 2,105 to 10,433 at 960 x 540.
+    of the owner's pictures, 2,105 to 10,433 at 960 x 540. The place mask
+    is written with both alpha blend factors zero over a clear 1, so it
+    holds every pixel a model draws whatever alpha its shader returns (a
+    gloss mask: on her body page a tenth of the texels under 64).
+217. **The wet floor's mirrored models clipped** (`hd_render.cpp`,
+    `HDRenderWaterWetModels`; `hd_splash_math.h`, `HDWetPlaneTo`) - five
+    clip planes on the mirrored draw: above the floor's plane, and inside
+    the box of the drawn wet points grown by one square, carried from the
+    world through the view into the mirrored projection's clip space as
+    the inverse matrix carries a plane. OWN, general graphics knowledge;
+    the square of reach is a free choice (a model on the outermost wet
+    square keeps what it reaches out with).
 
 ## Credited, but not contained here
 

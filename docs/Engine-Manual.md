@@ -789,8 +789,15 @@ chords** above for binding one of them to a pad chord.
   second (`loadbar_min_ms`) and the bar runs through to its end in that time;
   with *off*, on a short load a frame that was still on screen - a level's
   end, the end of a movie - fades to black first (`loadfade_ms`).
-- **Loading text** is the "Loading" lettering under the TR4 view: it shows
-  only with *TR4 loadscreens* on and *Loadbar style* TR4.
+- **Loading text** (on by default) writes the name of the level being loaded
+  at the top centre of every loading screen that is shown, in the game's font
+  (the HD font with HD textures on), in every *Loadbar style* and over the
+  level's picture, your HD picture or the *TR4 loadscreens* view alike. The
+  title's loads show no name, and a load without a screen (*off*, a short
+  load) shows no text either. The name stands the bar's own margin under the
+  top edge, so it stays inside the screen at every size. The script's old
+  "Loading" lettering is not drawn any more: in some language files that
+  entry is a three-line memory card text, a leftover of the PSX version.
 - **Shadow mode** has five values while HD is on - *Original*, *Circle*,
   *Faded circle*, *PSX* and *Projected*, Lara's projected shadow - and the
   four blobs while it is off. See **The projected shadow** for what each

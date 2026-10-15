@@ -4417,11 +4417,12 @@ namespace
 		std::printf("vistable: %s rooms=%d groups=%d art_rooms=%d walls=%d "
 			"bare=%d void=%d guests=%d guest_tris=%lld portals=%d wide=%d "
 			"ms=%.0f guests_unlinked=%d openings=%d openings_unlinked=%d "
-			"openings_twin=%d\n",
+			"openings_twin=%d wide_mirror=%d\n",
 			stem.c_str(), (int)rooms.size(), (int)trg.groups.size(), t.artRooms,
 			t.wallFaces, t.bareFaces, t.voidFaces, t.guestPairs, t.guestTris,
 			(int)portals.size(), t.widePortals, t.ms, t.guestsUnlinked,
-			(int)t.openings.size(), t.openingsUnlinked, t.openingsTwin);
+			(int)t.openings.size(), t.openingsUnlinked, t.openingsTwin,
+			t.wideMirrored);
 
 		/* The faces the art plainly covers: wholly covered at the largest
 		 * reach asked. `plain=` on each reach's line is the share of them

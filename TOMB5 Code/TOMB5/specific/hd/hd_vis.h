@@ -174,6 +174,9 @@ struct HDVisTables
 	 * pair's main room instead. */
 	int openingsTwin = 0;
 	int widePortals = 0;
+	/* Of the wide portals, those wide only by the record leading back: the
+	 * art's hole round the portal bare on the other room's faces alone. */
+	int wideMirrored = 0;
 	long long samples = 0, samplesCovered = 0;
 	double ms = 0.0;
 };

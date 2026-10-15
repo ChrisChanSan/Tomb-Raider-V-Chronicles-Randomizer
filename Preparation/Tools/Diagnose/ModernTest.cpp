@@ -12272,6 +12272,11 @@ static void vis_tables()
 	ok(t.wideCount[0] == 1 && t.wides[0].portal == 0 &&
 		t.wides[0].v[0][2] == 2048,
 		"vis: A's portal widened over the bare face", t.wides[0].v[0][2], 2048);
+	ok(t.wideCount[1] == 1 && t.wideMirrored == 1 &&
+		t.wides[(size_t)t.wideFirst[1]].v[0][0] == 0 &&
+		t.wides[(size_t)t.wideFirst[1]].v[0][2] == 2048,
+		"vis: B's record of the portal widened by A's bare face too",
+		t.wideCount[1], 1);
 
 	// Under the sky A takes C's art reaching out of C too.
 	rooms[0].flags = 8;

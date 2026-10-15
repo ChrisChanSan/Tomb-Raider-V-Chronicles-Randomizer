@@ -4215,12 +4215,12 @@ namespace walkoff
 			printf("-vis: tables rooms=%d art_rooms=%d walls=%d bare=%d "
 				"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f "
 				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d "
-				"twin=%d wide_bare=%.2f edge=%.5f\n",
+				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d\n",
 				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
 				t.guestPairs, t.guestTris, t.widePortals, t.ms,
 				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
 				g_vis_sources, t.openingsTwin, g_vis_params.wideBare,
-				g_vis_params.edge);
+				g_vis_params.edge, t.wideMirrored);
 		}
 
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts

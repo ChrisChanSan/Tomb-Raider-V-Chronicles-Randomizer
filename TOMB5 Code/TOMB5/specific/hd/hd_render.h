@@ -1748,8 +1748,10 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
  * them. Called once a level, outside a scene, after the sheets are built
  * and the depth texture is bound; `ms` (up to `max`) takes each draw's
  * time - the sheet's variants (plain, depth, under, foot, river, foam,
- * foam depth) and the cards -, -1 for one not drawn. Returns the whole
- * time in milliseconds, or -1 when the level has no sheet. */
+ * foam depth) and the cards -, then, in a level with a tank's wet floor,
+ * the floor's targets made at the frame's size and its shader drawn once
+ * (the ninth), -1 for one not drawn. Returns the whole time in
+ * milliseconds, or -1 when the level has no sheet. */
 double HDRenderWaterWarmUp(double* ms, int max);
 
 /* SPLASHLOG with -log, once a second while a card or a ring of a splash

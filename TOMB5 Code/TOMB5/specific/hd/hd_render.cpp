@@ -11916,6 +11916,9 @@ namespace
 	D3DSURFACE_DESC g_wet_room_desc = {};
 	bool g_wet_room_valid = false;
 	bool g_wet_room_want = false;
+	/* Whether this level's frames have drawn the objects once through the
+	 * models' clip planes (wet_warm_models); cleared at the level's build. */
+	bool g_wet_models_warmed = false;
 	float g_wet_plane[4] = {};
 	float g_wet_view[16] = {};
 	int g_wet_height = 0;
@@ -15324,6 +15327,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 	// The tanks' wet floors (see "the wet floor"), with the sheets alone.
 	g_wet.clear();
+	g_wet_models_warmed = false;
 
 	if (sheets)
 		build_wet_floors(rooms, count, stem);
@@ -15995,6 +15999,63 @@ namespace
 	std::vector<unsigned short> g_wet_tris;
 	float g_wet_axes[12] = {};
 
+	/* The models' target and its INTZ depth (HDRenderWaterWetModels) for a
+	 * frame of `desc`'s size, kept while the size holds. */
+	bool wet_make_models(const D3DSURFACE_DESC& desc)
+	{
+		if (g_wet_model && (g_wet_model_desc.Width != desc.Width ||
+			g_wet_model_desc.Height != desc.Height))
+			release_wet_models();
+
+		if (g_wet_model)
+			return true;
+
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+			&g_wet_model, 0)) ||
+			FAILED(g_wet_model->GetSurfaceLevel(0, &g_wet_model_surface)) ||
+			FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_DEPTHSTENCIL, kIntz, D3DPOOL_DEFAULT,
+			&g_wet_model_depth, 0)) ||
+			FAILED(g_wet_model_depth->GetSurfaceLevel(0,
+			&g_wet_model_depth_surface)))
+		{
+			release_wet_models();
+			return false;
+		}
+
+		g_wet_model_desc = desc;
+		return true;
+	}
+
+	// The room behind the models' copy (HDRenderWaterWetRoomCopy), the same.
+	bool wet_make_room(const D3DSURFACE_DESC& desc)
+	{
+		if (g_wet_room && (g_wet_room_desc.Width != desc.Width ||
+			g_wet_room_desc.Height != desc.Height ||
+			g_wet_room_desc.Format != desc.Format))
+		{
+			g_wet_room_surface->Release();
+			g_wet_room_surface = 0;
+			g_wet_room->Release();
+			g_wet_room = 0;
+		}
+
+		if (g_wet_room)
+			return true;
+
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &g_wet_room,
+			0)) || FAILED(g_wet_room->GetSurfaceLevel(0, &g_wet_room_surface)))
+		{
+			if (g_wet_room) { g_wet_room->Release(); g_wet_room = 0; }
+			return false;
+		}
+
+		g_wet_room_desc = desc;
+		return true;
+	}
+
 	/* The render target as it stands into g_wet_late, as HDRenderWaterCopy
 	 * takes the opaque frame: StretchRect between two surfaces of one size
 	 * and format is a plain copy. */
@@ -16564,6 +16625,68 @@ double HDRenderWaterWarmUp(double* ms, int max)
 
 		if (ms && 7 < max)
 			ms[7] = warm_now_ms() - t0;
+	}
+
+	/* A level with a tank's wet floor: the floor's targets at the frame's
+	 * size - the models' target and depth, the room behind them and the
+	 * later copy (28 MiB together at 2560 x 1440 with a 32-bit frame) -
+	 * and its pixel shader drawn once with them bound as its second draw
+	 * binds them, so the frame a tank first wets does not make them and
+	 * wait for the driver: RoomProbe -wetagain measured that frame's two
+	 * wet draws at 80 to 122 and 100 to 117 ms (three runs, 2560 x 1440),
+	 * a second frame's at 0.2 to 0.4 and 0.8 to 1.0. */
+	if (!g_wet.empty() && g_wet_ps && g_card_vs && wet_make_models(desc) &&
+		wet_make_room(desc))
+	{
+		const double t0 = warm_now_ms();
+		CardVertex card[3] = {};
+		IDirect3DBaseTexture9* had[5] = { 0, 0, 0, 0, 0 };
+		const DWORD wetStage[5] = { 1, 2, 3, 4, 7 };
+
+		for (int i = 0; i < 5; i++)
+			g_device->GetTexture(wetStage[i], &had[i]);
+
+		/* The later copy is the frame's as it stands, taken outside the
+		 * scene the warm-up opened. */
+		g_device->EndScene();
+		g_device->SetRenderTarget(0, target);
+		wet_copy_late();
+		g_device->SetRenderTarget(0, warmSurface);
+		g_device->BeginScene();
+
+		for (int k = 0; k < 3; k++)
+		{
+			card[k].x = (float)(k & 1);
+			card[k].y = (float)(k >> 1);
+			card[k].z = 10.0f;
+			card[k].a = 1.0f;
+			card[k].light = 1.0f;
+		}
+
+		g_device->SetTexture(0, g_wet_model);
+		g_device->SetTexture(1, g_field_dir);
+		g_device->SetTexture(2, g_field_rgb);
+		g_device->SetTexture(3, g_wet_model_depth);
+		g_device->SetTexture(4, g_wet_room);
+		g_device->SetTexture(5, g_wet_late ? g_wet_late : behind);
+		g_device->SetTexture(6, g_depth_texture);
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_wet_ps);
+		g_device->SetFVF(kCardFVF);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, card,
+			sizeof(CardVertex));
+		warm_drain();
+
+		for (int i = 0; i < 5; i++)
+		{
+			g_device->SetTexture(wetStage[i], had[i]);
+
+			if (had[i])
+				had[i]->Release();
+		}
+
+		if (ms && 8 < max)
+			ms[8] = warm_now_ms() - t0;
 	}
 
 	g_device->EndScene();
@@ -17237,10 +17360,95 @@ void HDRenderWaterWetDraw(const float* toFrame)
  * which the reflection would turn above it. Drawn here, after the rooms'
  * passes and before the second wet draw, into the target and depth of their
  * own; the device's target, depth, viewport and states are put back. */
+/* The models' mirrored draw warmed. The first draw of the objects through
+ * the five user clip planes held its frame for about 107 ms (RoomProbe
+ * -wetagain, two runs at 2560 x 1440: 107.1 and 107.7 ms, the same draw
+ * without the planes 0.24 and 0.13): the driver readies the models' vertex
+ * shader for the planes then. So the first frame of a level with a tank's
+ * wet floor - already the load's slow frame - draws its objects once into
+ * the models' target (made at the water's warm-up) with the same states
+ * and five planes that cut everything away: nothing is written, the
+ * shaders are readied. */
+static void wet_warm_models(HDWetModelDraw draw, const void* projection,
+	int bulbs)
+{
+	if (g_wet_models_warmed || g_wet.empty() || !g_wet_model_surface ||
+		!g_wet_model_depth_surface)
+		return;
+
+	g_wet_models_warmed = true;
+
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
+		D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+		D3DRS_STENCILENABLE, D3DRS_COLORWRITEENABLE, D3DRS_FOGENABLE,
+		D3DRS_SCISSORTESTENABLE, D3DRS_SEPARATEALPHABLENDENABLE,
+		D3DRS_CLIPPLANEENABLE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[stateCount];
+	float planes[5][4];
+	// w >= 0 for every point before the eye: each plane cuts all away.
+	const float none[4] = { 0.0f, 0.0f, 0.0f, -1.0f };
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* depth = 0;
+	D3DVIEWPORT9 vp = {};
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return;
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int k = 0; k < 5; k++)
+	{
+		g_device->GetClipPlane((DWORD)k, planes[k]);
+		g_device->SetClipPlane((DWORD)k, none);
+	}
+
+	g_device->GetViewport(&vp);
+	g_device->GetDepthStencilSurface(&depth);
+	g_device->SetRenderTarget(0, g_wet_model_surface);
+	g_device->SetDepthStencilSurface(g_wet_model_depth_surface);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
+		D3DCOLORWRITEENABLE_BLUE);
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0x1F);
+	draw(projection, bulbs, HD_PASS_SOLID);
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+	g_device->SetViewport(&vp);
+
+	for (int k = 0; k < 5; k++)
+		g_device->SetClipPlane((DWORD)k, planes[k]);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	target->Release();
+
+	if (depth)
+		depth->Release();
+}
+
 void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	int bulbs)
 {
 	g_wet_models = false;
+
+	if (draw && projection && g_device && g_in_frame)
+		wet_warm_models(draw, projection, bulbs);
 
 	if (!draw || !projection || !g_wet_ready || !g_device || !g_in_frame ||
 		g_wet_tris.empty() || !g_wet_height_set)
@@ -17260,28 +17468,10 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 		return;
 	}
 
-	if (g_wet_model && (g_wet_model_desc.Width != desc.Width ||
-		g_wet_model_desc.Height != desc.Height))
-		release_wet_models();
-
-	if (!g_wet_model)
+	if (!wet_make_models(desc))
 	{
-		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
-			D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
-			&g_wet_model, 0)) ||
-			FAILED(g_wet_model->GetSurfaceLevel(0, &g_wet_model_surface)) ||
-			FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
-			D3DUSAGE_DEPTHSTENCIL, kIntz, D3DPOOL_DEFAULT,
-			&g_wet_model_depth, 0)) ||
-			FAILED(g_wet_model_depth->GetSurfaceLevel(0,
-			&g_wet_model_depth_surface)))
-		{
-			release_wet_models();
-			target->Release();
-			return;
-		}
-
-		g_wet_model_desc = desc;
+		target->Release();
+		return;
 	}
 
 	/* The plane in view space: the world's up (its y runs down) and a
@@ -17456,28 +17646,10 @@ void HDRenderWaterWetRoomCopy(bool force)
 		return;
 	}
 
-	if (g_wet_room && (g_wet_room_desc.Width != desc.Width ||
-		g_wet_room_desc.Height != desc.Height ||
-		g_wet_room_desc.Format != desc.Format))
+	if (!wet_make_room(desc))
 	{
-		g_wet_room_surface->Release();
-		g_wet_room_surface = 0;
-		g_wet_room->Release();
-		g_wet_room = 0;
-	}
-
-	if (!g_wet_room)
-	{
-		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
-			D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &g_wet_room,
-			0)) || FAILED(g_wet_room->GetSurfaceLevel(0, &g_wet_room_surface)))
-		{
-			if (g_wet_room) { g_wet_room->Release(); g_wet_room = 0; }
-			target->Release();
-			return;
-		}
-
-		g_wet_room_desc = desc;
+		target->Release();
+		return;
 	}
 
 	g_wet_room_valid = SUCCEEDED(g_device->StretchRect(target, 0,

@@ -474,6 +474,10 @@
  *                     frame's objects and through the wet floor's mirror
  *                     of the models. Needs -tank; -wetnomodels leaves her
  *                     mirror out.
+ *     -wetagain       the wet floor's two draws once more after the
+ *                     frame's, each timed (GPU and the processor's time to
+ *                     the GPU's end, the "cpu" of the -hdwater lines): the
+ *                     first wet frame's cost against a second's.
  *     -tankcensus     every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
@@ -1520,14 +1524,14 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	 * it takes away. */
 	if (!g_nowarm)
 	{
-		double ms[8];
-		const double all = HDRenderWaterWarmUp(ms, 8);
+		double ms[9];
+		const double all = HDRenderWaterWarmUp(ms, 9);
 
 		if (all >= 0.0)
 			printf("-hdwater: warm-up %.2f ms: sheet %.2f, depth %.2f, under "
 				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
-				"cards %.2f\n", all, ms[0], ms[1], ms[2], ms[3], ms[4], ms[5],
-				ms[6], ms[7]);
+				"cards %.2f, wet floor %.2f\n", all, ms[0], ms[1], ms[2],
+				ms[3], ms[4], ms[5], ms[6], ms[7], ms[8]);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws
@@ -8004,10 +8008,19 @@ static void ProbeWetStands(const void* projection, int bulbs,
  * the seed room's origin as the cards' is, timed on the GPU with a
  * timestamp pair; the lines are -hdwater's, so the timing scripts add
  * them to the water's other phases. */
+// -wetagain's split of the mirror's time (set with -wetagain).
+static bool g_wet_again_split = false;
+
 static void ProbeWetDraw(int part)
 {
 	if (g_hdwater != 1 || g_tank_item < 0)
 		return;
+
+	// The processor's time from here to the GPU's end of the draws.
+	LARGE_INTEGER cpuFreq, cpu0, cpu1;
+
+	QueryPerformanceFrequency(&cpuFreq);
+	QueryPerformanceCounter(&cpu0);
 
 	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
 		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
@@ -8044,6 +8057,27 @@ static void ProbeWetDraw(int part)
 		// -wetlara: Lara through the models' mirror.
 		if (g_wet_lara_ready && !g_wet_no_models)
 			HDRenderWaterWetModels(ProbeWetLaraDraw, g_wet_stand_proj, 0);
+
+		// -wetagain: the models' share of the processor's time, apart.
+		if (g_wet_again_split)
+		{
+			IDirect3DQuery9* e = 0;
+			LARGE_INTEGER now;
+
+			if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &e)) && e)
+			{
+				e->Issue(D3DISSUE_END);
+
+				while (e->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE) {}
+
+				e->Release();
+			}
+
+			QueryPerformanceCounter(&now);
+			printf("-wetagain: the models' mirror cpu %.2f\n",
+				(double)(now.QuadPart - cpu0.QuadPart) * 1000.0 /
+				(double)cpuFreq.QuadPart);
+		}
 
 		HDRenderWaterWetMirror();
 	}
@@ -8089,16 +8123,25 @@ static void ProbeWetDraw(int part)
 	HDRenderSplashStats st;
 
 	HDRenderSplashStatsNow(&st);
+	QueryPerformanceCounter(&cpu1);
+
+	const double cpuMs = (double)(cpu1.QuadPart - cpu0.QuadPart) * 1000.0 /
+		(double)cpuFreq.QuadPart;
 
 	if (part == 0)
 		printf("-hdwater: %d wet floor draw(s), GPU %.4f ms (timestamps round "
-			"the wet floor's draw), floor %d wet %.3f\n", st.floor >= 0 ? 1 : 0,
-			ms, st.floor, st.floorWet);
+			"the wet floor's draw), floor %d wet %.3f cpu %.2f\n",
+			st.floor >= 0 ? 1 : 0, ms, st.floor, st.floorWet, cpuMs);
 	else
 		printf("-hdwater: %d wet floor mirror draw(s), GPU %.4f ms (timestamps "
-			"round the later copy and the mirror's draw)\n",
-			st.floor >= 0 ? 1 : 0, ms);
+			"round the later copy and the mirror's draw) cpu %.2f\n",
+			st.floor >= 0 ? 1 : 0, ms, cpuMs);
 }
+
+/* -wetagain: the wet floor's two draws once more after the frame's (its
+ * darkening and its mirror twice in the picture), each timed as the first:
+ * the first wet frame's draws against a second's. */
+static bool g_wet_again = false;
 
 /* The springs (hd_spring.h): with -hdwater 1 the level's springs, built as
  * the engine builds them after the sheets, ringing the sheets from the
@@ -11811,6 +11854,7 @@ static int ProbeMain(int argc, char** argv)
 			!strcmp(argv[at], "-tankcensus") ||
 			(!strcmp(argv[at], "-wetstand") && at + 1 < argc) ||
 			(!strcmp(argv[at], "-wetlara") && at + 1 < argc) ||
+			!strcmp(argv[at], "-wetagain") ||
 			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
@@ -11824,6 +11868,8 @@ static int ProbeMain(int argc, char** argv)
 				g_tank_census = true;
 			else if (!strcmp(argv[at], "-wetnomodels"))
 				g_wet_no_models = true;
+			else if (!strcmp(argv[at], "-wetagain"))
+				g_wet_again = g_wet_again_split = true;
 			else if (!strcmp(argv[at], "-wetlara"))
 				g_wet_lara = sscanf_s(argv[++at], "%f,%f,%f,%f,%d",
 					&g_wet_lara_at[0], &g_wet_lara_at[1], &g_wet_lara_at[2],
@@ -14921,6 +14967,36 @@ static int ProbeMain(int argc, char** argv)
 			{
 				WetLaraMatrices(view);
 				ProbeWetLaraDraw(&projection, 0, HD_PASS_SOLID);
+
+				/* The models' mirror called before the wet floor drew, as
+				 * on a level's frames before a tank breaks: its warm draw. */
+				if (!g_wet_no_models)
+				{
+					LARGE_INTEGER wf, w0, w1;
+					IDirect3DQuery9* e = 0;
+
+					QueryPerformanceFrequency(&wf);
+					QueryPerformanceCounter(&w0);
+					HDRenderWaterWetModels(ProbeWetLaraDraw,
+						g_wet_stand_proj, 0);
+
+					// -wetagain: its time to the GPU's end, apart.
+					if (g_wet_again_split && SUCCEEDED(g_device->CreateQuery(
+						D3DQUERYTYPE_EVENT, &e)) && e)
+					{
+						e->Issue(D3DISSUE_END);
+
+						while (e->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE)
+						{
+						}
+
+						e->Release();
+						QueryPerformanceCounter(&w1);
+						printf("-wetagain: the models' warm draw cpu %.2f\n",
+							(double)(w1.QuadPart - w0.QuadPart) * 1000.0 /
+							(double)wf.QuadPart);
+					}
+				}
 			}
 
 			for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
@@ -14975,6 +15051,12 @@ static int ProbeMain(int argc, char** argv)
 	HDRenderScissorOff();
 	// The wet floor's mirror before the cards, as the engine has it.
 	ProbeWetDraw(1);
+
+	if (g_wet_again)
+	{
+		ProbeWetDraw(0);
+		ProbeWetDraw(1);
+	}
 	// The water's cards where HDFrameDrawGlow draws them, and the springs.
 	ProbeCardsDraw();
 	SpringDraw();

@@ -14645,6 +14645,162 @@ names the spring. A static blocks only the square its origin stands on.
 
 **Commits.** `de4cce39`, `14c36eda`, `58b3e8fb`, `996e85a6`.
 
+#### Round 2: the crack at the spring's foot
+2026-10-15
+
+**What.** Asked for on 2026-10-14, after the owner had seen the spring in the game ("The
+spring looks good."), with a sketch and look references: "Is it possible to make, at the
+foot of the spring, a 3D crack or hole that carries the floor's texture? The hole's fill
+can be a black texture, a void." - and, asked whether that was only an idea: "Yes, if
+there are no conflicts, you can start the spring." His sketch shows from the side a
+shallow pit in the floor with the jet rising out of it and from above an irregular,
+elongated outline; the reference pictures supplied for this project (not in the
+repository) show a long jagged slit with torn edges and holes in plaster, dark inside,
+and a main crack with fine side branches. Since this round every spring - the table's
+and the rule's - rises out of a crack in its floor: a jagged slit with two to four fine
+side branches, its walls going down and carrying the floor's own texture over the lip,
+its bottom black; its bubbles are born inside it and its column rises out of it.
+
+**Why.** A jet out of a flat floor reads as a fountain nozzle hidden under the
+paving; a jet out of a hole reads as water forcing its way up from below.
+
+**How.** All in `specific/hd/hd_spring.h` (the shape, pure functions), `hd_spring.cpp`
+(the floor, the build, the draw) and `hd_shader/hd_spring.hlsl` (`CrackPS`, `HolePS`);
+`hd_level.cpp` gains one line, `HDSpringCrackDraw()` right after `HDFrameDrawGlow`
+opens its bracket.
+
+- *The outline* (`HDSpringCrackMake`), every choice a hash of the spring's seed - the
+  hash of its level's name and its place, the same every time. A main line 256 to 512
+  units long turned any way, bowed by up to 8 % of its length to one side and jagged by
+  up to 4 % at each of its 14 steps; its width 32 to 96 at the widest, each side's half
+  at a step 0.6 to 1 of the profile `sin(pi t)^0.6`, the two sides apart and each side
+  point slid along by up to 0.3 of a step, so the rim is torn and the slit closes to a
+  point at both ends. Two to four branches, each a third of the main line long (0.8 to
+  1.2 of that), rooted at a step between a fifth and four fifths of the way, the sides
+  taking turns, leaning 20 to 45 degrees (and up to 5 more either way) off square to
+  the line - one lean a side, so a side's branches run alike -, a third of the side's
+  half wide at the root and closing to a point in four jagged steps. A branch is a
+  spike in place of the side's point at its root, so the outline is one polygon of 28
+  points plus 8 a branch. Where a spike would cross the rim or another, the branches
+  alone are drawn again with the next round of the hash, at most 16 rounds: of 4,000
+  cracks of any spring 660 need a later round, none crosses after it (ModernTest).
+  The strength scales all of it from half (strength 0) to whole, so a weaker jet opens
+  less ground; a crack that does not lie on its body's squares of deep water (768 or
+  more, the rule's own) is made again at 0.8, 0.64 and 0.5 of its size. The sizes are
+  the request's; against the jet they make the slit one to two jets long and narrower
+  than the jet (the column is 64 units across at the floor at strength 0, 256 at 1).
+- *The floor* (`read_floors`). The floor the HD picture draws under the outline is the
+  `.TRG`'s, not the classic level's: per outline point the floor triangle under it
+  (facing up, its height nearest the spring's floor) gives the height of the rim
+  there and the floor's light (`colour1 + colour2`, as `RoomVS` sums them); per edge
+  the triangle under its middle gives the page and the page's place as a function of
+  world x and z. The file is read in pieces by the layout TRForge's reader documents
+  (`vendor/trforge`, MIT): the header and the part tables in order, then only the index
+  runs of the rooms whose box meets the crack and the span of vertices they name - a
+  few kilobytes of 30 to 58 MB, once at the level's build, for at most three springs a
+  level. The floor's texture is the player's own data; nothing of it is copied. The
+  bottom is a flat plane 64 to 128 units (scaled) under the outline's lowest point; a
+  crack whose floor parts by more than 192 units (three quarters of a click) keeps
+  none.
+- *The walls.* A wall under every edge from the floor's height to the bottom. Its
+  texture is the floor folded over the lip: a place d units down the wall takes the
+  floor's page at the point d units further into the crack along the edge's inward
+  normal, so the floor's pattern runs on over the lip and down (the page sampled with
+  wrap, as the floor's squares repeat it). Its light is the floor's at the rim times
+  the share a wall of the slit still sees of the light that falls on the floor: in the
+  slit's cross-section a wall d units down sees the open sky only above the far lip, w
+  units across (the slit's width there, measured from the edge's middle along its
+  inward normal to the nearest other edge), a cosine-weighted share of `0.5 (1 - sin
+  a)` with `sin a = d / sqrt(d^2 + w^2)` - a half at the lip -, times a dark band from
+  the bottom, black there and whole at the crack's depth over it. No light of its own
+  reaches into the crack; the distance fog is subtracted as `RoomPS` subtracts it, the
+  water round an eye under it is the rooms' own (`UnderWater`'s lines).
+- *The hole* (the depth trick). The crack must be in the depth buffer before the sheets
+  read it and in the frame's copy they bend, and the room's floor is drawn whole. So it
+  is drawn where the opaque frame is complete and the blend phase not begun - the start
+  of `HDFrameDrawGlow`, before the copy -, in four draws, with the stencil's bit 8 (the
+  receives keep bits 1 and 2, the creatures' mark bit 4; the receive or the mark clears
+  the whole stencil each frame, and the crack leaves its bit at 0). The volume is the
+  outline from 8 units over the floor to 8 under the bottom, a fan of the outline on
+  top and below and a quad down every edge. (1) The volume sets the bit to 0. (2) The
+  volume against the frame's depth turns the bit over at every face in front of what
+  was drawn: an odd count is a pixel whose surface lies inside the volume - the floor
+  the crack opens, and nothing that stands over it; the fans of a concave outline
+  cancel out the same way. (3) The volume again on the marked pixels alone, black, at
+  the depth of the bottom's plane along each pixel's own ray (`HolePS` writes the
+  depth), the bit back to 0. (4) The walls with the depth test and write: where the
+  hole is open they lie in front of the bottom, elsewhere behind the floor. The bottom
+  the walls leave open is the hole's black. Seen from over the water the sheets' depth
+  variant reads the pit's depth and shades it with the water's absorption and scatter
+  like a real pit; from under the water the rooms' own water look. Not drawn: without a
+  stencil in the frame's depth, with the eye under the floor, where the volume reaches
+  the near plane (the count would be cut), past half the far plane's distance (an empty
+  place of the frame holds the sky's depth there - a black hole in the sky; the fog has
+  taken the floor long before), off the screen, under 2 pixels, or while the room of
+  its floor is not on the frame's draw list (`RoomOnDrawList`): a ray to the crack then
+  always meets the floor or what stands in front of it.
+- *The bubbles and the column.* With a crack a bubble is born on its bottom at its own
+  hashed place in the slit - on the main line between a quarter and three quarters of
+  its way, across it at most half the side's half-width there -, and its spread and sway
+  grow from nothing there to whole at the crack's depth, so it rises out of the slit and
+  not through its walls. The column stands on the bottom. The rings a bubble leaves move
+  with it.
+- *The key.* `hd_springcrack`, a DWORD beside the options like `hd_springs`, read at the
+  level's build and never written: absent or 1 every spring has its crack, 0 none - the
+  springs then are exactly the first round's (every picture byte-identical).
+- *The seam.* The SPRINGLOG spring line ends in `crack=length,width,depth,branches,bottom
+  y,page`, or why there is none: `off` (the key), `fit`, `file`, `floor`, `rough`.
+- *RoomProbe.* `-springcrack 0|1` as the key; `-springs` lists a SPRINGCRACK line per
+  crack (state, fit, sizes, bottom, floor under the middle, the round) and per outline
+  point (place, floor, page, the page's place, light); `-springcrackmap` draws the
+  outline over the body's squares as text, 16 units a character, and lists the squares.
+  A picture draws the cracks whose floor's room it draws.
+
+**Measured.** The floors under the springs (the installation's `.TRG`, read only):
+ANDREA2's fountain room 120, page 4806, level at 2,560, one page across each 1,024
+square, cut in thirds of 341 units, the squares turned or mirrored apiece, the spring's
+point on a square's edge; the rule's ANDREA2 spring room 227, page 297, a rough slope of
+1,194 to 1,450 under the classic floor's 1,024 - its bubbles were born 256 units over the
+HD floor -, its outline's heights within 150 of each other; ANDREA1 room 210, page 4806,
+level at 2,047; JOBY2 room 36, page 479, level at 2,816. The cracks (RoomProbe
+`-springs`): the fountain 368 x 60, 81 deep, four branches, 60 points; ANDREA2's rule
+spring 442 x 91, 67 deep, two branches (the second round); ANDREA1 485 x 82, 94 deep, two;
+JOBY2 374 x 30, 92 deep, four - all whole (fit 1). Pixels at 960 x 540 against `e81b6e90`
+(the crack alone: `-springparts 0` on both sides, changed / by 8 levels or more): under
+the water close to the fountain's crack 5,136 / 5,136 (F3), 5,650 / 5,650 (low, F4) and
+24,407 / 24,407 (at the lip, F5); the rule's springs from over the water 17,946 / 849
+(ANDREA1), 11,624 / 1,305 (ANDREA2), 3,721 / 175 (JOBY2), under it 3,694 / 227, 2,524 /
+638, 795 / 188; at the fountain's two eyes of the first round 8,070 / 1,637 (the edge,
+the pit under the sheet and the bubbles' rings moved with them) and 11,041 / 2,299 (under
+the water, the crack below the picture, the rings alone). GPU at 2560 x 1440, the water's
+brackets, the springs' and the cracks', mean of nine runs against `e81b6e90`: the
+basin's edge 0.1406 to 0.1756 ms (+0.035, the cracks' draws 0.035), under the water
+0.1091 to 0.1098 ms (+0.001: the crack lies under the picture and is not drawn). Slots,
+fxc /O3: `CrackPS` 49 (1 texture, 48 arithmetic), `HolePS` 37; `ColumnPS` and `BubblePS`
+the same bytecode (their stamp lines alone change); no water variant touched, the depth
+variant at 512.
+
+**Checked.** The classic path (`-classicroom`, `-classiconly` on ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34) 6 of 6 md5-identical to `8691e82`; the fifteen cameras
+with `-hdwater 0` 15 of 15 identical to the parity set; with `-hdwater 1` 13 of 15
+identical to `e81b6e90`: A3 at the fountain shows its crack, E1 over ANDREA2 room 76
+the rule spring's column through rooms the picture leaves out, its foot now on the crack's
+bottom (62 pixels, at most 5 levels; with the column left out identical); the twelve pond
+views at 1, 3 and 5 s 36 of 36 identical; every WATERLOG line of the fifteen levels
+identical; with `-springcrack 0` all eleven crack pictures identical to `e81b6e90`.
+ModernTest's spring group 12 checks more. The suites, the tools and the engine build.
+
+**Left.** The look in the game: nobody in this round could play it - the crack's size,
+its branches, the walls' darkness and the black are the owner's to judge, as is how it
+reads from over a 2,304-deep basin, where the sheet's water takes most of it. Floor bumps
+inside the outline that stand over its rim's line stay over the hole (the volume's top is
+a fan from the rim); the rule's ANDREA2 spring lies on such a slope. The crack is drawn
+whole or not at all: an eye very close to it (its volume at the near plane) loses it for
+those frames, and a frame whose depth has no stencil draws none while the bubbles still
+start under the floor. A crack is not cut by statics on its floor.
+
+**Commits.** `278dfbbb`, `c2c406ff`.
+
 ### The level load on several cores
 2026-10-11
 

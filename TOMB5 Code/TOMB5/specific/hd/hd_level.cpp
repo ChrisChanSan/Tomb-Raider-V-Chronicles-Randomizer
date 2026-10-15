@@ -8756,6 +8756,7 @@ void HDFrameDrawGlow()
 	const int objects_here = g_frame_objects;
 
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
+	HDSpringCrackDraw();
 
 	/* The frame behind the water sheets: every opaque thing of the frame is
 	 * in the render target now - the HD rooms and objects, Lara and the

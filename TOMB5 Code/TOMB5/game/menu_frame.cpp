@@ -1235,10 +1235,11 @@ static bool MenuStepTr4Loadscreens(long, long dir)
 }
 
 /* Three states in the row's order: the TR5 bar, the TR4 bar, and off - no
- * loading screen at all, the level follows the screen before it through
- * black (file.cpp, S_LoadLevelFile). "TR4" and "TR5" stay as they are in
- * every language; "off" is the menu's own entry. tr4_loadbar follows the
- * state: the TR4 bar's look and the loading text ask it. */
+ * loading screen for a short load, the level follows the screen before it
+ * through black, while a load that builds the HD data shows its picture
+ * and the TR5 bar (file.cpp, S_LoadLevelFile). "TR4" and "TR5" stay as
+ * they are in every language; "off" is the menu's own entry. tr4_loadbar
+ * follows the state: the TR4 bar's look asks it. */
 static const char* MenuValLoadbarStyle(long, char* buf)
 {
 	strcpy(buf, CustomText(tomb5.loadbar == LOADBAR_OFF ? "off" :

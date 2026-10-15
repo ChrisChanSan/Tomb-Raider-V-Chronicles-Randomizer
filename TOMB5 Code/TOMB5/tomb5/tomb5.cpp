@@ -420,7 +420,7 @@ void init_tomb5_stuff()
 
 		/* The row's three states. Absent - every older registry - it reads
 		 * as tr4LB said, and that is written as its value; tr4LB follows
-		 * it from here on (the TR4 bar's look and the loading text). */
+		 * it from here on (the TR4 bar's look). */
 		sprintf(buf, "loadbar");
 		{
 			const bool found = REG_ReadLong(buf, tomb5.loadbar,

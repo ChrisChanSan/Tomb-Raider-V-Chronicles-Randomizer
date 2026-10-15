@@ -16716,7 +16716,9 @@ for its short time and the brake's 500 ms. With `hd_build` 1 and *HD textures* o
 art is still built: such a load is long and shows the classic picture. The newest run
 has one save load that stood 2.3 s (TR5, `wait=2313.9` with ten frames): the tail's
 presents took that long, the work 55 ms - not this round's change, noted for his next
-run.
+run. The two choices above - the level's picture rather than the TR4 view, and the
+TR5 bar's look, for an off load that builds - got his word the same night: both stay
+as built ("Beides so lassen, ist ok fuer mich").
 
 **Commits.** `596a371` (the decision); this record follows it.
 

@@ -124,7 +124,10 @@ struct HDVisWide
  *              the default: that art, and linked with a holder not under
  *              the sky
  *   overhang   how far outside its own room's whole box art must stand
- *              to reach out of the room (rules 1 and 2) */
+ *              to reach out of the room (rules 1 and 2)
+ *   wideBare   the share of bare samples that lets a face beside a portal
+ *              widen it: a broken-out edge of a wall, less than an
+ *              opening, still shows the room behind the portal */
 struct HDVisParams
 {
 	double reach;
@@ -135,6 +138,7 @@ struct HDVisParams
 	double artShare;
 	int guestRule;
 	double overhang;
+	double wideBare;
 };
 
 HDVisParams HDVisDefaults();

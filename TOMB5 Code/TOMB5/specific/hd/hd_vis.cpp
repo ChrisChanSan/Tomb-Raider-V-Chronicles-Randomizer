@@ -49,7 +49,12 @@
  *                  face, which the room behind shares with the holder
  *   artShare 0.5   a free choice: 2,483 of the 2,709 rooms have their
  *                  walls asked; the rest have no group, an empty or a
- *                  hollow one, and every face of theirs would be bare */
+ *                  hollow one, and every face of theirs would be bare
+ *   wideBare 0.3   JOBY2's broken pillar beside room 124's portal to
+ *                  room 99 is between 0.3 and 0.4 bare: at 0.3 its portal
+ *                  widens and room 99 is listed through the break; the wide
+ *                  portals of the fifteen levels are 53 at 0.5, 55 at 0.4,
+ *                  64 at 0.3, 82 at 0.2 and 113 at 0.1 */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -62,6 +67,7 @@ HDVisParams HDVisDefaults()
 	p.artShare = 0.5;
 	p.guestRule = 2;
 	p.overhang = 128.0;
+	p.wideBare = 0.3;
 	return p;
 }
 
@@ -454,7 +460,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				const int at = mainOf[(size_t)s];
 				bool again = Twins(rooms, g, at);
 
-				for (size_t k = before; k < open[(size_t)g].size() && !again; k++)
+				for (size_t k = before;
+					k < open[(size_t)g].size() && !again; k++)
 					again = open[(size_t)g][k].behind == at;
 
 				if (at != s)
@@ -575,7 +582,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 			for (int f = own.firstFace; faces &&
 				f < own.firstFace + own.faceCount && f < faceCount; f++)
 			{
-				if (t.faceBare[(size_t)f] < (float)params.bare)
+				if (t.faceBare[(size_t)f] < (float)params.wideBare)
 					continue;
 
 				const HDCoverFace& face = faces[f];

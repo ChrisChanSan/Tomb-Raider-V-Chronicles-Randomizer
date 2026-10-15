@@ -19833,7 +19833,7 @@ to be built) and DRAW (whether HD is drawn). Lines are those of this round's las
 | the barefoot set | `hd_feet.cpp:121` | build (a sound) | none (comment) |
 | the HD font's page and atlas | `hd_font.cpp:229`, `:267` | build | none (comment) |
 | the models' release | `hd_object.cpp:2811` (W14) | was a load-time reader of the draw | `!HDLaraDrawActive() && HDDrawn()` -> `!(tomb5.hd_objects && HDLaraActive())` |
-| the springs at the load | `hd_spring.cpp:1084` | a load-time reader of the draw (#200) | not this round's file: Left |
+| the springs at the load | `hd_spring.cpp` `HDSpringLevelBegin` | was a load-time reader of the draw (#200) | closed at the merge: `!HDLevelActive() \|\|` dropped (*Left.*) |
 | the soft body's log reason | `hd_laradraw.cpp:796` `soft_gate` at the load | a log line | none |
 | the press's data | `hd_switch.cpp:104` at `fe1d4e31` | build | `HDEnabled()` -> `HDSwitchHasData()` |
 | the switch's causes | `hd_switch.cpp:112`, `:154` at `fe1d4e31` | log | `hd_build=0`, `install=none`, `built=none` |
@@ -19933,15 +19933,28 @@ level data and row with a step of the row and a press (16 x 6). MenuTest 44,267 
 writes no draw of its own, `hd_build`'s three lines and no row of its own, the step's
 table over value, held state and data, and after a press the row reads the key's value and
 a step goes on from it. InterpTest 729 and LipsTest 270 / 243 unchanged, 0 failed. Read:
-every load-time reader asks the build gate and none the draw but `hd_spring.cpp:1084`
-(Left); the spare sample infos exist only with the gate on.
+every load-time reader asks the build gate and none the draw but `HDSpringLevelBegin`
+(closed at the merge, *Left.*); the spare sample infos exist only with the gate on.
 
-*Left.* The springs: `HDSpringLevelBegin` (`hd_spring.cpp:1084`), merged with #200 after
-the wiring, asks `HDLevelActive()` at the load, so a level loaded while the draw is
-classic builds no spring, and F12 shows none there until a load drawn HD; with the default
-row at 0 that is every level of a new player. The one-line change, for the spring's own
-round: drop `!HDLevelActive() ||` (the sheets it also asks are built only inside an HD
-build). The title menu's HD wordmark follows the files alone (`file.cpp:779`); the
+*Left.* The springs: `HDSpringLevelBegin` (`hd_spring.cpp`), merged with #200 after the
+wiring, asked `HDLevelActive()` at the load, so a level loaded while the draw was classic
+built no spring, and F12 showed none there until a load drawn HD; with the default row at
+0 that was every level of a new player. Closed at the merge of this round, in the commit
+after `56458c1b`: `!HDLevelActive() ||` is dropped - the build reaches the call only with
+`g_level_active` set, so the term was the draw alone. The load now asks only
+`tomb5.hd_water` and the sheets (`HDRenderWaterSheetsBuilt()`, true only after an HD
+build), so the springs and their cracks are built with the HD data whatever is drawn, the
+life built after them reads them as its bodies' springs as at a load drawn HD, and with
+`-log` their `SPRINGLOG` lines come at a load drawn classic too; the frame asks the draw:
+`HDSpringFeed` (the rings), `HDSpringDraw` (the columns and the bubbles) and
+`HDSpringCrackDraw` (the cracks and their holes) return on `!HDLevelActive()`, nothing
+else of the springs runs in a frame, and they have no sound. Proven at the merge: the
+probe compiles `hd_spring.cpp` without its engine part and came out the same but for its
+time stamps; the springs' lines of ANDREA1, ANDREA2 and JOBY2 are those #200's prover
+saved, byte for byte, at both draws; the 11 crack cameras are `56458c1b`'s at the draw HD
+and the explicit classic list at `-hddrawn 0`; the 15 parity cameras at `hd_water` 0 are
+the stored ones; the suites count as at `56458c1b`, 0 failed.
+The title menu's HD wordmark follows the files alone (`file.cpp:779`); the
 one-line change is `gfLevelId == LVL5_TITLE && tomb5.hd_enable ?`. Comments that name
 `hd_enable` for the build and are false now, outside the lines this round could touch:
 `footprnt.cpp:60`, `lara.h:259`, `drawroom.cpp:129`, `file.cpp:751`, `:1783`, `:1869`,

@@ -2245,6 +2245,8 @@ static void LevelRooms(std::vector<HDSpringRoom>& out)
 
 /* At the level's build, after the sheets and before the life, which
  * reads the springs as its bodies' springs (HDRenderWaterBody::spring).
+ * They are built with the HD data whatever is drawn; the frame's three
+ * calls below ask the draw (HDLevelActive).
  * The key hd_springs (a DWORD beside the options, read here, never
  * written): absent the rule's own one body in kHDSpringEvery, 0 no spring
  * of the rule, n one in kHDSpringEvery times n. The key hd_springcrack
@@ -2253,7 +2255,7 @@ void HDSpringLevelBegin(const char* stem)
 {
 	HDSpringClear();
 
-	if (!HDLevelActive() || !tomb5.hd_water || !HDRenderWaterSheetsBuilt())
+	if (!tomb5.hd_water || !HDRenderWaterSheetsBuilt())
 		return;
 
 	ulong thin = 1, crack = 1;

@@ -1911,9 +1911,11 @@ static void LoadLogStepKept(double* at, const char* step, long kept)
 }
 
 /* The step bar with what the loading screen drew, at the line's end: all
- * its frames and the ms from the work's end to its last frame - the
- * brake's wait plus that frame (drawbars.cpp, S_LoadScreenEnd). */
-static void LoadLogStepBar(double* at)
+ * its frames, the ms from the work's end to its last frame - the brake's
+ * wait plus that frame (drawbars.cpp, S_LoadScreenEnd) - and whether the
+ * load showed its screen (with the Loadbar style row off, 1 for a load
+ * that built the HD data). */
+static void LoadLogStepBar(double* at, long shown)
 {
 	LoadScreenStats screen;
 
@@ -1924,8 +1926,8 @@ static void LoadLogStepBar(double* at)
 
 	S_LoadScreenStatsGet(&screen);
 	LoadLogStep(at, 0);
-	Log("LOADLOG level=%s step=bar ms=%.1f frames=%ld wait=%.1f",
-		g_loadlog_level, *at - before, screen.frames, screen.wait_ms);
+	Log("LOADLOG level=%s step=bar ms=%.1f frames=%ld wait=%.1f shown=%ld",
+		g_loadlog_level, *at - before, screen.frames, screen.wait_ms, shown);
 }
 
 /* The frames the HD build's laps drew and their ms, on a line of their own
@@ -2265,17 +2267,8 @@ long S_LoadLevelFile(long num)
 	double loadlog_at = 0.0;
 	double loadlog_start = 0.0;
 
-	/* The Loadbar style row as the load begins. Off (LOADBAR_OFF) there is
-	 * no loading screen: no picture is read or rendered, no bar is drawn and
-	 * this load presents no frame of its own. Only where the screen still
-	 * shows the game's last frame - a level's end, a movie - is that frame
-	 * read back and faded to black while the loading thread works
-	 * (loadfade_ms; 0 one black frame); over a black screen nothing is
-	 * drawn. The level's own fade-in from black (DoLevel, DoTitle) follows
-	 * in every state. */
-	const long mode = (long)tomb5.loadbar;
-	const long shown = mode != LOADBAR_OFF;
 	const long black = LoadEntryBlack;
+	HDLevelNextLoad next;
 	long fade = 0;
 	long view = 0;
 
@@ -2283,6 +2276,35 @@ long S_LoadLevelFile(long num)
 	Log(__FUNCTION__);
 	LoadLogStep(&loadlog_at, 0);
 	LoadLogStep(&loadlog_start, 0);
+	strcpy(name, &gfFilenameWad[gfFilenameOffset[num]]);
+	LoadLogLevel(name);
+	loadbar_on = 0;
+	strcat(name, ".TRC");
+
+	/* The Loadbar style row as the load begins. Off (LOADBAR_OFF) a short
+	 * load has no loading screen: no picture is read or rendered, no bar is
+	 * drawn and the load presents no frame of its own. Only where the
+	 * screen still shows the game's last frame - a level's end, a movie -
+	 * is that frame read back and faded to black while the loading thread
+	 * works (loadfade_ms; 0 one black frame); over a black screen nothing
+	 * is drawn. A load that builds the HD data takes seconds, and that
+	 * long a black screen passes for a hang: off, it shows the screen as
+	 * the TR5 state does (LoadScreenModeOf). Whether it builds is the
+	 * keep's own answer, from the key stamped now and taken by LoadLevel's
+	 * HDLevelKeyNext (HDLevelKeyEarly). The level's own fade-in from black
+	 * (DoLevel, DoTitle) follows in every state. */
+	HDLevelKeyEarly(name, &next);
+
+	const long row = (long)tomb5.loadbar;
+	const long mode = LoadScreenModeOf(row,
+		LoadBuildsHD(next.gate, next.art, next.kept));
+	const long shown = mode != LOADBAR_OFF;
+
+	/* TR4 loadscreens as this load takes them: the view RenderLoadPic drew
+	 * stands on the screen and no picture is read. The row off renders no
+	 * view (gameflow.cpp), so an off load that shows its screen reads the
+	 * level's picture, as TR5 without TR4 loadscreens does. */
+	const long tr4_view = tomb5.tr4_loadscreens && mode == row;
 
 	if (!shown && !black)
 	{
@@ -2292,7 +2314,7 @@ long S_LoadLevelFile(long num)
 			CaptureLoadingScreen();
 	}
 
-	if (shown && (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus)))
+	if (shown && (!tr4_view || (!num && !bDoCredits && !gfStatus)))
 	{
 		if (!MonoScreenOn)
 		{
@@ -2354,11 +2376,6 @@ long S_LoadLevelFile(long num)
 	if (shown && !MonoScreenOn)
 		view = CaptureLoadingScreen();
 
-	strcpy(name, &gfFilenameWad[gfFilenameOffset[num]]);
-	LoadLogLevel(name);
-	loadbar_on = 0;
-	strcat(name, ".TRC");
-
 	/* The picture is shown at once, in one frame. Every frame of the bar
 	 * draws it again under the bar (S_DrawLoadBar), so it is released only
 	 * after the bar's last frame, below. */
@@ -2378,7 +2395,8 @@ long S_LoadLevelFile(long num)
 	 * when the build is chosen (hd_build) and an installation was found -
 	 * with hd_build 0 none is looked for; the thread then has its share of
 	 * the bar and the main thread's work the rest, otherwise the thread has
-	 * all of it. */
+	 * all of it. `mode` is the screen's state, not the row's: TR5 for an
+	 * off load that builds. */
 	const long hd = tomb5.hd_build && HDInstallRoot()[0];
 
 	S_LoadScreenBegin(mode, fade, (double)tomb5.loadfade_ms,
@@ -2462,11 +2480,12 @@ long S_LoadLevelFile(long num)
 	 * frame at each step's end where a tick has passed - and the brake
 	 * holds the screen until it has stood loadbar_min_ms, the bar running on
 	 * with the clock; its last frame is the full bar. A load longer than
-	 * that ends in one frame at once (drawbars.cpp, S_LoadScreenEnd). With
-	 * the row off nothing is drawn here. */
+	 * that ends in one frame at once (drawbars.cpp, S_LoadScreenEnd). A
+	 * load without a screen (the row off, a short load) draws nothing
+	 * here. */
 	S_LoadScreenEnd();
 
-	if (fade || view || !tomb5.tr4_loadscreens ||
+	if (fade || view || !tr4_view ||
 		(!num && !bDoCredits && !gfStatus))
 	{
 		if (MonoScreenOn == 2)
@@ -2474,7 +2493,7 @@ long S_LoadLevelFile(long num)
 	}
 
 	Log("S_LoadLevelFile: load bar finished");
-	LoadLogStepBar(&loadlog_at);
+	LoadLogStepBar(&loadlog_at, shown);
 	LoadLogStep(&loadlog_start, "total");
 	return 1;
 }

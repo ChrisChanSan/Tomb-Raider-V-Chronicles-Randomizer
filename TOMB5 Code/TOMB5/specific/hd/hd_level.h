@@ -137,6 +137,21 @@ void HDLevelUnload();
 // (specific\file.cpp, TexturePagesKeep). False with the build gate off.
 bool HDLevelKeepsNext();
 
+// What the coming load does with the HD data (HDLevelKeyEarly).
+struct HDLevelNextLoad
+{
+	int gate;	// the build gate is open: hd_build and an installation
+	int art;	// the level's .TRG is there
+	int kept;	// the data in memory are of this level: no build
+};
+
+// The key of the level about to be loaded, stamped before the loading
+// thread starts (specific\file.cpp, S_LoadLevelFile: whether the row off
+// shows a screen) and kept for LoadLevel's HDLevelKeyNext, which takes it
+// for the same file instead of stamping again: one key for the screen and
+// the keep. With the build gate off it stamps nothing and `out` is zero.
+void HDLevelKeyEarly(const char* wadName, HDLevelNextLoad* out);
+
 // The Direct3D device is about to be released or reset (a resolution change,
 // Alt+Enter, a lost device). Every HD object lives on THAT device, so all of
 // it goes now; HDLevelDeviceRecreated builds it again on the new one.

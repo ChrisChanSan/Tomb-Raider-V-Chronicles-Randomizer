@@ -44,6 +44,26 @@ inline long LoadBarModeOf(bool found, unsigned long value, bool tr4_bar)
 	return tr4_bar ? LOADBAR_TR4 : LOADBAR_TR5;
 }
 
+/* Whether a load builds the HD data, as the keep decides it (hd_level.cpp,
+ * HDLevelKeyEarly): the build gate open (hd_build and an installation),
+ * the level's art there (its .TRG) and the data in memory not kept for
+ * it. Such a load - another level, the title, the first load, a key
+ * refused - takes seconds; one that keeps them or builds none takes a
+ * tenth of one (the owner's -log runs: 34 to 94 ms against 0.96 to 5 s). */
+inline long LoadBuildsHD(long gate, long art, long kept)
+{
+	return gate && art && !kept;
+}
+
+/* The state a load's screen is drawn in. The row off leaves the screen
+ * out only for a short load; a load that builds the HD data shows it as
+ * the TR5 state does - the picture, the bar, the brake - so that seconds
+ * of black are never taken for a hang. */
+inline long LoadScreenModeOf(long mode, long builds)
+{
+	return mode == LOADBAR_OFF && builds ? LOADBAR_TR5 : mode;
+}
+
 /* The work of an HD load in two parts: the loading thread (its S_LoadBar
  * calls, pages + 20) and the main thread's work after it - the HD build
  * and the steps that follow it (font, cutscenes, warmup, profile). The

@@ -11243,7 +11243,9 @@ static void load_keep()
  * engine's own text): the row's state out of the registry, the fade of the
  * load without a loading screen, and the paths that state takes - no
  * picture read, no level view rendered, no frame of the load's own but the
- * fade's, and nothing at all over a black screen. */
+ * fade's, and nothing at all over a black screen - for a short load only:
+ * one that builds the HD data shows the screen as TR5, on the keep's own
+ * key, stamped once before the loading thread. */
 static void load_mode()
 {
 	char* file = hd_switch_text("../file.cpp");
@@ -11253,11 +11255,12 @@ static void load_mode()
 	char* flow = hd_switch_text("../../game/gameflow.cpp");
 	char* menu = hd_switch_text("../../game/menu_frame.cpp");
 	char* opts = hd_switch_text("../../tomb5/tomb5.cpp");
+	char* level = hd_switch_text("hd_level.cpp");
 	long n, a, b;
 
-	ok(file && bars && save && fx && flow && menu && opts, "load mode: the "
-		"seven files are read", !!file + !!bars + !!save + !!fx + !!flow +
-		!!menu + !!opts, 7);
+	ok(file && bars && save && fx && flow && menu && opts && level,
+		"load mode: the eight files are read", !!file + !!bars + !!save +
+		!!fx + !!flow + !!menu + !!opts + !!level, 8);
 
 	// The DWORD when it holds a state; the older bool otherwise.
 	ok(LoadBarModeOf(true, 0, true) == LOADBAR_TR5,
@@ -11329,7 +11332,7 @@ static void load_mode()
 	ok(n == 1, "load mode: the row names off", n, 1);
 
 	// Off: no picture read, no level view, no frame but the fade's.
-	n = hd_switch_count(file, "if (shown && (!tomb5.tr4_loadscreens ||");
+	n = hd_switch_count(file, "if (shown && (!tr4_view ||");
 	ok(n == 1, "load mode: off reads no picture", n, 1);
 	n = hd_switch_count(flow, "tomb5.tr4_loadscreens && tomb5.loadbar != "
 		"LOADBAR_OFF");
@@ -11375,7 +11378,7 @@ static void load_mode()
 	// The picture read back is released with the load's last frame.
 	n = hd_switch_count(save, "if (MonoScreenHD || MonoScreenView)");
 	ok(n == 1, "load mode: a screen read back is given back", n, 1);
-	n = hd_switch_count(file, "if (fade || view || !tomb5.tr4_loadscreens ||");
+	n = hd_switch_count(file, "if (fade || view || !tr4_view ||");
 	ok(n == 1, "load mode: a picture read back goes after the load", n, 1);
 
 	// TR4 loadscreens: the level's view read back once, before the first
@@ -11386,13 +11389,100 @@ static void load_mode()
 		"DrawLoadingScreen();");
 	ok(a >= 0 && a < b, "load mode: the TR4 view read back before the first "
 		"frame", a < b, 1);
-	a = load_keep_at(file, "if (shown && (!tomb5.tr4_loadscreens ||",
+	a = load_keep_at(file, "if (shown && (!tr4_view ||",
 		"if (shown && !MonoScreenOn)");
 	ok(a >= 0, "load mode: the view only where no picture was read", a >= 0,
 		1);
 	n = hd_switch_count(save, "d[x] = s[x] | 0xFF000000;");
 	ok(n == 1, "load mode: the screen read back pixel for pixel", n, 1);
 
+	// Off only for the short loads: a load builds the HD data with the
+	// build gate open, the level's .TRG there and the data not kept.
+	{
+		long bad = 0;
+
+		for (long g = 0; g <= 1; g++)
+			for (long art = 0; art <= 1; art++)
+				for (long kept = 0; kept <= 1; kept++)
+					bad += LoadBuildsHD(g, art, kept) !=
+						(g && art && !kept ? 1 : 0);
+
+		ok(bad == 0, "load mode: a build needs the gate, the art and no "
+			"keep", bad, 0);
+	}
+	n = LoadScreenModeOf(LOADBAR_OFF, LoadBuildsHD(1, 1, 1));
+	ok(n == LOADBAR_OFF, "load mode: off and the data kept, no screen", n,
+		LOADBAR_OFF);
+	n = LoadScreenModeOf(LOADBAR_OFF, LoadBuildsHD(1, 1, 0));
+	ok(n == LOADBAR_TR5, "load mode: off and a build, the screen as TR5", n,
+		LOADBAR_TR5);
+	n = LoadScreenModeOf(LOADBAR_OFF, LoadBuildsHD(0, 1, 0)) +
+		LoadScreenModeOf(LOADBAR_OFF, LoadBuildsHD(0, 0, 0));
+	ok(n == 2 * LOADBAR_OFF, "load mode: off with the build gate shut, no "
+		"screen", n, 2 * LOADBAR_OFF);
+	n = LoadScreenModeOf(LOADBAR_OFF, LoadBuildsHD(1, 0, 0));
+	ok(n == LOADBAR_OFF, "load mode: off and no .TRG, no screen", n,
+		LOADBAR_OFF);
+	{
+		long bad = 0;
+
+		for (long builds = 0; builds <= 1; builds++)
+		{
+			bad += LoadScreenModeOf(LOADBAR_TR5, builds) != LOADBAR_TR5;
+			bad += LoadScreenModeOf(LOADBAR_TR4, builds) != LOADBAR_TR4;
+		}
+
+		ok(bad == 0, "load mode: TR5 and TR4 as the row says", bad, 0);
+	}
+
+	// The decision in the engine: taken once, before the loading thread,
+	// from the key HDLevelKeyEarly stamps; the screen's state is the one
+	// the load draws in, its picture read where TR4 loadscreens drew none.
+	a = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"HDLevelKeyEarly(name, &next);");
+	b = load_keep_at(file, "long S_LoadLevelFile(long num)",
+		"LoadLevel, name, 0,");
+	ok(a >= 0 && a < b, "load mode: the decision before the thread", a < b,
+		1);
+	n = hd_switch_count(file, "HDLevelKeyEarly(");
+	ok(n == 1, "load mode: one early stamp", n, 1);
+	n = hd_switch_count(file, "LoadScreenModeOf(row,\r\n\t\tLoadBuildsHD("
+		"next.gate, next.art, next.kept));") + hd_switch_count(file,
+		"LoadScreenModeOf(row,\n\t\tLoadBuildsHD(next.gate, next.art, "
+		"next.kept));");
+	ok(n == 1, "load mode: the state from the row and the keep", n, 1);
+	n = hd_switch_count(file, "S_LoadScreenBegin(mode, fade,");
+	ok(n == 1, "load mode: the screen begins in that state", n, 1);
+	n = hd_switch_count(file, "tomb5.tr4_loadscreens && mode == row;");
+	ok(n == 1, "load mode: an off load shown reads its picture", n, 1);
+	n = hd_switch_count(file, "LoadLogStepBar(&loadlog_at, shown);") +
+		hd_switch_count(file, "wait=%.1f shown=%ld\",");
+	ok(n == 2, "load mode: the bar line says shown", n, 2);
+
+	// One key: LoadLevel's HDLevelKeyNext takes the early stamp for the
+	// same file; both stamp with KeyStampOf, every comparison is
+	// HDLevelKeepRefused on g_key_built.
+	n = hd_switch_count(level, "KeyStampOf(wadName, ");
+	ok(n == 2, "load mode: the early stamp and LoadLevel's, one stamp", n,
+		2);
+	n = hd_switch_count(level, "FileStampOf(");
+	ok(n == 6, "load mode: the files stamped in one place", n, 6);
+	n = hd_switch_count(level, "!strcmp(g_key_early_wad, wadName);");
+	ok(n == 1, "load mode: the early key taken for the same file", n, 1);
+	a = load_keep_at(level, "void HDLevelKeyNext(const char* wadName)",
+		"k = g_key_early;");
+	b = load_keep_at(level, "void HDLevelKeyNext(const char* wadName)",
+		"memset(&g_key_early, 0, sizeof(g_key_early));");
+	ok(a >= 0 && a < b, "load mode: taken once, then cleared", a < b, 1);
+	n = hd_switch_count(level, "out->kept = !HDLevelKeepRefused("
+		"&g_key_built, &g_key_early,");
+	ok(n == 1, "load mode: the early answer is the keep's comparison", n, 1);
+	n = hd_switch_count(level, "HDLevelKeepRefused(");
+	ok(n == 4, "load mode: no other comparison", n, 4);
+	n = hd_switch_count(level, "HDLevelKeyDiffers(");
+	ok(n == 0, "load mode: no key compared outside the keep's rule", n, 0);
+
+	free(level);
 	free(file);
 	free(bars);
 	free(save);
@@ -11899,7 +11989,7 @@ static void load_brake()
 	n = hd_switch_count(level, "S_LoadBarBuild(");
 	ok(n == 6, "load brake: the laps and the resident build's 5 steps", n,
 		6);
-	n = hd_switch_count(file, "LoadLogStepBar(&loadlog_at);");
+	n = hd_switch_count(file, "LoadLogStepBar(&loadlog_at, shown);");
 	ok(n == 1, "load brake: the bar step logs frames and wait", n, 1);
 	n = hd_switch_count(file, "step=hd_frames ms=%.1f frames=%ld");
 	ok(n == 1, "load brake: the build's frames on a line", n, 1);

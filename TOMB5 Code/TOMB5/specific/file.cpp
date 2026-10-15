@@ -2271,22 +2271,16 @@ long S_LoadLevelFile(long num)
 	loadbar_on = 0;
 	strcat(name, ".TRC");
 
-	for (int i = 0; i < 4; i++)
-	{
-		_BeginScene();
-		InitBuckets();
-		InitialiseSortList();
-		DrawLoadingScreen();
-		SortPolyList(SortCount, SortList);
-		DrawSortList();
-		S_DumpScreenFrame();
-	}
-
-	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
-	{
-		if (MonoScreenOn == 2)
-			ReleaseScreen();
-	}
+	/* The picture is shown at once, in one frame. Every frame of the bar
+	 * draws it again under the bar (S_DrawLoadBar), so it is released only
+	 * after the bar's last frame, below. */
+	_BeginScene();
+	InitBuckets();
+	InitialiseSortList();
+	DrawLoadingScreen();
+	SortPolyList(SortCount, SortList);
+	DrawSortList();
+	S_DumpScreenFrame();
 
 	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;
@@ -2299,9 +2293,9 @@ long S_LoadLevelFile(long num)
 			S_DrawLoadBar();
 
 
-		// This loop only repaints the loading bar while a background thread
-		// does the file I/O, so it need not call Present() (via
-		// S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) faster than a
+		// This loop only repaints the loading picture and bar while a
+		// background thread does the file I/O, so it need not call Present()
+		// (via S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) faster than a
 		// human can see. Unthrottled, it calls Present() as fast as the CPU
 		// allows with no vsync (D3DPRESENT_INTERVAL_IMMEDIATE) and no message
 		// pumping in between, and the game thread can hang for good inside
@@ -2364,6 +2358,12 @@ long S_LoadLevelFile(long num)
 
 	if (App.dx.Flags & DXF_HWR)
 		S_DrawLoadBar();
+
+	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	{
+		if (MonoScreenOn == 2)
+			ReleaseScreen();
+	}
 
 	Log("S_LoadLevelFile: load bar finished");
 	LoadLogStep(&loadlog_at, "bar");

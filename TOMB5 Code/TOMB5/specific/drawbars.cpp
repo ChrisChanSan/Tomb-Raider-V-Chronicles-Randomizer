@@ -24,6 +24,7 @@
 #include "polyinsert.h"
 #include "winmain.h"
 #include "texture.h"
+#include "LoadSave.h"	// DrawLoadingScreen - the picture under the load bar
 
 static GouraudBarColourSet healthBarColourSet =
 {
@@ -480,6 +481,13 @@ long S_DrawLoadBar()
 	App.dx.lpD3DDevice->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
 	App.dx.lpD3DDevice->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
 	App.dx.lpD3DDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, 0);
+
+	/* The loading picture first, in every frame of the bar: nothing clears
+	 * the back buffer between frames, but a swap chain with
+	 * D3DSWAPEFFECT_DISCARD promises nothing of its contents after a
+	 * Present, so the picture is drawn again rather than expected to be
+	 * there. Nothing when no picture is up (MonoScreenOn 0). */
+	DrawLoadingScreen();
 
 	if (tomb5.tr4_loadbar)
 	{

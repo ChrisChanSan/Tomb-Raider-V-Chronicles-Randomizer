@@ -106,6 +106,9 @@ namespace
 	/* The cracks, one for each spring in g_springs' order, and what the
 	 * level's build was told: the key hd_springcrack. */
 	std::vector<Crack> g_cracks;
+	/* Per crack the level's floor round it, nine floats a triangle (its
+	 * corners), for the gate of an eye under the bottom (over_ground). */
+	std::vector<std::vector<float>> g_ground;
 	int g_crack_key = 1;
 	int g_drawn_cracks = 0;
 	double g_crack_ms = -1.0;
@@ -367,6 +370,7 @@ void HDSpringClear()
 	g_springs.clear();
 	g_fed.clear();
 	g_cracks.clear();
+	g_ground.clear();
 	g_crack_key = 1;
 	g_held = 0.0;
 	g_stem[0] = 0;
@@ -718,6 +722,52 @@ void HDSpringDrawn(int* columns, int* bubbles)
 		*bubbles = g_drawn_bubbles;
 }
 
+/* The frame's copy for the columns (HDRenderWaterCopy), where the sheets'
+ * own copy is taken - after the opaque frame, before the blend phase -:
+ * taken when a column is drawn in this frame and reaches its screen
+ * (HDSpringColumnInFrame), the jet's foot and top through `toFrame` as the
+ * draw takes them. A frame under the water whose rooms hold no sheet - the
+ * sheet lies in the dry room over the water, and a view along the floor
+ * leaves that room off the frame's list - takes no copy for the sheets,
+ * and without a copy the column draws nothing. True when the frame has a
+ * copy after it. */
+bool HDSpringFrameCopy(const float* toFrame)
+{
+	HDRenderSpringFrame f;
+
+	if (g_springs.empty() || !toFrame || !(g_parts & 1) ||
+		!HDRenderWaterSpringFrame(&f) || !f.width || !f.height)
+		return false;
+
+	if (f.copy)
+		return true;
+
+	float m[16];
+
+	multiply(toFrame, f.view, m);
+
+	const float focal = f.proj[0] * 0.5f * (float)f.width;
+
+	for (size_t i = 0; i < g_springs.size(); i++)
+	{
+		const HDSpring& s = g_springs[i];
+		const HDSpringCrackShape* crack = crack_of(i);
+		const float foot = crack ? crack->bottomY : (float)s.floorY;
+		const float bw[3] = { s.x, foot, s.z };
+		const float tw[3] = { s.x, (float)s.surfaceY, s.z };
+		float b[3], top[3];
+
+		through(m, bw, b);
+		through(m, tw, top);
+
+		if (HDSpringColumnInFrame(s, foot - (float)s.surfaceY, b, top, focal,
+			f.proj))
+			return HDRenderWaterCopy();
+	}
+
+	return false;
+}
+
 /* The column and the bubbles of every spring in view, after the sheets:
  * `toFrame` takes the world into the frame's world, as for the cards
  * (hd_render.cpp, HDRenderWaterCardsDraw). The column needs the frame's
@@ -763,32 +813,20 @@ void HDSpringFrameDraw(const float* toFrame)
 
 		/* The column, a quad standing on the jet's line and turned to the
 		 * eye, in eight rows up its height; left out where an end lies
-		 * behind the eye. It fades as the eye looks along its line, where
-		 * the quad turns edge-on, and as its half-width at mid height
-		 * falls from kHDSpringFadeFrom to kHDSpringFadeTo pixels. */
-		if ((g_parts & 1) && f.copy && depth > 0.0f && b[2] > 1.0f &&
-			top[2] > 1.0f)
+		 * behind the eye (HDSpringColumnFront). It fades as the eye looks
+		 * along its line, where the quad turns edge-on, and as its
+		 * half-width at mid height falls from kHDSpringFadeFrom to
+		 * kHDSpringFadeTo pixels (HDSpringColumnWeight). */
+		if ((g_parts & 1) && f.copy && depth > 0.0f &&
+			HDSpringColumnFront(b, top))
 		{
 			const float ax[3] = { top[0] - b[0], top[1] - b[1],
 				top[2] - b[2] };
 			const float mid[3] = { (b[0] + top[0]) * 0.5f,
 				(b[1] + top[1]) * 0.5f, (b[2] + top[2]) * 0.5f };
-			float side[3] = { ax[1] * mid[2] - ax[2] * mid[1],
-				ax[2] * mid[0] - ax[0] * mid[2],
-				ax[0] * mid[1] - ax[1] * mid[0] };
-			const float sl = sqrtf(side[0] * side[0] + side[1] * side[1] +
-				side[2] * side[2]);
-			const float al = sqrtf(ax[0] * ax[0] + ax[1] * ax[1] +
-				ax[2] * ax[2]);
-			const float ml = sqrtf(mid[0] * mid[0] + mid[1] * mid[1] +
-				mid[2] * mid[2]);
-			const float sine = al > 0.0f && ml > 0.0f ? sl / (al * ml) : 0.0f;
-			const float across = HDSpringHalfWidth(s, depth * 0.5f) * focal /
-				mid[2];
-			float weight = s.strength *
-				fminf(fmaxf((sine - 0.2f) / 0.3f, 0.0f), 1.0f) *
-				fminf(fmaxf((across - kHDSpringFadeTo) /
-				(kHDSpringFadeFrom - kHDSpringFadeTo), 0.0f), 1.0f);
+			float side[3], sl;
+			const float weight = HDSpringColumnWeight(s.strength, ax, mid,
+				HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
 
 			if (weight > 0.0f && sl > 0.0f)
 			{
@@ -1113,6 +1151,11 @@ namespace
 	 * against the four springs' floors (the rule's ANDREA2 spring lies on
 	 * a slope of 1,194 to 1,450). */
 	const float kCrackRough = 192.0f;
+	/* How far round the outline the floor is read for an eye under the
+	 * bottom (over_ground): beyond it no such eye sees the slit. A free
+	 * choice, over twice the farthest camera of the logs under a bottom
+	 * (1,585 units from the rule's ANDREA2 spring). */
+	const float kCrackReach = 4096.0f;
 
 	// A floor triangle: world corners, page places, light, page, room.
 	struct FloorTri
@@ -1387,6 +1430,34 @@ namespace
 		return best;
 	}
 
+	/* Whether an eye under crack i's bottom stands over the level's floor
+	 * at its own column (HDSpringCrackGround): the heights there of the
+	 * floor read round the crack, at most sixteen of them. */
+	bool over_ground(size_t i, const float* eye)
+	{
+		float ys[16];
+		int n = 0;
+
+		if (i >= g_ground.size())
+			return false;
+
+		const std::vector<float>& g = g_ground[i];
+
+		for (size_t t = 0; t + 9 <= g.size() && n < 16; t += 9)
+		{
+			FloorTri tri = {};
+			double w[3];
+
+			memcpy(tri.p, &g[t], sizeof(tri.p));
+
+			if (weights(tri, eye[0], eye[2], w))
+				ys[n++] = (float)(w[0] * tri.p[0][1] + w[1] * tri.p[1][1] +
+					w[2] * tri.p[2][1]);
+		}
+
+		return HDSpringCrackGround(eye[1], ys, n, kCrackLift);
+	}
+
 	/* A triangle's map of world x, z to its page, about the point cx, cz:
 	 * u = m0 + m1 (x - cx) + m2 (z - cz), v the same with m3 - m5. */
 	void page_map(const FloorTri& t, double cx, double cz, float* m)
@@ -1480,6 +1551,7 @@ void HDSpringCrackBuild(const char* trg, const std::vector<HDSpringRoom>& rooms,
 	int on)
 {
 	g_cracks.assign(g_springs.size(), Crack());
+	g_ground.assign(g_springs.size(), std::vector<float>());
 	g_crack_key = on;
 
 	std::vector<HDRenderWaterSquare> squares;
@@ -1621,6 +1693,20 @@ void HDSpringCrackBuild(const char* trg, const std::vector<HDSpringRoom>& rooms,
 		pz[c.points] = c.midZ[half];
 		py[c.points] = k.middleY;
 		k.floor = HDSpringCrackFloorFit(px, pz, py, c.points + 1);
+
+		/* The floor round the crack for an eye under its bottom: the
+		 * floor-facing triangles within kCrackReach of the outline, every
+		 * height under the sheet. */
+		const float wide[4] = { box[0] - kCrackReach, box[1] - kCrackReach,
+			box[2] + kCrackReach, box[3] + kCrackReach };
+
+		tris.clear();
+
+		if (read_floors(trg, rooms, wide, (float)s.surfaceY + 64.0f, 1.0e9f,
+			tris))
+			for (const FloorTri& q : tris)
+				for (int j = 0; j < 3; j++)
+					g_ground[i].insert(g_ground[i].end(), q.p[j], q.p[j] + 3);
 	}
 }
 
@@ -1704,19 +1790,20 @@ void HDSpringCrackNumbers(int* drawn, double* ms)
  *               floor (fans over a concave outline cancel out the same way)
  *   3 the hole  the volume again on the marked pixels alone, black, at the
  *               depth of the bottom's plane along the pixel's ray (HolePS),
- *               the bit back to 0
+ *               or at the far plane's for an eye under that plane
+ *               (HDSpringCrackBottom), the bit back to 0
  *   4 walls     each edge's wall with the depth test and write, the
  *               floor's page on it (CrackPS): where the hole is open they
  *               lie in front of the bottom, elsewhere behind the floor
  *
  * The bottom the walls leave open is the hole's own black. Nothing when
  * the frame's depth has no stencil, the eye does not look into the slit
- * (HDSpringCrackSeen: under the bottom or behind the floor) or the volume
- * reaches the near plane, where the count would be cut; and only
- * while `drawn` says the room of the crack's floor is drawn this frame:
- * a ray to the crack then meets the floor or what stands in front of it,
- * never an empty place of the frame whose depth the count would meet
- * inside the volume. */
+ * (HDSpringCrackSeen: behind the floor; under the bottom, in the rock at
+ * its column, over_ground) or the volume reaches the near plane, where
+ * the count would be cut; and only while `drawn` says the room of the
+ * crack's floor is drawn this frame: a ray to the crack then meets the
+ * floor or what stands in front of it, never an empty place of the frame
+ * whose depth the count would meet inside the volume. */
 void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 {
 	HDRenderSpringFrame f;
@@ -1781,8 +1868,11 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 			!drawn(k.room)))
 			continue;
 
-		// The eye over the bottom and the floor, else the slit is not seen.
-		if (!HDSpringCrackSeen(eye, k.floor, c.bottomY, kCrackLift))
+		/* The eye over the floor, else the slit is not seen; under the
+		 * bottom over the level's own floor at its column. */
+		if (!HDSpringCrackSeen(eye, k.floor, kCrackLift) ||
+			(!HDSpringCrackBottom(eye[1], c.bottomY, kCrackLift) &&
+			!over_ground(i, eye)))
 			continue;
 
 		Draw dr;
@@ -1899,6 +1989,20 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 		if (hi[0] < -1.0f || lo[0] > 1.0f || hi[1] < -1.0f || lo[1] > 1.0f)
 			continue;
 
+		dr.crack = i;
+		dr.look[0] = c.depth > 0.0f ? 1.0f / c.depth : 1.0f;
+		dr.look[1] = dr.look[2] = dr.look[3] = 0.0f;
+
+		/* An eye under the bottom's plane looks up into the slit and sees
+		 * no bottom (HDSpringCrackBottom): the plane 0 meets no ray, and
+		 * HolePS writes the far plane's depth in black, behind the walls. */
+		if (!HDSpringCrackBottom(eye[1], c.bottomY, kCrackLift))
+		{
+			dr.plane[0] = dr.plane[1] = dr.plane[2] = dr.plane[3] = 0.0f;
+			draws.push_back(std::move(dr));
+			continue;
+		}
+
 		/* The bottom's plane in view space out of three of its points, its
 		 * normal turned so that the eye lies on its near side. */
 		const float w0[3] = { c.midX[half], c.bottomY, c.midZ[half] };
@@ -1934,13 +2038,10 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 				n[j] = -n[j];
 		}
 
-		dr.crack = i;
 		dr.plane[0] = n[0];
 		dr.plane[1] = n[1];
 		dr.plane[2] = n[2];
 		dr.plane[3] = dist;
-		dr.look[0] = c.depth > 0.0f ? 1.0f / c.depth : 1.0f;
-		dr.look[1] = dr.look[2] = dr.look[3] = 0.0f;
 		draws.push_back(std::move(dr));
 	}
 
@@ -2325,17 +2426,11 @@ void HDSpringDraw(const float* toFrame)
 	HDSpringFrameDraw(toFrame);
 }
 
-/* The cracks, at the start of the blend phase (hd_level.cpp,
- * HDFrameDrawGlow): the world into the HD frame's view space through the
- * engine's own matrix, which in the HD frame is the view itself, as
- * hd_level.cpp's WorldToFrame takes it for the cards. */
-void HDSpringCrackDraw()
+/* The world into the HD frame's view space through the engine's own
+ * matrix, which in the HD frame is the view itself, as hd_level.cpp's
+ * WorldToFrame takes it for the cards. */
+static void FrameMatrix(float* m)
 {
-	if (!HDLevelActive() || g_cracks.empty())
-		return;
-
-	float m[16];
-
 	phd_PushMatrix();
 	phd_TranslateAbs(0, 0, 0);
 	m[0] = aMXPtr[M00];
@@ -2355,7 +2450,31 @@ void HDSpringCrackDraw()
 	m[14] = aMXPtr[M23];
 	m[15] = 1.0f;
 	phd_PopMatrix();
+}
+
+// The cracks, at the start of the blend phase (hd_level.cpp,
+// HDFrameDrawGlow).
+void HDSpringCrackDraw()
+{
+	if (!HDLevelActive() || g_cracks.empty())
+		return;
+
+	float m[16];
+
+	FrameMatrix(m);
 	HDSpringCrackFrameDraw(m, RoomDrawn);
+}
+
+// The columns' copy, beside the sheets' (hd_level.cpp, HDFrameDrawGlow).
+void HDSpringCopy()
+{
+	if (!HDLevelActive() || g_springs.empty())
+		return;
+
+	float m[16];
+
+	FrameMatrix(m);
+	HDSpringFrameCopy(m);
 }
 
 // The shaders belong to the device that is going away.

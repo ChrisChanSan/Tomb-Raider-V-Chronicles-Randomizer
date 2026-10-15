@@ -265,6 +265,106 @@ inline float HDSpringHalfWidth(const HDSpring& s, float h)
 		kHDSpringSpread * h;
 }
 
+/* The column in a frame, its foot `b` and its top `t` in view space, z the
+ * depth in front of the eye: drawn while both ends lie more than
+ * kHDSpringFront in front of the eye - the draw's vertices divide by
+ * their depth -, else left out whole. */
+static const float kHDSpringFront = 1.0f;
+
+inline bool HDSpringColumnFront(const float* b, const float* t)
+{
+	return b[2] > kHDSpringFront && t[2] > kHDSpringFront;
+}
+
+/* The column's weight: its strength, faded as the eye looks along its line
+ * `ax` - the sine of the angle between the line and the way to the
+ * column's middle `mid`, from 0.2 (gone) to 0.5 (whole), where the quad
+ * turns edge-on - and as its half-width there, `half` units, falls from
+ * kHDSpringFadeFrom to kHDSpringFadeTo pixels at the focal length `focal`
+ * (pixels). `side` takes ax x mid, the quad's way across, and `length` its
+ * length. */
+inline float HDSpringColumnWeight(float strength, const float* ax,
+	const float* mid, float half, float focal, float* side, float* length)
+{
+	side[0] = ax[1] * mid[2] - ax[2] * mid[1];
+	side[1] = ax[2] * mid[0] - ax[0] * mid[2];
+	side[2] = ax[0] * mid[1] - ax[1] * mid[0];
+
+	const float sl = sqrtf(side[0] * side[0] + side[1] * side[1] +
+		side[2] * side[2]);
+	const float al = sqrtf(ax[0] * ax[0] + ax[1] * ax[1] + ax[2] * ax[2]);
+	const float ml = sqrtf(mid[0] * mid[0] + mid[1] * mid[1] +
+		mid[2] * mid[2]);
+	const float sine = al > 0.0f && ml > 0.0f ? sl / (al * ml) : 0.0f;
+	const float across = half * focal / mid[2];
+
+	*length = sl;
+	return strength * fminf(fmaxf((sine - 0.2f) / 0.3f, 0.0f), 1.0f) *
+		fminf(fmaxf((across - kHDSpringFadeTo) /
+		(kHDSpringFadeFrom - kHDSpringFadeTo), 0.0f), 1.0f);
+}
+
+/* Whether the column from `p0` to `p1` (view space, both in front), `h0`
+ * and `h1` units wide to each side there, reaches the screen: every
+ * corner of its quad lies within its half-width of an end, so the box of
+ * the ends, each widened by its half-width at its nearest depth and its
+ * farthest, through the projection (x' = proj[0] x / z + proj[8], y' =
+ * proj[5] y / z + proj[9], row-major as D3DMATRIX) against -1..1. An end
+ * nearer than its half-width may stand round the eye: then it does. */
+inline bool HDSpringColumnOnScreen(const float* p0, const float* p1,
+	float h0, float h1, const float* proj)
+{
+	const float* p[2] = { p0, p1 };
+	const float h[2] = { h0, h1 };
+	float lo[2] = { 1.0e30f, 1.0e30f }, hi[2] = { -1.0e30f, -1.0e30f };
+
+	for (int e = 0; e < 2; e++)
+	{
+		if (p[e][2] - h[e] <= kHDSpringFront)
+			return true;
+
+		for (int c = 0; c < 8; c++)
+		{
+			const float z = p[e][2] + (c & 1 ? h[e] : -h[e]);
+			const float x = p[e][0] + (c & 2 ? h[e] : -h[e]);
+			const float y = p[e][1] + (c & 4 ? h[e] : -h[e]);
+			const float sx = proj[0] * x / z + proj[8];
+			const float sy = proj[5] * y / z + proj[9];
+
+			lo[0] = fminf(lo[0], sx);
+			hi[0] = fmaxf(hi[0], sx);
+			lo[1] = fminf(lo[1], sy);
+			hi[1] = fmaxf(hi[1], sy);
+		}
+	}
+
+	return !(hi[0] < -1.0f || lo[0] > 1.0f || hi[1] < -1.0f || lo[1] > 1.0f);
+}
+
+/* Whether spring `s`'s column, `depth` units from its foot `b` to its top
+ * `t` (view space), is drawn in a frame of focal length `focal` and
+ * projection `proj` and reaches its screen: both ends in front, a weight
+ * over 0 and a way across - the numbers the draw takes (hd_spring.cpp,
+ * HDSpringFrameDraw). The column bends the frame's copy, so a frame it
+ * stands in takes one (HDSpringFrameCopy) whether or not a sheet of the
+ * frame asks for it. */
+inline bool HDSpringColumnInFrame(const HDSpring& s, float depth,
+	const float* b, const float* t, float focal, const float* proj)
+{
+	if (depth <= 0.0f || !HDSpringColumnFront(b, t))
+		return false;
+
+	const float ax[3] = { t[0] - b[0], t[1] - b[1], t[2] - b[2] };
+	const float mid[3] = { (b[0] + t[0]) * 0.5f, (b[1] + t[1]) * 0.5f,
+		(b[2] + t[2]) * 0.5f };
+	float side[3], sl;
+	const float weight = HDSpringColumnWeight(s.strength, ax, mid,
+		HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
+
+	return weight > 0.0f && sl > 0.0f && HDSpringColumnOnScreen(b, t,
+		HDSpringHalfWidth(s, 0.0f), HDSpringHalfWidth(s, depth), proj);
+}
+
 /* The crack at the spring's foot: a jagged slit in the floor the jet rises
  * out of, its walls the floor's own page carried over the lip and down,
  * its bottom black. Every choice is a hash of the spring's seed - its level
@@ -640,23 +740,18 @@ inline HDSpringCrackFloor HDSpringCrackFloorFit(const float* x,
 	return f;
 }
 
-/* Whether an eye at world x, y, z (y down) looks into a crack on `floor`
- * whose bottom lies at bottomY, each test by `lift`: the eye over the
- * bottom, and over the highest point of the outline or else over the
+/* Whether an eye at world x, y, z (y down) looks into a crack on `floor`,
+ * by `lift`: over the highest point of the outline or else over the
  * floor's plane at the eye's own column. On a slope the outline's heights
  * part, and an eye under its highest point still looks into the slit from
- * the side, the walls hiding the bottom it cannot see. Under the bottom
- * the hole would stand black on the bottom's plane in front of the walls
- * (HolePS meets that plane before the floor); behind the floor's plane
- * the eye looks at the back of the floor the crack opens. The plane only
- * widens the test of the highest point: away from the outline it is a
- * guess at the floor, so an eye over the whole outline keeps its crack. */
+ * the side, the walls hiding the bottom it cannot see - from under the
+ * bottom too, where the slope falls on below the crack. Behind the floor's
+ * plane the eye looks at the back of the floor the crack opens. The plane
+ * only widens the test of the highest point: away from the outline it is
+ * a guess at the floor, so an eye over the whole outline keeps its crack. */
 inline bool HDSpringCrackSeen(const float* eye,
-	const HDSpringCrackFloor& floor, float bottomY, float lift)
+	const HDSpringCrackFloor& floor, float lift)
 {
-	if (eye[1] >= bottomY - lift)
-		return false;
-
 	if (eye[1] < floor.top - lift)
 		return true;
 
@@ -664,6 +759,37 @@ inline bool HDSpringCrackSeen(const float* eye,
 		floor.slopeZ * (eye[2] - floor.z);
 
 	return eye[1] < y - lift;
+}
+
+/* Whether the hole draws its bottom for an eye at world y `eyeY` (y down):
+ * when the eye stands `lift` over the bottom's plane at `bottomY`. From
+ * under that plane a ray into the slit enters it at the floor rising and
+ * leaves it through a wall, never through the bottom - the bottom's plane
+ * turned to such an eye would stand black in front of the walls -, so the
+ * hole then writes no bottom and the walls fill the slit. */
+inline bool HDSpringCrackBottom(float eyeY, float bottomY, float lift)
+{
+	return eyeY < bottomY - lift;
+}
+
+/* Whether an eye at world y `eyeY` (y down) under a crack's bottom stands
+ * over the level's floor at its own column, by `lift`: of the floor's
+ * heights there (`ys`, `n` of them, the floor read round the crack), the
+ * one nearest the eye lies under it. Under the bottom the plane fitted to
+ * the outline is a guess at a slope that falls away from it, and an eye
+ * the guess puts over the floor may stand in the rock, where the walls
+ * would stand over what the back of the floor lets through. No height:
+ * the eye is too far from the crack to judge, and the slit is not seen. */
+inline bool HDSpringCrackGround(float eyeY, const float* ys, int n,
+	float lift)
+{
+	int best = -1;
+
+	for (int i = 0; i < n; i++)
+		if (best < 0 || fabsf(ys[i] - eyeY) < fabsf(ys[best] - eyeY))
+			best = i;
+
+	return best >= 0 && eyeY < ys[best] - lift;
 }
 
 /* Where bubble `k` is born in the crack: on the main line between a
@@ -1054,11 +1180,13 @@ inline bool HDSpringRulePick(const char* stem, unsigned bodyKey,
  * rule saw in each body, for RoomProbe -springs; HDSpringRings hands
  * their rings to the sheets once a frame before they draw (the eye's
  * world place picks the springs near enough); HDSpringFrameDraw draws the
- * columns and the bubbles after the sheets. HDSpringAdd is RoomProbe's -spring,
+ * columns and the bubbles after the sheets; HDSpringFrameCopy takes the
+ * frame's copy, where the sheets' is taken, for a column in the frame
+ * (HDSpringColumnInFrame). HDSpringAdd is RoomProbe's -spring,
  * HDSpringTiming and HDSpringDrawn its numbers, HDSpringParts its
  * -springparts; HDSpringLogLine writes the SPRINGLOG lines. The engine
- * calls the five after them (HDLevelBuild, HDLevelUnload, FeedWaterRipples,
- * DrawWaterCards, HDLevelDeviceLost).
+ * calls the six after them (HDLevelBuild, HDLevelUnload, FeedWaterRipples,
+ * DrawWaterCards, HDFrameDrawGlow, HDLevelDeviceLost).
  *
  * HDSpringCrackBuild gives each spring its crack once the springs are laid
  * (`on` 0 builds none: the key hd_springcrack), reading the floor under it
@@ -1093,6 +1221,7 @@ int HDSpringCount();
 const HDSpring* HDSpringAt(int i);
 void HDSpringRings(float eyeX, float eyeY, float eyeZ);
 void HDSpringFrameDraw(const float* toFrame);
+bool HDSpringFrameCopy(const float* toFrame);
 void HDSpringTiming(int on, double* ms);
 void HDSpringDrawn(int* columns, int* bubbles);
 void HDSpringParts(int mask);
@@ -1103,4 +1232,5 @@ void HDSpringLevelBegin(const char* stem);
 void HDSpringLevelEnd();
 void HDSpringFeed();
 void HDSpringDraw(const float* toFrame);
+void HDSpringCopy();
 void HDSpringDeviceLost();

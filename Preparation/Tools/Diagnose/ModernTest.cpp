@@ -22362,9 +22362,10 @@ static void spring_crack()
  * it, on a slope from 1,229.6 to 1,379.5 with its bottom at 1,446, and
  * the eyes in steps of 64 from 256 over its highest point to 128 under its
  * bottom at four places round it. RoomProbe's pictures there: the crack
- * right at every eye over the bottom that is over the floor, the hole
- * black in front of the walls under the bottom, and nothing but black from
- * an eye inside the rock uphill under the floor. */
+ * right at every eye over the bottom that is over the floor, the walls
+ * alone in the slit from an eye under the bottom that is over the floor
+ * (the hole without its bottom), and nothing but black from an eye inside
+ * the rock uphill under the floor. */
 static void spring_crack_gate()
 {
 	printf("the springs: the crack's gate\n");
@@ -22417,9 +22418,10 @@ static void spring_crack_gate()
 
 	/* The fan: four columns - the second camera's own, west and south of
 	 * the crack 1,000 away in the water (floors 1,912, 1,537, 1,657), and
-	 * 600 uphill, where the floor stands at 1,068. Every water eye over the
-	 * bottom less the lift (1,438) sees it; uphill the eyes over the whole
-	 * outline see it, the lower ones stand in the rock and do not. */
+	 * 600 uphill, where the floor stands at 1,068. Every water eye sees
+	 * it, the two under the bottom less the lift (1,438) without the
+	 * bottom; uphill the eyes over the whole outline see it, the lower ones
+	 * stand in the rock and do not. */
 	struct Eye
 	{
 		float x, z;
@@ -22428,36 +22430,79 @@ static void spring_crack_gate()
 
 	static const Eye fan[] =
 	{
-		{ 59858.0f, 41443.0f, 8 },
-		{ 59930.0f, 40450.0f, 8 },
-		{ 60930.0f, 41450.0f, 8 },
+		{ 59858.0f, 41443.0f, 10 },
+		{ 59930.0f, 40450.0f, 10 },
+		{ 60930.0f, 41450.0f, 10 },
 		{ 61354.3f, 40025.7f, 4 },
 	};
 	const float lift = 8.0f, bottom = 1446.0f;
-	int right = 0, total = 0;
+	int right = 0, total = 0, floors = 0;
 
 	for (const Eye& e : fan)
 		for (int k = 0; k < 10; k++, total++)
 		{
 			const float eye[3] = { e.x, 973.6f + 64.0f * (float)k, e.z };
 
-			right += HDSpringCrackSeen(eye, f, bottom, lift) == (k < e.seen) ?
+			right += HDSpringCrackSeen(eye, f, lift) == (k < e.seen) ? 1 : 0;
+			floors += HDSpringCrackBottom(eye[1], bottom, lift) == (k < 8) ?
 				1 : 0;
 		}
 
 	ok(right == total, "spring crack gate: the fan's forty eyes as the "
-		"pictures read - over the bottom and the floor seen, else not",
-		right, total);
+		"pictures read - over the floor seen, in the rock not", right, total);
+	ok(floors == total, "spring crack gate: the hole draws its bottom for "
+		"the eight rows over it, none for the two under it", floors, total);
 
 	/* Two cameras out of a game's camera log at this crack: one over it,
 	 * one 141 under its highest point and 75 over its bottom. */
 	const float over[3] = { 59528.0f, 562.0f, 41503.0f };
 	const float under[3] = { 59858.0f, 1371.0f, 41443.0f };
 
-	ok(HDSpringCrackSeen(over, f, bottom, lift) &&
-		HDSpringCrackSeen(under, f, bottom, lift), "spring crack gate: both "
-		"cameras of the log see the crack, the second under its highest "
-		"point", 1, 1);
+	ok(HDSpringCrackSeen(over, f, lift) && HDSpringCrackSeen(under, f, lift),
+		"spring crack gate: both cameras of the log see the crack, the second "
+		"under its highest point", 1, 1);
+
+	/* Three more cameras of the logs, under the crack's bottom on the
+	 * falling slope (y 1,558, 1,586 and 1,660): the slit seen, its walls
+	 * alone. */
+	const float low[3][3] = { { 59461.0f, 1558.0f, 41048.0f },
+		{ 60046.0f, 1586.0f, 41665.0f }, { 60252.0f, 1660.0f, 41452.0f } };
+	int lows = 0;
+
+	for (int i = 0; i < 3; i++)
+		lows += HDSpringCrackSeen(low[i], f, lift) &&
+			!HDSpringCrackBottom(low[i][1], bottom, lift) ? 1 : 0;
+
+	ok(lows == 3, "spring crack gate: three cameras under the bottom see the "
+		"slit without its bottom", lows, 3);
+
+	/* Under the bottom the level's own floor at the eye's column decides
+	 * (HDSpringCrackGround), the heights the .TRG gives there: 1,000 west
+	 * of the crack the floors at 1,536.8 and 1,591.3 - the eye at 1,485.6
+	 * stands over them and sees, the eye at 1,549.6 stands 13 under the
+	 * nearer, in the rock (the plane fitted to the outline puts it 137
+	 * over), and does not; the second camera's column (1,912.4, 2,041.1),
+	 * the south's (1,657.3) and the three cameras of the logs (1,813.9,
+	 * 1,967.8, 1,914.6 nearest) see; no floor, too far to judge, not. */
+	const float west[2] = { 1536.8f, 1591.3f };
+	const float his[2] = { 1912.4f, 2041.1f };
+	const float south = 1657.3f;
+	const float logs[3][2] = { { 1813.9f, 1893.7f }, { 1967.8f, 2053.1f },
+		{ 1914.6f, 2020.3f } };
+	int grounds = 0;
+
+	grounds += HDSpringCrackGround(1485.6f, west, 2, lift) ? 1 : 0;
+	grounds += !HDSpringCrackGround(1549.6f, west, 2, lift) ? 1 : 0;
+	grounds += HDSpringCrackGround(1549.6f, his, 2, lift) ? 1 : 0;
+	grounds += HDSpringCrackGround(1549.6f, &south, 1, lift) ? 1 : 0;
+
+	for (int i = 0; i < 3; i++)
+		grounds += HDSpringCrackGround(low[i][1], logs[i], 2, lift) ? 1 : 0;
+
+	grounds += !HDSpringCrackGround(1549.6f, his, 0, lift) ? 1 : 0;
+
+	ok(grounds == 8, "spring crack gate: under the bottom over the level's "
+		"floor seen, in the rock or with no floor not", grounds, 8);
 
 	/* A flat floor (the fountain's at 2,560, its bottom at 2,641): the
 	 * plane is the floor, and an eye sees the crack exactly when it stands
@@ -22472,7 +22517,7 @@ static void spring_crack_gate()
 	{
 		const float eye[3] = { 5000.0f, (float)h, -3000.0f };
 
-		same += HDSpringCrackSeen(eye, flat, 2641.0f, lift) ==
+		same += HDSpringCrackSeen(eye, flat, lift) ==
 			((float)h < 2560.0f - lift) ? 1 : 0;
 	}
 
@@ -22488,6 +22533,84 @@ static void spring_crack_gate()
 	ok(line.slopeX == 0.0f && line.slopeZ == 0.0f && line.y == 1100.0f &&
 		line.top == 1000.0f, "spring crack gate: points on one line give the "
 		"flat floor at their mean height", lround(line.y), 1100);
+}
+
+/* The column in a frame (hd_spring.h, HDSpringColumnInFrame and its parts)
+ * on the view-space foot and top RoomProbe's measuring build printed at
+ * the fountain's spring (ANDREA2, its foot on the crack's bottom at 2,641,
+ * the sheet at 256), 960 x 540: three eyes of a game's camera log under the
+ * water in room 120 at y 2,305 - two of them while the frame's rooms hold
+ * no sheet, so only the column's own question takes the copy -, and eyes
+ * of a fan round the column: one at mid height 300 units away looking up
+ * 30 degrees, the foot behind it, and two looking along the line. */
+static void spring_column()
+{
+	printf("the springs: the column in a frame\n");
+
+	const HDSpring s = spring_of(1.0f);
+	const float depth = 2641.0f - 256.0f, focal = 429.031f;
+	const float proj[16] = { 0.89382f, 0, 0, 0, 0, -1.58900f, 0, 0, 0, 0, 1,
+		1, 0, 0, 0, 0 };
+
+	struct Eye
+	{
+		float b[3], t[3];
+		int in;
+	};
+
+	static const Eye eyes[] =
+	{
+		// the log's ticks 270 and 287 (no sheet drawn) and 300
+		{ { -162.611f, 311.640f, 1228.992f },
+			{ -162.611f, -2072.520f, 1182.359f }, 1 },
+		{ { -232.332f, 408.523f, 1084.551f },
+			{ -232.332f, -1970.831f, 1242.871f }, 1 },
+		{ { -358.184f, 564.764f, 891.992f },
+			{ -358.184f, -1750.977f, 1460.977f }, 1 },
+		// mid height, 300 away, up 30 degrees: the foot behind the eye
+		{ { 0.0f, 1182.844f, -336.461f }, { 0.0f, -882.330f, 855.781f }, 0 },
+		// straight under and straight over it: along the line, edge-on
+		{ { 0.0f, 66.387f, -143.534f }, { 0.0f, 26.840f, 2240.753f }, 0 },
+		{ { 0.0f, -25.504f, 2321.358f }, { 0.0f, -65.051f, -62.930f }, 0 },
+		// the tick 270 turned away: both ends behind, or far to the side
+		{ { 162.611f, 311.640f, -1228.992f },
+			{ 162.611f, -2072.520f, -1182.359f }, 0 },
+		{ { 3600.0f, 311.640f, 1228.992f },
+			{ 3600.0f, -2072.520f, 1182.359f }, 0 },
+	};
+	int right = 0, total = 0;
+
+	for (const Eye& e : eyes)
+	{
+		right += HDSpringColumnInFrame(s, depth, e.b, e.t, focal, proj) ==
+			(e.in != 0) ? 1 : 0;
+		total++;
+	}
+
+	ok(right == total, "spring column: in the frame with both ends in "
+		"front, on the screen and not edge-on", right, total);
+
+	/* The ends: both in front at the log's tick 270, the foot 336 behind
+	 * the eye at the fan's, both behind turned away - the column whole or
+	 * left out whole, as the draw takes it. */
+	ok(HDSpringColumnFront(eyes[0].b, eyes[0].t) &&
+		!HDSpringColumnFront(eyes[3].b, eyes[3].t) &&
+		!HDSpringColumnFront(eyes[6].b, eyes[6].t), "spring column: drawn "
+		"with both ends in front, left out with one or both behind", 1, 1);
+
+	/* The weight at the log's tick 270: whole, and the quad's way across
+	 * the line, ax x mid, of a length over 0. */
+	float side[3], sl;
+	const float ax[3] = { eyes[0].t[0] - eyes[0].b[0],
+		eyes[0].t[1] - eyes[0].b[1], eyes[0].t[2] - eyes[0].b[2] };
+	const float mid[3] = { (eyes[0].b[0] + eyes[0].t[0]) * 0.5f,
+		(eyes[0].b[1] + eyes[0].t[1]) * 0.5f,
+		(eyes[0].b[2] + eyes[0].t[2]) * 0.5f };
+	const float w = HDSpringColumnWeight(s.strength, ax, mid,
+		HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
+
+	ok(w == 1.0f && sl > 0.0f, "spring column: the weight whole at the "
+		"log's tick 270", lround(w * 1000.0f), 1000);
 }
 
 static void spring_clock()
@@ -22886,6 +23009,7 @@ int main()
 	level_key();
 	spring_crack();
 	spring_crack_gate();
+	spring_column();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

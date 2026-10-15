@@ -97,10 +97,11 @@ static float loadbar_steps;
 static float loadbar_pos;
 static long loadbar_maxpos;
 
-/* The loading screen of the load under way (S_LoadScreenBegin): the
- * Loadbar style row as it stood when the load began, and with the row off
- * the fade of the last frame to black - whether it runs, since when and
- * over how long - and the frames drawn. */
+/* The loading screen of the load under way (S_LoadScreenBegin): its state
+ * (the Loadbar style row as the load began, TR5 for a load that builds
+ * with the row off), for a short load without a screen the fade of the
+ * last frame to black - whether it runs, since when and over how long -
+ * and the frames drawn. */
 static long loadbar_mode;
 static long loadbar_fading;
 static double loadbar_fade_at;
@@ -583,9 +584,11 @@ void S_DrawEnemyBar(long pos)
 }
 
 /* A level load's loading screen begins, right after its first frame (the
- * picture, in the TR5 and TR4 states): `mode` is the Loadbar style row
- * (LOADBAR_*); with LOADBAR_OFF, `fade` says whether the last frame is
- * faded to black over `fadeMs` (0 a cut), from now on. `minMs` is the
+ * picture, in the TR5 and TR4 states): `mode` is the screen's state
+ * (LOADBAR_*, file.cpp's LoadScreenModeOf), the row's own except TR5 for
+ * a load that builds with the row off; with LOADBAR_OFF, a short load
+ * without a screen, `fade` says whether the last frame is faded to black
+ * over `fadeMs` (0 a cut), from now on. `minMs` is the
  * brake, the least time the screen stands; `hd` says whether an HD build
  * follows the loading thread, which then has its share of the bar
  * (kLoadBarThreadShare) and otherwise all of it. The brake's clock starts
@@ -674,12 +677,13 @@ void S_LoadScreenStep(long step)
 }
 
 /* The loading thread has joined; from here to the tail the frames present
- * held (LoadBarPresentHeld). With the row off, a fade still running - a
- * thread shorter than loadfade_ms - ends here in one black frame: the HD
- * build after it draws a frame only at the ends of its steps, the longest
- * of which take most of a second, and the half faded frame would stand
- * that long. That frame waits for its tick, at most 1/60 s. In the TR5
- * and TR4 states a frame is drawn if one is due. */
+ * held (LoadBarPresentHeld). Without a screen (the row off, a short
+ * load), a fade still running - a thread shorter than loadfade_ms - ends
+ * here in one black frame: the HD build after it draws a frame only at
+ * the ends of its steps, the longest of which take most of a second, and
+ * the half faded frame would stand that long. That frame waits for its
+ * tick, at most 1/60 s. In the TR5 and TR4 states a frame is drawn if
+ * one is due. */
 void S_LoadScreenJoin()
 {
 	loadbar_held = loadbar_loading;
@@ -724,7 +728,8 @@ void S_LoadScreenStatsGet(LoadScreenStats* out)
 }
 
 /* Whether the load draws a frame now: the bar in the TR5 and TR4 states,
- * and with the row off only while the fade runs. */
+ * and without a screen (the row off, a short load) only while the fade
+ * runs. */
 long S_LoadScreenDraws()
 {
 	return loadbar_mode != LOADBAR_OFF || loadbar_fading;
@@ -782,7 +787,7 @@ long S_DrawLoadBar()
 	TextureStageLock();
 	DrawLoadingScreen();
 
-	/* With the row off there is no bar: the frame is the last frame of the
+	/* Without a screen there is no bar: the frame is the last frame of the
 	 * game (the picture above, captured by S_LoadLevelFile) under black
 	 * that thickens with the time since the fade began; the frame at full
 	 * black ends the fade, and nothing is drawn after it. */

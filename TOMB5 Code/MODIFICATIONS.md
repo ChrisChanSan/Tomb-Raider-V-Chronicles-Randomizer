@@ -5529,7 +5529,7 @@ path: `-classicroom -classiconly` of ANDREA2 231, JOBY2 66 and 28, ANDY3 34, AND
 and 212, two directions each, give the same bytes as the tools built at `8691e82` and at
 `e81b6e90`, 12 of 12; with `hd_enable` 0 none of the new code runs (`HDLevelBuildHD`
 returns before `BuildRoomVis`, and the walk asks `HDVisWalkOn`, false without a level
-built HD). ModernTest 15,152 checks, MenuTest 44,216, InterpTest 729, LipsTest 270 with
+built HD). ModernTest 15,152 checks, MenuTest 44,267, InterpTest 729, LipsTest 270 with
 the `.OBJ` folder and 243 without, 0 failed.
 
 **Left.** The default: `hd_vis` stays 0 until the owner has played 1. The places still

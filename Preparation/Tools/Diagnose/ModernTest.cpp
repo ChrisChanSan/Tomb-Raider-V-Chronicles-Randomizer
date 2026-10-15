@@ -11297,10 +11297,9 @@ static long load_name_depth(const LoadNameDef* def)
 
 /* The level's name on the loading screen (loadbar_math.h and the engine's
  * text): when it is drawn - the row, the screen shown, a level and not the
- * title, the view not already carrying it -, the slot RenderLoadPic names
- * as DoGameflow will load it, its place inside the screen at 1080, 1440 and
- * 2160 rows, and the frames that draw it: the TR4 view's and the load's
- * first, read back, and no text in the bar's frames. */
+ * title -, its place inside the screen at 1080, 1440 and 2160 rows, and the
+ * frame that draws it: the load's first, read back, and no text in the
+ * bar's frames. */
 static void load_mode_name(const char* file, const char* bars,
 	const char* flow)
 {
@@ -11311,92 +11310,43 @@ static void load_mode_name(const char* file, const char* bars,
 	ok(out && text, "load name: output.cpp and text.cpp are read",
 		!!out + !!text, 2);
 
-	// The rule: the row, a screen shown, a level, not baked in already.
+	// The rule: the row, a screen shown, a level.
 	{
 		long bad = 0, drawn = 0;
 
 		for (long row = 0; row <= 1; row++)
 			for (long shown = 0; shown <= 1; shown++)
 				for (long slot = -1; slot <= 1; slot++)	// none, title, level
-					for (long baked = 0; baked <= 1; baked++)
-					{
-						const long want = row && shown && slot > 0 &&
-							!baked;
-						const long got = LoadNameDrawn(row, shown, slot,
-							baked);
+				{
+					const long want = row && shown && slot > 0;
+					const long got = LoadNameDrawn(row, shown, slot);
 
-						bad += got != want;
-						drawn += got;
-					}
+					bad += got != want;
+					drawn += got;
+				}
 
-		ok(bad == 0, "load name: the row, shown, a level, not baked", bad,
-			0);
-		ok(drawn == 1, "load name: one case of twenty-four draws", drawn, 1);
+		ok(bad == 0, "load name: the row, shown, a level", bad, 0);
+		ok(drawn == 1, "load name: one case of twelve draws", drawn, 1);
 	}
-	ok(!LoadNameDrawn(1, 1, 0, 0), "load name: the title shows none",
-		LoadNameDrawn(1, 1, 0, 0), 0);
-	ok(!LoadNameDrawn(0, 1, 5, 0), "load name: the row off shows none",
-		LoadNameDrawn(0, 1, 5, 0), 0);
+	ok(!LoadNameDrawn(1, 1, 0), "load name: the title shows none",
+		LoadNameDrawn(1, 1, 0), 0);
+	ok(!LoadNameDrawn(0, 1, 5), "load name: the row off shows none",
+		LoadNameDrawn(0, 1, 5), 0);
 
 	// The screen's states: TR5 and TR4 show it, off only for a build.
 	n = LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_TR5, 0) != LOADBAR_OFF,
-		5, 0) + LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_TR4, 0) !=
-		LOADBAR_OFF, 5, 0);
+		5) + LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_TR4, 0) !=
+		LOADBAR_OFF, 5);
 	ok(n == 2, "load name: TR5 and TR4 carry the name", n, 2);
 	n = LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_OFF, 1) != LOADBAR_OFF,
-		5, 0);
+		5);
 	ok(n == 1, "load name: off, a load that builds carries it", n, 1);
 	n = LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_OFF, 0) != LOADBAR_OFF,
-		5, 0);
+		5);
 	ok(n == 0, "load name: off, a short load shows no text", n, 0);
 
-	// The coming slot, as DoGameflow sets it after DoTitle and DoLevel.
-	n = LoadNextSlot(1, 2, 0, 18, 7, 0, 1, 0, 18);
-	ok(n == 7, "load name: the title's load names the save's level", n, 7);
-	n = LoadNextSlot(1, 3, 0, 18, 7, 4, 1, 0, 18);
-	ok(n == 4, "load name: the title's new game names its level", n, 4);
-	n = LoadNextSlot(1, 4, 0, 18, 7, 4, 1, 0, 18);
-	ok(n == -1, "load name: the game's end names none", n, -1);
-	n = LoadNextSlot(0, 2, 5, 18, 5, 0, 1, 0, 18);
-	ok(n == 5, "load name: a save inside the level names it", n, 5);
-	n = LoadNextSlot(0, 3, 5, 18, 2, 6, 1, 0, 18);
-	ok(n == 6, "load name: a level's end names the next", n, 6);
-	n = LoadNextSlot(0, 1, 5, 18, 2, 6, 1, 0, 18);
-	ok(n == 0, "load name: the exit to the title names none", n, 0);
-	n = LoadNextSlot(0, 1, 5, 18, 2, 6, 0, 0, 18);
-	ok(n == 1, "load name: no title, slot 1", n, 1);
-	n = LoadNextSlot(0, 3, 18, 18, 2, 19, 1, 0, 18);
-	ok(n == 0, "load name: the last slot goes to the title", n, 0);
-	n = LoadNextSlot(0, 3, 9, 9, 2, 10, 1, 0, 18);
-	ok(n == 0, "load name: the credits' slot goes to the title", n, 0);
-	n = LoadNextSlot(0, 3, 1, 18, 2, 2, 1, 1, 18);
-	ok(n == 0, "load name: a demo disc goes to the title", n, 0);
-	n = LoadNextSlot(0, 0, 5, 18, 2, 6, 1, 0, 18);
-	ok(n == 5, "load name: any other status stays", n, 5);
-
-	// DoGameflow's own lines the slot rule follows.
-	n = hd_switch_count(flow, "gfCurrentLevel = savegame.CurrentLevel;");
-	ok(n == 2, "load name: a save's slot after a level and the title", n,
-		2);
-	n = hd_switch_count(flow, "gfCurrentLevel = gfLevelComplete;");
-	ok(n == 2, "load name: the next level after a level and the title", n,
-		2);
-	n = hd_switch_count(flow, "gfCurrentLevel = Gameflow->TitleEnabled == "
-		"0;");
-	ok(n == 1, "load name: status 1 goes to the title or slot 1", n, 1);
-	n = hd_switch_count(flow, "if (Gameflow->DemoDisc || Gameflow->nLevels "
-		"== 2)") + hd_switch_count(flow, "if (gfLevelComplete > "
-		"Gameflow->nLevels)");
-	ok(n == 2, "load name: the title past the last level", n, 2);
-	n = hd_switch_count(flow, "if (gfStatus == 3 && gfCurrentLevel == "
-		"gfLastSlot)");
-	ok(n == 1, "load name: the credits after the last slot", n, 1);
-	a = load_keep_at(flow, "void DoLevel(uchar Name, uchar Audio)",
-		"RenderLoadPic(0);");
-	b = load_keep_at(flow, "void DoLevel(uchar Name, uchar Audio)",
-		"bDoCredits = 1;");
-	ok(a >= 0 && a < b, "load name: the view before the credits' turn",
-		a < b, 1);
+	/* The slot: S_LoadLevelFile names gfCurrentLevel, which DoGameflow has
+	 * set for this load, since only DoTitle and DoLevel call it. */
 	n = hd_switch_count(flow, "S_LoadLevelFile(");
 	ok(n == 2, "load name: only DoTitle and DoLevel load", n, 2);
 	n = hd_switch_count(flow, "available_levels[lp - 1] ? 2 : 3, "
@@ -11463,21 +11413,10 @@ static void load_mode_name(const char* file, const char* bars,
 		}
 	}
 
-	// The lettering is gone; RenderLoadPic names the coming slot.
+	// The lettering is gone.
 	n = hd_switch_count(out, "TXT_LOADING2") + hd_switch_count(file,
 		"TXT_LOADING2") + hd_switch_count(bars, "TXT_LOADING2");
 	ok(n == 0, "load name: the script's lettering is drawn nowhere", n, 0);
-	n = hd_switch_count(out, "slot = LoadNextSlot(gfLevelId == LVL5_TITLE, "
-		"gfStatus, gfCurrentLevel,");
-	ok(n == 1, "load name: the view names the coming slot", n, 1);
-	n = hd_switch_count(out, "if (named)\r\n\t\t\tS_LoadScreenName(slot);") +
-		hd_switch_count(out, "if (named)\n\t\t\tS_LoadScreenName(slot);");
-	ok(n == 1, "load name: in every fade frame", n, 1);
-	n = hd_switch_count(out, "if (named)\r\n\t\tS_LoadScreenName(slot);") +
-		hd_switch_count(out, "if (named)\n\t\tS_LoadScreenName(slot);");
-	ok(n == 1, "load name: and in the last, which is read back", n, 1);
-	n = hd_switch_count(out, "LoadViewNamed = named ? slot : 0;");
-	ok(n == 1, "load name: the view says it carries the name", n, 1);
 
 	// The load's first frame: the name, the read back, then the present.
 	a = load_keep_at(file, "if (shown)\r\n\t{", "DrawLoadingScreen();");
@@ -11497,18 +11436,10 @@ static void load_mode_name(const char* file, const char* bars,
 		1);
 	n = hd_switch_count(file, "S_LoadScreenName(") + hd_switch_count(out,
 		"S_LoadScreenName(");
-	ok(n == 3, "load name: drawn in three places, none else", n, 3);
-	n = hd_switch_count(file, "if (named && S_LoadScreenKeepName())\r\n\t\t\t"
-		"view = 1;") + hd_switch_count(file, "if (named && "
-		"S_LoadScreenKeepName())\n\t\t\tview = 1;");
-	ok(n == 1, "load name: the picture read back goes after the load", n,
-		1);
-	n = hd_switch_count(file, "const long baked = LoadViewNamed && (view || "
-		"!MonoScreenOn);");
-	ok(n == 1, "load name: never over a view that has it", n, 1);
-	a = load_keep_at(file, "const long baked =", "LoadViewNamed = 0;");
-	b = load_keep_at(file, "const long baked =", "_BeginScene();");
-	ok(a >= 0 && a < b, "load name: the view's mark taken once", a < b, 1);
+	ok(n == 1, "load name: drawn in the first frame, nowhere else", n, 1);
+	n = hd_switch_count(file, "if (named)\r\n\t\t\tS_LoadScreenKeepName();") +
+		hd_switch_count(file, "if (named)\n\t\t\tS_LoadScreenKeepName();");
+	ok(n == 1, "load name: the frame with it read back", n, 1);
 
 	// The bar's frames draw the picture and no text of their own.
 	n = hd_switch_count(bars, "PrintString(");
@@ -11621,11 +11552,20 @@ static void load_mode()
 	ok(n == 1, "load mode: the row names off", n, 1);
 
 	// Off: no picture read, no level view, no frame but the fade's.
-	n = hd_switch_count(file, "if (shown && (!tr4_view ||");
-	ok(n == 1, "load mode: off reads no picture", n, 1);
-	n = hd_switch_count(flow, "tomb5.tr4_loadscreens && tomb5.loadbar != "
-		"LOADBAR_OFF");
-	ok(n == 2, "load mode: off renders no level view", n, 2);
+	n = hd_switch_count(file, "if (shown)\r\n\t{\r\n\t\tif (!MonoScreenOn)") +
+		hd_switch_count(file, "if (shown)\n\t{\n\t\tif (!MonoScreenOn)");
+	ok(n == 1, "load mode: off reads no picture, a shown load its own", n,
+		1);
+	/* The dropped view's names, each spelt in two literals so that a search
+	 * of the tree for them finds the record alone. */
+	n = hd_switch_count(flow, "Render" "LoadPic") + hd_switch_count(file,
+		"Render" "LoadPic") + hd_switch_count(bars, "Render" "LoadPic");
+	ok(n == 0, "load mode: no load renders a level view", n, 0);
+	n = hd_switch_count(opts, "tr4" "LS") + hd_switch_count(opts,
+		"tr4_" "loadscreens") + hd_switch_count(menu, "tr4_" "loadscreens") +
+		hd_switch_count(flow, "TR4 " "loadscreens") + hd_switch_count(file,
+		"tr4_" "loadscreens");
+	ok(n == 0, "load mode: the view's row and its key are gone", n, 0);
 	a = load_keep_at(file, "LoadLogLevel(name);", "if (shown)");
 	b = load_keep_at(file, "LoadLogLevel(name);", "DrawLoadingScreen();");
 	ok(a >= 0 && a < b, "load mode: the load's first frame only when shown",
@@ -11667,20 +11607,22 @@ static void load_mode()
 	// The picture read back is released with the load's last frame.
 	n = hd_switch_count(save, "if (MonoScreenHD || MonoScreenView)");
 	ok(n == 1, "load mode: a screen read back is given back", n, 1);
-	n = hd_switch_count(file, "if (fade || view || !tr4_view ||");
+	n = hd_switch_count(file, "S_LoadScreenEnd();\r\n\r\n\tif (MonoScreenOn "
+		"== 2)\r\n\t\tReleaseScreen();") + hd_switch_count(file,
+		"S_LoadScreenEnd();\n\n\tif (MonoScreenOn == 2)\n\t\tReleaseScreen();");
 	ok(n == 1, "load mode: a picture read back goes after the load", n, 1);
 
-	// TR4 loadscreens: the level's view read back once, before the first
-	// frame, when no picture was read; drawn under every frame from then on.
+	// A picture that could not be read: the frame on the screen read back
+	// once, before the first frame, and drawn under every frame from then.
 	a = load_keep_at(file, "if (shown && !MonoScreenOn)",
-		"view = CaptureLoadingScreen();");
+		"CaptureLoadingScreen();");
 	b = load_keep_at(file, "if (shown && !MonoScreenOn)",
 		"DrawLoadingScreen();");
-	ok(a >= 0 && a < b, "load mode: the TR4 view read back before the first "
-		"frame", a < b, 1);
-	a = load_keep_at(file, "if (shown && (!tr4_view ||",
+	ok(a >= 0 && a < b, "load mode: no picture read, the screen read back "
+		"before the first frame", a < b, 1);
+	a = load_keep_at(file, "LoadScreen(chosen_screen + 2, 4);",
 		"if (shown && !MonoScreenOn)");
-	ok(a >= 0, "load mode: the view only where no picture was read", a >= 0,
+	ok(a >= 0, "load mode: read back only after the picture's read", a >= 0,
 		1);
 	n = hd_switch_count(save, "d[x] = s[x] | 0xFF000000;");
 	ok(n == 1, "load mode: the screen read back pixel for pixel", n, 1);
@@ -11726,7 +11668,7 @@ static void load_mode()
 
 	// The decision in the engine: taken once, before the loading thread,
 	// from the key HDLevelKeyEarly stamps; the screen's state is the one
-	// the load draws in, its picture read where TR4 loadscreens drew none.
+	// the load draws in.
 	a = load_keep_at(file, "long S_LoadLevelFile(long num)",
 		"HDLevelKeyEarly(name, &next);");
 	b = load_keep_at(file, "long S_LoadLevelFile(long num)",
@@ -11742,8 +11684,6 @@ static void load_mode()
 	ok(n == 1, "load mode: the state from the row and the keep", n, 1);
 	n = hd_switch_count(file, "S_LoadScreenBegin(mode, fade,");
 	ok(n == 1, "load mode: the screen begins in that state", n, 1);
-	n = hd_switch_count(file, "tomb5.tr4_loadscreens && mode == row;");
-	ok(n == 1, "load mode: an off load shown reads its picture", n, 1);
 	n = hd_switch_count(file, "LoadLogStepBar(&loadlog_at, shown);") +
 		hd_switch_count(file, "wait=%.1f shown=%ld\",");
 	ok(n == 2, "load mode: the bar line says shown", n, 2);

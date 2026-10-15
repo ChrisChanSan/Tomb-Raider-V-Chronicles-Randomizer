@@ -959,11 +959,6 @@ void DoTitle(uchar name, uchar audio)
 		fmv_on_screen = 1;
 	}
 
-	// The level's view as the loading picture - not when there is no
-	// loading screen to show it (the Loadbar style row's off).
-	if (gfStatus != 4 && tomb5.tr4_loadscreens && tomb5.loadbar != LOADBAR_OFF)
-		RenderLoadPic(0);
-
 	input = 0;
 }
 
@@ -1264,9 +1259,6 @@ void DoLevel(uchar Name, uchar Audio)
 	lara.examine2 = 0;
 	lara.examine3 = 0;
 
-	if (tomb5.tr4_loadscreens && tomb5.loadbar != LOADBAR_OFF)
-		RenderLoadPic(0);
-
 	// Credits after the last campaign slot - in vanilla that is Red Alert,
 	// after a permutation whatever level the randomizer put at the end.
 	// Hang this on the identity, and the credits would come mid-game.
@@ -1459,7 +1451,6 @@ const char* CustomText(const char* engl)
 		{ "HD water", "HD water", "HD-Wasser", "HD water", "HD water" },
 		{ "Crawl Tilting",   "Crawl Tilting",   "Kriechneigung",  "Crawl Tilting",      "Crawl Tilting" },
 		{ "PSX skies",       "PSX skies",       "PSX-Himmel",     "PSX skies",          "PSX skies" },
-		{ "TR4 loadscreens", "TR4 loadscreens", "TR4-Ladebilder", "TR4 loadscreens",    "TR4 loadscreens" },
 		{ "Loadbar style",   "Loadbar style",   "Ladebalken",     "Loadbar style",      "Loadbar style" },
 		{ "Mono screen style", "Mono screen style", "Mono-Screen-Stil", "Mono screen style", "Mono screen style" },
 		{ "Loading text",    "Loading text",    "Ladetext",       "Loading text",       "Loading text" },

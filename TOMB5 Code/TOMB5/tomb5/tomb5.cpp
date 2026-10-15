@@ -152,10 +152,6 @@ void init_tomb5_stuff()
 		tomb5.PSX_skies = 1;							//on
 		REG_WriteBool(buf, tomb5.PSX_skies);
 
-		sprintf(buf, "tr4LS");
-		tomb5.tr4_loadscreens = 1;						//on
-		REG_WriteBool(buf, tomb5.tr4_loadscreens);
-
 		sprintf(buf, "tr4LB");
 		tomb5.tr4_loadbar = 1;							//on
 		REG_WriteBool(buf, tomb5.tr4_loadbar);
@@ -411,9 +407,6 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "psxsky");
 		REG_ReadBool(buf, tomb5.PSX_skies, 1);
-
-		sprintf(buf, "tr4LS");
-		REG_ReadBool(buf, tomb5.tr4_loadscreens, 1);
 
 		sprintf(buf, "tr4LB");
 		REG_ReadBool(buf, tomb5.tr4_loadbar, 1);
@@ -702,9 +695,6 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "psxsky");
 	REG_WriteBool(buf, tomb5.PSX_skies);
-
-	sprintf(buf, "tr4LS");
-	REG_WriteBool(buf, tomb5.tr4_loadscreens);
 
 	sprintf(buf, "tr4LB");
 	REG_WriteBool(buf, tomb5.tr4_loadbar);

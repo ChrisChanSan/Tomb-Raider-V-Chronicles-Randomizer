@@ -45,9 +45,6 @@
 #include "../game/text.h"
 #include "../game/interpolate.h"	// the in-between (tween) frame counters
 #include "../tomb5/tomb5.h"
-#include "../game/savegame.h"	// savegame.CurrentLevel - a save's slot
-#include "drawbars.h"		// the level's name on the loading screen
-#include "loadbar_math.h"	// LoadNextSlot, LoadNameDrawn
 
 D3DTLVERTEX aVertexBuffer[1024];
 
@@ -61,10 +58,6 @@ static ENVUV aMappedEnvUV[256];
 static ENVUV SkinENVUV[40][12];
 static D3DTLVERTEX SkinVerts[40][12];
 static short SkinClip[40][12];
-
-static PHD_VECTOR load_cam;
-static PHD_VECTOR load_target;
-static char load_roomnum = (char)NO_ROOM;
 
 void S_DrawPickup(short object_number)
 {
@@ -671,112 +664,6 @@ void aTransformLightPrelightClipMesh(MESH_DATA* mesh)
 		aVertexBuffer[i].color = RGBONLY(cR, cG, cB) | GlobalAlpha;
 		aVertexBuffer[i].specular = RGBA(sR, sG, sB, 0xFF);
 	}
-}
-
-static TR4LS tr4_load_screens[15] =
-{
-	{30548, 1770, 14103, 29452, 1576, 14853, 36},			//Title
-	{58434, -634, 42783, 57337, -1048, 40945, 59},			//Streets of Rome
-	{71226, 336, 32992, 71875, -568, 33761, 23},			//Trajan's Markets
-	{37136, -111, 31451, 38734, 343, 33029, 47},			//Colosseum
-	{46136, -6491, 27144, 46971, -6059, 28119, 95},			//The Base
-	{57948, 3115, 47907, 56425, 3509, 50335, 49},			//Sub
-	{22752, 14192, 63136, 24777, 13541, 61615, 11},			//Deepsea
-	{61212, -1112, 58204, 59492, -582, 57087, 4},			//Sinking
-	{63265, 8282, 62685, 63871, 8091, 64431, 113},			//Gallows
-	{48924, 18279, 38112, 47348, 19063, 39496, 55},			//Labyrinth
-	{36048, 9395, 41333, 36985, 8725, 42910, 101},			//Old Mill
-	{34286, -5004, 44626, 34288, -3651, 44523, 16},			//13th
-	{18204, -24322, 69690, 17000, -25322, 67556, 97},		//Iris
-	{46959, -1147, 71996, 47934, -1109, 70446, 0},			//Security breach cut
-	{51416, -2639, 47734, 51437, -2444, 36968, 119},		//Red Alert
-};
-
-static inline void GetLoadScreenCam()
-{
-	TR4LS* ls;
-
-	ls = &tr4_load_screens[gfLevelId];
-	load_cam.x = ls->px;
-	load_cam.y = ls->py;
-	load_cam.z = ls->pz;
-	load_target.x = ls->tx;
-	load_target.y = ls->ty;
-	load_target.z = ls->tz;
-	load_roomnum = ls->rn;
-}
-
-void RenderLoadPic(long unused)
-{
-	long slot, named;
-	short poisoned;
-
-	GetLoadScreenCam();
-	camera.pos.x = load_cam.x;
-	camera.pos.y = load_cam.y;
-	camera.pos.z = load_cam.z;
-	lara_item->pos.x_pos = camera.pos.x;
-	lara_item->pos.y_pos = camera.pos.y;
-	lara_item->pos.z_pos = camera.pos.z;
-	camera.target.x = load_target.x;
-	camera.target.y = load_target.y;
-	camera.target.z = load_target.z;
-	camera.pos.room_number = load_roomnum;
-
-	if (load_roomnum == NO_ROOM)
-		return;
-
-	KillActiveBaddies((ITEM_INFO*)0xABCDEF);
-	SetFade(255, 0);
-	poisoned = lara.poisoned;
-	FadeScreenHeight = 0;
-	lara.poisoned = 0;
-	BinocularRange = 0;
-
-	if (App.dx.InScene)
-		_EndScene();
-
-	InitialisePickUpDisplay();
-
-	/* The view is the coming load's loading screen: its fade frames and
-	 * its last carry the coming level's name (the Loading text row), and
-	 * the last is read back as the loading picture with it (file.cpp).
-	 * gfCurrentLevel is still the level left - DoGameflow sets the next
-	 * slot when this has returned - so the slot is worked out as it will
-	 * set it. The level's texture pages, the font's among them, stand. */
-	slot = LoadNextSlot(gfLevelId == LVL5_TITLE, gfStatus, gfCurrentLevel,
-		gfLastSlot, savegame.CurrentLevel, gfLevelComplete,
-		Gameflow->TitleEnabled, Gameflow->DemoDisc || Gameflow->nLevels == 2,
-		Gameflow->nLevels);
-	named = LoadNameDrawn(tomb5.loadingtxt, tomb5.loadbar != LOADBAR_OFF,
-		slot, 0);
-	LoadViewNamed = named ? slot : 0;
-
-	do
-	{
-		phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);
-		S_InitialisePolyList();
-		RenderIt(camera.pos.room_number);
-
-		if (named)
-			S_LoadScreenName(slot);
-
-		S_OutputPolyList();
-		S_DumpScreen();
-
-	} while (DoFade != 2);
-
-	phd_LookAt(camera.pos.x, camera.pos.y, camera.pos.z, camera.target.x, camera.target.y, camera.target.z, 0);
-	S_InitialisePolyList();
-	RenderIt(camera.pos.room_number);
-
-	if (named)
-		S_LoadScreenName(slot);
-
-	S_OutputPolyList();
-	S_DumpScreen();
-
-	lara.poisoned = poisoned;
 }
 
 long S_GetObjectBounds(short* bounds)

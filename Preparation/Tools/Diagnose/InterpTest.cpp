@@ -1410,8 +1410,9 @@ static void title_cadence()
  *
  *   fade        Fade()          - a grey level walking to a target by a
  *                                 speed, and the thing DoLevel waits on
- *   screenfade  DoScreenFade()  - nine steps, then DoFade = 2. RenderLoadPic
- *                                 cannot leave its loop until this happens,
+ *   screenfade  DoScreenFade()  - nine steps, then DoFade = 2. The load and
+ *                                 pause menus cannot leave their loops
+ *                                 after a fade until this happens,
  *                                 which is why a stuck guard would HANG the
  *                                 game and not merely slow a fade down
  *   weather     DoRain/DoSnow/DoUwEffect - one simulation step

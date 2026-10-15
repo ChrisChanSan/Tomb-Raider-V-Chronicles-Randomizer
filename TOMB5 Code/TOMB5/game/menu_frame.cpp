@@ -1218,22 +1218,6 @@ static bool MenuStepGameoverMenu(long, long dir)
 	return 1;
 }
 
-static const char* MenuValTr4Loadscreens(long, char* buf)
-{
-	strcpy(buf, CustomText(tomb5.tr4_loadscreens ? "on" : "off"));
-	return buf;
-}
-
-static bool MenuStepTr4Loadscreens(long, long dir)
-{
-	if (!dir)
-		return 0;
-
-	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-	tomb5.tr4_loadscreens = !tomb5.tr4_loadscreens;
-	return 1;
-}
-
 /* Three states in the row's order: the TR5 bar, the TR4 bar, and off - no
  * loading screen for a short load, the level follows the screen before it
  * through black, while a load that builds the HD data shows its picture
@@ -1640,7 +1624,6 @@ static const menu_row menu_rows_hud[] =
 	MENU_VALUE("Enemy bars", MenuValEnemyBars, MenuStepEnemyBars, MENU_SAVE_TOMB5),
 	MENU_VALUE("Ammo counter", MenuValAmmoCounter, MenuStepAmmoCounter, MENU_SAVE_TOMB5),
 	MENU_VALUE("Gameover menu", MenuValGameoverMenu, MenuStepGameoverMenu, MENU_SAVE_TOMB5),
-	MENU_VALUE("TR4 loadscreens", MenuValTr4Loadscreens, MenuStepTr4Loadscreens, MENU_SAVE_TOMB5),
 	MENU_VALUE("Loadbar style", MenuValLoadbarStyle, MenuStepLoadbarStyle, MENU_SAVE_TOMB5),
 	MENU_VALUE("Loading text", MenuValLoadingText, MenuStepLoadingText, MENU_SAVE_TOMB5)
 };

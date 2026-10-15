@@ -2270,7 +2270,6 @@ long S_LoadLevelFile(long num)
 	const long black = LoadEntryBlack;
 	HDLevelNextLoad next;
 	long fade = 0;
-	long view = 0;
 
 	LoadEntryBlack = 0;
 	Log(__FUNCTION__);
@@ -2300,12 +2299,6 @@ long S_LoadLevelFile(long num)
 		LoadBuildsHD(next.gate, next.art, next.kept));
 	const long shown = mode != LOADBAR_OFF;
 
-	/* TR4 loadscreens as this load takes them: the view RenderLoadPic drew
-	 * stands on the screen and no picture is read. The row off renders no
-	 * view (gameflow.cpp), so an off load that shows its screen reads the
-	 * level's picture, as TR5 without TR4 loadscreens does. */
-	const long tr4_view = tomb5.tr4_loadscreens && mode == row;
-
 	if (!shown && !black)
 	{
 		fade = 1;
@@ -2314,7 +2307,7 @@ long S_LoadLevelFile(long num)
 			CaptureLoadingScreen();
 	}
 
-	if (shown && (!tr4_view || (!num && !bDoCredits && !gfStatus)))
+	if (shown)
 	{
 		if (!MonoScreenOn)
 		{
@@ -2366,30 +2359,19 @@ long S_LoadLevelFile(long num)
 		}
 	}
 
-	/* No picture was read: with TR4 loadscreens on, the screen shows the
-	 * level's view as RenderLoadPic drew it, its last frame (after the
-	 * credits the frame before). It is read back once into the mono
-	 * picture, as the inventory keeps its background, so that every frame
-	 * of the bar draws it under the bar: the windowed swap chain's single
-	 * back buffer is not trusted to keep it from frame to frame. A picture
-	 * already up (MonoScreenOn) stays as it is. */
+	/* No picture could be read (LoadScreen found no SCREENS.STR or made no
+	 * surface): the frame on the screen is read back once into the mono
+	 * picture instead, as the inventory keeps its background, so that
+	 * every frame of the bar draws a picture under the bar and not what
+	 * the windowed swap chain's single back buffer happens to hold. A
+	 * picture already up (MonoScreenOn) stays as it is. */
 	if (shown && !MonoScreenOn)
-		view = CaptureLoadingScreen();
+		CaptureLoadingScreen();
 
-	/* The level's name (the Loading text row) on a shown screen of a level
-	 * - gfCurrentLevel is the slot DoGameflow set for this load -, unless
-	 * the view RenderLoadPic drew with it is what the frames show: read
-	 * back above, or, when that read made no picture, still on the screen
-	 * under frames that draw none. */
-	const long baked = LoadViewNamed && (view || !MonoScreenOn);
-	const long named = LoadNameDrawn(tomb5.loadingtxt, shown, gfCurrentLevel,
-		baked);
-
-	if (baked && LoadViewNamed != gfCurrentLevel)
-		Log("LOADLOG name view=%ld level=%ld", LoadViewNamed,
-			(long)gfCurrentLevel);
-
-	LoadViewNamed = 0;
+	/* The level's name (the Loading text row) on a shown screen of a level:
+	 * gfCurrentLevel is the slot DoGameflow set for this load. */
+	const long named = LoadNameDrawn(tomb5.loadingtxt, shown,
+		gfCurrentLevel);
 
 	/* The picture is shown at once, in one frame. Every frame of the bar
 	 * draws it again under the bar (S_DrawLoadBar), so it is released only
@@ -2409,8 +2391,8 @@ long S_LoadLevelFile(long num)
 		SortPolyList(SortCount, SortList);
 		DrawSortList();
 
-		if (named && S_LoadScreenKeepName())
-			view = 1;
+		if (named)
+			S_LoadScreenKeepName();
 
 		S_DumpScreenFrame();
 	}
@@ -2510,12 +2492,8 @@ long S_LoadLevelFile(long num)
 	 * here. */
 	S_LoadScreenEnd();
 
-	if (fade || view || !tr4_view ||
-		(!num && !bDoCredits && !gfStatus))
-	{
-		if (MonoScreenOn == 2)
-			ReleaseScreen();
-	}
+	if (MonoScreenOn == 2)
+		ReleaseScreen();
 
 	Log("S_LoadLevelFile: load bar finished");
 	LoadLogStepBar(&loadlog_at, shown);

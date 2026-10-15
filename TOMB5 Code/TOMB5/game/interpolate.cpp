@@ -1292,11 +1292,12 @@ bool InterpDrawnFrameWasTween()
 void InterpNoteClassicPresent()
 {
 	/* A present that waited its full two ticks is a 30 Hz one: the load/save
-	 * screen, the pause menu, the death menu, the loading bar, the load
-	 * screen's fade loop and the F4 outfit menu. Their counters step once per
-	 * present, so the latch must be down. RenderLoadPic loops `do { ...
-	 * S_DumpScreen(); } while (DoFade != 2)` and only DoScreenFade sets
-	 * DoFade to 2; a latch left from the last game frame would never end it.
+	 * screen, the pause menu, the death menu, the loading bar and the F4
+	 * outfit menu. Their counters step once per present, so the latch must
+	 * be down. The load and pause menus' loops
+	 * (S_LoadSave, S_PauseMenu) present with S_DumpScreen and, once a fade
+	 * is set, leave only on DoFade == 2, which only DoScreenFade sets; a
+	 * latch left from the last game frame would never end them.
 	 * The inventory ring and the title present at the frame rate at fps_mode
 	 * 1 and 2 and set the latch themselves (InterpNoteMenuFrame,
 	 * DrawPhaseGame); at fps_mode 0 they come through here. */

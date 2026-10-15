@@ -2418,6 +2418,7 @@ long S_LoadLevelFile(long num)
 	{
 		aInit();
 		Log("S_LoadLevelFile: aInit done");
+		S_LoadScreenStep(LOADSTEP_AINIT);
 		LoadLogStep(&loadlog_at, "ainit");
 
 		// The HD geometry and its texture pages. Here on the main thread,
@@ -2428,6 +2429,7 @@ long S_LoadLevelFile(long num)
 		// is 0.
 		HDLevelBuild();
 		Log("S_LoadLevelFile: HD build done");
+		S_LoadScreenStep(LOADSTEP_BUILD);
 		LoadLogStep(&loadlog_at, "hd_build");
 		LoadLogBuildFrames();
 
@@ -2436,15 +2438,18 @@ long S_LoadLevelFile(long num)
 		// session - the atlas does not change from level to level - so after
 		// the first level this is a comparison and a return.
 		HDFontBuild();
+		S_LoadScreenStep(LOADSTEP_FONT);
 		LoadLogStep(&loadlog_at, "font");
 	}
 	aMakeCutsceneResident(gfResidentCut[0], gfResidentCut[1], gfResidentCut[2], gfResidentCut[3]);
 	Log("S_LoadLevelFile: Cutscenes resident");
+	S_LoadScreenStep(LOADSTEP_CUTSCENES);
 	LoadLogStep(&loadlog_at, "cutscenes");
 
 	// The level's textures and buffers onto the card before the first frame
 	// asks for them - see the note over WarmUpLevel.
 	WarmUpLevel();
+	S_LoadScreenStep(LOADSTEP_WARMUP);
 	LoadLogStep(&loadlog_at, "warmup");
 
 	// PROFLOG counts a level's seconds from here. The name still carries its
@@ -2453,7 +2458,8 @@ long S_LoadLevelFile(long num)
 	LoadLogStep(&loadlog_at, "profile");
 
 	/* The work is done. The bar has followed it - the loop above while the
-	 * loading thread runs, the HD build's laps after it - and the brake
+	 * loading thread runs, the HD build's laps and the steps after it, a
+	 * frame at each step's end where a tick has passed - and the brake
 	 * holds the screen until it has stood loadbar_min_ms, the bar running on
 	 * with the clock; its last frame is the full bar. A load longer than
 	 * that ends in one frame at once (drawbars.cpp, S_LoadScreenEnd). With

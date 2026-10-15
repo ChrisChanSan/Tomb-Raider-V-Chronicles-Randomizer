@@ -11403,33 +11403,43 @@ static void load_mode()
 }
 
 /* The brake on a load's timeline (loadbar_math.h as drawbars.cpp runs
- * it), in ms from the loading screen's first frame. While the loading
- * thread runs, the loop draws a frame at every 1/60 s tick and polls again
- * after its Sleep(1); the join follows its last turn. The HD build's hook
- * calls draw a frame only where a tick has passed since the last one
- * handed out. After the work, the tail draws one frame a tick until the
- * work is done and the screen has stood minMs. A frame hands out the tick
- * it is drawn in. */
+ * it), in ms from the loading screen's first frame, which sits on a tick.
+ * While the loading thread runs, the loop draws a frame at every 1/60 s
+ * tick and polls again after its Sleep(1); the join follows its last
+ * turn. After the join the main thread's points - the join, aInit, the HD
+ * build's hook calls, the build's end, the font, the cutscenes, the warmup
+ * (specific\file.cpp, S_LoadScreenStep) - draw a frame only where a tick
+ * has passed since the last one handed out. After the work, the tail
+ * draws one frame a tick until the work is done and the screen has stood
+ * minMs. A frame hands out the tick it is drawn in, and its time on the
+ * bar is the last tick boundary it stands past. */
 struct BrakeLoad
 {
 	const char* level;
 	int resident;			// a save loaded inside its level
 	double thread;			// the loading thread's end (logged: the join)
-	double build;			// the HD build's ms from the join
-	double post;			// from the build's end to the work's end
+	double ainit;
+	double build;			// the HD build's ms
+	double font;
+	double cutscenes;
+	double warmup;
+	double profile;
 	int calls;			// the build's hook calls
-	double at[16];			// each one's ms after the join
+	double at[16];			// each one's ms after the build's start
 };
 
 struct BrakeRun
 {
 	int frames;			// the bar's frames, the picture's first not counted
-	int buildFrames;		// of them, those of the build's hook calls
+	int buildFrames;		// of them, those of the build's reports
 	int back;			// steps backwards
 	int ahead;			// frames ahead of the work or the clock
 	int full;			// frames at 100
 	int overTick;			// steps larger than one tick's share
+	int overSeen;			// of them, those with no blind stretch before
 	float maxJump;			// the largest step, percent
+	double blind;			// the longest stretch without a frame point
+	const char* blindAt;		// the point that ended it
 	double join;
 	double end;			// the work's end
 	double last;			// the last frame
@@ -11438,34 +11448,62 @@ struct BrakeRun
 static BrakeRun brake_run(const BrakeLoad& L, double minMs, float share,
 	bool logged)
 {
-	const double tick = 1000.0 / 60.0;
+	const double tick = kLoadBarTickMs;
 	const float eps = 0.001f;
 	BrakeRun r = {};
 	double handed = 0.0;
+	double point = 0.0;
 	float prev = -1.0f;
 
+	/* A frame at `t`, the point before it at `point`: a step over one
+	 * tick's share is seen (overSeen) when no stretch of the work longer
+	 * than a tick lies before it - a frame the rule should have kept to
+	 * its tick. */
 	const auto frame = [&](double t, float work)
 	{
-		const float pos = LoadBarPosition(work, t, minMs);
+		const double on = LoadBarTicksMs(floor(t / tick + 1e-9) * tick);
+		const float pos = LoadBarPosition(work, on, minMs);
 
 		if (prev >= 0.0f)
 		{
 			const float jump = pos - prev;
+			const bool over = minMs > 0.0 &&
+				jump > (float)(100.0 * tick / minMs) + eps;
 
 			r.back += jump < -eps;
 			r.maxJump = std::max(r.maxJump, jump);
-			r.overTick += minMs > 0.0 &&
-				jump > (float)(100.0 * tick / minMs) + eps;
+			r.overTick += over;
+			r.overSeen += over && t - point <= tick;
 		}
 
 		r.ahead += pos > 100.0f * work + eps ||
 			(minMs > 0.0 && pos > (float)(100.0 * t / minMs) + eps);
 		r.full += pos >= 100.0f - eps;
 		prev = pos;
-		handed = floor(t / tick + 1e-6) * tick;	// a whole tick, not one less
+		handed = floor(t / tick + 1e-9) * tick;
 		r.frames++;
 		r.last = t;
-		return LoadBarDone(work, t, minMs);
+		point = t;
+		return LoadBarDone(work, on, minMs);
+	};
+
+	/* A point of the main thread's work at `t`: a frame if a tick has
+	 * passed since the last one handed out. */
+	const auto reach = [&](double t, float work, const char* name, bool build)
+	{
+		if (t - point > r.blind)
+		{
+			r.blind = t - point;
+			r.blindAt = name;
+		}
+
+		if (t >= handed + tick)
+		{
+			frame(t, work);
+			r.buildFrames += build;
+		}
+
+		point = t;
 	};
 
 	// The loop: a frame at the next tick while the thread was running at
@@ -11482,114 +11520,131 @@ static BrakeRun brake_run(const BrakeLoad& L, double minMs, float share,
 
 	r.join = logged ? L.thread : std::max(L.thread, poll);
 
+	// The engine's table for a build that reported nothing: the laps'.
+	const int total = L.calls ? L.calls : kLoadBarBuildLaps;
+	double t = r.join;
+	float build = 0.0f;
+
+	reach(t, LoadBarWork(1.0f, build, share), "join", false);
+	t += L.ainit;
+	reach(t, LoadBarWork(1.0f, build, share), "ainit", false);
+
 	for (int i = 0; i < L.calls; i++)
 	{
-		const double t = r.join + L.at[i];
-
-		if (t >= handed + tick)
-		{
-			frame(t, LoadBarWork(1.0f, LoadBarBuildShare(i + 1, L.calls),
-				share));
-			r.buildFrames++;
-		}
+		build = LoadBarBuildShare(i + 1, total);
+		reach(r.join + L.ainit + L.at[i], LoadBarWork(1.0f, build, share),
+			i == 9 && total == kLoadBarBuildLaps ? "begin" :
+			i == 15 ? "objects" : i == 4 && total == kLoadBarResidentSteps ?
+			"life" : "step", true);
 	}
 
-	r.end = r.join + L.build + L.post;
+	const double steps[3] = { L.build, L.font, L.cutscenes };
+	const char* names[3] = { "build", "font", "cutscenes" };
+
+	for (int i = 0; i < 3; i++)
+	{
+		t += steps[i];
+		build = LoadBarBuildShare(total + 1 + i, total);
+		reach(t, LoadBarWork(1.0f, build, share), names[i], i == 0);
+	}
+
+	t += L.warmup;
+	reach(t, LoadBarWork(1.0f, build, share), "warmup", false);
+	r.end = t + L.profile;
 
 	while (!frame(std::max(handed + tick, r.end), 1.0f));
 
 	return r;
 }
 
-/* The 34 loads of a -log run on the target machine (LOADLOG steps): 16
- * saves loaded inside their level, 18 fresh loads with the full build. */
 static const BrakeLoad kBrakeLogged[] =
 {
-	// level, resident, join, build, post, hook calls (ms after the join)
-	{ "TITLE", 0, 433.6, 2593.7, 133.3, 16,
+	// level, resident, join, ainit, build, font, cutscenes, warmup,
+	// profile, hook calls (ms after the build's start)
+	{ "TITLE", 0, 433.6, 0.0, 2593.7, 121.2, 2.3, 9.8, 0.0, 16,
 		{ 13.6, 13.6, 13.6, 13.7, 14.6, 15.0, 15.0, 15.8,
 		16.0, 2061.8, 2067.0, 2071.9, 2072.5, 2072.5, 2072.5, 2539.8 } },
-	{ "ANDREA2", 0, 255.4, 2667.4, 25.6, 16,
+	{ "ANDREA2", 0, 255.4, 0.0, 2667.4, 0.0, 0.0, 25.6, 0.0, 16,
 		{ 8.0, 8.0, 8.0, 8.3, 8.9, 12.3, 12.3, 12.6,
 		12.7, 2063.0, 2066.7, 2074.1, 2125.8, 2125.8, 2125.8, 2574.4 } },
-	{ "ANDREA2", 1, 18.4, 15.7, 0.4, 5,
+	{ "ANDREA2", 1, 18.4, 0.0, 15.7, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 5.1, 5.1, 5.1, 9.4, 11.8 } },
-	{ "ANDREA2", 1, 34.6, 14.9, 0.4, 5,
+	{ "ANDREA2", 1, 34.6, 0.0, 14.9, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 4.6, 4.6, 4.6, 8.8, 11.2 } },
-	{ "ANDREA1", 0, 196.4, 1370.1, 20.8, 16,
+	{ "ANDREA1", 0, 196.4, 0.0, 1370.1, 0.0, 0.0, 20.8, 0.0, 16,
 		{ 7.4, 7.4, 7.4, 7.7, 8.2, 10.3, 10.3, 10.5,
 		10.7, 953.8, 956.9, 960.0, 971.5, 971.5, 971.5, 1296.3 } },
-	{ "ANDREA1", 1, 35.0, 13.3, 0.4, 5,
+	{ "ANDREA1", 1, 35.0, 0.0, 13.3, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 2.2, 2.2, 2.2, 6.8, 9.0 } },
-	{ "ANDY2", 0, 167.6, 1435.9, 29.2, 16,
+	{ "ANDY2", 0, 167.6, 0.0, 1435.9, 0.0, 1.4, 27.8, 0.0, 16,
 		{ 7.8, 7.8, 7.8, 8.1, 8.7, 9.9, 9.9, 10.1,
 		10.5, 1022.4, 1025.3, 1031.6, 1045.0, 1045.0, 1045.0, 1370.4 } },
-	{ "ANDY2", 1, 34.5, 11.4, 0.6, 5,
+	{ "ANDY2", 1, 34.5, 0.0, 11.4, 0.0, 0.2, 0.4, 0.0, 5,
 		{ 2.9, 2.9, 2.9, 7.1, 7.3 } },
-	{ "ANDY2", 1, 19.0, 10.8, 0.6, 5,
+	{ "ANDY2", 1, 19.0, 0.0, 10.8, 0.0, 0.2, 0.4, 0.0, 5,
 		{ 2.4, 2.4, 2.4, 6.6, 6.8 } },
-	{ "ANDY3", 0, 164.2, 1513.9, 17.3, 16,
+	{ "ANDY3", 0, 164.2, 0.0, 1513.9, 0.0, 0.0, 17.3, 0.0, 16,
 		{ 13.3, 13.3, 13.3, 13.5, 14.4, 15.8, 15.8, 16.0,
 		16.0, 1051.8, 1055.8, 1069.1, 1087.0, 1087.5, 1089.5, 1414.6 } },
-	{ "ANDY3", 1, 18.4, 16.8, 0.4, 5,
+	{ "ANDY3", 1, 18.4, 0.0, 16.8, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 7.7, 8.2, 8.4, 12.4, 12.8 } },
-	{ "ANDY3", 1, 18.4, 16.7, 0.4, 5,
+	{ "ANDY3", 1, 18.4, 0.0, 16.7, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 7.2, 7.7, 7.9, 12.2, 12.6 } },
-	{ "JOBY5", 0, 214.6, 1245.2, 23.9, 16,
+	{ "JOBY5", 0, 214.6, 0.0, 1245.2, 0.0, 0.0, 23.9, 0.0, 16,
 		{ 6.2, 6.2, 6.2, 6.4, 6.7, 7.9, 7.9, 8.0,
 		8.2, 776.8, 778.6, 780.3, 790.0, 790.2, 790.2, 1173.9 } },
-	{ "JOBY5", 1, 17.8, 15.2, 0.4, 5,
+	{ "JOBY5", 1, 17.8, 0.0, 15.2, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 5.6, 5.9, 5.9, 10.9, 11.1 } },
-	{ "RICH2", 0, 203.3, 2355.9, 22.7, 16,
+	{ "RICH2", 0, 203.3, 0.0, 2355.9, 0.0, 0.0, 22.7, 0.0, 16,
 		{ 9.7, 9.7, 9.7, 9.9, 10.5, 13.7, 13.7, 13.9,
 		14.3, 1755.8, 1758.7, 1769.3, 1783.1, 1783.1, 1783.1, 2114.7 } },
-	{ "RICH2", 1, 18.3, 19.6, 0.6, 5,
+	{ "RICH2", 1, 18.3, 0.0, 19.6, 0.0, 0.0, 0.6, 0.0, 5,
 		{ 5.5, 5.5, 5.5, 12.6, 12.8 } },
-	{ "RICHCUT2", 0, 35.4, 893.4, 5.7, 16,
+	{ "RICHCUT2", 0, 35.4, 0.0, 893.4, 0.0, 1.4, 4.3, 0.0, 16,
 		{ 37.0, 37.0, 37.0, 37.0, 37.1, 37.1, 37.1, 37.1,
 		37.1, 712.8, 713.1, 713.6, 713.9, 713.9, 713.9, 861.4 } },
-	{ "RICH1", 0, 150.2, 1129.6, 19.7, 16,
+	{ "RICH1", 0, 150.2, 0.0, 1129.6, 0.0, 0.0, 19.7, 0.0, 16,
 		{ 8.4, 8.4, 8.4, 8.6, 8.9, 9.9, 9.9, 10.0,
 		10.2, 714.2, 717.4, 719.3, 719.7, 719.7, 719.7, 1065.6 } },
-	{ "RICH1", 1, 35.8, 9.5, 0.4, 5,
+	{ "RICH1", 1, 35.8, 0.0, 9.5, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 0.4, 0.4, 0.4, 5.2, 5.2 } },
-	{ "JOBY2", 0, 173.8, 1688.7, 33.0, 16,
+	{ "JOBY2", 0, 173.8, 0.0, 1688.7, 0.0, 0.0, 33.0, 0.0, 16,
 		{ 12.5, 12.5, 12.5, 12.7, 13.9, 16.3, 16.3, 17.0,
 		17.2, 1242.6, 1246.8, 1249.6, 1262.9, 1263.0, 1263.0, 1545.2 } },
-	{ "JOBY2", 1, 18.2, 58.1, 0.4, 5,
+	{ "JOBY2", 1, 18.2, 0.0, 58.1, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 3.1, 3.2, 3.2, 8.0, 53.6 } },
-	{ "JOBY4", 0, 63.7, 844.9, 6.6, 16,
+	{ "JOBY4", 0, 63.7, 0.0, 844.9, 0.0, 0.0, 6.6, 0.0, 16,
 		{ 11.7, 11.7, 11.7, 11.8, 12.4, 13.0, 13.0, 13.1,
 		13.1, 654.0, 656.8, 657.1, 668.7, 668.7, 668.7, 812.7 } },
-	{ "JOBY4", 1, 18.3, 8.5, 0.3, 5,
+	{ "JOBY4", 1, 18.3, 0.0, 8.5, 0.0, 0.0, 0.3, 0.0, 5,
 		{ 1.4, 1.4, 1.4, 3.9, 4.1 } },
-	{ "RICH3", 0, 170.7, 1174.4, 22.2, 16,
+	{ "RICH3", 0, 170.7, 0.0, 1174.4, 0.0, 0.0, 22.2, 0.0, 16,
 		{ 5.6, 5.6, 5.6, 5.8, 6.3, 8.1, 8.1, 8.3,
 		8.5, 763.7, 769.0, 771.6, 772.2, 772.2, 772.2, 1102.4 } },
-	{ "RICH3", 1, 18.3, 9.8, 0.4, 5,
+	{ "RICH3", 1, 18.3, 0.0, 9.8, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 0.5, 0.5, 0.5, 5.3, 5.3 } },
-	{ "ANDY1", 0, 182.4, 1352.5, 20.8, 16,
+	{ "ANDY1", 0, 182.4, 0.0, 1352.5, 0.0, 0.0, 20.8, 0.0, 16,
 		{ 6.4, 6.4, 6.4, 6.7, 7.3, 8.7, 8.7, 8.8,
 		8.8, 900.0, 904.2, 932.2, 944.5, 944.6, 944.6, 1268.3 } },
-	{ "ANDY1", 1, 18.5, 11.4, 0.5, 5,
+	{ "ANDY1", 1, 18.5, 0.0, 11.4, 0.0, 0.0, 0.5, 0.0, 5,
 		{ 1.9, 2.0, 2.0, 6.8, 7.0 } },
-	{ "ANDREA3", 0, 147.4, 1497.0, 16.6, 16,
+	{ "ANDREA3", 0, 147.4, 0.0, 1497.0, 0.0, 0.0, 16.6, 0.0, 16,
 		{ 6.1, 6.1, 6.1, 6.2, 6.5, 7.2, 7.2, 7.3,
 		7.3, 1167.0, 1170.1, 1171.6, 1172.0, 1172.0, 1172.0, 1438.4 } },
-	{ "ANDREA3", 1, 18.6, 9.4, 0.4, 5,
+	{ "ANDREA3", 1, 18.6, 0.0, 9.4, 0.0, 0.0, 0.4, 0.0, 5,
 		{ 0.4, 0.4, 0.4, 4.6, 4.6 } },
-	{ "JOBY3", 0, 186.8, 955.2, 19.1, 16,
+	{ "JOBY3", 0, 186.8, 0.0, 955.2, 0.0, 0.2, 18.9, 0.0, 16,
 		{ 6.1, 6.1, 6.1, 6.3, 6.5, 7.4, 7.4, 7.5,
 		7.6, 550.0, 552.1, 553.6, 554.0, 554.0, 554.0, 886.5 } },
-	{ "JOBY3", 1, 18.5, 10.6, 0.7, 5,
+	{ "JOBY3", 1, 18.5, 0.0, 10.6, 0.0, 0.3, 0.4, 0.0, 5,
 		{ 0.4, 0.4, 0.4, 5.6, 5.6 } },
-	{ "TITLE", 0, 107.9, 2082.6, 6.4, 16,
+	{ "TITLE", 0, 107.9, 0.0, 2082.6, 0.0, 0.2, 6.2, 0.0, 16,
 		{ 18.4, 18.4, 18.4, 18.5, 22.9, 23.5, 23.5, 23.8,
 		24.0, 1867.9, 1873.1, 1878.0, 1878.5, 1878.5, 1878.5, 2028.4 } },
-	{ "ANDREA2", 0, 151.0, 2240.3, 23.7, 16,
+	{ "ANDREA2", 0, 151.0, 0.0, 2240.3, 0.0, 0.0, 23.7, 0.0, 16,
 		{ 6.0, 6.0, 6.0, 6.3, 6.9, 9.2, 9.2, 9.4,
 		9.4, 1866.6, 1870.2, 1877.5, 1883.9, 1883.9, 1883.9, 2147.0 } },
-	{ "TITLE", 0, 118.6, 2022.4, 7.7, 16,
+	{ "TITLE", 0, 118.6, 0.0, 2022.4, 0.0, 0.3, 7.4, 0.0, 16,
 		{ 11.0, 11.0, 11.0, 11.1, 12.4, 13.0, 13.0, 13.3,
 		13.5, 1804.5, 1809.7, 1814.7, 1815.3, 1815.3, 1815.3, 1968.3 } },
 };
@@ -11632,15 +11687,30 @@ static void load_brake()
 		"share", (long)(LoadBarWork(1.0f, 0.0f, 0.1f) * 100), 10);
 	ok(LoadBarWork(1.0f, 1.0f, 0.1f) == 1.0f, "load brake: the whole work",
 		(long)(LoadBarWork(1.0f, 1.0f, 0.1f) * 100), 100);
-	ok(LoadBarBuildShare(10, 16) == 0.741f, "load brake: the room build's "
-		"lap", (long)(LoadBarBuildShare(10, 16) * 1000), 741);
-	ok(LoadBarBuildShare(3, 5) == 0.6f, "load brake: a resident step",
-		(long)(LoadBarBuildShare(3, 5) * 10), 6);
+	ok(LoadBarBuildShare(10, 16) == 0.730f, "load brake: the room build's "
+		"lap", (long)(LoadBarBuildShare(10, 16) * 1000), 730);
+	ok(LoadBarBuildShare(3, 5) == 0.189f, "load brake: a resident step",
+		(long)(LoadBarBuildShare(3, 5) * 1000), 189);
+	ok(LoadBarBuildShare(19, 16) == 0.989f && LoadBarBuildShare(30, 16) ==
+		0.989f, "load brake: the cutscenes' point, and no further",
+		(long)(LoadBarBuildShare(30, 16) * 1000), 989);
+	ok(LoadBarBuildShare(2, 4) == 0.25f, "load brake: an even share of "
+		"another count", (long)(LoadBarBuildShare(2, 4) * 100), 25);
+	ok(LoadBarTicksMs(30.0 * kLoadBarTickMs - 0.002) == 30.0 *
+		kLoadBarTickMs && LoadBarDone(1.0f, LoadBarTicksMs(499.998), 500.0),
+		"load brake: the clock in whole ticks, 30 of them 500 ms",
+		(long)LoadBarTicksMs(499.998), 500);
+	ok(LoadBarTicksMs(5.0 * kLoadBarTickMs + 0.9) == 5.0 * kLoadBarTickMs,
+		"load brake: a frame a little late keeps its tick",
+		(long)(LoadBarTicksMs(5.0 * kLoadBarTickMs + 0.9) * 10), 833);
 	{
 		long back = 0;
 
-		for (int i = 1; i < 16; i++)
+		for (int i = 1; i < 16 + kLoadBarAfterSteps + 2; i++)
 			back += LoadBarBuildShare(i + 1, 16) < LoadBarBuildShare(i, 16);
+
+		for (int i = 1; i < 5 + kLoadBarAfterSteps + 2; i++)
+			back += LoadBarBuildShare(i + 1, 5) < LoadBarBuildShare(i, 5);
 
 		for (int w = 0; w <= 100; w++)
 			for (int t = 0; t < 700; t += 7)
@@ -11655,8 +11725,8 @@ static void load_brake()
 
 	// A save loaded inside its level, 52 ms of work: the clock leads.
 	{
-		const BrakeLoad save = { "save", 1, 35.0, 15.0, 2.0, 5,
-			{ 3.0, 3.5, 4.0, 10.0, 14.0 } };
+		const BrakeLoad save = { "save", 1, 35.0, 0.0, 15.0, 0.0, 0.0,
+			2.0, 0.0, 5, { 3.0, 3.5, 4.0, 10.0, 14.0 } };
 		const BrakeRun r = brake_run(save, 500.0, kLoadBarThreadShare,
 			false);
 
@@ -11664,18 +11734,19 @@ static void load_brake()
 			"never ahead", r.back + r.ahead, 0);
 		ok(r.full == 1, "load brake: 52 ms, one full frame, the last",
 			r.full, 1);
-		ok(r.last >= 500.0 && r.last < 500.0 + tick, "load brake: 52 ms, "
-			"full at the brake's 500", (long)r.last, 500);
+		ok(r.last >= 500.0 - 1e-6 && r.last < 500.0 + tick,
+			"load brake: 52 ms, full at the brake's 500", (long)r.last, 500);
 		ok(r.frames >= 29 && r.frames <= 31, "load brake: 52 ms, a frame a "
 			"tick", r.frames, 30);
-		ok(r.maxJump <= 100.0f * 2.0f * (float)(tick / 500.0), "load brake: "
-			"52 ms, no step over two ticks' share", (long)(r.maxJump * 100),
-			667);
+		ok(r.maxJump <= 100.0f * (float)(tick / 500.0) + 0.001f,
+			"load brake: 52 ms, no step over a tick's share",
+			(long)(r.maxJump * 100), 333);
 	}
 
 	// A fresh HD load of 2.5 s: the work leads, the bar follows it.
 	{
-		BrakeLoad fresh = { "fresh", 0, 250.0, 2200.0, 50.0, 16, {} };
+		BrakeLoad fresh = { "fresh", 0, 250.0, 0.0, 2200.0, 0.0, 0.0,
+			50.0, 0.0, 16, {} };
 
 		for (int i = 0; i < 16; i++)
 			fresh.at[i] = 2200.0 * kLoadBarLapShare[i];
@@ -11695,7 +11766,8 @@ static void load_brake()
 
 	// A load exactly as long as the brake: full on the tick at 500.
 	{
-		const BrakeLoad even = { "even", 0, 433.4, 0.0, 65.6, 0, {} };
+		const BrakeLoad even = { "even", 0, 433.4, 0.0, 0.0, 0.0, 0.0,
+			65.6, 0.0, 0, {} };
 		const BrakeRun r = brake_run(even, 500.0, 1.0f, false);
 
 		ok(r.end >= 499.9 && r.end <= 500.1, "load brake: the made-up load "
@@ -11710,7 +11782,7 @@ static void load_brake()
 	{
 		long bad = 0, late = 0, full = 0, saves = 0, fresh = 0;
 		long saveFrames[2] = { 1000, 0 }, freshFrames[2] = { 1000, 0 };
-		long saveOver = 0, freshOver = 0, buildFrames = 0;
+		long saveOver = 0, freshOver = 0, buildFrames = 0, seen = 0;
 		float saveJump = 0.0f, freshJump = 0.0f;
 		const int count = sizeof(kBrakeLogged) / sizeof(kBrakeLogged[0]);
 
@@ -11723,6 +11795,7 @@ static void load_brake()
 			long* frames = L.resident ? saveFrames : freshFrames;
 
 			bad += r.back + r.ahead;
+			seen += r.overSeen;
 			full += r.full != 1;
 			late += r.last < due || r.last >= due + tick;
 			frames[0] = std::min(frames[0], (long)r.frames);
@@ -11744,9 +11817,10 @@ static void load_brake()
 
 			if (getenv("BRAKE_TABLE"))
 				printf("    brake %-8s res=%d join=%.1f end=%.1f last=%.1f "
-					"frames=%d build=%d over=%d jump=%.1f\n", L.level,
-					L.resident, r.join, r.end, r.last, r.frames,
-					r.buildFrames, r.overTick, r.maxJump);
+					"frames=%d build=%d over=%d jump=%.1f blind=%.1f %s\n",
+					L.level, L.resident, r.join, r.end, r.last, r.frames,
+					r.buildFrames, r.overTick, r.maxJump, r.blind,
+					r.blindAt ? r.blindAt : "-");
 		}
 
 		ok(count == 34 && saves == 16 && fresh == 18, "load brake: 34 "
@@ -11755,6 +11829,10 @@ static void load_brake()
 		ok(full == 0, "load brake: logged, the full bar only last", full, 0);
 		ok(late == 0, "load brake: logged, full at 500 or the work's end",
 			late, 0);
+		ok(seen == 0, "load brake: logged, a step over a tick's share only "
+			"after a stretch of work with no frame point", seen, 0);
+		ok(saveOver <= 1 && saveJump < 11.0f, "load brake: logged saves, "
+			"one such step at most (JOBY2's 45 ms life)", saveOver, 1);
 		printf("    brake, 16 saves: %ld to %ld frames, %ld steps over a "
 			"tick's share, largest %.1f %%\n", saveFrames[0], saveFrames[1],
 			saveOver, saveJump);
@@ -11766,13 +11844,27 @@ static void load_brake()
 
 	// The engine: no frame of the build waits on the tick, the tail runs to
 	// the brake's end, the lines that log it.
+	a = load_keep_at(bars, "static void LoadScreenFrameDue(",
+		"TIME_SubTick() < 1.0)");
+	b = load_keep_at(bars, "static void LoadScreenFrameDue(",
+		"S_DrawLoadBar();");
+	ok(a >= 0 && a < b, "load brake: a frame after the join only past a "
+		"tick", a < b, 1);
+	a = load_keep_at(bars, "void S_LoadBarBuild(", "LoadScreenFrameDue(1);");
+	b = load_keep_at(bars, "void S_LoadBarBuild(", "void S_LoadScreenStep(");
+	ok(a >= 0 && a < b, "load brake: the build's reports draw through it",
+		a < b, 1);
+	n = hd_switch_count(file, "S_LoadScreenStep(LOADSTEP_");
+	ok(n == 5, "load brake: aInit, the build, font, cutscenes, warmup", n,
+		5);
+	n = hd_switch_count(bars, "S_LoadScreenStep(LOADSTEP_JOIN);");
+	ok(n == 1, "load brake: and the join", n, 1);
 	n = hd_switch_count(file, "const long hd = tomb5.hd_build && "
 		"HDInstallRoot()[0];");
 	ok(n == 1, "load brake: the thread's share when a build follows", n, 1);
-	a = load_keep_at(bars, "void S_LoadBarBuild(", "TIME_SubTick() < 1.0)");
-	b = load_keep_at(bars, "void S_LoadBarBuild(", "S_DrawLoadBar();");
-	ok(a >= 0 && a < b, "load brake: a build frame only past a tick", a < b,
-		1);
+	n = hd_switch_count(bars, "const double elapsed = LoadBarTicksMs(");
+	ok(n == 1, "load brake: the bar's time in whole ticks", n, 1);
+
 	a = load_keep_at(bars, "long S_DrawLoadBar()",
 		"while (TIME_SubTick() < 1.0);");
 	b = load_keep_at(bars, "long S_DrawLoadBar()", "_BeginScene();");

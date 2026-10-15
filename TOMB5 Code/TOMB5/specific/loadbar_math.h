@@ -21,6 +21,8 @@
  * with them, specific\file.cpp and specific\hd\hd_level.cpp feed the
  * work). */
 
+#include <math.h>	// floor - the brake's clock in whole ticks
+
 // The Loadbar style row: the TR5 bar, the TR4 bar, or no loading screen.
 enum
 {
@@ -42,45 +44,81 @@ inline long LoadBarModeOf(bool found, unsigned long value, bool tr4_bar)
 	return tr4_bar ? LOADBAR_TR4 : LOADBAR_TR5;
 }
 
-/* The work of a fresh HD load in two parts: the loading thread (its
- * S_LoadBar calls, pages + 20) and the HD build on the main thread
- * after it. The thread's share is its median part of the two, counted
- * in the LOADLOG lines of 18 fresh loads of a -log run on the target
- * machine (thread / (thread + hd_build) 0.038 to 0.164, median 0.096),
- * so that the bar keeps one pace across both. A load with no HD build
- * to follow gives the thread the whole bar. */
+/* The work of an HD load in two parts: the loading thread (its S_LoadBar
+ * calls, pages + 20) and the main thread's work after it - the HD build
+ * and the steps that follow it (font, cutscenes, warmup, profile). The
+ * thread's share is its median part of the two, counted in the LOADLOG
+ * lines of 18 fresh loads of a -log run on the target machine (thread /
+ * (thread + main) 0.038 to 0.161, median 0.094), so that the bar keeps
+ * one pace across both. A load with no HD build to follow gives the
+ * thread the whole bar. */
 const float kLoadBarThreadShare = 0.10f;
 
-/* The HD build's laps (hd_level.cpp, HDLevelBuildHD's lap(), in its
- * LoadPhase order: marks, boxes, gloss, intr, air, pairs, cuts, stand,
- * places, begin, tables, statics, sheets, surfaces, frames, objects): the
- * part of the build done at each lap's end, the median over the same 18
- * fresh loads. The room build (begin) is about three quarters, the
- * objects a fifth; what follows the last lap is the rest to 1. */
+/* The points at which the main thread reports its work: the HD build's
+ * own steps - the full build's 16 laps (hd_level.cpp, HDLevelBuildHD's
+ * lap(), in its LoadPhase order: marks, boxes, gloss, intr, air, pairs,
+ * cuts, stand, places, begin, tables, statics, sheets, surfaces, frames,
+ * objects) or the resident build's 5 steps (sheets, surfaces, frames,
+ * objects, life) - and after them three of specific\file.cpp's: the
+ * build's end, the font and the cutscenes. */
 const int kLoadBarBuildLaps = 16;
+const int kLoadBarResidentSteps = 5;
+const int kLoadBarAfterSteps = 3;
 
-const float kLoadBarLapShare[kLoadBarBuildLaps] =
+/* The main thread's part done at each point, the median over the same
+ * -log run: 18 fresh loads for the laps, the 16 saves loaded inside their
+ * level for the resident steps. The room build (begin) is about three
+ * quarters of a fresh load's, the objects a fifth; the warmup, the last
+ * step, takes what is left to 1. */
+const float kLoadBarLapShare[kLoadBarBuildLaps + kLoadBarAfterSteps] =
 {
-	0.005f, 0.005f, 0.005f, 0.006f, 0.006f, 0.007f, 0.007f, 0.007f,
-	0.007f, 0.741f, 0.742f, 0.745f, 0.752f, 0.752f, 0.752f, 0.950f
+	0.005f, 0.005f, 0.005f, 0.005f, 0.006f, 0.007f, 0.007f, 0.007f,
+	0.007f, 0.730f, 0.732f, 0.735f, 0.742f, 0.742f, 0.742f, 0.932f,
+	0.987f, 0.989f, 0.989f
 };
 
-/* The HD build's part done after `done` of `total` steps: the lap table
- * for the full build's laps, an even share for any other count (the
- * resident build's five steps). */
+const float kLoadBarResidentShare[kLoadBarResidentSteps +
+	kLoadBarAfterSteps] =
+{
+	0.186f, 0.189f, 0.189f, 0.573f, 0.621f, 0.968f, 0.968f, 0.968f
+};
+
+/* The main thread's part done after `done` of its points, the build
+ * having `total` steps of its own: the tables for the full and the
+ * resident build, an even share of total + kLoadBarAfterSteps for any
+ * other count. Past the last point it stays there: 1 comes with the work's
+ * end (S_FinishLoadBar). */
 inline float LoadBarBuildShare(int done, int total)
 {
 	if (done <= 0 || total <= 0)
 		return 0.0f;
 
-	if (done >= total)
-		return total == kLoadBarBuildLaps ? kLoadBarLapShare[total - 1] :
-			1.0f;
+	const int last = total + kLoadBarAfterSteps;
+	const int at = done < last ? done : last;
 
 	if (total == kLoadBarBuildLaps)
-		return kLoadBarLapShare[done - 1];
+		return kLoadBarLapShare[at - 1];
 
-	return (float)done / (float)total;
+	if (total == kLoadBarResidentSteps)
+		return kLoadBarResidentShare[at - 1];
+
+	return (float)at / (float)(last + 1);
+}
+
+/* The 1/60 s tick of Sync() (specific\time.cpp), in ms: the brake's clock
+ * counts whole ticks, so that every frame moves the bar by the ticks it
+ * stands for and no frame drawn a little late moves it by more. */
+const double kLoadBarTickMs = 1000.0 / 60.0;
+
+/* `ms` on the tick grid: the whole ticks it holds, in ms. Rounded to the
+ * nearest tick, since both ends of the span sit on Sync()'s boundaries and
+ * the span is a whole number of ticks up to the clock's rounding. */
+inline double LoadBarTicksMs(double ms)
+{
+	if (ms <= 0.0)
+		return 0.0;
+
+	return floor(ms / kLoadBarTickMs + 0.5) * kLoadBarTickMs;
 }
 
 // A share in 0..1.

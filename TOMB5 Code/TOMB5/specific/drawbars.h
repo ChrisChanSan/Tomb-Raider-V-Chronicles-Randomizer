@@ -31,6 +31,19 @@ void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
 	long hd);
 long S_LoadScreenDraws();
 void S_LoadBarBuild(long done, long total);
+
+// The steps of S_LoadLevelFile after the loading thread, in their order.
+enum
+{
+	LOADSTEP_JOIN,
+	LOADSTEP_AINIT,
+	LOADSTEP_BUILD,
+	LOADSTEP_FONT,
+	LOADSTEP_CUTSCENES,
+	LOADSTEP_WARMUP
+};
+
+void S_LoadScreenStep(long step);
 void S_LoadScreenJoin();
 void S_LoadScreenEnd();
 void S_LoadScreenStatsGet(LoadScreenStats* out);

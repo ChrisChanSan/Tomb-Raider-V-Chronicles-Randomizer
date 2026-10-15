@@ -14963,6 +14963,168 @@ shape itself stays is the next play test's to show.
 
 **Commits.** `8697749`, `169c24a`.
 
+### The marble floors' mirror (#205)
+2026-10-16
+
+**Measured.** Asked for on 2026-10-15, put into English: a mirror on all marble floors
+would be really cool, but whether it can be done is not known; have it measured
+("Spiegelung auf allen Marmorboeden waere eigentlich cool. Ich weiss aber nicht, ob sich
+das machen laesst. Kannst es ja mal vermessen lassen."). Two reference pictures supplied
+for this project (not in the repository) show RICH2 from above with his marks: a mirror on
+the corridor's floor up to a line, none from there on toward the lobby, and some again,
+sporadic, in room 128. This round measures and proposes; nothing on the game's path
+changes. The prototypes live in RoomProbe and in probe-only entry points of
+`hd_render.cpp` (`HDRenderMarbleProbeSet`, `HDRenderMarbleProbeDraw`,
+`HDRenderMarbleProbePlanar`, `HDRenderMarbleProbeDrawn`), which the game never calls.
+
+The census (RoomProbe `-marblecensus`, `ProbeMarbleCensus`). Per inner square of every
+room's classic floor: the footstep material (`fx`, 9 marble), the art's floor - the .TRG's
+flat triangles within 16 units of the classic floor, or about the flat face nearest within
+512 units where none lies there - by the page and the sheen's class covering most of its
+area and by the pass most of its faces take, and the art's own copy under it
+(`-tankcensus`' rule). What the data says alone does not name polished stone: `fx` 9
+stands only in ANDREA2 (77 squares), ANDREA3 (8) and RICH1 (9) - RICH2's marble is `fx` 6,
+stone, everywhere; the sheen's marble class names RICH2's washroom pages 1054 and 1082 and
+none of its black marble; material 3 resolves to glass on ANDREA's facade pages 201, 211
+and 3004 and JOBY2's ice 441, 479 and 480; and RICH2's black marble (1029, 1045, 1047,
+1049, 1053, 1079, 1081) and green tiles (1010) are the lobby pages the sheen bars
+(`HDGlossPageBarred`). So the rule is a page list, looked at by eye on the thirty largest
+floor pages of each level (DdsProbe): 960, 1002, 1010, 1029, 1045, 1047, 1049, 1053, 1054,
+1070, 1079, 1081, 1082, 1085, 1086, 1094 (the Rome office levels), 54, 1046, 1048, 1063,
+1104, 1105, 1110 (RICHCUT2), 162, 246, 249, 273, 274, 285, 366, 408, 411 (ANDREA) and
+2147, 2149, 2154 (the title). A mirror square is a square whose art floor wears a listed
+page, whose faces are opaque, through whose floor no copy of the art shows (a copy under
+an opaque floor does not show) and whose room is no water room (the tank interiors 22 and
+24 and the pool 124 and 127 of RICH2 hold 10 such squares).
+
+| level | inner | listed | mirror | rooms | clear, copy | clear only | heights |
+|---|---|---|---|---|---|---|---|
+| ANDREA1 | 2,354 | 108 | 108 | 14 | 0 | 0 | 7 |
+| ANDREA2 | 2,746 | 192 | 192 | 31 | 0 | 0 | 13 |
+| ANDREA3 | 1,430 | 176 | 173 | 23 | 0 | 0 | 7 |
+| RICH1 | 1,066 | 51 | 51 | 14 | 0 | 0 | 4 |
+| RICH2 | 1,759 | 759 | 344 | 44 | 347 | 25 | 19 |
+| RICH3 | 2,146 | 215 | 212 | 20 | 0 | 0 | 10 |
+| RICHCUT2 | 304 | 55 | 49 | 5 | 0 | 0 | 5 |
+| TITLE | 7,491 | 100 | 0 | 0 | 66 | 26 | 0 |
+
+(inner: the inner squares; listed: on a listed page; clear, copy: a clear floor over the
+art's copy; clear only: a clear floor without one; heights: the mirror squares' floor
+heights.)
+
+The other seven levels wear none of the listed pages; their tiled floors - ANDY2's stone
+mosaic 808 (35 squares in 15 rooms), JOBY2's checkered tiles 489 (44 in 5), JOBY3's and
+JOBY5's blue checker 570 (12 in one room each) - are no marble and were counted apart.
+RICH2 by room: the corridor 46 and its twin 75 carry the art's copy under their clear
+floor west of x 43,008 and are mirror squares only at the opaque mouth (5 and 4); the
+tank's rooms 45, 121 (9 each) and 122 (4); the lobby's gallery 120 (34, at four heights
+from -3,328 to -2,816), its green-tiled floors 2 and 4 (17 each); the pool's surround 125
+and 126 (12 each, at -768, -738 and -512); room 128 (6). His two pictures match the
+census: the corridor's clear floor with its copy ends at x 43,008 and the opaque mouth
+follows, and room 128's two western columns are clear floors over a partial copy (102
+triangles under, 18 mirrored, below the rule's third) - his "sporadic" ones; RICH2 has 25
+such clear squares without a full copy. Three rooms whose group draws nothing (ANDREA3
+115, RICH2 15 and 18; 6 squares) have no picture.
+
+Approach A, the march on dry marble (`-marblea 1|2|3`, `HDRenderMarbleProbeDraw`): the wet
+floor's layer, five by five points a square on the art's floor, drawn through `WetPS`
+unchanged with a dry floor's numbers - no front, no film, no hashed puddle share, the
+models' mask left off (RoomProbe has no models) - out of a copy of the frame taken where
+the wet floor's mirror is drawn. Three strengths: 1 darker (darkening 0.15, F0 0.04,
+strength 1), 2 polished stone (no darkening, F0 0.04, the textbook dielectric), 3 the
+grazing angle alone (F0 0). Approach B, the planar mirror (`-marbleb`): every drawn
+group's four passes drawn again before the frame through the view mirrored in the floor's
+plane and a projection turned left to right (two flips keep the winding), clipped by one
+user clip plane to what stands over the floor, into a target and an INTZ depth of its own;
+the same layer then takes its colour from that target at the pixel's place turned left to
+right where its depth holds something, through a copy of `WetPS`'s composition compiled by
+the tool, so A and B differ only in where the mirror's colour comes from. The mask is the
+layer itself under the depth test, as the wet floor's: no stencil bit is needed (bits 1,
+2, 4 and 8 are taken; 16 to 128 are free should one be wanted).
+
+GPU at 2,560 x 1,440, three runs each, medians in ms; A the frame's copy and the layer's
+draws, B the mirrored room draws and the layer's draw, the frame's own solid room draws
+(`-gpu`) for scale:
+
+| eye | squares A / B | frame | A1 | A2 | B rooms | B layer |
+|---|---|---|---|---|---|---|
+| E189 corridor at his line | 61 / 19 | 0.206 | 0.109 | 0.091 | 0.137 | 0.016 |
+| E190 room 128 | 14 / 10 | 0.769 | 0.130 | 0.113 | 1.055 | 0.020 |
+| L120 lobby gallery | 74 / 28 | 0.727 | 0.181 | 0.149 | 0.938 | 0.024 |
+| P125 pool surround | 71 / 16 | 0.207 | 0.158 | 0.135 | 0.301 | 0.022 |
+| ANDREA2 24 | 24 / 20 | 0.171 | 0.194 | 0.169 | 0.147 | 0.026 |
+| RICH3 93 | 42 / 42 | 0.127 | 0.176 | 0.158 | 0.100 | 0.031 |
+| RICHCUT2 3 | 38 / 38 | 0.135 | 0.188 | 0.167 | 0.103 | 0.029 |
+| round 5's four, least | 11 / 6 | 0.122 | 0.048 | 0.043 | 0.074 | 0.008 |
+| round 5's four, most | 14 / 12 | 0.135 | 0.153 | 0.125 | 0.111 | 0.027 |
+| his 3 to 10, least | 8 / 4 | 0.121 | 0.075 | 0.068 | 0.059 | 0.011 |
+| his 3 to 10, most | 23 / 17 | 0.237 | 0.143 | 0.117 | 0.353 | 0.020 |
+
+(frame: the frame's own solid room draws; E190, L120, ANDREA2 24 and his picture 10 spread
+over their three runs to 0.997-1.115, 0.846-1.145, 0.125-0.225 and 0.339-1.212 in B's
+mirrored rooms, every other number within 0.03.)
+
+A costs 0.04 to 0.19 ms a frame and does not grow with the rooms; B's mirrored draw is
+about the frame's own room draws once more for one plane - up to 1.06 ms where the
+picture's rooms are many (830 draw calls at room 128) - and one more such draw for each
+further floor height in the frame. Memory: A takes the frame's copy the wet floor already
+takes (4 bytes a pixel, 14.1 MiB at 2,560 x 1,440) and its layer (25 points of 48 bytes a
+square, 413 KB for RICH2's 344); B a target and its depth, 8 bytes a pixel, 28.1 MiB at
+2,560 x 1,440, the size of the models' mirror target it could take the place of.
+
+What each draws right and wrong, at 960 x 540 against the dry floor (pixels changed by
+more than 8): A2 17,045 to 163,892 an eye, B 16,740 to 174,788. Picture 4's light - the
+lit room beyond the lift's door - is a sliver in the frame: A finds 471 of its yellow
+pixels on the floor (red over 140, green over 120, blue under 0.7 green), in broken rows,
+B 1,737 in one strip. What the march does not find and B draws (B brighter by 24, A within
+8 of dry): RICHCUT2 3 29,031, RICH3 93 3,707, v510 1,693, room 126 5,271, picture 3's
+machine 936. What B leaves out: every square at another height than its plane - the lobby
+gallery 4,150, room 126 8,527, the pool's surround 1,355, picture 8 1,747 - one more
+mirrored draw of the rooms for each. B also reflects only the rooms it is handed: a room
+seen only in the mirror (the ceiling's rooms, through the floor's reflection) must be
+added to the frame's list. Both mirror the art's copies' floors only where the rule lets
+them: no listed square is a clear floor over a copy, so the two never double. The light
+field's stand-in where the march finds nothing lifts a dark floor at a grazing view
+(ANDREA2 room 24, A1 115,019 pixels against A2's 61,183): a share of the room's light the
+walls' sheen takes too.
+
+The conflicts. The tanks' wet floors lie on marble: 16 of tank 182's 22 wet squares and
+all 12 of tank 33's are mirror squares - a marble layer has to leave a point the water
+wets to the wet floor (its share one less the wet), or the floor mirrors twice. The engine
+draws no classic mirror (no level's script names one, `game\mirror.cpp`'s
+`Draw_Mirror_Lara` never runs); the art's two wall mirrors are RICH2's washrooms 134 and
+135, whose floors are listed mirror squares (page 1054): a floor mirror there reflects the
+wall mirror's copy as the frame shows it in A, and the copy's art behind the wall in B,
+and the objects `Draw_Mirror_Items` draws across the wall would be mirrored a second time
+by the models' mirror. Water sheets in a mirror room: none, the water rooms are left out.
+`hd_vis` 1 hands the frame a room list walked by the portals: A needs nothing of it, B
+needs its own list for the mirrored eye. The shaders: A takes `WetPS` as it is (320
+slots); a build of B's composition is `WetPS` without the march (fewer slots), and B's
+room draws take the room shaders as they are - the plain at 510 and the gloss at 507 of
+512 slots, with no room for a clip in the shader, so the clip stays the device's plane.
+The frame's copy and depth: A takes the late copy and the INTZ depth the wet floor takes,
+once a frame; B its own target. Save loads and the resident build: the rule is the level's
+(the pages, the classic floor, the .TRG) and is built with the level, nothing of it is in
+a savegame; the flip twins (RICH2's 46 and 75) are both counted, and the frame's room list
+says which is drawn.
+
+The proposal. A first: the wet floor's layer and shader as they are, over the mirror
+squares of the rooms the frame draws, at the polished strength (2), with the models'
+mirror as round 6 built it, leaving to the wet floor the points the water wets; 0.04 to
+0.19 ms a frame, no new shader, no new target. B as a later step where the march's limits
+show (picture 4's light, a tall thing's top at the frame's edge): about the frame's room
+draws again for each floor height, 28.1 MiB. Open for the owner: which pages and rooms
+take the mirror (the census pictures, one a room); the strength (1, 2 or 3); the look at
+the grazing angle; whether RICH2's lobby (rooms 0 to 4 and 120) and the pool's surround
+(125, 126) are in - his reference pictures show neither mirrored; whether the title's
+clear floors stay the art's own; and whether the tiled floors of ANDY2 and JOBY2 to 5 are
+in. A build round: `hd_render.cpp` (the layer from the census rule at the level's build,
+its draw beside the wet floor's mirror, the wet share), one line in `hd_level.cpp`'s frame
+for the rooms drawn, the page list (a column of the sheen's page table and of
+`hd_gloss.txt`, which already names pages one by one in every level), the rule in
+`hd_splash_math.h` with a ModernTest group, an option, RoomProbe's switch on the engine's
+own path, and the records.
+
 ### The spring (#200)
 2026-10-14
 

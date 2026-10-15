@@ -5595,6 +5595,171 @@ doorway and the sky beyond it (above) on both paths, not a hole.
 (the wide opening beyond the window) and this record; the fix pass `652f756` (the guests'
 count of eight credited to its source, the comments) and its record.
 
+**Round 10: the protections of the old path as data rules on the visibility path
+(2026-10-15).** The owner played `hd_vis` 1 through every level. In his words, put into
+English: mixed feelings. The texture fight in ANDREA1 is back (picture 1); the lift shaft
+in RICH2 is completely broken again (picture 2); the corner in JOBY2 at the spawn is
+broken again, our patch there is gone (picture 3); pictures 6, 7 and 8 are another
+broken-out place, as broken as before (picture 9 the same wall from the other side). But
+the corner it was meant to fix is fine now, and the pipes in the court are gone; very long
+rooms in RICH2 are no longer cut at a portal. The crane room's flipmap is broken again,
+our patch is gone there as well. The ghosts in ANDREA1 are back, partly; and the z-buffer
+sometimes shows the skybox for a moment at a room change, as once in ANDREA2, now
+anywhere. In his own words: "Gemischte Gefuehle. [...] Es fuehlt sich so an, als waeren
+all unsere Probleme in der neuen Version richtig zu beheben." The round brings the old
+path's protections back as rules from the level data, none of them deciding which room
+wins, each place measured first.
+
+**His places, measured** (RoomProbe at 1,280 x 720 with the walk's own lists; old the
+`c9ba6dd0` tool at `hd_vis` 0, new 9 the same tool at `-vis 1`, new 10 this round's; fight
+the eye one unit along x, pixels differing by more than 24). Each picture of his was
+matched to a tick of the camera log of his play test by rendering the ticks of the place
+beside it; the crane room is JOBY2's container hall (room 102, pictures 4 and 5), after
+the flip the log shows at that place (rooms 4, 80, 81, 87 and 89 to 43, 69, 18, 54 and
+53); it was never a probe camera before.
+
+| Picture | Level, tick, eye room | Fight old / new 9 / new 10 | What it is | Class |
+|---|---|---|---|---|
+| 1 | ANDREA1 5,708, room 19 | 2,836 / 4,590 / 2,836 | rooms 212 and 12 fight on one wall plane (1,968 and 1,594 of the new fight) | 2, coplanar faces |
+| 2 | RICH2 20,520, room 63 | 5,402 / 57,426 / 5,402 | room 61's hull doubles the shaft's floors (52,915 of the fight) | 1, doubled art |
+| 3 | JOBY2 24,366, room 123 | 3,718 / 20,290 / 3,718 | room 99 listed with a window of 1 pixel at room 124's edge, refused one unit on; the broken pillar shows it far beyond that sliver | 5, the window's edge |
+| 4 | JOBY2 25,897, room 102 | 1,426 / 1,444 / 1,426 | room 53, the other room of 89's flipmap pair, listed by an opening (32,590 pixels) | 4, flipmap twins |
+| 5 | JOBY2 26,055, room 102 | 3,707 / 3,707 / 3,707 | the hall down the rails; nothing differs | - |
+| 6, 7 | JOBY2 28,356 and 28,650, room 27 | 673 and 518 on all three | the art's broken-out wall shows the stairwell's pipes; the same on both paths | 3, the art's hole |
+| 8 | JOBY2 28,780, room 27 | 1,376 / 1,197 / 1,197 | 12,597 clear pixels at the corridor's end: room 141 refused from room 17, 'empty' | left |
+| 9 | JOBY2 31,981, room 33 | 473 on all three | J33's corner; the same on both paths | - |
+
+*The ghosts*: at the eyes the air rule was measured at (img04, pop57, img05, img09, img10)
+the new path draws the old picture to 1, 1, 0, 18 and 839 pixels - not back there; at camE
+8,957 pixels differ, 7,112 of them room 93's brick block in room 101's space: back. It is
+art of a listed room beyond its classic window (round 9's first cause class), which only a
+window cut answers; none of the five rules is one. *The sky flashes*: his log holds 159
+frames in 1,782 seconds where a listed room is missing between two frames that list it
+(`ROOMFLASH`), against 13 in 565 and 11 in 928 seconds of his two logs before on the old
+path; the eye's room changed at 2 of them. Walked again at each frame's eye (2,560 x
+1,440), 155 of the 181 missing rooms are refused with an empty window, and of the 102
+whose distance could be measured 49 touch the window, 22 stand 1 or 2 pixels off it, 2 3
+or 4, 2 5 to 8, 27 farther.
+
+**The five rules.** *Draw once* and *coplanar faces* (`hd_level.cpp`, `BuildRoomVis`,
+`DecidePairs`): with `hd_vis` 1 the level now builds the intrusion list and the rooms' air
+as the old path does and `DecidePairs` answers every piece whole, so no art is cut to a
+window and the renderer's two depth pushes stay: a hull (a group whose art outside its own
+room lies on other groups' art over more than half of it, round 6) draws that art pushed
+back, so the art of the room it stands in is the copy seen, and a covered face (a room's
+classic face inside a larger one of the room it stands in, one plane within a unit, round
+7) draws its art behind the larger face's. The copy kept is the one standing in its own
+room, and at the 40 covered faces the holder, which round 8 found to be the floor's owner
+or the larger face at every one. Census on both paths alike: 13 hulls on nine levels
+(ANDREA1 68 and 82, ANDREA2 219, ANDY1 145 and 164, ANDY2 233, JOBY2 110 and 135, JOBY4
+34, JOBY5 61, RICH2 26, 61 and 142, TITLE 54) and 40 covered faces on six (ANDREA1 1,
+ANDREA3 3, ANDY2 4, JOBY3 20, RICH1 7, RICH2 5); the tolerances are the rules' own (half
+the art, 4 units; a unit). The two are one commit: the renderer derives both from the same
+build, and the air without the intrusion boxes marks other hulls (ANDREA1 0, 2, 57 and
+154, ANDY1 175, 177 and 235, RICH2 37 and 93, five more). *Flipmap twins* (`hd_vis.cpp`,
+the openings): an opening whose room behind is the other room of a flipmap pair names the
+pair's main room, the one the portals lead to and the only one in the world; 68 openings
+over the fifteen levels (ANDREA1 7, ANDY3 3, JOBY2 1, RICH1 4, RICH2 16, RICH3 37;
+`TrgProbe -vistable`, `openings_twin=`), 575 openings become 507; the guests already asked
+the room that draws a group. Before it the flipped hall drew both states at once. *The
+broken wall beside a portal*, the class of the classic wall behind a hole (`hd_vis.cpp`,
+`wideBare` 0.3): a wall face beside a portal widens it from 0.3 of its samples bare, the
+openings keeping 0.5; JOBY2's pillar beside room 124's portal to room 99 lies between 0.3
+and 0.4, and at 0.3 room 99 is listed through the break with 521..749; wide portals 53 at
+0.5, 55 at 0.4, 64 at 0.3, 72 at 0.25, 82 at 0.2, 113 at 0.1 (at 0.3: ANDREA1 11, ANDREA2
+3, ANDY1 9, ANDY3 2, JOBY2 9, JOBY4 1, JOBY5 1, RICH1 10, RICH2 15, RICH3 1, TITLE 2). The
+classic face drawn behind the art was measured first: at his eyes no clear pixel lies on a
+classic face of a listed room (pictures 3, 6, 7 and 9: 0 on both paths); the black of
+picture 3 is room 99 dropped and the pipes of pictures 6 and 7 are art the old path draws
+the same - the classic wall there would need classic faces drawn inside the HD frame,
+which neither path has. *The list across the step* (`game/draw.cpp`, `VisFollowPortal`;
+`edge` 2/2,560 of the screen's width): a portal whose projection meets the window it is
+seen through on an edge, or stops within 2 pixels of it at 2,560, lists the room behind
+with that strip; 81 of the 181 missing rooms are listed again at their frames' eyes (4
+pixels 85, 8 pixels 90). The eye's room was not the cause (2 of 159), so the old and new
+room are not both kept.
+
+**The owner set.** Every place he reported is one camera file of the round's material
+(`owner_places.json`, 47 cameras: the 22 places, round 9's 20 owner views, round 7's shaft
+frame and his nine pictures of this test at their ticks, the crane hall with its flips),
+drawn old / new 9 / new 10 in a contact sheet beside it. RoomProbe takes one view per run;
+the sweep driver runs the file line by line. Over the 47: clear on a classic face 70,703 /
+70,721 / 70,721, art on an empty classic frame 2,455,204 / 1,434,509 / 1,434,509, fight
+129,323 / 322,742 / 217,739, seven views changed by this round (345,043 pixels), the rest
+of the difference to the old path ANDREA2 room 89's view (93,928, below).
+
+**The sweep, old / new 9 / new 10.** The old and round 9's pictures of round 9's sets are
+round 9's own, which the `c9ba6dd0` tool repeats to the pixel (the 131 sweep and the
+owner's 20 rendered again with it give round 9's totals).
+
+| Set | views | clear on a face old / 9 / 10 | art on empty old / 9 / 10 | fight old / 9 / 10 | changed 10 against 9 |
+|---|---:|---:|---:|---:|---:|
+| 131 sweep (1280 x 720) | 131 | 42,446 / 42,448 / 42,448 | 12,231,795 / 11,542,351 / 11,542,351 | 239,044 / 249,058 / 235,299 | 415,510 in 20 |
+| 22 places (2560 x 1440) | 22 | 2,258 / 2,312 / 2,312 | 8,641,789 / 4,559,672 / 4,559,672 | 426,183 / 778,546 / 778,430 | 5,983 in 4 |
+| 16 mass views | 16 | 25 / 25 / 25 | 31,613,162 / 29,289,288 / 29,289,288 | 308,446 / 269,947 / 308,399 | 1,789,158 in 4 |
+| 32 earlier views | 32 | 22,170 / 22,179 / 22,179 | 3,123,603 / 2,790,804 / 2,790,804 | - | 371 in 3 |
+| owner's 20 places | 20 | 216,235 / 216,253 / 216,253 | 1,442,962 / 1,443,127 / 1,443,127 | 178,366 / 178,045 / 177,928 | 5,978 in 2 |
+| J33's 9 views | 9 | 195,368 / 195,368 / 195,368 | 0 / 0 / 0 | 5,121 / 5,121 / 5,121 | 0 |
+| the video's 32 views | 32 | 24,165 / 24,165 / 24,165 | 1,489 / 1,489 / 1,489 | - | 0 |
+| trview 151, 152 | 2 | 1 / 1 / 1 | 833,323 / 828,083 / 828,083 | - | 0 |
+| the tower's swing (8) | 8 | 0 / 1 / 1 | 41,592 / 41,592 / 41,592 | 10,614 / 10,607 / 10,607 | 0 |
+| RICH2's lift ride (40) | 40 | - | - | 73,314 / 171,126 / 73,896 | 390,439 in 14 |
+| RICH2's fine walk (12) | 12 | - | - | 54,926 / 134,587 / 56,787 | 295,934 in 12 |
+| RICH2's shaft, frame 61,830 | 1 | - | - | 10,552 / 45,146 / 10,552 | 170,091 in 1 |
+| the owner set | 47 | 70,703 / 70,721 / 70,721 | 2,455,204 / 1,434,509 / 1,434,509 | 129,323 / 322,742 / 217,739 | 345,043 in 7 |
+
+Worse than round 9's new path by more than 500 pixels on a measure: three of the 16 mass
+views, by the covered faces' push, which gives the old path's numbers back (ANDREA3 room
+80 at yaw 0 54,545 -> 88,685 and at 90 48,772 -> 52,305, JOBY3 room 190 at 90 0 -> 846:
+round 7's face 339, room 16's art up to 32 units in front of room 80's face). The
+alternative, the push left out, keeps ANDREA1's room 212 fighting at his picture 1
+(+1,754) and at img01 and img02; the push is kept. The wins of round 9 stay: J33's doorway
+and the stair camera of frame 12,248 (the owner's 20: changed only img01 and img02, the
+covered face), the court (img10: 0 changed), the tower's swing (0), the long rooms (no
+list of the 22 places, the owner's 20 or the ride differs from round 9's), and the costs
+below. The sky flash measured on the probe, pixels clear in one picture of the eye step
+and not the other: the owner set 8,548 / 119,656 / 103,017, all but 9,245 of it ANDREA2
+room 89's view, where the eye stands on the plane of room 141's portal (x 50,176) and room
+128 is listed on one side of it with 802..1,279 and refused on the other; the ride, the
+fine walk and the shaft 2, 1 and 0 for this round.
+
+**The costs** (`RoomProbe -gpu 15`, the solid room draws, median of 15): at the 22 places
+(2,560 x 1,440) 0.1445 ms on round 9's path against 0.1435 on this round's (median), no
+place dearer by more than 0.013 ms, draw calls 63.5 against 104 (the pieces split the
+groups), triangles 55,320 on both; at the owner's 20 places 0.152 against 0.1485 ms, 86
+against 223 calls.
+
+**Measured.** His nine pictures matched to ticks of his log; each place on both paths with
+every listed group left out (`-skipgroup`); his `ROOMFLASH` frames walked again with the
+probe, the distance to the window per missing room, with the edge at 0, 2, 4 and 8 pixels
+at 2,560; the wide portals per level at seven bare shares; the hulls and covered faces per
+level with and without the intrusion boxes; the pushes emulated on the new list with the
+old tool before they were built (the 131 sweep and the owner's 20 gave the numbers this
+round's tool gives).
+
+**Checked.** With `hd_vis` 0 this round's tool gives the `c9ba6dd0` tool's picture file
+byte for byte at the 201 views of the parity set (22, 131, 16, 32), the owner's 20 places,
+the tower's 8, the ride's 40 and the owner set's 47. `-classicroom -classiconly` of
+ANDREA2 231, JOBY2 66 and ANDY3 34 at yaw 0 and 180 give the bytes of the `8691e82` and
+the `c9ba6dd0` tools, 6 of 6. ModernTest's `vis_tables` holds the three new rules on its
+three-room level (a face less bare than `wideBare` widens nothing, the edge of 2 pixels at
+2,560, the opening behind a flipmap twin naming the main room).
+
+**Left.** The default: `hd_vis` stays 0; the owner decides after his next play test. The
+ghost at camE (room 93's block, 7,112 pixels) and art beyond its window generally, which
+only a window cut answers. Picture 8's corridor end (12,597 clear pixels at the probe:
+room 141 refused from room 17, its projection more than the edge off room 17's window and
+no face beside the portal to widen it). Pictures 6 and 7, the stairwell's pipes through
+the art's broken wall, the same on both paths: the classic wall there needs classic faces
+drawn inside the HD frame. ANDREA2 room 89's view, an eye on a portal's plane. 100 of the
+181 rooms of his flash frames, 27 of them farther than 8 pixels off the window at the
+probe's eye. The three mass views of the covered faces' push.
+
+**Commits.** `1189c45` (the build's two depth pushes), `7d6cb2d` (an opening names a
+flipmap pair by its main room), `427330f` (a broken-out wall beside a portal widens it),
+`222575f` (a portal at the window's edge keeps its room listed), `9924788` (the suite) and
+this record.
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

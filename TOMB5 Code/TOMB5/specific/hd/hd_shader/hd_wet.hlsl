@@ -109,7 +109,25 @@
  *                  the first draw, 1 for the second; z the depth tolerance
  *                  in units, w its share of the view depth on top
  * c101 gWetDebug   (the debugger only) x the map, 5 to 8 (WetPS, "the
- *                  march debugger's maps") */
+ *                  march debugger's maps")
+ * c102 gWetPlane   the plane the models were mirrored in, in view space:
+ *                  xyz the world's up, w its height along it
+ * c103 gWetModels  x 1 while the models' mirror is bound on s0 and s3, y how
+ *                  far a pixel's layer may lie from that plane and still
+ *                  take it
+ *
+ * The models in the mirror (hd_render.cpp, HDRenderWaterWetModels): Lara and
+ * the objects the frame drew are drawn once more through the floor's
+ * mirror into a target of their own, s0's colour, with their own depth on
+ * s3, and once as the frame drew them into s0's alpha alone (0 under a
+ * model, 1 elsewhere, whatever alpha the model's page holds). Both are
+ * flipped left to right - the flip keeps the models' winding through the
+ * mirror - so they are read at 1 - x. The march goes past a place of the
+ * frame a model covers, as past a hole in the frame: a model's pixels in
+ * the frame are not the room the ray would meet behind it, and a march that
+ * took them laid the model's colour on the floor beside its feet. Where a
+ * mirrored model lies under a pixel, under the floor and nearer than what
+ * the march found, it is the mirror's. */
 float4 gFog : register(c16);
 float4 gWetScreen : register(c92);
 float4 gWetMode : register(c93);
@@ -126,6 +144,10 @@ sampler3D sFieldDir : register(s1);
 sampler3D sFieldRgb : register(s2);
 sampler2D sWetCopy : register(s5);
 sampler2D sWetDepth : register(s6);
+sampler2D sWetModel : register(s0);
+sampler2D sWetModelDepth : register(s3);
+float4 gWetPlane : register(c102);
+float4 gWetModels : register(c103);
 
 /* The steps of the march: 22 at a growth of 1.2 from 32 reach about 8,700
  * units, eight squares, and the crossing halved 8 times lies within a
@@ -165,12 +187,20 @@ bool WetOn(float2 uv)
 	return all(uv >= 0.0f) && all(uv <= 1.0f);
 }
 
+// Whether the frame drew a model at a place on the screen (alpha 0 there).
+bool WetModelAt(float2 uv)
+{
+	return gWetModels.x > 0.5f && tex2Dlod(sWetModel,
+		float4(1.0f - uv.x, uv.y, 0.0f, 0.0f)).a < 0.5f;
+}
+
 /* The march: from P along R, the place the ray meets the frame, and how
  * sure: 1 for a crossing whose depth fits exactly, down to 0 at the
  * tolerance; 0 for none. `why` 0 a hit, 1 off the screen, 2 behind the
- * eye, 3 out of steps; `steps` the steps taken. */
+ * eye, 3 out of steps; `steps` the steps taken, `len` the ray's length to
+ * the hit. A model's place counts as in front of the frame (WetModelAt). */
 float WetMarch(float3 P, float3 R, out float2 at, out float why,
-	out float steps)
+	out float steps, out float len)
 {
 	float step = gWetMarch.z;
 	float s = 0.0f;
@@ -179,6 +209,7 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 	at = float2(0.0f, 0.0f);
 	why = 3.0f;
 	steps = HD_WET_STEPS;
+	len = 0.0f;
 
 	[loop]
 	for (int i = 0; i < HD_WET_STEPS; i++)
@@ -206,7 +237,7 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 			return 0.0f;
 		}
 
-		const bool behind = q.z > WetDepth(uv);
+		const bool behind = q.z > WetDepth(uv) && !WetModelAt(uv);
 
 		if (behind && front)
 		{
@@ -218,8 +249,9 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 			{
 				const float m = (a + b) * 0.5f;
 				const float3 qm = P + R * m;
+				const float2 um = WetScreen(qm);
 
-				if (qm.z > WetDepth(WetScreen(qm)))
+				if (qm.z > WetDepth(um) && !WetModelAt(um))
 					b = m;
 				else
 					a = m;
@@ -235,6 +267,7 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 				at = ub;
 				why = 0.0f;
 				steps = i + 1;
+				len = b;
 				return saturate(2.0f - 2.0f * gap / tol);
 			}
 		}
@@ -250,56 +283,10 @@ float4 gWetDebug : register(c101);
 // The opaque frame's copy, the one the sheets read.
 sampler2D sWetOpaque : register(s7);
 
-/* Round three's march, kept here only to be measured: steps growing by
- * gWetMarch.w, the first point behind the frame by less than twice the
- * step taken, no halving, no depth fit. */
-float WetMarchOld(float3 P, float3 R, out float2 at, out float why)
-{
-	float step = gWetMarch.z;
-	float s = 0.0f;
-
-	at = float2(0.0f, 0.0f);
-	why = 3.0f;
-
-	[loop]
-	for (int i = 0; i < 12; i++)
-	{
-		s += step;
-
-		const float3 q = P + R * s;
-
-		if (q.z < 1.0f)
-		{
-			why = 2.0f;
-			return 0.0f;
-		}
-
-		const float2 uv = WetScreen(q);
-
-		if (!WetOn(uv))
-		{
-			why = 1.0f;
-			return 0.0f;
-		}
-
-		const float frame = WetDepth(uv);
-
-		if (q.z > frame && q.z - frame < step * 2.0f)
-		{
-			at = uv;
-			why = 0.0f;
-			return 1.0f;
-		}
-
-		step *= 1.5f;
-	}
-
-	return 0.0f;
-}
-
 /* The fine march, the measure: 8-unit steps out to 10,240 units, every
  * crossing halved ten times, a hit where the frame's depth fits the ray's
- * within 16 units and a hundredth of the depth. */
+ * within 16 units and a hundredth of the depth; past a model's place as
+ * the march goes. */
 float WetMarchFine(float3 P, float3 R, out float2 at)
 {
 	float s = 0.0f;
@@ -327,7 +314,7 @@ float WetMarchFine(float3 P, float3 R, out float2 at)
 			if (!WetOn(uv))
 				return 0.0f;
 
-			const bool behind = q.z > WetDepth(uv);
+			const bool behind = q.z > WetDepth(uv) && !WetModelAt(uv);
 
 			if (behind && front)
 			{
@@ -391,16 +378,17 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 
 #if HD_WET_DEBUG
 	/* The march debugger's maps (gWetDebug.x), wet pixels only:
-	 *   5  red round three's and green this march's distance in pixels
-	 *      from the fine march's hit (255: a hit on one side only); blue
-	 *      flags over 255: 1 the fine march hits, 2 round three's leaves
-	 *      the screen or passes the eye, 4 this one does, 8 round three's
-	 *      hit lies on the fine hit's surface (depths within 5 per cent),
-	 *      16 this one's does, 32 this one's hit shows what the later
-	 *      copy adds over the opaque one (s7), 64 something lies over
-	 *      this pixel since the opaque copy
-	 *   6, 7, 8  what the fine march, this one and round three's show,
-	 *      unweighted, black where they find nothing */
+	 *   5  green this march's distance in pixels from the fine march's hit
+	 *      (255: a hit on one side only), red 0; blue flags over 255: 1 the
+	 *      fine march hits, 4 this one leaves the screen or passes the
+	 *      eye, 16 its hit lies on the fine hit's surface (depths within 5
+	 *      per cent), 32 its hit shows what the later copy adds over the
+	 *      opaque one (s7), 64 something lies over this pixel since the
+	 *      opaque copy
+	 *   6, 7  what the fine march and this one show, unweighted, black
+	 *      where they find nothing; 7 with the mirrored models over it
+	 *   8  red where a mirrored model lies under the pixel, green where
+	 *      the frame drew a model at the pixel (the models' target) */
 	{
 		const float3 R = reflect(-V, N);
 		const float2 here = (vpos + 0.5f) * gWetScreen.xy;
@@ -409,37 +397,44 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 		if (wet <= 0.0f)
 			discard;
 
-		float2 at, old, ref;
-		float why, steps, whyOld;
-		const float found = WetMarch(P, R, at, why, steps);
-
-		const float hitOld = WetMarchOld(P, R, old, whyOld);
+		float2 at, ref;
+		float why, steps, len;
+		const float found = WetMarch(P, R, at, why, steps, len);
 		const float fine = WetMarchFine(P, R, ref);
+
+		if (map > 7.5f)
+		{
+			const float2 flip = float2(1.0f - here.x, here.y);
+			const float md = tex2Dlod(sWetModelDepth,
+				float4(flip, 0.0f, 0.0f)).r;
+
+			return float4(md < 1.0f && gWetModels.x > 0.5f ? 1.0f : 0.0f,
+				WetModelAt(here) ? 1.0f : 0.0f, 0.0f, 1.0f);
+		}
 
 		if (map > 5.5f)
 		{
-			float2 uv = old;
-			float hit = hitOld;
+			const float2 uv = map < 6.5f ? ref : at;
+			const float hit = map < 6.5f ? fine : found;
+			const float2 flip = float2(1.0f - here.x, here.y);
+			const float md = tex2Dlod(sWetModelDepth,
+				float4(flip, 0.0f, 0.0f)).r;
+			const float mz = gWetScreen.w / max(gWetScreen.z - md, 1.0e-6f);
+			const float hz = hit > 0.0f ? P.z * (1.0f + len / max(dist, 1.0f)) :
+				1.0e30f;
 
-			if (map < 6.5f)
-			{
-				uv = ref;
-				hit = fine;
-			}
-			else if (map < 7.5f)
-			{
-				uv = at;
-				hit = found;
-			}
+			// This march's, the mirrored models over it as WetPS takes them.
+			if (map > 6.5f && gWetModels.x > 0.5f && md < 1.0f &&
+				mz > input.viewZ.x && mz < hz &&
+				abs(dot(P, gWetPlane.xyz) - gWetPlane.w) < gWetModels.y)
+				return float4(tex2Dlod(sWetModel,
+					float4(flip, 0.0f, 0.0f)).rgb, 1.0f);
 
 			return float4(hit > 0.0f ? tex2Dlod(sWetCopy,
 				float4(uv, 0.0f, 0.0f)).rgb : float3(0.0f, 0.0f, 0.0f), 1.0f);
 		}
 
 		const float2 px = 1.0f / gWetScreen.xy;
-		const float offOld = hitOld > 0.0f && fine > 0.0f ?
-			length((old - ref) * px) : hitOld > 0.0f || fine > 0.0f ?
-			255.0f : 0.0f;
 		const float offNew = found > 0.0f && fine > 0.0f ?
 			length((at - ref) * px) : found > 0.0f || fine > 0.0f ?
 			255.0f : 0.0f;
@@ -453,13 +448,11 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 			(found > 0.0f && max(d.r, max(d.g, d.b)) > 4.0f / 255.0f ?
 			32.0f : 0.0f) +
 			(max(e.r, max(e.g, e.b)) > 4.0f / 255.0f ? 64.0f : 0.0f) +
-			(whyOld > 0.5f && whyOld < 2.5f ? 2.0f : 0.0f) +
 			(why > 0.5f && why < 2.5f ? 4.0f : 0.0f) +
-			(abs(WetDepth(old) - dr) < 0.05f * dr ? 8.0f : 0.0f) +
 			(abs(WetDepth(at) - dr) < 0.05f * dr ? 16.0f : 0.0f);
 
-		return float4(min(offOld, 255.0f) / 255.0f,
-			min(offNew, 255.0f) / 255.0f, flags / 255.0f, 1.0f);
+		return float4(0.0f, min(offNew, 255.0f) / 255.0f, flags / 255.0f,
+			1.0f);
 	}
 #endif
 
@@ -485,12 +478,14 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 
 	// What the reflected ray finds: the frame, or the walls' light.
 	float3 seen = colour * gWetLook.y;
+	// The view depth the march's hit has seen through the mirror.
+	float hitZ = 1.0e30f;
 
 	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f && input.field.w > 0.0f)
 	{
 		float2 at;
-		float why, steps;
-		const float sure = WetMarch(P, reflect(-V, N), at, why, steps);
+		float why, steps, len;
+		const float sure = WetMarch(P, reflect(-V, N), at, why, steps, len);
 
 		if (sure > 0.0f)
 		{
@@ -507,6 +502,28 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 				(1.0f + HD_WET_BRIGHT));
 
 			seen = lerp(seen, held / (1.0f - held), sure * edge.x * edge.y);
+			hitZ = P.z * (1.0f + len / max(dist, 1.0f));
+		}
+	}
+
+	/* A mirrored model under the pixel: on the plane the models were
+	 * mirrored in, under the floor (its depth past the layer's) and nearer
+	 * than the march's hit; its clip undone as the frame's is. */
+	if (gWetModels.x > 0.5f && input.field.w > 0.0f &&
+		abs(dot(P, gWetPlane.xyz) - gWetPlane.w) < gWetModels.y)
+	{
+		const float2 flip = float2(1.0f - (vpos.x + 0.5f) * gWetScreen.x,
+			(vpos.y + 0.5f) * gWetScreen.y);
+		const float d = tex2Dlod(sWetModelDepth, float4(flip, 0.0f, 0.0f)).r;
+		const float z = gWetScreen.w / max(gWetScreen.z - d, 1.0e-6f);
+
+		if (d < 1.0f && z > input.viewZ.x && z < hitZ)
+		{
+			const float3 held = min(tex2Dlod(sWetModel,
+				float4(flip, 0.0f, 0.0f)).rgb, HD_WET_BRIGHT /
+				(1.0f + HD_WET_BRIGHT));
+
+			seen = held / (1.0f - held);
 		}
 	}
 

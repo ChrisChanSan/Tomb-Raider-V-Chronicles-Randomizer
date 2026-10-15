@@ -2209,14 +2209,18 @@ it.
   m/s. It runs over a sloping floor as far as that lies level or falls,
   never up a ramp: the flat halves of the splits round RICH2's raised
   blocks are wet with the floor beside them. The wet floor is darker and
-  mirrors what stands on it - the
-  vending machines, Lara, a lit screen, the lamps and their glows - most
-  where the eye looks along the floor; where the level's art already
-  carries a copy of the room upside down under the floor (RICH2's
-  corridor 46 and its mouth), the wet floor mirrors nothing and is only
-  darker, with the lamps' highlight - at the corridor's mouth, where the
-  tank's water reaches, the floor over that copy is opaque. A game
-  loaded with the tank shot
+  mirrors what stands on it - the vending machines, Lara, a lit screen,
+  the lamps and the corridor's cove lights - most where the eye looks
+  along the floor. Lara and the objects that stand over the wet floor are
+  mirrored as themselves, drawn once more through the floor; the room's
+  art and its fixed pieces (the machines, the benches) are mirrored out of the
+  picture on the screen, so what lies off the screen's edge does not
+  show in it. Where the level's art carries a copy of the room upside down
+  under a see-through floor (RICH2's corridor 46 west of its mouth, and
+  some 55 rooms of RICH2 in all), that copy is the floor's reflection and
+  a wet floor there would only darken; where the copy lies under an
+  opaque floor, as at the corridor's mouth the tank's water reaches, the
+  wet floor mirrors as everywhere else. A game loaded with the tank shot
   starts with the floor wet, and it does not dry. With `hd_motion` off
   the water does not run out: the whole floor is wet from the moment of
   the shot.

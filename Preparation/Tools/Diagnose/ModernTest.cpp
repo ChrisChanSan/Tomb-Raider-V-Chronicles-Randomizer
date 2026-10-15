@@ -21814,6 +21814,46 @@ static void splash_tank_wet()
 		"a loaded game wet to the radius, dry past it", (long)limit, 2914);
 }
 
+/* The models' mirror's clip planes (hd_splash_math.h, HDWetPlaneTo): a
+ * plane carried through a matrix keeps every point's distance - here the
+ * box side x >= 41000 through a world-to-view with a turn and a shift and
+ * on through a projection with the floor's reflection and x turned, as
+ * HDRenderWaterWetModels makes them, at a point inside and one outside. */
+static void splash_wet_clip()
+{
+	printf("the splash: the models' mirror's clip planes\n");
+
+	const float view[16] = { 0.6f, 0.0f, -0.8f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+		0.8f, 0.0f, 0.6f, 0.0f, -2000.0f, 900.0f, 5000.0f, 1.0f };
+	const float mirrored[16] = { -1.2f, 0.0f, 0.0f, 0.0f, 0.0f, -1.7f, 0.0f,
+		0.0f, 0.0f, 0.4f, 1.0f, 1.0f, 0.0f, 1800.0f, -16.0f, 0.0f };
+	const float side[4] = { 1.0f, 0.0f, 0.0f, -41000.0f };
+	const float in[4] = { 41300.0f, -600.0f, 67000.0f, 1.0f };
+	const float out[4] = { 40500.0f, -600.0f, 67000.0f, 1.0f };
+	float v[4], c[4], kept[2];
+	bool made = HDWetPlaneTo(view, side, v) && HDWetPlaneTo(mirrored, v, c);
+
+	for (int n = 0; n < 2; n++)
+	{
+		const float* p = n ? out : in;
+		float q[4], r[4];
+
+		for (int k = 0; k < 4; k++)
+			q[k] = p[0] * view[k] + p[1] * view[4 + k] + p[2] * view[8 + k] +
+				p[3] * view[12 + k];
+
+		for (int k = 0; k < 4; k++)
+			r[k] = q[0] * mirrored[k] + q[1] * mirrored[4 + k] +
+				q[2] * mirrored[8 + k] + q[3] * mirrored[12 + k];
+
+		kept[n] = c[0] * r[0] + c[1] * r[1] + c[2] * r[2] + c[3] * r[3];
+	}
+
+	ok(made && fabsf(kept[0] - 300.0f) < 0.5f && fabsf(kept[1] + 500.0f) < 0.5f,
+		"a side 300 inside and 500 outside, in clip space", (long)kept[0],
+		300);
+}
+
 /* The wet floor over sloping squares (hd_splash_math.h, HDWetSlope,
  * HDWetHeight, HDWetPasses): RICH2's split by the raised block in room 45
  * (corners -768, 0, 0, 0, function 7; RoomProbe -tankslopes) and a tilt
@@ -22896,6 +22936,7 @@ int main()
 	splash_tank_dome();
 	splash_tank_wet();
 	splash_tank_slopes();
+	splash_wet_clip();
 	splash_rings();
 	spring_table();
 	spring_file();

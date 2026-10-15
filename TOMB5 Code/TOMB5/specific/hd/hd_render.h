@@ -1682,8 +1682,10 @@ bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size);
  * whether the radius keeps it, and the floor's dome foot and the furthest
  * the front runs; and the art's copy of the room under it (hd_render.cpp,
  * "the art's own mirror"): the 256-unit cells of art under the floor in
- * its column, how many of them the art mirrors over it, and whether the
- * square counts as copied (the march mirror then leaves it); and its
+ * its column, how many of them the art mirrors over it, whether the floor
+ * over them is a clear floor the copy shows through, and whether the
+ * square counts as copied - such a copy under a clear floor (the march
+ * mirror then leaves it); and its
  * floor's slope function, 0 for a flat one, its y then the highest
  * corner; false past the last. HDRenderWaterWetLimited 0 lays the
  * next build's floors without the rooms and the radius (-tankwetall), the
@@ -1697,6 +1699,7 @@ struct HDWaterWetSquare
 	float reach, limit;
 	int under, mirrored, copied;
 	int slope;
+	int clear;
 };
 
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
@@ -1714,6 +1717,25 @@ void HDRenderWaterWetLimited(int on);
  * for the game's. */
 void HDRenderWaterWetMirror();
 void HDRenderWaterWetMarch(int map, const float* trial = 0);
+
+/* The models in the wet floor's mirror (hd_render.cpp, "the models in the
+ * mirror"): between the rooms' passes and HDRenderWaterWetMirror, the
+ * frame's object list drawn twice into a target of the mirror's own - once
+ * through the floor's reflection, once as the frame drew it - by `draw`,
+ * which takes a projection (D3DMATRIX), the frame's bulb count and the
+ * passes: the engine hands in HDObjectFrameDraw, RoomProbe its stand-ins.
+ * Nothing when the wet floor drew nothing this frame. */
+typedef void (*HDWetModelDraw)(const void* projection, int bulbs,
+	unsigned int passes);
+void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
+	int bulbs);
+/* RoomProbe's -wetstand: a dark box 160 across and `height` high standing
+ * on the wet square under world x, z, drawn with the frame's view and
+ * `projection` (the frame's own when 0) in the frame `offX`, `offZ` shift
+ * the world into, its pixels' alpha `alpha` (0 to 255: a model's shader
+ * writes its page's alpha there); false where no wet square lies under it. */
+bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
+	float offZ, const float* projection = 0, int alpha = 255);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

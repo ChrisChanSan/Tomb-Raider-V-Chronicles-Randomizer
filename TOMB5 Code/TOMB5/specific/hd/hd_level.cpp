@@ -9174,6 +9174,7 @@ void HDFrameDrawGlow()
 	 * the cards and the objects' glows: the rooms' glows are in the copy it
 	 * reads, and the dome, the spray and a glow drawn after it lie over it
 	 * as over the floor (hd_render.cpp, "the wet floor"). */
+	HDRenderWaterWetModels(HDObjectFrameDraw, &projection, frame.bulbCount);
 	if (HDRenderWaterSheetsBuilt())
 		HDRenderWaterWetMirror();
 

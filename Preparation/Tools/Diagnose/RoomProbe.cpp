@@ -454,11 +454,15 @@
  *     -tankleave spray|water  -tank without its spray, or without its
  *                     water - a part's own pixels, against the picture with
  *                     it; repeatable.
- *     -wetstand x,z[,h]  a stand-in for Lara on a wet floor at world x, z:
- *                     a dark box 160 across and h high (768, her standing
- *                     height, without it), drawn among the frame's objects
- *                     and through the wet floor's mirror of the models;
- *                     repeatable. Needs -tank and a wet square there.
+ *     -wetstand x,z[,h[,a]]  a stand-in for Lara on a wet floor at world
+ *                     x, z: a dark box 160 across and h high (768, her
+ *                     standing height, without it), drawn among the frame's
+ *                     objects and through the wet floor's mirror of the
+ *                     models; repeatable. Needs -tank and a wet square
+ *                     there. a: the alpha its pixels write (255; the last
+ *                     given counts for all boxes), as a model's shader
+ *                     writes its page's alpha, which on her body page lies
+ *                     under 64 on a tenth of the texels.
  *     -wetnomodels    -wetstand's boxes without the models' mirror: the
  *                     picture the march alone makes of them.
  *     -tankcensus     every room's floor squares against the .TRG: the
@@ -1880,6 +1884,8 @@ static std::vector<float> g_swimmers;
  * drawn where the HD objects are and through the wet floor's mirror of the
  * models (HDRenderWaterProbeStand, HDRenderWaterWetModels). */
 static std::vector<float> g_wet_stands;
+// -wetstand's a: the alpha the boxes' pixels write.
+static int g_wet_stand_alpha = 255;
 // The frame's projection, for the models' mirror (ProbeWetDraw).
 static float g_wet_stand_proj[16];
 /* -wetnomodels: the stand-ins drawn without the models' mirror - the
@@ -7635,7 +7641,7 @@ static void ProbeWetStands(const void* projection, int bulbs,
 	for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
 		HDRenderWaterProbeStand(g_wet_stands[i], g_wet_stands[i + 1],
 			g_wet_stands[i + 2], g_seed_origin[0], g_seed_origin[1],
-			(const float*)projection);
+			(const float*)projection, g_wet_stand_alpha);
 }
 
 /* The tanks' wet floors where HDFrameDrawGlow draws them: part 0 the
@@ -11462,11 +11468,16 @@ static int ProbeMain(int argc, char** argv)
 			else if (!strcmp(argv[at], "-wetstand"))
 			{
 				float s[3] = { 0.0f, 0.0f, 768.0f };
+				int a = g_wet_stand_alpha;
 
-				if (sscanf_s(argv[++at], "%f,%f,%f", &s[0], &s[1], &s[2]) >= 2)
+				if (sscanf_s(argv[++at], "%f,%f,%f,%d", &s[0], &s[1], &s[2],
+					&a) >= 2 && a >= 0 && a <= 255)
+				{
 					g_wet_stands.insert(g_wet_stands.end(), s, s + 3);
+					g_wet_stand_alpha = a;
+				}
 				else
-					printf("RoomProbe: -wetstand wants x,z[,h] - '%s' "
+					printf("RoomProbe: -wetstand wants x,z[,h[,a]] - '%s' "
 						"ignored\n", argv[at]);
 			}
 			else if (!strcmp(argv[at], "-tankslopes"))
@@ -14536,7 +14547,7 @@ static int ProbeMain(int argc, char** argv)
 			for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
 				if (g_hdwater == 1 && !HDRenderWaterProbeStand(g_wet_stands[i],
 					g_wet_stands[i + 1], g_wet_stands[i + 2],
-					g_seed_origin[0], g_seed_origin[1]))
+					g_seed_origin[0], g_seed_origin[1], 0, g_wet_stand_alpha))
 					printf("-wetstand %.0f,%.0f: no wet square there - not "
 						"drawn\n", g_wet_stands[i], g_wet_stands[i + 1]);
 

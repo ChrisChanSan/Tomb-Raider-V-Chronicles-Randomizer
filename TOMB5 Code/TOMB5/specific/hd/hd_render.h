@@ -1732,9 +1732,10 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 /* RoomProbe's -wetstand: a dark box 160 across and `height` high standing
  * on the wet square under world x, z, drawn with the frame's view and
  * `projection` (the frame's own when 0) in the frame `offX`, `offZ` shift
- * the world into; false where no wet square lies under it. */
+ * the world into, its pixels' alpha `alpha` (0 to 255: a model's shader
+ * writes its page's alpha there); false where no wet square lies under it. */
 bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
-	float offZ, const float* projection = 0);
+	float offZ, const float* projection = 0, int alpha = 255);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

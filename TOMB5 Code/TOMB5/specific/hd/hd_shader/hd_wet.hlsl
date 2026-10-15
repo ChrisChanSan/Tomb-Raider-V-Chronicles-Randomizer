@@ -119,7 +119,8 @@
  * The models in the mirror (hd_render.cpp, HDRenderWaterWetModels): Lara and
  * the objects the frame drew are drawn once more through the floor's
  * mirror into a target of their own, s0's colour, with their own depth on
- * s3, and once as the frame drew them into s0's alpha alone. Both are
+ * s3, and once as the frame drew them into s0's alpha alone (0 under a
+ * model, 1 elsewhere, whatever alpha the model's page holds). Both are
  * flipped left to right - the flip keeps the models' winding through the
  * mirror - so they are read at 1 - x. The march goes past a place of the
  * frame a model covers, as past a hole in the frame: a model's pixels in
@@ -186,11 +187,11 @@ bool WetOn(float2 uv)
 	return all(uv >= 0.0f) && all(uv <= 1.0f);
 }
 
-// Whether the frame drew a model at a place on the screen.
+// Whether the frame drew a model at a place on the screen (alpha 0 there).
 bool WetModelAt(float2 uv)
 {
 	return gWetModels.x > 0.5f && tex2Dlod(sWetModel,
-		float4(1.0f - uv.x, uv.y, 0.0f, 0.0f)).a > 0.25f;
+		float4(1.0f - uv.x, uv.y, 0.0f, 0.0f)).a < 0.5f;
 }
 
 /* The march: from P along R, the place the ray meets the frame, and how

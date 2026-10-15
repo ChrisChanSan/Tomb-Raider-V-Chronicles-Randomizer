@@ -952,3 +952,64 @@ inline bool HDWetPasses(int a0, int a1, int b0, int b1, int step)
 {
 	return b0 >= a0 && b0 - a0 <= step && b1 >= a1 && b1 - a1 <= step;
 }
+
+/* A plane carried through a matrix (hd_render.cpp, "the models in the
+ * mirror"): for row vectors p' = p T, the plane c with c.p' = w.p for every
+ * p, c = T^-1 w - the wet squares' bounds from the world into view space and
+ * on into the mirrored projection's clip space, where the device takes a
+ * clip plane while a vertex shader draws. False for a singular T. */
+inline bool HDWetPlaneTo(const float* T, const float* w, float* c)
+{
+	double a[4][8];
+
+	for (int r = 0; r < 4; r++)
+		for (int k = 0; k < 8; k++)
+			a[r][k] = k < 4 ? (double)T[r * 4 + k] : (k - 4 == r ? 1.0 : 0.0);
+
+	for (int col = 0; col < 4; col++)
+	{
+		int best = col;
+
+		for (int r = col + 1; r < 4; r++)
+			if ((a[r][col] < 0 ? -a[r][col] : a[r][col]) >
+				(a[best][col] < 0 ? -a[best][col] : a[best][col]))
+				best = r;
+
+		if (a[best][col] == 0.0)
+			return false;
+
+		for (int k = 0; k < 8; k++)
+		{
+			const double t = a[col][k];
+
+			a[col][k] = a[best][k];
+			a[best][k] = t;
+		}
+
+		const double d = a[col][col];
+
+		for (int k = 0; k < 8; k++)
+			a[col][k] /= d;
+
+		for (int r = 0; r < 4; r++)
+			if (r != col && a[r][col] != 0.0)
+			{
+				const double f = a[r][col];
+
+				for (int k = 0; k < 8; k++)
+					a[r][k] -= f * a[col][k];
+			}
+	}
+
+	for (int r = 0; r < 4; r++)
+	{
+		double s = 0.0;
+
+		for (int k = 0; k < 4; k++)
+			s += a[r][4 + k] * (double)w[k];
+
+		c[r] = (float)s;
+	}
+
+	return true;
+}

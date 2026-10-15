@@ -11782,6 +11782,12 @@ namespace
 		int slope;		// its floor's slope function, 0 flat
 	};
 
+	// The world box of wet points (HDRenderWaterWetDraw).
+	struct WetBox
+	{
+		float x0, z0, x1, z1;
+	};
+
 	struct WetFloor
 	{
 		WetInfo info;
@@ -11882,7 +11888,8 @@ namespace
 
 	/* The models through the floor's mirror (HDRenderWaterWetModels): a
 	 * target of the frame's size, its colour the models drawn through the
-	 * mirror and its alpha the models as the frame drew them, and a depth
+	 * mirror and its alpha 0 where the frame drew a model, 1 elsewhere, and
+	 * a depth
 	 * texture of its own, INTZ as the frame's, so the mirror's pixel shader
 	 * reads the mirrored models' depth; D3DPOOL_DEFAULT and released with
 	 * the later copy. g_wet_models while this frame's models are in them,
@@ -11900,6 +11907,14 @@ namespace
 	float g_wet_view[16] = {};
 	int g_wet_height = 0;
 	bool g_wet_height_set = false;
+	/* The world box (x0, z0, x1, z1) of the drawn wet points on that plane,
+	 * and the clip planes made of it: view space for RoomProbe's stand-in,
+	 * which the fixed function draws (HDRenderWaterProbeStand), and the
+	 * mirrored projection's clip space; g_wet_clip_on while they stand. */
+	float g_wet_box[4] = {};
+	float g_wet_clip_view[5][4] = {};
+	float g_wet_clip[5][4] = {};
+	bool g_wet_clip_on = false;
 
 	void release_wet_models()
 	{
@@ -17014,6 +17029,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 
 	// The floor heights of the points drawn wet, for the models' plane.
 	std::map<int, int> heights;
+	std::map<int, WetBox> boxes;
 
 	for (int r = 0; r < 12; r++)
 		axes[r] = 0.0f;
@@ -17110,7 +17126,18 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			verts.push_back(v);
 
 			if (wet[i] > 0.0f)
-				heights[(int)lroundf(p.y + kWetLift)]++;
+			{
+				const int h = (int)lroundf(p.y + kWetLift);
+				WetBox& b = boxes[h];
+
+				if (heights[h]++ == 0)
+					b = { p.x, p.z, p.x, p.z };
+
+				b.x0 = p.x < b.x0 ? p.x : b.x0;
+				b.z0 = p.z < b.z0 ? p.z : b.z0;
+				b.x1 = p.x > b.x1 ? p.x : b.x1;
+				b.z1 = p.z > b.z1 ? p.z : b.z1;
+			}
 		}
 
 		if (g_splash_stats.floor < 0 && sum > 0.0)
@@ -17142,6 +17169,16 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			g_wet_height_set = true;
 		}
 
+	if (g_wet_height_set)
+	{
+		const WetBox& b = boxes[g_wet_height];
+
+		g_wet_box[0] = b.x0;
+		g_wet_box[1] = b.z0;
+		g_wet_box[2] = b.x1;
+		g_wet_box[3] = b.z1;
+	}
+
 	// The opaque frame, for the sheets (and the march debugger).
 	HDRenderWaterCopy();
 	g_wet_ready = true;
@@ -17158,14 +17195,25 @@ void HDRenderWaterWetDraw(const float* toFrame)
  * drawn once more with the floor's reflection folded into the projection
  * (the models' lighting is the frame's, worked out before the projection,
  * so the reflection shows them lit as they stand), and once as the frame
- * drew them into the target's alpha alone, the places the march goes past.
+ * drew them into the target's alpha alone, the places the march goes past:
+ * blended with both alpha factors zero, so every pixel a model writes
+ * leaves 0 over the clear 1, whatever alpha its shader returns (a model's
+ * pixel shader returns its page's alpha, a gloss mask: on her body page a
+ * tenth of the texels lie under 64).
  * Both are drawn flipped left to right as well: two flips keep a model's
  * winding, so a culled model keeps its front faces. The mirror takes them
  * only on the plane they were mirrored in - the floor height most of the
  * drawn wet points stand at - under the floor and nearer than the march's
- * hit (WetPS). Drawn here, after the rooms' passes and before the second
- * wet draw, into the target and depth of their own; the device's target,
- * depth, viewport and states are put back. */
+ * hit (WetPS). The mirrored draw is clipped to what stands over the wet
+ * floor: above the plane, and inside the box of the drawn wet points grown
+ * by one square (kWetModelReach) on every side, so a model on the outermost
+ * wet square keeps what it reaches out with. A model elsewhere in the
+ * frame's list - another room's, behind a wall the march cannot see when
+ * its ray leaves the screen before the wall (the hit's depth stands at
+ * infinity then) - is not mirrored, nor a part of a model under the floor,
+ * which the reflection would turn above it. Drawn here, after the rooms'
+ * passes and before the second wet draw, into the target and depth of their
+ * own; the device's target, depth, viewport and states are put back. */
 void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	int bulbs)
 {
@@ -17251,6 +17299,7 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 
 	const float* proj = (const float*)projection;
 	float mirrored[16], plain[16];
+	const float kWetModelReach = 1024.0f;	// units, one square
 
 	for (int r = 0; r < 4; r++)
 		for (int c = 0; c < 4; c++)
@@ -17270,11 +17319,30 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 		D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
 		D3DRS_STENCILENABLE, D3DRS_COLORWRITEENABLE, D3DRS_FOGENABLE,
 		D3DRS_SCISSORTESTENABLE, D3DRS_SEPARATEALPHABLENDENABLE,
-		D3DRS_CLIPPLANEENABLE
+		D3DRS_CLIPPLANEENABLE, D3DRS_SRCBLENDALPHA, D3DRS_DESTBLENDALPHA,
+		D3DRS_BLENDOPALPHA
 	};
 	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
 	DWORD saved[stateCount];
 	D3DVIEWPORT9 vp = {};
+
+	/* The five planes in the world (y runs down): above the floor, and
+	 * the box's four sides; to view space through the first draw's
+	 * world-to-view, to clip space through the mirrored projection. */
+	const float world[5][4] =
+	{
+		{ 0.0f, -1.0f, 0.0f, h },
+		{ 1.0f, 0.0f, 0.0f, kWetModelReach - g_wet_box[0] },
+		{ 0.0f, 0.0f, 1.0f, kWetModelReach - g_wet_box[1] },
+		{ -1.0f, 0.0f, 0.0f, g_wet_box[2] + kWetModelReach },
+		{ 0.0f, 0.0f, -1.0f, g_wet_box[3] + kWetModelReach }
+	};
+	bool clip = true;
+
+	for (int k = 0; k < 5; k++)
+		clip = clip && HDWetPlaneTo(g_wet_view, world[k],
+			g_wet_clip_view[k]) && HDWetPlaneTo(mirrored, g_wet_clip_view[k],
+			g_wet_clip[k]);
 
 	for (int i = 0; i < stateCount; i++)
 		g_device->GetRenderState(states[i], &saved[i]);
@@ -17284,7 +17352,7 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	g_device->SetRenderTarget(0, g_wet_model_surface);
 	g_device->SetDepthStencilSurface(g_wet_model_depth_surface);
 	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
-		D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+		D3DCLEAR_STENCIL, 0xFF000000, 1.0f, 0);
 	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
 	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
@@ -17298,12 +17366,30 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
 		D3DCOLORWRITEENABLE_ALPHA);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLENDALPHA, D3DBLEND_ZERO);
+	g_device->SetRenderState(D3DRS_DESTBLENDALPHA, D3DBLEND_ZERO);
+	g_device->SetRenderState(D3DRS_BLENDOPALPHA, D3DBLENDOP_ADD);
 	draw(plain, bulbs, HD_PASS_SOLID);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
 	g_device->Clear(0, 0, D3DCLEAR_ZBUFFER, 0x00000000, 1.0f, 0);
 	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
 		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
 		D3DCOLORWRITEENABLE_BLUE);
+
+	if (clip)
+	{
+		for (int k = 0; k < 5; k++)
+			g_device->SetClipPlane((DWORD)k, g_wet_clip[k]);
+
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0x1F);
+		g_wet_clip_on = true;
+	}
+
 	draw(mirrored, bulbs, HD_PASS_SOLID);
+	g_wet_clip_on = false;
 	g_device->SetRenderTarget(0, target);
 	g_device->SetDepthStencilSurface(depth);
 	g_device->SetViewport(&vp);
@@ -17330,7 +17416,7 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
  * and through HDRenderWaterWetModels as a model. False where no wet square
  * lies under it. */
 bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
-	float offZ, const float* projection)
+	float offZ, const float* projection, int alpha)
 {
 	if (!g_device)
 		return false;
@@ -17366,8 +17452,8 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 		v[i].z = z - offZ + ((i & 4) ? 80.0f : -80.0f);
 		// Dark as Lara's suit, its head lighter, so its mirror shows which
 		// way it stands.
-		v[i].c = (i & 2) ? D3DCOLOR_XRGB(30, 28, 26) :
-			D3DCOLOR_XRGB(90, 80, 70);
+		v[i].c = (i & 2) ? D3DCOLOR_ARGB(alpha, 30, 28, 26) :
+			D3DCOLOR_ARGB(alpha, 90, 80, 70);
 	}
 
 	static const unsigned short faces[36] =
@@ -17426,8 +17512,30 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
 	g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
 	g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+
+	/* In the models' mirror the fixed function takes a clip plane in the
+	 * world it draws in, not in clip space: the view-space planes through
+	 * the view, for the draw, and the clip-space planes back after it. */
+	if (g_wet_clip_on)
+		for (int k = 0; k < 5; k++)
+		{
+			float ff[4];
+
+			for (int r = 0; r < 4; r++)
+				ff[r] = g_view[r * 4] * g_wet_clip_view[k][0] +
+					g_view[r * 4 + 1] * g_wet_clip_view[k][1] +
+					g_view[r * 4 + 2] * g_wet_clip_view[k][2] +
+					g_view[r * 4 + 3] * g_wet_clip_view[k][3];
+
+			g_device->SetClipPlane((DWORD)k, ff);
+		}
+
 	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 12, faces,
 		D3DFMT_INDEX16, v, sizeof(Corner));
+
+	if (g_wet_clip_on)
+		for (int k = 0; k < 5; k++)
+			g_device->SetClipPlane((DWORD)k, g_wet_clip[k]);
 
 	for (int i = 0; i < 2; i++)
 		g_device->SetRenderState(states[i], saved[i]);

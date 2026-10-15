@@ -11239,6 +11239,295 @@ static void load_keep()
 	free(level);
 }
 
+/* The font's glyph rows and accent rows as the engine has them (game\
+ * chardef.inc, game\accent.inc, unscaled), for the place of the level's
+ * name on the loading screen. */
+struct LoadNameDef
+{
+	float u, v;
+	short w, h, YOffset;
+	char TopShade, BottomShade;
+};
+
+static const LoadNameDef load_name_rows[106] =
+{
+#include "../../../TOMB5 Code/TOMB5/game/chardef.inc"
+};
+
+static const char load_name_accent[46][2] =
+{
+#include "../../../TOMB5 Code/TOMB5/game/accent.inc"
+};
+
+/* The glyph rows at a screen `rows` lines high, as InitFont scales them. */
+static void load_name_scaled(long rows, LoadNameDef* out)
+{
+	const short winymax = (short)(rows - 1);
+
+	for (int i = 0; i < 106; i++)
+	{
+		out[i] = load_name_rows[i];
+		out[i].h = short((float)load_name_rows[i].h *
+			float(winymax / 240.0F));
+		out[i].YOffset = short((float)load_name_rows[i].YOffset *
+			float(winymax / 240.0F));
+	}
+}
+
+// GetFixedScale (specific\output.cpp) at a screen size; MulDiv rounds.
+static long load_name_fixed(long w, long h, long unit)
+{
+	const long x = w > 640 ? (w * unit + 320) / 640 : unit;
+	const long y = h > 480 ? (h * unit + 240) / 480 : unit;
+
+	return x < y ? x : y;
+}
+
+// How far the font reaches below a baseline, in pixels.
+static long load_name_depth(const LoadNameDef* def)
+{
+	long depth = 0;
+
+	for (int i = 0; i < 106; i++)
+		if (def[i].YOffset + def[i].h > depth)
+			depth = def[i].YOffset + def[i].h;
+
+	return depth;
+}
+
+/* The level's name on the loading screen (loadbar_math.h and the engine's
+ * text): when it is drawn - the row, the screen shown, a level and not the
+ * title, the view not already carrying it -, the slot RenderLoadPic names
+ * as DoGameflow will load it, its place inside the screen at 1080, 1440 and
+ * 2160 rows, and the frames that draw it: the TR4 view's and the load's
+ * first, read back, and no text in the bar's frames. */
+static void load_mode_name(const char* file, const char* bars,
+	const char* flow)
+{
+	char* out = hd_switch_text("../output.cpp");
+	char* text = hd_switch_text("../../game/text.cpp");
+	long n, a, b, c, d;
+
+	ok(out && text, "load name: output.cpp and text.cpp are read",
+		!!out + !!text, 2);
+
+	// The rule: the row, a screen shown, a level, not baked in already.
+	{
+		long bad = 0, drawn = 0;
+
+		for (long row = 0; row <= 1; row++)
+			for (long shown = 0; shown <= 1; shown++)
+				for (long slot = -1; slot <= 1; slot++)	// none, title, level
+					for (long baked = 0; baked <= 1; baked++)
+					{
+						const long want = row && shown && slot > 0 &&
+							!baked;
+						const long got = LoadNameDrawn(row, shown, slot,
+							baked);
+
+						bad += got != want;
+						drawn += got;
+					}
+
+		ok(bad == 0, "load name: the row, shown, a level, not baked", bad,
+			0);
+		ok(drawn == 1, "load name: one case of twenty-four draws", drawn, 1);
+	}
+	ok(!LoadNameDrawn(1, 1, 0, 0), "load name: the title shows none",
+		LoadNameDrawn(1, 1, 0, 0), 0);
+	ok(!LoadNameDrawn(0, 1, 5, 0), "load name: the row off shows none",
+		LoadNameDrawn(0, 1, 5, 0), 0);
+
+	// The screen's states: TR5 and TR4 show it, off only for a build.
+	n = LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_TR5, 0) != LOADBAR_OFF,
+		5, 0) + LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_TR4, 0) !=
+		LOADBAR_OFF, 5, 0);
+	ok(n == 2, "load name: TR5 and TR4 carry the name", n, 2);
+	n = LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_OFF, 1) != LOADBAR_OFF,
+		5, 0);
+	ok(n == 1, "load name: off, a load that builds carries it", n, 1);
+	n = LoadNameDrawn(1, LoadScreenModeOf(LOADBAR_OFF, 0) != LOADBAR_OFF,
+		5, 0);
+	ok(n == 0, "load name: off, a short load shows no text", n, 0);
+
+	// The coming slot, as DoGameflow sets it after DoTitle and DoLevel.
+	n = LoadNextSlot(1, 2, 0, 18, 7, 0, 1, 0, 18);
+	ok(n == 7, "load name: the title's load names the save's level", n, 7);
+	n = LoadNextSlot(1, 3, 0, 18, 7, 4, 1, 0, 18);
+	ok(n == 4, "load name: the title's new game names its level", n, 4);
+	n = LoadNextSlot(1, 4, 0, 18, 7, 4, 1, 0, 18);
+	ok(n == -1, "load name: the game's end names none", n, -1);
+	n = LoadNextSlot(0, 2, 5, 18, 5, 0, 1, 0, 18);
+	ok(n == 5, "load name: a save inside the level names it", n, 5);
+	n = LoadNextSlot(0, 3, 5, 18, 2, 6, 1, 0, 18);
+	ok(n == 6, "load name: a level's end names the next", n, 6);
+	n = LoadNextSlot(0, 1, 5, 18, 2, 6, 1, 0, 18);
+	ok(n == 0, "load name: the exit to the title names none", n, 0);
+	n = LoadNextSlot(0, 1, 5, 18, 2, 6, 0, 0, 18);
+	ok(n == 1, "load name: no title, slot 1", n, 1);
+	n = LoadNextSlot(0, 3, 18, 18, 2, 19, 1, 0, 18);
+	ok(n == 0, "load name: the last slot goes to the title", n, 0);
+	n = LoadNextSlot(0, 3, 9, 9, 2, 10, 1, 0, 18);
+	ok(n == 0, "load name: the credits' slot goes to the title", n, 0);
+	n = LoadNextSlot(0, 3, 1, 18, 2, 2, 1, 1, 18);
+	ok(n == 0, "load name: a demo disc goes to the title", n, 0);
+	n = LoadNextSlot(0, 0, 5, 18, 2, 6, 1, 0, 18);
+	ok(n == 5, "load name: any other status stays", n, 5);
+
+	// DoGameflow's own lines the slot rule follows.
+	n = hd_switch_count(flow, "gfCurrentLevel = savegame.CurrentLevel;");
+	ok(n == 2, "load name: a save's slot after a level and the title", n,
+		2);
+	n = hd_switch_count(flow, "gfCurrentLevel = gfLevelComplete;");
+	ok(n == 2, "load name: the next level after a level and the title", n,
+		2);
+	n = hd_switch_count(flow, "gfCurrentLevel = Gameflow->TitleEnabled == "
+		"0;");
+	ok(n == 1, "load name: status 1 goes to the title or slot 1", n, 1);
+	n = hd_switch_count(flow, "if (Gameflow->DemoDisc || Gameflow->nLevels "
+		"== 2)") + hd_switch_count(flow, "if (gfLevelComplete > "
+		"Gameflow->nLevels)");
+	ok(n == 2, "load name: the title past the last level", n, 2);
+	n = hd_switch_count(flow, "if (gfStatus == 3 && gfCurrentLevel == "
+		"gfLastSlot)");
+	ok(n == 1, "load name: the credits after the last slot", n, 1);
+	a = load_keep_at(flow, "void DoLevel(uchar Name, uchar Audio)",
+		"RenderLoadPic(0);");
+	b = load_keep_at(flow, "void DoLevel(uchar Name, uchar Audio)",
+		"bDoCredits = 1;");
+	ok(a >= 0 && a < b, "load name: the view before the credits' turn",
+		a < b, 1);
+	n = hd_switch_count(flow, "S_LoadLevelFile(");
+	ok(n == 2, "load name: only DoTitle and DoLevel load", n, 2);
+	n = hd_switch_count(flow, "available_levels[lp - 1] ? 2 : 3, "
+		"SCRIPT_TEXT(gfLevelNames[lp])");
+	ok(n == 1 && kLoadNameStyle == 2, "load name: the level list's style",
+		kLoadNameStyle, 2);
+	n = hd_switch_count(bars, "y = phd_winheight - h - GetFixedScale(20);");
+	ok(n == 2 && kLoadNameMargin == 20, "load name: the bar's own margin",
+		kLoadNameMargin, 20);
+
+	// The arithmetic it follows: InitFont's scale, DrawChar's accent.
+	n = hd_switch_count(text, "yoff = short((float)copy[i].YOffset * "
+		"float(phd_winymax / 240.0F));");
+	ok(n == 1, "load name: InitFont scales the y offsets so", n, 1);
+	n = hd_switch_count(text, "DrawChar(def->w / 2 + x2 - 3, y + "
+		"def->YOffset, col, accent);");
+	ok(n == 1, "load name: an accent sits on its letter's offset", n, 1);
+
+	// The place at three sizes: the ink inside, the margin kept.
+	{
+		static const long size[3][5] =
+		{
+			// width, rows, margin, reach, baseline (m_place.py)
+			{ 1920, 1080, 45, 66, 111 },
+			{ 2560, 1440, 60, 88, 148 },
+			{ 3840, 2160, 90, 133, 223 },
+		};
+		LoadNameDef def[106];
+
+		for (int s = 0; s < 3; s++)
+		{
+			load_name_scaled(size[s][1], def);
+
+			const long m = load_name_fixed(size[s][0], size[s][1],
+				kLoadNameMargin);
+			const long reach = LoadNameReach(def, 106, load_name_accent,
+				46);
+			const long y = LoadNameY(m, reach);
+			const long depth = load_name_depth(def);
+
+			ok(m == size[s][2], "load name: the margin at this size", m,
+				size[s][2]);
+			ok(reach == size[s][3], "load name: the font's reach up", reach,
+				size[s][3]);
+			ok(y == size[s][4], "load name: the baseline", y, size[s][4]);
+			ok(y - reach >= 0 && y - reach == m, "load name: the top ink "
+				"inside, at the margin", y - reach, m);
+			ok(y + depth < size[s][1] / 4, "load name: the line in the "
+				"top quarter", y + depth, size[s][1] / 4);
+
+			/* The lettering's place: its baseline GetFixedScale(37) over
+			 * the bottom edge. One line stays inside; PrintString steps a
+			 * further line down by its ink's height and 2, a line of
+			 * capitals ('A') by the least, and a third line's baseline is
+			 * under the edge already. */
+			const long old = size[s][1] - load_name_fixed(size[s][0],
+				size[s][1], 37);
+			const long step = def['A' - '!'].h + 2;
+
+			ok(old + depth <= size[s][1], "load name: one line at the old "
+				"place inside", old + depth, size[s][1]);
+			ok(old + 2 * step > size[s][1], "load name: a third line at the "
+				"old place below the edge", old + 2 * step, size[s][1]);
+		}
+	}
+
+	// The lettering is gone; RenderLoadPic names the coming slot.
+	n = hd_switch_count(out, "TXT_LOADING2") + hd_switch_count(file,
+		"TXT_LOADING2") + hd_switch_count(bars, "TXT_LOADING2");
+	ok(n == 0, "load name: the script's lettering is drawn nowhere", n, 0);
+	n = hd_switch_count(out, "slot = LoadNextSlot(gfLevelId == LVL5_TITLE, "
+		"gfStatus, gfCurrentLevel,");
+	ok(n == 1, "load name: the view names the coming slot", n, 1);
+	n = hd_switch_count(out, "if (named)\r\n\t\t\tS_LoadScreenName(slot);") +
+		hd_switch_count(out, "if (named)\n\t\t\tS_LoadScreenName(slot);");
+	ok(n == 1, "load name: in every fade frame", n, 1);
+	n = hd_switch_count(out, "if (named)\r\n\t\tS_LoadScreenName(slot);") +
+		hd_switch_count(out, "if (named)\n\t\tS_LoadScreenName(slot);");
+	ok(n == 1, "load name: and in the last, which is read back", n, 1);
+	n = hd_switch_count(out, "LoadViewNamed = named ? slot : 0;");
+	ok(n == 1, "load name: the view says it carries the name", n, 1);
+
+	// The load's first frame: the name, the read back, then the present.
+	a = load_keep_at(file, "if (shown)\r\n\t{", "DrawLoadingScreen();");
+	if (a < 0)
+		a = load_keep_at(file, "if (shown)\n\t{", "DrawLoadingScreen();");
+	b = load_keep_at(file, "DrawLoadingScreen();\r\n\r\n\t\tif (named)",
+		"S_LoadScreenName(gfCurrentLevel);");
+	if (b < 0)
+		b = load_keep_at(file, "DrawLoadingScreen();\n\n\t\tif (named)",
+			"S_LoadScreenName(gfCurrentLevel);");
+	c = load_keep_at(file, "S_LoadScreenName(gfCurrentLevel);",
+		"S_LoadScreenKeepName()");
+	d = load_keep_at(file, "S_LoadScreenName(gfCurrentLevel);",
+		"S_DumpScreenFrame();");
+	ok(a >= 0 && a < b && b < c && c < d, "load name: the first frame draws"
+		" it and is read back before its present", a < b && b < c && c < d,
+		1);
+	n = hd_switch_count(file, "S_LoadScreenName(") + hd_switch_count(out,
+		"S_LoadScreenName(");
+	ok(n == 3, "load name: drawn in three places, none else", n, 3);
+	n = hd_switch_count(file, "if (named && S_LoadScreenKeepName())\r\n\t\t\t"
+		"view = 1;") + hd_switch_count(file, "if (named && "
+		"S_LoadScreenKeepName())\n\t\t\tview = 1;");
+	ok(n == 1, "load name: the picture read back goes after the load", n,
+		1);
+	n = hd_switch_count(file, "const long baked = LoadViewNamed && (view || "
+		"!MonoScreenOn);");
+	ok(n == 1, "load name: never over a view that has it", n, 1);
+	a = load_keep_at(file, "const long baked =", "LoadViewNamed = 0;");
+	b = load_keep_at(file, "const long baked =", "_BeginScene();");
+	ok(a >= 0 && a < b, "load name: the view's mark taken once", a < b, 1);
+
+	// The bar's frames draw the picture and no text of their own.
+	n = hd_switch_count(bars, "PrintString(");
+	ok(n == 1, "load name: one PrintString in drawbars.cpp", n, 1);
+	a = load_keep_at(bars, "long S_DrawLoadBar()", "PrintString(");
+	ok(a < 0, "load name: none in the bar's frames", a, -1);
+	a = load_keep_at(bars, "long S_LoadScreenKeepName()", "_EndScene();");
+	b = load_keep_at(bars, "long S_LoadScreenKeepName()",
+		"made = CaptureLoadingScreen();");
+	c = load_keep_at(bars, "long S_LoadScreenKeepName()", "_BeginScene();");
+	ok(a >= 0 && a < b && b < c, "load name: read back between two scenes",
+		a < b && b < c, 1);
+	n = hd_switch_count(bars, "MonoScreenOn = was;");
+	ok(n == 1, "load name: a failed read keeps the picture", n, 1);
+
+	free(out);
+	free(text);
+}
+
 /* The Loadbar style row's third state (specific\loadbar_math.h and the
  * engine's own text): the row's state out of the registry, the fade of the
  * load without a loading screen, and the paths that state takes - no
@@ -11481,6 +11770,9 @@ static void load_mode()
 	ok(n == 4, "load mode: no other comparison", n, 4);
 	n = hd_switch_count(level, "HDLevelKeyDiffers(");
 	ok(n == 0, "load mode: no key compared outside the keep's rule", n, 0);
+
+	// The loading text: the level's name.
+	load_mode_name(file, bars, flow);
 
 	free(level);
 	free(file);

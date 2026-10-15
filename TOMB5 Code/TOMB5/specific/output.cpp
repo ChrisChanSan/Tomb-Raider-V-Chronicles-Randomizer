@@ -45,6 +45,9 @@
 #include "../game/text.h"
 #include "../game/interpolate.h"	// the in-between (tween) frame counters
 #include "../tomb5/tomb5.h"
+#include "../game/savegame.h"	// savegame.CurrentLevel - a save's slot
+#include "drawbars.h"		// the level's name on the loading screen
+#include "loadbar_math.h"	// LoadNextSlot, LoadNameDrawn
 
 D3DTLVERTEX aVertexBuffer[1024];
 
@@ -705,7 +708,7 @@ static inline void GetLoadScreenCam()
 
 void RenderLoadPic(long unused)
 {
-	long x, y;
+	long slot, named;
 	short poisoned;
 
 	GetLoadScreenCam();
@@ -735,8 +738,19 @@ void RenderLoadPic(long unused)
 
 	InitialisePickUpDisplay();
 
-	x = phd_centerx;
-	y = phd_winheight - GetFixedScale(37);
+	/* The view is the coming load's loading screen: its fade frames and
+	 * its last carry the coming level's name (the Loading text row), and
+	 * the last is read back as the loading picture with it (file.cpp).
+	 * gfCurrentLevel is still the level left - DoGameflow sets the next
+	 * slot when this has returned - so the slot is worked out as it will
+	 * set it. The level's texture pages, the font's among them, stand. */
+	slot = LoadNextSlot(gfLevelId == LVL5_TITLE, gfStatus, gfCurrentLevel,
+		gfLastSlot, savegame.CurrentLevel, gfLevelComplete,
+		Gameflow->TitleEnabled, Gameflow->DemoDisc || Gameflow->nLevels == 2,
+		Gameflow->nLevels);
+	named = LoadNameDrawn(tomb5.loadingtxt, tomb5.loadbar != LOADBAR_OFF,
+		slot, 0);
+	LoadViewNamed = named ? slot : 0;
 
 	do
 	{
@@ -744,8 +758,8 @@ void RenderLoadPic(long unused)
 		S_InitialisePolyList();
 		RenderIt(camera.pos.room_number);
 
-		if (tomb5.loadingtxt && tomb5.tr4_loadbar)
-			PrintString(x, y, 5, SCRIPT_TEXT(TXT_LOADING2), FF_CENTER);
+		if (named)
+			S_LoadScreenName(slot);
 
 		S_OutputPolyList();
 		S_DumpScreen();
@@ -756,8 +770,8 @@ void RenderLoadPic(long unused)
 	S_InitialisePolyList();
 	RenderIt(camera.pos.room_number);
 
-	if (tomb5.loadingtxt && tomb5.tr4_loadbar)
-		PrintString(x, y, 5, SCRIPT_TEXT(TXT_LOADING2), FF_CENTER);
+	if (named)
+		S_LoadScreenName(slot);
 
 	S_OutputPolyList();
 	S_DumpScreen();

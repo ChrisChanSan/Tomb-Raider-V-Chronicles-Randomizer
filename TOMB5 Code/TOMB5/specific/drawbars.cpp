@@ -25,7 +25,7 @@
 #include "winmain.h"
 #include "texture.h"
 #include "LoadSave.h"	// DrawLoadingScreen - the picture under the load bar
-#include "loadbar_math.h"	// LOADBAR_*, the brake, the fade of the row's off
+#include "loadbar_math.h"	// LOADBAR_*, the brake, the fade, the name
 #include "time.h"		// TIME_SubTick - a tick passed, without waiting
 #include "profile.h"		// ProfPresent - the held present
 #include "../game/text.h"	// GnFrameCounter
@@ -735,6 +735,50 @@ long S_LoadScreenDraws()
 	return loadbar_mode != LOADBAR_OFF || loadbar_fading;
 }
 
+// game\text.cpp: the accents PrintString composes over a letter.
+extern char AccentTable[46][2];
+
+/* The slot whose name RenderLoadPic drew over the TR4 view, 0 for none:
+ * the view is read back as the loading picture with the name in it, and
+ * S_LoadLevelFile then draws it no second time. */
+long LoadViewNamed;
+
+/* The name of the level in `slot` at the top centre of the frame being
+ * drawn, in the game's font (PrintString: the HD atlas when the HD path
+ * draws), its highest ink kLoadNameMargin under the top edge at this
+ * screen size (loadbar_math.h). Only where the level's texture pages
+ * stand - the font's classic page is one of them. */
+void S_LoadScreenName(long slot)
+{
+	const long reach = LoadNameReach(CharDef, 106, AccentTable, 46);
+
+	PrintString(phd_centerx, LoadNameY(GetFixedScale(kLoadNameMargin),
+		reach), (uchar)kLoadNameStyle, SCRIPT_TEXT(gfLevelNames[slot]),
+		FF_CENTER);
+}
+
+/* The load's first frame, drawn with the name, read back as the loading
+ * picture before it is presented: every later frame draws that picture
+ * and no text of its own, since the loading thread frees the level's
+ * texture pages - the classic font's among them (DrawChar's nTextures - 2)
+ * - while those frames draw. The scene is ended for the read and begun
+ * again for the present. 1 when the picture was made; otherwise the one
+ * before stays up, without the name. */
+long S_LoadScreenKeepName()
+{
+	const char was = MonoScreenOn;
+	long made;
+
+	_EndScene();
+	made = CaptureLoadingScreen();
+	_BeginScene();
+
+	if (!made)
+		MonoScreenOn = was;
+
+	return made;
+}
+
 
 void S_InitLoadBar(long max)
 {
@@ -749,8 +793,9 @@ void S_UpdateLoadBar()
 	loadbar_steps = 100.0F / loadbar_maxpos + loadbar_steps;
 }
 
-/* One frame of the loading screen, at the next 1/60 s tick: the picture,
- * and over it the bar or, with the row off, the fade. The tick is waited
+/* One frame of the loading screen, at the next 1/60 s tick: the picture -
+ * with the level's name in it, read back with the first frame - and over
+ * it the bar or, without a screen, the fade. The tick is waited
  * out first, so that the bar's position is the one at the Present:
  * S_DumpScreenFrame then finds its tick and does not wait again. The
  * position is the brake's (loadbar_math.h) out of the work done - the

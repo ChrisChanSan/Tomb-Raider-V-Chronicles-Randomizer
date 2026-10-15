@@ -266,53 +266,19 @@ inline float HDSpringHalfWidth(const HDSpring& s, float h)
 }
 
 /* The column in a frame, its foot `b` and its top `t` in view space, z the
- * depth in front of the eye. The part drawn is the part more than
- * kHDSpringFront in front of the eye - the draw's vertices divide by their
- * depth -: `lo` and `hi` are the shares of the way from the foot to the
- * top where it begins and ends, 0 and 1 while both ends are in front; false
- * when no part is. An eye beside the jet that looks up or down it keeps the
- * part in front; the rows behind it are cut. */
+ * depth in front of the eye: drawn while both ends lie more than
+ * kHDSpringFront in front of the eye - the draw's vertices divide by
+ * their depth -, else left out whole. */
 static const float kHDSpringFront = 1.0f;
 
-inline bool HDSpringColumnCut(const float* b, const float* t, float* lo,
-	float* hi)
+inline bool HDSpringColumnFront(const float* b, const float* t)
 {
-	*lo = 0.0f;
-	*hi = 1.0f;
-
-	if (b[2] > kHDSpringFront && t[2] > kHDSpringFront)
-		return true;
-
-	if (b[2] <= kHDSpringFront && t[2] <= kHDSpringFront)
-		return false;
-
-	const float at = (kHDSpringFront - b[2]) / (t[2] - b[2]);
-
-	if (b[2] <= kHDSpringFront)
-		*lo = at;
-	else
-		*hi = at;
-
-	return *hi > *lo;
-}
-
-/* The drawn part's ends `p0`, `p1` and its middle `mid` between the shares
- * `lo` and `hi` of the way from `b` to `t`; the whole column's own ends
- * where it is not cut. */
-inline void HDSpringColumnPart(const float* b, const float* t, float lo,
-	float hi, float* p0, float* p1, float* mid)
-{
-	for (int k = 0; k < 3; k++)
-	{
-		p0[k] = lo > 0.0f ? b[k] + (t[k] - b[k]) * lo : b[k];
-		p1[k] = hi < 1.0f ? b[k] + (t[k] - b[k]) * hi : t[k];
-		mid[k] = (p0[k] + p1[k]) * 0.5f;
-	}
+	return b[2] > kHDSpringFront && t[2] > kHDSpringFront;
 }
 
 /* The column's weight: its strength, faded as the eye looks along its line
- * `ax` - the sine of the angle between the line and the way to the drawn
- * part's middle `mid`, from 0.2 (gone) to 0.5 (whole), where the quad
+ * `ax` - the sine of the angle between the line and the way to the
+ * column's middle `mid`, from 0.2 (gone) to 0.5 (whole), where the quad
  * turns edge-on - and as its half-width there, `half` units, falls from
  * kHDSpringFadeFrom to kHDSpringFadeTo pixels at the focal length `focal`
  * (pixels). `side` takes ax x mid, the quad's way across, and `length` its
@@ -338,8 +304,8 @@ inline float HDSpringColumnWeight(float strength, const float* ax,
 		(kHDSpringFadeFrom - kHDSpringFadeTo), 0.0f), 1.0f);
 }
 
-/* Whether the drawn part from `p0` to `p1` (view space, both in front),
- * `h0` and `h1` units wide to each side there, reaches the screen: every
+/* Whether the column from `p0` to `p1` (view space, both in front), `h0`
+ * and `h1` units wide to each side there, reaches the screen: every
  * corner of its quad lies within its half-width of an end, so the box of
  * the ends, each widened by its half-width at its nearest depth and its
  * farthest, through the projection (x' = proj[0] x / z + proj[8], y' =
@@ -377,28 +343,26 @@ inline bool HDSpringColumnOnScreen(const float* p0, const float* p1,
 
 /* Whether spring `s`'s column, `depth` units from its foot `b` to its top
  * `t` (view space), is drawn in a frame of focal length `focal` and
- * projection `proj` and reaches its screen: a part in front, a weight over
- * 0 and a way across - the numbers the draw takes (hd_spring.cpp,
+ * projection `proj` and reaches its screen: both ends in front, a weight
+ * over 0 and a way across - the numbers the draw takes (hd_spring.cpp,
  * HDSpringFrameDraw). The column bends the frame's copy, so a frame it
  * stands in takes one (HDSpringFrameCopy) whether or not a sheet of the
  * frame asks for it. */
 inline bool HDSpringColumnInFrame(const HDSpring& s, float depth,
 	const float* b, const float* t, float focal, const float* proj)
 {
-	float lo, hi, p0[3], p1[3], mid[3], side[3], sl;
-
-	if (depth <= 0.0f || !HDSpringColumnCut(b, t, &lo, &hi))
+	if (depth <= 0.0f || !HDSpringColumnFront(b, t))
 		return false;
 
-	HDSpringColumnPart(b, t, lo, hi, p0, p1, mid);
-
 	const float ax[3] = { t[0] - b[0], t[1] - b[1], t[2] - b[2] };
+	const float mid[3] = { (b[0] + t[0]) * 0.5f, (b[1] + t[1]) * 0.5f,
+		(b[2] + t[2]) * 0.5f };
+	float side[3], sl;
 	const float weight = HDSpringColumnWeight(s.strength, ax, mid,
-		HDSpringHalfWidth(s, depth * (lo + hi) * 0.5f), focal, side, &sl);
+		HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
 
-	return weight > 0.0f && sl > 0.0f && HDSpringColumnOnScreen(p0, p1,
-		HDSpringHalfWidth(s, depth * lo), HDSpringHalfWidth(s, depth * hi),
-		proj);
+	return weight > 0.0f && sl > 0.0f && HDSpringColumnOnScreen(b, t,
+		HDSpringHalfWidth(s, 0.0f), HDSpringHalfWidth(s, depth), proj);
 }
 
 /* The crack at the spring's foot: a jagged slit in the floor the jet rises

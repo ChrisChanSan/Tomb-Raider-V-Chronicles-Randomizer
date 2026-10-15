@@ -22178,7 +22178,7 @@ static void spring_column()
 		{ { -358.184f, 564.764f, 891.992f },
 			{ -358.184f, -1750.977f, 1460.977f }, 1 },
 		// mid height, 300 away, up 30 degrees: the foot behind the eye
-		{ { 0.0f, 1182.844f, -336.461f }, { 0.0f, -882.330f, 855.781f }, 1 },
+		{ { 0.0f, 1182.844f, -336.461f }, { 0.0f, -882.330f, 855.781f }, 0 },
 		// straight under and straight over it: along the line, edge-on
 		{ { 0.0f, 66.387f, -143.534f }, { 0.0f, 26.840f, 2240.753f }, 0 },
 		{ { 0.0f, -25.504f, 2321.358f }, { 0.0f, -65.051f, -62.930f }, 0 },
@@ -22197,41 +22197,30 @@ static void spring_column()
 		total++;
 	}
 
-	ok(right == total, "spring column: in the frame wherever a part of it "
-		"is in front, on the screen and not edge-on", right, total);
+	ok(right == total, "spring column: in the frame with both ends in "
+		"front, on the screen and not edge-on", right, total);
 
-	// The cut: the foot 336 behind the eye, the part from 0.283 up drawn.
-	float lo = -1.0f, hi = -1.0f;
-	const bool cut = HDSpringColumnCut(eyes[3].b, eyes[3].t, &lo, &hi);
+	/* The ends: both in front at the log's tick 270, the foot 336 behind
+	 * the eye at the fan's, both behind turned away - the column whole or
+	 * left out whole, as the draw takes it. */
+	ok(HDSpringColumnFront(eyes[0].b, eyes[0].t) &&
+		!HDSpringColumnFront(eyes[3].b, eyes[3].t) &&
+		!HDSpringColumnFront(eyes[6].b, eyes[6].t), "spring column: drawn "
+		"with both ends in front, left out with one or both behind", 1, 1);
 
-	ok(cut && fabsf(lo - 337.461f / 1192.242f) < 1.0e-4f && hi == 1.0f,
-		"spring column: the rows behind the eye cut where the depth is 1",
-		lround(lo * 10000.0f), 2830);
-
-	ok(HDSpringColumnCut(eyes[0].b, eyes[0].t, &lo, &hi) && lo == 0.0f &&
-		hi == 1.0f && !HDSpringColumnCut(eyes[6].b, eyes[6].t, &lo, &hi),
-		"spring column: whole with both ends in front, none with both behind",
-		1, 1);
-
-	/* Uncut, the part's middle and the weight are the whole column's, to
-	 * the bit: the draw's own expression of mid height. */
-	float p0[3], p1[3], mid[3], side[3], sl;
-
-	HDSpringColumnPart(eyes[0].b, eyes[0].t, 0.0f, 1.0f, p0, p1, mid);
-
+	/* The weight at the log's tick 270: whole, and the quad's way across
+	 * the line, ax x mid, of a length over 0. */
+	float side[3], sl;
 	const float ax[3] = { eyes[0].t[0] - eyes[0].b[0],
 		eyes[0].t[1] - eyes[0].b[1], eyes[0].t[2] - eyes[0].b[2] };
+	const float mid[3] = { (eyes[0].b[0] + eyes[0].t[0]) * 0.5f,
+		(eyes[0].b[1] + eyes[0].t[1]) * 0.5f,
+		(eyes[0].b[2] + eyes[0].t[2]) * 0.5f };
 	const float w = HDSpringColumnWeight(s.strength, ax, mid,
 		HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
-	bool same = true;
 
-	for (int k = 0; k < 3; k++)
-		same = same && mid[k] == (eyes[0].b[k] + eyes[0].t[k]) * 0.5f &&
-			p0[k] == eyes[0].b[k] && p1[k] == eyes[0].t[k];
-
-	ok(same && w == 1.0f && sl > 0.0f, "spring column: uncut, the middle is "
-		"the column's and the weight whole at the log's tick 270", same ? 1 :
-		0, 1);
+	ok(w == 1.0f && sl > 0.0f, "spring column: the weight whole at the "
+		"log's tick 270", lround(w * 1000.0f), 1000);
 }
 
 static void spring_clock()

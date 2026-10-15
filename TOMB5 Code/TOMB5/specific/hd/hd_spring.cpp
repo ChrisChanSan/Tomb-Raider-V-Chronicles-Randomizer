@@ -808,51 +808,32 @@ void HDSpringFrameDraw(const float* toFrame)
 		through(m, tw, top);
 
 		/* The column, a quad standing on the jet's line and turned to the
-		 * eye, in eight rows up its height; where an end lies behind the
-		 * eye the rows behind it are cut and a row stands at the cut
-		 * (HDSpringColumnCut). It fades as the eye looks along its line,
-		 * where the quad turns edge-on, and as the half-width at the
-		 * drawn part's middle falls from kHDSpringFadeFrom to
+		 * eye, in eight rows up its height; left out where an end lies
+		 * behind the eye (HDSpringColumnFront). It fades as the eye looks
+		 * along its line, where the quad turns edge-on, and as its
+		 * half-width at mid height falls from kHDSpringFadeFrom to
 		 * kHDSpringFadeTo pixels (HDSpringColumnWeight). */
-		float lo = 0.0f, hi = 1.0f;
-
 		if ((g_parts & 1) && f.copy && depth > 0.0f &&
-			HDSpringColumnCut(b, top, &lo, &hi))
+			HDSpringColumnFront(b, top))
 		{
 			const float ax[3] = { top[0] - b[0], top[1] - b[1],
 				top[2] - b[2] };
-			float p0[3], p1[3], mid[3], side[3], sl;
-
-			HDSpringColumnPart(b, top, lo, hi, p0, p1, mid);
-
+			const float mid[3] = { (b[0] + top[0]) * 0.5f,
+				(b[1] + top[1]) * 0.5f, (b[2] + top[2]) * 0.5f };
+			float side[3], sl;
 			const float weight = HDSpringColumnWeight(s.strength, ax, mid,
-				HDSpringHalfWidth(s, depth * (lo + hi) * 0.5f), focal, side,
-				&sl);
+				HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
 
 			if (weight > 0.0f && sl > 0.0f)
 			{
 				for (int k = 0; k < 3; k++)
 					side[k] /= sl;
 
-				/* The rows: the drawn part's two ends and the eighths of
-				 * the height between them - the eight rows of the whole
-				 * column where it is not cut. */
-				float at[9];
-				int rows = 0;
-
-				at[rows++] = lo;
-
-				for (int r = 1; r < 8; r++)
-					if ((float)r / 8.0f > lo && (float)r / 8.0f < hi)
-						at[rows++] = (float)r / 8.0f;
-
-				at[rows++] = hi;
-
 				Vertex row[9][2];
 
-				for (int r = 0; r < rows; r++)
+				for (int r = 0; r <= 8; r++)
 				{
-					const float along = at[r];
+					const float along = (float)r / 8.0f;
 					const float h = depth * along;
 					const float hw = HDSpringHalfWidth(s, h);
 
@@ -878,7 +859,7 @@ void HDSpringFrameDraw(const float* toFrame)
 					}
 				}
 
-				for (int r = 0; r + 1 < rows; r++)
+				for (int r = 0; r < 8; r++)
 				{
 					const Vertex quad[6] = { row[r][0], row[r][1],
 						row[r + 1][1], row[r][0], row[r + 1][1],

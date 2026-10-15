@@ -11766,6 +11766,9 @@ static void load_brake()
 
 	// The engine: no frame of the build waits on the tick, the tail runs to
 	// the brake's end, the lines that log it.
+	n = hd_switch_count(file, "const long hd = tomb5.hd_build && "
+		"HDInstallRoot()[0];");
+	ok(n == 1, "load brake: the thread's share when a build follows", n, 1);
 	a = load_keep_at(bars, "void S_LoadBarBuild(", "TIME_SubTick() < 1.0)");
 	b = load_keep_at(bars, "void S_LoadBarBuild(", "S_DrawLoadBar();");
 	ok(a >= 0 && a < b, "load brake: a build frame only past a tick", a < b,

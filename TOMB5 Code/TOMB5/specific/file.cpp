@@ -20,6 +20,7 @@
 #include "hd/hd_pagecache.h"		// the level's HD pages, for the warm-up
 #include "hd/hd_model.h"		// HDModelPreload
 #include "hd/hd_feet.h"		// the two footstep sets
+#include "hd/hd_install.h"		// HDInstallRoot - an HD build follows
 #include "file.h"
 #include "function_stubs.h"
 #include "profile.h"			// ProfileLevel - PROFLOG counts from the load
@@ -2373,10 +2374,15 @@ long S_LoadLevelFile(long num)
 	}
 
 	/* The screen's clock starts with its first frame: the brake keeps it up
-	 * for loadbar_min_ms from here. With an HD build to follow (hd_build)
-	 * the loading thread has its share of the bar, the build the rest. */
+	 * for loadbar_min_ms from here. An HD build follows the loading thread
+	 * when the build is chosen (hd_build) and an installation was found -
+	 * with hd_build 0 none is looked for; the thread then has its share of
+	 * the bar and the main thread's work the rest, otherwise the thread has
+	 * all of it. */
+	const long hd = tomb5.hd_build && HDInstallRoot()[0];
+
 	S_LoadScreenBegin(mode, fade, (double)tomb5.loadfade_ms,
-		(double)tomb5.loadbar_min_ms, tomb5.hd_build != 0);
+		(double)tomb5.loadbar_min_ms, hd);
 
 	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;

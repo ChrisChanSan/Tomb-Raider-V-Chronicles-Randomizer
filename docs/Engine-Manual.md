@@ -1270,7 +1270,10 @@ stretched picture.
 
 The picture is shown at once and drawn again under the loading bar in every
 frame of the bar, the original pictures as well, so it stands under the bar
-whatever the graphics driver does with its buffers. With the HD build on (an
+whatever the graphics driver does with its buffers. With *TR4 loadscreens* on
+(the default) a level other than the title shows no picture while it loads:
+the bar stands over the last view of the game, which stays on screen only
+because a windowed game keeps its one back buffer. With the HD build on (an
 installation found, `hd_build` on), a savegame loaded inside the level shows its
 HD picture without decoding it again: the last decoded picture (about 8 MB) is
 kept until another one is shown, and a picture file changed on disk is read

@@ -7458,12 +7458,14 @@ int HDCarriedRoom(int group)
  * HDLOG vis, once per level at the first frame that asks, with -log:
  *
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
- *         guest_tris= wide= ms=
+ *         guest_tris= wide= ms= twin= wide_bare= edge=
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
  * room behind, guests the (holder, group) pairs and their triangles, wide
- * the portals with a wider opening, ms the tables' build. */
+ * the portals with a wider opening, ms the tables' build; twin the
+ * openings that named a flipmap pair's other room, named by its main room
+ * instead, wide_bare and edge HDVisDefaults' two numbers of the walk. */
 
 static int VisContents(int roomIndex)
 {
@@ -7483,10 +7485,14 @@ bool HDVisWalkOn()
 	if (gLogEnabled && !g_vis_logged)
 	{
 		g_vis_logged = true;
+		const HDVisParams p = HDVisDefaults();
+
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
-			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f", g_stem,
-			t->rooms, t->artRooms, t->wallFaces, t->bareFaces, t->voidFaces,
-			t->guestPairs, t->guestTris, t->widePortals, t->ms);
+			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
+			"wide_bare=%.2f edge=%.5f", g_stem, t->rooms, t->artRooms,
+			t->wallFaces, t->bareFaces, t->voidFaces, t->guestPairs,
+			t->guestTris, t->widePortals, t->ms, t->openingsTwin, p.wideBare,
+			p.edge);
 	}
 
 	return true;

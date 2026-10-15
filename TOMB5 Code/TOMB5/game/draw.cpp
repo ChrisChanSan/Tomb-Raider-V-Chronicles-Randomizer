@@ -207,11 +207,13 @@ static int g_reach_carried = 0;
  * with the window it got, and that window grows by union as the classic
  * one does. `g_vis_why` is per room the source that queued it first, for
  * VISLOG: 0 the portals or the eye's room, 1 a guest, 2 an opening, 3 a
- * wide portal; 0xff not queued. */
+ * wide portal, 4 a portal at the window's edge (VisFollowPortal); 0xff not
+ * queued. `g_vis_edge` is that edge's width in pixels for this frame. */
 static bool g_vis_walk = false;
 static unsigned char g_vis_why[256];
-static int g_vis_count[4];
+static int g_vis_count[5];
 static long g_vis_dequeues = 0;
+static float g_vis_edge = 0.0f;
 
 short* GetBoundsAccurate(ITEM_INFO* item)
 {
@@ -2008,6 +2010,7 @@ static void VisBeginWalk()
 	memset(g_vis_why, 0xff, sizeof(g_vis_why));
 	memset(g_vis_count, 0, sizeof(g_vis_count));
 	g_vis_dequeues = 0;
+	g_vis_edge = (float)(HDVisDefaults().edge * (double)(phd_winxmax + 1));
 }
 
 /* VISLOG, with -log, once a second and whenever the eye's room changes,
@@ -2019,7 +2022,8 @@ static void VisBeginWalk()
  * walk the rooms the portals queued first (and the eye's room), guest,
  * opening and wide those the three tables queued first, dequeues the walk's
  * whole work; the list every listed room with the letter of its source:
- * w portals, g guest, o opening, p wide portal. A table that only widens
+ * w portals, g guest, o opening, p wide portal, e a portal at the window's
+ * edge, counted again in edge= at the line's end. A table that only widens
  * the window of a room already queued is credited nothing, and the rooms
  * the wider window lets the portals reach read w. */
 static void VisEndWalk(short walkRoom)
@@ -2040,24 +2044,24 @@ static void VisEndWalk(short walkRoom)
 
 	char list[1024];
 	int at = 0;
-	static const char kWhy[4] = { 'w', 'g', 'o', 'p' };
+	static const char kWhy[5] = { 'w', 'g', 'o', 'p', 'e' };
 
 	list[0] = 0;
 
 	for (int i = 0; i < number_draw_rooms && at < (int)sizeof(list) - 16; i++)
 	{
 		const int r = draw_rooms[i];
-		const int why = r >= 0 && r < 256 && g_vis_why[r] < 4 ?
+		const int why = r >= 0 && r < 256 && g_vis_why[r] < 5 ?
 			g_vis_why[r] : 0;
 
 		at += sprintf(&list[at], "%s%d%c", i ? "," : "", r, kWhy[why]);
 	}
 
 	Log("VISLOG frame=%u eye_room=%d rooms=%ld walk=%ld guest=%d opening=%d "
-		"wide=%d dequeues=%ld list=%s", g_walkSerial, (int)walkRoom,
+		"wide=%d dequeues=%ld list=%s edge=%d", g_walkSerial, (int)walkRoom,
 		number_draw_rooms, number_draw_rooms - g_vis_count[1] - g_vis_count[2] -
-		g_vis_count[3], g_vis_count[1], g_vis_count[2], g_vis_count[3],
-		g_vis_dequeues, list);
+		g_vis_count[3] - g_vis_count[4], g_vis_count[1], g_vis_count[2],
+		g_vis_count[3], g_vis_dequeues, list, g_vis_count[4]);
 }
 
 static void NoteRoomWalk(short logicRoom, short walkRoom)
@@ -4750,7 +4754,7 @@ static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
 		open = corners;
 	}
 
-	if (!wide || !VisPortalRect(open, rect))
+	if (!VisPortalRect(open, rect))
 		return;
 
 	// Some of it inside the window: the classic rectangle has it.
@@ -4758,9 +4762,37 @@ static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
 		rect[1] < r->test_bottom && rect[3] > r->test_top)
 		return;
 
+	if (wide)
+	{
+		before = room[rn].bound_active;
+		VisQueue(rn, r, rect[0], rect[1], rect[2], rect[3], true);
+		VisNote(rn, 3, before);
+		return;
+	}
+
+	/* A portal whose projection stops just short of the window, or meets it
+	 * on an edge, lists the room behind with the strip it takes of the
+	 * window grown by g_vis_edge. The classic walk refuses it, and a room
+	 * whose art is drawn whole then drops out of the list for a frame as
+	 * the eye sways over that edge - the sky shows where its art stood -
+	 * while the frames either side list it. Walked again at the owner's
+	 * 181 dropped rooms, 155 were refused that way, 71 of the 102 that
+	 * could be measured standing 2 pixels or less off the window at 2,560
+	 * (HDVisDefaults' edge). */
+	const float e = g_vis_edge;
+	const float l = (float)r->test_left - e;
+	const float t = (float)r->test_top - e;
+	const float rr = (float)r->test_right + e;
+	const float b = (float)r->test_bottom + e;
+
+	if (e <= 0.0f || rect[0] >= rr || rect[2] <= l || rect[1] >= b ||
+		rect[3] <= t)
+		return;
+
 	before = room[rn].bound_active;
-	VisQueue(rn, r, rect[0], rect[1], rect[2], rect[3], true);
-	VisNote(rn, 3, before);
+	VisQueue(rn, r, rect[0] > l ? rect[0] : l, rect[1] > t ? rect[1] : t,
+		rect[2] < rr ? rect[2] : rr, rect[3] < b ? rect[3] : b, true);
+	VisNote(rn, 4, before);
 }
 
 /* Which of the two SetRoomBounds this walk is using. Off the HD path

@@ -127,7 +127,10 @@ struct HDVisWide
  *              to reach out of the room (rules 1 and 2)
  *   wideBare   the share of bare samples that lets a face beside a portal
  *              widen it: a broken-out edge of a wall, less than an
- *              opening, still shows the room behind the portal */
+ *              opening, still shows the room behind the portal
+ *   edge       how far a portal's projection may stand off the window it
+ *              is seen through and still list the room behind, as a share
+ *              of the screen's width (the walk, game\draw.cpp) */
 struct HDVisParams
 {
 	double reach;
@@ -139,6 +142,7 @@ struct HDVisParams
 	int guestRule;
 	double overhang;
 	double wideBare;
+	double edge;
 };
 
 HDVisParams HDVisDefaults();

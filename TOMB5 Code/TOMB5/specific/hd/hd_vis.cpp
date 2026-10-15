@@ -54,7 +54,13 @@
  *                  room 99 is between 0.3 and 0.4 bare: at 0.3 its portal
  *                  widens and room 99 is listed through the break; the wide
  *                  portals of the fifteen levels are 53 at 0.5, 55 at 0.4,
- *                  64 at 0.3, 82 at 0.2 and 113 at 0.1 */
+ *                  64 at 0.3, 82 at 0.2 and 113 at 0.1
+ *   edge 2/2560    of the 181 rooms the owner's walk lost for one frame,
+ *                  walked again at the frame's eye, 155 were refused with
+ *                  an empty window, 71 of the 102 that could be measured
+ *                  standing 2 pixels or less off it at 2,560 (49 touching
+ *                  it); 2 pixels lists 81 of the 181 there again, 4 and 8
+ *                  only 85 and 90 */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -68,6 +74,7 @@ HDVisParams HDVisDefaults()
 	p.guestRule = 2;
 	p.overhang = 128.0;
 	p.wideBare = 0.3;
+	p.edge = 2.0 / 2560.0;
 	return p;
 }
 

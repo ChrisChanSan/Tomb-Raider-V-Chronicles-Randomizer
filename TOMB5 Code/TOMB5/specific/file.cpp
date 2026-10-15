@@ -1956,6 +1956,16 @@ unsigned int __stdcall LoadLevel(void* name)
 	level_fp = 0;
 	level_fp = FileOpen((const char*)name);
 
+	// No file, no LoadTextures: kept pages would stay above nTextures, where
+	// no FreeTextures reaches them, so they go here. Never with the gate off.
+	if (!level_fp && g_pages_kept)
+	{
+		nTextures = g_pages_kept;
+		FreeTexturesFrom(1);
+		nTextures = 1;
+		g_pages_kept = 0;
+	}
+
 	if (level_fp)
 	{
 		fread(&version, 1, 4, level_fp);

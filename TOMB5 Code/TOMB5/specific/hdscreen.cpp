@@ -171,7 +171,12 @@ ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height)
  * them: the texture is twice the memory (2048 x 2048, a system copy beside
  * the card's) and a Direct3D object a new device would have to move, and
  * making it again costs 7 to 11 ms (LoadScreenHDPixels, timed the same way).
- * The heap goes with the process; nothing else needs giving back. */
+ * The pixels are not given back with the HD data: S_LoadLevelFile reads the
+ * picture before LoadLevel's FreeLevel, so a release there would drop the
+ * picture of the level being loaded, and its first save load would read it
+ * again. They go when another picture is read, and with the process. With
+ * tr4_loadscreens on only the title's loads show a picture, so the title's
+ * stays kept through the levels. */
 struct HDScreenKeep
 {
 	char name[48];

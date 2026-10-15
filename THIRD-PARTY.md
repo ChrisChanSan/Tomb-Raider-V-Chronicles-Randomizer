@@ -2074,7 +2074,15 @@ water surface", carries the tables.
     rgb and alpha are the share a, whole from half the weight up, the
     bend at most 96 units on cells 24 across and 96 along the line: OWN,
     set by eye on RoomProbe pictures from under the water. With a crack
-    (entry 206) the column stands on the crack's bottom: OWN.
+    (entry 206) the column stands on the crack's bottom: OWN. The
+    frame's copy is taken for a column too (`HDSpringFrameCopy`,
+    `HDSpringColumnInFrame`): a part more than a unit in front of the
+    eye, a weight over 0, the box of the drawn part's ends widened by
+    their half-widths on the screen; the rows behind the eye are cut
+    (`HDSpringColumnCut`) and the weight taken on the drawn part's
+    middle. OWN, chosen on the owner's camera log at the fountain (no
+    sheet's room in the frame, ticks 262 to 287) and a fan of 29 eyes
+    round the column (RoomProbe, a measuring build).
 201. **The file's spring row** - `spring <x> <z> <strength> [<seconds>]`
     in `hd_water.txt`: changes the table's spring of its level and room,
     takes it away at strength 0, else adds one; a row whose one key it is
@@ -2170,7 +2178,11 @@ water surface", carries the tables.
     outline's highest point or else over the plane of least squares through
     the outline's heights at the eye's own column. OWN, chosen on RoomProbe
     pictures of a fan of 42 eyes round ANDREA2's rule crack with the test
-    removed.
+    removed. The eye's test asks no more for the bottom; for an eye
+    under the bottom's plane (`HDSpringCrackBottom`) the hole writes
+    the far plane's depth in black and the walls fill the slit. OWN,
+    chosen on that fan's rows under the bottom and three cameras of the
+    owner's logs.
 208. **The crack's walls** (`hd_spring.hlsl`, `CrackPS`) - the floor's page
     folded over the lip (a place d down the wall takes the floor's page d
     further in along the edge's inward normal, wrapped), the floor's light

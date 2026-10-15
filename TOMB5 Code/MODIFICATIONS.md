@@ -15197,6 +15197,151 @@ inside the rock) draw a black wall, as before; the classic floor of that square 
 
 **Commits.** `31eea35e`.
 
+#### Round 4: the column and the crack under its bottom
+2026-10-15
+
+**What.** The owner's play test of the third round: "Yes, the crack still disappears. I
+do not know whether it is new, but at certain angles the water column that rises upward
+now disappears too." ("Ja, der Riss verschwindet noch. Ich weiss nicht ob das neu ist,
+aber in bestimmten Winkeln verschwindet jetzt auch die Wassersaeule die nach oben
+aufsteigt.") And with two pictures at the fountain: "Very hard to see. Picture 1 it is
+there, picture 2 a tiny bit to the right and the column is gone." ("Ganz schwer zu sehen.
+Bild 1 sie ist da, Bild 2 ganz bisschen nach rechts und die Saeule ist weg.") His
+pictures (reference pictures supplied for this project, not in the repository) show
+Lara under the water near the fountain's tiled floor with the column over her and, after
+a small turn, the bubbles without it; and the pit of ANDREA2's room 227 from down the
+slope with no crack - his log's ticks 1,460 to 1,498, the eye at x 60,252, y 1,660, z
+41,452, 214 under the rule crack's bottom. Since this round the column draws wherever a
+part of it stands in front of the eye on the screen, and a crack is seen from under its
+bottom, its walls alone in the slit.
+
+**Why.** *The column* bends the frame's copy, and the copy was taken only when a room of
+the frame drew a sheet. Under the water the sheet lies in the dry room over it (room 194
+over the fountain's water room 120); a view along the floor leaves that room off the
+frame's list, the frame took no copy, and the column went while its bubbles - which need
+none - stayed. An eye beside the jet looking up it lost the column too: the whole quad was
+left out once its foot lay behind the eye. *The crack* was left out for every eye under
+its bottom; on the slope the floor falls on below the crack, and there the eye looks up
+into the slit from the side.
+
+**How.** `specific/hd/hd_spring.h` :277 `HDSpringColumnCut`, :302 `HDSpringColumnPart`,
+:320 `HDSpringColumnWeight`, :348 `HDSpringColumnOnScreen`, :385 `HDSpringColumnInFrame`,
+:788 `HDSpringCrackSeen`, :806 `HDSpringCrackBottom` - pure functions, which ModernTest
+includes; `hd_spring.cpp` :730 `HDSpringFrameCopy`, :820 the column's cut in
+`HDSpringFrameDraw`, :1963 the hole without its bottom in `HDSpringCrackFrameDraw`,
+:2433 `HDSpringCopy`; `hd_level.cpp` gains one line, `HDSpringCopy()` beside the sheets'
+copy in `HDFrameDrawGlow`; RoomProbe asks the same where it takes the sheets' copy.
+
+- *The column's copy.* Where the sheets' copy is taken - after the opaque frame, before
+  the blend phase -, a frame that has none yet takes it when a spring's column is drawn
+  in it and reaches its screen: a part in front of the eye, a weight over 0, a way
+  across, and the box of the drawn part's ends, each widened by its half-width at its
+  nearest and its farthest depth, on the screen (an end nearer than its half-width may
+  stand round the eye and counts). The same foot, top and numbers as the draw. Still one
+  copy a frame: a frame whose sheets took it asks nothing more.
+- *The cut.* The part drawn is the part more than a unit in front of the eye (the draw's
+  vertices divide by their depth): where an end lies behind, the rows behind are cut and
+  a row stands at the cut, the eighths of the height in between stay where they were.
+  The weight is taken on the drawn part's middle and its half-width there; uncut, that is
+  the whole column's middle, to the bit, so a column with both ends in front draws as
+  before. The bend per row is unchanged.
+- *The edge-on fade stays.* An eye straight under or over the jet looks along its line,
+  where the quad turns edge-on (sine 0.06 at 64 units off the line): it fades as
+  designed - a flat quad seen along its line is a line.
+- *The gate.* A crack is seen from an eye over the highest point of its outline or else
+  over the floor's plane at the eye's own column; the test of the bottom is gone.
+- *The hole without its bottom.* For an eye under the bottom's plane by the lift (8) or
+  less a ray into the slit enters at the floor rising and leaves through a wall, never
+  through the bottom. The hole then writes no bottom: its plane is 0, which no ray meets,
+  so `HolePS` writes the far plane's depth in black and the walls fill the slit. No
+  shader changes. The near-plane, far, on-screen, size and room tests stay; the outline,
+  the hash, the sizes, the walls' look and the keys are unchanged.
+
+**Measured.** *The pool sequence:* his log's ticks 262 to 372, the eye in room 120 at y
+2,087 to 2,305, 900 to 1,350 units east of the fountain's spring, turning while Lara
+turns. The log's own room lists (VISLOG, ROOMLIST) and RoomProbe's offline walk with the
+visibility path at every tick (`-walk -vis 1 -walktarget`, 2,560 x 1,440, the same lists):
+tick 262 room 120 alone, 263 to 287 rooms 120 and 64, from 288 rooms 120, 194 and 64 -
+194 only along the frame's top (its window 0..252 of 1,440 rows at tick 305). RoomProbe
+at every tick with those rooms (960 x 540, 2 s; the column's pixels against the same
+frame with the bubbles alone), a measuring build printing the draw's numbers:
+
+| ticks | rooms | copy | foot / top depth | sine | half-width at mid | weight | column before | column now |
+|---|---|---|---|---|---|---|---|---|
+| 262 | 120 | none | 1,362 / 627 | 0.89 | 107 px | 1 | none (the copy) | 18,996 px (3,150 by 8) |
+| 263 - 287 | 120, 64 | none | 1,085..1,357 / 689..1,243 | 0.80..0.89 | 88..104 px | 1 | none (the copy) | 20,196..32,485 px |
+| 288 - 372 | 120, 194, 64 | taken | 372..1,054 / 1,257..1,596 | 0.65..0.79 | 88..109 px | 1 | 34,132..79,414 px | the same picture |
+
+Bubbles at every tick 29, from tick 313 43 (the rule spring's too), before and now. The
+class of the drop in picture 2: the copy - both ends in front, the weight whole, on the
+screen. *The fan* round the fountain's column: eyes at its foot's height (2,496), mid
+height (1,448) and its top's (320), at 300, 600 and 1,200 units east, looking level, up
+30 and up 60 degrees, each with the walk's own rooms, and one straight under and one
+straight over it 64 units off the line - 29 eyes:
+
+| eyes | before | now |
+|---|---|---|
+| 12 (foot's height up 30 and 60; mid 600 level, 1,200 level and up 30; top's level) | drawn | the same picture |
+| foot 300, 600, 1,200 level; mid 300 level | none (the copy: the walk lists no room 194) | 58,437, 37,822, 19,934, 268,802 px |
+| mid 300 up 30 and 60, 600 up 30 and 60, 1,200 up 60 | none (the foot behind: depth -336, -883, -77, -733, -433) | cut at 0.28, 0.43, 0.07, 0.36, 0.21: 248,085, 135,377, 116,900, 54,013, 15,311 px |
+| top 300, 600, 1,200 up 30 | none (the foot behind) | cut at 0.76, 0.54, 0.10: 27,901, 7,889, 2,358 px (144, 13, 26 by 8) |
+| top 300, 600, 1,200 up 60 | none, the part in front off the screen | drawn, 0 px |
+| straight under, straight over | none, edge-on (sine 0.061, 0.057) | none, edge-on |
+
+With the bubbles alone all 29 pictures are byte-identical before and now. *The crack:*
+the third round's fan of 42 eyes round the rule crack and his three eyes under its bottom
+(ticks 212,610 to 222,485 at y 1,558 and 177,203 to 177,610 at 1,586 of the earlier test,
+1,460 to 1,498 at 1,660 of this one), at 960 x 540 and 2 s against the same frame with
+the crack built and never drawn (a measuring build), the crack's pixels / the black ones
+(every channel 6 or less); without the gate the third round's pictures:
+
+| eye | without the gate (third round) | now |
+|---|---|---|
+| picture 2's column, 40 under the bottom | 954 / 801 | 1,049 / 172 |
+| picture 2's column, 104 under | 840 / 713 | 927 / 136 |
+| 1,000 west, 40 under | 834 / 788 | 928 / 282 |
+| 1,000 west, 104 under | 733 / 700 | 757 / 400 |
+| 1,000 south, 40 under | 1,125 / 925 | 1,323 / 392 |
+| 1,000 south, 104 under | 748 / 644 | 971 / 238 |
+| his eye at 1,558 | - | 834 / 184 |
+| his eye at 1,586 | - | 1,006 / 225 |
+| his eye at 1,660 (this test's picture) | - | 1,206 / 138 |
+
+The black left is the walls' own dark band, which runs to black at the bottom. Every other
+eye of the fan - all over the bottom, and the uphill eyes in the rock - draws the same
+picture as the third round, md5 for md5 (36 of 36); with each eye's rooms from the walk
+in place of the fan's fixed list, 36 of 45 identical to the column's commit, the same nine
+changed. GPU at 2,560 x 1,440 at the fountain's two eyes of the first round, the water's,
+the springs' and the cracks' brackets, mean of nine runs against `ae24df92`: the basin's
+edge 0.1752 to 0.1757 ms, under the water 0.1018 to 0.1045 ms; at tick 270 of the sequence
+the new copy 0.0228 ms and the column 0.0144 more (0.0191 to 0.0563 in all). No shader
+changed: every `.inc` byte-identical, `ColumnPS` 90 slots, `HolePS` 37.
+
+**Checked.** The classic path (`-classicroom`, `-classiconly` on ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34) 6 of 6 md5-identical to `8691e82` and `ae24df92`; the fifteen
+cameras with `-hdwater 0` 15 of 15 identical to the parity set, with `-hdwater 1` 15 of 15
+identical to `ae24df92`; the twelve pond views at 1, 3 and 5 s 36 of 36; every WATERLOG
+line of the fifteen levels (209) identical; the second round's eleven crack cameras 8 of
+11 identical to `ae24df92` with the cracks and with `-springcrack 0` - F3, F4 and F5 close
+over the fountain's crack, looking down, draw the column now, its top behind the eye
+(35,038, 48,334 and 83,677 pixels) - and with the columns left out 11 of 11 both ways; the
+SPRINGLOG and SPRINGCRACK lines of ANDREA1, ANDREA2 and JOBY2 identical to the second
+round's (47, 109, 63 lines). ModernTest's spring group 6 checks more: the column in the
+frame at the log's three ticks and five fan eyes, the cut, whole and none, the uncut
+middle and weight to the bit; the fan's rows under the bottom, the hole's bottom, the
+three cameras under it. The suites, the tools and the engine build.
+
+**Left.** The look in the game. A column out of sight behind walls whose frame has no
+sheet still takes the copy and draws hidden (at an eye straight over the fountain's jet,
+the rule spring's column across the level: +0.032 ms); a test of its rooms would need the
+water rooms a jet rises through, which a spring does not know. An eye 13 units under the
+floor at its own column (1,000 west of the rule crack at y 1,550: the floor's plane, a
+guess away from the outline, puts it 137 over) stands in the rock and sees the sky through
+the back of the floor in the probe; the crack's walls stand black on 231 pixels of it. The
+edge-on fade straight under and over the jet stays.
+
+**Commits.** `e2c3caf2`, `40bbc85e`.
+
 ### The level load on several cores
 2026-10-11
 

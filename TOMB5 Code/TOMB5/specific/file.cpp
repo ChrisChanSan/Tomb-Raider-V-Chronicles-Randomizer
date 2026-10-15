@@ -1448,7 +1448,7 @@ static bool feet_sample(long sample)
 {
 	static const int kFeetIds[2] = { SFX_LARA_FEET, SFX_LARA_LAND };
 
-	/* Only with hd_enable on. Without it there is no wardrobe, no outfit and
+	/* Only with the HD build on. Without it there is no wardrobe, no outfit and
 	 * no second set, so the two ids take the ordinary chain and a sound mod
 	 * plays unchanged. */
 	if (!HDEnabled() || !sample_lut || !sample_infos)
@@ -1502,7 +1502,7 @@ bool LoadSamples()
 	 * Nothing reads past num_infos on its own: sample_lut names an info, and
 	 * only HDFeetBare ever writes an index above it.
 	 *
-	 * Only with hd_enable on: sixteen bytes shift every later allocation in
+	 * Only with the HD build on: sixteen bytes shift every later allocation in
 	 * the bump allocator, and with HD off the memory layout stays exactly
 	 * that of the classic engine. */
 	const long spare = HDEnabled() ? HD_FEET_SPARE_INFOS : 0;
@@ -2101,7 +2101,10 @@ long S_LoadLevelFile(long num)
 				}
 			}
 
-			if (!(hd_logo ? LoadScreenHDLogo() : LoadScreenHD(hd_name)))
+			// The HD picture only while the HD draw is chosen (hd_enable, the
+			// HD textures row), as it stands when the load starts.
+			if (!tomb5.hd_enable ||
+				!(hd_logo ? LoadScreenHDLogo() : LoadScreenHD(hd_name)))
 				LoadScreen(chosen_screen + 2, 4);
 		}
 	}

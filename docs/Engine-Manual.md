@@ -116,7 +116,7 @@ worth knowing by name:
 |---|---|---|
 | `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30; `2` is the display's own refresh rate, which needs `vsync` on. There is no uncapped mode. The *Frame rate* row on the *Display* page writes this. See **Frame rate**. |
 | `vsync` | DWORD | `1`, the default: the picture waits for the monitor, so it is never torn across the middle. `0` for the original behaviour. **The only setting in the build that is not instant** — it is read when the graphics device is made, so a change takes hold the next time the game starts (or on the next Alt+Enter or resolution change). The *VSync* row writes this. |
-| `hd_enable` and its companions | | The Remaster art, and the outfit the F4 changer remembers. They have a table of their own under **HD from the Remaster**; every one of them is there, with its default. |
+| `hd_enable`, `hd_build` and their companions | | The Remaster art - `hd_build` builds it, `hd_enable` draws it - and the outfit the F4 changer remembers. They have a table of their own under **HD from the Remaster**; every one of them is there, with its default. |
 
 ---
 
@@ -1256,9 +1256,12 @@ as it is if you did not copy the other.
 
 **Nothing ships**, the same as with the sounds and the soundtracks. Any picture
 you do not copy simply stays the original 640x480 one, so a half-filled folder
-is fine. There is no `RICHCUT2.DDS` in the remaster and none is needed — the
-Security Breach cutscene borrows `RICH3.DDS`, Red Alert's picture, so it has
-an HD screen without a file of its own.
+is fine. The HD pictures are shown while **HD textures** is on - the same row
+and the same F12 that switch the HD art (see **The HD/SD switch**), as they
+stand when the load begins; with it off the original pictures load. They need
+no installation, only the files. There is no `RICHCUT2.DDS` in the remaster
+and none is needed — the Security Breach cutscene borrows `RICH3.DDS`, Red
+Alert's picture, so it has an HD screen without a file of its own.
 
 The originals are 4:3 and the engine has always stretched them onto your
 window. The HD ones are 16:9 and are fitted instead: on a 16:9 window they land
@@ -1298,10 +1301,11 @@ saying which file was decoded and at what size, or why one was refused, plus a
 *Tomb Raider IV-VI Remastered* does not repaint the old game. Beside every
 level it keeps a whole second version of the geometry — every room rebuilt and
 lit, with the static objects baked into it — and a model of its own for each
-object, at eight times the texture resolution. This engine draws that art when
-it finds the remaster installed, and the original art when it does not: file
-present → HD, otherwise vanilla, exactly the deal the loading screens and the
-HQ sounds have.
+object, at eight times the texture resolution. This engine builds that art
+whenever it finds the remaster installed and draws it while **HD textures** is
+on (or after F12), and the original art otherwise: file present → HD at a
+press, otherwise vanilla, nearly the deal the loading screens and the HQ
+sounds have.
 
 > **Where this work comes from.** Reading the Remaster's art at run time was
 > solved first by **TROne (GPLv3) by Todesengel1931**,
@@ -2253,7 +2257,7 @@ it.
   (`drips_at=`). The models are the Remaster's own (a bottle, two cloths, a barrel, a
   fish), drawn as HD objects: with `hd_objects` off nothing floats, the drips and
   their rings stay; the drop is drawn as the game draws its own falling drips, and
-  leaves the game's own drips alone. Without the sheets (`hd_water` 0, `hd_enable` 0)
+  leaves the game's own drips alone. Without the sheets (`hd_water` 0, `hd_build` 0)
   none of it runs.
 - **`LIFELOG` in the log.** With `-log`, every level with life writes one `LIFELOG
   level=<stem>` line at its load: the bodies that took life (`bodies=`), the floats
@@ -2309,7 +2313,9 @@ it.
 **Text.** The title menu, the names under the inventory ring, the options
 pages, the load and save lists with their *(quicksave)* line, the statistics
 after a level, the ammunition counter, the name of a pickup and the subtitles
-of a cutscene are drawn sharp. In the original all of them come out of one
+of a cutscene are drawn sharp while **HD textures** is on (with it off, or
+after F12, the text is the original text from the next letter on). In the
+original all of them come out of one
 256-pixel page of glyphs from 1999, blown up four and a half times on a 1080p
 screen and six times on a 1440p one, which is why the letters are soft. The
 Remaster ships the very same alphabet at eight times the size - the same
@@ -2332,13 +2338,15 @@ point in space the two sides of a doorway differ by up to a third of full
 brightness in its own art. Nothing here widens it and nothing here can close it
 without repainting the art.
 
-**Switching it on.** Options → *Graphics* → **HD textures**. Like every row on
-that tab it is remembered at once. It takes effect **at once when HD data are
-resident, otherwise at the next load**: the art is read and unpacked while the
-level loads, so in a level loaded with the row on, *off* and *on* switch the
-world on screen between the classic and the HD draw at once (see **The HD/SD
-switch** below), while in a level loaded with it off there is nothing to show
-until the next one. Switch it on, then load a save or start a level.
+**Switching it on.** Options → *Graphics* → **HD textures**, or **F12** anywhere
+in a level. Like every row on that tab it is remembered at once, and so is a
+press of F12. It takes effect **at once**: whenever the engine finds your
+installation, every level's HD art is read and unpacked while the level loads,
+whatever the row says, so *off* and *on* switch the world and the interface on
+screen between the classic and the HD look on the next frame (see **The HD/SD
+switch** below). The row is off on a fresh install: the game starts classic,
+and F12 shows the HD look at once. The registry value `hd_build` below turns
+the HD loading off altogether.
 
 There is no options row for the *path*, and normally there does not need to be:
 the engine reads Steam's own folder out of the registry, walks every library in
@@ -2356,17 +2364,18 @@ values, in the same key as every other setting
 
 | Value | Type | Meaning |
 |---|---|---|
-| `hd_enable` | DWORD | The options row writes this. `0`, the default, and nothing of the HD **art** below is read at all. One HD-adjacent thing is read anyway and is not in this table: the 44.1 kHz sound bank, which is opened out of your remaster installation whatever this value says — see **HQ sounds**. That search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries with `hd_enable` at `0`. With `1`, the *HD / SD* key (F12) is the switch between the HD and the classic draw of a built HD level, without a load (**The HD/SD switch** below says what it switches); it is not saved, so every game starts at what this value says, and every step of the options row sets the switch to the row's new value, so the row switches the world of a level loaded with `1` at once. That makes a third state beside `0` and `1`: the level built HD at its load as with `1`, and the world drawn classic until the key is pressed again. |
+| `hd_enable` | DWORD | The options row *HD textures* writes this, and so does the *HD / SD* key (F12): it is the **look**, `1` HD and `0` classic, of the world and the interface alike (**The HD/SD switch** below says what it switches). `0` is the default, so a new game starts classic. The row and the key are one value: a press of F12 turns the row, the row turns what F12 would, and both are saved at once, so the next game starts as you left it. It decides nothing about what is loaded - that is `hd_build`. |
+| `hd_build` | DWORD | Not on the options page. Whether the HD art is **built** at all, `1` by default: with `1`, every level's HD art is read and built at its load whenever your installation is found, whatever `hd_enable` says, so the switch between the two looks is always ready - at the price of the HD load's time and memory even while you play classic. Set it to `0` and nothing of the HD art is opened or built: the engine is the classic one, and the row and F12 have nothing to switch. One HD-adjacent thing never asks either value: the 44.1 kHz sound bank, which is opened out of your remaster installation in any case - see **HQ sounds** - and whose search also reads `hd_install` and `hd_install_tr3` below and walks your Steam libraries. Written into the registry with its default the first time the game reads its settings. |
 | `hd_objects` | DWORD | HD models for the objects **and for Lara**, `1` by default. There is no options row for it: it is not a matter of taste but a way back if one level's models ever go wrong. Set it to `0` and the rooms stay HD while every object and Lara draw the classic way. Lara has no key of her own on purpose — she is a model like the rest of them and a level's models are one buffer, so a second switch would only be a second way to end up with half a picture. Does nothing at all while `hd_enable` is off. |
 | `hd_motion` | DWORD | What **moves** in an HD room, `1` by default: water and waterfalls scrolling, ivy, banners, grass and kelp swaying in the wind, and a small ripple over a water surface, the slow travel of light along a shaft or a lamp cone, the four-page animated pictures (the twenty-seven flipbook surfaces of five levels), the longer loops of fourteen to thirty pages (the turning fan shadows of the 13th Floor, the monitor wall of the Security Breach cutscene, the flames, smoke and rain rings - 168 surfaces in nine levels; set to `0` they show their first page) and the ripple over the Remaster's own still-water sheets — in short, everything this chapter says stops with `hd_motion`. All of it comes from the Remaster's own art — the artists marked which surfaces flow and which vertices bend, and this reads those marks. Like `hd_objects` it has no options row and is a way back rather than a taste: set it to `0` and an HD room stands perfectly still. Does nothing at all while `hd_enable` is off. |
 | `hd_reflect` | DWORD | The **gloss** of metal, marble, ice and glass in an HD room, `1` by default: a highlight from the level's lamps where they hang - worked out once per level for every spot, so it stays by its lamp and runs on across doorways - and a reflection of the surface's own light that grows the flatter you look at it, on floors, walls, crates and ducts alike, never more than two and a half times the surface's own lit colour and never to white. Not a mirror: nothing is drawn twice. Which surfaces shine, in this order: the gloss the Remaster's artists gave a surface themselves (its own strength); your file `hd_gloss.txt`; a list of texture pages built into the engine; and the pages that lie on floors whose footsteps sound of metal, marble or ice - in every room that wears them. RICH2's lobby pages and every see-through floor stay exactly as they were. **`hd_gloss.txt`** lies beside the executable, where `SCRIPT.DAT` and `Balance.txt` are, and is read at every level load, so a change shows at the next one. One texture page per line: the page number, a class (`metal`, `marble`, `ice`, `glass` or `custom`) and optionally strength (above 0, up to 1), exponent (1 to 255, the tighter the highlight the higher) and F0 (0 to 1, how much it reflects face on), where `-` or leaving a number out takes the class's own; a `custom` page names all three. `-<page>` takes a page out (a surface the artists gave a gloss keeps it), `#` starts a comment, and a line that cannot be read is counted and skipped; a file saved as UTF-8 with or without a byte order mark reads the same - for example `140 metal 0.6 32` or `-3149 # the girders stay matt`. The page numbers of a room are in the `GLOSSLOG` lines of a `-log` run. Like `hd_motion` it has no options row and is a way back rather than a taste; set it to `0` and the picture is the one without any gloss. Does nothing while `hd_enable` is off. |
 | `hd_softbody` | DWORD | The options row *Body physics* writes this. The **soft motion of the chest** of the HD Lara (see *Lara in HD*): `0` off, the default, `1` subtle, `2` normal, `3` strong; any other number reads as off. Never on a young-Lara level, never for a Lara drawn classic, and nothing at all while `hd_enable` is off. |
-| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all while `hd_enable` is off. Tuning per body of water: `hd_water.txt`. |
+| `hd_water` | DWORD | The options row *HD water* writes this. The **water sheets** (see *Water* above), `1` by default: every water square the sheet can cover - over an underwater room, in a room drawn HD - gets this engine's own water surface with a caustic on the floor under it (none in the night levels, see *Water* above), and the level's own water face there is not drawn, nor the Remaster's own water art over it (`art keep` in `hd_water.txt` draws that art again); a water plane with no underwater room below keeps its faces. `0` builds no sheet, restores every water face of the level as without them and switches the caustic under them off; what stays is only the caustic's shape and its fade with distance on the Remaster's own marked water art and the wave on that art, which live in the compiled shaders. Taken at the start of a level; nothing at all with `hd_build` at `0`. Tuning per body of water: `hd_water.txt`. |
 | `hd_springs` | DWORD | Not on the options page. The **springs** the rule places (see *The springs* above): absent - every registry until you add it - the rule as built, one deep pool in two; `0` none of the rule's (ANDREA2's fountain and the springs of `hd_water.txt` stay); `n` one pool in two times n. Read at the start of a level, never written by the game. |
 | `hd_springcrack` | DWORD | Not on the options page. The **cracks** the springs rise out of (see *The springs* above): absent - every registry until you add it - or `1` every spring has its crack; `0` none, the springs as they were before the cracks. Read at the start of a level, never written by the game. |
 | `hd_reach` | DWORD | The **reach** of the portal walk, `1` by default. In an HD level a room whose portal faces the eye and lands on the screen is drawn even where the classic walk, portal window by portal window, would refuse it, because the Remaster's art opens walls the classic level keeps shut: the torn wall beside the stairs in The Base, the tower of Trajan's Markets. Set it to `0` and the walk is the classic one in an HD level too: a room the reach alone would have listed is not drawn, so the art of one room that showed through the walls of another is gone, and an opened wall may show the clear colour behind it instead. It is there to compare the two answers at the same place with the same build, not a taste; the ROOMLIST dump says `reach=0` in the log. Does nothing while `hd_enable` is off. |
-| `hd_air` | DWORD | The **air of the rooms**, `1` by default. Some of the Remaster's art of one room stands inside another room the first has no doorway, opening or shaft into; on `1` such art, where one of the overlap boxes holds it, is drawn only through its own room's portal window, and not at all when that room has no window this frame, so it no longer shows through a wall - a dark block beside a flag, a window frame in a brick loft, a marble strip above a metal stair opening, black bars beside a pillar, a lit floor in a doorway, a strip of a facade under a courtyard's ceiling. Set it to `0` and that art is drawn as it was before this setting existed: those six come back, and so does art the rule hides where a room the reach lists has no window of its own. On `1` and `2` a room seen with its own window that lies under the sky also brings in the rooms whose art stands in it, so art that hangs far from its own room's doorways - ANDREA2's brick tower beside the alley at the church gate - no longer comes and goes as the camera swings; on `0` it does as before. A room whose art there is mostly a copy of faces another room already holds is not brought in, so it is not drawn twice over itself. `2` is `1` and one more: a room whose art in another room's space stands mostly where that room's own art already stands - a second shell, like the one RICH2's lift shaft carries of the shaft's floors - has that art drawn only through its own room's window, so the doubled girders, lamps and panels no longer come and go beside the lift. It takes more than the doubles there: the shaft's counterweight and pulleys go with them, and the lamps' lit tubes, leaving a dark smear where a lamp hung. On `1` and `2` such a second shell is drawn a little behind the faces it copies, so where both stand the room's own faces win and the lamps and the grating of RICH2's lift shaft no longer speckle as the camera moves; where two rooms with no doorway between them share a stretch of wall, the art on the smaller of their two classic faces is drawn behind the larger one's, so the wall ANDREA1's room 212 shows through the grating from room 19 no longer flickers; the pipe in the hollow of JOBY2's broken pillar by the stairs is drawn whole where its room's walls are in sight; and a room brought in under the sky follows the level's flip state, so art of the state the level is not in is not drawn. It is there to compare the answers at the same place with the same build; the `HDLOG level=` line names it as `air=0`, `air=1` or `air=2` just before its last field, `covered=` (how many faces of one room lie inside a larger face of another and have their art drawn behind), so a log says which ran; with `-log` and the air on, one `HDLOG covered` line per such face follows. Taken at the start of a level; no options row; nothing at all while `hd_enable` is off. |
-| `hd_threads` | DWORD | The **threads of an HD level load**, `0` by default: the machine's own count, never more than 16. The texture pages are unpacked, the rooms' buffers filled and the models' pages unpacked on that many threads; `1` does all of it on one, and any other number takes that many. The level comes out the same whatever it says - the `hash=` at the end of the `built` line is the proof (see *The loading time* below). It is there to compare, not a taste. Taken at the start of a level; no options row; nothing at all while `hd_enable` is off. |
+| `hd_air` | DWORD | The **air of the rooms**, `1` by default. Some of the Remaster's art of one room stands inside another room the first has no doorway, opening or shaft into; on `1` such art, where one of the overlap boxes holds it, is drawn only through its own room's portal window, and not at all when that room has no window this frame, so it no longer shows through a wall - a dark block beside a flag, a window frame in a brick loft, a marble strip above a metal stair opening, black bars beside a pillar, a lit floor in a doorway, a strip of a facade under a courtyard's ceiling. Set it to `0` and that art is drawn as it was before this setting existed: those six come back, and so does art the rule hides where a room the reach lists has no window of its own. On `1` and `2` a room seen with its own window that lies under the sky also brings in the rooms whose art stands in it, so art that hangs far from its own room's doorways - ANDREA2's brick tower beside the alley at the church gate - no longer comes and goes as the camera swings; on `0` it does as before. A room whose art there is mostly a copy of faces another room already holds is not brought in, so it is not drawn twice over itself. `2` is `1` and one more: a room whose art in another room's space stands mostly where that room's own art already stands - a second shell, like the one RICH2's lift shaft carries of the shaft's floors - has that art drawn only through its own room's window, so the doubled girders, lamps and panels no longer come and go beside the lift. It takes more than the doubles there: the shaft's counterweight and pulleys go with them, and the lamps' lit tubes, leaving a dark smear where a lamp hung. On `1` and `2` such a second shell is drawn a little behind the faces it copies, so where both stand the room's own faces win and the lamps and the grating of RICH2's lift shaft no longer speckle as the camera moves; where two rooms with no doorway between them share a stretch of wall, the art on the smaller of their two classic faces is drawn behind the larger one's, so the wall ANDREA1's room 212 shows through the grating from room 19 no longer flickers; the pipe in the hollow of JOBY2's broken pillar by the stairs is drawn whole where its room's walls are in sight; and a room brought in under the sky follows the level's flip state, so art of the state the level is not in is not drawn. It is there to compare the answers at the same place with the same build; the `HDLOG level=` line names it as `air=0`, `air=1` or `air=2` just before its last field, `covered=` (how many faces of one room lie inside a larger face of another and have their art drawn behind), so a log says which ran; with `-log` and the air on, one `HDLOG covered` line per such face follows. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
+| `hd_threads` | DWORD | The **threads of an HD level load**, `0` by default: the machine's own count, never more than 16. The texture pages are unpacked, the rooms' buffers filled and the models' pages unpacked on that many threads; `1` does all of it on one, and any other number takes that many. The level comes out the same whatever it says - the `hash=` at the end of the `built` line is the proof (see *The loading time* below). It is there to compare, not a taste. Taken at the start of a level; no options row; nothing at all with `hd_build` at `0`. |
 | `hd_texture_budget_mb` | DWORD | How much video memory the HD art may take, in mebibytes. `0`, the default, means **work it out from the card** (see below; the card's own answer stops at 4095 MiB, which is a limit of the Direct3D 9 call and not of your card). Set a number and that number is the ceiling. |
 | `hd_install` | String | The folder of your *Tomb Raider IV-VI Remastered* — the one holding `tomb456.exe`. Leave it **empty** and the engine finds it by itself. |
 | `hd_install_tr3` | String | The folder of your *Tomb Raider I-III Remastered* — the one holding `tomb123.exe`. Needed for exactly one thing: the HD models of the four Tomb Raider III guests the randomizer can import (the T-Rex, the vulture, the Compsognathus and the raptor), which live in that bundle and in no other. Leave it **empty** and the engine looks for it in the same walk it uses for the other one; without the game those four enemies draw the classic way and nothing else changes. |
@@ -2382,31 +2391,40 @@ on a pad's *Separate* set on the PS5 DirectInput and generic pages. Both are
 the *HD / SD* row of *Key bindings*, shown whatever *Cheats* says, and both can
 be bound elsewhere like any hotkey.
 
-It is a third state beside `hd_enable` `0` and `1`: the level is built HD at
-its load exactly as with `1`, and the switch only chooses which of the two
-draws you see. Both sets of data stay in memory for the whole level, so a
-press costs no load and no wait. One press is one switch — holding the key
-does not repeat — and a press in the title, in the inventory ring, the pause
-menu, the load and save screens, the outfit changer or on the *Key bindings*
-page switches nothing, so binding F12 there does not also switch the picture.
-The choice holds for the whole session, across level loads, so the same spot
-can be compared before and after a load. It is never saved: every game starts
-drawn HD. With `hd_enable` at `0`, or with no installation found, there is no
-HD data to switch to, and the key does nothing.
+Whenever the engine finds your installation it builds every level's HD art at
+the level's load, whatever is drawn, and the switch only chooses which of the
+two looks you see. Both sets of data stay in memory for the whole level, so a
+press costs no load and no wait. The key and the *HD textures* row of the
+options are **one value**, `hd_enable`: a press turns the row, a step of the
+row does what a press does, the row always shows the look on screen, and both
+are saved at once, so the next game starts as you left it - classic on a fresh
+install. One press is one switch — holding the key does not repeat — and a
+press in the title, in the inventory ring, the pause menu, the load and save
+screens, the outfit changer or on the *Key bindings* page switches nothing, so
+binding F12 there does not also switch the picture. The choice holds across
+level loads, so the same spot can be compared before and after a load. There
+is nothing to switch only where the level on screen has no HD art: with
+`hd_build` at `0`, with no installation found, or in a level the remaster has
+nothing for; the key then does nothing, and the row still moves its value, as
+any option does.
 
-What it is to switch is the **world**: the rooms, the static meshes, the
-items and enemies, Lara, the water, its life and its splashes, the shadows and
-the fog bulbs. What stays as `hd_enable` says: the HUD, the inventory ring and
-the pickup display, the fonts, the loading screens and the F4 outfit changer.
+What it switches is the **world and the interface**: the rooms, the static
+meshes, the items and enemies, Lara, the water, its life and its splashes, the
+shadows and the fog bulbs, and the sharp letters of every text, the inventory
+ring and the pickup display, the loading screens (as the switch stands when a
+load begins) and the F4 outfit changer, which opens over the HD look only. The
+sounds stay as loaded: the 44.1 kHz bank and the barefoot steps are in the
+sound memory from the level's load and play whatever is drawn.
 
 A press shows the change on the next frame: the classic rooms, statics and sky,
 the classic items, enemies and Lara, the level's own water faces, splashes and
 ripples, the fish tank's classic model and the round shadows under everyone;
-press again and the HD world is back as it was. Nothing is loaded, freed or
-rebuilt for it. While the world is drawn classic the HD water's waves, the fish
-tank's water and its wet floor keep time with the game, so the HD picture after
-the second press is, as the engine's code reads (nobody has pressed it in a
-game yet), the one you would have seen had you never pressed, but for the few
+press again and the HD world is back as it was; the text, the ring and the
+pickup display switch with it. Nothing is loaded, freed or rebuilt for it.
+While the world is drawn classic the HD water's waves, the fish tank's water
+and its wet floor keep time with the game, so the HD picture after
+the second press is, as the engine's code reads, the one you would have seen
+had you never pressed, but for the few
 things below. Four things start again or settle when the HD draw comes back:
 Lara's projected shadow fades in over a quarter of a second while her round
 shadow goes out, the soft motion of her chest starts from rest, her braid
@@ -2424,14 +2442,9 @@ life, at most about two seconds. The crowd of rings and the ripple without
 its ring stay as they are, by decision: the switch is meant for a short
 before-and-after comparison, not for long stretches in the classic draw.
 The *HD textures* row of the options, in the title and in the pause menu,
-works the switch too: every step sets it to the row's new value, so *off*
-draws the whole world classic and *on* draws it HD, on the next frame, as a
-press does - when the level on screen was loaded with HD. If it was loaded
-with the row off, there is nothing to switch to until the next load, and
-that level then starts drawn HD. With the row off the key does nothing; with it
-on the key switches as above, and the row and the key always name one
-state: whichever was used last decides. The switch's state is never saved;
-the row's value is, as `hd_enable`.
+is the same switch: *off* draws the whole world and the interface classic and
+*on* draws them HD, on the next frame, as a press does, in every level the
+remaster has art for - a level loaded with the row off has its HD art too.
 
 Behind `-log`, every press that reaches a level, and every step of the row
 that changes the draw or finds nothing to switch, writes one line:
@@ -2442,10 +2455,12 @@ that changes the draw or finds nothing to switch, writes one line:
 level's file name, `tick` the logic tick, `frame` the drawn-frame clock and
 `by` whether the keyboard role, the pad chord or the *HD textures* row did
 it. A press or a step with no HD data writes the same line with the cause at
-its end: `hd_enable=0 nothing to switch` with `hd_enable` at `0`,
-`hd_enable=1 install=none nothing to switch` with it at `1` and no
-installation found, and, for the row, `hd_enable=1 built=none nothing to
-switch` when the level on screen was loaded without HD.
+its end: `hd_build=0 nothing to switch` with `hd_build` at `0`,
+`install=none nothing to switch` with no installation found, and
+`built=none nothing to switch` in a level the remaster has nothing for. At the
+game's start one more line names the two settings the game starts with:
+
+    HDLOG settings hd_enable=0|1 hd_build=<n>
 
 ### What the HD art asks of your graphics card
 
@@ -3668,8 +3683,9 @@ comes in and the blob goes out. Her reflection in a mirror has no blob; it takes
 shadows of the room as she does (see *The mirror* below). Any other stored number is
 drawn as it always was.
 
-The menu row is *Graphics → Shadow mode*. While HD is on - *HD textures* on and a
-*Tomb Raider IV-VI Remastered* found, in the title screen as in a level - it steps
+The menu row is *Graphics → Shadow mode*. While HD is on - *HD textures* on, `hd_build`
+not `0` and a *Tomb Raider IV-VI Remastered* found, in the title screen as in a level -
+it steps
 *Original*, *Circle*, *Faded circle*, *PSX*, *Projected* and wraps round at either end.
 While HD is off it steps the four blobs only, as it always did, and a stored `5` is shown
 as *Faded circle*, which is what is drawn for it then: right gives *PSX*, left *Circle*.
@@ -3791,11 +3807,12 @@ Three things that live on top of the HD path: the outfit changer, the `Mods`
 folder it draws its extra bodies from, and the footsteps that follow the
 outfit.
 
-**The changer needs the HD art on.** With *HD textures* off, or with no
-*Tomb Raider IV-VI Remastered* found, there is nothing to dress Lara in and
-nothing to re-dress her with, so F4 does nothing at all — with `-log` it says
-which of the two it was, once per session. The same goes for a mod's
-**models**, which only the HD path draws, and for the barefoot set. A mod's
+**The changer needs the HD art on.** With *HD textures* off (or after F12),
+with `hd_build` at `0` or with no *Tomb Raider IV-VI Remastered* found, Lara
+is the classic Lara and F4 does nothing at all — with `-log` it says which it
+was, once per session. The same goes for a mod's **models**, which only the
+HD path draws. The barefoot set is built whenever the art is and plays
+whatever is drawn. A mod's
 **sound bank** is the exception: that is read by the HQ-sound chain, which
 does not care what `hd_enable` says (see **HQ sounds**).
 
@@ -3804,7 +3821,9 @@ does not care what `hd_enable` says (see **HQ sounds**).
 <p align="center"><img src="outfit-changer.jpg" alt="The F4 outfit window" width="700"></p>
 
 **Press F4 in the game and everything stops**, exactly as the pause menu stops
-it — the window is headed simply **Outfit**. F4 is a fixed key and not one of
+it — the window is headed simply **Outfit**. It opens over the HD look only:
+with **HD textures** off, or after F12, Lara is the classic Lara and F4 does
+nothing (the log says why). F4 is a fixed key and not one of
 the bindable roles: it is read on its own
 edge, because it has no meaning in the game and a pad cannot reach it anyway
 (the menu itself is driven by the ordinary menu bits, so a pad works *inside*

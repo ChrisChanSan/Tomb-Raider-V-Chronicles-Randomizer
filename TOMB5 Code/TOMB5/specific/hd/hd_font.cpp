@@ -25,6 +25,7 @@
 #include "hd_fontmatch.h"
 #include "hd_install.h"
 #include "hd_level.h"			// HDEnabled - the one guard
+#include "hd_switch.h"			// HDDrawn - the text drawn HD or classic
 #include "../bc7.h"
 #include "../function_stubs.h"		// Log
 #include "../winmain.h"			// App.dx.lpD3DDevice
@@ -223,7 +224,7 @@ void HDFontLevelPage(const void* page)
 {
 	char md5[33];
 
-	// The guard. With hd_enable off, or without an installed Remaster, not a
+	// The guard. With hd_build 0, or without an installed Remaster, not a
 	// byte of the page is even copied and DrawChar never asks anything.
 	if (!page || !HDEnabled())
 		return;
@@ -389,8 +390,10 @@ void HDFontDeviceLost()
 const HDFontGlyph* HDFontGlyphAt(int index)
 {
 	// Not behind HDEnabled(): this is asked once per drawn character and the
-	// three tests below already say no in every case that one would.
-	if (!g_tex || !g_matched || index < 0 || index >= kGlyphs)
+	// texture test already says no in every case that one would. The draw
+	// is asked: with the world drawn classic (HDDrawn, the HD textures row)
+	// the text is the classic text too, from the next drawn character on.
+	if (!g_tex || !g_matched || !HDDrawn() || index < 0 || index >= kGlyphs)
 		return 0;
 
 	if (!g_hit[index].ok)

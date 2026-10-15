@@ -13,6 +13,7 @@
 #include "../tomb5/pch.h"
 #include "tomb5.h"
 #include "../specific/registry.h"
+#include "../specific/function_stubs.h"	// Log - the HDLOG settings line
 
 //----------------------------------------------------------------------------
 // Discord Rich Presence: switched off in this fork.
@@ -254,6 +255,10 @@ void init_tomb5_stuff()
 		tomb5.hd_threads = 0;							//the machine's
 		REG_WriteLong(buf, tomb5.hd_threads);
 
+		sprintf(buf, "hd_build");
+		tomb5.hd_build = 1;								//on
+		REG_WriteLong(buf, tomb5.hd_build);
+
 		sprintf(buf, "fps_mode");
 		tomb5.fps_mode = 1;								//60, the default
 		REG_WriteLong(buf, tomb5.fps_mode);
@@ -484,6 +489,10 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_threads");
 		REG_ReadLong(buf, tomb5.hd_threads, 0);
 
+		// Absent - every older registry - reads as 1: built when found.
+		sprintf(buf, "hd_build");
+		REG_ReadLong(buf, tomb5.hd_build, 1);
+
 		/* 0 is 30, 1 is 60 and 2 is the display's own refresh rate.
 		 * Anything above 2 is not a mode that exists and reads back as the
 		 * default. */
@@ -594,6 +603,13 @@ void init_tomb5_stuff()
 	}
 
 	CloseRegistry();
+
+	/* HDLOG settings, behind -log, once at the start: the draw a game starts
+	 * with (hd_enable, the HD textures row: 1 HD, 0 classic) and the build
+	 * gate (hd_build: 0 builds nothing HD, any other value builds a level's
+	 * HD data whenever an installation is found). */
+	Log("HDLOG settings hd_enable=%d hd_build=%lu", tomb5.hd_enable ? 1 : 0,
+		(unsigned long)tomb5.hd_build);
 }
 
 void save_new_tomb5_settings()
@@ -720,6 +736,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_threads");
 	REG_WriteLong(buf, tomb5.hd_threads);
+
+	sprintf(buf, "hd_build");
+	REG_WriteLong(buf, tomb5.hd_build);
 
 	sprintf(buf, "fps_mode");
 	REG_WriteLong(buf, tomb5.fps_mode);

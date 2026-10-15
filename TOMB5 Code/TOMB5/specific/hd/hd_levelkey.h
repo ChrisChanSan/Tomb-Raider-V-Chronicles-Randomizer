@@ -40,7 +40,7 @@ struct HDLevelFileStamp
 
 struct HDLevelKey
 {
-	int valid;			// 0: no key - HD off, or no level name
+	int valid;			// 0: no key - no HD build, or no level name
 	int level;			// gfLevelId, the level's identity
 	char name[32];			// the level file's name without .TRC
 	HDLevelFileStamp trc;		// the classic level, as LoadLevel opens it
@@ -145,6 +145,10 @@ inline const char* HDLevelKeepRefused(const HDLevelKey* built,
 // The engine's half, in hd_level.cpp.
 
 /* The key of the level LoadLevel is about to read (specific\file.cpp, on the
- * load thread, before FreeLevel), for HDLevelUnload's decision. With
- * hd_enable off it stores no key and reads no file. */
+ * load thread, before FreeLevel), for HDLevelUnload's decision. With the
+ * build gate off (HDEnabled: hd_build 0 or no installation) it stores no
+ * key and reads no file. The draw - the HD textures row, hd_enable - is no
+ * part of the key: the data are built whatever is drawn, so a step of the
+ * row or a press of the HD/SD switch never makes the next load of the same
+ * level build them again. */
 void HDLevelKeyNext(const char* wadName);

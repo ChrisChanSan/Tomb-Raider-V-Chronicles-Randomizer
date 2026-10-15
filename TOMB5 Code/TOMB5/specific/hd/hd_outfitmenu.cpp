@@ -16,6 +16,7 @@
 #include "hd_lara.h"
 #include "hd_laradraw.h"
 #include "hd_level.h"
+#include "hd_switch.h"			// HDDrawn - the menu only over the HD draw
 #include "hd_feet.h"
 #include "hd_mods.h"
 #include "../LoadSave.h"
@@ -236,15 +237,18 @@ bool HDOutfitMenuWanted()
 	/* With the HD path off there is nothing to change, and the player is
 	 * told once per session rather than left pressing a dead key. Everything
 	 * the menu can do - the wardrobe, the re-dress, the barefoot set - lives
-	 * inside that gate. */
-	if (!HDEnabled())
+	 * inside that gate. With the world drawn classic (HDDrawn, the HD
+	 * textures row) Lara is the classic Lara, so the menu does not open
+	 * either; its data stay built for the HD draw. */
+	if (!HDEnabled() || !HDDrawn())
 	{
 		if (!g_saidNothingToDo)
 		{
 			g_saidNothingToDo = true;
 			Log("HDLOG f4 pressed and there is nothing to change: %s",
-				tomb5.hd_enable ? "no Tomb Raider IV-VI installation was found"
-					: "HD textures are off in the options");
+				!tomb5.hd_build ? "hd_build is 0" : !HDEnabled() ?
+				"no Tomb Raider IV-VI installation was found" :
+				"HD textures are off - the world is drawn classic");
 		}
 
 		return false;

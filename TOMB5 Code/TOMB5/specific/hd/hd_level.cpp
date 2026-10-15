@@ -5397,13 +5397,19 @@ static void FillRoomLighting(int roomIndex, int group, HDRoomLighting& out,
 
 bool HDEnabled()
 {
-	// The guard. With hd_enable off nothing below this line ever runs, no
-	// Remaster is looked for, no file is opened, and the frame is the classic
-	// one, byte for byte.
-	if (!tomb5.hd_enable)
+	// The build gate. With hd_build 0 nothing below this line ever runs, no
+	// Remaster is looked for, no file is opened, and the engine is the
+	// classic one, byte for byte. hd_enable, the HD textures row, is the
+	// draw and not asked here: the data are built whatever it says.
+	if (!tomb5.hd_build)
 		return false;
 
 	return HDInstallRoot()[0] != 0;
+}
+
+bool HDLevelBuilt()
+{
+	return g_level_active;
 }
 
 /* The HD data kept across a load of the same level (hd_levelkey.h).
@@ -5415,7 +5421,7 @@ bool HDEnabled()
  * read again is the one the data were made from, so the room art, its pages,
  * the room and static tables and the models are what a build would make
  * again; what ties into the classic level or changes in play is made again.
- * With hd_enable off no key is stored and nothing is ever kept. */
+ * With hd_build 0 no key is stored and nothing is ever kept. */
 static HDLevelKey g_key_next;		// the level LoadLevel is about to read
 static HDLevelKey g_key_loading;	// the level being loaded or drawn now
 static HDLevelKey g_key_built;		// the level the HD data in memory are of
@@ -5748,7 +5754,7 @@ void HDLevelBuild()
 {
 	HDLevelBuildHD();
 
-	/* Behind the gate: with hd_enable off there is no bare set, no wardrobe
+	/* Behind the gate: with hd_build 0 there is no bare set, no wardrobe
 	 * and nothing to say about either. */
 	if (HDEnabled())
 		HDOutfitMenuFollowFeet();
@@ -5959,7 +5965,7 @@ static void HDLevelBuildHD()
 	/* A scan that failed (HDLevelLoad clears the stem) leaves what was read
 	 * ahead for it; a load with HD off read nothing ahead, and its unload
 	 * gave back what a level before left. */
-	if (tomb5.hd_enable && !g_stem[0])
+	if (tomb5.hd_build && !g_stem[0])
 		AheadDrop();
 
 	if (!HDEnabled() || !g_stem[0])
@@ -7246,16 +7252,18 @@ int HDCarriedRoom(int group)
 }
 
 /* The one question the room walk asks of the HD path: a level built HD
- * (g_level_active), the HD textures row on with an installation found
- * (HDEnabled) and the HD/SD switch at HD (hd_switch.h, HDDrawn).
- * g_level_active is false with hd_enable off at the load, before a level is
- * built, after HDLevelUnload and in a level whose .TRG had no rooms. The row
- * and the switch are read on every call, so either turns a running level
+ * (g_level_active) and the draw at HD (hd_switch.h, HDDrawn: the HD
+ * textures row, which the HD/SD switch flips). g_level_active is false
+ * with the build gate off at the load (HDEnabled: hd_build 0 or no
+ * installation, fixed for the session), before a level is built, after
+ * HDLevelUnload and in a level whose .TRG had no rooms; it is set only past
+ * HDEnabled, so the gate needs no second asking here. The draw is read on
+ * every call, so a press or a step of the row turns a running level
  * classic from the next frame on, and back. Whenever this answers false the
  * walk in game\draw.cpp carries no reach and is the classic walk. */
 bool HDLevelActive()
 {
-	return g_level_active && HDEnabled() && HDDrawn();
+	return g_level_active && HDDrawn();
 }
 
 /* The mirrors the room build found, handed to the game side in the engine's

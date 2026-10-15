@@ -13,35 +13,37 @@
 #pragma once
 
 /*
- * The HD/SD switch: one key flips the world between the HD draw and the
- * classic draw, for comparing the two at one spot. It is a third state
- * beside tomb5.hd_enable 0 and 1 - the HD level built at the load as ever,
- * drawn HD or classic as the switch says - so a flip costs no load: both
- * sets of data stay resident for the whole level.
+ * The HD/SD switch: one key flips the world and the interface between the
+ * HD draw and the classic draw, for comparing the two at one spot. A
+ * level's HD data are built at its load whenever the build gate is open
+ * (hd_level.h, HDEnabled: hd_build and an installation found), whatever is
+ * drawn, so both draws are resident for the whole level and a flip costs
+ * no load.
  *
- * The state starts at "drawn HD" with every game and holds for the session,
- * across level loads, so one spot can be compared before and after a load.
- * It is not saved: the registry's hd_enable decides how a game starts. With
- * hd_enable 0 there is no HD data to switch to; a press then changes
- * nothing and says so in the log. The HD textures row, which is hd_enable,
- * sets the state to its own new value at every step, so the row switches
- * the whole world at once as a press does, and a level loaded after it
- * starts drawn as the row says.
+ * The switch's state is the setting hd_enable, the HD textures row: a press
+ * and a step of the row flip the one value through one setter, the row
+ * shows every flip of the key, and the value is saved as every row's is -
+ * so a game starts drawn as the last one was left. There is nothing to
+ * switch only where the level on screen has no HD data: the build gate off
+ * (hd_build 0, or no installation) or a level the .TRG had nothing for. A
+ * press there changes nothing and says so in the log; a step of the row
+ * still moves the setting, as a step of any option does.
  *
  * The rule is pure arithmetic here, without an engine header, so that
  * Preparation\Tools\Diagnose\ModernTest.cpp checks the engine's own rule;
- * hd_switch.cpp holds the state and the log line.
+ * hd_switch.cpp holds the key's held state, the setter and the log line.
  */
 
 // One switch: the draw it asks for, and whether its key was down at the
 // last reading.
 struct HDSwitchState
 {
-	int drawn;	// 1 the HD draw, 0 the classic draw
+	int drawn;	// 1 the HD draw, 0 the classic draw (tomb5.hd_enable)
 	int held;	// the role was down at the last reading
 };
 
-// The start of every game: drawn HD, nothing held.
+// A state of the tools' own (RoomProbe, the suites): drawn HD, nothing held.
+// The engine's draw is the setting hd_enable as the registry gave it.
 #define HD_SWITCH_START	{ 1, 0 }
 
 // What one reading did.
@@ -54,11 +56,11 @@ enum
 
 /* One reading of the role: `down` is its key or its pad chord, `live`
  * whether a press may switch here (in a level, no menu open), `hd` whether
- * the session has HD data (HDEnabled). A press is the edge from up to down,
- * so a held key flips once and does not repeat; the held state is kept on
- * every reading, live or not, so a key still down when a menu closes is no
- * new press. Key and pad are one `down`, so one press of either - or of
- * both at once - is one edge. */
+ * the level on screen has HD data (HDSwitchHasData). A press is the edge
+ * from up to down, so a held key flips once and does not repeat; the held
+ * state is kept on every reading, live or not, so a key still down when a
+ * menu closes is no new press. Key and pad are one `down`, so one press of
+ * either - or of both at once - is one edge. */
 inline int HDSwitchStep(HDSwitchState* s, int down, int live, int hd)
 {
 	const int edge = down && !s->held;
@@ -76,14 +78,12 @@ inline int HDSwitchStep(HDSwitchState* s, int down, int live, int hd)
 }
 
 /* One step of the HD textures row: the draw takes the row's new value `on`
- * (1 HD, 0 classic), so the row and the key name one state. `hd` whether
- * the level on screen has HD data to draw (HDSwitchOption says how that is
- * asked). The state is set either way: without HD data the step switches
- * nothing now and says so, as a press does, and the state is how the next
- * level built HD starts. A flip only when the draw changed - a row stepped
- * to off while a press has the world classic already is no flip. `held` is
- * not touched: the row reads no key, so its step is never an edge of one,
- * and a key held across it is no new press. */
+ * (1 HD, 0 classic). `hd` whether the level on screen has HD data to draw.
+ * The value is set either way, as a step of an option is: without HD data
+ * the step switches nothing on screen and says so, as a press does, and
+ * the value is how the next level built HD is drawn. A flip only when the
+ * draw changed. `held` is not touched: the row reads no key, so its step is
+ * never an edge of one, and a key held across it is no new press. */
 inline int HDSwitchSet(HDSwitchState* s, int on, int hd)
 {
 	const int was = s->drawn;
@@ -98,16 +98,22 @@ inline int HDSwitchSet(HDSwitchState* s, int on, int hd)
 
 // The engine's half, in hd_switch.cpp.
 
-// Whether the world is to be drawn HD. True at the start of every game.
+// Whether the world and the interface are drawn HD: the setting hd_enable.
 bool HDDrawn();
+
+/* Whether the level on screen has HD data to switch to: HD rooms
+ * (HDLevelBuilt), HD objects or an HD Lara, built at its load. The one test
+ * of the key, the pad chord and the row. */
+bool HDSwitchHasData();
 
 /* One reading per S_UpdateInput (specific\input.cpp): the role's key, its
  * pad chord and whether a press may switch here. A flip, and a press with
- * nothing to switch to, writes one HDLOG line behind -log. */
+ * nothing to switch to, writes one HDLOG line behind -log; a flip is saved
+ * at once, as a step of the row is. */
 void HDSwitchInput(bool key, bool pad, bool live);
 
-/* The HD textures row's step (game\menu_frame.cpp, MenuStepHdTextures),
- * after it wrote tomb5.hd_enable: `on` the row's new value, `roomsBefore`
- * HDLevelActive() as the menu asked it before that write. A flip, and a
- * step with nothing to switch, writes the same HDLOG line with by=option. */
-void HDSwitchOption(bool on, bool roomsBefore);
+/* The HD textures row's step (game\menu_frame.cpp, MenuStepHdTextures): the
+ * draw flips through the same setter as a press and writes the same HDLOG
+ * line with by=option. The menu saves the value with the tomb5 settings
+ * (MenuAfterChange). */
+void HDSwitchOption();

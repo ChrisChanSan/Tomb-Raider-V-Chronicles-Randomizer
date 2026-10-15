@@ -454,6 +454,10 @@
  *     -tankleave spray|water  -tank without its spray, or without its
  *                     water - a part's own pixels, against the picture with
  *                     it; repeatable.
+ *     -tankcensus     every room's floor squares against the .TRG: the
+ *                     art's copy of the room under the floor and how the
+ *                     floor over it is drawn (census and censussq lines,
+ *                     ProbeCensus). Needs -roombox; -hdwater 0 is enough.
  *     -nowarm         no warm-up of the water's shaders before the picture
  *                     (HDRenderWaterWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
@@ -7337,6 +7341,232 @@ static void ProbeWetArt(int floor, const char* root, const char* stem)
 	}
 }
 
+/* -tankcensus: the art's copy of a room under its floor, for every room of
+ * the level - -tankart's question asked of every floor square, wet or not.
+ * Per square of a room's classic floor (a wall left out), out of every
+ * triangle of the .TRG whatever its group: under it the ones whose centroid
+ * lies in the square's column 16 to 2,048 units under the floor, of those
+ * the ones mirrored (the centroid mirrored in the floor within 32 units of
+ * the centroid of one over it, as -tankart), how deep the deepest lies,
+ * and the floor's own faces - flat triangles within 16 units of it - by
+ * how the renderer draws them: opaque (pass 0), clear (an alpha-pass
+ * triangle on a part-way clear page, HD_PASS_CLEAR, through which what
+ * lies under shows), cut (the alpha pass's test), additive. A square
+ * counts as copied at 8 mirrored and a third of what lies under, the
+ * engine's own numbers (hd_render.cpp, kWetCopyCells) asked of triangles.
+ * One `census` line a room - inner squares only, off the ring of walls and
+ * doors - and a `censussq` line for every square of a room that has one
+ * copied, and for every square any wet floor holds. */
+static bool g_tank_census = false;
+
+static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
+	const char* root, const char* stem)
+{
+	if (!g_tank_census)
+		return;
+
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("census: no .TRG (%s)\n", error.c_str());
+		return;
+	}
+
+	struct Tri
+	{
+		float x, y, z;
+		int kind;	// -1 not flat, else 0 opaque, 1 clear, 2 cut, 3 add
+	};
+
+	std::map<long long, std::vector<Tri> > column;
+	const auto key = [](int sx, int sz)
+	{
+		return ((long long)sx << 32) ^ (long long)(unsigned int)sz;
+	};
+	const auto cell = [](float x, float y, float z)
+	{
+		return ((long long)((int)floorf(x / 32.0f) & 0xFFFFF) << 40) |
+			((long long)((int)floorf(y / 32.0f) & 0xFFFFF) << 20) |
+			(long long)((int)floorf(z / 32.0f) & 0xFFFFF);
+	};
+	size_t total = 0;
+
+	for (size_t g = 0; g < trg.groups.size() && g < g_boxes_built.size(); g++)
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+			for (int pass = 0; pass < 3; pass++)
+				for (unsigned int i = 0; i + 2 < part.pass[pass].count; i += 3)
+				{
+					const unsigned int first = part.pass[pass].start + i;
+					float p[3][3];
+					int page = -1;
+
+					for (int v = 0; v < 3; v++)
+					{
+						const trf::remaster::TrgVertex& tv =
+							trg.vertices[trg.indices[first + v]];
+
+						p[v][0] = (float)tv.x + (float)g_boxes_built[g].originX;
+						p[v][1] = (float)tv.y;
+						p[v][2] = (float)tv.z + (float)g_boxes_built[g].originZ;
+						page = tv.layer && tv.layer <= trg.textures.size() ?
+							(int)trg.textures[tv.layer - 1u] : -1;
+					}
+
+					const float ax = p[1][0] - p[0][0], ay = p[1][1] - p[0][1];
+					const float az = p[1][2] - p[0][2], bx = p[2][0] - p[0][0];
+					const float by = p[2][1] - p[0][1], bz = p[2][2] - p[0][2];
+					const float nx = ay * bz - az * by, ny = az * bx - ax * bz;
+					const float nz = ax * by - ay * bx;
+					const float l = sqrtf(nx * nx + ny * ny + nz * nz);
+					Tri t = { (p[0][0] + p[1][0] + p[2][0]) / 3.0f,
+						(p[0][1] + p[1][1] + p[2][1]) / 3.0f,
+						(p[0][2] + p[1][2] + p[2][2]) / 3.0f, -1 };
+
+					const int slot = HDPageCacheSlotOf(page);
+
+					if (l > 0.0f && fabsf(ny) / l > 0.95f)
+						t.kind = pass == 0 ? 0 : pass == 2 ? 3 :
+							HDPageCacheSlotClear(slot) ? 1 : 2;
+
+					column[key((int)floorf(t.x / 1024.0f),
+						(int)floorf(t.z / 1024.0f))].push_back(t);
+					total++;
+				}
+
+	// The squares the wet floors hold, to be listed whatever they carry.
+	std::set<long long> wet;
+	HDWaterWetSquare ws;
+
+	for (int f = 0; f < 8; f++)
+		for (int at = 0; HDRenderWaterWetSquare(f, at, &ws); at++)
+			if (ws.kept)
+				wet.insert(key(ws.x >> 10, ws.z >> 10) ^
+					((long long)ws.y << 48));
+
+	struct Square
+	{
+		int x, z, y, under, mirrored, deep, faces[4];
+		bool inner, copied, listed;
+	};
+
+	int rooms_copied = 0, squares_all = 0, copied_all = 0, clear_all = 0;
+
+	printf("census level=%s triangles=%u\n", stem, (unsigned)total);
+
+	for (size_t r = 0; r < rooms.size(); r++)
+	{
+		const HDWaterRoom& w = rooms[r];
+		std::vector<Square> sq;
+
+		for (int sx = 0; w.floor && sx < w.sizeX; sx++)
+			for (int sz = 0; sz < w.sizeZ; sz++)
+			{
+				const int at = sx * w.sizeZ + sz;
+
+				if (w.floor[at] == -127)
+					continue;
+
+				Square s = { w.originX + sx * 1024, w.originZ + sz * 1024,
+					(int)w.floor[at] * 256, 0, 0, 0, { 0, 0, 0, 0 },
+					sx > 0 && sz > 0 && sx < w.sizeX - 1 && sz < w.sizeZ - 1,
+					false, false };
+				const std::vector<Tri>& all = column[key(s.x >> 10, s.z >> 10)];
+				std::set<long long> over;
+				const float fy = (float)s.y;
+
+				for (const Tri& t : all)
+					if (t.y < fy - 16.0f && t.y >= fy - 2048.0f - 64.0f)
+						over.insert(cell(t.x, t.y, t.z));
+
+				for (const Tri& t : all)
+				{
+					if (fabsf(t.y - fy) <= 16.0f)
+					{
+						if (t.kind >= 0)
+							s.faces[t.kind]++;
+					}
+					else if (t.y > fy && t.y <= fy + 2048.0f)
+					{
+						const float my = 2.0f * fy - t.y;
+						bool found = false;
+
+						s.under++;
+						s.deep = (int)(t.y - fy) > s.deep ? (int)(t.y - fy) :
+							s.deep;
+
+						for (int d = 0; d < 27 && !found; d++)
+							found = over.count(cell(
+								t.x + 32.0f * (float)(d % 3 - 1),
+								my + 32.0f * (float)(d / 3 % 3 - 1),
+								t.z + 32.0f * (float)(d / 9 - 1))) != 0;
+
+						s.mirrored += found ? 1 : 0;
+					}
+				}
+
+				s.copied = s.mirrored >= 8 && s.mirrored * 3 >= s.under;
+				s.listed = wet.count(key(s.x >> 10, s.z >> 10) ^
+					((long long)s.y << 48)) != 0;
+				sq.push_back(s);
+			}
+
+		int squares = 0, copied = 0, clear = 0, under = 0, mirrored = 0;
+		int deep = 0, faces[4] = { 0, 0, 0, 0 }, kinds[4] = { 0, 0, 0, 0 };
+		bool any = false;
+
+		for (const Square& s : sq)
+		{
+			any = any || s.copied;
+
+			if (!s.inner)
+				continue;
+
+			squares++;
+			copied += s.copied ? 1 : 0;
+			clear += s.copied && s.faces[1] ? 1 : 0;
+			under += s.under;
+			mirrored += s.mirrored;
+			deep = s.deep > deep ? s.deep : deep;
+
+			for (int k = 0; k < 4; k++)
+			{
+				faces[k] += s.faces[k];
+				kinds[k] += s.faces[k] ? 1 : 0;
+			}
+		}
+
+		if (!w.floor)
+			continue;
+
+		squares_all += squares;
+		copied_all += copied;
+		clear_all += clear;
+		rooms_copied += copied ? 1 : 0;
+		printf("census room=%d drawn=%d squares=%d copied=%d copiedclear=%d "
+			"under=%d mirrored=%d deep=%d floor=opaque:%d,clear:%d,cut:%d,"
+			"add:%d squaresby=opaque:%d,clear:%d,cut:%d,add:%d\n", (int)r,
+			w.drawn, squares, copied, clear, under, mirrored, deep, faces[0],
+			faces[1], faces[2], faces[3], kinds[0], kinds[1], kinds[2],
+			kinds[3]);
+
+		for (const Square& s : sq)
+			if (any || s.listed)
+				printf("censussq room=%d x=%d z=%d y=%d %s under=%d "
+					"mirrored=%d deep=%d floor=opaque:%d,clear:%d,cut:%d,"
+					"add:%d copy=%s%s\n", (int)r, s.x, s.z, s.y,
+					s.inner ? "inner" : "ring", s.under, s.mirrored, s.deep,
+					s.faces[0], s.faces[1], s.faces[2], s.faces[3],
+					s.copied ? "yes" : "no", s.listed ? " wet" : "");
+	}
+
+	printf("census level=%s rooms=%d squares=%d copied=%d copiedclear=%d "
+		"roomscopied=%d\n", stem, (int)rooms.size(), squares_all, copied_all,
+		clear_all, rooms_copied);
+}
+
 /* -tankwetmap: floor `floor`'s squares, room by room, one line each: the
  * square's corner, its floor, its nearest point's way from the glass in
  * units and in squares, the moment the front first reaches it (the dome's
@@ -11174,6 +11404,7 @@ static int ProbeMain(int argc, char** argv)
 			(!strcmp(argv[at], "-tankmarch") && at + 1 < argc) ||
 			!strcmp(argv[at], "-tankwetmap") ||
 			!strcmp(argv[at], "-tankart") ||
+			!strcmp(argv[at], "-tankcensus") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
 		{
@@ -11182,6 +11413,8 @@ static int ProbeMain(int argc, char** argv)
 				g_tank_wet_map = true;
 			else if (!strcmp(argv[at], "-tankart"))
 				g_tank_art = true;
+			else if (!strcmp(argv[at], "-tankcensus"))
+				g_tank_census = true;
 			else if (!strcmp(argv[at], "-tankslopes"))
 				g_tank_slopes = true;
 			else if (!strcmp(argv[at], "-tankwetall"))
@@ -13554,6 +13787,7 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 				g_hdwater);
 			ProbeWetSlopes(rooms);
+			ProbeCensus(rooms, root, stem);
 			ProbeWaterFalls(level, stem);
 			ProbeCardPages(root, managed, threads);
 

@@ -2165,6 +2165,12 @@ water surface", carries the tables.
     off the screen or while its floor's room is off the frame's draw list.
     OWN, a design of this project from general graphics knowledge (stencil
     parity of a closed volume, a depth written by the pixel shader).
+    The eye's test (`hd_spring.h`, `HDSpringCrackSeen`,
+    `HDSpringCrackFloorFit`): the eye 8 units over the bottom, and over the
+    outline's highest point or else over the plane of least squares through
+    the outline's heights at the eye's own column. OWN, chosen on RoomProbe
+    pictures of a fan of 42 eyes round ANDREA2's rule crack with the test
+    removed.
 208. **The crack's walls** (`hd_spring.hlsl`, `CrackPS`) - the floor's page
     folded over the lip (a place d down the wall takes the floor's page d
     further in along the edge's inward normal, wrapped), the floor's light

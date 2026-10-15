@@ -15067,7 +15067,8 @@ the water close to the fountain's crack 5,136 / 5,136 (F3), 5,650 / 5,650 (low, 
 24,407 / 24,407 (at the lip, F5); the rule's springs from over the water 17,946 / 849
 (ANDREA1), 11,624 / 1,305 (ANDREA2), 3,721 / 175 (JOBY2), under it 3,694 / 227, 2,524 /
 638, 795 / 188; at the fountain's two eyes of the first round 8,070 / 1,637 (the edge,
-the pit under the sheet and the bubbles' rings moved with them) and 11,041 / 2,299 (under
+where the crack lies out of sight: every changed pixel a ring of the sheet, moved with
+the bubble that leaves it) and 11,041 / 2,299 (under
 the water, the crack below the picture, the rings alone). GPU at 2560 x 1440, the water's
 brackets, the springs' and the cracks', mean of nine runs against `e81b6e90`: the
 basin's edge 0.1406 to 0.1756 ms (+0.035, the cracks' draws 0.035), under the water
@@ -15086,16 +15087,115 @@ views at 1, 3 and 5 s 36 of 36 identical; every WATERLOG line of the fifteen lev
 identical; with `-springcrack 0` all eleven crack pictures identical to `e81b6e90`.
 ModernTest's spring group 12 checks more. The suites, the tools and the engine build.
 
-**Left.** The look in the game: nobody in this round could play it - the crack's size,
-its branches, the walls' darkness and the black are the owner's to judge, as is how it
-reads from over a 2,304-deep basin, where the sheet's water takes most of it. Floor bumps
-inside the outline that stand over its rim's line stay over the hole (the volume's top is
-a fan from the rim); the rule's ANDREA2 spring lies on such a slope. The crack is drawn
-whole or not at all: an eye very close to it (its volume at the near plane) loses it for
-those frames, and a frame whose depth has no stencil draws none while the bubbles still
-start under the floor. A crack is not cut by statics on its floor.
+**Left.** The look in the game was the owner's to judge: the crack's size, its branches,
+the walls' darkness and the black bottom, the crack on the rough slope and the key's name.
+His word after playing it on 2026-10-15: "The spring looks great, well done." ("Die Quelle
+sieht top aus, gut gemacht.") - all of it stays as built. From over a 2,304-deep basin the
+sheet's water takes most of the crack. Floor bumps inside the outline that stand over its
+rim's line stay over the hole (the volume's top is a fan from the rim); the rule's ANDREA2
+spring lies on such a slope. The crack is drawn whole or not at all: an eye very close to
+it (its volume at the near plane) loses it for those frames, and a frame whose depth has
+no stencil draws none while the bubbles still start under the floor. A crack is not cut by
+statics on its floor. Anything whose surface lies within 8 units over the floor inside the
+outline - a pickup lying there, Lara's foot - lies inside the volume and turns into the
+hole's black. The blend and additive room polygons drawn after the crack in
+`HDFrameDrawGlow` paint over the hole as over the floor. A thin dark seam runs along the
+lip, where the walls begin at 0.41 to 0.42 of the floor's light (F5, F3).
 
 **Commits.** `278dfbbb`, `c2c406ff`.
+
+#### Round 3: the crack's gate
+2026-10-15
+
+**What.** The owner's play test of the second round, at the rule's ANDREA2 spring on the
+rough slope under the water: "Pictures 1 and 2: the spring on the slope - the crack
+disappears when the camera is below the crack's Y." ("Bild 1 und 2: Die Quelle auf der
+Schraege - der Riss verschwindet, wenn die Kamera unter dem Y des Risses ist.") His two
+pictures (reference pictures supplied for this project, not in the repository) match two
+still runs of that test's camera log: log ticks 197,282 to 206,297, the eye at y 562 over
+the crack (picture 1, the crack drawn), and 237,235 to 247,110, the eye at x 59,858, y
+1,371, z 41,443 down the slope (picture 2, no crack). Since this round an eye sees a crack
+whenever it stands over the crack's bottom and over the floor round it - on a slope from
+under the highest point of its rim too.
+
+**Why.** The crack was drawn only while the eye stood 8 units over the highest point of
+its outline. The rule's ANDREA2 crack lies on a slope: its rim runs from 1,229.6 to
+1,379.5, its bottom lies at 1,446. Picture 2's eye stood 141 under the highest point and
+75 over the bottom and looked into the slit from the side.
+
+**How.** `specific/hd/hd_spring.h` :581 `HDSpringCrackFloor`, :592
+`HDSpringCrackFloorFit`, :654 `HDSpringCrackSeen` - pure functions, which ModernTest
+includes; `hd_spring.cpp` :1623 fits the floor in `HDSpringCrackBuild`, :1785 asks the
+gate in `HDSpringCrackFrameDraw`.
+
+- *The floor's plane.* At the level's build the plane of least squares through the heights
+  of the outline's points and its middle - the floor under the outline as the `.TRG` draws
+  it -, and the highest of those points (the least y). Points on one line give the flat
+  floor at their mean.
+- *The gate.* A crack is drawn when the eye stands 8 units (`kCrackLift`) over its bottom,
+  and 8 over the highest point of its outline or else 8 over the floor's plane at the
+  eye's own column. On a flat floor the plane is the floor and the gate is the one before.
+  The plane only widens the test of the highest point: away from the outline it is a guess
+  at the floor (600 units uphill of the rule's ANDREA2 crack it lies at 963, the floor at
+  1,068), so an eye over the whole outline keeps its crack as before. The near-plane, far,
+  on-screen, size and room tests stay; the outline, the sizes, the walls, the hole and the
+  key are unchanged.
+
+**Measured.** RoomProbe at 960 x 540 and 2 s on the rule's ANDREA2 crack, against the same
+frame with the crack built and never drawn (a measuring build of the probe): the two eyes
+of the pictures and a fan of 40 more, ten heights 64 apart from 256 over the highest point
+to 128 under the bottom at four columns, each eye looking at the crack's middle - picture
+2's column, 1,000 west and 1,000 south in the water, and 600 uphill against the cave's
+wall. With the gate removed every eye in the water over the bottom draws the crack right,
+the walls and the black bottom as from above, its pixels falling smoothly as the eye
+sinks; under the bottom the hole is a flat black slit (in picture 2's column 40 under it
+954 pixels, 801 black): the bottom's plane, turned to the eye, lies in front of the walls;
+the uphill eyes under their floor stand in the rock and see black only. A gate of the
+bottom and the plane alone lost the two uphill eyes a little over their floor (256 and 192
+over the highest point, right pictures) - hence the highest point first. The fan with the
+gate, the crack's pixels: plain drawn before and now, the same picture; *new* drawn since
+this round, the same picture as with no gate at all; none not drawn, in brackets what no
+gate would draw (pixels / black ones):
+
+| eye over the highest point / over the bottom | picture 2's column (floor 1,912) | 1,000 west (1,537) | 1,000 south (1,657) | 600 uphill (1,068) |
+|---|---|---|---|---|
+| 256 / 472 | 1,834 | 3,371 | 3,534 | 1,858 |
+| 192 / 408 | 1,770 | 3,256 | 3,481 | 789 |
+| 128 / 344 | 1,704 | 3,052 | 3,331 | 37,501 (in the rock, 30,228 black) |
+| 64 / 280 | 1,620 | 2,771 | 3,120 | 42,133 (in the rock, 34,468 black) |
+| 0 / 216 | *new* 1,521 | *new* 2,452 | *new* 2,841 | none (46,303 / 38,155) |
+| -64 / 152 | *new* 1,417 | *new* 2,137 | *new* 2,526 | none (48,972 / 40,648) |
+| -128 / 88 | *new* 1,311 | *new* 1,749 | *new* 2,173 | none (49,464 / 41,549) |
+| -192 / 24 | *new* 1,170 | *new* 1,336 | *new* 1,747 | none (47,907 / 40,647) |
+| -256 / -40 | none (954 / 801) | none (834 / 788) | none (1,125 / 925) | none (46,128 / 39,329) |
+| -320 / -104 | none (840 / 713) | none (733 / 700) | none (748 / 644) | none (43,815 / 37,490) |
+
+Picture 1's eye draws 1,347 pixels as before; picture 2's eye draws the crack anew, 1,643
+pixels (372 black: the bottom; the rest the walls). GPU at 2560 x 1440 at the fountain's
+two eyes of the first round, the water's, the springs' and the cracks' brackets, mean of
+nine runs against `dd6b559a`: the basin's edge 0.1753 to 0.1739 ms, under the water 0.1015
+to 0.1033 ms - within the runs' spread; no shader changed, every `.inc` byte-identical.
+
+**Checked.** The classic path (`-classicroom`, `-classiconly` on ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34) 6 of 6 md5-identical to `8691e82` and `dd6b559a`; the fifteen
+cameras with `-hdwater 0` 15 of 15 identical to the parity set, with `-hdwater 1` 15 of 15
+identical to `dd6b559a`; the twelve pond views at 1, 3 and 5 s 36 of 36; every WATERLOG
+line of the fifteen levels (209) identical; the second round's eleven crack cameras 11 of
+11 identical to `dd6b559a` with the cracks and with `-springcrack 0` (none of their eyes
+stands under a highest point); the SPRINGLOG and SPRINGCRACK lines of ANDREA1, ANDREA2 and
+JOBY2 identical to the second round's. ModernTest's spring group 5 checks more: the fitted
+slope, the fan's forty eyes, the two eyes of the log, a flat floor a unit at a time,
+points on one line. The suites, the tools and the engine build.
+
+**Left.** The look in the game. An eye under the bottom but over the floor - the slope
+falls on below the crack, and the log holds such eyes (ticks 177,203 to 177,610 at y
+1,586, 212,610 to 222,485 at 1,558) - sees no crack: to show it there the hole would draw
+its bottom only for an eye over it and leave the slit to the walls. Uphill eyes over the
+whole outline and yet under the floor (in the fan 128 and 64 over the highest point,
+inside the rock) draw a black wall, as before; the classic floor of that square stands at
+1,024 (SectorCheck), which the camera does not pass.
+
+**Commits.** `31eea35e`.
 
 ### The level load on several cores
 2026-10-11

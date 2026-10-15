@@ -576,6 +576,96 @@ inline bool HDSpringCrackHolds(const HDSpringCrackShape& c, float x, float z)
 	return in;
 }
 
+/* The floor under a crack's outline (HDSpringCrackFloorFit): the plane
+ * that fits its points' heights best and the highest of them; y down. */
+struct HDSpringCrackFloor
+{
+	float y;		// the plane's height at the points' mean x, z
+	float slopeX, slopeZ;	// its change of y a unit along world x, z
+	float x, z;		// the points' mean
+	float top;		// the points' least y: the highest of them
+};
+
+/* The floor of n points at world x, z with heights y: the plane of least
+ * squares about their mean. Points on one line span no plane: then the
+ * flat floor at their mean height. */
+inline HDSpringCrackFloor HDSpringCrackFloorFit(const float* x,
+	const float* z, const float* y, int n)
+{
+	HDSpringCrackFloor f = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	double mx = 0.0, mz = 0.0, my = 0.0;
+
+	if (n < 1)
+		return f;
+
+	f.top = y[0];
+
+	for (int i = 0; i < n; i++)
+	{
+		mx += x[i];
+		mz += z[i];
+		my += y[i];
+		f.top = y[i] < f.top ? y[i] : f.top;
+	}
+
+	mx /= n;
+	mz /= n;
+	my /= n;
+
+	double xx = 0.0, xz = 0.0, zz = 0.0, xy = 0.0, zy = 0.0;
+
+	for (int i = 0; i < n; i++)
+	{
+		const double dx = x[i] - mx, dz = z[i] - mz, dy = y[i] - my;
+
+		xx += dx * dx;
+		xz += dx * dz;
+		zz += dz * dz;
+		xy += dx * dy;
+		zy += dz * dy;
+	}
+
+	const double det = xx * zz - xz * xz;
+
+	f.y = (float)my;
+	f.x = (float)mx;
+	f.z = (float)mz;
+
+	if (det > 1.0e-6 * xx * zz && det > 0.0)
+	{
+		f.slopeX = (float)((xy * zz - zy * xz) / det);
+		f.slopeZ = (float)((zy * xx - xy * xz) / det);
+	}
+
+	return f;
+}
+
+/* Whether an eye at world x, y, z (y down) looks into a crack on `floor`
+ * whose bottom lies at bottomY, each test by `lift`: the eye over the
+ * bottom, and over the highest point of the outline or else over the
+ * floor's plane at the eye's own column. On a slope the outline's heights
+ * part, and an eye under its highest point still looks into the slit from
+ * the side, the walls hiding the bottom it cannot see. Under the bottom
+ * the hole would stand black on the bottom's plane in front of the walls
+ * (HolePS meets that plane before the floor); behind the floor's plane
+ * the eye looks at the back of the floor the crack opens. The plane only
+ * widens the test of the highest point: away from the outline it is a
+ * guess at the floor, so an eye over the whole outline keeps its crack. */
+inline bool HDSpringCrackSeen(const float* eye,
+	const HDSpringCrackFloor& floor, float bottomY, float lift)
+{
+	if (eye[1] >= bottomY - lift)
+		return false;
+
+	if (eye[1] < floor.top - lift)
+		return true;
+
+	const float y = floor.y + floor.slopeX * (eye[0] - floor.x) +
+		floor.slopeZ * (eye[2] - floor.z);
+
+	return eye[1] < y - lift;
+}
+
 /* Where bubble `k` is born in the crack: on the main line between a
  * quarter and three quarters of its way, and across it at most half the
  * side's half-width there - inside the slit whatever the tear. */

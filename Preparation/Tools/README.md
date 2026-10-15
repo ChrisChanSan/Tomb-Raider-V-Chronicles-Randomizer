@@ -212,7 +212,8 @@ only, none without one, as the classic path draws a room;
 off and extended by the visibility path's tables (built as the engine builds them),
 prints `vis rooms= walk= box= opening= portal= dequeues=` after each direction's rooms
 and ends each `-walkfinal` line with `vis=walk|box|opening|portal`, what listed the
-room (walk: a portal, from any listed room); the build hands no intrusion list, no
+room first (walk: a portal, from any listed room; a table that only widens a listed
+room's window is not named); the build hands no intrusion list, no
 air and no carried rooms, so every named group is one whole draw; `-vissrc <mask>`
 (1 guests, 2 openings, 4 wide portals; 7 the default), `-visreach`, `-visbare`,
 `-visguest`, `-visguestrule 0|1|2` and `-visoverhang` set the tables' numbers;

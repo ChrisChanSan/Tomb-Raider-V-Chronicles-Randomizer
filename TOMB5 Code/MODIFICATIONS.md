@@ -5328,6 +5328,14 @@ its own portals, asks its own tables, and its window grows by union as the class
 does - the passing-on the owner asks for, and the answer to the failure of a room listed
 for its art without passing the walk on.
 
+Taken from a third party: the approach - the walk as the list, every listed room's art
+drawn whole, a group listed by its art in a listed room's box - and the count of eight
+triangles that makes a group a guest come from the TR2 visibility prototype of TROne
+(GPLv3) by Todesengel1931, which the owner handed over (`THIRD-PARTY.md` 203 and 204, the
+origin sentence in `hd_vis.h`); no code of it was taken. The tables' rules - the centroid
+and its 128 units, the link test, the openings, the wide portals - and the passing-on are
+this engine's own.
+
 **The three tables, measured** (`TrgProbe -vistable`, fifteen levels, 2,709 rooms, 8,078
 portals). *Guests*: a group whose triangles have their centroid in a room's inside (the
 grid less its ring of wall sectors) and more than 128 units outside the group's own room's
@@ -5421,12 +5429,17 @@ at the 22 places, the new path drawing fewer rooms into the sky (below). At ANDR
 courtyard cameras of the owner's log the new picture is the old one to the pixel, the sky
 alone above the walls. *A classic face behind as the last resort*: the clear pixels left
 on classic faces after the whole groups are the old path's own, view for view (the table
-below; JOBY2's broken corner is 22,166 of them at J33, closed only by room 24's ceiling,
-room 24 standing in rooms 31 and 33 with no link); with the sky drawn they show the sky,
-as on the old path. Not built: the owner judged room 24's art there worse than the hole,
-and a classic face behind the art needs a draw of its own. *Glass, water, glows, cards,
-the wet floor*: their phases are untouched, so nothing is painted over behind glass; the
-X-ray room's picture of the 22 places is the old one to the pixel.
+below), and with the sky drawn they show the sky, as on the old path. At the owner's
+twenty places all of them, 216,235 on the old path and 216,253 on the new, are the sky
+when the probe draws it (`-sky`), none left clear; the game draws the sky when a listed
+room under the sky has a window, which room 153 has at J33 on both paths and at frame
+12,248 on the new path alone (4,612 pixels there, the black doorway below). J33's 22,166
+are the doorway at the top of JOBY2's stairs: the classic column there is wider than the
+HD one, so the clipped classic frame shows the column's face where the HD frame shows the
+doorway and the sky beyond it. No view asks for a classic face behind; it is not built.
+*Glass, water, glows, cards, the wet floor*: their phases are untouched, so nothing is
+painted over behind glass; the X-ray room's picture of the 22 places is the old one to the
+pixel.
 
 **The owner's black doorway (pictures 173 and 174).** His round-8 log holds ten stair
 cameras by the riveted pipe column (the whole-list dumps of frames 4,932 to 14,722, the
@@ -5437,7 +5450,16 @@ lists them, with no window - a room the reach alone lists draws its art and sets
 `outside`, so the sky is not drawn and the doorway, with nothing of room 152's in it,
 stays black. The new walk lists both with a window at all nine (the tenth, the camera up
 the stairs, lists neither on either path), so the sky is drawn and the doorway shows what
-is behind it.
+is behind it. J33, room 33 at yaw 270, is the composition of picture 174: the old walk
+lists 152 and 153 with a window one pixel wide (x 925 to 926 of 1,280; the reach's window
+of 152 is 810 to 926), the new walk with 696 to 926, which holds the doorway (x 797 to
+926). At both cameras it is the openings table that lists them: with the openings alone
+(`-vissrc 2`) the walk gives these windows, with the guests or the wide portals alone the
+classic walk's, which at frame 12,248 lists neither room. The source the walk names for a
+room (`-walkfinal`, `VISLOG`) is the one that first queued it; a table that only widens
+the window of a room already queued is named nowhere, and the rooms the wider window lets
+the portals reach read `walk` - at frame 12,248 all fifteen, where the classic walk alone
+lists five.
 
 **The switch.** `tomb5.hd_vis` (`global/types.h`, read and written beside `hd_air` in
 `tomb5/tomb5.cpp`, any value but 1 reading as 0); `BuildRoomVis` (`hd_level.cpp`) takes it
@@ -5476,11 +5498,12 @@ fight (the eye one unit further along x, pixels differing by more than 24):
 | RICH2's fine walk (12) | 12 | 0 / 0 | - | 54,926 / 134,587 | - |
 | RICH2's shaft, frame 61,830 | 1 | 0 / 0 | - | 10,552 / 45,146 | - |
 
-Worse by more than 500 pixels on either measure: 7 views (9 rows, two views in two sets);
-better by more than 500: 21, by up to 2,003,505 pixels of art on the empty classic frame
-(ANDREA3's mass view from room 115, ANDREA2's and ANDREA1's high views, where the old
-path's reach drew rooms the classic walk does not list into the sky). Contact sheets old |
-new | clipped classic frame of both sides are with the round's material.
+Worse by more than 500 pixels on either measure or the fight: 13 views of the sets above
+(ANDREA1 228 at yaw 270 in two of them), 14 steps of the ride, the 12 fine steps and frame
+61,830; better by more than 500: 21, by up to 2,003,505 pixels of art on the empty classic
+frame (ANDREA3's mass view from room 115, ANDREA2's and ANDREA1's high views, where the
+old path's reach drew rooms the classic walk does not list into the sky). Contact sheets
+old | new | clipped classic frame of both sides are with the round's material.
 
 **Cause classes of the views where the new path is worse.**
 
@@ -5489,8 +5512,17 @@ new | clipped classic frame of both sides are with the round's material.
 | A room's art drawn whole beyond what its window showed (no window cut) | ANDREA1 228/270 (+16,547), trview 151 (+6,465), ANDREA2 95/90 (+1,885), ANDREA1 206/180 (+736), 128/0 (+592), 129/0 (+579) | art on empty | none: it is approach (1) |
 | A guest's art over the sky | ANDREA2 154/90 (+1,211, room 91), ANDREA1 awning (+548, room 110) | art on empty | left |
 | A room the classic window drops at the parent's edge, which the reach listed | ANDREA2 room 89's view: room 128 drops at the eye one unit on (fight 2,634 -> 376,762) | fight | the wide portals' screen listing (below); left for portals the art opens no wider |
-| A second shell of art: RICH2's room 61 doubling the floors of rooms 62 to 65 | the ride (14 of 40 steps), the fine walk (12 of 12), frame 61,830 | fight | left: round 7's push is one of the rules this path leaves out |
+| A second shell of art: RICH2's room 61 doubling the floors of rooms 62 to 65 and the walls of rooms 35 to 38 | the ride (14 of 40 steps), the fine walk (12 of 12), frame 61,830; the 131 sweep's RICH2 35/90 (+4,056), 35/270 (+2,395), 36/0 (+1,367), 38/0 (+4,814) | fight | left: round 7's push is one of the rules this path leaves out |
 | Two rooms sharing a wall plane | ANDREA1 room 212 from room 19 (img01 +66, img02 +51) | fight | left, under 500 |
+
+The four sweep views of RICH2's shaft rooms, measured (`-skipgroup`, each listed group
+left out of both pictures of the eye step): both paths list the same rooms (room 142 the
+old path's alone, by the reach, at 35/270); left out, room 61 takes 1,650 to 5,144 pixels
+of the new path's fight and room 35 (at 38/0 room 62) about as many - the two groups' art
+in the same planes, room 61's hull against the shaft's walls. These are views where the
+old path pushes room 61's hull back (round 7). They give 12,632 of the 131 sweep's fight
+(7,685 -> 20,317); the other 127 views 2,618 less. Room 37 at yaw 0, the fifth shaft view,
+is 454 worse.
 
 Checked expressly and not worse: back faces (closed by the cull, above), the sky, the flip
 rooms (RICH2's ten flips with the engine's mapping on the ride: the steps that list
@@ -5518,8 +5550,10 @@ classic walk does not list. The tables cost 0.05 to 2.3 seconds a level at the b
 to 512, the guests at 1, 8, 64 and 512 triangles, the box test); `RoomProbe -vis 1` at the
 owner's places with the first build, each table alone (`-vissrc`) and each guest rule
 (`-visguestrule`); the sweep's sets above with both paths, the frame drawn two-sided, with
-the sky and timed; the list room by room with its source against the old path's at the
-owner's places, the trview cameras, the 22 places and the 16 mass views.
+the sky and timed; the four RICH2 sweep views with each listed group left out; J33 and the
+stair camera of frame 12,248 with each table alone and J33 with the sky; the list room by
+room with its source against the old path's at the owner's places, the trview cameras, the
+22 places and the 16 mass views.
 
 **Checked.** With `hd_vis` 0 every picture is the `e81b6e90` tool's byte for byte: at all
 201 views of the parity set (the 22 places, the 131 sweep views, the 16 mass views, the 32
@@ -5532,17 +5566,26 @@ returns before `BuildRoomVis`, and the walk asks `HDVisWalkOn`, false without a 
 built HD). ModernTest 15,152 checks, MenuTest 44,267, InterpTest 729, LipsTest 270 with
 the `.OBJ` folder and 243 without, 0 failed.
 
+After the fix pass (comments, the ledger and this record), with the tools built from its
+last commit: `hd_vis` 0 gives the `e81b6e90` tool's picture at all 201 views of the parity
+set, at the owner's 20 places and at the 40 steps of the ride, and `-air 0` the `2d48e83`
+tool's at the 201; `-vis 1` gives the round's own pictures byte for byte at the 201 views
+and the owner's 20, so every number of the sweep stands; `TrgProbe -vistable` prints the
+round's tables line for line; the twelve classic renders are the `8691e82` tool's.
+
 **Left.** The default: `hd_vis` stays 0 until the owner has played 1. The places still
 worse (the cause classes above): the second shell in RICH2's shaft (the ride's fight
-73,314 -> 171,126), which round 7's push held and this path does not; the room the classic
-window drops at the parent's edge where the art opens no wider (ANDREA2 room 89's view,
-the reach's class); art of a listed room beyond its window drawn whole (up to 16,547
-pixels on an empty classic frame at a view); two guests over the sky; room 212's shared
-wall plane (66 pixels of fight). JOBY2's broken corner keeps its hole (22,166 at J33), as
-on the old path. The tables' build time at a load (up to 2.3 seconds).
+73,314 -> 171,126; the four sweep views of rooms 35 to 38, 7,685 -> 20,317), which round
+7's push held and this path does not; the room the classic window drops at the parent's
+edge where the art opens no wider (ANDREA2 room 89's view, the reach's class); art of a
+listed room beyond its window drawn whole (up to 16,547 pixels on an empty classic frame
+at a view); two guests over the sky; room 212's shared wall plane (66 pixels of fight).
+The tables' build time at a load (up to 2.3 seconds). J33's 22,166 clear pixels are the
+doorway and the sky beyond it (above) on both paths, not a hole.
 
 **Commits.** `e516a85` (the list and its tables), `674e65f` (the whole draw), `6989a1b`
-(the wide opening beyond the window) and this record.
+(the wide opening beyond the window) and this record; the fix pass `652f756` (the guests'
+count of eight credited to its source, the comments) and its record.
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

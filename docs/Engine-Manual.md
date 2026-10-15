@@ -3319,7 +3319,8 @@ build is 50 to 77 percent, the loading thread with the classic level 2 to 30.
 Those loads still let the loading bar run up to its end after the work, 0.31
 to 0.80 seconds of each. Now the bar follows the work - the loading thread
 while it reads the classic level, then the HD build at the ends of its steps
-(it stands during the room build and the objects, which draw no frame) - and
+and the steps after it (it stands during the room build and the objects, which
+draw no frame) - and
 the brake (`loadbar_min_ms`, half a second) keeps the screen up at least that
 long: a load longer than that takes as long as its work and ends in the full
 bar, a shorter one - a savegame inside its level - shows the bar running
@@ -4559,10 +4560,12 @@ that step took (the counter in front of a log line moves in steps of about
 ```
 LOADLOG level=RICH2 step=rooms ms=3.1
 LOADLOG level=RICH2 step=fill ms=1276.7
-LOADLOG level=RICH2 step=bar ms=6.1 frames=31 wait=5.8
+LOADLOG level=RICH2 step=bar ms=2.4 frames=21 wait=2.3
 ```
 
-(The numbers are a format sample.) In the order the work ends:
+(The numbers are a format sample; the `bar` line's come from the brake's
+simulation of a fresh RICH2 load of a `-log` run, not from a run.) In the order
+the work ends:
 
 - the loading thread: `free` (the level before), `textures` (the classic
   texture pages; `kept=1` at its end when a savegame loaded inside the level
@@ -4593,9 +4596,11 @@ LOADLOG level=RICH2 step=bar ms=6.1 frames=31 wait=5.8
   frames until the screen has stood `loadbar_min_ms`, the full bar's frame, the
   picture's release; at its end `frames=` - every frame the loading screen drew
   in this load - and `wait=` - the ms from the work's end to the last frame, the
-  brake's wait and that frame) and `total`. After `hd_build` the line
-  `step=hd_frames ms=<ms> frames=<n>` gives the frames the HD build's steps drew
-  and their time, which `hd_build` holds - not a step of its own.
+  brake's wait and that frame) and `total`. From `thread` to `warmup` a step
+  holds the bar's frame drawn at its end where a tick had passed. After
+  `hd_build` the line `step=hd_frames ms=<ms> frames=<n>` gives the frames the
+  HD build's steps and its end drew and their time, which `hd_build` holds - not
+  a step of its own.
 
 A step a load does not run is written with `ms=0.0 skipped=1` - for a
 savegame loaded inside the level, `scan`, every step of the room build and

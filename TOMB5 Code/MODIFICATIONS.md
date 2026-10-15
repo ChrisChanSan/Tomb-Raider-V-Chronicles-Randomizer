@@ -16319,15 +16319,19 @@ level, total 50 to 94 ms (`screen` 16.2 to 16.5 - the one frame waiting out its 
 `thread` 18 to 36, `hd_build` 8.5 to 58); 18 fresh loads, total 0.96 to 3.26 s (`thread`
 35 to 434, `hd_build` 845 to 2,668, of which `begin` 542 to 2,050 and `objects` 144 to
 467). The thread's part of a fresh load's work, thread / (thread + hd_build), is 0.038 to
-0.164, median 0.096. What `HDLevelBuild` can report: its own code is a row of calls, not
+0.164, median 0.096; against the main thread's whole work after the join (ainit +
+hd_build + font + cutscenes + warmup + profile), as the brake weighs it, 0.038 to 0.161,
+median 0.094. What `HDLevelBuild` can report: its own code is a row of calls, not
 loops over pages and groups - those loops are inside `HDRenderLevelBegin`
 (`specific/hd/hd_render.cpp`, the pages' decode and the groups' fill on the pool) and
 `HDObjectLevelBuild` (`specific/hd/hd_object.cpp`), neither open to this round. What
 `hd_level.cpp` has are the sixteen laps of `HDLevelBuildHD`'s `lap()` and the resident
-build's five steps. The build's part done at each lap's end, medians over the 18 fresh
-loads: `marks` to `places` 0.005 to 0.007, `begin` 0.741, `tables` 0.742, `statics`
-0.745, `sheets` to `frames` 0.752, `objects` 0.950; release and budget before the first
-lap and the fingerprints, life and re-dress after the last make up the rest.
+build's five steps, and after them `file.cpp`'s own steps. The main thread's part done at
+each point, medians over the 18 fresh loads: `marks` to `places` 0.005 to 0.007, `begin`
+0.730, `tables` 0.732, `statics` 0.735, `sheets` to `frames` 0.742, `objects` 0.932, the
+build's end 0.987, the font and the cutscenes 0.989, the warmup the rest; over the 16
+saves the resident build's `sheets` 0.186, `surfaces` and `frames` 0.189, `objects`
+0.573, `life` 0.621, the build's end, the font and the cutscenes 0.968.
 
 *S - the third state.* The row cycles TR5, TR4, off (`MenuStepLoadbarStyle`; "TR4" and
 "TR5" as before, "off" the menu's own entry, which the German file carries). It is the
@@ -16355,29 +16359,43 @@ such a fade at the join in one black frame, at most one tick. No frame waits on 
 after the work: the level's own fade-in takes over.
 
 *B - the brake.* The rule (`specific/loadbar_math.h`, pure): position = 100 x min(work,
-elapsed / T), T = `loadbar_min_ms`, elapsed from the loading screen's first frame (the
-picture's), the clock `QueryPerformanceCounter` - the counter `Sync()` paces the frames
-by and the `LOADLOG` lines read. Work = s x thread + (1 - s) x build: the thread's part
-is its `S_LoadBar` calls as before (pages + 20), the build's part the lap table above,
-s = 0.10 (the median above) when an HD build follows (`hd_build`), 1 when none does.
+elapsed / T), T = `loadbar_min_ms`, elapsed the whole 1/60 s ticks of `Sync()`'s grid
+from the loading screen's first frame (the picture's) to the last boundary the frame
+stands past (`LoadBarTicksMs`, on `QueryPerformanceCounter`, the counter `Sync()` and
+the `LOADLOG` lines read), so that a frame drawn a little after its tick moves the bar by
+that tick's share and no more. Work = s x thread + (1 - s) x main: the thread's part is
+its `S_LoadBar` calls as before (pages + 20), the main thread's part the table above,
+s = 0.10 (the median above) when an HD build follows - `hd_build` on and an installation
+found (`HDInstallRoot`, not asked with `hd_build` 0) - and 1 when none does.
 Both parts only grow, so the bar never goes back; it never runs ahead of the work or of
 the clock, and it is full when both are done (`LoadBarDone`): at T on a short load, at
 the work's end on a long one. T = 0 is no brake: the bar is the work. The frames:
 `S_DrawLoadBar` waits out the tick first and takes the position then, so the bar shows
 its Present's time (`S_DumpScreenFrame` finds its tick and does not wait again); while
-the loading thread runs, one a tick as before; in the HD build `S_LoadBarBuild` (called
-in `lap()` and after the resident build's five steps, `hd_level.cpp`) moves the build's
-part and draws a frame only when `TIME_SubTick()` says a whole tick has passed, so the
-build never waits - and nothing outside a load's screen, so the rebuild after a new
-device draws nothing; after the work `S_LoadScreenEnd` draws one frame a tick until the
+the loading thread runs, one a tick as before; after the join the main thread's points
+draw a frame only when `TIME_SubTick()` says a whole tick has passed, so the work never
+waits: `S_LoadBarBuild` (called in `lap()` and after the resident build's five steps,
+`hd_level.cpp`) and `S_LoadScreenStep` (`file.cpp`: the join, aInit, the build's end,
+the font, the cutscenes, the warmup), of which the build's steps, its end, the font and
+the cutscenes move the main thread's part - and nothing outside a load's screen, so the
+rebuild after a new device draws nothing. From the join to the tail the frames present
+held (`LoadBarPresentHeld`: `S_DumpScreenFrame`'s and `DXShowFrame`'s steps without the
+screenshot key and the reset): `DXShowFrame` would reset a lost device and with it
+release the HD path's objects (`HDLevelDeviceLost`) while the build still has steps to
+run on them, so a lost device is noted and no further frame drawn, and the tail's first
+present, after the work, finds it still lost and resets it as every frame does. After
+the work `S_LoadScreenEnd` draws one frame a tick until the
 brake is done, its last the full bar. `S_FinishLoadBar` now ends the work (the thread's
 count and the build's part at their ends), no longer the position. The picture or the
 view under every frame, the stage-0 lock of round 4 around the picture's and the bar's
 binds and draws, the loading text and both bar looks are as before. Weighting: one pace
 over a fresh load's two halves needs each half's share of the time, and that is what the
-thread share and the lap table are. The hook's cost: 2 to 6 frames per fresh load in the
-simulation of his 18 (66 in all), 0.9 ms each - about 3.3 ms of 845 to 2,668, 0.12 to
-0.39 percent; the test per lap is one counter read.
+thread share and the table are. The hook's cost: 3 to 7 frames of the build per fresh
+load in the simulation of his 18 (84 in all), 0.9 ms each - 2.7 to 6.3 ms of 845 to
+2,668, under 0.5 percent of any load's build; the test per point is one counter read.
+The frames at the steps after the build cost a fresh load's end up to one tick: when one
+came less than a tick before the work's end, the last frame waits for the next tick -
+6.1 ms on average over the 18, 16.3 at most.
 
 *T - the TR4 view.* With *TR4 loadscreens* on and no picture read, `S_LoadLevelFile`
 reads the screen back once before its first frame (`CaptureLoadingScreen`, the
@@ -16398,35 +16416,43 @@ pixel for pixel against 41.4 (38.1 to 49.5) through `ConvertSurfaceToTextures`; 
 per load class* (ModernTest's simulation of the 34 logged loads at T = 500): a save
 loaded inside its level draws 28 to 30 frames and ends with the full bar 500.0 ms after
 its first frame, where it took 50 to 94 ms - the brake's wait about 420 to 470 ms; a
-fresh load draws 6 to 30 frames, ends at its work's end as before plus the hook's frames
-(about 3.3 ms) and, with *TR4 loadscreens* on, the read back (about 11 ms at 2560 x
-1440). With the row off a save load from the load menu loses its picture frame and its
+fresh load draws 8 to 33 frames, ends at the first tick after its work's end (6.1 ms
+later on average) plus the build's frames (2.7 to 6.3 ms) and, with *TR4
+loadscreens* on, the read back (about 11 ms at 2560 x 1440). With the row off a save
+load from the load menu loses its picture frame and its
 last (`screen` 16.3 -> about 0 ms) and takes about 33 to 77 ms; a level's end adds the
-read back and draws the fade while the loading thread works. *Steps of the bar*: in the
-saves, 6 of their 462 steps are larger than one tick's share (3.3 percent) - a frame
-after the join or after a resident step that drew none; JOBY2's 45 ms `life` gives the
-largest, 11.0 percent. In the fresh loads the bar stands through `begin` and `objects`,
-which draw no frame, and moves on at their ends - 66.9 percent at most, at the room
-build's end.
+read back and draws the fade while the loading thread works. *Steps of the bar*: every
+step larger than one tick's share (3.3 percent) comes after a stretch of the work longer
+than a tick with no point to draw a frame at. The saves keep one, JOBY2's 45 ms `life`,
+10.0 percent. The fresh loads keep 55: the bar stands through `begin`, `objects` and
+the build's last stretch (life, re-dress) and moves on at their ends - 65.9 percent at
+most, at the room build's end - and in RICHCUT2 through the 37 ms before the first
+lap.
 
 **Memory.** Nothing is kept beyond round 4's. The view read back is window-sized: 14
 MiB at 2560 x 1440 as a `MANAGED` texture (with its copy on the card), from the load's
 start to its last frame, then released, like the HD picture's 16 MiB.
 
-**Checked.** ModernTest 15,292 -> 15,373: `load_mode` (41) - the row's reading,
+**Checked.** ModernTest 15,292 -> 15,388: `load_mode` (41) - the row's reading,
 `LoadBarModeOf` on every case of the DWORD and the bool, `LoadFadeAlpha` and that it
 never lightens, the registry lines and the row in the engine's text, off with no picture
 read, no level view rendered, no frame of the load's own but the fade's, the fade only
 over a frame not black, the black frame ending it, the join's cut, the noting before both
 fade-ins and the movies, the read back released and taken before the first frame and
-only where no picture was read, pixel for pixel; `load_brake` (40) - the rule, three
+only where no picture was read, pixel for pixel; `load_brake` (55) - the rule, the
+tables and the clock in whole ticks (30 of them full at 500 ms, a frame a little late
+keeping its tick), three
 made-up loads (a save of 52 ms: monotonic, never ahead, one full frame, full in the tick
-at 500, a frame a tick; a fresh load of 2.5 s: the bar never ahead of the work, full at
+at 500, a frame a tick, no step over a tick's share; a fresh load of 2.5 s: the bar
+never ahead of the work, full at
 the work's end, two to five frames of the build; a load exactly 500 ms long: full on
 the tick at 500) and the 34 logged loads (monotonic, never ahead of the work or the clock,
-the full bar only last, at 500 or at the work's end within one tick), and in the
-engine's text the build's frames only past a tick, the tick before the position, the
-tail, the laps and the resident steps reporting, the `LOADLOG` lines and the settings.
+the full bar only last, at 500 or at the work's end within one tick, every step over a
+tick's share after a stretch of work with no frame point longer than a tick, the saves'
+one at most), and in the engine's text the frames after the join only past a tick, the
+six points, the thread's share from the build gate, the clock in ticks, the held
+present with its end before the tail, the tick before the position, the tail, the laps
+and the resident steps reporting, the `LOADLOG` lines and the settings.
 Round 4's `load_keep` follows the tail: the picture goes after `S_LoadScreenEnd`. By
 reading: off, no path in `S_LoadLevelFile` draws a frame but the fade's (the first frame
 and `S_LoadScreenEnd`'s frames under the state, the loop and the hook under
@@ -16448,15 +16474,20 @@ and moving on at its end (`step=hd_frames`), the TR4 view and the loading text u
 every frame, and the read back's milliseconds on his machine (`screen`). The bar can move
 inside `begin` and `objects` only from frames drawn inside `HDRenderLevelBegin` and
 `HDObjectLevelBuild`, whose loops are in `hd_render.cpp` and `hd_object.cpp`; that is his
-decision for a round open to those files. With `hd_build` 1 and no installation found
-the thread keeps its share of 0.10 and the bar jumps from there at the work's end. A
-device lost during the HD build is now met by a Present between its steps as well (the
-reset path runs `HDLevelDeviceLost` in the middle of the build); with the borderless
-window that happens only when another program changes the display mode. Whether a movie
+decision for a round open to those files, as is a point inside the build's last
+stretch (life, re-dress). With an installation found and a level whose build gives up
+(no `.TRG` for it, no shader model 3) the thread keeps its share of 0.10 and the bar
+moves on at the build's end point; his log has no such level. A device lost while the
+loading thread runs is reset by the loop's present as before this round; only the main
+thread's work after the join presents held. `loadbar_min_ms` has no upper bound: a
+mistyped value holds every loading screen that long. Whether a movie
 ends in black is not known here: with the row off its last picture is faded as if it did
 not.
 
-**Commits.** `b6cf2ba`, `76435a2`, `143bc74`, `00b7381`
+**Commits.** `b6cf2ba`, `76435a2`, `143bc74`, `00b7381`; after the review `25e97ce`
+(the capture's comment), `a8e151e` (the thread's share from the build gate), `ce16ebc`
+(the frames after the join, the clock in ticks, the tables), `471b02d` (no device reset
+between the build's steps)
 
 ## 2.5 Sixty frames a second
 

@@ -23,6 +23,7 @@
 #include "hd_levelkey.h"		// the HD data kept across a same-level load
 #include "../registry.h"		// REG_PeekString - the outfit in the key
 #include "hd_render.h"
+#include "hd_vis.h"			// the visibility path's tables
 #include "hd_book.h"			// HDBookClock - the time the material 15 books turn on
 #include "hd_object.h"
 #include "hd_model.h"			// HDModelCastBegin - the projected shadow's map
@@ -3436,6 +3437,154 @@ static void BuildStaticPlaces()
 		(int)g_static_places.size());
 }
 
+/* The visibility path (tomb5.hd_vis, hd_vis.h), taken at the start of the
+ * level. With it the rooms a frame draws are the portal walk's, extended by
+ * the tables hd_vis.cpp makes, every listed room's art drawn whole: none of
+ * the room-art rules below runs - no intrusion list, no pieces, no air, no
+ * carried rooms, no hulls and no covered faces - so every group is one
+ * unscissored draw with the depth test. `g_vis_main` is, per room of a
+ * flipmap pair, the pair's room the portals lead to (the one whose
+ * flipped_room names the other), -1 for every other room: a group of a pair
+ * is in the world only while that room draws it.
+ *
+ * The classic side goes to hd_vis.cpp here, before the build: every room's
+ * origin, sectors, box in y and twin, its classic faces in world units as
+ * BuildStandFaces reads them (none for a room a randomizer marker names
+ * whole, which is drawn classic), and its portal records as GetRoomBounds
+ * reads them. The renderer's build adds the art (HDVisLevelBuild). */
+static bool g_vis_level = false;
+static bool g_vis_logged = false;
+static std::vector<short> g_vis_main;
+
+static void BuildRoomVis()
+{
+	g_vis_level = tomb5.hd_vis == 1;
+	g_vis_logged = false;
+	g_vis_main.assign((size_t)(number_rooms > 0 ? number_rooms : 0), -1);
+
+	if (!g_vis_level || number_rooms <= 0)
+	{
+		HDVisLevelClear();
+		return;
+	}
+
+	std::vector<HDVisRoom> rooms((size_t)number_rooms);
+	std::vector<HDCoverFace> faces;
+	std::vector<HDVisPortal> portals;
+	std::vector<int> links;
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+		HDVisRoom& one = rooms[(size_t)r];
+
+		if (info->flipped_room >= 0 && info->flipped_room < number_rooms)
+		{
+			g_vis_main[(size_t)r] = (short)r;
+			g_vis_main[(size_t)info->flipped_room] = (short)r;
+		}
+
+		one.x = info->x;
+		one.y = info->y;
+		one.z = info->z;
+		one.xs = info->y_size;
+		one.zs = info->x_size;
+		one.top = info->maxceiling;
+		one.bottom = info->minfloor;
+		one.flags = info->flags;
+		one.twin = info->flipped_room;
+		one.firstFace = (int)faces.size();
+		one.faceCount = 0;
+		one.firstPortal = (int)portals.size();
+		one.portalCount = 0;
+		one.firstLink = (int)links.size();
+		one.linkCount = 0;
+
+		for (int i = 0; info->pRoomlets && !HDMarkersRoomTouched(r) &&
+			i < info->nRoomlets; i++)
+		{
+			const ROOMLET* roomlet = &info->pRoomlets[i];
+			const ROOMLET_VERTEX* vtx = (const ROOMLET_VERTEX*)roomlet->pSVtx;
+			const short* ptr = roomlet->pFac;
+
+			if (!vtx || !ptr || roomlet->nVtx <= 0)
+				continue;
+
+			for (int q = 0; q < roomlet->nQuad + roomlet->nTri; q++)
+			{
+				const int corners = q < roomlet->nQuad ? 4 : 3;
+				HDCoverFace face;
+				bool good = true;
+
+				face.corners = corners;
+				face.doubleSided = (ptr[corners] >> 15) & 1;
+
+				for (int c = 0; c < 4; c++)
+				{
+					const int at = c < corners ? ptr[c] : ptr[0];
+
+					if (at < 0 || at >= roomlet->nVtx)
+						good = false;
+
+					const ROOMLET_VERTEX& v = vtx[good ? at : 0];
+
+					face.v[c][0] = (double)v.x + info->x;
+					face.v[c][1] = (double)v.y + info->y;
+					face.v[c][2] = (double)v.z + info->z;
+				}
+
+				ptr += corners + 2;
+
+				if (good)
+				{
+					faces.push_back(face);
+					one.faceCount++;
+				}
+			}
+		}
+
+		// The door list: a count, then 16 words a portal - the room, the
+		// normal, four corners.
+		if (info->door)
+		{
+			const short* door = info->door;
+			const int count = *door++;
+
+			for (int i = 0; i < count; i++, door += 16)
+			{
+				HDVisPortal p;
+
+				p.to = door[0];
+
+				for (int k = 0; k < 3; k++)
+					p.n[k] = door[1 + k];
+
+				for (int c = 0; c < 4; c++)
+					for (int k = 0; k < 3; k++)
+						p.v[c][k] = door[4 + c * 3 + k];
+
+				portals.push_back(p);
+				one.portalCount++;
+			}
+		}
+
+		// The floor links, 255 for none, as BuildRoomIntrusions reads them.
+		for (int i = 0; info->floor && i < info->x_size * info->y_size; i++)
+			for (const int to : { (int)info->floor[i].sky_room,
+				(int)info->floor[i].pit_room })
+				if (to != 255 && to < number_rooms)
+				{
+					links.push_back(to);
+					one.linkCount++;
+				}
+	}
+
+	HDVisLevelInput(&rooms[0], (int)rooms.size(),
+		faces.empty() ? 0 : &faces[0], (int)faces.size(),
+		portals.empty() ? 0 : &portals[0], (int)portals.size(),
+		links.empty() ? 0 : &links[0], (int)links.size());
+}
+
 /* Whose art stands inside whose room.
  *
  * Some rooms stand inside one another. ANDREA1's 53 (an air shaft) has most
@@ -3576,6 +3725,13 @@ static void BuildRoomIntrusions()
 {
 	g_intrusions.clear();
 
+	// None with the visibility path (BuildRoomVis).
+	if (g_vis_level)
+	{
+		HDRenderSetIntrusions(0, 0);
+		return;
+	}
+
 	/* Who is next door: the portal list of both rooms, and the vertical
 	 * links, which have no portal record at all - a stacked pair is joined
 	 * through FLOOR_INFO::pit_room and sky_room. */
@@ -3714,6 +3870,7 @@ static int g_air_on = 0;
 static void BuildRoomAir()
 {
 	g_air_on = tomb5.hd_air <= 2 ? (int)tomb5.hd_air : 1;
+	g_air_on = g_vis_level ? 0 : g_air_on;	// none with BuildRoomVis' path
 	HDRenderSetAirHulls(g_air_on == 2 ? 1 : 0);
 
 	if (!g_air_on)
@@ -6078,6 +6235,7 @@ static void HDLevelBuildHD()
 	 * edit shows at the next one without a restart. */
 	HDRenderGlossFile("hd_gloss.txt");
 	lap(LOAD_GLOSS);
+	BuildRoomVis();			// first: it says whether the rules below run
 	BuildRoomIntrusions();		// the same contract
 	lap(LOAD_INTR);
 	BuildRoomAir();			// and the rooms' air, the same contract
@@ -7253,6 +7411,111 @@ int HDCarriedRoom(int group)
 		return group;
 
 	return GroupOfRoom(main) == group ? main : -1;
+}
+
+/* The visibility path's questions (hd_level.h). The tables are the art's,
+ * kept by the numbers of the level as built - a room's guests, openings and
+ * wides are those of the group it holds now (g_room_group, which HDFlipRoom
+ * swaps with the records) - and a group is drawn by the room the portals
+ * lead to while that room holds it, by its own number when it is no
+ * flipmap pair's, and by none while its pair's other state is in the world.
+ *
+ * HDLOG vis, once per level at the first frame that asks, with -log:
+ *
+ *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
+ *         guest_tris= wide= ms=
+ *
+ * art_rooms the rooms whose walls were asked, walls their classic wall
+ * faces, bare those the art leaves bare (the openings), void those with no
+ * room behind, guests the (holder, group) pairs and their triangles, wide
+ * the portals with a wider opening, ms the tables' build. */
+
+static int VisContents(int roomIndex)
+{
+	if (roomIndex < 0 || roomIndex >= g_room_count)
+		return -1;
+
+	return g_room_group[roomIndex];
+}
+
+bool HDVisWalkOn()
+{
+	const HDVisTables* t = HDVisLevelTables();
+
+	if (!g_vis_level || !t || !HDLevelActive())
+		return false;
+
+	if (gLogEnabled && !g_vis_logged)
+	{
+		g_vis_logged = true;
+		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
+			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f", g_stem,
+			t->rooms, t->artRooms, t->wallFaces, t->bareFaces, t->voidFaces,
+			t->guestPairs, t->guestTris, t->widePortals, t->ms);
+	}
+
+	return true;
+}
+
+int HDVisRoomGuests(int roomIndex, const HDVisGuest** out)
+{
+	const HDVisTables* t = HDVisLevelTables();
+	const int c = VisContents(roomIndex);
+
+	*out = 0;
+
+	if (!t || c < 0 || c >= t->rooms || !t->guestCount[(size_t)c])
+		return 0;
+
+	*out = &t->guests[(size_t)t->guestFirst[(size_t)c]];
+	return t->guestCount[(size_t)c];
+}
+
+int HDVisRoomOpenings(int roomIndex, const HDVisOpening** out)
+{
+	const HDVisTables* t = HDVisLevelTables();
+	const int c = VisContents(roomIndex);
+
+	*out = 0;
+
+	if (!t || c < 0 || c >= t->rooms || !t->openCount[(size_t)c])
+		return 0;
+
+	*out = &t->openings[(size_t)t->openFirst[(size_t)c]];
+	return t->openCount[(size_t)c];
+}
+
+const HDVisWide* HDVisRoomWide(int roomIndex, int portal)
+{
+	const HDVisTables* t = HDVisLevelTables();
+	const int c = VisContents(roomIndex);
+
+	if (!t || c < 0 || c >= t->rooms)
+		return 0;
+
+	for (int k = 0; k < t->wideCount[(size_t)c]; k++)
+	{
+		const HDVisWide& w = t->wides[(size_t)(t->wideFirst[(size_t)c] + k)];
+
+		if (w.portal == portal)
+			return &w;
+	}
+
+	return 0;
+}
+
+int HDVisRoomOfGroup(int group)
+{
+	if (group < 0 || group >= g_room_count)
+		return -1;
+
+	const int main = (size_t)group < g_vis_main.size() ?
+		g_vis_main[(size_t)group] : -1;
+
+	if (main < 0)
+		return group;
+
+	return g_room_group[main] == group ? main : -1;
 }
 
 /* The one question the room walk asks of the HD path: a level built HD

@@ -74,6 +74,8 @@
 #include "hd_gloss_seed.h"
 // And the light field its highlight reads - the engine's own layout and build.
 #include "hd_gloss_field.h"
+// The visibility path's tables (-vistable), out of the engine's own builder.
+#include "VisInput.h"
 
 // The engine keeps these in tomb5\tomb5.cpp, filled from the registry values
 // hd_install and hd_install_tr3. Here the command line fills the first - the
@@ -4359,6 +4361,253 @@ namespace
 		}
 	}
 
+	/* -vistable: the visibility path's three tables (hd_vis.h) as the
+	 * engine builds them, with the counts they rest on. Per level:
+	 *
+	 *   vistable: <stem> rooms= groups= art_rooms= walls= bare= void=
+	 *             guests= guest_tris= portals= wide= ms=
+	 *   vistable: <stem> reach=<r> covered=<share of the art rooms' wall
+	 *             samples> faces=<walls> bare0= bare25= bare50= bare75=
+	 *             bare100= all=   (faces by their bare share: 0, under a
+	 *             quarter, under a half, under three quarters, under all,
+	 *             all bare), once per -visreach value
+	 *   vistable: <stem> guests by triangles in the inside: >=1 >=8 >=64
+	 *             >=512, and the art box's reach into other rooms' whole
+	 *             boxes (box_pairs=) and insides (inside_pairs=)
+	 *
+	 * and with -room <n> that room's guests, openings and wides. */
+	void dumpVisTable(const std::string& root, const std::string& stem,
+		const std::string& folder, int focus,
+		const std::vector<double>& reaches)
+	{
+		Tr5Level level;
+		std::string error;
+		trf::remaster::Trg trg;
+
+		if (!level.load(toW(folder + "\\" + stem + ".TRC"), error))
+		{
+			std::printf("vistable: %s classic level not loadable: %s\n",
+				stem.c_str(), error.c_str());
+			return;
+		}
+
+		if (!trf::remaster::read_trg(root + "\\DATA\\" + stem + ".TRG", trg,
+			error))
+		{
+			std::printf("vistable: %s .TRG FAILED %s\n", stem.c_str(),
+				error.c_str());
+			return;
+		}
+
+		std::vector<HDVisRoom> rooms;
+		std::vector<HDCoverFace> faces;
+		std::vector<HDVisPortal> portals;
+		std::vector<int> links;
+
+		VisInputFromLevel(level, rooms, faces, portals, links);
+
+		const HDVisParams base = HDVisDefaults();
+		HDVisTables t;
+
+		HDVisBuild(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
+			faces.empty() ? 0 : &faces[0], (int)faces.size(),
+			portals.empty() ? 0 : &portals[0], (int)portals.size(),
+			links.empty() ? 0 : &links[0], (int)links.size(), base, &t);
+
+		std::printf("vistable: %s rooms=%d groups=%d art_rooms=%d walls=%d "
+			"bare=%d void=%d guests=%d guest_tris=%lld portals=%d wide=%d "
+			"ms=%.0f guests_unlinked=%d openings=%d openings_unlinked=%d\n",
+			stem.c_str(), (int)rooms.size(), (int)trg.groups.size(), t.artRooms,
+			t.wallFaces, t.bareFaces, t.voidFaces, t.guestPairs, t.guestTris,
+			(int)portals.size(), t.widePortals, t.ms, t.guestsUnlinked,
+			(int)t.openings.size(), t.openingsUnlinked);
+
+		/* The faces the art plainly covers: wholly covered at the largest
+		 * reach asked. `plain=` on each reach's line is the share of them
+		 * that reach covers wholly too. */
+		std::vector<std::vector<float> > bares;
+
+		for (double reach : reaches)
+		{
+			HDVisParams p = base;
+			HDVisTables r;
+
+			p.reach = reach;
+			HDVisBuild(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
+				faces.empty() ? 0 : &faces[0], (int)faces.size(),
+				portals.empty() ? 0 : &portals[0], (int)portals.size(),
+			links.empty() ? 0 : &links[0], (int)links.size(), p, &r);
+			bares.push_back(r.faceBare);
+		}
+
+		for (size_t at = 0; at < reaches.size(); at++)
+		{
+			HDVisParams p = base;
+			HDVisTables r;
+			int bucket[6] = { 0, 0, 0, 0, 0, 0 };
+			int plain = 0, plainHere = 0;
+			const double reach = reaches[at];
+
+			for (size_t f = 0; f < bares.back().size(); f++)
+				if (bares.back()[f] == 0.0f)
+				{
+					plain++;
+					plainHere += bares[at][f] == 0.0f ? 1 : 0;
+				}
+
+			p.reach = reach;
+			HDVisBuild(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
+				faces.empty() ? 0 : &faces[0], (int)faces.size(),
+				portals.empty() ? 0 : &portals[0], (int)portals.size(),
+			links.empty() ? 0 : &links[0], (int)links.size(), p, &r);
+			std::printf("vistable: %s reach=%.0f plain=%d/%d\n", stem.c_str(),
+				reach, plainHere, plain);
+
+			for (float b : r.faceBare)
+			{
+				if (b < 0.0f)
+					continue;
+
+				bucket[b <= 0.0f ? 0 : b < 0.25f ? 1 : b < 0.5f ? 2 :
+					b < 0.75f ? 3 : b < 1.0f ? 4 : 5]++;
+			}
+
+			std::printf("vistable: %s reach=%.0f covered=%.4f art_rooms=%d "
+				"faces=%d bare0=%d bare25=%d bare50=%d bare75=%d bare100=%d "
+				"all=%d openings=%d void=%d wide=%d\n", stem.c_str(), reach,
+				r.samples ? (double)r.samplesCovered / (double)r.samples : 0.0,
+				r.artRooms, r.wallFaces, bucket[0], bucket[1], bucket[2],
+				bucket[3], bucket[4], bucket[5], r.bareFaces, r.voidFaces,
+				r.widePortals);
+		}
+
+		// The guests at every threshold, out of one build that keeps all.
+		{
+			HDVisParams p = base;
+			HDVisTables g;
+			int by[4] = { 0, 0, 0, 0 };
+			const int at[4] = { 1, 8, 64, 512 };
+
+			p.guestTris = 1;
+			HDVisBuild(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
+				faces.empty() ? 0 : &faces[0], (int)faces.size(),
+				portals.empty() ? 0 : &portals[0], (int)portals.size(),
+			links.empty() ? 0 : &links[0], (int)links.size(), p, &g);
+
+			for (const HDVisGuest& one : g.guests)
+				for (int k = 0; k < 4; k++)
+					if (one.tris >= at[k])
+						by[k]++;
+
+			/* The art box of every group against the other rooms' whole
+			 * boxes and insides, flipmap twins left out: how many rooms
+			 * a box test alone would name. */
+			int boxPairs = 0, insidePairs = 0;
+
+			for (size_t gi = 0; gi < trg.groups.size() && gi < rooms.size();
+				gi++)
+			{
+				float lo[3] = { 1e30f, 1e30f, 1e30f };
+				float hi[3] = { -1e30f, -1e30f, -1e30f };
+				const HDVisRoom& own = rooms[gi];
+
+				for (const trf::remaster::TrgPart& part : trg.groups[gi].parts)
+					for (int pass = 0; pass < 2; pass++)
+						for (unsigned k = 0; k < part.pass[pass].count; k++)
+						{
+							const unsigned idx = part.pass[pass].start + k;
+
+							if (idx >= trg.indices.size())
+								break;
+
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[idx]];
+							const float w[3] = { (float)v.x + own.x,
+								(float)v.y + own.y, (float)v.z + own.z };
+
+							for (int a = 0; a < 3; a++)
+							{
+								lo[a] = std::min(lo[a], w[a]);
+								hi[a] = std::max(hi[a], w[a]);
+							}
+						}
+
+				if (lo[0] > hi[0])
+					continue;
+
+				for (size_t h = 0; h < rooms.size(); h++)
+				{
+					const HDVisRoom& r = rooms[h];
+
+					if (h == gi || r.twin == (int)gi || own.twin == (int)h)
+						continue;
+
+					const float b0[3] = { (float)r.x, (float)r.top,
+						(float)r.z };
+					const float b1[3] = { (float)(r.x + ((long)r.xs << 10)),
+						(float)r.bottom, (float)(r.z + ((long)r.zs << 10)) };
+					const float i0[3] = { b0[0] + 1024.0f, b0[1],
+						b0[2] + 1024.0f };
+					const float i1[3] = { b1[0] - 1024.0f, b1[1],
+						b1[2] - 1024.0f };
+					bool box = true, inside = i0[0] < i1[0] && i0[2] < i1[2];
+
+					for (int a = 0; a < 3; a++)
+					{
+						box = box && lo[a] < b1[a] && hi[a] > b0[a];
+						inside = inside && lo[a] < i1[a] && hi[a] > i0[a];
+					}
+
+					boxPairs += box ? 1 : 0;
+					insidePairs += inside ? 1 : 0;
+				}
+			}
+
+			std::printf("vistable: %s guests tris>=1 %d >=8 %d >=64 %d "
+				">=512 %d box_pairs=%d inside_pairs=%d\n", stem.c_str(), by[0],
+				by[1], by[2], by[3], boxPairs, insidePairs);
+		}
+
+		if (focus < 0 || focus >= t.rooms)
+			return;
+
+		for (int k = 0; k < t.guestCount[(size_t)focus]; k++)
+		{
+			const HDVisGuest& g =
+				t.guests[(size_t)(t.guestFirst[(size_t)focus] + k)];
+
+			std::printf("vistable: %s room=%d guest=%d tris=%d box %.0f..%.0f "
+				"%.0f..%.0f %.0f..%.0f\n", stem.c_str(), focus, g.group, g.tris,
+				g.lo[0], g.hi[0], g.lo[1], g.hi[1], g.lo[2], g.hi[2]);
+		}
+
+		for (int k = 0; k < t.openCount[(size_t)focus]; k++)
+		{
+			const HDVisOpening& o =
+				t.openings[(size_t)(t.openFirst[(size_t)focus] + k)];
+
+			std::printf("vistable: %s room=%d opening face=%d bare=%.2f "
+				"behind=%d n=%d,%d,%d v0=%d,%d,%d v2=%d,%d,%d\n", stem.c_str(),
+				focus, o.face, o.bare, o.behind, o.n[0], o.n[1], o.n[2],
+				o.v[0][0], o.v[0][1], o.v[0][2], o.v[2][0], o.v[2][1],
+				o.v[2][2]);
+		}
+
+		for (int k = 0; k < t.wideCount[(size_t)focus]; k++)
+		{
+			const HDVisWide& w =
+				t.wides[(size_t)(t.wideFirst[(size_t)focus] + k)];
+			const HDVisPortal& p = portals[(size_t)(
+				rooms[(size_t)focus].firstPortal + w.portal)];
+
+			std::printf("vistable: %s room=%d wide portal=%d to=%d portal "
+				"%d,%d,%d..%d,%d,%d opening %d,%d,%d..%d,%d,%d\n", stem.c_str(),
+				focus, w.portal, p.to, p.v[0][0], p.v[0][1], p.v[0][2],
+				p.v[2][0], p.v[2][1], p.v[2][2], w.v[0][0], w.v[0][1],
+				w.v[0][2], w.v[2][0], w.v[2][1], w.v[2][2]);
+		}
+	}
+
 	void dumpClassicArt(const std::string& root, const std::string& stem,
 		const std::string& folder, int focus, double tol, double step,
 		int facing, int controls, bool perFace)
@@ -6270,6 +6519,9 @@ int main(int argc, char** argv)
 	bool gloss_field = false;
 	std::string gloss_file;
 	bool classic_art = false;
+	bool vis_table = false;
+	int vis_room = -1;
+	std::vector<double> vis_reaches;
 	double art_tol = 128.0;
 	double art_step = 64.0;
 	int art_facing = 1;
@@ -6295,6 +6547,25 @@ int main(int argc, char** argv)
 			dds_sizes = true;
 		else if (!_stricmp(argv[i], "-classicart"))
 			classic_art = true;
+		else if (!_stricmp(argv[i], "-vistable"))
+			vis_table = true;
+		else if (!_stricmp(argv[i], "-visroom") && i + 1 < argc)
+			vis_room = std::atoi(argv[++i]);
+		else if (!_stricmp(argv[i], "-visreach") && i + 1 < argc)
+		{
+			vis_reaches.clear();
+
+			for (const char* s = argv[++i]; *s; )
+			{
+				vis_reaches.push_back(std::atof(s));
+
+				while (*s && *s != ',')
+					s++;
+
+				if (*s == ',')
+					s++;
+			}
+		}
 		else if (!_stricmp(argv[i], "-perface"))
 			art_per_face = true;
 		else if (!_stricmp(argv[i], "-arttol") && i + 1 < argc)
@@ -6548,6 +6819,20 @@ int main(int argc, char** argv)
 
 		for (const std::string& stem : levels)
 			dumpGloss(root, stem, classic, gloss_seed, file);
+
+		return 0;
+	}
+
+	if (vis_table)
+	{
+		if (classic.empty())
+		{
+			std::printf("-vistable needs -classic <folder holding the .TRC>\n");
+			return 1;
+		}
+
+		for (const std::string& stem : levels)
+			dumpVisTable(root, stem, classic, vis_room, vis_reaches);
 
 		return 0;
 	}

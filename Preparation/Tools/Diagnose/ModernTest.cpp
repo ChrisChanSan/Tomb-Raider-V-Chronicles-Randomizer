@@ -82,6 +82,9 @@
  * a face, whether it covers the room, and which of the two a frame draws -
  * pure again (stand_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_cover.h"
+// The visibility path's tables (hd_vis.cpp is linked by bmt.bat).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_vis.h"
+#include "../../../TOMB5 Code/TOMB5/vendor/trforge/src/trf_remaster/Trg.h"
 /* The water's life: the drift, the bank, the spawn, the flight and the
  * bob - pure again (life_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_life_rules.h"
@@ -11304,6 +11307,162 @@ static void stand_draw()
 	ok(a.withArt && !a.behind, "stand: RICH2 16, art on no face in place", a.behind, 0);
 }
 
+/* The visibility path's tables (hd_vis.h) on a level of three rooms built by
+ * hand: A (0) and B (1) side by side with a portal between them, sharing the
+ * wall ring at x 5120..6144, and C (2) standing inside A with no link. A's
+ * art covers its west wall face and leaves its east one bare; B's art and
+ * C's art each reach out of their own room into A's inside, eight small
+ * triangles each. */
+static void vis_tri(trf::remaster::Trg& trg, float x, float y, float z,
+	const float a[3], const float b[3], const float c[3])
+{
+	const float* corner[3] = { a, b, c };
+
+	for (int k = 0; k < 3; k++)
+	{
+		trf::remaster::TrgVertex v;
+
+		v.x = (int16_t)(corner[k][0] - x);
+		v.y = (int16_t)(corner[k][1] - y);
+		v.z = (int16_t)(corner[k][2] - z);
+		trg.indices.push_back((uint32_t)trg.vertices.size());
+		trg.vertices.push_back(v);
+	}
+}
+
+static void vis_tables()
+{
+	trf::remaster::Trg trg;
+	std::vector<HDVisRoom> rooms(3);
+	std::vector<HDCoverFace> faces(2);
+	std::vector<HDVisPortal> portals(2);
+	const long x[3] = { 0, 5120, 2048 }, z[3] = { 0, 0, 2048 };
+	const int xs[3] = { 6, 6, 4 };
+
+	for (int r = 0; r < 3; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		one.x = x[r];
+		one.y = 0;
+		one.z = z[r];
+		one.xs = xs[r];
+		one.zs = xs[r];
+		one.top = -4096;
+		one.bottom = 0;
+		one.flags = 0;
+		one.twin = -1;
+		one.firstFace = 0;
+		one.faceCount = r == 0 ? 2 : 0;
+		one.firstPortal = r < 2 ? r : 0;
+		one.portalCount = r < 2 ? 1 : 0;
+		one.firstLink = 0;
+		one.linkCount = 0;
+	}
+
+	// A's west wall (normal -x, its outside) and east wall (+x).
+	const double w[4][3] = { { 1024, 0, 3072 }, { 1024, 0, 2048 },
+		{ 1024, -1024, 2048 }, { 1024, -1024, 3072 } };
+	const double e[4][3] = { { 5120, 0, 2048 }, { 5120, 0, 3072 },
+		{ 5120, -1024, 3072 }, { 5120, -1024, 2048 } };
+
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+		{
+			faces[0].v[c][k] = w[c][k];
+			faces[1].v[c][k] = e[c][k];
+		}
+
+	faces[0].corners = faces[1].corners = 4;
+	faces[0].doubleSided = faces[1].doubleSided = 0;
+
+	// The portal on A's east wall beside the bare face, and B's back.
+	const short pa[4][3] = { { 5120, 0, 3072 }, { 5120, 0, 4096 },
+		{ 5120, -1024, 4096 }, { 5120, -1024, 3072 } };
+
+	portals[0].to = 1;
+	portals[1].to = 0;
+	portals[0].n[0] = -1;
+	portals[1].n[0] = 1;
+	portals[0].n[1] = portals[0].n[2] = portals[1].n[1] = portals[1].n[2] = 0;
+
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+		{
+			portals[0].v[c][k] = pa[c][k];
+			portals[1].v[c][k] = (short)(k == 0 ? 0 : pa[c][k]);
+		}
+
+	trg.groups.resize(3);
+
+	for (int g = 0; g < 3; g++)
+	{
+		trf::remaster::TrgPart part;
+
+		part.pass[0].start = (uint32_t)trg.indices.size();
+
+		if (g == 0)
+		{
+			const float a[3] = { 1024, 0, 3072 }, b[3] = { 1024, 0, 2048 };
+			const float c[3] = { 1024, -1024, 2048 };
+			const float d[3] = { 1024, -1024, 3072 };
+
+			vis_tri(trg, 0, 0, 0, a, b, c);
+			vis_tri(trg, 0, 0, 0, a, c, d);
+		}
+		else
+			for (int t = 0; t < 8; t++)
+			{
+				// Art at x 3000 (B's) or 1500 (C's), out of its own room.
+				const float cx = g == 1 ? 3000.0f : 1500.0f;
+				const float a[3] = { cx, -2000.0f, 3000.0f + t * 16.0f };
+				const float b[3] = { cx + 8.0f, -2000.0f, 3000.0f + t * 16.0f };
+				const float c[3] = { cx, -2008.0f, 3008.0f + t * 16.0f };
+
+				vis_tri(trg, (float)x[g], 0, (float)z[g], a, b, c);
+			}
+
+		part.pass[0].count = (uint32_t)trg.indices.size() - part.pass[0].start;
+		trg.groups[(size_t)g].parts.push_back(part);
+	}
+
+	HDVisTables t;
+	const HDVisParams p = HDVisDefaults();
+
+	HDVisBuild(trg, &rooms[0], 3, &faces[0], 2, &portals[0], 2, 0, 0, p, &t);
+
+	ok(t.guestCount[0] == 1 && t.guests[(size_t)t.guestFirst[0]].group == 1,
+		"vis: A's one guest is B, linked, its art out of B", t.guestCount[0],
+		1);
+	ok(t.guestsUnlinked == 1, "vis: C, unlinked, is no guest of A under no sky",
+		t.guestsUnlinked, 1);
+	ok(t.artRooms == 1 && t.wallFaces == 2 && t.bareFaces == 1,
+		"vis: A's walls asked, the east face bare", t.bareFaces, 1);
+	ok(t.openCount[0] == 1 && t.openings[(size_t)t.openFirst[0]].behind == 1,
+		"vis: the opening lists B, the room behind", t.openCount[0], 1);
+	ok(t.openingsUnlinked == 1, "vis: and not C, standing in A unlinked",
+		t.openingsUnlinked, 1);
+	ok(t.openings.size() == 1 && t.openings[0].n[0] < 0,
+		"vis: the opening's normal points into A", t.openings[0].n[0], -1024);
+	ok(t.wideCount[0] == 1 && t.wides[0].portal == 0 &&
+		t.wides[0].v[0][2] == 2048,
+		"vis: A's portal widened over the bare face", t.wides[0].v[0][2], 2048);
+
+	// Under the sky A takes C's art reaching out of C too.
+	rooms[0].flags = 8;
+	HDVisBuild(trg, &rooms[0], 3, &faces[0], 2, &portals[0], 2, 0, 0, p, &t);
+	ok(t.guestCount[0] == 2, "vis: A under the sky has B and C as guests",
+		t.guestCount[0], 2);
+
+	// Art standing inside its own room's box is no guest, whatever the rule.
+	HDVisParams own = p;
+
+	own.overhang = 4096.0;
+	HDVisBuild(trg, &rooms[0], 3, &faces[0], 2, &portals[0], 2, 0, 0, own, &t);
+	ok(t.guestCount[0] == 0, "vis: art within its own room's box is no guest",
+		t.guestCount[0], 0);
+}
+
 static void stand_cover()
 {
 	ok(HDCoverRoomCovered(46, 46), "stand: 46 of 46 faces is covered",
@@ -21309,6 +21468,7 @@ int main()
 	model_cut();
 	stand_draw();
 	stand_cover();
+	vis_tables();
 	stand_overlap();
 	stand_part();
 	stand_shadow();

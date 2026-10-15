@@ -29,6 +29,7 @@
 #include "interpolate.h"		// the frame between two logic ticks
 #include "interpolate_math.h"		// the pose midpoint and the one blend factor
 #include "../specific/hd/hd_level.h"
+#include "../specific/hd/hd_vis.h"
 #include "../specific/hd/hd_object.h"
 #include "../specific/lighting.h"
 #include "items.h"
@@ -193,6 +194,24 @@ static int g_reach_trimmed = 0;
 static int g_reach_noart = 0;
 // And rooms taken in for the art they stand under a listed sky - CarryArt.
 static int g_reach_carried = 0;
+
+/* The visibility path (specific\hd\hd_vis.h, tomb5.hd_vis 1): the walk is
+ * the classic one - SetRoomBounds, the classic windows, no reach - and every
+ * room it dequeues lists three more kinds of room, each with the part of
+ * that dequeue's window it is seen in: the rooms whose art stands in its
+ * inside (its guests, by the box of that art), the rooms behind the classic
+ * wall faces its art leaves bare (by the face, as a portal), and through a
+ * portal whose opening in the art is wider than the portal, the room behind
+ * it by that opening. A room listed so is queued as a portal queues it, so
+ * it walks on through its own portals - and asks its own three tables -
+ * with the window it got, and that window grows by union as the classic
+ * one does. `g_vis_why` is per room the source that queued it first, for
+ * VISLOG: 0 the portals or the eye's room, 1 a guest, 2 an opening, 3 a
+ * wide portal; 0xff not queued. */
+static bool g_vis_walk = false;
+static unsigned char g_vis_why[256];
+static int g_vis_count[4];
+static long g_vis_dequeues = 0;
 
 short* GetBoundsAccurate(ITEM_INFO* item)
 {
@@ -1975,6 +1994,72 @@ static void ReachTrimRooms(long ex, long ey, long ez)
 		g_reach_added -= ReachDropArtless();
 }
 
+/* The visibility path's start of a walk, called beside the reach's: on with
+ * a level built with it and HD drawn (HDVisWalkOn), and then the reach is
+ * off - the three tables take its place. */
+static void VisBeginWalk()
+{
+	g_vis_walk = HDVisWalkOn();
+
+	if (!g_vis_walk)
+		return;
+
+	g_reach_on = false;
+	memset(g_vis_why, 0xff, sizeof(g_vis_why));
+	memset(g_vis_count, 0, sizeof(g_vis_count));
+	g_vis_dequeues = 0;
+}
+
+/* VISLOG, with -log, once a second and whenever the eye's room changes,
+ * on the visibility path:
+ *
+ *   VISLOG frame=<walk serial> eye_room=<n> rooms=<listed> walk=<n>
+ *          guest=<n> opening=<n> wide=<n> dequeues=<n> list=<room><why>,...
+ *
+ * walk the rooms the portals queued first (and the eye's room), guest,
+ * opening and wide those the three tables queued first, dequeues the walk's
+ * whole work; the list every listed room with the letter of its source:
+ * w portals, g guest, o opening, p wide portal. A table that only widens
+ * the window of a room already queued is credited nothing, and the rooms
+ * the wider window lets the portals reach read w. */
+static void VisEndWalk(short walkRoom)
+{
+	static DWORD last = 0;
+	static short lastRoom = -1;
+
+	if (!g_vis_walk || !gLogEnabled)
+		return;
+
+	const DWORD now = GetTickCount();
+
+	if (now - last < 1000 && walkRoom == lastRoom)
+		return;
+
+	last = now;
+	lastRoom = walkRoom;
+
+	char list[1024];
+	int at = 0;
+	static const char kWhy[4] = { 'w', 'g', 'o', 'p' };
+
+	list[0] = 0;
+
+	for (int i = 0; i < number_draw_rooms && at < (int)sizeof(list) - 16; i++)
+	{
+		const int r = draw_rooms[i];
+		const int why = r >= 0 && r < 256 && g_vis_why[r] < 4 ?
+			g_vis_why[r] : 0;
+
+		at += sprintf(&list[at], "%s%d%c", i ? "," : "", r, kWhy[why]);
+	}
+
+	Log("VISLOG frame=%u eye_room=%d rooms=%ld walk=%ld guest=%d opening=%d "
+		"wide=%d dequeues=%ld list=%s", g_walkSerial, (int)walkRoom,
+		number_draw_rooms, number_draw_rooms - g_vis_count[1] - g_vis_count[2] -
+		g_vis_count[3], g_vis_count[1], g_vis_count[2], g_vis_count[3],
+		g_vis_dequeues, list);
+}
+
 static void NoteRoomWalk(short logicRoom, short walkRoom)
 {
 	if (!gLogEnabled)
@@ -2511,6 +2596,7 @@ void DrawRooms(short current_room)
 	 * level the .TRG had nothing for, and then the walk below is the
 	 * original one. */
 	g_reach_on = HDLevelActive() && tomb5.hd_reach;
+	VisBeginWalk();
 
 	if (g_reach_on)
 		ReachBeginWalk(walk_room);
@@ -2527,6 +2613,7 @@ void DrawRooms(short current_room)
 		ReachTrimRooms((long)w2v_matrix[M03], (long)w2v_matrix[M13],
 			(long)w2v_matrix[M23]);
 
+	VisEndWalk(walk_room);
 	NoteRoomWalk(current_room, walk_room);
 	ProcessClosedDoors();
 
@@ -3435,6 +3522,7 @@ void RenderIt(short current_room)
 
 	// The cutscene walk starts the same way the game's does.
 	g_reach_on = HDLevelActive() && tomb5.hd_reach;
+	VisBeginWalk();
 
 	if (g_reach_on)
 		ReachBeginWalk(current_room);
@@ -4362,10 +4450,329 @@ static void SetRoomBoundsReach(short* door, long rn, ROOM_INFO* actualRoom)
 		g_reach_state[rn] &= ~REACH_CLASSIC;
 }
 
+/* The visibility path's source of a queued room: `before` is the room's
+ * bound_active ahead of the call that may have queued it. A room queued for
+ * the first time this walk keeps the source that queued it. */
+static void VisNote(long rn, int why, char before)
+{
+	if (rn < 0 || rn >= 256 || (before & 3) || !(room[rn].bound_active & 2) ||
+		g_vis_why[rn] != 0xff)
+		return;
+
+	g_vis_why[rn] = (unsigned char)why;
+	g_vis_count[why]++;
+}
+
+/* SetRoomBounds' tail for a rectangle the visibility path worked out itself:
+ * clamped to the window `actualRoom` is seen through in this dequeue (or,
+ * with `toScreen`, to the screen alone), then left alone when the room's
+ * own window already holds it, and otherwise queued or widened exactly as a
+ * portal's rectangle is. */
+static void VisQueue(long rn, ROOM_INFO* actualRoom, float tL, float tT,
+	float tR, float tB, bool toScreen = false)
+{
+	ROOM_INFO* r = &room[rn];
+	const float l = toScreen ? 0.0f : (float)actualRoom->test_left;
+	const float t = toScreen ? 0.0f : (float)actualRoom->test_top;
+	const float rr = toScreen ? (float)phd_winxmax :
+		(float)actualRoom->test_right;
+	const float b = toScreen ? (float)phd_winymax :
+		(float)actualRoom->test_bottom;
+
+	if (tL < l)
+		tL = l;
+
+	if (tR > rr)
+		tR = rr;
+
+	if (tT < t)
+		tT = t;
+
+	if (tB > b)
+		tB = b;
+
+	if (tL >= tR || tT >= tB)
+		return;
+
+	if (r->left <= tL && r->right >= tR && r->top <= tT && r->bottom >= tB)
+		return;
+
+	if (r->bound_active & 2)
+	{
+		if (tL < r->test_left)
+			r->test_left = (short)tL;
+
+		if (tT < r->test_top)
+			r->test_top = (short)tT;
+
+		if (tR > r->test_right)
+			r->test_right = (short)tR;
+
+		if (tB > r->test_bottom)
+			r->test_bottom = (short)tB;
+
+		return;
+	}
+
+	// The ring guard of SetRoomBounds.
+	if (room_list_end - room_list_start >= kRoomListRing)
+	{
+		g_reach_capped++;
+		return;
+	}
+
+	draw_room_list[room_list_end & (kRoomListRing - 1)] = rn;
+	room_list_end++;
+	r->bound_active |= 2;
+	r->test_left = (short)tL;
+	r->test_right = (short)tR;
+	r->test_top = (short)tT;
+	r->test_bottom = (short)tB;
+}
+
+/* A guest of the room being walked (`r`, whose matrix is on the stack): the
+ * box of its art in the room's inside, projected as SetRoomBounds projects
+ * a portal's corners, one pixel out on every side. A box that reaches past
+ * the eye's plane takes the whole window, as a portal straddling it takes
+ * the screen's edges; one wholly behind it lists nothing. */
+static void VisGuestBounds(const HDVisGuest& guest, long rn, ROOM_INFO* r)
+{
+	float tL = 1e30f, tR = -1e30f, tT = 1e30f, tB = -1e30f;
+	int behind = 0;
+
+	for (int c = 0; c < 8; c++)
+	{
+		const float lx = ((c & 1) ? guest.hi[0] : guest.lo[0]) - (float)r->x;
+		const float ly = ((c & 2) ? guest.hi[1] : guest.lo[1]) - (float)r->y;
+		const float lz = ((c & 4) ? guest.hi[2] : guest.lo[2]) - (float)r->z;
+		float x = aMXPtr[M00] * lx + aMXPtr[M01] * ly + aMXPtr[M02] * lz +
+			aMXPtr[M03];
+		float y = aMXPtr[M10] * lx + aMXPtr[M11] * ly + aMXPtr[M12] * lz +
+			aMXPtr[M13];
+		float z = aMXPtr[M20] * lx + aMXPtr[M21] * ly + aMXPtr[M22] * lz +
+			aMXPtr[M23];
+
+		if (z <= 0)
+		{
+			behind++;
+			continue;
+		}
+
+		z /= f_mpersp;
+
+		if (!z)
+		{
+			behind++;
+			continue;
+		}
+
+		x = x / z + f_centerx;
+		y = y / z + f_centery;
+
+		if (x - 1 < tL) tL = x - 1;
+		if (x + 1 > tR) tR = x + 1;
+		if (y - 1 < tT) tT = y - 1;
+		if (y + 1 > tB) tB = y + 1;
+	}
+
+	if (behind == 8)
+		return;
+
+	if (behind)
+	{
+		tL = 0;
+		tT = 0;
+		tR = (float)phd_winxmax;
+		tB = (float)phd_winymax;
+	}
+
+	VisQueue(rn, r, tL, tT, tR, tB);
+}
+
+/* The four corners of an opening or a wide portal as a portal record's
+ * words: the normal, then the corners, which is all SetRoomBounds reads. */
+static void VisDoor(const short n[3], const short v[4][3], short* door)
+{
+	for (int k = 0; k < 3; k++)
+		door[k] = n[k];
+
+	for (int c = 0; c < 4; c++)
+		for (int k = 0; k < 3; k++)
+			door[3 + c * 3 + k] = v[c][k];
+}
+
+/* The three tables of the room being walked, after its portals: its guests,
+ * and the rooms behind its bare wall faces that face the eye - the face's
+ * normal pointing to the eye's side, the test GetRoomBounds makes of a
+ * portal's - each by the face's own corners. */
+static void VisExtend(ROOM_INFO* r)
+{
+	const long here = (long)(r - room);
+	const HDVisGuest* guests = 0;
+	const HDVisOpening* openings = 0;
+	const int ng = HDVisRoomGuests((int)here, &guests);
+	const int no = HDVisRoomOpenings((int)here, &openings);
+
+	g_vis_dequeues++;
+
+	for (int k = 0; k < ng; k++)
+	{
+		const int b = HDVisRoomOfGroup(guests[k].group);
+
+		if (b < 0 || b >= number_rooms || b == here)
+			continue;
+
+		const char before = room[b].bound_active;
+
+		VisGuestBounds(guests[k], b, r);
+		VisNote(b, 1, before);
+	}
+
+	for (int k = 0; k < no; k++)
+	{
+		const HDVisOpening& o = openings[k];
+		const float ex = (float)(w2v_matrix[M03] - r->x);
+		const float ey = (float)(w2v_matrix[M13] - r->y);
+		const float ez = (float)(w2v_matrix[M23] - r->z);
+		const float side = o.n[0] * ((float)o.v[0][0] - ex) +
+			o.n[1] * ((float)o.v[0][1] - ey) + o.n[2] * ((float)o.v[0][2] - ez);
+		short door[15];
+
+		if (side >= 0 || o.behind < 0 || o.behind >= number_rooms ||
+			o.behind == here)
+			continue;
+
+		const char before = room[o.behind].bound_active;
+
+		VisDoor(o.n, o.v, door);
+		SetRoomBounds(door, o.behind, r);
+		VisNote(o.behind, 2, before);
+	}
+}
+
+/* A portal's corners (the words after its normal) projected as
+ * SetRoomBounds projects them, one pixel out, the behind-the-eye fixup
+ * taking the screen's edges; false when all four lie behind the eye. */
+static bool VisPortalRect(const short* door, float* rect)
+{
+	float vx[4], vz[4], vy[4];
+	int tooNear = 0;
+
+	rect[0] = rect[1] = 1e30f;
+	rect[2] = rect[3] = -1e30f;
+
+	for (int i = 0; i < 4; i++)
+	{
+		const short* c = &door[3 + i * 3];
+
+		vx[i] = aMXPtr[M00] * c[0] + aMXPtr[M01] * c[1] + aMXPtr[M02] * c[2] +
+			aMXPtr[M03];
+		vy[i] = aMXPtr[M10] * c[0] + aMXPtr[M11] * c[1] + aMXPtr[M12] * c[2] +
+			aMXPtr[M13];
+		vz[i] = aMXPtr[M20] * c[0] + aMXPtr[M21] * c[1] + aMXPtr[M22] * c[2] +
+			aMXPtr[M23];
+
+		if (vz[i] <= 0)
+		{
+			tooNear++;
+			continue;
+		}
+
+		const float z = vz[i] / f_mpersp;
+		float x = vx[i] < 0 ? 0.0f : (float)phd_winxmax;
+		float y = vy[i] < 0 ? 0.0f : (float)phd_winymax;
+
+		if (z)
+		{
+			x = vx[i] / z + f_centerx;
+			y = vy[i] / z + f_centery;
+		}
+
+		if (x - 1 < rect[0]) rect[0] = x - 1;
+		if (y - 1 < rect[1]) rect[1] = y - 1;
+		if (x + 1 > rect[2]) rect[2] = x + 1;
+		if (y + 1 > rect[3]) rect[3] = y + 1;
+	}
+
+	if (tooNear == 4)
+		return false;
+
+	for (int i = 0, last = 3; tooNear && i < 4; last = i, i++)
+	{
+		if ((vz[last] <= 0) == (vz[i] <= 0))
+			continue;
+
+		if (!(vx[i] > 0 && vx[last] > 0))
+			rect[0] = 0;
+
+		if (!(vx[i] < 0 && vx[last] < 0))
+			rect[2] = (float)phd_winxmax;
+
+		if (!(vy[i] > 0 && vy[last] > 0))
+			rect[1] = 0;
+
+		if (!(vy[i] < 0 && vy[last] < 0))
+			rect[3] = (float)phd_winymax;
+	}
+
+	return true;
+}
+
+/* A portal on the visibility path: the classic rectangle, and where the art
+ * opens wider round the portal (HDVisRoomWide) the rectangle of that
+ * opening too, so that the room behind gets the window the art shows it
+ * in. And where that wider opening has no part inside the window the room
+ * is seen through, but lands on the screen, the room behind is listed with
+ * the opening's rectangle clamped to the screen alone: the window is the
+ * classic geometry's, and the art opens beside it. A portal the art opens
+ * no wider than the classic level keeps the classic answer: from JOBY2's
+ * court, room 30's portal lands on the screen beside the window, and
+ * listing room 30 there draws the stairwell's pipes into the court's wall
+ * (24,640 pixels at the court's camera). */
+static void VisFollowPortal(short* door, long rn, ROOM_INFO* r)
+{
+	const int portal = (int)((door - 1 - (r->door + 1)) / 16);
+	const HDVisWide* wide = HDVisRoomWide((int)(r - room), portal);
+	char before = room[rn].bound_active;
+	short corners[15];
+	const short* open = door;
+	float rect[4];
+
+	SetRoomBounds(door, rn, r);
+	VisNote(rn, 0, before);
+
+	if (wide)
+	{
+		VisDoor(&door[0], wide->v, corners);
+		before = room[rn].bound_active;
+		SetRoomBounds(corners, rn, r);
+		VisNote(rn, 3, before);
+		open = corners;
+	}
+
+	if (!wide || !VisPortalRect(open, rect))
+		return;
+
+	// Some of it inside the window: the classic rectangle has it.
+	if (rect[0] < r->test_right && rect[2] > r->test_left &&
+		rect[1] < r->test_bottom && rect[3] > r->test_top)
+		return;
+
+	before = room[rn].bound_active;
+	VisQueue(rn, r, rect[0], rect[1], rect[2], rect[3], true);
+	VisNote(rn, 3, before);
+}
+
 /* Which of the two SetRoomBounds this walk is using. Off the HD path
  * g_reach_on is false and this calls the classic function. */
 static void FollowPortal(short* door, long rn, ROOM_INFO* r)
 {
+	if (g_vis_walk)
+	{
+		VisFollowPortal(door, rn, r);
+		return;
+	}
+
 	if (g_reach_on)
 		SetRoomBoundsReach(door, rn, r);
 	else
@@ -4506,6 +4913,9 @@ void GetRoomBounds()
 				}
 			}
 		}
+
+		if (g_vis_walk)
+			VisExtend(r);
 
 		phd_PopMatrix();
 	}

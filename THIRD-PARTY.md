@@ -2175,6 +2175,64 @@ water surface", carries the tables.
     view factor; the floor (its height, light, page and page map per
     outline point, out of the level's `.TRG` by the layout TRForge's reader
     documents) is DATA of the player's installation, read, never copied.
+209. **The visibility path's approach** (`specific/hd/hd_vis.h`, `game/draw.cpp`
+    `VisExtend`; `tomb5.hd_vis` 1) - the rooms of a frame are the portal
+    walk from the eye's room, every listed room's art is drawn whole with no
+    window cut and the depth buffer alone decides what hides what, and a group
+    whose art stands in a listed room's box is listed with the part of that
+    room's window its art's box covers. THIRD: TROne (GPLv3) by Todesengel1931
+    - https://github.com/todesengel1931 - its TR2 visibility prototype
+    (`host/render/hd_visibility_tr2.inc`, the copy handed over on 2026-10-14),
+    read for the approach; no code was taken. Taken from it: the approach
+    above and the guests' count of eight triangles (entry 210); the walk,
+    the tables and the other rules below are this project's own. Its known
+    failure, a room listed by its art box without passing the walk on, is
+    what entry 213 answers.
+210. **The guests' rule** (`hd_vis.cpp`, `guestRule` 2) - a group's triangles
+    count for a room when their centroid stands in the room's inside and more
+    than 128 units outside the group's own room's box; eight such triangles
+    make the group a guest, and a guest of a room not under the sky must be
+    linked with it (a portal either way or a floor link, closed over the
+    flipmap twins). THIRD for the count of eight: TROne (GPLv3) by
+    Todesengel1931 - https://github.com/todesengel1931 - names a guest by
+    eight or more triangles in a room's box (`host/render/
+    hd_visibility_tr2.inc`, the guest table's comment); the centroid test,
+    the 128 units and the link test OWN. DATA (TrgProbe `-vistable`,
+    RoomProbe `-vis 1 -visguestrule`): 2,671 (holder, group) pairs have a triangle in the
+    holder's inside, 2,377 eight or more; every such triangle counted lists
+    JOBY2's room 24 in rooms 30, 31 and 33 by the slabs of its ceiling (32
+    units over its box) and covers the stairwell's art with its marble at
+    all ten of the owner's stair cameras; with no link test ANDREA3's room
+    92 puts a beam into room 63 (400,730 pixels at one camera); 128 is
+    `HD_OVERHANG_SLACK`; under the count of eight lie 294 pairs, stray
+    triangles. Under the rule: 430 guests over the fifteen levels,
+    175 more taken out by the link test.
+211. **The openings** (`hd_vis.cpp`) - a classic wall face of a room whose
+    own art covers half its wall samples or more is an opening when its art
+    leaves half the face's samples or more bare (samples every 64 units, art
+    facing the face's way within 128 units counting); the rooms whose box
+    holds the point 512 units behind the face's middle are listed, linked
+    ones only, by the face's corners as a portal's when the face faces the
+    eye. OWN. DATA: of the 42,971 wall faces the art covers wholly within
+    512 units, 91.4 per cent within 32, 95.8 within 128, 97.7 within 256;
+    2,483 of 2,709 rooms have their walls asked; linked openings 575 over the
+    fifteen levels, 413 taken out by the link test; half, 512 and the art
+    share free choices.
+212. **The wide portals** (`hd_vis.cpp`) - a portal on an axis plane whose
+    room has bare wall faces in that plane touching it (or touching a face
+    already taken) is followed a second time with the rectangle round the
+    portal and those faces, when it passes the portal's own by 64 units or
+    more on a side; where that rectangle has no part inside the window the
+    room is seen through but lands on the screen, the room behind is listed
+    with it clamped to the screen alone. OWN. DATA: 53 portals of the 8,078
+    in the fifteen levels; the same screen listing for every portal brought
+    JOBY2's room 30 and its pipes into the court's wall (24,640 pixels at
+    the court's camera).
+213. **Passing on** (`game/draw.cpp`, `VisQueue`, `VisFollowPortal`) - a room
+    a guest, an opening or a wide portal lists is queued as a portal queues
+    it, with the part of the window it is seen in, so it walks on through its
+    own portals and asks its own tables, its window growing by union as the
+    classic one does. OWN.
 
 ## Credited, but not contained here
 

@@ -6051,13 +6051,16 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		/* A piece with no face outside the smaller box is art the air took
 		 * out of the open half: whole under every answer but the air's. */
 		const bool open = piece.face < 0 && !piece.inner;
-		bool answer = g_decide == 0 ? true : g_decide == 1 ? false
+		/* The visibility path (-vis 1) cuts no art to a window: every piece
+		 * whole, as DecidePairs answers there. */
+		const int decide = g_vis_option ? 0 : g_decide;
+		bool answer = decide == 0 ? true : decide == 1 ? false
 			: open ? true
 			: *empty ? piece.inner == 0
 			: !ask ? false
 			: !drawn ? true
 			: piece.face < 0 ? false
-			: g_decide == 3 ? alive : pairAlive;
+			: decide == 3 ? alive : pairAlive;
 
 		/* And with -unlinked 1, DecidePairs' last word: a piece whose art
 		 * stands in the air of a room its own room has no link with is
@@ -6067,9 +6070,9 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * (whole: a listed holder's pair is whole on that face, an
 		 * unlisted holder's on any frame); and so does one no face claims
 		 * whose holder is not drawn, on its pair's surviving faces. */
-		const bool unlinked = piece.air && g_unlinked && g_decide >= 2;
+		const bool unlinked = piece.air && g_unlinked && decide >= 2;
 		const bool claimed = piece.face >= 0
-			? !open && ask && answer && (g_decide == 3 ? alive : pairAlive)
+			? !open && ask && answer && (decide == 3 ? alive : pairAlive)
 			: ask && !drawn && pairAlive;
 
 		if (unlinked && !(g_unlinked == 2 && *empty))
@@ -10817,9 +10820,6 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis = atoi(argv[*at + 1]) == 1;
 		g_vis_option = walkoff::g_vis;
 
-		if (g_vis_option)
-			g_air_option = 0;
-
 		printf("-vis: %s\n", g_vis_option ? "the visibility path"
 			: "the room-art rules (default)");
 	}
@@ -12357,7 +12357,7 @@ static int ProbeMain(int argc, char** argv)
 							(long)(ra.numZSectors - 1) * 1024 - rb.originZ);
 
 						if (box.maxs[0] <= box.mins[0] ||
-							box.maxs[2] <= box.mins[2] || g_vis_option)
+							box.maxs[2] <= box.mins[2])
 							continue;
 
 						g_intrusions_built.push_back(box);

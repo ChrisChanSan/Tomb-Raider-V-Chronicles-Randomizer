@@ -104,6 +104,9 @@ static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &
 #define HD_MAX_ROOMS	1024
 #define HD_MAX_FRAME	256
 
+// Whether the level was built for the visibility path (BuildRoomVis).
+static bool VisDrawsWhole();
+
 namespace
 {
 	struct FrameRoom
@@ -908,6 +911,18 @@ namespace
 
 		const int first = g_piece_first[entry.group];
 		const int count = g_piece_count[entry.group];
+
+		/* The visibility path cuts no art to a window: every piece is drawn
+		 * whole with the open half, so the build's pieces keep only their
+		 * depth push - a hull's doubled art and a covered face's art behind
+		 * the art they double (BuildRoomVis). */
+		if (VisDrawsWhole())
+		{
+			for (int j = 0; j < count; j++)
+				HDRenderPairWhole(entry.group, j, 1);
+
+			return;
+		}
 		const bool empty = ClipEmpty(entry);
 		const bool ask = !entry.full && !empty;
 		int asked = 0;
@@ -3440,11 +3455,18 @@ static void BuildStaticPlaces()
 
 /* The visibility path (tomb5.hd_vis, hd_vis.h), taken at the start of the
  * level. With it the rooms a frame draws are the portal walk's, extended by
- * the tables hd_vis.cpp makes, every listed room's art drawn whole: none of
- * the room-art rules below runs - no intrusion list, no pieces, no air, no
- * carried rooms, no hulls and no covered faces - so every group is one
- * unscissored draw with the depth test. `g_vis_main` is, per room of a
- * flipmap pair, the pair's room the portals lead to (the one whose
+ * the tables hd_vis.cpp makes, every listed room's art drawn whole: no art
+ * is cut to a window (DecidePairs answers every piece whole) and no room is
+ * carried, so every group is drawn unscissored with the depth test. What
+ * the build marks from the level data is kept, the two depth pushes: the
+ * intrusion list (BuildRoomIntrusions) and the rooms' air (BuildRoomAir)
+ * go to the renderer, whose hulls - a group whose art outside its own room
+ * doubles other rooms' art - and covered faces - a room's classic face
+ * inside a larger one of the room it stands in, in one plane - draw that
+ * art pushed back, so the art of the room it stands in is the copy seen.
+ * Two copies of one wall in the depth buffer fight in a speckle that
+ * moves with the eye; pushed, one of them is drawn. `g_vis_main` is, per
+ * room of a flipmap pair, the pair's room the portals lead to (the one whose
  * flipped_room names the other), -1 for every other room: a group of a pair
  * is in the world only while that room draws it.
  *
@@ -3456,6 +3478,11 @@ static void BuildStaticPlaces()
 static bool g_vis_level = false;
 static bool g_vis_logged = false;
 static std::vector<short> g_vis_main;
+
+static bool VisDrawsWhole()
+{
+	return g_vis_level;
+}
 
 static void BuildRoomVis()
 {
@@ -3726,13 +3753,6 @@ static void BuildRoomIntrusions()
 {
 	g_intrusions.clear();
 
-	// None with the visibility path (BuildRoomVis).
-	if (g_vis_level)
-	{
-		HDRenderSetIntrusions(0, 0);
-		return;
-	}
-
 	/* Who is next door: the portal list of both rooms, and the vertical
 	 * links, which have no portal record at all - a stacked pair is joined
 	 * through FLOOR_INFO::pit_room and sky_room. */
@@ -3871,7 +3891,6 @@ static int g_air_on = 0;
 static void BuildRoomAir()
 {
 	g_air_on = tomb5.hd_air <= 2 ? (int)tomb5.hd_air : 1;
-	g_air_on = g_vis_level ? 0 : g_air_on;	// none with BuildRoomVis' path
 	HDRenderSetAirHulls(g_air_on == 2 ? 1 : 0);
 
 	if (!g_air_on)

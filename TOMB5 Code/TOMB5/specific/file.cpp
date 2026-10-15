@@ -423,11 +423,60 @@ void S_GetUVRotateTextures()
 	}
 }
 
+/* The classic texture pages kept across a load of the same level.
+ *
+ * A savegame loaded inside the level being played reads the same .TRC again:
+ * its size and write time are in the level key (hd/hd_levelkey.h), and when
+ * HDLevelUnload keeps the HD data on that key, the room, object and bump
+ * pages LoadTextures would make - Textures[1] up to the end of the page
+ * blocks - are the pages already on the device. Then LoadTextures steps over
+ * the two page blocks in the file instead of reading, inflating and making
+ * them (LoadTexturePagesKept), and FreeLevel releases only the entries above
+ * them. The misc block after them (the title's logo, the shine, the font and
+ * the sky) is read and made as on every load.
+ *
+ * LoadLevel takes the decision once, before FreeLevel (TexturePagesKeep);
+ * FreeLevel and LoadTextures read it. With the build gate off no key is
+ * stored, nothing is recorded and the decision is always 0. */
+struct TexturePages
+{
+	long end;			// nTextures after the page blocks; 0 = none recorded
+	long rt, ot, bt;	// the header's page counts they were made from
+};
+
+static TexturePages g_pages;	// what Textures[1..end) were made from
+static long g_pages_kept;		// this load keeps them: their end, else 0
+
+/* Keeps the pages when the HD data are kept and every recorded page is still
+ * there. A full FreeTextures (GameClose) or a page a new device could not
+ * take (MoveTexturesToDevice drops it to 0) leaves a hole, and then the level
+ * is read in full. The pixel format and the page sizes need no test: they are
+ * the device's and the registry's, fixed for a device, and a new device
+ * refuses the key (HDLevelDeviceLost). */
+static long TexturePagesKeep()
+{
+	if (!g_pages.end || g_pages.end > nTextures || !HDLevelKeepsNext())
+		return 0;
+
+	for (long i = 1; i < g_pages.end; i++)
+	{
+		if (!Textures[i].tex)
+			return 0;
+	}
+
+	return g_pages.end;
+}
+
 void FreeLevel()
 {
 	Log(__FUNCTION__);
 
-	FreeTextures();
+	// A load of the same level keeps its page blocks' entries (see above).
+	if (g_pages_kept)
+		FreeTexturesFrom(g_pages_kept);
+	else
+		FreeTextures();
+
 	DXFreeSounds();
 	HDLevelUnload();	// the other half of HDLevelLoad
 
@@ -460,17 +509,64 @@ void FreeLevel()
 	baddie_slots = 0;
 }
 
+/* A load that keeps the pages (TexturePagesKeep): the file is walked past the
+ * two page blocks without reading them - each starts with its size and its
+ * packed size, so a seek over the bytes a read would take ends where the read
+ * ends - the bar gets the calls a read makes (pages + 3, the count LoadLevel
+ * starts the bar with), Textures[1..end) stay as they are and nTextures goes
+ * to their end. The read binds each object page to stage 0 as it makes it;
+ * stage 0 ends on the last one here too. A header that does not match the
+ * record (a file rewritten with the same size and write time) gives the pages
+ * back and reads them. Returns 0 when the load reads the pages. */
+static long LoadTexturePagesKept(long RTPages, long OTPages, long BTPages)
+{
+	long size, compressedSize;
+
+	if (!g_pages_kept)
+		return 0;
+
+	if (RTPages != g_pages.rt || OTPages != g_pages.ot || BTPages != g_pages.bt)
+	{
+		Log("LoadTextures: the kept pages do not match the header - read");
+		nTextures = g_pages_kept;
+		FreeTexturesFrom(1);
+		nTextures = 1;
+		g_pages_kept = 0;
+		return 0;
+	}
+
+	for (int block = 0; block < 2; block++)
+	{
+		fread(&size, 1, 4, level_fp);
+		fread(&compressedSize, 1, 4, level_fp);
+		fseek(level_fp, FileCompressed ? compressedSize : size, SEEK_CUR);
+	}
+
+	for (long i = 0; i < g_pages_kept + 2; i++)
+		S_LoadBar();
+
+	if (OTPages)
+	{
+		TextureStageLock();	// under the bar's frames (texture.cpp)
+		App.dx.lpD3DDevice->SetTexture(0, Textures[RTPages + OTPages].tex);
+		TextureStageUnlock();
+	}
+
+	nTextures = g_pages_kept;
+	Log("LoadTextures: %d pages kept (RTPages %d OTPages %d BTPages %d)",
+		g_pages_kept - 1, RTPages, OTPages, BTPages);
+	return 1;
+}
+
+// The two halves of LoadTextures after its checks, below it.
+static void LoadTexturePages(long RTPages, long OTPages, long BTPages,
+	long format, long skip);
+static bool LoadTexturesMisc();
+
 bool LoadTextures(long RTPages, long OTPages, long BTPages)
 {
 	DXTEXTUREINFO* dxtex;
-	LPDIRECT3DTEXTURE9 tSurf;
-	uchar* TextureData;
-	long* d;
-	char* pData;
-	char* pComp;
-	char* s;
-	long format, skip, size, compressedSize, nTex, c;
-	uchar r, g, b, a;
+	long format, skip;
 
 	Log(__FUNCTION__);
 
@@ -506,6 +602,35 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 		format = 2;
 		skip = 2;
 	}
+
+	if (!LoadTexturePagesKept(RTPages, OTPages, BTPages))
+	{
+		LoadTexturePages(RTPages, OTPages, BTPages, format, skip);
+
+		// What the pages were made from, for a later load that keeps them.
+		if (HDEnabled())
+		{
+			g_pages.end = nTextures;
+			g_pages.rt = RTPages;
+			g_pages.ot = OTPages;
+			g_pages.bt = BTPages;
+		}
+	}
+
+	return LoadTexturesMisc();
+}
+
+/* The room, object and bump pages: the two page blocks read (the one in the
+ * device's pixel format inflated, the other stepped over), one page made per
+ * entry of Textures[] from 1 on, and the bar moved once per page and three
+ * times besides - pages + 3 calls. */
+static void LoadTexturePages(long RTPages, long OTPages, long BTPages,
+	long format, long skip)
+{
+	LPDIRECT3DTEXTURE9 tSurf;
+	uchar* TextureData;
+	char* pData;
+	long size, compressedSize, nTex;
 
 	if (format <= 1)
 	{
@@ -593,7 +718,9 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 		Textures[nTex].width = App.TextureSize;
 		Textures[nTex].height = App.TextureSize;
 		Textures[nTex].bump = 0;
+		TextureStageLock();	// under the bar's frames (texture.cpp)
 		App.dx.lpD3DDevice->SetTexture(0, tSurf);
+		TextureStageUnlock();
 		S_LoadBar();
 	}
 
@@ -643,6 +770,20 @@ bool LoadTextures(long RTPages, long OTPages, long BTPages)
 	}
 
 	free(pData);
+}
+
+/* The misc block after the pages, read and made on every load: the title's
+ * logo pages, the shine, the font (also handed to the HD font) and the sky. */
+static bool LoadTexturesMisc()
+{
+	LPDIRECT3DTEXTURE9 tSurf;
+	uchar* TextureData;
+	long* d;
+	char* pData;
+	char* pComp;
+	char* s;
+	long size, compressedSize, nTex, c;
+	uchar r, g, b, a;
 
 	fread(&size, 1, 4, level_fp);
 	fread(&compressedSize, 1, 4, level_fp);
@@ -1748,6 +1889,25 @@ static void LoadLogStep(double* at, const char* step)
 	*at = ms;
 }
 
+// A step whose work was kept from the load before: the line ends in kept=1.
+static void LoadLogStepKept(double* at, const char* step, long kept)
+{
+	if (!kept)
+	{
+		LoadLogStep(at, step);
+		return;
+	}
+
+	if (!gLogEnabled)
+		return;
+
+	const double before = *at;
+
+	LoadLogStep(at, 0);
+	Log("LOADLOG level=%s step=%s ms=%.1f kept=1", g_loadlog_level, step,
+		*at - before);
+}
+
 // The level's name for those lines: the file name without folder or .TRC.
 static void LoadLogLevel(const char* wad)
 {
@@ -1782,6 +1942,8 @@ unsigned int __stdcall LoadLevel(void* name)
 	// data of the same level stay in memory (hd_levelkey.h). Nothing with
 	// hd_enable off.
 	HDLevelKeyNext((const char*)name);
+	// The classic texture pages stay with the HD data (TexturePagesKeep).
+	g_pages_kept = TexturePagesKeep();
 	FreeLevel();
 	LoadLogStep(&g_loadlog_thread, "free");
 	nTextures = 1;
@@ -1794,6 +1956,16 @@ unsigned int __stdcall LoadLevel(void* name)
 	level_fp = 0;
 	level_fp = FileOpen((const char*)name);
 
+	// No file, no LoadTextures: kept pages would stay above nTextures, where
+	// no FreeTextures reaches them, so they go here. Never with the gate off.
+	if (!level_fp && g_pages_kept)
+	{
+		nTextures = g_pages_kept;
+		FreeTexturesFrom(1);
+		nTextures = 1;
+		g_pages_kept = 0;
+	}
+
 	if (level_fp)
 	{
 		fread(&version, 1, 4, level_fp);
@@ -1804,7 +1976,8 @@ unsigned int __stdcall LoadLevel(void* name)
 		S_LoadBar();
 
 		LoadTextures(RTPages, OTPages, BTPages);
-		LoadLogStep(&g_loadlog_thread, "textures");
+		LoadLogStepKept(&g_loadlog_thread, "textures", g_pages_kept);
+		g_pages_kept = 0;
 
 		fread(data, 1, 32, level_fp);
 		LaraDrawType = data[0] + LARA_NORMAL;
@@ -2114,22 +2287,16 @@ long S_LoadLevelFile(long num)
 	loadbar_on = 0;
 	strcat(name, ".TRC");
 
-	for (int i = 0; i < 4; i++)
-	{
-		_BeginScene();
-		InitBuckets();
-		InitialiseSortList();
-		DrawLoadingScreen();
-		SortPolyList(SortCount, SortList);
-		DrawSortList();
-		S_DumpScreenFrame();
-	}
-
-	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
-	{
-		if (MonoScreenOn == 2)
-			ReleaseScreen();
-	}
+	/* The picture is shown at once, in one frame. Every frame of the bar
+	 * draws it again under the bar (S_DrawLoadBar), so it is released only
+	 * after the bar's last frame, below. */
+	_BeginScene();
+	InitBuckets();
+	InitialiseSortList();
+	DrawLoadingScreen();
+	SortPolyList(SortCount, SortList);
+	DrawSortList();
+	S_DumpScreenFrame();
 
 	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;
@@ -2142,9 +2309,9 @@ long S_LoadLevelFile(long num)
 			S_DrawLoadBar();
 
 
-		// This loop only repaints the loading bar while a background thread
-		// does the file I/O, so it need not call Present() (via
-		// S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) faster than a
+		// This loop only repaints the loading picture and bar while a
+		// background thread does the file I/O, so it need not call Present()
+		// (via S_DrawLoadBar -> S_DumpScreenFrame -> DXShowFrame) faster than a
 		// human can see. Unthrottled, it calls Present() as fast as the CPU
 		// allows with no vsync (D3DPRESENT_INTERVAL_IMMEDIATE) and no message
 		// pumping in between, and the game thread can hang for good inside
@@ -2207,6 +2374,12 @@ long S_LoadLevelFile(long num)
 
 	if (App.dx.Flags & DXF_HWR)
 		S_DrawLoadBar();
+
+	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	{
+		if (MonoScreenOn == 2)
+			ReleaseScreen();
+	}
 
 	Log("S_LoadLevelFile: load bar finished");
 	LoadLogStep(&loadlog_at, "bar");

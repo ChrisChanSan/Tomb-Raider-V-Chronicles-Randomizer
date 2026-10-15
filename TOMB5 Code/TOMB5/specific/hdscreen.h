@@ -33,6 +33,16 @@ typedef unsigned long ulong;
 // maxSide is the largest edge the caller can put in a texture.
 ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height);
 
+// HDScreenRead with the last picture kept for the next load that shows it
+// (a savegame loaded inside the level): the same name, largest edge, file
+// size and write time hand the kept pixels back without a read, and a
+// different picture drops them before its own read. The pixels belong to the
+// keep - the caller does not free them. LoadScreenHD asks this only with the
+// build gate on; HDScreenKeepDrop gives the pixels back.
+ulong* HDScreenReadKept(const char* name, long maxSide, long* width,
+	long* height);
+void HDScreenKeepDrop();
+
 // The base name of the localised logo picture for the language the gameflow
 // settled on - "LOGO_DE" and so on. Never null.
 const char* HDScreenLogo();

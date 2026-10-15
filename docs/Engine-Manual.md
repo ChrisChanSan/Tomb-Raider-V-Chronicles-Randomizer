@@ -1268,6 +1268,17 @@ window. The HD ones are 16:9 and are fitted instead: on a 16:9 window they land
 pixel for pixel, and on anything else you get black bars rather than a
 stretched picture.
 
+The picture is shown at once and drawn again under the loading bar in every
+frame of the bar, the original pictures as well, so it stands under the bar
+whatever the graphics driver does with its buffers. With *TR4 loadscreens* on
+(the default) a level other than the title shows no picture while it loads:
+the bar stands over the last view of the game, which stays on screen only
+because a windowed game keeps its one back buffer. With the HD build on (an
+installation found, `hd_build` on), a savegame loaded inside the level shows its
+HD picture without decoding it again: the last decoded picture (about 8 MB) is
+kept until another one is shown, and a picture file changed on disk is read
+again.
+
 The **title menu** takes its wordmark from the same `LOGO_` file. Core's own
 menu logo is `data\logo512.pak`, and the German and French versions of that
 file (`grlogo.pak`, `frlogo.pak`) only ever existed on the German and French
@@ -3299,25 +3310,30 @@ at `hd_air 2` the room build is about 2.1 seconds, and inside it the three
 largest parts are the texture pages (about 0.6), the air's hulls asked of every
 triangle on one thread (0.5) and every room's triangles on the pool (0.5); the
 objects add 0.6.
-A savegame loaded inside the level you are in keeps the level's HD data. The
-classic level is read again as always, but the room art, its texture pages, the
-room and static tables and the models stay as they are; made again is only what
-ties into the classic level or changes in play - the water sheets with their
-splashes and rings, the restored water faces and their animation pages, the
-objects' binding to their slots, the water's life and the outfit rule. The HD
-part of such a load is meant to take about a tenth of a second where a fresh
-build takes two to three. The data are built again when the level's files
+A savegame loaded inside the level you are in keeps the level's HD data, and
+with them the classic level's texture pages and the decoded HD loading picture.
+The rest of the classic level is read again as always; the HD room art, its
+texture pages, the room and static tables and the models stay as they are; made
+again is only what ties into the classic level or changes in play - the water
+sheets with their splashes and rings, the restored water faces and their
+animation pages, the objects' binding to their slots, the water's life and the
+outfit rule. The HD part of such a load is meant to take about a tenth of a
+second where a fresh build takes two to three, and the whole load about a tenth
+as well. The data are built again when the level's files
 changed (its `.TRC`, its `.hdm`, the Remaster's `.TRG`, `hd_gloss.txt`,
 `hd_water.txt`), when `hd_air`, `hd_water`, `hd_objects`, the texture budget or
 format or the chosen outfit changed, after an outfit change made in the level,
 after the graphics device was made new (Alt+Enter, a resolution change), and for
 every other level; the log's `HDLOG level=<L> resident=1` line, or `resident=0
-refused=<what>`, says which. A fresh load reads the level's `.TRG` once, decodes
-its first texture pages while the classic level is still being read, and finds
-the models by one look into each model folder. Until the new level's build gives
-the previous level's HD data back, that `.TRG` and those pages (about 115 to 155
-MiB) are held beside them. The `LOADLOG` lines (*When
-something looks wrong*) time every step of a load on your machine.
+refused=<what>`, says which. The classic texture pages are read again whenever
+the HD data are, and when the game freed them in between; the loading picture is
+decoded again when another picture was shown in between or its file changed. A
+fresh load reads the level's `.TRG` once, decodes its first texture pages while
+the classic level is still being read, and finds the models by one look into
+each model folder. Until the new level's build gives the previous level's HD
+data back, that `.TRG` and those pages (about 115 to 155 MiB) are held beside
+them. The `LOADLOG` lines (*When something looks wrong*) time every step of a
+load on your machine.
 
 **Alt+Enter and the resolution keys.** Changing the resolution or toggling full
 screen throws the graphics device away and makes a new one. Everything the HD
@@ -4529,13 +4545,14 @@ LOADLOG level=RICH2 step=bar ms=6.1
 
 (The numbers are a format sample.) In the order the work ends:
 
-- the loading thread: `free` (the level before), `textures`, `read` (the
-  level's data block), `rooms`, `moveables`, `sprites`, `cameras`,
-  `sound_fx`, `boxes`, `anim_tex`, `tex_infos`, `hd_load` (with its own
-  `markers`, `trg_ahead` - the `.TRG` read beside the classic level from the
-  start of the load, and `waited=` what of it the scan still waited for - and
-  `scan`, the first look at the `.TRG`), `ai`, `items`, `cinematic`,
-  `samples` and `game_setup`;
+- the loading thread: `free` (the level before), `textures` (the classic
+  texture pages; `kept=1` at its end when a savegame loaded inside the level
+  kept them), `read` (the level's data block), `rooms`, `moveables`,
+  `sprites`, `cameras`, `sound_fx`, `boxes`, `anim_tex`, `tex_infos`,
+  `hd_load` (with its own `markers`, `trg_ahead` - the `.TRG` read beside the
+  classic level from the start of the load, and `waited=` what of it the scan
+  still waited for - and `scan`, the first look at the `.TRG`), `ai`,
+  `items`, `cinematic`, `samples` and `game_setup`;
 - the HD objects, as their build runs: `obj_end`, `obj_map`, `obj_mods`,
   `obj_plan`, `obj_ring`, `obj_wardrobe`, `obj_models` (the `models` line
   splits it), `obj_bind` and `obj_lara`;
@@ -4547,16 +4564,20 @@ LOADLOG level=RICH2 step=bar ms=6.1
   step), `pages_ahead` (the first pages decoded beside the load: `pages=`
   decoded, `taken=` of them by `pages`; its time ran beside the other steps
   and is in none of them), `life` and `redress`;
-- the main thread: `screen` (the load picture), `thread` (the wait for the
-  loading thread), `ainit`, `hd_build`, `font`, `cutscenes`, `warmup`,
-  `profile`, `bar` (the one frame of the full bar) and `total`.
+- the main thread: `screen` (the load picture: its read and decode - or the
+  line `HD screen: <path> kept` when a savegame loaded inside the level found it
+  decoded - and one frame of it), `thread` (the wait for the loading thread,
+  while the picture and the bar are drawn), `ainit`, `hd_build`, `font`,
+  `cutscenes`, `warmup`, `profile`, `bar` (the one frame of the full bar over
+  the picture, and the picture's release) and `total`.
 
 A step a load does not run is written with `ms=0.0 skipped=1` - for a
 savegame loaded inside the level, `scan`, every step of the room build and
 `obj_models`, while `sheets`, `surfaces`, `frames`, `objects`, `life` and
 `redress` carry their time. `trg_read` ends in `kept=1` when the build took
-the parse the scan read. A build that gives up on the way (no `.TRG`, no room
-drawn HD) writes no block. Without `-log` nothing is written.
+the parse the scan read, `textures` when the classic texture pages were kept. A
+build that gives up on the way (no `.TRG`, no room drawn HD) writes no block.
+Without `-log` nothing is written.
 `RoomProbe -loadtime` (`Preparation\Tools`) prints the HD build's steps in the
 same form without starting the game, with `-reload` those of a savegame
 loaded inside the level as far as the tool follows them.

@@ -15973,6 +15973,272 @@ frames of the picture and its release, 31 / 47 / 79 ms. Nothing there is changed
 
 **Commits.** `852395f`
 
+#### Round 4: the rest of a save load
+2026-10-15
+
+**What.** A savegame loaded inside the level being played keeps two more things beside
+the level's HD data: the classic texture pages (*K*) and the decoded HD loading picture
+(*P*). And the loading picture is drawn once at the start of every load and then again
+under the bar in every frame of the bar (*F*), instead of four frames that each but the
+first waited out a 1/60 s tick. *F* is a change of the classic path as well, at
+`hd_build` 0 too, by the owner's order; no room picture changes. New: `TexturePagesKeep`,
+`LoadTexturePagesKept` and `FreeTexturesFrom`, `HDLevelKeepsNext`, `HDScreenReadKept`,
+`TextureStageLock` and `TextureStageUnlock`, the `LOADLOG` word `kept=1` on the step
+`textures`, the line `HD screen: <path> kept`.
+
+**Why.** After round 3 the owner's newest log (`log_test25_bar`, built 2026-10-15 01:14,
+33 loads) put a save load inside the level at 327 ms, the median of 15: the loading
+thread 168 (of it `textures` 139), `screen` 116, `hd_build` 24, `warmup` 15. Asked
+whether the total could come down further, he was given three candidates with their
+savings and risks - the picture drawn once (about 50 ms, the classic path), the decoded
+HD picture kept (30 to 140 ms, HD only), the classic pages kept (about 139 ms, the
+riskier one, behind the build gate) - and ordered all three: "Yes, since we have come
+this far, let us go the full hundred per cent." ("Ja, wenn wir schon so weit sind,
+gehen wir die 100 %.") Project decision of 2026-10-15.
+
+**How.** *M - the two steps split first.* `textures`: `LoadTextures`
+(`specific/file.cpp`) reads in order the header's page counts, the pixel format of the
+device (8888 on every card), block 1 - the pages in that format, packed - read and
+inflated, block 2 - the same pages in 16 bit - stepped over, a page made per room,
+object and bump page (`CreateTexturePage`: a `MANAGED` texture, a lock, a 256 x 256
+copy), and the misc block (the title's two logo pages, the shine, the font, the sky),
+read, inflated and made. The `.TRC` blocks of the game folder's randomized levels: 9 to
+109 pages, block 1 2,304 to 27,904 KiB inflated out of 1,007 to 11,284, block 2 416 to
+5,276 KiB packed, the misc block 768 KiB out of 121 to 156 (vanilla levels: 9 to 17
+pages). Timed on this machine with the engine's own `LoadTextures`, `Decompress` and
+`CreateTexturePage` copied out of the tree into a harness outside the repository, its
+own Direct3D 9 device, Win32, nine runs, medians, the file cache warm:
+
+| Level | pages | `LoadTextures` ms | read | inflate | room pages made | object pages made | misc block |
+|---|---|---|---|---|---|---|---|
+| ANDREA1 | 101 + 3 | 159.6 | 4.7 | 119.5 | 2.2 | 28.1 | 4.9 |
+| ANDREA2 | 83 + 3 | 118.5 | 3.2 | 86.1 | 2.4 | 22.1 | 3.6 |
+| ANDY1 | 109 + 3 | 168.3 | 4.9 | 117.9 | 2.6 | 34.8 | 4.8 |
+| JOBY2 | 91 + 3 | 120.2 | 4.0 | 86.7 | 1.9 | 23.8 | 3.6 |
+| JOBY4 | 9 + 3 | 17.5 | 0.3 | 10.5 | 1.6 | 1.3 | 3.7 |
+| RICH2 | 98 + 3 | 139.1 | 3.9 | 99.3 | 2.2 | 26.6 | 4.8 |
+| TITLE | 16 + 5 | 31.7 | 0.7 | 20.4 | 2.5 | 2.4 | 5.7 |
+
+The other eight levels lie between these. The inflate is about 72 percent, the pages
+made about 20, the read 2 to 4, the misc block 3. The owner's ticks agree: on his 15
+save loads the stretch from the `free` line to the inflate's end is 109 ms (median), the
+pages made 31, the misc block 0. What a kept load can leave out is everything but the
+misc block: about 135 of his 139 ms.
+
+`screen`: `HDScreenRead` (`specific/hdscreen.cpp`) reads the 2,073,748-byte `.DDS` (0.7
+to 1.0 ms) and decodes it on one thread; `LoadScreenHDPixels` (`specific/LoadSave.cpp`)
+makes the 2048 x 2048 texture; four frames; `ReleaseScreen`. Timed on this machine the
+same way (the engine's `HDScreenRead` and `LoadScreenHDPixels`, the 14 pictures of
+`screens\HD`, seven runs): read and decode 40.7 to 77.3 ms (ANDREA2 68.1), the make 6.5
+to 11.0. In the owner's log: start to the `decoded` line 62 ms (median of the ticks),
+from there to the picture's release 47. Each frame ends in `S_DumpScreenFrame`, which
+waits until `Sync()` hands out a whole 1/60 s tick since the last one it handed out:
+the first frame comes after the decode and finds its tick passed, the other three wait
+one tick each - 50 ms. So `screen`'s 116 ms are the decode (about 60), the make (about
+10) and three ticks (50), in the log's rounding.
+
+*What the four frames are for.* The device's swap chain is windowed with
+`D3DSWAPEFFECT_DISCARD` and one back buffer (`specific/devicewindow.h`,
+`DevicePresentParams`). `_BeginScene` is `BeginScene` alone and clears nothing
+(`specific/function_table.cpp`, `HWBeginScene`); `S_DumpScreenFrame` ends in
+`EndScene` and `Present` (`specific/output.cpp`, `specific/dxshell.cpp`
+`DXShowFrame`); `S_DisplayMonoScreen` clears only the bars beside a 16:9 picture.
+`ReleaseScreen` ran right after the four frames, before the loading thread started,
+and `S_DrawLoadBar` (`specific/drawbars.cpp`) drew the bar alone - opaque rectangles,
+draw type 0 - onto whatever the back buffer held. With `DISCARD` that content is
+undefined after a `Present` by the Direct3D 9 contract; the picture stood under the
+bar because the runtime keeps the one back buffer's pixels in a windowed present. The
+four frames are Core's loop and name no reason; drawn into every buffer of a flip chain
+of up to four, they leave the picture under the bar whichever buffer comes next.
+Nothing else is in them: no fade, no flip of the mono picture, no state the bar's
+frames read. The other cases: with `tr4_loadscreens` on (its default) a level that is
+not the title loads no picture (`MonoScreenOn` 0, `DrawLoadingScreen` draws nothing),
+the frames present the back buffer as `RenderLoadPic` left it - a view of the level
+(`specific/output.cpp`) - and the bar stands over it, so one frame presents the same; a
+mono picture of the inventory still up (`MonoScreenOn` 1) is drawn by the frames and
+not released there.
+
+*K - the classic pages kept.* The decision is round 2's: `LoadLevel` asks it once,
+right after `HDLevelKeyNext` and before `FreeLevel` - `g_pages_kept =
+TexturePagesKeep()` - and `TexturePagesKeep` keeps the pages when
+`HDLevelKeepsNext()` says the HD data stay (new in `specific/hd/hd_level.cpp`: the
+same `HDLevelKeepRefused` with the same keys `HDLevelUnload` asks a moment later in
+`FreeLevel`; nothing between the two changes them), a record of the pages exists and
+every recorded entry still holds its page. The key already holds what the pages are
+made of: the `.TRC`'s size and write time, the device (a new device refuses it in
+`HDLevelDeviceLost`, whichever Alt+Enter, resolution change or lost device made it);
+the pixel format and the page sizes are the device's and the registry's, fixed for a
+device. A full `FreeTextures` (`GameClose`) or a page a new device dropped leaves a
+hole, and the level is read in full. The record (`g_pages`: `nTextures` after the page
+blocks and the three counts) is written after every read of the pages behind the build
+gate. `FreeLevel` releases only the entries from the record's end up to `nTextures` -
+the misc pages (`FreeTexturesFrom`, `specific/texture.cpp`); the entries below stay.
+`LoadTextures` is split where its own lines stand, so that none of them moved:
+`LoadTextures` keeps the checks and the pixel format, `LoadTexturePages` is the page
+blocks, `LoadTexturesMisc` the misc block. On a kept load `LoadTexturePagesKept` walks
+the file past the two page blocks: each starts with its size and packed size, and a
+seek over the bytes the read takes (the packed size, or the size in an uncompressed
+file) ends where the read ends. It makes the bar's calls a read makes - one per page and
+three besides, the `pages + 20` count `LoadLevel` starts the bar with stays exact -
+leaves `Textures[1..end)` as they are, sets `nTextures` to the end and binds the last
+object page to stage 0 as the read's loop leaves it. A header that does not match the
+record (a file rewritten with the same size and write time) gives the pages back and
+reads them; so does `LoadLevel` when the level file does not open after a kept
+`FreeLevel`, since no `LoadTextures` follows and the pages would stay above `nTextures`,
+out of every `FreeTextures`' reach. The misc block is read, inflated and made as on
+every load, the font page handed to the HD font and the title's HD wordmark put in as
+before. The HD water frames borrowed into `Textures[]` above `nTextures` are not
+touched: `nTextures` ends where a read ends it, and the resident build gives them back
+and borrows them again as before.
+The step's line is `LOADLOG level=<L> step=textures ms=<x> kept=1`, and the log has
+`LoadTextures: <n> pages kept (RTPages .. OTPages .. BTPages ..)` in place of the three
+page-count lines.
+
+*P - the decoded picture kept.* `HDScreenReadKept` (`specific/hdscreen.cpp`) keeps the
+last picture `HDScreenRead` decoded, keyed on its name, the largest edge asked for and
+the file's size and last write time (`GetFileAttributesExA` on the path the read
+opens); the same key hands the pixels back without opening the file and writes `HD
+screen: <path> kept, <w> x <h>` instead of `decoded`; a different key drops the kept
+picture before its own read, so there is one at most. Pixels and not the texture:
+`LoadScreenHDPixels` makes the texture again in 6.5 to 11 ms, while the texture is
+twice the memory (2048 x 2048 with a system copy beside the card's against 1920 x 1080
+pixels) and a Direct3D object a new device would have to move. `LoadScreenHD` asks the
+keep only with the build gate on (`HDEnabled()`, a line of its own); with it off the
+picture is read as before. The title's composed logo (`LoadScreenHDLogo`) and the
+classic `LoadScreen` are untouched. The pixels are not tied to the HD data or the
+device: they go when another picture is read, and with the process. Not with the HD
+data, because `S_LoadLevelFile` reads the picture before `LoadLevel`'s `FreeLevel` and
+`HDLevelUnload`: given back there at a level change, the picture of the level being
+loaded would go, and that level's first save load would read it again. The cost of
+this: with `tr4_loadscreens` on (its default) only the title's loads show a picture, so
+the title's pixels stay kept while the levels are played.
+
+*F - the picture under every bar frame.* `S_LoadLevelFile` draws the picture in one
+frame and starts the loading thread; `S_DrawLoadBar` draws `DrawLoadingScreen()` before
+the bar in every frame it draws - the loop while the thread runs and round 3's one
+full-bar frame - after its own render states (blending off, so the picture is the
+texture as it is); and `ReleaseScreen`, under the same test as before, follows the bar's
+last frame. What the player sees is the picture with the bar over it as before, on any
+swap chain; with no picture up nothing is drawn under the bar, as before. The `screen`
+step now holds the read and decode (or the keep), the make and one frame; the release
+moved into `bar`.
+The bar's frames now draw a textured picture while the loading thread runs, and both
+threads bind texture stage 0, which Direct3D keeps once per device:
+`D3DCREATE_MULTITHREADED` makes each call whole, not a bind and the draws after it. The
+loading thread binds in `FreeTextures` and `FreeTexturesFrom` (none), in the kept walk
+(the last object page) and once per object page in `LoadTexturePages` (Core's line). A
+bind landing between `S_DrawTile`'s bind of the picture and its two draws shows the
+picture as a level page or untextured, for one frame. A harness outside the repository
+showed it: one `D3DCREATE_MULTITHREADED` device, windowed `DISCARD` with one back
+buffer, the main thread binding a picture and drawing it in two triangles as
+`S_DrawTile` does and reading the frame back, a second thread binding a page every 270
+us (ANDREA2's object pages: 22.1 ms for 83) and none every eighth time:
+
+| frames (two runs each) | lock | bad frames | triangles as the page | untextured |
+|---|---|---|---|---|
+| 600, about 60 a second | no | 5 / 3 | 5 / 2 | 1 / 2 |
+| 600, about 60 a second | yes | 0 / 0 | 0 / 0 | 0 / 0 |
+| 3,000, unthrottled | no | 269 / 76 | 354 / 94 | 65 / 22 |
+| 3,000, unthrottled | yes | 0 / 0 | 0 / 0 | 0 / 0 |
+| 3,000, unthrottled, binds back to back | no | 925 / 523 | 1,342 / 632 | 232 / 87 |
+| 3,000, unthrottled, binds back to back | yes | 0 / 0 | 0 / 0 | 0 / 0 |
+
+What the lock costs the loading thread, timed in the same harness around its
+`EnterCriticalSection`: at 60 frames a second 8.5 ms in all over 60,473 binds (0.14
+us each on average), the longest single wait 4.0 ms. A load makes one bind per object
+page and three besides, so its waits come to well under a millisecond, a few at the
+worst.
+
+So both threads hold one critical section (`TextureStageLock`/`TextureStageUnlock`,
+`specific/texture.cpp`): `S_DrawLoadBar` from before the picture to after
+`DrawSortList` - the bar's own bind of draw type 0, which had the same gap over its
+strip before this round, is covered with it - and the loading thread around each of its
+four binds; the `Present` and the tick wait stay outside. The loading thread never
+takes the lock inside a device call, so the two locks are always taken in one order.
+Outside a load one thread draws and nobody waits on it. The lock lines are in the
+classic path as well; they belong to *F*.
+
+**Measured.** *Expected on the owner's save loads* (`log_test25_bar`, 15 loads, the
+medians above): `textures` 139 -> about 4 ms (the harness: 2.5 to 3.8 ms for a kept
+`LoadTextures` on every level; his misc block 0 to 16 by the ticks), so the loading
+thread 168 -> about 33, give or take the bar loop's turn at the join (up to one tick
+and a `Sleep`, as before); `screen` 116 -> about 10 to 27 ms - the decode's 62 go
+(the keep: 4.9 to 9.5 ms for a whole `LoadScreenHD` with a kept picture against 39.6
+to 92.1 without), the make's 7 to 11 stays, and of the three waited ticks, 50 ms, at
+most one remains: with the decode gone the one frame can come inside the tick of the
+menu's last frame and wait out its rest, 0 to 16.7 ms. `hd_build` 24, `warmup` 15 and
+`bar` 0.6 (plus the picture's release) stay. A save load inside the level: 327 -> about
+85 to 120 ms.
+*Memory.* The kept pages are the level's own, made once instead of released and made
+again: no more than before. The kept picture is 7.9 MiB of heap at 1920 x 1080, one
+picture at most, from a level's first HD picture until another picture is read or the
+process ends (with `tr4_loadscreens` on, the title's through all the levels) - 0.2
+percent of the `avail_virtual` 3,447 to 3,618 MiB his `budget=`
+lines read. *F* keeps the picture's texture until the bar's last frame instead of
+releasing it before the loading thread: the HD one is 2048 x 2048 A8R8G8B8 `MANAGED`,
+16 MiB in the process beside its copy on the card, now held through the HD build; the
+classic one is 640 x 480. The texture budget does not read the free memory
+(`AutoBudgetBytes`: the card's memory at the start and `nTextures`), so no page
+changes; the `budget=` line's `avail_virtual` and the outfit rule's room at the build
+read up to 24 MiB less, and the F4 window measures its room again when it opens, after
+the release.
+
+**Checked.** *K's bookkeeping, run:* no tool of the tree can run `LoadTextures` - it
+lives in `file.cpp` with the whole game behind it - so the harness above ran the
+engine's own `FreeLevel`, `LoadTextures` with its three parts, `TexturePagesKeep`,
+`LoadTexturePagesKept`, `CreateTexturePage`, `FreeTextures` and `FreeTexturesFrom`,
+copied out of this commit's tree, in `LoadLevel`'s order (the decision, `FreeLevel`,
+entry 0, the header, the bar's first call), on a device of its own: a fresh load, a kept
+load, a fresh load again, then a kept load with one page missing. On all 15 randomized
+levels of the game folder and all 15 in `data/Backup`, 30 of 30: `nTextures`, the file
+position after `LoadTextures` and the bar's call count equal; every field of every
+entry below `nTextures` equal; the kept entries the same objects; every page's pixels
+(FNV-1a over a read-back) equal, the misc pages made again equal; two stand-ins for the
+borrowed water frames above `nTextures` untouched; the fresh load after the kept one
+equal to the first; the load with a hole read in full. *P's keep, run:* the engine's
+`LoadScreenHD`, `LoadScreenHDReady`, `LoadScreenHDPixels`, `HDScreenRead` and the keep
+on a device of its own over the 14 pictures: the second load of each opens no file and
+makes the texture byte for byte as the first, and a load with the gate off reads the
+file and makes the same; another name reads, and the first again too; a copy of a
+picture kept on its second load, read again after its write time moved one second and
+after its size changed with the time put back, and with the file gone nothing is kept.
+*F* has no executed proof in the tree: no tool presents frames; it rests on reading
+(`S_DrawLoadBar`, `S_LoadLevelFile`), its stage-0 lock on the harness and its table
+above, and on the owner's run. With the tools built from
+this round's last commit: the six classic views `-classicroom N -classiconly` (ANDREA2
+19 and 231, JOBY2 42 and 66, ANDY3 17 and 34) 6 of 6 identical to `8691e82`'s tool and
+`56458c1b`'s (`git archive`); the fifteen parity cameras 15 of 15 and the six views
+drawn HD 6 of 6 identical to `56458c1b`'s tool; the build fingerprints of the fifteen
+levels at `hd_air` 1 and 2, 30 of 30. Only `DdsProbe` compiles a file of this round
+(`hdscreen.cpp`, without the engine part); it builds. Read with the build gate off:
+no key, so `TexturePagesKeep` returns 0 at its first test, `FreeLevel` calls
+`FreeTextures`, `LoadTexturePagesKept` returns at its first line, `LoadTexturePages`
+and `LoadTexturesMisc` are `LoadTextures`' own lines, the record is behind the gate,
+`LoadScreenHD` reads as before, the failed open's release cannot run: the classic load
+differs from `56458c1b` by *F*'s frames and the stage-0 lock they need, and by nothing
+else. Suites: ModernTest 15,258 -> 15,283 (a group of 25 counts the decision's place,
+the keeps' gates and keys, the one loading frame, the picture first in every bar frame
+and its release after the last, the four locked binds, the bar frame's draws under the
+lock with its `Present` outside, and the failed open's release), MenuTest 44,272,
+InterpTest 729, LipsTest 270 and 243, 0 failed; the engine, RoomProbe, TrgProbe,
+ModelProbe, MapProbe and DdsProbe build. The lock and the failed open's release are in
+no file a tool compiles, so the views, the cameras and the fingerprints above stand.
+
+**Left.** What only his next `-log` run shows: `step=textures ... kept=1` and its
+milliseconds, the `HD screen: ... kept` line and the `screen` step, the `thread` and
+`total` of a save load, and on screen the picture under the bar in every frame
+(classic and HD, with the four frames gone). His own open points stay his: the bar
+standing still during the HD build of a fresh load, and `warmup`. A device made new
+while a load is between `FreeLevel` and `LoadTextures` - Alt+Enter during the load -
+would find the kept pages outside `nTextures` and not move them; a device change in the
+middle of a load is not safe before this round either (the loading thread makes pages
+on the device meanwhile). With `tr4_loadscreens` on the bar stands over the level's
+view as `RenderLoadPic` left it, presented once instead of four times; no picture
+exists there to draw again.
+
+**Commits.** `8b69443`, `a8f9d68`, `00118f8`, `f9cf46c`, `638f6e2`, `f5bf841`,
+`975cff3`, `191c5b0`
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty
@@ -20974,4 +21240,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #199 | The level load on several cores |
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
-| #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once |
+| #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |

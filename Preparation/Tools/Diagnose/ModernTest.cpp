@@ -11090,6 +11090,153 @@ static void hd_build_gate()
 	free(opts);
 }
 
+// Where `what` first stands in `text` from `from` on, or -1.
+static long load_keep_at(const char* text, const char* from, const char* what)
+{
+	const char* start = text ? strstr(text, from) : 0;
+	const char* p = start ? strstr(start, what) : 0;
+
+	return p ? (long)(p - text) : -1;
+}
+
+/* A save load inside the level, in the engine's own text: the classic texture
+ * pages kept with the HD data on round 2's key, the decoded loading picture
+ * kept on its file, and the loading picture drawn under every bar frame.
+ * LoadLevel, FreeLevel, LoadTextures and the screen code need the game and
+ * a device, so their lines are counted where they stand; the bookkeeping of
+ * a kept load against a read one is run outside the tree on the engine's own
+ * functions (the record names it). */
+static void load_keep()
+{
+	char* file = hd_switch_text("../file.cpp");
+	char* tex = hd_switch_text("../texture.cpp");
+	char* save = hd_switch_text("../LoadSave.cpp");
+	char* screen = hd_switch_text("../hdscreen.cpp");
+	char* bars = hd_switch_text("../drawbars.cpp");
+	char* level = hd_switch_text("hd_level.cpp");
+	long n, a, b;
+
+	ok(file && tex && save && screen && bars && level, "load keep: the six "
+		"files are read", !!file + !!tex + !!save + !!screen + !!bars +
+		!!level, 6);
+
+	// The decision: once, in LoadLevel, after the key and before FreeLevel,
+	// by the key's own comparison.
+	n = hd_switch_count(file, "g_pages_kept = TexturePagesKeep();");
+	ok(n == 1, "load keep: the pages' decision is taken once", n, 1);
+	a = load_keep_at(file, "HDLevelKeyNext((const char*)name);",
+		"g_pages_kept = TexturePagesKeep();");
+	b = load_keep_at(file, "HDLevelKeyNext((const char*)name);",
+		"\tFreeLevel();");
+	ok(a >= 0 && a < b, "load keep: after the key, before FreeLevel", a < b, 1);
+	n = hd_switch_count(file, "!HDLevelKeepsNext()");
+	ok(n == 1, "load keep: the decision asks the HD key", n, 1);
+	n = hd_switch_count(level,
+		"return !HDLevelKeepRefused(&g_key_built, &g_key_next, "
+		"g_redress_count);");
+	ok(n == 1, "load keep: HDLevelKeepsNext is HDLevelUnload's test", n, 1);
+
+	// FreeLevel spares the kept pages only; the misc pages go.
+	n = hd_switch_count(file, "FreeTexturesFrom(g_pages_kept);");
+	ok(n == 1, "load keep: FreeLevel frees above the kept pages", n, 1);
+	n = hd_switch_count(tex, "for (long i = first; i < nTextures; i++)");
+	ok(n == 1, "load keep: FreeTexturesFrom starts at the first", n, 1);
+
+	// LoadTextures: the kept walk returns at once without a decision, the
+	// bar gets pages + 3 calls, the record is behind the build gate.
+	n = hd_switch_count(file, "\tif (!g_pages_kept)\r\n\t\treturn 0;") +
+		hd_switch_count(file, "\tif (!g_pages_kept)\n\t\treturn 0;");
+	ok(n == 1, "load keep: no decision, no kept walk", n, 1);
+	n = hd_switch_count(file, "for (long i = 0; i < g_pages_kept + 2; i++)");
+	ok(n == 1, "load keep: the bar's calls of a read", n, 1);
+	a = load_keep_at(file, "LoadTexturePages(RTPages, OTPages, BTPages, "
+		"format,", "if (HDEnabled())");
+	b = load_keep_at(file, "LoadTexturePages(RTPages, OTPages, BTPages, "
+		"format,", "g_pages.end = nTextures;");
+	ok(a >= 0 && a < b, "load keep: the record is behind the build gate",
+		a < b, 1);
+	n = hd_switch_count(file, "\"textures\", g_pages_kept);");
+	ok(n == 1, "load keep: the textures step says kept", n, 1);
+
+	// The picture: kept behind the build gate, keyed on size and time,
+	// dropped before another read; the title's logo reads as before.
+	n = hd_switch_count(save, "px = HDScreenReadKept(name, 2048, &w, &h);");
+	ok(n == 1, "load keep: LoadScreenHD asks the picture's keep", n, 1);
+	a = load_keep_at(save, "long LoadScreenHD(const char* name)",
+		"if (HDEnabled())");
+	b = load_keep_at(save, "long LoadScreenHD(const char* name)",
+		"HDScreenReadKept(");
+	ok(a >= 0 && a < b, "load keep: the picture's keep is behind the gate",
+		a < b, 1);
+	n = hd_switch_count(save,
+		"title = HDScreenRead(\"TITLE\", 2048, &tw, &th);");
+	ok(n == 1, "load keep: the title's logo reads as before", n, 1);
+	n = hd_switch_count(screen, "g_screen_keep.size == size &&");
+	ok(n == 1, "load keep: the picture's key holds the file's size", n, 1);
+	a = load_keep_at(screen, "ulong* HDScreenReadKept(", "HDScreenKeepDrop();");
+	b = load_keep_at(screen, "ulong* HDScreenReadKept(",
+		"px = HDScreenRead(name, maxSide, width, height);");
+	ok(a >= 0 && a < b, "load keep: another picture drops the kept one first",
+		a < b, 1);
+
+	// The frames: the picture once, then under every bar frame, released
+	// after the bar's last frame.
+	n = hd_switch_count(file, "for (int i = 0; i < 4; i++)");
+	ok(n == 0, "load keep: no four loading frames", n, 0);
+	n = hd_switch_count(file, "DrawLoadingScreen();");
+	ok(n == 1, "load keep: the picture's one frame", n, 1);
+	a = load_keep_at(bars, "long S_DrawLoadBar()", "DrawLoadingScreen();");
+	b = load_keep_at(bars, "long S_DrawLoadBar()", "if (tomb5.tr4_loadbar)");
+	ok(a >= 0 && a < b, "load keep: every bar frame draws the picture first",
+		a < b, 1);
+	a = load_keep_at(file, "S_FinishLoadBar();", "S_DrawLoadBar();");
+	b = load_keep_at(file, "S_FinishLoadBar();", "ReleaseScreen();");
+	ok(a >= 0 && a < b, "load keep: the picture goes after the last frame",
+		a < b, 1);
+
+	// Stage 0 between the two threads: each loading-thread bind and each
+	// bar frame's binds and draws under the one lock (texture.cpp).
+	n = hd_switch_count(tex, "TextureStageLock();") +
+		hd_switch_count(tex, "TextureStageUnlock();");
+	ok(n == 4, "load keep: FreeTextures' two binds are locked", n, 4);
+	n = hd_switch_count(file, "TextureStageLock();") +
+		hd_switch_count(file, "TextureStageUnlock();");
+	ok(n == 4, "load keep: LoadTextures' two binds are locked", n, 4);
+	{
+		const char* ot = "Textures[nTex].bump = 0;\r\n\t\tTextureStageLock";
+		const char* fr = "long S_DrawLoadBar()";
+		long s[5];
+
+		if (load_keep_at(file, ot, "TextureStageLock();") < 0)
+			ot = "Textures[nTex].bump = 0;\n\t\tTextureStageLock";
+
+		s[0] = load_keep_at(file, ot, "TextureStageLock();");
+		s[1] = load_keep_at(file, ot, "SetTexture(0, tSurf);");
+		s[2] = load_keep_at(file, ot, "TextureStageUnlock();");
+		n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2];
+		ok(n == 1, "load keep: the page loop binds under the lock", n, 1);
+
+		s[0] = load_keep_at(bars, fr, "TextureStageLock();");
+		s[1] = load_keep_at(bars, fr, "DrawLoadingScreen();");
+		s[2] = load_keep_at(bars, fr, "DrawSortList();");
+		s[3] = load_keep_at(bars, fr, "TextureStageUnlock();");
+		s[4] = load_keep_at(bars, fr, "S_DumpScreenFrame();");
+		n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2] && s[2] < s[3] &&
+			s[3] < s[4];
+		ok(n == 1, "load keep: the bar frame draws under the lock, presents "
+			"outside it", n, 1);
+	}
+	n = hd_switch_count(file, "if (!level_fp && g_pages_kept)");
+	ok(n == 1, "load keep: a failed open frees the kept pages", n, 1);
+
+	free(file);
+	free(tex);
+	free(save);
+	free(screen);
+	free(bars);
+	free(level);
+}
+
 /* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
  * alpha-pass pages are drawn as a clear floor, out of the smallest and the
  * largest alpha of the page's top mip. The pairs are the measured ones where
@@ -21461,6 +21608,7 @@ int main()
 	hd_switch_option();
 	hd_switch_wiring();
 	hd_build_gate();
+	load_keep();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

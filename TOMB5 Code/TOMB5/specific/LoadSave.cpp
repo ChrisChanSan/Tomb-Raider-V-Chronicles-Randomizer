@@ -42,6 +42,7 @@
 #include "../tomb5/tomb5.h"
 #include "drawbars.h"
 #include "hdscreen.h"
+#include "hd/hd_level.h"	// HDEnabled - the build gate for the picture's keep
 #include "bc7.h"
 #include "devicemove.h"
 
@@ -1022,6 +1023,15 @@ long LoadScreenHD(const char* name)
 
 	if (!name || !*name || !LoadScreenHDReady())
 		return 0;
+
+	// With the build gate on the decoded picture stays for the next load
+	// that shows it, a savegame loaded inside the level (HDScreenReadKept);
+	// the keep owns the pixels then.
+	if (HDEnabled())
+	{
+		px = HDScreenReadKept(name, 2048, &w, &h);
+		return px ? LoadScreenHDPixels(px, w, h) : 0;
+	}
 
 	px = HDScreenRead(name, 2048, &w, &h);
 

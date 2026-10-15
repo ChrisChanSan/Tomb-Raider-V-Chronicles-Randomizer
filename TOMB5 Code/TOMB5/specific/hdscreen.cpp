@@ -160,6 +160,93 @@ ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height)
 	return px;
 }
 
+/* The last level picture decoded, kept for the next load that shows it: a
+ * savegame loaded inside the level reads and decodes the same file again -
+ * 41 to 77 ms of BC7 decode on one thread against 1 ms of reading, timed on
+ * HDScreenRead itself over the 14 pictures of screens\HD. The key is the
+ * name, the largest edge asked for and the file's size and last write time,
+ * so a picture changed on disk is read again. One picture at most: a
+ * different key drops the kept one before its own read - at 1920 x 1080 that
+ * is 7.9 MiB of pixels in the heap. The pixels and not the texture made from
+ * them: the texture is twice the memory (2048 x 2048, a system copy beside
+ * the card's) and a Direct3D object a new device would have to move, and
+ * making it again costs 7 to 11 ms (LoadScreenHDPixels, timed the same way).
+ * The pixels are not given back with the HD data: S_LoadLevelFile reads the
+ * picture before LoadLevel's FreeLevel, so a release there would drop the
+ * picture of the level being loaded, and its first save load would read it
+ * again. They go when another picture is read, and with the process. With
+ * tr4_loadscreens on only the title's loads show a picture, so the title's
+ * stays kept through the levels. */
+struct HDScreenKeep
+{
+	char name[48];
+	long maxSide;
+	long long size;			// the file's, -1 when it is not there
+	long long written;
+	ulong* px;
+	long w, h;
+};
+
+static HDScreenKeep g_screen_keep;
+
+void HDScreenKeepDrop()
+{
+	free(g_screen_keep.px);
+	memset(&g_screen_keep, 0, sizeof(g_screen_keep));
+}
+
+ulong* HDScreenReadKept(const char* name, long maxSide, long* width,
+	long* height)
+{
+	WIN32_FILE_ATTRIBUTE_DATA a;
+	char path[80];
+	long long size, written;
+	ulong* px;
+
+	*width = 0;
+	*height = 0;
+
+	if (!name || !*name || strlen(name) > 40)
+		return 0;
+
+	HDScreenPath(path, name);
+	size = -1;
+	written = -1;
+
+	if (GetFileAttributesExA(path, GetFileExInfoStandard, &a) &&
+		!(a.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+	{
+		size = ((long long)a.nFileSizeHigh << 32) | a.nFileSizeLow;
+		written = ((long long)a.ftLastWriteTime.dwHighDateTime << 32) |
+			a.ftLastWriteTime.dwLowDateTime;
+	}
+
+	if (g_screen_keep.px && size >= 0 && !_stricmp(g_screen_keep.name, name) &&
+		g_screen_keep.maxSide == maxSide && g_screen_keep.size == size &&
+		g_screen_keep.written == written)
+	{
+		*width = g_screen_keep.w;
+		*height = g_screen_keep.h;
+		Log("HD screen: %s kept, %d x %d", path, *width, *height);
+		return g_screen_keep.px;
+	}
+
+	HDScreenKeepDrop();
+	px = HDScreenRead(name, maxSide, width, height);
+
+	if (!px)
+		return 0;
+
+	strcpy(g_screen_keep.name, name);
+	g_screen_keep.maxSide = maxSide;
+	g_screen_keep.size = size;
+	g_screen_keep.written = written;
+	g_screen_keep.px = px;
+	g_screen_keep.w = *width;
+	g_screen_keep.h = *height;
+	return px;
+}
+
 #endif	// HDSCREEN_NO_ENGINE
 
 // Everything below composes two decoded pictures and touches nothing else -

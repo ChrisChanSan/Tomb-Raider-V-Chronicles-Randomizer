@@ -22114,6 +22114,34 @@ static void spring_crack_gate()
 	ok(lows == 3, "spring crack gate: three cameras under the bottom see the "
 		"slit without its bottom", lows, 3);
 
+	/* Under the bottom the level's own floor at the eye's column decides
+	 * (HDSpringCrackGround), the heights the .TRG gives there: 1,000 west
+	 * of the crack the floors at 1,536.8 and 1,591.3 - the eye at 1,485.6
+	 * stands over them and sees, the eye at 1,549.6 stands 13 under the
+	 * nearer, in the rock (the plane fitted to the outline puts it 137
+	 * over), and does not; the second camera's column (1,912.4, 2,041.1),
+	 * the south's (1,657.3) and the three cameras of the logs (1,813.9,
+	 * 1,967.8, 1,914.6 nearest) see; no floor, too far to judge, not. */
+	const float west[2] = { 1536.8f, 1591.3f };
+	const float his[2] = { 1912.4f, 2041.1f };
+	const float south = 1657.3f;
+	const float logs[3][2] = { { 1813.9f, 1893.7f }, { 1967.8f, 2053.1f },
+		{ 1914.6f, 2020.3f } };
+	int grounds = 0;
+
+	grounds += HDSpringCrackGround(1485.6f, west, 2, lift) ? 1 : 0;
+	grounds += !HDSpringCrackGround(1549.6f, west, 2, lift) ? 1 : 0;
+	grounds += HDSpringCrackGround(1549.6f, his, 2, lift) ? 1 : 0;
+	grounds += HDSpringCrackGround(1549.6f, &south, 1, lift) ? 1 : 0;
+
+	for (int i = 0; i < 3; i++)
+		grounds += HDSpringCrackGround(low[i][1], logs[i], 2, lift) ? 1 : 0;
+
+	grounds += !HDSpringCrackGround(1549.6f, his, 0, lift) ? 1 : 0;
+
+	ok(grounds == 8, "spring crack gate: under the bottom over the level's "
+		"floor seen, in the rock or with no floor not", grounds, 8);
+
 	/* A flat floor (the fountain's at 2,560, its bottom at 2,641): the
 	 * plane is the floor, and an eye sees the crack exactly when it stands
 	 * the lift over it - every eye from 2,000 to 2,700 a unit apart. */

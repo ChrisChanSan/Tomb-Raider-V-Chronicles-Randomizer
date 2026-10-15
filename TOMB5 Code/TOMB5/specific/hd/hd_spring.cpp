@@ -106,6 +106,9 @@ namespace
 	/* The cracks, one for each spring in g_springs' order, and what the
 	 * level's build was told: the key hd_springcrack. */
 	std::vector<Crack> g_cracks;
+	/* Per crack the level's floor round it, nine floats a triangle (its
+	 * corners), for the gate of an eye under the bottom (over_ground). */
+	std::vector<std::vector<float>> g_ground;
 	int g_crack_key = 1;
 	int g_drawn_cracks = 0;
 	double g_crack_ms = -1.0;
@@ -367,6 +370,7 @@ void HDSpringClear()
 	g_springs.clear();
 	g_fed.clear();
 	g_cracks.clear();
+	g_ground.clear();
 	g_crack_key = 1;
 	g_held = 0.0;
 	g_stem[0] = 0;
@@ -1147,6 +1151,11 @@ namespace
 	 * against the four springs' floors (the rule's ANDREA2 spring lies on
 	 * a slope of 1,194 to 1,450). */
 	const float kCrackRough = 192.0f;
+	/* How far round the outline the floor is read for an eye under the
+	 * bottom (over_ground): beyond it no such eye sees the slit. A free
+	 * choice, over twice the farthest camera of the logs under a bottom
+	 * (1,585 units from the rule's ANDREA2 spring). */
+	const float kCrackReach = 4096.0f;
 
 	// A floor triangle: world corners, page places, light, page, room.
 	struct FloorTri
@@ -1421,6 +1430,34 @@ namespace
 		return best;
 	}
 
+	/* Whether an eye under crack i's bottom stands over the level's floor
+	 * at its own column (HDSpringCrackGround): the heights there of the
+	 * floor read round the crack, at most sixteen of them. */
+	bool over_ground(size_t i, const float* eye)
+	{
+		float ys[16];
+		int n = 0;
+
+		if (i >= g_ground.size())
+			return false;
+
+		const std::vector<float>& g = g_ground[i];
+
+		for (size_t t = 0; t + 9 <= g.size() && n < 16; t += 9)
+		{
+			FloorTri tri = {};
+			double w[3];
+
+			memcpy(tri.p, &g[t], sizeof(tri.p));
+
+			if (weights(tri, eye[0], eye[2], w))
+				ys[n++] = (float)(w[0] * tri.p[0][1] + w[1] * tri.p[1][1] +
+					w[2] * tri.p[2][1]);
+		}
+
+		return HDSpringCrackGround(eye[1], ys, n, kCrackLift);
+	}
+
 	/* A triangle's map of world x, z to its page, about the point cx, cz:
 	 * u = m0 + m1 (x - cx) + m2 (z - cz), v the same with m3 - m5. */
 	void page_map(const FloorTri& t, double cx, double cz, float* m)
@@ -1514,6 +1551,7 @@ void HDSpringCrackBuild(const char* trg, const std::vector<HDSpringRoom>& rooms,
 	int on)
 {
 	g_cracks.assign(g_springs.size(), Crack());
+	g_ground.assign(g_springs.size(), std::vector<float>());
 	g_crack_key = on;
 
 	std::vector<HDRenderWaterSquare> squares;
@@ -1655,6 +1693,20 @@ void HDSpringCrackBuild(const char* trg, const std::vector<HDSpringRoom>& rooms,
 		pz[c.points] = c.midZ[half];
 		py[c.points] = k.middleY;
 		k.floor = HDSpringCrackFloorFit(px, pz, py, c.points + 1);
+
+		/* The floor round the crack for an eye under its bottom: the
+		 * floor-facing triangles within kCrackReach of the outline, every
+		 * height under the sheet. */
+		const float wide[4] = { box[0] - kCrackReach, box[1] - kCrackReach,
+			box[2] + kCrackReach, box[3] + kCrackReach };
+
+		tris.clear();
+
+		if (read_floors(trg, rooms, wide, (float)s.surfaceY + 64.0f, 1.0e9f,
+			tris))
+			for (const FloorTri& q : tris)
+				for (int j = 0; j < 3; j++)
+					g_ground[i].insert(g_ground[i].end(), q.p[j], q.p[j] + 3);
 	}
 }
 
@@ -1746,12 +1798,12 @@ void HDSpringCrackNumbers(int* drawn, double* ms)
  *
  * The bottom the walls leave open is the hole's own black. Nothing when
  * the frame's depth has no stencil, the eye does not look into the slit
- * (HDSpringCrackSeen: behind the floor) or the volume
- * reaches the near plane, where the count would be cut; and only
- * while `drawn` says the room of the crack's floor is drawn this frame:
- * a ray to the crack then meets the floor or what stands in front of it,
- * never an empty place of the frame whose depth the count would meet
- * inside the volume. */
+ * (HDSpringCrackSeen: behind the floor; under the bottom, in the rock at
+ * its column, over_ground) or the volume reaches the near plane, where
+ * the count would be cut; and only while `drawn` says the room of the
+ * crack's floor is drawn this frame: a ray to the crack then meets the
+ * floor or what stands in front of it, never an empty place of the frame
+ * whose depth the count would meet inside the volume. */
 void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 {
 	HDRenderSpringFrame f;
@@ -1816,8 +1868,11 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 			!drawn(k.room)))
 			continue;
 
-		// The eye over the floor, else the slit is not seen.
-		if (!HDSpringCrackSeen(eye, k.floor, kCrackLift))
+		/* The eye over the floor, else the slit is not seen; under the
+		 * bottom over the level's own floor at its column. */
+		if (!HDSpringCrackSeen(eye, k.floor, kCrackLift) ||
+			(!HDSpringCrackBottom(eye[1], c.bottomY, kCrackLift) &&
+			!over_ground(i, eye)))
 			continue;
 
 		Draw dr;

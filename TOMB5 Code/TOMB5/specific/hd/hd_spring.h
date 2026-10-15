@@ -772,6 +772,26 @@ inline bool HDSpringCrackBottom(float eyeY, float bottomY, float lift)
 	return eyeY < bottomY - lift;
 }
 
+/* Whether an eye at world y `eyeY` (y down) under a crack's bottom stands
+ * over the level's floor at its own column, by `lift`: of the floor's
+ * heights there (`ys`, `n` of them, the floor read round the crack), the
+ * one nearest the eye lies under it. Under the bottom the plane fitted to
+ * the outline is a guess at a slope that falls away from it, and an eye
+ * the guess puts over the floor may stand in the rock, where the walls
+ * would stand over what the back of the floor lets through. No height:
+ * the eye is too far from the crack to judge, and the slit is not seen. */
+inline bool HDSpringCrackGround(float eyeY, const float* ys, int n,
+	float lift)
+{
+	int best = -1;
+
+	for (int i = 0; i < n; i++)
+		if (best < 0 || fabsf(ys[i] - eyeY) < fabsf(ys[best] - eyeY))
+			best = i;
+
+	return best >= 0 && eyeY < ys[best] - lift;
+}
+
 /* Where bubble `k` is born in the crack: on the main line between a
  * quarter and three quarters of its way, and across it at most half the
  * side's half-width there - inside the slit whatever the tear. */

@@ -162,6 +162,9 @@ struct HDVisTables
 	 * with no link to it, and openings onto a room with none. */
 	int guestsUnlinked = 0;
 	int openingsUnlinked = 0;
+	/* Openings that named the other room of a flipmap pair, named by the
+	 * pair's main room instead. */
+	int openingsTwin = 0;
 	int widePortals = 0;
 	long long samples = 0, samplesCovered = 0;
 	double ms = 0.0;

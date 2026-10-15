@@ -198,6 +198,15 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * is seen from it. */
 	const size_t n = (size_t)roomCount;
 	std::vector<unsigned char> link(n * n, 0);
+	// Per room, the room of its flipmap pair the portals lead to.
+	std::vector<int> mainOf(n, 0);
+
+	for (int r = 0; r < roomCount; r++)
+		mainOf[(size_t)r] = r;
+
+	for (int r = 0; r < roomCount; r++)
+		if (rooms[r].twin >= 0 && rooms[r].twin < roomCount)
+			mainOf[(size_t)rooms[r].twin] = r;
 
 	for (int r = 0; r < roomCount; r++)
 	{
@@ -422,6 +431,15 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				one.v[k][2] = ToShort(q[2] - (double)own.z);
 			}
 
+			/* Of a flipmap pair only the room the portals lead to is in the
+			 * world - the one whose twin names the other; it draws whichever
+			 * state the map is in. The other room stands at the same place,
+			 * and listed it would draw its state beside the one the map
+			 * shows (JOBY2's room 53 behind a bare face of room 89, its
+			 * twin: both states of the crane hall at once). An opening names
+			 * the pair by its main room. */
+			const size_t before = open[(size_t)g].size();
+
 			for (int s = 0; s < roomCount; s++)
 			{
 				if (Twins(rooms, g, s) || !InBox(rooms[s], p))
@@ -433,7 +451,19 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					continue;
 				}
 
-				one.behind = s;
+				const int at = mainOf[(size_t)s];
+				bool again = Twins(rooms, g, at);
+
+				for (size_t k = before; k < open[(size_t)g].size() && !again; k++)
+					again = open[(size_t)g][k].behind == at;
+
+				if (at != s)
+					t.openingsTwin++;
+
+				if (again)
+					continue;
+
+				one.behind = at;
 				open[(size_t)g].push_back(one);
 				found++;
 			}

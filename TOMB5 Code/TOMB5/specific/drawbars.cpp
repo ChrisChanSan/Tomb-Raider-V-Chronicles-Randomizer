@@ -25,6 +25,7 @@
 #include "winmain.h"
 #include "texture.h"
 #include "LoadSave.h"	// DrawLoadingScreen - the picture under the load bar
+#include "loadbar_math.h"	// LOADBAR_*, the fade of the row's off
 
 static GouraudBarColourSet healthBarColourSet =
 {
@@ -90,6 +91,64 @@ long loadbar_on;
 static float loadbar_steps;
 static float loadbar_pos;
 static long loadbar_maxpos;
+
+/* The loading screen of the load under way (S_LoadScreenBegin): the
+ * Loadbar style row as it stood when the load began, and with the row off
+ * the fade of the last frame to black - whether it runs, since when and
+ * over how long - and the frames drawn. */
+static long loadbar_mode;
+static long loadbar_fading;
+static double loadbar_fade_at;
+static double loadbar_fade_ms;
+static long loadbar_frames;
+
+/* The clock of the loading screen, in ms: QueryPerformanceCounter, the
+ * counter Sync() paces the frames by and the LOADLOG lines read. */
+static double LoadScreenClockMs()
+{
+	LARGE_INTEGER now, rate;
+
+	QueryPerformanceCounter(&now);
+	QueryPerformanceFrequency(&rate);
+	return rate.QuadPart ?
+		(double)now.QuadPart * 1000.0 / (double)rate.QuadPart : 0.0;
+}
+
+/* Black over the whole window at `alpha`, into the sort list: the same
+ * quad and draw type as the screen fade's (DoScreenFade), so the third
+ * state's fade looks as the engine's own fades do. */
+static void LoadFadeQuad(long alpha)
+{
+	D3DTLVERTEX v[4];
+	TEXTURESTRUCT tex;
+	const ulong c = (ulong)alpha << 24;
+
+	v[0].sx = 0;
+	v[0].sy = 0;
+	v[1].sx = float(phd_winxmax + 1);
+	v[1].sy = (float)phd_winymin;
+	v[2].sx = float(phd_winxmax + 1);
+	v[2].sy = float(phd_winymax + 1);
+	v[3].sx = (float)phd_winxmin;
+	v[3].sy = float(phd_winymax + 1);
+
+	for (int i = 0; i < 4; i++)
+	{
+		v[i].sz = 0;
+		v[i].rhw = f_moneoznear;
+		v[i].color = c;
+		v[i].specular = 0xFF000000;
+	}
+
+	tex.drawtype = 3;
+	tex.flag = 0;
+	tex.tpage = 0;
+	clipflags[0] = 0;
+	clipflags[1] = 0;
+	clipflags[2] = 0;
+	clipflags[3] = 0;
+	AddQuadSorted(v, 0, 1, 2, 3, &tex, 0);
+}
 
 static void DrawColoredRect(float x0, float y0, float x1, float y1, float z, ulong c0, ulong c1, ulong c2, ulong c3, TEXTURESTRUCT* tex)
 {
@@ -458,6 +517,31 @@ void S_DrawEnemyBar(long pos)
 		DoBar(x, y, w, h, pos, 0xA00000, 0xA0A000);
 }
 
+/* A level load's loading screen begins: `mode` is the Loadbar style row
+ * (LOADBAR_*); with LOADBAR_OFF, `fade` says whether the last frame is
+ * faded to black over `fadeMs` (0 a cut), from now on. */
+void S_LoadScreenBegin(long mode, long fade, double fadeMs)
+{
+	loadbar_mode = mode;
+	loadbar_fading = mode == LOADBAR_OFF && fade;
+	loadbar_fade_at = LoadScreenClockMs();
+	loadbar_fade_ms = fadeMs;
+	loadbar_frames = 0;
+}
+
+/* Whether the load draws a frame now: the bar in the TR5 and TR4 states,
+ * and with the row off only while the fade runs. */
+long S_LoadScreenDraws()
+{
+	return loadbar_mode != LOADBAR_OFF || loadbar_fading;
+}
+
+// The frames this load's screen has drawn, for the LOADLOG bar line.
+long S_LoadScreenFrames()
+{
+	return loadbar_frames;
+}
+
 void S_InitLoadBar(long max)
 {
 	loadbar_steps = 0;
@@ -492,7 +576,21 @@ long S_DrawLoadBar()
 	TextureStageLock();
 	DrawLoadingScreen();
 
-	if (tomb5.tr4_loadbar)
+	/* With the row off there is no bar: the frame is the last frame of the
+	 * game (the picture above, captured by S_LoadLevelFile) under black
+	 * that thickens with the time since the fade began; the frame at full
+	 * black ends the fade, and nothing is drawn after it. */
+	if (loadbar_mode == LOADBAR_OFF)
+	{
+		const long alpha = LoadFadeAlpha(LoadScreenClockMs() -
+			loadbar_fade_at, loadbar_fade_ms);
+
+		LoadFadeQuad(alpha);
+
+		if (alpha >= 255)
+			loadbar_fading = 0;
+	}
+	else if (tomb5.tr4_loadbar)
 	{
 		x = GetFixedScale(20);
 		w = phd_winwidth - (x << 1);
@@ -525,6 +623,7 @@ long S_DrawLoadBar()
 	DrawSortList();
 	TextureStageUnlock();
 	S_DumpScreenFrame();
+	loadbar_frames++;
 
 	if (loadbar_pos >= loadbar_steps)
 		return loadbar_maxpos <= loadbar_steps;

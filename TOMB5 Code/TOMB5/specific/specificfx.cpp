@@ -1269,6 +1269,15 @@ void SetFade(long start, long end)
 	FadeEnd = end;
 }
 
+/* Whether the screen fade has run to black and nothing has started another
+ * since: the last frame it drew, and its loop presented, was black. The
+ * level load asks it before its own fade-in is set (game\gameflow.cpp), so
+ * that a load without a loading screen draws nothing over a black screen. */
+long ScreenFadedToBlack()
+{
+	return DoFade == 2 && FadeEnd >= 255;
+}
+
 void DoScreenFade()
 {
 	D3DTLVERTEX v[4];

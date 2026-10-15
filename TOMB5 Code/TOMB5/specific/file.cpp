@@ -34,6 +34,7 @@
 #include "drawroom.h"
 #include "dxsound.h"
 #include "LoadSave.h"
+#include "loadbar_math.h"		// LOADBAR_OFF - the load without a screen
 #include "function_table.h"
 #include "polyinsert.h"
 #include "winmain.h"
@@ -2215,6 +2216,11 @@ static void WarmUpLevel()
 		hd_buffers, ms);
 }
 
+/* Whether the screen is black as the next level load begins, noted by
+ * game\gameflow.cpp (LoadEntryNoteBlack) before the level's own fade-in
+ * is set: the load without a loading screen then draws nothing at all. */
+long LoadEntryBlack;
+
 long S_LoadLevelFile(long num)
 {
 	static long lscreen = 0;
@@ -2226,11 +2232,33 @@ long S_LoadLevelFile(long num)
 	double loadlog_at = 0.0;
 	double loadlog_start = 0.0;
 
+	/* The Loadbar style row as the load begins. Off (LOADBAR_OFF) there is
+	 * no loading screen: no picture is read or rendered, no bar is drawn and
+	 * this load presents no frame of its own. Only where the screen still
+	 * shows the game's last frame - a level's end, a movie - is that frame
+	 * read back and faded to black while the loading thread works
+	 * (loadfade_ms; 0 one black frame); over a black screen nothing is
+	 * drawn. The level's own fade-in from black (DoLevel, DoTitle) follows
+	 * in every state. */
+	const long mode = (long)tomb5.loadbar;
+	const long shown = mode != LOADBAR_OFF;
+	const long black = LoadEntryBlack;
+	long fade = 0;
+
+	LoadEntryBlack = 0;
 	Log(__FUNCTION__);
 	LoadLogStep(&loadlog_at, 0);
 	LoadLogStep(&loadlog_start, 0);
 
-	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	if (!shown && !black)
+	{
+		fade = 1;
+
+		if (tomb5.loadfade_ms && !MonoScreenOn)
+			CaptureLoadingScreen();
+	}
+
+	if (shown && (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus)))
 	{
 		if (!MonoScreenOn)
 		{
@@ -2286,17 +2314,21 @@ long S_LoadLevelFile(long num)
 	LoadLogLevel(name);
 	loadbar_on = 0;
 	strcat(name, ".TRC");
+	S_LoadScreenBegin(mode, fade, (double)tomb5.loadfade_ms);
 
 	/* The picture is shown at once, in one frame. Every frame of the bar
 	 * draws it again under the bar (S_DrawLoadBar), so it is released only
 	 * after the bar's last frame, below. */
-	_BeginScene();
-	InitBuckets();
-	InitialiseSortList();
-	DrawLoadingScreen();
-	SortPolyList(SortCount, SortList);
-	DrawSortList();
-	S_DumpScreenFrame();
+	if (shown)
+	{
+		_BeginScene();
+		InitBuckets();
+		InitialiseSortList();
+		DrawLoadingScreen();
+		SortPolyList(SortCount, SortList);
+		DrawSortList();
+		S_DumpScreenFrame();
+	}
 
 	LoadLogStep(&loadlog_at, "screen");
 	LevelLoadingThread.active = 1;
@@ -2305,7 +2337,7 @@ long S_LoadLevelFile(long num)
 
 	while (LevelLoadingThread.active)
 	{
-		if (App.dx.Flags & DXF_HWR && loadbar_on)
+		if (App.dx.Flags & DXF_HWR && loadbar_on && S_LoadScreenDraws())
 			S_DrawLoadBar();
 
 
@@ -2372,10 +2404,10 @@ long S_LoadLevelFile(long num)
 	// the full bar (see drawbars.cpp).
 	S_FinishLoadBar();
 
-	if (App.dx.Flags & DXF_HWR)
+	if (App.dx.Flags & DXF_HWR && shown)
 		S_DrawLoadBar();
 
-	if (!tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
+	if (fade || !tomb5.tr4_loadscreens || (!num && !bDoCredits && !gfStatus))
 	{
 		if (MonoScreenOn == 2)
 			ReleaseScreen();

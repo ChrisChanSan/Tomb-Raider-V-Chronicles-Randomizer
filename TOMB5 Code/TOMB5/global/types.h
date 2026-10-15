@@ -2668,7 +2668,10 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	bool crawltilt;				//on off
 	bool PSX_skies;				//on off
 	bool tr4_loadscreens;		//on off
-	bool tr4_loadbar;			//on off
+	bool tr4_loadbar;			//on off, on for loadbar 1 only
+	ulong loadbar;				//0-> TR5, 1-> TR4, 2-> off (no
+								//loading screen): LOADBAR_*
+	ulong loadfade_ms;			//off: the last frame's fade, 0 a cut
 	ulong inv_bg_mode;			//1-> original, 2->TR4, 3-> clear
 	bool loadingtxt;			//on off
 	bool shimmer;				//on off

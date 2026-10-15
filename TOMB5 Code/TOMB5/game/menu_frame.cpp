@@ -26,6 +26,7 @@
 #include "../specific/LoadSave.h"
 #include "../specific/registry.h"
 #include "../specific/drawbars.h"
+#include "../specific/loadbar_math.h"	// LOADBAR_* - the Loadbar style row
 #include "../specific/audio.h"
 #include "../specific/dxsound.h"
 #include "../specific/function_stubs.h"	// Log, gLogEnabled - the MENULOG seam
@@ -1233,9 +1234,15 @@ static bool MenuStepTr4Loadscreens(long, long dir)
 	return 1;
 }
 
+/* Three states in the row's order: the TR5 bar, the TR4 bar, and off - no
+ * loading screen at all, the level follows the screen before it through
+ * black (file.cpp, S_LoadLevelFile). "TR4" and "TR5" stay as they are in
+ * every language; "off" is the menu's own entry. tr4_loadbar follows the
+ * state: the TR4 bar's look and the loading text ask it. */
 static const char* MenuValLoadbarStyle(long, char* buf)
 {
-	strcpy(buf, CustomText(tomb5.tr4_loadbar ? "TR4" : "TR5"));	// both stay, no German entry
+	strcpy(buf, CustomText(tomb5.loadbar == LOADBAR_OFF ? "off" :
+		tomb5.loadbar == LOADBAR_TR4 ? "TR4" : "TR5"));
 	return buf;
 }
 
@@ -1245,7 +1252,15 @@ static bool MenuStepLoadbarStyle(long, long dir)
 		return 0;
 
 	SoundEffect(SFX_MENU_SELECT, 0, SFX_ALWAYS);
-	tomb5.tr4_loadbar = !tomb5.tr4_loadbar;
+
+	if (dir > 0)
+		tomb5.loadbar = tomb5.loadbar >= LOADBAR_OFF ? LOADBAR_TR5 :
+			tomb5.loadbar + 1;
+	else
+		tomb5.loadbar = tomb5.loadbar <= LOADBAR_TR5 ? LOADBAR_OFF :
+			tomb5.loadbar - 1;
+
+	tomb5.tr4_loadbar = tomb5.loadbar == LOADBAR_TR4;
 	return 1;
 }
 

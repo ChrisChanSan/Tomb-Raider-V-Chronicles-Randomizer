@@ -30,6 +30,7 @@ void OutputSky();
 long LoadTitleLogoHD(long page);
 void SuperShowLogo();
 void SetFade(long start, long end);
+long ScreenFadedToBlack();
 void DoScreenFade();
 void DoWeather();
 void DoRain();

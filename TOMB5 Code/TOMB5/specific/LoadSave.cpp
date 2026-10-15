@@ -60,6 +60,9 @@ char MonoScreenOn;
 // a square MonoScreenPicSide texture, and is drawn with its own aspect ratio
 // instead of being stretched onto the window. See LoadScreenHD().
 static char MonoScreenHD;
+// The picture is the screen read back for a load (CaptureLoadingScreen):
+// window-sized, so ReleaseScreen gives it back as it does an HD picture.
+static char MonoScreenView;
 static long MonoScreenPicW;
 static long MonoScreenPicH;
 static long MonoScreenPicSide;
@@ -616,6 +619,49 @@ void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface)
 
 	MonoScreen.tex = tex9;
 	MonoScreenHD = 0;	// whatever came in here fills the window, as before
+	MonoScreenView = 0;
+}
+
+/* What stands on the screen, as the loading picture: the back buffer read
+ * back once into the mono picture, in colour and at full brightness
+ * (MonoScreenOn 2, as a loaded picture - RGBM_Mono leaves it as it is),
+ * the same read as the inventory's background (CreateMonoScreen). Every
+ * frame of the load then draws it again (DrawLoadingScreen) instead of
+ * relying on the back buffer, whose contents a D3DSWAPEFFECT_DISCARD swap
+ * chain does not promise after a Present. Read once, as the load begins,
+ * when that buffer still holds the frame the player sees. ReleaseScreen
+ * gives it back after the load's last frame. 1 when a picture was made;
+ * 0 leaves no picture up, as before. */
+long CaptureLoadingScreen()
+{
+	LPDIRECT3DSURFACE9 sysMem;
+	LPDIRECT3DTEXTURE9 before;
+
+	MonoScreenOn = 2;
+	before = MonoScreen.tex;
+
+	const HRESULT got = DeviceReadBack(App.dx.lpD3DDevice, &sysMem);
+
+	if (!sysMem)
+	{
+		Log("DXLOG loading picture hr=0x%08lX - no picture",
+			(unsigned long)got);
+		MonoScreenOn = 0;
+		return 0;
+	}
+
+	ConvertSurfaceToTextures(sysMem);
+	sysMem->Release();
+
+	// ConvertSurfaceToTextures leaves the texture before when it makes none.
+	if (!MonoScreen.tex || MonoScreen.tex == before)
+	{
+		MonoScreenOn = 0;
+		return 0;
+	}
+
+	MonoScreenView = 1;
+	return 1;
 }
 
 void FreeMonoScreen()
@@ -1095,12 +1141,14 @@ void ReleaseScreen()
 {
 	MonoScreenOn = 0;
 
-	// An HD picture is a 2048x2048 texture, sixteen megabytes; the original
-	// path leaves its 640x480 one standing until the next picture replaces it,
-	// which would be a lot to leave lying around here.
-	if (MonoScreenHD)
+	// An HD picture is a 2048x2048 texture, sixteen megabytes, and a screen
+	// read back is the window's size; the original path leaves its 640x480
+	// one standing until the next picture replaces it, which would be a lot
+	// to leave lying around here.
+	if (MonoScreenHD || MonoScreenView)
 	{
 		MonoScreenHD = 0;
+		MonoScreenView = 0;
 
 		if (MonoScreen.tex)
 		{

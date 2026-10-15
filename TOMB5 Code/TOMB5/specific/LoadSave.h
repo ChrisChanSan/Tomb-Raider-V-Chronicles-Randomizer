@@ -21,6 +21,7 @@ void DoOptions();
 void CreateMonoScreen();
 void RGBM_Mono(uchar* r, uchar* g, uchar* b);
 void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface);
+long CaptureLoadingScreen();
 void FreeMonoScreen();
 
 // The picture's texture onto a new device (specific/devicemove.h).

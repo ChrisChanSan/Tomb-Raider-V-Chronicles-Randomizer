@@ -99,6 +99,8 @@
 /* The level's HD key: which load of a level keeps the HD data of the one
  * before (level_key below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_levelkey.h"
+// The loading screen's rules: the row's state and the fade (load_mode).
+#include "../../../TOMB5 Code/TOMB5/specific/loadbar_math.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -11237,6 +11239,147 @@ static void load_keep()
 	free(level);
 }
 
+/* The Loadbar style row's third state (specific\loadbar_math.h and the
+ * engine's own text): the row's state out of the registry, the fade of the
+ * load without a loading screen, and the paths that state takes - no
+ * picture read, no level view rendered, no frame of the load's own but the
+ * fade's, and nothing at all over a black screen. */
+static void load_mode()
+{
+	char* file = hd_switch_text("../file.cpp");
+	char* bars = hd_switch_text("../drawbars.cpp");
+	char* save = hd_switch_text("../LoadSave.cpp");
+	char* fx = hd_switch_text("../specificfx.cpp");
+	char* flow = hd_switch_text("../../game/gameflow.cpp");
+	char* menu = hd_switch_text("../../game/menu_frame.cpp");
+	char* opts = hd_switch_text("../../tomb5/tomb5.cpp");
+	long n, a, b;
+
+	ok(file && bars && save && fx && flow && menu && opts, "load mode: the "
+		"seven files are read", !!file + !!bars + !!save + !!fx + !!flow +
+		!!menu + !!opts, 7);
+
+	// The DWORD when it holds a state; the older bool otherwise.
+	ok(LoadBarModeOf(true, 0, true) == LOADBAR_TR5,
+		"load mode: a DWORD 0 is TR5", LoadBarModeOf(true, 0, true), 0);
+	ok(LoadBarModeOf(true, 1, false) == LOADBAR_TR4,
+		"load mode: a DWORD 1 is TR4", LoadBarModeOf(true, 1, false), 1);
+	ok(LoadBarModeOf(true, 2, true) == LOADBAR_OFF,
+		"load mode: a DWORD 2 is off", LoadBarModeOf(true, 2, true), 2);
+	ok(LoadBarModeOf(true, 2, false) == LOADBAR_OFF,
+		"load mode: off whatever the bool says", LoadBarModeOf(true, 2,
+		false), 2);
+	ok(LoadBarModeOf(false, 0, true) == LOADBAR_TR4,
+		"load mode: no DWORD, tr4LB 1 sees TR4", LoadBarModeOf(false, 0,
+		true), 1);
+	ok(LoadBarModeOf(false, 2, false) == LOADBAR_TR5,
+		"load mode: no DWORD, tr4LB 0 sees TR5", LoadBarModeOf(false, 2,
+		false), 0);
+	ok(LoadBarModeOf(true, 3, true) == LOADBAR_TR4,
+		"load mode: a DWORD 3 falls back to tr4LB 1", LoadBarModeOf(true, 3,
+		true), 1);
+	ok(LoadBarModeOf(true, 0xFFFFFFFFul, false) == LOADBAR_TR5,
+		"load mode: a DWORD -1 falls back to tr4LB 0", LoadBarModeOf(true,
+		0xFFFFFFFFul, false), 0);
+
+	// The fade: 0 at its start, 255 at its end and after, a cut at 0 ms.
+	ok(LoadFadeAlpha(0.0, 150.0) == 0, "load mode: the fade starts clear",
+		LoadFadeAlpha(0.0, 150.0), 0);
+	ok(LoadFadeAlpha(75.0, 150.0) == 127, "load mode: half way is 127",
+		LoadFadeAlpha(75.0, 150.0), 127);
+	ok(LoadFadeAlpha(150.0, 150.0) == 255, "load mode: black at its end",
+		LoadFadeAlpha(150.0, 150.0), 255);
+	ok(LoadFadeAlpha(400.0, 150.0) == 255, "load mode: black after it",
+		LoadFadeAlpha(400.0, 150.0), 255);
+	ok(LoadFadeAlpha(0.0, 0.0) == 255, "load mode: 0 ms is a cut",
+		LoadFadeAlpha(0.0, 0.0), 255);
+	ok(LoadFadeAlpha(-3.0, 150.0) == 0, "load mode: before its start clear",
+		LoadFadeAlpha(-3.0, 150.0), 0);
+	{
+		long last = -1, back = 0;
+
+		for (int ms = 0; ms <= 200; ms++)
+		{
+			const long al = LoadFadeAlpha((double)ms, 150.0);
+
+			back += al < last;
+			last = al;
+		}
+
+		ok(back == 0, "load mode: the fade never lightens", back, 0);
+	}
+
+	// The registry: the DWORD read with the bool as its default, and the
+	// bool following the state; the row's three states.
+	n = hd_switch_count(opts, "LoadBarModeOf(false, 0, tomb5.tr4_loadbar));");
+	ok(n == 1, "load mode: absent, the DWORD reads as tr4LB", n, 1);
+	n = hd_switch_count(opts, "tomb5.tr4_loadbar = tomb5.loadbar == "
+		"LOADBAR_TR4;");
+	ok(n == 1, "load mode: tr4LB follows the state when read", n, 1);
+	n = hd_switch_count(opts, "sprintf(buf, \"loadbar\");");
+	ok(n == 3, "load mode: loadbar written, read and saved", n, 3);
+	n = hd_switch_count(opts, "sprintf(buf, \"loadfade_ms\");");
+	ok(n == 3, "load mode: loadfade_ms written, read and saved", n, 3);
+	n = hd_switch_count(opts, "REG_ReadLong(buf, tomb5.loadfade_ms, 150);");
+	ok(n == 1, "load mode: loadfade_ms absent reads as 150", n, 1);
+	n = hd_switch_count(menu, "tomb5.tr4_loadbar = tomb5.loadbar == "
+		"LOADBAR_TR4;");
+	ok(n == 1, "load mode: the row keeps tr4LB with the state", n, 1);
+	n = hd_switch_count(menu, "tomb5.loadbar == LOADBAR_OFF ? \"off\" :");
+	ok(n == 1, "load mode: the row names off", n, 1);
+
+	// Off: no picture read, no level view, no frame but the fade's.
+	n = hd_switch_count(file, "if (shown && (!tomb5.tr4_loadscreens ||");
+	ok(n == 1, "load mode: off reads no picture", n, 1);
+	n = hd_switch_count(flow, "tomb5.tr4_loadscreens && tomb5.loadbar != "
+		"LOADBAR_OFF");
+	ok(n == 2, "load mode: off renders no level view", n, 2);
+	a = load_keep_at(file, "S_LoadScreenBegin(mode, fade,", "if (shown)");
+	b = load_keep_at(file, "S_LoadScreenBegin(mode, fade,",
+		"DrawLoadingScreen();");
+	ok(a >= 0 && a < b, "load mode: the load's first frame only when shown",
+		a < b, 1);
+	n = hd_switch_count(file, "loadbar_on && S_LoadScreenDraws())");
+	ok(n == 1, "load mode: the thread's frames ask the state", n, 1);
+	n = hd_switch_count(file, "if (App.dx.Flags & DXF_HWR && shown)");
+	ok(n == 1, "load mode: the last frame only when shown", n, 1);
+	n = hd_switch_count(bars, "return loadbar_mode != LOADBAR_OFF || "
+		"loadbar_fading;");
+	ok(n == 1, "load mode: off draws only while the fade runs", n, 1);
+	a = load_keep_at(file, "if (!shown && !black)", "fade = 1;");
+	b = load_keep_at(file, "if (!shown && !black)", "CaptureLoadingScreen();");
+	ok(a >= 0 && a < b, "load mode: the fade only over a frame not black",
+		a < b, 1);
+	n = hd_switch_count(bars,
+		"if (alpha >= 255)\r\n\t\t\tloadbar_fading = 0;") +
+		hd_switch_count(bars, "if (alpha >= 255)\n\t\t\tloadbar_fading = 0;");
+	ok(n == 1, "load mode: the black frame ends the fade", n, 1);
+
+	// Black: the fade ran to black, no movie after it, noted before the
+	// level's fade-in resets the fade, at both of the load's entries.
+	n = hd_switch_count(fx, "return DoFade == 2 && FadeEnd >= 255;");
+	ok(n == 1, "load mode: black is a fade run to black", n, 1);
+	n = hd_switch_count(flow, "LoadEntryNoteBlack();\r\n\tSetFade(255, 0);") +
+		hd_switch_count(flow, "LoadEntryNoteBlack();\n\tSetFade(255, 0);");
+	ok(n == 2, "load mode: noted before both fade-ins", n, 2);
+	n = hd_switch_count(flow, "fmv_on_screen = 1;");
+	ok(n == 3, "load mode: each movie before a load counts", n, 3);
+
+	// The picture read back is released with the load's last frame.
+	n = hd_switch_count(save, "if (MonoScreenHD || MonoScreenView)");
+	ok(n == 1, "load mode: a screen read back is given back", n, 1);
+	n = hd_switch_count(file, "if (fade || !tomb5.tr4_loadscreens ||");
+	ok(n == 1, "load mode: the fade's picture goes after the load", n, 1);
+
+	free(file);
+	free(bars);
+	free(save);
+	free(fx);
+	free(flow);
+	free(menu);
+	free(opts);
+}
+
 /* The page class of the HD room renderer (specific\hd\hd_pageclass.h): which
  * alpha-pass pages are drawn as a clear floor, out of the smallest and the
  * largest alpha of the page's top mip. The pairs are the measured ones where
@@ -21609,6 +21752,7 @@ int main()
 	hd_switch_wiring();
 	hd_build_gate();
 	load_keep();
+	load_mode();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

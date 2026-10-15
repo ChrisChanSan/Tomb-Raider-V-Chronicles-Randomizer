@@ -738,11 +738,6 @@ long S_LoadScreenDraws()
 // game\text.cpp: the accents PrintString composes over a letter.
 extern char AccentTable[46][2];
 
-/* The slot whose name RenderLoadPic drew over the TR4 view, 0 for none:
- * the view is read back as the loading picture with the name in it, and
- * S_LoadLevelFile then draws it no second time. */
-long LoadViewNamed;
-
 /* The name of the level in `slot` at the top centre of the frame being
  * drawn, in the game's font (PrintString: the HD atlas when the HD path
  * draws), its highest ink kLoadNameMargin under the top edge at this

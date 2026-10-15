@@ -1290,11 +1290,12 @@ void DoScreenFade()
 	 *
 	 * Nine steps from SetFade's start value to its end - FadeCnt counts them
 	 * and DoFade goes to 2 on the ninth - and this is called once per drawn
-	 * frame from S_OutputPolyList. Three places wait on that 2 and none of
-	 * them counts frames itself: DoLevel's death path (game\gameflow.cpp),
-	 * the level change beside it, and RenderLoadPic's `do { ... } while
-	 * (DoFade != 2)` (specific\output.cpp). At sixty, unguarded, the death
-	 * fade and the level fade would take half as long in wall-clock time.
+	 * frame from S_OutputPolyList. The places that wait on that 2 count no
+	 * frames themselves: DoLevel's death path (game\gameflow.cpp), the
+	 * level change beside it, the title menu's choice (TitleOptions there)
+	 * and the loops of the load and pause menus (S_LoadSave, S_PauseMenu in
+	 * specific\LoadSave.cpp). At sixty, unguarded, the death fade and the
+	 * level fade would take half as long in wall-clock time.
 	 *
 	 * The in-between frame draws the same grey - `a` is read before the
 	 * step, so it is what the frame before it drew - and the tile below is
@@ -1302,9 +1303,9 @@ void DoScreenFade()
 	 * walked value has overshot the end, and without the clamp below the
 	 * in-between frames would draw that overshoot.
 	 *
-	 * RenderLoadPic's loop is also the reason the tween latch has to be put
-	 * down by a thirty hertz present: it is the one loop in the build that
-	 * cannot end until this counter moves. See InterpNoteClassicPresent. */
+	 * The menus' loops are also the reason the tween latch has to be put
+	 * down by a thirty hertz present: once their fade is set they cannot
+	 * end until this counter moves. See InterpNoteClassicPresent. */
 	if (!InterpIsTweenFrame())
 	{
 		FadeVal += FadeStep;

@@ -2623,17 +2623,6 @@ struct COLOR_BIT_MASKS
 	ulong dwRGBAlphaBitOffset;
 };
 
-struct TR4LS
-{
-	long px;
-	long py;
-	long pz;
-	long tx;
-	long ty;
-	long tz;
-	uchar rn;
-};
-
 struct STARS
 {
 	FVECTOR pos;
@@ -2667,7 +2656,6 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	ulong bar_mode;				//1-> original, 2-> TR4, 3-> PSX
 	bool crawltilt;				//on off
 	bool PSX_skies;				//on off
-	bool tr4_loadscreens;		//on off
 	bool tr4_loadbar;			//on off, on for loadbar 1 only
 	ulong loadbar;				//0-> TR5, 1-> TR4, 2-> off (no
 								//loading screen): LOADBAR_*

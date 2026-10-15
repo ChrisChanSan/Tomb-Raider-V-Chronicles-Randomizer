@@ -658,7 +658,7 @@ right). The seven tabs:
 | Audio | Music volume, SFX volume, Sound quality, Language | 80 / 90 / Medium / automatic |
 | Controls | *Key bindings*, *View*, *Modes*, Control type, Action, Control layout, Camera speed, Dead zone, Mouse sensitivity, Invert mouse, Targeting, Ammotype hotkeys | see below |
 | Graphics | *Display*, HD textures, Body physics, HD water, Fog, Distance fog, Shimmer, Mono screen style, Shadow mode, PSX skies, Static lighting, UW Effect, Look transparency, Footprints — fourteen rows on two pages of seven, turned with the arrows at the bottom | see **tomb5 options**; Body physics off; HD water on; Shadow mode *Projected* (offered only while HD is on, see **The projected shadow**) |
-| HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, TR4 loadscreens, Loadbar style, Loading text | see **tomb5 options** |
+| HUD | Bar mode, Bar positions, Enemy bars, Ammo counter, Gameover menu, Loadbar style, Loading text | see **tomb5 options** |
 | tomb5 options | Cutscene skipper, Cheats, Level Select, Fix climb up delay, Flexible crawling, Crawl Tilting | see below |
 | Special Features | the bonus gallery (title screen only) | all locked |
 | Credits | who this is built on | — |
@@ -693,7 +693,7 @@ crawling* (on), *Crawl Tilting* (on).
 
 The other settings the original never had — *Footprints*, *Shadow mode*,
 *Fog*, *HD textures*, *Body physics*, *HD water*, *Bar mode*, *Bar positions*,
-*Enemy bars*, *Ammo counter*, *Gameover menu*, *PSX skies*, *TR4 loadscreens*,
+*Enemy bars*, *Ammo counter*, *Gameover menu*, *PSX skies*,
 *Loadbar style*, *Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*,
 *Ammotype hotkeys*, *Look transparency*, *Static lighting*, *UW Effect* — sit on
 the tab their subject belongs to. *Graphics* holds the picture rows (plus
@@ -773,18 +773,15 @@ chords** above for binding one of them to a pad chord.
   where no key would have drawn it.
 - **Level Select** adds a fifth row to the title screen that jumps straight to
   any level. It is a development shortcut, hidden by default.
-- **TR4 loadscreens** shows, while a level loads, the level's own view as the
-  loading picture - a fixed camera per level, faded in, as Tomb Raider 4 did -
-  instead of the level's picture (the original one or your HD one out of
-  `screens\HD`); the title's own loads always show their picture.
 - **Loadbar style** is the bar's look, *TR5* (short and thin) or *TR4* (wide),
-  or *off*: a short load has no loading screen, no picture, no bar, no text;
-  the level follows the screen before it through black. Short is a savegame
-  loaded inside the level being played, whose HD art is kept - and every
-  load when no HD art is built (`hd_build` 0, no installation found). A load
-  that builds the HD art - another level, the title, the first load - takes
-  seconds, and *off* shows its loading screen as *TR5* does: the level's
-  picture (the HD one with HD textures on, also with *TR4 loadscreens* on)
+  under the level's picture - the original one, or your HD one out of
+  `screens\HD` with HD textures on -, or *off*: a short load has no loading
+  screen, no picture, no bar, no text; the level follows the screen before it
+  through black. Short is a savegame loaded inside the level being played,
+  whose HD art is kept - and every load when no HD art is built (`hd_build`
+  0, no installation found). A load that builds the HD art - another level,
+  the title, the first load - takes seconds, and *off* shows its loading
+  screen as *TR5* does: the level's picture (the HD one with HD textures on)
   and the TR5 bar. With a bar, the loading screen stands at least half a
   second (`loadbar_min_ms`) and the bar runs through to its end in that time;
   with *off*, on a short load a frame that was still on screen - a level's
@@ -792,7 +789,7 @@ chords** above for binding one of them to a pad chord.
 - **Loading text** (on by default) writes the name of the level being loaded
   at the top centre of every loading screen that is shown, in the game's font
   (the HD font with HD textures on), in every *Loadbar style* and over the
-  level's picture, your HD picture or the *TR4 loadscreens* view alike. The
+  level's picture and your HD picture alike. The
   title's loads show no name, and a load without a screen (*off*, a short
   load) shows no text either. The name stands the bar's own margin under the
   top edge, so it stays inside the screen at every size. The script's old
@@ -1297,13 +1294,10 @@ stretched picture.
 
 The picture is shown at once and drawn again under the loading bar in every
 frame of the bar, the original pictures as well, so it stands under the bar
-whatever the graphics driver does with its buffers. With *TR4 loadscreens* on
-(the default) a level other than the title shows no picture file while it
-loads: the level's view that the game has just drawn is taken once off the
-screen and drawn under the bar in every frame the same way. With *Loadbar
-style* off a short load reads no picture at all; a load that builds the HD
-art shows the level's picture, with *TR4 loadscreens* on as well, since off
-draws no view. With the HD build on (an
+whatever the graphics driver does with its buffers. Every load that shows a
+loading screen shows its level's picture. With *Loadbar style* off a short load
+reads no picture at all; a load that builds the HD art shows the level's
+picture. With the HD build on (an
 installation found, `hd_build` on), a savegame loaded inside the level shows its
 HD picture without decoding it again: the last decoded picture (about 8 MB) is
 kept until another one is shown, and a picture file changed on disk is read
@@ -4607,8 +4601,8 @@ the work ends:
   and is in none of them), `life` and `redress`;
 - the main thread: `screen` (the load picture: its read and decode - or the
   line `HD screen: <path> kept` when a savegame loaded inside the level found it
-  decoded - or, with *TR4 loadscreens*, the level's view taken off the screen,
-  and one frame of it; with *Loadbar style* off and a short load only the last
+  decoded -, and one frame of it, taken off the screen again where the level's
+  name is drawn on it; with *Loadbar style* off and a short load only the last
   frame taken off the screen for its fade, or nothing - and the stamp of the
   coming level's key, which decides it), `thread` (the wait for the loading
   thread, while the picture and the bar are drawn), `ainit`, `hd_build`,

@@ -115,8 +115,8 @@ void InterpLogEyeFix(unsigned int frame, short walkRoom, long rooms, long outsid
  * tick is never a tween frame, so the poison ramp the tick's own camera
  * steps (phd_GenerateW2V) steps once per tick at every rate. S_DumpScreen
  * clears it on every 30 Hz present (InterpNoteClassicPresent), so a modal
- * loop entered after a tween frame does not inherit `true` and
- * RenderLoadPic's `while (DoFade != 2)` ends. Always false at fps_mode 0. */
+ * loop entered after a tween frame does not inherit `true` and the load and
+ * pause menus' wait for DoFade == 2 ends. Always false at fps_mode 0. */
 bool InterpIsTweenFrame();
 
 /* The latch of the frame drawn last, which a tick does not lower. For the

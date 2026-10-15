@@ -20,7 +20,7 @@
  * includes this file and runs the rules as the engine runs them
  * (tomb5\tomb5.cpp reads the row with them, specific\drawbars.cpp draws
  * with them, specific\file.cpp and specific\hd\hd_level.cpp feed the
- * work, specific\output.cpp names the coming level over the TR4 view). */
+ * work, and specific\file.cpp names the level being loaded). */
 
 #include <math.h>	// floor - the brake's clock in whole ticks
 
@@ -200,43 +200,11 @@ inline long LoadFadeAlpha(double elapsed, double fadeMs)
 
 /* The level's name on a loading screen (the Loading text row). `slot` is
  * the gameflow slot the load reads: 0 is the title's (DoGameflow), which
- * is no level and shows no name, -1 no load at all. A screen not shown
- * (the row off, a short load) draws nothing, the name neither. `baked`:
- * the picture under the frame already carries the name (the TR4 view,
- * read back with it), so that it is never drawn twice. */
-inline long LoadNameDrawn(long row, long shown, long slot, long baked)
+ * is no level and shows no name, and nothing under it is a level. A screen
+ * not shown (the row off, a short load) draws nothing, the name neither. */
+inline long LoadNameDrawn(long row, long shown, long slot)
 {
-	return row && shown && slot > 0 && !baked;
-}
-
-/* The slot DoGameflow (game\gameflow.cpp) loads next, out of what it reads
- * when DoTitle or DoLevel has returned: RenderLoadPic draws the view at
- * their end, before gfCurrentLevel is set. A save (status 2) is its own
- * level; after the title, 3 is the level chosen and anything else stays
- * where it is; after a level, 1 is the title (slot 1 when there is none),
- * 3 the next level, the title past the last one, on a demo disc or with
- * two slots, and the title after the last campaign slot (DoLevel turns
- * that 3 into 1 for the credits); 4 ends the game. */
-inline long LoadNextSlot(long fromTitle, long status, long current,
-	long lastSlot, long saveLevel, long complete, long titleOn,
-	long titleOnly, long levels)
-{
-	if (status == 4)
-		return -1;
-
-	if (status == 2)
-		return saveLevel;
-
-	if (fromTitle)
-		return status == 3 ? complete : current;
-
-	if (status == 1 || (status == 3 && current == lastSlot))
-		return titleOn ? 0 : 1;
-
-	if (status == 3)
-		return titleOnly || complete > levels ? 0 : complete;
-
-	return current;
+	return row && shown && slot > 0;
 }
 
 /* The name's font style: the one the title's level list draws a level's

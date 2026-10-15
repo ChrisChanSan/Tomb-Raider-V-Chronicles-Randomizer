@@ -17099,10 +17099,136 @@ name` - its name would then stand in the picture read back. One such case is kno
 by reading: a level completed into a slot marked `GF_NOLEVEL`, which `DoGameflow`
 passes over to the slot after it; whether the shipped script has one was not checked.
 The row keeps its name *Loading text*; whether it should read *Level name* is his
-call.
+call. His answers the same night: the look stays as built, style 2 and the margin
+`GetFixedScale(20)` - "The look is good." ("Look sieht gut aus."); the row keeps its
+name - "Loading text fits; in case we add something later it is kept more general."
+("Loading text passt, falls wir noch mal was hinzufuegen wollen, ist es allgemeiner
+gehalten."); the TR4 view under the name, `LoadNextSlot` and the `LOADLOG name` line
+went with round 4.
 
 **Commits.** `5206c07` (the comments on the screen's state), `2947690` (the name);
 this record follows them.
+
+#### Round 4: the TR4 view dropped
+2026-10-16
+
+**What.** The *TR4 loadscreens* row is gone from the *HUD* page, with its setting
+`tomb5.tr4_loadscreens` and its registry bool `tr4LS`, which is neither read nor written
+any more (an old value stays in the registry, unread and harmless). Every loading screen
+that is shown is the level's picture - the HD one out of `screens\HD` with *HD textures*
+on, else the original - with the level's name drawn into its first frame and read back
+once, as round 3 built it: what the row off showed before. *Loadbar style* and *Loading
+text* move up one on the page and keep their rules; the loads' classes and the brake are
+untouched. A change of the classic path too, at `hd_build` 0 as well: the loads' frames
+change, no room picture does.
+
+**Why.** Round 3 asked him three things. On the look (the title list's style 2, the
+margin `GetFixedScale(20)`): "The look is good." ("Look sieht gut aus.") On the row's
+name: "Loading text fits; in case we add something later it is kept more general."
+("Loading text passt, falls wir noch mal was hinzufuegen wollen, ist es allgemeiner
+gehalten.") On the TR4 view, which showed the level being left under the name of the
+level being loaded, he asked back: "Are the TR4 loading pictures still good for
+anything? Otherwise we can drop the switch." ("Sind die TR4-Ladebilder eigentlich noch
+zu was gut? Sonst koennen wir den Switch droppen.") The facts he was given: the view is
+this port's inheritance, through the TOMB5 project it starts from, of Tomb Raider 4's PC
+loading screens - one fixed camera per level, drawn from the level being left -, while
+Tomb Raider 5 itself loads over its pictures, and only for the view did round 3 need a
+mirror of `DoGameflow`'s switch and a mark of its own. The recommendation was to drop the
+row and the view, and he ordered: "Yes, order the round, away with it." ("Ja, bestell
+die Runde, weg damit.") Project decision of 2026-10-15.
+
+**How.** *D - every use listed first*, by `git grep` at `1c68828` for `tr4_loadscreens`,
+`tr4LS`, `RenderLoadPic`, `GetLoadScreenCam`, `tr4_load_screens`, `TR4LS`, `load_cam`,
+`load_target`, `load_roomnum`, `tr4_view`, `LoadNextSlot`, `LoadViewNamed`, `baked`, the
+`LOADLOG` line `name view=` and the row's label; what went, file by file:
+
+| File | What went |
+|---|---|
+| `global/types.h` | `struct TR4LS` (a row of the camera table) and `tomb5_options::tr4_loadscreens` (the options are not stored by their layout anywhere) |
+| `tomb5/tomb5.cpp` | `tr4LS`: the default written on a first start, the read, the write |
+| `game/menu_frame.cpp` | the *HUD* row, `MenuValTr4Loadscreens`, `MenuStepTr4Loadscreens` |
+| `game/gameflow.cpp` | `RenderLoadPic(0)` at the end of `DoTitle` and of `DoLevel`; the row's label in the menu's five-language table |
+| `specific/output.cpp`, `output.h` | `RenderLoadPic` (the camera and Lara put on the table's camera, `KillActiveBaddies`, its fade loop of nine steps and its last frame, the name in each), `GetLoadScreenCam`, `tr4_load_screens[15]`, `load_cam`, `load_target`, `load_roomnum`, and the three includes round 3 added for it |
+| `specific/file.cpp` | `tr4_view`, so that every shown load reads its picture (`if (shown)`); `baked`, the `LOADLOG` line `name view= level=`, `LoadViewNamed = 0`; the variable `view` and the release's condition, which was always true without the view: the picture is given back after the last frame whenever one is up (`MonoScreenOn` 2) |
+| `specific/drawbars.cpp`, `drawbars.h` | `LoadViewNamed` |
+| `specific/loadbar_math.h` | `LoadNextSlot`; the argument `baked` of `LoadNameDrawn` |
+| `specific/hdscreen.cpp` | a comment: with the view on, only the title's picture was read |
+
+Four comments named the view's fade loop as the loop that waits on `DoScreenFade`
+(`game/interpolate.cpp`, `interpolate.h`, `specific/specificfx.cpp`, `InterpTest.cpp`);
+they name the loops that still wait on it: the load and pause menus' (`S_LoadSave`,
+`S_PauseMenu`), which present at 30 Hz and, once their fade is set, leave only on `DoFade
+== 2`, and `TitleOptions`. The code they explain - the tween latch put down by a 30 Hz
+present - stays as it is.
+
+*What stayed and why.* Three places read a frame back (`CaptureLoadingScreen`). The fade
+of an off short load over a frame not black (round 1): kept. The first frame with the
+level's name (`S_LoadScreenKeepName`, round 3), the only way the name stands under bar
+frames that cannot print: kept. And `shown && !MonoScreenOn` before the first frame,
+which read the view and, besides it, the screen where no picture could be read
+(`LoadScreen` finds no `SCREENS.STR` or makes no surface): kept for that case alone, and
+its comment says so. The credits have no read back of their own: the load into them (the
+last slot's end turns `gfStatus` 3 into 1 with `bDoCredits`, then `DoTitle` loads the
+title) read no picture with the view on and showed the view of the level left; it reads
+the title's picture now, as with the row off, without a name (slot 0). Round 1's table
+row "the credits' end ... that frame read back" was that view. `MonoScreenView`
+(`LoadSave.cpp`) marks any picture read back, not the view, and stays. The engine after
+the drop is the row off of before, line for line: `tr4_view` 0, no `RenderLoadPic`,
+`LoadViewNamed` 0 and so nothing `baked`, the release always taken. `RenderLoadPic`'s side
+effects (`KillActiveBaddies`, `BinocularRange` 0, `InitialisePickUpDisplay`,
+`FadeScreenHeight` 0, Lara and the camera moved) never ran with the row off or with
+*Loadbar style* off either; the load that follows sets the level up (`DoTitle` and
+`DoLevel` call `InitialisePickUpDisplay` themselves). `TOMB5 Code/USING.md` keeps its
+section on the row: it is the TOMB5 project's guide as it came, unchanged since the
+baseline and already silent on *off* and on the name.
+
+*The frames now, by reading `S_LoadLevelFile`.* The title: on the first start the logo
+picture (the HD logo with *HD textures* on), afterwards the three title pictures in turn,
+no name (slot 0); before, with the row on, a title load from a level showed the view of
+the level left. A level - a new game, a level's end, a game loaded from another level:
+the level's picture with its name in the first frame, read back and drawn under every
+bar frame; before, the view of the level left with the coming level's name. A savegame
+loaded inside its level, with a bar: the level's picture (the HD one kept decoded, #203
+round 4) with its name; before, the level's view from its fixed camera. With *Loadbar
+style* off it shows no screen, as before. The credits: the title's picture, as above.
+
+**Measured.** With the row on (its default) a load began with the view's ten frames -
+nine fade steps and the last - at the 30 Hz present, about 0.3 s (round 1's table), and
+the read back of the last, about 11 ms at 2560 x 1440. Both are gone; the level's picture
+is read in their place: an HD picture decoded on a fresh load (61 and 132 ms in the two
+loads of round 2), kept decoded on a save load (its texture made again, 7 to 11 ms). The
+picture with the name is read back as round 3 measured it. A save load with a bar still
+ends with the brake, 500 ms after its first frame.
+
+**Checked.** ModernTest 15,477 -> 15,454: `load_mode` 125 -> 102. Out, 24 checks: the
+eleven cases of `LoadNextSlot` and the five `DoGameflow` lines it mirrored (the function
+went with `RenderLoadPic`); the view before the credits' turn in `DoLevel`; the four lines
+of `RenderLoadPic` (the slot named, the name in every fade frame and in the last, the
+view's mark); `baked` never over a view that has it, and the mark taken once; an off load
+shown reading its picture where the view stood (every shown load reads it now). Changed,
+the count kept: `LoadNameDrawn` swept over twelve cases instead of twenty-four, the name
+drawn in one place instead of three, the first frame with it read back, the picture read
+under `shown` alone, no load rendering a level view (the function's name in none of
+`gameflow.cpp`, `file.cpp`, `drawbars.cpp`), the release after the last frame without a
+condition, the screen read back before the first frame only after the picture's read and
+only where none came. In, one: the row and its key gone (`tr4LS` and the setting in none
+of `tomb5.cpp`, `menu_frame.cpp`, `gameflow.cpp`, `file.cpp`). Those two absence checks
+spell the names in two literals, so that a search of the engine, the tools, the manual
+and the README for the dropped names finds none: 0 hits outside this record. MenuTest
+holds no expectation of the *HUD* rows; the page counts its rows itself (`MENU_ROWS`).
+No tool compiles a file this round changed except through `types.h`; with the tools built
+from this round's last commit the six classic views `-classicroom N -classiconly` 6 of 6
+identical to `8691e82`'s tool and `1c688288`'s (`git archive`); the fifteen parity
+cameras 15 of 15 and the six views drawn HD 6 of 6 identical to `1c688288`'s tool; the
+build fingerprints of the fifteen levels at `hd_air` 1 and 2, 30 of 30. MenuTest 44,272,
+InterpTest 729, LipsTest 270 and 243, 0 failed; the engine and the eight tools build.
+
+**Left.** His next play test: every shown loading screen with its picture and its name;
+a title load from a level with the title's picture; the load into the credits with the
+title's picture. The screenshot `docs/menu-hud.jpg` still shows the row; a new one is
+his to take.
+
+**Commits.** `c2fb63b` (the drop); this record follows it.
 
 ## 2.5 Sixty frames a second
 
@@ -22106,4 +22232,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |
-| #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name |
+| #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name; Round 4: the TR4 view dropped |

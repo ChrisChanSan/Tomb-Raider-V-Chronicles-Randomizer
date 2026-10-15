@@ -174,9 +174,7 @@ ulong* HDScreenRead(const char* name, long maxSide, long* width, long* height)
  * The pixels are not given back with the HD data: S_LoadLevelFile reads the
  * picture before LoadLevel's FreeLevel, so a release there would drop the
  * picture of the level being loaded, and its first save load would read it
- * again. They go when another picture is read, and with the process. With
- * tr4_loadscreens on only the title's loads show a picture, so the title's
- * stays kept through the levels. */
+ * again. They go when another picture is read, and with the process. */
 struct HDScreenKeep
 {
 	char name[48];

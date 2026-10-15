@@ -11191,6 +11191,41 @@ static void load_keep()
 	ok(a >= 0 && a < b, "load keep: the picture goes after the last frame",
 		a < b, 1);
 
+	// Stage 0 between the two threads: each loading-thread bind and each
+	// bar frame's binds and draws under the one lock (texture.cpp).
+	n = hd_switch_count(tex, "TextureStageLock();") +
+		hd_switch_count(tex, "TextureStageUnlock();");
+	ok(n == 4, "load keep: FreeTextures' two binds are locked", n, 4);
+	n = hd_switch_count(file, "TextureStageLock();") +
+		hd_switch_count(file, "TextureStageUnlock();");
+	ok(n == 4, "load keep: LoadTextures' two binds are locked", n, 4);
+	{
+		const char* ot = "Textures[nTex].bump = 0;\r\n\t\tTextureStageLock";
+		const char* fr = "long S_DrawLoadBar()";
+		long s[5];
+
+		if (load_keep_at(file, ot, "TextureStageLock();") < 0)
+			ot = "Textures[nTex].bump = 0;\n\t\tTextureStageLock";
+
+		s[0] = load_keep_at(file, ot, "TextureStageLock();");
+		s[1] = load_keep_at(file, ot, "SetTexture(0, tSurf);");
+		s[2] = load_keep_at(file, ot, "TextureStageUnlock();");
+		n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2];
+		ok(n == 1, "load keep: the page loop binds under the lock", n, 1);
+
+		s[0] = load_keep_at(bars, fr, "TextureStageLock();");
+		s[1] = load_keep_at(bars, fr, "DrawLoadingScreen();");
+		s[2] = load_keep_at(bars, fr, "DrawSortList();");
+		s[3] = load_keep_at(bars, fr, "TextureStageUnlock();");
+		s[4] = load_keep_at(bars, fr, "S_DumpScreenFrame();");
+		n = s[0] >= 0 && s[0] < s[1] && s[1] < s[2] && s[2] < s[3] &&
+			s[3] < s[4];
+		ok(n == 1, "load keep: the bar frame draws under the lock, presents "
+			"outside it", n, 1);
+	}
+	n = hd_switch_count(file, "if (!level_fp && g_pages_kept)");
+	ok(n == 1, "load keep: a failed open frees the kept pages", n, 1);
+
 	free(file);
 	free(tex);
 	free(save);

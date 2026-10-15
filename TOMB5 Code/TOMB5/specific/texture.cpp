@@ -153,6 +153,33 @@ void FreeTextures()
 	}
 }
 
+/* FreeTextures for a load that keeps the level's page blocks (file.cpp,
+ * TexturePagesKeep): the entries from `first` up to nTextures go - the misc
+ * pages, which LoadTextures makes on every load - and the pages below stay.
+ * Entry 0 is never a page. */
+void FreeTexturesFrom(long first)
+{
+	TEXTURE* tex;
+
+	Log(__FUNCTION__);
+
+	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
+
+	for (long i = first; i < nTextures; i++)
+	{
+		tex = &Textures[i];
+
+		if (tex->tex)
+		{
+			Log("Released %s @ %x - RefCnt = %d", "Texture", tex->tex,
+				tex->tex->Release());
+			tex->tex = 0;
+		}
+		else
+			Log("%s Attempt To Release NULL Ptr", "Texture");
+	}
+}
+
 /* After DXCreate made a new device in place of an old one (Alt+Enter, a
  * resolution change): every page of Textures[] and the mono picture are made
  * again on the new device (specific/devicemove.h). Without it the first

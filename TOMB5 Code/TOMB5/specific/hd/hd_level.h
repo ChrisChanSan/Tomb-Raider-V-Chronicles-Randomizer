@@ -131,6 +131,12 @@ void HDLevelRedressRefresh(const char* why);
 int HDLevelRedressCount();
 void HDLevelUnload();
 
+// Whether HDLevelUnload keeps the HD data for the level LoadLevel has just
+// named: the same keys and the same comparison, asked before FreeLevel, so
+// that LoadLevel can keep the level's classic texture pages beside them
+// (specific\file.cpp, TexturePagesKeep). False with the build gate off.
+bool HDLevelKeepsNext();
+
 // The Direct3D device is about to be released or reset (a resolution change,
 // Alt+Enter, a lost device). Every HD object lives on THAT device, so all of
 // it goes now; HDLevelDeviceRecreated builds it again on the new one.

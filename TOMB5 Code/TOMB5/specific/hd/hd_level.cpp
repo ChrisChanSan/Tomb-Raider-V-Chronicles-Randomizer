@@ -5570,6 +5570,14 @@ void HDLevelKeyNext(const char* wadName)
 	});
 }
 
+/* HDLevelUnload's decision, asked before it from the same keys: nothing
+ * between LoadLevel's HDLevelKeyNext and FreeLevel's HDLevelUnload changes
+ * them, so both give the same answer. */
+bool HDLevelKeepsNext()
+{
+	return !HDLevelKeepRefused(&g_key_built, &g_key_next, g_redress_count);
+}
+
 void HDLevelLoad(const char* wadName)
 {
 	static unsigned char loaded[NUMBER_OBJECTS];

@@ -486,7 +486,10 @@ long S_DrawLoadBar()
 	 * the back buffer between frames, but a swap chain with
 	 * D3DSWAPEFFECT_DISCARD promises nothing of its contents after a
 	 * Present, so the picture is drawn again rather than expected to be
-	 * there. Nothing when no picture is up (MonoScreenOn 0). */
+	 * there. Nothing when no picture is up (MonoScreenOn 0).
+	 * The loading thread binds stage 0 meanwhile: the picture's and the bar's
+	 * binds and draws are held together up to DrawSortList (texture.cpp). */
+	TextureStageLock();
 	DrawLoadingScreen();
 
 	if (tomb5.tr4_loadbar)
@@ -520,6 +523,7 @@ long S_DrawLoadBar()
 
 	SortPolyList(SortCount, SortList);
 	DrawSortList();
+	TextureStageUnlock();
 	S_DumpScreenFrame();
 
 	if (loadbar_pos >= loadbar_steps)

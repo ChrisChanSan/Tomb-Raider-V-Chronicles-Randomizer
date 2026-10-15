@@ -546,7 +546,11 @@ static long LoadTexturePagesKept(long RTPages, long OTPages, long BTPages)
 		S_LoadBar();
 
 	if (OTPages)
+	{
+		TextureStageLock();	// under the bar's frames (texture.cpp)
 		App.dx.lpD3DDevice->SetTexture(0, Textures[RTPages + OTPages].tex);
+		TextureStageUnlock();
+	}
 
 	nTextures = g_pages_kept;
 	Log("LoadTextures: %d pages kept (RTPages %d OTPages %d BTPages %d)",
@@ -714,7 +718,9 @@ static void LoadTexturePages(long RTPages, long OTPages, long BTPages,
 		Textures[nTex].width = App.TextureSize;
 		Textures[nTex].height = App.TextureSize;
 		Textures[nTex].bump = 0;
+		TextureStageLock();	// under the bar's frames (texture.cpp)
 		App.dx.lpD3DDevice->SetTexture(0, tSurf);
+		TextureStageUnlock();
 		S_LoadBar();
 	}
 

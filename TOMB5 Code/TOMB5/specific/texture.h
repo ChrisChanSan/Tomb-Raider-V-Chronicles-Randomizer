@@ -18,6 +18,8 @@ LPDIRECT3DTEXTURE9 CreateTexturePage(long w, long h, long MipMapCount, long* pSr
 void FreeTextures();
 void FreeTexturesFrom(long first);
 void MoveTexturesToDevice();
+void TextureStageLock();
+void TextureStageUnlock();
 
 extern TEXTURE Textures[256];
 extern long nTextures;

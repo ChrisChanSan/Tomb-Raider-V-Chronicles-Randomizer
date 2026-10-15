@@ -28,6 +28,33 @@
 TEXTURE Textures[256];
 long nTextures;
 
+/* Texture stage 0 between the loading thread and the frames of the load bar.
+ * Direct3D keeps one stage 0 per device, not per thread, and the device's own
+ * lock (D3DCREATE_MULTITHREADED) covers one call, not a bind and the draws
+ * after it. While a level loads, the main thread draws the loading picture
+ * and the bar (S_DrawLoadBar) and the loading thread binds pages (FreeLevel,
+ * LoadTextures). A bind landing between the picture's bind and its draws
+ * shows the picture as a level page or untextured for a frame. So the main
+ * thread holds this lock from the frame's first bind to its last draw, and
+ * the loading thread holds it around each of its binds. Nobody else waits on
+ * it: outside a load one thread draws. */
+static struct TextureStageLockCS
+{
+	CRITICAL_SECTION cs;
+
+	TextureStageLockCS() { InitializeCriticalSection(&cs); }
+} g_stage_lock;
+
+void TextureStageLock()
+{
+	EnterCriticalSection(&g_stage_lock.cs);
+}
+
+void TextureStageUnlock()
+{
+	LeaveCriticalSection(&g_stage_lock.cs);
+}
+
 // Destination is always a plain 32-bit D3DFMT_A8R8G8B8 texture now (the old per-adapter
 // enumerated pixel format - 5551, 8888, etc. - no longer varies), so the only path that
 // actually runs in practice is the 32-bit passthrough (format==1, see LoadTextures() in
@@ -137,7 +164,9 @@ void FreeTextures()
 
 	Log(__FUNCTION__);
 
+	TextureStageLock();	// on the loading thread under the bar's frames
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
+	TextureStageUnlock();
 
 	for (int i = 0; i < nTextures; i++)
 	{
@@ -163,7 +192,9 @@ void FreeTexturesFrom(long first)
 
 	Log(__FUNCTION__);
 
+	TextureStageLock();	// on the loading thread under the bar's frames
 	DXAttempt(App.dx.lpD3DDevice->SetTexture(0, 0));
+	TextureStageUnlock();
 
 	for (long i = first; i < nTextures; i++)
 	{

@@ -146,8 +146,8 @@ head-bone look, the damping, and whether her body is drawn.</td>
 <tr>
 <td width="50%"><img src="docs/menu-hud.jpg" alt="HUD"><br>
 <b>HUD</b>: bar mode and positions, enemy bars, the ammo counter, the
-game-over menu, TR4 loading screens, the loading bar style and the loading
-text.</td>
+game-over menu, TR4 loading screens, the loading bar style (TR5, TR4 or off -
+no loading screen) and the loading text.</td>
 <td width="50%"><img src="docs/menu-audio.jpg" alt="Audio"><br>
 <b>Audio</b>: music and effect volume, sound quality — and the language,
 which can be changed while the game runs.</td>

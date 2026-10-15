@@ -16239,6 +16239,225 @@ exists there to draw again.
 **Commits.** `8b69443`, `a8f9d68`, `00118f8`, `f9cf46c`, `638f6e2`, `f5bf841`,
 `975cff3`, `191c5b0`
 
+### The loading screen's third state and the brake (#204)
+2026-10-15
+
+**What.** The *Loadbar style* row on the *HUD* page gets a third state: *TR5*, *TR4* or
+*off*. Off, a level load has no loading screen - no picture, no bar, no text - and the
+level follows the screen before it through black. With a bar, the **brake** keeps the
+loading screen up for at least `loadbar_min_ms` (500) from its first frame while the bar
+runs smoothly to its end, and the bar follows the work through the HD build as well. With
+*TR4 loadscreens* on, the level's view is read back off the screen once and drawn under
+every frame. These are changes of the classic path as well, at `hd_build 0` too, by the
+owner's order: the load's frames and timing change, no room picture does. New: the
+registry DWORDs `loadbar`, `loadbar_min_ms` and `loadfade_ms`, `specific/loadbar_math.h`,
+`S_LoadScreenBegin`, `S_LoadScreenDraws`, `S_LoadBarBuild`, `S_LoadScreenJoin`,
+`S_LoadScreenEnd`, `S_LoadScreenStatsGet` (`specific/drawbars.cpp`),
+`CaptureLoadingScreen` (`specific/LoadSave.cpp`), `ScreenFadedToBlack`
+(`specific/specificfx.cpp`), `LoadEntryBlack` (`specific/file.cpp`), the `LOADLOG`
+words `frames=` and `wait=` at the end of the step `bar` and the line `step=hd_frames`.
+
+**Why.** After round 4 a savegame loaded inside its level took about 52 ms in the owner's
+newest log, and the bar was hardly to be seen. On 2026-10-15 he wrote: "we have the
+switch Loading bar TR4/TR5, we could give it a third state, off, a seamless throw into
+the level ... For the values TR4/TR5 we could build in an artificial brake. Then the user
+can choose whether he wants to see the bar and the picture, with the picture staying for
+roughly half a second to a second and the bar running through smoothly. Or with off
+straight on - a nice variant, also with speedruns in mind." ("wir haben ja den Schalter
+Ladebalken TR4/TR5, wir koennten dem noch einen 3. Zustand geben, off, also nahtloser
+Wurf ins Level ... Fuer die Werte TR4/TR5 koennten wir eine kuenstliche Bremse einbauen.
+Dann kann der User waehlen, ob er den Ladebalken + Bild sehen will und das Bild fuer Pi
+mal Daumen 0,5 bis 1 Sekunde bleibt und der Ladebalken fluessig durchlaeuft. Oder mit Aus
+halt direkt weiter - das waere eine schoene Variante, auch im Hinblick auf Speedruns.")
+Then: "Should we show the fade in/out for the 52 ms? I think that is better than a
+standing picture. I am not sure." ("Sollen wir fuer die 52 ms den Fade in/out Effekt
+einblenden? Ich glaube, das ist besser als ein Standbild. Sicher bin ich mir da nicht.")
+and "Take 500 ms for the brake, a good middle value I think." ("Nimm mal 500 ms fuer die
+Bremse. Ich glaube, das koennte ein guter Mittelwert sein.") He did not know what the rows
+*TR4 loadscreens* and *Loading text* still do; the manual says it now. Project decisions
+of 2026-10-15: the third state, the brake at 500 ms, the fade with its length a value.
+
+**How.** *M - the rows, the entries and the costs, read and counted first.* The three
+rows (`game/menu_frame.cpp`, `MENU_VALUE` rows of `menu_rows_hud`; the settings in
+`tomb5/tomb5.cpp` and `global/types.h`):
+
+| Row | Setting (registry) | What it does |
+|---|---|---|
+| TR4 loadscreens | `tomb5.tr4_loadscreens` (`tr4LS`, 1) | At the end of `DoTitle` and `DoLevel` (`game/gameflow.cpp`) `RenderLoadPic` (`specific/output.cpp`) draws the level being left from a fixed camera per level (`tr4_load_screens`), faded in from black over the fade's nine steps; `S_LoadLevelFile` then reads no picture file unless it is a title load from the title |
+| Loadbar style | `tomb5.tr4_loadbar` (`tr4LB`, 1), now `tomb5.loadbar` (`loadbar`) | `S_DrawLoadBar`: the TR4 bar (wide, x 20, 7 high) or the TR5 bar (x 170, 5 high), each in the three `bar_mode` looks |
+| Loading text | `tomb5.loadingtxt` (`loadtxt`, 1) | Inside `RenderLoadPic` only, and only with the TR4 bar: the script's "Loading" lettering at the bottom of the view; with the TR5 bar it never shows |
+
+The entries into `S_LoadLevelFile`: `DoTitle` (the title, `num` 0) and `DoLevel`. Both
+set the level's fade-in, `SetFade(255, 0)`, before the load; the load's own frames never
+call `DoScreenFade`, so the level's first frames come out of black in every state. The
+fades to black, `SetFade(0, 255)`, have four callers, and each waits for `DoFade` 2 and
+draws no frame after it: the title menu's choice (new game, load, level select, the
+cutscene selector), a death in `DoLevel`, the load menu (`S_LoadSave`, from the inventory
+and from the load key) and the pause menu's exit. A level's end (`gfLevelComplete`: the
+finish trigger, a flip effect, the SKIP cheat, a cutscene's end) has none, and a movie
+played between (`DoTitle`'s intro, `DoLevel`'s outro and intro) leaves its last picture.
+
+| Entry | On screen as the load begins | Today, TR4 loadscreens on (default) | Today, off | Loadbar style off | TR5 / TR4 with the brake |
+|---|---|---|---|---|---|
+| title: new game, load, level select, cutscenes | black | the title's view fades in (0.3 s), the bar over it | the level's picture, the bar | black, nothing drawn | picture or view under every frame, at least 500 ms |
+| load menu (inventory, load key) | black | the level's view fades in, the bar | the picture, the bar | black, nothing drawn | as above |
+| death, then reset or load | black | the level's view fades in, the bar | the picture, the bar | black, nothing drawn | as above |
+| pause menu's exit to the title | black | the view of the level left, then the title's picture, the bar | the title's picture, the bar | black, nothing drawn | as above |
+| a level's end | the last game frame | the view of the level left fades in, the bar | the picture at once, the bar | the frame fades to black (150 ms) | as above |
+| after a movie | the movie's last picture | the view fades in, the bar | the picture at once, the bar | that picture fades to black | as above |
+| the credits' end | the last credits frame | no picture (credits), the bar over the frame kept | the same | the frame fades to black | that frame read back, the bar |
+
+Before this round the bar's frames stood over whatever the back buffer held whenever no
+picture was up - the TR4 view and the credits' frame: round 4's one picture frame and
+every bar frame drew no picture there, and the view stayed only because the windowed
+swap chain (`D3DSWAPEFFECT_DISCARD`, one back buffer) keeps its pixels across a Present.
+
+The costs. One loading frame - the picture, the bar, `DrawSortList`, the Present without
+a tick to wait for - is the owner's `step=bar` on a fresh load: 0.8 to 1.1 ms. The 34
+loads of his newest log (the build of 2026-10-15 03:39): 16 saves loaded inside their
+level, total 50 to 94 ms (`screen` 16.2 to 16.5 - the one frame waiting out its tick -,
+`thread` 18 to 36, `hd_build` 8.5 to 58); 18 fresh loads, total 0.96 to 3.26 s (`thread`
+35 to 434, `hd_build` 845 to 2,668, of which `begin` 542 to 2,050 and `objects` 144 to
+467). The thread's part of a fresh load's work, thread / (thread + hd_build), is 0.038 to
+0.164, median 0.096. What `HDLevelBuild` can report: its own code is a row of calls, not
+loops over pages and groups - those loops are inside `HDRenderLevelBegin`
+(`specific/hd/hd_render.cpp`, the pages' decode and the groups' fill on the pool) and
+`HDObjectLevelBuild` (`specific/hd/hd_object.cpp`), neither open to this round. What
+`hd_level.cpp` has are the sixteen laps of `HDLevelBuildHD`'s `lap()` and the resident
+build's five steps. The build's part done at each lap's end, medians over the 18 fresh
+loads: `marks` to `places` 0.005 to 0.007, `begin` 0.741, `tables` 0.742, `statics`
+0.745, `sheets` to `frames` 0.752, `objects` 0.950; release and budget before the first
+lap and the fingerprints, life and re-dress after the last make up the rest.
+
+*S - the third state.* The row cycles TR5, TR4, off (`MenuStepLoadbarStyle`; "TR4" and
+"TR5" as before, "off" the menu's own entry, which the German file carries). It is the
+registry DWORD `loadbar` (0, 1, 2), read by `LoadBarModeOf` (`specific/loadbar_math.h`):
+present and 0 to 2 it is the state, absent or out of range the older bool `tr4LB`
+decides - 1 the TR4 bar, 0 the TR5 one - and that is written as its value, so no
+player's loading screen changes. `tr4LB` follows the state (`tr4_loadbar` is the TR4
+state) and is still saved, for the bar's look and the loading text that ask it.
+Off, `S_LoadLevelFile` reads no picture, `DoTitle` and `DoLevel` skip `RenderLoadPic`,
+the load's first frame and its last are not drawn and the loop while the loading thread
+runs draws only while a fade runs (`S_LoadScreenDraws`); the loading thread, the HD build
+and every `LOADLOG` step run as before. `screen` then holds only the read back of the
+fade's frame, or nothing. Black or not: `ScreenFadedToBlack` (`specific/specificfx.cpp`)
+is 1 while the last screen fade ran to black (`DoFade` 2, its end 255) and nothing set
+another; `LoadEntryNoteBlack` (`game/gameflow.cpp`) asks it in `DoTitle` and `DoLevel`
+before their own `SetFade(255, 0)` resets it, and counts a movie played after the fade
+as not black (`fmv_on_screen`), into `LoadEntryBlack`. Over black nothing is drawn. Over
+a frame that is not black, `CaptureLoadingScreen` reads it back once and the loop draws
+it under black that thickens with the time since (`LoadFadeAlpha`, 255 x elapsed /
+`loadfade_ms`, the quad and draw type of `DoScreenFade`); the frame at full black ends
+the fade. `loadfade_ms` 0 is a cut: one black frame, nothing read back. A loading thread
+shorter than the fade (JOBY4 64 ms, RICHCUT2 35 ms in the log) would leave the frame half
+faded through the HD build's long steps, which draw no frame; `S_LoadScreenJoin` ends
+such a fade at the join in one black frame, at most one tick. No frame waits on a tick
+after the work: the level's own fade-in takes over.
+
+*B - the brake.* The rule (`specific/loadbar_math.h`, pure): position = 100 x min(work,
+elapsed / T), T = `loadbar_min_ms`, elapsed from the loading screen's first frame (the
+picture's), the clock `QueryPerformanceCounter` - the counter `Sync()` paces the frames
+by and the `LOADLOG` lines read. Work = s x thread + (1 - s) x build: the thread's part
+is its `S_LoadBar` calls as before (pages + 20), the build's part the lap table above,
+s = 0.10 (the median above) when an HD build follows (`hd_build`), 1 when none does.
+Both parts only grow, so the bar never goes back; it never runs ahead of the work or of
+the clock, and it is full when both are done (`LoadBarDone`): at T on a short load, at
+the work's end on a long one. T = 0 is no brake: the bar is the work. The frames:
+`S_DrawLoadBar` waits out the tick first and takes the position then, so the bar shows
+its Present's time (`S_DumpScreenFrame` finds its tick and does not wait again); while
+the loading thread runs, one a tick as before; in the HD build `S_LoadBarBuild` (called
+in `lap()` and after the resident build's five steps, `hd_level.cpp`) moves the build's
+part and draws a frame only when `TIME_SubTick()` says a whole tick has passed, so the
+build never waits - and nothing outside a load's screen, so the rebuild after a new
+device draws nothing; after the work `S_LoadScreenEnd` draws one frame a tick until the
+brake is done, its last the full bar. `S_FinishLoadBar` now ends the work (the thread's
+count and the build's part at their ends), no longer the position. The picture or the
+view under every frame, the stage-0 lock of round 4 around the picture's and the bar's
+binds and draws, the loading text and both bar looks are as before. Weighting: one pace
+over a fresh load's two halves needs each half's share of the time, and that is what the
+thread share and the lap table are. The hook's cost: 2 to 6 frames per fresh load in the
+simulation of his 18 (66 in all), 0.9 ms each - about 3.3 ms of 845 to 2,668, 0.12 to
+0.39 percent; the test per lap is one counter read.
+
+*T - the TR4 view.* With *TR4 loadscreens* on and no picture read, `S_LoadLevelFile`
+reads the screen back once before its first frame (`CaptureLoadingScreen`, the
+inventory's read: `DeviceReadBack`), into the mono picture as a loaded picture is
+(`MonoScreenOn` 2, colour, full brightness, window-sized), and every frame draws it under
+the bar; `ReleaseScreen` gives it back after the last frame (`MonoScreenView`, as an HD
+picture). The read itself still finds the frame `RenderLoadPic` presented last - once, at
+a known moment, as the inventory does - but no frame after it depends on the back buffer.
+The loading text is part of the view. The read back copies the 32-bit back buffer pixel
+for pixel (`LoadingScreenTexture`) instead of `ConvertSurfaceToTextures`' per-pixel mask
+arithmetic, which gives the same pixels for an X8R8G8B8 buffer in colour.
+
+**Measured.** *The read back*, a harness outside the repository (this tree's conversion,
+a Direct3D 9 device like the engine's - windowed, `DISCARD`, one X8R8G8B8 back buffer -
+nine runs, medians, the first frame's upload included): 2560 x 1440 10.9 ms (9.7 to 19.0)
+pixel for pixel against 41.4 (38.1 to 49.5) through `ConvertSurfaceToTextures`; 1920 x
+1080 23.5 through the conversion; a later frame of the picture alone 0.13 ms. *Expected
+per load class* (ModernTest's simulation of the 34 logged loads at T = 500): a save
+loaded inside its level draws 28 to 30 frames and ends with the full bar 500.0 ms after
+its first frame, where it took 50 to 94 ms - the brake's wait about 420 to 470 ms; a
+fresh load draws 6 to 30 frames, ends at its work's end as before plus the hook's frames
+(about 3.3 ms) and, with *TR4 loadscreens* on, the read back (about 11 ms at 2560 x
+1440). With the row off a save load from the load menu loses its picture frame and its
+last (`screen` 16.3 -> about 0 ms) and takes about 33 to 77 ms; a level's end adds the
+read back and draws the fade while the loading thread works. *Steps of the bar*: in the
+saves, 6 of their 462 steps are larger than one tick's share (3.3 percent) - a frame
+after the join or after a resident step that drew none; JOBY2's 45 ms `life` gives the
+largest, 11.0 percent. In the fresh loads the bar stands through `begin` and `objects`,
+which draw no frame, and moves on at their ends - 66.9 percent at most, at the room
+build's end.
+
+**Memory.** Nothing is kept beyond round 4's. The view read back is window-sized: 14
+MiB at 2560 x 1440 as a `MANAGED` texture (with its copy on the card), from the load's
+start to its last frame, then released, like the HD picture's 16 MiB.
+
+**Checked.** ModernTest 15,292 -> 15,373: `load_mode` (41) - the row's reading,
+`LoadBarModeOf` on every case of the DWORD and the bool, `LoadFadeAlpha` and that it
+never lightens, the registry lines and the row in the engine's text, off with no picture
+read, no level view rendered, no frame of the load's own but the fade's, the fade only
+over a frame not black, the black frame ending it, the join's cut, the noting before both
+fade-ins and the movies, the read back released and taken before the first frame and
+only where no picture was read, pixel for pixel; `load_brake` (40) - the rule, three
+made-up loads (a save of 52 ms: monotonic, never ahead, one full frame, full in the tick
+at 500, a frame a tick; a fresh load of 2.5 s: the bar never ahead of the work, full at
+the work's end, two to five frames of the build; a load exactly 500 ms long: full on
+the tick at 500) and the 34 logged loads (monotonic, never ahead of the work or the clock,
+the full bar only last, at 500 or at the work's end within one tick), and in the
+engine's text the build's frames only past a tick, the tick before the position, the
+tail, the laps and the resident steps reporting, the `LOADLOG` lines and the settings.
+Round 4's `load_keep` follows the tail: the picture goes after `S_LoadScreenEnd`. By
+reading: off, no path in `S_LoadLevelFile` draws a frame but the fade's (the first frame
+and `S_LoadScreenEnd`'s frames under the state, the loop and the hook under
+`S_LoadScreenDraws`), and the HD picture is not asked for (the picture's block is under
+`shown`). No frame of the build waits (`TIME_SubTick` first). No tool compiles a file
+this round changed, so the pictures stand; with the tools built from this round's last
+commit: the six classic views `-classicroom N -classiconly` (ANDREA2 19 and 231, JOBY2
+42 and 66, ANDY3 17 and 34) 6 of 6 identical to `8691e82`'s tool and `dd6b559a`'s (`git
+archive`); the fifteen parity cameras 15 of 15 and the six views drawn HD 6 of 6
+identical to `dd6b559a`'s tool; the build fingerprints of the fifteen levels at
+`hd_air` 1 and 2, 30 of 30. MenuTest 44,272, InterpTest 729, LipsTest 270 and 243, 0
+failed; the engine, RoomProbe, TrgProbe, ModelProbe, MapProbe, MenuTest, InterpTest and
+LipsTest build.
+
+**Left.** What only his `-log` run and his eyes can show: the fade against the cut
+(`loadfade_ms` 150 against 0) on a level's end, the brake's feel at 500 ms on a save load
+(`step=bar ... frames= wait=`), the bar standing through the room build of a fresh load
+and moving on at its end (`step=hd_frames`), the TR4 view and the loading text under
+every frame, and the read back's milliseconds on his machine (`screen`). The bar can move
+inside `begin` and `objects` only from frames drawn inside `HDRenderLevelBegin` and
+`HDObjectLevelBuild`, whose loops are in `hd_render.cpp` and `hd_object.cpp`; that is his
+decision for a round open to those files. With `hd_build` 1 and no installation found
+the thread keeps its share of 0.10 and the bar jumps from there at the work's end. A
+device lost during the HD build is now met by a Present between its steps as well (the
+reset path runs `HDLevelDeviceLost` in the middle of the build); with the borderless
+window that happens only when another program changes the display mode. Whether a movie
+ends in black is not known here: with the row off its last picture is faded as if it did
+not.
+
+**Commits.** `b6cf2ba`, `76435a2`, `143bc74`, `00b7381`
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty
@@ -21241,3 +21460,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |
+| #204 | The loading screen's third state and the brake (#204) |

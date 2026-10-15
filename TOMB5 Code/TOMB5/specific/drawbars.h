@@ -17,9 +17,22 @@ void S_DrawHealthBar(long pos);
 void S_DrawAirBar(long pos);
 void S_DrawDashBar(long pos);
 void S_DrawEnemyBar(long pos);
-void S_LoadScreenBegin(long mode, long fade, double fadeMs);
+// What a level load's screen drew: all its frames, those of the HD
+// build's laps and their ms, and the ms from the work's end to the last.
+struct LoadScreenStats
+{
+	long frames;
+	long build_frames;
+	double build_ms;
+	double wait_ms;
+};
+
+void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
+	long hd);
 long S_LoadScreenDraws();
-long S_LoadScreenFrames();
+void S_LoadBarBuild(long done, long total);
+void S_LoadScreenEnd();
+void S_LoadScreenStatsGet(LoadScreenStats* out);
 void S_InitLoadBar(long max);
 void S_UpdateLoadBar();
 void S_FinishLoadBar();

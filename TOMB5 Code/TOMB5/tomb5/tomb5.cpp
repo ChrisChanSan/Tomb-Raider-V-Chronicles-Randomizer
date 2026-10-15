@@ -168,6 +168,10 @@ void init_tomb5_stuff()
 		tomb5.loadfade_ms = 150;						//off's fade to black
 		REG_WriteLong(buf, tomb5.loadfade_ms);
 
+		sprintf(buf, "loadbar_min_ms");
+		tomb5.loadbar_min_ms = 500;						//the brake
+		REG_WriteLong(buf, tomb5.loadbar_min_ms);
+
 		sprintf(buf, "inv_bgM");
 		tomb5.inv_bg_mode = 1;							//original
 		REG_WriteLong(buf, tomb5.inv_bg_mode);
@@ -429,6 +433,10 @@ void init_tomb5_stuff()
 
 		sprintf(buf, "loadfade_ms");
 		REG_ReadLong(buf, tomb5.loadfade_ms, 150);
+
+		// The brake: the loading screen stands at least this long.
+		sprintf(buf, "loadbar_min_ms");
+		REG_ReadLong(buf, tomb5.loadbar_min_ms, 500);
 
 		sprintf(buf, "inv_bgM");
 		REG_ReadLong(buf, tomb5.inv_bg_mode, 1);
@@ -706,6 +714,9 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "loadfade_ms");
 	REG_WriteLong(buf, tomb5.loadfade_ms);
+
+	sprintf(buf, "loadbar_min_ms");
+	REG_WriteLong(buf, tomb5.loadbar_min_ms);
 
 	sprintf(buf, "inv_bgM");
 	REG_WriteLong(buf, tomb5.inv_bg_mode);

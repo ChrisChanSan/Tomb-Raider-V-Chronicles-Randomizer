@@ -11191,8 +11191,8 @@ static void load_keep()
 	b = load_keep_at(bars, "long S_DrawLoadBar()", "if (tomb5.tr4_loadbar)");
 	ok(a >= 0 && a < b, "load keep: every bar frame draws the picture first",
 		a < b, 1);
-	a = load_keep_at(file, "S_FinishLoadBar();", "S_DrawLoadBar();");
-	b = load_keep_at(file, "S_FinishLoadBar();", "ReleaseScreen();");
+	a = load_keep_at(file, "S_LoadScreenEnd();", "S_LoadScreenEnd();");
+	b = load_keep_at(file, "S_LoadScreenEnd();", "ReleaseScreen();");
 	ok(a >= 0 && a < b, "load keep: the picture goes after the last frame",
 		a < b, 1);
 
@@ -11334,15 +11334,15 @@ static void load_mode()
 	n = hd_switch_count(flow, "tomb5.tr4_loadscreens && tomb5.loadbar != "
 		"LOADBAR_OFF");
 	ok(n == 2, "load mode: off renders no level view", n, 2);
-	a = load_keep_at(file, "S_LoadScreenBegin(mode, fade,", "if (shown)");
-	b = load_keep_at(file, "S_LoadScreenBegin(mode, fade,",
-		"DrawLoadingScreen();");
+	a = load_keep_at(file, "LoadLogLevel(name);", "if (shown)");
+	b = load_keep_at(file, "LoadLogLevel(name);", "DrawLoadingScreen();");
 	ok(a >= 0 && a < b, "load mode: the load's first frame only when shown",
 		a < b, 1);
 	n = hd_switch_count(file, "loadbar_on && S_LoadScreenDraws())");
 	ok(n == 1, "load mode: the thread's frames ask the state", n, 1);
-	n = hd_switch_count(file, "if (App.dx.Flags & DXF_HWR && shown)");
-	ok(n == 1, "load mode: the last frame only when shown", n, 1);
+	n = hd_switch_count(bars,
+		"if (App.dx.Flags & DXF_HWR && loadbar_mode != LOADBAR_OFF)");
+	ok(n == 1, "load mode: the last frames only when shown", n, 1);
 	n = hd_switch_count(bars, "return loadbar_mode != LOADBAR_OFF || "
 		"loadbar_fading;");
 	ok(n == 1, "load mode: off draws only while the fade runs", n, 1);
@@ -11377,6 +11377,405 @@ static void load_mode()
 	free(fx);
 	free(flow);
 	free(menu);
+	free(opts);
+}
+
+/* The brake on a load's timeline (loadbar_math.h as drawbars.cpp runs
+ * it), in ms from the loading screen's first frame. While the loading
+ * thread runs, the loop draws a frame at every 1/60 s tick and polls again
+ * after its Sleep(1); the join follows its last turn. The HD build's hook
+ * calls draw a frame only where a tick has passed since the last one
+ * handed out. After the work, the tail draws one frame a tick until the
+ * work is done and the screen has stood minMs. A frame hands out the tick
+ * it is drawn in. */
+struct BrakeLoad
+{
+	const char* level;
+	int resident;			// a save loaded inside its level
+	double thread;			// the loading thread's end (logged: the join)
+	double build;			// the HD build's ms from the join
+	double post;			// from the build's end to the work's end
+	int calls;			// the build's hook calls
+	double at[16];			// each one's ms after the join
+};
+
+struct BrakeRun
+{
+	int frames;			// the bar's frames, the picture's first not counted
+	int buildFrames;		// of them, those of the build's hook calls
+	int back;			// steps backwards
+	int ahead;			// frames ahead of the work or the clock
+	int full;			// frames at 100
+	int overTick;			// steps larger than one tick's share
+	float maxJump;			// the largest step, percent
+	double join;
+	double end;			// the work's end
+	double last;			// the last frame
+};
+
+static BrakeRun brake_run(const BrakeLoad& L, double minMs, float share,
+	bool logged)
+{
+	const double tick = 1000.0 / 60.0;
+	const float eps = 0.001f;
+	BrakeRun r = {};
+	double handed = 0.0;
+	float prev = -1.0f;
+
+	const auto frame = [&](double t, float work)
+	{
+		const float pos = LoadBarPosition(work, t, minMs);
+
+		if (prev >= 0.0f)
+		{
+			const float jump = pos - prev;
+
+			r.back += jump < -eps;
+			r.maxJump = std::max(r.maxJump, jump);
+			r.overTick += minMs > 0.0 &&
+				jump > (float)(100.0 * tick / minMs) + eps;
+		}
+
+		r.ahead += pos > 100.0f * work + eps ||
+			(minMs > 0.0 && pos > (float)(100.0 * t / minMs) + eps);
+		r.full += pos >= 100.0f - eps;
+		prev = pos;
+		handed = floor(t / tick + 1e-6) * tick;	// a whole tick, not one less
+		r.frames++;
+		r.last = t;
+		return LoadBarDone(work, t, minMs);
+	};
+
+	// The loop: a frame at the next tick while the thread was running at
+	// its poll; logged loads already hold the loop's last turn in the join.
+	double poll = 1.0;
+
+	while (logged ? handed + tick < L.thread : poll < L.thread)
+	{
+		const double t = std::max(handed + tick, poll);
+
+		frame(t, share * (float)std::min(1.0, t / L.thread));
+		poll = t + 1.0;
+	}
+
+	r.join = logged ? L.thread : std::max(L.thread, poll);
+
+	for (int i = 0; i < L.calls; i++)
+	{
+		const double t = r.join + L.at[i];
+
+		if (t >= handed + tick)
+		{
+			frame(t, LoadBarWork(1.0f, LoadBarBuildShare(i + 1, L.calls),
+				share));
+			r.buildFrames++;
+		}
+	}
+
+	r.end = r.join + L.build + L.post;
+
+	while (!frame(std::max(handed + tick, r.end), 1.0f));
+
+	return r;
+}
+
+/* The 34 loads of a -log run on the target machine (LOADLOG steps): 16
+ * saves loaded inside their level, 18 fresh loads with the full build. */
+static const BrakeLoad kBrakeLogged[] =
+{
+	// level, resident, join, build, post, hook calls (ms after the join)
+	{ "TITLE", 0, 433.6, 2593.7, 133.3, 16,
+		{ 13.6, 13.6, 13.6, 13.7, 14.6, 15.0, 15.0, 15.8,
+		16.0, 2061.8, 2067.0, 2071.9, 2072.5, 2072.5, 2072.5, 2539.8 } },
+	{ "ANDREA2", 0, 255.4, 2667.4, 25.6, 16,
+		{ 8.0, 8.0, 8.0, 8.3, 8.9, 12.3, 12.3, 12.6,
+		12.7, 2063.0, 2066.7, 2074.1, 2125.8, 2125.8, 2125.8, 2574.4 } },
+	{ "ANDREA2", 1, 18.4, 15.7, 0.4, 5,
+		{ 5.1, 5.1, 5.1, 9.4, 11.8 } },
+	{ "ANDREA2", 1, 34.6, 14.9, 0.4, 5,
+		{ 4.6, 4.6, 4.6, 8.8, 11.2 } },
+	{ "ANDREA1", 0, 196.4, 1370.1, 20.8, 16,
+		{ 7.4, 7.4, 7.4, 7.7, 8.2, 10.3, 10.3, 10.5,
+		10.7, 953.8, 956.9, 960.0, 971.5, 971.5, 971.5, 1296.3 } },
+	{ "ANDREA1", 1, 35.0, 13.3, 0.4, 5,
+		{ 2.2, 2.2, 2.2, 6.8, 9.0 } },
+	{ "ANDY2", 0, 167.6, 1435.9, 29.2, 16,
+		{ 7.8, 7.8, 7.8, 8.1, 8.7, 9.9, 9.9, 10.1,
+		10.5, 1022.4, 1025.3, 1031.6, 1045.0, 1045.0, 1045.0, 1370.4 } },
+	{ "ANDY2", 1, 34.5, 11.4, 0.6, 5,
+		{ 2.9, 2.9, 2.9, 7.1, 7.3 } },
+	{ "ANDY2", 1, 19.0, 10.8, 0.6, 5,
+		{ 2.4, 2.4, 2.4, 6.6, 6.8 } },
+	{ "ANDY3", 0, 164.2, 1513.9, 17.3, 16,
+		{ 13.3, 13.3, 13.3, 13.5, 14.4, 15.8, 15.8, 16.0,
+		16.0, 1051.8, 1055.8, 1069.1, 1087.0, 1087.5, 1089.5, 1414.6 } },
+	{ "ANDY3", 1, 18.4, 16.8, 0.4, 5,
+		{ 7.7, 8.2, 8.4, 12.4, 12.8 } },
+	{ "ANDY3", 1, 18.4, 16.7, 0.4, 5,
+		{ 7.2, 7.7, 7.9, 12.2, 12.6 } },
+	{ "JOBY5", 0, 214.6, 1245.2, 23.9, 16,
+		{ 6.2, 6.2, 6.2, 6.4, 6.7, 7.9, 7.9, 8.0,
+		8.2, 776.8, 778.6, 780.3, 790.0, 790.2, 790.2, 1173.9 } },
+	{ "JOBY5", 1, 17.8, 15.2, 0.4, 5,
+		{ 5.6, 5.9, 5.9, 10.9, 11.1 } },
+	{ "RICH2", 0, 203.3, 2355.9, 22.7, 16,
+		{ 9.7, 9.7, 9.7, 9.9, 10.5, 13.7, 13.7, 13.9,
+		14.3, 1755.8, 1758.7, 1769.3, 1783.1, 1783.1, 1783.1, 2114.7 } },
+	{ "RICH2", 1, 18.3, 19.6, 0.6, 5,
+		{ 5.5, 5.5, 5.5, 12.6, 12.8 } },
+	{ "RICHCUT2", 0, 35.4, 893.4, 5.7, 16,
+		{ 37.0, 37.0, 37.0, 37.0, 37.1, 37.1, 37.1, 37.1,
+		37.1, 712.8, 713.1, 713.6, 713.9, 713.9, 713.9, 861.4 } },
+	{ "RICH1", 0, 150.2, 1129.6, 19.7, 16,
+		{ 8.4, 8.4, 8.4, 8.6, 8.9, 9.9, 9.9, 10.0,
+		10.2, 714.2, 717.4, 719.3, 719.7, 719.7, 719.7, 1065.6 } },
+	{ "RICH1", 1, 35.8, 9.5, 0.4, 5,
+		{ 0.4, 0.4, 0.4, 5.2, 5.2 } },
+	{ "JOBY2", 0, 173.8, 1688.7, 33.0, 16,
+		{ 12.5, 12.5, 12.5, 12.7, 13.9, 16.3, 16.3, 17.0,
+		17.2, 1242.6, 1246.8, 1249.6, 1262.9, 1263.0, 1263.0, 1545.2 } },
+	{ "JOBY2", 1, 18.2, 58.1, 0.4, 5,
+		{ 3.1, 3.2, 3.2, 8.0, 53.6 } },
+	{ "JOBY4", 0, 63.7, 844.9, 6.6, 16,
+		{ 11.7, 11.7, 11.7, 11.8, 12.4, 13.0, 13.0, 13.1,
+		13.1, 654.0, 656.8, 657.1, 668.7, 668.7, 668.7, 812.7 } },
+	{ "JOBY4", 1, 18.3, 8.5, 0.3, 5,
+		{ 1.4, 1.4, 1.4, 3.9, 4.1 } },
+	{ "RICH3", 0, 170.7, 1174.4, 22.2, 16,
+		{ 5.6, 5.6, 5.6, 5.8, 6.3, 8.1, 8.1, 8.3,
+		8.5, 763.7, 769.0, 771.6, 772.2, 772.2, 772.2, 1102.4 } },
+	{ "RICH3", 1, 18.3, 9.8, 0.4, 5,
+		{ 0.5, 0.5, 0.5, 5.3, 5.3 } },
+	{ "ANDY1", 0, 182.4, 1352.5, 20.8, 16,
+		{ 6.4, 6.4, 6.4, 6.7, 7.3, 8.7, 8.7, 8.8,
+		8.8, 900.0, 904.2, 932.2, 944.5, 944.6, 944.6, 1268.3 } },
+	{ "ANDY1", 1, 18.5, 11.4, 0.5, 5,
+		{ 1.9, 2.0, 2.0, 6.8, 7.0 } },
+	{ "ANDREA3", 0, 147.4, 1497.0, 16.6, 16,
+		{ 6.1, 6.1, 6.1, 6.2, 6.5, 7.2, 7.2, 7.3,
+		7.3, 1167.0, 1170.1, 1171.6, 1172.0, 1172.0, 1172.0, 1438.4 } },
+	{ "ANDREA3", 1, 18.6, 9.4, 0.4, 5,
+		{ 0.4, 0.4, 0.4, 4.6, 4.6 } },
+	{ "JOBY3", 0, 186.8, 955.2, 19.1, 16,
+		{ 6.1, 6.1, 6.1, 6.3, 6.5, 7.4, 7.4, 7.5,
+		7.6, 550.0, 552.1, 553.6, 554.0, 554.0, 554.0, 886.5 } },
+	{ "JOBY3", 1, 18.5, 10.6, 0.7, 5,
+		{ 0.4, 0.4, 0.4, 5.6, 5.6 } },
+	{ "TITLE", 0, 107.9, 2082.6, 6.4, 16,
+		{ 18.4, 18.4, 18.4, 18.5, 22.9, 23.5, 23.5, 23.8,
+		24.0, 1867.9, 1873.1, 1878.0, 1878.5, 1878.5, 1878.5, 2028.4 } },
+	{ "ANDREA2", 0, 151.0, 2240.3, 23.7, 16,
+		{ 6.0, 6.0, 6.0, 6.3, 6.9, 9.2, 9.2, 9.4,
+		9.4, 1866.6, 1870.2, 1877.5, 1883.9, 1883.9, 1883.9, 2147.0 } },
+	{ "TITLE", 0, 118.6, 2022.4, 7.7, 16,
+		{ 11.0, 11.0, 11.0, 11.1, 12.4, 13.0, 13.0, 13.3,
+		13.5, 1804.5, 1809.7, 1814.7, 1815.3, 1815.3, 1815.3, 1968.3 } },
+};
+
+/* The brake (loadbar_math.h): its rule, three loads made up for it - a
+ * save loaded inside its level, a fresh HD load, a load exactly as long as
+ * the brake - and the 34 logged loads; then the engine's text: the frames
+ * of the build that never wait, the tail, the lines that log it. */
+static void load_brake()
+{
+	char* file = hd_switch_text("../file.cpp");
+	char* bars = hd_switch_text("../drawbars.cpp");
+	char* level = hd_switch_text("hd_level.cpp");
+	char* opts = hd_switch_text("../../tomb5/tomb5.cpp");
+	const double tick = 1000.0 / 60.0;
+	long n, a, b;
+
+	ok(file && bars && level && opts, "load brake: the four files are read",
+		!!file + !!bars + !!level + !!opts, 4);
+
+	// The rule: the smaller of the work and the clock, 100 when both are.
+	ok(LoadBarPosition(1.0f, 0.0, 500.0) == 0.0f, "load brake: 0 at the "
+		"first frame", (long)LoadBarPosition(1.0f, 0.0, 500.0), 0);
+	ok(LoadBarPosition(1.0f, 250.0, 500.0) == 50.0f, "load brake: the work "
+		"done, half the time", (long)LoadBarPosition(1.0f, 250.0, 500.0), 50);
+	ok(fabs(LoadBarPosition(0.3f, 400.0, 500.0) - 30.0f) < 0.01f,
+		"load brake: never ahead of the work",
+		(long)(LoadBarPosition(0.3f, 400.0, 500.0) + 0.5f), 30);
+	ok(LoadBarPosition(1.0f, 600.0, 500.0) == 100.0f, "load brake: full "
+		"after the time", (long)LoadBarPosition(1.0f, 600.0, 500.0), 100);
+	ok(LoadBarPosition(0.5f, 10.0, 0.0) == 50.0f, "load brake: 0 ms is the "
+		"work", (long)LoadBarPosition(0.5f, 10.0, 0.0), 50);
+	ok(LoadBarDone(1.0f, 500.0, 500.0), "load brake: done at the time",
+		LoadBarDone(1.0f, 500.0, 500.0), 1);
+	ok(!LoadBarDone(1.0f, 499.9, 500.0), "load brake: not before it",
+		LoadBarDone(1.0f, 499.9, 500.0), 0);
+	ok(!LoadBarDone(0.99f, 900.0, 500.0), "load brake: not before the work",
+		LoadBarDone(0.99f, 900.0, 500.0), 0);
+	ok(LoadBarWork(1.0f, 0.0f, 0.1f) == 0.1f, "load brake: the thread's "
+		"share", (long)(LoadBarWork(1.0f, 0.0f, 0.1f) * 100), 10);
+	ok(LoadBarWork(1.0f, 1.0f, 0.1f) == 1.0f, "load brake: the whole work",
+		(long)(LoadBarWork(1.0f, 1.0f, 0.1f) * 100), 100);
+	ok(LoadBarBuildShare(10, 16) == 0.741f, "load brake: the room build's "
+		"lap", (long)(LoadBarBuildShare(10, 16) * 1000), 741);
+	ok(LoadBarBuildShare(3, 5) == 0.6f, "load brake: a resident step",
+		(long)(LoadBarBuildShare(3, 5) * 10), 6);
+	{
+		long back = 0;
+
+		for (int i = 1; i < 16; i++)
+			back += LoadBarBuildShare(i + 1, 16) < LoadBarBuildShare(i, 16);
+
+		for (int w = 0; w <= 100; w++)
+			for (int t = 0; t < 700; t += 7)
+				back += LoadBarPosition(w / 100.0f, t + 7, 500.0) <
+					LoadBarPosition(w / 100.0f, t, 500.0) ||
+					(w && LoadBarPosition(w / 100.0f, t, 500.0) <
+					LoadBarPosition((w - 1) / 100.0f, t, 500.0));
+
+		ok(back == 0, "load brake: the laps and the rule never go back",
+			back, 0);
+	}
+
+	// A save loaded inside its level, 52 ms of work: the clock leads.
+	{
+		const BrakeLoad save = { "save", 1, 35.0, 15.0, 2.0, 5,
+			{ 3.0, 3.5, 4.0, 10.0, 14.0 } };
+		const BrakeRun r = brake_run(save, 500.0, kLoadBarThreadShare,
+			false);
+
+		ok(r.back == 0 && r.ahead == 0, "load brake: 52 ms, monotonic and "
+			"never ahead", r.back + r.ahead, 0);
+		ok(r.full == 1, "load brake: 52 ms, one full frame, the last",
+			r.full, 1);
+		ok(r.last >= 500.0 && r.last < 500.0 + tick, "load brake: 52 ms, "
+			"full at the brake's 500", (long)r.last, 500);
+		ok(r.frames >= 29 && r.frames <= 31, "load brake: 52 ms, a frame a "
+			"tick", r.frames, 30);
+		ok(r.maxJump <= 100.0f * 2.0f * (float)(tick / 500.0), "load brake: "
+			"52 ms, no step over two ticks' share", (long)(r.maxJump * 100),
+			667);
+	}
+
+	// A fresh HD load of 2.5 s: the work leads, the bar follows it.
+	{
+		BrakeLoad fresh = { "fresh", 0, 250.0, 2200.0, 50.0, 16, {} };
+
+		for (int i = 0; i < 16; i++)
+			fresh.at[i] = 2200.0 * kLoadBarLapShare[i];
+
+		const BrakeRun r = brake_run(fresh, 500.0, kLoadBarThreadShare,
+			false);
+
+		ok(r.back == 0 && r.ahead == 0, "load brake: 2.5 s, monotonic and "
+			"never ahead of the work", r.back + r.ahead, 0);
+		ok(r.full == 1, "load brake: 2.5 s, one full frame, the last",
+			r.full, 1);
+		ok(r.last >= r.end && r.last < r.end + tick, "load brake: 2.5 s, "
+			"full at the work's end", (long)(r.last - r.end), 0);
+		ok(r.buildFrames >= 2 && r.buildFrames <= 5, "load brake: 2.5 s, "
+			"the build's laps draw a few frames", r.buildFrames, 4);
+	}
+
+	// A load exactly as long as the brake: full on the tick at 500.
+	{
+		const BrakeLoad even = { "even", 0, 433.4, 0.0, 65.6, 0, {} };
+		const BrakeRun r = brake_run(even, 500.0, 1.0f, false);
+
+		ok(r.end >= 499.9 && r.end <= 500.1, "load brake: the made-up load "
+			"ends at 500", (long)r.end, 500);
+		ok(r.full == 1 && r.last >= 499.9 && r.last <= 500.1,
+			"load brake: 500 ms, full on its last tick", (long)r.last, 500);
+		ok(r.back == 0 && r.ahead == 0, "load brake: 500 ms, monotonic",
+			r.back + r.ahead, 0);
+	}
+
+	// The 34 logged loads at 500 ms.
+	{
+		long bad = 0, late = 0, full = 0, saves = 0, fresh = 0;
+		long saveFrames[2] = { 1000, 0 }, freshFrames[2] = { 1000, 0 };
+		long saveOver = 0, freshOver = 0, buildFrames = 0;
+		float saveJump = 0.0f, freshJump = 0.0f;
+		const int count = sizeof(kBrakeLogged) / sizeof(kBrakeLogged[0]);
+
+		for (int i = 0; i < count; i++)
+		{
+			const BrakeLoad& L = kBrakeLogged[i];
+			const BrakeRun r = brake_run(L, 500.0, kLoadBarThreadShare,
+				true);
+			const double due = std::max(500.0, r.end);
+			long* frames = L.resident ? saveFrames : freshFrames;
+
+			bad += r.back + r.ahead;
+			full += r.full != 1;
+			late += r.last < due || r.last >= due + tick;
+			frames[0] = std::min(frames[0], (long)r.frames);
+			frames[1] = std::max(frames[1], (long)r.frames);
+
+			if (L.resident)
+			{
+				saves++;
+				saveOver += r.overTick;
+				saveJump = std::max(saveJump, r.maxJump);
+			}
+			else
+			{
+				fresh++;
+				freshOver += r.overTick;
+				freshJump = std::max(freshJump, r.maxJump);
+				buildFrames += r.buildFrames;
+			}
+
+			if (getenv("BRAKE_TABLE"))
+				printf("    brake %-8s res=%d join=%.1f end=%.1f last=%.1f "
+					"frames=%d build=%d over=%d jump=%.1f\n", L.level,
+					L.resident, r.join, r.end, r.last, r.frames,
+					r.buildFrames, r.overTick, r.maxJump);
+		}
+
+		ok(count == 34 && saves == 16 && fresh == 18, "load brake: 34 "
+			"logged loads, 16 saves, 18 fresh", count, 34);
+		ok(bad == 0, "load brake: logged, monotonic and never ahead", bad, 0);
+		ok(full == 0, "load brake: logged, the full bar only last", full, 0);
+		ok(late == 0, "load brake: logged, full at 500 or the work's end",
+			late, 0);
+		printf("    brake, 16 saves: %ld to %ld frames, %ld steps over a "
+			"tick's share, largest %.1f %%\n", saveFrames[0], saveFrames[1],
+			saveOver, saveJump);
+		printf("    brake, 18 fresh: %ld to %ld frames, %ld of the build's "
+			"laps, %ld steps over a tick's share, largest %.1f %%\n",
+			freshFrames[0], freshFrames[1], buildFrames, freshOver,
+			freshJump);
+	}
+
+	// The engine: no frame of the build waits on the tick, the tail runs to
+	// the brake's end, the lines that log it.
+	a = load_keep_at(bars, "void S_LoadBarBuild(", "TIME_SubTick() < 1.0)");
+	b = load_keep_at(bars, "void S_LoadBarBuild(", "S_DrawLoadBar();");
+	ok(a >= 0 && a < b, "load brake: a build frame only past a tick", a < b,
+		1);
+	a = load_keep_at(bars, "long S_DrawLoadBar()",
+		"while (TIME_SubTick() < 1.0);");
+	b = load_keep_at(bars, "long S_DrawLoadBar()", "_BeginScene();");
+	ok(a >= 0 && a < b, "load brake: the tick before the position", a < b,
+		1);
+	n = hd_switch_count(bars, "return LoadBarDone(work, elapsed, "
+		"loadbar_min_ms);");
+	ok(n == 1, "load brake: a frame says when the brake is done", n, 1);
+	n = hd_switch_count(bars, "while (!S_DrawLoadBar());");
+	ok(n == 1, "load brake: the tail draws to the brake's end", n, 1);
+	n = hd_switch_count(level, "S_LoadBarBuild(phase + 1, LOAD_PHASES);");
+	ok(n == 1, "load brake: every lap of the build reports", n, 1);
+	n = hd_switch_count(level, "S_LoadBarBuild(");
+	ok(n == 6, "load brake: the laps and the resident build's 5 steps", n,
+		6);
+	n = hd_switch_count(file, "LoadLogStepBar(&loadlog_at);");
+	ok(n == 1, "load brake: the bar step logs frames and wait", n, 1);
+	n = hd_switch_count(file, "step=hd_frames ms=%.1f frames=%ld");
+	ok(n == 1, "load brake: the build's frames on a line", n, 1);
+	n = hd_switch_count(opts, "sprintf(buf, \"loadbar_min_ms\");");
+	ok(n == 3, "load brake: loadbar_min_ms written, read and saved", n, 3);
+	n = hd_switch_count(opts,
+		"REG_ReadLong(buf, tomb5.loadbar_min_ms, 500);");
+	ok(n == 1, "load brake: absent reads as 500", n, 1);
+
+	free(file);
+	free(bars);
+	free(level);
 	free(opts);
 }
 
@@ -21753,6 +22152,7 @@ int main()
 	hd_build_gate();
 	load_keep();
 	load_mode();
+	load_brake();
 	ledge_hang();
 	ledge_trigger();
 	deferred();

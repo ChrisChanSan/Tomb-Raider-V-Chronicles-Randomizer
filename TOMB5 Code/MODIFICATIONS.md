@@ -15538,7 +15538,18 @@ merge with the round that adds a call to the level build's sequence: that call r
 installation or a mod between two loads of the same level is not in the key (the session
 already takes the mods as fixed); a level built again needs a load of another level, a
 changed setting or a new graphics device. The kept data are freed at the next build of
-another level, as before.
+another level, as before. The springs (#200) were that case: `HDSpringLevelBegin` ran in
+the full build only and `HDLevelUnload` ends the springs at every load, so a save loaded
+inside its level had no springs, no cracks and a life begun without their marks until the
+next full build. Closed in the merge pass after `56458c1b`: the resident build now begins
+the springs before the life, after the sheets set again and the objects' rebind, the full
+build's order; their time falls in the step `life` there as in the full build, and no
+`LOADLOG` line changed. `RoomProbe -reload` cannot show it - the probe models the keep
+itself and links no `hd_level.cpp` - so the order rests on reading, and the owner's next
+`-log` run of a save loaded inside a level shows it in the `SPRINGLOG` lines before the
+`resident build` line. Measured with that commit's tools: the fifteen parity cameras at
+`hd_water` 0 are the stored ones, 15 of 15; the eleven crack cameras are those of the
+probe built from `04e2c2b0`, 11 of 11; the suites count as before, 0 failed.
 
 **Commits.** `bcf7fd6`, `636422d`, `2163672`, `5024414`, `0fe49fb`, `27f8bd4`, `68826a2`,
 `5164802`, `eb23c5a`, `9689393`, `3a25e00`
@@ -19953,7 +19964,10 @@ probe compiles `hd_spring.cpp` without its engine part and came out the same but
 time stamps; the springs' lines of ANDREA1, ANDREA2 and JOBY2 are those #200's prover
 saved, byte for byte, at both draws; the 11 crack cameras are `56458c1b`'s at the draw HD
 and the explicit classic list at `-hddrawn 0`; the 15 parity cameras at `hd_water` 0 are
-the stored ones; the suites count as at `56458c1b`, 0 failed.
+the stored ones; the suites count as at `56458c1b`, 0 failed. In the same merge pass the
+resident build of #203 (a save loaded inside its level) got the call too, after its sheets
+and before its life; it had begun none, while `HDLevelUnload` ends the springs at every
+load (#203, round 2, *Left.*).
 The title menu's HD wordmark follows the files alone (`file.cpp:779`); the
 one-line change is `gfLevelId == LVL5_TITLE && tomb5.hd_enable ?`. Comments that name
 `hd_enable` for the build and are false now, outside the lines this round could touch:

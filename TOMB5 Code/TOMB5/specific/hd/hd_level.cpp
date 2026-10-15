@@ -5771,8 +5771,8 @@ void HDLevelBuild()
  * with their splashes, rings, wet films, tanks and falls, the restored water
  * faces (HDFlipRoom swaps them in play), the water frames' borrowed pages in
  * the classic Textures[] the load has filled again, the objects' binding to
- * the classic slots (HDObjectLevelRebind), the water's life and the
- * re-dress rule. False when the data are not there any more. */
+ * the classic slots (HDObjectLevelRebind), the springs, the water's life and
+ * the re-dress rule. False when the data are not there any more. */
 static bool HDLevelBuildResident(double loadlog_at)
 {
 	if (!HDEnabled() || !g_stem[0] || !HDRenderReady() ||
@@ -5815,6 +5815,10 @@ static bool HDLevelBuildResident(double loadlog_at)
 	const double frames = LoadClockMs();
 	HDObjectLevelRebind(HDInstallRoot(), g_stem);
 	const double objects = LoadClockMs();
+	/* The springs, as the full build begins them: after the sheets set again
+	 * above, whose bodies they mark, and before the life, which reads those
+	 * marks. HDLevelUnload ended them, as it does at every load. */
+	HDSpringLevelBegin(g_stem);
 	HDLifeLevelBegin(g_stem);
 	const double life = LoadClockMs();
 

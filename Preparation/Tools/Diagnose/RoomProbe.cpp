@@ -465,6 +465,15 @@
  *                     under 64 on a tenth of the texels.
  *     -wetnomodels    -wetstand's boxes without the models' mirror: the
  *                     picture the march alone makes of them.
+ *     -wetlara x,y,z[,yaw[,pose]]
+ *                     Lara herself on a wet floor at world x, z, her
+ *                     floor at y: the level's outfit built as the engine
+ *                     builds it, her parts drawn through the model path
+ *                     on the classic skeleton, standing (pose 0) or on all
+ *                     fours (1), turned by yaw degrees; drawn among the
+ *                     frame's objects and through the wet floor's mirror
+ *                     of the models. Needs -tank; -wetnomodels leaves her
+ *                     mirror out.
  *     -tankcensus     every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
@@ -1892,6 +1901,27 @@ static float g_wet_stand_proj[16];
  * picture the march alone makes of them, the before picture out of the
  * same build. */
 static bool g_wet_no_models = false;
+
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
+
+/* -wetlara x,y,z[,yaw[,pose]]: Lara herself on a wet floor - the level's
+ * outfit built as the engine builds it (HDLaraPlan, HDModelLevelBegin,
+ * HDLaraLevelBuild), her parts drawn through HDModelDraw on node matrices
+ * of the classic skeleton's bind walk (as ModelProbe's), standing (pose 0)
+ * or on all fours (pose 1, the crawl: hips, thighs, shins and upper arms
+ * turned a right angle each), her lowest joint 40 units over y (her
+ * floor), turned by yaw degrees; drawn among the frame's objects and
+ * through the wet floor's mirror of the models in place of -wetstand's
+ * boxes. */
+static bool g_wet_lara = false;
+static float g_wet_lara_at[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+static int g_wet_lara_pose = 0;
+static bool g_wet_lara_ready = false;
+static float g_wet_lara_bind[HD_LARA_NODES][3];
+static long g_wet_lara_flags[HD_LARA_NODES];
+static float g_wet_lara_mats[HD_LARA_NODES * 16];
+
 
 static float g_seed_origin[2] = { 0.0f, 0.0f };
 
@@ -7685,6 +7715,276 @@ static void ProbeWetMap(int floor)
 	}
 }
 
+static void WetLaraMul(const float* a, const float* b, float* out)
+{
+	float t[16];
+
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 4; c++)
+			t[r * 4 + c] = a[r * 4] * b[c] + a[r * 4 + 1] * b[4 + c] +
+				a[r * 4 + 2] * b[8 + c] + a[r * 4 + 3] * b[12 + c];
+
+	memcpy(out, t, sizeof(t));
+}
+
+// A turn about y (yaw) or x (pitch) in degrees, ModelProbe's MatRotY/X.
+static void WetLaraTurn(int axis, float deg, float* m)
+{
+	const float a = deg * 3.14159265f / 180.0f, c = cosf(a), s = sinf(a);
+
+	memset(m, 0, 16 * sizeof(float));
+	m[0] = m[5] = m[10] = m[15] = 1.0f;
+
+	if (axis == 0)
+	{
+		m[0] = c; m[2] = -s; m[8] = s; m[10] = c;
+	}
+	else
+	{
+		m[5] = c; m[6] = s; m[9] = -s; m[10] = c;
+	}
+}
+
+/* Her node matrices, model space to `view`: the classic stack walk with a
+ * pitch per node where the pose asks for one (ModelProbe's
+ * BuildNodeMatrices), the whole turned by yaw and set on her floor. */
+static void WetLaraMatrices(const float* view)
+{
+	static const float kCrawl[HD_LARA_NODES] =
+	{
+		-90.0f, 90.0f, -90.0f, 0.0f, 90.0f, -90.0f, 0.0f, 0.0f,
+		90.0f, 0.0f, 0.0f, 90.0f, 0.0f, 0.0f, 0.0f
+	};
+	float local[HD_LARA_NODES * 16], stack[HD_LARA_NODES][16];
+	float current[16], step[16], turn[16];
+	int top = 0;
+
+	WetLaraTurn(1, g_wet_lara_pose ? kCrawl[0] : 0.0f, current);
+	memcpy(local, current, sizeof(current));
+
+	for (int n = 1; n < HD_LARA_NODES; n++)
+	{
+		if ((g_wet_lara_flags[n] & 1) && top > 0)
+			memcpy(current, stack[--top], sizeof(current));
+
+		if (g_wet_lara_flags[n] & 2)
+		{
+			memcpy(stack[top], current, sizeof(current));
+
+			if (top < HD_LARA_NODES - 1)
+				++top;
+		}
+
+		memset(step, 0, sizeof(step));
+		step[0] = step[5] = step[10] = step[15] = 1.0f;
+		step[12] = g_wet_lara_bind[n][0];
+		step[13] = g_wet_lara_bind[n][1];
+		step[14] = g_wet_lara_bind[n][2];
+		WetLaraMul(step, current, current);
+
+		if (g_wet_lara_pose && kCrawl[n] != 0.0f)
+		{
+			WetLaraTurn(1, kCrawl[n], turn);
+			WetLaraMul(turn, current, current);
+		}
+
+		memcpy(local + n * 16, current, sizeof(current));
+	}
+
+	// Her lowest joint 40 units over her floor (y runs down).
+	float lowest = -1.0e9f;
+
+	for (int n = 0; n < HD_LARA_NODES; n++)
+		lowest = local[n * 16 + 13] > lowest ? local[n * 16 + 13] : lowest;
+
+	float place[16], yaw[16];
+
+	WetLaraTurn(0, g_wet_lara_at[3], yaw);
+	memset(place, 0, sizeof(place));
+	place[0] = place[5] = place[10] = place[15] = 1.0f;
+	place[12] = g_wet_lara_at[0] - g_seed_origin[0];
+	place[13] = g_wet_lara_at[1] - 40.0f - lowest;
+	place[14] = g_wet_lara_at[2] - g_seed_origin[1];
+	WetLaraMul(yaw, place, place);
+	WetLaraMul(place, view, place);
+
+	for (int n = 0; n < HD_LARA_NODES; n++)
+		WetLaraMul(local + n * 16, place, g_wet_lara_mats + n * 16);
+}
+
+// The slot of a name in the engine's own table, or -1.
+static int WetLaraSlot(const char* want)
+{
+	for (int s = 0; s < 1024; s++)
+		if (HDSlotName(s) && !_stricmp(HDSlotName(s), want))
+			return s;
+
+	return -1;
+}
+
+/* Her outfit out of the level's header and her skeleton out of its mesh
+ * tree (ModelProbe's RunLara and ReadClassicSlot), built on the card. */
+static void WetLaraBuild(const char* root, const char* stem)
+{
+	Tr5Level level;
+	std::string error;
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	std::wstring wide(trc.begin(), trc.end());
+	const char* why = "";
+
+	if (g_roombox.empty() || !level.load(wide, error))
+	{
+		printf("-wetlara: %s not read - no Lara\n", trc.c_str());
+		return;
+	}
+
+	int body = -1, hair = -1;
+	Tr5Level::MoveableInfo info;
+
+	for (int s : level.moveableSlots())
+	{
+		const char* name = HDSlotName(s);
+
+		if (name && !_stricmp(name, "HAIR"))
+			hair = s;
+
+		if (name && (!_stricmp(name, "LARA_SKIN") ||
+			(body < 0 && !_stricmp(name, "LARA"))))
+			body = s;
+	}
+
+	if (body < 0 || !level.moveableInfo(body, info) ||
+		info.nmeshes < HD_LARA_NODES)
+	{
+		printf("-wetlara: no Lara mesh tree in %s\n", stem);
+		return;
+	}
+
+	// The bind walk: four longs a node after the first, flags x y z.
+	float bindAbs[HD_LARA_NODES][3] = {};
+	float cur[3] = { 0, 0, 0 }, st[HD_LARA_NODES][3];
+	int top = 0;
+
+	for (int n = 1; n < HD_LARA_NODES; n++)
+	{
+		const long long at = (long long)info.boneIndex + (n - 1) * 4LL;
+
+		g_wet_lara_flags[n] = level.debugReadBoneLong(at);
+
+		for (int k = 0; k < 3; k++)
+			g_wet_lara_bind[n][k] = (float)level.debugReadBoneLong(at + 1 + k);
+
+		if ((g_wet_lara_flags[n] & 1) && top > 0)
+			memcpy(cur, st[--top], sizeof(cur));
+
+		if (g_wet_lara_flags[n] & 2)
+		{
+			memcpy(st[top], cur, sizeof(cur));
+
+			if (top < HD_LARA_NODES - 1)
+				++top;
+		}
+
+		for (int k = 0; k < 3; k++)
+			bindAbs[n][k] = cur[k] += g_wet_lara_bind[n][k];
+	}
+
+	const int drawType = level.laraType() + 1;
+	const bool joby = !_strnicmp(stem, "JOBY", 4);
+	const int outfit = HDLaraOutfitFor(drawType, (joby && drawType == 1) ||
+		drawType == 3, drawType == 2, level.hdOutfit(), &why);
+	std::vector<int> present;
+
+	for (int s : level.moveableSlots())
+		if (HDSlotIsLara(s))
+			present.push_back(s);
+
+	HDLaraLevel wardrobe;
+
+	wardrobe.outfit = outfit;
+	wardrobe.bodyBind = &bindAbs[0][0];
+	wardrobe.bodyNodes = HD_LARA_NODES;
+	wardrobe.hairBind = 0;
+	wardrobe.hairNodes = 0;
+	wardrobe.slots = present.empty() ? 0 : &present[0];
+	wardrobe.slotCount = (int)present.size();
+	(void)hair;
+
+	HDModelSlot wanted[HD_LARA_PART_COUNT * 2];
+	const int count = HDLaraPlan(&wardrobe, wanted, HD_LARA_PART_COUNT * 2);
+	HDModelStats stats;
+	HDLaraStats laraStats;
+
+	if (!HDModelInit(g_device, &why) || count <= 0 ||
+		!HDModelLevelBegin(g_device, root, wanted, count, false, 1, &stats,
+		&why) || !HDLaraLevelBuild(&wardrobe, &laraStats))
+	{
+		printf("-wetlara: her build failed - %s\n", why);
+		return;
+	}
+
+	g_wet_lara_ready = true;
+	printf("-wetlara: %s (%s), %d parts planned, %d loaded, at %.0f,%.0f,"
+		"%.0f yaw %.0f %s\n", HDLaraOutfitModel(outfit) ?
+		HDLaraOutfitModel(outfit) : "none", HDLaraOutfitLabel(outfit), count,
+		laraStats.loaded, g_wet_lara_at[0], g_wet_lara_at[1], g_wet_lara_at[2],
+		g_wet_lara_at[3], g_wet_lara_pose ? "crawl" : "stand");
+}
+
+/* Her parts as HDObjectFrameDraw draws the objects: the body, the head
+ * and the face, the holster rig and the hands of a frame with nothing in
+ * them, her nodes lit evenly (128, the classic mid shade) under the sun's
+ * game factor. */
+static void ProbeWetLaraDraw(const void* projection, int bulbs,
+	unsigned int passes)
+{
+	if (!g_wet_lara_ready)
+		return;
+
+	float light[HD_LARA_NODES * 3];
+
+	for (int i = 0; i < HD_LARA_NODES * 3; i++)
+		light[i] = 128.0f;
+
+	HDModelLighting lighting;
+
+	lighting.lights = 0;
+	lighting.lightCount = 0;
+	lighting.sunScale = 0.75f;
+	lighting.specStrength = 0.0f;
+	lighting.specPower = 1.0f;
+	HDModelFrameBegin((const D3DMATRIX*)projection, bulbs, passes);
+	HDModelClip(0);
+
+	const unsigned int bodyMask = HDLaraBodyMask();
+	static const int kParts[4] =
+	{
+		HD_LARA_PART_BODY, HD_LARA_PART_HEAD, HD_LARA_PART_FACE,
+		HD_LARA_PART_HOLSTER_RIG
+	};
+
+	for (int i = 0; i < 4; i++)
+		if (HDLaraHasPart(kParts[i]))
+			HDModelDraw(HDLaraPartSlot(kParts[i]), g_wet_lara_mats,
+				HD_LARA_NODES, light, i == 0 ? bodyMask : i == 3 ?
+				HDLaraPartCoverage(kParts[i]) : ~0u, &lighting);
+
+	HDLaraFrame now;
+	HDLaraDraw list[8];
+	const int lara = WetLaraSlot("LARA");
+	const int holster = WetLaraSlot("LARA_HOLSTERS_PISTOLS");
+
+	now.rightHandSlot = now.leftHandSlot = lara;
+	now.leftHolsterSlot = now.rightHolsterSlot = holster;
+	now.backGunSlot = 0;
+
+	const int pieces = HDLaraFrameParts(&now, list, 8);
+
+	for (int i = 0; i < pieces; i++)
+		HDModelDraw(HDLaraPartSlot(list[i].part), g_wet_lara_mats,
+			HD_LARA_NODES, light, list[i].nodeMask, &lighting);
+}
+
 // The stand-ins as HDObjectFrameDraw would draw the objects.
 static void ProbeWetStands(const void* projection, int bulbs,
 	unsigned int passes)
@@ -7740,6 +8040,10 @@ static void ProbeWetDraw(int part)
 		// -wetstand: the stand-ins through the models' mirror.
 		if (!g_wet_stands.empty() && !g_wet_no_models)
 			HDRenderWaterWetModels(ProbeWetStands, g_wet_stand_proj, 0);
+
+		// -wetlara: Lara through the models' mirror.
+		if (g_wet_lara_ready && !g_wet_no_models)
+			HDRenderWaterWetModels(ProbeWetLaraDraw, g_wet_stand_proj, 0);
 
 		HDRenderWaterWetMirror();
 	}
@@ -11506,6 +11810,7 @@ static int ProbeMain(int argc, char** argv)
 			!strcmp(argv[at], "-tankart") ||
 			!strcmp(argv[at], "-tankcensus") ||
 			(!strcmp(argv[at], "-wetstand") && at + 1 < argc) ||
+			(!strcmp(argv[at], "-wetlara") && at + 1 < argc) ||
 			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
@@ -11519,6 +11824,10 @@ static int ProbeMain(int argc, char** argv)
 				g_tank_census = true;
 			else if (!strcmp(argv[at], "-wetnomodels"))
 				g_wet_no_models = true;
+			else if (!strcmp(argv[at], "-wetlara"))
+				g_wet_lara = sscanf_s(argv[++at], "%f,%f,%f,%f,%d",
+					&g_wet_lara_at[0], &g_wet_lara_at[1], &g_wet_lara_at[2],
+					&g_wet_lara_at[3], &g_wet_lara_pose) >= 3;
 			else if (!strcmp(argv[at], "-wetstand"))
 			{
 				float s[3] = { 0.0f, 0.0f, 768.0f };
@@ -13996,6 +14305,10 @@ static int ProbeMain(int argc, char** argv)
 			if (g_hdwater == 1)
 				SpringBuild(root, stem, room);
 
+			// -wetlara: her outfit on the card.
+			if (g_wet_lara)
+				WetLaraBuild(root, stem);
+
 			// -life: the water's life on the bodies just built.
 			if (g_life && g_hdwater)
 				LifeBuild(root, stem);
@@ -14597,6 +14910,18 @@ static int ProbeMain(int argc, char** argv)
 			// -wetstand: Lara's stand-ins, among the frame's objects.
 			std::memcpy(g_wet_stand_proj, &projection,
 				sizeof(g_wet_stand_proj));
+
+			/* The room behind the models, before Lara or the stand-ins, as
+			 * HDRenderWaterMarkBegin takes it before the game's objects. */
+			if (g_hdwater == 1 && (g_wet_lara_ready || !g_wet_stands.empty()))
+				HDRenderWaterWetRoomCopy(true);
+
+			// -wetlara: Lara, where the stand-ins stand.
+			if (g_wet_lara_ready)
+			{
+				WetLaraMatrices(view);
+				ProbeWetLaraDraw(&projection, 0, HD_PASS_SOLID);
+			}
 
 			for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
 				if (g_hdwater == 1 && !HDRenderWaterProbeStand(g_wet_stands[i],

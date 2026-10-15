@@ -1729,6 +1729,11 @@ typedef void (*HDWetModelDraw)(const void* projection, int bulbs,
 	unsigned int passes);
 void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	int bulbs);
+/* The frame's colour before the objects, the room behind the models for
+ * the wet floor's march: taken while the last frame's wet floor mirrored
+ * models (HDRenderWaterWetModels), or always with `force` (RoomProbe,
+ * which draws one frame). HDRenderWaterMarkBegin calls it. */
+void HDRenderWaterWetRoomCopy(bool force);
 /* RoomProbe's -wetstand: a dark box 160 across and `height` high standing
  * on the wet square under world x, z, drawn with the frame's view and
  * `projection` (the frame's own when 0) in the frame `offX`, `offZ` shift

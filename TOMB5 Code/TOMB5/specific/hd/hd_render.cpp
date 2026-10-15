@@ -11903,6 +11903,19 @@ namespace
 	IDirect3DSurface9* g_wet_model_depth_surface = 0;
 	D3DSURFACE_DESC g_wet_model_desc = {};
 	bool g_wet_models = false;
+	/* The room behind the models: the frame's colour taken before the
+	 * objects are drawn (HDRenderWaterWetRoomCopy, from
+	 * HDRenderWaterMarkBegin), while the last frame's wet floor mirrored
+	 * models. A model hides in the frame what a reflected ray passing
+	 * behind it meets; the march takes this copy's colour where it went
+	 * behind a model's place and met nothing else (WetMarch, why 4).
+	 * g_wet_room_valid for this frame's copy, g_wet_room_want while the
+	 * models' mirror ran. */
+	IDirect3DTexture9* g_wet_room = 0;
+	IDirect3DSurface9* g_wet_room_surface = 0;
+	D3DSURFACE_DESC g_wet_room_desc = {};
+	bool g_wet_room_valid = false;
+	bool g_wet_room_want = false;
 	float g_wet_plane[4] = {};
 	float g_wet_view[16] = {};
 	int g_wet_height = 0;
@@ -11939,6 +11952,15 @@ namespace
 		}
 
 		g_wet_models = false;
+
+		if (g_wet_room_surface)
+		{
+			g_wet_room_surface->Release();
+			g_wet_room_surface = 0;
+		}
+
+		if (g_wet_room) { g_wet_room->Release(); g_wet_room = 0; }
+		g_wet_room_valid = false;
 	}
 
 	void release_wet_late()
@@ -11969,6 +11991,7 @@ namespace
 		g_wet_late_valid = false;
 		g_wet_ready = false;
 		g_wet_models = false;
+		g_wet_room_valid = false;
 	}
 
 	// A world square and a surface height, as one key.
@@ -17407,6 +17430,59 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	g_wet_plane[2] = n[2];
 	g_wet_plane[3] = dist;
 	g_wet_models = true;
+	g_wet_room_want = true;
+}
+
+void HDRenderWaterWetRoomCopy(bool force)
+{
+	const bool want = force || g_wet_room_want;
+
+	g_wet_room_valid = false;
+	g_wet_room_want = false;
+
+	if (!want || !g_device || !g_in_frame)
+		return;
+
+	IDirect3DSurface9* target = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		desc.MultiSampleType != D3DMULTISAMPLE_NONE)
+	{
+		target->Release();
+		return;
+	}
+
+	if (g_wet_room && (g_wet_room_desc.Width != desc.Width ||
+		g_wet_room_desc.Height != desc.Height ||
+		g_wet_room_desc.Format != desc.Format))
+	{
+		g_wet_room_surface->Release();
+		g_wet_room_surface = 0;
+		g_wet_room->Release();
+		g_wet_room = 0;
+	}
+
+	if (!g_wet_room)
+	{
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &g_wet_room,
+			0)) || FAILED(g_wet_room->GetSurfaceLevel(0, &g_wet_room_surface)))
+		{
+			if (g_wet_room) { g_wet_room->Release(); g_wet_room = 0; }
+			target->Release();
+			return;
+		}
+
+		g_wet_room_desc = desc;
+	}
+
+	g_wet_room_valid = SUCCEEDED(g_device->StretchRect(target, 0,
+		g_wet_room_surface, 0, D3DTEXF_POINT));
+	target->Release();
 }
 
 /* RoomProbe's stand-in on a wet floor (-wetstand): a dark box 160 across
@@ -17591,8 +17667,8 @@ static void wet_layer(int part)
 	IDirect3DVertexShader9* vs = 0;
 	IDirect3DPixelShader9* ps = 0;
 	IDirect3DVertexDeclaration9* decl = 0;
-	IDirect3DBaseTexture9* tex[7] = { 0, 0, 0, 0, 0, 0, 0 };
-	const DWORD stage[7] = { 1, 2, 5, 6, 7, 0, 3 };
+	IDirect3DBaseTexture9* tex[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+	const DWORD stage[8] = { 1, 2, 5, 6, 7, 0, 3, 4 };
 	IDirect3DVertexBuffer9* stream = 0;
 	IDirect3DIndexBuffer9* index = 0;
 	UINT streamOffset = 0, streamStride = 0;
@@ -17613,7 +17689,7 @@ static void wet_layer(int part)
 	};
 	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
-	DWORD saved[stateCount], savedSamp[7][sampCount];
+	DWORD saved[stateCount], savedSamp[8][sampCount];
 
 	g_device->GetVertexShader(&vs);
 	g_device->GetPixelShader(&ps);
@@ -17625,7 +17701,7 @@ static void wet_layer(int part)
 	for (int i = 0; i < stateCount; i++)
 		g_device->GetRenderState(states[i], &saved[i]);
 
-	for (int s = 0; s < 7; s++)
+	for (int s = 0; s < 8; s++)
 	{
 		g_device->GetTexture(stage[s], &tex[s]);
 
@@ -17714,8 +17790,9 @@ static void wet_layer(int part)
 	 * far a pixel's layer may lie from the plane - the layer's own lift and
 	 * the rounding a sloping square's corners have (kWetSlopeRise). */
 	const bool models = part == 1 && g_wet_models;
+	const bool room = models && g_wet_room_valid;
 	const float modelsOn[4] = { models ? 1.0f : 0.0f,
-		kWetLift + (float)kWetSlopeRise, 0.0f, 0.0f };
+		kWetLift + (float)kWetSlopeRise, room ? 1.0f : 0.0f, 0.0f };
 
 	for (int s = 5; s < 7; s++)
 	{
@@ -17731,6 +17808,14 @@ static void wet_layer(int part)
 
 	g_device->SetTexture(0, models ? g_wet_model : 0);
 	g_device->SetTexture(3, models ? g_wet_model_depth : 0);
+	// The room behind the models on s4, point sampled as the frame's copy.
+	g_device->SetSamplerState(4, D3DSAMP_MINFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(4, D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+	g_device->SetSamplerState(4, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+	g_device->SetSamplerState(4, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(4, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
+	g_device->SetSamplerState(4, D3DSAMP_SRGBTEXTURE, FALSE);
+	g_device->SetTexture(4, room ? g_wet_room : 0);
 	g_device->SetPixelShaderConstantF(102, g_wet_plane, 1);
 	g_device->SetPixelShaderConstantF(103, modelsOn, 1);
 	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)verts.size(),
@@ -17740,7 +17825,7 @@ static void wet_layer(int part)
 	for (int i = 0; i < stateCount; i++)
 		g_device->SetRenderState(states[i], saved[i]);
 
-	for (int s = 0; s < 7; s++)
+	for (int s = 0; s < 8; s++)
 	{
 		for (int i = 0; i < sampCount; i++)
 			g_device->SetSamplerState(stage[s], samps[i], savedSamp[s][i]);
@@ -18177,6 +18262,9 @@ bool HDRenderWaterMarkLine(const char* stem, char* out, size_t size)
 
 void HDRenderWaterMarkBegin()
 {
+	// The room behind the models, before they are drawn.
+	HDRenderWaterWetRoomCopy(false);
+
 	g_mark_frame = false;
 	g_mark_open = false;
 	g_mark_surface = 0;

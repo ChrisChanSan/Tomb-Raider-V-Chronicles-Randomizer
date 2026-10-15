@@ -114,7 +114,8 @@
  *                  xyz the world's up, w its height along it
  * c103 gWetModels  x 1 while the models' mirror is bound on s0 and s3, y how
  *                  far a pixel's layer may lie from that plane and still
- *                  take it
+ *                  take it, z 1 while the room behind the models is bound
+ *                  on s4
  *
  * The models in the mirror (hd_render.cpp, HDRenderWaterWetModels): Lara and
  * the objects the frame drew are drawn once more through the floor's
@@ -146,6 +147,8 @@ sampler2D sWetCopy : register(s5);
 sampler2D sWetDepth : register(s6);
 sampler2D sWetModel : register(s0);
 sampler2D sWetModelDepth : register(s3);
+// The frame's colour before the models were drawn: the room behind them.
+sampler2D sWetRoom : register(s4);
 float4 gWetPlane : register(c102);
 float4 gWetModels : register(c103);
 
@@ -197,14 +200,22 @@ bool WetModelAt(float2 uv)
 /* The march: from P along R, the place the ray meets the frame, and how
  * sure: 1 for a crossing whose depth fits exactly, down to 0 at the
  * tolerance; 0 for none. `why` 0 a hit, 1 off the screen, 2 behind the
- * eye, 3 out of steps; `steps` the steps taken, `len` the ray's length to
- * the hit. A model's place counts as in front of the frame (WetModelAt). */
+ * eye, 3 out of steps, 4 the room behind a model; `steps` the steps taken,
+ * `len` the ray's length to the hit. A model's place counts as in front of
+ * the frame (WetModelAt). A ray that went behind a model's place and met
+ * nothing after it met what the model hides in the frame - the room behind
+ * it, which the copy taken before the models holds (sWetRoom): its first
+ * such place is the answer then, sure as a hit, where that copy is bound
+ * (gWetModels.z); without it the ray finds nothing, as before. */
 float WetMarch(float3 P, float3 R, out float2 at, out float why,
 	out float steps, out float len)
 {
 	float step = gWetMarch.z;
 	float s = 0.0f;
 	bool front = true;
+	// The first place the ray went behind a model, and its length there.
+	float2 hidden = float2(0.0f, 0.0f);
+	float hiddenLen = -1.0f;
 
 	at = float2(0.0f, 0.0f);
 	why = 3.0f;
@@ -225,7 +236,7 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 		{
 			why = 2.0f;
 			steps = i + 1;
-			return 0.0f;
+			break;
 		}
 
 		const float2 uv = WetScreen(q);
@@ -234,10 +245,18 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 		{
 			why = 1.0f;
 			steps = i + 1;
-			return 0.0f;
+			break;
 		}
 
-		const bool behind = q.z > WetDepth(uv) && !WetModelAt(uv);
+		const bool model = WetModelAt(uv);
+
+		if (model && hiddenLen < 0.0f && q.z > WetDepth(uv))
+		{
+			hidden = uv;
+			hiddenLen = s;
+		}
+
+		const bool behind = q.z > WetDepth(uv) && !model;
 
 		if (behind && front)
 		{
@@ -275,7 +294,22 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 		front = !behind;
 	}
 
+	if (gWetModels.z > 0.5f && hiddenLen >= 0.0f)
+	{
+		at = hidden;
+		why = 4.0f;
+		len = hiddenLen;
+		return 1.0f;
+	}
+
 	return 0.0f;
+}
+
+// The frame's colour a march found: the room behind a model for why 4.
+float3 WetFound(float2 at, float why)
+{
+	return why > 3.5f ? tex2Dlod(sWetRoom, float4(at, 0.0f, 0.0f)).rgb :
+		tex2Dlod(sWetCopy, float4(at, 0.0f, 0.0f)).rgb;
 }
 
 #if HD_WET_DEBUG
@@ -430,8 +464,9 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 				return float4(tex2Dlod(sWetModel,
 					float4(flip, 0.0f, 0.0f)).rgb, 1.0f);
 
-			return float4(hit > 0.0f ? tex2Dlod(sWetCopy,
-				float4(uv, 0.0f, 0.0f)).rgb : float3(0.0f, 0.0f, 0.0f), 1.0f);
+			return float4(hit > 0.0f ? (map < 6.5f ? tex2Dlod(sWetCopy,
+				float4(uv, 0.0f, 0.0f)).rgb : WetFound(uv, why)) :
+				float3(0.0f, 0.0f, 0.0f), 1.0f);
 		}
 
 		const float2 px = 1.0f / gWetScreen.xy;
@@ -497,8 +532,7 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 			 * HD_WET_BRIGHT. Fades out toward the screen's edge, over
 			 * its last tenth. */
 			const float2 edge = saturate(min(at, 1.0f - at) * 10.0f);
-			const float3 held = min(tex2Dlod(sWetCopy,
-				float4(at, 0.0f, 0.0f)).rgb, HD_WET_BRIGHT /
+			const float3 held = min(WetFound(at, why), HD_WET_BRIGHT /
 				(1.0f + HD_WET_BRIGHT));
 
 			seen = lerp(seen, held / (1.0f - held), sure * edge.x * edge.y);

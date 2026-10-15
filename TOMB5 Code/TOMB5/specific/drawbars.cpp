@@ -25,7 +25,7 @@
 #include "winmain.h"
 #include "texture.h"
 #include "LoadSave.h"	// DrawLoadingScreen - the picture under the load bar
-#include "loadbar_math.h"	// LOADBAR_*, the brake, the fade of the row's off
+#include "loadbar_math.h"	// LOADBAR_*, the brake, the fade, the name
 #include "time.h"		// TIME_SubTick - a tick passed, without waiting
 #include "profile.h"		// ProfPresent - the held present
 #include "../game/text.h"	// GnFrameCounter
@@ -97,10 +97,11 @@ static float loadbar_steps;
 static float loadbar_pos;
 static long loadbar_maxpos;
 
-/* The loading screen of the load under way (S_LoadScreenBegin): the
- * Loadbar style row as it stood when the load began, and with the row off
- * the fade of the last frame to black - whether it runs, since when and
- * over how long - and the frames drawn. */
+/* The loading screen of the load under way (S_LoadScreenBegin): its state
+ * (the Loadbar style row as the load began, TR5 for a load that builds
+ * with the row off), for a short load without a screen the fade of the
+ * last frame to black - whether it runs, since when and over how long -
+ * and the frames drawn. */
 static long loadbar_mode;
 static long loadbar_fading;
 static double loadbar_fade_at;
@@ -583,9 +584,11 @@ void S_DrawEnemyBar(long pos)
 }
 
 /* A level load's loading screen begins, right after its first frame (the
- * picture, in the TR5 and TR4 states): `mode` is the Loadbar style row
- * (LOADBAR_*); with LOADBAR_OFF, `fade` says whether the last frame is
- * faded to black over `fadeMs` (0 a cut), from now on. `minMs` is the
+ * picture, in the TR5 and TR4 states): `mode` is the screen's state
+ * (LOADBAR_*, file.cpp's LoadScreenModeOf), the row's own except TR5 for
+ * a load that builds with the row off; with LOADBAR_OFF, a short load
+ * without a screen, `fade` says whether the last frame is faded to black
+ * over `fadeMs` (0 a cut), from now on. `minMs` is the
  * brake, the least time the screen stands; `hd` says whether an HD build
  * follows the loading thread, which then has its share of the bar
  * (kLoadBarThreadShare) and otherwise all of it. The brake's clock starts
@@ -674,12 +677,13 @@ void S_LoadScreenStep(long step)
 }
 
 /* The loading thread has joined; from here to the tail the frames present
- * held (LoadBarPresentHeld). With the row off, a fade still running - a
- * thread shorter than loadfade_ms - ends here in one black frame: the HD
- * build after it draws a frame only at the ends of its steps, the longest
- * of which take most of a second, and the half faded frame would stand
- * that long. That frame waits for its tick, at most 1/60 s. In the TR5
- * and TR4 states a frame is drawn if one is due. */
+ * held (LoadBarPresentHeld). Without a screen (the row off, a short
+ * load), a fade still running - a thread shorter than loadfade_ms - ends
+ * here in one black frame: the HD build after it draws a frame only at
+ * the ends of its steps, the longest of which take most of a second, and
+ * the half faded frame would stand that long. That frame waits for its
+ * tick, at most 1/60 s. In the TR5 and TR4 states a frame is drawn if
+ * one is due. */
 void S_LoadScreenJoin()
 {
 	loadbar_held = loadbar_loading;
@@ -724,10 +728,55 @@ void S_LoadScreenStatsGet(LoadScreenStats* out)
 }
 
 /* Whether the load draws a frame now: the bar in the TR5 and TR4 states,
- * and with the row off only while the fade runs. */
+ * and without a screen (the row off, a short load) only while the fade
+ * runs. */
 long S_LoadScreenDraws()
 {
 	return loadbar_mode != LOADBAR_OFF || loadbar_fading;
+}
+
+// game\text.cpp: the accents PrintString composes over a letter.
+extern char AccentTable[46][2];
+
+/* The slot whose name RenderLoadPic drew over the TR4 view, 0 for none:
+ * the view is read back as the loading picture with the name in it, and
+ * S_LoadLevelFile then draws it no second time. */
+long LoadViewNamed;
+
+/* The name of the level in `slot` at the top centre of the frame being
+ * drawn, in the game's font (PrintString: the HD atlas when the HD path
+ * draws), its highest ink kLoadNameMargin under the top edge at this
+ * screen size (loadbar_math.h). Only where the level's texture pages
+ * stand - the font's classic page is one of them. */
+void S_LoadScreenName(long slot)
+{
+	const long reach = LoadNameReach(CharDef, 106, AccentTable, 46);
+
+	PrintString(phd_centerx, LoadNameY(GetFixedScale(kLoadNameMargin),
+		reach), (uchar)kLoadNameStyle, SCRIPT_TEXT(gfLevelNames[slot]),
+		FF_CENTER);
+}
+
+/* The load's first frame, drawn with the name, read back as the loading
+ * picture before it is presented: every later frame draws that picture
+ * and no text of its own, since the loading thread frees the level's
+ * texture pages - the classic font's among them (DrawChar's nTextures - 2)
+ * - while those frames draw. The scene is ended for the read and begun
+ * again for the present. 1 when the picture was made; otherwise the one
+ * before stays up, without the name. */
+long S_LoadScreenKeepName()
+{
+	const char was = MonoScreenOn;
+	long made;
+
+	_EndScene();
+	made = CaptureLoadingScreen();
+	_BeginScene();
+
+	if (!made)
+		MonoScreenOn = was;
+
+	return made;
 }
 
 
@@ -744,8 +793,9 @@ void S_UpdateLoadBar()
 	loadbar_steps = 100.0F / loadbar_maxpos + loadbar_steps;
 }
 
-/* One frame of the loading screen, at the next 1/60 s tick: the picture,
- * and over it the bar or, with the row off, the fade. The tick is waited
+/* One frame of the loading screen, at the next 1/60 s tick: the picture -
+ * with the level's name in it, read back with the first frame - and over
+ * it the bar or, without a screen, the fade. The tick is waited
  * out first, so that the bar's position is the one at the Present:
  * S_DumpScreenFrame then finds its tick and does not wait again. The
  * position is the brake's (loadbar_math.h) out of the work done - the
@@ -782,7 +832,7 @@ long S_DrawLoadBar()
 	TextureStageLock();
 	DrawLoadingScreen();
 
-	/* With the row off there is no bar: the frame is the last frame of the
+	/* Without a screen there is no bar: the frame is the last frame of the
 	 * game (the picture above, captured by S_LoadLevelFile) under black
 	 * that thickens with the time since the fade began; the frame at full
 	 * black ends the fade, and nothing is drawn after it. */

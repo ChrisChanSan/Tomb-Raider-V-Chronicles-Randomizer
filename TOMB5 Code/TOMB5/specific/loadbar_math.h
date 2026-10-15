@@ -13,13 +13,14 @@
 #pragma once
 
 /* The loading screen's rules, and nothing else: the Loadbar style row's
- * state, the brake's position and the fade of the third state.
+ * state, the brake's position, the fade of the third state and the
+ * level's name on the screen.
  *
  * No engine header on purpose: Preparation\Tools\Diagnose\ModernTest.cpp
  * includes this file and runs the rules as the engine runs them
  * (tomb5\tomb5.cpp reads the row with them, specific\drawbars.cpp draws
  * with them, specific\file.cpp and specific\hd\hd_level.cpp feed the
- * work). */
+ * work, specific\output.cpp names the coming level over the TR4 view). */
 
 #include <math.h>	// floor - the brake's clock in whole ticks
 
@@ -195,4 +196,92 @@ inline long LoadFadeAlpha(double elapsed, double fadeMs)
 		return 0;
 
 	return (long)(255.0 * elapsed / fadeMs);
+}
+
+/* The level's name on a loading screen (the Loading text row). `slot` is
+ * the gameflow slot the load reads: 0 is the title's (DoGameflow), which
+ * is no level and shows no name, -1 no load at all. A screen not shown
+ * (the row off, a short load) draws nothing, the name neither. `baked`:
+ * the picture under the frame already carries the name (the TR4 view,
+ * read back with it), so that it is never drawn twice. */
+inline long LoadNameDrawn(long row, long shown, long slot, long baked)
+{
+	return row && shown && slot > 0 && !baked;
+}
+
+/* The slot DoGameflow (game\gameflow.cpp) loads next, out of what it reads
+ * when DoTitle or DoLevel has returned: RenderLoadPic draws the view at
+ * their end, before gfCurrentLevel is set. A save (status 2) is its own
+ * level; after the title, 3 is the level chosen and anything else stays
+ * where it is; after a level, 1 is the title (slot 1 when there is none),
+ * 3 the next level, the title past the last one, on a demo disc or with
+ * two slots, and the title after the last campaign slot (DoLevel turns
+ * that 3 into 1 for the credits); 4 ends the game. */
+inline long LoadNextSlot(long fromTitle, long status, long current,
+	long lastSlot, long saveLevel, long complete, long titleOn,
+	long titleOnly, long levels)
+{
+	if (status == 4)
+		return -1;
+
+	if (status == 2)
+		return saveLevel;
+
+	if (fromTitle)
+		return status == 3 ? complete : current;
+
+	if (status == 1 || (status == 3 && current == lastSlot))
+		return titleOn ? 0 : 1;
+
+	if (status == 3)
+		return titleOnly || complete > levels ? 0 : complete;
+
+	return current;
+}
+
+/* The name's font style: the one the title's level list draws a level's
+ * name in (gameflow.cpp, an entry not selected) and the statistics too. */
+const long kLoadNameStyle = 2;
+
+/* The name's margin from the top edge to its highest ink, in
+ * GetFixedScale units: the bar's own margin from the bottom edge
+ * (GetFixedScale(20), drawbars.cpp), so that name and bar frame the
+ * picture alike. */
+const long kLoadNameMargin = 20;
+
+/* How far the font reaches above a baseline at the current screen size,
+ * in pixels: the highest glyph of `def` (CharDef, scaled by InitFont) and
+ * the highest accent PrintString composes (AccentTable: the accent drawn
+ * at the base letter's y offset). */
+template <class Def>
+inline long LoadNameReach(const Def* def, long glyphs,
+	const char (*accent)[2], long rows)
+{
+	long reach = 0;
+
+	for (long i = 0; i < glyphs; i++)
+		if (-def[i].YOffset > reach)
+			reach = -def[i].YOffset;
+
+	for (long i = 0; i < rows; i++)
+	{
+		const long a = accent[i][0] - '!';
+		const long b = accent[i][1] - '!';
+
+		if (a < 0 || b < 0 || a >= glyphs || b >= glyphs)
+			continue;
+
+		if (-(def[a].YOffset + def[b].YOffset) > reach)
+			reach = -(def[a].YOffset + def[b].YOffset);
+	}
+
+	return reach;
+}
+
+/* The name's baseline: its highest ink `margin` pixels under the top
+ * edge. A name is one line (no level name of the language files breaks),
+ * so it grows no further down than the font's depth under the baseline. */
+inline long LoadNameY(long margin, long reach)
+{
+	return margin + reach;
 }

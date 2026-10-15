@@ -16720,6 +16720,164 @@ run.
 
 **Commits.** `596a371` (the decision); this record follows it.
 
+#### Round 3: the loading text is the level's name
+2026-10-15
+
+**What.** With *Loading text* on (`tomb5.loadingtxt`, the registry bool `loadtxt`,
+default on), every loading screen that is shown carries the name of the level being
+loaded at the top centre, in the game's font - `PrintString`, so the HD font atlas draws
+it when the HD path draws -, in the style the title's level list draws a level's name
+in: over the level's picture or the HD picture in the TR5 state, over the *TR4
+loadscreens* view or the picture in the TR4 state, and over the screen of an off load
+that builds (round 2: the TR5 state). The title's loads show no name, and a load without
+a screen (off, a short load) shows no text. The script's `TXT_LOADING2` lettering is
+drawn nowhere any more, with the row on or off. New: `LoadNameDrawn`, `LoadNextSlot`,
+`LoadNameReach`, `LoadNameY`, `kLoadNameStyle`, `kLoadNameMargin`
+(`specific/loadbar_math.h`), `S_LoadScreenName`, `S_LoadScreenKeepName` and
+`LoadViewNamed` (`specific/drawbars.cpp`, declared in `drawbars.h`), the `LOADLOG` line
+`name view= level=` (written only when the TR4 view names another level than the load
+reads). The comments of `drawbars.cpp` on the screen's state say what `mode` is since
+round 2: the screen's state, TR5 for an off load that builds.
+
+**Why.** The owner played round 1 and wrote: "I found the TR4 loading texts." ("Ich habe
+die TR4 Ladetexte gefunden.") and "If I see it right, the TR4 loading texts still carry
+PS1 leftovers; the switch can be always off and vanish from the menu. Or we keep it and
+show the level's name at the top centre. 50/50 coin toss, you decide, surprise me.
+Maybe you think of something better." ("Wenn ich das richtig sehe, sind bei den TR4
+Ladetexten noch PS1-Ueberbleibsel; der Schalter kann always off sein und aus dem Menue
+verschwinden. Oder wir behalten den und blenden oben in der Mitte den Namen des Levels
+ein. 50/50 Cointoss, entscheide du, ich lass mich ueberraschen. Vielleicht faellt dir
+ja noch was Besseres ein.") On his picture of round 1 the lettering was cut at the
+bottom edge at 2560 x 1440. Project decision of 2026-10-15, which he answered with
+"Sounds good." ("Hoert sich gut an."): the row stays, with its key and its default, and
+shows the level's name at the top centre of every shown loading screen; the lettering
+goes.
+
+**How.** *M - the frames, the lettering and the slot, read first.* The frames of a
+loading screen: `RenderLoadPic` (`specific/output.cpp`, at the end of `DoTitle` and
+`DoLevel` with *TR4 loadscreens* on and a bar) draws the view in its fade loop - nine
+steps, one present each - and once more after it; `S_LoadLevelFile`
+(`specific/file.cpp`) reads that last frame back (`CaptureLoadingScreen`) when no
+picture was read, then draws its first frame, the picture; `S_DrawLoadBar`
+(`specific/drawbars.cpp`) draws the picture and the bar in every frame after it - while
+the loading thread runs, in the build's laps, at the join and in the tail. The only
+text was `RenderLoadPic`'s: `PrintString(x, winheight - GetFixedScale(37), 5,
+TXT_LOADING2)` in each of its frames, with the row on and the TR4 bar only, read back
+with the view under the bar.
+
+*The cut.* `TXT_LOADING2` is entry 211, the 17th of the language file's PSX block
+(`PrepareLanguageBuffer` maps the blocks one by one). In the English and US files it is
+"LOADING"; the German file's PSX block has 58 entries where the enum counts 56, and
+its entry 211 is a memory card message of three lines. `PrintString` puts the first
+baseline at the given y and steps each further line down by its ink's height and 2. At
+2560 x 1440: `GetFixedScale(37)` = min(MulDiv(2560, 37, 640) = 148, MulDiv(1440, 37,
+480) = 111) = 111, the first baseline at 1,329, the glyphs scaled by 1,439 / 240 =
+5.996 (`InitFont`); the second line's baseline 1,414 with its ink to 1,426, the third's
+1,499 with its ink from 1,428 to 1,535 - 95 pixels below the edge. At 1920 x 1080 the
+third line ends 72 pixels below, at 3840 x 2160 141. One line ("LOADING") stays inside
+at all three (99 pixels to spare at 1440). The place was made for one line; the text
+in his language is three.
+
+*The slot.* While `S_LoadLevelFile` draws, `gfCurrentLevel` is the slot being loaded:
+its only callers are `DoTitle` and `DoLevel`, which `DoGameflow` calls after its
+switch has set `gfCurrentLevel` (a save's level, the level completed into, the title),
+and the statistics and the save file's name read `gfLevelNames[gfCurrentLevel]` the
+same way. `RenderLoadPic` runs at the end of `DoTitle` and `DoLevel`, before that
+switch: there `gfCurrentLevel` is still the level left.
+
+*The race.* A bar frame cannot print: the classic glyphs come from the page
+`nTextures - 2` (`DrawChar`), and the loading thread frees the level's pages
+(`FreeLevel`) and counts `nTextures` up from 1 while the frames draw; the HD atlas
+lives for the session but is not there before the first level's build or with the HD
+path off.
+
+*T - the name.* The rule (`loadbar_math.h`): a frame carries the name when the row is
+on, the screen is shown, the slot is a level - not the title's 0, not -1 for no load -
+and the picture under it does not already carry it (`LoadNameDrawn`). `RenderLoadPic`
+works out the coming slot as `DoGameflow` will set it (`LoadNextSlot`: a save its
+level; after the title a 3 the level chosen; after a level a 1 the title, or slot 1
+without one, a 3 the next level, or the title past the last level, on a demo disc, with
+two slots and after the last campaign slot, whose 3 `DoLevel` turns into 1 for the
+credits; a 4 no load) and prints the name in its fade frames and its last, and notes
+the slot (`LoadViewNamed`). `S_LoadLevelFile` prints it in its first frame - after the
+picture, before the sort list is drawn - unless the view RenderLoadPic named is what
+that frame shows (read back, or, when the read made no picture, still on the screen),
+then reads that frame back before its present (`S_LoadScreenKeepName`: the scene ended
+for the read and begun again for the present) and takes it as the loading picture, so
+every frame of the bar draws the picture with the name and no text of its own. The
+picture read back goes with the load's last frame like the view's (`view`). A read
+that fails leaves the picture before it up, without the name. The place: the name's
+highest ink stands `GetFixedScale(20)` under the top edge - the bar's own margin from
+the bottom edge, so name and bar frame the picture alike -, its baseline that plus the
+font's reach above a baseline at this size (`LoadNameReach`: the highest of the 106
+scaled glyphs and of the accents `PrintString` composes, an accent drawn at its
+letter's y offset). Style 2, the title's level list's for a name not selected (and the
+statistics'). A name is one line: no level name of the six language files breaks.
+
+| Rows | Margin | Reach up | Baseline | Ink | Depth under the baseline | Old lettering, 3rd line |
+|---|---|---|---|---|---|---|
+| 1080 (1920 wide) | 45 | 66 | 111 | 45 to 138 | 27 | 72 px below the edge |
+| 1440 (2560 wide) | 60 | 88 | 148 | 60 to 184 | 36 | 95 px below the edge |
+| 2160 (3840 wide) | 90 | 133 | 223 | 90 to 277 | 54 | 141 px below the edge |
+
+The frames, each drawing the name once: the TR4 view's nine fade frames and its last
+(printed), the load's first frame (printed, or the view read back with it), every bar
+frame (the picture read back with it). With the row on and a screen shown no frame is
+without it; the title's loads and the loads without a screen have none.
+
+**Measured.** The place at the three sizes with the engine's arithmetic (`InitFont`'s
+scale, `GetFixedScale`, `DrawChar`'s quads; the glyph and accent rows of `chardef.inc`
+and `accent.inc`; the strings of the owner's language files, read only), the table
+above. *The read back* of the first frame, where the picture is no view read back
+already: round 1's harness measured it at 10.9 ms at 2560 x 1440 (pixel for pixel, the
+first frame's upload included); by the pixel count about 6 ms at 1920 x 1080 and about
+25 ms at 3840 x 2160 (estimates in proportion, not measured). It falls into the
+`LOADLOG` step `screen`, before the brake's clock starts: a save load still ends at
+500 ms after its first frame, a fresh load is that much longer. Memory: the window-sized
+texture (14 MiB at 2560 x 1440, 32 MiB at 3840 x 2160, `MANAGED`) replaces the HD
+picture's 16 MiB texture from the first frame to the last, then goes; the decoded HD
+pixels round 4 keeps are untouched.
+
+**Checked.** ModernTest 15,412 -> 15,477: `load_mode` 60 -> 125 - `LoadNameDrawn` on
+all 24 cases (row, shown, none, title or level, baked; one draws), the title and the
+row off with none, the three states (TR5 and TR4 carry it, off a build carries it, off
+a short load does not), `LoadNextSlot` on eleven cases, and in the engine's text the
+`DoGameflow` lines it follows (the save's slot twice, the next level twice, status 1,
+the title past the last level, the credits after the last slot, the view before the
+credits' turn, `S_LoadLevelFile` called twice), the level list's style 2, the bar's
+margin 20, `InitFont`'s scale line and `DrawChar`'s accent line; the place at 1080,
+1440 and 2160 rows (margin, reach and baseline as in the table, the top ink at the
+margin, the line in the top quarter, one line at the old place inside and a third
+line's baseline under the edge); `TXT_LOADING2` in none of `output.cpp`, `file.cpp`,
+`drawbars.cpp`; the view's slot from `LoadNextSlot`, the name in every fade frame and
+the last, the view's mark; the first frame's order (picture, name, sort list, read
+back, present), three calls in all, the read back released after the load, never over
+a view that has it, the mark taken once; one `PrintString` in `drawbars.cpp` and none
+in `S_DrawLoadBar`, the read back between two scenes, a failed read keeping the
+picture. By reading: every frame above draws the name once, through the picture or the
+print, never both; `RenderLoadPic` prints with the level left's pages standing, the
+first frame before the loading thread starts. No tool compiles a file this round
+changed: with the tools built from this round's last commit the six classic views
+`-classicroom N -classiconly` 6 of 6 identical to `8691e82`'s tool and `2fe3ed6c`'s
+(`git archive`); the fifteen parity cameras 15 of 15 and the six views drawn HD 6 of 6
+identical to `2fe3ed6c`'s tool; the build fingerprints of the fifteen levels at
+`hd_air` 1 and 2, 30 of 30. MenuTest 44,272, InterpTest 729, LipsTest 270 and 243, 0
+failed; the engine and the eight tools build.
+
+**Left.** His next play test: the name over the TR4 view as it fades in and under the
+bar, over the HD and the classic picture, after a level's end, a save load and a new
+game; its size and place at his 2560 x 1440 (baseline 148, ink from 60); the `screen`
+step with the read back. `LoadNextSlot` mirrors `DoGameflow`'s switch; the test pins
+those lines, and a view that names another level than the load reads writes `LOADLOG
+name` - its name would then stand in the picture read back. One such case is known
+by reading: a level completed into a slot marked `GF_NOLEVEL`, which `DoGameflow`
+passes over to the slot after it; whether the shipped script has one was not checked.
+The row keeps its name *Loading text*; whether it should read *Level name* is his
+call.
+
+**Commits.** `5206c07` (the comments on the screen's state), `2947690` (the name);
+this record follows them.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty
@@ -21722,4 +21880,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |
-| #204 | The loading screen's third state and the brake (#204) |
+| #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name |

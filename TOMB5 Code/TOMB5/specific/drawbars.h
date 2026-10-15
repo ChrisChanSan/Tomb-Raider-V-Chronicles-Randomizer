@@ -47,6 +47,11 @@ void S_LoadScreenStep(long step);
 void S_LoadScreenJoin();
 void S_LoadScreenEnd();
 void S_LoadScreenStatsGet(LoadScreenStats* out);
+
+// The level's name on the loading screen (loadbar_math.h, LoadNameDrawn).
+void S_LoadScreenName(long slot);
+long S_LoadScreenKeepName();
+extern long LoadViewNamed;
 void S_InitLoadBar(long max);
 void S_UpdateLoadBar();
 void S_FinishLoadBar();

@@ -2376,17 +2376,42 @@ long S_LoadLevelFile(long num)
 	if (shown && !MonoScreenOn)
 		view = CaptureLoadingScreen();
 
+	/* The level's name (the Loading text row) on a shown screen of a level
+	 * - gfCurrentLevel is the slot DoGameflow set for this load -, unless
+	 * the view RenderLoadPic drew with it is what the frames show: read
+	 * back above, or, when that read made no picture, still on the screen
+	 * under frames that draw none. */
+	const long baked = LoadViewNamed && (view || !MonoScreenOn);
+	const long named = LoadNameDrawn(tomb5.loadingtxt, shown, gfCurrentLevel,
+		baked);
+
+	if (baked && LoadViewNamed != gfCurrentLevel)
+		Log("LOADLOG name view=%ld level=%ld", LoadViewNamed,
+			(long)gfCurrentLevel);
+
+	LoadViewNamed = 0;
+
 	/* The picture is shown at once, in one frame. Every frame of the bar
 	 * draws it again under the bar (S_DrawLoadBar), so it is released only
-	 * after the bar's last frame, below. */
+	 * after the bar's last frame, below. A frame with the name is read back
+	 * before its present and stands for the picture from then on: the bar's
+	 * frames draw no text while the loading thread frees the pages. */
 	if (shown)
 	{
 		_BeginScene();
 		InitBuckets();
 		InitialiseSortList();
 		DrawLoadingScreen();
+
+		if (named)
+			S_LoadScreenName(gfCurrentLevel);
+
 		SortPolyList(SortCount, SortList);
 		DrawSortList();
+
+		if (named && S_LoadScreenKeepName())
+			view = 1;
+
 		S_DumpScreenFrame();
 	}
 

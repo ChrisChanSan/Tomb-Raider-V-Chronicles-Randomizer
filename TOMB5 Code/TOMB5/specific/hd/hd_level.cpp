@@ -9077,6 +9077,7 @@ void HDFrameDrawGlow()
 			HDRenderWaterCopy();
 			break;
 		}
+	HDSpringCopy();
 
 	/* The game's own ripples for the rings on the sheets and Lara's place
 	 * for their waterline, once a frame and only in a level that built

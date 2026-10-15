@@ -718,6 +718,52 @@ void HDSpringDrawn(int* columns, int* bubbles)
 		*bubbles = g_drawn_bubbles;
 }
 
+/* The frame's copy for the columns (HDRenderWaterCopy), where the sheets'
+ * own copy is taken - after the opaque frame, before the blend phase -:
+ * taken when a column is drawn in this frame and reaches its screen
+ * (HDSpringColumnInFrame), the jet's foot and top through `toFrame` as the
+ * draw takes them. A frame under the water whose rooms hold no sheet - the
+ * sheet lies in the dry room over the water, and a view along the floor
+ * leaves that room off the frame's list - takes no copy for the sheets,
+ * and without a copy the column draws nothing. True when the frame has a
+ * copy after it. */
+bool HDSpringFrameCopy(const float* toFrame)
+{
+	HDRenderSpringFrame f;
+
+	if (g_springs.empty() || !toFrame || !(g_parts & 1) ||
+		!HDRenderWaterSpringFrame(&f) || !f.width || !f.height)
+		return false;
+
+	if (f.copy)
+		return true;
+
+	float m[16];
+
+	multiply(toFrame, f.view, m);
+
+	const float focal = f.proj[0] * 0.5f * (float)f.width;
+
+	for (size_t i = 0; i < g_springs.size(); i++)
+	{
+		const HDSpring& s = g_springs[i];
+		const HDSpringCrackShape* crack = crack_of(i);
+		const float foot = crack ? crack->bottomY : (float)s.floorY;
+		const float bw[3] = { s.x, foot, s.z };
+		const float tw[3] = { s.x, (float)s.surfaceY, s.z };
+		float b[3], top[3];
+
+		through(m, bw, b);
+		through(m, tw, top);
+
+		if (HDSpringColumnInFrame(s, foot - (float)s.surfaceY, b, top, focal,
+			f.proj))
+			return HDRenderWaterCopy();
+	}
+
+	return false;
+}
+
 /* The column and the bubbles of every spring in view, after the sheets:
  * `toFrame` takes the world into the frame's world, as for the cards
  * (hd_render.cpp, HDRenderWaterCardsDraw). The column needs the frame's
@@ -762,44 +808,51 @@ void HDSpringFrameDraw(const float* toFrame)
 		through(m, tw, top);
 
 		/* The column, a quad standing on the jet's line and turned to the
-		 * eye, in eight rows up its height; left out where an end lies
-		 * behind the eye. It fades as the eye looks along its line, where
-		 * the quad turns edge-on, and as its half-width at mid height
-		 * falls from kHDSpringFadeFrom to kHDSpringFadeTo pixels. */
-		if ((g_parts & 1) && f.copy && depth > 0.0f && b[2] > 1.0f &&
-			top[2] > 1.0f)
+		 * eye, in eight rows up its height; where an end lies behind the
+		 * eye the rows behind it are cut and a row stands at the cut
+		 * (HDSpringColumnCut). It fades as the eye looks along its line,
+		 * where the quad turns edge-on, and as the half-width at the
+		 * drawn part's middle falls from kHDSpringFadeFrom to
+		 * kHDSpringFadeTo pixels (HDSpringColumnWeight). */
+		float lo = 0.0f, hi = 1.0f;
+
+		if ((g_parts & 1) && f.copy && depth > 0.0f &&
+			HDSpringColumnCut(b, top, &lo, &hi))
 		{
 			const float ax[3] = { top[0] - b[0], top[1] - b[1],
 				top[2] - b[2] };
-			const float mid[3] = { (b[0] + top[0]) * 0.5f,
-				(b[1] + top[1]) * 0.5f, (b[2] + top[2]) * 0.5f };
-			float side[3] = { ax[1] * mid[2] - ax[2] * mid[1],
-				ax[2] * mid[0] - ax[0] * mid[2],
-				ax[0] * mid[1] - ax[1] * mid[0] };
-			const float sl = sqrtf(side[0] * side[0] + side[1] * side[1] +
-				side[2] * side[2]);
-			const float al = sqrtf(ax[0] * ax[0] + ax[1] * ax[1] +
-				ax[2] * ax[2]);
-			const float ml = sqrtf(mid[0] * mid[0] + mid[1] * mid[1] +
-				mid[2] * mid[2]);
-			const float sine = al > 0.0f && ml > 0.0f ? sl / (al * ml) : 0.0f;
-			const float across = HDSpringHalfWidth(s, depth * 0.5f) * focal /
-				mid[2];
-			float weight = s.strength *
-				fminf(fmaxf((sine - 0.2f) / 0.3f, 0.0f), 1.0f) *
-				fminf(fmaxf((across - kHDSpringFadeTo) /
-				(kHDSpringFadeFrom - kHDSpringFadeTo), 0.0f), 1.0f);
+			float p0[3], p1[3], mid[3], side[3], sl;
+
+			HDSpringColumnPart(b, top, lo, hi, p0, p1, mid);
+
+			const float weight = HDSpringColumnWeight(s.strength, ax, mid,
+				HDSpringHalfWidth(s, depth * (lo + hi) * 0.5f), focal, side,
+				&sl);
 
 			if (weight > 0.0f && sl > 0.0f)
 			{
 				for (int k = 0; k < 3; k++)
 					side[k] /= sl;
 
+				/* The rows: the drawn part's two ends and the eighths of
+				 * the height between them - the eight rows of the whole
+				 * column where it is not cut. */
+				float at[9];
+				int rows = 0;
+
+				at[rows++] = lo;
+
+				for (int r = 1; r < 8; r++)
+					if ((float)r / 8.0f > lo && (float)r / 8.0f < hi)
+						at[rows++] = (float)r / 8.0f;
+
+				at[rows++] = hi;
+
 				Vertex row[9][2];
 
-				for (int r = 0; r <= 8; r++)
+				for (int r = 0; r < rows; r++)
 				{
-					const float along = (float)r / 8.0f;
+					const float along = at[r];
 					const float h = depth * along;
 					const float hw = HDSpringHalfWidth(s, h);
 
@@ -825,7 +878,7 @@ void HDSpringFrameDraw(const float* toFrame)
 					}
 				}
 
-				for (int r = 0; r < 8; r++)
+				for (int r = 0; r + 1 < rows; r++)
 				{
 					const Vertex quad[6] = { row[r][0], row[r][1],
 						row[r + 1][1], row[r][0], row[r + 1][1],
@@ -2325,17 +2378,11 @@ void HDSpringDraw(const float* toFrame)
 	HDSpringFrameDraw(toFrame);
 }
 
-/* The cracks, at the start of the blend phase (hd_level.cpp,
- * HDFrameDrawGlow): the world into the HD frame's view space through the
- * engine's own matrix, which in the HD frame is the view itself, as
- * hd_level.cpp's WorldToFrame takes it for the cards. */
-void HDSpringCrackDraw()
+/* The world into the HD frame's view space through the engine's own
+ * matrix, which in the HD frame is the view itself, as hd_level.cpp's
+ * WorldToFrame takes it for the cards. */
+static void FrameMatrix(float* m)
 {
-	if (!HDLevelActive() || g_cracks.empty())
-		return;
-
-	float m[16];
-
 	phd_PushMatrix();
 	phd_TranslateAbs(0, 0, 0);
 	m[0] = aMXPtr[M00];
@@ -2355,7 +2402,31 @@ void HDSpringCrackDraw()
 	m[14] = aMXPtr[M23];
 	m[15] = 1.0f;
 	phd_PopMatrix();
+}
+
+// The cracks, at the start of the blend phase (hd_level.cpp,
+// HDFrameDrawGlow).
+void HDSpringCrackDraw()
+{
+	if (!HDLevelActive() || g_cracks.empty())
+		return;
+
+	float m[16];
+
+	FrameMatrix(m);
 	HDSpringCrackFrameDraw(m, RoomDrawn);
+}
+
+// The columns' copy, beside the sheets' (hd_level.cpp, HDFrameDrawGlow).
+void HDSpringCopy()
+{
+	if (!HDLevelActive() || g_springs.empty())
+		return;
+
+	float m[16];
+
+	FrameMatrix(m);
+	HDSpringFrameCopy(m);
 }
 
 // The shaders belong to the device that is going away.

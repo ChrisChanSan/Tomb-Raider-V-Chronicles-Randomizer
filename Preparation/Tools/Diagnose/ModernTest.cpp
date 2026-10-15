@@ -22128,6 +22128,95 @@ static void spring_crack_gate()
 		"flat floor at their mean height", lround(line.y), 1100);
 }
 
+/* The column in a frame (hd_spring.h, HDSpringColumnInFrame and its parts)
+ * on the view-space foot and top RoomProbe's measuring build printed at
+ * the fountain's spring (ANDREA2, its foot on the crack's bottom at 2,641,
+ * the sheet at 256), 960 x 540: three eyes of a game's camera log under the
+ * water in room 120 at y 2,305 - two of them while the frame's rooms hold
+ * no sheet, so only the column's own question takes the copy -, and eyes
+ * of a fan round the column: one at mid height 300 units away looking up
+ * 30 degrees, the foot behind it, and two looking along the line. */
+static void spring_column()
+{
+	printf("the springs: the column in a frame\n");
+
+	const HDSpring s = spring_of(1.0f);
+	const float depth = 2641.0f - 256.0f, focal = 429.031f;
+	const float proj[16] = { 0.89382f, 0, 0, 0, 0, -1.58900f, 0, 0, 0, 0, 1,
+		1, 0, 0, 0, 0 };
+
+	struct Eye
+	{
+		float b[3], t[3];
+		int in;
+	};
+
+	static const Eye eyes[] =
+	{
+		// the log's ticks 270 and 287 (no sheet drawn) and 300
+		{ { -162.611f, 311.640f, 1228.992f },
+			{ -162.611f, -2072.520f, 1182.359f }, 1 },
+		{ { -232.332f, 408.523f, 1084.551f },
+			{ -232.332f, -1970.831f, 1242.871f }, 1 },
+		{ { -358.184f, 564.764f, 891.992f },
+			{ -358.184f, -1750.977f, 1460.977f }, 1 },
+		// mid height, 300 away, up 30 degrees: the foot behind the eye
+		{ { 0.0f, 1182.844f, -336.461f }, { 0.0f, -882.330f, 855.781f }, 1 },
+		// straight under and straight over it: along the line, edge-on
+		{ { 0.0f, 66.387f, -143.534f }, { 0.0f, 26.840f, 2240.753f }, 0 },
+		{ { 0.0f, -25.504f, 2321.358f }, { 0.0f, -65.051f, -62.930f }, 0 },
+		// the tick 270 turned away: both ends behind, or far to the side
+		{ { 162.611f, 311.640f, -1228.992f },
+			{ 162.611f, -2072.520f, -1182.359f }, 0 },
+		{ { 3600.0f, 311.640f, 1228.992f },
+			{ 3600.0f, -2072.520f, 1182.359f }, 0 },
+	};
+	int right = 0, total = 0;
+
+	for (const Eye& e : eyes)
+	{
+		right += HDSpringColumnInFrame(s, depth, e.b, e.t, focal, proj) ==
+			(e.in != 0) ? 1 : 0;
+		total++;
+	}
+
+	ok(right == total, "spring column: in the frame wherever a part of it "
+		"is in front, on the screen and not edge-on", right, total);
+
+	// The cut: the foot 336 behind the eye, the part from 0.283 up drawn.
+	float lo = -1.0f, hi = -1.0f;
+	const bool cut = HDSpringColumnCut(eyes[3].b, eyes[3].t, &lo, &hi);
+
+	ok(cut && fabsf(lo - 337.461f / 1192.242f) < 1.0e-4f && hi == 1.0f,
+		"spring column: the rows behind the eye cut where the depth is 1",
+		lround(lo * 10000.0f), 2830);
+
+	ok(HDSpringColumnCut(eyes[0].b, eyes[0].t, &lo, &hi) && lo == 0.0f &&
+		hi == 1.0f && !HDSpringColumnCut(eyes[6].b, eyes[6].t, &lo, &hi),
+		"spring column: whole with both ends in front, none with both behind",
+		1, 1);
+
+	/* Uncut, the part's middle and the weight are the whole column's, to
+	 * the bit: the draw's own expression of mid height. */
+	float p0[3], p1[3], mid[3], side[3], sl;
+
+	HDSpringColumnPart(eyes[0].b, eyes[0].t, 0.0f, 1.0f, p0, p1, mid);
+
+	const float ax[3] = { eyes[0].t[0] - eyes[0].b[0],
+		eyes[0].t[1] - eyes[0].b[1], eyes[0].t[2] - eyes[0].b[2] };
+	const float w = HDSpringColumnWeight(s.strength, ax, mid,
+		HDSpringHalfWidth(s, depth * 0.5f), focal, side, &sl);
+	bool same = true;
+
+	for (int k = 0; k < 3; k++)
+		same = same && mid[k] == (eyes[0].b[k] + eyes[0].t[k]) * 0.5f &&
+			p0[k] == eyes[0].b[k] && p1[k] == eyes[0].t[k];
+
+	ok(same && w == 1.0f && sl > 0.0f, "spring column: uncut, the middle is "
+		"the column's and the weight whole at the log's tick 270", same ? 1 :
+		0, 1);
+}
+
 static void spring_clock()
 {
 	printf("the springs: the hashed clock\n");
@@ -22523,6 +22612,7 @@ int main()
 	level_key();
 	spring_crack();
 	spring_crack_gate();
+	spring_column();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -7692,6 +7692,19 @@ static void SpringDraw()
 		(columns ? 1 : 0) + (bubbles ? 1 : 0), columns, bubbles, ms);
 }
 
+/* The frame's copy for the springs' columns, where HDFrameDrawGlow asks
+ * for it beside the sheets' (hd_spring.cpp, HDSpringFrameCopy). */
+static void SpringCopy()
+{
+	if (g_hdwater != 1 || !HDSpringCount())
+		return;
+
+	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
+
+	HDSpringFrameCopy(m);
+}
+
 // Whether the picture draws a room: the seed's or one of -with's.
 static bool SpringRoomDrawn(int room)
 {
@@ -14246,6 +14259,8 @@ static int ProbeMain(int argc, char** argv)
 
 			if (sheet)
 				HDRenderWaterCopy();
+
+			SpringCopy();
 
 			/* The see-through half of the alpha pass - the glass - after
 			 * everything opaque and before the glows, which is the order

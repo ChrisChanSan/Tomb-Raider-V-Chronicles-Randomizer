@@ -11350,6 +11350,13 @@ static void load_mode()
 	b = load_keep_at(file, "if (!shown && !black)", "CaptureLoadingScreen();");
 	ok(a >= 0 && a < b, "load mode: the fade only over a frame not black",
 		a < b, 1);
+	a = load_keep_at(file, "load thread joined", "S_LoadScreenJoin();");
+	b = load_keep_at(file, "load thread joined", "HDLevelBuild();");
+	ok(a >= 0 && a < b, "load mode: a fade the thread outlasts ends at the "
+		"join", a < b, 1);
+	n = hd_switch_count(bars, "loadbar_fade_ms = 0;\r\n\tS_DrawLoadBar();") +
+		hd_switch_count(bars, "loadbar_fade_ms = 0;\n\tS_DrawLoadBar();");
+	ok(n == 1, "load mode: in one black frame", n, 1);
 	n = hd_switch_count(bars,
 		"if (alpha >= 255)\r\n\t\t\tloadbar_fading = 0;") +
 		hd_switch_count(bars, "if (alpha >= 255)\n\t\t\tloadbar_fading = 0;");

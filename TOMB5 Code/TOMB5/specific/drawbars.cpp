@@ -580,6 +580,20 @@ void S_LoadBarBuild(long done, long total)
 	loadbar_build_ms += LoadScreenClockMs() - at;
 }
 
+/* The loading thread has joined. With the row off, a fade still running -
+ * a thread shorter than loadfade_ms - ends here in one black frame: the
+ * HD build after it draws a frame only at the ends of its steps, the
+ * longest of which take most of a second, and the half faded frame would
+ * stand that long. The frame waits for its tick, at most 1/60 s. */
+void S_LoadScreenJoin()
+{
+	if (!loadbar_fading || !(App.dx.Flags & DXF_HWR))
+		return;
+
+	loadbar_fade_ms = 0;
+	S_DrawLoadBar();
+}
+
 /* The work is done: the brake's tail and the last frame. The bar runs on
  * with the clock, one frame a tick, until the screen has stood minMs; the
  * last frame is the full bar - at minMs, or at the next tick when the work

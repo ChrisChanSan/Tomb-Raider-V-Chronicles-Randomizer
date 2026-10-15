@@ -2401,6 +2401,7 @@ long S_LoadLevelFile(long num)
 	}
 
 	Log("S_LoadLevelFile: load thread joined");
+	S_LoadScreenJoin();
 	LoadLogStep(&loadlog_at, "thread");
 
 	// Here and not on the load thread (see the comment in LoadLevel): room

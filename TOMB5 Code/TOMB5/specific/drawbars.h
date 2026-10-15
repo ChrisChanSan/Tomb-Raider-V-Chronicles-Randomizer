@@ -31,6 +31,7 @@ void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
 	long hd);
 long S_LoadScreenDraws();
 void S_LoadBarBuild(long done, long total);
+void S_LoadScreenJoin();
 void S_LoadScreenEnd();
 void S_LoadScreenStatsGet(LoadScreenStats* out);
 void S_InitLoadBar(long max);

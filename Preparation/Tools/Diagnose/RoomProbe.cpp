@@ -7573,7 +7573,8 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
  * own out to its foot, the flood's speed past it), whether the radius
  * keeps it and, as copy=, the art's copy of the room under it: the cells
  * of art under the floor, the mirrored ones and whether the square counts
- * as copied (HDWaterWetSquare). */
+ * as copied (HDWaterWetSquare); clear= 1 where its floor is a clear floor,
+ * the one kind of floor a copy counts under. */
 static void ProbeWetMap(int floor)
 {
 	if (!g_tank_wet_map)
@@ -7598,10 +7599,24 @@ static void ProbeWetMap(int floor)
 			kTankDomeOut + (q.way - q.reach) / kWetSpread;
 
 		printf("wetmap tank=%d room=%d x=%d z=%d y=%d way=%.0f squares=%.2f "
-			"t=%.2f %s copy=%d/%d/%s slope=%d\n", q.item, q.room, q.x, q.z,
-			q.y, q.way, q.way / 1024.0f, t, q.kept ? "kept" : "dropped",
-			q.under, q.mirrored, q.copied ? "yes" : "no", q.slope);
+			"t=%.2f %s copy=%d/%d/%s slope=%d clear=%d\n", q.item, q.room,
+			q.x, q.z, q.y, q.way, q.way / 1024.0f, t,
+			q.kept ? "kept" : "dropped", q.under, q.mirrored,
+			q.copied ? "yes" : "no", q.slope, q.clear);
 	}
+}
+
+// The stand-ins as HDObjectFrameDraw would draw the objects.
+static void ProbeWetStands(const void* projection, int bulbs,
+	unsigned int passes)
+{
+	(void)bulbs;
+	(void)passes;
+
+	for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
+		HDRenderWaterProbeStand(g_wet_stands[i], g_wet_stands[i + 1],
+			g_wet_stands[i + 2], g_seed_origin[0], g_seed_origin[1],
+			(const float*)projection);
 }
 
 /* The tanks' wet floors where HDFrameDrawGlow draws them: part 0 the

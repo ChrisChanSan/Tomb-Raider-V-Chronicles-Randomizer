@@ -1590,6 +1590,9 @@ namespace
 		 * and in every group of the other six but the 28 that carry a
 		 * sheet. */
 		std::vector<HDFlatPlane> waterFlats;
+		/* And out of its clear floors (HD_PASS_CLEAR) alone: where the art
+		 * lets what lies under a floor show through it. */
+		std::vector<HDFlatPlane> clearFlats;
 	};
 
 	// One 256-unit cell of a room-local position, as one key. The bias makes
@@ -6795,6 +6798,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		 * majority; a sheet in the second list answers "the remaster built
 		 * the water here" and needs no majority. See BuildWaterSurfaces. */
 		std::vector<std::pair<int, unsigned int> > waterflats;
+		/* And out of its clear floors alone (HD_PASS_CLEAR): the planes the
+		 * art lets what lies under them show through (the wet floor's copy
+		 * rule, wet_copied). */
+		std::vector<std::pair<int, unsigned int> > clearflats;
 		/* The GLOSSLOG part counts of this group, added to the level's once
 		 * its passes are built. */
 		int group_parts[5] = { 0, 0, 0, 0, 0 };
@@ -7166,6 +7173,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							const bool sheet =
 								MaterialBase(part) == HD_TRG_MATERIAL_WATER;
+							// A clear floor, by the test of clear_tri below.
+							const bool clearFloor = pass == 1 &&
+								blend == 0.0f && !g_no_clear &&
+								(int)g < g_room_groups &&
+								HDPageCacheSlotClear(slot);
 
 							for (int cx = x0 >> 10; cx <= lastX; cx++)
 								for (int cz = z0 >> 10; cz <= lastZ; cz++)
@@ -7176,6 +7188,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 									if (sheet)
 										waterflats.push_back(std::make_pair(
 											(int)a.y, SectorKey(cx << 10, cz << 10)));
+
+									if (clearFloor)
+										clearflats.push_back(std::make_pair(
+											(int)a.y, SectorKey(cx << 10,
+											cz << 10)));
 								}
 						}
 					}
@@ -8302,6 +8319,30 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			}
 
 			group.waterFlats.shrink_to_fit();
+		}
+
+		// And over the clear floors alone.
+		if (!clearflats.empty())
+		{
+			std::sort(clearflats.begin(), clearflats.end());
+			clearflats.erase(std::unique(clearflats.begin(), clearflats.end()),
+				clearflats.end());
+
+			for (size_t i = 0; i < clearflats.size(); i++)
+			{
+				if (group.clearFlats.empty() ||
+					group.clearFlats.back().y != clearflats[i].first)
+				{
+					HDFlatPlane row;
+
+					row.y = clearflats[i].first;
+					group.clearFlats.push_back(row);
+				}
+
+				group.clearFlats.back().cells.push_back(clearflats[i].second);
+			}
+
+			group.clearFlats.shrink_to_fit();
 		}
 
 		/* The samples for the matrix proof. The .TRG dies with this function
@@ -11733,6 +11774,7 @@ namespace
 		float way;
 		bool kept;
 		int under, mirrored;	// the art's cells (see wet_copied)
+		bool clear;		// its floor a clear floor (wet_clear)
 		bool copied;
 		int slope;		// its floor's slope function, 0 flat
 	};
@@ -12641,34 +12683,38 @@ namespace
 	 * the classic floor of every room: the squares, then the points and
 	 * their way from the glass. */
 	/* The art's own mirror. A room's art can carry a copy of the room
-	 * upside down under its floor, so that a floor drawn part-way clear
-	 * shows it as the room's reflection: RICH2's corridor, room 46 and its
-	 * flip twin 75, does so for its whole length, 1,536 units deep, and its
-	 * copy reaches under room 122's two squares at the corridor's mouth
-	 * (RoomProbe -tankart, every triangle of the .TRG: 24 to 874 under each
-	 * of the corridor's squares, 40 to 100 per cent of them mirroring one
-	 * over it within 32 units; 120 and 134 under room 122's, 99 each). Its
-	 * floor lets the copy through from x 41,984 west, where it lies in the
-	 * alpha pass on a part-way clear page; at the mouth it is opaque. There
+	 * upside down under a floor it draws part-way clear (HD_PASS_CLEAR),
+	 * so that the copy shows through the floor as the room's reflection:
+	 * RICH2's corridor, room 46 and its flip twin 75, does so west of x
+	 * 41,984 for 1,536 units of depth (RoomProbe -tankart, every triangle
+	 * of the .TRG: 24 to 874 under each of the corridor's squares, 40 to
+	 * 100 per cent of them mirroring one over it within 32 units), and
+	 * -tankcensus counts 387 squares of 55 rooms of RICH2 with such a copy
+	 * under a clear floor (RICHCUT2 5, TITLE 74, no other level). There
 	 * the water adds no mirror of its own: the art's is the room's
-	 * reflection, and one marched out of the frame is another picture of
-	 * it - the corridor's ceiling glows, which no depth holds, land in it
-	 * as yellow bands across the floor. The wet floor keeps its darkening.
+	 * reflection, and one marched out of the frame would be a second
+	 * picture of it over the first. The wet floor keeps its darkening.
+	 * Under an opaque floor the copy does not show, and the square marches
+	 * as any other (wet_clear): the corridor's copy reaches on under its
+	 * own opaque floor at the mouth, x 44,032 to 48,127, and under room
+	 * 122's two squares there.
 	 *
 	 * Asked of what the level keeps of its art, the 256-unit cells that
 	 * hold a vertex of a group (HDGroup::cells): in a square's column, the
 	 * cells under its floor - down to kWetCopyDepth - of every room whose
 	 * flat floor lies there at that height, and of those the ones with a
 	 * cell over the floor at the mirrored height. A square is copied when
-	 * at least kWetCopyCells of them are mirrored and they are a third of
-	 * what lies under it. Counted on RICH2 (-tankwetmap -tankwetall, the
-	 * copy= field): the corridor's 36 squares 21 to 38 cells under, 12 to
-	 * 34 of them mirrored; room 122's two at its mouth 30 and 32 under, 15
-	 * and 16 mirrored; every other square of either tank none under but
-	 * one of room 23's, 3 under and 1 mirrored. 2,048 units hold the
-	 * corridor's 1,536 with room to spare; kWetCopyCells, two of each of a
-	 * square's four rows of cells, and the third are free choices in the
-	 * wide gap between the two kinds of square. */
+	 * its floor is a clear floor, at least kWetCopyCells of those cells are
+	 * mirrored and they are a third of what lies under it. Counted on RICH2
+	 * (-tankwetmap -tankwetall, the copy= field): the corridor's 36 squares
+	 * 21 to 38 cells under, 12 to 34 of them mirrored; room 122's two at
+	 * its mouth 30 and 32 under, 15 and 16 mirrored; every other square of
+	 * either tank none under but one of room 23's, 3 under and 1 mirrored.
+	 * Of the squares the tanks' water reaches, none has a clear floor.
+	 * 2,048 units hold the corridor's 1,536 with room to spare;
+	 * kWetCopyCells, two of each of a square's four rows of cells, and the
+	 * third are free choices in the wide gap between the two kinds of
+	 * square. */
 	const int kWetCopyDepth = 8;		// cells, 2,048 units
 	const int kWetCopyCells = 8;
 
@@ -12716,6 +12762,24 @@ namespace
 					if (any(i, fy - j, k) || any(i, fy - j - 1, k))
 						(*mirrored)++;
 				}
+	}
+
+	/* Whether the floor of square sx, sz at height y is a clear floor in
+	 * the art of any of `list`'s rooms: a clear triangle of a group's own
+	 * horizontal planes (HDGroup::clearFlats) within a click's sixteenth
+	 * of it, as -tankcensus asks of the floor's faces. */
+	bool wet_clear(const HDWaterRoom* rooms, const std::vector<int>& list,
+		int sx, int sz, int y)
+	{
+		for (int r : list)
+			for (const HDFlatPlane& row : g_groups[(size_t)r].clearFlats)
+				if (abs(row.y - y) <= 16 && std::binary_search(
+					row.cells.begin(), row.cells.end(),
+					SectorKey(sx * 1024 - rooms[r].originX,
+					sz * 1024 - rooms[r].originZ)))
+					return true;
+
+		return false;
 	}
 
 	/* The sloping floors. A square whose floor entry is a TILT, a SPLIT1/2
@@ -13159,7 +13223,7 @@ namespace
 				const Wet& q = wet[s];
 				const std::vector<Floor>& here = floors[square(q.sx, q.sz)];
 				WetSquare map = { q.sx * 1024, q.sz * 1024, q.y, q.room,
-					nearest[s], false, 0, 0, false, q.fn };
+					nearest[s], false, 0, 0, false, false, q.fn };
 
 				for (int k = 0; k < 25; k++)
 					map.kept = map.kept || (g[(size_t)k] >= 0 &&
@@ -13186,7 +13250,8 @@ namespace
 					wet_copied(rooms, list, q.sx, q.sz, q.y, &map.under,
 						&map.mirrored);
 
-				map.copied = map.mirrored >= kWetCopyCells &&
+				map.clear = !q.fn && wet_clear(rooms, list, q.sx, q.sz, q.y);
+				map.copied = map.clear && map.mirrored >= kWetCopyCells &&
 					map.mirrored * 3 >= map.under;
 
 				for (int k = 0; k < 25 && map.kept && map.copied; k++)
@@ -16177,6 +16242,7 @@ bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
 	out->mirrored = s.mirrored;
 	out->copied = s.copied ? 1 : 0;
 	out->slope = s.slope;
+	out->clear = s.clear ? 1 : 0;
 	out->reach = w.info.reach;
 	out->limit = w.limit;
 	return true;

@@ -454,6 +454,13 @@
  *     -tankleave spray|water  -tank without its spray, or without its
  *                     water - a part's own pixels, against the picture with
  *                     it; repeatable.
+ *     -wetstand x,z[,h]  a stand-in for Lara on a wet floor at world x, z:
+ *                     a dark box 160 across and h high (768, her standing
+ *                     height, without it), drawn among the frame's objects
+ *                     and through the wet floor's mirror of the models;
+ *                     repeatable. Needs -tank and a wet square there.
+ *     -wetnomodels    -wetstand's boxes without the models' mirror: the
+ *                     picture the march alone makes of them.
  *     -tankcensus     every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
@@ -1868,6 +1875,18 @@ static std::vector<float> g_waders;
 /* -swimmer x,z,below: stand-ins for a body swimming under the surface, as
  * x, z, below, drawn as -creature's. */
 static std::vector<float> g_swimmers;
+/* -wetstand x,z[,h]: stand-ins for Lara on a wet floor, as x, z, h (768,
+ * her standing height, without h): a dark box on the wet square there,
+ * drawn where the HD objects are and through the wet floor's mirror of the
+ * models (HDRenderWaterProbeStand, HDRenderWaterWetModels). */
+static std::vector<float> g_wet_stands;
+// The frame's projection, for the models' mirror (ProbeWetDraw).
+static float g_wet_stand_proj[16];
+/* -wetnomodels: the stand-ins drawn without the models' mirror - the
+ * picture the march alone makes of them, the before picture out of the
+ * same build. */
+static bool g_wet_no_models = false;
+
 static float g_seed_origin[2] = { 0.0f, 0.0f };
 
 /* -life <seed>: the water's life (hd_life_rules.h) on the level's water
@@ -7657,7 +7676,13 @@ static void ProbeWetDraw(int part)
 	if (part == 0)
 		HDRenderWaterWetDraw(m);
 	else
+	{
+		// -wetstand: the stand-ins through the models' mirror.
+		if (!g_wet_stands.empty() && !g_wet_no_models)
+			HDRenderWaterWetModels(ProbeWetStands, g_wet_stand_proj, 0);
+
 		HDRenderWaterWetMirror();
+	}
 
 	if (timed)
 	{
@@ -11420,6 +11445,8 @@ static int ProbeMain(int argc, char** argv)
 			!strcmp(argv[at], "-tankwetmap") ||
 			!strcmp(argv[at], "-tankart") ||
 			!strcmp(argv[at], "-tankcensus") ||
+			(!strcmp(argv[at], "-wetstand") && at + 1 < argc) ||
+			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
 		{
@@ -11430,6 +11457,18 @@ static int ProbeMain(int argc, char** argv)
 				g_tank_art = true;
 			else if (!strcmp(argv[at], "-tankcensus"))
 				g_tank_census = true;
+			else if (!strcmp(argv[at], "-wetnomodels"))
+				g_wet_no_models = true;
+			else if (!strcmp(argv[at], "-wetstand"))
+			{
+				float s[3] = { 0.0f, 0.0f, 768.0f };
+
+				if (sscanf_s(argv[++at], "%f,%f,%f", &s[0], &s[1], &s[2]) >= 2)
+					g_wet_stands.insert(g_wet_stands.end(), s, s + 3);
+				else
+					printf("RoomProbe: -wetstand wants x,z[,h] - '%s' "
+						"ignored\n", argv[at]);
+			}
 			else if (!strcmp(argv[at], "-tankslopes"))
 				g_tank_slopes = true;
 			else if (!strcmp(argv[at], "-tankwetall"))
@@ -14489,6 +14528,17 @@ static int ProbeMain(int argc, char** argv)
 
 			// The springs' cracks, where HDFrameDrawGlow draws them.
 			SpringCrackDraw();
+
+			// -wetstand: Lara's stand-ins, among the frame's objects.
+			std::memcpy(g_wet_stand_proj, &projection,
+				sizeof(g_wet_stand_proj));
+
+			for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
+				if (g_hdwater == 1 && !HDRenderWaterProbeStand(g_wet_stands[i],
+					g_wet_stands[i + 1], g_wet_stands[i + 2],
+					g_seed_origin[0], g_seed_origin[1]))
+					printf("-wetstand %.0f,%.0f: no wet square there - not "
+						"drawn\n", g_wet_stands[i], g_wet_stands[i + 1]);
 
 			// A shot tank's wet floor, before the copy, as the engine has it.
 			ProbeWetDraw(0);

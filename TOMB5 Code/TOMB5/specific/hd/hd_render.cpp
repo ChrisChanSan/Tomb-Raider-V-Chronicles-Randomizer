@@ -11648,7 +11648,10 @@ namespace
 	 * (HDRenderWaterWetMirror), out of a copy of the frame as it stands
 	 * there, so the rooms' glows and what the glass shows are mirrored too,
 	 * and the dome, the spray and the objects' glows lie over the mirror as
-	 * over the floor. Each point keeps its way: how far the water runs
+	 * over the floor. Lara and the objects are mirrored as geometry, drawn
+	 * through the floor's reflection into a target of their own just
+	 * before the mirror ("the models in the mirror"). Each point keeps its
+	 * way: how far the water runs
 	 * from the glass to it, through the grid (the shortest way along
 	 * neighbours, diagonals at their own length, a step down at no cost),
 	 * pushed back by up to kWetRagged out of a hash of its place; and how
@@ -11877,6 +11880,52 @@ namespace
 	bool g_wet_late_valid = false;
 	bool g_wet_ready = false;
 
+	/* The models through the floor's mirror (HDRenderWaterWetModels): a
+	 * target of the frame's size, its colour the models drawn through the
+	 * mirror and its alpha the models as the frame drew them, and a depth
+	 * texture of its own, INTZ as the frame's, so the mirror's pixel shader
+	 * reads the mirrored models' depth; D3DPOOL_DEFAULT and released with
+	 * the later copy. g_wet_models while this frame's models are in them,
+	 * g_wet_plane the plane they were mirrored in (view space: the world's
+	 * up, its height along it). The first draw keeps the world-to-view
+	 * matrix it drew in (g_wet_view) and the floor height most of its drawn
+	 * points stand at (g_wet_height): the plane. */
+	IDirect3DTexture9* g_wet_model = 0;
+	IDirect3DSurface9* g_wet_model_surface = 0;
+	IDirect3DTexture9* g_wet_model_depth = 0;
+	IDirect3DSurface9* g_wet_model_depth_surface = 0;
+	D3DSURFACE_DESC g_wet_model_desc = {};
+	bool g_wet_models = false;
+	float g_wet_plane[4] = {};
+	float g_wet_view[16] = {};
+	int g_wet_height = 0;
+	bool g_wet_height_set = false;
+
+	void release_wet_models()
+	{
+		if (g_wet_model_surface)
+		{
+			g_wet_model_surface->Release();
+			g_wet_model_surface = 0;
+		}
+
+		if (g_wet_model) { g_wet_model->Release(); g_wet_model = 0; }
+
+		if (g_wet_model_depth_surface)
+		{
+			g_wet_model_depth_surface->Release();
+			g_wet_model_depth_surface = 0;
+		}
+
+		if (g_wet_model_depth)
+		{
+			g_wet_model_depth->Release();
+			g_wet_model_depth = 0;
+		}
+
+		g_wet_models = false;
+	}
+
 	void release_wet_late()
 	{
 		if (g_wet_late_surface)
@@ -11887,6 +11936,7 @@ namespace
 
 		if (g_wet_late) { g_wet_late->Release(); g_wet_late = 0; }
 		g_wet_late_valid = false;
+		release_wet_models();
 	}
 
 	void release_water_copy()
@@ -11903,6 +11953,7 @@ namespace
 		g_copy_valid = false;
 		g_wet_late_valid = false;
 		g_wet_ready = false;
+		g_wet_models = false;
 	}
 
 	// A world square and a surface height, as one key.
@@ -16936,6 +16987,8 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	g_splash_stats.floor = -1;
 	g_splash_stats.floorWet = 0.0f;
 	g_wet_ready = false;
+	g_wet_models = false;
+	g_wet_height_set = false;
 	g_wet_verts.clear();
 	g_wet_tris.clear();
 
@@ -16956,6 +17009,11 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	/* The world's axes in view space, each row made a unit long: the light
 	 * field's direction and the floor's up into view space (WetPS). */
 	float* axes = g_wet_axes;
+
+	std::memcpy(g_wet_view, m, sizeof(g_wet_view));
+
+	// The floor heights of the points drawn wet, for the models' plane.
+	std::map<int, int> heights;
 
 	for (int r = 0; r < 12; r++)
 		axes[r] = 0.0f;
@@ -17050,6 +17108,9 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			v.a = p.puddle * p.march * open(p);
 			v.light = p.light;
 			verts.push_back(v);
+
+			if (wet[i] > 0.0f)
+				heights[(int)lroundf(p.y + kWetLift)]++;
 		}
 
 		if (g_splash_stats.floor < 0 && sum > 0.0)
@@ -17074,10 +17135,326 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	if (tris.empty())
 		return;
 
+	for (const std::pair<const int, int>& h : heights)
+		if (!g_wet_height_set || h.second > heights[g_wet_height])
+		{
+			g_wet_height = h.first;
+			g_wet_height_set = true;
+		}
+
 	// The opaque frame, for the sheets (and the march debugger).
 	HDRenderWaterCopy();
 	g_wet_ready = true;
 	wet_layer(0);
+}
+
+/* The models in the mirror. The march mirrors what the frame shows, and a
+ * model is a thin thing in front of the room: a ray reflected past Lara's
+ * feet meets her own pixels in the copy, which stand nearer than the room
+ * the ray would meet behind her, and the march laid her dark colour on the
+ * floor beside her (a grey-black shape the camera's angle moves) or took
+ * her for a wall in the mirror of the room behind her. So the models are
+ * mirrored as geometry, as a planar mirror is: the frame's object list
+ * drawn once more with the floor's reflection folded into the projection
+ * (the models' lighting is the frame's, worked out before the projection,
+ * so the reflection shows them lit as they stand), and once as the frame
+ * drew them into the target's alpha alone, the places the march goes past.
+ * Both are drawn flipped left to right as well: two flips keep a model's
+ * winding, so a culled model keeps its front faces. The mirror takes them
+ * only on the plane they were mirrored in - the floor height most of the
+ * drawn wet points stand at - under the floor and nearer than the march's
+ * hit (WetPS). Drawn here, after the rooms' passes and before the second
+ * wet draw, into the target and depth of their own; the device's target,
+ * depth, viewport and states are put back. */
+void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
+	int bulbs)
+{
+	g_wet_models = false;
+
+	if (!draw || !projection || !g_wet_ready || !g_device || !g_in_frame ||
+		g_wet_tris.empty() || !g_wet_height_set)
+		return;
+
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* depth = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		desc.MultiSampleType != D3DMULTISAMPLE_NONE)
+	{
+		target->Release();
+		return;
+	}
+
+	if (g_wet_model && (g_wet_model_desc.Width != desc.Width ||
+		g_wet_model_desc.Height != desc.Height))
+		release_wet_models();
+
+	if (!g_wet_model)
+	{
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+			&g_wet_model, 0)) ||
+			FAILED(g_wet_model->GetSurfaceLevel(0, &g_wet_model_surface)) ||
+			FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_DEPTHSTENCIL, kIntz, D3DPOOL_DEFAULT,
+			&g_wet_model_depth, 0)) ||
+			FAILED(g_wet_model_depth->GetSurfaceLevel(0,
+			&g_wet_model_depth_surface)))
+		{
+			release_wet_models();
+			target->Release();
+			return;
+		}
+
+		g_wet_model_desc = desc;
+	}
+
+	/* The plane in view space: the world's up (its y runs down) and a
+	 * point of the floor, out of the first draw's world-to-view. */
+	const float* m = g_wet_view;
+	float n[3] = { -m[4], -m[5], -m[6] };
+	const float l = sqrtf(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+
+	if (l <= 0.0f)
+	{
+		target->Release();
+		return;
+	}
+
+	const float h = (float)g_wet_height;
+	const float p0[3] = { h * m[4] + m[12], h * m[5] + m[13],
+		h * m[6] + m[14] };
+
+	for (int k = 0; k < 3; k++)
+		n[k] /= l;
+
+	const float dist = n[0] * p0[0] + n[1] * p0[1] + n[2] * p0[2];
+
+	/* The reflection in the plane, for a row vector: p - 2 (p.n - d) n,
+	 * then the projection, then x turned (the second flip); and the
+	 * projection alone with x turned, for the models as the frame drew
+	 * them. */
+	float k4[16] = {};
+
+	for (int r = 0; r < 3; r++)
+		for (int c = 0; c < 3; c++)
+			k4[r * 4 + c] = (r == c ? 1.0f : 0.0f) - 2.0f * n[r] * n[c];
+
+	for (int c = 0; c < 3; c++)
+		k4[12 + c] = 2.0f * dist * n[c];
+
+	k4[15] = 1.0f;
+
+	const float* proj = (const float*)projection;
+	float mirrored[16], plain[16];
+
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 4; c++)
+		{
+			float s = 0.0f;
+
+			for (int i = 0; i < 4; i++)
+				s += k4[r * 4 + i] * proj[i * 4 + c];
+
+			mirrored[r * 4 + c] = c == 0 ? -s : s;
+			plain[r * 4 + c] = c == 0 ? -proj[r * 4 + c] : proj[r * 4 + c];
+		}
+
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
+		D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+		D3DRS_STENCILENABLE, D3DRS_COLORWRITEENABLE, D3DRS_FOGENABLE,
+		D3DRS_SCISSORTESTENABLE, D3DRS_SEPARATEALPHABLENDENABLE,
+		D3DRS_CLIPPLANEENABLE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[stateCount];
+	D3DVIEWPORT9 vp = {};
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	g_device->GetViewport(&vp);
+	g_device->GetDepthStencilSurface(&depth);
+	g_device->SetRenderTarget(0, g_wet_model_surface);
+	g_device->SetDepthStencilSurface(g_wet_model_depth_surface);
+	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
+		D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_ALPHA);
+	draw(plain, bulbs, HD_PASS_SOLID);
+	g_device->Clear(0, 0, D3DCLEAR_ZBUFFER, 0x00000000, 1.0f, 0);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+		D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
+		D3DCOLORWRITEENABLE_BLUE);
+	draw(mirrored, bulbs, HD_PASS_SOLID);
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+	g_device->SetViewport(&vp);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	target->Release();
+
+	if (depth)
+		depth->Release();
+
+	g_wet_plane[0] = n[0];
+	g_wet_plane[1] = n[1];
+	g_wet_plane[2] = n[2];
+	g_wet_plane[3] = dist;
+	g_wet_models = true;
+}
+
+/* RoomProbe's stand-in on a wet floor (-wetstand): a dark box 160 across
+ * and `height` high standing on the wet square under world x, z, drawn
+ * with the fixed function in the frame's view and `projection` (the
+ * frame's own when 0) - in the picture before the wet floor's first draw,
+ * and through HDRenderWaterWetModels as a model. False where no wet square
+ * lies under it. */
+bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
+	float offZ, const float* projection)
+{
+	if (!g_device)
+		return false;
+
+	bool found = false;
+	float floorY = 0.0f;
+
+	for (const WetFloor& w : g_wet)
+		for (const WetSquare& s : w.squares)
+			if (!found && s.kept && x >= (float)s.x &&
+				x < (float)(s.x + 1024) && z >= (float)s.z &&
+				z < (float)(s.z + 1024))
+			{
+				floorY = (float)s.y;
+				found = true;
+			}
+
+	if (!found)
+		return false;
+
+	struct Corner
+	{
+		float x, y, z;
+		D3DCOLOR c;
+	};
+
+	Corner v[8];
+
+	for (int i = 0; i < 8; i++)
+	{
+		v[i].x = x - offX + ((i & 1) ? 80.0f : -80.0f);
+		v[i].y = floorY - ((i & 2) ? 0.0f : height);
+		v[i].z = z - offZ + ((i & 4) ? 80.0f : -80.0f);
+		// Dark as Lara's suit, its head lighter, so its mirror shows which
+		// way it stands.
+		v[i].c = (i & 2) ? D3DCOLOR_XRGB(30, 28, 26) :
+			D3DCOLOR_XRGB(90, 80, 70);
+	}
+
+	static const unsigned short faces[36] =
+	{
+		0, 1, 3, 0, 3, 2,  4, 6, 7, 4, 7, 5,  0, 4, 5, 0, 5, 1,
+		2, 3, 7, 2, 7, 6,  0, 2, 6, 0, 6, 4,  1, 5, 7, 1, 7, 3
+	};
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex = 0;
+	DWORD fvf = 0;
+	D3DMATRIX world, view, proj;
+	const D3DRENDERSTATETYPE states[] = { D3DRS_LIGHTING, D3DRS_FOGENABLE };
+	const D3DTEXTURESTAGESTATETYPE stages[] =
+	{
+		D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_ALPHAOP, D3DTSS_ALPHAARG1
+	};
+	DWORD saved[2], stage[4];
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* index = 0;
+	UINT streamOffset = 0, streamStride = 0;
+
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetIndices(&index);
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetTexture(0, &tex);
+	g_device->GetTransform(D3DTS_WORLD, &world);
+	g_device->GetTransform(D3DTS_VIEW, &view);
+	g_device->GetTransform(D3DTS_PROJECTION, &proj);
+
+	for (int i = 0; i < 2; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	for (int i = 0; i < 4; i++)
+		g_device->GetTextureStageState(0, stages[i], &stage[i]);
+
+	D3DMATRIX identity = {};
+
+	identity._11 = identity._22 = identity._33 = identity._44 = 1.0f;
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(0);
+	g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE);
+	g_device->SetTexture(0, 0);
+	g_device->SetTransform(D3DTS_WORLD, &identity);
+	g_device->SetTransform(D3DTS_VIEW, (const D3DMATRIX*)g_view);
+	g_device->SetTransform(D3DTS_PROJECTION,
+		(const D3DMATRIX*)(projection ? projection : g_proj));
+	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_DIFFUSE);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+	g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
+	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, 8, 12, faces,
+		D3DFMT_INDEX16, v, sizeof(Corner));
+
+	for (int i = 0; i < 2; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < 4; i++)
+		g_device->SetTextureStageState(0, stages[i], stage[i]);
+
+	g_device->SetTransform(D3DTS_WORLD, &world);
+	g_device->SetTransform(D3DTS_VIEW, &view);
+	g_device->SetTransform(D3DTS_PROJECTION, &proj);
+	g_device->SetTexture(0, tex);
+	// DrawIndexedPrimitiveUP leaves stream 0 and the indices unset.
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetIndices(index);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (stream) stream->Release();
+	if (index) index->Release();
+	if (tex) tex->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	return true;
 }
 
 /* The frame's second wet-floor draw (see HDRenderWaterWetDraw), after the
@@ -17106,8 +17483,8 @@ static void wet_layer(int part)
 	IDirect3DVertexShader9* vs = 0;
 	IDirect3DPixelShader9* ps = 0;
 	IDirect3DVertexDeclaration9* decl = 0;
-	IDirect3DBaseTexture9* tex[5] = { 0, 0, 0, 0, 0 };
-	const DWORD stage[5] = { 1, 2, 5, 6, 7 };
+	IDirect3DBaseTexture9* tex[7] = { 0, 0, 0, 0, 0, 0, 0 };
+	const DWORD stage[7] = { 1, 2, 5, 6, 7, 0, 3 };
 	IDirect3DVertexBuffer9* stream = 0;
 	IDirect3DIndexBuffer9* index = 0;
 	UINT streamOffset = 0, streamStride = 0;
@@ -17128,7 +17505,7 @@ static void wet_layer(int part)
 	};
 	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
-	DWORD saved[stateCount], savedSamp[5][sampCount];
+	DWORD saved[stateCount], savedSamp[7][sampCount];
 
 	g_device->GetVertexShader(&vs);
 	g_device->GetPixelShader(&ps);
@@ -17140,7 +17517,7 @@ static void wet_layer(int part)
 	for (int i = 0; i < stateCount; i++)
 		g_device->GetRenderState(states[i], &saved[i]);
 
-	for (int s = 0; s < 5; s++)
+	for (int s = 0; s < 7; s++)
 	{
 		g_device->GetTexture(stage[s], &tex[s]);
 
@@ -17222,6 +17599,32 @@ static void wet_layer(int part)
 	g_device->SetSamplerState(6, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
 	g_device->SetSamplerState(6, D3DSAMP_SRGBTEXTURE, FALSE);
 	g_device->SetTexture(6, soft ? g_depth_texture : 0);
+
+	/* The models through the mirror (HDRenderWaterWetModels), for the
+	 * second draw: their target on s0, their depth on s3, read texel for
+	 * texel; the plane on c102, and on c103 whether they are there and how
+	 * far a pixel's layer may lie from the plane - the layer's own lift and
+	 * the rounding a sloping square's corners have (kWetSlopeRise). */
+	const bool models = part == 1 && g_wet_models;
+	const float modelsOn[4] = { models ? 1.0f : 0.0f,
+		kWetLift + (float)kWetSlopeRise, 0.0f, 0.0f };
+
+	for (int s = 5; s < 7; s++)
+	{
+		g_device->SetSamplerState(stage[s], D3DSAMP_MINFILTER, D3DTEXF_POINT);
+		g_device->SetSamplerState(stage[s], D3DSAMP_MAGFILTER, D3DTEXF_POINT);
+		g_device->SetSamplerState(stage[s], D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSU,
+			D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSV,
+			D3DTADDRESS_CLAMP);
+		g_device->SetSamplerState(stage[s], D3DSAMP_SRGBTEXTURE, FALSE);
+	}
+
+	g_device->SetTexture(0, models ? g_wet_model : 0);
+	g_device->SetTexture(3, models ? g_wet_model_depth : 0);
+	g_device->SetPixelShaderConstantF(102, g_wet_plane, 1);
+	g_device->SetPixelShaderConstantF(103, modelsOn, 1);
 	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)verts.size(),
 		(UINT)(tris.size() / 3), &tris[0], D3DFMT_INDEX16, &verts[0],
 		sizeof(CardVertex));
@@ -17229,7 +17632,7 @@ static void wet_layer(int part)
 	for (int i = 0; i < stateCount; i++)
 		g_device->SetRenderState(states[i], saved[i]);
 
-	for (int s = 0; s < 5; s++)
+	for (int s = 0; s < 7; s++)
 	{
 		for (int i = 0; i < sampCount; i++)
 			g_device->SetSamplerState(stage[s], samps[i], savedSamp[s][i]);

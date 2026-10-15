@@ -1718,6 +1718,24 @@ void HDRenderWaterWetLimited(int on);
 void HDRenderWaterWetMirror();
 void HDRenderWaterWetMarch(int map, const float* trial = 0);
 
+/* The models in the wet floor's mirror (hd_render.cpp, "the models in the
+ * mirror"): between the rooms' passes and HDRenderWaterWetMirror, the
+ * frame's object list drawn twice into a target of the mirror's own - once
+ * through the floor's reflection, once as the frame drew it - by `draw`,
+ * which takes a projection (D3DMATRIX), the frame's bulb count and the
+ * passes: the engine hands in HDObjectFrameDraw, RoomProbe its stand-ins.
+ * Nothing when the wet floor drew nothing this frame. */
+typedef void (*HDWetModelDraw)(const void* projection, int bulbs,
+	unsigned int passes);
+void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
+	int bulbs);
+/* RoomProbe's -wetstand: a dark box 160 across and `height` high standing
+ * on the wet square under world x, z, drawn with the frame's view and
+ * `projection` (the frame's own when 0) in the frame `offX`, `offZ` shift
+ * the world into; false where no wet square lies under it. */
+bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
+	float offZ, const float* projection = 0);
+
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the
  * frame that first shows a sheet does not wait for the driver to ready

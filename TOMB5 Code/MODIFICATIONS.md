@@ -1770,10 +1770,11 @@ returns before any folder is searched or any file is opened, and the two calls i
 neighbouring rows. Since 2026-10-15 the row is the draw and not the build: the build is
 `hd_build` (registry only, 1 by default), which `HDEnabled()` asks in the row's place, and
 the row and F12 switch the level on screen at once (chapter 2.6, The HD/SD switch, Built
-when found). Ten settings steer the path in all: `hd_enable`,
-`hd_objects`, `hd_motion`, `hd_reflect`, `hd_texture_budget_mb`, `hd_install`,
-`hd_install_tr3`, `hd_texture_format`, `hd_outfit` and the `hd_footsteps` subkey, and the
-manual lists those ten and no others. The four Tomb
+when found). The settings that steer the path stand, each with its default, in the
+manual's table under **HD from the Remaster**: `hd_build`, `hd_enable`, `hd_objects`,
+`hd_motion`, `hd_reflect`, `hd_softbody`, `hd_water`, `hd_springs`, `hd_reach`, `hd_air`,
+`hd_threads`, `hd_texture_budget_mb`, `hd_install`, `hd_install_tr3`,
+`hd_texture_format`, `hd_outfit` and the `hd_footsteps` subkey. The four Tomb
 Raider III enemies this project ports into TR5 can be drawn from the *other* bundle:
 `Tomb Raider I-III Remastered` is looked for in the same walk (`tomb123.exe` with a
 subfolder `3` carrying `DATA` and `TEX`), with the registry override `hd_install_tr3`; a

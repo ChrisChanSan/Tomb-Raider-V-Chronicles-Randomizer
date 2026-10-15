@@ -237,7 +237,9 @@
  *                     record and is drawn by the twin's group (HDFlipRoom).
  *                     One `-flip:` line per pair names the state; the
  *                     walk's lists stay room numbers, each drawn by the
- *                     group the line names
+ *                     group the line names. With -hdwater 1 the water
+ *                     follows the swap too (HDRenderWaterFlipRoom): the
+ *                     bodies only an alternate floods draw.
  *     -walkdump <log> [frame]
  *                     every ROOMLIST whole-list dump of a -log run, or the
  *                     one of that frame, walked again - see RunWalkDump.
@@ -14263,6 +14265,15 @@ static int ProbeMain(int argc, char** argv)
 			ProbeWetSlopes(rooms);
 			ProbeCensus(rooms, root, stem);
 			ProbeWaterFalls(level, stem);
+
+			// -flip: the water follows the swapped pairs, as FlipMap's hook.
+			for (size_t k = 0; k < walkoff::g_flip_rooms.size(); k++)
+			{
+				const int a = walkoff::g_flip_rooms[k];
+
+				if (a >= 0 && a < nr && rooms[a].flip >= 0)
+					HDRenderWaterFlipRoom(a, rooms[a].flip);
+			}
 			ProbeCardPages(root, managed, threads);
 
 			/* -reload: the sheets set again over the kept build, as the

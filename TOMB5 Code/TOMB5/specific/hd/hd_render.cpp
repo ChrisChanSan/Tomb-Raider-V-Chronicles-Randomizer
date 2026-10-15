@@ -11097,6 +11097,9 @@ namespace
 		int body;
 		int sink;		// the sink its water names, or -1
 		int pit;		// the water room under it
+		/* 1 + the room under it whose flipmap alternate holds the water,
+		 * 0 for water every flip state holds (see "the flipped water"). */
+		int alt;
 	};
 
 	/* A land square a lifted sheet's level surface runs on over
@@ -11113,6 +11116,7 @@ namespace
 	{
 		HDRenderWaterBody info;
 		int minX, maxX, minZ, maxZ;	// world, the squares' corners
+		int alt;			// its squares' alt, all one
 	};
 
 	/* One draw: the sheet squares of one body in one group, and the world
@@ -11188,6 +11192,22 @@ namespace
 
 	std::vector<WaterSquare> g_wsquares;
 	std::vector<WaterBody> g_wbodies;
+	/* Per room, 1 while FlipMap has swapped its record with its pair's
+	 * (HDRenderWaterFlipRoom); all 0 at the level's build. */
+	std::vector<unsigned char> g_wflip;
+
+	/* Whether a body draws now: a body of flipped water only while the room
+	 * whose alternate holds it is swapped. */
+	bool body_shown(int body)
+	{
+		if (body < 0 || body >= (int)g_wbodies.size() ||
+			!g_wbodies[(size_t)body].alt)
+			return true;
+
+		const size_t room = (size_t)(g_wbodies[(size_t)body].alt - 1);
+
+		return room < g_wflip.size() && g_wflip[room] != 0;
+	}
 	std::vector<WaterLook> g_wlooks;
 	// The deep look of a level's water rooms, where the level takes one
 	// (see "under the water", "the deep look").
@@ -14385,6 +14405,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		section = HD_WATER_ROME;
 
 	g_wlevel.section = section;
+	g_wflip.assign((size_t)count, 0);
 
 	const int groups = (int)g_groups.size();
 
@@ -14411,7 +14432,20 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	 * there, and a square whose dry floor stands over that top by more than
 	 * a click at every corner is none (water_square); the WATERLOG counts
 	 * both. The room below gets the caustic from the surface down - the
-	 * lowest surface, should two stand over it. */
+	 * lowest surface, should two stand over it.
+	 *
+	 * The flipped water: a room under the square that is dry while its
+	 * flipmap alternate is an underwater room holds water only once
+	 * FlipMap has swapped the two (JOBY5's corridor floor, room 38, and
+	 * its flooded alternate 3). The square is water then, its water the
+	 * alternate's - a pair stands at one place, so its top and depth are
+	 * read there - and it is marked with the room whose flip floods it:
+	 * its body draws only while that room is swapped (body_shown,
+	 * HDRenderWaterFlipRoom), as the art of a pair follows the swap. Its
+	 * squares come after all others, so its bodies are numbered after the
+	 * bodies every flip state holds. */
+	std::vector<WaterSquare> flipped;
+
 	for (int r = 0; r < count; r++)
 	{
 		const HDWaterRoom& rm = rooms[r];
@@ -14423,11 +14457,23 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			for (int sz = 0; sz < rm.sizeZ; sz++)
 			{
 				const int at = sx * rm.sizeZ + sz;
-				const int pit = rm.below[at];
+				int pit = rm.below[at];
+				int alt = 0;
 
-				if (pit < 0 || pit >= count || rm.floor[at] == -127 ||
-					!(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+				if (pit < 0 || pit >= count || rm.floor[at] == -127)
 					continue;
+
+				if (!(rooms[pit].flags & HD_WATER_ROOM_UNDERWATER))
+				{
+					const int a = rooms[pit].flip;
+
+					if (a < 0 || a >= count ||
+						!(rooms[a].flags & HD_WATER_ROOM_UNDERWATER))
+						continue;
+
+					alt = pit + 1;
+					pit = a;
+				}
 
 				WaterSquare s = {};
 
@@ -14444,6 +14490,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				s.wy = rm.floor[at] * 256;
 				s.sink = -1;
 				s.pit = pit;
+				s.alt = alt;
 
 				if (sheets && !water_square(rooms, count, r, at, pit, s.wx,
 					s.wz, &s.wy))
@@ -14462,7 +14509,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				s.open = (rm.flags & HD_WATER_ROOM_OPEN) ? 1 : 0;
 				s.body = -1;
 				s.sheet = sheets && rm.drawn && r < groups ? 1 : 0;
-				g_wsquares.push_back(s);
+				(alt ? flipped : g_wsquares).push_back(s);
 
 				if (pit < groups)
 				{
@@ -14473,6 +14520,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 				}
 			}
 	}
+
+	g_wsquares.insert(g_wsquares.end(), flipped.begin(), flipped.end());
 
 	for (int g = 0; g < groups; g++)
 		g_wlevel.causticRooms += g_caustic_top[(size_t)g] > -1.0e8f ? 1 : 0;
@@ -14528,6 +14577,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		b.info.waves = b.info.foam = b.info.bend = 1.0f;
 		b.info.clip = kWaterClip;
 		b.info.swell = 1.0f;
+		b.alt = seed.alt;
+		b.info.alt = seed.alt - 1;
 		b.info.crest = 1.0f;
 
 		const int id = (int)g_wbodies.size();
@@ -14553,7 +14604,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 					const_iterator f = at.find(WaterKey(s.wx + step[n][0],
 					s.wz + step[n][1], s.wy));
 
-				if (f == at.end())
+				if (f == at.end() ||
+					g_wsquares[(size_t)f->second].alt != s.alt)
 				{
 					b.info.perimeter++;
 					continue;
@@ -18238,6 +18290,10 @@ bool HDRenderWaterFoot(int at, float* place, float* dir, float* half)
 	if (at < 0 || at >= HDRenderWaterFeet())
 		return false;
 
+	// A foot on flipped water only while its body draws.
+	if (!body_shown(g_wfeet[(size_t)at].body))
+		return false;
+
 	const WaterFoot& f = g_wfeet[(size_t)at];
 
 	if (place)
@@ -19085,7 +19141,7 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		"foam=%.2f twins=%d raw=%.2f,%.2f,%.2f none=%d art=%s bend=%.2f "
 		"swirl=%s flow=%.2f,%.2f,%.0f sinks=%d lying=%d refused=%d "
 		"lit=%.2f,%.2f,%.2f held=%d lift=%d skirt=%d clip=%d swell=%.2f "
-		"crest=%.2f spring=%s",
+		"crest=%.2f spring=%s alt=%d",
 		body, list,
 		b.surfaceY, b.sectors, b.sheets,
 		b.perimeter ? 2.0 * b.sectors / b.perimeter : 0.0, b.openAir,
@@ -19095,8 +19151,17 @@ bool HDRenderWaterLogLine(int body, const char* stem, int option, char* out,
 		b.raw[2], b.noSheet, b.artKeep ? "keep" : "hide", b.bend,
 		b.footOff ? "off" : "on", b.flow[0], b.flow[1], b.speed, b.sinks,
 		b.lying, b.refused, lit[0], lit[1], lit[2], b.held, b.lift,
-		b.skirt, b.clip, b.swell, b.crest, spring);
+		b.skirt, b.clip, b.swell, b.crest, spring, b.alt);
 	return true;
+}
+
+void HDRenderWaterFlipRoom(int room, int other)
+{
+	if (room >= 0 && (size_t)room < g_wflip.size())
+		g_wflip[(size_t)room] ^= 1;
+
+	if (other >= 0 && (size_t)other < g_wflip.size())
+		g_wflip[(size_t)other] ^= 1;
 }
 
 void HDRenderWaterTiming(int on, double* ms, int* draws)
@@ -19173,7 +19238,8 @@ bool HDRenderGroupHasSheet(int group)
 	{
 		const int film = film_of_body(r.body);
 
-		if (film < 0 || g_film_wet[(size_t)film] > 0.0f)
+		if (body_shown(r.body) &&
+			(film < 0 || g_film_wet[(size_t)film] > 0.0f))
 			return true;
 	}
 
@@ -20090,6 +20156,10 @@ namespace
 
 		for (const SheetRange& r : g_sheet_ranges[(size_t)group])
 		{
+			// Flipped water only while its room is swapped.
+			if (!body_shown(r.body))
+				continue;
+
 			/* A tank's film: only while wet, only with the copy, and
 			 * cross-faded by the blend factor (see "the tank's film"). */
 			const int film = film_of_body(r.body);

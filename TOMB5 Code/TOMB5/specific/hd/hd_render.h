@@ -1282,6 +1282,10 @@ void HDRenderWaterSinks(const HDWaterSink* sinks, int count);
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	const char* stem, int sheets);
 
+/* FlipMap swapped the records of `room` and `other` (hd_level.cpp,
+ * HDFlipRoom): the bodies of water only an alternate holds follow it. */
+void HDRenderWaterFlipRoom(int room, int other);
+
 /* The corner heights of one square out of its height byte and its slope
  * entry, as the water squares take them: out[0..3] the world y at the
  * corners (0, 0), (1024, 0), (0, 1024) and (1024, 1024) of the square, x
@@ -1372,6 +1376,10 @@ struct HDRenderWaterBody
 	 * HDLifeSpringPush). */
 	int spring;
 	float springAt[2];
+	/* The room whose flipmap floods it, -1 for water every flip state
+	 * holds: the body draws only while FlipMap has swapped that room
+	 * with its alternate (HDRenderWaterFlipRoom). */
+	int alt;
 };
 
 // What the level built, for its log line.

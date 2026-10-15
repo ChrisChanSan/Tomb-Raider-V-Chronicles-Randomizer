@@ -1737,6 +1737,32 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 	float offZ, const float* projection = 0, int alpha = 255);
 
+/* RoomProbe's marble floors (hd_render.cpp, "RoomProbe's marble floors"), a
+ * measurement the game never calls: HDRenderMarbleProbeSet takes the
+ * squares - the corner, the art floor's y and the room - and
+ * HDRenderMarbleProbeDraw lays the wet floor's march over them with a dry
+ * floor's darkening, F0 and strength, inside the frame's bracket and with
+ * the world shifted by `toFrame` as the wet floor's draw takes it - or,
+ * with `planar`, that pixel shader reading `mirror` and its depth;
+ * HDRenderMarbleProbePlanar lays a planar reflection the caller drew into
+ * `mirror` (the frame's size, flipped left to right) over them, weighted
+ * by Schlick's term over `f0` times `gain`, or with `tint` the squares in a
+ * flat colour. HDRenderMarbleProbeDrawn: the squares the last draw took. */
+struct IDirect3DPixelShader9;
+
+struct HDMarbleProbeSquare
+{
+	int x, z, y, room;
+};
+
+void HDRenderMarbleProbeSet(const HDMarbleProbeSquare* squares, int count);
+void HDRenderMarbleProbeDraw(const float* toFrame, float dark, float f0,
+	float gain, IDirect3DPixelShader9* planar = 0,
+	IDirect3DTexture9* mirror = 0, IDirect3DTexture9* mirrorDepth = 0);
+void HDRenderMarbleProbePlanar(const float* toFrame, IDirect3DTexture9* mirror,
+	float f0, float gain, int tint);
+int HDRenderMarbleProbeDrawn();
+
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the
  * frame that first shows a sheet does not wait for the driver to ready

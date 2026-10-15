@@ -469,6 +469,25 @@
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
  *                     ProbeCensus). Needs -roombox; -hdwater 0 is enough.
+ *     -marblecensus   every room's floor squares by whether they are polished
+ *                     stone and would take a mirror: the footstep material,
+ *                     the art floor's page, class and pass, the art's copy
+ *                     under it (marblesq, marbleroom, marblepage, marblefloor
+ *                     and marblelevel lines, ProbeMarbleCensus); -marblequiet
+ *                     the same without the marblesq lines. Needs -roombox.
+ *     -marblepages a,b,...  the pages a polished floor wears, in place of
+ *                     what the data says (MarbleStone).
+ *     -marblea 1|2|3|4  the census's mirror squares of the picture's rooms
+ *                     (-marblerooms a,b,... in their place) under the wet
+ *                     floor's march with a dry floor's numbers: 1 darker,
+ *                     2 polished, 3 the grazing angle alone, 4 the wet
+ *                     floor's own; timed on the GPU (marble: lines).
+ *     -marbleb        the room art drawn again through the floor's plane
+ *                     (-marbleheight y, or the height of the most squares)
+ *                     and laid over that plane's squares with -marblea's
+ *                     numbers (2 without); both draws timed on the GPU.
+ *     -marbletint     the mirror squares in a flat red, for the census's
+ *                     pictures.
  *     -nowarm         no warm-up of the water's shaders before the picture
  *                     (HDRenderWaterWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
@@ -7646,6 +7665,948 @@ static void ProbeCensus(const std::vector<HDWaterRoom>& rooms,
 		unseen_all, refit_all, refit_copied_all);
 }
 
+/* -marblecensus: which floor squares are polished stone, for every room of
+ * the level. Per inner square of a room's classic floor (off its ring of
+ * walls and doors, not a wall): the classic footstep material (FLOOR_INFO's
+ * fx, 9 marble); the art's floor - the .TRG's flat triangles within 16
+ * units of the classic floor, as -tankcensus takes them, or where none
+ * lies there about the flat face nearest within 512 units (refit, as
+ * -tankcensus refits) - by the page and the sheen's class that cover most
+ * of its area (hd_gloss_math.h: the part's material, else the page as
+ * HDRenderGlossPageInfo resolves it) and by how the renderer draws most of
+ * its faces (opaque, clear, cut, additive); whether the page is one of the
+ * lobby's barred ones (HDGlossPageBarred); and the art's own copy under the
+ * floor (-tankcensus' rule). A square is a candidate when its floor is
+ * polished stone (MarbleStone). It is a mirror square - the rule this
+ * census proposes - when it is a candidate, its faces are opaque, no copy
+ * shows through a clear floor (a copy under an opaque floor does not
+ * show) and its room is no water room. One marblesq line a candidate,
+ * one marbleroom line a room with a candidate, one marblepage line a page
+ * on a candidate's floor, one marblefloor line a page any inner square's
+ * floor wears most, and one marblelevel line. */
+static bool g_marble_census = false;
+// -marblequiet: the census without its marblesq lines.
+static bool g_marble_quiet = false;
+
+/* A floor square of the census: its room, corner, classic floor y and the
+ * art's floor y (ay, the classic one unless refit), footstep material,
+ * page, the sheen's class, how its faces are drawn and how many. */
+struct MarbleSquare
+{
+	int room, x, z, y, ay, fx, page, cls, kind, faces;
+	bool barred, copied, clear, mirror, refit;
+};
+
+// The mirror squares of the last census, for -marblea and -marbleb.
+static std::vector<MarbleSquare> g_marble_squares;
+
+/* -marblepages a,b,...: the pages a floor of polished stone wears, in place
+ * of what the data says of a floor (MarbleStone). */
+static std::set<int> g_marble_pages;
+
+/* Whether a floor is polished stone: its page is on -marblepages' list,
+ * or without a list by what the data says of it - its page resolves to a
+ * dielectric sheen (marble, ice, glass; material 3 resolves to glass),
+ * its page is one of RICH2's lobby pages the sheen bars (hd_gloss_math.h:
+ * its marble), or its classic square's footstep material is marble (fx
+ * 9). */
+static bool MarbleStone(int page, int cls, bool barred, int fx)
+{
+	if (!g_marble_pages.empty())
+		return g_marble_pages.count(page) != 0;
+
+	return cls == HD_GLOSS_MARBLE || cls == HD_GLOSS_ICE ||
+		cls == HD_GLOSS_GLASS || barred || fx == 9;
+}
+
+static void ProbeMarbleCensus(const std::vector<HDWaterRoom>& rooms,
+	const char* root, const char* stem)
+{
+	if (!g_marble_census)
+		return;
+
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("marble: no .TRG (%s)\n", error.c_str());
+		return;
+	}
+
+	// The classes the sheen resolved, by page.
+	std::map<int, int> classOf;
+	HDRenderGlossPage gp;
+
+	for (int at = 0; HDRenderGlossPageInfo(at, &gp); at++)
+		if (gp.strength > 0.0f && !classOf.count(gp.page))
+			classOf[gp.page] = gp.cls;
+
+	/* A triangle by its centroid, its area, how it is drawn (-1 not flat,
+	 * 0 opaque, 1 clear, 2 cut, 3 additive), its page and the class of the
+	 * sheen its part's material or its page names. */
+	struct Tri
+	{
+		float x, y, z, area;
+		int kind, page, cls;
+	};
+
+	std::map<long long, std::vector<Tri> > column;
+	const auto key = [](int sx, int sz)
+	{
+		return ((long long)sx << 32) ^ (long long)(unsigned int)sz;
+	};
+	const auto cell = [](float x, float y, float z)
+	{
+		return ((long long)((int)floorf(x / 32.0f) & 0xFFFFF) << 40) |
+			((long long)((int)floorf(y / 32.0f) & 0xFFFFF) << 20) |
+			(long long)((int)floorf(z / 32.0f) & 0xFFFFF);
+	};
+
+	for (size_t g = 0; g < trg.groups.size() && g < g_boxes_built.size(); g++)
+		for (const trf::remaster::TrgPart& part : trg.groups[g].parts)
+		{
+			HDGloss mat;
+			const bool own = HDGlossFromMaterial(part.material, part.param,
+				&mat);
+
+			for (int pass = 0; pass < 3; pass++)
+				for (unsigned int i = 0; i + 2 < part.pass[pass].count; i += 3)
+				{
+					const unsigned int first = part.pass[pass].start + i;
+					float p[3][3];
+					int page = -1;
+
+					for (int v = 0; v < 3; v++)
+					{
+						const trf::remaster::TrgVertex& tv =
+							trg.vertices[trg.indices[first + v]];
+
+						p[v][0] = (float)tv.x + (float)g_boxes_built[g].originX;
+						p[v][1] = (float)tv.y;
+						p[v][2] = (float)tv.z + (float)g_boxes_built[g].originZ;
+						page = tv.layer && tv.layer <= trg.textures.size() ?
+							(int)trg.textures[tv.layer - 1u] : -1;
+					}
+
+					const float ax = p[1][0] - p[0][0], ay = p[1][1] - p[0][1];
+					const float az = p[1][2] - p[0][2], bx = p[2][0] - p[0][0];
+					const float by = p[2][1] - p[0][1], bz = p[2][2] - p[0][2];
+					const float nx = ay * bz - az * by, ny = az * bx - ax * bz;
+					const float nz = ax * by - ay * bx;
+					const float l = sqrtf(nx * nx + ny * ny + nz * nz);
+					Tri t = { (p[0][0] + p[1][0] + p[2][0]) / 3.0f,
+						(p[0][1] + p[1][1] + p[2][1]) / 3.0f,
+						(p[0][2] + p[1][2] + p[2][2]) / 3.0f, 0.5f * l, -1,
+						page, own ? mat.cls : classOf.count(page) ?
+						classOf[page] : HD_GLOSS_NONE };
+
+					if (l > 0.0f && fabsf(ny) / l > 0.95f)
+						t.kind = pass == 0 ? 0 : pass == 2 ? 3 :
+							HDPageCacheSlotClear(HDPageCacheSlotOf(page)) ?
+							1 : 2;
+
+					column[key((int)floorf(t.x / 1024.0f),
+						(int)floorf(t.z / 1024.0f))].push_back(t);
+				}
+		}
+
+	struct PageSum
+	{
+		int squares, mirror, fx9, cls;
+		bool barred, clear;
+		std::set<int> rooms;
+	};
+
+	struct FloorSum
+	{
+		int squares, fx[16], kinds[5], cls, copied;
+		std::set<int> rooms;
+	};
+
+	std::map<int, PageSum> pages;
+	std::map<int, FloorSum> floors;
+	int all = 0, cand = 0, mirror = 0, fx9 = 0, byPage = 0, both = 0;
+	int roomsMirror = 0, refit = 0;
+
+	/* The square's art floor at fy: its faces' page by area, their kind by
+	 * count, and the copy under it (-tankcensus' rule); false where no flat
+	 * face lies within 16 units of fy. */
+	const auto measure = [&](const std::vector<Tri>& col, float fy,
+		MarbleSquare& s)
+	{
+		std::map<long long, float> area;
+		std::map<long long, int> clsOf;
+		int byKind[4] = { 0, 0, 0, 0 };
+		std::set<long long> over;
+		int under = 0, mirrored = 0;
+
+		s.faces = 0;
+		s.page = -1;
+		s.kind = -1;
+		s.cls = HD_GLOSS_NONE;
+
+		for (const Tri& t : col)
+			if (t.y < fy - 16.0f && t.y >= fy - 2048.0f - 64.0f)
+				over.insert(cell(t.x, t.y, t.z));
+
+		for (const Tri& t : col)
+		{
+			if (fabsf(t.y - fy) <= 16.0f && t.kind >= 0)
+			{
+				const long long k = ((long long)t.page << 8) | t.cls;
+
+				area[k] += t.area;
+				byKind[t.kind]++;
+				s.faces++;
+			}
+			else if (t.y > fy + 16.0f && t.y <= fy + 2048.0f)
+			{
+				const float my = 2.0f * fy - t.y;
+				bool found = false;
+
+				under++;
+
+				for (int d = 0; d < 27 && !found; d++)
+					found = over.count(cell(
+						t.x + 32.0f * (float)(d % 3 - 1),
+						my + 32.0f * (float)(d / 3 % 3 - 1),
+						t.z + 32.0f * (float)(d / 9 - 1))) != 0;
+
+				mirrored += found ? 1 : 0;
+			}
+		}
+
+		float best = 0.0f;
+
+		for (const std::pair<const long long, float>& a : area)
+			if (a.second > best)
+			{
+				best = a.second;
+				s.page = (int)(a.first >> 8);
+				s.cls = (int)(a.first & 255);
+			}
+
+		for (int k = 3; k >= 0; k--)
+			if (byKind[k] && (s.kind < 0 || byKind[k] >= byKind[s.kind]))
+				s.kind = k;
+
+		s.copied = mirrored >= 8 && mirrored * 3 >= under;
+		s.clear = byKind[1] > 0;
+		return s.faces > 0;
+	};
+
+	g_marble_squares.clear();
+
+	for (size_t r = 0; r < rooms.size(); r++)
+	{
+		const HDWaterRoom& w = rooms[r];
+		const HDRoomGrid* grid = r < g_grids_built.size() ?
+			&g_grids_built[r] : 0;
+
+		if (!w.floor)
+			continue;
+
+		int squares = 0, rc = 0, rm = 0, rfx = 0, rcopied = 0, rrefit = 0;
+		int kinds[4] = { 0, 0, 0, 0 };
+		int x0 = 1 << 30, z0 = 1 << 30, x1 = -(1 << 30), z1 = -(1 << 30);
+		std::set<int> heights, rpages;
+
+		for (int sx = 1; sx < w.sizeX - 1; sx++)
+			for (int sz = 1; sz < w.sizeZ - 1; sz++)
+			{
+				const int at = sx * w.sizeZ + sz;
+
+				if (w.floor[at] == -127)
+					continue;
+
+				MarbleSquare s = {};
+
+				s.room = (int)r;
+				s.x = w.originX + sx * 1024;
+				s.z = w.originZ + sz * 1024;
+				s.y = (int)w.floor[at] * 256;
+				s.ay = s.y;
+
+				if (grid && grid->zSectors == w.sizeZ &&
+					grid->first + at < (int)g_sectors_built.size())
+					s.fx = g_sectors_built[(size_t)(grid->first + at)].fx;
+
+				const std::vector<Tri>& col = column[key(s.x >> 10,
+					s.z >> 10)];
+
+				/* No flat face of the art at the classic floor: the art's
+				 * floor stands elsewhere, the flat face nearest within 512
+				 * units, as -tankcensus refits it. */
+				if (!measure(col, (float)s.y, s))
+				{
+					float nearY = 1.0e9f;
+
+					for (const Tri& t : col)
+						if (t.kind >= 0 && fabsf(t.y - (float)s.y) <= 512.0f &&
+							fabsf(t.y - (float)s.y) < fabsf(nearY - (float)s.y))
+							nearY = t.y;
+
+					if (nearY < 1.0e8f && measure(col, nearY, s))
+					{
+						s.ay = (int)lroundf(nearY);
+						s.refit = true;
+					}
+				}
+
+				s.barred = s.page >= 0 && HDGlossPageBarred(s.page);
+				s.mirror = MarbleStone(s.page, s.cls, s.barred, s.fx) &&
+					s.kind == 0 && !(s.copied && s.clear) &&
+					!(w.flags & HD_WATER_ROOM_UNDERWATER);
+				squares++;
+				all++;
+				refit += s.refit ? 1 : 0;
+				rrefit += s.refit ? 1 : 0;
+
+				const bool isCand = MarbleStone(s.page, s.cls, s.barred,
+					s.fx);
+
+				// Every inner square's floor by its page, candidate or not.
+				FloorSum& fs = floors[s.page];
+
+				fs.squares++;
+				fs.fx[s.fx & 15]++;
+				fs.kinds[s.kind < 0 ? 4 : s.kind]++;
+				fs.cls = s.cls > fs.cls ? s.cls : fs.cls;
+				fs.copied += s.copied ? 1 : 0;
+				fs.rooms.insert((int)r);
+
+				if (!isCand)
+					continue;
+
+				cand++;
+				rc++;
+				fx9 += s.fx == 9 ? 1 : 0;
+				rfx += s.fx == 9 ? 1 : 0;
+				byPage += s.cls != HD_GLOSS_NONE ? 1 : 0;
+				both += s.cls != HD_GLOSS_NONE && s.fx == 9 ? 1 : 0;
+				mirror += s.mirror ? 1 : 0;
+				rm += s.mirror ? 1 : 0;
+				rcopied += s.copied ? 1 : 0;
+
+				if (s.kind >= 0)
+					kinds[s.kind]++;
+
+				if (s.mirror)
+				{
+					heights.insert(s.ay);
+					x0 = s.x < x0 ? s.x : x0;
+					z0 = s.z < z0 ? s.z : z0;
+					x1 = s.x + 1024 > x1 ? s.x + 1024 : x1;
+					z1 = s.z + 1024 > z1 ? s.z + 1024 : z1;
+					g_marble_squares.push_back(s);
+				}
+
+				if (s.page >= 0)
+				{
+					PageSum& ps = pages[s.page];
+
+					rpages.insert(s.page);
+					ps.squares++;
+					ps.mirror += s.mirror ? 1 : 0;
+					ps.fx9 += s.fx == 9 ? 1 : 0;
+					ps.cls = s.cls;
+					ps.barred = s.barred;
+					ps.clear = ps.clear || s.kind == 1;
+					ps.rooms.insert((int)r);
+				}
+
+				if (g_marble_quiet)
+					continue;
+
+				printf("marblesq level=%s room=%d x=%d z=%d y=%d art=%d fx=%d "
+					"page=%d class=%s barred=%d floor=%s faces=%d copy=%s "
+					"water=%d mirror=%d\n", stem, (int)r, s.x, s.z, s.y, s.ay,
+					s.fx,
+					s.page, HDGlossClassName(s.cls), s.barred ? 1 : 0,
+					s.kind == 0 ? "opaque" : s.kind == 1 ? "clear" :
+					s.kind == 2 ? "cut" : s.kind == 3 ? "add" : "none",
+					s.faces, s.copied ? "yes" : "no",
+					w.flags & HD_WATER_ROOM_UNDERWATER ? 1 : 0,
+					s.mirror ? 1 : 0);
+			}
+
+		if (!rc)
+			continue;
+
+		roomsMirror += rm ? 1 : 0;
+
+		std::string hs, pl;
+
+		for (int h : heights)
+			hs += (hs.empty() ? "" : ",") + std::to_string(h);
+
+		for (int p : rpages)
+			pl += (pl.empty() ? "" : ",") + std::to_string(p);
+
+		printf("marbleroom level=%s room=%d drawn=%d squares=%d candidates=%d "
+			"fx9=%d mirror=%d copied=%d refit=%d floor=opaque:%d,clear:%d,"
+			"cut:%d,add:%d heights=%s pages=%s box=%d..%d,%d..%d\n", stem,
+			(int)r, w.drawn, squares, rc, rfx, rm, rcopied, rrefit, kinds[0],
+			kinds[1], kinds[2], kinds[3], hs.empty() ? "-" : hs.c_str(),
+			pl.empty() ? "-" : pl.c_str(), rm ? x0 : 0, rm ? x1 : 0,
+			rm ? z0 : 0, rm ? z1 : 0);
+	}
+
+	for (const std::pair<const int, PageSum>& p : pages)
+	{
+		std::string rl;
+
+		for (int r : p.second.rooms)
+			rl += (rl.empty() ? "" : ",") + std::to_string(r);
+
+		printf("marblepage level=%s page=%d class=%s barred=%d clear=%d "
+			"squares=%d fx9=%d mirror=%d rooms=%s\n", stem, p.first,
+			HDGlossClassName(p.second.cls), p.second.barred ? 1 : 0,
+			p.second.clear ? 1 : 0, p.second.squares, p.second.fx9,
+			p.second.mirror, rl.c_str());
+	}
+
+	/* One marblefloor line a page any inner square's floor wears most: its
+	 * squares, their footstep materials (fx:count), how its faces are drawn
+	 * (opaque, clear, cut, additive, none), its class, the squares with a
+	 * copy under them and its rooms. */
+	for (const std::pair<const int, FloorSum>& f : floors)
+	{
+		std::string fx, rl;
+
+		for (int k = 0; k < 16; k++)
+			if (f.second.fx[k])
+				fx += (fx.empty() ? "" : ",") + std::to_string(k) + ":" +
+					std::to_string(f.second.fx[k]);
+
+		for (int r : f.second.rooms)
+			rl += (rl.empty() ? "" : ",") + std::to_string(r);
+
+		printf("marblefloor level=%s page=%d squares=%d fx=%s kinds=%d,%d,%d,"
+			"%d,%d class=%s copied=%d rooms=%s\n", stem, f.first,
+			f.second.squares, fx.c_str(), f.second.kinds[0],
+			f.second.kinds[1], f.second.kinds[2], f.second.kinds[3],
+			f.second.kinds[4], HDGlossClassName(f.second.cls),
+			f.second.copied, rl.c_str());
+	}
+
+	printf("marblelevel level=%s squares=%d candidates=%d fx9=%d class=%d "
+		"both=%d mirror=%d roomsmirror=%d refit=%d\n", stem, all, cand, fx9,
+		byPage, both, mirror, roomsMirror, refit);
+}
+
+/* The marble floors' switches, out of ProbeMain's chain of else-ifs (the
+ * usage at the top, after -tankcensus). -marblecensus needs -roombox and
+ * builds the classic floor as -hdwater 0 does where -hdwater is not given;
+ * -marblea and -marbleb take the census's mirror squares. */
+static int g_marble_a = 0;
+static bool g_marble_b = false;
+static bool g_marble_tint = false;
+static std::vector<int> g_marble_rooms;
+static int g_marble_height = 1 << 30;
+
+static bool MarbleArg(int argc, char** argv, int* at)
+{
+	const char* a = argv[*at];
+	const bool more = *at + 1 < argc;
+
+	if (strncmp(a, "-marble", 7))
+		return false;
+
+	if (!strcmp(a, "-marblecensus") || !strcmp(a, "-marblequiet"))
+		g_marble_quiet = g_marble_quiet || a[7] == 'q';
+	else if (!strcmp(a, "-marblea") && more)
+		g_marble_a = atoi(argv[++*at]);
+	else if (!strcmp(a, "-marbleb"))
+		g_marble_b = true;
+	else if (!strcmp(a, "-marbletint"))
+		g_marble_tint = true;
+	else if (!strcmp(a, "-marblepages") && more)
+	{
+		for (const char* s = argv[++*at]; *s; s++)
+		{
+			g_marble_pages.insert(atoi(s));
+
+			while (s[1] && *s != ',')
+				s++;
+		}
+	}
+	else if (!strcmp(a, "-marbleheight") && more)
+		g_marble_height = atoi(argv[++*at]);
+	else if (!strcmp(a, "-marblerooms") && more)
+	{
+		const char* s = argv[++*at];
+
+		while (*s)
+		{
+			g_marble_rooms.push_back(atoi(s));
+
+			while (*s && *s != ',')
+				s++;
+
+			if (*s == ',')
+				s++;
+		}
+	}
+	else
+		return false;
+
+	g_marble_census = true;
+
+	if (g_hdwater < 0)
+		g_hdwater = 0;
+
+	return true;
+}
+
+
+/* -marblea n, -marbleb, -marbletint: the census's mirror squares of the
+ * picture's rooms (the seed and the -with groups, or -marblerooms' list)
+ * as a layer over their art floor (HDRenderMarbleProbeSet). -marblea n
+ * draws the wet floor's march over it with a dry floor's numbers - n 1
+ * darker (the darkening 0.15, F0 0.04, strength 1), 2 polished stone (no
+ * darkening, F0 0.04, strength 1), 3 the grazing angle alone (no
+ * darkening, F0 0, strength 1), 4 the wet floor's own (0.4, 0.02, 4/3) -
+ * where the wet floor's mirror is drawn, timed on the GPU. -marbleb draws
+ * the room art a second time through the plane of the most squares (or
+ * -marbleheight's) into a target of its own before the frame
+ * (ProbeMarblePlanarRender), clipped to what stands over the plane and
+ * flipped left to right to keep the winding, and lays it over that
+ * plane's squares with -marblea's numbers (2 without), both timed on the
+ * GPU. -marbletint lays the squares in a flat red - the census's picture
+ * of which floor a room's rule takes. */
+static int g_marble_plane = 1 << 30;
+static IDirect3DTexture9* g_marble_tex = 0;
+static IDirect3DSurface9* g_marble_depth = 0;
+
+// The dry floor's numbers of -marblea n: the darkening, F0, the strength.
+static void MarbleLook(int n, float* look)
+{
+	static const float kLook[5][3] =
+	{
+		{ 0.0f, 0.04f, 1.0f }, { 0.15f, 0.04f, 1.0f }, { 0.0f, 0.04f, 1.0f },
+		{ 0.0f, 0.0f, 1.0f }, { 0.4f, 0.02f, 4.0f / 3.0f }
+	};
+	const int at = n >= 1 && n <= 4 ? n : 2;
+
+	for (int k = 0; k < 3; k++)
+		look[k] = kLook[at][k];
+}
+
+static void ProbeMarbleSet(int seed)
+{
+	if (!g_marble_a && !g_marble_b && !g_marble_tint)
+		return;
+
+	std::set<int> rooms(g_marble_rooms.begin(), g_marble_rooms.end());
+
+	if (rooms.empty())
+	{
+		rooms.insert(seed);
+
+		for (int i = 0; i < g_with_count; i++)
+			rooms.insert(g_with_group[i]);
+	}
+
+	std::map<int, int> heights;
+
+	for (const MarbleSquare& s : g_marble_squares)
+		if (rooms.count(s.room))
+			heights[s.ay]++;
+
+	g_marble_plane = g_marble_height;
+
+	for (const std::pair<const int, int>& h : heights)
+		if (g_marble_height == 1 << 30 && (g_marble_plane == 1 << 30 ||
+			h.second > heights[g_marble_plane]))
+			g_marble_plane = h.first;
+
+	std::vector<HDMarbleProbeSquare> list;
+
+	for (const MarbleSquare& s : g_marble_squares)
+		if (rooms.count(s.room) && (!g_marble_b || s.ay == g_marble_plane))
+			list.push_back({ s.x, s.z, s.ay, s.room });
+
+	HDRenderMarbleProbeSet(list.empty() ? 0 : &list[0], (int)list.size());
+	printf("marble: %d square(s) in %d room(s), %d height(s), plane %d\n",
+		(int)list.size(), (int)rooms.size(), (int)heights.size(),
+		g_marble_plane);
+}
+
+// A timestamp bracket on the GPU: Begin, then End returns its ms (-1).
+struct MarbleTimer
+{
+	IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+
+	void Begin()
+	{
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]);
+
+		if (q[0] && q[1] && q[2] && q[3])
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+	}
+
+	double End()
+	{
+		double ms = -1.0;
+
+		if (q[0] && q[1] && q[2] && q[3])
+		{
+			UINT64 a = 0, b = 0, f = 0;
+			BOOL disjoint = TRUE;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			q[3]->Issue(D3DISSUE_END);
+
+			while (q[0]->GetData(&disjoint, sizeof(disjoint),
+				D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[3]->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			if (!disjoint && f)
+				ms = (double)(b - a) * 1000.0 / (double)f;
+		}
+
+		for (int i = 0; i < 4; i++)
+			if (q[i])
+			{
+				q[i]->Release();
+				q[i] = 0;
+			}
+
+		return ms;
+	}
+};
+
+#include <d3dcommon.h>
+
+/* -marbleb's pixel shader, compiled when the tool runs (d3dcompiler_47,
+ * the system's own): the wet floor's WetPS (hd_wet.hlsl) on the same
+ * registers, with what the reflected ray finds taken from the planar
+ * reflection on s5 at the pixel's own place turned left to right, where
+ * its depth on s3 holds something, in place of the march; the clip undone,
+ * the weight, the light field's stand-in, the lamps' highlight, the cap
+ * and the fog as WetPS has them, so the two approaches differ only in
+ * where the mirror's colour comes from. */
+static const char kMarblePlanarPS[] =
+	"float4 gFog : register(c16);\n"
+	"float4 gWetScreen : register(c92);\n"
+	"float4 gWetMode : register(c93);\n"
+	"float4 gWetLook : register(c94);\n"
+	"float4 gWetMarch : register(c95);\n"
+	"float4 gWetAxes[3] : register(c96);\n"
+	"float4 gWetGain : register(c100);\n"
+	"sampler3D sFieldDir : register(s1);\n"
+	"sampler3D sFieldRgb : register(s2);\n"
+	"sampler2D sMirror : register(s5);\n"
+	"sampler2D sMirrorDepth : register(s3);\n"
+	"sampler2D sWetDepth : register(s6);\n"
+	"struct WET_IN { float4 view : TEXCOORD0; float4 viewZ : TEXCOORD1;\n"
+	"	float4 field : TEXCOORD2; };\n"
+	"float4 main(WET_IN input, float2 vpos : VPOS) : COLOR0\n"
+	"{\n"
+	"	const float3 P = input.view.xyz;\n"
+	"	const float dist = length(P);\n"
+	"	const float3 V = -P / max(dist, 1.0f);\n"
+	"	const float3 N = -gWetAxes[1].xyz;\n"
+	"	const float nv = saturate(dot(N, V));\n"
+	"	float wet = input.view.w;\n"
+	"	if (gWetMode.x > 0.5f)\n"
+	"	{\n"
+	"		const float d = tex2Dlod(sWetDepth, float4((vpos + 0.5f) *\n"
+	"			gWetScreen.xy, 0.0f, 0.0f)).r;\n"
+	"		const float behind = gWetScreen.w /\n"
+	"			max(gWetScreen.z - d, 1.0e-6f);\n"
+	"		const float under = (behind - input.viewZ.x) * dist /\n"
+	"			max(input.viewZ.x, 1.0f) * nv;\n"
+	"		wet *= saturate(1.0f - (under - gWetMode.y) * gWetMode.z);\n"
+	"	}\n"
+	"	if (gWetGain.y < 0.5f)\n"
+	"		return float4(0.0f, 0.0f, 0.0f, wet * gWetMode.w);\n"
+	"	const float4 toward = tex3D(sFieldDir, input.field.xyz);\n"
+	"	const float3 colour = tex3D(sFieldRgb, input.field.xyz).rgb;\n"
+	"	float3 Lw = toward.xyz * 2.0f - 1.0f;\n"
+	"	const float len = length(Lw);\n"
+	"	const float3 L = (Lw.x * gWetAxes[0].xyz + Lw.y * gWetAxes[1].xyz +\n"
+	"		Lw.z * gWetAxes[2].xyz) / max(len, 1.0e-3f);\n"
+	"	const float3 LV = L + V;\n"
+	"	const float3 H = LV * rsqrt(max(dot(LV, LV), 1.0e-8f));\n"
+	"	const float lobe = pow(saturate(dot(N, H)), gWetLook.w) *\n"
+	"		saturate(dot(N, L));\n"
+	"	const float g = 1.0f - nv;\n"
+	"	const float g2 = g * g;\n"
+	"	const float F = gWetLook.x + (1.0f - gWetLook.x) * (g2 * g2 * g);\n"
+	"	float3 seen = colour * gWetLook.y;\n"
+	"	const float2 at = float2(1.0f - (vpos.x + 0.5f) * gWetScreen.x,\n"
+	"		(vpos.y + 0.5f) * gWetScreen.y);\n"
+	"	if (gWetMarch.y > 0.5f && input.field.w > 0.0f &&\n"
+	"		tex2Dlod(sMirrorDepth, float4(at, 0.0f, 0.0f)).r < 1.0f)\n"
+	"	{\n"
+	"		const float3 held = min(tex2Dlod(sMirror, float4(at, 0.0f,\n"
+	"			0.0f)).rgb, 8.0f / 9.0f);\n"
+	"		seen = held / (1.0f - held);\n"
+	"	}\n"
+	"	float3 mirror = (seen * input.field.w + colour *\n"
+	"		(toward.a * saturate(len) * lobe * gWetLook.z)) * F *\n"
+	"		gWetGain.x;\n"
+	"	const float t = max(mirror.r, max(mirror.g, mirror.b)) /\n"
+	"		gWetMarch.x;\n"
+	"	mirror *= (1.0f - exp(-t)) / max(t, 1.0e-4f);\n"
+	"	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *\n"
+	"		(2.0f / 255.0f);\n"
+	"	mirror *= saturate(1.0f - fog / max(input.viewZ.y, 0.05f));\n"
+	"	return float4(mirror * wet, 0.0f);\n"
+	"}\n";
+
+static IDirect3DPixelShader9* g_marble_ps = 0;
+static IDirect3DTexture9* g_marble_ztex = 0;
+
+// kMarblePlanarPS compiled through the system's d3dcompiler_47.dll.
+static IDirect3DPixelShader9* MarblePlanarShader()
+{
+	typedef HRESULT (WINAPI* Compile)(const void*, SIZE_T, const char*,
+		const void*, void*, const char*, const char*, UINT, UINT, ID3DBlob**,
+		ID3DBlob**);
+	HMODULE dll = LoadLibraryA("d3dcompiler_47.dll");
+	const Compile compile = dll ? (Compile)GetProcAddress(dll, "D3DCompile") :
+		0;
+	ID3DBlob* code = 0;
+	ID3DBlob* errors = 0;
+	IDirect3DPixelShader9* ps = 0;
+
+	if (compile && SUCCEEDED(compile(kMarblePlanarPS,
+		sizeof(kMarblePlanarPS) - 1, "marble", 0, 0, "main", "ps_3_0",
+		1u << 15, 0, &code, &errors)) && code)
+		g_device->CreatePixelShader((const DWORD*)code->GetBufferPointer(),
+			&ps);
+	else
+		printf("marble: the planar shader did not compile: %s\n", errors ?
+			(const char*)errors->GetBufferPointer() : "no compiler");
+
+	if (code) code->Release();
+	if (errors) errors->Release();
+
+	return ps;
+}
+
+/* -marbleb's reflection, before the frame: every drawn group's four
+ * passes through the view mirrored in the plane y = g_marble_plane and a
+ * projection turned left to right (two flips keep the winding), clipped
+ * by one plane to what stands over the floor, into g_marble_tex and a
+ * depth of its own; the device's target, depth and clip plane put back. */
+static void ProbeMarblePlanarRender(const float* view,
+	const D3DMATRIX& projection, long width, long height, int room)
+{
+	if (!g_marble_b || g_marble_plane == 1 << 30 || !g_device)
+		return;
+
+	if (!g_marble_ps && !(g_marble_ps = MarblePlanarShader()))
+		return;
+
+	if (!g_marble_tex && (FAILED(g_device->CreateTexture((UINT)width,
+		(UINT)height, 1, D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8,
+		D3DPOOL_DEFAULT, &g_marble_tex, 0)) ||
+		FAILED(g_device->CreateTexture((UINT)width, (UINT)height, 1,
+		D3DUSAGE_DEPTHSTENCIL, (D3DFORMAT)MAKEFOURCC('I', 'N', 'T', 'Z'),
+		D3DPOOL_DEFAULT, &g_marble_ztex, 0)) ||
+		FAILED(g_marble_ztex->GetSurfaceLevel(0, &g_marble_depth))))
+	{
+		printf("marble: no reflection target\n");
+		return;
+	}
+
+	const float h = (float)g_marble_plane;
+	float mv[16], fp[16], t[16];
+
+	for (int c = 0; c < 4; c++)
+	{
+		mv[c] = view[c];
+		mv[4 + c] = -view[4 + c];
+		mv[8 + c] = view[8 + c];
+		mv[12 + c] = view[12 + c] + 2.0f * h * view[4 + c];
+	}
+
+	std::memcpy(fp, &projection, sizeof(fp));
+
+	for (int r = 0; r < 4; r++)
+		fp[r * 4] = -fp[r * 4];
+
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 4; c++)
+			t[r * 4 + c] = mv[r * 4] * fp[c] + mv[r * 4 + 1] * fp[4 + c] +
+				mv[r * 4 + 2] * fp[8 + c] + mv[r * 4 + 3] * fp[12 + c];
+
+	// Over the floor: y under h in the world, whose y runs down.
+	const float over[4] = { 0.0f, -1.0f, 0.0f, h };
+	float clip[4], keep[4] = { 0, 0, 0, 0 };
+	DWORD keepOn = 0;
+
+	if (!HDWetPlaneTo(t, over, clip))
+		return;
+
+	HDFrameLighting frame;
+	HDRoomLighting lighting;
+	static D3DMATRIX withWorld[kWithMax];
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* surface = 0;
+	IDirect3DSurface9* depth = 0;
+
+	FillLighting(frame, lighting, (float)width * 0.5f, (float)height * 0.5f,
+		mv);
+
+	for (int i = 0; i < g_with_count; i++)
+	{
+		memset(&withWorld[i], 0, sizeof(withWorld[i]));
+		withWorld[i]._11 = withWorld[i]._22 = withWorld[i]._33 =
+			withWorld[i]._44 = 1.0f;
+		withWorld[i]._41 = g_with_offset[i][0];
+		withWorld[i]._42 = g_with_offset[i][1];
+		withWorld[i]._43 = g_with_offset[i][2];
+	}
+
+	g_device->GetRenderTarget(0, &target);
+	g_device->GetDepthStencilSurface(&depth);
+	g_device->GetClipPlane(0, keep);
+	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &keepOn);
+	g_marble_tex->GetSurfaceLevel(0, &surface);
+	g_device->SetRenderTarget(0, surface);
+	g_device->SetDepthStencilSurface(g_marble_depth);
+
+	/* Drawn twice, timed the second time: the first brings the pages in
+	 * and readies the driver, which the frame did before in the game. */
+	double ms = -1.0;
+	int calls = 0;
+
+	for (int run = 0; run < 2; run++)
+	{
+		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
+			D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+		g_device->BeginScene();
+		HDRenderFrameBegin((const D3DMATRIX*)mv, (const D3DMATRIX*)fp, &frame);
+		g_device->SetClipPlane(0, clip);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 1);
+
+		MarbleTimer timer;
+		const unsigned int passes[4] =
+		{
+			HD_PASS_SOLID, HD_PASS_CLEAR, HD_PASS_BLEND, HD_PASS_ADDITIVE
+		};
+
+		timer.Begin();
+
+		for (int p = 0; p < 4; p++)
+		{
+			DrawOneGroup(room, 0, &lighting, passes[p]);
+
+			for (int i = 0; i < g_with_count; i++)
+				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
+					passes[p]);
+		}
+
+		ms = timer.End();
+		calls = HDRenderDrawCalls();
+
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, keepOn);
+		g_device->SetClipPlane(0, keep);
+		HDRenderFrameEnd();
+		g_device->EndScene();
+	}
+
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+
+	if (surface) surface->Release();
+	if (target) target->Release();
+	if (depth) depth->Release();
+
+	printf("marble: planar mirror in y %d, %d draw call(s), GPU %.4f ms "
+		"(timestamps round the mirrored room draws)\n", g_marble_plane,
+		calls, ms);
+}
+
+// The layer where the wet floor's mirror is drawn, timed on the GPU.
+static void ProbeMarbleDraw()
+{
+	if (!g_marble_a && !g_marble_b && !g_marble_tint)
+		return;
+
+	const float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
+		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
+	float look[3];
+	MarbleTimer timer;
+
+	MarbleLook(g_marble_a, look);
+
+	/* Drawn twice, the first with no colour written: the timed draw is
+	 * not the one that readies the driver's states and shaders. */
+	double ms = -1.0;
+	DWORD writes = 0;
+
+	g_device->GetRenderState(D3DRS_COLORWRITEENABLE, &writes);
+
+	for (int run = 0; run < 2; run++)
+	{
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, run ? writes : 0);
+		timer.Begin();
+
+		if (g_marble_tint)
+			HDRenderMarbleProbePlanar(m, 0, 0.0f, 0.0f, 1);
+		else if (g_marble_b)
+			HDRenderMarbleProbeDraw(m, look[0], look[1], look[2],
+				g_marble_ps, g_marble_tex, g_marble_ztex);
+		else
+			HDRenderMarbleProbeDraw(m, look[0], look[1], look[2]);
+
+		ms = timer.End();
+	}
+
+	printf("marble: %s, %d square(s) drawn, dark %.2f F0 %.2f strength "
+		"%.2f, GPU %.4f ms (timestamps round the %s)\n", g_marble_tint ?
+		"tint" : g_marble_b ? "planar" : "march", HDRenderMarbleProbeDrawn(),
+		look[0], look[1], look[2], ms, g_marble_b ? "layer's draw" :
+		"frame's copy and the layer's draws");
+
+	if (g_marble_depth)
+	{
+		g_marble_depth->Release();
+		g_marble_depth = 0;
+	}
+
+	if (g_marble_tex)
+	{
+		g_marble_tex->Release();
+		g_marble_tex = 0;
+	}
+
+	if (g_marble_ztex)
+	{
+		g_marble_ztex->Release();
+		g_marble_ztex = 0;
+	}
+
+	if (g_marble_ps)
+	{
+		g_marble_ps->Release();
+		g_marble_ps = 0;
+	}
+}
 /* -tankwetmap: floor `floor`'s squares, room by room, one line each: the
  * square's corner, its floor, its nearest point's way from the glass in
  * units and in squares, the moment the front first reaches it (the dome's
@@ -11327,6 +12288,12 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -walkboxes   every room's origin, for -with\n");
 		printf("       -reachsurvey [step]   every room of the level as the\n");
 		printf("                             eye, both rules, one line\n");
+		printf("       -marblecensus  -marblequiet  -marblepages a,b,...   the "
+			"polished floors: marblesq/marbleroom/marblepage/marblefloor/"
+			"marblelevel lines (with -roombox)\n");
+		printf("       -marblea 1|2|3|4  -marbleb  -marbletint  -marblerooms "
+			"a,b,...  -marbleheight y   a mirror on them: the march, a "
+			"planar mirror, the squares in red\n");
 		printf("       -budget <MiB>  -format rgba|dxt5  -psnr\n");
 		printf("       -caps maxtex <n>  -caps noidx32  -seq <A,B,C>  -vramhog\n");
 		printf("       -loadtime   the HD build step by step as LOADLOG "
@@ -11426,6 +12393,9 @@ static int ProbeMain(int argc, char** argv)
 			continue;
 
 		if (VisArg(argc, argv, &at))
+			continue;
+
+		if (MarbleArg(argc, argv, &at))
 			continue;
 
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)
@@ -13907,6 +14877,8 @@ static int ProbeMain(int argc, char** argv)
 				g_hdwater);
 			ProbeWetSlopes(rooms);
 			ProbeCensus(rooms, root, stem);
+			ProbeMarbleCensus(rooms, root, stem);
+			ProbeMarbleSet(room);
 			ProbeWaterFalls(level, stem);
 			ProbeCardPages(root, managed, threads);
 
@@ -14362,6 +15334,8 @@ static int ProbeMain(int argc, char** argv)
 
 	Snapshot before, after;
 
+	// -marbleb: the reflection, before the frame and its state proof.
+	ProbeMarblePlanarRender(view, projection, width, height, room);
 	PoseAsClassicPath();
 	Take(before);
 
@@ -14650,6 +15624,8 @@ static int ProbeMain(int argc, char** argv)
 	HDRenderScissorOff();
 	// The wet floor's mirror before the cards, as the engine has it.
 	ProbeWetDraw(1);
+	// -marblea, -marbleb, -marbletint: the marble floors' layer.
+	ProbeMarbleDraw();
 	// The water's cards where HDFrameDrawGlow draws them, and the springs.
 	ProbeCardsDraw();
 	SpringDraw();

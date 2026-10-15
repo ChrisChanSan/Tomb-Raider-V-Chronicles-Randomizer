@@ -27,6 +27,10 @@
 #include "LoadSave.h"	// DrawLoadingScreen - the picture under the load bar
 #include "loadbar_math.h"	// LOADBAR_*, the brake, the fade of the row's off
 #include "time.h"		// TIME_SubTick - a tick passed, without waiting
+#include "profile.h"		// ProfPresent - the held present
+#include "../game/text.h"	// GnFrameCounter
+#include "../game/interpolate.h"	// InterpNoteClassicPresent
+#include "hd/hd_level.h"	// HDFramePresented - the frame clock of -log
 
 static GouraudBarColourSet healthBarColourSet =
 {
@@ -122,6 +126,13 @@ static double loadbar_wait_ms;
 static long loadbar_build_total;
 static long loadbar_build_done;
 
+/* From the loading thread's join to the tail (S_LoadScreenJoin,
+ * S_LoadScreenEnd) the frames present held: a lost device is noted and
+ * not reset (loadbar_lost), and no further frame is drawn until the
+ * tail, whose present resets it as every other frame's does. */
+static long loadbar_held;
+static long loadbar_lost;
+
 /* The clock of the loading screen, in ms: QueryPerformanceCounter, the
  * counter Sync() paces the frames by and the LOADLOG lines read. */
 static double LoadScreenClockMs()
@@ -141,6 +152,31 @@ static double LoadScreenTickMs()
 	const double sub = TIME_SubTick();
 
 	return LoadScreenClockMs() - (sub - floor(sub)) * kLoadBarTickMs;
+}
+
+/* A frame's present between the join and the tail: what S_DumpScreenFrame
+ * and DXShowFrame do, without the screenshot key, and without the reset
+ * of a lost device. That reset releases the HD path's objects
+ * (HDLevelDeviceLost) while the HD build, which these frames interleave,
+ * still has steps to run on them; a lost device stays lost until reset,
+ * so the tail's first present finds it again after the build and resets
+ * it there. The tick was waited out by S_DrawLoadBar; Sync() hands it out
+ * here, as in S_DumpScreenFrame. */
+static void LoadBarPresentHeld()
+{
+	InterpNoteClassicPresent();
+	Sync();
+	GnFrameCounter++;
+	_EndScene();
+
+	const HRESULT hr = App.dx.lpD3DDevice->Present(0, 0, 0, 0);
+
+	HDFramePresented();
+	ProfPresent();
+	App.dx.DoneBlit = 1;
+
+	if (hr == D3DERR_DEVICELOST)
+		loadbar_lost = 1;
 }
 
 /* Black over the whole window at `alpha`, into the sort list: the same
@@ -572,6 +608,8 @@ void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
 	loadbar_build_frames = 0;
 	loadbar_build_ms = 0;
 	loadbar_wait_ms = 0;
+	loadbar_held = 0;
+	loadbar_lost = 0;
 }
 
 /* A frame of the main thread's work after the join, only when a whole
@@ -581,7 +619,7 @@ void S_LoadScreenBegin(long mode, long fade, double fadeMs, double minMs,
 static void LoadScreenFrameDue(long build)
 {
 	if (!(App.dx.Flags & DXF_HWR) || !loadbar_on || !S_LoadScreenDraws() ||
-		TIME_SubTick() < 1.0)
+		loadbar_lost || TIME_SubTick() < 1.0)
 		return;
 
 	const double at = LoadScreenClockMs();
@@ -635,14 +673,17 @@ void S_LoadScreenStep(long step)
 	LoadScreenFrameDue(step == LOADSTEP_BUILD);
 }
 
-/* The loading thread has joined. With the row off, a fade still running -
- * a thread shorter than loadfade_ms - ends here in one black frame: the
- * HD build after it draws a frame only at the ends of its steps, the
- * longest of which take most of a second, and the half faded frame would
- * stand that long. That frame waits for its tick, at most 1/60 s. In the
- * TR5 and TR4 states a frame is drawn if one is due. */
+/* The loading thread has joined; from here to the tail the frames present
+ * held (LoadBarPresentHeld). With the row off, a fade still running - a
+ * thread shorter than loadfade_ms - ends here in one black frame: the HD
+ * build after it draws a frame only at the ends of its steps, the longest
+ * of which take most of a second, and the half faded frame would stand
+ * that long. That frame waits for its tick, at most 1/60 s. In the TR5
+ * and TR4 states a frame is drawn if one is due. */
 void S_LoadScreenJoin()
 {
+	loadbar_held = loadbar_loading;
+
 	if (!loadbar_fading || !(App.dx.Flags & DXF_HWR))
 	{
 		S_LoadScreenStep(LOADSTEP_JOIN);
@@ -656,11 +697,14 @@ void S_LoadScreenJoin()
 /* The work is done: the brake's tail and the last frame. The bar runs on
  * with the clock, one frame a tick, until the screen has stood minMs; the
  * last frame is the full bar - at minMs, or at the next tick when the work
- * took longer. Then the screen is over and the build's frames stop. */
+ * took longer. Then the screen is over and the build's frames stop. The
+ * tail presents as every frame does again: a device lost in the work is
+ * reset by its first present. */
 void S_LoadScreenEnd()
 {
 	const double from = LoadScreenClockMs();
 
+	loadbar_held = 0;
 	S_FinishLoadBar();
 
 	if (App.dx.Flags & DXF_HWR && loadbar_mode != LOADBAR_OFF)
@@ -784,7 +828,12 @@ long S_DrawLoadBar()
 	SortPolyList(SortCount, SortList);
 	DrawSortList();
 	TextureStageUnlock();
-	S_DumpScreenFrame();
+
+	if (loadbar_held)
+		LoadBarPresentHeld();
+	else
+		S_DumpScreenFrame();
+
 	loadbar_frames++;
 	return LoadBarDone(work, elapsed, loadbar_min_ms);
 }

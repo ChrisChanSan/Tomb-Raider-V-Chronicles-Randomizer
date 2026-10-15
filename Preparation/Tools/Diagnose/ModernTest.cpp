@@ -11845,7 +11845,7 @@ static void load_brake()
 	// The engine: no frame of the build waits on the tick, the tail runs to
 	// the brake's end, the lines that log it.
 	a = load_keep_at(bars, "static void LoadScreenFrameDue(",
-		"TIME_SubTick() < 1.0)");
+		"loadbar_lost || TIME_SubTick() < 1.0)");
 	b = load_keep_at(bars, "static void LoadScreenFrameDue(",
 		"S_DrawLoadBar();");
 	ok(a >= 0 && a < b, "load brake: a frame after the join only past a "
@@ -11864,6 +11864,25 @@ static void load_brake()
 	ok(n == 1, "load brake: the thread's share when a build follows", n, 1);
 	n = hd_switch_count(bars, "const double elapsed = LoadBarTicksMs(");
 	ok(n == 1, "load brake: the bar's time in whole ticks", n, 1);
+
+	// Between the join and the tail no present resets a lost device.
+	a = load_keep_at(bars, "static void LoadBarPresentHeld()",
+		"Present(0, 0, 0, 0);");
+	b = load_keep_at(bars, "static void LoadBarPresentHeld()",
+		"loadbar_lost = 1;");
+	ok(a >= 0 && a < b, "load brake: the held present notes a lost "
+		"device", a < b, 1);
+	n = hd_switch_count(bars, "DXShowFrame(");
+	ok(n == 0, "load brake: and never resets it there", n, 0);
+	n = hd_switch_count(bars,
+		"if (loadbar_held)\r\n\t\tLoadBarPresentHeld();") +
+		hd_switch_count(bars, "if (loadbar_held)\n\t\tLoadBarPresentHeld();");
+	ok(n == 1, "load brake: a frame presents held after the join", n, 1);
+	a = load_keep_at(bars, "void S_LoadScreenJoin()", "loadbar_held = ");
+	b = load_keep_at(bars, "void S_LoadScreenEnd()", "loadbar_held = 0;");
+	ok(a >= 0 && b > a && b < load_keep_at(bars, "void S_LoadScreenEnd()",
+		"while (!S_DrawLoadBar());"), "load brake: held from the join, the "
+		"tail presents as ever", b > a, 1);
 
 	a = load_keep_at(bars, "long S_DrawLoadBar()",
 		"while (TIME_SubTick() < 1.0);");

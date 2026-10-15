@@ -2113,7 +2113,12 @@ water surface", carries the tables.
     the darkening and the lamps' highlight; at the corridor's mouth its
     floor is opaque, so the copy does not show there. The mirror marched there out
     of the frame showed the ceiling glows as yellow bands (1,446 to 5,194
-    pixels at the eyes of his pictures, 0 after).
+    pixels at the eyes of his pictures, 0 after). Since the splash's sixth
+    round a square counts as copied only where its floor is a clear floor
+    as well (`wet_clear`, `HDGroup::clearFlats`), the one kind of floor a
+    copy shows through: the corridor's mouth, opaque over its copy, marches
+    again. The bands are the cove lights' true mirror, not a glow without
+    depth (entry 215).
 204. **The sloping floors under a wet floor** - the run crosses an edge
     where the next square's edge stands level or a click under the one
     it comes from at both corners (`hd_splash_math.h`, `HDWetPasses`),
@@ -2233,6 +2238,37 @@ water surface", carries the tables.
     it, with the part of the window it is seen in, so it walks on through its
     own portals and asks its own tables, its window growing by union as the
     classic one does. OWN.
+214. **The art's copies counted** (RoomProbe `-tankcensus`) - every floor
+    square of a level against the .TRG: the triangles 16 to 2,048 units
+    under the floor, those whose centroid mirrored in the floor lies within
+    32 units of one over it, and the floor's own faces by how the renderer
+    draws them; copied at 8 mirrored and a third of those under. OWN, a
+    measuring rule of this project (entry 203's numbers asked of
+    triangles). DATA: RICH2 387 copied squares under a clear floor in 55
+    rooms, RICHCUT2 5, TITLE 74, no other level; RICH2's tank rooms 121, 45
+    and 23 carry none, room 122 one under an opaque floor.
+215. **The cove lights in the wet floor's mirror** - the march keeps
+    mirroring what the frame holds with depth; the yellow bands at RICH2's
+    corridor mouth are the mirror of the corridor's cove lights, opaque art
+    that writes its depth. OWN, a decision on a measurement: the additive
+    pass alone draws nothing at those eyes, the glass left as an alpha test
+    changes no pixel, and of the bands' pixels 94 to 99 per cent lie within
+    2 pixels of the fine march's hit (`-tankmarch`), on its surface, none
+    showing what the later copy adds over the opaque frame.
+216. **The models in the wet floor's mirror** (`hd_render.cpp`,
+    `HDRenderWaterWetModels`; `hd_wet.hlsl`, `WetModelAt`) - the frame's
+    object list drawn twice more into a target and an INTZ depth of the
+    mirror's own: through the floor's reflection folded into the
+    projection, and as the frame drew it into the target's alpha alone,
+    both turned left to right to keep the winding; the march goes past a
+    model's place, and a mirrored model on the floor's plane, under the
+    floor and nearer than the march's hit is the mirror's. OWN, a design of
+    this project from general graphics knowledge (a planar reflection
+    through the projection matrix, a coverage mask); `game/mirror.cpp` is
+    not drawn on. The plane - the height most drawn wet points stand at -
+    and the 8 units of slack (a sloping corner's rounding, `kWetSlopeRise`)
+    are free choices. DATA: the march's hits on a stand-in at Lara's place
+    of the owner's pictures, 2,105 to 10,433 at 960 x 540.
 
 ## Credited, but not contained here
 

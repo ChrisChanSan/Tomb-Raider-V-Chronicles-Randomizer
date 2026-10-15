@@ -13796,6 +13796,178 @@ lies under the floor.
 picture), `5fc97db8` (the sloping floors); the fix pass `cd8adc07` (the cells along a
 split's crease), `97bb452f` (the march's steps).
 
+**Round 6: the art's copies counted, the corridor's mouth wet again, the models in the
+mirror.** Asked for after the play test of round 5 on 2026-10-15, put into English (his
+words beside in German): picture 3, the vending machine is still cut away, just barely,
+at its inverted tip, and wall and step textures are partly cut the same way, picture 8
+("der Automat wird noch ganz knapp an der invertierten Spitze weggeblendet, auch
+Texturen von Waenden und Stufen werden so teilweise weggeschnitten"); picture 4, the
+yellow light is still crossed by ripples and cracks ("das gelbe Licht wird noch von
+Rippeln und Rissen durchzogen"); pictures 5 and 6, Lara has a grey-black shape that the
+camera's angle pulls into and out of the floor, which covers textures in part, and the
+mirrored textures are partly eaten whole ("Lara hat jetzt eine grau-schwarze
+Unbenannte, die kann ich mit dem Winkel der Kamera aus dem Boden rein- und rausziehen");
+picture 7, Lara's reflection still has ripples and stripes in places ("Laras Spiegelbild
+hat teilweise noch Rippel und Streifen"); picture 9, room 122's squares x1,z1 and x1,z2
+lost their wet surface ("haben ihre nasse Flaeche verloren"). And a question: the whole
+level is run through with such marble floors, and in many places the art has mirrored
+rooms under the floor - everything from room 46 has that effect, everything after it,
+the new wet area too, did not; can it be that some were forgotten and the errors are the
+result of that conflict? Picture 10, that floor should have such a copy too ("Kann es
+sein, dass da doch welche sind, die wir vergessen haben ... der Boden muesste ja auch so
+eine Kopie haben").
+
+The eyes. Found by content as in round 5 (`CAMLOG` runs after the shot rendered beside
+his pictures, Lara's place from `HAIRLOG`'s braid root): picture 3 the machine from
+above in room 122 (ticks 297,844 to 312,610), 4 room 45 toward the lift (323,453 to
+326,375), 5 and 6 one place in room 122 from two eyes (356,032 and 366,703; Lara at x
+48,446, z 68,707 in both), 7 Lara crawling (the crop; the run 405,797 to 434,360, the
+least certain), 8 room 121 toward the lit wall (565,875), 9 room 121 toward the
+corridor's mouth (597,657), 10 room 126 (612,828).
+
+The census (RoomProbe `-tankcensus`). Round 5's `-tankart` question asked of every floor
+square of a level: the .TRG's triangles 16 to 2,048 units under the floor, those whose
+centroid mirrored in the floor lies within 32 units of one over it, and the floor's own
+faces by how the renderer draws them. A square counts as copied at 8 mirrored and a
+third of those under, the engine's own numbers asked of triangles. RICH2 in 3.7 s, the
+other fourteen levels in 35 s together:
+
+| level | squares | copied | of them under a clear floor | rooms with one |
+|---|---|---|---|---|
+| RICH2 | 1,759 | 605 | 387 | 102 |
+| RICHCUT2 | 304 | 38 | 5 | 5 |
+| TITLE | 7,491 | 157 | 74 | 25 |
+| the other twelve | 774 to 6,447 | 80 to 568 | 0 | 38 to 102 |
+
+A copy under an opaque floor cannot show: those counts are stacked rooms whose art
+happens to mirror, in every level. Under a clear floor - the art's copy that shows as
+the room's reflection - RICH2 has it in 55 rooms: 5, 8, 10, 12, 21, 29, 34, 40, 41, 46
+west of x 41,984, 47 to 55, 57, 75, 84, 85, 88 to 97, 100 to 104, 116 to 119, 129, 144 to
+146, 150, 153, 154, 168 to 171 and 176, the rooms the build names as its clear-floor
+rooms. Every one is drawn HD, and the game's markers cut only room 120, above y -2,944
+(his log): nothing of a copy is cut. The tank's rooms: 121 and 45 none (227 and 179
+triangles under, 5 and 3 mirrored, opaque floors), 23 and its twin 32 none (1,060, 0),
+122 copied under 3 of its 4 squares (629 under, 333 mirrored, the corridor's copy
+reaching on) but under an opaque floor. Picture 10 is room 126: 24 squares, none copied
+(431 under, 14 mirrored, 768 deep), its floor opaque; rooms 125 and 127 none either.
+
+The answer to his question: nothing was forgotten. The art carries its copy under the
+clear floors, from the corridor 46 (and its twin 75) west of its mouth on, and there it
+draws; after it - rooms 122, 121, 45, the tank's wet area, and room 126 - the floors are
+opaque and carry no copy that could show. The conflict he suspected was real in two of
+his pictures: the wet floor's copy rule (round 5) kept the march off the four squares at
+the corridor's mouth, where the corridor's copy lies under an opaque floor - picture 9
+is those squares without a mirror, and picture 3's machine reflection ran from a marched
+square onto one of them. Pictures 4 to 8 stand on squares with no copy under them.
+
+The mouth squares (`hd_render.cpp`, "the art's own mirror", `wet_clear`). A square now
+counts as copied only where its floor is a clear floor too (`HD_PASS_CLEAR`, the one
+kind of floor a copy shows through): the groups keep the planes of their clear floors
+(`HDGroup::clearFlats`, built beside the other flat planes, by the same test the clear
+floors' triangles take). The four mouth squares (room 46's two, 31/28 and 29/21 cells;
+room 122's two, 32/16 and 30/15) march again; no square either tank's water reaches has
+a clear floor. `-tankwetmap` ends its lines in `clear=`. At picture 9's eye 40,299
+pixels of 1,920 x 1,080 change: the mouth squares mirror the wall and the bench again.
+
+The yellow bands. Round 5 named the corridor's ceiling glows, drawn without depth, as
+their cause. Measured now: the additive pass alone (`-glow`) is black at the band eyes
+and at his pictures' eyes; the glass left as an alpha test (`-noblend`) changes no pixel;
+the corridor's cove lights are opaque art that writes its depth. Of the bands' yellow
+pixels (wet against dry, R over 140, G over 120, B under 0.7 G) at four eyes, 5,733 of
+5,794, 1,873 of 1,984, 2,323 of 2,457 and 4,367 of 4,584 lie within 2 pixels of the fine
+march's hit, every one on its surface, none showing what the later copy adds over the
+opaque frame; the fine march's own colour is as bright there. The bands are the cove
+lights' mirror at its true place - their reflection in a wet floor - and come back with
+the mouth squares: at round 5's 22 eyes of tank 182, E160 1,809, c408 2,457, c577 1,583,
+c601 1,984, e360 719, k229 5,794, k458 4,584, v510 108, the rest 0 (0 at all in round
+5's build). Nothing drawn without depth lies in the march's way there, so no remedy for
+one was built; whether the cove's mirror should be weaker is a question of the look.
+
+Picture 4. At its eye the march lies more than 2 pixels off the fine march for 79 of
+101,382 wet pixels, on one side only for 4,196, off the fine colour by more than 48 for
+1,143: the yellow light is the lift's lit wall and the cove strip mirrored. Its ripples
+and cracks were not measured to a cause; two parts of the design lie under a bright
+mirror: the share of the mirror each 256-unit grid point takes out of a hash (0.5 to 1,
+a damp place against a pool), which a bright reflection shows as a pattern, and the
+floor's own veins and inlays, over which the mirror is added. Left as a question.
+
+The models in the mirror (`hd_render.cpp`, "the models in the mirror",
+`HDRenderWaterWetModels`). The cause classes, at his eyes with a stand-in for Lara:
+(1) the shape under Lara: the march meets a model's own pixels in the copy - a ray
+reflected past her feet finds her legs, which stand nearer than the room the ray would
+meet behind them, and lays her dark colour on the floor beside her, or takes her for
+the wall behind; the angle moves it. Counted with RoomProbe `-wetstand` (a dark box 160
+across at her place, 768 high, 400 crawling): the march's hits on the box (rays whose
+hit moves when the march goes past it, map 7 with and without) 2,885 at picture 5's
+eye, 2,105 at 6, 10,433 at 7, 2,300 at 8, at 960 x 540; over a 10-degree yaw and pitch
+fan round 5 and 6 in 5-degree steps 1,921 to 8,771 an angle (0 where the box covers the
+floor, pitch down 5 and 10). (2) Her reflection's stripes are the same rays on her thin
+parts. (3) The machine's tip in picture 3: the fine march and this one both find
+nothing below the mirrored screen - the machine's top stands in the top tenth of the
+frame and the rays that would meet it leave the copy or end in its faded edge; no march
+over the screen can find it. Picture 8 without Lara shows the fine march and this one
+alike; its cut lies where Lara stands, class 1.
+
+Built: the frame's object list is drawn twice more, between the rooms' passes and the
+mirror, into a target and an INTZ depth of the mirror's own - through the floor's
+reflection, folded into the projection (the models' lighting is the frame's, worked out
+before the projection, so they show lit as they stand), and as the frame drew them into
+the target's alpha alone; both turned left to right, which keeps a culled model's
+winding, and read at 1 - x. The plane is the floor height most of the drawn wet points
+stand at. `WetPS`'s march goes past a model's place as past a hole in the frame; a
+mirrored model under a pixel - on that plane within the layer's 4 and a corner's 8
+units, under the floor, nearer than the march's hit - is the mirror's, its clip undone
+as the frame's is, weighted, held and fogged as the march's. The engine hands in
+`HDObjectFrameDraw` (one line in `HDFrameDrawGlow`), RoomProbe its stand-ins. No game
+code changes and nothing of `game\mirror.cpp` is used: a planar reflection through the
+projection is the textbook form. A planar mirror of the room art as well, for class 3,
+was measured and not built: the solid passes of the four wet rooms (122, 121, 45, 46)
+take 0.093 to 0.117 ms at 2,560 x 1,440 at his eyes (`-gpu 9`), within the bound, but
+their draw needs the frame's room list - each room's world, light and window - at the
+wet floor's draw, a hook in `hd_level.cpp`'s room loop beyond this round's one line.
+
+**Measured.** GPU at 2,560 x 1,440, five runs, the water's phases and both wet draws
+summed, tank 182 60 s after the shot, medians, `dd6b559a` against the round's head: round
+5's eyes c601 0.117 to 0.175 ms, k185 0.110 to 0.183, v510 0.129 to 0.157, and E158 0.163
+to 0.186; his eyes 3 to 9 0.106 to 0.134 against 0.118 to 0.171 - the march on the mouth
+squares and the larger shader; with a two-box stand-in drawn through the models'
+mirror 0.121 to 0.181. Lara's own two extra draws the probe cannot draw: the four rooms'
+15,670 triangles take 0.1 ms, so her mesh twice is of that order. Memory: the target and
+its depth, 8 bytes a pixel, 28.1 MiB at 2,560 x 1,440, against the 3,886 MiB budget of his
+log's `HDLOG` line (0.7 per cent), made at the first wet mirror and released with the
+later copy. Slots: `WetPS` 256 to 320 (20 texture, 300 arithmetic), the debugger 508 to
+472 (round three's march left out of it, map 8 the models' places); every other `.inc`
+byte-identical.
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82`, `dd6b559a` and the head
+(ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`).
+With `-hdwater 0` the fifteen cameras 15 of 15 identical to the fix round's parity set.
+With `-hdwater 1` against a RoomProbe built from `dd6b559a`: the fifteen cameras 15 of
+15, the six HD views of those rooms 6 of 6, the pond's twelve views at 1, 3 and 5 s 36 of
+36, the canal dive 4 of 4, the tank views without `-tank` and his view before the break
+3 of 3, tank 33's three eyes and its view with `-tank 33 60` 4 of 4, the sweep's 209
+WATERLOG lines; the RICH2 views with `-tank 182` change where the mouth squares stand in
+the picture (round 5's 22 eyes: 947 to 153,975 pixels by more than 4 at 960 x 540, the
+round's build without stand-ins md5-identical to the mouth squares' own build at all 22)
+and, with `-wetstand`, where a stand-in's mirror lies. The suites (ModernTest, MenuTest,
+InterpTest, LipsTest) 0 failed; the engine and every tool build.
+
+**Left.** The look in the game - nobody in this round could play it, and RoomProbe
+draws no Lara: her real mesh in the mirror, the pictures of a dark box are the proof.
+The machine's tip at the frame's top edge (class 3) stays cut until the room art is
+mirrored as geometry too. The cove lights' mirror at the corridor's mouth is their true
+reflection; whether it should read weaker is the owner's. Picture 4's ripples and
+cracks are not measured to a cause. The models are mirrored in one plane a frame - the
+height most wet points stand at - so on tank 33's plinth, a click under room 23's
+lowered floor, they do not show. A model drawn in a classic mirror room's reflection
+would be mirrored again; a speaking face over a wet floor would write its `LIPLOG`
+line again for each extra draw. The pictures of round 5 the owner asked about (160) and
+Lara's boxes: the boxes are class 1, built against; picture 160's half-see-through was
+the art's copy (round 5).
+
+**Commits.** `f30f7b2b` (the census), `e247a29b` (the copy under a clear floor only),
+`4ff5742c` (the models in the mirror).
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in

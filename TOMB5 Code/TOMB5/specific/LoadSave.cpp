@@ -622,16 +622,6 @@ void ConvertSurfaceToTextures(LPDIRECT3DSURFACE9 surface)
 	MonoScreenView = 0;
 }
 
-/* What stands on the screen, as the loading picture: the back buffer read
- * back once into the mono picture, in colour and at full brightness
- * (MonoScreenOn 2, as a loaded picture - RGBM_Mono leaves it as it is),
- * the same read as the inventory's background (CreateMonoScreen). Every
- * frame of the load then draws it again (DrawLoadingScreen) instead of
- * relying on the back buffer, whose contents a D3DSWAPEFFECT_DISCARD swap
- * chain does not promise after a Present. Read once, as the load begins,
- * when that buffer still holds the frame the player sees. ReleaseScreen
- * gives it back after the load's last frame. 1 when a picture was made;
- * 0 leaves no picture up, as before. */
 /* The read back screen into a texture of its size, pixel for pixel: the
  * back buffer is X8R8G8B8 (or A8R8G8B8), the texture A8R8G8B8, so a pixel
  * is the same 32 bits made opaque - what ConvertSurfaceToTextures makes of
@@ -672,6 +662,16 @@ static LPDIRECT3DTEXTURE9 LoadingScreenTexture(LPDIRECT3DSURFACE9 surface,
 	return tex9;
 }
 
+/* What stands on the screen, as the loading picture: the back buffer read
+ * back once into the mono picture, in colour and at full brightness
+ * (MonoScreenOn 2, as a loaded picture - RGBM_Mono leaves it as it is),
+ * the same read as the inventory's background (CreateMonoScreen). Every
+ * frame of the load then draws it again (DrawLoadingScreen) instead of
+ * relying on the back buffer, whose contents a D3DSWAPEFFECT_DISCARD swap
+ * chain does not promise after a Present. Read once, as the load begins,
+ * when that buffer still holds the frame the player sees. ReleaseScreen
+ * gives it back after the load's last frame. 1 when a picture was made;
+ * 0 leaves no picture up, as before. */
 long CaptureLoadingScreen()
 {
 	LPDIRECT3DSURFACE9 sysMem;

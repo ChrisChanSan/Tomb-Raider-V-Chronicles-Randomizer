@@ -12286,6 +12286,31 @@ static void vis_tables()
 	HDVisBuild(trg, &rooms[0], 3, &faces[0], 2, &portals[0], 2, 0, 0, own, &t);
 	ok(t.guestCount[0] == 0, "vis: art within its own room's box is no guest",
 		t.guestCount[0], 0);
+
+	// A face beside a portal widens it only at wideBare or more; the
+	// openings keep their own share.
+	HDVisParams narrow = p;
+
+	rooms[0].flags = 0;
+	narrow.wideBare = 1.01;
+	HDVisBuild(trg, &rooms[0], 3, &faces[0], 2, &portals[0], 2, 0, 0, narrow,
+		&t);
+	ok(t.wideCount[0] == 0 && t.openCount[0] == 1,
+		"vis: a face less bare than wideBare widens no portal",
+		t.wideCount[0], 0);
+	ok(p.edge * 2560.0 > 1.99 && p.edge * 2560.0 < 2.01,
+		"vis: the window's edge is 2 pixels at 2,560", (int)(p.edge * 2560.0),
+		2);
+
+	// B the other room of C's flipmap pair: the opening behind A's bare
+	// face names C, the pair's main room, once.
+	rooms[2].twin = 1;
+	HDVisBuild(trg, &rooms[0], 3, &faces[0], 2, &portals[0], 2, 0, 0, p, &t);
+	ok(t.openCount[0] == 1 && t.openings[(size_t)t.openFirst[0]].behind == 2 &&
+		t.openingsTwin == 1,
+		"vis: an opening behind a flipmap twin names the main room",
+		t.openCount[0] ? t.openings[(size_t)t.openFirst[0]].behind : -1, 2);
+	rooms[2].twin = -1;
 }
 
 static void stand_cover()

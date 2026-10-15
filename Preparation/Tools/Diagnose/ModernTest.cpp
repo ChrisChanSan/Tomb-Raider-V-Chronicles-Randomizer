@@ -22000,9 +22000,10 @@ static void spring_crack()
  * it, on a slope from 1,229.6 to 1,379.5 with its bottom at 1,446, and
  * the eyes in steps of 64 from 256 over its highest point to 128 under its
  * bottom at four places round it. RoomProbe's pictures there: the crack
- * right at every eye over the bottom that is over the floor, the hole
- * black in front of the walls under the bottom, and nothing but black from
- * an eye inside the rock uphill under the floor. */
+ * right at every eye over the bottom that is over the floor, the walls
+ * alone in the slit from an eye under the bottom that is over the floor
+ * (the hole without its bottom), and nothing but black from an eye inside
+ * the rock uphill under the floor. */
 static void spring_crack_gate()
 {
 	printf("the springs: the crack's gate\n");
@@ -22055,9 +22056,10 @@ static void spring_crack_gate()
 
 	/* The fan: four columns - the second camera's own, west and south of
 	 * the crack 1,000 away in the water (floors 1,912, 1,537, 1,657), and
-	 * 600 uphill, where the floor stands at 1,068. Every water eye over the
-	 * bottom less the lift (1,438) sees it; uphill the eyes over the whole
-	 * outline see it, the lower ones stand in the rock and do not. */
+	 * 600 uphill, where the floor stands at 1,068. Every water eye sees
+	 * it, the two under the bottom less the lift (1,438) without the
+	 * bottom; uphill the eyes over the whole outline see it, the lower ones
+	 * stand in the rock and do not. */
 	struct Eye
 	{
 		float x, z;
@@ -22066,36 +22068,51 @@ static void spring_crack_gate()
 
 	static const Eye fan[] =
 	{
-		{ 59858.0f, 41443.0f, 8 },
-		{ 59930.0f, 40450.0f, 8 },
-		{ 60930.0f, 41450.0f, 8 },
+		{ 59858.0f, 41443.0f, 10 },
+		{ 59930.0f, 40450.0f, 10 },
+		{ 60930.0f, 41450.0f, 10 },
 		{ 61354.3f, 40025.7f, 4 },
 	};
 	const float lift = 8.0f, bottom = 1446.0f;
-	int right = 0, total = 0;
+	int right = 0, total = 0, floors = 0;
 
 	for (const Eye& e : fan)
 		for (int k = 0; k < 10; k++, total++)
 		{
 			const float eye[3] = { e.x, 973.6f + 64.0f * (float)k, e.z };
 
-			right += HDSpringCrackSeen(eye, f, bottom, lift) == (k < e.seen) ?
+			right += HDSpringCrackSeen(eye, f, lift) == (k < e.seen) ? 1 : 0;
+			floors += HDSpringCrackBottom(eye[1], bottom, lift) == (k < 8) ?
 				1 : 0;
 		}
 
 	ok(right == total, "spring crack gate: the fan's forty eyes as the "
-		"pictures read - over the bottom and the floor seen, else not",
-		right, total);
+		"pictures read - over the floor seen, in the rock not", right, total);
+	ok(floors == total, "spring crack gate: the hole draws its bottom for "
+		"the eight rows over it, none for the two under it", floors, total);
 
 	/* Two cameras out of a game's camera log at this crack: one over it,
 	 * one 141 under its highest point and 75 over its bottom. */
 	const float over[3] = { 59528.0f, 562.0f, 41503.0f };
 	const float under[3] = { 59858.0f, 1371.0f, 41443.0f };
 
-	ok(HDSpringCrackSeen(over, f, bottom, lift) &&
-		HDSpringCrackSeen(under, f, bottom, lift), "spring crack gate: both "
-		"cameras of the log see the crack, the second under its highest "
-		"point", 1, 1);
+	ok(HDSpringCrackSeen(over, f, lift) && HDSpringCrackSeen(under, f, lift),
+		"spring crack gate: both cameras of the log see the crack, the second "
+		"under its highest point", 1, 1);
+
+	/* Three more cameras of the logs, under the crack's bottom on the
+	 * falling slope (y 1,558, 1,586 and 1,660): the slit seen, its walls
+	 * alone. */
+	const float low[3][3] = { { 59461.0f, 1558.0f, 41048.0f },
+		{ 60046.0f, 1586.0f, 41665.0f }, { 60252.0f, 1660.0f, 41452.0f } };
+	int lows = 0;
+
+	for (int i = 0; i < 3; i++)
+		lows += HDSpringCrackSeen(low[i], f, lift) &&
+			!HDSpringCrackBottom(low[i][1], bottom, lift) ? 1 : 0;
+
+	ok(lows == 3, "spring crack gate: three cameras under the bottom see the "
+		"slit without its bottom", lows, 3);
 
 	/* A flat floor (the fountain's at 2,560, its bottom at 2,641): the
 	 * plane is the floor, and an eye sees the crack exactly when it stands
@@ -22110,7 +22127,7 @@ static void spring_crack_gate()
 	{
 		const float eye[3] = { 5000.0f, (float)h, -3000.0f };
 
-		same += HDSpringCrackSeen(eye, flat, 2641.0f, lift) ==
+		same += HDSpringCrackSeen(eye, flat, lift) ==
 			((float)h < 2560.0f - lift) ? 1 : 0;
 	}
 

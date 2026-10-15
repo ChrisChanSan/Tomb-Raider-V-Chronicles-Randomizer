@@ -1757,14 +1757,15 @@ void HDSpringCrackNumbers(int* drawn, double* ms)
  *               floor (fans over a concave outline cancel out the same way)
  *   3 the hole  the volume again on the marked pixels alone, black, at the
  *               depth of the bottom's plane along the pixel's ray (HolePS),
- *               the bit back to 0
+ *               or at the far plane's for an eye under that plane
+ *               (HDSpringCrackBottom), the bit back to 0
  *   4 walls     each edge's wall with the depth test and write, the
  *               floor's page on it (CrackPS): where the hole is open they
  *               lie in front of the bottom, elsewhere behind the floor
  *
  * The bottom the walls leave open is the hole's own black. Nothing when
  * the frame's depth has no stencil, the eye does not look into the slit
- * (HDSpringCrackSeen: under the bottom or behind the floor) or the volume
+ * (HDSpringCrackSeen: behind the floor) or the volume
  * reaches the near plane, where the count would be cut; and only
  * while `drawn` says the room of the crack's floor is drawn this frame:
  * a ray to the crack then meets the floor or what stands in front of it,
@@ -1834,8 +1835,8 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 			!drawn(k.room)))
 			continue;
 
-		// The eye over the bottom and the floor, else the slit is not seen.
-		if (!HDSpringCrackSeen(eye, k.floor, c.bottomY, kCrackLift))
+		// The eye over the floor, else the slit is not seen.
+		if (!HDSpringCrackSeen(eye, k.floor, kCrackLift))
 			continue;
 
 		Draw dr;
@@ -1952,6 +1953,20 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 		if (hi[0] < -1.0f || lo[0] > 1.0f || hi[1] < -1.0f || lo[1] > 1.0f)
 			continue;
 
+		dr.crack = i;
+		dr.look[0] = c.depth > 0.0f ? 1.0f / c.depth : 1.0f;
+		dr.look[1] = dr.look[2] = dr.look[3] = 0.0f;
+
+		/* An eye under the bottom's plane looks up into the slit and sees
+		 * no bottom (HDSpringCrackBottom): the plane 0 meets no ray, and
+		 * HolePS writes the far plane's depth in black, behind the walls. */
+		if (!HDSpringCrackBottom(eye[1], c.bottomY, kCrackLift))
+		{
+			dr.plane[0] = dr.plane[1] = dr.plane[2] = dr.plane[3] = 0.0f;
+			draws.push_back(std::move(dr));
+			continue;
+		}
+
 		/* The bottom's plane in view space out of three of its points, its
 		 * normal turned so that the eye lies on its near side. */
 		const float w0[3] = { c.midX[half], c.bottomY, c.midZ[half] };
@@ -1987,13 +2002,10 @@ void HDSpringCrackFrameDraw(const float* toFrame, bool (*drawn)(int room))
 				n[j] = -n[j];
 		}
 
-		dr.crack = i;
 		dr.plane[0] = n[0];
 		dr.plane[1] = n[1];
 		dr.plane[2] = n[2];
 		dr.plane[3] = dist;
-		dr.look[0] = c.depth > 0.0f ? 1.0f / c.depth : 1.0f;
-		dr.look[1] = dr.look[2] = dr.look[3] = 0.0f;
 		draws.push_back(std::move(dr));
 	}
 

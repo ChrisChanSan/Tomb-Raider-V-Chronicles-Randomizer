@@ -776,23 +776,18 @@ inline HDSpringCrackFloor HDSpringCrackFloorFit(const float* x,
 	return f;
 }
 
-/* Whether an eye at world x, y, z (y down) looks into a crack on `floor`
- * whose bottom lies at bottomY, each test by `lift`: the eye over the
- * bottom, and over the highest point of the outline or else over the
+/* Whether an eye at world x, y, z (y down) looks into a crack on `floor`,
+ * by `lift`: over the highest point of the outline or else over the
  * floor's plane at the eye's own column. On a slope the outline's heights
  * part, and an eye under its highest point still looks into the slit from
- * the side, the walls hiding the bottom it cannot see. Under the bottom
- * the hole would stand black on the bottom's plane in front of the walls
- * (HolePS meets that plane before the floor); behind the floor's plane
- * the eye looks at the back of the floor the crack opens. The plane only
- * widens the test of the highest point: away from the outline it is a
- * guess at the floor, so an eye over the whole outline keeps its crack. */
+ * the side, the walls hiding the bottom it cannot see - from under the
+ * bottom too, where the slope falls on below the crack. Behind the floor's
+ * plane the eye looks at the back of the floor the crack opens. The plane
+ * only widens the test of the highest point: away from the outline it is
+ * a guess at the floor, so an eye over the whole outline keeps its crack. */
 inline bool HDSpringCrackSeen(const float* eye,
-	const HDSpringCrackFloor& floor, float bottomY, float lift)
+	const HDSpringCrackFloor& floor, float lift)
 {
-	if (eye[1] >= bottomY - lift)
-		return false;
-
 	if (eye[1] < floor.top - lift)
 		return true;
 
@@ -800,6 +795,17 @@ inline bool HDSpringCrackSeen(const float* eye,
 		floor.slopeZ * (eye[2] - floor.z);
 
 	return eye[1] < y - lift;
+}
+
+/* Whether the hole draws its bottom for an eye at world y `eyeY` (y down):
+ * when the eye stands `lift` over the bottom's plane at `bottomY`. From
+ * under that plane a ray into the slit enters it at the floor rising and
+ * leaves it through a wall, never through the bottom - the bottom's plane
+ * turned to such an eye would stand black in front of the walls -, so the
+ * hole then writes no bottom and the walls fill the slit. */
+inline bool HDSpringCrackBottom(float eyeY, float bottomY, float lift)
+{
+	return eyeY < bottomY - lift;
 }
 
 /* Where bubble `k` is born in the crack: on the main line between a

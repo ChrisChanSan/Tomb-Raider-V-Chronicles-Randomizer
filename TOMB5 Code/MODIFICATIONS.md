@@ -16589,6 +16589,137 @@ not.
 (the frames after the join, the clock in ticks, the tables), `471b02d` (no device reset
 between the build's steps)
 
+#### Round 2: off only for the short loads
+2026-10-15
+
+**What.** With *Loadbar style* off, a level load that builds the HD art shows its loading
+screen as the TR5 state does - the level's picture (HD or classic), the TR5 bar and the
+brake - and only a short load, one that keeps the HD art or builds none, goes without a
+screen as round 1 made it. Whether a load builds is decided once, before the loading
+thread starts, on the keep's own key: `HDLevelKeyEarly` (`specific/hd/hd_level.cpp`)
+stamps the coming level's key, and `LoadLevel`'s `HDLevelKeyNext` takes that key for the
+same file instead of stamping it again. With `hd_build` 0, no installation found or a
+level without its `.TRG` no HD art is built, every load is short and off shows no screen
+for any of them. New: `HDLevelKeyEarly` and `HDLevelNextLoad` (`hd_level.h`),
+`KeyStampOf` (the stamp `HDLevelKeyNext` made, moved into a helper of its own),
+`LoadBuildsHD` and `LoadScreenModeOf` (`specific/loadbar_math.h`), the word `shown=` at
+the end of the `LOADLOG` step `bar`.
+
+**Why.** The owner played round 1 (his `-log` run of the build of 2026-10-15 21:07) and
+wrote: "The brake feels great. The transitions inside a level look great too, super
+smooth. One thing I overlooked: Loadbar = Off has a side effect. When I load across
+levels or go back to the title, that takes longer than inside a level because of the HD
+build. Now we have black screens for that time. For the long transitions we must keep the
+pictures and the loading bar at Off, or the user thinks it crashed, and the beautiful HD
+pictures never appear." ("Die Bremse fuehlt sich top an. Die Uebergaenge in einem Level
+sehen auch geil aus, super fluessig. Eine Sache, die ich uebersehen habe: Loadbar = Off
+hat einen Nebeneffekt. Wenn ich leveluebergreifend lade oder zurueck zum Title, das
+dauert ja laenger als in einem Level wegen dem HD-Aufbau. Da haben wir jetzt
+Blackscreens fuer die Zeit. Fuer die langen Uebergaenge muessen wir die Bilder +
+Ladebalken behalten bei Off, sonst denkt der User, es ist abgestuerzt, und die schoenen
+HD-Bilder kommen nie zum Vorschein.")
+
+**How.** *M - his loads classed first.* Every load of his newest run (35, a bar for 20 of
+them and off for 15) and of the run before round 1 (34), by the `HDLOG` line
+the keep writes (`resident=1`, or `resident=0 refused=<field>`), the entry before it and
+the `LOADLOG` steps:
+
+| Load | Entry | The key | Loads (newest / before) | Work | Off in round 1 | Off now |
+|---|---|---|---|---|---|---|
+| a savegame of the level being played | the load menu (inventory, load key) | `resident=1` | 29 / 16 | 34 to 94 ms | no screen: black, or the fade over a frame not black | the same |
+| another level | a level's end, the title's new game or load, a cutscene's open or close, a game loaded from another level | `refused=level` | 3 / 15 | 0.96 to 4.96 s | black for all of it (after a level's end the 150 ms fade, then black) | the level's picture and the TR5 bar |
+| the title | the pause menu's exit, the last level's end | `refused=level` | 2 / 2 | 2.19 to 3.47 s | black | the title's picture and the bar |
+| the first load | the start | `refused=nothing_built` | 1 / 1 | 3.26 to 3.65 s | black | the logo picture and the bar |
+
+Of the newest run's off loads, four built: three entered over black drew no frame at all
+for 3.4, 3.9 and 3.5 s (`frames=0`), the fourth, a level's end, drew the fade's ten
+frames and then nothing for about 2.3 s - the black screens he saw. The two classes do
+not meet: the longest short load is 94 ms, the shortest build 0.96 s. Neither run has a
+death; by reading a death's reset or load goes through `S_LoadLevelFile` like the load
+menu, and its key decides the same way. The key's answer is therefore the line between a
+short load and a long one, and it is known before the load starts: the key names the
+level's files by size and write time, the settings and the outfit, all there before the
+loading thread reads anything.
+
+*Where the key was stamped and compared.* `HDLevelKeyNext` stamped it at `LoadLevel`'s
+top, on the loading thread (`LOADLOG` step `free`): the level's name, five file stamps
+(`GetFileAttributesExA` on the `.TRC`, its `.hdm`, the `.TRG`, `hd_gloss.txt` and
+`hd_water.txt` - no file opened), the two install roots, five settings and the outfit's
+registry value. Every comparison is `HDLevelKeepRefused` against the key of the data
+built and the re-dress count: in `HDLevelKeyNext` (whether to read ahead),
+`HDLevelKeepsNext` (`TexturePagesKeep`, the classic pages) and `HDLevelUnload` (the keep
+itself and its `HDLOG` line).
+
+*S - the decision.* `S_LoadLevelFile` now forms the level's file name first and asks
+`HDLevelKeyEarly(name, &next)`: behind the build gate (`HDEnabled`) it stamps the key
+with `KeyStampOf` - the same lines `HDLevelKeyNext` ran, now one helper both call -,
+keeps it with the file name, and answers whether the gate is open, whether the `.TRG`
+is there (its stamp found) and whether `HDLevelKeepRefused` keeps the data for it. The
+pure rule (`loadbar_math.h`): a load builds when the gate is open, the art is there and
+the data are not kept (`LoadBuildsHD`); the screen's state is the row's, but TR5 where
+the row is off and the load builds (`LoadScreenModeOf`). That state is the one
+`S_LoadScreenBegin` gets, so the frames, the bar and the brake are the TR5 state's to the
+line: the picture's frame, the loop while the thread runs, the build's frames, the tail.
+The bar's look is the TR5 one, since `tr4_loadbar` is the TR4 state only. The fade of
+round 1 is left to the short loads (`fade` only where no screen is shown). The row off
+renders no level view (`DoTitle`, `DoLevel` skip `RenderLoadPic`), so a shown off load
+reads the level's picture even with *TR4 loadscreens* on (`tr4_view` 0 for it) and gives
+it back after its last frame as TR5 does; the loading text, drawn only inside
+`RenderLoadPic`, stays out as before. The `LOADLOG` line `step=bar` ends in `shown=1`
+when the load showed its screen, `shown=0` when it did not.
+
+*One key.* `HDLevelKeyNext` still stands at `LoadLevel`'s top and still clears and gates
+as before; for the file `HDLevelKeyEarly` stamped - the same buffer, `S_LoadLevelFile`'s
+`name`, handed to the thread - it takes the early key instead of stamping, clears it, and
+goes on as before: the read ahead's drop, its comparison, the thread. Any other caller
+stamps as it did. So the screen's decision, `TexturePagesKeep` and `HDLevelUnload` read
+one key through one comparison; the key's fields and their meaning are unchanged, only
+its stamp moves from the loading thread's first step (`free`) to the main thread's
+`screen` step, a few milliseconds earlier. A key with no name stays invalid and is not
+taken; a device made anew clears the built key (`HDLevelDeviceLost`), so the early
+answer is a build and the screen is shown, as the load then builds.
+
+**Measured.** The stamp alone (a harness outside the repository: the five attribute
+reads as `FileStampOf` makes them, on the owner's game folder, 1,000 rounds): 0.17 ms
+median, 0.46 at most. It moves and is not added: the load stamps once, as before. In his
+log the step `free` of a kept load, which holds the stamp, its comparison and
+`FreeLevel`, is 0.4 to 0.7 ms. Expected per load class from the table: a short load with
+the row off is round 1's, to the frame; a building one draws the TR5 state's frames -
+the newest run's builds with a bar drew 22 and 20 frames over 3.6 and 5.0 s - and its
+picture read adds to `screen` what it adds there (61 and 132 ms in those two loads).
+
+**Checked.** ModernTest 15,393 -> 15,412: `load_mode` 41 -> 60 - the rule
+(`LoadBuildsHD` on all eight cases; off with the data kept no screen, off with a build
+the TR5 state, off with the build gate shut or no `.TRG` no screen, TR5 and TR4 as the
+row says whatever the load does) and in the engine's text the decision before the
+loading thread and once, the state from the row and the keep, the screen begun in that
+state, the picture read for a shown off load, the `shown=` word; and of the key: both
+stamps through `KeyStampOf` (two calls), the five file stamps in one place, the early
+key taken for the same file and cleared after, the early answer the keep's comparison,
+`HDLevelKeepRefused` asked four times in `hd_level.cpp` (the three before and the early
+one) and no key compared outside it. By reading: no second key and no second comparison;
+the key's `valid` and the device-recreate case as before; the brake, the frames, the
+hook in the build's laps and `drawbars.cpp` untouched. No tool compiles `file.cpp` or
+`hd_level.cpp`: with the tools built from this round's last commit the six classic views
+`-classicroom N -classiconly` 6 of 6 identical to `8691e82`'s tool and `ae24df92`'s (`git
+archive`); the fifteen parity cameras 15 of 15 and the six views drawn HD 6 of 6
+identical to `ae24df92`'s tool; the build fingerprints of the fifteen levels at `hd_air`
+1 and 2, 30 of 30. MenuTest 44,272, InterpTest 729, LipsTest 270 and 243, 0 failed; the
+engine and the eight tools build.
+
+**Left.** His next `-log` run: an off load across levels or to the title with its
+picture and bar (`step=bar ... shown=1`), a save inside the level still without a screen
+(`shown=0`). A device lost while the loading thread has not yet reached its first line
+clears the built key after the decision: that load builds without its screen. A level
+whose build gives up early (no shader model 3) is decided as a build and shows its screen
+for its short time and the brake's 500 ms. With `hd_build` 1 and *HD textures* off the
+art is still built: such a load is long and shows the classic picture. The newest run
+has one save load that stood 2.3 s (TR5, `wait=2313.9` with ten frames): the tail's
+presents took that long, the work 55 ms - not this round's change, noted for his next
+run.
+
+**Commits.** `596a371` (the decision); this record follows it.
+
 ## 2.5 Sixty frames a second
 
 The engine presents up to sixty pictures a second while its simulation keeps the thirty

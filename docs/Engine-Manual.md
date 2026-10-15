@@ -117,9 +117,9 @@ worth knowing by name:
 | `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30; `2` is the display's own refresh rate, which needs `vsync` on. There is no uncapped mode. The *Frame rate* row on the *Display* page writes this. See **Frame rate**. |
 | `vsync` | DWORD | `1`, the default: the picture waits for the monitor, so it is never torn across the middle. `0` for the original behaviour. **The only setting in the build that is not instant** — it is read when the graphics device is made, so a change takes hold the next time the game starts (or on the next Alt+Enter or resolution change). The *VSync* row writes this. |
 | `hd_enable`, `hd_build` and their companions | | The Remaster art - `hd_build` builds it, `hd_enable` draws it - and the outfit the F4 changer remembers. They have a table of their own under **HD from the Remaster**; every one of them is there, with its default. |
-| `loadbar` | DWORD | The *Loadbar style* row: `0` the TR5 bar, `1` the TR4 bar, `2` off - no loading screen at all (see **tomb5 options**). Written by the row. A registry from before this value reads the older `tr4LB` once: `1` (its default) gives the TR4 bar, `0` the TR5 one, so nobody's loading screen changes; `tr4LB` follows `loadbar` from then on. |
+| `loadbar` | DWORD | The *Loadbar style* row: `0` the TR5 bar, `1` the TR4 bar, `2` off - no loading screen for a short load (see **tomb5 options**). Short is a load that builds no HD art: a savegame loaded inside the level being played, whose HD art is kept, and with `hd_build` 0, no installation or a level without its `.TRG` every load (the classic level's own read takes well under half a second). A load that builds the HD art - another level, the title, the first load after the start, the same level after the device was made anew or a file of it changed - takes one to five seconds and shows the loading screen as `0` does: the level's picture, the TR5 bar and the brake, so that the screen is never black that long. Written by the row. A registry from before this value reads the older `tr4LB` once: `1` (its default) gives the TR4 bar, `0` the TR5 one, so nobody's loading screen changes; `tr4LB` follows `loadbar` from then on. |
 | `loadbar_min_ms` | DWORD | The **brake**, `500` by default: with the TR5 or the TR4 bar the loading screen stands at least this many milliseconds from its first frame, the bar running smoothly to its end in that time; a load that takes longer ends when its work does. `0` is no brake: the bar follows the work alone and the level starts the moment the load is done. No options row. |
-| `loadfade_ms` | DWORD | With *Loadbar style* off: how long the last frame of the game takes to fade to black where the screen was not black already (a level's end, after a movie), `150` by default. `0` is a cut - one black frame. The fade runs while the loading thread works; what is left of it when the thread is done is cut to black in one frame. No options row. |
+| `loadfade_ms` | DWORD | With *Loadbar style* off, on a load without a screen: how long the last frame of the game takes to fade to black where the screen was not black already (a level's end, after a movie), `150` by default. `0` is a cut - one black frame. The fade runs while the loading thread works; what is left of it when the thread is done is cut to black in one frame. No options row. |
 
 ---
 
@@ -778,11 +778,17 @@ chords** above for binding one of them to a pad chord.
   instead of the level's picture (the original one or your HD one out of
   `screens\HD`); the title's own loads always show their picture.
 - **Loadbar style** is the bar's look, *TR5* (short and thin) or *TR4* (wide),
-  or *off*: no loading screen at all, no picture, no bar, no text; the level
-  follows the screen before it through black. With a bar, the loading screen
-  stands at least half a second (`loadbar_min_ms`) and the bar runs through to
-  its end in that time; with *off*, a frame that was still on screen - a
-  level's end, the end of a movie - fades to black first (`loadfade_ms`).
+  or *off*: a short load has no loading screen, no picture, no bar, no text;
+  the level follows the screen before it through black. Short is a savegame
+  loaded inside the level being played, whose HD art is kept - and every
+  load when no HD art is built (`hd_build` 0, no installation found). A load
+  that builds the HD art - another level, the title, the first load - takes
+  seconds, and *off* shows its loading screen as *TR5* does: the level's
+  picture (the HD one with HD textures on, also with *TR4 loadscreens* on)
+  and the TR5 bar. With a bar, the loading screen stands at least half a
+  second (`loadbar_min_ms`) and the bar runs through to its end in that time;
+  with *off*, on a short load a frame that was still on screen - a level's
+  end, the end of a movie - fades to black first (`loadfade_ms`).
 - **Loading text** is the "Loading" lettering under the TR4 view: it shows
   only with *TR4 loadscreens* on and *Loadbar style* TR4.
 - **Shadow mode** has five values while HD is on - *Original*, *Circle*,
@@ -1288,7 +1294,9 @@ whatever the graphics driver does with its buffers. With *TR4 loadscreens* on
 (the default) a level other than the title shows no picture file while it
 loads: the level's view that the game has just drawn is taken once off the
 screen and drawn under the bar in every frame the same way. With *Loadbar
-style* off no picture is read at all. With the HD build on (an
+style* off a short load reads no picture at all; a load that builds the HD
+art shows the level's picture, with *TR4 loadscreens* on as well, since off
+draws no view. With the HD build on (an
 installation found, `hd_build` on), a savegame loaded inside the level shows its
 HD picture without decoding it again: the last decoded picture (about 8 MB) is
 kept until another one is shown, and a picture file changed on disk is read
@@ -4589,14 +4597,17 @@ the work ends:
 - the main thread: `screen` (the load picture: its read and decode - or the
   line `HD screen: <path> kept` when a savegame loaded inside the level found it
   decoded - or, with *TR4 loadscreens*, the level's view taken off the screen,
-  and one frame of it; with *Loadbar style* off only the last frame taken off
-  the screen for its fade, or nothing), `thread` (the wait for the loading
+  and one frame of it; with *Loadbar style* off and a short load only the last
+  frame taken off the screen for its fade, or nothing - and the stamp of the
+  coming level's key, which decides it), `thread` (the wait for the loading
   thread, while the picture and the bar are drawn), `ainit`, `hd_build`,
   `font`, `cutscenes`, `warmup`, `profile`, `bar` (after the work: the brake's
   frames until the screen has stood `loadbar_min_ms`, the full bar's frame, the
   picture's release; at its end `frames=` - every frame the loading screen drew
-  in this load - and `wait=` - the ms from the work's end to the last frame, the
-  brake's wait and that frame) and `total`. From `thread` to `warmup` a step
+  in this load -, `wait=` - the ms from the work's end to the last frame, the
+  brake's wait and that frame - and `shown=`, 1 when the load showed its
+  loading screen: always with a bar, with *off* only for a load that built the
+  HD art) and `total`. From `thread` to `warmup` a step
   holds the bar's frame drawn at its end where a tick had passed. After
   `hd_build` the line `step=hd_frames ms=<ms> frames=<n>` gives the frames the
   HD build's steps and its end drew and their time, which `hd_build` holds - not

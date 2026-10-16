@@ -77,6 +77,15 @@
  *                     what the engine does in place of the classic horizon
  *                     mesh
  *     -skyonly        the same, with the room left out: the dome alone
+ *     -skycensus      what the level's sky is made of, printed and then
+ *                     stop, no device: per sky part and pass the material,
+ *                     the pages, the height, radius, elevation, UV bytes and
+ *                     light (`sky part`), the band's rings (`sky ring`), the
+ *                     sky pages of the level's page table (`sky pages`) and
+ *                     the classic HORIZON mesh's rings (`sky horizon`, with
+ *                     -roombox). -rooms or -roombox gives the room count
+ *     -skydump <path> with -skycensus: every sky triangle as one line,
+ *                     group part pass page and x y z u v of its corners
  *     -with <group> <dx dy dz>
  *                     draw that group too, at that world offset from the
  *                     room - the difference of the two classic room origins,
@@ -12602,6 +12611,326 @@ static bool VisArg(int argc, char** argv, int* at)
 	return true;
 }
 
+/* -skycensus: what the sky of one level is made of, read out of the two
+ * files and printed, with no device and no picture. The .TRG's groups past
+ * the last room are the HD sky; per part and pass a `sky part` line gives
+ * the material and its four parameters, the triangles, the .TEX pages, the
+ * height, the distance from the dome's axis and the elevation seen from its
+ * centre, the u and v bytes, the baked light and the vertex numbers (the
+ * .TRG writes a part's vertices as one block). A part whose vertices all lie
+ * at one height is a flat sheet, and its line adds the UV bytes a thousand
+ * units of it take (the page's tiling). Every height of the band gets a
+ * `sky ring` line with its v bytes, which is how the page's rows lie on the
+ * sphere. The classic HORIZON mesh (slot 454) of the .TRC under -roombox
+ * gets the same rings, with the classic page and the texinfo v of the faces
+ * that touch each ring. -skydump <path> writes every sky triangle as one
+ * line: group part pass page, then x y z u v of its three corners. */
+static bool g_sky_census = false;
+static std::string g_sky_dump;
+
+/* The sky's switches, ahead of the parse chain, which stands at the
+ * compiler's limit of nested blocks (C1061). */
+static bool SkyArg(int argc, char** argv, int* at)
+{
+	const char* a = argv[*at];
+
+	if (!strcmp(a, "-skycensus"))
+		g_sky_census = true;
+	else if (!strcmp(a, "-skydump") && *at + 1 < argc)
+		g_sky_dump = argv[++*at];
+	else
+		return false;
+
+	return true;
+}
+
+static int ProbeSkyCensus(const char* root, const char* stem, int rooms)
+{
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("skycensus: no .TRG (%s)\n", error.c_str());
+		return 2;
+	}
+
+	Tr5Level level;
+	bool classic = false;
+
+	if (!g_roombox.empty())
+	{
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+
+		classic = level.load(std::wstring(trc.begin(), trc.end()), error);
+	}
+
+	if (rooms <= 0 && classic)
+		rooms = level.roomCount();
+
+	if (rooms <= 0)
+	{
+		printf("skycensus: -rooms or -roombox needed\n");
+		return 2;
+	}
+
+	FILE* dump = 0;
+
+	if (!g_sky_dump.empty())
+		fopen_s(&dump, g_sky_dump.c_str(), "w");
+
+	printf("skycensus level=%s groups=%d rooms=%d sky=%d\n", stem,
+		(int)trg.groups.size(), rooms,
+		(int)trg.groups.size() > rooms ? (int)trg.groups.size() - rooms : 0);
+
+	for (size_t g = (size_t)rooms; g < trg.groups.size(); g++)
+	{
+		const trf::remaster::TrgGroup& group = trg.groups[g];
+
+		for (size_t p = 0; p < group.parts.size(); p++)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart& part = group.parts[p];
+				const unsigned int start = part.pass[pass].start;
+				const unsigned int count = part.pass[pass].count;
+
+				if (count < 3)
+					continue;
+
+				std::set<int> pages;
+				std::map<int, std::pair<int, int> > rings;
+				float y0 = 1e9f, y1 = -1e9f, r0 = 1e9f, r1 = -1e9f;
+				float e0 = 1e9f, e1 = -1e9f, x0 = 1e9f, x1 = -1e9f;
+				int u0 = 255, u1 = 0, v0 = 255, v1 = 0, l0 = 999, l1 = 0;
+				unsigned int i0 = 0xFFFFFFFFu, i1 = 0;
+
+				for (unsigned int i = 0; i < count; i++)
+				{
+					const unsigned int corner = trg.indices[start + i];
+					const trf::remaster::TrgVertex& v = trg.vertices[corner];
+					const float r = sqrtf((float)v.x * v.x +
+						(float)v.z * v.z);
+					const float e = atan2f(-(float)v.y, r) * 57.29578f;
+					const int light = v.colour1[0] + v.colour1[1] +
+						v.colour1[2] + v.colour2[0] + v.colour2[1] +
+						v.colour2[2];
+
+					if (v.layer >= 1 && v.layer <= trg.textures.size())
+						pages.insert(trg.textures[v.layer - 1u]);
+
+					y0 = (std::min)(y0, (float)v.y);
+					y1 = (std::max)(y1, (float)v.y);
+					r0 = (std::min)(r0, r);
+					r1 = (std::max)(r1, r);
+					e0 = (std::min)(e0, e);
+					e1 = (std::max)(e1, e);
+					x0 = (std::min)(x0, (float)v.x);
+					x1 = (std::max)(x1, (float)v.x);
+					u0 = (std::min)(u0, (int)v.u);
+					u1 = (std::max)(u1, (int)v.u);
+					v0 = (std::min)(v0, (int)v.v);
+					v1 = (std::max)(v1, (int)v.v);
+					l0 = (std::min)(l0, light);
+					l1 = (std::max)(l1, light);
+					i0 = (std::min)(i0, corner);
+					i1 = (std::max)(i1, corner);
+
+					std::map<int, std::pair<int, int> >::iterator ring =
+						rings.find(v.y);
+
+					if (ring == rings.end())
+						rings[v.y] = std::make_pair((int)v.v, (int)v.v);
+					else
+					{
+						ring->second.first = (std::min)(ring->second.first,
+							(int)v.v);
+						ring->second.second = (std::max)(ring->second.second,
+							(int)v.v);
+					}
+				}
+
+				printf("sky part group=%d part=%d pass=%d material=%u "
+					"param=%.3f,%.3f,%.3f,%.3f tris=%u pages=", (int)g,
+					(int)p, pass, part.material, part.param[0],
+					part.param[1], part.param[2], part.param[3], count / 3);
+
+				for (std::set<int>::const_iterator it = pages.begin();
+					it != pages.end(); ++it)
+					printf("%s%d", it == pages.begin() ? "" : ",", *it);
+
+				printf(" y=%.0f..%.0f r=%.0f..%.0f elev=%.1f..%.1f "
+					"u=%d..%d v=%d..%d light=%d..%d rings=%d "
+					"vertices=%u..%u", y0, y1, r0, r1, e0, e1, u0, u1, v0, v1,
+					l0, l1, (int)rings.size(), i0, i1);
+
+				if (y0 == y1 && x1 > x0)
+					printf(" sheet uv_per_1000=%.2f",
+						(float)(u1 - u0) * 1000.0f / (x1 - x0));
+
+				printf("\n");
+
+				if (rings.size() > 1 && rings.size() <= 64)
+					for (std::map<int, std::pair<int, int> >::const_iterator
+						it = rings.begin(); it != rings.end(); ++it)
+						printf("sky ring group=%d part=%d pass=%d y=%d "
+							"v=%d..%d\n", (int)g, (int)p, pass, it->first,
+							it->second.first, it->second.second);
+
+				for (unsigned int i = 0; dump && i + 2 < count; i += 3)
+				{
+					fprintf(dump, "%d %d %d", (int)g, (int)p, pass);
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[start + i + c]];
+
+						if (!c)
+							fprintf(dump, " %d", v.layer >= 1 &&
+								v.layer <= trg.textures.size()
+								? (int)trg.textures[v.layer - 1u] : -1);
+
+						fprintf(dump, " %d %d %d %d %d", v.x, v.y, v.z, v.u,
+							v.v);
+					}
+
+					fprintf(dump, "\n");
+				}
+			}
+	}
+
+	if (dump)
+		fclose(dump);
+
+	/* Every page of the .TEX block 7000..7199 (the sky's panoramas and
+	 * cloud sheets) the level's own page table names, sky part or not. */
+	printf("sky pages level=%s table=", stem);
+
+	for (size_t t = 0, n = 0; t < trg.textures.size(); t++)
+		if (trg.textures[t] >= 7000 && trg.textures[t] < 7200)
+			printf("%s%d", n++ ? "," : "", (int)trg.textures[t]);
+
+	printf("\n");
+
+	/* The classic HORIZON mesh: its vertices by height, and per height the
+	 * page and the v pixels of the faces with a corner there. The mesh lies
+	 * at the .TRC's mesh pointer of slot 454's first mesh: centre and radius
+	 * (10 bytes), the vertex count and the vertices (6 bytes each), the
+	 * normals or the shades, then the quads (12 bytes: four corners, the
+	 * texinfo, the effects) and the triangles (10 bytes: three corners). */
+	Tr5Level::MoveableInfo info;
+	size_t at = 0, texAt = 0;
+	int texCount = 0;
+
+	if (!classic || !level.moveableInfo(454, info) || info.nmeshes < 1 ||
+		!level.debugMeshAt(info.meshIndex, at) ||
+		!level.debugTexinfoBlock(texAt, texCount))
+	{
+		printf("sky horizon: %s\n", classic ? "no HORIZON mesh in the level"
+			: "no classic level (-roombox)");
+		return 0;
+	}
+
+	const std::vector<uint8_t>& b = level.debugBytes();
+	const auto word = [&](size_t o)
+	{
+		int16_t w = 0;
+
+		if (o + 2 <= b.size())
+			memcpy(&w, &b[o], 2);
+
+		return (int)w;
+	};
+	const int verts = word(at + 10);
+	std::vector<int> vy((size_t)(std::max)(verts, 0)), vr(vy.size());
+	size_t o = at + 12;
+
+	for (int v = 0; v < verts; v++, o += 6)
+	{
+		const int x = word(o), z = word(o + 4);
+
+		vy[(size_t)v] = word(o + 2);
+		vr[(size_t)v] = (int)sqrtf((float)(x * x + z * z));
+	}
+
+	const int normals = word(o);
+
+	o += 2 + (size_t)(normals > 0 ? normals * 6 : -normals * 2);
+
+	struct Ring
+	{
+		int r0, r1, v0, v1, faces;
+		std::set<int> pages;
+	};
+	std::map<int, Ring> rings;
+	int faces = 0;
+
+	for (int kind = 4; kind >= 3; kind--)
+	{
+		const int n = word(o);
+
+		o += 2;
+
+		for (int f = 0; f < n; f++, o += (size_t)(kind * 2 + 4))
+		{
+			const int tex = word(o + (size_t)kind * 2) & 0x7FFF;
+			const size_t t = texAt + (size_t)tex * 40;
+
+			if (tex >= texCount || t + 22 > b.size())
+				continue;
+
+			faces++;
+
+			for (int c = 0; c < kind; c++)
+			{
+				const int v = word(o + (size_t)c * 2);
+
+				if (v < 0 || v >= verts)
+					continue;
+
+				const int py = (word(t + 8 + (size_t)c * 4) >> 8) & 0xFF;
+				std::map<int, Ring>::iterator it = rings.find(vy[(size_t)v]);
+
+				if (it == rings.end())
+				{
+					Ring r = { vr[(size_t)v], vr[(size_t)v], py, py, 0 };
+
+					it = rings.insert(std::make_pair(vy[(size_t)v], r)).first;
+				}
+
+				Ring& r = it->second;
+
+				r.r0 = (std::min)(r.r0, vr[(size_t)v]);
+				r.r1 = (std::max)(r.r1, vr[(size_t)v]);
+				r.v0 = (std::min)(r.v0, py);
+				r.v1 = (std::max)(r.v1, py);
+				r.faces++;
+				r.pages.insert(word(t + 2) & 0x7FFF);
+			}
+		}
+	}
+
+	printf("sky horizon level=%s vertices=%d faces=%d rings=%d\n", stem,
+		verts, faces, (int)rings.size());
+
+	for (std::map<int, Ring>::const_iterator it = rings.begin();
+		it != rings.end(); ++it)
+	{
+		printf("sky horizon ring y=%d r=%d..%d v=%d..%d corners=%d pages=",
+			it->first, it->second.r0, it->second.r1, it->second.v0,
+			it->second.v1, it->second.faces);
+
+		for (std::set<int>::const_iterator p = it->second.pages.begin();
+			p != it->second.pages.end(); ++p)
+			printf("%s%d", p == it->second.pages.begin() ? "" : ",", *p);
+
+		printf("\n");
+	}
+
+	return 0;
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	/* -loadtime, -reload and -reloadas are taken out of the list here, ahead
@@ -12639,6 +12968,8 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -light <x y z r g b falloff>   -bulb <x y z rad den [r g b]>\n");
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
+		printf("       -sky  -skyonly  -skycensus  -skydump <path>   the HD "
+			"sky drawn, alone, or its parts counted\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");
@@ -12854,6 +13185,9 @@ static int ProbeMain(int argc, char** argv)
 
 	for (; at < argc; at++)
 	{
+		if (SkyArg(argc, argv, &at))
+			continue;
+
 		// The springs' switches: the chain below is at the compiler's limit
 		// of nested blocks (C1061).
 		if (SpringArg(argc, argv, &at))
@@ -13703,6 +14037,10 @@ static int ProbeMain(int argc, char** argv)
 
 	/* -walk needs no device, no .TRG and no picture - only the classic
 	 * level - so it runs here, before the window exists. */
+	// -skycensus needs no device: the two files, read and printed.
+	if (g_sky_census)
+		return ProbeSkyCensus(root, stem, rooms);
+
 	if (reachSurvey)
 	{
 		if (g_roombox.empty())

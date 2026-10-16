@@ -22881,6 +22881,20 @@ static void marble_rules()
 	ok(n2 == 2 && order && HDMarblePlanesPick(p, 4, 8) == 3 &&
 		HDMarblePlanesPick(q, 2, 2) == 0,
 		"marble: the planes by cover, the higher first, the cap", n2, 2);
+
+	// The level key: a kept load is built again when hd_marble changes.
+	HDLevelKey k1, k2;
+
+	memset(&k1, 0, sizeof(k1));
+	k1.valid = 1;
+	k1.marble = 1;
+	k2 = k1;
+	k2.marble = 0;
+
+	const char* why = HDLevelKeyDiffers(&k1, &k2);
+
+	ok(why && !strcmp(why, "hd_marble") && !HDLevelKeyDiffers(&k1, &k1),
+		"marble: the level key names hd_marble", why ? 1 : 0, 1);
 }
 
 /* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD

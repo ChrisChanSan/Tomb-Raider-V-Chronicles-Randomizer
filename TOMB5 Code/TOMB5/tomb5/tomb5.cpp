@@ -40,6 +40,7 @@
 
 #include "../game/gameflow.h"
 #include "../game/lara.h"
+#include "../specific/hd/hd_render.h"	// HDRenderMarbleSet
 
 tomb5_options tomb5;
 
@@ -263,6 +264,9 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_vis");
 		tomb5.hd_vis = 0;								//the portal walk's
 		REG_WriteLong(buf, tomb5.hd_vis);
+
+		// The marble floors on, two floor heights (see the read below).
+		HDRenderMarbleSet(1, 2);
 
 		sprintf(buf, "hd_threads");
 		tomb5.hd_threads = 0;							//the machine's
@@ -521,6 +525,20 @@ void init_tomb5_stuff()
 
 		if (tomb5.hd_vis > 1)
 			tomb5.hd_vis = 0;
+
+		/* The marble floors' mirror and the most floor heights a frame
+		 * mirrors (specific\hd\hd_render.cpp, "the marble floors"), handed
+		 * to the renderer before any level is built. Absent - every older
+		 * registry - reads as on and 2. */
+		{
+			ulong marble = 1, planes = 2;
+
+			sprintf(buf, "hd_marble");
+			REG_ReadLong(buf, marble, 1);
+			sprintf(buf, "hd_marble_planes");
+			REG_ReadLong(buf, planes, 2);
+			HDRenderMarbleSet(marble > 1 ? 1 : (int)marble, (int)planes);
+		}
 
 		// Absent - every older registry - reads as 0, the machine's count.
 		sprintf(buf, "hd_threads");

@@ -557,6 +557,7 @@
     <ClInclude Include="TOMB5\game\sphere.h" />
     <ClInclude Include="TOMB5\game\spider.h" />
     <ClInclude Include="TOMB5\game\spotcam.h" />
+    <ClInclude Include="TOMB5\game\spotcam_math.h" />
     <ClInclude Include="TOMB5\game\subsuit.h" />
     <ClInclude Include="TOMB5\game\swampy.h" />
     <ClInclude Include="TOMB5\game\switch.h" />

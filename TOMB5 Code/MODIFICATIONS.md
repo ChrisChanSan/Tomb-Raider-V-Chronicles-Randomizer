@@ -21587,7 +21587,7 @@ fifteen rows, so four blank separators would push the tool credits off it.
 **Commits.** `12a0cda`, `366ba76`, `83c7195`, `9f0ec17`, `52c94ee`, `be95b08`, `402a243`
 
 ### Skipping cutscenes and the intro flyby with the controller
-2026-07-31 - 2026-08-22
+2026-07-31 - 2026-10-16
 
 **What.** Cross on a controller, and Enter, skip a cutscene and the level-intro camera
 flyby, as Escape already did. The skip fires only while `cutseq_trig == 2`, the actual
@@ -21608,6 +21608,92 @@ already-masked input.
 flyby), `specific/alexstuff.cpp` (the credits roll and the intro videos).
 
 **Commits.** `bdf95ad`, `e980790`, `790f4f2`, `6176647`, `be95b08`
+
+#### The flyby's triggers on a skip (#207, 2026-10-16)
+2026-10-16
+
+**What.** A skipped camera flyby now fires the heavy trigger under its last camera, as a
+flyby played through does. The skip itself is unchanged: the same keys, the same edge,
+one camera a frame, the fade, the credits and the intro. New: `game/spotcam_math.h`
+(pure: `SpotEndTestCamera`, `SpotSeqEndsShort`), the `FLYLOG` line behind `-log`, and
+`TrgProbe -flyby`, the census of every level's flybys and the triggers they test.
+
+**Why.** The owner (2026-10-16): the skipper of the decompilation still has flaws -
+inside a flyby triggers fire, RICH2's lifts and RICH3's helicopter at the start as
+examples, and another port had fixed them so that they fire along on a skip. Both
+examples are flybys (spotcam sequences), neither is a CUTSEQ cutscene.
+
+*The cause, read in `CalculateSpotCams` (`game/spotcam.cpp`, line numbers of the tree
+before this part).* The frame takes the spline's place from the position it starts with
+(354-362), steps it (442), and the skip then jumps it to 0x10000 (450-451); the camera is
+placed afterwards at the frame-start place (458-460). The segment's end (532) arms the
+test of the camera just reached (545-546), the refill makes that camera knot 1 of the
+next segment, and the next frame, starting at position 0, stands exactly on it and tests
+there (513-528) - for every camera but the last the skip tests where a played run does.
+The last camera of a SNAPBACK sequence is tested in the frame it is reached (676-693)
+and the flyby ends: played through, that frame stands within one speed step of the last
+camera; skipped, it stands at the camera before the last. Its trigger is never tested,
+and the one before it is tested twice. A sequence without SNAPBACK ends on the spline to
+the chase camera, whose first frame stands on the last camera and tests it there; the
+skip changes nothing there. The look-key break (783-792) clears the armed test without
+running it and is not the skip. The finding, measured in play on a TR4 level in TROne
+(GPLv3) by Todesengel1931, was the witness; this reading is its check (THIRD-PARTY.md,
+entry 227).
+
+*The census* (`TrgProbe -flyby` over the classic `.TRC` of `data/Backup`): 64 sequences,
+359 cameras, 58 of them with SP_TESTTRIGGER; 11 sequences end short on a skip. What the
+skip left unfired, the trigger under the last camera against the one tested instead:
+
+| Level | Sequence | Under the last camera | Tested instead |
+|---|---|---|---|
+| RICH2 | 3 (cameras 3-9, the lift) | HEAVY: LIFT_DOORS1 64, LIFT_DOORS2 65, BLUE_GUARD 67 and 68, music 1, TWOGUN 69 | a SWITCH trigger, which a heavy test does not take: nothing |
+| RICH3 | 6 (cameras 3-6, the helicopter at the start) | HEAVY: TWOGUN 20 | EXPLOSION 50 a second time |
+| ANDREA2 | 5 (cameras 15-20) | HEAVY: DOOR_TYPE3 137 | DOOR_TYPE3 47 a second time |
+| ANDREA3 | 5 (cameras 9-11) | HEAVY: TELEPORTER 5, music 16 | EARTHQUAKE 13 a second time |
+| RICH1 | 0 (cameras 0-6) | HEAVY: cutscene 11 | CLOSED_DOOR3 179 and TWOGUN 180 a second time |
+| ANDY2 1, RICH1 1, RICH2 4, 5 and 6, RICH3 10 | | nothing, or the same sector | the same or nothing |
+
+RICH3's sequence 6 is started from room 8 at the level's start, by the trigger that also
+starts ANIMATING9 217 and ANIMATING5 49; RICH2's sequence 3 from the lift's switch in
+room 33. The title has 5 sequences and 11 test cameras and never skips; JOBY3, JOBY4 and
+RICHCUT2 have no flyby. Two sequences take the chase-camera end with a test on the last
+camera (ANDY3 6, whose last camera starts cutscene 44, and RICH2 0, no trigger): their
+first test is right on a skip, their second runs at the last camera instead of near the
+chase camera - left as it is, the trigger there has already been tested. The CUTSEQ skip
+(`do_cutseq_skipper_stuff`, `game/deltapak.cpp`) is not involved in either example and
+is not changed; RICH1's cutscene 11 starts from a flyby's last camera and now starts on
+a skip as well.
+
+**How.** `game/spotcam_math.h`: `SpotEndTestCamera(first_flags, skipped, title,
+last_camera)` gives the last camera when the frame's segment end was forced by the skip,
+the sequence has SNAPBACK and the level is not the title, otherwise -1 (the camera's
+place); `SpotSeqEndsShort` is the census rule; the flag values are asserted against
+`spotcam.h` (`spotcam.cpp:42`). `game/spotcam.cpp`: `skip_now` (365) is set where the skip
+jumps (480); the end branch asks the rule (717-720) and tests at `SpotCam[last]`'s place
+and room (733-736), the other tests as before. `check_camera` (77) is kept where a test is
+armed (287, 580); `FlyLog` (85-93) writes `FLYLOG seq=<n> cam=<i> flags=<hex>
+test=<x>,<y>,<z> room=<r> skip=0|1 tick=<GlobalCounter>` at both tests (547, 724-731).
+`Preparation/Tools/Diagnose/TrgProbe.cpp` `FlybyCensus` and its helpers: the spotcam block
+found behind the fixed cameras by the counts up to the `TEX` marker, the GetFloor door
+walk and the GetHeight descent to the trigger's sector, the trigger read as
+`_TestTriggers` reads it. `ModernTest.cpp` `spotcam_end`: a model of the frame order
+(`spot_run`) with eleven checks - played through, skipped without the rule (the last test
+a camera short) and with it, the title, a skip from the middle of the last segment, a
+skip let go before the end, the chase-camera end skipped and played, no test on the last
+camera, the rule alone and the census rule on the levels' flags.
+
+**Checked.** The census before and after `TrgProbe` took the rule from the header,
+byte-identical on all 15 levels; ModernTest, MenuTest, InterpTest, LipsTest 0 failed; the
+nine tool builds; the classic pictures with `hd_build` 0 unchanged (RoomProbe, six views).
+
+**Left.** The proof in play is the owner's: a `-log` run of RICH2's lift and of RICH3's
+start, once played through and once skipped, and the `FLYLOG` lines of the two compared -
+the same cameras, the last camera's line with the last camera's place, `skip=1`. RICH2's
+sequence 3 jumps from camera 5 to 7 (SP_JUMPTO), so camera 7's test (music 14) is never
+armed, played or skipped - a data fact, left as it is. A second test on the chase-camera
+end (ANDY3 6) and the CUTSEQ skip's own fixes per scene are unchanged.
+
+**Commits.** `240ce8a5`, `802edab8`, `4afa68bc`
 
 ### The HD/SD switch: F12 and a pad chord (#202)
 2026-10-13 - 2026-10-15

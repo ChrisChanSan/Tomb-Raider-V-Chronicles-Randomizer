@@ -26,6 +26,7 @@
 //   TrgProbe <path to the game 5 folder> -all
 //   TrgProbe <path to the game 5 folder> -bc7 [threads]   decode timing only
 //   TrgProbe -find [override folder]                      run the discovery
+//   TrgProbe -flyby <classic folder> [level ...]          the flyby census
 //
 // -find runs the engine's own search for an installed Tomb Raider IV-VI
 // Remastered (specific\hd\hd_install.cpp is compiled in): the registry
@@ -76,6 +77,10 @@
 #include "hd_gloss_field.h"
 // The visibility path's tables (-vistable), out of the engine's own builder.
 #include "VisInput.h"
+// The engine's slot names, for the items a flyby's trigger moves (-flyby).
+#include "hd_bind.h"
+// The census rule of the sequences a skip ends short (-flyby).
+#include "../../../TOMB5 Code/TOMB5/game/spotcam_math.h"
 
 // The engine keeps these in tomb5\tomb5.cpp, filled from the registry values
 // hd_install and hd_install_tr3. Here the command line fills the first - the
@@ -6401,6 +6406,509 @@ namespace
 	}
 }
 
+/* -flyby: the census of the camera flybys and of the heavy triggers they
+ * test.
+ *
+ * A flyby is a run of SPOTCAM records (global/types.h, 40 bytes) sharing one
+ * sequence number, read right behind the fixed cameras (LoadCameras,
+ * specific/file.cpp). Tr5Level parses past them without keeping their
+ * place, so the block is found by the table it follows: the fixed camera
+ * count and its first and last record as cameraRecords() reads them, then
+ * every count from the spotcams to the animated textures in range where the
+ * layout (Tr5Level::findItems) puts it, and the "TEX" marker behind them.
+ * Exactly one match is required. */
+struct FlySpot
+{
+	int32_t x, y, z, tx, ty, tz;
+	uint8_t seq, cam;
+	int16_t fov, roll, timer, speed;
+	uint16_t flags;
+	int16_t room;
+};
+
+static bool FlyFind(const Tr5Level& lv, std::vector<FlySpot>& out,
+	size_t& at, int& matches, std::string& error)
+{
+	std::vector<Tr5Level::CameraRecord> cams;
+
+	out.clear();
+	matches = 0;
+	at = 0;
+
+	if (!lv.cameraRecords(cams, error))
+		return false;
+
+	const std::vector<uint8_t>& b = lv.debugBytes();
+	const int32_t n = (int32_t)cams.size();
+	auto rd = [&](size_t p, int32_t& v)
+	{
+		if (p + 4 > b.size())
+			return false;
+
+		std::memcpy(&v, &b[p], 4);
+		return true;
+	};
+	auto same = [&](size_t p, const Tr5Level::CameraRecord& c)
+	{
+		int32_t x, y, z;
+		int16_t room, flags;
+
+		if (p + 16 > b.size())
+			return false;
+
+		std::memcpy(&x, &b[p], 4);
+		std::memcpy(&y, &b[p + 4], 4);
+		std::memcpy(&z, &b[p + 8], 4);
+		std::memcpy(&room, &b[p + 12], 2);
+		std::memcpy(&flags, &b[p + 14], 2);
+		return x == c.x && y == c.y && z == c.z && room == c.room &&
+			(uint16_t)flags == (uint16_t)c.flags;
+	};
+
+	for (size_t p = lv.mainBlockOffset(); p + 4 <= b.size(); p++)
+	{
+		int32_t v, s, m, boxes;
+
+		if (!rd(p, v) || v != n)
+			continue;
+
+		if (n > 0 && (!same(p + 4, cams[0]) ||
+			!same(p + 4 + 16 * (size_t)(n - 1), cams[(size_t)n - 1])))
+			continue;
+
+		const size_t q = p + 4 + 16 * (size_t)n;
+
+		if (!rd(q, s) || s < 0 || s > 256)
+			continue;
+
+		const size_t r = q + 4 + 40 * (size_t)s;
+
+		if (!rd(r, m) || m < 0 || m > 4096)
+			continue;
+
+		const size_t bx = r + 4 + 16 * (size_t)m;
+
+		if (!rd(bx, boxes) || boxes <= 0 || boxes > 65535)
+			continue;
+
+		// Overlaps, the zones (ten shorts per box), the animated texture
+		// words, the one UV range byte, then the "TEX" marker.
+		const size_t ov = bx + 4 + 8 * (size_t)boxes;
+		int32_t o, a;
+
+		if (!rd(ov, o) || o < 0 || o > 1 << 20)
+			continue;
+
+		const size_t an = ov + 4 + 2 * (size_t)o + 20 * (size_t)boxes;
+
+		if (!rd(an, a) || a < 0 || a > 1 << 16)
+			continue;
+
+		const size_t tex = an + 4 + 2 * (size_t)a + 1;
+
+		if (tex + 3 > b.size() || std::memcmp(&b[tex], "TEX", 3))
+			continue;
+
+		matches++;
+		at = q;
+	}
+
+	if (matches != 1)
+	{
+		error = "spotcam block not located uniquely";
+		return false;
+	}
+
+	int32_t s = 0;
+
+	rd(at, s);
+
+	for (int32_t i = 0; i < s; i++)
+	{
+		FlySpot f;
+
+		std::memcpy(&f, &b[at + 4 + 40 * (size_t)i], 38);
+		out.push_back(f);
+	}
+
+	return true;
+}
+
+/* The sector whose floordata a test at (x, y, z) in `room` reads, the way
+ * GetFloor and GetHeight (game/control.cpp) walk: the door chain in the
+ * room first (the edge rows clamped as GetFloor clamps them), then down
+ * every pit room to the lowest floor, where GetHeight takes trigger_index.
+ * The no-collision triangles that stop either walk early are not modelled;
+ * a camera place over one is named by its sector's floordata anyway. */
+static bool FlySector(const Tr5Level& lv, long x, long z, int room,
+	int& outRoom, int& outSx, int& outSz, int& outFd)
+{
+	const std::vector<Tr5Room>& rooms = lv.rooms();
+	std::vector<Tr5Level::SectorInfo> info;
+	std::string error;
+	bool door = true;
+
+	for (int hop = 0; hop < 64; hop++)
+	{
+		if (room < 0 || room >= (int)rooms.size())
+			return false;
+
+		const Tr5Room& r = rooms[(size_t)room];
+		long zs = (z - r.originZ) >> 10, xs = (x - r.originX) >> 10;
+
+		if (!door)
+		{
+			if (zs < 0 || zs >= r.numZSectors || xs < 0 ||
+				xs >= r.numXSectors)
+				return true;
+		}
+		else if (zs <= 0 || zs >= r.numZSectors - 1)
+		{
+			zs = zs <= 0 ? 0 : r.numZSectors - 1;
+			xs = std::max(1L, std::min(xs, (long)r.numXSectors - 2));
+		}
+		else
+			xs = std::max(0L, std::min(xs, (long)r.numXSectors - 1));
+
+		if (!lv.sectorInfo(room, info, error))
+			return false;
+
+		const Tr5Level::SectorInfo& s =
+			info[(size_t)(xs * r.numZSectors + zs)];
+
+		if (door && s.doorTo >= 0)
+		{
+			room = s.doorTo;
+			continue;
+		}
+
+		door = false;
+		outRoom = room;
+		outSx = (int)xs;
+		outSz = (int)zs;
+		outFd = s.fdIndex;
+
+		if (s.roomBelow == 255)
+			return true;
+
+		room = s.roomBelow;
+	}
+
+	return false;
+}
+
+static const char* FlyKind(int kind)
+{
+	static const char* const k[] =
+	{
+		"TRIGGER", "PAD", "SWITCH", "KEY", "PICKUP", "HEAVY", "ANTIPAD",
+		"COMBAT", "DUMMY", "ANTITRIGGER", "HEAVYSWITCH",
+		"HEAVYANTITRIGGER", "MONKEY", "SKELETON", "TIGHTROPE",
+		"CRAWLDUCK", "CLIMB"
+	};
+
+	return kind >= 0 && kind < 17 ? k[kind] : "?";
+}
+
+/* One sector's trigger as _TestTriggers reads it: the TRIGGER entry, its
+ * flags word, the reference word of SWITCH, KEY and PICKUP, then the
+ * commands up to the end bit - for a camera or a flyby the end bit of the
+ * extra word that follows, as the engine reads it. The words are the
+ * chain's own, in file order, out of readChain. `kind` is -1 when the
+ * sector has no trigger. */
+struct FlyCmd
+{
+	int type, value, extra;
+};
+
+static void FlyTrigger(const Tr5Level& lv, int fd, int& kind, int& flags,
+	std::vector<FlyCmd>& cmds)
+{
+	std::vector<Tr5FloorEntry> chain;
+	std::vector<uint16_t> w;
+
+	kind = -1;
+	flags = 0;
+	cmds.clear();
+
+	if (fd <= 0 || !lv.readChain(fd, chain))
+		return;
+
+	for (size_t e = 0; e < chain.size(); e++)
+		w.insert(w.end(), chain[e].words.begin(), chain[e].words.end());
+
+	size_t i = 0;
+
+	while (i < w.size())
+	{
+		const uint16_t h = w[i++];
+
+		if ((h & 0x1F) != 4)
+		{
+			if (h & 0x8000)
+				return;
+
+			i += (size_t)Tr5Floor::extraWords(h & 0x1F);
+			continue;
+		}
+
+		kind = (h >> 8) & 0x3F;
+
+		if (i >= w.size())
+			return;
+
+		flags = w[i++];
+
+		if (Tr5Floor::hasRefWord(kind))
+		{
+			if (i >= w.size())
+				return;
+
+			FlyCmd c = { -1, w[i++] & 0x3FF, 0 };
+
+			cmds.push_back(c);
+		}
+
+		while (i < w.size())
+		{
+			uint16_t t = w[i++];
+			FlyCmd c = { Tr5Floor::cmdType(t), t & 0x3FF, 0 };
+
+			if ((c.type == 1 || c.type == 12) && i < w.size())
+			{
+				t = w[i++];
+				c.extra = t;
+			}
+
+			cmds.push_back(c);
+
+			if (t & 0x8000)
+				return;
+		}
+
+		return;
+	}
+}
+
+static std::string FlyFlags(unsigned f)
+{
+	static const char* const n[16] =
+	{
+		"snap", "vignette", "loop", "track", "nodrawlara", "targetlara",
+		"snapback", "jumpto", "quake", "nobreak", "nolaractl", "laractl",
+		"fadein", "fadeout", "TEST", "oneshot"
+	};
+	std::string s;
+
+	for (int i = 0; i < 16; i++)
+		if (f & (1u << i))
+			s += (s.empty() ? "" : "|") + std::string(n[i]);
+
+	return s.empty() ? "-" : s;
+}
+
+/* What a sector's trigger does, one line: the kind, whether a heavy test
+ * with HeavyFlags 0 acts on it, and every command with its target - an
+ * item by number, slot and slot name, its room and place. */
+static std::string FlyDescribe(const Tr5Level& lv, int fd)
+{
+	static const char* const to[] =
+	{
+		"object", "camera", "sink", "flipmap", "flipon", "flipoff",
+		"target", "finish", "cd", "flipeffect", "secret", "bodybag",
+		"flyby", "cutscene"
+	};
+	int kind, flags;
+	std::vector<FlyCmd> cmds;
+	char buf[256];
+
+	FlyTrigger(lv, fd, kind, flags, cmds);
+
+	if (kind < 0)
+		return "no trigger";
+
+	const bool acts = kind == 5 || kind == 11;
+	std::string s;
+
+	std::snprintf(buf, sizeof(buf), "%s%s timer=%d mask=%02X%s:",
+		FlyKind(kind), acts ? " (heavy test acts)" : " (heavy test: no)",
+		flags & 0xFF, (flags >> 9) & 0x1F, flags & 0x100 ? " oneshot" : "");
+	s = buf;
+
+	for (size_t i = 0; i < cmds.size(); i++)
+	{
+		const FlyCmd& c = cmds[i];
+		Tr5Item it;
+
+		if (c.type < 0)
+			std::snprintf(buf, sizeof(buf), " ref#%d", c.value);
+		else if (c.type == 0 && lv.getItem(c.value, it))
+		{
+			const char* name = HDSlotName(it.objectNumber);
+
+			std::snprintf(buf, sizeof(buf),
+				" object#%d=%s(slot %d,room %d,%d,%d,%d,ocb %d)", c.value,
+				name ? name : "?", it.objectNumber, it.roomNumber, it.x,
+				it.y, it.z, it.triggerFlags);
+		}
+		else if (c.type == 1 || c.type == 12)
+			std::snprintf(buf, sizeof(buf), " %s#%d(word %04X)",
+				to[c.type], c.value, c.extra);
+		else
+			std::snprintf(buf, sizeof(buf), " %s#%d",
+				c.type < 14 ? to[c.type] : "?", c.value);
+
+		s += buf;
+	}
+
+	return s;
+}
+
+static int FlybyCensus(const std::string& folder,
+	std::vector<std::string> levels)
+{
+	if (levels.empty())
+		levels.assign(std::begin(kLevels), std::end(kLevels));
+
+	int failed = 0;
+
+	for (const std::string& name : levels)
+	{
+		Tr5Level lv;
+		std::string error;
+		std::vector<FlySpot> sc;
+		size_t at = 0;
+		int matches = 0;
+		const std::string path = folder + "\\" + name + ".TRC";
+
+		if (!lv.load(toW(path), error) ||
+			!FlyFind(lv, sc, at, matches, error))
+		{
+			std::printf("%s: %s (matches %d)\n", name.c_str(),
+				error.c_str(), matches);
+			failed++;
+			continue;
+		}
+
+		int nseq = 0, nrisk = 0, ntest = 0, nway = 0;
+
+		std::printf("level %s spotcams %d at 0x%zX\n", name.c_str(),
+			(int)sc.size(), at);
+
+		for (size_t i = 0; i < sc.size(); )
+		{
+			size_t j = i;
+
+			while (j + 1 < sc.size() && sc[j + 1].seq == sc[i].seq)
+				j++;
+
+			nseq++;
+
+			// The end branch takes the first camera's flags (s->flags).
+			const unsigned first = sc[i].flags, last = sc[j].flags;
+			const bool open = !(first & 0x0C);
+			const bool risk = SpotSeqEndsShort((int)first, (int)last);
+			const bool way = open && !(first & 0x40) && (last & 0x4000);
+
+			nrisk += risk ? 1 : 0;
+			nway += way ? 1 : 0;
+			std::printf("seq %d cams %zu..%zu (%zu) first %04X last %04X "
+				"end %s%s\n", sc[i].seq, i, j, j - i + 1, first, last,
+				!open ? "loop/track" :
+				(first & 0x40) ? "snapback" : "spline_to_camera",
+				risk ? " AT-RISK" : way ? " last-tests-twice" : "");
+
+			for (size_t k = i; k <= j; k++)
+			{
+				const FlySpot& f = sc[k];
+
+				std::printf("  cam %zu (%d) flags %04X %s pos %d,%d,%d "
+					"room %d timer %d speed %d\n", k, f.cam,
+					(unsigned)f.flags, FlyFlags(f.flags).c_str(), f.x, f.y,
+					f.z, f.room, f.timer, f.speed);
+
+				if (!(f.flags & 0x4000))
+					continue;
+
+				int r = -1, sx = 0, sz = 0, fd = 0;
+
+				ntest++;
+
+				if (!FlySector(lv, f.x, f.z, f.room, r, sx, sz, fd))
+				{
+					std::printf("    test: sector not found\n");
+					continue;
+				}
+
+				const int alt = lv.rooms()[(size_t)r].altRoom;
+
+				std::printf("    test%s: room %d sector %d,%d fd %d%s -> %s\n",
+					k == j ? " (last)" : "", r, sx, sz, fd,
+					alt >= 0 ? " (flip twin)" : "",
+					FlyDescribe(lv, fd).c_str());
+			}
+
+			// Where the end test lands when the skip ends the sequence: the
+			// frame stands at the camera before the last.
+			if (risk && j > i)
+			{
+				int r = -1, sx = 0, sz = 0, fd = 0;
+				const FlySpot& f = sc[j - 1];
+
+				if (FlySector(lv, f.x, f.z, f.room, r, sx, sz, fd))
+					std::printf("    skip tests at cam %zu instead: room %d "
+						"sector %d,%d fd %d -> %s\n", j - 1, r, sx, sz, fd,
+						FlyDescribe(lv, fd).c_str());
+			}
+
+			i = j + 1;
+		}
+
+		// The floor triggers that start a flyby or a CUTSEQ cutscene, one
+		// line per floordata chain with the sectors that share it.
+		std::map<int, std::string> starts;
+
+		for (size_t r = 0; r < lv.rooms().size(); r++)
+		{
+			std::vector<Tr5Level::SectorInfo> info;
+
+			if (!lv.sectorInfo((int)r, info, error))
+				continue;
+
+			for (const Tr5Level::SectorInfo& s : info)
+			{
+				int kind, flags;
+				std::vector<FlyCmd> cmds;
+				char buf[64];
+
+				FlyTrigger(lv, s.fdIndex, kind, flags, cmds);
+
+				bool hit = false;
+
+				for (const FlyCmd& c : cmds)
+					hit = hit || c.type == 12 || c.type == 13;
+
+				if (!hit)
+					continue;
+
+				std::snprintf(buf, sizeof(buf), " %zu:%d,%d", r, s.sx, s.sz);
+				starts[s.fdIndex] += buf;
+			}
+		}
+
+		for (const auto& kv : starts)
+			std::printf("start fd %d -> %s; at%s\n", kv.first,
+				FlyDescribe(lv, kv.first).c_str(), kv.second.c_str());
+
+		std::printf("summary %s: %d sequences, %d cameras, %d test "
+			"cameras, %d at risk, %d last-tests-twice, %d start chains\n",
+			name.c_str(), nseq, (int)sc.size(), ntest, nrisk, nway,
+			(int)starts.size());
+	}
+
+	return failed ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
 	if (argc < 2)
@@ -6471,8 +6979,14 @@ int main(int argc, char** argv)
 		std::printf("       [-trmnormals]  the same over every .TRM of the ITEM folder\n");
 		std::printf("       [-ddssizes]  every .DDS of this game's and its siblings'\n");
 		std::printf("                    TEX by the size in its header\n");
+		std::printf("usage: TrgProbe -flyby <classic folder> [level ...]"
+			"  the flybys and their heavy triggers\n");
 		return 1;
 	}
+
+	if (!_stricmp(argv[1], "-flyby") && argc > 2)
+		return FlybyCensus(argv[2],
+			std::vector<std::string>(argv + 3, argv + argc));
 
 	if (!_stricmp(argv[1], "-find"))
 	{

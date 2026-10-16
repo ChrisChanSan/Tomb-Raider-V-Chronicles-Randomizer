@@ -207,13 +207,16 @@ static int g_reach_carried = 0;
  * with the window it got, and that window grows by union as the classic
  * one does. `g_vis_why` is per room the source that queued it first, for
  * VISLOG: 0 the portals or the eye's room, 1 a guest, 2 an opening, 3 a
- * wide portal, 4 a portal at the window's edge (VisFollowPortal); 0xff not
- * queued. `g_vis_edge` is that edge's width in pixels for this frame. */
+ * wide portal, 4 a portal at the window's edge (VisFollowPortal), 5 a
+ * portal the eye stands at (VisNearPortals); 0xff not queued. `g_vis_edge`
+ * is that edge's width in pixels for this frame, `g_vis_near` how near a
+ * portal the eye has to stand, in world units. */
 static bool g_vis_walk = false;
 static unsigned char g_vis_why[256];
-static int g_vis_count[5];
+static int g_vis_count[6];
 static long g_vis_dequeues = 0;
 static float g_vis_edge = 0.0f;
+static float g_vis_near = 0.0f;
 
 short* GetBoundsAccurate(ITEM_INFO* item)
 {
@@ -2011,6 +2014,7 @@ static void VisBeginWalk()
 	memset(g_vis_count, 0, sizeof(g_vis_count));
 	g_vis_dequeues = 0;
 	g_vis_edge = (float)(HDVisDefaults().edge * (double)(phd_winxmax + 1));
+	g_vis_near = (float)HDVisDefaults().reach;
 }
 
 /* VISLOG, with -log, once a second and whenever the eye's room changes,
@@ -2023,7 +2027,8 @@ static void VisBeginWalk()
  * opening and wide those the three tables queued first, dequeues the walk's
  * whole work; the list every listed room with the letter of its source:
  * w portals, g guest, o opening, p wide portal, e a portal at the window's
- * edge, counted again in edge= at the line's end. A table that only widens
+ * edge, n a portal the eye stands at, counted again in edge= and near= at
+ * the line's end. A table that only widens
  * the window of a room already queued is credited nothing, and the rooms
  * the wider window lets the portals reach read w. */
 static void VisEndWalk(short walkRoom)
@@ -2044,24 +2049,25 @@ static void VisEndWalk(short walkRoom)
 
 	char list[1024];
 	int at = 0;
-	static const char kWhy[5] = { 'w', 'g', 'o', 'p', 'e' };
+	static const char kWhy[6] = { 'w', 'g', 'o', 'p', 'e', 'n' };
 
 	list[0] = 0;
 
 	for (int i = 0; i < number_draw_rooms && at < (int)sizeof(list) - 16; i++)
 	{
 		const int r = draw_rooms[i];
-		const int why = r >= 0 && r < 256 && g_vis_why[r] < 5 ?
+		const int why = r >= 0 && r < 256 && g_vis_why[r] < 6 ?
 			g_vis_why[r] : 0;
 
 		at += sprintf(&list[at], "%s%d%c", i ? "," : "", r, kWhy[why]);
 	}
 
 	Log("VISLOG frame=%u eye_room=%d rooms=%ld walk=%ld guest=%d opening=%d "
-		"wide=%d dequeues=%ld list=%s edge=%d", g_walkSerial, (int)walkRoom,
-		number_draw_rooms, number_draw_rooms - g_vis_count[1] - g_vis_count[2] -
-		g_vis_count[3] - g_vis_count[4], g_vis_count[1], g_vis_count[2],
-		g_vis_count[3], g_vis_dequeues, list, g_vis_count[4]);
+		"wide=%d dequeues=%ld list=%s edge=%d near=%d", g_walkSerial,
+		(int)walkRoom, number_draw_rooms, number_draw_rooms - g_vis_count[1] -
+		g_vis_count[2] - g_vis_count[3] - g_vis_count[4] - g_vis_count[5],
+		g_vis_count[1], g_vis_count[2], g_vis_count[3], g_vis_dequeues, list,
+		g_vis_count[4], g_vis_count[5]);
 }
 
 static void NoteRoomWalk(short logicRoom, short walkRoom)
@@ -4605,6 +4611,60 @@ static void VisDoor(const short n[3], const short v[4][3], short* door)
 			door[3 + c * 3 + k] = v[c][k];
 }
 
+/* The portals of the room being walked that the eye stands at: the eye
+ * inside the box of a portal's four corners grown by the art's reach
+ * (HDVisDefaults, 128 units, how far art may stand off a classic face).
+ * Such a portal lists the room behind with the whole window the room being
+ * walked is seen in. Its own rectangle cannot: a portal the eye stands in
+ * or has just passed projects onto the screen's edges or behind the eye,
+ * and the classic walk refuses the room behind with an empty window, or
+ * by the side test - while that room's art stands round the eye. Walked
+ * again at the owner's flash frames (RoomProbe -visnear), this lists
+ * JOBY3's room 76, JOBY5's 88 and RICH2's 55, 4,029,896 of the 4,127,491
+ * pixels of sky those frames showed. */
+static void VisNearPortals(ROOM_INFO* r)
+{
+	const long here = (long)(r - room);
+	const float e[3] = { (float)(w2v_matrix[M03] - r->x),
+		(float)(w2v_matrix[M13] - r->y), (float)(w2v_matrix[M23] - r->z) };
+	const short* door = r->door;
+
+	if (!door)
+		return;
+
+	for (int n = *door++; n > 0; n--, door += 16)
+	{
+		const long to = door[0];
+		bool inside = true;
+
+		if (to < 0 || to >= number_rooms || to == here)
+			continue;
+
+		for (int k = 0; k < 3 && inside; k++)
+		{
+			float lo = door[4 + k], hi = lo;
+
+			for (int c = 1; c < 4; c++)
+			{
+				const float v = door[4 + c * 3 + k];
+
+				if (v < lo) lo = v;
+				if (v > hi) hi = v;
+			}
+
+			inside = e[k] >= lo - g_vis_near && e[k] <= hi + g_vis_near;
+		}
+
+		if (!inside)
+			continue;
+
+		const char before = room[to].bound_active;
+
+		VisQueue(to, r, 0.0f, 0.0f, (float)phd_winxmax, (float)phd_winymax);
+		VisNote(to, 5, before);
+	}
+}
+
 /* The three tables of the room being walked, after its portals: its guests,
  * and the rooms behind its bare wall faces that face the eye - the face's
  * normal pointing to the eye's side, the test GetRoomBounds makes of a
@@ -4618,6 +4678,7 @@ static void VisExtend(ROOM_INFO* r)
 	const int no = HDVisRoomOpenings((int)here, &openings);
 
 	g_vis_dequeues++;
+	VisNearPortals(r);
 
 	for (int k = 0; k < ng; k++)
 	{

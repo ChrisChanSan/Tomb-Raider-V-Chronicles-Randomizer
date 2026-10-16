@@ -5884,10 +5884,10 @@ file of the round's material beside the owner set.
 | J2-end-1 | JOBY2 15,331, room 121 | 0.42 / 0.66 | 0 / 0 / 0; 2,560: 0 / 0 | not reproduced |
 | J2-end-2 | JOBY2 15,955, room 89 | 0.78 / 0.92 | 0 / 0 / 0; 2,560: 0 / 0 | not reproduced |
 | J2-lockers | JOBY2 17,639, room 24 | 0.84 / 0.92 | 0 / 0 / 0; 2,560: 0 / 0 | a classic model |
-| A2-arch-1 | ANDREA2 8,353, room 231 | 0.51 / 0.53 | 0 / 243 / 243; 2,560: 1,062 / 1,062 | the classic level's hole |
-| A2-arch-2 | ANDREA2 9,212, room 231 | 0.59 / 0.87 | 0 / 21,749 / 21,749; 2,560: 87,063 / 87,063 | the classic level's hole |
-| A2-arch-p1 | ANDREA2 25,212, room 231 | SD, still run | 0 / 386 / 386; 2,560: 1,272 / 1,272 | the classic level's hole (SD) |
-| A2-arch-p2 | ANDREA2 25,818, room 231 | SD, still run | 0 / 6,493 / 6,493; 2,560: 26,224 / 26,224 | the classic level's hole (SD) |
+| A2-arch-1 | ANDREA2 8,353, room 231 | 0.51 / 0.53 | 0 / 243 / 243; 2,560: 1,062 / 1,062 | off the window, 15 px: the classic level's hole |
+| A2-arch-2 | ANDREA2 9,212, room 231 | 0.59 / 0.87 | 0 / 21,749 / 21,749; 2,560: 87,063 / 87,063 | off the window, 33 px: the classic level's hole |
+| A2-arch-p1 | ANDREA2 25,212, room 231 | SD, still run | 0 / 386 / 386; 2,560: 1,272 / 1,272 | off the window, 16 px: the classic level's hole (SD) |
+| A2-arch-p2 | ANDREA2 25,818, room 231 | SD, still run | 0 / 6,493 / 6,493; 2,560: 26,224 / 26,224 | off the window, 1 px: the classic level's hole (SD) |
 | A3-canopy | ANDY3 12,913, room 35 | 0.30 / 0.76 | 0 / 713 / 713; 2,560: 2,944 / 2,944 | a classic room with no art |
 | A3-board | ANDY3 12,143, room 35 | 0.60 / 0.88 | 0 / 677 / 677; 2,560: 2,821 / 2,821 | a coplanar classic static |
 
@@ -5905,18 +5905,37 @@ HD picture there is clear in the classic frame too (the classic walk's rooms' fa
 their windows, `-classiconly -classicclip`): at the arch's four places 20,638 / 20,881 /
 20,881, 67,896 / 89,645 / 89,645, 19,160 / 19,546 / 19,546 and 45,118 / 51,611 / 51,611
 clear pixels on the old path, new 10 and new 11, every one clear in the classic frame. His
-SD pictures show the same black above the arch. *A classic place with no art* - ANDY3's
-canopy is room 88, a room whose group is empty, 58 classic faces, none of them covered by
-any art within 128 units (TrgProbe `-classicart -perface`); #194's rule draws it classic.
-*A classic model* - JOBY2's lockers are no room art and no static (drawn with `-statics
-new` the place holds nothing there): they are the search object of slot 164, whose HD
-model the model binder refuses for its skeleton (`HDLOG slot=164 ... hd=0
-reason=skeleton_drift`, drift 484 of 708), so the item is drawn classic - the models'
-path, not the room art's. *A coplanar classic static* - the board on ANDY3's house: room
-39's six classic statics (slots 25 to 27, 31, 38 and 39, no group holding them) land
-within 16 units of room 35's art at 22,582 pixels of the 1,280 x 720 picture, the art
-winning 7,957 of them (within 64 units 32,871 and 17,395); no classic face is there (0
-pixels).
+SD pictures show the same black above the arch. Its walk is round 10's *portal off the
+window*, not the eye at a portal (`-walkwant`, the gap as round 10 measured it: the room's
+reach rectangle against the window of the room it was refused from; the eye against the
+plane of the refused portal from its corners in the classic level). At arch-2 the classic
+walk lists 9 rooms and refuses room 78 from room 81 as empty: the portal lands at x 677 to
+728 of 1,280, room 81's window ends at 644 - 33 pixels off (67 at 2,560) - and the eye
+stands 8,381 units off the portal's plane on the side it faces, over 65 times the art's
+reach of 128; the other 20 rooms have no portal from a listed room. At arch-1 and the
+first SD place rooms 88 and 81 are refused from room 236, 15 and 17 pixels off at arch-1,
+18 and 16 at the SD place (33 to 38 at 2,560), the eye 3,007 to 7,774 units off their
+planes; at the second SD place room 81 from room 236, 1 pixel off (4 at 2,560), 6,815
+units - just beyond the window's edge of round 10 (one pixel at 1,280, two at 2,560). The
+black on the visibility path is the old path's reach: the old path lists 24, 21, 22 and 22
+rooms there the classic walk does not and draws their art over it; drawn with those rooms
+left out, its picture is new 11's at all four places, 0 pixels differing, and the pixels
+its art covers - 243, 21,749, 386 and 6,493 - are the pixels new 11 differs from it by,
+all clear in the classic frame. At arch-2 room 223's art alone covers 9,689 of the 21,749,
+the rest the art of several reach rooms at once (rooms 18, 15, 62, 221, 46 and 164 alone 3
+to 676). The visibility path takes no reach, so it shows the classic level's black; no
+rule is built for a gap of 15 to 33 pixels at 1,280 (round 10's measure of the class,
+below). *A classic place with no art* - ANDY3's canopy is room 88, a room whose group is
+empty, 58 classic faces, none of them covered by any art within 128 units (TrgProbe
+`-classicart -perface`); #194's rule draws it classic. *A classic model* - JOBY2's lockers
+are no room art and no static (drawn with `-statics new` the place holds nothing there):
+they are the search object of slot 164, whose HD model the model binder refuses for its
+skeleton (`HDLOG slot=164 ... hd=0 reason=skeleton_drift`, drift 484 of 708), so the item
+is drawn classic - the models' path, not the room art's. *A coplanar classic static* - the
+board on ANDY3's house: room 39's six classic statics (slots 25 to 27, 31, 38 and 39, no
+group holding them) land within 16 units of room 35's art at 22,582 pixels of the 1,280 x
+720 picture, the art winning 7,957 of them (within 64 units 32,871 and 17,395); no classic
+face is there (0 pixels).
 
 **The window rule for the ghosts, measured** (RoomProbe `-vis 1 -viswin`, 1,280 x 720,
 pixels differing from the old path by more than 8; camE and the owner set of 99):
@@ -5972,11 +5991,12 @@ all classic), JOBY2 2 (24), RICH2 4 (78, three in part, one covered), RICHCUT2 3
 part), TITLE 3 (374). Classic statics by #194's rule: 103 of 2,845 - ANDREA1 10, ANDY1 3,
 ANDY3 7, JOBY3 24, JOBY4 8, JOBY5 10, RICH1 3, RICH2 21, RICH3 11, TITLE 6, none in the
 other five. The canopy (room 88) and the lockers (slot 164) are named above; the board's
-statics are seven of ANDY3's classic statics. A rule that a classic face or static the art
-covers within its own tolerance steps back was not built: at the board the classic static
-is in front of the art at 1,042 pixels beyond 16 units, so a push of the static behind the
-art would leave it in front where it is not coplanar, and the static's answer (classic, no
-group holds it) is #194's rule, which the old path shares. Left with its numbers.
+statics are six of ANDY3's seven classic statics. A rule that a classic face or static the
+art covers within its own tolerance steps back was not built: at the board the classic
+static is in front of the art at 1,042 pixels beyond 16 units, so a push of the static
+behind the art would leave it in front where it is not coplanar, and the static's answer
+(classic, no group holds it) is #194's rule, which the old path shares. Left with its
+numbers.
 
 **The default.** `hd_vis` stays 0 in the code; the owner has played with 1 since round 9,
 and this round's places were seen on it. Which value is the default is his decision.
@@ -6005,11 +6025,18 @@ No view of the sets is worse than new 10 by more than 500 pixels but the 131 swe
 ANDREA2 room 71 at yaw 90: 988 more pixels differ from the old path - 1,217 pixels of a
 piece cut to its window are clear now, and all 1,217 are clear in the classic frame too;
 the old path fills them with art of a room its reach lists. The 22 places' metal view
-differs from the old path by 77 pixels (new 10 by none). With `hd_vis` 0 the 201 views of
-the parity set, the owner's 20, the tower's 8 and the ride's 40 are the `dc75a96a` tool's
-byte for byte. The owner set of 99 changes at three views, awning, camE and pop75, each
-nearer the old path (2,292 -> 0, 8,957 -> 0, 59,253 -> 58,078 pixels differing from it);
-its sky in the eye's step 102,884 -> 102,895.
+differs from the old path by 77 pixels (new 10 by none), and J2-3 by 724 against new 10's
+429; both look from JOBY2's room 28, and both are room 33's art, a room only the old
+path's reach lists (its window empty): drawn with group 33 left out, the old path's
+picture is new 11's, 0 pixels differing at both. New 10 drew room 30's art standing in
+room 24 whole there (`-viswin 0` gives new 10's picture, and with group 30 left out too
+its 77 and, at J2-3, the striped column's 392 pixels are new 11's); new 11 cuts it to room
+30's window as the old path does, and the art behind fills the place (0 clear pixels at
+J2-3; the 77 are the screen's last column, x 2,559, rows 271 to 356). With `hd_vis` 0 the
+201 views of the parity set, the owner's 20, the tower's 8 and the ride's 40 are the
+`dc75a96a` tool's byte for byte. The owner set of 99 changes at three views, awning, camE
+and pop75, each nearer the old path (2,292 -> 0, 8,957 -> 0, 59,253 -> 58,078 pixels
+differing from it); its sky in the eye's step 102,884 -> 102,895.
 
 **The flash frames** (his 159 ROOMFLASH frames of round 10's log, 2,560 x 1,440, the
 frame's walk eye): on round 10's path 6 of 155 drawable frames flash, 4,127,491 pixels; on
@@ -6032,7 +6059,9 @@ out.
 all nine tools build; ModernTest 15,476 checks, MenuTest 44,272, InterpTest 729, LipsTest
 270 with the `.OBJ` folder and 243 without, 0 failed. No shader was touched.
 
-**Left.** The ANDREA2 arch and its SD twins: the classic level's own hole, as he said.
+**Left.** The ANDREA2 arch and its SD twins: the classic level's own hole, as he said -
+a portal off the window by 15 to 33 pixels at 1,280, which only the old path's reach
+fills.
 JOBY2's corridor end: not reproduced at the matched eye on any path or in the classic
 frame (0 clear pixels; the tick matched at a score of 0.42 / 0.66), so its cause - a flip
 state, the draw distance or another eye - needs his eye again. JOBY2's lockers: the search

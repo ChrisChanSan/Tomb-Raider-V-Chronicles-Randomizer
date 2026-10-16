@@ -21550,9 +21550,10 @@ static HDSplashSetup splash_dive(int fall)
  * surface the extinction measures against. A room under a sheet takes the
  * depth under its body's surface; a room no sheet lies over takes the depth
  * that puts every point in the water - but under the deep look its body's
- * surface counts wherever it lies above the eye, the rule that keeps
- * JOBY4's sea surface in sight from room 6 (eye 14,558, the body of room 7
- * at 12,032). Snell's window: 48.6 degrees for water. */
+ * surface counts on either side of the eye, the rule that keeps JOBY4's
+ * sea surface in sight from room 6 (eye 14,558, the body of room 7 at
+ * 12,032) and from room 119 over it (eye 8,000). Snell's window: 48.6
+ * degrees for water. */
 static void water_under()
 {
 	printf("the water from below: the eye's depth and Snell's window\n");
@@ -21567,10 +21568,10 @@ static void water_under()
 		"water under: no sheet over the room, no deep look: all water", 0, 0);
 	ok(HDWaterUnderDepth(1, 1, 14558.0f, 12032.0f, none) == 2526.0f,
 		"water under: the deep look's sea, its surface over the eye", 0, 0);
-	ok(HDWaterUnderDepth(1, 1, 11000.0f, 12032.0f, none) == none,
-		"water under: ...not when that surface lies under the eye", 0, 0);
-	ok(HDWaterUnderDepth(1, 1, 12032.0f, 12032.0f, none) == none,
-		"water under: ...nor at its height", 0, 0);
+	ok(HDWaterUnderDepth(1, 1, 8000.0f, 12032.0f, none) == 4032.0f,
+		"water under: ...and its distance when it lies under the eye", 0, 0);
+	ok(HDWaterUnderDepth(1, 1, 12032.0f, 12032.0f, none) == 0.0f,
+		"water under: ...0 at its height", 0, 0);
 	ok(HDWaterUnderDepth(0, 0, 11000.0f, 12032.0f, none) == -1032.0f,
 		"water under: a room under a sheet keeps its sign", 0, 0);
 

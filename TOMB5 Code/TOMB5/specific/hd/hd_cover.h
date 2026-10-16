@@ -1070,11 +1070,28 @@ inline bool HDStaticFlat(const float* mins, const float* maxs)
 	return false;
 }
 
+/* How far a shatterable static's box and a piece's must overlap, and how
+ * close a pane's plane must stand to its piece, in units. Counted with
+ * RoomProbe -smashcensus over the fifteen levels: a piece that belongs to a
+ * static overlaps it by 38 units or more on every axis the static has an
+ * extent on, and a pane's plane stands 0 or 1 unit off its glass (ANDREA1
+ * rooms 198 and 201: the glass at 966..967, the pane at 968); the statics
+ * of one row touch or overlap their neighbour's piece by 0 to 2 units at
+ * the shared edge (JOBY2 room 57, RICH3 rooms 120, 169, 170 and 171). 16
+ * lies inside that gap. */
+#define HD_STATIC_PIECE_EDGE	16.0f
+
 /* Whether a destructible piece of the art is the piece of a shatterable
- * static (slot 50 to 57): their boxes overlap, the static's box - local to
- * its room - moved into the piece's group frame by the difference of the two
- * rooms' origins (`dx`, `dz`: the static's room's origin less the piece's).
- * Any group's piece: a piece is art standing at the static's place, and once
+ * static (slot 50 to 57), the static's box - local to its room - moved into
+ * the piece's group frame by the difference of the two rooms' origins (`dx`,
+ * `dz`: the static's room's origin less the piece's). Along an axis on which
+ * the static's box has an extent the two overlap by more than
+ * HD_STATIC_PIECE_EDGE; along one on which it has none - a pane, flat by
+ * HDStaticFlat's measure - its plane stands within HD_STATIC_PIECE_EDGE of
+ * the piece. Without the slack a pane's glass a unit behind it stays after
+ * the shot; with a mere touch a static takes its neighbour's piece as well,
+ * and the last of them to be written decides it (UpdateDestructibles). Any
+ * group's piece: a piece is art standing at the static's place, and once
  * the static is shot neither may be drawn. */
 inline bool HDStaticPiecePaired(const float* mins, const float* maxs, float dx,
 	float dz, const float* pieceMins, const float* pieceMaxs)
@@ -1083,8 +1100,20 @@ inline bool HDStaticPiecePaired(const float* mins, const float* maxs, float dx,
 	const float hi[3] = { maxs[0] + dx, maxs[1], maxs[2] + dz };
 
 	for (int axis = 0; axis < 3; axis++)
-		if (hi[axis] < pieceMins[axis] || lo[axis] > pieceMaxs[axis])
+	{
+		const float from =
+			lo[axis] > pieceMins[axis] ? lo[axis] : pieceMins[axis];
+		const float to =
+			hi[axis] < pieceMaxs[axis] ? hi[axis] : pieceMaxs[axis];
+
+		if (maxs[axis] - mins[axis] < 1.0f)
+		{
+			if (from - to > HD_STATIC_PIECE_EDGE)
+				return false;
+		}
+		else if (to - from <= HD_STATIC_PIECE_EDGE)
 			return false;
+	}
 
 	return true;
 }

@@ -13162,6 +13162,58 @@ static void static_art()
 			"static: a piece one unit beside the box does not", 1, 1);
 	}
 
+	/* The smash group: the pairs RoomProbe -smashcensus measured, room
+	 * local, each case a level's own boxes. A pane's glass a unit behind its
+	 * plane pairs; a row's neighbour touching or overlapping by two units at
+	 * the shared edge does not; the smallest true overlap, 38, does. */
+	{
+		const float a1Pane[2][3] =
+			{ { 1110.0f, -2729.0f, 968.0f }, { 1969.0f, -1792.0f, 968.0f } };
+		const float a1Glass[2][3] =
+			{ { 1109.0f, -2769.0f, 966.0f }, { 1963.0f, -1833.0f, 967.0f } };
+		const float a1Frame[2][3] =
+			{ { 1110.0f, -2770.0f, 952.0f }, { 1963.0f, -1833.0f, 980.0f } };
+		const float j2Pane0[2][3] =
+			{ { 1024.0f, -4096.0f, 1536.0f }, { 2048.0f, -3072.0f, 1536.0f } };
+		const float j2Piece0[2][3] =
+			{ { 1024.0f, -4096.0f, 1523.0f }, { 2048.0f, -3071.0f, 1548.0f } };
+		const float j2Piece1[2][3] =
+			{ { 2048.0f, -4096.0f, 1523.0f }, { 3072.0f, -3071.0f, 1548.0f } };
+		const float r3Box0[2][3] =
+			{ { 1025.0f, -2055.0f, 3069.0f }, { 2049.0f, -3.0f, 4093.0f } };
+		const float r3Piece13[2][3] =
+			{ { 1023.0f, -2055.0f, 3068.0f }, { 2048.0f, 0.0f, 4095.0f } };
+		const float r3Piece14[2][3] =
+			{ { 2047.0f, -2055.0f, 3068.0f }, { 3072.0f, 0.0f, 4095.0f } };
+		const float r3Lamp[2][3] =
+			{ { 4425.0f, -681.0f, 2982.0f }, { 4785.0f, -512.0f, 3249.0f } };
+		const float r3Shade[2][3] =
+			{ { 4719.0f, -614.0f, 3085.0f }, { 4776.0f, -576.0f, 3142.0f } };
+
+		ok(HDStaticPiecePaired(a1Pane[0], a1Pane[1], 0.0f, 0.0f,
+			a1Glass[0], a1Glass[1]),
+			"smash: ANDREA1 198's glass a unit behind the pane pairs", 1, 1);
+		ok(HDStaticPiecePaired(a1Pane[0], a1Pane[1], 0.0f, 0.0f,
+			a1Frame[0], a1Frame[1]),
+			"smash: ANDREA1 198's frame around the pane pairs", 1, 1);
+		ok(HDStaticPiecePaired(j2Pane0[0], j2Pane0[1], 0.0f, 0.0f,
+			j2Piece0[0], j2Piece0[1]),
+			"smash: JOBY2 57's first pane takes its own piece", 1, 1);
+		ok(!HDStaticPiecePaired(j2Pane0[0], j2Pane0[1], 0.0f, 0.0f,
+			j2Piece1[0], j2Piece1[1]),
+			"smash: JOBY2 57's first pane leaves the piece it touches", 1, 1);
+		ok(HDStaticPiecePaired(r3Box0[0], r3Box0[1], 0.0f, 0.0f,
+			r3Piece13[0], r3Piece13[1]),
+			"smash: RICH3 120's first static takes its own piece", 1, 1);
+		ok(!HDStaticPiecePaired(r3Box0[0], r3Box0[1], 0.0f, 0.0f,
+			r3Piece14[0], r3Piece14[1]),
+			"smash: RICH3 120's first static leaves the piece two units in",
+			1, 1);
+		ok(HDStaticPiecePaired(r3Lamp[0], r3Lamp[1], 0.0f, 0.0f,
+			r3Shade[0], r3Shade[1]),
+			"smash: RICH3 46's 38-unit overlap pairs", 1, 1);
+	}
+
 	// The frame: never both the static and its art, never neither.
 	for (int answer = HD_STATIC_GROUPS; answer <= HD_STATIC_CLASSIC; answer++)
 		for (int listed = 0; listed < 2; listed++)

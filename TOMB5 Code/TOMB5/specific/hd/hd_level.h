@@ -426,6 +426,11 @@ void HDFrameScissorForRoom(int roomIndex);
 // in a level whose .TRG has no sky group - then the classic sky draws whole.
 bool HDFrameSky(const float* viewWorld);
 
+// Whether the HD sky just drawn stands for the classic flat layers; where it
+// does not (JOBY4's band alone), SkyDrawPhase draws the script's layers over
+// it as the classic path does.
+bool HDFrameSkyCoversLayers();
+
 void HDFrameDraw();
 void HDFrameDrawGlow();
 

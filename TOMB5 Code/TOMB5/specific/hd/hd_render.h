@@ -2552,6 +2552,21 @@ bool HDRenderShadowModelsStencil();
 int HDRenderSkyGroups();
 bool HDRenderSky(const D3DMATRIX* world);
 
+/* Whether the HD sky stands for the classic flat layers (a cloud sheet, or
+ * a band in the opaque pass); JOBY4's band alone does not. See
+ * HDRenderSkyCoversLayers in hd_render.cpp. */
+bool HDRenderSkyCoversLayers();
+
+/* The page of the HD sky's nearest cloud sheet, or 0 when its alpha pass has
+ * no sheet - the HD page the classic layers can carry. */
+IDirect3DTexture9* HDRenderSkyLayerPage();
+
+/* RoomProbe's twin of one classic flat layer over the HD sky, drawn with
+ * `page`: layer 1 or 2, the script's colour (0x00RRGGBB), UpdateSky's
+ * counter. The game draws its layers through the classic path. */
+bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
+	unsigned long colour, float skyPos, int layer);
+
 /* --- the statics ------------------------------------------------------------
  *
  * Whether the .TRG draws anything where this static mesh stands. Room local,

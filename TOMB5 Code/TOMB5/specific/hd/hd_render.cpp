@@ -21247,6 +21247,241 @@ bool HDRenderSky(const D3DMATRIX* world)
 	return drew;
 }
 
+/* Whether the HD sky stands for the classic flat layers: a cloud sheet in
+ * any sky group, or a band in the opaque pass - TITLE's two whole painted
+ * skies. The band of every other level is an alpha-pass part with a sheet
+ * over it, except JOBY4's (RoomProbe -skycensus), which is the band alone
+ * and one flat colour; the layers that JOBY4's script draws (the surface
+ * seen from below, on the level's own sky page) have nothing in the HD sky
+ * standing for them. */
+bool HDRenderSkyCoversLayers()
+{
+	for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+		for (int pass = 0; pass < 2; pass++)
+			for (const HDRange& range : g_groups[(size_t)g].pass[pass])
+				if (range.count && (pass == 0 || range.flatLight == 0.0f))
+					return true;
+
+	return false;
+}
+
+/* The page of the HD sky's nearest cloud sheet: of the alpha pass's sheets
+ * the last in part order, which is the lowest and so the nearest over the
+ * camera (HDRenderSky). ANDY1 to ANDY3, the levels whose layer 1 carries the
+ * lightning, have 7116 at 4,259 and 7113 at 3,550 units and give 7113. 0
+ * where the sky has no sheet in its alpha pass. */
+IDirect3DTexture9* HDRenderSkyLayerPage()
+{
+	const HDRange* nearest = 0;
+
+	for (int g = g_room_groups; g < (int)g_groups.size(); g++)
+		for (const HDRange& range : g_groups[(size_t)g].pass[1])
+			if (range.count && range.flatLight == 0.0f &&
+				range.pageSlot >= 0 &&
+				(!nearest || range.baseVertex > nearest->baseVertex))
+				nearest = &range;
+
+	return nearest ? HDPageCacheSlotTexture(nearest->pageSlot) : 0;
+}
+
+#include "hd_shader/hd_sky_layer_vs.inc"
+#include "hd_shader/hd_sky_layer_ps.inc"
+
+namespace
+{
+	IDirect3DVertexShader9* g_sky_layer_vs = 0;
+	IDirect3DPixelShader9* g_sky_layer_ps = 0;
+	IDirect3DDevice9* g_sky_shader_device = 0;
+
+	/* The sky's probe shaders, made on first use on the device in hand.
+	 * Only RoomProbe draws with them, and it keeps one device for its
+	 * whole run; the game never reaches this. */
+	bool sky_probe_shaders()
+	{
+		if (g_sky_shader_device != g_device)
+		{
+			g_sky_layer_vs = 0;
+			g_sky_layer_ps = 0;
+			g_sky_shader_device = g_device;
+		}
+
+		if (!g_sky_layer_vs && FAILED(g_device->CreateVertexShader(
+			(const DWORD*)kHDSkyLayerVS, &g_sky_layer_vs)))
+			g_sky_layer_vs = 0;
+
+		if (!g_sky_layer_ps && FAILED(g_device->CreatePixelShader(
+			(const DWORD*)kHDSkyLayerPS, &g_sky_layer_ps)))
+			g_sky_layer_ps = 0;
+
+		return g_sky_layer_vs && g_sky_layer_ps;
+	}
+
+	/* What the probe's sky draws change, as it was: the render states and
+	 * the stage 0 sampler states below, the shaders, the declaration, stream
+	 * 0 (which DrawPrimitiveUP leaves empty), the page and the constants the
+	 * layer shader takes (vertex c0 - c3, pixel c0 - c1, which the room
+	 * shaders read as well). */
+	const D3DRENDERSTATETYPE kSkyProbeStates[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_SRCBLEND, D3DRS_DESTBLEND, D3DRS_CULLMODE,
+		D3DRS_ALPHATESTENABLE
+	};
+
+	const D3DSAMPLERSTATETYPE kSkyProbeSamplers[] =
+	{
+		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_MINFILTER,
+		D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER
+	};
+
+	struct SkyProbeState
+	{
+		DWORD rs[sizeof(kSkyProbeStates) / sizeof(kSkyProbeStates[0])];
+		DWORD ss[sizeof(kSkyProbeSamplers) / sizeof(kSkyProbeSamplers[0])];
+		IDirect3DVertexShader9* vs;
+		IDirect3DPixelShader9* ps;
+		IDirect3DBaseTexture9* page;
+		IDirect3DVertexDeclaration9* decl;
+		IDirect3DVertexBuffer9* stream;
+		UINT offset, stride;
+		float vc[16];
+		float pc[8];
+
+		void save()
+		{
+			for (size_t i = 0; i < sizeof(rs) / sizeof(rs[0]); i++)
+				g_device->GetRenderState(kSkyProbeStates[i], &rs[i]);
+
+			for (size_t i = 0; i < sizeof(ss) / sizeof(ss[0]); i++)
+				g_device->GetSamplerState(0, kSkyProbeSamplers[i], &ss[i]);
+
+			g_device->GetVertexShader(&vs);
+			g_device->GetPixelShader(&ps);
+			g_device->GetTexture(0, &page);
+			g_device->GetVertexDeclaration(&decl);
+			g_device->GetStreamSource(0, &stream, &offset, &stride);
+			g_device->GetVertexShaderConstantF(0, vc, 4);
+			g_device->GetPixelShaderConstantF(0, pc, 2);
+		}
+
+		void restore()
+		{
+			for (size_t i = 0; i < sizeof(rs) / sizeof(rs[0]); i++)
+				g_device->SetRenderState(kSkyProbeStates[i], rs[i]);
+
+			for (size_t i = 0; i < sizeof(ss) / sizeof(ss[0]); i++)
+				g_device->SetSamplerState(0, kSkyProbeSamplers[i], ss[i]);
+
+			g_device->SetVertexShader(vs);
+			g_device->SetPixelShader(ps);
+			g_device->SetTexture(0, page);
+			g_device->SetVertexDeclaration(decl);
+			g_device->SetStreamSource(0, stream, offset, stride);
+			g_device->SetVertexShaderConstantF(0, vc, 4);
+			g_device->SetPixelShaderConstantF(0, pc, 2);
+
+			if (vs) vs->Release();
+			if (ps) ps->Release();
+			if (page) page->Release();
+			if (decl) decl->Release();
+			if (stream) stream->Release();
+		}
+	};
+}
+
+/* RoomProbe's twin of one classic flat layer (specificfx.cpp, DrawFlatSky),
+ * drawn over the HD sky with `page`: the two quads of 9,728 units 1,536 over
+ * the camera, the first shifted along x by `skyPos` (UpdateSky's counter)
+ * and the second one quad width behind it, layer 1 turned half round
+ * (SkyDrawPhase's phd_RotY(32760)), u along x and v along z over each quad;
+ * the colour split as CalcColorSplit splits it; draw type 4: the page's
+ * alpha over what is there, no depth test. `world` is the sky's own matrix,
+ * the camera's position. The device state goes back as it was. */
+bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
+	unsigned long colour, float skyPos, int layer)
+{
+	if (!g_device || !page || !world || !sky_probe_shaders())
+		return false;
+
+	const float turn = layer == 1 ? -1.0f : 1.0f;	// phd_RotY(32760)
+	float rot[16] =
+	{
+		turn, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, turn, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
+	};
+	float model[16], wvp[16];
+
+	multiply(rot, (const float*)world, model);
+	multiply(model, g_viewproj, wvp);
+
+	struct Corner
+	{
+		float x, y, z, u, v;
+	} quad[2][4];
+
+	for (int q = 0; q < 2; q++)
+	{
+		const float x0 = skyPos - 9728.0f * (float)q;
+		const float cx[4] = { -4864.0f, 4864.0f, 4864.0f, -4864.0f };
+		const float cz[4] = { -4864.0f, -4864.0f, 4864.0f, 4864.0f };
+		const float cu[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+		const float cv[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+		for (int c = 0; c < 4; c++)
+		{
+			quad[q][c].x = x0 + cx[c];
+			quad[q][c].y = -1536.0f;
+			quad[q][c].z = cz[c];
+			quad[q][c].u = cu[c];
+			quad[q][c].v = cv[c];
+		}
+	}
+
+	float diffuse[4], specular[4];
+
+	for (int i = 0; i < 3; i++)
+	{
+		const int c = (int)((colour >> (16 - 8 * i)) & 0xFF);
+
+		diffuse[i] = c > 128 ? 1.0f : (float)(c << 1) / 255.0f;
+		specular[i] = c > 128 ? (float)((c - 128) >> 1) / 255.0f : 0.0f;
+	}
+
+	diffuse[3] = specular[3] = 1.0f;
+
+	SkyProbeState saved;
+
+	saved.save();
+	set_matrix_constant(0, wvp);
+	g_device->SetPixelShaderConstantF(0, diffuse, 1);
+	g_device->SetPixelShaderConstantF(1, specular, 1);
+	g_device->SetVertexShader(g_sky_layer_vs);
+	g_device->SetPixelShader(g_sky_layer_ps);
+	g_device->SetFVF(D3DFVF_XYZ | D3DFVF_TEX1);
+	g_device->SetTexture(0, page);
+	g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
+	g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
+	g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+	g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+	g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+	g_device->SetRenderState(D3DRS_ZENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+
+	for (int q = 0; q < 2; q++)
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, quad[q],
+			sizeof(Corner));
+
+	saved.restore();
+	return true;
+}
+
 bool HDRenderRoomPass(int group, int pass, const D3DMATRIX* world,
 	const HDRoomLighting* lighting)
 {

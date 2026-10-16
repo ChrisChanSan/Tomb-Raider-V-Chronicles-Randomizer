@@ -8058,6 +8058,13 @@ bool HDFrameSky(const float* viewWorld)
 	return drew;
 }
 
+/* Asked by SkyDrawPhase after HDFrameSky answered true, so the HD level is
+ * built and its sky groups are the ones just drawn. */
+bool HDFrameSkyCoversLayers()
+{
+	return HDRenderSkyCoversLayers();
+}
+
 /* The projected shadow's cast pass: Lara's parts that her main draw marked,
  * into the map, as seen along the frame's key light. Inside the frame's
  * bracket and after the room loops, so the device is in the HD path's state;

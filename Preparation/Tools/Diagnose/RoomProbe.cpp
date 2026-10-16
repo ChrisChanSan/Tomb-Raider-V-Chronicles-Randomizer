@@ -86,6 +86,13 @@
  *                     -roombox). -rooms or -roombox gives the room count
  *     -skydump <path> with -skycensus: every sky triangle as one line,
  *                     group part pass page and x y z u v of its corners
+ *     -skylayer <1|2> <r> <g> <b> <vel>
+ *                     with -sky: one of the script's classic flat layers
+ *                     over the HD sky as SkyDrawPhase draws it, moved as
+ *                     UpdateSky moves it over -time seconds; repeatable
+ *     -skylayerpage sd|hd  the page the layers carry: the level's classic
+ *                     sky page out of the .TRC under -roombox (sd), or the
+ *                     HD sky's nearest cloud sheet page (hd)
  *     -with <group> <dx dy dz>
  *                     draw that group too, at that world offset from the
  *                     room - the difference of the two classic room origins,
@@ -12628,6 +12635,22 @@ static bool VisArg(int argc, char** argv, int* at)
 static bool g_sky_census = false;
 static std::string g_sky_dump;
 
+/* -skylayer <1|2> <r> <g> <b> <vel>: one of the script's classic flat layers
+ * drawn over the HD sky the way SkyDrawPhase draws it (HDRenderSkyLayerProbe),
+ * its counter where UpdateSky leaves it after -time seconds of logic ticks
+ * (30 a second, `vel` a tick, wrapped at 0x2600). Repeatable for the two.
+ * -skylayerpage sd|hd: the page it carries, the level's classic sky page out
+ * of the .TRC under -roombox (sd, the default) or the HD page the game
+ * borrows for it (hd). */
+struct SkyLayerArg
+{
+	int layer;
+	unsigned long colour;
+	int vel;
+};
+static std::vector<SkyLayerArg> g_sky_layers;
+static bool g_sky_layer_hd = false;
+
 /* The sky's switches, ahead of the parse chain, which stands at the
  * compiler's limit of nested blocks (C1061). */
 static bool SkyArg(int argc, char** argv, int* at)
@@ -12638,10 +12661,116 @@ static bool SkyArg(int argc, char** argv, int* at)
 		g_sky_census = true;
 	else if (!strcmp(a, "-skydump") && *at + 1 < argc)
 		g_sky_dump = argv[++*at];
+	else if (!strcmp(a, "-skylayer") && *at + 5 < argc)
+	{
+		SkyLayerArg l;
+
+		l.layer = atoi(argv[*at + 1]);
+		l.colour = (unsigned long)(atoi(argv[*at + 2]) & 0xFF) << 16 |
+			(unsigned long)(atoi(argv[*at + 3]) & 0xFF) << 8 |
+			(unsigned long)(atoi(argv[*at + 4]) & 0xFF);
+		l.vel = atoi(argv[*at + 5]);
+		g_sky_layers.push_back(l);
+		*at += 5;
+	}
+	else if (!strcmp(a, "-skylayerpage") && *at + 1 < argc)
+		g_sky_layer_hd = !strcmp(argv[++*at], "hd");
 	else
 		return false;
 
 	return true;
+}
+
+/* The level's classic sky page: the last 256 x 256 block of the .TRC's misc
+ * texture block (shine, font, sky - LoadTexturesMisc), after the 32 and 16
+ * bit page blocks; the header before them is the version and three page
+ * counts (10 bytes). A MANAGED A8R8G8B8 texture, or 0. */
+static IDirect3DTexture9* SkyClassicPage(const char* stem)
+{
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	FILE* f = 0;
+
+	if (g_roombox.empty() || fopen_s(&f, trc.c_str(), "rb") || !f)
+		return 0;
+
+	std::vector<unsigned char> sky;
+	unsigned int sizes[2] = { 0, 0 };
+
+	fseek(f, 10, SEEK_SET);
+
+	for (int block = 0; block < 3; block++)
+	{
+		if (fread(sizes, 4, 2, f) != 2)
+			break;
+
+		if (block < 2)
+		{
+			fseek(f, (long)sizes[1], SEEK_CUR);
+			continue;
+		}
+
+		std::vector<unsigned char> packed(sizes[1]), plain(sizes[0]);
+		uLongf length = sizes[0];
+
+		if (sizes[0] >= 0x40000 && fread(&packed[0], 1, sizes[1], f) ==
+			sizes[1] && uncompress(&plain[0], &length, &packed[0],
+			sizes[1]) == Z_OK && length == sizes[0])
+			sky.assign(plain.end() - 0x40000, plain.end());
+	}
+
+	fclose(f);
+
+	IDirect3DTexture9* page = 0;
+	D3DLOCKED_RECT rect;
+
+	if (sky.empty() || FAILED(g_device->CreateTexture(256, 256, 1, 0,
+		D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &page, 0)))
+		return 0;
+
+	if (FAILED(page->LockRect(0, &rect, 0, 0)))
+	{
+		page->Release();
+		return 0;
+	}
+
+	for (int y = 0; y < 256; y++)
+		memcpy((BYTE*)rect.pBits + y * rect.Pitch, &sky[(size_t)y * 1024],
+			1024);
+
+	page->UnlockRect(0);
+	return page;
+}
+
+/* The layers of -skylayer over the HD sky just drawn, in SkyDrawPhase's
+ * order: layer 1, then layer 2. Called right after HDRenderSky. */
+static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
+{
+	if (g_sky_layers.empty())
+		return;
+
+	IDirect3DTexture9* page = g_sky_layer_hd ? HDRenderSkyLayerPage()
+		: SkyClassicPage(stem);
+
+	printf("sky layers: %d on the %s page%s\n", (int)g_sky_layers.size(),
+		g_sky_layer_hd ? "HD" : "classic", page ? "" : " - NONE, not drawn");
+
+	for (int pass = 1; pass <= 2 && page; pass++)
+		for (const SkyLayerArg& l : g_sky_layers)
+		{
+			if (l.layer != pass)
+				continue;
+
+			const long ticks = (long)floor(g_time * 30.0);
+			long pos = (long)(((long long)l.vel * ticks) % 0x2600);
+
+			if (pos < 0)
+				pos += 0x2600;
+
+			HDRenderSkyLayerProbe(world, page, l.colour, (float)pos, l.layer);
+		}
+
+	if (page && !g_sky_layer_hd)
+		page->Release();
 }
 
 static int ProbeSkyCensus(const char* root, const char* stem, int rooms)
@@ -12970,6 +13099,8 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -effect <0..21>  -paritycheck\n");
 		printf("       -sky  -skyonly  -skycensus  -skydump <path>   the HD "
 			"sky drawn, alone, or its parts counted\n");
+		printf("       -skylayer <1|2> <r> <g> <b> <vel>  "
+			"-skylayerpage sd|hd   a classic flat layer over the HD sky\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");
@@ -16262,6 +16393,7 @@ static int ProbeMain(int argc, char** argv)
 		skyWorld._42 = (float)cy;
 		skyWorld._43 = (float)cz;
 		skyDrew = HDRenderSky(&skyWorld);
+		ProbeSkyLayers(&skyWorld, stem);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

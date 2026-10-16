@@ -79,6 +79,8 @@ call :onestamp hd_spring hd_spring_column_ps.inc
 call :onestamp hd_spring hd_spring_bubble_ps.inc
 call :onestamp hd_spring hd_spring_crack_ps.inc
 call :onestamp hd_spring hd_spring_hole_ps.inc
+call :onestamp hd_sky hd_sky_layer_vs.inc
+call :onestamp hd_sky hd_sky_layer_ps.inc
 
 if not defined STALE (
 	endlocal
@@ -124,6 +126,8 @@ call :onestamp hd_spring hd_spring_column_ps.inc
 call :onestamp hd_spring hd_spring_bubble_ps.inc
 call :onestamp hd_spring hd_spring_crack_ps.inc
 call :onestamp hd_spring hd_spring_hole_ps.inc
+call :onestamp hd_sky hd_sky_layer_vs.inc
+call :onestamp hd_sky hd_sky_layer_ps.inc
 
 if defined STALE (
 	echo be: shaders STILL out of step after bshader -!STALE!

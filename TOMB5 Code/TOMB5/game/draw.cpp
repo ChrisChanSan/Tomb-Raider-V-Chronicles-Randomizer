@@ -666,11 +666,19 @@ void SkyDrawPhase()
 		 *
 		 * With hd_enable off, before a level is built, or in a level whose
 		 * .TRG has no sky group, HDFrameSky returns false on its first test
-		 * and the classic sky is drawn unchanged. */
+		 * and the classic sky is drawn unchanged.
+		 *
+		 * The layers go only where the HD sky stands for them. JOBY4's sky
+		 * group is a band of one flat colour and nothing else, while its
+		 * script's two layers are the sea's surface seen from below on the
+		 * level's own sky page; there they are drawn over the band, as the
+		 * classic path draws them (HDFrameSkyCoversLayers). */
 		const bool hdSky = HDFrameSky(aMXPtr);
+		const bool covered = hdSky && HDFrameSkyCoversLayers();
 		const bool lightning = (gfLevelFlags & GF_LIGHTNING) != 0;
-		const bool layer1 = (gfLevelFlags & GF_LAYER1) && (!hdSky || lightning);
-		const bool layer2 = (gfLevelFlags & GF_LAYER2) && !hdSky;
+		const bool layer1 = (gfLevelFlags & GF_LAYER1) &&
+			(!covered || lightning);
+		const bool layer2 = (gfLevelFlags & GF_LAYER2) && !covered;
 
 		phd_PushMatrix();
 

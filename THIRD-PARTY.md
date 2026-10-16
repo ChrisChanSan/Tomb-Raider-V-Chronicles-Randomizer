@@ -2405,6 +2405,32 @@ water surface", carries the tables.
     metric. DATA: RoomProbe `-wetblur`/`-wetnomirror` at four band eyes,
     the mirror's variation along the reflected bands 1.276 sharp, 0.504
     built; +0.05 ms GPU at 2560 x 1440.
+227. **The skipped flyby's last trigger test** (`game/spotcam.cpp`,
+    `CalculateSpotCams`; `game/spotcam_math.h`, `SpotEndTestCamera`,
+    `SpotSeqEndsShort`) - the cause: the skip jumps the spline after the
+    frame's camera place is taken, so the end of a SNAPBACK sequence is
+    tested at the camera before the last; the fix's rule: on such a frame
+    the last camera's own place and room; and the census rule: first camera
+    SNAPBACK without LOOP/TRACK, last camera SP_TESTTRIGGER. THIRD: TROne
+    (GPLv3) by Todesengel1931 - https://github.com/todesengel1931 - the
+    flyby skip fix in `games/tr5/src/game/spotcam.cpp` (`CalculateSpotCams`,
+    its SNAPBACK branch) and the census in `games/tr5/glue/hostglue_input5.cpp`
+    (the copy handed over on 2026-10-14), read for the cause and the rules;
+    no code was taken, the form and the words are this project's own.
+    CLASSIC: our own reading of the engine's frame order is the check
+    (`MODIFICATIONS.md`, the flyby skip's entry). DATA (TrgProbe `-flyby`):
+    64 sequences, 359 cameras, 58 test cameras, 11 sequences ending short,
+    5 of them leaving a trigger unfired (RICH2 3, RICH3 6, ANDREA2 5,
+    ANDREA3 5, RICH1 0).
+228. **The flyby census and the FLYLOG seam** (TrgProbe `-flyby`,
+    `FlybyCensus`; `game/spotcam.cpp`, `FlyLog`, `check_camera`;
+    ModernTest `spotcam_end`) - the spotcam block found behind the fixed
+    cameras by the level's own counts up to the "TEX" marker, the trigger
+    of a test's place by the GetFloor door walk and the GetHeight descent,
+    the frame-order model the rule is checked against, and one log line per
+    heavy-trigger test with the arming camera, the place and the skip. OWN,
+    this project's own tools on the classic engine's code (CLASSIC) and the
+    player's files (DATA).
 
 ## Credited, but not contained here
 

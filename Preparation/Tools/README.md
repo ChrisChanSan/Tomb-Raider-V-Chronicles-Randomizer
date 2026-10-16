@@ -219,13 +219,14 @@ flipped room shows its twin's art only when they name the `now group=` of its
 only, none without one, as the classic path draws a room;
 `-vis 1` is the engine's `hd_vis` 1: `-walk` walks the portals' list with the reach
 off and extended by the visibility path's tables (built as the engine builds them),
-prints `vis rooms= walk= box= opening= portal= dequeues= edge=` after each
+prints `vis rooms= walk= box= opening= portal= dequeues= edge= near=` after each
 direction's rooms and ends each `-walkfinal` line with
-`vis=walk|box|opening|portal|edge`, what listed the
+`vis=walk|box|opening|portal|edge|near`, what listed the
 room first (walk: a portal, from any listed room; a table that only widens a listed
-room's window is not named; `edge`, a portal at the window's edge); the build answers
-every piece whole and carries no room, so every named group is one whole draw with only
-the hulls' and the covered faces' push; `-vissrc <mask>`
+room's window is not named; `edge`, a portal at the window's edge; `near`, a portal
+the eye stands at); the build carries no room and answers the pieces of a room's art
+standing inside another room as `-viswin` says, so every named group is one whole draw
+but for those pieces, with only the hulls' and the covered faces' push; `-vissrc <mask>`
 (1 guests, 2 openings, 4 wide portals; 7 the default), `-visreach`, `-visbare`,
 `-visguest`, `-visguestrule 0|1|2`, `-visoverhang`, `-viswidebare` and `-visedge` set
 the tables' and the walk's numbers; `-viswin <rule>` chooses how `-vis 1` answers the
@@ -234,8 +235,8 @@ answer: inside the room's own window unless a classic face of the pair is in sig
 every piece whole, 1 the art in unlinked air alone in the window, 3 every piece in the
 window, 4 none drawn, 5 the whole group in the window - the candidates the rule was
 chosen from); `-visnear 0` leaves out the portal the eye stands at (the walk's
-`VisNearPortals`, source `near`) (the `-vis` tables line ends in `mirror=`, the wide
-portals that are wide by the record leading back); `-viscams <file>` (as
+`VisNearPortals`, source `near`); the `-vis` tables line ends in `mirror=`, the wide
+portals that are wide by the record leading back; `-viscams <file>` (as
 `RoomProbe <5-folder> -viscams <file> -roombox <folder> [switches]`) runs a camera file
 as a set: one camera a line, `name LEVEL room x y z`, then `yaw <deg> <pitch>` or
 `target <x> <y> <z>`, `size <w> <h>` and `flip <rooms>` if wanted, `#` a comment; the

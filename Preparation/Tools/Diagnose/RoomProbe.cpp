@@ -12642,7 +12642,7 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     piece whole
  *   -visnear 0|1      1, the default, lists the room behind a portal the
  *                     eye stands at (VisNearPortals); 0 leaves that out
- *   -gpu <n>         the frame's solid room draws timed n times on the GPU
+ *   -gpu <n>          the frame's solid room draws timed n times on the GPU
  *                     after the picture (the print beside the draw calls) */
 static bool VisArg(int argc, char** argv, int* at)
 {

@@ -3539,7 +3539,8 @@ namespace walkoff
 	 * the walk ask the three tables one by one: bit 0 the guests, bit 1 the
 	 * openings, bit 2 the wide portals. `g_vis_why` is per room the source
 	 * that queued it first, as VISLOG prints it: 0 the portals or the seed,
-	 * 1 a guest, 2 an opening, 3 a wide portal, 0xff not queued. */
+	 * 1 a guest, 2 an opening, 3 a wide portal, 4 a portal at the window's
+	 * edge, 0xff not queued. */
 	static bool g_vis = false;
 	static int g_vis_sources = 7;
 	static HDVisParams g_vis_params = HDVisDefaults();
@@ -3549,7 +3550,7 @@ namespace walkoff
 	static std::vector<HDVisPortal> g_vis_portals;
 	static std::vector<int> g_vis_links;
 	static std::vector<unsigned char> g_vis_why;
-	static int g_vis_count[4] = { 0, 0, 0, 0 };
+	static int g_vis_count[5] = { 0, 0, 0, 0, 0 };
 
 	// The group a room holds now, as hd_level.cpp's g_room_group.
 	static int VisContents(int room)
@@ -3837,11 +3838,10 @@ namespace walkoff
 
 		const int c = VisContents(fromRoom);
 		const HDVisTables& t = g_vis_tables;
+		const int wides = (g_vis_sources & 4) && c >= 0 && c < t.rooms ?
+			t.wideCount[(size_t)c] : 0;
 
-		if (!(g_vis_sources & 4) || c < 0 || c >= t.rooms)
-			return;
-
-		for (int k = 0; k < t.wideCount[(size_t)c]; k++)
+		for (int k = 0; k < wides; k++)
 		{
 			const HDVisWide& w = t.wides[(size_t)(t.wideFirst[(size_t)c] + k)];
 
@@ -3858,16 +3858,37 @@ namespace walkoff
 			break;
 		}
 
-		if (!wide || !VisPortalRect(open, mx, rect))
+		if (!VisPortalRect(open, mx, rect))
 			return;
 
 		if (rect[0] < r.test_right && rect[2] > r.test_left &&
 			rect[1] < r.test_bottom && rect[3] > r.test_top)
 			return;
 
+		if (wide)
+		{
+			before = g_room[(size_t)to].bound_active;
+			VisQueue(to, r, rect[0], rect[1], rect[2], rect[3], fromRoom, true);
+			VisNote(to, 3, before);
+			return;
+		}
+
+		// The window's edge (VisFollowPortal, game\draw.cpp).
+		const float e = (float)(g_vis_params.edge * (double)(g_winxmax + 1));
+		const float l = (float)r.test_left - e;
+		const float tt = (float)r.test_top - e;
+		const float rr = (float)r.test_right + e;
+		const float b = (float)r.test_bottom + e;
+
+		if (e <= 0.0f || rect[0] >= rr || rect[2] <= l || rect[1] >= b ||
+			rect[3] <= tt)
+			return;
+
 		before = g_room[(size_t)to].bound_active;
-		VisQueue(to, r, rect[0], rect[1], rect[2], rect[3], fromRoom, true);
-		VisNote(to, 3, before);
+		VisQueue(to, r, rect[0] > l ? rect[0] : l, rect[1] > tt ? rect[1] : tt,
+			rect[2] < rr ? rect[2] : rr, rect[3] < b ? rect[3] : b, fromRoom,
+			true);
+		VisNote(to, 4, before);
 	}
 
 	// Which of the two SetRoomBounds this run is walking with.
@@ -4222,11 +4243,13 @@ namespace walkoff
 
 			printf("-vis: tables rooms=%d art_rooms=%d walls=%d bare=%d "
 				"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f "
-				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d\n",
+				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d "
+				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d\n",
 				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
 				t.guestPairs, t.guestTris, t.widePortals, t.ms,
 				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
-				g_vis_sources);
+				g_vis_sources, t.openingsTwin, g_vis_params.wideBare,
+				g_vis_params.edge, t.wideMirrored);
 		}
 
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
@@ -4489,7 +4512,8 @@ namespace walkoff
 		g_end = 1;
 		g_list[0] = seed;
 		g_vis_why.assign(g_room.size(), 0xff);
-		g_vis_count[0] = g_vis_count[1] = g_vis_count[2] = g_vis_count[3] = 0;
+		g_vis_count[0] = g_vis_count[1] = g_vis_count[2] = g_vis_count[3] =
+			g_vis_count[4] = 0;
 		g_queue_peak = 1;
 		g_reach_only = 0;
 		g_dequeues = 0;
@@ -4627,10 +4651,10 @@ namespace walkoff
 	{
 		const Room& r = g_room[(size_t)which];
 
-		static const char* const kWhy[4] = { "walk", "box", "opening",
-			"portal" };
+		static const char* const kWhy[5] = { "walk", "box", "opening",
+			"portal", "edge" };
 		const int why = g_vis && (size_t)which < g_vis_why.size() &&
-			g_vis_why[(size_t)which] < 4 ? g_vis_why[(size_t)which] : 0;
+			g_vis_why[(size_t)which] < 5 ? g_vis_why[(size_t)which] : 0;
 
 		printf("%sroom %d final=%d,%d..%d,%d reach=%d,%d..%d,%d %s%s%s\n", lead,
 			which, r.left, r.top, r.right, r.bottom, r.box[0], r.box[1],
@@ -4990,11 +5014,12 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			// -vis 1: the sources, as VISLOG counts them.
 			if (walkoff::g_vis)
 				printf("      vis rooms=%d walk=%d box=%d opening=%d portal=%d "
-					"dequeues=%ld\n", (int)walkoff::g_drawn.size(),
+					"dequeues=%ld edge=%d\n", (int)walkoff::g_drawn.size(),
 					(int)walkoff::g_drawn.size() - walkoff::g_vis_count[1] -
-					walkoff::g_vis_count[2] - walkoff::g_vis_count[3],
-					walkoff::g_vis_count[1], walkoff::g_vis_count[2],
-					walkoff::g_vis_count[3], walkoff::g_dequeues);
+					walkoff::g_vis_count[2] - walkoff::g_vis_count[3] -
+					walkoff::g_vis_count[4], walkoff::g_vis_count[1],
+					walkoff::g_vis_count[2], walkoff::g_vis_count[3],
+					walkoff::g_dequeues, walkoff::g_vis_count[4]);
 
 			// -walkfinal: every listed room's answer, as -walkwant gives one.
 			if (finals)
@@ -6080,13 +6105,16 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		/* A piece with no face outside the smaller box is art the air took
 		 * out of the open half: whole under every answer but the air's. */
 		const bool open = piece.face < 0 && !piece.inner;
-		bool answer = g_decide == 0 ? true : g_decide == 1 ? false
+		/* The visibility path (-vis 1) cuts no art to a window: every piece
+		 * whole, as DecidePairs answers there. */
+		const int decide = g_vis_option ? 0 : g_decide;
+		bool answer = decide == 0 ? true : decide == 1 ? false
 			: open ? true
 			: *empty ? piece.inner == 0
 			: !ask ? false
 			: !drawn ? true
 			: piece.face < 0 ? false
-			: g_decide == 3 ? alive : pairAlive;
+			: decide == 3 ? alive : pairAlive;
 
 		/* And with -unlinked 1, DecidePairs' last word: a piece whose art
 		 * stands in the air of a room its own room has no link with is
@@ -6096,9 +6124,9 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * (whole: a listed holder's pair is whole on that face, an
 		 * unlisted holder's on any frame); and so does one no face claims
 		 * whose holder is not drawn, on its pair's surviving faces. */
-		const bool unlinked = piece.air && g_unlinked && g_decide >= 2;
+		const bool unlinked = piece.air && g_unlinked && decide >= 2;
 		const bool claimed = piece.face >= 0
-			? !open && ask && answer && (g_decide == 3 ? alive : pairAlive)
+			? !open && ask && answer && (decide == 3 ? alive : pairAlive)
 			: ask && !drawn && pairAlive;
 
 		if (unlinked && !(g_unlinked == 2 && *empty))
@@ -11138,14 +11166,16 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *
  *   -vis 0|1          tomb5.hd_vis: 1 walks the portals' list extended by
  *                     the three tables (hd_vis.h) with the reach off, and
- *                     builds the level with no intrusion list, no air, no
- *                     carried rooms and no pair faces, so every group drawn
- *                     is one whole draw; 0, the default, changes nothing
+ *                     answers every piece of the build whole, no carried
+ *                     rooms, so every group is drawn whole with only the
+ *                     build's depth pushes; 0, the default, changes nothing
  *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
  *                     portals (7, the default, all three)
  *   -visreach <units> -visbare <share> -visguest <triangles>
  *   -visguestrule 0|1|2 -visoverhang <units>   the tables' numbers in place
  *                     of HDVisDefaults'
+ *   -viswidebare <share>   the bare share that lets a face widen a portal
+ *   -visedge <share>  the window's edge, as a share of the screen's width
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
  *                     after the picture (the print beside the draw calls) */
 static bool VisArg(int argc, char** argv, int* at)
@@ -11159,9 +11189,6 @@ static bool VisArg(int argc, char** argv, int* at)
 	{
 		walkoff::g_vis = atoi(argv[*at + 1]) == 1;
 		g_vis_option = walkoff::g_vis;
-
-		if (g_vis_option)
-			g_air_option = 0;
 
 		printf("-vis: %s\n", g_vis_option ? "the visibility path"
 			: "the room-art rules (default)");
@@ -11178,6 +11205,10 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.guestRule = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visoverhang"))
 		walkoff::g_vis_params.overhang = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-viswidebare"))
+		walkoff::g_vis_params.wideBare = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-visedge"))
+		walkoff::g_vis_params.edge = atof(argv[*at + 1]);
 	else if (!strcmp(a, "-gpu"))
 		g_gpu_runs = atoi(argv[*at + 1]);
 	else
@@ -12722,7 +12753,7 @@ static int ProbeMain(int argc, char** argv)
 							(long)(ra.numZSectors - 1) * 1024 - rb.originZ);
 
 						if (box.maxs[0] <= box.mins[0] ||
-							box.maxs[2] <= box.mins[2] || g_vis_option)
+							box.maxs[2] <= box.mins[2])
 							continue;
 
 						g_intrusions_built.push_back(box);
@@ -15738,8 +15769,171 @@ static int ProbeReloadOther(int result, int argc, char** argv)
 	return ProbeMain((int)a.size(), &a[0]);
 }
 
+/* -viscams <file>: the walk at every camera of a camera file, a set in one
+ * call - RoomProbe <5-folder> -viscams <file> -roombox <folder> [switches].
+ * A line of the file: <name> <LEVEL> <room> <x> <y> <z> (world, the room
+ * the eye stands in), then `yaw <degrees> <pitch>` or `target <x> <y> <z>`,
+ * then `size <w> <h>` (1280 720) and `flip <room,...>` if wanted; `#`
+ * starts a comment. Per camera the tool runs itself on the walk (-walk,
+ * -walkfinal, -walkeach, -nodraw, -fov 80 and every switch after the
+ * file, -vis 1 among them) and prints
+ *
+ *   viscams: <name> <LEVEL> rooms=<n> list=<room>:<source>,...
+ *
+ * the source the walk names per room, in -walkfinal's words: walk, box (a
+ * guest), opening, portal (a wide portal), edge.
+ * The lines of two builds side by side name every camera a rule changes;
+ * the pictures are drawn with -roomwin from the same lists. */
+static int VisCams(int argc, char** argv, int at)
+{
+	FILE* f = fopen(argv[at + 1], "r");
+	char exe[MAX_PATH];
+	char line[1024];
+	int cams = 0, failed = 0;
+
+	if (!f || argc < 2)
+	{
+		printf("viscams: cannot read %s\n", argv[at + 1]);
+		return 1;
+	}
+
+	GetModuleFileNameA(0, exe, sizeof(exe));
+
+	// Every switch but the file's own two words goes to each walk.
+	std::string rest;
+
+	for (int i = 2; i < argc; i++)
+		if (i != at && i != at + 1)
+			rest += std::string(" \"") + argv[i] + "\"";
+
+	while (fgets(line, sizeof(line), f))
+	{
+		char* hash = strchr(line, '#');
+
+		if (hash)
+			*hash = 0;
+
+		char name[64], level[32], kind[16];
+		int room = 0, w = 1280, h = 720, used = 0;
+		double x, y, z, a, b, c = 0.0;
+
+		if (sscanf(line, "%63s %31s %d %lf %lf %lf %15s %n", name, level,
+			&room, &x, &y, &z, kind, &used) != 7)
+			continue;
+
+		std::string cam;
+		const char* more = line + used;
+		int n = 0;
+
+		if (!strcmp(kind, "target") &&
+			sscanf(more, "%lf %lf %lf %n", &a, &b, &c, &n) == 3)
+			cam = " -walktarget " + std::to_string((long)a) + " " +
+				std::to_string((long)b) + " " + std::to_string((long)c);
+		else if (!strcmp(kind, "yaw") &&
+			sscanf(more, "%lf %lf %n", &a, &b, &n) == 2)
+			cam = " -walkyaw " + std::to_string(a) + " " +
+				std::to_string(a) + " 1 -walkpitch " + std::to_string(b);
+		else
+		{
+			printf("viscams: %s: no camera\n", name);
+			failed++;
+			continue;
+		}
+
+		more += n;
+
+		char word[16], flips[256];
+		std::string flip;
+
+		while (sscanf(more, "%15s %n", word, &n) == 1)
+		{
+			more += n;
+
+			if (!strcmp(word, "size") &&
+				sscanf(more, "%d %d %n", &w, &h, &n) == 2)
+				more += n;
+			else if (!strcmp(word, "flip") &&
+				sscanf(more, "%255s %n", flips, &n) == 1)
+			{
+				flip = std::string(" -flip ") + flips;
+				more += n;
+			}
+			else
+				break;
+		}
+
+		const std::string cmd = std::string("\"\"") + exe + "\" \"" + argv[1] +
+			"\" " + level + " " + std::to_string(room) + rest + " -walk " +
+			std::to_string(room) + " " + std::to_string((long)x) + " " +
+			std::to_string((long)y) + " " + std::to_string((long)z) +
+			" -size " + std::to_string(w) + " " + std::to_string(h) +
+			" -fov 80 -walkfinal -walkeach -nodraw" + cam + flip + "\"";
+		FILE* p = _popen(cmd.c_str(), "r");
+		std::vector<int> order;
+		std::vector<std::string> source(32768);
+		char out[2048];
+
+		cams++;
+
+		while (p && fgets(out, sizeof(out), p))
+		{
+			const char* rooms = strstr(out, " rooms=");
+			int r = 0, got = 0;
+			char vis[16];
+
+			if (!strncmp(out, "  yaw", 5) && rooms && strchr(rooms, ':'))
+			{
+				const char* s = strchr(rooms, ':') + 1;
+
+				order.clear();
+
+				while (sscanf(s, "%d %n", &r, &n) == 1)
+				{
+					order.push_back(r);
+					s += n;
+				}
+			}
+			else if (sscanf(out, " room %d final=%n", &r, &got) == 1 &&
+				got > 0 && r >= 0 && r < (int)source.size())
+			{
+				const char* v = strstr(out, " vis=");
+
+				source[(size_t)r] = v && sscanf(v + 5, "%15s", vis) == 1 ?
+					vis : "-";
+			}
+		}
+
+		if (p)
+			_pclose(p);
+
+		if (order.empty())
+		{
+			printf("viscams: %s %s no walk\n", name, level);
+			failed++;
+			continue;
+		}
+
+		printf("viscams: %s %s rooms=%d list=", name, level, (int)order.size());
+
+		for (size_t k = 0; k < order.size(); k++)
+			printf("%s%d:%s", k ? "," : "", order[k],
+				source[(size_t)order[k]].empty() ? "-" :
+				source[(size_t)order[k]].c_str());
+
+		printf("\n");
+	}
+
+	fclose(f);
+	printf("viscams: %d cameras, %d without a walk\n", cams, failed);
+	return failed ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
+	for (int i = 2; i + 1 < argc; i++)
+		if (!strcmp(argv[i], "-viscams"))
+			return VisCams(argc, argv, i);
+
 	for (int i = 1; i < argc; i++)
 		if (!strcmp(argv[i], "-windowcycle"))
 		{

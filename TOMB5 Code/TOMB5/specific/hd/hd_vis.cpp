@@ -49,7 +49,22 @@
  *                  face, which the room behind shares with the holder
  *   artShare 0.5   a free choice: 2,483 of the 2,709 rooms have their
  *                  walls asked; the rest have no group, an empty or a
- *                  hollow one, and every face of theirs would be bare */
+ *                  hollow one, and every face of theirs would be bare
+ *   wideBare 0.3   JOBY2's broken pillar beside the portal of rooms 123
+ *                  and 124 is between 0.3 and 0.4 bare on room 124's side:
+ *                  at 0.3 that portal widens - from room 123 by the record
+ *                  leading back (the wides below) - and room 99 is listed
+ *                  through the break (431..748 at 1,280); the wide portals
+ *                  of the fifteen levels by their own faces are 53 at 0.5,
+ *                  55 at 0.4, 64 at 0.3, 82 at 0.2 and 113 at 0.1, and 55
+ *                  more at 0.3 by the record leading back
+ *   edge 2/2560    of the 181 rooms the owner's walk lost for one frame,
+ *                  walked again at the frame's eye, 155 were refused with
+ *                  an empty window, 71 of the 102 that could be measured
+ *                  standing 2 pixels or less off it at 2,560 (49 touching
+ *                  it); 2 pixels lists 81 of the 181 there again, 4 and 8
+ *                  only 85 and 90; with the wides read from both records
+ *                  85, against 11 with the edge at 0 */
 HDVisParams HDVisDefaults()
 {
 	HDVisParams p;
@@ -62,6 +77,8 @@ HDVisParams HDVisDefaults()
 	p.artShare = 0.5;
 	p.guestRule = 2;
 	p.overhang = 128.0;
+	p.wideBare = 0.3;
+	p.edge = 2.0 / 2560.0;
 	return p;
 }
 
@@ -198,6 +215,15 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * is seen from it. */
 	const size_t n = (size_t)roomCount;
 	std::vector<unsigned char> link(n * n, 0);
+	// Per room, the room of its flipmap pair the portals lead to.
+	std::vector<int> mainOf(n, 0);
+
+	for (int r = 0; r < roomCount; r++)
+		mainOf[(size_t)r] = r;
+
+	for (int r = 0; r < roomCount; r++)
+		if (rooms[r].twin >= 0 && rooms[r].twin < roomCount)
+			mainOf[(size_t)rooms[r].twin] = r;
 
 	for (int r = 0; r < roomCount; r++)
 	{
@@ -422,6 +448,15 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				one.v[k][2] = ToShort(q[2] - (double)own.z);
 			}
 
+			/* Of a flipmap pair only the room the portals lead to is in the
+			 * world - the one whose twin names the other; it draws whichever
+			 * state the map is in. The other room stands at the same place,
+			 * and listed it would draw its state beside the one the map
+			 * shows (JOBY2's room 53 behind a bare face of room 89, its
+			 * twin: both states of the crane hall at once). An opening names
+			 * the pair by its main room. */
+			const size_t before = open[(size_t)g].size();
+
 			for (int s = 0; s < roomCount; s++)
 			{
 				if (Twins(rooms, g, s) || !InBox(rooms[s], p))
@@ -433,7 +468,20 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					continue;
 				}
 
-				one.behind = s;
+				const int at = mainOf[(size_t)s];
+				bool again = Twins(rooms, g, at);
+
+				for (size_t k = before;
+					k < open[(size_t)g].size() && !again; k++)
+					again = open[(size_t)g][k].behind == at;
+
+				if (at != s)
+					t.openingsTwin++;
+
+				if (again)
+					continue;
+
+				one.behind = at;
 				open[(size_t)g].push_back(one);
 				found++;
 			}
@@ -496,12 +544,27 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	 * plane that touch the portal or a face already taken, unioned with
 	 * the portal's own rectangle. A portal whose union passes its own
 	 * rectangle by a sample's spacing or more on a side has an opening in
-	 * the art wider than itself. */
+	 * the art wider than itself.
+	 *
+	 * A portal is two records, one in each room, and the hole the art
+	 * leaves round it is one hole: a record takes in the bare faces of the
+	 * record that leads back (the same plane, the rectangles touching) when
+	 * that one is wide, so the walk widens the window from either side.
+	 * Only the faces of one side may be bare - JOBY2's broken pillar beside
+	 * the portal of rooms 123 and 124 leaves room 124's faces bare and not
+	 * room 123's - and from room 123 the break shows room 124 and room 99
+	 * behind it. Only the faces: the two records of one portal need not
+	 * span the same rectangle. Per portal record, world: the union, the
+	 * portal, the bare faces taken; axis -1 for one off the axes. */
+	const int pc = portals && portalCount > 0 ? portalCount : 0;
+	std::vector<PlaneRect> grown((size_t)pc), plain((size_t)pc);
+	std::vector<PlaneRect> faceOnly((size_t)pc);
+	std::vector<double> planeAt((size_t)pc, 0.0);
+	std::vector<int> axisOf((size_t)pc, -1);
+
 	for (int r = 0; r < roomCount && portals; r++)
 	{
 		const HDVisRoom& own = rooms[r];
-
-		t.wideFirst[(size_t)r] = (int)t.wides.size();
 
 		for (int i = 0; i < own.portalCount; i++)
 		{
@@ -545,7 +608,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 			for (int f = own.firstFace; faces &&
 				f < own.firstFace + own.faceCount && f < faceCount; f++)
 			{
-				if (t.faceBare[(size_t)f] < (float)params.bare)
+				if (t.faceBare[(size_t)f] < (float)params.wideBare)
 					continue;
 
 				const HDCoverFace& face = faces[f];
@@ -569,6 +632,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 			}
 
 			std::vector<unsigned char> taken(bare.size(), 0);
+			PlaneRect only = { 1e30, -1e30, 1e30, -1e30 };
 			bool grew = true;
 
 			while (grew)
@@ -583,19 +647,88 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 						u.u1 = std::max(u.u1, bare[k].u1);
 						u.w0 = std::min(u.w0, bare[k].w0);
 						u.w1 = std::max(u.w1, bare[k].w1);
+						only.u0 = std::min(only.u0, bare[k].u0);
+						only.u1 = std::max(only.u1, bare[k].u1);
+						only.w0 = std::min(only.w0, bare[k].w0);
+						only.w1 = std::max(only.w1, bare[k].w1);
 						grew = true;
 					}
 			}
 
-			if (portalRect.u0 - u.u0 < params.step &&
-				u.u1 - portalRect.u1 < params.step &&
-				portalRect.w0 - u.w0 < params.step &&
-				u.w1 - portalRect.w1 < params.step)
+			const double ou = origin[ua], ow = origin[wa];
+
+			axisOf[(size_t)at] = axis;
+			planeAt[(size_t)at] = plane + origin[axis];
+			grown[(size_t)at] = { u.u0 + ou, u.u1 + ou, u.w0 + ow, u.w1 + ow };
+			faceOnly[(size_t)at] = { only.u0 + ou, only.u1 + ou, only.w0 + ow,
+				only.w1 + ow };
+			plain[(size_t)at] = { portalRect.u0 + ou, portalRect.u1 + ou,
+				portalRect.w0 + ow, portalRect.w1 + ow };
+		}
+	}
+
+	const auto passes = [&](const PlaneRect& u, const PlaneRect& own) {
+		return own.u0 - u.u0 >= params.step || u.u1 - own.u1 >= params.step ||
+			own.w0 - u.w0 >= params.step || u.w1 - own.w1 >= params.step;
+	};
+
+	for (int r = 0; r < roomCount && portals; r++)
+	{
+		const HDVisRoom& own = rooms[r];
+
+		t.wideFirst[(size_t)r] = (int)t.wides.size();
+
+		for (int i = 0; i < own.portalCount; i++)
+		{
+			const int at = own.firstPortal + i;
+
+			if (at < 0 || at >= pc || axisOf[(size_t)at] < 0)
 				continue;
 
+			const HDVisPortal& p = portals[at];
+			const int axis = axisOf[(size_t)at];
+			const int ua = (axis + 1) % 3;
+			const int wa = (axis + 2) % 3;
+			const PlaneRect mine = grown[(size_t)at];
+			PlaneRect u = mine;
+			const int s = p.to;
+
+			for (int j = 0; s >= 0 && s < roomCount &&
+				j < rooms[s].portalCount; j++)
+			{
+				const int back = rooms[s].firstPortal + j;
+
+				if (back < 0 || back >= pc || portals[back].to != r ||
+					axisOf[(size_t)back] != axis ||
+					fabs(planeAt[(size_t)back] - planeAt[(size_t)at]) > 2.0 ||
+					!Touches(plain[(size_t)back], plain[(size_t)at], 2.0))
+					continue;
+
+				const PlaneRect& o = faceOnly[(size_t)back];
+
+				if (!passes(grown[(size_t)back], plain[(size_t)back]))
+					continue;
+
+				u.u0 = std::min(u.u0, o.u0);
+				u.u1 = std::max(u.u1, o.u1);
+				u.w0 = std::min(u.w0, o.w0);
+				u.w1 = std::max(u.w1, o.w1);
+			}
+
+			if (!passes(u, plain[(size_t)at]))
+				continue;
+
+			if (!passes(mine, plain[(size_t)at]))
+				t.wideMirrored++;
+
 			HDVisWide wide;
-			const double cu[4] = { u.u0, u.u1, u.u1, u.u0 };
-			const double cwv[4] = { u.w0, u.w0, u.w1, u.w1 };
+			const double ou = (double)(ua == 0 ? own.x : ua == 1 ? own.y :
+				own.z);
+			const double ow = (double)(wa == 0 ? own.x : wa == 1 ? own.y :
+				own.z);
+			const double cu[4] = { u.u0 - ou, u.u1 - ou, u.u1 - ou, u.u0 - ou };
+			const double cwv[4] = { u.w0 - ow, u.w0 - ow, u.w1 - ow,
+				u.w1 - ow };
 
 			wide.portal = i;
 

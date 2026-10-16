@@ -124,7 +124,13 @@ struct HDVisWide
  *              the default: that art, and linked with a holder not under
  *              the sky
  *   overhang   how far outside its own room's whole box art must stand
- *              to reach out of the room (rules 1 and 2) */
+ *              to reach out of the room (rules 1 and 2)
+ *   wideBare   the share of bare samples that lets a face beside a portal
+ *              widen it: a broken-out edge of a wall, less than an
+ *              opening, still shows the room behind the portal
+ *   edge       how far a portal's projection may stand off the window it
+ *              is seen through and still list the room behind, as a share
+ *              of the screen's width (the walk, game\draw.cpp) */
 struct HDVisParams
 {
 	double reach;
@@ -135,6 +141,8 @@ struct HDVisParams
 	double artShare;
 	int guestRule;
 	double overhang;
+	double wideBare;
+	double edge;
 };
 
 HDVisParams HDVisDefaults();
@@ -162,7 +170,13 @@ struct HDVisTables
 	 * with no link to it, and openings onto a room with none. */
 	int guestsUnlinked = 0;
 	int openingsUnlinked = 0;
+	/* Openings that named the other room of a flipmap pair, named by the
+	 * pair's main room instead. */
+	int openingsTwin = 0;
 	int widePortals = 0;
+	/* Of the wide portals, those wide only by the record leading back: the
+	 * art's hole round the portal bare on the other room's faces alone. */
+	int wideMirrored = 0;
 	long long samples = 0, samplesCovered = 0;
 	double ms = 0.0;
 };

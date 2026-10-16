@@ -480,6 +480,15 @@
  *                     frame's, each timed (GPU and the processor's time to
  *                     the GPU's end, the "cpu" of the -hdwater lines): the
  *                     first wet frame's cost against a second's.
+ *     -wetblur k[,near]  the soft mirror at strength k: the blur's radius
+ *                     per pixel the march's last step spans (hd_render.cpp,
+ *                     kWetBlur), whole from near units from the eye on
+ *                     (kWetBlurNear); 0 draws the mirror sharp, as before
+ *                     the soft mirror. With -wetlara or -wetstand the room
+ *                     behind the models' copy prints its GPU time.
+ *     -wetnomirror    the wet floor's darkening without its mirror: the
+ *                     picture less this one is the mirror alone, the soft
+ *                     mirror's ripple metric's layer.
  *     -tankcensus     every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
@@ -8012,6 +8021,8 @@ static void ProbeWetStands(const void* projection, int bulbs,
  * them to the water's other phases. */
 // -wetagain's split of the mirror's time (set with -wetagain).
 static bool g_wet_again_split = false;
+// -wetnomirror: the darkening alone.
+static bool g_wet_no_mirror = false;
 
 static void ProbeWetDraw(int part)
 {
@@ -8081,7 +8092,8 @@ static void ProbeWetDraw(int part)
 				(double)cpuFreq.QuadPart);
 		}
 
-		HDRenderWaterWetMirror();
+		if (!g_wet_no_mirror)
+			HDRenderWaterWetMirror();
 	}
 
 	if (timed)
@@ -11919,6 +11931,8 @@ static int ProbeMain(int argc, char** argv)
 			(!strcmp(argv[at], "-wetstand") && at + 1 < argc) ||
 			(!strcmp(argv[at], "-wetlara") && at + 1 < argc) ||
 			!strcmp(argv[at], "-wetagain") ||
+			(!strcmp(argv[at], "-wetblur") && at + 1 < argc) ||
+			!strcmp(argv[at], "-wetnomirror") ||
 			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
@@ -11934,6 +11948,15 @@ static int ProbeMain(int argc, char** argv)
 				g_wet_no_models = true;
 			else if (!strcmp(argv[at], "-wetagain"))
 				g_wet_again = g_wet_again_split = true;
+			else if (!strcmp(argv[at], "-wetblur"))
+			{
+				float k = -1.0f, whole = -1.0f;
+
+				sscanf_s(argv[++at], "%f,%f", &k, &whole);
+				HDRenderWaterWetBlur(k, whole);
+			}
+			else if (!strcmp(argv[at], "-wetnomirror"))
+				g_wet_no_mirror = true;
 			else if (!strcmp(argv[at], "-wetlara"))
 				g_wet_lara = sscanf_s(argv[++at], "%f,%f,%f,%f,%d",
 					&g_wet_lara_at[0], &g_wet_lara_at[1], &g_wet_lara_at[2],

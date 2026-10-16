@@ -1713,6 +1713,12 @@ struct HDWaterWetSquare
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
 void HDRenderWaterWetLimited(int on);
 
+/* The soft mirror's strength (hd_render.cpp, kWetBlur): the blur's radius
+ * per pixel of the march's last step, and the distance from the eye it
+ * comes in whole at (kWetBlurNear); 0 draws the mirror sharp, below 0
+ * restores the engine's. RoomProbe -wetblur. */
+void HDRenderWaterWetBlur(float strength, float whole);
+
 /* The wet floors' second draw, after the rooms' glass and glows and before
  * the cards and the objects' glows: the mirror out of a copy of the frame
  * as it stands, over the darkening HDRenderWaterWetDraw laid. Nothing when

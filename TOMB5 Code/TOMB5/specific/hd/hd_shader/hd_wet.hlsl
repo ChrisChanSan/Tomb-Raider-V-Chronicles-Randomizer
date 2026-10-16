@@ -152,6 +152,24 @@ sampler2D sWetRoom : register(s4);
 float4 gWetPlane : register(c102);
 float4 gWetModels : register(c103);
 
+/* The mirror softened (hd_render.cpp, "the soft mirror"). The march meets a
+ * thin bright strip in some rows and steps past it in the next where its
+ * step spans more pixels than the strip: the strip's reflection ripples.
+ * So the mirror is drawn into a layer of its own, its alpha the blur's
+ * radius - the screen length of the march's last step times gWetModels.w,
+ * at most HD_WET_RADIUS pixels, coded (1 + 16 r) / 255, 0 where no wet
+ * pixel lies - and blurred there across and down (gWetGain.y 2), each
+ * pixel over its own radius, a Gaussian of sigma r / 2 over the covered
+ * pixels only; the second pass adds it to the frame. Nearer the eye than
+ * 1 / gWetBlur.w the radius shrinks with the distance: a near ray's steps
+ * span many pixels, but the strip there spans more, and the mirror stays
+ * sharp. gWetBlur in the blur: the pass's direction, one pixel in uv, and
+ * in z 1 for the pass into the frame, which reads the radius and the cover
+ * out of the layer (s4). */
+float4 gWetBlur : register(c104);
+#define HD_WET_RADIUS 15.0f
+#define HD_WET_TAPS 4
+
 /* The steps of the march: 22 at a growth of 1.2 from 32 reach about 8,700
  * units, eight squares, and the crossing halved 8 times lies within a
  * 256th of its step. */
@@ -206,13 +224,15 @@ bool WetModelAt(float2 uv)
  * nothing after it met what the model hides in the frame - the room behind
  * it, which the copy taken before the models holds (sWetRoom): its first
  * such place is the answer then, sure as a hit, where that copy is bound
- * (gWetModels.z); without it the ray finds nothing, as before. */
+ * (gWetModels.z); without it the ray finds nothing, as before. `spread`:
+ * the last step's stretch on the screen, in uv (the soft mirror's radius). */
 float WetMarch(float3 P, float3 R, out float2 at, out float why,
-	out float steps, out float len)
+	out float steps, out float len, out float2 spread)
 {
 	float step = gWetMarch.z;
 	float s = 0.0f;
 	bool front = true;
+	float2 was = WetScreen(P);
 	// The first place the ray went behind a model, and its length there.
 	float2 hidden = float2(0.0f, 0.0f);
 	float hiddenLen = -1.0f;
@@ -221,6 +241,7 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 	why = 3.0f;
 	steps = HD_WET_STEPS;
 	len = 0.0f;
+	spread = float2(0.0f, 0.0f);
 
 	[loop]
 	for (int i = 0; i < HD_WET_STEPS; i++)
@@ -240,6 +261,9 @@ float WetMarch(float3 P, float3 R, out float2 at, out float why,
 		}
 
 		const float2 uv = WetScreen(q);
+
+		spread = uv - was;
+		was = uv;
 
 		if (!WetOn(uv))
 		{
@@ -384,8 +408,55 @@ float WetMarchFine(float3 P, float3 R, out float2 at)
 }
 #endif
 
+#if !HD_WET_DEBUG
+// The soft mirror's blur, one pass (see gWetBlur): the layer on s0.
+float4 WetBlur(float2 vpos)
+{
+	const float2 uv = (vpos + 0.5f) * gWetScreen.xy;
+	const float4 c = tex2Dlod(sWetModel, float4(uv, 0.0f, 0.0f));
+	// The radius and the cover from the layer itself (s4 in the second).
+	const float code = gWetBlur.z > 0.5f ?
+		tex2Dlod(sWetRoom, float4(uv, 0.0f, 0.0f)).a : c.a;
+	const float r = max(code * 255.0f - 1.0f, 0.0f) / 16.0f;
+	float3 sum = c.rgb;
+	float total = 1.0f;
+
+	[branch]
+	if (r > 0.25f)
+	{
+		[unroll]
+		for (int i = 1; i <= HD_WET_TAPS; i++)
+		{
+			// A tap i / HD_WET_TAPS of the radius out, sigma half of it.
+			const float w = exp(-2.0f * i * i /
+				(float)(HD_WET_TAPS * HD_WET_TAPS));
+			const float2 o = gWetBlur.xy * (r * i / HD_WET_TAPS);
+			const float4 a = tex2Dlod(sWetModel, float4(uv + o, 0.0f, 0.0f));
+			const float4 b = tex2Dlod(sWetModel, float4(uv - o, 0.0f, 0.0f));
+			const float ca = gWetBlur.z > 0.5f ?
+				tex2Dlod(sWetRoom, float4(uv + o, 0.0f, 0.0f)).a : a.a;
+			const float cb = gWetBlur.z > 0.5f ?
+				tex2Dlod(sWetRoom, float4(uv - o, 0.0f, 0.0f)).a : b.a;
+			const float wa = ca > 0.5f / 255.0f ? w : 0.0f;
+			const float wb = cb > 0.5f / 255.0f ? w : 0.0f;
+
+			sum += a.rgb * wa + b.rgb * wb;
+			total += wa + wb;
+		}
+	}
+
+	return float4(sum / total, gWetBlur.z > 0.5f ? 0.0f : code);
+}
+#endif
+
 float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 {
+#if !HD_WET_DEBUG
+	[branch]
+	if (gWetGain.y > 1.5f)
+		return WetBlur(vpos);
+#endif
+
 	const float3 P = input.view.xyz;
 	const float dist = length(P);
 	const float3 V = -P / max(dist, 1.0f);
@@ -431,9 +502,9 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 		if (wet <= 0.0f)
 			discard;
 
-		float2 at, ref;
+		float2 at, ref, spread;
 		float why, steps, len;
-		const float found = WetMarch(P, R, at, why, steps, len);
+		const float found = WetMarch(P, R, at, why, steps, len, spread);
 		const float fine = WetMarchFine(P, R, ref);
 
 		if (map > 7.5f)
@@ -515,12 +586,18 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 	float3 seen = colour * gWetLook.y;
 	// The view depth the march's hit has seen through the mirror.
 	float hitZ = 1.0e30f;
+	// The soft mirror's radius in pixels (none without a march).
+	float radius = 0.0f;
 
 	if (gWetMarch.y > 0.5f && gWetMode.x > 0.5f && input.field.w > 0.0f)
 	{
-		float2 at;
+		float2 at, spread;
 		float why, steps, len;
-		const float sure = WetMarch(P, reflect(-V, N), at, why, steps, len);
+		const float sure = WetMarch(P, reflect(-V, N), at, why, steps, len,
+			spread);
+
+		radius = min(length(spread / gWetScreen.xy) * gWetModels.w *
+			saturate(dist * gWetBlur.w), HD_WET_RADIUS);
 
 		if (sure > 0.0f)
 		{
@@ -577,5 +654,8 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 
 	mirror *= saturate(1.0f - fog / max(input.viewZ.y, 0.05f));
 
-	return float4(mirror * wet, 0.0f);
+	/* Into the soft mirror's layer: the radius coded in alpha; 0 into the
+	 * frame, which the mirror is added to. */
+	return float4(mirror * wet, gWetModels.w > 0.0f ?
+		(1.0f + floor(radius * 16.0f + 0.5f)) / 255.0f : 0.0f);
 }

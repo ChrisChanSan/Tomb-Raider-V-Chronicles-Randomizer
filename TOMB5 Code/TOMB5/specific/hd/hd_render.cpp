@@ -11738,6 +11738,16 @@ namespace
 	const float kWetGrowth = 1.2f;
 	const float kWetFit = 32.0f;		// units
 	const float kWetFitShare = 0.02f;	// of the view depth
+	/* The soft mirror: the blur's radius per pixel the march's last step
+	 * spans on the screen (hd_wet.hlsl, gWetBlur); RoomProbe -wetblur
+	 * draws with another, 0 sharp as before. */
+	const float kWetBlur = 1.0f;
+	float g_wet_blur = kWetBlur;
+	/* And how far from the eye it comes in whole: nearer, the radius shrinks
+	 * with the distance - a near ray's steps span many pixels, but there the
+	 * strip spans more and the mirror holds still (the owner: fine near). */
+	const float kWetBlurNear = 2048.0f;	// units
+	float g_wet_blur_near = kWetBlurNear;
 
 	/* Where a tank's water may run: the rooms its row names, by level and
 	 * the room the tank stands in - a square is theirs when it lies inside
@@ -11936,6 +11946,11 @@ namespace
 	D3DSURFACE_DESC g_wet_room_desc = {};
 	bool g_wet_room_valid = false;
 	bool g_wet_room_want = false;
+	/* The soft mirror's layer (wet_layer): the mirror drawn alone, its
+	 * alpha the blur's radius, at the frame's size in 32 bits. */
+	IDirect3DTexture9* g_wet_soft = 0;
+	IDirect3DSurface9* g_wet_soft_surface = 0;
+	D3DSURFACE_DESC g_wet_soft_desc = {};
 	/* Whether this level's frames have drawn the objects once through the
 	 * models' clip planes (wet_warm_models); cleared at the level's build. */
 	bool g_wet_models_warmed = false;
@@ -11984,6 +11999,14 @@ namespace
 
 		if (g_wet_room) { g_wet_room->Release(); g_wet_room = 0; }
 		g_wet_room_valid = false;
+
+		if (g_wet_soft_surface)
+		{
+			g_wet_soft_surface->Release();
+			g_wet_soft_surface = 0;
+		}
+
+		if (g_wet_soft) { g_wet_soft->Release(); g_wet_soft = 0; }
 	}
 
 	void release_wet_late()
@@ -16108,6 +16131,34 @@ namespace
 		return true;
 	}
 
+	// The soft mirror's layer, the same.
+	bool wet_make_soft(const D3DSURFACE_DESC& desc)
+	{
+		if (g_wet_soft && (g_wet_soft_desc.Width != desc.Width ||
+			g_wet_soft_desc.Height != desc.Height))
+		{
+			g_wet_soft_surface->Release();
+			g_wet_soft_surface = 0;
+			g_wet_soft->Release();
+			g_wet_soft = 0;
+		}
+
+		if (g_wet_soft)
+			return true;
+
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+			&g_wet_soft, 0)) ||
+			FAILED(g_wet_soft->GetSurfaceLevel(0, &g_wet_soft_surface)))
+		{
+			if (g_wet_soft) { g_wet_soft->Release(); g_wet_soft = 0; }
+			return false;
+		}
+
+		g_wet_soft_desc = desc;
+		return true;
+	}
+
 	/* The render target as it stands into g_wet_late, as HDRenderWaterCopy
 	 * takes the opaque frame: StretchRect between two surfaces of one size
 	 * and format is a plain copy. */
@@ -16416,6 +16467,12 @@ void HDRenderWaterWetLimited(int on)
 	g_wet_limited = on != 0;
 }
 
+void HDRenderWaterWetBlur(float strength, float whole)
+{
+	g_wet_blur = strength < 0.0f ? kWetBlur : strength;
+	g_wet_blur_near = whole < 0.0f ? kWetBlurNear : whole;
+}
+
 void HDRenderWaterWetMarch(int map, const float* trial)
 {
 	g_wet_debug = map > 0 ? map : 0;
@@ -16680,15 +16737,16 @@ double HDRenderWaterWarmUp(double* ms, int max)
 	}
 
 	/* A level with a tank's wet floor: the floor's targets at the frame's
-	 * size - the models' target and depth, the room behind them and the
-	 * later copy (28 MiB together at 2560 x 1440 with a 32-bit frame) -
+	 * size - the models' target and depth, the room behind them, the
+	 * later copy and the soft mirror's layer (42 MiB together at 2560 x
+	 * 1440 with a 32-bit frame) -
 	 * and its pixel shader drawn once with them bound as its second draw
 	 * binds them, so the frame a tank first wets does not make them and
 	 * wait for the driver: RoomProbe -wetagain measured that frame's two
 	 * wet draws at 80 to 122 and 100 to 117 ms (three runs, 2560 x 1440),
 	 * a second frame's at 0.2 to 0.4 and 0.8 to 1.0. */
 	if (!g_wet.empty() && g_wet_ps && g_card_vs && wet_make_models(desc) &&
-		wet_make_room(desc))
+		wet_make_room(desc) && wet_make_soft(desc))
 	{
 		const double t0 = warm_now_ms();
 		CardVertex card[3] = {};
@@ -18015,8 +18073,20 @@ static void wet_layer(int part)
 	 * the rounding a sloping square's corners have (kWetSlopeRise). */
 	const bool models = part == 1 && g_wet_models;
 	const bool room = models && g_wet_room_valid;
+	/* The soft mirror: the mirror into its layer, blurred across into the
+	 * later copy (read no more by then), and down into the frame - where
+	 * the frame is one sample a pixel, as the layer is. */
+	IDirect3DSurface9* frame = 0;
+	D3DSURFACE_DESC frameDesc;
+	const bool blur = part == 1 && !debug && g_wet_blur > 0.0f && copy &&
+		g_wet_late_surface &&
+		SUCCEEDED(g_device->GetRenderTarget(0, &frame)) && frame &&
+		SUCCEEDED(frame->GetDesc(&frameDesc)) &&
+		frameDesc.MultiSampleType == D3DMULTISAMPLE_NONE &&
+		wet_make_soft(frameDesc);
 	const float modelsOn[4] = { models ? 1.0f : 0.0f,
-		kWetLift + (float)kWetSlopeRise, room ? 1.0f : 0.0f, 0.0f };
+		kWetLift + (float)kWetSlopeRise, room ? 1.0f : 0.0f,
+		blur ? g_wet_blur : 0.0f };
 
 	for (int s = 5; s < 7; s++)
 	{
@@ -18042,9 +18112,54 @@ static void wet_layer(int part)
 	g_device->SetTexture(4, room ? g_wet_room : 0);
 	g_device->SetPixelShaderConstantF(102, g_wet_plane, 1);
 	g_device->SetPixelShaderConstantF(103, modelsOn, 1);
-	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)verts.size(),
-		(UINT)(tris.size() / 3), &tris[0], D3DFMT_INDEX16, &verts[0],
-		sizeof(CardVertex));
+
+	// The soft mirror's distance in whole (gWetBlur.w), for the layer.
+	const float nearOn[4] = { 0.0f, 0.0f, 0.0f,
+		g_wet_blur_near > 1.0f ? 1.0f / g_wet_blur_near : 1.0f };
+
+	g_device->SetPixelShaderConstantF(104, nearOn, 1);
+
+	const auto draw = [&]()
+	{
+		g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0,
+			(UINT)verts.size(), (UINT)(tris.size() / 3), &tris[0],
+			D3DFMT_INDEX16, &verts[0], sizeof(CardVertex));
+	};
+
+	if (blur)
+	{
+		g_device->SetRenderTarget(0, g_wet_soft_surface);
+		g_device->SetViewport(&vp);
+		g_device->Clear(0, 0, D3DCLEAR_TARGET, 0, 1.0f, 0);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	}
+
+	draw();
+
+	if (blur)
+	{
+		const float across[4] = { screen[0], 0.0f, 0.0f, 0.0f };
+		const float down[4] = { 0.0f, screen[1], 1.0f, 0.0f };
+		const float pass[4] = { kWetMirror, 2.0f, 0.0f, 0.0f };
+
+		g_device->SetPixelShaderConstantF(100, pass, 1);
+		g_device->SetPixelShaderConstantF(104, across, 1);
+		g_device->SetRenderTarget(0, g_wet_late_surface);
+		g_device->SetViewport(&vp);
+		g_device->SetTexture(0, g_wet_soft);
+		draw();
+		g_device->SetPixelShaderConstantF(104, down, 1);
+		g_device->SetRenderTarget(0, frame);
+		g_device->SetViewport(&vp);
+		g_device->SetTexture(0, g_wet_late);
+		g_device->SetTexture(4, g_wet_soft);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		draw();
+		g_wet_late_valid = false;
+	}
+
+	if (frame)
+		frame->Release();
 
 	for (int i = 0; i < stateCount; i++)
 		g_device->SetRenderState(states[i], saved[i]);

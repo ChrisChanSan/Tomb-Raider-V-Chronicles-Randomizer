@@ -2405,6 +2405,55 @@ water surface", carries the tables.
     metric. DATA: RoomProbe `-wetblur`/`-wetnomirror` at four band eyes,
     the mirror's variation along the reflected bands 1.276 sharp, 0.504
     built; +0.05 ms GPU at 2560 x 1440.
+227. **The marble floors' page column** (`hd_gloss_pages.h`, the `mirror`
+    column and class `A`; `hd_gloss_math.h`, `HDGlossMirror`, the
+    `mirror`/`nomirror` word of `hd_gloss.txt`) - the floors that mirror,
+    named by texture page: 35 pages. OWN, looked at by eye on the thirty
+    largest floor pages of each level; DATA: RoomProbe `-marblecensus` -
+    the footstep material names marble in three levels only and RICH2's
+    marble is stone there, so the data alone does not tell polished stone.
+    The lobby, the pool's surround and the title are in by a project
+    decision of 2026-10-16.
+228. **The mirror faces** (`hd_render.cpp`, the triangle loop and
+    `marble_build`; `hd_splash_math.h`, `HDMarbleFace`, `HD_MARBLE_FLAT`) - a
+    triangle of a room's opaque pass or clear floors on a page of the
+    column, flat and facing up, outside the water rooms; the mirror's extent
+    and its planes are those faces, never the classic squares. OWN, a
+    design of this project; 0.95 the census's flat face. DATA: RoomProbe
+    `-marble 1`, RICH2 42,228 faces at 67 heights, 180 in water rooms.
+229. **The clear floors drawn opaque** (`hd_render.cpp`, `draw_pass`
+    `opaque`, `HDRange::marbleOpaque`) - a clear floor of the column drawn
+    with the blend off while the mirror is on, the art's mirrored copy under
+    it hidden. OWN, a project decision of 2026-10-16 (the planar mirror
+    takes the copies' place); DATA: RICH2 147 draw calls, TITLE 9.
+230. **The planar pass** (`hd_render.cpp`, `HDRenderMarbleDraw`,
+    `marble_note`, `marble_replay`; `hd_wet.hlsl`, `MarblePS`) - the frame's
+    noted room, stand and static draws and its object list made again
+    through the projection folded with the floor's reflection and turned
+    left to right, one clip plane over the floor, into one target per plane,
+    laid over the plane's faces through stencil bit 16. OWN, a design of
+    this project from general graphics knowledge (a planar reflection); the
+    composition shares the wet floor's Schlick term and cap, at the
+    textbook F0 0.04 of polished stone and no darkening. DATA: GPU 0.14 to
+    5 ms at 2560 x 1440 by the rooms drawn (the record's table).
+231. **The plane order and cap** (`hd_splash_math.h`, `HDMarbleCoverage`,
+    `HDMarblePlanesPick`; `hd_marble_planes`) - a frame's floor heights
+    ordered by the share of the screen their faces cover, the higher first
+    between equals, at most the cap (default 2). OWN, free choice; DATA: the
+    cap's cost at 1, 2 and 3 planes at 27 eyes.
+232. **The mirror's edges** (`hd_render.cpp`, `marble_make`,
+    `g_marble_rows`, the flip's half pixel; bilinear reading) - the target
+    read at 2 X + W - x plus a half, Direct3D 9's pixel centre, and drawn at
+    two rows a row of the frame, read between them. OWN, from general
+    graphics knowledge (the pixel-centre rule, supersampling); DATA: p7,
+    the reflection 1.04 pixels back under the pipe, the reflected edge's RMS
+    about its line 0.290 to 0.211 pixels.
+233. **The wet floor keeps its points** (`hd_render.cpp`,
+    `HDRenderMarbleDraw`; `MarblePS`'s mask mode) - the wet layer's points
+    of the frame clear the marble's stencil bit where they are wet, so the
+    water's mirror is the wet floor's alone. OWN, a project decision of
+    2026-10-16; DATA: tank 182 has 16 of its 22 wet squares on marble, tank
+    33 all 12.
 
 ## Credited, but not contained here
 

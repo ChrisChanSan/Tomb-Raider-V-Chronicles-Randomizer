@@ -23449,3 +23449,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name; Round 4: the TR4 view dropped |
 | #205 | The marble floors' mirror (#205), measured and built (round 1) |
 | #207 | The flyby's triggers on a skip (#207), in the skipper's entry |
+| #209 | The destroyable windows (#209) |

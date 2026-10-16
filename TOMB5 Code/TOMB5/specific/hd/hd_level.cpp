@@ -5167,9 +5167,10 @@ static void BuildStaticTables()
 			/* 2. And if the engine can destroy it, which piece of the art is
 			 * it? Slots 50 to 57 are the shatterable ones - the same test
 			 * control.cpp makes before it shatters one. Every piece of a
-			 * group drawn HD whose box overlaps the static's, whatever its
-			 * group (hd_cover.h, HDStaticPiecePaired), whatever the static's
-			 * answer. */
+			 * group drawn HD whose box overlaps the static's by more than
+			 * the edge, or whose plane a flat static stands at (hd_cover.h,
+			 * HDStaticPiecePaired, #209), whatever its group, whatever the
+			 * static's answer. */
 			if (mesh->static_number < 50 || mesh->static_number >= 58)
 				continue;
 

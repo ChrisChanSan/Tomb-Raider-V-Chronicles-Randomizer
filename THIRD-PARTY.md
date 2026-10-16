@@ -2431,6 +2431,24 @@ water surface", carries the tables.
     heavy-trigger test with the arming camera, the place and the skip. OWN,
     this project's own tools on the classic engine's code (CLASSIC) and the
     player's files (DATA).
+229. **A shatterable static's piece by overlap and a pane's plane**
+    (`hd_cover.h`, `HDStaticPiecePaired`, `HD_STATIC_PIECE_EDGE`) - a
+    destructible piece of the art belongs to a static of slot 50 to 57
+    when the two boxes overlap by more than 16 units along every axis the
+    static has an extent on, and the static's plane stands within 16 units
+    of the piece along an axis it has none on. OWN, the rule a free choice;
+    16 chosen inside the measured gap. DATA (RoomProbe `-smashcensus`, the
+    15 levels): true pairs overlap by 38 units or more, a pane stands 0 or
+    1 unit off its glass (ANDREA1 rooms 198 and 201), a row's neighbours
+    touch or overlap by 0 to 2 (JOBY2 room 57, RICH3 rooms 120, 169, 170,
+    171); pairs ANDREA1 4 -> 6, JOBY2 7 -> 3, RICH3 44 -> 36.
+230. **The smash census and the shot static's picture** (RoomProbe
+    `-smashcensus`, `-smash`, `probestatics::SmashCensus`, `SmashHide`) -
+    every destructible piece, every shatterable static, the gap per axis
+    and the pairing's answer, the pieces no static or several take; and the
+    art after a static is shot, each pair written as `UpdateDestructibles`
+    writes it. OWN, this project's own tools on the player's files (DATA)
+    and the classic level's statics (CLASSIC).
 
 ## Credited, but not contained here
 

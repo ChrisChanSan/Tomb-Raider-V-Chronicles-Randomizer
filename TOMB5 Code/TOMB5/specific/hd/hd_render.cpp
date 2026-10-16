@@ -17830,7 +17830,8 @@ void HDRenderMarbleProbeDraw(const float* toFrame, float dark, float f0,
 	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x0000000F);
+	/* The colour writes stay the caller's: a warm-up draw with none
+	 * leaves the frame, and so the next draw's copy of it, untouched. */
 	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
 
 	for (int s = 0; s < 7; s++)

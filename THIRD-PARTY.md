@@ -2244,7 +2244,12 @@ water surface", carries the tables.
     covered faces (a room's classic face inside a larger one of the room it
     stands in, one plane within a unit) draw that art pushed back, so the
     copy of the room the art stands in is the one seen. OWN: this project's
-    hull and covered-face rules (the #181 entry, rounds 6 and 7), kept.
+    hull and covered-face rules (the #181 entry, rounds 6 and 7), kept. The
+    covered face reads a classic datum - which room's classic face holds the
+    other's, the holder round 8 found to be the floor's owner or the larger
+    face at all 40 - but no classic routine chooses between two rooms'
+    faces, so the rule is OWN, not CLASSIC/OWN; round 7's pairs carried no
+    ledger class of their own to follow.
     DATA (RoomProbe `-vis 1`, its `hull:` and `covered:` lines): 13 hulls on
     nine levels and 40 covered faces on six, the old path's own; RICH2's
     shaft at the owner's picture 2 57,426 -> 5,402 pixels of eye-step fight,
@@ -2260,10 +2265,12 @@ water surface", carries the tables.
 216. **A broken-out wall beside a portal** (`hd_vis.cpp`, `wideBare` 0.3) -
     a wall face beside a portal widens it from 0.3 of its samples bare, the
     openings keeping 0.5. OWN. DATA (RoomProbe `-vis 1 -viswidebare`): JOBY2's
-    pillar beside room 124's portal to room 99 lies between 0.3 and 0.4 bare
-    and at 0.3 lists room 99 through the break (the owner's picture 3: fight
-    20,290 -> 3,718 pixels); 53, 55, 64, 72, 82 and 113 wide portals at 0.5,
-    0.4, 0.3, 0.25, 0.2 and 0.1.
+    broken pillar beside the portal of rooms 123 and 124 lies between 0.3 and
+    0.4 bare on room 124's side, and at 0.3 room 124's record of that portal
+    widens; 53, 55, 64, 72, 82 and 113 wide portals at 0.5, 0.4, 0.3, 0.25,
+    0.2 and 0.1. Alone it did not mend the owner's picture 3 (the walk from
+    room 123 reads room 123's record; at the rule's own commit the fight
+    stayed 20,290 pixels): entry 218 does, with this share.
 217. **The window's edge** (`game/draw.cpp`, `VisFollowPortal`; `edge`
     2/2,560) - a portal whose projection meets the window it is seen through
     on an edge, or stops within 2 pixels of it at 2,560, lists the room
@@ -2272,7 +2279,21 @@ water surface", carries the tables.
     owner's ROOMFLASH frames walked again, RoomProbe `-visedge`): of 181
     rooms dropped for one frame 155 were refused with an empty window, 71
     of the 102 measurable 2 pixels or less off it; at 2 pixels 81 are
-    listed again, at 4 85, at 8 90.
+    listed again, at 4 85, at 8 90. With entry 218, 85 of the 181 at 2
+    pixels, 11 with the edge at 0; drawn at those frames, the sky the dropped
+    rooms leave shows at 6 of 155 frames against 8 without the edge and 9 on
+    round 9's path.
+218. **Both records of a portal take the art's hole round it** (`hd_vis.cpp`,
+    the wides) - a portal record takes in the bare faces of the record that
+    leads back (the same plane within 2 units, the rectangles touching) when
+    that one is wide, so the walk widens the window from either room. OWN.
+    CLASSIC fact read: a portal is stored twice, once in each room, and the
+    two records need not span one rectangle - taking the other record's
+    whole rectangle made 781 wide portals, its bare faces alone 55. DATA
+    (TrgProbe `-vistable`, `wide_mirror=`): 119 wide portals, 55 of them by
+    the record leading back (ANDREA1 7, ANDREA2 3, ANDY1 9, ANDY3 2, JOBY2 9,
+    JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2); the owner's nine pictures
+    of round 10 draw the old path's picture at 1,280 and at his 2,560.
 
 ## Credited, but not contained here
 

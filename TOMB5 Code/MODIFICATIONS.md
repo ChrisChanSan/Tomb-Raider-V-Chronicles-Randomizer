@@ -5664,20 +5664,21 @@ over the fifteen levels (ANDREA1 7, ANDY3 3, JOBY2 1, RICH1 4, RICH2 16, RICH3 3
 the room that draws a group. Before it the flipped hall drew both states at once. *The
 broken wall beside a portal*, the class of the classic wall behind a hole (`hd_vis.cpp`,
 `wideBare` 0.3): a wall face beside a portal widens it from 0.3 of its samples bare, the
-openings keeping 0.5; JOBY2's pillar beside room 124's portal to room 99 lies between 0.3
-and 0.4, and at 0.3 room 99 is listed through the break with 521..749; wide portals 53 at
-0.5, 55 at 0.4, 64 at 0.3, 72 at 0.25, 82 at 0.2, 113 at 0.1 (at 0.3: ANDREA1 11, ANDREA2
-3, ANDY1 9, ANDY3 2, JOBY2 9, JOBY4 1, JOBY5 1, RICH1 10, RICH2 15, RICH3 1, TITLE 2). The
-classic face drawn behind the art was measured first: at his eyes no clear pixel lies on a
-classic face of a listed room (pictures 3, 6, 7 and 9: 0 on both paths); the black of
-picture 3 is room 99 dropped and the pipes of pictures 6 and 7 are art the old path draws
-the same - the classic wall there would need classic faces drawn inside the HD frame,
-which neither path has. *The list across the step* (`game/draw.cpp`, `VisFollowPortal`;
-`edge` 2/2,560 of the screen's width): a portal whose projection meets the window it is
-seen through on an edge, or stops within 2 pixels of it at 2,560, lists the room behind
-with that strip; 81 of the 181 missing rooms are listed again at their frames' eyes (4
-pixels 85, 8 pixels 90). The eye's room was not the cause (2 of 159), so the old and new
-room are not both kept.
+openings keeping 0.5; JOBY2's broken pillar beside the portal of rooms 123 and 124 lies
+between 0.3 and 0.4 bare on room 124's side, and at 0.3 room 124's record of that portal
+widens - the walk from room 123 reads room 123's record, so this rule alone did not list
+room 99 at picture 3 (the fix pass below); wide portals 53 at 0.5, 55 at 0.4, 64 at 0.3,
+72 at 0.25, 82 at 0.2, 113 at 0.1 (at 0.3: ANDREA1 11, ANDREA2 3, ANDY1 9, ANDY3 2, JOBY2
+9, JOBY4 1, JOBY5 1, RICH1 10, RICH2 15, RICH3 1, TITLE 2). The classic face drawn behind
+the art was measured first: at his eyes no clear pixel lies on a classic face of a listed
+room (pictures 3, 6, 7 and 9: 0 on both paths); the black of picture 3 is room 99 dropped
+and the pipes of pictures 6 and 7 are art the old path draws the same - the classic wall
+there would need classic faces drawn inside the HD frame, which neither path has. *The
+list across the step* (`game/draw.cpp`, `VisFollowPortal`; `edge` 2/2,560 of the screen's
+width): a portal whose projection meets the window it is seen through on an edge, or stops
+within 2 pixels of it at 2,560, lists the room behind with that strip; 81 of the 181
+missing rooms are listed again at their frames' eyes (4 pixels 85, 8 pixels 90). The eye's
+room was not the cause (2 of 159), so the old and new room are not both kept.
 
 **The owner set.** Every place he reported is one camera file of the round's material
 (`owner_places.json`, 47 cameras: the 22 places, round 9's 20 owner views, round 7's shaft
@@ -5747,18 +5748,105 @@ three-room level (a face less bare than `wideBare` widens nothing, the edge of 2
 
 **Left.** The default: `hd_vis` stays 0; the owner decides after his next play test. The
 ghost at camE (room 93's block, 7,112 pixels) and art beyond its window generally, which
-only a window cut answers. Picture 8's corridor end (12,597 clear pixels at the probe:
-room 141 refused from room 17, its projection more than the edge off room 17's window and
-no face beside the portal to widen it). Pictures 6 and 7, the stairwell's pipes through
-the art's broken wall, the same on both paths: the classic wall there needs classic faces
-drawn inside the HD frame. ANDREA2 room 89's view, an eye on a portal's plane. 100 of the
-181 rooms of his flash frames, 27 of them farther than 8 pixels off the window at the
-probe's eye. The three mass views of the covered faces' push.
+only a window cut answers. Picture 8's corridor end was left here (12,597 clear pixels,
+room 141 refused from room 17); the fix pass mended it. Pictures 6 and 7, the stairwell's
+pipes through the art's broken wall, the same on both paths: the classic wall there needs
+classic faces drawn inside the HD frame. ANDREA2 room 89's view, an eye on a portal's
+plane. 100 of the 181 rooms of his flash frames, 27 of them farther than 8 pixels off the
+window at the probe's eye. The three mass views of the covered faces' push.
 
 **Commits.** `1189c45` (the build's two depth pushes), `7d6cb2d` (an opening names a
 flipmap pair by its main room), `427330f` (a broken-out wall beside a portal widens it),
 `222575f` (a portal at the window's edge keeps its room listed), `9924788` (the suite) and
 this record.
+
+**The fix pass (2026-10-16).** The review found the broken-out wall's rule credited with
+picture 3 when the window's edge alone had mended it there, and picture 3 worse than both
+paths at the owner's own back buffer (2,560 x 1,440: fight 32,431 / 31,573 / 97,446, room
+99 listed through the 2-pixel edge at the eye and dropped one unit on); the edge's measure
+not met and unexplained for 79 rooms, with the ride's and the fine walk's sky measure
+empty (no clear pixel in any of their pictures); no camera-file switch; the ride's steps
+outside the owner set; no cause for the ride's and the fine walk's gap to the old path; a
+stale comment above `VisFollowPortal`; the covered faces' class in the ledger unexplained.
+
+*Picture 3, measured.* Rooms 123 and 124 share the plane x 38,912; the eye (39,830,
+-3,251, 24,246) looks past the pillar at z 25,600 to 26,624, and the far corner of their
+portal and the near corner of room 124's portal to room 99 (z 28,672) stand nearly on one
+line from it, so room 99's portal touches room 124's window on an edge and the classic
+answer turns with every step of the eye. The art's pillar is broken: at `wideBare` 0.3
+room 124's record of its portal to room 123 is wide over z 23,552 to 26,624 - and the walk
+from room 123 reads room 123's record of the same portal, which has none. *The rule*
+(`hd_vis.cpp`, the wides): a portal is two records and the hole the art leaves round it
+one hole; a record takes in the bare faces of the record that leads back (the same plane
+within 2 units, the rectangles touching) when that one is wide. Only the faces: the two
+records need not span one rectangle, and taking the other's whole union made 781 wide
+portals (ANDREA1 138 of 149). Census (`TrgProbe -vistable`, `wide_mirror=`): 119 wide
+portals, 64 by their own faces and 55 by the record leading back - ANDREA1 7, ANDREA2 3,
+ANDY1 9, ANDY3 2, JOBY2 9, JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2. At picture 3 room
+99 is now listed by the walk at the eye and one unit on (431..748 at 1,280, 863..1,496 at
+2,560), the edge set to 0 or not. His nine pictures draw the old path's picture pixel for
+pixel at 1,280 x 720 and at his 2,560 x 1,440 (fight at 2,560 old / new 9 / new 10: 12,590
+/ 19,551 / 12,590, 25,871 / 233,338 / 25,871, 32,431 / 31,573 / 32,431, 7,926 / 8,273 /
+7,926, the rest equal on all three) - picture 8 included: room 27's record of its portal
+to room 17 is wide by room 17's broken-out faces now, and room 141 is listed by the walk
+through room 17.
+
+*The sky flashes, measured in pixels.* His 159 `ROOMFLASH` frames were drawn at 2,560 at
+the frame's walk eye (without his flips; 4 frames whose eye room has no art cannot be
+drawn): once with the walk's list and once with the rooms the frame dropped added, and the
+pixels clear in the first and drawn in the second are the sky that frame shows and the
+frames beside it fill. Round 9's path: 9 of 155 frames, 4,196,804 pixels; this round's: 6
+frames, 4,127,491 pixels; with the edge at 0, 8 of the nine that flash on round 9's path.
+The rooms of his flash frames listed at their eyes: 85 of 181 (11 with the edge at 0). The
+79 rooms without a measurable distance: 21 the children of a dropped room, 44 refused with
+their portal off the screen, 10 listed at the probe, 2 too near the eye and 2 facing away.
+The frames that still flash, classed: JOBY3 frame 244,967 (room 76, 3,299,115 pixels) and
+ANDREA2 room 89's view of the owner set - the eye on a portal's plane, the room behind's
+box holding the eye and its portal on both edges of the screen; JOBY5 frame 92,453 (room
+88 33 pixels off room 83's window, with its two children, 493,293), RICH2 frame 102,488
+(room 55 48 pixels off room 49's, 237,488) and ANDREA2 frame 24,785 (room 226 481 pixels
+off, 161) - portals off the window with no bare face beside them; ANDY1 frames 203,586 and
+203,589 (room 69, 49,099 and 48,335) refused at the screen's bottom edge. Keeping last
+frame's rooms one frame longer would clear every `ROOMFLASH` by its definition; it was not
+built - it is a state outside the level data, and a room leaving the view would stay drawn
+a frame with last frame's window.
+
+*The ride's and the fine walk's gap*: at the ride's step 9 and the fine walk's steps 0 to
+2 room 61 is listed as a guest (its art reaches into the shaft's rooms; `-viscams` names
+it `box`), which the old path does not list there; its hull pushes its art back, and where
+it stands farther than the push in front of the other copy it is seen - all 29,156 pixels
+of step 9's difference to the old picture are room 61's (`-skipgroup 61` gives the old
+picture). The fight is 3,767 against 3,185 there; the second shell, left.
+
+*The rest.* `RoomProbe -viscams <file>` runs a camera file as a set (one line a camera,
+the tool running itself on the walk per camera, one line out per camera with the list and
+each room's source), and the owner set holds the ride's 40 steps and the fine walk's 12 as
+well: 99 cameras (over them old / new 9 / new 10: eye-step fight 257,563 / 628,455 /
+348,601, clear pixels 1,364,515 / 2,397,809 / 2,385,228, sky in the eye's step 8,551 /
+119,659 / 102,884; of the first 47, fight 217,918 and sky 102,881 against the 217,739 and
+103,017 above - picture 8). The comment above `VisFollowPortal` names the edge.
+ModernTest's `vis_tables` holds the record leading back (15,392 checks); the edge's own
+branch lives in the walk with the engine's matrices and is measured through RoomProbe's
+copy (`-visedge`) on the sets, not unit-tested.
+
+*The sweep again* with the fix pass's tool: the 131 sweep, the 22 places, the 16 mass
+views, the 32 earlier views, the owner's 20, J33's 9, the video's 32, trview's 2, the
+tower's 8, the ride's 40, the fine walk's 12 and the shaft's frame give this round's
+numbers of the table above, every one - no view of them changes; with `hd_vis` 0 the 201
+views of the parity set, the owner's 20, the tower's 8 and the ride's 40 give the
+`c9ba6dd0` tool's bytes, and the classic six the `8691e82` tool's. The costs (`-gpu 15`):
+at the 22 places 0.1435 ms on round 9's path against 0.143, at the owner's 20 0.1515
+against 0.148 (medians), no place dearer by more than 0.004 ms, draw calls 63.5 against
+104 and 86 against 223, triangles equal.
+
+*Left after the fix pass*: the eye on a portal's plane (JOBY3 room 76, ANDREA2 room 89),
+portals off the window with no bare face beside them, rooms refused at the screen's edge,
+room 61's guest art on the ride (the second shell), the ghost at camE, the stairwell's
+pipes of pictures 6 and 7.
+
+*Commits of the fix pass*: `f4879b6` (both records of a portal take the art's hole round
+it), `bb02f82` (the walk's portal comment), `a7d6750` (RoomProbe `-viscams`) and this
+record.
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

@@ -23311,5 +23311,5 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |
 | #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name; Round 4: the TR4 view dropped |
-| #205 | The marble floors' mirror (#205), measured |
+| #205 | The marble floors' mirror (#205), measured and built (round 1) |
 | #207 | The flyby's triggers on a skip (#207), in the skipper's entry |

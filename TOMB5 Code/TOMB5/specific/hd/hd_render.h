@@ -1282,6 +1282,10 @@ void HDRenderWaterSinks(const HDWaterSink* sinks, int count);
 void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 	const char* stem, int sheets);
 
+/* FlipMap swapped the records of `room` and `other` (hd_level.cpp,
+ * HDFlipRoom): the bodies of water only an alternate holds follow it. */
+void HDRenderWaterFlipRoom(int room, int other);
+
 /* The corner heights of one square out of its height byte and its slope
  * entry, as the water squares take them: out[0..3] the world y at the
  * corners (0, 0), (1024, 0), (0, 1024) and (1024, 1024) of the square, x
@@ -1372,6 +1376,10 @@ struct HDRenderWaterBody
 	 * HDLifeSpringPush). */
 	int spring;
 	float springAt[2];
+	/* The room whose flipmap floods it, -1 for water every flip state
+	 * holds: the body draws only while FlipMap has swapped that room
+	 * with its alternate (HDRenderWaterFlipRoom). */
+	int alt;
 };
 
 // What the level built, for its log line.
@@ -1705,6 +1713,12 @@ struct HDWaterWetSquare
 bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out);
 void HDRenderWaterWetLimited(int on);
 
+/* The soft mirror's strength (hd_render.cpp, kWetBlur): the blur's radius
+ * per pixel of the march's last step, and the distance from the eye it
+ * comes in whole at (kWetBlurNear); 0 draws the mirror sharp, below 0
+ * restores the engine's. RoomProbe -wetblur. */
+void HDRenderWaterWetBlur(float strength, float whole);
+
 /* The wet floors' second draw, after the rooms' glass and glows and before
  * the cards and the objects' glows: the mirror out of a copy of the frame
  * as it stands, over the darkening HDRenderWaterWetDraw laid. Nothing when
@@ -1729,6 +1743,11 @@ typedef void (*HDWetModelDraw)(const void* projection, int bulbs,
 	unsigned int passes);
 void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 	int bulbs);
+/* The frame's colour before the objects, the room behind the models for
+ * the wet floor's march: taken while the last frame's wet floor mirrored
+ * models (HDRenderWaterWetModels), or always with `force` (RoomProbe,
+ * which draws one frame). HDRenderWaterMarkBegin calls it. */
+void HDRenderWaterWetRoomCopy(bool force);
 /* RoomProbe's -wetstand: a dark box 160 across and `height` high standing
  * on the wet square under world x, z, drawn with the frame's view and
  * `projection` (the frame's own when 0) in the frame `offX`, `offZ` shift
@@ -1769,8 +1788,10 @@ int HDRenderMarbleProbeDrawn();
  * them. Called once a level, outside a scene, after the sheets are built
  * and the depth texture is bound; `ms` (up to `max`) takes each draw's
  * time - the sheet's variants (plain, depth, under, foot, river, foam,
- * foam depth) and the cards -, -1 for one not drawn. Returns the whole
- * time in milliseconds, or -1 when the level has no sheet. */
+ * foam depth) and the cards -, then, in a level with a tank's wet floor,
+ * the floor's targets made at the frame's size and its shader drawn once
+ * (the ninth), -1 for one not drawn. Returns the whole time in
+ * milliseconds, or -1 when the level has no sheet. */
 double HDRenderWaterWarmUp(double* ms, int max);
 
 /* SPLASHLOG with -log, once a second while a card or a ring of a splash

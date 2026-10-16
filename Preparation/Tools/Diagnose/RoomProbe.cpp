@@ -237,7 +237,9 @@
  *                     record and is drawn by the twin's group (HDFlipRoom).
  *                     One `-flip:` line per pair names the state; the
  *                     walk's lists stay room numbers, each drawn by the
- *                     group the line names
+ *                     group the line names. With -hdwater 1 the water
+ *                     follows the swap too (HDRenderWaterFlipRoom): the
+ *                     bodies only an alternate floods draw.
  *     -walkdump <log> [frame]
  *                     every ROOMLIST whole-list dump of a -log run, or the
  *                     one of that frame, walked again - see RunWalkDump.
@@ -465,6 +467,28 @@
  *                     under 64 on a tenth of the texels.
  *     -wetnomodels    -wetstand's boxes without the models' mirror: the
  *                     picture the march alone makes of them.
+ *     -wetlara x,y,z[,yaw[,pose]]
+ *                     Lara herself on a wet floor at world x, z, her
+ *                     floor at y: the level's outfit built as the engine
+ *                     builds it, her parts drawn through the model path
+ *                     on the classic skeleton, standing (pose 0) or on all
+ *                     fours (1), turned by yaw degrees; drawn among the
+ *                     frame's objects and through the wet floor's mirror
+ *                     of the models. Needs -tank; -wetnomodels leaves her
+ *                     mirror out.
+ *     -wetagain       the wet floor's two draws once more after the
+ *                     frame's, each timed (GPU and the processor's time to
+ *                     the GPU's end, the "cpu" of the -hdwater lines): the
+ *                     first wet frame's cost against a second's.
+ *     -wetblur k[,near]  the soft mirror at strength k: the blur's radius
+ *                     per pixel the march's last step spans (hd_render.cpp,
+ *                     kWetBlur), whole from near units from the eye on
+ *                     (kWetBlurNear); 0 draws the mirror sharp, as before
+ *                     the soft mirror. With -wetlara or -wetstand the room
+ *                     behind the models' copy prints its GPU time.
+ *     -wetnomirror    the wet floor's darkening without its mirror: the
+ *                     picture less this one is the mirror alone, the soft
+ *                     mirror's ripple metric's layer.
  *     -tankcensus     every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
@@ -1530,14 +1554,14 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	 * it takes away. */
 	if (!g_nowarm)
 	{
-		double ms[8];
-		const double all = HDRenderWaterWarmUp(ms, 8);
+		double ms[9];
+		const double all = HDRenderWaterWarmUp(ms, 9);
 
 		if (all >= 0.0)
 			printf("-hdwater: warm-up %.2f ms: sheet %.2f, depth %.2f, under "
 				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
-				"cards %.2f\n", all, ms[0], ms[1], ms[2], ms[3], ms[4], ms[5],
-				ms[6], ms[7]);
+				"cards %.2f, wet floor %.2f\n", all, ms[0], ms[1], ms[2],
+				ms[3], ms[4], ms[5], ms[6], ms[7], ms[8]);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws
@@ -1911,6 +1935,27 @@ static float g_wet_stand_proj[16];
  * picture the march alone makes of them, the before picture out of the
  * same build. */
 static bool g_wet_no_models = false;
+
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_lara.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_bind.h"
+
+/* -wetlara x,y,z[,yaw[,pose]]: Lara herself on a wet floor - the level's
+ * outfit built as the engine builds it (HDLaraPlan, HDModelLevelBegin,
+ * HDLaraLevelBuild), her parts drawn through HDModelDraw on node matrices
+ * of the classic skeleton's bind walk (as ModelProbe's), standing (pose 0)
+ * or on all fours (pose 1, the crawl: hips, thighs, shins and upper arms
+ * turned a right angle each), her lowest joint 40 units over y (her
+ * floor), turned by yaw degrees; drawn among the frame's objects and
+ * through the wet floor's mirror of the models in place of -wetstand's
+ * boxes. */
+static bool g_wet_lara = false;
+static float g_wet_lara_at[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+static int g_wet_lara_pose = 0;
+static bool g_wet_lara_ready = false;
+static float g_wet_lara_bind[HD_LARA_NODES][3];
+static long g_wet_lara_flags[HD_LARA_NODES];
+static float g_wet_lara_mats[HD_LARA_NODES * 16];
+
 
 static float g_seed_origin[2] = { 0.0f, 0.0f };
 
@@ -8674,6 +8719,276 @@ static void ProbeWetMap(int floor)
 	}
 }
 
+static void WetLaraMul(const float* a, const float* b, float* out)
+{
+	float t[16];
+
+	for (int r = 0; r < 4; r++)
+		for (int c = 0; c < 4; c++)
+			t[r * 4 + c] = a[r * 4] * b[c] + a[r * 4 + 1] * b[4 + c] +
+				a[r * 4 + 2] * b[8 + c] + a[r * 4 + 3] * b[12 + c];
+
+	memcpy(out, t, sizeof(t));
+}
+
+// A turn about y (yaw) or x (pitch) in degrees, ModelProbe's MatRotY/X.
+static void WetLaraTurn(int axis, float deg, float* m)
+{
+	const float a = deg * 3.14159265f / 180.0f, c = cosf(a), s = sinf(a);
+
+	memset(m, 0, 16 * sizeof(float));
+	m[0] = m[5] = m[10] = m[15] = 1.0f;
+
+	if (axis == 0)
+	{
+		m[0] = c; m[2] = -s; m[8] = s; m[10] = c;
+	}
+	else
+	{
+		m[5] = c; m[6] = s; m[9] = -s; m[10] = c;
+	}
+}
+
+/* Her node matrices, model space to `view`: the classic stack walk with a
+ * pitch per node where the pose asks for one (ModelProbe's
+ * BuildNodeMatrices), the whole turned by yaw and set on her floor. */
+static void WetLaraMatrices(const float* view)
+{
+	static const float kCrawl[HD_LARA_NODES] =
+	{
+		-90.0f, 90.0f, -90.0f, 0.0f, 90.0f, -90.0f, 0.0f, 0.0f,
+		90.0f, 0.0f, 0.0f, 90.0f, 0.0f, 0.0f, 0.0f
+	};
+	float local[HD_LARA_NODES * 16], stack[HD_LARA_NODES][16];
+	float current[16], step[16], turn[16];
+	int top = 0;
+
+	WetLaraTurn(1, g_wet_lara_pose ? kCrawl[0] : 0.0f, current);
+	memcpy(local, current, sizeof(current));
+
+	for (int n = 1; n < HD_LARA_NODES; n++)
+	{
+		if ((g_wet_lara_flags[n] & 1) && top > 0)
+			memcpy(current, stack[--top], sizeof(current));
+
+		if (g_wet_lara_flags[n] & 2)
+		{
+			memcpy(stack[top], current, sizeof(current));
+
+			if (top < HD_LARA_NODES - 1)
+				++top;
+		}
+
+		memset(step, 0, sizeof(step));
+		step[0] = step[5] = step[10] = step[15] = 1.0f;
+		step[12] = g_wet_lara_bind[n][0];
+		step[13] = g_wet_lara_bind[n][1];
+		step[14] = g_wet_lara_bind[n][2];
+		WetLaraMul(step, current, current);
+
+		if (g_wet_lara_pose && kCrawl[n] != 0.0f)
+		{
+			WetLaraTurn(1, kCrawl[n], turn);
+			WetLaraMul(turn, current, current);
+		}
+
+		memcpy(local + n * 16, current, sizeof(current));
+	}
+
+	// Her lowest joint 40 units over her floor (y runs down).
+	float lowest = -1.0e9f;
+
+	for (int n = 0; n < HD_LARA_NODES; n++)
+		lowest = local[n * 16 + 13] > lowest ? local[n * 16 + 13] : lowest;
+
+	float place[16], yaw[16];
+
+	WetLaraTurn(0, g_wet_lara_at[3], yaw);
+	memset(place, 0, sizeof(place));
+	place[0] = place[5] = place[10] = place[15] = 1.0f;
+	place[12] = g_wet_lara_at[0] - g_seed_origin[0];
+	place[13] = g_wet_lara_at[1] - 40.0f - lowest;
+	place[14] = g_wet_lara_at[2] - g_seed_origin[1];
+	WetLaraMul(yaw, place, place);
+	WetLaraMul(place, view, place);
+
+	for (int n = 0; n < HD_LARA_NODES; n++)
+		WetLaraMul(local + n * 16, place, g_wet_lara_mats + n * 16);
+}
+
+// The slot of a name in the engine's own table, or -1.
+static int WetLaraSlot(const char* want)
+{
+	for (int s = 0; s < 1024; s++)
+		if (HDSlotName(s) && !_stricmp(HDSlotName(s), want))
+			return s;
+
+	return -1;
+}
+
+/* Her outfit out of the level's header and her skeleton out of its mesh
+ * tree (ModelProbe's RunLara and ReadClassicSlot), built on the card. */
+static void WetLaraBuild(const char* root, const char* stem)
+{
+	Tr5Level level;
+	std::string error;
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	std::wstring wide(trc.begin(), trc.end());
+	const char* why = "";
+
+	if (g_roombox.empty() || !level.load(wide, error))
+	{
+		printf("-wetlara: %s not read - no Lara\n", trc.c_str());
+		return;
+	}
+
+	int body = -1, hair = -1;
+	Tr5Level::MoveableInfo info;
+
+	for (int s : level.moveableSlots())
+	{
+		const char* name = HDSlotName(s);
+
+		if (name && !_stricmp(name, "HAIR"))
+			hair = s;
+
+		if (name && (!_stricmp(name, "LARA_SKIN") ||
+			(body < 0 && !_stricmp(name, "LARA"))))
+			body = s;
+	}
+
+	if (body < 0 || !level.moveableInfo(body, info) ||
+		info.nmeshes < HD_LARA_NODES)
+	{
+		printf("-wetlara: no Lara mesh tree in %s\n", stem);
+		return;
+	}
+
+	// The bind walk: four longs a node after the first, flags x y z.
+	float bindAbs[HD_LARA_NODES][3] = {};
+	float cur[3] = { 0, 0, 0 }, st[HD_LARA_NODES][3];
+	int top = 0;
+
+	for (int n = 1; n < HD_LARA_NODES; n++)
+	{
+		const long long at = (long long)info.boneIndex + (n - 1) * 4LL;
+
+		g_wet_lara_flags[n] = level.debugReadBoneLong(at);
+
+		for (int k = 0; k < 3; k++)
+			g_wet_lara_bind[n][k] = (float)level.debugReadBoneLong(at + 1 + k);
+
+		if ((g_wet_lara_flags[n] & 1) && top > 0)
+			memcpy(cur, st[--top], sizeof(cur));
+
+		if (g_wet_lara_flags[n] & 2)
+		{
+			memcpy(st[top], cur, sizeof(cur));
+
+			if (top < HD_LARA_NODES - 1)
+				++top;
+		}
+
+		for (int k = 0; k < 3; k++)
+			bindAbs[n][k] = cur[k] += g_wet_lara_bind[n][k];
+	}
+
+	const int drawType = level.laraType() + 1;
+	const bool joby = !_strnicmp(stem, "JOBY", 4);
+	const int outfit = HDLaraOutfitFor(drawType, (joby && drawType == 1) ||
+		drawType == 3, drawType == 2, level.hdOutfit(), &why);
+	std::vector<int> present;
+
+	for (int s : level.moveableSlots())
+		if (HDSlotIsLara(s))
+			present.push_back(s);
+
+	HDLaraLevel wardrobe;
+
+	wardrobe.outfit = outfit;
+	wardrobe.bodyBind = &bindAbs[0][0];
+	wardrobe.bodyNodes = HD_LARA_NODES;
+	wardrobe.hairBind = 0;
+	wardrobe.hairNodes = 0;
+	wardrobe.slots = present.empty() ? 0 : &present[0];
+	wardrobe.slotCount = (int)present.size();
+	(void)hair;
+
+	HDModelSlot wanted[HD_LARA_PART_COUNT * 2];
+	const int count = HDLaraPlan(&wardrobe, wanted, HD_LARA_PART_COUNT * 2);
+	HDModelStats stats;
+	HDLaraStats laraStats;
+
+	if (!HDModelInit(g_device, &why) || count <= 0 ||
+		!HDModelLevelBegin(g_device, root, wanted, count, false, 1, &stats,
+		&why) || !HDLaraLevelBuild(&wardrobe, &laraStats))
+	{
+		printf("-wetlara: her build failed - %s\n", why);
+		return;
+	}
+
+	g_wet_lara_ready = true;
+	printf("-wetlara: %s (%s), %d parts planned, %d loaded, at %.0f,%.0f,"
+		"%.0f yaw %.0f %s\n", HDLaraOutfitModel(outfit) ?
+		HDLaraOutfitModel(outfit) : "none", HDLaraOutfitLabel(outfit), count,
+		laraStats.loaded, g_wet_lara_at[0], g_wet_lara_at[1], g_wet_lara_at[2],
+		g_wet_lara_at[3], g_wet_lara_pose ? "crawl" : "stand");
+}
+
+/* Her parts as HDObjectFrameDraw draws the objects: the body, the head
+ * and the face, the holster rig and the hands of a frame with nothing in
+ * them, her nodes lit evenly (128, the classic mid shade) under the sun's
+ * game factor. */
+static void ProbeWetLaraDraw(const void* projection, int bulbs,
+	unsigned int passes)
+{
+	if (!g_wet_lara_ready)
+		return;
+
+	float light[HD_LARA_NODES * 3];
+
+	for (int i = 0; i < HD_LARA_NODES * 3; i++)
+		light[i] = 128.0f;
+
+	HDModelLighting lighting;
+
+	lighting.lights = 0;
+	lighting.lightCount = 0;
+	lighting.sunScale = 0.75f;
+	lighting.specStrength = 0.0f;
+	lighting.specPower = 1.0f;
+	HDModelFrameBegin((const D3DMATRIX*)projection, bulbs, passes);
+	HDModelClip(0);
+
+	const unsigned int bodyMask = HDLaraBodyMask();
+	static const int kParts[4] =
+	{
+		HD_LARA_PART_BODY, HD_LARA_PART_HEAD, HD_LARA_PART_FACE,
+		HD_LARA_PART_HOLSTER_RIG
+	};
+
+	for (int i = 0; i < 4; i++)
+		if (HDLaraHasPart(kParts[i]))
+			HDModelDraw(HDLaraPartSlot(kParts[i]), g_wet_lara_mats,
+				HD_LARA_NODES, light, i == 0 ? bodyMask : i == 3 ?
+				HDLaraPartCoverage(kParts[i]) : ~0u, &lighting);
+
+	HDLaraFrame now;
+	HDLaraDraw list[8];
+	const int lara = WetLaraSlot("LARA");
+	const int holster = WetLaraSlot("LARA_HOLSTERS_PISTOLS");
+
+	now.rightHandSlot = now.leftHandSlot = lara;
+	now.leftHolsterSlot = now.rightHolsterSlot = holster;
+	now.backGunSlot = 0;
+
+	const int pieces = HDLaraFrameParts(&now, list, 8);
+
+	for (int i = 0; i < pieces; i++)
+		HDModelDraw(HDLaraPartSlot(list[i].part), g_wet_lara_mats,
+			HD_LARA_NODES, light, list[i].nodeMask, &lighting);
+}
+
 // The stand-ins as HDObjectFrameDraw would draw the objects.
 static void ProbeWetStands(const void* projection, int bulbs,
 	unsigned int passes)
@@ -8693,10 +9008,21 @@ static void ProbeWetStands(const void* projection, int bulbs,
  * the seed room's origin as the cards' is, timed on the GPU with a
  * timestamp pair; the lines are -hdwater's, so the timing scripts add
  * them to the water's other phases. */
+// -wetagain's split of the mirror's time (set with -wetagain).
+static bool g_wet_again_split = false;
+// -wetnomirror: the darkening alone.
+static bool g_wet_no_mirror = false;
+
 static void ProbeWetDraw(int part)
 {
 	if (g_hdwater != 1 || g_tank_item < 0)
 		return;
+
+	// The processor's time from here to the GPU's end of the draws.
+	LARGE_INTEGER cpuFreq, cpu0, cpu1;
+
+	QueryPerformanceFrequency(&cpuFreq);
+	QueryPerformanceCounter(&cpu0);
 
 	float m[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0,
 		-g_seed_origin[0], 0, -g_seed_origin[1], 1 };
@@ -8730,7 +9056,33 @@ static void ProbeWetDraw(int part)
 		if (!g_wet_stands.empty() && !g_wet_no_models)
 			HDRenderWaterWetModels(ProbeWetStands, g_wet_stand_proj, 0);
 
-		HDRenderWaterWetMirror();
+		// -wetlara: Lara through the models' mirror.
+		if (g_wet_lara_ready && !g_wet_no_models)
+			HDRenderWaterWetModels(ProbeWetLaraDraw, g_wet_stand_proj, 0);
+
+		// -wetagain: the models' share of the processor's time, apart.
+		if (g_wet_again_split)
+		{
+			IDirect3DQuery9* e = 0;
+			LARGE_INTEGER now;
+
+			if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &e)) && e)
+			{
+				e->Issue(D3DISSUE_END);
+
+				while (e->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE) {}
+
+				e->Release();
+			}
+
+			QueryPerformanceCounter(&now);
+			printf("-wetagain: the models' mirror cpu %.2f\n",
+				(double)(now.QuadPart - cpu0.QuadPart) * 1000.0 /
+				(double)cpuFreq.QuadPart);
+		}
+
+		if (!g_wet_no_mirror)
+			HDRenderWaterWetMirror();
 	}
 
 	if (timed)
@@ -8774,16 +9126,87 @@ static void ProbeWetDraw(int part)
 	HDRenderSplashStats st;
 
 	HDRenderSplashStatsNow(&st);
+	QueryPerformanceCounter(&cpu1);
+
+	const double cpuMs = (double)(cpu1.QuadPart - cpu0.QuadPart) * 1000.0 /
+		(double)cpuFreq.QuadPart;
 
 	if (part == 0)
 		printf("-hdwater: %d wet floor draw(s), GPU %.4f ms (timestamps round "
-			"the wet floor's draw), floor %d wet %.3f\n", st.floor >= 0 ? 1 : 0,
-			ms, st.floor, st.floorWet);
+			"the wet floor's draw), floor %d wet %.3f cpu %.2f\n",
+			st.floor >= 0 ? 1 : 0, ms, st.floor, st.floorWet, cpuMs);
 	else
 		printf("-hdwater: %d wet floor mirror draw(s), GPU %.4f ms (timestamps "
-			"round the later copy and the mirror's draw)\n",
-			st.floor >= 0 ? 1 : 0, ms);
+			"round the later copy and the mirror's draw) cpu %.2f\n",
+			st.floor >= 0 ? 1 : 0, ms, cpuMs);
 }
+
+/* The room behind the models' copy (HDRenderWaterWetRoomCopy) where
+ * HDRenderWaterMarkBegin takes it, timed on the GPU with a timestamp pair:
+ * a -hdwater line of its own, a whole frame's colour copied. */
+static void ProbeWetRoomCopy()
+{
+	IDirect3DQuery9* q[3] = { 0, 0, 0 };
+	IDirect3DQuery9* freq = 0;
+
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &freq);
+
+	const bool timed = q[0] && q[1] && q[2] && freq;
+
+	if (timed)
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	HDRenderWaterWetRoomCopy(true);
+
+	double ms = -1.0;
+
+	if (timed)
+	{
+		UINT64 a = 0, b = 0, f = 0;
+		BOOL disjoint = TRUE;
+
+		q[2]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+		freq->Issue(D3DISSUE_END);
+
+		while (q[0]->GetData(&disjoint, sizeof(disjoint), D3DGETDATA_FLUSH) ==
+			S_FALSE)
+			;
+
+		while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (freq->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		if (!disjoint && f)
+			ms = (double)(b - a) * 1000.0 / (double)f;
+	}
+
+	for (int i = 0; i < 3; i++)
+		if (q[i])
+			q[i]->Release();
+
+	if (freq)
+		freq->Release();
+
+	printf("-hdwater: wet room copy GPU %.4f ms (timestamps round the "
+		"copy of the frame's colour before the models)\n", ms);
+}
+
+/* -wetagain: the wet floor's two draws once more after the frame's (its
+ * darkening and its mirror twice in the picture), each timed as the first:
+ * the first wet frame's draws against a second's. */
+static bool g_wet_again = false;
 
 /* The springs (hd_spring.h): with -hdwater 1 the level's springs, built as
  * the engine builds them after the sheets, ringing the sheets from the
@@ -12520,6 +12943,10 @@ static int ProbeMain(int argc, char** argv)
 			!strcmp(argv[at], "-tankart") ||
 			!strcmp(argv[at], "-tankcensus") ||
 			(!strcmp(argv[at], "-wetstand") && at + 1 < argc) ||
+			(!strcmp(argv[at], "-wetlara") && at + 1 < argc) ||
+			!strcmp(argv[at], "-wetagain") ||
+			(!strcmp(argv[at], "-wetblur") && at + 1 < argc) ||
+			!strcmp(argv[at], "-wetnomirror") ||
 			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
@@ -12533,6 +12960,21 @@ static int ProbeMain(int argc, char** argv)
 				g_tank_census = true;
 			else if (!strcmp(argv[at], "-wetnomodels"))
 				g_wet_no_models = true;
+			else if (!strcmp(argv[at], "-wetagain"))
+				g_wet_again = g_wet_again_split = true;
+			else if (!strcmp(argv[at], "-wetblur"))
+			{
+				float k = -1.0f, whole = -1.0f;
+
+				sscanf_s(argv[++at], "%f,%f", &k, &whole);
+				HDRenderWaterWetBlur(k, whole);
+			}
+			else if (!strcmp(argv[at], "-wetnomirror"))
+				g_wet_no_mirror = true;
+			else if (!strcmp(argv[at], "-wetlara"))
+				g_wet_lara = sscanf_s(argv[++at], "%f,%f,%f,%f,%d",
+					&g_wet_lara_at[0], &g_wet_lara_at[1], &g_wet_lara_at[2],
+					&g_wet_lara_at[3], &g_wet_lara_pose) >= 3;
 			else if (!strcmp(argv[at], "-wetstand"))
 			{
 				float s[3] = { 0.0f, 0.0f, 768.0f };
@@ -14924,6 +15366,15 @@ static int ProbeMain(int argc, char** argv)
 			ProbeMarbleCensus(rooms, root, stem);
 			ProbeMarbleSet(room);
 			ProbeWaterFalls(level, stem);
+
+			// -flip: the water follows the swapped pairs, as FlipMap's hook.
+			for (size_t k = 0; k < walkoff::g_flip_rooms.size(); k++)
+			{
+				const int a = walkoff::g_flip_rooms[k];
+
+				if (a >= 0 && a < nr && rooms[a].flip >= 0)
+					HDRenderWaterFlipRoom(a, rooms[a].flip);
+			}
 			ProbeCardPages(root, managed, threads);
 
 			/* -reload: the sheets set again over the kept build, as the
@@ -15011,6 +15462,10 @@ static int ProbeMain(int argc, char** argv)
 			 * them as its bodies' springs - the engine's order. */
 			if (g_hdwater == 1)
 				SpringBuild(root, stem, room);
+
+			// -wetlara: her outfit on the card.
+			if (g_wet_lara)
+				WetLaraBuild(root, stem);
 
 			// -life: the water's life on the bodies just built.
 			if (g_life && g_hdwater)
@@ -15616,6 +16071,48 @@ static int ProbeMain(int argc, char** argv)
 			std::memcpy(g_wet_stand_proj, &projection,
 				sizeof(g_wet_stand_proj));
 
+			/* The room behind the models, before Lara or the stand-ins, as
+			 * HDRenderWaterMarkBegin takes it before the game's objects. */
+			if (g_hdwater == 1 && (g_wet_lara_ready || !g_wet_stands.empty()))
+				ProbeWetRoomCopy();
+
+			// -wetlara: Lara, where the stand-ins stand.
+			if (g_wet_lara_ready)
+			{
+				WetLaraMatrices(view);
+				ProbeWetLaraDraw(&projection, 0, HD_PASS_SOLID);
+
+				/* The models' mirror called before the wet floor drew, as
+				 * on a level's frames before a tank breaks: its warm draw. */
+				if (!g_wet_no_models)
+				{
+					LARGE_INTEGER wf, w0, w1;
+					IDirect3DQuery9* e = 0;
+
+					QueryPerformanceFrequency(&wf);
+					QueryPerformanceCounter(&w0);
+					HDRenderWaterWetModels(ProbeWetLaraDraw,
+						g_wet_stand_proj, 0);
+
+					// -wetagain: its time to the GPU's end, apart.
+					if (g_wet_again_split && SUCCEEDED(g_device->CreateQuery(
+						D3DQUERYTYPE_EVENT, &e)) && e)
+					{
+						e->Issue(D3DISSUE_END);
+
+						while (e->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE)
+						{
+						}
+
+						e->Release();
+						QueryPerformanceCounter(&w1);
+						printf("-wetagain: the models' warm draw cpu %.2f\n",
+							(double)(w1.QuadPart - w0.QuadPart) * 1000.0 /
+							(double)wf.QuadPart);
+					}
+				}
+			}
+
 			for (size_t i = 0; i + 2 < g_wet_stands.size(); i += 3)
 				if (g_hdwater == 1 && !HDRenderWaterProbeStand(g_wet_stands[i],
 					g_wet_stands[i + 1], g_wet_stands[i + 2],
@@ -15672,6 +16169,12 @@ static int ProbeMain(int argc, char** argv)
 	ProbeWetDraw(1);
 	// -marblea, -marbleb, -marbletint: the marble floors' layer.
 	ProbeMarbleDraw();
+
+	if (g_wet_again)
+	{
+		ProbeWetDraw(0);
+		ProbeWetDraw(1);
+	}
 	// The water's cards where HDFrameDrawGlow draws them, and the springs.
 	ProbeCardsDraw();
 	SpringDraw();

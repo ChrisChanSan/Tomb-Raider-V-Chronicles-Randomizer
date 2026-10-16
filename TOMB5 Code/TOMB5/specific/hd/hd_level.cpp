@@ -7708,6 +7708,7 @@ void HDFlipRoom(int roomIndex, int otherIndex)
 	if (roomIndex < HD_MAX_ROOMS && otherIndex < HD_MAX_ROOMS)
 		g_water_faces[roomIndex].swap(g_water_faces[otherIndex]);
 
+	HDRenderWaterFlipRoom(roomIndex, otherIndex);
 	/* The first ten swaps of a level, and then a count - a flip that runs on
 	 * a timer would otherwise fill the log with the same two lines. */
 	if (gLogEnabled && g_flips_done < 10)

@@ -2367,6 +2367,44 @@ water surface", carries the tables.
     the record leading back (ANDREA1 7, ANDREA2 3, ANDY1 9, ANDY3 2, JOBY2 9,
     JOBY4 1, RICH1 9, RICH2 12, RICH3 1, TITLE 2); the owner's nine pictures
     of round 10 draw the old path's picture at 1,280 and at his 2,560.
+223. **The room behind the models** (`hd_render.cpp`,
+    `HDRenderWaterWetRoomCopy`; `hd_wet.hlsl`, `WetMarch` why 4) - the
+    frame's colour copied before the objects are drawn, while the last
+    frame's wet floor mirrored models; a reflected ray that went behind a
+    model's place and met nothing after it takes that copy's colour at its
+    first such place. OWN, a design of this project from general graphics
+    knowledge (a screen-space reflection's hidden region filled from a
+    layer without the occluder). DATA: RoomProbe `-wetlara` at the owner's
+    eye and four round it, the floor pixels the march left to the stand-in
+    because of her, 34,446 before and as without her after (probe pitch
+    +4.3); at the pitch his CAMLOG eye looks, -4.3: 40,972 before, 1,173
+    after. The copy: 0.016 ms of GPU at 2560 x 1440.
+224. **The wet floor warmed before its first frame** (`hd_render.cpp`,
+    `HDRenderWaterWarmUp`, `wet_warm_models`) - the wet floor's targets made
+    at the frame's size and its pixel shader drawn once at the water's
+    warm-up, and the level's first frame drawing its objects once through
+    five clip planes that cut everything away. OWN, free choice of where;
+    DATA: RoomProbe `-wetagain`, the first wet frame's draws 100 to 122 ms
+    before and 0.6 to 1.4 after, the clipped draw alone 107 ms the first
+    time and 0.13 to 0.24 without the planes.
+225. **The flipped water** (`hd_render.cpp`, `HDRenderSetWaterSheets`,
+    `body_shown`, `HDRenderWaterFlipRoom`) - a square over a room that is
+    dry while its flipmap alternate is an underwater room is water while
+    FlipMap has swapped the two, read in the alternate, its bodies apart
+    and drawn only in that state. OWN, from the classic level's own
+    flipmap pairs (DATA: the census of the 15 levels, five bodies in JOBY5
+    and RICH3).
+226. **The soft mirror** (`hd_render.cpp`, `wet_layer`, `kWetBlur`,
+    `kWetBlurNear`; `hd_wet.hlsl`, `WetBlur`) - the wet floor's mirror drawn
+    into a layer of its own, its alpha the blur's radius (the screen length
+    of the march's last step, whole from 2,048 units from the eye on,
+    shrinking nearer), blurred across and down over the covered pixels
+    with a Gaussian of sigma r / 2, then added to the frame. OWN, a design
+    of this project from general graphics knowledge (a separable blur of
+    variable radius); the strength and the distance free choices by the
+    metric. DATA: RoomProbe `-wetblur`/`-wetnomirror` at four band eyes,
+    the mirror's variation along the reflected bands 1.276 sharp, 0.504
+    built; +0.05 ms GPU at 2560 x 1440.
 
 ## Credited, but not contained here
 

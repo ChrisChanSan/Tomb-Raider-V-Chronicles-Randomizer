@@ -108,6 +108,17 @@ rem a second draw over a river's sheet (hd_room.hlsl, "the river").
  /Fh "%SHADERDIR%\hd_room_water_river_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The sea seen from below, a study for RoomProbe -underlook alone: the sun's
+rem disc, the lit underside and the shafts (hd_water_look.hlsl,
+rem which includes hd_room.hlsl for the waves and the hash); the game never
+rem draws with it.
+"%FXC%" /nologo /T vs_3_0 /E LookVS /O3 /Vn kHDWaterLookVS ^
+ /Fh "%SHADERDIR%\hd_water_look_vs.inc" "%SHADERDIR%\hd_water_look.hlsl"
+if errorlevel 1 exit /b 1
+"%FXC%" /nologo /T ps_3_0 /E LookPS /O3 /Vn kHDWaterLookPS ^
+ /Fh "%SHADERDIR%\hd_water_look_ps.inc" "%SHADERDIR%\hd_water_look.hlsl"
+if errorlevel 1 exit /b 1
+
 rem The water's cards - a splash's crown and drops, a tank's spray: the same
 rem file's CardVS and CardPS with HD_CARD defined, which alone declares their
 rem constants (hd_room.hlsl, "the cards"). Stamped with the same MD5.
@@ -214,6 +225,10 @@ if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_foam_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_foam_depth_ps.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_water_look hd_water_look_vs.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_water_look hd_water_look_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_card_vs.inc
 if errorlevel 1 exit /b 1

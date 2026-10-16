@@ -44,6 +44,8 @@
 #include "hd_shader/hd_room_water_river_ps.inc"
 #include "hd_shader/hd_room_water_foam_ps.inc"
 #include "hd_shader/hd_room_water_foam_depth_ps.inc"
+#include "hd_shader/hd_water_look_vs.inc"	// RoomProbe -underlook alone
+#include "hd_shader/hd_water_look_ps.inc"
 #include "hd_shader/hd_room_card_vs.inc"
 #include "hd_shader/hd_room_card_ps.inc"
 #include "hd_shader/hd_wet_ps.inc"
@@ -17777,6 +17779,185 @@ void HDRenderWaterWetRoomCopy(bool force)
 	g_wet_room_valid = SUCCEEDED(g_device->StretchRect(target, 0,
 		g_wet_room_surface, 0, D3DTEXF_POINT));
 	target->Release();
+}
+
+/* RoomProbe's -underlook: the sea seen from below, a study the game never
+ * draws (hd_water_look.hlsl). Two draws over the whole picture added to
+ * it, inside the frame's bracket after everything else, with this frame's
+ * constants under the water (g_under_now: the eye's depth, the
+ * extinction) - so only a frame drawn with the eye under the water takes
+ * it. The waves are the body's own first four rows, the deep look's in a
+ * level that takes it; the light comes from the look's highlight direction
+ * (gWaterSun) in the hue of its highlight colour, its brightest channel 1.
+ * `knobs`: the disc, the shafts and the underside's strengths, the surface
+ * light's reach in units, the disc's power, the shafts' cell size, the
+ * noise's floor, the shafts' reach under the surface and the march's
+ * length. The device's whole state is held in a state block and put back.
+ * `gpuMs` takes the pass's time between two GPU timestamps, -1 untimed. */
+bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
+	float centreY, float eyeX, float eyeZ, const float* knobs, double* gpuMs)
+{
+	if (gpuMs)
+		*gpuMs = -1.0;
+
+	if (!g_device || !view || !knobs || g_under_now[11] <= 0.0f)
+		return false;
+
+	const WaterLook* look = g_wdeep_on ? &g_wlook_deep :
+		g_under_body >= 0 && g_under_body < (int)g_wlooks.size() ?
+		&g_wlooks[(size_t)g_under_body] : g_wlooks.empty() ? 0 :
+		&g_wlooks[0];
+
+	if (!look)
+		return false;
+
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DStateBlock9* held = 0;
+	const D3DVERTEXELEMENT9 corner[] = {
+		{ 0, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT,
+			D3DDECLUSAGE_POSITION, 0 },
+		D3DDECL_END()
+	};
+
+	if (FAILED(g_device->CreateVertexShader((const DWORD*)kHDWaterLookVS,
+		&vs)) || FAILED(g_device->CreatePixelShader(
+		(const DWORD*)kHDWaterLookPS, &ps)) ||
+		FAILED(g_device->CreateVertexDeclaration(corner, &decl)) ||
+		FAILED(g_device->CreateStateBlock(D3DSBT_ALL, &held)))
+	{
+		if (vs)
+			vs->Release();
+		if (ps)
+			ps->Release();
+		if (decl)
+			decl->Release();
+		return false;
+	}
+
+	// The light's hue: the highlight colour, its brightest channel 1.
+	const float* high = look->pixel + 16;
+	const float top = high[0] > high[1] ? (high[0] > high[2] ? high[0] :
+		high[2]) : (high[1] > high[2] ? high[1] : high[2]);
+	float c[14 * 4] = {};
+
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 3; k++)
+			c[i * 4 + k] = view[i * 4 + k];
+
+	c[12] = 1.0f / persp;
+	c[13] = 1.0f / persp;
+	c[14] = centreX;
+	c[15] = centreY;
+	c[16] = eyeX;
+	c[18] = eyeZ;
+	c[19] = g_under_now[11];
+	c[20] = look->pixel[20];
+	c[21] = look->pixel[21];
+	c[22] = look->pixel[22];
+	c[23] = knobs[4];
+	c[24] = knobs[0];
+	c[25] = knobs[1];
+	c[26] = knobs[2];
+	c[27] = g_motion[2];
+
+	for (int k = 0; k < 3; k++)
+		c[28 + k] = top > 0.0f ? high[k] / top : 1.0f;
+
+	c[31] = knobs[3];
+	std::memcpy(c + 32, look->rows, 16 * sizeof(float));
+
+	for (int k = 0; k < 4; k++)
+		c[48 + k] = g_under_now[k];
+
+	c[52] = knobs[5];
+	c[53] = knobs[6];
+	c[54] = knobs[7];
+	c[55] = knobs[8];
+
+	/* Two draws of the whole picture. The disc and the underside lie at
+	 * the surface, behind everything the frame drew: their corners stand
+	 * at a depth of 0.9999, tested LESS, so they show only where the depth
+	 * buffer still holds its clear (the remaster's surface art is additive
+	 * and writes none). The shafts lie in the water between the eye and
+	 * whatever it sees, and the study has no depth to stop them at: they
+	 * are drawn untested, their march held to `knobs[8]`. */
+	const float quad[4][4] = {
+		{ -1.0f, 1.0f, 0.9999f, 1.0f }, { 1.0f, 1.0f, 0.9999f, 1.0f },
+		{ -1.0f, -1.0f, 0.9999f, 1.0f }, { 1.0f, -1.0f, 0.9999f, 1.0f }
+	};
+	float shafts[4] = { 0.0f, knobs[1], 0.0f, g_motion[2] };
+
+	c[25] = 0.0f;
+	held->Capture();
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetPixelShaderConstantF(200, c, 14);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x7);
+
+	IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+	const bool timed = gpuMs &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+		&q[0])) &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1])) &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2])) &&
+		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]));
+
+	if (timed)
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	bool drawn = SUCCEEDED(g_device->DrawPrimitiveUP(
+		D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0])));
+
+	g_device->SetPixelShaderConstantF(206, shafts, 1);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+	drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2,
+		quad, sizeof(quad[0]))) && drawn;
+
+	if (timed)
+	{
+		UINT64 t0 = 0, t1 = 0, freq = 0;
+
+		q[2]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+		q[3]->Issue(D3DISSUE_END);
+
+		while (q[3]->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+			S_FALSE) {}
+		while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) == S_FALSE) {}
+		while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) == S_FALSE) {}
+
+		if (freq && t1 >= t0)
+			*gpuMs = (double)(t1 - t0) * 1000.0 / (double)freq;
+	}
+
+	for (int i = 0; i < 4; i++)
+		if (q[i])
+			q[i]->Release();
+
+	held->Apply();
+	held->Release();
+	decl->Release();
+	ps->Release();
+	vs->Release();
+	return drawn;
 }
 
 /* RoomProbe's stand-in on a wet floor (-wetstand): a dark box 160 across

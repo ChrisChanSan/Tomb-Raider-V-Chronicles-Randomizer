@@ -74,6 +74,24 @@ static short last_camera;
 static short LastFov;
 static short spotcam_timer;
 static short spotcam_loopcnt;
+static short check_camera;	// whose SP_TESTTRIGGER set bCheckTrigger
+
+/* FLYLOG, behind -log: one line per heavy-trigger test a flyby makes. seq is
+ * the sequence, cam the SpotCam index whose SP_TESTTRIGGER armed the test,
+ * flags its flags, test and room the place handed to TestTriggersAtXYZ,
+ * skip 1 when the skip jumped this frame's segment to its end, tick
+ * GlobalCounter. A played and a skipped run of one flyby compare line for
+ * line: the same cameras, the same places. */
+static void FlyLog(long x, long y, long z, short room, long skip)
+{
+	if (!gLogEnabled)
+		return;
+
+	Log("FLYLOG seq=%d cam=%d flags=%04X test=%ld,%ld,%ld room=%d skip=%ld "
+		"tick=%d", current_sequence, check_camera,
+		(ushort)SpotCam[check_camera].flags, x, y, z, room, skip,
+		GlobalCounter);
+}
 
 long Spline(long x, long* knots, long nk)
 {
@@ -264,7 +282,10 @@ void InitialiseSpotCam(short Sequence)
 				current_spline_camera = first_camera;
 
 			if (s->flags & SP_TESTTRIGGER)
+			{
 				bCheckTrigger = 1;
+				check_camera = first_camera;
+			}
 
 			if (s->flags & SP_VIGNETTE)
 			{
@@ -523,6 +544,8 @@ void CalculateSpotCams()
 		{
 			ctype = camera.type;
 			camera.type = HEAVY_CAMERA;
+			FlyLog(camera.pos.x, camera.pos.y, camera.pos.z,
+				camera.pos.room_number, skip_now);
 
 			if (gfLevelId != LVL5_TITLE)
 				TestTriggersAtXYZ(camera.pos.x, camera.pos.y, camera.pos.z, camera.pos.room_number, 1, 0);
@@ -552,7 +575,10 @@ void CalculateSpotCams()
 				SCNoDrawLara = 1;
 
 			if (SpotCam[current_spline_camera].flags & SP_TESTTRIGGER)
+			{
 				bCheckTrigger = 1;
+				check_camera = current_spline_camera;
+			}
 
 			if (SpotCam[current_spline_camera].flags & SP_QUAKE)
 			{
@@ -694,6 +720,15 @@ void CalculateSpotCams()
 
 							ctype = camera.type;
 							camera.type = HEAVY_CAMERA;
+
+							if (at >= 0)
+								FlyLog(SpotCam[at].x, SpotCam[at].y,
+									SpotCam[at].z, SpotCam[at].room_number,
+									skip_now);
+							else
+								FlyLog(camera.pos.x, camera.pos.y,
+									camera.pos.z, camera.pos.room_number,
+									skip_now);
 
 							if (at >= 0)
 								TestTriggersAtXYZ(SpotCam[at].x, SpotCam[at].y,

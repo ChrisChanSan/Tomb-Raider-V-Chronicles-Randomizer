@@ -7229,11 +7229,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							const bool sheet =
 								MaterialBase(part) == HD_TRG_MATERIAL_WATER;
-							// A clear floor, by the test of clear_tri below.
+							/* A clear floor, by the test of clear_tri below;
+							 * one of the mirror column is drawn opaque while
+							 * the marble floors are on (see "the marble
+							 * floors"), and nothing shows through it. */
 							const bool clearFloor = pass == 1 &&
 								blend == 0.0f && !g_no_clear &&
 								(int)g < g_room_groups &&
-								HDPageCacheSlotClear(slot);
+								HDPageCacheSlotClear(slot) && !(g_marble_on &&
+								MirrorPage(HDPageCachePageOfSlot(slot)));
 
 							for (int cx = x0 >> 10; cx <= lastX; cx++)
 								for (int cz = z0 >> 10; cz <= lastZ; cz++)
@@ -9973,6 +9977,8 @@ namespace
 		 * three registers are on the device. */
 		bool glow_ps_on = false;
 		int glow_up = -1;
+		// Whether the blend is off for an opaque clear floor (see below).
+		bool opaque_on = false;
 		/* The cull mode on the device. The bracket installs D3DCULL_NONE,
 		 * the ranges RangeCulls picks switch it to D3DCULL_CCW, and the end
 		 * of the pass puts NONE back, so a model drawn between two rooms
@@ -10413,6 +10419,19 @@ namespace
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
+
+			/* A clear floor of the mirror column is drawn opaque while the
+			 * marble floors are on (see "the marble floors"): the floor
+			 * the planar mirror lies on, the art's copy under it hidden. */
+			const bool opaque = clearOnly && range.marbleOpaque &&
+				g_marble_on;
+
+			if (opaque != opaque_on)
+			{
+				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE,
+					opaque ? FALSE : TRUE);
+				opaque_on = opaque;
+			}
 
 			if (g_index32)
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
@@ -18166,7 +18185,8 @@ namespace
 
 			for (HDRange& r : group.pass[1])
 			{
-				r.marbleOpaque = false;
+				r.marbleOpaque = g_marble_on && !water && r.clear &&
+					MirrorPage(HDPageCachePageOfSlot(r.pageSlot));
 				g_marble_opaque += r.marbleOpaque ? 1 : 0;
 			}
 		}

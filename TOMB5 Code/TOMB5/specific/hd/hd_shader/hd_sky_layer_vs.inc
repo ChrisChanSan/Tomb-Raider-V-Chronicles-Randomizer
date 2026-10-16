@@ -85,4 +85,4 @@ const BYTE kHDSkyLayerVS[] =
       1,   0, 228, 144, 255, 255, 
       0,   0
 };
-// bshader-stamp ff71e629ea54e99799ed3fe15fa864bb
+// bshader-stamp 6b014d838f643860060026566a594f9a

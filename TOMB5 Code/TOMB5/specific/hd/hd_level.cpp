@@ -8065,6 +8065,40 @@ bool HDFrameSkyCoversLayers()
 	return HDRenderSkyCoversLayers();
 }
 
+/* The classic layers draw the level's own sky page, Textures[nTextures - 1]
+ * (specificfx.cpp, DrawFlatSky); over an HD sky with a cloud sheet that
+ * entry holds the sheet's HD page for as long as the layers' one OutputSky
+ * runs, and the classic page goes back right after. The reference stays
+ * the page cache's: nothing is added to the classic array or counted. The
+ * layers keep the classic motion (UpdateSky), quads and colour; the page
+ * brings its own alpha, so the clouds stand over the dome instead of the
+ * opaque classic page covering it. */
+static LPDIRECT3DTEXTURE9 g_sky_page_kept = 0;
+static bool g_sky_page_lent = false;
+
+bool HDFrameSkyLayerPage(bool lend)
+{
+	if (!lend)
+	{
+		if (g_sky_page_lent && nTextures > 0)
+			Textures[nTextures - 1].tex = g_sky_page_kept;
+
+		g_sky_page_lent = false;
+		return false;
+	}
+
+	IDirect3DTexture9* const page = HDLevelActive() ? HDRenderSkyLayerPage()
+		: 0;
+
+	if (!page || nTextures < 1 || g_sky_page_lent)
+		return false;
+
+	g_sky_page_kept = Textures[nTextures - 1].tex;
+	Textures[nTextures - 1].tex = page;
+	g_sky_page_lent = true;
+	return true;
+}
+
 /* The projected shadow's cast pass: Lara's parts that her main draw marked,
  * into the map, as seen along the frame's key light. Inside the frame's
  * bracket and after the room loops, so the device is in the HD path's state;

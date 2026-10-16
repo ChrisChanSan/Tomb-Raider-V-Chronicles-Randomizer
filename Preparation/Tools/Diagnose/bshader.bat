@@ -202,6 +202,16 @@ if errorlevel 1 exit /b 1
  /Fh "%SHADERDIR%\hd_sky_layer_ps.inc" "%SHADERDIR%\hd_sky.hlsl"
 if errorlevel 1 exit /b 1
 
+rem And the cloud layer, measured by RoomProbe alone (hd_sky.hlsl,
+rem CloudVS and CloudPS): a hashed field marched through a thin slab.
+"%FXC%" /nologo /T vs_3_0 /E CloudVS /O3 /Vn kHDSkyCloudVS ^
+ /Fh "%SHADERDIR%\hd_sky_cloud_vs.inc" "%SHADERDIR%\hd_sky.hlsl"
+if errorlevel 1 exit /b 1
+
+"%FXC%" /nologo /T ps_3_0 /E CloudPS /O3 /Vn kHDSkyCloudPS ^
+ /Fh "%SHADERDIR%\hd_sky_cloud_ps.inc" "%SHADERDIR%\hd_sky.hlsl"
+if errorlevel 1 exit /b 1
+
 call :stamp hd_room hd_room_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
@@ -268,6 +278,10 @@ call :stamp hd_sky hd_sky_layer_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_sky hd_sky_layer_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_sky hd_sky_cloud_vs.inc
+if errorlevel 1 exit /b 1
+call :stamp hd_sky hd_sky_cloud_ps.inc
+if errorlevel 1 exit /b 1
 
 for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 call :size "%SHADERDIR%\hd_room_water_vs.inc"
@@ -284,6 +298,8 @@ call :size "%SHADERDIR%\hd_spring_crack_ps.inc"
 call :size "%SHADERDIR%\hd_spring_hole_ps.inc"
 call :size "%SHADERDIR%\hd_sky_layer_vs.inc"
 call :size "%SHADERDIR%\hd_sky_layer_ps.inc"
+call :size "%SHADERDIR%\hd_sky_cloud_vs.inc"
+call :size "%SHADERDIR%\hd_sky_cloud_ps.inc"
 exit /b 0
 
 :stamp

@@ -84,4 +84,4 @@ const BYTE kHDSkyLayerPS[] =
       0,   8,   8, 128,   0,   0, 
     255, 128, 255, 255,   0,   0
 };
-// bshader-stamp ff71e629ea54e99799ed3fe15fa864bb
+// bshader-stamp 6b014d838f643860060026566a594f9a

@@ -2567,6 +2567,12 @@ IDirect3DTexture9* HDRenderSkyLayerPage();
 bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 	unsigned long colour, float skyPos, int layer);
 
+/* RoomProbe's volumetric cloud layer over the HD sky, a measurement only
+ * (hd_sky.hlsl, CloudPS): `slab` floor, thickness, wind travel, cell;
+ * `shape` coverage, density, horizon fade; `top`, `bottom` rgb. */
+bool HDRenderSkyCloudProbe(const D3DMATRIX* world, const float* slab,
+	const float* shape, const float* top, const float* bottom);
+
 /* --- the statics ------------------------------------------------------------
  *
  * Whether the .TRG draws anything where this static mesh stands. Room local,

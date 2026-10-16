@@ -93,6 +93,15 @@
  *     -skylayerpage sd|hd  the page the layers carry: the level's classic
  *                     sky page out of the .TRC under -roombox (sd), or the
  *                     HD sky's nearest cloud sheet page (hd)
+ *     -skycloud <floor> <thickness> <cell> <coverage> <density> <vel>
+ *                     with -sky: a volumetric cloud layer over the HD sky
+ *                     and the layers, a measurement only - a hashed
+ *                     field marched through a slab over the camera, moved
+ *                     as UpdateSky moves a layer of speed `vel`
+ *     -skygpu <n>     after the picture, the HD sky, the layers and the
+ *                     cloud layer each timed n times on the GPU (`sky gpu`
+ *                     lines: median, min, max); the picture of such a run
+ *                     holds the extra draws
  *     -with <group> <dx dy dz>
  *                     draw that group too, at that world offset from the
  *                     room - the difference of the two classic room origins,
@@ -12651,6 +12660,21 @@ struct SkyLayerArg
 static std::vector<SkyLayerArg> g_sky_layers;
 static bool g_sky_layer_hd = false;
 
+/* -skycloud <floor> <thickness> <cell> <coverage> <density> <vel>: the
+ * volumetric cloud layer over the HD sky and the layers, a measurement only
+ * (HDRenderSkyCloudProbe): a slab from `floor` to `floor + thickness` units
+ * over the camera, a lattice of `cell` units, the air clear below
+ * `coverage`, `density` per unit path, carried along x as UpdateSky carries
+ * a layer moving `vel` a tick (30 ticks a second, over -time). The colours
+ * are a free choice for the measurement: 0.92 0.93 0.97 at the top, 0.42
+ * 0.44 0.52 at the floor; the fade towards the horizon 0.15 of the rise.
+ * -skygpu <n>: after the picture, the HD sky, the layers and the cloud
+ * layer each drawn n times more in a GPU timestamp bracket of its own; one
+ * `sky gpu` line each with the median and the spread in ms. */
+static bool g_sky_cloud = false;
+static float g_sky_cloud_args[6] = { 0, 0, 0, 0, 0, 0 };
+static int g_sky_gpu = 0;
+
 /* The sky's switches, ahead of the parse chain, which stands at the
  * compiler's limit of nested blocks (C1061). */
 static bool SkyArg(int argc, char** argv, int* at)
@@ -12675,6 +12699,16 @@ static bool SkyArg(int argc, char** argv, int* at)
 	}
 	else if (!strcmp(a, "-skylayerpage") && *at + 1 < argc)
 		g_sky_layer_hd = !strcmp(argv[++*at], "hd");
+	else if (!strcmp(a, "-skycloud") && *at + 6 < argc)
+	{
+		for (int i = 0; i < 6; i++)
+			g_sky_cloud_args[i] = (float)atof(argv[*at + 1 + i]);
+
+		g_sky_cloud = true;
+		*at += 6;
+	}
+	else if (!strcmp(a, "-skygpu") && *at + 1 < argc)
+		g_sky_gpu = atoi(argv[++*at]);
 	else
 		return false;
 
@@ -12741,18 +12775,100 @@ static IDirect3DTexture9* SkyClassicPage(const char* stem)
 	return page;
 }
 
-/* The layers of -skylayer over the HD sky just drawn, in SkyDrawPhase's
- * order: layer 1, then layer 2. Called right after HDRenderSky. */
-static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
+// A timestamp bracket on the GPU: Begin, then End returns its ms (-1).
+struct SkyTimer
 {
-	if (g_sky_layers.empty())
+	IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+
+	void Begin()
+	{
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]);
+
+		if (q[0] && q[1] && q[2] && q[3])
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+	}
+
+	double End()
+	{
+		double ms = -1.0;
+
+		if (q[0] && q[1] && q[2] && q[3])
+		{
+			UINT64 a = 0, b = 0, f = 0;
+			BOOL disjoint = TRUE;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			q[3]->Issue(D3DISSUE_END);
+
+			while (q[0]->GetData(&disjoint, sizeof(disjoint),
+				D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[3]->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			if (!disjoint && f)
+				ms = (double)(b - a) * 1000.0 / (double)f;
+		}
+
+		for (int i = 0; i < 4; i++)
+			if (q[i])
+			{
+				q[i]->Release();
+				q[i] = 0;
+			}
+
+		return ms;
+	}
+};
+
+static void ProbeSkyCloud(const D3DMATRIX* world)
+{
+	if (!g_sky_cloud)
 		return;
 
-	IDirect3DTexture9* page = g_sky_layer_hd ? HDRenderSkyLayerPage()
-		: SkyClassicPage(stem);
+	const float* a = g_sky_cloud_args;
+	const double span = 64.0 * (double)a[2];
+	double wind = fmod((double)a[5] * floor(g_time * 30.0), span);
 
-	printf("sky layers: %d on the %s page%s\n", (int)g_sky_layers.size(),
-		g_sky_layer_hd ? "HD" : "classic", page ? "" : " - NONE, not drawn");
+	if (wind < 0.0)
+		wind += span;
+
+	const float slab[4] = { a[0], a[1], (float)wind, a[2] };
+	const float shape[4] = { a[3], a[4], 0.15f, 0.0f };
+	const float top[3] = { 0.92f, 0.93f, 0.97f };
+	const float bottom[3] = { 0.42f, 0.44f, 0.52f };
+
+	HDRenderSkyCloudProbe(world, slab, shape, top, bottom);
+}
+
+/* The layers of -skylayer over the HD sky just drawn, in SkyDrawPhase's
+ * order: layer 1, then layer 2; then -skycloud's layer. Called right after
+ * HDRenderSky. */
+static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
+{
+	IDirect3DTexture9* page = 0;
+
+	if (!g_sky_layers.empty())
+	{
+		page = g_sky_layer_hd ? HDRenderSkyLayerPage() : SkyClassicPage(stem);
+		printf("sky layers: %d on the %s page%s\n",
+			(int)g_sky_layers.size(), g_sky_layer_hd ? "HD" : "classic",
+			page ? "" : " - NONE, not drawn");
+	}
 
 	for (int pass = 1; pass <= 2 && page; pass++)
 		for (const SkyLayerArg& l : g_sky_layers)
@@ -12768,6 +12884,42 @@ static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
 
 			HDRenderSkyLayerProbe(world, page, l.colour, (float)pos, l.layer);
 		}
+
+	ProbeSkyCloud(world);
+
+	/* -skygpu: each part n times in its own bracket. They draw into the
+	 * picture's own target, so a -skygpu run is for its numbers and not for
+	 * its picture. */
+	for (int part = 0; part < 3 && g_sky_gpu > 0; part++)
+	{
+		if ((part == 1 && !page) || (part == 2 && !g_sky_cloud))
+			continue;
+
+		std::vector<double> ms;
+
+		for (int run = 0; run < g_sky_gpu; run++)
+		{
+			SkyTimer t;
+
+			t.Begin();
+
+			if (part == 0)
+				HDRenderSky(world);
+			else if (part == 1)
+				for (const SkyLayerArg& l : g_sky_layers)
+					HDRenderSkyLayerProbe(world, page, l.colour, 0.0f,
+						l.layer);
+			else
+				ProbeSkyCloud(world);
+
+			ms.push_back(t.End());
+		}
+
+		std::sort(ms.begin(), ms.end());
+		printf("sky gpu part=%s runs=%d median=%.4f min=%.4f max=%.4f ms\n",
+			part == 0 ? "dome" : part == 1 ? "layers" : "cloud",
+			(int)ms.size(), ms[ms.size() / 2], ms.front(), ms.back());
+	}
 
 	if (page && !g_sky_layer_hd)
 		page->Release();
@@ -13101,6 +13253,8 @@ static int ProbeMain(int argc, char** argv)
 			"sky drawn, alone, or its parts counted\n");
 		printf("       -skylayer <1|2> <r> <g> <b> <vel>  "
 			"-skylayerpage sd|hd   a classic flat layer over the HD sky\n");
+		printf("       -skycloud <floor> <thickness> <cell> <coverage> "
+			"<density> <vel>  -skygpu <n>   the cloud measurement\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");

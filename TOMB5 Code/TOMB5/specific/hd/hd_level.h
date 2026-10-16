@@ -431,6 +431,11 @@ bool HDFrameSky(const float* viewWorld);
 // it as the classic path does.
 bool HDFrameSkyCoversLayers();
 
+// The HD sky's nearest cloud sheet page lent to the classic sky page's slot
+// for the layers' one OutputSky (true), and given back (false). Answers
+// whether a page was lent; nothing is lent where the sky has no sheet.
+bool HDFrameSkyLayerPage(bool lend);
+
 void HDFrameDraw();
 void HDFrameDrawGlow();
 

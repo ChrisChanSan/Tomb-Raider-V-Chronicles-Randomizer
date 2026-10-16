@@ -695,8 +695,18 @@ void SkyDrawPhase()
 		if (layer2)
 			DrawFlatSky(0xFF000000 | *(ulong*)&gfLayer2Col, SkyPos2, -1536, 2);
 
+		/* Over an HD sky that has a cloud sheet, the layers carry that
+		 * sheet's HD page in place of the level's classic sky page, for the
+		 * one OutputSky that draws them (HDFrameSkyLayerPage) - ANDY1 to
+		 * ANDY3, where layer 1 carries the lightning. */
+		const bool borrowed = hdSky && (layer1 || layer2) &&
+			HDFrameSkyLayerPage(true);
+
 		if (layer1 || layer2)
 			OutputSky();
+
+		if (borrowed)
+			HDFrameSkyLayerPage(false);
 
 		phd_PopMatrix();
 

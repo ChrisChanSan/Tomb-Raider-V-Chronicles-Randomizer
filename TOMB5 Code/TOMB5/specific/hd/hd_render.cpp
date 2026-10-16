@@ -21394,8 +21394,11 @@ namespace
  * the camera, the first shifted along x by `skyPos` (UpdateSky's counter)
  * and the second one quad width behind it, layer 1 turned half round
  * (SkyDrawPhase's phd_RotY(32760)), u along x and v along z over each quad;
- * the colour split as CalcColorSplit splits it; draw type 4: the page's
- * alpha over what is there, no depth test. `world` is the sky's own matrix,
+ * the colour split as CalcColorSplit splits it; layer 1 as draw type 4,
+ * the page's alpha over what is there, layer 2 as draw type 2, added with
+ * no specular half (polyinsert.cpp); no depth test; the page's top level
+ * alone, as the classic sampler takes it (MIPFILTER NONE,
+ * function_table.cpp). `world` is the sky's own matrix,
  * the camera's position. The device state goes back as it was. */
 bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 	unsigned long colour, float skyPos, int layer)
@@ -21446,7 +21449,8 @@ bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 		const int c = (int)((colour >> (16 - 8 * i)) & 0xFF);
 
 		diffuse[i] = c > 128 ? 1.0f : (float)(c << 1) / 255.0f;
-		specular[i] = c > 128 ? (float)((c - 128) >> 1) / 255.0f : 0.0f;
+		specular[i] = c > 128 && layer != 2 ?
+			(float)((c - 128) >> 1) / 255.0f : 0.0f;
 	}
 
 	diffuse[3] = specular[3] = 1.0f;
@@ -21465,12 +21469,14 @@ bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 	g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
 	g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 	g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+	g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
 	g_device->SetRenderState(D3DRS_ZENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
 	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_SRCBLEND, layer == 2 ? D3DBLEND_ONE
+		: D3DBLEND_SRCALPHA);
+	g_device->SetRenderState(D3DRS_DESTBLEND, layer == 2 ? D3DBLEND_ONE
+		: D3DBLEND_INVSRCALPHA);
 	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 
@@ -21479,6 +21485,139 @@ bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 			sizeof(Corner));
 
 	saved.restore();
+	return true;
+}
+
+#include "hd_shader/hd_sky_cloud_vs.inc"
+#include "hd_shader/hd_sky_cloud_ps.inc"
+
+/* RoomProbe's volumetric cloud layer (hd_sky.hlsl, CloudPS), a measurement
+ * only: one quad over the whole screen, each pixel's ray walked through the
+ * slab, composed over the sky with its own alpha, no depth test and no depth
+ * write, as the classic layers are, so the rooms drawn after it cover it.
+ * `slab` is the floor over the camera, the thickness, the wind's travel and
+ * the lattice cell; `shape` the coverage, the density and the horizon fade;
+ * `top` and `bottom` the colours (rgb). `world` is the sky's own matrix. */
+bool HDRenderSkyCloudProbe(const D3DMATRIX* world, const float* slab,
+	const float* shape, const float* top, const float* bottom)
+{
+	static IDirect3DVertexShader9* vs = 0;
+	static IDirect3DPixelShader9* ps = 0;
+	static IDirect3DDevice9* made = 0;
+
+	if (!g_device || !world)
+		return false;
+
+	if (made != g_device)
+	{
+		vs = 0;
+		ps = 0;
+		made = g_device;
+	}
+
+	if (!vs && FAILED(g_device->CreateVertexShader(
+		(const DWORD*)kHDSkyCloudVS, &vs)))
+		vs = 0;
+
+	if (!ps && FAILED(g_device->CreatePixelShader(
+		(const DWORD*)kHDSkyCloudPS, &ps)))
+		ps = 0;
+
+	if (!vs || !ps)
+		return false;
+
+	/* The view's axes in world space: the columns of the rotation that
+	 * takes a world direction into the view (row vectors, p * M), each over
+	 * the projection's scale on it. */
+	float view[16];
+
+	multiply((const float*)world, g_view, view);
+
+	float c[28] = { 0.0f };
+
+	for (int i = 0; i < 3; i++)
+	{
+		c[i] = view[i * 4] / g_proj[0];
+		c[4 + i] = view[i * 4 + 1] / g_proj[5];
+		c[8 + i] = view[i * 4 + 2];
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		c[12 + i] = slab[i];
+		c[16 + i] = shape[i];
+	}
+
+	for (int i = 0; i < 3; i++)
+	{
+		c[20 + i] = top[i];
+		c[24 + i] = bottom[i];
+	}
+
+	float saved[28];
+	DWORD states[4];
+	IDirect3DVertexShader9* oldVs = 0;
+	IDirect3DPixelShader9* oldPs = 0;
+	IDirect3DVertexDeclaration9* oldDecl = 0;
+	IDirect3DVertexBuffer9* stream = 0;
+	UINT offset = 0, stride = 0;
+	const D3DRENDERSTATETYPE kinds[4] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_CULLMODE
+	};
+
+	g_device->GetPixelShaderConstantF(0, saved, 7);
+	g_device->GetVertexShader(&oldVs);
+	g_device->GetPixelShader(&oldPs);
+	g_device->GetVertexDeclaration(&oldDecl);
+	g_device->GetStreamSource(0, &stream, &offset, &stride);
+
+	for (int i = 0; i < 4; i++)
+		g_device->GetRenderState(kinds[i], &states[i]);
+
+	DWORD src = 0, dst = 0;
+
+	g_device->GetRenderState(D3DRS_SRCBLEND, &src);
+	g_device->GetRenderState(D3DRS_DESTBLEND, &dst);
+
+	g_device->SetPixelShaderConstantF(0, c, 7);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+	g_device->SetFVF(D3DFVF_XYZW);
+	g_device->SetRenderState(D3DRS_ZENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+
+	const float corners[16] =
+	{
+		-1.0f, -1.0f, 0.0f, 1.0f, 1.0f, -1.0f, 0.0f, 1.0f,
+		1.0f, 1.0f, 0.0f, 1.0f, -1.0f, 1.0f, 0.0f, 1.0f
+	};
+
+	g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, corners,
+		4 * sizeof(float));
+
+	g_device->SetPixelShaderConstantF(0, saved, 7);
+	g_device->SetVertexShader(oldVs);
+	g_device->SetPixelShader(oldPs);
+	g_device->SetVertexDeclaration(oldDecl);
+	g_device->SetStreamSource(0, stream, offset, stride);
+
+	for (int i = 0; i < 4; i++)
+		g_device->SetRenderState(kinds[i], states[i]);
+
+	g_device->SetRenderState(D3DRS_SRCBLEND, src);
+	g_device->SetRenderState(D3DRS_DESTBLEND, dst);
+
+	if (oldVs) oldVs->Release();
+	if (oldPs) oldPs->Release();
+	if (oldDecl) oldDecl->Release();
+	if (stream) stream->Release();
+
 	return true;
 }
 

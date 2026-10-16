@@ -15424,17 +15424,20 @@ out and the middle third (Lara) left out, the grey-level correlation against eac
 picture. The surface's picture is tick 23,995, the eye (26,690, 14,786, 58,502) in room
 123 looking 43 degrees up (correlation 0.496); the one without it is tick 24,484, the
 eye (35,651, 14,558, 61,811) in room 6 looking 19 degrees up (0.350, the rock at the
-left in place). The room list is not the cause: every one of the level's 26 `VISLOG`
-lines lists room 19 (a guest, `19g`), and the walk at all 912 eyes (RoomProbe
-`-viscams`, `-vis 1`) lists it 912 times. The cause is the under view's room test.
-Room 123 lies under the basin of room 7, so the extinction's depth is the eye's under
-that basin, 2,754 units, and the way through the water to a point above counts d x
-2,754 / h of its length - a seventh of it to the surface art 19,000 units up. Room 6
-lies under no sheet and took the depth that puts every point in the water
-(`kUnderNoSurface`): the whole way, 18,800 units and more, kept exp(-0.000419 x
-18,800) = 0.0004 of the additive art's light, and the surface went black. Counted at
-960 x 540 as the pixels that change by 4 or more of 255 in any channel when room 19 is
-left out of the frame: tick 23,995 307,030 pixels, tick 24,484 none.
+left in place). One tick scored higher for that picture: 24,391 (0.391), an eye in room
+123 whose frame shows the surface, which his picture does not, so it was set aside;
+24,484 is the best of the 209 ticks in room 6. The room list is not the cause: every
+one of the level's 26 `VISLOG` lines lists room 19 (a guest, `19g`), and the walk at
+all 912 eyes (RoomProbe `-viscams`, `-vis 1`) lists it 912 times. The cause is the
+under view's room test. Room 123 lies under the basin of room 7, so the extinction's
+depth is the eye's under that basin, 2,754 units, and the way through the water to a
+point above counts d x 2,754 / h of its length - a seventh of it to the surface art
+19,000 units up. Room 6 lies under no sheet and took the depth that puts every point in
+the water (`kUnderNoSurface`): the whole way, 18,800 units and more, kept
+exp(-0.000419 x 18,800) = 0.0004 of the additive art's light, and the surface went
+black. Counted at 960 x 540 as the pixels that change by 4 or more of 255 in any
+channel when room 19 is left out of the frame: tick 23,995 307,030 pixels, tick 24,484
+none.
 
 The rule (`hd_water_under.h`, `HDWaterUnderDepth`, called by `water_under_constants`):
 in a level that takes the deep look - one sea, every water room under the look of its
@@ -15451,13 +15454,19 @@ heights, the eye looking 60 degrees up, the surface's pixels and their mean ligh
 luma of the difference): 4 squares under it (room 116, y 0) 91.5 % at 7.9; 12 squares
 (room 119, y 8,000) none; 20 squares (room 79, y 16,500) 0.1 % before the rule above
 and 30.3 % at 7.2 after it (the rest of that view is rock). The eye at 12 squares
-stands over the basin's height, so the rule's "above the eye" left it the whole way
-through the water - a hole in the reach between the water's top layer and the basin.
-The rule now counts the body's surface on either side of the eye, its distance the
-depth: room 119 90.8 % at 9.3; rooms 116 and 79 and his two eyes unchanged (at room
-116 the distance 12,032 is more than the art's height over the eye, so the way is the
-whole way as before). No cut by the far plane at these views: the art is drawn to the
-rocks' horizon in each.
+stands over the basin's height, so the rule's "above the eye" leaves it the whole way
+through the water. That is the extinction, not a hole: the way to the art 12,253 units
+up, 60 degrees up, is about 14,150 units and keeps exp(-0.000419 x 14,150) = 0.0027 of
+its light; at 4 squares the whole way of 4,910 units keeps 0.13. A first version of
+this round (`f89a0037`) counted the basin on either side of the eye, its distance the
+depth, and drew room 119 at 90.8 %; but that depth is the distance DOWN to the basin,
+not up to the surface drawn, so it shrank as the eye went away from the art: light 9.27
+at 12 squares against 7.90 at 4. Reverted (`11ff451e`); the three heights are again
+91.5 %, none and 30.3 %, and his two eyes are unchanged. What stays uneven is item 1's
+stand-in: an eye under the basin (rooms 123, 6, 79) measures against the basin's height,
+16,000 units under the art, so at 20 squares the surface shows and at 12 it does not -
+the owner's choice below. No cut by the far plane at these views: the art is drawn to
+the rocks' horizon in each.
 
 *The look, a study* (`hd_water_look.hlsl`; `hd_render.cpp`, `HDRenderWaterProbeLook`;
 RoomProbe `-underlook`, `-underlookset`). Nothing of it is on the game's path: the
@@ -15512,7 +15521,10 @@ shafts read as broad streaks rather than thin rays, and the window's rim under t
 sea's waves leaves dark streaks in the lit underside; the shafts have no depth to stop
 at and are drawn over near rocks within their 8,000 units. The deep look's surface is
 the basin of room 7's height, a stand-in for the sea's own surface the art draws 16,000
-units higher; how bright it should be from far below is the owner's. The tool's own
+units higher; how bright it should be from far below is the owner's. The study puts its
+surface at that stand-in too (the eye's depth under the basin, 2,526 at tick 24,484), so
+its disc, its window and the start of its shafts stand 16,000 units lower than the art;
+its pictures and cost are measured against that height. The tool's own
 `.inc` for the study is stamped by `bshader.bat` but not checked by `be.bat`, as the
 engine never draws with it.
 
@@ -15520,10 +15532,15 @@ engine never draws with it.
 whether it is to go into the game at all at 0.56 to 0.82 ms at 2,560 x 1,440; the sun's
 source - the look's own highlight direction as now, or the level's light data; and
 where it would apply - only the sea levels (the deep look, JOBY4 alone over the fifteen)
-or every water body seen from below.
+or every water body seen from below. And the sea's surface from far below: today an eye
+under the basin measures against the basin (the surface shows 19,000 units under the
+art, tick 23,995 59.2 % of the picture), an eye over it against the whole way (shown at
+4 squares under the art, dark at 12); measuring every eye against the art's own height
+would be even in height, but the whole way of 19,000 units and more keeps less than
+0.0004 of the light, which would take the surface out of both of his pictures.
 
-**Commits.** `5be09089` (the vanishing), `f89a0037` (the reach), `2a9d3f24`
-(the study).
+**Commits.** `5be09089` (the vanishing), `f89a0037` (the reach, reverted by
+`11ff451e`), `2a9d3f24` (the study).
 
 ### The marble floors' mirror (#205)
 2026-10-16

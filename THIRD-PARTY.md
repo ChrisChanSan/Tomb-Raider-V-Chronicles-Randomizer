@@ -2434,12 +2434,12 @@ water surface", carries the tables.
 229. **The deep look's sea surface from every water room** (`hd_water_under.h`,
     `HDWaterUnderDepth`; `hd_render.cpp`, `water_under_constants`) - in a
     level that takes the deep look a water room no sheet lies over counts
-    its body's surface on either side of the eye, the distance to it the
-    eye's depth for the extinction, in place of the depth that puts every
-    point in the water. OWN, from the level's own water data (the body and
-    the deep look's share); DATA: RoomProbe `-underwater`, the frame with
-    and without room 19, his eye in room 6 0 to 116,979 surface pixels, an
-    eye 12 squares under the art 0 to 470,590, his eye in room 123 and the
+    its body's surface where it lies above the eye, the eye's depth under
+    it the depth for the extinction, in place of the depth that puts every
+    point in the water; an eye over that surface keeps the whole way. OWN,
+    from the level's own water data (the body and the deep look's share);
+    DATA: RoomProbe `-underwater`, the frame with and without room 19, his
+    eye in room 6 0 to 116,979 surface pixels, his eye in room 123 and the
     other levels unchanged. ModernTest `water_under`.
 230. **The sea seen from below, a study** (`hd_water_look.hlsl`, `LookPS`,
     `LookShaft`; `hd_render.cpp`, `HDRenderWaterProbeLook`; RoomProbe

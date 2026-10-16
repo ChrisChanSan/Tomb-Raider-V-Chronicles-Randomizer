@@ -24,21 +24,18 @@
  * deep look, `eyeY` and `surface` world y (down), `none` the depth that
  * puts every point in the water (kUnderNoSurface). A fallback room has no
  * surface over it - except under the deep look, whose water is one sea:
- * there the body's surface counts on either side of the eye, its distance
- * from the eye the depth. Under it that is the eye's depth; over it the
- * same distance keeps the far surface in sight, which the whole way
- * through the water would take: in JOBY4 an eye at y 8,000 in room 119,
- * 12 squares under the surface art at y -4,253, saw none of it, at 4
- * squares (room 116) and at 20 (room 79) it showed (RoomProbe
- * -underwater, the frame with and without room 19). Anywhere else the
- * depth is the eye's under the body's surface. */
+ * there the body's surface counts wherever it lies above the eye. An eye
+ * over it keeps the whole way: the distance down to a surface under the eye
+ * would give less extinction the farther the eye stands from the sea's own
+ * surface over it (in JOBY4 the basin of room 7 stands for that one, drawn
+ * by room 19 16,000 units higher). Anywhere else the depth is the eye's
+ * under the body's surface. */
 inline float HDWaterUnderDepth(int fallback, int deep, float eyeY,
 	float surface, float none)
 {
-	if (fallback && deep)
-		return eyeY > surface ? eyeY - surface : surface - eyeY;
+	const bool sea = fallback && deep && eyeY > surface;
 
-	return fallback ? none : eyeY - surface;
+	return fallback && !sea ? none : eyeY - surface;
 }
 
 /* The cosine of the half angle of the window a flat surface opens over the

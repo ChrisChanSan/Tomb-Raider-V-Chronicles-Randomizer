@@ -13950,8 +13950,8 @@ namespace
 			g_wbodies[(size_t)b].info.lift);
 		/* A room no sheet lies over takes kUnderNoSurface, every point in
 		 * the water - but not in a level with the deep look, whose water is
-		 * one sea: there the body's surface counts on either side of the
-		 * eye, whichever room the eye is in (HDWaterUnderDepth,
+		 * one sea: there the body's surface counts wherever it lies above
+		 * the eye, whichever room the eye is in (HDWaterUnderDepth,
 		 * hd_water_under.h). JOBY4's sea surface is the remaster's
 		 * additive art of room 19 at y -4,253; from room 6 (no sheet over
 		 * it) the whole way to it was water, exp(-0.000419 x 18,800) =

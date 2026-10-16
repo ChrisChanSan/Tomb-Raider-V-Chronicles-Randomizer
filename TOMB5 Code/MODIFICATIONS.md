@@ -15719,7 +15719,8 @@ none. The 19 eyes against the dry floor change 12,730 (p3) to 129,546 (W3c) pixe
 more than 8 of 255, against the measurement's planar prototype 11 (W24) to 21,121
 (c601); `hd_vis` 1 at E190, L120 and p8 draws what `hd_vis` 0 draws (the probe's room
 list is its own). Pictures: p8's floor mirrored to its diagonal, E190's two west
-columns opaque under the mirror, p7's pipe, the lobby (rooms 0, 2, 4, 120), the pool's
+columns opaque under the mirror (a strip of the far floor stays torn, see the fix pass),
+p7's pipe, the lobby (rooms 0, 2, 4, 120), the pool's
 surround (125, 126), the title (rooms 33 and 40), tank 182's and tank 33's wet floors
 after the break, the twins 46 and 75 alike. The seam between the wet mirror and the dry
 one after tank 182's break, from room 122 (2,115, -1,500, 3,779 in the room, yaw 174.3,
@@ -15729,23 +15730,69 @@ beside her change by more than 2 of 255 with her there, at most 54. ModernTest's
 marble groups (the page column, the face rule, the coverage, the planes and the cap, the
 key) - the counts in the round's report.
 
-**Left.** The look in the game: nobody in this round could play it. The cost where many
-rooms are drawn (two to five ms at 2,560 x 1,440 with two planes, against the frame's
-own 0.2 to 0.75): which passes carry it - the additive pass's glows and the glass are
-made again with the rest - is not measured yet; the cap, the default of two and a rule
-of what the mirror leaves out are the owner's. The first call's 23 ms in a level: a
-warm-up as the wet floor's models have would take it to the load. A room seen only in
-the mirror (the ceiling's rooms) is not drawn: no hole showed at the probe's eyes, whose
-room list is given; the game's portal walk was not tried. The art's copies under the
-opaque floors are still drawn. The thin light seams along the raised step's edges at p8
-are the probe's list: it lacks rooms 120 and 126, which the game's walk from there holds,
-and drawn with the walk's list they are gone (see the fix pass); a room the game's list
-lacks would show them as well. A level's other floor heights in view stay plain past
-the cap. Classic objects drawn by the classic path are not in the mirror. The frame
-notes at most 4,096 draws, each checked against the ones noted before it (a list drawn
-twice notes once), and a frame past that leaves the rest out of the mirror without a
-line; the most made again at two planes, E190 with every room within 6,000 units, are
-1,660. The noting's own CPU time is not timed.
+**Left.** The look in the game: nobody in this round could play it. The cost where the
+probe draws every room within 6,000 units (two to six ms at 2,560 x 1,440 with two
+planes; on the game's own lists 0.36 to 1.33, see the fix pass): which passes carry it
+- the additive pass's glows and the glass are made again with the rest - is not
+measured yet; the cap, the default of two and a rule of what the mirror leaves out are
+the owner's. The first call's 23 ms in a level: a warm-up as the wet floor's models
+have would take it to the load. A room seen only in the mirror is not drawn: on the
+game's lists the mirror misses at most 327 pixels at the eyes measured (the fix pass),
+so no mirrored walk was built. The pages 3314 and 3315 at E190 (the fix pass) are the
+owner's to name. The art's copies under the opaque floors are still drawn. The thin
+light seams along the raised step's edges at p8 are the probe's list: it lacks rooms
+120 and 126, which the game's walk from there holds, and drawn with the walk's list
+they are gone (see the fix pass); a room the game's list lacks would show them as well.
+A level's other floor heights in view stay plain past the cap. Classic objects drawn by
+the classic path are not in the mirror. The frame notes at most 4,096 draws, each
+checked against the ones noted before it (a list drawn twice notes once), and a frame
+past that leaves the rest out of the mirror without a line; the most made again at two
+planes, E190 with every room within 6,000 units, are 1,660. The noting's own CPU time
+is not timed.
+
+**Fix pass, round 1.** Two things the round's proof found open, and the costs again.
+
+E190's strip. Part of the far floor in E190's view, inside the outline of the owner's
+picture, still shows the art's copy and no mirror. Its squares wear pages 3314 and 3315
+(three squares each in the census, `fx` 6, two of each over a copy, rooms 46, 75 and
+128), which are not in the mirror column: they were not among the thirty largest floor
+pages the measurement looked at. Rows 257 to 279 between x 400 and 600 at 960 x 540 are
+the same with `hd_marble` 0 and 1, at two planes and at four. With the two pages named in
+`hd_gloss.txt` (`3314 mirror`, `3315 mirror`) the strip mirrors - 4,156 of its pixels
+change by more than 8 of 255, 5,977 in the frame - RICH2's faces grow from 42,228 to
+42,376 and its opaque clear floors from 147 to 153 draw calls. The column is not
+changed: a page the owner names goes into the text file.
+
+The game's room list. Every picture of the round drew the probe's own list (one given,
+or every room within 6,000 units), which holds what a mirror needs, so a room seen only
+in the mirror could not go missing there. The offline portal walk (`-walk`, the
+engine's camera at the eye's yaw and pitch, 960 x 540, fov 80) gives the game's list.
+Drawn with that list and with the union of it and the probe's (`hd_water` 1), the
+pixels the mirror changes by more than 8 of 255 where the direct view is the same are
+what the game's list loses in the mirror; each room of the union the walk lacks was then
+added alone. With `hd_vis` 0's walk: p8 none (the list 120, 121, 126), p3, L120 and L2
+none; E190 25 (rooms 70 and 112, a pixel at the wall's foot); p7 247 (rooms 43, 44 and
+66: a dashed line a pixel high on the floor's join with the wall, which those rooms add
+rather than the game's list losing it); P125 327 (room 26, the outside room over the
+lobby: a triangle of the reflected ceiling, 0.06 % of the frame); E189 176 (room
+120). With `hd_vis` 1's reach walk: p8, p3, L120 and P125 none, p7 207, E190 122. No
+hole shows at the four places, so no mirrored walk was built (the design's rule). Two
+of the probe's own lists are not the game's: p8's lacks rooms 120 and 126 (the light
+seams of Left), and E189's holds room 128, which the walk from there does not and which
+covers 285,045 pixels of the direct view, so the measurement's and this round's E189
+pictures are of a view the game does not draw there.
+
+Costs on the game's lists. GPU at 2,560 x 1,440, the timestamps round
+`HDRenderMarbleDraw`, `hd_water` 1, three runs, medians in ms (min to max): cap 1, 2 and
+3 at E190 0.345, 0.444, 0.605; L120 0.764, 1.138, 1.696; L2 0.478, 0.760, 1.154; P125
+0.402, 1.331 (1.141 to 3.012), 1.556; cap 2 at p8 0.625, p7 0.525 (0.380 to 3.027), p3
+0.511, E189 0.358; every other spread under 0.08 but L120 cap 1 (0.700 to 1.372) and
+P125 cap 3 (to 1.953). The walk's lists hold 3 to 11 rooms, the unions 12 to 59; p8
+costs more than on its own list (0.309), with 16 heights in view there against 3. On
+the probe's own lists, timed in turn three times in this session: E190 5.60 (5.54 to
+6.67) with `hd_water` 0 and 2.38 (2.20 to 3.36) with 1, L120 5.81 (5.65 to 6.27) and
+2.34 (2.17 to 2.42) - above the table's 3.932 and 4.062, the same draws (1,660 and
+1,364); why `hd_water` 0 costs more there and why the sessions differ is not measured.
 
 **Commits.** `2ab4aa66` (the page column), `105dc00b` (the faces, the stencil mask and
 the planar pass), `fe5da61b` (the clear floors), `d8b44e27` (the edges), `97d70c4f` (the

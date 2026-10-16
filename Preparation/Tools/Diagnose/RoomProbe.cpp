@@ -553,6 +553,15 @@
  *     -shatter       hide every destructible piece of the drawn room -
  *                     what the room looks like after Lara has shot the
  *                     statics whose art the .TRG baked in.
+ *     -smash <room>:<mesh>  the static Lara has shot: the pieces the engine
+ *                     pairs with it hidden, each pair written as
+ *                     hd_level.cpp's UpdateDestructibles writes it.
+ *                     Repeatable. Needs -roombox.
+ *     -smashcensus    every destructible piece, every shatterable static
+ *                     and the pieces within 1024 units of it with the gap
+ *                     per axis and the pairing's answer; the pieces no
+ *                     static takes and the ones several take. Prints and
+ *                     stops. Needs -roombox.
  *     -hasgeom <x0 y0 z0 x1 y1 z1>
  *                     does the drawn group draw anything inside that
  *                     room-local box? The question hd_level.cpp asks per
@@ -2868,6 +2877,32 @@ static bool g_field_sight = false;
  * does once Lara has shot the static that stands there - the after picture
  * of a shattered room, out of the same build. */
 static bool g_shatter = false;
+/* -smash <room>:<mesh> (repeatable): the statics Lara has shot, their pieces
+ * hidden as the engine pairs them (probestatics::SmashHide). -smashcensus:
+ * the pieces, the shatterable statics and their pairs, then no picture. */
+static std::vector<std::pair<int, int> > g_smash;
+static bool g_smash_census = false;
+
+/* The two switches above, out of the main chain, which stands at the
+ * compiler's limit of nested blocks (C1061). */
+static bool SmashArg(int argc, char** argv, int* at)
+{
+	if (!strcmp(argv[*at], "-smashcensus"))
+	{
+		g_smash_census = true;
+		return true;
+	}
+
+	if (strcmp(argv[*at], "-smash") || *at + 1 >= argc)
+		return false;
+
+	int r = -1, m = -1;
+
+	if (sscanf(argv[++(*at)], "%d:%d", &r, &m) == 2)
+		g_smash.push_back(std::make_pair(r, m));
+
+	return true;
+}
 /* -hasgeom: ask the renderer whether the drawn group has any geometry inside
  * a room-local box - the question hd_level.cpp asks once per static mesh of
  * an HD room. Up to eight boxes per run. */
@@ -10840,6 +10875,190 @@ namespace probestatics
 		}
 	}
 
+	/* The origin shift of a static's room into a piece's group frame, as
+	 * hd_level.cpp hands it to HDStaticPiecePaired. */
+	static void SmashShift(const Static& s, int group, float* dx, float* dz)
+	{
+		*dx = g_stand_rooms_built[(size_t)s.room].origin[0] -
+			g_stand_rooms_built[(size_t)group].origin[0];
+		*dz = g_stand_rooms_built[(size_t)s.room].origin[2] -
+			g_stand_rooms_built[(size_t)group].origin[2];
+	}
+
+	/* -smashcensus: every destructible piece of the art, every shatterable
+	 * static (slots 50 to 57, the test control.cpp makes) and, for each
+	 * static, every piece of a group drawn HD within 1024 units on all
+	 * three axes: the gap per axis after the origin shift (negative is the
+	 * overlap's length) and whether HDStaticPiecePaired pairs the two. The
+	 * summary counts the pieces no static takes and the pieces two or more
+	 * statics take - hd_level.cpp's UpdateDestructibles writes a piece's
+	 * state once per pair, so the last pair of a shared piece decides it. */
+	static void SmashCensus(const char* stem)
+	{
+		Answer(stem);
+
+		const int pieces = HDRenderDestructibleCount();
+		std::vector<int> takers((size_t)(pieces > 0 ? pieces : 1), 0);
+		int statics = 0, pairs = 0, without = 0;
+		const int groups = (int)g_stand_rooms_built.size();
+
+		for (int p = 0; p < pieces; p++)
+		{
+			int group = -1;
+			unsigned int material = 0;
+			float lo[3], hi[3];
+
+			if (!HDRenderDestructibleInfo(p, &group, &material, lo, hi))
+				continue;
+
+			printf("smash: %s piece=%d group=%d material=0x%04x base=%u "
+				"copy=%u box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f hd=%d\n", stem,
+				p, group, material, material & 0xFFu, (material >> 8) & 0x7Fu,
+				lo[0], hi[0], lo[1], hi[1], lo[2], hi[2], group >= 0 &&
+				group < groups && StandGroupHD(group) ? 1 : 0);
+		}
+
+		for (const Static& s : g_list)
+		{
+			if (s.slot < 50 || s.slot >= 58)
+				continue;
+
+			statics++;
+
+			const char* flat = "-";
+
+			for (int axis = 0; axis < 3 && flat[0] == '-'; axis++)
+				if (s.maxs[axis] - s.mins[axis] < 1.0f)
+					flat = axis == 0 ? "x" : axis == 1 ? "y" : "z";
+
+			printf("smash: %s static room=%d mesh=%d slot=%d flags=%d "
+				"box=%.0f..%.0f,%.0f..%.0f,%.0f..%.0f flat=%s\n", stem, s.room,
+				s.mesh, (int)s.slot, (int)s.flags, s.mins[0], s.maxs[0],
+				s.mins[1], s.maxs[1], s.mins[2], s.maxs[2], flat);
+
+			int taken = 0;
+
+			for (int p = 0; p < pieces; p++)
+			{
+				int group = -1;
+				float lo[3], hi[3];
+
+				if (!HDRenderDestructibleInfo(p, &group, 0, lo, hi) ||
+					group < 0 || group >= groups || !StandGroupHD(group))
+					continue;
+
+				float dx, dz;
+
+				SmashShift(s, group, &dx, &dz);
+
+				const float slo[3] =
+					{ s.mins[0] + dx, s.mins[1], s.mins[2] + dz };
+				const float shi[3] =
+					{ s.maxs[0] + dx, s.maxs[1], s.maxs[2] + dz };
+				float gap[3];
+				bool reach = true;
+
+				for (int axis = 0; axis < 3; axis++)
+				{
+					const float from =
+						slo[axis] > lo[axis] ? slo[axis] : lo[axis];
+					const float to =
+						shi[axis] < hi[axis] ? shi[axis] : hi[axis];
+
+					gap[axis] = from - to;
+					reach = reach && gap[axis] <= 1024.0f;
+				}
+
+				if (!reach)
+					continue;
+
+				const bool paired = HDStaticPiecePaired(s.mins, s.maxs, dx, dz,
+					lo, hi);
+
+				printf("smash: %s near room=%d mesh=%d piece=%d group=%d "
+					"gap=%.0f,%.0f,%.0f paired=%d\n", stem, s.room, s.mesh, p,
+					group, gap[0], gap[1], gap[2], paired ? 1 : 0);
+
+				if (paired)
+				{
+					takers[(size_t)p]++;
+					pairs++;
+					taken++;
+				}
+			}
+
+			if (!taken)
+				without++;
+		}
+
+		int unpaired = 0, shared = 0;
+
+		for (int p = 0; p < pieces; p++)
+		{
+			int group = -1;
+
+			if (!HDRenderDestructibleInfo(p, &group, 0, 0, 0) || group < 0 ||
+				group >= groups || !StandGroupHD(group))
+				continue;
+
+			if (!takers[(size_t)p])
+				unpaired++;
+			else if (takers[(size_t)p] > 1)
+				shared++;
+		}
+
+		printf("smash: %s pieces=%d statics=%d pairs=%d pieces_unpaired=%d "
+			"pieces_shared=%d statics_without=%d\n", stem, pieces, statics,
+			pairs, unpaired, shared, without);
+	}
+
+	/* -smash <room>:<mesh>: the art after Lara has shot those statics, as
+	 * the engine draws it. The pairs are hd_level.cpp's - HDStaticPiecePaired
+	 * over every piece of a group drawn HD, statics in room and mesh order -
+	 * and each pair writes its piece's state the way UpdateDestructibles
+	 * does, hidden when its static is shot and shown when not, so a piece
+	 * two statics take ends in the state of the last of them. */
+	static void SmashHide(const char* stem,
+		const std::vector<std::pair<int, int> >& shot)
+	{
+		Answer(stem);
+
+		const int groups = (int)g_stand_rooms_built.size();
+
+		for (const Static& s : g_list)
+		{
+			bool named = false;
+
+			for (size_t k = 0; k < shot.size(); k++)
+				named = named || (shot[k].first == s.room &&
+					shot[k].second == s.mesh);
+
+			if (s.slot < 50 || s.slot >= 58)
+				continue;
+
+			for (int p = 0; p < HDRenderDestructibleCount(); p++)
+			{
+				int group = -1;
+				float lo[3], hi[3];
+
+				if (!HDRenderDestructibleInfo(p, &group, 0, lo, hi) ||
+					group < 0 || group >= groups || !StandGroupHD(group))
+					continue;
+
+				float dx, dz;
+
+				SmashShift(s, group, &dx, &dz);
+
+				if (!HDStaticPiecePaired(s.mins, s.maxs, dx, dz, lo, hi))
+					continue;
+
+				HDRenderDestructibleHide(p, named);
+				printf("smash: %s %s room=%d mesh=%d piece=%d group=%d\n",
+					stem, named ? "hidden" : "shown", s.room, s.mesh, p, group);
+			}
+		}
+	}
+
 	struct Vtx
 	{
 		float x, y, z;
@@ -12715,6 +12934,10 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -statictable   every static's answer, old and new, the "
 			"shares and the shatterable\n");
 		printf("                      ones, then no picture (needs -roombox)\n");
+		printf("       -smash <room>:<mesh>   that static shot: its pieces "
+			"hidden as the engine pairs them\n");
+		printf("       -smashcensus   the destructible pieces, the shatterable "
+			"statics and their pairs\n");
 		printf("       -statics new|old   the classic statics a frame of this "
 			"picture draws, flat, and with new the statics' pieces\n");
 		printf("       -piece <room>:<mesh>   with -statics new, only that "
@@ -12863,6 +13086,9 @@ static int ProbeMain(int argc, char** argv)
 			continue;
 
 		if (MarbleArg(argc, argv, &at))
+			continue;
+
+		if (SmashArg(argc, argv, &at))
 			continue;
 
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)
@@ -14652,6 +14878,15 @@ static int ProbeMain(int argc, char** argv)
 		return 0;
 	}
 
+	/* -smashcensus: the pieces and their statics, and no picture. */
+	if (g_smash_census)
+	{
+		probestatics::SmashCensus(stem);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
 	const double commitAfter = CommitMiB();
 	const UINT vramAfter = g_device->GetAvailableTextureMem();
 
@@ -15087,6 +15322,9 @@ static int ProbeMain(int argc, char** argv)
 			if (g_shatter && group == room)
 				HDRenderDestructibleHide(i, true);
 		}
+
+		if (!g_smash.empty())
+			probestatics::SmashHide(stem, g_smash);
 	}
 	// The wind belongs to material 8, and this says how much of the .TRG's
 	// own sway weight was on other materials.

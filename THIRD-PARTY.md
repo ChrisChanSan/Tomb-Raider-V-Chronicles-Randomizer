@@ -2443,11 +2443,12 @@ water surface", carries the tables.
     touch or overlap by 0 to 2 (JOBY2 room 57, RICH3 rooms 120, 169, 170,
     171); pairs ANDREA1 4 -> 6, JOBY2 7 -> 3, RICH3 44 -> 36.
 230. **The smash census and the shot static's picture** (RoomProbe
-    `-smashcensus`, `-smash`, `probestatics::SmashCensus`, `SmashHide`) -
-    every destructible piece, every shatterable static, the gap per axis
-    and the pairing's answer, the pieces no static or several take; and the
-    art after a static is shot, each pair written as `UpdateDestructibles`
-    writes it. OWN, this project's own tools on the player's files (DATA)
+    `-smashcensus`, `-smash`, `-smashpiece`, `probestatics::SmashCensus`,
+    `SmashHide`) - every destructible piece, every shatterable static, the
+    gap per axis and the pairing's answer, the pieces no static or several
+    take; and the art after a static is shot, each pair written as
+    `UpdateDestructibles` writes it, or with any piece hidden by its
+    number. OWN, this project's own tools on the player's files (DATA)
     and the classic level's statics (CLASSIC).
 
 ## Credited, but not contained here

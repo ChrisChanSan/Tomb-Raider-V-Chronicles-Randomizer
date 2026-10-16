@@ -6107,9 +6107,9 @@ receive through `HDRenderRoomShadowStand` (`hd_render.cpp:8742`). The statics: t
 `hd_cover.h` - `HD_STATIC_SHARE`, `HD_STATIC_OTHER_NUM`/`_DEN` and the answers (`:976`),
 `HDStaticCellsHold` (`:986`), `HDStaticOtherHolds` (`:991`), `HDStaticStandSure` (`:999`),
 `HDStaticStandWithGroup` (`:1015`), `HDStaticAnswer` (`:1035`), `HDStaticFlat` (`:1064`),
-`HDStaticPiecePaired` (`:1079`), `HDStaticDrawClassic` (`:1094`), the piece's distances
-`HD_STATIC_PIECE_REACH`, `_SLACK` and `_OPEN` (`:1124`) and the frame's one source
-`HDStaticDrawSource` (`:1139`); the renderer keeps per group the cells of its overhang of
+`HDStaticPiecePaired` (`:1096`), `HDStaticDrawClassic` (`:1123`), the piece's distances
+`HD_STATIC_PIECE_REACH`, `_SLACK` and `_OPEN` (`:1153`) and the frame's one source
+`HDStaticDrawSource` (`:1168`); the renderer keeps per group the cells of its overhang of
 no intrusion piece and no stand range (`cellsFree`, `hd_render.cpp:1386`) and one list per
 stand range (`:6191`), and `HDRenderStaticArt` (`:9805`, `hd_render.h:1380`) answers one
 static for the engine and for RoomProbe alike. The pieces: the statics' places
@@ -7590,10 +7590,11 @@ and, in a list of small items, JOBY2's window frame has problems ("Joby2 Fenster
 Probleme"). Reference pictures supplied for this project (not in the repository) show
 ANDREA1's arched window before and after the shot in HD and in the classic draw, ANDREA2's
 window onto the hall with the left half of the picture flooded yellow, and a glass-block
-window on a JOBY2 facade with a black hole in it. A shot pane now takes its glass with it,
-and a static in a row takes its own piece and no other: `HDStaticPiecePaired`
-(`specific/hd/hd_cover.h`) asks for a real overlap and gives a pane's plane a slack of
-`HD_STATIC_PIECE_EDGE` = **16** units. Nothing else of the draw changes.
+window on a JOBY2 facade with a black hole in it. A shot pane now takes its destructible
+glass piece with it, and a static in a row takes its own piece and no other:
+`HDStaticPiecePaired` (`specific/hd/hd_cover.h`) asks for a real overlap and gives a
+pane's plane a slack of `HD_STATIC_PIECE_EDGE` = **16** units. Nothing else of the draw
+changes. The plain glass arch top above ANDREA1's panes is not a piece and stays (Left).
 
 **The census.** None of the owner's windows is an item. `SMASH_OBJECT1` to `8` (slots 397
 to 404) stand only in RICH3 (ItemCheck over the fifteen classic `.TRC`): items 40 and 41,
@@ -7641,20 +7642,38 @@ neighbour's piece by one or two units there, so each static took two or three pi
 the last pair `UpdateDestructibles` wrote decided: shooting JOBY2's first pane changed no
 pixel, the second hid the third pane (99,225 pixels), the third the first two (198,449).
 The owner's JOBY2 window is not of this family; it is the room art's. (a) *Hardly
-visible*: ANDREA1's pane is the `.TRG`'s own additive glass, page 15074 at weight 0.818
-on vertex colours of mean 25 and 20; drawn alone over black at his eye (`-glow -addmat
-14`) it lights 152,615 pixels at a mean of 0.9, 3.8 and 4.1 of 255 and at most 28. The
-data's glass, drawn as the data says; nothing is built. (d) *The yellow flood*: the art
-alone at his ANDREA2 eye has no yellow, the classic picture of the same place is
-yellow-green as well, and Lara and the statue take it too - the level's light on that
-side, not the glass. Nothing is built.
+visible*: neither window has a sheen. Material 14 names no specular
+(`HDGlossFromMaterial` reads materials 3 and 17 only), and pages 15074 and 3007 are
+not among the 16 and 15 pages of the two levels' sheen. ANDREA1's pane is
+the `.TRG`'s own additive glass, page 15074 at weight 0.818 on vertex colours of mean 25
+and 20; drawn alone over black at his eye (`-glow -addmat 14`) it lights 152,615 pixels at
+a mean of 0.9, 3.8 and 4.1 of 255 and at most 28. ANDREA2's window is no pane but a grid
+of bars 51 units deep (pieces 3 and 4, x 998..1049, 2,146 triangles each) on page
+3007, in the alpha run with `param[1]` = 0.1, which the room's glass rule
+(`hd_render.cpp`, the alpha pass's material 14) reads as the opacity of the whole part.
+Hidden at his eye (`-smashpiece 3 -smashpiece 4`, 960 x 540), the grid changes 165,378
+pixels, by at most 20 of 255 and by 6.87 on average; over black by at most 19. The
+reference picture of the classic draw shows the bars solid. The blend steps by the opacity
+times the page's alpha, so at an opacity of 1 the grid would step ten times as far. Both
+windows are the data's glass, drawn as the room's glass rule reads it. That rule
+belongs to the room draw, not to this round's files, so nothing is built (Left).
+(d) *The yellow flood*: the source is not proven. The probe draws no run-time light,
+and at his eye the hall behind the window is not drawn (its floor shows the
+background). The art alone has no yellow there. His two pictures differ in strength:
+over the near wall (the left 40 % and top 60 % of the frame) the HD picture averages
+RGB 205, 215, 47 at a saturation of 0.77, and the classic one 206, 202, 127 at 0.39.
+Lara and the statue take the HD tint too. A run-time light or fog bulb on room 73's
+side is the candidate; it is not isolated, and nothing is built.
 
 **The rule.** `HD_STATIC_PIECE_EDGE`: along an axis the static's box has an extent on the
 two boxes overlap by more than 16 units; along one it has none on (`HDStaticFlat`'s
 measure, under one unit) its plane stands within 16 of the piece. Measured: every true
 pair overlaps by 38 units or more and a pane stands 0 or 1 unit off its glass; the false
 pairs overlap by 0 to 2. Replayed on the census, two pairs are gained (ANDREA1's two
-panes) and twelve lost (JOBY2 4, RICH3 8); no piece is shared any more.
+panes) and twelve lost (JOBY2 4, RICH3 8); no piece is shared any more. A static thin
+but not flat on an axis (an extent of 1 to 16) could pair nothing along it; the 72
+shatterable statics of the fifteen levels have none, their smallest extent other than
+none being 59.
 
 **Measured.** At the eyes above, 960 x 540, RoomProbe built from `b68185f1` (before) and
 from the fix: ANDREA1 198 after the shot is now identical to the `-shatter` picture
@@ -7662,24 +7681,40 @@ from the fix: ANDREA1 198 after the shot is now identical to the `-shatter` pict
 classic pane covers 149,031 (`-classicroom 198 -classiconly -static 198:2` against
 without); room 201 clears 210,351 against 38,839 (classic pane 216,369). JOBY2 57 hides
 exactly one pane per shot, 99,225, 99,225 and 99,224 pixels. Pictures with nothing shot
-are byte-identical before and after.
+are byte-identical before and after. The `-shatter` picture hides pieces only, so it
+cannot see the arch top: each arched window also carries a plain material 14 part
+(26 triangles, y -2729..-2481, z 966..967 against the static's plane at 968, inside its
+box in x and y) that the art does not mark destructible. Drawn alone (`-glow -addmat
+14`), the glass at room 198 lights 152,615 pixels whole and still 21,616 after the
+shot, at most 13 of 255; at room 201, 183,343 and 6,035, at most 18. The classic draw
+has nothing there after the shot.
 
 **Checked.** Classic `-classicroom`/`-classiconly` ANDREA2 19 and 231, JOBY2 42 and 66,
 ANDY3 17 and 34: 6 of 6 md5-identical to the `8691e82` tool and to `dc75a96a`. The 15
 parity cameras and the six HD views: identical to the `dc75a96a` tool; ModelProbe `-all`
-over the fifteen levels: 15 of 15 identical tables. No shader changed. ModernTest 15,483
+over the fifteen levels: 15 of 15 identical tables, and nine model pictures (Lara,
+slots 61, 334, 345, 347, 397 and 398 at `mesh_bits` 1, `0xFFFE` and `0x100`) identical
+too. With `-smashpiece` added, every window picture above is byte-identical to the
+fix's. No shader changed. ModernTest 15,483
 checks with the smash group's seven, MenuTest 44,272, InterpTest 729, LipsTest 270 and
 243, 0 failed.
 
-**Left.** The glass's visibility (a) and the yellow side of ANDREA2 (d) are the owner's
-to judge: a stronger glass would be a rule of this project's own on the room shader. The
-JOBY2 facade window belongs to the room art's own round; its eye is not in the log.
+**Left.** The glass's visibility (a) is the owner's to judge. For ANDREA2 the open
+question is whether the room's glass rule should take `param[1]` as the opacity of the
+grid's bars as well as of its glass; that rule is the room draw's (`hd_render.cpp`).
+ANDREA1's arch tops stay after the shot (faint, at most 18 of 255); taking a plain glass
+part in a shot pane's plane with the shot would be a rule in the room build's cutting of
+pieces, outside this round's files. The yellow side of ANDREA2 (d) has no proven source;
+a run-time picture of the level's lights at his eye would settle it. The JOBY2 facade
+window belongs to the room art's own round; its eye is not in the log.
+`hd_level.cpp`'s comment at the pairing loop ("every piece ... whose box overlaps the
+static's") still names the old rule and is the merge's to update.
 RICH1's ten shatterable statics and RICH2's two in room 57 are drawn by art that carries
 no destructible piece (`-statictable` names them DEFECT), so in HD they stay after the
 shot; RICH2's pieces in groups 5 and 128 and ANDREA2's two glass pieces have no static and
 cannot be shot. `UpdateDestructibles` still writes per pair; no piece is shared any more.
 
-**Commits.** `b68185f1`, `f7af128c`
+**Commits.** `b68185f1`, `f7af128c`, `7af87c25`
 
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15

@@ -21163,18 +21163,29 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * far inside the far plane of 20480, and the cloud discs reach past it, which
  * only cuts the disc where the band already covers it.
  *
- * The depth: the sky must be behind everything and must sort inside
- * itself - the discs hang in front of the band overhead and behind it at the
- * horizon, and both are drawn in the opaque and the alpha pass, so there is
- * no draw order that gets both right. So it is drawn with its own depth range
- * instead: the viewport's MinZ is pushed to HD_SKY_MINZ for the length of
+ * The depth: the sky must be behind everything, so it is drawn with its own
+ * depth range: the viewport's MinZ is pushed to HD_SKY_MINZ for the length of
  * this call, which folds the whole sky into the last thousandth of the depth
- * buffer. Inside that slice the depth test sorts the sky properly; outside
- * it, every pixel of the world is nearer, because the classic depth of the
- * far plane itself is only 0.995 (SetupZRange(20, 20480): a - b/z = 0.99500)
- * and the deepest thing the engine can draw therefore never reaches the
- * slice. The viewport is read back and put together again before the call
- * returns. */
+ * buffer. Outside that slice every pixel of the world is nearer, because the
+ * classic depth of the far plane itself is only 0.995 (SetupZRange(20,
+ * 20480): a - b/z = 0.99500) and the deepest thing the engine can draw
+ * therefore never reaches the slice. The viewport is read back and put
+ * together again before the call returns.
+ *
+ * The order inside the sky: the flat cloud sheets (RoomProbe -skycensus: a
+ * square of 5 x 5 or 10 x 10 tiles of one page, 1,752 to 4,996 units above
+ * the camera) are nearer than the band's sphere of 4,100 only overhead, above
+ * the elevation where their plane meets it (30 to 71 degrees), and the band
+ * is see-through there - its page is alpha 0 above about 27 degrees. Sorted
+ * by depth, a sheet would be cut off along that circle wherever the band
+ * stands in front of it, and the band's own empty half, drawn with the depth
+ * write on, hides every sheet behind the sphere. So the alpha pass is drawn
+ * as a painter's picture in the order the .TRG lists its parts, which is back
+ * to front in every sky level: the sheets from the highest to the lowest,
+ * the band last, its haze laid over the sheets towards the horizon as the
+ * page's alpha ramp asks. The depth test is off for that pass alone (the
+ * sky's opaque parts lie behind every alpha part wherever both are drawn);
+ * every pixel of the world still comes after the sky and is nearer. */
 #define HD_SKY_MINZ	0.996f
 
 int HDRenderSkyGroups()
@@ -21182,6 +21193,22 @@ int HDRenderSkyGroups()
 	const int groups = (int)g_groups.size();
 
 	return groups > g_room_groups ? groups - g_room_groups : 0;
+}
+
+/* The sky group's alpha pass in the .TRG's part order. The .TRG writes each
+ * part's vertices as one block in part order (RoomProbe -skycensus,
+ * vertices=, in all thirteen sky levels), so the lowest vertex a range names
+ * keeps that order where the build's range sort put the band first. Sorted
+ * once a level; later frames find the list in order and move nothing. */
+static void HDRenderSkyPartOrder(std::vector<HDRange>& ranges)
+{
+	const auto before = [](const HDRange& a, const HDRange& b)
+	{
+		return a.baseVertex < b.baseVertex;
+	};
+
+	if (!std::is_sorted(ranges.begin(), ranges.end(), before))
+		std::stable_sort(ranges.begin(), ranges.end(), before);
 }
 
 bool HDRenderSky(const D3DMATRIX* world)
@@ -21199,10 +21226,22 @@ bool HDRenderSky(const D3DMATRIX* world)
 	slice.MaxZ = 1.0f;
 	g_device->SetViewport(&slice);
 
+	DWORD zfunc = D3DCMP_LESSEQUAL;
+
+	g_device->GetRenderState(D3DRS_ZFUNC, &zfunc);
+
 	bool drew = false;
 
 	for (int g = g_room_groups; g < (int)g_groups.size(); g++)
-		drew = HDRenderRoom(g, world, 0) || drew;
+	{
+		HDRenderSkyPartOrder(g_groups[(size_t)g].pass[1]);
+		drew = HDRenderRoomMask(g, world, 0, HD_PASS_OPAQUE) || drew;
+		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_ALWAYS);
+		drew = HDRenderRoomMask(g, world, 0, HD_PASS_ALPHA) || drew;
+		g_device->SetRenderState(D3DRS_ZFUNC, zfunc);
+		drew = HDRenderRoomMask(g, world, 0,
+			HD_PASS_ALL & ~(unsigned int)HD_PASS_SOLID) || drew;
+	}
 
 	g_device->SetViewport(&saved);
 	return drew;

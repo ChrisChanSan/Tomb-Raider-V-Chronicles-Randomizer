@@ -97,6 +97,8 @@
 /* The water's cards: a dive splash, a fish tank's spray and the wet film
  * on its floor as functions of their age alone (splash_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
+// The water seen from below: the eye's depth, Snell's window (water_under).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The springs: the table, the file's key, the hashed clock (spring_*).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
 /* The level's HD key: which load of a level keeps the HD data of the one
@@ -21544,6 +21546,44 @@ static HDSplashSetup splash_dive(int fall)
 	return s;
 }
 
+/* The water seen from below (hd_water_under.h): the eye's depth under the
+ * surface the extinction measures against. A room under a sheet takes the
+ * depth under its body's surface; a room no sheet lies over takes the depth
+ * that puts every point in the water - but under the deep look its body's
+ * surface counts wherever it lies above the eye, the rule that keeps
+ * JOBY4's sea surface in sight from room 6 (eye 14,558, the body of room 7
+ * at 12,032). Snell's window: 48.6 degrees for water. */
+static void water_under()
+{
+	printf("the water from below: the eye's depth and Snell's window\n");
+
+	const float none = 1.0e6f;
+
+	ok(HDWaterUnderDepth(0, 0, 14786.0f, 12032.0f, none) == 2754.0f,
+		"water under: a room under a sheet, its surface's depth", 0, 0);
+	ok(HDWaterUnderDepth(0, 1, 14786.0f, 12032.0f, none) == 2754.0f,
+		"water under: ...the same under the deep look", 0, 0);
+	ok(HDWaterUnderDepth(1, 0, 14558.0f, 12032.0f, none) == none,
+		"water under: no sheet over the room, no deep look: all water", 0, 0);
+	ok(HDWaterUnderDepth(1, 1, 14558.0f, 12032.0f, none) == 2526.0f,
+		"water under: the deep look's sea, its surface over the eye", 0, 0);
+	ok(HDWaterUnderDepth(1, 1, 11000.0f, 12032.0f, none) == none,
+		"water under: ...not when that surface lies under the eye", 0, 0);
+	ok(HDWaterUnderDepth(1, 1, 12032.0f, 12032.0f, none) == none,
+		"water under: ...nor at its height", 0, 0);
+	ok(HDWaterUnderDepth(0, 0, 11000.0f, 12032.0f, none) == -1032.0f,
+		"water under: a room under a sheet keeps its sign", 0, 0);
+
+	const float c = HDWaterSnellCos(1.333f);
+	const long deg = (long)floorf(acosf(c) * 57.29578f * 10.0f + 0.5f);
+
+	ok(deg == 486, "water under: Snell's window 48.6 degrees", deg, 486);
+	ok(HDWaterSnellCos(1.0f) == 0.0f,
+		"water under: no water, the window is the whole sky", 0, 0);
+	ok(HDWaterSnellCos(0.5f) == 0.0f,
+		"water under: an index under 1 is taken as 1", 0, 0);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -23258,6 +23298,7 @@ int main()
 	splash_tank_slopes();
 	splash_wet_clip();
 	splash_rings();
+	water_under();
 	spring_table();
 	spring_file();
 	spring_clock();

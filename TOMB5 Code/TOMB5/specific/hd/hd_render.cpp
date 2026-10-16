@@ -58,6 +58,7 @@
 #include "hd_gloss_field.h"
 #include "hd_shadow.h"			// HD_SHADOW_MAP, the projected shadow's map
 #include "hd_splash_math.h"		// the water's cards
+#include "hd_water_under.h"		// the eye's depth under the water
 #include "hd_spring.h"			// a row's `spring` key
 
 #include <algorithm>
@@ -13943,9 +13944,20 @@ namespace
 			g_wlooks[(size_t)b];
 		// The eye's depth under the water drawn: a lifted body's surface
 		// stands its lift over the water's top.
-		const float depth = fallback ? kUnderNoSurface : f->underEyeY -
-			(float)(g_wbodies[(size_t)b].info.surfaceY -
+		const float surface = (float)(g_wbodies[(size_t)b].info.surfaceY -
 			g_wbodies[(size_t)b].info.lift);
+		/* A room no sheet lies over takes kUnderNoSurface, every point in
+		 * the water - but not in a level with the deep look, whose water is
+		 * one sea: there the body's surface counts wherever it lies above
+		 * the eye, whichever room the eye is in (HDWaterUnderDepth,
+		 * hd_water_under.h). JOBY4's sea surface is the remaster's
+		 * additive art of room 19 at y -4,253; from room 6 (no sheet over
+		 * it) the whole way to it was water, exp(-0.000419 x 18,800) =
+		 * 0.0004 of it was left and it went black, while from room 123
+		 * under the basin of room 7 it showed (RoomProbe -underwater, the
+		 * frame drawn with and without room 19). */
+		const float depth = HDWaterUnderDepth(fallback ? 1 : 0,
+			g_wdeep_on ? 1 : 0, f->underEyeY, surface, kUnderNoSurface);
 
 		/* The deep look's light: its deep colour, dimmed with the eye's
 		 * depth under the water's top (kDeepDim). */

@@ -2432,12 +2432,12 @@ water surface", carries the tables.
     this project's own tools on the classic engine's code (CLASSIC) and the
     player's files (DATA).
 229. **The sky census** (RoomProbe `-skycensus`, `-skydump`, `ProbeSkyCensus`) -
-    what the `.TRG`'s sky groups and the classic HORIZON mesh are made of,
-    read part by part: the band a sphere of 4,100 in 21 rings with v linear in
-    its elevation, the cloud sheets flat squares of tiles of one page, each
-    part's vertices one block in part order, the level's page table naming
-    exactly the sky pages its parts use. OWN, this project's own tool on the
-    player's files (DATA: the fifteen levels' `sky part`, `sky ring`, `sky
+    what the `.TRG`'s sky groups and the classic HORIZON mesh are made of, read
+    part by part: the band a sphere of 4,100 (ANDREA3's 4,891) in 21 rings with
+    v linear in its elevation, the cloud sheets flat squares of tiles of one
+    page, each part's vertices one block in part order, the level's page table
+    naming exactly the sky pages its parts use. OWN, this project's own tool on
+    the player's files (DATA: the fifteen levels' `sky part`, `sky ring`, `sky
     pages` and `sky horizon` lines).
 230. **The sky's alpha pass back to front** (`hd_render.cpp`, "The sky dome",
     `HDRenderSky`, `HDRenderSkyPartOrder`) - a sky group's alpha-pass ranges
@@ -2455,18 +2455,24 @@ water surface", carries the tables.
     DdsProbe), its script's layers the sea's surface on the level's own sky
     page; TITLE's bands are in the opaque pass.
 232. **The HD page lent to the layers** (`hd_level.cpp`, `HDFrameSkyLayerPage`;
-    `hd_render.cpp`, `HDRenderSkyLayerPage`) - over an HD sky with a cloud
-    sheet the layers draw the nearest sheet's page in the classic sky page's
-    slot for their one `OutputSky`. OWN, free choice of the sheet (the
-    nearest, the last of the alpha pass in part order); DATA: the classic sky
-    page is alpha 255 on every texel (the `.TRC`'s misc block), and at the
-    owner's ANDY3 eye 1,128 of 311,355 sky pixels stayed as the dome draws
-    them with it, 229,933 with the sheet's page (RoomProbe `-skylayer`).
+    `hd_render.cpp`, `HDRenderSkyLayerPage`; `game/draw.cpp`, `SkyDrawPhase`) -
+    over an HD sky with a cloud sheet the layers draw the nearest sheet's page
+    in the classic sky page's slot for their one `OutputSky`, on the flat
+    layer's quads also with `PSX_skies` on. OWN, free choice of the sheet (the
+    nearest, the last of the alpha pass in part order); DATA: the classic flat
+    page is alpha 255 on every texel of ANDY2 and ANDY3 (the `.TRC`'s misc
+    block), the PSX path's tiles are 65 x 65 windows of the `SKY_GRAPHICS`
+    sprites on shared object pages (the `.TRC`'s sprite table), which a sheet
+    page has no stand-in for; at the owner's ANDY3 eye 1,128 of 311,355 sky
+    pixels stayed as the dome draws them with the flat page, 229,933 with the
+    sheet's page, and the PSX tiles changed 150,748 (RoomProbe `-skylayer`,
+    `-skylayerpage psx`).
 233. **RoomProbe's layer twin and the volumetric clouds measured**
     (`hd_render.cpp`, `HDRenderSkyLayerProbe`, `HDRenderSkyCloudProbe`;
     `hd_sky.hlsl`, `LayerVS`, `LayerPS`, `CloudVS`, `CloudPS`; RoomProbe
     `-skylayer`, `-skylayerpage`, `-skycloud`, `-skygpu`) - the classic
-    layer drawn as `DrawFlatSky` and the classic draw types 4 and 2 draw it;
+    layer drawn as `DrawFlatSky` or `DrawPSXSky` (4 x 4 tiles a quad on the
+    `SKY_GRAPHICS` sprites' windows) and the classic draw types 4 and 2 draw it;
     a cloud slab marched in 16 steps through a field of smoothly
     interpolated lattice values in two octaves, the values a hash of the
     cell's integer coordinates (two rounds of multiplying each axis by a

@@ -1553,9 +1553,12 @@ see *Lara in HD* below for which of her stays classic and why.
   clouds but no moon, and the lightning flash is painted through a layer the
   dome would otherwise have replaced - in the three Irish levels that layer
   now carries the Remaster's own cloud page instead of the old low-resolution
-  one. Deepsea Dive's sky is a single colour with nothing over it, so there
-  the game keeps its two moving layers - the sea's surface seen from below -
-  over it, as it always drew them.
+  one, drawn as one smooth layer also with the PSX sky option on (that
+  option's tiles cut small windows out of other pages, which the HD page
+  cannot fill). Deepsea Dive's sky is a single colour with nothing over it,
+  so there the game keeps its two moving layers - the sea's surface seen from
+  below - over it, as it always drew them, on the path the PSX sky option
+  names.
 
 **The people.**
 

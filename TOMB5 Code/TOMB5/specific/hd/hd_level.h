@@ -426,6 +426,17 @@ void HDFrameScissorForRoom(int roomIndex);
 // in a level whose .TRG has no sky group - then the classic sky draws whole.
 bool HDFrameSky(const float* viewWorld);
 
+// Whether the HD sky just drawn stands for the classic flat layers; where it
+// does not (JOBY4's band alone), SkyDrawPhase draws the script's layers over
+// it as the classic path does.
+bool HDFrameSkyCoversLayers();
+
+// The HD sky's nearest cloud sheet page lent to the classic sky page's slot
+// for the layers' one OutputSky (true), and given back (false). Answers
+// whether a page was lent; nothing is lent where the sky has no sheet. A lent
+// page is drawn on the flat layer's quads, whatever PSX_skies says.
+bool HDFrameSkyLayerPage(bool lend);
+
 void HDFrameDraw();
 void HDFrameDrawGlow();
 

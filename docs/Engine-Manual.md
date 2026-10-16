@@ -1568,9 +1568,19 @@ see *Lara in HD* below for which of her stays classic and why.
   with its own drifting cloud layers over it. Thirteen of the fifteen levels
   have one; the engine draws it in place of the classic horizon mesh and the
   two flat colour layers, and leaves the classic sky whole in the two that do
-  not. The moon, the stars and the lightning still draw over it: the panorama
-  has clouds but no moon, and the lightning flash is painted through a layer
-  the dome would otherwise have replaced.
+  not. Its cloud sheets lie over the panorama the way the files list them,
+  from the farthest to the nearest with the panorama's haze last, so the
+  clouds fill the sky to the horizon without a ring or a hard edge. The
+  moon, the stars and the lightning still draw over it: the panorama has
+  clouds but no moon, and the lightning flash is painted through a layer the
+  dome would otherwise have replaced - in the three Irish levels that layer
+  now carries the Remaster's own cloud page instead of the old low-resolution
+  one, drawn as one smooth layer also with the PSX sky option on (that
+  option's tiles cut small windows out of other pages, which the HD page
+  cannot fill). Deepsea Dive's sky is a single colour with nothing over it,
+  so there the game keeps its two moving layers - the sea's surface seen from
+  below - over it, as it always drew them, on the path the PSX sky option
+  names.
 
 **The people.**
 

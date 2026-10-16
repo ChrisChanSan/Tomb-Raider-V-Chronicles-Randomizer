@@ -77,6 +77,32 @@
  *                     what the engine does in place of the classic horizon
  *                     mesh
  *     -skyonly        the same, with the room left out: the dome alone
+ *     -skycensus      what the level's sky is made of, printed and then
+ *                     stop, no device: per sky part and pass the material,
+ *                     the pages, the height, radius, elevation, UV bytes and
+ *                     light (`sky part`), the band's rings (`sky ring`), the
+ *                     sky pages of the level's page table (`sky pages`) and
+ *                     the classic HORIZON mesh's rings (`sky horizon`, with
+ *                     -roombox). -rooms or -roombox gives the room count
+ *     -skydump <path> with -skycensus: every sky triangle as one line,
+ *                     group part pass page and x y z u v of its corners
+ *     -skylayer <1|2> <r> <g> <b> <vel>
+ *                     with -sky: one of the script's classic flat layers
+ *                     over the HD sky as SkyDrawPhase draws it, moved as
+ *                     UpdateSky moves it over -time seconds; repeatable
+ *     -skylayerpage sd|hd|psx  the page the layers carry: the level's
+ *                     classic sky page out of the .TRC under -roombox (sd),
+ *                     the HD sky's nearest cloud sheet page (hd), or the PSX
+ *                     sky's tiles on the SKY_GRAPHICS sprites' page (psx)
+ *     -skycloud <floor> <thickness> <cell> <coverage> <density> <vel>
+ *                     with -sky: a volumetric cloud layer over the HD sky
+ *                     and the layers, a measurement only - a hashed
+ *                     field marched through a slab over the camera, moved
+ *                     as UpdateSky moves a layer of speed `vel`
+ *     -skygpu <n>     after the picture, the HD sky, the layers and the
+ *                     cloud layer each timed n times on the GPU (`sky gpu`
+ *                     lines: median, min, max); the picture of such a run
+ *                     holds the extra draws
  *     -with <group> <dx dy dz>
  *                     draw that group too, at that world offset from the
  *                     room - the difference of the two classic room origins,
@@ -12516,6 +12542,733 @@ static bool VisArg(int argc, char** argv, int* at)
 	return true;
 }
 
+/* -skycensus: what the sky of one level is made of, read out of the two
+ * files and printed, with no device and no picture. The .TRG's groups past
+ * the last room are the HD sky; per part and pass a `sky part` line gives
+ * the material and its four parameters, the triangles, the .TEX pages, the
+ * height, the distance from the dome's axis and the elevation seen from its
+ * centre, the u and v bytes, the baked light and the vertex numbers (the
+ * .TRG writes a part's vertices as one block). A part whose vertices all lie
+ * at one height is a flat sheet, and its line adds the UV bytes a thousand
+ * units of it take (the page's tiling). Every height of the band gets a
+ * `sky ring` line with its v bytes, which is how the page's rows lie on the
+ * sphere. The classic HORIZON mesh (slot 454) of the .TRC under -roombox
+ * gets the same rings, with the classic page and the texinfo v of the faces
+ * that touch each ring. -skydump <path> writes every sky triangle as one
+ * line: group part pass page, then x y z u v of its three corners. */
+static bool g_sky_census = false;
+static std::string g_sky_dump;
+
+/* -skylayer <1|2> <r> <g> <b> <vel>: one of the script's classic flat layers
+ * drawn over the HD sky the way SkyDrawPhase draws it (HDRenderSkyLayerProbe),
+ * its counter where UpdateSky leaves it after -time seconds of logic ticks
+ * (30 a second, `vel` a tick, wrapped at 0x2600). Repeatable for the two.
+ * -skylayerpage sd|hd: the page it carries, the level's classic sky page out
+ * of the .TRC under -roombox (sd, the default) or the HD page the game
+ * borrows for it (hd), or the PSX sky's tiles (psx): DrawSkySegment's 4 x 4
+ * tiles a quad on the four SKY_GRAPHICS sprites' windows and page, as the
+ * game draws the layers with PSX_skies on and no HD page lent. */
+struct SkyLayerArg
+{
+	int layer;
+	unsigned long colour;
+	int vel;
+};
+static std::vector<SkyLayerArg> g_sky_layers;
+static bool g_sky_layer_hd = false;
+static bool g_sky_layer_psx = false;
+static float g_sky_psx_windows[16];
+
+/* -skycloud <floor> <thickness> <cell> <coverage> <density> <vel>: the
+ * volumetric cloud layer over the HD sky and the layers, a measurement only
+ * (HDRenderSkyCloudProbe): a slab from `floor` to `floor + thickness` units
+ * over the camera, a lattice of `cell` units, the air clear below
+ * `coverage`, `density` per unit path, carried along x as UpdateSky carries
+ * a layer moving `vel` a tick (30 ticks a second, over -time). The colours
+ * are a free choice for the measurement: 0.92 0.93 0.97 at the top, 0.42
+ * 0.44 0.52 at the floor; the fade towards the horizon 0.15 of the rise.
+ * -skygpu <n>: after the picture, the HD sky, the layers and the cloud
+ * layer each drawn n times more in a GPU timestamp bracket of its own; one
+ * `sky gpu` line each with the median and the spread in ms. */
+static bool g_sky_cloud = false;
+static float g_sky_cloud_args[6] = { 0, 0, 0, 0, 0, 0 };
+static int g_sky_gpu = 0;
+
+/* The sky's switches, ahead of the parse chain, which stands at the
+ * compiler's limit of nested blocks (C1061). */
+static bool SkyArg(int argc, char** argv, int* at)
+{
+	const char* a = argv[*at];
+
+	if (!strcmp(a, "-skycensus"))
+		g_sky_census = true;
+	else if (!strcmp(a, "-skydump") && *at + 1 < argc)
+		g_sky_dump = argv[++*at];
+	else if (!strcmp(a, "-skylayer") && *at + 5 < argc)
+	{
+		SkyLayerArg l;
+
+		l.layer = atoi(argv[*at + 1]);
+		l.colour = (unsigned long)(atoi(argv[*at + 2]) & 0xFF) << 16 |
+			(unsigned long)(atoi(argv[*at + 3]) & 0xFF) << 8 |
+			(unsigned long)(atoi(argv[*at + 4]) & 0xFF);
+		l.vel = atoi(argv[*at + 5]);
+		g_sky_layers.push_back(l);
+		*at += 5;
+	}
+	else if (!strcmp(a, "-skylayerpage") && *at + 1 < argc)
+	{
+		g_sky_layer_hd = !strcmp(argv[*at + 1], "hd");
+		g_sky_layer_psx = !strcmp(argv[++*at], "psx");
+	}
+	else if (!strcmp(a, "-skycloud") && *at + 6 < argc)
+	{
+		for (int i = 0; i < 6; i++)
+			g_sky_cloud_args[i] = (float)atof(argv[*at + 1 + i]);
+
+		g_sky_cloud = true;
+		*at += 6;
+	}
+	else if (!strcmp(a, "-skygpu") && *at + 1 < argc)
+		g_sky_gpu = atoi(argv[++*at]);
+	else
+		return false;
+
+	return true;
+}
+
+/* The level's classic sky page: the last 256 x 256 block of the .TRC's misc
+ * texture block (shine, font, sky - LoadTexturesMisc), after the 32 and 16
+ * bit page blocks; the header before them is the version and three page
+ * counts (10 bytes). A MANAGED A8R8G8B8 texture, or 0. */
+static IDirect3DTexture9* SkyClassicPage(const char* stem)
+{
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	FILE* f = 0;
+
+	if (g_roombox.empty() || fopen_s(&f, trc.c_str(), "rb") || !f)
+		return 0;
+
+	std::vector<unsigned char> sky;
+	unsigned int sizes[2] = { 0, 0 };
+
+	fseek(f, 10, SEEK_SET);
+
+	for (int block = 0; block < 3; block++)
+	{
+		if (fread(sizes, 4, 2, f) != 2)
+			break;
+
+		if (block < 2)
+		{
+			fseek(f, (long)sizes[1], SEEK_CUR);
+			continue;
+		}
+
+		std::vector<unsigned char> packed(sizes[1]), plain(sizes[0]);
+		uLongf length = sizes[0];
+
+		if (sizes[0] >= 0x40000 && fread(&packed[0], 1, sizes[1], f) ==
+			sizes[1] && uncompress(&plain[0], &length, &packed[0],
+			sizes[1]) == Z_OK && length == sizes[0])
+			sky.assign(plain.end() - 0x40000, plain.end());
+	}
+
+	fclose(f);
+
+	IDirect3DTexture9* page = 0;
+	D3DLOCKED_RECT rect;
+
+	if (sky.empty() || FAILED(g_device->CreateTexture(256, 256, 1, 0,
+		D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &page, 0)))
+		return 0;
+
+	if (FAILED(page->LockRect(0, &rect, 0, 0)))
+	{
+		page->Release();
+		return 0;
+	}
+
+	for (int y = 0; y < 256; y++)
+		memcpy((BYTE*)rect.pBits + y * rect.Pitch, &sky[(size_t)y * 1024],
+			1024);
+
+	page->UnlockRect(0);
+	return page;
+}
+
+/* The PSX sky's page (DrawSkySegment): the four SKY_GRAPHICS sprites of the
+ * .TRC under -roombox, found as LoadSprites reads them after the "SPR"
+ * marker, and the 32 bit object page they share, out of the first texture
+ * block. `windows` gets x1 y1 x2 y2 per sprite in page units with
+ * LoadSprites' one texel trimmed off each side. A MANAGED A8R8G8B8 texture,
+ * or 0 when a sprite is missing or the four lie on different pages. */
+static IDirect3DTexture9* SkyPsxPage(const char* stem, float* windows)
+{
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	FILE* f = 0;
+
+	if (g_roombox.empty() || fopen_s(&f, trc.c_str(), "rb") || !f)
+		return 0;
+
+	std::vector<unsigned char> file;
+
+	fseek(f, 0, SEEK_END);
+	file.resize((size_t)ftell(f));
+	fseek(f, 0, SEEK_SET);
+
+	const bool read = !file.empty() &&
+		fread(&file[0], 1, file.size(), f) == file.size();
+
+	fclose(f);
+
+	if (!read || file.size() < 18)
+		return 0;
+
+	unsigned int sizes[2];
+
+	memcpy(sizes, &file[10], 8);
+
+	std::vector<unsigned char> tex32(sizes[0]);
+	uLongf length = sizes[0];
+
+	if (18 + (size_t)sizes[1] > file.size() || uncompress(&tex32[0], &length,
+		&file[18], sizes[1]) != Z_OK || length != sizes[0])
+		return 0;
+
+	// The marker followed by a sane sprite count, as LoadSprites finds it.
+	size_t at = 0;
+	int count = -1;
+
+	for (size_t i = 0; i + 8 <= file.size(); i++)
+		if (!memcmp(&file[i], "SPR", 4))
+		{
+			memcpy(&count, &file[i + 4], 4);
+
+			if (count >= 0 && count < 2000)
+			{
+				at = i + 8;
+				break;
+			}
+
+			count = -1;
+		}
+
+	if (count < 0)
+		return 0;
+
+	const size_t slotsAt = at + 16 * (size_t)count;
+	int slots = 0, first = -1;
+
+	if (slotsAt + 4 > file.size())
+		return 0;
+
+	memcpy(&slots, &file[slotsAt], 4);
+
+	for (int i = 0; i < slots && slotsAt + 12 + 8 * (size_t)i <= file.size();
+		i++)
+	{
+		int slot;
+		short n, offset;
+
+		memcpy(&slot, &file[slotsAt + 4 + 8 * (size_t)i], 4);
+		memcpy(&n, &file[slotsAt + 8 + 8 * (size_t)i], 2);
+		memcpy(&offset, &file[slotsAt + 10 + 8 * (size_t)i], 2);
+
+		if (slot == 455 && n <= -4)	// SKY_GRAPHICS, game/objects.h
+			first = offset;
+	}
+
+	if (first < 0 || first + 4 > count)
+		return 0;
+
+	int tpage = -1;
+
+	for (int d = 0; d < 4; d++)
+	{
+		unsigned short head[4];
+		short box[4];
+		const size_t s = at + 16 * (size_t)(first + d);
+
+		memcpy(head, &file[s], 8);
+		memcpy(box, &file[s + 8], 8);
+
+		if (tpage >= 0 && head[0] != tpage)
+			return 0;
+
+		tpage = head[0];
+		windows[4 * d + 0] = (float)box[0] / 256.0f + 1.0f / 256.0f;
+		windows[4 * d + 1] = (float)box[1] / 256.0f + 1.0f / 256.0f;
+		windows[4 * d + 2] = (float)box[2] / 256.0f - 1.0f / 256.0f;
+		windows[4 * d + 3] = (float)box[3] / 256.0f - 1.0f / 256.0f;
+	}
+
+	if ((size_t)(tpage + 1) * 0x40000 > tex32.size())
+		return 0;
+
+	IDirect3DTexture9* page = 0;
+	D3DLOCKED_RECT rect;
+
+	if (FAILED(g_device->CreateTexture(256, 256, 1, 0, D3DFMT_A8R8G8B8,
+		D3DPOOL_MANAGED, &page, 0)))
+		return 0;
+
+	if (FAILED(page->LockRect(0, &rect, 0, 0)))
+	{
+		page->Release();
+		return 0;
+	}
+
+	for (int y = 0; y < 256; y++)
+		memcpy((BYTE*)rect.pBits + y * rect.Pitch,
+			&tex32[(size_t)tpage * 0x40000 + (size_t)y * 1024], 1024);
+
+	page->UnlockRect(0);
+	printf("sky psx: SKY_GRAPHICS sprites %d..%d on page %d\n", first,
+		first + 3, tpage);
+	return page;
+}
+
+// A timestamp bracket on the GPU: Begin, then End returns its ms (-1).
+struct SkyTimer
+{
+	IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+
+	void Begin()
+	{
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]);
+
+		if (q[0] && q[1] && q[2] && q[3])
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+	}
+
+	double End()
+	{
+		double ms = -1.0;
+
+		if (q[0] && q[1] && q[2] && q[3])
+		{
+			UINT64 a = 0, b = 0, f = 0;
+			BOOL disjoint = TRUE;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			q[3]->Issue(D3DISSUE_END);
+
+			while (q[0]->GetData(&disjoint, sizeof(disjoint),
+				D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			while (q[3]->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+				;
+
+			if (!disjoint && f)
+				ms = (double)(b - a) * 1000.0 / (double)f;
+		}
+
+		for (int i = 0; i < 4; i++)
+			if (q[i])
+			{
+				q[i]->Release();
+				q[i] = 0;
+			}
+
+		return ms;
+	}
+};
+
+static void ProbeSkyCloud(const D3DMATRIX* world)
+{
+	if (!g_sky_cloud)
+		return;
+
+	const float* a = g_sky_cloud_args;
+	const double span = 64.0 * (double)a[2];
+	double wind = fmod((double)a[5] * floor(g_time * 30.0), span);
+
+	if (wind < 0.0)
+		wind += span;
+
+	const float slab[4] = { a[0], a[1], (float)wind, a[2] };
+	const float shape[4] = { a[3], a[4], 0.15f, 0.0f };
+	const float top[3] = { 0.92f, 0.93f, 0.97f };
+	const float bottom[3] = { 0.42f, 0.44f, 0.52f };
+
+	HDRenderSkyCloudProbe(world, slab, shape, top, bottom);
+}
+
+/* The layers of -skylayer over the HD sky just drawn, in SkyDrawPhase's
+ * order: layer 1, then layer 2; then -skycloud's layer. Called right after
+ * HDRenderSky. */
+static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
+{
+	IDirect3DTexture9* page = 0;
+
+	if (!g_sky_layers.empty())
+	{
+		page = g_sky_layer_hd ? HDRenderSkyLayerPage() : g_sky_layer_psx ?
+			SkyPsxPage(stem, g_sky_psx_windows) : SkyClassicPage(stem);
+		printf("sky layers: %d on the %s page%s\n",
+			(int)g_sky_layers.size(), g_sky_layer_hd ? "HD" :
+			g_sky_layer_psx ? "PSX sprites'" : "classic",
+			page ? "" : " - NONE, not drawn");
+	}
+
+	for (int pass = 1; pass <= 2 && page; pass++)
+		for (const SkyLayerArg& l : g_sky_layers)
+		{
+			if (l.layer != pass)
+				continue;
+
+			const long ticks = (long)floor(g_time * 30.0);
+			long pos = (long)(((long long)l.vel * ticks) % 0x2600);
+
+			if (pos < 0)
+				pos += 0x2600;
+
+			HDRenderSkyLayerProbe(world, page, l.colour, (float)pos, l.layer,
+				g_sky_layer_psx ? g_sky_psx_windows : 0);
+		}
+
+	ProbeSkyCloud(world);
+
+	/* -skygpu: each part n times in its own bracket. They draw into the
+	 * picture's own target, so a -skygpu run is for its numbers and not for
+	 * its picture. */
+	for (int part = 0; part < 3 && g_sky_gpu > 0; part++)
+	{
+		if ((part == 1 && !page) || (part == 2 && !g_sky_cloud))
+			continue;
+
+		std::vector<double> ms;
+
+		for (int run = 0; run < g_sky_gpu; run++)
+		{
+			SkyTimer t;
+
+			t.Begin();
+
+			if (part == 0)
+				HDRenderSky(world);
+			else if (part == 1)
+				for (const SkyLayerArg& l : g_sky_layers)
+					HDRenderSkyLayerProbe(world, page, l.colour, 0.0f,
+						l.layer, g_sky_layer_psx ? g_sky_psx_windows : 0);
+			else
+				ProbeSkyCloud(world);
+
+			ms.push_back(t.End());
+		}
+
+		std::sort(ms.begin(), ms.end());
+		printf("sky gpu part=%s runs=%d median=%.4f min=%.4f max=%.4f ms\n",
+			part == 0 ? "dome" : part == 1 ? "layers" : "cloud",
+			(int)ms.size(), ms[ms.size() / 2], ms.front(), ms.back());
+	}
+
+	if (page && !g_sky_layer_hd)
+		page->Release();
+}
+
+static int ProbeSkyCensus(const char* root, const char* stem, int rooms)
+{
+	trf::remaster::Trg trg;
+	std::string error;
+
+	if (!trf::remaster::read_trg(std::string(root) + "\\DATA\\" + stem +
+		".TRG", trg, error))
+	{
+		printf("skycensus: no .TRG (%s)\n", error.c_str());
+		return 2;
+	}
+
+	Tr5Level level;
+	bool classic = false;
+
+	if (!g_roombox.empty())
+	{
+		const std::string trc = g_roombox + "\\" + stem + ".TRC";
+
+		classic = level.load(std::wstring(trc.begin(), trc.end()), error);
+	}
+
+	if (rooms <= 0 && classic)
+		rooms = level.roomCount();
+
+	if (rooms <= 0)
+	{
+		printf("skycensus: -rooms or -roombox needed\n");
+		return 2;
+	}
+
+	FILE* dump = 0;
+
+	if (!g_sky_dump.empty())
+		fopen_s(&dump, g_sky_dump.c_str(), "w");
+
+	printf("skycensus level=%s groups=%d rooms=%d sky=%d\n", stem,
+		(int)trg.groups.size(), rooms,
+		(int)trg.groups.size() > rooms ? (int)trg.groups.size() - rooms : 0);
+
+	for (size_t g = (size_t)rooms; g < trg.groups.size(); g++)
+	{
+		const trf::remaster::TrgGroup& group = trg.groups[g];
+
+		for (size_t p = 0; p < group.parts.size(); p++)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart& part = group.parts[p];
+				const unsigned int start = part.pass[pass].start;
+				const unsigned int count = part.pass[pass].count;
+
+				if (count < 3)
+					continue;
+
+				std::set<int> pages;
+				std::map<int, std::pair<int, int> > rings;
+				float y0 = 1e9f, y1 = -1e9f, r0 = 1e9f, r1 = -1e9f;
+				float e0 = 1e9f, e1 = -1e9f, x0 = 1e9f, x1 = -1e9f;
+				int u0 = 255, u1 = 0, v0 = 255, v1 = 0, l0 = 999, l1 = 0;
+				unsigned int i0 = 0xFFFFFFFFu, i1 = 0;
+
+				for (unsigned int i = 0; i < count; i++)
+				{
+					const unsigned int corner = trg.indices[start + i];
+					const trf::remaster::TrgVertex& v = trg.vertices[corner];
+					const float r = sqrtf((float)v.x * v.x +
+						(float)v.z * v.z);
+					const float e = atan2f(-(float)v.y, r) * 57.29578f;
+					const int light = v.colour1[0] + v.colour1[1] +
+						v.colour1[2] + v.colour2[0] + v.colour2[1] +
+						v.colour2[2];
+
+					if (v.layer >= 1 && v.layer <= trg.textures.size())
+						pages.insert(trg.textures[v.layer - 1u]);
+
+					y0 = (std::min)(y0, (float)v.y);
+					y1 = (std::max)(y1, (float)v.y);
+					r0 = (std::min)(r0, r);
+					r1 = (std::max)(r1, r);
+					e0 = (std::min)(e0, e);
+					e1 = (std::max)(e1, e);
+					x0 = (std::min)(x0, (float)v.x);
+					x1 = (std::max)(x1, (float)v.x);
+					u0 = (std::min)(u0, (int)v.u);
+					u1 = (std::max)(u1, (int)v.u);
+					v0 = (std::min)(v0, (int)v.v);
+					v1 = (std::max)(v1, (int)v.v);
+					l0 = (std::min)(l0, light);
+					l1 = (std::max)(l1, light);
+					i0 = (std::min)(i0, corner);
+					i1 = (std::max)(i1, corner);
+
+					std::map<int, std::pair<int, int> >::iterator ring =
+						rings.find(v.y);
+
+					if (ring == rings.end())
+						rings[v.y] = std::make_pair((int)v.v, (int)v.v);
+					else
+					{
+						ring->second.first = (std::min)(ring->second.first,
+							(int)v.v);
+						ring->second.second = (std::max)(ring->second.second,
+							(int)v.v);
+					}
+				}
+
+				printf("sky part group=%d part=%d pass=%d material=%u "
+					"param=%.3f,%.3f,%.3f,%.3f tris=%u pages=", (int)g,
+					(int)p, pass, part.material, part.param[0],
+					part.param[1], part.param[2], part.param[3], count / 3);
+
+				for (std::set<int>::const_iterator it = pages.begin();
+					it != pages.end(); ++it)
+					printf("%s%d", it == pages.begin() ? "" : ",", *it);
+
+				printf(" y=%.0f..%.0f r=%.0f..%.0f elev=%.1f..%.1f "
+					"u=%d..%d v=%d..%d light=%d..%d rings=%d "
+					"vertices=%u..%u", y0, y1, r0, r1, e0, e1, u0, u1, v0, v1,
+					l0, l1, (int)rings.size(), i0, i1);
+
+				if (y0 == y1 && x1 > x0)
+					printf(" sheet uv_per_1000=%.2f",
+						(float)(u1 - u0) * 1000.0f / (x1 - x0));
+
+				printf("\n");
+
+				if (rings.size() > 1 && rings.size() <= 64)
+					for (std::map<int, std::pair<int, int> >::const_iterator
+						it = rings.begin(); it != rings.end(); ++it)
+						printf("sky ring group=%d part=%d pass=%d y=%d "
+							"v=%d..%d\n", (int)g, (int)p, pass, it->first,
+							it->second.first, it->second.second);
+
+				for (unsigned int i = 0; dump && i + 2 < count; i += 3)
+				{
+					fprintf(dump, "%d %d %d", (int)g, (int)p, pass);
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[start + i + c]];
+
+						if (!c)
+							fprintf(dump, " %d", v.layer >= 1 &&
+								v.layer <= trg.textures.size()
+								? (int)trg.textures[v.layer - 1u] : -1);
+
+						fprintf(dump, " %d %d %d %d %d", v.x, v.y, v.z, v.u,
+							v.v);
+					}
+
+					fprintf(dump, "\n");
+				}
+			}
+	}
+
+	if (dump)
+		fclose(dump);
+
+	/* Every page of the .TEX block 7000..7199 (the sky's panoramas and
+	 * cloud sheets) the level's own page table names, sky part or not. */
+	printf("sky pages level=%s table=", stem);
+
+	for (size_t t = 0, n = 0; t < trg.textures.size(); t++)
+		if (trg.textures[t] >= 7000 && trg.textures[t] < 7200)
+			printf("%s%d", n++ ? "," : "", (int)trg.textures[t]);
+
+	printf("\n");
+
+	/* The classic HORIZON mesh: its vertices by height, and per height the
+	 * page and the v pixels of the faces with a corner there. The mesh lies
+	 * at the .TRC's mesh pointer of slot 454's first mesh: centre and radius
+	 * (10 bytes), the vertex count and the vertices (6 bytes each), the
+	 * normals or the shades, then the quads (12 bytes: four corners, the
+	 * texinfo, the effects) and the triangles (10 bytes: three corners). */
+	Tr5Level::MoveableInfo info;
+	size_t at = 0, texAt = 0;
+	int texCount = 0;
+
+	if (!classic || !level.moveableInfo(454, info) || info.nmeshes < 1 ||
+		!level.debugMeshAt(info.meshIndex, at) ||
+		!level.debugTexinfoBlock(texAt, texCount))
+	{
+		printf("sky horizon: %s\n", classic ? "no HORIZON mesh in the level"
+			: "no classic level (-roombox)");
+		return 0;
+	}
+
+	const std::vector<uint8_t>& b = level.debugBytes();
+	const auto word = [&](size_t o)
+	{
+		int16_t w = 0;
+
+		if (o + 2 <= b.size())
+			memcpy(&w, &b[o], 2);
+
+		return (int)w;
+	};
+	const int verts = word(at + 10);
+	std::vector<int> vy((size_t)(std::max)(verts, 0)), vr(vy.size());
+	size_t o = at + 12;
+
+	for (int v = 0; v < verts; v++, o += 6)
+	{
+		const int x = word(o), z = word(o + 4);
+
+		vy[(size_t)v] = word(o + 2);
+		vr[(size_t)v] = (int)sqrtf((float)(x * x + z * z));
+	}
+
+	const int normals = word(o);
+
+	o += 2 + (size_t)(normals > 0 ? normals * 6 : -normals * 2);
+
+	struct Ring
+	{
+		int r0, r1, v0, v1, faces;
+		std::set<int> pages;
+	};
+	std::map<int, Ring> rings;
+	int faces = 0;
+
+	for (int kind = 4; kind >= 3; kind--)
+	{
+		const int n = word(o);
+
+		o += 2;
+
+		for (int f = 0; f < n; f++, o += (size_t)(kind * 2 + 4))
+		{
+			const int tex = word(o + (size_t)kind * 2) & 0x7FFF;
+			const size_t t = texAt + (size_t)tex * 40;
+
+			if (tex >= texCount || t + 22 > b.size())
+				continue;
+
+			faces++;
+
+			for (int c = 0; c < kind; c++)
+			{
+				const int v = word(o + (size_t)c * 2);
+
+				if (v < 0 || v >= verts)
+					continue;
+
+				const int py = (word(t + 8 + (size_t)c * 4) >> 8) & 0xFF;
+				std::map<int, Ring>::iterator it = rings.find(vy[(size_t)v]);
+
+				if (it == rings.end())
+				{
+					Ring r = { vr[(size_t)v], vr[(size_t)v], py, py, 0 };
+
+					it = rings.insert(std::make_pair(vy[(size_t)v], r)).first;
+				}
+
+				Ring& r = it->second;
+
+				r.r0 = (std::min)(r.r0, vr[(size_t)v]);
+				r.r1 = (std::max)(r.r1, vr[(size_t)v]);
+				r.v0 = (std::min)(r.v0, py);
+				r.v1 = (std::max)(r.v1, py);
+				r.faces++;
+				r.pages.insert(word(t + 2) & 0x7FFF);
+			}
+		}
+	}
+
+	printf("sky horizon level=%s vertices=%d faces=%d rings=%d\n", stem,
+		verts, faces, (int)rings.size());
+
+	for (std::map<int, Ring>::const_iterator it = rings.begin();
+		it != rings.end(); ++it)
+	{
+		printf("sky horizon ring y=%d r=%d..%d v=%d..%d corners=%d pages=",
+			it->first, it->second.r0, it->second.r1, it->second.v0,
+			it->second.v1, it->second.faces);
+
+		for (std::set<int>::const_iterator p = it->second.pages.begin();
+			p != it->second.pages.end(); ++p)
+			printf("%s%d", p == it->second.pages.begin() ? "" : ",", *p);
+
+		printf("\n");
+	}
+
+	return 0;
+}
+
 static int ProbeMain(int argc, char** argv)
 {
 	/* -loadtime, -reload and -reloadas are taken out of the list here, ahead
@@ -12553,6 +13306,12 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -light <x y z r g b falloff>   -bulb <x y z rad den [r g b]>\n");
 		printf("       -fog <start end r g b>  -underwater  -shimmer  -wibble <n>\n");
 		printf("       -effect <0..21>  -paritycheck\n");
+		printf("       -sky  -skyonly  -skycensus  -skydump <path>   the HD "
+			"sky drawn, alone, or its parts counted\n");
+		printf("       -skylayer <1|2> <r> <g> <b> <vel>  "
+			"-skylayerpage sd|hd|psx   a classic layer over the HD sky\n");
+		printf("       -skycloud <floor> <thickness> <cell> <coverage> "
+			"<density> <vel>  -skygpu <n>   the cloud measurement\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");
 		printf("       -hdwater 0|1  -waterfile <path>   the water sheets "
 			"(needs -roombox)\n");
@@ -12773,6 +13532,9 @@ static int ProbeMain(int argc, char** argv)
 
 	for (; at < argc; at++)
 	{
+		if (SkyArg(argc, argv, &at))
+			continue;
+
 		// The springs' switches: the chain below is at the compiler's limit
 		// of nested blocks (C1061).
 		if (SpringArg(argc, argv, &at))
@@ -13626,8 +14388,13 @@ static int ProbeMain(int argc, char** argv)
 	printf("install: %s\n", root);
 	printf("commit before anything: %.1f MiB\n", CommitMiB());
 
+	// -skycensus needs no device: the two files, read and printed.
+	if (g_sky_census)
+		return ProbeSkyCensus(root, stem, rooms);
+
 	/* -walk needs no device, no .TRG and no picture - only the classic
 	 * level - so it runs here, before the window exists. */
+
 	if (reachSurvey)
 	{
 		if (g_roombox.empty())
@@ -15862,6 +16629,7 @@ static int ProbeMain(int argc, char** argv)
 		skyWorld._42 = (float)cy;
 		skyWorld._43 = (float)cz;
 		skyDrew = HDRenderSky(&skyWorld);
+		ProbeSkyLayers(&skyWorld, stem);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

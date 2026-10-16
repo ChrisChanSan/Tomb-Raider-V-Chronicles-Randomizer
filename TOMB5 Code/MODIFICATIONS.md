@@ -2755,6 +2755,187 @@ writes one `HDLOG ... sky groups=` line per level.
 
 **Commits.** `1087750`, `c0f9ede`, `5285f99`
 
+**2026-10-16 (#208): the seam in the dome, JOBY4's layers, an HD page for the layers, and
+volumetric clouds measured.**
+
+**What.** Four changes and one measurement. (1) RoomProbe `-skycensus` says what the sky
+of a level is made of. (2) The sky's alpha pass is drawn in the order the `.TRG` lists its
+parts, back to front, with no depth test among those parts, so the cloud sheets are no
+longer cut off in a hard circle where they meet the band's sphere. (3) The classic flat
+layers are left out only where the HD sky stands for them; JOBY4's are drawn over its band
+again. (4) Where the layers are drawn over an HD sky that has a cloud sheet (ANDY1 to
+ANDY3, where layer 1 carries the lightning), they carry that sheet's HD page instead of
+the level's classic sky page, and on the flat layer's quads also with the PSX sky on. (5)
+A volumetric cloud layer is measured in RoomProbe and nowhere else; nothing of it is on
+the game's path.
+
+**The census.** The HD sky group is not a cone. It is one band and up to three flat sheets
+(RoomProbe `-skycensus`, all fifteen levels). The band is a sphere of radius 4,100 about
+the camera (ANDREA3's 4,891, its centre 818 units off; the others centred up to 1,271
+units above or below it), 1,280 triangles in 21 rings from elevation -75 to +75 degrees,
+wearing a 4,096 x 2,048 panorama out of the block 7000..7011 whose v runs linear in the
+band's own elevation (v 21..233, 1.42 bytes a degree); its page is alpha 0 above about 27
+degrees and opaque below about 9 degrees. A sheet is a flat square of 5 x 5 or 10 x 10
+tiles of one 512 x 512 page each (7.4 v bytes a thousand units, half width 17,170) at
+1,752 to 4,996 units over the camera, material 1, scrolling on its own parameters. A
+level's page table names exactly the sky pages its parts use; six pages of the block are
+named by no level (7001, 7009, 7104, 7105, 7106, 7114). The classic HORIZON mesh (slot
+454) is a short cylinder of radius 2,147 (716 in ANDY1 to ANDY3 and RICH1) in three to
+thirteen rings on one to five classic pages. The classic layers take one of two paths, by
+the `PSX_skies` setting (`psxsky`, on by default). Off, they are `DrawFlatSky`'s two quads
+of 9,728 units at 1,536 over the camera on the level's own 256 x 256 sky page, every texel
+at alpha 255 except in ANDY1 and RICH2 (70 per cent). On, `DrawPSXSky` cuts each quad into
+4 x 4 tiles of 2,432 units, each tile one of the four `SKY_GRAPHICS` sprites: 65 x 65
+texel windows on an object page they share with up to seven other sprites (the `.TRC`'s
+sprite table, all fifteen levels). In ANDY1 to ANDY3 and RICH1 to RICHCUT2 those are dark
+cloud tiles with holes (alpha 255 on 35 to 52 per cent of the texels); in JOBY3 to JOBY5 a
+near-opaque dark teal (rgb about 1,18,22); in TITLE, ANDREA1 to ANDREA3 and JOBY2
+near-opaque cloud colour.
+
+| level | script | layer 1; layer 2 (r,g,b,vel) | HD sky parts (page height; * opaque) |
+|---|---|---|---|
+| TITLE | H 1 | 128,128,128,7 | *band 7010, *band 7000 |
+| ANDREA1 | H 1 | 16,16,96,3 | 7107 2441, 7100 2280, 7108 2057, band 7002 |
+| ANDREA2 | H 1 | 128,128,128,3 | *7109 2441, 7101 1752, band 7003 |
+| ANDREA3 | H 1 | 128,128,128,3 | 7102 2441, band 7004 |
+| ANDY1-3 | H 1 L | 80,96,160,-8 | 7116 4259, 7113 3550, *7112 4996, band 7007 |
+| JOBY2 | H 1 | 168,168,200,-8 | 7110 2759, 7111 2295, band 7005 |
+| JOBY3, 5 | H 1 2 | 128,128,128,2; 128,128,128,-1 | none: the classic sky whole |
+| JOBY4 | H 1 2 | 128,128,128,2; 128,128,128,-1 | band 7006 (one flat colour) |
+| RICH1, 2 | H 1 2 | 64,64,144,-5; 32,32,78,2 | 7115 2534, 7103 2262, *7112 2836, 7008 |
+| RICH3 | H 1 2 | 64,64,144,-5; 32,32,78,2 | *1218 -3319, as RICH1, band 7011 |
+| RICHCUT2 | H | - | as RICH1, band 7011 |
+
+(H `GF_HORIZON`, 1 and 2 `GF_LAYER1`/`GF_LAYER2`, L `GF_LIGHTNING`, from the game's
+`SCRIPT.DAT`; height over the camera in units, RICH3's ground part under it.)
+
+**The seam - cause.** In a reference picture supplied for this project the dome showed a
+cap of one cloud picture, a ring of another and black between them, with a hard circle
+round the cap. The eye is JOBY2's room 139 (the brick parapet; the HD/SD switches of the
+owner's log at camera ticks 21147 to 21588, eye 3286,-9224,45533, yaw 79, pitch -31.5),
+not ANDY3, and RoomProbe at that eye draws the same picture. The build's range sort put
+the band first in the sky's alpha pass ("the unlit band before the cloud layers"), and
+that pass blends with the depth write on; so the band's sphere wrote depth over its whole
+empty upper half, and every sheet failed the depth test wherever it lies beyond the
+sphere. A sheet at height h is nearer than the sphere only above asin(h/4100): JOBY2's
+7110 above 40.0 degrees (the cap), 7111 above 32.6 (the ring), the clear colour below
+until the band's haze. The UV mapping is right: the band's v follows its elevation and
+each sheet tile spans its page once.
+
+**The seam - rule.** The alpha pass of a sky group is drawn in the `.TRG`'s part order,
+which is back to front in all thirteen sky levels (the sheets from the highest to the
+lowest, the band last); the `.TRG` writes each part's vertices as one ascending block, so
+`HDRenderSkyPartOrder` keeps that order by each range's lowest vertex (`hd_render.cpp`, in
+"The sky dome"; the census's `vertices=`; RICH3's ground part is the one block out of
+order, and it is in the opaque pass). The pass is drawn with the depth test off
+(`D3DCMP_ALWAYS`, the previous function read back and restored). An opaque sheet (ANDY's
+7112 at 4,996, RICH's 7112 at 2,836, ANDREA2's 7109 at 2,441, each the highest sheet) is
+nearer than the band above the elevation where it meets the sphere (71.1, 43.8 and 36.5
+degrees), and the band drawn over it there adds nothing: the band page's alpha is 0 at and
+above each of those crossings (`-skydump`'s band rows against the page, DdsProbe
+`-alpha`). RICH3's ground plane lies beyond the opaque band below the horizon. Band-last
+with the depth test kept would leave a step where a sheet crosses the sphere with the
+band's alpha not 0 there (ANDREA1's 7108 at 30.1 degrees, alpha up to 49; ANDREA2's 7101
+at 25.3, 85; ANDREA3's 7102 at 33.8, 249). Measured with `-skyonly -black` at 1,280 x 720,
+pixels of the clear colour: JOBY2 at his eye 105,937 to 0, the hard steps (24 levels or
+more to the pixel below) 1,549 to 0; ANDREA1 room 152 51,791 to 0; ANDY3 room 35 429,490
+to 191,082 (the rest is ANDY's sheet 7112, black in 262,072 of its 262,144 texels);
+ANDREA2 room 153 0 to 0 with 129,193 pixels changed (7101 no longer cut at 25.3 degrees).
+
+**The hiding - cause.** In JOBY4 the owner's log has 912 camera ticks with the eye under
+water (rooms 123 and 6), the SD stretch from tick 24062 to 24284. The sky phase ran on
+every HD frame: all 26 `VISLOG` seconds and all 291 `ROOMLIST` frames (rebuilt from the
+deltas) list a walk room under the sky, no `CAMLOG draw` line falls in JOBY4, and
+`HDFrameSky` has no under-water gate - not a room list without a sky room, not a cull, not
+a phase skipped. JOBY4's sky group is the band alone, page 7006, one colour (0D232A, every
+texel alpha 255), while its script draws both layers on the level's own sky page, which in
+JOBY4 is the sea's surface seen from below. `HDFrameSky` answering true dropped both
+layers, so the moving surface overhead was gone and what stood for it was room 19's art
+(the stacked sea), drawn where that room is listed and windowed - camera-dependent. The
+band's polar holes (beyond its last ring at 75 degrees) are on screen at 173 of the 912
+ticks, but at 69 HD ticks rendered (every tenth) room 19's surface covers the hole at all
+21 where it is in view: no cap is built.
+
+**The hiding - rule.** `HDRenderSkyCoversLayers`: the HD sky stands for the layers when a
+sky group holds a cloud sheet or a band in the opaque pass (TITLE's two painted skies);
+otherwise (`JOBY4` alone of the fifteen) `SkyDrawPhase` draws the script's layers over the
+band as the classic path draws them (`game/draw.cpp`, `HDFrameSkyCoversLayers`), on the
+path `PSX_skies` names. At twelve of his HD ticks (every sixtieth) the pixels of bare band
+(0D232A within 3 levels) fall from 1,763,129 to 379,032 at 1,280 x 720 with the flat path
+(RoomProbe `-skylayer` twin) and to 379,802 with the PSX tiles (`-skylayerpage psx`), the
+setting in use; the PSX tiles change 111,771 to 716,140 pixels a tick against the frame
+drawn without the layers.
+
+**The HD page for the layers.** The level's classic sky page is opaque in ANDY2 and ANDY3
+(70 per cent of ANDY1's texels), so on the flat path layer 1 covered the HD dome with the
+SD clouds. Over an HD sky with a cloud sheet the layers now carry the sheet nearest the
+camera (the last sheet of the alpha pass in part order; 7113 in ANDY), lent into the
+classic page's slot `Textures[nTextures - 1]` for the one `OutputSky` that draws them and
+given back right after (`HDFrameSkyLayerPage`, `hd_level.cpp`); motion (`UpdateSky`),
+quads, colour and the lightning stay classic. JOBY4 has no sheet and keeps its classic
+page. The PSX path never reads that slot: `DrawSkySegment` takes each tile's page from its
+`SKY_GRAPHICS` sprite (ANDY3: the four on page 7, 65 x 65 windows), and a 512 x 512 sheet
+page has nothing to stand in for windows of a shared object page. So while a page is lent
+`SkyDrawPhase` draws the layers on the flat quads whatever `PSX_skies` says, and puts the
+setting back before `OutputSky`; where nothing is lent the setting is honoured as before.
+At the owner's ANDY3 eye (room 35, layer 1 80,96,160 at -8, 1,280 x 720), against the dome
+drawn alone and counting a pixel changed when any channel differs: the classic flat page
+changes 310,227 pixels (mean of the largest channel difference 116.0 levels), the PSX
+tiles 150,748 (27.7, up to 112), the HD page on the flat quads 81,422 (33.6, up to 122);
+the PSX tiles and the HD page differ in 190,776 pixels. Of 311,355 sky pixels the classic
+page leaves 1,128 as the dome draws them and the HD page 229,933 (the mean change over all
+sky pixels 89.3 and 5.3 levels).
+
+**The costs** (GPU timestamp brackets, RoomProbe `-skygpu 50`, 2,560 x 1,440, three runs,
+the medians): the dome at JOBY2's eye 0.287 ms (0.2868, 0.2876, 0.2880), at ANDY3's 0.353
+(0.3522 to 0.3538); a layer pair on either page 0.012 (0.0118 to 0.0120); at ANDY3's eye
+the layer on the PSX tiles 0.0127 (0.0126, 0.0127, 0.0127) and on the HD page's flat quads
+0.0119 (0.0119, 0.0119, 0.0118); the volumetric layer 1.90 at JOBY2's eye (1.8985, 1.9015,
+1.9014) and 1.80 at ANDY3's (1.7978, 1.7982, 1.8002). The dome's draw calls and triangles
+are those of before (the `HDLOG sky` line's `calls=`); no before figure of the dome was
+taken in the same tool. Shader slots: `LayerVS` 6, `LayerPS` 4, `CloudVS` 2, `CloudPS` 333
+of 512 (three octaves took 519, so two). No page or texture is added; `CloudPS` is 5,920
+bytes of bytecode.
+
+**The proposal - volumetric clouds, measured only.** `hd_sky.hlsl` `CloudPS` (RoomProbe
+`-skycloud`, `HDRenderSkyCloudProbe`): every pixel's ray walked through a slab over the
+camera in 16 steps, the density a lattice of values from a hash of the cell's integer
+coordinates (two octaves, smoothly interpolated, no trigonometry), carried along x as
+`UpdateSky` carries a layer, composed front to back over the sky, faded towards the
+horizon. Pictures at three eyes (JOBY2 his eye, ANDY3 room 35, ANDREA1 room 152): the
+field reads as soft puffs over the dome; at 1.8 to 1.9 ms full screen at 2,560 x 1,440 it
+costs six times the dome. Nothing of it is on the game's path; the owner decides.
+
+**Checked.** With `hd_build` 0 the classic frames are the old ones byte for byte (P1: the
+six classic views md5-identical to the 8691e82 and the dc75a96a tools; three classic views
+at the sky eyes identical to dc75a96a); `SkyDrawPhase` with `HDFrameSky` false has
+`covered` false and lends no page, so its classic branches draw as before. With `hd_build`
+1 the six HD views are identical to dc75a96a and twelve of the fifteen parity cameras; the
+three that change are sky views (JOBY2 C1 10,417 and C4 6,638 pixels, ANDREA2 E1 33, all
+in the frame's top rows).
+
+**Left.** Two comments outside the sky's own lines still describe the old order: the
+build's range sort ("the unlit band of the sky before the cloud layers") and `draw_pass`'s
+sky branch ("the depth write stays on"); their lines belong to other parts of the file.
+TITLE draws both its sky groups every frame and the second (7000) wins at equal depth;
+which one belongs to `jobyfrigger`'s horizon swap is not established. The band's polar
+holes stay open (covered everywhere measured). JOBY3 and JOBY5 have no HD sky at all. The
+layers' HD page is sampled at its top level, as the classic sampler takes every page
+(`MIPFILTER NONE`). ANDREA3, where the painter's order changes most (the band's alpha 249
+where 7102 crosses it, so the band now lies over a nearer sheet's edge there), has no
+measured eye. The engine's own `SkyDrawPhase` is not drawn by any tool: its two paths are
+shown through RoomProbe's twin, and the `PSX_skies` switch-over is read from the code. No
+ModernTest group: the rules live on the renderer's ranges, with no pure function to test
+beside them.
+
+**Open for the owner.** Whether JOBY4's restored surface layers are the look wanted: with
+the PSX sky on (his setting) they are the dark teal `SKY_GRAPHICS` tiles, with it off the
+bright surface page; whether the lightning layer should keep the cloud sheet's page or
+drop to the lightning's colour alone; whether a lent HD page should override the PSX sky
+setting as it now does; whether the volumetric layer is wanted at its cost.
+
+**Commits.** `4eb9e0f5`, `124ec950`, `9da28f2e`, `3d7c5581`, `1b9b05e3`, `33b315fd`
+
 ### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items
 2026-09-29
 

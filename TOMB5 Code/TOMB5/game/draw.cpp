@@ -666,11 +666,36 @@ void SkyDrawPhase()
 		 *
 		 * With hd_enable off, before a level is built, or in a level whose
 		 * .TRG has no sky group, HDFrameSky returns false on its first test
-		 * and the classic sky is drawn unchanged. */
+		 * and the classic sky is drawn unchanged.
+		 *
+		 * The layers go only where the HD sky stands for them. JOBY4's sky
+		 * group is a band of one flat colour and nothing else, while its
+		 * script's two layers are the sea's surface seen from below on the
+		 * level's own sky page; there they are drawn over the band, as the
+		 * classic path draws them (HDFrameSkyCoversLayers). */
 		const bool hdSky = HDFrameSky(aMXPtr);
+		const bool covered = hdSky && HDFrameSkyCoversLayers();
 		const bool lightning = (gfLevelFlags & GF_LIGHTNING) != 0;
-		const bool layer1 = (gfLevelFlags & GF_LAYER1) && (!hdSky || lightning);
-		const bool layer2 = (gfLevelFlags & GF_LAYER2) && !hdSky;
+		const bool layer1 = (gfLevelFlags & GF_LAYER1) &&
+			(!covered || lightning);
+		const bool layer2 = (gfLevelFlags & GF_LAYER2) && !covered;
+
+		/* Over an HD sky that has a cloud sheet, the layers carry that
+		 * sheet's HD page in place of the level's classic sky page, for the
+		 * one OutputSky that draws them (HDFrameSkyLayerPage) - ANDY1 to
+		 * ANDY3, where layer 1 carries the lightning. The page covers the
+		 * flat layer's whole quad, u and v 0 to 1, as the sheet's own tiles
+		 * do; the PSX sky's tiles cut 65 x 65 texel windows out of shared
+		 * object pages (DrawSkySegment, SKY_GRAPHICS), which no HD page
+		 * stands in for, so a borrowed page is drawn on the flat quads
+		 * whatever PSX_skies says. Where nothing is lent the layers take
+		 * the path the setting names, as the classic sky does. */
+		const bool borrowed = hdSky && (layer1 || layer2) &&
+			HDFrameSkyLayerPage(true);
+		const bool psxSkies = tomb5.PSX_skies;
+
+		if (borrowed)
+			tomb5.PSX_skies = false;
 
 		phd_PushMatrix();
 
@@ -687,8 +712,13 @@ void SkyDrawPhase()
 		if (layer2)
 			DrawFlatSky(0xFF000000 | *(ulong*)&gfLayer2Col, SkyPos2, -1536, 2);
 
+		tomb5.PSX_skies = psxSkies;
+
 		if (layer1 || layer2)
 			OutputSky();
+
+		if (borrowed)
+			HDFrameSkyLayerPage(false);
 
 		phd_PopMatrix();
 

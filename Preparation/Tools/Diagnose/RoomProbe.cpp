@@ -8140,6 +8140,68 @@ static void ProbeWetDraw(int part)
 			st.floor >= 0 ? 1 : 0, ms, cpuMs);
 }
 
+/* The room behind the models' copy (HDRenderWaterWetRoomCopy) where
+ * HDRenderWaterMarkBegin takes it, timed on the GPU with a timestamp pair:
+ * a -hdwater line of its own, a whole frame's colour copied. */
+static void ProbeWetRoomCopy()
+{
+	IDirect3DQuery9* q[3] = { 0, 0, 0 };
+	IDirect3DQuery9* freq = 0;
+
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+	g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &freq);
+
+	const bool timed = q[0] && q[1] && q[2] && freq;
+
+	if (timed)
+	{
+		q[0]->Issue(D3DISSUE_BEGIN);
+		q[1]->Issue(D3DISSUE_END);
+	}
+
+	HDRenderWaterWetRoomCopy(true);
+
+	double ms = -1.0;
+
+	if (timed)
+	{
+		UINT64 a = 0, b = 0, f = 0;
+		BOOL disjoint = TRUE;
+
+		q[2]->Issue(D3DISSUE_END);
+		q[0]->Issue(D3DISSUE_END);
+		freq->Issue(D3DISSUE_END);
+
+		while (q[0]->GetData(&disjoint, sizeof(disjoint), D3DGETDATA_FLUSH) ==
+			S_FALSE)
+			;
+
+		while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		while (freq->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		if (!disjoint && f)
+			ms = (double)(b - a) * 1000.0 / (double)f;
+	}
+
+	for (int i = 0; i < 3; i++)
+		if (q[i])
+			q[i]->Release();
+
+	if (freq)
+		freq->Release();
+
+	printf("-hdwater: wet room copy GPU %.4f ms (timestamps round the "
+		"copy of the frame's colour before the models)\n", ms);
+}
+
 /* -wetagain: the wet floor's two draws once more after the frame's (its
  * darkening and its mirror twice in the picture), each timed as the first:
  * the first wet frame's draws against a second's. */
@@ -14971,7 +15033,7 @@ static int ProbeMain(int argc, char** argv)
 			/* The room behind the models, before Lara or the stand-ins, as
 			 * HDRenderWaterMarkBegin takes it before the game's objects. */
 			if (g_hdwater == 1 && (g_wet_lara_ready || !g_wet_stands.empty()))
-				HDRenderWaterWetRoomCopy(true);
+				ProbeWetRoomCopy();
 
 			// -wetlara: Lara, where the stand-ins stand.
 			if (g_wet_lara_ready)

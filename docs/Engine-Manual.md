@@ -2222,6 +2222,9 @@ it.
   show in it.
   What a model hides in the picture - the bench behind a crawling Lara -
   is mirrored out of the room's picture taken before the models.
+  The reflection is softened further from the eye - fine near, the
+  cove lights' strips without steps across the floor further down the
+  corridor - and Lara's and the objects' reflections with it.
   A level with a tank makes the wet floor's targets at its load and
   readies its shaders on its first frame, so breaking a tank does not
   hold the picture. Where the level's art carries a copy of the room upside down

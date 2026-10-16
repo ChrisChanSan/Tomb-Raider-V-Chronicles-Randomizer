@@ -14019,7 +14019,8 @@ every listed object mirrored; all five are answered above and here.
 **Commits.** `f30f7b2b` (the census), `e247a29b` (the copy under a clear floor only),
 `4ff5742c` (the models in the mirror), `4d58f085` (the models' mask and clip planes),
 `cd8e8548` (the census's refit).
-**Round 7: the veil under her, the first wet frame, the flipped water.** Asked for after
+**Round 7: the veil under her, the soft bands, the first wet frame, the flipped water.**
+Asked for after
 the play test of round 6 (the engine of `46c5526b`) on 2026-10-16, put into English (his
 words beside in German): the grey veil under Lara is still there, he thinks it the
 shadow of the mirror's double, and it stands upside down, so it comes from her mirror
@@ -14059,7 +14060,16 @@ wet floor mirrored models), and a ray that went behind a model's place and met n
 after it takes that copy's colour at its first such place (`WetMarch`, `why` 4): the
 room the model hides. After: 78, 46, 88, 95 and -1,949 - as without her. The models'
 mask and the clip planes are unchanged. `WetPS` 320 to 336 slots, the debugger's 471 to
-481.
+481. Those five views stood at the probe's pitch +4.3, which looks down; his `CAMLOG` eye
+looks up (its target 63 units above it, the y axis pointing down), the probe's -4.3,
+which the horizon's height confirms. The fix pass measured that eye and its fan again:
+the floor pixels where the march finds nothing with her (debugger map 7, her own pixels
+left out) 7,996, 9,842, 6,985, 8,581 and 7,568 before the fix (40,972), 219, 184, 288,
+249 and 233 after (1,173); the march's class - pixels her presence darkens by 64 on
+average - 42,078 before, 11,385 after, and what stays is her own dark reflection. The
+copy of the room costs 0.016 ms of GPU at 2,560 x 1,440 at his eye (0.0156 to 0.0166, six
+runs, its own timestamp bracket in RoomProbe), on every frame after one whose wet floor
+mirrored models.
 
 The first wet frame. RoomProbe `-wetagain` draws the wet floor's two draws a second time
 and times each to the GPU's end. His eye at 2,560 x 1,440, three runs: the first frame's
@@ -14077,36 +14087,89 @@ into the models' target through five planes that cut everything away
 bar frames have no objects to draw, and the models' shaders are not the renderer's to
 draw alone. After: the first wet frame's draws 0.9 to 1.4 and 0.6 to 0.8 ms, the warm
 draw 152 to 194 ms on the level's first frame (with the frame's queued work it waits
-for). No new line in `hd_level.cpp` for it. The proof in the game is his next cold
-start: no `PROFLOG ... late` line at the first wet frame.
+for). No new line in `hd_level.cpp` for it. The proof in the game is his next cold start:
+no `PROFLOG ... late` line at the first wet frame.
 
-The bands, measured and not built. Three softer reads of the march's hit, each by the
-last step's stretch on the screen: the copy's mip at that size, five taps in a cross,
-five taps along the step, each at two or three strengths. Measured at round 6's band eyes
-k229 and k458 (low eyes down corridor 46 and 75 from afar, the places of his videos),
-c408 and c601: the rows' alternation across the band (|L(y) - (L(y-1) + L(y+1)) / 2|
-over the fine march's bright band, grown by 2), the picture's mean over the four eyes:
-4.147 sharp; mip 4.045, 3.931, 3.822; cross 3.987, 3.944; along 3.939, 3.913 - at most
-8 per cent less, and the reflection departs from the fine march's by 11 against 4.6
-units of light. The mip read built whole (the later copy's and the models' target's
-mips): the alternation 3.453 to 3.060 (k229), 4.210 to 3.737 (k458), 4.885 to 4.574
-(c408), 4.038 to 3.917 (c601), the mirror's GPU 0.13 to 0.18 ms at 2,560 x 1,440; but the
-band's stepped edge stays and small far reflections (a lit sign) wash out. The ripple is
-where the hit switches - rows that meet the thin strip against rows that step past it -
-and a read softened at the hit cannot soften that switch. Not built; under Left.
+Where the warm draw's time goes. The level's first frame comes right after
+`S_LoadScreenEnd` (`file.cpp`), which presents the full bar last; the window shows that
+picture until the first frame presents, so the warm draw holds the full bar a little
+longer and never a moving picture. PROFLOG writes that frame as `first_frame` and never
+counts it late - it is the frame its own comment calls the level's warm-up cost (his log
+at `46c5526b`: ANDREA2's cold first frame 220.27 ms of work, 121.29 of it `hdglow`).
+RoomProbe's frame is a cold first frame - a new process and device every run - and its
+warm draw at his eye at 2,560 x 1,440 held 119.4, 120.7 and 119.6 ms. A cold start into
+RICH2 thus shows its full bar about 120 ms longer, once; later levels find the driver's
+work done. The draw cannot move into the build: the build has no frame's objects to draw,
+the models' shaders are the model path's, and `hd_level.cpp`'s one line of this round is
+the flipped water's.
 
-**Measured.** The veil's classes and counts above (RoomProbe `-wetlara`, debugger map
-7); the first wet frame with `-wetagain` before, after the targets' warm-up alone (the
-mirror still 74 to 78 ms) and after the models' warm draw; the bands' three ways.
+The bands. Three softer reads of the march's hit first, each by the last step's stretch
+on the screen: the copy's mip at that size, five taps in a cross, five taps along the
+step, each at two or three strengths. Measured at round 6's band eyes k229 and k458 (low
+eyes down corridor 46 and 75 from afar, the places of his videos), c408 and c601: the
+rows' alternation across the band (|L(y) - (L(y-1) + L(y+1)) / 2| over the fine march's
+bright band, grown by 2), the picture's mean over the four eyes: 4.147 sharp; mip 4.045,
+3.931, 3.822; cross 3.987, 3.944; along 3.939, 3.913 - at most 8 per cent less, and the
+reflection departs from the fine march's by 11 against 4.6 units of light. The mip read
+built whole: the band's stepped edge stays and small far reflections (a lit sign) wash
+out. The ripple is where the hit switches - rows that meet the thin strip against rows
+that step past it - and a read softened at the hit cannot soften that switch.
+
+The fourth way is built: the mirror's layer blurred on the screen. The mirror is drawn
+into a target of its own (`g_wet_soft`, the frame's size in 32 bits, made at the water's
+warm-up), its alpha the blur's radius - the screen length of the march's last step, at
+most 15 pixels, whole from 2,048 units from the eye on and shrinking nearer (`kWetBlur`
+1, `kWetBlurNear`) - then blurred across into the later copy (which the mirror reads no
+more by then) and down into the frame, each pixel over its own radius, a Gaussian of
+sigma r / 2 over four taps a side, the covered pixels only; the mirrored models lie in
+the layer and soften with it. The alternation metric above counts the marble's own veins,
+so the soft mirror is measured on the mirror alone - the picture less the one RoomProbe
+draws `-wetnomirror` - along each reflected band: the mean luminance of the band's pixels
+in a row, B(y), and its variation |B(y) - (B(y-1) + B(y+1)) / 2| along the band's length,
+over the map-6 band in the picture's lower half (the floor), in pieces of 150 pixels and
+more. Means over the four eyes, and over each band's further half:
+
+| Strength (k, whole from) | along the band | its further half |
+|---|---|---|
+| sharp | 1.276 | 1.549 |
+| 0.25 everywhere | 0.662 | 0.913 |
+| 0.5 everywhere | 0.545 | 0.733 |
+| 1 everywhere | 0.452 | 0.568 |
+| 2 everywhere | 0.430 | 0.579 |
+| 1, 1,024 | 0.475 | 0.590 |
+| **1, 2,048 (built)** | **0.504** | **0.640** |
+| 1, 4,096 | 0.631 | 0.812 |
+| 2, 2,048 | 0.481 | 0.605 |
+
+Two thirds of the ripple go (k229 1.634 to 0.791, k458 1.329 to 0.539, c408 1.606 to
+0.466, c601 0.533 to 0.222); the cross-row metric of the three reads gives 4.147 to
+3.732. Everywhere at full strength the vending machine's reflection beside him blurs to a
+smear (RoomProbe at his eye, -4.3); from 2,048 units on it stays readable near and the
+bands lose their steps far. The mirror's GPU at 2,560 x 1,440, three runs: k229 0.137 to
+0.187 ms, c601 0.137 to 0.193, his eye with Lara 0.20 to 0.22 against 0.25: about +0.05
+ms. `WetPS` 336 to 479 slots, the debugger's 481 (it draws no soft mirror). Changed
+pictures against `80ef4765`: the wet floor's only - 22 of round 6's 25 band views (1,761
+to 104,223 pixels), 7 of his 8 eyes (36,820 to 98,289), the three tank-33 views (62,912
+to 75,661); the pond 36 of 36, the canals, the dry views and the 15 cameras identical,
+`WATERLOG` 240 of 240. RoomProbe `-wetblur k[,whole]` draws with another strength (0
+sharp, as before).
+
+**Measured.** The veil's classes and counts above (RoomProbe `-wetlara`, debugger map 7),
+at the probe's +4.3 and again at his eye's -4.3; the room copy's GPU; the first wet frame
+with `-wetagain` before, after the targets' warm-up alone (the mirror still 74 to 78 ms)
+and after the models' warm draw; the bands' three reads and the soft mirror's strengths,
+its cost.
 
 **Checked.** See the flipped water below for the sweep; the classic path, `hd_water 0`,
 the pond and the band eyes in the round's proofs.
 
-**Left.** The bands: a blur of the mirror layer in screen space, in a target of its own
-with its radius from the step's stretch, is the remedy the measure points to, not built
-in this round. The veil's fix reads the room's copy only from the second wet frame on (a
-frame's lag; the first shows the stand-in as before). The look in the game: nobody in
-this round could play it.
+**Left.** The veil's fix reads the room's copy only from the second wet frame on (a
+frame's lag; the first shows the stand-in as before). With a multisampled frame the
+mirror stays sharp (the layer is one sample a pixel). Some queries on the water squares
+do not ask whether a flipped body shows (`HDRenderWaterSheetUnder`, `sheet_surface_near`,
+`HDRenderWaterUnderOn`): JOBY5's basins are 256 deep and the classic engine makes no
+ripples on a dry floor, so nothing is expected to show; RICH3's channel is not checked.
+The look in the game: nobody in this round could play it.
 
 **The flipped water.** JOBY5's corridor under the leaks: room 37 over room 38, a grated
 floor over a dry room, and flipmap 0 swaps 37 with 2 and 38 with 3 (his log's `HDLOG
@@ -14126,14 +14189,15 @@ squares), 14 and 20 (153, 9), 30 and 52 (154, 9), 36 and 50 (155, 9), all basins
 rooms 20, 30, 36 and 37 (falls 3, 4 and 8 to 13) and RICH3's fall 0 stand over a body
 now and get their curtain and foam by the existing rule. At his picture's eye (tick
 31,625, eye (58,556, 4,063, 75,801) in room 37): with the flip off the picture is
-md5-identical to `46c5526b`'s, with it on 184,476 of 518,400 pixels change - the sheet
-over the grate. The sweep: 13 levels' `WATERLOG` lines identical but for the new field;
+md5-identical to `46c5526b`'s, with it on 196,783 of 518,400 pixels differ in any
+channel - the sheet over the grate. The sweep: 13 levels' `WATERLOG` lines identical
+but for the new field;
 JOBY5's 124 lines become 148 (four bodies, the falls over them, their feet and segments,
 the curtains after them renumbered) and RICH3's 3 become 10. RoomProbe `-flip` hands its
 swaps to the water too.
 
 **Commits.** `3dc9b342` (the veil), `567a7876` (the first wet frame), `99ac494a` (the
-flipped water).
+flipped water), `c70c7559` (the room copy's time), `181b51ee` (the soft mirror).
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

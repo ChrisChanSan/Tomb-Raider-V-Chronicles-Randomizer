@@ -14463,11 +14463,12 @@ static int ProbeMain(int argc, char** argv)
 	printf("install: %s\n", root);
 	printf("commit before anything: %.1f MiB\n", CommitMiB());
 
-	/* -walk needs no device, no .TRG and no picture - only the classic
-	 * level - so it runs here, before the window exists. */
 	// -skycensus needs no device: the two files, read and printed.
 	if (g_sky_census)
 		return ProbeSkyCensus(root, stem, rooms);
+
+	/* -walk needs no device, no .TRG and no picture - only the classic
+	 * level - so it runs here, before the window exists. */
 
 	if (reachSurvey)
 	{

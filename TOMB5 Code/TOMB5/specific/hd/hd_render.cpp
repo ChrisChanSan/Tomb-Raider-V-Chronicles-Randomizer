@@ -21174,7 +21174,8 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  *
  * The order inside the sky: the flat cloud sheets (RoomProbe -skycensus: a
  * square of 5 x 5 or 10 x 10 tiles of one page, 1,752 to 4,996 units above
- * the camera) are nearer than the band's sphere of 4,100 only overhead, above
+ * the camera) are nearer than the band's sphere (radius 4,100; ANDREA3's
+ * 4,891, its centre 818 units off the camera) only overhead, above
  * the elevation where their plane meets it (30 to 71 degrees), and the band
  * is see-through there - its page is alpha 0 above about 27 degrees. Sorted
  * by depth, a sheet would be cut off along that circle wherever the band
@@ -21183,9 +21184,13 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * as a painter's picture in the order the .TRG lists its parts, which is back
  * to front in every sky level: the sheets from the highest to the lowest,
  * the band last, its haze laid over the sheets towards the horizon as the
- * page's alpha ramp asks. The depth test is off for that pass alone (the
- * sky's opaque parts lie behind every alpha part wherever both are drawn);
- * every pixel of the world still comes after the sky and is nearer. */
+ * page's alpha ramp asks. The depth test is off for that pass alone. An
+ * opaque sheet (ANDY's and RICH's 7112, ANDREA2's 7109) is nearer than the
+ * band above the elevation where it meets the sphere (36.5 to 71.1 degrees),
+ * and the band drawn over it there adds nothing: its page is alpha 0 at and
+ * above each of those crossings (RoomProbe -skydump's band rows against the
+ * band page's alpha). Every pixel of the world still comes after the sky
+ * and is nearer. */
 #define HD_SKY_MINZ	0.996f
 
 int HDRenderSkyGroups()

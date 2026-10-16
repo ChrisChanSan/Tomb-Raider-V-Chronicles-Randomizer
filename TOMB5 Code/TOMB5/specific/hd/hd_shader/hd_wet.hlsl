@@ -659,3 +659,66 @@ float4 WetPS(WET_IN input, float2 vpos : VPOS) : COLOR0
 	return float4(mirror * wet, gWetModels.w > 0.0f ?
 		(1.0f + floor(radius * 16.0f + 0.5f)) / 255.0f : 0.0f);
 }
+
+/* The marble floors (hd_render.cpp, "the marble floors"): a planar mirror
+ * laid over a polished floor's own faces, drawn with CardVS as the wet
+ * floor is and on its registers. The room art, the statics and the models
+ * were drawn once more through the floor's plane into a target of their
+ * own (s5) and its depth (s3), flipped left to right; a pixel takes what
+ * that target holds at its own place turned back, where the depth holds
+ * something, and the walls' light where it holds nothing - the wet floor's
+ * composition otherwise, at a dry floor's numbers (gWetLook: F0 0.04, no
+ * darkening): Schlick's term, the light field's stand-in and the lamps'
+ * highlight, the soft cap and the fog. gMarble.x 1 draws the wet floor's
+ * points instead, their wetness in alpha, for the stencil they leave the
+ * marble out of; gMarble.y and w the flip's place in the target: a
+ * pixel's x there is (y - vpos.x) * w. */
+float4 gMarble : register(c105);
+
+float4 MarblePS(WET_IN input, float2 vpos : VPOS) : COLOR0
+{
+	if (gMarble.x > 0.5f)
+		return float4(0.0f, 0.0f, 0.0f, input.view.w);
+
+	const float3 P = input.view.xyz;
+	const float dist = length(P);
+	const float3 V = -P / max(dist, 1.0f);
+	const float3 N = -gWetAxes[1].xyz;
+	const float nv = saturate(dot(N, V));
+	const float4 toward = tex3D(sFieldDir, input.field.xyz);
+	const float3 colour = tex3D(sFieldRgb, input.field.xyz).rgb;
+	const float3 Lw = toward.xyz * 2.0f - 1.0f;
+	const float len = length(Lw);
+	const float3 L = (Lw.x * gWetAxes[0].xyz + Lw.y * gWetAxes[1].xyz +
+		Lw.z * gWetAxes[2].xyz) / max(len, 1.0e-3f);
+	const float3 LV = L + V;
+	const float3 H = LV * rsqrt(max(dot(LV, LV), 1.0e-8f));
+	const float lobe = pow(saturate(dot(N, H)), gWetLook.w) *
+		saturate(dot(N, L));
+	const float g = 1.0f - nv;
+	const float g2 = g * g;
+	const float F = gWetLook.x + (1.0f - gWetLook.x) * (g2 * g2 * g);
+	float3 seen = colour * gWetLook.y;
+	const float2 at = float2((gMarble.y - vpos.x) * gMarble.w,
+		(vpos.y + 0.5f) * gWetScreen.y);
+
+	if (tex2Dlod(sWetModelDepth, float4(at, 0.0f, 0.0f)).r < 1.0f)
+	{
+		const float3 held = min(tex2Dlod(sWetCopy, float4(at, 0.0f,
+			0.0f)).rgb, HD_WET_BRIGHT / (1.0f + HD_WET_BRIGHT));
+
+		seen = held / (1.0f - held);
+	}
+
+	float3 mirror = (seen + colour * (toward.a * saturate(len) * lobe *
+		gWetLook.z)) * F * gWetGain.x;
+	const float t = max(mirror.r, max(mirror.g, mirror.b)) / gWetMarch.x;
+
+	mirror *= (1.0f - exp(-t)) / max(t, 1.0e-4f);
+
+	const float fog = max(0.0f, input.viewZ.x - gFog.x) * gFog.y *
+		(2.0f / 255.0f);
+
+	mirror *= saturate(1.0f - fog / max(input.viewZ.y, 0.05f));
+	return float4(mirror, 0.0f);
+}

@@ -512,6 +512,14 @@
  *                     numbers (2 without); both draws timed on the GPU.
  *     -marbletint     the mirror squares in a flat red, for the census's
  *                     pictures.
+ *     -marble 0|1     the engine's marble floors (tomb5.hd_marble; off where
+ *                     not given): the mirror faces built with the level, the
+ *                     frame's rooms, statics and models (-wetlara,
+ *                     -wetstand) drawn through each floor height and laid
+ *                     over the floor (HDRenderMarbleDraw), timed on the GPU
+ *                     (marble: line).
+ *     -marbleplanes n the most floor heights a frame mirrors
+ *                     (tomb5.hd_marble_planes, 2 where not given).
  *     -nowarm         no warm-up of the water's shaders before the picture
  *                     (HDRenderWaterWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
@@ -8179,6 +8187,12 @@ static bool g_marble_b = false;
 static bool g_marble_tint = false;
 static std::vector<int> g_marble_rooms;
 static int g_marble_height = 1 << 30;
+/* -marble 0|1 and -marbleplanes n: the engine's marble floors and the most
+ * floor heights a frame mirrors, as tomb5.hd_marble and hd_marble_planes;
+ * off where -marble is not given, so a picture of another switch stays the
+ * one it was. */
+static int g_marble_engine = 0;
+static int g_marble_planes = 2;
 
 static bool MarbleArg(int argc, char** argv, int* at)
 {
@@ -8187,6 +8201,20 @@ static bool MarbleArg(int argc, char** argv, int* at)
 
 	if (strncmp(a, "-marble", 7))
 		return false;
+
+	/* The engine's own marble floors (ProbeMarble), set before the build;
+	 * the faces are built where the water is, with the classic level read
+	 * as -hdwater 0 reads it where -hdwater is not given. */
+	if ((!strcmp(a, "-marble") || !strcmp(a, "-marbleplanes")) && more)
+	{
+		(a[7] ? g_marble_planes : g_marble_engine) = atoi(argv[++*at]);
+		HDRenderMarbleSet(g_marble_engine, g_marble_planes);
+
+		if (g_marble_engine && g_hdwater < 0)
+			g_hdwater = 0;
+
+		return true;
+	}
 
 	if (!strcmp(a, "-marblecensus") || !strcmp(a, "-marblequiet"))
 		g_marble_quiet = g_marble_quiet || a[7] == 'q';
@@ -9139,6 +9167,42 @@ static void ProbeWetDraw(int part)
 		printf("-hdwater: %d wet floor mirror draw(s), GPU %.4f ms (timestamps "
 			"round the later copy and the mirror's draw) cpu %.2f\n",
 			st.floor >= 0 ? 1 : 0, ms, cpuMs);
+}
+
+/* -marble 1: the engine's marble floors where HDFrameDrawGlow draws them,
+ * before the wet floor's models, with Lara (-wetlara) or the stand-ins
+ * (-wetstand) as the models. Drawn first with nothing laid over the frame
+ * (HDRenderMarbleQuiet), the driver's first use of the clip plane and the
+ * target timed apart, then for the picture, timed with a timestamp pair:
+ * one marble: line. */
+static void ProbeMarble(const void* projection)
+{
+	if (!g_marble_engine)
+		return;
+
+	const HDWetModelDraw draw = g_wet_lara_ready ? ProbeWetLaraDraw :
+		!g_wet_stands.empty() ? ProbeWetStands : 0;
+	MarbleTimer timer;
+
+	HDRenderMarbleQuiet(true);
+	timer.Begin();
+	HDRenderMarbleDraw(draw, projection, 0);
+
+	const double first = timer.End();
+
+	HDRenderMarbleQuiet(false);
+	timer.Begin();
+	HDRenderMarbleDraw(draw, projection, 0);
+
+	const double ms = timer.End();
+	HDRenderMarbleStats s;
+
+	HDRenderMarbleStatsNow(&s);
+	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
+		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
+		"(timestamps round HDRenderMarbleDraw), first %.4f ms\n", s.planes,
+		s.drawn, g_marble_planes, s.faces, s.calls, s.wet, s.faces_level,
+		s.water, s.opaque, s.heights, ms, first);
 }
 
 /* The room behind the models' copy (HDRenderWaterWetRoomCopy) where
@@ -16165,6 +16229,8 @@ static int ProbeMain(int argc, char** argv)
 	// The scissor rectangle, off again inside the bracket, as the engine's
 	// frame does.
 	HDRenderScissorOff();
+	// The marble floors' mirror, before the wet floor's models.
+	ProbeMarble(&projection);
 	// The wet floor's mirror before the cards, as the engine has it.
 	ProbeWetDraw(1);
 	// -marblea, -marbleb, -marbletint: the marble floors' layer.

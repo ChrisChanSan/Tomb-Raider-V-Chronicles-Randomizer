@@ -22836,6 +22836,53 @@ static void marble_pages()
 		slabs.source, HD_GLOSS_FROM_SEED);
 }
 
+/* The marble floors' rules (hd_splash_math.h): the face rule's flat and
+ * up at 0.95 of the normal (y runs down), either winding; the share of the
+ * screen a triangle covers, cut to the view; the planes picked by that
+ * share, the higher floor first between equals, at most the cap and none
+ * that covers nothing. */
+static void marble_rules()
+{
+	printf("the marble floors: the face rule and the planes\n");
+
+	const float a[3] = { 0.0f, 0.0f, 0.0f };
+	const float b[3] = { 1024.0f, 0.0f, 0.0f };
+	const float c[3] = { 0.0f, 0.0f, 1024.0f };
+	const float tilt[3] = { 0.0f, -300.0f, 1024.0f };	// 16.3 degrees
+	const float steep[3] = { 0.0f, -400.0f, 1024.0f };	// 21.3 degrees
+
+	ok(HDMarbleFace(a, b, c, -1.0f) && HDMarbleFace(a, c, b, -1.0f) &&
+		!HDMarbleFace(a, b, c, 1.0f),
+		"marble: a flat face up in either winding, not down", 0, 0);
+	ok(HDMarbleFace(a, b, tilt, -0.9f) && !HDMarbleFace(a, b, steep, -0.9f),
+		"marble: 16 degrees is flat, 21 is not", 0, 0);
+
+	// A triangle wholly in view, half of it past the right edge, behind.
+	const float whole[12] = { -0.5f, -0.5f, 0.5f, 1.0f, 0.5f, -0.5f, 0.5f,
+		1.0f, -0.5f, 0.5f, 0.5f, 1.0f };
+	const float half[12] = { 0.0f, -1.0f, 0.5f, 1.0f, 2.0f, -1.0f, 0.5f,
+		1.0f, 0.0f, 1.0f, 0.5f, 1.0f };
+	const float behind[12] = { -0.5f, -0.5f, -0.5f, 1.0f, 0.5f, -0.5f,
+		-0.5f, 1.0f, -0.5f, 0.5f, -0.5f, 1.0f };
+	const float cw = HDMarbleCoverage(whole);
+	const float ch = HDMarbleCoverage(half);
+
+	ok(fabsf(cw - 0.5f) < 1e-4f && fabsf(ch - 1.5f) < 1e-4f &&
+		HDMarbleCoverage(behind) == 0.0f,
+		"marble: the covered share, cut to the view", lroundf(ch * 1000.0f),
+		1500);
+
+	HDMarblePlane p[4] = { { -768, 0.2f }, { -512, 0.9f }, { -2816, 0.2f },
+		{ 0, 0.0f } };
+	const int n2 = HDMarblePlanesPick(p, 4, 2);
+	const bool order = p[0].y == -512 && p[1].y == -2816 && p[2].y == -768;
+	HDMarblePlane q[2] = { { 0, 0.0f }, { 256, 0.0f } };
+
+	ok(n2 == 2 && order && HDMarblePlanesPick(p, 4, 8) == 3 &&
+		HDMarblePlanesPick(q, 2, 2) == 0,
+		"marble: the planes by cover, the higher first, the cap", n2, 2);
+}
+
 /* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD
  * data, every field changed alone refuses with that field's name, and a
  * load with HD off, with nothing built or after an outfit change refuses
@@ -23126,6 +23173,7 @@ int main()
 	spring_crack_gate();
 	spring_column();
 	marble_pages();
+	marble_rules();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

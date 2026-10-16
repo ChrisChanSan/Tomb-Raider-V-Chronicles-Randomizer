@@ -56,6 +56,9 @@ struct HDLevelKey
 	long budgetMb;			// tomb5.hd_texture_budget_mb
 	char format[16];		// tomb5_hd_texture_format
 	char outfit[HD_LEVEL_KEY_OUTFIT];	// the registry's hd_outfit, or ""
+	/* tomb5.hd_marble: the marble floors' faces and opaque clear floors are
+	 * the build's (hd_render.cpp, "the marble floors"). */
+	int marble;
 };
 
 inline int HDLevelStampSame(const HDLevelFileStamp* a,
@@ -116,6 +119,9 @@ inline const char* HDLevelKeyDiffers(const HDLevelKey* a, const HDLevelKey* b)
 
 	if (strcmp(a->outfit, b->outfit))
 		return "hd_outfit";
+
+	if (a->marble != b->marble)
+		return "hd_marble";
 
 	return 0;
 }

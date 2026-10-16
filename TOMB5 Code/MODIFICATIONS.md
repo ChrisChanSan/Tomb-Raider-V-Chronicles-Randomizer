@@ -23779,3 +23779,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #207 | The flyby's triggers on a skip (#207), in the skipper's entry |
 | #209 | The destroyable windows (#209) |
 | #210 | The sea seen from below (#210), in the water sheets' entry |
+| #208 | The sky's seam, hiding and layers (#208), in the sky's entry |

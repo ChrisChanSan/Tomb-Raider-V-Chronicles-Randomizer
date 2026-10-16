@@ -68,6 +68,10 @@
 #define HD_GLOSS_GLASS		4
 #define HD_GLOSS_CUSTOM		5
 #define HD_GLOSS_CLASSES	6
+/* Not a class: a line that names the mirror column alone and nothing of the
+ * page's sheen, which the other sources then name as if the line were not
+ * there (HDGlossFile::find leaves it out, HDGlossResolve finds no class). */
+#define HD_GLOSS_ASIS		(-1)
 
 // Where a page's gloss came from - for the log and the tools.
 #define HD_GLOSS_FROM_NONE	0
@@ -105,7 +109,10 @@ struct HDGloss
 };
 
 /* One line of the page table or of hd_gloss.txt. A number below zero means
- * "the class's own default" - only a custom page must name all three. */
+ * "the class's own default" - only a custom page must name all three.
+ * `mirror` is the mirror column: 1 where a floor of the page is a planar
+ * mirror (hd_render.cpp, "the marble floors"), 0 where it is not, and -1 in
+ * a file's line that does not say, which leaves the table's word. */
 struct HDGlossPage
 {
 	int page;
@@ -113,6 +120,7 @@ struct HDGlossPage
 	float strength;
 	float power;
 	float f0;
+	int mirror;
 };
 
 inline const char* HDGlossClassName(int cls)
@@ -318,14 +326,19 @@ inline bool HDGlossPageBarred(int page)
 
 /* One line of the page table's text form - hd_gloss.txt:
  *
- *     <page> <class> [<strength> [<exponent> [<F0>]]]   [# comment]
- *     -<page>                                           [# comment]
+ *     <page> <class> [<strength> [<exponent> [<F0>]]] [mirror]   [# comment]
+ *     <page> mirror|nomirror                                [# comment]
+ *     -<page> [mirror|nomirror]                             [# comment]
  *
  * The class is metal, marble, ice, glass or custom (any case); a custom page
  * names all three numbers. A strength lies in (0, 1], an exponent in 1..255,
  * an F0 in [0, 1]; a number written as "-" or left out takes the class's
  * default. '#' starts a comment anywhere; a blank line or a comment alone is
- * no entry.
+ * no entry. The last word "mirror" or "nomirror" sets the mirror column: the
+ * page's flat floors are a planar mirror or not (hd_render.cpp, "the marble
+ * floors"); a line without it leaves the table's column, and a line of a
+ * page and that word alone says nothing of the sheen (HD_GLOSS_ASIS). One
+ * line a page: a later line for the same page replaces the earlier whole.
  *
  * Returns 1 for an entry (`*remove` says whether it takes the page out), 0
  * for a line with nothing on it and -1 for a line that cannot be read - the
@@ -341,6 +354,7 @@ inline int HDGlossParseLine(const char* line, HDGlossPage* out, bool* remove)
 	out->strength = -1.0f;
 	out->power = -1.0f;
 	out->f0 = -1.0f;
+	out->mirror = -1;
 
 	// The line without its comment and its line end.
 	while (line[n] && line[n] != '#' && line[n] != '\r' && line[n] != '\n' &&
@@ -372,6 +386,24 @@ inline int HDGlossParseLine(const char* line, HDGlossPage* out, bool* remove)
 	if (!count)
 		return 0;
 
+	// The mirror column, the last word when it is there.
+	if (count >= 2)
+	{
+		char last[16];
+		size_t k = 0;
+
+		for (; words[count - 1][k] && k + 1 < sizeof(last); k++)
+			last[k] = (char)tolower((unsigned char)words[count - 1][k]);
+
+		last[k] = 0;
+
+		if (!strcmp(last, "mirror") || !strcmp(last, "nomirror"))
+		{
+			out->mirror = last[0] == 'm' ? 1 : 0;
+			count--;
+		}
+	}
+
 	// A page number, digits only, 1..65535 - the range of a page file name.
 	const char* first = words[0];
 	const bool minus = first[0] == '-';
@@ -397,6 +429,13 @@ inline int HDGlossParseLine(const char* line, HDGlossPage* out, bool* remove)
 	{
 		*remove = true;
 		return count == 1 ? 1 : -1;
+	}
+
+	// The page and the mirror word alone: nothing of the sheen.
+	if (count == 1 && out->mirror >= 0)
+	{
+		out->cls = HD_GLOSS_ASIS;
+		return 1;
 	}
 
 	if (count < 2 || count > 5)
@@ -468,15 +507,36 @@ struct HDGlossFile
 
 	HDGlossFile() : lines(0), bad(0), present(false) {}
 
-	// The file's entry for a page, or null; `removes` says it took the page out.
+	/* The file's entry for a page's sheen, or null; `removes` says it took
+	 * the page out. A line of the mirror column alone names no sheen. */
 	const HDGlossPage* find(int page, bool* removes) const
 	{
 		const std::map<int, HDGlossPage>::const_iterator at = entries.find(page);
 
 		*removes = at != entries.end() && at->second.cls == HD_GLOSS_NONE;
-		return at != entries.end() && at->second.cls != HD_GLOSS_NONE ? &at->second : 0;
+		return at != entries.end() && at->second.cls != HD_GLOSS_NONE &&
+			at->second.cls != HD_GLOSS_ASIS ? &at->second : 0;
+	}
+
+	// The file's mirror column for a page: 1, 0, or -1 where it says none.
+	int mirror(int page) const
+	{
+		const std::map<int, HDGlossPage>::const_iterator at =
+			entries.find(page);
+
+		return at != entries.end() ? at->second.mirror : -1;
 	}
 };
+
+/* Whether a page's flat floors are a planar mirror: the file's column where
+ * its line names it, else the table's line, else not. */
+inline bool HDGlossMirror(int fileMirror, const HDGlossPage* tableEntry)
+{
+	if (fileMirror >= 0)
+		return fileMirror == 1;
+
+	return tableEntry && tableEntry->mirror == 1;
+}
 
 // The whole text of hd_gloss.txt, line by line (CR, LF or both end a line).
 inline void HDGlossParseText(const char* text, HDGlossFile* out)
@@ -506,7 +566,7 @@ inline void HDGlossParseText(const char* text, HDGlossFile* out)
 		line[n] = 0;
 		out->lines++;
 
-		HDGlossPage entry = { -1, HD_GLOSS_NONE, -1.0f, -1.0f, -1.0f };
+		HDGlossPage entry = { -1, HD_GLOSS_NONE, -1.0f, -1.0f, -1.0f, -1 };
 		bool remove = false;
 		const int got = (size_t)(end - at) >= sizeof(line) ? -1 :
 			HDGlossParseLine(line, &entry, &remove);

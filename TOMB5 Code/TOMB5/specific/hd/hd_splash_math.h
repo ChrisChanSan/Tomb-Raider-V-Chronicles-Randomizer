@@ -1013,3 +1013,140 @@ inline bool HDWetPlaneTo(const float* T, const float* w, float* c)
 
 	return true;
 }
+
+/* The marble floors (hd_render.cpp, "the marble floors"). A triangle of the
+ * art is a mirror face when it lies flat and faces up: its normal out of the
+ * corners' cross product has a height over HD_MARBLE_FLAT of its length,
+ * and the side is the corners' own normals' (the winding of the art is not
+ * reliable), up being a negative y in this engine. 0.95 is the census's
+ * flat face (RoomProbe -marblecensus), about 18 degrees off the level. */
+#define HD_MARBLE_FLAT	0.95f
+
+inline bool HDMarbleFace(const float* a, const float* b, const float* c,
+	float nyVertex)
+{
+	const double ux = (double)b[0] - a[0], uy = (double)b[1] - a[1];
+	const double uz = (double)b[2] - a[2];
+	const double vx = (double)c[0] - a[0], vy = (double)c[1] - a[1];
+	const double vz = (double)c[2] - a[2];
+	const double nx = uy * vz - uz * vy;
+	const double ny = uz * vx - ux * vz;
+	const double nz = ux * vy - uy * vx;
+	const double len = sqrt(nx * nx + ny * ny + nz * nz);
+
+	return len > 1e-6 && fabs(ny) > HD_MARBLE_FLAT * len && nyVertex < 0.0f;
+}
+
+/* The share of the screen a triangle covers, its corners in clip space
+ * (x, y, z, w each): the triangle cut to the view volume (|x|, |y| <= w,
+ * z >= 0, Direct3D's), its area in the screen's -1..1 square, which is 4
+ * whole. What orders the planes of a frame (HDMarblePlanesPick). */
+inline float HDMarbleCoverage(const float* c)
+{
+	float poly[2][16][4];
+	int n = 3;
+	int cur = 0;
+
+	for (int i = 0; i < 3; i++)
+		for (int k = 0; k < 4; k++)
+			poly[0][i][k] = c[i * 4 + k];
+
+	for (int plane = 0; plane < 5 && n >= 3; plane++)
+	{
+		int m = 0;
+		const auto dist = [plane](const float* p)
+		{
+			switch (plane)
+			{
+			case 0: return p[3] + p[0];
+			case 1: return p[3] - p[0];
+			case 2: return p[3] + p[1];
+			case 3: return p[3] - p[1];
+			default: return p[2];
+			}
+		};
+
+		for (int i = 0; i < n && m < 14; i++)
+		{
+			const float* p = poly[cur][i];
+			const float* q = poly[cur][(i + 1) % n];
+			const float dp = dist(p), dq = dist(q);
+
+			if (dp >= 0.0f)
+			{
+				for (int k = 0; k < 4; k++)
+					poly[cur ^ 1][m][k] = p[k];
+
+				m++;
+			}
+
+			if ((dp >= 0.0f) != (dq >= 0.0f))
+			{
+				const float t = dp / (dp - dq);
+
+				for (int k = 0; k < 4; k++)
+					poly[cur ^ 1][m][k] = p[k] + (q[k] - p[k]) * t;
+
+				m++;
+			}
+		}
+
+		n = m;
+		cur ^= 1;
+	}
+
+	double area = 0.0;
+
+	for (int i = 0; i < n; i++)
+	{
+		const float* p = poly[cur][i];
+		const float* q = poly[cur][(i + 1) % n];
+
+		if (p[3] <= 0.0f || q[3] <= 0.0f)
+			return 0.0f;
+
+		area += (double)p[0] / p[3] * q[1] / q[3] -
+			(double)q[0] / q[3] * p[1] / p[3];
+	}
+
+	return (float)(fabs(area) * 0.5);
+}
+
+/* One floor height of a frame's mirror faces and the share of the screen
+ * its faces cover (HDMarbleCoverage, summed). */
+struct HDMarblePlane
+{
+	int y;
+	float cover;
+};
+
+/* The planes a frame mirrors: the ones covering the most of the screen
+ * first, the higher floor first between two that cover alike (y runs down),
+ * at most `cap` of them and none that covers nothing. Sorts `planes` in
+ * that order and returns how many of the first are drawn. */
+inline int HDMarblePlanesPick(HDMarblePlane* planes, int count, int cap)
+{
+	for (int i = 1; i < count; i++)
+		for (int j = i; j > 0; j--)
+		{
+			const HDMarblePlane& a = planes[j - 1];
+			const HDMarblePlane& b = planes[j];
+
+			if (b.cover > a.cover || (b.cover == a.cover && b.y < a.y))
+			{
+				const HDMarblePlane t = a;
+
+				planes[j - 1] = b;
+				planes[j] = t;
+			}
+			else
+				break;
+		}
+
+	int n = 0;
+
+	while (n < count && n < cap && planes[n].cover > 0.0f)
+		n++;
+
+	return n;
+}

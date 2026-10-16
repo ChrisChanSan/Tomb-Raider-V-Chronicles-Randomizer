@@ -128,6 +128,11 @@ rem And RoomProbe's march debugger out of the same file (-tankmarch).
 "%FXC%" /nologo /T ps_3_0 /E WetPS /O3 /D HD_WET_DEBUG=1 /Vn kHDWetDebugPS ^
  /Fh "%SHADERDIR%\hd_wet_debug_ps.inc" "%SHADERDIR%\hd_wet.hlsl"
 if errorlevel 1 exit /b 1
+rem And the marble floors' planar mirror out of the same file (MarblePS,
+rem hd_render.cpp "the marble floors").
+"%FXC%" /nologo /T ps_3_0 /E MarblePS /O3 /Vn kHDWetMarblePS ^
+ /Fh "%SHADERDIR%\hd_wet_marble_ps.inc" "%SHADERDIR%\hd_wet.hlsl"
+if errorlevel 1 exit /b 1
 
 "%FXC%" /nologo /T vs_3_0 /E ModelVS /O3 /Vn kHDModelVS /Fh "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model.hlsl"
 if errorlevel 1 exit /b 1
@@ -223,6 +228,8 @@ call :stamp hd_wet hd_wet_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_wet hd_wet_debug_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_wet hd_wet_marble_ps.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_model hd_model_ps.inc
@@ -263,6 +270,7 @@ call :size "%SHADERDIR%\hd_room_card_vs.inc"
 call :size "%SHADERDIR%\hd_room_card_ps.inc"
 call :size "%SHADERDIR%\hd_wet_ps.inc"
 call :size "%SHADERDIR%\hd_wet_debug_ps.inc"
+call :size "%SHADERDIR%\hd_wet_marble_ps.inc"
 call :size "%SHADERDIR%\hd_spring_column_ps.inc"
 call :size "%SHADERDIR%\hd_spring_bubble_ps.inc"
 call :size "%SHADERDIR%\hd_spring_crack_ps.inc"

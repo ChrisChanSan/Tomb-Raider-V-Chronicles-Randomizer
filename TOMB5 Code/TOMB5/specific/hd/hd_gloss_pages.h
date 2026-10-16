@@ -29,6 +29,15 @@
  * beside the game's executable takes the same lines in text, so a line can
  * be tried there before it is written here.
  *
+ * The last column is the mirror column: 1 where the page's flat floors are
+ * a planar mirror (hd_render.cpp, "the marble floors"). A line of class A
+ * names that column alone and nothing of the sheen. The 35 pages of the
+ * column are the polished floors of the Rome levels, RICHCUT2 and the title,
+ * looked at by eye on the thirty largest floor pages of each level
+ * (RoomProbe -marblecensus, DdsProbe); the pages the sheen bars are among
+ * them, the mirror being no sheen. The comment over a line names what the
+ * page shows and where.
+ *
  * Kept sorted by page number. */
 
 #include "hd_gloss_math.h"
@@ -38,53 +47,159 @@
 #define I HD_GLOSS_ICE
 #define G HD_GLOSS_GLASS
 #define X HD_GLOSS_NONE		// "-<page>": the seed misreads this page
+#define A HD_GLOSS_ASIS		// the mirror column alone
 
 static const HDGlossPage kHDGlossPages[] =
 {
-	// page class strength power  F0
-	{    33, X, -1.0f, -1.0f, -1.0f },	// RICH1: a brick wall and a lamp's glow on a metal floor
-	{    50, X, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2: poured concrete with tie holes
-	{    53, G, -1.0f, -1.0f, -1.0f },	// RICH2: a black window pane in a white frame
-	{    93, M, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2, JOBY2, TITLE: the locker doors, their upper half
-	{    94, M, -1.0f, -1.0f, -1.0f },	// RICH1, RICH2, TITLE: the locker doors, their lower half
-	{   141, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the crate's front, the logo panel and the hazard stripes
-	{   390, X, -1.0f, -1.0f, -1.0f },	// ANDREA3: a stone relief of a procession
-	{   391, X, -1.0f, -1.0f, -1.0f },	// ANDREA3: the same relief
-	{   421, M, -1.0f, -1.0f, -1.0f },	// JOBY2: a riveted steel column
-	{   436, X, -1.0f, -1.0f, -1.0f },	// JOBY2, JOBY3, JOBY5: a pipe over a wooden pallet in the snow
-	{   469, M, -1.0f, -1.0f, -1.0f },	// JOBY2: riveted steel columns, painted
-	{   470, M, -1.0f, -1.0f, -1.0f },	// JOBY2: the same painted steel with a pipe across, the twin of 469
-	{   480, I, -1.0f, -1.0f, -1.0f },	// JOBY2: the material 3 snow and ice floor
-	{   482, X, -1.0f, -1.0f, -1.0f },	// JOBY3, JOBY5: cracked plaster over concrete
-	{   576, M, -1.0f, -1.0f, -1.0f },	// JOBY3 room 79: the duct's diamond plate with its vents
-	{   954, M, -1.0f, -1.0f, -1.0f },	// RICH1: a galvanised steel plate with rivets
-	{   993, M, -1.0f, -1.0f, -1.0f },	// RICH1: a steel plate with a vent grille
-	{  1054, S, -1.0f, -1.0f, -1.0f },	// RICH2 rooms 134 and 135: the washroom's green mosaic
-	{  1082, S, -1.0f, -1.0f, -1.0f },	// RICH1: brown marble slabs (the seed calls them metal)
-	{  1085, S, -1.0f, -1.0f, -1.0f },	// RICH2 rooms 134 and 135: the green tile band under a marble strip
-	{  1086, S, -1.0f, -1.0f, -1.0f },	// RICH2 rooms 134 and 135: green marble tiles
-	{  1187, X, -1.0f, -1.0f, -1.0f },	// RICH3: an atlas of black, teal brick and pale pink
-	{  3010, X, -1.0f, -1.0f, -1.0f },	// RICH1: a brown wooden panel
-	{  3063, G, -1.0f, -1.0f, -1.0f },	// ANDREA1: a green monitor screen
-	{  3064, X, -1.0f, -1.0f, -1.0f },	// RICH1: an atlas of labels, cables and a blue flame
-	{  3066, M, -1.0f, -1.0f, -1.0f },	// JOBY3 room 79: a vent grille with a warning sign under screens
-	{  3121, X, -1.0f, -1.0f, -1.0f },	// ANDREA2, ANDREA3: grass and earth
-	{  3162, M, -1.0f, -1.0f, -1.0f },	// ANDREA1: grey steel girders, the twin of 3163
-	{  3171, X, -1.0f, -1.0f, -1.0f },	// JOBY2: a plain grey sheet on 762,756 triangles - not a floor's metal
-	{  4046, X, -1.0f, -1.0f, -1.0f },	// JOBY3: three steaks
-	{  6037, X, -1.0f, -1.0f, -1.0f },	// JOBY2: brown wooden planks
-	{  8511, X, -1.0f, -1.0f, -1.0f },	// RICH3: an atlas of coloured labels and parts
-	{  9000, M, -1.0f, -1.0f, -1.0f },	// ANDREA2: the material 3 armour and statue metal
-	{  9001, M, -1.0f, -1.0f, -1.0f },	// ANDREA2: the same, its second page
-	{ 11035, X, -1.0f, -1.0f, -1.0f },	// ANDREA2: an atlas of signs and bricks
-	{ 12057, X, -1.0f, -1.0f, -1.0f },	// JOBY2: papers and posters
-	{ 12058, X, -1.0f, -1.0f, -1.0f },	// JOBY2: a concrete wall with tyre tracks
-	{ 14051, X, -1.0f, -1.0f, -1.0f },	// ANDREA2: an olive atlas with bricks and a gear
-	{ 15073, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the ceiling lamp and the arrow bracket
-	{ 16066, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the forklift, its dark parts
-	{ 16067, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the forklift's yellow body
-	{ 16068, M, -1.0f, -1.0f, -1.0f },	// ANDREA1 room 3: the forklift, mast and details
-	{ 16100, X, -1.0f, -1.0f, -1.0f },	// RICH1: an atlas with cola cans
+	// page class strength power F0 mirror
+	// RICH1: a brick wall and a lamp's glow on a metal floor
+	{    33, X, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1, RICH2: poured concrete with tie holes
+	{    50, X, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH2: a black window pane in a white frame
+	{    53, G, -1.0f, -1.0f, -1.0f, 0 },
+	// RICHCUT2: a marble floor
+	{    54, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH1, RICH2, JOBY2, TITLE: the locker doors, their upper half
+	{    93, M, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1, RICH2, TITLE: the locker doors, their lower half
+	{    94, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1 room 3: the crate's front, the logo panel and the hazard stripes
+	{   141, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1: the marble halls' floor
+	{   162, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA2, ANDREA3: a marble floor
+	{   246, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA2, ANDREA3: a marble floor
+	{   249, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA2: a marble floor (footstep marble)
+	{   273, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA2: a marble floor (footstep marble)
+	{   274, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA2: a marble floor (footstep marble)
+	{   285, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA3: a marble floor
+	{   366, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA3: a stone relief of a procession
+	{   390, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA3: the same relief
+	{   391, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA3: a marble floor (footstep marble)
+	{   408, A, -1.0f, -1.0f, -1.0f, 1 },
+	// ANDREA3: a marble floor (footstep marble)
+	{   411, A, -1.0f, -1.0f, -1.0f, 1 },
+	// JOBY2: a riveted steel column
+	{   421, M, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2, JOBY3, JOBY5: a pipe over a wooden pallet in the snow
+	{   436, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: riveted steel columns, painted
+	{   469, M, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: the same painted steel with a pipe across, the twin of 469
+	{   470, M, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: the material 3 snow and ice floor
+	{   480, I, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY3, JOBY5: cracked plaster over concrete
+	{   482, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY3 room 79: the duct's diamond plate with its vents
+	{   576, M, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1: a galvanised steel plate with rivets
+	{   954, M, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1, RICH2, RICH3: grey marble slabs
+	{   960, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH1: a steel plate with a vent grille
+	{   993, M, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1: a marble floor (footstep marble)
+	{  1002, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH1, RICH2, RICH3, RICHCUT2: the lobby's green tiles
+	{  1010, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the lobby's clear black marble
+	{  1029, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the lobby's clear black marble
+	{  1045, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICHCUT2: a marble floor
+	{  1046, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the corridor's and the lobby's clear black marble
+	{  1047, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICHCUT2: a marble floor
+	{  1048, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the lobby's black marble
+	{  1049, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the lobby's clear black marble
+	{  1053, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2 rooms 134 and 135: the washroom's green mosaic
+	{  1054, S, -1.0f, -1.0f, -1.0f, 1 },
+	// RICHCUT2: a marble floor
+	{  1063, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: a marble floor
+	{  1070, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the lobby's clear black marble
+	{  1079, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2: the lobby's clear black marble
+	{  1081, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH1: brown marble slabs (the seed calls them metal)
+	{  1082, S, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2 rooms 134 and 135: the green tile band under a marble strip
+	{  1085, S, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2 rooms 134 and 135: green marble tiles
+	{  1086, S, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2, RICH3: a marble floor
+	{  1094, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICHCUT2: a marble floor
+	{  1104, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICHCUT2: a marble floor
+	{  1105, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICHCUT2: a marble floor
+	{  1110, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH3: an atlas of black, teal brick and pale pink
+	{  1187, X, -1.0f, -1.0f, -1.0f, 0 },
+	// TITLE: a clear marble floor
+	{  2147, A, -1.0f, -1.0f, -1.0f, 1 },
+	// TITLE: a clear marble floor
+	{  2149, A, -1.0f, -1.0f, -1.0f, 1 },
+	// TITLE: a clear marble floor
+	{  2154, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH1: a brown wooden panel
+	{  3010, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1: a green monitor screen
+	{  3063, G, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1: an atlas of labels, cables and a blue flame
+	{  3064, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY3 room 79: a vent grille with a warning sign under screens
+	{  3066, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA2, ANDREA3: grass and earth
+	{  3121, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1: grey steel girders, the twin of 3163
+	{  3162, M, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: a plain grey sheet on 762,756 triangles - not a floor's metal
+	{  3171, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY3: three steaks
+	{  4046, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: brown wooden planks
+	{  6037, X, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH3: an atlas of coloured labels and parts
+	{  8511, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA2: the material 3 armour and statue metal
+	{  9000, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA2: the same, its second page
+	{  9001, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA2: an atlas of signs and bricks
+	{ 11035, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: papers and posters
+	{ 12057, X, -1.0f, -1.0f, -1.0f, 0 },
+	// JOBY2: a concrete wall with tyre tracks
+	{ 12058, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA2: an olive atlas with bricks and a gear
+	{ 14051, X, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1 room 3: the ceiling lamp and the arrow bracket
+	{ 15073, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1 room 3: the forklift, its dark parts
+	{ 16066, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1 room 3: the forklift's yellow body
+	{ 16067, M, -1.0f, -1.0f, -1.0f, 0 },
+	// ANDREA1 room 3: the forklift, mast and details
+	{ 16068, M, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH1: an atlas with cola cans
+	{ 16100, X, -1.0f, -1.0f, -1.0f, 0 },
 };
 
 #undef M
@@ -92,6 +207,7 @@ static const HDGlossPage kHDGlossPages[] =
 #undef I
 #undef G
 #undef X
+#undef A
 
 inline int HDGlossTableSize()
 {

@@ -1756,31 +1756,40 @@ void HDRenderWaterWetRoomCopy(bool force);
 bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 	float offZ, const float* projection = 0, int alpha = 255);
 
-/* RoomProbe's marble floors (hd_render.cpp, "RoomProbe's marble floors"), a
- * measurement the game never calls: HDRenderMarbleProbeSet takes the
- * squares - the corner, the art floor's y and the room - and
- * HDRenderMarbleProbeDraw lays the wet floor's march over them with a dry
- * floor's darkening, F0 and strength, inside the frame's bracket and with
- * the world shifted by `toFrame` as the wet floor's draw takes it - or,
- * with `planar`, that pixel shader reading `mirror` and its depth;
- * HDRenderMarbleProbePlanar lays a planar reflection the caller drew into
- * `mirror` (the frame's size, flipped left to right) over them, weighted
- * by Schlick's term over `f0` times `gain`, or with `tint` the squares in a
- * flat colour. HDRenderMarbleProbeDrawn: the squares the last draw took. */
-struct IDirect3DPixelShader9;
-
-struct HDMarbleProbeSquare
+/* The marble floors (hd_render.cpp, "the marble floors"): a planar mirror
+ * on the polished floors the sheen's page table names in its mirror column.
+ * HDRenderMarbleSet before a level's build: `on` builds the mirror faces
+ * and draws the clear floors of the column opaque (tomb5.hd_marble), and
+ * `planes` is the most floor heights a frame mirrors (hd_marble_planes,
+ * 1 to 8). HDRenderMarbleDraw once a frame inside the glow phase's bracket,
+ * after the rooms' passes: the frame's room, stand and static draws made
+ * again through each plane, the models by `draw` as HDRenderWaterWetModels
+ * takes them (none when 0), and the mirror laid over the floors. The
+ * stats are the last frame's and the level's. */
+struct HDRenderMarbleStats
 {
-	int x, z, y, room;
+	int planes;	// floor heights with a face in view this frame
+	int drawn;	// of them mirrored (the cap)
+	int faces;	// faces laid over the frame
+	int calls;	// the mirrored room draw calls
+	int wet;	// 1 when a wet floor took its points out
+	int faces_level;
+	int water;	// faces left out in water rooms
+	int opaque;	// clear floor draw calls drawn opaque
+	int heights;	// the level's floor heights with a face
 };
 
-void HDRenderMarbleProbeSet(const HDMarbleProbeSquare* squares, int count);
-void HDRenderMarbleProbeDraw(const float* toFrame, float dark, float f0,
-	float gain, IDirect3DPixelShader9* planar = 0,
-	IDirect3DTexture9* mirror = 0, IDirect3DTexture9* mirrorDepth = 0);
-void HDRenderMarbleProbePlanar(const float* toFrame, IDirect3DTexture9* mirror,
-	float f0, float gain, int tint);
-int HDRenderMarbleProbeDrawn();
+void HDRenderMarbleSet(int on, int planes);
+int HDRenderMarbleOn();
+void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
+	int bulbs);
+void HDRenderMarbleStatsNow(HDRenderMarbleStats* out);
+/* RoomProbe's warm-up: with `on`, HDRenderMarbleDraw draws the mirrored
+ * rooms into its target and lays nothing over the frame. */
+void HDRenderMarbleQuiet(bool on);
+/* RoomProbe's -marblerows: the mirror target drawn at 1 or 2 rows a row of
+ * the frame (2 in the engine). */
+void HDRenderMarbleRows(int rows);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

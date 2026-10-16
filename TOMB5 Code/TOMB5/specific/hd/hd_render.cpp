@@ -48,6 +48,7 @@
 #include "hd_shader/hd_room_card_ps.inc"
 #include "hd_shader/hd_wet_ps.inc"
 #include "hd_shader/hd_wet_debug_ps.inc"
+#include "hd_shader/hd_wet_marble_ps.inc"
 #include "hd_shader/hd_glow_ps.inc"
 #include "hd_shader/hd_shadow_receive_ps.inc"
 #include "hd_shader/hd_shadow_receive2_ps.inc"
@@ -1347,6 +1348,10 @@ namespace
 		 * the glass's phase. In the sort key, so a floor and a pane never
 		 * share a draw call. */
 		int clear = 0;
+		/* A clear floor on a page of the mirror column, drawn opaque while
+		 * the marble floors are on (see "the marble floors"). Set after the
+		 * build and not in the sort key: the page is in the key already. */
+		bool marbleOpaque = false;
 		/* Which destructible piece these triangles belong to, or -1 for the
 		 * room itself. In the sort key, so a piece's triangles never share a
 		 * draw call with the wall behind them. */
@@ -1593,6 +1598,12 @@ namespace
 		/* And out of its clear floors (HD_PASS_CLEAR) alone: where the art
 		 * lets what lies under a floor show through it. */
 		std::vector<HDFlatPlane> clearFlats;
+		/* Its mirror faces (see "the marble floors"): nine floats a face,
+		 * the corners in the group's own space, and each face's floor
+		 * height, the corners' mean y rounded. Empty while the marble floors
+		 * are off. */
+		std::vector<float> mirrorFaces;
+		std::vector<int> mirrorY;
 	};
 
 	// One 256-unit cell of a room-local position, as one key. The bias makes
@@ -1747,6 +1758,10 @@ namespace
 	 * below), drawn with CardVS. Null when the device refused it: then no
 	 * floor is drawn wet. */
 	IDirect3DPixelShader9* g_wet_ps = 0;
+	/* The marble floors' mirror laid over the floor (hd_wet.hlsl, MarblePS;
+	 * "the marble floors"), drawn with CardVS. Null when the device refused
+	 * it: then no floor is mirrored. */
+	IDirect3DPixelShader9* g_marble_ps = 0;
 	/* RoomProbe's march debugger (hd_wet.hlsl built with HD_WET_DEBUG) and
 	 * the map it draws in the mirror's place (-tankmarch), 0 none. */
 	IDirect3DPixelShader9* g_wet_debug_ps = 0;
@@ -3985,6 +4000,41 @@ namespace
 	// HDRenderGlossOverride: every sheen at its upper bound. False in the engine.
 	bool g_gloss_max = false;
 
+	/* The marble floors (see "the marble floors"): whether the level is
+	 * built and drawn with them (tomb5.hd_marble, HDRenderMarbleSet), and
+	 * the most floor heights a frame mirrors (tomb5.hd_marble_planes). */
+	bool g_marble_on = false;
+	int g_marble_cap = 2;
+
+	/* The frame's room, stand and static draws as they were made, for the
+	 * mirrored pass to make again (marble_note); `g_marble_replay` while it
+	 * does, `g_marble_spent` once a frame's mirror was asked for, so the
+	 * next frame's first bracket starts the list over. */
+	struct MarbleDraw
+	{
+		int kind;		// 0 a room, 1 a stand range, 2 a static piece
+		int id;			// the group or the piece
+		D3DMATRIX world;
+		const HDRoomLighting* lighting;
+		unsigned int passes;
+		int window;
+		int stand;
+		bool behind;
+	};
+
+	std::vector<MarbleDraw> g_marble_draws;
+	bool g_marble_replay = false;
+	bool g_marble_spent = false;
+	// The bracket's frame lighting, put back after the mirrored models.
+	const HDFrameLighting* g_marble_frame = 0;
+
+	// Whether a page's flat floors are a mirror: the mirror column.
+	bool MirrorPage(int page)
+	{
+		return page >= 0 && HDGlossMirror(g_gloss_file.mirror(page),
+			HDGlossTableFind(page));
+	}
+
 	/* The resolver for one page (HDGlossResolve), with the page's slot for the
 	 * engine's second bar: a page part-way clear in every texel is a floor
 	 * of the blend phase (HD_PASS_CLEAR) and never shines, whatever names it
@@ -4518,6 +4568,11 @@ bool HDRenderInit(IDirect3DDevice9* device, const char** why)
 		&g_wet_debug_ps)))
 		g_wet_debug_ps = 0;
 
+	// Nor is the marble floors': without it no floor is mirrored.
+	if (FAILED(device->CreatePixelShader((const DWORD*)kHDWetMarblePS,
+		&g_marble_ps)))
+		g_marble_ps = 0;
+
 	// Nor is the projected shadow's: without it the blob is drawn.
 	if (FAILED(device->CreatePixelShader((const DWORD*)kHDShadowReceivePS,
 		&g_shadow_receive_ps)))
@@ -4682,6 +4737,7 @@ void HDRenderShutdown()
 	if (g_card_vs) { g_card_vs->Release(); g_card_vs = 0; }
 	if (g_card_ps) { g_card_ps->Release(); g_card_ps = 0; }
 	if (g_wet_ps) { g_wet_ps->Release(); g_wet_ps = 0; }
+	if (g_marble_ps) { g_marble_ps->Release(); g_marble_ps = 0; }
 	if (g_wet_debug_ps) { g_wet_debug_ps->Release(); g_wet_debug_ps = 0; }
 	if (g_shadow_receive_ps) { g_shadow_receive_ps->Release(); g_shadow_receive_ps = 0; }
 	if (g_shadow_receive2_ps) { g_shadow_receive2_ps->Release(); g_shadow_receive2_ps = 0; }
@@ -7173,11 +7229,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 							const bool sheet =
 								MaterialBase(part) == HD_TRG_MATERIAL_WATER;
-							// A clear floor, by the test of clear_tri below.
+							/* A clear floor, by the test of clear_tri below;
+							 * one of the mirror column is drawn opaque while
+							 * the marble floors are on (see "the marble
+							 * floors"), and nothing shows through it. */
 							const bool clearFloor = pass == 1 &&
 								blend == 0.0f && !g_no_clear &&
 								(int)g < g_room_groups &&
-								HDPageCacheSlotClear(slot);
+								HDPageCacheSlotClear(slot) && !(g_marble_on &&
+								MirrorPage(HDPageCachePageOfSlot(slot)));
 
 							for (int cx = x0 >> 10; cx <= lastX; cx++)
 								for (int cz = z0 >> 10; cz <= lastZ; cz++)
@@ -7194,6 +7254,38 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 											(int)a.y, SectorKey(cx << 10,
 											cz << 10)));
 								}
+						}
+					}
+
+					/* A mirror face of the marble floors (see "the marble
+					 * floors"): a triangle of a room's opaque pass or of its
+					 * clear floors, on a page of the mirror column, flat and
+					 * facing up (HDMarbleFace). */
+					if (g_marble_on && (int)g < g_room_groups &&
+						(pass == 0 || (pass == 1 && blend == 0.0f &&
+						!g_no_clear && HDPageCacheSlotClear(slot))) &&
+						MirrorPage(HDPageCachePageOfSlot(slot)))
+					{
+						float p[9];
+						float ny = 0.0f;
+
+						for (int c = 0; c < 3; c++)
+						{
+							const trf::remaster::TrgVertex& v =
+								trg.vertices[trg.indices[first + c]];
+
+							p[c * 3] = (float)v.x;
+							p[c * 3 + 1] = (float)v.y;
+							p[c * 3 + 2] = (float)v.z;
+							ny += v.normal_y();
+						}
+
+						if (HDMarbleFace(p, p + 3, p + 6, ny / 3.0f))
+						{
+							group.mirrorFaces.insert(
+								group.mirrorFaces.end(), p, p + 9);
+							group.mirrorY.push_back((int)lroundf(
+								(p[1] + p[4] + p[7]) / 3.0f));
 						}
 					}
 
@@ -9088,6 +9180,14 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 		return;
 
 	g_in_frame = true;
+
+	// A new frame's first bracket: the marble floors' list starts over.
+	if (g_marble_spent)
+	{
+		g_marble_draws.clear();
+		g_marble_spent = false;
+	}
+
 	g_draw_calls = 0;
 	g_cutout_calls = 0;
 	g_flip_calls = 0;
@@ -9124,6 +9224,7 @@ void HDRenderFrameBegin(const D3DMATRIX* view, const D3DMATRIX* projection,
 	 * one SetShaderConstant is made. */
 	g_water_table_up = (const void*)~(size_t)0;	// force the first upload
 	apply_frame_lighting(frame);
+	g_marble_frame = frame;
 }
 
 /* The window one room is drawn in. `left/top` is the first pixel
@@ -9876,6 +9977,8 @@ namespace
 		 * three registers are on the device. */
 		bool glow_ps_on = false;
 		int glow_up = -1;
+		// Whether the blend is off for an opaque clear floor (see below).
+		bool opaque_on = false;
 		/* The cull mode on the device. The bracket installs D3DCULL_NONE,
 		 * the ranges RangeCulls picks switch it to D3DCULL_CCW, and the end
 		 * of the pass puts NONE back, so a model drawn between two rooms
@@ -10316,6 +10419,19 @@ namespace
 
 			if (want_behind != behind_on)
 				behind_on = set_stand_matrix(wvp, want_behind);
+
+			/* A clear floor of the mirror column is drawn opaque while the
+			 * marble floors are on (see "the marble floors"): the floor
+			 * the planar mirror lies on, the art's copy under it hidden. */
+			const bool opaque = clearOnly && range.marbleOpaque &&
+				g_marble_on;
+
+			if (opaque != opaque_on)
+			{
+				g_device->SetRenderState(D3DRS_ALPHABLENDENABLE,
+					opaque ? FALSE : TRUE);
+				opaque_on = opaque;
+			}
 
 			if (g_index32)
 				g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
@@ -12022,12 +12138,17 @@ namespace
 		release_wet_models();
 	}
 
+	// The marble floors' target (see "the marble floors").
+	void release_marble();
+	void marble_build(const HDWaterRoom* rooms, int count);
+
 	void release_water_copy()
 	{
 		if (g_copy_surface) { g_copy_surface->Release(); g_copy_surface = 0; }
 		if (g_copy_texture) { g_copy_texture->Release(); g_copy_texture = 0; }
 		g_copy_valid = false;
 		release_wet_late();
+		release_marble();
 	}
 
 	// The copies belong to the bracket they were taken in (HDRenderFrameEnd).
@@ -14423,6 +14544,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 
 	if (!rooms || count <= 0 || g_groups.empty())
 		return;
+
+	// The marble floors' faces and clear floors, by the rooms' flags.
+	marble_build(rooms, count);
 
 	if (section < 0 || section >= HD_WATER_SECTIONS)
 		section = HD_WATER_ROME;
@@ -17923,523 +18047,717 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 	return true;
 }
 
-/* RoomProbe's marble floors (-marblea, -marbleb), a measurement of a mirror
- * on dry polished stone; the game calls none of these. The squares are the
- * census's (RoomProbe -marblecensus): a layer kWetLift over each square's
- * art floor, five by five points a square as the wet floor's, its triangles
- * two a cell. HDRenderMarbleProbeDraw draws it through the wet floor's own
- * pixel shader (WetPS) with a dry floor's numbers - no front, no film, no
- * hashed puddle share, the darkening and F0 and the mirror's strength
- * handed in - out of a copy of the frame as it stands; the march, the
- * light field's stand-in and the lamps' highlight are the wet floor's.
- * With `planar`, a pixel shader of the caller's on the wet floor's
- * registers, the same draw reads a planar reflection on s5 and its depth
- * on s3 in place of the march.
- * HDRenderMarbleProbePlanar lays a planar reflection - the room art drawn
- * a second time through the floor's plane by the caller, into a texture
- * of the frame's size flipped left to right - over the same layer, its
- * weight Schlick's term at each point. Each counts the squares it drew. */
+/* ------------------------------------------------ the marble floors -- */
+
+/* The marble floors. A polished floor mirrors the room over it: the room
+ * art, the statics and the models are drawn once more through the floor's
+ * plane, into a target of their own, and laid over the floor with the wet
+ * floor's composition at a dry floor's numbers (hd_wet.hlsl, MarblePS).
+ *
+ * Which floors. The page decides - the data alone does not tell polished
+ * stone (the marble measurement: the footstep material names marble in
+ * three levels only, RICH2's marble is stone there) - so the sheen's page
+ * table carries a mirror column (hd_gloss_pages.h, hd_gloss.txt's
+ * "mirror" word). A mirror face is a triangle of a room's art, of its
+ * opaque pass or of its clear floors, on such a page, flat and facing up
+ * (HDMarbleFace, hd_splash_math.h), in a room that is no water room. The
+ * mirror's extent is those faces, and their heights are the planes: never
+ * the classic squares, whose edges cut the mirror where Core's floor runs
+ * diagonally (RICH2 room 121, the wedge under the tank's wall). Built with
+ * the level (the triangle loop, marble_build) while tomb5.hd_marble is on.
+ *
+ * The clear floors. A face of the column whose page is part-way clear -
+ * RICH2's lobby and corridor, the title's floors - stands over the art's
+ * own mirrored copy of the room. It is drawn opaque (draw_pass, `opaque`):
+ * the planar mirror takes the copy's place, and the copy, still drawn,
+ * lies hidden under an opaque floor and out of the mirror's clip plane.
+ *
+ * The frame. Every room, stand range and static piece the frame draws is
+ * noted as it is drawn (marble_note); the faces of the rooms drawn are
+ * taken into view space and summed by height into planes, each by the
+ * share of the screen its faces cover (HDMarbleCoverage), and the planes
+ * covering the most are mirrored, at most g_marble_cap of them
+ * (HDMarblePlanesPick): for each, the noted draws made again through the
+ * projection folded with the plane's reflection and turned left to right
+ * (two flips keep the winding), one clip plane keeping what stands over
+ * the floor, the models with them (the frame's object list through the
+ * same projection), into one target and its INTZ depth used again for the
+ * next plane. Then over the frame: the plane's faces mark stencil bit
+ * kMarbleStencilBit under the depth test, a wet floor's points of this
+ * frame take it away again (the water's mirror is the wet floor's), and
+ * the faces are drawn once more through MarblePS where the bit stands,
+ * clearing it. Called once a frame between the rooms' glows and the wet
+ * floor's models (hd_level.cpp, HDFrameDrawGlow). */
 namespace
 {
-	struct MarblePoint
+	/* The stencil bit of the mirror's mask: bits 1, 2, 4 and 8 are the
+	 * shadow's receive, the creatures' mark and the crack's; 16 is free. */
+	const DWORD kMarbleStencilBit = 0x10;
+	/* The mirror's reflectance face on: the textbook dielectric's
+	 * ((n - 1) / (n + 1))^2 at n = 1.5, polished stone (hd_gloss_math.h). */
+	const float kMarbleF0 = 0.04f;
+
+	// The level's mirror faces and the opaque clear floors (marble_build).
+	int g_marble_faces = 0;
+	int g_marble_water = 0;
+	int g_marble_opaque = 0;
+	int g_marble_heights = 0;
+
+	// The target the mirrored rooms are drawn into, and its depth.
+	IDirect3DTexture9* g_marble_tex = 0;
+	IDirect3DSurface9* g_marble_surface = 0;
+	IDirect3DTexture9* g_marble_ztex = 0;
+	IDirect3DSurface9* g_marble_zsurface = 0;
+	D3DSURFACE_DESC g_marble_desc = {};
+
+	HDRenderMarbleStats g_marble_stats = {};
+	// RoomProbe's warm-up draw: the mirrored rooms alone, nothing laid.
+	bool g_marble_quiet = false;
+	// The mirror target's rows a frame's row (marble_make): 1 or 2.
+	int g_marble_rows = 2;
+
+	void release_marble()
 	{
-		float x, y, z;
-		float light;
-		float field[3];
+		IUnknown** held[4] =
+		{
+			(IUnknown**)&g_marble_surface, (IUnknown**)&g_marble_tex,
+			(IUnknown**)&g_marble_zsurface, (IUnknown**)&g_marble_ztex
+		};
+
+		for (int i = 0; i < 4; i++)
+			if (*held[i])
+			{
+				(*held[i])->Release();
+				*held[i] = 0;
+			}
+	}
+
+	/* The target is the frame's width and g_marble_rows times its height:
+	 * drawn into that many rows a pixel and read bilinearly half way
+	 * between them, a reflected edge is smoothed down the screen, where
+	 * the grazing view stretches it (see "the marble floors' edges"). */
+	bool marble_make(const D3DSURFACE_DESC& desc)
+	{
+		const UINT height = desc.Height * (UINT)g_marble_rows;
+
+		if (g_marble_tex && (g_marble_desc.Width != desc.Width ||
+			g_marble_desc.Height != height))
+			release_marble();
+
+		if (g_marble_tex)
+			return true;
+
+		if (FAILED(g_device->CreateTexture(desc.Width, height, 1,
+			D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
+			&g_marble_tex, 0)) ||
+			FAILED(g_marble_tex->GetSurfaceLevel(0, &g_marble_surface)) ||
+			FAILED(g_device->CreateTexture(desc.Width, height, 1,
+			D3DUSAGE_DEPTHSTENCIL, kIntz, D3DPOOL_DEFAULT, &g_marble_ztex,
+			0)) || FAILED(g_marble_ztex->GetSurfaceLevel(0,
+			&g_marble_zsurface)))
+		{
+			release_marble();
+			return false;
+		}
+
+		g_marble_desc = desc;
+		g_marble_desc.Height = height;
+		return true;
+	}
+
+	/* After the level's build and its rooms' flags: a water room's faces
+	 * leave the mirror (the tank interiors and the pool), and the clear
+	 * floors of the column elsewhere are drawn opaque. */
+	void marble_build(const HDWaterRoom* rooms, int count)
+	{
+		std::unordered_set<int> heights;
+
+		g_marble_faces = 0;
+		g_marble_water = 0;
+		g_marble_opaque = 0;
+
+		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
+		{
+			HDGroup& group = g_groups[(size_t)g];
+			const bool water = g < count &&
+				(rooms[g].flags & HD_WATER_ROOM_UNDERWATER) != 0;
+
+			if (water)
+			{
+				g_marble_water += (int)group.mirrorY.size();
+				group.mirrorFaces.clear();
+				group.mirrorY.clear();
+			}
+
+			g_marble_faces += (int)group.mirrorY.size();
+			heights.insert(group.mirrorY.begin(), group.mirrorY.end());
+
+			for (HDRange& r : group.pass[1])
+			{
+				r.marbleOpaque = g_marble_on && !water && r.clear &&
+					MirrorPage(HDPageCachePageOfSlot(r.pageSlot));
+				g_marble_opaque += r.marbleOpaque ? 1 : 0;
+			}
+		}
+
+		g_marble_heights = (int)heights.size();
+	}
+
+	void marble_note(int kind, int id, const D3DMATRIX* world,
+		const HDRoomLighting* lighting, unsigned int passes, int window)
+	{
+		if (!g_marble_on || g_marble_replay || !g_marble_faces ||
+			g_marble_draws.size() >= 4096)
+			return;
+
+		MarbleDraw d;
+
+		d.kind = window == HD_WINDOW_STAND ? 1 : kind;
+		d.id = id;
+		// No matrix is the identity, as prepare takes it.
+		memset(&d.world, 0, sizeof(d.world));
+		d.world._11 = d.world._22 = d.world._33 = d.world._44 = 1.0f;
+
+		if (world)
+			d.world = *world;
+
+		d.lighting = lighting;
+		d.passes = passes;
+		d.window = window;
+		d.stand = d.kind == 1 ? g_stand_pick : -1;
+		d.behind = d.kind == 1 && g_stand_pick_behind;
+
+		// A frame drawn twice in one list (RoomProbe's warm-up) notes once.
+		for (const MarbleDraw& o : g_marble_draws)
+			if (o.kind == d.kind && o.id == d.id && o.passes == d.passes &&
+				o.window == d.window && o.stand == d.stand &&
+				!memcmp(&o.world, &d.world, sizeof(d.world)))
+				return;
+
+		g_marble_draws.push_back(d);
+	}
+
+	// One plane of a frame: its faces in view space and where it lies.
+	struct MarbleLayer
+	{
+		std::vector<CardVertex> verts;
+		float cover = 0.0f;
+		float plane[4] = { 0.0f, 0.0f, 0.0f, 0.0f };	// view space, up
+		float axes[12] = {};
 	};
 
-	std::vector<MarblePoint> g_marble_points;
-	std::vector<int> g_marble_square_first;
-	int g_marble_drawn = 0;
-
-	/* The layer's points of this frame in view space, the squares in the
-	 * frame, their triangles: what both draws take. False when no square
-	 * is in the frame. */
-	bool marble_layer(const float* toFrame, std::vector<CardVertex>& verts,
-		std::vector<unsigned short>& tris, float* axes)
+	/* The noted draws made again; the projection is the caller's. A sky
+	 * group is left out: it is drawn in a depth slice of its own. */
+	void marble_replay()
 	{
-		float m[16];
+		HDRenderScissorOff();
+		g_marble_replay = true;
 
-		verts.clear();
-		tris.clear();
-		g_marble_drawn = 0;
-
-		if (!toFrame)
-			return false;
-
-		for (int r = 0; r < 4; r++)
-			for (int k = 0; k < 4; k++)
-				m[r * 4 + k] = toFrame[r * 4 + 0] * g_view[k] +
-					toFrame[r * 4 + 1] * g_view[4 + k] +
-					toFrame[r * 4 + 2] * g_view[8 + k] +
-					toFrame[r * 4 + 3] * g_view[12 + k];
-
-		for (int r = 0; r < 12; r++)
-			axes[r] = 0.0f;
-
-		for (int r = 0; r < 3; r++)
+		for (const MarbleDraw& d : g_marble_draws)
 		{
-			const float l = sqrtf(m[r * 4] * m[r * 4] +
-				m[r * 4 + 1] * m[r * 4 + 1] + m[r * 4 + 2] * m[r * 4 + 2]);
-
-			for (int k = 0; k < 3 && l > 0.0f; k++)
-				axes[r * 4 + k] = m[r * 4 + k] / l;
-		}
-
-		for (size_t s = 0; s < g_marble_square_first.size(); s++)
-		{
-			const size_t first = (size_t)g_marble_square_first[s];
-			const size_t base = verts.size();
-			unsigned int past = 31u;
-
-			if (base + 25 > 65535)
-				break;
-
-			for (int k = 0; k < 25; k++)
-			{
-				const MarblePoint& p = g_marble_points[first + (size_t)k];
-				CardVertex v;
-
-				v.x = p.x * m[0] + p.y * m[4] + p.z * m[8] + m[12];
-				v.y = p.x * m[1] + p.y * m[5] + p.z * m[9] + m[13];
-				v.z = p.x * m[2] + p.y * m[6] + p.z * m[10] + m[14];
-
-				const float cx = v.x * g_proj[0] + v.z * g_proj[8];
-				const float cy = v.y * g_proj[5] + v.z * g_proj[9];
-
-				past &= (v.z < 1.0f ? 1u : 0u) | (cx < -v.z ? 2u : 0u) |
-					(cx > v.z ? 4u : 0u) | (cy < -v.z ? 8u : 0u) |
-					(cy > v.z ? 16u : 0u);
-				v.u = v.x;
-				v.v = v.y;
-				v.cx = v.z;
-				v.cz = 1.0f;
-				v.r = p.field[0];
-				v.g = p.field[1];
-				v.b = p.field[2];
-				v.a = 1.0f;
-				v.light = p.light;
-				verts.push_back(v);
-			}
-
-			if (past)
-			{
-				verts.resize(base);
+			if (d.kind != 2 && d.id >= g_room_groups)
 				continue;
-			}
 
-			g_marble_drawn++;
-
-			for (int j = 0; j < 4; j++)
-				for (int i = 0; i < 4; i++)
-				{
-					const unsigned short a = (unsigned short)(base + j * 5 + i);
-
-					tris.push_back(a);
-					tris.push_back((unsigned short)(a + 1));
-					tris.push_back((unsigned short)(a + 5));
-					tris.push_back((unsigned short)(a + 1));
-					tris.push_back((unsigned short)(a + 6));
-					tris.push_back((unsigned short)(a + 5));
-				}
+			if (d.kind == 2)
+				HDRenderStaticPiece(d.id, &d.world, d.lighting, d.passes);
+			else if (d.kind == 1)
+				HDRenderRoomStand(d.id, &d.world, d.lighting, d.passes,
+					d.stand, d.behind);
+			else
+				HDRenderRoomMask(d.id, &d.world, d.lighting, d.passes,
+					d.window);
 		}
 
-		return !tris.empty();
+		HDRenderScissorOff();
+		g_marble_replay = false;
 	}
-}
 
-void HDRenderMarbleProbeSet(const HDMarbleProbeSquare* squares, int count)
-{
-	g_marble_points.clear();
-	g_marble_square_first.clear();
-
-	for (int s = 0; squares && s < count; s++)
+	// The room path's shaders and stream, as the bracket sets them.
+	void marble_room_state()
 	{
-		float l[3];
-
-		group_light(squares[s].room, l);
-		g_marble_square_first.push_back((int)g_marble_points.size());
-
-		for (int k = 0; k < 25; k++)
-		{
-			MarblePoint p;
-
-			p.x = (float)(squares[s].x + k % 5 * 256);
-			p.y = (float)squares[s].y - kWetLift;
-			p.z = (float)(squares[s].z + k / 5 * 256);
-			p.light = l[0] > l[1] ? (l[0] > l[2] ? l[0] : l[2]) :
-				(l[1] > l[2] ? l[1] : l[2]);
-
-			for (int a = 0; a < 3; a++)
-			{
-				const float pos = a == 0 ? p.x : a == 1 ? p.y : p.z;
-				const float side = (float)g_field_grid.dims[a] *
-					HD_GLOSS_FIELD_CELL;
-
-				p.field[a] = side > 0.0f ?
-					(pos - g_field_grid.origin[a]) / side : 0.0f;
-			}
-
-			g_marble_points.push_back(p);
-		}
+		g_device->SetVertexShader(g_vs);
+		g_device->SetPixelShader(g_ps);
+		g_device->SetVertexDeclaration(g_decl);
+		g_device->SetStreamSource(0, g_vb, 0, sizeof(HDVertex));
+		g_device->SetIndices(g_ib);
+		g_device->SetTexture(1, g_field_dir);
+		g_device->SetTexture(2, g_field_rgb);
 	}
 }
 
-int HDRenderMarbleProbeDrawn()
+void HDRenderMarbleSet(int on, int planes)
 {
-	return g_marble_drawn;
+	g_marble_on = on != 0;
+	g_marble_cap = planes < 1 ? 1 : planes > 8 ? 8 : planes;
 }
 
-void HDRenderMarbleProbeDraw(const float* toFrame, float dark, float f0,
-	float gain, IDirect3DPixelShader9* planar, IDirect3DTexture9* mirror,
-	IDirect3DTexture9* mirrorDepth)
+int HDRenderMarbleOn()
 {
-	std::vector<CardVertex> verts;
-	std::vector<unsigned short> tris;
-	float axes[12];
+	return g_marble_on ? 1 : 0;
+}
 
-	if (!g_device || !g_card_vs || !g_wet_ps || !g_in_frame ||
-		!marble_layer(toFrame, verts, tris, axes))
+void HDRenderMarbleQuiet(bool on)
+{
+	g_marble_quiet = on;
+}
+
+void HDRenderMarbleRows(int rows)
+{
+	g_marble_rows = rows > 1 ? 2 : 1;
+
+	if (g_marble_tex)
+		release_marble();
+}
+
+void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
+{
+	if (!out)
 		return;
 
-	// A planar reflection in place of the frame's copy, or the copy.
-	const bool copy = planar ? mirror != 0 : wet_copy_late();
-	IDirect3DVertexShader9* vs = 0;
-	IDirect3DPixelShader9* ps = 0;
-	IDirect3DVertexDeclaration9* decl = 0;
-	IDirect3DBaseTexture9* tex[7] = { 0, 0, 0, 0, 0, 0, 0 };
-	const DWORD stage[7] = { 1, 2, 5, 6, 7, 0, 3 };
-	IDirect3DVertexBuffer9* stream = 0;
-	IDirect3DIndexBuffer9* index = 0;
-	UINT streamOffset = 0, streamStride = 0;
-	DWORD fvf = 0;
+	*out = g_marble_stats;
+	out->faces_level = g_marble_faces;
+	out->water = g_marble_water;
+	out->opaque = g_marble_opaque;
+	out->heights = g_marble_heights;
+}
+
+void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
+	int bulbs)
+{
+	g_marble_spent = true;
+	g_marble_stats = HDRenderMarbleStats();
+
+	if (!g_marble_on || !g_device || !g_in_frame || !g_card_vs ||
+		!g_marble_ps || g_marble_draws.empty() || !g_marble_faces)
+		return;
+
+	IDirect3DSurface9* target = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		desc.MultiSampleType != D3DMULTISAMPLE_NONE || !marble_make(desc))
+	{
+		target->Release();
+		return;
+	}
+
+	// The faces of the rooms drawn, by height, in view space.
+	std::map<int, MarbleLayer> layers;
+	std::vector<char> taken(g_groups.size(), 0);
+
+	for (const MarbleDraw& d : g_marble_draws)
+	{
+		if (d.kind != 0 || d.id < 0 || d.id >= g_room_groups ||
+			taken[(size_t)d.id] || !(d.passes & HD_PASS_SOLID) ||
+			(d.window != HD_WINDOW_ALL && d.window != HD_WINDOW_OPEN))
+			continue;
+
+		taken[(size_t)d.id] = 1;
+
+		const HDGroup& group = g_groups[(size_t)d.id];
+
+		if (group.mirrorY.empty())
+			continue;
+
+		float m[16], l[3];
+
+		multiply((const float*)&d.world, g_view, m);
+		group_light(d.id, l);
+
+		const float light = l[0] > l[1] ? (l[0] > l[2] ? l[0] : l[2]) :
+			(l[1] > l[2] ? l[1] : l[2]);
+		const float origin[2] =
+		{
+			(size_t)d.id * 2 + 1 < g_group_origin.size() ?
+				g_group_origin[(size_t)d.id * 2] : 0.0f,
+			(size_t)d.id * 2 + 1 < g_group_origin.size() ?
+				g_group_origin[(size_t)d.id * 2 + 1] : 0.0f
+		};
+
+		for (size_t f = 0; f < group.mirrorY.size(); f++)
+		{
+			const float* p = &group.mirrorFaces[f * 9];
+			CardVertex v[3];
+			float clip[12];
+
+			for (int c = 0; c < 3; c++)
+			{
+				// Lifted a few units over the floor, as the wet floor is.
+				const float x = p[c * 3], y = p[c * 3 + 1] - kWetLift;
+				const float z = p[c * 3 + 2];
+				const float world[3] = { x + origin[0], y, z + origin[1] };
+				CardVertex& o = v[c];
+
+				o.x = x * m[0] + y * m[4] + z * m[8] + m[12];
+				o.y = x * m[1] + y * m[5] + z * m[9] + m[13];
+				o.z = x * m[2] + y * m[6] + z * m[10] + m[14];
+
+				for (int k = 0; k < 4; k++)
+					clip[c * 4 + k] = o.x * g_proj[k] + o.y * g_proj[4 + k] +
+						o.z * g_proj[8 + k] + g_proj[12 + k];
+
+				o.u = o.x;
+				o.v = o.y;
+				o.cx = o.z;
+				o.cz = 1.0f;
+
+				float* field[3] = { &o.r, &o.g, &o.b };
+
+				for (int a = 0; a < 3; a++)
+				{
+					const float side = (float)g_field_grid.dims[a] *
+						HD_GLOSS_FIELD_CELL;
+
+					*field[a] = side > 0.0f ?
+						(world[a] - g_field_grid.origin[a]) / side : 0.0f;
+				}
+
+				o.a = 1.0f;
+				o.light = light;
+			}
+
+			const float cover = HDMarbleCoverage(clip);
+
+			if (cover <= 0.0f)
+				continue;
+
+			MarbleLayer& layer = layers[group.mirrorY[f]];
+
+			if (layer.verts.empty())
+			{
+				// The world's up in view space and a point of the floor.
+				const float h = (float)group.mirrorY[f];
+				float n[3] = { -m[4], -m[5], -m[6] };
+				const float len = sqrtf(n[0] * n[0] + n[1] * n[1] +
+					n[2] * n[2]);
+
+				for (int k = 0; k < 3 && len > 0.0f; k++)
+					layer.plane[k] = n[k] / len;
+
+				layer.plane[3] = layer.plane[0] * (h * m[4] + m[12]) +
+					layer.plane[1] * (h * m[5] + m[13]) +
+					layer.plane[2] * (h * m[6] + m[14]);
+
+				for (int r = 0; r < 3; r++)
+				{
+					const float a = sqrtf(m[r * 4] * m[r * 4] +
+						m[r * 4 + 1] * m[r * 4 + 1] +
+						m[r * 4 + 2] * m[r * 4 + 2]);
+
+					for (int k = 0; k < 3 && a > 0.0f; k++)
+						layer.axes[r * 4 + k] = m[r * 4 + k] / a;
+				}
+			}
+
+			layer.cover += cover;
+			layer.verts.insert(layer.verts.end(), v, v + 3);
+		}
+	}
+
+	std::vector<HDMarblePlane> planes;
+
+	for (const std::pair<const int, MarbleLayer>& l : layers)
+		planes.push_back({ l.first, l.second.cover });
+
+	const int drawn = planes.empty() ? 0 : HDMarblePlanesPick(&planes[0],
+		(int)planes.size(), g_marble_cap);
+
+	g_marble_stats.planes = (int)planes.size();
+	g_marble_stats.drawn = drawn;
+
+	if (!drawn)
+	{
+		target->Release();
+		return;
+	}
+
+	D3DVIEWPORT9 vp = {};
+	IDirect3DSurface9* depth = 0;
+	float keepClip[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	DWORD keepClipOn = 0;
+	float keepProj[16];
+
+	g_device->GetViewport(&vp);
+	g_device->GetDepthStencilSurface(&depth);
+	g_device->GetClipPlane(0, keepClip);
+	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &keepClipOn);
+	std::memcpy(keepProj, g_proj, sizeof(keepProj));
+
 	const D3DRENDERSTATETYPE states[] =
 	{
 		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
 		D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND, D3DRS_DESTBLEND,
-		D3DRS_BLENDOP, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
-		D3DRS_FOGENABLE, D3DRS_SEPARATEALPHABLENDENABLE,
-		D3DRS_COLORWRITEENABLE, D3DRS_STENCILENABLE
+		D3DRS_BLENDOP, D3DRS_ALPHATESTENABLE, D3DRS_ALPHAREF,
+		D3DRS_ALPHAFUNC, D3DRS_CULLMODE, D3DRS_FOGENABLE,
+		D3DRS_SEPARATEALPHABLENDENABLE, D3DRS_COLORWRITEENABLE,
+		D3DRS_STENCILENABLE, D3DRS_TWOSIDEDSTENCILMODE, D3DRS_STENCILFUNC,
+		D3DRS_STENCILREF, D3DRS_STENCILMASK, D3DRS_STENCILWRITEMASK,
+		D3DRS_STENCILPASS, D3DRS_STENCILFAIL, D3DRS_STENCILZFAIL
 	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	const DWORD stage[5] = { 1, 2, 3, 5, 0 };
 	const D3DSAMPLERSTATETYPE samps[] =
 	{
 		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER,
 		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_ADDRESSW,
 		D3DSAMP_SRGBTEXTURE
 	};
-	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
-	DWORD saved[stateCount], savedSamp[7][sampCount];
 
-	g_device->GetVertexShader(&vs);
-	g_device->GetPixelShader(&ps);
-	g_device->GetVertexDeclaration(&decl);
-	g_device->GetFVF(&fvf);
-	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
-	g_device->GetIndices(&index);
-
-	for (int i = 0; i < stateCount; i++)
-		g_device->GetRenderState(states[i], &saved[i]);
-
-	for (int s = 0; s < 7; s++)
+	for (int i = 0; i < drawn; i++)
 	{
-		g_device->GetTexture(stage[s], &tex[s]);
+		const MarbleLayer& layer = layers[planes[(size_t)i].y];
+		const float* n = layer.plane;
+		const float dist = n[3];
 
-		for (int i = 0; i < sampCount; i++)
-			g_device->GetSamplerState(stage[s], samps[i], &savedSamp[s][i]);
+		/* The reflection in the plane, p - 2 (p.n - d) n for a row vector,
+		 * then the projection, then x turned (the second flip). */
+		float k4[16] = {};
+
+		for (int r = 0; r < 3; r++)
+			for (int c = 0; c < 3; c++)
+				k4[r * 4 + c] = (r == c ? 1.0f : 0.0f) - 2.0f * n[r] * n[c];
+
+		for (int c = 0; c < 3; c++)
+			k4[12 + c] = 2.0f * dist * n[c];
+
+		k4[15] = 1.0f;
+
+		float mirrored[16];
+
+		for (int r = 0; r < 4; r++)
+			for (int c = 0; c < 4; c++)
+			{
+				float s = 0.0f;
+
+				for (int k = 0; k < 4; k++)
+					s += k4[r * 4 + k] * keepProj[k * 4 + c];
+
+				mirrored[r * 4 + c] = c == 0 ? -s : s;
+			}
+
+		// What stands over the floor, in the eye's own view space.
+		const float over[4] = { n[0], n[1], n[2], -dist };
+		float clip[4];
+
+		if (!HDWetPlaneTo(mirrored, over, clip))
+			continue;
+
+		D3DVIEWPORT9 rows = vp;
+
+		rows.Y *= (DWORD)g_marble_rows;
+		rows.Height *= (DWORD)g_marble_rows;
+		g_device->SetRenderTarget(0, g_marble_surface);
+		g_device->SetDepthStencilSurface(g_marble_zsurface);
+		g_device->SetViewport(&rows);
+		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
+			D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+		g_device->SetClipPlane(0, clip);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 1);
+		std::memcpy(g_proj, mirrored, sizeof(mirrored));
+		multiply(g_view, g_proj, g_viewproj);
+		marble_room_state();
+
+		const int callsBefore = g_draw_calls;
+
+		marble_replay();
+		g_marble_stats.calls += g_draw_calls - callsBefore;
+
+		if (draw && projection)
+		{
+			draw(mirrored, bulbs, HD_PASS_SOLID);
+			marble_room_state();
+			g_water_table_up = (const void*)~(size_t)0;
+			apply_frame_lighting(g_marble_frame);
+		}
+
+		std::memcpy(g_proj, keepProj, sizeof(keepProj));
+		multiply(g_view, g_proj, g_viewproj);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, keepClipOn);
+		g_device->SetClipPlane(0, keepClip);
+		g_device->SetRenderTarget(0, target);
+		g_device->SetDepthStencilSurface(depth);
+		g_device->SetViewport(&vp);
+
+		if (g_marble_quiet)
+			continue;
+
+		// Over the frame: the mask, the wet floor's points out, the mirror.
+		IDirect3DVertexShader9* vs = 0;
+		IDirect3DPixelShader9* ps = 0;
+		IDirect3DVertexDeclaration9* decl = 0;
+		IDirect3DBaseTexture9* tex[5] = { 0, 0, 0, 0, 0 };
+		DWORD saved[stateCount], savedSamp[5][sampCount];
+		IDirect3DVertexBuffer9* stream = 0;
+		IDirect3DIndexBuffer9* index = 0;
+		UINT streamOffset = 0, streamStride = 0;
+		DWORD fvf = 0;
+
+		g_device->GetVertexShader(&vs);
+		g_device->GetPixelShader(&ps);
+		g_device->GetVertexDeclaration(&decl);
+		g_device->GetFVF(&fvf);
+		g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+		g_device->GetIndices(&index);
+
+		for (int s = 0; s < stateCount; s++)
+			g_device->GetRenderState(states[s], &saved[s]);
+
+		for (int s = 0; s < 5; s++)
+		{
+			g_device->GetTexture(stage[s], &tex[s]);
+
+			for (int k = 0; k < sampCount; k++)
+				g_device->GetSamplerState(stage[s], samps[k],
+					&savedSamp[s][k]);
+		}
+
+		const float screen[4] = { vp.Width ? 1.0f / (float)vp.Width : 0.0f,
+			vp.Height ? 1.0f / (float)vp.Height : 0.0f, g_proj[10],
+			-g_proj[14] };
+		const float look[4] = { kMarbleF0, kWetWalls, kWetHighlight,
+			kWetPower };
+		const float march[4] = { kWetCap, 1.0f, 0.0f, 0.0f };
+		const float gain[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+		/* The flip's place in the target (MarblePS). A pixel's centre lies
+		 * on the whole number in Direct3D 9, so pixel x of the viewport
+		 * shows what the turned projection drew at 2 X + W - x, whose texel
+		 * centre is at that plus a half: u = (2 X + W + 0.5 - x) / width. */
+		const float width = (float)desc.Width;
+		const float flipMask[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+		const float flipLook[4] = { 0.0f, 2.0f * (float)vp.X +
+			(float)vp.Width + 0.5f, 0.0f,
+			width > 0.0f ? 1.0f / width : 0.0f };
+
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_marble_ps);
+		g_device->SetFVF(kCardFVF);
+		set_matrix_constant(0, g_proj);
+		g_device->SetPixelShaderConstantF(92, screen, 1);
+		g_device->SetPixelShaderConstantF(94, look, 1);
+		g_device->SetPixelShaderConstantF(95, march, 1);
+		g_device->SetPixelShaderConstantF(96, layer.axes, 3);
+		g_device->SetPixelShaderConstantF(100, gain, 1);
+
+		for (int s = 0; s < 5; s++)
+		{
+			// The mirror read bilinearly, its depth as it stands.
+			const bool point = stage[s] == 3;
+
+			g_device->SetSamplerState(stage[s], D3DSAMP_MINFILTER,
+				point ? D3DTEXF_POINT : D3DTEXF_LINEAR);
+			g_device->SetSamplerState(stage[s], D3DSAMP_MAGFILTER,
+				point ? D3DTEXF_POINT : D3DTEXF_LINEAR);
+			g_device->SetSamplerState(stage[s], D3DSAMP_MIPFILTER,
+				D3DTEXF_NONE);
+			g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSU,
+				D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSV,
+				D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSW,
+				D3DTADDRESS_CLAMP);
+			g_device->SetSamplerState(stage[s], D3DSAMP_SRGBTEXTURE, FALSE);
+		}
+
+		g_device->SetTexture(0, 0);
+		g_device->SetTexture(1, g_field_dir);
+		g_device->SetTexture(2, g_field_rgb);
+		g_device->SetTexture(3, g_marble_ztex);
+		g_device->SetTexture(5, g_marble_tex);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_TWOSIDEDSTENCILMODE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_ALWAYS);
+		g_device->SetRenderState(D3DRS_STENCILREF, kMarbleStencilBit);
+		g_device->SetRenderState(D3DRS_STENCILMASK, kMarbleStencilBit);
+		g_device->SetRenderState(D3DRS_STENCILWRITEMASK, kMarbleStencilBit);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_REPLACE);
+		g_device->SetRenderState(D3DRS_STENCILFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetRenderState(D3DRS_STENCILZFAIL, D3DSTENCILOP_KEEP);
+		g_device->SetPixelShaderConstantF(105, flipLook, 1);
+
+		const UINT faces = (UINT)(layer.verts.size() / 3);
+
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, faces,
+			&layer.verts[0], sizeof(CardVertex));
+
+		/* A wet floor's points of this frame (HDRenderWaterWetDraw) take
+		 * the bit away again where the water has come: the floor mirrors
+		 * there through the wet floor's own draw, and not twice. */
+		if (g_wet_ready && !g_wet_tris.empty())
+		{
+			g_device->SetPixelShaderConstantF(105, flipMask, 1);
+			g_device->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+			g_device->SetRenderState(D3DRS_ALPHAREF, 0);
+			g_device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+			g_device->SetRenderState(D3DRS_STENCILREF, 0);
+			g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0,
+				(UINT)g_wet_verts.size(), (UINT)(g_wet_tris.size() / 3),
+				&g_wet_tris[0], D3DFMT_INDEX16, &g_wet_verts[0],
+				sizeof(CardVertex));
+			g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+			g_device->SetPixelShaderConstantF(105, flipLook, 1);
+			g_marble_stats.wet = 1;
+		}
+
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
+			D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
+			D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+		g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		g_device->SetRenderState(D3DRS_STENCILFUNC, D3DCMP_EQUAL);
+		g_device->SetRenderState(D3DRS_STENCILREF, kMarbleStencilBit);
+		g_device->SetRenderState(D3DRS_STENCILPASS, D3DSTENCILOP_ZERO);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, faces,
+			&layer.verts[0], sizeof(CardVertex));
+		g_marble_stats.faces += (int)faces;
+
+		for (int s = 0; s < stateCount; s++)
+			g_device->SetRenderState(states[s], saved[s]);
+
+		for (int s = 0; s < 5; s++)
+		{
+			for (int k = 0; k < sampCount; k++)
+				g_device->SetSamplerState(stage[s], samps[k],
+					savedSamp[s][k]);
+
+			g_device->SetTexture(stage[s], tex[s]);
+
+			if (tex[s])
+				tex[s]->Release();
+		}
+
+		g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+		g_device->SetIndices(index);
+		g_device->SetFVF(fvf);
+		g_device->SetVertexDeclaration(decl);
+		g_device->SetVertexShader(vs);
+		g_device->SetPixelShader(ps);
+
+		if (stream) stream->Release();
+		if (index) index->Release();
+		if (decl) decl->Release();
+		if (vs) vs->Release();
+		if (ps) ps->Release();
 	}
 
-	D3DVIEWPORT9 vp = {};
+	if (depth)
+		depth->Release();
 
-	g_device->GetViewport(&vp);
-
-	const bool soft = g_depth_texture != 0;
-	const float screen[4] = { vp.Width ? 1.0f / (float)vp.Width : 0.0f,
-		vp.Height ? 1.0f / (float)vp.Height : 0.0f, g_proj[10], -g_proj[14] };
-	const float mode[4] = { soft ? 1.0f : 0.0f, kWetLift + kWetHole,
-		1.0f / kWetHole, dark };
-	const float look[4] = { f0, kWetWalls, kWetHighlight, kWetPower };
-	const float march[4] = { kWetCap, copy ? 1.0f : 0.0f, kWetFirstStep,
-		kWetGrowth };
-	const float proj[4] = { g_proj[0], g_proj[5], g_proj[8], g_proj[9] };
-	const float none[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-	g_device->SetVertexShader(g_card_vs);
-	g_device->SetPixelShader(planar ? planar : g_wet_ps);
-	g_device->SetFVF(kCardFVF);
-	set_matrix_constant(0, g_proj);
-	g_device->SetPixelShaderConstantF(92, screen, 1);
-	g_device->SetPixelShaderConstantF(93, mode, 1);
-	g_device->SetPixelShaderConstantF(94, look, 1);
-	g_device->SetPixelShaderConstantF(95, march, 1);
-	g_device->SetPixelShaderConstantF(96, axes, 3);
-	g_device->SetPixelShaderConstantF(99, proj, 1);
-	g_device->SetPixelShaderConstantF(101, none, 1);
-	g_device->SetPixelShaderConstantF(102, none, 1);
-	g_device->SetPixelShaderConstantF(103, none, 1);
-	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
-	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_SEPARATEALPHABLENDENABLE, FALSE);
-	/* The colour writes stay the caller's: a warm-up draw with none
-	 * leaves the frame, and so the next draw's copy of it, untouched. */
-	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-
-	for (int s = 0; s < 7; s++)
-	{
-		const bool point = s == 3 || s >= 5;
-
-		g_device->SetSamplerState(stage[s], D3DSAMP_MINFILTER,
-			point ? D3DTEXF_POINT : D3DTEXF_LINEAR);
-		g_device->SetSamplerState(stage[s], D3DSAMP_MAGFILTER,
-			point ? D3DTEXF_POINT : D3DTEXF_LINEAR);
-		g_device->SetSamplerState(stage[s], D3DSAMP_MIPFILTER, D3DTEXF_NONE);
-		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSU,
-			D3DTADDRESS_CLAMP);
-		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSV,
-			D3DTADDRESS_CLAMP);
-		g_device->SetSamplerState(stage[s], D3DSAMP_ADDRESSW,
-			D3DTADDRESS_CLAMP);
-		g_device->SetSamplerState(stage[s], D3DSAMP_SRGBTEXTURE, FALSE);
-	}
-
-	g_device->SetTexture(1, g_field_dir);
-	g_device->SetTexture(2, g_field_rgb);
-	g_device->SetTexture(5, planar ? mirror : copy ? g_wet_late : 0);
-	g_device->SetTexture(6, soft ? g_depth_texture : 0);
-	g_device->SetTexture(7, 0);
-	g_device->SetTexture(0, 0);
-	g_device->SetTexture(3, planar ? mirrorDepth : 0);
-
-	// The darkening, then the mirror, as the wet floor's two draws.
-	for (int part = dark > 0.0f ? 0 : 1; part < 2; part++)
-	{
-		const float gains[4] = { gain, (float)part, kWetFit, kWetFitShare };
-
-		g_device->SetPixelShaderConstantF(100, gains, 1);
-		g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0,
-			(UINT)verts.size(), (UINT)(tris.size() / 3), &tris[0],
-			D3DFMT_INDEX16, &verts[0], sizeof(CardVertex));
-	}
-
-	for (int i = 0; i < stateCount; i++)
-		g_device->SetRenderState(states[i], saved[i]);
-
-	for (int s = 0; s < 7; s++)
-	{
-		for (int i = 0; i < sampCount; i++)
-			g_device->SetSamplerState(stage[s], samps[i], savedSamp[s][i]);
-
-		g_device->SetTexture(stage[s], tex[s]);
-
-		if (tex[s])
-			tex[s]->Release();
-	}
-
-	// DrawIndexedPrimitiveUP leaves stream 0 and the indices unset.
-	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
-	g_device->SetIndices(index);
-	g_device->SetFVF(fvf);
-	g_device->SetVertexDeclaration(decl);
-	g_device->SetVertexShader(vs);
-	g_device->SetPixelShader(ps);
-
-	if (stream) stream->Release();
-	if (index) index->Release();
-	if (decl) decl->Release();
-	if (vs) vs->Release();
-	if (ps) ps->Release();
-}
-
-/* The planar mirror laid over the layer: each point's weight is Schlick's
- * term over F0 at its view angle times `gain`, its colour the reflection
- * texel at its own place on the screen (the texture holds the reflection
- * flipped left to right, so read at 1 - x), added over the frame as the
- * wet floor's mirror is; projected texture coordinates keep the place
- * exact across a triangle. `tint` 1 draws the layer's squares in a flat
- * colour instead - the census's picture of which floor it takes. */
-void HDRenderMarbleProbePlanar(const float* toFrame, IDirect3DTexture9* mirror,
-	float f0, float gain, int tint)
-{
-	std::vector<CardVertex> verts;
-	std::vector<unsigned short> tris;
-	float axes[12];
-
-	if (!g_device || !g_in_frame || (!mirror && !tint) ||
-		!marble_layer(toFrame, verts, tris, axes))
-		return;
-
-	struct Corner
-	{
-		float x, y, z;
-		D3DCOLOR c;
-		float s, t, q;
-	};
-
-	std::vector<Corner> v(verts.size());
-	D3DVIEWPORT9 vp = {};
-
-	g_device->GetViewport(&vp);
-
-	const float texel[2] = { vp.Width ? 1.0f / (float)vp.Width : 0.0f,
-		vp.Height ? 1.0f / (float)vp.Height : 0.0f };
-
-	for (size_t i = 0; i < verts.size(); i++)
-	{
-		const CardVertex& a = verts[i];
-		const float len = sqrtf(a.x * a.x + a.y * a.y + a.z * a.z);
-		// N.V with N the world's up in view space, -axes row 1.
-		const float nv = len > 0.0f ? -(axes[4] * -a.x + axes[5] * -a.y +
-			axes[6] * -a.z) / len : 1.0f;
-		const float g = 1.0f - (nv < 0.0f ? 0.0f : nv > 1.0f ? 1.0f : nv);
-		const float w = (f0 + (1.0f - f0) * g * g * g * g * g) * gain;
-		const int c = (int)(255.0f * (w > 1.0f ? 1.0f : w) + 0.5f);
-		const float cx = a.x * g_proj[0] + a.z * g_proj[8];
-		const float cy = a.y * g_proj[5] + a.z * g_proj[9];
-
-		v[i].x = a.x;
-		v[i].y = a.y;
-		v[i].z = a.z;
-		v[i].c = tint ? D3DCOLOR_ARGB(255, 160, 24, 24) :
-			D3DCOLOR_ARGB(255, c, c, c);
-		/* Its place on the screen at 1 - x as (s / q, t / q), half a texel
-		 * on: a pixel's centre lies on the whole number in Direct3D 9. */
-		v[i].s = 0.5f * a.z - 0.5f * cx + 0.5f * a.z * texel[0];
-		v[i].t = 0.5f * a.z - 0.5f * cy + 0.5f * a.z * texel[1];
-		v[i].q = a.z;
-	}
-
-	IDirect3DVertexShader9* vs = 0;
-	IDirect3DPixelShader9* ps = 0;
-	IDirect3DVertexDeclaration9* decl = 0;
-	IDirect3DBaseTexture9* tex = 0;
-	DWORD fvf = 0;
-	D3DMATRIX world, view, proj;
-	const D3DRENDERSTATETYPE states[] =
-	{
-		D3DRS_LIGHTING, D3DRS_FOGENABLE, D3DRS_ZENABLE, D3DRS_ZWRITEENABLE,
-		D3DRS_ZFUNC, D3DRS_ALPHABLENDENABLE, D3DRS_SRCBLEND,
-		D3DRS_DESTBLEND, D3DRS_CULLMODE, D3DRS_STENCILENABLE,
-		D3DRS_ALPHATESTENABLE
-	};
-	const D3DTEXTURESTAGESTATETYPE stages[] =
-	{
-		D3DTSS_COLOROP, D3DTSS_COLORARG1, D3DTSS_COLORARG2, D3DTSS_ALPHAOP,
-		D3DTSS_ALPHAARG1, D3DTSS_TEXTURETRANSFORMFLAGS, D3DTSS_TEXCOORDINDEX
-	};
-	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
-	const int stageCount = (int)(sizeof(stages) / sizeof(stages[0]));
-	DWORD saved[stateCount], stage[stageCount];
-	DWORD samp[4];
-	const D3DSAMPLERSTATETYPE samps[4] =
-	{
-		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_ADDRESSU,
-		D3DSAMP_ADDRESSV
-	};
-	IDirect3DVertexBuffer9* stream = 0;
-	IDirect3DIndexBuffer9* index = 0;
-	UINT streamOffset = 0, streamStride = 0;
-
-	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
-	g_device->GetIndices(&index);
-	g_device->GetVertexShader(&vs);
-	g_device->GetPixelShader(&ps);
-	g_device->GetVertexDeclaration(&decl);
-	g_device->GetFVF(&fvf);
-	g_device->GetTexture(0, &tex);
-	g_device->GetTransform(D3DTS_WORLD, &world);
-	g_device->GetTransform(D3DTS_VIEW, &view);
-	g_device->GetTransform(D3DTS_PROJECTION, &proj);
-
-	for (int i = 0; i < stateCount; i++)
-		g_device->GetRenderState(states[i], &saved[i]);
-
-	for (int i = 0; i < stageCount; i++)
-		g_device->GetTextureStageState(0, stages[i], &stage[i]);
-
-	for (int i = 0; i < 4; i++)
-		g_device->GetSamplerState(0, samps[i], &samp[i]);
-
-	D3DMATRIX identity = {};
-
-	identity._11 = identity._22 = identity._33 = identity._44 = 1.0f;
-	g_device->SetVertexShader(0);
-	g_device->SetPixelShader(0);
-	g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1 |
-		D3DFVF_TEXCOORDSIZE3(0));
-	g_device->SetTexture(0, tint ? 0 : mirror);
-	g_device->SetTransform(D3DTS_WORLD, &identity);
-	g_device->SetTransform(D3DTS_VIEW, &identity);
-	g_device->SetTransform(D3DTS_PROJECTION, (const D3DMATRIX*)g_proj);
-	g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
-	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
-	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_SRCBLEND, tint ? D3DBLEND_SRCALPHA :
-		D3DBLEND_ONE);
-	g_device->SetRenderState(D3DRS_DESTBLEND, tint ? D3DBLEND_INVSRCALPHA :
-		D3DBLEND_ONE);
-	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	g_device->SetTextureStageState(0, D3DTSS_COLOROP, tint ?
-		D3DTOP_SELECTARG2 : D3DTOP_MODULATE);
-	g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
-	g_device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
-	g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
-	g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_DIFFUSE);
-	g_device->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS,
-		D3DTTFF_COUNT3 | D3DTTFF_PROJECTED);
-	g_device->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
-	g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-	g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-	g_device->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP);
-	g_device->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP);
-
-	if (tint)
-		for (Corner& c : v)
-			c.c = D3DCOLOR_ARGB(140, 200, 30, 30);
-
-	g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0, (UINT)v.size(),
-		(UINT)(tris.size() / 3), &tris[0], D3DFMT_INDEX16, &v[0],
-		sizeof(Corner));
-
-	for (int i = 0; i < stateCount; i++)
-		g_device->SetRenderState(states[i], saved[i]);
-
-	for (int i = 0; i < stageCount; i++)
-		g_device->SetTextureStageState(0, stages[i], stage[i]);
-
-	for (int i = 0; i < 4; i++)
-		g_device->SetSamplerState(0, samps[i], samp[i]);
-
-	g_device->SetTransform(D3DTS_WORLD, &world);
-	g_device->SetTransform(D3DTS_VIEW, &view);
-	g_device->SetTransform(D3DTS_PROJECTION, &proj);
-	g_device->SetTexture(0, tex);
-	// DrawIndexedPrimitiveUP leaves stream 0 and the indices unset.
-	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
-	g_device->SetIndices(index);
-	g_device->SetFVF(fvf);
-	g_device->SetVertexDeclaration(decl);
-	g_device->SetVertexShader(vs);
-	g_device->SetPixelShader(ps);
-
-	if (stream) stream->Release();
-	if (index) index->Release();
-	if (tex) tex->Release();
-	if (decl) decl->Release();
-	if (vs) vs->Release();
-	if (ps) ps->Release();
+	target->Release();
 }
 
 /* The frame's second wet-floor draw (see HDRenderWaterWetDraw), after the
@@ -21113,10 +21431,12 @@ bool HDRenderRoomMask(int group, const D3DMATRIX* world,
 		/* The water sheet, after the room's glass and once per room: with
 		 * the whole room's call or the open half's, never with the pieces
 		 * of its intruding art. */
-		if (window == HD_WINDOW_ALL || window == HD_WINDOW_OPEN)
+		if (!g_marble_replay &&
+			(window == HD_WINDOW_ALL || window == HD_WINDOW_OPEN))
 			draw_water_sheet(group);
 	}
 
+	marble_note(0, group, world, lighting, passes, window);
 	return true;
 }
 
@@ -23027,6 +23347,7 @@ bool HDRenderStaticPiece(int piece, const D3DMATRIX* world,
 		draw_pass(art, 1, wvp, true);
 
 	g_device->SetIndices(g_ib);
+	marble_note(2, piece, world, lighting, passes, HD_WINDOW_ALL);
 	return true;
 }
 

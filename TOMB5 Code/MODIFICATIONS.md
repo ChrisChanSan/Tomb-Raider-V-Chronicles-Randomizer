@@ -15567,6 +15567,237 @@ for the rooms drawn, the page list (a column of the sheen's page table and of
 `hd_splash_math.h` with a ModernTest group, an option, RoomProbe's switch on the engine's
 own path, and the records.
 
+**Built, round 1.** Decided on 2026-10-16 on the measurement's pictures, put into
+English: the planar mirror looks best and replaces the Remaster's rooms built mirrored
+under RICH2's floors, which tear it where they are sporadic; the statics, items and
+animatings are mirrored with the rooms; bilinear reading; the title, the lobby and the
+pool's surround are in. Reference pictures supplied for this project (not in the
+repository) show the four places the round answers: p3 (the vending machine), p8 (RICH2
+room 121, the reflection ending at a diagonal), E190 (room 128, the mirror torn at the
+two west columns) and p7 (the pipe's reflection with a stepped edge).
+
+What. A planar mirror on the polished floors (`hd_render.cpp`, "the marble floors";
+`HDRenderMarbleDraw`): the frame's rooms, stand ranges, static pieces and models drawn a
+second time through each floor height and laid over the floor's own faces.
+
+The page column (`hd_gloss_pages.h`, `hd_gloss_math.h` `HDGlossMirror`). The sheen's page
+table carries a sixth column, `mirror`, set on the measurement's 35 pages (RICH 16,
+RICHCUT2 7, ANDREA 9, TITLE 3); a page the sheen does not name stands as a line of class
+`A` (`HD_GLOSS_ASIS`), which names nothing of the sheen - the lobby's barred pages among
+them. `hd_gloss.txt` takes a last word `mirror` or `nomirror`, or a page and that word
+alone; the file's word stands over the table's, a later line for a page over an earlier
+one, so a page is switched without a rebuild. The table's comments now stand over their
+lines, so a row keeps the 80 columns.
+
+The faces (the triangle loop; `HDMarbleFace`, `hd_splash_math.h`; `marble_build`). A
+triangle of a room's opaque pass or of its clear floors on a page of the column, flat
+and facing up (the normal's height over 0.95 of its length, the census's flat face; the
+side from the corners' own normals), is kept with its group in the group's own space,
+its height the corners' mean y. After the rooms' flags (`HDRenderSetWaterSheets`, which
+the engine calls at every build) a water room's faces leave. The mirror's extent is
+those faces and their heights are the planes: the classic squares are not asked, so the
+mirror at p8 runs to the art's own diagonal edge (Core's wedge under the tank's wall).
+Counted with `-marble 1`: ANDREA1 2,472 faces at 17 heights, ANDREA2 3,597 at 22,
+ANDREA3 7,130 at 10, RICH1 520 at 3, RICH2 42,228 at 67 (180 more in water rooms),
+RICH3 4,864 at 27, RICHCUT2 1,475 at 9, TITLE 1,860 at 2; ANDY2 and JOBY2 none.
+
+The clear floors (`HDRange::marbleOpaque`, `draw_pass` `opaque`). A clear-floor draw call
+on a page of the column, in a room that is no water room, is drawn with the blend off in
+`HD_PASS_CLEAR`: opaque, the depth written as before. No shader changes, the room
+shaders keep 510 (plain) and 507 (gloss) of 512 slots. Such draw calls: RICH2 147,
+TITLE 9. Such a floor is no clear floor for the wet floor's copy rule (`clearFlats`), so a
+tank's march runs over it again (splash round 6's rule flipped there). The copies under
+the floors stay drawn with their rooms: they are triangles of the rooms' own draw calls,
+and no measured rule separates them - left.
+
+The frame (`marble_note`, `marble_replay`, `HDRenderMarbleDraw`; one call line in
+`hd_level.cpp`'s `HDFrameDrawGlow`, before the wet floor's models). Every
+`HDRenderRoomMask`, `HDRenderRoomStand` and `HDRenderStaticPiece` call of the frame is
+noted with its matrix, lighting, passes and window; the frame's first bracket starts the
+list over once a mirror was drawn. The faces of the rooms drawn (window all or open, the
+solid pass) go into view space lifted `kWetLift` (4 units), each is cut to the view and
+its share of the screen summed into its height's plane (`HDMarbleCoverage`); the planes
+covering the most are mirrored, the higher first between equals, at most
+`hd_marble_planes` (`HDMarblePlanesPick`). Per plane: the projection folded with the
+plane's reflection in view space and turned left to right (two flips keep the winding),
+one device clip plane keeping what stands over the floor, into one A8R8G8B8 target and
+its INTZ depth used again for the next plane; the noted draws made again with the
+scissor off, the sky groups and the water sheets left out; the frame's object list
+(`HDObjectFrameDraw`) through the same projection, the frame's lighting put back after
+it. Over the frame: the plane's faces mark stencil bit 16 (1, 2, 4 and 8 are the
+shadow's receive, the creatures' mark and the crack's) under the depth test, the wet
+floor's points take it away, and the faces are drawn once more through `MarblePS`
+(`hd_wet.hlsl`, 93 slots) where it stands, clearing it: the wet floor's composition at a
+dry floor's numbers - Schlick's term at F0 0.04, no darkening, the walls' light where the
+target holds nothing, the lamps' highlight, the soft cap, the fog. WetPS's and the march
+debugger's bytecode are unchanged (only their stamps follow the file).
+
+The edges. The measurement's composite read the target one pixel beside its place: in
+Direct3D 9 a pixel's centre lies on the whole number, so pixel x shows what the turned
+projection drew at 2 X + W - x and its texel centre is a half further; corrected, the
+pipe's reflected end at p7 moves 1.04 pixels back under the pipe. The target is read
+bilinearly and drawn at two rows a row of the frame, read half way between them: the
+pipe's reflected underside at p7 lies 0.211 pixels RMS about its line, 0.290 with one
+row (`-marblerows`). The steps along it, 88 columns falling 2.2 rows (the edge's row in
+each column found to a share of a pixel, then rounded): before, one step - the row held
+76 columns, then one jump of a whole row, a stair - and the largest miss of the line
+0.531 pixels; with the two rows six steps, the longest run 57
+columns, the largest miss 0.416: the edge moves by shares of a pixel, so its rounded row
+changes oftener about the same fall (one row: one step, 77 columns, 0.536). The RMS is
+the measure of the stair, the count is not. A multisampled target was not built: its
+depth cannot be read as a texture, and the composite reads the depth for where the
+target holds nothing. The soft blur of the wet floor was not applied: its radius is the
+march's last step on the screen, which the planar mirror has none of, and a radius of
+its own would be a new rule to measure first.
+
+The wet floor's points. Where a tank's water has come this frame its mirror is the wet
+floor's own: the marble's stencil bit is taken away on every point the wet layer draws
+wet (MarblePS's mask mode, the alpha test over zero). Before the break and past the
+front the marble mirror is there.
+
+The keys. `hd_marble` (0|1, default 1) and `hd_marble_planes` (default 2, 1 to 8), read
+from the registry in `tomb5.cpp` beside `hd_vis` and handed to the renderer before a
+level is built (`HDRenderMarbleSet`; a first run takes the defaults); the level key
+carries `hd_marble` (`hd_levelkey.h`), so a kept load is built again when it changed.
+Nothing goes into a savegame. The resident load keeps the faces with the groups and sets
+the water rooms again; the flip twins (RICH2 46 and 75) carry faces each and the frame
+mirrors the one drawn. With `hd_marble` 0 nothing of this runs and every picture is the
+one before. RoomProbe: `-marble 0|1`, `-marbleplanes n`, `-marblerows 1|2` on the probe's
+own frame (`ProbeMarble`, a `marble:` line); the measurement's probe-only entry points
+(`HDRenderMarbleProbeSet`, `Draw`, `Planar`, `Drawn`) and `-marblea`, `-marbleb`,
+`-marbletint`, `-marbleheight` and `-marblerooms` with the runtime-compiled planar shader
+are gone; the census stays.
+
+**Measured.** GPU at 2,560 x 1,440, the timestamps round `HDRenderMarbleDraw`, three runs
+each, medians in ms (spread below); the frame's solid room draws (`-gpu 3`) for scale:
+
+| eye | frame | cap 1 | cap 2 | cap 3 | cap 2, one row |
+|---|---|---|---|---|---|
+| E189 corridor | 0.207 | 0.344 | 0.794 | 0.996 | 0.583 |
+| E190 room 128 | 0.753 | 2.995 | 3.932 | 4.687 | 3.775 |
+| L120 gallery | 0.694 | 3.012 | 4.062 | 4.854 | 3.865 |
+| L0 lobby | 0.206 | 2.366 | 3.205 | 3.198 | 2.976 |
+| L2 lobby | 0.202 | 2.444 | 2.859 | 3.148 | 2.720 |
+| L4 lobby | 0.705 | 2.850 | 3.596 | 4.743 | 3.497 |
+| P125 pool surround | 0.194 | 2.301 | 3.453 | 4.228 | 3.129 |
+| P126 pool surround | 0.189 | 2.543 | 3.398 | 4.342 | 2.968 |
+| W24 ANDREA2 | 0.169 | 2.442 | 2.903 | 3.342 | 2.914 |
+| W93 RICH3 | 0.127 | 0.271 | 0.267 | 0.270 | 0.169 |
+| W3c RICHCUT2 | 0.135 | 0.269 | 0.271 | 0.270 | 0.180 |
+| T40 title | 0.288 | 0.434 | 0.434 | 0.436 | 0.379 |
+| p3 | 0.126 | 0.243 | 0.532 | 0.822 | 0.327 |
+| p7 | 0.126 | 0.220 | 0.467 | 0.655 | 0.312 |
+| p8 | 0.122 | 0.138 | 0.288 | 0.455 | 0.232 |
+| p10 | 0.226 | 2.542 | 2.611 | 2.655 | 2.446 |
+| the other eleven, least | 0.112 | 0.139 | 0.154 | 0.155 | 0.104 |
+| the other eleven, most | 0.210 | 0.340 | 0.799 | 1.016 | 0.607 |
+
+(The other eleven: c601, k185, v510, E158, p4, p5, p6 and p9 of the measurement, T33,
+E189t and W46 of this round; least and most per column, so a row mixes eyes. Every
+spread under 0.1 but at the eyes with every room within 6,000 units, where it reaches
+0.12 to 1.08 - E190 cap 3 4.617 to 5.699, p10 cap 2 2.522 to 3.396, L0 cap 2 2.928 to
+3.752 - and seven times at c601, k185, p6, p9 and T40, up to 0.22. The eyes with a room
+list of their own cost a tenth of a millisecond to one; those with every room within
+6,000 units, as the measurement drew them, two to five - the noted draws of all four
+passes of many rooms made again, not the frame's solid draws alone, which the frame
+column times.) A
+first call in a process - the driver readying the room shaders for the clip plane - took
+22.6 to 26.7 ms at most eyes (timed apart, the call that lays nothing). Memory: the
+target and its depth, 8 bytes a pixel at two rows, 56.3 MiB at 2,560 x 1,440 (28.1 MiB
+at one row). The probe drew these with `hd_water` 0, which `-marble 1` sets where
+`-hdwater` is not given (the faces are built with the water's rooms); with `hd_water` 1
+E190, p8 and p7 are md5-identical and p3 differs by its water alone.
+
+**Checked.** The classic path 6 of 6 md5-identical to `8691e82` and `3f8f52dd` (ANDREA2
+19 and 231, JOBY2 42 and 66, ANDY3 17 and 34, `-classicroom`/`-classiconly`). With
+`hd_marble` 0 every picture is the `3f8f52dd` tool's (built from `git archive`): the 15
+cameras with `hd_water` 0 against the stored parity set and with `hd_water` 1, the six
+HD views, round 6's 25 band views and 8 owner eyes (`-tank 182 60`), the measurement's
+19 eyes - all md5-identical. With `hd_marble` 1 of the 15 cameras one changes, the
+washroom of RICH2 room 134 (page 1054 under the wall mirror's copy), the six HD views
+none. The 19 eyes against the dry floor change 12,730 (p3) to 129,546 (W3c) pixels by
+more than 8 of 255, against the measurement's planar prototype 11 (W24) to 21,121
+(c601); `hd_vis` 1 at E190, L120 and p8 draws what `hd_vis` 0 draws (the probe's room
+list is its own). Pictures: p8's floor mirrored to its diagonal, E190's two west
+columns opaque under the mirror (a strip of the far floor stays torn, see the fix pass),
+p7's pipe, the lobby (rooms 0, 2, 4, 120), the pool's
+surround (125, 126), the title (rooms 33 and 40), tank 182's and tank 33's wet floors
+after the break, the twins 46 and 75 alike. The seam between the wet mirror and the dry
+one after tank 182's break, from room 122 (2,115, -1,500, 3,779 in the room, yaw 174.3,
+pitch 30): 3,670 pixels still mirror the dry marble beside 45,963 that gave way to the
+wet floor. Lara (`-wetlara` at p8) stands in the mirror: 1,797 pixels of the floor
+beside her change by more than 2 of 255 with her there, at most 54. ModernTest's
+marble groups (the page column, the face rule, the coverage, the planes and the cap, the
+key) - the counts in the round's report.
+
+**Left.** The look in the game: nobody in this round could play it. The cost where the
+probe draws every room within 6,000 units (two to six ms at 2,560 x 1,440 with two
+planes; on the game's own lists 0.36 to 1.33, see the fix pass): which passes carry it
+- the additive pass's glows and the glass are made again with the rest - is not
+measured yet; the cap, the default of two and a rule of what the mirror leaves out are
+the owner's. The first call's 23 ms in a level: a warm-up as the wet floor's models
+have would take it to the load. A room seen only in the mirror is not drawn: on the
+game's lists the mirror misses at most 327 pixels at the eyes measured (the fix pass),
+so no mirrored walk was built. The pages 3314 and 3315 at E190 (the fix pass) are the
+owner's to name. The art's copies under the opaque floors are still drawn. The thin
+light seams along the raised step's edges at p8 are the probe's list: it lacks rooms
+120 and 126, which the game's walk from there holds, and drawn with the walk's list
+they are gone (see the fix pass); a room the game's list lacks would show them as well.
+A level's other floor heights in view stay plain past the cap. Classic objects drawn by
+the classic path are not in the mirror. The frame notes at most 4,096 draws, each
+checked against the ones noted before it (a list drawn twice notes once), and a frame
+past that leaves the rest out of the mirror without a line; the most made again at two
+planes, E190 with every room within 6,000 units, are 1,660. The noting's own CPU time
+is not timed.
+
+**Fix pass, round 1.** Two things the round's proof found open, and the costs again.
+
+E190's strip. Part of the far floor in E190's view, inside the outline of the owner's
+picture, still shows the art's copy and no mirror. Its squares wear pages 3314 and 3315
+(three squares each in the census, `fx` 6, two of each over a copy, rooms 46, 75 and
+128), which are not in the mirror column: they were not among the thirty largest floor
+pages the measurement looked at. Rows 257 to 279 between x 400 and 600 at 960 x 540 are
+the same with `hd_marble` 0 and 1, at two planes and at four. With the two pages named in
+`hd_gloss.txt` (`3314 mirror`, `3315 mirror`) the strip mirrors - 4,156 of its pixels
+change by more than 8 of 255, 5,977 in the frame - RICH2's faces grow from 42,228 to
+42,376 and its opaque clear floors from 147 to 153 draw calls. The column is not
+changed: a page the owner names goes into the text file.
+
+The game's room list. Every picture of the round drew the probe's own list (one given,
+or every room within 6,000 units), which holds what a mirror needs, so a room seen only
+in the mirror could not go missing there. The offline portal walk (`-walk`, the
+engine's camera at the eye's yaw and pitch, 960 x 540, fov 80) gives the game's list.
+Drawn with that list and with the union of it and the probe's (`hd_water` 1), the
+pixels the mirror changes by more than 8 of 255 where the direct view is the same are
+what the game's list loses in the mirror; each room of the union the walk lacks was then
+added alone. With `hd_vis` 0's walk: p8 none (the list 120, 121, 126), p3, L120 and L2
+none; E190 25 (rooms 70 and 112, a pixel at the wall's foot); p7 247 (rooms 43, 44 and
+66: a dashed line a pixel high on the floor's join with the wall, which those rooms add
+rather than the game's list losing it); P125 327 (room 26, the outside room over the
+lobby: a triangle of the reflected ceiling, 0.06 % of the frame); E189 176 (room
+120). With `hd_vis` 1's reach walk: p8, p3, L120 and P125 none, p7 207, E190 122. No
+hole shows at the four places, so no mirrored walk was built (the design's rule). Two
+of the probe's own lists are not the game's: p8's lacks rooms 120 and 126 (the light
+seams of Left), and E189's holds room 128, which the walk from there does not and which
+covers 285,045 pixels of the direct view, so the measurement's and this round's E189
+pictures are of a view the game does not draw there.
+
+Costs on the game's lists. GPU at 2,560 x 1,440, the timestamps round
+`HDRenderMarbleDraw`, `hd_water` 1, three runs, medians in ms (min to max): cap 1, 2 and
+3 at E190 0.345, 0.444, 0.605; L120 0.764, 1.138, 1.696; L2 0.478, 0.760, 1.154; P125
+0.402, 1.331 (1.141 to 3.012), 1.556; cap 2 at p8 0.625, p7 0.525 (0.380 to 3.027), p3
+0.511, E189 0.358; every other spread under 0.08 but L120 cap 1 (0.700 to 1.372) and
+P125 cap 3 (to 1.953). The walk's lists hold 3 to 11 rooms, the unions 12 to 59; p8
+costs more than on its own list (0.309), with 16 heights in view there against 3. On
+the probe's own lists, timed in turn three times in this session: E190 5.60 (5.54 to
+6.67) with `hd_water` 0 and 2.38 (2.20 to 3.36) with 1, L120 5.81 (5.65 to 6.27) and
+2.34 (2.17 to 2.42) - above the table's 3.932 and 4.062, the same draws (1,660 and
+1,364); why `hd_water` 0 costs more there and why the sessions differ is not measured.
+
+**Commits.** `2ab4aa66` (the page column), `105dc00b` (the faces, the stencil mask and
+the planar pass), `fe5da61b` (the clear floors), `d8b44e27` (the edges), `97d70c4f` (the
+wet floor's points), `1117ac10` (the keys and the prototypes' removal).
+
 ### The spring (#200)
 2026-10-14
 

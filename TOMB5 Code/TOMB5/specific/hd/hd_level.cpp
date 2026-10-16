@@ -5774,6 +5774,7 @@ static int KeyStampOf(const char* wadName, HDLevelKey& k)
 	k.objects = (int)tomb5.hd_objects;
 	k.budgetMb = (long)tomb5.hd_texture_budget_mb;
 	snprintf(k.format, sizeof(k.format), "%s", tomb5_hd_texture_format);
+	k.marble = HDRenderMarbleOn();
 
 	if (!REG_PeekString("tomb5", "hd_outfit", k.outfit, sizeof(k.outfit)))
 		k.outfit[0] = 0;
@@ -9201,6 +9202,7 @@ void HDFrameDrawGlow()
 	 * the cards and the objects' glows: the rooms' glows are in the copy it
 	 * reads, and the dome, the spray and a glow drawn after it lie over it
 	 * as over the floor (hd_render.cpp, "the wet floor"). */
+	HDRenderMarbleDraw(HDObjectFrameDraw, &projection, frame.bulbCount);
 	HDRenderWaterWetModels(HDObjectFrameDraw, &projection, frame.bulbCount);
 	if (HDRenderWaterSheetsBuilt())
 		HDRenderWaterWetMirror();

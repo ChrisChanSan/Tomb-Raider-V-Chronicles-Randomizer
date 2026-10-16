@@ -2431,6 +2431,50 @@ water surface", carries the tables.
     heavy-trigger test with the arming camera, the place and the skip. OWN,
     this project's own tools on the classic engine's code (CLASSIC) and the
     player's files (DATA).
+229. **The sky census** (RoomProbe `-skycensus`, `-skydump`, `ProbeSkyCensus`) -
+    what the `.TRG`'s sky groups and the classic HORIZON mesh are made of,
+    read part by part: the band a sphere of 4,100 in 21 rings with v linear in
+    its elevation, the cloud sheets flat squares of tiles of one page, each
+    part's vertices one block in part order, the level's page table naming
+    exactly the sky pages its parts use. OWN, this project's own tool on the
+    player's files (DATA: the fifteen levels' `sky part`, `sky ring`, `sky
+    pages` and `sky horizon` lines).
+230. **The sky's alpha pass back to front** (`hd_render.cpp`, "The sky dome",
+    `HDRenderSky`, `HDRenderSkyPartOrder`) - a sky group's alpha-pass ranges
+    drawn in the `.TRG`'s part order, kept by each range's lowest vertex, with
+    the depth test off among them. DATA: the part order is back to front in
+    all thirteen sky levels and the vertex blocks keep it (`-skycensus`); the
+    cause, the band's depth over its empty half, from the build's range sort
+    and the blend's depth write. OWN, the painter's rule over that order;
+    measured at the owner's JOBY2 eye: the clear pixels 105,937 to 0.
+231. **The layers where the HD sky does not stand for them** (`game/draw.cpp`,
+    `SkyDrawPhase`; `hd_level.cpp`, `HDFrameSkyCoversLayers`; `hd_render.cpp`,
+    `HDRenderSkyCoversLayers`) - the classic flat layers left out only where a
+    sky group holds a cloud sheet or an opaque-pass band. OWN, the rule; DATA:
+    JOBY4's sky group is a band of one colour alone (page 7006, `-skycensus`,
+    DdsProbe), its script's layers the sea's surface on the level's own sky
+    page; TITLE's bands are in the opaque pass.
+232. **The HD page lent to the layers** (`hd_level.cpp`, `HDFrameSkyLayerPage`;
+    `hd_render.cpp`, `HDRenderSkyLayerPage`) - over an HD sky with a cloud
+    sheet the layers draw the nearest sheet's page in the classic sky page's
+    slot for their one `OutputSky`. OWN, free choice of the sheet (the
+    nearest, the last of the alpha pass in part order); DATA: the classic sky
+    page is alpha 255 on every texel (the `.TRC`'s misc block), and at the
+    owner's ANDY3 eye 1,128 of 311,355 sky pixels stayed as the dome draws
+    them with it, 229,933 with the sheet's page (RoomProbe `-skylayer`).
+233. **RoomProbe's layer twin and the volumetric clouds measured**
+    (`hd_render.cpp`, `HDRenderSkyLayerProbe`, `HDRenderSkyCloudProbe`;
+    `hd_sky.hlsl`, `LayerVS`, `LayerPS`, `CloudVS`, `CloudPS`; RoomProbe
+    `-skylayer`, `-skylayerpage`, `-skycloud`, `-skygpu`) - the classic
+    layer drawn as `DrawFlatSky` and the classic draw types 4 and 2 draw it;
+    a cloud slab marched in 16 steps through a field of smoothly
+    interpolated lattice values in two octaves, the values a hash of the
+    cell's integer coordinates (two rounds of multiplying each axis by a
+    linear function of another and folding back into 0..1), carried along x
+    as `UpdateSky` carries a layer. OWN, a design of this project from
+    general graphics knowledge; the steps, octaves, colours and fade free
+    choices for the measurement, the octaves cut to two by the 512-slot
+    budget (three took 519). Probe only; the game draws none of it.
 
 ## Credited, but not contained here
 

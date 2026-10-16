@@ -14019,6 +14019,121 @@ every listed object mirrored; all five are answered above and here.
 **Commits.** `f30f7b2b` (the census), `e247a29b` (the copy under a clear floor only),
 `4ff5742c` (the models in the mirror), `4d58f085` (the models' mask and clip planes),
 `cd8e8548` (the census's refit).
+**Round 7: the veil under her, the first wet frame, the flipped water.** Asked for after
+the play test of round 6 (the engine of `46c5526b`) on 2026-10-16, put into English (his
+words beside in German): the grey veil under Lara is still there, he thinks it the
+shadow of the mirror's double, and it stands upside down, so it comes from her mirror
+("Ja, der graue Schleier ist noch da. Ich glaube, das ist der Schatten von der
+Doppelgaengerspiegelung." - "der steht auf dem Kopf, das kommt also von der
+Laraspiegelung"); the yellow bands are the ceiling's, fine near and rippled the farther
+he goes, and he asks for their edges softened, a reflection need not be HD ("Koennen
+wir die Kanten von den gelben Baendern nicht einfach weichzeichnen? In einer Spiegelung
+muss es ja nicht unbedingt HD sein."); breaking RICH2's fish tank after a cold start
+freezes the picture once, which only this round's predecessor brought ("habe ich kurz
+Standbild ... nur bei einem Kaltstart einmal"); and in JOBY5 water surfaces under the
+leaks carry no HD water and no foam - JOBY5 starts dry there and flipmap 0 floods it
+after the cutscene ("Kann es sein, weil die Flipmap in JOBY5 erst aus ist?").
+
+The veil. His picture's eye by content (the probe beside it at every eighth low `CAMLOG`
+eye of his two crawls, correlation 0.317 at the best): tick 63,297, eye (47,412, -255,
+69,571) in room 122 toward (47,443, -318, 68,730), Lara crawling at `HAIRLOG`'s braid
+root (47,262, -253, 68,756). RoomProbe draws her now (`-wetlara x,y,z,yaw,pose`): her
+outfit built as the engine builds it (`HDLaraPlan`, `HDModelLevelBegin`,
+`HDLaraLevelBuild` - the VCI catsuit, 13 parts), her parts through the model path on the
+classic skeleton's bind walk, standing or on all fours, among the frame's objects and
+through the models' mirror - in RoomProbe because the wet floor and the tank are there
+and it links the model path already (`-life`). At his eye and four eyes round it (yaw
+8 degrees either way, pitch 4), 960 x 540, the tank 60 s after it broke: the mirrored
+geometry is right - her reflection upside down, its colour her own (the model class,
+21,891 pixels over the five views, lighter than the floor by 20 on average: her
+reflection where none stood before); the models draw double sided, so the two flips of
+the mirrored projection change nothing a culled face would show. The veil is the
+march's: a reflected ray from the floor under her passes under her body to the bench
+behind her, the frame's copy holds her own pixels there, the march goes past them (the
+models' mask) and then meets nothing, and the light field's flat stand-in fills that
+place - her silhouette mirrored, upside down. Floor pixels where the march finds
+nothing with her against without her: 7,107, 8,696, 6,201, 7,395 and 5,047 (34,446).
+So the frame's colour is now also taken before the objects are drawn
+(`HDRenderWaterWetRoomCopy`, from `HDRenderWaterMarkBegin`, only while the last frame's
+wet floor mirrored models), and a ray that went behind a model's place and met nothing
+after it takes that copy's colour at its first such place (`WetMarch`, `why` 4): the
+room the model hides. After: 78, 46, 88, 95 and -1,949 - as without her. The models'
+mask and the clip planes are unchanged. `WetPS` 320 to 336 slots, the debugger's 471 to
+481.
+
+The first wet frame. RoomProbe `-wetagain` draws the wet floor's two draws a second time
+and times each to the GPU's end. His eye at 2,560 x 1,440, three runs: the first frame's
+darkening 2.9, 121.6 and 80.8 ms, its mirror 105.4, 117.0 and 100.6 ms; the second
+frame's 0.2 to 0.4 and 0.8 to 1.0. What the first frame makes: the models' target and
+its INTZ depth, the later copy, now the room's copy (28 MiB together at that size), and
+the first draws of `WetPS` and of the models through the five clip planes. Split apart,
+the mirrored draw alone held 107.1 and 107.7 ms, the same draw without the planes 0.24
+and 0.13: the driver readies the models' vertex shader for user clip planes. The water's
+warm-up at the level's build (`HDRenderWaterWarmUp`, which `hd_level.cpp` already calls)
+now makes the wet floor's targets at the frame's size and draws `WetPS` once with them
+bound (3.2 to 4.1 ms); and the first frame of a level with a tank draws its objects once
+into the models' target through five planes that cut everything away
+(`wet_warm_models`) - the load's own slow frame, the level's first; the loading screen's
+bar frames have no objects to draw, and the models' shaders are not the renderer's to
+draw alone. After: the first wet frame's draws 0.9 to 1.4 and 0.6 to 0.8 ms, the warm
+draw 152 to 194 ms on the level's first frame (with the frame's queued work it waits
+for). No new line in `hd_level.cpp` for it. The proof in the game is his next cold
+start: no `PROFLOG ... late` line at the first wet frame.
+
+The bands, measured and not built. Three softer reads of the march's hit, each by the
+last step's stretch on the screen: the copy's mip at that size, five taps in a cross,
+five taps along the step, each at two or three strengths. Measured at round 6's band eyes
+k229 and k458 (low eyes down corridor 46 and 75 from afar, the places of his videos),
+c408 and c601: the rows' alternation across the band (|L(y) - (L(y-1) + L(y+1)) / 2|
+over the fine march's bright band, grown by 2), the picture's mean over the four eyes:
+4.147 sharp; mip 4.045, 3.931, 3.822; cross 3.987, 3.944; along 3.939, 3.913 - at most
+8 per cent less, and the reflection departs from the fine march's by 11 against 4.6
+units of light. The mip read built whole (the later copy's and the models' target's
+mips): the alternation 3.453 to 3.060 (k229), 4.210 to 3.737 (k458), 4.885 to 4.574
+(c408), 4.038 to 3.917 (c601), the mirror's GPU 0.13 to 0.18 ms at 2,560 x 1,440; but the
+band's stepped edge stays and small far reflections (a lit sign) wash out. The ripple is
+where the hit switches - rows that meet the thin strip against rows that step past it -
+and a read softened at the hit cannot soften that switch. Not built; under Left.
+
+**Measured.** The veil's classes and counts above (RoomProbe `-wetlara`, debugger map
+7); the first wet frame with `-wetagain` before, after the targets' warm-up alone (the
+mirror still 74 to 78 ms) and after the models' warm draw; the bands' three ways.
+
+**Checked.** See the flipped water below for the sweep; the classic path, `hd_water 0`,
+the pond and the band eyes in the round's proofs.
+
+**Left.** The bands: a blur of the mirror layer in screen space, in a target of its own
+with its radius from the step's stretch, is the remedy the measure points to, not built
+in this round. The veil's fix reads the room's copy only from the second wet frame on (a
+frame's lag; the first shows the stand-in as before). The look in the game: nobody in
+this round could play it.
+
+**The flipped water.** JOBY5's corridor under the leaks: room 37 over room 38, a grated
+floor over a dry room, and flipmap 0 swaps 37 with 2 and 38 with 3 (his log's `HDLOG
+flip` lines at tick 13,078), room 3 an underwater room. The census asked the room under
+a square for its underwater flag at the level's build, before any flip: room 38 is dry,
+so its squares were dropped - and the leaks over them (falls 10 to 13, items 64 to 68)
+stood over no body, no curtain, no foam. The rule now: a square over a room that is dry
+while its flipmap alternate is an underwater room is water once FlipMap swaps the two,
+its top and depth read in the alternate (a pair stands at one place), marked with the
+room whose flip floods it. Its squares come after all others, join only each other, and
+their bodies draw - sheets, the foot foam, the feet's drops - only while that room is
+swapped: `HDFlipRoom` hands each swap on (`HDRenderWaterFlipRoom`, its one new line), as
+it hands on the art's groups. The body lines end in `alt=<room>` (-1 for water every
+state holds). The census of the 15 levels: JOBY5 rooms 2 and 37 (flooded by 38's flip, 5
+squares), 14 and 20 (153, 9), 30 and 52 (154, 9), 36 and 50 (155, 9), all basins at
+4,864; RICH3 rooms 185, 187, 191 and 192 (183, 21, a channel at 0). The leaks of JOBY5's
+rooms 20, 30, 36 and 37 (falls 3, 4 and 8 to 13) and RICH3's fall 0 stand over a body
+now and get their curtain and foam by the existing rule. At his picture's eye (tick
+31,625, eye (58,556, 4,063, 75,801) in room 37): with the flip off the picture is
+md5-identical to `46c5526b`'s, with it on 184,476 of 518,400 pixels change - the sheet
+over the grate. The sweep: 13 levels' `WATERLOG` lines identical but for the new field;
+JOBY5's 124 lines become 148 (four bodies, the falls over them, their feet and segments,
+the curtains after them renumbered) and RICH3's 3 become 10. RoomProbe `-flip` hands its
+swaps to the water too.
+
+**Commits.** `3dc9b342` (the veil), `567a7876` (the first wet frame), `99ac494a` (the
+flipped water).
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and

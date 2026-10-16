@@ -2173,6 +2173,10 @@ it.
   one).
   The squares and the sheets count each place once, the level's and a body's
   alike; the second room of a flipmap pair at a place counts under `twins=`.
+  Water that only a flipmap's alternate room holds - JOBY5's corridor under
+  the leaks once flipmap 0 floods it, four rooms of RICH3 - is a body of
+  its own that draws only while that flip is on (`alt=<room>` at the end of
+  its body line, -1 for water every flip state holds).
   The first frame of a level whose camera is in a water room writes one
   `WATERLOG level=<stem> undergate` line: the camera's room (`room=`), that
   room's own underwater flag, which decides (`flag=`), the classic camera's
@@ -2215,7 +2219,12 @@ it.
   mirrored as themselves, drawn once more through the floor; the room's
   art and its fixed pieces (the machines, the benches) are mirrored out of the
   picture on the screen, so what lies off the screen's edge does not
-  show in it. Where the level's art carries a copy of the room upside down
+  show in it.
+  What a model hides in the picture - the bench behind a crawling Lara -
+  is mirrored out of the room's picture taken before the models.
+  A level with a tank makes the wet floor's targets at its load and
+  readies its shaders on its first frame, so breaking a tank does not
+  hold the picture. Where the level's art carries a copy of the room upside down
   under a see-through floor (RICH2's corridor 46 west of its mouth, and
   some 55 rooms of RICH2 in all), that copy is the floor's reflection and
   a wet floor there would only darken; where the copy lies under an

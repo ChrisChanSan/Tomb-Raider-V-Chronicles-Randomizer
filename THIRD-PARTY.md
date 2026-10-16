@@ -2292,6 +2292,31 @@ water surface", carries the tables.
     the inverse matrix carries a plane. OWN, general graphics knowledge;
     the square of reach is a free choice (a model on the outermost wet
     square keeps what it reaches out with).
+218. **The room behind the models** (`hd_render.cpp`,
+    `HDRenderWaterWetRoomCopy`; `hd_wet.hlsl`, `WetMarch` why 4) - the
+    frame's colour copied before the objects are drawn, while the last
+    frame's wet floor mirrored models; a reflected ray that went behind a
+    model's place and met nothing after it takes that copy's colour at its
+    first such place. OWN, a design of this project from general graphics
+    knowledge (a screen-space reflection's hidden region filled from a
+    layer without the occluder). DATA: RoomProbe `-wetlara` at the owner's
+    eye and four round it, the floor pixels the march left to the stand-in
+    because of her, 34,446 before and as without her after.
+219. **The wet floor warmed before its first frame** (`hd_render.cpp`,
+    `HDRenderWaterWarmUp`, `wet_warm_models`) - the wet floor's targets made
+    at the frame's size and its pixel shader drawn once at the water's
+    warm-up, and the level's first frame drawing its objects once through
+    five clip planes that cut everything away. OWN, free choice of where;
+    DATA: RoomProbe `-wetagain`, the first wet frame's draws 100 to 122 ms
+    before and 0.6 to 1.4 after, the clipped draw alone 107 ms the first
+    time and 0.13 to 0.24 without the planes.
+220. **The flipped water** (`hd_render.cpp`, `HDRenderSetWaterSheets`,
+    `body_shown`, `HDRenderWaterFlipRoom`) - a square over a room that is
+    dry while its flipmap alternate is an underwater room is water while
+    FlipMap has swapped the two, read in the alternate, its bodies apart
+    and drawn only in that state. OWN, from the classic level's own
+    flipmap pairs (DATA: the census of the 15 levels, five bodies in JOBY5
+    and RICH3).
 
 ## Credited, but not contained here
 

@@ -269,6 +269,17 @@
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
+ *     -underlook      with -underwater and -hdwater 1: the sea seen from
+ *                     below, a study the game never draws - the sun's disc
+ *                     through the surface, its lit underside and the shafts
+ *                     added over the frame (HDRenderWaterProbeLook), its GPU
+ *                     time printed
+ *     -underlookset <disc shafts underside reach power cell floor deep len>
+ *                     the same with its nine numbers (strengths, the surface
+ *                     light's reach, the disc's power, the shafts' cell
+ *                     size, the noise's floor, their reach under the
+ *                     surface, the march's length); the defaults are 3 3
+ *                     0.25 40000 600 700 0.55 6000 8000
  *     -roomplane <y x0 z0 x1 z1>
  *                     the same, on the OTHER shimmer bit - the answer a
  *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
@@ -1912,6 +1923,36 @@ static bool g_water = false;
 // -hdwater 0|1 (-1 not asked) and -waterfile - see the usage above.
 static int g_hdwater = -1;
 static std::string g_water_file;
+/* -underlook and -underlookset: the sea seen from below, a study over the
+ * frame (HDRenderWaterProbeLook) - the disc, the shafts and the underside's
+ * strengths, the surface light's reach, the disc's power, the shafts' cell
+ * size, the noise's floor, their reach under the surface and the march's
+ * length. The defaults are free choices for the first pictures. */
+static bool g_under_look = false;
+static float g_under_knobs[9] = { 3.0f, 3.0f, 0.25f, 40000.0f, 600.0f,
+	700.0f, 0.55f, 6000.0f, 8000.0f };
+
+// The two switches, out of ProbeMain's chain of else-ifs (C1061).
+static bool UnderArg(int argc, char** argv, int* at)
+{
+	if (!strcmp(argv[*at], "-underlook"))
+	{
+		g_under_look = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-underlookset") && *at + 9 < argc)
+	{
+		for (int k = 0; k < 9; k++)
+			g_under_knobs[k] = (float)atof(argv[*at + 1 + k]);
+
+		g_under_look = true;
+		*at += 9;
+		return true;
+	}
+
+	return false;
+}
 // -ripple x,z,age[,size]: the rings handed to every picture.
 struct ProbeRipple
 {
@@ -12746,6 +12787,9 @@ static int ProbeMain(int argc, char** argv)
 		if (SmashArg(argc, argv, &at))
 			continue;
 
+		if (UnderArg(argc, argv, &at))
+			continue;
+
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)
 		{
 			width = atol(argv[at + 1]);
@@ -16072,6 +16116,25 @@ static int ProbeMain(int argc, char** argv)
 	// The water's cards where HDFrameDrawGlow draws them, and the springs.
 	ProbeCardsDraw();
 	SpringDraw();
+
+	// -underlook: the sea seen from below, over everything (a study).
+	if (g_under_look)
+	{
+		double gpu = -1.0;
+		const bool drawn = HDRenderWaterProbeLook(view, (float)persp,
+			(float)width * 0.5f, (float)height * 0.5f,
+			(float)cx + g_seed_origin[0], (float)cz + g_seed_origin[1],
+			g_under_knobs, &gpu);
+
+		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
+			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f\n",
+			drawn ? "drawn" : "NOT drawn (no frame under the water)", gpu,
+			width, height, g_under_knobs[0], g_under_knobs[1],
+			g_under_knobs[2], g_under_knobs[3], g_under_knobs[4],
+			g_under_knobs[5], g_under_knobs[6], g_under_knobs[7],
+			g_under_knobs[8]);
+	}
+
 	HDRenderFrameEnd();
 	g_device->EndScene();
 

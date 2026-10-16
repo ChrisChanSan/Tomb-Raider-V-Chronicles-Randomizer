@@ -1755,6 +1755,15 @@ void HDRenderWaterWetRoomCopy(bool force);
  * writes its page's alpha there); false where no wet square lies under it. */
 bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 	float offZ, const float* projection = 0, int alpha = 255);
+/* RoomProbe's -underlook, a study the game never draws: the sea seen from
+ * below - the sun's disc through the surface, its underside lit from above
+ * and the shafts - added over the frame drawn with the eye under the water,
+ * inside its bracket. `view` the frame's view matrix (row major, its upper
+ * three rows the axes), `persp` and the centre the projection's, the eye's
+ * world x and z; `knobs` nine numbers (hd_render.cpp); `gpuMs` the pass's
+ * GPU time or -1. False without a frame under the water. */
+bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
+	float centreY, float eyeX, float eyeZ, const float* knobs, double* gpuMs);
 
 /* The marble floors (hd_render.cpp, "the marble floors"): a planar mirror
  * on the polished floors the sheen's page table names in its mirror column.

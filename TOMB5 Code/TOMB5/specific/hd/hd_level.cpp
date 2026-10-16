@@ -8065,14 +8065,16 @@ bool HDFrameSkyCoversLayers()
 	return HDRenderSkyCoversLayers();
 }
 
-/* The classic layers draw the level's own sky page, Textures[nTextures - 1]
- * (specificfx.cpp, DrawFlatSky); over an HD sky with a cloud sheet that
+/* The classic flat layers draw the level's own sky page, Textures[nTextures
+ * - 1] (specificfx.cpp, DrawFlatSky); over an HD sky with a cloud sheet that
  * entry holds the sheet's HD page for as long as the layers' one OutputSky
- * runs, and the classic page goes back right after. The reference stays
- * the page cache's: nothing is added to the classic array or counted. The
- * layers keep the classic motion (UpdateSky), quads and colour; the page
- * brings its own alpha, so the clouds stand over the dome instead of the
- * opaque classic page covering it. */
+ * runs, and the classic page goes back right after. SkyDrawPhase draws the
+ * layers on the flat path while the page is lent, also with PSX_skies on,
+ * whose tiles take the SKY_GRAPHICS sprites' own pages instead. The
+ * reference stays the page cache's: nothing is added to the classic array
+ * or counted. The layers keep the classic motion (UpdateSky), quads and
+ * colour; the page brings its own alpha, so the clouds stand over the dome
+ * instead of the opaque classic page covering it. */
 static LPDIRECT3DTEXTURE9 g_sky_page_kept = 0;
 static bool g_sky_page_lent = false;
 

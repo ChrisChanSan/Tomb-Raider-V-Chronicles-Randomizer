@@ -90,9 +90,10 @@
  *                     with -sky: one of the script's classic flat layers
  *                     over the HD sky as SkyDrawPhase draws it, moved as
  *                     UpdateSky moves it over -time seconds; repeatable
- *     -skylayerpage sd|hd  the page the layers carry: the level's classic
- *                     sky page out of the .TRC under -roombox (sd), or the
- *                     HD sky's nearest cloud sheet page (hd)
+ *     -skylayerpage sd|hd|psx  the page the layers carry: the level's
+ *                     classic sky page out of the .TRC under -roombox (sd),
+ *                     the HD sky's nearest cloud sheet page (hd), or the PSX
+ *                     sky's tiles on the SKY_GRAPHICS sprites' page (psx)
  *     -skycloud <floor> <thickness> <cell> <coverage> <density> <vel>
  *                     with -sky: a volumetric cloud layer over the HD sky
  *                     and the layers, a measurement only - a hashed
@@ -12650,7 +12651,9 @@ static std::string g_sky_dump;
  * (30 a second, `vel` a tick, wrapped at 0x2600). Repeatable for the two.
  * -skylayerpage sd|hd: the page it carries, the level's classic sky page out
  * of the .TRC under -roombox (sd, the default) or the HD page the game
- * borrows for it (hd). */
+ * borrows for it (hd), or the PSX sky's tiles (psx): DrawSkySegment's 4 x 4
+ * tiles a quad on the four SKY_GRAPHICS sprites' windows and page, as the
+ * game draws the layers with PSX_skies on and no HD page lent. */
 struct SkyLayerArg
 {
 	int layer;
@@ -12659,6 +12662,8 @@ struct SkyLayerArg
 };
 static std::vector<SkyLayerArg> g_sky_layers;
 static bool g_sky_layer_hd = false;
+static bool g_sky_layer_psx = false;
+static float g_sky_psx_windows[16];
 
 /* -skycloud <floor> <thickness> <cell> <coverage> <density> <vel>: the
  * volumetric cloud layer over the HD sky and the layers, a measurement only
@@ -12698,7 +12703,10 @@ static bool SkyArg(int argc, char** argv, int* at)
 		*at += 5;
 	}
 	else if (!strcmp(a, "-skylayerpage") && *at + 1 < argc)
-		g_sky_layer_hd = !strcmp(argv[++*at], "hd");
+	{
+		g_sky_layer_hd = !strcmp(argv[*at + 1], "hd");
+		g_sky_layer_psx = !strcmp(argv[++*at], "psx");
+	}
 	else if (!strcmp(a, "-skycloud") && *at + 6 < argc)
 	{
 		for (int i = 0; i < 6; i++)
@@ -12772,6 +12780,138 @@ static IDirect3DTexture9* SkyClassicPage(const char* stem)
 			1024);
 
 	page->UnlockRect(0);
+	return page;
+}
+
+/* The PSX sky's page (DrawSkySegment): the four SKY_GRAPHICS sprites of the
+ * .TRC under -roombox, found as LoadSprites reads them after the "SPR"
+ * marker, and the 32 bit object page they share, out of the first texture
+ * block. `windows` gets x1 y1 x2 y2 per sprite in page units with
+ * LoadSprites' one texel trimmed off each side. A MANAGED A8R8G8B8 texture,
+ * or 0 when a sprite is missing or the four lie on different pages. */
+static IDirect3DTexture9* SkyPsxPage(const char* stem, float* windows)
+{
+	const std::string trc = g_roombox + "\\" + stem + ".TRC";
+	FILE* f = 0;
+
+	if (g_roombox.empty() || fopen_s(&f, trc.c_str(), "rb") || !f)
+		return 0;
+
+	std::vector<unsigned char> file;
+
+	fseek(f, 0, SEEK_END);
+	file.resize((size_t)ftell(f));
+	fseek(f, 0, SEEK_SET);
+
+	const bool read = !file.empty() &&
+		fread(&file[0], 1, file.size(), f) == file.size();
+
+	fclose(f);
+
+	if (!read || file.size() < 18)
+		return 0;
+
+	unsigned int sizes[2];
+
+	memcpy(sizes, &file[10], 8);
+
+	std::vector<unsigned char> tex32(sizes[0]);
+	uLongf length = sizes[0];
+
+	if (18 + (size_t)sizes[1] > file.size() || uncompress(&tex32[0], &length,
+		&file[18], sizes[1]) != Z_OK || length != sizes[0])
+		return 0;
+
+	// The marker followed by a sane sprite count, as LoadSprites finds it.
+	size_t at = 0;
+	int count = -1;
+
+	for (size_t i = 0; i + 8 <= file.size(); i++)
+		if (!memcmp(&file[i], "SPR", 4))
+		{
+			memcpy(&count, &file[i + 4], 4);
+
+			if (count >= 0 && count < 2000)
+			{
+				at = i + 8;
+				break;
+			}
+
+			count = -1;
+		}
+
+	if (count < 0)
+		return 0;
+
+	const size_t slotsAt = at + 16 * (size_t)count;
+	int slots = 0, first = -1;
+
+	if (slotsAt + 4 > file.size())
+		return 0;
+
+	memcpy(&slots, &file[slotsAt], 4);
+
+	for (int i = 0; i < slots && slotsAt + 12 + 8 * (size_t)i <= file.size();
+		i++)
+	{
+		int slot;
+		short n, offset;
+
+		memcpy(&slot, &file[slotsAt + 4 + 8 * (size_t)i], 4);
+		memcpy(&n, &file[slotsAt + 8 + 8 * (size_t)i], 2);
+		memcpy(&offset, &file[slotsAt + 10 + 8 * (size_t)i], 2);
+
+		if (slot == 455 && n <= -4)	// SKY_GRAPHICS, game/objects.h
+			first = offset;
+	}
+
+	if (first < 0 || first + 4 > count)
+		return 0;
+
+	int tpage = -1;
+
+	for (int d = 0; d < 4; d++)
+	{
+		unsigned short head[4];
+		short box[4];
+		const size_t s = at + 16 * (size_t)(first + d);
+
+		memcpy(head, &file[s], 8);
+		memcpy(box, &file[s + 8], 8);
+
+		if (tpage >= 0 && head[0] != tpage)
+			return 0;
+
+		tpage = head[0];
+		windows[4 * d + 0] = (float)box[0] / 256.0f + 1.0f / 256.0f;
+		windows[4 * d + 1] = (float)box[1] / 256.0f + 1.0f / 256.0f;
+		windows[4 * d + 2] = (float)box[2] / 256.0f - 1.0f / 256.0f;
+		windows[4 * d + 3] = (float)box[3] / 256.0f - 1.0f / 256.0f;
+	}
+
+	if ((size_t)(tpage + 1) * 0x40000 > tex32.size())
+		return 0;
+
+	IDirect3DTexture9* page = 0;
+	D3DLOCKED_RECT rect;
+
+	if (FAILED(g_device->CreateTexture(256, 256, 1, 0, D3DFMT_A8R8G8B8,
+		D3DPOOL_MANAGED, &page, 0)))
+		return 0;
+
+	if (FAILED(page->LockRect(0, &rect, 0, 0)))
+	{
+		page->Release();
+		return 0;
+	}
+
+	for (int y = 0; y < 256; y++)
+		memcpy((BYTE*)rect.pBits + y * rect.Pitch,
+			&tex32[(size_t)tpage * 0x40000 + (size_t)y * 1024], 1024);
+
+	page->UnlockRect(0);
+	printf("sky psx: SKY_GRAPHICS sprites %d..%d on page %d\n", first,
+		first + 3, tpage);
 	return page;
 }
 
@@ -12864,9 +13004,11 @@ static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
 
 	if (!g_sky_layers.empty())
 	{
-		page = g_sky_layer_hd ? HDRenderSkyLayerPage() : SkyClassicPage(stem);
+		page = g_sky_layer_hd ? HDRenderSkyLayerPage() : g_sky_layer_psx ?
+			SkyPsxPage(stem, g_sky_psx_windows) : SkyClassicPage(stem);
 		printf("sky layers: %d on the %s page%s\n",
-			(int)g_sky_layers.size(), g_sky_layer_hd ? "HD" : "classic",
+			(int)g_sky_layers.size(), g_sky_layer_hd ? "HD" :
+			g_sky_layer_psx ? "PSX sprites'" : "classic",
 			page ? "" : " - NONE, not drawn");
 	}
 
@@ -12882,7 +13024,8 @@ static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
 			if (pos < 0)
 				pos += 0x2600;
 
-			HDRenderSkyLayerProbe(world, page, l.colour, (float)pos, l.layer);
+			HDRenderSkyLayerProbe(world, page, l.colour, (float)pos, l.layer,
+				g_sky_layer_psx ? g_sky_psx_windows : 0);
 		}
 
 	ProbeSkyCloud(world);
@@ -12908,7 +13051,7 @@ static void ProbeSkyLayers(const D3DMATRIX* world, const char* stem)
 			else if (part == 1)
 				for (const SkyLayerArg& l : g_sky_layers)
 					HDRenderSkyLayerProbe(world, page, l.colour, 0.0f,
-						l.layer);
+						l.layer, g_sky_layer_psx ? g_sky_psx_windows : 0);
 			else
 				ProbeSkyCloud(world);
 
@@ -13252,7 +13395,7 @@ static int ProbeMain(int argc, char** argv)
 		printf("       -sky  -skyonly  -skycensus  -skydump <path>   the HD "
 			"sky drawn, alone, or its parts counted\n");
 		printf("       -skylayer <1|2> <r> <g> <b> <vel>  "
-			"-skylayerpage sd|hd   a classic flat layer over the HD sky\n");
+			"-skylayerpage sd|hd|psx   a classic layer over the HD sky\n");
 		printf("       -skycloud <floor> <thickness> <cell> <coverage> "
 			"<density> <vel>  -skygpu <n>   the cloud measurement\n");
 		printf("       -time <seconds>  -water  -nomotion  -animtex\n");

@@ -21399,9 +21399,12 @@ namespace
  * no specular half (polyinsert.cpp); no depth test; the page's top level
  * alone, as the classic sampler takes it (MIPFILTER NONE,
  * function_table.cpp). `world` is the sky's own matrix,
- * the camera's position. The device state goes back as it was. */
+ * the camera's position. The device state goes back as it was. With
+ * `windows` it is the PSX sky's twin (DrawPSXSky, DrawSkySegment): `page`
+ * is the SKY_GRAPHICS sprites' page and `windows` their four windows, x1 y1
+ * x2 y2 each in page units as LoadSprites stores them. */
 bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
-	unsigned long colour, float skyPos, int layer)
+	unsigned long colour, float skyPos, int layer, const float* windows)
 {
 	if (!g_device || !page || !world || !sky_probe_shaders())
 		return false;
@@ -21422,25 +21425,40 @@ bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 	struct Corner
 	{
 		float x, y, z, u, v;
-	} quad[2][4];
+	} quad[32][4];
+
+	/* The flat path: one tile per quad, u and v 0 to 1. The PSX path
+	 * (`windows`): 4 x 4 tiles of 2,432 units per quad (SetSkyCoords),
+	 * tile (ix, iz) showing sprite def (ix & 1) + 2 (iz & 1), its window
+	 * running from x2, y2 at the tile's low x and z to x1, y1 at the high
+	 * ones, as DrawSkySegment hands its corners to AddQuadSorted. */
+	const int side = windows ? 4 : 1;
+	const float step = 9728.0f / (float)side;
+	int tiles = 0;
 
 	for (int q = 0; q < 2; q++)
-	{
-		const float x0 = skyPos - 9728.0f * (float)q;
-		const float cx[4] = { -4864.0f, 4864.0f, 4864.0f, -4864.0f };
-		const float cz[4] = { -4864.0f, -4864.0f, 4864.0f, 4864.0f };
-		const float cu[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
-		const float cv[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+		for (int iz = 0; iz < side; iz++)
+			for (int ix = 0; ix < side; ix++, tiles++)
+			{
+				const float x0 = skyPos - 9728.0f * (float)q - 4864.0f +
+					step * (float)ix;
+				const float z0 = -4864.0f + step * (float)iz;
+				const float* w = windows ?
+					windows + 4 * ((ix & 1) + 2 * (iz & 1)) : 0;
+				const float cx[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+				const float cz[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
 
-		for (int c = 0; c < 4; c++)
-		{
-			quad[q][c].x = x0 + cx[c];
-			quad[q][c].y = -1536.0f;
-			quad[q][c].z = cz[c];
-			quad[q][c].u = cu[c];
-			quad[q][c].v = cv[c];
-		}
-	}
+				for (int c = 0; c < 4; c++)
+				{
+					Corner& k = quad[tiles][c];
+
+					k.x = x0 + step * cx[c];
+					k.y = -1536.0f;
+					k.z = z0 + step * cz[c];
+					k.u = w ? w[2] + (w[0] - w[2]) * cx[c] : cx[c];
+					k.v = w ? w[3] + (w[1] - w[3]) * cz[c] : cz[c];
+				}
+			}
 
 	float diffuse[4], specular[4];
 
@@ -21480,8 +21498,8 @@ bool HDRenderSkyLayerProbe(const D3DMATRIX* world, IDirect3DTexture9* page,
 	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
 	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
 
-	for (int q = 0; q < 2; q++)
-		g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, quad[q],
+	for (int t = 0; t < tiles; t++)
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLEFAN, 2, quad[t],
 			sizeof(Corner));
 
 	saved.restore();

@@ -433,7 +433,8 @@ bool HDFrameSkyCoversLayers();
 
 // The HD sky's nearest cloud sheet page lent to the classic sky page's slot
 // for the layers' one OutputSky (true), and given back (false). Answers
-// whether a page was lent; nothing is lent where the sky has no sheet.
+// whether a page was lent; nothing is lent where the sky has no sheet. A lent
+// page is drawn on the flat layer's quads, whatever PSX_skies says.
 bool HDFrameSkyLayerPage(bool lend);
 
 void HDFrameDraw();

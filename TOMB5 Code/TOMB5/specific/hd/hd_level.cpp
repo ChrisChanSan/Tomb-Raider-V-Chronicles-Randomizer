@@ -104,9 +104,6 @@ static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &
 #define HD_MAX_ROOMS	1024
 #define HD_MAX_FRAME	256
 
-// Whether the level was built for the visibility path (BuildRoomVis).
-static bool VisDrawsWhole();
-
 namespace
 {
 	struct FrameRoom
@@ -912,17 +909,15 @@ namespace
 		const int first = g_piece_first[entry.group];
 		const int count = g_piece_count[entry.group];
 
-		/* The visibility path cuts no art to a window: every piece is drawn
-		 * whole with the open half, so the build's pieces keep only their
-		 * depth push - a hull's doubled art and a covered face's art behind
-		 * the art they double (BuildRoomVis). */
-		if (VisDrawsWhole())
-		{
-			for (int j = 0; j < count; j++)
-				HDRenderPairWhole(entry.group, j, 1);
-
-			return;
-		}
+		/* The visibility path asks the same: a piece is art of the room
+		 * standing inside another room, beyond the room's own walls, where
+		 * the classic path shows it only through the room's window. Drawn
+		 * whole there it hangs in the other room's space - ANDREA1's brick
+		 * block of room 93 over room 101's roof (7,112 pixels at camE,
+		 * 1280x720), the window frame in room 93's loft, JOBY2's black bars
+		 * by the pillar of room 152 - which the owner played as ghosts. The
+		 * rest of a room's art, the open half, stays whole on that path
+		 * (DrawRoomWindowed). */
 		const bool empty = ClipEmpty(entry);
 		const bool ask = !entry.full && !empty;
 		int asked = 0;
@@ -3455,9 +3450,9 @@ static void BuildStaticPlaces()
 
 /* The visibility path (tomb5.hd_vis, hd_vis.h), taken at the start of the
  * level. With it the rooms a frame draws are the portal walk's, extended by
- * the tables hd_vis.cpp makes, every listed room's art drawn whole: no art
- * is cut to a window (DecidePairs answers every piece whole) and no room is
- * carried, so every group is drawn unscissored with the depth test. What
+ * the tables hd_vis.cpp makes, every listed room's art drawn whole but for
+ * its art standing inside another room, which DecidePairs answers as the
+ * other path does, and no room is carried. What
  * the build marks from the level data is kept, the two depth pushes: the
  * intrusion list (BuildRoomIntrusions) and the rooms' air (BuildRoomAir)
  * go to the renderer, whose hulls - a group whose art outside its own room
@@ -3478,11 +3473,6 @@ static void BuildStaticPlaces()
 static bool g_vis_level = false;
 static bool g_vis_logged = false;
 static std::vector<short> g_vis_main;
-
-static bool VisDrawsWhole()
-{
-	return g_vis_level;
-}
 
 static void BuildRoomVis()
 {

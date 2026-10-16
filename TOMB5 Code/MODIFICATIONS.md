@@ -15638,11 +15638,17 @@ projection drew at 2 X + W - x and its texel centre is a half further; corrected
 pipe's reflected end at p7 moves 1.04 pixels back under the pipe. The target is read
 bilinearly and drawn at two rows a row of the frame, read half way between them: the
 pipe's reflected underside at p7 lies 0.211 pixels RMS about its line, 0.290 with one
-row (`-marblerows`). A multisampled target was not built: its depth cannot be read as a
-texture, and the composite reads the depth for where the target holds nothing. The
-soft blur of the wet floor was not applied: its radius is the march's last step on the
-screen, which the planar mirror has none of, and a radius of its own would be a new rule
-to measure first.
+row (`-marblerows`). The steps along it, 88 columns falling 2.2 rows (the edge's row in
+each column found to a share of a pixel, then rounded): before, one step - the row held
+76 columns, then one jump of a whole row, a stair - and the largest miss of the line
+0.531 pixels; with the two rows six steps, the longest run 57
+columns, the largest miss 0.416: the edge moves by shares of a pixel, so its rounded row
+changes oftener about the same fall (one row: one step, 77 columns, 0.536). The RMS is
+the measure of the stair, the count is not. A multisampled target was not built: its
+depth cannot be read as a texture, and the composite reads the depth for where the
+target holds nothing. The soft blur of the wet floor was not applied: its radius is the
+march's last step on the screen, which the planar mirror has none of, and a radius of
+its own would be a new rule to measure first.
 
 The wet floor's points. Where a tank's water has come this frame its mirror is the wet
 floor's own: the marble's stencil bit is taken away on every point the wet layer draws
@@ -15698,7 +15704,9 @@ column times.) A
 first call in a process - the driver readying the room shaders for the clip plane - took
 22.6 to 26.7 ms at most eyes (timed apart, the call that lays nothing). Memory: the
 target and its depth, 8 bytes a pixel at two rows, 56.3 MiB at 2,560 x 1,440 (28.1 MiB
-at one row).
+at one row). The probe drew these with `hd_water` 0, which `-marble 1` sets where
+`-hdwater` is not given (the faces are built with the water's rooms); with `hd_water` 1
+E190, p8 and p7 are md5-identical and p3 differs by its water alone.
 
 **Checked.** The classic path 6 of 6 md5-identical to `8691e82` and `3f8f52dd` (ANDREA2
 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34, `-classicroom`/`-classiconly`). With
@@ -15713,7 +15721,11 @@ more than 8 of 255, against the measurement's planar prototype 11 (W24) to 21,12
 list is its own). Pictures: p8's floor mirrored to its diagonal, E190's two west
 columns opaque under the mirror, p7's pipe, the lobby (rooms 0, 2, 4, 120), the pool's
 surround (125, 126), the title (rooms 33 and 40), tank 182's and tank 33's wet floors
-after the break with the seam to the dry mirror, the twins 46 and 75 alike. ModernTest's
+after the break, the twins 46 and 75 alike. The seam between the wet mirror and the dry
+one after tank 182's break, from room 122 (2,115, -1,500, 3,779 in the room, yaw 174.3,
+pitch 30): 3,670 pixels still mirror the dry marble beside 45,963 that gave way to the
+wet floor. Lara (`-wetlara` at p8) stands in the mirror: 1,797 pixels of the floor
+beside her change by more than 2 of 255 with her there, at most 54. ModernTest's
 marble groups (the page column, the face rule, the coverage, the planes and the cap, the
 key) - the counts in the round's report.
 
@@ -15725,9 +15737,15 @@ of what the mirror leaves out are the owner's. The first call's 23 ms in a level
 warm-up as the wet floor's models have would take it to the load. A room seen only in
 the mirror (the ceiling's rooms) is not drawn: no hole showed at the probe's eyes, whose
 room list is given; the game's portal walk was not tried. The art's copies under the
-opaque floors are still drawn. Thin light seams along the raised step's edges at p8, a
-pixel wide, their cause not measured. A level's other floor heights in view stay plain
-past the cap. Classic objects drawn by the classic path are not in the mirror.
+opaque floors are still drawn. The thin light seams along the raised step's edges at p8
+are the probe's list: it lacks rooms 120 and 126, which the game's walk from there holds,
+and drawn with the walk's list they are gone (see the fix pass); a room the game's list
+lacks would show them as well. A level's other floor heights in view stay plain past
+the cap. Classic objects drawn by the classic path are not in the mirror. The frame
+notes at most 4,096 draws, each checked against the ones noted before it (a list drawn
+twice notes once), and a frame past that leaves the rest out of the mirror without a
+line; the most made again at two planes, E190 with every room within 6,000 units, are
+1,660. The noting's own CPU time is not timed.
 
 **Commits.** `2ab4aa66` (the page column), `105dc00b` (the faces, the stencil mask and
 the planar pass), `fe5da61b` (the clear floors), `d8b44e27` (the edges), `97d70c4f` (the

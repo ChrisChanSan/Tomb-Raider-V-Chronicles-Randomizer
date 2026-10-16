@@ -23597,3 +23597,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #205 | The marble floors' mirror (#205), measured and built (round 1) |
 | #207 | The flyby's triggers on a skip (#207), in the skipper's entry |
 | #209 | The destroyable windows (#209) |
+| #210 | The sea seen from below (#210), in the water sheets' entry |

@@ -18113,6 +18113,8 @@ namespace
 	HDRenderMarbleStats g_marble_stats = {};
 	// RoomProbe's warm-up draw: the mirrored rooms alone, nothing laid.
 	bool g_marble_quiet = false;
+	// The mirror target's rows a frame's row (marble_make): 1 or 2.
+	int g_marble_rows = 2;
 
 	void release_marble()
 	{
@@ -18130,20 +18132,26 @@ namespace
 			}
 	}
 
+	/* The target is the frame's width and g_marble_rows times its height:
+	 * drawn into that many rows a pixel and read bilinearly half way
+	 * between them, a reflected edge is smoothed down the screen, where
+	 * the grazing view stretches it (see "the marble floors' edges"). */
 	bool marble_make(const D3DSURFACE_DESC& desc)
 	{
+		const UINT height = desc.Height * (UINT)g_marble_rows;
+
 		if (g_marble_tex && (g_marble_desc.Width != desc.Width ||
-			g_marble_desc.Height != desc.Height))
+			g_marble_desc.Height != height))
 			release_marble();
 
 		if (g_marble_tex)
 			return true;
 
-		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+		if (FAILED(g_device->CreateTexture(desc.Width, height, 1,
 			D3DUSAGE_RENDERTARGET, D3DFMT_A8R8G8B8, D3DPOOL_DEFAULT,
 			&g_marble_tex, 0)) ||
 			FAILED(g_marble_tex->GetSurfaceLevel(0, &g_marble_surface)) ||
-			FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			FAILED(g_device->CreateTexture(desc.Width, height, 1,
 			D3DUSAGE_DEPTHSTENCIL, kIntz, D3DPOOL_DEFAULT, &g_marble_ztex,
 			0)) || FAILED(g_marble_ztex->GetSurfaceLevel(0,
 			&g_marble_zsurface)))
@@ -18153,6 +18161,7 @@ namespace
 		}
 
 		g_marble_desc = desc;
+		g_marble_desc.Height = height;
 		return true;
 	}
 
@@ -18290,6 +18299,14 @@ int HDRenderMarbleOn()
 void HDRenderMarbleQuiet(bool on)
 {
 	g_marble_quiet = on;
+}
+
+void HDRenderMarbleRows(int rows)
+{
+	g_marble_rows = rows > 1 ? 2 : 1;
+
+	if (g_marble_tex)
+		release_marble();
 }
 
 void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
@@ -18529,9 +18546,13 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		if (!HDWetPlaneTo(mirrored, over, clip))
 			continue;
 
+		D3DVIEWPORT9 rows = vp;
+
+		rows.Y *= (DWORD)g_marble_rows;
+		rows.Height *= (DWORD)g_marble_rows;
 		g_device->SetRenderTarget(0, g_marble_surface);
 		g_device->SetDepthStencilSurface(g_marble_zsurface);
-		g_device->SetViewport(&vp);
+		g_device->SetViewport(&rows);
 		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
 			D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
 		g_device->SetClipPlane(0, clip);
@@ -18601,11 +18622,14 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			kWetPower };
 		const float march[4] = { kWetCap, 1.0f, 0.0f, 0.0f };
 		const float gain[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
-		/* The flip's place in the target (MarblePS): a pixel's x there,
-		 * as the measurement had it - one less the pixel's own centre. */
+		/* The flip's place in the target (MarblePS). A pixel's centre lies
+		 * on the whole number in Direct3D 9, so pixel x of the viewport
+		 * shows what the turned projection drew at 2 X + W - x, whose texel
+		 * centre is at that plus a half: u = (2 X + W + 0.5 - x) / width. */
 		const float width = (float)desc.Width;
 		const float flipMask[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
-		const float flipLook[4] = { 0.0f, width - 0.5f, 0.0f,
+		const float flipLook[4] = { 0.0f, 2.0f * (float)vp.X +
+			(float)vp.Width + 0.5f, 0.0f,
 			width > 0.0f ? 1.0f / width : 0.0f };
 
 		g_device->SetVertexShader(g_card_vs);
@@ -18620,7 +18644,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 
 		for (int s = 0; s < 5; s++)
 		{
-			const bool point = stage[s] == 3 || stage[s] == 5;
+			// The mirror read bilinearly, its depth as it stands.
+			const bool point = stage[s] == 3;
 
 			g_device->SetSamplerState(stage[s], D3DSAMP_MINFILTER,
 				point ? D3DTEXF_POINT : D3DTEXF_LINEAR);

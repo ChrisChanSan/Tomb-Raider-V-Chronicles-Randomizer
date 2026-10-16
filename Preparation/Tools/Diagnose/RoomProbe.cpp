@@ -520,6 +520,8 @@
  *                     (marble: line).
  *     -marbleplanes n the most floor heights a frame mirrors
  *                     (tomb5.hd_marble_planes, 2 where not given).
+ *     -marblerows 1|2 the mirror's target at one or two rows a row of the
+ *                     frame (2, the engine's, where not given).
  *     -nowarm         no warm-up of the water's shaders before the picture
  *                     (HDRenderWaterWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
@@ -8213,6 +8215,13 @@ static bool MarbleArg(int argc, char** argv, int* at)
 		if (g_marble_engine && g_hdwater < 0)
 			g_hdwater = 0;
 
+		return true;
+	}
+
+	// -marblerows 1|2: the mirror target's rows a row of the frame.
+	if (!strcmp(a, "-marblerows") && more)
+	{
+		HDRenderMarbleRows(atoi(argv[++*at]));
 		return true;
 	}
 

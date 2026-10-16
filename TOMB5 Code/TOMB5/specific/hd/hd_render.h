@@ -1787,6 +1787,9 @@ void HDRenderMarbleStatsNow(HDRenderMarbleStats* out);
 /* RoomProbe's warm-up: with `on`, HDRenderMarbleDraw draws the mirrored
  * rooms into its target and lays nothing over the frame. */
 void HDRenderMarbleQuiet(bool on);
+/* RoomProbe's -marblerows: the mirror target drawn at 1 or 2 rows a row of
+ * the frame (2 in the engine). */
+void HDRenderMarbleRows(int rows);
 
 /* RoomProbe's marble floors (hd_render.cpp, "RoomProbe's marble floors"), a
  * measurement the game never calls: HDRenderMarbleProbeSet takes the

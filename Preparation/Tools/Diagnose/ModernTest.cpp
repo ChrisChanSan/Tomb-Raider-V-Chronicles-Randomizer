@@ -13949,15 +13949,18 @@ static void gloss_class()
 		"gloss class: no strength, an odd exponent or another material names none", 0, 0);
 
 	// The table: sorted, one line per page, every class a real one or a
-	// removal, and none of RICH2's lobby pages in it.
+	// removal, and none of RICH2's lobby pages in it but as a line of the
+	// mirror column alone.
 	int bad_lines = 0;
 
 	for (int i = 0; i < HDGlossTableSize(); i++)
 	{
 		const HDGlossPage& t = kHDGlossPages[i];
 
-		if ((i && kHDGlossPages[i - 1].page >= t.page) || HDGlossPageBarred(t.page) ||
-			t.cls < HD_GLOSS_NONE || t.cls > HD_GLOSS_CUSTOM || HDGlossTableFind(t.page) != &t)
+		if ((i && kHDGlossPages[i - 1].page >= t.page) ||
+			(HDGlossPageBarred(t.page) && t.cls != HD_GLOSS_ASIS) ||
+			t.cls < HD_GLOSS_ASIS || t.cls > HD_GLOSS_CUSTOM ||
+			(t.mirror != 0 && t.mirror != 1) || HDGlossTableFind(t.page) != &t)
 			bad_lines++;
 	}
 
@@ -22751,6 +22754,88 @@ static void spring_clock()
 		lround(fabs(cross) * 1000.0) + lround(fabs(row) * 1000.0), 0);
 }
 
+/* The marble floors' page column (hd_gloss_math.h, hd_gloss_pages.h): the
+ * mirror word read at a line's end, a line of the word alone naming no
+ * sheen, the file's word over the table's, and the 35 pages of the column
+ * in the table - the lobby's among them, which keep no sheen. */
+static void marble_pages()
+{
+	printf("the marble floors: the page column\n");
+
+	HDGlossPage e;
+	bool remove = false;
+
+	ok(HDGlossParseLine("1054 marble mirror", &e, &remove) == 1 &&
+		e.cls == HD_GLOSS_MARBLE && e.mirror == 1 && !remove,
+		"marble: a class and the mirror word", e.mirror, 1);
+	ok(HDGlossParseLine("960 MIRROR # grey slabs", &e, &remove) == 1 &&
+		e.cls == HD_GLOSS_ASIS && e.mirror == 1 && e.page == 960,
+		"marble: the word alone names no sheen", e.cls, HD_GLOSS_ASIS);
+	ok(HDGlossParseLine("1047 nomirror", &e, &remove) == 1 && e.mirror == 0,
+		"marble: nomirror", e.mirror, 0);
+	ok(HDGlossParseLine("141 metal 0.5", &e, &remove) == 1 && e.mirror == -1,
+		"marble: a line without the word leaves the column", e.mirror, -1);
+	ok(HDGlossParseLine("-1054 mirror", &e, &remove) == 1 && remove &&
+		e.mirror == 1, "marble: a removal keeps its mirror word", e.mirror, 1);
+	ok(HDGlossParseLine("mirror", &e, &remove) < 0 &&
+		HDGlossParseLine("960 mirror 3", &e, &remove) < 0,
+		"marble: a word without a page, a number after it", 0, 0);
+
+	HDGlossFile file;
+
+	HDGlossParseText("960 nomirror\n1029 mirror\n1054 marble 0.5\n"
+		"1086 mirror\n1086 nomirror\n", &file);
+
+	bool removes = true;
+	const HDGlossPage* asis = file.find(1029, &removes);
+	const bool m960 = HDGlossMirror(file.mirror(960), HDGlossTableFind(960));
+	const bool m1029 = HDGlossMirror(file.mirror(1029),
+		HDGlossTableFind(1029));
+	const bool m1054 = HDGlossMirror(file.mirror(1054),
+		HDGlossTableFind(1054));
+	const bool m1086 = HDGlossMirror(file.mirror(1086),
+		HDGlossTableFind(1086));
+	const bool m141 = HDGlossMirror(file.mirror(141), HDGlossTableFind(141));
+
+	ok(!asis && !removes, "marble: the file's mirror line is no sheen line",
+		asis ? 1 : 0, 0);
+	ok(!m960 && m1029 && m1054 && !m1086 && !m141,
+		"marble: the file's word, else the table's, the later line wins",
+		(m960 ? 1 : 0) + (m1029 ? 2 : 0) + (m1054 ? 4 : 0) +
+		(m1086 ? 8 : 0) + (m141 ? 16 : 0), 6);
+
+	static const int kPages[] =
+	{
+		54, 162, 246, 249, 273, 274, 285, 366, 408, 411, 960, 1002, 1010,
+		1029, 1045, 1046, 1047, 1048, 1049, 1053, 1054, 1063, 1070, 1079,
+		1081, 1082, 1085, 1086, 1094, 1104, 1105, 1110, 2147, 2149, 2154
+	};
+	const int count = (int)(sizeof(kPages) / sizeof(kPages[0]));
+	int listed = 0, column = 0;
+
+	for (int i = 0; i < count; i++)
+		listed += HDGlossTableFind(kPages[i]) &&
+			HDGlossTableFind(kPages[i])->mirror == 1 ? 1 : 0;
+
+	for (int i = 0; i < HDGlossTableSize(); i++)
+		column += kHDGlossPages[i].mirror;
+
+	ok(listed == 35 && column == 35,
+		"marble: the 35 pages of the column and no other", listed * 100 +
+		column, 3535);
+
+	// A lobby page in the column names no sheen: HDGlossResolve finds none.
+	const HDGloss lobby = HDGlossResolve(0, 0, false,
+		HDGlossTableFind(1047), HD_GLOSS_NONE, HDGlossPageBarred(1047));
+	const HDGloss slabs = HDGlossResolve(0, 0, false, HDGlossTableFind(960),
+		HD_GLOSS_MARBLE, false);
+
+	ok(lobby.strength == 0.0f && slabs.cls == HD_GLOSS_MARBLE &&
+		slabs.source == HD_GLOSS_FROM_SEED,
+		"marble: a line of the column alone leaves the sheen's sources",
+		slabs.source, HD_GLOSS_FROM_SEED);
+}
+
 /* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD
  * data, every field changed alone refuses with that field's name, and a
  * load with HD off, with nothing built or after an outfit change refuses
@@ -23040,6 +23125,7 @@ int main()
 	spring_crack();
 	spring_crack_gate();
 	spring_column();
+	marble_pages();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

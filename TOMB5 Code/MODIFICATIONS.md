@@ -15014,7 +15014,8 @@ heights.)
 
 The other seven levels wear none of the listed pages; their tiled floors - ANDY2's stone
 mosaic 808 (35 squares in 15 rooms), JOBY2's checkered tiles 489 (44 in 5), JOBY3's and
-JOBY5's blue checker 570 (12 in one room each) - are no marble and were counted apart.
+JOBY5's blue checker 570 (12 in one room each) - are no marble and were counted apart,
+with a picture of each of their 22 rooms as the Rome levels' rooms have.
 RICH2 by room: the corridor 46 and its twin 75 carry the art's copy under their clear
 floor west of x 43,008 and are mirror squares only at the opaque mouth (5 and 4); the
 tank's rooms 45, 121 (9 each) and 122 (4); the lobby's gallery 120 (34, at four heights
@@ -15062,7 +15063,12 @@ draws, B the mirrored room draws and the layer's draw, the frame's own solid roo
 
 (frame: the frame's own solid room draws; E190, L120, ANDREA2 24 and his picture 10 spread
 over their three runs to 0.997-1.115, 0.846-1.145, 0.125-0.225 and 0.339-1.212 in B's
-mirrored rooms, every other number within 0.03.)
+mirrored rooms, every other number within 0.03; the least and most rows take each
+column's own least or most over those eyes, so a row mixes eyes. Timed again with the
+untimed first draw writing no colour: every A median within 0.007 ms of the table and
+every B layer within 0.01 but the lobby gallery's 0.054; the room draws of E190, L120 and
+ANDREA2 24, the frame's and B's mirrored ones alike, spread again, to medians of 1.37,
+1.26 and 0.20 for the frame and 0.87, 1.63 and 0.22 for B.)
 
 A costs 0.04 to 0.19 ms a frame and does not grow with the rooms; B's mirrored draw is
 about the frame's own room draws once more for one plane - up to 1.06 ms where the
@@ -15073,20 +15079,24 @@ square, 413 KB for RICH2's 344); B a target and its depth, 8 bytes a pixel, 28.1
 2,560 x 1,440, the size of the models' mirror target it could take the place of.
 
 What each draws right and wrong, at 960 x 540 against the dry floor (pixels changed by
-more than 8): A2 17,045 to 163,892 an eye, B 16,740 to 174,788. Picture 4's light - the
-lit room beyond the lift's door - is a sliver in the frame: A finds 471 of its yellow
-pixels on the floor (red over 140, green over 120, blue under 0.7 green), in broken rows,
-B 1,737 in one strip. What the march does not find and B draws (B brighter by 24, A within
-8 of dry): RICHCUT2 3 29,031, RICH3 93 3,707, v510 1,693, room 126 5,271, picture 3's
-machine 936. What B leaves out: every square at another height than its plane - the lobby
-gallery 4,150, room 126 8,527, the pool's surround 1,355, picture 8 1,747 - one more
-mirrored draw of the rooms for each. B also reflects only the rooms it is handed: a room
-seen only in the mirror (the ceiling's rooms, through the floor's reflection) must be
-added to the frame's list. Both mirror the art's copies' floors only where the rule lets
-them: no listed square is a clear floor over a copy, so the two never double. The light
-field's stand-in where the march finds nothing lifts a dark floor at a grazing view
-(ANDREA2 room 24, A1 115,019 pixels against A2's 61,183): a share of the room's light the
-walls' sheen takes too.
+more than 8, the layer drawn once): A2 7,621 to 107,233 an eye, B 8,879 to 128,310.
+Picture 4's light - the lit room beyond the lift's door - is a sliver in the frame: A
+finds 47 of its yellow pixels on the floor (red over 140, green over 120, blue under 0.7
+green), in broken rows, B 1,233 in one strip. What the march does not find and B draws (B
+brighter by 24, A within 8 of dry): room 126 4,692, v510 4,320, RICHCUT2 3 3,766, his
+picture 9 2,200, picture 4 978, picture 3's machine 561, RICH3 93 452. What B leaves out:
+every square at another height than its plane - the lobby gallery 4,078, the pool's
+surround 1,248, room 126 423, picture 8 427 - one more mirrored draw of the rooms for
+each. B also reflects only the rooms it is handed: a room seen only in the mirror (the
+ceiling's rooms, through the floor's reflection) must be added to the frame's list. Both
+mirror the art's copies' floors only where the rule lets them: no listed square is a
+clear floor over a copy, so the two never double. Neither takes a sloping floor: the
+census counts flat faces only (the normal's height over 0.95 of its length) and the layer
+is one flat grid a square, so a sloping marble floor is no mirror square in A or B, and
+in B it would be one more plane. Strength 1's darkening outweighs its mirror on most
+floors: the pixels it changes lose 19 to 44 of red, green and blue summed on average at
+ANDREA2 24, RICH3 93, RICHCUT2 3, the pool's surround, room 126, his picture 3 and one of
+round 5's eyes, where strengths 2 and 3 only add (20 to 91 on average at every eye).
 
 The conflicts. The tanks' wet floors lie on marble: 16 of tank 182's 22 wet squares and
 all 12 of tank 33's are mirror squares - a marble layer has to leave a point the water

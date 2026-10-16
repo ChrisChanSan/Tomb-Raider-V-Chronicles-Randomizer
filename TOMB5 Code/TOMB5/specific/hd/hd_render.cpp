@@ -18692,6 +18692,25 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, faces,
 			&layer.verts[0], sizeof(CardVertex));
 
+		/* A wet floor's points of this frame (HDRenderWaterWetDraw) take
+		 * the bit away again where the water has come: the floor mirrors
+		 * there through the wet floor's own draw, and not twice. */
+		if (g_wet_ready && !g_wet_tris.empty())
+		{
+			g_device->SetPixelShaderConstantF(105, flipMask, 1);
+			g_device->SetRenderState(D3DRS_ALPHATESTENABLE, TRUE);
+			g_device->SetRenderState(D3DRS_ALPHAREF, 0);
+			g_device->SetRenderState(D3DRS_ALPHAFUNC, D3DCMP_GREATER);
+			g_device->SetRenderState(D3DRS_STENCILREF, 0);
+			g_device->DrawIndexedPrimitiveUP(D3DPT_TRIANGLELIST, 0,
+				(UINT)g_wet_verts.size(), (UINT)(g_wet_tris.size() / 3),
+				&g_wet_tris[0], D3DFMT_INDEX16, &g_wet_verts[0],
+				sizeof(CardVertex));
+			g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+			g_device->SetPixelShaderConstantF(105, flipLook, 1);
+			g_marble_stats.wet = 1;
+		}
+
 		g_device->SetRenderState(D3DRS_COLORWRITEENABLE,
 			D3DCOLORWRITEENABLE_RED | D3DCOLORWRITEENABLE_GREEN |
 			D3DCOLORWRITEENABLE_BLUE | D3DCOLORWRITEENABLE_ALPHA);

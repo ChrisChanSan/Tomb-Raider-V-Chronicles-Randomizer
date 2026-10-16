@@ -16,9 +16,11 @@
  *
  * With the path on, the rooms a frame draws are the engine's own portal walk
  * from the eye's room (game\draw.cpp, GetRoomBounds), every listed room's art
- * is drawn whole, and the depth buffer alone decides what hides what. The
- * walk is extended where the art opens more than the classic level, by three
- * tables made here once per level:
+ * is drawn whole but for its art standing inside another room, which is cut
+ * to its room's window as on the other path (hd_level.cpp, DecidePairs), and
+ * the depth buffer decides the rest. The walk is extended where the art
+ * opens more than the classic level, by three tables made here once per
+ * level:
  *
  *   guests    per room, the groups whose art stands in its inside
  *   openings  per room, the classic wall faces its own art leaves bare,

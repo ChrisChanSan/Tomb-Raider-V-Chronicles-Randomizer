@@ -3036,10 +3036,17 @@ static int g_unlinked = 1;
  * triangle stands in unlinked air and the build is the box's alone; 2 is 1
  * with the hulls (MarkAirHulls in hd_render.cpp). */
 static int g_air_option = 1;
-/* -vis 1: the engine's tomb5.hd_vis 1 - the build hands no intrusion list
- * (and so no pair faces), no air and no carried rooms, as BuildRoomVis turns
- * BuildRoomIntrusions and BuildRoomAir off. */
+/* -vis 1: the engine's tomb5.hd_vis 1 - the walk of BuildRoomVis' path and
+ * no carried rooms; the intrusion list and the air are built as with 0. */
 static bool g_vis_option = false;
+/* -viswin <rule>: how -vis 1 answers the pieces of a group's intruding art
+ * (DecideGroup): 0 every piece whole; 1 a piece in unlinked air inside the
+ * group's window unless a claimed face of its pair survives the window, the
+ * rest whole; 2 every piece as the room-art rules answer it (-decide
+ * frame, -unlinked 1), the engine's answer and the default; 3 every piece
+ * inside the window; 4 every piece left out; 5 the group's whole art inside
+ * the window. */
+static int g_vis_win = 2;
 // -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
 static int g_gpu_runs = 0;
 static int g_window_mode = HD_WINDOW_ALL;
@@ -3726,7 +3733,7 @@ namespace walkoff
 	static std::vector<HDVisPortal> g_vis_portals;
 	static std::vector<int> g_vis_links;
 	static std::vector<unsigned char> g_vis_why;
-	static int g_vis_count[5] = { 0, 0, 0, 0, 0 };
+	static int g_vis_count[6] = { 0, 0, 0, 0, 0, 0 };
 
 	// The group a room holds now, as hd_level.cpp's g_room_group.
 	static int VisContents(int room)
@@ -3888,11 +3895,56 @@ namespace walkoff
 		return p;
 	}
 
+	// -visnear 0 turns VisNearPortals off, to measure without it.
+	static bool g_vis_near = true;
+
+	// VisNearPortals (game\draw.cpp).
+	static void VisNearPortals(int here, Room& r)
+	{
+		const float reach = (float)g_vis_params.reach;
+		const float e[3] = { (float)(g_eye[0] - r.x), (float)(g_eye[1] - r.y),
+			(float)(g_eye[2] - r.z) };
+
+		for (size_t d = 0; g_vis_near && d < r.doors.size(); d++)
+		{
+			const Tr5Level::PortalRecord& p = r.doors[d];
+			const int to = p.toRoom;
+			bool inside = true;
+
+			if (to < 0 || (size_t)to >= g_room.size() || to == here)
+				continue;
+
+			for (int k = 0; k < 3 && inside; k++)
+			{
+				float lo = (float)p.v[0][k], hi = lo;
+
+				for (int c = 1; c < 4; c++)
+				{
+					if ((float)p.v[c][k] < lo) lo = (float)p.v[c][k];
+					if ((float)p.v[c][k] > hi) hi = (float)p.v[c][k];
+				}
+
+				inside = e[k] >= lo - reach && e[k] <= hi + reach;
+			}
+
+			if (!inside)
+				continue;
+
+			const char before = g_room[(size_t)to].bound_active;
+
+			VisQueue(to, r, 0.0f, 0.0f, (float)g_winxmax, (float)g_winymax,
+				here);
+			VisNote(to, 5, before);
+		}
+	}
+
 	// VisExtend (game\draw.cpp).
 	static void VisExtend(int here, Room& r, const float* mx)
 	{
 		const int c = VisContents(here);
 		const HDVisTables& t = g_vis_tables;
+
+		VisNearPortals(here, r);
 
 		if (c < 0 || c >= t.rooms)
 			return;
@@ -4689,7 +4741,7 @@ namespace walkoff
 		g_list[0] = seed;
 		g_vis_why.assign(g_room.size(), 0xff);
 		g_vis_count[0] = g_vis_count[1] = g_vis_count[2] = g_vis_count[3] =
-			g_vis_count[4] = 0;
+			g_vis_count[4] = g_vis_count[5] = 0;
 		g_queue_peak = 1;
 		g_reach_only = 0;
 		g_dequeues = 0;
@@ -4827,10 +4879,10 @@ namespace walkoff
 	{
 		const Room& r = g_room[(size_t)which];
 
-		static const char* const kWhy[5] = { "walk", "box", "opening",
-			"portal", "edge" };
+		static const char* const kWhy[6] = { "walk", "box", "opening",
+			"portal", "edge", "near" };
 		const int why = g_vis && (size_t)which < g_vis_why.size() &&
-			g_vis_why[(size_t)which] < 5 ? g_vis_why[(size_t)which] : 0;
+			g_vis_why[(size_t)which] < 6 ? g_vis_why[(size_t)which] : 0;
 
 		printf("%sroom %d final=%d,%d..%d,%d reach=%d,%d..%d,%d %s%s%s\n", lead,
 			which, r.left, r.top, r.right, r.bottom, r.box[0], r.box[1],
@@ -5190,12 +5242,14 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			// -vis 1: the sources, as VISLOG counts them.
 			if (walkoff::g_vis)
 				printf("      vis rooms=%d walk=%d box=%d opening=%d portal=%d "
-					"dequeues=%ld edge=%d\n", (int)walkoff::g_drawn.size(),
+					"dequeues=%ld edge=%d near=%d\n",
+					(int)walkoff::g_drawn.size(),
 					(int)walkoff::g_drawn.size() - walkoff::g_vis_count[1] -
 					walkoff::g_vis_count[2] - walkoff::g_vis_count[3] -
-					walkoff::g_vis_count[4], walkoff::g_vis_count[1],
-					walkoff::g_vis_count[2], walkoff::g_vis_count[3],
-					walkoff::g_dequeues, walkoff::g_vis_count[4]);
+					walkoff::g_vis_count[4] - walkoff::g_vis_count[5],
+					walkoff::g_vis_count[1], walkoff::g_vis_count[2],
+					walkoff::g_vis_count[3], walkoff::g_dequeues,
+					walkoff::g_vis_count[4], walkoff::g_vis_count[5]);
 
 			// -walkfinal: every listed room's answer, as -walkwant gives one.
 			if (finals)
@@ -6067,6 +6121,22 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 	{
 		HDRenderScissorOff();
 
+		// -viswin 5: the group's whole art inside its window.
+		if (g_vis_option && g_vis_win == 5 && !full)
+		{
+			bool drew = false;
+
+			if (!empty)
+			{
+				HDRenderScissor(rect[0], rect[1], rect[2], rect[3]);
+				drew = HDRenderRoomMask(group, world, lighting, passes,
+					HD_WINDOW_ALL);
+				HDRenderScissorOff();
+			}
+
+			return drew;
+		}
+
 		if (!HDRenderGroupIntrudingTriangles(group) || full)
 			return HDRenderRoomMask(group, world, lighting, passes,
 				HD_WINDOW_ALL);
@@ -6074,7 +6144,7 @@ static bool DrawOneGroup(int group, const D3DMATRIX* world,
 		const bool drew = HDRenderRoomMask(group, world, lighting, passes,
 			HD_WINDOW_OPEN);
 
-		if (!empty)
+		if (!empty && !(g_vis_option && g_vis_win == 4))
 		{
 			HDRenderScissor(rect[0], rect[1], rect[2], rect[3]);
 			HDRenderRoomMask(group, world, lighting, passes,
@@ -6281,9 +6351,10 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		/* A piece with no face outside the smaller box is art the air took
 		 * out of the open half: whole under every answer but the air's. */
 		const bool open = piece.face < 0 && !piece.inner;
-		/* The visibility path (-vis 1) cuts no art to a window: every piece
-		 * whole, as DecidePairs answers there. */
-		const int decide = g_vis_option ? 0 : g_decide;
+		/* The visibility path (-vis 1) answers as -viswin says; its default,
+		 * 2, is DecidePairs' answer there, the frame's. */
+		const int decide = !g_vis_option ? g_decide : g_vis_win == 2 ? 2
+			: g_vis_win >= 3 ? 1 : 0;
 		bool answer = decide == 0 ? true : decide == 1 ? false
 			: open ? true
 			: *empty ? piece.inner == 0
@@ -6307,6 +6378,12 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 
 		if (unlinked && !(g_unlinked == 2 && *empty))
 			answer = claimed;
+
+		/* -viswin 1: the art in unlinked air alone held to the window, on
+		 * the claimed faces the room-art rules ask (pairAlive). */
+		if (g_vis_option && g_vis_win == 1 && piece.air)
+			answer = piece.face >= 0 ? ask && pairAlive
+				: ask && !drawn && pairAlive;
 
 		HDRenderPairWhole(group, j, answer ? 1 : 0);
 
@@ -12489,10 +12566,10 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
 /* The visibility path's switches, out of ProbeMain's chain of else-ifs:
  *
  *   -vis 0|1          tomb5.hd_vis: 1 walks the portals' list extended by
- *                     the three tables (hd_vis.h) with the reach off, and
- *                     answers every piece of the build whole, no carried
- *                     rooms, so every group is drawn whole with only the
- *                     build's depth pushes; 0, the default, changes nothing
+ *                     the three tables (hd_vis.h) with the reach off, no
+ *                     carried rooms, every group drawn whole but for its
+ *                     pieces of intruding art, answered as -viswin says;
+ *                     0, the default, changes nothing
  *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
  *                     portals (7, the default, all three)
  *   -visreach <units> -visbare <share> -visguest <triangles>
@@ -12500,6 +12577,11 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     of HDVisDefaults'
  *   -viswidebare <share>   the bare share that lets a face widen a portal
  *   -visedge <share>  the window's edge, as a share of the screen's width
+ *   -viswin <rule>    how -vis 1 answers the pieces of intruding art (see
+ *                     g_vis_win): 2, the default, as the engine; 0 every
+ *                     piece whole
+ *   -visnear 0|1      1, the default, lists the room behind a portal the
+ *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
  *                     after the picture (the print beside the draw calls) */
 static bool VisArg(int argc, char** argv, int* at)
@@ -12533,6 +12615,10 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.wideBare = atof(argv[*at + 1]);
 	else if (!strcmp(a, "-visedge"))
 		walkoff::g_vis_params.edge = atof(argv[*at + 1]);
+	else if (!strcmp(a, "-viswin"))
+		g_vis_win = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visnear"))
+		walkoff::g_vis_near = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-gpu"))
 		g_gpu_runs = atoi(argv[*at + 1]);
 	else

@@ -2571,6 +2571,35 @@ water surface", carries the tables.
     general graphics knowledge; the steps, octaves, colours and fade free
     choices for the measurement, the octaves cut to two by the 512-slot
     budget (three took 519). Probe only; the game draws none of it.
+245. **The visibility path's window on art standing in another room**
+    (`hd_level.cpp`, `DecidePairs`) - with `hd_vis` 1 a piece of a room's
+    art that stands inside another room (the intrusion list) gets the answer
+    of `hd_vis` 0: inside the room's own window unless a classic face the
+    pair claims is drawn this frame; the rest of the room's art stays whole.
+    It replaces entry 218's 'every piece answered whole'; the pushes of 218
+    stay. OWN: this project's pieces and their answer (the #181 entry,
+    rounds 4 to 8), applied to the visibility path's list. DATA (RoomProbe
+    `-vis 1 -viswin`, five candidates measured at the owner's places, camE
+    and the owner set of 99): ANDREA1's brick block of room 93 at camE 8,957
+    pixels changed against the old path down to 0 (7,112 of them the block),
+    the owner's three ANDREA1 ghosts 4,853, 41,998 and 74,183 down to 0,
+    JOBY2's bars by the pillar 9,339 down to 103; over the 99 cameras no
+    view worse than round 10 by more than 500 pixels.
+246. **The portal the eye stands at** (`game/draw.cpp`, `VisNearPortals`) -
+    a portal whose four corners' box, grown by the art's reach of 128 units
+    (`HDVisDefaults`, how far art stands off a classic face), holds the eye
+    lists the room behind with the whole window of the room being walked.
+    CLASSIC fact read: `SetRoomBounds` projects such a portal onto the
+    screen's edges or behind the eye, and the side test skips a portal the
+    eye has passed; the rule is OWN. DATA (the owner's ROOMFLASH frames of
+    round 10 walked again, RoomProbe `-visnear`): JOBY3's room 76, JOBY5's 88
+    with its children and RICH2's 55 listed at their frames' eyes, 4,029,896
+    of the 4,127,491 pixels of sky those frames showed.
+247. **RoomProbe `-viswin` and `-visnear`** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`) - the pieces' answer on the visibility path chosen per
+    run (the engine's, every piece whole, the air pieces alone, every piece
+    in the window, none, the whole group in the window) and the walk's copy
+    of entry 246 with a switch to leave it out. OWN, this project's tool.
 
 ## Credited, but not contained here
 

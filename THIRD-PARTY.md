@@ -2431,6 +2431,28 @@ water surface", carries the tables.
     heavy-trigger test with the arming camera, the place and the skip. OWN,
     this project's own tools on the classic engine's code (CLASSIC) and the
     player's files (DATA).
+229. **The deep look's sea surface from every water room** (`hd_water_under.h`,
+    `HDWaterUnderDepth`; `hd_render.cpp`, `water_under_constants`) - in a
+    level that takes the deep look a water room no sheet lies over counts
+    its body's surface on either side of the eye, the distance to it the
+    eye's depth for the extinction, in place of the depth that puts every
+    point in the water. OWN, from the level's own water data (the body and
+    the deep look's share); DATA: RoomProbe `-underwater`, the frame with
+    and without room 19, his eye in room 6 0 to 116,979 surface pixels, an
+    eye 12 squares under the art 0 to 470,590, his eye in room 123 and the
+    other levels unchanged. ModernTest `water_under`.
+230. **The sea seen from below, a study** (`hd_water_look.hlsl`, `LookPS`,
+    `LookShaft`; `hd_render.cpp`, `HDRenderWaterProbeLook`; RoomProbe
+    `-underlook`, `-underlookset`) - the sun's disc through the surface by
+    the eye ray bent out through the normal of the body's own wave rows,
+    the underside lit inside Snell's window, the shafts as the light's way
+    followed back to the surface into a value noise of the cells' hash,
+    two draws over the frame. OWN, a design of this project from general
+    graphics knowledge (Snell's law, a marched light shaft) and the
+    project's own wave and hash, aimed at reference pictures supplied for
+    this project (not in the repository); the strengths, the disc's power, the cells,
+    the reaches and the rim's width free choices. Probe-only; the game
+    never draws it.
 
 ## Credited, but not contained here
 

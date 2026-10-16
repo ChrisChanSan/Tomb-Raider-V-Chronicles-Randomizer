@@ -15395,6 +15395,136 @@ shape itself stays is the next play test's to show.
 
 **Commits.** `8697749`, `169c24a`.
 
+**The sea seen from below (#210), 2026-10-16.** Asked for with the owner's new list,
+put into English (his words beside in German): JOBY4's water surface can never be
+reached, it lies far out of the playable reach because the sinks pull Lara down ("Die
+Wasseroberflaeche ist nie zu erreichen, die ist weit ausserhalb der Playable reach wegen
+den Sinks, die ziehen Lara nach unten."), with two pictures - from below the surface's
+wavy underside over the whole sky, and a step on the same water with the surface gone -
+and six photographs as the look he would like from below: the sun's bright disc
+through the rippled surface, rays of light fanning down into the blue, the underside
+bright and alive (reference pictures supplied for this project, not in the repository).
+Four things: the vanishing measured and its cause mended, the surface's reach, the
+look measured as a study the game never draws, and this part.
+
+*What the surface is.* JOBY4 has one body, room 7's two squares (a basin at y 12,032,
+`WATERLOG body=0`), and 132 of its 134 water rooms lie under no sheet (`under=2
+under_fallback=132 under_deep=1`): the sea's surface the owner sees is no sheet. Drawn
+at his first eye with `-hdwater 0` it is there all the same; drawn with the seed room
+and one room at a time, only room 19 brings it. TrgProbe `-parts 19`: its part 3,
+material 16 in the additive pass, 73,728 triangles flat at y -4,269 to -4,237 over x
+-30,160 to 31,584 and z -26,616 to 32,767 - the remaster's own surface art, standing
+over the whole sea from a 6 x 6 room at the level's far end (`HDLOG room=19
+tris=24599/0/23040 overhang=42939`).
+
+*His two pictures* (`hd_render.cpp`, "the eye under the water"). Matched by content to
+the CAMLOG eyes of his log of the engine of `3f8f52dd`: every third of JOBY4's 912
+ticks drawn at 320 x 180 with `-underwater -hdwater 1`, the probe's clear colour taken
+out and the middle third (Lara) left out, the grey-level correlation against each
+picture. The surface's picture is tick 23,995, the eye (26,690, 14,786, 58,502) in room
+123 looking 43 degrees up (correlation 0.496); the one without it is tick 24,484, the
+eye (35,651, 14,558, 61,811) in room 6 looking 19 degrees up (0.350, the rock at the
+left in place). The room list is not the cause: every one of the level's 26 `VISLOG`
+lines lists room 19 (a guest, `19g`), and the walk at all 912 eyes (RoomProbe
+`-viscams`, `-vis 1`) lists it 912 times. The cause is the under view's room test.
+Room 123 lies under the basin of room 7, so the extinction's depth is the eye's under
+that basin, 2,754 units, and the way through the water to a point above counts d x
+2,754 / h of its length - a seventh of it to the surface art 19,000 units up. Room 6
+lies under no sheet and took the depth that puts every point in the water
+(`kUnderNoSurface`): the whole way, 18,800 units and more, kept exp(-0.000419 x
+18,800) = 0.0004 of the additive art's light, and the surface went black. Counted at
+960 x 540 as the pixels that change by 4 or more of 255 in any channel when room 19 is
+left out of the frame: tick 23,995 307,030 pixels, tick 24,484 none.
+
+The rule (`hd_water_under.h`, `HDWaterUnderDepth`, called by `water_under_constants`):
+in a level that takes the deep look - one sea, every water room under the look of its
+largest body - a water room no sheet lies over counts that body's surface too,
+whichever room the eye is in. After: tick 24,484 116,979 pixels (22.6 % of the
+picture), depth 2,526; tick 23,995 unchanged. Along 40 eyes evenly between his two
+ticks (480 x 270), the 37 in room 123 are identical before and after and the three in
+room 6 go from 417, 6 and 0 surface pixels to 463, 21,890 and 29,590. No other level
+takes the deep look, and no room under a sheet changes.
+
+*The reach.* The surface art lies 4 to 22 squares over the eyes of JOBY4's water rooms
+(their ceilings reach up to -1,280, their floors down to 19,200). Measured at three
+heights, the eye looking 60 degrees up, the surface's pixels and their mean light (the
+luma of the difference): 4 squares under it (room 116, y 0) 91.5 % at 7.9; 12 squares
+(room 119, y 8,000) none; 20 squares (room 79, y 16,500) 0.1 % before the rule above
+and 30.3 % at 7.2 after it (the rest of that view is rock). The eye at 12 squares
+stands over the basin's height, so the rule's "above the eye" left it the whole way
+through the water - a hole in the reach between the water's top layer and the basin.
+The rule now counts the body's surface on either side of the eye, its distance the
+depth: room 119 90.8 % at 9.3; rooms 116 and 79 and his two eyes unchanged (at room
+116 the distance 12,032 is more than the art's height over the eye, so the way is the
+whole way as before). No cut by the far plane at these views: the art is drawn to the
+rocks' horizon in each.
+
+*The look, a study* (`hd_water_look.hlsl`; `hd_render.cpp`, `HDRenderWaterProbeLook`;
+RoomProbe `-underlook`, `-underlookset`). Nothing of it is on the game's path: the
+game never calls the function and draws with no shader of that file. One pixel shader
+in two draws over the frame drawn with the eye under the water: the sun's disc through
+the surface - the eye ray meets the surface at the eye's depth over its upward cosine,
+the normal there comes from the body's own first four wave rows (`WaveSum`), the ray
+bends out into the air by Snell's law (n 1.333, the window 48.6 degrees,
+`HDWaterSnellCos`) and the disc is its cosine to the light to the 600th power, with a
+broad glow of 0.08 at the 8th; the underside inside the window lit from above (0.35 to
+1 toward straight up), its rim softened over 0.08 of cosine; both drawn behind
+everything (their corners at a depth of 0.9999 tested LESS, so only where the frame
+left its clear - the surface art writes no depth) and faded over 40,000 units of the
+eye ray. The shafts: 24 steps along the eye ray up to 8,000 units, at each the light's
+way in the water followed back to the surface and a value noise of the cells' hash
+(`CellHash`, cells of 700 units, drifting with the clock) above 0.55 there, faded over
+6,000 units under the surface and by the extinction's sigma_s along the ray, brighter
+toward the light; the steps' start jittered by the hash of the pixel - the shafts'
+places are a hash, never a curve. The light's direction is the look's own highlight
+direction (`gWaterSun`, the deep look's), its colour the hue of the look's highlight.
+Strengths 3, 3 and 0.25 for the disc, the shafts and the underside are free choices
+for the first pictures (the shafts at 0.6 added 1.0 of luma on average at the turned
+room-6 eye, at 6 10.7).
+
+**Measured.** The look at four eyes, his two and the same places turned toward the
+light (yaw 245, 50 degrees up), 960 x 540 beside the frame without it. GPU at 2,560 x
+1,440, timestamps round the two draws, three runs each: tick 23,995 0.8196, 0.8184,
+0.8191 ms (median 0.8191, spread 0.0012); tick 24,484 0.6468, 0.6472, 0.6464 (0.6468,
+0.0008); room 123 turned 0.7282, 0.5592, 0.5581 (0.5592, 0.1701, the first run's
+warm-up); room 6 turned 0.6736, 0.6755, 0.6756 (0.6755, 0.0020). Memory: no texture,
+two shaders made and released in the call; the run's peak commit 188 to 212 MiB with
+it and 188 to 210 without, run to run alike. Slots, fxc /O3: `LookPS` 227, `LookVS` 1;
+every other `.inc` byte-identical to `dc75a96a`'s (31 of 31). The disc stands where the
+fan of eight yaws at 62 degrees up puts the light (yaw 180 to 315 bright, 45 and 90
+dark at the room 123 place).
+
+**Checked.** With the tools built from the last engine commit against `dc75a96a`'s: the
+classic path, 6 of 6 md5-identical to `8691e82` and `dc75a96a` (ANDREA2 19 and 231,
+JOBY2 42 and 66, ANDY3 17 and 34, `-classicroom` and `-classiconly`); the fifteen
+cameras with `-hdwater 0`, 15 of 15 identical to the fix round's parity set; with
+`-hdwater 1` the fifteen cameras 15 of 15, the six HD views 6 of 6, the pond's 36
+views 36 of 36, the canal dive 4 of 4, the tank views 4 of 4 and tank 33's eyes 3
+of 3, the 22 band eyes (25 pictures) 25 of 25, the owner's eight 8 of 8, the under
+views of ANDREA1, JOBY5, JOBY2 and JOBY4's start cavern 14 of 14, and the
+`WATERLOG` sweep 240 of 240 lines identical. JOBY4's eyes in rooms no sheet lies
+over are the only pictures that change, as listed above. The suites (ModernTest
+15,486 with the new `water_under` group of 10, MenuTest 44,272, InterpTest 729,
+LipsTest 270 and 243) 0 failed; the engine and all nine tools build.
+
+**Left.** The look in the game: nobody in this round could play it. The study's
+shafts read as broad streaks rather than thin rays, and the window's rim under the
+sea's waves leaves dark streaks in the lit underside; the shafts have no depth to stop
+at and are drawn over near rocks within their 8,000 units. The deep look's surface is
+the basin of room 7's height, a stand-in for the sea's own surface the art draws 16,000
+units higher; how bright it should be from far below is the owner's. The tool's own
+`.inc` for the study is stamped by `bshader.bat` but not checked by `be.bat`, as the
+engine never draws with it.
+
+**Open for the owner.** The study's strength (the disc, the shafts, the underside) and
+whether it is to go into the game at all at 0.56 to 0.82 ms at 2,560 x 1,440; the sun's
+source - the look's own highlight direction as now, or the level's light data; and
+where it would apply - only the sea levels (the deep look, JOBY4 alone over the fifteen)
+or every water body seen from below.
+
+**Commits.** `5be09089` (the vanishing), `f89a0037` (the reach), `2a9d3f24`
+(the study).
+
 ### The marble floors' mirror (#205)
 2026-10-16
 

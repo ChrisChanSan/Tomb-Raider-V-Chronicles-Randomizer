@@ -562,6 +562,9 @@
  *                     per axis and the pairing's answer; the pieces no
  *                     static takes and the ones several take. Prints and
  *                     stops. Needs -roombox.
+ *     -smashpiece <n> destructible piece n (the "destructible:" list's
+ *                     number) hidden in whichever group it lies, the seed
+ *                     room's or a -with room's. Repeatable.
  *     -hasgeom <x0 y0 z0 x1 y1 z1>
  *                     does the drawn group draw anything inside that
  *                     room-local box? The question hd_level.cpp asks per
@@ -2882,6 +2885,8 @@ static bool g_shatter = false;
  * the pieces, the shatterable statics and their pairs, then no picture. */
 static std::vector<std::pair<int, int> > g_smash;
 static bool g_smash_census = false;
+/* -smashpiece <n> (repeatable): pieces hidden by number, in any group. */
+static std::vector<int> g_smash_pieces;
 
 /* The two switches above, out of the main chain, which stands at the
  * compiler's limit of nested blocks (C1061). */
@@ -2890,6 +2895,12 @@ static bool SmashArg(int argc, char** argv, int* at)
 	if (!strcmp(argv[*at], "-smashcensus"))
 	{
 		g_smash_census = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-smashpiece") && *at + 1 < argc)
+	{
+		g_smash_pieces.push_back(atoi(argv[++(*at)]));
 		return true;
 	}
 
@@ -12938,6 +12949,8 @@ static int ProbeMain(int argc, char** argv)
 			"hidden as the engine pairs them\n");
 		printf("       -smashcensus   the destructible pieces, the shatterable "
 			"statics and their pairs\n");
+		printf("       -smashpiece <n>   destructible piece n hidden, in any "
+			"group; repeatable\n");
 		printf("       -statics new|old   the classic statics a frame of this "
 			"picture draws, flat, and with new the statics' pieces\n");
 		printf("       -piece <room>:<mesh>   with -statics new, only that "
@@ -15321,6 +15334,10 @@ static int ProbeMain(int argc, char** argv)
 
 			if (g_shatter && group == room)
 				HDRenderDestructibleHide(i, true);
+
+			for (size_t k = 0; k < g_smash_pieces.size(); k++)
+				if (g_smash_pieces[k] == i)
+					HDRenderDestructibleHide(i, true);
 		}
 
 		if (!g_smash.empty())

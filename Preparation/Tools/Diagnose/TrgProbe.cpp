@@ -79,6 +79,8 @@
 #include "VisInput.h"
 // The engine's slot names, for the items a flyby's trigger moves (-flyby).
 #include "hd_bind.h"
+// The census rule of the sequences a skip ends short (-flyby).
+#include "../../../TOMB5 Code/TOMB5/game/spotcam_math.h"
 
 // The engine keeps these in tomb5\tomb5.cpp, filled from the registry values
 // hd_install and hd_install_tr3. Here the command line fills the first - the
@@ -6805,7 +6807,7 @@ static int FlybyCensus(const std::string& folder,
 			// The end branch takes the first camera's flags (s->flags).
 			const unsigned first = sc[i].flags, last = sc[j].flags;
 			const bool open = !(first & 0x0C);
-			const bool risk = open && (first & 0x40) && (last & 0x4000);
+			const bool risk = SpotSeqEndsShort((int)first, (int)last);
 			const bool way = open && !(first & 0x40) && (last & 0x4000);
 
 			nrisk += risk ? 1 : 0;

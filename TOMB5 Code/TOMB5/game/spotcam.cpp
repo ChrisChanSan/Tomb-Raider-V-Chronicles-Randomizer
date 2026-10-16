@@ -12,6 +12,7 @@
  */
 #include "../tomb5/pch.h"
 #include "spotcam.h"
+#include "spotcam_math.h"
 #include "../specific/3dmath.h"
 #include "tomb4fx.h"
 #include "camera.h"
@@ -37,6 +38,10 @@ char SCNoDrawLara;
 char SCOverlay;
 uchar SpotRemap[16];
 uchar CameraCnt[16];
+
+static_assert(SPOT_LOOPCAMERA == SP_LOOPCAMERA &&
+	SPOT_TRACKCAMERA == SP_TRACKCAMERA && SPOT_SNAPBACK == SP_SNAPBACK &&
+	SPOT_TESTTRIGGER == SP_TESTTRIGGER, "spotcam_math.h flags");
 
 static QUAKE_CAM quakecam;
 
@@ -336,6 +341,7 @@ void CalculateSpotCams()
 	long dist, ds, sval;
 	static long bFirstLook = 0;
 	short spline_cnt;
+	long skip_now = 0;	// the skip jumped this frame's segment to its end
 
 	s = &SpotCam[first_camera];
 	sp = 0;
@@ -448,7 +454,10 @@ void CalculateSpotCams()
 	// path - see JoyBitConfirm() in input.cpp, same reasoning as the
 	// cutscene-skip fix in control.cpp.
 	if (tomb5.cutseq_skipper && (keymap[DIK_ESCAPE] || (ControlMethod == 1 && Key(256 + JoyBitConfirm()))) && gfLevelId != LVL5_TITLE)
+	{
 		current_spline_position = 0x10000;
+		skip_now = 1;
+	}
 
 	if (!(input & IN_LOOK))
 		bFirstLook = 0;
@@ -677,10 +686,20 @@ void CalculateSpotCams()
 					{
 						if (bCheckTrigger)
 						{
+							// A skipped end tests at the last camera's own
+							// place and room, not where the frame began.
+							const long at = SpotEndTestCamera(s->flags,
+								skip_now, gfLevelId == LVL5_TITLE,
+								last_camera);
+
 							ctype = camera.type;
 							camera.type = HEAVY_CAMERA;
 
-							if (gfLevelId != LVL5_TITLE)
+							if (at >= 0)
+								TestTriggersAtXYZ(SpotCam[at].x, SpotCam[at].y,
+									SpotCam[at].z, SpotCam[at].room_number,
+									1, 0);
+							else if (gfLevelId != LVL5_TITLE)
 								TestTriggersAtXYZ(camera.pos.x, camera.pos.y, camera.pos.z, camera.pos.room_number, 1, 0);
 							else
 							{

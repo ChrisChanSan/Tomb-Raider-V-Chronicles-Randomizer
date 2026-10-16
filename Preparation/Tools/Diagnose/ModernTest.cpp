@@ -61,6 +61,9 @@
  * arrangement as the one above. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pageclass.h"
 #include "../../../TOMB5 Code/TOMB5/game/mirror_math.h"
+/* Where a flyby makes its heavy-trigger test - pure as well (spotcam_end
+ * below). */
+#include "../../../TOMB5 Code/TOMB5/game/spotcam_math.h"
 /* Which opaque triangles of an HD object are cut out - pure as well
  * (model_cut below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model_cut.h"
@@ -19315,6 +19318,229 @@ static void shadow_walk()
 		"clipped", 0, 0);
 }
 
+/* The flyby's heavy-trigger tests on a skip (game\spotcam_math.h), against a
+ * model of one frame of CalculateSpotCams in its own order: the spline's
+ * place from the frame-start position, the step, the skip's jump to 0x10000,
+ * the camera placed there, an armed test made there, the segment end arming
+ * the reached camera's test, the refill to cameras [c-1, c, c+1, c+2] and,
+ * past the last camera, the SNAPBACK end with its test or the spline to the
+ * chase camera. The cameras stand on a line, x only; the model's spline is
+ * linear between knots 1 and 2, exact at 0 and 0x10000 as the engine's is.
+ * A sequence starts as SP_SNAPCAMERA starts it: knots [c0, c0, c1, c2]. */
+struct SpotSim
+{
+	std::vector<long> x;	// the cameras' places
+	std::vector<int> flags;
+	long chase;				// the chase camera's place
+	long speed;
+	int skipFrom, skipTo;	// the frames the skip is held, [from, to)
+	bool rule;				// the end test through SpotEndTestCamera
+	bool title;
+};
+
+struct SpotTest
+{
+	long at;
+	int cam;
+};
+
+static std::vector<SpotTest> spot_run(const SpotSim& m)
+{
+	std::vector<SpotTest> out;
+	const int last = (int)m.x.size() - 1;
+	long k[4];
+	int cur = 1, armed = (m.flags[0] & SPOT_TESTTRIGGER) ? 0 : -1;
+	long pos = 0;
+	bool toCamera = false;
+
+	for (int i = 0; i < 4; i++)
+		k[i] = m.x[i == 0 ? 0 : (i - 1) % (last + 1)];
+
+	for (int f = 0; f < 100000; f++)
+	{
+		const long cp = k[1] + (long)((long long)(k[2] - k[1]) * pos / 65536);
+		const int skip = f >= m.skipFrom && f < m.skipTo && !m.title;
+
+		pos += m.speed;
+
+		if (skip)
+			pos = 0x10000;
+
+		if (armed >= 0)
+		{
+			out.push_back({ cp, armed });
+			armed = -1;
+		}
+
+		if (pos <= 0x10000 - m.speed)
+			continue;
+
+		if (m.flags[(size_t)cur] & SPOT_TESTTRIGGER)
+			armed = cur;
+
+		pos = 0;
+
+		long n[4];
+		int next = cur - 1;
+
+		for (int i = 0; i < 4; i++, next++)
+			n[i] = m.x[(size_t)std::min(next, last)];
+
+		cur++;
+
+		if (cur <= last)
+		{
+			std::copy(n, n + 4, k);
+			continue;
+		}
+
+		if ((m.flags[0] & SPOT_SNAPBACK) || toCamera)
+		{
+			if (armed >= 0)
+			{
+				const int at = m.rule ? SpotEndTestCamera(m.flags[0], skip,
+					m.title, last) : -1;
+
+				out.push_back({ at >= 0 ? m.x[(size_t)at] : cp, armed });
+			}
+
+			return out;
+		}
+
+		cur--;
+		k[0] = m.x[(size_t)cur - 1];
+		k[1] = m.x[(size_t)cur];
+		k[2] = k[3] = m.chase;
+		toCamera = true;
+	}
+
+	return out;
+}
+
+static void spotcam_end()
+{
+	printf("the flyby's trigger tests on a skip\n");
+
+	// Five cameras 1024 apart, SNAPBACK on the first, a heavy test on the
+	// last three; 655 a frame is the census's commonest speed.
+	SpotSim m;
+
+	m.x = { 0, 1024, 2048, 3072, 4096 };
+	m.flags = { SPOT_SNAPBACK, 0, SPOT_TESTTRIGGER, SPOT_TESTTRIGGER,
+		SPOT_TESTTRIGGER };
+	m.chase = 9000;
+	m.speed = 655;
+	m.skipFrom = m.skipTo = 0;
+	m.rule = true;
+	m.title = false;
+
+	// Played through: every test at its camera, the last within one step.
+	std::vector<SpotTest> t = spot_run(m);
+	const long step = 1024 * 2 * 655 / 65536 + 1;
+
+	ok(t.size() == 3 && t[0].at == 2048 && t[1].at == 3072 &&
+		t[2].cam == 4 && labs(t[2].at - 4096) <= step,
+		"spotcam: played through, each test at its camera", (long)t.size(),
+		3);
+
+	// Skipped from the first frame without the rule: the last test stands a
+	// camera short - the cause. With the rule it is at the last camera.
+	m.skipTo = 1 << 30;
+	m.rule = false;
+	t = spot_run(m);
+	ok(t.size() == 3 && t[0].at == 2048 && t[1].at == 3072 &&
+		t[2].cam == 4 && t[2].at == 3072,
+		"spotcam: skipped as before, the last test one camera short",
+		t.size() == 3 ? t[2].at : -1, 3072);
+
+	m.rule = true;
+	t = spot_run(m);
+	ok(t.size() == 3 && t[0].at == 2048 && t[1].at == 3072 &&
+		t[2].cam == 4 && t[2].at == 4096,
+		"spotcam: skipped, the middle tests where played, the last at it",
+		t.size() == 3 ? t[2].at : -1, 4096);
+
+	// The title never skips: the same tests as played through.
+	m.title = true;
+	t = spot_run(m);
+	ok(t.size() == 3 && t[2].cam == 4 && labs(t[2].at - 4096) <= step &&
+		t[2].at != 4096,
+		"spotcam: the title, skip held, tests as played through",
+		t.size() == 3 ? t[2].at : -1, 4096);
+	m.title = false;
+
+	// The skip first held halfway through the last segment: the frame
+	// starts between the cameras, the test goes to the last.
+	m.skipFrom = 350;
+	m.rule = false;
+	t = spot_run(m);
+
+	const long mid = t.size() == 3 ? t[2].at : -1;
+
+	m.rule = true;
+	t = spot_run(m);
+	ok(mid > 3072 && mid < 4096 && t.size() == 3 && t[2].at == 4096,
+		"spotcam: skipped late, the end test from mid segment to the last",
+		mid, 4096);
+
+	// Held and let go before the last segment: that end is played, the
+	// rule does not touch it.
+	m.skipFrom = 0;
+	m.skipTo = 3;
+	t = spot_run(m);
+	ok(t.size() == 3 && labs(t[2].at - 4096) <= step && t[2].at != 4096,
+		"spotcam: skip let go before the end, the end test as played",
+		t.size() == 3 ? t[2].at : -1, 4096);
+
+	// Without SNAPBACK the end runs over the spline to the chase camera:
+	// its first frame tests at the last camera, the end once more. Skipped,
+	// both stand at the last camera with or without the rule.
+	m.flags[0] = 0;
+	m.skipTo = 1 << 30;
+	t = spot_run(m);
+
+	std::vector<SpotTest> old;
+
+	m.rule = false;
+	old = spot_run(m);
+	ok(t.size() == 4 && t[2].at == 4096 && t[3].at == 4096 &&
+		t[3].cam == 4 && old.size() == 4 && old[3].at == t[3].at,
+		"spotcam: to the chase camera, skipped, the rule changes nothing",
+		t.size() == 4 ? t[3].at : -1, 4096);
+
+	m.skipTo = 0;
+	t = spot_run(m);
+	ok(t.size() == 4 && t[2].at == 4096 && t[3].cam == 4 &&
+		t[3].at > 4096 && t[3].at <= 9000,
+		"spotcam: to the chase camera, played, the second test near it",
+		t.size() == 4 ? t[3].at : -1, 9000);
+
+	// No heavy test on the last camera: no end test, skipped or not.
+	m.flags = { SPOT_SNAPBACK, 0, SPOT_TESTTRIGGER, SPOT_TESTTRIGGER, 0 };
+	m.skipTo = 1 << 30;
+	m.rule = true;
+	t = spot_run(m);
+	ok(t.size() == 2 && t[0].at == 2048 && t[1].at == 3072,
+		"spotcam: no test on the last camera, none at the end",
+		(long)t.size(), 2);
+
+	// The rule alone: only a skipped, non-title SNAPBACK end moves.
+	ok(SpotEndTestCamera(SPOT_SNAPBACK, 1, 0, 9) == 9 &&
+		SpotEndTestCamera(SPOT_SNAPBACK, 0, 0, 9) == -1 &&
+		SpotEndTestCamera(SPOT_SNAPBACK, 1, 1, 9) == -1 &&
+		SpotEndTestCamera(0, 1, 0, 9) == -1,
+		"spotcam: the end test camera by skip, title and SNAPBACK", 0, 0);
+
+	// The census rule on flag pairs of the classic levels: RICH2 sequence 3
+	// (the lift) and RICH3 sequence 6 (the helicopter) at risk; RICH2
+	// sequence 0 (no SNAPBACK), RICH3 sequence 7 (TRACK) and RICH2 sequence
+	// 10 (no test at the end) not.
+	ok(SpotSeqEndsShort(0x1641, 0x4800) && SpotSeqEndsShort(0x4641, 0x4000) &&
+		!SpotSeqEndsShort(0x4100, 0x4100) &&
+		!SpotSeqEndsShort(0x0249, 0x4000) && !SpotSeqEndsShort(0x0651, 0),
+		"spotcam: the census rule on the levels' own flags", 0, 0);
+}
+
 /* The water's life (hd_life_rules.h): a body of squares, w by d, from the
  * world's origin, every square `depth` deep and under a ceiling. */
 static HDLifeBody life_body(int w, int d, int depth)
@@ -23000,6 +23226,7 @@ int main()
 	shadow_walk();
 	shadow_arrival();
 	shadow_cut();
+	spotcam_end();
 	life_drift();
 	life_spring();
 	life_bank();

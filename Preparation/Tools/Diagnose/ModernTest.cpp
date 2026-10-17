@@ -10891,6 +10891,37 @@ static void hd_switch_option()
 				}
 }
 
+/* Opens a file of the tree by its path relative to Diagnose\, the folder the
+ * EXE is built in: first beside the EXE (_get_pgmptr, the EXE's full path),
+ * so that a start from any working directory reads the same sources, then
+ * relative to the working directory. 0 when neither opens. */
+static FILE* tree_open(const char* rel)
+{
+	FILE* f = 0;
+	char* exe = 0;
+	char path[1024];
+
+	if (!_get_pgmptr(&exe) && exe)
+	{
+		const char* cut = strrchr(exe, '\\');
+		const size_t dir = cut ? (size_t)(cut - exe) + 1 : 0;
+
+		if (dir && dir + strlen(rel) < sizeof(path))
+		{
+			memcpy(path, exe, dir);
+			strcpy_s(path + dir, sizeof(path) - dir, rel);
+
+			if (!fopen_s(&f, path, "rb") && f)
+				return f;
+		}
+	}
+
+	if (fopen_s(&f, rel, "rb") || !f)
+		return 0;
+
+	return f;
+}
+
 /* The switch's wiring, in the engine's own text. The gates that ask
  * HDDrawn() live in hd_level.cpp, hd_object.cpp, hd_laradraw.cpp and
  * hd_life.cpp, which need the game and are not linked here, so their lines
@@ -10902,12 +10933,13 @@ static void hd_switch_option()
 static char* hd_switch_text(const char* name)
 {
 	char path[256];
-	FILE* f = 0;
 
 	snprintf(path, sizeof(path), "../../../TOMB5 Code/TOMB5/specific/hd/%s",
 		name);
 
-	if (fopen_s(&f, path, "rb") || !f)
+	FILE* f = tree_open(path);
+
+	if (!f)
 		return 0;
 
 	fseek(f, 0, SEEK_END);

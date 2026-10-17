@@ -19,6 +19,9 @@
  *                                             decoded eye, target and roots
  *   CutseqProbe [cutseq.bin] -cutlog n        the CUTLOG lines a run of
  *                                             cutscene n at fps_mode 1 writes
+ *   CutseqProbe [cutseq.bin] -actors [n]      every cutscene's audio track
+ *                                             and its actors' object slots
+ *                                             and node counts, or n's alone
  *
  * The file is read in place and never written. Every cutscene is decoded with
  * the engine's own decoder (game\cutseq_decode.h, the templates DecodeAnim
@@ -705,12 +708,55 @@ static int SimulateLog(const std::vector<char>& file, int n)
 	return 0;
 }
 
+/* Every cutscene's actors as the file names them: the object slot each
+ * actor is drawn from (actor_data[i].objslot) and its node count, with the
+ * audio track the cutscene plays, which the HD faces speak. Actor 0 is Lara,
+ * -1 (NO_ITEM) where she is not in it. The file's own slots, before
+ * stealth3_start (game\deltapak.cpp) puts the slot of the guard beside her
+ * on actor 1 of the four stealth3 cutscenes. With `only` above 0, that
+ * cutscene alone. */
+static int ListActors(const std::vector<char>& file, int only)
+{
+	printf("cutseq name      frames audio actors  actor:slot/nodes ...\n");
+
+	for (int n = 1; n <= CUT_COUNT; n++)
+	{
+		if (only > 0 && n != only)
+			continue;
+
+		long size;
+		char* data = SceneData(file, n, &size);
+
+		if (!data)
+		{
+			printf("%6d %-9s not in the file\n", n, CUT_NAME[n]);
+			continue;
+		}
+
+		const NEW_CUTSCENE* cut = (const NEW_CUTSCENE*)data;
+		const int actors = cut->numactors;
+
+		printf("%6d %-9s %6d %5ld %6d ", n, CUT_NAME[n], cut->numframes,
+			cut->audio_track, actors);
+
+		for (int i = 0; i < actors && i < 10; i++)
+			printf(" %d:%d/%d", i, cut->actor_data[i].objslot,
+				cut->actor_data[i].nodes);
+
+		printf("\n");
+		free(data);
+	}
+
+	return 0;
+}
+
 int main(int argc, char** argv)
 {
 	const char* path = DEFAULT_FILE;
 	int argi = 1;
 
-	if (argi < argc && strcmp(argv[argi], "-frames") && strcmp(argv[argi], "-cutlog"))
+	if (argi < argc && strcmp(argv[argi], "-frames") &&
+		strcmp(argv[argi], "-cutlog") && strcmp(argv[argi], "-actors"))
 		path = argv[argi++];
 
 	FILE* fp = fopen(path, "rb");
@@ -745,6 +791,9 @@ int main(int argc, char** argv)
 
 	if (argi + 1 < argc && !strcmp(argv[argi], "-cutlog"))
 		return SimulateLog(file, atoi(argv[argi + 1]));
+
+	if (argi < argc && !strcmp(argv[argi], "-actors"))
+		return ListActors(file, argi + 1 < argc ? atoi(argv[argi + 1]) : 0);
 
 	printf("%s: %zu bytes\n", path, file.size());
 

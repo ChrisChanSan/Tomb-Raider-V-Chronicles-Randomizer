@@ -2600,6 +2600,39 @@ water surface", carries the tables.
     run (the engine's, every piece whole, the air pieces alone, every piece
     in the window, none, the whole group in the window) and the walk's copy
     of entry 246 with a switch to leave it out. OWN, this project's tool.
+248. **The plane of a claimed face** (`hd_level.cpp`, `DecidePairs`; `hd_vis.h`,
+    `HDVisFacesShareAPlane`) - with `hd_vis` 1 a piece of a room's art standing
+    in the air of a room its own room has no link with is drawn whole only
+    when a claimed face of its pair that the classic path draws this frame
+    stands in the plane of the piece's own face (every corner within one
+    unit); otherwise inside its room's window. It narrows entry 245 and keeps
+    `hd_vis` 0 as it was. OWN: the plane test and its use, read from the
+    reason the pieces are answered per pair (the art of one wall reaches over
+    the seams of that wall's faces). DATA (RoomProbe `-vis 1 -visplane`,
+    `-visfaces`): ANDREA1's brick block of room 93 seen from the balcony of
+    room 68, kept whole by the block's floor in sight while its roof and
+    walls stood in room 101's space, 2,304 pixels at 1,280 x 720 down to 0;
+    over the sweep sets two views more change (ANDREA3 room 16 at yaw 270,
+    room 8's wall in room 115's air cut to its window, 59,516 pixels;
+    ANDREA2 room 115 at yaw 0, 405) and none else.
+249. **The classic room the visibility path leaves out** (`hd_level.cpp`,
+    `VisHidesClassicRoom`, asked by `HDFrameRoom`; `hd_vis.h`,
+    `HDVisClassicRoomHidden`) - with `hd_vis` 1 a room drawn classic whose own
+    group holds no art, none of whose classic faces any art covers (wholly or
+    in part), and whose inside holds a guest of the visibility tables (a
+    linked group's art, eight triangles or more) draws none of its faces.
+    OWN, from the owner's decision on ANDY3's canopy (the art's trees replace
+    the flat faces that stood in for them). DATA (TrgProbe `-classicart
+    -perface`, `-vistable -visroom`; RoomProbe `-classicroom`): of the 21
+    classic rooms with faces in the fifteen levels it takes ANDY3 88, 118 and
+    122 and ANDY1 212, each a band of painted tree trunks and leaves round a
+    forest's trees, all under the sky; at round 11's canopy place 219,836
+    pixels change, 84,808 of them to sky, the rest to room 35's trees.
+250. **RoomProbe `-visplane`, `-visfaces`, `-visportals` and `-walkdoors`**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`) - entry 248 on and off, a
+    piece's claimed face with its corners under its decide line, a room's
+    portal records with their world corners, and every closed door with the
+    portals it shuts. OWN, this project's tool.
 
 ## Credited, but not contained here
 

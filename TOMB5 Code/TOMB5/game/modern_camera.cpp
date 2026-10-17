@@ -897,8 +897,8 @@ void ModernCameraUpdate(const MODERN_CAMERA_CFG* cfg, MODERN_CAMERA_STATE* state
  * MODERN_CAMERA_HIDE_DIST stays a number a test can hold to its origin; which
  * distance is measured, once per frame, and every path that draws her
  * (game\draw.cpp, specific\hd\hd_laradraw.cpp, the braid, the shadow) asking
- * the same question, is the engine's side. A hard cut and not a fade: the
- * Remaster's camera cuts her within a twelfth of a second. */
+ * the same question, is the engine's side. A hard cut and not a fade, a free
+ * choice of this project. */
 long ModernCameraHidesLara(const MODERN_CAMERA_CFG* cfg, long distance)
 {
 	if (!cfg)

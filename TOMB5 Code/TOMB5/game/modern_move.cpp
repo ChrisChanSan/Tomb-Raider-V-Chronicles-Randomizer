@@ -1672,10 +1672,11 @@ void ModernTranslate(const MODERN_CFG* cfg, MODERN_STATE* state, long stick_x, l
 	delta = ModernWrap((long)target - lara_yaw);
 	adelta = ModernAbs(delta);
 
-	/* 4. The directional jump out of a stand, only with a weapon drawn, as in
-	 * the Remaster. Armed, AS_COMPRESS reads the direction bits as the jump -
-	 * forward, the back flip, a side flip - and nothing turns. Unarmed, this
-	 * branch steps aside for rule 6: she turns onto the held course and runs,
+	/* 4. The directional jump out of a stand, only with a weapon drawn, a
+	 * free choice of this project. Armed, AS_COMPRESS reads the direction bits
+	 * as the jump - forward, the back flip, a side flip - and nothing turns.
+	 * Unarmed, this branch steps aside for rule 6: she turns onto the held
+	 * course and runs,
 	 * and the jump key gives the normal standing jump in the stick's direction,
 	 * so she can break out of a circle with a jump instead of a side flip.
 	 *

@@ -659,8 +659,8 @@ static void key_conflicts_cheats_inert()
 /* The mouse's five buttons are key codes above every scan code. What has to
  * hold: the codes are the five numbers the engine's mask is built on, the
  * predicate and the bit agree with them, the names are the page's, the Modern
- * row carries the three buttons of the Remaster's own keyboard page and stays
- * sound, and the conflict rule treats a button exactly as a key. */
+ * row carries the three buttons the camera hand rests on and stays sound, and
+ * the conflict rule treats a button exactly as a key. */
 static void key_mouse()
 {
 	long got[KEY_SCHEME_ROLES];
@@ -713,7 +713,7 @@ static void key_mouse()
 
 	check(KeySchemeMouseName(0x52, 0) == 0, 1, "mouse: a key has no button name");
 
-	// The Modern row: the Remaster's own three buttons, nothing else moved.
+	// The Modern row: the camera hand's three buttons, nothing else moved.
 	check(kModern[9], KEY_MOUSE_RIGHT, "mouse: the Modern row draws on the right button");
 	check(kModern[11], KEY_MOUSE_MIDDLE, "mouse: looks on the middle button");
 	check(kModern[KEY_ROLE_SECOND], KEY_MOUSE_LEFT, "mouse: and takes the secondary action on the left one");

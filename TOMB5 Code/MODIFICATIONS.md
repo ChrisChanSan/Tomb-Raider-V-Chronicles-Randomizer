@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-09-23** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-10-17** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository
@@ -16,18 +16,22 @@ after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) and two smal
 fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-09-22** by comparing every file under `TOMB5/` byte for byte against
-that first commit: **122 files changed, 98 entirely new - 220 in all**, none deleted,
-**206** of them carrying the modification notice at the top, which `grep -rl "Modified
+Measured on **2026-10-17** by comparing every file under `TOMB5/` byte for byte against
+that first commit: **128 files changed, 172 entirely new - 300 in all**, none deleted,
+**254** of them carrying the modification notice at the top, which `grep -rl "Modified
 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries the same
 notice as an XML comment. Seven files that earlier work had changed without a notice -
 `game/draw.h`, `game/tomb4fx.cpp`, `game/rope.cpp`, `game/sphere.cpp`,
 `game/deathsld.cpp`, `game/flmtorch.cpp` and `specific/polyinsert.h` - were given it in
-`7c02357`.
+`7c02357`. Four more upstream headers changed without one - `game/lara_states.h`,
+`specific/file.h`, `specific/fmv.h` and `specific/winmain.h` - were given it on
+2026-10-17.
 
-Fourteen of the 220 do not carry the notice, and none of them should:
+Forty-six of the 300 do not carry the notice, and none of them should:
 
-- the four `specific/hd/hd_shader/*.inc` are compiler output (`fxc` bytecode as a C array), regenerated from the `.hlsl` files beside them and carrying no source of this project at all;
+- the 36 `specific/hd/hd_shader/*.inc` (8 vertex and 28 pixel shaders) are compiler
+  output (`fxc` bytecode as a C array), regenerated from the nine `.hlsl` files beside
+  them and carrying no source of this project at all;
 - `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other people's files that are not modified here in any way - stb_vorbis carries its own licence at the end of the file, and the second one *is* a licence. A notice on them would claim an authorship this project does not have;
 - the other eight are under `vendor/trforge/`: five source files copied from TRForge
   (MIT), its `LICENSE`, its `NOTICE.md` and a `VERSION.txt` recording where they came
@@ -39,6 +43,10 @@ Fourteen of the 220 do not carry the notice, and none of them should:
 
 `game/trex.h`, `game/raptor.h` and `game/compy.h` carry the notice and additionally name
 tomb3 as their origin further down (section 2.3).
+
+At `5df75640` (2026-10-16), built from a clean clone of the tracked files alone, the
+four test suites ran ModernTest 15,508 checks, MenuTest 44,272, InterpTest 729 and
+LipsTest 270 with the player's `.OBJ` folder and 243 without, 0 failed each.
 
 This modified version remains licensed under the **GNU General Public License version
 3**, the same licence as the original. See `LICENSE`. The complete corresponding source
@@ -896,7 +904,7 @@ log line changed.
 the first place, rather than repaired after the drop; the drop's position and room stay
 as they are.
 
-**Commits.** `700f4c5`, `2096a92`
+**Commits.** `700f4c5`, `2096a92`, `5005f2d`
 
 ### A secret bonus, and the reward read from a file
 2026-08-03 - 2026-08-30
@@ -988,6 +996,7 @@ therefore gated at the call site, and switches itself off after the first find.
 **Commits.** `bc328a8`
 
 ### Lara blanked out in the half turn on a rope: the ROPELOG seam
+2026-09-24
 
 **What.** When Lara turns half round on a rope she disappears for a moment. The defect
 belongs to the base engine: it appears with the HD art off, at *Frame rate 30* and under
@@ -1066,16 +1075,15 @@ in eight levels, the tightrope turn 451 in four); and 52 fire on the last frame 
 degrees. In ANDREA1 the hips turn from the tick before to the flip frame by 179.3
 degrees as drawn and 0.9 under the old yaw in 48, 176.8 and 5.3 in 207, 177.0 and 11.0
 in 210, 171.9 and 9.7 in 212; the next animation's first frame follows the frame drawn
-under the old yaw by 5.9 (11), 13.4 (209) and 19.4 (213) degrees. The owner's `-log`
-session (build `Sep 24 2026 22:43:40`) shows it on four back twists: at tick 684 frame
+under the old yaw by 5.9 (11), 13.4 (209) and 19.4 (213) degrees. A play-test `-log`
+session of 2026-09-24 shows it on four back twists: at tick 684 frame
 5566 of 212 is drawn (`ARMLOG gc=684 lara=212/10`) while `MODERNLOG lara=` has gone from
 -15317 to 17451, the hips' view-space x in `ARMLOG` jumps from 44 to -44 on that tick,
 and the second's `INTERPLOG` reads `halfturn=6 root_flip=0`: the tweens into the flip
-tick blended the pose under the live, turned yaw. His video of the same build
-(`Saltos.mp4`, 60 frames a second at 165 Hz) shows a whole body seen from the front
-between frames seen from behind in both back twists it holds, video frames 237 to 239
-and 363 to 364, about one tick each, and in the forward twist two ticks unlike their
-neighbours (frames 613 to 614 and 615 to 616); which of the two forward twists that
+tick blended the pose under the live, turned yaw. A 60 fps recording of the same build,
+made at 165 Hz, shows a whole body seen from the front between frames seen from behind
+in both back twists it holds, about one tick each, and in the forward twist two ticks
+unlike their neighbours; which of the two forward twists that
 session played is not measured (the logged session played 210 and never 207). With the
 frame turned, the back twist turns 9.7, 19.4 and then 24.6 to 24.8 degrees a tick, 207
 turns 5.3 and 13.4, 48 0.9 and 5.9. It does not bridge 211's own start: 211's first
@@ -1124,8 +1132,8 @@ twice is itself, the one-axis cases, and the three kinds with their pairs.
 stands on another animation (11, 209, 211 or 213, key 0 in all 52 cases, measured over the
 thirteen campaign levels), and the pose rule refuses every tween across an animation
 change, so the frames between the two ticks wore the new tick's pose from the first of
-them on. After 210 that pose is 211's first key, the seam above: in the owner's `-log`
-session of build `Sep 25 2026 00:05:52` (JOBY2), `ARMLOG`'s joints out of
+them on. After 210 that pose is 211's first key, the seam above: in a play-test `-log`
+session of 2026-09-25 (JOBY2), `ARMLOG`'s joints out of
 `lara_matrices` step 178.3, 179.0, 178.6 and 178.3 degrees in the HD body and 178.3 and
 177.8 in the classic one from the last frame of the `TURNLOG` tick to the first of 211,
 where a step between two frames at 165 Hz is about 3 degrees, and the first tick of 211
@@ -1615,7 +1623,9 @@ line; vanilla's averaged upper arm has determinants 0.25, 0.0003 and 0.25); 76 a
 key 0 to 1 far and no seam. `RootProbe -sweep` over ANDREA1 prints what it printed
 before, byte for byte.
 
-**Commits.** `b643607`, `b7607c9`, `a9da3ac`, `ef9891f`
+**Commits.** `b643607`, `b7607c9`, `a9da3ac`, `ef9891f`, `e845165`. The subject of
+`b643607` says a far key-frame pair is drawn from its nearer frame; the code draws the
+pair's first key frame.
 
 ### Level Select, a keyhole that survives a save, and the underwater pickup animation
 2026-07-31 - 2026-09-14
@@ -3088,7 +3098,7 @@ brightness, the floor's edge, a kicked door swinging open in the glass, the 56 t
 doorway and the way from 134 to 130 for a second Lara, and that nothing is doubled outside
 the glass.
 
-**Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`
+**Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`, `1093689`
 
 ### The reflection stays behind the glass
 2026-09-29
@@ -3211,7 +3221,7 @@ glass, turning, walking along it, the braid swinging, nothing of the reflection 
 of it; in the middle of the washroom the reflection whole; the cabin doors and room 177's
 door still in the glass; the lobby floor and the other levels as before.
 
-**Commits.** `add3a27`, `35d7a1f`, `578047a`
+**Commits.** `add3a27`, `35d7a1f`, `578047a`, `d305f23`
 
 ### A seam for the poison sway
 2026-09-29
@@ -3772,7 +3782,9 @@ levels of the previous entry. In the log, `GLOSSLOG skipped` and the GLOSSLOG le
 'Round 189b (#189): the sheen is bounded by the surface's own light', 'Round 189b (#189):
 every room that wears the page shines', 'Round 189b (#189): the tools and the suite',
 'Round 189b (#189): the record follows', 'Round 189b (#189): what review pass 1 found, and
-a whole build every time'.
+a whole build every time'. The body of the commit that bounds the sheen also names the
+lamps' normalisation to the 90th percentile; `HD_GLOSS_LAMP_NORM` came with the commit of
+the light field, and the bound's commit does not touch it.
 
 ### The sheen at a strength that shows
 2026-10-01
@@ -4948,7 +4960,7 @@ against 1,692 more of a door frame and 1,137 more of a palm, with all the air's 
 No load-time cache: the
 slowest level takes about 110 ms, under the 300 ms that would call for one.
 
-**Commits.** `42ff30d`, `944329c`, `b09b724`, `12fc789`, `0fb1409`
+**Commits.** `42ff30d`, `944329c`, `b09b724`, `12fc789`, `0fb1409`, `2508eb0`
 
 **Round 5, after the owner's play test of the air rule (2026-10-11).** The build of
 `4f725a8` was played with `hd_air` 1. What he found, in his words: the room art looks good
@@ -9736,7 +9748,8 @@ lights' change in time', 'Round 188 (#188): the suites', 'Round 188 (#188): the 
 follows', 'Round 188 (#188): what the correction's review pass 1 found', 'Round 188
 (#188): the record follows', 'Round 188 (#188): the shadow's light is a fixed one, and the
 lamps pull by a number of the table', 'Round 188 (#188): the suites', 'Round 188 (#188):
-the record follows', 'Round 188 (#188): the record follows'.
+the record follows', 'Round 188 (#188): the record follows'. The body of `ac05dd9` gives
+`shadow_pull` 7 checks and `shadow_fixed` 11; they are 8 and 10.
 
 ### The projected shadow: the creatures cast as well, into a second map
 2026-10-04
@@ -10826,8 +10839,8 @@ reaches exactly 2.0 in eleven files and lies above 1 in 3.3 % of the 39,788,013 
 
 The room light rests on these rank counts, which no scale on either triple can change.
 The picture check adds less. RoomProbe's RICH2 X-ray view (seed room 6, camera 1900
--24500 3700, yaw minus 75, pitch 8, the view an earlier round matched to the Remaster
-recording's frame `rem_t4`) is drawn from scratch copies of the install's RICH2 files
+-24500 3700, yaw minus 75, pitch 8, the view an earlier round matched to a frame of a
+recording of the Remaster) is drawn from scratch copies of the install's RICH2 files
 whose two triples are rewritten so that the shader's sum draws the rule under test - the
 product as `c1 * c2 / 255` and 0, one triple alone as that triple and 0. The copy left
 as it is draws the install's own picture to the byte, and every copy finds all 209 of
@@ -10944,7 +10957,7 @@ slots, but the triangles of the art inside each such item's box were counted by 
 that is not in this tree.
 
 **Commits.** `7c82c34`, `1d364f7`, `af37039`, `28fbd9a`, `df7b39a`, `565eaf8`, `f312f7b`,
-`6f46ac0`, `243f5bf`, `e325f04`, `56a248c`
+`6f46ac0`, `243f5bf`, `e325f04`, `56a248c`, `12f1384`, `0fb2d9a`
 
 ### The water sheets: this project's own water surface
 2026-10-07
@@ -15360,7 +15373,7 @@ entry 169 now says which of its two sentences holds when.
 `0f76a5c`; the fix pass `e801c4f`, `fea1fe7`, `95d7b2f`.
 
 **Round 3, after the owner's second play test.** The owner played round 2 on
-2026-10-11 (the build of 23:11:47) and wrote, put into English: the river ends are fine.
+2026-10-11 and wrote, put into English: the river ends are fine.
 The fish flee only in a horizontal plane, the vertical is missing. The drips now come
 from the ceiling and look good. The barrels made no rings on the water surface for him.
 The aquarium has no fish. In ANDREA2 the floats may vanish under the water surface
@@ -15492,7 +15505,7 @@ foam at the grate is the water's look.
 **Commits.** `3f9333c`, `be2277f`, `2485257`, `6b2637b`, `443008c`.
 
 **Round 4, after the owner's third play test.** The owner played round 3 on 2026-10-13
-(the build of 02:57:04; his third play test of the life, his sixteenth in all) and wrote,
+(his third play test of the life, his sixteenth in all) and wrote,
 put into English: fish are still a problem in general - they flee as far as the wall and
 stay stuck there. In RICH2 they are only in an aquarium, and in the aquarium they have
 the flight mode too; in there they should simply swim to and fro a little. And on a
@@ -17119,7 +17132,7 @@ and `HDLOG level=<L> hd_share ms=` sums the level's whole HD share. The two fing
 time is in their own `hash_ms` and in no other number of the lines.
 
 **Why.** Collected under #199, opened on 2026-10-09 with the loading bar as its first
-entry. The owner's log of the build of 2026-10-09 18:38 put the HD share of a level load
+entry. The owner's log of a build of 2026-10-09 put the HD share of a level load
 at 1.2 to 3.9 s (TITLE 3.9, RICH2 3.7, ANDREA2 3.5, JOBY2 2.8, ANDY3 2.6, JOBY5 2.6, ANDY1
 2.4, ANDREA1 2.4, JOBY4 1.2), the room build at 0.7 to 3.0 s on one core (TITLE 3.0, RICH2
 2.5, ANDREA2 2.5, JOBY2 1.8, ANDY3 1.5, ANDY1 1.3, ANDREA1 1.3, JOBY5 1.1, JOBY4 0.7), the
@@ -17347,10 +17360,10 @@ picture. New: the `LOADLOG level=<L> step=<step> ms=<n>` lines behind `-log` and
 `RoomProbe -loadtime`.
 
 **Why.** On 2026-10-14 the owner asked to shorten the load of a savegame inside a level,
-and, before anything is changed, for the measurement of the load's phases. His five logs
-of 2026-10-12 to 14 (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and, recorded for
-this round, `19_alllevels`; 2560 x 1440, `hd_enable 1`, `hd_air` 1 and 2) are the in-game
-numbers; nobody could play in this round.
+and, before anything is changed, for the measurement of the load's phases. His five
+play-test logs of 2026-10-12 to 14 (the fifth, of every level, recorded for this round;
+2560 x 1440, `hd_enable 1`, `hd_air` 1 and 2) are the in-game numbers; nobody could play
+in this round.
 
 **How.** *The seam.* One step is a clock read (`QueryPerformanceCounter`) and a `Log`
 call on lines of their own beside the call they time; no call changed and no existing
@@ -17384,8 +17397,8 @@ water's steps, the objects (`hd_object.cpp` is not linked), the font, `life` and
 second RoomProbe. `hd_render.cpp` is not this round's file (the room art and the splash
 rounds work in it), so the engine's `LOADLOG` has `fill` as one step.
 
-**Measured.** *Per level, the owner's logs.* `log_test19_alllevels` (built 2026-10-14
-02:30:36, `hd_air 2`) loads every level fresh and then a save of it inside it, 34 loads;
+**Measured.** *Per level, the owner's logs.* The fifth log (a build of 2026-10-14,
+`hd_air 2`) loads every level fresh and then a save of it inside it, 34 loads;
 medians in ms out of the tick in front of the `S_LoadLevelFile:` lines (steps of 15.6 ms)
 and the QPC fields of the HDLOG lines; `gap` is the HD build's tick span less every QPC
 field that books it:
@@ -17408,18 +17421,17 @@ field that books it:
 | RICHCUT2 | 1 | 2141 (2141) | 94 | 47 | 23 | 1203 | 945 | 310 | 631 | 214 | 8 | 11 | 0 | 797 |
 | TITLE | 3 | 3422 (3282) | 94 | 203 | 109 | 2500 | 2172 | 1017 | 866 | 254 | 31 | 14 | 0 | 625 |
 
-Over all 64 loads of the five logs (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and
-`19_alllevels`; the four older ones hold 18 + 5 + 3 + 4 loads of the builds of 2026-10-12
-and 14): 1.8 to 4.8 s a load, the HD build 50 to 77 % of it, the loading thread 2 to 30 %,
-the bar's tail 6 to 42 % (0.31 to 0.80 s). The existing lines already account for the HD
-build to within the tick (`gap` -2 to 28 ms): the built line's `phases=` and the
-`hd_share` line split it, and `pages` is a part of `built`. The one block left is `fill`.
-`hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG` scan depends on the file
-cache: RICH2 404 ms cold, 88 to 176 warm.
+Over all 64 loads of the five logs (the four older ones hold 18 + 5 + 3 + 4 loads of the
+builds of 2026-10-12 and 14): 1.8 to 4.8 s a load, the HD build 50 to 77 % of it, the
+loading thread 2 to 30 %, the bar's tail 6 to 42 % (0.31 to 0.80 s). The existing lines
+already account for the HD build to within the tick (`gap` -2 to 28 ms): the built line's
+`phases=` and the `hd_share` line split it, and `pages` is a part of `built`. The one
+block left is `fill`. `hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG`
+scan depends on the file cache: RICH2 404 ms cold, 88 to 176 warm.
 
 *Savegame loads.* The mark is `INTERPLOG ... invalidated: savegame loaded` after the bar;
 a load inside the same level is one whose load before it was the same level and which
-started from `invalidated: load menu`. `log_test19` has one for 13 levels (fresh load
+started from `invalidated: load menu`. The fifth log has one for 13 levels (fresh load
 first, then the save inside it; ms):
 
 | Level | fresh | inside it | difference | thread fresh / inside | HD build fresh / inside | bar tail fresh / inside |
@@ -17441,8 +17453,8 @@ first, then the save inside it; ms):
 A load inside the level costs what a fresh load of it costs: -422 to +109 ms, the median
 -47. The loading thread is shorter the second time (the files are in the cache), the bar's
 tail longer, and on four levels (ANDY2, JOBY4, JOBY5, RICH1) the HD build is 250 to 390 ms
-shorter (the pages and the models' files cached as well). The two older ones: `log_test16`
-line 92151 RICH2 3,219 against 3,172, `log_test18` line 18254 RICH2 4,094 against 4,047.
+shorter (the pages and the models' files cached as well). The two older ones: the first
+log RICH2 3,219 against 3,172, the fourth RICH2 4,094 against 4,047.
 
 *FILL, split* (the scaffold, `RoomProbe -loadtime -threads 16`, three runs each over
 the fifteen levels at `hd_air` 1 and 2, medians, on a quiet machine - a first sweep
@@ -17451,8 +17463,8 @@ slower and was discarded). The fair scale between this machine and the owner's i
 the pages, whose code did not change between his builds and this one: the probe's
 pages over his lie between 0.93 and 1.65 per level, RICH2 at `hd_air 2` 1.33; where
 he has an `hd_air 2` log the fill agrees with that within about 10 % (RICH2 1.26,
-ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). Against `log_test19` (every level, `hd_air
-2`, the build of 2026-10-14 02:30) the pages factor is 0.86 to 1.82 and the fill
+ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). Against the fifth log (every level, `hd_air
+2`, a build of 2026-10-14) the pages factor is 0.86 to 1.82 and the fill
 factor 1.02 to 1.67; with RICH2's 1.35 from that log the parts below come out within
 2 % of these (hulls 503, pool and join 457, carry cells 170). RICH2, `hd_air 2`,
 probe ms / 1.33 (his own in brackets): fill 1,205 [1,277] = `MarkAirHulls` 512 (42
@@ -17533,7 +17545,7 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
   surfaces and frames, the objects' binding and Lara, the life, the re-dress; and the
   flips back, new work that no load does today and that no bound below holds). The
   re-bind is an estimate: no owner log times its parts one by one. Its bound out of the
-  RICH2 load above (`log_test18` line 18254, its `hd_share` line 20331): tables 4,
+  RICH2 load above (the fourth log, with its `hd_share` line): tables 4,
   statics 17, sheets 19, surfaces and frames 0; the objects less their models and ring,
   617 - 576 - 32 = 9, hold the binding and Lara; the build's `gap`, 24, holds the
   release, the budget, the life, the re-dress and the tick's rounding - 73 ms if all of
@@ -17590,7 +17602,7 @@ the word `skipped=1`.
 your recommendation, B plus C." Of C, the parts outside the room art's fill are built here
 (C1); the hulls, the largest groups, `MarkCarryCells` on the pool and the sidecar (C2)
 live in the code another round is changing and follow its merge. His `-log` run of the
-seam's build (20:48:11) loads ANDREA1 fresh in 3,722 ms and a savegame inside it in
+seam's build loads ANDREA1 fresh in 3,722 ms and a savegame inside it in
 3,594: `hd_build` 2,507 of it, of which the steps B still runs take about 50.
 
 **How.** *The key* (`hd_levelkey.h`, pure, so that ModernTest checks the engine's own
@@ -17712,7 +17724,7 @@ B runs again took 50 (`release` 6 and `budget` 6 now skipped; `sheets` 18, `surf
 `frames` 0, `obj_bind` 4.5, `obj_lara` 0.4, `life` 0, `redress` 6.5) plus the objects'
 plan (`obj_map` 0.3, `obj_plan` 1.4, `obj_ring` 48.3, `obj_wardrobe` 0.1), and the scan
 93 ms on the loading thread: B saves about 2.5 of the 3.6 seconds there; the
-classic thread, the load picture and the bar's tail remain. On RICH2 (`log_test19`,
+classic thread, the load picture and the bar's tail remain. On RICH2 (the fifth log,
 inside it 3,985 ms, HD build 2,969, scan 112) about 3 seconds. The `obj_ring` part
 shrinks with the folder listing below.
 *C1, RoomProbe and ModelProbe on this machine*, the afbb6f6b tool alternating with the
@@ -17892,8 +17904,8 @@ frame. At position 100 and target 100 `S_DrawLoadBar` draws the full bar, finds
 `loadbar_pos >= loadbar_steps` and returns done, so nothing after the work can loop any
 more.
 
-**Measured.** The owner's four logs with `LOADLOG` lines (built 2026-10-14 20:48 to
-2026-10-15 00:15; 48 loads; display 165 Hz, VSync on). *The pace.* On a load whose
+**Measured.** The owner's four logs with `LOADLOG` lines (builds of 2026-10-14 and
+2026-10-15; 48 loads; display 165 Hz, VSync on). *The pace.* On a load whose
 counted target runs ahead of the drawn bar - TITLE, JOBY4 and RICHCUT2 with 9 to 16
 pages, 100 / 29 to 100 / 36 per call - every frame from the bar's start to the join moves
 the bar, and so does every frame of the tail: 51 frames for the positions 0 to 100.
@@ -17992,7 +18004,7 @@ first waited out a 1/60 s tick. *F* is a change of the classic path as well, at
 `TextureStageLock` and `TextureStageUnlock`, the `LOADLOG` word `kept=1` on the step
 `textures`, the line `HD screen: <path> kept`.
 
-**Why.** After round 3 the owner's newest log (`log_test25_bar`, built 2026-10-15 01:14,
+**Why.** After round 3 the owner's newest log (a build of 2026-10-15,
 33 loads) put a save load inside the level at 327 ms, the median of 15: the loading
 thread 168 (of it `textures` 139), `screen` 116, `hd_build` 24, `warmup` 15. Asked
 whether the total could come down further, he was given three candidates with their
@@ -18164,7 +18176,7 @@ takes the lock inside a device call, so the two locks are always taken in one or
 Outside a load one thread draws and nobody waits on it. The lock lines are in the
 classic path as well; they belong to *F*.
 
-**Measured.** *Expected on the owner's save loads* (`log_test25_bar`, 15 loads, the
+**Measured.** *Expected on the owner's save loads* (that newest log, 15 loads, the
 medians above): `textures` 139 -> about 4 ms (the harness: 2.5 to 3.8 ms for a kept
 `LoadTextures` on every level; his misc block 0 to 16 by the ticks), so the loading
 thread 168 -> about 33, give or take the bar loop's turn at the join (up to one tick
@@ -18320,7 +18332,7 @@ swap chain (`D3DSWAPEFFECT_DISCARD`, one back buffer) keeps its pixels across a 
 
 The costs. One loading frame - the picture, the bar, `DrawSortList`, the Present without
 a tick to wait for - is the owner's `step=bar` on a fresh load: 0.8 to 1.1 ms. The 34
-loads of his newest log (the build of 2026-10-15 03:39): 16 saves loaded inside their
+loads of his newest log (a build of 2026-10-15): 16 saves loaded inside their
 level, total 50 to 94 ms (`screen` 16.2 to 16.5 - the one frame waiting out its tick -,
 `thread` 18 to 36, `hd_build` 8.5 to 58); 18 fresh loads, total 0.96 to 3.26 s (`thread`
 35 to 434, `hd_build` 845 to 2,668, of which `begin` 542 to 2,050 and `objects` 144 to
@@ -18511,7 +18523,7 @@ for any of them. New: `HDLevelKeyEarly` and `HDLevelNextLoad` (`hd_level.h`),
 `LoadBuildsHD` and `LoadScreenModeOf` (`specific/loadbar_math.h`), the word `shown=` at
 the end of the `LOADLOG` step `bar`.
 
-**Why.** The owner played round 1 (his `-log` run of the build of 2026-10-15 21:07) and
+**Why.** The owner played round 1 (his `-log` run of a build of 2026-10-15) and
 wrote: "The brake feels great. The transitions inside a level look great too, super
 smooth. One thing I overlooked: Loadbar = Off has a side effect. When I load across
 levels or go back to the title, that takes longer than inside a level because of the HD
@@ -20457,7 +20469,7 @@ slide for one tick, and a falling object in cut scene 38 (1029 to 1032 a frame, 
 arc, 62 of them with an axis step of 384 or more; holding a node on such a step would
 catch them.
 
-**Commits.** `d2bfb86`, `04ba96f`, `ee81554`, `8b64a97`
+**Commits.** `d2bfb86`, `04ba96f`, `ee81554`, `8b64a97`, `01c4f72`
 
 ### The level warm-up
 2026-09-07
@@ -20983,7 +20995,7 @@ by itself the re-seat costs the little that camera moved. Across a cut the camer
 tick is another camera: the seam hands the translation the orbit's world yaw under the
 chase camera and the measured eye-to-target vector under the sniper camera, and the two
 differ by the angle between the views. The measurement is a rich2 log through the sniper
-camera (build `Sep 26 2026 12:18:13`, 2626 `MODERNLOG` tick lines, one init line, no gap
+camera (a build of 2026-09-26, 2626 `MODERNLOG` tick lines, one init line, no gap
 in `f=`): 38 changes of `old_type` between 0 and 1, 37 of them with the stick out on both
 sides, the right stick at rest and `cam_step=0` at every one. The course survived the cut
 itself only while the thumb had not yet drifted 384 units since the last seat. 36 of the
@@ -22149,7 +22161,7 @@ the standing line sits
 `MODERN_LEDGE_HANG_OUT` (100) units past it, the engine's own catch-snap
 distances; `MODERN_LEDGE_RESIDUAL` (15) is the most a walk or a stand may lie
 off the line and still start the move; `MODERN_LEDGE_SNAP` (0x18E2) is the
-catch's own 34.6-degree cardinal window (`:433`, `:443`-`:445`);
+catch's own 35-degree cardinal window (`:433`, `:443`-`:445`);
 `MODERN_LEDGE_NEAR` (512) is how close an edge has to be before `LEDGELOG`
 reports the refusal set (`:449`). The nine refusals, each one engine test asked the way its
 own site asks it (`LaraLedgeRefusals`, `game/lara.cpp:6150`-`6317`, with the
@@ -22174,8 +22186,14 @@ accepts no longer reaches for a ledge below the way `lara_as_forwardjump` does
 AS_REACH` once she is already falling) — the new trigger catches her before
 she leaves the ledge; a sprint and a refused edge still reach below. The phase (`modern_ledge_phase`) and the
 heading she hangs with are appended to `tomb5_save_info` as `ledge_phase` and
-`ledge_heading` (`global/types.h:1399`-`1400`) and written/read only while she
-is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
+`ledge_heading` (`global/types.h:1399`-`1400`). Every save of this build carries them:
+`LaraLedgeSave` (`game/savegame.cpp:103`) writes the phase and heading in the hang and
+`MODERN_LEDGE_NONE` and 0 otherwise, so the block written after `SAVEGAME_INFO`
+(`specific/gamemain.cpp:176`) has grown from 4 to 7 bytes under `#pragma pack(push, 1)`.
+The read is length-checked: `LaraLedgeLoad` (`game/savegame.cpp:116`-`117`) takes each
+field only when the byte count `ReadFile` returned (`specific/gamemain.cpp:229`) reaches
+past its offset, and uses them only while she is in the hang. An older build reads its
+own 4 bytes of the block and leaves the 3 after them unread. A save that cannot go
 on this way is settled once by the same refusal test into the hang or a fall.
 Under the Modern orbit the camera swings round with her turn, ending behind her
 back over the drop where the walls allow it, and keeps looking at her all the
@@ -22383,7 +22401,7 @@ and written where each is computed (`:595`, `:1246`-`1249`, `:1780`, `:1873`, `:
 
 **Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
 `8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`, `eafab87`, `5a5bf5d`, `2b6ac8e`,
-`be07363`, `eaa95a4`, `c2112d7`, `8840d13`
+`be07363`, `eaa95a4`, `c2112d7`, `8840d13`, `dcfd375`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20
@@ -22983,7 +23001,7 @@ as `ed676ba`'s tool does (15, 15, 12 and 6, the first 15 also equal to the store
 pictures): this pass changes no picture.
 
 **The owner's first F12 test.** A `-log` play test of 2026-10-14 with the build of
-`ed676ba` (`PCtomb5 built Oct 14 2026 20:06:54`) in ANDREA2, ANDREA1 and ANDY3 at 165 Hz,
+`ed676ba` in ANDREA2, ANDREA1 and ANDY3 at 165 Hz,
 felt with no frame drops or hitches. It writes 79 `HDLOG switch` lines: 66 flips (ANDREA2
 59, ANDY3 6, ANDREA1 1; 26 by the key, 53 by the pad chord) and 13 presses that answer
 `hd_enable=0 nothing to switch`, all made while the *HD textures* row stood off (83.4 to
@@ -23798,6 +23816,73 @@ round, plan and project-owner references from `hd_pagecache.h`, `game/accent.inc
 
 **Commits.** `bc0b13c`, `6a1854d`, `9c7d1e5`, `d28d251`, `bcdbc7d`, `e041c3f`
 
+### The record completed before the push (#211)
+2026-10-17
+
+**What.** Text and comments only, no code line: four modified upstream headers carry the
+GPLv3 5(a) notice, the head of this record states the measurement as it stands today, the
+index has a row for every task of the delta, nine review commits are cited, no tracked
+file names a recording, screenshot or log of the play tests by file, and the ledge hang's
+save sentence, the catch window's angle and the tools' README say what the code and the
+tree hold.
+
+**Why.** The audit of 2026-10-16 found the record incomplete: F-023 and F-024 (four
+headers without the notice), F-025 and F-027 (the head at the counts of 2026-09-22, the
+freeze's suite counts in no tracked file), F-026 and F-031 (eight tasks without an index
+row, an entry without its date line), F-032 and F-033 (nine review commits on no Commits
+line, three commit texts to correct in the record), F-001 (play-test videos and logs named
+by file, decided: all of it goes, as unnecessary for GitHub), F-028 (the ledge fields
+described as written only in the move), F-062 (34.6 degrees where 0x18E2 is 35.0) and
+F-037 (the tools' README counting an older tree).
+
+**How.**
+
+- The notice block of `game/lara.h`, copied byte for byte, heads `game/lara_states.h`,
+  `specific/file.h`, `specific/fmv.h` and `specific/winmain.h`.
+- Section 1 of this record: the date range runs to 2026-10-17, the measurement is that of
+  2026-10-17 with the 46 exceptions by kind, the four headers are named beside `7c02357`,
+  and the suite counts at `5df75640` stand after the origin sentences.
+- The appendix: rows for #162, #163, #174, #175, #176, #178, #179 and #197; #161 gains its
+  two entries on the mouse and the movement keys; the rows of #173, #198, #205, #207, #208
+  and #210 name the headings of the entries that hold them; the two #194 rows are one, and
+  #208 stands before #209. The rope entry's date line is 2026-09-24, the date of its first
+  commit, `4d578e9`.
+- The Commits lines of eight entries cite `01c4f72`, `d305f23`, `1093689`, `e845165`,
+  `dcfd375`, `5005f2d`, `2508eb0`, `0fb2d9a` and `12f1384`. One sentence each corrects
+  `b643607`'s subject (the tightrope entry), `ac05dd9`'s check counts (the projected
+  shadow's first entry) and the 189b commit that bounds the sheen (the shine's light field
+  entry).
+- Twenty-three passages name no file of the play tests any more: the five load logs of
+  2026-10-12 to 14 are the first to the fifth log, the newest one is the newest log, the
+  video is a 60 fps recording of the same build without its frame numbers, the frame of
+  the Remaster recording is a frame of a recording; the line numbers inside the logs and
+  the build stamps of the sessions are gone, dates stay, and every measured value stays.
+- The ledge hang entry says that every save of this build writes `ledge_phase` and
+  `ledge_heading` (a block of 7 bytes where it was 4), that the read is length-checked,
+  and what an older build does with the 3 bytes; its window and the comment at
+  `MODERN_LEDGE_SNAP` in `game/modern_move.h` say 35 degrees.
+- `Preparation/Tools/README.md`: the counts, the two suite rows, `VisInput.h`, and the
+  working folder ModernTest and MenuTest need.
+
+**Checked.** Every number above comes from a script over the tracked tree at this round's
+head. Against the first commit, under `TOMB5/`: 128 files changed and 172 new, 300 in all,
+none deleted, 254 with the notice; the 46 without are the 36 compiled shader `.inc` (8
+vertex, 28 pixel, from 9 `.hlsl`), 2 vendored lib files and 8 under `vendor/trforge/`, and
+no other changed or new file lacks it. The commits in `6aff86d..HEAD` carry 38 task
+numbers and each has a row; every title in the appendix's rows is a heading of the record,
+no number has two rows, and the rows run in number order. All nine review commits stand on
+a Commits line. The scan for the play tests' file names, in-log line numbers and session
+build stamps finds 39 hits at `5df75640` and 0 now. Under `Preparation/Tools/Diagnose/`:
+54 tools with a `main`, 47 `b*.bat`, 45 tools with a script, 9 without, `be.bat` and
+`bshader.bat` building no tool; started from another folder ModernTest fails 121 checks
+and MenuTest 7. The nine scripts `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
+`bit` and `blips` build with exit 0 (`PCtomb5 built Oct 17 2026 13:32:48`); ModernTest
+15,508 checks, MenuTest 44,272, InterpTest 729, LipsTest 270 with the player's `.OBJ`
+folder and 243 without, 0 failed each - the counts of `5df75640`, as no code line changed.
+
+**Commits.** `02eee06`, `7dd0633`, `ffda320`, `e0198d8`, `c13f502`, `22d930f` and this
+record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -23973,13 +24058,20 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #158 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
 | #159 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
 | #160 | The cut scenes at the frame rate |
-| #161 | Modern control: the stick turned into the classic direction bits; The options menu as one table-driven frame; The modern camera: a free orbit on the right stick; The pad: radial dead zones, a second binding set and a Modifier for chords; The -log switch and the diagnostic seams; The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot; Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; Combat, Sprint, Duck and Grab: hold or toggle; Two action keys: the interaction bit and the Secondary role; The cheats: DOZY as a toggle, and five bindable hotkeys |
+| #161 | Modern control: the stick turned into the classic direction bits; The options menu as one table-driven frame; The modern camera: a free orbit on the right stick; The pad: radial dead zones, a second binding set and a Modifier for chords; The -log switch and the diagnostic seams; The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot; Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; Combat, Sprint, Duck and Grab: hold or toggle; Two action keys: the interaction bit and the Secondary role; The cheats: DOZY as a toggle, and five bindable hotkeys; The mouse: the modern camera's second input, five bindable buttons and two rows; The movement keys as the modern stick |
+| #162 | Lara's face between her lines: the blink loop and the firing face |
+| #163 | HD models for items, enemies and machinery; The cutscene faces speak: their lips follow the Remaster's track files |
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |
 | #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
-| #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
+| #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two questions measured |
+| #174 | Lara blanked out in the half turn on a rope: the ROPELOG seam; Lara facing the wrong way for one tick in the jump twists: the early half turn; Lara squeezed to a sliver in the tightrope turn: the far key-frame pair; The in-between frame: the root snapshot; The animation's root offset on a refused frame; The pose between two ticks |
+| #175 | A camera cut keeps the held course until the stick is let go |
+| #176 | An enemy never carries a wall grab |
 | #177 | The drawn eye at a corner; The Modern eye clear of a wall |
+| #178 | HD models for items, enemies and machinery; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The pose between two ticks |
+| #179 | The light shafts compose as screen, a stacked sea is drawn once, a fast swing stands still; The light shafts have a pixel shader of their own; The light shafts are as faint as the church mist |
 | #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off; The reach-only answer goes back to the smaller box; Art in the air of an unlinked room draws inside its own window |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
@@ -23992,17 +24084,18 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |
 | #192 | A light faded to nothing is not counted into an HD object's light list |
 | #193 | The soft motion of the chest: an optional secondary motion for the HD Lara |
-| #194 | A classic room covered by another group's art is drawn as that art |
-| #194 | A place the art draws is drawn by the art alone: a classic room face by face, her shadow there, and the static meshes |
+| #194 | A classic room covered by another group's art is drawn as that art; A place the art draws is drawn by the art alone: a classic room face by face, her shadow there, and the static meshes |
 | #196 | Where the HD rules come from, counted on our own data |
-| #198 | The water's life |
+| #197 | The water sheets: this project's own water surface |
+| #198 | The water sheets: this project's own water surface |
 | #199 | The level load on several cores |
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |
 | #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name; Round 4: the TR4 view dropped |
-| #205 | The marble floors' mirror (#205), measured and built (round 1) |
-| #207 | The flyby's triggers on a skip (#207), in the skipper's entry |
+| #205 | The marble floors' mirror (#205) |
+| #207 | Skipping cutscenes and the intro flyby with the controller |
+| #208 | The sky |
 | #209 | The destroyable windows (#209) |
-| #210 | The sea seen from below (#210), in the water sheets' entry |
-| #208 | The sky's seam, hiding and layers (#208), in the sky's entry |
+| #210 | The water sheets: this project's own water surface |
+| #211 | The record completed before the push (#211) |

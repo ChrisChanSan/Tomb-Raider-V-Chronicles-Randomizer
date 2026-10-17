@@ -487,7 +487,7 @@ enum modern_constants
 	MODERN_LEDGE_TURN_SIDE = 1,		// 1 right (y_rot grows, animation 12), -1 left (animation 13)
 
 	/* The angle window of the engine's own catch (lara_col_reach and
-	 * lara_col_crawl2hang snap y_rot to a cardinal inside +-0x18E2, 34.6
+	 * lara_col_crawl2hang snap y_rot to a cardinal inside +-0x18E2, 35
 	 * degrees, and refuse outside it). Every hang routine is cardinal only. */
 	MODERN_LEDGE_SNAP = 0x18E2,
 

@@ -251,6 +251,9 @@
  *                     -walkeach, its final window and reach after the walk:
  *                     `final=l,t..r,b reach=l,t..r,b classic|REACH`
  *     -walkfinal      the same final line for every listed room (-walkeach)
+ *     -walkdoors      one line per closed door: its item, slot, room and
+ *                     place, the room behind it and the world corners of
+ *                     each portal it shuts
  *     -walkshut <item,item,...|all>
  *                     walk with those closed doors shut (CLOSED_DOOR1 ..
  *                     LIFT_DOORS2 items, whose shutting zeroes the normals
@@ -3047,6 +3050,12 @@ static bool g_vis_option = false;
  * inside the window; 4 every piece left out; 5 the group's whole art inside
  * the window. */
 static int g_vis_win = 2;
+// -visfaces 1: each piece's claimed face, its corners, under its decide line.
+static bool g_vis_faces = false;
+/* -visplane 1, the engine's: on the visibility path a piece in unlinked air
+ * stays whole only on a claimed face in its own face's plane that survives
+ * the window (DecidePairs); 0 keeps the pair's answer. */
+static bool g_vis_plane = true;
 // -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
 static int g_gpu_runs = 0;
 static int g_window_mode = HD_WINDOW_ALL;
@@ -3227,6 +3236,13 @@ namespace walkoff
 	/* -walkshut: the door items -walk walks with shut, as -walkdump
 	 * prints them (doors_shut=); -1 alone shuts every one of them. */
 	static std::vector<int> g_shut_items;
+	/* -walkdoors: one line per closed door at the load - its item, slot,
+	 * room and place, the room behind it and the corners of every portal
+	 * it shuts - what a per-run patch of a level's portals needs. */
+	static bool g_door_print = false;
+	/* -visportals <room>: that room's portal records at the load, the room
+	 * behind, the normal and the world corners; -1 every room's. -2 none. */
+	static int g_portal_room = -2;
 	// -flip: the rooms whose flipmap is swapped, as FlipMap names them.
 	static std::vector<int> g_flip_rooms;
 	/* Per room the group that draws it (HDFlipRoom), and the room of its
@@ -4292,6 +4308,21 @@ namespace walkoff
 			r.flags = rm.flags;
 			r.alt = rm.altRoom;
 			level.portalRecords(i, r.doors, error);
+
+			for (size_t k = 0; (g_portal_room == -1 || g_portal_room == i) &&
+				k < r.doors.size(); k++)
+			{
+				const Tr5Level::PortalRecord& q = r.doors[k];
+
+				printf("-visportals: room %d portal %d to %d normal %d %d %d",
+					i, (int)k, q.toRoom, q.nx, q.ny, q.nz);
+
+				for (int c = 0; c < 4; c++)
+					printf(" %ld,%d,%ld", r.x + q.v[c][0], q.v[c][1],
+						r.z + q.v[c][2]);
+
+				printf("\n");
+			}
 		}
 
 		/* The closed doors: the sector in front of the door names the room
@@ -4379,6 +4410,25 @@ namespace walkoff
 
 			if (!door.portals.empty())
 				g_doors.push_back(door);
+
+			for (size_t k = 0; g_door_print && k < door.portals.size(); k++)
+			{
+				const Room& r = g_room[(size_t)door.portals[k].first];
+				const Tr5Level::PortalRecord& q =
+					r.doors[(size_t)door.portals[k].second];
+
+				printf("-walkdoors: item %d slot %d room %d at %d %d %d "
+					"yrot %d behind %d shuts room %d portal %d to %d",
+					i, item.objectNumber, item.roomNumber, (int)item.x,
+					(int)item.y, (int)item.z, item.yRot, behind,
+					door.portals[k].first, door.portals[k].second, q.toRoom);
+
+				for (int c = 0; c < 4; c++)
+					printf(" %ld,%d,%ld", r.x + q.v[c][0], q.v[c][1],
+						r.z + q.v[c][2]);
+
+				printf("\n");
+			}
 		}
 
 		g_group_of.resize(g_room.size());
@@ -6379,6 +6429,34 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		if (unlinked && !(g_unlinked == 2 && *empty))
 			answer = claimed;
 
+		/* -visplane 1: of a pair's claimed faces only one in the plane of
+		 * the piece's own face keeps the piece whole (DecidePairs). */
+		if (g_vis_option && g_vis_plane && unlinked && answer &&
+			piece.face >= 0 && (size_t)piece.face < g_faces_built.size())
+		{
+			const HDPairFace& own = g_faces_built[(size_t)piece.face];
+			bool inPlane = false;
+
+			for (int k = 0; k < HDRenderGroupPairRanges(group) && !inPlane;
+				k++)
+			{
+				HDPairRange other;
+
+				if (!HDRenderGroupPairRange(group, k, &other) ||
+					other.intrusion != piece.intrusion || other.face < 0 ||
+					(size_t)other.face >= g_faces_built.size())
+					continue;
+
+				const HDPairFace& f = g_faces_built[(size_t)other.face];
+
+				inPlane = FaceSurvives(f, offset, win) &&
+					HDVisFacesShareAPlane(f.v, f.corners, own.v,
+						own.corners, HD_VIS_PLANE_TOLERANCE);
+			}
+
+			answer = inPlane;
+		}
+
 		/* -viswin 1: the art in unlinked air alone held to the window, on
 		 * the claimed faces the room-art rules ask (pairAlive). */
 		if (g_vis_option && g_vis_win == 1 && piece.air)
@@ -6430,6 +6508,21 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 				piece.face < 0 ? " (no face)" : alive ? " (face drawn)"
 					: " (face dropped)", piece.inner ? " inner" : "",
 				piece.air ? " air" : "");
+
+		if (say && g_vis_faces && piece.face >= 0 &&
+			(size_t)piece.face < g_faces_built.size())
+		{
+			const HDPairFace& f = g_faces_built[(size_t)piece.face];
+
+			printf("decide:   face %5d of room %3d, %d corners:", piece.face,
+				f.group, f.corners);
+
+			for (int c = 0; c < f.corners && c < 4; c++)
+				printf(" %.0f,%.0f,%.0f", f.v[c][0] + offset[0],
+					f.v[c][1] + offset[1], f.v[c][2] + offset[2]);
+
+			printf("\n");
+		}
 	}
 
 	if (say)
@@ -12580,6 +12673,15 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *   -viswin <rule>    how -vis 1 answers the pieces of intruding art (see
  *                     g_vis_win): 2, the default, as the engine; 0 every
  *                     piece whole
+ *   -visportals <room>
+ *                     that room's portal records at the walk's load: the
+ *                     room behind, the normal and the world corners; -1
+ *                     prints every room's
+ *   -visplane 0|1     1, the default, keeps a piece in unlinked air whole
+ *                     only on a claimed face in its own face's plane
+ *                     (DecidePairs); 0 on any claimed face of its pair
+ *   -visfaces 0|1     1 prints each piece's claimed face, its corners in
+ *                     the seed room's frame, under its decide line
  *   -visnear 0|1      1, the default, lists the room behind a portal the
  *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
@@ -12617,6 +12719,12 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_params.edge = atof(argv[*at + 1]);
 	else if (!strcmp(a, "-viswin"))
 		g_vis_win = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visportals"))
+		walkoff::g_portal_room = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visplane"))
+		g_vis_plane = atoi(argv[*at + 1]) != 0;
+	else if (!strcmp(a, "-visfaces"))
+		g_vis_faces = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-visnear"))
 		walkoff::g_vis_near = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-gpu"))
@@ -14168,8 +14276,15 @@ static int ProbeMain(int argc, char** argv)
 			walkTargetGiven = true;
 			at += 3;
 		}
-		else if (!strcmp(argv[at], "-walkfinal"))
-			walkFinal = true;
+		else if (!strcmp(argv[at], "-walkfinal") ||
+			!strcmp(argv[at], "-walkdoors"))
+		{
+			// -walkdoors shares this branch: the chain is at the nesting limit.
+			if (!strcmp(argv[at], "-walkdoors"))
+				walkoff::g_door_print = true;
+			else
+				walkFinal = true;
+		}
 		else if ((!strcmp(argv[at], "-walkshut") ||
 			!strcmp(argv[at], "-flip")) && at + 1 < argc)
 		{

@@ -18338,6 +18338,11 @@ namespace
 	 * of one flat floor differ by at most two. The plane's clip, 4 units
 	 * over it, still clears every corner (a unit and two). */
 	const int kMarbleHeightJoin = 2;
+	/* How far in to its centroid a buried face's corners and edges' middles
+	 * are asked (marble_build): a face is buried only where it lies under
+	 * higher faces nearly to its edge, not by a point that a shared edge's
+	 * rounding could put on either side. */
+	const float kMarbleBuriedIn = 0.125f;
 
 	// The level's mirror faces and the opaque clear floors (marble_build).
 	int g_marble_faces = 0;
@@ -18491,13 +18496,17 @@ namespace
 			group.mirrorFaces.resize(kept * 9);
 			group.mirrorY.resize(kept);
 
-			/* A face lying under a higher face of its own room - its
-			 * centroid inside that face seen from above, 16 units and more
-			 * under it - is no mirror: what is left of the art's copy where
-			 * marble_copies' square rule did not take it (a square under
-			 * one panel of the ceiling), hidden under the opaque floor and
-			 * yet a floor height of its own. The higher faces are asked by
-			 * the 1,024-unit squares their boxes touch. */
+			/* A face lying wholly under higher faces of its own room is no
+			 * mirror: hidden under the floor over it, it would yet be a
+			 * floor height of its own and take a plane of the cap. So goes
+			 * what is left of the art's copy where marble_copies' square
+			 * rule did not take it (a square under one panel of the
+			 * ceiling). Wholly: seven points of the face - its centroid,
+			 * and its corners and its edges' middles drawn kMarbleBuriedIn
+			 * of the way in to it - each inside a face 16 units and more
+			 * over it, seen from above. A floor running out from under a
+			 * higher one shows past its edge and stays. The higher faces
+			 * are asked by the 1,024-unit squares their boxes touch. */
 			std::unordered_map<long long, std::vector<size_t> > over;
 			const float* faces = group.mirrorFaces.data();
 			const auto key = [](int sx, int sz)
@@ -18522,25 +18531,20 @@ namespace
 						over[key(sx, sz)].push_back(f);
 			}
 
-			std::vector<char> under(group.mirrorY.size(), 0);
-
-			for (size_t f = 0; f < group.mirrorY.size(); f++)
+			// Whether (x, z) lies inside a face 16 units and more over f.
+			const auto covered = [&](size_t f, float x, float z)
 			{
-				const float* p = faces + f * 9;
-				const float cx = (p[0] + p[3] + p[6]) / 3.0f;
-				const float cz = (p[2] + p[5] + p[8]) / 3.0f;
 				const std::vector<size_t>& above = over[key(
-					(int)floorf(cx / 1024.0f), (int)floorf(cz / 1024.0f))];
-				bool buried = false;
+					(int)floorf(x / 1024.0f), (int)floorf(z / 1024.0f))];
 
-				for (size_t k = 0; k < above.size() && !buried; k++)
+				for (size_t k = 0; k < above.size(); k++)
 				{
 					const float* q = faces + above[k] * 9;
 
 					if (group.mirrorY[above[k]] >= group.mirrorY[f] - 16)
 						continue;
 
-					// The centroid's side of each edge, seen from above.
+					// The point's side of each edge, seen from above.
 					float s[3];
 
 					for (int e = 0; e < 3; e++)
@@ -18548,12 +18552,36 @@ namespace
 						const float* a = q + e * 3;
 						const float* b = q + (e + 1) % 3 * 3;
 
-						s[e] = (b[0] - a[0]) * (cz - a[2]) -
-							(b[2] - a[2]) * (cx - a[0]);
+						s[e] = (b[0] - a[0]) * (z - a[2]) -
+							(b[2] - a[2]) * (x - a[0]);
 					}
 
-					buried = (s[0] >= 0.0f && s[1] >= 0.0f && s[2] >= 0.0f) ||
-						(s[0] <= 0.0f && s[1] <= 0.0f && s[2] <= 0.0f);
+					if ((s[0] >= 0.0f && s[1] >= 0.0f && s[2] >= 0.0f) ||
+						(s[0] <= 0.0f && s[1] <= 0.0f && s[2] <= 0.0f))
+						return true;
+				}
+
+				return false;
+			};
+			std::vector<char> under(group.mirrorY.size(), 0);
+
+			for (size_t f = 0; f < group.mirrorY.size(); f++)
+			{
+				const float* p = faces + f * 9;
+				const float cx = (p[0] + p[3] + p[6]) / 3.0f;
+				const float cz = (p[2] + p[5] + p[8]) / 3.0f;
+				bool buried = covered(f, cx, cz);
+
+				// The corners (0 to 2) and the edges' middles (3 to 5).
+				for (int c = 0; c < 6 && buried; c++)
+				{
+					const float* a = p + c % 3 * 3;
+					const float* b = p + (c < 3 ? c : (c + 1) % 3) * 3;
+					const float x = (a[0] + b[0]) / 2.0f;
+					const float z = (a[2] + b[2]) / 2.0f;
+
+					buried = covered(f, x + (cx - x) * kMarbleBuriedIn,
+						z + (cz - z) * kMarbleBuriedIn);
 				}
 
 				under[f] = buried ? 1 : 0;
@@ -18657,8 +18685,9 @@ namespace
 		g_marble_heights = (int)heights.size();
 	}
 
-	/* The art's copy of a room under its polished floor. RICH2, RICHCUT2
-	 * and the title build a room a second time, turned upside down under a
+	/* The art's copy of a room under its polished floor. RICH2 and the
+	 * title, and no other level, build a room a second time (119,319 and
+	 * 18,160 triangles by the rule below), turned upside down under a
 	 * part-way clear floor, so the floor shows it as a reflection; the
 	 * planar mirror takes that copy's place (the clear floors of the column
 	 * are drawn opaque), and the copy, hidden under them, is still drawn,

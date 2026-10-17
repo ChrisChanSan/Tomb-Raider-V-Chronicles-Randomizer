@@ -203,3 +203,85 @@ void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 void HDVisLevelBuild(const trf::remaster::Trg& trg);
 void HDVisLevelClear();
 const HDVisTables* HDVisLevelTables();
+
+/* Whether classic face b stands in the plane of classic face a: every corner
+ * of b within `tolerance` units of the plane through a's first three corners
+ * (its first, third and fourth when those three lie on a line).
+ *
+ * What for: on the visibility path a piece of art standing in a room its own
+ * room has no link with is drawn whole only on a face of its room that the
+ * classic path draws this frame and that stands in the plane of the piece's
+ * own face (hd_level.cpp, DecidePairs). The art of one wall reaches over the
+ * seams of the faces that wall is made of, and those faces share a plane; a
+ * face in another plane is another wall of the room, and the art of that
+ * wall is seen where the classic path shows that wall, in the room's window.
+ * The classic faces lie on TR5's grid, so a wall's faces share their plane
+ * to the unit. */
+inline bool HDVisFacesShareAPlane(const float a[4][3], int aCorners,
+	const float b[4][3], int bCorners, double tolerance)
+{
+	if (aCorners < 3 || bCorners < 1)
+		return false;
+
+	for (int pick = 0; pick < 2; pick++)
+	{
+		const int i0 = 0;
+		const int i1 = pick == 0 ? 1 : 2;
+		const int i2 = pick == 0 ? 2 : (aCorners > 3 ? 3 : 2);
+		double u[3], v[3], n[3];
+
+		for (int k = 0; k < 3; k++)
+		{
+			u[k] = (double)a[i1][k] - a[i0][k];
+			v[k] = (double)a[i2][k] - a[i0][k];
+		}
+
+		n[0] = u[1] * v[2] - u[2] * v[1];
+		n[1] = u[2] * v[0] - u[0] * v[2];
+		n[2] = u[0] * v[1] - u[1] * v[0];
+
+		const double len = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+
+		if (len <= 1e-6)
+			continue;
+
+		const double inv = 1.0 / sqrt(len);
+
+		for (int c = 0; c < bCorners && c < 4; c++)
+		{
+			double d = 0.0;
+
+			for (int k = 0; k < 3; k++)
+				d += ((double)b[c][k] - a[i0][k]) * n[k] * inv;
+
+			if (d > tolerance || d < -tolerance)
+				return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+/* The tolerance of that test, in world units. */
+#define HD_VIS_PLANE_TOLERANCE	1.0
+
+/* Whether the visibility path draws nothing of a classic room: a room drawn
+ * classic (GroupOfRoom has no group for it) whose own group holds no art at
+ * all, none of whose classic faces any group's art covers (neither covered
+ * nor covered in part by the stand rule), and whose inside holds a guest -
+ * the art of a group linked with it, as many triangles as make a guest
+ * (HDVisTables::guests).
+ *
+ * What for: such a room is classic scenery standing in for what the art
+ * now models in its place - ANDY3's room 88 is a band of tree trunks and
+ * leaves painted on flat faces round the trees of room 35's art that stand
+ * in its inside (10,064 triangles). Drawn classic it hangs a flat slab of
+ * old texture across the new trees; left out, the trees stand against the
+ * sky. */
+inline bool HDVisClassicRoomHidden(bool groupEmpty, bool facesCovered,
+	int classicFaces, int guests)
+{
+	return groupEmpty && !facesCovered && classicFaces > 0 && guests > 0;
+}

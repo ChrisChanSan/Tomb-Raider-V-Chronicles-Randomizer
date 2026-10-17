@@ -104,6 +104,9 @@ static_assert(HD_LARA_OUTFIT_TR3_ANTARC == 5 && HD_LARA_OUTFIT_TR3_NEVADA == 6 &
 #define HD_MAX_ROOMS	1024
 #define HD_MAX_FRAME	256
 
+// Whether the level was built for the visibility path (BuildRoomVis).
+static bool VisLevel();
+
 namespace
 {
 	struct FrameRoom
@@ -994,6 +997,44 @@ namespace
 			if (piece.air)
 			{
 				whole = claimed;
+
+				/* On the visibility path only a claimed face in the plane
+				 * of the piece's own face keeps it whole: the faces of one
+				 * wall share a plane, and the art of another wall of the
+				 * room is seen where the classic path shows that wall, in
+				 * the room's window. Kept whole by the floor of ANDREA1's
+				 * room 93 in sight, the walls of its brick block stood in
+				 * room 101 beside the facade's corner (2,304 pixels at
+				 * 1280x720). A piece no face claims has no plane and keeps
+				 * the pair's answer. */
+				if (whole && VisLevel() && piece.face >= 0 &&
+					(size_t)piece.face < g_pair_faces.size())
+				{
+					const HDPairFace& own = g_pair_faces[(size_t)piece.face];
+					bool inPlane = false;
+
+					for (int k = 0; k < count && !inPlane; k++)
+					{
+						const HDPairRange& other =
+							g_pieces[(size_t)(first + k)];
+
+						if (other.intrusion != piece.intrusion ||
+							other.face < 0 ||
+							(size_t)other.face >= g_face_alive.size() ||
+							!g_face_alive[(size_t)other.face])
+							continue;
+
+						const HDPairFace& drawn =
+							g_pair_faces[(size_t)other.face];
+
+						inPlane = HDVisFacesShareAPlane(drawn.v,
+							drawn.corners, own.v, own.corners,
+							HD_VIS_PLANE_TOLERANCE);
+					}
+
+					whole = inPlane;
+				}
+
 				g_clip_unlinked_pieces++;
 
 				if (empty)
@@ -3474,6 +3515,11 @@ static bool g_vis_level = false;
 static bool g_vis_logged = false;
 static std::vector<short> g_vis_main;
 
+static bool VisLevel()
+{
+	return g_vis_level;
+}
+
 static void BuildRoomVis()
 {
 	g_vis_level = tomb5.hd_vis == 1;
@@ -3601,6 +3647,36 @@ static void BuildRoomVis()
 		faces.empty() ? 0 : &faces[0], (int)faces.size(),
 		portals.empty() ? 0 : &portals[0], (int)portals.size(),
 		links.empty() ? 0 : &links[0], (int)links.size());
+}
+
+/* Whether the visibility path draws none of a classic room's faces
+ * (HDVisClassicRoomHidden in hd_vis.h says which rooms and why): asked by
+ * HDFrameRoom for a room no group draws, before the stand rule. The room's
+ * number is the walk's and the tables'; its group is the one the flip table
+ * names, empty when the room's own art is nothing at all. A room a
+ * randomizer marker names is drawn classic whatever the art. Per frame,
+ * because the stand rule's state and the tables are the level's and cost
+ * one look each. */
+static bool VisHidesClassicRoom(int roomIndex)
+{
+	if (!g_vis_level || roomIndex < 0 || roomIndex >= g_room_count ||
+		HDMarkersRoomTouched(roomIndex))
+		return false;
+
+	const HDVisTables* tables = HDVisLevelTables();
+	const int group = g_room_group[roomIndex];
+
+	if (!tables || roomIndex >= tables->rooms || group < 0 ||
+		group >= HD_MAX_ROOMS || roomIndex >= number_rooms)
+		return false;
+
+	const bool covered = g_group_stand_covered[group] != 0 ||
+		g_group_stand_part[group] != 0;
+	const ROOM_INFO* r = &room[roomIndex];
+
+	return HDVisClassicRoomHidden(HDRenderGroupTriangles(group, -1) == 0,
+		covered, r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0,
+		tables->guestCount[(size_t)roomIndex]);
 }
 
 /* Whose art stands inside whose room.
@@ -7888,7 +7964,13 @@ bool HDFrameRoom(int roomIndex, const float* viewWorld,
 	const int group = GroupOfRoom(roomIndex);
 
 	if (group < 0)
+	{
+		// A room the visibility path leaves out: none of its roomlets.
+		if (VisHidesClassicRoom(roomIndex))
+			return true;
+
 		return StandHolderRoom(roomIndex, viewWorld, left, top, right, bottom);
+	}
 
 	if (g_frame_count >= HD_MAX_FRAME)
 	{

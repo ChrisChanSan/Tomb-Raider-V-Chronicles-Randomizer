@@ -151,6 +151,35 @@ bool HDLipsMapBuild(const HDTrmModel* trm, const char* stem, HDLipsMap* out,
  * may differ. False for a file without a rig or a block. */
 bool HDLipsSameRig(const HDTrmModel* a, const HDTrmModel* b);
 
+/* The track files a face has in a folder: every <stem>_<digits>.TRL, the
+ * numbers in rising order. Writes the first `max` into `tracks` and
+ * returns how many there are, 0 for a folder that is not there. */
+int HDLipsTrackFiles(const char* folder, const char* stem, int* tracks,
+	int max);
+
+// Whose track files a mod's face speaks - HDLipsModRig.
+enum HDLipsRig
+{
+	HD_LIPS_RIG_OWN = 0,	// its own folder holds track files of it
+	HD_LIPS_RIG_INSTALL,	// none; the install's face has the same rig
+	HD_LIPS_RIG_DIFFERS,	// none; the install's face has another rig
+	HD_LIPS_RIG_NONE	// none, and no install face of the name loads
+};
+
+/* The folder a mod's face looks for its track files in. A mod's own
+ * track files win (`ownTracks`, from HDLipsTrackFiles on `ownFolder`).
+ * Without them, `installFace` - the install's .TRM of the same name, or
+ * "" where there is none - is loaded, and where it carries the same rig
+ * (HDLipsSameRig) the face speaks the install's files in `installItem`,
+ * game 5's ITEM; otherwise it stays on `ownFolder` and has no track. Sets
+ * *folder to the one of the two to look in and returns the HDLipsRig. */
+int HDLipsModRig(const HDTrmModel* face, bool ownTracks,
+	const char* installFace, const char* ownFolder, const char* installItem,
+	const char** folder);
+
+// "own", "install", "differs", "none" or "-".
+const char* HDLipsRigName(int rig);
+
 // "identity", "(x,-z,y)", "(x,-y,-z)" or "-".
 const char* HDLipsAxisName(int axis);
 

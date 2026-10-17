@@ -2157,7 +2157,7 @@ namespace
 	 * installation's face looks in game 5's ITEM and nowhere else. A mod's
 	 * face, whose rig need not be the install's, looks in its own folder;
 	 * where that holds no track file of the face and the install's face of
-	 * the same name carries the same rig and block header (HDLipsSameRig),
+	 * the same name carries the same rig and block header (HDLipsModRig),
 	 * it speaks the install's files from game 5's ITEM - a mod that changes
 	 * the face's geometry and keeps its rig. A Tomb Raider III guest's face
 	 * looks only in its own folder. */
@@ -2195,30 +2195,24 @@ namespace
 			std::vector<int> own;
 
 			lips_files(*lips, own);
-			lips->rig = own.empty() ? "none" : "own";
 
 			HDModelOrigin installOrigin = HD_MODEL_ORIGIN_NONE;
 			const std::string installPath = own.empty()
 				? find_model(stem, false, &installOrigin, 0, kModsNone)
 				: std::string();
-			HDTrmModel install;
-			const char* trouble = "";
+			const std::string ownFolder = lips->folder;
+			const std::string installItem = join(g_install, "ITEM");
+			const char* folder = ownFolder.c_str();
+			const int rig = HDLipsModRig(&trm, !own.empty(),
+				installPath.c_str(), ownFolder.c_str(), installItem.c_str(),
+				&folder);
 
-			std::memset(&install, 0, sizeof(install));
+			lips->rig = HDLipsRigName(rig);
 
-			if (!installPath.empty() && HDTrmLoad(installPath.c_str(), &install,
-				&trouble))
+			if (rig == HD_LIPS_RIG_INSTALL)
 			{
-				if (HDLipsSameRig(&trm, &install))
-				{
-					lips->folder = join(g_install, "ITEM");
-					lips->folderLabel = "5";
-					lips->rig = "install";
-				}
-				else
-					lips->rig = "differs";
-
-				HDTrmFree(&install);
+				lips->folder = folder;
+				lips->folderLabel = "5";
 			}
 		}
 
@@ -2308,44 +2302,17 @@ namespace
 	}
 
 	/* The track files a face has, in track order: every <STEM>_<digits>.TRL
-	 * of its folder. */
+	 * of its folder (HDLipsTrackFiles). */
 	void lips_files(const Lips& lips, std::vector<int>& out)
 	{
-		out.clear();
+		const int n = HDLipsTrackFiles(lips.folder.c_str(), lips.stem.c_str(),
+			0, 0);
 
-		WIN32_FIND_DATAA found;
-		const std::string pattern = join(lips.folder, (lips.stem + "_*.TRL").c_str());
-		HANDLE walk = FindFirstFileA(pattern.c_str(), &found);
+		out.assign(n > 0 ? (size_t)n : 0, 0);
 
-		if (walk == INVALID_HANDLE_VALUE)
-			return;
-
-		do
-		{
-			const std::string name = found.cFileName;
-			const size_t digits = lips.stem.size() + 1;
-
-			if (name.size() <= digits + 4 ||
-				!same_name(name.substr(name.size() - 4), ".TRL"))
-				continue;
-
-			const std::string number = name.substr(digits, name.size() - 4 - digits);
-
-			if (number.empty() ||
-				number.find_first_not_of("0123456789") != std::string::npos)
-				continue;
-
-			int track = 0;
-
-			for (size_t d = 0; d < number.size() && track < 100000; d++)
-				track = track * 10 + (number[d] - '0');
-
-			out.push_back(track);
-		}
-		while (FindNextFileA(walk, &found));
-
-		FindClose(walk);
-		std::sort(out.begin(), out.end());
+		if (n > 0)
+			HDLipsTrackFiles(lips.folder.c_str(), lips.stem.c_str(), &out[0],
+				n);
 	}
 
 	/* The loop's line, one per face that keeps lips - see HDModelLipsLine. */

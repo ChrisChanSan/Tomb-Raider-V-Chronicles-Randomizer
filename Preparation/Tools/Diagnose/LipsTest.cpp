@@ -56,10 +56,15 @@
  *      and the firing frame's mouth against its numbers.
  *   9. a face of another geometry on the same rig: which faces HDLipsSameRig
  *      takes for one rig and which it refuses, a copy refused for one byte
- *      of each part it compares, and the tracks of two cutscenes Lara acts
- *      in - cutscene 8 (track 102) and 32 (track 120) - read in game 5's
- *      ITEM and driving LARA_YOUNG_HEAD's mouth, whose geometry is not
- *      LARA_HEAD's, while the bind returns it to itself.
+ *      of each part it compares; the folder a mod's face speaks from
+ *      (HDLipsModRig, HDLipsTrackFiles - what make_lips decides by) with
+ *      LARA_YOUNG_HEAD standing in for a mod's face: game 5's ITEM without
+ *      track files of its own, its own folder with them, beside an install
+ *      face of another rig or none; and the tracks of two cutscenes Lara
+ *      acts in, read out of the game's data\cutseq.bin - cutscene 8 (track
+ *      102) and 32 (track 120) - opened in that folder and driving
+ *      LARA_YOUNG_HEAD's mouth, whose geometry is not LARA_HEAD's, while
+ *      the bind returns it to itself.
  *
  * Besides the checks it prints what the comments in hd_trl.cpp and hd_trl.h
  * quote: how far each face's composed bind stands from its rig, the scale the
@@ -1566,6 +1571,41 @@ static void section_fire()
 		"firing frame (%.2f): %.2f\n", lidFrom, lidTo, lidMid);
 }
 
+/* The game's own cutseq.bin, read in place and never written - the file
+ * CutseqProbe reads by default. */
+static const char* CUTSEQ_FILE =
+	"C:/Cloude AI/TR Randomizer final steps/Tomb5 Steam Version/data/"
+	"cutseq.bin";
+
+/* Cutscene n's audio track and actor 0's object slot, out of cutseq.bin: a
+ * table of offset and size (8 bytes a cutscene, by number), then each
+ * cutscene's NEW_CUTSCENE (global\types.h) - numactors at 0, audio_track at
+ * 16, actor_data at 24 with 8 bytes an actor and objslot at 4 of it. */
+static bool cut_track(const std::vector<char>& file, int n, int* track,
+	int* actor0)
+{
+	if (n <= 0 || file.size() < (size_t)n * 8 + 8)
+		return false;
+
+	int offset = 0;
+	int size = 0;
+
+	memcpy(&offset, &file[(size_t)n * 8], 4);
+	memcpy(&size, &file[(size_t)n * 8 + 4], 4);
+
+	if (offset <= 0 || size < 32 || (size_t)offset + size > file.size())
+		return false;
+
+	short actors = 0;
+	short slot = -1;
+
+	memcpy(&actors, &file[(size_t)offset], 2);
+	memcpy(track, &file[(size_t)offset + 16], 4);
+	memcpy(&slot, &file[(size_t)offset + 28], 2);
+	*actor0 = actors > 0 ? slot : -1;
+	return true;
+}
+
 /* One part of a face's rig changed by one byte: HDLipsSameRig must refuse
  * it. `part` 0 the inverse binds, 1 the block's parents, 2 its columns, 3
  * its frame 0. The copy shares nothing with the face. */
@@ -1636,15 +1676,87 @@ static void section_mod_rig()
 	check(!HDLipsSameRig(&none, &none) && !HDLipsSameRig(&lara->trm, &none) &&
 		!HDLipsSameRig(0, &lara->trm), "a face without a rig is taken");
 
-	/* The two cutscenes: Lara is actor 0 of cutscene 8 (ANDREA2, track
-	 * 102) and of cutscene 32 (JOBY5's start, track 120), as CutseqProbe
-	 * -actors reads the game's data\cutseq.bin. Her track files lie in
-	 * game 5's ITEM, which is where a face on her rig looks once its own
-	 * folder holds none (make_lips, hd_model.cpp). */
+	/* The folder a mod's face speaks from - HDLipsModRig and
+	 * HDLipsTrackFiles, the two make_lips (hd_model.cpp) decides by.
+	 * LARA_YOUNG_HEAD stands in for a mod's LARA_HEAD.TRM: another geometry
+	 * on her rig. Its own folder is one with no track file of hers (a
+	 * folder that is not there), one with game 4's (4\ITEM, a mod that
+	 * ships its own), and the install's face beside it is LARA_HEAD,
+	 * LARSON_HEAD (another rig) or none. */
+	const std::string item5 = g_root5 + "\\ITEM";
+	const std::string item4 = g_bundle + "\\4\\ITEM";
+	const std::string bare = g_root5 + "\\no mod folder of this name";
+	const std::string laraFile = trm_path(lara);
+	const std::string larsonFile = trm_path(larson);
+	const std::string missing = bare + "\\LARA_HEAD.TRM";
+	int tracks5[64];
+	const int count5 = HDLipsTrackFiles(item5.c_str(), "LARA_HEAD", tracks5,
+		64);
+	const int count4 = HDLipsTrackFiles(item4.c_str(), "LARA_HEAD", 0, 0);
+	const int countBare = HDLipsTrackFiles(bare.c_str(), "LARA_HEAD", 0, 0);
+
+	printf("track files of LARA_HEAD: %d in 5\\ITEM (%d to %d), %d in "
+		"4\\ITEM, %d in a folder that is not there\n", count5,
+		count5 > 0 ? tracks5[0] : 0, count5 > 0 ? tracks5[count5 - 1] : 0,
+		count4, countBare);
+	check(count5 == 18 && tracks5[0] == 96 && tracks5[17] == 135,
+		"5\\ITEM holds %d track files of LARA_HEAD, 18 (96 to 135) wanted",
+		count5);
+	check(count4 == 24 && countBare == 0, "4\\ITEM holds %d track files of "
+		"LARA_HEAD (24 wanted), a missing folder %d", count4, countBare);
+
+	const char* folder = 0;
+	int rig = HDLipsModRig(&young->trm, countBare > 0, laraFile.c_str(),
+		bare.c_str(), item5.c_str(), &folder);
+	const std::string spoken = folder ? folder : "";
+
+	check(rig == HD_LIPS_RIG_INSTALL && spoken == item5 &&
+		!strcmp(HDLipsRigName(rig), "install"), "a mod's face on her rig "
+		"without track files: rig=%s, folder %s - install and 5\\ITEM "
+		"wanted", HDLipsRigName(rig), spoken.c_str());
+
+	rig = HDLipsModRig(&lara->trm, false, laraFile.c_str(), bare.c_str(),
+		item5.c_str(), &folder);
+	check(rig == HD_LIPS_RIG_INSTALL && folder && item5 == folder,
+		"the install's own LARA_HEAD as a mod's face: rig=%s",
+		HDLipsRigName(rig));
+
+	rig = HDLipsModRig(&young->trm, count4 > 0, laraFile.c_str(),
+		item4.c_str(), item5.c_str(), &folder);
+	check(rig == HD_LIPS_RIG_OWN && folder && item4 == folder &&
+		!strcmp(HDLipsRigName(rig), "own"), "a mod's face with track files "
+		"of its own: rig=%s, folder %s - own and its own folder wanted",
+		HDLipsRigName(rig), folder ? folder : "-");
+
+	rig = HDLipsModRig(&young->trm, false, larsonFile.c_str(), bare.c_str(),
+		item5.c_str(), &folder);
+	check(rig == HD_LIPS_RIG_DIFFERS && folder && bare == folder &&
+		!strcmp(HDLipsRigName(rig), "differs"), "a mod's face beside an "
+		"install face of another rig: rig=%s - differs and its own folder "
+		"wanted", HDLipsRigName(rig));
+
+	rig = HDLipsModRig(&young->trm, false, "", bare.c_str(), item5.c_str(),
+		&folder);
+
+	const int rigMissing = HDLipsModRig(&young->trm, false, missing.c_str(),
+		bare.c_str(), item5.c_str(), 0);
+
+	check(rig == HD_LIPS_RIG_NONE && folder && bare == folder &&
+		rigMissing == HD_LIPS_RIG_NONE &&
+		!strcmp(HDLipsRigName(rig), "none") && !strcmp(HDLipsRigName(4), "-"),
+		"a mod's face with no install face of its name: rig=%s and %s",
+		HDLipsRigName(rig), HDLipsRigName(rigMissing));
+
+	/* The two cutscenes, as the game's data\cutseq.bin names them: Lara is
+	 * actor 0 (object slot 0) of cutscene 8 (ANDREA2) and of cutscene 32
+	 * (JOBY5's start), and the audio track each plays is the track file her
+	 * face speaks. The engine overrides the track of cutscene 4 alone
+	 * (init_cutseq_actors, deltapak.cpp). The numbers wanted here are what
+	 * the file reads; the tracks below are taken from the file. */
 	struct Cut
 	{
 		int cut;
-		int track;
+		int track;		// wanted from the file
 		int frames;
 		int frame;		// the frame of the widest mouth, every 10th
 		double lara;		// the farthest vertex on LARA_HEAD
@@ -1655,9 +1767,47 @@ static void section_mod_rig()
 		{ 8, 102, 1395, 70, 6.6087, 6.8420 },
 		{ 32, 120, 3078, 1270, 7.1867, 7.1686 },
 	};
+	std::vector<char> cutseq;
+	FILE* fp = fopen(CUTSEQ_FILE, "rb");
+
+	if (fp)
+	{
+		fseek(fp, 0, SEEK_END);
+		cutseq.resize((size_t)ftell(fp));
+		fseek(fp, 0, SEEK_SET);
+
+		if (!cutseq.empty() &&
+			fread(&cutseq[0], 1, cutseq.size(), fp) != cutseq.size())
+			cutseq.clear();
+
+		fclose(fp);
+	}
+
+	check(!cutseq.empty(), "%s does not read", CUTSEQ_FILE);
+
 	Face* faces[2] = { lara, young };
 
 	for (int i = 0; i < 2; i++)
+	{
+		int track = -1;
+		int laraSlot = -1;
+
+		cut_track(cutseq, cuts[i].cut, &track, &laraSlot);
+		printf("cutscene %2d: audio track %d, actor 0 in slot %d\n",
+			cuts[i].cut, track, laraSlot);
+		check(track == cuts[i].track && laraSlot == 0, "cutscene %d: track "
+			"%d and actor 0 in slot %d, track %d and Lara (0) wanted",
+			cuts[i].cut, track, laraSlot, cuts[i].track);
+
+		bool listed = false;
+
+		for (int t = 0; t < count5 && t < 64; t++)
+			listed = listed || tracks5[t] == track;
+
+		check(listed, "cutscene %d: track %d is not among LARA_HEAD's "
+			"track files in the folder the mod's face speaks from",
+			cuts[i].cut, track);
+
 		for (int k = 0; k < 2; k++)
 		{
 			Face* f = faces[k];
@@ -1668,15 +1818,18 @@ static void section_mod_rig()
 				continue;
 			}
 
-			/* LARA_HEAD's own file, read at the face's columns - the path a
-			 * face on her rig takes. */
+			/* LARA_HEAD's file in the folder HDLipsModRig gave, read at
+			 * the face's columns - the path a mod's face on her rig takes. */
 			HDTrlClip clip;
 			const char* why = "";
 			int frames = 0;
+			char name[64];
 			std::vector<float> frame((size_t)f->map.columns * 12);
 
-			if (HDTrlOpen(trl_path("LARA_HEAD", cuts[i].track).c_str(),
-				f->map.columns, &clip, &why))
+			snprintf(name, sizeof(name), "\\LARA_HEAD_%d.TRL", track);
+
+			if (HDTrlOpen((spoken + name).c_str(), f->map.columns, &clip,
+				&why))
 			{
 				frames = clip.frames;
 
@@ -1690,7 +1843,7 @@ static void section_mod_rig()
 
 			check(!frame.empty() && frames == cuts[i].frames,
 				"cutscene %d: LARA_HEAD_%d.TRL reads %d frames for %s, "
-				"%d wanted", cuts[i].cut, cuts[i].track, frames,
+				"%d wanted", cuts[i].cut, track, frames,
 				f->stem.c_str(), cuts[i].frames);
 
 			if (frame.empty())
@@ -1705,13 +1858,14 @@ static void section_mod_rig()
 
 			printf("cutscene %2d: LARA_HEAD_%d.TRL frame %d on %s - the "
 				"farthest vertex %.4f units, %d past a unit; the bind "
-				"%.2e\n", cuts[i].cut, cuts[i].track, cuts[i].frame,
+				"%.2e\n", cuts[i].cut, track, cuts[i].frame,
 				f->stem.c_str(), moved.farthest, moved.overOne, rest.farthest);
 			check(fabs(moved.farthest - want) <= 0.001 && rest.farthest < 1e-3,
 				"cutscene %d: %s moves %.4f units, %.4f wanted, and its "
 				"bind %.2e", cuts[i].cut, f->stem.c_str(), moved.farthest,
 				want, rest.farthest);
 		}
+	}
 }
 
 int main(int argc, char** argv)

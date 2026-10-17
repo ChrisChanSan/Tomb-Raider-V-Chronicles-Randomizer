@@ -1607,6 +1607,8 @@ namespace
 		 * are off. */
 		std::vector<float> mirrorFaces;
 		std::vector<int> mirrorY;
+		// The art's copy triangles left out under them (marble_copies).
+		int mirrorCopies = 0;
 	};
 
 	// One 256-unit cell of a room-local position, as one key. The bias makes
@@ -4008,6 +4010,8 @@ namespace
 	 * the most floor heights a frame mirrors (tomb5.hd_marble_planes). */
 	bool g_marble_on = false;
 	int g_marble_cap = 2;
+	// RoomProbe's -marblecopies 1: the copies kept (HDRenderMarbleKeepCopies).
+	bool g_marble_keep_copies = false;
 
 	/* The frame's room, stand and static draws as they were made, for the
 	 * mirrored pass to make again (marble_note); `g_marble_replay` while it
@@ -4037,6 +4041,11 @@ namespace
 		return page >= 0 && HDGlossMirror(g_gloss_file.mirror(page),
 			HDGlossTableFind(page));
 	}
+
+	// The art's copies under the polished floors (see "the marble floors").
+	int marble_copies(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g,
+		std::vector<std::vector<unsigned char> >& copies);
 
 	/* The resolver for one page (HDGlossResolve), with the page's slot for the
 	 * engine's second bar: a page part-way clear in every texel is a floor
@@ -6883,6 +6892,14 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		// And the rooms under the sky its art stands in (CarryHostsOf).
 		CarryHostsOf(trg, source, (int)g, o.carryHosts, o.carryCopies);
 
+		/* The art's copy of the room under its polished floors, left out
+		 * of the level while the marble floors are on (marble_copies). */
+		std::vector<std::vector<unsigned char> > marbleCopies;
+
+		group.mirrorCopies = g_marble_on && !g_marble_keep_copies &&
+			(int)g < g_room_groups ? marble_copies(trg, source, (int)g,
+			marbleCopies) : 0;
+
 		for (int pass = 0; pass < 3; pass++)
 		{
 			tris.clear();
@@ -7141,6 +7158,11 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 					if (first + 2 >= trg.indices.size())
 						break;
+
+					// A copy under a polished floor (marble_copies).
+					if (!marbleCopies.empty() &&
+						marbleCopies[part_at * 3 + (size_t)pass][at / 3])
+						continue;
 
 					/* Does this triangle stand in an opening? Asked first in
 					 * the loop: a cut triangle never reaches the sort list,
@@ -18262,8 +18284,9 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
  * The clear floors. A face of the column whose page is part-way clear -
  * RICH2's lobby and corridor, the title's floors - stands over the art's
  * own mirrored copy of the room. It is drawn opaque (draw_pass, `opaque`):
- * the planar mirror takes the copy's place, and the copy, still drawn,
- * lies hidden under an opaque floor and out of the mirror's clip plane.
+ * the planar mirror takes the copy's place, and the copy is left out of
+ * the level (marble_copies); what of it the rule leaves lies hidden under
+ * the opaque floor and is no mirror face (marble_build).
  *
  * The frame. Every room, stand range and static piece the frame draws is
  * noted as it is drawn (marble_note); the faces of the rooms drawn are
@@ -18299,6 +18322,17 @@ namespace
 	const float kMarbleClipOver = kWetLift;
 	// The clip's offset in use: kMarbleClipOver, or RoomProbe's -marbleclip.
 	float g_marble_clip = kMarbleClipOver;
+	/* A square's triangles under a mirror plane are the art's copy when at
+	 * least this many are mirrored, and a third or more (marble_copies):
+	 * RoomProbe -tankcensus's numbers, the wet floor's (kWetCopyCells). */
+	const int kMarbleCopyMirrored = 8;
+	/* How far a copy's corner turned about the plane may lie from the
+	 * original's, in units: the plane is its faces' mean height rounded,
+	 * their corners within a unit of it (marble_build). */
+	const float kMarbleCopyNear = 2.0f;
+	/* How far past each corner, out from its centroid, a copy's triangle
+	 * must still lie under the floor (marble_copies), in units. */
+	const float kMarbleCopyMargin = 64.0f;
 
 	// The level's mirror faces and the opaque clear floors (marble_build).
 	int g_marble_faces = 0;
@@ -18309,6 +18343,11 @@ namespace
 	 * the faces left out for a corner farther than kMarbleClipOver. */
 	int g_marble_spread = 0;
 	int g_marble_rising = 0;
+	// The copy triangles left out, and of them in water rooms (none known).
+	int g_marble_copies = 0;
+	int g_marble_copies_water = 0;
+	// The faces left out for lying under a floor of their own room.
+	int g_marble_buried = 0;
 
 	// The target the mirrored rooms are drawn into, and its depth.
 	IDirect3DTexture9* g_marble_tex = 0;
@@ -18392,12 +18431,18 @@ namespace
 		g_marble_opaque = 0;
 		g_marble_spread = 0;
 		g_marble_rising = 0;
+		g_marble_copies = 0;
+		g_marble_copies_water = 0;
+		g_marble_buried = 0;
 
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
 			HDGroup& group = g_groups[(size_t)g];
 			const bool water = g < count &&
 				(rooms[g].flags & HD_WATER_ROOM_UNDERWATER) != 0;
+
+			g_marble_copies += group.mirrorCopies;
+			g_marble_copies_water += water ? group.mirrorCopies : 0;
 
 			if (water)
 			{
@@ -18438,6 +18483,94 @@ namespace
 
 			group.mirrorFaces.resize(kept * 9);
 			group.mirrorY.resize(kept);
+
+			/* A face lying under a higher face of its own room - its
+			 * centroid inside that face seen from above, 16 units and more
+			 * under it - is no mirror: what is left of the art's copy where
+			 * marble_copies' square rule did not take it (a square under
+			 * one panel of the ceiling), hidden under the opaque floor and
+			 * yet a floor height of its own. The higher faces are asked by
+			 * the 1,024-unit squares their boxes touch. */
+			std::unordered_map<long long, std::vector<size_t> > over;
+			const float* faces = group.mirrorFaces.data();
+			const auto key = [](int sx, int sz)
+			{
+				return ((long long)sx << 32) ^ (long long)(unsigned int)sz;
+			};
+
+			for (size_t f = 0; f < group.mirrorY.size(); f++)
+			{
+				const float* p = faces + f * 9;
+				const int x0 = (int)floorf(fminf(p[0], fminf(p[3], p[6])) /
+					1024.0f);
+				const int x1 = (int)floorf(fmaxf(p[0], fmaxf(p[3], p[6])) /
+					1024.0f);
+				const int z0 = (int)floorf(fminf(p[2], fminf(p[5], p[8])) /
+					1024.0f);
+				const int z1 = (int)floorf(fmaxf(p[2], fmaxf(p[5], p[8])) /
+					1024.0f);
+
+				for (int sx = x0; sx <= x1; sx++)
+					for (int sz = z0; sz <= z1; sz++)
+						over[key(sx, sz)].push_back(f);
+			}
+
+			std::vector<char> under(group.mirrorY.size(), 0);
+
+			for (size_t f = 0; f < group.mirrorY.size(); f++)
+			{
+				const float* p = faces + f * 9;
+				const float cx = (p[0] + p[3] + p[6]) / 3.0f;
+				const float cz = (p[2] + p[5] + p[8]) / 3.0f;
+				const std::vector<size_t>& above = over[key(
+					(int)floorf(cx / 1024.0f), (int)floorf(cz / 1024.0f))];
+				bool buried = false;
+
+				for (size_t k = 0; k < above.size() && !buried; k++)
+				{
+					const float* q = faces + above[k] * 9;
+
+					if (group.mirrorY[above[k]] >= group.mirrorY[f] - 16)
+						continue;
+
+					// The centroid's side of each edge, seen from above.
+					float s[3];
+
+					for (int e = 0; e < 3; e++)
+					{
+						const float* a = q + e * 3;
+						const float* b = q + (e + 1) % 3 * 3;
+
+						s[e] = (b[0] - a[0]) * (cz - a[2]) -
+							(b[2] - a[2]) * (cx - a[0]);
+					}
+
+					buried = (s[0] >= 0.0f && s[1] >= 0.0f && s[2] >= 0.0f) ||
+						(s[0] <= 0.0f && s[1] <= 0.0f && s[2] <= 0.0f);
+				}
+
+				under[f] = buried ? 1 : 0;
+			}
+
+			kept = 0;
+
+			for (size_t f = 0; f < group.mirrorY.size(); f++)
+			{
+				if (under[f])
+				{
+					g_marble_buried++;
+					continue;
+				}
+
+				for (int k = 0; k < 9; k++)
+					group.mirrorFaces[kept * 9 + k] =
+						group.mirrorFaces[f * 9 + k];
+
+				group.mirrorY[kept++] = group.mirrorY[f];
+			}
+
+			group.mirrorFaces.resize(kept * 9);
+			group.mirrorY.resize(kept);
 			g_marble_faces += (int)group.mirrorY.size();
 			heights.insert(group.mirrorY.begin(), group.mirrorY.end());
 
@@ -18450,6 +18583,331 @@ namespace
 		}
 
 		g_marble_heights = (int)heights.size();
+	}
+
+	/* The art's copy of a room under its polished floor. RICH2, RICHCUT2
+	 * and the title build a room a second time, turned upside down under a
+	 * part-way clear floor, so the floor shows it as a reflection; the
+	 * planar mirror takes that copy's place (the clear floors of the column
+	 * are drawn opaque), and the copy, hidden under them, is still drawn,
+	 * made again in every mirrored draw and its own faces a floor height of
+	 * their own. So while the marble floors are on it is left out of the
+	 * level.
+	 *
+	 * A copy is told by its triangles: a triangle of the group under one of
+	 * its mirror planes - its centroid 16 to 2,048 units under the plane,
+	 * in a 1,024-unit square a mirror face of that plane lies over - is
+	 * mirrored when its three corners turned about the plane each fall
+	 * within kMarbleCopyNear units of a corner of one triangle of the group
+	 * on the same page (the copy is the room turned, corner for corner); a
+	 * square is a copy's when at least kMarbleCopyMirrored of the
+	 * triangles under it are mirrored and they are a third or more of them
+	 * (RoomProbe -tankcensus's square rule), and its mirrored triangles
+	 * leave. A copy lies wholly under its floor: a triangle with a corner,
+	 * pushed kMarbleCopyMargin out from its centroid, under no mirror face
+	 * of the plane seen from above can show past the floor's edge or through
+	 * a gap in it from a room beside (RICH2's corridor seen from room 121)
+	 * and stays. And a copy lies where no room is: a triangle whose
+	 * centroid stands inside a classic room's box - in its height, and
+	 * within HD_OVERHANG_SLACK of it across - is art of that room (a wall
+	 * of the corridor under a room above, panelled alike over and under
+	 * the floor's height) and stays. One list of flags a part and pass
+	 * (part * 3 + pass), a flag a triangle; empty where the group holds no
+	 * copy. Returns the triangles flagged. */
+	int marble_copies(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g,
+		std::vector<std::vector<unsigned char> >& copies)
+	{
+		copies.clear();
+
+		if (!g_boxes || g < 0 || g >= g_box_count)
+			return 0;
+
+		struct Tri
+		{
+			float x, y, z;
+			unsigned int list, at;
+			float p[9];
+			int page;
+		};
+
+		std::vector<Tri> tris;
+		// Per plane: its faces seen from above, six floats a face, by square.
+		std::map<int, std::unordered_map<long long, std::vector<float> > >
+			under;
+		const auto square = [](float x, float z)
+		{
+			return ((long long)(int)floorf(x / 1024.0f) << 32) ^
+				(long long)(unsigned int)(int)floorf(z / 1024.0f);
+		};
+		const auto cell = [](float x, float y, float z)
+		{
+			return ((long long)((int)floorf(x / 32.0f) & 0xFFFFF) << 40) |
+				((long long)((int)floorf(y / 32.0f) & 0xFFFFF) << 20) |
+				(long long)((int)floorf(z / 32.0f) & 0xFFFFF);
+		};
+
+		for (size_t pi = 0; pi < source.parts.size(); pi++)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart& part = source.parts[pi];
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+				const float blend = MaterialBlend(part, pass);
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const unsigned int first = run.start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					float p[9];
+					float ny = 0.0f;
+					int page = -1;
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[first + c]];
+
+						p[c * 3] = (float)v.x;
+						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 2] = (float)v.z;
+						ny += v.normal_y();
+
+						if (c == 0)
+							page = v.layer && v.layer <= trg.textures.size() ?
+								(int)trg.textures[v.layer - 1u] :
+								trg.textures.empty() ? -1 :
+								(int)trg.textures[0];
+					}
+
+					Tri t = { (p[0] + p[3] + p[6]) / 3.0f,
+						(p[1] + p[4] + p[7]) / 3.0f,
+						(p[2] + p[5] + p[8]) / 3.0f,
+						(unsigned int)(pi * 3 + (size_t)pass), at / 3 };
+
+					memcpy(t.p, p, sizeof(p));
+					t.page = page;
+					tris.push_back(t);
+
+					// A mirror face, as the triangle loop takes one.
+					const int slot = HDPageCacheSlotOf(page);
+
+					if (!(pass == 0 || (pass == 1 && blend == 0.0f &&
+						!g_no_clear && HDPageCacheSlotClear(slot))) ||
+						!MirrorPage(page) ||
+						!HDMarbleFace(p, p + 3, p + 6, ny / 3.0f))
+						continue;
+
+					const int h = (int)lroundf(t.y);
+					bool level = true;
+
+					for (int c = 0; c < 3; c++)
+						level = level &&
+							fabsf(p[c * 3 + 1] - (float)h) <= kMarbleClipOver;
+
+					if (!level)
+						continue;
+
+					const float x0 = fminf(p[0], fminf(p[3], p[6]));
+					const float x1 = fmaxf(p[0], fmaxf(p[3], p[6]));
+					const float z0 = fminf(p[2], fminf(p[5], p[8]));
+					const float z1 = fmaxf(p[2], fmaxf(p[5], p[8]));
+
+					for (float x = floorf(x0 / 1024.0f) * 1024.0f; x < x1;
+						x += 1024.0f)
+						for (float z = floorf(z0 / 1024.0f) * 1024.0f; z < z1;
+							z += 1024.0f)
+						{
+							std::vector<float>& on = under[h][square(x + 1.0f,
+								z + 1.0f)];
+							const float xz[6] = { p[0], p[2], p[3], p[5], p[6],
+								p[8] };
+
+							on.insert(on.end(), xz, xz + 6);
+						}
+				}
+
+				copies.push_back(std::vector<unsigned char>(run.count / 3,
+					0));
+			}
+
+		if (under.empty())
+		{
+			copies.clear();
+			return 0;
+		}
+
+		std::unordered_map<long long, std::vector<size_t> > cells;
+
+		for (size_t i = 0; i < tris.size(); i++)
+			cells[cell(tris[i].x, tris[i].y, tris[i].z)].push_back(i);
+
+		// Whether a triangle turned about h is one of the group's own.
+		const auto turned = [&](const Tri& t, float h)
+		{
+			const float my = 2.0f * h - t.y;
+
+			for (int d = 0; d < 27; d++)
+			{
+				std::unordered_map<long long, std::vector<size_t> >::
+					const_iterator at = cells.find(cell(
+					t.x + 32.0f * (float)(d % 3 - 1),
+					my + 32.0f * (float)(d / 3 % 3 - 1),
+					t.z + 32.0f * (float)(d / 9 - 1)));
+
+				if (at == cells.end())
+					continue;
+
+				for (size_t o : at->second)
+				{
+					const Tri& u = tris[o];
+					bool all = u.page == t.page;
+
+					for (int c = 0; c < 3 && all; c++)
+					{
+						bool one = false;
+
+						for (int k = 0; k < 3 && !one; k++)
+							one = fabsf(u.p[k * 3] - t.p[c * 3]) <=
+								kMarbleCopyNear &&
+								fabsf(u.p[k * 3 + 1] - (2.0f * h -
+								t.p[c * 3 + 1])) <= kMarbleCopyNear &&
+								fabsf(u.p[k * 3 + 2] - t.p[c * 3 + 2]) <=
+								kMarbleCopyNear;
+
+						all = one;
+					}
+
+					if (all)
+						return true;
+				}
+			}
+
+			return false;
+		};
+
+		// Whether a point of the group stands in a classic room.
+		const auto roomed = [g](const Tri& t)
+		{
+			const float wx = t.x + g_boxes[g].originX;
+			const float wz = t.z + g_boxes[g].originZ;
+
+			for (int r = 0; r < g_box_count; r++)
+			{
+				const HDRoomBox& b = g_boxes[r];
+				const float x = wx - b.originX, z = wz - b.originZ;
+
+				if (t.y >= b.mins[1] && t.y <= b.maxs[1] &&
+					x >= b.mins[0] - HD_OVERHANG_SLACK &&
+					x <= b.maxs[0] + HD_OVERHANG_SLACK &&
+					z >= b.mins[2] - HD_OVERHANG_SLACK &&
+					z <= b.maxs[2] + HD_OVERHANG_SLACK)
+					return true;
+			}
+
+			return false;
+		};
+
+		// Whether a triangle, grown at its corners, lies under a plane.
+		typedef std::unordered_map<long long, std::vector<float> > Faces;
+		const auto covered = [&square](const Tri& t, const Faces& faces)
+		{
+			for (int c = 0; c < 3; c++)
+			{
+				float x = t.p[c * 3], z = t.p[c * 3 + 2];
+				const float dx = x - t.x, dz = z - t.z;
+				const float len = sqrtf(dx * dx + dz * dz);
+				const float out = len > 0.0f ? kMarbleCopyMargin / len : 0.0f;
+
+				x += dx * out;
+				z += dz * out;
+
+				const Faces::const_iterator at = faces.find(square(x, z));
+				bool under = false;
+
+				for (size_t f = 0; at != faces.end() &&
+					f + 5 < at->second.size() && !under; f += 6)
+				{
+					const float* q = &at->second[f];
+					float s[3];
+
+					for (int e = 0; e < 3; e++)
+					{
+						const float* a = q + e * 2;
+						const float* b = q + (e + 1) % 3 * 2;
+
+						s[e] = (b[0] - a[0]) * (z - a[1]) -
+							(b[1] - a[1]) * (x - a[0]);
+					}
+
+					under = (s[0] >= 0.0f && s[1] >= 0.0f && s[2] >= 0.0f) ||
+						(s[0] <= 0.0f && s[1] <= 0.0f && s[2] <= 0.0f);
+				}
+
+				if (!under)
+					return false;
+			}
+
+			return true;
+		};
+
+		// Per plane and square: the triangles under it, and the mirrored.
+		struct Column
+		{
+			int under = 0;
+			std::vector<size_t> mirrored;
+		};
+
+		std::map<std::pair<int, long long>, Column> columns;
+
+		for (size_t i = 0; i < tris.size(); i++)
+		{
+			const Tri& t = tris[i];
+
+			for (const std::pair<const int, Faces>& plane : under)
+			{
+				const float h = (float)plane.first;
+
+				if (t.y <= h + 16.0f || t.y > h + 2048.0f ||
+					!plane.second.count(square(t.x, t.z)))
+					continue;
+
+				Column& col = columns[std::make_pair(plane.first,
+					square(t.x, t.z))];
+
+				col.under++;
+
+				if (turned(t, h) && !roomed(t) && covered(t, plane.second))
+					col.mirrored.push_back(i);
+			}
+		}
+
+		int flagged = 0;
+
+		for (const std::pair<const std::pair<int, long long>, Column>& c :
+			columns)
+		{
+			const int mirrored = (int)c.second.mirrored.size();
+
+			if (mirrored < kMarbleCopyMirrored ||
+				mirrored * 3 < c.second.under)
+				continue;
+
+			for (size_t i : c.second.mirrored)
+			{
+				unsigned char& flag = copies[tris[i].list][tris[i].at];
+
+				flagged += flag ? 0 : 1;
+				flag = 1;
+			}
+		}
+
+		if (!flagged)
+			copies.clear();
+
+		return flagged;
 	}
 
 	void marble_note(int kind, int id, const D3DMATRIX* world,
@@ -18493,6 +18951,8 @@ namespace
 		float cover = 0.0f;
 		float plane[4] = { 0.0f, 0.0f, 0.0f, 0.0f };	// view space, up
 		float axes[12] = {};
+		// Its cover by room, for the stats' room of the most.
+		std::map<int, float> rooms;
 	};
 
 	/* The noted draws made again; the projection is the caller's. A sky
@@ -18563,6 +19023,11 @@ void HDRenderMarbleClip(float units)
 	g_marble_clip = units;
 }
 
+void HDRenderMarbleKeepCopies(bool keep)
+{
+	g_marble_keep_copies = keep;
+}
+
 void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 {
 	if (!out)
@@ -18575,6 +19040,9 @@ void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 	out->heights = g_marble_heights;
 	out->spread = g_marble_spread;
 	out->rising = g_marble_rising;
+	out->copies = g_marble_copies;
+	out->copies_water = g_marble_copies_water;
+	out->buried = g_marble_buried;
 }
 
 void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
@@ -18709,6 +19177,7 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			}
 
 			layer.cover += cover;
+			layer.rooms[d.id] += cover;
 			layer.verts.insert(layer.verts.end(), v, v + 3);
 		}
 	}
@@ -18728,6 +19197,17 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	{
 		g_marble_stats.plane_y[i] = planes[i].y;
 		g_marble_stats.plane_cover[i] = planes[i].cover;
+		g_marble_stats.plane_room[i] = -1;
+
+		float most = 0.0f;
+
+		for (const std::pair<const int, float>& r :
+			layers[planes[i].y].rooms)
+			if (r.second > most)
+			{
+				most = r.second;
+				g_marble_stats.plane_room[i] = r.first;
+			}
 	}
 
 	if (!drawn)

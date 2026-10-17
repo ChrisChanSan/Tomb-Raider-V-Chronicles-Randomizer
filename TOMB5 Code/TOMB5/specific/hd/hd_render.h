@@ -1789,10 +1789,16 @@ struct HDRenderMarbleStats
 	// The frame's planes in their order, the first eight: height, share.
 	int plane_y[8];
 	float plane_cover[8];
+	int plane_room[8];	// the room whose faces cover the most of it
 	// The farthest corner of a kept face from its plane, units, and the
 	// faces left out for rising farther than the mirror's clip offset.
 	int spread;
 	int rising;
+	// The art's copy triangles left out of the level, and in water rooms.
+	int copies;
+	int copies_water;
+	// The faces left out for lying under a floor of their own room.
+	int buried;
 };
 
 void HDRenderMarbleSet(int on, int planes);
@@ -1809,6 +1815,9 @@ void HDRenderMarbleRows(int rows);
 /* RoomProbe's -marbleclip: how far over the floor's plane the mirrored draw
  * starts, in units (4 in the engine; 0 puts the clip in the floor). */
 void HDRenderMarbleClip(float units);
+/* RoomProbe's -marblecopies 1: the art's copies under the polished floors
+ * kept in the level as they were before (set before the level's build). */
+void HDRenderMarbleKeepCopies(bool keep);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

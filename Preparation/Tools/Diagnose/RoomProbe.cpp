@@ -557,6 +557,11 @@
  *                     one marbleplane: line a plane of the frame follows,
  *                     in its rank: the height, the share of the screen its
  *                     faces cover, drawn or left.
+ *     -marblecopies 0|1  1 keeps the art's copy of a room under its
+ *                     polished floor in the level (HDRenderMarbleKeepCopies;
+ *                     0, the engine's, where not given, leaves it out). The
+ *                     marble: line ends with the copy triangles left out and
+ *                     of them those in water rooms.
  *     -nowarm         no warm-up of the water's shaders before the picture
  *                     (HDRenderWaterWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
@@ -8409,6 +8414,13 @@ static bool MarbleArg(int argc, char** argv, int* at)
 		return true;
 	}
 
+	// -marblecopies 0|1: 1 keeps the art's copies under the floors.
+	if (!strcmp(a, "-marblecopies") && more)
+	{
+		HDRenderMarbleKeepCopies(atoi(argv[++*at]) != 0);
+		return true;
+	}
+
 	if (!strcmp(a, "-marblecensus") || !strcmp(a, "-marblequiet"))
 		g_marble_quiet = g_marble_quiet || a[7] == 'q';
 	else if (!strcmp(a, "-marblepages") && more)
@@ -8986,14 +8998,16 @@ static void ProbeMarble(const void* projection)
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
 		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
-		"rising %d\n", s.planes, s.drawn, g_marble_planes, s.faces, s.calls,
-		s.wet, s.faces_level, s.water, s.opaque, s.heights, ms, first,
-		s.spread, s.rising);
+		"rising %d; copies %d water %d buried %d\n", s.planes, s.drawn,
+		g_marble_planes, s.faces, s.calls, s.wet, s.faces_level, s.water,
+		s.opaque, s.heights, ms, first, s.spread, s.rising, s.copies,
+		s.copies_water, s.buried);
 
 	// One marbleplane line a plane of the frame, in the order it is ranked.
 	for (int i = 0; i < s.planes && i < 8; i++)
-		printf("marbleplane: %d y %d cover %.5f %s\n", i, s.plane_y[i],
-			s.plane_cover[i], i < s.drawn ? "drawn" : "left");
+		printf("marbleplane: %d y %d cover %.5f %s room %d\n", i,
+			s.plane_y[i], s.plane_cover[i], i < s.drawn ? "drawn" : "left",
+			s.plane_room[i]);
 }
 
 /* The room behind the models' copy (HDRenderWaterWetRoomCopy) where

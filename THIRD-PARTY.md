@@ -2691,6 +2691,43 @@ carries the tables.
     leaves the picture and comes back within a tick at the six edges of the
     three runs (mean added luma 13.60 to 4.55 at 21,547 / 21,548, 3.83 to
     12.25 at 21,577 / 21,578, 16.66 to 5.10 at 21,937 / 21,938).
+255. **The wall of a claimed face** (`hd_level.cpp`, `DecidePairs` and
+    `BuildVisWalls`; `hd_vis.h`, `HDVisFacesOneWall`, `HDVisWallLabels`) - with
+    `hd_vis` 1 a piece of a room's art standing in the air of a room its own
+    room has no link with is drawn whole only when a claimed face of its pair
+    that the classic path draws this frame is one wall with the piece's own
+    face; otherwise inside its room's window. One wall: the pair's faces joined
+    face to face where one stands in the other's plane (every corner within one
+    unit) or both stand upright and meet along an edge, round the corners a wall
+    turns; made once per level. It narrows entry 245 and keeps `hd_vis` 0 as it
+    was. OWN: the plane and edge tests and their use, read from the reason the
+    pieces are answered per pair (the art of one wall reaches over the seams of
+    that wall's faces, in its plane and round its corners). DATA (RoomProbe
+    `-vis 1 -visplane`, `-visfaces`): ANDREA1's brick block of room 93 seen from
+    the balcony of room 68, kept whole by the block's floor in sight while its
+    roof and walls stood in room 101's space, 2,304 pixels at 1,280 x 720 down
+    to 0; the plane alone also cut ANDREA3's wooden wall of room 8 at its corner
+    (59,516 pixels at 2,560 x 1,440, black seams), which the wall keeps as
+    before; over the sweep sets one view changes against round 11, ANDREA2 room
+    115 at yaw 0 (405 pixels, room 70's sloped faces), and none else.
+256. **The classic room the visibility path leaves out** (`hd_level.cpp`,
+    `VisHidesClassicRoom`, asked by `HDFrameRoom`; `hd_vis.h`,
+    `HDVisClassicRoomHidden`) - with `hd_vis` 1 a room drawn classic whose own
+    group holds no art, none of whose classic faces any art covers (wholly or
+    in part), and whose inside holds a guest of the visibility tables (a
+    linked group's art, eight triangles or more) draws none of its faces.
+    OWN, from the owner's decision on ANDY3's canopy (the art's trees replace
+    the flat faces that stood in for them). DATA (TrgProbe `-classicart
+    -perface`, `-vistable -visroom`; RoomProbe `-classicroom`): of the 21
+    classic rooms with faces in the fifteen levels it takes ANDY3 88, 118 and
+    122 and ANDY1 212, each a band of painted tree trunks and leaves round a
+    forest's trees, all under the sky; at round 11's canopy place 219,836
+    pixels change, 84,808 of them to sky, the rest to room 35's trees.
+257. **RoomProbe `-visplane`, `-visfaces`, `-visportals` and `-walkdoors`**
+    (`Preparation/Tools/Diagnose/RoomProbe.cpp`) - entry 255 on and off, a
+    piece's claimed face with its corners under its decide line, a room's
+    portal records with their world corners, and every closed door with the
+    portals it shuts. OWN, this project's tool.
 
 ## Credited, but not contained here
 

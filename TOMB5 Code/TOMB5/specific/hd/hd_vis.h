@@ -203,3 +203,322 @@ void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 void HDVisLevelBuild(const trf::remaster::Trg& trg);
 void HDVisLevelClear();
 const HDVisTables* HDVisLevelTables();
+
+/* Whether classic face b stands in the plane of classic face a: every corner
+ * of b within `tolerance` units of the plane through a's first three corners
+ * (its first, third and fourth when those three lie on a line).
+ *
+ * What for: the faces of one wall of a room (HDVisFacesOneWall,
+ * HDVisWallLabels). The classic faces lie on TR5's grid, so a wall's faces
+ * share their plane to the unit. */
+inline bool HDVisFacesShareAPlane(const float a[4][3], int aCorners,
+	const float b[4][3], int bCorners, double tolerance)
+{
+	if (aCorners < 3 || bCorners < 1)
+		return false;
+
+	for (int pick = 0; pick < 2; pick++)
+	{
+		const int i0 = 0;
+		const int i1 = pick == 0 ? 1 : 2;
+		const int i2 = pick == 0 ? 2 : (aCorners > 3 ? 3 : 2);
+		double u[3], v[3], n[3];
+
+		for (int k = 0; k < 3; k++)
+		{
+			u[k] = (double)a[i1][k] - a[i0][k];
+			v[k] = (double)a[i2][k] - a[i0][k];
+		}
+
+		n[0] = u[1] * v[2] - u[2] * v[1];
+		n[1] = u[2] * v[0] - u[0] * v[2];
+		n[2] = u[0] * v[1] - u[1] * v[0];
+
+		const double len = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+
+		if (len <= 1e-6)
+			continue;
+
+		const double inv = 1.0 / sqrt(len);
+
+		for (int c = 0; c < bCorners && c < 4; c++)
+		{
+			double d = 0.0;
+
+			for (int k = 0; k < 3; k++)
+				d += ((double)b[c][k] - a[i0][k]) * n[k] * inv;
+
+			if (d > tolerance || d < -tolerance)
+				return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+/* The tolerance of that test, in world units. */
+#define HD_VIS_PLANE_TOLERANCE	1.0
+
+/* Whether classic face a stands upright, a wall: the normal of its plane,
+ * taken as HDVisFacesShareAPlane takes it, leans less than 1 in 100 off the
+ * horizontal. A floor, a ceiling or a slope does not. */
+inline bool HDVisFaceUpright(const float a[4][3], int corners)
+{
+	if (corners < 3)
+		return false;
+
+	for (int pick = 0; pick < 2; pick++)
+	{
+		const int i1 = pick == 0 ? 1 : 2;
+		const int i2 = pick == 0 ? 2 : (corners > 3 ? 3 : 2);
+		double u[3], v[3];
+
+		for (int k = 0; k < 3; k++)
+		{
+			u[k] = (double)a[i1][k] - a[0][k];
+			v[k] = (double)a[i2][k] - a[0][k];
+		}
+
+		const double nx = u[1] * v[2] - u[2] * v[1];
+		const double ny = u[2] * v[0] - u[0] * v[2];
+		const double nz = u[0] * v[1] - u[1] * v[0];
+		const double len = nx * nx + ny * ny + nz * nz;
+
+		if (len <= 1e-6)
+			continue;
+
+		return ny * ny <= 1e-4 * len;
+	}
+
+	return false;
+}
+
+/* Whether classic faces a and b meet along an edge: two points `tolerance`
+ * or more apart, each a corner of one face within `tolerance` of an edge of
+ * the other. Faces that touch at one corner only do not. */
+inline bool HDVisFacesShareAnEdge(const float a[4][3], int aCorners,
+	const float b[4][3], int bCorners, double tolerance)
+{
+	double found[8][3];
+	int count = 0;
+
+	if (aCorners < 2 || bCorners < 2)
+		return false;
+
+	// Faces whose boxes stand apart by more than the tolerance never meet.
+	for (int k = 0; k < 3; k++)
+	{
+		double aLo = a[0][k], aHi = a[0][k], bLo = b[0][k], bHi = b[0][k];
+
+		for (int c = 1; c < aCorners && c < 4; c++)
+		{
+			aLo = a[c][k] < aLo ? a[c][k] : aLo;
+			aHi = a[c][k] > aHi ? a[c][k] : aHi;
+		}
+
+		for (int c = 1; c < bCorners && c < 4; c++)
+		{
+			bLo = b[c][k] < bLo ? b[c][k] : bLo;
+			bHi = b[c][k] > bHi ? b[c][k] : bHi;
+		}
+
+		if (aLo > bHi + tolerance || bLo > aHi + tolerance)
+			return false;
+	}
+
+	for (int side = 0; side < 2; side++)
+	{
+		const float (*p)[3] = side == 0 ? a : b;
+		const float (*q)[3] = side == 0 ? b : a;
+		const int pn = (side == 0 ? aCorners : bCorners) < 4
+			? (side == 0 ? aCorners : bCorners) : 4;
+		const int qn = (side == 0 ? bCorners : aCorners) < 4
+			? (side == 0 ? bCorners : aCorners) : 4;
+
+		for (int c = 0; c < pn && qn >= 2; c++)
+		{
+			bool on = false;
+
+			for (int e = 0; e < qn && !on; e++)
+			{
+				const float* s = q[e];
+				const float* t = q[(e + 1) % qn];
+				double d[3], w[3], dd = 0.0, dw = 0.0, gap = 0.0;
+
+				for (int k = 0; k < 3; k++)
+				{
+					d[k] = (double)t[k] - s[k];
+					w[k] = (double)p[c][k] - s[k];
+					dd += d[k] * d[k];
+					dw += d[k] * w[k];
+				}
+
+				double f = dd > 0.0 ? dw / dd : 0.0;
+
+				f = f < 0.0 ? 0.0 : f > 1.0 ? 1.0 : f;
+
+				for (int k = 0; k < 3; k++)
+					gap += (w[k] - f * d[k]) * (w[k] - f * d[k]);
+
+				on = gap <= tolerance * tolerance;
+			}
+
+			bool known = !on;
+
+			for (int i = 0; i < count && !known; i++)
+			{
+				double gap = 0.0;
+
+				for (int k = 0; k < 3; k++)
+					gap += (found[i][k] - p[c][k]) * (found[i][k] - p[c][k]);
+
+				known = gap < tolerance * tolerance;
+			}
+
+			if (!known && count < 8)
+			{
+				for (int k = 0; k < 3; k++)
+					found[count][k] = p[c][k];
+
+				count++;
+			}
+		}
+	}
+
+	return count >= 2;
+}
+
+/* Whether classic faces a and b are one wall: b stands in a's plane
+ * (HDVisFacesShareAPlane), or both stand upright and meet along an edge -
+ * the two sides of a corner the wall turns. */
+inline bool HDVisFacesOneWall(const float a[4][3], int aCorners,
+	const float b[4][3], int bCorners, double tolerance)
+{
+	if (HDVisFacesShareAPlane(a, aCorners, b, bCorners, tolerance))
+		return true;
+
+	return HDVisFaceUpright(a, aCorners) && HDVisFaceUpright(b, bCorners) &&
+		HDVisFacesShareAnEdge(a, aCorners, b, bCorners, tolerance);
+}
+
+/* A claimed classic face of one pair as HDVisWallLabels and HDVisWallDrawn
+ * ask it: its corners and whether the classic path draws it this frame. */
+struct HDVisWallFace
+{
+	const float (*v)[3];
+	int corners;
+	bool drawn;
+};
+
+/* The most faces of one pair HDVisWallLabels asks; the largest pair of the
+ * fifteen levels claims 173 (ANDY2, room 31's art in room 44). Faces past
+ * it are left out. */
+#define HD_VIS_WALL_FACES	256
+
+/* The walls of a pair's claimed faces: label[i] is the lowest index among
+ * the faces that are one wall with face i, face to face through
+ * HDVisFacesOneWall asked either way round. Built once per level; a frame
+ * asks only whether a drawn face carries a piece's label (HDVisWallDrawn).
+ *
+ * What for: on the visibility path a piece of art standing in a room its own
+ * room has no link with is drawn whole only on a claimed face the classic
+ * path draws that is one wall with the piece's own face (hd_level.cpp,
+ * DecidePairs), and inside its room's window otherwise. The art of one wall
+ * reaches over the seams of the faces the wall is made of, in its plane and
+ * round the corners it turns, so a drawn face of the wall shows all of it.
+ * A face of another surface does not: from ANDREA1's balcony the floor of
+ * room 93's brick block is drawn through the loft's opening, while the
+ * block's walls and roof stand in room 101 beside the facade's corner, and
+ * their art is seen where the classic path shows them, in room 93's window.
+ * Round a corner: ANDREA3's wooden wall of room 8 in room 115's air is faces
+ * 76 and 77 on one side of the corner and the drawn face 78 on the other;
+ * held to the plane alone it is cut at the corner, 59,516 pixels at
+ * 2560x1440 from room 16, the gallery behind it showing with black seams. */
+inline void HDVisWallLabels(const HDVisWallFace* faces, int count, int* label,
+	double tolerance)
+{
+	if (count > HD_VIS_WALL_FACES)
+		count = HD_VIS_WALL_FACES;
+
+	for (int i = 0; i < count; i++)
+		label[i] = i;
+
+	for (int i = 1; i < count; i++)
+		for (int j = 0; j < i; j++)
+		{
+			int ri = i, rj = j;
+
+			while (label[ri] != ri)
+				ri = label[ri];
+
+			while (label[rj] != rj)
+				rj = label[rj];
+
+			if (ri == rj)
+				continue;
+
+			if (HDVisFacesOneWall(faces[i].v, faces[i].corners, faces[j].v,
+					faces[j].corners, tolerance) ||
+				HDVisFacesOneWall(faces[j].v, faces[j].corners, faces[i].v,
+					faces[i].corners, tolerance))
+			{
+				if (ri < rj)
+					label[rj] = ri;
+				else
+					label[ri] = rj;
+			}
+		}
+
+	for (int i = 0; i < count; i++)
+	{
+		int r = i;
+
+		while (label[r] != r)
+			r = label[r];
+
+		label[i] = r;
+	}
+}
+
+/* Whether face `target` of a pair's claimed faces is one wall with a face
+ * the classic path draws this frame (HDVisWallLabels says what for). */
+inline bool HDVisWallDrawn(const HDVisWallFace* faces, int count, int target,
+	double tolerance)
+{
+	if (count > HD_VIS_WALL_FACES)
+		count = HD_VIS_WALL_FACES;
+
+	if (!faces || target < 0 || target >= count)
+		return false;
+
+	int label[HD_VIS_WALL_FACES];
+
+	HDVisWallLabels(faces, count, label, tolerance);
+
+	for (int i = 0; i < count; i++)
+		if (faces[i].drawn && label[i] == label[target])
+			return true;
+
+	return false;
+}
+
+/* Whether the visibility path draws nothing of a classic room: a room drawn
+ * classic (GroupOfRoom has no group for it) whose own group holds no art at
+ * all, none of whose classic faces any group's art covers (neither covered
+ * nor covered in part by the stand rule), and whose inside holds a guest -
+ * the art of a group linked with it, as many triangles as make a guest
+ * (HDVisTables::guests).
+ *
+ * What for: such a room is classic scenery standing in for what the art
+ * now models in its place - ANDY3's room 88 is a band of tree trunks and
+ * leaves painted on flat faces round the trees of room 35's art that stand
+ * in its inside (10,064 triangles). Drawn classic it hangs a flat slab of
+ * old texture across the new trees; left out, the trees stand against the
+ * sky. */
+inline bool HDVisClassicRoomHidden(bool groupEmpty, bool facesCovered,
+	int classicFaces, int guests)
+{
+	return groupEmpty && !facesCovered && classicFaces > 0 && guests > 0;
+}

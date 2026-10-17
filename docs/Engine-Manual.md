@@ -232,8 +232,8 @@ but does nothing while *Action* (below) is set to *One key* — the *Key
 bindings* page only lists it under *Separate*, so *One key* shows the page
 without it.
 
-The three mouse buttons of the Modern row are the Remaster's own keyboard
-page: draw on the right button, look on the middle one, the secondary action on
+The three mouse buttons of the Modern row are the three the camera hand rests
+on: draw on the right button, look on the middle one, the secondary action on
 the left one. Any keyboard row can be given a mouse button: pick the row and
 press the button, as you would press a key. The page names the five buttons
 *Mouse L*, *Mouse R*, *Mouse M*, *Mouse 4* and *Mouse 5* (*Maus* in German).
@@ -649,9 +649,9 @@ there — drawn greyed out, and the cursor steps over it — however many secret
 you have found; the nine secrets of a quarter of the campaign decide what the
 gallery **holds**, never whether the row can be reached.
 
-The page is one sorted tree rather than a single flat list: a title, then rows that either open another page (drawn centred, like the
-Remaster's own) or are settings of their own (left-aligned, value on the
-right). The seven tabs:
+The page is one sorted tree rather than a single flat list: a title, then rows
+that either open another page (drawn centred) or are settings of their own
+(left-aligned, value on the right). The seven tabs:
 
 | Tab | Holds | Default |
 |---|---|---|
@@ -1506,13 +1506,13 @@ see *Lara in HD* below for which of her stays classic and why.
   fourteen to thirty pages in a row, one page every fortieth to fifth of a
   second. Under the ceiling fans of the 13th Floor the fan's soft shadow on the
   vent floor turns with the fan, twenty pages a second, and at 60 frames a
-  second each page stands for exactly three frames, as it does in the
-  Remaster; the shadows under the two fans that start later turn from the
-  beginning, as the original game's did. The monitor wall of the Security
-  Breach cutscene plays its six-second loop. Flames, smoke, candle and gas
-  flames, the X-ray scanner's figure in Escape with the Iris and the rain rings
-  on the ground of Ireland move as well, 168 surfaces in nine levels. The ones
-  that add light carry no strength in the art; the time a page stands, a
+  second each page stands for exactly three frames; the shadows under the two
+  fans that start later turn from the beginning, as the original game's did.
+  The monitor wall of the Security Breach cutscene plays its six-second loop.
+  Flames, smoke, candle and gas flames, the X-ray scanner's figure in Escape
+  with the Iris and the rain rings on the ground of Ireland move as well, 168
+  surfaces in nine levels. The ones that add light carry no strength in the
+  art; the time a page stands, a
   fortieth to a tenth of a second, doubles as their strength, which is how
   faint they have always been drawn - the fires, the candle flames and the
   X-ray figure look as they did while they stood still. One strength per
@@ -1601,8 +1601,8 @@ see *Lara in HD* below for which of her stays classic and why.
   cutscenes fill a spare slot with — planks, a stone block, a pillar, an ID
   card, a horse — no longer wear somebody else's face, and the hussar shows
   his own.
-- **And they speak.** The Remaster animates a face with one small file per
-  spoken line, and the engine plays it in step with the cutscene: the lips
+- **And they speak.** The installation holds one small file per spoken line
+  for a face, and the engine plays it in step with the cutscene: the lips
   part, the jaw drops on the teeth, the mouth closes between phrases, and now
   and then the eyes blink — Lara's face too. After the last line of a file
   the face settles back to rest over a third of a second. The files follow
@@ -1654,8 +1654,8 @@ see *Lara in HD* below for which of her stays classic and why.
   rather than of one link — which changes where nothing sits and only which
   way the plait faces.
 - **Latex looks like latex.** Tomb Raider Chronicles has no highlight of any
-  kind in its lighting, so an HD outfit lit that way comes out flat matt beside
-  the Remaster's own picture, where the catsuits shine. Lara's parts carry a
+  kind in its lighting, so an HD outfit lit that way comes out flat matt where
+  latex and rubber should shine. Lara's parts carry a
   highlight whose strength says what they are made of — latex for the two
   catsuits, rubber for the diving suit, a soft wide sheen on skin, a light
   satin on the Rome top, a hard small point on a weapon. It follows the room's
@@ -1777,7 +1777,7 @@ it.
   water - eight pictures that take turns in the same texture slot every fifth
   of a second - and the Remaster ships an HD painting of each of those eight.
   They are found through the level's own texture table and put on the face in
-  the Remaster's order and at the original's pace, so a VCI pool moves exactly
+  the original's order and at the original's pace, so a VCI pool moves exactly
   as it always did at four times the resolution. Seven levels have such frames
   (Rome's two, Ireland's Gallows Tree and Old Mill, and three of the four
   Russian levels — *The Base*, *Deepsea Dive* and *Sinking Submarine*); where

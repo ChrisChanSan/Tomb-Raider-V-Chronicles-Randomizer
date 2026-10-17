@@ -415,8 +415,10 @@ from", carries the tables.
     constants.** TROne, `tests/test_controller.cpp`, `host/input/` and
     `docs/CONTROLS.md` (TROne-main, copy of 2026-09-13; since its round K32
     TROne carries this project's core and orbit, see the TROne section above).
-    THIRD. Ours: `ModernTest`; nine constants re-measured in play, the Remaster's
-    timings from video (PICTURE).
+    THIRD, reworked here almost throughout: of the 32 constants 16 stand as
+    TROne's design has them, nine were re-measured in this project's own play,
+    and the turn rate, the camera's return and the orbit rate's ends are this
+    project's own choices (OWN). Ours: `ModernTest`.
 36. **Material 1's scroll in param.xy.** Read so by TROne as well. DATA. Ours:
     calibrated against the classic UVROT tile in RICH2; 5 to 65 parts a level.
 37. **Materials 13 and 15, the flipbook and the books.** Read the same way by

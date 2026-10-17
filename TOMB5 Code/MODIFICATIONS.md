@@ -20589,16 +20589,14 @@ numbers, with 32 test expectations (28 `modern.*` and 4 `combatmode.*` cases of 
 `tests/test_controller.cpp`) taken across verbatim and named as such in the test's own
 header; none of their modern-control code is in this tree. The orbit camera shares only
 the idea that a camera angle is a state: TROne's world angle (its copy of 2026-09-13)
-never returns behind the player, this one falls home. Nothing in the scheme comes from the
-Remaster's programs at first or second hand — it was rebuilt by playing the Remaster and
-watching what it does, a walk of all 32 constants of the design found none traceable to a
-Remaster program (16 kept as they stood, 9 re-measured by play, 5 not applicable, 2
-unknown and therefore not taken), and what the Remaster gave is what anybody sees of it:
-timings taken from video of it playing - the turn on the spot and the half turn while
-running (`MODERN_TURN_RATE`), the camera's return behind her in 0.6 to 0.75 s and its own
-orbit rate of a full circle in 2.85 to 2.95 s (`game/modern_camera.h`) - and a handful of
-option names read out of a plain text file of the player's own installation. The same
-statement stands in the origin block of `game/modern_move.h` beside the code.
+never returns behind the player, this one falls home. The scheme is TROne's design
+reworked here almost throughout: of the 32 constants of the design 16 stand as TROne's
+design has them, 9 were re-measured in this project's own play, 5 do not apply and 2 of
+unknown origin are not taken. The turn rate (`MODERN_TURN_RATE`, 30 degrees a tick, the
+top of the thumb's measured 15 to 30), the camera's return behind her in 0.67 s and the
+ends of its orbit rate (`game/modern_camera.h`) are this project's own choices; a handful
+of option names are read out of a plain text file of the player's own installation. The
+same statement stands in the origin block of `game/modern_move.h` beside the code.
 
 ### Modern control: the stick turned into the classic direction bits
 2026-09-17 - 2026-09-20
@@ -20629,8 +20627,8 @@ the course is read, so the camera the player turns takes her course with it. At 
 nothing of it runs. A camera cut while the stick is held keeps her course until the stick
 is let go (*A camera cut keeps the held course until the stick is let go* below).
 
-**Why.** The scheme is the last piece the project was missing against the Remaster's own
-control, and it survives a 1:1 engine because it only sets the classic bits: the
+**Why.** The scheme gives the player a control relative to the camera beside the engine's
+own Tank control, and it survives a 1:1 engine because it only sets the classic bits: the
 engine's `input` word carries the same bits at the same values, and TR5's state numbers
 are the numbers the design was measured against. The held world course exists because
 the obvious alternative does not work — reading the camera fresh every tick under a
@@ -21702,8 +21700,9 @@ default. The cursor is hidden and held inside the client area while the window i
 Modern is on and no FMV plays; with `-log` the `MOUSELOG` seam records the counts, the
 steps and every change of the capture.
 
-**Why.** The Remaster's modern keyboard page binds draw, look and the secondary action to
-the mouse and turns the camera with it. The engine read no mouse at all: the
+**Why.** The modern camera wants a second input beside the right stick for a player at the
+keyboard, and the three roles the camera hand rests on - draw, look and the secondary
+action - want buttons of their own. The engine read no mouse at all: the
 `WM_MOUSEMOVE` case of `WinMainWndProc` stored `mouseX`, `mouseY` and `mouseB` into
 statics that nothing read, and `Key()` read `keymap` alone, which is why
 `game/key_scheme.h` called Q, R and Numpad 0 placeholders for the three roles.
@@ -21878,8 +21877,11 @@ the mouse drives none of them. Every existing log line prints as before.
 **Decisions.** Raw Input (`WM_INPUT`) carries the counts and the buttons, not
 DirectInput's mouse device. The mouse turns the camera under *Modern* only; *Tank* keeps
 its classic look. The mouse does nothing in the menus and the inventory. The three Modern
-defaults are the Remaster's keyboard page: draw on the right button, look on the middle
-one, the secondary action on the left one. A full circle takes 2048 counts at the middle
+defaults are this project's choice for the three buttons the camera hand rests on: draw
+on the right button, look on the middle one, the secondary action on the left one. The
+message of commit `8d0f5b7` names another product's page of default keys for this row
+and cannot be changed; the row's three defaults are this project's choice, as said here.
+A full circle takes 2048 counts at the middle
 of the slider, and the slider spans a quarter to four times that; the yaw and the pitch
 share one gain, and the mouse's pitch invert is a setting of its own. The camera turns no
 faster than 2048 units a tick with the mouse, so that the 60 fps interpolator never

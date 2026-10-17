@@ -18289,12 +18289,26 @@ namespace
 	/* The mirror's reflectance face on: the textbook dielectric's
 	 * ((n - 1) / (n + 1))^2 at n = 1.5, polished stone (hd_gloss_math.h). */
 	const float kMarbleF0 = 0.04f;
+	/* The mirrored draw keeps what stands more than this over the floor's
+	 * plane. At the plane itself the floor's own triangles lie at a distance
+	 * of nothing to the clip, kept or cut by rounding along a line through
+	 * each, and where kept they cover the reflection in the target - a
+	 * floor that blinks from frame to frame as the eye moves. The offset is
+	 * the layer's own lift, so the mirror starts where the laid faces
+	 * stand; a mirror face's corners lie within it (marble_build). */
+	const float kMarbleClipOver = kWetLift;
+	// The clip's offset in use: kMarbleClipOver, or RoomProbe's -marbleclip.
+	float g_marble_clip = kMarbleClipOver;
 
 	// The level's mirror faces and the opaque clear floors (marble_build).
 	int g_marble_faces = 0;
 	int g_marble_water = 0;
 	int g_marble_opaque = 0;
 	int g_marble_heights = 0;
+	/* The farthest a kept face's corner lies from its plane, in units, and
+	 * the faces left out for a corner farther than kMarbleClipOver. */
+	int g_marble_spread = 0;
+	int g_marble_rising = 0;
 
 	// The target the mirrored rooms are drawn into, and its depth.
 	IDirect3DTexture9* g_marble_tex = 0;
@@ -18360,7 +18374,15 @@ namespace
 
 	/* After the level's build and its rooms' flags: a water room's faces
 	 * leave the mirror (the tank interiors and the pool), and the clear
-	 * floors of the column elsewhere are drawn opaque. */
+	 * floors of the column elsewhere are drawn opaque.
+	 *
+	 * A face with a corner farther than kMarbleClipOver from its plane
+	 * leaves too: it rises across itself (a ramp, a step's nose, a roof's
+	 * slope), stands partly over the clip and so in its own mirror, and a
+	 * level floor's reflection is not its own. The faces lie in two kinds,
+	 * nothing between: every corner within a unit of the plane, or the
+	 * face rising 15 units and more (RICH2 561 of 42,228, ANDREA2 30,
+	 * ANDREA3 4, RICH3 54, RICHCUT2 27; RoomProbe -marble 1's spread). */
 	void marble_build(const HDWaterRoom* rooms, int count)
 	{
 		std::unordered_set<int> heights;
@@ -18368,6 +18390,8 @@ namespace
 		g_marble_faces = 0;
 		g_marble_water = 0;
 		g_marble_opaque = 0;
+		g_marble_spread = 0;
+		g_marble_rising = 0;
 
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
@@ -18382,6 +18406,38 @@ namespace
 				group.mirrorY.clear();
 			}
 
+			size_t kept = 0;
+
+			for (size_t f = 0; f < group.mirrorY.size(); f++)
+			{
+				float most = 0.0f;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const float d = fabsf(group.mirrorFaces[f * 9 + c * 3 + 1] -
+						(float)group.mirrorY[f]);
+
+					most = d > most ? d : most;
+				}
+
+				if (most > kMarbleClipOver)
+				{
+					g_marble_rising++;
+					continue;
+				}
+
+				if ((int)ceilf(most) > g_marble_spread)
+					g_marble_spread = (int)ceilf(most);
+
+				for (int k = 0; k < 9; k++)
+					group.mirrorFaces[kept * 9 + k] =
+						group.mirrorFaces[f * 9 + k];
+
+				group.mirrorY[kept++] = group.mirrorY[f];
+			}
+
+			group.mirrorFaces.resize(kept * 9);
+			group.mirrorY.resize(kept);
 			g_marble_faces += (int)group.mirrorY.size();
 			heights.insert(group.mirrorY.begin(), group.mirrorY.end());
 
@@ -18502,6 +18558,11 @@ void HDRenderMarbleRows(int rows)
 		release_marble();
 }
 
+void HDRenderMarbleClip(float units)
+{
+	g_marble_clip = units;
+}
+
 void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 {
 	if (!out)
@@ -18512,6 +18573,8 @@ void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 	out->water = g_marble_water;
 	out->opaque = g_marble_opaque;
 	out->heights = g_marble_heights;
+	out->spread = g_marble_spread;
+	out->rising = g_marble_rising;
 }
 
 void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
@@ -18661,6 +18724,12 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	g_marble_stats.planes = (int)planes.size();
 	g_marble_stats.drawn = drawn;
 
+	for (size_t i = 0; i < planes.size() && i < 8; i++)
+	{
+		g_marble_stats.plane_y[i] = planes[i].y;
+		g_marble_stats.plane_cover[i] = planes[i].cover;
+	}
+
 	if (!drawn)
 	{
 		target->Release();
@@ -18732,8 +18801,9 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				mirrored[r * 4 + c] = c == 0 ? -s : s;
 			}
 
-		// What stands over the floor, in the eye's own view space.
-		const float over[4] = { n[0], n[1], n[2], -dist };
+		/* What stands more than kMarbleClipOver over the floor, in the eye's
+		 * own view space. */
+		const float over[4] = { n[0], n[1], n[2], -dist - g_marble_clip };
 		float clip[4];
 
 		if (!HDWetPlaneTo(mirrored, over, clip))

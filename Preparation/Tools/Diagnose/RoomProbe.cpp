@@ -548,6 +548,15 @@
  *                     (tomb5.hd_marble_planes, 2 where not given).
  *     -marblerows 1|2 the mirror's target at one or two rows a row of the
  *                     frame (2, the engine's, where not given).
+ *     -marbleclip <units>  how far over the floor's plane the mirrored draw
+ *                     starts (HDRenderMarbleClip; 4, the engine's, where
+ *                     not given; 0 puts the clip in the floor, where the
+ *                     floor's own triangles blink into its mirror). The
+ *                     marble: line ends with the kept faces' spread and
+ *                     the faces left out for rising across themselves, and
+ *                     one marbleplane: line a plane of the frame follows,
+ *                     in its rank: the height, the share of the screen its
+ *                     faces cover, drawn or left.
  *     -nowarm         no warm-up of the water's shaders before the picture
  *                     (HDRenderWaterWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
@@ -8393,6 +8402,13 @@ static bool MarbleArg(int argc, char** argv, int* at)
 		return true;
 	}
 
+	// -marbleclip <units>: the mirrored draw's start over the floor.
+	if (!strcmp(a, "-marbleclip") && more)
+	{
+		HDRenderMarbleClip((float)atof(argv[++*at]));
+		return true;
+	}
+
 	if (!strcmp(a, "-marblecensus") || !strcmp(a, "-marblequiet"))
 		g_marble_quiet = g_marble_quiet || a[7] == 'q';
 	else if (!strcmp(a, "-marblepages") && more)
@@ -8969,9 +8985,15 @@ static void ProbeMarble(const void* projection)
 	HDRenderMarbleStatsNow(&s);
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
-		"(timestamps round HDRenderMarbleDraw), first %.4f ms\n", s.planes,
-		s.drawn, g_marble_planes, s.faces, s.calls, s.wet, s.faces_level,
-		s.water, s.opaque, s.heights, ms, first);
+		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
+		"rising %d\n", s.planes, s.drawn, g_marble_planes, s.faces, s.calls,
+		s.wet, s.faces_level, s.water, s.opaque, s.heights, ms, first,
+		s.spread, s.rising);
+
+	// One marbleplane line a plane of the frame, in the order it is ranked.
+	for (int i = 0; i < s.planes && i < 8; i++)
+		printf("marbleplane: %d y %d cover %.5f %s\n", i, s.plane_y[i],
+			s.plane_cover[i], i < s.drawn ? "drawn" : "left");
 }
 
 /* The room behind the models' copy (HDRenderWaterWetRoomCopy) where

@@ -1786,6 +1786,13 @@ struct HDRenderMarbleStats
 	int water;	// faces left out in water rooms
 	int opaque;	// clear floor draw calls drawn opaque
 	int heights;	// the level's floor heights with a face
+	// The frame's planes in their order, the first eight: height, share.
+	int plane_y[8];
+	float plane_cover[8];
+	// The farthest corner of a kept face from its plane, units, and the
+	// faces left out for rising farther than the mirror's clip offset.
+	int spread;
+	int rising;
 };
 
 void HDRenderMarbleSet(int on, int planes);
@@ -1799,6 +1806,9 @@ void HDRenderMarbleQuiet(bool on);
 /* RoomProbe's -marblerows: the mirror target drawn at 1 or 2 rows a row of
  * the frame (2 in the engine). */
 void HDRenderMarbleRows(int rows);
+/* RoomProbe's -marbleclip: how far over the floor's plane the mirrored draw
+ * starts, in units (4 in the engine; 0 puts the clip in the floor). */
+void HDRenderMarbleClip(float units);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

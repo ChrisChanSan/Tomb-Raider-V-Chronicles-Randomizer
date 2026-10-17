@@ -21673,13 +21673,15 @@ static void water_under()
 
 /* The sea seen from below on the game's path (hd_water_under.h). The
  * classic layers stay out under an HD sky that has a cloud sheet or an
- * opaque band, and in a level with the deep look whatever its sky -
- * JOBY4's band alone, one flat colour, keeps them out. The look's surface
- * is the water's top over the dive: JOBY4's -5,120 over the eye of the
- * owner's picture (y 14,790 in room 33) is 19,910 units up; an eye over
- * it still meets it a unit up. The look's own numbers stay inside the
- * shader's ranges: a floor between 0 and 1, the march shorter than the
- * shafts' reach under the surface, a rim inside the window's cosine. */
+ * opaque band, and in a level with the deep look and the sheets on
+ * whatever its sky - JOBY4's band alone, one flat colour, keeps them out.
+ * The look's surface is the water's top over the dive: JOBY4's -5,120 over
+ * an eye at y 14,790 in room 33 is 19,910 units up; an eye over it still
+ * meets it a unit up. The look's own numbers stay inside the shader's
+ * ranges: a floor between 0 and 1, the march shorter than the shafts'
+ * reach under the surface, a rim narrower than the window itself (its
+ * cosine runs from the critical 0.661 to 1), so that the window's middle
+ * takes the whole light. */
 static void water_look()
 {
 	printf("the sea from below: the layers' rule and the look's numbers\n");
@@ -21695,7 +21697,7 @@ static void water_look()
 	ok(HDSkyLayersLeftOut(1, 1, 1),
 		"water look: ...and with a sheet as well", 0, 0);
 	ok(HDWaterLookDepth(14790.0f, -5120.0f) == 19910.0f,
-		"water look: the surface 19,910 units over the eye of his picture",
+		"water look: the surface 19,910 units over an eye in room 33",
 		(long)HDWaterLookDepth(14790.0f, -5120.0f), 19910);
 	ok(HDWaterLookDepth(-6000.0f, -5120.0f) == 1.0f,
 		"water look: an eye over the top meets it a unit up", 0, 0);
@@ -21711,9 +21713,9 @@ static void water_look()
 		"water look: the march shorter than the shafts' reach",
 		(long)k[HD_LOOK_LENGTH], (long)k[HD_LOOK_DEEP]);
 	ok(k[HD_LOOK_RIM] > 0.0f &&
-		k[HD_LOOK_RIM] < HDWaterSnellCos(1.333f),
-		"water look: the rim inside the window's cosine",
-		(long)(k[HD_LOOK_RIM] * 100.0f), 40);
+		k[HD_LOOK_RIM] < 1.0f - HDWaterSnellCos(1.333f),
+		"water look: the rim narrower than the window's span of cosine",
+		(long)(k[HD_LOOK_RIM] * 100.0f), 30);
 	ok(k[HD_LOOK_CELL] > 0.0f && k[HD_LOOK_WAVES] > 0.0f &&
 		k[HD_LOOK_REACH] > 0.0f && k[HD_LOOK_POWER] > 1.0f,
 		"water look: the cells, the waves' way, the reach and the power", 0,

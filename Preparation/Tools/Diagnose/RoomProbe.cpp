@@ -316,7 +316,8 @@
  *                     700 0.55 6000 8000 were its first numbers
  *     -undertick <file> <room>
  *                     with -roombox, -out and the picture's switches (-vis
- *                     1 among them): the sea's surface counted along a
+ *                     1 among them; with the look's switches -sky and
+ *                     -rooms <n> too): the sea's surface counted along a
  *                     walk of eyes, each a CAMLOG tick's eye and target -
  *                     the walk's rooms, the picture with them and without
  *                     <room> and the look; see UnderTicks
@@ -18391,6 +18392,7 @@ static int UnderTicks(int argc, char** argv, int at)
 
 	// The switches for the walk and for the two pictures.
 	std::string walkRest, pictureRest, bareRest;
+	bool look = false, sky = false, rooms = false;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -18398,6 +18400,11 @@ static int UnderTicks(int argc, char** argv, int at)
 			continue;
 
 		const std::string a = argv[i];
+
+		look = look || a == "-underlook" || a == "-underlookknobs" ||
+			a == "-underlookset";
+		sky = sky || a == "-sky";
+		rooms = rooms || a == "-rooms";
 
 		if (a == "-out" && i + 1 < argc)
 		{
@@ -18425,6 +18432,16 @@ static int UnderTicks(int argc, char** argv, int at)
 			walkRest += v;
 			pictureRest += v;
 		}
+	}
+
+	/* The look is drawn with the sky, and the sky's groups come in with the
+	 * rooms' load: without -sky and -rooms <n> it is left out unseen and
+	 * the counts are those of a picture without it. */
+	if (look && !(sky && rooms))
+	{
+		printf("undertick: the look needs -sky and -rooms <n>\n");
+		fclose(f);
+		return 1;
 	}
 
 	std::string loaded;

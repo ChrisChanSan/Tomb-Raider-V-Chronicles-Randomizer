@@ -21963,15 +21963,18 @@ bool HDRenderSky(const D3DMATRIX* world)
 /* Whether the classic flat layers stay out under the HD sky: where it
  * stands for them - a cloud sheet in any sky group, or a band in the
  * opaque pass, TITLE's two whole painted skies - and in a level that takes
- * the deep look (HDSkyLayersLeftOut, hd_water_under.h). The band of every
- * other level is an alpha-pass part with a sheet over it, except JOBY4's
- * (RoomProbe -skycensus), which is the band alone and one flat colour;
- * JOBY4's script layers are the sea's surface seen from below on the
- * level's classic page, and JOBY4 takes the deep look, whose surface the
- * remaster's art of room 19 and HDRenderWaterLook draw instead. RICH3
- * takes it too (its one water room no sheet lies over, the flipped room
- * 190, against none under a sheet), and its sheets leave the layers out
- * already. */
+ * the deep look with the sheets on (HDSkyLayersLeftOut, hd_water_under.h).
+ * The band of every other level is an alpha-pass part with a sheet over
+ * it, except JOBY4's (RoomProbe -skycensus), which is the band alone and
+ * one flat colour; JOBY4's script layers are the sea's surface seen from
+ * below on the level's classic page, and JOBY4 takes the deep look, whose
+ * surface the remaster's art of room 19 and HDRenderWaterLook draw
+ * instead. The look and its fill of the band's open poles come only with
+ * the sheets (g_caustic_on, tomb5.hd_water); with them off the layers stay
+ * in, as before, so that nothing leaves the poles at the frame's clear.
+ * RICH3 takes the deep look too (its one water room no sheet lies over,
+ * the flipped room 190, against none under a sheet), and its sheets leave
+ * the layers out already. */
 bool HDRenderSkyCoversLayers()
 {
 	int sheet = 0;
@@ -21985,7 +21988,8 @@ bool HDRenderSkyCoversLayers()
 				else if (range.count && range.flatLight == 0.0f)
 					sheet = 1;
 
-	return HDSkyLayersLeftOut(sheet, opaque, g_wdeep_on ? 1 : 0);
+	return HDSkyLayersLeftOut(sheet, opaque,
+		g_wdeep_on && g_caustic_on ? 1 : 0);
 }
 
 /* The page of the HD sky's nearest cloud sheet: of the alpha pass's sheets

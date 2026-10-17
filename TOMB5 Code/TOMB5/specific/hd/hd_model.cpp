@@ -141,6 +141,10 @@ namespace
 		std::string folder;		// where its track files are looked for
 		const char* from = "5";		// the face file's own folder, for the log
 		const char* folderLabel = "5";	// ... and the track files'
+		/* A mod's face only: whose track files it speaks - "own", "install"
+		 * (the install's face has the same rig), "differs" or "none" (no
+		 * install face of that name); "" for every other face. */
+		const char* rig = "";
 
 		std::vector<float> position;		// 3 a vertex, the file's own
 		std::vector<unsigned char> normal;	// 3 a vertex, biased by 127
@@ -2151,8 +2155,14 @@ namespace
 	 * numbered after Tomb Raider IV's (29 to 112), three of them (96, 101,
 	 * 103) under numbers this game uses for other lines. So an
 	 * installation's face looks in game 5's ITEM and nowhere else. A mod's
-	 * face, whose rig need not be the install's, looks only in its own
-	 * folder, and so does a Tomb Raider III guest's. */
+	 * face, whose rig need not be the install's, looks in its own folder;
+	 * where that holds no track file of the face and the install's face of
+	 * the same name carries the same rig and block header (HDLipsSameRig),
+	 * it speaks the install's files from game 5's ITEM - a mod that changes
+	 * the face's geometry and keeps its rig. A Tomb Raider III guest's face
+	 * looks only in its own folder. */
+	void lips_files(const Lips& lips, std::vector<int>& out);
+
 	Lips* make_lips(const HDTrmModel& trm, const std::string& stem,
 		const std::string& path, HDModelOrigin origin)
 	{
@@ -2174,6 +2184,42 @@ namespace
 		{
 			lips->folder = folder_of(path);
 			lips->folderLabel = ownLabel;
+		}
+
+		/* A mod's face without track files of its own: the install's face
+		 * of the same name, read once here, lends its files when the rig
+		 * is the same. The face's own vertices, bones and weights still
+		 * take the deform, so its changed geometry speaks. */
+		if (origin == HD_MODEL_ORIGIN_MOD)
+		{
+			std::vector<int> own;
+
+			lips_files(*lips, own);
+			lips->rig = own.empty() ? "none" : "own";
+
+			HDModelOrigin installOrigin = HD_MODEL_ORIGIN_NONE;
+			const std::string installPath = own.empty()
+				? find_model(stem, false, &installOrigin, 0, kModsNone)
+				: std::string();
+			HDTrmModel install;
+			const char* trouble = "";
+
+			std::memset(&install, 0, sizeof(install));
+
+			if (!installPath.empty() && HDTrmLoad(installPath.c_str(), &install,
+				&trouble))
+			{
+				if (HDLipsSameRig(&trm, &install))
+				{
+					lips->folder = join(g_install, "ITEM");
+					lips->folderLabel = "5";
+					lips->rig = "install";
+				}
+				else
+					lips->rig = "differs";
+
+				HDTrmFree(&install);
+			}
 		}
 
 		lips->mapped = HDLipsMapBuild(&trm, stem.c_str(), &lips->map, &lips->why);
@@ -2324,12 +2370,19 @@ namespace
 
 		lips_files(lips, files);
 
+		// A mod's face: whose track files it speaks - see Lips::rig.
+		char rig[32] = "";
+
+		if (*lips.rig)
+			std::snprintf(rig, sizeof(rig), " rig=%s", lips.rig);
+
 		if (files.empty())
 		{
 			std::snprintf(line, sizeof(line), "slot=%d face=%s file=- frames=0 "
-				"cols=%d joints=%d/%d axis=%s len=0.0s reason=no file", slot,
+				"cols=%d joints=%d/%d axis=%s len=0.0s reason=no file%s", slot,
 				lips.stem.c_str(), lips.columns, lips.map.driven, lips.map.rigJoints,
-				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED));
+				HDLipsAxisName(lips.mapped ? lips.map.axis
+					: HD_LIPS_AXIS_REFUSED), rig);
 			g_lips_lines.push_back(line);
 			loop_line(slot, lips);
 			return;
@@ -2351,12 +2404,13 @@ namespace
 					lips.folderLabel);
 
 			std::snprintf(line, sizeof(line), "slot=%d face=%s file=%s_%d.TRL "
-				"frames=%d cols=%d joints=%d/%d axis=%s len=%.1fs reason=%s%s", slot,
+				"frames=%d cols=%d joints=%d/%d axis=%s len=%.1fs "
+				"reason=%s%s%s", slot,
 				lips.stem.c_str(), lips.stem.c_str(), files[i],
 				opened ? clip.frames : 0, opened ? clip.columns : 0,
 				lips.map.driven, lips.map.rigJoints,
 				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED),
-				opened ? clip.frames / 30.0 : 0.0, reason, from);
+				opened ? clip.frames / 30.0 : 0.0, reason, from, rig);
 			g_lips_lines.push_back(line);
 			HDTrlClose(&clip);
 		}

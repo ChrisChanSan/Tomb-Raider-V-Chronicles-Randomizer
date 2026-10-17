@@ -142,6 +142,15 @@ struct HDLipsMap
 bool HDLipsMapBuild(const HDTrmModel* trm, const char* stem, HDLipsMap* out,
 	const char** why);
 
+/* True when two faces carry the same rig and the same joint block header,
+ * bit for bit: the joint count and every inverse bind matrix, the block's
+ * nodes and parents, its columns and the joint each drives, and its frame
+ * 0. Everything a track file's frame is read against is then the same, so
+ * the one face's track files drive the other face's joints exactly as its
+ * own; the geometry, its bones and weights and the block's later frames
+ * may differ. False for a file without a rig or a block. */
+bool HDLipsSameRig(const HDTrmModel* a, const HDTrmModel* b);
+
 // "identity", "(x,-z,y)", "(x,-y,-z)" or "-".
 const char* HDLipsAxisName(int axis);
 

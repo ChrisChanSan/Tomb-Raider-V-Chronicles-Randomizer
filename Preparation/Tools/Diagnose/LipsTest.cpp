@@ -54,6 +54,12 @@
  *      a full mask is no mask - and the blinks the loop starts.
  *   8. the firing face: the ease in and out, the blend from the loop's frame,
  *      and the firing frame's mouth against its numbers.
+ *   9. a face of another geometry on the same rig: which faces HDLipsSameRig
+ *      takes for one rig and which it refuses, a copy refused for one byte
+ *      of each part it compares, and the tracks of two cutscenes Lara acts
+ *      in - cutscene 8 (track 102) and 32 (track 120) - read in game 5's
+ *      ITEM and driving LARA_YOUNG_HEAD's mouth, whose geometry is not
+ *      LARA_HEAD's, while the bind returns it to itself.
  *
  * Besides the checks it prints what the comments in hd_trl.cpp and hd_trl.h
  * quote: how far each face's composed bind stands from its rig, the scale the
@@ -1560,6 +1566,154 @@ static void section_fire()
 		"firing frame (%.2f): %.2f\n", lidFrom, lidTo, lidMid);
 }
 
+/* One part of a face's rig changed by one byte: HDLipsSameRig must refuse
+ * it. `part` 0 the inverse binds, 1 the block's parents, 2 its columns, 3
+ * its frame 0. The copy shares nothing with the face. */
+static bool same_after_one_byte(const HDTrmModel& trm, int part)
+{
+	const size_t joints = (size_t)trm.rigJoints * 12;
+	std::vector<float> bind(trm.rigBind, trm.rigBind + joints);
+	std::vector<int> parent(trm.blockParent, trm.blockParent + trm.blockNodes);
+	std::vector<int> column(trm.blockColumn,
+		trm.blockColumn + trm.blockColumns);
+	std::vector<float> zero(trm.blockBind,
+		trm.blockBind + (size_t)trm.blockColumns * 12);
+	unsigned char* bytes = part == 0 ? (unsigned char*)&bind[5]
+		: part == 1 ? (unsigned char*)&parent[7]
+		: part == 2 ? (unsigned char*)&column[3]
+		: (unsigned char*)&zero[17];
+
+	bytes[0] ^= 1;
+
+	HDTrmModel copy = trm;
+
+	copy.rigBind = &bind[0];
+	copy.blockParent = &parent[0];
+	copy.blockColumn = &column[0];
+	copy.blockBind = &zero[0];
+	return HDLipsSameRig(&trm, &copy);
+}
+
+static void section_mod_rig()
+{
+	printf("\n-- 9. another geometry on the same rig ------------------\n");
+
+	Face* lara = face("LARA_HEAD");
+	Face* young = face("LARA_YOUNG_HEAD");
+	Face* creepy = face("LARA_CREEPY_HEAD");
+	Face* larson = face("LARSON_HEAD");
+	Face* pierre = face("PIERRE_HEAD");
+
+	if (!lara->loaded || !young->loaded || !creepy->loaded || !larson->loaded ||
+		!pierre->loaded)
+	{
+		check(false, "the five faces of this section do not all load");
+		return;
+	}
+
+	/* The three faces of Lara carry one rig and one block header; their
+	 * geometry differs (5913, 12740 and 5409 vertices) and the creepy
+	 * face's block lies four bytes earlier, which the rule does not read. */
+	check(HDLipsSameRig(&lara->trm, &lara->trm),
+		"LARA_HEAD is not its own rig");
+	check(HDLipsSameRig(&lara->trm, &young->trm) &&
+		HDLipsSameRig(&young->trm, &lara->trm),
+		"LARA_YOUNG_HEAD is not taken for LARA_HEAD's rig");
+	check(HDLipsSameRig(&lara->trm, &creepy->trm),
+		"LARA_CREEPY_HEAD is not taken for LARA_HEAD's rig");
+	check(!HDLipsSameRig(&lara->trm, &larson->trm) &&
+		!HDLipsSameRig(&larson->trm, &pierre->trm),
+		"LARSON_HEAD or PIERRE_HEAD is taken for another face's rig");
+
+	for (int part = 0; part < 4; part++)
+		check(!same_after_one_byte(lara->trm, part),
+			"one byte changed in part %d of LARA_HEAD's rig is still the rig",
+			part);
+
+	HDTrmModel none;
+
+	memset(&none, 0, sizeof(none));
+	check(!HDLipsSameRig(&none, &none) && !HDLipsSameRig(&lara->trm, &none) &&
+		!HDLipsSameRig(0, &lara->trm), "a face without a rig is taken");
+
+	/* The two cutscenes: Lara is actor 0 of cutscene 8 (ANDREA2, track
+	 * 102) and of cutscene 32 (JOBY5's start, track 120), as CutseqProbe
+	 * -actors reads the game's data\cutseq.bin. Her track files lie in
+	 * game 5's ITEM, which is where a face on her rig looks once its own
+	 * folder holds none (make_lips, hd_model.cpp). */
+	struct Cut
+	{
+		int cut;
+		int track;
+		int frames;
+		int frame;		// the frame of the widest mouth, every 10th
+		double lara;		// the farthest vertex on LARA_HEAD
+		double young;		// ... and on LARA_YOUNG_HEAD
+	};
+	static const Cut cuts[2] =
+	{
+		{ 8, 102, 1395, 70, 6.6087, 6.8420 },
+		{ 32, 120, 3078, 1270, 7.1867, 7.1686 },
+	};
+	Face* faces[2] = { lara, young };
+
+	for (int i = 0; i < 2; i++)
+		for (int k = 0; k < 2; k++)
+		{
+			Face* f = faces[k];
+
+			if (!f->mapped)
+			{
+				check(false, "%s is not mapped: %s", f->stem.c_str(), f->why);
+				continue;
+			}
+
+			/* LARA_HEAD's own file, read at the face's columns - the path a
+			 * face on her rig takes. */
+			HDTrlClip clip;
+			const char* why = "";
+			int frames = 0;
+			std::vector<float> frame((size_t)f->map.columns * 12);
+
+			if (HDTrlOpen(trl_path("LARA_HEAD", cuts[i].track).c_str(),
+				f->map.columns, &clip, &why))
+			{
+				frames = clip.frames;
+
+				if (!HDTrlReadFrame(&clip, cuts[i].frame, &frame[0]))
+					frame.clear();
+
+				HDTrlClose(&clip);
+			}
+			else
+				frame.clear();
+
+			check(!frame.empty() && frames == cuts[i].frames,
+				"cutscene %d: LARA_HEAD_%d.TRL reads %d frames for %s, "
+				"%d wanted", cuts[i].cut, cuts[i].track, frames,
+				f->stem.c_str(), cuts[i].frames);
+
+			if (frame.empty())
+				continue;
+
+			Result moved;
+			Result rest;
+			const double want = k ? cuts[i].young : cuts[i].lara;
+
+			deform(f, &frame[0], 1.0, moved);
+			deform(f, f->trm.blockBind, 1.0, rest);
+
+			printf("cutscene %2d: LARA_HEAD_%d.TRL frame %d on %s - the "
+				"farthest vertex %.4f units, %d past a unit; the bind "
+				"%.2e\n", cuts[i].cut, cuts[i].track, cuts[i].frame,
+				f->stem.c_str(), moved.farthest, moved.overOne, rest.farthest);
+			check(fabs(moved.farthest - want) <= 0.001 && rest.farthest < 1e-3,
+				"cutscene %d: %s moves %.4f units, %.4f wanted, and its "
+				"bind %.2e", cuts[i].cut, f->stem.c_str(), moved.farthest,
+				want, rest.farthest);
+		}
+}
+
 int main(int argc, char** argv)
 {
 	const char* objFolder = argc > 1 ? argv[1] : 0;
@@ -1589,6 +1743,7 @@ int main(int argc, char** argv)
 	section_ease();
 	section_loop(blockFolder);
 	section_fire();
+	section_mod_rig();
 
 	for (std::map<std::string, Face*>::iterator at = g_faces.begin(); at != g_faces.end(); ++at)
 	{

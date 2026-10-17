@@ -402,6 +402,29 @@ const char* HDLipsAxisName(int axis)
 	}
 }
 
+bool HDLipsSameRig(const HDTrmModel* a, const HDTrmModel* b)
+{
+	if (!a || !b || !a->rigBind || !b->rigBind || !a->blockParent ||
+		!b->blockParent || !a->blockColumn || !b->blockColumn ||
+		!a->blockBind || !b->blockBind)
+		return false;
+
+	if (a->rigJoints <= 0 || a->rigJoints != b->rigJoints ||
+		a->blockNodes <= 0 || a->blockNodes != b->blockNodes ||
+		a->blockColumns <= 0 || a->blockColumns != b->blockColumns)
+		return false;
+
+	// Bytes rather than floats, so a NaN or a signed zero counts as itself.
+	const size_t rig = (size_t)a->rigJoints * 48;
+	const size_t nodes = (size_t)a->blockNodes * 4;
+	const size_t columns = (size_t)a->blockColumns;
+
+	return !std::memcmp(a->rigBind, b->rigBind, rig) &&
+		!std::memcmp(a->blockParent, b->blockParent, nodes) &&
+		!std::memcmp(a->blockColumn, b->blockColumn, columns * 4) &&
+		!std::memcmp(a->blockBind, b->blockBind, columns * 48);
+}
+
 bool HDLipsMapBuild(const HDTrmModel* trm, const char* stem, HDLipsMap* out,
 	const char** why)
 {

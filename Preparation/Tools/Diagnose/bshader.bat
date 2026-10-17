@@ -252,7 +252,13 @@ call :stamp hd_room hd_room_water_foam_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_water_foam_depth_ps.inc
 if errorlevel 1 exit /b 1
+rem The water look includes hd_room.hlsl, the shadow caster hd_model.hlsl:
+rem their .inc carry that file's MD5 too, as the glow shader's does below.
+call :incstamp hd_room hd_water_look_vs.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_water_look hd_water_look_vs.inc
+if errorlevel 1 exit /b 1
+call :incstamp hd_room hd_water_look_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_water_look hd_water_look_ps.inc
 if errorlevel 1 exit /b 1
@@ -276,7 +282,11 @@ call :incstamp hd_room hd_glow_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_glow hd_glow_ps.inc
 if errorlevel 1 exit /b 1
+call :incstamp hd_model hd_shadow_cast_vs.inc
+if errorlevel 1 exit /b 1
 call :stamp hd_shadow hd_shadow_cast_vs.inc
+if errorlevel 1 exit /b 1
+call :incstamp hd_model hd_shadow_cast_ps.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_shadow hd_shadow_cast_ps.inc
 if errorlevel 1 exit /b 1

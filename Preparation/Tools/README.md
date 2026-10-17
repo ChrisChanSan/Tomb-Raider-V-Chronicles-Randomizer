@@ -286,8 +286,11 @@ Both the `.hlsl` and the generated `.inc` are checked in — GPLv3 wants the
 source that produced the bytecode to sit beside it.
 
 **`be.bat` checks that for you.** Every `.inc` carries
-the MD5 of the `.hlsl` it came from on its last line (`bshader.bat`, `:stamp`)
-and `be.bat` compares the two before it builds; where they differ it prints
+the MD5 of the `.hlsl` it came from on its last line (`bshader.bat`, `:stamp`),
+and the five whose shader includes another `.hlsl` (glow and water look
+include `hd_room.hlsl`, the shadow caster `hd_model.hlsl`) carry that file's
+MD5 on the line before (`:incstamp`). `be.bat` compares all 36 `.inc` before
+it builds; where they differ it prints
 `be: regenerating shaders - ... out of step with the HLSL`, runs `bshader.bat`
 itself and only then builds, and it refuses to build at all if that fails. A
 **content** stamp and not a file date, because a fresh clone gives every file

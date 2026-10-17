@@ -49,3 +49,76 @@ inline float HDWaterSnellCos(float n)
 
 	return sqrtf(1.0f - s * s);
 }
+
+/* Whether the classic flat layers stay out under an HD sky (SkyDrawPhase,
+ * hd_render.cpp HDRenderSkyCoversLayers): where the HD sky stands for them
+ * - a cloud sheet in it, or a band in the opaque pass (TITLE) - and in a
+ * level that takes the deep look, whatever its sky. The deep look's water
+ * is one sea seen from below, and its script's layers are that sea's
+ * surface on the level's own classic page (JOBY4: the PSX sky's dark teal
+ * SKY_GRAPHICS tiles, or the bright surface page with the PSX sky off);
+ * the surface over it is the remaster's art of the sea and the look of
+ * HDRenderWaterLook. `sheet`, `opaqueBand` and `deep` are 0 or 1. */
+inline bool HDSkyLayersLeftOut(int sheet, int opaqueBand, int deep)
+{
+	return sheet != 0 || opaqueBand != 0 || deep != 0;
+}
+
+/* The sea seen from below on the game's path (HDRenderWaterLook): the
+ * depth of its surface over the eye. The surface is the water's top over
+ * the dive - the highest ceiling of a square of any of the level's water
+ * rooms (`top`, world y, down; JOBY4 -5,120, the deep look's own top), 867
+ * units over the remaster's art of the sea's surface (room 19, y -4,253)
+ * and so a flat stand-in for that art seen from below. At least one unit,
+ * so that the eye ray always meets it above the eye. */
+inline float HDWaterLookDepth(float eyeY, float top)
+{
+	const float d = eyeY - top;
+
+	return d > 1.0f ? d : 1.0f;
+}
+
+/* The look's eleven numbers on the game's path, in the order of
+ * RoomProbe's -underlookknobs: the disc's, the shafts' and the underside's
+ * strengths, the surface light's reach along the eye ray in units, the
+ * disc's power, the shafts' cell size in units, the noise's floor (the
+ * share of the cells that pass no shaft), the shafts' reach under the
+ * surface and the march's length in units, the way in units over which
+ * the waves' slope is kept whole and the window rim's width in cosine
+ * (hd_water_look.hlsl, gLookMore; 0 for either: whole, and 0.08). */
+enum
+{
+	HD_LOOK_DISC, HD_LOOK_SHAFTS, HD_LOOK_UNDERSIDE, HD_LOOK_REACH,
+	HD_LOOK_POWER, HD_LOOK_CELL, HD_LOOK_FLOOR, HD_LOOK_DEEP, HD_LOOK_LENGTH,
+	HD_LOOK_WAVES, HD_LOOK_RIM, HD_LOOK_KNOBS
+};
+
+/* Free choices, set by eye on RoomProbe -underlook pictures of JOBY4 at
+ * three eyes of the owner's play (rooms 33, 123 and 6, looking 46, 43 and
+ * 19 degrees up) against the look of a reference picture of that sea from
+ * below: a soft bright surface overhead, faint shafts fanning down into
+ * dark water. His eyes there stand 18,800 to 20,200 units under the
+ * surface (y 13,667 to 15,044), so the shafts reach 40,000 units down
+ * (0.63 of their light left at the shallowest eye, where 6,000 left
+ * 0.04); the water's sigma_s (0.000444 a unit) leaves a twentieth of the
+ * light 6,700 units along the ray, so the march stops at 5,000 and its 24
+ * steps fall 208 units apart; cells of 1,600 units, of which 62 per cent
+ * pass no shaft, give a few broad soft columns where 700 and 0.55 gave an
+ * even haze. The disc stays faint (no sun shows on the reference), the
+ * underside a glow; the waves' slope is kept whole over 1,500 units of the
+ * way and the rim spread over 0.4 of cosine, so that 19,000 units up the
+ * waves no longer draw noise and dark streaks across the lit window. */
+inline void HDWaterLookKnobs(float* knobs)
+{
+	knobs[HD_LOOK_DISC] = 0.3f;
+	knobs[HD_LOOK_SHAFTS] = 16.0f;
+	knobs[HD_LOOK_UNDERSIDE] = 0.4f;
+	knobs[HD_LOOK_REACH] = 40000.0f;
+	knobs[HD_LOOK_POWER] = 600.0f;
+	knobs[HD_LOOK_CELL] = 1600.0f;
+	knobs[HD_LOOK_FLOOR] = 0.62f;
+	knobs[HD_LOOK_DEEP] = 40000.0f;
+	knobs[HD_LOOK_LENGTH] = 5000.0f;
+	knobs[HD_LOOK_WAVES] = 1500.0f;
+	knobs[HD_LOOK_RIM] = 0.4f;
+}

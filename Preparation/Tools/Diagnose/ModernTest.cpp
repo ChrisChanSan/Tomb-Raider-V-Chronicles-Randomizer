@@ -21671,6 +21671,55 @@ static void water_under()
 		"water under: an index under 1 is taken as 1", 0, 0);
 }
 
+/* The sea seen from below on the game's path (hd_water_under.h). The
+ * classic layers stay out under an HD sky that has a cloud sheet or an
+ * opaque band, and in a level with the deep look whatever its sky -
+ * JOBY4's band alone, one flat colour, keeps them out. The look's surface
+ * is the water's top over the dive: JOBY4's -5,120 over the eye of the
+ * owner's picture (y 14,790 in room 33) is 19,910 units up; an eye over
+ * it still meets it a unit up. The look's own numbers stay inside the
+ * shader's ranges: a floor between 0 and 1, the march shorter than the
+ * shafts' reach under the surface, a rim inside the window's cosine. */
+static void water_look()
+{
+	printf("the sea from below: the layers' rule and the look's numbers\n");
+
+	ok(!HDSkyLayersLeftOut(0, 0, 0),
+		"water look: a bare band and no deep look keeps the layers", 0, 0);
+	ok(HDSkyLayersLeftOut(1, 0, 0),
+		"water look: a cloud sheet stands for the layers", 0, 0);
+	ok(HDSkyLayersLeftOut(0, 1, 0),
+		"water look: an opaque band stands for the layers", 0, 0);
+	ok(HDSkyLayersLeftOut(0, 0, 1),
+		"water look: the deep look leaves them out over a bare band", 0, 0);
+	ok(HDSkyLayersLeftOut(1, 1, 1),
+		"water look: ...and with a sheet as well", 0, 0);
+	ok(HDWaterLookDepth(14790.0f, -5120.0f) == 19910.0f,
+		"water look: the surface 19,910 units over the eye of his picture",
+		(long)HDWaterLookDepth(14790.0f, -5120.0f), 19910);
+	ok(HDWaterLookDepth(-6000.0f, -5120.0f) == 1.0f,
+		"water look: an eye over the top meets it a unit up", 0, 0);
+
+	float k[HD_LOOK_KNOBS];
+
+	HDWaterLookKnobs(k);
+	ok(HD_LOOK_KNOBS == 11, "water look: eleven numbers", HD_LOOK_KNOBS, 11);
+	ok(k[HD_LOOK_FLOOR] > 0.0f && k[HD_LOOK_FLOOR] < 1.0f,
+		"water look: the noise's floor between 0 and 1",
+		(long)(k[HD_LOOK_FLOOR] * 100.0f), 62);
+	ok(k[HD_LOOK_LENGTH] < k[HD_LOOK_DEEP],
+		"water look: the march shorter than the shafts' reach",
+		(long)k[HD_LOOK_LENGTH], (long)k[HD_LOOK_DEEP]);
+	ok(k[HD_LOOK_RIM] > 0.0f &&
+		k[HD_LOOK_RIM] < HDWaterSnellCos(1.333f),
+		"water look: the rim inside the window's cosine",
+		(long)(k[HD_LOOK_RIM] * 100.0f), 40);
+	ok(k[HD_LOOK_CELL] > 0.0f && k[HD_LOOK_WAVES] > 0.0f &&
+		k[HD_LOOK_REACH] > 0.0f && k[HD_LOOK_POWER] > 1.0f,
+		"water look: the cells, the waves' way, the reach and the power", 0,
+		0);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -23529,6 +23578,7 @@ int main()
 	splash_wet_clip();
 	splash_rings();
 	water_under();
+	water_look();
 	spring_table();
 	spring_file();
 	spring_clock();

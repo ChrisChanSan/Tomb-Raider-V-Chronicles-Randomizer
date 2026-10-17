@@ -295,17 +295,25 @@
  *     -underwater     the room carries ROOM_UNDERWATER and the camera is in
  *                     it: the WaterTable darkening on the colour and the
  *                     screen wobble on the position.
- *     -underlook      with -underwater and -hdwater 1: the sea seen from
- *                     below, a study the game never draws - the sun's disc
- *                     through the surface, its lit underside and the shafts
- *                     added over the frame (HDRenderWaterProbeLook), its GPU
- *                     time printed
+ *     -underlook      with -sky, -underwater and -hdwater 1 in a level
+ *                     with the deep look: the sea seen from below as the
+ *                     game draws it (HDRenderWaterLook) - the sun's disc
+ *                     through the surface, its lit underside and the
+ *                     shafts - right after the sky and before the rooms,
+ *                     at HDWaterLookKnobs' numbers, its GPU time printed
+ *     -underlookknobs <disc shafts underside reach power cell floor deep len
+ *                     waves rim>
+ *                     the same with these eleven numbers in place of the
+ *                     engine's (strengths, the surface light's reach, the
+ *                     disc's power, the shafts' cell size, the noise's
+ *                     floor, their reach under the surface, the march's
+ *                     length, the way the waves' slope is kept whole over,
+ *                     the window rim's width in cosine)
  *     -underlookset <disc shafts underside reach power cell floor deep len>
- *                     the same with its nine numbers (strengths, the surface
- *                     light's reach, the disc's power, the shafts' cell
- *                     size, the noise's floor, their reach under the
- *                     surface, the march's length); the defaults are 3 3
- *                     0.25 40000 600 700 0.55 6000 8000
+ *                     the study: the same shader added over the whole
+ *                     frame (HDRenderWaterProbeLook), its surface the body's
+ *                     the extinction measures against; 3 3 0.25 40000 600
+ *                     700 0.55 6000 8000 were its first numbers
  *     -roomplane <y x0 z0 x1 z1>
  *                     the same, on the OTHER shimmer bit - the answer a
  *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
@@ -720,6 +728,7 @@
  * quoted include is resolved from THIS file's folder first, so this works
  * from both build scripts. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
@@ -1949,21 +1958,38 @@ static bool g_water = false;
 // -hdwater 0|1 (-1 not asked) and -waterfile - see the usage above.
 static int g_hdwater = -1;
 static std::string g_water_file;
-/* -underlook and -underlookset: the sea seen from below, a study over the
- * frame (HDRenderWaterProbeLook) - the disc, the shafts and the underside's
- * strengths, the surface light's reach, the disc's power, the shafts' cell
- * size, the noise's floor, their reach under the surface and the march's
- * length. The defaults are free choices for the first pictures. */
+/* -underlook: the sea seen from below as the game draws it
+ * (HDRenderWaterLook), right after the sky; -underlookknobs the same with
+ * other numbers in place of HDWaterLookKnobs' (to choose them).
+ * -underlookset: the study over the whole frame (HDRenderWaterProbeLook),
+ * its surface the body's the extinction measures against, with its nine
+ * numbers - the disc, the shafts and the underside's strengths, the
+ * surface light's reach, the disc's power, the shafts' cell size, the
+ * noise's floor, their reach under the surface and the march's length. */
 static bool g_under_look = false;
-static float g_under_knobs[9] = { 3.0f, 3.0f, 0.25f, 40000.0f, 600.0f,
-	700.0f, 0.55f, 6000.0f, 8000.0f };
+static bool g_under_game = false;
+static bool g_under_game_knobs = false;
+static float g_under_knobs[HD_LOOK_KNOBS] = { 3.0f, 3.0f, 0.25f,
+	40000.0f, 600.0f, 700.0f, 0.55f, 6000.0f, 8000.0f, 0.0f, 0.0f };
+static float g_under_game_set[HD_LOOK_KNOBS] = {};
 
-// The two switches, out of ProbeMain's chain of else-ifs (C1061).
+// The switches, out of ProbeMain's chain of else-ifs (C1061).
 static bool UnderArg(int argc, char** argv, int* at)
 {
 	if (!strcmp(argv[*at], "-underlook"))
 	{
-		g_under_look = true;
+		g_under_game = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-underlookknobs") && *at + HD_LOOK_KNOBS < argc)
+	{
+		for (int k = 0; k < HD_LOOK_KNOBS; k++)
+			g_under_game_set[k] = (float)atof(argv[*at + 1 + k]);
+
+		g_under_game = true;
+		g_under_game_knobs = true;
+		*at += HD_LOOK_KNOBS;
 		return true;
 	}
 
@@ -16718,6 +16744,32 @@ static int ProbeMain(int argc, char** argv)
 		ProbeSkyLayers(&skyWorld, stem);
 	}
 
+	/* -underlook: the sea seen from below where the game draws it, right
+	 * after the sky (HDFrameSky) and before the rooms, with the frame's own
+	 * block under the water. */
+	if (g_under_game)
+	{
+		double gpu = -1.0;
+		const bool drawn = skyDrew && HDRenderWaterLook(&frame, view,
+			(float)persp, (float)width * 0.5f, (float)height * 0.5f,
+			(float)cx + g_seed_origin[0], (float)cz + g_seed_origin[1],
+			g_under_game_knobs ? g_under_game_set : 0, &gpu);
+		float k[HD_LOOK_KNOBS];
+
+		if (g_under_game_knobs)
+			memcpy(k, g_under_game_set, sizeof(k));
+		else
+			HDWaterLookKnobs(k);
+
+		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
+			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
+			"%.0f %.2f\n", drawn ? "drawn" : skyDrew ? "NOT drawn (no deep "
+			"look, no -hdwater 1 or no frame under the water)" :
+			"NOT drawn (no sky)",
+			gpu, width, height, k[0], k[1], k[2], k[3], k[4], k[5], k[6],
+			k[7], k[8], k[9], k[10]);
+	}
+
 	/* The scene: one room, or a room and the neighbours -with names, drawn
 	 * in the engine's own order out of the engine's own entry points -
 	 * HDFrameDraw draws every room's HD_PASS_SOLID and then every room's
@@ -16971,7 +17023,7 @@ static int ProbeMain(int argc, char** argv)
 	ProbeCardsDraw();
 	SpringDraw();
 
-	// -underlook: the sea seen from below, over everything (a study).
+	// -underlookset: the sea seen from below, over everything (a study).
 	if (g_under_look)
 	{
 		double gpu = -1.0;
@@ -16980,7 +17032,7 @@ static int ProbeMain(int argc, char** argv)
 			(float)cx + g_seed_origin[0], (float)cz + g_seed_origin[1],
 			g_under_knobs, &gpu);
 
-		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
+		printf("-underlookset: %s, GPU %.4f ms (timestamps round the pass) at "
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f\n",
 			drawn ? "drawn" : "NOT drawn (no frame under the water)", gpu,
 			width, height, g_under_knobs[0], g_under_knobs[1],
@@ -17082,9 +17134,12 @@ static int ProbeMain(int argc, char** argv)
 				"shows page %d\n", HDRenderBookCalls(), group, part, page);
 	}
 
+	// The end: whether SkyDrawPhase leaves the script's flat layers out
+	// under this sky (HDRenderSkyCoversLayers).
 	if (sky)
-		printf("sky: %d sky group(s), %d unlit part(s), HDRenderSky returned %s\n",
-			HDRenderSkyGroups(), stats.skyFlatParts, skyDrew ? "true" : "FALSE");
+		printf("sky: %d sky group(s), %d unlit part(s), HDRenderSky returned "
+			"%s, layers out %d\n", HDRenderSkyGroups(), stats.skyFlatParts,
+			skyDrew ? "true" : "FALSE", HDRenderSkyCoversLayers() ? 1 : 0);
 
 	const int broken = Diff(before, after);
 	// kStateCount + three samplers' kSamplerCount + kStageCount, plus the

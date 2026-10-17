@@ -31,12 +31,13 @@
  *
  * The last column is the mirror column: 1 where the page's flat floors are
  * a planar mirror (hd_render.cpp, "the marble floors"). A line of class A
- * names that column alone and nothing of the sheen. The 35 pages of the
+ * names that column alone and nothing of the sheen. The 37 pages of the
  * column are the polished floors of the Rome levels, RICHCUT2 and the title,
  * looked at by eye on the thirty largest floor pages of each level
- * (RoomProbe -marblecensus, DdsProbe); the pages the sheen bars are among
- * them, the mirror being no sheen. The comment over a line names what the
- * page shows and where.
+ * (RoomProbe -marblecensus, DdsProbe), and RICH2's banded black marble at
+ * the corridor's end and in room 128, three squares a page; the pages the
+ * sheen bars are among them, the mirror being no sheen. The comment over a
+ * line names what the page shows and where.
  *
  * Kept sorted by page number. */
 
@@ -172,6 +173,10 @@ static const HDGlossPage kHDGlossPages[] =
 	{  3162, M, -1.0f, -1.0f, -1.0f, 0 },
 	// JOBY2: a plain grey sheet on 762,756 triangles - not a floor's metal
 	{  3171, X, -1.0f, -1.0f, -1.0f, 0 },
+	// RICH2 rooms 46, 75 and 128: black marble with gold bands
+	{  3314, A, -1.0f, -1.0f, -1.0f, 1 },
+	// RICH2 rooms 46, 75 and 128: the same, its second page
+	{  3315, A, -1.0f, -1.0f, -1.0f, 1 },
 	// JOBY3: three steaks
 	{  4046, X, -1.0f, -1.0f, -1.0f, 0 },
 	// JOBY2: brown wooden planks

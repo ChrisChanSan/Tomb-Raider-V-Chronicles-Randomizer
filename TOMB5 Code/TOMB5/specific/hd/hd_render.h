@@ -1818,6 +1818,13 @@ void HDRenderMarbleClip(float units);
 /* RoomProbe's -marblecopies 1: the art's copies under the polished floors
  * kept in the level as they were before (set before the level's build). */
 void HDRenderMarbleKeepCopies(bool keep);
+/* The marble floors' warm-up (hd_render.cpp): once a level, after its
+ * build, the mirror's target made at the frame's size and the room shaders
+ * drawn once with the clip plane on, and the layer's pair once, so the
+ * first frame with a mirror does not wait for the driver. `ms` takes each
+ * draw's time (target, plain, gloss, glow, layer; -1 for one not drawn).
+ * Returns the whole time in milliseconds, or -1 when nothing was warmed. */
+double HDRenderMarbleWarmUp(double* ms, int max);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

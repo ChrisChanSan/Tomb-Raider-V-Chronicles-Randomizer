@@ -18994,6 +18994,218 @@ namespace
 	}
 }
 
+/* The marble floors' warm-up. The first mirrored draw in a process waited
+ * for the driver: the room shaders drawn with a clip plane on are made
+ * again for it, and the mirror's target and depth are made at the frame's
+ * size - RoomProbe measured that first draw at 22.6 to 26.7 ms. So once a
+ * level, after its build, the target is made, each room pixel shader the
+ * mirrored rooms take (plain, gloss, glow) draws one triangle of the
+ * level's first opaque range with the clip plane on into it, and the
+ * layer's pair (CardVS, MarblePS) one card with the mirror's two textures
+ * bound, into a target of its own of 16 x 16; the queue is drained after
+ * each and the device's state put back. Nothing of it reaches the frame.
+ * `ms` takes the time of each (target, plain, gloss, glow, layer; -1 for
+ * one not drawn). Returns the whole time, or -1 when the level has no
+ * mirror face or the marble floors are off. */
+double HDRenderMarbleWarmUp(double* ms, int max)
+{
+	for (int i = 0; ms && i < max; i++)
+		ms[i] = -1.0;
+
+	const HDRange* range = 0;
+
+	for (size_t g = 0; g < g_groups.size() && !range; g++)
+		if (!g_groups[g].pass[0].empty())
+			range = &g_groups[g].pass[0][0];
+
+	if (!g_marble_on || !g_marble_faces || !g_device || !range || !g_vb ||
+		!g_ib || !g_vs || !g_ps || !g_decl || !g_card_vs || !g_marble_ps)
+		return -1.0;
+
+	const double start = warm_now_ms();
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* depth = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return -1.0;
+
+	g_device->GetDepthStencilSurface(&depth);
+
+	IDirect3DTexture9* warm = 0;
+	IDirect3DSurface9* warmSurface = 0;
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		desc.MultiSampleType != D3DMULTISAMPLE_NONE || !marble_make(desc) ||
+		FAILED(g_device->CreateTexture(16, 16, 1, D3DUSAGE_RENDERTARGET,
+		desc.Format, D3DPOOL_DEFAULT, &warm, 0)) ||
+		FAILED(warm->GetSurfaceLevel(0, &warmSurface)))
+	{
+		if (warm) warm->Release();
+		if (depth) depth->Release();
+		target->Release();
+		return -1.0;
+	}
+
+	if (ms && 0 < max)
+		ms[0] = warm_now_ms() - start;
+
+	// The device's state as the level left it, put back below.
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DBaseTexture9* tex[4] = { 0, 0, 0, 0 };
+	const DWORD stage[4] = { 1, 2, 3, 5 };
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* indices = 0;
+	UINT streamOffset = 0, streamStride = 0;
+	DWORD fvf = 0, clipOn = 0;
+	float clip[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	D3DVIEWPORT9 port = {};
+	const D3DRENDERSTATETYPE states[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_CULLMODE, D3DRS_STENCILENABLE
+	};
+	const int stateCount = (int)(sizeof(states) / sizeof(states[0]));
+	DWORD saved[stateCount];
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetIndices(&indices);
+	g_device->GetViewport(&port);
+	g_device->GetClipPlane(0, clip);
+	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &clipOn);
+
+	for (int i = 0; i < 4; i++)
+		g_device->GetTexture(stage[i], &tex[i]);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->GetRenderState(states[i], &saved[i]);
+
+	// The rooms as the mirror draws them: its target, the clip plane on.
+	const D3DVIEWPORT9 corner = { 0, 0, 16, 16, 0.0f, 1.0f };
+	const float keepAll[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	g_device->SetRenderTarget(0, g_marble_surface);
+	g_device->SetDepthStencilSurface(g_marble_zsurface);
+	g_device->SetViewport(&corner);
+	g_device->BeginScene();
+	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
+		D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+	g_device->SetRenderState(D3DRS_ZWRITEENABLE, TRUE);
+	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+	g_device->SetClipPlane(0, keepAll);
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 1);
+	marble_room_state();
+	warm_drain();
+
+	IDirect3DPixelShader9* const rooms[3] = { g_ps, g_gloss_ps, g_glow_ps };
+
+	for (int i = 0; i < 3; i++)
+	{
+		if (!rooms[i])
+			continue;
+
+		const double t0 = warm_now_ms();
+
+		g_device->SetPixelShader(rooms[i]);
+
+		if (g_index32)
+			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+				(UINT)g_vertex_count, range->start, 1);
+		else
+		{
+			g_device->SetStreamSource(0, g_vb,
+				range->baseVertex * (UINT)sizeof(HDVertex), sizeof(HDVertex));
+			g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+				range->vertexSpan, range->start, 1);
+		}
+
+		warm_drain();
+
+		if (ms && 1 + i < max)
+			ms[1 + i] = warm_now_ms() - t0;
+	}
+
+	// The layer's pair with the mirror's colour and depth bound.
+	{
+		const double t0 = warm_now_ms();
+		CardVertex card[3] = {};
+
+		for (int k = 0; k < 3; k++)
+		{
+			card[k].x = (float)(k & 1);
+			card[k].y = (float)(k >> 1);
+			card[k].z = 10.0f;
+			card[k].a = 1.0f;
+			card[k].light = 1.0f;
+		}
+
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+		g_device->SetRenderTarget(0, warmSurface);
+		g_device->SetDepthStencilSurface(0);
+		g_device->SetViewport(&corner);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		g_device->SetTexture(3, g_marble_ztex);
+		g_device->SetTexture(5, g_marble_tex);
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_marble_ps);
+		g_device->SetFVF(kCardFVF);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, card,
+			sizeof(CardVertex));
+		warm_drain();
+
+		if (ms && 4 < max)
+			ms[4] = warm_now_ms() - t0;
+	}
+
+	g_device->EndScene();
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+	g_device->SetViewport(&port);
+	g_device->SetClipPlane(0, clip);
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, clipOn);
+
+	for (int i = 0; i < stateCount; i++)
+		g_device->SetRenderState(states[i], saved[i]);
+
+	for (int i = 0; i < 4; i++)
+	{
+		g_device->SetTexture(stage[i], tex[i]);
+
+		if (tex[i])
+			tex[i]->Release();
+	}
+
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetIndices(indices);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (stream) stream->Release();
+	if (indices) indices->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	warmSurface->Release();
+	warm->Release();
+
+	if (depth) depth->Release();
+
+	target->Release();
+	return warm_now_ms() - start;
+}
+
 void HDRenderMarbleSet(int on, int planes)
 {
 	g_marble_on = on != 0;

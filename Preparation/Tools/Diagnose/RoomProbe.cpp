@@ -562,8 +562,9 @@
  *                     0, the engine's, where not given, leaves it out). The
  *                     marble: line ends with the copy triangles left out and
  *                     of them those in water rooms.
- *     -nowarm         no warm-up of the water's shaders before the picture
- *                     (HDRenderWaterWarmUp, which the engine runs once a
+ *     -nowarm         no warm-up of the water's shaders and the marble
+ *                     floors' mirror before the picture (HDRenderWaterWarmUp
+ *                     and HDRenderMarbleWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
  *                     the depth texture's bind): the first sheet draw then
  *                     waits for the driver as a game's first water frame
@@ -1624,6 +1625,14 @@ static bool ShotBegin(Shot& shot, long w, long h)
 				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
 				"cards %.2f, wet floor %.2f\n", all, ms[0], ms[1], ms[2],
 				ms[3], ms[4], ms[5], ms[6], ms[7], ms[8]);
+
+		// The marble floors' mirror, as the engine warms it a level.
+		const double marble = HDRenderMarbleWarmUp(ms, 5);
+
+		if (marble >= 0.0)
+			printf("-marble: warm-up %.2f ms: target %.2f, plain %.2f, "
+				"gloss %.2f, glow %.2f, layer %.2f\n", marble, ms[0], ms[1],
+				ms[2], ms[3], ms[4]);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws

@@ -141,6 +141,10 @@ namespace
 		std::string folder;		// where its track files are looked for
 		const char* from = "5";		// the face file's own folder, for the log
 		const char* folderLabel = "5";	// ... and the track files'
+		/* A mod's face only: whose track files it speaks - "own", "install"
+		 * (the install's face has the same rig), "differs" or "none" (no
+		 * install face of that name); "" for every other face. */
+		const char* rig = "";
 
 		std::vector<float> position;		// 3 a vertex, the file's own
 		std::vector<unsigned char> normal;	// 3 a vertex, biased by 127
@@ -2151,8 +2155,14 @@ namespace
 	 * numbered after Tomb Raider IV's (29 to 112), three of them (96, 101,
 	 * 103) under numbers this game uses for other lines. So an
 	 * installation's face looks in game 5's ITEM and nowhere else. A mod's
-	 * face, whose rig need not be the install's, looks only in its own
-	 * folder, and so does a Tomb Raider III guest's. */
+	 * face, whose rig need not be the install's, looks in its own folder;
+	 * where that holds no track file of the face and the install's face of
+	 * the same name carries the same rig and block header (HDLipsModRig),
+	 * it speaks the install's files from game 5's ITEM - a mod that changes
+	 * the face's geometry and keeps its rig. A Tomb Raider III guest's face
+	 * looks only in its own folder. */
+	void lips_files(const Lips& lips, std::vector<int>& out);
+
 	Lips* make_lips(const HDTrmModel& trm, const std::string& stem,
 		const std::string& path, HDModelOrigin origin)
 	{
@@ -2174,6 +2184,36 @@ namespace
 		{
 			lips->folder = folder_of(path);
 			lips->folderLabel = ownLabel;
+		}
+
+		/* A mod's face without track files of its own: the install's face
+		 * of the same name, read once here, lends its files when the rig
+		 * is the same. The face's own vertices, bones and weights still
+		 * take the deform, so its changed geometry speaks. */
+		if (origin == HD_MODEL_ORIGIN_MOD)
+		{
+			std::vector<int> own;
+
+			lips_files(*lips, own);
+
+			HDModelOrigin installOrigin = HD_MODEL_ORIGIN_NONE;
+			const std::string installPath = own.empty()
+				? find_model(stem, false, &installOrigin, 0, kModsNone)
+				: std::string();
+			const std::string ownFolder = lips->folder;
+			const std::string installItem = join(g_install, "ITEM");
+			const char* folder = ownFolder.c_str();
+			const int rig = HDLipsModRig(&trm, !own.empty(),
+				installPath.c_str(), ownFolder.c_str(), installItem.c_str(),
+				&folder);
+
+			lips->rig = HDLipsRigName(rig);
+
+			if (rig == HD_LIPS_RIG_INSTALL)
+			{
+				lips->folder = folder;
+				lips->folderLabel = "5";
+			}
 		}
 
 		lips->mapped = HDLipsMapBuild(&trm, stem.c_str(), &lips->map, &lips->why);
@@ -2262,44 +2302,17 @@ namespace
 	}
 
 	/* The track files a face has, in track order: every <STEM>_<digits>.TRL
-	 * of its folder. */
+	 * of its folder (HDLipsTrackFiles). */
 	void lips_files(const Lips& lips, std::vector<int>& out)
 	{
-		out.clear();
+		const int n = HDLipsTrackFiles(lips.folder.c_str(), lips.stem.c_str(),
+			0, 0);
 
-		WIN32_FIND_DATAA found;
-		const std::string pattern = join(lips.folder, (lips.stem + "_*.TRL").c_str());
-		HANDLE walk = FindFirstFileA(pattern.c_str(), &found);
+		out.assign(n > 0 ? (size_t)n : 0, 0);
 
-		if (walk == INVALID_HANDLE_VALUE)
-			return;
-
-		do
-		{
-			const std::string name = found.cFileName;
-			const size_t digits = lips.stem.size() + 1;
-
-			if (name.size() <= digits + 4 ||
-				!same_name(name.substr(name.size() - 4), ".TRL"))
-				continue;
-
-			const std::string number = name.substr(digits, name.size() - 4 - digits);
-
-			if (number.empty() ||
-				number.find_first_not_of("0123456789") != std::string::npos)
-				continue;
-
-			int track = 0;
-
-			for (size_t d = 0; d < number.size() && track < 100000; d++)
-				track = track * 10 + (number[d] - '0');
-
-			out.push_back(track);
-		}
-		while (FindNextFileA(walk, &found));
-
-		FindClose(walk);
-		std::sort(out.begin(), out.end());
+		if (n > 0)
+			HDLipsTrackFiles(lips.folder.c_str(), lips.stem.c_str(), &out[0],
+				n);
 	}
 
 	/* The loop's line, one per face that keeps lips - see HDModelLipsLine. */
@@ -2324,12 +2337,19 @@ namespace
 
 		lips_files(lips, files);
 
+		// A mod's face: whose track files it speaks - see Lips::rig.
+		char rig[32] = "";
+
+		if (*lips.rig)
+			std::snprintf(rig, sizeof(rig), " rig=%s", lips.rig);
+
 		if (files.empty())
 		{
 			std::snprintf(line, sizeof(line), "slot=%d face=%s file=- frames=0 "
-				"cols=%d joints=%d/%d axis=%s len=0.0s reason=no file", slot,
+				"cols=%d joints=%d/%d axis=%s len=0.0s reason=no file%s", slot,
 				lips.stem.c_str(), lips.columns, lips.map.driven, lips.map.rigJoints,
-				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED));
+				HDLipsAxisName(lips.mapped ? lips.map.axis
+					: HD_LIPS_AXIS_REFUSED), rig);
 			g_lips_lines.push_back(line);
 			loop_line(slot, lips);
 			return;
@@ -2351,12 +2371,13 @@ namespace
 					lips.folderLabel);
 
 			std::snprintf(line, sizeof(line), "slot=%d face=%s file=%s_%d.TRL "
-				"frames=%d cols=%d joints=%d/%d axis=%s len=%.1fs reason=%s%s", slot,
+				"frames=%d cols=%d joints=%d/%d axis=%s len=%.1fs "
+				"reason=%s%s%s", slot,
 				lips.stem.c_str(), lips.stem.c_str(), files[i],
 				opened ? clip.frames : 0, opened ? clip.columns : 0,
 				lips.map.driven, lips.map.rigJoints,
 				HDLipsAxisName(lips.mapped ? lips.map.axis : HD_LIPS_AXIS_REFUSED),
-				opened ? clip.frames / 30.0 : 0.0, reason, from);
+				opened ? clip.frames / 30.0 : 0.0, reason, from, rig);
 			g_lips_lines.push_back(line);
 			HDTrlClose(&clip);
 		}

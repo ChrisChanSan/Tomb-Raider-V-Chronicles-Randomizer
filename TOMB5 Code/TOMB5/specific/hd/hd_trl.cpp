@@ -15,6 +15,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <io.h>			// _findfirst: a face's track files
+
+#include <algorithm>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -398,6 +403,138 @@ const char* HDLipsAxisName(int axis)
 	case HD_LIPS_AXIS_IDENTITY: return "identity";
 	case HD_LIPS_AXIS_X_NZ_Y: return "(x,-z,y)";
 	case HD_LIPS_AXIS_X_NY_NZ: return "(x,-y,-z)";
+	default: return "-";
+	}
+}
+
+bool HDLipsSameRig(const HDTrmModel* a, const HDTrmModel* b)
+{
+	if (!a || !b || !a->rigBind || !b->rigBind || !a->blockParent ||
+		!b->blockParent || !a->blockColumn || !b->blockColumn ||
+		!a->blockBind || !b->blockBind)
+		return false;
+
+	if (a->rigJoints <= 0 || a->rigJoints != b->rigJoints ||
+		a->blockNodes <= 0 || a->blockNodes != b->blockNodes ||
+		a->blockColumns <= 0 || a->blockColumns != b->blockColumns)
+		return false;
+
+	// Bytes rather than floats, so a NaN or a signed zero counts as itself.
+	const size_t rig = (size_t)a->rigJoints * 48;
+	const size_t nodes = (size_t)a->blockNodes * 4;
+	const size_t columns = (size_t)a->blockColumns;
+
+	return !std::memcmp(a->rigBind, b->rigBind, rig) &&
+		!std::memcmp(a->blockParent, b->blockParent, nodes) &&
+		!std::memcmp(a->blockColumn, b->blockColumn, columns * 4) &&
+		!std::memcmp(a->blockBind, b->blockBind, columns * 48);
+}
+
+int HDLipsTrackFiles(const char* folder, const char* stem, int* tracks,
+	int max)
+{
+	std::string base = folder ? folder : "";
+
+	while (!base.empty() &&
+		(base[base.size() - 1] == '\\' || base[base.size() - 1] == '/'))
+		base.erase(base.size() - 1);
+
+	const std::string name = stem ? stem : "";
+	const std::string pattern = base + "\\" + name + "_*.TRL";
+	std::vector<int> found;
+	_finddata_t entry;
+	const intptr_t walk = _findfirst(pattern.c_str(), &entry);
+
+	if (walk != -1)
+	{
+		do
+		{
+			const std::string file = entry.name;
+			const size_t digits = name.size() + 1;
+
+			if (file.size() <= digits + 4)
+				continue;
+
+			// ".TRL" in any case.
+			const std::string ext = file.substr(file.size() - 4);
+			bool trl = true;
+
+			for (int i = 0; i < 4; i++)
+				if (std::toupper((unsigned char)ext[i]) != ".TRL"[i])
+					trl = false;
+
+			if (!trl)
+				continue;
+
+			const std::string number =
+				file.substr(digits, file.size() - 4 - digits);
+
+			if (number.empty() ||
+				number.find_first_not_of("0123456789") != std::string::npos)
+				continue;
+
+			int track = 0;
+
+			for (size_t d = 0; d < number.size() && track < 100000; d++)
+				track = track * 10 + (number[d] - '0');
+
+			found.push_back(track);
+		}
+		while (_findnext(walk, &entry) == 0);
+
+		_findclose(walk);
+	}
+
+	std::sort(found.begin(), found.end());
+
+	for (int i = 0; i < (int)found.size() && i < max && tracks; i++)
+		tracks[i] = found[i];
+
+	return (int)found.size();
+}
+
+int HDLipsModRig(const HDTrmModel* face, bool ownTracks,
+	const char* installFace, const char* ownFolder, const char* installItem,
+	const char** folder)
+{
+	if (folder)
+		*folder = ownFolder;
+
+	if (ownTracks)
+		return HD_LIPS_RIG_OWN;
+
+	if (!installFace || !*installFace)
+		return HD_LIPS_RIG_NONE;
+
+	HDTrmModel install;
+	const char* trouble = "";
+
+	std::memset(&install, 0, sizeof(install));
+
+	if (!HDTrmLoad(installFace, &install, &trouble))
+		return HD_LIPS_RIG_NONE;
+
+	const bool same = HDLipsSameRig(face, &install);
+
+	HDTrmFree(&install);
+
+	if (!same)
+		return HD_LIPS_RIG_DIFFERS;
+
+	if (folder)
+		*folder = installItem;
+
+	return HD_LIPS_RIG_INSTALL;
+}
+
+const char* HDLipsRigName(int rig)
+{
+	switch (rig)
+	{
+	case HD_LIPS_RIG_OWN: return "own";
+	case HD_LIPS_RIG_INSTALL: return "install";
+	case HD_LIPS_RIG_DIFFERS: return "differs";
+	case HD_LIPS_RIG_NONE: return "none";
 	default: return "-";
 	}
 }

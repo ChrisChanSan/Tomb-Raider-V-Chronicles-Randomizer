@@ -11,7 +11,10 @@ rem   hd_install.cpp  where the remaster is, read the way the engine reads it
 rem                   (it needs advapi32 for the registry and Steam's path)
 rem
 rem Run LipsTest.exe with no arguments, or with the folder of .OBJ files the
-rem fourth section compares against.
+rem fourth section compares against, the loop block's folder second and the
+rem game folder's cutseq.bin third - by default the file beside the
+rem repository's Preparation tree, looked for from the EXE's folder first and
+rem the working folder second; an empty argument stands for none.
 call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul 2>&1
 cd /d "%~dp0"
 cl /nologo /EHsc /O2 /std:c++17 /W4 /D_CRT_SECURE_NO_WARNINGS /Fe:LipsTest.exe LipsTest.cpp "..\..\..\TOMB5 Code\TOMB5\specific\hd\hd_trm.cpp" "..\..\..\TOMB5 Code\TOMB5\specific\hd\hd_trl.cpp" "..\..\..\TOMB5 Code\TOMB5\specific\hd\hd_install.cpp" advapi32.lib user32.lib

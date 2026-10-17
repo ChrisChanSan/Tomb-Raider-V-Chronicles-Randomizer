@@ -314,6 +314,12 @@
  *                     frame (HDRenderWaterProbeLook), its surface the body's
  *                     the extinction measures against; 3 3 0.25 40000 600
  *                     700 0.55 6000 8000 were its first numbers
+ *     -undertick <file> <room>
+ *                     with -roombox, -out and the picture's switches (-vis
+ *                     1 among them): the sea's surface counted along a
+ *                     walk of eyes, each a CAMLOG tick's eye and target -
+ *                     the walk's rooms, the picture with them and without
+ *                     <room> and the look; see UnderTicks
  *     -roomplane <y x0 z0 x1 z1>
  *                     the same, on the OTHER shimmer bit - the answer a
  *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
@@ -18273,11 +18279,331 @@ static int VisCams(int argc, char** argv, int at)
 	return failed ? 1 : 0;
 }
 
+/* The picture a run of this tool wrote (WritePng: one IDAT, filter 0 on
+ * every row, 24 bit) read back into `rgb`. False for any other file. */
+static bool ReadOwnPng(const std::string& path, std::vector<unsigned char>& rgb,
+	long* w, long* h)
+{
+	FILE* f = fopen(path.c_str(), "rb");
+
+	if (!f)
+		return false;
+
+	std::vector<unsigned char> file;
+	unsigned char buf[65536];
+	size_t got;
+
+	while ((got = fread(buf, 1, sizeof(buf), f)) > 0)
+		file.insert(file.end(), buf, buf + got);
+
+	fclose(f);
+
+	const auto be = [&](size_t at)
+	{
+		return ((unsigned long)file[at] << 24) | ((unsigned long)file[at + 1] <<
+			16) | ((unsigned long)file[at + 2] << 8) | file[at + 3];
+	};
+	std::vector<unsigned char> packed;
+	size_t at = 8;
+
+	*w = *h = 0;
+
+	while (at + 12 <= file.size())
+	{
+		const unsigned long len = be(at);
+
+		if (at + 12 + len > file.size())
+			return false;
+
+		if (!memcmp(&file[at + 4], "IHDR", 4) && len >= 13)
+		{
+			*w = (long)be(at + 8);
+			*h = (long)be(at + 12);
+		}
+		else if (!memcmp(&file[at + 4], "IDAT", 4))
+			packed.insert(packed.end(), file.begin() + at + 8,
+				file.begin() + at + 8 + len);
+
+		at += 12 + len;
+	}
+
+	if (*w <= 0 || *h <= 0 || packed.empty())
+		return false;
+
+	std::vector<unsigned char> raw((size_t)*h * (1 + (size_t)*w * 3));
+	uLongf length = (uLongf)raw.size();
+
+	if (uncompress(&raw[0], &length, &packed[0], (uLong)packed.size()) !=
+		Z_OK || length != raw.size())
+		return false;
+
+	rgb.resize((size_t)*w * *h * 3);
+
+	for (long y = 0; y < *h; y++)
+	{
+		if (raw[(size_t)y * (1 + (size_t)*w * 3)] != 0)
+			return false;
+
+		memcpy(&rgb[(size_t)y * *w * 3],
+			&raw[(size_t)y * (1 + (size_t)*w * 3) + 1], (size_t)*w * 3);
+	}
+
+	return true;
+}
+
+/* -undertick <file> <room>: the surface seen from below, counted along a
+ * walk of eyes - a set in one call: RoomProbe <5-folder> -undertick <file>
+ * <room> -roombox <folder> -out <prefix> [switches]. A line of the file:
+ * <name> <LEVEL> <room> <x> <y> <z> target <tx> <ty> <tz> (world, the room
+ * the eye stands in; a CAMLOG tick's eye= and target=); `#` starts a
+ * comment. Per eye the tool runs itself three times: the walk (-walk,
+ * -walktarget, -walkfinal, -nodraw, -fov 80 and every switch after the
+ * file, -vis 1 among them, as -viscams), then the picture from that eye
+ * with the walk's rooms (-with, the eye's room the seed, -underwater and
+ * the camera of -walktarget), once whole and once without <room> and
+ * without the switches that draw the look (-underlook, -underlookknobs,
+ * -underlookset) - the sea's surface art and the look left out - and
+ * prints
+ *
+ *   undertick: <name> room=<r> rooms=<n> listed=<0|1> surface=<pixels>
+ *   share=<per cent> light=<mean luma of the difference>
+ *
+ * the surface's pixels those that differ by 4 or more of 255 in any
+ * channel; listed says whether the walk lists <room>. The pictures stay
+ * under <prefix>_<name>_s and _n. */
+static int UnderTicks(int argc, char** argv, int at)
+{
+	FILE* f = at + 2 < argc ? fopen(argv[at + 1], "r") : 0;
+	const int surface = at + 2 < argc ? atoi(argv[at + 2]) : -1;
+	char exe[MAX_PATH];
+	char line[1024];
+	std::string folder, prefix = "undertick";
+	int eyes = 0, failed = 0;
+
+	if (!f || argc < 2)
+	{
+		printf("undertick: cannot read %s\n", at + 1 < argc ? argv[at + 1] :
+			"(no file)");
+		return 1;
+	}
+
+	GetModuleFileNameA(0, exe, sizeof(exe));
+
+	// The switches for the walk and for the two pictures.
+	std::string walkRest, pictureRest, bareRest;
+
+	for (int i = 2; i < argc; i++)
+	{
+		if (i >= at && i <= at + 2)
+			continue;
+
+		const std::string a = argv[i];
+
+		if (a == "-out" && i + 1 < argc)
+		{
+			prefix = argv[++i];
+			continue;
+		}
+
+		if (a == "-roombox" && i + 1 < argc)
+			folder = argv[i + 1];
+
+		const std::string q = " \"" + a + "\"";
+		int skip = a == "-underlookknobs" ? HD_LOOK_KNOBS :
+			a == "-underlookset" ? 9 : 0;
+
+		walkRest += q;
+		pictureRest += q;
+
+		if (a != "-underlook" && !skip)
+			bareRest += q;
+
+		for (; skip > 0 && i + 1 < argc; skip--)
+		{
+			const std::string v = std::string(" \"") + argv[++i] + "\"";
+
+			walkRest += v;
+			pictureRest += v;
+		}
+	}
+
+	std::string loaded;
+
+	while (fgets(line, sizeof(line), f))
+	{
+		char* hash = strchr(line, '#');
+
+		if (hash)
+			*hash = 0;
+
+		char name[64], level[32], kind[16];
+		int room = 0;
+		long x, y, z, tx, ty, tz;
+
+		if (sscanf(line, "%63s %31s %d %ld %ld %ld %15s %ld %ld %ld", name,
+			level, &room, &x, &y, &z, kind, &tx, &ty, &tz) != 10 ||
+			strcmp(kind, "target"))
+			continue;
+
+		if (loaded != level)
+		{
+			if (folder.empty() || !walkoff::Load(folder, level))
+			{
+				printf("undertick: %s needs -roombox with %s.TRC\n", name,
+					level);
+				failed++;
+				continue;
+			}
+
+			loaded = level;
+		}
+
+		if (room < 0 || room >= (int)walkoff::g_room.size())
+		{
+			printf("undertick: %s: room %d is not in %s\n", name, room, level);
+			failed++;
+			continue;
+		}
+
+		eyes++;
+
+		const std::string target = " -walktarget " + std::to_string(tx) +
+			" " + std::to_string(ty) + " " + std::to_string(tz);
+		const std::string walk = std::string("\"\"") + exe + "\" \"" +
+			argv[1] + "\" " + level + " " + std::to_string(room) + walkRest +
+			" -walk " + std::to_string(room) + " " + std::to_string(x) + " " +
+			std::to_string(y) + " " + std::to_string(z) + target +
+			" -fov 80 -walkfinal -walkeach -nodraw\"";
+		FILE* p = _popen(walk.c_str(), "r");
+		std::vector<int> order;
+		char out[2048];
+		int n = 0;
+
+		while (p && fgets(out, sizeof(out), p))
+		{
+			const char* rooms = strstr(out, " rooms=");
+
+			if (!strncmp(out, "  yaw", 5) && rooms && strchr(rooms, ':'))
+			{
+				const char* s = strchr(rooms, ':') + 1;
+				int r = 0;
+
+				order.clear();
+
+				while (sscanf(s, "%d %n", &r, &n) == 1)
+				{
+					order.push_back(r);
+					s += n;
+				}
+			}
+		}
+
+		if (p)
+			_pclose(p);
+
+		if (order.empty())
+		{
+			printf("undertick: %s %s no walk\n", name, level);
+			failed++;
+			continue;
+		}
+
+		// The walk's rooms at their offsets from the eye's room.
+		const walkoff::Room& seed = walkoff::g_room[(size_t)room];
+		std::string with, bareWith;
+		bool listed = false;
+
+		for (int r : order)
+		{
+			if (r == room || r < 0 || r >= (int)walkoff::g_room.size())
+				continue;
+
+			const walkoff::Room& o = walkoff::g_room[(size_t)r];
+			const std::string w = " -with " + std::to_string(r) + " " +
+				std::to_string(o.x - seed.x) + " 0 " +
+				std::to_string(o.z - seed.z);
+
+			with += w;
+
+			if (r == surface)
+				listed = true;
+			else
+				bareWith += w;
+		}
+
+		if (room == surface)
+			listed = true;
+
+		const std::string eye = std::string("\"\"") + exe + "\" \"" +
+			argv[1] + "\" " + level + " " + std::to_string(room) + " " +
+			std::to_string(x - seed.x) + " " + std::to_string(y) + " " +
+			std::to_string(z - seed.z) + " 0 0" + target + " -underwater";
+		const std::string sPath = prefix + "_" + name + "_s";
+		const std::string nPath = prefix + "_" + name + "_n";
+		const std::string sCmd = eye + with + pictureRest + " -out \"" +
+			sPath + "\" > NUL 2>&1\"";
+		const std::string nCmd = eye + bareWith + bareRest + " -out \"" +
+			nPath + "\" > NUL 2>&1\"";
+
+		system(sCmd.c_str());
+		system(nCmd.c_str());
+
+		const std::string tail = std::string("_") + level + "_r" +
+			std::to_string(room) + ".png";
+		std::vector<unsigned char> a, b;
+		long aw = 0, ah = 0, bw = 0, bh = 0;
+
+		if (!ReadOwnPng(sPath + tail, a, &aw, &ah) ||
+			!ReadOwnPng(nPath + tail, b, &bw, &bh) || aw != bw || ah != bh)
+		{
+			printf("undertick: %s %s no pictures\n", name, level);
+			failed++;
+			continue;
+		}
+
+		long pixels = 0;
+		double light = 0.0;
+
+		for (size_t i = 0; i + 2 < a.size(); i += 3)
+		{
+			int most = 0;
+			double luma = 0.0;
+
+			for (int c = 0; c < 3; c++)
+			{
+				const int d = abs((int)a[i + c] - (int)b[i + c]);
+
+				most = d > most ? d : most;
+				luma += d * (c == 0 ? 0.299 : c == 1 ? 0.587 : 0.114);
+			}
+
+			if (most >= 4)
+			{
+				pixels++;
+				light += luma;
+			}
+		}
+
+		printf("undertick: %s room=%d rooms=%d listed=%d surface=%ld "
+			"share=%.2f light=%.2f\n", name, room, (int)order.size(),
+			listed ? 1 : 0, pixels, 100.0 * pixels / (double)(aw * ah),
+			pixels ? light / pixels : 0.0);
+	}
+
+	fclose(f);
+	printf("undertick: %d eyes, %d without a count\n", eyes, failed);
+	return failed ? 1 : 0;
+}
+
 int main(int argc, char** argv)
 {
 	for (int i = 2; i + 1 < argc; i++)
 		if (!strcmp(argv[i], "-viscams"))
 			return VisCams(argc, argv, i);
+
+	for (int i = 2; i + 2 < argc; i++)
+		if (!strcmp(argv[i], "-undertick"))
+			return UnderTicks(argc, argv, i);
 
 	for (int i = 1; i < argc; i++)
 		if (!strcmp(argv[i], "-windowcycle"))

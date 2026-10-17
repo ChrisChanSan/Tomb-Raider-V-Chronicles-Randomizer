@@ -8006,9 +8006,29 @@ static bool HDFrameSkyLook(HDFrameLighting frame, const D3DMATRIX& world)
 	frame.underUp[0] = -world._21 / len;
 	frame.underUp[1] = -world._22 / len;
 	frame.underUp[2] = -world._23 / len;
-	return HDRenderWaterLook(&frame, (const float*)&world, (float)f_persp,
-		(float)f_centerx, (float)f_centery, (float)camera.pos.x,
-		(float)camera.pos.z);
+
+	const bool drew = HDRenderWaterLook(&frame, (const float*)&world,
+		(float)f_persp, (float)f_centerx, (float)f_centery,
+		(float)camera.pos.x, (float)camera.pos.z);
+
+	/* WATERLOG, with -log, once per level: the first frame the look is
+	 * drawn, the room and the eye. The level's first sky frame comes before
+	 * HDFrameSky's own line sets g_sky_logged, so that frame starts the
+	 * level's count afresh. */
+	static bool logged = false;
+
+	if (!g_sky_logged)
+		logged = false;
+
+	if (gLogEnabled && drew && !logged)
+	{
+		logged = true;
+		Log("WATERLOG level=%s look room=%d eye=%ld,%ld,%ld", g_stem,
+			(int)eye_room, (long)camera.pos.x, (long)camera.pos.y,
+			(long)camera.pos.z);
+	}
+
+	return drew;
 }
 
 /* The HD sky, in the classic horizon's place.

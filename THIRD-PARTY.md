@@ -2603,8 +2603,12 @@ water surface", carries the tables.
 248. **The layers out under the deep look** (`hd_water_under.h`,
     `HDSkyLayersLeftOut`; `hd_render.cpp`, `HDRenderSkyCoversLayers`) - the
     classic flat layers left out under the HD sky in a level that takes the
-    deep look, whatever its sky holds, beside entry 242's sheet and opaque
-    band. OWN, the rule, at the owner's word that the SD surface must go;
+    deep look with the sheets on (`hd_water` 1), whatever its sky holds,
+    beside entry 242's sheet and opaque band; with `hd_water` 0 no look is
+    drawn and the layers stay in, since the band's open pole would show the
+    frame's clear as a dark disc overhead (2,576 pixels at tick 22,020,
+    mean colour 10.5, 68.4, 64.8 against 23.2, 100.3, 103.6 just outside).
+    OWN, the rule, at the owner's word that the SD surface must go;
     DATA: the deep look from the level's water data (`WATERLOG
     under_deep=1`: JOBY4, 132 water rooms no sheet lies over against 2;
     RICH3, 1 against 0, whose sheets leave its layers out already), JOBY4's
@@ -2618,14 +2622,19 @@ water surface", carries the tables.
     deep look, with `hd_water` on and the eye under the water: its surface
     the water's top over the dive, its light the hue of the water's
     scattered colour, the waves' slope held to 1,500 / t of itself, the
-    window's rim over 0.4 of cosine. OWN, the design (entry 239) and its
+    window's rim over 0.3 of cosine, inside the window's own span of 0.339
+    (cosine 0.661 to 1). OWN, the design (entry 239) and its
     place; DATA: the top from the level's water rooms (JOBY4 -5,120, 867
     units over the remaster's art of the surface at -4,253), the colour
-    from the deep look; the eleven numbers free choices set by eye at three
-    of the owner's eyes against a reference picture supplied for this
-    project (not in the repository); measured: 0 rock pixels touched at four
-    eyes, 0.888 to 0.906 ms at 2,560 x 1,440, nothing drawn with `hd_water`
-    0. ModernTest `water_look`.
+    from the deep look; the eleven numbers free choices set by eye at four
+    eyes of the owner's dive for the look of a reference picture supplied
+    for this project (not in the repository), not matched in brightness:
+    the remaster's art and the band alone are brighter overhead than it
+    (mean luma of the top third 55.2 at tick 22,020 against its 36.4), so
+    the look adds 4.3 to 17.4 to the mean luma at those eyes (disc 0.2,
+    shafts 8, underside 0.12); measured: 0 rock pixels touched at four eyes,
+    0.885 to 0.912 ms at 2,560 x 1,440 (medians), nothing drawn with
+    `hd_water` 0. ModernTest `water_look`.
 250. **The clear filled with the water's colour** (`hd_render.cpp`,
     `water_look_draws`) - with the look, a third draw at a depth of 0.99999
     tested LESS adds the water's scattered colour where the depth buffer
@@ -2639,8 +2648,10 @@ water surface", carries the tables.
     game's look drawn at the sky's place with the engine's numbers or
     others, the study kept under `-underlookset`, a walk of CAMLOG eyes
     whose rooms the portal walk lists and whose surface pixels the tool
-    counts out of its own pictures (`ReadOwnPng`), and the layer rule's
-    answer per level. OWN, this project's tool.
+    counts out of its own pictures (`ReadOwnPng`) - with the look's
+    switches it stops unless `-sky` and `-rooms <n>` are given, without
+    which the look is left out unseen -, and the layer rule's answer per
+    level. OWN, this project's tool.
 252. **Picture 218 and the clouds' texels** (RoomProbe `-skydump` of round 1,
     DdsProbe, the owner's log) - the picture matched to ANDREA2's tick
     25,031 (correlation 0.983); ANDREA2's opaque sheet 7109 and alpha sheet
@@ -2654,8 +2665,11 @@ water surface", carries the tables.
     seaweed card, and room 19 (the sea's surface art) missing from the
     portal walk at 164 ticks, reached only as a box guest of room 100: at
     the 106 of them looking up his build's surface art was 0 and the look
-    now keeps 11,881 to 75,006 pixels. DATA; the walk agrees with all 61 of
-    his `VISLOG` lines. No rule changed in the list.
+    now keeps 8,221 to 68,223 pixels. DATA; the walk agrees with all 61 of
+    his `VISLOG` lines. No rule changed in the list: room 19's art still
+    leaves the picture and comes back within a tick at the six edges of the
+    three runs (mean added luma 13.60 to 4.55 at 21,547 / 21,548, 3.83 to
+    12.25 at 21,577 / 21,578, 16.66 to 5.10 at 21,937 / 21,938).
 
 ## Credited, but not contained here
 

@@ -2949,13 +2949,13 @@ setting as it now does; whether the volumetric layer is wanted at its cost.
 **2026-10-17, Round 2 (#208): JOBY4's layers out under the deep look, and the heavy clouds
 measured.**
 
-**What.** Two things. (1) In a level that takes the deep look the script's flat layers
-stay out under the HD sky whatever the sky holds (`HDSkyLayersLeftOut`,
-`hd_water_under.h`; `HDRenderSkyCoversLayers`): JOBY4 no longer draws them over its bare
-band, and the surface overhead is the remaster's art of room 19 and this project's own
-look (the water sheets' entry, the #210 part's Round 2). (2) The heavy clouds of a picture
-of the owner's game are measured: the picture is ANDREA2, its clouds are ANDREA2's own
-page, and nothing changes.
+**What.** Two things. (1) In a level that takes the deep look, with the water sheets on,
+the script's flat layers stay out under the HD sky whatever the sky holds
+(`HDSkyLayersLeftOut`, `hd_water_under.h`; `HDRenderSkyCoversLayers`): JOBY4 no longer
+draws them over its bare band, and the surface overhead is the remaster's art of room 19
+and this project's own look (the water sheets' entry, the #210 part's Round 2). (2) The
+heavy clouds of a picture of the owner's game are measured: the picture is ANDREA2, its
+clouds are ANDREA2's own page, and nothing changes.
 
 **Why.** The owner's report of 2026-10-17, put into English (his words beside in German):
 JOBY4's water surface is SD now, so this project's shader effect is hard to see ("Die
@@ -2985,9 +2985,14 @@ level's water data (`WATERLOG under_deep=1`, the fallback rooms more than four t
 rooms under a sheet): JOBY4, 132 against 2, and RICH3, 1 against 0 (its flipped room 190),
 whose sheets leave its layers out already. RoomProbe `-sky`'s line ends with the rule's
 answer: `layers out 1` in all thirteen sky levels, 0 in JOBY3 and JOBY5, which have no HD
-sky. With `hd_water` 0 the bodies and the deep look are still built (`under_deep=1`), so
-JOBY4's layers stay out there too, and the band and the art are the sky; the look is drawn
-only with the sheets.
+sky. The deep look counts for the rule only with the sheets on (`g_caustic_on`,
+`tomb5.hd_water` 1): with `hd_water` 0 the bodies and the deep look are still built
+(`under_deep=1`), but the look and its fill are not drawn, and with the layers out the
+band's open pole past its last ring at 75 degrees showed the frame's clear as a dark disc
+overhead (at tick 22,020, 2,576 pixels of mean colour 10.5, 68.4, 64.8 against 23.2,
+100.3, 103.6 just outside; with the PSX tiles there 10.5, 109.0, 111.6). So with
+`hd_water` 0 JOBY4's layers stay in, as before this round: `layers out 0` for JOBY4 alone
+of the fifteen levels at `-hdwater 0`, `1` at `-hdwater 1`.
 
 **Picture 218 - measured.** His picture of red roofs and two domes under heavy grey clouds
 is ANDREA2, not ANDREA1: room 150 at tick 25,031 of his ANDREA2 visit after ANDREA1's
@@ -3039,7 +3044,7 @@ printed by RoomProbe `-sky`, the layers' pictures come from round 1's twin. RICH
 the deep look on one flipped room no sheet lies over (1 > 4 x 0), which the deep look's
 share was not meant for.
 
-**Commits.** `49f37cae`
+**Commits.** `49f37cae`, `2aa8e016` (the rule's `hd_water` 0 case)
 
 ### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items
 2026-09-29
@@ -16226,23 +16231,34 @@ of the water's scattered colour (JOBY4 0.057, 0.125, 0.162), the water's own, wh
 study took the highlight's near-white. Far up the waves are finer than a pixel and their
 normals drew noise and dark streaks across the lit window (round 1's Left): their slope is
 held to 1,500 / t of itself, t the way to the surface, and the window's rim spread
-over 0.4 of cosine (`gLookMore`, c214). With the script's layers out, the band's open
+over 0.3 of cosine (`gLookMore`, c214), inside the window's own span of 0.339 (its
+cosine from the critical 0.661 to 1), so that the window's middle still takes the whole
+light; a first rim of 0.4, wider than the window, held the lit window at 0.85 of its light
+even looking straight up. With the script's layers out, the band's open
 poles (past its last ring at 75 degrees) showed the clear's black through the art, a dark
 disc overhead at his picture's eye (2,576 pixels at 960 x 540): a third draw at a depth
 of 0.99999, tested LESS, adds the scattered colour there and only there (`gLookFill`,
 c215; the band's depth 0.99998) - the colour a view ray under the water takes when it
-meets nothing, 14, 32, 41 against the band's 13, 35, 42; the hole now 53, 153, 183 against
-53, 157, 189 just outside it.
+meets nothing, 14, 32, 41 against the band's 13, 35, 42; the hole now 35, 113, 132 against
+36, 119, 140 just outside it.
 
-The strengths, free choices set by eye on RoomProbe `-underlook` pictures at three of his
-eyes (his picture's, tick 22,020 in room 33, and round 1's 23,995 and 24,484) against his
-reference - a soft bright surface overhead, faint shafts fanning down into dark water:
+The strengths are free choices set by eye on RoomProbe `-underlook` pictures at four eyes
+(his picture's, tick 22,020 in room 33, round 1's 23,995 and 24,484, and room 123 turned
+50 degrees up) for the look his reference shows - a soft bright surface overhead, faint
+shafts fanning down into dark water. His reference is not matched in brightness, and is
+not meant to be: the remaster's surface art and the band alone are already brighter
+overhead than it (mean luma at 960 x 540, the whole picture and its top third: his
+reference 27.8 and 36.4, his picture of the PSX tiles 40.6 and 60.9; at tick 22,020 our
+frame with the PSX tiles 35.0 and 45.3, with the art and the band alone 43.0 and 55.2).
+The look adds to that, so it is kept low: with the first draft's strengths (disc 0.3,
+shafts 16, underside 0.4) the frame came to 61.4 and 85.6, twice the reference overhead;
+at the strengths below it comes to 51.8 and 69.3.
 
 | number | study | game |
 |---|---|---|
-| disc | 3 | 0.3 |
-| shafts | 3 | 16 |
-| underside | 0.25 | 0.4 |
+| disc | 3 | 0.2 |
+| shafts | 3 | 8 |
+| underside | 0.25 | 0.12 |
 | surface light's reach | 40,000 | 40,000 |
 | disc's power | 600 | 600 |
 | shafts' cell | 700 | 1,600 |
@@ -16250,7 +16266,7 @@ reference - a soft bright surface overhead, faint shafts fanning down into dark 
 | shafts' reach under the surface | 6,000 | 40,000 |
 | march | 8,000 | 5,000 |
 | waves kept whole over | - | 1,500 |
-| rim | 0.08 | 0.4 |
+| rim | 0.08 | 0.3 |
 
 His eyes stand 18,800 to 20,200 units under the look's surface, so the shafts reach 40,000
 down (0.63 of their light at the shallowest eye, where 6,000 left 0.04); the water's
@@ -16262,22 +16278,23 @@ no column showing). The disc stays faint, no sun showing on his reference.
 
 | eye | before: PSX tiles | look: pixels | mean luma added | most | rock pixels |
 |---|---|---|---|---|---|
-| E216: tick 22,020, room 33, 46 deg up | 433,045 | 433,045 | 21.98 | 142 | 0 of 83,011 |
-| tick 23,995, room 123, 43 deg up | 404,942 | 379,718 | 20.52 | 106 | 0 of 95,582 |
-| tick 24,484, room 6, 19 deg up | 207,842 | 215,577 | 8.02 | 45 | 0 of 288,180 |
-| L3: room 123 turned, yaw 245, 50 deg up | 118,758 | 118,758 | 35.43 | 154 | 0 of 399,642 |
+| E216: tick 22,020, room 33, 46 deg up | 433,045 | 433,045 | 10.47 | 86 | 0 of 83,011 |
+| tick 23,995, room 123, 43 deg up | 404,942 | 373,188 | 9.87 | 52 | 0 of 95,582 |
+| tick 24,484, room 6, 19 deg up | 207,842 | 196,858 | 4.27 | 22 | 0 of 288,180 |
+| L3: room 123 turned, yaw 245, 50 deg up | 118,758 | 118,758 | 17.36 | 77 | 0 of 399,642 |
 
 (960 x 540, `-black`; before: the base tool with the PSX tiles over the band, the pixels
 they change against the frame without them; look: the pixels `-underlook` changes against
 this round's frame without it; ticks 23,995 and 24,484 from round 1's log.)
 
 GPU at 2,560 x 1,440, timestamps round its draws, three runs each:
-E216 0.9036, 0.8983, 0.9053 ms (median 0.9036); 23,995 0.9032, 0.8956, 0.8966 (0.8966);
-24,484 0.8894, 0.8824, 0.8883 (0.8883); L3 0.9064, 0.9075, 0.9036 (0.9064). Drawn before
+E216 0.9019, 1.0749, 0.9035 ms (median 0.9035); 23,995 0.9024, 0.8959, 0.8972 (0.8972);
+24,484 0.8852, 0.8825, 0.8913 (0.8852); L3 0.9133, 0.9116, 0.9055 (0.9116). Drawn before
 the rooms, it covers the whole picture whatever stands in front, so its cost does not fall
 with the view. `LookPS` 234 slots of 512, `LookVS` 1; no texture, the shaders made once
 per device. With `hd_water` 0 nothing of it is drawn: the four eyes 4 of 4 byte-identical
-to the base tool.
+to the base tool, with the PSX layers drawn and without them; and JOBY4's layers stay in
+there (the sky entry's Round 2), as before this round.
 
 *The vanishing over his whole dive* (RoomProbe `-undertick`). Every one of his 1,613 JOBY4
 ticks walked with the look in place: per eye the portal walk's rooms (`-vis 1`, the
@@ -16289,18 +16306,20 @@ surface is 0 or falls under half of both neighbours, in classes:
 
 | class | ticks | where | surface, his build | surface, now |
 |---|---|---|---|---|
-| out of the picture | 34 | 21,130 to 21,207, room 123, 3 to 56 deg down | 0 | 0 |
-| the room list | 106 | 21,548-577, 21,938-980, 22,085-117, 10 to 37 deg up | 0 | 11,881 to 75,006 |
+| out of the picture | 45 | 21,130 to 21,207, room 123, 3 to 56 deg down | 0 | 0 |
+| the room list | 106 | 21,548-577, 21,938-980, 22,085-117, 10 to 37 deg up | 0 | 8,221 to 68,223 |
 | near art | 2 | 22,188 and 22,189, room 6, a seaweed card | 3,070 and 669 | 5,504 and 1,226 |
 
 (his build: the PSX tiles over the band and room 19's art, no look - the walk with
 `-skylayer` and `-skylayerpage psx`, the surface the art's pixels; now: the art and the
 look. The room list's three runs and ten ticks either side of each: 0 in his build at
-every one of the 106, 3,758 to 59,862 beside them; now 32,544 to 36,511, 53,708 to 66,023
-and 11,881 to 75,006 in them, 17,805 to 114,004 beside them.)
+every one of the 106, 3,758 to 59,862 beside them; now 16,898 to 21,711, 42,166 to 57,817
+and 8,221 to 68,223 in them, 16,112 to 114,004 beside them. The numbers are those of the
+look's final strengths; the first draft's, twice as bright, kept 11,881 to 75,006 in them
+and lit 11 of the out-of-the-picture ticks faintly, which are 0 now.)
 
 The surface's light over the whole dive: 1,525 of the 1,613 ticks look up, none of them at
-0, 44,181 pixels of 129,600 on the average. The classes: *Out of the picture* - the camera
+0, 40,789 pixels of 129,600 on the average. The classes: *Out of the picture* - the camera
 at the dive's start looks down at Lara, the art's lowest elevation from the eye over the
 frame's top edge or at it (21,130 to 21,134 look 3 to 10 degrees down, the art's far edge
 at the frame's top under the whole way's extinction); nothing to mend. *The room list* -
@@ -16310,7 +16329,7 @@ visibility path lists it as a box guest of room 100 (`-walkwant 19`: "REACHED fr
 21,566), so it drops out of the list wherever room 100 is not walked: 164 ticks, 58 of
 them looking down. In his build nothing else stood for it and the surface was gone - the
 vanishing he saw. The rule is the look: drawn with the sky, it needs no room of the list,
-and those ticks keep 11,881 to 75,006 surface pixels. The list itself belongs to the
+and those ticks keep 8,221 to 68,223 surface pixels. The list itself belongs to the
 visibility walk and is not changed here. *Near art* - a seaweed card of room 6 fills the
 picture as the camera passes it (the pictures of 22,186 to 22,190); nothing to mend. No
 tick fell to the under view's depth: every room his eye stood in takes the basin's surface
@@ -16320,11 +16339,33 @@ pair, `HDLOG flip pairs=0`) or to the layers (out, the sky entry's Round 2). Rou
 walk of 40 eyes between its ticks 23,995 and 24,484 is byte-for-byte the same with this
 round's tool, its base and round 1's numbers.
 
+*What is not mended.* The look keeps light overhead where room 19 is missing, but it does
+not stand in for room 19's art, which is about half of the surface's light overhead: at
+each edge of the three runs the art leaves the picture or comes back within one tick. The
+mean added luma of the surface's pixels at the edges (480 x 270, the look's final
+strengths):
+
+| edge | listed | not listed |
+|---|---|---|
+| 21,547 / 21,548 | 13.60 | 4.55 |
+| 21,577 / 21,578 | 12.25 | 3.83 |
+| 21,937 / 21,938 | 16.66 | 5.10 |
+| 21,980 / 21,981 | 15.23 | 7.49 |
+| 22,084 / 22,085 | 14.67 | 10.26 |
+| 22,117 / 22,118 | 8.17 | 6.61 |
+
+So the surface no longer goes black, but it still dims and brightens in a step three
+times over his dive, for 30, 43 and 33 ticks; that step is what is left of the vanishing
+he reported.
+
 **Decisions.** The look takes the place of the SD layers as the owner decided; it is drawn
 with the sky and under `hd_water` only, in the levels the deep look takes. Its strengths
 are free choices by eye; the surface height and the colour come from the level's water.
-The vanishing is not mended in the room list: the look carries the surface where room 19
-is missing.
+The vanishing is not mended: the look keeps the surface from going black where room 19 is
+missing, but room 19's own art still drops out of the picture and comes back with the list
+(below, *What is not mended*). The two places that could mend it - a stand-in draw of the
+missing surface room in the room phase (as `DrawStandInHolders` draws art whose carrier is
+not listed) or the visibility walk itself - lie outside this round's lines.
 
 **Checked.** As in the sky entry's Round 2: the classic views, the fifteen cameras with
 `-hdwater 0` and `1`, the six HD views, round 1's sky eyes, the under views with and
@@ -16332,20 +16373,28 @@ without `-underlook` (ANDREA1, JOBY5, JOBY2 and JOBY4's start cavern), the `WATE
 sweep (`under_deep=1` in JOBY4 and RICH3 alone), byte-identical to `245de8e7`'s tools;
 JOBY4 changes only with `-underlook`. ModernTest 15,520 checks with the new `water_look`
 group of 12, MenuTest 44,272, InterpTest 729, LipsTest 270 and 243, 0 failed; the engine
-and all nine tools build.
+and all nine tools build. All of it again after `2aa8e016`, with round 1's twelve JOBY4
+ticks 12 of 12 byte-identical without `-underlook` (the look changes 78,673 to 374,041
+pixels there), and the whole walk of his dive again at the final strengths.
 
 **Left.** The look has not been seen in the game by anyone yet; its numbers are the
 probe's. It is drawn under the whole picture before the rooms, so it costs 0.89 to 0.91 ms
 at 2,560 x 1,440 whatever covers it. The shafts end at every opaque edge rather than in
 front of it: the water in front of a far rock carries no shaft. RICH3 takes the deep look
 on one flipped room (190) no sheet lies over (1 > 4 x 0): the look is drawn there with the
-sky in view and was covered by the room at the eye measured. Room 19 still leaves the list
-at 164 ticks; the art's own surface comes back with it. The game's sky frame steps no
-clock of its own (`HDFrameSky` takes the last frame's drawn time), so the look's shafts
-drift one frame behind the rooms, and the sky's own bracket, drawn with the eye taken as
-out of the water, starts the under view's tween afresh every frame.
+sky in view and was covered by the room at the eye measured (with its neighbours; drawn
+alone, with the sky open over it, the look adds 8.2 to the mean luma at 960 x 540, eye
+3,584, -200, 3,584 looking 75 degrees up). Room 19 still leaves the list at 164 ticks, and
+with it the art's own surface pops out and back within a tick (*What is not mended*); that
+pop is what is left of the vanishing he saw. The game's sky frame steps no clock of its
+own (`HDFrameSky` takes the last frame's drawn time), so the look's shafts drift one frame
+behind the rooms, and the sky's own bracket, drawn with the eye taken as out of the water,
+starts the under view's tween afresh every frame. The 73-character subject of `49f37cae`
+is one over the limit of 72 and stays, since no commit is rewritten.
 
-**Commits.** `49f37cae` (the layers and the look), `5a9a853a` (the walk).
+**Commits.** `49f37cae` (the layers and the look), `5a9a853a` (the walk), `2aa8e016` (the
+rim inside the window, the lower strengths, the layers kept with `hd_water` 0, the walk's
+guard).
 
 ### The marble floors' mirror (#205)
 2026-10-16

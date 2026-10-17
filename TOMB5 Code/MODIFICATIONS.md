@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-09-23** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-10-17** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository
@@ -16,18 +16,22 @@ after this copy was taken (`setup.cpp`: Two Gun gains `undead = 1`) and two smal
 fixes that predate this repository and are documented in the files themselves
 (`dxsound.cpp` LOCSOFTWARE, `function_stubs.cpp` DO_LOG).
 
-Measured on **2026-09-22** by comparing every file under `TOMB5/` byte for byte against
-that first commit: **122 files changed, 98 entirely new - 220 in all**, none deleted,
-**206** of them carrying the modification notice at the top, which `grep -rl "Modified
+Measured on **2026-10-17** by comparing every file under `TOMB5/` byte for byte against
+that first commit: **128 files changed, 172 entirely new - 300 in all**, none deleted,
+**254** of them carrying the modification notice at the top, which `grep -rl "Modified
 2026 by ChrisChanSan" TOMB5/` lists. The project file `tomb5.vcxproj` carries the same
 notice as an XML comment. Seven files that earlier work had changed without a notice -
 `game/draw.h`, `game/tomb4fx.cpp`, `game/rope.cpp`, `game/sphere.cpp`,
 `game/deathsld.cpp`, `game/flmtorch.cpp` and `specific/polyinsert.h` - were given it in
-`7c02357`.
+`7c02357`. Four more upstream headers changed without one - `game/lara_states.h`,
+`specific/file.h`, `specific/fmv.h` and `specific/winmain.h` - were given it on
+2026-10-17.
 
-Fourteen of the 220 do not carry the notice, and none of them should:
+Forty-six of the 300 do not carry the notice, and none of them should:
 
-- the four `specific/hd/hd_shader/*.inc` are compiler output (`fxc` bytecode as a C array), regenerated from the `.hlsl` files beside them and carrying no source of this project at all;
+- the 36 `specific/hd/hd_shader/*.inc` (8 vertex and 28 pixel shaders) are compiler
+  output (`fxc` bytecode as a C array), regenerated from the nine `.hlsl` files beside
+  them and carrying no source of this project at all;
 - `tomb5/libs/stb/stb_vorbis.c` and `tomb5/libs/discordRPC/LICENSE` are other people's files that are not modified here in any way - stb_vorbis carries its own licence at the end of the file, and the second one *is* a licence. A notice on them would claim an authorship this project does not have;
 - the other eight are under `vendor/trforge/`: five source files copied from TRForge
   (MIT), its `LICENSE`, its `NOTICE.md` and a `VERSION.txt` recording where they came
@@ -39,6 +43,10 @@ Fourteen of the 220 do not carry the notice, and none of them should:
 
 `game/trex.h`, `game/raptor.h` and `game/compy.h` carry the notice and additionally name
 tomb3 as their origin further down (section 2.3).
+
+At `5df75640` (2026-10-16), built from a clean clone of the tracked files alone, the
+four test suites ran ModernTest 15,508 checks, MenuTest 44,272, InterpTest 729 and
+LipsTest 270 with the player's `.OBJ` folder and 243 without, 0 failed each.
 
 This modified version remains licensed under the **GNU General Public License version
 3**, the same licence as the original. See `LICENSE`. The complete corresponding source
@@ -988,6 +996,7 @@ therefore gated at the call site, and switches itself off after the first find.
 **Commits.** `bc328a8`
 
 ### Lara blanked out in the half turn on a rope: the ROPELOG seam
+2026-09-24
 
 **What.** When Lara turns half round on a rope she disappears for a moment. The defect
 belongs to the base engine: it appears with the HD art off, at *Frame rate 30* and under
@@ -23973,13 +23982,20 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #158 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
 | #159 | Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn |
 | #160 | The cut scenes at the frame rate |
-| #161 | Modern control: the stick turned into the classic direction bits; The options menu as one table-driven frame; The modern camera: a free orbit on the right stick; The pad: radial dead zones, a second binding set and a Modifier for chords; The -log switch and the diagnostic seams; The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot; Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; Combat, Sprint, Duck and Grab: hold or toggle; Two action keys: the interaction bit and the Secondary role; The cheats: DOZY as a toggle, and five bindable hotkeys |
+| #161 | Modern control: the stick turned into the classic direction bits; The options menu as one table-driven frame; The modern camera: a free orbit on the right stick; The pad: radial dead zones, a second binding set and a Modifier for chords; The -log switch and the diagnostic seams; The keyboard: two binding sets, bindable hotkey roles, and the look key's turn on the spot; Finding an installed Remaster, reading what it holds for a level, and the settings that steer it; Combat, Sprint, Duck and Grab: hold or toggle; Two action keys: the interaction bit and the Secondary role; The cheats: DOZY as a toggle, and five bindable hotkeys; The mouse: the modern camera's second input, five bindable buttons and two rows; The movement keys as the modern stick |
+| #162 | Lara's face between her lines: the blink loop and the firing face |
+| #163 | HD models for items, enemies and machinery; The cutscene faces speak: their lips follow the Remaster's track files |
 | #164 | Address space, the page cache and what the machine can pay for |
 | #169 | The in-between frame: the root snapshot |
 | #171 | Ledge hang: an automatic turn and lowering at an edge |
 | #172 | (outside an entry); Licence notices, origin sentences and the corrections made before the public push; Optional high quality sound bank from the player's remaster |
-| #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two open questions |
+| #173 | The record: from an eighteen-thousand-line diary to a licence document; Comments in the engine, the randomizer and the tools say what, why and what for; String literals, a build script's working directory, and two questions measured |
+| #174 | Lara blanked out in the half turn on a rope: the ROPELOG seam; Lara facing the wrong way for one tick in the jump twists: the early half turn; Lara squeezed to a sliver in the tightrope turn: the far key-frame pair; The in-between frame: the root snapshot; The animation's root offset on a refused frame; The pose between two ticks |
+| #175 | A camera cut keeps the held course until the stick is let go |
+| #176 | An enemy never carries a wall grab |
 | #177 | The drawn eye at a corner; The Modern eye clear of a wall |
+| #178 | HD models for items, enemies and machinery; Lara's HD wardrobe: a scan of the installed art, its properties, and which outfit is worn; The pose between two ticks |
+| #179 | The light shafts compose as screen, a stacked sea is drawn once, a fast swing stands still; The light shafts have a pixel shader of their own; The light shafts are as faint as the church mist |
 | #181 | The room's inside decides, per frame, and the back of a wall is not drawn; A room the reach alone lists draws none of its art in a listed holder; The reach can be switched off; The reach-only answer goes back to the smaller box; Art in the air of an unlinked room draws inside its own window |
 | #182 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
 | #183 | The material 15 books in motion: a fan's shadow that turns, and flames that play |
@@ -23992,17 +24008,17 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #191 | At a diagonal wall the stick is read in the view on screen; A level camera that follows Lara is blended between its ticks; A held course also ends when the stick is turned past 45 degrees |
 | #192 | A light faded to nothing is not counted into an HD object's light list |
 | #193 | The soft motion of the chest: an optional secondary motion for the HD Lara |
-| #194 | A classic room covered by another group's art is drawn as that art |
-| #194 | A place the art draws is drawn by the art alone: a classic room face by face, her shadow there, and the static meshes |
+| #194 | A classic room covered by another group's art is drawn as that art; A place the art draws is drawn by the art alone: a classic room face by face, her shadow there, and the static meshes |
 | #196 | Where the HD rules come from, counted on our own data |
-| #198 | The water's life |
+| #197 | The water sheets: this project's own water surface |
+| #198 | The water sheets: this project's own water surface |
 | #199 | The level load on several cores |
 | #200 | The spring (#200) |
 | #202 | The HD/SD switch: F12 and a pad chord (#202) |
 | #203 | The level load measured, and the save-load path (#203); Round 2: B built, and the three cheap steps of C; Round 3: the bar full at once; Round 4: the rest of a save load |
 | #204 | The loading screen's third state and the brake (#204); Round 2: off only for the short loads; Round 3: the loading text is the level's name; Round 4: the TR4 view dropped |
-| #205 | The marble floors' mirror (#205), measured and built (round 1) |
-| #207 | The flyby's triggers on a skip (#207), in the skipper's entry |
+| #205 | The marble floors' mirror (#205) |
+| #207 | Skipping cutscenes and the intro flyby with the controller |
+| #208 | The sky |
 | #209 | The destroyable windows (#209) |
-| #210 | The sea seen from below (#210), in the water sheets' entry |
-| #208 | The sky's seam, hiding and layers (#208), in the sky's entry |
+| #210 | The water sheets: this project's own water surface |

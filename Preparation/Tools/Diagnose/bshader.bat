@@ -315,6 +315,21 @@ if errorlevel 1 exit /b 1
 call :stamp hd_sky hd_sky_cloud_ps.inc
 if errorlevel 1 exit /b 1
 
+rem fxc and echo end their lines with CRLF, while .gitattributes keeps the
+rem .inc LF: without this pass git shows all 36 files modified after every
+rem run, in their line endings alone. Rewritten with line feeds, a
+rem regenerated .inc is byte for byte the tracked one.
+set "PS=$d = $env:SHADERDIR; foreach ($f in Get-ChildItem -LiteralPath $d"
+set "PS=!PS! -Filter *.inc) { $t = [IO.File]::ReadAllText($f.FullName);"
+set "PS=!PS! $crlf = [string][char]13 + [char]10;"
+set "PS=!PS! [IO.File]::WriteAllText($f.FullName,"
+set "PS=!PS! $t.Replace($crlf, [string][char]10)) }"
+powershell -NoProfile -NonInteractive -Command "!PS!"
+if errorlevel 1 (
+	echo bshader: the .inc could not be rewritten with line feeds.
+	exit /b 1
+)
+
 for %%F in ("%SHADERDIR%\hd_room_vs.inc" "%SHADERDIR%\hd_room_ps.inc" "%SHADERDIR%\hd_room_gloss_ps.inc" "%SHADERDIR%\hd_model_vs.inc" "%SHADERDIR%\hd_model_ps.inc" "%SHADERDIR%\hd_glow_ps.inc" "%SHADERDIR%\hd_shadow_cast_vs.inc" "%SHADERDIR%\hd_shadow_cast_ps.inc" "%SHADERDIR%\hd_shadow_receive_ps.inc" "%SHADERDIR%\hd_shadow_receive2_ps.inc" "%SHADERDIR%\hd_shadow_receive_model_ps.inc" "%SHADERDIR%\hd_shadow_receive_mirror_ps.inc") do echo bshader: %%~nxF %%~zF bytes of C source
 call :size "%SHADERDIR%\hd_room_water_vs.inc"
 call :size "%SHADERDIR%\hd_room_water_ps.inc"

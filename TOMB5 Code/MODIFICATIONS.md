@@ -23816,6 +23816,73 @@ round, plan and project-owner references from `hd_pagecache.h`, `game/accent.inc
 
 **Commits.** `bc0b13c`, `6a1854d`, `9c7d1e5`, `d28d251`, `bcdbc7d`, `e041c3f`
 
+### The record completed before the push (#211)
+2026-10-17
+
+**What.** Text and comments only, no code line: four modified upstream headers carry the
+GPLv3 5(a) notice, the head of this record states the measurement as it stands today, the
+index has a row for every task of the delta, nine review commits are cited, no tracked
+file names a recording, screenshot or log of the play tests by file, and the ledge hang's
+save sentence, the catch window's angle and the tools' README say what the code and the
+tree hold.
+
+**Why.** The audit of 2026-10-16 found the record incomplete: F-023 and F-024 (four
+headers without the notice), F-025 and F-027 (the head at the counts of 2026-09-22, the
+freeze's suite counts in no tracked file), F-026 and F-031 (eight tasks without an index
+row, an entry without its date line), F-032 and F-033 (nine review commits on no Commits
+line, three commit texts to correct in the record), F-001 (play-test videos and logs named
+by file, decided: all of it goes, as unnecessary for GitHub), F-028 (the ledge fields
+described as written only in the move), F-062 (34.6 degrees where 0x18E2 is 35.0) and
+F-037 (the tools' README counting an older tree).
+
+**How.**
+
+- The notice block of `game/lara.h`, copied byte for byte, heads `game/lara_states.h`,
+  `specific/file.h`, `specific/fmv.h` and `specific/winmain.h`.
+- Section 1 of this record: the date range runs to 2026-10-17, the measurement is that of
+  2026-10-17 with the 46 exceptions by kind, the four headers are named beside `7c02357`,
+  and the suite counts at `5df75640` stand after the origin sentences.
+- The appendix: rows for #162, #163, #174, #175, #176, #178, #179 and #197; #161 gains its
+  two entries on the mouse and the movement keys; the rows of #173, #198, #205, #207, #208
+  and #210 name the headings of the entries that hold them; the two #194 rows are one, and
+  #208 stands before #209. The rope entry's date line is 2026-09-24, the date of its first
+  commit, `4d578e9`.
+- The Commits lines of eight entries cite `01c4f72`, `d305f23`, `1093689`, `e845165`,
+  `dcfd375`, `5005f2d`, `2508eb0`, `0fb2d9a` and `12f1384`. One sentence each corrects
+  `b643607`'s subject (the tightrope entry), `ac05dd9`'s check counts (the projected
+  shadow's first entry) and the 189b commit that bounds the sheen (the shine's light field
+  entry).
+- Twenty-three passages name no file of the play tests any more: the five load logs of
+  2026-10-12 to 14 are the first to the fifth log, the newest one is the newest log, the
+  video is a 60 fps recording of the same build without its frame numbers, the frame of
+  the Remaster recording is a frame of a recording; the line numbers inside the logs and
+  the build stamps of the sessions are gone, dates stay, and every measured value stays.
+- The ledge hang entry says that every save of this build writes `ledge_phase` and
+  `ledge_heading` (a block of 7 bytes where it was 4), that the read is length-checked,
+  and what an older build does with the 3 bytes; its window and the comment at
+  `MODERN_LEDGE_SNAP` in `game/modern_move.h` say 35 degrees.
+- `Preparation/Tools/README.md`: the counts, the two suite rows, `VisInput.h`, and the
+  working folder ModernTest and MenuTest need.
+
+**Checked.** Every number above comes from a script over the tracked tree at this round's
+head. Against the first commit, under `TOMB5/`: 128 files changed and 172 new, 300 in all,
+none deleted, 254 with the notice; the 46 without are the 36 compiled shader `.inc` (8
+vertex, 28 pixel, from 9 `.hlsl`), 2 vendored lib files and 8 under `vendor/trforge/`, and
+no other changed or new file lacks it. The commits in `6aff86d..HEAD` carry 38 task
+numbers and each has a row; every title in the appendix's rows is a heading of the record,
+no number has two rows, and the rows run in number order. All nine review commits stand on
+a Commits line. The scan for the play tests' file names, in-log line numbers and session
+build stamps finds 39 hits at `5df75640` and 0 now. Under `Preparation/Tools/Diagnose/`:
+54 tools with a `main`, 47 `b*.bat`, 45 tools with a script, 9 without, `be.bat` and
+`bshader.bat` building no tool; started from another folder ModernTest fails 121 checks
+and MenuTest 7. The nine scripts `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
+`bit` and `blips` build with exit 0 (`PCtomb5 built Oct 17 2026 13:32:48`); ModernTest
+15,508 checks, MenuTest 44,272, InterpTest 729, LipsTest 270 with the player's `.OBJ`
+folder and 243 without, 0 failed each - the counts of `5df75640`, as no code line changed.
+
+**Commits.** `02eee06`, `7dd0633`, `ffda320`, `e0198d8`, `c13f502`, `22d930f` and this
+record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -24031,3 +24098,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #208 | The sky |
 | #209 | The destroyable windows (#209) |
 | #210 | The water sheets: this project's own water surface |
+| #211 | The record completed before the push (#211) |

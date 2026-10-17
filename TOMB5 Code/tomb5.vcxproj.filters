@@ -1024,12 +1024,81 @@
     <ClInclude Include="TOMB5\specific\sfxbank.h">
       <Filter>TOMB5\specific</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\crashseam.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\devicemove.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\devicewindow.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\loadbar_math.h">
+      <Filter>TOMB5\specific</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_folderlist.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_field.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_math.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_pages.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_seed.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_levelkey.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_model_cut.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_objlight_dark.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_shadow.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_softbody.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_splash_math.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_water_under.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="TOMB5\specific\hd\hd_shader\hd_room.hlsl">
       <Filter>TOMB5\specific\hd\hd_shader</Filter>
     </None>
     <None Include="TOMB5\specific\hd\hd_shader\hd_model.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_glow.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_shadow.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_shadow_receive.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_sky.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_spring.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_water_look.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_wet.hlsl">
       <Filter>TOMB5\specific\hd\hd_shader</Filter>
     </None>
   </ItemGroup>

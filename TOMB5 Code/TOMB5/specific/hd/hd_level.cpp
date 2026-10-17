@@ -232,6 +232,14 @@ namespace
 	 * line; their sum is the level line's band_unclaimed. */
 	std::vector<int> g_pair_band;
 	int g_band_unclaimed = 0;
+	/* Per entry of g_pieces, the wall its claimed face is part of among the
+	 * claimed faces of its pair (HDVisWallLabels): the index in g_pieces of
+	 * the pair's first piece on a face of that wall, -1 for a piece no face
+	 * claims. Built by the level's first DecidePairs on the visibility path
+	 * (BuildVisWalls), once the pieces exist; BuildRoomVis drops the last
+	 * level's. */
+	std::vector<int> g_piece_wall;
+	bool g_piece_wall_built = false;
 	int g_piece_first[HD_MAX_ROOMS];
 	int g_piece_count[HD_MAX_ROOMS];
 	short g_room_group[HD_MAX_ROOMS];
@@ -902,6 +910,81 @@ namespace
 	 * the smaller box (HDPairRange), whole on the answer above and never one
 	 * of the pieces the counters ask. With tomb5.hd_air off no piece has
 	 * air, and the answer above is the whole answer. */
+	/* The walls of every pair's claimed faces, per piece (g_piece_wall):
+	 * the faces of one pair asked face to face once, so that a frame asks
+	 * only which drawn face carries the piece's wall. A pair claims 173
+	 * faces at most over the fifteen levels; the pieces of faces past
+	 * HD_VIS_WALL_FACES keep -1, the answer of a piece no face claims. */
+	void BuildVisWalls()
+	{
+		g_piece_wall.assign(g_pieces.size(), -1);
+		g_piece_wall_built = true;
+
+		for (int g = 0; g < HD_MAX_ROOMS; g++)
+		{
+			const int first = g_piece_first[g];
+			const int count = g_piece_count[g];
+
+			for (int j = 0; j < count; j++)
+			{
+				const HDPairRange& piece = g_pieces[(size_t)(first + j)];
+
+				// No face, or labelled with an earlier piece of its pair.
+				if (piece.face < 0 ||
+					(size_t)piece.face >= g_pair_faces.size() ||
+					g_piece_wall[(size_t)(first + j)] >= 0)
+					continue;
+
+				HDVisWallFace wall[HD_VIS_WALL_FACES];
+				int pieceOf[HD_VIS_WALL_FACES];
+				int label[HD_VIS_WALL_FACES];
+				int walls = 0;
+
+				for (int k = j; k < count; k++)
+				{
+					const HDPairRange& other = g_pieces[(size_t)(first + k)];
+					bool known = false;
+
+					if (other.intrusion != piece.intrusion || other.face < 0 ||
+						(size_t)other.face >= g_pair_faces.size())
+						continue;
+
+					for (int i = 0; i < walls && !known; i++)
+						known = g_pieces[(size_t)pieceOf[i]].face == other.face;
+
+					if (known || walls >= HD_VIS_WALL_FACES)
+						continue;
+
+					const HDPairFace& face = g_pair_faces[(size_t)other.face];
+
+					pieceOf[walls] = first + k;
+					wall[walls].v = face.v;
+					wall[walls].corners = face.corners;
+					wall[walls].drawn = false;
+					walls++;
+				}
+
+				HDVisWallLabels(wall, walls, label, HD_VIS_PLANE_TOLERANCE);
+
+				for (int k = j; k < count; k++)
+				{
+					const HDPairRange& other = g_pieces[(size_t)(first + k)];
+
+					if (other.intrusion != piece.intrusion || other.face < 0)
+						continue;
+
+					for (int i = 0; i < walls; i++)
+						if (g_pieces[(size_t)pieceOf[i]].face == other.face)
+						{
+							g_piece_wall[(size_t)(first + k)] =
+								pieceOf[label[i]];
+							break;
+						}
+				}
+			}
+		}
+	}
+
 	void DecidePairs(FrameRoom& entry)
 	{
 		entry.scissoredTris = 0;
@@ -998,41 +1081,38 @@ namespace
 			{
 				whole = claimed;
 
-				/* On the visibility path only a claimed face in the plane
-				 * of the piece's own face keeps it whole: the faces of one
-				 * wall share a plane, and the art of another wall of the
-				 * room is seen where the classic path shows that wall, in
-				 * the room's window. Kept whole by the floor of ANDREA1's
-				 * room 93 in sight, the walls of its brick block stood in
-				 * room 101 beside the facade's corner (2,304 pixels at
-				 * 1280x720). A piece no face claims has no plane and keeps
-				 * the pair's answer. */
-				if (whole && VisLevel() && piece.face >= 0 &&
-					(size_t)piece.face < g_pair_faces.size())
+				/* On the visibility path only a claimed face the classic
+				 * path draws that is one wall with the piece's own face -
+				 * in its plane, or round a corner the wall turns - keeps
+				 * it whole (HDVisWallDrawn says why): the art of another
+				 * surface of the room is seen where the classic path shows
+				 * that surface, in the room's window. Kept whole by the
+				 * floor of ANDREA1's room 93 in sight, the walls of its
+				 * brick block stood in room 101 beside the facade's corner
+				 * (2,304 pixels at 1280x720). A piece no face claims has no
+				 * wall and keeps the pair's answer. */
+				if (whole && VisLevel() && piece.face >= 0)
 				{
-					const HDPairFace& own = g_pair_faces[(size_t)piece.face];
-					bool inPlane = false;
+					if (!g_piece_wall_built ||
+						g_piece_wall.size() != g_pieces.size())
+						BuildVisWalls();
 
-					for (int k = 0; k < count && !inPlane; k++)
+					const int wall = g_piece_wall[(size_t)(first + j)];
+					bool drawn = wall < 0;
+
+					for (int k = 0; k < count && !drawn; k++)
 					{
 						const HDPairRange& other =
 							g_pieces[(size_t)(first + k)];
 
-						if (other.intrusion != piece.intrusion ||
-							other.face < 0 ||
-							(size_t)other.face >= g_face_alive.size() ||
-							!g_face_alive[(size_t)other.face])
-							continue;
-
-						const HDPairFace& drawn =
-							g_pair_faces[(size_t)other.face];
-
-						inPlane = HDVisFacesShareAPlane(drawn.v,
-							drawn.corners, own.v, own.corners,
-							HD_VIS_PLANE_TOLERANCE);
+						drawn = other.intrusion == piece.intrusion &&
+							g_piece_wall[(size_t)(first + k)] == wall &&
+							other.face >= 0 &&
+							(size_t)other.face < g_face_alive.size() &&
+							g_face_alive[(size_t)other.face] != 0;
 					}
 
-					whole = inPlane;
+					whole = drawn;
 				}
 
 				g_clip_unlinked_pieces++;
@@ -3524,6 +3604,8 @@ static void BuildRoomVis()
 {
 	g_vis_level = tomb5.hd_vis == 1;
 	g_vis_logged = false;
+	g_piece_wall.clear();
+	g_piece_wall_built = false;
 	g_vis_main.assign((size_t)(number_rooms > 0 ? number_rooms : 0), -1);
 
 	if (!g_vis_level || number_rooms <= 0)

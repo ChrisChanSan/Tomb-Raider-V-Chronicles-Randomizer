@@ -12744,6 +12744,111 @@ static void vis_plane()
 		"plane: two units off is not", 0, 0);
 }
 
+/* The wall of a claimed face (HDVisFaceUpright, HDVisFacesShareAnEdge,
+ * HDVisFacesOneWall, HDVisWallDrawn): ANDREA3's wooden wall of room 8 in
+ * room 115's air, faces 76 and 77 at z 3072 and face 78 at x 0 round the
+ * corner, in the seed room's frame as RoomProbe -visfaces prints them; and
+ * ANDREA1's brick block of room 93, whose drawn floor is no part of its
+ * walls and roof. */
+static void vis_wall()
+{
+	const float f76[4][3] = { { -1024, -1024, 3072 }, { -2048, -1024, 3072 },
+		{ -2048, 0, 3072 }, { -1024, 0, 3072 } };
+	const float f77[4][3] = { { 0, -1024, 3072 }, { -1024, -1024, 3072 },
+		{ -1024, 0, 3072 }, { 0, 0, 3072 } };
+	const float f78[4][3] = { { 0, -1024, 4096 }, { 0, -1024, 3072 },
+		{ 0, 0, 3072 }, { 0, 0, 4096 } };
+	const float floor606[4][3] = { { 5120, -3584, 5120 }, { 5120, -3584, 6144 },
+		{ 6144, -3584, 6144 }, { 6144, -3584, 5120 } };
+	const float roof607[4][3] = { { 5120, -5376, 6144 }, { 5120, -5376, 5120 },
+		{ 6144, -5376, 5120 }, { 6144, -5376, 6144 } };
+	const float wall608[4][3] = { { 6144, -4608, 5120 }, { 5120, -4608, 5120 },
+		{ 5120, -3584, 5120 }, { 6144, -3584, 5120 } };
+	const float wall609[4][3] = { { 6144, -5376, 5120 }, { 5120, -5376, 5120 },
+		{ 5120, -4608, 5120 }, { 6144, -4608, 5120 } };
+	const float wall611[4][3] = { { 6144, -4608, 6144 }, { 6144, -4608, 5120 },
+		{ 6144, -3584, 5120 }, { 6144, -3584, 6144 } };
+	// A slope: one corner raised, the plane leans off the upright.
+	const float slope[4][3] = { { 0, 0, 0 }, { 1024, -256, 0 },
+		{ 1024, -256, 1024 }, { 0, 0, 1024 } };
+	// Touching f78 at the one corner (0, 0, 4096) only.
+	const float touch[4][3] = { { 0, 0, 4096 }, { 1024, 0, 4096 },
+		{ 1024, 1024, 4096 }, { 0, 1024, 4096 } };
+	// Half as tall as f78's neighbour across the seam at x 0, z 3072.
+	const float half[4][3] = { { 0, -512, 3072 }, { -1024, -512, 3072 },
+		{ -1024, 0, 3072 }, { 0, 0, 3072 } };
+	const double tol = HD_VIS_PLANE_TOLERANCE;
+
+	ok(HDVisFaceUpright(f78, 4), "wall: face 78 stands upright", 1, 1);
+	ok(HDVisFaceUpright(f76, 4), "wall: face 76 stands upright", 1, 1);
+	ok(!HDVisFaceUpright(floor606, 4), "wall: a floor does not", 0, 0);
+	ok(!HDVisFaceUpright(roof607, 4), "wall: a roof does not", 0, 0);
+	ok(!HDVisFaceUpright(slope, 4), "wall: a slope does not", 0, 0);
+	ok(!HDVisFaceUpright(f78, 2), "wall: two corners are no face", 0, 0);
+
+	ok(HDVisFacesShareAnEdge(f77, 4, f78, 4, tol),
+		"wall: 77 and 78 meet along the corner", 1, 1);
+	ok(HDVisFacesShareAnEdge(f78, 4, f77, 4, tol),
+		"wall: and either way round", 1, 1);
+	ok(HDVisFacesShareAnEdge(f76, 4, f77, 4, tol),
+		"wall: 76 and 77 meet along their seam", 1, 1);
+	ok(!HDVisFacesShareAnEdge(f76, 4, f78, 4, tol),
+		"wall: 76 and 78 do not touch", 0, 0);
+	ok(!HDVisFacesShareAnEdge(f78, 4, touch, 4, tol),
+		"wall: one corner in common is no edge", 0, 0);
+	ok(HDVisFacesShareAnEdge(f78, 4, half, 4, tol),
+		"wall: half the corner's height is an edge", 1, 1);
+
+	ok(HDVisFacesOneWall(f78, 4, f77, 4, tol),
+		"wall: 77 is one wall with 78 round the corner", 1, 1);
+	ok(!HDVisFacesOneWall(f78, 4, f76, 4, tol),
+		"wall: 76 is not, face to face", 0, 0);
+	ok(HDVisFacesOneWall(f77, 4, f76, 4, tol),
+		"wall: 76 is one wall with 77 in its plane", 1, 1);
+	ok(!HDVisFacesOneWall(floor606, 4, wall608, 4, tol),
+		"wall: the block's floor is not one wall with its side", 0, 0);
+	ok(HDVisFacesOneWall(wall608, 4, wall611, 4, tol),
+		"wall: the block's two sides are one wall round its corner", 1, 1);
+	ok(!HDVisFacesOneWall(floor606, 4, roof607, 4, tol),
+		"wall: nor its floor with its roof", 0, 0);
+
+	HDVisWallFace andrea3[3] = { { f76, 4, false }, { f77, 4, false },
+		{ f78, 4, true } };
+
+	ok(HDVisWallDrawn(andrea3, 3, 0, tol),
+		"wall: 78 drawn keeps 76 whole, through 77", 1, 1);
+	ok(HDVisWallDrawn(andrea3, 3, 1, tol),
+		"wall: 78 drawn keeps 77 whole", 1, 1);
+	ok(HDVisWallDrawn(andrea3, 3, 2, tol),
+		"wall: a drawn face keeps itself whole", 1, 1);
+	andrea3[2].drawn = false;
+	ok(!HDVisWallDrawn(andrea3, 3, 0, tol),
+		"wall: none drawn keeps none whole", 0, 0);
+
+	HDVisWallFace andrea1[5] = { { floor606, 4, true },
+		{ roof607, 4, false }, { wall608, 4, false }, { wall609, 4, false },
+		{ wall611, 4, false } };
+
+	ok(!HDVisWallDrawn(andrea1, 5, 1, tol),
+		"wall: the block's floor drawn cuts its roof", 0, 0);
+	ok(!HDVisWallDrawn(andrea1, 5, 2, tol),
+		"wall: and its wall at z 5120", 0, 0);
+	ok(!HDVisWallDrawn(andrea1, 5, 4, tol),
+		"wall: and its wall at x 6144", 0, 0);
+	ok(HDVisWallDrawn(andrea1, 5, 0, tol),
+		"wall: and keeps the floor itself", 1, 1);
+	andrea1[2].drawn = true;
+	ok(HDVisWallDrawn(andrea1, 5, 4, tol),
+		"wall: a side drawn keeps the side round the corner", 1, 1);
+	ok(HDVisWallDrawn(andrea1, 5, 3, tol),
+		"wall: and the side's other face in its plane", 1, 1);
+	ok(!HDVisWallDrawn(andrea1, 5, 1, tol),
+		"wall: but not the roof", 0, 0);
+	ok(!HDVisWallDrawn(andrea1, 5, 5, tol),
+		"wall: a face past the list is not whole", 0, 0);
+	ok(!HDVisWallDrawn(0, 0, 0, tol), "wall: no faces, nothing whole", 0, 0);
+}
+
 /* The classic room the visibility path leaves out (HDVisClassicRoomHidden):
  * ANDY3's room 88 - an empty group, 58 classic faces none of which any art
  * covers, room 35's trees its guest - and the rooms it keeps. */
@@ -23530,6 +23635,7 @@ int main()
 	stand_cover();
 	vis_tables();
 	vis_plane();
+	vis_wall();
 	vis_hidden_room();
 	stand_overlap();
 	stand_part();

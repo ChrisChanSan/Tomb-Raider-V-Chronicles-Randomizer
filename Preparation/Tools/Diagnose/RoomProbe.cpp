@@ -3053,8 +3053,9 @@ static int g_vis_win = 2;
 // -visfaces 1: each piece's claimed face, its corners, under its decide line.
 static bool g_vis_faces = false;
 /* -visplane 1, the engine's: on the visibility path a piece in unlinked air
- * stays whole only on a claimed face in its own face's plane that survives
- * the window (DecidePairs); 0 keeps the pair's answer. */
+ * stays whole only on a claimed face that survives the window and is one
+ * wall with its own face (HDVisWallDrawn, DecidePairs); 0 keeps the pair's
+ * answer. */
 static bool g_vis_plane = true;
 // -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
 static int g_gpu_runs = 0;
@@ -6429,32 +6430,48 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		if (unlinked && !(g_unlinked == 2 && *empty))
 			answer = claimed;
 
-		/* -visplane 1: of a pair's claimed faces only one in the plane of
-		 * the piece's own face keeps the piece whole (DecidePairs). */
+		/* -visplane 1: of a pair's claimed faces only a drawn one that is
+		 * one wall with the piece's own face keeps the piece whole
+		 * (HDVisWallDrawn, DecidePairs). */
 		if (g_vis_option && g_vis_plane && unlinked && answer &&
 			piece.face >= 0 && (size_t)piece.face < g_faces_built.size())
 		{
-			const HDPairFace& own = g_faces_built[(size_t)piece.face];
-			bool inPlane = false;
+			HDVisWallFace wall[HD_VIS_WALL_FACES];
+			int faceOf[HD_VIS_WALL_FACES];
+			int walls = 0;
+			int target = -1;
 
-			for (int k = 0; k < HDRenderGroupPairRanges(group) && !inPlane;
-				k++)
+			for (int k = 0; k < HDRenderGroupPairRanges(group) &&
+				walls < HD_VIS_WALL_FACES; k++)
 			{
 				HDPairRange other;
+				bool known = false;
 
 				if (!HDRenderGroupPairRange(group, k, &other) ||
 					other.intrusion != piece.intrusion || other.face < 0 ||
 					(size_t)other.face >= g_faces_built.size())
 					continue;
 
+				for (int i = 0; i < walls && !known; i++)
+					known = faceOf[i] == other.face;
+
+				if (known)
+					continue;
+
 				const HDPairFace& f = g_faces_built[(size_t)other.face];
 
-				inPlane = FaceSurvives(f, offset, win) &&
-					HDVisFacesShareAPlane(f.v, f.corners, own.v,
-						own.corners, HD_VIS_PLANE_TOLERANCE);
+				if (other.face == piece.face)
+					target = walls;
+
+				faceOf[walls] = other.face;
+				wall[walls].v = f.v;
+				wall[walls].corners = f.corners;
+				wall[walls].drawn = FaceSurvives(f, offset, win);
+				walls++;
 			}
 
-			answer = inPlane;
+			answer = HDVisWallDrawn(wall, walls, target,
+				HD_VIS_PLANE_TOLERANCE);
 		}
 
 		/* -viswin 1: the art in unlinked air alone held to the window, on
@@ -12678,8 +12695,10 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     room behind, the normal and the world corners; -1
  *                     prints every room's
  *   -visplane 0|1     1, the default, keeps a piece in unlinked air whole
- *                     only on a claimed face in its own face's plane
- *                     (DecidePairs); 0 on any claimed face of its pair
+ *                     only on a drawn claimed face that is one wall with
+ *                     its own face, in its plane or round a corner
+ *                     (HDVisWallDrawn, DecidePairs); 0 on any claimed face
+ *                     of its pair
  *   -visfaces 0|1     1 prints each piece's claimed face, its corners in
  *                     the seed room's frame, under its decide line
  *   -visnear 0|1      1, the default, lists the room behind a portal the

@@ -22161,7 +22161,7 @@ the standing line sits
 `MODERN_LEDGE_HANG_OUT` (100) units past it, the engine's own catch-snap
 distances; `MODERN_LEDGE_RESIDUAL` (15) is the most a walk or a stand may lie
 off the line and still start the move; `MODERN_LEDGE_SNAP` (0x18E2) is the
-catch's own 34.6-degree cardinal window (`:433`, `:443`-`:445`);
+catch's own 35-degree cardinal window (`:433`, `:443`-`:445`);
 `MODERN_LEDGE_NEAR` (512) is how close an edge has to be before `LEDGELOG`
 reports the refusal set (`:449`). The nine refusals, each one engine test asked the way its
 own site asks it (`LaraLedgeRefusals`, `game/lara.cpp:6150`-`6317`, with the
@@ -22186,8 +22186,14 @@ accepts no longer reaches for a ledge below the way `lara_as_forwardjump` does
 AS_REACH` once she is already falling) — the new trigger catches her before
 she leaves the ledge; a sprint and a refused edge still reach below. The phase (`modern_ledge_phase`) and the
 heading she hangs with are appended to `tomb5_save_info` as `ledge_phase` and
-`ledge_heading` (`global/types.h:1399`-`1400`) and written/read only while she
-is in the move (`game/savegame.cpp:103`, `:116`-`117`); a save that cannot go
+`ledge_heading` (`global/types.h:1399`-`1400`). Every save of this build carries them:
+`LaraLedgeSave` (`game/savegame.cpp:103`) writes the phase and heading in the hang and
+`MODERN_LEDGE_NONE` and 0 otherwise, so the block written after `SAVEGAME_INFO`
+(`specific/gamemain.cpp:176`) has grown from 4 to 7 bytes under `#pragma pack(push, 1)`.
+The read is length-checked: `LaraLedgeLoad` (`game/savegame.cpp:116`-`117`) takes each
+field only when the byte count `ReadFile` returned (`specific/gamemain.cpp:229`) reaches
+past its offset, and uses them only while she is in the hang. An older build reads its
+own 4 bytes of the block and leaves the 3 after them unread. A save that cannot go
 on this way is settled once by the same refusal test into the hang or a fall.
 Under the Modern orbit the camera swings round with her turn, ending behind her
 back over the drop where the walls allow it, and keeps looking at her all the

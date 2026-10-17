@@ -675,7 +675,8 @@ void SkyDrawPhase()
 		 * group is a band of one flat colour and nothing else, while its
 		 * script's two layers are the sea's surface seen from below on the
 		 * level's own sky page; there they are drawn over the band, as the
-		 * classic path draws them (HDFrameSkyCoversLayers). */
+		 * classic path draws them, unless the level's water takes the deep
+		 * look, whose under view is that surface (HDFrameSkyCoversLayers). */
 		const bool hdSky = HDFrameSky(aMXPtr);
 		const bool covered = hdSky && HDFrameSkyCoversLayers();
 		const bool lightning = (gfLevelFlags & GF_LIGHTNING) != 0;

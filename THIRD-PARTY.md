@@ -2544,7 +2544,9 @@ carries the tables.
     sky group holds a cloud sheet or an opaque-pass band. OWN, the rule; DATA:
     JOBY4's sky group is a band of one colour alone (page 7006, `-skycensus`,
     DdsProbe), its script's layers the sea's surface on the level's own sky
-    page; TITLE's bands are in the opaque pass.
+    page; TITLE's bands are in the opaque pass. Since 2026-10-17 a level whose
+    water takes the deep look keeps its layers off as well (OWN, decided after
+    the play test of that day): the surface seen from below is the HD picture.
 243. **The HD page lent to the layers** (`hd_level.cpp`, `HDFrameSkyLayerPage`;
     `hd_render.cpp`, `HDRenderSkyLayerPage`; `game/draw.cpp`, `SkyDrawPhase`) -
     over an HD sky with a cloud sheet the layers draw the nearest sheet's page

@@ -2943,6 +2943,17 @@ bright surface page; whether the lightning layer should keep the cloud sheet's p
 drop to the lightning's colour alone; whether a lent HD page should override the PSX sky
 setting as it now does; whether the volumetric layer is wanted at its cost.
 
+**2026-10-17 (#208): JOBY4's layers off again.** Decided from the play test of
+2026-10-17: the sea's surface seen from below in `JOBY4` is the HD picture, room 19's
+art under the under view of #210, not the classic script layers that the round of
+2026-10-16 brought back over the level's bare band (with the PSX sky on the dark teal
+tiles, with it off the SD sea page). `HDRenderSkyCoversLayers` answers true in a level
+whose water takes the deep look (`g_wdeep_on`, `JOBY4` alone of the fifteen), so
+`SkyDrawPhase` leaves both layers out there, as before that round; the band stays. No
+other level changes: everywhere else the answer came from a cloud sheet or an
+opaque-pass band already. The round of #208 that measures the vanishing surface and
+builds the project's own surface look follows.
+
 **Commits.** `4eb9e0f5`, `124ec950`, `9da28f2e`, `3d7c5581`, `1b9b05e3`, `33b315fd`
 
 ### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items

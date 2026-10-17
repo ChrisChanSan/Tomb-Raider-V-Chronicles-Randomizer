@@ -21986,9 +21986,15 @@ bool HDRenderSky(const D3DMATRIX* world)
  * over it, except JOBY4's (RoomProbe -skycensus), which is the band alone
  * and one flat colour; the layers that JOBY4's script draws (the surface
  * seen from below, on the level's own sky page) have nothing in the HD sky
- * standing for them. */
+ * standing for them - and are left out all the same where the level's
+ * water takes the deep look (g_wdeep_on): there the surface seen from
+ * below is the HD picture, room 19's art under the under view, and the
+ * layers would lay the classic sky page over it. */
 bool HDRenderSkyCoversLayers()
 {
+	if (g_wdeep_on)
+		return true;
+
 	for (int g = g_room_groups; g < (int)g_groups.size(); g++)
 		for (int pass = 0; pass < 2; pass++)
 			for (const HDRange& range : g_groups[(size_t)g].pass[pass])

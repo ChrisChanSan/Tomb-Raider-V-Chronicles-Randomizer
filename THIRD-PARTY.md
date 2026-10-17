@@ -2728,6 +2728,74 @@ carries the tables.
     piece's claimed face with its corners under its decide line, a room's
     portal records with their world corners, and every closed door with the
     portals it shuts. OWN, this project's tool.
+258. **The marble mirror's clip over the floor** (`hd_render.cpp`,
+    `kMarbleClipOver`, `g_marble_clip`, `HDRenderMarbleDraw`) - the mirrored
+    draw keeps what stands 4 units (the layer's lift, `kWetLift`) over the
+    floor's plane, not what stands in it: at the plane the floor's own
+    triangles were kept or cut by rounding and covered the reflection.
+    OWN, from general graphics knowledge (a planar reflection's clip
+    plane); DATA: the owner's log and videos, RICH2, the same eye with the
+    clip in the floor and 4 units over it 60 to 34,574 pixels apart at his
+    hall (room 12, ticks 15389 to 15412) and 61 to 9,755 at his corridor
+    (room 46, ticks 12955 to 12975) at 960 x 540.
+259. **Rising faces are no mirror** (`hd_render.cpp`, `marble_build`) - a
+    face with a corner farther than the clip's offset from its plane
+    leaves the mirror. DATA: RoomProbe `-marble 1`'s spread - every face
+    of the eight levels lies with each corner within a unit of its plane
+    or rises 15 units and more across itself (RICH2 561 of 42,228 counted
+    with the copies in the level, 477 with them left out; ANDREA2 30,
+    ANDREA3 4, RICH3 54, RICHCUT2 27); OWN, the limit the clip's.
+260. **The art's copy under a polished floor left out** (`hd_render.cpp`,
+    `marble_copies`, the triangle loop's skip; `kMarbleCopyNear`,
+    `kMarbleCopyMargin`, `kMarbleCopyMirrored`) - while `hd_marble` is on,
+    a group's triangles that are the room turned corner for corner about
+    one of its mirror planes (each corner within 2 units, the same page),
+    lie wholly under that plane's faces with a 64-unit margin, stand in no
+    classic room's box and make a copy's square leave the level. OWN, the
+    rule a project decision of 2026-10-16 (the copies dropped for the
+    planar mirror); the square rule RoomProbe `-tankcensus`'s (8 mirrored,
+    a third); 2 from the faces' spread (entry 259), 64 a free choice
+    measured: without it two triangles beside RICH2's corridor showed as
+    holes from room 121 (p9 562 pixels, v510 445), with it none. DATA: RICH2
+    119,319 triangles; at the measurement's 28 eyes the pictures with and
+    without the copies differ by at most 31 pixels (a crack between floor
+    pieces the copy filled, see the record's Left).
+261. **A mirror face wholly under its own room's floor is none**
+    (`hd_render.cpp`, `marble_build`, `kMarbleBuriedIn`) - a face whose
+    centroid, corners and edges' middles (these drawn an eighth of the way
+    in) each lie under a face of its own group 16 units and more higher
+    leaves the mirror: what is left of a copy. OWN, the rule and the
+    eighth a free choice; DATA: RICH2 4,558 faces and ANDREA1 12 (squares
+    under rooms 174 and 175's tops), no other level; the planes -22527 and
+    1536 of the owner's two eyes gone. The centroid alone took ANDREA1
+    room 175's visible floor at -5592 (63,266 pixels at A175b, 960 x 540).
+262. **One floor, one height** (`hd_render.cpp`, `marble_build`,
+    `kMarbleHeightJoin`) - heights within 2 units of the next are one
+    plane, at the height most faces hold. DATA: entry 259's spread (two
+    faces of one floor differ by at most 2), RICH2 33 to 24 heights, 1,834
+    faces moved, the pool surround's -2816 and -2817; OWN, the rule.
+263. **The cap re-judged** (`hd_marble_planes`, default 2, unchanged) - no
+    hold of last frame's planes. DATA: 132 consecutive ticks of the owner's
+    log (RICH2 rooms 120 and 126), the drawn set changing with the same
+    planes in view 3 times, between second floors of 2 to 3 per cent of
+    the screen, and a simulated hold (twice the cover to take a place)
+    leaving 2 and losing 0.18 of a screen's cover; OWN, the decision.
+264. **RICH2's banded marble in the mirror column** (`hd_gloss_pages.h`,
+    3314 and 3315, class `A`) - OWN, the owner's decision of 2026-10-17;
+    DATA: RoomProbe `-marblecensus`, three squares a page in rooms 46, 75
+    and 128, two over a copy; at E190 4,342 pixels of the strip change.
+265. **The marble mirror's warm-up** (`hd_render.cpp`,
+    `HDRenderMarbleWarmUp`; `hd_level.cpp`, `BuildWaterSheets`) - once a
+    level the mirror's target made and the plain, gloss and glow room
+    shaders drawn once with the clip plane on, and the layer's pair once,
+    as the water's warm-up does. OWN, after this project's water warm-up;
+    DATA: the first marble draw at 2560 x 1440 at the owner's two eyes 42
+    ms (median of five) before, 0.08 to 0.67 after; the load 27.7 to 48.6
+    ms more over the sessions measured.
+266. **RoomProbe's marble measurement** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`, `-marbleclip`, `-marblecopies`, the `marbleplane:`
+    lines and the `marble:` line's spread, rising, copies, buried and
+    joined counts) - OWN, this project's tool on the player's files (DATA).
 
 ## Credited, but not contained here
 

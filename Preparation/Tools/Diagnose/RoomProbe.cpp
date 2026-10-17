@@ -566,8 +566,23 @@
  *                     (tomb5.hd_marble_planes, 2 where not given).
  *     -marblerows 1|2 the mirror's target at one or two rows a row of the
  *                     frame (2, the engine's, where not given).
- *     -nowarm         no warm-up of the water's shaders before the picture
- *                     (HDRenderWaterWarmUp, which the engine runs once a
+ *     -marbleclip <units>  how far over the floor's plane the mirrored draw
+ *                     starts (HDRenderMarbleClip; 4, the engine's, where
+ *                     not given; 0 puts the clip in the floor, where the
+ *                     floor's own triangles blink into its mirror). The
+ *                     marble: line ends with the kept faces' spread and
+ *                     the faces left out for rising across themselves, and
+ *                     one marbleplane: line a plane of the frame follows,
+ *                     in its rank: the height, the share of the screen its
+ *                     faces cover, drawn or left.
+ *     -marblecopies 0|1  1 keeps the art's copy of a room under its
+ *                     polished floor in the level (HDRenderMarbleKeepCopies;
+ *                     0, the engine's, where not given, leaves it out). The
+ *                     marble: line ends with the copy triangles left out and
+ *                     of them those in water rooms.
+ *     -nowarm         no warm-up of the water's shaders and the marble
+ *                     floors' mirror before the picture (HDRenderWaterWarmUp
+ *                     and HDRenderMarbleWarmUp, which the engine runs once a
  *                     level and RoomProbe once a picture by default, after
  *                     the depth texture's bind): the first sheet draw then
  *                     waits for the driver as a game's first water frame
@@ -1629,6 +1644,14 @@ static bool ShotBegin(Shot& shot, long w, long h)
 				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
 				"cards %.2f, wet floor %.2f\n", all, ms[0], ms[1], ms[2],
 				ms[3], ms[4], ms[5], ms[6], ms[7], ms[8]);
+
+		// The marble floors' mirror, as the engine warms it a level.
+		const double marble = HDRenderMarbleWarmUp(ms, 5);
+
+		if (marble >= 0.0)
+			printf("-marble: warm-up %.2f ms: target %.2f, plain %.2f, "
+				"gloss %.2f, glow %.2f, layer %.2f\n", marble, ms[0], ms[1],
+				ms[2], ms[3], ms[4]);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws
@@ -8536,6 +8559,20 @@ static bool MarbleArg(int argc, char** argv, int* at)
 		return true;
 	}
 
+	// -marbleclip <units>: the mirrored draw's start over the floor.
+	if (!strcmp(a, "-marbleclip") && more)
+	{
+		HDRenderMarbleClip((float)atof(argv[++*at]));
+		return true;
+	}
+
+	// -marblecopies 0|1: 1 keeps the art's copies under the floors.
+	if (!strcmp(a, "-marblecopies") && more)
+	{
+		HDRenderMarbleKeepCopies(atoi(argv[++*at]) != 0);
+		return true;
+	}
+
 	if (!strcmp(a, "-marblecensus") || !strcmp(a, "-marblequiet"))
 		g_marble_quiet = g_marble_quiet || a[7] == 'q';
 	else if (!strcmp(a, "-marblepages") && more)
@@ -9112,9 +9149,17 @@ static void ProbeMarble(const void* projection)
 	HDRenderMarbleStatsNow(&s);
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
-		"(timestamps round HDRenderMarbleDraw), first %.4f ms\n", s.planes,
+		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
+		"rising %d; copies %d water %d buried %d joined %d\n", s.planes,
 		s.drawn, g_marble_planes, s.faces, s.calls, s.wet, s.faces_level,
-		s.water, s.opaque, s.heights, ms, first);
+		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
+		s.copies, s.copies_water, s.buried, s.joined);
+
+	// One marbleplane line a plane of the frame, in the order it is ranked.
+	for (int i = 0; i < s.planes && i < 8; i++)
+		printf("marbleplane: %d y %d cover %.5f %s room %d\n", i,
+			s.plane_y[i], s.plane_cover[i], i < s.drawn ? "drawn" : "left",
+			s.plane_room[i]);
 }
 
 /* The room behind the models' copy (HDRenderWaterWetRoomCopy) where

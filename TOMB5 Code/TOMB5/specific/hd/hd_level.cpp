@@ -2635,6 +2635,16 @@ static void BuildWaterSheets()
 			"cards %.2f", g_stem, warmed, warm[0], warm[1], warm[2], warm[3],
 			warm[4], warm[5], warm[6], warm[7]);
 
+	/* And the marble floors' mirror, so the first frame with one does not
+	 * wait for the driver (hd_render.cpp, HDRenderMarbleWarmUp). */
+	double marble[5];
+	const double marbled = HDRenderMarbleWarmUp(marble, 5);
+
+	if (marbled >= 0.0 && gLogEnabled)
+		Log("HDLOG level=%s marble warm-up %.2f ms: target %.2f, plain "
+			"%.2f, gloss %.2f, glow %.2f, layer %.2f", g_stem, marbled,
+			marble[0], marble[1], marble[2], marble[3], marble[4]);
+
 	/* WATERLOG, with -log: one level line and one line per body - the
 	 * legend is over HDRenderWaterLogLine in hd_render.cpp, which writes
 	 * RoomProbe -hdwater's lines too. */

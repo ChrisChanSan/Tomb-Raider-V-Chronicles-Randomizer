@@ -1798,6 +1798,21 @@ struct HDRenderMarbleStats
 	int water;	// faces left out in water rooms
 	int opaque;	// clear floor draw calls drawn opaque
 	int heights;	// the level's floor heights with a face
+	// The frame's planes in their order, the first eight: height, share.
+	int plane_y[8];
+	float plane_cover[8];
+	int plane_room[8];	// the room whose faces cover the most of it
+	// The farthest corner of a kept face from its plane, units, and the
+	// faces left out for rising farther than the mirror's clip offset.
+	int spread;
+	int rising;
+	// The art's copy triangles left out of the level, and in water rooms.
+	int copies;
+	int copies_water;
+	// The faces left out for lying under a floor of their own room.
+	int buried;
+	// The faces moved to a neighbouring height of their own floor.
+	int joined;
 };
 
 void HDRenderMarbleSet(int on, int planes);
@@ -1811,6 +1826,19 @@ void HDRenderMarbleQuiet(bool on);
 /* RoomProbe's -marblerows: the mirror target drawn at 1 or 2 rows a row of
  * the frame (2 in the engine). */
 void HDRenderMarbleRows(int rows);
+/* RoomProbe's -marbleclip: how far over the floor's plane the mirrored draw
+ * starts, in units (4 in the engine; 0 puts the clip in the floor). */
+void HDRenderMarbleClip(float units);
+/* RoomProbe's -marblecopies 1: the art's copies under the polished floors
+ * kept in the level as they were before (set before the level's build). */
+void HDRenderMarbleKeepCopies(bool keep);
+/* The marble floors' warm-up (hd_render.cpp): once a level, after its
+ * build, the mirror's target made at the frame's size and the room shaders
+ * drawn once with the clip plane on, and the layer's pair once, so the
+ * first frame with a mirror does not wait for the driver. `ms` takes each
+ * draw's time (target, plain, gloss, glow, layer; -1 for one not drawn).
+ * Returns the whole time in milliseconds, or -1 when nothing was warmed. */
+double HDRenderMarbleWarmUp(double* ms, int max);
 
 /* The warm-up (hd_render.cpp, "the warm-up"): each of the water's pixel
  * shaders and the cards' pair draws once into a target of its own, so the

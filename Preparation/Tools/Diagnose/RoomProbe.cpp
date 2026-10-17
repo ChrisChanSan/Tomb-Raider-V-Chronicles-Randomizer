@@ -16240,6 +16240,10 @@ static int ProbeMain(int argc, char** argv)
 				sizeof(line)); s++)
 				printf("%s\n", line);
 
+			for (int a = 0; HDRenderWaterArtLine(a, stem, line,
+				sizeof(line)); a++)
+				printf("%s\n", line);
+
 			for (int w = 0; HDRenderWaterWetLine(w, stem, line,
 				sizeof(line)); w++)
 			{

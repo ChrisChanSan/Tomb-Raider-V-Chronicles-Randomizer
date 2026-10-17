@@ -21639,6 +21639,84 @@ static void water_under()
 		"water under: an index under 1 is taken as 1", 0, 0);
 }
 
+/* The ripple of the remaster's still water art (hd_splash_math.h,
+ * HDArtRipple): the length a fifth of the water's width and never under its
+ * class's longest row, the deep-water rate at that length times 0.35 of the
+ * class's calm, the travel a tenth of the part's span at the sea's steepness
+ * and less for a flatter class. The rows are kWaterClass's (hd_render.cpp):
+ * basin 260 / 2 / 0.6, channel 420 / 3 / 0.8, sea 1500 / 38 / 1.0; g 4300. */
+static void art_ripple()
+{
+	printf("the art's ripple: length, rate and travel from the water\n");
+
+	const float g = 4300.0f;
+	const float steep = 38.0f / 1500.0f;
+	const HDArtRippleWater sea = { 3538.0f, 1500.0f, 38.0f, 1.0f, 1.0f };
+	float out[3];
+
+	ok(HDArtRipple(sea, steep, g, 0.996f, out),
+		"art ripple: JOBY4's sea ripples", 0, 0);
+	ok((long)floorf(1.0f / out[0] + 0.5f) == 12182,
+		"art ripple: ...a fifth of its width, 12,182 units",
+		(long)floorf(1.0f / out[0] + 0.5f), 12182);
+	ok((long)floorf(100.0f / out[2] + 0.5f) == 1205,
+		"art ripple: ...a period of 12.05 s",
+		(long)floorf(100.0f / out[2] + 0.5f), 1205);
+	ok(fabsf(out[1] - 0.0996f) < 1.0e-6f,
+		"art ripple: ...a tenth of its span", 0, 0);
+
+	const HDArtRippleWater pot = { 0.3f, 260.0f, 2.0f, 0.6f, 1.0f };
+
+	HDArtRipple(pot, steep, g, 0.357f, out);
+	ok((long)floorf(1.0f / out[0] + 0.5f) == 260,
+		"art ripple: a small water takes its class's longest row",
+		(long)floorf(1.0f / out[0] + 0.5f), 260);
+	ok((long)floorf(1000.0f * out[1] / 0.357f + 0.5f) == 30,
+		"art ripple: a basin travels 0.30 of the sea's share",
+		(long)floorf(1000.0f * out[1] / 0.357f + 0.5f), 30);
+
+	const HDArtRippleWater basin = { 36.0f, 260.0f, 2.0f, 0.6f, 1.0f };
+	float big[3];
+
+	HDArtRipple(basin, steep, g, 1.0f, out);
+	HDArtRipple(sea, steep, g, 1.0f, big);
+	ok(out[0] > big[0] && out[2] > big[2],
+		"art ripple: a larger water, a longer and slower wave", 0, 0);
+	ok((long)floorf(100.0f / out[2] + 0.5f) == 638,
+		"art ripple: ANDREA2's fountain of 36 squares, 6.38 s",
+		(long)floorf(100.0f / out[2] + 0.5f), 638);
+
+	HDArtRippleWater calm = basin;
+	float half[3];
+
+	calm.calm = 0.3f;
+	HDArtRipple(calm, steep, g, 1.0f, half);
+	ok(fabsf(half[2] * 2.0f - out[2]) < 1.0e-6f && half[0] == out[0],
+		"art ripple: the rate follows the class's calm alone", 0, 0);
+
+	HDArtRippleWater high = sea;
+
+	high.waves = 4.0f;
+	HDArtRipple(high, steep, g, 0.5f, out);
+	ok(fabsf(out[1] - 0.05f) < 1.0e-6f,
+		"art ripple: a row's waves never take it past a tenth", 0, 0);
+
+	HDArtRippleWater flat = sea;
+
+	flat.waves = 0.0f;
+	ok(!HDArtRipple(flat, steep, g, 1.0f, out) && out[1] == 0.0f,
+		"art ripple: waves 0 holds the art still", 0, 0);
+	ok(!HDArtRipple(sea, steep, g, 0.0f, out) && out[0] == 0.0f &&
+		out[1] == 0.0f && out[2] == 0.0f,
+		"art ripple: no span, nothing moves", 0, 0);
+
+	HDArtRippleWater none = sea;
+
+	none.lambda = 0.0f;
+	ok(!HDArtRipple(none, steep, g, 1.0f, out),
+		"art ripple: no class row, no ripple", 0, 0);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -23497,6 +23575,7 @@ int main()
 	splash_wet_clip();
 	splash_rings();
 	water_under();
+	art_ripple();
 	spring_table();
 	spring_file();
 	spring_clock();

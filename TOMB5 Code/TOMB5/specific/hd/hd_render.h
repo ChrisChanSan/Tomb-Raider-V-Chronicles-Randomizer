@@ -987,8 +987,8 @@ struct HDRenderStats
 	/* The still water surfaces - material 16. The parts, counted per pass
 	 * block, how the file splits them between the passes, their triangles,
 	 * how many of them live in a sub-rectangle of their page, the smallest
-	 * such span in 255ths, and the largest UV travel the ripple was given, in
-	 * page units (hd_render.cpp, MaterialRipple). */
+	 * such span in 255ths, and the largest UV travel the ripple was given at
+	 * the build, in page units (hd_render.cpp, HDWaterArt). */
 	int waterParts;
 	int waterOpaqueParts;
 	int waterAdditiveParts;
@@ -1919,6 +1919,9 @@ void HDRenderWaterFootAdd(float x1, float z1, float x2, float z2,
 	float reach);
 int HDRenderWaterFeet();
 bool HDRenderWaterFoot(int at, float* place, float* dir, float* half);
+/* The WATERLOG line of one part of the remaster's still water art and the
+ * ripple the water gave it - false past the last. */
+bool HDRenderWaterArtLine(int at, const char* stem, char* out, size_t size);
 /* The WATERLOG line of one waterfall object HDRenderWaterFalls was given -
  * false past the last. */
 bool HDRenderWaterFallLine(int at, const char* stem, char* out, size_t size);

@@ -152,7 +152,7 @@ namespace
 	 *       (MaterialBookTime below)
 	 *   16  the water material: the remaster's own still water surface -
 	 *       every basin, cistern and pool the .TRG builds a sheet for, and
-	 *       the sea of JOBY4 (MaterialRipple below) */
+	 *       the sea of JOBY4 (HDWaterArt below) */
 #define HD_TRG_MATERIAL_FLOW		1
 #define HD_TRG_MATERIAL_MASK		6
 #define HD_TRG_MATERIAL_WIND		8
@@ -468,7 +468,7 @@ namespace
 		 * apart with opposite normals, every one sitting 1 to 20 units off
 		 * the classic minfloor of a ROOM_REFLECT room, its parameters scaling
 		 * with the area of the body of water. It falls through to 1.0 like
-		 * every other material; MaterialRipple reads its three numbers. */
+		 * every other material; its ripple is the water's (HDWaterArt). */
 		switch (part.material)
 		{
 		case HD_TRG_MATERIAL_GLOW:
@@ -770,10 +770,11 @@ namespace
 	 * in the game live in a sub-rectangle of their page - the smallest is 40
 	 * of 255 across, JOBY5's group 4 - and the sampler is on CLAMP for a
 	 * still surface, so anything that moves a coordinate has to know how far
-	 * it may move it before it walks off its own rectangle. The cap in
-	 * MaterialRipple is a tenth of that rectangle's smaller side; it is a bound on the travel
-	 * and not a proof that the sample stays inside the rectangle, because a
-	 * pixel already on the rim can be pushed that tenth over it.
+	 * it may move it before it walks off its own rectangle. The ripple's cap
+	 * (HDArtRipple) is a tenth of that rectangle's smaller side; it is a
+	 * bound on the travel and not a proof that the sample stays inside the
+	 * rectangle, because a pixel already on the rim can be pushed that
+	 * tenth over it.
 	 *
 	 * Walked over all three passes, so the answer is the part's and not the
 	 * pass's; it is asked once per material 16 part at level build, which is
@@ -823,96 +824,73 @@ namespace
 		return any;
 	}
 
-	/* The ripple of one still water surface.
+	/* The remaster's still water art, part by part.
 	 *
 	 * Material 16 is a surface of standing water: its 28 parts are fountains,
-	 * basins, mill ponds and pools plus the two great seas of JOBY4 and
-	 * JOBY5; 17 of them are a double sheet two units apart whose halves face
-	 * up and down (the view out of the air and out of the water); all sit
-	 * within 20 units of the classic minfloor of a reflecting room; and page
-	 * 3255, which 90 % of the material's triangles wear, is a grey noise
-	 * field with no hole in it.
+	 * basins, mill ponds and pools, the soup in JOBY3's and JOBY5's kitchen
+	 * pots, plus the two great seas of JOBY4 and JOBY5; 17 of them are a
+	 * double sheet two units apart whose halves face up and down (the view out
+	 * of the air and out of the water); and page 3255, which 90 % of the
+	 * material's triangles wear, is a grey noise field with no hole in it.
+	 * TrgProbe -mat 16 prints the four numbers the file gives each part; the
+	 * ripple reads none of them.
 	 *
-	 * Its three numbers scale with the area of the body of water,
-	 * monotonically, over the whole game:
+	 * The ripple is a texture ripple and nothing else: the pixel shader moves
+	 * the part's texture coordinates by a small travel along a slow wave
+	 * (hd_room.hlsl, the note over HD_RIPPLE_OCTAVE), and nothing touches the
+	 * vertex - `sway` is 0 on 27 of the 28 parts, and a sheet that bobbed would
+	 * tear away from the stone rim it is let into. That structure - the travel
+	 * held to the part's own UV span (PartUvSpan) and no movement in the
+	 * vertex - is TROne's own design (Copyright 2026 Todesengel, GPLv3,
+	 * TROne-main (copy of 2026-10-06, commit 75c4c843), its own water rule for
+	 * material 16), and the same count here; the wave in hd_room.hlsl is a
+	 * different curve with different terms.
 	 *
-	 *     3538 squares (JOBY4's sea)    param 0.1  1.0   0.035
-	 *      900 squares (JOBY5's sea)          0.3  1.0   0.08
-	 *       36 squares (a large pool)         0.8  0.7   0.1
-	 *     1-28 squares (a basin)              0.8  0.7   0.2
-	 *        4 squares (a puddle)             5.0  0.1   0.5
+	 * Its three numbers - the wave's scale, the travel and the rate - are this
+	 * project's own, out of the water the part lies over (see "the art's
+	 * ripple" over water_art_ripples): the body's class and squares, the
+	 * class's longest wave row and calm in kWaterClass, its row's wave scale,
+	 * the part's own span (HDArtRipple, hd_splash_math.h). Until the bodies are
+	 * known - the build of the groups comes first, and RoomProbe without
+	 * -hdwater never builds them - a part stands for its own water: the
+	 * squares it covers and the class the data rule gives them indoors
+	 * (WaterArtOf below).
 	 *
-	 * A brightness would not do that; a wave would. param[0] behaves like a
-	 * spatial frequency (a big sea has long waves, a puddle short ones) and
-	 * param[2] like a rate (a big sea's waves are slow, a puddle's quick).
-	 * param[1] is the one that does not follow the area, so it is read as an
-	 * amplitude.
-	 *
-	 * Origin. That param[1] is the travel is our own reading of the table
-	 * above: it is the one slot that does not follow the area. Which of the
-	 * other two is the frequency and which the rate is a FREE CHOICE of this
-	 * project, not a result: over the game as a whole both are smallest on
-	 * the two seas and largest on the puddle (param[0] from 0.1 to 5.0,
-	 * param[2] from 0.035 to 0.5, TrgProbe -mat 16), though not in step in
-	 * every pair of tuples - (0.3, 0.08) against (0.4, 0.04), (0.8, 0.2)
-	 * against (1.0, 0.1) - and no count of ours separates them. The order
-	 * settled on - param[0] the scale, param[1] the travel, param[2] the rate
-	 * - coincides with the order TROne's prose names for these three slots
-	 * (TROne-main, copy of 2026-10-05). TROne states that it read that order
-	 * off the Remaster's own shader programs, which this project uses neither
-	 * at first hand nor at second, so the coincidence is written down here
-	 * and is not taken as evidence; for that one bit there is no measurement
-	 * of our own. If the sea ripples too finely and too fast while the
-	 * fountain is too coarse and too slow, the choice is the wrong way round.
-	 * The reversal is not a swap of out[0] and out[2]: each anchor below
-	 * belongs to its parameter, so the sources change places and keep their
-	 * anchors - the scale reads param[2] through the 0.2 anchor (floored at
-	 * 0.0125), the rate reads param[0] through the 0.8 anchor. No constant of
-	 * TROne's is used; every number below comes from a TR5 measurement. The
-	 * structure around them - the travel held to the part's own UV span
-	 * (PartUvSpan) and no movement in the vertex - is TROne's own design
-	 * (Copyright 2026 Todesengel, GPLv3, TROne-main (copy of 2026-10-06,
-	 * commit 75c4c843), its own water rule for material 16), and the wave in
-	 * hd_room.hlsl is a different curve with different terms.
-	 *
-	 * The three anchors:
-	 *
-	 *   the scale   param[0] = 0.8 - the basin value, and the commonest in
-	 *               the game - is one wave per one and a half floor squares,
-	 *               1536 units, the size of a wave on a swimming pool.
-	 *               Everything else follows in proportion. Floored at 0.05
-	 *               so that a part whose parameters are all zero (JOBY5 group
-	 *               115's second part, the twin of JOBY3's) still has a
-	 *               finite wavelength.
-	 *   the rate    the classic water surface walks one WaterTable row per
-	 *               game step (wibble += 4 in control.cpp, and the row is
-	 *               (wibble >> 2) & 0x3F), so its own period is 64 steps of
-	 *               a 30 Hz clock: 2.13 seconds. param[2] = 0.2, the basin
-	 *               value, is put on that period, and the rest follows in
-	 *               proportion - 0.5 gives 0.85 s, 0.1 gives 4.3 s, 0.035
-	 *               gives 12 s for JOBY4's sea, a swell rather than a ripple.
-	 *   the travel  param[1] = 1 moves the coordinate by a tenth of the
-	 *               part's own smaller UV span, and less for a smaller
-	 *               number: on the tightest part in the game, JOBY5's group 4
-	 *               at 40 of 255, that is 4 texels of a 256 page. A pixel
-	 *               already on the rim can still be pushed over it; that does
-	 *               not show, because the pages material 16 uses are noise
-	 *               fields that fill the page. A visible bleed at the edge of
-	 *               a small sheet is answered by clamping the sampled uv into
-	 *               the part's rectangle, not by a smaller travel for all.
-	 *
-	 * Nothing here touches the vertex: `sway` is 0 on 27 of the 28 parts, and
-	 * a sheet that bobbed would tear away from the stone rim it is let into.
-	 * This is a texture ripple and nothing else - TROne's own reasoning for
-	 * its material 16 water, and the same count here.
-	 *
-	 * Returns false for every other material in the game, and then out[] is
-	 * three zeroes and the pixel shader's one compare skips the whole thing.
-	 */
-	inline bool MaterialRipple(const trf::remaster::Trg& trg,
-		const trf::remaster::TrgPart& part, float* out)
+	 * HDWaterArt holds one part as the ripple asks for it: its index in the
+	 * group, its smaller UV span in page units, its box (room x and z, world
+	 * y), the squares that box spans along x and z, and the squares its
+	 * triangles that face up cover - never more than the box spans, so a sea
+	 * the file stacks counts once. `body`, `cls`, `squares` and `ripple` are
+	 * what the water gave it: the body under it or -1, the class, the squares
+	 * and the three numbers of gRipple. */
+	struct HDWaterArt
 	{
-		out[0] = out[1] = out[2] = 0.0f;
+		int part = -1;
+		float span = 0.0f;
+		int box[6] = { 0, 0, 0, 0, 0, 0 };	// x0 x1 z0 z1 y0 y1
+		int boxX = 0, boxZ = 0;
+		float area = 0.0f;
+		int body = -1;
+		int cls = 0;
+		float squares = 0.0f;
+		float ripple[3] = { 0.0f, 0.0f, 0.0f };
+	};
+
+	// With the water sheets, where the classes are (see "the art's ripple").
+	int ArtRippleClass(int openAir, const HDWaterArt& art);
+	bool ArtRippleOf(int cls, float squares, float waves, float span,
+		float* out);
+
+	/* One material 16 part as HDWaterArt, with the ripple it has until the
+	 * bodies are known. False for every other material in the game, and for a
+	 * part with no vertex; its ripple is then three zeroes and the pixel
+	 * shader's one compare skips the whole thing. A vertex faces up where its
+	 * normal's y byte is over 160, as TrgProbe counts it. */
+	inline bool WaterArtOf(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgPart& part, int at, HDWaterArt& art)
+	{
+		art = HDWaterArt();
+		art.part = at;
 
 		if (MaterialBase(part) != HD_TRG_MATERIAL_WATER)
 			return false;
@@ -922,29 +900,78 @@ namespace
 		if (!PartUvSpan(trg, part, spanU, spanV))
 			return false;
 
-		const float span = spanU < spanV ? spanU : spanV;
-		float scale = part.param[0];
-		float travel = part.param[1];
+		art.span = spanU < spanV ? spanU : spanV;
 
-		if (scale < 0.05f)
-			scale = 0.05f;
+		bool any = false;
+		double area = 0.0;
 
-		if (travel < 0.0f)
-			travel = 0.0f;
-		else if (travel > 1.0f)
-			travel = 1.0f;
+		for (int pass = 0; pass < 3; pass++)
+		{
+			const trf::remaster::TrgPart::Pass& run = part.pass[pass];
 
-		// 0.8 -> one wave per 1536 units, counted in waves per unit: the
-		// shader's own wave has period 1, not 2 pi.
-		out[0] = scale * (1.0f / 1536.0f) / 0.8f;
-		// param[1] = 1 -> a tenth of the smaller span, in page units.
-		out[1] = travel * 0.1f * span;
-		// 0.2 -> the classic surface's own 64 steps of a 30 Hz clock, in
-		// waves a second.
-		out[2] = part.param[2] > 0.0f
-			? part.param[2] * (30.0f / 64.0f) / 0.2f : 0.0f;
+			for (unsigned int k = 0; k + 2 < run.count; k += 3)
+			{
+				const trf::remaster::TrgVertex* v[3];
+				bool ok = true;
 
-		return out[1] > 0.0f;
+				for (int c = 0; c < 3 && ok; c++)
+				{
+					const unsigned int index = run.start + k + (unsigned int)c;
+
+					ok = index < trg.indices.size() &&
+						trg.indices[index] < trg.vertices.size();
+					v[c] = ok ? &trg.vertices[trg.indices[index]] : 0;
+				}
+
+				if (!ok)
+					continue;
+
+				for (int c = 0; c < 3; c++)
+				{
+					const int p[3] = { v[c]->x, v[c]->z, v[c]->y };
+
+					for (int a = 0; a < 3; a++)
+					{
+						if (!any || p[a] < art.box[a * 2])
+							art.box[a * 2] = p[a];
+
+						if (!any || p[a] > art.box[a * 2 + 1])
+							art.box[a * 2 + 1] = p[a];
+					}
+
+					any = true;
+				}
+
+				if (v[0]->ny > 160 && v[1]->ny > 160 && v[2]->ny > 160)
+					area += 0.5 * fabs(
+						(double)(v[1]->x - v[0]->x) * (v[2]->z - v[0]->z) -
+						(double)(v[2]->x - v[0]->x) * (v[1]->z - v[0]->z));
+			}
+		}
+
+		if (!any)
+			return false;
+
+		art.boxX = (art.box[1] - art.box[0] + 1023) / 1024;
+		art.boxZ = (art.box[3] - art.box[2] + 1023) / 1024;
+
+		if (art.boxX < 1)
+			art.boxX = 1;
+
+		if (art.boxZ < 1)
+			art.boxZ = 1;
+
+		const float spans = (float)(art.boxX * art.boxZ);
+
+		art.area = (float)(area / (1024.0 * 1024.0));
+
+		if (art.area <= 0.0f || art.area > spans)
+			art.area = spans;
+
+		art.cls = ArtRippleClass(0, art);
+		art.squares = art.area;
+		ArtRippleOf(art.cls, art.squares, 1.0f, art.span, art.ripple);
+		return true;
 	}
 
 	/* The flipbook of one part.
@@ -1337,8 +1364,12 @@ namespace
 		/* The ripple of this draw call - the wave scale, the travel and the
 		 * rate of a material 16 water surface, and three zeroes for every
 		 * other draw call. In the sort key like every other per-draw-call
-		 * constant. See MaterialRipple above. */
+		 * constant. See HDWaterArt above; `ripplePart` is the part's index
+		 * in its group and -1 elsewhere, in the key too, so a part's ranges
+		 * are its own and take the ripple of the water under it
+		 * (water_art_ripples). */
 		float ripple[3] = { 0.0f, 0.0f, 0.0f };
+		int ripplePart = -1;
 		/* How see-through this draw call is, or 0 for one that is drawn
 		 * solid. Non-zero puts the range in the blend pass: SRCALPHA /
 		 * INVSRCALPHA, no depth write, drawn after everything opaque - see
@@ -1557,6 +1588,8 @@ namespace
 		float roomMins[3] = { 0, 0, 0 };
 		float roomMaxs[3] = { 0, 0, 0 };
 		bool hasRoomBox = false;
+		// Its material 16 parts, as the ripple asks for them (HDWaterArt).
+		std::vector<HDWaterArt> waterArt;
 		float mins[3] = { 0, 0, 0 };
 		float maxs[3] = { 0, 0, 0 };
 		bool hasBounds = false;
@@ -6381,7 +6414,8 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		int bookPart;			// the .TRG part, for the log
 		float gloss, glossPower;	// see MaterialGloss
 		int glossMat;			// see MaterialGloss
-		float ripple[3];		// see MaterialRipple
+		float ripple[3];		// see HDWaterArt
+		int ripplePart;			// see HDRange::ripplePart
 		int water16;			// a material 16 part, still or not
 		float blend;			// see MaterialBlend
 		int clear;			// see HDRange::clear
@@ -6930,13 +6964,26 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 				 * sorts it into - 25 of its 28 parts are additive and 3 are
 				 * opaque, and the file's own choice is kept - and three zeroes
 				 * for everything else, which is every part of nine of the
-				 * fifteen levels. */
-				float ripple[3] = { 0.0f, 0.0f, 0.0f };
-				const bool ripples = MaterialRipple(trg, part, ripple);
-				/* Counted as a water surface whether or not it ripples: the
-				 * one part of the game whose four numbers are all zero -
-				 * JOBY5's group 115, the twin of JOBY3's puddle - is a still
-				 * water surface and belongs in the count. */
+				 * fifteen levels. The group keeps each part once, for the
+				 * water to give its ripple (water_art_ripples). */
+				const int art_at = (int)(&part - &source.parts[0]);
+				HDWaterArt art;
+				const bool water_art = WaterArtOf(trg, part, art_at, art);
+				const float* ripple = art.ripple;
+				const bool ripples = ripple[1] > 0.0f;
+
+				if (water_art && run.count)
+				{
+					bool known = false;
+
+					for (const HDWaterArt& a : group.waterArt)
+						known = known || a.part == art_at;
+
+					if (!known)
+						group.waterArt.push_back(art);
+				}
+
+				// Counted as a water surface whether or not it ripples.
 				const bool water =
 					MaterialBase(part) == HD_TRG_MATERIAL_WATER;
 
@@ -7742,6 +7789,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tri.ripple[0] = ripple[0];
 					tri.ripple[1] = ripple[1];
 					tri.ripple[2] = ripple[2];
+					tri.ripplePart = water ? art_at : -1;
 					tri.water16 = water ? 1 : 0;
 
 					/* A clear floor: a triangle of a room's alpha pass that is
@@ -7843,12 +7891,17 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * 17 never share a level, so nothing else moves. */
 					if (a.glossMat != b.glossMat) return a.glossMat < b.glossMat;
 					/* And the water ripple is one more pixel constant per
-					 * draw call - three zeroes on every part of the game that
-					 * is not a water surface, so nothing else moves in the
-					 * key. */
-					if (a.ripple[0] != b.ripple[0]) return a.ripple[0] < b.ripple[0];
-					if (a.ripple[1] != b.ripple[1]) return a.ripple[1] < b.ripple[1];
-					if (a.ripple[2] != b.ripple[2]) return a.ripple[2] < b.ripple[2];
+					 * draw call, and a material 16 part's ranges are its own:
+					 * the water under each part gives it its ripple after the
+					 * build (water_art_ripples). Every draw call without one
+					 * first, then the parts, the later part of a group first -
+					 * a free choice; JOBY5's room 49 holds the game's only
+					 * two on one page and in one pass, and their order decides
+					 * which vertices the group's samples take (group_light). */
+					if ((a.ripplePart >= 0) != (b.ripplePart >= 0))
+						return b.ripplePart >= 0;
+					if (a.ripplePart != b.ripplePart)
+						return a.ripplePart > b.ripplePart;
 					/* The solid part of the alpha pass first, the
 					 * see-through part after it - they are drawn in two
 					 * different phases of the frame. */
@@ -7967,6 +8020,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 			range.ripple[0] = tris[0].ripple[0];
 			range.ripple[1] = tris[0].ripple[1];
 			range.ripple[2] = tris[0].ripple[2];
+			range.ripplePart = tris[0].ripplePart;
 			range.blend = tris[0].blend;
 			range.clear = tris[0].clear;
 			range.destructId = tris[0].destructId;
@@ -8003,6 +8057,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					tris[i].ripple[0] == range.ripple[0] &&
 					tris[i].ripple[1] == range.ripple[1] &&
 					tris[i].ripple[2] == range.ripple[2] &&
+					tris[i].ripplePart == range.ripplePart &&
 					tris[i].blend == range.blend &&
 					tris[i].clear == range.clear &&
 					tris[i].destructId == range.destructId &&
@@ -8078,6 +8133,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					range.ripple[0] = tris[i].ripple[0];
 					range.ripple[1] = tris[i].ripple[1];
 					range.ripple[2] = tris[i].ripple[2];
+					range.ripplePart = tris[i].ripplePart;
 					range.blend = tris[i].blend;
 					range.clear = tris[i].clear;
 					range.destructId = tris[i].destructId;
@@ -10306,8 +10362,9 @@ namespace
 				g_device->SetPixelShaderConstantF(18, add, 1);
 			}
 
-			/* The ripple of this draw call. The three numbers are
-			 * material 16's own (MaterialRipple), and zero everywhere else -
+			/* The ripple of this draw call. The three numbers are the
+			 * water's under a material 16 part (water_art_ripples), and
+			 * zero everywhere else -
 			 * so this compare is false for every draw call in nine of the
 			 * fifteen levels and the constant is written once per pass. */
 			if (!want_sheen && (ripple_dirty || ripple[0] != range.ripple[0] ||
@@ -12268,6 +12325,126 @@ namespace
 			return HD_WATER_CHANNEL;
 
 		return HD_WATER_BASIN;
+	}
+
+	/* The art's ripple: the three numbers of gRipple for the remaster's still
+	 * water art (HDWaterArt), out of this project's water data alone.
+	 *
+	 * The water under a part is the body whose squares in the part's own room
+	 * lie under its box and within 32 units of its height (the slack of the
+	 * art over a sheet, step 8 of HDRenderSetWaterSheets) - the body with the
+	 * most such squares. 22 of the game's 28 parts lie over one: ANDREA2's
+	 * fountain of rooms 144, 229 and 231, ANDY2's two and nineteen of JOBY5's.
+	 * The six that lie over none stand for their own water - the squares
+	 * their triangles cover, and the class the data rule (WaterClassOf) gives
+	 * them with their room's open air and no sink: JOBY4's sea (3,538
+	 * squares, open air) and JOBY5's two (900) are seas; the soup in the
+	 * kitchen pots of JOBY3 and JOBY5 and ANDREA1's fountain bowls in room 59
+	 * are basins. The nearest body would not do: JOBY4's one body is a basin
+	 * of two squares, 16,000 units under its sea.
+	 *
+	 * The numbers are HDArtRipple's (hd_splash_math.h): the body's squares,
+	 * its class's longest wave row - kWaterClass's first wavelength and
+	 * height - and calm, its row's `waves` (1 without a row), the sea row's
+	 * steepness as the travel's measure, kWaterG, and the part's own span. The
+	 * part's UV span bounds the travel and does not set the scale: the parts'
+	 * maps onto their pages are not planar - JOBY5's small basins lay 48
+	 * texels over 944 units along x and over 3,826 along z - so no length on
+	 * the page stands for a length in the room. A row of hd_water.txt reaches
+	 * the art through its body, as its class and its `waves`. */
+	int ArtRippleClass(int openAir, const HDWaterArt& art)
+	{
+		HDRenderWaterBody b = {};
+
+		b.openAir = openAir;
+		b.sectors = (int)(art.area + 0.5f);
+		b.perimeter = 2 * (art.boxX + art.boxZ);
+		return WaterClassOf(b);
+	}
+
+	bool ArtRippleOf(int cls, float squares, float waves, float span,
+		float* out)
+	{
+		if (cls < 0 || cls >= HD_WATER_CLASSES)
+			cls = HD_WATER_BASIN;
+
+		const HDWaterClass& c = kWaterClass[cls];
+		const HDWaterClass& sea = kWaterClass[HD_WATER_SEA];
+		HDArtRippleWater w;
+
+		w.squares = squares;
+		w.lambda = c.lambda[0];
+		w.height = c.height[0];
+		w.calm = c.calm;
+		w.waves = waves;
+		return HDArtRipple(w, sea.height[0] / sea.lambda[0], kWaterG, span,
+			out);
+	}
+
+	// Every group's art, after the bodies, and each range of a part.
+	void water_art_ripples(const HDWaterRoom* rooms, int count)
+	{
+		for (size_t g = 0; g < g_groups.size(); g++)
+		{
+			HDGroup& group = g_groups[g];
+
+			for (HDWaterArt& art : group.waterArt)
+			{
+				std::vector<int> under(g_wbodies.size(), 0);
+				int best = -1;
+
+				for (const WaterSquare& s : g_wsquares)
+				{
+					const int x0 = s.sx * 1024;
+					const int z0 = s.sz * 1024;
+
+					if (s.room != (int)g || s.body < 0 ||
+						s.body >= (int)under.size() ||
+						s.wy < art.box[4] - 32 || s.wy > art.box[5] + 32 ||
+						x0 >= art.box[1] || x0 + 1024 <= art.box[0] ||
+						z0 >= art.box[3] || z0 + 1024 <= art.box[2])
+						continue;
+
+					under[(size_t)s.body]++;
+				}
+
+				for (size_t b = 0; b < under.size(); b++)
+					if (under[b] > (best < 0 ? 0 : under[(size_t)best]))
+						best = (int)b;
+
+				float waves = 1.0f;
+
+				art.body = best;
+
+				if (best >= 0)
+				{
+					const HDRenderWaterBody& b = g_wbodies[(size_t)best].info;
+
+					art.cls = b.cls;
+					art.squares = (float)b.sectors;
+					waves = b.waves;
+				}
+				else
+				{
+					const int open = (int)g < count &&
+						(rooms[g].flags & HD_WATER_ROOM_OPEN) ? 1 : 0;
+
+					art.cls = ArtRippleClass(open, art);
+					art.squares = art.area;
+				}
+
+				ArtRippleOf(art.cls, art.squares, waves, art.span, art.ripple);
+
+				for (int pass = 0; pass < 3; pass++)
+					for (HDRange& range : group.pass[pass])
+						if (range.ripplePart == art.part)
+						{
+							range.ripple[0] = art.ripple[0];
+							range.ripple[1] = art.ripple[1];
+							range.ripple[2] = art.ripple[2];
+						}
+			}
+		}
 	}
 
 	/* hd_water.txt, one row a line:
@@ -15161,6 +15338,9 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 			}
 		}
 	}
+
+	// The art's ripple, now that the bodies and their classes stand.
+	water_art_ripples(rooms, count);
 
 	/* The eye under the water (see "under the water"): the body each
 	 * underwater room is looked through. A room under sheet squares takes
@@ -19460,6 +19640,41 @@ bool HDRenderWaterFoot(int at, float* place, float* dir, float* half)
 		*half = f.half;
 
 	return true;
+}
+
+/* WATERLOG, one part of the remaster's still water art (HDWaterArt, in group
+ * order): its room and its index there, the body under it (-1 for none),
+ * the class and the squares its ripple took, and the ripple: its length in
+ * units, its period in seconds and its travel in page units, and the part's
+ * own span (see "the art's ripple"). False past the last. */
+bool HDRenderWaterArtLine(int at, const char* stem, char* out, size_t size)
+{
+	if (!out || !size || at < 0)
+		return false;
+
+	for (size_t g = 0; g < g_groups.size(); g++)
+	{
+		const std::vector<HDWaterArt>& arts = g_groups[g].waterArt;
+
+		if (at >= (int)arts.size())
+		{
+			at -= (int)arts.size();
+			continue;
+		}
+
+		const HDWaterArt& a = arts[(size_t)at];
+
+		snprintf(out, size, "WATERLOG level=%s art room=%d part=%d body=%d "
+			"class=%s squares=%.1f length=%.0f period=%.2f travel=%.4f "
+			"span=%.3f", stem ? stem : "?", (int)g, a.part, a.body,
+			HDRenderWaterClassName(a.cls), a.squares,
+			a.ripple[0] > 0.0f ? 1.0f / a.ripple[0] : 0.0f,
+			a.ripple[2] > 0.0f ? 1.0f / a.ripple[2] : 0.0f, a.ripple[1],
+			a.span);
+		return true;
+	}
+
+	return false;
 }
 
 /* WATERLOG, a waterfall object: its number in items[], its slot and room,

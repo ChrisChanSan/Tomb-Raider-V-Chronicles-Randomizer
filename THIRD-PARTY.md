@@ -2600,21 +2600,25 @@ water surface", carries the tables.
     run (the engine's, every piece whole, the air pieces alone, every piece
     in the window, none, the whole group in the window) and the walk's copy
     of entry 246 with a switch to leave it out. OWN, this project's tool.
-248. **The plane of a claimed face** (`hd_level.cpp`, `DecidePairs`; `hd_vis.h`,
-    `HDVisFacesShareAPlane`) - with `hd_vis` 1 a piece of a room's art standing
-    in the air of a room its own room has no link with is drawn whole only
-    when a claimed face of its pair that the classic path draws this frame
-    stands in the plane of the piece's own face (every corner within one
-    unit); otherwise inside its room's window. It narrows entry 245 and keeps
-    `hd_vis` 0 as it was. OWN: the plane test and its use, read from the
-    reason the pieces are answered per pair (the art of one wall reaches over
-    the seams of that wall's faces). DATA (RoomProbe `-vis 1 -visplane`,
-    `-visfaces`): ANDREA1's brick block of room 93 seen from the balcony of
-    room 68, kept whole by the block's floor in sight while its roof and
-    walls stood in room 101's space, 2,304 pixels at 1,280 x 720 down to 0;
-    over the sweep sets two views more change (ANDREA3 room 16 at yaw 270,
-    room 8's wall in room 115's air cut to its window, 59,516 pixels;
-    ANDREA2 room 115 at yaw 0, 405) and none else.
+248. **The wall of a claimed face** (`hd_level.cpp`, `DecidePairs` and
+    `BuildVisWalls`; `hd_vis.h`, `HDVisFacesOneWall`, `HDVisWallLabels`) - with
+    `hd_vis` 1 a piece of a room's art standing in the air of a room its own
+    room has no link with is drawn whole only when a claimed face of its pair
+    that the classic path draws this frame is one wall with the piece's own
+    face; otherwise inside its room's window. One wall: the pair's faces joined
+    face to face where one stands in the other's plane (every corner within one
+    unit) or both stand upright and meet along an edge, round the corners a wall
+    turns; made once per level. It narrows entry 245 and keeps `hd_vis` 0 as it
+    was. OWN: the plane and edge tests and their use, read from the reason the
+    pieces are answered per pair (the art of one wall reaches over the seams of
+    that wall's faces, in its plane and round its corners). DATA (RoomProbe
+    `-vis 1 -visplane`, `-visfaces`): ANDREA1's brick block of room 93 seen from
+    the balcony of room 68, kept whole by the block's floor in sight while its
+    roof and walls stood in room 101's space, 2,304 pixels at 1,280 x 720 down
+    to 0; the plane alone also cut ANDREA3's wooden wall of room 8 at its corner
+    (59,516 pixels at 2,560 x 1,440, black seams), which the wall keeps as
+    before; over the sweep sets one view changes against round 11, ANDREA2 room
+    115 at yaw 0 (405 pixels, room 70's sloped faces), and none else.
 249. **The classic room the visibility path leaves out** (`hd_level.cpp`,
     `VisHidesClassicRoom`, asked by `HDFrameRoom`; `hd_vis.h`,
     `HDVisClassicRoomHidden`) - with `hd_vis` 1 a room drawn classic whose own

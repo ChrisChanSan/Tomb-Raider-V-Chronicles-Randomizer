@@ -250,10 +250,11 @@ answer: inside the room's own window unless a classic face of the pair is in sig
 every piece whole, 1 the art in unlinked air alone in the window, 3 every piece in the
 window, 4 none drawn, 5 the whole group in the window - the candidates the rule was
 chosen from); `-visplane 0` keeps a piece in unlinked air whole on any claimed face
-of its pair drawn this frame (1, the default and the engine's, only on one in the plane
-of the piece's own face); `-visfaces 1` prints each piece's claimed face and its corners
-under its `decide:` line; `-visportals <room>` prints that room's portal records at the
-walk's load, the room behind, the normal and the world corners (-1 every room's);
+of its pair drawn this frame (1, the default and the engine's, only on one that is one
+wall with the piece's own face, in its plane or round a corner); `-visfaces 1` prints each
+piece's claimed face and its corners under its `decide:` line; `-visportals <room>`
+prints that room's portal records at the walk's load, the room behind, the normal and the
+world corners (-1 every room's);
 `-visnear 0` leaves out the portal the eye stands at (the walk's
 `VisNearPortals`, source `near`); the `-vis` tables line ends in `mirror=`, the wide
 portals that are wide by the record leading back; `-viscams <file>` (as

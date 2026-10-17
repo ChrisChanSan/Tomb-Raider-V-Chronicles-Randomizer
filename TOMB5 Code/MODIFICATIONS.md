@@ -6281,16 +6281,16 @@ classed before anything changed.
 **His places, matched** (as round 11: every sixth tick of the level's loads at 320 x 180
 on the visibility path, gradient and grey correlated with the middle of the lower half
 left out, then every tick round the best; JOBY2 with the crane hall flipped as at its
-load). The steel stair room he took for RICH2 or RICH3 is JOBY2's room 28, the room of
-round 11's J2-3; the container's edge is the pillar of J2-4 seen from above. Head is the
-`245de8e7` tool (round 11's rules), new this round's; pixels of the defect at 1,280 x 720
-and 2,560 x 1,440.
+load). The steel stair room, which the brief took from his log for RICH2 or RICH3, is
+JOBY2's room 28, the room of round 11's J2-3; the container's edge is the pillar of J2-4
+seen from above. Head is the `245de8e7` tool (round 11's rules), new this round's; pixels
+of the defect at 1,280 x 720 and 2,560 x 1,440.
 
 | Place | Level, load, tick, eye room | Score | Head -> new, 1,280; 2,560 | Class |
 |---|---|---|---|---|
-| A1-215 | ANDREA1, 23, 18,400, room 68 | 0.62 / 0.76 | 2,304 -> 0; 9,163 -> 0 | 6, kept whole by a claimed face in another plane |
-| J2-220 | JOBY2, 30, 28,164, room 28 | 0.68 / 0.90 | 176 -> 176; 692 -> 692 | 6, band art (room 30's in room 60) |
-| J2-221 | JOBY2, 30, 29,609, room 152 | 0.22 / 0.48 | 272 -> 272; 1,104 -> 1,104 | 6, band art (room 30's in room 16) |
+| A1-215 | ANDREA1, 23, 18,400, room 68 | 0.62 / 0.76 | 2,304 -> 0; 9,163 -> 0 | 6, kept whole by a claimed face of another surface |
+| J2-220 | JOBY2, 30, 28,164, room 28 | 0.68 / 0.90 | 176 -> 176; 692 -> 692 | 6, room 30's art in the open half: in no entry's box |
+| J2-221 | JOBY2, 30, 29,609, room 152 | 0.22 / 0.48 | 272 -> 272; 1,104 -> 1,104 | 6, room 30's art in the open half: band art not in room 16's air, and in no box |
 | J2-end-1 (round 11) | JOBY2, log of round 11, 15,331, room 121 | 0.42 / 0.66 | 3,078 clear at 2,560, doors shut | the door past the far plane |
 | J2-end-2 (round 11) | JOBY2, log of round 11, 15,955, room 89 | 0.78 / 0.92 | the door drawn, 17,375 units off | - |
 
@@ -6310,35 +6310,75 @@ whole, the five air pieces with them; the old path draws the same 2,304 pixels (
 differing). Every piece in its window (`-viswin 3`) changes those 2,304 pixels and no
 other.
 
-*The rule: the plane of the claimed face* (`hd_level.cpp`, `DecidePairs`, the visibility
-path only; `hd_vis.h`, `HDVisFacesShareAPlane`). A piece in unlinked air with a claimed
-face stays whole only when a claimed face of its pair that the classic path draws this
-frame stands in the plane of the piece's own face, every corner within 1 unit; otherwise
-it is drawn inside its room's window, as the other pieces are. The reason round 5 asked
-per pair - the art of one wall reaches over the seams of the faces that wall is made of -
-is a reason about the faces of one wall, and those share a plane: room 101's facade in
-room 93 is faces 696 to 699 at x 5,120, one plane (`ModernTest`, 13 checks on these
-faces). Face 606 is the block's floor and pieces 1 to 5 stand on its roof and two walls. A
-piece no face claims has no plane and keeps the pair's answer. Measured: A1-215 2,304 -> 0
-at 1,280 and 9,163 -> 0 at 2,560, no pixel clear; the eye's step one unit along x 22,704
--> 22,669 (116,959 -> 116,834); the sweep below.
+*The rule: the wall of the claimed face* (`hd_level.cpp`, `DecidePairs` and
+`BuildVisWalls`, the visibility path only; `hd_vis.h`, `HDVisFacesOneWall`,
+`HDVisWallLabels`). A piece in unlinked air with a claimed face stays whole only when a
+claimed face of its pair that the classic path draws this frame is one wall with the
+piece's own face; otherwise it is drawn inside its room's window, as the other pieces
+are. One wall: the faces of the pair joined face to face where one stands in the other's
+plane (every corner within 1 unit) or where both stand upright (the plane's normal less
+than 1 in 100 off the horizontal) and meet along an edge, two points a unit or more
+apart on each other's edges - the corners a wall turns. The reason round 5 asked per pair
+is that the art of one wall reaches over the seams of the faces that wall is made of, and
+it does so in the wall's plane and round its corners: room 101's facade in room 93 is
+faces 696 to 699 at x 5,120, one plane; ANDREA3's wooden wall of room 8 in room 115's air
+(the mass view from room 16 at yaw 270) is faces 76 and 77 at z 3,072 and face 78 at x 0,
+76 and 77 meeting 78 along the corner's edge (`-visfaces 1`). Face 606 is the block's
+floor, which is not upright, so its walls and roof are another surface. The labels are
+made once per level, when the first frame asks (the largest pair, room 31's art in room
+44 of ANDY2, claims 173 faces; TrgProbe `-roomspace` over the fifteen levels), and a frame
+asks only whether a drawn face carries the piece's label. A piece no face claims keeps
+the pair's answer. Measured: A1-215 2,304 -> 0 at 1,280 and 9,163 -> 0 at 2,560, no pixel
+clear; the eye's step one unit along x 22,704 -> 22,669 (116,959 -> 116,834). Held to the
+plane alone, the rule cut the ANDREA3 view's pieces 0 and 1 (faces 76 and 77, 42
+triangles) to room 8's window while piece 2 (face 78, drawn, 300 triangles) stayed whole:
+59,516 pixels at 2,560 x 1,440 went, the wall ending in a hard edge at its corner and the
+gallery behind it showing with black seams, where the head, the old path and the step
+all draw the wall whole; with the wall the view is the head's to the pixel. The sweep
+below. `ModernTest` holds 13 checks on the plane and 31 on the wall (upright faces, the
+shared edge, one wall, the labels drawn and not, on the faces of both places).
 
 **The hole in the steel room and the dots at the container** (J2-220, J2-221). Both are
-the art of room 30, JOBY2's court above, and both stand where the window rule never asks.
-At J2-220 the lilac teeth along the ceiling's edge of the marble room are 176 pixels (692
-at 2,560) of room 30's triangles at y -3,072 over x 30,378..30,720, z 41,301..42,325,
-inside room 60's box and in front of room 60's wall at x 30,720 by 64 units and more; at
-J2-221 the black dots by the pillar are 272 pixels (1,104) of room 30's triangles at x
-24,234, y -4,129..-3,754, z 40,959..43,349, inside room 16's box, 8 to 64 units and more
-in front of room 16's facade (an offline depth test of the .TRG's triangles, idmap). They
-are every pixel group 30 draws in either frame; its window is 125..180 x 0..341 at J2-220
-and 700..708 x 134..196 at J2-221. No classic face claims them and the box one sector
-smaller of rooms 60 and 16 (one and two sectors inside along x) is empty, so they are band
-art: the build hands them to the open half, drawn whole on both paths (the old path draws
-the same pixels, 0 differing; every piece in its window changes none). Not the classic
-level's hole. A rule needs a pair's band drawn with its pieces where the holder's smaller
-box is empty, which is the renderer's index fill (`hd_render.cpp`, outside this round's
-functions): left with its numbers.
+the art of room 30, JOBY2's court above, drawn with the open half - the art of a room the
+build hands no piece, drawn over the whole screen - and so where no frame's answer
+reaches. Every piece of room 30's art in rooms 60 and 16 is held to room 30's window at
+both ticks (125..180 x 0..341 at J2-220, 700..708 x 134..196 at J2-221), and the defect is
+every pixel group 30 draws outside that window (RoomProbe with and without the group:
+176 and 272 at 1,280). Which triangles they are, and how the build sorted them, was read
+from the renderer's own index fill (an instrumented build of the probe, not committed:
+one line per triangle of the group with its entry, air, face, smaller box, stand and
+static box; RoomProbe's picture unchanged byte for byte), the triangles rasterized with
+the probe's camera and the nearest of those drawn whole kept per pixel:
+
+- J2-220: 154 of the 176 pixels are room 30's triangles that no entry's box holds, at x
+  30,720..31,061, y -3,413..-3,072, z 41,984..42,666 - on room 60's east wall plane and in
+  the wall behind it, past room 60's box, which ends there one sector in from the grid's
+  edge at 31,744 (the squares beyond are wall, SectorCheck); the other 22 lie on triangle
+  edges. The front-most of room 30's triangles at those pixels, a plate at y -3,072
+  inside room 60's box, is a piece (faces 174 and 176) cut to the window; what shows is
+  the art behind it.
+- J2-221: 164 of the 272 pixels are band art of room 30 in room 16's box (no face claims
+  it, outside the smaller box) at x 24,306..24,359, y -4,057..-3,912, z 40,839..41,041,
+  whose centroid stands in room 16's square (2,1), ceiling -4,352, within 32 units of
+  square (2,0), ceiling -3,328 (the doorway to room 152): the air is asked at the
+  centroid and four points 32 units round it (`HDRoomAirReaches`, `HD_AIR_MARGIN`), the
+  low square refuses it, so the art is in no room's air and the build hands it to the
+  open half; 91 are room 30's triangles in no entry's box (z below 40,960, room 16's first
+  ring of squares); 17 lie on triangle edges.
+
+Neither is the classic level's hole, and the old path draws the same pixels. The cause
+lies in the sorting of the index fill (`hd_render.cpp`, the build's per-triangle loop:
+the entry's box, the air test, the band), which runs once at the level's build and
+before any frame; `DecidePairs` answers only the pieces the fill made, and
+`DrawRoomWindowed` draws the open half over the whole screen by design. The only lever
+the round's functions have on these triangles is the group's whole art in its window
+(RoomProbe `-viswin 5`): on the 131 room-centre views it changes 5,411,823 pixels in 109
+of them and leaves 4,823,478 clear - no rule. A rule for them belongs in the fill: the air
+asked at the centroid's own square for a triangle on a square's seam (J2-221's 164
+pixels), and art in no entry's box near a holder's wall (the rest; held to its window,
+such art took 1,188,671 of the air rule's 1,379,566 pixels on the 131 views when round 10
+measured it); both change `hd_vis` 0's pictures unless gated, and the fill is outside this
+round's files. Left with these numbers.
 
 **JOBY2's corridor end is a door** (round 11's J2-end, his trview picture of item 128).
 The double door of room 106 - items 128 and 129, CLOSED_DOOR3 and CLOSED_DOOR4 (slots 304
@@ -6349,8 +6389,11 @@ and 306; the binder gives them CLOSED_DOOR4_JOBY2_R and CLOSED_DOOR4_JOBY2, 3 no
 stand 17,375 units ahead and his picture shows them (the two-tone panel of the HD model,
 ModelProbe `-slot 304`). At J2-end-1 they stand 25,298 and 24,655 units ahead, past the
 classic far plane of 20,480 (`InitWindow(..., 20, 20480, ...)`): `S_GetObjectBounds`
-(`specific/output.cpp`) answers 0 for an item whose depth reaches the far plane in a room
-not under the sky, so `DrawAnimatingItem` draws neither door, on either path, while the
+(`specific/output.cpp`) answers 0 when the depth of the item's origin (the matrix's `M23`)
+reaches the far plane and `outside` is clear - the flag `game/draw.cpp` sets from the
+camera's room (`logic_room`, the walk's first room) and again when the walk lists a room
+under the sky; none of the 24 rooms listed there has `ROOM_OUTSIDE` (RoomCheck, every
+flag 0x40). So `DrawAnimatingItem` draws neither door, on either path, while the
 visibility path draws room 106's art at 24,378 units (his log lists room 106 there). With
 the doors shut (`-walkshut 128,129`) the probe leaves 3,078 pixels clear at 2,560, every
 one inside the doors' projected rectangle (1,764..1,866 x 609..705), and 0 with them open;
@@ -6363,31 +6406,39 @@ round: left, and asked.
 `VisHidesClassicRoom`, asked by `HDFrameRoom` for a room no group draws; `hd_vis.h`,
 `HDVisClassicRoomHidden`; the visibility path only). Room 88 is an empty group with 58
 classic faces, none covered (3.9 % of their samples under any art within 128 units,
-TrgProbe `-classicart -perface`), under the sky, and its inside holds two guests of the
-visibility tables (TrgProbe `-vistable -visroom 88`): room 35's art, 10,064 triangles -
-the ground and the trees of his picture - and room 44's, 201. #194's rule draws such a
-room classic, a flat band of painted trunks and leaves standing across the trees. The
-rule: a room drawn classic whose own group holds no art, none of whose faces the stand
-rule covers, wholly or in part, and whose inside holds at least one guest draws none of
-its faces; a room a randomizer marker names stays classic. Of round 11's census of the 21
-classic rooms with faces it takes four, all forest bands under the sky: ANDY3 88 (58
-faces; guests 35 and 44), ANDY3 118 (46 faces; room 98's art 9,327 triangles, 65's 43,
+TrgProbe `-classicart -perface`; the engine's own stand rule, RoomProbe `-stand` with the
+room drawn classic, finds room 35's 728 and room 44's 38 triangles on its faces and covers
+0 of 58), under the sky, and its inside holds two guests of the visibility tables
+(TrgProbe `-vistable -visroom 88`, the engine's `HDVisBuild`): room 35's art, 10,064
+triangles - the ground and the trees of his picture - and room 44's, 201. #194's rule
+draws such a room classic, a flat band of painted trunks and leaves standing across the
+trees. The rule: a room drawn classic whose own group holds no art, none of whose faces
+the stand rule covers, wholly or in part, and whose inside holds at least one guest draws
+none of its faces; a room a randomizer marker names stays classic. Of round 11's census of
+the 21 classic rooms with faces it takes four, all forest bands under the sky: ANDY3 88
+(58 faces; guests 35 and 44), ANDY3 118 (46 faces; room 98's art 9,327 triangles, 65's 43,
 13's 21), ANDY3 122 (15 faces; 98's, 14) and ANDY1 212 (9 faces; 24's 209, 2's 96). It
 keeps the hollow groups (JOBY2 19 and 21, RICHCUT2 2 to 4, TITLE 70, 101 and 103, ANDREA2
 124), the rooms covered wholly or in part (RICH2 15, 16, 18 and 19) and the empty rooms
 with no guest (ANDY3 26, 28, 103 and 210). Measured with RoomProbe at 1,280 x 720, the
 picture with the room's faces drawn in the art's depth buffer (`-classicroom`) against the
-picture without: at round 11's canopy place, which looks at the house, 219,836 pixels
-change, 84,808 of them to sky and the rest to room 35's trees; at ten ticks of his visit
-that list room 88, five seen from room 35's side change 41,638, 8,713, 43,398, 63,406 and
-48,763 pixels (to sky 39,299, 1,842, 29,555, 31,362 and 30,493), five from inside room 88
-looking up none - the band's faces turn their backs there and the classic path drops them
-as well. Room 118 from its middle in four directions 297,909, 219,510, 679,495 and 0 (to
-sky 194,931, 134,940, 407,653, 0), room 122 206,023 and 0 twice (to sky 184,202; one view
-the probe could not draw), ANDY1's 212 from room 73 in five 17,082, 0, 140,417, 0 and
-14,891 (to sky 8,890, 0, 51,289, 0 and 2,012). Every clear pixel the rule leaves is sky in
-the game: the four rooms are under it. The probe draws no classic room, so none of the
-sweep's pictures moves with this rule.
+picture without; "clear" is what the probe leaves empty, which it draws no sky into. At
+round 11's canopy place, which looks at the house from room 35, 219,836 pixels change,
+84,808 of them to clear and the rest to room 35's trees. At ten ticks of his visit that
+list room 88: from room 38, outside room 88, 41,638 change (39,299 to clear); with the eye
+inside room 88's own box (y 4,096..6,656), at four ticks 8,713, 43,398, 63,406 and 48,763
+(1,842, 29,555, 31,362 and 30,493 to clear) and at five none - room 88's faces are not in
+those pictures. Room 118 from its middle in four directions 297,909, 219,510, 679,495 and
+0 (to clear 194,931, 134,940, 407,653, 0), room 122 206,023 and 0 twice (to clear 184,202;
+one view the probe could not draw), ANDY1's 212 from room 73 in five 17,082, 0, 140,417, 0
+and 14,891 (to clear 8,890, 0, 51,289, 0 and 2,012). The engine's stand rule covers none
+of the other three either (RoomProbe `-stand`: room 118 0 of 46 faces under room 98's
+1,052 triangles, room 122 0 of 15, room 212 0 of 9). All four rooms are under the sky
+(`ROOM_OUTSIDE`), so the game draws its sky where the art leaves the picture clear; not
+all of it is high: from room 118's middle looking along +x part of the newly clear area
+lies below the horizon, at the far edge of the forest floor, where the band showed painted
+trunks and the game shows the sky. The probe draws no classic room, so none of the sweep's
+pictures moves with this rule.
 
 **The sweep, head (round 11's rules) against new** (`pvf12.py`: per view the visibility
 path with both tools and the eye one unit along x; changed, pixels differing by more than
@@ -6399,7 +6450,7 @@ round 9's classic frames; changed against old, against round 9's old-path pictur
 |---|---:|---:|---:|---:|---:|---:|
 | 22 places (2,560 x 1,440) | 22 | 778,237 / 778,237 | 4,503,035 / 4,503,035 | 0 in 0 | 4,812,020 / 4,812,020 | 22 |
 | 131 sweep (1,280 x 720) | 131 | 235,148 / 235,148 | 11,495,277 / 11,495,277 | 405 in 1 | 1,022,656 / 1,023,061 | 131 |
-| 16 mass views | 16 | 308,471 / 309,322 | 29,289,288 / 29,289,288 | 59,516 in 1 | 3,694,738 / 3,754,254 | 16 |
+| 16 mass views | 16 | 308,471 / 308,471 | 29,289,288 / 29,289,288 | 0 in 0 | 3,694,738 / 3,694,738 | 16 |
 | 32 earlier views | 32 | 36,811 / 36,811 | 2,750,762 / 2,750,762 | 405 in 1 | 448,927 / 449,332 | 32 |
 | owner's 20 places | 20 | 177,868 / 177,868 | 1,442,962 / 1,442,962 | 0 in 0 | 3,338 / 3,338 | 20 |
 | J33's 9 views | 9 | 5,121 / 5,121 | 0 / 0 | 0 in 0 | 0 / 0 | - |
@@ -6409,11 +6460,14 @@ round 9's classic frames; changed against old, against round 9's old-path pictur
 | RICH2's lift ride (40) | 40 | 73,896 / 73,896 | - | 0 in 0 | 29,156 / 29,156 | 40 |
 | RICH2's fine walk (12) | 12 | 56,787 / 56,787 | - | 0 in 0 | 83,282 / 83,282 | - |
 | RICH2's shaft, frame 61,830 | 1 | 10,552 / 10,552 | - | 0 in 0 | 0 / 0 | - |
-
 The owner set of 99 (his cameras of round 10): fight 348,547 / 348,547, changed against
 old 1,314,966 / 1,314,966, no view changed; round 11's sixteen places unchanged to the
-pixel. No view of any set is worse than round 11 by more than 500 pixels but the mass view
-named under Left (59,516 pixels changed, none clear).
+pixel. Against round 11 one view changes, ANDREA2 room 115 at yaw 0 (in the 131 sweep and
+the 32 earlier views): 405 pixels, none clear - room 70's sloped faces 498 and 507 to 509
+in room 140's air, none upright and none in the plane of a drawn face, held to room 70's
+window; under the bound of 500. With the plane alone (the round's first rule) the 16 mass
+views changed 59,516 pixels more, in the ANDREA3 view above; with the wall they are round
+11's to the pixel. No view of any set is worse than round 11 by more than 500 pixels.
 
 **The portal list for #214** (the classic levels' own faults the rounds found, for a patch
 the randomizer applies on every run; the numbers in the round's material,
@@ -6424,32 +6478,32 @@ the randomizer applies on every run; the numbers in the round's material,
 | ANDREA2 | the arch, four eyes of round 11 in room 231 (two of them SD) | 231, 102, 235 | none: room 231's east wall at x 58,368 has neither a face nor a portal over y -1,536..-1,024, z 40,960..43,008 - room 102's space (an empty room with no face at all) above room 229's doorway | the eye stands 2 to 34 units above y -1,025, the plane of the ceiling portals 229 -> 102, 144 -> 235 and 236 -> 235, and the walk refuses 102 and 235 by side; the black band's lower edge lies at y -1,012..-1,043 at every depth along the view, its top at y -1,205 on the wall's plane; 20,638, 67,896, 19,160 and 45,118 pixels at 1,280, all black in the classic frame too | add the portal 231 <-> 102 (x 58,368, y -1,536..-1,024, z 40,960..43,008), so the walk reaches 102 and through its portal 1 room 235 |
 | ANDREA2 | the same eyes | 236 -> 88, 236 -> 81, 81 -> 78 | 236's portal 1 (x 63,488..64,512, z 45,056, y -1,024..256), 236's portal 5 (x 64,512, z 35,840..38,912), 81's portal 2 (x 66,560, z 35,840..36,864) | refused by an empty window, 16 to 34 pixels off it at 1,280 (3 at the second SD eye), the eye 3,007 to 8,381 units from their planes | none on their own: re-measure after the patch above |
 | JOBY2 | the corridor end, round 11's two eyes | 106, 22 | 106's portal 2 and 22's portal 0 (x 60,416, y -3,072..-1,024, z 38,912..40,960), shut by the double door 128/129 | the door is shut and the walk refuses 22, as it should | none in the level: the doors are not drawn past the far plane (the object path, above); a run can test for it - a closed door whose doorway is in sight more than 20,480 units from an eye along the walk |
-| ANDREA1 | a flash frame of his log, eye in room 95 | 64 -> 103, 105 -> 59 | 64's and 105's portals to 103 and 59 | refused by an empty window 5 pixels off it at 2,560, 966 pixels of sky for one frame | widen each portal toward the window by its gap |
-| ANDY3 | a flash frame, eye in room 38 | 39 -> 95 | 39's portal to 95 | refused at the screen's top edge, 3 pixels off at 2,560, 78,220 pixels for one frame | widen the portal by its gap, or the walk's edge tolerance |
+| ANDREA1 | a flash frame of his log, eye in room 95 | 64 -> 103, 105 -> 59 | 64's and 105's portals to 103 and 59 | refused: each portal's box starts 5 pixels (2,560) past a window that ends at the screen's middle; 966 pixels of sky for one frame | none proven in the level: the walk refuses the rooms by its windows, and the flash is the listed rooms' art drawn whole past them for one frame - left with the walk |
+| ANDY3 | a flash frame, eye in room 38 | 39 -> 95 | 39's portal to 95 | refused: the portal's projected box lies wholly above the screen (its bottom at y -3 of 2,560), so it is out of view; 78,220 pixels for one frame | none proven in the level: the flash does not come through this portal - the walk's projection or rounding, left with the walk |
 | JOBY5 | a flash frame, eye in room 16 | 16 -> 40 | 16's floor portal to 40 (y 4,863) | a fixed camera's cut frame, the eye on the portal's plane | none: not the level's |
 
-**Checked.** The engine and all nine tools build from `261de567`; ModernTest 15,528 checks
-(20 new: 13 on the plane, 7 on the hidden room), MenuTest 44,272, InterpTest 729, LipsTest
-270 with the `.OBJ` folder and 243 without, 0 failed; the shaders' `.inc` untouched. With
-`hd_vis` 0 the pictures of the parity sets (the 22 places, the 131 sweep, the 16 mass
-views, the 32 earlier views, the owner's 20, the tower's 8 and the ride's 40) are the
-`245de8e7` tool's byte for byte, and the 22 places again with the final probe build; both
-rules ask `g_vis_level` first. Round 11's sixteen places give round 11's pictures to the
-pixel.
+**Checked.** The engine and all nine tools build from `b414c9d`; ModernTest 15,559 checks
+(51 new: 13 on the plane, 31 on the wall, 7 on the hidden room), MenuTest 44,272,
+InterpTest 729, LipsTest 270 with the `.OBJ` folder and 243 without, 0 failed; the
+shaders' `.inc` untouched. With `hd_vis` 0 the pictures of the parity sets (the 22
+places, the 131 sweep, the 16 mass views, the 32 earlier views, the owner's 20, the
+tower's 8 and the ride's 40) are the `245de8e7` tool's byte for byte; both rules ask
+`g_vis_level` first. Round 11's sixteen places give round 11's pictures to the pixel.
+The instrumented probe that read the fill's classes at JOBY2's two places had a print
+added to the renderer's fill for the build, taken out before any commit; it draws those
+places byte for byte as the probe does.
 
 **Left.** JOBY2's corridor end: the double door is not drawn past the far plane of 20,480
 units while its room's art is (the object path, outside this round's functions) - a
-question. JOBY2's steel room and container dots: room 30's band art in rooms 60 and 16
-(176 and 272 pixels at 1,280), the open half's (the renderer's index fill). The view of
-the 16 mass views that the plane rule changes, ANDREA3 room 16 at yaw 270: room 8's wall
-in room 115's air (faces 76 and 77, another plane than the drawn face 78) is cut to room
-8's window, 59,516 pixels, the stone gallery behind it in its place, none clear, the
-near-black there 9,398 -> 2,019 pixels, the step one unit along x 851 pixels more; not a
-place of his, so his eye is wanted. The portal list above for #214. Rooms 118 and 122 of
-ANDY3 and 212 of ANDY1 left out with the canopy - his word on them. The default.
+question. JOBY2's steel room and container dots: room 30's art in the open half, in no
+entry's box and as band art outside room 16's air at a square's seam (176 and 272 pixels
+at 1,280) - a rule for the renderer's index fill, outside this round's files. The portal
+list above for #214. Rooms 118 and 122 of ANDY3 and 212 of ANDY1 left out with the
+canopy - his word on them. The default.
 
 **Commits.** `2ccaca3` (the plane of a claimed face, the hidden classic room), `261de56`
-(RoomProbe `-visplane`, `-visfaces`, `-visportals`, `-walkdoors`) and this record.
+(RoomProbe `-visplane`, `-visfaces`, `-visportals`, `-walkdoors`), `b414c9d` (the wall of
+a claimed face in place of its plane) and the records, `14cac35` and this one.
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

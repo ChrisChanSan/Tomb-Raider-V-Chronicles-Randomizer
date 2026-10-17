@@ -2601,6 +2601,23 @@ carries the tables.
     run (the engine's, every piece whole, the air pieces alone, every piece
     in the window, none, the whole group in the window) and the walk's copy
     of entry 246 with a switch to leave it out. OWN, this project's tool.
+248. **The art's ripple from the water under it** (`hd_render.cpp`, `HDWaterArt`,
+    `water_art_ripples`; `hd_splash_math.h`, `HDArtRipple`) - a material 16 part takes its
+    ripple's scale, travel and rate from the body under it (the body's squares in the
+    part's room under its box within 32 units of its height: the body's class, squares and
+    row's `waves`) or, over no body, from the squares its own up-facing triangles cover
+    and the class the data rule gives them with its room's open air; the length a fifth of
+    the water's width and never under the class's longest wave row, the deep-water rate at
+    that length at 0.35 of the class's calm, the travel a tenth of the part's UV span at
+    the sea row's steepness and in proportion below it, never more. None of the file's
+    numbers is read (entry 22). OWN: the rule, the fifth and the 0.35, free choices set on
+    RoomProbe pictures of JOBY4's sea. DATA: 22 of the 28 parts lie over a body (RoomProbe
+    `-hdwater 0 -nodraw`, the `WATERLOG ... art` lines). PICTURE (RoomProbe at 1280x720
+    and 2560x1440, `-time 3`, against the tool of `5df75640`): under JOBY4's sea 11 to 37
+    per cent of the pixels change, by 1.3 to 1.4 of 255 on average; JOBY5's sea 85 per
+    cent by 5.5; JOBY3's kitchen pots 2.8 per cent by 24; ANDREA1's fountain 1.0 per cent
+    by 11; with the sheets on, the views of ANDREA2's basin, JOBY5's room 49, RICH2's pool
+    and TITLE do not change.
 
 ## Credited, but not contained here
 

@@ -23793,6 +23793,148 @@ round, plan and project-owner references from `hd_pagecache.h`, `game/accent.inc
 
 **Commits.** `bc0b13c`, `6a1854d`, `9c7d1e5`, `d28d251`, `bcdbc7d`, `e041c3f`
 
+### The water art's ripple from the project's own data, and the origin sentences (#212)
+2026-10-17
+
+**What.** The ripple of the Remaster's still water art (material 16, the pixel constant
+`c36`) reads none of the `.TRG` part's numbers any more. Its scale, travel and rate come
+from the water the part lies over: the body whose squares in the part's own room lie under
+the part's box within 32 units of its height - the body's class as drawn, its squares and
+its row's `waves` - or, for a part over no body, the squares its own up-facing triangles
+cover (never more than its box spans) and the class the data rule (`WaterClassOf`) gives
+them with its room's open air and no sink. `HDArtRipple` (`hd_splash_math.h`) turns that
+into the three numbers: the length a fifth of the water's width (the square root of its
+squares) and never under its class's longest wave row; the rate the deep-water rate at
+that length, `calm * sqrt(g k)`, at 0.35 of the class's calm; the travel a tenth of the
+part's own smaller UV span at the sea row's steepness (height over wavelength), a basin's
+0.30 and a channel's 0.28 of that, times the row's `waves` and never more than a tenth. A
+`WATERLOG level=... art` line per part names the body, the class, the squares, the length,
+the period and the travel; `TrgProbe -mat 16` prints the file's four numbers as facts of
+the file, as before. Beside it the public text states the origins in this project's own
+words: the origin ledger's header in `THIRD-PARTY.md` lists every rule of the HD path with
+its origin and defines its classes as the entries use them - OWN this project's design,
+THIRD TROne's or TRForge's, credited - and the twenty entries that cite TROne's design are
+THIRD; no sentence names a route by which a rule came to this tree from another product's
+programs; the modern control is described as what it is, TROne's design reworked here
+almost throughout, its numbers with this project's own reasons.
+
+**Why.** F-002: which of material 16's first and third numbers is the scale and which the
+rate was a free choice with no measurement of this project's behind it, and the owner
+chose that the art takes its ripple from this project's own water data. F-003, F-004
+(lenses 7a_hd, 7a_game, 7b): sentences of `THIRD-PARTY.md`, `vendor/trforge/VERSION.txt`
+and this record described the way a rule had travelled before it reached this tree; the
+fact of every modification stays - two prose passages of `Trg.h` left out, each rule
+re-counted here or declared a free choice. F-013: the ledger's header defined OWN as
+TROne's design and the scope as what came by way of TROne or TRForge, while the later
+entries used OWN for this project's design and THIRD for TROne's. F-005 to F-009 (lenses
+7a_game, 7b): the modern control's comments, tests, record and manual named another
+product as its model and as the source of its turn rate, its camera's return and its orbit
+rate and of the mouse row's defaults; the owner describes the control as a mix of TROne's
+base and this project's reworking, almost everything re-tuned.
+
+**How.** `specific/hd/hd_render.cpp`: `HDWaterArt` and `WaterArtOf` (the part's span, box,
+own squares and the ripple it has until the bodies are known; RoomProbe without `-hdwater`
+builds no body and keeps that one); `HDRange::ripplePart` and the triangle's in the sort
+key and the join - every draw call without water first, then the parts, the later part of
+a group first, so the draw calls and the vertices the groups' light samples take
+(`group_light`) stay what they were: JOBY5's room 49 holds the game's only two parts on
+one page and in one pass; `ArtRippleClass`, `ArtRippleOf` and `water_art_ripples`, called
+in `HDRenderSetWaterSheets` once the bodies stand (also with `tomb5.hd_water` 0, which
+builds the bodies and no sheet); `HDRenderWaterArtLine`, printed by `hd_level.cpp` behind
+`-log` and by RoomProbe `-hdwater`. `specific/hd/hd_splash_math.h`: `HDArtRipple`.
+ModernTest gains `art_ripple`, 13 checks. The words: `THIRD-PARTY.md` (row 51, the TRForge
+paragraph, the ledger's header, entries 3, 7, 22, 35 and 38, the classes of entries 12, 15
+to 21, 23 to 32, 35 and 39, the five entries that said "a rule of this project", the
+round's removals, the water block, entry 248 new), `vendor/trforge/VERSION.txt`, this
+record (the HD path's opening, the water entry's ripple paragraph, "Where the HD rules
+come from", section 2.6's opening and Why, the mouse entry's Why and Decisions, sections
+2.8 and 2.9), `game/modern_move.h`, `modern_move.cpp`, `modern_state.cpp`,
+`modern_camera.h`, `modern_camera.cpp`, `key_scheme.h`, the comments and strings of
+ModernTest and MenuTest (TROne's back-input test is cited by what it tests), and
+`docs/Engine-Manual.md`.
+
+The ripple the water gives each part, against the numbers the file's tuple gave it under
+the old reading (in brackets; length in units, period in seconds, travel as a share of the
+part's span):
+
+| water | parts | body | class | squares | length | period | travel |
+|---|---|---|---|---|---|---|---|
+| JOBY4's sea, room 19 | 1 | none, open air | sea | 3,538 | 12,182 (12,288) | 12.05 (12.19) | 0.100 (0.100) |
+| JOBY5's two seas, rooms 65 and 82 | 2 | none, open air | sea | 900 | 6,144 (4,096) | 8.56 (5.33) | 0.100 (0.100) |
+| ANDREA2's fountain, room 231 | 1 | 3 | basin | 36 | 1,229 (1,536) | 6.38 (2.13) | 0.030 (0.070) |
+| ANDREA1's fountain bowls, room 59 | 1 | none | basin | 4 | 410 (1,536) | 3.68 (2.13) | 0.030 (0.070) |
+| the soup in JOBY3's kitchen pots, room 105 | 1 | none | basin | 4 | 410 (246) | 3.68 (0.85) | 0.030 (0.010) |
+| the same pots in JOBY5's room 115 | 1 | none | basin | 4 | 410 (still) | 3.68 (still) | 0.030 (0) |
+| ANDY2 room 52 | 1 | 0 | basin | 2 | 290 (3,072) | 3.10 (10.67) | 0.030 (0.100) |
+| ANDY2 room 57 | 1 | 1 | channel | 16 | 819 (12,288) | 3.91 (10.67) | 0.028 (0.050) |
+| JOBY5's channels, rooms 4, 49 (two parts) and 184 | 4 | 0, 4, 13 | channel | 23 to 29 | 982 to 1,103 (1,536) | 4.28 to 4.53 (2.13; 4.27 room 49's first) | 0.028 (0.070) |
+| JOBY5's basins, rooms 2, 14, 27, 28, 50, 52, 53, 61, 83, 115, 117 (two), 139, 143, 151 | 15 | one each | basin | 3 to 14 | 355 to 766 (1,536; 1,229 room 117's second) | 3.43 to 5.04 (2.13; 4.27) | 0.030 (0.070; 0.025) |
+
+The pictures (RoomProbe, `-time 3 -sky`, the tool of `5df75640` against this one): the
+pixels that changed in any channel and their mean change on the largest channel, of 255.
+
+| eye | 1280x720, hd_water 1 | 2560x1440, hd_water 1 | 1280x720, hd_water 0 | 2560x1440, hd_water 0 |
+|---|---|---|---|---|
+| JOBY4 under the sea, #210's "da" eye (26690, 14786, 58502, room 123) | 328,201 (35.6 %), 1.30 | 1,373,792 (37.3 %), 1.38 | 421,793, 1.88 | 1,721,762, 2.09 |
+| JOBY4, #210's "weg" eye (35651, 14558, 61811, room 6) | 128,352 (13.9 %), 1.33 | 545,143 (14.8 %), 1.44 | 166,601, 1.94 | 685,850, 2.20 |
+| JOBY4, the "da" place turned to the light (#210's L3) | 103,740 (11.3 %), 1.32 | 426,770 (11.6 %), 1.40 | 129,778, 1.97 | 523,453, 2.16 |
+| JOBY5's sea from above, room 65 | 783,571 (85.0 %), 5.47 | 3,154,147 (85.6 %), 5.55 | 783,600, 5.47 | 3,154,284, 5.55 |
+| JOBY3's kitchen pots from above, room 105 | 25,432 (2.8 %), 23.5 | 101,695 (2.8 %), 25.1 | 25,432, 23.5 | 101,695, 25.1 |
+| ANDREA1's fountain, room 59 | 9,252 (1.0 %), 10.7 | 36,879 (1.0 %), 11.6 | 9,252, 10.7 | 36,879, 11.6 |
+| ANDREA2's basin edge, room 231 (#197's A1) | 0 | 0 | 47,294 (5.1 %), 9.68 | 191,675 (5.2 %), 10.6 |
+| ANDREA2's basin from above, room 231 (#197's D2) | 0 | 0 | 206,692 (22.4 %), 13.0 | 829,522 (22.5 %), 13.1 |
+| JOBY5 room 49 | 0 | 0 | 57,695 (6.3 %), 6.42 | 230,684 (6.3 %), 6.74 |
+| RICH2's pool, room 125 (#197's G1) | 0 | 0 | 0 | 0 |
+| TITLE, room 1 | 0 | 0 | 0 | 0 |
+
+The GPU (`-gpu 20`, the solid passes of the frame - the additive sea is outside that
+bracket - three runs at 2560x1440 and hd_water 0, medians in ms, before and after):
+JOBY3's pots 0.340 and 0.341, JOBY4's "da" eye 0.509 and 0.501, ANDREA2's basin from above
+0.124 and 0.124, JOBY5's room 49 0.275 and 0.276; the draw calls 449, 995, 24 and 290
+before and after. The shader and its slots are unchanged; a water part's pixels take the
+same branch as before, only with other constants.
+
+**Decisions.** The owner chose way b of two: the art takes its ripple from this project's
+own data, and the file's numbers are not read. The body's size sets the length, because
+over the whole game the file's tuples grew with the area of the water, and a fifth of the
+width with the class's longest row as the floor stays within one per cent of the length of
+JOBY4's sea, the one place where the art's ripple was accepted in play (the owner's
+seventh play test, "Accepted: JOBY4"); the rate is the deep-water law the sheets use, at
+0.35 of the class's calm so that the same sea keeps its twelve seconds. The part's UV span
+bounds the travel and does not set the scale: the parts' maps onto their pages are not
+planar (JOBY5's small basins lay 48 texels over 944 units along x and over 3,826 along z),
+so no length on the page stands for a length in the room. A part over no body takes the
+class its own squares and its room's open air give it and not the nearest body's: the
+nearest body to JOBY4's sea is a basin of two squares 16,000 units under it. Every part
+now ripples, the pots of JOBY5's room 115 among them, which stood still under the old
+reading's zeroes. The sort keeps the draw calls and the light samples as they were, so
+nothing but the ripple changes; the build's fingerprint (`HDRenderBuildHash`) changes in
+the water levels with the ripple's numbers.
+
+**Checked.** With the tools built from this round's commits: the six classic pictures of
+`-classicroom -classiconly` (ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34) 6 of 6
+identical to `5df75640`; with `-hdwater 1` the 15 cameras of #197 15 of 15 and the six HD
+views 6 of 6 identical; with `-hdwater 0` the 15 cameras 11 of 15 identical, the four
+others the views of ANDREA2's room 231, whose material 16 grid draws where no sheet does
+(A1, A2, D1, D2); the WATERLOG sweep of the fifteen levels 240 of 240 lines identical at
+`-hdwater 1` and 147 of 147 at `-hdwater 0`, the new art lines left out. The eyes'
+pictures of this round's tool reproduce the measured ones, 44 of 44 byte for byte.
+ModernTest 15,521 (15,508 and the 13 of `art_ripple`), MenuTest 44,272, InterpTest 729,
+LipsTest 270 with the lips' objects and 243 without, 0 failed; all nine tool builds
+exit 0. The ledger's classes counted per entry: every one of its 234 entries names a class
+its header defines, and no entry that cites TROne's design as its source is OWN.
+
+**Left.** `hd_room.hlsl`'s ripple note still says the three numbers come out of the `.TRG`
+part's own and names the order TROne's prose gives; it changes with the next run of
+`bshader.bat`. The sentences that measure a look on recordings of another product (this
+record's light shafts and lips entries, the ledger's entry 7, the manual's glow strength,
+the README's barefoot landing) belong to fix list F-011 and F-012. JOBY3's pots and
+ANDREA1's bowls ripple slower and wider than before, JOBY5's pots ripple where they stood
+still, JOBY5's seas roll longer and slower; none of them was played.
+
+**Commits.** `c948bd5a`, `e1e5897b`, `063290cf`, `0bf337f4`, `113f0582`, and the records'
+commit that adds this entry.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -24001,3 +24143,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #209 | The destroyable windows (#209) |
 | #210 | The sea seen from below (#210), in the water sheets' entry |
 | #208 | The sky's seam, hiding and layers (#208), in the sky's entry |
+| #212 | The water art's ripple from the project's own data, and the origin sentences (#212) |

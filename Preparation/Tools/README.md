@@ -22,7 +22,12 @@ Visual Studio installation. If yours sits elsewhere - a different edition, a
 different major version - that single line in each script is what to change;
 nothing else in them is machine-dependent. Two of the forty-five `b*.bat` are
 not tool scripts at all: `be.bat` builds the engine and `bshader.bat` compiles
-the shaders.
+the shaders. `bshader.bat` has no `vcvars` line but needs `fxc.exe` of the
+Windows SDK (an optional component of the same workload, installed by
+default), which it looks for in the two `Windows Kits\10\bin` folders under
+`Program Files` and `Program Files (x86)`; it is needed only when a `.hlsl`
+changes - a build of the published tree runs `be.bat` without it, because the
+tracked `.inc` match their stamps.
 
 Nine tools have no script and are built by hand from their header comment:
 BoneCheck, CornerCheck, DinoCheck, FaceCheck, GeomTest, TR3FetchCheck,

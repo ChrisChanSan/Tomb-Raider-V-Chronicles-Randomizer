@@ -16545,8 +16545,9 @@ they agree within 8, less the direct view's own blinks grown by a pixel.)
 **The rules.** *The clip over the floor* (`kMarbleClipOver`): the mirrored draw keeps what
 stands 4 units (the layer's lift) over the plane. *Rising faces* (`marble_build`): every
 face of the eight levels lies with each corner within a unit of its plane or rises 15
-units and more across itself (RICH2 561 of 42,228 faces, ANDREA2 30, ANDREA3 4, RICH3 54,
-RICHCUT2 27; RoomProbe's spread) - a face rising farther than the clip's offset stood in
+units and more across itself (RICH2 561 of 42,228 faces counted with the copies in the
+level, 477 with them left out; ANDREA2 30, ANDREA3 4, RICH3 54, RICHCUT2 27; RoomProbe's
+spread) - a face rising farther than the clip's offset stood in
 its own mirror and leaves. *The copies* (`marble_copies`, while `hd_marble` is on, at the
 level's build): a group's triangle leaves the level when it is the room turned corner for
 corner about one of its mirror planes (each corner within 2 units of a corner of one
@@ -16559,8 +16560,11 @@ none in a water room. Each part of the rule answers a picture: centroids within 
 (E189 25,820 pixels, L120 3,418); corners within 2 units left both so, the room boxes took
 them back; without the corners pushed out two triangles beside the corridor, seen from
 room 121 past the floor's edge, were holes (p9 562 pixels, v510 445), with them none.
-*Buried faces*: a mirror face under a higher face of its own room (16 units and more) is
-none - what is left of a copy (RICH2 4,596). *One floor, one height*
+*Buried faces*: a mirror face lying wholly under higher faces of its own room (16 units
+and more over it) is none - its centroid, and its corners and its edges' middles drawn an
+eighth of the way in to it, each inside such a face seen from above: what is left of a
+copy (RICH2 4,558) and ANDREA1's squares at -5632 under the -5760 tops of rooms 174 and
+175 (12; no other level has one). *One floor, one height*
 (`kMarbleHeightJoin`): heights within 2 units of the next are one plane at the height most
 faces hold, two faces of one floor differing by at most 2 - RICH2's pool surround at -2816
 and -2817 (0.13 and 0.34 of the screen at tick 13384) were two planes and the cap mirrored
@@ -16588,8 +16592,8 @@ tool, after the head's:
 draw's before is the head's code without its warm-up. The residual blinks are the
 reflected edges following his camera, which jitters between ticks: the same eye drawn
 twice is md5-identical at both eyes, and a hall tick's mask is the bands' reflected edges.
-The load gains the warm-up: 28.7 to 39.1 ms at the head, 45.3 to 48.6 in an earlier
-session, the plain room shader's driver work nearly all of it.) The pages at E190: 4,342
+The load gains the warm-up: 27.7 to 48.6 ms over the sessions measured, the plain room
+shader's driver work nearly all of it.) The pages at E190: 4,342
 pixels of the strip change (rows 257 to 279, x 400 to 600), RICH2's opaque clear floors
 147 to 153 draw calls. Over the measurement's 28 eyes the head against the `245de8e7` tool
 changes 21 (W24) to 45,575 (W46) pixels - the floors no longer caught in their own mirror
@@ -16603,6 +16607,25 @@ always between second floors covering 2 to 3 % of the screen. A hold - last tick
 stay unless one covers twice as much - simulated on the same covers left 2 of 3 and gave
 up 0.18 of a screen's cover. No hold; `hd_marble_planes` stays 2.
 
+**The buried faces re-judged.** The rule's first form asked the centroid alone and took
+4,596 faces in RICH2 and 17 in ANDREA1, a level with no copies. Among those 17 were floor
+triangles 3,600 to 4,800 units across that run only partly under a step: three of room
+175's at -5592 and room 165's at -6120. At ANDREA1 room 175 (A175b at 960 x 540, the water
+on) that floor's reflection was gone: 63,266 pixels against the rule asking the whole
+face, and 108 between the `245de8e7` tool and the head with the rule off. Asking seven
+points gives 4,558 in RICH2 and 12 in ANDREA1. The 12 are squares at -5632 under the -5760
+tops of rooms 174 and 175, and they change 0 to 11 pixels against the rule off. At
+ANDREA1's seven eyes the pictures stand 0 to 334 pixels from the `245de8e7` tool's (A175b
+108). At the measurement's 28 eyes they are the head's except at L120 (121 pixels), L0
+(14), L2 (5) and L4 (1): a face of the pool's surround at -2816 runs out from under the
+tank's rim and mirrors there again. At his two eyes (the four runs of ticks, 108 in all)
+they are the head's, and so are the blinks of the table above. Room 165's -6120 floor is
+visible: at eye A165, cap 2 against cap 1 (its plane drawn or not), its reflection covers
+9,737 pixels. The first form gave a better picture there (96,147 pixels apart) for another
+reason. The cap ranks planes by their faces' cover without what hides them: room 177's
+-6094 takes the first place and shows 0 pixels, and the first form freed the second place
+for the platform's -6656.
+
 **Decisions.** The copies leave the level rather than only the mirror: they cost a
 mirrored draw each and their faces took the cap. A triangle the copy rule is not sure of
 stays: hidden under the opaque floor it costs a draw and shows nothing. The faces in a
@@ -16614,18 +16637,22 @@ warmed: the mirrored models (Lara, the items) are drawn by the object path in
 MenuTest 44,272, InterpTest 729, LipsTest 270 with the lip objects and 243 without, none
 failed. With `hd_marble` 0 the 28 eyes are md5-identical to the `245de8e7` tool's at
 `hd_water` 0 and 1. Pictures: his two eyes and the 28, the strip at E190 and at his
-corridor's end, the copies kept and left out.
+corridor's end, the copies kept and left out. The title's T33 log, written apart from
+RICH2's t33: copies 18,160, buried 0.
 
 **Left.** The look in the game: nobody in this round could play it. Cracks between floor
 pieces that the copy filled now show what lies behind (31 pixels at t33, 16 at E190, a
 hairline). The models' shader variants for the clip plane are not warmed (`hd_model.cpp`):
 the first frame with Lara in a mirror may still wait. The cap's swaps between small second
-floors (2 to 3 % of the screen) stay. TITLE and RICHCUT2 were checked at the measurement's
-eyes only, not at an eye of his.
+floors (2 to 3 % of the screen) stay. The cap ranks by cover without what hides it, so a
+plane hidden from the eye can take a place (ANDREA1 A165, above). The title's copies
+(18,160 triangles; RICHCUT2 has none) were checked at the measurement's eyes only (T33,
+T40), not at an eye of his.
 
 **Commits.** `f8b8b471` (the clip over the floor, the rising faces, RoomProbe's plane
 lines), `3cf0dc15` (the copies left out, the buried faces), `53e0930d` (pages 3314 and
-3315), `676e35c2` (the warm-up), `465758a6` (one floor, one height; the cap re-judged).
+3315), `676e35c2` (the warm-up), `465758a6` (one floor, one height; the cap re-judged),
+`0aa8ea0a` (a buried face wholly under a floor).
 
 ### The spring (#200)
 2026-10-14

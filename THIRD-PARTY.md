@@ -2614,8 +2614,9 @@ water surface", carries the tables.
     face with a corner farther than the clip's offset from its plane
     leaves the mirror. DATA: RoomProbe `-marble 1`'s spread - every face
     of the eight levels lies with each corner within a unit of its plane
-    or rises 15 units and more across itself (RICH2 561 of 42,228, ANDREA2
-    30, ANDREA3 4, RICH3 54, RICHCUT2 27); OWN, the limit the clip's.
+    or rises 15 units and more across itself (RICH2 561 of 42,228 counted
+    with the copies in the level, 477 with them left out; ANDREA2 30,
+    ANDREA3 4, RICH3 54, RICHCUT2 27); OWN, the limit the clip's.
 250. **The art's copy under a polished floor left out** (`hd_render.cpp`,
     `marble_copies`, the triangle loop's skip; `kMarbleCopyNear`,
     `kMarbleCopyMargin`, `kMarbleCopyMirrored`) - while `hd_marble` is on,
@@ -2631,11 +2632,15 @@ water surface", carries the tables.
     119,319 triangles; at the measurement's 28 eyes the pictures with and
     without the copies differ by at most 31 pixels (a crack between floor
     pieces the copy filled, see the record's Left).
-251. **A mirror face under its own room's floor is none** (`hd_render.cpp`,
-    `marble_build`) - a face whose centroid lies under a higher face of its
-    own group (16 units and more) leaves the mirror: what is left of a copy.
-    OWN; DATA: RICH2 4,596 faces, the planes -22527 and 1536 of the
-    owner's two eyes gone.
+251. **A mirror face wholly under its own room's floor is none**
+    (`hd_render.cpp`, `marble_build`, `kMarbleBuriedIn`) - a face whose
+    centroid, corners and edges' middles (these drawn an eighth of the way
+    in) each lie under a face of its own group 16 units and more higher
+    leaves the mirror: what is left of a copy. OWN, the rule and the
+    eighth a free choice; DATA: RICH2 4,558 faces and ANDREA1 12 (squares
+    under rooms 174 and 175's tops), no other level; the planes -22527 and
+    1536 of the owner's two eyes gone. The centroid alone took ANDREA1
+    room 175's visible floor at -5592 (63,266 pixels at A175b, 960 x 540).
 252. **One floor, one height** (`hd_render.cpp`, `marble_build`,
     `kMarbleHeightJoin`) - heights within 2 units of the next are one
     plane, at the height most faces hold. DATA: entry 249's spread (two
@@ -2657,7 +2662,8 @@ water surface", carries the tables.
     shaders drawn once with the clip plane on, and the layer's pair once,
     as the water's warm-up does. OWN, after this project's water warm-up;
     DATA: the first marble draw at 2560 x 1440 at the owner's two eyes 42
-    ms (median of five) before, 0.08 to 0.63 after; the load 46.6 ms more.
+    ms (median of five) before, 0.08 to 0.67 after; the load 27.7 to 48.6
+    ms more over the sessions measured.
 256. **RoomProbe's marble measurement** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`, `-marbleclip`, `-marblecopies`, the `marbleplane:`
     lines and the `marble:` line's spread, rising, copies, buried and

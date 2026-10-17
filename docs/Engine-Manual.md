@@ -1549,14 +1549,16 @@ see *Lara in HD* below for which of her stays classic and why.
   (the *mirror column* of the gloss's page list), and only their flat,
   upward faces, so the mirror ends where the floor's own art ends - along
   Core's diagonal edges too - and never in a water room; a face that rises
-  across itself (a ramp, a step's nose) is no mirror. The see-through
+  across itself (a ramp, a step's nose) is no mirror, nor is one lying
+  wholly under a higher floor of its room (a floor running out from under
+  a step still mirrors where it shows). The see-through
   floors of RICH2's corridor and lobby and of the title, under which the
   Remaster built a mirrored copy of the room, are drawn solid while the
   mirror is on, and that copy is left out of the level: the mirror takes its
   place. The mirror starts a few units over the floor, so a floor never
   shows its own underside in it (the blinking floors of RICH2's corridor
   and halls), and it is made ready at the level's load, so its first frame
-  does not stall (about 46 ms more load at 2560 x 1440). The reflection is weak
+  does not stall (some 30 to 50 ms more load). The reflection is weak
   looking straight down and grows the flatter you look (polished stone
   reflects 4 % face on), with no darkening. A frame mirrors at most
   `hd_marble_planes` floor heights, the ones that cover the most of the

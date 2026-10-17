@@ -16501,6 +16501,132 @@ the probe's own lists, timed in turn three times in this session: E190 5.60 (5.5
 the planar pass), `fe5da61b` (the clear floors), `d8b44e27` (the edges), `97d70c4f` (the
 wet floor's points), `1117ac10` (the keys and the prototypes' removal).
 
+**Round 2.** 2026-10-17
+
+**What.** Reported on 2026-10-17, put into English: RICH2's mirror now conflicts with the
+Remaster's mirrored rooms, all such floors flicker massively ("Rich2 die Spiegelung kommt
+jetzt mit den gespiegelten Remaster Raeumen in Konflikt. All solche Boeden Flackern jetzt
+massiv."), and pages 3314 and 3315 are in too ("Seiten 3314/3315 auch ja."). Decided on
+2026-10-16: the Remaster's rooms built mirrored under RICH2's floors are dropped for the
+planar mirror. Two videos supplied for this project (not in the repository; RICH2, 8 and 5
+seconds at 60 frames a second) show the corridor with the broken pipe and the hall with
+the inlaid octagon: the floor's mirror there in one frame, gone in the next, while the
+camera moves; still while it stands.
+
+**Why: the cause, measured before a line changed.** The eyes are his log's (RICH2, the
+CAMLOG ticks matched by content to the videos, the engine's camera from eye and target):
+the corridor, room 46, ticks 12955 to 12975, the game's list 46, 42, 122, 113; the hall,
+room 12, ticks 15389 to 15412, the offline walk's list 8, 9, 10, 12, 58, 119, 129;
+RoomProbe at 960 x 540, `hd_water` 1. (a) The cap: not the cause - at every tick of both
+the same two planes are drawn (the floor and one more), and caps 1, 2 and 8 flicker alike
+(15390 to 15391: 32,789 pixels each). (b) The copies: hidden under the opaque floors,
+1,536 units down, no fighting of depths; but their faces are a floor height of their own
+(the hall's -22527 at 0.67 of the screen's cover, the corridor's 1536 at 0.39) that took
+the cap's second plane at both eyes - a whole mirrored draw for nothing; and through the
+corridor's banded strip at the doors (pages 3314 and 3315, not in the column, still
+blended) the copy showed. (c) Stencil bit 16: no conflict - it is set and taken away
+within one plane's draw, and every other writer has its own mask and clears in its own
+pass. (d) The cause: the mirrored draw's clip plane lay in the floor's own plane, so the
+floor's triangles (its clear floors are two-sided) stood at a distance of nothing to the
+clip, kept or cut by rounding along a line through each, and where kept they were the
+nearest thing in the target - the floor's underside laid over the floor in place of the
+reflection; the videos' diagonal cuts are those lines. Per floor of his videos, the same
+eye with the clip in the floor and 4 units over it:
+
+| floor | ticks | pixels apart a tick | mirror-only blinks a triple |
+|---|---|---|---|
+| hall, room 12, y -24,064 | 15389-15412 | 60 to 34,574 (mean 12,812) | mean 1,789, max 5,069 |
+| corridor, room 46, y 0 | 12955-12975 | 61 to 9,755 (mean 4,028) | mean 620, max 1,759 |
+
+(Pixels apart: more than 8 of 255; up to 64 % of the hall's mirrored floor. A blink: a
+pixel of three ticks running whose middle leaves both neighbours by more than 24 while
+they agree within 8, less the direct view's own blinks grown by a pixel.)
+
+**The rules.** *The clip over the floor* (`kMarbleClipOver`): the mirrored draw keeps what
+stands 4 units (the layer's lift) over the plane. *Rising faces* (`marble_build`): every
+face of the eight levels lies with each corner within a unit of its plane or rises 15
+units and more across itself (RICH2 561 of 42,228 faces, ANDREA2 30, ANDREA3 4, RICH3 54,
+RICHCUT2 27; RoomProbe's spread) - a face rising farther than the clip's offset stood in
+its own mirror and leaves. *The copies* (`marble_copies`, while `hd_marble` is on, at the
+level's build): a group's triangle leaves the level when it is the room turned corner for
+corner about one of its mirror planes (each corner within 2 units of a corner of one
+triangle of the group on the same page), lies wholly under that plane's faces with each
+corner pushed 64 units out, stands in no classic room's box (in its height, within the
+overhang's 128 units across), and its 1,024-unit square is a copy's (at least 8 such
+triangles and a third of those under it, the census's rule). RICH2: 119,319 triangles,
+none in a water room. Each part of the rule answers a picture: centroids within a cell
+(the census's test) took the corridor's own walls under room 128 and the gallery's art
+(E189 25,820 pixels, L120 3,418); corners within 2 units left both so, the room boxes took
+them back; without the corners pushed out two triangles beside the corridor, seen from
+room 121 past the floor's edge, were holes (p9 562 pixels, v510 445), with them none.
+*Buried faces*: a mirror face under a higher face of its own room (16 units and more) is
+none - what is left of a copy (RICH2 4,596). *One floor, one height*
+(`kMarbleHeightJoin`): heights within 2 units of the next are one plane at the height most
+faces hold, two faces of one floor differing by at most 2 - RICH2's pool surround at -2816
+and -2817 (0.13 and 0.34 of the screen at tick 13384) were two planes and the cap mirrored
+one part of the floor; RICH2 33 to 24 heights, 1,834 faces moved. *The pages*: 3314 and
+3315 in the table's mirror column (class `A`). *The warm-up* (`HDRenderMarbleWarmUp`, from
+`BuildWaterSheets` after the water's): the target made at the frame's size, the plain,
+gloss and glow room shaders drawn once each with the clip plane on, the layer's pair once.
+
+**Measured.** At his eyes, `hd_water` 1, 960 x 540 unless named; before the `245de8e7`
+tool, after the head's:
+
+| | before | after |
+|---|---|---|
+| hall, mirror-only blinks a triple (22) | mean 1,789, max 5,069 | mean 255, max 442 |
+| corridor, the same (19) | mean 620, max 1,759 | mean 39, max 83 |
+| hall, the copies' pixels a tick (24, kept against left out) | - | 0 to 2 |
+| corridor, the same (21) | the strip: 8,774 at tick 12965 | 0 to 4 |
+| hall, GPU ms, 2560 x 1440, three runs | 0.46, 0.46, 0.61; 0.97, 1.30, 0.46 | 0.32, 0.33, 0.31 |
+| corridor, the same | 0.18, 0.18, 0.20; 0.25, 0.19, 0.19 | 0.12, 0.11, 0.13 |
+| mirrored draw calls, hall / corridor | 158 / 80 | 79 / 40 |
+| first marble draw ms, 2560 x 1440, five runs, hall | 0.2, 45.5, 42.3, 43.5, 42.1 | 0.32, 0.27, 0.33, 0.27, 0.67 |
+| corridor, the same | 47.8, 40.6, 44.6, 42.0, 40.3 | 0.08, 0.08, 0.29, 0.08, 0.08 |
+
+(GPU: the timestamps round `HDRenderMarbleDraw`, two sessions for the old tool. The first
+draw's before is the head's code without its warm-up. The residual blinks are the
+reflected edges following his camera, which jitters between ticks: the same eye drawn
+twice is md5-identical at both eyes, and a hall tick's mask is the bands' reflected edges.
+The load gains the warm-up: 28.7 to 39.1 ms at the head, 45.3 to 48.6 in an earlier
+session, the plain room shader's driver work nearly all of it.) The pages at E190: 4,342
+pixels of the strip change (rows 257 to 279, x 400 to 600), RICH2's opaque clear floors
+147 to 153 draw calls. Over the measurement's 28 eyes the head against the `245de8e7` tool
+changes 21 (W24) to 45,575 (W46) pixels - the floors no longer caught in their own mirror
+(W46's light bars, the title's checkered hall T40 38,661) and the strip; the copies kept
+against left out differ by 0 at 25 of them, 16 at E190, 31 at t33 and 1 at W46.
+
+**The cap re-judged.** 132 consecutive ticks of his log (RICH2 rooms 120 and 126, the
+walk's lists) and 60 more in room 121: with the heights joined the drawn set changes with
+the same planes in view 2 times in 72 ticks at 120, once in 60 at 126 and never at 121,
+always between second floors covering 2 to 3 % of the screen. A hold - last tick's planes
+stay unless one covers twice as much - simulated on the same covers left 2 of 3 and gave
+up 0.18 of a screen's cover. No hold; `hd_marble_planes` stays 2.
+
+**Decisions.** The copies leave the level rather than only the mirror: they cost a
+mirrored draw each and their faces took the cap. A triangle the copy rule is not sure of
+stays: hidden under the opaque floor it costs a draw and shows nothing. The faces in a
+water room are untouched (none of RICH2's copies lies in one). The models' shaders are not
+warmed: the mirrored models (Lara, the items) are drawn by the object path in
+`hd_model.cpp`, outside this round's files.
+
+**Checked.** The nine builds exit 0; ModernTest 15,508 (the page column's 37 pages),
+MenuTest 44,272, InterpTest 729, LipsTest 270 with the lip objects and 243 without, none
+failed. With `hd_marble` 0 the 28 eyes are md5-identical to the `245de8e7` tool's at
+`hd_water` 0 and 1. Pictures: his two eyes and the 28, the strip at E190 and at his
+corridor's end, the copies kept and left out.
+
+**Left.** The look in the game: nobody in this round could play it. Cracks between floor
+pieces that the copy filled now show what lies behind (31 pixels at t33, 16 at E190, a
+hairline). The models' shader variants for the clip plane are not warmed (`hd_model.cpp`):
+the first frame with Lara in a mirror may still wait. The cap's swaps between small second
+floors (2 to 3 % of the screen) stay. TITLE and RICHCUT2 were checked at the measurement's
+eyes only, not at an eye of his.
+
+**Commits.** `f8b8b471` (the clip over the floor, the rising faces, RoomProbe's plane
+lines), `3cf0dc15` (the copies left out, the buried faces), `53e0930d` (pages 3314 and
+3315), `676e35c2` (the warm-up), `465758a6` (one floor, one height; the cap re-judged).
+
 ### The spring (#200)
 2026-10-14
 

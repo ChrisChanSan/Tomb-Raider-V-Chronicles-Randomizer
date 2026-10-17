@@ -4741,7 +4741,10 @@ Open the engine's solution in Visual Studio with the C++ workload — in the
 release package it is `Source\TOMB5 engine\tomb5.sln`, in the repository
 `TOMB5 Code/tomb5.sln` (the package renames the folder so the two can be told
 apart). Configuration **Release**, platform **Win32 (x86)**. The result is
-`release\PCtomb5.exe`.
+`release\PCtomb5.exe`. The project builds with the **v142** toolset, "MSVC
+v142 - VS 2019 C++ x64/x86 build tools": an individual component of the
+Visual Studio Installer on newer versions, and present in Visual Studio 2019
+itself.
 
 > **Pick Win32.** The x64 configurations are leftovers from the original
 > project and build a DLL, not a game.

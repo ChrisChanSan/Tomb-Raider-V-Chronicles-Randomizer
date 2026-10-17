@@ -47,8 +47,19 @@
 #
 # eol=lf pins the checkout instead of teaching the batch file to normalise:
 # one line of rule rather than a second hashing path in two scripts that would
-# have to agree forever. These six files are C source and HLSL - no tool in
+# have to agree forever. These files are C source and HLSL - no tool in
 # this project cares which ending they carry, only that every machine sees the
 # same one.
 **/hd_shader/*.hlsl eol=lf
 **/hd_shader/*.inc  eol=lf
+
+# The batch files check out with CARRIAGE RETURNS on every machine. cmd.exe
+# finds a "call :label" or "goto label" by scanning the file, and with bare
+# line feeds that scan misses labels: on such a checkout (core.autocrlf=false
+# or input, or a ZIP downloaded from GitHub) be.bat reported its own label
+# :onestamp as missing and skipped the shader guard, and bshader.bat wrote
+# wrong stamps into six .inc files. "text eol=crlf" keeps them with line
+# feeds inside the repository and writes them out with CRLF whatever the
+# machine's setting.
+*.bat text eol=crlf
+*.cmd text eol=crlf

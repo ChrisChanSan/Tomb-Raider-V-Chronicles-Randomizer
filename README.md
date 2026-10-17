@@ -787,7 +787,10 @@ fresh clone builds; the single absolute path in each of them is the call to
 `vcvars32.bat` or `vcvars64.bat`, pinned to the install this was built with —
 `C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\`.
 Another version, edition or drive means editing that one line in the script
-you are running, and nothing else.
+you are running, and nothing else. The engine project builds with the
+**v142** toolset, "MSVC v142 - VS 2019 C++ x64/x86 build tools": an
+individual component of the Visual Studio Installer on newer versions, and
+present in Visual Studio 2019 itself.
 
 - **Engine:** `TOMB5 Code\tomb5.vcxproj` with Visual Studio (Win32, Release).
 - **Randomizer:** `TR5Randomizer\build\b1.bat` (command line) and

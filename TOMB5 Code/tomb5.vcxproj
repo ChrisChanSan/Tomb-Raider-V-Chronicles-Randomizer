@@ -640,6 +640,22 @@
     <ClInclude Include="TOMB5\specific\texture.h" />
     <ClInclude Include="TOMB5\specific\time.h" />
     <ClInclude Include="TOMB5\specific\winmain.h" />
+    <ClInclude Include="TOMB5\specific\crashseam.h" />
+    <ClInclude Include="TOMB5\specific\devicemove.h" />
+    <ClInclude Include="TOMB5\specific\devicewindow.h" />
+    <ClInclude Include="TOMB5\specific\loadbar_math.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_folderlist.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_field.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_math.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_pages.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_gloss_seed.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_levelkey.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_model_cut.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_objlight_dark.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_shadow.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_softbody.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_splash_math.h" />
+    <ClInclude Include="TOMB5\specific\hd\hd_water_under.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_register.h" />
     <ClInclude Include="TOMB5\tomb5\libs\discordRPC\discord_rpc.h" />
     <ClInclude Include="TOMB5\tomb5\libs\zlib\zlib.h" />
@@ -659,6 +675,13 @@
          travels with the sources GPLv3 asks for. -->
     <None Include="TOMB5\specific\hd\hd_shader\hd_room.hlsl" />
     <None Include="TOMB5\specific\hd\hd_shader\hd_model.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_glow.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_shadow.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_shadow_receive.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_sky.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_spring.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_water_look.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_wet.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="TOMB5\tomb5\libs\discordRPC\discord-rpc.lib" />

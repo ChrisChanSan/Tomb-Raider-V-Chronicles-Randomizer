@@ -96,4 +96,5 @@ const BYTE kHDShadowCastPS[] =
       0,   8,   2, 128,  18,   0, 
       0, 160, 255, 255,   0,   0
 };
+// bshader-include hd_model d521b47e114cd887458e8f2fd8902fc2
 // bshader-stamp 4c75654519fdb1e5ec58acfd6b3b79d3

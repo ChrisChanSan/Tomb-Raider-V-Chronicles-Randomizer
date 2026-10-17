@@ -23882,6 +23882,58 @@ folder and 243 without, 0 failed each - the counts of `5df75640`, as no code lin
 
 **Commits.** `02eee06`, `7dd0633`, `ffda320`, `e0198d8`, `c13f502`, `22d930f` and this
 record.
+### The build from a stranger's checkout (#213)
+2026-10-17
+
+**What.** A checkout made with other settings than this machine's builds the same way. The
+batch files check out with CRLF on every machine, the shader guard checks all 36 `.inc`
+and the three shaders that include another `.hlsl`, `bshader.bat` writes its `.inc` with
+line feeds, the documents name the v142 toolset and the Windows SDK's `fxc.exe`, the
+project files list every header and shader of the engine, and ModernTest and MenuTest find
+the engine sources they count from whatever folder they are started in.
+
+**Why.** The push audit of 2026-10-16 found: the 51 `.bat` files had no line-ending rule,
+so a checkout with `core.autocrlf=false` or `input`, or a ZIP from GitHub, wrote them with
+bare line feeds, and cmd then missed labels - `be.bat` reported `:onestamp` missing and
+skipped the guard, `bshader.bat` wrote six wrong stamps (F-053, LENS9-01, LENS9-07). The
+guard compared 33 of 36 stamps and no include stamp for the water look and the shadow
+caster (F-054, LENS9-03, LENS46-06, LENS7A_HD-07). `tomb5.vcxproj` pins `PlatformToolset`
+v142 while the documents named only the C++ workload, and `bshader.bat` needs `fxc.exe`,
+not `vcvars` (F-035, F-036, LENS9-02, LENS9-06). Sixteen headers and seven `.hlsl` were
+missing from the project files (F-055, LENS46-07). The two suites read sources relative to
+the working directory and reported false failures when started elsewhere (LENS9-05).
+
+**How.** `.gitattributes`: `*.bat text eol=crlf` and `*.cmd text eol=crlf`; a "text" file
+is stored with line feeds, which the 51 files already were, so `git add --renormalize`
+changed nothing in the index, and the working-tree bytes stayed the same. `be.bat`, both
+guard blocks: `:onestamp` for `hd_water_look_vs.inc`, `hd_water_look_ps.inc` and
+`hd_wet_marble_ps.inc`, `:incstamp hd_room` for the two water look `.inc` and `:incstamp
+hd_model` for the two `hd_shadow_cast_*.inc`. `bshader.bat`: the matching `:incstamp`
+calls before each `:stamp`, and a PowerShell pass after the stamps that rewrites the 36
+`.inc` with line feeds (fxc and `echo` write CRLF). `README.md` (Building) and
+`docs/Engine-Manual.md` (Building the engine): one sentence on the toolset, "MSVC v142 -
+VS 2019 C++ x64/x86 build tools". `Preparation/Tools/README.md`: the `fxc.exe` sentence in
+Building, the include stamps in the guard paragraph, one sentence each in the ModernTest
+and MenuTest rows. `tomb5.vcxproj` and `.filters`: 16 `ClInclude` and 7 `None` items, BOM
+and CRLF kept. `ModernTest.cpp` and `MenuTest.cpp`: `tree_open()` opens a tree file by its
+path from the EXE's own folder (`_get_pgmptr`), then from the working directory.
+
+**Checked.** `git ls-files --eol`: 51 `.bat` as `i/lf w/crlf attr/text eol=crlf`, md5 of
+all 51 working-tree files the same before and after. A clone with `core.autocrlf=false`:
+every `.bat` checked out with CRLF, `be.bat` exit 0 without a missing label, `bshader.bat`
+regenerated 36 of 36 `.inc` byte-identical to the tracked files, `git status` empty; the
+same `be.bat` rewritten with line feeds by hand stopped with cmd's batch recursion error.
+One `bshader.bat` run here: the bytecode of 36 of 36 `.inc` identical to the tree, four
+`.inc` gained their `// bshader-include` line and nothing else. With three stamps broken
+on purpose (two include lines, the marble stamp) `be.bat` named exactly those three,
+regenerated and built. Every tracked `.h` under `TOMB5 Code/TOMB5` and every `.hlsl` is in
+both project files, except the vendored zlib's internal headers, which the project never
+listed. The nine `b*.bat` of the suites and probes exit 0; ModernTest 15508, MenuTest
+44272, InterpTest 729 and LipsTest 270 (with the obj folder) and 243 checks, 0 failed,
+from `Diagnose\` and from the repository root alike (before: 15480 checks, 121 failed and
+43556 checks, 7 failed from the root).
+
+**Commits.** `ce2f8dd`, `83f19b1`, `5c237a9`, `087562e`, `d7a5aec`, `a7342c1`
 
 ## 3. Randomizer changes since Beta 1.0
 
@@ -24099,3 +24151,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #209 | The destroyable windows (#209) |
 | #210 | The water sheets: this project's own water surface |
 | #211 | The record completed before the push (#211) |
+| #213 | The build from a stranger's checkout (#213) |

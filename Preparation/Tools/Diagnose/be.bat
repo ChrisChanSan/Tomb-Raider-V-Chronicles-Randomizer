@@ -10,7 +10,9 @@ rem
 rem Every .inc carries the MD5 of its .hlsl on its last line (bshader.bat,
 rem :stamp) and this compares them. A content stamp, not a file date, because
 rem a fresh clone gives every file the same date and a date guard would then
-rem either cry wolf or say nothing at all.
+rem either cry wolf or say nothing at all. An .inc whose shader includes
+rem another .hlsl carries that file's MD5 as well (:incstamp), so an edit to
+rem the included file alone is caught too.
 rem
 rem The MD5 is taken over bytes, so the checkout has to be byte-identical
 rem everywhere; git's core.autocrlf=true checks HLSL out with carriage
@@ -61,16 +63,23 @@ call :onestamp hd_room hd_room_water_foot_ps.inc
 call :onestamp hd_room hd_room_water_river_ps.inc
 call :onestamp hd_room hd_room_water_foam_ps.inc
 call :onestamp hd_room hd_room_water_foam_depth_ps.inc
+call :onestamp hd_water_look hd_water_look_vs.inc
+call :incstamp hd_room hd_water_look_vs.inc
+call :onestamp hd_water_look hd_water_look_ps.inc
+call :incstamp hd_room hd_water_look_ps.inc
 call :onestamp hd_room hd_room_card_vs.inc
 call :onestamp hd_room hd_room_card_ps.inc
 call :onestamp hd_wet hd_wet_ps.inc
 call :onestamp hd_wet hd_wet_debug_ps.inc
+call :onestamp hd_wet hd_wet_marble_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
 call :incstamp hd_room hd_glow_ps.inc
 call :onestamp hd_shadow hd_shadow_cast_vs.inc
+call :incstamp hd_model hd_shadow_cast_vs.inc
 call :onestamp hd_shadow hd_shadow_cast_ps.inc
+call :incstamp hd_model hd_shadow_cast_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive2_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_model_ps.inc
@@ -110,16 +119,23 @@ call :onestamp hd_room hd_room_water_foot_ps.inc
 call :onestamp hd_room hd_room_water_river_ps.inc
 call :onestamp hd_room hd_room_water_foam_ps.inc
 call :onestamp hd_room hd_room_water_foam_depth_ps.inc
+call :onestamp hd_water_look hd_water_look_vs.inc
+call :incstamp hd_room hd_water_look_vs.inc
+call :onestamp hd_water_look hd_water_look_ps.inc
+call :incstamp hd_room hd_water_look_ps.inc
 call :onestamp hd_room hd_room_card_vs.inc
 call :onestamp hd_room hd_room_card_ps.inc
 call :onestamp hd_wet hd_wet_ps.inc
 call :onestamp hd_wet hd_wet_debug_ps.inc
+call :onestamp hd_wet hd_wet_marble_ps.inc
 call :onestamp hd_model hd_model_vs.inc
 call :onestamp hd_model hd_model_ps.inc
 call :onestamp hd_glow hd_glow_ps.inc
 call :incstamp hd_room hd_glow_ps.inc
 call :onestamp hd_shadow hd_shadow_cast_vs.inc
+call :incstamp hd_model hd_shadow_cast_vs.inc
 call :onestamp hd_shadow hd_shadow_cast_ps.inc
+call :incstamp hd_model hd_shadow_cast_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive2_ps.inc
 call :onestamp hd_shadow_receive hd_shadow_receive_model_ps.inc

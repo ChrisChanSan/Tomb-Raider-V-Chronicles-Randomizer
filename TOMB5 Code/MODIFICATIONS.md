@@ -2676,7 +2676,7 @@ still fast swings. Every additive material other than 2. The data fixes of the r
 before. The weight each part reads from the art (`MaterialAddWeight`), including the
 sun shafts' 0.08: the gain multiplies it.
 
-**Decisions.** The strength follows the church mist, not a
+**Decisions.** The strength follows the church mist and the Remaster's picture, not a
 share of the brightness the glow had before its fades: the 55 per cent rule of the
 entry before is withdrawn. The haze and mist layers keep the fades: ANDY2's mist at
 its faded level is the target, and ANDREA1's page-3232 haze needs no exemption. Each
@@ -20634,20 +20634,20 @@ are the numbers the design was measured against. The held world course exists be
 the obvious alternative does not work — reading the camera fresh every tick under a
 chase camera that swings to stay behind Lara is a feedback loop that spins her in
 circles. The direct turn exists because the automaton's fastest rate (1456, about 8
-degrees a tick) does not read as the reference game; it is barred from the air, the
+degrees a tick) is too slow to follow the stick; it is barred from the air, the
 ladder, the water and every interaction pose because there `y_rot` belongs to the
 animation and an outside hand on it puts a pose crooked. 30 degrees a tick is the rate a
 thumb can circle the stick at (15 to 30); the older lid of 3277 sat below it, so a
 faster circle broke out of the turn and she ran off or stopped, and a one-tick flick
-above 90 degrees snapped a whole turn into a single frame where the reference takes six
+above 90 degrees snapped a whole turn into one frame where this project's rate takes six
 ticks. Withholding forward past 45 degrees of turn dropped a running Lara into `AS_STOP`
 for single ticks (203 of 937 run ticks, 25 stumble episodes); a gate that asks how much
 turn is left can never open for a stick circling at exactly her own rate, so the second
 question is asked in ticks, and a held stick never reaches that counter (thrown a half
 turn and held she is inside the 90-degree gate by tick 4; over 128 measured runs the
 counter reaches 3 of 8), which leaves the ledge the standing gate protects untouched.
-The classic forward jump turns 1 degree a tick, 1 to 36 degrees over 40 ticks, where the
-reference curves about 90 degrees around a pillar in one jump. Nothing in this engine
+The classic forward jump turns 1 degree a tick, 1 to 36 degrees over 40 ticks, too little
+to steer; 4 degrees a tick was tuned in this project's own play. Nothing in this engine
 writes `lara_item->pos.y_rot` while she aims — only her arms and torso move, in
 `larafire.cpp`, `lara1gun.cpp` and `lara2gun.cpp` — so the refusal to run while aiming
 guarded a collision that does not exist here. The water's old 6 degrees a tick left up
@@ -20791,7 +20791,7 @@ identical substitution because `game/larafire.cpp` sets `camera.type = COMBAT_CA
 every tick a weapon is ready or being drawn — an orbit built into `ChaseCamera` alone
 would have stopped answering the stick the moment the player armed himself. An offset
 from her heading swung the camera behind her whenever she turned (a 62-degree turn was
-followed inside 20 ticks, overshooting to 80), where the reference camera stands still
+followed inside 20 ticks, overshooting to 80), where a world-angle camera stands still
 while she spins under it; a world yaw minus this tick's heading is exact regardless,
 where an offset carrying a per-tick heading delta drifts on every rounding and loses any
 tick the orbit does not run. Without the lead the eye lagged the orbit by most of a
@@ -23844,7 +23844,7 @@ builds the bodies and no sheet); `HDRenderWaterArtLine`, printed by `hd_level.cp
 `-log` and by RoomProbe `-hdwater`. `specific/hd/hd_splash_math.h`: `HDArtRipple`.
 ModernTest gains `art_ripple`, 13 checks. The words: `THIRD-PARTY.md` (row 51, the TRForge
 paragraph, the ledger's header, entries 3, 7, 22, 35 and 38, the classes of entries 12, 15
-to 21, 23 to 32, 35 and 39, the five entries that said "a rule of this project", the
+to 21, 23 to 33, 35 and 39, the five entries that said "a rule of this project", the
 round's removals, the water block, entry 248 new), `vendor/trforge/VERSION.txt`, this
 record (the HD path's opening, the water entry's ripple paragraph, "Where the HD rules
 come from", section 2.6's opening and Why, the mouse entry's Why and Decisions, sections
@@ -23922,15 +23922,30 @@ pictures of this round's tool reproduce the measured ones, 44 of 44 byte for byt
 ModernTest 15,521 (15,508 and the 13 of `art_ripple`), MenuTest 44,272, InterpTest 729,
 LipsTest 270 with the lips' objects and 243 without, 0 failed; all nine tool builds
 exit 0. The ledger's classes counted per entry: every one of its 234 entries names a class
-its header defines, and no entry that cites TROne's design as its source is OWN.
+its header defines, no entry that cites TROne's design as its source is OWN, and every
+entry that takes TROne's or TRForge's code or design names THIRD; the format facts read
+in their descriptions stay DATA.
 
 **Left.** `hd_room.hlsl`'s ripple note still says the three numbers come out of the `.TRG`
 part's own and names the order TROne's prose gives; it changes with the next run of
 `bshader.bat`. The sentences that measure a look on recordings of another product (this
 record's light shafts and lips entries, the ledger's entry 7, the manual's glow strength,
-the README's barefoot landing) belong to fix list F-011 and F-012. JOBY3's pots and
-ANDREA1's bowls ripple slower and wider than before, JOBY5's pots ripple where they stood
-still, JOBY5's seas roll longer and slower; none of them was played.
+the README's barefoot landing) belong to fix list F-011 and F-012.
+
+Where the new ripple moves away from today's look (the table above; none of it was
+played): at the default `tomb5.hd_water` 1, which draws only the six parts over no body,
+JOBY3's pots ripple slower and wider (period 3.68 s against 0.85, length 410 against 246,
+travel 0.030 against 0.010), ANDREA1's bowls slower and finer, with a narrower travel
+(3.68 s against 2.13, length 410 against 1,536, travel 0.030 against 0.070), JOBY5's pots
+ripple where they stood still, and JOBY5's seas roll longer and slower (6,144 against
+4,096, 8.56 s against 5.33). At `tomb5.hd_water` 0, where no sheet hides the art, the
+parts over a body move with them: ANDREA2's fountain turns three times slower (6.38 s
+against 2.13) and finer (1,229 against 1,536, travel 0.030 against 0.070); ANDY2's room
+52 ripples far finer and faster (length 290 against 3,072, 3.10 s against 10.67) and room
+57 the same (819 against 12,288, 3.91 s against 10.67); JOBY5's channels and basins
+ripple finer (355 to 1,103 against 1,536, one part 1,229) and slower (3.43 to 5.04 s
+against 2.13), save room 49's first part (4.28 s against 4.27) and room 117's second
+(3.90 s against 4.27, now faster). ANDY2's two rooms were not pictured.
 
 **Commits.** `c948bd5a`, `e1e5897b`, `063290cf`, `0bf337f4`, `113f0582`, and the records'
 commit that adds this entry.

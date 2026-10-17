@@ -408,7 +408,7 @@ from", carries the tables.
     Ours: RICH3 names three pages only `4\TEX` has; `WHITE.DDS` is in `4\TEX`
     only.
 33. **The Steam discovery, by content and not by folder name.** TROne,
-    `host/fs/discovery.cpp`. PLACE. Ours: `TrgProbe -find`.
+    `host/fs/discovery.cpp`. THIRD and PLACE. Ours: `TrgProbe -find`.
 34. **The `.TRL` track layout of the faces.** TROne, its porting notes for TR4
     and its mimic measurement. DATA. Ours: `LipsTest` over 45 files of `5\ITEM`.
 35. **The modern control's design, its 32 test expectations and six default

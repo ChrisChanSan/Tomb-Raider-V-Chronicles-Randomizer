@@ -1075,16 +1075,15 @@ in eight levels, the tightrope turn 451 in four); and 52 fire on the last frame 
 degrees. In ANDREA1 the hips turn from the tick before to the flip frame by 179.3
 degrees as drawn and 0.9 under the old yaw in 48, 176.8 and 5.3 in 207, 177.0 and 11.0
 in 210, 171.9 and 9.7 in 212; the next animation's first frame follows the frame drawn
-under the old yaw by 5.9 (11), 13.4 (209) and 19.4 (213) degrees. The owner's `-log`
-session (build `Sep 24 2026 22:43:40`) shows it on four back twists: at tick 684 frame
+under the old yaw by 5.9 (11), 13.4 (209) and 19.4 (213) degrees. A play-test `-log`
+session of 2026-09-24 shows it on four back twists: at tick 684 frame
 5566 of 212 is drawn (`ARMLOG gc=684 lara=212/10`) while `MODERNLOG lara=` has gone from
 -15317 to 17451, the hips' view-space x in `ARMLOG` jumps from 44 to -44 on that tick,
 and the second's `INTERPLOG` reads `halfturn=6 root_flip=0`: the tweens into the flip
-tick blended the pose under the live, turned yaw. His video of the same build
-(`Saltos.mp4`, 60 frames a second at 165 Hz) shows a whole body seen from the front
-between frames seen from behind in both back twists it holds, video frames 237 to 239
-and 363 to 364, about one tick each, and in the forward twist two ticks unlike their
-neighbours (frames 613 to 614 and 615 to 616); which of the two forward twists that
+tick blended the pose under the live, turned yaw. A 60 fps recording of the same build,
+made at 165 Hz, shows a whole body seen from the front between frames seen from behind
+in both back twists it holds, about one tick each, and in the forward twist two ticks
+unlike their neighbours; which of the two forward twists that
 session played is not measured (the logged session played 210 and never 207). With the
 frame turned, the back twist turns 9.7, 19.4 and then 24.6 to 24.8 degrees a tick, 207
 turns 5.3 and 13.4, 48 0.9 and 5.9. It does not bridge 211's own start: 211's first
@@ -1133,8 +1132,8 @@ twice is itself, the one-axis cases, and the three kinds with their pairs.
 stands on another animation (11, 209, 211 or 213, key 0 in all 52 cases, measured over the
 thirteen campaign levels), and the pose rule refuses every tween across an animation
 change, so the frames between the two ticks wore the new tick's pose from the first of
-them on. After 210 that pose is 211's first key, the seam above: in the owner's `-log`
-session of build `Sep 25 2026 00:05:52` (JOBY2), `ARMLOG`'s joints out of
+them on. After 210 that pose is 211's first key, the seam above: in a play-test `-log`
+session of 2026-09-25 (JOBY2), `ARMLOG`'s joints out of
 `lara_matrices` step 178.3, 179.0, 178.6 and 178.3 degrees in the HD body and 178.3 and
 177.8 in the classic one from the last frame of the `TURNLOG` tick to the first of 211,
 where a step between two frames at 165 Hz is about 3 degrees, and the first tick of 211
@@ -10840,8 +10839,8 @@ reaches exactly 2.0 in eleven files and lies above 1 in 3.3 % of the 39,788,013 
 
 The room light rests on these rank counts, which no scale on either triple can change.
 The picture check adds less. RoomProbe's RICH2 X-ray view (seed room 6, camera 1900
--24500 3700, yaw minus 75, pitch 8, the view an earlier round matched to the Remaster
-recording's frame `rem_t4`) is drawn from scratch copies of the install's RICH2 files
+-24500 3700, yaw minus 75, pitch 8, the view an earlier round matched to a frame of a
+recording of the Remaster) is drawn from scratch copies of the install's RICH2 files
 whose two triples are rewritten so that the shader's sum draws the rule under test - the
 product as `c1 * c2 / 255` and 0, one triple alone as that triple and 0. The copy left
 as it is draws the install's own picture to the byte, and every copy finds all 209 of
@@ -15374,7 +15373,7 @@ entry 169 now says which of its two sentences holds when.
 `0f76a5c`; the fix pass `e801c4f`, `fea1fe7`, `95d7b2f`.
 
 **Round 3, after the owner's second play test.** The owner played round 2 on
-2026-10-11 (the build of 23:11:47) and wrote, put into English: the river ends are fine.
+2026-10-11 and wrote, put into English: the river ends are fine.
 The fish flee only in a horizontal plane, the vertical is missing. The drips now come
 from the ceiling and look good. The barrels made no rings on the water surface for him.
 The aquarium has no fish. In ANDREA2 the floats may vanish under the water surface
@@ -15506,7 +15505,7 @@ foam at the grate is the water's look.
 **Commits.** `3f9333c`, `be2277f`, `2485257`, `6b2637b`, `443008c`.
 
 **Round 4, after the owner's third play test.** The owner played round 3 on 2026-10-13
-(the build of 02:57:04; his third play test of the life, his sixteenth in all) and wrote,
+(his third play test of the life, his sixteenth in all) and wrote,
 put into English: fish are still a problem in general - they flee as far as the wall and
 stay stuck there. In RICH2 they are only in an aquarium, and in the aquarium they have
 the flight mode too; in there they should simply swim to and fro a little. And on a
@@ -17133,7 +17132,7 @@ and `HDLOG level=<L> hd_share ms=` sums the level's whole HD share. The two fing
 time is in their own `hash_ms` and in no other number of the lines.
 
 **Why.** Collected under #199, opened on 2026-10-09 with the loading bar as its first
-entry. The owner's log of the build of 2026-10-09 18:38 put the HD share of a level load
+entry. The owner's log of a build of 2026-10-09 put the HD share of a level load
 at 1.2 to 3.9 s (TITLE 3.9, RICH2 3.7, ANDREA2 3.5, JOBY2 2.8, ANDY3 2.6, JOBY5 2.6, ANDY1
 2.4, ANDREA1 2.4, JOBY4 1.2), the room build at 0.7 to 3.0 s on one core (TITLE 3.0, RICH2
 2.5, ANDREA2 2.5, JOBY2 1.8, ANDY3 1.5, ANDY1 1.3, ANDREA1 1.3, JOBY5 1.1, JOBY4 0.7), the
@@ -17361,10 +17360,10 @@ picture. New: the `LOADLOG level=<L> step=<step> ms=<n>` lines behind `-log` and
 `RoomProbe -loadtime`.
 
 **Why.** On 2026-10-14 the owner asked to shorten the load of a savegame inside a level,
-and, before anything is changed, for the measurement of the load's phases. His five logs
-of 2026-10-12 to 14 (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and, recorded for
-this round, `19_alllevels`; 2560 x 1440, `hd_enable 1`, `hd_air` 1 and 2) are the in-game
-numbers; nobody could play in this round.
+and, before anything is changed, for the measurement of the load's phases. His five
+play-test logs of 2026-10-12 to 14 (the fifth, of every level, recorded for this round;
+2560 x 1440, `hd_enable 1`, `hd_air` 1 and 2) are the in-game numbers; nobody could play
+in this round.
 
 **How.** *The seam.* One step is a clock read (`QueryPerformanceCounter`) and a `Log`
 call on lines of their own beside the call they time; no call changed and no existing
@@ -17398,8 +17397,8 @@ water's steps, the objects (`hd_object.cpp` is not linked), the font, `life` and
 second RoomProbe. `hd_render.cpp` is not this round's file (the room art and the splash
 rounds work in it), so the engine's `LOADLOG` has `fill` as one step.
 
-**Measured.** *Per level, the owner's logs.* `log_test19_alllevels` (built 2026-10-14
-02:30:36, `hd_air 2`) loads every level fresh and then a save of it inside it, 34 loads;
+**Measured.** *Per level, the owner's logs.* The fifth log (a build of 2026-10-14,
+`hd_air 2`) loads every level fresh and then a save of it inside it, 34 loads;
 medians in ms out of the tick in front of the `S_LoadLevelFile:` lines (steps of 15.6 ms)
 and the QPC fields of the HDLOG lines; `gap` is the HD build's tick span less every QPC
 field that books it:
@@ -17422,18 +17421,17 @@ field that books it:
 | RICHCUT2 | 1 | 2141 (2141) | 94 | 47 | 23 | 1203 | 945 | 310 | 631 | 214 | 8 | 11 | 0 | 797 |
 | TITLE | 3 | 3422 (3282) | 94 | 203 | 109 | 2500 | 2172 | 1017 | 866 | 254 | 31 | 14 | 0 | 625 |
 
-Over all 64 loads of the five logs (`log_test16`, `16b_air2`, `17_andy3`, `18_wet` and
-`19_alllevels`; the four older ones hold 18 + 5 + 3 + 4 loads of the builds of 2026-10-12
-and 14): 1.8 to 4.8 s a load, the HD build 50 to 77 % of it, the loading thread 2 to 30 %,
-the bar's tail 6 to 42 % (0.31 to 0.80 s). The existing lines already account for the HD
-build to within the tick (`gap` -2 to 28 ms): the built line's `phases=` and the
-`hd_share` line split it, and `pages` is a part of `built`. The one block left is `fill`.
-`hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG` scan depends on the file
-cache: RICH2 404 ms cold, 88 to 176 warm.
+Over all 64 loads of the five logs (the four older ones hold 18 + 5 + 3 + 4 loads of the
+builds of 2026-10-12 and 14): 1.8 to 4.8 s a load, the HD build 50 to 77 % of it, the
+loading thread 2 to 30 %, the bar's tail 6 to 42 % (0.31 to 0.80 s). The existing lines
+already account for the HD build to within the tick (`gap` -2 to 28 ms): the built line's
+`phases=` and the `hd_share` line split it, and `pages` is a part of `built`. The one
+block left is `fill`. `hash_ms` runs only with `-log` (RICH2 165 to 238 ms). The `.TRG`
+scan depends on the file cache: RICH2 404 ms cold, 88 to 176 warm.
 
 *Savegame loads.* The mark is `INTERPLOG ... invalidated: savegame loaded` after the bar;
 a load inside the same level is one whose load before it was the same level and which
-started from `invalidated: load menu`. `log_test19` has one for 13 levels (fresh load
+started from `invalidated: load menu`. The fifth log has one for 13 levels (fresh load
 first, then the save inside it; ms):
 
 | Level | fresh | inside it | difference | thread fresh / inside | HD build fresh / inside | bar tail fresh / inside |
@@ -17455,8 +17453,8 @@ first, then the save inside it; ms):
 A load inside the level costs what a fresh load of it costs: -422 to +109 ms, the median
 -47. The loading thread is shorter the second time (the files are in the cache), the bar's
 tail longer, and on four levels (ANDY2, JOBY4, JOBY5, RICH1) the HD build is 250 to 390 ms
-shorter (the pages and the models' files cached as well). The two older ones: `log_test16`
-line 92151 RICH2 3,219 against 3,172, `log_test18` line 18254 RICH2 4,094 against 4,047.
+shorter (the pages and the models' files cached as well). The two older ones: the first
+log RICH2 3,219 against 3,172, the fourth RICH2 4,094 against 4,047.
 
 *FILL, split* (the scaffold, `RoomProbe -loadtime -threads 16`, three runs each over
 the fifteen levels at `hd_air` 1 and 2, medians, on a quiet machine - a first sweep
@@ -17465,8 +17463,8 @@ slower and was discarded). The fair scale between this machine and the owner's i
 the pages, whose code did not change between his builds and this one: the probe's
 pages over his lie between 0.93 and 1.65 per level, RICH2 at `hd_air 2` 1.33; where
 he has an `hd_air 2` log the fill agrees with that within about 10 % (RICH2 1.26,
-ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). Against `log_test19` (every level, `hd_air
-2`, the build of 2026-10-14 02:30) the pages factor is 0.86 to 1.82 and the fill
+ANDREA1 1.25, JOBY2 1.42, TITLE 1.24). Against the fifth log (every level, `hd_air
+2`, a build of 2026-10-14) the pages factor is 0.86 to 1.82 and the fill
 factor 1.02 to 1.67; with RICH2's 1.35 from that log the parts below come out within
 2 % of these (hulls 503, pool and join 457, carry cells 170). RICH2, `hd_air 2`,
 probe ms / 1.33 (his own in brackets): fill 1,205 [1,277] = `MarkAirHulls` 512 (42
@@ -17547,7 +17545,7 @@ block is 0.69 to 1.51 MiB, its pool a few MiB more (not measured; bound 20,000,0
   surfaces and frames, the objects' binding and Lara, the life, the re-dress; and the
   flips back, new work that no load does today and that no bound below holds). The
   re-bind is an estimate: no owner log times its parts one by one. Its bound out of the
-  RICH2 load above (`log_test18` line 18254, its `hd_share` line 20331): tables 4,
+  RICH2 load above (the fourth log, with its `hd_share` line): tables 4,
   statics 17, sheets 19, surfaces and frames 0; the objects less their models and ring,
   617 - 576 - 32 = 9, hold the binding and Lara; the build's `gap`, 24, holds the
   release, the budget, the life, the re-dress and the tick's rounding - 73 ms if all of
@@ -17604,7 +17602,7 @@ the word `skipped=1`.
 your recommendation, B plus C." Of C, the parts outside the room art's fill are built here
 (C1); the hulls, the largest groups, `MarkCarryCells` on the pool and the sidecar (C2)
 live in the code another round is changing and follow its merge. His `-log` run of the
-seam's build (20:48:11) loads ANDREA1 fresh in 3,722 ms and a savegame inside it in
+seam's build loads ANDREA1 fresh in 3,722 ms and a savegame inside it in
 3,594: `hd_build` 2,507 of it, of which the steps B still runs take about 50.
 
 **How.** *The key* (`hd_levelkey.h`, pure, so that ModernTest checks the engine's own
@@ -17726,7 +17724,7 @@ B runs again took 50 (`release` 6 and `budget` 6 now skipped; `sheets` 18, `surf
 `frames` 0, `obj_bind` 4.5, `obj_lara` 0.4, `life` 0, `redress` 6.5) plus the objects'
 plan (`obj_map` 0.3, `obj_plan` 1.4, `obj_ring` 48.3, `obj_wardrobe` 0.1), and the scan
 93 ms on the loading thread: B saves about 2.5 of the 3.6 seconds there; the
-classic thread, the load picture and the bar's tail remain. On RICH2 (`log_test19`,
+classic thread, the load picture and the bar's tail remain. On RICH2 (the fifth log,
 inside it 3,985 ms, HD build 2,969, scan 112) about 3 seconds. The `obj_ring` part
 shrinks with the folder listing below.
 *C1, RoomProbe and ModelProbe on this machine*, the afbb6f6b tool alternating with the
@@ -17906,8 +17904,8 @@ frame. At position 100 and target 100 `S_DrawLoadBar` draws the full bar, finds
 `loadbar_pos >= loadbar_steps` and returns done, so nothing after the work can loop any
 more.
 
-**Measured.** The owner's four logs with `LOADLOG` lines (built 2026-10-14 20:48 to
-2026-10-15 00:15; 48 loads; display 165 Hz, VSync on). *The pace.* On a load whose
+**Measured.** The owner's four logs with `LOADLOG` lines (builds of 2026-10-14 and
+2026-10-15; 48 loads; display 165 Hz, VSync on). *The pace.* On a load whose
 counted target runs ahead of the drawn bar - TITLE, JOBY4 and RICHCUT2 with 9 to 16
 pages, 100 / 29 to 100 / 36 per call - every frame from the bar's start to the join moves
 the bar, and so does every frame of the tail: 51 frames for the positions 0 to 100.
@@ -18006,7 +18004,7 @@ first waited out a 1/60 s tick. *F* is a change of the classic path as well, at
 `TextureStageLock` and `TextureStageUnlock`, the `LOADLOG` word `kept=1` on the step
 `textures`, the line `HD screen: <path> kept`.
 
-**Why.** After round 3 the owner's newest log (`log_test25_bar`, built 2026-10-15 01:14,
+**Why.** After round 3 the owner's newest log (a build of 2026-10-15,
 33 loads) put a save load inside the level at 327 ms, the median of 15: the loading
 thread 168 (of it `textures` 139), `screen` 116, `hd_build` 24, `warmup` 15. Asked
 whether the total could come down further, he was given three candidates with their
@@ -18178,7 +18176,7 @@ takes the lock inside a device call, so the two locks are always taken in one or
 Outside a load one thread draws and nobody waits on it. The lock lines are in the
 classic path as well; they belong to *F*.
 
-**Measured.** *Expected on the owner's save loads* (`log_test25_bar`, 15 loads, the
+**Measured.** *Expected on the owner's save loads* (that newest log, 15 loads, the
 medians above): `textures` 139 -> about 4 ms (the harness: 2.5 to 3.8 ms for a kept
 `LoadTextures` on every level; his misc block 0 to 16 by the ticks), so the loading
 thread 168 -> about 33, give or take the bar loop's turn at the join (up to one tick
@@ -18334,7 +18332,7 @@ swap chain (`D3DSWAPEFFECT_DISCARD`, one back buffer) keeps its pixels across a 
 
 The costs. One loading frame - the picture, the bar, `DrawSortList`, the Present without
 a tick to wait for - is the owner's `step=bar` on a fresh load: 0.8 to 1.1 ms. The 34
-loads of his newest log (the build of 2026-10-15 03:39): 16 saves loaded inside their
+loads of his newest log (a build of 2026-10-15): 16 saves loaded inside their
 level, total 50 to 94 ms (`screen` 16.2 to 16.5 - the one frame waiting out its tick -,
 `thread` 18 to 36, `hd_build` 8.5 to 58); 18 fresh loads, total 0.96 to 3.26 s (`thread`
 35 to 434, `hd_build` 845 to 2,668, of which `begin` 542 to 2,050 and `objects` 144 to
@@ -18525,7 +18523,7 @@ for any of them. New: `HDLevelKeyEarly` and `HDLevelNextLoad` (`hd_level.h`),
 `LoadBuildsHD` and `LoadScreenModeOf` (`specific/loadbar_math.h`), the word `shown=` at
 the end of the `LOADLOG` step `bar`.
 
-**Why.** The owner played round 1 (his `-log` run of the build of 2026-10-15 21:07) and
+**Why.** The owner played round 1 (his `-log` run of a build of 2026-10-15) and
 wrote: "The brake feels great. The transitions inside a level look great too, super
 smooth. One thing I overlooked: Loadbar = Off has a side effect. When I load across
 levels or go back to the title, that takes longer than inside a level because of the HD
@@ -20997,7 +20995,7 @@ by itself the re-seat costs the little that camera moved. Across a cut the camer
 tick is another camera: the seam hands the translation the orbit's world yaw under the
 chase camera and the measured eye-to-target vector under the sniper camera, and the two
 differ by the angle between the views. The measurement is a rich2 log through the sniper
-camera (build `Sep 26 2026 12:18:13`, 2626 `MODERNLOG` tick lines, one init line, no gap
+camera (a build of 2026-09-26, 2626 `MODERNLOG` tick lines, one init line, no gap
 in `f=`): 38 changes of `old_type` between 0 and 1, 37 of them with the stick out on both
 sides, the right stick at rest and `cam_step=0` at every one. The course survived the cut
 itself only while the thumb had not yet drifted 384 units since the last seat. 36 of the
@@ -22997,7 +22995,7 @@ as `ed676ba`'s tool does (15, 15, 12 and 6, the first 15 also equal to the store
 pictures): this pass changes no picture.
 
 **The owner's first F12 test.** A `-log` play test of 2026-10-14 with the build of
-`ed676ba` (`PCtomb5 built Oct 14 2026 20:06:54`) in ANDREA2, ANDREA1 and ANDY3 at 165 Hz,
+`ed676ba` in ANDREA2, ANDREA1 and ANDY3 at 165 Hz,
 felt with no frame drops or hitches. It writes 79 `HDLOG switch` lines: 66 flips (ANDREA2
 59, ANDY3 6, ANDREA1 1; 26 by the key, 53 by the pad chord) and 13 presses that answer
 `hd_enable=0 nothing to switch`, all made while the *HD textures* row stood off (83.4 to

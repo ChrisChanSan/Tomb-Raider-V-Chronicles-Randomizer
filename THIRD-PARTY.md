@@ -48,7 +48,7 @@ file:
 |---|---|---|
 | `TOMB5 Code/TOMB5/specific/hd/hd_install.cpp/.h` | `host/fs/discovery.cpp` | Steam discovery: the registry lookup, the `libraryfolders.vdf` reader in both of its shapes, the "recognise by content, never by folder name" rule, and the wording of the diagnostics. The IV-VI branch is taken, and so is the I-III branch - the same table row, `tomb123.exe` beside subfolders 1..3 with `DATA` and `TEX` - because the four Tomb Raider III guests the randomizer imports have their HD models in that bundle. The rest of TROne's discovery (the classic installs, the per-game level counts, the PIX / TRACKS / FMV folders) is not taken. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_render.cpp/.h` | `host/render/game_renderer.cpp`, `hd_load` and `hd_draw_room` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The shape of the level build and of the draw: one buffer for the whole level, a range table per group, group *i* is room *i*, groups past the room count are the sky dome, three passes per room in the order opaque / alpha / additive, and the additive pass blended `ONE, ONE` with the depth write off. Also the rule that a vertex whose texture layer is 0 falls back to the level's first page instead of drawing nothing. |
-| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl` | the same file's GLSL `k_hd_vert` / `k_hd_frag` (TROne-main, copy of 2026-10-06, commit 75c4c843) | Taken: the alpha test living in the alpha pass **only** (an opaque tile's alpha is a gloss mask, and testing on it blanks whole floors), and the additive pass weighting its colour by the texture's alpha - both TROne's own design. Not taken: the lighting rule. That the room light is the **sum** of the vertex's two colour triples, each byte over 255, with the pixel `texel * light`, is this project's own count: on the 107,118 classic room vertices a `.TRG` vertex of the same room stands on, the sum orders them as the classic prelight does better than the product or either triple (`TrgProbe -shadeorder`, the origin ledger below). In its copy of 2026-10-05 TROne's sum rested on TRForge's reading of the Remaster's shaders; in 75c4c843 it rests on TROne's own count over its `.TRG` files, and the room-shadow scale on the first triple is marked its own design; this shader has no such scale. Translated to HLSL for shader model 3; not a line of the GLSL is copied. |
+| `TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_room.hlsl` | the same file's GLSL `k_hd_vert` / `k_hd_frag` (TROne-main, copy of 2026-10-06, commit 75c4c843) | Taken: the alpha test living in the alpha pass **only** (an opaque tile's alpha is a gloss mask, and testing on it blanks whole floors), and the additive pass weighting its colour by the texture's alpha - both TROne's own design. Not taken: the lighting rule. That the room light is the **sum** of the vertex's two colour triples, each byte over 255, with the pixel `texel * light`, is this project's own count: on the 107,118 classic room vertices a `.TRG` vertex of the same room stands on, the sum orders them as the classic prelight does better than the product or either triple (`TrgProbe -shadeorder`, the origin ledger below). In its copy 75c4c843 TROne rests the sum on its own count over its `.TRG` files and marks a room-shadow scale on the first triple as its own design; this shader has no such scale. Translated to HLSL for shader model 3; not a line of the GLSL is copied. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_pagecache.cpp/.h` | `host/render/hd_pages.cpp`, `upload2` / `fill_missing_tiles` | Where a page is looked for when it is not in its own game's `TEX` folder — the sibling games next, `WHITE.DDS` last — and the rule that a page that cannot be found is painted **white** and never black. The upload itself is new: TROne hands the driver BC7 blocks in one texture array, and Direct3D 9 has neither. |
 | `TOMB5 Code/TOMB5/game/draw.cpp`, `DrawStaticObjects` | `host/render/game_renderer.cpp`, the baked-mesh rule in `draw_mesh` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The rule itself, not the code: a static mesh the remaster baked into the room art must not be drawn a second time (TROne's "double lantern" bug report). TROne suppresses by mesh pointer and needs an exception for a moveable that claims the same pointer; our seam skips one room's own `MESH_INFO` list, for which that exception cannot arise. |
 | `TOMB5 Code/TOMB5/specific/hd/hd_model.cpp` | `host/render/game_renderer.cpp`: `build_skinned_model`, `bind_pose_of_slot`, the model and head loops of `hd_load` (TROne-main, copy of 2026-10-06, commit 75c4c843) | The rules of the object path: one `.TRM` replaces the **whole** classic model; a vertex's three bone indices are nodes of the classic mesh tree; the bind pose is that tree's accumulated offsets with the rotations left out, walked with the same push and pop; a `<NAME>_HEAD.TRM` is drawn on the node nearest the face geometry's own centre (measured, not hard-coded) - **rigidly** here, where 75c4c843 splits the neck onto the parent node by default and keeps the rigid draw as the fallback; a part's three index runs are the three passes, additive blended `ONE, ONE` with the depth write off; and a node the caller never gave a matrix for gets the last one it did give rather than collapsing to the origin (`fill_unseen_joints`). The renderer under them is new: TROne is OpenGL 3.3 with vertex arrays and texture arrays, this is Direct3D 9 with a vertex declaration, one texture per page and compiled bytecode. |
@@ -112,10 +112,10 @@ reach the recipient with the binary.
 `TOMB5 Code/TOMB5/vendor/trforge/src/` — the reader for the remasters'
 `LEVELn.TRG` geometry and the whole-file helpers it needs — and compiled into
 `PCTomb5.exe`. On the day of the copy, 2026-09-05, all five were byte for byte
-TRForge's as TROne's own copy held them; since then three comment passages of
-`trf_remaster/Trg.h` have been left out of this copy, each of which told in
-words what the Remaster's renderer does with a `.TRG` field or with its point
-lights. `vendor/trforge/VERSION.txt` names the source, the date, the SHA-256 of
+TRForge's as TROne's own copy held them; since then three prose comment
+passages of `trf_remaster/Trg.h` have been left out of this copy - over the
+normal bytes, the vertex layout and the point lights; its code is unchanged.
+`vendor/trforge/VERSION.txt` names the source, the date, the SHA-256 of
 every file then and of `Trg.h` now, the passages left out, and what was
 deliberately **not** taken. The first three lines of a TRForge module carry a
 hidden signature, so those files are never reformatted and never carry our
@@ -260,16 +260,19 @@ The release package carries all of these in its `Licenses\` folder;
 
 ## The origin ledger of the HD path
 
-Every rule, constant, table, procedure and format fact of the HD path that came
-by way of TROne or TRForge, one entry each: what it is; where it stands there
-(by function, section or file, and the copy it was read in); its class; and this
-project's own evidence for it. The classes: DATA (a fact about the player's files,
-countable on them), PICTURE (a fact seen in the running game's pictures or video),
-CLASSIC (the classic engine's own code), OWN (TROne's own design, under the GPLv3),
-THIRD (another project's code under its licence), PLACE (where a file is). "Free
-choice" says that nothing of ours decides the question and this project chose. The
-counts are reproduced by the tool switch named; `MODIFICATIONS.md`, section 2.4,
-entry "Where the HD rules come from", carries the tables.
+Every rule, constant, table, procedure and format fact of the HD path, one entry
+each, with its origin: what it is; where it stands (by function, section or file,
+and for a rule TROne or TRForge has too, where it stands there and the copy it was
+read in); its class; and this project's own evidence for it. The classes: DATA (a
+fact about the player's files, countable on them), PICTURE (a fact measured on this
+engine's own pictures), CLASSIC (the classic engine's own code), OWN (this project's
+own design: a free choice, a count on its data, or tuned by eye on its RoomProbe
+pictures, in its play tests or on reference pictures supplied for this project, not
+in the repository), THIRD (TROne's design or code under the GPLv3, or TRForge's under
+the MIT licence, credited), PLACE (where a file is). "Free choice" says that nothing
+of ours decides the question and this project chose. The counts are reproduced by the
+tool switch named; `MODIFICATIONS.md`, section 2.4, entry "Where the HD rules come
+from", carries the tables.
 
 1. **The `.TRG` container** - header, light cubes, groups, parts of 44 bytes with
    three index runs that tile the index list, the 20-byte vertex. TRForge,
@@ -280,8 +283,8 @@ entry "Where the HD rules come from", carries the tables.
    classic room vertices of the fifteen levels have a `.TRG` vertex of the same
    group at exactly their position (`TrgProbe -shadeorder`).
 3. **u and v are the fourth bytes of the two colour triples** (+15, +19). TRForge,
-   `Trg.h`, which named them from the Remaster's shaders (that prose is left out
-   of our copy). DATA. Ours: on 15,999 classic faces with `.TRG` vertices inside,
+   `Trg.h`, which names them (its prose passage over the vertex is left out of
+   our copy). DATA. Ours: on 15,999 classic faces with `.TRG` vertices inside,
    the classic u orders vertex pairs as +15 does in 3,157,175 pairs and the other
    way in 1,465,989, the classic v as +19 in 3,354,530 against 1,340,180, the
    crossed reading splits even (`TrgProbe -uvbytes`).
@@ -296,8 +299,7 @@ entry "Where the HD rules come from", carries the tables.
    thirteen levels, never below 0, none in RICH1 and RICHCUT2
    (`TrgProbe -normals`).
 7. **The room light is the SUM of the two colour triples.** TROne, `k_hd_frag`
-   (TROne-main, copy of 2026-10-05, resting on TRForge's reading of the
-   Remaster's shaders; in 75c4c843 on TROne's own count). DATA. Ours: on the
+   (TROne-main, copy of 2026-10-05; in 75c4c843 on TROne's own count). DATA. Ours: on the
    107,118 paired vertices the sum orders them as the classic prelight does
    with a rank correlation of 0.553, the
    product 0.460, `colour1` 0.397, `colour2` 0.527; of the sampled pairs sum and
@@ -327,7 +329,7 @@ entry "Where the HD rules come from", carries the tables.
     TRForge, `bind_level_items`. DATA. Ours: the table of all 471 slots against
     the installed bundle (`MODIFICATIONS.md` 2.4, the EXTRA prefix entry).
 12. **The `EXTRA<game>_` and `EXTRA_` prefixes, and the "Effect" slots left
-    out.** TROne, `hd_load`'s prefix pass. DATA and OWN. Ours: the same 471-slot
+    out.** TROne, `hd_load`'s prefix pass. DATA and THIRD. Ours: the same 471-slot
     table; `GUN_FLASH` measured never to reach the per-item path.
 13. **A `DUMMY` model means "draw nothing".** TRForge, `HdMesh.cpp` (TROne-main's
     vendored copy). DATA. Ours: ANDREA1's map calls 14 of its slots `DUMMY`
@@ -341,68 +343,68 @@ entry "Where the HD rules come from", carries the tables.
 15. **The level build's shape and the draw rule** - one buffer, a range table
     per group, groups past the rooms are the sky, opaque / alpha / additive with
     the additive pass `ONE, ONE` and no depth write. TROne, `hd_load` and
-    `hd_draw_room`. OWN. Ours: the groups, sky groups, ranges and page changes of
+    `hd_draw_room`. THIRD. Ours: the groups, sky groups, ranges and page changes of
     the fifteen levels (`TrgProbe -all -classic`), and RoomProbe's pictures of
     the engine's own build.
 16. **A vertex whose layer is 0 takes the level's first page.** TROne,
-    `hd_load`. OWN. Ours: no vertex of the fifteen levels carries layer 0
+    `hd_load`. THIRD. Ours: no vertex of the fifteen levels carries layer 0
     (`TrgProbe -layer0`), so it never fires on them.
 17. **The alpha test lives in the alpha pass only.** TROne, `k_hd_frag` and
-    `k_trm_frag`. OWN. Ours: the opaque pages' alpha measured as a mask
+    `k_trm_frag`. THIRD. Ours: the opaque pages' alpha measured as a mask
     (`hd_pagecache.cpp`, 0 % against 51 to 95 % for the cut-out sheets).
 18. **The additive pass weighted by the texture's alpha** (rooms). TROne,
-    `k_hd_frag`. OWN; free choice to keep it.
+    `k_hd_frag`. THIRD; free choice to keep it.
 19. **The water-mark road** - classic water vertices matched to `.TRG` vertices
     by a hash of the packed int16 position, the owning group read from the index
-    runs. TROne, `hd_load` and `hd_water_mark`. OWN. Ours: the pairing count of
+    runs. TROne, `hd_load` and `hd_water_mark`. THIRD. Ours: the pairing count of
     entry 2.
 20. **The wind's shape** - two sines of the position taken across each other,
     about 24 units of travel, a wavelength of about 1.4 blocks.
     TROne, `k_hd_vert`'s water block (copy of 2026-09-05), where the same
-    shape moved TROne's water. OWN; free choice to keep TROne's numbers for
+    shape moved TROne's water. THIRD; free choice to keep TROne's numbers for
     the wind. The water's wave, swell, UV wobble and caustic, which this entry
     credited to TROne before (`MODIFICATIONS.md`, "Water in the HD rooms"),
     are this project's own design: entries 40 to 86.
 21. **Material 16's ripple held to the part's own UV span, nothing moving in
-    the vertex.** TROne, its own material 16 water rule. OWN. Ours: `sway` is 0
+    the vertex.** TROne, its own material 16 water rule. THIRD. Ours: `sway` is 0
     on 27 of the 28 parts; 23 of 28 live in a sub-rectangle of their page.
-22. **Which of material 16's param[0] and param[2] is the scale and which the
-    rate.** TROne's prose names the order, read off the Remaster's shaders.
-    DATA for what is known: both move with the area the same way (0.1 to 5.0 and
-    0.035 to 0.5, `TrgProbe -mat 16`). The order itself is a free choice; ours
-    coincides with TROne's and is not taken as evidence (`hd_render.cpp`,
-    `MaterialRipple`).
+22. **Material 16 marks the remaster's still water art; its four numbers are
+    facts of the file.** DATA: 28 parts in six levels, `TrgProbe -mat 16` prints
+    each part's numbers (`param[0]` 0.1 to 5.0 and `param[2]` 0.035 to 0.5, both
+    moving with the area of the water). The ripple reads none of them: its scale,
+    travel and rate are this project's own, entry 248 (`hd_render.cpp`,
+    `HDWaterArt`).
 23. **Statics baked into the art are not drawn again** (the double lantern).
-    TROne, `draw_mesh`. OWN. Ours: `RoomProbe -statictable` over the fifteen
+    TROne, `draw_mesh`. THIRD. Ours: `RoomProbe -statictable` over the fifteen
     levels.
 24. **The object path** - one `.TRM` replaces the whole model, bone numbers are
     mesh-tree nodes, the bind pose is the tree's offsets, a head rides rigidly on
     the node nearest its centre, an uncovered node is drawn by nobody, an unseen
     node keeps the last matrix. TROne, `build_skinned_model`,
-    `bind_pose_of_slot`, `hd_load`'s head loop, `fill_unseen_joints`. OWN and
+    `bind_pose_of_slot`, `hd_load`'s head loop, `fill_unseen_joints`. THIRD and
     CLASSIC. Ours: `ModelProbe -all` (the skeleton drift), `ModelProbe -nodes`.
 25. **The item bracket and the swap rule** - wholly HD or wholly classic; a swap
     mesh on a covered node loses to the model. TROne, `item_flush` and
-    `draw_mesh`. OWN. Ours: `ModelProbe -name MAFIA` (the swap files).
+    `draw_mesh`. THIRD. Ours: `ModelProbe -name MAFIA` (the swap files).
 26. **The ring's off-centre projection folded into the draw, its light as
     ambient and one sun.** TROne, `games/tr5/glue/hostglue_2d5.cpp`,
-    `phd_PutPolygonsPickup` (copy of 2026-10-06, commit 75c4c843). OWN (the
+    `phd_PutPolygonsPickup` (copy of 2026-10-06, commit 75c4c843). THIRD (the
     idea; the arithmetic is TR5's). Ours: `ModelProbe -ringcheck`, `-ringlight`.
 27. **Lara's composite and the role table.** TROne, `lara_flush`, `lara_load`,
-    `RegisterLaraWardrobe`. OWN. Ours: the section table (`ModelProbe -lara`).
+    `RegisterLaraWardrobe`. THIRD. Ours: the section table (`ModelProbe -lara`).
 28. **The braid, one frame per link.** TROne, `draw_hair`, and the classic
-    `game/hair.cpp`. OWN and CLASSIC. Ours: `braidcheck` in `hd_laradraw.cpp`.
+    `game/hair.cpp`. THIRD and CLASSIC. Ours: `braidcheck` in `hd_laradraw.cpp`.
 29. **The HD font's template match** - ink at alpha 96, intersection over union,
     0.94, a texel of margin in the same ratio, the prefilter 0.85 to 1.20.
-    TROne, `hdtext_find` and `hdtext_arm`. OWN. Ours: `FontProbe -atlas` over the
+    TROne, `hdtext_find` and `hdtext_arm`. THIRD. Ours: `FontProbe -atlas` over the
     106 `chardef.inc` glyphs.
-30. **The glyph quad's mip LOD bias of -0.7.** TROne, `k_ui_frag`. OWN. Ours:
+30. **The glyph quad's mip LOD bias of -0.7.** TROne, `k_ui_frag`. THIRD. Ours:
     the minification 1.8, 2.7 and 1.35 measured on this engine's output.
 31. **The glow's screen composition, near fade and `|N.V|` term.** TROne, its
-    rules for its glow material. OWN. Ours: RoomProbe on ANDREA2 room 131.
+    rules for its glow material. THIRD. Ours: RoomProbe on ANDREA2 room 131.
 32. **Where a page is looked for: its own game, the sibling games, then
     `WHITE.DDS`; a missing page is white, never black.** TROne,
-    `host/render/hd_pages.cpp` (`upload_shared`, `upload2`). OWN and PLACE.
+    `host/render/hd_pages.cpp` (`upload_shared`, `upload2`). THIRD and PLACE.
     Ours: RICH3 names three pages only `4\TEX` has; `WHITE.DDS` is in `4\TEX`
     only.
 33. **The Steam discovery, by content and not by folder name.** TROne,
@@ -413,7 +415,7 @@ entry "Where the HD rules come from", carries the tables.
     constants.** TROne, `tests/test_controller.cpp`, `host/input/` and
     `docs/CONTROLS.md` (TROne-main, copy of 2026-09-13; since its round K32
     TROne carries this project's core and orbit, see the TROne section above).
-    OWN. Ours: `ModernTest`; nine constants re-measured in play, the Remaster's
+    THIRD. Ours: `ModernTest`; nine constants re-measured in play, the Remaster's
     timings from video (PICTURE).
 36. **Material 1's scroll in param.xy.** Read so by TROne as well. DATA. Ours:
     calibrated against the classic UVROT tile in RICH2; 5 to 65 parts a level.
@@ -422,8 +424,8 @@ entry "Where the HD rules come from", carries the tables.
     in `hd_render.cpp`.
 38. **`param[0]` of materials 6, 7 and 8 is the cut-out threshold.** Read the
     same way by TROne (TROne-main, copy of 2026-10-05, its rules for the
-    cut-out materials, there resting on the Remaster's shaders; in 75c4c843 on
-    its own count, with material 8 cut at a fixed 0.5). DATA.
+    cut-out materials; in 75c4c843 on its own count, with material 8 cut at a
+    fixed 0.5). DATA.
     Ours: 0.5 in 42 of the 44 per-level tuples of the three materials over the
     fifteen levels, the other two ANDY1's 0.503 on material 6 and ANDY2's 0.12
     on material 8 (`TrgProbe -all -mat 6`, `-mat 7`, `-mat 8`); every other
@@ -434,7 +436,7 @@ entry "Where the HD rules come from", carries the tables.
     the per-page measure).
 39. **On a `.TRM` the material, not the index run, decides the cut, and
     material 0's alpha stays a mask.** TROne, `docs/SHADER_RULES.md` (copy of
-    2026-09-05), on its own data. DATA and OWN. Ours: of the three cut-out
+    2026-09-05), on its own data. DATA and THIRD. Ours: of the three cut-out
     materials only 6 and 8 occur in the `.TRM` files of `4\ITEM` and
     `5\ITEM`, both with 0.5 in `param[0]` in every part, and only 6 in the
     opaque run; the page's share of texels at exactly 0 among those below the
@@ -443,25 +445,22 @@ entry "Where the HD rules come from", carries the tables.
     grips at 4, and material 0's page 9000 of the Roman statue at 715, which
     the material rule keeps whole.
 
-Removed in the same round, so that nothing of the HD path rests on a reading of
-the Remaster's programs: the spare scale on the first colour triple (TROne's
-room-shadow factor, always 1 here); the sibling names `<n>_1024.DDS` and
-`<n>_2048.DDS` tried for ids 8000..8499 (35 pages ship that way, all in the
-I-III bundle's `1\TEX`, all beside a plain `<n>.DDS`); and the passages of
-`Trg.h` that told in words what the Remaster's renderer does with a vertex and
-with the point lights. The engine manual's HD chapter points here.
+Removed in the same round, so that every rule of the HD path rests on this
+project's own count, is declared a free choice or is credited: the spare scale on
+the first colour triple (TROne's room-shadow factor, always 1 here); the sibling
+names `<n>_1024.DDS` and `<n>_2048.DDS` tried for ids 8000..8499 (35 pages ship
+that way, all in the I-III bundle's `1\TEX`, all beside a plain `<n>.DDS`); and
+two prose passages of `Trg.h`, over the vertex and over the point lights
+(`vendor/trforge/VERSION.txt`). The engine manual's HD chapter points here.
 
 **This project's own water.** Entries 40 to 86 came by way of neither TROne nor
 TRForge: the water sheets, their wave and their caustic are this project's own
 design out of textbook graphics (sums of sines, Schlick's fresnel, Blinn-Phong,
 exponential absorption, foam by shore distance, refraction by Snell's law, a
-copy of the frame and a depth texture read back) and its own counts. In these
-entries OWN is this project's own design - a free choice, a count on our data, or
-tuned by eye on reference pictures supplied for this project (not in the
-repository) - DATA a measurement on the player's files with the tool switch
-that repeats it, and CLASSIC the classic engine's own code, as above (entry 71,
-the game's own ripples). `MODIFICATIONS.md`, entry "The water sheets: this project's own
-water surface", carries the tables.
+copy of the frame and a depth texture read back) and its own counts; their
+classes are the header's (entry 71, the game's own ripples, is CLASSIC).
+`MODIFICATIONS.md`, entry "The water sheets: this project's own water surface",
+carries the tables.
 
 40. **The water square.** A square of a room that is not under water whose room
     below (`FLOOR_INFO::pit_room`) is an underwater room; its surface the
@@ -706,7 +705,7 @@ water surface", carries the tables.
 78. **The motion clock** - every motion of the HD path runs on the drawn
     state's time, the tick clock less the part of a tick the blended pose
     stands behind it (`hd_book.h`, `HDBookClock`), so it moves on every frame
-    at sixty frames a second and more. A rule of this project.
+    at sixty frames a second and more. A rule of this project (OWN).
 79. **One ring a body** - a new ripple of the same kind (a body's, flags
     0x10, or a small one's) within 192 units of a live ring and 256 of its
     height goes into that ring: taken as its own while the ring is younger
@@ -776,7 +775,7 @@ water surface", carries the tables.
     units at 0.25 of foam, broken by the pattern. OWN, free choice.
 89. **Lara's gap in the waterline** - no waterline within 320 units of Lara's
     place, back in full 64 further out, while she swims at the surface or
-    wades (`lara.water_status`); her rings stay. A rule of this project: a
+    wades (`lara.water_status`); her rings stay. A rule of this project (OWN): a
     wet line round her body read as white paint on her (the play test of
     2026-10-08); 320 and 64 free choices that cover her 768 units.
 90. **The waterfall's foot** - every WATERFALL1 to 3 and WATERFALLSS1 and 2
@@ -838,7 +837,7 @@ water surface", carries the tables.
     choices. What makes the splash of ANDREA1's fountain is no effect of the
     engine but the remaster's own art, a spray part of material 1
     (`TrgProbe -parts 59`, DATA); it is not copied.
-96. **No stretch of a waterfall that stops short** - a rule of this project:
+96. **No stretch of a waterfall that stops short** - a rule of this project (OWN):
     a fall whose bottom stopped short of the surface would be stretched down
     to it; none does (entry 90's count), and the art cannot be stretched
     without rewriting its vertex buffer. What reads as short in ANDREA2 room
@@ -877,7 +876,7 @@ water surface", carries the tables.
 101. **The creatures' mark** - the HD objects' solid draw marks the stencil's
     bit 4 under every pixel it draws, and the sheet's depth variant draws a
     range twice, split by that bit: the marked pixels without the waterline
-    of entry 76. A rule of this project: the wet line on a swimming rat
+    of entry 76. A rule of this project (OWN): the wet line on a swimming rat
     read as Lara's did (the play test of 2026-10-09); the stencil split is
     general graphics knowledge, chosen because it costs the depth variant
     no slot where a list read in a loop would take it over 512.
@@ -1048,7 +1047,7 @@ water surface", carries the tables.
     unmarked stand-in, `-latemark` the same picture as the bracket's mark).
 123. **Small rings after the others** - a sheet draw takes Lara's, the
     falls' and the rows' rings first and a small ring (a bubble, a shell, a
-    rat) after them, each group youngest first. A rule of this project;
+    rat) after them, each group youngest first. A rule of this project (OWN);
     count on our data: a rat ripples one tick in sixteen
     (`game/rat.cpp`) and swims 480 units a second, so eight rats start about
     15 rings a second against the 8 a draw can show.

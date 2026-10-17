@@ -18333,6 +18333,11 @@ namespace
 	/* How far past each corner, out from its centroid, a copy's triangle
 	 * must still lie under the floor (marble_copies), in units. */
 	const float kMarbleCopyMargin = 64.0f;
+	/* Two face heights this close, in units, are one floor (marble_build):
+	 * a corner lies within a unit of its face's rounded mean, so two faces
+	 * of one flat floor differ by at most two. The plane's clip, 4 units
+	 * over it, still clears every corner (a unit and two). */
+	const int kMarbleHeightJoin = 2;
 
 	// The level's mirror faces and the opaque clear floors (marble_build).
 	int g_marble_faces = 0;
@@ -18348,6 +18353,8 @@ namespace
 	int g_marble_copies_water = 0;
 	// The faces left out for lying under a floor of their own room.
 	int g_marble_buried = 0;
+	// The faces moved to a neighbouring height of their floor (marble_build).
+	int g_marble_joined = 0;
 
 	// The target the mirrored rooms are drawn into, and its depth.
 	IDirect3DTexture9* g_marble_tex = 0;
@@ -18581,6 +18588,71 @@ namespace
 				g_marble_opaque += r.marbleOpaque ? 1 : 0;
 			}
 		}
+
+		/* One floor, one height. A face's height is its corners' mean
+		 * rounded, and the corners lie within a unit of it, so one floor's
+		 * faces fall on neighbouring heights (RICH2's pool surround at
+		 * -2816 and -2817) and the cap mirrored a part of it and left the
+		 * rest. Heights within kMarbleHeightJoin of the next are one plane,
+		 * at the one most faces hold. */
+		std::map<int, int> faces;
+
+		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
+			for (int y : g_groups[(size_t)g].mirrorY)
+				faces[y]++;
+
+		std::map<int, int> join;
+		std::vector<std::pair<int, int> > run;
+
+		for (std::map<int, int>::const_iterator it = faces.begin();
+			it != faces.end(); ++it)
+		{
+			if (!run.empty() && it->first - run.back().first >
+				kMarbleHeightJoin)
+			{
+				int best = run[0].first, most = run[0].second;
+
+				for (const std::pair<int, int>& r : run)
+					if (r.second > most)
+					{
+						best = r.first;
+						most = r.second;
+					}
+
+				for (const std::pair<int, int>& r : run)
+					join[r.first] = best;
+
+				run.clear();
+			}
+
+			run.push_back(*it);
+
+			if (std::next(it) == faces.end())
+			{
+				int best = run[0].first, most = run[0].second;
+
+				for (const std::pair<int, int>& r : run)
+					if (r.second > most)
+					{
+						best = r.first;
+						most = r.second;
+					}
+
+				for (const std::pair<int, int>& r : run)
+					join[r.first] = best;
+			}
+		}
+
+		heights.clear();
+		g_marble_joined = 0;
+
+		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
+			for (int& y : g_groups[(size_t)g].mirrorY)
+			{
+				g_marble_joined += join[y] != y ? 1 : 0;
+				y = join[y];
+				heights.insert(y);
+			}
 
 		g_marble_heights = (int)heights.size();
 	}
@@ -19255,6 +19327,7 @@ void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 	out->copies = g_marble_copies;
 	out->copies_water = g_marble_copies_water;
 	out->buried = g_marble_buried;
+	out->joined = g_marble_joined;
 }
 
 void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,

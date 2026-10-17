@@ -1799,6 +1799,8 @@ struct HDRenderMarbleStats
 	int copies_water;
 	// The faces left out for lying under a floor of their own room.
 	int buried;
+	// The faces moved to a neighbouring height of their own floor.
+	int joined;
 };
 
 void HDRenderMarbleSet(int on, int planes);

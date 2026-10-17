@@ -9007,10 +9007,10 @@ static void ProbeMarble(const void* projection)
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
 		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
-		"rising %d; copies %d water %d buried %d\n", s.planes, s.drawn,
-		g_marble_planes, s.faces, s.calls, s.wet, s.faces_level, s.water,
-		s.opaque, s.heights, ms, first, s.spread, s.rising, s.copies,
-		s.copies_water, s.buried);
+		"rising %d; copies %d water %d buried %d joined %d\n", s.planes,
+		s.drawn, g_marble_planes, s.faces, s.calls, s.wet, s.faces_level,
+		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
+		s.copies, s.copies_water, s.buried, s.joined);
 
 	// One marbleplane line a plane of the frame, in the order it is ranked.
 	for (int i = 0; i < s.planes && i < 8; i++)

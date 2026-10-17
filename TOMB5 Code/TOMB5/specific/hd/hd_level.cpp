@@ -2539,6 +2539,9 @@ static void BuildWaterSheets()
 	for (int s = 0; HDRenderWaterSegLine(s, g_stem, line, sizeof(line)); s++)
 		Log("%s", line);
 
+	for (int a = 0; HDRenderWaterArtLine(a, g_stem, line, sizeof(line)); a++)
+		Log("%s", line);
+
 	for (int w = 0; HDRenderWaterWetLine(w, g_stem, line, sizeof(line)); w++)
 		Log("%s", line);
 }

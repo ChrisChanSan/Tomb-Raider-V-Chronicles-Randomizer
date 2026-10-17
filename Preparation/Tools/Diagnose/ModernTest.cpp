@@ -309,9 +309,9 @@ static void bit_values()
 		ok(cfg.block_eps == 4, "four world units still count as not moving",
 			cfg.block_eps, 4);
 		/* 3277 was TROne's own 18 degrees a tick, a lid the thumb runs past.
-		 * 5461 is 30 degrees a tick, measured from Remaster footage: a spin
-		 * on the spot in 0.42 s and a running half turn in six ticks. */
-		ok(cfg.turn_rate == 5461, "the direct turn's rate, the Remaster's own 30 deg/tick",
+		 * 5461 is 30 degrees a tick, the top of the thumb's measured 15 to
+		 * 30: a running half turn in six ticks. */
+		ok(cfg.turn_rate == 5461, "the direct turn's rate, 30 deg/tick",
 			cfg.turn_rate, 5461);
 		ok(cfg.direct_turn == 1, "the direct turn's own gate is on", cfg.direct_turn, 1);
 		/* MODERN_SNAP_DELTA is gone with the one-tick about-turn. There is no
@@ -341,7 +341,7 @@ static void bit_values()
 			cfg.block_turn, 4);
 
 		/* Three turn-rate candidates, all named so swapping one back in is a
-		 * one-word edit. The default is the Remaster-measured 5461; 3277 is
+		 * one-word edit. The default is 5461, the measured thumb's top; 3277 is
 		 * TROne's 18 degrees. */
 		ok(MODERN_TURN_RATE_VANILLA == 1456, "vanilla's fastest turn, for the play test",
 			MODERN_TURN_RATE_VANILLA, 1456);
@@ -802,8 +802,8 @@ static void deadzone()
 		}
 	}
 
-	/* 7. And the player's own per cent on top of all eight: a slider,
-	 * toggleable the way the Remaster's is, over the tuned zone widths.
+	/* 7. And the player's own per cent on top of all eight: a slider the
+	 * player can switch off, over the tuned zone widths.
 	 *
 	 * The row is worth nothing if its default is not the tuned engine
 	 * itself, so that is the first thing checked here: 50 has to give back
@@ -1167,8 +1167,8 @@ static void held_course()
 	/* (a) At the shipped defaults: a stick that keeps moving - 3 degrees a
 	 * tick, comfortably over the 2.1-degree noise floor, the shape of the
 	 * measured episode above - re-seats on every tick while a camera swings
-	 * under her, tracking it exactly as closely as the Remaster's own
-	 * every-tick read does for as long as the thumb keeps moving. */
+	 * under her, tracking it exactly as closely as an every-tick read of
+	 * the camera would for as long as the thumb keeps moving. */
 	{
 		short cam = 0;
 		int t;
@@ -1626,14 +1626,13 @@ static void jumping()
 	 *
 	 * TROne's own line that disarms aiming on a jump is in
 	 * trone_modern_glue.h, trone_modern_glue_situation (TROne-main, copy of
-	 * 2026-10-05), outside the profile block that forces
-	 * aim_strafe off for the Remaster, and their own test builds a plain
-	 * modern_test_glue() that never sets remaster_profile - so their
-	 * expectation is unconditional. Measured against a Remaster recording
-	 * of jumps with and without weapons: armed, the side flip stands as
-	 * TROne's; unarmed, it is rule 6 (the run branch) instead - turn onto
-	 * the course, IN_FORWARD, and a forward jump rather than a flip. So
-	 * TROne's one case is now two of ours. */
+	 * 2026-10-05), outside a profile block of TROne's that
+	 * forces aim_strafe off, and their own test builds a plain
+	 * modern_test_glue() that never sets that profile - so their
+	 * expectation is unconditional. This project's choice: armed, the side
+	 * flip stands as TROne's; unarmed, it is rule 6 (the run branch) instead
+	 * - turn onto the course, IN_FORWARD, and a forward jump rather than a
+	 * flip. So TROne's one case is now two of ours. */
 	ModernResetState(&state);
 	sit.anim_state = 2;
 	sit.jump = 1;
@@ -2332,11 +2331,12 @@ static void back_input()
 	ok((out.bits & ~(long)MODERN_IN_WALK) == MODERN_IN_BACK, "...and IN_BACK is the bit",
 		out.bits & ~(long)MODERN_IN_WALK, MODERN_IN_BACK);
 
-	/* TROne: modern.remaster_back_input_distinguishes_running_from_armed_hopback
-	 * rides on this switch - their Remaster profile sets back_turns from
-	 * "is a weapon held". Ours is a constant (MODERN_BACK_TURNS), because this
-	 * engine has no pointer aiming to hop away from; the switch is here for a
-	 * profile that aims with a pointer, which this engine does not have. The
+	/* TROne: its test of the back input that tells running from the armed
+	 * hop back (tests/test_controller.cpp) rides on this switch - a profile
+	 * of TROne's sets back_turns from "is a weapon held". Ours is a constant
+	 * (MODERN_BACK_TURNS), because this engine has no pointer aiming to hop
+	 * away from; the switch is here for a profile that aims with a pointer,
+	 * which this engine does not have. The
 	 * sector the rule fires in is asserted either side, because it is the one
 	 * place a half turn and a step apart differ by a single unit. */
 	state.have_ref = 0;
@@ -3597,7 +3597,7 @@ static void spin_sweep()
 	 * the difference every tick, crosses half a turn and the shortest way round
 	 * changes side. That is the arithmetic of "turn toward the stick at a fixed
 	 * rate" and not a rule that can be added; the cure would be a rate over
-	 * 6371, and 5461 is what the Remaster's own footage was counted at. It is
+	 * 6371, and 5461 is the top of the thumb's measured 15 to 30. It is
 	 * the same shape as the defect measured at 3277 - only the speed it
 	 * starts at has moved from 18 to 30 degrees a tick. */
 	circle_run(6371, 0, 300, 0, 0, -1, &c);
@@ -7444,7 +7444,7 @@ static void camera_speed()
 		"...which is 360 deg/s, a full turn in one second",
 		yaw * 30 * 360 / 65536, 360);
 	ok(yaw * 30 * 360 / 65536 > 125,
-		"and past the Remaster's own 125 deg/s, so the slider has room over it",
+		"and past 125 deg/s, a circle in under three seconds, at the top",
 		yaw * 30 * 360 / 65536, 125);
 
 	/* The clamp. The value comes out of the registry, and a key a user can edit
@@ -10262,7 +10262,7 @@ static void deferred()
 	printf("\nnot ours yet - TROne expectations still owed, by name\n");
 	printf("(ptr: needs a pointer profile, which this engine does not have;\n");
 	printf(" seam: the missing half is in specific\\input.cpp, which cannot be linked here):\n");
-	printf("  ptr     modern.remaster_back_input_distinguishes_running_from_armed_hopback\n");
+	printf("  ptr     modern: the back input, running against the hop back\n");
 	printf("  none    modern.angles_match_the_classic_convention (trone_modern_camera_yaw)\n");
 	printf("          - the degenerate camera falls back to Lara's yaw in game\\modern_state.cpp,\n");
 	printf("            which needs the engine's own camera and cannot be linked here\n");
@@ -21671,6 +21671,84 @@ static void water_under()
 		"water under: an index under 1 is taken as 1", 0, 0);
 }
 
+/* The ripple of the remaster's still water art (hd_splash_math.h,
+ * HDArtRipple): the length a fifth of the water's width and never under its
+ * class's longest row, the deep-water rate at that length times 0.35 of the
+ * class's calm, the travel a tenth of the part's span at the sea's steepness
+ * and less for a flatter class. The rows are kWaterClass's (hd_render.cpp):
+ * basin 260 / 2 / 0.6, channel 420 / 3 / 0.8, sea 1500 / 38 / 1.0; g 4300. */
+static void art_ripple()
+{
+	printf("the art's ripple: length, rate and travel from the water\n");
+
+	const float g = 4300.0f;
+	const float steep = 38.0f / 1500.0f;
+	const HDArtRippleWater sea = { 3538.0f, 1500.0f, 38.0f, 1.0f, 1.0f };
+	float out[3];
+
+	ok(HDArtRipple(sea, steep, g, 0.996f, out),
+		"art ripple: JOBY4's sea ripples", 0, 0);
+	ok((long)floorf(1.0f / out[0] + 0.5f) == 12182,
+		"art ripple: ...a fifth of its width, 12,182 units",
+		(long)floorf(1.0f / out[0] + 0.5f), 12182);
+	ok((long)floorf(100.0f / out[2] + 0.5f) == 1205,
+		"art ripple: ...a period of 12.05 s",
+		(long)floorf(100.0f / out[2] + 0.5f), 1205);
+	ok(fabsf(out[1] - 0.0996f) < 1.0e-6f,
+		"art ripple: ...a tenth of its span", 0, 0);
+
+	const HDArtRippleWater pot = { 0.3f, 260.0f, 2.0f, 0.6f, 1.0f };
+
+	HDArtRipple(pot, steep, g, 0.357f, out);
+	ok((long)floorf(1.0f / out[0] + 0.5f) == 260,
+		"art ripple: a small water takes its class's longest row",
+		(long)floorf(1.0f / out[0] + 0.5f), 260);
+	ok((long)floorf(1000.0f * out[1] / 0.357f + 0.5f) == 30,
+		"art ripple: a basin travels 0.30 of the sea's share",
+		(long)floorf(1000.0f * out[1] / 0.357f + 0.5f), 30);
+
+	const HDArtRippleWater basin = { 36.0f, 260.0f, 2.0f, 0.6f, 1.0f };
+	float big[3];
+
+	HDArtRipple(basin, steep, g, 1.0f, out);
+	HDArtRipple(sea, steep, g, 1.0f, big);
+	ok(out[0] > big[0] && out[2] > big[2],
+		"art ripple: a larger water, a longer and slower wave", 0, 0);
+	ok((long)floorf(100.0f / out[2] + 0.5f) == 638,
+		"art ripple: ANDREA2's fountain of 36 squares, 6.38 s",
+		(long)floorf(100.0f / out[2] + 0.5f), 638);
+
+	HDArtRippleWater calm = basin;
+	float half[3];
+
+	calm.calm = 0.3f;
+	HDArtRipple(calm, steep, g, 1.0f, half);
+	ok(fabsf(half[2] * 2.0f - out[2]) < 1.0e-6f && half[0] == out[0],
+		"art ripple: the rate follows the class's calm alone", 0, 0);
+
+	HDArtRippleWater high = sea;
+
+	high.waves = 4.0f;
+	HDArtRipple(high, steep, g, 0.5f, out);
+	ok(fabsf(out[1] - 0.05f) < 1.0e-6f,
+		"art ripple: a row's waves never take it past a tenth", 0, 0);
+
+	HDArtRippleWater flat = sea;
+
+	flat.waves = 0.0f;
+	ok(!HDArtRipple(flat, steep, g, 1.0f, out) && out[1] == 0.0f,
+		"art ripple: waves 0 holds the art still", 0, 0);
+	ok(!HDArtRipple(sea, steep, g, 0.0f, out) && out[0] == 0.0f &&
+		out[1] == 0.0f && out[2] == 0.0f,
+		"art ripple: no span, nothing moves", 0, 0);
+
+	HDArtRippleWater none = sea;
+
+	none.lambda = 0.0f;
+	ok(!HDArtRipple(none, steep, g, 1.0f, out),
+		"art ripple: no class row, no ripple", 0, 0);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -23529,6 +23607,7 @@ int main()
 	splash_wet_clip();
 	splash_rings();
 	water_under();
+	art_ripple();
 	spring_table();
 	spring_file();
 	spring_clock();

@@ -15,7 +15,7 @@
 /*
  * The two keyboard sets - the part that is pure arithmetic.
  *
- * Modern uses the Remaster's default keys, Tank keeps Core's. The
+ * Modern has a default row of its own, Tank keeps Core's. The
  * keyboard therefore has two default rows and two player-editable sets,
  * one per control scheme, and three small questions come with them: which
  * default key a role still answers to, which set sits in the active
@@ -140,10 +140,10 @@ inline const char* KeySchemeMouseName(long code, int german)
  *   Z step left            X step right               P pause   Return select
  *   Mouse L secondary
  *
- * Draw, look and the secondary action are the Remaster's own keyboard
- * page: the right, the middle and the left mouse button. The three sit on
- * no other slot of either default row, so the row stays sound, and they
- * are the three the camera hand already rests on. Tank's own slot 18 is
+ * Draw, look and the secondary action are on the right, the middle and
+ * the left mouse button, this project's choice: they are the three the
+ * camera hand already rests on. The three sit on no other slot of either
+ * default row, so the row stays sound. Tank's own slot 18 is
  * DIK_HOME (specific/input.cpp), free in Core's cluster; Tank's row has no
  * mouse button at all.
  *
@@ -154,8 +154,8 @@ inline const char* KeySchemeMouseName(long code, int german)
  * the engine has had all along, so an untouched registry answers to
  * exactly the keys it answered to before.
  *
- * The one deliberate difference: quick load is F9 under Modern (matching
- * the Remaster's own binding page) and stays F6 under Tank, which is
+ * The one deliberate difference: quick load is F9 under Modern (a free
+ * choice of this project) and stays F6 under Tank, which is
  * Core's. F1/F2/F7/F8/F11 are the five cheat roles; they are the free F
  * keys once F4 (the outfit changer, hd_outfitmenu.cpp) and F10 (IN_E) are
  * left alone, and F5/F6/F9 belong to save and load. F12 is the HD/SD

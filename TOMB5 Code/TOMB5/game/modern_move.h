@@ -31,15 +31,13 @@
  * orbit camera in its own input code (TROne-main, copy of 2026-10-06, commit
  * 75c4c843, docs\CONTROLS.md 4.7 and docs\LEGAL.md). Units, state list and
  * wording here are TR5's own; ModernTest.cpp takes over TROne's test
- * expectations. Of the 32 constants, 16 carry a stated origin, 9 are measured
- * in play of this game, 5 do not apply and 2 of unknown origin are not used.
- * What the Remaster gave is what anybody sees of it: timings taken from
- * video of it playing - the turn on the spot and the half turn while running
- * (MODERN_TURN_RATE below), the camera's return behind her in 0.6 to 0.75 s
- * and its own orbit rate of a full circle in 2.85 to 2.95 s (modern_camera.h)
- * - and a set of option names read from the player's own COMMON.TXT. No
- * Remaster program is used, and the Remaster's modern control is rebuilt
- * only from how it plays.
+ * expectations. The scheme is TROne's design reworked here almost
+ * throughout: of the 32 constants, 16 stand as TROne's design has them, 9
+ * are measured in play of this game, 5 do not apply and 2 of unknown origin
+ * are not used. The turn rate (MODERN_TURN_RATE below), the camera's return
+ * behind her and the ends of its orbit rate (modern_camera.h) are this
+ * project's own choices, each with its reason beside it. A set of option
+ * names is read from the player's own COMMON.TXT.
  *
  * Angles are the engine's 16-bit units: 65536 is a full turn, 0 is +Z, 0x4000
  * is +X (item->pos.y_rot, phd_atan(z, x)). The per-tick state machine, the
@@ -279,14 +277,15 @@ enum modern_constants
 	 * fast back 1092, jump 546. At 18 degrees a thumb circling at a measured 15
 	 * to 30 degrees a tick outruns her: the error grows past 180, the shortest
 	 * way flips and she turns the other way or runs into a wall.
-	 * The Remaster, timed from video of it: one revolution on the spot in about
-	 * 0.42 s (about 28 degrees a tick at 30 ticks a second) and a half turn while
-	 * running in 6 ticks (30). 65536/12 = 5461.33, so 5461: a half turn takes
-	 * six ticks and a seventh of two units. 5462 would land it in six exactly;
-	 * 5461 keeps the timed 30.000 degrees, and two units are a fiftieth of a
-	 * degree. The older candidates stay named so a swap is a one-word edit;
-	 * MODERNLOG prints the rate in its init line and each tick's turn in yawd. */
-	MODERN_TURN_RATE = 5461,	// 30 deg/tick, the Remaster's rate timed from video
+	 * 30 degrees a tick is the top of that measured thumb, so a circling stick
+	 * does not outrun her, and a half turn while running takes six ticks - a
+	 * free choice of this project within that bound. 65536/12 = 5461.33, so
+	 * 5461: a half turn takes six ticks and a seventh of two units. 5462 would
+	 * land it in six exactly; 5461 keeps 30.000 degrees, and two units are a
+	 * fiftieth of a degree. The older candidates stay named so a swap is a
+	 * one-word edit; MODERNLOG prints the rate in its init line and each
+	 * tick's turn in yawd. */
+	MODERN_TURN_RATE = 5461,	// 30 deg/tick, the measured thumb's top
 	MODERN_TURN_RATE_VANILLA = 1456,
 	MODERN_TURN_RATE_MIDDLE = 2184,
 	MODERN_TURN_RATE_TRONE = 3277,	// 18 deg/tick, TROne's rate
@@ -301,7 +300,7 @@ enum modern_constants
 	 * she never steps in a direction the stick points away from. While she is
 	 * really running it is not asked at all (the withheld bit would cost her a
 	 * one-tick AS_STOP). A reversal turns at the rate like everything else,
-	 * with the run animation playing, as in the Remaster - no one-tick 180.
+	 * with the run animation playing - no one-tick 180.
 	 * Standing, the gate is 90 degrees: at 45 a circling stick kept her in
 	 * AS_STOP turning on the spot with no direction bit (232 ticks measured).
 	 * 90 is a safety line, not a feel number: she still never steps toward a

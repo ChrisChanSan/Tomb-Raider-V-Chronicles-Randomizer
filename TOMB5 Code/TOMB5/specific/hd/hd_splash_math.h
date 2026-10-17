@@ -1150,3 +1150,69 @@ inline int HDMarblePlanesPick(HDMarblePlane* planes, int count, int cap)
 
 	return n;
 }
+
+/* The ripple of the remaster's still water art (material 16; hd_render.cpp,
+ * "the art's ripple"): the three numbers of gRipple (hd_room.hlsl), out of
+ * this project's own water data and nothing of the file's part. `b` is the
+ * water the art lies over - its floor squares, its class's longest wave row
+ * (kWaterClass: the row's wavelength and height, the class's calm) and its
+ * row's wave scale - `steepRef` the sea row's height over its wavelength,
+ * `g` kWaterG, `span` the part's own smaller UV span in page units.
+ *
+ *   length  a fifth of the water's width (the square root of its squares),
+ *           and never shorter than its class's longest row: the art's swell
+ *           is the long wave of the water under it, so a sea of 3,538
+ *           squares rolls at 12,182 units, water of a square and a
+ *           half or less at the basin row's 260
+ *   rate    the deep-water rate at that length, omega = calm sqrt(g k), at
+ *           0.35 of the class's calm: 12 s for the sea of 3,538 squares
+ *   travel  a tenth of the span for the sea's steepness, the other classes
+ *           in proportion to their own (a basin 0.30, a channel 0.28 of
+ *           it), times the row's wave scale, and never more than a tenth
+ *
+ * The fifth and the 0.35 are this project's choices, set by RoomProbe
+ * pictures of JOBY4's sea; the tenth of the span is the hard cap the
+ * shader's ripple note relies on. out[0] is waves per unit, out[1] page
+ * units, out[2] waves a second; false, and out[1] 0, where nothing moves. */
+#define HD_ART_RIPPLE_SHARE   0.2f
+#define HD_ART_RIPPLE_CALM    0.35f
+#define HD_ART_RIPPLE_TRAVEL  0.1f
+
+struct HDArtRippleWater
+{
+	float squares;		// the water's floor squares
+	float lambda;		// its class's longest wave row, units
+	float height;		// that row's height, units
+	float calm;		// its class's share of the deep-water rate
+	float waves;		// its row's wave scale, 1 without a row
+};
+
+inline bool HDArtRipple(const HDArtRippleWater& b, float steepRef, float g,
+	float span, float* out)
+{
+	const float twoPi = 6.28318531f;
+
+	out[0] = out[1] = out[2] = 0.0f;
+
+	if (b.lambda <= 0.0f || steepRef <= 0.0f || g <= 0.0f || span <= 0.0f)
+		return false;
+
+	float length = HD_ART_RIPPLE_SHARE * 1024.0f *
+		sqrtf(b.squares > 0.0f ? b.squares : 0.0f);
+
+	if (length < b.lambda)
+		length = b.lambda;
+
+	float share = HD_ART_RIPPLE_TRAVEL * (b.height / b.lambda) / steepRef *
+		(b.waves > 0.0f ? b.waves : 0.0f);
+
+	if (share > HD_ART_RIPPLE_TRAVEL)
+		share = HD_ART_RIPPLE_TRAVEL;
+
+	const float calm = b.calm > 0.0f ? b.calm : 0.0f;
+
+	out[0] = 1.0f / length;
+	out[1] = share * span;
+	out[2] = HD_ART_RIPPLE_CALM * calm * sqrtf(g * twoPi / length) / twoPi;
+	return out[1] > 0.0f;
+}

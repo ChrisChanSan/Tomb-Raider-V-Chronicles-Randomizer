@@ -884,7 +884,7 @@ namespace
 	 *
 	 * Material 16 could be an additive sheet whose weight sits in param[2]
 	 * or a still-water surface. The geometry is the one thing that can
-	 * decide it (hd_render.cpp, MaterialRipple, has the answer). A water surface
+	 * decide it (hd_render.cpp, HDWaterArt, has the answer). A water surface
 	 * is one horizontal plane; it sits at the height the classic room draws
 	 * its water at; its normals point up; and it is tessellated far finer
 	 * than a wall needs to be, because a wave has to be able to move its

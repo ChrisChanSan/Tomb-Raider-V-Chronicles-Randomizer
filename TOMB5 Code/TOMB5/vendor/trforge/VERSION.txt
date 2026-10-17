@@ -31,9 +31,8 @@ identical to TROne's own copy (both sides hashed, byte counts equal):
 Edited here since, in Trg.h only, three comment passages left out, each
 with a one-line note in its place where a note is needed: the passage over
 the normal bytes (2026-10-04), the one over the vertex layout and the one
-over the point lights (2026-10-06). Each told in words what the Remaster's
-renderer does with a field; nothing of TRForge's code or byte layout
-changed. Trg.h now:
+over the point lights (2026-10-06). Each was prose beside a field;
+nothing of TRForge's code or byte layout changed. Trg.h now:
 
     Trg.h        26F169147619   7063 bytes
 

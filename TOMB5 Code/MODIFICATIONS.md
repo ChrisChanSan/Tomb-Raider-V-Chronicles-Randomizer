@@ -1755,17 +1755,16 @@ copyright in the files' own headers and in `THIRD-PARTY.md`; everything else is 
 project's own measurement over the player's files. No byte and no logic of the
 Remaster's programs `tomb5.dll`, `tomb456.exe` or `tomb123.exe` is in this tree -
 `hd_install.cpp` only tests that such a file EXISTS, as a marker that a folder is the
-right one. Four rules of this path are named in TRForge's or TROne's text as readings of
-the Remaster's shaders: the room light as the SUM of a vertex's two colour triples, which
-bytes of a `.TRG` vertex are u, v and the biased normal, the order of material 16's scale
-and rate, and `param[0]` of materials 6, 7 and 8 as the cut-out threshold. The first three
-had reached this tree at second hand all the same, as plain prose with no evidence of its
-own; the fourth already rested on this project's count (0.5 in 42 of 44 per-level
-tuples). Beside them the vendored `Trg.h` carried TRForge's prose about the Remaster's
-renderer. Each rule now rests on this project's own count over the player's files, or is
-declared this project's free choice, and the prose is left out of the copy (the entry
-"Where the HD rules come from" below); `THIRD-PARTY.md` keeps the origin ledger of every
-rule of this path that came by way of TROne or TRForge.
+right one. Four rules of this path once stood here as plain prose with no count of this
+project's: the room light as the SUM of a vertex's two colour triples, which bytes of a
+`.TRG` vertex are u, v and the biased normal, the order of material 16's scale and rate,
+and `param[0]` of materials 6, 7 and 8 as the cut-out threshold; the fourth already
+rested on this project's count (0.5 in 42 of 44 per-level tuples). Beside them the
+vendored `Trg.h` carried prose passages over the vertex and the point lights. Each rule
+now rests on this project's own count over the player's files or is declared this
+project's free choice - material 16's ripple reads none of the file's numbers since
+#212 - and the prose is left out of the copy (the entry "Where the HD rules come from"
+below); `THIRD-PARTY.md` keeps the origin ledger of every rule of this path.
 
 ### Finding an installed Remaster, reading what it holds for a level, and the settings that steer it
 2026-09-05 - 2026-09-20
@@ -7033,11 +7032,9 @@ vertex shader does nothing for it: `sway` is 0 on 27 of the 28 parts and a bobbi
 would tear away from the stone rim it is let into; that structure - a texture ripple held
 to the part's own UV span, nothing moving in the vertex - is TROne's own design for
 material 16 (GPLv3). Which of `param[0]` and `param[2]` is the frequency and which the
-rate is not decided by any measurement of ours: it is this project's free choice, written
-into `MaterialRipple` with its reversal beside it. The order chosen coincides with the
-order TROne's prose names for the three slots, a reading TROne states it took from the
-Remaster's own shader programs; this project uses those neither at first hand nor at
-second, so the coincidence is recorded and is no evidence. The water
+rate is not decided by any measurement of ours: it was this project's free choice, written
+into `MaterialRipple` with its reversal beside it; since #212 the ripple reads none of the
+three numbers (the entry "The water art's ripple from the project's own data"). The water
 frames: `HDScanLevelTextures` (`specific/hd/hd_scan.cpp`) reads the `.TEX` sidecar - a
 page count, that many page numbers, then one `uint16` per object texture - written
 against TRForge's format description (MIT; `trf_remaster/Remaster.h` and `HdPages.h`
@@ -10740,29 +10737,26 @@ make the room light), `-uvbytes` (which bytes are u, v and the layer), `-normals
 `-trmnormals` (the normal bias of a `.TRG` and of a `.TRM`, and the sway range) and
 `-ddssizes` (the size of every page). With the room light settled as the SUM by that
 count, the room shader drops the spare scale it carried on the first triple, the one
-place where the shape of a rule read off the Remaster's shaders stood in the code; the
+place where a scale with no count of this project's stood in the code; the
 room vertex shader now reads nothing of `c4`, which `fxc` gives a literal of its own, so
 the room passes write `c4` to the pixel file alone. `HDScanPagePath` no longer tries
 `<n>_2048.DDS` and `<n>_1024.DDS` for ids 8000..8499, a branch that never applies.
-`vendor/trforge/src/trf_remaster/Trg.h` leaves out its two passages that told in words
-what the Remaster's renderer does with a vertex and with the point lights, and its
-dangling "see below"; `VERSION.txt` and `NOTICE.md` say so with the new hash. Sentences
-about what the Remaster's program does become the file facts they rest on; every line
+`vendor/trforge/src/trf_remaster/Trg.h` leaves out its two prose passages over the
+vertex and over the point lights, and its dangling "see below"; `VERSION.txt` and
+`NOTICE.md` say so with the new hash. Sentences that stated a rule without its count
+become the file facts they rest on; every line
 number into TROne's files becomes the function it falls in and the copy it was read in;
 sentences about TROne's state are dated. The picture of the game is the same.
 
 **Why.** A reading of every line of TROne, TRForge and this tree found four rules of the
-HD path that TRForge's or TROne's text names as readings of the Remaster's shaders, none
-of them in this tree as code, an address, a table or shader text, all of them as plain
-prose rules: the room light as `colour1 * factor + colour2` with the factor at 1
-(TROne's, resting on TRForge's reading of the extracted shaders); which bytes of a `.TRG`
-vertex are u, v and the biased normal (TRForge's names); which of material 16's
-`param[0]` and `param[2]` is the ripple's scale and which its rate (the order TROne's
-prose names); and `param[0]` of materials 6, 7 and 8 as the cut-out threshold. The first
-three had come at second hand with no evidence of this project's own and no origin
-sentence naming the route; the fourth already had its own count here. The vendored
-`Trg.h` carried TRForge's prose about the renderer's use of the vertex and of the point
-lights besides. Beside them stood
+HD path that stood in this tree as plain prose rules and nowhere as code, an address, a
+table or shader text: the room light as `colour1 * factor + colour2` with the factor at
+1 (TROne's); which bytes of a `.TRG` vertex are u, v and the biased normal (TRForge's
+names); which of material 16's `param[0]` and `param[2]` is the ripple's scale and which
+its rate (the order TROne's prose names); and `param[0]` of materials 6, 7 and 8 as the
+cut-out threshold. The first three had no evidence of this project's own; the fourth
+already had its own count here. The vendored `Trg.h` carried prose passages over the
+vertex and the point lights besides. Beside them stood
 numbers with no stated origin - eleven pages "of 4096x4096" (they are 4096x2048), the
 slot names "strength, scale, scale" of materials 7 and 8, the three-resolution id range of
 TRForge's - and the cleanup of 2026-09-22 had shortened the origin note over material
@@ -10789,7 +10783,7 @@ header. `specific/hd/hd_shader/hd_room.hlsl:875`: `o.light = lerp(inC0.rgb + inC
 1.0f, gFlat.x)`; the header (`:4`), the light note (`:87`) and the register note name the
 count. `specific/hd/hd_render.cpp:7527` and `:8442`: `gPass.z` is written 0 and `c4` goes
 to the pixel file only; `MaterialRipple` (`:876`, note at `:816`) states the order of
-scale and rate as a free choice, the coincidence with TROne's reading, and TROne's own
+scale and rate as a free choice and TROne's own
 design of the ripple's structure (also `PartUvSpan`, `:753`, and `hd_room.hlsl`'s ripple
 note); the material list names the ranges of materials 7 and 8 in place of slot names.
 `specific/hd/hd_scan.cpp:95`: the plain page name only. The page sizes:
@@ -20607,16 +20601,14 @@ numbers, with 32 test expectations (28 `modern.*` and 4 `combatmode.*` cases of 
 `tests/test_controller.cpp`) taken across verbatim and named as such in the test's own
 header; none of their modern-control code is in this tree. The orbit camera shares only
 the idea that a camera angle is a state: TROne's world angle (its copy of 2026-09-13)
-never returns behind the player, this one falls home. Nothing in the scheme comes from the
-Remaster's programs at first or second hand — it was rebuilt by playing the Remaster and
-watching what it does, a walk of all 32 constants of the design found none traceable to a
-Remaster program (16 kept as they stood, 9 re-measured by play, 5 not applicable, 2
-unknown and therefore not taken), and what the Remaster gave is what anybody sees of it:
-timings taken from video of it playing - the turn on the spot and the half turn while
-running (`MODERN_TURN_RATE`), the camera's return behind her in 0.6 to 0.75 s and its own
-orbit rate of a full circle in 2.85 to 2.95 s (`game/modern_camera.h`) - and a handful of
-option names read out of a plain text file of the player's own installation. The same
-statement stands in the origin block of `game/modern_move.h` beside the code.
+never returns behind the player, this one falls home. The scheme is TROne's design
+reworked here almost throughout: of the 32 constants of the design 16 stand as TROne's
+design has them, 9 were re-measured in this project's own play, 5 do not apply and 2 of
+unknown origin are not taken. The turn rate (`MODERN_TURN_RATE`, 30 degrees a tick, the
+top of the thumb's measured 15 to 30), the camera's return behind her in 0.67 s and the
+ends of its orbit rate (`game/modern_camera.h`) are this project's own choices; a handful
+of option names are read out of a plain text file of the player's own installation. The
+same statement stands in the origin block of `game/modern_move.h` beside the code.
 
 ### Modern control: the stick turned into the classic direction bits
 2026-09-17 - 2026-09-20
@@ -20647,27 +20639,27 @@ the course is read, so the camera the player turns takes her course with it. At 
 nothing of it runs. A camera cut while the stick is held keeps her course until the stick
 is let go (*A camera cut keeps the held course until the stick is let go* below).
 
-**Why.** The scheme is the last piece the project was missing against the Remaster's own
-control, and it survives a 1:1 engine because it only sets the classic bits: the
+**Why.** The scheme gives the player a control relative to the camera beside the engine's
+own Tank control, and it survives a 1:1 engine because it only sets the classic bits: the
 engine's `input` word carries the same bits at the same values, and TR5's state numbers
 are the numbers the design was measured against. The held world course exists because
 the obvious alternative does not work — reading the camera fresh every tick under a
 chase camera that swings to stay behind Lara is a feedback loop that spins her in
 circles. The direct turn exists because the automaton's fastest rate (1456, about 8
-degrees a tick) does not read as the reference game; it is barred from the air, the
+degrees a tick) is too slow to follow the stick; it is barred from the air, the
 ladder, the water and every interaction pose because there `y_rot` belongs to the
 animation and an outside hand on it puts a pose crooked. 30 degrees a tick is the rate a
 thumb can circle the stick at (15 to 30); the older lid of 3277 sat below it, so a
 faster circle broke out of the turn and she ran off or stopped, and a one-tick flick
-above 90 degrees snapped a whole turn into a single frame where the reference takes six
+above 90 degrees snapped a whole turn into one frame where this project's rate takes six
 ticks. Withholding forward past 45 degrees of turn dropped a running Lara into `AS_STOP`
 for single ticks (203 of 937 run ticks, 25 stumble episodes); a gate that asks how much
 turn is left can never open for a stick circling at exactly her own rate, so the second
 question is asked in ticks, and a held stick never reaches that counter (thrown a half
 turn and held she is inside the 90-degree gate by tick 4; over 128 measured runs the
 counter reaches 3 of 8), which leaves the ledge the standing gate protects untouched.
-The classic forward jump turns 1 degree a tick, 1 to 36 degrees over 40 ticks, where the
-reference curves about 90 degrees around a pillar in one jump. Nothing in this engine
+The classic forward jump turns 1 degree a tick, 1 to 36 degrees over 40 ticks, too little
+to steer; 4 degrees a tick was tuned in this project's own play. Nothing in this engine
 writes `lara_item->pos.y_rot` while she aims — only her arms and torso move, in
 `larafire.cpp`, `lara1gun.cpp` and `lara2gun.cpp` — so the refusal to run while aiming
 guarded a collision that does not exist here. The water's old 6 degrees a tick left up
@@ -20811,7 +20803,7 @@ identical substitution because `game/larafire.cpp` sets `camera.type = COMBAT_CA
 every tick a weapon is ready or being drawn — an orbit built into `ChaseCamera` alone
 would have stopped answering the stick the moment the player armed himself. An offset
 from her heading swung the camera behind her whenever she turned (a 62-degree turn was
-followed inside 20 ticks, overshooting to 80), where the reference camera stands still
+followed inside 20 ticks, overshooting to 80), where a world-angle camera stands still
 while she spins under it; a world yaw minus this tick's heading is exact regardless,
 where an offset carrying a per-tick heading delta drifts on every rounding and loses any
 tick the orbit does not run. Without the lead the eye lagged the orbit by most of a
@@ -21720,8 +21712,9 @@ default. The cursor is hidden and held inside the client area while the window i
 Modern is on and no FMV plays; with `-log` the `MOUSELOG` seam records the counts, the
 steps and every change of the capture.
 
-**Why.** The Remaster's modern keyboard page binds draw, look and the secondary action to
-the mouse and turns the camera with it. The engine read no mouse at all: the
+**Why.** The modern camera wants a second input beside the right stick for a player at the
+keyboard, and the three roles the camera hand rests on - draw, look and the secondary
+action - want buttons of their own. The engine read no mouse at all: the
 `WM_MOUSEMOVE` case of `WinMainWndProc` stored `mouseX`, `mouseY` and `mouseB` into
 statics that nothing read, and `Key()` read `keymap` alone, which is why
 `game/key_scheme.h` called Q, R and Numpad 0 placeholders for the three roles.
@@ -21896,8 +21889,11 @@ the mouse drives none of them. Every existing log line prints as before.
 **Decisions.** Raw Input (`WM_INPUT`) carries the counts and the buttons, not
 DirectInput's mouse device. The mouse turns the camera under *Modern* only; *Tank* keeps
 its classic look. The mouse does nothing in the menus and the inventory. The three Modern
-defaults are the Remaster's keyboard page: draw on the right button, look on the middle
-one, the secondary action on the left one. A full circle takes 2048 counts at the middle
+defaults are this project's choice for the three buttons the camera hand rests on: draw
+on the right button, look on the middle one, the secondary action on the left one. The
+message of commit `8d0f5b7` names another product's page of default keys for this row
+and cannot be changed; the row's three defaults are this project's choice, as said here.
+A full circle takes 2048 counts at the middle
 of the slider, and the slider spans a quarter to four times that; the yaw and the pitch
 share one gain, and the mouse's pitch invert is a setting of its own. The camera turns no
 faster than 2048 units a tick with the mouse, so that the 60 fps interpolator never
@@ -23613,13 +23609,13 @@ rather than by its function. Nothing in the tree opens, maps,
 links, parses or disassembles a program of the Tomb Raider IV-VI Remaster;
 `hd_install.cpp` tests that `tomb456.exe` or `tomb123.exe` exists and nothing more. The
 audit's walk followed the words that name a program; four rules of the HD path that
-TRForge's or TROne's text names as readings of the Remaster's shaders carried none of
-those words and passed it - the room light as the sum of the two colour triples, the u,
-v and normal bytes of a `.TRG` vertex, the order of material 16's scale and rate, and
-`param[0]` of materials 6, 7 and 8 as the cut-out threshold - and so did TRForge's prose
-about the Remaster's renderer in the vendored `Trg.h`. A reading of every line of TROne,
-TRForge and this tree found them, and section 2.4's entry "Where the HD rules come from"
-measures the rules on our own data and leaves the prose out.
+stood here as plain prose with no count of this project's carried none of those words
+and passed it - the room light as the sum of the two colour triples, the u, v and normal
+bytes of a `.TRG` vertex, the order of material 16's scale and rate, and `param[0]` of
+materials 6, 7 and 8 as the cut-out threshold - and so did two prose passages of the
+vendored `Trg.h`. A reading of every line of TROne, TRForge and this tree found them,
+and section 2.4's entry "Where the HD rules come from" measures the rules on our own
+data and leaves the prose out.
 
 ### Licence notices, origin sentences and the corrections made before the public push
 2026-09-21 - 2026-09-22
@@ -23665,11 +23661,11 @@ description, on TROne's own GPLv3 code with its file and function, or on a measu
 made here on the player's own data files, and the sentences are to say so. Three of the
 four rules named in the opening of this section did not meet that until the entry "Where
 the HD rules come from" (2.4) measured them on our own data or declared them a free
-choice - the room light, the u, v and normal bytes, material 16's order: they had come
-as prose resting on TRForge's and TROne's reading of the Remaster's shaders, and no
-origin sentence said so; the fourth, the cut-out threshold, had its own count here
-already. A byte-hashing shader guard fires falsely when git rewrites line endings on
-checkout, which breaks the build from a clean clone. A diagnostic seam that formats its lines without testing `-log` costs
+choice - the room light, the u, v and normal bytes, material 16's order: they had stood
+as prose with no count of this project's; the fourth, the cut-out threshold, had its own
+count here already. A byte-hashing shader guard fires falsely when git rewrites line
+endings on checkout, which breaks the build from a clean clone. A diagnostic seam that
+formats its lines without testing `-log` costs
 work on every level load for output nobody reads. A checkbox that promises a feature the
 program does not have misleads the player, and a hard-coded German string cannot be
 translated. `RANDO_BUILD_ID` distinguishes builds whose output can differ: four commits
@@ -23732,11 +23728,10 @@ Todesengel1931, tomb3 (Troye's decompilation of Tomb Raider III), and measuremen
 the player's own files - stand as before, with one exception: the comment pass shortened
 the origin note over material 16's slot order (`hd_render.cpp`, `MaterialRipple`). It
 kept that the order is the one TROne's prose names and that it is unproven; it cut the
-sentence naming where TROne's reading came from - the Remaster's own shaders - and that
-this source is off limits here at first and at second hand, and the paragraph saying
-plainly that the choice between `param[0]` and `param[2]` is one this project's
-measurement cannot decide. Section 2.4's entry "Where the HD rules come from" puts both
-back in their true form. Nothing changed about what the code does.
+paragraph saying plainly that the choice between `param[0]` and `param[2]` is one this
+project's measurement cannot decide. Section 2.4's entry "Where the HD rules come from"
+put it back; since #212 the ripple reads neither number. Nothing changed about what the
+code does.
 
 ### The record: from an eighteen-thousand-line diary to a licence document
 2026-09-22
@@ -23882,6 +23877,162 @@ folder and 243 without, 0 failed each - the counts of `5df75640`, as no code lin
 
 **Commits.** `02eee06`, `7dd0633`, `ffda320`, `e0198d8`, `c13f502`, `22d930f` and this
 record.
+### The water art's ripple from the project's own data, and the origin sentences (#212)
+2026-10-17
+
+**What.** The ripple of the Remaster's still water art (material 16, the pixel constant
+`c36`) reads none of the `.TRG` part's numbers any more. Its scale, travel and rate come
+from the water the part lies over: the body whose squares in the part's own room lie under
+the part's box within 32 units of its height - the body's class as drawn, its squares and
+its row's `waves` - or, for a part over no body, the squares its own up-facing triangles
+cover (never more than its box spans) and the class the data rule (`WaterClassOf`) gives
+them with its room's open air and no sink. `HDArtRipple` (`hd_splash_math.h`) turns that
+into the three numbers: the length a fifth of the water's width (the square root of its
+squares) and never under its class's longest wave row; the rate the deep-water rate at
+that length, `calm * sqrt(g k)`, at 0.35 of the class's calm; the travel a tenth of the
+part's own smaller UV span at the sea row's steepness (height over wavelength), a basin's
+0.30 and a channel's 0.28 of that, times the row's `waves` and never more than a tenth. A
+`WATERLOG level=... art` line per part names the body, the class, the squares, the length,
+the period and the travel; `TrgProbe -mat 16` prints the file's four numbers as facts of
+the file, as before. Beside it the public text states the origins in this project's own
+words: the origin ledger's header in `THIRD-PARTY.md` lists every rule of the HD path with
+its origin and defines its classes as the entries use them - OWN this project's design,
+THIRD TROne's or TRForge's, credited - and the twenty entries that cite TROne's design are
+THIRD; no sentence names a route by which a rule came to this tree from another product's
+programs; the modern control is described as what it is, TROne's design reworked here
+almost throughout, its numbers with this project's own reasons.
+
+**Why.** F-002: which of material 16's first and third numbers is the scale and which the
+rate was a free choice with no measurement of this project's behind it, and the owner
+chose that the art takes its ripple from this project's own water data. F-003, F-004
+(lenses 7a_hd, 7a_game, 7b): sentences of `THIRD-PARTY.md`, `vendor/trforge/VERSION.txt`
+and this record described the way a rule had travelled before it reached this tree; the
+fact of every modification stays - two prose passages of `Trg.h` left out, each rule
+re-counted here or declared a free choice. F-013: the ledger's header defined OWN as
+TROne's design and the scope as what came by way of TROne or TRForge, while the later
+entries used OWN for this project's design and THIRD for TROne's. F-005 to F-009 (lenses
+7a_game, 7b): the modern control's comments, tests, record and manual named another
+product as its model and as the source of its turn rate, its camera's return and its orbit
+rate and of the mouse row's defaults; the owner describes the control as a mix of TROne's
+base and this project's reworking, almost everything re-tuned.
+
+**How.** `specific/hd/hd_render.cpp`: `HDWaterArt` and `WaterArtOf` (the part's span, box,
+own squares and the ripple it has until the bodies are known; RoomProbe without `-hdwater`
+builds no body and keeps that one); `HDRange::ripplePart` and the triangle's in the sort
+key and the join - every draw call without water first, then the parts, the later part of
+a group first, so the draw calls and the vertices the groups' light samples take
+(`group_light`) stay what they were: JOBY5's room 49 holds the game's only two parts on
+one page and in one pass; `ArtRippleClass`, `ArtRippleOf` and `water_art_ripples`, called
+in `HDRenderSetWaterSheets` once the bodies stand (also with `tomb5.hd_water` 0, which
+builds the bodies and no sheet); `HDRenderWaterArtLine`, printed by `hd_level.cpp` behind
+`-log` and by RoomProbe `-hdwater`. `specific/hd/hd_splash_math.h`: `HDArtRipple`.
+ModernTest gains `art_ripple`, 13 checks. The words: `THIRD-PARTY.md` (row 51, the TRForge
+paragraph, the ledger's header, entries 3, 7, 22, 35 and 38, the classes of entries 12, 15
+to 21, 23 to 33, 35 and 39, the five entries that said "a rule of this project", the
+round's removals, the water block, entry 248 new), `vendor/trforge/VERSION.txt`, this
+record (the HD path's opening, the water entry's ripple paragraph, "Where the HD rules
+come from", section 2.6's opening and Why, the mouse entry's Why and Decisions, sections
+2.8 and 2.9), `game/modern_move.h`, `modern_move.cpp`, `modern_state.cpp`,
+`modern_camera.h`, `modern_camera.cpp`, `key_scheme.h`, the comments and strings of
+ModernTest and MenuTest (TROne's back-input test is cited by what it tests), and
+`docs/Engine-Manual.md`.
+
+The ripple the water gives each part, against the numbers the file's tuple gave it under
+the old reading (in brackets; length in units, period in seconds, travel as a share of the
+part's span):
+
+| water | parts | body | class | squares | length | period | travel |
+|---|---|---|---|---|---|---|---|
+| JOBY4's sea, room 19 | 1 | none, open air | sea | 3,538 | 12,182 (12,288) | 12.05 (12.19) | 0.100 (0.100) |
+| JOBY5's two seas, rooms 65 and 82 | 2 | none, open air | sea | 900 | 6,144 (4,096) | 8.56 (5.33) | 0.100 (0.100) |
+| ANDREA2's fountain, room 231 | 1 | 3 | basin | 36 | 1,229 (1,536) | 6.38 (2.13) | 0.030 (0.070) |
+| ANDREA1's fountain bowls, room 59 | 1 | none | basin | 4 | 410 (1,536) | 3.68 (2.13) | 0.030 (0.070) |
+| the soup in JOBY3's kitchen pots, room 105 | 1 | none | basin | 4 | 410 (246) | 3.68 (0.85) | 0.030 (0.010) |
+| the same pots in JOBY5's room 115 | 1 | none | basin | 4 | 410 (still) | 3.68 (still) | 0.030 (0) |
+| ANDY2 room 52 | 1 | 0 | basin | 2 | 290 (3,072) | 3.10 (10.67) | 0.030 (0.100) |
+| ANDY2 room 57 | 1 | 1 | channel | 16 | 819 (12,288) | 3.91 (10.67) | 0.028 (0.050) |
+| JOBY5's channels, rooms 4, 49 (two parts) and 184 | 4 | 0, 4, 13 | channel | 23 to 29 | 982 to 1,103 (1,536) | 4.28 to 4.53 (2.13; 4.27 room 49's first) | 0.028 (0.070) |
+| JOBY5's basins, rooms 2, 14, 27, 28, 50, 52, 53, 61, 83, 115, 117 (two), 139, 143, 151 | 15 | one each | basin | 3 to 14 | 355 to 766 (1,536; 1,229 room 117's second) | 3.43 to 5.04 (2.13; 4.27) | 0.030 (0.070; 0.025) |
+
+The pictures (RoomProbe, `-time 3 -sky`, the tool of `5df75640` against this one): the
+pixels that changed in any channel and their mean change on the largest channel, of 255.
+
+| eye | 1280x720, hd_water 1 | 2560x1440, hd_water 1 | 1280x720, hd_water 0 | 2560x1440, hd_water 0 |
+|---|---|---|---|---|
+| JOBY4 under the sea, #210's "da" eye (26690, 14786, 58502, room 123) | 328,201 (35.6 %), 1.30 | 1,373,792 (37.3 %), 1.38 | 421,793, 1.88 | 1,721,762, 2.09 |
+| JOBY4, #210's "weg" eye (35651, 14558, 61811, room 6) | 128,352 (13.9 %), 1.33 | 545,143 (14.8 %), 1.44 | 166,601, 1.94 | 685,850, 2.20 |
+| JOBY4, the "da" place turned to the light (#210's L3) | 103,740 (11.3 %), 1.32 | 426,770 (11.6 %), 1.40 | 129,778, 1.97 | 523,453, 2.16 |
+| JOBY5's sea from above, room 65 | 783,571 (85.0 %), 5.47 | 3,154,147 (85.6 %), 5.55 | 783,600, 5.47 | 3,154,284, 5.55 |
+| JOBY3's kitchen pots from above, room 105 | 25,432 (2.8 %), 23.5 | 101,695 (2.8 %), 25.1 | 25,432, 23.5 | 101,695, 25.1 |
+| ANDREA1's fountain, room 59 | 9,252 (1.0 %), 10.7 | 36,879 (1.0 %), 11.6 | 9,252, 10.7 | 36,879, 11.6 |
+| ANDREA2's basin edge, room 231 (#197's A1) | 0 | 0 | 47,294 (5.1 %), 9.68 | 191,675 (5.2 %), 10.6 |
+| ANDREA2's basin from above, room 231 (#197's D2) | 0 | 0 | 206,692 (22.4 %), 13.0 | 829,522 (22.5 %), 13.1 |
+| JOBY5 room 49 | 0 | 0 | 57,695 (6.3 %), 6.42 | 230,684 (6.3 %), 6.74 |
+| RICH2's pool, room 125 (#197's G1) | 0 | 0 | 0 | 0 |
+| TITLE, room 1 | 0 | 0 | 0 | 0 |
+
+The GPU (`-gpu 20`, the solid passes of the frame - the additive sea is outside that
+bracket - three runs at 2560x1440 and hd_water 0, medians in ms, before and after):
+JOBY3's pots 0.340 and 0.341, JOBY4's "da" eye 0.509 and 0.501, ANDREA2's basin from above
+0.124 and 0.124, JOBY5's room 49 0.275 and 0.276; the draw calls 449, 995, 24 and 290
+before and after. The shader and its slots are unchanged; a water part's pixels take the
+same branch as before, only with other constants.
+
+**Decisions.** The owner chose way b of two: the art takes its ripple from this project's
+own data, and the file's numbers are not read. The body's size sets the length, because
+over the whole game the file's tuples grew with the area of the water, and a fifth of the
+width with the class's longest row as the floor stays within one per cent of the length of
+JOBY4's sea, the one place where the art's ripple was accepted in play (the owner's
+seventh play test, "Accepted: JOBY4"); the rate is the deep-water law the sheets use, at
+0.35 of the class's calm so that the same sea keeps its twelve seconds. The part's UV span
+bounds the travel and does not set the scale: the parts' maps onto their pages are not
+planar (JOBY5's small basins lay 48 texels over 944 units along x and over 3,826 along z),
+so no length on the page stands for a length in the room. A part over no body takes the
+class its own squares and its room's open air give it and not the nearest body's: the
+nearest body to JOBY4's sea is a basin of two squares 16,000 units under it. Every part
+now ripples, the pots of JOBY5's room 115 among them, which stood still under the old
+reading's zeroes. The sort keeps the draw calls and the light samples as they were, so
+nothing but the ripple changes; the build's fingerprint (`HDRenderBuildHash`) changes in
+the water levels with the ripple's numbers.
+
+**Checked.** With the tools built from this round's commits: the six classic pictures of
+`-classicroom -classiconly` (ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34) 6 of 6
+identical to `5df75640`; with `-hdwater 1` the 15 cameras of #197 15 of 15 and the six HD
+views 6 of 6 identical; with `-hdwater 0` the 15 cameras 11 of 15 identical, the four
+others the views of ANDREA2's room 231, whose material 16 grid draws where no sheet does
+(A1, A2, D1, D2); the WATERLOG sweep of the fifteen levels 240 of 240 lines identical at
+`-hdwater 1` and 147 of 147 at `-hdwater 0`, the new art lines left out. The eyes'
+pictures of this round's tool reproduce the measured ones, 44 of 44 byte for byte.
+ModernTest 15,521 (15,508 and the 13 of `art_ripple`), MenuTest 44,272, InterpTest 729,
+LipsTest 270 with the lips' objects and 243 without, 0 failed; all nine tool builds
+exit 0. The ledger's classes counted per entry: every one of its 234 entries names a class
+its header defines, no entry that cites TROne's design as its source is OWN, and every
+entry that takes TROne's or TRForge's code or design names THIRD; the format facts read
+in their descriptions stay DATA.
+
+**Left.** `hd_room.hlsl`'s ripple note still says the three numbers come out of the `.TRG`
+part's own and names the order TROne's prose gives; it changes with the next run of
+`bshader.bat`. The sentences that measure a look on recordings of another product (this
+record's light shafts and lips entries, the ledger's entry 7, the manual's glow strength,
+the README's barefoot landing) belong to fix list F-011 and F-012.
+
+Where the new ripple moves away from today's look (the table above; none of it was
+played): at the default `tomb5.hd_water` 1, which draws only the six parts over no body,
+JOBY3's pots ripple slower and wider (period 3.68 s against 0.85, length 410 against 246,
+travel 0.030 against 0.010), ANDREA1's bowls slower and finer, with a narrower travel
+(3.68 s against 2.13, length 410 against 1,536, travel 0.030 against 0.070), JOBY5's pots
+ripple where they stood still, and JOBY5's seas roll longer and slower (6,144 against
+4,096, 8.56 s against 5.33). At `tomb5.hd_water` 0, where no sheet hides the art, the
+parts over a body move with them: ANDREA2's fountain turns three times slower (6.38 s
+against 2.13) and finer (1,229 against 1,536, travel 0.030 against 0.070); ANDY2's room
+52 ripples far finer and faster (length 290 against 3,072, 3.10 s against 10.67) and room
+57 the same (819 against 12,288, 3.91 s against 10.67); JOBY5's channels and basins
+ripple finer (355 to 1,103 against 1,536, one part 1,229) and slower (3.43 to 5.04 s
+against 2.13), save room 49's first part (4.28 s against 4.27) and room 117's second
+(3.90 s against 4.27, now faster). ANDY2's two rooms were not pictured.
+
+**Commits.** `c948bd5a`, `e1e5897b`, `063290cf`, `0bf337f4`, `113f0582`, and the records'
+commit that adds this entry.
 ### The build from a stranger's checkout (#213)
 2026-10-17
 
@@ -24151,4 +24302,5 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #209 | The destroyable windows (#209) |
 | #210 | The water sheets: this project's own water surface |
 | #211 | The record completed before the push (#211) |
+| #212 | The water art's ripple from the project's own data, and the origin sentences (#212) |
 | #213 | The build from a stranger's checkout (#213) |

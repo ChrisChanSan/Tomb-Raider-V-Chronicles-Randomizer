@@ -530,8 +530,8 @@ long ModernUpdateInput(long bits, long stick_x, long stick_y, long action, long 
 		lara.turn_rate = 0;
 	}
 	/* In the air the same line again, at the jump's own rate: she can still
-	 * steer left and right after take-off, as in the Remaster, and so jump a
-	 * much wider arc round an edge.
+	 * steer left and right after take-off, a free choice of this project, and
+	 * so jump a much wider arc round an edge.
 	 *
 	 * A third arm of the same either/or, possible because the three lists do
 	 * not overlap: ModernWaterTurnRate answers only the eight swim and

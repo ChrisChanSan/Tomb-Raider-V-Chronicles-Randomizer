@@ -30,8 +30,8 @@
  * yaw; a stick at rest keeps the camera where it is in the world, also while
  * she turns; while she moves, the camera falls back behind her so slowly that
  * it is hard to notice, and faster while a wall clips the eye. An eye that
- * comes too close hides her completely. This is the behaviour of the
- * Remaster's camera as seen in gameplay recordings.
+ * comes too close hides her completely. These rules are this project's own
+ * design.
  *
  * The state is a world yaw and not an offset from her heading, because an
  * offset turns the view with every degree she turns: a turn of 62 degrees was
@@ -128,9 +128,8 @@ enum modern_camera_constants
 	 * on the Controls page, 0 to 100, like SFX and Music.
 	 *
 	 * 60 degrees a second at the bottom leaves room for a slower camera; 360 a
-	 * second at the top, a full turn in one second, lies past the Remaster's
-	 * own rate (a full circle in 2.85 to 2.95 s, about 125 deg/s), so the
-	 * slider has room above that reference. At 30 ticks a second, 60 deg/s is
+	 * second at the top, a full turn in one second, for a faster one - both
+	 * ends free choices of this project. At 30 ticks a second, 60 deg/s is
 	 * 364.09 units a tick and 360 deg/s is 2184.53, so 364 and 2184.
 	 *
 	 * The mapping is linear, which puts the default of 40 at exactly
@@ -256,8 +255,8 @@ enum modern_camera_constants
 	 * automaton's is 8, so anything over 150 in a single tick is an animation.
 	 * 65536 * 150 / 360 = 27306.67, so 27307.
 	 *
-	 * The swing is paid out over 20 ticks, 0.67 s, the middle of the 0.6 to
-	 * 0.75 s the Remaster's camera takes to sit behind her again. Feel number:
+	 * The swing is paid out over 20 ticks, 0.67 s, a free choice of this
+	 * project. Feel number:
 	 * MODERNLOG's `carry=` prints what is still pending every tick.
 	 *
 	 * The profile is eased, 3u^2 - 2u^3: a linear swing starts and stops at
@@ -269,7 +268,7 @@ enum modern_camera_constants
 	 * small enough that total * profile stays inside a long, exact at both
 	 * ends. */
 	MODERN_CAMERA_CARRY_FLIP = 27307,	// 150 deg in one tick: an animation, never a turn
-	MODERN_CAMERA_CARRY_TICKS = 20,		// 0.67 s at 30 Hz - the Remaster's own 0.6 to 0.75
+	MODERN_CAMERA_CARRY_TICKS = 20,		// 0.67 s at 30 Hz, a free choice
 	MODERN_CAMERA_CARRY_ONE = 4096,		// the eased profile's fixed point
 
 	/* How many fractions of the ray the eye is pulled in along, when geometry

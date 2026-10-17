@@ -1745,17 +1745,16 @@ copyright in the files' own headers and in `THIRD-PARTY.md`; everything else is 
 project's own measurement over the player's files. No byte and no logic of the
 Remaster's programs `tomb5.dll`, `tomb456.exe` or `tomb123.exe` is in this tree -
 `hd_install.cpp` only tests that such a file EXISTS, as a marker that a folder is the
-right one. Four rules of this path are named in TRForge's or TROne's text as readings of
-the Remaster's shaders: the room light as the SUM of a vertex's two colour triples, which
-bytes of a `.TRG` vertex are u, v and the biased normal, the order of material 16's scale
-and rate, and `param[0]` of materials 6, 7 and 8 as the cut-out threshold. The first three
-had reached this tree at second hand all the same, as plain prose with no evidence of its
-own; the fourth already rested on this project's count (0.5 in 42 of 44 per-level
-tuples). Beside them the vendored `Trg.h` carried TRForge's prose about the Remaster's
-renderer. Each rule now rests on this project's own count over the player's files, or is
-declared this project's free choice, and the prose is left out of the copy (the entry
-"Where the HD rules come from" below); `THIRD-PARTY.md` keeps the origin ledger of every
-rule of this path that came by way of TROne or TRForge.
+right one. Four rules of this path once stood here as plain prose with no count of this
+project's: the room light as the SUM of a vertex's two colour triples, which bytes of a
+`.TRG` vertex are u, v and the biased normal, the order of material 16's scale and rate,
+and `param[0]` of materials 6, 7 and 8 as the cut-out threshold; the fourth already
+rested on this project's count (0.5 in 42 of 44 per-level tuples). Beside them the
+vendored `Trg.h` carried prose passages over the vertex and the point lights. Each rule
+now rests on this project's own count over the player's files or is declared this
+project's free choice - material 16's ripple reads none of the file's numbers since
+#212 - and the prose is left out of the copy (the entry "Where the HD rules come from"
+below); `THIRD-PARTY.md` keeps the origin ledger of every rule of this path.
 
 ### Finding an installed Remaster, reading what it holds for a level, and the settings that steer it
 2026-09-05 - 2026-09-20
@@ -2677,7 +2676,7 @@ still fast swings. Every additive material other than 2. The data fixes of the r
 before. The weight each part reads from the art (`MaterialAddWeight`), including the
 sun shafts' 0.08: the gain multiplies it.
 
-**Decisions.** The strength follows the church mist and the Remaster's picture, not a
+**Decisions.** The strength follows the church mist, not a
 share of the brightness the glow had before its fades: the 55 per cent rule of the
 entry before is withdrawn. The haze and mist layers keep the fades: ANDY2's mist at
 its faded level is the target, and ANDREA1's page-3232 haze needs no exemption. Each
@@ -7021,11 +7020,9 @@ vertex shader does nothing for it: `sway` is 0 on 27 of the 28 parts and a bobbi
 would tear away from the stone rim it is let into; that structure - a texture ripple held
 to the part's own UV span, nothing moving in the vertex - is TROne's own design for
 material 16 (GPLv3). Which of `param[0]` and `param[2]` is the frequency and which the
-rate is not decided by any measurement of ours: it is this project's free choice, written
-into `MaterialRipple` with its reversal beside it. The order chosen coincides with the
-order TROne's prose names for the three slots, a reading TROne states it took from the
-Remaster's own shader programs; this project uses those neither at first hand nor at
-second, so the coincidence is recorded and is no evidence. The water
+rate is not decided by any measurement of ours: it was this project's free choice, written
+into `MaterialRipple` with its reversal beside it; since #212 the ripple reads none of the
+three numbers (the entry "The water art's ripple from the project's own data"). The water
 frames: `HDScanLevelTextures` (`specific/hd/hd_scan.cpp`) reads the `.TEX` sidecar - a
 page count, that many page numbers, then one `uint16` per object texture - written
 against TRForge's format description (MIT; `trf_remaster/Remaster.h` and `HdPages.h`
@@ -10727,29 +10724,26 @@ make the room light), `-uvbytes` (which bytes are u, v and the layer), `-normals
 `-trmnormals` (the normal bias of a `.TRG` and of a `.TRM`, and the sway range) and
 `-ddssizes` (the size of every page). With the room light settled as the SUM by that
 count, the room shader drops the spare scale it carried on the first triple, the one
-place where the shape of a rule read off the Remaster's shaders stood in the code; the
+place where a scale with no count of this project's stood in the code; the
 room vertex shader now reads nothing of `c4`, which `fxc` gives a literal of its own, so
 the room passes write `c4` to the pixel file alone. `HDScanPagePath` no longer tries
 `<n>_2048.DDS` and `<n>_1024.DDS` for ids 8000..8499, a branch that never applies.
-`vendor/trforge/src/trf_remaster/Trg.h` leaves out its two passages that told in words
-what the Remaster's renderer does with a vertex and with the point lights, and its
-dangling "see below"; `VERSION.txt` and `NOTICE.md` say so with the new hash. Sentences
-about what the Remaster's program does become the file facts they rest on; every line
+`vendor/trforge/src/trf_remaster/Trg.h` leaves out its two prose passages over the
+vertex and over the point lights, and its dangling "see below"; `VERSION.txt` and
+`NOTICE.md` say so with the new hash. Sentences that stated a rule without its count
+become the file facts they rest on; every line
 number into TROne's files becomes the function it falls in and the copy it was read in;
 sentences about TROne's state are dated. The picture of the game is the same.
 
 **Why.** A reading of every line of TROne, TRForge and this tree found four rules of the
-HD path that TRForge's or TROne's text names as readings of the Remaster's shaders, none
-of them in this tree as code, an address, a table or shader text, all of them as plain
-prose rules: the room light as `colour1 * factor + colour2` with the factor at 1
-(TROne's, resting on TRForge's reading of the extracted shaders); which bytes of a `.TRG`
-vertex are u, v and the biased normal (TRForge's names); which of material 16's
-`param[0]` and `param[2]` is the ripple's scale and which its rate (the order TROne's
-prose names); and `param[0]` of materials 6, 7 and 8 as the cut-out threshold. The first
-three had come at second hand with no evidence of this project's own and no origin
-sentence naming the route; the fourth already had its own count here. The vendored
-`Trg.h` carried TRForge's prose about the renderer's use of the vertex and of the point
-lights besides. Beside them stood
+HD path that stood in this tree as plain prose rules and nowhere as code, an address, a
+table or shader text: the room light as `colour1 * factor + colour2` with the factor at
+1 (TROne's); which bytes of a `.TRG` vertex are u, v and the biased normal (TRForge's
+names); which of material 16's `param[0]` and `param[2]` is the ripple's scale and which
+its rate (the order TROne's prose names); and `param[0]` of materials 6, 7 and 8 as the
+cut-out threshold. The first three had no evidence of this project's own; the fourth
+already had its own count here. The vendored `Trg.h` carried prose passages over the
+vertex and the point lights besides. Beside them stood
 numbers with no stated origin - eleven pages "of 4096x4096" (they are 4096x2048), the
 slot names "strength, scale, scale" of materials 7 and 8, the three-resolution id range of
 TRForge's - and the cleanup of 2026-09-22 had shortened the origin note over material
@@ -10776,7 +10770,7 @@ header. `specific/hd/hd_shader/hd_room.hlsl:875`: `o.light = lerp(inC0.rgb + inC
 1.0f, gFlat.x)`; the header (`:4`), the light note (`:87`) and the register note name the
 count. `specific/hd/hd_render.cpp:7527` and `:8442`: `gPass.z` is written 0 and `c4` goes
 to the pixel file only; `MaterialRipple` (`:876`, note at `:816`) states the order of
-scale and rate as a free choice, the coincidence with TROne's reading, and TROne's own
+scale and rate as a free choice and TROne's own
 design of the ripple's structure (also `PartUvSpan`, `:753`, and `hd_room.hlsl`'s ripple
 note); the material list names the ranges of materials 7 and 8 in place of slot names.
 `specific/hd/hd_scan.cpp:95`: the plain page name only. The page sizes:
@@ -23595,13 +23589,13 @@ rather than by its function. Nothing in the tree opens, maps,
 links, parses or disassembles a program of the Tomb Raider IV-VI Remaster;
 `hd_install.cpp` tests that `tomb456.exe` or `tomb123.exe` exists and nothing more. The
 audit's walk followed the words that name a program; four rules of the HD path that
-TRForge's or TROne's text names as readings of the Remaster's shaders carried none of
-those words and passed it - the room light as the sum of the two colour triples, the u,
-v and normal bytes of a `.TRG` vertex, the order of material 16's scale and rate, and
-`param[0]` of materials 6, 7 and 8 as the cut-out threshold - and so did TRForge's prose
-about the Remaster's renderer in the vendored `Trg.h`. A reading of every line of TROne,
-TRForge and this tree found them, and section 2.4's entry "Where the HD rules come from"
-measures the rules on our own data and leaves the prose out.
+stood here as plain prose with no count of this project's carried none of those words
+and passed it - the room light as the sum of the two colour triples, the u, v and normal
+bytes of a `.TRG` vertex, the order of material 16's scale and rate, and `param[0]` of
+materials 6, 7 and 8 as the cut-out threshold - and so did two prose passages of the
+vendored `Trg.h`. A reading of every line of TROne, TRForge and this tree found them,
+and section 2.4's entry "Where the HD rules come from" measures the rules on our own
+data and leaves the prose out.
 
 ### Licence notices, origin sentences and the corrections made before the public push
 2026-09-21 - 2026-09-22
@@ -23647,11 +23641,11 @@ description, on TROne's own GPLv3 code with its file and function, or on a measu
 made here on the player's own data files, and the sentences are to say so. Three of the
 four rules named in the opening of this section did not meet that until the entry "Where
 the HD rules come from" (2.4) measured them on our own data or declared them a free
-choice - the room light, the u, v and normal bytes, material 16's order: they had come
-as prose resting on TRForge's and TROne's reading of the Remaster's shaders, and no
-origin sentence said so; the fourth, the cut-out threshold, had its own count here
-already. A byte-hashing shader guard fires falsely when git rewrites line endings on
-checkout, which breaks the build from a clean clone. A diagnostic seam that formats its lines without testing `-log` costs
+choice - the room light, the u, v and normal bytes, material 16's order: they had stood
+as prose with no count of this project's; the fourth, the cut-out threshold, had its own
+count here already. A byte-hashing shader guard fires falsely when git rewrites line
+endings on checkout, which breaks the build from a clean clone. A diagnostic seam that
+formats its lines without testing `-log` costs
 work on every level load for output nobody reads. A checkbox that promises a feature the
 program does not have misleads the player, and a hard-coded German string cannot be
 translated. `RANDO_BUILD_ID` distinguishes builds whose output can differ: four commits
@@ -23714,11 +23708,10 @@ Todesengel1931, tomb3 (Troye's decompilation of Tomb Raider III), and measuremen
 the player's own files - stand as before, with one exception: the comment pass shortened
 the origin note over material 16's slot order (`hd_render.cpp`, `MaterialRipple`). It
 kept that the order is the one TROne's prose names and that it is unproven; it cut the
-sentence naming where TROne's reading came from - the Remaster's own shaders - and that
-this source is off limits here at first and at second hand, and the paragraph saying
-plainly that the choice between `param[0]` and `param[2]` is one this project's
-measurement cannot decide. Section 2.4's entry "Where the HD rules come from" puts both
-back in their true form. Nothing changed about what the code does.
+paragraph saying plainly that the choice between `param[0]` and `param[2]` is one this
+project's measurement cannot decide. Section 2.4's entry "Where the HD rules come from"
+put it back; since #212 the ripple reads neither number. Nothing changed about what the
+code does.
 
 ### The record: from an eighteen-thousand-line diary to a licence document
 2026-09-22

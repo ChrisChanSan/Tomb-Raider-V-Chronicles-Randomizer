@@ -108,10 +108,10 @@ rem a second draw over a river's sheet (hd_room.hlsl, "the river").
  /Fh "%SHADERDIR%\hd_room_water_river_ps.inc" "%SHADERDIR%\hd_room.hlsl"
 if errorlevel 1 exit /b 1
 
-rem The sea seen from below, a study for RoomProbe -underlook alone: the sun's
-rem disc, the lit underside and the shafts (hd_water_look.hlsl,
-rem which includes hd_room.hlsl for the waves and the hash); the game never
-rem draws with it.
+rem The sea seen from below (HDRenderWaterLook, RoomProbe -underlook): the
+rem sun's disc, the lit underside and the shafts (hd_water_look.hlsl, which
+rem includes hd_room.hlsl for the waves and the hash); the game draws it in
+rem a level with the deep look, the probe its study as well.
 "%FXC%" /nologo /T vs_3_0 /E LookVS /O3 /Vn kHDWaterLookVS ^
  /Fh "%SHADERDIR%\hd_water_look_vs.inc" "%SHADERDIR%\hd_water_look.hlsl"
 if errorlevel 1 exit /b 1

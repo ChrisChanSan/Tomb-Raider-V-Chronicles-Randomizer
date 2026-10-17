@@ -11,9 +11,10 @@
  * version. See the LICENSE file at the root of this source tree.
  */
 
-/* The sea seen from below, a probe-only study (RoomProbe -underlook,
- * hd_render.cpp HDRenderWaterProbeLook): the whole picture, added to it
- * (twice: the disc and the underside behind everything, the shafts over
+/* The sea seen from below (hd_render.cpp: HDRenderWaterLook on the game's
+ * path, drawn right after the sky in a level with the deep look, and
+ * RoomProbe's study HDRenderWaterProbeLook): the whole picture, added to
+ * it (twice: the disc and the underside behind everything, the shafts over
  * it), with three parts of light the eye under the water would see
  * looking up -
  *
@@ -31,8 +32,14 @@
  *
  * Both fade with the way: the surface's light over gLookLight.w units of
  * the eye ray, the shafts with the extinction's own sigma_s and over
- * gLookShaft.z units under the surface. Nothing of this is drawn by the
- * game. */
+ * gLookShaft.z units under the surface. Far up the waves are finer than a
+ * pixel, and their normals there are drawn as noise and as dark streaks
+ * where they tip a ray out of the window; so their slope is held to
+ * gLookMore.x / t of itself, t the way to the surface (0: kept whole).
+ * A third draw on the game's path fills what the frame left at its clear
+ * (the sky band's open poles, past its last ring at 75 degrees) with
+ * gLookFill, the water's scattered colour: the colour a view ray under
+ * the water takes when it meets nothing. */
 #include "hd_room.hlsl"
 
 /* c200 - c202 gLookAxis   the view's axes in the world: world x, y, z of a
@@ -47,7 +54,12 @@
  * c208 - c211 gLookWave   the body's first four wave rows
  * c212        gLookSigma  the extinction (the frame's c134)
  * c213        gLookShaft  the cells' size, the noise's floor, the shafts'
- *                          reach under the surface, the march's length */
+ *                          reach under the surface, the march's length
+ * c214        gLookMore   x the way over which the waves' slope is kept
+ *                          whole (0 always whole), y the window rim's
+ *                          width in cosine (0 the study's 0.08)
+ * c215        gLookFill   the colour added before the three parts (0 but
+ *                          in the fill's draw) */
 float4 gLookAxis[3] : register(c200);
 float4 gLookPix : register(c203);
 float4 gLookEye : register(c204);
@@ -57,6 +69,8 @@ float4 gLookLight : register(c207);
 float4 gLookWave[4] : register(c208);
 float4 gLookSigma : register(c212);
 float4 gLookShaft : register(c213);
+float4 gLookMore : register(c214);
+float4 gLookFill : register(c215);
 
 struct LOOK_OUT
 {
@@ -102,7 +116,7 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 	const float3 sun = normalize(float3(gLookSun.x, -gLookSun.y,
 		gLookSun.z));
 	const float D = gLookEye.w;
-	float3 col = 0.0f;
+	float3 col = gLookFill.rgb;
 	float far = gLookShaft.w;
 
 	if (vu.y > 1.0e-3f)
@@ -114,14 +128,18 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 		WaveSum(hit, gLookGain.w, gLookWave[0], gLookWave[1], gLookWave[2],
 			gLookWave[3], slope);
 
+		if (gLookMore.x > 0.0f)
+			slope *= saturate(gLookMore.x / t);
+
 		const float3 n = normalize(float3(-slope.x, 1.0f, -slope.y));
 		const float3 a = refract(vu, -n, 1.333f);
 		/* The window's rim, soft: from the critical cosine (0.661, 48.6
-		 * degrees, hd_water_under.h) over 0.08 of cosine inward, so that
-		 * the ripples do not punch hard holes in it. 0.08 is a free
-		 * choice. */
+		 * degrees, hd_water_under.h) over gLookMore.y of cosine inward
+		 * (0: 0.08, the study's), so that the ripples do not punch hard
+		 * holes in it. */
+		const float rim = gLookMore.y > 0.0f ? gLookMore.y : 0.08f;
 		const float win = dot(a, a) > 0.5f ?
-			saturate((dot(vu, n) - 0.661f) / 0.08f) : 0.0f;
+			saturate((dot(vu, n) - 0.661f) / rim) : 0.0f;
 		const float toward = saturate(dot(a, sun));
 		const float disc = pow(toward, gLookSun.w) +
 			0.08f * pow(toward, 8.0f);

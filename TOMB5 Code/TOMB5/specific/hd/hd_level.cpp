@@ -7980,6 +7980,60 @@ void HDFrameScissorForRoom(int roomIndex)
 	HDRenderScissorOff();
 }
 
+/* The sea seen from below, drawn by HDFrameSky right after the sky
+ * (HDRenderWaterLook, which answers false at once outside a level with the
+ * deep look or with tomb5.hd_water off). The eye under the water is
+ * HDFrameDraw's own test on the room the drawn eye stands in - a water
+ * room the under look holds (HDRenderWaterUnderOn) - and world up in view
+ * space is the sky's view's second row, as HDFrameDraw takes it from its
+ * first room's; the sky's block takes those fields in a copy, so the dome
+ * it has just drawn is untouched. */
+static bool HDFrameSkyLook(HDFrameLighting frame, const D3DMATRIX& world)
+{
+	const short eye_room = InterpEyeRoom(camera.pos.room_number);
+
+	if (HDObjectRingFrame() || eye_room < 0 || eye_room >= number_rooms ||
+		!(room[eye_room].flags & ROOM_UNDERWATER) ||
+		!HDRenderWaterUnderOn(eye_room))
+		return false;
+
+	const float len = sqrtf(world._21 * world._21 + world._22 * world._22 +
+		world._23 * world._23);
+
+	if (len <= 0.0f)
+		return false;
+
+	frame.under = 1;
+	frame.underRoom = eye_room;
+	frame.underEyeY = (float)camera.pos.y;
+	frame.underUp[0] = -world._21 / len;
+	frame.underUp[1] = -world._22 / len;
+	frame.underUp[2] = -world._23 / len;
+
+	const bool drew = HDRenderWaterLook(&frame, (const float*)&world,
+		(float)f_persp, (float)f_centerx, (float)f_centery,
+		(float)camera.pos.x, (float)camera.pos.z);
+
+	/* WATERLOG, with -log, once per level: the first frame the look is
+	 * drawn, the room and the eye. The level's first sky frame comes before
+	 * HDFrameSky's own line sets g_sky_logged, so that frame starts the
+	 * level's count afresh. */
+	static bool logged = false;
+
+	if (!g_sky_logged)
+		logged = false;
+
+	if (gLogEnabled && drew && !logged)
+	{
+		logged = true;
+		Log("WATERLOG level=%s look room=%d eye=%ld,%ld,%ld", g_stem,
+			(int)eye_room, (long)camera.pos.x, (long)camera.pos.y,
+			(long)camera.pos.z);
+	}
+
+	return drew;
+}
+
 /* The HD sky, in the classic horizon's place.
  *
  * Called from SkyDrawPhase (game\draw.cpp) at the line where the classic path
@@ -8040,6 +8094,10 @@ bool HDFrameSky(const float* viewWorld)
 
 	HDRenderFrameBegin(&kIdentity, &projection, &frame);
 	const bool drew = HDRenderSky(&world);
+
+	if (drew)
+		HDFrameSkyLook(frame, world);
+
 	HDRenderFrameEnd();
 
 	if (gLogEnabled && !g_sky_logged)

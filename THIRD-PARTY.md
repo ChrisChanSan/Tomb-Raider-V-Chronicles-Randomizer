@@ -2545,8 +2545,9 @@ carries the tables.
     JOBY4's sky group is a band of one colour alone (page 7006, `-skycensus`,
     DdsProbe), its script's layers the sea's surface on the level's own sky
     page; TITLE's bands are in the opaque pass. Since 2026-10-17 a level whose
-    water takes the deep look keeps its layers off as well (OWN, decided after
-    the play test of that day): the surface seen from below is the HD picture.
+    water takes the deep look keeps its layers off as well while the water
+    sheets are on (OWN, decided after the play test of that day): the surface
+    seen from below is the HD picture and this project's own look.
 243. **The HD page lent to the layers** (`hd_level.cpp`, `HDFrameSkyLayerPage`;
     `hd_render.cpp`, `HDRenderSkyLayerPage`; `game/draw.cpp`, `SkyDrawPhase`) -
     over an HD sky with a cloud sheet the layers draw the nearest sheet's page
@@ -2620,6 +2621,76 @@ carries the tables.
     cent by 5.5; JOBY3's kitchen pots 2.8 per cent by 24; ANDREA1's fountain 1.0 per cent
     by 11; with the sheets on, the views of ANDREA2's basin, JOBY5's room 49, RICH2's pool
     and TITLE do not change.
+249. **The layers out under the deep look** (`hd_water_under.h`,
+    `HDSkyLayersLeftOut`; `hd_render.cpp`, `HDRenderSkyCoversLayers`) - the
+    classic flat layers left out under the HD sky in a level that takes the
+    deep look with the sheets on (`hd_water` 1), whatever its sky holds,
+    beside entry 242's sheet and opaque band; with `hd_water` 0 no look is
+    drawn and the layers stay in, since the band's open pole would show the
+    frame's clear as a dark disc overhead (2,576 pixels at tick 22,020,
+    mean colour 10.5, 68.4, 64.8 against 23.2, 100.3, 103.6 just outside).
+    OWN, the rule, at the owner's word that the SD surface must go;
+    DATA: the deep look from the level's water data (`WATERLOG
+    under_deep=1`: JOBY4, 132 water rooms no sheet lies over against 2;
+    RICH3, 1 against 0, whose sheets leave its layers out already), JOBY4's
+    band one colour alone (entry 242); at his picture's eye (tick 22,020) the
+    PSX tiles had changed 433,045 pixels of 518,400. ModernTest `water_look`.
+250. **The sea seen from below on the game's path** (`hd_render.cpp`,
+    `HDRenderWaterLook`, `water_look_constants`, `water_look_draws`;
+    `hd_level.cpp`, `HDFrameSkyLook`; `hd_water_look.hlsl`; `hd_water_under.h`,
+    `HDWaterLookDepth`, `HDWaterLookKnobs`) - entry 239's look drawn by the
+    game right after the sky, before the rooms, in a level that takes the
+    deep look, with `hd_water` on and the eye under the water: its surface
+    the water's top over the dive, its light the hue of the water's
+    scattered colour, the waves' slope held to 1,500 / t of itself, the
+    window's rim over 0.3 of cosine, inside the window's own span of 0.339
+    (cosine 0.661 to 1). OWN, the design (entry 239) and its
+    place; DATA: the top from the level's water rooms (JOBY4 -5,120, 867
+    units over the remaster's art of the surface at -4,253), the colour
+    from the deep look; the eleven numbers free choices set by eye at four
+    eyes of the owner's dive for the look of a reference picture supplied
+    for this project (not in the repository), not matched in brightness:
+    the remaster's art and the band alone are brighter overhead than it
+    (mean luma of the top third 55.2 at tick 22,020 against its 36.4), so
+    the look adds 4.3 to 17.4 to the mean luma at those eyes (disc 0.2,
+    shafts 8, underside 0.12); measured: 0 rock pixels touched at four eyes,
+    0.885 to 0.912 ms at 2,560 x 1,440 (medians), nothing drawn with
+    `hd_water` 0. ModernTest `water_look`.
+251. **The clear filled with the water's colour** (`hd_render.cpp`,
+    `water_look_draws`) - with the look, a third draw at a depth of 0.99999
+    tested LESS adds the water's scattered colour where the depth buffer
+    still holds its clear: the band's open poles past its last ring at 75
+    degrees, no longer covered by the layers. OWN; DATA: the band's depth
+    0.99998 (`HD_SKY_MINZ` 0.996 and the sphere at 4,100 units), at his
+    picture's eye 2,576 pixels of the hole, the scattered colour 14, 32, 41
+    against the band's 13, 35, 42.
+252. **RoomProbe `-underlook`, `-underlookknobs`, `-undertick` and the sky
+    line's `layers out`** (`Preparation/Tools/Diagnose/RoomProbe.cpp`) - the
+    game's look drawn at the sky's place with the engine's numbers or
+    others, the study kept under `-underlookset`, a walk of CAMLOG eyes
+    whose rooms the portal walk lists and whose surface pixels the tool
+    counts out of its own pictures (`ReadOwnPng`) - with the look's
+    switches it stops unless `-sky` and `-rooms <n>` are given, without
+    which the look is left out unseen -, and the layer rule's answer per
+    level. OWN, this project's tool.
+253. **Picture 218 and the clouds' texels** (RoomProbe `-skydump` of round 1,
+    DdsProbe, the owner's log) - the picture matched to ANDREA2's tick
+    25,031 (correlation 0.983); ANDREA2's opaque sheet 7109 and alpha sheet
+    7101 at 13.4 units a texel, 2.15 to 6.29 and 3.00 to 8.76 screen pixels
+    a texel across from 20 to 90 degrees up at his 2,560 x 1,440 (persp
+    1,144); ANDREA1's 7107 near-black (2, 1, 12) and its horizon sheets at
+    alpha 30 at the most. DATA; no rule changed.
+254. **The vanishing surface classed over his dive** (RoomProbe `-undertick`
+    on the 1,613 CAMLOG ticks of the owner's JOBY4 play of 2026-10-17) - the
+    surface 0 at 34 ticks looking down at the dive's start, 2 under a
+    seaweed card, and room 19 (the sea's surface art) missing from the
+    portal walk at 164 ticks, reached only as a box guest of room 100: at
+    the 106 of them looking up his build's surface art was 0 and the look
+    now keeps 8,221 to 68,223 pixels. DATA; the walk agrees with all 61 of
+    his `VISLOG` lines. No rule changed in the list: room 19's art still
+    leaves the picture and comes back within a tick at the six edges of the
+    three runs (mean added luma 13.60 to 4.55 at 21,547 / 21,548, 3.83 to
+    12.25 at 21,577 / 21,578, 16.66 to 5.10 at 21,937 / 21,938).
 
 ## Credited, but not contained here
 

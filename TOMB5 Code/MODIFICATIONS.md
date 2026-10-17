@@ -2943,18 +2943,116 @@ bright surface page; whether the lightning layer should keep the cloud sheet's p
 drop to the lightning's colour alone; whether a lent HD page should override the PSX sky
 setting as it now does; whether the volumetric layer is wanted at its cost.
 
-**2026-10-17 (#208): JOBY4's layers off again.** Decided from the play test of
-2026-10-17: the sea's surface seen from below in `JOBY4` is the HD picture, room 19's
-art under the under view of #210, not the classic script layers that the round of
-2026-10-16 brought back over the level's bare band (with the PSX sky on the dark teal
-tiles, with it off the SD sea page). `HDRenderSkyCoversLayers` answers true in a level
-whose water takes the deep look (`g_wdeep_on`, `JOBY4` alone of the fifteen), so
-`SkyDrawPhase` leaves both layers out there, as before that round; the band stays. No
-other level changes: everywhere else the answer came from a cloud sheet or an
-opaque-pass band already. The round of #208 that measures the vanishing surface and
-builds the project's own surface look follows.
+**2026-10-17 (#208), interim: JOBY4's layers off again.** Decided from the play test of
+2026-10-17 and built the same afternoon (`ccee83fc`): `HDRenderSkyCoversLayers` answered
+true wherever the water took the deep look (`g_wdeep_on`), with the water sheets on or
+off, so `SkyDrawPhase` left JOBY4's two script layers out and the surface seen from
+below was the remaster's art of room 19 alone. With the sheets off that left the band's
+open pole uncovered (a dark disc overhead past 75 degrees). Round 2 below replaced the
+rule the same day: the layers stay out only with the sheets on, whose look fills the
+poles.
 
 **Commits.** `4eb9e0f5`, `124ec950`, `9da28f2e`, `3d7c5581`, `1b9b05e3`, `33b315fd`
+
+**2026-10-17, Round 2 (#208): JOBY4's layers out under the deep look, and the heavy clouds
+measured.**
+
+**What.** Two things. (1) In a level that takes the deep look, with the water sheets on,
+the script's flat layers stay out under the HD sky whatever the sky holds
+(`HDSkyLayersLeftOut`, `hd_water_under.h`; `HDRenderSkyCoversLayers`): JOBY4 no longer
+draws them over its bare band, and the surface overhead is the remaster's art of room 19
+and this project's own look (the water sheets' entry, the #210 part's Round 2). (2) The
+heavy clouds of a picture of the owner's game are measured: the picture is ANDREA2, its
+clouds are ANDREA2's own page, and nothing changes.
+
+**Why.** The owner's report of 2026-10-17, put into English (his words beside in German):
+JOBY4's water surface is SD now, so this project's shader effect is hard to see ("Die
+Wasseroberflaeche in Joby4 ist jetzt SD daher ist unser Shadereffekt sehr schlecht zu
+sehen"); the SD must go and something beautiful of our own be built ("unsere SD muss weg
+und wir muessen was schoenes eigenes bauen"); JOBY2's clouds look in his game as on his
+own Remaster screen, and the ANDY skies match side by side, but in ANDREA1 the clouds on
+his Remaster screen are only faintly visible and finer ("nur ganz leicht zu sehen und mehr
+HD") than ours. Reference pictures supplied for this project, not in the repository: three
+of his game, two of his Remaster screen.
+
+**The layers - cause.** Round 1's rule left the layers out only where the HD sky holds a
+cloud sheet or an opaque band, so over JOBY4's band - one flat colour, nothing else - they
+came back: with the PSX sky on (his setting) the dark teal `SKY_GRAPHICS` tiles, with it
+off the bright surface page, an SD surface over the whole sea. His picture of it is tick
+22,020 of his JOBY4 dive (room 33, eye 34,044, 14,790, 65,130, 46 degrees up), found by
+the rock's silhouette: 839 ticks looking up 20 degrees or more drawn at 320 x 180 with the
+PSX tiles, the smooth dark region (grey deviation under 3 over 7 x 7, luma under 70,
+Lara's third left out) against his picture's, intersection over union 0.566 at that tick
+and 0.559 to 0.565 at its neighbours 22,014 to 22,032 (the ridge's bumps and the tiles'
+seam in the same places). At 960 x 540 the PSX tiles change 433,045 pixels there against
+the frame without them, 404,942 at round 1's tick 23,995 and 207,842 at 24,484.
+
+**The layers - rule.** `HDSkyLayersLeftOut(sheet, opaque band, deep)`: out where the HD
+sky stands for them, and in a level that takes the deep look. The deep look comes from the
+level's water data (`WATERLOG under_deep=1`, the fallback rooms more than four times the
+rooms under a sheet): JOBY4, 132 against 2, and RICH3, 1 against 0 (its flipped room 190),
+whose sheets leave its layers out already. RoomProbe `-sky`'s line ends with the rule's
+answer: `layers out 1` in all thirteen sky levels, 0 in JOBY3 and JOBY5, which have no HD
+sky. The deep look counts for the rule only with the sheets on (`g_caustic_on`,
+`tomb5.hd_water` 1): with `hd_water` 0 the bodies and the deep look are still built
+(`under_deep=1`), but the look and its fill are not drawn, and with the layers out the
+band's open pole past its last ring at 75 degrees showed the frame's clear as a dark disc
+overhead (at tick 22,020, 2,576 pixels of mean colour 10.5, 68.4, 64.8 against 23.2,
+100.3, 103.6 just outside; with the PSX tiles there 10.5, 109.0, 111.6). So with
+`hd_water` 0 JOBY4's layers stay in, as before this round: `layers out 0` for JOBY4 alone
+of the fifteen levels at `-hdwater 0`, `1` at `-hdwater 1`.
+
+**Picture 218 - measured.** His picture of red roofs and two domes under heavy grey clouds
+is ANDREA2, not ANDREA1: room 150 at tick 25,031 of his ANDREA2 visit after ANDREA1's
+second (log line 151,693; eye 53,498, -9,505, 25,785, yaw 78.6, 30.6 degrees up, still
+from tick 25,000 to 25,045), grey-level correlation 0.983 at 320 x 180, Lara's third left
+out, over every second of the 522 ticks of that visit looking up 10 degrees or more. What
+draws its sky: the sheet 7109 in the opaque pass at 2,441 units over the camera (grey
+storm clouds, alpha 253 to 255, mean colour 92, 115, 135), the alpha sheet 7101 at 1,752
+(alpha mean 123), the band 7003 (opaque under 9 degrees, clear over 35); no classic layer
+(the sheets stand for it, `layers out 1`) and no lent page (no lightning). Screen pixels
+per texel at his 2,560 x 1,440 (persp 1,144, the log's `HDLOG ... sky` line) - a sheet's
+tile of 6,870 units over 512 texels, 13.4 units a texel, seen at h / sin(e), across and
+along the view:
+
+| part | 20 deg | 30 deg | 45 deg | 60 deg | 90 deg |
+|---|---|---|---|---|---|
+| ANDREA2 7109 at 2,441 | 2.15 / 0.74 | 3.14 / 1.57 | 4.45 / 3.14 | 5.45 / 4.72 | 6.29 |
+| ANDREA2 7101 at 1,752 | 3.00 / 1.02 | 4.38 / 2.19 | 6.19 / 4.38 | 7.59 / 6.57 | 8.76 |
+| ANDREA1 7107 at 2,441 | 1.08 / 0.37 | 1.58 / 0.79 | 2.23 / 1.58 | 2.73 / 2.37 | 3.16 |
+| ANDREA1 7100 at 2,280 | 2.30 / 0.79 | 3.37 / 1.68 | 4.76 / 3.37 | 5.83 / 5.05 | 6.73 |
+| ANDREA1 7108 at 2,057 | 2.55 / 0.87 | 3.73 / 1.87 | 5.28 / 3.73 | 6.46 / 5.60 | 7.46 |
+
+The bands (7002, 7003; 4,096 x 2,048 over 360 degrees and over v 21..233 for -75 to +75)
+take 1.75 screen pixels a texel at the screen's centre. The heavy look is the page itself,
+the darkest storm clouds of the sky block, drawn opaque as the file's pass says and
+magnified two to five times. ANDREA1 is the night: its overhead sheet 7107 (6.7 units a
+texel) is a near-black blue (2, 1, 12, alpha 254 to 255), its two horizon sheets 7100 and
+7108 are faint (alpha at most 30, mean 7.4, 82.6 % of the texels under 16); at two of his
+ANDREA1 eyes looking up (room 105 at 77 degrees, room 58 at 26) the sky is the deep blue
+with faint clouds of his reference picture of ANDREA1. Every sheet is drawn at the file's
+own alpha (the sky's alpha pass, source alpha) and the file's own baked light (the room
+formula; 0.999 to 1.530 on ANDREA1's sheets), the band at light 1, its baked light being
+zero; no weight of ours stands on a sheet. Nothing is changed.
+
+**Decisions.** The layer rule follows the water data, not the sky: the deep look is the
+one place the level's own data says the water is a sea seen from below. No rule changes
+for the clouds: the picture that read heavy is ANDREA2 drawn as its files say, and ANDREA1
+reads as his reference.
+
+**Checked.** With the tools built from this round's commits against `245de8e7`'s: the
+classic views (`hd_build` 0) 6 of 6 md5-identical to `8691e82` and `245de8e7`; the fifteen
+parity cameras with `-hdwater 0` and `-hdwater 1` 15 of 15 each; the six HD views 6 of 6;
+round 1's sky eyes (JOBY2 139, ANDY3 35, ANDREA1 152, ANDREA2 153) 4 of 4 drawn whole and
+4 of 4 with `-skyonly`; the under views of ANDREA1, JOBY5, JOBY2 and JOBY4's start cavern
+14 of 14 with and without `-underlook`; the `WATERLOG` sweep 240 of 240 lines.
+
+**Left.** The engine's `SkyDrawPhase` is still drawn by no tool: the rule's answer is
+printed by RoomProbe `-sky`, the layers' pictures come from round 1's twin. RICH3 takes
+the deep look on one flipped room no sheet lies over (1 > 4 x 0), which the deep look's
+share was not meant for.
+
+**Commits.** `49f37cae`, `2aa8e016` (the rule's `hd_water` 0 case)
 
 ### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items
 2026-09-29
@@ -16102,6 +16200,204 @@ would be even in height, but the whole way of 19,000 units and more keeps less t
 
 **Commits.** `5be09089` (the vanishing), `f89a0037` (the reach, reverted by
 `11ff451e`), `2a9d3f24` (the study).
+
+**The sea seen from below, Round 2 (#210), 2026-10-17.** Asked for with the owner's play
+report of that day, put into English (his words beside in German): JOBY4's water surface
+is SD now, so this project's shader effect is hard to see, and he thinks it still vanishes
+often ("Die Wasseroberflaeche in Joby4 ist jetzt SD daher ist unser Shadereffekt sehr
+schlecht zu sehen, aber ich glaube der verschwindet noch oft"); with a picture of his
+Remaster screen of that sea from below: the SD must go and something beautiful of our own
+be built ("unsere SD muss weg und wir muessen was schoenes eigenes bauen"). His pictures
+are reference pictures supplied for this project, not in the repository; his log of that
+play (the engine of 16 October, 19:53) holds 1,613 camera ticks of JOBY4, every one with
+the eye under the water (rooms 123, 33, 6, 30, 124 and 91). Three things: the script's
+layers out (the sky entry's Round 2), round 1's study on the game's path as the sea's
+surface seen from below, and the vanishing measured over his whole dive.
+
+*The look on the game's path* (`hd_render.cpp`, `HDRenderWaterLook`; `hd_level.cpp`,
+`HDFrameSkyLook`; `hd_water_look.hlsl`; `hd_water_under.h`, `HDWaterLookDepth`,
+`HDWaterLookKnobs`). `HDFrameSky` draws it right after the sky, in a level that takes the
+deep look, with the sheets on (`tomb5.hd_water`) and the eye in a water room the under
+look holds - `HDFrameDraw`'s own test, filled into a copy of the sky's frame block, so
+that the extinction and the water's scattered colour come through `water_under_constants`
+as for the rooms. Three draws over the whole picture, added to it: the disc and the
+underside at a depth of 0.9999 tested LESS, the shafts untested, and the fill (below). It
+is drawn before the rooms: the remaster's surface art of room 19 (additive) is added over
+it later, and every opaque thing of the frame stands in front of it, so the shafts lie on
+the open water only and no rock is streaked (round 1's Left) - at four eyes 0 of 83,011,
+95,582, 288,180 and 399,642 rock pixels (the frame without the sky and room 19) changed.
+Its surface is the water's top over the dive, the highest ceiling of a square of the
+level's water rooms (JOBY4 -5,120, 867 units over the art's -4,253), not the basin of room
+7 the extinction measures against (12,032, 16,000 units under the art): the disc, the
+window and the shafts' start stand where the sea's surface is drawn. Its light is the hue
+of the water's scattered colour (JOBY4 0.057, 0.125, 0.162), the water's own, where the
+study took the highlight's near-white. Far up the waves are finer than a pixel and their
+normals drew noise and dark streaks across the lit window (round 1's Left): their slope is
+held to 1,500 / t of itself, t the way to the surface, and the window's rim spread
+over 0.3 of cosine (`gLookMore`, c214), inside the window's own span of 0.339 (its
+cosine from the critical 0.661 to 1), so that the window's middle still takes the whole
+light; a first rim of 0.4, wider than the window, held the lit window at 0.85 of its light
+even looking straight up. With the script's layers out, the band's open
+poles (past its last ring at 75 degrees) showed the clear's black through the art, a dark
+disc overhead at his picture's eye (2,576 pixels at 960 x 540): a third draw at a depth
+of 0.99999, tested LESS, adds the scattered colour there and only there (`gLookFill`,
+c215; the band's depth 0.99998) - the colour a view ray under the water takes when it
+meets nothing, 14, 32, 41 against the band's 13, 35, 42; the hole now 35, 113, 132 against
+36, 119, 140 just outside it.
+
+The strengths are free choices set by eye on RoomProbe `-underlook` pictures at four eyes
+(his picture's, tick 22,020 in room 33, round 1's 23,995 and 24,484, and room 123 turned
+50 degrees up) for the look his reference shows - a soft bright surface overhead, faint
+shafts fanning down into dark water. His reference is not matched in brightness, and is
+not meant to be: the remaster's surface art and the band alone are already brighter
+overhead than it (mean luma at 960 x 540, the whole picture and its top third: his
+reference 27.8 and 36.4, his picture of the PSX tiles 40.6 and 60.9; at tick 22,020 our
+frame with the PSX tiles 35.0 and 45.3, with the art and the band alone 43.0 and 55.2).
+The look adds to that, so it is kept low: with the first draft's strengths (disc 0.3,
+shafts 16, underside 0.4) the frame came to 61.4 and 85.6, twice the reference overhead;
+at the strengths below it comes to 51.8 and 69.3.
+
+| number | study | game |
+|---|---|---|
+| disc | 3 | 0.2 |
+| shafts | 3 | 8 |
+| underside | 0.25 | 0.12 |
+| surface light's reach | 40,000 | 40,000 |
+| disc's power | 600 | 600 |
+| shafts' cell | 700 | 1,600 |
+| noise's floor | 0.55 | 0.62 |
+| shafts' reach under the surface | 6,000 | 40,000 |
+| march | 8,000 | 5,000 |
+| waves kept whole over | - | 1,500 |
+| rim | 0.08 | 0.3 |
+
+His eyes stand 18,800 to 20,200 units under the look's surface, so the shafts reach 40,000
+down (0.63 of their light at the shallowest eye, where 6,000 left 0.04); the water's
+sigma_s of 0.000444 a unit leaves a twentieth of the light 6,700 units along the ray, so
+the march stops at 5,000, its 24 steps 208 units apart; cells of 1,600, 62 per cent of
+them without a shaft, give a few broad soft columns where 700 and 0.55 gave an even haze
+(the shafts alone at 30 added 4.6, 10.3 and 13.2 levels on average at his picture's eye,
+no column showing). The disc stays faint, no sun showing on his reference.
+
+| eye | before: PSX tiles | look: pixels | mean luma added | most | rock pixels |
+|---|---|---|---|---|---|
+| E216: tick 22,020, room 33, 46 deg up | 433,045 | 433,045 | 10.47 | 86 | 0 of 83,011 |
+| tick 23,995, room 123, 43 deg up | 404,942 | 373,188 | 9.87 | 52 | 0 of 95,582 |
+| tick 24,484, room 6, 19 deg up | 207,842 | 196,858 | 4.27 | 22 | 0 of 288,180 |
+| L3: room 123 turned, yaw 245, 50 deg up | 118,758 | 118,758 | 17.36 | 77 | 0 of 399,642 |
+
+(960 x 540, `-black`; before: the base tool with the PSX tiles over the band, the pixels
+they change against the frame without them; look: the pixels `-underlook` changes against
+this round's frame without it; ticks 23,995 and 24,484 from round 1's log.)
+
+GPU at 2,560 x 1,440, timestamps round its draws, three runs each:
+E216 0.9019, 1.0749, 0.9035 ms (median 0.9035); 23,995 0.9024, 0.8959, 0.8972 (0.8972);
+24,484 0.8852, 0.8825, 0.8913 (0.8852); L3 0.9133, 0.9116, 0.9055 (0.9116). Drawn before
+the rooms, it covers the whole picture whatever stands in front, so its cost does not fall
+with the view. `LookPS` 234 slots of 512, `LookVS` 1; no texture, the shaders made once
+per device. With `hd_water` 0 nothing of it is drawn: the four eyes 4 of 4 byte-identical
+to the base tool, with the PSX layers drawn and without them; and JOBY4's layers stay in
+there (the sky entry's Round 2), as before this round.
+
+*The vanishing over his whole dive* (RoomProbe `-undertick`). Every one of his 1,613 JOBY4
+ticks walked with the look in place: per eye the portal walk's rooms (`-vis 1`, the
+visibility path he played), the picture from that eye with them, and the same without room
+19 and without the look, at 480 x 270; the surface's pixels those that differ by 4 or more
+of 255 in a channel. The walk agrees with his log: of its 61 `VISLOG` lines in JOBY4, all
+61 list room 19 or leave it out as the walk does at the tick before. The ticks where the
+surface is 0 or falls under half of both neighbours, in classes:
+
+| class | ticks | where | surface, his build | surface, now |
+|---|---|---|---|---|
+| out of the picture | 45 | 21,130 to 21,207, room 123, 3 to 56 deg down | 0 | 0 |
+| the room list | 106 | 21,548-577, 21,938-980, 22,085-117, 10 to 37 deg up | 0 | 8,221 to 68,223 |
+| near art | 2 | 22,188 and 22,189, room 6, a seaweed card | 3,070 and 669 | 5,504 and 1,226 |
+
+(his build: the PSX tiles over the band and room 19's art, no look - the walk with
+`-skylayer` and `-skylayerpage psx`, the surface the art's pixels; now: the art and the
+look. The room list's three runs and ten ticks either side of each: 0 in his build at
+every one of the 106, 3,758 to 59,862 beside them; now 16,898 to 21,711, 42,166 to 57,817
+and 8,221 to 68,223 in them, 16,112 to 114,004 beside them. The numbers are those of the
+look's final strengths; the first draft's, twice as bright, kept 11,881 to 75,006 in them
+and lit 11 of the out-of-the-picture ticks faintly, which are 0 now.)
+
+The surface's light over the whole dive: 1,525 of the 1,613 ticks look up, none of them at
+0, 40,789 pixels of 129,600 on the average. The classes: *Out of the picture* - the camera
+at the dive's start looks down at Lara, the art's lowest elevation from the eye over the
+frame's top edge or at it (21,130 to 21,134 look 3 to 10 degrees down, the art's far edge
+at the frame's top under the whole way's extinction); nothing to mend. *The room list* -
+room 19, whose art is the sea's surface, has no portal from the rooms of his dive; the
+visibility path lists it as a box guest of room 100 (`-walkwant 19`: "REACHED from room
+100 ... vis=box" at tick 21,540, "NOT REACHED - no portal to it out of any listed room" at
+21,566), so it drops out of the list wherever room 100 is not walked: 164 ticks, 58 of
+them looking down. In his build nothing else stood for it and the surface was gone - the
+vanishing he saw. The rule is the look: drawn with the sky, it needs no room of the list,
+and those ticks keep 8,221 to 68,223 surface pixels. The list itself belongs to the
+visibility walk and is not changed here. *Near art* - a seaweed card of room 6 fills the
+picture as the camera passes it (the pictures of 22,186 to 22,190); nothing to mend. No
+tick fell to the under view's depth: every room his eye stood in takes the basin's surface
+(`-underwater`: room 123 depth 1,656, air room 7; rooms 124, 6, 30, 33 and 91 at 2,404 to
+2,901 under the deep look's rule of round 1), and none to a flip (the level has no flipped
+pair, `HDLOG flip pairs=0`) or to the layers (out, the sky entry's Round 2). Round 1's
+walk of 40 eyes between its ticks 23,995 and 24,484 is byte-for-byte the same with this
+round's tool, its base and round 1's numbers.
+
+*What is not mended.* The look keeps light overhead where room 19 is missing, but it does
+not stand in for room 19's art, which is about half of the surface's light overhead: at
+each edge of the three runs the art leaves the picture or comes back within one tick. The
+mean added luma of the surface's pixels at the edges (480 x 270, the look's final
+strengths):
+
+| edge | listed | not listed |
+|---|---|---|
+| 21,547 / 21,548 | 13.60 | 4.55 |
+| 21,577 / 21,578 | 12.25 | 3.83 |
+| 21,937 / 21,938 | 16.66 | 5.10 |
+| 21,980 / 21,981 | 15.23 | 7.49 |
+| 22,084 / 22,085 | 14.67 | 10.26 |
+| 22,117 / 22,118 | 8.17 | 6.61 |
+
+So the surface no longer goes black, but it still dims and brightens in a step three
+times over his dive, for 30, 43 and 33 ticks; that step is what is left of the vanishing
+he reported.
+
+**Decisions.** The look takes the place of the SD layers as the owner decided; it is drawn
+with the sky and under `hd_water` only, in the levels the deep look takes. Its strengths
+are free choices by eye; the surface height and the colour come from the level's water.
+The vanishing is not mended: the look keeps the surface from going black where room 19 is
+missing, but room 19's own art still drops out of the picture and comes back with the list
+(below, *What is not mended*). The two places that could mend it - a stand-in draw of the
+missing surface room in the room phase (as `DrawStandInHolders` draws art whose carrier is
+not listed) or the visibility walk itself - lie outside this round's lines.
+
+**Checked.** As in the sky entry's Round 2: the classic views, the fifteen cameras with
+`-hdwater 0` and `1`, the six HD views, round 1's sky eyes, the under views with and
+without `-underlook` (ANDREA1, JOBY5, JOBY2 and JOBY4's start cavern), the `WATERLOG`
+sweep (`under_deep=1` in JOBY4 and RICH3 alone), byte-identical to `245de8e7`'s tools;
+JOBY4 changes only with `-underlook`. ModernTest 15,520 checks with the new `water_look`
+group of 12, MenuTest 44,272, InterpTest 729, LipsTest 270 and 243, 0 failed; the engine
+and all nine tools build. All of it again after `2aa8e016`, with round 1's twelve JOBY4
+ticks 12 of 12 byte-identical without `-underlook` (the look changes 78,673 to 374,041
+pixels there), and the whole walk of his dive again at the final strengths.
+
+**Left.** The look has not been seen in the game by anyone yet; its numbers are the
+probe's. It is drawn under the whole picture before the rooms, so it costs 0.89 to 0.91 ms
+at 2,560 x 1,440 whatever covers it. The shafts end at every opaque edge rather than in
+front of it: the water in front of a far rock carries no shaft. RICH3 takes the deep look
+on one flipped room (190) no sheet lies over (1 > 4 x 0): the look is drawn there with the
+sky in view and was covered by the room at the eye measured (with its neighbours; drawn
+alone, with the sky open over it, the look adds 8.2 to the mean luma at 960 x 540, eye
+3,584, -200, 3,584 looking 75 degrees up). Room 19 still leaves the list at 164 ticks, and
+with it the art's own surface pops out and back within a tick (*What is not mended*); that
+pop is what is left of the vanishing he saw. The game's sky frame steps no clock of its
+own (`HDFrameSky` takes the last frame's drawn time), so the look's shafts drift one frame
+behind the rooms, and the sky's own bracket, drawn with the eye taken as out of the water,
+starts the under view's tween afresh every frame. The 73-character subject of `49f37cae`
+is one over the limit of 72 and stays, since no commit is rewritten.
+
+**Commits.** `49f37cae` (the layers and the look), `5a9a853a` (the walk), `2aa8e016` (the
+rim inside the window, the lower strengths, the layers kept with `hd_water` 0, the walk's
+guard).
 
 ### The marble floors' mirror (#205)
 2026-10-16

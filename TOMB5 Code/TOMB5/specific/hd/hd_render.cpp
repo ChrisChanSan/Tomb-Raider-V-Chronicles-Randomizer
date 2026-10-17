@@ -44,7 +44,7 @@
 #include "hd_shader/hd_room_water_river_ps.inc"
 #include "hd_shader/hd_room_water_foam_ps.inc"
 #include "hd_shader/hd_room_water_foam_depth_ps.inc"
-#include "hd_shader/hd_water_look_vs.inc"	// RoomProbe -underlook alone
+#include "hd_shader/hd_water_look_vs.inc"	// the sea seen from below
 #include "hd_shader/hd_water_look_ps.inc"
 #include "hd_shader/hd_room_card_vs.inc"
 #include "hd_shader/hd_room_card_ps.inc"
@@ -18085,19 +18085,228 @@ void HDRenderWaterWetRoomCopy(bool force)
 	target->Release();
 }
 
-/* RoomProbe's -underlook: the sea seen from below, a study the game never
- * draws (hd_water_look.hlsl). Two draws over the whole picture added to
- * it, inside the frame's bracket after everything else, with this frame's
- * constants under the water (g_under_now: the eye's depth, the
+namespace
+{
+	/* The look's sixteen constants (hd_water_look.hlsl, c200 - c215):
+	 * the view's axes, the projection, the eye and its surface's depth,
+	 * the light's direction (the look's highlight direction, gWaterSun) and
+	 * its colour (the hue of `light`, its brightest channel 1), the gains
+	 * and the clock, the body's first four wave rows, the extinction
+	 * (`sigma`, the frame's c134), the shafts' numbers, the waves' fade
+	 * and the window rim's width; the fill's colour 0 (water_look_draws
+	 * sets it for its third draw).
+	 * `knobs` in the order of HDWaterLookKnobs. */
+	void water_look_constants(const WaterLook& look, const float* view,
+		float persp, float centreX, float centreY, float eyeX, float eyeZ,
+		float depth, const float* sigma, const float* light,
+		const float* knobs, float* c)
+	{
+		const float* high = light;
+		const float top = high[0] > high[1] ? (high[0] > high[2] ?
+			high[0] : high[2]) : (high[1] > high[2] ? high[1] : high[2]);
+
+		std::memset(c, 0, 16 * 4 * sizeof(float));
+
+		for (int i = 0; i < 3; i++)
+			for (int k = 0; k < 3; k++)
+				c[i * 4 + k] = view[i * 4 + k];
+
+		c[12] = 1.0f / persp;
+		c[13] = 1.0f / persp;
+		c[14] = centreX;
+		c[15] = centreY;
+		c[16] = eyeX;
+		c[18] = eyeZ;
+		c[19] = depth;
+		c[20] = look.pixel[20];
+		c[21] = look.pixel[21];
+		c[22] = look.pixel[22];
+		c[23] = knobs[HD_LOOK_POWER];
+		c[24] = knobs[HD_LOOK_DISC];
+		c[25] = knobs[HD_LOOK_SHAFTS];
+		c[26] = knobs[HD_LOOK_UNDERSIDE];
+		c[27] = g_motion[2];
+
+		for (int k = 0; k < 3; k++)
+			c[28 + k] = top > 0.0f ? high[k] / top : 1.0f;
+
+		c[31] = knobs[HD_LOOK_REACH];
+		std::memcpy(c + 32, look.rows, 16 * sizeof(float));
+
+		for (int k = 0; k < 4; k++)
+			c[48 + k] = sigma[k];
+
+		c[52] = knobs[HD_LOOK_CELL];
+		c[53] = knobs[HD_LOOK_FLOOR];
+		c[54] = knobs[HD_LOOK_DEEP];
+		c[55] = knobs[HD_LOOK_LENGTH];
+		c[56] = knobs[HD_LOOK_WAVES];
+		c[57] = knobs[HD_LOOK_RIM];
+	}
+
+	/* The look's draws of the whole picture, added to it, the shaders and
+	 * the declaration already set; the render states they need are set
+	 * here and are the caller's to put back. The disc and the underside lie
+	 * at the surface, behind everything the frame drew: their corners stand
+	 * at a depth of 0.9999, tested LESS, so they show only where the depth
+	 * buffer still holds its clear or the sky's slice (HD_SKY_MINZ; the
+	 * remaster's surface art is additive and writes none). The shafts lie in
+	 * the water between the eye and whatever it sees and are drawn untested,
+	 * their march held to the knobs' length; on the game's path they are
+	 * drawn with the sky, before the rooms, so every opaque thing of the
+	 * frame stands over them. With `fill`, a third draw at a depth of
+	 * 0.99999, tested LESS, adds that colour where the depth buffer still
+	 * holds its clear - nothing drawn there, not even the sky's band, whose
+	 * slice ends under 0.99999 (HD_SKY_MINZ 0.996 and the band's sphere
+	 * at four blocks: 0.99998). `gpuMs` takes the time between two GPU
+	 * timestamps round them, -1 untimed. */
+	bool water_look_draws(float* c, const float* fill, double* gpuMs)
+	{
+		const float quad[4][4] = {
+			{ -1.0f, 1.0f, 0.9999f, 1.0f }, { 1.0f, 1.0f, 0.9999f, 1.0f },
+			{ -1.0f, -1.0f, 0.9999f, 1.0f }, { 1.0f, -1.0f, 0.9999f, 1.0f }
+		};
+		const float shafts[4] = { 0.0f, c[25], 0.0f, c[27] };
+
+		c[25] = 0.0f;
+		g_device->SetPixelShaderConstantF(200, c, 16);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+		g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+		g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
+		g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
+		g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x7);
+
+		IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+		const bool timed = gpuMs &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+			&q[0])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2])) &&
+			SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ,
+			&q[3]));
+
+		if (timed)
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+
+		bool drawn = SUCCEEDED(g_device->DrawPrimitiveUP(
+			D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0])));
+
+		g_device->SetPixelShaderConstantF(206, shafts, 1);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
+		drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2,
+			quad, sizeof(quad[0]))) && drawn;
+
+		if (fill)
+		{
+			const float clear[4][4] = {
+				{ -1.0f, 1.0f, 0.99999f, 1.0f }, { 1.0f, 1.0f, 0.99999f, 1.0f },
+				{ -1.0f, -1.0f, 0.99999f, 1.0f },
+				{ 1.0f, -1.0f, 0.99999f, 1.0f }
+			};
+			const float none[4] = { 0.0f, 0.0f, 0.0f, c[27] };
+			const float colour[4] = { fill[0], fill[1], fill[2], 0.0f };
+
+			g_device->SetPixelShaderConstantF(206, none, 1);
+			g_device->SetPixelShaderConstantF(215, colour, 1);
+			g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+			drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,
+				2, clear, sizeof(clear[0]))) && drawn;
+		}
+
+		if (timed)
+		{
+			UINT64 t0 = 0, t1 = 0, freq = 0;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+			q[3]->Issue(D3DISSUE_END);
+
+			while (q[3]->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+
+			if (freq && t1 >= t0)
+				*gpuMs = (double)(t1 - t0) * 1000.0 / (double)freq;
+		}
+
+		for (int i = 0; i < 4; i++)
+			if (q[i])
+				q[i]->Release();
+
+		return drawn;
+	}
+
+	const D3DVERTEXELEMENT9 kLookCorner[] = {
+		{ 0, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT,
+			D3DDECLUSAGE_POSITION, 0 },
+		D3DDECL_END()
+	};
+
+	/* The game's look shaders (HDRenderWaterLook), made on first use on the
+	 * device in hand and made again, the old ones released, for a new one;
+	 * shaders outlive a device reset, so nothing else has to drop them. */
+	IDirect3DDevice9* g_look_device = 0;
+	IDirect3DVertexShader9* g_look_vs = 0;
+	IDirect3DPixelShader9* g_look_ps = 0;
+	IDirect3DVertexDeclaration9* g_look_decl = 0;
+
+	bool water_look_shaders()
+	{
+		if (g_look_device != g_device)
+		{
+			if (g_look_vs)
+				g_look_vs->Release();
+			if (g_look_ps)
+				g_look_ps->Release();
+			if (g_look_decl)
+				g_look_decl->Release();
+
+			g_look_vs = 0;
+			g_look_ps = 0;
+			g_look_decl = 0;
+			g_look_device = g_device;
+		}
+
+		if (!g_look_vs && FAILED(g_device->CreateVertexShader(
+			(const DWORD*)kHDWaterLookVS, &g_look_vs)))
+			g_look_vs = 0;
+
+		if (!g_look_ps && FAILED(g_device->CreatePixelShader(
+			(const DWORD*)kHDWaterLookPS, &g_look_ps)))
+			g_look_ps = 0;
+
+		if (!g_look_decl && FAILED(g_device->CreateVertexDeclaration(
+			kLookCorner, &g_look_decl)))
+			g_look_decl = 0;
+
+		return g_look_vs && g_look_ps && g_look_decl;
+	}
+}
+
+/* RoomProbe's -underlookset: the sea seen from below, the study with other
+ * strengths (hd_water_look.hlsl, the look HDRenderWaterLook draws on the
+ * game's path). Two draws over the whole picture added to it, inside the
+ * frame's bracket after everything else, with this frame's constants under
+ * the water (g_under_now: the eye's depth under the body's surface, the
  * extinction) - so only a frame drawn with the eye under the water takes
  * it. The waves are the body's own first four rows, the deep look's in a
- * level that takes it; the light comes from the look's highlight direction
- * (gWaterSun) in the hue of its highlight colour, its brightest channel 1.
- * `knobs`: the disc, the shafts and the underside's strengths, the surface
- * light's reach in units, the disc's power, the shafts' cell size, the
- * noise's floor, the shafts' reach under the surface and the march's
- * length. The device's whole state is held in a state block and put back.
- * `gpuMs` takes the pass's time between two GPU timestamps, -1 untimed. */
+ * level that takes it. `knobs` in the order of HDWaterLookKnobs. The
+ * device's whole state is held in a state block and put back. `gpuMs`
+ * takes the pass's time between two GPU timestamps, -1 untimed. */
 bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 	float centreY, float eyeX, float eyeZ, const float* knobs, double* gpuMs)
 {
@@ -18119,16 +18328,11 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 	IDirect3DPixelShader9* ps = 0;
 	IDirect3DVertexDeclaration9* decl = 0;
 	IDirect3DStateBlock9* held = 0;
-	const D3DVERTEXELEMENT9 corner[] = {
-		{ 0, 0, D3DDECLTYPE_FLOAT4, D3DDECLMETHOD_DEFAULT,
-			D3DDECLUSAGE_POSITION, 0 },
-		D3DDECL_END()
-	};
 
 	if (FAILED(g_device->CreateVertexShader((const DWORD*)kHDWaterLookVS,
 		&vs)) || FAILED(g_device->CreatePixelShader(
 		(const DWORD*)kHDWaterLookPS, &ps)) ||
-		FAILED(g_device->CreateVertexDeclaration(corner, &decl)) ||
+		FAILED(g_device->CreateVertexDeclaration(kLookCorner, &decl)) ||
 		FAILED(g_device->CreateStateBlock(D3DSBT_ALL, &held)))
 	{
 		if (vs)
@@ -18140,127 +18344,118 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 		return false;
 	}
 
-	// The light's hue: the highlight colour, its brightest channel 1.
-	const float* high = look->pixel + 16;
-	const float top = high[0] > high[1] ? (high[0] > high[2] ? high[0] :
-		high[2]) : (high[1] > high[2] ? high[1] : high[2]);
-	float c[14 * 4] = {};
+	float c[16 * 4];
 
-	for (int i = 0; i < 3; i++)
-		for (int k = 0; k < 3; k++)
-			c[i * 4 + k] = view[i * 4 + k];
-
-	c[12] = 1.0f / persp;
-	c[13] = 1.0f / persp;
-	c[14] = centreX;
-	c[15] = centreY;
-	c[16] = eyeX;
-	c[18] = eyeZ;
-	c[19] = g_under_now[11];
-	c[20] = look->pixel[20];
-	c[21] = look->pixel[21];
-	c[22] = look->pixel[22];
-	c[23] = knobs[4];
-	c[24] = knobs[0];
-	c[25] = knobs[1];
-	c[26] = knobs[2];
-	c[27] = g_motion[2];
-
-	for (int k = 0; k < 3; k++)
-		c[28 + k] = top > 0.0f ? high[k] / top : 1.0f;
-
-	c[31] = knobs[3];
-	std::memcpy(c + 32, look->rows, 16 * sizeof(float));
-
-	for (int k = 0; k < 4; k++)
-		c[48 + k] = g_under_now[k];
-
-	c[52] = knobs[5];
-	c[53] = knobs[6];
-	c[54] = knobs[7];
-	c[55] = knobs[8];
-
-	/* Two draws of the whole picture. The disc and the underside lie at
-	 * the surface, behind everything the frame drew: their corners stand
-	 * at a depth of 0.9999, tested LESS, so they show only where the depth
-	 * buffer still holds its clear (the remaster's surface art is additive
-	 * and writes none). The shafts lie in the water between the eye and
-	 * whatever it sees, and the study has no depth to stop them at: they
-	 * are drawn untested, their march held to `knobs[8]`. */
-	const float quad[4][4] = {
-		{ -1.0f, 1.0f, 0.9999f, 1.0f }, { 1.0f, 1.0f, 0.9999f, 1.0f },
-		{ -1.0f, -1.0f, 0.9999f, 1.0f }, { 1.0f, -1.0f, 0.9999f, 1.0f }
-	};
-	float shafts[4] = { 0.0f, knobs[1], 0.0f, g_motion[2] };
-
-	c[25] = 0.0f;
+	water_look_constants(*look, view, persp, centreX, centreY, eyeX, eyeZ,
+		g_under_now[11], g_under_now, look->pixel + 16, knobs, c);
 	held->Capture();
 	g_device->SetVertexShader(vs);
 	g_device->SetPixelShader(ps);
 	g_device->SetVertexDeclaration(decl);
-	g_device->SetPixelShaderConstantF(200, c, 14);
-	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-	g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
-	g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
-	g_device->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
-	g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_ONE);
-	g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_ONE);
-	g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
-	g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
-	g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0x7);
 
-	IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
-	const bool timed = gpuMs &&
-		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
-		&q[0])) &&
-		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1])) &&
-		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2])) &&
-		SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]));
-
-	if (timed)
-	{
-		q[0]->Issue(D3DISSUE_BEGIN);
-		q[1]->Issue(D3DISSUE_END);
-	}
-
-	bool drawn = SUCCEEDED(g_device->DrawPrimitiveUP(
-		D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0])));
-
-	g_device->SetPixelShaderConstantF(206, shafts, 1);
-	g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
-	drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2,
-		quad, sizeof(quad[0]))) && drawn;
-
-	if (timed)
-	{
-		UINT64 t0 = 0, t1 = 0, freq = 0;
-
-		q[2]->Issue(D3DISSUE_END);
-		q[0]->Issue(D3DISSUE_END);
-		q[3]->Issue(D3DISSUE_END);
-
-		while (q[3]->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
-			S_FALSE) {}
-		while (q[1]->GetData(&t0, sizeof(t0), D3DGETDATA_FLUSH) == S_FALSE) {}
-		while (q[2]->GetData(&t1, sizeof(t1), D3DGETDATA_FLUSH) == S_FALSE) {}
-
-		if (freq && t1 >= t0)
-			*gpuMs = (double)(t1 - t0) * 1000.0 / (double)freq;
-	}
-
-	for (int i = 0; i < 4; i++)
-		if (q[i])
-			q[i]->Release();
+	const bool drawn = water_look_draws(c, 0, gpuMs);
 
 	held->Apply();
 	held->Release();
 	decl->Release();
 	ps->Release();
 	vs->Release();
+	return drawn;
+}
+
+/* The sea seen from below on the game's path: the look of the study above
+ * at the strengths of HDWaterLookKnobs, drawn by HDFrameSky right after the
+ * sky in a level that takes the deep look, with the sheets on
+ * (tomb5.hd_water, which g_caustic_on holds) and the eye under the water.
+ * `under` is a frame block with its under-the-water fields filled as
+ * HDFrameDraw fills them (the eye's room, its world y, world up in view
+ * space); the extinction and the water's scattered colour come from it
+ * through water_under_constants. The look's surface is the water's top
+ * over the dive (HDWaterLookDepth), not the basin the extinction measures
+ * against, so that its disc, its window and its shafts stand where the
+ * sea's surface is drawn; its light is the hue of the scattered colour,
+ * the water's own. Drawn in the sky's place, before the rooms: the surface
+ * art of the remaster (room 19 in JOBY4, additive) is added over it later,
+ * and every opaque thing of the frame covers it - the shafts' light lies
+ * only on open water. What the frame left at its clear, the band's open
+ * poles, takes the scattered colour (water_look_draws' fill): with the
+ * script's layers out nothing else covers them, and black there drew a
+ * dark disc overhead. `knobs` stands in for HDWaterLookKnobs when given
+ * (RoomProbe -underlookknobs). The render states, the shaders, the
+ * declaration and stream 0 are put back as they were. `gpuMs` as in
+ * HDRenderWaterProbeLook. */
+bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
+	float persp, float centreX, float centreY, float eyeX, float eyeZ,
+	const float* knobs, double* gpuMs)
+{
+	if (gpuMs)
+		*gpuMs = -1.0;
+
+	if (!g_device || !under || !view || !g_wdeep_on || !g_caustic_on)
+		return false;
+
+	float u[16] = {};
+	float own[HD_LOOK_KNOBS];
+
+	if (!water_under_constants(under, u) || !water_look_shaders())
+		return false;
+
+	if (!knobs)
+	{
+		HDWaterLookKnobs(own);
+		knobs = own;
+	}
+
+	const D3DRENDERSTATETYPE kept[] = {
+		D3DRS_ZENABLE, D3DRS_ZFUNC, D3DRS_ZWRITEENABLE,
+		D3DRS_ALPHABLENDENABLE, D3DRS_BLENDOP, D3DRS_SRCBLEND,
+		D3DRS_DESTBLEND, D3DRS_ALPHATESTENABLE, D3DRS_STENCILENABLE,
+		D3DRS_SCISSORTESTENABLE, D3DRS_CULLMODE, D3DRS_FOGENABLE,
+		D3DRS_COLORWRITEENABLE
+	};
+	const int states = (int)(sizeof(kept) / sizeof(kept[0]));
+	DWORD was[sizeof(kept) / sizeof(kept[0])];
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DVertexBuffer9* stream = 0;
+	UINT offset = 0, stride = 0;
+
+	for (int i = 0; i < states; i++)
+		g_device->GetRenderState(kept[i], &was[i]);
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetStreamSource(0, &stream, &offset, &stride);
+
+	float c[16 * 4];
+
+	water_look_constants(g_wlook_deep, view, persp, centreX, centreY, eyeX,
+		eyeZ, HDWaterLookDepth(under->underEyeY, g_wdeep_top), u, u + 4,
+		knobs, c);
+	g_device->SetVertexShader(g_look_vs);
+	g_device->SetPixelShader(g_look_ps);
+	g_device->SetVertexDeclaration(g_look_decl);
+
+	const bool drawn = water_look_draws(c, u + 4, gpuMs);
+
+	for (int i = 0; i < states; i++)
+		g_device->SetRenderState(kept[i], was[i]);
+
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetStreamSource(0, stream, offset, stride);
+
+	if (vs)
+		vs->Release();
+	if (ps)
+		ps->Release();
+	if (decl)
+		decl->Release();
+	if (stream)
+		stream->Release();
 	return drawn;
 }
 
@@ -21980,28 +22175,36 @@ bool HDRenderSky(const D3DMATRIX* world)
 	return drew;
 }
 
-/* Whether the HD sky stands for the classic flat layers: a cloud sheet in
- * any sky group, or a band in the opaque pass - TITLE's two whole painted
- * skies. The band of every other level is an alpha-pass part with a sheet
- * over it, except JOBY4's (RoomProbe -skycensus), which is the band alone
- * and one flat colour; the layers that JOBY4's script draws (the surface
- * seen from below, on the level's own sky page) have nothing in the HD sky
- * standing for them - and are left out all the same where the level's
- * water takes the deep look (g_wdeep_on): there the surface seen from
- * below is the HD picture, room 19's art under the under view, and the
- * layers would lay the classic sky page over it. */
+/* Whether the classic flat layers stay out under the HD sky: where it
+ * stands for them - a cloud sheet in any sky group, or a band in the
+ * opaque pass, TITLE's two whole painted skies - and in a level that takes
+ * the deep look with the sheets on (HDSkyLayersLeftOut, hd_water_under.h).
+ * The band of every other level is an alpha-pass part with a sheet over
+ * it, except JOBY4's (RoomProbe -skycensus), which is the band alone and
+ * one flat colour; JOBY4's script layers are the sea's surface seen from
+ * below on the level's classic page, and JOBY4 takes the deep look, whose
+ * surface the remaster's art of room 19 and HDRenderWaterLook draw
+ * instead. The look and its fill of the band's open poles come only with
+ * the sheets (g_caustic_on, tomb5.hd_water); with them off the layers stay
+ * in, as before, so that nothing leaves the poles at the frame's clear.
+ * RICH3 takes the deep look too (its one water room no sheet lies over,
+ * the flipped room 190, against none under a sheet), and its sheets leave
+ * the layers out already. */
 bool HDRenderSkyCoversLayers()
 {
-	if (g_wdeep_on)
-		return true;
+	int sheet = 0;
+	int opaque = 0;
 
 	for (int g = g_room_groups; g < (int)g_groups.size(); g++)
 		for (int pass = 0; pass < 2; pass++)
 			for (const HDRange& range : g_groups[(size_t)g].pass[pass])
-				if (range.count && (pass == 0 || range.flatLight == 0.0f))
-					return true;
+				if (range.count && pass == 0)
+					opaque = 1;
+				else if (range.count && range.flatLight == 0.0f)
+					sheet = 1;
 
-	return false;
+	return HDSkyLayersLeftOut(sheet, opaque,
+		g_wdeep_on && g_caustic_on ? 1 : 0);
 }
 
 /* The page of the HD sky's nearest cloud sheet: of the alpha pass's sheets

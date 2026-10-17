@@ -63,8 +63,39 @@
 #include "../../../TOMB5 Code/TOMB5/game/cutseq_decode.h"
 #include "../../../TOMB5 Code/TOMB5/game/interpolate_math.h"
 
-static const char* DEFAULT_FILE =
-	"C:/Cloude AI/TR Randomizer final steps/Tomb5 Steam Version/data/cutseq.bin";
+/* The game folder's own cutseq.bin, read in place and never written. The
+ * game folder lies beside the repository's Preparation tree, so the file
+ * is looked for from the EXE's folder first and the working folder second;
+ * the first argument names another file. */
+static const char* DEFAULT_REL =
+	"..\\..\\..\\Tomb5 Steam Version\\data\\cutseq.bin";
+
+static const char* default_path(char* path, size_t size)
+{
+	char* exe = 0;
+
+	if (!_get_pgmptr(&exe) && exe)
+	{
+		const char* cut = strrchr(exe, '\\');
+		const size_t dir = cut ? (size_t)(cut - exe) + 1 : 0;
+
+		if (dir && dir + strlen(DEFAULT_REL) < size)
+		{
+			memcpy(path, exe, dir);
+			strcpy_s(path + dir, size - dir, DEFAULT_REL);
+			FILE* f = fopen(path, "rb");
+
+			if (f)
+			{
+				fclose(f);
+				return path;
+			}
+		}
+	}
+
+	strcpy_s(path, size, DEFAULT_REL);
+	return path;
+}
 
 static const int CUT_COUNT = 44;
 
@@ -752,7 +783,8 @@ static int ListActors(const std::vector<char>& file, int only)
 
 int main(int argc, char** argv)
 {
-	const char* path = DEFAULT_FILE;
+	char defaultPath[1024];
+	const char* path = default_path(defaultPath, sizeof(defaultPath));
 	int argi = 1;
 
 	if (argi < argc && strcmp(argv[argi], "-frames") &&

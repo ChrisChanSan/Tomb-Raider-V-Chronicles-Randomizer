@@ -76,6 +76,7 @@
 
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -1571,11 +1572,43 @@ static void section_fire()
 		"firing frame (%.2f): %.2f\n", lidFrom, lidTo, lidMid);
 }
 
-/* The game's own cutseq.bin, read in place and never written - the file
- * CutseqProbe reads by default. */
-static const char* CUTSEQ_FILE =
-	"C:/Cloude AI/TR Randomizer final steps/Tomb5 Steam Version/data/"
-	"cutseq.bin";
+/* The game folder's own cutseq.bin, read in place and never written - the
+ * file CutseqProbe reads by default. The game folder lies beside the
+ * repository's Preparation tree, so without a file named on the command
+ * line it is looked for from the EXE's folder first and the working folder
+ * second. */
+static const char* CUTSEQ_REL =
+	"..\\..\\..\\Tomb5 Steam Version\\data\\cutseq.bin";
+
+static FILE* cutseq_open(const char* named, char* path, size_t size)
+{
+	char* exe = 0;
+
+	if (named)
+	{
+		strcpy_s(path, size, named);
+		return fopen(path, "rb");
+	}
+
+	if (!_get_pgmptr(&exe) && exe)
+	{
+		const char* cut = strrchr(exe, '\\');
+		const size_t dir = cut ? (size_t)(cut - exe) + 1 : 0;
+
+		if (dir && dir + strlen(CUTSEQ_REL) < size)
+		{
+			memcpy(path, exe, dir);
+			strcpy_s(path + dir, size - dir, CUTSEQ_REL);
+			FILE* f = fopen(path, "rb");
+
+			if (f)
+				return f;
+		}
+	}
+
+	strcpy_s(path, size, CUTSEQ_REL);
+	return fopen(path, "rb");
+}
 
 /* Cutscene n's audio track and actor 0's object slot, out of cutseq.bin: a
  * table of offset and size (8 bytes a cutscene, by number), then each
@@ -1634,7 +1667,7 @@ static bool same_after_one_byte(const HDTrmModel& trm, int part)
 	return HDLipsSameRig(&trm, &copy);
 }
 
-static void section_mod_rig()
+static void section_mod_rig(const char* cutseqFile)
 {
 	printf("\n-- 9. another geometry on the same rig ------------------\n");
 
@@ -1768,7 +1801,8 @@ static void section_mod_rig()
 		{ 32, 120, 3078, 1270, 7.1867, 7.1686 },
 	};
 	std::vector<char> cutseq;
-	FILE* fp = fopen(CUTSEQ_FILE, "rb");
+	char cutseqPath[1024];
+	FILE* fp = cutseq_open(cutseqFile, cutseqPath, sizeof(cutseqPath));
 
 	if (fp)
 	{
@@ -1783,7 +1817,7 @@ static void section_mod_rig()
 		fclose(fp);
 	}
 
-	check(!cutseq.empty(), "%s does not read", CUTSEQ_FILE);
+	check(!cutseq.empty(), "%s does not read", cutseqPath);
 
 	Face* faces[2] = { lara, young };
 
@@ -1870,8 +1904,9 @@ static void section_mod_rig()
 
 int main(int argc, char** argv)
 {
-	const char* objFolder = argc > 1 ? argv[1] : 0;
-	const char* blockFolder = argc > 2 ? argv[2] : 0;
+	const char* objFolder = argc > 1 && argv[1][0] ? argv[1] : 0;
+	const char* blockFolder = argc > 2 && argv[2][0] ? argv[2] : 0;
+	const char* cutseqFile = argc > 3 && argv[3][0] ? argv[3] : 0;
 
 	g_root5 = HDInstallRoot();
 
@@ -1897,7 +1932,7 @@ int main(int argc, char** argv)
 	section_ease();
 	section_loop(blockFolder);
 	section_fire();
-	section_mod_rig();
+	section_mod_rig(cutseqFile);
 
 	for (std::map<std::string, Face*>::iterator at = g_faces.begin(); at != g_faces.end(); ++at)
 	{

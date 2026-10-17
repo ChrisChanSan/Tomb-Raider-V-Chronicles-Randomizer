@@ -23950,12 +23950,14 @@ classic level and the Remaster bind them, and nothing about them changed.
 **Why.** The owner reported on 2026-10-17 that the speaking heads in the cutscenes were
 gone, noticed on Lara in ANDREA2, and that they had been finished and had worked at 60
 frames a second too. His `-log` of that day: in ANDREA2's cutscene 8 the `LIPLOG` lines
-drive `LARSON` alone (slot 45, track 102, `src=trl`), Lara's face changes only between
-`loop` and `fire`, and the `HDLOG frame lara` line written while the cutscene runs ends in
-`lips=loop`. At every level build of that log her face's lips line reads `slot=23042
-face=LARA_HEAD file=- ... reason=no file`, where the record of #163 lists 18 track files
-with `from=4 trl_from=5`, and the same build's notes say `MODLOG LARA_HEAD (slot 23042):
-LARA_HEAD.TRM comes from mod6 Outfits\4-5 Barefoot`.
+drive `LARSON` alone (slot 45, track 102, `src=trl`), and inside the three plays of the
+cutscene (between `CUTLOG open cutseq=8` and `CUTLOG close`) Lara's face writes only
+`LIPLOG ... lara blink` lines, the blinks of the loop between her lines, and no `face=cut`
+line. No `HDLOG frame lara` line falls inside a play; the three of that stretch, written
+between the plays, end in `lips=loop`. At every level build of that log her face's lips
+line reads `slot=23042 face=LARA_HEAD file=- ... reason=no file`, where the record of #163
+lists 18 track files with `from=4 trl_from=5`, and the same build's notes say `MODLOG
+LARA_HEAD (slot 23042): LARA_HEAD.TRM comes from mod6 Outfits\4-5 Barefoot`.
 
 The chain, link by link:
 
@@ -23971,7 +23973,7 @@ The chain, link by link:
 4. In a cutscene Lara acts in, the Lara draw hands the cut's track to `choose_face`
    (`hd_laradraw.cpp`; actor 0 of cutscene 8 is slot 0, its track 102, by `CutseqProbe
    -actors`), `HDModelLipsOpen` finds no clip and the face keeps the loop between her
-   lines: `lips=loop`.
+   lines: the `lara blink` lines inside the plays.
 
 No commit lost the heads. The lines that bind her track - `make_lips`, the cut block of
 the Lara draw and the cut branch of `choose_face` - are unchanged since `87ce6db`,
@@ -24008,14 +24010,19 @@ bit; `LARSON_HEAD` and `PIERRE_HEAD` (41 joints) do not.
 the joint count and every inverse bind matrix, the block's node count and parents, its
 column count and the joint each column drives, and its frame 0 are the same bytes -
 everything a track file's frame is read against (`HDLipsMapBuild`, `HDLipsSkins`); bytes
-rather than floats, so a NaN or a signed zero counts as itself. `make_lips`
-(`hd_model.cpp`): for a face of `HD_MODEL_ORIGIN_MOD` whose own folder holds no
-`<STEM>_*.TRL`, it finds the install's face of the same name (`find_model` with
-`kModsNone`), reads it once with `HDTrmLoad`, and where `HDLipsSameRig` holds, sets the
-track folder to game 5's `ITEM`; `Lips::rig` keeps the outcome. Nothing else of the face
-changes: its map, its loop, its blinks and its deform are its own file's. An install's
-face and a Tomb Raider III guest's are not touched; a mod that ships track files of its
-own keeps them.
+rather than floats, so a NaN or a signed zero counts as itself. `HDLipsTrackFiles` lists
+a face's `<STEM>_<digits>.TRL` in a folder, the rule `lips_files` used and now calls.
+`HDLipsModRig` takes a mod's face, whether its own folder holds track files and the
+install's face of the same name; without own files it reads that face once with
+`HDTrmLoad`, and where `HDLipsSameRig` holds, it answers `install` with game 5's `ITEM`
+as the folder, else `differs`, `none` or `own` with the face's own folder (`HDLipsRigName`
+gives the word). `make_lips` (`hd_model.cpp`), for a face of `HD_MODEL_ORIGIN_MOD`, finds
+the install's face (`find_model` with `kModsNone`) only when its own folder holds no track
+file, calls `HDLipsModRig` and keeps the outcome in `Lips::rig`. The choice lives in
+`hd_trl.cpp` so that LipsTest, which builds that file beside itself, runs it. Nothing
+else of the face changes: its map, its loop, its blinks and its deform are its own file's.
+An install's face and a Tomb Raider III guest's are not touched; a mod that ships track
+files of its own keeps them.
 
 With `-log` the level build's lips lines of a mod's face end in ` rig=own`, `
 rig=install`, ` rig=differs` or ` rig=none` (no install face of that name); with the
@@ -24056,21 +24063,51 @@ does not have (PIERRE and LION from ANDREA3, ROMAN_GOD from ANDREA2). Slots 48, 
 of his randomized `joby5.trc` have the classic backup's moveable records - mesh, bone and
 animation index and frame offset - and every mesh byte for byte (1, 20 and 1 meshes).
 MapProbe binds them by JOBY5's own `.MAP` to the same three names in the classic and in
-the randomized file; the sidecar names a donor for 47, 57 and 61 only. The names in his
+the randomized file. His `joby5.hdm` names 23 donors (33, 37, 39, 41, 45, 47, 53, 55, 57,
+59, 61, 63, 77, 89, 345 to 348, 351, 367 and 401 to 403); of the three pairs it names the
+first, 47, 57 and 61, and not 48, 58 or 62. The names in his
 log are the Remaster's own names for JOBY5's slots: 48 and 62 are one-node props of the
 cutscene, 58 is Sergie, whose face speaks track 120 over the cutscene's 3206 frames. No
 actor the camera sees carries a foreign model, so neither the randomizer nor the binder
 changed.
 
-Over the 13 campaign levels, the slots any cutscene uses as an actor that the randomizer
-changes in an existing slot (his files and seed 380 alike): ANDY1's 89 (the imp of
-cutscenes 9 and 10), whose vertex positions are the classic ones mesh for mesh (the bytes
-differ elsewhere in each mesh), and JOBY5's 37 (`BLUE_GUARD`, the two guards of cutscene
-15, started by a floor trigger in room 87), whose 15 classic meshes hold 24 vertices and
-17 quads each and which the cross mix fills with RICH1's guard. HD binds `BLUE_GUARD.TRM`
-to slot 37 by name before and after, so the HD cutscene is unchanged; with HD off the
-cutscene draws RICH1's guard where the classic level has those meshes. Recorded, not
-changed.
+Which cutscenes a level plays is not read by one tool. A cutscene starts from the level's
+script (`gfCutNumber`, `game/gameflow.cpp`), from a floor trigger (`TrgProbe -flyby`,
+through the remaps of `game/control.cpp` - 10 plays 9 with `PUZZLE_ITEM3`, 1 to 4 and
+above 63 are the stealth cutscenes), from a pickup whose OCB is above 1024 (the cutscene
+is the OCB minus 1024, `game/pickup.cpp`), and from fixed numbers in the code (28 to 31,
+the stealth3 chain of `game/deltapak.cpp`; 34 in `pickup.cpp`; 28 for the credits in
+`gameflow.cpp`). The level-to-cutscene mapping below is by hand: the log for cutscene 8 of
+ANDREA2 and 32 of JOBY5, `TrgProbe -flyby` on the classic backups for the floor triggers;
+the script, the pickups' OCB and the fixed numbers were not read for every level, so the
+claim is not proven complete. Without any mapping, the donor slots of his 13 sidecars that
+are an actor slot of any cutscene (actor 0 aside) bound it from above:
+
+| level | donors | donor slot: the cutscenes that use it as an actor |
+|---|---|---|
+| Andrea1 | 28 | 39: 4/11/30, 47: 41, 49: 32, 51: 32, 63: 7, 89: 9/10/39 |
+| Andrea2 | 17 | 37: 1/15/18, 49: 32, 89: 9/10/39 |
+| Andrea3 | 14 | 37: 1/15/18, 39: 4/11/30, 49: 32, 89: 9/10/39 |
+| Andy2 | 27 | 37: 1/15/18, 45: 7/8/16/17, 47: 41, 51: 32 |
+| andy1 | 38 | 39: 4/11/30, 47: 41, 49: 32, 51: 32, 63: 7, 89: 9/10/39 |
+| andy3 | 22 | 37: 1/15/18, 47: 41, 49: 32 |
+| joby2 | 22 | 39: 4/11/30, 49: 32, 51: 32, 63: 7, 89: 9/10/39 |
+| joby3 | 22 | 45: 7/8/16/17, 47: 41, 63: 7, 89: 9/10/39 |
+| joby4 | 0 | - |
+| joby5 | 23 | 37: 1/15/18, 39: 4/11/30, 45: 7/8/16/17, 47: 41, 63: 7, 89: 9/10/39 |
+| rich1 | 25 | 45: 7/8/16/17, 47: 41, 63: 7 |
+| rich2 | 30 | 47: 41, 49: 32, 51: 32, 63: 7, 89: 9/10/39 |
+| rich3 | 32 | 37: 1/15/18, 45: 7/8/16/17, 47: 41, 49: 32, 63: 7, 89: 9/10/39 |
+
+With the hand mapping, the slots a cutscene of the level uses as an actor that the
+randomizer changes in an existing slot (his files and seed 380 alike): ANDY1's 89 (the imp
+of cutscenes 9 and 10), whose vertex positions are the classic ones mesh for mesh (the
+bytes differ elsewhere in each mesh), and JOBY5's 37 (`BLUE_GUARD`, the two guards of
+cutscene 15, started by a floor trigger in room 87), whose 15 classic meshes hold 24
+vertices and 17 quads each and which the cross mix fills with RICH1's guard. HD binds
+`BLUE_GUARD.TRM` to slot 37 by name before and after, so the HD cutscene is unchanged;
+with HD off the cutscene draws RICH1's guard where the classic level has those meshes.
+Recorded, not changed.
 
 **Decisions.** The install's tracks go to a mod's face only on a rig that is the same bit
 for bit, never on a near one, because a track frame is read against exactly those bytes; a
@@ -24091,9 +24128,15 @@ slot 58 `SERGIE_HEAD` with `SERGIE_HEAD_113`, `_115` and `_120.TRL`, 48 and 62 o
 `.MAP` models with no face. `CutseqProbe -actors` over his `data\cutseq.bin` as in the
 table. LipsTest section 9: the three faces of Lara taken for one rig, `LARSON_HEAD` and
 `PIERRE_HEAD` refused, one byte changed in each of the four compared parts refused, a file
-without a rig refused, and the widest frames of the two cutscenes' tracks (every tenth
-frame) on `LARA_HEAD` and on `LARA_YOUNG_HEAD`, whose geometry differs, with the bind back
-to within 6e-14 units:
+without a rig refused; `HDLipsTrackFiles` finds 18 `LARA_HEAD` track files in 5\ITEM (96
+to 135), 24 in 4\ITEM and none in a missing folder; `HDLipsModRig` with `LARA_YOUNG_HEAD`
+standing in for a mod's face answers `install` and 5\ITEM without track files of its own
+(and so for `LARA_HEAD` itself), `own` and its own folder with 4\ITEM's, `differs` beside
+`LARSON_HEAD` and `none` without an install face or with a missing file; the audio track
+and actor 0 of cutscenes 8 and 32 are read out of the game folder's `data\cutseq.bin`
+(102 and 120, Lara in slot 0), the track is among the folder's files, and its widest frame
+(every tenth frame), opened in the folder `HDLipsModRig` gave, moves `LARA_HEAD` and
+`LARA_YOUNG_HEAD`, whose geometry differs, with the bind back to within 6e-14 units:
 
 | cutscene | track, frame | `LARA_HEAD` | `LARA_YOUNG_HEAD` |
 |---|---|---|---|
@@ -24104,16 +24147,23 @@ The randomizer's sources did not change; the regression all the same, seed 380 w
 cross allsanity 8 weapons` over the 13 classic levels, the old randomizer built from
 `245de8e` against this one: 13 `.trc` and 13 `.hdm` byte-identical. The nine scripts `be`,
 `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit` and `blips` build with exit 0
-(`PCtomb5 built Oct 17 2026 15:52:38`), `b1.bat` and `b2.bat` too; ModernTest 15,508
-checks, MenuTest 44,272, InterpTest 729, LipsTest 287 with the `.OBJ` folder and 260
-without (270 and 243 before), 0 failed each. Not measured: a cutscene in the game.
+(`PCtomb5 built Oct 17 2026 16:30:20`), `b1.bat` and `b2.bat` too; ModernTest 15,508
+checks, MenuTest 44,272, InterpTest 729, LipsTest 299 with the `.OBJ` folder and 272
+without (270 and 243 before), 0 failed each. LipsTest with `HDLipsModRig` leaving the
+folder on the mod's own fails six checks of section 9. After the choice moved into
+`hd_trl.cpp`, ModelProbe on his files with his Mods folder prints the same lips lines as
+before it (18 lines `rig=install`, "the clip is open", 6.61 and 7.19 units), and without
+it 18 lines `reason=ok from=4 trl_from=5` and no `rig=`. Not measured: a cutscene in the
+game.
 
-**Left.** The cutscenes a level starts from its script (`CMD_PLAYCUT`) are not listed by a
-tool; cutscene 32 for JOBY5 is from the log, the floor-triggered ones from `TrgProbe
--flyby`. Whether the two guards of JOBY5's cutscene 15 should keep the classic level's
-meshes with HD off is the owner's call.
+**Left.** No tool lists the cutscenes a level plays: the script, the pickups' OCB and the
+fixed numbers above were not read for every level, so the list of changed actor slots
+rests on the hand mapping, inside the upper bound of the table. Whether the two guards of
+JOBY5's cutscene 15 should keep the classic level's meshes with HD off is the owner's
+call.
 
-**Commits.** `a113f3d`, `3fc0ec6` and this record.
+**Commits.** `a113f3d`, `3fc0ec6`, `ef2ab3c` (the choice of the track folder in
+`hd_trl.cpp`, pinned by LipsTest) and the records.
 
 ## 3. Randomizer changes since Beta 1.0
 

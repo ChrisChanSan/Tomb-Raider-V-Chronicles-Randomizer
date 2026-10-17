@@ -904,7 +904,7 @@ log line changed.
 the first place, rather than repaired after the drop; the drop's position and room stay
 as they are.
 
-**Commits.** `700f4c5`, `2096a92`
+**Commits.** `700f4c5`, `2096a92`, `5005f2d`
 
 ### A secret bonus, and the reward read from a file
 2026-08-03 - 2026-08-30
@@ -1624,7 +1624,9 @@ line; vanilla's averaged upper arm has determinants 0.25, 0.0003 and 0.25); 76 a
 key 0 to 1 far and no seam. `RootProbe -sweep` over ANDREA1 prints what it printed
 before, byte for byte.
 
-**Commits.** `b643607`, `b7607c9`, `a9da3ac`, `ef9891f`
+**Commits.** `b643607`, `b7607c9`, `a9da3ac`, `ef9891f`, `e845165`. The subject of
+`b643607` says a far key-frame pair is drawn from its nearer frame; the code draws the
+pair's first key frame.
 
 ### Level Select, a keyhole that survives a save, and the underwater pickup animation
 2026-07-31 - 2026-09-14
@@ -3097,7 +3099,7 @@ brightness, the floor's edge, a kicked door swinging open in the glass, the 56 t
 doorway and the way from 134 to 130 for a second Lara, and that nothing is doubled outside
 the glass.
 
-**Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`
+**Commits.** `7235cb2`, `0737b1d`, `4f4815e`, `38575fc`, `18e4b19`, `1093689`
 
 ### The reflection stays behind the glass
 2026-09-29
@@ -3220,7 +3222,7 @@ glass, turning, walking along it, the braid swinging, nothing of the reflection 
 of it; in the middle of the washroom the reflection whole; the cabin doors and room 177's
 door still in the glass; the lobby floor and the other levels as before.
 
-**Commits.** `add3a27`, `35d7a1f`, `578047a`
+**Commits.** `add3a27`, `35d7a1f`, `578047a`, `d305f23`
 
 ### A seam for the poison sway
 2026-09-29
@@ -3781,7 +3783,9 @@ levels of the previous entry. In the log, `GLOSSLOG skipped` and the GLOSSLOG le
 'Round 189b (#189): the sheen is bounded by the surface's own light', 'Round 189b (#189):
 every room that wears the page shines', 'Round 189b (#189): the tools and the suite',
 'Round 189b (#189): the record follows', 'Round 189b (#189): what review pass 1 found, and
-a whole build every time'.
+a whole build every time'. The body of the commit that bounds the sheen also names the
+lamps' normalisation to the 90th percentile; `HD_GLOSS_LAMP_NORM` came with the commit of
+the light field, and the bound's commit does not touch it.
 
 ### The sheen at a strength that shows
 2026-10-01
@@ -4957,7 +4961,7 @@ against 1,692 more of a door frame and 1,137 more of a palm, with all the air's 
 No load-time cache: the
 slowest level takes about 110 ms, under the 300 ms that would call for one.
 
-**Commits.** `42ff30d`, `944329c`, `b09b724`, `12fc789`, `0fb1409`
+**Commits.** `42ff30d`, `944329c`, `b09b724`, `12fc789`, `0fb1409`, `2508eb0`
 
 **Round 5, after the owner's play test of the air rule (2026-10-11).** The build of
 `4f725a8` was played with `hd_air` 1. What he found, in his words: the room art looks good
@@ -9745,7 +9749,8 @@ lights' change in time', 'Round 188 (#188): the suites', 'Round 188 (#188): the 
 follows', 'Round 188 (#188): what the correction's review pass 1 found', 'Round 188
 (#188): the record follows', 'Round 188 (#188): the shadow's light is a fixed one, and the
 lamps pull by a number of the table', 'Round 188 (#188): the suites', 'Round 188 (#188):
-the record follows', 'Round 188 (#188): the record follows'.
+the record follows', 'Round 188 (#188): the record follows'. The body of `ac05dd9` gives
+`shadow_pull` 7 checks and `shadow_fixed` 11; they are 8 and 10.
 
 ### The projected shadow: the creatures cast as well, into a second map
 2026-10-04
@@ -10953,7 +10958,7 @@ slots, but the triangles of the art inside each such item's box were counted by 
 that is not in this tree.
 
 **Commits.** `7c82c34`, `1d364f7`, `af37039`, `28fbd9a`, `df7b39a`, `565eaf8`, `f312f7b`,
-`6f46ac0`, `243f5bf`, `e325f04`, `56a248c`
+`6f46ac0`, `243f5bf`, `e325f04`, `56a248c`, `12f1384`, `0fb2d9a`
 
 ### The water sheets: this project's own water surface
 2026-10-07
@@ -20466,7 +20471,7 @@ slide for one tick, and a falling object in cut scene 38 (1029 to 1032 a frame, 
 arc, 62 of them with an axis step of 384 or more; holding a node on such a step would
 catch them.
 
-**Commits.** `d2bfb86`, `04ba96f`, `ee81554`, `8b64a97`
+**Commits.** `d2bfb86`, `04ba96f`, `ee81554`, `8b64a97`, `01c4f72`
 
 ### The level warm-up
 2026-09-07
@@ -22392,7 +22397,7 @@ and written where each is computed (`:595`, `:1246`-`1249`, `:1780`, `:1873`, `:
 
 **Commits.** `bf84c3f`, `7e7e2b3`, `cba4d46`, `2a84a0d`, `8da2259`, `93bfff2`,
 `8b4a761`, `8924c7b`, `6ca7c09`, `e0c0771`, `eafab87`, `5a5bf5d`, `2b6ac8e`,
-`be07363`, `eaa95a4`, `c2112d7`, `8840d13`
+`be07363`, `eaa95a4`, `c2112d7`, `8840d13`, `dcfd375`
 
 ### The options menu as one table-driven frame
 2026-08-24 - 2026-09-20

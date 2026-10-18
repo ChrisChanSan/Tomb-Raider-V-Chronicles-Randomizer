@@ -1832,6 +1832,13 @@ void HDRenderMarbleClip(float units);
 /* RoomProbe's -marblecopies 1: the art's copies under the polished floors
  * kept in the level as they were before (set before the level's build). */
 void HDRenderMarbleKeepCopies(bool keep);
+/* RoomProbe's -marblevoid: the mirror's target cleared to magenta at a
+ * depth that reads as held, so the floor's pixels that show none of the
+ * mirrored rooms tell themselves apart (a picture less the plain one). */
+void HDRenderMarbleVoid(bool on);
+/* RoomProbe's -marbleplanefloor: the mirror's plane in the floor under the
+ * clip, as before it lay in the clip (the strip at a wall's foot). */
+void HDRenderMarblePlaneFloor(bool on);
 /* The marble floors' warm-up (hd_render.cpp): once a level, after its
  * build, the mirror's target made at the frame's size and the room shaders
  * drawn once with the clip plane on, and the layer's pair once, so the

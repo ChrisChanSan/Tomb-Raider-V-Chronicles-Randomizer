@@ -587,6 +587,13 @@
  *                     one marbleplane: line a plane of the frame follows,
  *                     in its rank: the height, the share of the screen its
  *                     faces cover, drawn or left.
+ *     -marblevoid     the mirror's target cleared to magenta at a depth
+ *                     that reads as held (HDRenderMarbleVoid): the picture
+ *                     less the plain one is the floor that shows none of
+ *                     the mirrored rooms - the strip at a wall's foot.
+ *     -marbleplanefloor  the mirror's plane in the floor and the clip
+ *                     -marbleclip units over it, as before the plane lay
+ *                     in the clip (HDRenderMarblePlaneFloor).
  *     -marblecopies 0|1  1 keeps the art's copy of a room under its
  *                     polished floor in the level (HDRenderMarbleKeepCopies;
  *                     0, the engine's, where not given, leaves it out). The
@@ -8597,6 +8604,22 @@ static bool MarbleArg(int argc, char** argv, int* at)
 	if (!strcmp(a, "-marbleclip") && more)
 	{
 		HDRenderMarbleClip((float)atof(argv[++*at]));
+		return true;
+	}
+
+	/* -marblevoid: the mirror's target cleared to magenta, its depth as
+	 * held: the picture less the plain one is the floor that shows none
+	 * of the mirrored rooms. */
+	if (!strcmp(a, "-marblevoid"))
+	{
+		HDRenderMarbleVoid(true);
+		return true;
+	}
+
+	// -marbleplanefloor: the mirror's plane in the floor, under the clip.
+	if (!strcmp(a, "-marbleplanefloor"))
+	{
+		HDRenderMarblePlaneFloor(true);
 		return true;
 	}
 

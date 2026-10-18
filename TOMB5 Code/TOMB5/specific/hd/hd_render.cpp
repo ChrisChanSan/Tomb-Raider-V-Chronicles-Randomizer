@@ -18692,11 +18692,22 @@ namespace
 	 * of nothing to the clip, kept or cut by rounding along a line through
 	 * each, and where kept they cover the reflection in the target - a
 	 * floor that blinks from frame to frame as the eye moves. The offset is
-	 * the layer's own lift, so the mirror starts where the laid faces
-	 * stand; a mirror face's corners lie within it (marble_build). */
-	const float kMarbleClipOver = kWetLift;
+	 * the layer's own lift (the laid faces stand this far over the floor,
+	 * as the wet floor's do), and the mirror's plane lies in the clip: a
+	 * plane under the clip left a strip of the wall's foot out of the
+	 * reflection, through which what stands behind the wall showed, as wide
+	 * as the offset over the tangent of the eye's angle to the floor. A
+	 * mirror face's corners lie within the offset (marble_build). */
+	const float kMarbleClipOver = 4.0f;
 	// The clip's offset in use: kMarbleClipOver, or RoomProbe's -marbleclip.
 	float g_marble_clip = kMarbleClipOver;
+	/* RoomProbe's -marbleplanefloor: the mirror's plane in the floor, under
+	 * the clip, as it lay before it lay in the clip. */
+	bool g_marble_plane_floor = false;
+	/* RoomProbe's -marblevoid: the mirror's target cleared to a colour of
+	 * its own and a depth that reads as held, so what of the floor shows
+	 * nothing of the mirrored rooms tells itself apart in the picture. */
+	bool g_marble_void = false;
 	/* A square's triangles under a mirror plane are the art's copy when at
 	 * least this many are mirrored, and a third or more (marble_copies):
 	 * RoomProbe -tankcensus's numbers, the wet floor's (kWetCopyCells). */
@@ -19716,6 +19727,16 @@ void HDRenderMarbleKeepCopies(bool keep)
 	g_marble_keep_copies = keep;
 }
 
+void HDRenderMarbleVoid(bool on)
+{
+	g_marble_void = on;
+}
+
+void HDRenderMarblePlaneFloor(bool on)
+{
+	g_marble_plane_floor = on;
+}
+
 void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 {
 	if (!out)
@@ -19799,7 +19820,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			for (int c = 0; c < 3; c++)
 			{
 				// Lifted a few units over the floor, as the wet floor is.
-				const float x = p[c * 3], y = p[c * 3 + 1] - kWetLift;
+				const float x = p[c * 3];
+				const float y = p[c * 3 + 1] - kMarbleClipOver;
 				const float z = p[c * 3 + 2];
 				const float world[3] = { x + origin[0], y, z + origin[1] };
 				CardVertex& o = v[c];
@@ -19942,7 +19964,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 	{
 		const MarbleLayer& layer = layers[planes[(size_t)i].y];
 		const float* n = layer.plane;
-		const float dist = n[3];
+		// The mirror's plane, in the clip over the floor.
+		const float dist = n[3] + (g_marble_plane_floor ? 0.0f : g_marble_clip);
 
 		/* The reflection in the plane, p - 2 (p.n - d) n for a row vector,
 		 * then the projection, then x turned (the second flip). */
@@ -19970,9 +19993,9 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				mirrored[r * 4 + c] = c == 0 ? -s : s;
 			}
 
-		/* What stands more than kMarbleClipOver over the floor, in the eye's
-		 * own view space. */
-		const float over[4] = { n[0], n[1], n[2], -dist - g_marble_clip };
+		/* What stands more than kMarbleClipOver over the floor, the mirror's
+		 * plane, in the eye's own view space. */
+		const float over[4] = { n[0], n[1], n[2], -n[3] - g_marble_clip };
 		float clip[4];
 
 		if (!HDWetPlaneTo(mirrored, over, clip))
@@ -19986,7 +20009,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		g_device->SetDepthStencilSurface(g_marble_zsurface);
 		g_device->SetViewport(&rows);
 		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
-			D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+			D3DCLEAR_STENCIL, g_marble_void ? 0xFFFF00FF : 0x00000000,
+			g_marble_void ? 0.99999f : 1.0f, 0);
 		g_device->SetClipPlane(0, clip);
 		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 1);
 		std::memcpy(g_proj, mirrored, sizeof(mirrored));

@@ -57,6 +57,7 @@
 #include "../../game/deltapak.h"		// GLOBAL_playing_cutseq, cutseq_num - the lips
 #include "../../game/gameflow.h"		// Gameflow - the language LIPLOG names
 #include "../drawroom.h"		// mesh_vtxbuf - the classic mesh's own box
+#include "hd_object_rules.h"		// the skeleton fit
 
 #include <math.h>
 #include <stdio.h>
@@ -109,6 +110,9 @@ namespace
 		int maxBone;		// the highest node the .TRM names
 		float drift;		// the bind drift, mean over the covered nodes
 		float worst;
+		/* The skeleton fit's worst node, in classic units, or -1 when no
+		 * node could be measured (hd_object_rules.h). */
+		float fit;
 		unsigned int covered;
 		/* The "this item shows nothing" line is written once per slot per
 		 * level and not thirty times a second. */
@@ -917,6 +921,66 @@ namespace
 
 			owner = node;
 		}
+	}
+
+	/* The skeleton fit of one slot (hd_object_rules.h): the .TRM's
+	 * single-weight centre of every node against the centre of the classic
+	 * mesh of that node, both in the bind pose - the mesh's own vertices,
+	 * which the engine keeps in MESH_DATA::aVtx, plus the node's bind
+	 * offset. Node n's mesh is mesh_vtxbuf[mesh_index + 2n], the walk
+	 * DrawAnimatingItem takes. The worst node, or -1 for none measured. */
+	float skeleton_fit_of(int slot, int nodes)
+	{
+		if (!mesh_vtxbuf || slot < 0 || slot >= NUMBER_OBJECTS ||
+			!objects[slot].loaded)
+			return -1.0f;
+
+		const OBJECT_INFO& object = objects[slot];
+		int count = nodes < HD_OBJ_NODES ? nodes : HD_OBJ_NODES;
+
+		if (count > object.nmeshes)
+			count = object.nmeshes;
+
+		float bind[HD_OBJ_NODES * 3];
+		float trm[HD_OBJ_NODES * 3];
+		float mesh[HD_OBJ_NODES * 3];
+		int trmCount[HD_OBJ_NODES];
+		int meshCount[HD_OBJ_NODES];
+
+		bind_pose_of(slot, bind, count);
+
+		for (int node = 0; node < count; node++)
+		{
+			trmCount[node] = HDModelNodeCentre(slot, node, trm + node * 3);
+			meshCount[node] = 0;
+
+			const int at = object.mesh_index + node * 2;
+
+			if (at < 0 || at >= num_level_meshes)
+				continue;
+
+			const MESH_DATA* one = mesh_vtxbuf[at];
+
+			if (!one || !one->nVerts || !one->aVtx)
+				continue;
+
+			double sum[3] = { 0, 0, 0 };
+
+			for (int v = 0; v < one->nVerts; v++)
+			{
+				sum[0] += one->aVtx[v].x;
+				sum[1] += one->aVtx[v].y;
+				sum[2] += one->aVtx[v].z;
+			}
+
+			for (int k = 0; k < 3; k++)
+				mesh[node * 3 + k] =
+					(float)(sum[k] / one->nVerts) + bind[node * 3 + k];
+
+			meshCount[node] = one->nVerts;
+		}
+
+		return HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, count);
 	}
 
 	/* ---------------------------------------------------------- the light -- */
@@ -2231,6 +2295,7 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		verdict.covered = 0;
 		verdict.drift = 0;
 		verdict.worst = 0;
+		verdict.fit = -1.0f;
 		verdict.lift = 0;	// the floor rule below fills it
 		verdict.hd = 0;
 		verdict.why = verdict.baked ? "baked" : "no_model";
@@ -2263,6 +2328,10 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 
 		HDModelBindDrift(slot, &verdict.drift, &verdict.worst);
 
+		// Only a model the drift refuses is asked for its fit.
+		if (verdict.drift > kDriftLimit)
+			verdict.fit = skeleton_fit_of(slot, wanted[i].nodes);
+
 		/* The skeleton test, in the order of certainty.
 		 *
 		 * 1. A bone number the slot does not have. The randomizer puts
@@ -2273,7 +2342,11 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		 *    accepted; a guard.
 		 * 3. The bind drift, for a foreign model with the right node count:
 		 *    the vertices of a node sit around that node in the tree they
-		 *    were drawn for and nowhere near it in another. */
+		 *    were drawn for and nowhere near it in another.
+		 * 4. The fit, for a model the drift refuses: a node whose mesh
+		 *    hangs far off its joint reads as drift although the .TRM
+		 *    stands where the classic meshes stand; the places themselves
+		 *    answer then (hd_object_rules.h). */
 		if (verdict.maxBone >= wanted[i].nodes)
 			verdict.why = "skeleton_nodes";
 		else if (!verdict.covered)
@@ -2294,12 +2367,18 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 			g_baked_slots++;
 			g_baked_any = true;
 		}
-		else if (verdict.drift > kDriftLimit)
-			verdict.why = "skeleton_drift";
 		else
 		{
-			verdict.hd = 1;
-			verdict.why = "ok";
+			const HDSkeletonVerdict judged =
+				HDSkeletonJudge(verdict.drift, verdict.fit, kDriftLimit);
+
+			if (judged == HD_SKELETON_DRIFTS)
+				verdict.why = "skeleton_drift";
+			else
+			{
+				verdict.hd = 1;
+				verdict.why = judged == HD_SKELETON_PLACED ? "fit" : "ok";
+			}
 		}
 
 		if (verdict.hd)
@@ -2314,12 +2393,12 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 				covered++;
 
 		Log("HDLOG slot=%d name=%s model=%s nodes=%d maxbone=%d cover=%d "
-			"drift=%.0f/%.0f head=%d hd=%d reason=%s",
+			"drift=%.0f/%.0f head=%d hd=%d reason=%s fit=%.0f",
 			slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
 			HDModelName(slot) ? HDModelName(slot) : "-", wanted[i].nodes,
 			verdict.maxBone, covered, verdict.drift, verdict.worst,
 			HDModelHasHead(slot) ? HDModelHeadNode(slot) : -1,
-			(int)verdict.hd, verdict.why);
+			(int)verdict.hd, verdict.why, verdict.fit);
 	}
 
 	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "

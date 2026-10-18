@@ -104,6 +104,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The sky band's closed poles (sky_cap).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
+// The fog bulbs' body: the span, the column, the veil, the breath (fog_body).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_fog.h"
 // The springs: the table, the file's key, the hashed clock (spring_*).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
 /* The level's HD key: which load of a level keeps the HD data of the one
@@ -25435,6 +25437,182 @@ static void far_plane()
 		ZRainTint(10240.0f, 16.0F), 24);
 }
 
+/* The fog bulbs' body (hd_fog.h): the piece of the eye ray in the sphere,
+ * the density's column over it, the veil and the light it lets through, the
+ * breath and its hash, and the sphere's rectangle on the screen. A bulb of
+ * ANDY3's mill: radius 1,312, d 1/71.75. */
+static void fog_body()
+{
+	printf("the fog bulbs' body: span, column, veil, breath, rectangle\n");
+
+	const float rad = 1312.0f, d = 1.0f / 71.75f;
+	const float ahead[3] = { 0.0f, 0.0f, 1.0f };
+	const float endless = 1.0e9f;
+	float s0 = 0, s1 = 0, b2 = 0;
+
+	// The whole column through the centre is 4/3 radii, the classic's 2 r d.
+	const float c0[3] = { 0.0f, 0.0f, 8000.0f };
+	const bool hit = HDFogSpan(ahead, c0, rad, endless, &s0, &s1, &b2);
+	const float whole = HDFogColumn(b2, s0, s1);
+	const float tau = HDFogTau(d, rad, whole);
+
+	const float peak = HDFogClassicPeak(d, rad);
+
+	ok(hit && fabsf(whole - 4.0f / 3.0f) < 1e-5f,
+		"fog: the column through the centre, whole, is 4/3",
+		(long)(whole * 1e4f), 13333);
+	ok(fabsf(tau * 255.0f - peak) < 1e-3f * tau * 255.0f,
+		"fog: ...its veil is the classic chord's own most, 2 r d",
+		(long)(tau * 255.0f * 100.0f), (long)(peak * 100.0f));
+
+	// Off the centre the column falls as (1 - b^2)^1.5: 0.5 and 0.9.
+	const float b[2] = { 0.5f, 0.9f };
+
+	for (int i = 0; i < 2; i++)
+	{
+		const float c[3] = { b[i] * rad, 0.0f, 8000.0f };
+		const bool in = HDFogSpan(ahead, c, rad, endless, &s0, &s1, &b2);
+		const float got = HDFogColumn(b2, s0, s1);
+		const float want = 4.0f / 3.0f * powf(1.0f - b[i] * b[i], 1.5f);
+
+		ok(in && fabsf(got - want) < 2e-3f * want,
+			i ? "fog: ...at b 0.9 the column is 4/3 (1 - b^2)^1.5"
+			: "fog: ...at b 0.5 the column is 4/3 (1 - b^2)^1.5",
+			(long)(got * 1e4f), (long)(want * 1e4f));
+	}
+
+	// No rim: the column leaves zero with zero slope.
+	const float cr[3] = { 0.999f * rad, 0.0f, 8000.0f };
+	const bool rim = HDFogSpan(ahead, cr, rad, endless, &s0, &s1, &b2);
+	const float atRim = rim ? HDFogColumn(b2, s0, s1) : 0.0f;
+
+	ok(rim && atRim < 1e-3f,
+		"fog: at b 0.999 the column is under a thousandth of the centre's",
+		(long)(atRim * 1e6f), 0);
+
+	// A ray that passes beside the sphere, and a sphere behind the eye.
+	const float beside[3] = { 1.01f * rad, 0.0f, 8000.0f };
+	const float behind[3] = { 0.0f, 0.0f, -2000.0f };
+
+	ok(!HDFogSpan(ahead, beside, rad, endless, &s0, &s1, &b2),
+		"fog: a ray past the sphere takes nothing", 0, 0);
+	ok(!HDFogSpan(ahead, behind, rad, endless, &s0, &s1, &b2),
+		"fog: a sphere behind the eye takes nothing", 0, 0);
+
+	// The surface cuts the column: at the centre half, in front of it none.
+	const bool cut = HDFogSpan(ahead, c0, rad, 8000.0f, &s0, &s1, &b2);
+	const float half = cut ? HDFogColumn(b2, s0, s1) : 0.0f;
+
+	ok(cut && fabsf(half - 2.0f / 3.0f) < 1e-5f,
+		"fog: a surface at the centre is veiled by the front half alone",
+		(long)(half * 1e4f), 6667);
+	ok(!HDFogSpan(ahead, c0, rad, 8000.0f - rad - 10.0f, &s0, &s1, &b2),
+		"fog: a surface in front of the sphere is not veiled at all", 0, 0);
+
+	// The eye inside, at the centre: the column from the eye out, half.
+	const float inside[3] = { 0.0f, 0.0f, 0.0f };
+	const bool eye = HDFogSpan(ahead, inside, rad, endless, &s0, &s1, &b2);
+	const float out = eye ? HDFogColumn(b2, s0, s1) : 0.0f;
+
+	ok(eye && fabsf(out - 2.0f / 3.0f) < 1e-5f,
+		"fog: the eye at the centre sees half the column", (long)(out * 1e4f),
+		6667);
+
+	// The veil adds no more light than the classic at the same column.
+	bool under = true;
+
+	for (int i = 0; i <= 100; i++)
+	{
+		const float t = 0.02f * (float)i;
+
+		under = under && 1.0f - HDFogTransmit(t) <= t + 1e-6f &&
+			HDFogTransmit(t) <= 1.0f;
+	}
+
+	ok(under && HDFogTransmit(0.0f) == 1.0f,
+		"fog: 1 - T never exceeds tau, and no fog lets all through", 0, 0);
+
+	// The hash: in 0..1, the same twice, not one value, 64 cells round.
+	bool range = true, same = true, wrap = true;
+	float lo = 1.0f, hi = 0.0f;
+
+	for (int i = 0; i < 512; i++)
+	{
+		const float x = (float)(i % 8), y = (float)((i / 8) % 8),
+			z = (float)(i / 64);
+		const float h = HDFogHash(x, y, z);
+
+		range = range && h >= 0.0f && h < 1.0f;
+		same = same && h == HDFogHash(x, y, z);
+		wrap = wrap && h == HDFogHash(x + 64.0f, y, z - 64.0f);
+		lo = h < lo ? h : lo;
+		hi = h > hi ? h : hi;
+	}
+
+	ok(range && same && wrap && hi - lo > 0.9f,
+		"fog: the hash lies in 0..1, repeats itself, folds at 64 and spreads",
+		(long)((hi - lo) * 100.0f), 90);
+
+	// The breath only thins, by at most HD_FOG_BREATH, and rises with time.
+	bool thin = true;
+
+	for (int i = 0; i < 200; i++)
+	{
+		const float p[3] = { 37.0f * (float)i, -11.0f * (float)i,
+			53.0f * (float)i };
+		const float w = HDFogBreath(p, rad, 0.37f * (float)i);
+
+		thin = thin && w <= 1.0f && w >= 1.0f - HD_FOG_BREATH;
+	}
+
+	const float cell = HD_FOG_CELL * rad;
+	const float p0[3] = { 41000.0f, 7000.0f, 47000.0f };
+	const float p1[3] = { 41000.0f, 7000.0f - HD_FOG_RISE * 3.0f * cell,
+		47000.0f };
+	const float w0 = HDFogBreath(p1, rad, 3.0f);
+	const float w1 = HDFogBreath(p0, rad, 0.0f);
+
+	ok(thin, "fog: the breath stays in 1 - HD_FOG_BREATH..1", 0, 0);
+	ok(fabsf(w0 - w1) < 1e-4f,
+		"fog: the breath rises HD_FOG_RISE cells a second", (long)(w0 * 1e4f),
+		(long)(w1 * 1e4f));
+
+	// The ray's tau: breath off is the plain column's; on, between the two.
+	const float none[3] = { 0, 0, 0 };
+	const float axes[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
+	const float plain = HDFogRayTau(ahead, c0, rad, d, endless, none, axes,
+		0.0f, 0);
+	const float breath = HDFogRayTau(ahead, c0, rad, d, endless, p0, axes,
+		1.0f, 1);
+
+	ok(fabsf(plain - tau) < 1e-6f && breath <= plain &&
+		breath >= (1.0f - HD_FOG_BREATH) * plain,
+		"fog: the ray's tau, breath off the column's, on within its band",
+		(long)(breath * 1e5f), (long)(plain * 1e5f));
+
+	// The rectangle: straight ahead, behind, at the near plane, off screen.
+	float r[4];
+	const int front = HDFogBounds(c0, rad, 1.0f, 1.0f, 20.0f, r);
+	const float edge = tanf(asinf(rad / 8000.0f));
+
+	ok(front == 1 && fabsf(r[2] - edge) < 1e-5f && fabsf(r[0] + edge) < 1e-5f &&
+		fabsf(r[3] - edge) < 1e-5f,
+		"fog: a sphere ahead fills the box of its touching planes",
+		(long)(r[2] * 1e5f), (long)(edge * 1e5f));
+	ok(HDFogBounds(behind, rad, 1.0f, 1.0f, 20.0f, r) == 0,
+		"fog: a sphere behind the eye has no rectangle", 0, 0);
+
+	const float close[3] = { 0.0f, 0.0f, 600.0f };
+
+	ok(HDFogBounds(close, rad, 1.0f, 1.0f, 20.0f, r) == 2,
+		"fog: a sphere over the near plane takes the whole screen", 0, 0);
+
+	const float aside[3] = { 9000.0f, 0.0f, 3000.0f };
+
+	ok(HDFogBounds(aside, rad, 1.0f, 1.0f, 20.0f, r) == 0,
+		"fog: a sphere beside the frame has no rectangle", 0, 0);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -25627,6 +25805,7 @@ int main()
 	marble_over();
 	marble_slopes();
 	debris_pieces();
+	fog_body();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

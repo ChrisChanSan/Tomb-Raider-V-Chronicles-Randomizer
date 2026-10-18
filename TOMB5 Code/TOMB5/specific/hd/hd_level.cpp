@@ -58,6 +58,7 @@
 #include "../drawbars.h"			// S_LoadBarBuild - the loading bar
 #include "hd_light.h"
 #include "hd_splash_math.h"		// the water's cards: HDFilmStrength
+#include "hd_water_under.h"		// HDWaterSurfaceRoom - the sea's surface
 
 #include <vector>
 
@@ -7663,6 +7664,68 @@ int HDCarriedRoom(int group)
 	return GroupOfRoom(main) == group ? main : -1;
 }
 
+/* The room whose art is the sea's surface over the dive (hd_water_under.h,
+ * HDWaterSurfaceRoom), in a level that takes the deep look; -1 in every
+ * other level and while HDLevelActive() is false. Worked out at the first
+ * frame that asks and kept for the level: the rooms' flags and squares as
+ * the water build reads them for the deep look's top (hd_render.cpp,
+ * g_wdeep_top) and the highest point of each room's art. The deep look is
+ * the water build's answer whatever tomb5.hd_water says, and the art is
+ * room art, so the answer does not depend on the sheets. */
+static int SurfaceRoom()
+{
+	static char stem[64] = { 0 };
+	static int rooms = -1;
+	static int answer = -1;
+
+	if (!HDLevelActive())
+		return -1;
+
+	if (rooms == g_room_count && !strcmp(stem, g_stem))
+		return answer;
+
+	HDRenderWaterLevel water;
+
+	strncpy(stem, g_stem, sizeof(stem) - 1);
+	rooms = g_room_count;
+	answer = -1;
+	HDRenderWaterLevelInfo(&water);
+
+	if (!water.underDeep || g_room_count <= 0 || g_room_count > number_rooms)
+		return answer;
+
+	std::vector<int> wet((size_t)g_room_count, 0);
+	std::vector<int> hasArt((size_t)g_room_count, 0);
+	std::vector<float> ceilTop((size_t)g_room_count, 1.0e9f);
+	std::vector<float> artTop((size_t)g_room_count, 0.0f);
+
+	for (int r = 0; r < g_room_count; r++)
+	{
+		const ROOM_INFO* rr = &room[r];
+		const int squares = rr->floor ? rr->x_size * rr->y_size : 0;
+		const int group = GroupOfRoom(r);
+		float mins[3], maxs[3];
+
+		wet[(size_t)r] = (rr->flags & ROOM_UNDERWATER) ? 1 : 0;
+
+		// A square of the water build: floor and ceiling both a height.
+		for (int i = 0; i < squares; i++)
+			if (rr->floor[i].floor != -127 && rr->floor[i].ceiling != -127 &&
+				rr->floor[i].ceiling * 256.0f < ceilTop[(size_t)r])
+				ceilTop[(size_t)r] = rr->floor[i].ceiling * 256.0f;
+
+		if (group >= 0 && HDRenderGroupBounds(group, mins, maxs))
+		{
+			hasArt[(size_t)r] = 1;
+			artTop[(size_t)r] = mins[1] + (float)rr->y;
+		}
+	}
+
+	answer = HDWaterSurfaceRoom(&wet[0], &ceilTop[0], &hasArt[0], &artTop[0],
+		g_room_count, kHDWaterSurfaceReach);
+	return answer;
+}
+
 /* The visibility path's questions (hd_level.h). The tables are the art's,
  * kept by the numbers of the level as built - a room's guests, openings and
  * wides are those of the group it holds now (g_room_group, which HDFlipRoom
@@ -9112,7 +9175,8 @@ void HDFrameDraw()
 	 * the deep look (the level line's under_deep). on=0 with flag=1: the
 	 * level built no sheets (tomb5.hd_water 0, a device without the water
 	 * shaders, a level with no water square) or the frame drew no HD
-	 * room. */
+	 * room. surface the room whose art is the sea's surface (SurfaceRoom,
+	 * drawn at every frame below), -1 for none. */
 	if (gLogEnabled && !g_undergate_logged && eye_wet && !HDObjectRingFrame())
 	{
 		HDRenderWaterLevel water;
@@ -9120,8 +9184,56 @@ void HDFrameDraw()
 		HDRenderWaterLevelInfo(&water);
 		g_undergate_logged = true;
 		Log("WATERLOG level=%s undergate room=%d flag=%d cam=%d on=%d "
-			"deep=%d", g_stem, (int)eye_room, eye_wet ? 1 : 0,
-			camera.underwater ? 1 : 0, frame.under, water.underDeep);
+			"deep=%d surface=%d", g_stem, (int)eye_room, eye_wet ? 1 : 0,
+			camera.underwater ? 1 : 0, frame.under, water.underDeep,
+			SurfaceRoom());
+	}
+
+	/* The sea's surface at every frame. In a level that takes the deep look
+	 * the art of one room is the surface over the whole dive (SurfaceRoom),
+	 * and that room is out of reach of the portals of the rooms the dive is
+	 * swum in: JOBY4's room 19 comes onto the list only as a guest of room
+	 * 100, so that by the list alone the surface would leave the picture
+	 * and come back within a tick wherever room 100 is not walked. So the
+	 * room's art joins every frame the list leaves it out of, with the
+	 * whole screen as its window - no portal, list, window or budget
+	 * decides it -, at the matrix of the frame's first room moved by the
+	 * difference of the two rooms' origins (as DecideStand moves a stand
+	 * range) and with its own lighting, under the frame's extinction like
+	 * every listed room. Only the art: the room's classic faces, statics
+	 * and items stay with the walk. Before DecideStand, which then counts
+	 * the art as listed. */
+	const int surface = SurfaceRoom();
+	const int surfaceGroup = GroupOfRoom(surface);
+	bool surfaceListed = surfaceGroup < 0;
+
+	for (int i = 0; i < g_frame_count && !surfaceListed; i++)
+		surfaceListed = g_frame[i].group == surfaceGroup;
+
+	if (!surfaceListed && !HDObjectRingFrame() && g_frame_count > 0 &&
+		g_frame_count < HD_MAX_FRAME)
+	{
+		const FrameRoom& first = g_frame[0];
+		FrameRoom& entry = g_frame[g_frame_count++];
+		const D3DMATRIX& m = first.world;
+		const float off[3] = {
+			(float)(room[surface].x - room[first.room].x),
+			(float)(room[surface].y - room[first.room].y),
+			(float)(room[surface].z - room[first.room].z) };
+
+		entry.room = surface;
+		entry.group = surfaceGroup;
+		entry.view = first.view;
+		entry.world = m;
+
+		for (int k = 0; k < 4; k++)
+			entry.world.m[3][k] = off[0] * m.m[0][k] + off[1] * m.m[1][k] +
+				off[2] * m.m[2][k] + m.m[3][k];
+
+		ClipWindow(entry, 0, 0, (int)phd_winwidth, (int)phd_winheight);
+		entry.windowed = surfaceGroup < HD_MAX_ROOMS &&
+			g_group_windowed[surfaceGroup] != 0;
+		entry.scissoredTris = 0;
 	}
 
 	// A destructible piece follows its own static's Flags bit.

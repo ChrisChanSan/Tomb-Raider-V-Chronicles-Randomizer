@@ -81,6 +81,44 @@ inline float HDWaterLookDepth(float eyeY, float top)
 	return d > 1.0f ? d : 1.0f;
 }
 
+/* How far under the water's top the art of the sea's surface may reach
+ * highest and still be that surface (HDWaterSurfaceRoom), in units: a free
+ * choice of two squares, between the 851 of JOBY4's sea and the 3,840 of
+ * the next water room's art there, and short of the 4,864 of RICH3's one
+ * water room, whose art is its own floor. */
+static const float kHDWaterSurfaceReach = 2048.0f;
+
+/* The room whose art is the sea's surface over the dive, in a level that
+ * takes the deep look. The remaster lays that surface as one sheet over the
+ * whole dive in the art of a single room, far over the room's own squares
+ * and out of reach of the portals of the rooms the dive is swum in: JOBY4's
+ * room 19 is a room of the sea floor (squares at y 15,872 to 17,152) whose
+ * art reaches y -4,269 and spans the level. So the room is found by its
+ * art: of the `count` rooms, the water room (`wet` 1) whose art (`hasArt`
+ * 1) reaches highest, `artTop` the world y of its highest point (y counts
+ * down), when that point lies at most `reach` units under the water's top
+ * - the highest ceiling of a square of any water room, `ceilTop` each
+ * room's own highest (1.0e9 for a room without a square), the top the deep
+ * look measures its surface from. A tie goes to the lower number; -1 where
+ * no water room's art reaches that high. */
+inline int HDWaterSurfaceRoom(const int* wet, const float* ceilTop,
+	const int* hasArt, const float* artTop, int count, float reach)
+{
+	float top = 1.0e9f;
+	int best = -1;
+
+	for (int r = 0; r < count; r++)
+		if (wet[r] && ceilTop[r] < top)
+			top = ceilTop[r];
+
+	for (int r = 0; r < count; r++)
+		if (wet[r] && hasArt[r] && artTop[r] <= top + reach &&
+			(best < 0 || artTop[r] < artTop[best]))
+			best = r;
+
+	return best;
+}
+
 /* The look's eleven numbers on the game's path, in the order of
  * RoomProbe's -underlookknobs: the disc's, the shafts' and the underside's
  * strengths, the surface light's reach along the eye ray in units, the

@@ -1072,6 +1072,9 @@
     <ClInclude Include="TOMB5\specific\hd\hd_water_under.h">
       <Filter>TOMB5\specific\hd</Filter>
     </ClInclude>
+    <ClInclude Include="TOMB5\specific\hd\hd_fog.h">
+      <Filter>TOMB5\specific\hd</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="TOMB5\specific\hd\hd_shader\hd_room.hlsl">
@@ -1102,6 +1105,9 @@
       <Filter>TOMB5\specific\hd\hd_shader</Filter>
     </None>
     <None Include="TOMB5\specific\hd\hd_shader\hd_gamma.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_fog.hlsl">
       <Filter>TOMB5\specific\hd\hd_shader</Filter>
     </None>
   </ItemGroup>

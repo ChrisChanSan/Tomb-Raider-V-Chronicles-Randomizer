@@ -89,6 +89,38 @@ struct HDFogBulb
 	float density;		// bulb->d, which is 1 / den
 };
 
+/* The volumetric fog of the fog bulbs (hd_fog.h, hd_fog.hlsl): with 1 the
+ * frame's bulbs are drawn as a body of fog of their own, once a frame over
+ * the finished HD scene, and the rooms' and models' per-pixel haze of the
+ * same bulbs goes; with 0 the haze stays as it was. tomb5.cpp sets it from
+ * the registry's hd_fog. */
+void HDRenderFogSet(int on);
+int HDRenderFogOn();
+
+/* The fog's last pass, for RoomProbe: the bulbs the bracket offered it, the
+ * quads it drew and their pixels, and with HDRenderFogProbe's timing on its
+ * GPU time (timestamps round the pass, waited for - a stall, never in the
+ * engine). HDRenderFogProbe's draws 0 takes the drawn bulbs' haze out of the
+ * shaders and leaves the pass out: the picture of the scene with neither,
+ * which RoomProbe holds against the one without bulbs. The engine never
+ * calls it. */
+struct HDFogLast
+{
+	int offered;
+	int drawn;
+	long pixels;
+	double gpuMs;
+	int timed;
+	// Where the breath stood: the eye in the world, the world's axes in
+	// view space (rows), 0 when no room placed it.
+	int placed;
+	float eye[3];
+	float axes[9];
+};
+
+void HDRenderFogLast(HDFogLast* out);
+void HDRenderFogProbe(int timing, int draws);
+
 // Per frame, set once between HDRenderFrameBegin and the first room.
 struct HDFrameLighting
 {

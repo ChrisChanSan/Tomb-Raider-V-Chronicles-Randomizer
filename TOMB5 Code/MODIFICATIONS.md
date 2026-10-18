@@ -23476,6 +23476,138 @@ shadow. The recipes are in `docs/Engine-Manual.md` under *Frame rate*.
 
 **Commits.** `34a7ccc`, `5301765`, `ced7f30`, `2628a7e`, `a785a50`, `80df417`, `ca17073`
 
+### The zoom at the frame rate (#225)
+2026-10-19
+
+**What.** The binoculars' and the sights' zoom is drawn between two logic ticks like the
+camera: on a frame between two ticks of a zoom the field of view lies between the two
+ticks' values at the frame's alpha, so at 165 Hz every frame of a zoom draws a value of
+its own. `InterpCapturePrev` (`game/interpolate.cpp`) keeps `BinocularRange` and
+`CurrentFov` before the tick; `InterpBeginFrame` sets the blended field of view after the
+camera's blend; `SkyDrawPhase`'s three `AlterFOV` calls (`game/draw.cpp`) go through the
+new `InterpZoomFOV`, which blends the range at the same alpha for the sky's `GAME_FOV -
+range` and the view's `GAME_FOV - 7 * range`; `InterpEndFrame` sets the field of view the
+classic code would have left. The rule is two inline functions in `game/modern_camera.h`,
+`ModernCameraZoomTweens` and `ModernCameraZoomLerp`. `ALTERFOV` ends with `alpha` and
+`tween`, `INTERPLOG` with `zoom=`.
+
+**Why.** The owner, 2026-10-18: "Ach, bevor ich es vergesse: Das Zoomen mit dem Visier
+von der Desert Eagle/HK ist noch 30 FPS, das ruckelt beim Rein- und Rauszoomen." - the
+zoom of the revolver's and the HK's sight still runs at 30 FPS and stutters while zooming
+in and out. He plays at 165 Hz in the display-bound mode (`fps_mode` 2).
+
+**Measured, in the code.** Before any change:
+
+| what | where | when |
+|---|---|---|
+| the step: 64, or 32 with the walk key, under the duck key (in) or the sprint key (out) | `camera.cpp` `BinocularCamera`, `BinocStep` | each tick |
+| the clamp: 128 to 1536 | the same | each tick |
+| the view's field of view, `GAME_FOV - 7 * BinocularRange`, from the range before the tick's step | `camera.cpp` 3723 | each tick |
+| the sky's own, `GAME_FOV - BinocularRange`, and back to `7 *` after the sky | `draw.cpp` 592, 648, 749 | each frame, from the tick's range |
+| the entry, the range 0 to 128 | `control.cpp` 468, 480, 492 (the three sights), `newinv2.cpp` 2886 (the binoculars) | the tick |
+| the exit, the range to 0 and `AlterFOV(GAME_FOV)` | `control.cpp` 506 to 508 (a sight), `camera.cpp` 3708 and 3709 (the binoculars) | the tick |
+| what the seam blends: the eye, the target and the roll, the poison sway, Lara's pose and root, the arms and the nine aim angles, the items, effects, braid, particles and ropes | `interpolate.cpp` `InterpBeginFrame` | each frame |
+| what it did not: the field of view | - | - |
+
+One step of the range is 7 x 64 = 448 units of the view's field of view, 2.46 degrees
+(182 units a degree); with the walk key 224. Indoors the frame draws the value the tick's
+`BinocularCamera` set from the range before its step, so the view lags the range by a
+tick; outdoors `SkyDrawPhase` sets the sky's and then the view's from the range after the
+step. Everything `AlterFOV` feeds follows the value it is given: `phd_persp`, `f_persp`,
+`f_mpersp` and their inverses, which the classic and the HD paths project with (the HD
+rooms take `f_persp` when they are collected, the HD sky and the pickup display when they
+draw). `ModernCameraNearRadius` is computed in the chase and first person cameras only
+and is not reached while the binoculars run.
+
+**Measured, in the logs.** The owner's log of 2026-10-17 holds one zoom, in JOBY2 with
+the HK's sight (`ARMLOG gun=2/4`), 165 frames a second (`FPSLOG frames=165
+logic_ticks=30`). One `ALTERFOV` line a tick, the frames between them counted by their
+`ARMLOG` lines:
+
+| tick | field of view | degrees | frames on it | step |
+|---|---|---|---|---|
+| the entry | 13664 | 75.1 | 5, drawn live | 896 from 14560, a camera cut |
+| 15 more | 13664 | 75.1 | 5 or 6 a tick | 0 |
+| 1 | 13216 | 72.6 | 5 | 448 |
+| 2 | 12768 | 70.2 | 6 | 448 |
+| 3 | 12320 | 67.7 | 6 | 448 |
+| 4 | 11872 | 65.2 | 5 | 448 |
+| 5 | 11424 | 62.8 | 5 | 448 |
+| 6 | 10976 | 60.3 | 6 | 448 |
+| 7 | 10528 | 57.8 | 6 | 448 |
+| 8 | 10080 | 55.4 | 5 | 448 |
+| 9 | 9632 | 52.9 | 6 | 448 |
+| 10 | 9184 | 50.5 | 5 | 448 |
+| 11 | 8736 | 48.0 | 6 | 448 |
+| 12 | 8288 | 45.5 | 5 | 448 |
+| 61 more | 8288 | 45.5 | 5 or 6 a tick | 0 |
+| the exit | 14560 | 80.0 | - | 6272, a camera cut |
+
+The frames of a tick carry the alphas 0.01 to 0.93 and drew one value; the next frame
+jumped by 448. The entry and the exit are camera cuts already: the frames after the entry
+tick are drawn live (`ARMLOG a=1.000`, `INTERPLOG camcut=5 (eye=5)`), the exit likewise
+(`camcut=5 (eye=5 aim=5)`), because the eye moves between Lara's head and the chase
+camera. The two other logs hold no zoom. An offline run of the same model (30 Hz ticks,
+165 Hz frames, the seam's alpha) gives runs of five and six frames on one value and jumps
+of 448, as the log does.
+
+**The rule.** A frame between two ticks draws the zoom between them when the zoom ran at
+both ticks (both ranges at least 128) and both ticks' fields of view are a zoom's (at
+most `GAME_FOV - 7 * 128`); it then draws `from + (to - from) * alpha`, the camera's own
+`InterpLerpLong` arithmetic, with `from` and `to` the field of view before and after the
+tick for the frame's first value, and `GAME_FOV - factor * range` before and after for
+`SkyDrawPhase`'s. At alpha 1 the value is `to`: a frame on a tick draws the tick's own. A
+blended value that equals the classic one is set as the classic call sets it.
+`InterpEndFrame` sets the last classic value again when a blended one was set, so the
+next tick finds `phd_persp` as a 30 Hz run leaves it. At `fps_mode` 0 `InterpBeginFrame`
+returns at `alpha >= 1` before the zoom, `g_zoomOn` stays false, `InterpZoomFOV` calls
+`AlterFOV(short(GAME_FOV - factor * BinocularRange))`, the expression `SkyDrawPhase`
+passed before, and `InterpEndFrame` sets nothing: no byte changes. The same holds on
+every frame at alpha 1, on a camera cut and on the first frame after an invalidation.
+
+**Decisions.** The entry and the exit stay the cuts they are at thirty: the frames there
+are camera cuts, drawn live, and a field of view blended over a live camera would be the
+one thing on the screen moving between two pictures that jump. "Rein- und Rauszoomen" is
+the zoom under the two keys, which the log shows in steps of 448; the entry and the exit
+are the sight coming up and going down. A field of view the zoom did not set before the
+tick (GAME_FOV after the binoculars were taken from the inventory, whose return
+invalidates the seam) is refused by the second test. The zoom takes the frame's alpha,
+not the corner rule's `camAlpha`: the zoom steps at a fixed rate, like the poison sway.
+The first value blends the field of view itself, not the range, because indoors the tick
+leaves the value from the range before its step; blending the range there would make a
+frame at alpha 1 draw a tick ahead. The rule lives in `modern_camera.h` beside the drawn
+eye, the camera's other state between two ticks, a header with no engine include that
+InterpTest includes for the two inline functions. `BinocularCamera` is not changed: it
+runs on the tick only, and its value is the `to` of the blend.
+
+**Checked.** InterpTest 754 checks (729 and the group `zoom`, 25: the blend at alpha 0,
+0.5, 1 and 1.5, the steps of 448 and 224 out and in, the clamp's ends 3808 and 13664 and a
+range held there drawing one value, the view's 7 x and the sky's 1 x of one blended
+range, the entry, the exit, GAME_FOV before and after the tick as cuts, alpha 0 blending
+and alpha 1 not, and the reproduction: a zoom in of 19 steps, held, out of 19 steps, then
+the exit, ticked at 30 Hz and drawn at 165 Hz - before, runs of six frames and jumps of
+448; now 209 frames of a moving zoom each with its own value, the largest step 82 units,
+none moving backwards, the view after the sky likewise, the entry tick and the exit tick
+the tick's own value at every alpha). RoomProbe compiles none of the round's files; built
+from this round and from `d0bf4f7b`, the fifteen parity cameras at `hd_water` 0 and 1 and
+the six HD views are identical, 15 of 15 twice and 6 of 6. The nine scripts `be`,
+`broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`, `bit` and `blips` build with exit 0;
+ModernTest 15,829, MenuTest 44,754, InterpTest 754, LipsTest 299 with the `.OBJ` folder
+and 272 without, 0 failed each (LipsTest by hand, with the game folder's `cutseq.bin` as
+its third argument, because the worktree has no game folder).
+
+**Left.** Nothing of it has been seen in play; the owner's next `-log` of a zoom at
+*Display* shows it (`ALTERFOV ... tween 1` on every frame between two ticks, `INTERPLOG
+zoom=`). The logs hold a zoom in only; a zoom out is the same arithmetic, run offline.
+Outdoors the frame's room walk still projects with the value from before the sky, a step
+apart from the one the rooms are drawn with, as at thirty; between two ticks the two now
+lie closer. RoomProbe's log reader takes the last `ALTERFOV` line before a walk dump; on a
+blended frame that is now the blended value the walk used.
+
+**Commits.** `8baca4e8` (the blend), `f34e369a` (`ALTERFOV`, `INTERPLOG` and
+InterpTest's group), the record's own commit, `6166c522` (the zoom keys named the right
+way round - duck zooms in, sprint out - and the comments' wording) and this list's own.
+
 ## 2.6 Modern controls and the options menu
 
 Beside the engine's own Tank control the game offers a second scheme, **Modern**, in
@@ -28137,3 +28269,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #220 | The gamma row (#220) |
 | #221 | The number beside every slider (#221) |
 | #222 | The pieces of a broken static in HD (#222) |
+| #225 | The zoom at the frame rate (#225) |

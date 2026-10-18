@@ -560,3 +560,49 @@ void ModernCameraDrawnEye(const long prev[3], short prev_room, const long cur[3]
 long ModernCameraNearRadius(long znear, long half_w, long half_h, long persp);
 long ModernCameraWallClearance(const long eye[3], short room, long radius,
 	MODERN_EYE_OPEN open, void* ctx, long out[3], short* out_room);
+
+/* The zoom between two ticks.
+ *
+ * The binoculars and the sights of the revolver, the crossbow and the HK
+ * share one camera (BinocularCamera, game\camera.cpp). Under the sprint or
+ * the duck key it moves BinocularRange by 64 a tick, 32 with the walk key,
+ * between MODERN_ZOOM_RANGE_MIN and MODERN_ZOOM_RANGE_MAX. The view's field
+ * of view is GAME_FOV less MODERN_ZOOM_LENS times the range, the sky's
+ * GAME_FOV less the range once (SkyDrawPhase, game\draw.cpp). Set once a
+ * tick, one value holds for every frame of that tick, five or six at
+ * 165 Hz, and then jumps by 448 units, two and a half degrees.
+ *
+ * ModernCameraZoomTweens says whether a frame between two ticks draws the
+ * zoom between them: the zoom ran at both ticks (both ranges at least
+ * MODERN_ZOOM_RANGE_MIN) and both ticks' fields of view are a zoom's (at
+ * most `widest`, the view's field of view at the range 128). The entry, a
+ * range of 0 before the tick, and the exit, a range of 0 after it, are not
+ * tweened: the eye jumps there between Lara's head and the chase camera, the
+ * frame is a camera cut, and the field of view cuts with it. A field of view
+ * the zoom did not set, such as GAME_FOV after the binoculars were taken
+ * from the inventory, is refused by `widest`. A frame at alpha 1 or above
+ * is not tweened either: it draws the tick's own state.
+ *
+ * ModernCameraZoomLerp is the field of view at `alpha` between the two
+ * ticks' values, the arithmetic of the camera's own blend (InterpLerpLong,
+ * game\interpolate_math.h); at alpha 1 and above it is `to`, exactly. */
+#define MODERN_ZOOM_RANGE_MIN	128
+#define MODERN_ZOOM_RANGE_MAX	1536
+#define MODERN_ZOOM_LENS		7	// the view: GAME_FOV - 7 * range
+#define MODERN_ZOOM_SKY			1	// the sky: GAME_FOV - range
+
+inline bool ModernCameraZoomTweens(long prevRange, long range, long prevFov,
+	long fov, long widest, float alpha)
+{
+	return alpha < 1.0F &&
+		prevRange >= MODERN_ZOOM_RANGE_MIN && range >= MODERN_ZOOM_RANGE_MIN &&
+		prevFov <= widest && fov <= widest;
+}
+
+inline long ModernCameraZoomLerp(long from, long to, float alpha)
+{
+	if (alpha >= 1.0F)
+		return to;
+
+	return from + (long)((float)(to - from) * alpha);
+}

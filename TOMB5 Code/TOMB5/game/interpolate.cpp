@@ -338,6 +338,19 @@ namespace
 	InterpCamera g_savedCam;
 	bool g_camTouched = false;
 
+	/* The zoom (see InterpZoomFOV). The range and the field of view before
+	 * the tick; whether this frame draws the zoom between the two ticks, and
+	 * at which alpha; the field of view the classic code would have left set
+	 * at this point of the frame; whether a blended one was set instead; and
+	 * whether an AlterFOV call sets one right now. */
+	long g_prevZoomRange = 0;
+	long g_prevZoomFov = 0;
+	bool g_zoomOn = false;
+	float g_zoomAlpha = 1.0F;
+	short g_zoomClassic = 0;
+	bool g_zoomTouched = false;
+	bool g_zoomSetting = false;
+
 	bool g_applied = false;		// this frame wrote into the live state
 	float g_alpha = 1.0F;		// what this frame is being drawn at
 
@@ -412,6 +425,7 @@ namespace
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
 	int g_secPoseBack = 0;		// frames on which Lara's pose was blended walking backwards
 	int g_secBridge = 0;		// frames on which Lara's pose was bridged after an early half turn
+	int g_secZoom = 0;		// frames drawn with the zoom between two ticks
 	/* Refused tween frames whose root offset was blended in time. A count,
 	 * not a mean per frame: once per climb cycle would round to 0.0. */
 	int g_secRootFix = 0;
@@ -767,6 +781,25 @@ namespace
 		lara.poisoned = poisoned;
 	}
 
+	/* Sets the zoom's field of view `fov` where the classic code sets
+	 * `classic`, and remembers `classic` for InterpEndFrame. A blended value
+	 * equal to the classic one is set as the classic call would set it. */
+	void SetZoomFov(short fov, short classic)
+	{
+		g_zoomClassic = classic;
+
+		if (fov == classic)
+		{
+			AlterFOV(classic);
+			return;
+		}
+
+		g_zoomTouched = true;
+		g_zoomSetting = true;
+		AlterFOV(fov);
+		g_zoomSetting = false;
+	}
+
 	/* INTERPLOG, once per second. Fields beyond the snap and camera counts:
 	 *
 	 *   halfturn     rotations that turned exactly half a turn in one tick and
@@ -860,7 +893,13 @@ namespace
 	 *                zero everywhere else and zero at fps_mode 0.
 	 *   cutscene_cut frames between two ticks that a cutscene camera's cut
 	 *                drew live (INTERP_CUTSEQ_SNAP), counted in camcut as
-	 *                well; one per cut at sixty hertz, four to six at 165. */
+	 *                well; one per cut at sixty hertz, four to six at 165.
+	 *   zoom         frames drawn with the zoom's field of view between two
+	 *                ticks (InterpZoomFOV): while the binoculars or a sight
+	 *                zoom, every frame between two ticks of the zoom: about
+	 *                165 a second at 165 Hz (fps_mode 2, where the frames do
+	 *                not land on the ticks) and 30 at sixty; zero while the
+	 *                range stands still, everywhere else and at fps_mode 0. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -873,7 +912,7 @@ namespace
 				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
 				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d bridge=%d "
-				"cutscene_cut=%d",
+				"cutscene_cut=%d zoom=%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -895,7 +934,8 @@ namespace
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
 				(double)g_secParticles / g_secFrames, g_secPartKinds,
-				g_secRootFlip, g_secPoseBack, g_secBridge, g_snapCutseqCut);
+				g_secRootFlip, g_secPoseBack, g_secBridge, g_snapCutseqCut,
+				g_secZoom);
 
 		/* TICKLOG: how often each tween-guarded counter stepped in the logic
 		 * second that just ended (GlobalCounter, thirty in both modes). A 30
@@ -956,6 +996,7 @@ namespace
 		g_secPoseFar = 0;
 		g_secPoseBack = 0;
 		g_secBridge = 0;
+		g_secZoom = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
 		g_secRootFix = 0;
@@ -1123,6 +1164,10 @@ void InterpCapturePrev()
 	g_prevSway[3] = XSoff2;
 	g_prevSway[4] = YSoff2;
 	g_prevSway[5] = ZSoff2;
+
+	// The zoom before the tick: the range and the field of view it left.
+	g_prevZoomRange = BinocularRange;
+	g_prevZoomFov = CurrentFov;
 }
 
 /* How far this frame stands past the last logic tick, as a clamped fraction
@@ -1241,6 +1286,32 @@ short InterpPrevCamRoom()
 bool InterpSkyWithheld()
 {
 	return g_skyWithheld;
+}
+
+static_assert(INTERP_ZOOM_SKY == MODERN_ZOOM_SKY &&
+	INTERP_ZOOM_VIEW == MODERN_ZOOM_LENS, "the zoom's factors are named twice");
+
+/* The tick's value is the expression SkyDrawPhase passed to AlterFOV, so a
+ * frame that does not blend the zoom sets the same short. */
+void InterpZoomFOV(long factor)
+{
+	const short classic = short(GAME_FOV - factor * BinocularRange);
+
+	if (!g_zoomOn)
+	{
+		AlterFOV(classic);
+		return;
+	}
+
+	const long from = GAME_FOV - factor * g_prevZoomRange;
+	const long fov = ModernCameraZoomLerp(from, classic, g_zoomAlpha);
+
+	SetZoomFov(short(fov), classic);
+}
+
+bool InterpZoomSetting()
+{
+	return g_zoomSetting;
 }
 
 /* CAMLOG's draw line: one per drawn frame the rule acted on, from DrawRooms
@@ -1383,6 +1454,8 @@ void InterpBeginFrame(float alpha)
 	g_touchedRopes = 0;
 	g_camTouched = false;
 	g_aimTouched = false;
+	g_zoomOn = false;
+	g_zoomTouched = false;
 	ClearEyeFix();
 
 	/* Nothing is pose-blended until this frame's walk allows it slot by slot,
@@ -1800,6 +1873,29 @@ void InterpBeginFrame(float alpha)
 			LerpAngle(g_prevCam.roll, roll, camAlpha));
 
 		PoisonSwayBlend(NULL);
+
+		/* The zoom, from the field of view before the tick to the one the
+		 * tick left, at the frame's alpha: alpha, not camAlpha, because the
+		 * zoom steps at a fixed rate like a clock. The frame's walk and every
+		 * view drawn before SkyDrawPhase use this value; SkyDrawPhase sets
+		 * its two through InterpZoomFOV at the same alpha. AlterFOV is not
+		 * called when the blended value equals the tick's own. */
+		g_zoomOn = ModernCameraZoomTweens(g_prevZoomRange, BinocularRange,
+			g_prevZoomFov, CurrentFov,
+			GAME_FOV - MODERN_ZOOM_LENS * MODERN_ZOOM_RANGE_MIN, alpha);
+
+		if (g_zoomOn)
+		{
+			const short tick = CurrentFov;
+			const short fov =
+				short(ModernCameraZoomLerp(g_prevZoomFov, tick, alpha));
+
+			g_zoomAlpha = alpha;
+			g_zoomClassic = tick;
+
+			if (fov != tick)
+				SetZoomFov(fov, tick);
+		}
 	}
 
 	if (gLogEnabled)
@@ -1898,6 +1994,19 @@ void InterpEndFrame()
 		g_seedSaved = false;
 	}
 
+	/* The zoom: the field of view the classic code would have left, set
+	 * again, so the next tick reads phd_persp as a 30 Hz run leaves it. A
+	 * frame that set no blended value needs nothing. */
+	if (g_zoomTouched)
+	{
+		AlterFOV(g_zoomClassic);
+
+		if (gLogEnabled)
+			g_secZoom++;
+	}
+
+	g_zoomOn = false;
+	g_zoomTouched = false;
 	g_alpha = 1.0F;
 	g_touchedItems = 0;
 	g_touchedFxs = 0;

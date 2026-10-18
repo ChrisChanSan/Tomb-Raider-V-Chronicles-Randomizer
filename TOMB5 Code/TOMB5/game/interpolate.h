@@ -98,6 +98,31 @@ short InterpPrevCamRoom();
  * always at fps_mode 0. */
 bool InterpSkyWithheld();
 
+/* The zoom's field of view on the frame being drawn.
+ *
+ * BinocularCamera (game\camera.cpp) sets the field of view once a tick from
+ * BinocularRange, so at 165 Hz five or six frames would share each zoom step
+ * and then jump. On a blended frame whose two ticks both zoom
+ * (ModernCameraZoomTweens, game\modern_camera.h) InterpBeginFrame sets the
+ * field of view between the one the last tick left and the one before it,
+ * at the frame's alpha, and SkyDrawPhase (game\draw.cpp) sets its two
+ * through InterpZoomFOV: GAME_FOV less `factor` times the range, the range
+ * blended between the two ticks at the same alpha. On every other frame,
+ * and always at fps_mode 0, InterpZoomFOV is AlterFOV with the tick's own
+ * value, the call SkyDrawPhase made before. InterpEndFrame puts back the
+ * field of view the classic code would have left, so the next tick finds
+ * phd_persp and the floats beside it as at 30 Hz. Everything AlterFOV
+ * feeds follows the blended value the way it follows the tick's: phd_persp,
+ * f_persp, f_mpersp and their inverses, which the classic and the HD
+ * paths project with.
+ *
+ * InterpZoomSetting is true while an AlterFOV call sets a blended value;
+ * ALTERFOV (specific\3dmath.cpp) prints it. */
+enum { INTERP_ZOOM_SKY = 1, INTERP_ZOOM_VIEW = 7 };
+
+void InterpZoomFOV(long factor);
+bool InterpZoomSetting();
+
 /* CAMLOG's draw line for a frame the drawn-eye rule acted on (game\draw.cpp,
  * DrawRooms, after the walk and the sky). Writes nothing without -log or on a
  * frame the rule left alone. */

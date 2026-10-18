@@ -589,7 +589,7 @@ void SkyDrawPhase()
 			DrawMoon();
 
 		if (BinocularRange)
-			AlterFOV(short(GAME_FOV - BinocularRange));
+			InterpZoomFOV(INTERP_ZOOM_SKY);
 
 		phd_PushMatrix();
 		phd_TranslateAbs(camera.pos.x, camera.pos.y, camera.pos.z);
@@ -645,7 +645,7 @@ void SkyDrawPhase()
 			phd_PopMatrix();
 
 			if (BinocularRange)
-				AlterFOV(short(GAME_FOV -  (7 * BinocularRange)));
+				InterpZoomFOV(INTERP_ZOOM_VIEW);
 
 			return;
 		}
@@ -746,7 +746,7 @@ void SkyDrawPhase()
 		phd_PopMatrix();
 
 		if (BinocularRange)
-			AlterFOV(short(GAME_FOV -  (7 * BinocularRange)));
+			InterpZoomFOV(INTERP_ZOOM_VIEW);
 	}
 }
 

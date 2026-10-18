@@ -18119,8 +18119,8 @@ namespace
 	 * its colour (the hue of `light`, its brightest channel 1), the gains
 	 * and the clock, the body's first four wave rows, the extinction
 	 * (`sigma`, the frame's c134), the shafts' numbers, the waves' fade
-	 * and the window rim's width; c215 0, the colour the shader adds
-	 * first (gLookFill), which no draw sets.
+	 * and the window rim's width; c215 is left 0, a register the shader
+	 * does not declare, so that the block goes up sixteen registers wide.
 	 * `knobs` in the order of HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
@@ -22990,15 +22990,15 @@ static void HDRenderSkyPartOrder(std::vector<HDRange>& ranges)
 
 /* The band's closed poles (hd_sky_cap.h, HDSkyCapBuild): the band ends at
  * its last ring on either side and leaves the pole beyond to the frame's
- * clear, which showed as a dark disc straight overhead in JOBY4, where the
- * band is the whole sky seen from below the water. Each pole gets a disc in
- * the last ring's own page and texture row, built into the band's own run
- * as the .TRG is read: the same pass, the same draw call, the same depth
- * slice, and the look's light (HDRenderWaterLook) laid over it as over the
- * band. 64 triangles and 64 corners per band, two bands in TITLE; a band
- * row the alpha test cuts away (the cloud levels above about 27 degrees)
- * draws nothing in its disc either. On while HDRenderSkyCapSet leaves it
- * on - always in the game. */
+ * clear, which without a cap is a dark disc straight overhead in JOBY4,
+ * where the band is the whole sky seen from below the water. Each pole
+ * gets a disc in the last ring's own page and texture row, built into the
+ * band's own run as the .TRG is read: the same pass, the same draw call,
+ * the same depth slice, and the look's light (HDRenderWaterLook) laid over
+ * it as over the band. 64 triangles and 64 corners per band, two bands in
+ * TITLE; a band row the alpha test cuts away (the cloud levels above about
+ * 27 degrees) draws nothing in its disc either. On while HDRenderSkyCapSet
+ * leaves it on - always in the game. */
 namespace
 {
 	bool g_sky_cap_on = true;

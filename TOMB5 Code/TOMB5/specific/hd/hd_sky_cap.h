@@ -25,7 +25,7 @@
  * -skycensus, all thirteen sky levels), so both of its poles are open: a
  * ring of 32 edges, 1,060 units out from the axis, and nothing inside it.
  * Seen from below the water in JOBY4, where the band is the whole sky, the
- * open top pole was the frame's clear. The caps close each pole of the
+ * open top pole shows the frame's clear. The caps close each pole of the
  * band as part of the band itself: every edge of a triangle that lies on
  * the band's highest or lowest ring gets one triangle to the ring's centre,
  * in the ring's plane - a flat disc of 32 wedges. Each wedge carries the

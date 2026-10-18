@@ -430,8 +430,9 @@ namespace
 	 *
 	 * A page can paint a window's frame on clear texels in its own colour
 	 * and only the panes on partial ones: ANDREA2's window grid, page 3007,
-	 * is 80.6 % texels under 16 of 255 (the frame, mean colour 106, 82, 60)
-	 * and 19.4 % partial ones (the panes, alpha near 0.52), no texel opaque.
+	 * is 80.6 % texels under 16 of 255 and 19.4 % partial ones, none
+	 * opaque; under the grid's triangles 54.1 % are clear (the frame, mean
+	 * colour 106, 82, 60) and 45.9 % partial (the panes, alpha near 0.52).
 	 * The classic mesh in its place draws the frame solid and the panes
 	 * additive: 260 quads with effects bit 0 clear, drawn opaque, and 70
 	 * with it set, ONE / ONE (output.cpp, polyinsert.cpp). Drawn as one
@@ -447,10 +448,27 @@ namespace
 	 * the texel times its light added to what lies behind. The room shader
 	 * keeps one half's texels per draw (hd_room.hlsl, gPass.z).
 	 *
+	 * The texels decide and not the classic faces, though both were read
+	 * at the place of every see-through part: the room build ties no part
+	 * to the classic faces it replaces, and where the classic draws solid
+	 * faces at a part's place but its page paints no frame, there is no
+	 * texel to draw solid. JOBY3's and JOBY5's 58 lamp covers (page 10072)
+	 * stand, all but one, on the classic's ceiling lamps (static slots 45,
+	 * 47 to 49),
+	 * drawn opaque with a white diffuser of texel 255; the HD lamp has its
+	 * body on the same page in the opaque run and a glow of material 2, and
+	 * its cover is grey, about 30 at alpha 0.59, with no clear texel -
+	 * drawn solid it would be a dark box where the classic is brightest.
+	 * RICH3's four pieces on page 10084 cover no clear texel either (static
+	 * 53: 6 small opaque faces, 36 alpha-keyed), nor does RICH2's glass on
+	 * page 3309 (no classic face at five of its six places).
+	 *
 	 * Which pages: a texel under 16 at all, and more than half of the page
 	 * below the alpha test's reference (HDPageCacheSlotCutoutPermille,
-	 * 500). Over the 74 see-through parts of the fifteen levels' alpha
-	 * passes the page shares run 856 per mille (page 3007) and then 116
+	 * 500). Both are the whole page's, texels no triangle covers among
+	 * them; the draw call carries its page and not its texels. Over the 74
+	 * see-through parts of the fifteen levels' alpha passes the page
+	 * shares run 856 per mille (page 3007) and then 116
 	 * (RICH3's page 10084, whose triangles cover no clear texel), 46, 12
 	 * and 0, so only ANDREA2's grid and its flip twin split; every other
 	 * glass is drawn as it was. */
@@ -462,6 +480,37 @@ namespace
 		return blend > 0.0f && blend < 1.0f && !clear &&
 			HDPageCacheSlotAlphaMin(slot) < HD_GLASS_CLEAR_BELOW &&
 			HDPageCacheSlotCutoutPermille(slot) > HD_GLASS_FRAME_PERMILLE;
+	}
+
+	/* Whether an additive draw call is glass, added as the classic adds it.
+	 *
+	 * The classic draws its glass with draw type 2: ONE / ONE, the texel
+	 * times its light, the specular off and the texture's alpha read for
+	 * nothing (polyinsert.cpp). The additive run of a material 14 part is
+	 * the art's glass in that place, and the additive pass draws it texel
+	 * times light times the texel's alpha times param[1] (MaterialAddWeight).
+	 * RICH2's bridge in the lobby is such glass (room group 125, part 2,
+	 * page 16103, param[1] 0.8181, texels about 18, 18, 21 at alpha 0.44):
+	 * it added 5.7 levels of 255 on average at an eye in front of it, where
+	 * the classic bridge's 16 additive quads add 10.1 (its room's ambient
+	 * for light) to 26.9 (full light) - so faint the pane was not seen.
+	 *
+	 * So such a draw call is added as the classic adds it: its alpha and
+	 * its param[1] weigh nothing (gPass.z -1 and a weight of 1, draw_pass),
+	 * and the bridge adds 16.4 (8.6 to 23.1 over a tenth to nine tenths of
+	 * its pixels). Only where its page has no clear texel, under 16 of 255
+	 * (HD_GLASS_CLEAR_BELOW, the split's bound): such a page is glass in
+	 * every texel. A page with clear texels says with its alpha where its
+	 * glass is and how much, and keeps it: ANDREA1's arched panes (page
+	 * 15074, smallest alpha 0) and the lamp glass of RICH2 and RICH3 (page
+	 * 15101, smallest 12, mean 30, its layers stacked many deep), which
+	 * drawn whole went white - 150 levels more where the classic lamp adds
+	 * 94. Of the 107 material 14 parts with an additive run in the fifteen
+	 * levels, 86 lie on pages without a clear texel and 21 on pages with. */
+	inline bool AddGlass(int material, int slot)
+	{
+		return material == HD_TRG_MATERIAL_DECAL &&
+			HDPageCacheSlotAlphaMin(slot) >= HD_GLASS_CLEAR_BELOW;
 	}
 
 	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
@@ -10197,19 +10246,31 @@ namespace
 			if (blendOnly && (range.clear != 0) != clearOnly)
 				continue;
 
+			/* The additive run of a material 14 part: the glass the classic
+			 * draw adds (AddGlass). */
+			const bool add_glass = additive_pass && AddGlass(range.material,
+				range.pageSlot);
+
 			/* The half: the frame without the alpha test, which its clear
 			 * texels would fail; the glass without the specular, as the
-			 * classic's additive draw type has it. Written only where the
+			 * classic's additive draw type has it. The additive run's glass
+			 * keeps the glass half's texels too. Written only where the
 			 * half changes, so every other draw call keeps the constant
 			 * the top of the pass wrote. */
-			const float want_split = !split ? 0.0f : blendOnly ? -1.0f : 1.0f;
+			const float want_split = split ? (blendOnly ? -1.0f : 1.0f) :
+				add_glass ? -1.0f : 0.0f;
 
 			if (want_split != split_now)
 			{
 				split_now = want_split;
-				constants[0] = blendOnly || split ? 0.0f : 0.5f;
+
+				if (pass == 1)
+				{
+					constants[0] = blendOnly || split ? 0.0f : 0.5f;
+					constants[3] = split && blendOnly ? 0.0f : 1.0f;
+				}
+
 				constants[2] = split_now;
-				constants[3] = split && blendOnly ? 0.0f : 1.0f;
 				g_device->SetPixelShaderConstantF(4, constants, 1);
 			}
 
@@ -10453,7 +10514,9 @@ namespace
 				ripple_dirty = true;
 			}
 
-			const float want_weight = additive_pass ? range.addWeight : 1.0f;
+			// The glass is added whole, as the classic adds it (AddGlass).
+			const float want_weight = additive_pass && !add_glass ?
+				range.addWeight : 1.0f;
 			const float want_period = additive_pass ? range.addPeriod : 0.0f;
 
 			if (add_dirty || add[0] != want_weight || add[2] != want_period)

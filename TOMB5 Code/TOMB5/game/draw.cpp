@@ -2290,12 +2290,16 @@ static void NoteRoomWalk(short logicRoom, short walkRoom)
 	 *      the rooms this walk hands it. A room the portal chain does not
 	 *      reach is not drawn in the classic path either; that is vanilla
 	 *      behaviour the remaster's taller art makes visible.
-	 *   the far plane. InitWindow sets it at 20480 units, twenty sectors
-	 *      (specific\gamemain.cpp), and both paths project with the same
-	 *      constants, so art past it is clipped in both.
+	 *   the far plane. InitWindow sets it at ZFAR_UNITS, 41 sectors
+	 *      (specific\zrange_math.h), and it cuts objects, the statics the
+	 *      art leaves to the classic path, sprites and effects - not the
+	 *      rooms' faces, whose depth stays under 1 at any distance in both
+	 *      paths. far_plane= prints phd_zfar, the plane shifted by
+	 *      W2V_SHIFT.
 	 *
 	 * If the art appears on a frame that also joins its room to the list,
-	 * it is the walk; if the room was there all along, it is the far plane.
+	 * it is the walk; if the room was there all along and the thing that
+	 * appears is an object, it is the far plane.
 	 * Measured with TrgProbe -near over that corner: ANDREA1 has no remaster
 	 * art more than 936 units outside its own room's box anywhere within
 	 * 8,000 units of it, so the tower is ordinary art of some room and not

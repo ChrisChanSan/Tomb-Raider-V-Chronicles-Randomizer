@@ -34,6 +34,7 @@
 #include "devicewindow.h"	// the style of the two display states
 #include "hd/hd_mods.h"		// the mods folder's log sink
 #include "hd/hd_wardrobe.h"	// and the wardrobe scan's
+#include "zrange_math.h"		// ZFAR_UNITS - the far plane
 
 WINAPP App;
 long resChangeCounter;
@@ -278,7 +279,9 @@ void WinProcessCommands(long cmd)
 			}
 
 			HWInitialise();
-			InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight, 20, 20480, 80, App.dx.dwRenderWidth, App.dx.dwRenderHeight);
+			InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight,
+				ZNEAR_UNITS, ZFAR_UNITS, 80, App.dx.dwRenderWidth,
+				App.dx.dwRenderHeight);
 			InitFont();
 			S_InitD3DMatrix();
 			aSetViewMatrix();

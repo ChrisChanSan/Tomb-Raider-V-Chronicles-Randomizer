@@ -29,6 +29,7 @@
 #include "../game/secretreward.h"
 #include "input.h"			// ApplyKeyScheme - the one-time keyboard seat
 #include "../tomb5/tomb5.h"
+#include "zrange_math.h"		// ZFAR_UNITS - the far plane
 
 WATERTAB WaterTable[22][64];
 THREAD MainThread;
@@ -257,7 +258,9 @@ unsigned int __stdcall GameMain(void* ptr)
 	{
 		InitialiseFunctionTable();
 		HWInitialise();
-		InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight, 20, 20480, 80, App.dx.dwRenderWidth, App.dx.dwRenderHeight);
+		InitWindow(0, 0, App.dx.dwRenderWidth, App.dx.dwRenderHeight,
+			ZNEAR_UNITS, ZFAR_UNITS, 80, App.dx.dwRenderWidth,
+			App.dx.dwRenderHeight);
 		InitFont();
 		TIME_Init();
 		App.SetupComplete = 1;

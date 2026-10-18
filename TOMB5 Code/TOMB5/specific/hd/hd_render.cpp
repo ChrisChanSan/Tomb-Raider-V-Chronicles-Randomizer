@@ -22947,17 +22947,19 @@ bool HDRenderRoomStand(int group, const D3DMATRIX* world,
  * the matrix the classic path builds for its own horizon mesh -
  * phd_TranslateAbs(camera.pos) with no rotation - and the dome rides on the
  * camera exactly as the horizon did. No scaling: the sphere's four blocks sit
- * far inside the far plane of 20480, and the cloud discs reach past it, which
- * only cuts the disc where the band already covers it.
+ * far inside the far plane, and the cloud discs, out to 24,000 units, are
+ * drawn whole: the far plane cuts objects and sprites, not this group, and
+ * its depth stays under 1 at any distance.
  *
  * The depth: the sky must be behind everything, so it is drawn with its own
  * depth range: the viewport's MinZ is pushed to HD_SKY_MINZ for the length of
  * this call, which folds the whole sky into the last thousandth of the depth
  * buffer. Outside that slice every pixel of the world is nearer, because the
- * classic depth of the far plane itself is only 0.995 (SetupZRange(20,
- * 20480): a - b/z = 0.99500) and the deepest thing the engine can draw
- * therefore never reaches the slice. The viewport is read back and put
- * together again before the call returns.
+ * depth curve a - b/z is built on ZFAR_SHIPPED (specific\3dmath.cpp,
+ * SetupZRange): 0.99500 at 20,480 units, 0.99550 at the far plane of
+ * ZFAR_UNITS, and under a = 0.99597 at any distance, so nothing the engine
+ * draws reaches the slice. The viewport is read back and put together again
+ * before the call returns.
  *
  * The order inside the sky: the flat cloud sheets (RoomProbe -skycensus: a
  * square of 5 x 5 or 10 x 10 tiles of one page, 1,752 to 4,996 units above
@@ -25347,7 +25349,10 @@ void HDRenderZConstants(double mznear, double mzfar, double* a, double* b, doubl
 {
 	/* SetupZRange (specific\3dmath.cpp), line for line and in single
 	 * precision, because that is what the classic path writes into the depth
-	 * buffer and the aim is to match it, not to be more accurate than it. */
+	 * buffer and the aim is to match it, not to be more accurate than it.
+	 * mzfar is the depth curve's scale, which SetupZRange takes from
+	 * ZFAR_SHIPPED (20480) and not from the far plane, ZFAR_UNITS: the
+	 * engine's f_a and f_b are what this gives for 20 and 20480. */
 	const float f_mznear = (float)mznear;
 	const float f_mzfar = (float)mzfar;
 

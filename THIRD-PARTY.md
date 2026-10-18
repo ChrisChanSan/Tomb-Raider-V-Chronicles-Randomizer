@@ -2877,7 +2877,8 @@ carries the tables.
     marble's mirror 11.5 levels on the mean where the water lies, the
     water's 4.3; the outline's jump 59.2 levels between neighbouring
     pixels, 3.7 after; the vending machine's mirror 536 to 0 pixels over a
-    tilt of 28 to 43 degrees, 1,240 to 673 after; 316 of tank 182's 352
+    tilt of 28 to 43 degrees, 1,240 to 673 after (RoomProbe `-wetcut`,
+    ledger 279); 316 of tank 182's 352
     cells polished, 192 of tank 33's. TEXTBOOK: separating axes for a
     triangle against a square. The tolerance of a click's sixteenth is
     `wet_clear`'s; the unit the cell is held in by and the three corners of
@@ -2905,9 +2906,13 @@ carries the tables.
     fifteen levels): JOBY4 132 against 2 and room 19, RICH3 1 against 0
     and none; `under_deep=1` in JOBY4 alone after.
 279. **RoomProbe's wet measures** (`Preparation/Tools/Diagnose/
-    RoomProbe.cpp`, `-wetstep`, the warm-up line's `wet models`; the
-    `SPLASHLOG ... wet` load line's `polished=`) - OWN, this project's log
-    and tool on the player's files (DATA).
+    RoomProbe.cpp`, `-wetstep`, `-wetcut`, the warm-up line's `wet
+    models`; the `SPLASHLOG ... wet` load line's `polished=`) - OWN, this
+    project's log and tool on the player's files (DATA). The key of
+    `-wetcut 40,20,80,30` that counts the vending machine's lit screen
+    and its mirror (green over red by 40, over blue by 20, above 80; the
+    split at 30 per cent of the height, the screen above, the floor
+    below) is a free choice read off the pictures at RICH2's tank.
 
 ## Credited, but not contained here
 

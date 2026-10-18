@@ -2276,8 +2276,11 @@ it.
   corridor - and Lara's and the objects' reflections with it.
   A level with a tank makes the wet floor's targets and readies its
   shaders, the models' through the floor's mirror among them, at its load
-  (about a tenth of a second more under the loading bar), so neither the
-  first frame nor breaking a tank holds the picture. Where the level's
+  (about a tenth of a second more under the loading bar), so the water
+  holds neither the first frame nor the picture when a tank breaks. With
+  the marble floors on, the marble's own first mirrored draw still holds
+  the first frame of such a level for about a tenth of a second after a
+  cold start. Where the level's
   art carries a copy of the room upside down
   under a see-through floor (RICH2's corridor 46 west of its mouth, and
   some 55 rooms of RICH2 in all), that copy is the floor's reflection and

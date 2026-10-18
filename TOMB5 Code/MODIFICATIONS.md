@@ -15573,7 +15573,10 @@ tank from about (45,300, -1,281, 68,580), ticks 195,609 to 200,406, Lara at (46,
 68,540) facing the tank. Measured at those eyes (his picture's and a fan of 8 degrees of
 yaw and 4 of pitch round it; the tilt at 28, 31, 34, 37, 40 and 43 degrees, both with Lara
 by `-wetlara`), at round 7's eye with her crawling, round 6's 25 band eyes and his eight
-eyes of round 6, and tank 33's three, 960 x 540 unless named.
+eyes of round 6, and tank 33's three, 960 x 540 unless named. The tanks' eyes of the
+other levels (ANDREA2, JOBY2, JOBY5) have no wet floor to measure: over the fifteen levels
+(`-hdwater 1 -marble 1 -nodraw`) the `SPLASHLOG ... wet` load line comes in RICH2 alone,
+for tanks 182 and 33.
 
 *The three faults have one cause.* His floor is polished: the marble floors (#205,
 `hd_marble`, on by default) mirror the corridor's mouth, rooms 122, 121, 45 and room 23 as
@@ -15615,11 +15618,14 @@ without the water's mirror):
 | mirrored, after | 1,240 | 1,108 | 1,099 | 1,146 | 1,128 | 673 |
 | mirrored by the dry marble floor | 1,320 | 1,199 | 1,192 | 1,228 | 1,197 | 719 |
 
-(green-dominant pixels, G over R by 40 and over B by 20 and over 80, in the frame's lower
-70 per cent; the same with the marble floors off before.) The bench, the walls and the
-room's other fixed pieces are cut the same way wherever their mirror lies off the screen;
-Lara and the objects are mirrored as geometry (round 6), clipped only to the wet box grown
-by a square, which no eye here reached.
+(RoomProbe `-wetcut 40,20,80,30`: the pixels whose green is over red by 40, over blue by
+20 and over 80, in the frame's upper 30 per cent for the screen and its lower 70 for the
+mirror; the same with the marble floors off before. The screen's row is counted in the
+pictures after; at 40 and 43 degrees the split row crosses the floor, and part of the
+mirror counts above it: 2,681 and 1,412 there before, 2,729 and 1,981 on the dry floor.)
+The bench, the walls and the room's other fixed pieces are cut the same way wherever
+their mirror lies off the screen; Lara and the objects are mirrored as geometry (round 6),
+clipped only to the wet box grown by a square, which no eye here reached.
 
 - *The strong transition.* The same table: where the water lies the floor mirrors by 4.3
   levels, round it by 11.5 to 15.5, so the wet area reads drier than the polished floor
@@ -15720,7 +15726,9 @@ floor's own draw, and not twice") now holds only where the water marches; it is 
 floors' code and is left as it is.
 
 **Commits.** `a6b5b5cb` (the polished floor under the water), `7c08a502` (the models'
-shaders at the load), `31c79d68` (RoomProbe `-wetstep`) and the record's.
+shaders at the load), `31c79d68` (RoomProbe `-wetstep`), `0fa08b01` (the record),
+`a71909a4` (RoomProbe `-wetcut`), `ea8c2857` (two comments' numbers and words) and the
+record's corrections.
 
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
@@ -17319,10 +17327,19 @@ surface room, no water.
 **Decisions.** The sea is told apart by the data's own mark of one, the surface over the
 dive; no level is named in the code.
 
+**Checked.** With the tool of `b35b3b96` against the round's, beside the sweep and the
+eyes above: the classic path (`hd_build` 0, the six rooms of the wet floor's Round 8) 6 of
+6 identical; the fifteen parity cameras 15 of 15 with `hd_water` 0 and with 1, the marble
+floors off and on each; the six HD views 6 of 6; the pond's twelve views 36 of 36 and the
+canal dive 4 of 4; RICH3's room 190 at its six eyes with `hd_water` 0 6 of 6 identical.
+ModernTest 15,634 checks with `water_deep`'s 9 among them, MenuTest 44,272, InterpTest
+729, LipsTest 299 with round 163's `.OBJ` folder and 272 without (`cutseq.bin` given by
+hand), 0 failed; the engine and all nine tools build.
+
 **Left.** Not seen in the game yet. A level with a sea's surface whose water mostly lies
 under sheets keeps the basin's look by the share, as before.
 
-**Commits.** `d846de7f`.
+**Commits.** `d846de7f`, `ea8c2857` (the water build's comment names the channel's look).
 
 ### The marble floors' mirror (#205)
 2026-10-16

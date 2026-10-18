@@ -22154,6 +22154,73 @@ static void water_surface()
 		(long)kHDWaterSurfaceReach, 2048);
 }
 
+/* The wet floor over a polished floor (hd_water_under.h): a mirror face
+ * overlapping a 256-unit cell held a unit in, and a wet point giving its own
+ * mirror to the marble floors' where they mirrored its height. The cell at
+ * 46,080, 67,584 of RICH2's corridor mouth; a split's crease runs across a
+ * cell's corners, so a face along one side only meets it. */
+static void wet_polish()
+{
+	printf("the wet floor over a polished floor: the cells and the mirror\n");
+
+	// A face covering the cell, as a floor's two triangles do.
+	const float ax[3] = { 45568.0f, 47104.0f, 45568.0f };
+	const float az[3] = { 67072.0f, 67072.0f, 68608.0f };
+
+	ok(HDWetCellOnFace(ax, az, 46080.0f, 67584.0f, 256.0f, 1.0f),
+		"polished: a face over the cell overlaps it", 0, 1);
+
+	// A face beside the cell that only meets its edge does not.
+	const float bx[3] = { 45824.0f, 46080.0f, 45824.0f };
+	const float bz[3] = { 67584.0f, 67584.0f, 67840.0f };
+
+	ok(!HDWetCellOnFace(bx, bz, 46080.0f, 67584.0f, 256.0f, 1.0f),
+		"polished: a face meeting the cell's edge does not count", 1, 0);
+	ok(HDWetCellOnFace(bx, bz, 46080.0f, 67584.0f, 256.0f, 0.0f),
+		"polished: ...it does with the cell not held in", 0, 1);
+
+	/* A face whose box overlaps the cell but whose long edge passes its
+	 * corner: the triangle's edge separates them. */
+	const float cx[3] = { 45900.0f, 46200.0f, 45900.0f };
+	const float cz[3] = { 67400.0f, 67400.0f, 67700.0f };
+
+	ok(!HDWetCellOnFace(cx, cz, 46100.0f, 67600.0f, 256.0f, 1.0f),
+		"polished: the face's own edge separates a cell past it", 1, 0);
+	ok(HDWetCellOnFace(cx, cz, 46000.0f, 67500.0f, 256.0f, 1.0f),
+		"polished: ...a cell in its corner overlaps it", 0, 1);
+
+	// Wound the other way round, the same answers.
+	const float rx[3] = { cx[0], cx[2], cx[1] };
+	const float rz[3] = { cz[0], cz[2], cz[1] };
+
+	ok(!HDWetCellOnFace(rx, rz, 46100.0f, 67600.0f, 256.0f, 1.0f) &&
+		HDWetCellOnFace(rx, rz, 46000.0f, 67500.0f, 256.0f, 1.0f),
+		"polished: either winding", 0, 1);
+
+	// A face with no area overlaps nothing.
+	const float dx[3] = { 46000.0f, 46200.0f, 46400.0f };
+	const float dz[3] = { 67600.0f, 67700.0f, 67800.0f };
+
+	ok(!HDWetCellOnFace(dx, dz, 46080.0f, 67584.0f, 256.0f, 1.0f),
+		"polished: a face with no area", 1, 0);
+
+	// The frame's mirrored planes, the most covering first.
+	const int planes[3] = { 0, -768, -2560 };
+
+	ok(HDWetGivesWay(0, planes, 2, 3, 16), "gives way: the floor mirrored",
+		0, 1);
+	ok(HDWetGivesWay(-14, planes, 2, 3, 16),
+		"gives way: ...a face's height a few units off it", 0, 1);
+	ok(!HDWetGivesWay(-2560, planes, 2, 3, 16),
+		"gives way: not where the cap left the height unmirrored", 1, 0);
+	ok(!HDWetGivesWay(0, planes, 0, 3, 16),
+		"gives way: not where the marble mirrored nothing", 1, 0);
+	ok(!HDWetGivesWay(-256, planes, 3, 3, 16),
+		"gives way: not a click off every mirrored plane", 1, 0);
+	ok(HDWetGivesWay(-2560, planes, 9, 3, 16),
+		"gives way: the planes read no further than the list", 0, 1);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -24019,6 +24086,7 @@ int main()
 	art_ripple();
 	water_look();
 	water_surface();
+	wet_polish();
 	spring_table();
 	spring_file();
 	spring_clock();

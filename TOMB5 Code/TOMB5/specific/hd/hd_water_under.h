@@ -119,6 +119,74 @@ inline int HDWaterSurfaceRoom(const int* wet, const float* ceilTop,
 	return best;
 }
 
+/* The wet floor over a polished floor (hd_render.cpp, "the polished floor
+ * under the water"), the arithmetic without a device; ModernTest checks
+ * both (wet_polish).
+ *
+ * HDWetCellOnFace: whether a triangle - its corners' x in `ax` and z in
+ * `az` - overlaps the square cell x0 .. x0 + size, z0 .. z0 + size held
+ * `inset` in from every side, so a triangle that only meets the cell's edge
+ * does not count: separating axes over the cell's two axes and the
+ * triangle's three edges. A triangle with no area overlaps nothing.
+ *
+ * HDWetGivesWay: whether a wet point on a polished floor at height `y`
+ * gives its own mirror to the marble floors' this frame: one of the
+ * frame's first `drawn` mirrored planes (`planeY`, at most `count` of
+ * them) lies within `reach` units of it. */
+inline bool HDWetCellOnFace(const float* ax, const float* az, float x0,
+	float z0, float size, float inset)
+{
+	const float bx0 = x0 + inset, bx1 = x0 + size - inset;
+	const float bz0 = z0 + inset, bz1 = z0 + size - inset;
+
+	if ((ax[0] < bx0 && ax[1] < bx0 && ax[2] < bx0) ||
+		(ax[0] > bx1 && ax[1] > bx1 && ax[2] > bx1) ||
+		(az[0] < bz0 && az[1] < bz0 && az[2] < bz0) ||
+		(az[0] > bz1 && az[1] > bz1 && az[2] > bz1))
+		return false;
+
+	for (int e = 0; e < 3; e++)
+	{
+		const int n = (e + 1) % 3, o = (e + 2) % 3;
+		const float nx = az[n] - az[e], nz = ax[e] - ax[n];
+		const float side = nx * (ax[o] - ax[e]) + nz * (az[o] - az[e]);
+		float most = -1.0e30f;
+
+		if (side == 0.0f)
+			return false;
+
+		// The cell's corner reaching furthest to the triangle's side.
+		for (int c = 0; c < 4; c++)
+		{
+			const float cx = (c & 1) ? bx1 : bx0;
+			const float cz = (c & 2) ? bz1 : bz0;
+			const float d = (side < 0.0f ? -1.0f : 1.0f) *
+				(nx * (cx - ax[e]) + nz * (cz - az[e]));
+
+			most = d > most ? d : most;
+		}
+
+		if (most < 0.0f)
+			return false;
+	}
+
+	return true;
+}
+
+inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
+	int reach)
+{
+	for (int k = 0; k < drawn && k < count; k++)
+	{
+		const int d = planeY[k] - y;
+
+		if (d <= reach && d >= -reach)
+			return true;
+	}
+
+	return false;
+}
+
 /* The look's eleven numbers on the game's path, in the order of
  * RoomProbe's -underlookknobs: the disc's, the shafts' and the underside's
  * strengths, the surface light's reach along the eye ray in units, the

@@ -11868,7 +11868,9 @@ namespace
 	 * and the dome, the spray and the objects' glows lie over the mirror as
 	 * over the floor. Lara and the objects are mirrored as geometry, drawn
 	 * through the floor's reflection into a target of their own just
-	 * before the mirror ("the models in the mirror"). Each point keeps its
+	 * before the mirror ("the models in the mirror"). Over a polished floor
+	 * the marble floors' mirror is the water's ("the polished floor under
+	 * the water"). Each point keeps its
 	 * way: how far the water runs
 	 * from the glass to it, through the grid (the shortest way along
 	 * neighbours, diagonals at their own length, a step down at no cost),
@@ -11979,6 +11981,8 @@ namespace
 		float way;		// units from the glass along the water's way
 		float puddle;		// the share of the mirror there
 		float march;		// 0 where the art mirrors the room itself
+		// 1 on a polished floor's mirror face (wet_polished), else 0
+		float polished;
 		float light;		// its room's light, for the fog
 		float field[3];		// the light field's texture coordinate
 	};
@@ -11994,6 +11998,7 @@ namespace
 		float reach;		// the dome's foot from the glass, units
 		float furthest;		// the furthest point along the water's way
 		int found;		// the squares the run found before the radius
+		int polished;		// its cells on a polished floor (wet_polished)
 	};
 
 	/* A square of a wet floor for RoomProbe's map (HDRenderWaterWetSquare):
@@ -12008,6 +12013,7 @@ namespace
 		bool clear;		// its floor a clear floor (wet_clear)
 		bool copied;
 		int slope;		// its floor's slope function, 0 flat
+		int polished;		// its cells on a polished floor (wet_polished)
 	};
 
 	// The world box of wet points (HDRenderWaterWetDraw).
@@ -13222,6 +13228,77 @@ namespace
 				}
 	}
 
+	/* The polished floor under the water. Where the marble floors are on,
+	 * a polished floor already mirrors the room as a plane: the room art,
+	 * the statics and the models drawn once more through the floor
+	 * ("the marble floors"). The wet floor's own mirror is marched over the
+	 * screen and finds only what the frame shows. Laid over a polished floor
+	 * as over any other, the water takes the marble's mirror away under
+	 * every pixel of its layer (HDRenderMarbleDraw clears its stencil where
+	 * the layer's wet is over 0) and lays its own, weaker and blurred, in
+	 * its place: at RICH2's tank (RoomProbe, 960 x 540, the tank 60 s after
+	 * it broke) the marble's mirror lifts the floor where the water lies by
+	 * 11.5 levels on average, the water's own by 4.3, so the wet floor reads
+	 * drier than the floor round it, and its outline - the front's ragged
+	 * ramp, soft in the darkening - turns into a hard line of 256-unit steps
+	 * where the marble's mirror stops at the first wet pixel: a jump of 59
+	 * levels between neighbouring pixels (the median over the rows across
+	 * it). And a thing whose reflection the march needs leaves the frame as
+	 * the eye turns: the march mirrors the vending machine's lit screen in
+	 * 536 pixels with the eye 28 degrees down, in none at 43.
+	 *
+	 * Water on polished stone lies flat in the same plane, 4 units over it,
+	 * and mirrors the same room: one planar mirror stands for both. So a
+	 * wet point on a polished floor keeps the marble's mirror: the layer's
+	 * points the marble's mask reads carry no wet there (g_wet_verts), and
+	 * where the marble mirrored that floor's height this frame the point's
+	 * own mirror - the march, its light-field stand-in and the mirrored
+	 * models - gives way (wet_give_way); its darkening and the lamps'
+	 * highlight stay, so the floor reads wet by its darkening over a mirror
+	 * that runs on unbroken from the dry floor. Where the marble did not
+	 * mirror the height - the frame's planes are capped - or the floor is no
+	 * polished floor, or the marble floors are off, the water marches as
+	 * before. A polished floor is the marble's own extent, its mirror
+	 * faces, asked per 256-unit cell of the layer (wet_polished): a cell
+	 * whose wet corners stand at one height and which a face overlaps.
+	 * RICH2: every flat square of either tank's floor, 16 cells of 16, and
+	 * the flat half of the six splits round the raised blocks, 10 of 16;
+	 * 316 cells of tank 182's 352 and all 192 of tank 33's. Where every
+	 * drawn point gives way, the models are not mirrored for the water. */
+	/* Whether the 256-unit cell at world x0, z0 lies on a polished floor
+	 * (see "the polished floor under the water"): a mirror face of the
+	 * marble floors (HDGroup::mirrorFaces, "the marble floors") of any of
+	 * `list`'s rooms, at floor y within a click's sixteenth, overlaps it
+	 * held a unit in, so a face that only meets its edge does not count
+	 * (HDWetCellOnFace, hd_water_under.h). No face while the marble floors
+	 * are off. */
+	bool wet_polished(const std::vector<int>& list, int x0, int z0, int y)
+	{
+		for (int r : list)
+		{
+			const HDGroup& g = g_groups[(size_t)r];
+			const bool at = (size_t)r * 2 + 1 < g_group_origin.size();
+			const float ox = at ? g_group_origin[(size_t)r * 2] : 0.0f;
+			const float oz = at ? g_group_origin[(size_t)r * 2 + 1] : 0.0f;
+
+			for (size_t f = 0; f < g.mirrorY.size(); f++)
+			{
+				if (abs(g.mirrorY[f] - y) > 16)
+					continue;
+
+				const float* p = &g.mirrorFaces[f * 9];
+				const float ax[3] = { p[0] + ox, p[3] + ox, p[6] + ox };
+				const float az[3] = { p[2] + oz, p[5] + oz, p[8] + oz };
+
+				if (HDWetCellOnFace(ax, az, (float)x0, (float)z0, 256.0f,
+					1.0f))
+					return true;
+			}
+		}
+
+		return false;
+	}
+
 	/* Whether the floor of square sx, sz at height y is a clear floor in
 	 * the art of any of `list`'s rooms: a clear triangle of a group's own
 	 * horizontal planes (HDGroup::clearFlats) within a click's sixteenth
@@ -13715,6 +13792,42 @@ namespace
 				for (int k = 0; k < 25 && map.kept && map.copied; k++)
 					if (g[(size_t)k] >= 0)
 						w.points[(size_t)g[(size_t)k]].march = 0.0f;
+
+				/* The cells on a polished floor, and the points round them: a
+				 * cell whose wet corners - three at least - stand at one
+				 * height, so a split's flat half counts and its slope not. */
+				for (int c = 0; c < 16 && map.kept; c++)
+				{
+					const int i = c % 4, j = c / 4;
+					int corner[4], n = 0, y = 0;
+					bool flat = true;
+
+					for (int k = 0; k < 4; k++)
+					{
+						corner[k] = g[(size_t)((j + k / 2) * 5 + i + k % 2)];
+
+						if (corner[k] < 0)
+							continue;
+
+						const int h = (int)lroundf(
+							w.points[(size_t)corner[k]].y + kWetLift);
+
+						flat = flat && (n == 0 || h == y);
+						y = h;
+						n++;
+					}
+
+					if (n < 3 || !flat || !wet_polished(list, q.sx * 1024 +
+						i * 256, q.sz * 1024 + j * 256, y))
+						continue;
+
+					map.polished++;
+					w.info.polished++;
+
+					for (int k = 0; k < 4; k++)
+						if (corner[k] >= 0)
+							w.points[(size_t)corner[k]].polished = 1.0f;
+				}
 
 				w.squares.push_back(map);
 			}
@@ -16409,9 +16522,17 @@ namespace
 
 	/* The wet floors of this frame (HDRenderWaterWetDraw): their points in
 	 * view space, their triangles and the world's axes there, kept from the
-	 * first draw for the second. */
+	 * first draw for the second (g_wet_layer). g_wet_verts holds the same
+	 * points as the marble floors' mask reads them (HDRenderMarbleDraw):
+	 * the wet in place of where the water's own mirror lies, 0 on a
+	 * polished floor, which keeps its marble mirror under the water ("the
+	 * polished floor under the water"). g_wet_polish: each point's floor
+	 * height where it lies on a polished floor, kNotPolished elsewhere. */
+	std::vector<CardVertex> g_wet_layer;
 	std::vector<CardVertex> g_wet_verts;
 	std::vector<unsigned short> g_wet_tris;
+	std::vector<int> g_wet_polish;
+	const int kNotPolished = 0x7FFFFFFF;
 	float g_wet_axes[12] = {};
 
 	/* The models' target and its INTZ depth (HDRenderWaterWetModels) for a
@@ -16856,8 +16977,10 @@ bool HDRenderWaterWetSquare(int floor, int at, HDWaterWetSquare* out)
  * points and triangles of
  * its grid, the dome's foot from the glass and the furthest point along
  * the water's way (units, the ragged push included); then the squares the
- * run found in its rooms before the radius dropped the far ones, and the
- * furthest along the way the front runs (the foot and kWetRadius). */
+ * run found in its rooms before the radius dropped the far ones, the
+ * furthest along the way the front runs (the foot and kWetRadius), and the
+ * kept squares' 256-unit cells on a polished floor (wet_polished; none
+ * while the marble floors are off). */
 bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size)
 {
 	if (!out || !size || at < 0 || at >= (int)g_wet.size())
@@ -16876,9 +16999,9 @@ bool HDRenderWaterWetLine(int at, const char* stem, char* out, size_t size)
 
 	snprintf(out, size, "SPLASHLOG level=%s wet tank=%d squares=%d rooms=%s "
 		"heights=%d points=%d tris=%d reach=%.0f far=%.0f found=%d "
-		"limit=%.0f", stem ? stem : "?", w.item, w.squares, rooms, w.heights,
-		w.vertices, w.triangles, w.reach, w.furthest, w.found,
-		g_wet[(size_t)at].limit);
+		"limit=%.0f polished=%d", stem ? stem : "?", w.item, w.squares, rooms,
+		w.heights, w.vertices, w.triangles, w.reach, w.furthest, w.found,
+		g_wet[(size_t)at].limit, w.polished);
 	return true;
 }
 
@@ -17581,6 +17704,32 @@ void HDRenderWaterCardsDraw(const float* toFrame)
 
 static void wet_layer(int part);
 
+/* The frame's wet points on a polished floor give their own mirror to the
+ * marble floors' where those mirrored that floor's height this frame
+ * (HDRenderMarbleDraw has drawn by now; see "the polished floor under the
+ * water"): the point's share of the water's mirror - the march, the light
+ * field's stand-in and the mirrored models - goes to 0, its darkening and
+ * the lamps' highlight stay. Whether any drawn point still marches. */
+static bool wet_give_way()
+{
+	HDRenderMarbleStats marble;
+	bool marches = false;
+
+	HDRenderMarbleStatsNow(&marble);
+
+	for (size_t i = 0; i < g_wet_layer.size(); i++)
+	{
+		if (g_wet_polish[i] != kNotPolished && HDWetGivesWay(g_wet_polish[i],
+			marble.plane_y, marble.drawn, 8, 16))
+			g_wet_layer[i].a = 0.0f;
+	}
+
+	for (size_t i = 0; i < g_wet_tris.size() && !marches; i++)
+		marches = g_wet_layer[g_wet_tris[i]].a > 0.0f;
+
+	return marches;
+}
+
 /* The frame's wet floors (see "the wet floor"): every point of a shot
  * tank's floor at this moment into view space, as the cards' are, and the
  * triangles with any wet corner, kept for the frame's two draws - CardVS
@@ -17600,8 +17749,10 @@ void HDRenderWaterWetDraw(const float* toFrame)
 	g_wet_ready = false;
 	g_wet_models = false;
 	g_wet_height_set = false;
+	g_wet_layer.clear();
 	g_wet_verts.clear();
 	g_wet_tris.clear();
+	g_wet_polish.clear();
 
 	if (!g_device || !g_card_vs || !g_wet_ps || !g_in_frame || !toFrame ||
 		g_wet.empty())
@@ -17639,7 +17790,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			axes[r * 4 + k] = m[r * 4 + k] / l;
 	}
 
-	std::vector<CardVertex>& verts = g_wet_verts;
+	std::vector<CardVertex>& verts = g_wet_layer;
 	std::vector<unsigned short>& tris = g_wet_tris;
 	std::vector<float> wet;
 
@@ -17720,6 +17871,8 @@ void HDRenderWaterWetDraw(const float* toFrame)
 			v.a = p.puddle * p.march * open(p);
 			v.light = p.light;
 			verts.push_back(v);
+			g_wet_polish.push_back(p.polished > 0.0f ?
+				(int)lroundf(p.y + kWetLift) : kNotPolished);
 
 			if (wet[i] > 0.0f)
 			{
@@ -17745,6 +17898,7 @@ void HDRenderWaterWetDraw(const float* toFrame)
 		if (past)
 		{
 			verts.resize(base);
+			g_wet_polish.resize(base);
 			continue;
 		}
 
@@ -17774,6 +17928,13 @@ void HDRenderWaterWetDraw(const float* toFrame)
 		g_wet_box[2] = b.x1;
 		g_wet_box[3] = b.z1;
 	}
+
+	// The points as the marble floors' mask reads them (see g_wet_verts).
+	g_wet_verts = g_wet_layer;
+
+	for (size_t i = 0; i < g_wet_verts.size(); i++)
+		if (g_wet_polish[i] != kNotPolished)
+			g_wet_verts[i].cz = 0.0f;
 
 	// The opaque frame, for the sheets (and the march debugger).
 	HDRenderWaterCopy();
@@ -17902,6 +18063,10 @@ void HDRenderWaterWetModels(HDWetModelDraw draw, const void* projection,
 
 	if (!draw || !projection || !g_wet_ready || !g_device || !g_in_frame ||
 		g_wet_tris.empty() || !g_wet_height_set)
+		return;
+
+	// Where every drawn point gives way to the marble, nothing is mirrored.
+	if (!wet_give_way())
 		return;
 
 	IDirect3DSurface9* target = 0;
@@ -20201,6 +20366,7 @@ void HDRenderWaterWetMirror()
 		return;
 
 	g_wet_ready = false;
+	wet_give_way();
 	wet_copy_late();
 	wet_layer(1);
 }
@@ -20211,7 +20377,7 @@ void HDRenderWaterWetMirror()
  * written whole, the opaque frame's copy on s7. */
 static void wet_layer(int part)
 {
-	std::vector<CardVertex>& verts = g_wet_verts;
+	std::vector<CardVertex>& verts = g_wet_layer;
 	std::vector<unsigned short>& tris = g_wet_tris;
 	const float* axes = g_wet_axes;
 	const bool debug = part == 1 && g_wet_debug > 0 && g_wet_debug_ps;

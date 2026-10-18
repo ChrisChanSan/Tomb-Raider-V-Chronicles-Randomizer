@@ -2885,7 +2885,8 @@ carries the tables.
     the classic room drawn as art). DATA (RoomProbe `-staticcover` on the
     player's files): 19 of the 103 classic statics at 0.603 to 1.000, the
     rest at 0.475 and below at 32 units; at 16 the dormer of ANDY3 falls to
-    0.434, at 64 the gap is the same.
+    0.437, at 64 the gap is the same (0.475 against 0.617), all sampled
+    every 64 units.
 277. **Flat and own-held statics not asked** (`hd_vis.cpp`,
     `HDVisStaticCovers`; `hd_level.cpp`, the statics handed in) - a static
     whose own room's art holds a twentieth of its box's cells

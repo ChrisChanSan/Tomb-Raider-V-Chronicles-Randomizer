@@ -12872,18 +12872,20 @@ static void vis_hidden_room()
 
 /* The static mesh the visibility path leaves to the art that lies on it
  * (HDVisStaticDrawnByArt): ANDY3's dormer of room 39, room 35's art on
- * 0.607 to 0.790 of its statics' samples within 32 units, and the shares
+ * 0.603 to 0.791 of its statics' samples within 32 units, and the shares
  * the rule keeps classic. */
 static void vis_static_rule()
 {
-	ok(HDVisStaticDrawnByArt(0.607f, 0.5, true),
-		"static: ANDY3 39 mesh 12, 0.607, room 35 drawn", 1, 1);
-	ok(HDVisStaticDrawnByArt(0.79f, 0.5, true),
-		"static: ANDY3 39 mesh 2, 0.790, room 35 drawn", 1, 1);
-	ok(!HDVisStaticDrawnByArt(0.79f, 0.5, false),
+	ok(HDVisStaticDrawnByArt(0.603f, 0.5, true),
+		"static: ANDY3 39 mesh 12, 0.603, room 35 drawn", 1, 1);
+	ok(HDVisStaticDrawnByArt(0.791f, 0.5, true),
+		"static: ANDY3 39 mesh 2, 0.791, room 35 drawn", 1, 1);
+	ok(!HDVisStaticDrawnByArt(0.791f, 0.5, false),
 		"static: the holder not drawn keeps it classic", 0, 0);
+	ok(!HDVisStaticDrawnByArt(0.475f, 0.5, true),
+		"static: JOBY5 141 mesh 7, 0.475, stays classic", 0, 0);
 	ok(!HDVisStaticDrawnByArt(0.474f, 0.5, true),
-		"static: JOBY5 141 mesh 7, 0.474, stays classic", 0, 0);
+		"static: JOBY3 137 meshes 4 and 5, 0.474, stay classic", 0, 0);
 	ok(HDVisStaticDrawnByArt(0.5f, 0.5, true),
 		"static: a half of its samples is enough", 1, 1);
 	ok(!HDVisStaticDrawnByArt(0.0f, 0.0, true),
@@ -12902,7 +12904,7 @@ static void vis_enclosed_rule()
 	ok(!HDVisClassicRoomEnclosed(true, false, 12, 146),
 		"enclosed: a group with art in its box keeps its faces", 0, 0);
 	ok(!HDVisClassicRoomEnclosed(false, true, 46, 121),
-		"enclosed: covered (ANDREA2 124) keeps its faces", 0, 0);
+		"enclosed: covered faces stay, though a room encloses it", 0, 0);
 	ok(!HDVisClassicRoomEnclosed(false, false, 31, -1),
 		"enclosed: inside no room (ANDY3 26) keeps its faces", 0, 0);
 	ok(!HDVisClassicRoomEnclosed(false, false, 0, 146),
@@ -13000,13 +13002,13 @@ static void vis_cube(trf::remaster::Trg& trg, float ox, float oz, float x0,
  * inside. */
 static void vis_enclosed_tables()
 {
-	for (int variant = 0; variant < 4; variant++)
+	for (int variant = 0; variant < 5; variant++)
 	{
 		trf::remaster::Trg trg;
 		std::vector<HDVisRoom> rooms(2);
 		std::vector<HDVisPortal> portals(2);
 		// 0: as above; 1: no portal; 2: C reaches out of A's box; 3: A's
-		// art in C's inside is four triangles.
+		// art in C's inside is four triangles; 4: eight, a guest's least.
 		const long x[2] = { 0, variant == 2 ? 5120 : 1024 };
 
 		for (int r = 0; r < 2; r++)
@@ -13036,7 +13038,9 @@ static void vis_enclosed_tables()
 			part.pass[0].start = (uint32_t)trg.indices.size();
 
 			// A's art in the middle of C's inside, one sector square.
-			for (int t = 0; g == 0 && t < (variant == 3 ? 4 : 12); t++)
+			const int tris = variant == 3 ? 4 : variant == 4 ? 8 : 12;
+
+			for (int t = 0; g == 0 && t < tris; t++)
 			{
 				const float cx = (float)x[1] + 1100.0f + t * 32.0f;
 				const float a[3] = { cx, -1000.0f, 2100.0f };
@@ -13056,17 +13060,29 @@ static void vis_enclosed_tables()
 		HDVisBuild(trg, &rooms[0], 2, 0, 0, &portals[0], 2, 0, 0,
 			HDVisDefaults(), &t);
 
-		const int want = variant == 0 ? 0 : -1;
-		static const char* what[4] =
+		const int want = variant == 0 || variant == 4 ? 0 : -1;
+		static const char* what[5] =
 		{
 			"enclosed: C inside A, linked, A's art in it",
 			"enclosed: no link, no enclosing room",
 			"enclosed: C past A's box, none",
-			"enclosed: four triangles are fewer than a guest's eight"
+			"enclosed: four triangles are fewer than a guest's eight",
+			"enclosed: eight triangles are enough"
 		};
 
 		ok(t.enclosedBy.size() == 2 && t.enclosedBy[1] == want, what[variant],
 			t.enclosedBy.size() == 2 ? t.enclosedBy[1] : -9, want);
+
+		if (variant == 0)
+		{
+			ok(t.enclosedBy.size() == 2 && t.enclosedBy[0] == -1,
+				"enclosed: A, whose inside holds no other art, by none",
+				t.enclosedBy.size() == 2 ? t.enclosedBy[0] : -9, -1);
+			ok(t.roomsEnclosed == 1 && t.enclosedTris.size() == 2 &&
+				t.enclosedTris[1] == 12,
+				"enclosed: one room, by A's twelve triangles",
+				t.roomsEnclosed, 1);
+		}
 	}
 }
 
@@ -13134,7 +13150,7 @@ static void vis_static_covers()
 	one.mins[2] = s0[2] - 1024.0f;
 	one.maxs[2] = s0[2] + (float)s - 1024.0f;
 
-	for (int variant = 0; variant < 4; variant++)
+	for (int variant = 0; variant < 6; variant++)
 	{
 		trf::remaster::Trg trg;
 
@@ -13149,7 +13165,9 @@ static void vis_static_covers()
 			/* 0: A's art on the cube's faces, 24 units out; 1: 40 units
 			 * out, past the reach; 2: C's own art on the faces, which
 			 * holds its box's cells and answers it without asking; 3: A's
-			 * art on the cube with A's box moved away from it. */
+			 * art on the cube with A's box moved away from it; 4: as 0 with
+			 * the static in a room past the level's groups; 5: as 0 with no
+			 * faces handed in. */
 			const float off = variant == 1 ? 40.0f : 24.0f;
 			const bool here = variant == 2 ? g == 1 : g == 0;
 
@@ -13170,8 +13188,13 @@ static void vis_static_covers()
 
 		HDVisTables t;
 
-		HDVisStaticCovers(trg, &asked[0], 2, &one, 1, &faces[0],
-			(int)faces.size(), HDVisDefaults(), &t);
+		HDVisStatic which = one;
+
+		if (variant == 4)
+			which.room = 7;
+
+		HDVisStaticCovers(trg, &asked[0], 2, &which, 1, &faces[0],
+			variant == 5 ? 0 : (int)faces.size(), HDVisDefaults(), &t);
 
 		const float share = t.staticShare.empty() ? -1.0f : t.staticShare[0];
 		const int group = t.staticGroup.empty() ? -9 : t.staticGroup[0];
@@ -13192,10 +13215,17 @@ static void vis_static_covers()
 			ok(group == -1 && t.staticsHeld == 0,
 				"covers: the room's own art holding it is not asked",
 				group, -1);
-		else
+		else if (variant == 3)
 			ok(group == -1,
 				"covers: art of a room whose box misses the static", group,
 				-1);
+		else if (variant == 4)
+			ok(group == -1 && t.staticsHeld == 0,
+				"covers: a static of no group's room is not asked", group, -1);
+		else
+			ok(t.staticGroup.size() == 1 && group == -1 && share == 0.0f,
+				"covers: no faces, one answer of none",
+				(long)t.staticGroup.size(), 1);
 	}
 }
 

@@ -6717,9 +6717,10 @@ the census of the fifteen levels (RoomProbe `-staticcover`): of the 103 statics 
 answers classic, the non-flat ones fall with a reach of 32 units into 19 at 0.603 to 1.000
 and the rest at 0.475 and below - JOBY5 room 141 and JOBY3 room 137, thin statics of slot
 6 with one side on a wall, 0.452 to 0.475. With a reach of 16 units the dormer's six drop
-to 0.434..0.689 and mix with those, with 64 the gap is the same (0.474 against 0.598): 32
-is the reach, and a half the share, in the gap. Sampled every 16 units the shares move by
-0.006 at most and the level costs 0.6 to 1.3 seconds, so the step is the stand rule's.
+to 0.437..0.698 and RICH2's room 32 to 0.292, mixing with those; with 64 the gap is the
+same (0.475 against the dormer's 0.617). All three sampled every 64 units: 32 is the
+reach, and a half the share, in the gap. Sampled every 16 units the shares move by 0.006
+at most and the level costs 0.6 to 1.3 seconds, so the step is the stand rule's.
 Held to the room whose box holds the static, the census leaves out ANDREA1's beams of
 rooms 180 and 207, JOBY3's four slot-24 statics of room 49 and RICH3's room 50, held only
 by art reaching in from rooms whose box they are not in (0.593 to 0.972). The level's
@@ -6843,7 +6844,10 @@ the classic walk does not reach from there (106 only by the reach of the old pat
 triangles), so the guests table (`hd_vis.cpp`, `guestRule` 2) lists room 106 from them,
 and a room the tables list walks on through its own portals, to 105, 104, 108, 107
 and 113. With the guests left out of the walk (`-vissrc 6`) none of them is listed and the
-mill is gone: 18,085 and 19,667 pixels at 1,280 x 720 (72,797 and 79,034 at 2,560). His
+mill is gone: 96,938 and 98,467 pixels at 1,280 x 720 (385,184 and 391,524 at 2,560), to
+the pixel the picture with the six rooms left out by hand. Of those, the five rooms the
+walk reaches on from 106, with 106 itself still drawn, are 18,085 and 19,667 (72,797 and
+79,034). His
 "mill from rooms where it is not possible" is this: the guests' art and the walk on from
 it. Kept as it is. The pictures at both ticks are the head's byte for byte with this
 round's rules, at both sizes.
@@ -6878,8 +6882,8 @@ above. GPU time of the solid room draws (RoomProbe `-gpu 3`, median, three runs,
 0.169..0.174.
 
 **Checked.** The engine and all nine tools build from the last code commit; ModernTest
-15,648 checks (36 new: 7 on the static rule, 5 on the static covers, 6 on the enclosed
-room, 4 on the enclosure table, 7 on the height and 7 on the box side), MenuTest 44,272,
+15,654 checks (42 new: 8 on the static rule, 7 on the static covers, 6 on the enclosed
+room, 7 on the enclosure table, 7 on the height and 7 on the box side), MenuTest 44,272,
 InterpTest 729, LipsTest 299 with the `.OBJ` folder and 272 without (the cutseq file named
 by hand, the worktree having no game folder), 0 failed; the shaders' `.inc` untouched.
 With `hd_vis` 0 the pictures of every set above and of the places of rounds 11, 12 and 13
@@ -6899,7 +6903,9 @@ the probe; the game's frame at the four places is his to see.
 
 **Commits.** `0293717` (the default), `fbb1251` (the static the art lies on), `89cea13`
 (the classic room inside another's art), `d7939e7` (art held by its height), `b03ad55`
-(only on the wall plane, the holder drawn), `9e87cb0` (the statics' step) and this record.
+(only on the wall plane, the holder drawn), `9e87cb0` (the statics' step), `2755e19` (this
+record) and a last one (the mill's pixels, the shares at the step of 64 and the tests'
+labels corrected, six checks more).
 
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04

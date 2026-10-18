@@ -6639,6 +6639,268 @@ canopy - his word on them. The default.
 (RoomProbe `-visplane`, `-visfaces`, `-visportals`, `-walkdoors`), `b414c9d` (the wall of
 a claimed face in place of its plane) and the records, `14cac35` and this one.
 
+**Round 13: the default, the mill-wheel house, the facade window, the sliver, and the mill
+seen from afar (2026-10-18).** The owner played the engine of 2026-10-17 (round 12 in it)
+and sent pictures of ANDY3's mill-wheel house, of JOBY2's facade window with the broken
+pane (from his earlier list) and a trview picture of JOBY2's room 30 cutting into its
+neighbour (reference pictures supplied for this project, not in the repository), a `-log`
+of a still stand before the window, and his word, put into English: ANDREA1 and ANDY3 are
+right on the earlier points; asked whether `hd_vis` should become the default, "yes, I
+think we now have everything except a few small things. ANDY3 alone has gained a lot; it
+may be a positive bug, but I can now see the mill from rooms where it is actually not
+possible - a nice effect"; of the mill-wheel house, "some of the meshes are still SD and
+some fight with the HD textures"; of the window's log, "the log is here"; and of JOBY2's
+ghosts, "they are still there minimally, a few pixels; that should be 256 units of
+overlap; it probably cut only 250". That last reading was taken as a hypothesis to
+measure.
+
+**The default** (`tomb5/tomb5.cpp`). `hd_vis` is 1 now: the first run's registry value and
+the value an absent key reads as. 0 keeps the classic walk with the room-art rules of the
+entries above; any other value reads as 0, as before. A registry an earlier build wrote
+keeps the value it holds - it wrote `hd_vis` 0 on its first run - so on such an
+installation the path stays as it was until the value is set.
+
+**His places, matched** (CAMLOG ticks of his log drawn at 320 x 180 on the visibility path
+and correlated with his pictures as in round 11). ANDY3's picture 1 is load 4 tick 5,490,
+eye in room 35 (0.15 / 0.22, low because his pictures carry Lara and a darker sky; the
+dormer, the cone and the roofs are the probe's at that tick); picture 3 matched no tick of
+the log (0.10 / 0.21 at best), so two eyes of this round's own stand beside it - one from
+above the dormer's south-west side (40,575, 6,500, 31,297) and tick 5,592. The window is
+the still stand of his window log, ticks 563 to 806, eye in room 146 (22,263, -6,133,
+34,471). The sliver is load 6 tick 7,559, eye in room 28, the worst of the 4 ticks out of
+658 (every second tick of his JOBY2 visit, the crane hall flipped as at the load) at which
+group 30 draws anything outside its window - 16, 7, 7 and 2 pixels at 640 x 360; his
+trview camera (29,377, -3,499, 39,670) stands in room 28's box at the ceiling of room 60,
+the room with the marble walls and the chequered floor, where the probe draws the same
+corner.
+
+**The mill-wheel house** (picture 1, the dormer on the roof of ANDY3's room 39). The house
+is room 39, whose box (x 37,888..49,152, y 6,656..8,704, z 32,768..38,912) shares z
+32,768..34,816 with room 35's, the land round the mill; the dormer stands there, and room
+35's art models it. Its classic faces are six static meshes of room 39 that the statics'
+rule (`hd_cover.h`, `HDStaticAnswer`) answers classic: room 39's own art holds 0 to 3 of
+the 48 to 200 cells of their boxes (under a twentieth), and room 35's art is not asked,
+because a group's art inside its own room's box is that room's and not a static's of
+another room. No classic room face is there (the house is drawn HD), and no static of the
+house has a model of its own to be refused - the statics are drawn from the room art or
+classic. Measured with RoomProbe `-statics new -coincide 16`, each static drawn alone
+(`-piece`), at tick 5,490: pixels within 16 units of the art (of them the art's) and in
+front of it by more, the old texture.
+
+| Static | Slot | Faces | Box (x, y, z) | 1,280 x 720 within (art's) / in front | 2,560 x 1,440 within (art's) / in front | Room 35's art on it |
+|---|---:|---:|---|---|---|---:|
+| room 39 mesh 1 | 25 | 19 | 344, 1,034, 974 | 3,599 (3,098) / 10 | 14,388 (12,535) / 41 | 0.773 |
+| mesh 2 | 26 | 19 | 344, 1,034, 974 | 226 (226) / 3 | 877 (877) / 9 | 0.791 |
+| mesh 3 | 27 | 12 | 1,722, 254, 1,228 | 5,663 (3,209) / 987 | 22,715 (12,751) / 3,863 | 0.663 |
+| mesh 6 | 31 | 5 | 1,734, 1,235, 1,026 | 5,137 (1,896) / 5,467 | 20,483 (7,501) / 21,933 | 0.655 |
+| mesh 11 | 38 | 15 | 464, 534, 842 | 2,572 (365) / 1,014 | 10,286 (1,473) / 4,072 | 0.647 |
+| mesh 12 | 39 | 15 | 464, 534, 842 | 15,066 (6,284) / 36 | 60,246 (25,136) / 175 | 0.603 |
+| all six | | | | 31,967 (14,810) / 7,513 | 127,820 (59,207) / 30,077 | |
+
+Room 35's art left out (`-skipgroup 35`), the statics land within 16 units of nothing (1
+pixel) and stand in front of everything at 114,543: it is room 35's art they fight with.
+The last column is the share of the static's surface that art lies on, the rule below.
+
+*The rule: a static the art lies on* (`hd_vis.h`, `HDVisStaticCovers`,
+`HDVisStaticDrawnByArt`; `hd_vis.cpp`; `hd_level.cpp`, `VisStaticFaces`, the statics
+handed in by `BuildRoomVis`, `VisStaticLeftToArt` asked by `HDStaticDrawnClassic`; the
+visibility path only). Once per level, with the `.TRG` the build has open, every static
+whose own room's art does not hold a twentieth of its box's cells, and that is not flat
+(`HDStaticFlat`: a pane or a square laid on a wall lies on whatever art stands behind it,
+which need not model it), is sampled over its faces every 64 units (`HD_COVER_STEP`, as
+the stand rule samples a face), and per group whose room's box holds the centre of its
+faces - the room it stands in, its own or another that shares the place - the samples a
+triangle of that group's opaque or alpha art covers within 32 units, facing either way,
+are counted. A static the frame would draw classic is left to the group with the largest
+share when that share is a half or more and the frame draws the group. The numbers, from
+the census of the fifteen levels (RoomProbe `-staticcover`): of the 103 statics the rule
+answers classic, the non-flat ones fall with a reach of 32 units into 19 at 0.603 to 1.000
+and the rest at 0.475 and below - JOBY5 room 141 and JOBY3 room 137, thin statics of slot
+6 with one side on a wall, 0.452 to 0.475. With a reach of 16 units the dormer's six drop
+to 0.434..0.689 and mix with those, with 64 the gap is the same (0.474 against 0.598): 32
+is the reach, and a half the share, in the gap. Sampled every 16 units the shares move by
+0.006 at most and the level costs 0.6 to 1.3 seconds, so the step is the stand rule's.
+Held to the room whose box holds the static, the census leaves out ANDREA1's beams of
+rooms 180 and 207, JOBY3's four slot-24 statics of room 49 and RICH3's room 50, held only
+by art reaching in from rooms whose box they are not in (0.593 to 0.972). The level's
+cost, probe-measured with five levels at once: 13 to 533 ms, TITLE 533, RICH2 423, JOBY2
+365 (only the statics the own art does not hold are asked; all of them, every 16 units,
+took 2 to 34 seconds).
+
+Taken, 19 statics: ANDY3's six of the dormer and room 18's mesh 1 (slot 40, room 86's art,
+0.931); ANDREA1 room 221's three poles of slot 42 (room 59's art, 1.000); ANDY1 room 225's
+mesh 6 (slot 25, room 124's, 0.935); RICH1 room 59's mesh 0 (slot 21, room 57's, 0.802);
+RICH2 room 32's mesh 0 (slot 2, room 23's, 1.000); TITLE rooms 23, 24 and 25, two vault
+panels of slot 15 each (rooms 21, 20 and 19, 1.000) - one of them seen from room 23 at 640
+x 360: the flat green static over the vault, the art's own vault without it, 104,004
+pixels. Measured at the mill-wheel house (the classic statics drawn, the picture the
+head's against this round's, pixels differing by more than 8):
+
+| Eye | Size | Statics within / in front, head | new | Changed | New clear | Eye step fight head / new |
+|---|---|---|---|---:|---:|---|
+| tick 5,490 (picture 1) | 1,280 | 31,967 / 7,513 | 0 / 0 | 24,670 | 0 | 5,235 / 4,516 |
+| tick 5,490 | 2,560 | 127,820 / 30,077 | 0 / 0 | 98,690 | 0 | 25,714 / 22,304 |
+| own, above the dormer (picture 3's side) | 1,280 | 64,731 / 14,394 | 0 / 0 | 48,182 | 0 | 1,186 / 519 |
+| tick 5,592 | 1,280 | 65,630 / 11,400 | 0 / 0 | 42,143 | 0 | 10,459 / 2,228 |
+
+The probe draws no static in the sweep's pictures, so they do not move with this rule; in
+the game the statics above change wherever their group is listed, and nowhere else.
+
+**JOBY2's facade window** (the still stand). The window is a hole in room 146's art (the
+courtyard facade): a frame, a grid of glass blocks, a few of them broken out. Behind it is
+room 21, a sniper's room: a hollow group (its 360 triangles all stand outside its own
+box), so the engine draws it classic - 12 faces, of which the art covers none (TrgProbe
+`-classicart -perface`: 6.5 to 26.1 per cent of the floor's, ceiling's and side walls'
+samples, the far wall at x 25,600 bare). Its inside (x 24,576..25,600, z 33,792..35,840, y
+-7,680..-5,632) lies wholly in the box of room 146 (x 12,288..25,600, y -7,680..-4,352, z
+25,600..38,912), the room it is linked with through the window, and room 146's art models
+it: 177 triangles in it - the bars and walls behind the glass, and the window's dark
+wooden reveal. Drawn classic, room 21's faces stand in front of that art with the room's
+dark light - the black hole and the pale reveal of his picture -, and the stand rule
+leaves out room 146's art lying on them (90 triangles). The classic guard in the hole is
+the sniper, item 21 (slot 83, `SNIPER`, mesh bits all on), drawn by the object path with
+its HD model in the room's dark light - no room art. The canopy rule of round 12 does not
+take room 21: its group holds triangles (elsewhere) and it has no guest (room 146's art in
+it is in room 146's own box).
+
+*The rule: a classic room inside another's art* (`hd_vis.h`, `HDVisClassicRoomEnclosed`,
+`HDVisTables::enclosedBy`; `hd_vis.cpp`, `HDVisBuild`; `hd_level.cpp`,
+`VisHidesClassicRoom`; the visibility path only). Per room, the linked room whose whole
+box holds the room's inside and whose art stands in that inside with a guest's eight
+triangles or more is noted; a room drawn classic whose own group holds no art in its own
+box, no face of which any art covers wholly or in part, and which is enclosed so draws
+none of its faces, beside the canopy rule. Census: of the 21 classic rooms with faces in
+the fifteen levels, it takes JOBY2's 19 and 21, the two sniper rooms of the courtyard
+facade, and no other - their insides lie in room 146's box at a share of 1.00, the next
+classic room's in any linked room's box at 0.30 (ANDY3 118); the enclosure table names 126
+rooms over the fifteen levels (RoomProbe `-vis 1`, `-vis: enclosed` lines), and none of
+the other 19 classic rooms with faces is among them. Measured with the room drawn classic
+(`-classicroom 21 -stand`, the frame as drawn before) against left out (`-stand`):
+
+| Eye | Size | Changed | Clear before / after |
+|---|---|---:|---|
+| his still stand | 1,280 | 91,657 | 0 / 0 |
+| his still stand | 2,560 | 366,624 | 0 / 0 |
+| own, the facade from the containers (19,000, -5,200, 33,000) | 1,280 | 10,659 | 53,581 / 53,581 |
+| own, room 19's window (17,000, -6,200, 29,500) | 1,280 | 56,675 | 74,732 / 74,732 |
+
+Every changed pixel is in the window; no pixel goes clear. The hole now shows the bars and
+the walls behind the glass, and the reveal is the art's dark wood.
+
+**JOBY2's sliver** (tick 7,559). Group 30 draws 347 pixels outside its window at 2,560 x
+1,440 (14,824 inside it), a row of small teeth at the corner of room 60's ceiling and east
+wall. Read with an instrumented probe (a print in the renderer's fill for the run, not
+committed; its picture the probe's to the byte): 322 of them are two of room 30's
+triangles on the plane x 30,720, y -3,413..-3,242, z 42,325..43,008, one a third triangle,
+24 lie on edges; every pixel's point lies at x 30,720 and y -3,324..-3,156 - 4 to 172
+units under room 60's ceiling. The level data: room 60's ceiling is at -3,328 over the
+squares x 29,696..30,720, z 40,960..43,008 (SectorCheck, room 60 squares (1,2) and (1,3))
+and room 30's floor at -3,072 over the same squares (room 30 squares (6,1) to (6,3)); the
+two rooms are not linked and overlap by 256 units there, the column one sector wide
+between room 60's walls. x 30,720 is the plane of room 60's east wall and the edge of its
+intrusion box (x 29,696..30,720, y -3,328..-1,280); room 30's triangles there stand 86
+units into the box, their centroid 28 units over it. No rule cut them: not the box (asked
+at the centroid), not the air (its five points HD_AIR_MARGIN apart, and the one 32 units
+past the wall plane lands on a wall square), so the open half drew them whole on both
+paths, fighting with room 60's wall in one plane. The 256 he named is the overlap; nothing
+cut 250 of it - the cut misses the triangles by where their centroid stands.
+
+*The rule: art on the holder's wall plane, held by its height* (`hd_render.cpp`, the index
+fill's `height_at` and `by_height`; `hd_vis.h`, `HDVisHeightReaches`, `HDVisOnBoxSide`;
+`hd_level.cpp`, `DecidePairs`; the visibility path only). A triangle no box and no air
+holds, whose centroid an entry's box holds in x and z, whose three corners lie in one side
+plane of that box within a unit, and whose corners reach into the box's height by more
+than HD_AIR_MARGIN, becomes a piece of its own, `air` 2: on the visibility path it is art
+in unlinked air while its holder is drawn, held to its room's window; with the holder not
+drawn, and with `hd_vis` 0, it is the open half it was. Census (RoomProbe `-visheight 1`):
+1,179 triangles in 155 pieces over the fifteen levels (JOBY2 94 in 12). The rule's first
+form asked the height alone, 2,369 triangles in 225 pieces, and cut three views of the
+sweep besides the sliver (ANDREA1 room 110 at yaw 0, 720 pixels of a beam's end gone to
+clear; room 228 at yaw 270, 324 pixels of cracks at a wall corner - room 37's art on the
+plane z 29,696 of room 208's box with room 208 not listed; ANDREA2 room 200, 6); on the
+plane and with the holder drawn, those views are the head's to the pixel. Measured: tick
+7,559 347 -> 1 pixel at 2,560 (group 30's pixels 14,824 -> 14,478); the places of rounds
+11 and 12 that show the same art (group 30's pixels outside its window, head -> new; every
+other pixel the head's to the byte):
+
+| Place | 1,280 x 720 | 2,560 x 1,440 |
+|---|---|---|
+| tick 7,559 (his sliver) | 85 -> 0 | 347 -> 1 |
+| round 12's J2-220, the steel room (tick 28,164) | 176 -> 0 | 692 -> 1 |
+| round 11's J2-3, the striped column (tick 18,091) | 20 -> 0 | 70 -> 0 |
+| round 12's J2-221, the container dots | the head's | the head's |
+| round 12's A1-215, ANDREA1 | the head's | the head's |
+
+J2-220's lilac teeth were the same piece's triangles (room 30's in room 60's box, 16 of
+them) seen from the stairs. J2-221's dots (band art at a square's seam, and art in no box)
+lie on no side plane and stay.
+
+**The mill seen from afar** (his remark; a decision, no change). At ticks 5,492 and 5,585
+of his ANDY3 visit, eye in room 35 on the house's roof, the visibility path lists rooms
+106, 105, 104, 108, 107 and 113 - the mill and its buildings north of the house - which
+the classic walk does not reach from there (106 only by the reach of the old path): room
+106's art stands in the insides of rooms 93 and 95, the rooms above the house (421 and 67
+triangles), so the guests table (`hd_vis.cpp`, `guestRule` 2) lists room 106 from them,
+and a room the tables list walks on through its own portals, to 105, 104, 108, 107
+and 113. With the guests left out of the walk (`-vissrc 6`) none of them is listed and the
+mill is gone: 18,085 and 19,667 pixels at 1,280 x 720 (72,797 and 79,034 at 2,560). His
+"mill from rooms where it is not possible" is this: the guests' art and the walk on from
+it. Kept as it is. The pictures at both ticks are the head's byte for byte with this
+round's rules, at both sizes.
+
+**The sweep, the head (`b35b3b96`) against this round's tool** (as round 12's: the
+visibility path with both tools and the eye one unit along x; the old path's pictures of
+both tools byte for byte). Every view of every set is the head's to the byte on the
+visibility path; with `hd_vis` 0 every picture is too.
+
+| Set | views | fight head / new | art on empty head / new | changed new against head | changed against old head / new | `hd_vis` 0 same |
+|---|---:|---:|---:|---:|---:|---:|
+| 22 places (2,560 x 1,440) | 22 | 778,237 / 778,237 | 4,503,035 / 4,503,035 | 0 in 0 | 4,812,268 / 4,812,268 | 22 |
+| 131 sweep (1,280 x 720) | 131 | 235,152 / 235,152 | 11,495,277 / 11,495,277 | 0 in 0 | 1,025,670 / 1,025,670 | 131 |
+| 16 mass views | 16 | 308,471 / 308,471 | 29,289,288 / 29,289,288 | 0 in 0 | 3,694,738 / 3,694,738 | 16 |
+| 32 earlier views | 32 | 36,816 / 36,816 | 2,750,762 / 2,750,762 | 0 in 0 | 451,017 / 451,017 | 32 |
+| owner's 20 places | 20 | 177,868 / 177,868 | 1,442,962 / 1,442,962 | 0 in 0 | 3,338 / 3,338 | 20 |
+| J33's 9 views | 9 | 5,121 / 5,121 | 0 / 0 | 0 in 0 | 0 / 0 | - |
+| the video's 32 views | 32 | 2,754 / 2,754 | 1,489 / 1,489 | 0 in 0 | 0 / 0 | - |
+| trview 151, 152 | 2 | 2,355 / 2,355 | 796,026 / 796,026 | 0 in 0 | 37,466 / 37,466 | - |
+| the tower's swing (8) | 8 | 10,607 / 10,607 | 41,592 / 41,592 | 0 in 0 | 13 / 13 | 8 |
+| RICH2's lift ride (40) | 40 | 73,896 / 73,896 | - | 0 in 0 | 29,156 / 29,156 | 40 |
+| RICH2's fine walk (12) | 12 | 56,787 / 56,787 | - | 0 in 0 | 83,282 / 83,282 | - |
+| RICH2's shaft, frame 61,830 | 1 | 10,552 / 10,552 | - | 0 in 0 | 0 / 0 | - |
+
+The owner set of 99: fight 348,547 / 348,547, changed against old 1,314,966 / 1,314,966,
+no view changed; round 11's sixteen places the head's to the byte but J2-3 (above); round
+12's three places the head's but J2-220 (above). The statics and the classic rooms are not
+in these pictures (the probe draws neither unless asked); their changes are the two tables
+above. GPU time of the solid room draws (RoomProbe `-gpu 3`, median, three runs, 1,280 x
+720, head / new): the mill-wheel house 0.420..0.423 / 0.413..0.462 ms, the window
+0.091..0.097 / 0.087..0.095, the sliver 0.058..0.061 / 0.058, A1-215 0.162..0.173 /
+0.169..0.174.
+
+**Checked.** The engine and all nine tools build from the last code commit; ModernTest
+15,648 checks (36 new: 7 on the static rule, 5 on the static covers, 6 on the enclosed
+room, 4 on the enclosure table, 7 on the height and 7 on the box side), MenuTest 44,272,
+InterpTest 729, LipsTest 299 with the `.OBJ` folder and 272 without (the cutseq file named
+by hand, the worktree having no game folder), 0 failed; the shaders' `.inc` untouched.
+With `hd_vis` 0 the pictures of every set above and of the places of rounds 11, 12 and 13
+are the head tool's byte for byte (the 325 sweep views, the 6 pictures of this round's
+places and round 12's 6); every rule asks `g_vis_level` (or the visibility tables, built
+only on that path) first, and `hd_build` 0 builds none of it. The static answers of the
+fifteen levels (`-statictable`) are the head's line for line with the fill's new pieces
+in.
+
+**Left.** The default reaches an installation only where the registry has no `hd_vis` yet:
+every earlier build wrote 0 on its first run - a question. The statics a group's art
+reaching in from another room's box models (ANDREA1 180 and 207, JOBY3 room 49's four,
+RICH3 room 50) stay classic. The sniper is drawn with its HD model in room 21's dark
+light. JOBY2's container dots (round 12's J2-221: band art at a square's seam, the air's
+margin, and art in no box) are not on a box's side plane and stay. The record's numbers at
+the probe; the game's frame at the four places is his to see.
+
+**Commits.** `0293717` (the default), `fbb1251` (the static the art lies on), `89cea13`
+(the classic room inside another's art), `d7939e7` (art held by its height), `b03ad55`
+(only on the wall plane, the holder drawn), `9e87cb0` (the statics' step) and this record.
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

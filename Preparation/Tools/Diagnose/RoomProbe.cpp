@@ -1993,7 +1993,7 @@ static bool GammaProbeShot(Shot& shot)
 
 /* -gammatime: the pass and the copy back, n times over the shot as it
  * stands, on the GPU's clock (D3DQUERYTYPE_TIMESTAMP); the target holds the
- * plain picture again after every round.
+ * plain picture again after every repetition.
  *   gamma cost <w>x<h> runs=<n> pass=<median> (<min>..<max>) ms
  *     back=<median> (<min>..<max>) ms */
 static void GammaProbeTime(Shot& shot)

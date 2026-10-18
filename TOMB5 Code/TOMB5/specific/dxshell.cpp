@@ -210,9 +210,12 @@ long DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name, char* path,
  *
  * What it is. Just before the present, the back buffer is copied into a
  * texture of its size (StretchRect), and drawn back over it, one quad,
- * through hd_gamma.hlsl's curve. Every picture comes through
- * DXShowFrame, so this covers the world, the menus and the inventory over
- * it, the loading bar, the credits and the films alike.
+ * through hd_gamma.hlsl's curve. The engine presents in two places:
+ * DXShowFrame, which the world, the menus and the inventory over it, the
+ * loading bar, the credits and the films end in, and the loading bar's
+ * frames while the HD build runs (drawbars.cpp, LoadBarPresentHeld). Both
+ * take the same steps (DXGammaStart, DXGammaFinish), so every picture is
+ * covered.
  *
  * After the present the copy is put back into the back buffer. The engine
  * reads the last presented frame out of it - the inventory's and the pause
@@ -488,11 +491,15 @@ static void GammaRestore(LPDIRECT3DDEVICE9 dev)
 	}
 }
 
-HRESULT DXShowFrame()
+/* Before a present, in both of the engine's presents (DXShowFrame and the
+ * loading bar's held frames, drawbars.cpp's LoadBarPresentHeld): the -log
+ * line at the first present and at each change of the value, then the
+ * pass. True when DXGammaFinish has the engine's picture to put back. At
+ * the middle - and above the top, which the registry read never lets
+ * through - no pass runs and nothing is made. */
+bool DXGammaStart()
 {
-	HRESULT hr;
 	const ulong row = tomb5.gamma;
-	bool curved = 0;
 
 	if ((long)row != g_gammaNamed)
 	{
@@ -500,11 +507,25 @@ HRESULT DXShowFrame()
 		GammaLog(row, 0, S_OK);
 	}
 
-	/* Before the screenshot, so that the file is the picture as shown. At
-	 * the middle - and above the top, which the registry read never lets
-	 * through - nothing at all happens here. */
 	if (row != GAMMA_MIDDLE && row <= 100)
-		curved = GammaPass(G_dxptr->lpD3DDevice, row);
+		return GammaPass(G_dxptr->lpD3DDevice, row);
+
+	return 0;
+}
+
+// After a present: the copy back, unless the device is lost.
+void DXGammaFinish(bool curved, HRESULT hr)
+{
+	if (curved && hr != D3DERR_DEVICELOST)
+		GammaRestore(G_dxptr->lpD3DDevice);
+}
+
+HRESULT DXShowFrame()
+{
+	HRESULT hr;
+
+	// Before the screenshot, so that the file is the picture as shown.
+	const bool curved = DXGammaStart();
 
 	/* The engine's screenshot. One new -log line per file: the read-back's
 	 * HRESULT (DeviceReadBack: the first step that failed, or
@@ -541,8 +562,7 @@ HRESULT DXShowFrame()
 	HDFramePresented();
 
 	// The back buffer the engine's own picture again (the gamma pass).
-	if (curved && hr != D3DERR_DEVICELOST)
-		GammaRestore(G_dxptr->lpD3DDevice);
+	DXGammaFinish(curved, hr);
 
 	if (hr == D3DERR_DEVICELOST)
 	{

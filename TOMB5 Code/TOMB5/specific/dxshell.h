@@ -28,6 +28,11 @@ long DXCreateD3DDevice(LPDIRECT3D9 d3d, UINT adapter, HWND hwnd, D3DPRESENT_PARA
 long DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name, char* path,
 	size_t size);
 HRESULT DXShowFrame();
+/* The gamma pass's two steps around a present, for the presents outside
+ * DXShowFrame (the loading bar's held frames, drawbars.cpp): the pass
+ * before, true when the copy back after it has something to put back. */
+bool DXGammaStart();
+void DXGammaFinish(bool curved, HRESULT hr);
 void DXMove(long x, long y);
 void DXClose();
 long DXCreate(long w, long h, long bpp, long Flags, DXPTR* dxptr, HWND hWnd, long WindowStyle);

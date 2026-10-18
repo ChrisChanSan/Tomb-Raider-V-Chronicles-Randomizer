@@ -2937,7 +2937,9 @@ static void graphics_hd_row()
  * trip through that read; the field in global\types.h; and in
  * specific\dxshell.cpp that the pass runs nowhere at 50, that the picture
  * goes back after the present, and that the device's release and reset
- * take the pass's objects with them. */
+ * take the pass's objects with them; that both of the engine's presents,
+ * DXShowFrame and the loading bar's held one (specific\drawbars.cpp),
+ * take the pass. */
 static void display_gamma_row()
 {
 	static const char* const want[3] = { "Frame rate", "VSync", "Gamma" };
@@ -2948,6 +2950,7 @@ static void display_gamma_row()
 	char* dx = tree_file("../../../TOMB5 Code/TOMB5/specific/dxshell.cpp");
 	char* fx = tree_file(
 		"../../../TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_gamma.hlsl");
+	char* bars = tree_file("../../../TOMB5 Code/TOMB5/specific/drawbars.cpp");
 	char label[8][64];
 	char line[8][512];
 	int rows = 0, i, v, d;
@@ -2963,6 +2966,7 @@ static void display_gamma_row()
 		free(types);
 		free(dx);
 		free(fx);
+		free(bars);
 		return;
 	}
 
@@ -3094,7 +3098,7 @@ static void display_gamma_row()
 	// The pass: never at 50, the picture back after the present, released.
 	check(strstr(dx, "#define GAMMA_MIDDLE\t50") != 0, 1,
 		"gamma row: the middle is 50");
-	check(strstr(dx, "if (row != GAMMA_MIDDLE && row <= 100)\r\n\t\tcurved = "
+	check(strstr(dx, "if (row != GAMMA_MIDDLE && row <= 100)\r\n\t\treturn "
 		"GammaPass(G_dxptr->lpD3DDevice, row);") != 0, 1,
 		"gamma row: the pass runs only away from the middle");
 	check(tree_count(dx, "GammaPass("), 2,
@@ -3106,6 +3110,35 @@ static void display_gamma_row()
 		"gamma row: DXClose releases the pass's objects");
 	check(strstr(dx, "HDLevelDeviceLost();\r\n\t\t\tGammaRelease();") != 0, 1,
 		"gamma row: and so does the reset");
+
+	/* Both of the engine's presents take the pass: DXShowFrame and the
+	 * loading bar's held frames, each with the start before its Present and
+	 * the finish after it, and the device's Present nowhere else. */
+	check(tree_count(dx, "->Present(0, 0, 0, 0);"), 1,
+		"gamma row: dxshell.cpp presents in DXShowFrame only");
+	check(tree_count(dx, "const bool curved = DXGammaStart();"), 1,
+		"gamma row: DXShowFrame starts with the pass");
+	check(tree_count(dx, "\tDXGammaFinish(curved, hr);"), 1,
+		"gamma row: and ends with the copy back");
+	check(bars != 0, 1, "gamma row: drawbars.cpp is readable from here");
+
+	if (bars)
+	{
+		const char* s = strstr(bars, "static void LoadBarPresentHeld()");
+		const char* st = s ? strstr(s, "const bool curved = DXGammaStart();\r\n"
+			"\tconst HRESULT hr = App.dx.lpD3DDevice->Present(0, 0, 0, 0);")
+			: 0;
+		const char* fin = s ? strstr(s, "DXGammaFinish(curved, hr);") : 0;
+		const char* end = s ? strstr(s, "\r\n}\r\n") : 0;
+
+		check(tree_count(bars, "->Present("), 1,
+			"gamma row: the loading bar presents in one place");
+		check(st != 0 && end != 0 && st < end, 1,
+			"gamma row: its held present starts with the pass");
+		check(fin != 0 && st != 0 && end != 0 && st < fin && fin < end, 1,
+			"gamma row: and ends with the copy back");
+	}
+
 	check(strstr(fx, "exp2((50.0 - gRow.x) / 50.0)") != 0, 1,
 		"gamma row: the shader's power is 2 ^ ((50 - n) / 50)");
 
@@ -3115,6 +3148,7 @@ static void display_gamma_row()
 	free(types);
 	free(dx);
 	free(fx);
+	free(bars);
 }
 
 int main()

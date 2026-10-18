@@ -2796,6 +2796,33 @@ carries the tables.
     RoomProbe.cpp`, `-marbleclip`, `-marblecopies`, the `marbleplane:`
     lines and the `marble:` line's spread, rising, copies, buried and
     joined counts) - OWN, this project's tool on the player's files (DATA).
+267. **The room whose art is the sea's surface** (`hd_water_under.h`,
+    `HDWaterSurfaceRoom`, `kHDWaterSurfaceReach`; `hd_level.cpp`,
+    `SurfaceRoom`) - in a level that takes the deep look, the water room
+    whose art reaches highest, when it reaches within 2,048 units of the
+    water's top (the highest ceiling of a square of any water room, the
+    deep look's own top). DATA: the classic squares and flags and the
+    groups' art (RoomProbe `-surfaceroom`): JOBY4 room 19, a room of the
+    sea floor (squares at 15,872 to 17,152), art up to -4,269 under a top
+    of -5,120 (851), spanning x -6,608 to 55,136 and z 39,944 to 99,327;
+    the next water room's art -1,280 (room 113, 3,840 under); the dry room
+    1's art -4,352; RICH3's one water room 190 has its art at 0, its own
+    floor, under a top of -4,864 (none). OWN, the rule; the 2,048 a free
+    choice of two squares between 851 and 3,840.
+268. **The sea's surface drawn at every frame** (`hd_level.cpp`,
+    `HDFrameDraw`) - the surface room's art joins every frame of the HD
+    path whose list leaves it out, with the whole screen as its window, at
+    the first listed room's matrix moved by the two origins' difference
+    (as `DecideStand`), its own lighting and the frame's extinction. OWN,
+    the owner's rule of 2026-10-17 ("draw always") and the place, chosen
+    over the reach walk (`draw.cpp`, beside `CarryArt`), which his dive's
+    visibility path does not run; DATA: RoomProbe `-undertick` over 306
+    eyes of his dive with and without it (164 ticks without room 19 on the
+    list, the six edges, round 1's 40 eyes, every 40th tick).
+269. **The surface room in the log and the probe** (`hd_level.cpp`, the
+    `WATERLOG ... undergate` line's `surface=`; RoomProbe `-surfaceroom`,
+    `-surfacealways`, `-undertick`'s `carried=`) - OWN, this project's
+    log and tool on the player's files (DATA).
 
 ## Credited, but not contained here
 

@@ -21993,6 +21993,77 @@ static void water_look()
 		0);
 }
 
+/* The room whose art is the sea's surface (hd_water_under.h,
+ * HDWaterSurfaceRoom), on rooms shaped as JOBY4's and RICH3's: the water
+ * room whose art reaches highest, within the reach of the water's top. In
+ * JOBY4 room 19's art reaches -4,269 under a top of -5,120 (rooms 11, 50,
+ * 90 and 123 carry it), the next water room's -1,280, and the dry room 1's
+ * art -4,352, higher than the sea's but no water room's. In RICH3 the one
+ * water room's art is its own floor, 4,864 under its top. */
+static void water_surface()
+{
+	printf("the sea's surface: the room whose art is it\n");
+
+	const float reach = kHDWaterSurfaceReach;
+	const int wet[5] = { 0, 1, 1, 1, 1 };
+	const float ceilTop[5] = { -4352.0f, 15872.0f, -5120.0f, -1280.0f,
+		1.0e9f };
+	const int art[5] = { 1, 1, 1, 1, 0 };
+	const float artTop[5] = { -4352.0f, -4269.0f, 11249.0f, -1280.0f,
+		-9000.0f };
+
+	ok(HDWaterSurfaceRoom(wet, ceilTop, art, artTop, 5, reach) == 1,
+		"sea surface: the water room whose art reaches highest",
+		HDWaterSurfaceRoom(wet, ceilTop, art, artTop, 5, reach), 1);
+
+	// A dry room's art, higher still, is no sea's surface.
+	const int allWet[5] = { 1, 1, 1, 1, 1 };
+
+	ok(HDWaterSurfaceRoom(allWet, ceilTop, art, artTop, 5, reach) == 0,
+		"sea surface: ...the same room taken as wet wins",
+		HDWaterSurfaceRoom(allWet, ceilTop, art, artTop, 5, reach), 0);
+
+	/* Room 4 has no art throughout, so its -9,000 never counts; here room
+	 * 1 loses its art as well. */
+	const int noArt[5] = { 0, 0, 1, 1, 0 };
+
+	ok(HDWaterSurfaceRoom(wet, ceilTop, noArt, artTop, 5, reach) == -1,
+		"sea surface: without room 1's art none, the next 3,840 under",
+		HDWaterSurfaceRoom(wet, ceilTop, noArt, artTop, 5, reach), -1);
+	ok(HDWaterSurfaceRoom(wet, ceilTop, noArt, artTop, 5, 3839.0f) == -1,
+		"sea surface: ...none with a reach a unit short of it",
+		HDWaterSurfaceRoom(wet, ceilTop, noArt, artTop, 5, 3839.0f), -1);
+	ok(HDWaterSurfaceRoom(wet, ceilTop, noArt, artTop, 5, 3840.0f) == 3,
+		"sea surface: the reach counts its own end",
+		HDWaterSurfaceRoom(wet, ceilTop, noArt, artTop, 5, 3840.0f), 3);
+
+	// RICH3: one water room, its art its own floor under a top of -4,864.
+	const int rWet[2] = { 0, 1 };
+	const float rCeil[2] = { -2048.0f, -4864.0f };
+	const int rArt[2] = { 1, 1 };
+	const float rTop[2] = { -6400.0f, 0.0f };
+
+	ok(HDWaterSurfaceRoom(rWet, rCeil, rArt, rTop, 2, reach) == -1,
+		"sea surface: none in a level whose water art is its floor",
+		HDWaterSurfaceRoom(rWet, rCeil, rArt, rTop, 2, reach), -1);
+
+	// A tie goes to the lower number; no water room, no surface.
+	const float tie[5] = { 0.0f, -4269.0f, -4269.0f, 0.0f, 0.0f };
+	const int dry[5] = { 0, 0, 0, 0, 0 };
+
+	ok(HDWaterSurfaceRoom(wet, ceilTop, art, tie, 5, reach) == 1,
+		"sea surface: a tie goes to the lower number",
+		HDWaterSurfaceRoom(wet, ceilTop, art, tie, 5, reach), 1);
+	ok(HDWaterSurfaceRoom(dry, ceilTop, art, artTop, 5, reach) == -1,
+		"sea surface: no water room, no surface",
+		HDWaterSurfaceRoom(dry, ceilTop, art, artTop, 5, reach), -1);
+	ok(HDWaterSurfaceRoom(wet, ceilTop, art, artTop, 0, reach) == -1,
+		"sea surface: no room at all", 0, 0);
+	ok(kHDWaterSurfaceReach > 851.0f && kHDWaterSurfaceReach < 3840.0f,
+		"sea surface: the reach between JOBY4's sea and its next art",
+		(long)kHDWaterSurfaceReach, 2048);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -23857,6 +23928,7 @@ int main()
 	water_under();
 	art_ripple();
 	water_look();
+	water_surface();
 	spring_table();
 	spring_file();
 	spring_clock();

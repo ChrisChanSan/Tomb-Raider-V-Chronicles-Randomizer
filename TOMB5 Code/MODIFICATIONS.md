@@ -3054,6 +3054,32 @@ share was not meant for.
 
 **Commits.** `49f37cae`, `2aa8e016` (the rule's `hd_water` 0 case)
 
+**2026-10-18, Round 3 (#208): the hole overhead checked.**
+
+**What.** The owner's two pictures of 2026-10-17 (the water sheets' entry, the #210 part's
+Round 3): a darker disc at the top centre of the sky under the sub's hull, and the sky
+black behind Lara looking steeply up. Measured at round 2's eye of tick 22,020 (room 33)
+and the same eye turned 70, 80, 85 and 89 degrees up, 1280 x 720, with `hd_water` 1 and 0:
+the band's open pole past its last ring at 75 degrees (4,622 pixels of the dome alone at
+clear at the tick's own 46 degrees, 73,381 to 83,724 turned up) holds no black pixel at
+any pitch with either key - with `hd_water` 1 the look's fill and room 19's art over it
+(mean 35, 117, 137 from 70 to 89 degrees), with 0 the script's layers and the art (7, 101,
+104). The black disc of his steep picture was the clear in a build without the fill; the
+dark teal around it was the walk leaving room 19 out from 72 degrees up (the pole then 31,
+70, 91 and 0, 36, 44), which the #210 part's Round 3 mends. Nothing changes in the sky
+region.
+
+**Left.** The darker disc of his first picture is filled, not gone: with `hd_water` 1 the
+pole stands 6.2 to 7.8 of luma under the band round it, with a sharp edge, at every
+pitch, listed or carried (a ring 6 pixels wide either side of the pole's edge; the same
+rings elsewhere in the picture -1.4 to 0.6). The fill adds the water's scattered colour,
+27.75 of luma, where the band's last ring has 35.6; the room's art is additive and adds
+the same over both. With `hd_water` 0 the layers cover it (no darker disc). The fill
+draw stays as merged; its colour is the owner's to judge (the #210 part's Round 3,
+*Left*).
+
+**Commits.** None for the sky; this part is recorded with the #210 part's Round 3.
+
 ### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items
 2026-09-29
 
@@ -16598,6 +16624,7 @@ strengths):
 So the surface no longer goes black, but it still dims and brightens in a step three
 times over his dive, for 30, 43 and 33 ticks; that step is what is left of the vanishing
 he reported.
+Round 3 (below) mends it: room 19's art is drawn at every frame.
 
 **Decisions.** The look takes the place of the SD layers as the owner decided; it is drawn
 with the sky and under `hd_water` only, in the levels the deep look takes. Its strengths
@@ -16636,6 +16663,255 @@ is one over the limit of 72 and stays, since no commit is rewritten.
 **Commits.** `49f37cae` (the layers and the look), `5a9a853a` (the walk), `2aa8e016` (the
 rim inside the window, the lower strengths, the layers kept with `hd_water` 0, the walk's
 guard).
+
+**The sea seen from below, Round 3 (#210), 2026-10-18.** Asked for with two pictures of
+the owner's JOBY4 dive of 2026-10-17, put into English (his words beside in German): the
+skybox still has a hole up there in the middle, and when he looks steeply up everything
+vanishes again; can a global rule be built for the level - the water surface is always to
+be seen, no if/else, only draw always ("Die Wasseroberflaeche ist immer zu sehen. Es gibt
+kein If else sonder nur Draw always?"). His pictures are reference pictures supplied for
+this project, not in the repository: under the sub's hull with the surface's art overhead
+and a darker round disc at its top centre, and looking steeply up at the hull with the art
+gone, everything dark teal and a black disc behind Lara. Both come from a build of that
+afternoon, the layers out and round 2's look and fill not yet in.
+
+*The surface room from the level's data.* Round 2 found the cause of the vanishing and
+left it (*What is not mended*): the remaster lays the sea's surface over the whole dive in
+the art of one room, room 19, and the rooms of the dive have no portal to it. The data,
+read with the classic level and RoomProbe `-groups`/`-surfaceroom`:
+
+| | JOBY4 room 19 |
+|---|---|
+| its squares | 6 x 6, 22 squares, floor 16,128 to 17,152, ceiling 15,872 to 16,128 |
+| flags | 0x9: water, and outside (the sky is drawn from it) |
+| portals | to and from rooms 17, 37, 86 and 28; none from the dive's rooms |
+| its classic faces | 13 (2 quads), y 16,128 to 17,152 - the sea floor |
+| items, statics | 0 and 0 |
+| its art | 24,599 opaque and 23,040 additive triangles, 18 ranges |
+| the art's extent | x -6,608 to 55,136, z 39,944 to 99,327, y -4,269 to 17,363 |
+| the sea in it | part 3, 73,728 triangles stacked fourfold at y -4,269, -4,253, -4,237 |
+
+The art is the surface because it is a sheet 61,744 by 59,383 units wide, a level, flat,
+stacked sea (`WATERLOG ... art room=19 part=3 class=sea`) 20,000 units over the room's own
+squares, over every water room of the level: it covers the middle of 123 of the other 133
+water rooms, the next room's art 20. The rule from the data (`HDWaterSurfaceRoom`,
+`hd_water_under.h`): of the water rooms, the one whose art reaches highest, when its
+highest point lies at most 2,048 units under the water's top, the highest ceiling of a
+square of any water room (the deep look's own top, `g_wdeep_top`). No room number stands
+in the code.
+
+| level | water's top | the rule's room | its art's top | the next water room's art |
+|---|---|---|---|---|
+| JOBY4 | -5,120 | 19 | -4,269 (851 under) | room 113, -1,280 (3,840 under) |
+| RICH3 | -4,864 | none | room 190, 0 (4,864 under) | - |
+
+The dry room 1 of JOBY4 has art at -4,352, higher than the sea's, and is no water room.
+The 2,048 is a free choice of two squares between JOBY4's 851 and 3,840. RICH3, which also
+takes the deep look (one flooded flipped room, 190, against 0 under a sheet), has no
+surface room: its one water room's art is its own floor. The rule names nothing there and
+RICH3 draws as before (*Checked*); whether RICH3 should take the deep look at all is still
+the owner's question. The rule only runs where the deep look does; ANDREA1's water would
+name room 26 (-3,072 under -5,120), unused (`deep=0`).
+
+*Draw always - the place.* Two places could draw it. The reach walk's step beside
+`CarryArt` (`draw.cpp`) runs only with the reach on, and his dive ran the visibility path
+(`VisBeginWalk` turns the reach off): it would need a new call in both walks outside their
+gate, it would hand room 19 to the classic walk (its doors, items, statics and fog bulbs;
+0 items and 0 statics) and write it into the `VISLOG` list. The stand-in in
+`HDFrameDraw`'s room phase (`hd_level.cpp`) draws the art alone and needs nothing of the
+walk: whenever no entry of the frame holds the room's group, one is added with the whole
+screen as its window, the matrix of the frame's first room moved by the difference of the
+two rooms' origins (as `DecideStand` moves a stand range), the room's own lighting
+(`FillRoomLighting`, in the room loop) and the frame's extinction (`frame.under`, which
+every room of the frame takes), before `DecideStand`. The art's own two passes are drawn
+as for a listed room: the opaque sea floor in the solid phase, the surface in the glow
+phase. The room's classic faces are not drawn either way (an HD room's roomlets are never
+drawn, and an added room is on no classic list), so no SD remnant shows. The `VISLOG` list
+stays the walk's; `WATERLOG level=JOBY4 undergate ... surface=19` names the room once a
+level; RoomProbe `-undertick`'s line ends in `carried=1` where the frame carries it. No
+condition can fail: not the list, a portal, a window or the reach's budget. Not the sky
+phase, whose frame has no extinction (round 2). It runs with `hd_water` on or off: the
+deep look is the water build's answer either way (`under_deep=1` with `-hdwater 0`), and
+the art is room art.
+
+The eye out of the water: from the start cavern's air room 7 (eye 25,088, 11,500, 51,200;
+looking 60 degrees up, level and down) the room is added and the pictures are
+byte-identical to those without it, 3 of 3 at 960 x 540 (the cavern's own art hides it),
+as at JOBY4's room 0 (*Checked*). Nothing speaks against it there, and the rule stays
+unconditional, as he asked.
+
+*Measured at his dive* (RoomProbe `-undertick`, `-sky -rooms 137 -vis 1 -size 480 270
+-time 3 -underlook`, with `-hdwater 1` and `0`; the base the tool of `7d9a7323` re-run,
+the round's tool with `-surfacealways`; light the mean added luma of the surface's
+pixels). 306 eyes: the 164 ticks without room 19 on the list, the six run edges with ten
+ticks either side (132 ticks), every 40th tick (41) - 266 ticks - and round 1's 40 eyes
+between 23,995 and 24,484. The base reproduces round 2's numbers (the edges 13.60 / 4.55
+... 8.17 / 6.61; 21,578 12.24 against the record's 12.25). Of the 164 ticks every one is
+carried.
+
+| hd_water | | before | after |
+|---|---|---|---|
+| 1 | 106 looking up, surface | 8,221 to 68,223 | 13,120 to 70,052 |
+| 1 | 106 looking up, light | 3.79 to 10.26 | 6.92 to 16.64 |
+| 0 | 106 looking up, surface | 0 | 4,707 to 40,863 |
+| 0 | 106 looking up, light | 0 | 14.28 to 26.55 |
+| 1 and 0 | 58 looking down, surface | 0 to 5 | 0 to 5 |
+| 1 and 0 | up ticks under half of both neighbours | - | 0 |
+| 1 | up ticks with less light than both neighbours | 4 | 10 |
+| 0 | up ticks with less light than both neighbours | 0 | 8 |
+
+Read literally - no up tick under its neighbours - the order is not met: with `hd_water`
+1, 10 of the 106 up ticks have less light than both neighbours (4 before), the deepest
+22,089 at 0.958 of its neighbours' mean (10.64 against 11.52 and 10.70; 0.953 before,
+without the art), then 21,568 at 0.979 and 22,104 at 0.989; with 0, 8, the deepest 22,117
+at 0.985. The surface's pixels: 8 with 1 (deepest 22,089 at 0.915, 0.894 before) and 14
+with 0 (22,089 at 0.932). These are the eye's own motion: 22,089 dips as deep before,
+when the art is not in the frame, and the 100 up ticks where the walk lists room 19 hold
+4 such minima of light themselves (the deepest 0.992). The tolerance the round holds them
+to is the edges' tenth: no up tick lies more than a tenth under its neighbours' mean
+(light at most 4.2 %, pixels at most 8.5 %); the steps it replaces were 0.15 to 1.08 of
+the neighbours with `hd_water` 1 and the whole of the light with 0.
+
+The six edges, `hd_water` 1 (light at the two ticks, the step, and the step over the mean
+light of the twenty neighbours):
+
+| edge | before | after | step before | step after |
+|---|---|---|---|---|
+| 21,547 / 21,548 | 13.60 / 4.55 | 13.60 / 13.69 | 9.05 (1.03) | 0.09 (0.01) |
+| 21,577 / 21,578 | 3.83 / 12.24 | 12.02 / 12.24 | 8.41 (1.08) | 0.22 (0.02) |
+| 21,937 / 21,938 | 16.66 / 5.10 | 16.66 / 16.64 | 11.56 (1.04) | 0.02 (0.00) |
+| 21,980 / 21,981 | 7.49 / 15.23 | 15.40 / 15.23 | 7.74 (0.68) | 0.17 (0.01) |
+| 22,084 / 22,085 | 14.67 / 10.26 | 14.67 / 13.89 | 4.41 (0.33) | 0.78 (0.05) |
+| 22,117 / 22,118 | 6.61 / 8.17 | 7.75 / 8.17 | 1.56 (0.15) | 0.42 (0.04) |
+
+With `hd_water` 0 the six steps were 23.71, 21.15, 26.63, 24.05, 20.45 and 14.50 (the art
+gone, 0 pixels, at one side of each) and are 0.49, 0.20, 0.08, 0.13, 1.04 and 0.22 (0.00
+to 0.05 of the neighbours). The largest tick-to-tick step anywhere in the 21 ticks of each
+edge after: 0.25, 0.51, 0.33, 0.22, 1.20 and 3.53 (`hd_water` 1; the last one inside the
+run of 22,117's neighbours as before, 3.53 then too). Where the walk lists room 19 nothing
+changes: 142 of 142 first pictures byte-identical with `hd_water` 1 and 142 of 142 with 0
+(round 1's 40 eyes all listed, and 37 of the 41 ticks; the other four are carried, three
+looking up changed, one looking down not).
+
+*The hole and the steep look.* His first picture could not be placed by content: the probe
+draws neither Lara nor the hull, and over every third tick from 21,130 to 21,800 and every
+sixth of the dive (379 pictures at 320 x 180, his build's look) the best grey correlation
+was 0.52 (tick 22,540) and the best dark-region overlap 0.42 (22,570), neither of them his
+place. So the round takes round 2's E216 eye (tick 22,020, room 33, 46 degrees up) and the
+same eye turned 70, 80, 85 and 89 degrees up; 1280 x 720, `-black`, the walk's rooms; the
+pole region the black pixels of the dome alone at clear (round 2's measure):
+
+| eye | room 19 listed | pole px | hd_water 1 before / after | hd_water 0 before / after |
+|---|---|---|---|---|
+| 22,020 | yes | 4,622 | 35, 113, 132 / the same | 11, 109, 112 / the same |
+| 70 up | yes | 83,724 | 35, 117, 136 / the same | 7, 100, 103 / the same |
+| 80 up | no | 77,026 | 31, 71, 91 / 36, 118, 137 | 0, 36, 44 / 7, 101, 104 |
+| 85 up | no | 74,240 | 31, 70, 91 / 35, 117, 137 | 0, 36, 44 / 7, 101, 104 |
+| 89 up | no | 73,381 | 31, 70, 90 / 35, 117, 137 | 0, 36, 44 / 7, 101, 103 |
+
+(mean colour in the pole region; `hd_water` 0 with JOBY4's script layers on the PSX page,
+as the game draws them there). No black pixel in the pole region at any eye with either
+key; with `hd_water` 1 none in the picture at all; with `hd_water` 0 1,304 at 22,020, all
+of them black texels of the rocks' art (no water's colour over them without the sheets),
+the same before and after. His second picture is this case: from 72 degrees up the walk
+leaves room 19 out (the walk alone at whole degrees: listed at 70 and 71, left out at 72
+to 75, 80, 85 and 89), the surface's art goes, and what is left is the look's fill
+(`hd_water` 1, 31, 71, 91) or the dark teal layers (0, 36, 44) - his "everything dark
+teal"; the black disc of his build (no fill, no layers) is round 2's fill now. With the
+rule the pole region takes the art's colour at every pitch, the same as at 70 degrees
+where the walk lists it. No black pixel is left at any pitch to 89 degrees.
+
+The darker disc of his first picture is not mended. The pole region's mean colour and its
+black pixels do not see it; its edge does. Measured as the mean luma of a ring 6 pixels
+wide just outside the pole less one just inside, with the same two rings moved 150 and
+250 pixels to two to four other places of the same picture as controls (`fix2/disc.py`
+of the round's scratch; luma 0.299 / 0.587 / 0.114):
+
+| eye | room 19 | hd_water 1, before / after | controls | hd_water 0, so too | controls |
+|---|---|---|---|---|---|
+| 22,020 | listed | 6.3 / 6.3 | -1.4 to -0.9 | -2.8 / -2.8 | -3.4 to -1.7 |
+| 70 up | listed | 6.2 / 6.2 | -1.1 to 0.3 | -2.7 / -2.7 | -2.0 to 0.7 |
+| 75 up | carried | 7.8 / 6.5 | -0.6 to 0.0 | -0.9 / -2.5 | -0.9 to 0.2 |
+| 80 up | carried | 7.8 / 6.5 | -0.4 to 0.2 | -0.8 / -2.5 | -0.4 to 0.5 |
+| 85 up | carried | 7.8 / 6.5 | -1.4 to 0.6 | -0.8 / -2.5 | -1.9 to 1.1 |
+| 89 up | carried | 7.8 / 6.5 | -1.4 to 0.0 | -0.9 / -2.5 | -1.7 to 0.4 |
+
+With `hd_water` 1 the disc stands 6.2 to 7.8 of luma darker than the band round it, with
+a sharp edge, at every pitch; the art takes off 1.3 at most (at 80 degrees it adds 35.6
+inside and 34.3 outside: it is additive, 23,040 of its triangles, and hides nothing). The
+cause, from the frame's own numbers: the band's last ring alone (`-skyonly`) is 35.6 of
+luma; the fill adds the water's scattered colour, the look's `light` 0.0565, 0.1252,
+0.1616 (14.4, 31.9, 41.2 of 255), 27.75 of luma; the look's two other draws add the same
+light on both sides, the art nearly so, and the edge is their difference, 7.9 - the look
+over the dome alone (`-skyonly -underlook`) gives 7.5 to 7.8. With `hd_water` 0 the
+script's layers cover the pole and the band alike and no darker disc is left; the inside
+is 2.5 to 2.8 lighter wherever the art is in the frame, listed or carried (within the
+controls at 22,020 and 70 degrees, outside them at the steep eyes, where the controls lie
+within 1.9): a faint lighter disc, a third of the other key's step. So with `hd_water` 1
+the hole of his first picture is filled but still seen as a darker disc, faint through
+the art; the fill draw stays as merged (its colour is the owner's to judge, *Left*), and
+nothing changes in the sky region.
+
+*The cost* (RoomProbe `-gpu 20`, the solid room draws timed, 2,560 x 1,440, three runs):
+
+| eye | room 19 | solid ms before | after | draw calls | triangles |
+|---|---|---|---|---|---|
+| 22,020 | listed | 0.048 | 0.047 | 157 / 157 | 66,853 / 66,853 |
+| 23,995 | listed | 0.116 | 0.115 | 268 / 268 | 126,717 / 126,717 |
+| 24,484 | listed | 0.158 | 0.160 | 343 / 343 | 140,094 / 140,094 |
+| L3 | listed | 0.135 | 0.136 | 210 / 210 | 129,386 / 129,386 |
+| 21,548 | carried | 0.114 | 0.117 | 181 / 199 | 80,742 / 128,381 |
+
+(medians of three; draw calls of the whole frame, triangles of all three passes of the
+groups drawn.) Where it is carried the frame draws room 19's 47,639 triangles (24,599
+opaque, 23,040 of the surface) in 18 more draw calls; the opaque pass costs 0.003 ms more,
+the surface's additive pass is not timed by the tool. Where the walk lists it nothing
+changes.
+
+The added entry also takes part in every pass that runs over the frame's entries, and
+these are not measured: `FillRoomLighting` works out room 19's lights on the processor
+once in each frame that carries it, and the shadow's receive pass (`ShadowCastPass`)
+draws every entry whose art box touches the reach of Lara's shadow - room 19's box spans
+the whole dive (the extent above), so in every carried frame with her shadow cast the
+receive draws the art once more, the whole group (`HD_WINDOW_ALL`: the entry is full) in
+its opaque and alpha-tested passes, 24,599 triangles (the additive surface takes no
+shadow). Both are what each frame where the walk lists room 19 - 1,449 of the 1,613
+ticks of his dive - already pays for it; RoomProbe draws no shadow and times neither.
+
+**Decisions.** The surface room comes from the data: the water room whose art reaches
+highest, near the water's top; no room number in the code. It is drawn in `HDFrameDraw`'s
+room phase and not in the reach walk, because his dive runs the visibility path and the
+art needs nothing of the walk; and at every frame of a level whose deep look names it,
+under the water or not, with `hd_water` on or off - his rule, nothing measured speaking
+against it. The look's strengths, the layers rule and the fill draw stay as merged.
+
+**Checked.** With the tool of `7d9a7323` against this round's (`-surfacealways`): the
+classic views (`hd_build` 0) at round 2's six views and the 22,020 eye 7 of 7
+byte-identical; each level's room 0 with the sky 15 of 15 with `hd_water` 0 and 15 of 15
+with 1 (JOBY4's room 19 added there, hidden); the fifteen parity cameras 15 of 15 each;
+round 1's sky eyes 4 of 4 each; round 2's four JOBY4 eyes (rooms within 20,000) 4 of 4
+each; RICH3 room 190's four eyes (`3584 -200 3584` level and 75 up, `2048 -300 5120` 60
+up, `5120 -100 2048` 85 up; rooms within 12,000) 4 of 4 each, the rule naming no room
+(`surfaceroom: RICH3 ... room=-1 ... added=0`). ModernTest 15,594 checks with the new
+`water_surface` group of 10, MenuTest 44,272, InterpTest 729, LipsTest 299 and 272 (with
+`cutseq.bin` given; 295 and 268 with 9 failed through `blips.bat`, which finds no game
+folder in the worktree), 0 failed; the engine and all nine tools build.
+
+**Left.** Not seen in the game yet; the numbers are the probe's, whose pictures draw no
+objects. His first picture is not placed by content. The rule is worked out once a level
+at the first frame that asks, from the rooms as they stand then - in a level with flipped
+water rooms a flip before that frame would be read in its flipped state (none in JOBY4;
+RICH3's water room has its art at its floor in both records, groups 183 and 190 at y 0
+to 256). The cost of the surface's additive pass, of room 19's lighting and of its
+shadow receive where it is carried is not measured. Whether RICH3 should take the deep
+look is open. The darker disc at the band's open pole with `hd_water` 1 (6.2 to 7.8 of
+luma, the fill's scattered colour against the band's last ring) is left as it is: the
+fill draw is merged as it stands and the owner has not seen it yet; taking the band's
+last ring's colour for the fill, or closing the band's pole, are the ways to it, his to
+choose.
+
+**Commits.** `332d7249` (the rule, its draw, the log and the probe), `20ef1ea3` (the
+record), `496a9060` (the record's darker disc, minima, cost and pitch).
 
 ### The marble floors' mirror (#205)
 2026-10-16

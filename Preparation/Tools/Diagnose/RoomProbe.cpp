@@ -323,7 +323,18 @@
  *                     -rooms <n> too): the sea's surface counted along a
  *                     walk of eyes, each a CAMLOG tick's eye and target -
  *                     the walk's rooms, the picture with them and without
- *                     <room> and the look; see UnderTicks
+ *                     <room> and the look; see UnderTicks. With
+ *                     -surfacealways <room> joins the first picture where
+ *                     the walk leaves it out, as the game draws the sea's
+ *                     surface at every frame (hd_level.cpp, HDFrameDraw)
+ *     -surfaceroom    with -hdwater: the room whose art is the sea's
+ *                     surface (hd_water_under.h, HDWaterSurfaceRoom) out
+ *                     of the classic level's squares and the groups' art,
+ *                     as the game finds it, printed as one line
+ *     -surfacealways  with -hdwater: that room drawn as the game draws it
+ *                     at every frame of a level that takes the deep look,
+ *                     added to the -with list where the picture leaves it
+ *                     out (hd_level.cpp, HDFrameDraw)
  *     -roomplane <y x0 z0 x1 z1>
  *                     the same, on the OTHER shimmer bit - the answer a
  *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
@@ -2005,6 +2016,12 @@ static bool g_under_game_knobs = false;
 static float g_under_knobs[HD_LOOK_KNOBS] = { 3.0f, 3.0f, 0.25f,
 	40000.0f, 600.0f, 700.0f, 0.55f, 6000.0f, 8000.0f, 0.0f, 0.0f };
 static float g_under_game_set[HD_LOOK_KNOBS] = {};
+/* -surfaceroom: the room whose art is the sea's surface, printed;
+ * -surfacealways: that room drawn as the game draws it at every frame of a
+ * level that takes the deep look - added to the -with list where the
+ * picture leaves it out, at its offset from the seed room. */
+static bool g_surface_room = false;
+static bool g_surface_always = false;
 
 // The switches, out of ProbeMain's chain of else-ifs (C1061).
 static bool UnderArg(int argc, char** argv, int* at)
@@ -2012,6 +2029,18 @@ static bool UnderArg(int argc, char** argv, int* at)
 	if (!strcmp(argv[*at], "-underlook"))
 	{
 		g_under_game = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-surfaceroom"))
+	{
+		g_surface_room = true;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-surfacealways"))
+	{
+		g_surface_always = true;
 		return true;
 	}
 
@@ -16368,6 +16397,82 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderSetWaterSheets(nr ? &rooms[0] : 0, nr, section, stem,
 				g_hdwater);
 			ProbeWetSlopes(rooms);
+
+			/* -surfaceroom and -surfacealways: the game's rule over the
+			 * same rooms - the water rooms' highest square ceilings and each
+			 * group's highest art (group r is room r at the load) - with the
+			 * deep look's own answer, and the next water room's art for the
+			 * margin. */
+			if (g_surface_room || g_surface_always)
+			{
+				HDRenderWaterLevel wl;
+				std::vector<int> wet((size_t)nr, 0), art((size_t)nr, 0);
+				std::vector<float> ceilTop((size_t)nr, 1.0e9f);
+				std::vector<float> artTop((size_t)nr, 0.0f);
+				float top = 1.0e9f;
+
+				HDRenderWaterLevelInfo(&wl);
+
+				for (int r = 0; r < nr; r++)
+				{
+					const HDWaterRoom& w = rooms[(size_t)r];
+					float mins[3], maxs[3];
+
+					wet[(size_t)r] =
+						(w.flags & HD_WATER_ROOM_UNDERWATER) ? 1 : 0;
+
+					for (int i = 0; w.floor && w.ceiling &&
+						i < w.sizeX * w.sizeZ; i++)
+						if (w.floor[i] != -127 && w.ceiling[i] != -127 &&
+							w.ceiling[i] * 256.0f < ceilTop[(size_t)r])
+							ceilTop[(size_t)r] = w.ceiling[i] * 256.0f;
+
+					if (w.drawn && HDRenderGroupBounds(r, mins, maxs))
+					{
+						art[(size_t)r] = 1;
+						artTop[(size_t)r] = mins[1] + (float)w.originY;
+					}
+
+					if (wet[(size_t)r] && ceilTop[(size_t)r] < top)
+						top = ceilTop[(size_t)r];
+				}
+
+				const int s = nr ? HDWaterSurfaceRoom(&wet[0], &ceilTop[0],
+					&art[0], &artTop[0], nr, kHDWaterSurfaceReach) : -1;
+				int next = -1;
+
+				for (int r = 0; r < nr; r++)
+					if (r != s && wet[(size_t)r] && art[(size_t)r] &&
+						(next < 0 || artTop[(size_t)r] < artTop[(size_t)next]))
+						next = r;
+
+				bool drawn = s == room;
+
+				for (int i = 0; i < g_with_count && !drawn; i++)
+					drawn = g_with_group[i] == s;
+
+				const bool add = g_surface_always && wl.underDeep && s >= 0 &&
+					!drawn && g_with_count < kWithMax;
+
+				if (add)
+				{
+					g_with_group[g_with_count] = s;
+					g_with_offset[g_with_count][0] = (float)(rooms[(size_t)s].
+						originX - rooms[(size_t)room].originX);
+					g_with_offset[g_with_count][1] = 0.0f;
+					g_with_offset[g_with_count][2] = (float)(rooms[(size_t)s].
+						originZ - rooms[(size_t)room].originZ);
+					g_with_count++;
+				}
+
+				if (g_surface_room)
+					printf("surfaceroom: %s deep=%d top=%.0f room=%d "
+						"art_top=%.0f next=%d next_top=%.0f used=%d "
+						"added=%d\n", stem, wl.underDeep, top, s,
+						s >= 0 ? artTop[(size_t)s] : 0.0f, next,
+						next >= 0 ? artTop[(size_t)next] : 0.0f,
+						wl.underDeep && s >= 0 ? 1 : 0, add ? 1 : 0);
+			}
 			ProbeCensus(rooms, root, stem);
 			ProbeMarbleCensus(rooms, root, stem);
 			ProbeWaterFalls(level, stem);
@@ -18554,7 +18659,13 @@ static bool ReadOwnPng(const std::string& path, std::vector<unsigned char>& rgb,
  *
  * the surface's pixels those that differ by 4 or more of 255 in any
  * channel; listed says whether the walk lists <room>. The pictures stay
- * under <prefix>_<name>_s and _n. */
+ * under <prefix>_<name>_s and _n.
+ *
+ * With -surfacealways the first picture takes the game's rule for the
+ * sea's surface (hd_level.cpp, HDFrameDraw; the picture's -surfacealways):
+ * where the walk leaves <room> out - which the rule names in JOBY4 - the
+ * line ends in carried=1, and carried=0 where the walk lists it or the
+ * switch is not given. */
 static int UnderTicks(int argc, char** argv, int at)
 {
 	FILE* f = at + 2 < argc ? fopen(argv[at + 1], "r") : 0;
@@ -18575,7 +18686,7 @@ static int UnderTicks(int argc, char** argv, int at)
 
 	// The switches for the walk and for the two pictures.
 	std::string walkRest, pictureRest, bareRest;
-	bool look = false, sky = false, rooms = false;
+	bool look = false, sky = false, rooms = false, always = false;
 
 	for (int i = 2; i < argc; i++)
 	{
@@ -18592,6 +18703,14 @@ static int UnderTicks(int argc, char** argv, int at)
 		if (a == "-out" && i + 1 < argc)
 		{
 			prefix = argv[++i];
+			continue;
+		}
+
+		// The game's rule, for the first picture alone.
+		if (a == "-surfacealways")
+		{
+			always = true;
+			pictureRest += " \"" + a + "\"";
 			continue;
 		}
 
@@ -18734,6 +18853,8 @@ static int UnderTicks(int argc, char** argv, int at)
 		if (room == surface)
 			listed = true;
 
+		const bool carried = always && !listed;
+
 		const std::string eye = std::string("\"\"") + exe + "\" \"" +
 			argv[1] + "\" " + level + " " + std::to_string(room) + " " +
 			std::to_string(x - seed.x) + " " + std::to_string(y) + " " +
@@ -18785,9 +18906,10 @@ static int UnderTicks(int argc, char** argv, int at)
 		}
 
 		printf("undertick: %s room=%d rooms=%d listed=%d surface=%ld "
-			"share=%.2f light=%.2f\n", name, room, (int)order.size(),
-			listed ? 1 : 0, pixels, 100.0 * pixels / (double)(aw * ah),
-			pixels ? light / pixels : 0.0);
+			"share=%.2f light=%.2f carried=%d\n", name, room,
+			(int)order.size(), listed ? 1 : 0, pixels,
+			100.0 * pixels / (double)(aw * ah), pixels ? light / pixels : 0.0,
+			carried ? 1 : 0);
 	}
 
 	fclose(f);

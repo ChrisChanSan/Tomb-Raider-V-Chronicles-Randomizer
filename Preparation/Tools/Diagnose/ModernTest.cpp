@@ -97,6 +97,7 @@
 /* The water's cards: a dive splash, a fish tank's spray and the wet film
  * on its floor as functions of their age alone (splash_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h"
 // The water seen from below: the eye's depth, Snell's window (water_under).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The springs: the table, the file's key, the hashed clock (spring_*).
@@ -23731,6 +23732,68 @@ static void marble_rules()
 		"marble: the level key names hd_marble", why ? 1 : 0, 1);
 }
 
+/* The marble floors' slopes (hd_marble_math.h): a sloped face's plane, its
+ * normal up and of length 1 in either winding, its distance in world space
+ * with the group's origin; a level face's plane is the floor's height; two
+ * faces of one slope are one plane, a slope beside it or over it not. */
+static void marble_slopes()
+{
+	printf("the marble floors: the sloped planes\n");
+
+	// A ramp of 256 units over a square, rising toward +z (y runs down).
+	const float ramp[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-256.0f, 1024.0f };
+	const float back[9] = { 0.0f, 0.0f, 0.0f, 0.0f, -256.0f, 1024.0f,
+		1024.0f, 0.0f, 0.0f };
+	float a[4], b[4];
+
+	ok(HDMarbleTiltPlane(ramp, 0.0f, 0.0f, a) &&
+		HDMarbleTiltPlane(back, 0.0f, 0.0f, b) && a[1] < 0.0f && b[1] < 0.0f,
+		"marble slopes: the normal up in either winding", 0, 0);
+	ok(fabsf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2] - 1.0f) < 1e-5f &&
+		fabsf(a[2] - b[2]) < 1e-6f && fabsf(a[2] + 0.2425f) < 1e-3f,
+		"marble slopes: of length 1, leaning 1 in 4", lroundf(-a[2] * 1e4f),
+		2425);
+
+	const float level[9] = { 0.0f, -2816.0f, 0.0f, 1024.0f, -2816.0f, 0.0f,
+		0.0f, -2816.0f, 1024.0f };
+	float l[4];
+
+	ok(HDMarbleTiltPlane(level, 5000.0f, 7000.0f, l) &&
+		fabsf(l[1] + 1.0f) < 1e-6f && fabsf(l[3] - 2816.0f) < 1e-3f,
+		"marble slopes: a level face's plane is its height", lroundf(l[3]),
+		2816);
+
+	// The ramp's next square, one square on in x, in a group 1024 off.
+	const float next[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-256.0f, 1024.0f };
+	float n[4];
+
+	HDMarbleTiltPlane(next, 1024.0f, 0.0f, n);
+	ok(HDMarbleTiltSame(a, n, 0.001f, 2.0f),
+		"marble slopes: one ramp's squares are one plane", lroundf(n[3]),
+		lroundf(a[3]));
+
+	// The same lean 256 units higher, and the lean turned to +x.
+	const float over[9] = { 0.0f, -256.0f, 0.0f, 1024.0f, -256.0f, 0.0f,
+		0.0f, -512.0f, 1024.0f };
+	const float turned[9] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1024.0f,
+		1024.0f, -256.0f, 0.0f };
+	float o[4], t[4];
+
+	HDMarbleTiltPlane(over, 0.0f, 0.0f, o);
+	HDMarbleTiltPlane(turned, 0.0f, 0.0f, t);
+	ok(!HDMarbleTiltSame(a, o, 0.001f, 2.0f) &&
+		!HDMarbleTiltSame(a, t, 0.001f, 2.0f),
+		"marble slopes: a step over or a turned lean is another", 0, 0);
+
+	const float none[9] = { 0.0f, 0.0f, 0.0f, 512.0f, 0.0f, 0.0f, 1024.0f,
+		0.0f, 0.0f };
+
+	ok(!HDMarbleTiltPlane(none, 0.0f, 0.0f, o),
+		"marble slopes: a face of no area has no plane", 0, 0);
+}
+
 /* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD
  * data, every field changed alone refuses with that field's name, and a
  * load with HD off, with nothing built or after an outfit change refuses
@@ -24030,6 +24093,7 @@ int main()
 	spring_column();
 	marble_pages();
 	marble_rules();
+	marble_slopes();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -18639,6 +18639,8 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 
 /* ------------------------------------------------ the marble floors -- */
 
+#include "hd_marble_math.h"		// the mirror's places
+
 /* The marble floors. A polished floor mirrors the room over it: the room
  * art, the statics and the models are drawn once more through the floor's
  * plane, into a target of their own, and laid over the floor with the wet
@@ -18746,6 +18748,23 @@ namespace
 	int g_marble_buried = 0;
 	// The faces moved to a neighbouring height of their floor (marble_build).
 	int g_marble_joined = 0;
+	/* The faces left out for rising (marble_build), for RoomProbe's
+	 * -marblerise: six floats a face - its group, its height, its lowest
+	 * and highest corner's y, its run across (the longer side of its box
+	 * seen from above) and the rise over that run. */
+	std::vector<float> g_marble_rise_list;
+	/* The sloped faces (marble_build): by group, nine floats a face as the
+	 * level's faces, and each face's plane, a number into g_marble_tilts -
+	 * four floats a plane, its normal (up, y negative) and its distance in
+	 * world space. A sloped plane's key among the frame's planes is
+	 * kMarbleTiltKey and its number, far past any floor height. */
+	std::vector<std::vector<float> > g_marble_tilt_faces;
+	std::vector<std::vector<int> > g_marble_tilt_id;
+	std::vector<float> g_marble_tilts;
+	const int kMarbleTiltKey = 1 << 28;
+	/* Two sloped faces lie in one plane when their normals' parts differ
+	 * by at most this and their distances by kMarbleHeightJoin. */
+	const float kMarbleTiltSame = 0.001f;
 
 	// The target the mirrored rooms are drawn into, and its depth.
 	IDirect3DTexture9* g_marble_tex = 0;
@@ -18814,12 +18833,15 @@ namespace
 	 * floors of the column elsewhere are drawn opaque.
 	 *
 	 * A face with a corner farther than kMarbleClipOver from its plane
-	 * leaves too: it rises across itself (a ramp, a step's nose, a roof's
-	 * slope), stands partly over the clip and so in its own mirror, and a
-	 * level floor's reflection is not its own. The faces lie in two kinds,
-	 * nothing between: every corner within a unit of the plane, or the
-	 * face rising 15 units and more (RICH2 561 of 42,228, ANDREA2 30,
-	 * ANDREA3 4, RICH3 54, RICHCUT2 27; RoomProbe -marble 1's spread). */
+	 * rises across itself: a level floor's mirror is not its own, and it
+	 * would stand partly over the clip, in that mirror. The faces lie in
+	 * two kinds, nothing between: every corner within a unit of the plane,
+	 * or the face rising 15 units and more (RICH2 477 with the copies left
+	 * out, ANDREA2 30, ANDREA3 4, RICH3 54, RICHCUT2 27; RoomProbe
+	 * -marblerise), each a walked slope of 1 in 22 to 1 in 4. Such a face
+	 * leaves the level faces for a plane of its own, its normal and
+	 * distance, which it shares with the faces of its slope; the frame
+	 * ranks and mirrors that plane as it does a floor height. */
 	void marble_build(const HDWaterRoom* rooms, int count)
 	{
 		std::unordered_set<int> heights;
@@ -18832,6 +18854,10 @@ namespace
 		g_marble_copies = 0;
 		g_marble_copies_water = 0;
 		g_marble_buried = 0;
+		g_marble_rise_list.clear();
+		g_marble_tilt_faces.assign(g_groups.size(), std::vector<float>());
+		g_marble_tilt_id.assign(g_groups.size(), std::vector<int>());
+		g_marble_tilts.clear();
 
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
@@ -18865,7 +18891,48 @@ namespace
 
 				if (most > kMarbleClipOver)
 				{
+					const float* p = &group.mirrorFaces[f * 9];
+					const float lo = fmaxf(p[1], fmaxf(p[4], p[7]));
+					const float hi = fminf(p[1], fminf(p[4], p[7]));
+					const float run = fmaxf(fmaxf(p[0], fmaxf(p[3], p[6])) -
+						fminf(p[0], fminf(p[3], p[6])), fmaxf(p[2], fmaxf(p[5],
+						p[8])) - fminf(p[2], fminf(p[5], p[8])));
+					const float row[6] = { (float)g, (float)group.mirrorY[f],
+						lo, hi, run, lo - hi };
+
+					g_marble_rise_list.insert(g_marble_rise_list.end(), row,
+						row + 6);
 					g_marble_rising++;
+
+					/* Its own plane (HDMarbleTiltPlane), joined to a plane
+					 * of the level found already (HDMarbleTiltSame). */
+					float plane[4];
+					const float ox = (size_t)g * 2 + 1 < g_group_origin.size() ?
+						g_group_origin[(size_t)g * 2] : 0.0f;
+					const float oz = (size_t)g * 2 + 1 < g_group_origin.size() ?
+						g_group_origin[(size_t)g * 2 + 1] : 0.0f;
+
+					if (!HDMarbleTiltPlane(p, ox, oz, plane))
+						continue;
+
+					int id = -1;
+
+					for (size_t t = 0; t + 3 < g_marble_tilts.size() && id < 0;
+						t += 4)
+						if (HDMarbleTiltSame(&g_marble_tilts[t], plane,
+							kMarbleTiltSame, (float)kMarbleHeightJoin))
+							id = (int)(t / 4);
+
+					if (id < 0)
+					{
+						id = (int)(g_marble_tilts.size() / 4);
+						g_marble_tilts.insert(g_marble_tilts.end(), plane,
+							plane + 4);
+					}
+
+					g_marble_tilt_faces[(size_t)g].insert(
+						g_marble_tilt_faces[(size_t)g].end(), p, p + 9);
+					g_marble_tilt_id[(size_t)g].push_back(id);
 					continue;
 				}
 
@@ -19727,6 +19794,15 @@ void HDRenderMarbleKeepCopies(bool keep)
 	g_marble_keep_copies = keep;
 }
 
+int HDRenderMarbleRisingFaces(const float** rows)
+{
+	if (rows)
+		*rows = g_marble_rise_list.empty() ? 0 :
+			&g_marble_rise_list[0];
+
+	return (int)(g_marble_rise_list.size() / 6);
+}
+
 void HDRenderMarbleVoid(bool on)
 {
 	g_marble_void = on;
@@ -19753,6 +19829,7 @@ void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 	out->copies_water = g_marble_copies_water;
 	out->buried = g_marble_buried;
 	out->joined = g_marble_joined;
+	out->slopes = (int)(g_marble_tilts.size() / 4);
 }
 
 void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
@@ -19792,8 +19869,13 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		taken[(size_t)d.id] = 1;
 
 		const HDGroup& group = g_groups[(size_t)d.id];
+		const std::vector<float>* tilt = (size_t)d.id <
+			g_marble_tilt_faces.size() ? &g_marble_tilt_faces[(size_t)d.id] :
+			0;
+		const size_t flat = group.mirrorY.size();
+		const size_t all = flat + (tilt ? tilt->size() / 9 : 0);
 
-		if (group.mirrorY.empty())
+		if (!all)
 			continue;
 
 		float m[16], l[3];
@@ -19811,9 +19893,13 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				g_group_origin[(size_t)d.id * 2 + 1] : 0.0f
 		};
 
-		for (size_t f = 0; f < group.mirrorY.size(); f++)
+		for (size_t f = 0; f < all; f++)
 		{
-			const float* p = &group.mirrorFaces[f * 9];
+			// A level face, or a sloped one in a plane of its own.
+			const float* p = f < flat ? &group.mirrorFaces[f * 9] :
+				&(*tilt)[(f - flat) * 9];
+			const int key = f < flat ? group.mirrorY[f] : kMarbleTiltKey +
+				g_marble_tilt_id[(size_t)d.id][f - flat];
 			CardVertex v[3];
 			float clip[12];
 
@@ -19859,9 +19945,9 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			if (cover <= 0.0f)
 				continue;
 
-			MarbleLayer& layer = layers[group.mirrorY[f]];
+			MarbleLayer& layer = layers[key];
 
-			if (layer.verts.empty())
+			if (layer.verts.empty() && f < flat)
 			{
 				// The world's up in view space and a point of the floor.
 				const float h = (float)group.mirrorY[f];
@@ -19875,7 +19961,34 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				layer.plane[3] = layer.plane[0] * (h * m[4] + m[12]) +
 					layer.plane[1] * (h * m[5] + m[13]) +
 					layer.plane[2] * (h * m[6] + m[14]);
+			}
+			else if (layer.verts.empty())
+			{
+				// The slope's normal in view space and its first corner.
+				const float* t = &g_marble_tilts[(size_t)(key -
+					kMarbleTiltKey) * 4];
+				float n[3], len = 0.0f;
 
+				for (int k = 0; k < 3; k++)
+				{
+					n[k] = t[0] * m[k] + t[1] * m[4 + k] + t[2] * m[8 + k];
+					len += n[k] * n[k];
+				}
+
+				len = sqrtf(len);
+				layer.plane[3] = 0.0f;
+
+				for (int k = 0; k < 3 && len > 0.0f; k++)
+				{
+					layer.plane[k] = n[k] / len;
+					layer.plane[3] += layer.plane[k] * (p[0] * m[k] +
+						p[1] * m[4 + k] + p[2] * m[8 + k] + m[12 + k]);
+				}
+			}
+
+			// The world's axes in view space, for MarblePS's light.
+			if (layer.verts.empty())
+			{
 				for (int r = 0; r < 3; r++)
 				{
 					const float a = sqrtf(m[r * 4] * m[r * 4] +

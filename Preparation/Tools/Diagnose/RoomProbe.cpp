@@ -591,6 +591,9 @@
  *                     that reads as held (HDRenderMarbleVoid): the picture
  *                     less the plain one is the floor that shows none of
  *                     the mirrored rooms - the strip at a wall's foot.
+ *     -marblerise     one marblerise line a face the level's build left out
+ *                     for rising across itself: its room, height, lowest
+ *                     and highest corner's y, run across and rise.
  *     -marbleplanefloor  the mirror's plane in the floor and the clip
  *                     -marbleclip units over it, as before the plane lay
  *                     in the clip (HDRenderMarblePlaneFloor).
@@ -8570,6 +8573,8 @@ static void ProbeMarbleCensus(const std::vector<HDWaterRoom>& rooms,
  * one it was. */
 static int g_marble_engine = 0;
 static int g_marble_planes = 2;
+// -marblerise: one marblerise line a face the build left out for rising.
+static bool g_marble_rise = false;
 
 static bool MarbleArg(int argc, char** argv, int* at)
 {
@@ -8613,6 +8618,13 @@ static bool MarbleArg(int argc, char** argv, int* at)
 	if (!strcmp(a, "-marblevoid"))
 	{
 		HDRenderMarbleVoid(true);
+		return true;
+	}
+
+	// -marblerise: the faces left out for rising, one line each.
+	if (!strcmp(a, "-marblerise"))
+	{
+		g_marble_rise = true;
 		return true;
 	}
 
@@ -9207,10 +9219,21 @@ static void ProbeMarble(const void* projection)
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
 		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
-		"rising %d; copies %d water %d buried %d joined %d\n", s.planes,
-		s.drawn, g_marble_planes, s.faces, s.calls, s.wet, s.faces_level,
+		"rising %d; copies %d water %d buried %d joined %d slopes %d\n",
+		s.planes, s.drawn, g_marble_planes, s.faces, s.calls, s.wet,
+		s.faces_level,
 		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
-		s.copies, s.copies_water, s.buried, s.joined);
+		s.copies, s.copies_water, s.buried, s.joined, s.slopes);
+
+	/* -marblerise: room, height, the lowest and highest corner's y, the
+	 * run across and the rise (marble_build's rising faces). */
+	const float* rise = 0;
+	const int risen = g_marble_rise ? HDRenderMarbleRisingFaces(&rise) : 0;
+
+	for (int i = 0; i < risen; i++)
+		printf("marblerise: room %d y %d low %.0f high %.0f run %.0f "
+			"rise %.1f\n", (int)rise[i * 6], (int)rise[i * 6 + 1],
+			rise[i * 6 + 2], rise[i * 6 + 3], rise[i * 6 + 4], rise[i * 6 + 5]);
 
 	// One marbleplane line a plane of the frame, in the order it is ranked.
 	for (int i = 0; i < s.planes && i < 8; i++)

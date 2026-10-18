@@ -1802,6 +1802,8 @@ struct HDRenderMarbleStats
 	int plane_y[8];
 	float plane_cover[8];
 	int plane_room[8];	// the room whose faces cover the most of it
+	// The level's sloped planes, each a plane of its own (marble_build).
+	int slopes;
 	// The farthest corner of a kept face from its plane, units, and the
 	// faces left out for rising farther than the mirror's clip offset.
 	int spread;
@@ -1836,6 +1838,10 @@ void HDRenderMarbleKeepCopies(bool keep);
  * depth that reads as held, so the floor's pixels that show none of the
  * mirrored rooms tell themselves apart (a picture less the plain one). */
 void HDRenderMarbleVoid(bool on);
+/* RoomProbe's -marblerise: the faces the level's build left out for rising
+ * across themselves, six floats a face (group, height, lowest and highest
+ * corner's y, run across, rise). Returns how many. */
+int HDRenderMarbleRisingFaces(const float** rows);
 /* RoomProbe's -marbleplanefloor: the mirror's plane in the floor under the
  * clip, as before it lay in the clip (the strip at a wall's foot). */
 void HDRenderMarblePlaneFloor(bool on);

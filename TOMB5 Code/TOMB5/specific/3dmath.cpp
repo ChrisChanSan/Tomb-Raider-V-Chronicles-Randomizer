@@ -132,8 +132,13 @@ void AlterFOV(short fov)
 	// Logs every setter of the field of view, in order. The camera's own
 	// trace reads CurrentFov before drawing and therefore cannot see
 	// anyone who sets it afterwards; this line sits where every call
-	// must pass, so nothing that changes the FOV goes unlogged.
-	Log("ALTERFOV %d (%d deg) winh %d", (int)fov, (int)fov / 182, (int)phd_winheight);
+	// must pass, so nothing that changes the FOV goes unlogged. The end
+	// of the line is the blend factor of the frame being drawn (1 on a
+	// tick and outside a frame) and whether the value is the zoom's,
+	// blended between two ticks (InterpZoomFOV, game\interpolate.h).
+	Log("ALTERFOV %d (%d deg) winh %d alpha %.3f tween %d", (int)fov,
+		(int)fov / 182, (int)phd_winheight, (double)InterpFrameAlpha(),
+		InterpZoomSetting() ? 1 : 0);
 
 	CurrentFov = fov;
 	fov /= 2;

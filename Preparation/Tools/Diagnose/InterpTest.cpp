@@ -41,6 +41,9 @@
  * frame's time they turn on - a header of its own beside this one, with no
  * engine header in it either. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_book.h"
+/* The zoom's rule between two ticks, a header with no engine include
+ * either; only its inline functions are used, so nothing is linked. */
+#include "../../../TOMB5 Code/TOMB5/game/modern_camera.h"
 
 static int g_fail = 0;
 static int g_checks = 0;
@@ -6302,6 +6305,269 @@ static void cutseq()
 		INTERP_CUTSEQ_NODES, 30);
 }
 
+/* -------------------------------------------------------------- the zoom -- */
+
+/* The zoom of the binoculars and the sights between two ticks
+ * (ModernCameraZoomTweens and ModernCameraZoomLerp, game\modern_camera.h,
+ * which game\interpolate.cpp calls in InterpBeginFrame and InterpZoomFOV).
+ * GAME_FOV is game\types.h's 80 * 182, which this tool does not include. */
+static const long ZOOM_GAME_FOV = 80 * 182;
+static const long ZOOM_WIDEST = ZOOM_GAME_FOV -
+	MODERN_ZOOM_LENS * MODERN_ZOOM_RANGE_MIN;
+
+/* One tick of BinocularCamera (game\camera.cpp) as the frame-rate seam sees
+ * it: the capture before the tick (InterpCapturePrev), the field of view set
+ * at the top of the camera from the range before the step, then the step of
+ * the sprint (in) or the duck (out) key, clamped to 128..1536. `entry` is
+ * the tick control.cpp raises the range from 0 to 128 on, `exit` the one it
+ * drops it to 0 and the field of view to GAME_FOV on. */
+struct ZoomTick
+{
+	long prevRange, range, prevFov, fov;
+};
+
+static void zoom_tick(ZoomTick* z, int key, bool entry, bool exit)
+{
+	z->prevRange = z->range;
+	z->prevFov = z->fov;
+
+	if (exit)
+	{
+		z->range = 0;
+		z->fov = ZOOM_GAME_FOV;
+		return;
+	}
+
+	if (entry)
+		z->range = MODERN_ZOOM_RANGE_MIN;
+
+	z->fov = ZOOM_GAME_FOV - MODERN_ZOOM_LENS * z->range;
+
+	if (key > 0)
+	{
+		z->range += 64;
+
+		if (z->range > MODERN_ZOOM_RANGE_MAX)
+			z->range = MODERN_ZOOM_RANGE_MAX;
+	}
+	else if (key < 0)
+	{
+		z->range -= 64;
+
+		if (z->range < MODERN_ZOOM_RANGE_MIN)
+			z->range = MODERN_ZOOM_RANGE_MIN;
+	}
+}
+
+/* The field of view a frame at `alpha` draws its walk and its view with
+ * indoors (InterpBeginFrame), and the one SkyDrawPhase sets after the sky
+ * (InterpZoomFOV(7)). `blend` false is the code before the seam knew the
+ * zoom: the tick's own value at every alpha. */
+static long zoom_view(const ZoomTick* z, float alpha, bool blend)
+{
+	if (!blend || !ModernCameraZoomTweens(z->prevRange, z->range,
+			z->prevFov, z->fov, ZOOM_WIDEST, alpha))
+		return z->fov;
+
+	return ModernCameraZoomLerp(z->prevFov, z->fov, alpha);
+}
+
+static long zoom_after_sky(const ZoomTick* z, float alpha, bool blend)
+{
+	const long tick = ZOOM_GAME_FOV - MODERN_ZOOM_LENS * z->range;
+
+	if (!blend || !ModernCameraZoomTweens(z->prevRange, z->range,
+			z->prevFov, z->fov, ZOOM_WIDEST, alpha))
+		return tick;
+
+	return ModernCameraZoomLerp(ZOOM_GAME_FOV -
+		MODERN_ZOOM_LENS * z->prevRange, tick, alpha);
+}
+
+static void zoom()
+{
+	printf("the zoom between two ticks\n");
+
+	// The blend of two ticks' values: the ends and the middle.
+	ok(ModernCameraZoomLerp(13664, 13216, 0.0F) == 13664,
+		"zoom lerp at alpha 0 is the previous tick's",
+		ModernCameraZoomLerp(13664, 13216, 0.0F), 13664);
+	ok(ModernCameraZoomLerp(13664, 13216, 0.5F) == 13440,
+		"zoom lerp at alpha 0.5 is the middle of a step of 448",
+		ModernCameraZoomLerp(13664, 13216, 0.5F), 13440);
+	ok(ModernCameraZoomLerp(13664, 13216, 1.0F) == 13216,
+		"zoom lerp at alpha 1 is the tick's own",
+		ModernCameraZoomLerp(13664, 13216, 1.0F), 13216);
+	ok(ModernCameraZoomLerp(13664, 13216, 1.5F) == 13216,
+		"zoom lerp above alpha 1 is the tick's own",
+		ModernCameraZoomLerp(13664, 13216, 1.5F), 13216);
+	ok(ModernCameraZoomLerp(13216, 13664, 0.5F) == 13440,
+		"zoom lerp out (duck) at 0.5 is the middle too",
+		ModernCameraZoomLerp(13216, 13664, 0.5F), 13440);
+	ok(ModernCameraZoomLerp(13664, 13440, 0.5F) == 13552,
+		"zoom lerp of the walk key's step of 224 at 0.5",
+		ModernCameraZoomLerp(13664, 13440, 0.5F), 13552);
+
+	// The clamp's ends: a range that stands still blends to itself.
+	{
+		const long in = ZOOM_GAME_FOV -
+			MODERN_ZOOM_LENS * MODERN_ZOOM_RANGE_MAX;
+		const long out = ZOOM_GAME_FOV -
+			MODERN_ZOOM_LENS * MODERN_ZOOM_RANGE_MIN;
+		bool still = true;
+
+		for (int k = 0; k <= 16; k++)
+			still = still && ModernCameraZoomLerp(in, in, k / 16.0F) == in &&
+				ModernCameraZoomLerp(out, out, k / 16.0F) == out;
+
+		ok(in == 3808 && out == 13664,
+			"the clamp's ends 1536 and 128 are 3808 and 13664", in, 3808);
+		ok(still, "a range held at 128 or at 1536 draws one value", still, 1);
+		ok(ModernCameraZoomTweens(MODERN_ZOOM_RANGE_MAX,
+				MODERN_ZOOM_RANGE_MAX, in, in, ZOOM_WIDEST, 0.5F),
+			"the range held at 1536 is a zoom (blended to itself)", 0, 1);
+		ok(ModernCameraZoomTweens(MODERN_ZOOM_RANGE_MIN,
+				MODERN_ZOOM_RANGE_MIN, out, out, ZOOM_WIDEST, 0.5F),
+			"the range held at 128 is a zoom (blended to itself)", 0, 1);
+	}
+
+	// The view's 7 x and the sky's 1 x of the same blended range.
+	{
+		const long viewFrom = ZOOM_GAME_FOV - MODERN_ZOOM_LENS * 512;
+		const long viewTo = ZOOM_GAME_FOV - MODERN_ZOOM_LENS * 576;
+		const long skyFrom = ZOOM_GAME_FOV - MODERN_ZOOM_SKY * 512;
+		const long skyTo = ZOOM_GAME_FOV - MODERN_ZOOM_SKY * 576;
+		const long view = ModernCameraZoomLerp(viewFrom, viewTo, 0.5F);
+		const long sky = ModernCameraZoomLerp(skyFrom, skyTo, 0.5F);
+
+		ok(view == ZOOM_GAME_FOV - 7 * 544,
+			"the view at 0.5 is GAME_FOV - 7 x 544", view,
+			ZOOM_GAME_FOV - 7 * 544);
+		ok(sky == ZOOM_GAME_FOV - 544, "the sky at 0.5 is GAME_FOV - 544",
+			sky, ZOOM_GAME_FOV - 544);
+	}
+
+	// The cuts: the entry, the exit, a field of view the zoom did not set,
+	// and every frame at alpha 1 - the only alpha fps_mode 0 draws at.
+	ok(!ModernCameraZoomTweens(0, 128, 14560, 13664, ZOOM_WIDEST, 0.5F),
+		"the entry (range 0 to 128) is a cut", 1, 0);
+	ok(!ModernCameraZoomTweens(1536, 0, 3808, 14560, ZOOM_WIDEST, 0.5F),
+		"the exit (range to 0, GAME_FOV) is a cut", 1, 0);
+	ok(!ModernCameraZoomTweens(128, 128, 14560, 13664, ZOOM_WIDEST, 0.5F),
+		"GAME_FOV before the tick (the inventory's) is a cut", 1, 0);
+	ok(!ModernCameraZoomTweens(128, 192, 13664, 14560, ZOOM_WIDEST, 0.5F),
+		"GAME_FOV after the tick is a cut", 1, 0);
+	ok(ModernCameraZoomTweens(128, 192, 13664, 13664, ZOOM_WIDEST, 0.5F),
+		"two ticks of the zoom blend", 0, 1);
+	ok(ModernCameraZoomTweens(128, 192, 13664, 13216, ZOOM_WIDEST, 0.0F),
+		"alpha 0 blends (the previous tick's value)", 0, 1);
+	ok(!ModernCameraZoomTweens(128, 192, 13664, 13216, ZOOM_WIDEST, 1.0F),
+		"alpha 1 does not blend: fps_mode 0, the tick frames", 1, 0);
+
+	/* The reproduction: a zoom in under the sprint key, held at 1536, a
+	 * zoom out under the duck key, then the exit, ticked at 30 Hz and drawn
+	 * at 165 Hz with the seam's alpha (the time past the last tick, in
+	 * ticks). Before, five or six frames drew one value and the next jumped
+	 * by 448; now every frame of a moving zoom draws its own value, and the
+	 * values fall (in) or rise (out) one way. */
+	{
+		const int TICKS = 64;
+		ZoomTick z = { 0, 0, ZOOM_GAME_FOV, ZOOM_GAME_FOV };
+		ZoomTick at[TICKS];
+
+		for (int n = 0; n < TICKS; n++)
+		{
+			const int key = n >= 1 && n < 20 ? 1 : (n >= 30 && n < 49 ? -1 : 0);
+
+			zoom_tick(&z, key, n == 0, n == TICKS - 4);
+			at[n] = z;
+		}
+
+		long prevOld = -1, prevNew = -1, prevSky = -1;
+		long worstOld = 0, worstNew = 0;
+		int runOld = 0, runNew = 0, longestOld = 0, longestNew = 0;
+		int backwards = 0, skyBack = 0, frames = 0;
+
+		printf("  frame  tick  alpha  before     now  sky before     now\n");
+
+		for (int k = 0; k * 30 < (TICKS - 1) * 165; k++)
+		{
+			const double t = k * 30.0 / 165.0;
+			const int j = (int)t;
+			const float alpha = (float)(t - j);
+			const ZoomTick* zt = &at[j];
+			const long vOld = zoom_view(zt, alpha, false);
+			const long vNew = zoom_view(zt, alpha, true);
+			const long sOld = zoom_after_sky(zt, alpha, false);
+			const long sNew = zoom_after_sky(zt, alpha, true);
+			const int dir = j >= 2 && j <= 20 ? -1 :
+				(j >= 31 && j <= 49 ? 1 : 0);
+
+			if (k >= 6 && k < 30)
+				printf("  %5d %5d  %.3f  %6ld  %6ld      %6ld  %6ld\n", k, j,
+					(double)alpha, vOld, vNew, sOld, sNew);
+
+			if (dir)
+			{
+				frames++;
+
+				if (prevNew >= 0 && (vNew - prevNew) * dir < 0)
+					backwards++;
+
+				if (prevSky >= 0 && (sNew - prevSky) * dir < 0)
+					skyBack++;
+
+				if (prevOld >= 0 && labs(vOld - prevOld) > worstOld)
+					worstOld = labs(vOld - prevOld);
+
+				if (prevNew >= 0 && labs(vNew - prevNew) > worstNew)
+					worstNew = labs(vNew - prevNew);
+
+				runOld = vOld == prevOld ? runOld + 1 : 1;
+				runNew = vNew == prevNew ? runNew + 1 : 1;
+
+				// A run counts inside the zoom's motion, not at its ends.
+				if ((j >= 3 && j < 20) || (j >= 32 && j < 49))
+				{
+					if (runOld > longestOld)
+						longestOld = runOld;
+
+					if (runNew > longestNew)
+						longestNew = runNew;
+				}
+			}
+
+			prevOld = vOld;
+			prevNew = vNew;
+			prevSky = sNew;
+		}
+
+		printf("  %d frames of a moving zoom: before, the longest run of one"
+			" value %d frames and the largest jump %ld; now %d and %ld\n",
+			frames, longestOld, worstOld, longestNew, worstNew);
+
+		ok(longestOld >= 5 && worstOld == 448,
+			"before: runs of five or six frames, jumps of 448", longestOld, 5);
+		ok(longestNew == 1, "now: no two frames of a moving zoom alike",
+			longestNew, 1);
+		ok(worstNew <= 100, "now: no frame steps more than 100 units",
+			worstNew, 100);
+		ok(backwards == 0, "now: the view moves one way between ticks",
+			backwards, 0);
+		ok(skyBack == 0, "now: the view after the sky moves one way",
+			skyBack, 0);
+
+		// The entry tick and the exit tick draw the tick's own value.
+		bool cuts = true;
+
+		for (int k = 0; k < 4; k++)
+			cuts = cuts && zoom_view(&at[0], k / 4.0F, true) == at[0].fov &&
+				zoom_view(&at[TICKS - 4], k / 4.0F, true) == ZOOM_GAME_FOV;
+
+		ok(cuts, "the entry and the exit draw the tick's value", cuts, 1);
+	}
+}
+
 int main()
 {
 	printf("InterpTest - the arithmetic of the 60 FPS interpolation\n");
@@ -6339,6 +6605,7 @@ int main()
 	title_shadow();
 	books();
 	cutseq();
+	zoom();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

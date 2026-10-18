@@ -425,6 +425,7 @@ namespace
 	int g_secLaraPose = 0;		// frames on which LARA's own pose was blended
 	int g_secPoseBack = 0;		// frames on which Lara's pose was blended walking backwards
 	int g_secBridge = 0;		// frames on which Lara's pose was bridged after an early half turn
+	int g_secZoom = 0;		// frames drawn with the zoom between two ticks
 	/* Refused tween frames whose root offset was blended in time. A count,
 	 * not a mean per frame: once per climb cycle would round to 0.0. */
 	int g_secRootFix = 0;
@@ -892,7 +893,13 @@ namespace
 	 *                zero everywhere else and zero at fps_mode 0.
 	 *   cutscene_cut frames between two ticks that a cutscene camera's cut
 	 *                drew live (INTERP_CUTSEQ_SNAP), counted in camcut as
-	 *                well; one per cut at sixty hertz, four to six at 165. */
+	 *                well; one per cut at sixty hertz, four to six at 165.
+	 *   zoom         frames drawn with the zoom's field of view between two
+	 *                ticks (InterpZoomFOV): while the binoculars or a sight
+	 *                zoom, every frame between two ticks of the zoom: about
+	 *                165 a second at 165 Hz (fps_mode 2, where the frames do
+	 *                not land on the ticks) and 30 at sixty; zero while the
+	 *                range stands still, everywhere else and at fps_mode 0. */
 	void LogSecond()
 	{
 		if (gLogEnabled && g_secFrames > 0)
@@ -905,7 +912,7 @@ namespace
 				"root_fix=%d "
 				"arms=%d/%d/%d stretch=%.2f@node%d(anim%d f%d) "
 				"particles=%.1f particle_kinds=%04lx root_flip=%d pose_back=%d bridge=%d "
-				"cutscene_cut=%d",
+				"cutscene_cut=%d zoom=%d",
 				(int)gfLevelId, g_at, g_secFrames, g_secTween,
 				(double)(g_secAlphaMin <= g_secAlphaMax ? g_secAlphaMin : 0.0F),
 				g_secAlphaSum / g_secFrames,
@@ -927,7 +934,8 @@ namespace
 				(double)g_secStretch / 100.0, g_secStretchNode,
 				g_secStretchAnim, g_secStretchFrame,
 				(double)g_secParticles / g_secFrames, g_secPartKinds,
-				g_secRootFlip, g_secPoseBack, g_secBridge, g_snapCutseqCut);
+				g_secRootFlip, g_secPoseBack, g_secBridge, g_snapCutseqCut,
+				g_secZoom);
 
 		/* TICKLOG: how often each tween-guarded counter stepped in the logic
 		 * second that just ended (GlobalCounter, thirty in both modes). A 30
@@ -988,6 +996,7 @@ namespace
 		g_secPoseFar = 0;
 		g_secPoseBack = 0;
 		g_secBridge = 0;
+		g_secZoom = 0;
 		g_secPoseHD = 0;
 		g_secLaraPose = 0;
 		g_secRootFix = 0;
@@ -1989,7 +1998,12 @@ void InterpEndFrame()
 	 * again, so the next tick reads phd_persp as a 30 Hz run leaves it. A
 	 * frame that set no blended value needs nothing. */
 	if (g_zoomTouched)
+	{
 		AlterFOV(g_zoomClassic);
+
+		if (gLogEnabled)
+			g_secZoom++;
+	}
 
 	g_zoomOn = false;
 	g_zoomTouched = false;

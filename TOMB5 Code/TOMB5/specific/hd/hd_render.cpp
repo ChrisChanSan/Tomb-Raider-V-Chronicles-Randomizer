@@ -18773,6 +18773,13 @@ namespace
 	bool g_marble_after_quiet = false;
 	// RoomProbe's -marbleslots: the places of the next frame, as given.
 	std::vector<HDMarbleSlot> g_marble_force;
+	/* The rooms over each group's floor: the rooms its ceiling's portals
+	 * open into (HDRenderMarbleOver, from the level's load). The frame
+	 * draws a room it sees; a room over a polished floor shows in the
+	 * floor's mirror even where the eye, looking down, sees none of it
+	 * (ANDREA1's church, rooms 157 and 186 over room 165), so each is drawn
+	 * into the mirror of a floor of the room under it. */
+	std::vector<std::vector<int> > g_marble_over;
 	/* The sloped faces (marble_build): by group, nine floats a face as the
 	 * level's faces, and each face's plane, a number into g_marble_tilts -
 	 * four floats a plane, its normal (up, y negative) and its distance in
@@ -18882,6 +18889,7 @@ namespace
 		g_marble_buried = 0;
 		g_marble_rise_list.clear();
 		g_marble_seen.clear();
+		g_marble_over.assign(g_groups.size(), std::vector<int>());
 		g_marble_tilt_faces.assign(g_groups.size(), std::vector<float>());
 		g_marble_tilt_id.assign(g_groups.size(), std::vector<int>());
 		g_marble_tilts.clear();
@@ -19568,6 +19576,61 @@ namespace
 		g_marble_replay = false;
 	}
 
+	/* The rooms over a plane's floors that the frame did not draw, each
+	 * drawn whole into the plane's mirror with the matrix and the light of
+	 * the room under it, moved by the two rooms' origins. Returns how
+	 * many. */
+	int marble_replay_over(const MarbleLayer& layer,
+		const std::vector<const MarbleDraw*>& noted)
+	{
+		std::vector<char> done(g_groups.size(), 0);
+		int drawn = 0;
+
+		HDRenderScissorOff();
+		g_marble_replay = true;
+
+		for (const std::pair<const int, float>& r : layer.rooms)
+		{
+			const MarbleDraw* under = r.first >= 0 &&
+				r.first < (int)noted.size() ? noted[(size_t)r.first] : 0;
+
+			if (!under || r.first >= (int)g_marble_over.size())
+				continue;
+
+			for (int over : g_marble_over[(size_t)r.first])
+			{
+				if (over < 0 || over >= g_room_groups || noted[(size_t)over] ||
+					done[(size_t)over] ||
+					(size_t)over * 2 + 1 >= g_group_origin.size() ||
+					(size_t)r.first * 2 + 1 >= g_group_origin.size())
+					continue;
+
+				done[(size_t)over] = 1;
+
+				const float off[2] =
+				{
+					g_group_origin[(size_t)over * 2] -
+						g_group_origin[(size_t)r.first * 2],
+					g_group_origin[(size_t)over * 2 + 1] -
+						g_group_origin[(size_t)r.first * 2 + 1]
+				};
+				D3DMATRIX world = under->world;
+
+				for (int k = 0; k < 4; k++)
+					world.m[3][k] += off[0] * under->world.m[0][k] +
+						off[1] * under->world.m[2][k];
+
+				HDRenderRoomMask(over, &world, under->lighting,
+					under->passes, HD_WINDOW_ALL);
+				drawn++;
+			}
+		}
+
+		HDRenderScissorOff();
+		g_marble_replay = false;
+		return drawn;
+	}
+
 	// The room path's shaders and stream, as the bracket sets them.
 	void marble_room_state()
 	{
@@ -19949,6 +20012,17 @@ int HDRenderMarbleRisingFaces(const float** rows)
 	return (int)(g_marble_rise_list.size() / 6);
 }
 
+void HDRenderMarbleOver(int group, int over)
+{
+	if (group < 0 || group >= (int)g_marble_over.size() || over == group)
+		return;
+
+	std::vector<int>& list = g_marble_over[(size_t)group];
+
+	if (std::find(list.begin(), list.end(), over) == list.end())
+		list.push_back(over);
+}
+
 void HDRenderMarbleSlots(const int* ys, const float* gains, int count)
 {
 	g_marble_force.clear();
@@ -20293,6 +20367,13 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		D3DSAMP_SRGBTEXTURE
 	};
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
+	// The frame's own room draws by group, the first of each.
+	std::vector<const MarbleDraw*> noted(g_groups.size(), 0);
+
+	for (const MarbleDraw& d : g_marble_draws)
+		if (d.kind == 0 && d.id >= 0 && d.id < (int)noted.size() &&
+			!noted[(size_t)d.id])
+			noted[(size_t)d.id] = &d;
 
 	for (int i = 0; i < drawn; i++)
 	{
@@ -20354,6 +20435,7 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		const int callsBefore = g_draw_calls;
 
 		marble_replay();
+		g_marble_stats.over += marble_replay_over(layer, noted);
 		g_marble_stats.calls += g_draw_calls - callsBefore;
 
 		if (draw && projection)

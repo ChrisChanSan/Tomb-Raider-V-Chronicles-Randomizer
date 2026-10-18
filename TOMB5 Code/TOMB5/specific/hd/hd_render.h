@@ -1806,6 +1806,8 @@ struct HDRenderMarbleStats
 	 * the strength its mirror was laid at (0 when not drawn). */
 	int plane_seen[8];
 	float plane_gain[8];
+	// The rooms over the mirrored floors drawn that the frame did not draw.
+	int over;
 	// The level's sloped planes, each a plane of its own (marble_build).
 	int slopes;
 	// The farthest corner of a kept face from its plane, units, and the
@@ -1842,6 +1844,10 @@ void HDRenderMarbleKeepCopies(bool keep);
  * depth that reads as held, so the floor's pixels that show none of the
  * mirrored rooms tell themselves apart (a picture less the plain one). */
 void HDRenderMarbleVoid(bool on);
+/* At the level's load, after its build: `over` is a room whose portal lies
+ * in the ceiling of `group` (both groups). It is drawn into the mirror of
+ * a floor of `group` when the frame does not draw it. */
+void HDRenderMarbleOver(int group, int over);
 /* RoomProbe's -marbleslots: the planes the next frames mirror and the
  * strength of each, in place of the places' own step (count 0 gives the
  * step back). */

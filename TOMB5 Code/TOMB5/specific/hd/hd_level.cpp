@@ -2636,6 +2636,25 @@ static void BuildWaterSheets()
 			"cards %.2f", g_stem, warmed, warm[0], warm[1], warm[2], warm[3],
 			warm[4], warm[5], warm[6], warm[7]);
 
+	/* The rooms over the polished floors (hd_render.cpp, HDRenderMarbleOver):
+	 * the rooms each room's ceiling portals open into - a portal's normal
+	 * points into its room, so down out of a ceiling. */
+	for (int r = 0; HDRenderMarbleOn() && r < number_rooms &&
+		r < HD_MAX_ROOMS; r++)
+	{
+		const short* door = room[r].door;
+
+		if (!door || g_room_group[r] < 0)
+			continue;
+
+		const int count = *door++;
+
+		for (int i = 0; i < count; i++, door += 16)
+			if (door[2] > 0 && door[0] >= 0 && door[0] < number_rooms &&
+				door[0] < HD_MAX_ROOMS && g_room_group[door[0]] >= 0)
+				HDRenderMarbleOver(g_room_group[r], g_room_group[door[0]]);
+	}
+
 	/* And the marble floors' mirror, so the first frame with one does not
 	 * wait for the driver (hd_render.cpp, HDRenderMarbleWarmUp). */
 	double marble[5];

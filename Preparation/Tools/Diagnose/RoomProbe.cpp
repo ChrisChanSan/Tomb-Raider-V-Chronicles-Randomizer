@@ -9313,11 +9313,12 @@ static void ProbeMarble(const void* projection)
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
 		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
-		"rising %d; copies %d water %d buried %d joined %d slopes %d\n",
+		"rising %d; copies %d water %d buried %d joined %d slopes %d over %d\n",
 		s.planes, s.drawn, g_marble_planes, s.faces, s.calls, s.wet,
 		s.faces_level,
 		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
-		s.copies, s.copies_water, s.buried, s.joined, s.slopes);
+		s.copies, s.copies_water, s.buried, s.joined, s.slopes,
+		s.over);
 
 	/* -marblerise: room, height, the lowest and highest corner's y, the
 	 * run across and the rise (marble_build's rising faces). */
@@ -16776,6 +16777,23 @@ static int ProbeMain(int argc, char** argv)
 			 * them as its bodies' springs - the engine's order. */
 			if (g_hdwater == 1)
 				SpringBuild(root, stem, room);
+
+			/* The rooms over the polished floors, as the engine gives them at
+			 * the level's load (hd_level.cpp): the rooms a room's ceiling
+			 * portals open into (a portal's normal points into its room, so
+			 * down out of a ceiling). */
+			if (g_marble_engine)
+				for (int r = 0; r < level.roomCount(); r++)
+				{
+					std::vector<Tr5Level::PortalRecord> doors;
+					std::string why;
+
+					level.portalRecords(r, doors, why);
+
+					for (const Tr5Level::PortalRecord& d : doors)
+						if (d.ny > 0)
+							HDRenderMarbleOver(r, d.toRoom);
+				}
 
 			// -wetlara: her outfit on the card.
 			if (g_wet_lara)

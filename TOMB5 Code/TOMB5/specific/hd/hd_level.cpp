@@ -2646,6 +2646,33 @@ static void BuildWaterSheets()
 			"cards %.2f", g_stem, warmed, warm[0], warm[1], warm[2], warm[3],
 			warm[4], warm[5], warm[6], warm[7]);
 
+	/* The rooms over the polished floors (hd_render.cpp, HDRenderMarbleOver):
+	 * the rooms each room's ceiling portals open into - a portal's normal
+	 * points into its room, so down out of a ceiling - and the rooms its
+	 * other portals open into (HDRenderMarbleBeside), by room number, and
+	 * the table that names the group drawing each room, which a flip map
+	 * changes. The portals are the art's own: the group drawing room r
+	 * holds room r's record, in every flip state. */
+	HDRenderMarbleRooms(g_room_group, g_room_count < HD_MAX_ROOMS ?
+		g_room_count : HD_MAX_ROOMS);
+
+	for (int r = 0; HDRenderMarbleOn() && r < number_rooms &&
+		r < HD_MAX_ROOMS; r++)
+	{
+		const short* door = room[r].door;
+
+		if (!door || g_room_group[r] < 0)
+			continue;
+
+		const int count = *door++;
+
+		for (int i = 0; i < count; i++, door += 16)
+			if (door[0] >= 0 && door[0] < number_rooms &&
+				door[0] < HD_MAX_ROOMS)
+				(door[2] > 0 ? HDRenderMarbleOver :
+					HDRenderMarbleBeside)(g_room_group[r], door[0]);
+	}
+
 	/* And the marble floors' mirror, so the first frame with one does not
 	 * wait for the driver (hd_render.cpp, HDRenderMarbleWarmUp). */
 	double marble[5];
@@ -7275,6 +7302,22 @@ static void HDLevelBuildHD()
 	lap(LOAD_OBJECTS);
 	// The models' fingerprint is on the models line; the step is without it.
 	load_ms[LOAD_OBJECTS] -= HDModelHashMs() - model_hash_ms;
+
+	/* The model shaders as the marble floors' mirror draws them, once the
+	 * models are built and the level has a mirror face (hd_model.cpp,
+	 * HDModelMirrorWarmUp); a new line with -log. */
+	HDRenderMarbleStats marbleLevel;
+
+	HDRenderMarbleStatsNow(&marbleLevel);
+
+	if (HDRenderMarbleOn() && marbleLevel.faces_level > 0)
+	{
+		const double warmed = HDModelMirrorWarmUp();
+
+		if (warmed >= 0.0 && gLogEnabled)
+			Log("HDLOG level=%s marble models warm-up %.2f ms", g_stem,
+				warmed);
+	}
 
 	/* The whole of the level's HD load in one line: the .TRG scan on the
 	 * load thread and every step of this build, the build itself as one

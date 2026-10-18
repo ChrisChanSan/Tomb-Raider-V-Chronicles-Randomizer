@@ -4080,6 +4080,12 @@ namespace
 	int marble_copies(const trf::remaster::Trg& trg,
 		const trf::remaster::TrgGroup& source, int g,
 		std::vector<std::vector<unsigned char> >& copies);
+	// RoomProbe's crack census (see "the marble floors").
+	bool g_crack_on = false;
+	void marble_crack_collect(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g,
+		const std::vector<std::vector<unsigned char> >& copies);
+	void marble_crack_census();
 
 	/* The resolver for one page (HDGlossResolve), with the page's slot for the
 	 * engine's second bar: a page part-way clear in every texel is a floor
@@ -6937,6 +6943,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		group.mirrorCopies = g_marble_on && !g_marble_keep_copies &&
 			(int)g < g_room_groups ? marble_copies(trg, source, (int)g,
 			marbleCopies) : 0;
+
+		if (g_crack_on && g_marble_on && (int)g < g_room_groups)
+			marble_crack_collect(trg, source, (int)g, marbleCopies);
 
 		for (int pass = 0; pass < 3; pass++)
 		{
@@ -18967,6 +18976,8 @@ bool HDRenderWaterProbeStand(float x, float z, float height, float offX,
 
 /* ------------------------------------------------ the marble floors -- */
 
+#include "hd_marble_math.h"		// the mirror's places
+
 /* The marble floors. A polished floor mirrors the room over it: the room
  * art, the statics and the models are drawn once more through the floor's
  * plane, into a target of their own, and laid over the floor with the wet
@@ -19020,11 +19031,22 @@ namespace
 	 * of nothing to the clip, kept or cut by rounding along a line through
 	 * each, and where kept they cover the reflection in the target - a
 	 * floor that blinks from frame to frame as the eye moves. The offset is
-	 * the layer's own lift, so the mirror starts where the laid faces
-	 * stand; a mirror face's corners lie within it (marble_build). */
-	const float kMarbleClipOver = kWetLift;
+	 * the layer's own lift (the laid faces stand this far over the floor,
+	 * as the wet floor's do), and the mirror's plane lies in the clip: a
+	 * plane under the clip leaves a strip of the wall's foot out of the
+	 * reflection, through which what stands behind the wall shows, as wide
+	 * as the offset over the tangent of the eye's angle to the floor. A
+	 * mirror face's corners lie within the offset (marble_build). */
+	const float kMarbleClipOver = 4.0f;
 	// The clip's offset in use: kMarbleClipOver, or RoomProbe's -marbleclip.
 	float g_marble_clip = kMarbleClipOver;
+	/* RoomProbe's -marbleplanefloor: the mirror's plane in the floor, under
+	 * the clip, which leaves the strip at a wall's foot out (a measure). */
+	bool g_marble_plane_floor = false;
+	/* RoomProbe's -marblevoid: the mirror's target cleared to a colour of
+	 * its own and a depth that reads as held, so what of the floor shows
+	 * nothing of the mirrored rooms tells itself apart in the picture. */
+	bool g_marble_void = false;
 	/* A square's triangles under a mirror plane are the art's copy when at
 	 * least this many are mirrored, and a third or more (marble_copies):
 	 * RoomProbe -tankcensus's numbers, the wet floor's (kWetCopyCells). */
@@ -19046,6 +19068,17 @@ namespace
 	 * higher faces nearly to its edge, not by a point that a shared edge's
 	 * rounding could put on either side. */
 	const float kMarbleBuriedIn = 0.125f;
+	/* The crack census (marble_crack_census): an edge lies along a mirror
+	 * face's edge within this many units of its line, and an open piece
+	 * shorter than it is none. */
+	const float kMarbleCrackNear = 1.0f;
+	/* The census's triangles in the world, nine floats each, and their
+	 * groups; its count of closed edges, and seven floats an open edge
+	 * (group, gap, open length, length, the open piece's middle x y z). */
+	std::vector<float> g_crack_tris;
+	std::vector<int> g_crack_group;
+	int g_crack_closed = 0;
+	std::vector<float> g_crack_rows;
 
 	// The level's mirror faces and the opaque clear floors (marble_build).
 	int g_marble_faces = 0;
@@ -19063,6 +19096,86 @@ namespace
 	int g_marble_buried = 0;
 	// The faces moved to a neighbouring height of their floor (marble_build).
 	int g_marble_joined = 0;
+	/* The faces left out for rising (marble_build), for RoomProbe's
+	 * -marblerise: six floats a face - its group, its height, its lowest
+	 * and highest corner's y, its run across (the longer side of its box
+	 * seen from above) and the rise over that run. */
+	std::vector<float> g_marble_rise_list;
+	/* How long a place's mirror takes to rise from nothing to whole, or to
+	 * fall back, in milliseconds (hd_marble_math.h, HDMarbleFadeStep and
+	 * HDMarbleSlotsStep): eight frames at sixty a second, at any frame
+	 * rate. A frame's time counts at most kMarbleFadeLongest. */
+	const double kMarbleFadeMs = 8000.0 / 60.0;
+	const double kMarbleFadeLongest = 50.0;
+	// The frame's places, kept from frame to frame (HDMarbleSlotsStep).
+	HDMarbleSlot g_marble_slots[8];
+	// The time of the last mirrored frame (warm_now_ms), 0 before one.
+	double g_marble_last_ms = 0.0;
+	/* The pixels of each plane the last count saw past what stands in
+	 * front (an occlusion query of its faces against the frame's depth),
+	 * by height, and the frame it was asked in. A plane no longer in view
+	 * loses its count; a count older than kMarbleSeenOldest frames scores
+	 * no more (HDMarbleScore). */
+	struct MarbleSeen
+	{
+		int pixels;
+		int frame;
+	};
+	std::map<int, MarbleSeen> g_marble_seen;
+	const int kMarbleSeenOldest = 6;
+	// The frames HDRenderMarbleDraw has laid planes in (the counts' clock).
+	int g_marble_clock = 0;
+	/* The occlusion queries, made once and used again: one in flight per
+	 * plane at most, read as the GPU answers - a frame or more later where
+	 * it renders ahead - and never waited for in the game. */
+	struct MarbleQuery
+	{
+		int y;
+		int frame;
+		bool busy;
+		IDirect3DQuery9* q;
+	};
+	std::vector<MarbleQuery> g_marble_queries;
+	const size_t kMarbleQueriesMost = 64;
+	// The draw before was RoomProbe's warm-up: its counts are waited for.
+	bool g_marble_after_quiet = false;
+	// RoomProbe's -marblelag: the counts not waited for after a warm-up.
+	bool g_marble_no_wait = false;
+	// RoomProbe's -marbleslots: the places of the next frame, as given.
+	std::vector<HDMarbleSlot> g_marble_force;
+	/* The rooms over each group: the rooms its ceiling's portals open into
+	 * (HDRenderMarbleOver, from the level's load), and the rooms its other
+	 * portals open into (HDRenderMarbleBeside), by room number. The frame
+	 * draws a room it sees; a room over the rooms in view shows in a
+	 * floor's mirror even where the eye, looking down, sees none of it, so
+	 * such a room the frame did not draw is drawn into every mirror
+	 * (hd_marble_math.h, HDMarbleOverRooms), to g_marble_over_depth: the
+	 * rooms over the drawn rooms and over the rooms beside them - a
+	 * floor's mirror looks out through the side portals and up - and the
+	 * rooms over those, a shaft's next storey (RoomProbe -marbleover: of
+	 * 207,814 pixels of floor showing nothing over 50 eyes, 176,722 left at
+	 * depth 1, 160,294 at 2, 146,969 at 3; the rest the sky, which the
+	 * mirror does not draw, and rooms the eyes' lists lack). */
+	std::vector<std::vector<int> > g_marble_over;
+	std::vector<std::vector<int> > g_marble_beside;
+	int g_marble_over_depth = 3;
+	/* Which group draws which room now (HDRenderMarbleRooms: the level's
+	 * table, which a flip map changes; none in RoomProbe, room n drawn by
+	 * group n), and its length. */
+	const short* g_marble_room_group = 0;
+	int g_marble_room_count = 0;
+	/* The sloped faces (marble_build): by group, nine floats a face as the
+	 * level's faces, and each face's plane, a number into g_marble_tilts -
+	 * four floats a plane, its normal (up, y negative) and its distance in
+	 * world space. A sloped plane's key among the frame's planes is
+	 * kMarbleTiltKey and its number, far past any floor height. */
+	std::vector<std::vector<float> > g_marble_tilt_faces;
+	std::vector<std::vector<int> > g_marble_tilt_id;
+	std::vector<float> g_marble_tilts;
+	const int kMarbleTiltKey = 1 << 28;
+	/* Two sloped faces lie in one plane when their normals' parts differ
+	 * by at most this and their distances by kMarbleHeightJoin. */
+	const float kMarbleTiltSame = 0.001f;
 
 	// The target the mirrored rooms are drawn into, and its depth.
 	IDirect3DTexture9* g_marble_tex = 0;
@@ -19091,6 +19204,12 @@ namespace
 				(*held[i])->Release();
 				*held[i] = 0;
 			}
+
+		for (MarbleQuery& m : g_marble_queries)
+			if (m.q)
+				m.q->Release();
+
+		g_marble_queries.clear();
 	}
 
 	/* The target is the frame's width and g_marble_rows times its height:
@@ -19131,12 +19250,15 @@ namespace
 	 * floors of the column elsewhere are drawn opaque.
 	 *
 	 * A face with a corner farther than kMarbleClipOver from its plane
-	 * leaves too: it rises across itself (a ramp, a step's nose, a roof's
-	 * slope), stands partly over the clip and so in its own mirror, and a
-	 * level floor's reflection is not its own. The faces lie in two kinds,
-	 * nothing between: every corner within a unit of the plane, or the
-	 * face rising 15 units and more (RICH2 561 of 42,228, ANDREA2 30,
-	 * ANDREA3 4, RICH3 54, RICHCUT2 27; RoomProbe -marble 1's spread). */
+	 * rises across itself: a level floor's mirror is not its own, and it
+	 * would stand partly over the clip, in that mirror. The faces lie in
+	 * two kinds, nothing between: every corner within a unit of the plane,
+	 * or the face rising 15 units and more (RICH2 477 with the copies left
+	 * out, ANDREA2 30, ANDREA3 4, RICH3 54, RICHCUT2 27; RoomProbe
+	 * -marblerise), each a walked slope of 1 in 22 to 1 in 4. Such a face
+	 * leaves the level faces for a plane of its own, its normal and
+	 * distance, which it shares with the faces of its slope; the frame
+	 * ranks and mirrors that plane as it does a floor height. */
 	void marble_build(const HDWaterRoom* rooms, int count)
 	{
 		std::unordered_set<int> heights;
@@ -19149,6 +19271,24 @@ namespace
 		g_marble_copies = 0;
 		g_marble_copies_water = 0;
 		g_marble_buried = 0;
+		g_marble_rise_list.clear();
+		g_marble_seen.clear();
+		g_marble_last_ms = 0.0;
+
+		// A count still in flight is the last level's: it names no plane.
+		for (MarbleQuery& m : g_marble_queries)
+			m.y = INT_MIN;
+		g_marble_over.assign(g_groups.size(), std::vector<int>());
+		g_marble_beside.assign(g_groups.size(), std::vector<int>());
+		g_marble_tilt_faces.assign(g_groups.size(), std::vector<float>());
+		g_marble_tilt_id.assign(g_groups.size(), std::vector<int>());
+		g_marble_tilts.clear();
+
+		for (HDMarbleSlot& s : g_marble_slots)
+		{
+			s.y = INT_MIN;
+			s.gain = 0.0f;
+		}
 
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
@@ -19182,7 +19322,48 @@ namespace
 
 				if (most > kMarbleClipOver)
 				{
+					const float* p = &group.mirrorFaces[f * 9];
+					const float lo = fmaxf(p[1], fmaxf(p[4], p[7]));
+					const float hi = fminf(p[1], fminf(p[4], p[7]));
+					const float run = fmaxf(fmaxf(p[0], fmaxf(p[3], p[6])) -
+						fminf(p[0], fminf(p[3], p[6])), fmaxf(p[2], fmaxf(p[5],
+						p[8])) - fminf(p[2], fminf(p[5], p[8])));
+					const float row[6] = { (float)g, (float)group.mirrorY[f],
+						lo, hi, run, lo - hi };
+
+					g_marble_rise_list.insert(g_marble_rise_list.end(), row,
+						row + 6);
 					g_marble_rising++;
+
+					/* Its own plane (HDMarbleTiltPlane), joined to a plane
+					 * of the level found already (HDMarbleTiltSame). */
+					float plane[4];
+					const float ox = (size_t)g * 2 + 1 < g_group_origin.size() ?
+						g_group_origin[(size_t)g * 2] : 0.0f;
+					const float oz = (size_t)g * 2 + 1 < g_group_origin.size() ?
+						g_group_origin[(size_t)g * 2 + 1] : 0.0f;
+
+					if (!HDMarbleTiltPlane(p, ox, oz, plane))
+						continue;
+
+					int id = -1;
+
+					for (size_t t = 0; t + 3 < g_marble_tilts.size() && id < 0;
+						t += 4)
+						if (HDMarbleTiltSame(&g_marble_tilts[t], plane,
+							kMarbleTiltSame, (float)kMarbleHeightJoin))
+							id = (int)(t / 4);
+
+					if (id < 0)
+					{
+						id = (int)(g_marble_tilts.size() / 4);
+						g_marble_tilts.insert(g_marble_tilts.end(), plane,
+							plane + 4);
+					}
+
+					g_marble_tilt_faces[(size_t)g].insert(
+						g_marble_tilt_faces[(size_t)g].end(), p, p + 9);
+					g_marble_tilt_id[(size_t)g].push_back(id);
 					continue;
 				}
 
@@ -19386,6 +19567,14 @@ namespace
 			}
 
 		g_marble_heights = (int)heights.size();
+
+		if (g_crack_on)
+		{
+			g_crack_closed = 0;
+			marble_crack_census();
+			g_crack_tris.clear();
+			g_crack_group.clear();
+		}
 	}
 
 	/* The art's copy of a room under its polished floor. RICH2 and the
@@ -19714,6 +19903,352 @@ namespace
 		return flagged;
 	}
 
+	/* RoomProbe's -marblecracks (marble_crack_census): every triangle of
+	 * group g the level keeps (not the art's copies, `copies` as
+	 * marble_copies flags them) in the world's place. The groups are
+	 * built on several threads: each group's are gathered apart and added
+	 * under a lock. */
+	std::mutex g_crack_lock;
+
+	void marble_crack_collect(const trf::remaster::Trg& trg,
+		const trf::remaster::TrgGroup& source, int g,
+		const std::vector<std::vector<unsigned char> >& copies)
+	{
+		std::vector<float> tris;
+		const float ox = (size_t)g * 2 + 1 < g_group_origin.size() ?
+			g_group_origin[(size_t)g * 2] : 0.0f;
+		const float oz = (size_t)g * 2 + 1 < g_group_origin.size() ?
+			g_group_origin[(size_t)g * 2 + 1] : 0.0f;
+
+		for (size_t pi = 0; pi < source.parts.size(); pi++)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart& part = source.parts[pi];
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned int at = 0; at + 2 < run.count; at += 3)
+				{
+					const unsigned int first = run.start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					if (!copies.empty() &&
+						copies[pi * 3 + (size_t)pass][at / 3])
+						continue;
+
+					float p[9];
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& v =
+							trg.vertices[trg.indices[first + c]];
+
+						p[c * 3] = (float)v.x + ox;
+						p[c * 3 + 1] = (float)v.y;
+						p[c * 3 + 2] = (float)v.z + oz;
+					}
+
+					tris.insert(tris.end(), p, p + 9);
+				}
+			}
+
+		std::lock_guard<std::mutex> hold(g_crack_lock);
+
+		g_crack_tris.insert(g_crack_tris.end(), tris.begin(), tris.end());
+		g_crack_group.insert(g_crack_group.end(), tris.size() / 9, g);
+	}
+
+	/* The crack census (RoomProbe -marblecracks): each edge of each mirror
+	 * face, in the world, asked whether the edges of the level's other
+	 * triangles lying along it (within kMarbleCrackNear of its line)
+	 * cover it end to end - a floor's edge met by its neighbour floor, a
+	 * wall's foot or a step's riser. An edge not covered is open: its
+	 * gap is how far the nearest other triangle (edge or face) lies from the
+	 * open piece's middle. The edges are asked by the 512-unit squares
+	 * their boxes touch. One HDRenderMarbleCrack row an open edge. */
+	void marble_crack_census()
+	{
+		g_crack_rows.clear();
+
+		const size_t count = g_crack_tris.size() / 9;
+		const auto key = [](int sx, int sz)
+		{
+			return ((long long)sx << 32) ^ (long long)(unsigned int)sz;
+		};
+		std::unordered_map<long long, std::vector<int> > cells;
+
+		for (size_t t = 0; t < count; t++)
+		{
+			const float* p = &g_crack_tris[t * 9];
+			const int x0 = (int)floorf(fminf(p[0], fminf(p[3], p[6])) /
+				512.0f);
+			const int x1 = (int)floorf(fmaxf(p[0], fmaxf(p[3], p[6])) /
+				512.0f);
+			const int z0 = (int)floorf(fminf(p[2], fminf(p[5], p[8])) /
+				512.0f);
+			const int z1 = (int)floorf(fmaxf(p[2], fmaxf(p[5], p[8])) /
+				512.0f);
+
+			for (int sx = x0; sx <= x1 && x1 - x0 < 64; sx++)
+				for (int sz = z0; sz <= z1 && z1 - z0 < 64; sz++)
+					cells[key(sx, sz)].push_back((int)t);
+		}
+
+		// The level's mirror faces as marble_build keeps them, level and
+		// sloped, in the world, and their groups.
+		std::vector<float> faces;
+		std::vector<int> faceGroup;
+
+		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
+		{
+			const float ox = (size_t)g * 2 + 1 < g_group_origin.size() ?
+				g_group_origin[(size_t)g * 2] : 0.0f;
+			const float oz = (size_t)g * 2 + 1 < g_group_origin.size() ?
+				g_group_origin[(size_t)g * 2 + 1] : 0.0f;
+			const std::vector<float>* list[2] =
+			{
+				&g_groups[(size_t)g].mirrorFaces,
+				(size_t)g < g_marble_tilt_faces.size() ?
+					&g_marble_tilt_faces[(size_t)g] : 0
+			};
+
+			for (int l = 0; l < 2; l++)
+				for (size_t k = 0; list[l] && k + 8 < list[l]->size(); k += 9)
+				{
+					for (int c = 0; c < 9; c++)
+						faces.push_back((*list[l])[k + (size_t)c] +
+							(c % 3 == 0 ? ox : c % 3 == 2 ? oz : 0.0f));
+
+					faceGroup.push_back(g);
+				}
+		}
+
+		// Whether triangle t is face f itself.
+		const auto self = [&](int t, size_t f)
+		{
+			for (int c = 0; c < 9; c++)
+				if (fabsf(g_crack_tris[(size_t)t * 9 + (size_t)c] -
+					faces[f * 9 + (size_t)c]) > 0.01f)
+					return false;
+
+			return true;
+		};
+		std::vector<int> nearby;
+		std::vector<std::pair<float, float> > spans;
+
+		for (size_t f = 0; f < faceGroup.size(); f++)
+			for (int e = 0; e < 3; e++)
+			{
+				const float* a = &faces[f * 9 + (size_t)e * 3];
+				const float* b = &faces[f * 9 + (size_t)((e + 1) % 3) * 3];
+				const float d[3] = { b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+				const float len = sqrtf(d[0] * d[0] + d[1] * d[1] +
+					d[2] * d[2]);
+
+				if (len < 1.0f)
+					continue;
+
+				const float u[3] = { d[0] / len, d[1] / len, d[2] / len };
+
+				nearby.clear();
+
+				for (int sx = (int)floorf(fminf(a[0], b[0]) / 512.0f);
+					sx <= (int)floorf(fmaxf(a[0], b[0]) / 512.0f); sx++)
+					for (int sz = (int)floorf(fminf(a[2], b[2]) / 512.0f);
+						sz <= (int)floorf(fmaxf(a[2], b[2]) / 512.0f); sz++)
+					{
+						const std::unordered_map<long long,
+							std::vector<int> >::const_iterator c =
+							cells.find(key(sx, sz));
+
+						if (c != cells.end())
+							nearby.insert(nearby.end(), c->second.begin(),
+								c->second.end());
+					}
+
+				std::sort(nearby.begin(), nearby.end());
+				nearby.erase(std::unique(nearby.begin(), nearby.end()),
+					nearby.end());
+				spans.clear();
+
+				// The other triangles' edges along this one, as spans of it.
+				for (int t : nearby)
+				{
+					if (self(t, f))
+						continue;
+
+					for (int k = 0; k < 3; k++)
+					{
+						const float* c = &g_crack_tris[(size_t)t * 9 + k * 3];
+						const float* q = &g_crack_tris[(size_t)t * 9 +
+							(k + 1) % 3 * 3];
+						float s[2], off = 0.0f;
+
+						for (int m = 0; m < 2; m++)
+						{
+							const float* v = m ? q : c;
+							const float w[3] = { v[0] - a[0], v[1] - a[1],
+								v[2] - a[2] };
+
+							s[m] = w[0] * u[0] + w[1] * u[1] + w[2] * u[2];
+
+							const float r[3] = { w[0] - s[m] * u[0],
+								w[1] - s[m] * u[1], w[2] - s[m] * u[2] };
+
+							off = fmaxf(off, sqrtf(r[0] * r[0] + r[1] * r[1] +
+								r[2] * r[2]));
+						}
+
+						if (off <= kMarbleCrackNear)
+							spans.push_back({ fminf(s[0], s[1]),
+								fmaxf(s[0], s[1]) });
+					}
+				}
+
+				std::sort(spans.begin(), spans.end());
+
+				// The open pieces of [0, len] the spans leave.
+				float reach = 0.0f, open = 0.0f, mid = -1.0f, widest = 0.0f;
+
+				for (const std::pair<float, float>& s : spans)
+				{
+					if (s.first > reach + kMarbleCrackNear &&
+						s.first - reach > widest)
+					{
+						widest = s.first - reach;
+						mid = (reach + fminf(s.first, len)) * 0.5f;
+					}
+
+					if (s.first > reach + kMarbleCrackNear)
+						open += fminf(s.first, len) - reach;
+
+					reach = fmaxf(reach, s.second);
+
+					if (reach >= len)
+						break;
+				}
+
+				if (reach < len - kMarbleCrackNear)
+				{
+					open += len - reach;
+
+					if (len - reach > widest)
+					{
+						widest = len - reach;
+						mid = (reach + len) * 0.5f;
+					}
+				}
+
+				if (open <= 0.0f || mid < 0.0f)
+				{
+					g_crack_closed++;
+					continue;
+				}
+
+				/* The gap: the nearest other triangle to the open piece's
+				 * middle, its edges and its face (a floor edge lying on a
+				 * wall's face, the wall going on under the floor, is no
+				 * gap). */
+				const float pm[3] = { a[0] + u[0] * mid, a[1] + u[1] * mid,
+					a[2] + u[2] * mid };
+				float gap = 1e9f;
+
+				for (int t : nearby)
+				{
+					if (self(t, f))
+						continue;
+
+					for (int k = 0; k < 3; k++)
+					{
+						const float* c = &g_crack_tris[(size_t)t * 9 + k * 3];
+						const float* q = &g_crack_tris[(size_t)t * 9 +
+							(k + 1) % 3 * 3];
+						const float cq[3] = { q[0] - c[0], q[1] - c[1],
+							q[2] - c[2] };
+						const float l2 = cq[0] * cq[0] + cq[1] * cq[1] +
+							cq[2] * cq[2];
+						float h = l2 > 0.0f ? ((pm[0] - c[0]) * cq[0] +
+							(pm[1] - c[1]) * cq[1] + (pm[2] - c[2]) * cq[2]) /
+							l2 : 0.0f;
+
+						h = h < 0.0f ? 0.0f : h > 1.0f ? 1.0f : h;
+
+						const float r[3] = { c[0] + cq[0] * h - pm[0],
+							c[1] + cq[1] * h - pm[1],
+							c[2] + cq[2] * h - pm[2] };
+
+						gap = fminf(gap, sqrtf(r[0] * r[0] + r[1] * r[1] +
+							r[2] * r[2]));
+					}
+
+					// The face: the middle's foot inside the triangle.
+					const float* t0 = &g_crack_tris[(size_t)t * 9];
+					const float e1[3] = { t0[3] - t0[0], t0[4] - t0[1],
+						t0[5] - t0[2] };
+					const float e2[3] = { t0[6] - t0[0], t0[7] - t0[1],
+						t0[8] - t0[2] };
+					const float n[3] = { e1[1] * e2[2] - e1[2] * e2[1],
+						e1[2] * e2[0] - e1[0] * e2[2],
+						e1[0] * e2[1] - e1[1] * e2[0] };
+					const float nn = n[0] * n[0] + n[1] * n[1] + n[2] * n[2];
+
+					if (nn <= 0.0f)
+						continue;
+
+					const float w[3] = { pm[0] - t0[0], pm[1] - t0[1],
+						pm[2] - t0[2] };
+					const float s = (w[0] * n[0] + w[1] * n[1] + w[2] * n[2]) /
+						nn;
+					const float fp[3] = { w[0] - s * n[0], w[1] - s * n[1],
+						w[2] - s * n[2] };
+					const float d11 = e1[0] * e1[0] + e1[1] * e1[1] +
+						e1[2] * e1[2];
+					const float d12 = e1[0] * e2[0] + e1[1] * e2[1] +
+						e1[2] * e2[2];
+					const float d22 = e2[0] * e2[0] + e2[1] * e2[1] +
+						e2[2] * e2[2];
+					const float p1 = fp[0] * e1[0] + fp[1] * e1[1] +
+						fp[2] * e1[2];
+					const float p2 = fp[0] * e2[0] + fp[1] * e2[1] +
+						fp[2] * e2[2];
+					const float det = d11 * d22 - d12 * d12;
+
+					if (det <= 0.0f)
+						continue;
+
+					const float bu = (d22 * p1 - d12 * p2) / det;
+					const float bv = (d11 * p2 - d12 * p1) / det;
+
+					if (bu >= 0.0f && bv >= 0.0f && bu + bv <= 1.0f)
+						gap = fminf(gap, fabsf(s) * sqrtf(nn));
+				}
+
+				const float row[7] = { (float)faceGroup[f], gap,
+					open, len, pm[0], pm[1], pm[2] };
+
+				g_crack_rows.insert(g_crack_rows.end(), row, row + 7);
+			}
+
+		// The rows in one order whatever the threads' (room, x, y, z).
+		std::vector<std::vector<float> > rows;
+
+		for (size_t r = 0; r + 6 < g_crack_rows.size(); r += 7)
+			rows.push_back(std::vector<float>(g_crack_rows.begin() + r,
+				g_crack_rows.begin() + r + 7));
+
+		std::sort(rows.begin(), rows.end(), [](const std::vector<float>& a,
+			const std::vector<float>& b)
+		{
+			return a[0] != b[0] ? a[0] < b[0] : a[4] != b[4] ? a[4] < b[4] :
+				a[5] != b[5] ? a[5] < b[5] : a[6] < b[6];
+		});
+		g_crack_rows.clear();
+
+		for (const std::vector<float>& r : rows)
+			g_crack_rows.insert(g_crack_rows.end(), r.begin(), r.end());
+	}
+
 	void marble_note(int kind, int id, const D3DMATRIX* world,
 		const HDRoomLighting* lighting, unsigned int passes, int window)
 	{
@@ -19785,6 +20320,99 @@ namespace
 		g_marble_replay = false;
 	}
 
+	/* The rooms over (HDMarbleOverRooms), each drawn whole into the plane's
+	 * mirror with the matrix and the light of the drawn room it was found
+	 * from, moved by the two rooms' origins - unless its box lies wholly
+	 * outside the mirrored view (g_viewproj, the mirror's) or under the
+	 * plane `clip` (clip space), where nothing of it can show. Returns how
+	 * many were drawn; `culled` counts those left out so, and `outs` (when
+	 * given) takes 1 for each of the first sixteen left out. */
+	int marble_replay_over(const std::vector<HDMarbleOverRoom>& over,
+		const std::vector<const MarbleDraw*>& noted, const float* clip,
+		int* culled, int* outs)
+	{
+		int drawn = 0;
+
+		HDRenderScissorOff();
+		g_marble_replay = true;
+
+		for (const HDMarbleOverRoom& o : over)
+		{
+			const MarbleDraw* under = o.via >= 0 &&
+				(size_t)o.via < noted.size() ? noted[(size_t)o.via] : 0;
+
+			if (!under || (size_t)o.group * 2 + 1 >= g_group_origin.size() ||
+				(size_t)o.via * 2 + 1 >= g_group_origin.size())
+				continue;
+
+			const float off[2] =
+			{
+				g_group_origin[(size_t)o.group * 2] -
+					g_group_origin[(size_t)o.via * 2],
+				g_group_origin[(size_t)o.group * 2 + 1] -
+					g_group_origin[(size_t)o.via * 2 + 1]
+			};
+			D3DMATRIX world = under->world;
+
+			for (int k = 0; k < 4; k++)
+				world.m[3][k] += off[0] * under->world.m[0][k] +
+					off[1] * under->world.m[2][k];
+
+			// The box's corners in clip space: out when all lie past a side.
+			const HDGroup& room = g_groups[(size_t)o.group];
+			int outside[7] = { 0, 0, 0, 0, 0, 0, 0 };
+
+			for (int c = 0; c < 8 && room.hasBounds; c++)
+			{
+				const float p[3] = { c & 1 ? room.maxs[0] : room.mins[0],
+					c & 2 ? room.maxs[1] : room.mins[1],
+					c & 4 ? room.maxs[2] : room.mins[2] };
+				float q[4], h[4];
+
+				for (int k = 0; k < 4; k++)
+					q[k] = p[0] * world.m[0][k] + p[1] * world.m[1][k] +
+						p[2] * world.m[2][k] + world.m[3][k];
+
+				for (int k = 0; k < 4; k++)
+					h[k] = q[0] * g_viewproj[k] + q[1] * g_viewproj[4 + k] +
+						q[2] * g_viewproj[8 + k] + q[3] * g_viewproj[12 + k];
+
+				outside[0] += h[0] < -h[3] ? 1 : 0;
+				outside[1] += h[0] > h[3] ? 1 : 0;
+				outside[2] += h[1] < -h[3] ? 1 : 0;
+				outside[3] += h[1] > h[3] ? 1 : 0;
+				outside[4] += h[2] < 0.0f ? 1 : 0;
+				outside[5] += h[2] > h[3] ? 1 : 0;
+				outside[6] += clip[0] * h[0] + clip[1] * h[1] +
+					clip[2] * h[2] + clip[3] * h[3] < 0.0f ? 1 : 0;
+			}
+
+			bool out = false;
+
+			for (int s = 0; s < 7; s++)
+				out = out || outside[s] == 8;
+
+			const size_t at = (size_t)(&o - &over[0]);
+
+			if (outs && at < 16)
+				outs[at] = out ? 1 : 0;
+
+			if (out)
+			{
+				(*culled)++;
+				continue;
+			}
+
+			HDRenderRoomMask(o.group, &world, under->lighting,
+				under->passes, HD_WINDOW_ALL);
+			drawn++;
+		}
+
+		HDRenderScissorOff();
+		g_marble_replay = false;
+		return drawn;
+	}
+
 	// The room path's shaders and stream, as the bracket sets them.
 	void marble_room_state()
 	{
@@ -19795,6 +20423,161 @@ namespace
 		g_device->SetIndices(g_ib);
 		g_device->SetTexture(1, g_field_dir);
 		g_device->SetTexture(2, g_field_rgb);
+	}
+
+	/* The counts in flight read into g_marble_seen as the GPU has them, or
+	 * waited for with `wait` (RoomProbe's picture after its warm-up draw);
+	 * one not yet answered stays in flight for a later frame (the flush
+	 * hands the queued work to the GPU and does not wait), and one that
+	 * fails frees its query. The stats count the answered and the still
+	 * flying, and the oldest age of an answer in frames. */
+	void marble_seen_read(bool wait)
+	{
+		for (MarbleQuery& m : g_marble_queries)
+		{
+			if (!m.busy)
+				continue;
+
+			DWORD pixels = 0;
+			HRESULT r = m.q->GetData(&pixels, sizeof(pixels),
+				D3DGETDATA_FLUSH);
+
+			while (wait && r == S_FALSE)
+				r = m.q->GetData(&pixels, sizeof(pixels), D3DGETDATA_FLUSH);
+
+			if (r == S_FALSE)
+			{
+				g_marble_stats.flying++;
+				continue;
+			}
+
+			if (r == S_OK)
+			{
+				g_marble_seen[m.y] = { (int)pixels, m.frame };
+				g_marble_stats.answered++;
+
+				if (g_marble_clock - m.frame > g_marble_stats.late)
+					g_marble_stats.late = g_marble_clock - m.frame;
+			}
+
+			m.busy = false;
+		}
+	}
+
+	/* Each plane's faces drawn against the frame's depth with nothing
+	 * written, an occlusion query round each: what of the plane the eye
+	 * sees past what stands in front, for a later frame's pick. A plane
+	 * whose last query is still in flight is not asked again. The
+	 * device's state is put back, the vertex constants of the matrix
+	 * with it. */
+	void marble_seen_ask(const std::map<int, MarbleLayer>& layers)
+	{
+		const D3DRENDERSTATETYPE states[] =
+		{
+			D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
+			D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+			D3DRS_FOGENABLE, D3DRS_COLORWRITEENABLE, D3DRS_STENCILENABLE,
+			D3DRS_CLIPPLANEENABLE
+		};
+		const int count = (int)(sizeof(states) / sizeof(states[0]));
+		DWORD saved[count];
+		IDirect3DVertexShader9* vs = 0;
+		IDirect3DPixelShader9* ps = 0;
+		IDirect3DVertexDeclaration9* decl = 0;
+		IDirect3DVertexBuffer9* stream = 0;
+		IDirect3DIndexBuffer9* index = 0;
+		UINT offset = 0, stride = 0;
+		DWORD fvf = 0;
+		float keep[4];
+		float keepMatrix[16];
+
+		g_device->GetVertexShader(&vs);
+		g_device->GetPixelShader(&ps);
+		g_device->GetVertexDeclaration(&decl);
+		g_device->GetFVF(&fvf);
+		g_device->GetStreamSource(0, &stream, &offset, &stride);
+		g_device->GetIndices(&index);
+		g_device->GetPixelShaderConstantF(105, keep, 1);
+		g_device->GetVertexShaderConstantF(0, keepMatrix, 4);
+
+		for (int s = 0; s < count; s++)
+			g_device->GetRenderState(states[s], &saved[s]);
+
+		// MarblePS's first branch: the cheapest pixel it draws.
+		const float quick[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_marble_ps);
+		g_device->SetFVF(kCardFVF);
+		set_matrix_constant(0, g_proj);
+		g_device->SetPixelShaderConstantF(105, quick, 1);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+
+		for (const std::pair<const int, MarbleLayer>& l : layers)
+		{
+			MarbleQuery* idle = 0;
+			bool flying = false;
+
+			for (MarbleQuery& m : g_marble_queries)
+			{
+				flying = flying || (m.busy && m.y == l.first);
+				idle = !idle && !m.busy ? &m : idle;
+			}
+
+			if (l.second.verts.empty() || flying)
+				continue;
+
+			if (!idle && g_marble_queries.size() < kMarbleQueriesMost)
+			{
+				IDirect3DQuery9* q = 0;
+
+				if (FAILED(g_device->CreateQuery(D3DQUERYTYPE_OCCLUSION,
+					&q)) || !q)
+					continue;
+
+				g_marble_queries.push_back({ 0, 0, false, q });
+				idle = &g_marble_queries.back();
+			}
+
+			if (!idle)
+				continue;
+
+			idle->q->Issue(D3DISSUE_BEGIN);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+				(UINT)(l.second.verts.size() / 3), &l.second.verts[0],
+				sizeof(CardVertex));
+			idle->q->Issue(D3DISSUE_END);
+			idle->y = l.first;
+			idle->frame = g_marble_clock;
+			idle->busy = true;
+		}
+
+		for (int s = 0; s < count; s++)
+			g_device->SetRenderState(states[s], saved[s]);
+
+		g_device->SetPixelShaderConstantF(105, keep, 1);
+		g_device->SetVertexShaderConstantF(0, keepMatrix, 4);
+		g_device->SetStreamSource(0, stream, offset, stride);
+		g_device->SetIndices(index);
+		g_device->SetFVF(fvf);
+		g_device->SetVertexDeclaration(decl);
+		g_device->SetVertexShader(vs);
+		g_device->SetPixelShader(ps);
+
+		if (stream) stream->Release();
+		if (index) index->Release();
+		if (decl) decl->Release();
+		if (vs) vs->Release();
+		if (ps) ps->Release();
 	}
 }
 
@@ -20044,6 +20827,120 @@ void HDRenderMarbleKeepCopies(bool keep)
 	g_marble_keep_copies = keep;
 }
 
+int HDRenderMarbleRisingFaces(const float** rows)
+{
+	if (rows)
+		*rows = g_marble_rise_list.empty() ? 0 :
+			&g_marble_rise_list[0];
+
+	return (int)(g_marble_rise_list.size() / 6);
+}
+
+void HDRenderMarbleOver(int group, int room)
+{
+	if (group < 0 || group >= (int)g_marble_over.size() || room < 0)
+		return;
+
+	std::vector<int>& list = g_marble_over[(size_t)group];
+
+	if (std::find(list.begin(), list.end(), room) == list.end())
+		list.push_back(room);
+}
+
+void HDRenderMarbleBeside(int group, int room)
+{
+	if (group < 0 || group >= (int)g_marble_beside.size() || room < 0)
+		return;
+
+	std::vector<int>& list = g_marble_beside[(size_t)group];
+
+	if (std::find(list.begin(), list.end(), room) == list.end())
+		list.push_back(room);
+}
+
+void HDRenderMarbleCracks(bool on)
+{
+	g_crack_on = on;
+}
+
+int HDRenderMarbleCrackRows(const float** rows, int* closed)
+{
+	if (rows)
+		*rows = g_crack_rows.empty() ? 0 : &g_crack_rows[0];
+
+	if (closed)
+		*closed = g_crack_closed;
+
+	return (int)(g_crack_rows.size() / 7);
+}
+
+void HDRenderMarbleOverDepth(int depth)
+{
+	g_marble_over_depth = depth < 0 ? 0 : depth > 3 ? 3 : depth;
+}
+
+void HDRenderMarbleRooms(const short* groups, int count)
+{
+	g_marble_room_group = groups;
+	g_marble_room_count = groups ? count : 0;
+}
+
+void HDRenderMarbleSlots(const int* ys, const float* gains, int count)
+{
+	g_marble_force.clear();
+
+	for (int i = 0; i < count && i < 8; i++)
+		g_marble_force.push_back({ ys[i], gains[i] });
+}
+
+void HDRenderMarbleNoWait(bool on)
+{
+	g_marble_no_wait = on;
+}
+
+void HDRenderMarbleVoid(bool on)
+{
+	g_marble_void = on;
+}
+
+void HDRenderMarblePlaneFloor(bool on)
+{
+	g_marble_plane_floor = on;
+}
+
+int HDRenderMarbleTargetRead(unsigned long* px, int max, int* w, int* h)
+{
+	IDirect3DSurface9* read = 0;
+	D3DLOCKED_RECT rect;
+	const int width = (int)g_marble_desc.Width;
+	const int height = (int)g_marble_desc.Height;
+
+	if (!g_device || !g_marble_surface || !px || width * height > max ||
+		FAILED(g_device->CreateOffscreenPlainSurface(g_marble_desc.Width,
+		g_marble_desc.Height, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &read,
+		0)))
+		return 0;
+
+	int got = 0;
+
+	if (SUCCEEDED(g_device->GetRenderTargetData(g_marble_surface, read)) &&
+		SUCCEEDED(read->LockRect(&rect, 0, D3DLOCK_READONLY)))
+	{
+		for (int y = 0; y < height; y++)
+			memcpy(px + (size_t)y * (size_t)width, (const unsigned char*)
+				rect.pBits + (size_t)y * (size_t)rect.Pitch,
+				(size_t)width * 4);
+
+		read->UnlockRect();
+		got = width * height;
+		*w = width;
+		*h = height;
+	}
+
+	read->Release();
+	return got;
+}
+
 void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 {
 	if (!out)
@@ -20060,6 +20957,7 @@ void HDRenderMarbleStatsNow(HDRenderMarbleStats* out)
 	out->copies_water = g_marble_copies_water;
 	out->buried = g_marble_buried;
 	out->joined = g_marble_joined;
+	out->slopes = (int)(g_marble_tilts.size() / 4);
 }
 
 void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
@@ -20099,8 +20997,13 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		taken[(size_t)d.id] = 1;
 
 		const HDGroup& group = g_groups[(size_t)d.id];
+		const std::vector<float>* tilt = (size_t)d.id <
+			g_marble_tilt_faces.size() ? &g_marble_tilt_faces[(size_t)d.id] :
+			0;
+		const size_t flat = group.mirrorY.size();
+		const size_t all = flat + (tilt ? tilt->size() / 9 : 0);
 
-		if (group.mirrorY.empty())
+		if (!all)
 			continue;
 
 		float m[16], l[3];
@@ -20118,16 +21021,21 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				g_group_origin[(size_t)d.id * 2 + 1] : 0.0f
 		};
 
-		for (size_t f = 0; f < group.mirrorY.size(); f++)
+		for (size_t f = 0; f < all; f++)
 		{
-			const float* p = &group.mirrorFaces[f * 9];
+			// A level face, or a sloped one in a plane of its own.
+			const float* p = f < flat ? &group.mirrorFaces[f * 9] :
+				&(*tilt)[(f - flat) * 9];
+			const int key = f < flat ? group.mirrorY[f] : kMarbleTiltKey +
+				g_marble_tilt_id[(size_t)d.id][f - flat];
 			CardVertex v[3];
 			float clip[12];
 
 			for (int c = 0; c < 3; c++)
 			{
 				// Lifted a few units over the floor, as the wet floor is.
-				const float x = p[c * 3], y = p[c * 3 + 1] - kWetLift;
+				const float x = p[c * 3];
+				const float y = p[c * 3 + 1] - kMarbleClipOver;
 				const float z = p[c * 3 + 2];
 				const float world[3] = { x + origin[0], y, z + origin[1] };
 				CardVertex& o = v[c];
@@ -20165,9 +21073,9 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			if (cover <= 0.0f)
 				continue;
 
-			MarbleLayer& layer = layers[group.mirrorY[f]];
+			MarbleLayer& layer = layers[key];
 
-			if (layer.verts.empty())
+			if (layer.verts.empty() && f < flat)
 			{
 				// The world's up in view space and a point of the floor.
 				const float h = (float)group.mirrorY[f];
@@ -20181,7 +21089,34 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				layer.plane[3] = layer.plane[0] * (h * m[4] + m[12]) +
 					layer.plane[1] * (h * m[5] + m[13]) +
 					layer.plane[2] * (h * m[6] + m[14]);
+			}
+			else if (layer.verts.empty())
+			{
+				// The slope's normal in view space and its first corner.
+				const float* t = &g_marble_tilts[(size_t)(key -
+					kMarbleTiltKey) * 4];
+				float n[3], len = 0.0f;
 
+				for (int k = 0; k < 3; k++)
+				{
+					n[k] = t[0] * m[k] + t[1] * m[4 + k] + t[2] * m[8 + k];
+					len += n[k] * n[k];
+				}
+
+				len = sqrtf(len);
+				layer.plane[3] = 0.0f;
+
+				for (int k = 0; k < 3 && len > 0.0f; k++)
+				{
+					layer.plane[k] = n[k] / len;
+					layer.plane[3] += layer.plane[k] * (p[0] * m[k] +
+						p[1] * m[4 + k] + p[2] * m[8 + k] + m[12 + k]);
+				}
+			}
+
+			// The world's axes in view space, for MarblePS's light.
+			if (layer.verts.empty())
+			{
 				for (int r = 0; r < 3; r++)
 				{
 					const float a = sqrtf(m[r * 4] * m[r * 4] +
@@ -20199,21 +21134,103 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		}
 	}
 
+	/* The planes scored (hd_marble_math.h, HDMarbleScore): by what of each
+	 * its last count saw past what stands in front while that count is
+	 * fresh, else by its cover; a plane out of view loses its count. Then
+	 * the places stepped by the frame's time. RoomProbe's warm-up draw
+	 * takes the best by score at full strength and leaves the places as
+	 * they stand. */
+	D3DVIEWPORT9 vp = {};
+
+	g_device->GetViewport(&vp);
+	g_marble_clock++;
+	marble_seen_read(g_marble_after_quiet && !g_marble_no_wait);
+	g_marble_after_quiet = g_marble_quiet;
+
+	for (std::map<int, MarbleSeen>::iterator s = g_marble_seen.begin();
+		s != g_marble_seen.end(); )
+		s = layers.count(s->first) ? std::next(s) : g_marble_seen.erase(s);
+
 	std::vector<HDMarblePlane> planes;
+	std::vector<int> ys;
+	std::vector<float> scores;
 
 	for (const std::pair<const int, MarbleLayer>& l : layers)
-		planes.push_back({ l.first, l.second.cover });
+	{
+		const std::map<int, MarbleSeen>::const_iterator seen =
+			g_marble_seen.find(l.first);
+		const float score = seen == g_marble_seen.end() ? l.second.cover :
+			HDMarbleScore(seen->second.pixels, g_marble_clock -
+			seen->second.frame, kMarbleSeenOldest, l.second.cover,
+			(int)vp.Width, (int)vp.Height);
 
-	const int drawn = planes.empty() ? 0 : HDMarblePlanesPick(&planes[0],
+		planes.push_back({ l.first, score });
+		ys.push_back(l.first);
+		scores.push_back(score);
+	}
+
+	const int ranked = planes.empty() ? 0 : HDMarblePlanesPick(&planes[0],
 		(int)planes.size(), g_marble_cap);
+	std::vector<HDMarbleSlot> use;
+
+	if (g_marble_quiet)
+		for (int i = 0; i < ranked; i++)
+			use.push_back({ planes[(size_t)i].y, 1.0f });
+	else if (!g_marble_force.empty())
+		use = g_marble_force;
+	else
+	{
+		const double now = warm_now_ms();
+		const float step = g_marble_last_ms > 0.0 ? HDMarbleFadeStep(now -
+			g_marble_last_ms, kMarbleFadeMs, kMarbleFadeLongest) : 1.0f;
+
+		g_marble_last_ms = now;
+		HDMarbleSlotsStep(g_marble_slots, g_marble_cap, ys.data(),
+			scores.data(), (int)ys.size(), step, HD_MARBLE_HOLD);
+		use.assign(g_marble_slots, g_marble_slots + g_marble_cap);
+	}
+
+	// The places' planes first, in their order, then the rest by score.
+	std::vector<HDMarblePlane> order;
+	std::vector<float> gains;
+
+	for (const HDMarbleSlot& s : use)
+		if (s.y != INT_MIN && s.gain > 0.0f && layers.count(s.y))
+		{
+			order.push_back({ s.y, HDMarbleScoreOf(ys.data(),
+				scores.data(), (int)ys.size(), s.y) });
+			gains.push_back(s.gain);
+		}
+
+	const int drawn = (int)order.size();
+
+	for (const HDMarblePlane& p : planes)
+	{
+		bool placed = false;
+
+		for (int i = 0; i < drawn; i++)
+			placed = placed || order[(size_t)i].y == p.y;
+
+		if (!placed)
+			order.push_back(p);
+	}
+
+	planes.swap(order);
+	marble_seen_ask(layers);
 
 	g_marble_stats.planes = (int)planes.size();
 	g_marble_stats.drawn = drawn;
 
 	for (size_t i = 0; i < planes.size() && i < 8; i++)
 	{
+		const std::map<int, MarbleSeen>::const_iterator seen =
+			g_marble_seen.find(planes[i].y);
+
 		g_marble_stats.plane_y[i] = planes[i].y;
-		g_marble_stats.plane_cover[i] = planes[i].cover;
+		g_marble_stats.plane_cover[i] = layers[planes[i].y].cover;
+		g_marble_stats.plane_seen[i] = seen != g_marble_seen.end() ?
+			seen->second.pixels : -1;
+		g_marble_stats.plane_gain[i] = (int)i < drawn ? gains[i] : 0.0f;
 		g_marble_stats.plane_room[i] = -1;
 
 		float most = 0.0f;
@@ -20233,13 +21250,11 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		return;
 	}
 
-	D3DVIEWPORT9 vp = {};
 	IDirect3DSurface9* depth = 0;
 	float keepClip[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	DWORD keepClipOn = 0;
 	float keepProj[16];
 
-	g_device->GetViewport(&vp);
 	g_device->GetDepthStencilSurface(&depth);
 	g_device->GetClipPlane(0, keepClip);
 	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &keepClipOn);
@@ -20265,12 +21280,41 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		D3DSAMP_SRGBTEXTURE
 	};
 	const int sampCount = (int)(sizeof(samps) / sizeof(samps[0]));
+	// The frame's own room draws by group, the first of each.
+	std::vector<const MarbleDraw*> noted(g_groups.size(), 0);
+
+	for (const MarbleDraw& d : g_marble_draws)
+		if (d.kind == 0 && d.id >= 0 && d.id < (int)noted.size() &&
+			!noted[(size_t)d.id])
+			noted[(size_t)d.id] = &d;
+
+	// The rooms over the frame's rooms, once for every plane.
+	std::vector<HDMarbleOverRoom> overRooms;
+	{
+		std::vector<char> drawnRooms((size_t)g_room_groups, 0);
+
+		for (int g = 0; g < g_room_groups && g < (int)noted.size(); g++)
+			drawnRooms[(size_t)g] = noted[(size_t)g] ? 1 : 0;
+
+		HDMarbleOverRooms(g_marble_over, g_marble_beside,
+			g_marble_room_group, g_marble_room_count, drawnRooms,
+			g_marble_over_depth, overRooms);
+	}
+
+	g_marble_stats.over_count = (int)overRooms.size();
+
+	for (size_t i = 0; i < overRooms.size() && i < 16; i++)
+	{
+		g_marble_stats.over_group[i] = overRooms[i].group;
+		g_marble_stats.over_via[i] = overRooms[i].via;
+	}
 
 	for (int i = 0; i < drawn; i++)
 	{
 		const MarbleLayer& layer = layers[planes[(size_t)i].y];
 		const float* n = layer.plane;
-		const float dist = n[3];
+		// The mirror's plane, in the clip over the floor.
+		const float dist = n[3] + (g_marble_plane_floor ? 0.0f : g_marble_clip);
 
 		/* The reflection in the plane, p - 2 (p.n - d) n for a row vector,
 		 * then the projection, then x turned (the second flip). */
@@ -20298,9 +21342,9 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 				mirrored[r * 4 + c] = c == 0 ? -s : s;
 			}
 
-		/* What stands more than kMarbleClipOver over the floor, in the eye's
-		 * own view space. */
-		const float over[4] = { n[0], n[1], n[2], -dist - g_marble_clip };
+		/* What stands more than kMarbleClipOver over the floor, the mirror's
+		 * plane, in the eye's own view space. */
+		const float over[4] = { n[0], n[1], n[2], -n[3] - g_marble_clip };
 		float clip[4];
 
 		if (!HDWetPlaneTo(mirrored, over, clip))
@@ -20314,7 +21358,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		g_device->SetDepthStencilSurface(g_marble_zsurface);
 		g_device->SetViewport(&rows);
 		g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
-			D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+			D3DCLEAR_STENCIL, g_marble_void ? 0xFFFF00FF : 0x00000000,
+			g_marble_void ? 0.99999f : 1.0f, 0);
 		g_device->SetClipPlane(0, clip);
 		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 1);
 		std::memcpy(g_proj, mirrored, sizeof(mirrored));
@@ -20324,6 +21369,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		const int callsBefore = g_draw_calls;
 
 		marble_replay();
+		g_marble_stats.over += marble_replay_over(overRooms, noted, clip,
+			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
 		g_marble_stats.calls += g_draw_calls - callsBefore;
 
 		if (draw && projection)
@@ -20381,7 +21428,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		const float look[4] = { kMarbleF0, kWetWalls, kWetHighlight,
 			kWetPower };
 		const float march[4] = { kWetCap, 1.0f, 0.0f, 0.0f };
-		const float gain[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+		// The place's strength (the fade), MarblePS's gWetGain.x.
+		const float gain[4] = { gains[(size_t)i], 1.0f, 0.0f, 0.0f };
 		/* The flip's place in the target (MarblePS). A pixel's centre lies
 		 * on the whole number in Direct3D 9, so pixel x of the viewport
 		 * shows what the turned projection drew at 2 X + W - x, whose texel
@@ -20453,8 +21501,10 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			&layer.verts[0], sizeof(CardVertex));
 
 		/* A wet floor's points of this frame (HDRenderWaterWetDraw) take
-		 * the bit away again where the water has come: the floor mirrors
-		 * there through the wet floor's own draw, and not twice. */
+		 * the bit away again where the water marches: the floor mirrors
+		 * there through the wet floor's own draw, and not twice. A point on
+		 * a polished cell (HDWetCellOnFace) carries wet 0 in these vertices
+		 * and keeps this mirror under the water. */
 		if (g_wet_ready && !g_wet_tris.empty())
 		{
 			g_device->SetPixelShaderConstantF(105, flipMask, 1);

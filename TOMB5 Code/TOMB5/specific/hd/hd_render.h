@@ -1802,6 +1802,28 @@ struct HDRenderMarbleStats
 	int plane_y[8];
 	float plane_cover[8];
 	int plane_room[8];	// the room whose faces cover the most of it
+	/* Its pixels the last occlusion count saw (-1 when none was read) and
+	 * the strength its mirror was laid at (0 when not drawn). */
+	int plane_seen[8];
+	float plane_gain[8];
+	/* The rooms over the mirrored floors drawn that the frame did not
+	 * draw, and those left out for lying outside the mirror's view. */
+	int over;
+	int over_culled;
+	/* The frame's rooms over (all planes'), the first sixteen: the group,
+	 * the drawn group it was found from, and 1 where the first plane's
+	 * mirror left it out for lying outside its view. */
+	int over_count;
+	int over_group[16];
+	int over_via[16];
+	int over_out[16];
+	/* The occlusion counts read this frame, those still in flight, and
+	 * the most frames an answer read came after it was asked. */
+	int answered;
+	int flying;
+	int late;
+	// The level's sloped planes, each a plane of its own (marble_build).
+	int slopes;
 	// The farthest corner of a kept face from its plane, units, and the
 	// faces left out for rising farther than the mirror's clip offset.
 	int spread;
@@ -1832,6 +1854,54 @@ void HDRenderMarbleClip(float units);
 /* RoomProbe's -marblecopies 1: the art's copies under the polished floors
  * kept in the level as they were before (set before the level's build). */
 void HDRenderMarbleKeepCopies(bool keep);
+/* RoomProbe's -marblevoid: the mirror's target cleared to magenta at a
+ * depth that reads as held, so the floor's pixels that show none of the
+ * mirrored rooms tell themselves apart (a picture less the plain one). */
+void HDRenderMarbleVoid(bool on);
+/* RoomProbe's -marblelag: with `on`, a draw after a warm-up draw reads the
+ * occlusion counts as they stand, waiting for none, as a game frame does. */
+void HDRenderMarbleNoWait(bool on);
+/* At the level's load, after its build: `room` (a room number) is a room
+ * whose portal lies in the ceiling of `group`. While the frame draws
+ * `group` and not the group that draws `room`, that group is drawn into
+ * the mirrors. */
+void HDRenderMarbleOver(int group, int room);
+/* At the level's load: `room` is a room a portal of `group` opens into
+ * that is not over it (a wall's or a floor's portal). */
+void HDRenderMarbleBeside(int group, int room);
+/* RoomProbe's -marbleover: how far from the frame's rooms the rooms over
+ * are looked for (hd_marble_math.h, HDMarbleOverRooms; 0 none, 1 over the
+ * drawn rooms, 2 and over the rooms beside them, 3 and over those rooms
+ * over; 3 in the engine). */
+void HDRenderMarbleOverDepth(int depth);
+/* RoomProbe's -marblecracks, before the level's build: each mirror face's
+ * edges asked whether the level's other triangles' edges cover them end
+ * to end (a neighbour floor, a wall's foot, a riser). The rows: seven
+ * floats an open edge - its room, the gap to the nearest other triangle
+ * (under a unit: it lies on that triangle's face), the open length, the
+ * edge's length, the open piece's middle (world x y z);
+ * `closed` the edges covered. Returns the open edges. */
+void HDRenderMarbleCracks(bool on);
+int HDRenderMarbleCrackRows(const float** rows, int* closed);
+/* At the level's load: the level's table of which group draws which room
+ * (`count` rooms), read at each frame, so a flip map's swap reaches the
+ * rooms over; 0 draws room n as group n. */
+void HDRenderMarbleRooms(const short* groups, int count);
+/* RoomProbe's -marbleslots: the planes the next frames mirror and the
+ * strength of each, in place of the places' own step (count 0 gives the
+ * step back). */
+void HDRenderMarbleSlots(const int* ys, const float* gains, int count);
+/* RoomProbe's -marblerise: the faces the level's build left out for rising
+ * across themselves, six floats a face (group, height, lowest and highest
+ * corner's y, run across, rise). Returns how many. */
+int HDRenderMarbleRisingFaces(const float** rows);
+/* RoomProbe's -marbleplanefloor: the mirror's plane in the floor under the
+ * clip, which leaves the strip at a wall's foot out (a measure). */
+void HDRenderMarblePlaneFloor(bool on);
+/* RoomProbe's -marbletarget: the mirror's target as the frame's last
+ * mirrored plane left it, read into `px` (0xAARRGGBB, w by h, at most
+ * `max` pixels). Returns the pixels read, 0 when there is none. */
+int HDRenderMarbleTargetRead(unsigned long* px, int max, int* w, int* h);
 /* The marble floors' warm-up (hd_render.cpp): once a level, after its
  * build, the mirror's target made at the frame's size and the room shaders
  * drawn once with the clip plane on, and the layer's pair once, so the

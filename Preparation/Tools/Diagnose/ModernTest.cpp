@@ -97,6 +97,7 @@
 /* The water's cards: a dive splash, a fish tank's spray and the wet film
  * on its floor as functions of their age alone (splash_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h"
 // The water seen from below: the eye's depth, Snell's window (water_under).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 // The sky band's closed poles (sky_cap).
@@ -24390,6 +24391,295 @@ static void marble_rules()
 		"marble: the level key names hd_marble", why ? 1 : 0, 1);
 }
 
+/* The marble floors' places (hd_marble_math.h): the pixels' share in the
+ * cover's units; places all empty take the best planes whole; a plane that
+ * shows nothing leaves at once; a plane outscored fades out a step a frame
+ * and its place is then taken from one step up; the hold keeps a plane
+ * that scores half the best outside; the cap is kept throughout. */
+static void marble_places()
+{
+	printf("the marble floors: the places and the fade\n");
+
+	ok(fabsf(HDMarbleSeenCover(960 * 540, 960, 540) - 4.0f) < 1e-5f &&
+		fabsf(HDMarbleSeenCover(960 * 135, 960, 540) - 1.0f) < 1e-5f &&
+		HDMarbleSeenCover(5, 0, 540) == 0.0f,
+		"marble places: the pixels' share, 4 the whole screen", 0, 0);
+
+	HDMarbleSlot s[2] = { { INT_MIN, 0.0f }, { INT_MIN, 0.0f } };
+	int ys[4] = { 0, -256, -512, -768 };
+	float sc[4] = { 0.5f, 0.2f, 0.1f, 0.0f };
+	int used = HDMarbleSlotsStep(s, 2, ys, sc, 4, 0.125f, HD_MARBLE_HOLD);
+
+	ok(used == 2 && s[0].y == 0 && s[1].y == -256 && s[0].gain == 1.0f &&
+		s[1].gain == 1.0f,
+		"marble places: empty places take the best two whole", used, 2);
+
+	// -512 outscores -256 by more than the hold: -256 fades, a step.
+	float sc2[4] = { 0.5f, 0.05f, 0.3f, 0.0f };
+
+	HDMarbleSlotsStep(s, 2, ys, sc2, 4, 0.125f, HD_MARBLE_HOLD);
+	ok(s[1].y == -256 && fabsf(s[1].gain - 0.875f) < 1e-6f &&
+		s[0].gain == 1.0f,
+		"marble places: an outscored plane fades a step", lroundf(s[1].gain *
+		1000.0f), 875);
+
+	int frames = 1;
+
+	while (s[1].y == -256 && frames < 20)
+	{
+		HDMarbleSlotsStep(s, 2, ys, sc2, 4, 0.125f, HD_MARBLE_HOLD);
+		frames++;
+	}
+
+	ok(frames == 8 && s[1].y == -512 && fabsf(s[1].gain - 0.125f) < 1e-6f,
+		"marble places: gone after eight steps, the next from one", frames,
+		8);
+
+	for (int i = 0; i < 10; i++)
+		HDMarbleSlotsStep(s, 2, ys, sc2, 4, 0.125f, HD_MARBLE_HOLD);
+
+	ok(s[1].y == -512 && s[1].gain == 1.0f && s[0].y == 0,
+		"marble places: the new plane rises to whole and stays", 0, 0);
+
+	// Half the best outside holds; a little less does not.
+	HDMarbleSlot h[1] = { { 0, 1.0f } };
+	int hy[2] = { 0, -256 };
+	float hold[2] = { 0.5f, 1.0f };
+	float lose[2] = { 0.49f, 1.0f };
+
+	HDMarbleSlotsStep(h, 1, hy, hold, 2, 0.125f, HD_MARBLE_HOLD);
+
+	const bool held = h[0].y == 0 && h[0].gain == 1.0f;
+
+	HDMarbleSlotsStep(h, 1, hy, lose, 2, 0.125f, HD_MARBLE_HOLD);
+	ok(held && h[0].y == 0 && fabsf(h[0].gain - 0.875f) < 1e-6f,
+		"marble places: the hold at half the best outside", 0, 0);
+
+	// What shows nothing leaves at once; a view of new planes is whole.
+	HDMarbleSlot g[2] = { { 0, 1.0f }, { -256, 0.5f } };
+	int gy[2] = { -1024, -1280 };
+	float gs[2] = { 0.4f, 0.3f };
+
+	used = HDMarbleSlotsStep(g, 2, gy, gs, 2, 0.125f, HD_MARBLE_HOLD);
+	ok(used == 2 && g[0].y == -1024 && g[1].y == -1280 &&
+		g[0].gain == 1.0f && g[1].gain == 1.0f,
+		"marble places: a plane gone leaves, a new view is whole", used, 2);
+
+	HDMarbleSlot z[2] = { { 0, 1.0f }, { -256, 1.0f } };
+	float zs[4] = { 0.5f, 0.0f, 0.2f, 0.1f };
+
+	HDMarbleSlotsStep(z, 2, ys, zs, 4, 0.125f, HD_MARBLE_HOLD);
+	ok(z[0].y == 0 && z[0].gain == 1.0f && z[1].y == -512 &&
+		fabsf(z[1].gain - 0.125f) < 1e-6f,
+		"marble places: a hidden plane's place taken from one step", 0, 0);
+
+	// The cap: never more places than it, whatever the planes.
+	HDMarbleSlot c[8];
+	int cy[6] = { 0, -256, -512, -768, -1024, -1280 };
+	float cs[6] = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f };
+
+	for (HDMarbleSlot& one : c)
+	{
+		one.y = INT_MIN;
+		one.gain = 0.0f;
+	}
+
+	used = HDMarbleSlotsStep(c, 2, cy, cs, 6, 0.125f, HD_MARBLE_HOLD);
+	ok(used == 2 && c[0].y == -1280 && c[1].y == -1024 &&
+		c[2].y == INT_MIN,
+		"marble places: the cap holds", used, 2);
+}
+
+/* The marble floors' counts and fade time (hd_marble_math.h): a plane's
+ * score is its count's share of the screen while the count is fresh, its
+ * cover with no count, an old one or one from a frame to come; the fade's
+ * step is the frame's time over the whole fade, cut at the longest frame,
+ * so a whole fade takes the same time at any frame rate. */
+static void marble_counts()
+{
+	printf("the marble floors: the counts and the fade time\n");
+
+	ok(fabsf(HDMarbleScore(960 * 135, 2, 6, 0.3f, 960, 540) - 1.0f) <
+		1e-5f, "marble counts: a fresh count is the pixels' share", 0, 0);
+	ok(HDMarbleScore(0, 1, 6, 0.3f, 960, 540) == 0.0f,
+		"marble counts: a fresh count of nothing scores nothing", 0, 0);
+	ok(HDMarbleScore(-1, 0, 6, 0.3f, 960, 540) == 0.3f,
+		"marble counts: no count, the cover", 0, 0);
+	ok(HDMarbleScore(960 * 135, 6, 6, 0.3f, 960, 540) == 1.0f &&
+		HDMarbleScore(960 * 135, 7, 6, 0.3f, 960, 540) == 0.3f,
+		"marble counts: six frames old counts, seven does not", 0, 0);
+	ok(HDMarbleScore(960 * 135, -1, 6, 0.3f, 960, 540) == 0.3f,
+		"marble counts: a count from a later frame does not", 0, 0);
+
+	const double whole = 8000.0 / 60.0;
+
+	ok(lroundf(HDMarbleFadeStep(1000.0 / 60.0, whole, 50.0) * 1000.0f) ==
+		125 && lroundf(HDMarbleFadeStep(1000.0 / 30.0, whole, 50.0) *
+		1000.0f) == 250,
+		"marble counts: an eighth a frame at 60, a quarter at 30",
+		lroundf(HDMarbleFadeStep(1000.0 / 30.0, whole, 50.0) * 1000.0f), 250);
+	ok(lroundf(HDMarbleFadeStep(500.0, whole, 50.0) * 1000.0f) == 375,
+		"marble counts: a halt counts as the longest frame",
+		lroundf(HDMarbleFadeStep(500.0, whole, 50.0) * 1000.0f), 375);
+	ok(HDMarbleFadeStep(-5.0, whole, 50.0) == 0.0f &&
+		HDMarbleFadeStep(10.0, 0.0, 50.0) == 1.0f &&
+		HDMarbleFadeStep(400.0, 100.0, 1000.0) == 1.0f,
+		"marble counts: no time no step; no fade at once; at most 1", 0, 0);
+
+	// A whole fade in and out at 30, 60 and 144 frames a second.
+	int frames[3] = { 0, 0, 0 };
+	const double rate[3] = { 30.0, 60.0, 144.0 };
+
+	for (int r = 0; r < 3; r++)
+	{
+		HDMarbleSlot s[1] = { { 0, 1.0f } };
+		int ys[2] = { 0, -256 };
+		float sc[2] = { 0.1f, 0.5f };
+		const float step = HDMarbleFadeStep(1000.0 / rate[r], whole, 50.0);
+
+		while (frames[r] < 1000 && !(s[0].y == -256 && s[0].gain >= 1.0f))
+		{
+			HDMarbleSlotsStep(s, 1, ys, sc, 2, step, HD_MARBLE_HOLD);
+			frames[r]++;
+		}
+	}
+
+	const double ms[3] = { frames[0] * 1000.0 / 30.0,
+		frames[1] * 1000.0 / 60.0, frames[2] * 1000.0 / 144.0 };
+
+	ok(frames[1] == 15 && fabs(ms[0] - ms[1]) <= 1000.0 / 30.0 &&
+		fabs(ms[2] - ms[1]) <= 1000.0 / 30.0,
+		"marble counts: out and in, the same time at 30, 60 and 144",
+		frames[1], 15);
+}
+
+/* The marble floors' rooms over (hd_marble_math.h, HDMarbleOverRooms): a
+ * shaft of rooms - 0 drawn, 1 over it, 2 beside it and undrawn, 3 over 2,
+ * 4 over 1, 5 over 4 - and a flip table that draws room 1 as group 6. */
+static void marble_over()
+{
+	printf("the marble floors: the rooms over\n");
+
+	std::vector<std::vector<int> > up(7), side(7);
+	std::vector<char> drawn(7, 0);
+	std::vector<HDMarbleOverRoom> out;
+
+	up[0] = { 1 };
+	side[0] = { 2 };
+	up[2] = { 3 };
+	up[1] = { 4 };
+	up[4] = { 5 };
+	side[1] = { 3 };
+	drawn[0] = 1;
+
+	HDMarbleOverRooms(up, side, 0, 0, drawn, 0, out);
+	ok(out.empty(), "marble over: depth 0 takes none", (int)out.size(), 0);
+
+	HDMarbleOverRooms(up, side, 0, 0, drawn, 1, out);
+	ok(out.size() == 1 && out[0].group == 1 && out[0].via == 0,
+		"marble over: depth 1, the room over the drawn one", (int)out.size(),
+		1);
+
+	HDMarbleOverRooms(up, side, 0, 0, drawn, 2, out);
+	ok(out.size() == 2 && out[1].group == 3 && out[1].via == 0,
+		"marble over: depth 2, over the undrawn room beside, by the drawn",
+		(int)out.size(), 2);
+
+	HDMarbleOverRooms(up, side, 0, 0, drawn, 3, out);
+	ok(out.size() == 3 && out[2].group == 4 && out[2].via == 0,
+		"marble over: depth 3, the room over the room over, once",
+		(int)out.size(), 3);
+
+	// Room 2 drawn: it is no room over, and its own room over is depth 1.
+	drawn[2] = 1;
+	HDMarbleOverRooms(up, side, 0, 0, drawn, 2, out);
+	ok(out.size() == 2 && out[0].group == 1 && out[1].group == 3 &&
+		out[1].via == 2,
+		"marble over: a drawn neighbour's room over is its own", 0, 0);
+
+	// The flip: room 1 drawn now by group 6, whose ceiling is room 5's.
+	const short table[7] = { 0, 6, 2, 3, 4, 5, 1 };
+
+	drawn[2] = 0;
+	up[6] = { 5 };
+	HDMarbleOverRooms(up, side, table, 7, drawn, 3, out);
+	ok(out.size() == 3 && out[0].group == 6 && out[2].group == 5,
+		"marble over: a flip map names the group that draws the room",
+		(int)out.size(), 3);
+
+	// A room out of the table or the groups is none.
+	std::vector<std::vector<int> > far(1);
+	std::vector<char> one(1, 1);
+
+	far[0] = { 9, -1 };
+	HDMarbleOverRooms(far, far, 0, 0, one, 3, out);
+	ok(out.empty() && HDMarbleGroupOf(3, table, 2, 7) == -1 &&
+		HDMarbleGroupOf(1, table, 7, 7) == 6,
+		"marble over: rooms out of range are none", (int)out.size(), 0);
+}
+
+/* The marble floors' slopes (hd_marble_math.h): a sloped face's plane, its
+ * normal up and of length 1 in either winding, its distance in world space
+ * with the group's origin; a level face's plane is the floor's height; two
+ * faces of one slope are one plane, a slope beside it or over it not. */
+static void marble_slopes()
+{
+	printf("the marble floors: the sloped planes\n");
+
+	// A ramp of 256 units over a square, rising toward +z (y runs down).
+	const float ramp[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-256.0f, 1024.0f };
+	const float back[9] = { 0.0f, 0.0f, 0.0f, 0.0f, -256.0f, 1024.0f,
+		1024.0f, 0.0f, 0.0f };
+	float a[4], b[4];
+
+	ok(HDMarbleTiltPlane(ramp, 0.0f, 0.0f, a) &&
+		HDMarbleTiltPlane(back, 0.0f, 0.0f, b) && a[1] < 0.0f && b[1] < 0.0f,
+		"marble slopes: the normal up in either winding", 0, 0);
+	ok(fabsf(a[0] * a[0] + a[1] * a[1] + a[2] * a[2] - 1.0f) < 1e-5f &&
+		fabsf(a[2] - b[2]) < 1e-6f && fabsf(a[2] + 0.2425f) < 1e-3f,
+		"marble slopes: of length 1, leaning 1 in 4", lroundf(-a[2] * 1e4f),
+		2425);
+
+	const float level[9] = { 0.0f, -2816.0f, 0.0f, 1024.0f, -2816.0f, 0.0f,
+		0.0f, -2816.0f, 1024.0f };
+	float l[4];
+
+	ok(HDMarbleTiltPlane(level, 5000.0f, 7000.0f, l) &&
+		fabsf(l[1] + 1.0f) < 1e-6f && fabsf(l[3] - 2816.0f) < 1e-3f,
+		"marble slopes: a level face's plane is its height", lroundf(l[3]),
+		2816);
+
+	// The ramp's next square, one square on in x, in a group 1024 off.
+	const float next[9] = { 0.0f, 0.0f, 0.0f, 1024.0f, 0.0f, 0.0f, 0.0f,
+		-256.0f, 1024.0f };
+	float n[4];
+
+	HDMarbleTiltPlane(next, 1024.0f, 0.0f, n);
+	ok(HDMarbleTiltSame(a, n, 0.001f, 2.0f),
+		"marble slopes: one ramp's squares are one plane", lroundf(n[3]),
+		lroundf(a[3]));
+
+	// The same lean 256 units higher, and the lean turned to +x.
+	const float over[9] = { 0.0f, -256.0f, 0.0f, 1024.0f, -256.0f, 0.0f,
+		0.0f, -512.0f, 1024.0f };
+	const float turned[9] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1024.0f,
+		1024.0f, -256.0f, 0.0f };
+	float o[4], t[4];
+
+	HDMarbleTiltPlane(over, 0.0f, 0.0f, o);
+	HDMarbleTiltPlane(turned, 0.0f, 0.0f, t);
+	ok(!HDMarbleTiltSame(a, o, 0.001f, 2.0f) &&
+		!HDMarbleTiltSame(a, t, 0.001f, 2.0f),
+		"marble slopes: a step over or a turned lean is another", 0, 0);
+
+	const float none[9] = { 0.0f, 0.0f, 0.0f, 512.0f, 0.0f, 0.0f, 1024.0f,
+		0.0f, 0.0f };
+
+	ok(!HDMarbleTiltPlane(none, 0.0f, 0.0f, o),
+		"marble slopes: a face of no area has no plane", 0, 0);
+}
+
 /* The level's HD key (hd_levelkey.h): a key equal to itself keeps the HD
  * data, every field changed alone refuses with that field's name, and a
  * load with HD off, with nothing built or after an outfit change refuses
@@ -24790,6 +25080,10 @@ int main()
 	marble_pages();
 	marble_rules();
 	far_plane();
+	marble_places();
+	marble_counts();
+	marble_over();
+	marble_slopes();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

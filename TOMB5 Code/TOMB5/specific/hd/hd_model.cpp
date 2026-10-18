@@ -290,6 +290,8 @@ namespace
 	IDirect3DVertexShader9* g_vs = 0;
 	IDirect3DPixelShader9* g_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
+	// The pair above warmed for the marble mirror (HDModelMirrorWarmUp).
+	bool g_mirror_warmed = false;
 	/* The projected shadow's cast shaders (hd_shadow.hlsl). Not a condition
 	 * of the model path: without them the projected shadow is refused and
 	 * the blob stays. */
@@ -3040,6 +3042,7 @@ void HDModelShutdown()
 	if (g_cast_ps) { g_cast_ps->Release(); g_cast_ps = 0; }
 	if (g_receive_ps) { g_receive_ps->Release(); g_receive_ps = 0; }
 
+	g_mirror_warmed = false;
 	g_device = 0;
 	g_in_frame = false;
 	g_in_cast = false;
@@ -4253,6 +4256,143 @@ int HDModelPreload()
 	}
 
 	return done;
+}
+
+/* The models' warm-up for the marble floors' mirror (hd_render.cpp, "the
+ * marble floors"). The mirror draws the frame's objects - Lara, the
+ * items, all through HDModelDraw's one pair of shaders - once more with a
+ * clip plane on, and the driver makes that pair again for the plane the
+ * first time a model stands in a mirror, a stall of about a tenth of a
+ * second (RoomProbe -wetlara). So once for the pair's life (made in
+ * HDModelInit, released in HDModelShutdown), after a level's models are
+ * built, one triangle of a model is drawn through it with the plane on,
+ * into a target of 16 x 16 of its own, and the queue is drained; nothing
+ * of it reaches the frame, and the device's state is put back. Returns
+ * the time in milliseconds, or -1 when nothing was drawn. */
+double HDModelMirrorWarmUp()
+{
+	const Model* model = 0;
+
+	for (std::map<int, Model>::const_iterator at = g_models.begin();
+		at != g_models.end() && !model; ++at)
+		if (at->second.vb && at->second.ib && at->second.vertices >= 3 &&
+			at->second.indices >= 3)
+			model = &at->second;
+
+	if (!g_device || !g_vs || !g_ps || !g_decl || !model || g_mirror_warmed)
+		return -1.0;
+
+	LARGE_INTEGER frequency, t0, t1;
+
+	QueryPerformanceFrequency(&frequency);
+	QueryPerformanceCounter(&t0);
+
+	IDirect3DSurface9* target = 0;
+	IDirect3DSurface9* depth = 0;
+	IDirect3DSurface9* warm = 0;
+	IDirect3DSurface9* warmDepth = 0;
+	D3DSURFACE_DESC desc;
+
+	if (FAILED(g_device->GetRenderTarget(0, &target)) || !target)
+		return -1.0;
+
+	g_device->GetDepthStencilSurface(&depth);
+
+	if (FAILED(target->GetDesc(&desc)) ||
+		FAILED(g_device->CreateRenderTarget(16, 16, desc.Format,
+		D3DMULTISAMPLE_NONE, 0, FALSE, &warm, 0)) ||
+		FAILED(g_device->CreateDepthStencilSurface(16, 16, D3DFMT_D24S8,
+		D3DMULTISAMPLE_NONE, 0, TRUE, &warmDepth, 0)))
+	{
+		if (warm) warm->Release();
+		if (depth) depth->Release();
+		target->Release();
+		return -1.0;
+	}
+
+	// The device's state as the level left it, put back below.
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DVertexBuffer9* stream = 0;
+	IDirect3DIndexBuffer9* indices = 0;
+	UINT streamOffset = 0, streamStride = 0;
+	DWORD fvf = 0, clipOn = 0;
+	float clip[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	D3DVIEWPORT9 port = {};
+
+	g_device->GetVertexShader(&vs);
+	g_device->GetPixelShader(&ps);
+	g_device->GetVertexDeclaration(&decl);
+	g_device->GetFVF(&fvf);
+	g_device->GetStreamSource(0, &stream, &streamOffset, &streamStride);
+	g_device->GetIndices(&indices);
+	g_device->GetViewport(&port);
+	g_device->GetClipPlane(0, clip);
+	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &clipOn);
+
+	const D3DVIEWPORT9 corner = { 0, 0, 16, 16, 0.0f, 1.0f };
+	const float keepAll[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+
+	g_device->SetRenderTarget(0, warm);
+	g_device->SetDepthStencilSurface(warmDepth);
+	g_device->SetViewport(&corner);
+	g_device->BeginScene();
+	g_device->Clear(0, 0, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER |
+		D3DCLEAR_STENCIL, 0x00000000, 1.0f, 0);
+	g_device->SetClipPlane(0, keepAll);
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 1);
+	g_device->SetVertexShader(g_vs);
+	g_device->SetPixelShader(g_ps);
+	g_device->SetVertexDeclaration(g_decl);
+	g_device->SetStreamSource(0, model->vb, 0, sizeof(HDModelVertex));
+	g_device->SetIndices(model->ib);
+	g_device->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0, 0,
+		(UINT)model->vertices, 0, 1);
+	g_device->EndScene();
+
+	// The queue drained, so the driver's work is done here.
+	IDirect3DQuery9* done = 0;
+
+	if (SUCCEEDED(g_device->CreateQuery(D3DQUERYTYPE_EVENT, &done)) && done)
+	{
+		done->Issue(D3DISSUE_END);
+
+		while (done->GetData(0, 0, D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		done->Release();
+	}
+
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, clipOn);
+	g_device->SetClipPlane(0, clip);
+	g_device->SetRenderTarget(0, target);
+	g_device->SetDepthStencilSurface(depth);
+	g_device->SetViewport(&port);
+	g_device->SetStreamSource(0, stream, streamOffset, streamStride);
+	g_device->SetIndices(indices);
+	g_device->SetFVF(fvf);
+	g_device->SetVertexDeclaration(decl);
+	g_device->SetVertexShader(vs);
+	g_device->SetPixelShader(ps);
+
+	if (stream) stream->Release();
+	if (indices) indices->Release();
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+
+	warm->Release();
+	warmDepth->Release();
+	target->Release();
+
+	if (depth)
+		depth->Release();
+
+	g_mirror_warmed = true;
+	QueryPerformanceCounter(&t1);
+	return (double)(t1.QuadPart - t0.QuadPart) * 1000.0 /
+		(double)frequency.QuadPart;
 }
 
 void HDModelFrameBegin(const D3DMATRIX* projection, int bulbCount,

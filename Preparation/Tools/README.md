@@ -63,7 +63,7 @@ else - with their own name substituted.
 | `GeomTest` | - | tries `buildRoomGeometry` on one room and reports what came out - face count, triangles, bounding box, degenerate faces. The tool for a room that has no drawn surface at all. |
 | `LevelDiff` | bld | two levels compared block by block. If everything but the images is byte-equal, only textures were exchanged. |
 | `LevelBuild` | bbw | applies a patch JSON to a level - how the hand-built test levels are made. |
-| `FixCheck` | bfc | applies LevelFix and saves the result, so the repairs can be looked at in trview - and a repaired view window drawn by RoomProbe, with `-roombox` on the folder the result was saved to. |
+| `FixCheck` | bfc | applies LevelFix and saves the result, so the repairs can be looked at in trview - and a repaired view window drawn by RoomProbe, with `-roombox` on the folder the result was saved to. For a one-shot entry (`TriggerOneShot`) it checks the result itself: `FOUND` lists the triggers it reaches with sector, item and setup word before and after, `SET` reads the saved file back and walks the room on its own, `BYTES` compares source and result byte by byte (only the setup words' high bytes may differ). Ends with `HOLDS`, or `FAILS` and exit code 2 on any warning or failed check. |
 | `TriggerCommands` | - | counts which trigger commands occur in a level. |
 | `CameraCheck` | bcc | the fixed cameras with their flags. |
 | `TexRec` | btx | texture pages and texinfos. |

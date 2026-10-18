@@ -326,6 +326,57 @@ namespace LevelFix
     //   - JOBY5, rooms 16 and 40: a fixed camera's cut puts the eye on the
     //     floor window's own plane for one frame.
 
+    // Triggers that must wake their item once and never again: the one-shot
+    // bit goes onto every trigger of this kind in this room whose object
+    // command names an item of this slot (Tr5Level::setTriggerOneShot).
+    // Found by the data, set in place; nothing else in the room changes.
+    struct TriggerOneShot
+    {
+        const char* level;                  // file name without extension
+        int room;
+        int kind;                           // 0 = TRIGGER, 4 = PICKUP, ...
+        int slot;                           // the woken item's object slot
+        const char* reason;
+    };
+
+    //------------------------------------------------------------------------
+    // rich2: the floor lasers must stay dead once the water has killed them.
+    //
+    // FLOOR_LASERS item 34 (slot 392, OCB 44: a field of 4 by 4 sectors over
+    // room 23's floor) is named by exactly two triggers in the level, both
+    // in room 5, the corridor that leads into room 23: plain TRIGGERs on
+    // (3,1) and (3,2), each [8004 3E00 8022] - timer 0, mask 31, no
+    // one-shot, one object command.
+    //
+    // No switch turns the lasers off; the water does. The HEAVY trigger
+    // under the FISHTANK item 33 (room 23 (1,2) and (1,3)) names the tank
+    // and flipmap 3, which swaps room 23 for its twin 32. While the shot
+    // tank pours, GetFishTank (lasers.cpp) puts the lasers' trigger_flags
+    // at 64, ControlFloorLasers counts that down and calls KillItem at 0.
+    // The switch behind the water, SWITCH_TYPE2 item 38 on room 23 (1,4),
+    // stands inside the laser field; its trigger exists only in room 32 and
+    // opens doors 36, 37, 39, 40 and 41.
+    //
+    // KillItem keeps the item's code bits and sets no IFL_INVISIBLE, so the
+    // next step onto (3,1) or (3,2) passes the TO_OBJECT test in
+    // _TestTriggers (control.cpp) and AddActiveItem wakes the lasers again.
+    // The tank has died in the meantime, GetFishTank finds none, and no
+    // countdown starts: the lasers stay armed over the switch - and, out of
+    // the room's item list since KillItem, are not drawn there. Only a
+    // reload ends it: KillItem's IFL_CLEARBODY makes a saved game write the
+    // item as killed (savegame.cpp). A route back through room 5 after the
+    // water and before the switch runs into exactly that.
+    //
+    // With the bit, the first wake also sets IFL_INVISIBLE on item 34, and
+    // the TO_OBJECT branch skips it for every later plain trigger. The
+    // first wake stays as it was; the lasers' own code never reads the bit.
+    //------------------------------------------------------------------------
+    static const TriggerOneShot kTriggerOneShots[] =
+    {
+        { "rich2", 5, 0 /*TRIGGER*/, 392 /*FLOOR_LASERS*/,
+          "floor lasers 34 woken once - they must not re-arm after the flood" },
+    };
+
     // Apply all entries for this level. Failed entries end up as warnings in
     // "warnings"; the run continues, because a fix that was not applied does
     // not make the level any worse than before.

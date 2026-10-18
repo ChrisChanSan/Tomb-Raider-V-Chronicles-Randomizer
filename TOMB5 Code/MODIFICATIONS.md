@@ -4,7 +4,7 @@
 
 This is a modified version of **TOMB5**, the PC Tomb Raider Chronicles decompilation
 project by Troye/Trxyebeep and contributors, <https://github.com/Trxyebeep/TOMB5>. It
-was modified between **2026-07-30 and 2026-10-17** (ongoing) for the *TR5 Randomizer*
+was modified between **2026-07-30 and 2026-10-18** (ongoing) for the *TR5 Randomizer*
 project.
 
 The upstream code as received is preserved as the first commit of this repository
@@ -1668,6 +1668,87 @@ end, `next_anim`, `next_frame` and state changes stay the level's own.
 
 **Commits.** `f63d3f9`, `5a0b80d`, `3ae1d43`, `52c94ee`, `3a214cf`, `dd5be08`,
 `04c1a42`
+
+### A trigger Core left without its one-shot bit: RICH2's floor lasers (#223)
+2026-10-18
+
+**What.** On every run the randomizer sets the one-shot bit in the setup word of the two
+triggers in RICH2's room 5 that wake the floor lasers, item 34. The entry is a new kind
+in `TR5Randomizer/src/core/LevelFix.h`, `TriggerOneShot` (`kTriggerOneShots`): a level,
+a room, a trigger kind and an object slot. `Tr5Level::setTriggerOneShot` finds every
+trigger of that kind in the room whose object command names an item of that slot and
+writes the bit in place. It is the randomizer's other repair of a level's own fault
+beside ANDREA2's arch window from the portal list for #214 (2.4, "Art in the air of an
+unlinked room draws inside its own window", round 12) and the entries before it; no
+engine file changes.
+
+**Why.** The owner's order of 2026-10-18, put into English: the triggers for the floor
+lasers in room 5 must be set to "only once"; they have softlock potential - set off the
+water without pressing the switch, and the lasers are armed again. The data and the code
+give the cause:
+
+| Step | The player | The level's data and the engine |
+|---|---|---|
+| 1 | walks through room 5 towards room 23 | TRIGGER on (3,1) or (3,2), `[8004 3E00 8022]` (timer 0, mask 31, no one-shot, object 34): `_TestTriggers` completes item 34's code bits and `AddActiveItem` wakes it. FLOOR_LASERS, slot 392, OCB 44: a field of 4 by 4 sectors, room 23's (1,1) to (4,4) |
+| 2 | sets off the water | the fish tank, item 33 (FISHTANK, slot 413) on room 23 (1,2), with the HEAVY trigger under it on (1,2) and (1,3), `[8504 3E00 0021 8C03]`: the tank and flipmap 3, room 23 swapped for its twin 32. While the tank pours, `GetFishTank` (`game/lasers.cpp`) sets the lasers' `trigger_flags` to 64 |
+| 3 | waits | `ControlFloorLasers` counts the 64 ticks down and calls `KillItem`: the lasers leave the active list and room 23's item list, keep their code bits, get `IFL_CLEARBODY` and no `IFL_INVISIBLE`. The tank's water runs out after 105 ticks and `KillItem` takes the tank |
+| 4, Core's route | presses switch 38 (SWITCH_TYPE2, room 23 (1,4), inside the laser field) | its SWITCH trigger, which stands only in room 32 (1,4), opens doors 36, 37, 39, 40 and 41 |
+| 4, the fault | goes back through room 5 before the switch and returns | the step onto (3,1) or (3,2) passes the TO_OBJECT test (no `IFL_INVISIBLE` on the item), `AddActiveItem` wakes the lasers again; `trigger_flags` is 0 and `GetFishTank` finds no tank, so no countdown starts: the lasers stay armed over the switch, and out of the room's item list they are not drawn (`PrintObjects` walks that list) |
+| 5 | reloads a game saved after step 3 | the save writes an item with `IFL_CLEARBODY` as killed (`game/savegame.cpp`), and loading kills it again and gives it `IFL_INVISIBLE`: the only way out |
+
+The data marks nothing of step 4's fault as intended: item 34 has no off switch and no
+other trigger, room 32 has no trigger on it, and none of room 5's six triggers carries the
+one-shot bit (the two on (2,1) and (2,2) wake guard 245, the antitriggers on (5,1) and
+(5,2) close doors 179 and 180). A randomized run that puts an item Lara needs behind
+her gives her a reason to go back before the switch; whether Core's own order does is not
+measured. The fix is the owner's decision either way.
+
+With the bit, `_TestTriggers` gives item 34 `IFL_INVISIBLE` on its first wake ("if (flags
+& IFL_INVISIBLE) item->flags |= IFL_INVISIBLE"), and the TO_OBJECT branch skips an item
+with that flag for every trigger kind but SWITCH and the antitriggers. The first wake is
+unchanged; the lasers' own functions (`InitialiseFloorLasers`, `ControlFloorLasers`,
+`GetFishTank`, `S_DrawFloorLasers`) never read the flag, and the save stores it with the
+other flags.
+
+| Level | Room | Sector | Trigger | Item | Setup word before | After | File offset (source) |
+|---|---|---|---|---|---|---|---|
+| RICH2 | 5 | (3,1) | TRIGGER, chain 219 | 34, FLOOR_LASERS | `3E00` | `3F00` | 3,040,966 |
+| RICH2 | 5 | (3,2) | TRIGGER, chain 222 | 34, FLOOR_LASERS | `3E00` | `3F00` | 3,040,972 |
+
+**How.** `LevelFix::apply` runs the entry in both programs (`Randomize.cpp` and the GUI's
+`gui/Main.cpp`, the run and the debug level), after the level's info is read and before
+anything is rolled, so the roll does not see the change. `setTriggerOneShot` walks the
+room's sectors with `readChain` (a word's index is the chain start plus the entries in
+front of it, as `musicTriggers` counts), skips a camera's or flyby's second word, takes
+one setup word per trigger, refuses a chain that a sector of another room reads as well
+(the bit would reach that sector too), and writes only the setup words: no chain is
+rebuilt, no index moves, and the file keeps its size. `FixCheck` holds the result
+against the file: FOUND (the triggers with their sectors and words), SET (the saved file
+read back and walked on its own) and BYTES (source against result).
+
+**Checked.** `b1.bat`, `b2.bat` and `bfc.bat` exit 0. FixCheck over the sixteen levels of
+the checksum list: every entry applies without a warning (ANDREA2 5, ANDY1 1, JOBY5 1,
+RICH1 1, RICH2 1); RICH2 FOUND (3,1) and (3,2), item 34, `3E00 -> 3F00`, SET both, BYTES
+2 of 4,805,655 differ, both setup words' high bytes, 0 other. The regression of
+`Preparation/Verification.md`, Randomize.exe of `e93d66c7` (the last change under
+`TR5Randomizer/` before this one) against the head, seed 380, the thirteen campaign
+levels, once with no switches and once with `mix cross allsanity 8 weapons`: every
+`.trc` and `.hdm` byte-identical but RICH2's `.trc`, which differs in two bytes, the
+setup words `3E00 -> 3F00` in the chain words `8004 3E00 8022` (offsets 4,733,129 and
+4,733,135 plain, 11,084,857 and 11,084,863 with the switches); the run's log gains the
+line `LevelFix 1 fixes applied`.
+
+**Left.** A route into room 23 that does not cross room 5's (3,1) or (3,2) before the
+water would wake the lasers for the first time after it, and they would stay armed; the
+bit cannot help there. The data gives no such route before the switch: room 23's doorways
+to rooms 25 and 27 stand behind doors 36 and 37 and doors 39 and 40, which switch 38
+opens, and room 24 is the tank's flooded interior with a portal to 23 alone (the round's
+check read the doors' slots 304 and 306 from the switch's own action, not from the slot
+table). Whether the HD path draws re-armed lasers that the classic path leaves undrawn is
+not measured; the fix does not depend on it.
+
+**Commits.** `9a3dde16` (the entry and `setTriggerOneShot`), `79ebae59` (FixCheck) and
+the records.
 
 ## 2.3 Tomb Raider III enemies
 

@@ -3472,6 +3472,40 @@ carries the tables.
     OWN.
 342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
+343. **RICH2's floor-laser triggers and what wakes and kills the lasers**
+    (`LevelFix.h`, `kTriggerOneShots`, the entry's comment;
+    `MODIFICATIONS.md`, 2.2, "A trigger Core left without its one-shot
+    bit") - the two TRIGGERs of room 5 on (3,1) and (3,2), each
+    `[8004 3E00 8022]` (timer 0, mask 31, no one-shot, object 34), the
+    only triggers naming item 34 (FLOOR_LASERS, slot 392, OCB 44, flags
+    0); the fish tank, item 33 (FISHTANK, slot 413, flags 0x100), with
+    the HEAVY trigger `[8504 3E00 0021 8C03]` under it on room 23 (1,2)
+    and (1,3) (the tank and flipmap 3, room 23's twin 32); switch 38
+    (SWITCH_TYPE2, room 23 (1,4)), whose SWITCH trigger stands only in
+    room 32 (1,4) and opens doors 36, 37, 39, 40 and 41. DATA, read with
+    the randomizer's own `Tr5Level` out of the classic `.TRC`. CLASSIC,
+    the mechanism: `_TestTriggers`' TO_OBJECT test and its one-shot line,
+    `AddActiveItem`, `KillItem`, `GetFishTank`, `ControlFloorLasers`,
+    `ControlFishtank`, `PrintObjects` and the save's killed-item record
+    (`control.cpp`, `items.cpp`, `lasers.cpp`, `tower.cpp`, `draw.cpp`,
+    `savegame.cpp`).
+344. **The place of the fix** (`LevelFix.h`, `kTriggerOneShots`) - RICH2,
+    room 5, the corridor whose door sectors (0,1) and (0,2) lead into
+    room 23; its sectors (3,1) and (3,2), the trigger at x 41,472,
+    y -2,944, z 68,096 among them. PLACE.
+345. **One-shot triggers set in place** (`Tr5Level.cpp`/`.h`,
+    `setTriggerOneShot`, `Tr5OneShotHit`; `LevelFix.cpp`, `apply`) - the
+    one-shot bit (0x0100) set on every trigger of a kind in a room whose
+    object command names an item of a slot, found by the data, written
+    into the setup word where it stands (no chain rebuilt, no index
+    moved), a chain another room's sector reads as well refused. OWN, the
+    rule; the order of 2026-10-18 for RICH2's floor lasers.
+346. **FixCheck's FOUND, SET and BYTES** (`Preparation/Tools/Diagnose/
+    FixCheck.cpp`) - a one-shot entry's triggers listed, the saved file
+    walked back on its own, and source against result byte by byte, with
+    `HOLDS` or `FAILS` and exit code 2. OWN, this project's own tool on
+    the player's files (DATA): RICH2 2 of 4,805,655 bytes, both setup
+    words; every entry of the sixteen levels applied without a warning.
 
 ## Credited, but not contained here
 

@@ -2011,8 +2011,8 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * texels, in their own colour, and only its panes on partial ones:
 	 * of ANDREA2's window grid (page 3007, param[1] 0.1) 2,076 of 2,146
 	 * triangles cover clear texels on average, their mean colour 106, 82,
-	 * 60, and no texel is opaque - read as alpha the bars were drawn at a
-	 * tenth of nothing. Of the 74 material 14 parts
+	 * 60, and no texel is opaque - read as alpha the bars would be drawn
+	 * at a tenth of nothing. Of the 74 material 14 parts
 	 * with an alpha run and param[1] under 1 in the fifteen levels, that
 	 * grid's two groups are the only ones with a clear texel at all, so the
 	 * panes of every other glass, and every draw call at 1, keep their

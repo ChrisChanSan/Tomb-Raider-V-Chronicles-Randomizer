@@ -564,7 +564,15 @@
  *                     outline it measures how hard the outline is (the
  *                     water's mirror against the marble floors'); any
  *                     picture, with or without -tank.
- *     -tankcensus     every room's floor squares against the .TRG: the
+ *     -wetcut r,b,g,row  the pixels of one lit colour counted above and
+ *                     below a row: green over red by more than r, over blue
+ *                     by more than b and above g; the row at row per cent
+ *                     of the height. A wetcut line after the picture's own.
+ *                     With 40,20,80,30 at the fish tank it counts the
+ *                     vending machine's lit screen in the frame and its
+ *                     mirror on the floor below: what of the machine the
+ *                     floor's mirror loses as the camera tilts.
+ *     -tankcensus    every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
  *                     ProbeCensus). Needs -roombox; -hdwater 0 is enough.
@@ -1747,6 +1755,38 @@ static void WetStepLine(const unsigned long* px, long w, long h)
 		stepY, list.c_str());
 }
 
+// -wetcut: the colour's margins (green over red, over blue, green's least)
+// and the row that splits the frame, in per cent of its height.
+static bool g_wet_cut = false;
+static int g_wet_cut_key[4] = { 0, 0, 0, 0 };
+
+/* -wetcut: the pixels of the keyed colour above the row (the thing itself in
+ * the frame) and below it (its mirror on the floor), so a mirror that drops
+ * the thing as the camera moves shows as a falling count below. */
+static void WetCutLine(const unsigned long* px, long w, long h)
+{
+	if (!g_wet_cut)
+		return;
+
+	const int* k = g_wet_cut_key;
+	const long row = h * (long)k[3] / 100;
+	long above = 0, below = 0;
+
+	for (long y = 0; y < h; y++)
+		for (long x = 0; x < w; x++)
+		{
+			const unsigned long c = px[y * w + x];
+			const int r = (int)((c >> 16) & 255), g = (int)((c >> 8) & 255);
+			const int b = (int)(c & 255);
+
+			if (g - r > k[0] && g - b > k[1] && g > k[2])
+				(y < row ? above : below)++;
+		}
+
+	printf("wetcut: key %d,%d,%d row %ld of %ld above %ld below %ld\n", k[0],
+		k[1], k[2], row, h, above, below);
+}
+
 static bool ShotWrite(Shot& shot, const char* path)
 {
 	D3DLOCKED_RECT rect;
@@ -1813,6 +1853,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 
 	shot.readback->UnlockRect();
 	WetStepLine(pixels, shot.w, shot.h);
+	WetCutLine(pixels, shot.w, shot.h);
 
 	const double texels = (double)shot.w * (double)shot.h;
 	const bool ok = WritePng(path, pixels, shot.w, shot.h);
@@ -14073,6 +14114,7 @@ static int ProbeMain(int argc, char** argv)
 			(!strcmp(argv[at], "-wetblur") && at + 1 < argc) ||
 			!strcmp(argv[at], "-wetnomirror") ||
 			(!strcmp(argv[at], "-wetstep") && at + 1 < argc) ||
+			(!strcmp(argv[at], "-wetcut") && at + 1 < argc) ||
 			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
@@ -14101,6 +14143,10 @@ static int ProbeMain(int argc, char** argv)
 				g_wet_step = sscanf_s(argv[++at], "%d,%d,%d,%d",
 					&g_wet_step_at[0], &g_wet_step_at[1], &g_wet_step_at[2],
 					&g_wet_step_at[3]) == 4;
+			else if (!strcmp(argv[at], "-wetcut"))
+				g_wet_cut = sscanf_s(argv[++at], "%d,%d,%d,%d",
+					&g_wet_cut_key[0], &g_wet_cut_key[1], &g_wet_cut_key[2],
+					&g_wet_cut_key[3]) == 4;
 			else if (!strcmp(argv[at], "-wetlara"))
 				g_wet_lara = sscanf_s(argv[++at], "%f,%f,%f,%f,%d",
 					&g_wet_lara_at[0], &g_wet_lara_at[1], &g_wet_lara_at[2],

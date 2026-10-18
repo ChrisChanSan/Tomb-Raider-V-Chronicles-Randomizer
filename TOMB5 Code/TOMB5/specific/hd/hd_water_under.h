@@ -200,7 +200,7 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
 	return false;
 }
 
-/* The look's eighteen numbers on the game's path, in the order of
+/* The look's nineteen numbers on the game's path, in the order of
  * RoomProbe's -underlookknobs: the disc's, the shafts' and the underside's
  * strengths, the surface light's reach along the eye ray in units, the
  * disc's power, the shafts' cell size in units, the noise's floor (the
@@ -211,15 +211,27 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
  * seven of the sea's sheet in the art's place (HDWaterSeaOver): the
  * disc's, the shafts' and the underside's strengths there, the sheet's
  * own, its ripple's contrast, the share the shafts' noise lights it by and
- * the weight the art keeps. */
+ * the weight the art keeps; then the disc's power there
+ * (HDWaterGlowPower). */
 enum
 {
 	HD_LOOK_DISC, HD_LOOK_SHAFTS, HD_LOOK_UNDERSIDE, HD_LOOK_REACH,
 	HD_LOOK_POWER, HD_LOOK_CELL, HD_LOOK_FLOOR, HD_LOOK_DEEP, HD_LOOK_LENGTH,
 	HD_LOOK_WAVES, HD_LOOK_RIM, HD_LOOK_SEA_DISC, HD_LOOK_SEA_SHAFTS,
 	HD_LOOK_SEA_UNDERSIDE, HD_LOOK_SHEET, HD_LOOK_RIPPLE, HD_LOOK_PATCHES,
-	HD_LOOK_ART, HD_LOOK_KNOBS
+	HD_LOOK_ART, HD_LOOK_SEA_POWER, HD_LOOK_KNOBS
 };
+
+/* The power of the cosine to the light whose glow falls to half its peak
+ * `halfDeg` degrees from the light's direction: cos^p(half) = 1/2. The
+ * disc of the look is pow(cos, p) (hd_water_look.hlsl); 600 halves within
+ * 2.7 degrees, a spot. 0 or less for a half angle outside 0 to 90. */
+inline float HDWaterGlowPower(float halfDeg)
+{
+	const float c = cosf(halfDeg * 0.017453293f);
+
+	return halfDeg > 0.0f && halfDeg < 90.0f ? logf(0.5f) / logf(c) : 0.0f;
+}
 
 /* Free choices, set by eye on RoomProbe -underlook pictures of JOBY4's
  * dive (rooms 33, 123 and 6, looking 46, 43 and 19 degrees up, and room
@@ -261,11 +273,23 @@ enum
  *
  * And the look is stronger there, so that it carries the picture: the
  * photographs' brightest tenth is 7.7 times their darkest, the art's 1.5
- * to 2.3. The disc at 8 (its broad glow 0.64), the shafts at 24 and the
- * underside at 0.24 take it to 1.5 to 3.0, the brightest at the eyes
- * that face the light, with the mean luma at most 96 of 255, under the
- * brighter photograph's 116, and the pattern's contrast to 0.038 to
- * 0.087, inside each eye's band. */
+ * to 2.3. The shafts at 24 and the underside at 0.24 take it to 1.5 to
+ * 3.0, the brightest at the eyes that face the light, with the mean luma
+ * at most 96 of 255, under the brighter photograph's 116, and the
+ * pattern's contrast to 0.038 to 0.087, inside each eye's band.
+ *
+ * The disc there is a glow, not a spot: at the power 600 it fell to half
+ * within 12 pixels of 960 and by up to 27 of luma a pixel at its rim. The
+ * sunlit photograph's glow round the sun (smoothed over 6 pixels) falls to
+ * half 178 pixels from its peak at 960 wide - 22.5 degrees under the
+ * game's own perspective, the power 8.75 (HDWaterGlowPower) - and by at
+ * most 2.7 a pixel; its peak is 2.49 times the photograph's median luma.
+ * At 8.75 the disc's strength is the largest whole number from 8 down
+ * whose peak lies under the old one at every eye the disc is in (4 of 4)
+ * and whose peak
+ * over the open water's median lies under the photograph's 2.49 at the
+ * three eyes that face it from open water: 4 (1.6 to 1.9; 5 and 6 lift
+ * the peak over the old one, 6 to 181 against 161). */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -279,13 +303,14 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_LENGTH] = 5000.0f;
 	knobs[HD_LOOK_WAVES] = 1500.0f;
 	knobs[HD_LOOK_RIM] = 0.3f;
-	knobs[HD_LOOK_SEA_DISC] = 8.0f;
+	knobs[HD_LOOK_SEA_DISC] = 4.0f;
 	knobs[HD_LOOK_SEA_SHAFTS] = 24.0f;
 	knobs[HD_LOOK_SEA_UNDERSIDE] = 0.24f;
 	knobs[HD_LOOK_SHEET] = 0.10f;
 	knobs[HD_LOOK_RIPPLE] = 0.8f;
 	knobs[HD_LOOK_PATCHES] = 1.5f;
 	knobs[HD_LOOK_ART] = 0.0f;
+	knobs[HD_LOOK_SEA_POWER] = HDWaterGlowPower(22.5f);
 }
 
 /* The sea's surface seen from below in the art's place (hd_render.cpp,

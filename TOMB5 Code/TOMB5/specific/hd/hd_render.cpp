@@ -18753,9 +18753,9 @@ namespace
 	 * sheet") where `sea` is given - the eye's depth under the art's
 	 * plane and the extinction's (`sea[0]`, `sea[1]`), the art's box, the
 	 * sheet's strength, ripple, clear zone, edge and patches, and the
-	 * disc's, the shafts' and the underside's strengths there in place of
-	 * the others; all 0 without it. `knobs` in the order of
-	 * HDWaterLookKnobs. */
+	 * disc's power and the disc's, the shafts' and the underside's
+	 * strengths there in place of the others; all 0 without it. `knobs` in
+	 * the order of HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
 		float depth, const float* sigma, const float* light,
@@ -18806,6 +18806,7 @@ namespace
 		if (!sea)
 			return;
 
+		c[23] = knobs[HD_LOOK_SEA_POWER];
 		c[24] = knobs[HD_LOOK_SEA_DISC];
 		c[25] = knobs[HD_LOOK_SEA_SHAFTS];
 		c[26] = knobs[HD_LOOK_SEA_UNDERSIDE];

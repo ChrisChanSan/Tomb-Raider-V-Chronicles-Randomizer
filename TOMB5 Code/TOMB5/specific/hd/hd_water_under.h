@@ -247,8 +247,8 @@ enum
  * looking 26 to 85 degrees up, four more of the dive, two at the
  * stand-in's edge), measured where the art lay, against two
  * photographs of a sea from below taken as look references only. Their
- * hue is 201 to 207 degrees, the art's 177 to 188: the sheet takes the
- * water's own colour (the look's light; 197 to 202 with the band).
+ * hue is 201 to 207 degrees, the art's 175 to 188: the sheet takes the
+ * water's own colour (the look's light; 198 to 202 with the band).
  * Their pattern's contrast (the luma's spread over 16-pixel windows over
  * its mean) is 0.076 and 0.110, the game's picture of the art 0.146 to
  * 0.164: a half to three quarters of it is the band each eye's 0.054 to

@@ -17538,8 +17538,11 @@ room 19, part 3, material 16 in the additive pass (73,728 triangles, the topmost
 stacked copy kept, page 3255; `WATERLOG ... art room=19 part=3 class=sea`), drawn by the
 room path's own `RoomPS` - not a sheet shader - at its part's weight, with the material's
 texture ripple, and under the water through `UnderWater` with `share` 0: a glow the water
-only dims. Its turquoise is the vertices' colour (red 0: the art adds 5.2, 47.6 and 45.8
-of red, green and blue at the straight-up eye) times the page's pattern; its strength is
+only dims. Its turquoise is the vertices' colour: the art's two baked colours are (0, 75,
+49) and (0, 72, 82) (TrgProbe `-cell 19 1000 1000`, every stacked copy alike), and its
+page is grey - 125 of 255 on each channel, its luma's spread 14.6, chroma 0 (DdsProbe, the
+engine's own decoder, numbers only) - so the art adds 5.2, 47.6 and 45.8 of red, green and
+blue at the straight-up eye, the page's grey pattern in the vertices' hue; its strength is
 the extinction's: the deep look measures the way through the water against the basin of
 room 7 (y 12,032), 16,000 units under the art, less the clear zone of 2,048 units, so from
 the dive's eyes (2,065 to 3,562 under the basin) the art keeps nearly all its light -
@@ -17551,21 +17554,23 @@ up in room 123 - and round 2's four) and two at the stand-in's edge, three pictu
 the art alone (with it less without room 19), the look alone (`-underlook` less without
 it), both. In the art's region (where it adds more than 1 of luma):
 
-| eye | the art adds | its hue | its spread | the look adds | the picture's hue | spread |
-|---|---|---|---|---|---|---|
-| U85, room 29, 85 deg up | 34.8 | 177 | 0.263 | 8.8 | 188 | 0.092 |
-| U45, room 30, 47 up | 19.3 | 184 | 0.326 | 3.8 | 195 | 0.077 |
-| U65, room 49, 65 up | 14.2 | 188 | 0.331 | 9.9 | 198 | 0.058 |
-| U26, room 123, 26 up | 19.4 | 185 | 0.357 | 5.2 | 195 | 0.079 |
-| E216, room 33, 46 up | 15.5 | 184 | 0.445 | 18.0 | 197 | 0.069 |
-| T23995, room 123, 43 up | 19.9 | 185 | 0.302 | 10.4 | 195 | 0.068 |
-| T24484, room 6, 19 up | 16.1 | 186 | 0.393 | 4.1 | 196 | 0.078 |
-| L3, room 123, 50 up | 19.5 | 185 | 0.349 | 16.9 | 196 | 0.059 |
-| G628, room 119, 63 up, 283 under the basin | 34.3 | 175 | 0.338 | 10.0 | 186 | 0.114 |
+| eye | the art adds | its hue | its chroma | its spread | the look adds | the picture's hue | its chroma | spread |
+|---|---|---|---|---|---|---|---|---|
+| U85, room 29, 85 deg up | 34.8 | 177 | 42.8 | 0.263 | 8.8 | 188 | 83.7 | 0.092 |
+| U45, room 30, 47 up | 19.3 | 184 | 25.2 | 0.326 | 3.8 | 195 | 70.1 | 0.077 |
+| U65, room 49, 65 up | 14.2 | 188 | 19.7 | 0.331 | 9.9 | 198 | 71.8 | 0.058 |
+| U26, room 123, 26 up | 19.4 | 185 | 25.7 | 0.357 | 5.2 | 195 | 70.9 | 0.079 |
+| E216, room 33, 46 up | 15.5 | 184 | 18.2 | 0.445 | 18.0 | 197 | 76.1 | 0.069 |
+| T23995, room 123, 43 up | 19.9 | 185 | 26.7 | 0.302 | 10.4 | 195 | 77.6 | 0.068 |
+| T24484, room 6, 19 up | 16.1 | 186 | 21.7 | 0.393 | 4.1 | 196 | 66.5 | 0.078 |
+| L3, room 123, 50 up | 19.5 | 185 | 26.4 | 0.349 | 16.9 | 196 | 84.0 | 0.059 |
+| G628, room 119, 63 up, 283 under the basin | 34.3 | 175 | 38.3 | 0.338 | 10.0 | 186 | 73.6 | 0.114 |
 
-(the art adds and the look adds: mean luma; hue in degrees of the mean colour; the art's
-spread its luma's spread over 32-pixel windows over its mean, the picture's over 16-pixel
-windows; the band of the picture without room 19 and the look is hue 198 to 203). The art
+(the art adds and the look adds: mean luma; hue in degrees of the mean colour; chroma the
+mean of each pixel's largest channel less its smallest, the art's of its own added colour;
+the art's spread its luma's spread over 32-pixel windows over its mean, the picture's over
+16-pixel windows; the band of the picture without room 19 and the look is hue 198 to
+203). The art
 lays a pattern of a third of its own light over the picture in a hue of 175 to 188, the
 look adds a smooth glow at 201: the art swallows the look.
 
@@ -17586,49 +17591,68 @@ look's light), dimmed by the room shader's own way (`HDWaterSheetPath`: under th
 along the ray, less the clear zone), over the art's box (x -6,608 to 55,136, z 39,944 to
 99,327, its plane y -4,269: the build reads the surface room's highest material 16 part)
 and coming in over 4,096 units from its edge, its ripple the body's two longest wave rows
-(`WaveSum`; 1,500 and 700 units in JOBY4) at 0.7 of its light, half again (1.5) where a
+(`WaveSum`; 1,500 and 700 units in JOBY4) at 0.8 of its light, half again (1.5) where a
 shaft leaves the surface (`LookShaft`, the cells' hash). The art's additive ranges then
-draw at weight 0 - only in a frame whose look drew the sheet (the clock of the sky's frame
-block against the room brackets' last two; a frame drawn without the sky keeps the art).
+draw at weight 0 - only in a frame whose look drew the sheet (`HDWaterSeaGivesWay`: a flag
+the look's first sheet sets after the water's build, and the clock of the sky's frame
+block against the room brackets' last two; a frame drawn without the sky, and every frame
+before the look's first sheet, keeps the art).
 And there the look is stronger: the disc 8, the shafts 24, the lit underside 0.24 in place
 of 0.2, 8 and 0.12. Everywhere else - over the stand-in's surface, out of the water, with
 `hd_water` 0, in every other level - the art and the look are as before.
 
-The numbers from his look references, as numbers: the photographs' hue is 201 and 207
-degrees (his picture of the art 183); their pattern's spread (16-pixel windows over the
-mean luma, at 960 wide) 0.076 and 0.110 away from the sun, his picture of the art 0.146
-and 0.164 - so each eye's band is a half to three quarters of its own spread before; their
-brightest tenth of the picture is 7.6 times their darkest (32-pixel windows), the art's
-picture 1.5 to 2.3. The sheet's 0.10 and the patches' 1.5 keep the water between the glow
-and the shafts dark; the strengths were raised until the eyes that face the light carried
-about three times and the mean luma stayed under the brighter photograph's 116 of 255.
+The numbers from his look references, as numbers (each picture cut to the photograph -
+the viewer's frame and black bars out, found by their edges - and scaled to 960 wide;
+measured in the same form as the probe's pictures; his two pictures of the art with the
+player and the rock cut out as rectangles):
+
+| picture | luma | hue | chroma | spread | carry |
+|---|---|---|---|---|---|
+| photograph, the sun overhead | 115.8 | 201 | 49.7 | 0.156 | 7.70 |
+| photograph, the deep blue | 53.2 | 207 | 99.7 | 0.071 | 7.70 |
+| his picture of the art | 76.6 | 184 | 79.0 | 0.117 | 2.39 |
+| his second picture of it | 76.6 | 184 | 79.1 | 0.118 | 2.20 |
+
+(spread the mean of the luma's spread over 16-pixel windows over the mean luma, carry the
+brightest tenth of the 32-pixel windows over the darkest). The photographs' spread lies at
+0.60 and 1.33 of the art's 0.118 - the deep blue one softer, the sunlit one's sparkles
+harder - so each eye's band is 0.60 to 1.33 of its own spread before. The sheet's ripple
+is the softest step of 0.05 that holds every eye at or over the band's soft end: at 0.7
+E216 and U65 fell under it (0.54 and 0.59 of before), at 0.75 E216 (0.57), at 0.8 every
+eye is inside (E216 0.61). The sheet's 0.10 and the patches' 1.5 keep the water between
+the glow and the shafts dark; the strengths were raised until the eyes that face the light
+carried about three times and the mean luma stayed under the brighter photograph's 116 of
+255. The scripts (`refs.py`, `band.py`) and the pictures stay in the round's scratch
+folder.
 
 **Measured.** After, in the art's region of before (RoomProbe as above, the tool of the
 last commit against `dc4883fc`'s):
 
-| eye | luma | hue | spread (band) | carry | the sheet adds | the look adds |
-|---|---|---|---|---|---|---|
-| U85 | 76.2 / 71.1 | 188 / 199 | 0.092 / 0.064 (0.048-0.069) | 1.88 / 1.87 | 15.6 | 23.5 |
-| U45 | 60.3 / 54.1 | 195 / 202 | 0.077 / 0.056 (0.040-0.058) | 1.78 / 1.76 | 8.8 | 8.3 |
-| U65 | 62.3 / 71.9 | 198 / 202 | 0.058 / 0.034 (0.030-0.043) | 1.93 / 2.38 | 6.5 | 27.1 |
-| U26 | 60.7 / 60.0 | 195 / 202 | 0.079 / 0.054 (0.041-0.059) | 1.63 / 1.69 | 8.8 | 15.7 |
-| E216 | 70.3 / 96.0 | 197 / 201 | 0.069 / 0.037 (0.036-0.052) | 1.49 / 1.51 | 10.1 | 49.5 |
-| T23995 | 67.1 / 74.3 | 195 / 202 | 0.068 / 0.044 (0.035-0.051) | 1.99 / 2.95 | 8.5 | 29.4 |
-| T24484 | 56.7 / 56.2 | 196 / 202 | 0.078 / 0.054 (0.041-0.059) | 1.52 / 1.86 | 7.5 | 12.5 |
-| L3 | 73.5 / 95.2 | 196 / 201 | 0.059 / 0.039 (0.031-0.044) | 2.02 / 3.00 | 8.6 | 49.8 |
-| G628 | 73.2 / 73.1 | 186 / 198 | 0.114 / 0.077 (0.059-0.086) | 1.99 / 1.86 | 18.4 | 27.0 |
-| G631 | 73.8 / 76.1 | 186 / 198 | 0.112 / 0.073 (0.058-0.084) | 2.24 / 1.98 | 18.3 | 30.5 |
+| eye | luma | hue | chroma | spread (band) | of before | carry | the sheet adds | the look adds |
+|---|---|---|---|---|---|---|---|---|
+| U85 | 76.2 / 71.1 | 188 / 199 | 83.7 / 73.4 | 0.092 / 0.072 (0.055-0.122) | 0.78 | 1.88 / 1.87 | 15.6 | 23.5 |
+| U45 | 60.3 / 54.1 | 195 / 202 | 70.1 / 61.1 | 0.077 / 0.063 (0.046-0.102) | 0.81 | 1.78 / 1.77 | 8.8 | 8.3 |
+| U65 | 62.3 / 71.9 | 198 / 202 | 71.8 / 78.5 | 0.058 / 0.038 (0.035-0.076) | 0.66 | 1.93 / 2.38 | 6.5 | 27.1 |
+| U26 | 60.7 / 60.0 | 195 / 202 | 70.9 / 67.1 | 0.079 / 0.061 (0.047-0.105) | 0.77 | 1.63 / 1.69 | 8.8 | 15.7 |
+| E216 | 70.3 / 96.0 | 197 / 201 | 76.1 / 100.6 | 0.069 / 0.042 (0.041-0.091) | 0.61 | 1.49 / 1.51 | 10.1 | 49.5 |
+| T23995 | 67.1 / 74.3 | 195 / 202 | 77.6 / 80.6 | 0.068 / 0.049 (0.041-0.090) | 0.72 | 1.99 / 2.95 | 8.5 | 29.4 |
+| T24484 | 56.7 / 56.2 | 196 / 202 | 66.5 / 63.4 | 0.078 / 0.061 (0.047-0.104) | 0.77 | 1.52 / 1.86 | 7.5 | 12.5 |
+| L3 | 73.5 / 95.2 | 196 / 201 | 84.0 / 100.8 | 0.059 / 0.042 (0.036-0.078) | 0.71 | 2.02 / 3.01 | 8.6 | 49.8 |
+| G628 | 73.2 / 73.1 | 186 / 198 | 73.6 / 71.4 | 0.114 / 0.087 (0.069-0.152) | 0.76 | 1.99 / 1.86 | 18.4 | 27.0 |
+| G630 | 73.5 / 74.8 | 186 / 198 | 74.0 / 73.1 | 0.114 / 0.085 (0.068-0.151) | 0.75 | 2.30 / 2.10 | 18.3 | 29.2 |
+| G631 | 73.8 / 76.1 | 186 / 198 | 74.3 / 74.2 | 0.112 / 0.082 (0.068-0.149) | 0.73 | 2.24 / 1.98 | 18.3 | 30.5 |
 
 (before / after; carry the brightest tenth of the region's 32-pixel windows over the
 darkest; the sheet adds `-sea sheet` less without room 19 and the look, the look adds
-`-sea look` less the same.) Every eye's spread lies in its band, every hue is the water's
-own (198 to 202), the carry rises at the eyes that face the light (T23995 and L3 to 3.0,
-U65 to 2.4) and the mean luma stays at most 96. Pixels the art and the look left alone
-before: unchanged at every eye but open water near the horizon, where the sheet now covers
-the art's box past the rooms the picture lists (T24484 11,424 such pixels, by at most 33
-levels), all of them open water. Commit by commit: with the look's own strengths
-(`83020629`) the spread came to 0.041 to 0.097 and the carry 1.27 to 1.84, the picture
-darker than before (mean luma 48 to 65).
+`-sea look` less the same.) Every eye's spread lies in its band (0.61 to 0.81 of before),
+every hue is the water's own (198 to 202), the carry rises at the eyes that face the light
+(T23995 and L3 to 3.0, U65 to 2.4) and the mean luma stays at most 96. Pixels the art and
+the look both left alone before (each under 1 of luma): unchanged at G628 to G641 and L3,
+changed at the other six eyes by at most 48 levels (U45 59,826 such pixels) - open water,
+where the sheet now covers the art's box past the rooms the picture lists and the stronger
+shafts reach. Commit by commit: with the look's own strengths (`83020629`) the spread came
+to 0.041 to 0.097 and the carry 1.27 to 1.84, the picture darker than before (mean luma 48
+to 65); with the ripple at 0.7 (`02da2e6b` to `9f466d2f`) E216 and U65 lay under the band.
 
 The fade, at the edge (RoomProbe `-undertick` over ticks 600 to 660 of his flight and the
 four eyes', `-sky -rooms 137 -vis 1 -size 480 270 -time 3 -underlook -surfacealways
@@ -17637,14 +17661,17 @@ before and after; from tick 632 on (the eye over the basin, 11,941 and up) the p
 of 58 byte-identical, the surface's pixels and light the same (121,578 to 127,238 pixels,
 11.58 to 14.89); under it the pictures without room 19 and the look 32 of 32 identical,
 the ones with them changed (tick 631, the eye 3 units under the basin: light 42.10 before,
-46.20 after). The edge eyes G632, G634 and G641 3 of 3 byte-identical.
+46.20 after; tick 630 41.37 and 44.70). The edge eyes G632, G634 and G641 3 of 3
+byte-identical.
 
 GPU at 2,560 x 1,440, three runs each, medians: the look (its two draws) U85 0.900 to
 0.941 ms, U45 0.904 to 0.942, T23995 0.902 to 0.939, L3 0.901 to 0.939 - 0.04 ms more, the
 sheet's branch; the frame's additive pass (RoomProbe `-gpuadd 20`, all its groups, room
 19's art among them) 0.743, 0.530, 0.881 and 0.169 ms with the art at its own weight
 (`-sea art`) and 0.744, 0.530, 0.882 and 0.168 with it at 0: the art is still drawn, at
-the same cost. `LookPS` 341 slots of 512 (234 before), `LookVS` 1; no texture.
+the same cost. `LookPS` 341 slots of 512 (234 before), `LookVS` 1; no texture. With the
+ripple at 0.8 the same: the look 0.900 to 0.907 ms before and 0.940 to 0.946 after at the
+four eyes, the additive pass 0.741, 0.531, 0.879 and 0.168 ms.
 
 **Decisions.** The art is not touched in its own draw: its shader is the room shader of
 every room (`RoomPS`, 514 slots already), and its coverage stays the stand-in's as merged;
@@ -17663,7 +17690,10 @@ and 1, 48 of 48 each; RICH3's room 190 6 of 6 with each key; the other levels' u
 eyes and six edge eyes with `hd_water` 0 14 of 14; the `WATERLOG` sweep 268 of 268 lines
 identical (`under_deep=1` in JOBY4 alone). `-sea art` draws the before picture byte for
 byte at all fourteen eyes (the art at its weight, the look at its old strengths, the sheet
-at 0). ModernTest 15,679 checks with the new `water_sea` group of 19, MenuTest 44,619,
+at 0). The pictures without the look (`-sky -surfacealways`) are the base's at all
+fourteen eyes - the art kept until the look's first sheet - and so are the `-underlookset`
+study's at the eight dive eyes. ModernTest 15,684 checks with the new `water_sea` group of
+24, MenuTest 44,619,
 InterpTest 729, LipsTest 299 with round 163's `.OBJ` folder and 272 without (`cutseq.bin`
 given by hand), 0 failed; the engine and all nine tools build.
 
@@ -17675,7 +17705,8 @@ wave's own warp; from far up it reads as fine regular waves. The art still costs
 additive draw at weight 0. A frame drawn under the water without the sky keeps the art.
 
 **Commits.** `83020629` (the sheet), `02da2e6b` (the look stronger), `bfc0bf56` (RoomProbe
-`-sea`), `e4b3ae60` (RoomProbe `-gpuadd`), `4424af87` (the knobs' comment).
+`-sea`), `e4b3ae60` (RoomProbe `-gpuadd`), `4424af87` (the knobs' comment), `9457eb3d`
+(the art kept until the first sheet, the ripple at 0.8).
 
 ### The marble floors' mirror (#205)
 2026-10-16

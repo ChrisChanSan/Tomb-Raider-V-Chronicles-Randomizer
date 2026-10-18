@@ -41,27 +41,27 @@
 //
 
     ps_3_0
-    def c0, 127.5, 0, 1, -9.99999996e-013
-    def c1, 1000000, 255, 0.00784313772, 16
-    def c2, 1, 2, 3, 4
-    def c3, 5, 6, 7, 4
-    def c5, -12, -13, -14, -15
-    def c6, -24, -25, -26, -27
-    def c7, -28, -29, -30, -31
-    def c8, 2, -9.99999975e-005, 10000, 2.85714293
-    def c9, 0.00200000009, 0.300000012, 1.10000002, 0.800000012
-    def c11, 0.0185919981, 0.0172479991, 0.159154937, 0.0223999992
-    def c12, 0.899999976, 0.0203840006, 0.699999988, -0.231000006
-    def c13, -2, 3, 0.00392156886, -0.100000001
-    def c14, 1.5, 1, 0.5, 1.33333337
-    def c15, -0.00100000005, 999.999939, -0.0625, 0.349999994
-    def c37, 2.5, 0.0313725509, -0.718627453, -1.44269502
-    def c38, 0.5, 1, 3.37381911, -9.99999994e-009
-    def c39, -0.0627451017, 0, 0, 0
-    def c72, -0, -1, -2, -3
-    def c73, -8, -9, -10, -11
-    def c74, -16, -17, -18, -19
-    def c75, -20, -21, -22, -23
+    def c0, 127.5, -9.99999996e-013, 1000000, 255
+    def c1, 1, 2, 3, 4
+    def c2, -8, -9, -10, -11
+    def c3, 5, 6, 7, 0.00784313772
+    def c5, -0, -1, -2, -3
+    def c6, -4, -5, -6, -7
+    def c7, -20, -21, -22, -23
+    def c8, -24, -25, -26, -27
+    def c9, -28, -29, -30, -31
+    def c11, 2, -9.99999975e-005, 10000, 2.85714293
+    def c12, 0.00200000009, 0.300000012, 1.10000002, 0.800000012
+    def c13, 0.0185919981, 0.0172479991, 0.159154937, 0.0223999992
+    def c14, 0.899999976, 0.0203840006, 0.699999988, -0.231000006
+    def c15, -2, 3, 0.00392156886, -0.100000001
+    def c37, 1.5, 1, 0.5, 1.33333337
+    def c38, -0.00100000005, 999.999939, -0.0625, 0.349999994
+    def c39, 2.5, 0.0313725509, -0.718627453, -1.44269502
+    def c72, 0.5, 1, 3.37381911, -9.99999994e-009
+    def c73, -0.0627451017, -1, -0, 1
+    def c74, -12, -13, -14, -15
+    def c75, 16, 17, 18, 19
     def c76, 2, -1, 0.600000024, 0.550000012
     def c77, 0, -1, -2, -3
     def c78, -27, -28, -29, -30
@@ -78,9 +78,9 @@
     mul r0.xyz, c0.x, v1
     frc r1.xy, c17
     add r1.zw, -r1.xyxy, c17.xyxy
-    cmp r1.xy, -r1, c0.y, c0.z
-    mov r2.yz, c0
-    cmp r1.xy, c17, r2.y, r1
+    cmp r1.xy, -r1, -c73.z, -c73.y
+    mov r2.yzw, c73
+    cmp r1.xy, c17, -r2.z, r1
     add r1.xy, r1, r1.zwzw
     mov r3, c22
     cmp r4, -r1.x, r3, c20
@@ -89,41 +89,41 @@
     add r4.xyz, -r4, v3
     dp3 r0.w, r4, r4
     mad r1.z, r4.w, -r4.w, r0.w
-    add r1.w, r0.w, c0.w
+    add r1.w, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r1.w, r0.w, c1.x
+    cmp r0.w, r1.w, r0.w, c0.z
     rcp r1.w, r0.w
     add r1.w, -r1.w, r4.w
     mul r1.w, r1.w, r6.w
     mul r4.xyz, r0.w, r4
-    mul r2.xw, r4.xyzy, v5.xyzy
-    add r0.w, r2.w, r2.x
+    mul r4.xy, r4, v5
+    add r0.w, r4.y, r4.x
     mad r0.w, v5.z, r4.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r1.w
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r4.xyz, r6, r0.w, r0
     cmp r4.xyz, r1.z, r0, r4
     cmp r0.xyz, -r1.x, r0, r4
-    add r4, -r1.x, c2
+    add r4, -r1.x, c1
     cmp r3, r4.x, c24, r3
     cmp r5, r4.x, c25, r5
     add r3.xyz, -r3, v3
     dp3 r0.w, r3, r3
     mad r1.z, r3.w, -r3.w, r0.w
-    add r1.w, r0.w, c0.w
+    add r1.w, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r1.w, r0.w, c1.x
+    cmp r0.w, r1.w, r0.w, c0.z
     rcp r1.w, r0.w
     add r1.w, -r1.w, r3.w
     mul r1.w, r1.w, r5.w
     mul r3.xyz, r0.w, r3
-    mul r2.xw, r3.xyzy, v5.xyzy
-    add r0.w, r2.w, r2.x
+    mul r3.xy, r3, v5
+    add r0.w, r3.y, r3.x
     mad r0.w, v5.z, r3.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r1.w
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r3.xyz, r5, r0.w, r0
     cmp r3.xyz, r1.z, r0, r3
     cmp r0.xyz, r4.x, r0, r3
@@ -134,19 +134,19 @@
     add r5.xyz, -r5, v3
     dp3 r0.w, r5, r5
     mad r1.z, r5.w, -r5.w, r0.w
-    add r1.w, r0.w, c0.w
+    add r1.w, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r1.w, r0.w, c1.x
+    cmp r0.w, r1.w, r0.w, c0.z
     rcp r1.w, r0.w
     add r1.w, -r1.w, r5.w
     mul r1.w, r1.w, r7.w
     mul r5.xyz, r0.w, r5
-    mul r2.xw, r5.xyzy, v5.xyzy
-    add r0.w, r2.w, r2.x
+    mul r5.xy, r5, v5
+    add r0.w, r5.y, r5.x
     mad r0.w, v5.z, r5.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r1.w
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r5.xyz, r7, r0.w, r0
     cmp r5.xyz, r1.z, r0, r5
     cmp r0.xyz, r4.y, r0, r5
@@ -155,19 +155,19 @@
     add r3.xyz, -r3, v3
     dp3 r0.w, r3, r3
     mad r1.z, r3.w, -r3.w, r0.w
-    add r1.w, r0.w, c0.w
+    add r1.w, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r1.w, r0.w, c1.x
+    cmp r0.w, r1.w, r0.w, c0.z
     rcp r1.w, r0.w
     add r1.w, -r1.w, r3.w
     mul r1.w, r1.w, r5.w
     mul r3.xyz, r0.w, r3
-    mul r2.xw, r3.xyzy, v5.xyzy
-    add r0.w, r2.w, r2.x
+    mul r3.xy, r3, v5
+    add r0.w, r3.y, r3.x
     mad r0.w, v5.z, r3.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r1.w
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r3.xyz, r5, r0.w, r0
     cmp r3.xyz, r1.z, r0, r3
     cmp r0.xyz, r4.z, r0, r3
@@ -178,19 +178,19 @@
     add r4.xyz, -r5, v3
     dp3 r0.w, r4, r4
     mad r1.z, r5.w, -r5.w, r0.w
-    add r1.w, r0.w, c0.w
+    add r1.w, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r1.w, r0.w, c1.x
+    cmp r0.w, r1.w, r0.w, c0.z
     rcp r1.w, r0.w
     add r1.w, -r1.w, r5.w
     mul r1.w, r1.w, r7.w
     mul r4.xyz, r0.w, r4
-    mul r2.xw, r4.xyzy, v5.xyzy
-    add r0.w, r2.w, r2.x
+    mul r4.xy, r4, v5
+    add r0.w, r4.y, r4.x
     mad r0.w, v5.z, r4.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r1.w
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r4.xyz, r7, r0.w, r0
     cmp r4.xyz, r1.z, r0, r4
     cmp r0.xyz, r4.w, r0, r4
@@ -200,19 +200,19 @@
     add r3.xyz, -r3, v3
     dp3 r0.w, r3, r3
     mad r2.x, r3.w, -r3.w, r0.w
-    add r2.w, r0.w, c0.w
+    add r5.x, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r2.w, r0.w, c1.x
-    rcp r2.w, r0.w
-    add r2.w, -r2.w, r3.w
-    mul r2.w, r2.w, r4.w
+    cmp r0.w, r5.x, r0.w, c0.z
+    rcp r5.x, r0.w
+    add r3.w, r3.w, -r5.x
+    mul r3.w, r3.w, r4.w
     mul r3.xyz, r0.w, r3
     mul r3.xy, r3, v5
     add r0.w, r3.y, r3.x
     mad r0.w, v5.z, r3.z, r0.w
-    add r0.w, -r0.w, c0.z
-    mul r0.w, r0.w, r2.w
-    mul r0.w, r0.w, c1.y
+    add r0.w, -r0.w, c73.w
+    mul r0.w, r0.w, r3.w
+    mul r0.w, r0.w, c0.w
     mad r3.xyz, r4, r0.w, r0
     cmp r3.xyz, r2.x, r0, r3
     cmp r0.xyz, r1.x, r0, r3
@@ -223,9 +223,9 @@
     add r3.xyz, -r3, v3
     dp3 r0.w, r3, r3
     mad r1.x, r3.w, -r3.w, r0.w
-    add r2.x, r0.w, c0.w
+    add r2.x, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r2.x, r0.w, c1.x
+    cmp r0.w, r2.x, r0.w, c0.z
     rcp r2.x, r0.w
     add r2.x, -r2.x, r3.w
     mul r2.x, r2.x, r4.w
@@ -233,56 +233,56 @@
     mul r3.xy, r3, v5
     add r0.w, r3.y, r3.x
     mad r0.w, v5.z, r3.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r2.x
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r3.xyz, r4, r0.w, r0
     cmp r3.xyz, r1.x, r0, r3
     cmp r0.xyz, r1.z, r0, r3
-    cmp r3, r1.w, r2.y, c34
+    cmp r3, r1.w, -r2.z, c34
     add r3.xyz, -r3, v3
     dp3 r0.w, r3, r3
     mad r1.x, r3.w, -r3.w, r0.w
-    add r1.z, r0.w, c0.w
+    add r1.z, r0.w, c0.y
     rsq r0.w, r0.w
-    cmp r0.w, r1.z, r0.w, c1.x
+    cmp r0.w, r1.z, r0.w, c0.z
     rcp r1.z, r0.w
     add r1.z, -r1.z, r3.w
     mul r1.z, r1.z, c35.w
     mul r3.xyz, r0.w, r3
-    mul r2.xw, r3.xyzy, v5.xyzy
-    add r0.w, r2.w, r2.x
+    mul r3.xy, r3, v5
+    add r0.w, r3.y, r3.x
     mad r0.w, v5.z, r3.z, r0.w
-    add r0.w, -r0.w, c0.z
+    add r0.w, -r0.w, c73.w
     mul r0.w, r0.w, r1.z
-    mul r0.w, r0.w, c1.y
+    mul r0.w, r0.w, c0.w
     mad r3.xyz, c35, r0.w, r0
     cmp r3.xyz, r1.x, r0, r3
     cmp r0.xyz, r1.w, r0, r3
     add r0.xyz, r0, v4
     add r0.w, -c16.x, v2.z
     mul r1.x, r0.w, c16.y
-    cmp r0.w, r0.w, r1.x, c0.y
+    cmp r0.w, r0.w, r1.x, -c73.z
     add r1.xzw, -r0.w, r0.xyyz
-    mul r1.xzw, r1, c1.z
+    mul r1.xzw, r1, c3.w
     dp3 r2.x, v2, v2
-    add r2.w, r2.x, c0.w
-    rsq r3.x, r2.x
-    cmp r2.w, r2.w, r3.x, c1.x
-    mul r3.xyz, r2.w, v2
+    add r3.x, r2.x, c0.y
+    rsq r3.y, r2.x
+    cmp r3.x, r3.x, r3.y, c0.z
+    mul r3.xyz, r3.x, v2
     mov r4.xyz, r1.xzww
-    mov r5.xyz, c0.y
-    mov r2.w, c0.y
-    mov r3.w, c0.y
+    mov r5.xyz, -c73.z
+    mov r3.w, -c73.z
+    mov r4.w, -c73.z
     rep i0
-      mov r4.w, r1.y
-      break_ge r3.w, r4.w
-      add r4.w, r3.w, r3.w
-      add r6, r4.w, -c3.wxyz
-      add r7, r4.w, c73
-      add r8, r4.w, c5
-      add r9, r4.w, c77
-      cmp r10, -r9_abs.x, c41, r2.y
+      mov r5.w, r1.y
+      break_ge r4.w, r5.w
+      add r5.w, r4.w, r4.w
+      add r6, r5.w, c6
+      add r7, r5.w, c2
+      add r8, r5.w, c74
+      add r9, r5.w, c77
+      cmp r10, -r9_abs.x, c41, -r2.z
       cmp r10, -r9_abs.y, c42, r10
       cmp r10, -r9_abs.z, c43, r10
       cmp r9, -r9_abs.w, c44, r10
@@ -295,18 +295,18 @@
       cmp r9, -r7_abs.z, c51, r9
       cmp r9, -r7_abs.w, c52, r9
       cmp r9, -r8_abs.x, c53, r9
-      add r10, r4.w, c74
-      add r11, r4.w, c75
-      add r12, r4.w, c6
+      add r10, r5.w, -c75
+      add r11, r5.w, c7
+      add r12, r5.w, c8
       cmp r9, -r8_abs.y, c54, r9
       cmp r9, -r8_abs.z, c55, r9
       cmp r9, -r8_abs.w, c56, r9
       cmp r9, -r10_abs.x, c57, r9
-      add r13, r4.w, c72
+      add r13, r5.w, c5
       cmp r9, -r10_abs.y, c58, r9
       cmp r9, -r10_abs.z, c59, r9
       cmp r9, -r10_abs.w, c60, r9
-      cmp r14, -r13_abs.x, c40, r2.y
+      cmp r14, -r13_abs.x, c40, -r2.z
       cmp r14, -r13_abs.y, c41, r14
       cmp r14, -r13_abs.z, c42, r14
       cmp r13, -r13_abs.w, c43, r14
@@ -334,12 +334,12 @@
       cmp r6, -r12_abs.y, c65, r6
       cmp r6, -r12_abs.z, c66, r6
       cmp r6, -r12_abs.w, c67, r6
-      add r7, r4.w, c7
+      add r7, r5.w, c9
       cmp r6, -r7_abs.x, c68, r6
       cmp r6, -r7_abs.y, c69, r6
       cmp r6, -r7_abs.z, c70, r6
       cmp r6, -r7_abs.w, c71, r6
-      add r7, r4.w, c78
+      add r7, r5.w, c78
       cmp r8, -r11_abs.x, c61, r9
       cmp r8, -r11_abs.y, c62, r8
       cmp r8, -r11_abs.z, c63, r8
@@ -351,229 +351,232 @@
       cmp r8, -r7_abs.y, c69, r8
       cmp r8, -r7_abs.z, c70, r8
       cmp r7, -r7_abs.w, c71, r8
-      add r4.w, r6.w, r6.z
-      if_ge -r4.w, c0.y
-        mov r4.w, c0.y
+      add r5.w, r6.w, r6.z
+      if_ge -r5.w, -c73.z
+        mov r5.w, -c73.z
       else
-        mul r5.w, r6.w, r6.w
-        dp3 r8.x, r6, r6
-        add r8.yzw, r6.xxyz, -v2.xxyz
-        dp3 r8.y, r8.yzww, r8.yzww
-        if_lt r8.x, r5.w
-          mad r5.w, r6.w, -r6.w, r8.y
-          dp3 r8.z, r6, r3
-          mad r8.w, r8.z, -r8.z, r8.x
-          mad r8.w, r6.w, r6.w, -r8.w
-          max r9.x, r8.w, c0.y
-          rsq r8.w, r9.x
-          rcp r8.w, r8.w
-          add r8.z, r8.w, r8.z
-          mul r9.xyz, r3, r8.z
-          cmp r9.xyz, r5.w, r9, v2
-          mov r10.xyz, c0.y
+        mul r8.x, r6.w, r6.w
+        dp3 r8.y, r6, r6
+        add r9.xyz, r6, -v2
+        dp3 r8.z, r9, r9
+        if_lt r8.y, r8.x
+          mad r8.x, r6.w, -r6.w, r8.z
+          dp3 r8.w, r6, r3
+          mad r9.x, r8.w, -r8.w, r8.y
+          mad r9.x, r6.w, r6.w, -r9.x
+          max r10.x, r9.x, -c73.z
+          rsq r9.x, r10.x
+          rcp r9.x, r9.x
+          add r8.w, r8.w, r9.x
+          mul r9.xyz, r3, r8.w
+          cmp r9.xyz, r8.x, r9, v2
+          mov r10.xyz, -c73.z
         else
-          mad r5.w, r6.w, -r6.w, r8.y
+          mad r8.x, r6.w, -r6.w, r8.z
           dp3 r6.x, r6, r3
-          mad r6.y, r6.x, -r6.x, r8.x
+          mad r6.y, r6.x, -r6.x, r8.y
           mad r6.z, r6.w, r6.w, -r6.y
-          max r8.x, r6.z, c0.y
-          rsq r6.z, r8.x
+          max r8.y, r6.z, -c73.z
+          rsq r6.z, r8.y
           rcp r6.z, r6.z
-          add r8.x, -r6.z, r6.x
-          mul r8.xyz, r3, r8.x
-          mad r8.w, r6.x, r6.x, -r2.x
+          add r8.y, -r6.z, r6.x
+          mul r8.yzw, r3.xxyz, r8.y
+          mad r9.w, r6.x, r6.x, -r2.x
           mad r6.y, r6.w, -r6.w, r6.y
           add r6.z, r6.z, r6.x
           mul r11.xyz, r3, r6.z
-          cmp r11.xyz, r6.y, c0.y, r11
-          cmp r12.xyz, r6.y, c0.y, r8
-          cmp r11.xyz, r8.w, r3, r11
-          cmp r12.xyz, r8.w, c0.y, r12
+          cmp r11.xyz, r6.y, -c73.z, r11
+          cmp r12.xyz, r6.y, -c73.z, r8.yzww
+          cmp r11.xyz, r9.w, r3, r11
+          cmp r12.xyz, r9.w, -c73.z, r12
           cmp r11.xyz, -r6.x, r3, r11
-          cmp r6.xyz, -r6.x, c0.y, r12
-          cmp r10.xyz, r5.w, r11, r8
-          cmp r9.xyz, r5.w, r6, v2
+          cmp r6.xyz, -r6.x, -c73.z, r12
+          cmp r10.xyz, r8.x, r11, r8.yzww
+          cmp r9.xyz, r8.x, r6, v2
         endif
         add r6.xyz, -r10, r9
-        dp3 r5.w, r6, r6
-        rsq r5.w, r5.w
-        rcp r5.w, r5.w
-        add r6.x, r6.w, r6.w
-        mad r6.y, r6.w, c8.x, c8.y
+        dp3 r6.x, r6, r6
+        rsq r6.x, r6.x
         rcp r6.x, r6.x
-        cmp r6.x, r6.y, r6.x, c8.z
-        mul_sat r6.x, r5.w, r6.x
-        mul r5.w, r7.w, r5.w
-        mul_sat r6.x, r6.x, c8.w
-        mad r6.y, r6.x, c13.x, c13.y
-        mul r6.x, r6.x, r6.x
-        mul r6.x, r6.x, r6.y
-        mul r4.w, r5.w, r6.x
+        add r6.y, r6.w, r6.w
+        mad r6.z, r6.w, c11.x, c11.y
+        rcp r6.y, r6.y
+        cmp r6.y, r6.z, r6.y, c11.z
+        mul_sat r6.y, r6.y, r6.x
+        mul r6.x, r7.w, r6.x
+        mul_sat r6.y, r6.y, c11.w
+        mad r6.z, r6.y, c15.x, c15.y
+        mul r6.y, r6.y, r6.y
+        mul r6.y, r6.y, r6.z
+        mul r5.w, r6.y, r6.x
       endif
-      mad r4.xyz, r4.w, -c13.z, r4
-      mul r6.xyz, r7, r4.w
-      mad r5.xyz, r6, c13.z, r5
-      add r2.w, r2.w, r4.w
-      add r3.w, r3.w, c0.z
+      mad r4.xyz, r5.w, -c15.z, r4
+      mul r6.xyz, r7, r5.w
+      mad r5.xyz, r6, c15.z, r5
+      add r3.w, r3.w, r5.w
+      add r4.w, r4.w, c73.w
     endrep
     mov_sat r5.xyz, r5
-    max r1.xyz, r4, c0.y
-    texld r3, v0, s0
-    mul r0.xyz, r0, c1.z
-    dsx r4.xyz, v3.zxyw
-    dsy r6.xyz, v3.yzxw
-    dp3 r1.w, r4, r4
-    dp3 r2.x, r6, r6
-    max r4.w, r1.w, r2.x
-    rsq r1.w, r4.w
+    max r1.xyz, r4, -c73.z
+    texld r4, v0, s0
+    add r6, r4.w, -c4.x
+    texkill r6
+    add r6, r4.wxyz, c73.xyyy
+    cmp r2.xz, r6.x, c73.yyzw, c73.wyyw
+    mul r7, r2.x, c4.z
+    texkill r7
+    mul r0.xyz, r0, c3.w
+    dsx r3.xyz, v3.zxyw
+    dsy r7.xyz, v3.yzxw
+    dp3 r1.w, r3, r3
+    dp3 r2.x, r7, r7
+    max r5.w, r1.w, r2.x
+    rsq r1.w, r5.w
     rcp r1.w, r1.w
-    mad_sat r1.w, r1.w, c13.w, -c13.x
-    add r2.x, c9.x, -v4.w
-    add r7.xyz, c10, v3
+    mad_sat r1.w, r1.w, c15.w, -c15.x
+    add r2.x, c12.x, -v4.w
+    add r8.xyz, c10, v3
     mul r1.w, r1.w, v4.w
-    mul r1.w, r1.w, c9.y
-    mul r8.xyz, r4, r6
-    mad r4.xyz, r4.zxyw, r6.yzxw, -r8
-    add r2.y, -r4_abs.x, r4_abs.z
-    cmp r6, r2.y, r7.xyxy, r7.zyzy
-    max r2.y, r4_abs.x, r4_abs.z
-    add r2.y, -r2.y, r4_abs.y
-    cmp r4, r2.y, r7.xzxz, r6
-    mov r2.y, c18.y
-    mul r6.xy, r2.y, c9.zwzw
-    mad r7.x, r4.y, c11.x, r6.x
-    mad r7.y, r4.z, c11.y, -r6.y
-    mul r4.yz, r7.xxyw, c11.z
-    frc r4.yz, r4
-    mad r4.yz, r4, c76.x, c76.y
-    mul r6.xy, r4_abs.yzzw, r4_abs.yzzw
-    mad r4.yz, r4_abs, -c2.y, c2.z
-    mul r4.yz, r4, r6.xxyw
-    mad r4.yz, r4, c76.x, c76.y
-    mul r4.yz, r4, c76.xzww
-    mad r4.x, r4.x, c11.w, r4.y
-    mad r4.x, r2.y, c12.x, r4.x
-    mad r4.z, r4.w, c12.y, -r4.z
-    mad r4.y, r2.y, -c12.z, r4.z
-    mul r4.xy, r4, c11.z
-    frc r4.xy, r4
-    mad r4.xy, r4, c76.x, c76.y
-    mul r4.zw, r4_abs.xyxy, r4_abs.xyxy
-    mad r4.xy, r4_abs, -c2.y, c2.z
-    mul r4.xy, r4, r4.zwzw
-    mad r4.xy, r4, c76.x, c76.y
-    add r2.y, r4.y, r4.x
-    mad r2.y, r2_abs.y, -c38.x, c38.y
-    mul r2.y, r2.y, r2.y
-    mul r4.x, r2.y, r2.y
-    mad r2.y, r4.x, r2.y, c12.w
-    mul r1.w, r1.w, r2.y
-    mad r1.w, r1.w, c38.z, c38.y
-    mul r4.xyz, r1.w, r1
-    cmp r4.xyz, r1.w, r4, c0.y
-    cmp r1.xyz, r2.x, r1, r4
-    mul r1.xyz, r1, r3
-    mad r4.xyz, r5, c4.w, r1
-    mul r1.w, r2.w, c13.z
-    mad r0.w, r0.w, c1.z, r1.w
+    mul r1.w, r1.w, c12.y
+    mul r9.xyz, r3, r7
+    mad r3.xyz, r3.zxyw, r7.yzxw, -r9
+    add r5.w, -r3_abs.x, r3_abs.z
+    cmp r7, r5.w, r8.xyxy, r8.zyzy
+    max r5.w, r3_abs.x, r3_abs.z
+    add r3.x, r3_abs.y, -r5.w
+    cmp r7, r3.x, r8.xzxz, r7
+    mov r3.y, c18.y
+    mul r3.xz, r3.y, c12.zyww
+    mad r8.x, r7.y, c13.x, r3.x
+    mad r8.y, r7.z, c13.y, -r3.z
+    mul r3.xz, r8.xyyw, c13.z
+    frc r3.xz, r3
+    mad r3.xz, r3, c76.x, c76.y
+    mul r7.yz, r3_abs.xxzw, r3_abs.xxzw
+    mad r3.xz, r3_abs, -c1.y, c1.z
+    mul r3.xz, r3, r7.yyzw
+    mad r3.xz, r3, c76.x, c76.y
+    mul r3.xz, r3, c76.zyww
+    mad r3.x, r7.x, c13.w, r3.x
+    mad r7.x, r3.y, c14.x, r3.x
+    mad r3.x, r7.w, c14.y, -r3.z
+    mad r7.y, r3.y, -c14.z, r3.x
+    mul r3.xy, r7, c13.z
+    frc r3.xy, r3
+    mad r3.xy, r3, c76.x, c76.y
+    mul r7.xy, r3_abs, r3_abs
+    mad r3.xy, r3_abs, -c1.y, c1.z
+    mul r3.xy, r3, r7
+    mad r3.xy, r3, c76.x, c76.y
+    add r3.x, r3.y, r3.x
+    mad r3.x, r3_abs.x, -c72.x, c72.y
+    mul r3.x, r3.x, r3.x
+    mul r3.y, r3.x, r3.x
+    mad r3.x, r3.y, r3.x, c14.w
+    mul r1.w, r1.w, r3.x
+    mad r1.w, r1.w, c72.z, c72.y
+    mul r3.xyz, r1.w, r1
+    cmp r3.xyz, r1.w, r3, -c73.z
+    cmp r1.xyz, r2.x, r1, r3
+    mul r1.xyz, r1, r4
+    mad r3.xyz, r5, c4.w, r1
+    mul r1.w, r3.w, c15.z
+    mad r0.w, r0.w, c3.w, r1.w
     dp3 r1.w, v5, v5
-    add r2.x, r1.w, c38.w
+    add r2.x, r1.w, c72.w
     rsq r1.w, r1.w
-    cmp r1.w, r2.x, r1.w, c8.z
-    mul r2.xyw, r1.w, v5.xyzz
-    nrm r5.xyz, -v2
-    dp3 r6.x, r2.xyww, c86
-    dp3 r6.y, r2.xyww, c87
-    dp3 r6.z, r2.xyww, c88
-    dp3 r7.x, r5, c86
-    dp3 r7.y, r5, c87
-    dp3 r7.z, r5, c88
-    dp3 r1.w, r6, r7
-    cmp r2.xyw, r1.w, r6.xyzz, -r6.xyzz
-    mad r5, v2.xyzx, c0.zzzy, c0.yyyz
-    dp4 r6.x, r5, c89
-    dp4 r6.y, r5, c90
-    dp4 r6.z, r5, c91
-    texld r5, r6, s1
-    texld r6, r6, s2
-    mad r5.xyz, r5, c76.x, c76.y
-    dp3 r4.w, r5, r5
-    rsq r4.w, r4.w
-    rcp r6.w, r4.w
-    add r7.w, r6.w, c15.x
-    cmp r4.w, r7.w, r4.w, c15.y
-    mul r8.xyz, r4.w, r5
-    mad r5.xyz, r5, r4.w, r7
-    dp3 r4.w, r5, r5
-    add r7.x, r4.w, c38.w
-    rsq r4.w, r4.w
-    cmp r4.w, r7.x, r4.w, c8.z
-    mul r5.xyz, r4.w, r5
-    dp3_sat r4.w, r2.xyww, r5
-    pow r5.x, r4.w, c19.y
-    dp3_sat r2.x, r2.xyww, r8
+    cmp r1.w, r2.x, r1.w, c11.z
+    mul r5.xyz, r1.w, v5
+    nrm r7.xyz, -v2
+    dp3 r8.x, r5, c86
+    dp3 r8.y, r5, c87
+    dp3 r8.z, r5, c88
+    dp3 r5.x, r7, c86
+    dp3 r5.y, r7, c87
+    dp3 r5.z, r7, c88
+    dp3 r1.w, r8, r5
+    cmp r7.xyz, r1.w, r8, -r8
+    mad r8, v2.xyzx, -c73.yyyz, -c73.zzzy
+    dp4 r9.x, r8, c89
+    dp4 r9.y, r8, c90
+    dp4 r9.z, r8, c91
+    texld r8, r9, s1
+    texld r9, r9, s2
+    mad r8.xyz, r8, c76.x, c76.y
+    dp3 r2.x, r8, r8
+    rsq r2.x, r2.x
+    rcp r3.w, r2.x
+    add r5.w, r3.w, c38.x
+    cmp r2.x, r5.w, r2.x, c38.y
+    mad r5.xyz, r8, r2.x, r5
+    mul r8.xyz, r2.x, r8
+    dp3 r2.x, r5, r5
+    add r5.w, r2.x, c72.w
+    rsq r2.x, r2.x
+    cmp r2.x, r5.w, r2.x, c11.z
+    mul r5.xyz, r2.x, r5
+    dp3_sat r2.x, r7, r5
+    pow r5.x, r2.x, c19.y
+    dp3_sat r2.x, r7, r8
     mul r2.x, r2.x, r5.x
-    max r2.y, r3.y, r3.z
-    max r4.w, r3.x, r2.y
-    add r2.y, r4.w, c15.z
-    rcp r2.w, r4.w
-    cmp r2.y, r2.y, r2.w, c1.w
-    mad r5.xyz, r3, r2.y, -c0.z
-    mad r5.xyz, c36.y, r5, r2.z
-    mul r5.xyz, r5, r6
-    mov_sat r6.w, r6.w
-    mul r2.y, r5.w, r6.w
-    mul r2.x, r2.x, r2.y
+    max r5.x, r4.y, r4.z
+    max r6.x, r4.x, r5.x
+    add r5.x, r6.x, c38.z
+    rcp r5.y, r6.x
+    cmp r5.x, r5.x, r5.y, c75.x
+    mad r4.xyz, r4, r5.x, c73.y
+    mad r4.xyz, c36.y, r4, r2.w
+    mul r4.xyz, r4, r9
+    mov_sat r3.w, r3.w
+    mul r3.w, r3.w, r8.w
+    mul r2.x, r2.x, r3.w
     mul r2.x, r2.x, c3.y
-    mov r7.xw, c36
-    add r7.xyz, -r7.wxww, c14
-    mad r8.xyz, r8, c38.x, c38.x
-    mul r6.xyz, r5.w, r6
-    cmp r6.xyz, r7.x, r6, r8
-    add r8, r3, -c0.z
-    mad r8, c36.yyyz, r8, r2.z
-    mul r0.xyz, r0, r8
-    mul r0.xyz, r0, c15.w
-    add r1.w, -r1_abs.w, c0.z
-    mul r2.y, r1.w, r1.w
-    mul r2.y, r2.y, r2.y
-    mul r1.w, r1.w, r2.y
-    mad r1.w, r7.y, r1.w, c36.x
+    mov r5.xw, c36
+    add r5.xyz, -r5.wxww, c37
+    mad r7.xyz, r8, c72.x, c72.x
+    mul r8.xyz, r8.w, r9
+    cmp r7.xyz, r5.x, r8, r7
+    mad r6.xyz, c36.y, r6.yzww, r2.w
+    mul r0.xyz, r0, r6
+    mul r0.xyz, r0, c38.w
+    add r1.w, -r1_abs.w, c73.w
+    mul r3.w, r1.w, r1.w
+    mul r3.w, r3.w, r3.w
+    mul r1.w, r1.w, r3.w
+    mad r1.w, r5.y, r1.w, c36.x
     mul r1.w, r1.w, c19.x
     mul r1.w, r1.w, c19.z
-    mul r1.w, r8.w, r1.w
-    mad r0.xyz, r5, r2.x, r0
+    add r3.w, r4.w, c73.y
+    mad r2.w, c36.z, r3.w, r2.w
+    mul r1.w, r1.w, r2.w
+    mad r0.xyz, r4, r2.x, r0
     mad r0.xyz, r0, r1.w, -r0.w
-    max r2.xyw, r0.xyzz, c0.y
+    max r4.xyz, r0, -c73.z
     max r0.x, r1.y, r1.z
-    max r3.x, r1.x, r0.x
-    mad r0.xy, r3.x, c37.x, c37.yzzw
-    max r0.z, r2.y, r2.w
-    max r1.x, r2.x, r0.z
+    max r2.x, r1.x, r0.x
+    mad r0.xy, r2.x, c39.x, c39.yzzw
+    max r0.z, r4.y, r4.z
+    max r1.x, r4.x, r0.z
     rcp r0.x, r0.x
-    cmp r0.x, r0.y, c14.w, r0.x
+    cmp r0.x, r0.y, c37.w, r0.x
     mul r0.y, r0.x, r1.x
-    mul r0.z, r0.y, c37.w
+    mul r0.z, r0.y, c39.w
     exp r0.z, r0.z
-    add r0.z, -r0.z, c0.z
-    mad r0.x, r1.x, r0.x, c8.y
+    add r0.z, -r0.z, c73.w
+    mad r0.x, r1.x, r0.x, c11.y
     rcp r0.y, r0.y
-    cmp r0.x, r0.x, r0.y, c8.z
+    cmp r0.x, r0.x, r0.y, c11.z
     mul r0.x, r0.x, r0.z
-    mul r0.xyz, r0.x, r2.xyww
-    add_sat r1.xyz, -r4, c0.z
-    mad r0.xyz, r0, r1, r4
-    cmp oC0.xyz, r7.z, r0, r6
-    add r0, r3.w, -c4.x
-    texkill r0
-    mul r0.x, r3.w, c19.w
-    add r0.y, -r2.z, c19.w
-    add r0.z, r3.w, c39.x
-    cmp r0.z, r0.z, -c0.y, -c0.z
-    cmp r0.y, r0.y, c0.y, r0.z
-    cmp oC0.w, r0.y, r0.x, c0.z
+    mul r0.xyz, r0.x, r4
+    add_sat r1.xyz, -r3, c73.w
+    mad r0.xyz, r0, r1, r3
+    cmp oC0.xyz, r5.z, r0, r7
+    mul r0.x, r4.w, c19.w
+    add r0.y, r2.y, c19.w
+    cmp r0.y, r0.y, -c73.z, r2.z
+    cmp oC0.w, r0.y, r0.x, c73.w
 
-// approximately 512 instruction slots used (3 texture, 509 arithmetic)
+// approximately 515 instruction slots used (3 texture, 512 arithmetic)
 #endif
 
 const BYTE kHDRoomGlossPS[] =
@@ -683,89 +686,89 @@ const BYTE kHDRoomGlossPS[] =
     114,  32,  49,  48,  46,  49, 
       0, 171,  81,   0,   0,   5, 
       0,   0,  15, 160,   0,   0, 
-    255,  66,   0,   0,   0,   0, 
-      0,   0, 128,  63, 204, 188, 
-    140, 171,  81,   0,   0,   5, 
-      1,   0,  15, 160,   0,  36, 
-    116,  73,   0,   0, 127,  67, 
-    129, 128,   0,  60,   0,   0, 
-    128,  65,  81,   0,   0,   5, 
-      2,   0,  15, 160,   0,   0, 
+    255,  66, 204, 188, 140, 171, 
+      0,  36, 116,  73,   0,   0, 
+    127,  67,  81,   0,   0,   5, 
+      1,   0,  15, 160,   0,   0, 
     128,  63,   0,   0,   0,  64, 
       0,   0,  64,  64,   0,   0, 
     128,  64,  81,   0,   0,   5, 
-      3,   0,  15, 160,   0,   0, 
-    160,  64,   0,   0, 192,  64, 
-      0,   0, 224,  64,   0,   0, 
-    128,  64,  81,   0,   0,   5, 
-      5,   0,  15, 160,   0,   0, 
-     64, 193,   0,   0,  80, 193, 
-      0,   0,  96, 193,   0,   0, 
-    112, 193,  81,   0,   0,   5, 
-      6,   0,  15, 160,   0,   0, 
-    192, 193,   0,   0, 200, 193, 
-      0,   0, 208, 193,   0,   0, 
-    216, 193,  81,   0,   0,   5, 
-      7,   0,  15, 160,   0,   0, 
-    224, 193,   0,   0, 232, 193, 
-      0,   0, 240, 193,   0,   0, 
-    248, 193,  81,   0,   0,   5, 
-      8,   0,  15, 160,   0,   0, 
-      0,  64,  23, 183, 209, 184, 
-      0,  64,  28,  70, 110, 219, 
-     54,  64,  81,   0,   0,   5, 
-      9,   0,  15, 160, 111,  18, 
-      3,  59, 154, 153, 153,  62, 
-    205, 204, 140,  63, 205, 204, 
-     76,  63,  81,   0,   0,   5, 
-     11,   0,  15, 160,  63,  78, 
-    152,  60, 173,  75, 141,  60, 
-    131, 249,  34,  62,  52, 128, 
-    183,  60,  81,   0,   0,   5, 
-     12,   0,  15, 160, 102, 102, 
-    102,  63,  89, 252, 166,  60, 
-     51,  51,  51,  63,  68, 139, 
-    108, 190,  81,   0,   0,   5, 
-     13,   0,  15, 160,   0,   0, 
-      0, 192,   0,   0,  64,  64, 
-    129, 128, 128,  59, 205, 204, 
-    204, 189,  81,   0,   0,   5, 
-     14,   0,  15, 160,   0,   0, 
-    192,  63,   0,   0, 128,  63, 
-      0,   0,   0,  63, 171, 170, 
-    170,  63,  81,   0,   0,   5, 
-     15,   0,  15, 160, 111,  18, 
-    131, 186, 255, 255, 121,  68, 
-      0,   0, 128, 189,  51,  51, 
-    179,  62,  81,   0,   0,   5, 
-     37,   0,  15, 160,   0,   0, 
-     32,  64, 129, 128,   0,  61, 
-    248, 247,  55, 191,  59, 170, 
-    184, 191,  81,   0,   0,   5, 
-     38,   0,  15, 160,   0,   0, 
-      0,  63,   0,   0, 128,  63, 
-    167, 236,  87,  64, 119, 204, 
-     43, 178,  81,   0,   0,   5, 
-     39,   0,  15, 160, 129, 128, 
-    128, 189,   0,   0,   0,   0, 
-      0,   0,   0,   0,   0,   0, 
-      0,   0,  81,   0,   0,   5, 
-     72,   0,  15, 160,   0,   0, 
-      0, 128,   0,   0, 128, 191, 
-      0,   0,   0, 192,   0,   0, 
-     64, 192,  81,   0,   0,   5, 
-     73,   0,  15, 160,   0,   0, 
+      2,   0,  15, 160,   0,   0, 
       0, 193,   0,   0,  16, 193, 
       0,   0,  32, 193,   0,   0, 
      48, 193,  81,   0,   0,   5, 
-     74,   0,  15, 160,   0,   0, 
-    128, 193,   0,   0, 136, 193, 
-      0,   0, 144, 193,   0,   0, 
-    152, 193,  81,   0,   0,   5, 
-     75,   0,  15, 160,   0,   0, 
+      3,   0,  15, 160,   0,   0, 
+    160,  64,   0,   0, 192,  64, 
+      0,   0, 224,  64, 129, 128, 
+      0,  60,  81,   0,   0,   5, 
+      5,   0,  15, 160,   0,   0, 
+      0, 128,   0,   0, 128, 191, 
+      0,   0,   0, 192,   0,   0, 
+     64, 192,  81,   0,   0,   5, 
+      6,   0,  15, 160,   0,   0, 
+    128, 192,   0,   0, 160, 192, 
+      0,   0, 192, 192,   0,   0, 
+    224, 192,  81,   0,   0,   5, 
+      7,   0,  15, 160,   0,   0, 
     160, 193,   0,   0, 168, 193, 
       0,   0, 176, 193,   0,   0, 
     184, 193,  81,   0,   0,   5, 
+      8,   0,  15, 160,   0,   0, 
+    192, 193,   0,   0, 200, 193, 
+      0,   0, 208, 193,   0,   0, 
+    216, 193,  81,   0,   0,   5, 
+      9,   0,  15, 160,   0,   0, 
+    224, 193,   0,   0, 232, 193, 
+      0,   0, 240, 193,   0,   0, 
+    248, 193,  81,   0,   0,   5, 
+     11,   0,  15, 160,   0,   0, 
+      0,  64,  23, 183, 209, 184, 
+      0,  64,  28,  70, 110, 219, 
+     54,  64,  81,   0,   0,   5, 
+     12,   0,  15, 160, 111,  18, 
+      3,  59, 154, 153, 153,  62, 
+    205, 204, 140,  63, 205, 204, 
+     76,  63,  81,   0,   0,   5, 
+     13,   0,  15, 160,  63,  78, 
+    152,  60, 173,  75, 141,  60, 
+    131, 249,  34,  62,  52, 128, 
+    183,  60,  81,   0,   0,   5, 
+     14,   0,  15, 160, 102, 102, 
+    102,  63,  89, 252, 166,  60, 
+     51,  51,  51,  63,  68, 139, 
+    108, 190,  81,   0,   0,   5, 
+     15,   0,  15, 160,   0,   0, 
+      0, 192,   0,   0,  64,  64, 
+    129, 128, 128,  59, 205, 204, 
+    204, 189,  81,   0,   0,   5, 
+     37,   0,  15, 160,   0,   0, 
+    192,  63,   0,   0, 128,  63, 
+      0,   0,   0,  63, 171, 170, 
+    170,  63,  81,   0,   0,   5, 
+     38,   0,  15, 160, 111,  18, 
+    131, 186, 255, 255, 121,  68, 
+      0,   0, 128, 189,  51,  51, 
+    179,  62,  81,   0,   0,   5, 
+     39,   0,  15, 160,   0,   0, 
+     32,  64, 129, 128,   0,  61, 
+    248, 247,  55, 191,  59, 170, 
+    184, 191,  81,   0,   0,   5, 
+     72,   0,  15, 160,   0,   0, 
+      0,  63,   0,   0, 128,  63, 
+    167, 236,  87,  64, 119, 204, 
+     43, 178,  81,   0,   0,   5, 
+     73,   0,  15, 160, 129, 128, 
+    128, 189,   0,   0, 128, 191, 
+      0,   0,   0, 128,   0,   0, 
+    128,  63,  81,   0,   0,   5, 
+     74,   0,  15, 160,   0,   0, 
+     64, 193,   0,   0,  80, 193, 
+      0,   0,  96, 193,   0,   0, 
+    112, 193,  81,   0,   0,   5, 
+     75,   0,  15, 160,   0,   0, 
+    128,  65,   0,   0, 136,  65, 
+      0,   0, 144,  65,   0,   0, 
+    152,  65,  81,   0,   0,   5, 
      76,   0,  15, 160,   0,   0, 
       0,  64,   0,   0, 128, 191, 
     154, 153,  25,  63, 205, 204, 
@@ -808,13 +811,13 @@ const BYTE kHDRoomGlossPS[] =
      12, 128,   1,   0,  68, 129, 
      17,   0,  68, 160,  88,   0, 
       0,   4,   1,   0,   3, 128, 
-      1,   0, 228, 129,   0,   0, 
-     85, 160,   0,   0, 170, 160, 
+      1,   0, 228, 129,  73,   0, 
+    170, 161,  73,   0,  85, 161, 
       1,   0,   0,   2,   2,   0, 
-      6, 128,   0,   0, 228, 160, 
+     14, 128,  73,   0, 228, 160, 
      88,   0,   0,   4,   1,   0, 
       3, 128,  17,   0, 228, 160, 
-      2,   0,  85, 128,   1,   0, 
+      2,   0, 170, 129,   1,   0, 
     228, 128,   2,   0,   0,   3, 
       1,   0,   3, 128,   1,   0, 
     228, 128,   1,   0, 238, 128, 
@@ -839,13 +842,13 @@ const BYTE kHDRoomGlossPS[] =
       4,   0, 255, 129,   0,   0, 
     255, 128,   2,   0,   0,   3, 
       1,   0,   8, 128,   0,   0, 
-    255, 128,   0,   0, 255, 160, 
+    255, 128,   0,   0,  85, 160, 
       7,   0,   0,   2,   0,   0, 
       8, 128,   0,   0, 255, 128, 
      88,   0,   0,   4,   0,   0, 
       8, 128,   1,   0, 255, 128, 
-      0,   0, 255, 128,   1,   0, 
-      0, 160,   6,   0,   0,   2, 
+      0,   0, 255, 128,   0,   0, 
+    170, 160,   6,   0,   0,   2, 
       1,   0,   8, 128,   0,   0, 
     255, 128,   2,   0,   0,   3, 
       1,   0,   8, 128,   1,   0, 
@@ -856,22 +859,22 @@ const BYTE kHDRoomGlossPS[] =
       0,   3,   4,   0,   7, 128, 
       0,   0, 255, 128,   4,   0, 
     228, 128,   5,   0,   0,   3, 
-      2,   0,   9, 128,   4,   0, 
-    100, 128,   5,   0, 100, 144, 
+      4,   0,   3, 128,   4,   0, 
+    228, 128,   5,   0, 228, 144, 
       2,   0,   0,   3,   0,   0, 
-      8, 128,   2,   0, 255, 128, 
-      2,   0,   0, 128,   4,   0, 
+      8, 128,   4,   0,  85, 128, 
+      4,   0,   0, 128,   4,   0, 
       0,   4,   0,   0,   8, 128, 
       5,   0, 170, 144,   4,   0, 
     170, 128,   0,   0, 255, 128, 
       2,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 129, 
-      0,   0, 170, 160,   5,   0, 
+     73,   0, 255, 160,   5,   0, 
       0,   3,   0,   0,   8, 128, 
       0,   0, 255, 128,   1,   0, 
     255, 128,   5,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
-    255, 128,   1,   0,  85, 160, 
+    255, 128,   0,   0, 255, 160, 
       4,   0,   0,   4,   4,   0, 
       7, 128,   6,   0, 228, 128, 
       0,   0, 255, 128,   0,   0, 
@@ -884,7 +887,7 @@ const BYTE kHDRoomGlossPS[] =
     228, 128,   4,   0, 228, 128, 
       2,   0,   0,   3,   4,   0, 
      15, 128,   1,   0,   0, 129, 
-      2,   0, 228, 160,  88,   0, 
+      1,   0, 228, 160,  88,   0, 
       0,   4,   3,   0,  15, 128, 
       4,   0,   0, 128,  24,   0, 
     228, 160,   3,   0, 228, 128, 
@@ -902,12 +905,12 @@ const BYTE kHDRoomGlossPS[] =
     255, 129,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
       8, 128,   0,   0, 255, 128, 
-      0,   0, 255, 160,   7,   0, 
+      0,   0,  85, 160,   7,   0, 
       0,   2,   0,   0,   8, 128, 
       0,   0, 255, 128,  88,   0, 
       0,   4,   0,   0,   8, 128, 
       1,   0, 255, 128,   0,   0, 
-    255, 128,   1,   0,   0, 160, 
+    255, 128,   0,   0, 170, 160, 
       6,   0,   0,   2,   1,   0, 
       8, 128,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
@@ -918,23 +921,23 @@ const BYTE kHDRoomGlossPS[] =
     255, 128,   5,   0,   0,   3, 
       3,   0,   7, 128,   0,   0, 
     255, 128,   3,   0, 228, 128, 
-      5,   0,   0,   3,   2,   0, 
-      9, 128,   3,   0, 100, 128, 
-      5,   0, 100, 144,   2,   0, 
+      5,   0,   0,   3,   3,   0, 
+      3, 128,   3,   0, 228, 128, 
+      5,   0, 228, 144,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      2,   0, 255, 128,   2,   0, 
+      3,   0,  85, 128,   3,   0, 
       0, 128,   4,   0,   0,   4, 
       0,   0,   8, 128,   5,   0, 
     170, 144,   3,   0, 170, 128, 
       0,   0, 255, 128,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      0,   0, 255, 129,   0,   0, 
-    170, 160,   5,   0,   0,   3, 
+      0,   0, 255, 129,  73,   0, 
+    255, 160,   5,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
     255, 128,   1,   0, 255, 128, 
       5,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      1,   0,  85, 160,   4,   0, 
+      0,   0, 255, 160,   4,   0, 
       0,   4,   3,   0,   7, 128, 
       5,   0, 228, 128,   0,   0, 
     255, 128,   0,   0, 228, 128, 
@@ -966,12 +969,12 @@ const BYTE kHDRoomGlossPS[] =
     255, 129,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
       8, 128,   0,   0, 255, 128, 
-      0,   0, 255, 160,   7,   0, 
+      0,   0,  85, 160,   7,   0, 
       0,   2,   0,   0,   8, 128, 
       0,   0, 255, 128,  88,   0, 
       0,   4,   0,   0,   8, 128, 
       1,   0, 255, 128,   0,   0, 
-    255, 128,   1,   0,   0, 160, 
+    255, 128,   0,   0, 170, 160, 
       6,   0,   0,   2,   1,   0, 
       8, 128,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
@@ -982,23 +985,23 @@ const BYTE kHDRoomGlossPS[] =
     255, 128,   5,   0,   0,   3, 
       5,   0,   7, 128,   0,   0, 
     255, 128,   5,   0, 228, 128, 
-      5,   0,   0,   3,   2,   0, 
-      9, 128,   5,   0, 100, 128, 
-      5,   0, 100, 144,   2,   0, 
+      5,   0,   0,   3,   5,   0, 
+      3, 128,   5,   0, 228, 128, 
+      5,   0, 228, 144,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      2,   0, 255, 128,   2,   0, 
+      5,   0,  85, 128,   5,   0, 
       0, 128,   4,   0,   0,   4, 
       0,   0,   8, 128,   5,   0, 
     170, 144,   5,   0, 170, 128, 
       0,   0, 255, 128,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      0,   0, 255, 129,   0,   0, 
-    170, 160,   5,   0,   0,   3, 
+      0,   0, 255, 129,  73,   0, 
+    255, 160,   5,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
     255, 128,   1,   0, 255, 128, 
       5,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      1,   0,  85, 160,   4,   0, 
+      0,   0, 255, 160,   4,   0, 
       0,   4,   5,   0,   7, 128, 
       7,   0, 228, 128,   0,   0, 
     255, 128,   0,   0, 228, 128, 
@@ -1026,12 +1029,12 @@ const BYTE kHDRoomGlossPS[] =
     255, 129,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
       8, 128,   0,   0, 255, 128, 
-      0,   0, 255, 160,   7,   0, 
+      0,   0,  85, 160,   7,   0, 
       0,   2,   0,   0,   8, 128, 
       0,   0, 255, 128,  88,   0, 
       0,   4,   0,   0,   8, 128, 
       1,   0, 255, 128,   0,   0, 
-    255, 128,   1,   0,   0, 160, 
+    255, 128,   0,   0, 170, 160, 
       6,   0,   0,   2,   1,   0, 
       8, 128,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
@@ -1042,23 +1045,23 @@ const BYTE kHDRoomGlossPS[] =
     255, 128,   5,   0,   0,   3, 
       3,   0,   7, 128,   0,   0, 
     255, 128,   3,   0, 228, 128, 
-      5,   0,   0,   3,   2,   0, 
-      9, 128,   3,   0, 100, 128, 
-      5,   0, 100, 144,   2,   0, 
+      5,   0,   0,   3,   3,   0, 
+      3, 128,   3,   0, 228, 128, 
+      5,   0, 228, 144,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      2,   0, 255, 128,   2,   0, 
+      3,   0,  85, 128,   3,   0, 
       0, 128,   4,   0,   0,   4, 
       0,   0,   8, 128,   5,   0, 
     170, 144,   3,   0, 170, 128, 
       0,   0, 255, 128,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      0,   0, 255, 129,   0,   0, 
-    170, 160,   5,   0,   0,   3, 
+      0,   0, 255, 129,  73,   0, 
+    255, 160,   5,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
     255, 128,   1,   0, 255, 128, 
       5,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      1,   0,  85, 160,   4,   0, 
+      0,   0, 255, 160,   4,   0, 
       0,   4,   3,   0,   7, 128, 
       5,   0, 228, 128,   0,   0, 
     255, 128,   0,   0, 228, 128, 
@@ -1090,12 +1093,12 @@ const BYTE kHDRoomGlossPS[] =
     255, 129,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
       8, 128,   0,   0, 255, 128, 
-      0,   0, 255, 160,   7,   0, 
+      0,   0,  85, 160,   7,   0, 
       0,   2,   0,   0,   8, 128, 
       0,   0, 255, 128,  88,   0, 
       0,   4,   0,   0,   8, 128, 
       1,   0, 255, 128,   0,   0, 
-    255, 128,   1,   0,   0, 160, 
+    255, 128,   0,   0, 170, 160, 
       6,   0,   0,   2,   1,   0, 
       8, 128,   0,   0, 255, 128, 
       2,   0,   0,   3,   1,   0, 
@@ -1106,23 +1109,23 @@ const BYTE kHDRoomGlossPS[] =
     255, 128,   5,   0,   0,   3, 
       4,   0,   7, 128,   0,   0, 
     255, 128,   4,   0, 228, 128, 
-      5,   0,   0,   3,   2,   0, 
-      9, 128,   4,   0, 100, 128, 
-      5,   0, 100, 144,   2,   0, 
+      5,   0,   0,   3,   4,   0, 
+      3, 128,   4,   0, 228, 128, 
+      5,   0, 228, 144,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      2,   0, 255, 128,   2,   0, 
+      4,   0,  85, 128,   4,   0, 
       0, 128,   4,   0,   0,   4, 
       0,   0,   8, 128,   5,   0, 
     170, 144,   4,   0, 170, 128, 
       0,   0, 255, 128,   2,   0, 
       0,   3,   0,   0,   8, 128, 
-      0,   0, 255, 129,   0,   0, 
-    170, 160,   5,   0,   0,   3, 
+      0,   0, 255, 129,  73,   0, 
+    255, 160,   5,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
     255, 128,   1,   0, 255, 128, 
       5,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      1,   0,  85, 160,   4,   0, 
+      0,   0, 255, 160,   4,   0, 
       0,   4,   4,   0,   7, 128, 
       7,   0, 228, 128,   0,   0, 
     255, 128,   0,   0, 228, 128, 
@@ -1151,20 +1154,20 @@ const BYTE kHDRoomGlossPS[] =
       2,   0,   1, 128,   3,   0, 
     255, 128,   3,   0, 255, 129, 
       0,   0, 255, 128,   2,   0, 
-      0,   3,   2,   0,   8, 128, 
+      0,   3,   5,   0,   1, 128, 
       0,   0, 255, 128,   0,   0, 
-    255, 160,   7,   0,   0,   2, 
+     85, 160,   7,   0,   0,   2, 
       0,   0,   8, 128,   0,   0, 
     255, 128,  88,   0,   0,   4, 
-      0,   0,   8, 128,   2,   0, 
-    255, 128,   0,   0, 255, 128, 
-      1,   0,   0, 160,   6,   0, 
-      0,   2,   2,   0,   8, 128, 
+      0,   0,   8, 128,   5,   0, 
+      0, 128,   0,   0, 255, 128, 
+      0,   0, 170, 160,   6,   0, 
+      0,   2,   5,   0,   1, 128, 
       0,   0, 255, 128,   2,   0, 
-      0,   3,   2,   0,   8, 128, 
-      2,   0, 255, 129,   3,   0, 
-    255, 128,   5,   0,   0,   3, 
-      2,   0,   8, 128,   2,   0, 
+      0,   3,   3,   0,   8, 128, 
+      3,   0, 255, 128,   5,   0, 
+      0, 129,   5,   0,   0,   3, 
+      3,   0,   8, 128,   3,   0, 
     255, 128,   4,   0, 255, 128, 
       5,   0,   0,   3,   3,   0, 
       7, 128,   0,   0, 255, 128, 
@@ -1179,13 +1182,13 @@ const BYTE kHDRoomGlossPS[] =
       3,   0, 170, 128,   0,   0, 
     255, 128,   2,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
-    255, 129,   0,   0, 170, 160, 
+    255, 129,  73,   0, 255, 160, 
       5,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      2,   0, 255, 128,   5,   0, 
+      3,   0, 255, 128,   5,   0, 
       0,   3,   0,   0,   8, 128, 
-      0,   0, 255, 128,   1,   0, 
-     85, 160,   4,   0,   0,   4, 
+      0,   0, 255, 128,   0,   0, 
+    255, 160,   4,   0,   0,   4, 
       3,   0,   7, 128,   4,   0, 
     228, 128,   0,   0, 255, 128, 
       0,   0, 228, 128,  88,   0, 
@@ -1217,12 +1220,12 @@ const BYTE kHDRoomGlossPS[] =
       0,   0, 255, 128,   2,   0, 
       0,   3,   2,   0,   1, 128, 
       0,   0, 255, 128,   0,   0, 
-    255, 160,   7,   0,   0,   2, 
+     85, 160,   7,   0,   0,   2, 
       0,   0,   8, 128,   0,   0, 
     255, 128,  88,   0,   0,   4, 
       0,   0,   8, 128,   2,   0, 
       0, 128,   0,   0, 255, 128, 
-      1,   0,   0, 160,   6,   0, 
+      0,   0, 170, 160,   6,   0, 
       0,   2,   2,   0,   1, 128, 
       0,   0, 255, 128,   2,   0, 
       0,   3,   2,   0,   1, 128, 
@@ -1243,13 +1246,13 @@ const BYTE kHDRoomGlossPS[] =
       3,   0, 170, 128,   0,   0, 
     255, 128,   2,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
-    255, 129,   0,   0, 170, 160, 
+    255, 129,  73,   0, 255, 160, 
       5,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 128, 
       2,   0,   0, 128,   5,   0, 
       0,   3,   0,   0,   8, 128, 
-      0,   0, 255, 128,   1,   0, 
-     85, 160,   4,   0,   0,   4, 
+      0,   0, 255, 128,   0,   0, 
+    255, 160,   4,   0,   0,   4, 
       3,   0,   7, 128,   4,   0, 
     228, 128,   0,   0, 255, 128, 
       0,   0, 228, 128,  88,   0, 
@@ -1261,7 +1264,7 @@ const BYTE kHDRoomGlossPS[] =
       0,   0, 228, 128,   3,   0, 
     228, 128,  88,   0,   0,   4, 
       3,   0,  15, 128,   1,   0, 
-    255, 128,   2,   0,  85, 128, 
+    255, 128,   2,   0, 170, 129, 
      34,   0, 228, 160,   2,   0, 
       0,   3,   3,   0,   7, 128, 
       3,   0, 228, 129,   3,   0, 
@@ -1273,13 +1276,13 @@ const BYTE kHDRoomGlossPS[] =
       3,   0, 255, 129,   0,   0, 
     255, 128,   2,   0,   0,   3, 
       1,   0,   4, 128,   0,   0, 
-    255, 128,   0,   0, 255, 160, 
+    255, 128,   0,   0,  85, 160, 
       7,   0,   0,   2,   0,   0, 
       8, 128,   0,   0, 255, 128, 
      88,   0,   0,   4,   0,   0, 
       8, 128,   1,   0, 170, 128, 
-      0,   0, 255, 128,   1,   0, 
-      0, 160,   6,   0,   0,   2, 
+      0,   0, 255, 128,   0,   0, 
+    170, 160,   6,   0,   0,   2, 
       1,   0,   4, 128,   0,   0, 
     255, 128,   2,   0,   0,   3, 
       1,   0,   4, 128,   1,   0, 
@@ -1290,22 +1293,22 @@ const BYTE kHDRoomGlossPS[] =
       0,   3,   3,   0,   7, 128, 
       0,   0, 255, 128,   3,   0, 
     228, 128,   5,   0,   0,   3, 
-      2,   0,   9, 128,   3,   0, 
-    100, 128,   5,   0, 100, 144, 
+      3,   0,   3, 128,   3,   0, 
+    228, 128,   5,   0, 228, 144, 
       2,   0,   0,   3,   0,   0, 
-      8, 128,   2,   0, 255, 128, 
-      2,   0,   0, 128,   4,   0, 
+      8, 128,   3,   0,  85, 128, 
+      3,   0,   0, 128,   4,   0, 
       0,   4,   0,   0,   8, 128, 
       5,   0, 170, 144,   3,   0, 
     170, 128,   0,   0, 255, 128, 
       2,   0,   0,   3,   0,   0, 
       8, 128,   0,   0, 255, 129, 
-      0,   0, 170, 160,   5,   0, 
+     73,   0, 255, 160,   5,   0, 
       0,   3,   0,   0,   8, 128, 
       0,   0, 255, 128,   1,   0, 
     170, 128,   5,   0,   0,   3, 
       0,   0,   8, 128,   0,   0, 
-    255, 128,   1,   0,  85, 160, 
+    255, 128,   0,   0, 255, 160, 
       4,   0,   0,   4,   3,   0, 
       7, 128,  35,   0, 228, 160, 
       0,   0, 255, 128,   0,   0, 
@@ -1326,56 +1329,56 @@ const BYTE kHDRoomGlossPS[] =
     255, 128,  16,   0,  85, 160, 
      88,   0,   0,   4,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      1,   0,   0, 128,   0,   0, 
-     85, 160,   2,   0,   0,   3, 
+      1,   0,   0, 128,  73,   0, 
+    170, 161,   2,   0,   0,   3, 
       1,   0,  13, 128,   0,   0, 
     255, 129,   0,   0, 148, 128, 
       5,   0,   0,   3,   1,   0, 
      13, 128,   1,   0, 228, 128, 
-      1,   0, 170, 160,   8,   0, 
+      3,   0, 255, 160,   8,   0, 
       0,   3,   2,   0,   1, 128, 
       2,   0, 228, 144,   2,   0, 
     228, 144,   2,   0,   0,   3, 
-      2,   0,   8, 128,   2,   0, 
-      0, 128,   0,   0, 255, 160, 
+      3,   0,   1, 128,   2,   0, 
+      0, 128,   0,   0,  85, 160, 
       7,   0,   0,   2,   3,   0, 
-      1, 128,   2,   0,   0, 128, 
-     88,   0,   0,   4,   2,   0, 
-      8, 128,   2,   0, 255, 128, 
-      3,   0,   0, 128,   1,   0, 
-      0, 160,   5,   0,   0,   3, 
-      3,   0,   7, 128,   2,   0, 
-    255, 128,   2,   0, 228, 144, 
+      2, 128,   2,   0,   0, 128, 
+     88,   0,   0,   4,   3,   0, 
+      1, 128,   3,   0,   0, 128, 
+      3,   0,  85, 128,   0,   0, 
+    170, 160,   5,   0,   0,   3, 
+      3,   0,   7, 128,   3,   0, 
+      0, 128,   2,   0, 228, 144, 
       1,   0,   0,   2,   4,   0, 
       7, 128,   1,   0, 248, 128, 
       1,   0,   0,   2,   5,   0, 
-      7, 128,   0,   0,  85, 160, 
-      1,   0,   0,   2,   2,   0, 
-      8, 128,   0,   0,  85, 160, 
+      7, 128,  73,   0, 170, 161, 
       1,   0,   0,   2,   3,   0, 
-      8, 128,   0,   0,  85, 160, 
+      8, 128,  73,   0, 170, 161, 
+      1,   0,   0,   2,   4,   0, 
+      8, 128,  73,   0, 170, 161, 
      38,   0,   0,   1,   0,   0, 
     228, 240,   1,   0,   0,   2, 
-      4,   0,   8, 128,   1,   0, 
+      5,   0,   8, 128,   1,   0, 
      85, 128,  45,   0,   3,   2, 
-      3,   0, 255, 128,   4,   0, 
+      4,   0, 255, 128,   5,   0, 
     255, 128,   2,   0,   0,   3, 
-      4,   0,   8, 128,   3,   0, 
-    255, 128,   3,   0, 255, 128, 
+      5,   0,   8, 128,   4,   0, 
+    255, 128,   4,   0, 255, 128, 
       2,   0,   0,   3,   6,   0, 
-     15, 128,   4,   0, 255, 128, 
-      3,   0, 147, 161,   2,   0, 
+     15, 128,   5,   0, 255, 128, 
+      6,   0, 228, 160,   2,   0, 
       0,   3,   7,   0,  15, 128, 
-      4,   0, 255, 128,  73,   0, 
+      5,   0, 255, 128,   2,   0, 
     228, 160,   2,   0,   0,   3, 
-      8,   0,  15, 128,   4,   0, 
-    255, 128,   5,   0, 228, 160, 
+      8,   0,  15, 128,   5,   0, 
+    255, 128,  74,   0, 228, 160, 
       2,   0,   0,   3,   9,   0, 
-     15, 128,   4,   0, 255, 128, 
+     15, 128,   5,   0, 255, 128, 
      77,   0, 228, 160,  88,   0, 
       0,   4,  10,   0,  15, 128, 
       9,   0,   0, 140,  41,   0, 
-    228, 160,   2,   0,  85, 128, 
+    228, 160,   2,   0, 170, 129, 
      88,   0,   0,   4,  10,   0, 
      15, 128,   9,   0,  85, 140, 
      42,   0, 228, 160,  10,   0, 
@@ -1417,13 +1420,13 @@ const BYTE kHDRoomGlossPS[] =
       8,   0,   0, 140,  53,   0, 
     228, 160,   9,   0, 228, 128, 
       2,   0,   0,   3,  10,   0, 
-     15, 128,   4,   0, 255, 128, 
-     74,   0, 228, 160,   2,   0, 
+     15, 128,   5,   0, 255, 128, 
+     75,   0, 228, 161,   2,   0, 
       0,   3,  11,   0,  15, 128, 
-      4,   0, 255, 128,  75,   0, 
+      5,   0, 255, 128,   7,   0, 
     228, 160,   2,   0,   0,   3, 
-     12,   0,  15, 128,   4,   0, 
-    255, 128,   6,   0, 228, 160, 
+     12,   0,  15, 128,   5,   0, 
+    255, 128,   8,   0, 228, 160, 
      88,   0,   0,   4,   9,   0, 
      15, 128,   8,   0,  85, 140, 
      54,   0, 228, 160,   9,   0, 
@@ -1438,8 +1441,8 @@ const BYTE kHDRoomGlossPS[] =
      15, 128,  10,   0,   0, 140, 
      57,   0, 228, 160,   9,   0, 
     228, 128,   2,   0,   0,   3, 
-     13,   0,  15, 128,   4,   0, 
-    255, 128,  72,   0, 228, 160, 
+     13,   0,  15, 128,   5,   0, 
+    255, 128,   5,   0, 228, 160, 
      88,   0,   0,   4,   9,   0, 
      15, 128,  10,   0,  85, 140, 
      58,   0, 228, 160,   9,   0, 
@@ -1453,7 +1456,7 @@ const BYTE kHDRoomGlossPS[] =
      88,   0,   0,   4,  14,   0, 
      15, 128,  13,   0,   0, 140, 
      40,   0, 228, 160,   2,   0, 
-     85, 128,  88,   0,   0,   4, 
+    170, 129,  88,   0,   0,   4, 
      14,   0,  15, 128,  13,   0, 
      85, 140,  41,   0, 228, 160, 
      14,   0, 228, 128,  88,   0, 
@@ -1544,8 +1547,8 @@ const BYTE kHDRoomGlossPS[] =
      15, 128,  12,   0, 255, 140, 
      67,   0, 228, 160,   6,   0, 
     228, 128,   2,   0,   0,   3, 
-      7,   0,  15, 128,   4,   0, 
-    255, 128,   7,   0, 228, 160, 
+      7,   0,  15, 128,   5,   0, 
+    255, 128,   9,   0, 228, 160, 
      88,   0,   0,   4,   6,   0, 
      15, 128,   7,   0,   0, 140, 
      68,   0, 228, 160,   6,   0, 
@@ -1560,7 +1563,7 @@ const BYTE kHDRoomGlossPS[] =
      15, 128,   7,   0, 255, 140, 
      71,   0, 228, 160,   6,   0, 
     228, 128,   2,   0,   0,   3, 
-      7,   0,  15, 128,   4,   0, 
+      7,   0,  15, 128,   5,   0, 
     255, 128,  78,   0, 228, 160, 
      88,   0,   0,   4,   8,   0, 
      15, 128,  11,   0,   0, 140, 
@@ -1599,82 +1602,82 @@ const BYTE kHDRoomGlossPS[] =
       7,   0,  15, 128,   7,   0, 
     255, 140,  71,   0, 228, 160, 
       8,   0, 228, 128,   2,   0, 
-      0,   3,   4,   0,   8, 128, 
+      0,   3,   5,   0,   8, 128, 
       6,   0, 255, 128,   6,   0, 
     170, 128,  41,   0,   3,   2, 
-      4,   0, 255, 129,   0,   0, 
-     85, 160,   1,   0,   0,   2, 
-      4,   0,   8, 128,   0,   0, 
-     85, 160,  42,   0,   0,   0, 
-      5,   0,   0,   3,   5,   0, 
-      8, 128,   6,   0, 255, 128, 
+      5,   0, 255, 129,  73,   0, 
+    170, 161,   1,   0,   0,   2, 
+      5,   0,   8, 128,  73,   0, 
+    170, 161,  42,   0,   0,   0, 
+      5,   0,   0,   3,   8,   0, 
+      1, 128,   6,   0, 255, 128, 
       6,   0, 255, 128,   8,   0, 
-      0,   3,   8,   0,   1, 128, 
+      0,   3,   8,   0,   2, 128, 
       6,   0, 228, 128,   6,   0, 
     228, 128,   2,   0,   0,   3, 
-      8,   0,  14, 128,   6,   0, 
-    144, 128,   2,   0, 144, 145, 
+      9,   0,   7, 128,   6,   0, 
+    228, 128,   2,   0, 228, 145, 
       8,   0,   0,   3,   8,   0, 
-      2, 128,   8,   0, 249, 128, 
-      8,   0, 249, 128,  41,   0, 
-      4,   2,   8,   0,   0, 128, 
-      5,   0, 255, 128,   4,   0, 
-      0,   4,   5,   0,   8, 128, 
+      4, 128,   9,   0, 228, 128, 
+      9,   0, 228, 128,  41,   0, 
+      4,   2,   8,   0,  85, 128, 
+      8,   0,   0, 128,   4,   0, 
+      0,   4,   8,   0,   1, 128, 
       6,   0, 255, 128,   6,   0, 
-    255, 129,   8,   0,  85, 128, 
+    255, 129,   8,   0, 170, 128, 
       8,   0,   0,   3,   8,   0, 
-      4, 128,   6,   0, 228, 128, 
+      8, 128,   6,   0, 228, 128, 
       3,   0, 228, 128,   4,   0, 
-      0,   4,   8,   0,   8, 128, 
-      8,   0, 170, 128,   8,   0, 
-    170, 129,   8,   0,   0, 128, 
-      4,   0,   0,   4,   8,   0, 
-      8, 128,   6,   0, 255, 128, 
-      6,   0, 255, 128,   8,   0, 
-    255, 129,  11,   0,   0,   3, 
-      9,   0,   1, 128,   8,   0, 
-    255, 128,   0,   0,  85, 160, 
-      7,   0,   0,   2,   8,   0, 
-      8, 128,   9,   0,   0, 128, 
-      6,   0,   0,   2,   8,   0, 
-      8, 128,   8,   0, 255, 128, 
+      0,   4,   9,   0,   1, 128, 
+      8,   0, 255, 128,   8,   0, 
+    255, 129,   8,   0,  85, 128, 
+      4,   0,   0,   4,   9,   0, 
+      1, 128,   6,   0, 255, 128, 
+      6,   0, 255, 128,   9,   0, 
+      0, 129,  11,   0,   0,   3, 
+     10,   0,   1, 128,   9,   0, 
+      0, 128,  73,   0, 170, 161, 
+      7,   0,   0,   2,   9,   0, 
+      1, 128,  10,   0,   0, 128, 
+      6,   0,   0,   2,   9,   0, 
+      1, 128,   9,   0,   0, 128, 
       2,   0,   0,   3,   8,   0, 
-      4, 128,   8,   0, 255, 128, 
-      8,   0, 170, 128,   5,   0, 
+      8, 128,   8,   0, 255, 128, 
+      9,   0,   0, 128,   5,   0, 
       0,   3,   9,   0,   7, 128, 
       3,   0, 228, 128,   8,   0, 
-    170, 128,  88,   0,   0,   4, 
-      9,   0,   7, 128,   5,   0, 
-    255, 128,   9,   0, 228, 128, 
+    255, 128,  88,   0,   0,   4, 
+      9,   0,   7, 128,   8,   0, 
+      0, 128,   9,   0, 228, 128, 
       2,   0, 228, 144,   1,   0, 
       0,   2,  10,   0,   7, 128, 
-      0,   0,  85, 160,  42,   0, 
+     73,   0, 170, 161,  42,   0, 
       0,   0,   4,   0,   0,   4, 
-      5,   0,   8, 128,   6,   0, 
+      8,   0,   1, 128,   6,   0, 
     255, 128,   6,   0, 255, 129, 
-      8,   0,  85, 128,   8,   0, 
+      8,   0, 170, 128,   8,   0, 
       0,   3,   6,   0,   1, 128, 
       6,   0, 228, 128,   3,   0, 
     228, 128,   4,   0,   0,   4, 
       6,   0,   2, 128,   6,   0, 
       0, 128,   6,   0,   0, 129, 
-      8,   0,   0, 128,   4,   0, 
+      8,   0,  85, 128,   4,   0, 
       0,   4,   6,   0,   4, 128, 
       6,   0, 255, 128,   6,   0, 
     255, 128,   6,   0,  85, 129, 
      11,   0,   0,   3,   8,   0, 
-      1, 128,   6,   0, 170, 128, 
-      0,   0,  85, 160,   7,   0, 
+      2, 128,   6,   0, 170, 128, 
+     73,   0, 170, 161,   7,   0, 
       0,   2,   6,   0,   4, 128, 
-      8,   0,   0, 128,   6,   0, 
+      8,   0,  85, 128,   6,   0, 
       0,   2,   6,   0,   4, 128, 
       6,   0, 170, 128,   2,   0, 
-      0,   3,   8,   0,   1, 128, 
+      0,   3,   8,   0,   2, 128, 
       6,   0, 170, 129,   6,   0, 
       0, 128,   5,   0,   0,   3, 
-      8,   0,   7, 128,   3,   0, 
-    228, 128,   8,   0,   0, 128, 
-      4,   0,   0,   4,   8,   0, 
+      8,   0,  14, 128,   3,   0, 
+    144, 128,   8,   0,  85, 128, 
+      4,   0,   0,   4,   9,   0, 
       8, 128,   6,   0,   0, 128, 
       6,   0,   0, 128,   2,   0, 
       0, 129,   4,   0,   0,   4, 
@@ -1688,521 +1691,529 @@ const BYTE kHDRoomGlossPS[] =
     228, 128,   6,   0, 170, 128, 
      88,   0,   0,   4,  11,   0, 
       7, 128,   6,   0,  85, 128, 
-      0,   0,  85, 160,  11,   0, 
+     73,   0, 170, 161,  11,   0, 
     228, 128,  88,   0,   0,   4, 
      12,   0,   7, 128,   6,   0, 
-     85, 128,   0,   0,  85, 160, 
-      8,   0, 228, 128,  88,   0, 
+     85, 128,  73,   0, 170, 161, 
+      8,   0, 249, 128,  88,   0, 
       0,   4,  11,   0,   7, 128, 
-      8,   0, 255, 128,   3,   0, 
+      9,   0, 255, 128,   3,   0, 
     228, 128,  11,   0, 228, 128, 
      88,   0,   0,   4,  12,   0, 
-      7, 128,   8,   0, 255, 128, 
-      0,   0,  85, 160,  12,   0, 
+      7, 128,   9,   0, 255, 128, 
+     73,   0, 170, 161,  12,   0, 
     228, 128,  88,   0,   0,   4, 
      11,   0,   7, 128,   6,   0, 
       0, 129,   3,   0, 228, 128, 
      11,   0, 228, 128,  88,   0, 
       0,   4,   6,   0,   7, 128, 
-      6,   0,   0, 129,   0,   0, 
-     85, 160,  12,   0, 228, 128, 
+      6,   0,   0, 129,  73,   0, 
+    170, 161,  12,   0, 228, 128, 
      88,   0,   0,   4,  10,   0, 
-      7, 128,   5,   0, 255, 128, 
+      7, 128,   8,   0,   0, 128, 
      11,   0, 228, 128,   8,   0, 
-    228, 128,  88,   0,   0,   4, 
-      9,   0,   7, 128,   5,   0, 
-    255, 128,   6,   0, 228, 128, 
+    249, 128,  88,   0,   0,   4, 
+      9,   0,   7, 128,   8,   0, 
+      0, 128,   6,   0, 228, 128, 
       2,   0, 228, 144,  43,   0, 
       0,   0,   2,   0,   0,   3, 
       6,   0,   7, 128,  10,   0, 
     228, 129,   9,   0, 228, 128, 
-      8,   0,   0,   3,   5,   0, 
-      8, 128,   6,   0, 228, 128, 
+      8,   0,   0,   3,   6,   0, 
+      1, 128,   6,   0, 228, 128, 
       6,   0, 228, 128,   7,   0, 
-      0,   2,   5,   0,   8, 128, 
-      5,   0, 255, 128,   6,   0, 
-      0,   2,   5,   0,   8, 128, 
-      5,   0, 255, 128,   2,   0, 
-      0,   3,   6,   0,   1, 128, 
+      0,   2,   6,   0,   1, 128, 
+      6,   0,   0, 128,   6,   0, 
+      0,   2,   6,   0,   1, 128, 
+      6,   0,   0, 128,   2,   0, 
+      0,   3,   6,   0,   2, 128, 
       6,   0, 255, 128,   6,   0, 
     255, 128,   4,   0,   0,   4, 
-      6,   0,   2, 128,   6,   0, 
-    255, 128,   8,   0,   0, 160, 
-      8,   0,  85, 160,   6,   0, 
-      0,   2,   6,   0,   1, 128, 
-      6,   0,   0, 128,  88,   0, 
-      0,   4,   6,   0,   1, 128, 
-      6,   0,  85, 128,   6,   0, 
-      0, 128,   8,   0, 170, 160, 
+      6,   0,   4, 128,   6,   0, 
+    255, 128,  11,   0,   0, 160, 
+     11,   0,  85, 160,   6,   0, 
+      0,   2,   6,   0,   2, 128, 
+      6,   0,  85, 128,  88,   0, 
+      0,   4,   6,   0,   2, 128, 
+      6,   0, 170, 128,   6,   0, 
+     85, 128,  11,   0, 170, 160, 
       5,   0,   0,   3,   6,   0, 
-     17, 128,   5,   0, 255, 128, 
+     18, 128,   6,   0,  85, 128, 
       6,   0,   0, 128,   5,   0, 
-      0,   3,   5,   0,   8, 128, 
-      7,   0, 255, 128,   5,   0, 
-    255, 128,   5,   0,   0,   3, 
-      6,   0,  17, 128,   6,   0, 
-      0, 128,   8,   0, 255, 160, 
+      0,   3,   6,   0,   1, 128, 
+      7,   0, 255, 128,   6,   0, 
+      0, 128,   5,   0,   0,   3, 
+      6,   0,  18, 128,   6,   0, 
+     85, 128,  11,   0, 255, 160, 
       4,   0,   0,   4,   6,   0, 
-      2, 128,   6,   0,   0, 128, 
-     13,   0,   0, 160,  13,   0, 
+      4, 128,   6,   0,  85, 128, 
+     15,   0,   0, 160,  15,   0, 
      85, 160,   5,   0,   0,   3, 
-      6,   0,   1, 128,   6,   0, 
-      0, 128,   6,   0,   0, 128, 
+      6,   0,   2, 128,   6,   0, 
+     85, 128,   6,   0,  85, 128, 
       5,   0,   0,   3,   6,   0, 
-      1, 128,   6,   0,   0, 128, 
-      6,   0,  85, 128,   5,   0, 
-      0,   3,   4,   0,   8, 128, 
-      5,   0, 255, 128,   6,   0, 
+      2, 128,   6,   0,  85, 128, 
+      6,   0, 170, 128,   5,   0, 
+      0,   3,   5,   0,   8, 128, 
+      6,   0,  85, 128,   6,   0, 
       0, 128,  43,   0,   0,   0, 
       4,   0,   0,   4,   4,   0, 
-      7, 128,   4,   0, 255, 128, 
-     13,   0, 170, 161,   4,   0, 
+      7, 128,   5,   0, 255, 128, 
+     15,   0, 170, 161,   4,   0, 
     228, 128,   5,   0,   0,   3, 
       6,   0,   7, 128,   7,   0, 
-    228, 128,   4,   0, 255, 128, 
+    228, 128,   5,   0, 255, 128, 
       4,   0,   0,   4,   5,   0, 
       7, 128,   6,   0, 228, 128, 
-     13,   0, 170, 160,   5,   0, 
+     15,   0, 170, 160,   5,   0, 
     228, 128,   2,   0,   0,   3, 
-      2,   0,   8, 128,   2,   0, 
-    255, 128,   4,   0, 255, 128, 
-      2,   0,   0,   3,   3,   0, 
-      8, 128,   3,   0, 255, 128, 
-      0,   0, 170, 160,  39,   0, 
+      3,   0,   8, 128,   3,   0, 
+    255, 128,   5,   0, 255, 128, 
+      2,   0,   0,   3,   4,   0, 
+      8, 128,   4,   0, 255, 128, 
+     73,   0, 255, 160,  39,   0, 
       0,   0,   1,   0,   0,   2, 
       5,   0,  23, 128,   5,   0, 
     228, 128,  11,   0,   0,   3, 
       1,   0,   7, 128,   4,   0, 
-    228, 128,   0,   0,  85, 160, 
-     66,   0,   0,   3,   3,   0, 
+    228, 128,  73,   0, 170, 161, 
+     66,   0,   0,   3,   4,   0, 
      15, 128,   0,   0, 228, 144, 
-      0,   8, 228, 160,   5,   0, 
+      0,   8, 228, 160,   2,   0, 
+      0,   3,   6,   0,  15, 128, 
+      4,   0, 255, 128,   4,   0, 
+      0, 161,  65,   0,   0,   1, 
+      6,   0,  15, 128,   2,   0, 
+      0,   3,   6,   0,  15, 128, 
+      4,   0, 147, 128,  73,   0, 
+     84, 160,  88,   0,   0,   4, 
+      2,   0,   5, 128,   6,   0, 
+      0, 128,  73,   0, 229, 160, 
+     73,   0, 215, 160,   5,   0, 
+      0,   3,   7,   0,  15, 128, 
+      2,   0,   0, 128,   4,   0, 
+    170, 160,  65,   0,   0,   1, 
+      7,   0,  15, 128,   5,   0, 
       0,   3,   0,   0,   7, 128, 
-      0,   0, 228, 128,   1,   0, 
-    170, 160,  91,   0,   0,   2, 
-      4,   0,   7, 128,   3,   0, 
+      0,   0, 228, 128,   3,   0, 
+    255, 160,  91,   0,   0,   2, 
+      3,   0,   7, 128,   3,   0, 
     210, 144,  92,   0,   0,   2, 
-      6,   0,   7, 128,   3,   0, 
+      7,   0,   7, 128,   3,   0, 
     201, 144,   8,   0,   0,   3, 
-      1,   0,   8, 128,   4,   0, 
-    228, 128,   4,   0, 228, 128, 
+      1,   0,   8, 128,   3,   0, 
+    228, 128,   3,   0, 228, 128, 
       8,   0,   0,   3,   2,   0, 
-      1, 128,   6,   0, 228, 128, 
-      6,   0, 228, 128,  11,   0, 
-      0,   3,   4,   0,   8, 128, 
+      1, 128,   7,   0, 228, 128, 
+      7,   0, 228, 128,  11,   0, 
+      0,   3,   5,   0,   8, 128, 
       1,   0, 255, 128,   2,   0, 
       0, 128,   7,   0,   0,   2, 
-      1,   0,   8, 128,   4,   0, 
+      1,   0,   8, 128,   5,   0, 
     255, 128,   6,   0,   0,   2, 
       1,   0,   8, 128,   1,   0, 
     255, 128,   4,   0,   0,   4, 
       1,   0,  24, 128,   1,   0, 
-    255, 128,  13,   0, 255, 160, 
-     13,   0,   0, 161,   2,   0, 
+    255, 128,  15,   0, 255, 160, 
+     15,   0,   0, 161,   2,   0, 
       0,   3,   2,   0,   1, 128, 
-      9,   0,   0, 160,   4,   0, 
+     12,   0,   0, 160,   4,   0, 
     255, 145,   2,   0,   0,   3, 
-      7,   0,   7, 128,  10,   0, 
+      8,   0,   7, 128,  10,   0, 
     228, 160,   3,   0, 228, 144, 
       5,   0,   0,   3,   1,   0, 
       8, 128,   1,   0, 255, 128, 
       4,   0, 255, 144,   5,   0, 
       0,   3,   1,   0,   8, 128, 
-      1,   0, 255, 128,   9,   0, 
+      1,   0, 255, 128,  12,   0, 
      85, 160,   5,   0,   0,   3, 
-      8,   0,   7, 128,   4,   0, 
-    228, 128,   6,   0, 228, 128, 
-      4,   0,   0,   4,   4,   0, 
-      7, 128,   4,   0, 210, 128, 
-      6,   0, 201, 128,   8,   0, 
+      9,   0,   7, 128,   3,   0, 
+    228, 128,   7,   0, 228, 128, 
+      4,   0,   0,   4,   3,   0, 
+      7, 128,   3,   0, 210, 128, 
+      7,   0, 201, 128,   9,   0, 
     228, 129,   2,   0,   0,   3, 
-      2,   0,   2, 128,   4,   0, 
-      0, 140,   4,   0, 170, 139, 
-     88,   0,   0,   4,   6,   0, 
-     15, 128,   2,   0,  85, 128, 
-      7,   0,  68, 128,   7,   0, 
+      5,   0,   8, 128,   3,   0, 
+      0, 140,   3,   0, 170, 139, 
+     88,   0,   0,   4,   7,   0, 
+     15, 128,   5,   0, 255, 128, 
+      8,   0,  68, 128,   8,   0, 
     102, 128,  11,   0,   0,   3, 
-      2,   0,   2, 128,   4,   0, 
-      0, 139,   4,   0, 170, 139, 
-      2,   0,   0,   3,   2,   0, 
-      2, 128,   2,   0,  85, 129, 
-      4,   0,  85, 139,  88,   0, 
-      0,   4,   4,   0,  15, 128, 
-      2,   0,  85, 128,   7,   0, 
-    136, 128,   6,   0, 228, 128, 
-      1,   0,   0,   2,   2,   0, 
+      5,   0,   8, 128,   3,   0, 
+      0, 139,   3,   0, 170, 139, 
+      2,   0,   0,   3,   3,   0, 
+      1, 128,   3,   0,  85, 139, 
+      5,   0, 255, 129,  88,   0, 
+      0,   4,   7,   0,  15, 128, 
+      3,   0,   0, 128,   8,   0, 
+    136, 128,   7,   0, 228, 128, 
+      1,   0,   0,   2,   3,   0, 
       2, 128,  18,   0,  85, 160, 
-      5,   0,   0,   3,   6,   0, 
-      3, 128,   2,   0,  85, 128, 
-      9,   0, 238, 160,   4,   0, 
-      0,   4,   7,   0,   1, 128, 
-      4,   0,  85, 128,  11,   0, 
-      0, 160,   6,   0,   0, 128, 
+      5,   0,   0,   3,   3,   0, 
+      5, 128,   3,   0,  85, 128, 
+     12,   0, 246, 160,   4,   0, 
+      0,   4,   8,   0,   1, 128, 
+      7,   0,  85, 128,  13,   0, 
+      0, 160,   3,   0,   0, 128, 
+      4,   0,   0,   4,   8,   0, 
+      2, 128,   7,   0, 170, 128, 
+     13,   0,  85, 160,   3,   0, 
+    170, 129,   5,   0,   0,   3, 
+      3,   0,   5, 128,   8,   0, 
+    212, 128,  13,   0, 170, 160, 
+     19,   0,   0,   2,   3,   0, 
+      5, 128,   3,   0, 228, 128, 
+      4,   0,   0,   4,   3,   0, 
+      5, 128,   3,   0, 228, 128, 
+     76,   0,   0, 160,  76,   0, 
+     85, 160,   5,   0,   0,   3, 
+      7,   0,   6, 128,   3,   0, 
+    224, 139,   3,   0, 224, 139, 
+      4,   0,   0,   4,   3,   0, 
+      5, 128,   3,   0, 228, 139, 
+      1,   0,  85, 161,   1,   0, 
+    170, 160,   5,   0,   0,   3, 
+      3,   0,   5, 128,   3,   0, 
+    228, 128,   7,   0, 229, 128, 
+      4,   0,   0,   4,   3,   0, 
+      5, 128,   3,   0, 228, 128, 
+     76,   0,   0, 160,  76,   0, 
+     85, 160,   5,   0,   0,   3, 
+      3,   0,   5, 128,   3,   0, 
+    228, 128,  76,   0, 246, 160, 
+      4,   0,   0,   4,   3,   0, 
+      1, 128,   7,   0,   0, 128, 
+     13,   0, 255, 160,   3,   0, 
+      0, 128,   4,   0,   0,   4, 
+      7,   0,   1, 128,   3,   0, 
+     85, 128,  14,   0,   0, 160, 
+      3,   0,   0, 128,   4,   0, 
+      0,   4,   3,   0,   1, 128, 
+      7,   0, 255, 128,  14,   0, 
+     85, 160,   3,   0, 170, 129, 
       4,   0,   0,   4,   7,   0, 
-      2, 128,   4,   0, 170, 128, 
-     11,   0,  85, 160,   6,   0, 
-     85, 129,   5,   0,   0,   3, 
-      4,   0,   6, 128,   7,   0, 
-    208, 128,  11,   0, 170, 160, 
-     19,   0,   0,   2,   4,   0, 
-      6, 128,   4,   0, 228, 128, 
-      4,   0,   0,   4,   4,   0, 
-      6, 128,   4,   0, 228, 128, 
+      2, 128,   3,   0,  85, 128, 
+     14,   0, 170, 161,   3,   0, 
+      0, 128,   5,   0,   0,   3, 
+      3,   0,   3, 128,   7,   0, 
+    228, 128,  13,   0, 170, 160, 
+     19,   0,   0,   2,   3,   0, 
+      3, 128,   3,   0, 228, 128, 
+      4,   0,   0,   4,   3,   0, 
+      3, 128,   3,   0, 228, 128, 
      76,   0,   0, 160,  76,   0, 
      85, 160,   5,   0,   0,   3, 
-      6,   0,   3, 128,   4,   0, 
-    233, 139,   4,   0, 233, 139, 
-      4,   0,   0,   4,   4,   0, 
-      6, 128,   4,   0, 228, 139, 
-      2,   0,  85, 161,   2,   0, 
+      7,   0,   3, 128,   3,   0, 
+    228, 139,   3,   0, 228, 139, 
+      4,   0,   0,   4,   3,   0, 
+      3, 128,   3,   0, 228, 139, 
+      1,   0,  85, 161,   1,   0, 
     170, 160,   5,   0,   0,   3, 
-      4,   0,   6, 128,   4,   0, 
-    228, 128,   6,   0, 208, 128, 
-      4,   0,   0,   4,   4,   0, 
-      6, 128,   4,   0, 228, 128, 
-     76,   0,   0, 160,  76,   0, 
-     85, 160,   5,   0,   0,   3, 
-      4,   0,   6, 128,   4,   0, 
-    228, 128,  76,   0, 248, 160, 
-      4,   0,   0,   4,   4,   0, 
-      1, 128,   4,   0,   0, 128, 
-     11,   0, 255, 160,   4,   0, 
-     85, 128,   4,   0,   0,   4, 
-      4,   0,   1, 128,   2,   0, 
-     85, 128,  12,   0,   0, 160, 
-      4,   0,   0, 128,   4,   0, 
-      0,   4,   4,   0,   4, 128, 
-      4,   0, 255, 128,  12,   0, 
-     85, 160,   4,   0, 170, 129, 
-      4,   0,   0,   4,   4,   0, 
-      2, 128,   2,   0,  85, 128, 
-     12,   0, 170, 161,   4,   0, 
-    170, 128,   5,   0,   0,   3, 
-      4,   0,   3, 128,   4,   0, 
-    228, 128,  11,   0, 170, 160, 
-     19,   0,   0,   2,   4,   0, 
-      3, 128,   4,   0, 228, 128, 
-      4,   0,   0,   4,   4,   0, 
-      3, 128,   4,   0, 228, 128, 
-     76,   0,   0, 160,  76,   0, 
-     85, 160,   5,   0,   0,   3, 
-      4,   0,  12, 128,   4,   0, 
-     68, 139,   4,   0,  68, 139, 
-      4,   0,   0,   4,   4,   0, 
-      3, 128,   4,   0, 228, 139, 
-      2,   0,  85, 161,   2,   0, 
-    170, 160,   5,   0,   0,   3, 
-      4,   0,   3, 128,   4,   0, 
-    228, 128,   4,   0, 238, 128, 
-      4,   0,   0,   4,   4,   0, 
-      3, 128,   4,   0, 228, 128, 
+      3,   0,   3, 128,   3,   0, 
+    228, 128,   7,   0, 228, 128, 
+      4,   0,   0,   4,   3,   0, 
+      3, 128,   3,   0, 228, 128, 
      76,   0,   0, 160,  76,   0, 
      85, 160,   2,   0,   0,   3, 
-      2,   0,   2, 128,   4,   0, 
-     85, 128,   4,   0,   0, 128, 
-      4,   0,   0,   4,   2,   0, 
-      2, 128,   2,   0,  85, 139, 
-     38,   0,   0, 161,  38,   0, 
+      3,   0,   1, 128,   3,   0, 
+     85, 128,   3,   0,   0, 128, 
+      4,   0,   0,   4,   3,   0, 
+      1, 128,   3,   0,   0, 139, 
+     72,   0,   0, 161,  72,   0, 
      85, 160,   5,   0,   0,   3, 
-      2,   0,   2, 128,   2,   0, 
-     85, 128,   2,   0,  85, 128, 
-      5,   0,   0,   3,   4,   0, 
-      1, 128,   2,   0,  85, 128, 
-      2,   0,  85, 128,   4,   0, 
-      0,   4,   2,   0,   2, 128, 
-      4,   0,   0, 128,   2,   0, 
-     85, 128,  12,   0, 255, 160, 
+      3,   0,   1, 128,   3,   0, 
+      0, 128,   3,   0,   0, 128, 
+      5,   0,   0,   3,   3,   0, 
+      2, 128,   3,   0,   0, 128, 
+      3,   0,   0, 128,   4,   0, 
+      0,   4,   3,   0,   1, 128, 
+      3,   0,  85, 128,   3,   0, 
+      0, 128,  14,   0, 255, 160, 
       5,   0,   0,   3,   1,   0, 
       8, 128,   1,   0, 255, 128, 
-      2,   0,  85, 128,   4,   0, 
+      3,   0,   0, 128,   4,   0, 
       0,   4,   1,   0,   8, 128, 
-      1,   0, 255, 128,  38,   0, 
-    170, 160,  38,   0,  85, 160, 
-      5,   0,   0,   3,   4,   0, 
+      1,   0, 255, 128,  72,   0, 
+    170, 160,  72,   0,  85, 160, 
+      5,   0,   0,   3,   3,   0, 
       7, 128,   1,   0, 255, 128, 
       1,   0, 228, 128,  88,   0, 
-      0,   4,   4,   0,   7, 128, 
-      1,   0, 255, 128,   4,   0, 
-    228, 128,   0,   0,  85, 160, 
+      0,   4,   3,   0,   7, 128, 
+      1,   0, 255, 128,   3,   0, 
+    228, 128,  73,   0, 170, 161, 
      88,   0,   0,   4,   1,   0, 
       7, 128,   2,   0,   0, 128, 
-      1,   0, 228, 128,   4,   0, 
+      1,   0, 228, 128,   3,   0, 
     228, 128,   5,   0,   0,   3, 
       1,   0,   7, 128,   1,   0, 
-    228, 128,   3,   0, 228, 128, 
-      4,   0,   0,   4,   4,   0, 
+    228, 128,   4,   0, 228, 128, 
+      4,   0,   0,   4,   3,   0, 
       7, 128,   5,   0, 228, 128, 
       4,   0, 255, 160,   1,   0, 
     228, 128,   5,   0,   0,   3, 
-      1,   0,   8, 128,   2,   0, 
-    255, 128,  13,   0, 170, 160, 
+      1,   0,   8, 128,   3,   0, 
+    255, 128,  15,   0, 170, 160, 
       4,   0,   0,   4,   0,   0, 
       8, 128,   0,   0, 255, 128, 
-      1,   0, 170, 160,   1,   0, 
+      3,   0, 255, 160,   1,   0, 
     255, 128,   8,   0,   0,   3, 
       1,   0,   8, 128,   5,   0, 
     228, 144,   5,   0, 228, 144, 
       2,   0,   0,   3,   2,   0, 
       1, 128,   1,   0, 255, 128, 
-     38,   0, 255, 160,   7,   0, 
+     72,   0, 255, 160,   7,   0, 
       0,   2,   1,   0,   8, 128, 
       1,   0, 255, 128,  88,   0, 
       0,   4,   1,   0,   8, 128, 
       2,   0,   0, 128,   1,   0, 
-    255, 128,   8,   0, 170, 160, 
-      5,   0,   0,   3,   2,   0, 
-     11, 128,   1,   0, 255, 128, 
-      5,   0, 164, 144,  36,   0, 
-      0,   2,   5,   0,   7, 128, 
+    255, 128,  11,   0, 170, 160, 
+      5,   0,   0,   3,   5,   0, 
+      7, 128,   1,   0, 255, 128, 
+      5,   0, 228, 144,  36,   0, 
+      0,   2,   7,   0,   7, 128, 
       2,   0, 228, 145,   8,   0, 
-      0,   3,   6,   0,   1, 128, 
-      2,   0, 244, 128,  86,   0, 
-    228, 160,   8,   0,   0,   3, 
-      6,   0,   2, 128,   2,   0, 
-    244, 128,  87,   0, 228, 160, 
-      8,   0,   0,   3,   6,   0, 
-      4, 128,   2,   0, 244, 128, 
-     88,   0, 228, 160,   8,   0, 
-      0,   3,   7,   0,   1, 128, 
+      0,   3,   8,   0,   1, 128, 
       5,   0, 228, 128,  86,   0, 
     228, 160,   8,   0,   0,   3, 
-      7,   0,   2, 128,   5,   0, 
+      8,   0,   2, 128,   5,   0, 
     228, 128,  87,   0, 228, 160, 
-      8,   0,   0,   3,   7,   0, 
+      8,   0,   0,   3,   8,   0, 
       4, 128,   5,   0, 228, 128, 
      88,   0, 228, 160,   8,   0, 
+      0,   3,   5,   0,   1, 128, 
+      7,   0, 228, 128,  86,   0, 
+    228, 160,   8,   0,   0,   3, 
+      5,   0,   2, 128,   7,   0, 
+    228, 128,  87,   0, 228, 160, 
+      8,   0,   0,   3,   5,   0, 
+      4, 128,   7,   0, 228, 128, 
+     88,   0, 228, 160,   8,   0, 
       0,   3,   1,   0,   8, 128, 
-      6,   0, 228, 128,   7,   0, 
+      8,   0, 228, 128,   5,   0, 
     228, 128,  88,   0,   0,   4, 
-      2,   0,  11, 128,   1,   0, 
-    255, 128,   6,   0, 164, 128, 
-      6,   0, 164, 129,   4,   0, 
-      0,   4,   5,   0,  15, 128, 
-      2,   0,  36, 144,   0,   0, 
-    106, 160,   0,   0, 149, 160, 
-      9,   0,   0,   3,   6,   0, 
-      1, 128,   5,   0, 228, 128, 
+      7,   0,   7, 128,   1,   0, 
+    255, 128,   8,   0, 228, 128, 
+      8,   0, 228, 129,   4,   0, 
+      0,   4,   8,   0,  15, 128, 
+      2,   0,  36, 144,  73,   0, 
+    149, 161,  73,   0, 106, 161, 
+      9,   0,   0,   3,   9,   0, 
+      1, 128,   8,   0, 228, 128, 
      89,   0, 228, 160,   9,   0, 
-      0,   3,   6,   0,   2, 128, 
-      5,   0, 228, 128,  90,   0, 
+      0,   3,   9,   0,   2, 128, 
+      8,   0, 228, 128,  90,   0, 
     228, 160,   9,   0,   0,   3, 
-      6,   0,   4, 128,   5,   0, 
+      9,   0,   4, 128,   8,   0, 
     228, 128,  91,   0, 228, 160, 
-     66,   0,   0,   3,   5,   0, 
-     15, 128,   6,   0, 228, 128, 
+     66,   0,   0,   3,   8,   0, 
+     15, 128,   9,   0, 228, 128, 
       1,   8, 228, 160,  66,   0, 
-      0,   3,   6,   0,  15, 128, 
-      6,   0, 228, 128,   2,   8, 
+      0,   3,   9,   0,  15, 128, 
+      9,   0, 228, 128,   2,   8, 
     228, 160,   4,   0,   0,   4, 
-      5,   0,   7, 128,   5,   0, 
+      8,   0,   7, 128,   8,   0, 
     228, 128,  76,   0,   0, 160, 
      76,   0,  85, 160,   8,   0, 
-      0,   3,   4,   0,   8, 128, 
-      5,   0, 228, 128,   5,   0, 
+      0,   3,   2,   0,   1, 128, 
+      8,   0, 228, 128,   8,   0, 
     228, 128,   7,   0,   0,   2, 
-      4,   0,   8, 128,   4,   0, 
-    255, 128,   6,   0,   0,   2, 
-      6,   0,   8, 128,   4,   0, 
-    255, 128,   2,   0,   0,   3, 
-      7,   0,   8, 128,   6,   0, 
-    255, 128,  15,   0,   0, 160, 
-     88,   0,   0,   4,   4,   0, 
-      8, 128,   7,   0, 255, 128, 
-      4,   0, 255, 128,  15,   0, 
-     85, 160,   5,   0,   0,   3, 
-      8,   0,   7, 128,   4,   0, 
-    255, 128,   5,   0, 228, 128, 
-      4,   0,   0,   4,   5,   0, 
-      7, 128,   5,   0, 228, 128, 
-      4,   0, 255, 128,   7,   0, 
+      2,   0,   1, 128,   2,   0, 
+      0, 128,   6,   0,   0,   2, 
+      3,   0,   8, 128,   2,   0, 
+      0, 128,   2,   0,   0,   3, 
+      5,   0,   8, 128,   3,   0, 
+    255, 128,  38,   0,   0, 160, 
+     88,   0,   0,   4,   2,   0, 
+      1, 128,   5,   0, 255, 128, 
+      2,   0,   0, 128,  38,   0, 
+     85, 160,   4,   0,   0,   4, 
+      5,   0,   7, 128,   8,   0, 
+    228, 128,   2,   0,   0, 128, 
+      5,   0, 228, 128,   5,   0, 
+      0,   3,   8,   0,   7, 128, 
+      2,   0,   0, 128,   8,   0, 
     228, 128,   8,   0,   0,   3, 
-      4,   0,   8, 128,   5,   0, 
+      2,   0,   1, 128,   5,   0, 
     228, 128,   5,   0, 228, 128, 
-      2,   0,   0,   3,   7,   0, 
-      1, 128,   4,   0, 255, 128, 
-     38,   0, 255, 160,   7,   0, 
-      0,   2,   4,   0,   8, 128, 
-      4,   0, 255, 128,  88,   0, 
-      0,   4,   4,   0,   8, 128, 
-      7,   0,   0, 128,   4,   0, 
-    255, 128,   8,   0, 170, 160, 
+      2,   0,   0,   3,   5,   0, 
+      8, 128,   2,   0,   0, 128, 
+     72,   0, 255, 160,   7,   0, 
+      0,   2,   2,   0,   1, 128, 
+      2,   0,   0, 128,  88,   0, 
+      0,   4,   2,   0,   1, 128, 
+      5,   0, 255, 128,   2,   0, 
+      0, 128,  11,   0, 170, 160, 
       5,   0,   0,   3,   5,   0, 
-      7, 128,   4,   0, 255, 128, 
+      7, 128,   2,   0,   0, 128, 
       5,   0, 228, 128,   8,   0, 
-      0,   3,   4,   0,  24, 128, 
-      2,   0, 244, 128,   5,   0, 
+      0,   3,   2,   0,  17, 128, 
+      7,   0, 228, 128,   5,   0, 
     228, 128,  32,   0,   0,   3, 
-      5,   0,   1, 128,   4,   0, 
-    255, 128,  19,   0,  85, 160, 
+      5,   0,   1, 128,   2,   0, 
+      0, 128,  19,   0,  85, 160, 
       8,   0,   0,   3,   2,   0, 
-     17, 128,   2,   0, 244, 128, 
+     17, 128,   7,   0, 228, 128, 
       8,   0, 228, 128,   5,   0, 
       0,   3,   2,   0,   1, 128, 
       2,   0,   0, 128,   5,   0, 
       0, 128,  11,   0,   0,   3, 
-      2,   0,   2, 128,   3,   0, 
-     85, 128,   3,   0, 170, 128, 
-     11,   0,   0,   3,   4,   0, 
-      8, 128,   3,   0,   0, 128, 
-      2,   0,  85, 128,   2,   0, 
-      0,   3,   2,   0,   2, 128, 
-      4,   0, 255, 128,  15,   0, 
+      5,   0,   1, 128,   4,   0, 
+     85, 128,   4,   0, 170, 128, 
+     11,   0,   0,   3,   6,   0, 
+      1, 128,   4,   0,   0, 128, 
+      5,   0,   0, 128,   2,   0, 
+      0,   3,   5,   0,   1, 128, 
+      6,   0,   0, 128,  38,   0, 
     170, 160,   6,   0,   0,   2, 
-      2,   0,   8, 128,   4,   0, 
-    255, 128,  88,   0,   0,   4, 
-      2,   0,   2, 128,   2,   0, 
-     85, 128,   2,   0, 255, 128, 
-      1,   0, 255, 160,   4,   0, 
-      0,   4,   5,   0,   7, 128, 
-      3,   0, 228, 128,   2,   0, 
-     85, 128,   0,   0, 170, 161, 
-      4,   0,   0,   4,   5,   0, 
+      5,   0,   2, 128,   6,   0, 
+      0, 128,  88,   0,   0,   4, 
+      5,   0,   1, 128,   5,   0, 
+      0, 128,   5,   0,  85, 128, 
+     75,   0,   0, 160,   4,   0, 
+      0,   4,   4,   0,   7, 128, 
+      4,   0, 228, 128,   5,   0, 
+      0, 128,  73,   0,  85, 160, 
+      4,   0,   0,   4,   4,   0, 
       7, 128,  36,   0,  85, 160, 
-      5,   0, 228, 128,   2,   0, 
-    170, 128,   5,   0,   0,   3, 
-      5,   0,   7, 128,   5,   0, 
-    228, 128,   6,   0, 228, 128, 
-      1,   0,   0,   2,   6,   0, 
-     24, 128,   6,   0, 255, 128, 
-      5,   0,   0,   3,   2,   0, 
-      2, 128,   5,   0, 255, 128, 
-      6,   0, 255, 128,   5,   0, 
+      4,   0, 228, 128,   2,   0, 
+    255, 128,   5,   0,   0,   3, 
+      4,   0,   7, 128,   4,   0, 
+    228, 128,   9,   0, 228, 128, 
+      1,   0,   0,   2,   3,   0, 
+     24, 128,   3,   0, 255, 128, 
+      5,   0,   0,   3,   3,   0, 
+      8, 128,   3,   0, 255, 128, 
+      8,   0, 255, 128,   5,   0, 
       0,   3,   2,   0,   1, 128, 
-      2,   0,   0, 128,   2,   0, 
-     85, 128,   5,   0,   0,   3, 
+      2,   0,   0, 128,   3,   0, 
+    255, 128,   5,   0,   0,   3, 
       2,   0,   1, 128,   2,   0, 
       0, 128,   3,   0,  85, 160, 
-      1,   0,   0,   2,   7,   0, 
+      1,   0,   0,   2,   5,   0, 
       9, 128,  36,   0, 228, 160, 
-      2,   0,   0,   3,   7,   0, 
-      7, 128,   7,   0, 243, 129, 
-     14,   0, 228, 160,   4,   0, 
-      0,   4,   8,   0,   7, 128, 
-      8,   0, 228, 128,  38,   0, 
-      0, 160,  38,   0,   0, 160, 
-      5,   0,   0,   3,   6,   0, 
-      7, 128,   5,   0, 255, 128, 
-      6,   0, 228, 128,  88,   0, 
-      0,   4,   6,   0,   7, 128, 
-      7,   0,   0, 128,   6,   0, 
-    228, 128,   8,   0, 228, 128, 
-      2,   0,   0,   3,   8,   0, 
-     15, 128,   3,   0, 228, 128, 
-      0,   0, 170, 161,   4,   0, 
-      0,   4,   8,   0,  15, 128, 
-     36,   0, 149, 160,   8,   0, 
-    228, 128,   2,   0, 170, 128, 
+      2,   0,   0,   3,   5,   0, 
+      7, 128,   5,   0, 243, 129, 
+     37,   0, 228, 160,   4,   0, 
+      0,   4,   7,   0,   7, 128, 
+      8,   0, 228, 128,  72,   0, 
+      0, 160,  72,   0,   0, 160, 
+      5,   0,   0,   3,   8,   0, 
+      7, 128,   8,   0, 255, 128, 
+      9,   0, 228, 128,  88,   0, 
+      0,   4,   7,   0,   7, 128, 
+      5,   0,   0, 128,   8,   0, 
+    228, 128,   7,   0, 228, 128, 
+      4,   0,   0,   4,   6,   0, 
+      7, 128,  36,   0,  85, 160, 
+      6,   0, 249, 128,   2,   0, 
+    255, 128,   5,   0,   0,   3, 
+      0,   0,   7, 128,   0,   0, 
+    228, 128,   6,   0, 228, 128, 
       5,   0,   0,   3,   0,   0, 
       7, 128,   0,   0, 228, 128, 
-      8,   0, 228, 128,   5,   0, 
-      0,   3,   0,   0,   7, 128, 
-      0,   0, 228, 128,  15,   0, 
-    255, 160,   2,   0,   0,   3, 
-      1,   0,   8, 128,   1,   0, 
-    255, 140,   0,   0, 170, 160, 
-      5,   0,   0,   3,   2,   0, 
-      2, 128,   1,   0, 255, 128, 
-      1,   0, 255, 128,   5,   0, 
-      0,   3,   2,   0,   2, 128, 
-      2,   0,  85, 128,   2,   0, 
-     85, 128,   5,   0,   0,   3, 
-      1,   0,   8, 128,   1,   0, 
-    255, 128,   2,   0,  85, 128, 
-      4,   0,   0,   4,   1,   0, 
-      8, 128,   7,   0,  85, 128, 
-      1,   0, 255, 128,  36,   0, 
+     38,   0, 255, 160,   2,   0, 
+      0,   3,   1,   0,   8, 128, 
+      1,   0, 255, 140,  73,   0, 
+    255, 160,   5,   0,   0,   3, 
+      3,   0,   8, 128,   1,   0, 
+    255, 128,   1,   0, 255, 128, 
+      5,   0,   0,   3,   3,   0, 
+      8, 128,   3,   0, 255, 128, 
+      3,   0, 255, 128,   5,   0, 
+      0,   3,   1,   0,   8, 128, 
+      1,   0, 255, 128,   3,   0, 
+    255, 128,   4,   0,   0,   4, 
+      1,   0,   8, 128,   5,   0, 
+     85, 128,   1,   0, 255, 128, 
+     36,   0,   0, 160,   5,   0, 
+      0,   3,   1,   0,   8, 128, 
+      1,   0, 255, 128,  19,   0, 
       0, 160,   5,   0,   0,   3, 
       1,   0,   8, 128,   1,   0, 
-    255, 128,  19,   0,   0, 160, 
+    255, 128,  19,   0, 170, 160, 
+      2,   0,   0,   3,   3,   0, 
+      8, 128,   4,   0, 255, 128, 
+     73,   0,  85, 160,   4,   0, 
+      0,   4,   2,   0,   8, 128, 
+     36,   0, 170, 160,   3,   0, 
+    255, 128,   2,   0, 255, 128, 
       5,   0,   0,   3,   1,   0, 
       8, 128,   1,   0, 255, 128, 
-     19,   0, 170, 160,   5,   0, 
-      0,   3,   1,   0,   8, 128, 
-      8,   0, 255, 128,   1,   0, 
-    255, 128,   4,   0,   0,   4, 
-      0,   0,   7, 128,   5,   0, 
-    228, 128,   2,   0,   0, 128, 
-      0,   0, 228, 128,   4,   0, 
+      2,   0, 255, 128,   4,   0, 
       0,   4,   0,   0,   7, 128, 
-      0,   0, 228, 128,   1,   0, 
-    255, 128,   0,   0, 255, 129, 
-     11,   0,   0,   3,   2,   0, 
-     11, 128,   0,   0, 164, 128, 
-      0,   0,  85, 160,  11,   0, 
-      0,   3,   0,   0,   1, 128, 
-      1,   0,  85, 128,   1,   0, 
+      4,   0, 228, 128,   2,   0, 
+      0, 128,   0,   0, 228, 128, 
+      4,   0,   0,   4,   0,   0, 
+      7, 128,   0,   0, 228, 128, 
+      1,   0, 255, 128,   0,   0, 
+    255, 129,  11,   0,   0,   3, 
+      4,   0,   7, 128,   0,   0, 
+    228, 128,  73,   0, 170, 161, 
+     11,   0,   0,   3,   0,   0, 
+      1, 128,   1,   0,  85, 128, 
+      1,   0, 170, 128,  11,   0, 
+      0,   3,   2,   0,   1, 128, 
+      1,   0,   0, 128,   0,   0, 
+      0, 128,   4,   0,   0,   4, 
+      0,   0,   3, 128,   2,   0, 
+      0, 128,  39,   0,   0, 160, 
+     39,   0, 233, 160,  11,   0, 
+      0,   3,   0,   0,   4, 128, 
+      4,   0,  85, 128,   4,   0, 
     170, 128,  11,   0,   0,   3, 
-      3,   0,   1, 128,   1,   0, 
-      0, 128,   0,   0,   0, 128, 
-      4,   0,   0,   4,   0,   0, 
-      3, 128,   3,   0,   0, 128, 
-     37,   0,   0, 160,  37,   0, 
-    233, 160,  11,   0,   0,   3, 
-      0,   0,   4, 128,   2,   0, 
-     85, 128,   2,   0, 255, 128, 
-     11,   0,   0,   3,   1,   0, 
-      1, 128,   2,   0,   0, 128, 
-      0,   0, 170, 128,   6,   0, 
-      0,   2,   0,   0,   1, 128, 
-      0,   0,   0, 128,  88,   0, 
-      0,   4,   0,   0,   1, 128, 
-      0,   0,  85, 128,  14,   0, 
-    255, 160,   0,   0,   0, 128, 
-      5,   0,   0,   3,   0,   0, 
-      2, 128,   0,   0,   0, 128, 
-      1,   0,   0, 128,   5,   0, 
-      0,   3,   0,   0,   4, 128, 
-      0,   0,  85, 128,  37,   0, 
-    255, 160,  14,   0,   0,   2, 
-      0,   0,   4, 128,   0,   0, 
-    170, 128,   2,   0,   0,   3, 
-      0,   0,   4, 128,   0,   0, 
-    170, 129,   0,   0, 170, 160, 
-      4,   0,   0,   4,   0,   0, 
-      1, 128,   1,   0,   0, 128, 
-      0,   0,   0, 128,   8,   0, 
-     85, 160,   6,   0,   0,   2, 
+      1,   0,   1, 128,   4,   0, 
+      0, 128,   0,   0, 170, 128, 
+      6,   0,   0,   2,   0,   0, 
+      1, 128,   0,   0,   0, 128, 
+     88,   0,   0,   4,   0,   0, 
+      1, 128,   0,   0,  85, 128, 
+     37,   0, 255, 160,   0,   0, 
+      0, 128,   5,   0,   0,   3, 
       0,   0,   2, 128,   0,   0, 
-     85, 128,  88,   0,   0,   4, 
-      0,   0,   1, 128,   0,   0, 
-      0, 128,   0,   0,  85, 128, 
-      8,   0, 170, 160,   5,   0, 
-      0,   3,   0,   0,   1, 128, 
-      0,   0,   0, 128,   0,   0, 
-    170, 128,   5,   0,   0,   3, 
-      0,   0,   7, 128,   0,   0, 
-      0, 128,   2,   0, 244, 128, 
-      2,   0,   0,   3,   1,   0, 
-     23, 128,   4,   0, 228, 129, 
-      0,   0, 170, 160,   4,   0, 
-      0,   4,   0,   0,   7, 128, 
-      0,   0, 228, 128,   1,   0, 
-    228, 128,   4,   0, 228, 128, 
-     88,   0,   0,   4,   0,   8, 
-      7, 128,   7,   0, 170, 128, 
-      0,   0, 228, 128,   6,   0, 
-    228, 128,   2,   0,   0,   3, 
-      0,   0,  15, 128,   3,   0, 
-    255, 128,   4,   0,   0, 161, 
-     65,   0,   0,   1,   0,   0, 
-     15, 128,   5,   0,   0,   3, 
-      0,   0,   1, 128,   3,   0, 
-    255, 128,  19,   0, 255, 160, 
-      2,   0,   0,   3,   0,   0, 
-      2, 128,   2,   0, 170, 129, 
-     19,   0, 255, 160,   2,   0, 
+      0, 128,   1,   0,   0, 128, 
+      5,   0,   0,   3,   0,   0, 
+      4, 128,   0,   0,  85, 128, 
+     39,   0, 255, 160,  14,   0, 
+      0,   2,   0,   0,   4, 128, 
+      0,   0, 170, 128,   2,   0, 
       0,   3,   0,   0,   4, 128, 
-      3,   0, 255, 128,  39,   0, 
-      0, 160,  88,   0,   0,   4, 
-      0,   0,   4, 128,   0,   0, 
-    170, 128,   0,   0,  85, 161, 
-      0,   0, 170, 161,  88,   0, 
-      0,   4,   0,   0,   2, 128, 
-      0,   0,  85, 128,   0,   0, 
-     85, 160,   0,   0, 170, 128, 
-     88,   0,   0,   4,   0,   8, 
-      8, 128,   0,   0,  85, 128, 
+      0,   0, 170, 129,  73,   0, 
+    255, 160,   4,   0,   0,   4, 
+      0,   0,   1, 128,   1,   0, 
+      0, 128,   0,   0,   0, 128, 
+     11,   0,  85, 160,   6,   0, 
+      0,   2,   0,   0,   2, 128, 
+      0,   0,  85, 128,  88,   0, 
+      0,   4,   0,   0,   1, 128, 
       0,   0,   0, 128,   0,   0, 
-    170, 160, 255, 255,   0,   0
+     85, 128,  11,   0, 170, 160, 
+      5,   0,   0,   3,   0,   0, 
+      1, 128,   0,   0,   0, 128, 
+      0,   0, 170, 128,   5,   0, 
+      0,   3,   0,   0,   7, 128, 
+      0,   0,   0, 128,   4,   0, 
+    228, 128,   2,   0,   0,   3, 
+      1,   0,  23, 128,   3,   0, 
+    228, 129,  73,   0, 255, 160, 
+      4,   0,   0,   4,   0,   0, 
+      7, 128,   0,   0, 228, 128, 
+      1,   0, 228, 128,   3,   0, 
+    228, 128,  88,   0,   0,   4, 
+      0,   8,   7, 128,   5,   0, 
+    170, 128,   0,   0, 228, 128, 
+      7,   0, 228, 128,   5,   0, 
+      0,   3,   0,   0,   1, 128, 
+      4,   0, 255, 128,  19,   0, 
+    255, 160,   2,   0,   0,   3, 
+      0,   0,   2, 128,   2,   0, 
+     85, 128,  19,   0, 255, 160, 
+     88,   0,   0,   4,   0,   0, 
+      2, 128,   0,   0,  85, 128, 
+     73,   0, 170, 161,   2,   0, 
+    170, 128,  88,   0,   0,   4, 
+      0,   8,   8, 128,   0,   0, 
+     85, 128,   0,   0,   0, 128, 
+     73,   0, 255, 160, 255, 255, 
+      0,   0
 };
-// bshader-stamp 4c5c3a8d2db01a14a3c75c8cb50db61a
+// bshader-stamp a96e739c1c2c30fe043af355ad6063a7

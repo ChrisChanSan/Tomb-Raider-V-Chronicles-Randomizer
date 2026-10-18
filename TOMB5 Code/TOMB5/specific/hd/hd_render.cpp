@@ -425,6 +425,45 @@ namespace
 		return opacity;
 	}
 
+	/* Whether a see-through draw call is a frame with glass in it, drawn in
+	 * two halves.
+	 *
+	 * A page can paint a window's frame on clear texels in its own colour
+	 * and only the panes on partial ones: ANDREA2's window grid, page 3007,
+	 * is 80.6 % texels under 16 of 255 (the frame, mean colour 106, 82, 60)
+	 * and 19.4 % partial ones (the panes, alpha near 0.52), no texel opaque.
+	 * The classic mesh in its place draws the frame solid and the panes
+	 * additive: 260 quads with effects bit 0 clear, drawn opaque, and 70
+	 * with it set, ONE / ONE (output.cpp, polyinsert.cpp). Drawn as one
+	 * blended draw call without a depth write, the frame's own back faces,
+	 * the hall behind it and the mirror drawn after the glass all came
+	 * through the bars, and the panes at a tenth of their alpha were gone.
+	 *
+	 * So such a draw call is drawn as the classic draws its window: its
+	 * clear texels with the solid ranges of the alpha pass, without the
+	 * alpha test and with the depth write, before everything that is sorted
+	 * against the frame; its other texels in the glass's phase with the
+	 * classic's own blend for its glass, ONE / ONE and the specular off -
+	 * the texel times its light added to what lies behind. The room shader
+	 * keeps one half's texels per draw (hd_room.hlsl, gPass.z).
+	 *
+	 * Which pages: a texel under 16 at all, and more than half of the page
+	 * below the alpha test's reference (HDPageCacheSlotCutoutPermille,
+	 * 500). Over the 74 see-through parts of the fifteen levels' alpha
+	 * passes the page shares run 856 per mille (page 3007) and then 116
+	 * (RICH3's page 10084, whose triangles cover no clear texel), 46, 12
+	 * and 0, so only ANDREA2's grid and its flip twin split; every other
+	 * glass is drawn as it was. */
+#define HD_GLASS_CLEAR_BELOW	16	// a clear texel, of 255
+#define HD_GLASS_FRAME_PERMILLE	500	// more than half the page below 0.5
+
+	inline bool GlassSplits(float blend, int clear, int slot)
+	{
+		return blend > 0.0f && blend < 1.0f && !clear &&
+			HDPageCacheSlotAlphaMin(slot) < HD_GLASS_CLEAR_BELOW &&
+			HDPageCacheSlotCutoutPermille(slot) > HD_GLASS_FRAME_PERMILLE;
+	}
+
 	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
 	{
 		float weight;
@@ -9937,8 +9976,9 @@ namespace
 			return;
 
 		/* gPass: x is the alpha reference - a texel below it is thrown away
-		 * and zero throws nothing away - y the additive weighting, z unread
-		 * by the room shaders (0), w the specular add - the
+		 * and zero throws nothing away - y the additive weighting, z the
+		 * half of a split draw call (0 here, see GlassSplits), w the
+		 * specular add - the
 		 * classic path switches D3DRS_SPECULARENABLE off for its additive
 		 * draw type (HWR_DrawSortList, polyinsert.cpp) and the overbright half of the room
 		 * colour goes off with it. The PIXEL constant file only: the room
@@ -10064,6 +10104,11 @@ namespace
 		int glow_up = -1;
 		// Whether the blend is off for an opaque clear floor (see below).
 		bool opaque_on = false;
+		/* The half of a split draw call on the device (GlassSplits): gPass.z
+		 * as last written, 1 the frame, -1 the glass, 0 everything else; and
+		 * whether the glass's ONE / ONE is set. */
+		float split_now = 0.0f;
+		bool pane_on = false;
 		/* The cull mode on the device. The bracket installs D3DCULL_NONE,
 		 * the ranges RangeCulls picks switch it to D3DCULL_CCW, and the end
 		 * of the pass puts NONE back, so a model drawn between two rooms
@@ -10137,14 +10182,45 @@ namespace
 
 		for (const HDRange& range : group.pass[pass])
 		{
+			/* A frame with glass in it is drawn in both phases, its frame
+			 * with the solid ranges and its glass with the glass - see
+			 * GlassSplits. */
+			const bool split = pass == 1 && !sky &&
+				GlassSplits(range.blend, range.clear, range.pageSlot);
+
 			// This phase draws the see-through ranges or the solid ones,
 			// never both - see the note on `blendOnly`.
-			if ((range.blend != 0.0f) != blendOnly)
+			if ((range.blend != 0.0f) != blendOnly && !(split && !blendOnly))
 				continue;
 
 			// And the see-through half draws its floors or its glass.
 			if (blendOnly && (range.clear != 0) != clearOnly)
 				continue;
+
+			/* The half: the frame without the alpha test, which its clear
+			 * texels would fail; the glass without the specular, as the
+			 * classic's additive draw type has it. Written only where the
+			 * half changes, so every other draw call keeps the constant
+			 * the top of the pass wrote. */
+			const float want_split = !split ? 0.0f : blendOnly ? -1.0f : 1.0f;
+
+			if (want_split != split_now)
+			{
+				split_now = want_split;
+				constants[0] = blendOnly || split ? 0.0f : 0.5f;
+				constants[2] = split_now;
+				constants[3] = split && blendOnly ? 0.0f : 1.0f;
+				g_device->SetPixelShaderConstantF(4, constants, 1);
+			}
+
+			if (blendOnly && split != pane_on)
+			{
+				pane_on = split;
+				g_device->SetRenderState(D3DRS_SRCBLEND,
+					pane_on ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+				g_device->SetRenderState(D3DRS_DESTBLEND,
+					pane_on ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
+			}
 
 			/* And this call draws the art that is drawn whole or the art
 			 * that is drawn inside the window, never both - the two are
@@ -10575,6 +10651,20 @@ namespace
 				g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
 				g_device->SetSamplerState(0, D3DSAMP_MAXANISOTROPY, kept_taps);
 			}
+		}
+
+		// A pass that ended on a split draw call puts the glass's blend
+		// and gPass.z back.
+		if (pane_on)
+		{
+			g_device->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+			g_device->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+		}
+
+		if (split_now != 0.0f)
+		{
+			constants[2] = 0.0f;
+			g_device->SetPixelShaderConstantF(4, constants, 1);
 		}
 
 		if (pass == 2 || blendOnly)

@@ -64,6 +64,7 @@
 #include "hd_water_under.h"		// the eye's depth under the water
 #include "hd_spring.h"			// a row's `spring` key
 #include "hd_sky_cap.h"			// the sky band's closed poles
+#include "hd_debris.h"			// the glass's pages and its hue
 
 #include <algorithm>
 #include <array>
@@ -465,21 +466,20 @@ namespace
 	 *
 	 * Which pages: a texel under 16 at all, and more than half of the page
 	 * below the alpha test's reference (HDPageCacheSlotCutoutPermille,
-	 * 500). Both are the whole page's, texels no triangle covers among
-	 * them; the draw call carries its page and not its texels. Over the 74
+	 * 500; HDGlassFramePage, hd_debris_rules.h, which the pieces of a
+	 * broken static read too). Both are the whole page's, texels no
+	 * triangle covers among them; the draw call carries its page and not
+	 * its texels. Over the 74
 	 * see-through parts of the fifteen levels' alpha passes the page
 	 * shares run 856 per mille (page 3007) and then 116
 	 * (RICH3's page 10084, whose triangles cover no clear texel), 46, 12
 	 * and 0, so only ANDREA2's grid and its flip twin split; every other
 	 * glass is drawn as it was. */
-#define HD_GLASS_CLEAR_BELOW	16	// a clear texel, of 255
-#define HD_GLASS_FRAME_PERMILLE	500	// more than half the page below 0.5
-
 	inline bool GlassSplits(float blend, int clear, int slot)
 	{
 		return blend > 0.0f && blend < 1.0f && !clear &&
-			HDPageCacheSlotAlphaMin(slot) < HD_GLASS_CLEAR_BELOW &&
-			HDPageCacheSlotCutoutPermille(slot) > HD_GLASS_FRAME_PERMILLE;
+			HDGlassFramePage(HDPageCacheSlotAlphaMin(slot),
+				HDPageCacheSlotCutoutPermille(slot));
 	}
 
 	/* Whether an additive draw call is glass, added as the classic adds it.
@@ -510,8 +510,33 @@ namespace
 	inline bool AddGlass(int material, int slot)
 	{
 		return material == HD_TRG_MATERIAL_DECAL &&
-			HDPageCacheSlotAlphaMin(slot) >= HD_GLASS_CLEAR_BELOW;
+			HDGlassWholePage(HDPageCacheSlotAlphaMin(slot));
 	}
+
+	/* The glass's hue (hd_debris_rules.h, "the glass's look"): every draw
+	 * call of a room group that the room draw may draw as the classic's
+	 * glass - a see-through range of the alpha pass, an additive range of
+	 * material 14 - with the boxes of its triangles in world units, kept
+	 * from the build (GlassTintPrepare). HDRenderGlassTint matches the
+	 * classic faces the classic adds against those boxes and writes each
+	 * range's tint; draw_pass hands it to the room shader where the range
+	 * is drawn as glass (GlassSplits' glass half, AddGlass), which the
+	 * pages decide at the draw as before. */
+	struct GlassCandidate
+	{
+		int group;
+		int pass;
+		int range;
+		std::vector<float> boxes;	// six floats a triangle, world units
+		int faces;			// the classic faces at its place
+		float area;			// their area
+		float sum[3];			// their added colour times their area
+	};
+
+	std::vector<GlassCandidate> g_glass;
+
+	void GlassTintPrepare(const trf::remaster::Trg& trg,
+		const std::vector<unsigned int>& sorted);
 
 	inline float MaterialAddWeight(const trf::remaster::TrgPart& part)
 	{
@@ -1483,6 +1508,12 @@ namespace
 		 * destructible bits, and 0 in the other two passes. In the sort key, so
 		 * an additive draw call is one material. */
 		int material = 0;
+		/* The hue of the classic glass at this draw call's place (see
+		 * GlassCandidate): a direction whose luma is 1 and w 1, or all
+		 * zero where the classic adds nothing there. Written once the
+		 * level's classic faces are in (HDRenderGlassTint), and not in the
+		 * sort key: those faces are read after the ranges are built. */
+		float tint[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 		/* The glow part of a material 2 draw call in the additive pass - its
 		 * entry in g_glow_parts - and -1 for every other draw call. In the
 		 * sort key, because the glow shader's three registers are per part. */
@@ -8979,6 +9010,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 	// And the sheen of every draw call - see ResolveSheen.
 	ResolveSheen();
 
+	// The glass's places, for its hue - see GlassCandidate.
+	GlassTintPrepare(trg, sorted);
+
 	/* --- the vertex window of every draw call ---------------------------
 	 *
 	 * The lowest and highest vertex number each range names. On a normal card
@@ -10069,6 +10103,199 @@ namespace
 		g_device->SetPixelShaderConstantF(86, regs, 6);
 	}
 
+	/* The glass's places (see GlassCandidate): every see-through range of a
+	 * room group's alpha pass and every additive range of material 14, with
+	 * the box of each of its triangles in world units - the .TRG's own
+	 * vertices, room local, moved by the group's room origin (the boxes the
+	 * frame is handed, as FindMirrors reads them). Every range's tint starts
+	 * at zero; the sky's groups are left out. */
+	void GlassTintPrepare(const trf::remaster::Trg& trg,
+		const std::vector<unsigned int>& sorted)
+	{
+		g_glass.clear();
+
+		const int rooms = g_room_groups < (int)g_groups.size() ?
+			g_room_groups : (int)g_groups.size();
+
+		for (int g = 0; g < rooms; g++)
+		{
+			const bool placed = g_boxes && g < g_box_count;
+			const float ox = placed ? g_boxes[g].originX : 0.0f;
+			const float oz = placed ? g_boxes[g].originZ : 0.0f;
+
+			for (int pass = 1; pass < 3; pass++)
+			{
+				std::vector<HDRange>& ranges = g_groups[(size_t)g].pass[pass];
+
+				for (size_t r = 0; r < ranges.size(); r++)
+				{
+					HDRange& range = ranges[r];
+
+					for (int i = 0; i < 4; i++)
+						range.tint[i] = 0.0f;
+
+					const bool glass = pass == 1 ?
+						range.blend > 0.0f && range.blend < 1.0f &&
+						!range.clear :
+						range.material == HD_TRG_MATERIAL_DECAL;
+
+					if (!glass || !placed)
+						continue;
+
+					GlassCandidate c;
+
+					c.group = g;
+					c.pass = pass;
+					c.range = (int)r;
+					c.faces = 0;
+					c.area = 0.0f;
+					c.sum[0] = c.sum[1] = c.sum[2] = 0.0f;
+
+					for (unsigned int at = 0; at + 2 < range.count; at += 3)
+					{
+						float box[6] = { 3.0e38f, 3.0e38f, 3.0e38f,
+							-3.0e38f, -3.0e38f, -3.0e38f };
+						bool ok = range.start + at + 2 < sorted.size();
+
+						for (int k = 0; k < 3 && ok; k++)
+						{
+							const unsigned int i = sorted[range.start + at + k];
+
+							if (i >= trg.vertices.size())
+							{
+								ok = false;
+								break;
+							}
+
+							const trf::remaster::TrgVertex& v = trg.vertices[i];
+							const float p[3] = { (float)v.x + ox, (float)v.y,
+								(float)v.z + oz };
+
+							for (int a = 0; a < 3; a++)
+							{
+								box[a] = p[a] < box[a] ? p[a] : box[a];
+								box[a + 3] = p[a] > box[a + 3] ? p[a] :
+									box[a + 3];
+							}
+						}
+
+						if (ok)
+							c.boxes.insert(c.boxes.end(), box, box + 6);
+					}
+
+					g_glass.push_back(c);
+				}
+			}
+		}
+	}
+}
+
+/* The classic glass of the level (hd_debris.h): the faces matched against
+ * the places GlassTintPrepare kept, per range the faces whose centre lies
+ * at one of its triangles (HDGlassAtPlace) counted once each, their added
+ * colours summed by area and turned into the range's tint (HDGlassTintOf).
+ * Called again with the faces of a kept level, it writes the same tints. */
+int HDRenderGlassTint(const HDGlassFace* faces, int count)
+{
+	// The faces by the 1024-unit square their centre stands in.
+	std::unordered_map<long long, std::vector<int> > cells;
+	const auto key = [](int x, int z)
+	{
+		return ((long long)x << 32) ^ (long long)(unsigned int)z;
+	};
+
+	for (int f = 0; faces && f < count; f++)
+		cells[key((int)floorf(faces[f].centre[0]) >> 10,
+			(int)floorf(faces[f].centre[2]) >> 10)].push_back(f);
+
+	std::vector<unsigned char> seen((size_t)(count > 0 ? count : 0), 0);
+	std::vector<int> hit;
+	int tinted = 0;
+
+	for (GlassCandidate& c : g_glass)
+	{
+		c.faces = 0;
+		c.area = 0.0f;
+		c.sum[0] = c.sum[1] = c.sum[2] = 0.0f;
+		hit.clear();
+
+		for (size_t b = 0; b + 5 < c.boxes.size(); b += 6)
+		{
+			const float* box = &c.boxes[b];
+			const int x0 = (int)floorf(box[0] - HD_GLASS_PLACE_MARGIN) >> 10;
+			const int x1 = (int)floorf(box[3] + HD_GLASS_PLACE_MARGIN) >> 10;
+			const int z0 = (int)floorf(box[2] - HD_GLASS_PLACE_MARGIN) >> 10;
+			const int z1 = (int)floorf(box[5] + HD_GLASS_PLACE_MARGIN) >> 10;
+
+			for (int x = x0; x <= x1; x++)
+				for (int z = z0; z <= z1; z++)
+				{
+					const auto it = cells.find(key(x, z));
+
+					if (it == cells.end())
+						continue;
+
+					for (int f : it->second)
+						if (!seen[(size_t)f] &&
+							HDGlassAtPlace(box, faces[f].centre))
+						{
+							seen[(size_t)f] = 1;
+							hit.push_back(f);
+						}
+				}
+		}
+
+		for (int f : hit)
+		{
+			seen[(size_t)f] = 0;
+			c.faces++;
+			c.area += faces[f].area;
+
+			for (int i = 0; i < 3; i++)
+				c.sum[i] += faces[f].colour[i] * faces[f].area;
+		}
+
+		HDRange& range =
+			g_groups[(size_t)c.group].pass[c.pass][(size_t)c.range];
+
+		HDGlassTintOf(c.sum, range.tint);
+		tinted += range.tint[3] > 0.0f ? 1 : 0;
+	}
+
+	return tinted;
+}
+
+bool HDRenderGlassTintInfo(int at, HDGlassTintInfo* out)
+{
+	if (at < 0 || at >= (int)g_glass.size() || !out)
+		return false;
+
+	const GlassCandidate& c = g_glass[(size_t)at];
+	const HDRange& range =
+		g_groups[(size_t)c.group].pass[c.pass][(size_t)c.range];
+
+	out->group = c.group;
+	out->pass = c.pass;
+	out->page = HDPageCachePageOfSlot(range.pageSlot);
+	out->triangles = (int)(range.count / 3);
+	out->blend = range.blend;
+	out->split = c.pass == 1 &&
+		GlassSplits(range.blend, range.clear, range.pageSlot);
+	out->whole = c.pass == 2 && AddGlass(range.material, range.pageSlot);
+	out->faces = c.faces;
+	out->area = c.area;
+
+	for (int i = 0; i < 3; i++)
+		out->colour[i] = c.area > 0.0f ? c.sum[i] / c.area : 0.0f;
+
+	for (int i = 0; i < 4; i++)
+		out->tint[i] = range.tint[i];
+
+	return true;
+}
+
+namespace
+{
 	/* `blendOnly`: the alpha pass is drawn twice in a frame, once for its
 	 * solid ranges - the cut-outs, with the alpha test - and once, after
 	 * everything opaque, for its see-through ones. Both other passes are
@@ -10110,6 +10337,14 @@ namespace
 		};
 
 		g_device->SetPixelShaderConstantF(4, constants, 1);
+
+		/* gTint (c37), the glass's hue (see GlassCandidate): zero for every
+		 * draw call but the classic's glass. Written at the top of every
+		 * pass whatever it was, so that no constant another draw left there
+		 * is ever read. */
+		float tint[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+		g_device->SetPixelShaderConstantF(37, tint, 1);
 
 		/* The opaque pass turns the alpha test on for the ranges whose .TRG
 		 * material is one of the three cut-out materials, and for no others
@@ -10333,6 +10568,21 @@ namespace
 
 				constants[2] = split_now;
 				g_device->SetPixelShaderConstantF(4, constants, 1);
+			}
+
+			/* The hue of the classic glass at its place, where this call
+			 * is drawn as the classic's glass: the glass half of a split,
+			 * the additive run's glass. Written only where it changes. */
+			const bool hue = ((split && blendOnly) || add_glass) &&
+				range.tint[3] > 0.0f;
+
+			if (hue ? memcmp(tint, range.tint, sizeof(tint)) != 0 :
+				tint[3] != 0.0f)
+			{
+				for (int i = 0; i < 4; i++)
+					tint[i] = hue ? range.tint[i] : 0.0f;
+
+				g_device->SetPixelShaderConstantF(37, tint, 1);
 			}
 
 			if (blendOnly && split != pane_on)
@@ -10789,6 +11039,14 @@ namespace
 		{
 			constants[2] = 0.0f;
 			g_device->SetPixelShaderConstantF(4, constants, 1);
+		}
+
+		// And one that ended on the glass's hue puts the zero back.
+		if (tint[3] != 0.0f)
+		{
+			const float none[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
+			g_device->SetPixelShaderConstantF(37, none, 1);
 		}
 
 		if (pass == 2 || blendOnly)

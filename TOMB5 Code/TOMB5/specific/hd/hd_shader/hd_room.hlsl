@@ -438,6 +438,8 @@ float4 gCrestVH[2] : register(c177);
  *                                 weight)
  * c20 - c35   gLights[16]         per room  (8 lights, two registers each)
  * c36         gRipple             per DRAW CALL
+ * c37         gTint               per DRAW CALL (the glass's hue; not in
+ *                                 the gloss variant)
  * c40 - c71   gBulbs[32]          per frame (16 bulbs, two registers each)
  * c134 - c136 gUnderSigma, gUnderLight, gUnderUp   per frame (the eye
  *                                 under the water; not in the gloss
@@ -655,6 +657,12 @@ float4 gLights[HD_MAX_LIGHTS * 2] : register(c20);
 // See the note over HD_RIPPLE_OCTAVE. (0, 0, 0, 0) for every draw call that
 // is not a water surface, and the .y = 0 there is what switches it off.
 float4 gRipple : register(c36);
+
+/* The glass's hue (hd_debris_rules.h, "the glass's look"): for a draw call
+ * drawn as the classic's glass, the hue of the classic glass at its place -
+ * a direction whose luma is 1, times the gain of a flying piece - and w 1;
+ * (0, 0, 0, 0) for every other draw call. */
+float4 gTint : register(c37);
 
 /* Two registers per bulb: (x, y, z, radius) in VIEW space, then
  * (r, g, b, density). */
@@ -2011,6 +2019,13 @@ float4 RoomPS(VS_OUT input) : COLOR0
 				gAdd.y * (6.2831853f / gAdd.z));
 
 	lit *= lerp(1.0f, weight, gPass.y);
+
+	/* The glass's hue (gTint above): the luma of this draw call's add put
+	 * on the classic glass's direction, so its strength stays the art's and
+	 * its hue becomes the classic's. A select, so every draw call with w 0
+	 * keeps its picture to the bit. */
+	lit = gTint.w > 0.0f ?
+		dot(lit, float3(0.299f, 0.587f, 0.114f)) * gTint.rgb : lit;
 
 	// Under the water (see above): a glow is dimmed, a surface scatters.
 	lit = UnderWater(lit, input.viewPos, 1.0f - gPass.y);

@@ -129,6 +129,31 @@ void HDDebrisFrameInfo(HDDebrisFrameStats* out);
 // Lets the shaders and the declaration go, with the device.
 void HDDebrisRelease();
 
+/* The glass's hue in the room draw, defined with it in hd_render.cpp: the
+ * level's classic faces the classic adds, handed once the room build is
+ * done, matched against the places of the art's glass (HDGlassAtPlace)
+ * and turned into each draw call's tint; returns the draw calls that took
+ * a hue. Info answers for the `at`-th draw call that may be drawn as
+ * glass, false past the last. */
+int HDRenderGlassTint(const HDGlassFace* faces, int count);
+
+struct HDGlassTintInfo
+{
+	int group;		// the room group
+	int pass;		// 1 the alpha pass, 2 the additive one
+	int page;		// its page
+	int triangles;
+	float blend;		// the alpha pass's see-through weight
+	bool split;		// drawn as a frame and its glass (GlassSplits)
+	bool whole;		// added whole (AddGlass)
+	int faces;		// the classic faces at its place
+	float area;		// their area
+	float colour[3];	// their added colour, by area
+	float tint[4];		// the hue it takes, w 1 where it takes one
+};
+
+bool HDRenderGlassTintInfo(int at, HDGlassTintInfo* out);
+
 #ifdef HD_DEBRIS_BODY
 
 #include <stdio.h>

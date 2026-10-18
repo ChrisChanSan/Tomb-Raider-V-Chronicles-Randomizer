@@ -25464,6 +25464,210 @@ call.
 **Commits.** `a113f3d`, `3fc0ec6`, `ef2ab3c` (the choice of the track folder in
 `hd_trl.cpp`, pinned by LipsTest) and the records.
 
+### The far plane (#217)
+2026-10-18
+
+**What.** The far plane moves from twenty sectors (20,480 units) to forty-one (41,984),
+for the HD path and the classic draw alike: an object, a static the art leaves to the
+classic path, and the sprites and effects cut at the plane (debris, shockwaves, splashes,
+shadows, footprints, rain, sprite sparks) are now drawn between the two distances; the
+sparks, fire, smoke, blood, drips and bubbles with a cut of their own at 20,480 keep it.
+The rooms' faces were never cut by the plane, in either path, and are drawn as before. The
+depth
+curve, the rain's tint, the circle of the fog bulbs and the count of an object's box
+corners stay on the plane the game shipped with (`ZFAR_SHIPPED`), so that everything
+nearer than 20,480 units is drawn as it was. The number and its reason are one constant,
+`ZFAR_SECTORS` in the new `specific/zrange_math.h`, which the engine, ModernTest and
+RoomProbe include. RoomProbe gains `-zfar`, `-farcull`, `-farsurvey` and `-farobjects`.
+
+**Why.** The owner, 2026-10-18, on the door at JOBY2's corridor end: "Die maximale
+Entfernung zu der Tuer sind ca. 34x1024, die Sichtweite kann gerne in HD/SD erweitert
+werden." - the greatest distance to the door is about 34 times 1024; the view distance may
+gladly be extended, in HD and SD. The room art's round 12 had measured the place: from
+the eye 33258,-1698,33194 (room 121, looking at 33543,-1683,33424) the closed double door,
+items 128 and 129 of room 106, stands 25,298 and 24,655 units ahead, and
+`S_GetObjectBounds` (`specific/output.cpp`) returns 0 for an object whose origin lies at
+or past `f_mzfar` unless the frame lists an outside room, while the art of the room behind
+the doorway is drawn.
+
+**What rests on the far plane.** Every site, found by `20480`, `0x5000`, `f_mzfar`,
+`f_zfar`, `phd_zfar`, `mzfar` and `zfar` over the engine and the HD path, before any
+change:
+
+| site | what it does | now |
+|---|---|---|
+| `gamemain.cpp` `GameMain`, `winmain.cpp` `WinProcessCommands` | `InitWindow(..., 20, 20480, 80, ...)` at the start and after a display mode change: the plane | `ZNEAR_UNITS`, `ZFAR_UNITS` |
+| `3dmath.cpp` `InitWindow`, `SetupZRange` | `phd_zfar` (shifted by 14), `f_zfar`, `f_mzfar`; the depth curve `f_a`, `f_b`, `f_boo` | the plane at 41,984; the curve on `ZFAR_SHIPPED` |
+| `output.cpp` `S_GetObjectBounds` 674 | the cull: origin depth at or past `f_mzfar` in an inside frame, 0 | moves |
+| `output.cpp` 726 | the corners counted between the near plane and `f_mzfar`; under 8 is -1, drawn clipped without the window test | `ZFAR_SHIPPED` (below) |
+| `output.cpp` `phd_PutPolygonsSkyMesh` 2068-2071 | the classic horizon at the plane's rhw, drawn before the world without depth writes | derived: sz 0.99550, the pixels the same |
+| `drawroom.cpp` `aBuildFogBulbList` 940 | the fog bulbs nearer than a literal 20480 | `ZFAR_SHIPPED` |
+| `specificfx.cpp` `setXYZ3`, `setXYZ4` 404-614 | an effect vertex past `f_mzfar` takes clip flag 256 and `f_zfar` as its sort key: debris, shockwaves, splashes, shadows, footprints | moves |
+| `specificfx.cpp` `ClipCheckPoint` 654, `DrawSkySegment` 6291, 6363 | the same for the classic sky's layers | moves; never reached, the layers' corners lie within 15,458 units of the eye |
+| `specificfx.cpp` `DoRain` 1560, 1603 | a drop's tint, 8 to 16 and 16 to 32 over the plane: a look | `ZRainTint` on `ZFAR_SHIPPED` |
+| `specificfx.cpp` `DoRain` 1570, 1614 | a drop's cut | moves |
+| `specificfx.cpp` `S_DrawDrawSparksNEW` 2363 | a sprite spark at or past the plane is not drawn and is switched off | moves |
+| `specificfx.cpp` `DrawStars` 6076-6097 | the stars at the plane's rhw, in the sky's phase | derived |
+| `specificfx.cpp`, the literal `0x5000` (`S_DrawSparks`' line sparks, fire and smoke sparks, blood, drips, bubbles, the rope) | their own cut at 20,480 and a fade to black that reaches 0 there | untouched: their own look |
+| `alexstuff.cpp` `aTransformClip_D3DV` 219 | reads the vertex's sz before it is written | moves; no caller |
+| `newinv2.cpp` `DelDrawSprite` 3696 | a sprite at the plane less 20 | derived; no caller |
+| `draw.cpp` `DrawEffect` 3915 | an effect drawn only nearer than `phd_zfar` | moves |
+| `draw.cpp` 2293-2325 | ROOMPOP's note ("art past it is clipped in both", which the round 12 measurement refutes) and `far_plane=` (`phd_zfar`, shifted) | the note rewritten; the line prints 687865856 |
+| `hd_render.cpp` 22950-22960 | the sky's note: its slice from 0.996 lies behind the deepest depth | rewritten |
+| `hd_render.cpp` `HDRenderZConstants` 25352-25356 | `SetupZRange`'s twin for the tools, called with 20 and 20480 | the note: 20480 is the curve's scale |
+| `hd_level.cpp` 8012, 8333, `hd_object.cpp` 1387, 3534, `hd_laradraw.cpp` 661 | the HD projections take `f_a` and `f_b` | the same values |
+| `hd_spring.cpp` `farZ = b / (a - 0.995)` | the cracks drawn to half of the depth 0.995 | the same: 10,240 |
+| `hd_room.hlsl` `SceneZ`, the water's `kWaterClip`, the wet floor's `kWetLift` | depth read back as z = b / (a - d), clips in units on it | the same curve |
+| distance fog (`tomb5.distance_fog` times 1024, 3 to 30 sectors) | darkens a vertex past its start | untouched; above 20 it had no object to darken before |
+
+The water sheets, the sea seen from below and the room art have no distance of their
+own: they are room art and were drawn past 20,480 before (the surface art 19,000 to
+40,000 units from the eye included), on the same depth curve.
+
+**The number from the data.** `RoomProbe -farsurvey 1` puts the eye at the centre of
+every square inside every room's wall ring, at the room's middle height, walks the classic
+portal walk from it over yaws 0 to 345 (step 15) and pitches -20 to 20 (step 10) at 2560 x
+1440 and a field of view of 80, and asks the engine's rule for every item and static of
+the listed rooms with no plane and its box against its room's window: the deepest it is
+ever drawn from an inside frame. In an outside frame the plane cuts no object (the first
+test is skipped and a box past it is drawn clipped). Flip maps are not walked.
+
+| level | eyes | frames | outside | deepest thing inside | deepest door inside | things past 20,480 |
+|---|---|---|---|---|---|---|
+| ANDREA1 | 2,629 | 315,480 | 149,904 | 25,589 (DOOR_TYPE2, room 107) | 3,116 | 15 |
+| ANDREA2 | 2,985 | 358,200 | 178,032 | 20,577 (TRAPDOOR1, room 70) | 11,704 | 4 |
+| ANDREA3 | 1,538 | 184,560 | 47,313 | 29,696 (CRUMBLING_FLOOR, room 29) | 13,553 | 40 |
+| ANDY1 | 2,136 | 256,320 | 218,015 | 8,409 | - | 0 |
+| ANDY2 | 3,746 | 449,520 | 25,457 | 14,336 | 6,493 | 0 |
+| ANDY3 | 4,021 | 482,520 | 433,749 | 11,293 | - | 0 |
+| JOBY2 | 6,745 | 809,400 | 537,279 | 40,560 (a static of room 3) | 34,231 (CLOSED_DOOR4, room 106) | 149 |
+| JOBY3 | 827 | 99,240 | 120 | 17,408 | 12,288 | 0 |
+| JOBY4 | 4,926 | 591,120 | 549,022 | 23,767 (ANIMATING16, room 123) | - | 1 |
+| JOBY5 | 1,007 | 120,840 | 2,403 | 17,408 | 12,288 | 0 |
+| RICH1 | 1,090 | 130,800 | 986 | 20,480 (PICKUP_ITEM4, room 136) | 18,793 | 1 |
+| RICH2 | 1,824 | 218,880 | 65,050 | 22,528 (ANIMATING5, room 119) | 17,408 | 11 |
+| RICH3 | 2,202 | 264,240 | 102,768 | 21,504 (LIFT_TELEPORTER, room 131) | 21,372 | 3 |
+| RICHCUT2 | 376 | 45,120 | 43,786 | - | - | 0 |
+| TITLE | 7,527 | 903,240 | 835,325 | 16,180 | - | 0 |
+
+How many things a plane still cuts somewhere, of the 224 past 20,480, by sectors: JOBY2
+149 at 20, 87 at 24, 35 at 28, 29 at 30, 23 at 32, 16 at 34, 15 at 35, 8 at 36, 6 at 38
+and none at 40; ANDREA3 40 at 20, 15 at 24, 3 at 28, none at 30; every other level none
+at 24 but ANDREA1's one. JOBY2 again with yaws every 3 degrees and pitches -10 to 10
+every 5: the deepest thing 40,806 (the same static of room 3, seen from room 129), the
+door 34,340 from room 121 - 33.5 sectors, the owner's 34. The deepest listed room corner
+of an inside frame is 52,927 (JOBY2) and 43,095 (ANDREA3): room boxes, not things.
+
+The number: 41 sectors, the smallest whole count that holds the deepest thing and the
+margin of one square (an eye elsewhere in the sampled square stands at most a square
+farther from it): 40,806 + 1,024 = 41,830 under 41,984; 40 sectors (40,960) does not.
+It holds the owner's 34 sectors with seven to spare.
+
+**The depth curve, re-derived.** The curve is sz = a - b / z with 0.005 at the near plane
+and 0.995 at the scale it is built on; its slope b / z^2 is set by the near plane, b being
+0.99 times the near plane's 20 times scale / (scale - 20). Built on 20,480, as before: a =
+0.99596775, b = 19.819355; 0.99500 at 20,480, 0.99550 at 41,984, under a = 0.99597 at
+any distance - under the sky's slice from 0.996 (`HD_SKY_MINZ`) everywhere. Built on
+41,984 instead it would be a = 0.99547184, b = 19.809437: every depth on screen would
+move, by 4.9e-4 at 1,000 units (8,150 steps of a 24-bit buffer), and with it the HD path's
+projection, the water's depth reading and the springs' cut, for 0.05 % of resolution. The
+step of a 24-bit buffer in units:
+
+| view depth | the curve on 20,480 (before and now) | the curve on 41,984 |
+|---|---|---|
+| 1,000 | 0.0030 | 0.0030 |
+| 10,000 | 0.30 | 0.30 |
+| 20,000 | 1.20 | 1.20 |
+| 30,000 | 2.71 | 2.71 |
+| 34,816 | 3.65 | 3.65 |
+| 41,984 | 5.30 | 5.30 |
+
+The rooms' art past 20,480 had these steps before; the objects now drawn there take them.
+At the corridor door (24,658 and 25,300 units, a step of 1.9) the pixels the moved plane
+changes at the eye moved 0, 1, 2 and 4 units along x are 1,146, 1,146, 1,147 and 1,146,
+all of them the flat items': no fight with the art around them.
+
+**The corner count stays on the shipped plane.** `S_GetObjectBounds` counts the box
+corners between the near plane and the plane; under eight it answers -1, drawn clipped,
+and skips the window test. On the moved plane an object nearer than 20,480 whose box
+reaches past it would be window tested instead: at 1,158 of the 5,445 distinct camera
+ticks of the owner's three JOBY2 segments (his logs of 2026-10-17, lines 137098 to 144863
+and 161703 to 181906, and the collection's 35760 to 42655) an object nearer than 20,480
+changed its answer from -1 to 0. Counted under `ZFAR_SHIPPED` none does, and a thing past
+20,480, which the moved cull now lets through, is drawn clipped - as a thing past the
+plane in an outside frame always was.
+
+**The door.** `RoomProbe -farobjects` draws the items the rule lets in, flat and orange,
+into the picture (the HD art, or `-classiconly` the classic faces), with the walk's list
+and windows, the level's flips (4, 80, 81, 87, 89) and their groups, at 2560 x 1440:
+
+| eye | path | orange at 20,480 | at 41,984 | pixels changed | not orange |
+|---|---|---|---|---|---|
+| round 12's, room 121 | HD | 11,320 | 12,466 | 1,146 (1,055 in the door's box) | 0 |
+| round 12's, room 121 | classic | 11,320 | 12,547 | 1,227 (1,089 in the door's box) | 0 |
+| ticks 6273, 6282, 6291, 6300, 6309 | HD, classic | as before | as before | 0 | 0 |
+
+The door stands in the gap between the crates the round 12 eye looks through. Along the
+owner's corridor way, -farcull at every distinct tick: the door joins the list past 20,480
+at 36 ticks (f 6273 to 6309 of the collection's segment, the eye in room 121, the door
+20,807 to 28,335 units ahead, its box up to 10,562 pixels inside its window); at the five
+ticks drawn it stands behind the crates and walls of rooms 129 and 104, and nothing of
+the picture changes. The two segments of 2026-10-17 never list a thing past 20,480. 55
+distinct things join at those 36 ticks, the door's two leaves and its keyhole among them.
+
+**The parity.** RoomProbe of `b35b3b96` against this round's, no far switch, and this
+round's with `-farobjects` at 20,480 against 41,984:
+
+| set | pictures | base against now | 20,480 against 41,984 |
+|---|---|---|---|
+| census eyes, room 0, `-sky`, hd_water 0 | 15 | 15 identical | 15 identical |
+| census eyes, hd_water 1 | 15 | 15 identical | 15 identical |
+| the fifteen parity cameras, hd_water 0 | 15 | 15 identical | 15 identical |
+| the fifteen parity cameras, hd_water 1 | 15 | 15 identical | 15 identical |
+| classic views (`-classiconly`, six and the 229 eye) | 7 | 7 identical | 7 identical |
+| JOBY4's four eyes under the sea, hd_water 1 `-sky -underlook` | 4 | 4 identical | 4 identical |
+| the same, hd_water 0 `-sky` | 4 | 4 identical | 4 identical |
+| the sky's four eyes, hd_water 0 and 1 | 8 | 8 identical | 8 identical |
+
+`-farcull` at the same 38 eyes with the walk's whole list: nothing joins at any of them.
+What the moved plane brings in across the fifteen levels is the survey's 224 things: JOBY2
+149 (12 of them doors), ANDREA3 40, ANDREA1 15, RICH2 11, ANDREA2 4, RICH3 3 (2 lift
+doors), JOBY4 1, RICH1 1; the far sprites and effects are not counted offline.
+
+The cost: the art's draw calls are the same (282 and 194 at the two corridor eyes, 187
+at C1_sea_floe, 183 at A152), its GPU time within the runs' spread (three processes of
+`-gpu 3` each, 0.38 to 0.45 ms before and after at the round 12 eye); the engine draws the
+things that join, 18 at the round 12 eye and 13 at tick 6300, one object each.
+
+**Decisions.** The plane moves for both paths and the four cuts that are looks stay: the
+depth curve (every depth nearer than 20,480 the float it was, the HD projection, the
+water's reading and the sky's slice with it), the rain's tint, the fog bulbs' circle (a
+bulb past 20,480 would fog faces nearer than it) and the corner count. 41 sectors from
+the survey and a square's margin, not the owner's 34: JOBY2 lists statics of room 3 to
+40,806. No new key: the owner asked for the extension, not a switch.
+
+**Checked.** The nine scripts `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
+`bit` and `blips` build with exit 0; ModernTest 15,627 checks (the group `far_plane`, 15:
+the constant, its margin and the next sector less, the 34 sectors, the shifted plane in a
+long, `ZDepthCurve` bit for bit `SetupZRange`'s with 20480, 0.995 at the shipped plane,
+the far plane and any distance under the sky's slice, the steps at 10,000, 30,000 and the
+plane, `ZRainTint` against `DoRain`'s expression at every eighth unit to 45,000, its ends
+and its middle), MenuTest 44,272, InterpTest 729, LipsTest 299 with the `.OBJ` folder and
+272 without, 0 failed each.
+
+**Left.** The far sprites and effects are not measured: they exist only in play. The tool
+draws a door as its classic mesh, flat, in both pictures; the HD path draws the door's HD
+model where the rule lets it. A fog bulb past 20,480 fogs nothing past it either. The
+survey walks every level in its first flip state. Comments outside the round's lines
+still name 20480 as the far plane: `modern_camera.h` 75 and 211, `hd_object.cpp` 328 to
+330 (the ring's backdrop at 0.995), `hd_spring.cpp` 1844 ("half the far plane's distance",
+now half the curve's scale), `hd_render.cpp` 11102 and 11886 (the steps at 20,480, which
+hold). `tomb5.vcxproj` does not list `zrange_math.h` (a header the build finds by its
+include). `S_DrawSparks`' line sparks take a negative colour past 0x5000, as before.
+
+**Commits.** `038e3b55` (the plane, the depth curve kept and the cuts that are looks),
+`aaebafaa` (RoomProbe's switches and ModernTest's group) and the record's own commit.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -25683,3 +25887,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #212 | The water art's ripple from the project's own data, and the origin sentences (#212) |
 | #213 | The build from a stranger's checkout (#213) |
 | #215 | The speaking heads of the cutscenes on the HD path (#215) |
+| #217 | The far plane (#217) |

@@ -14338,7 +14338,9 @@ namespace
 	 * one clock; the sky's, which the look is drawn in, keeps the one
 	 * before (hd_level.cpp, HDFrameSky steps none). So the art gives way
 	 * only in a frame whose look drew the sheet: a frame drawn without
-	 * the sky (no outside room in its list) keeps the art. */
+	 * the sky (no outside room in its list) keeps the art, and so does
+	 * every frame before the look's first sheet (`g_wsea_drawn`). */
+	bool g_wsea_drawn = false;
 	float g_wsea_drew = -1.0e30f;
 	float g_wsea_now = -1.0e30f;
 	float g_wsea_before = -1.0e30f;
@@ -14523,8 +14525,8 @@ namespace
 
 		g_wsea_over = HDWaterSeaOver(g_caustic_on ? 1 : 0, g_wdeep_on ? 1 : 0,
 			on ? 1 : 0, out[11], kUnderNoSurface);
-		water_sea_art(g_wsea_over && (g_wsea_drew == g_wsea_now ||
-			g_wsea_drew == g_wsea_before));
+		water_sea_art(HDWaterSeaGivesWay(g_wsea_over, g_wsea_drawn,
+			g_wsea_drew, g_wsea_now, g_wsea_before));
 		return on;
 	}
 
@@ -15773,6 +15775,7 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		g_wsea_base.clear();
 		g_wsea_given = false;
 		g_wsea_set = -1.0f;
+		g_wsea_drawn = false;
 		g_wsea_drew = -1.0e30f;
 
 		if (g_wdeep_on && surface >= 0 && surface < groups)
@@ -18897,6 +18900,7 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	// The art gives way to the sheet just drawn (see "the sea's sheet").
 	if (drawn && c[58] > 0.0f)
 	{
+		g_wsea_drawn = true;
 		g_wsea_drew = under->clock;
 		water_sea_art(true);
 	}

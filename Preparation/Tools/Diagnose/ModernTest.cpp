@@ -22090,9 +22090,11 @@ static void water_look()
 /* The sea's sheet in the place of the art of its surface (hd_water_under.h,
  * HDWaterSeaOver, HDWaterSheetPath, HDWaterRippleScale, the knobs): the
  * sheet only with the sheets on, in a level with the deep look, the eye
- * under the water and the stand-in's surface over it; the way the
- * extinction counts the room shader's; the ripple held to -1 .. 1; and the
- * strengths inside the bands the record names. Numbers of JOBY4's dive:
+ * under the water and the stand-in's surface over it; the art giving way
+ * only in a frame whose look drew the sheet; the way the extinction
+ * counts the room shader's; the ripple held to -1 .. 1; and the knobs'
+ * order among themselves (the bands are the pictures', which the record
+ * measures; no test here draws one). Numbers of JOBY4's dive:
  * the eye of the straight-up picture 2,065 under the basin, the clear zone
  * 2,048, the art 18,366 over the eye; the sea's two longest rows 38 and 16
  * high. */
@@ -22119,6 +22121,17 @@ static void water_sea()
 	ok(!HDWaterSeaOver(1, 1, 1, HDWaterUnderDepth(1, 1, 11941.0f, 12032.0f,
 		none), none),
 		"sea sheet: 91 units over it, gone, as the art goes", 0, 0);
+
+	ok(!HDWaterSeaGivesWay(true, false, -1.0e30f, -1.0e30f, -1.0e30f),
+		"sea sheet: before the look's first sheet the art stays", 0, 0);
+	ok(HDWaterSeaGivesWay(true, true, 7.0f, 7.0f, 6.0f),
+		"sea sheet: drawn with this frame's clock, the art gives way", 0, 0);
+	ok(HDWaterSeaGivesWay(true, true, 6.0f, 7.0f, 6.0f),
+		"sea sheet: ...or with the clock before (the sky's bracket)", 0, 0);
+	ok(!HDWaterSeaGivesWay(true, true, 5.0f, 7.0f, 6.0f),
+		"sea sheet: a sheet two clocks old keeps the art", 0, 0);
+	ok(!HDWaterSeaGivesWay(false, true, 7.0f, 7.0f, 6.0f),
+		"sea sheet: no sea over the eye, the art stays", 0, 0);
 
 	const float straight = HDWaterSheetPath(18366.0f, 1.0f, 2065.0f, 2048.0f);
 	const float slant = HDWaterSheetPath(36732.0f, 0.5f, 2065.0f, 2048.0f);
@@ -22152,7 +22165,7 @@ static void water_sea()
 		"sea sheet: the art gives way wholly under the sheet", 0, 0);
 	ok(k[HD_LOOK_RIPPLE] > 0.0f && k[HD_LOOK_RIPPLE] < 1.0f,
 		"sea sheet: the ripple never takes the sheet below black",
-		(long)(k[HD_LOOK_RIPPLE] * 100.0f), 70);
+		(long)(k[HD_LOOK_RIPPLE] * 100.0f), 80);
 	ok(k[HD_LOOK_SEA_DISC] > k[HD_LOOK_DISC] &&
 		k[HD_LOOK_SEA_SHAFTS] > k[HD_LOOK_SHAFTS] &&
 		k[HD_LOOK_SEA_UNDERSIDE] > k[HD_LOOK_UNDERSIDE],

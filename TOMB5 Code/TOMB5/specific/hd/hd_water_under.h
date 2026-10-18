@@ -243,27 +243,29 @@ enum
  *
  * Where the eye has the sea's surface over it (HDWaterSeaOver) the art
  * gives way (weight 0) and the look draws the sea's sheet in its place,
- * set on RoomProbe pictures at ten eyes of the dive (four of a dive log
- * looking 26 to 85 degrees up, four more of the dive, two at the
- * stand-in's edge), measured where the art lay, against two
- * photographs of a sea from below taken as look references only. Their
- * hue is 201 to 207 degrees, the art's 175 to 188: the sheet takes the
+ * set on RoomProbe pictures at eleven eyes of the dive (eight looking 19
+ * to 85 degrees up, three under the stand-in's edge), measured where the
+ * art lay, against two photographs of a sea from below taken as look
+ * references only (cut to the photograph, 960 wide). The art's page is
+ * grey; its turquoise is the vertices' colour (red 0; hue 175 to 188 in
+ * the pictures), the photographs' hue 201 and 207: the sheet takes the
  * water's own colour (the look's light; 198 to 202 with the band).
  * Their pattern's contrast (the luma's spread over 16-pixel windows over
- * its mean) is 0.076 and 0.110, the game's picture of the art 0.146 to
- * 0.164: a half to three quarters of it is the band each eye's 0.054 to
- * 0.114 is taken into.
- * The ripple is 0.7 of the sheet's light; the sheet 0.10 of the water's
- * light, half again where a shaft leaves it (1.5), so the water between
- * the glow and the shafts stays dark.
+ * the mean luma) is 0.071 and 0.156, the game's own pictures of the art
+ * (the player cut out) 0.118: 0.60 to 1.33 of it is the band each eye's
+ * 0.058 to 0.114 is taken into. The ripple is 0.8 of the sheet's light,
+ * the softest step of 0.05 that holds every eye at or over the band's
+ * soft end (0.75 leaves the eye that takes the most glow under it); the
+ * sheet 0.10 of the water's light, half again where a shaft leaves it
+ * (1.5), so the water between the glow and the shafts stays dark.
  *
  * And the look is stronger there, so that it carries the picture: the
- * photographs' brightest tenth is 7.6 times their darkest, the art's 1.5
+ * photographs' brightest tenth is 7.7 times their darkest, the art's 1.5
  * to 2.3. The disc at 8 (its broad glow 0.64), the shafts at 24 and the
  * underside at 0.24 take it to 1.5 to 3.0, the brightest at the eyes
  * that face the light, with the mean luma at most 96 of 255, under the
- * brighter photograph's 116, and the pattern's contrast to 0.034 to
- * 0.077, inside each eye's band. */
+ * brighter photograph's 116, and the pattern's contrast to 0.038 to
+ * 0.087, inside each eye's band. */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -281,7 +283,7 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_SEA_SHAFTS] = 24.0f;
 	knobs[HD_LOOK_SEA_UNDERSIDE] = 0.24f;
 	knobs[HD_LOOK_SHEET] = 0.10f;
-	knobs[HD_LOOK_RIPPLE] = 0.7f;
+	knobs[HD_LOOK_RIPPLE] = 0.8f;
 	knobs[HD_LOOK_PATCHES] = 1.5f;
 	knobs[HD_LOOK_ART] = 0.0f;
 }
@@ -299,6 +301,18 @@ inline bool HDWaterSeaOver(int caustic, int deep, int under, float depth,
 	float none)
 {
 	return caustic != 0 && deep != 0 && under != 0 && depth < none;
+}
+
+/* Whether the art gives way this frame: the eye has the sea over it
+ * (`over`, HDWaterSeaOver), the look has drawn the sheet since the level's
+ * water was built (`drawn`), and it drew it with the clock of this frame's
+ * brackets (`drew`, against `now` and the one `before`). `drawn` is its
+ * own flag so that no starting value of the clocks can stand for a draw:
+ * a frame whose look drew no sheet keeps the art. */
+inline bool HDWaterSeaGivesWay(bool over, bool drawn, float drew, float now,
+	float before)
+{
+	return over && drawn && (drew == now || drew == before);
 }
 
 /* The way through the water the extinction counts to a point `t` units

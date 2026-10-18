@@ -816,6 +816,10 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_model.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_life_rules.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
+// A broken static's pieces in HD (-debris); this file holds the definitions,
+// as hd_level.cpp does in the engine.
+#define HD_DEBRIS_BODY
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_debris.h"
 #include <algorithm>
 /* hd_install.cpp reads the two registry overrides out of these, which the
  * engine defines in tomb5\tomb5.cpp; ModelProbe brings the same pair. Left
@@ -3562,6 +3566,21 @@ static std::vector<std::pair<int, int> > g_smash;
 static bool g_smash_census = false;
 /* -smashpiece <n> (repeatable): pieces hidden by number, in any group. */
 static std::vector<int> g_smash_pieces;
+/* -debris <room>:<mesh> <life>: that static broken (its pieces hidden, as
+ * -smash) and its pieces drawn after <life> steps of their flight, with
+ * the look the engine gives them in HD (hd_debris.h). The break and the
+ * flight are this tool's copy of ShatterObject, TriggerDebris and
+ * UpdateDebris (game\debris.cpp) with a random generator of its own seeded
+ * with -debrisseed (default 1) and no floor or ceiling test, so a piece
+ * flies on where the game would let it settle; the count is 128, the
+ * shot's and the X-ray controller's. -debrisclassic draws the same pieces
+ * as DrawDebris draws them without the HD look - the classic page, the
+ * classic colour and blend - the picture before the rule. */
+static int g_debris_room = -1;
+static int g_debris_mesh = -1;
+static int g_debris_life = 0;
+static long g_debris_seed = 1;
+static bool g_debris_classic = false;
 
 /* The two switches above, out of the main chain, which stands at the
  * compiler's limit of nested blocks (C1061). */
@@ -3576,6 +3595,25 @@ static bool SmashArg(int argc, char** argv, int* at)
 	if (!strcmp(argv[*at], "-smashpiece") && *at + 1 < argc)
 	{
 		g_smash_pieces.push_back(atoi(argv[++(*at)]));
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-debris") && *at + 2 < argc)
+	{
+		sscanf(argv[++(*at)], "%d:%d", &g_debris_room, &g_debris_mesh);
+		g_debris_life = atoi(argv[++(*at)]);
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-debrisseed") && *at + 1 < argc)
+	{
+		g_debris_seed = atol(argv[++(*at)]);
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-debrisclassic"))
+	{
+		g_debris_classic = true;
 		return true;
 	}
 
@@ -11543,6 +11581,7 @@ namespace probestatics
 		int mesh;
 		long x, y, z;
 		short rot;
+		short shade;		// MESH_INFO::shade, the break's colour
 		short flags;
 		short slot;
 		float mins[3], maxs[3];
@@ -11672,6 +11711,7 @@ namespace probestatics
 				memcpy(&my, raw.data() + at + 4, 4);
 				memcpy(&mz, raw.data() + at + 8, 4);
 				memcpy(&s.rot, raw.data() + at + 12, 2);
+				memcpy(&s.shade, raw.data() + at + 14, 2);
 				memcpy(&s.flags, raw.data() + at + 16, 2);
 				memcpy(&s.slot, raw.data() + at + 18, 2);
 				s.room = r;
@@ -12298,6 +12338,673 @@ namespace probestatics
 					moved);
 			}
 		}
+	}
+
+	/* -debris: one piece as TriggerDebris leaves it and UpdateDebris moves
+	 * it (DEBRIS_STRUCT's fields), with what DrawDebris reads besides. */
+	struct DebrisPiece
+	{
+		long x, y, z;
+		short off[9];
+		short dir, speed, yvel, gravity;
+		unsigned char xrot, yrot;
+		unsigned char r, g, b;
+		long colour[3];
+		int face;
+		int tex;
+		int flags;
+	};
+
+	static std::vector<DebrisPiece> g_debris;
+	static long g_debris_rand = 1;
+	static std::vector<IDirect3DTexture9*> g_debris_pages;
+	// The seed room's origin: the tool's frame is that room's.
+	static float g_debris_origin[2] = { 0.0f, 0.0f };
+
+	// The engine's generator (specific\function_stubs.cpp), seeded here.
+	static long DebrisRandom()
+	{
+		g_debris_rand = 0x41C64E6D * g_debris_rand + 12345;
+		return (g_debris_rand >> 10) & 0x7FFF;
+	}
+
+	/* The classic mesh of a static, as the level holds it: the vertices, the
+	 * prelight (255 less the light word over 32) or none, the quads (four
+	 * corners, the texture, the effects) and the triangles (three and the
+	 * same two) - drawroom.cpp's walk. */
+	struct DebrisMesh
+	{
+		std::vector<short> v;
+		std::vector<long> prelight;
+		std::vector<unsigned short> quads, tris;
+	};
+
+	static bool DebrisReadMesh(int pointer, DebrisMesh& m)
+	{
+		size_t at = 0;
+		const std::vector<uint8_t>& raw = g_level.debugBytes();
+
+		if (!g_level.debugMeshAt(pointer, at) || at + 12 > raw.size())
+			return false;
+
+		const uint8_t* p = raw.data() + at + 10;
+		unsigned short word;
+
+		memcpy(&word, p, 2);
+		p += 2;
+
+		const int n = word & 0xFF;
+
+		m.v.resize((size_t)n * 3);
+		memcpy(m.v.data(), p, (size_t)n * 6);
+		p += n * 6;
+
+		short norms;
+
+		memcpy(&norms, p, 2);
+		p += 2;
+
+		if (!norms)
+			norms = (short)n;
+
+		if (norms <= 0)
+			for (int i = 0; i < n; i++, p += 2)
+			{
+				short shade;
+
+				memcpy(&shade, p, 2);
+
+				const long c = 255 - (shade >> 5);
+
+				m.prelight.push_back(c | (c << 8) | (c << 16));
+			}
+		else
+			p += n * 6;
+
+		short count;
+
+		memcpy(&count, p, 2);
+		p += 2;
+		m.quads.resize((size_t)(count > 0 ? count : 0) * 6);
+		memcpy(m.quads.data(), p, m.quads.size() * 2);
+		p += m.quads.size() * 2;
+		memcpy(&count, p, 2);
+		p += 2;
+		m.tris.resize((size_t)(count > 0 ? count : 0) * 5);
+		memcpy(m.tris.data(), p, m.tris.size() * 2);
+		return true;
+	}
+
+	/* The break, the flight and the HD looks: ShatterObject's walk (the
+	 * triangles, then the quads, a quad by its corners 1, 2 and 4) at count
+	 * 128 with no item, TriggerDebris with DebrisFlags 0, then <life> steps
+	 * of UpdateDebris without its floor and ceiling. The static's own pieces
+	 * of the art are hidden as the engine hides them once it is broken, and
+	 * hd_debris is handed the break exactly as hd_level.cpp hands it. */
+	static void DebrisPrepare(const char* root, const char* stem, int seed)
+	{
+		if (g_debris_room < 0)
+			return;
+
+		Answer(stem);
+
+		if (seed >= 0 && seed < (int)g_stand_rooms_built.size())
+		{
+			g_debris_origin[0] = g_stand_rooms_built[(size_t)seed].origin[0];
+			g_debris_origin[1] = g_stand_rooms_built[(size_t)seed].origin[2];
+		}
+
+		const Static* found = 0;
+
+		for (const Static& s : g_list)
+			if (s.room == g_debris_room && s.mesh == g_debris_mesh)
+				found = &s;
+
+		DebrisMesh m;
+
+		if (!found || !g_have[found->slot] ||
+			!DebrisReadMesh(g_mesh_of[found->slot], m))
+		{
+			printf("-debris: no static %d:%d with a mesh\n", g_debris_room,
+				g_debris_mesh);
+			return;
+		}
+
+		const Static& s = *found;
+		const int groups = (int)g_stand_rooms_built.size();
+		std::vector<HDDebrisPart> parts;
+
+		for (int p = 0; p < HDRenderDestructibleCount(); p++)
+		{
+			int group = -1;
+			unsigned int material = 0;
+			float lo[3], hi[3], dx, dz;
+
+			if (!HDRenderDestructibleInfo(p, &group, &material, lo, hi) ||
+				group < 0 || group >= groups || !StandGroupHD(group) ||
+				!HDStaticPieceInState(Twin(s.room), group))
+				continue;
+
+			SmashShift(s, group, &dx, &dz);
+
+			if (!HDStaticPiecePaired(s.mins, s.maxs, dx, dz, lo, hi))
+				continue;
+
+			HDDebrisPart part;
+
+			part.group = group;
+			part.material = material;
+			part.originX = g_stand_rooms_built[(size_t)group].origin[0];
+			part.originZ = g_stand_rooms_built[(size_t)group].origin[2];
+			parts.push_back(part);
+			HDRenderDestructibleHide(p, true);
+			printf("-debris: part group=%d material=0x%04x (piece %d hidden)\n",
+				group, material, p);
+		}
+
+		HDDebrisLevelRead(root, stem);
+
+		HDDebrisLevelStats ls;
+
+		HDDebrisLevelInfo(&ls);
+		printf("-debris: the level's destructible parts %d, %d triangles, "
+			"read in %.1f ms\n", ls.parts, ls.triangles, ls.ms);
+
+		// ShatterObject: the vertices turned by the static's y_rot.
+		const int nv = (int)(m.v.size() / 3) < 256 ? (int)(m.v.size() / 3) :
+			256;
+		const long sn = enginecam::PhdSin(s.rot), cs = enginecam::PhdCos(s.rot);
+		std::vector<short> rot((size_t)nv * 3);
+		long sum[3] = { 0, 0, 0 };
+
+		for (int i = 0; i < nv; i++)
+		{
+			const long x = m.v[(size_t)i * 3], y = m.v[(size_t)i * 3 + 1];
+			const long z = m.v[(size_t)i * 3 + 2];
+
+			rot[(size_t)i * 3] = (short)((cs * x + sn * z) >> 14);
+			rot[(size_t)i * 3 + 1] = (short)((16384 * y) >> 14);
+			rot[(size_t)i * 3 + 2] = (short)((-sn * x + cs * z) >> 14);
+
+			for (int a = 0; a < 3; a++)
+				sum[a] += rot[(size_t)i * 3 + a];
+		}
+
+		const long vp[3] = { nv ? sum[0] / nv : 0, nv ? sum[1] / nv : 0,
+			nv ? sum[2] / nv : 0 };
+		const int nt = (int)(m.tris.size() / 5), nq = (int)(m.quads.size() / 6);
+		std::vector<HDDebrisFace> faces((size_t)(nt + nq > 0 ? nt + nq : 1));
+
+		for (int f = 0; f < nt + nq; f++)
+		{
+			const unsigned short* w = f < nt ? &m.tris[(size_t)f * 5] :
+				&m.quads[(size_t)(f - nt) * 6];
+			HDDebrisFace& out = faces[(size_t)f];
+
+			out.corners = f < nt ? 3 : 4;
+
+			for (int k = 0; k < out.corners; k++)
+			{
+				if (w[k] >= nv)
+				{
+					out.corners = 0;
+					break;
+				}
+
+				out.corner[k][0] = (float)(rot[(size_t)w[k] * 3] + s.x);
+				out.corner[k][1] = (float)(rot[(size_t)w[k] * 3 + 1] + s.y);
+				out.corner[k][2] = (float)(rot[(size_t)w[k] * 3 + 2] + s.z);
+			}
+		}
+
+		HDDebrisBreakBegin(parts.data(), (int)parts.size(), faces.data(),
+			nt + nq);
+		g_debris.clear();
+		g_debris_rand = g_debris_seed;
+
+		int num = 128;
+
+		for (int f = 0; f < nt + nq && num; f++)
+		{
+			const unsigned short* w = f < nt ? &m.tris[(size_t)f * 5] :
+				&m.quads[(size_t)(f - nt) * 6];
+			const int a = w[0], b = w[1], c = f < nt ? w[2] : w[3];
+
+			if (a >= 256 || b >= 256 || c >= 256)
+				continue;
+
+			DebrisPiece d;
+			long vec[3], vels[3];
+			const int corner[3] = { a, b, c };
+
+			memset(&d, 0, sizeof(d));
+
+			for (int k = 0; k < 3; k++)
+				for (int i = 0; i < 3; i++)
+					d.off[k * 3 + i] = rot[(size_t)corner[k] * 3 + i];
+
+			for (int i = 0; i < 3; i++)
+			{
+				vec[i] = (d.off[i] + d.off[3 + i] + d.off[6 + i]) / 3;
+
+				for (int k = 0; k < 3; k++)
+					d.off[k * 3 + i] =
+						(short)(d.off[k * 3 + i] - (short)vec[i]);
+
+				vels[i] = vec[i] - vp[i];
+			}
+
+			d.x = vec[0] + s.x;
+			d.y = vec[1] + s.y;
+			d.z = vec[2] + s.z;
+
+			// TriggerDebris: the smoke's numbers are not drawn here.
+			short rgb = s.shade;
+
+			if (DebrisRandom() & 3)
+				rgb = rgb < 0 ? (short)-rgb : rgb;
+
+			d.dir = (short)lround(atan2((double)vels[0], (double)vels[2]) *
+				32768.0 / 3.14159265358979);
+			vels[0] = vels[0] < 0 ? -vels[0] : vels[0];
+			vels[2] = vels[2] < 0 ? -vels[2] : vels[2];
+			d.speed = (short)((long)sqrt((double)(vels[0] * vels[0] +
+				vels[2] * vels[2])) >> 3);
+
+			if (vels[1])
+			{
+				d.yvel = (short)(-512 - (DebrisRandom() & 0x1FF));
+				d.gravity = (short)((DebrisRandom() & 0x3F) + 64);
+
+				if (vels[1] == -1)
+					d.yvel = (short)(d.yvel << 1);
+			}
+			else
+			{
+				d.yvel = 0;
+				d.gravity = (short)((DebrisRandom() & 0x1F) + 32);
+			}
+
+			d.r = (unsigned char)(rgb << 3);
+			d.g = (unsigned char)((rgb >> 5) << 3);
+			d.b = (unsigned char)((rgb >> 10) << 3);
+
+			for (int k = 0; k < 3; k++)
+				d.colour[k] = m.prelight.empty() ? 0 :
+					m.prelight[(size_t)corner[k]];
+
+			d.face = f;
+			d.tex = w[f < nt ? 3 : 4];
+			d.flags = w[f < nt ? 4 : 5];
+			HDDebrisNote((int)g_debris.size(), f, d.x, d.y, d.z);
+			g_debris.push_back(d);
+			num--;
+		}
+
+		HDDebrisBreakStats bs;
+
+		HDDebrisBreakInfo(&bs);
+		HDDebrisBreakEnd();
+		printf("-debris: %s static %d:%d slot %d, %d faces at %d places, "
+			"%d pieces; %d part(s), %d triangles dealt to %d faces in "
+			"%.2f ms; %d pieces carry art, %d triangles fly\n", stem,
+			s.room, s.mesh, s.slot, bs.faces, bs.places, bs.pieces, bs.parts,
+			bs.triangles, bs.facesWithArt, bs.ms, bs.piecesWithArt,
+			bs.trianglesFlying);
+
+		// UpdateDebris, <life> times.
+		for (int t = 0; t < g_debris_life; t++)
+			for (DebrisPiece& d : g_debris)
+			{
+				d.yvel = (short)(d.yvel + d.gravity);
+
+				if (d.yvel > 4096)
+					d.yvel = 4096;
+
+				d.speed = (short)(d.speed - (d.speed >> 4));
+				d.x += d.speed * enginecam::PhdSin(d.dir) >> 14;
+				d.y += d.yvel >> 4;
+				d.z += d.speed * enginecam::PhdCos(d.dir) >> 14;
+				d.xrot = (unsigned char)(d.xrot + (d.yvel >> 6));
+
+				if (d.yvel)
+					d.yrot = (unsigned char)(d.yrot + (d.speed >> 5));
+			}
+
+		printf("-debris: life %d, the first piece at %ld %ld %ld\n",
+			g_debris_life, g_debris.empty() ? 0 : g_debris[0].x,
+			g_debris.empty() ? 0 : g_debris[0].y,
+			g_debris.empty() ? 0 : g_debris[0].z);
+	}
+
+	/* A piece's matrix as DrawDebris builds it - the view, phd_TranslateAbs
+	 * to the piece, phd_RotY and phd_RotX by the two bytes shifted up by
+	 * eight - in the classic layout M00 .. M23; `view` is the tool's D3D
+	 * view of the seed room's frame. */
+	static void DebrisMatrix(const DebrisPiece& d, const float* view,
+		float* out)
+	{
+		double m[3][4];
+
+		for (int r = 0; r < 3; r++)
+		{
+			for (int c = 0; c < 3; c++)
+				m[r][c] = view[c * 4 + r];
+
+			m[r][3] = view[12 + r];
+		}
+
+		const double p[3] = { (double)d.x - g_debris_origin[0], (double)d.y,
+			(double)d.z - g_debris_origin[1] };
+
+		for (int r = 0; r < 3; r++)
+			m[r][3] += m[r][0] * p[0] + m[r][1] * p[1] + m[r][2] * p[2];
+
+		const double sy = enginecam::PhdSin(d.yrot << 8) / 16384.0;
+		const double cy = enginecam::PhdCos(d.yrot << 8) / 16384.0;
+		const double sx = enginecam::PhdSin(d.xrot << 8) / 16384.0;
+		const double cx = enginecam::PhdCos(d.xrot << 8) / 16384.0;
+
+		for (int r = 0; r < 3; r++)
+		{
+			const double a = cy * m[r][0] - sy * m[r][2];
+			const double c = cy * m[r][2] + sy * m[r][0];
+
+			m[r][0] = a;
+			m[r][2] = c;
+
+			const double b = cx * m[r][1] + sx * m[r][2];
+			const double e = cx * m[r][2] - sx * m[r][1];
+
+			m[r][1] = b;
+			m[r][2] = e;
+		}
+
+		for (int r = 0; r < 3; r++)
+			for (int c = 0; c < 4; c++)
+				out[r * 4 + c] = (float)m[r][c];
+	}
+
+	// A classic page of the level, 256 x 256 out of the 32-bit block.
+	static IDirect3DTexture9* DebrisPage(int page)
+	{
+		if (page < 0 || page > 255)
+			return 0;
+
+		if (g_debris_pages.empty())
+		{
+			g_debris_pages.assign(256, 0);
+
+			const std::vector<uint8_t>& raw = g_level.debugBytes();
+			int size = 0, packed = 0;
+
+			if (raw.size() < 18)
+				return 0;
+
+			memcpy(&size, raw.data() + 10, 4);
+			memcpy(&packed, raw.data() + 14, 4);
+
+			std::vector<uint8_t> pages((size_t)size);
+			uLongf got = (uLongf)size;
+
+			if (uncompress(pages.data(), &got, raw.data() + 18,
+				(uLong)packed) != Z_OK)
+				return 0;
+
+			for (int i = 0; i < 256 && (size_t)(i + 1) * 262144 <= got; i++)
+			{
+				IDirect3DTexture9* t = 0;
+				D3DLOCKED_RECT lr;
+
+				if (FAILED(g_device->CreateTexture(256, 256, 1, 0,
+					D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &t, 0)))
+					continue;
+
+				if (SUCCEEDED(t->LockRect(0, &lr, 0, 0)))
+				{
+					for (int y = 0; y < 256; y++)
+						memcpy((uint8_t*)lr.pBits + y * lr.Pitch,
+							pages.data() + (size_t)i * 262144 + y * 1024, 1024);
+
+					t->UnlockRect(0);
+				}
+
+				g_debris_pages[(size_t)i] = t;
+			}
+		}
+
+		return g_debris_pages[(size_t)page];
+	}
+
+	/* CalcColorSplit (specific\polyinsert.cpp): up to 128 doubled into the
+	 * diffuse colour, above it the diffuse pinned and half the rest
+	 * specular. */
+	static void DebrisSplit(long r, long g, long b, DWORD* diffuse,
+		DWORD* specular)
+	{
+		const long in[3] = { r, g, b };
+		long d[3], s[3];
+
+		for (int i = 0; i < 3; i++)
+		{
+			d[i] = in[i] - 128 <= 0 ? in[i] << 1 : 255;
+			s[i] = in[i] - 128 <= 0 ? 0 : (in[i] - 128) >> 1;
+			d[i] = d[i] > 255 ? 255 : d[i];
+		}
+
+		*diffuse = 0xFF000000u | (DWORD)(d[0] << 16) | (DWORD)(d[1] << 8) |
+			(DWORD)d[2];
+		*specular = 0xFF000000u | (DWORD)(s[0] << 16) | (DWORD)(s[1] << 8) |
+			(DWORD)s[2];
+	}
+
+	/* The pieces drawn the classic way, as DrawDebris and the sort list draw
+	 * them: the face's own texture with its corners 1 to 3 (without
+	 * AdjustUV's half-texel nudge), the static's colour times the prelight,
+	 * split; additive for an effects word with bit 0, else the texture's
+	 * own draw type; both sides. */
+	static void DebrisDrawClassic(const float* view,
+		const D3DMATRIX* projection)
+	{
+		size_t at = 0;
+		int32_t n = 0;
+
+		if (!g_level.debugTexinfoBlock(at, n))
+			return;
+
+		struct V
+		{
+			float x, y, z;
+			DWORD diffuse, specular;
+			float u, v;
+		};
+
+		IDirect3DStateBlock9* kept = 0;
+
+		g_device->CreateStateBlock(D3DSBT_ALL, &kept);
+		g_device->SetVertexShader(0);
+		g_device->SetPixelShader(0);
+		g_device->SetFVF(D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_SPECULAR |
+			D3DFVF_TEX1);
+
+		D3DMATRIX one;
+
+		memset(&one, 0, sizeof(one));
+		one._11 = one._22 = one._33 = one._44 = 1.0f;
+		g_device->SetTransform(D3DTS_WORLD, &one);
+		g_device->SetTransform(D3DTS_VIEW, &one);
+		g_device->SetTransform(D3DTS_PROJECTION, projection);
+		g_device->SetRenderState(D3DRS_LIGHTING, FALSE);
+		g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+		g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		g_device->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
+		g_device->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
+		g_device->SetTextureStageState(0, D3DTSS_COLORARG2, D3DTA_DIFFUSE);
+		g_device->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+		g_device->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_TEXTURE);
+		g_device->SetTextureStageState(1, D3DTSS_COLOROP, D3DTOP_DISABLE);
+		g_device->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+		g_device->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+		g_device->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_NONE);
+
+		for (const DebrisPiece& d : g_debris)
+		{
+			const uint8_t* t = g_level.debugBytes().data() + at +
+				(size_t)(d.tex & 0x7FFF) * 40;
+			unsigned short tw[11];
+
+			if ((d.tex & 0x7FFF) >= n)
+				continue;
+
+			memcpy(tw, t, sizeof(tw));
+
+			float m[12];
+
+			DebrisMatrix(d, view, m);
+
+			int drawtype = tw[0];
+
+			if (d.flags & 1)
+				drawtype = 2;
+
+			V v[3];
+
+			for (int k = 0; k < 3; k++)
+			{
+				const float p[3] = { (float)d.off[k * 3],
+					(float)d.off[k * 3 + 1], (float)d.off[k * 3 + 2] };
+				const long c = d.colour[k] & 0xFF;
+				long rgb[3] = { ((c * d.r) >> 8), ((c * d.g) >> 8),
+					((c * d.b) >> 8) };
+
+				for (int i = 0; i < 3; i++)
+					rgb[i] = rgb[i] > 255 ? 255 : rgb[i];
+
+				v[k].x = m[0] * p[0] + m[1] * p[1] + m[2] * p[2] + m[3];
+				v[k].y = m[4] * p[0] + m[5] * p[1] + m[6] * p[2] + m[7];
+				v[k].z = m[8] * p[0] + m[9] * p[1] + m[10] * p[2] + m[11];
+				DebrisSplit(rgb[0], rgb[1], rgb[2], &v[k].diffuse,
+					&v[k].specular);
+				v[k].u = (float)(tw[3 + k * 2] >> 8) / 256.0f;
+				v[k].v = (float)(tw[4 + k * 2] >> 8) / 256.0f;
+			}
+
+			const bool add = drawtype == 2;
+
+			g_device->SetRenderState(D3DRS_ZWRITEENABLE, add ? FALSE : TRUE);
+			g_device->SetRenderState(D3DRS_ALPHABLENDENABLE,
+				drawtype ? TRUE : FALSE);
+			g_device->SetRenderState(D3DRS_SRCBLEND,
+				add ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+			g_device->SetRenderState(D3DRS_DESTBLEND,
+				add ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
+			g_device->SetRenderState(D3DRS_SPECULARENABLE, add ? FALSE : TRUE);
+			g_device->SetTexture(0, DebrisPage(tw[1] & 0x7FFF));
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, v, sizeof(V));
+		}
+
+		if (kept)
+		{
+			kept->Apply();
+			kept->Release();
+		}
+	}
+
+	/* The pieces in the picture, last in the tool's bracket as in the
+	 * engine's two: the classic way under -debrisclassic, else through
+	 * hd_debris with the projection and the lighting the rooms took. */
+	static void DebrisDraw(const float* view, const D3DMATRIX* projection,
+		const HDFrameLighting* frame)
+	{
+		if (g_debris.empty())
+			return;
+
+		/* The draw's GPU time, timestamps round it, as -life measures its
+		 * models; the classic pages made and uploaded before, as a level
+		 * load has them. */
+		if (g_debris_classic && DebrisPage(0))
+			for (size_t i = 0; i < g_debris_pages.size(); i++)
+				if (g_debris_pages[i])
+					g_debris_pages[i]->PreLoad();
+
+		IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
+
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT, &q[0]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[1]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &q[2]);
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ, &q[3]);
+
+		const bool timed = q[0] && q[1] && q[2] && q[3];
+
+		if (timed)
+		{
+			q[0]->Issue(D3DISSUE_BEGIN);
+			q[1]->Issue(D3DISSUE_END);
+		}
+
+		int calls = 0, tris = 0;
+
+		if (g_debris_classic)
+		{
+			DebrisDrawClassic(view, projection);
+			calls = tris = (int)g_debris.size();
+		}
+		else
+		{
+			HDDebrisFrameBegin();
+
+			for (size_t i = 0; i < g_debris.size(); i++)
+			{
+				float m[12];
+
+				DebrisMatrix(g_debris[i], view, m);
+				HDDebrisDrawn((int)i, m);
+			}
+
+			HDDebrisDraw(g_device, projection, frame, 0);
+			HDDebrisDraw(g_device, projection, frame, 1);
+
+			HDDebrisFrameStats fs;
+
+			HDDebrisFrameInfo(&fs);
+			calls = fs.calls;
+			tris = fs.triangles;
+		}
+
+		double gpu = -1.0;
+
+		if (timed)
+		{
+			BOOL disjoint = TRUE;
+			UINT64 a = 0, b = 0, freq = 0;
+
+			q[2]->Issue(D3DISSUE_END);
+			q[3]->Issue(D3DISSUE_END);
+			q[0]->Issue(D3DISSUE_END);
+
+			while (q[0]->GetData(&disjoint, sizeof(disjoint),
+				D3DGETDATA_FLUSH) == S_FALSE) {}
+			while (q[1]->GetData(&a, sizeof(a), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[2]->GetData(&b, sizeof(b), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+			while (q[3]->GetData(&freq, sizeof(freq), D3DGETDATA_FLUSH) ==
+				S_FALSE) {}
+
+			if (!disjoint && freq)
+				gpu = (double)(b - a) * 1000.0 / (double)freq;
+		}
+
+		for (int i = 0; i < 4; i++)
+			if (q[i])
+				q[i]->Release();
+
+		printf("-debris: %zu pieces drawn %s, %d triangles in %d draw "
+			"calls, gpu_ms=%.4f\n", g_debris.size(),
+			g_debris_classic ? "the classic way" : "with the HD look", tris,
+			calls, gpu);
 	}
 
 	struct Vtx
@@ -17618,6 +18325,9 @@ static int ProbeMain(int argc, char** argv)
 
 		if (!g_smash.empty())
 			probestatics::SmashHide(stem, g_smash);
+
+		// -debris: the break and its flight, the static's art hidden.
+		probestatics::DebrisPrepare(root, stem, room);
 	}
 	// The wind belongs to material 8, and this says how much of the .TRG's
 	// own sway weight was on other materials.
@@ -18831,6 +19541,9 @@ static int ProbeMain(int argc, char** argv)
 			g_under_knobs[5], g_under_knobs[6], g_under_knobs[7],
 			g_under_knobs[8]);
 	}
+
+	// -debris: the pieces, last in the bracket as the engine draws them.
+	probestatics::DebrisDraw(view, &projection, &frame);
 
 	HDRenderFrameEnd();
 	g_device->EndScene();

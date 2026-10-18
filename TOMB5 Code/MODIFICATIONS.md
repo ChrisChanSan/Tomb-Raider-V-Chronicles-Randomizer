@@ -3080,6 +3080,113 @@ draw stays as merged; its colour is the owner's to judge (the #210 part's Round 
 
 **Commits.** None for the sky; this part is recorded with the #210 part's Round 3.
 
+**2026-10-18, Round 4 (#208): the band's poles closed.**
+
+**What.** The band ends at its last ring on either side - 21 rings, 68 to 79 degrees under
+the horizon and 75 to 79 over it in the thirteen sky levels (RoomProbe `-skycensus`) - and
+leaves both poles open. Each pole now gets a cap of the band's own: a flat disc in the
+plane of its last ring, one wedge per edge of that ring to the ring's centre, carrying the
+edge's page, colours and texture row (`hd_sky_cap.h`, `HDSkyCapBuild`). The wedges are
+built into the band's own run of indices as the `.TRG` is read (`HDRenderSkyCaps` in
+`HDRenderLevelBegin`), so the band stays one draw call in its pass, its painter's order
+and its depth slice. Round 2's third draw of the look - the fill of the clear with the
+water's scattered colour - leaves the game path with its constant (`water_look_draws`'
+`fill`, `gLookFill` c215): the cap takes its place, and the look lays its light over the
+cap as over the band. The study (`-underlookset`) draws as before.
+
+**Why.** Asked whether the darker disc at the filled pole of JOBY4's sky should be mended
+by giving the fill the band's colour, by closing the band's pole, or left, the owner chose
+the second, as recommended ("A1 Weg 2", "A1 Pol-Scheibe deine Empfehlung"): a cap in the
+band's own colour, so that no state leaves a hole, and the look's light over it. His two
+pictures of 2026-10-17 (the darker disc at the top centre under the sub's hull, and the
+black disc looking steeply up) are reference pictures supplied for this project, not in
+the repository; his log of a JOBY4 dive on the build of 2026-10-18 12:04:01 gave three
+eyes looking up (CAMLOG ticks 54,078 in room 29 at 87 degrees, 66,421 in room 52 at 86,
+20,843 in room 123 at 80).
+
+**Measured.** RoomProbe of `b35b3b96` against this round's, both with `-surfacealways`,
+1280 x 720, at round 3's eye of tick 22,020 (room 33, the listed state), the same eye
+turned 72 to 89 degrees up, and the dive's three eyes. The step is round 3's: the mean
+luma of a ring 6 pixels wide just outside the old pole minus one just inside, the pole the
+black pixels of the dome alone (`-skyonly`) of the old tool; the controls are the same
+rings moved to two or four other places of the same picture (after, `hd_water` 1).
+
+| eye | pole px | `hd_water` 1 before | after | controls | dome alone after | `hd_water` 0 |
+|---|---|---|---|---|---|---|
+| 22,020 | 4,622 | 6.6 | -1.3 | 1.0, -1.1 | 0.0 | -2.7, unchanged |
+| 72 up | 85,265 | 5.0 | -3.0 | -2.6, -1.2 | 0.0 | 1.3, unchanged |
+| 75 up | 81,986 | 7.4 | -0.5 | -3.2, 1.0 | 0.0 | 1.0, unchanged |
+| 80 up | 77,026 | 7.5 | -0.4 | -3.0, 2.0 | 0.0 | 0.8, unchanged |
+| 85 up | 74,240 | 7.6 | -0.3 | -2.6 to 1.7 | 0.0 | 0.6, unchanged |
+| 89 up | 73,381 | 7.7 | -0.3 | -2.2 to 2.9 | 0.0 | 0.7, unchanged |
+| 54,078 | 73,624 | -1.7 | -3.0 | -4.7 to -2.3 | 0.1 | 0.5, unchanged |
+| 66,421 | 74,024 | 1.4 | -1.8 | -8.1 to -0.5 | 0.5 | -2.3, unchanged |
+| 20,843 | 77,072 | -1.3 | unchanged | -14.4, -5.5 | 0.1 | -2.8, unchanged |
+
+The pixels change inside the old pole and nowhere else: 0 changed pixels outside it grown
+by 2 at every eye, with either key - the surface art and the look's light are the same
+pixels as before. The dome alone has no step left (0.0 to 0.5): the cap is the band's last
+ring drawn inward. What is left with `hd_water` 1, -0.3 to -1.3 at the steep eyes and
+22,020, is mostly the look's own light, which grows toward the zenith: the dome with the
+look alone gives -0.5 to -0.8 there (7.2 to 7.4 before), and -2.8 at 72 degrees, where the
+72-degree eye's -3.0 stands a little past its controls. No black pixel lies in the sky: 0
+in the old pole with either key at every eye but 20,843, where the sub's hull stands in
+front of it (2,641 pixels with `hd_water` 0, the hull's, the same before); the other black
+pixels of the pictures (1,304 at 22,020 and 32,120 at 20,843 with `hd_water` 0, 2,284 at
+20,843 with 1) are the hull's and the rock's and unchanged. With `hd_water` 0 the script's
+layers cover the cap at every eye (each picture byte-identical).
+
+**The other levels' poles.** Each sky level's room 0 looking straight up and straight
+down, the dome alone and the whole sky, 960 x 540: the top pole is unchanged in ten
+levels, where the band's top row is cut away by its alpha test, and closed in three -
+JOBY4 (41,252 pixels, black to 13, 35, 42), TITLE (40,666, black to 59, 59, 59) and
+ANDREA3 (9,310, its cloud sheet 123, 170, 254 under the band's faint top row, now 121,
+166, 249). The bottom pole is unchanged in ANDREA1, the three ANDY levels and TITLE and
+closed in eight: ANDREA2 (41,266 pixels, black to 20, 22, 27), ANDREA3 (20,650, to 13, 13,
+16), JOBY2 (48,803, to 2, 3, 5), JOBY4 (41,252, to 13, 35, 42), RICH1, RICH2 and RICHCUT2
+(7,332, to 1, 0, 0) and RICH3 (41,293: its ground sheet under the sky, 14, 11, 12, seen
+through the hole as a disc, now under the band's dark bottom row as all round the hole).
+The census eyes (room 0, `-sky`, `hd_water` 0 and 1) 15 of 15 each, the fifteen parity
+cameras 15 of 15 each, round 1's sky eyes 4 of 4 each and the classic views (`hd_build` 0)
+7 of 7 are byte-identical; of round 2's four JOBY4 eyes, E216 changes 3,664 pixels at the
+top edge, where its pole stands (`hd_water` 1: 33, 106, 124 to 35, 116, 137; the probe
+with `hd_water` 0 and no layers: 9, 62, 59 to 22, 97, 101), the other three are identical.
+
+**The cost.** 64 triangles and 64 corners per band (32 a pole), 128 in TITLE's two bands;
+draw calls unchanged (252 and 77 at the two eyes below). At 2,560 x 1,440, three runs each
+at the 80-degree eye and the dive's tick 54,078: the dome (`-skygpu 20`) 0.107 ms before,
+0.117 after (the cap's pixels), the look 0.944 and 0.943 before, 0.903 and 0.902 after
+(the third draw gone), the solid room draws within their noise (0.105 to 0.119 and 0.030
+to 0.032 ms).
+
+**The rule.** From the band's own data: in the sky groups (past the rooms), every pass run
+of a part with no baked light whose corners stand at three heights or more (the band; a
+flat sheet of one height is none, RICH3's unlit ground sheet among them); at its highest
+and its lowest height, every triangle edge with both corners there gets one wedge, the
+edge reversed and a corner at the middle of the ring's box, in the ring's plane, with the
+first corner's page, colours and v and the edge's middle u; a ring with no width (a pole
+closed already) gets none. The wedges are inserted after the run's own indices and every
+later run moves up by as many, so the parts still tile the index list. ModernTest
+`sky_cap`, 11 checks. RoomProbe `-skycap 0|1` draws without the caps for the A/B picture
+and prints `skycap: on|off bands= poles= triangles= vertices=` after the build.
+
+**Decisions.** The cap is the band's last texel row drawn inward, not a colour of ours, so
+it shows whatever that row shows: one colour in JOBY4, nothing where the alpha test cuts
+the row away. A flat disc in the ring's plane, not the sphere's apex: from inside, both
+cover the same hole, and the disc needs no centre or radius beyond the ring's own. Both
+poles of every band, so that no pitch and no state leaves the frame's clear in the sky.
+
+**Checked.** The nine builds exit 0 (the engine `PCtomb5 built Oct 18 2026 14:21:20`);
+ModernTest 15,623 checks (the new `sky_cap` group of 11), MenuTest 44,272, InterpTest 729,
+LipsTest 299 with the reference `.OBJ` folder and 272 without (the game folder's
+`cutseq.bin` given by hand), 0 failed. The look's study (`-underlookset`) is
+byte-identical without the sky and changes only the old pole's 4,622 pixels with it.
+
+**Left.** The cap has not been seen in the game; its numbers are the probe's. The step at
+the 72-degree eye stands 0.4 past its nearest control, the look's own light (above).
+
+**Commits.** `3744ceba`
+
 ### A floor whose page is part-way clear is drawn blended, and a mirror shows the room's items
 2026-09-29
 
@@ -8678,6 +8785,70 @@ slots 50 to 57; the merge's to update. The `HDLOG flippair` line still skips the
 whose main room has the higher number.
 
 **Commits.** `052a283e`, `e07d5ec2`, `dee55029`
+
+#### Round 3: the bars drawn solid
+2026-10-18
+
+**What.** The room shader's glass line takes reading C (`hd_room.hlsl`, the last line of
+`RoomPS`): in a draw call whose see-through weight `gSpec.w` is under 1 - the alpha pass's
+material 14 parts with `param[1]` under 1 - a texel with alpha under 16 of 255 is drawn
+opaque; every other texel keeps its alpha times `gSpec.w`, and a draw call at 1 (every
+other draw call of the game) is untouched. ANDREA2's window grid now stands from the ledge
+as solid bars in their own colour with the faint panes between them; the broken state is
+unchanged (its grid is hidden after the break by round 2's rule).
+
+**Why.** Asked whether ANDREA2's bars should be drawn solid by the third reading, the
+owner answered "A5 ja Lesart C bauen" ("A5 yes, build reading C"). Told that the panes
+between the bars stay as they are, faint, at their alpha times the part's opacity, he
+accepted it with a picture of the window from the hall side: solid frames, clear panes.
+His pictures (ours from the ledge, the window all but invisible, and the classic draw, a
+grid of solid gold bars with panes) are reference pictures supplied for this project, not
+in the repository.
+
+**The data behind the rule.** The texel census of round 2, re-run on this round's tree
+with the engine's own resolvers (`HDScanReadTrg`, `HDScanPagePath`, the engine's BC7
+decoder) over the fifteen levels: 74 material 14 parts with an alpha run and `param[1]`
+under 1, and clear texels in two of them alone - ANDREA2's grid in group 65 and its flip
+twin 132 (page 3007, `param[1]` 0.1: 55,877 of 103,293 texels clear, mean colour 106, 82,
+60, 47,416 partial, none opaque; 2,076 of the 2,146 triangles cover clear texels on
+average, all 640 horizontal ones among them). The bars lie on clear texels painted in
+their colour, the panes on partial ones. Every other part of the 74 has no clear texel, so
+the rule draws nothing of theirs differently. TITLE's page 2150 has clear texels (17.7 %)
+but its parts' `param[1]` is 1, so their draw calls stand at 1. ANDREA1's pane (page
+15074, `0x800e`) is not of this family: it lies in the additive run at weight 0.818, and
+the see-through weight is the alpha run's alone (`MaterialBlend` gives 0 outside pass 1,
+the draw call then carries 1), so its `gSpec.w` is 1.
+
+**Measured.** RoomProbe of `b35b3b96` against this round's, 960 x 540, `-time 3`, `-sky`:
+
+| eye | state | pixels changed | against the fix pass's reading C |
+|---|---|---|---|
+| ANDREA2 room 73, ticks 1507875 to 1545422 | whole | 97,138, 96,158 by 4 or more | byte-identical |
+| the same, `-black` | whole | 97,138 | byte-identical |
+| the same | broken (`-flip 132 -smash 132:0`) | 0 | - |
+| ANDREA2, ticks 1464922 to 1466453 | whole | 45,388 | - |
+| the same | broken | 0 | - |
+| JOBY2 102, JOBY2 52 (three eyes), JOBY3 10, RICH2 84, RICH3 46 | as drawn | 0 of 7 | - |
+| ANDREA1 room 198 and room 201 (the additive pane) | whole | 0 of 2 | - |
+
+The 15 parity cameras with `hd_water` 0 and 1 (15 of 15 each), the census eyes (15 of 15
+each) and the classic views (`hd_build` 0, 7 of 7, and ANDREA2's window eye drawn classic)
+are byte-identical to the tool of the sky's Round 4 commit. The shader's bytecode changes
+in `hd_room_ps.inc` and `hd_room_gloss_ps.inc`; the fifteen other `.inc` built from or
+with `hd_room.hlsl` change their stamp line only, which `be.bat`'s shader guard checks.
+
+**Decisions.** The rule reads the draw call's own weight and the texel's alpha, never a
+level, a room or a page. The threshold is the census's own: clear is under 16 of 255, the
+same bound that counts the grid's texels as clear and every other part's as not.
+
+**Checked.** As in the sky's Round 4: the nine builds, ModernTest 15,623, MenuTest 44,272,
+InterpTest 729, LipsTest 299 and 272, 0 failed.
+
+**Left.** Reading C has not been seen in the game. A part a mod adds with clear texels
+under a see-through draw call would draw those texels solid as well; the census holds for
+the fifteen levels as shipped.
+
+**Commits.** `60097611`
 
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15
@@ -16682,6 +16853,8 @@ of 0.99999, tested LESS, adds the scattered colour there and only there (`gLookF
 c215; the band's depth 0.99998) - the colour a view ray under the water takes when it
 meets nothing, 14, 32, 41 against the band's 13, 35, 42; the hole now 35, 113, 132 against
 36, 119, 140 just outside it.
+The sky entry's Round 4 takes the fill's place: the band's poles are closed by caps of its
+own, and the third draw and `gLookFill` are gone.
 
 The strengths are free choices set by eye on RoomProbe `-underlook` pictures at four eyes
 (his picture's, tick 22,020 in room 33, round 1's 23,995 and 24,484, and room 123 turned

@@ -2867,6 +2867,49 @@ carries the tables.
     found through the engine's own resolvers: 74 parts, the clear texels
     on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
     16073, RICH2's 3309 and RICH3's 10084.
+275. **The sky band's caps** (`hd_sky_cap.h`, `HDSkyCapBuild`, `HDSkyCapPole`,
+    `HDSkyCapUnlit`; `hd_render.cpp`, `HDRenderSkyCaps`, called from
+    `HDRenderLevelBegin`) - every run of a sky group's part with no baked
+    light whose corners stand at three heights or more gets, at its highest
+    and its lowest height, one wedge per triangle edge lying there: the
+    edge reversed and a corner at the middle of the ring's box in the
+    ring's plane, with the edge's page, colours and texture row and the
+    edge's middle u; inserted after the run's own indices, the later runs
+    moved up. DATA: the bands of the thirteen sky levels (RoomProbe
+    `-skycensus`): 21 rings, 1,280 triangles, open from 68 to 79 degrees
+    under the horizon and 75 to 79 over it, radius 1,060 at the last ring;
+    32 edges a ring; RICH3's unlit sheet of one height. OWN, the rule and
+    the flat disc (chosen over the sphere's apex: both cover the same hole
+    seen from inside); the owner's choice of 2026-10-18 ("A1 Weg 2", the
+    band's pole closed in its own colour).
+276. **The look without its fill** (`hd_render.cpp`, `water_look_draws`,
+    `HDRenderWaterLook`; `hd_water_look.hlsl`, `gLookFill` c215 removed) -
+    the third draw of the sea seen from below (the water's scattered colour
+    where the frame kept its clear) leaves the game path, the caps standing
+    in its place; the study draws as before. OWN.
+277. **The pole measured** (`MODIFICATIONS.md`, the sky's Round 4) - the
+    ring-edge step (the mean luma of a 6-pixel ring just outside the old
+    pole minus one just inside, the pole the black pixels of the dome
+    alone, with two to four shifted control rings) at the eye of tick
+    22,020, the same eye turned 72 to 89 degrees up and three looking-up
+    eyes of the owner's JOBY4 dive log of 2026-10-18 (ticks 54,078, 66,421
+    and 20,843): 5.0 to 7.7 before, -3.0 to -0.3 after with `hd_water` 1,
+    0.0 to 0.5 for the dome alone; each sky level's poles straight up and
+    down; the dome 0.107 to 0.117 ms and the look 0.94 to 0.90 ms at 2,560
+    x 1,440. OWN, this project's tool on the player's files (DATA).
+278. **RoomProbe `-skycap 0|1` and its `skycap:` line** - the band's caps
+    built or left out for the A/B picture, and the count after the build.
+    OWN, this project's tool.
+279. **A see-through part's clear texels drawn whole** (`hd_room.hlsl`,
+    `RoomPS`'s last line) - in a draw call whose see-through weight is
+    under 1, a texel under 16 of 255 is drawn opaque, every other at its
+    alpha times the weight; a draw call at 1 is untouched. DATA: the texel
+    census over the fifteen levels (74 material 14 parts with an alpha run
+    and `param[1]` under 1; clear texels in ANDREA2's grid alone, groups 65
+    and 132 on page 3007, 55,877 of 103,293, 2,076 of 2,146 triangles on
+    them; ANDREA1's pane 15074 in the additive run, weight 1); the 16 the
+    census's own bound of clear. OWN, the reading; the owner's choice of
+    2026-10-18 ("A5 ja Lesart C bauen").
 
 ## Credited, but not contained here
 

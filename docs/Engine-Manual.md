@@ -1619,8 +1619,9 @@ see *Lara in HD* below for which of her stays classic and why.
   reflects 4 % face on), with no darkening. A frame mirrors at most
   `hd_marble_planes` floor heights, the ones that cover the most of the
   screen; another height in view stays a plain floor in that frame. Where a
-  broken tank's water has run over the marble, the wet floor's own mirror
-  is there instead. In your own `hd_gloss.txt` (see `hd_reflect`) the word
+  broken tank's water has run over the marble, this mirror runs on under
+  the water, which darkens the floor (see *The dive splash and the fish
+  tank*). In your own `hd_gloss.txt` (see `hd_reflect`) the word
   `mirror` or `nomirror` at the end of a page's line, or a line of a page
   and that word alone (`960 nomirror`), switches a page's mirror without a
   rebuild of the engine; read at the next level load. The page numbers are
@@ -2074,8 +2075,10 @@ it.
   polished surfaces lose their sheen there and fade like the rest. A water
   room with no sheet over it takes the water of the level's largest body
   and has no surface over it: everything it sees lies in the water. In a
-  level that is almost all water no sheet lies over (JOBY4, swum in the
-  diving suit), every water room takes a deep sea's water in the section's
+  level that is almost all water no sheet lies over and whose water has a
+  sea's surface over the dive (JOBY4, swum in the diving suit; a flooded
+  room under its own ceiling, as RICH3's, is no sea and keeps its own
+  water's look), every water room takes a deep sea's water in the section's
   colours - the section's deep colour, not the shallow one a pool shows over
   its floor, so the far walls go into dark blue-green water and not into a
   pale haze; the deeper the camera is under the highest water of the level,
@@ -2317,15 +2320,26 @@ it.
   mirrored as themselves, drawn once more through the floor; the room's
   art and its fixed pieces (the machines, the benches) are mirrored out of the
   picture on the screen, so what lies off the screen's edge does not
-  show in it.
+  show in it. On a polished floor with the marble floors on (`hd_marble`,
+  the default) - both of RICH2's tanks' floors are polished - the floor
+  keeps the marble's own mirror under the water instead: the room, its
+  fixed pieces, Lara and the objects mirrored as a plane, nothing cut away
+  at the screen's edge, the same mirror as on the dry marble round it, and
+  the water darkens the floor under it. The wet patch then shows no edge
+  in the reflection, only the soft edge of its darkening.
   What a model hides in the picture - the bench behind a crawling Lara -
   is mirrored out of the room's picture taken before the models.
   The reflection is softened further from the eye - fine near, the
   cove lights' strips without steps across the floor further down the
   corridor - and Lara's and the objects' reflections with it.
-  A level with a tank makes the wet floor's targets at its load and
-  readies its shaders on its first frame, so breaking a tank does not
-  hold the picture. Where the level's art carries a copy of the room upside down
+  A level with a tank makes the wet floor's targets and readies its
+  shaders, the models' through the floor's mirror among them, at its load
+  (about a tenth of a second more under the loading bar), so the water
+  holds neither the first frame nor the picture when a tank breaks. With
+  the marble floors on, the marble's own first mirrored draw still holds
+  the first frame of such a level for about a tenth of a second after a
+  cold start. Where the level's
+  art carries a copy of the room upside down
   under a see-through floor (RICH2's corridor 46 west of its mouth, and
   some 55 rooms of RICH2 in all), that copy is the floor's reflection and
   a wet floor there would only darken; where the copy lies under an

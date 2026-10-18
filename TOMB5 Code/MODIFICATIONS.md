@@ -15722,6 +15722,187 @@ swaps to the water too.
 **Commits.** `3dc9b342` (the veil), `567a7876` (the first wet frame), `99ac494a` (the
 flipped water), `c70c7559` (the room copy's time), `181b51ee` (the soft mirror).
 
+**Round 8 (#197), 2026-10-18: the polished floor under the water, the models' shaders at
+the load.** Asked for after the play test of round 7 (the build of 2026-10-17 20:20:19),
+put into English (his words beside in German), with a picture of Lara on the wet floor at
+the corridor's mouth and a short video of the camera tilting there: the spread of the wet
+area is still faulty - it has sharp edges, the objects are still cut away depending on the
+camera, and the transition to the normal reflection is still very strong ("Momentan ist
+die Ausbreitung unserer Nassflaeche noch fehlerhaft. Sie hat scharfe Kanten, die Objekte
+werden noch kameraabhaengig weggeschnitten und der Uebergang zur normalen Spiegelung ist
+noch sehr doll."). And to round 7's question whether the first wet frame's warm draw under
+the loading bar is acceptable: he asked whether that was the tank's lag in RICH2 and wants
+no lag; the warm draw goes to the level's load, as the marble mirror's does. His picture
+and video are reference pictures supplied for this project, not in the repository.
+
+*The eyes.* His log of the session (the same build) holds RICH2's `CAMLOG` eyes; his
+picture is matched by content at the eye the camera held for half a minute from tick
+147,672 on: (45,850, -1,107, 68,015) in room 46, the corridor's mouth, toward (45,838,
+-661, 68,359), 52.3 degrees down, Lara standing at `HAIRLOG`'s braid root (45,813, -691,
+68,394); RoomProbe at that eye with the tank 60 s after the break and the marble floors on
+draws his picture's floor, bench, gold bands and stepped wet area as he saw them. The
+video is the camera tilting between 28 and 43 degrees down over the corridor toward the
+tank from about (45,300, -1,281, 68,580), ticks 195,609 to 200,406, Lara at (46,015, 0,
+68,540) facing the tank. Measured at those eyes (his picture's and a fan of 8 degrees of
+yaw and 4 of pitch round it; the tilt at 28, 31, 34, 37, 40 and 43 degrees, both with Lara
+by `-wetlara`), at round 7's eye with her crawling, round 6's 25 band eyes and his eight
+eyes of round 6, and tank 33's three, 960 x 540 unless named. The tanks' eyes of the
+other levels (ANDREA2, JOBY2, JOBY5) have no wet floor to measure: over the fifteen levels
+(`-hdwater 1 -marble 1 -nodraw`) the `SPLASHLOG ... wet` load line comes in RICH2 alone,
+for tanks 182 and 33.
+
+*The three faults have one cause.* His floor is polished: the marble floors (#205,
+`hd_marble`, on by default) mirror the corridor's mouth, rooms 122, 121, 45 and room 23 as
+a plane - the room art, the statics and the models drawn once more through the floor. The
+wet floor laid over it took that mirror away under every pixel of its layer whose wet is
+over 0 (the marble pass clears its stencil there, `HDRenderMarbleDraw`) and laid its own
+in its place, marched over the screen, weaker and blurred. Measured at his picture's eye
+with the pictures' differences (dry with and without the marble floors, wet with and
+without the water's mirror):
+
+| at his picture's eye | pixels | mean | 95th percentile |
+|---|---|---|---|
+| the marble's mirror on the dry floor | 321,947 | 15.5 | 64.9 |
+| the marble's mirror where the water lies | 100,335 | 11.5 | - |
+| the water's own mirror there (marble floors off) | 91,331 | 4.3 | 12.7 |
+
+- *The sharp edges.* The water's front at the radius is a soft ramp in the wet (a quarter
+  square, ragged by the hash of each 256-unit point), and the darkening follows it softly.
+  But the marble's mirror stops at the first pixel whose wet is over 0, so the outline of
+  the wet area became the line where the marble's strong mirror ends - stepped along the
+  256-unit cells the ragged points draw. Across it, the luma of the wet picture less the
+  dry one jumps by 59.2 levels between two neighbouring pixels (the median over the rows
+  150 to 539 crossing the outline at his eye; 67.4 at the 95th percentile). The run's own
+  other edges are walls: at tank 182 every side of a kept square is a kept square, a
+  square the radius dropped (the ramp) or a wall, a raised block or the glass; at tank 33
+  two sides face room 13's floor, the tank's inside behind the glass. No edge of either
+  floor stops on an open floor at full wet, so no falloff by the distance to a dry square
+  was built: it would change nothing in RICH2.
+
+- *The cut objects.* The water's mirror finds only what the frame shows: a ray reflected
+  off the floor toward a thing above the screen's top edge leaves the frame, and the march
+  fades out over the screen's last tenth. The vending machine's lit screen is mirrored on
+  the floor in 536 pixels with the camera 28 degrees down and in none at 43:
+
+| the tilt (degrees down) | 28 | 31 | 34 | 37 | 40 | 43 |
+|---|---|---|---|---|---|---|
+| the machine's screen in the frame | 2,261 | 2,524 | 2,681 | 2,874 | 2,718 | 1,937 |
+| mirrored, before | 536 | 407 | 396 | 244 | 36 | 0 |
+| mirrored, after | 1,240 | 1,108 | 1,099 | 1,146 | 1,128 | 673 |
+| mirrored by the dry marble floor | 1,320 | 1,199 | 1,192 | 1,228 | 1,197 | 719 |
+
+(RoomProbe `-wetcut 40,20,80,30`: the pixels whose green is over red by 40, over blue by
+20 and over 80, in the frame's upper 30 per cent for the screen and its lower 70 for the
+mirror; the same with the marble floors off before. The screen's row is counted in the
+pictures after; at 40 and 43 degrees the split row crosses the floor, and part of the
+mirror counts above it: 2,681 and 1,412 there before, 2,729 and 1,981 on the dry floor.)
+The bench, the walls and the room's other fixed pieces are cut the same way wherever
+their mirror lies off the screen; Lara and the objects are mirrored as geometry (round 6),
+clipped only to the wet box grown by a square, which no eye here reached.
+
+- *The strong transition.* The same table: where the water lies the floor mirrors by 4.3
+  levels, round it by 11.5 to 15.5, so the wet area reads drier than the polished floor
+  round it, behind a hard line.
+
+*The rule from the data.* Water on polished stone lies flat in the same plane, 4 units
+over it, and mirrors the same room: one planar mirror stands for both, and the marble's is
+the exact one. So a wet point on a polished floor keeps the marble's mirror
+(`hd_render.cpp`, "the polished floor under the water"): the points the marble's mask
+reads (`g_wet_verts`) carry no wet there, and where the marble mirrored that floor's
+height this frame (the frame's planes are capped at `hd_marble_planes`) the point's own
+mirror - the march, the light field's stand-in and the mirrored models - gives way
+(`wet_give_way`, `HDWetGivesWay`); the darkening and the lamps' highlight stay. Where the
+floor is no polished floor, the marble did not mirror its height or the marble floors are
+off, the water marches as before. A polished floor is the marble's own extent - its mirror
+faces, the same faces whose planes it mirrors - asked per 256-unit cell of the layer
+(`wet_polished`, `HDWetCellOnFace`): a cell whose wet corners, three at least, stand at
+one height, overlapped by a face at that height within a click's sixteenth, the cell held
+a unit in so a face that only meets its edge does not count. RICH2: all 16 cells of each
+flat square of either floor and 10 of the 16 of the six splits round the raised blocks
+(their flat half) - 316 of tank 182's 352 cells, all 192 of tank 33's; the `SPLASHLOG ...
+wet` load line ends in `polished=<cells>`. Where every drawn point gives way the models
+are not drawn through the water's mirror at all.
+
+*After.* At his picture's eye the outline's jump is 3.7 levels (median over the same
+rows); the darkening's ramp at the radius runs from 0 to a third of the floor's light over
+some 150 pixels; the gold band's reflection runs on unbroken over the wet floor. The
+machine's mirror stays at every tilt (the table), 6 to 8 per cent under the dry floor's
+where the darkening takes the faint green under the measure's threshold. Pictures changed
+by more than 4 levels, marble floors on, against `b35b3b96`: his picture's eye and its fan
+35,220 to 55,758 pixels, the tilt 15,421 to 17,261, round 7's eye 66,053, 22 of the 25
+band eyes 2,645 to 71,550 (the three in room 23 identical, tank 182's floor out of their
+view), 7 of his eight eyes 5,336 to 22,113 (room 126's identical), tank 33's three 19,479
+to 53,698; with the marble floors off 48 of 48 byte-identical.
+
+*The warm draw at the load.* Round 7 left the models' warm draw through the five clip
+planes (`wet_warm_models`) on the level's first frame, after the loading bar, because the
+level's models are built after the water's warm-up and the load has none to draw. But the
+driver readies the shaders for the planes by their code: the water's warm-up
+(`HDRenderWaterWarmUp`, called from `BuildWaterSheets`) now makes the models' shaders once
+more out of the model path's bytecode, with its vertex declaration, and draws one triangle
+through five planes that cut it away (`wet_warm_model_shaders`), in a level with a tank's
+wet floor only. The first frame's draw stays as a guard for a driver that readies each
+shader object apart. RoomProbe `-wetagain` at round 7's eye with Lara, 2,560 x 1,440, a
+new process each run (a cold start), three runs:
+
+| | marble floors off | marble floors on |
+|---|---|---|
+| the first frame's warm draw, before | 106.0, 76.8, 90.0 ms | 86.9, 91.3, 91.8 ms |
+| the first frame's warm draw, after | 0.94, 0.89, 0.93 ms | 0.63, 0.80, 0.85 ms |
+| the load's warm-up, added | 92.0, 108.7, 116.8 ms | 106.9, 166.1, 303.4 ms |
+| the first frame's two wet draws, after | 0.03 and 0.98 to 1.20 ms | 0.03 and 1.03 to 1.15 ms |
+
+(the largest added load ran with other builds on the machine). RoomProbe's warm-up line
+names the new part `wet models`. The game's `HDLOG ... water warm-up` line takes it in its
+whole time. With the marble floors on the marble's own first mirrored draw still holds the
+first frame: 72.6, 82.8 and 93.1 ms before, 105.3, 99.2 and 99.8 after - the models drawn
+with its one clip plane, a variant of its own: a scratch build that also drew the models'
+shaders through one plane at the load took it to 0.56 and 0.61 ms. That draw is the marble
+floors' (*Left*).
+
+**Decisions.** The polished floor keeps its own mirror under the water and the water gives
+way; the water's mirror stays where no marble mirrors (marble floors off, a height the cap
+left out, a floor that is no polished floor). No falloff by the distance to a dry square:
+no edge of the two floors needs one. The models' shaders are readied at the load out of
+their bytecode; the first frame's draw stays as a guard.
+
+**Checked.** With the tool of `b35b3b96` against the round's: the classic path (`hd_build`
+0, `-classicroom` and `-classiconly` at ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and
+34) 6 of 6 identical, to `8691e82` as well; the fifteen parity cameras 15 of 15 with
+`hd_water` 0 and with 1, the marble floors off and on each (the fix round's parity set of
+`hd_water` 0 has drifted with the rounds merged since: 8 of 15, the base tool's pictures
+the same as the round's); the six HD views 6 of 6; the pond's twelve views at 1, 3 and 5 s
+36 of 36; the canal dive 4 of 4; the tank views without `-tank`, before the break (the
+marble floors off and on) and tank 33's view 5 of 5; all 48 eyes of this round's sets with
+`hd_water` 0 (the marble floors off and on) and with `hd_water` 1 and the marble floors
+off, 48 of 48 each; the `WATERLOG` sweep 267 of 268 lines, the one other RICH3's (Round 4
+(#210) below). GPU at 2,560 x 1,440, the marble floors on, three runs, medians, the
+water's mirror draw (the later copy and the mirror): his picture's eye 0.182 to 0.079 ms,
+round 7's eye 0.320 to 0.090, the band eye k229 0.187 to 0.077, tank 33's E162 0.161 to
+0.068; its darkening and the marble pass as before within the runs' spread (the marble
+0.84 to 0.66, 0.95 to 1.22, 0.34 to 0.19 and 2.47 to 2.63 ms). ModernTest 15,634 checks
+with the new `wet_polish` group of 13 and `water_deep` of 9, MenuTest 44,272, InterpTest
+729, LipsTest 299 with round 163's `.OBJ` folder and 272 without (`cutseq.bin` given by
+hand: the worktree has no game folder; 295 and 268 with 9 failed without it), 0 failed;
+the engine and all nine tools build.
+
+**Left.** The look in the game: nobody in this round could play it. With the marble floors
+on, the wet floor now mirrors exactly as the dry marble does and reads wet by its
+darkening alone; whether it should mirror more than the dry stone is the owner's to say
+(the water's own F0 is 0.02 against polished stone's 0.04). With the marble floors off the
+water's mirror is as before: what stands off the screen is not mirrored. The marble's own
+first mirrored draw of the models holds the first frame of a level with a polished floor
+(72.6 to 105.3 ms here); the marble floors' warm-up would need the models' shaders drawn
+through one clip plane, as the water's now draws them through five. The marble pass's
+comment over its wet mask (`HDRenderMarbleDraw`, "the floor mirrors there through the wet
+floor's own draw, and not twice") now holds only where the water marches; it is the marble
+floors' code and is left as it is.
+
+**Commits.** `a6b5b5cb` (the polished floor under the water), `7c08a502` (the models'
+shaders at the load), `31c79d68` (RoomProbe `-wetstep`), `0fa08b01` (the record),
+`a71909a4` (RoomProbe `-wetcut`), `ea8c2857` (two comments' numbers and words) and
+`73bffc06` (the record's corrections).
+
 **The water's life.** Asked for on 2026-10-09: a little more life in the water - now and
 then small fish that flee from Lara, oil drifting through the sewers at random, and
 whatever else comes to mind. Two reference pictures supplied for this project (not in
@@ -17261,6 +17442,80 @@ choose.
 
 **Commits.** `332d7249` (the rule, its draw, the log and the probe), `20ef1ea3` (the
 record), `496a9060` (the record's darker disc, minima, cost and pitch).
+
+**The sea seen from below, Round 4 (#210), 2026-10-18.** Asked for, put into English (his
+words beside in German), with a trview picture of RICH3's room 190 - a flooded room with a
+crate, bubbles and a waterfall: that is a perfectly normal room, like in JOBY5 for example
+("das ist doch ein ganz normaler Raum wie z.B. in Joby5"). So RICH3 takes no deep look;
+the sea's look is JOBY4's alone. His picture is a reference picture supplied for this
+project, not in the repository.
+
+*The cause.* The deep look held wherever a level's water rooms no sheet lies over
+outnumbered those under a sheet more than four times (`kUnderDeepShare`). RICH3 has one
+water room, 190, flooded by a flip (its alternate 183 is dry), and no sheet over any: 1
+against 0 passed the share, and room 190 took the sea class's absorption and the section's
+deep palette, dimmed with the depth under the water's top, where the basin's or the
+channel's look belonged (`WATERLOG level=RICH3 ... under_deep=1`).
+
+*The rule from the data* (`hd_water_under.h`, `HDWaterDeepLook`; the water build in
+`hd_render.cpp`). A sea has a surface the dive looks up to: the art of one water room laid
+as the sea's surface far over its own squares, which round 3's rule finds
+(`HDWaterSurfaceRoom`: the water room whose art reaches highest, within 2,048 units of the
+water's top). A flooded room has its own ceiling over its water, and its art is its own
+floor. The water build now asks that rule of the rooms as built - the same flags, squares
+and art bounds `hd_level.cpp`'s `SurfaceRoom` reads - and takes the deep look only where
+it names a room:
+
+| level | fallback rooms | under a sheet | surface room | deep look before | after |
+|---|---|---|---|---|---|
+| JOBY4 | 132 | 2 | 19 (art 851 under the top) | yes | yes |
+| RICH3 | 1 | 0 | none (art 4,864 under) | yes | no |
+| the other thirteen | - | - | - | no | no |
+
+*Measured.* The `WATERLOG` sweep over the fifteen levels (`-hdwater 1 -nodraw`), the tool
+before against after: 267 of 268 lines identical, the one other RICH3's level line,
+`under_deep=1` to `0`; `under_deep=1` in JOBY4 alone. Room 190 at round 2's four eyes and
+two of this round's (looking 25 degrees down across the room from (3,584, -1,000, 2,048)
+of the room and 40 up toward its ceiling from (2,560, -4,000, 4,608)), the rooms within
+12,000 units, `-underwater -surfacealways`, 960 x 540:
+
+| eye | pixels changed by more than 2, hd_water 1 | mean colour before | after | hd_water 0 |
+|---|---|---|---|---|
+| R3a, level | 145,194 | 34, 46, 58 | 36, 47, 54 | identical |
+| R3b, 75 up | 291,422 | 27, 42, 79 | 32, 46, 64 | identical |
+| R3c, 60 up | 148,851 | 30, 44, 62 | 33, 46, 54 | identical |
+| R3d, 85 up | 259,361 | 22, 37, 71 | 26, 40, 56 | identical |
+| R3e, 25 down | 201,187 | 18, 28, 43 | 21, 31, 41 | identical |
+| R3f, 40 up | 238,468 | 26, 40, 61 | 29, 42, 48 | identical |
+
+The room takes the channel's look of its level's one body: the absorption (`-underwater`'s
+sigma 0.000584, 0.000457, 0.000293 before, 0.000263, 0.000206, 0.000132 after) and the
+shallow colour instead of the deep blue, the walls and the crate readable across the room.
+JOBY4 at round 2's four eyes of the dive (rooms within 20,000 units, `-sky -underlook
+-surfacealways -black`) 4 of 4 byte-identical with `hd_water` 1 and 4 of 4 with 0; RICH3's
+rooms open to the sky (64 and 65, two eyes each, looking up and level with the sky) 4 of 4
+with each key - its HD sky carries its cloud sheet, so the classic layers' rule does not
+move. ModernTest `water_deep`, 9 checks: JOBY4 and RICH3, the share without a surface and
+the surface without the share, RICH2's and ANDY3's shares, the share's bound, room 0 as a
+surface room, no water.
+
+**Decisions.** The sea is told apart by the data's own mark of one, the surface over the
+dive; no level is named in the code.
+
+**Checked.** With the tool of `b35b3b96` against the round's, beside the sweep and the
+eyes above: the classic path (`hd_build` 0, the six rooms of the wet floor's Round 8) 6 of
+6 identical; the fifteen parity cameras 15 of 15 with `hd_water` 0 and with 1, the marble
+floors off and on each; the six HD views 6 of 6; the pond's twelve views 36 of 36 and the
+canal dive 4 of 4; RICH3's room 190 at its six eyes with `hd_water` 0 6 of 6 identical.
+ModernTest 15,634 checks with `water_deep`'s 9 among them, MenuTest 44,272, InterpTest
+729, LipsTest 299 with round 163's `.OBJ` folder and 272 without (`cutseq.bin` given by
+hand), 0 failed; the engine and all nine tools build.
+
+**Left.** Not seen in the game yet. A level with a sea's surface whose water mostly lies
+under sheets keeps the basin's look by the share, as before.
+
+**Commits.** `d846de7f`, `ea8c2857` (the water build's comment names the channel's look)
+and `73bffc06` (the Checked part).
 
 ### The marble floors' mirror (#205)
 2026-10-16

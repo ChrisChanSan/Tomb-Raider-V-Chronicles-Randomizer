@@ -103,6 +103,15 @@ beside it, and says so when the two disagree.
   which can show rain or snow gets a new draw - six of the thirteen can,
   and those are the ones to compare. The run names the result in its own
   notes.
+- **A missing view window (LevelFix, `SightWindow`).** Every run on
+  ANDREA2 writes the window between rooms 231 and 102 over the arch, so
+  ANDREA2 differs from a build without it on every seed and with no
+  switches at all: 64 bytes longer, one 32-byte record at the end of each
+  of the two rooms' portal lists, their two counts, five header offsets
+  each moved by 32, the two rooms' size words and the main block's two
+  size words. Every other room, every byte in front of the rooms and
+  behind them, every other level and every `.hdm` stay byte-identical -
+  the entry records no HD cut.
 - **The cyborg in the cross pool.** One more foreign kind to draw
   from, so a `cross` run places a different set. Byte-identity with a
   build lacking the cyborg is claimed when the two new rows are

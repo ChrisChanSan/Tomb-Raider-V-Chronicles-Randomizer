@@ -40,6 +40,7 @@
 
 #include "../game/gameflow.h"
 #include "../game/lara.h"
+#include "../game/menu_frame.h"	// MenuSliderHeldUlong - the slider keys
 #include "../specific/hd/hd_render.h"	// HDRenderMarbleSet
 
 tomb5_options tomb5;
@@ -555,8 +556,7 @@ void init_tomb5_stuff()
 		// about which end was meant.
 		sprintf(buf, "gamma");
 		REG_ReadLong(buf, tomb5.gamma, 50);
-		if (tomb5.gamma > 100)
-			tomb5.gamma = 50;
+		tomb5.gamma = MenuSliderHeldUlong(tomb5.gamma, 50);
 
 		// Absent - every older registry - reads as 1: built when found.
 		sprintf(buf, "hd_build");
@@ -626,8 +626,8 @@ void init_tomb5_stuff()
 		// past what the slider itself can ask for.
 		sprintf(buf, "cam_speed");
 		REG_ReadLong(buf, tomb5.camera_speed, 40);
-		if (tomb5.camera_speed > 100)
-			tomb5.camera_speed = 100;
+		tomb5.camera_speed = MenuSliderHeldUlong(tomb5.camera_speed,
+			MENU_SLIDER_NEAREST);
 
 		// Guarded like cam_speed above but landing on the default rather
 		// than on the nearest end, because an out-of-range value here says
@@ -639,16 +639,15 @@ void init_tomb5_stuff()
 		// arrive).
 		sprintf(buf, "dead_zone");
 		REG_ReadLong(buf, tomb5.dead_zone, 50);
-		if (tomb5.dead_zone > 100)
-			tomb5.dead_zone = 50;
+		tomb5.dead_zone = MenuSliderHeldUlong(tomb5.dead_zone, 50);
 
 		// Missing - every older registry - reads as 50, the middle; out of
 		// range lands on the middle too, for dead_zone's reason: a hand-edited
 		// value says nothing about which end was meant.
 		sprintf(buf, "mouse_sens");
 		REG_ReadLong(buf, tomb5.mouse_sensitivity, 50);
-		if (tomb5.mouse_sensitivity > 100)
-			tomb5.mouse_sensitivity = 50;
+		tomb5.mouse_sensitivity = MenuSliderHeldUlong(
+			tomb5.mouse_sensitivity, 50);
 
 		sprintf(buf, "mouse_invert");
 		REG_ReadBool(buf, tomb5.mouse_invert, 0);

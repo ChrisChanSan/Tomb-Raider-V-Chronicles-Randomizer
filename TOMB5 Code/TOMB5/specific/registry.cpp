@@ -18,6 +18,7 @@
 #include "setupdlg.h"
 #include "../game/gameflow.h"	// LanguageChoice
 #include "../game/key_scheme.h"	// KEY_SCHEME_ROLES - the two keyboard sets
+#include "../game/menu_frame.h"	// MenuSliderHeld - the two volume sliders
 
 static HKEY phkResult;
 static DWORD dwDisposition;
@@ -641,6 +642,13 @@ bool LoadSettings()
 
 	REG_ReadLong((char*)"MusicVolume", (ulong&)MusicVolume, 80);
 	REG_ReadLong((char*)"SFXVolume", (ulong&)SFXVolume, 90);
+
+	// Held to the sliders' span at once, so that the menu's number and bar
+	// and the mixer see the same value from the first frame on; a value
+	// outside it goes to the nearer end.
+	MusicVolume = MenuSliderHeld(MusicVolume, MENU_SLIDER_NEAREST);
+	SFXVolume = MenuSliderHeld(SFXVolume, MENU_SLIDER_NEAREST);
+
 	REG_ReadLong((char*)"ControlMethod", (ulong&)ControlMethod, 0);
 
 	// 2 (the old reset position) could get saved along in earlier states -

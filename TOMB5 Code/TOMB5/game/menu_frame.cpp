@@ -81,8 +81,8 @@ static bool MenuStepMusicVolume(long, long dir)
 	if (dir > 0)
 		MusicVolume++;
 
-	if (MusicVolume > 100)
-		MusicVolume = 100;
+	if (MusicVolume > MENU_SLIDER_TOP)
+		MusicVolume = MENU_SLIDER_TOP;
 
 	if (MusicVolume < 0)
 		MusicVolume = 0;
@@ -106,8 +106,8 @@ static bool MenuStepSfxVolume(long, long dir)
 	if (dir > 0)
 		SFXVolume++;
 
-	if (SFXVolume > 100)
-		SFXVolume = 100;
+	if (SFXVolume > MENU_SLIDER_TOP)
+		SFXVolume = MENU_SLIDER_TOP;
 
 	if (SFXVolume < 0)
 		SFXVolume = 0;
@@ -491,7 +491,7 @@ static bool MenuStepCameraSpeed(long, long dir)
 	if (dir < 0 && tomb5.camera_speed > 0)
 		tomb5.camera_speed--;
 
-	if (dir > 0 && tomb5.camera_speed < 100)
+	if (dir > 0 && tomb5.camera_speed < MENU_SLIDER_TOP)
 		tomb5.camera_speed++;
 
 	return tomb5.camera_speed != old;
@@ -512,7 +512,7 @@ static bool MenuStepDeadZone(long, long dir)
 	if (dir < 0 && tomb5.dead_zone > 0)
 		tomb5.dead_zone--;
 
-	if (dir > 0 && tomb5.dead_zone < 100)
+	if (dir > 0 && tomb5.dead_zone < MENU_SLIDER_TOP)
 		tomb5.dead_zone++;
 
 	return tomb5.dead_zone != old;
@@ -533,7 +533,8 @@ static bool MenuStepMouseSensitivity(long, long dir)
 	// times at 100, lives at ModernCameraMouseGain (game/modern_camera.cpp).
 	ulong old = tomb5.mouse_sensitivity;
 
-	tomb5.mouse_sensitivity = (ulong)MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100);
+	tomb5.mouse_sensitivity = (ulong)MenuSliderStep(
+		(int)tomb5.mouse_sensitivity, (int)dir, MENU_SLIDER_TOP);
 	return tomb5.mouse_sensitivity != old;
 }
 
@@ -673,7 +674,8 @@ static bool MenuStepGamma(long, long dir)
 {
 	ulong old = tomb5.gamma;
 
-	tomb5.gamma = (ulong)MenuSliderStep((int)tomb5.gamma, (int)dir, 100);
+	tomb5.gamma = (ulong)MenuSliderStep((int)tomb5.gamma, (int)dir,
+		MENU_SLIDER_TOP);
 	return tomb5.gamma != old;
 }
 
@@ -2249,6 +2251,28 @@ static long MenuSliderNumberX()
 		+ GetFixedScale(4);
 }
 
+/* Whether a slider's number carries a percent sign. Every slider's value is
+ * its share of the bar, 0..100, so the number reads as a percentage - the
+ * gamma row's too, where it is the slider's position, 50 the middle, and not
+ * a strength. Both fonts hold the sign: game/chardef.inc's row 4 (15 wide,
+ * scaled like a digit), and the HD atlas matches that row at score 1.000.
+ *
+ * The sign is drawn where the widest text, "100%", ends at least one gap,
+ * GetFixedScale(4), before the screen's edge - the same gap the number keeps
+ * after the bar's frame. The position does not move for it. Up to 4:3 the
+ * room right of the bar is a sixteenth of the screen and "100%" does not fit:
+ * 49 pixels against the 36 behind the gap at 640x480, 13 past the edge. There
+ * the number stands without the sign rather than cross the edge or push the
+ * bar; from about 1.46:1 on, 3:2 and wider, it fits at every size. */
+static bool MenuSliderSignFits()
+{
+	char top[16];
+
+	sprintf(top, "%d%%", MENU_SLIDER_TOP);
+	return MenuSliderNumberX() + GetStringLength(top, 0, 0)
+		+ GetFixedScale(4) <= phd_winxmax + 1;
+}
+
 void MenuFrameRun()
 {
 	const menu_page* pg;
@@ -2385,8 +2409,9 @@ void MenuFrameRun()
 			/* The bar's number beside it, every frame, so it moves with the
 			 * bar while a key or the pad is held: the value the bar is given,
 			 * written as MenuSettleSlider writes it to the log, in the value
-			 * rows' font and colours. */
-			sprintf(buf, "%d",
+			 * rows' font and colours, with its percent sign where the screen
+			 * has room for it. */
+			sprintf(buf, MenuSliderSignFits() ? "%d%%" : "%d",
 				(int)(row->slider ? row->slider(row->param) : 0));
 			PrintString(MenuSliderNumberX(), y,
 				(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : 6)), buf, 0);

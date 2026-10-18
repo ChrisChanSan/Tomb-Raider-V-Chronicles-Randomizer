@@ -26477,6 +26477,179 @@ after the round's check `1dd39e25` (the comment's gap under Direct3D 9's pixel r
 `ccd39dca` (the tests read the number's text and colours out of the engine's draw) and
 `cd075f39` (the record's correction after them).
 
+#### Round 2: the percent sign, and the slider keys held at the read
+2026-10-18
+
+**What.** Every slider's number carries a percent sign where the screen has room for it:
+50 reads "50%", on all six rows, *Gamma* included, in the classic font and in the HD one,
+at the first round's position and with its gap. The sign has room from about 1.46:1 on -
+3:2, 16:10, 16:9 and every wider shape - and none on the narrower ones, 4:3, 5:4 and 1:1
+among them, where the number stands without it as before. And the six slider keys are held
+to the sliders' span, 0 to 100, at the registry read, so that a hand-edited or stale value
+can neither move the bar past its ends nor push the number past the edge, from the first
+frame on; the two volumes, which had no check at all, go to the nearer end.
+
+**Why.** The play test's answers of 2026-10-18 to the first round's questions: to the
+numbers beside the sliders, "Top"; to the gap of 3 and 5 pixels against 4 and 4, "lassen"
+(leave it); to whether the registry's volume values should be clamped at the read, "ja"
+(yes); to whether the number should stand behind the bar or at the screen's right edge,
+"so wie jetzt" (as it is now); to whether the number should read 0 to 100, in decibels or
+as a percentage, "Prozent" (percent).
+
+**Measured before the change.** The glyphs. Both fonts hold a percent sign, and a glyph is
+drawn at the same place and size in both: `DrawChar` (`game/text.cpp`) shifts the classic
+quad's texture window onto the HD atlas and widens quad and window by the glyph's margin,
+it never moves or scales the letter. So the widths are the classic table's in both fonts,
+the HD glyph adds its rim:
+
+| font | the sign | where | unscaled | 640x480 | 2560x1440 | HD rim, each side |
+|---|---|---|---|---|---|---|
+| classic, `game/chardef.inc` | row 4 (`'%' - '!'`) | u,v 214,13, 15x12, y offset -9 | 15 wide | 18 x 23 | 74 x 71 | - |
+| HD, `FONT0_OG.DDS` matched at run time | row 4, score 1.000 | 60,38 on the 256 atlas | the same quad | 18 x 23 | 74 x 71 | 1.34 / 5.36 pixels |
+
+FontProbe `-match` on the player's files finds 93 of the 106 rows in `FONT0`, the sign
+among them (the 13 it does not find are the twelve pad icons and the c-cedilla), and
+`-sample` draws "100", "100%", "50%" and "0%" in both fonts at both sizes through
+`DrawChar`'s arithmetic (pictures and logs under the round's scratch folder, from a
+measuring copy of FontProbe with the screen size changed; the tree's FontProbe draws at
+1920x1080 only). "100" is 31 pixels at 640x480 and 127 at 2560x1440, "100%" 49 and 201.
+The room behind the bar, the number at `MenuSliderNumberX` and the screen's edge under
+Direct3D 9's pixel rule:
+
+| layout | number x | "100" | "100%" | gap, `GetFixedScale(4)` | to the edge with "100" | with "100%" | sign drawn |
+|---|---|---|---|---|---|---|---|
+| 640x480 | 604 | 31 | 49 | 4 | 5 | -13 | no |
+| 800x600 | 755 | 39 | 62 | 5 | 6 | -17 | no |
+| 1024x768 | 966 | 49 | 78 | 6 | 9 | -20 | no |
+| 1280x1024 | 1208 | 62 | 99 | 8 | 10 | -27 | no |
+| 1600x1200 | 1510 | 80 | 126 | 10 | 10 | -36 | no |
+| 1280x800 | 1140 | 62 | 99 | 7 | 78 | 41 | yes |
+| 1440x960 | 1308 | 72 | 114 | 8 | 60 | 18 | yes |
+| 1920x1080 | 1659 | 96 | 152 | 9 | 165 | 109 | yes |
+| 2560x1440 | 2212 | 127 | 201 | 12 | 221 | 147 | yes |
+| 3840x2160 | 3318 | 192 | 304 | 18 | 330 | 218 | yes |
+| 2560x1080 | 2059 | 127 | 201 | 9 | 374 | 300 | yes |
+
+Up to 4:3 the bar is scaled by the width and the room right of it is a sixteenth of the
+screen, so "100%" is short of it at every size: 13 pixels past the edge at 640x480, 90 at
+the worst width up to 3840. Swept over every width from 640 to 3840, the sign keeps one
+gap to the edge in no width of 5:4, 4:3 or 1:1 and in every width of 16:10, 16:9, 21:9 and
+32:9 whose height needs no 480 floor; at 1024 wide the rule's edge lies between 706 and
+707 high.
+
+The reads and the rows' bounds. Every slider row's step holds its value in 0..100, written
+in the step itself (four as `100`, two as `MenuSliderStep`'s top), and `DoSlider` fills
+`pos * w / 100` of its bar. The registry reads:
+
+| key | field | read in | default | at the read before |
+|---|---|---|---|---|
+| `MusicVolume` | `MusicVolume`, `long` | `specific/registry.cpp` | 80 | nothing |
+| `SFXVolume` | `SFXVolume`, `long` | `specific/registry.cpp` | 90 | nothing |
+| `cam_speed` | `tomb5.camera_speed`, `ulong` | `tomb5/tomb5.cpp` | 40 | over 100 is 100 |
+| `dead_zone` | `tomb5.dead_zone`, `ulong` | `tomb5/tomb5.cpp` | 50 | over 100 is 50 |
+| `mouse_sens` | `tomb5.mouse_sensitivity`, `ulong` | `tomb5/tomb5.cpp` | 50 | over 100 is 50 |
+| `gamma` | `tomb5.gamma`, `ulong` | `tomb5/tomb5.cpp` | 50 | over 100 is 50 |
+
+A stray volume reached the sound as it stood, the music less than it seems: a Music Volume
+over 100 makes `ACMSetVolume`'s `-4000 * (100 - v) / 100` turn positive, but
+`DSVolumeToLinear` (`specific/dxsound.cpp`) turns every volume of 0 and over into 1.0, the
+slider's top's own factor, so it played no louder than 100; one below 0 played at the
+curve's value, audible down to -149 where the slider's 0 is silence. An SFX Volume above
+100 raises every sound by (v - 100) * 50 hundredths, up to `specific/dxsound.cpp`'s own
+limit of 0, and one below 0 attenuates further. What a stray value of either did for
+certain was move the bar and the number past their ends; the row's step clamped it only
+while the cursor stood on the row. (Commit `a5c27044`'s message says a Music Volume of 150
+played louder than the top; it did not, as above.)
+
+**The rules.** The sign: `MenuSliderSignFits` (`game/menu_frame.cpp`) is true where
+`MenuSliderNumberX()` plus the width of the widest text, `"100%"` written from
+`MENU_SLIDER_TOP` and measured with `GetStringLength`, plus one `GetFixedScale(4)` - the
+gap the number keeps after the frame - is at most `phd_winxmax + 1`. The draw writes
+`"%d%%"` where it is true and `"%d"` where it is not; `MenuSettleSlider`'s `MENULOG` value
+stays `"%d"`. The span: `MENU_SLIDER_TOP`, 100, in `game/menu_frame.h`, the value of
+`DoSlider`'s full bar, and the six steps name it instead of their own 100. The hold:
+`MenuSliderHeld(value, out)` in the same header keeps a value inside 0..`MENU_SLIDER_TOP`,
+puts one outside on `out` when that lies inside the span and on the nearer end otherwise
+(`MENU_SLIDER_NEAREST`); it takes a `long`, as the two volumes are, so a negative DWORD
+lies under the span. `MenuSliderHeldUlong` beside it takes the four tomb5 keys in their
+own `ulong`, where every value outside lies over the span, and sends such a value through
+`MenuSliderHeld` as `MENU_SLIDER_TOP + 1`, so the fallback rule stays in one place. Each
+of the six reads is followed at once by the hold of its field's type: `MusicVolume`,
+`SFXVolume` and `cam_speed` to the nearer end, `dead_zone`, `mouse_sens` and `gamma` to
+50. Nothing is written to the registry by it; the next save writes the held value, the
+volumes with `SaveSettings`, the four others with `save_new_tomb5_settings`.
+
+**Decisions.** No sign below about 1.46:1 rather than any of the other ways to make room:
+the number crossing the edge (13 pixels at 640x480), the bar or the number moved (the
+position stays "as it is now", and every slider picture would change by more than the
+sign), the font's small form (`FF_SMALL` takes a quarter off each advance but draws each
+glyph at full size, so "100%" still covers 42 pixels against 36) or a sign out of another
+font. The rule is decided per layout from the widest text and not per value, so the sign
+does not come and go while the bar moves. The *Gamma* row's number is a percentage of the
+slider's span, its position, 50 the middle where no pass runs - not a strength of the
+curve. `dead_zone`, `mouse_sens` and `gamma` keep landing on their middle: their reads
+give the reason, a hand-edited value says nothing about which end was meant, and the
+answer concerned the volumes; what changes for them is that the span comes from the one
+definition. Each key is held in its field's own type, so the four `ulong` keys come out
+exactly as their reads had them - a `cam_speed` of 2^31 or more lies over the span and
+goes to 100 - and only the two `long` volumes, which had no check at all, read a negative
+DWORD as under the span. The first commit of the hold took every key as a `long` and so
+sent such a `cam_speed` to 0; `MenuSliderHeldUlong` takes that back. The hold lives in
+`game/menu_frame.h` beside the rows; `specific/registry.cpp` and `tomb5/tomb5.cpp` include
+it, and MenuTest compiles it with the engine's own headers (`tomb5/pch.h` before it),
+since the header needs `global/types.h`.
+
+**Checked.** MenuTest 44,754 checks before and 44,898 after, 0 failed. `slider_numbers`
+reads the draw's two formats and holds them as differing by the sign alone, writes each
+row's bottom, middle and top with the sign as well ("0%", "50%", "100%"), reads each
+step's top as the name `MENU_SLIDER_TOP` and the value the header gives it, holds that
+value against `DoSlider`'s full bar, and reads the sign's width out of `game/chardef.inc`
+(15). The new `slider_sign_room` holds `MenuSliderSignFits`'s text and its rule: 640x480
+("100%" 49 pixels, 13 past the edge, no sign), 1600x1200 and 1280x1024 (no sign),
+1280x800, 1440x960, 1920x1080 (152 wide, 109 to the edge) and 2560x1440 (number at 2212,
+201 wide, 147 to the edge) with it, 1024x706 against 1024x707, and the sweep above, every
+value's text with the sign at least a gap before the edge and "100%" the widest of them.
+The new `slider_reads` holds the six reads against the compiled `MenuSliderHeld` and
+`MenuSliderHeldUlong`: the fields' types (two `long`, four `ulong`), each hold right after
+its read and of its field's type, its fallback, its default kept, and -1, -50, 0, 37, 100,
+101, 150 and 1000 as stored landing where the read decides (-1 and -50 under the span for
+a volume, over it for the four others: 100 for `cam_speed`, 50 for the rest); no second
+top at the reads, the ulong hold sending what lies over the span through the one rule,
+nothing in either hold that writes the registry, the saves unchanged. The mouse and gamma
+rows' own checks follow the new text. Five changes made by hand to the engine, one at a
+time and restored with `git checkout`: the music read's fallback to 50 fails 6 checks, the
+sign's gap to `GetFixedScale(2)` 1, the format to `"%d %%"` 20, `MENU_SLIDER_TOP` to 99
+55, the dead zone's hold moved one line off its read 1; and after the fix, the ulong hold
+taken as signed again fails 3. Parity: the engine's diff touches the slider block's
+format, one new function beside `MenuSliderNumberX`, the six steps' tops (the same 100 by
+its name) and the six reads, so a page without a slider row draws the same picture, and so
+does every page at 5:4, 4:3 and 1:1. Where the sign is drawn the digits keep their quads
+and one quad is added per number, at the classic font 1,443 pixels at 1280x800, 2,968 at
+1920x1080 and 5,254 at 2560x1440 for each slider, so 2, 3 and 1 times that on *Audio*,
+*Controls* and *Display*; the HD sign's quad is widened by its rim (1.34 to 5.36 pixels
+each side). No renderer file is touched. This parity is held by the draw's own arithmetic,
+not by rendered pictures: MenuTest renders no menu (its pictures are row masks, all still
+passing), the game was not run, and the quads were computed; that the digits keep their
+quads follows from `PrintString` using the string's bottom only at a line feed and
+`DrawChar` drawing each glyph from its own `CharDef`. ModernTest 15,829, InterpTest 729,
+LipsTest 299 with the obj folder and 272 without (the game's `cutseq.bin` given by its
+path; from `blips.bat`'s folder alone 295 and 268, the nine checks that read the file
+failing); the nine build scripts exit 0. The engine was built (`release/PCtomb5.exe`, Oct
+18 2026 23:58:26, md5 `3fb0b6b2488b45593993d642aea9106a`, after the fix) and not run here.
+
+**Left.** On screens narrower than about 1.46:1 - 4:3, 5:4 and 1:1 among them - the number
+has no sign, because "100%" does not fit behind the bar; whether that is right, or whether
+those screens should give the bar some room, is the next play test's question. The HD
+sign's centre of gravity lies 4.44 pixels from the classic one at 2560x1440 (1.02 at
+640x480), the largest of the four glyphs of "100%" (FontProbe `-sample`); that is the
+atlas match's own figure and not changed here. The menu screenshots in `docs/` show
+neither the numbers nor the sign.
+
+**Commits.** `b2e63001` (the sign), `a5c27044` (the span and the held reads), `dadf33d7`
+(the tests), `ebd69de0` (the record); after the review, `41b11ba8` (the four tomb5 keys
+held as `ulong`), `b3bb4ab3` (the tests on it) and the correction of this record, README
+and the manual.
+
 ## 2.7 First person view, cheats and the -log seams
 
 Three things that share one property: they are switched on by the player and are off in

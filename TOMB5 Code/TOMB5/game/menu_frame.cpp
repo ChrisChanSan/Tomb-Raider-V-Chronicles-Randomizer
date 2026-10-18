@@ -26,6 +26,7 @@
 #include "../specific/LoadSave.h"
 #include "../specific/registry.h"
 #include "../specific/drawbars.h"
+#include "../specific/output.h"		// GetFixedScale - the slider's number
 #include "../specific/loadbar_math.h"	// LOADBAR_* - the Loadbar style row
 #include "../specific/audio.h"
 #include "../specific/dxsound.h"
@@ -2226,6 +2227,26 @@ static void MenuEnterLegacy(long page)
 		CalculateNumSpecialFeatures();
 }
 
+/* Where a slider row's number starts: right of the bar's white frame, one
+ * gap of GetFixedScale(4) after it, left-aligned as a value row's text is.
+ * The bar is DoSlider's own (specific/drawbars.cpp): x 400 of 640, scaled
+ * by phd_winxmax / 640, GetFixedScale(200) wide, and its frame one pixel
+ * wider on each side - the same arithmetic here, so the number follows the
+ * bar at every resolution.
+ *
+ * The gap is the tightest layout's own split. Up to 4:3 the bar's width is
+ * scaled by the width, so the space right of it is a sixteenth of the
+ * screen: 40 pixels at 640x480 (the frame ends at 600). "100", the widest
+ * number a 0..100 slider shows, is 31 there (game/chardef.inc's digits,
+ * scaled by phd_winxmax / 512 as game/text.cpp does), and the 9 left over
+ * go 4 to the bar's side and 5 to the edge's. Wider screens scale the bar
+ * by the height and only gain room on the right. */
+static long MenuSliderNumberX()
+{
+	return long(400.0F * (float)phd_winxmax / 640.0F) + GetFixedScale(200) + 1
+		+ GetFixedScale(4);
+}
+
 void MenuFrameRun()
 {
 	const menu_page* pg;
@@ -2359,6 +2380,14 @@ void MenuFrameRun()
 			// kept rather than re-derived (specific/LoadSave.cpp at base).
 			DoSlider(400, y + 4 - (font_height >> 1), 200, 16, row->slider ? row->slider(row->param) : 0,
 				0x1F1F1F, 0x3F3FFF, cur == i && enabled[i] ? 0x7F7F7F : 0x3F3F3F);
+			/* The bar's number beside it, every frame, so it moves with the
+			 * bar while a key or the pad is held: the value the bar is given,
+			 * written as MenuSettleSlider writes it to the log, in the value
+			 * rows' font and colours. */
+			sprintf(buf, "%d",
+				(int)(row->slider ? row->slider(row->param) : 0));
+			PrintString(MenuSliderNumberX(), y,
+				(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : 6)), buf, 0);
 			continue;
 		}
 

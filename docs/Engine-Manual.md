@@ -1767,6 +1767,13 @@ it.
   with no depth of their own; 96 of them in eight levels, and nothing else in
   the game touched. The panes still break when the game breaks them: the piece
   is the same one Lara can shoot away.
+  One window is a frame with glass in it: ANDREA2's barred window between the
+  ledge and the hall paints its bars in the clear part of its texture and only
+  its panes see-through. Its bars are drawn solid, with depth, as the original
+  draws them, so neither their own far side nor the hall's reflection shows
+  through them, and its panes are added over what lies behind them the way the
+  original adds its glass - a faint film of light. The window still goes with
+  its break.
 - **Marble floors reflect.** The Remaster builds the polished floors of the
   VCI building - the RICH2 lobby and the halls around it, the cut scene that
   follows it and rooms of the title flyby - as a floor that is slightly

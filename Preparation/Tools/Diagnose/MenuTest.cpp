@@ -3090,7 +3090,7 @@ static void display_gamma_row()
 	check(strstr(opts, "tomb5.gamma = 50;\r\n\t\tREG_WriteLong(buf, "
 		"tomb5.gamma);") != 0, 1, "gamma row: a first run writes 50");
 	check(strstr(opts, "REG_ReadLong(buf, tomb5.gamma, 50);\r\n\t\t"
-		"tomb5.gamma = (ulong)MenuSliderHeld((long)tomb5.gamma, 50);") != 0,
+		"tomb5.gamma = MenuSliderHeldUlong(tomb5.gamma, 50);") != 0,
 		1, "gamma row: missing reads 50, outside 0..100 reads 50");
 
 	/* The round trip: the save writes the field as it stands, and the read
@@ -3100,7 +3100,7 @@ static void display_gamma_row()
 		int same = 1;
 
 		for (v = 0; v <= 100; v++)
-			if (MenuSliderHeld(v, 50) != v)
+			if (MenuSliderHeldUlong((ulong)v, 50) != (ulong)v)
 				same = 0;
 
 		check(same, 1, "gamma row: every value 0..100 reads back as itself");
@@ -3459,7 +3459,17 @@ static void slider_sign_room(const char* frame, const long* digit, long sign,
  * engine see the held value from the first frame. A value under the span, at
  * its ends, inside it and over it comes out as stated: at the nearer end for
  * the volumes and cam_speed, on the middle for dead_zone, mouse_sens and
- * gamma; and nothing of it writes the registry. */
+ * gamma; and nothing of it writes the registry. Each key is held in its
+ * field's own type: the volumes are long, so a negative DWORD is under the
+ * span, the four tomb5 keys ulong, so it is over it, as their reads had it. */
+static long held_as_read(int key, unsigned long stored, long out)
+{
+	if (key < 2)
+		return MenuSliderHeld((long)stored, out);
+
+	return (long)MenuSliderHeldUlong(stored, out);
+}
+
 static void slider_reads()
 {
 	static const char* const key[6] =
@@ -3481,12 +3491,12 @@ static void slider_reads()
 	{
 		"\tMusicVolume = MenuSliderHeld(MusicVolume, ",
 		"\tSFXVolume = MenuSliderHeld(SFXVolume, ",
-		"\t\ttomb5.camera_speed = (ulong)MenuSliderHeld(\r\n"
-		"\t\t\t(long)tomb5.camera_speed, ",
-		"\t\ttomb5.dead_zone = (ulong)MenuSliderHeld((long)tomb5.dead_zone, ",
-		"\t\ttomb5.mouse_sensitivity = (ulong)MenuSliderHeld(\r\n"
-		"\t\t\t(long)tomb5.mouse_sensitivity, ",
-		"\t\ttomb5.gamma = (ulong)MenuSliderHeld((long)tomb5.gamma, "
+		"\t\ttomb5.camera_speed = MenuSliderHeldUlong(tomb5.camera_speed,\r\n"
+		"\t\t\t",
+		"\t\ttomb5.dead_zone = MenuSliderHeldUlong(tomb5.dead_zone, ",
+		"\t\ttomb5.mouse_sensitivity = MenuSliderHeldUlong(\r\n"
+		"\t\t\ttomb5.mouse_sensitivity, ",
+		"\t\ttomb5.gamma = MenuSliderHeldUlong(tomb5.gamma, "
 	};
 	static const long def[6] = { 80, 90, 40, 50, 50, 50 };
 	static const long want_out[6] =
@@ -3499,30 +3509,47 @@ static void slider_reads()
 	{
 		0xFFFFFFFFUL, 0xFFFFFFCEUL, 0, 37, 100, 101, 150, 1000
 	};
-	static const long want[2][8] =
+	static const long want[3][8] =
 	{
-		{ 0, 0, 0, 37, 100, 100, 100, 100 },	// to the nearer end
+		{ 0, 0, 0, 37, 100, 100, 100, 100 },	// long, to the nearer end
+		{ 100, 100, 0, 37, 100, 100, 100, 100 },	// ulong, the nearer end
 		{ 50, 50, 0, 37, 100, 50, 50, 50 }	// to the middle
 	};
+	static const int row[6] = { 0, 0, 1, 2, 2, 2 };
 	char* reg = tree_file("../../../TOMB5 Code/TOMB5/specific/registry.cpp");
 	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
 	char* head = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.h");
 	const char* body = head ? strstr(head, "inline long MenuSliderHeld(") : 0;
 	const char* body_end = body ? strstr(body, "\r\n}\r\n") : 0;
+	const char* ubody = head ? strstr(head,
+		"inline ulong MenuSliderHeldUlong(") : 0;
+	const char* ubody_end = ubody ? strstr(ubody, "\r\n}\r\n") : 0;
+	char* types = tree_file("../../../TOMB5 Code/TOMB5/global/types.h");
+	char* save = tree_file("../../../TOMB5 Code/TOMB5/specific/LoadSave.cpp");
 	const char* control = reg ? strstr(reg,
 		"REG_ReadLong((char*)\"ControlMethod\"") : 0;
 	int i, k;
 
-	check(reg && opts && head && body && body_end, 1,
+	check(reg && opts && head && body && body_end && ubody && ubody_end
+		&& types && save, 1,
 		"slider reads: registry.cpp, tomb5.cpp and the hold are readable");
 
-	if (!reg || !opts || !head || !body || !body_end)
+	if (!reg || !opts || !head || !body || !body_end || !ubody || !ubody_end
+		|| !types || !save)
 	{
 		free(reg);
 		free(opts);
 		free(head);
+		free(types);
+		free(save);
 		return;
 	}
+
+	check(strstr(save, "\nlong MusicVolume = ") && strstr(save,
+		"\nlong SFXVolume = ") && strstr(types, "\tulong camera_speed;")
+		&& strstr(types, "\tulong dead_zone;") && strstr(types,
+		"\tulong mouse_sensitivity;") && strstr(types, "\tulong gamma;"), 1,
+		"slider reads: the volumes are long, the four tomb5 keys ulong");
 
 	for (i = 0; i < 6; i++)
 	{
@@ -3563,14 +3590,20 @@ static void slider_reads()
 		check((int)out, (int)want_out[i], what);
 		snprintf(what, sizeof(what), "slider reads: %s's default stays",
 			key[i]);
-		check((int)MenuSliderHeld(def[i], out), (int)def[i], what);
+		check((int)held_as_read(i, (unsigned long)def[i], out), (int)def[i],
+			what);
 
 		for (k = 0; k < 8; k++)
 		{
-			snprintf(what, sizeof(what), "slider reads: %s read as %ld",
-				key[i], (long)probe[k]);
-			check((int)MenuSliderHeld((long)probe[k], out),
-				(int)want[i >= 3][k], what);
+			if (i < 2)
+				snprintf(what, sizeof(what), "slider reads: %s read as %ld",
+					key[i], (long)probe[k]);
+			else
+				snprintf(what, sizeof(what), "slider reads: %s read as %lu",
+					key[i], probe[k]);
+
+			check((int)held_as_read(i, probe[k], out), (int)want[row[i]][k],
+				what);
 		}
 	}
 
@@ -3578,8 +3611,17 @@ static void slider_reads()
 		"slider reads: MENU_SLIDER_NEAREST lies outside the span");
 	check(tree_count(reg, "MenuSliderHeld("), 2,
 		"slider reads: registry.cpp holds the two volumes");
-	check(tree_count(opts, "MenuSliderHeld("), 4,
+	check(tree_count(opts, "MenuSliderHeldUlong("), 4,
 		"slider reads: tomb5.cpp holds its four slider keys");
+	check(tree_count(opts, "MenuSliderHeld("), 0,
+		"slider reads: and none of them as a long");
+	{
+		const char* over = strstr(ubody,
+			"return (ulong)MenuSliderHeld(MENU_SLIDER_TOP + 1, out);");
+
+		check(over && over < ubody_end, 1, "slider reads: the ulong hold "
+			"sends what lies over the span through the one rule");
+	}
 	check(tree_count(opts, "if (tomb5.camera_speed > 100)")
 		+ tree_count(opts, "if (tomb5.dead_zone > 100)")
 		+ tree_count(opts, "if (tomb5.mouse_sensitivity > 100)")
@@ -3596,6 +3638,13 @@ static void slider_reads()
 				writes++;
 
 		check(writes, 0, "slider reads: the hold writes nothing back");
+		writes = 0;
+
+		for (const char* p = ubody; p < ubody_end; p++)
+			if (!strncmp(p, "REG_", 4))
+				writes++;
+
+		check(writes, 0, "slider reads: nor does the ulong hold");
 	}
 
 	check(strstr(reg, "REG_WriteLong((char*)\"MusicVolume\", MusicVolume);")
@@ -3612,6 +3661,8 @@ static void slider_reads()
 	free(reg);
 	free(opts);
 	free(head);
+	free(types);
+	free(save);
 }
 
 /* Every slider row draws its number beside its bar. Read from the tree as

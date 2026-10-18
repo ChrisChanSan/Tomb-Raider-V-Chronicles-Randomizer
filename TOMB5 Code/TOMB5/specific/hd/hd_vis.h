@@ -195,6 +195,11 @@ struct HDVisTables
 	std::vector<int> enclosedBy;
 	std::vector<int> enclosedTris;
 	int roomsEnclosed = 0;
+	/* Per room: the rooms its floor links name (HDVisRoom's links: a floor
+	 * square's room above or below), each once, in floorRooms from
+	 * floorFirst on (HDVisClassicRoomHidden's floorOnArt). */
+	std::vector<int> floorFirst, floorCount;
+	std::vector<int> floorRooms;
 	/* Per static handed in (HDVisStaticCovers): the group whose art lies on
 	 * the most of its samples, -1 for none, and that share; and how many
 	 * reach staticShare. */
@@ -631,18 +636,24 @@ inline bool HDVisWallDrawn(const HDVisWallFace* faces, int count, int target,
  * all, none of whose classic faces any group's art covers (neither covered
  * nor covered in part by the stand rule), and whose inside holds a guest -
  * the art of a group linked with it, as many triangles as make a guest
- * (HDVisTables::guests).
+ * (HDVisTables::guests) - or whose floor links all name rooms drawn HD
+ * (`floorOnArt`: it has one at least, HDVisTables::floorRooms).
  *
  * What for: such a room is classic scenery standing in for what the art
  * now models in its place - ANDY3's room 88 is a band of tree trunks and
  * leaves painted on flat faces round the trees of room 35's art that stand
  * in its inside (10,064 triangles). Drawn classic it hangs a flat slab of
  * old texture across the new trees; left out, the trees stand against the
- * sky. */
+ * sky. ANDY3's rooms 26, 28 and 210 are the same lids of painted trunks
+ * and leaves over the hollows of rooms 24, 27 and 209, every floor square
+ * of theirs over the room below, with no guest: the trees round the hollows
+ * are rooms 86's and 87's art standing in their own boxes. The floor links
+ * tell such a room from ANDY3's room 103, which has none. */
 inline bool HDVisClassicRoomHidden(bool groupEmpty, bool facesCovered,
-	int classicFaces, int guests)
+	int classicFaces, int guests, bool floorOnArt)
 {
-	return groupEmpty && !facesCovered && classicFaces > 0 && guests > 0;
+	return groupEmpty && !facesCovered && classicFaces > 0 &&
+		(guests > 0 || floorOnArt);
 }
 
 /* The settings revision of hd_vis an installation's registry holds (the

@@ -5666,6 +5666,50 @@ namespace walkoff
 				if (t.enclosedBy[(size_t)r] >= 0)
 					printf("-vis: enclosed room=%d by=%d tris=%d\n", r,
 						t.enclosedBy[(size_t)r], t.enclosedTris[(size_t)r]);
+
+			/* Every room with classic faces and no art in the .TRG at
+			 * all (an empty group or none): its faces, whether it is
+			 * under the sky (ROOM_OUTSIDE) and its guests - what the
+			 * canopy rule asks besides the stand rule's cover. */
+			for (int r = 0; r < t.rooms && r < (int)g_vis_rooms.size(); r++)
+			{
+				if ((r < (int)g_hd.size() && g_hd[(size_t)r]) ||
+					g_vis_rooms[(size_t)r].faceCount <= 0)
+					continue;
+
+				const HDVisRoom& one = g_vis_rooms[(size_t)r];
+				std::string to;
+
+				// The floor links and the portals, each room HD (h) or not.
+				for (int i = 0; i < one.linkCount; i++)
+				{
+					const int at = one.firstLink + i;
+					const int l = at >= 0 && at < (int)g_vis_links.size() ?
+						g_vis_links[(size_t)at] : -1;
+
+					if (l >= 0)
+						to += " f" + std::to_string(l) + (l < (int)g_hd.size()
+							&& g_hd[(size_t)l] ? "h" : "");
+				}
+
+				for (int i = 0; i < one.portalCount; i++)
+				{
+					const int at = one.firstPortal + i;
+					const int p = at >= 0 && at < (int)g_vis_portals.size() ?
+						g_vis_portals[(size_t)at].to : -1;
+
+					if (p >= 0)
+						to += " p" + std::to_string(p) + (p < (int)g_hd.size()
+							&& g_hd[(size_t)p] ? "h" : "");
+				}
+
+				printf("-vis: classic room=%d faces=%d outside=%d "
+					"guests=%d box=%ld,%ld,%ld sectors=%dx%d y=%ld..%ld "
+					"links=%s\n", r, one.faceCount, (one.flags & 8) ? 1 : 0,
+					t.guestCount[(size_t)r], one.x, one.y, one.z, one.xs,
+					one.zs, one.top, one.bottom, to.empty() ? " -" :
+					to.c_str());
+			}
 		}
 
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
@@ -15757,7 +15801,13 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     the three tables (hd_vis.h) with the reach off, no
  *                     carried rooms, every group drawn whole but for its
  *                     pieces of intruding art, answered as -viswin says;
- *                     0, the default, changes nothing
+ *                     0, the default, changes nothing. With -walk it
+ *                     prints the tables' line, an "enclosed" line per
+ *                     room standing inside another and a "classic" line
+ *                     per room with classic faces and no art: its faces,
+ *                     ROOM_OUTSIDE, guests, box, and the rooms its floor
+ *                     links (f) and portals (p) name, h where they have
+ *                     art - what the canopy rule asks
  *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
  *                     portals (7, the default, all three)
  *   -visreach <units> -visbare <share> -visguest <triangles>

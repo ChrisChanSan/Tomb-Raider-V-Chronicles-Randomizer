@@ -13074,19 +13074,19 @@ static void vis_wall()
  * covers, room 35's trees its guest - and the rooms it keeps. */
 static void vis_hidden_room()
 {
-	ok(HDVisClassicRoomHidden(true, false, 58, 2),
+	ok(HDVisClassicRoomHidden(true, false, 58, 2, false),
 		"hidden: ANDY3 88, empty, uncovered, two guests", 1, 1);
-	ok(!HDVisClassicRoomHidden(false, false, 12, 1),
+	ok(!HDVisClassicRoomHidden(false, false, 12, 1, false),
 		"hidden: a hollow group (JOBY2 19) keeps its faces", 0, 0);
-	ok(!HDVisClassicRoomHidden(true, true, 16, 2),
+	ok(!HDVisClassicRoomHidden(true, true, 16, 2, false),
 		"hidden: covered in part (RICH2 18) keeps its faces", 0, 0);
-	ok(!HDVisClassicRoomHidden(true, false, 31, 0),
-		"hidden: no guest (ANDY3 26) keeps its faces", 0, 0);
-	ok(!HDVisClassicRoomHidden(true, false, 0, 3),
+	ok(!HDVisClassicRoomHidden(true, false, 31, 0, false),
+		"hidden: no guest, no floor on art, keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomHidden(true, false, 0, 3, false),
 		"hidden: no classic face, nothing to leave out", 0, 0);
-	ok(HDVisClassicRoomHidden(true, false, 15, 1),
+	ok(HDVisClassicRoomHidden(true, false, 15, 1, false),
 		"hidden: ANDY3 122, one guest of 14 triangles", 1, 1);
-	ok(HDVisClassicRoomHidden(true, false, 9, 2),
+	ok(HDVisClassicRoomHidden(true, false, 9, 2, false),
 		"hidden: ANDY1 212, two guests", 1, 1);
 }
 
@@ -13095,19 +13095,43 @@ static void vis_hidden_room()
  * no art covers, inside room 146's box. Its faces are what the broken
  * facade window shows; whatever stands in it, only an empty group whose
  * guests model the place is left out. */
+/* The lids of ANDY3's hollows (HDVisClassicRoomHidden's floorOnArt): rooms
+ * 26, 28 and 210, empty groups with 31, 13 and 15 faces no art covers and no
+ * guest, every floor link naming the HD room below (24, 27 and 209); room
+ * 103, empty with 11 faces, has no floor link and stays. */
+static void vis_lid_rule()
+{
+	ok(HDVisClassicRoomHidden(true, false, 31, 0, true),
+		"lid: ANDY3 26 over room 24, no guest, goes", 1, 1);
+	ok(HDVisClassicRoomHidden(true, false, 13, 0, true),
+		"lid: ANDY3 28 over room 27 goes", 1, 1);
+	ok(HDVisClassicRoomHidden(true, false, 15, 0, true),
+		"lid: ANDY3 210 over room 209 goes", 1, 1);
+	ok(!HDVisClassicRoomHidden(true, false, 11, 0, false),
+		"lid: ANDY3 103, no floor link, keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomHidden(true, true, 15, 0, true),
+		"lid: covered (RICH2 15), the stand rule draws it", 0, 0);
+	ok(!HDVisClassicRoomHidden(false, false, 12, 0, true),
+		"lid: a hollow group over HD rooms keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomHidden(true, false, 0, 0, true),
+		"lid: no classic face, nothing to leave out", 0, 0);
+	ok(HDVisClassicRoomHidden(true, false, 58, 2, true),
+		"lid: ANDY3 88, guests and floor on art, goes as before", 1, 1);
+}
+
 static void vis_enclosed_kept()
 {
-	ok(!HDVisClassicRoomHidden(false, false, 12, 0),
+	ok(!HDVisClassicRoomHidden(false, false, 12, 0, false),
 		"enclosed: JOBY2 21, hollow, keeps its 12 faces", 0, 0);
-	ok(!HDVisClassicRoomHidden(false, false, 12, 1),
+	ok(!HDVisClassicRoomHidden(false, false, 12, 1, false),
 		"enclosed: room 146's art in it as a guest changes nothing", 0, 0);
-	ok(!HDVisClassicRoomHidden(false, false, 12, 4),
+	ok(!HDVisClassicRoomHidden(false, false, 12, 4, false),
 		"enclosed: nor do more guests", 0, 0);
-	ok(!HDVisClassicRoomHidden(false, true, 12, 1),
+	ok(!HDVisClassicRoomHidden(false, true, 12, 1, false),
 		"enclosed: covered, the stand rule draws it, not this one", 0, 0);
-	ok(HDVisClassicRoomHidden(true, false, 12, 1),
+	ok(HDVisClassicRoomHidden(true, false, 12, 1, false),
 		"enclosed: the same faces round an empty group go", 1, 1);
-	ok(!HDVisClassicRoomHidden(true, false, 12, 0),
+	ok(!HDVisClassicRoomHidden(true, false, 12, 0, false),
 		"enclosed: an empty group with no guest keeps them", 0, 0);
 }
 
@@ -25569,6 +25593,7 @@ int main()
 	vis_wall();
 	vis_hidden_room();
 	vis_enclosed_kept();
+	vis_lid_rule();
 	vis_static_rule();
 	vis_height_rule();
 	vis_box_side();

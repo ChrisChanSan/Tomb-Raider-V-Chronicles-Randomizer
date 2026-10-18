@@ -3944,11 +3944,26 @@ static bool VisHidesClassicRoom(int roomIndex)
 	const int faces = r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0;
 	const int tris = HDRenderGroupTriangles(group, -1);
 
+	// Every room its floor links name drawn HD this frame, one at least.
+	bool floorOnArt = false;
+
+	if (roomIndex < (int)tables->floorCount.size())
+	{
+		const int first = tables->floorFirst[(size_t)roomIndex];
+		const int count = tables->floorCount[(size_t)roomIndex];
+
+		floorOnArt = count > 0;
+
+		for (int i = 0; i < count && floorOnArt; i++)
+			floorOnArt = GroupOfRoom(
+				tables->floorRooms[(size_t)(first + i)]) >= 0;
+	}
+
 	/* A room standing inside another (HDVisTables::enclosedBy) keeps its
 	 * faces: its own group is hollow and never drawn, and the enclosing
 	 * art covers none of them, so nothing else closes its inside. */
 	return HDVisClassicRoomHidden(tris == 0, covered, faces,
-		tables->guestCount[(size_t)roomIndex]);
+		tables->guestCount[(size_t)roomIndex], floorOnArt);
 }
 
 /* Whose art stands inside whose room.

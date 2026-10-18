@@ -190,6 +190,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	t.faceBare.assign((size_t)(faceCount > 0 ? faceCount : 0), -1.0f);
 	t.enclosedBy.assign((size_t)t.rooms, -1);
 	t.enclosedTris.assign((size_t)t.rooms, 0);
+	t.floorFirst.assign((size_t)t.rooms, 0);
+	t.floorCount.assign((size_t)t.rooms, 0);
 
 	if (!rooms || roomCount <= 0)
 		return false;
@@ -241,13 +243,25 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				link[(size_t)r * n + to] = link[(size_t)to * n + r] = 1;
 		}
 
+		t.floorFirst[(size_t)r] = (int)t.floorRooms.size();
+
 		for (int i = 0; links && i < rooms[r].linkCount; i++)
 		{
 			const int at = rooms[r].firstLink + i;
 			const int to = at >= 0 && at < linkCount ? links[at] : -1;
 
-			if (to >= 0 && to < roomCount)
-				link[(size_t)r * n + to] = link[(size_t)to * n + r] = 1;
+			if (to < 0 || to >= roomCount)
+				continue;
+
+			link[(size_t)r * n + to] = link[(size_t)to * n + r] = 1;
+
+			// Each room a floor link names, once (a link per square).
+			if (std::find(t.floorRooms.begin() + t.floorFirst[(size_t)r],
+				t.floorRooms.end(), to) == t.floorRooms.end())
+			{
+				t.floorRooms.push_back(to);
+				t.floorCount[(size_t)r]++;
+			}
 		}
 	}
 

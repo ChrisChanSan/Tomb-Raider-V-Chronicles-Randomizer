@@ -2823,6 +2823,50 @@ carries the tables.
     `WATERLOG ... undergate` line's `surface=`; RoomProbe `-surfaceroom`,
     `-surfacealways`, `-undertick`'s `carried=`) - OWN, this project's
     log and tool on the player's files (DATA).
+270. **The ten shatter slots** (`hd_cover.h`, `HDStaticShatterSlot`,
+    `HD_STATIC_SHATTER_FIRST` 50, `HD_STATIC_SHATTER_LAST` 59) - a static of
+    slot 50 to 59 can take a destructible piece. CLASSIC: the savegame
+    writes and restores Flags bit 0 for exactly these slots
+    (`savegame.cpp`), `ShatterSounds` holds ten per level, a shot takes 50
+    to 57 (`control.cpp`), the gladiator's and the Roman god's blows 50 to
+    59, the `XRAY_CONTROLLER` at OCB 333 any static at its own place
+    (`objects.cpp`). DATA (the classic `.TRC` files): 16 statics of slots 58
+    and 59, ANDREA2 2 (the window, slot 59, rooms 65 and 132), RICH1 2,
+    RICH2 12; ANDREA2's item 109 is that controller, started by the same
+    heavy trigger as flip 8.
+271. **A flipmap twin's pieces left to its own state** (`hd_cover.h`,
+    `HDStaticPieceInState`; `hd_level.cpp`, the pairing loop) - a static
+    takes no piece of its room's flipmap twin, found as `flipped_room`
+    names it. CLASSIC: FlipMap puts the twin in the room's place and sets
+    the alternate's `flipped_room` to -1 (`control.cpp`). OWN, the rule.
+    DATA (`-smashcensus`): ANDREA2's pieces 3 and 4, the same box in groups
+    65 and 132, one pair each; no pair of any other level is lost.
+272. **A static read where its list stands** (`hd_cover.h`,
+    `HDStaticListRoom`; `hd_level.cpp`, `UpdateDestructibles`) - a pair
+    reads its static in the room that holds the list it was built from,
+    out of the group table `HDFlipRoom` swaps. CLASSIC: FlipMap's three
+    `memcpy` lines swap two rooms' records with their `MESH_INFO` lists;
+    `sgRestoreGame` flips first and restores the statics' flags after.
+    OWN, the reading. DATA: the owner's logs of 2026-10-16 and 2026-10-17
+    (the flip line in the flyby's tick, the glass sound a frame later, the
+    flip right after each restored load).
+273. **The smash census and the shot after a flip** (RoomProbe
+    `-smashcensus`, `-statictable`, `-smash` with `-flip`,
+    `probestatics::Twin`, `SmashHide`) - the ten slots, the twin's pieces
+    marked ` twin`, and a shot named in the rooms as they stand after the
+    flips, each pair reading its static where its list stands. OWN, this
+    project's own tool on the player's files (DATA) and the classic
+    level's statics and flip pairs (CLASSIC).
+274. **The glass parts' texels and the three readings** (`MODIFICATIONS.md`,
+    the windows' Round 2, "The bars' visibility"; nothing in the code) -
+    the alpha run's material 14 parts with `param[1]` under 1 counted by
+    the texels they cover (clear below 16, opaque 240 and above), and the
+    present reading, reading B (opaque texels opaque) and reading C (clear
+    texels opaque) drawn at one eye per page. OWN, the count and the
+    readings, measured with scratch tools on the player's files (DATA),
+    found through the engine's own resolvers: 74 parts, the clear texels
+    on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
+    16073, RICH2's 3309 and RICH3's 10084.
 
 ## Credited, but not contained here
 

@@ -1118,6 +1118,55 @@ inline bool HDStaticPiecePaired(const float* mins, const float* maxs, float dx,
 	return true;
 }
 
+/* The statics the engine takes out of the classic list, slots 50 to 59: the
+ * savegame keeps Flags bit 0 for exactly these ten (savegame.cpp) and
+ * ShatterSounds holds ten per level. A shot takes 50
+ * to 57 (control.cpp), a blow of the gladiator or of the Roman god any of
+ * the ten, and an XRAY_CONTROLLER with OCB 333 every static at its own
+ * place (objects.cpp): ANDREA2's window onto the hall, slot 59 in rooms 65
+ * and 132, goes that way, from the same heavy trigger as flip 8. The
+ * fifteen levels hold 16 statics of slots 58 and 59: ANDREA2 2, RICH1 2,
+ * RICH2 12. */
+#define HD_STATIC_SHATTER_FIRST	50
+#define HD_STATIC_SHATTER_LAST	59
+
+inline bool HDStaticShatterSlot(int slot)
+{
+	return slot >= HD_STATIC_SHATTER_FIRST && slot <= HD_STATIC_SHATTER_LAST;
+}
+
+/* Whether a static may take a piece of group `pieceGroup`, `twin` being the
+ * flipmap twin of the static's room (-1 for none). FlipMap puts the twin in
+ * the room's place, never beside it, so the twin's art is the other state's.
+ * ANDREA2's window stands in both rooms 65 and 132, each state with its own
+ * grid at the same place: a static that took the other state's grid as well
+ * would leave both grids to whichever static UpdateDestructibles writes
+ * last. Any other group's piece may pair: art standing at the place. */
+inline bool HDStaticPieceInState(int twin, int pieceGroup)
+{
+	return twin < 0 || pieceGroup != twin;
+}
+
+/* The room that holds the MESH_INFO list room `buildRoom` had when the level
+ * was built, out of the group table `roomGroup` of `count` rooms: FlipMap
+ * swaps two rooms' records, their lists with them, and HDFlipRoom swaps
+ * the table with them, so the list stands where the group stands. The room
+ * itself until a flip moves it; -1 when no room holds it. */
+inline int HDStaticListRoom(const short* roomGroup, int count, int buildRoom)
+{
+	if (buildRoom < 0)
+		return -1;
+
+	if (buildRoom < count && roomGroup[buildRoom] == buildRoom)
+		return buildRoom;
+
+	for (int r = 0; r < count; r++)
+		if (roomGroup[r] == buildRoom)
+			return r;
+
+	return -1;
+}
+
 /* Whether a frame draws a static the classic way, from its answer and from
  * whether the frame lists a group that holds it. */
 inline bool HDStaticDrawClassic(int answer, bool holderListed)

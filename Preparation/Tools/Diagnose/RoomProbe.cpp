@@ -268,7 +268,8 @@
  *                     walk's lists stay room numbers, each drawn by the
  *                     group the line names. With -hdwater 1 the water
  *                     follows the swap too (HDRenderWaterFlipRoom): the
- *                     bodies only an alternate floods draw.
+ *                     bodies only an alternate floods draw. With -smash
+ *                     the shots name the rooms after the swaps.
  *     -walkdump <log> [frame]
  *                     every ROOMLIST whole-list dump of a -log run, or the
  *                     one of that frame, walked again - see RunWalkDump.
@@ -636,12 +637,16 @@
  *     -smash <room>:<mesh>  the static Lara has shot: the pieces the engine
  *                     pairs with it hidden, each pair written as
  *                     hd_level.cpp's UpdateDestructibles writes it.
- *                     Repeatable. Needs -roombox.
+ *                     Repeatable. Needs -roombox. With -flip the room is
+ *                     the number after those flips, the static the one
+ *                     whose list stands there (ANDREA2: -flip 132 -smash
+ *                     132:0 is the window the controller breaks).
  *     -smashcensus    every destructible piece, every shatterable static
- *                     and the pieces within 1024 units of it with the gap
- *                     per axis and the pairing's answer; the pieces no
- *                     static takes and the ones several take. Prints and
- *                     stops. Needs -roombox.
+ *                     (slots 50 to 59) and the pieces within 1024 units of
+ *                     it with the gap per axis and the pairing's answer
+ *                     (` twin` for a piece of the room's flipmap twin);
+ *                     the pieces no static takes and the ones several
+ *                     take. Prints and stops. Needs -roombox.
  *     -smashpiece <n> destructible piece n (the "destructible:" list's
  *                     number) hidden in whichever group it lies, the seed
  *                     room's or a -with room's. Repeatable.
@@ -10388,6 +10393,26 @@ namespace probestatics
 	static bool g_table = false;		// -statictable
 	static bool g_answered = false;
 
+	/* The flipmap twin of a room as BuildStaticTables takes it: the main
+	 * room names it, the alternate is the room that names it; -1 for none.
+	 * The pairs leave the twin's pieces (HDStaticPieceInState). */
+	static int Twin(int r)
+	{
+		const std::vector<Tr5Room>& rooms = g_level.rooms();
+
+		if (r < 0 || r >= (int)rooms.size())
+			return -1;
+
+		if (rooms[(size_t)r].altRoom >= 0)
+			return rooms[(size_t)r].altRoom;
+
+		for (size_t m = 0; m < rooms.size(); m++)
+			if (rooms[m].altRoom == r)
+				return (int)m;
+
+		return -1;
+	}
+
 	static bool Load(const char* stem)
 	{
 		if (g_loaded)
@@ -10854,7 +10879,7 @@ namespace probestatics
 		 * static's, in the piece group's frame. */
 		for (const Static& s : g_list)
 		{
-			if (s.slot < 50 || s.slot >= 58)
+			if (!HDStaticShatterSlot(s.slot))
 				continue;
 
 			int found = 0;
@@ -10865,7 +10890,9 @@ namespace probestatics
 				float lo[3], hi[3];
 
 				if (!HDRenderDestructibleInfo(p, &group, 0, lo, hi) || group < 0 ||
-					group >= (int)g_stand_rooms_built.size() || !StandGroupHD(group))
+					group >= (int)g_stand_rooms_built.size() ||
+					!StandGroupHD(group) ||
+					!HDStaticPieceInState(Twin(s.room), group))
 					continue;
 
 				const float dx = g_stand_rooms_built[(size_t)s.room].origin[0] -
@@ -10901,13 +10928,14 @@ namespace probestatics
 	}
 
 	/* -smashcensus: every destructible piece of the art, every shatterable
-	 * static (slots 50 to 57, the test control.cpp makes) and, for each
-	 * static, every piece of a group drawn HD within 1024 units on all
-	 * three axes: the gap per axis after the origin shift (negative is the
-	 * overlap's length) and whether HDStaticPiecePaired pairs the two. The
-	 * summary counts the pieces no static takes and the pieces two or more
-	 * statics take - hd_level.cpp's UpdateDestructibles writes a piece's
-	 * state once per pair, so the last pair of a shared piece decides it. */
+	 * static (slots 50 to 59, HDStaticShatterSlot) and, for each static,
+	 * every piece of a group drawn HD within 1024 units on all three axes:
+	 * the gap per axis after the origin shift (negative is the overlap's
+	 * length) and whether BuildStaticTables pairs the two - a piece of the
+	 * room's flipmap twin never, its line ending in ` twin`. The summary
+	 * counts the pieces no static takes and the pieces two or more statics
+	 * take - hd_level.cpp's UpdateDestructibles writes a piece's state once
+	 * per pair, so the last pair of a shared piece decides it. */
 	static void SmashCensus(const char* stem)
 	{
 		Answer(stem);
@@ -10935,7 +10963,7 @@ namespace probestatics
 
 		for (const Static& s : g_list)
 		{
-			if (s.slot < 50 || s.slot >= 58)
+			if (!HDStaticShatterSlot(s.slot))
 				continue;
 
 			statics++;
@@ -10987,12 +11015,14 @@ namespace probestatics
 				if (!reach)
 					continue;
 
-				const bool paired = HDStaticPiecePaired(s.mins, s.maxs, dx, dz,
-					lo, hi);
+				const bool state = HDStaticPieceInState(Twin(s.room), group);
+				const bool paired = state && HDStaticPiecePaired(s.mins, s.maxs,
+					dx, dz, lo, hi);
 
 				printf("smash: %s near room=%d mesh=%d piece=%d group=%d "
-					"gap=%.0f,%.0f,%.0f paired=%d\n", stem, s.room, s.mesh, p,
-					group, gap[0], gap[1], gap[2], paired ? 1 : 0);
+					"gap=%.0f,%.0f,%.0f paired=%d%s\n", stem, s.room, s.mesh, p,
+					group, gap[0], gap[1], gap[2], paired ? 1 : 0,
+					state ? "" : " twin");
 
 				if (paired)
 				{
@@ -11029,26 +11059,46 @@ namespace probestatics
 
 	/* -smash <room>:<mesh>: the art after Lara has shot those statics, as
 	 * the engine draws it. The pairs are hd_level.cpp's - HDStaticPiecePaired
-	 * over every piece of a group drawn HD, statics in room and mesh order -
-	 * and each pair writes its piece's state the way UpdateDestructibles
-	 * does, hidden when its static is shot and shown when not, so a piece
-	 * two statics take ends in the state of the last of them. */
+	 * over every piece of a group drawn HD but the room's flipmap twin's
+	 * (HDStaticPieceInState), statics in room and mesh order - and each pair
+	 * writes its piece's state the way UpdateDestructibles does, hidden when
+	 * its static is shot and shown when not, so a piece two statics take
+	 * ends in the state of the last of them. With -flip the shots name the
+	 * rooms as they stand after those flips: a pair reads the static where
+	 * its list stands now (HDStaticListRoom over the group table FlipMap
+	 * and HDFlipRoom leave), and its line ends in ` at=` that room. */
 	static void SmashHide(const char* stem,
 		const std::vector<std::pair<int, int> >& shot)
 	{
 		Answer(stem);
 
 		const int groups = (int)g_stand_rooms_built.size();
+		const int count = g_level.roomCount();
+		std::vector<short> table((size_t)(count > 0 ? count : 1), -1);
+
+		for (int r = 0; r < count; r++)
+			table[(size_t)r] = (short)r;
+
+		for (size_t k = 0; k < walkoff::g_flip_rooms.size(); k++)
+		{
+			const int a = walkoff::g_flip_rooms[k];
+			const int b = a >= 0 && a < count ?
+				g_level.rooms()[(size_t)a].altRoom : -1;
+
+			if (b >= 0 && b < count)
+				std::swap(table[(size_t)a], table[(size_t)b]);
+		}
 
 		for (const Static& s : g_list)
 		{
+			const int at = HDStaticListRoom(&table[0], count, s.room);
 			bool named = false;
 
 			for (size_t k = 0; k < shot.size(); k++)
-				named = named || (shot[k].first == s.room &&
+				named = named || (shot[k].first == at &&
 					shot[k].second == s.mesh);
 
-			if (s.slot < 50 || s.slot >= 58)
+			if (!HDStaticShatterSlot(s.slot))
 				continue;
 
 			for (int p = 0; p < HDRenderDestructibleCount(); p++)
@@ -11057,7 +11107,8 @@ namespace probestatics
 				float lo[3], hi[3];
 
 				if (!HDRenderDestructibleInfo(p, &group, 0, lo, hi) ||
-					group < 0 || group >= groups || !StandGroupHD(group))
+					group < 0 || group >= groups || !StandGroupHD(group) ||
+					!HDStaticPieceInState(Twin(s.room), group))
 					continue;
 
 				float dx, dz;
@@ -11067,9 +11118,15 @@ namespace probestatics
 				if (!HDStaticPiecePaired(s.mins, s.maxs, dx, dz, lo, hi))
 					continue;
 
+				char moved[24] = "";
+
+				if (at != s.room)
+					snprintf(moved, sizeof(moved), " at=%d", at);
+
 				HDRenderDestructibleHide(p, named);
-				printf("smash: %s %s room=%d mesh=%d piece=%d group=%d\n",
-					stem, named ? "hidden" : "shown", s.room, s.mesh, p, group);
+				printf("smash: %s %s room=%d mesh=%d piece=%d group=%d%s\n",
+					stem, named ? "hidden" : "shown", s.room, s.mesh, p, group,
+					moved);
 			}
 		}
 	}
@@ -13709,7 +13766,7 @@ static int ProbeMain(int argc, char** argv)
 			"shares and the shatterable\n");
 		printf("                      ones, then no picture (needs -roombox)\n");
 		printf("       -smash <room>:<mesh>   that static shot: its pieces "
-			"hidden as the engine pairs them\n");
+			"hidden as the engine pairs them (rooms after -flip)\n");
 		printf("       -smashcensus   the destructible pieces, the shatterable "
 			"statics and their pairs\n");
 		printf("       -smashpiece <n>   destructible piece n hidden, in any "

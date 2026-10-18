@@ -13441,6 +13441,96 @@ static void static_art()
 			"smash: RICH3 46's 38-unit overlap pairs", 1, 1);
 	}
 
+	/* The window group: the ten shatter slots the savegame keeps, a flipmap
+	 * twin's art left to its own state, and a static read where its list
+	 * stands after a flip. ANDREA2's window onto the hall is slot 59 in rooms
+	 * 132 (the main) and 65 (its alternate, flip 8), each with its own grid
+	 * at the same place, piece 4 in group 132 and piece 3 in group 65; the
+	 * controller clears the static room 132 holds once the flip has run. */
+	{
+		ok(!HDStaticShatterSlot(49), "window: slot 49 is not a shatter slot",
+			HDStaticShatterSlot(49), 0);
+		ok(HDStaticShatterSlot(50), "window: slot 50 is the first", 0, 1);
+		ok(HDStaticShatterSlot(57), "window: slot 57, the last a shot takes",
+			0, 1);
+		ok(HDStaticShatterSlot(59), "window: slot 59, ANDREA2's window", 0, 1);
+		ok(!HDStaticShatterSlot(60), "window: slot 60 is past the ten", 1, 0);
+		ok(HDStaticPieceInState(-1, 31),
+			"window: a room with no twin takes any group's piece", 0, 1);
+		ok(!HDStaticPieceInState(65, 65),
+			"window: room 132's static leaves its twin's grid", 1, 0);
+		ok(HDStaticPieceInState(65, 132),
+			"window: room 132's static takes its own grid", 0, 1);
+		ok(HDStaticPieceInState(65, 31),
+			"window: and a neighbour's art beside it", 0, 1);
+
+		short table[250];
+
+		for (int r = 0; r < 250; r++)
+			table[r] = (short)r;
+
+		ok(HDStaticListRoom(table, 250, 65) == 65,
+			"window: before a flip a list stands in its own room",
+			HDStaticListRoom(table, 250, 65), 65);
+
+		// FlipMap(8) and HDFlipRoom(132, 65).
+		table[132] = 65;
+		table[65] = 132;
+
+		ok(HDStaticListRoom(table, 250, 65) == 132,
+			"window: after the flip room 65's list stands at 132",
+			HDStaticListRoom(table, 250, 65), 132);
+		ok(HDStaticListRoom(table, 250, 132) == 65,
+			"window: and room 132's at 65", HDStaticListRoom(table, 250, 132),
+			65);
+		ok(HDStaticListRoom(table, 250, 31) == 31,
+			"window: a room outside the pair stays",
+			HDStaticListRoom(table, 250, 31), 31);
+		ok(HDStaticListRoom(table, 250, -1) == -1 &&
+			HDStaticListRoom(table, 250, 300) == -1,
+			"window: no room holds a list out of range", 0, -1);
+
+		/* The whole walk, as BuildStaticTables pairs and UpdateDestructibles
+		 * reads: Flags bit 0 per list (by the room it was built in), the
+		 * pieces' hidden state per pair, last pair written wins. */
+		const int statics[2] = { 65, 132 };
+		const int twins[2] = { 132, 65 };
+		const int pieces[2] = { 3, 4 };
+		const int groupOf[2] = { 65, 132 };
+		int flags[250];
+		int pairs = 0;
+		bool hidden[2] = { false, false };
+
+		for (int r = 0; r < 250; r++)
+			flags[r] = 1;
+
+		// The shot after the flip: room 132's static, the list built at 65.
+		flags[table[132]] = 0;
+
+		for (int s = 0; s < 2; s++)
+			for (int p = 0; p < 2; p++)
+			{
+				if (!HDStaticPieceInState(twins[s], groupOf[p]))
+					continue;
+
+				pairs++;
+				hidden[p] = flags[table[HDStaticListRoom(table, 250,
+					statics[s])]] == 0;
+			}
+
+		ok(pairs == 2, "window: one pair per state", pairs, 2);
+		ok(hidden[0], "window: the broken state's grid goes with the break",
+			hidden[0], 1);
+		ok(!hidden[1], "window: the whole state's grid stays", hidden[1], 0);
+
+		/* Read by the room's number instead, piece 3's pair would read the
+		 * list standing at room 65 now - the whole state's - and keep it. */
+		const bool byNumber = flags[table[65]] == 0;
+
+		ok(!byNumber, "window: read by number the broken grid would stay",
+			byNumber, 0);
+	}
+
 	// The frame: never both the static and its art, never neither.
 	for (int answer = HD_STATIC_GROUPS; answer <= HD_STATIC_CLASSIC; answer++)
 		for (int listed = 0; listed < 2; listed++)

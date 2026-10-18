@@ -8502,8 +8502,182 @@ RICH1's ten shatterable statics and RICH2's two in room 57 are drawn by art that
 no destructible piece (`-statictable` names them DEFECT), so in HD they stay after the
 shot; RICH2's pieces in groups 5 and 128 and ANDREA2's two glass pieces have no static and
 cannot be shot. `UpdateDestructibles` still writes per pair; no piece is shared any more.
+Round 2 (below) mended ANDREA2's window: its grid goes with its break.
 
 **Commits.** `b68185f1`, `f7af128c`, `7af87c25`
+
+#### Round 2: ANDREA2's window and its break
+2026-10-18
+
+**What.** Decided on 2026-10-17, put into English: ANDREA2's window (in trview, room 132,
+mesh 47) gets the same treatment as ANDREA1's - whole before the break, gone with it. An
+older note of 2026-09-06 on the same window: the classic game breaks it in a cutscene, and
+this project showed a dark pattern of shards there for good where the Remaster shows clear
+glass. Reference pictures supplied for this project (not in the repository) show the place
+from Lara's ledge: in HD nothing of the window, in the classic draw a grid of solid gold
+bars with faint panes between them. The broken state's grid now goes with the break, in
+play and after every save load; before the break the window stands as the data draws it.
+The bars' visibility is measured and left to the owner (below); nothing of the draw's look
+changes.
+
+**The window's data.** Rooms 132 and 65 are one flipmap pair: 132 the main room (its
+`flipped_room` names 65), 65 its alternate, flip 8 (the room header's `FlipNumber`), both
+at x 65536, z 38912. Their classic faces are the same 30 faces, texture for texture and
+corner for corner (FaceCheck), and none of them lies in the window's plane, room-local x
+1024, which is the portal to room 31, Lara's ledge. The window is a static in each room:
+slot 59, mesh 571, at 67072, -2048, 41472, `y_rot` 16384, Flags 1. trview's "Mesh 47" is
+room 132's: the level's static number 47 counted from 0 (room 65's is 23). Mesh 571 has
+192 vertices, 260 opaque quads on textures 2229 and 2230 - the bars - and 70 additive
+quads on 2231 and 2232 - the panes: the classic draw's solid bars and faint glass. Round
+1's sentence that the classic window is room faces and cannot be broken is wrong on both
+counts.
+
+**Its break.** Room 131 lies under room 132; its sector (3, 3) holds a heavy trigger
+(`8504 3E00 006D 8C08`): item 109 and FLIPMAP 8. Item 109 is an `XRAY_CONTROLLER` (type
+156) in room 132 at the static's own place with OCB 333, and `ControlXRayMachine`'s case
+333 (`objects.cpp`) shatters every static of its room standing exactly at its place,
+whatever its slot, and clears its Flags bit 0. The trigger is tested by flyby sequence 5,
+camera 16, a camera that tests the heavy triggers where it stands: in the owner's log of
+2026-10-17, at tick 311828, the FLYLOG line in room 132 and the HD flip line `room=132 <->
+room=65` stand in the same tick and the glass sound (sfx 12) follows at 311859. The
+cutscene the note remembers is this flyby; cutscene 8 (Larson) comes later and flips
+nothing. FlipMap runs at the end of the trigger's walk, the controller in the next frame,
+so the static it clears is the one room 132 holds by then: the list built for room 65. Of
+the log's eleven ANDREA2 loads the first breaks the window in play; the other ten restore
+it from saves - `sgRestoreGame` flips map 8 (the flip line right after each load) and then
+restores Flags bit 0 of every static of slots 50 to 59 (`savegame.cpp`). In the log of
+2026-10-16 the owner's still eye before the break (ticks 1507875 to 1545422, room 73)
+follows a load without a flip, and an eye of the broken state (ticks 1464922 to 1466453,
+eye 64399, -3316, 41614 in room 73 looking at 65596, -2704, 41728) follows a save restored
+after the break (flip at 1380984).
+
+`HDLOG flippair` names only three of the level's five pairs (52/176 flip 4, 116/170 flip
+9, 239/244 flip 2): the line skips a room whose `flipped_room` is lower than its own
+number, and only a main room names its twin (FlipMap sets the alternate's to -1), so a
+pair whose main room has the higher number - 132/65 flip 8, 163/147 flip 3 - is never
+written. That is the log's alone: both rooms of each pair are drawn HD (`HDLOG room` 602
+opaque and 2,146 alpha triangles in 65 and in 132) and `HDFlipRoom` swaps them (the `HDLOG
+flip` line).
+
+**The HD art.** Groups 65 and 132 each hold two parts: the walls (opaque, 602 triangles;
+group 65 has 56 of them on page 4834 at x 2048..3072, where group 132 has pages 291 and
+292 - not at the window) and the grid, `0x800e`, 2,146 triangles on page 3007 in the alpha
+run, `param` (2, 0.1), box x 998..1049, y -4095..-2047, z 2048..4096: piece 3 in group 65
+and piece 4 in group 132, the same box and the same triangles. Nothing in the art marks
+one state's grid as broken; the break is the static. The pairing took slots 50 to 57 only,
+so neither piece had a static and `UpdateDestructibles` never touched them: before the
+flip room 132 draws group 132 and its grid, after it room 132 draws group 65 and its grid:
+the window "still there" after the break and after every load. At 960 x 540 (RoomProbe,
+seed room 73 with its neighbours):
+
+| | the owner's eye | the broken state's eye |
+|---|---|---|
+| classic: the window static drawn, against without | 250,516 px, at most 201 | 119,677 px, at most 201 |
+| HD before: the broken state's grid, against hidden | 165,378 px, at most 20, mean 4.65 | 79,532 px, at most 18, mean 4.16 |
+| HD: group 132 against group 65, whole | 25,288 px, at most 4 | 17,362 px, at most 5 |
+
+**The rule.** From the engine's own state, never a room's number, in three pure functions
+of `hd_cover.h`. (1) `HDStaticShatterSlot`: slots 50 to 59 (`HD_STATIC_SHATTER_FIRST`,
+`_LAST`) - the ten whose Flags bit 0 the savegame writes and restores, ten `ShatterSounds`
+per level; a shot takes 50 to 57, the gladiator's and the Roman god's blows any of the
+ten, the controller at OCB 333 any static at its place. (2) `HDStaticPieceInState`: a
+static takes no piece of its room's flipmap twin - FlipMap puts the twin in the room's
+place and never beside it, so the twin's grid is the other state's; the pairing loop finds
+the twin as `flipped_room` names it, for the alternate by the main room that names it. (3)
+`HDStaticListRoom`: `UpdateDestructibles` reads each pair's static where the list it was
+built from stands now - FlipMap swaps two rooms' records, their `MESH_INFO` lists with
+them, and `HDFlipRoom` the group table with them - the room itself until a flip moves it.
+Without (2) and (3) the slots alone would have hidden the right grid here only because the
+main room's number, 132, is the higher of the two and the last pair written wins; with
+them it holds in any numbering. A save loaded after the break takes the same path: the
+restore's FlipMap swaps the table, its statics' loop clears the bit in the list room 132
+holds, and the next frame hides piece 3.
+
+Over the fifteen levels (`-smashcensus`) the rule changes three: ANDREA2 statics 3 -> 5,
+pairs 3 -> 5, unpaired pieces 2 -> 0 (each slot 59 static takes its own state's grid, the
+twin's piece is marked `twin`); RICH2 statics 14 -> 26, pairs 12 -> 14, unpaired 2 -> 0 -
+pieces 0 and 6 (groups 5 and 128) are the art of slot 59 statics in rooms 5 and 128, and
+nothing in RICH2 can clear those (no gladiator, no Roman god, its three controllers have
+OCB 0 or 65535), so they stay drawn as before; RICH1 statics 15 -> 17, the two slot 58
+statics of rooms 147 and 150 with no piece near. The 16 statics of slots 58 and 59 are
+ANDREA2 2, RICH1 2, RICH2 12. No piece is shared; no pair of another level is lost to the
+twin rule; the pairs of the game go from 65 to 69, one per piece.
+
+**Measured.** RoomProbe of `7d9a7323` against the round's: the broken state with its
+static shot (`-smash 65:0`, and as the engine numbers it, `-flip 132 -smash 132:0`, the
+pair reading room 132) is now byte-identical to the picture with its grid hidden at both
+eyes (0 pixels), where before it kept the grid (165,378 and 79,532 pixels). Pictures with
+nothing broken - HD in either state, classic before and after - are byte-identical.
+
+**The bars' visibility.** The grid's bars are not opaque texels: of the 103,293 texels of
+page 3007 under the grid, 55,877 (54.1 %) have alpha below 16 and carry the bars' colour
+(mean RGB 106, 82, 60), 47,416 (45.9 %) lie between 16 and 239 - the panes - and none is
+240 or more; 2,076 of the 2,146 triangles, all 640 horizontal ones among them (the bars'
+tops and bottoms), sample the clear texels. The present reading (`param[1]` the opacity of
+the whole part) draws the bars at nothing and the panes at a tenth of their alpha. Over
+the fifteen levels the alpha run's material 14 parts with `param[1]` under 1 (the
+additive run's take the additive weight and are not this rule's), one part's texels per
+row:
+
+| level | parts | page | `param[1]` | clear | partial | opaque |
+|---|---|---|---|---|---|---|
+| ANDREA2 | 2 | 3007 | 0.1 | 54.1 % | 45.9 % | 0 |
+| JOBY2 | 2 | 16073 | 0.1 | 0 | 97.4 % | 2.6 % (86 texels) |
+| JOBY2 | 1 | 513 | 0.2333 | 0 | 0 | 100 % |
+| JOBY3 | 27 | 10072 | 0.1 | 0 | 100 % | 0 |
+| JOBY5 | 31 | 10072 | 0.1 | 0 | 100 % | 0 |
+| RICH2 | 6 | 3309 | 0.8417 | 0 | 100 % | 75 texels |
+| RICH3 | 5 | 10084 | 0.1 | 0 | 100 % | 20 texels in one part |
+
+RICH2's six parts are one window in six rooms (groups 84, 91, 96, 100, 102 and 104, 72
+triangles and one box each), each over the same 239,700 texels with the same 75 opaque;
+of RICH3's five, one covers 29,423 texels with 20 opaque, the other four 4,843 with none.
+ANDREA2's bars are the only clear texels of the 74 parts.
+
+The readings drawn, at 960 x 540 at the owner's eye and at one eye on each other page, by
+scratch RoomProbe builds that change only the room shader's alpha output and only where a
+draw call's see-through weight is under 1 (a control build made the same way with the
+shader unchanged gives the present pictures byte for byte). Reading B is round 1's other
+reading: texels at alpha 240 and above opaque, the rest at alpha times `param[1]`. Reading
+C draws the texels below 16 opaque instead. The alpha test (`-noblend`) is neither: it
+draws the texels at 0.5 and above solid and drops the rest. Each against the present
+picture:
+
+| eye | page | reading B | reading C | the alpha test |
+|---|---|---|---|---|
+| ANDREA2, the owner's eye | 3007 | 0 px | 97,138 px, up to 245 | 167,454 px, up to 230 |
+| JOBY2 room 102 | 513 | 45,582 px, up to 150 | 0 px | 45,582 px, up to 176 |
+| JOBY2 room 52 | 16073 | 0 px | 0 px | 16,128 px, up to 34 |
+| JOBY3 room 10 | 10072 | 0 px | 0 px | 7,268 px, up to 240 |
+| RICH2 room 84 | 3309 | 1 px, by 5 | 0 px | 24,447 px, up to 24 |
+| RICH3 room 46 | 10084 | 0 px | 0 px | 2,456 px, up to 110 |
+
+The opaque texels are no frames: reading B changes nothing at ANDREA2 and draws JOBY2's
+four blue panes in room 102 solid; the few opaque texels of pages 16073 and 3309 come to
+one pixel once filtered. Reading C draws ANDREA2's bars solid in their own colour with the
+panes faint between them, as the classic draw shows the window, and by the census above
+touches no other part of the fifteen levels. So the data supports reading B nowhere and
+reading C at ANDREA2 alone; C lives in the shader, outside this round's files, so nothing
+is built and the reading is the owner's.
+
+**Decisions.** The rule reads the engine's state (slot, flip twin, Flags bit 0) and names
+no room. The flip pair's own two pieces stay apart by the twin rule rather than by the
+order of the pairs. The bars' reading is the owner's; the pictures are kept outside the
+repository.
+
+**Checked.** Classic views ANDREA2 19 and 231, JOBY2 42 and 66, ANDY3 17 and 34: 6 of 6
+identical to `8691e82` and `7d9a7323`; the 15 parity cameras and the six HD views 15 of 15
+and 6 of 6, ModelProbe `-all` 15 of 15 and its nine pictures 9 of 9, round 1's 13 window
+pictures (ANDREA1 198 and 201, JOBY2 57) 13 of 13 identical to `7d9a7323` and to round 1's
+own. The census is identical in twelve levels. ModernTest 15,602 checks with the window
+group's 18, 0 failed. The texel counts are read out of the `.TRG` and the pages as the
+engine finds them (`HDScanReadTrg`, `HDScanPagePath`).
+
+**Left.** The bars (above). `hd_level.cpp`'s comment at `g_destruct_pairs` still says
+slots 50 to 57; the merge's to update. The `HDLOG flippair` line still skips the pairs
+whose main room has the higher number.
+
+**Commits.** `052a283e`, `e07d5ec2`, `dee55029`
 
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15

@@ -1079,6 +1079,20 @@ keeps playing, like the one in the X-ray corridor of Escape with the Iris,
 jumps where it takes the view and where it hands it back, and is drawn
 between the game steps in between, in both control schemes.
 
+**The zoom.** The binoculars and the sights of the revolver, the crossbow and
+the HK zoom by one notch per game step while the zoom keys are held, about two
+and a half degrees, half that with Walk held. Between two game steps the
+picture is drawn at the zoom in between, as the camera is: at *Display* on a
+165 Hz panel every picture of a zoom has a field of view of its own instead
+of five or six pictures sharing one notch and the next jumping by the whole
+notch. Raising the binoculars or the sight and lowering them stay the cuts
+they are at thirty: the camera jumps there between Lara's head and the view
+behind her, and the field of view jumps with it. With `-log`, every
+`ALTERFOV` line ends with `alpha` and `tween`: during a zoom at *Display* the
+lines with `tween 1` carry a new value on every picture, and `INTERPLOG`'s
+`zoom=` counts the pictures a second that were drawn in between. At 30
+nothing changes.
+
 **At a corner.** Between two game steps the camera is drawn on the straight
 line between the two places it stood, and beside a pillar or a door frame that
 line can pass through the stone for a frame or two, which would show as a

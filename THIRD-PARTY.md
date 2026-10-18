@@ -3472,6 +3472,30 @@ carries the tables.
     OWN.
 342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
+343. **The zoom between two ticks** (`game/modern_camera.h`,
+    `ModernCameraZoomTweens`, `ModernCameraZoomLerp`; `game/interpolate.cpp`,
+    `InterpZoomFOV`, the capture before the tick and the field of view set
+    again after the frame; `game/draw.cpp`, `SkyDrawPhase`'s three calls) -
+    the field of view of a frame between two ticks of the binoculars' or a
+    sight's zoom blended at the frame's alpha. CLASSIC: the step of 64, 32
+    with the walk key, the clamp to 128 and 1536, the view's `GAME_FOV - 7 *
+    range` set before the step and the sky's `GAME_FOV - range`
+    (`camera.cpp`, `BinocularCamera`; `draw.cpp`), the entry at 128 and the
+    exit to `GAME_FOV` (`control.cpp`, `newinv2.cpp`, `camera.cpp`), and so
+    the widest zoom, `GAME_FOV - 7 * 128` = 13664. DATA: the owner's `-log`
+    of a zoom in JOBY2 at 165 Hz (`ALTERFOV`, `ARMLOG`, `FPSLOG` lines): 448
+    units a tick, five or six frames on one value, the entry and the exit
+    drawn as camera cuts. OWN: the blend with the camera's own
+    `InterpLerpLong` arithmetic, the two tests (both ranges a zoom's, both
+    fields of view at most the widest), the entry and the exit kept as cuts,
+    the frame's alpha rather than the corner rule's.
+344. **`ALTERFOV`'s `alpha` and `tween`, `INTERPLOG`'s `zoom=`**
+    (`specific/3dmath.cpp`, `game/interpolate.cpp`) - the blend factor of
+    the frame and whether the value is the zoom's blended one, at the end of
+    the line; the frames a second drawn with the blended zoom. OWN.
+345. **InterpTest's `zoom` group** (`Preparation/Tools/Diagnose/
+    InterpTest.cpp`) - 25 checks on the two inline functions and a zoom in
+    and out ticked at 30 Hz and drawn at 165 Hz with the seam's alpha. OWN.
 
 ## Credited, but not contained here
 

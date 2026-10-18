@@ -3102,6 +3102,57 @@ carries the tables.
     and its mirror (green over red by 40, over blue by 20, above 80; the
     split at 30 per cent of the height, the screen above, the floor
     below) is a free choice read off the pictures at RICH2's tank.
+298. **The classic break** (`game/debris.cpp`, `ShatterObject`, `TriggerDebris`,
+    `UpdateDebris`; `specificfx.cpp`, `DrawDebris`) - the faces walked the
+    triangles first and then the quads, a quad's piece its corners 1, 2 and
+    4, up to the caller's count (128 for a shot and for the X-ray
+    controller), each with its face's classic texinfo, the static's shade
+    times the prelight, its flight and its life; drawn through the sort list
+    on the classic pages. CLASSIC. Ours: ANDREA2's window measured (mesh
+    571, 330 quads, 128 pieces, pages 11 and 13, `MODIFICATIONS.md`, "The
+    pieces of a broken static in HD"); the flight left byte for byte as it
+    was (a scratch harness over `game/debris.cpp` of both trees).
+299. **A piece's look from the static's own part** (`hd_debris_rules.h`,
+    `HDDebrisFaceOf`; `hd_level.cpp`, `HDStaticBreak`) - a triangle of the
+    static's destructible part goes with the classic face nearest its
+    centroid, no reach; a face that became a piece flies its triangles, a
+    face the count left out takes them with it. DATA: the part is the
+    pairing's (`HDStaticPiecePaired`, `hd_cover.h`); at ANDREA2's
+    window every centroid lies 0 to 26 units off a face, over the game's 58
+    statics with a part at most 151 (DebrisMeasure). OWN, the rule.
+300. **One place, its triangles dealt by a hash** (`HDDebrisSamePlace`,
+    `HDDebrisPlaces`, `HDDebrisDeal`, `HDDebrisHash`) - faces with the same
+    corners share the place's triangles by a hash of the triangle's number.
+    DATA: ANDREA2's window stands as 165 places of two faces each. OWN, the
+    deal; the hash is the multiply-xorshift finaliser `HDCardHash` ends in,
+    a textbook construction.
+301. **A piece with no art draws nothing in HD** (`HDDebrisNote`,
+    `HDDebrisDrawn`) - OWN; DATA: at ANDREA2 the 48 places without a
+    triangle are the crossings of two bars, 36 to 55 by 38 to 48 units, 18
+    of them among the 128 pieces.
+302. **A piece's blend** (`HDDebrisKindOf`, `HDDebrisSeeThrough`) - the
+    part's run read as the room draw reads a destructible part's
+    (`MaterialBlend`, `MaterialAddWeight`, `MaterialAlphaRef`): opaque,
+    glass at `param[1]`, cut at 0.5, a glow at 1. OWN, those readings
+    (their own entries); DATA: the runs of the game's parts (opaque, the
+    alpha run of ANDREA2 and RICH2 and RICH3, the additive run of ANDREA1,
+    JOBY2 and RICH3, the table in `MODIFICATIONS.md`).
+303. **The pieces' draw** (`hd_debris.cpp`, `HDDebrisDraw`; `hd_level.cpp`,
+    `HDFrameDraw` and `HDFrameDrawGlow`) - the room's own vertex and pixel
+    shaders on vertices put into view space on the processor, one call per
+    kind and page, the frame's fog, fog bulbs and screen, no dynamic light,
+    no gloss, both sides, last in each bracket. OWN, free choices; the
+    shaders' lines are the room's.
+304. **The parts read by seeking** (`HDDebrisLevelRead`) - the `.TRG`'s head
+    and parts, then only the destructible parts' index runs and vertices.
+    DATA: the layout of entry 1; ANDREA2's five parts, 7,220 triangles, in
+    3.0 to 12.3 ms (median 4.4
+    of ten runs). OWN, the seek.
+305. **RoomProbe `-debris`, `-debrisclassic`, `-debrisseed`** - the break
+    drawn at a life: the tool's copy of the break and the flight with a
+    random generator of its own (seed 1, a free choice) and no floor test;
+    the classic look out of the `.TRC`'s 32-bit pages. OWN, this project's
+    tool on the player's files (DATA).
 
 ## Credited, but not contained here
 

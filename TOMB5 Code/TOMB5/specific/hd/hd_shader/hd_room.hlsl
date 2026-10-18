@@ -107,7 +107,8 @@
  *               k_hd_frag, on a TR1 snow floor; ANDREA1's stucco, JOBY2's
  *               snow and JOBY3's bulkheads here).
  *   1 alpha     clip(a - 0.5), the punch-through pass.
- *   2 additive  colour * alpha, blended ONE/ONE with the depth write off.
+ *   2 additive  colour * alpha, blended ONE/ONE with the depth write off
+ *               (material 14's glass: the colour alone, see gPass.z).
  *
  * All three switches ride in one constant so the shader never branches:
  * gPass.x is the alpha reference - 0.5 in the alpha pass, the material's own
@@ -116,7 +117,11 @@
  * additive pass and 0 otherwise; gPass.w is 0 in the additive pass and 1
  * otherwise, because the classic path switches D3DRS_SPECULARENABLE off for
  * its additive draw type (polyinsert.cpp) and the overbright term below goes
- * off with it.
+ * off with it. gPass.z is 0 except in the two halves of a see-through draw
+ * call that hd_render.cpp splits (GlassSplits): 1 keeps its clear texels, -1
+ * the rest; and -1 for the additive run of a material 14 part, the glass
+ * the classic draw adds (hd_render.cpp, draw_pass), where it also keeps the
+ * texel's alpha from weighing the colour.
  *
  * -------------------------------------------------------- the parity block
  *
@@ -195,8 +200,8 @@
  */
 float4x4 gWorldViewProj : register(c0);
 
-/* x = alpha test on/off, y = additive weight on/off, z = not read here,
- * w = specular (overbright) on/off.
+/* x = alpha test on/off, y = additive weight on/off, z = the glass's texels
+ * (see the passes above), w = specular (overbright) on/off.
  *
  * Read by the pixel shader only. The vertex shader reads none of it, so fxc
  * gives c4 of the vertex file to a literal of its own, and hd_render.cpp
@@ -1741,6 +1746,14 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * passes at the top says why the reference is per material). */
 	clip(texel.a - gPass.x);
 
+	/* The split of a see-through draw call whose page paints its frame on
+	 * clear texels (hd_render.cpp, GlassSplits). gPass.z is 1 for its solid
+	 * half, which keeps the clear texels alone, -1 for its glass half, which
+	 * keeps the rest, and 0 for every other draw call, where the product is
+	 * 0 and nothing is thrown away. The additive run's glass is drawn at -1
+	 * as well: its clear texels are not glass. */
+	clip(gPass.z * (texel.a < 16.0f / 255.0f ? 1.0f : -1.0f));
+
 	/* Into the classic path's 0..255 space. */
 	float3 f = input.light * 127.5f;
 
@@ -1979,8 +1992,13 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	// RoomProbe's -glossfield picture: the field in place of the surface.
 	lit = gGloss.w > 0.5f ? field : lit;
 #else
-	/* Additive pass only: an unweighted glow washes the whole frame out. */
-	lit *= lerp(1.0f, texel.a, gPass.y);
+	/* Additive pass only: an unweighted glow washes the whole frame out.
+	 * Except the glass (gPass.z -1, see the passes at the top): the classic
+	 * draw adds its glass at texel times light and reads no alpha for it
+	 * (polyinsert.cpp, draw type 2), so here the alpha only chooses the
+	 * texels (the clip on gPass.z above) and weighs nothing. step() is 1 for
+	 * every other draw call, which keeps their picture to the bit. */
+	lit *= lerp(1.0f, texel.a, gPass.y * step(0.0f, gPass.z));
 
 	/* And the part's own weight, with its swing (see gAdd above). gPass.y is 1 in the additive pass and 0 in the other two,
 	 * so the two surface passes multiply by exactly one and keep their
@@ -2016,7 +2034,10 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * with an alpha run and param[1] under 1 in the fifteen levels, that
 	 * grid's two groups are the only ones with a clear texel at all, so the
 	 * panes of every other glass, and every draw call at 1, keep their
-	 * picture to the bit. */
+	 * picture to the bit. That grid is drawn in two halves besides (the
+	 * clip on gPass.z above): its clear texels with the solid ranges and the
+	 * depth write, its panes added as the classic adds them, so neither
+	 * reaches this line with a blend that reads its alpha. */
 	const float seen = texel.a * gSpec.w;
 
 	return float4(lit, gSpec.w < 1.0f && texel.a < 16.0f / 255.0f ? 1.0f :

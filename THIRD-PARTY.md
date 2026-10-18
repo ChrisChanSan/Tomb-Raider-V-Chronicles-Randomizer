@@ -3386,6 +3386,92 @@ carries the tables.
     art, the look and the sheet alone (`-sea art` draws the picture before the sheet
     byte for byte), and the additive pass timed. OWN, this project's tool on the
     player's files (DATA).
+334. **A frame with glass in it drawn in two halves** (`hd_render.cpp`,
+    `GlassSplits`, `HD_GLASS_CLEAR_BELOW`, `HD_GLASS_FRAME_PERMILLE`,
+    `draw_pass`; `hd_room.hlsl`, the clip on `gPass.z`) - a see-through
+    draw call of the alpha pass whose page has a clear texel and more than
+    half of its texels below the alpha test's reference draws its clear
+    texels with the alpha pass's solid ranges (no alpha test, the depth
+    write on) and the rest in the glass's phase. DATA: page 3007's texels
+    (80.6 % of the whole page under 16 and 19.4 % partial, none opaque;
+    under the grid's triangles 54.1 % clear in the frame's colour;
+    856 per mille below 128, the next see-through page 116), the classic
+    window mesh 571's face attributes (260 quads with effects bit 0
+    clear, 70 with it set) and the HD triangles by place against them;
+    the 16 the census's own bound of clear. CLASSIC: a face with effects
+    bit 0 drawn as draw type 2 (`output.cpp`, `phd_PutPolygons`), draw
+    type 0 drawn into the depth buffer (`AddQuadZBuffer`). PICTURE (RoomProbe
+    `-calltrace`, the marble floors on, and the owner's pictures of
+    2026-10-18): the grid's one blended draw call without a depth write,
+    its back faces and the hall's mirror over its bars. OWN: the frame
+    half's place among the solid ranges, and 500 per mille in the
+    census's gap, a free choice.
+335. **The glass half added ONE / ONE** (`hd_render.cpp`, `draw_pass`, the
+    split's blend and `gPass.w`) - the split's other texels added as the
+    texel times its light, the specular off. CLASSIC: draw type 2,
+    SRCBLEND and DESTBLEND ONE and D3DRS_SPECULARENABLE off
+    (`polyinsert.cpp`, `HWR_DrawSortList`); the pane's addition, the
+    texel times the prelit light (`drawroom.cpp`'s 255 minus the shade
+    over 32, times the static's shade over 256, doubled up to 128:
+    `output.cpp`, `aTransformLightPrelightClipMesh`) over the classic
+    page's pane texels: 13.1 to 46.0 levels, 23.9 on average. PICTURE
+    (RoomProbe, eight eyes, the glass half against none): ONE / ONE +15.9
+    to +17.9, the alpha-weighted sum +8.7 to +9.4, the blend at the
+    texels' own alpha -11.0 to -25.8, the reading before -1.1 to -2.6.
+    OWN: the choice of the one that lands in the band and adds light.
+336. **RICH2's bridge pane, measured and left** (`MODIFICATIONS.md`, the
+    windows' Round 4; nothing in the code) - item 183, `BRIDGE_TILT2`, is
+    `DUMMY` in `RICH2.MAP` and baked into room group 125 (part 2, material
+    14 in the additive run, weight 0.8181, page 16103). DATA (the `.MAP`,
+    the `.TRG`, the page's texels, the classic mesh 495's 16 additive
+    quads); PICTURE (RoomProbe `-glow -addmat 14` at the trview eye of the
+    owner's picture: 5.7 levels on average over 10,861 pixels).
+337. **The 74 see-through parts' classic faces** (`MODIFICATIONS.md`, the
+    windows' Round 4; nothing in the code) - per part the classic room
+    faces and static faces at its place, by draw type, and its pixels at a
+    census eye before and after. DATA, counted with scratch tools on the
+    player's files (the classic `.TRC` and the `.TRG` through the engine's
+    resolvers); PICTURE (RoomProbe, one eye a part, 70 of 74 in view).
+338. **RoomProbe `-calltrace`, `-lumaat` and `-gpuall`** (`Preparation/Tools/
+    Diagnose/RoomProbe.cpp`) - every draw call of the frame that samples a
+    page, with its depth, blend, cull and room shader constants; a
+    pixel's colour and luma; `-gpu` over every pass. OWN, this project's
+    tool; the device's `DrawIndexedPrimitive` read at entry 82 of the
+    `IDirect3DDevice9` table, the declaration order of the SDK's `d3d9.h`
+    (PLACE).
+339. **The additive run's glass added whole** (`hd_render.cpp`, `AddGlass`,
+    `draw_pass`'s weight and `gPass.z`; `hd_room.hlsl`, the `step` on
+    `gPass.z` in the additive pass's alpha multiply) - an additive draw
+    call of material 14 whose page has no texel under 16 of 255 is added
+    as the texel times its light, its alpha and `param[1]` weighing
+    nothing. CLASSIC: draw type 2, ONE / ONE, the specular off, the
+    texture's alpha not read (`polyinsert.cpp`, `HWR_DrawSortList`).
+    DATA: the page's smallest alpha (`HDPageCacheSlotAlphaMin`) and the
+    split's bound of clear (16); the 107 additive material 14 parts of the
+    fifteen levels by page (86 on pages without a clear texel); the
+    classic bands - the bridge's mesh 495, 10.1 at its room's ambient (48)
+    to 26.9 at full light, ANDREA1's static 50, 14.2 (7.2 to 28.9) - from
+    the classic draw's own arithmetic over the classic pages' texels
+    (`aTransformLightPrelightClipMesh`). PICTURE (RoomProbe `-glow -addmat
+    14`): the bridge 5.7 before, 16.4 after; the lamp glass of page 15101
+    added whole without the bound, white, 150 levels more where the
+    classic adds 94. OWN: the bound reused from the split, the choice that
+    leaves a page with clear texels to its alpha.
+340. **The classic faces at every material 14 part's place**
+    (`MODIFICATIONS.md`, the windows' Round 4 fix pass; ModernTest's rows)
+    - the classic room and static faces at the place of the 74 see-through
+    and the 107 additive parts, by draw type, with their texels; the
+    ceiling lamps of JOBY3 and JOBY5 (statics 45, 47 to 49) under the 58
+    lamp covers of page 10072. DATA, counted with scratch tools on the
+    player's files (the classic `.TRC`, the `.TRG` and its pages through
+    the engine's resolvers); PICTURE (RoomProbe, one census eye a part).
+341. **ModernTest holds the glass rules' bodies** (`Preparation/Tools/
+    Diagnose/ModernTest.cpp`, `glass_body`, `glass_split`) - the bodies of
+    `GlassSplits` and `AddGlass` compared blank for blank with the rules
+    the test runs over the census, and the classic's agreement per family.
+    OWN.
+342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
 
 ## Credited, but not contained here
 

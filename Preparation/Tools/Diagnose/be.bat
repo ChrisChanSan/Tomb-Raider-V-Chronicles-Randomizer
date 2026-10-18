@@ -92,6 +92,7 @@ call :onestamp hd_sky hd_sky_layer_vs.inc
 call :onestamp hd_sky hd_sky_layer_ps.inc
 call :onestamp hd_sky hd_sky_cloud_vs.inc
 call :onestamp hd_sky hd_sky_cloud_ps.inc
+call :onestamp hd_gamma hd_gamma_ps.inc
 
 if not defined STALE (
 	endlocal
@@ -148,6 +149,7 @@ call :onestamp hd_sky hd_sky_layer_vs.inc
 call :onestamp hd_sky hd_sky_layer_ps.inc
 call :onestamp hd_sky hd_sky_cloud_vs.inc
 call :onestamp hd_sky hd_sky_cloud_ps.inc
+call :onestamp hd_gamma hd_gamma_ps.inc
 
 if defined STALE (
 	echo be: shaders STILL out of step after bshader -!STALE!

@@ -197,9 +197,314 @@ long DXSaveScreen(LPDIRECT3DSURFACE9 surf, const char* name, char* path,
 	return DeviceSaveTga(surf, path);
 }
 
+/* The gamma pass: the Display page's Gamma row (tomb5.gamma, 0 to 100) put
+ * over everything the engine presents.
+ *
+ * Why a pass and not the device's gamma ramp. SetGammaRamp acts on a
+ * full-screen exclusive swap chain only, and this engine never makes one:
+ * DXCreate creates the device windowed in both of its modes, full screen
+ * being a border-less window, and Alt+Enter only makes the other of the two
+ * - the ramp would do nothing in either. A ramp is also the display's own,
+ * not the window's, so one set by hand stays on the desktop if the game
+ * dies with it set. The pass touches the frame and nothing outside it.
+ *
+ * What it is. Just before the present, the back buffer is copied into a
+ * texture of its size (StretchRect), and drawn back over it, one quad,
+ * through hd_gamma.hlsl's curve. Every picture comes through
+ * DXShowFrame, so this covers the world, the menus and the inventory over
+ * it, the loading bar, the credits and the films alike.
+ *
+ * After the present the copy is put back into the back buffer. The engine
+ * reads the last presented frame out of it - the inventory's and the pause
+ * menu's picture of the world behind them (CreateMonoScreen) - and draws
+ * over it again; without the copy back that picture would carry the curve
+ * once and then be given it a second time. So the back buffer between two
+ * frames is the engine's own picture, as it is with the row at 50.
+ *
+ * At 50, the middle, no pass runs at all, and none of the objects below is
+ * even made: the picture is the engine's own, byte for byte. A step that
+ * fails leaves the frame as it is and says so once on the -log. */
+#include "hd/hd_shader/hd_gamma_ps.inc"
+
+#define GAMMA_MIDDLE	50
+
+static IDirect3DTexture9* g_gammaCopy = 0;
+static IDirect3DSurface9* g_gammaCopyLevel = 0;
+static IDirect3DPixelShader9* g_gammaShader = 0;
+static UINT g_gammaW = 0, g_gammaH = 0;
+static bool g_gammaRefused = 0;	// one -log line per device, not per frame
+static long g_gammaNamed = -1;	// the value the -log line last named
+
+// Everything the pass made; the device's own release and reset come here.
+static void GammaRelease()
+{
+	if (g_gammaCopyLevel) { g_gammaCopyLevel->Release(); g_gammaCopyLevel = 0; }
+	if (g_gammaCopy) { g_gammaCopy->Release(); g_gammaCopy = 0; }
+	if (g_gammaShader) { g_gammaShader->Release(); g_gammaShader = 0; }
+	g_gammaW = g_gammaH = 0;
+	g_gammaRefused = 0;
+}
+
+/* One new -log line, once at the first present and again at each change of
+ * the value; a refused step adds itself at the end, once per device:
+ *   DXLOG gamma row=<0..100> gamma=<g> power=<1/g> pass=<on|off>
+ *   [refused=<copy texture|shader|copy|draw> hr=<0x...>] */
+static void GammaLog(ulong row, const char* refused, HRESULT hr)
+{
+	const double gamma = pow(2.0, ((double)row - GAMMA_MIDDLE) / 50.0);
+
+	if (refused)
+		Log("DXLOG gamma row=%lu gamma=%.4f power=%.4f pass=%s refused=%s "
+			"hr=0x%08lX", row, gamma, 1.0 / gamma,
+			row == GAMMA_MIDDLE ? "off" : "on", refused, (unsigned long)hr);
+	else
+		Log("DXLOG gamma row=%lu gamma=%.4f power=%.4f pass=%s", row, gamma,
+			1.0 / gamma, row == GAMMA_MIDDLE ? "off" : "on");
+}
+
+static bool GammaRefuse(ulong row, const char* step, HRESULT hr)
+{
+	if (!g_gammaRefused)
+		GammaLog(row, step, hr);
+
+	g_gammaRefused = 1;
+	return 0;
+}
+
+/* The pass itself; true when the back buffer holds the curve's picture and
+ * the copy the engine's, so that GammaRestore has something to put back.
+ * Every state it sets is read first and set back after, so the next frame
+ * finds the device as the engine left it - no state block, which would
+ * hold references to whatever was bound and stand in the way of a Reset. */
+static bool GammaPass(LPDIRECT3DDEVICE9 dev, ulong row)
+{
+	static const D3DRENDERSTATETYPE rs[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE, D3DRS_FOGENABLE,
+		D3DRS_STENCILENABLE, D3DRS_SCISSORTESTENABLE, D3DRS_COLORWRITEENABLE,
+		D3DRS_SRGBWRITEENABLE, D3DRS_CLIPPLANEENABLE, D3DRS_FILLMODE
+	};
+	static const DWORD rs_set[] =
+	{
+		D3DZB_FALSE, FALSE, FALSE, FALSE, D3DCULL_NONE, FALSE, FALSE, FALSE,
+		0xF, FALSE, 0, D3DFILL_SOLID
+	};
+	static const D3DSAMPLERSTATETYPE ss[] =
+	{
+		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER,
+		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_SRGBTEXTURE
+	};
+	static const DWORD ss_set[] =
+	{
+		D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_NONE, D3DTADDRESS_CLAMP,
+		D3DTADDRESS_CLAMP, FALSE
+	};
+	const long nrs = sizeof(rs) / sizeof(rs[0]);
+	const long nss = sizeof(ss) / sizeof(ss[0]);
+	struct { float x, y, z, rhw, u, v; } quad[4];
+	DWORD rs_old[sizeof(rs) / sizeof(rs[0])];
+	DWORD ss_old[sizeof(ss) / sizeof(ss[0])];
+	DWORD tci_old, ttf_old, fvf_old;
+	LPDIRECT3DSURFACE9 back = 0, target_old = 0;
+	LPDIRECT3DBASETEXTURE9 tex_old = 0;
+	LPDIRECT3DPIXELSHADER9 ps_old = 0;
+	LPDIRECT3DVERTEXSHADER9 vs_old = 0;
+	LPDIRECT3DVERTEXDECLARATION9 decl_old = 0;
+	LPDIRECT3DVERTEXBUFFER9 vb_old = 0;
+	UINT vb_offset = 0, vb_stride = 0;
+	D3DVIEWPORT9 view_old;
+	D3DSURFACE_DESC desc;
+	float c0_old[4], c0[4] = { (float)row, 0, 0, 0 };
+	HRESULT hr;
+	long i;
+
+	if (g_gammaRefused)
+		return 0;
+
+	hr = dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back);
+
+	if (FAILED(hr))
+		return GammaRefuse(row, "copy", hr);
+
+	back->GetDesc(&desc);
+
+	// The copy follows the back buffer's size: Alt+Enter and a resolution
+	// change make a new device and release this one in DXClose, but the
+	// size is asked here as well rather than trusted.
+	if (g_gammaCopy && (desc.Width != g_gammaW || desc.Height != g_gammaH))
+	{
+		g_gammaCopyLevel->Release();
+		g_gammaCopy->Release();
+		g_gammaCopyLevel = 0;
+		g_gammaCopy = 0;
+	}
+
+	if (!g_gammaCopy)
+	{
+		hr = dev->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &g_gammaCopy,
+			0);
+
+		if (SUCCEEDED(hr))
+			hr = g_gammaCopy->GetSurfaceLevel(0, &g_gammaCopyLevel);
+
+		if (FAILED(hr))
+		{
+			back->Release();
+			GammaRelease();
+			return GammaRefuse(row, "copy texture", hr);
+		}
+
+		g_gammaW = desc.Width;
+		g_gammaH = desc.Height;
+	}
+
+	if (!g_gammaShader)
+	{
+		hr = dev->CreatePixelShader((const DWORD*)kHDGammaPS, &g_gammaShader);
+
+		if (FAILED(hr))
+		{
+			back->Release();
+			return GammaRefuse(row, "shader", hr);
+		}
+	}
+
+	hr = dev->StretchRect(back, 0, g_gammaCopyLevel, 0, D3DTEXF_NONE);
+
+	if (FAILED(hr))
+	{
+		back->Release();
+		return GammaRefuse(row, "copy", hr);
+	}
+
+	for (i = 0; i < nrs; i++)
+		dev->GetRenderState(rs[i], &rs_old[i]);
+
+	for (i = 0; i < nss; i++)
+		dev->GetSamplerState(0, ss[i], &ss_old[i]);
+
+	dev->GetTextureStageState(0, D3DTSS_TEXCOORDINDEX, &tci_old);
+	dev->GetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, &ttf_old);
+	dev->GetTexture(0, &tex_old);
+	dev->GetPixelShader(&ps_old);
+	dev->GetVertexShader(&vs_old);
+	dev->GetFVF(&fvf_old);
+	dev->GetVertexDeclaration(&decl_old);
+	dev->GetStreamSource(0, &vb_old, &vb_offset, &vb_stride);
+	dev->GetPixelShaderConstantF(0, c0_old, 1);
+	dev->GetRenderTarget(0, &target_old);
+	dev->GetViewport(&view_old);
+
+	dev->SetRenderTarget(0, back);	// the viewport becomes the whole of it
+
+	for (i = 0; i < nrs; i++)
+		dev->SetRenderState(rs[i], rs_set[i]);
+
+	for (i = 0; i < nss; i++)
+		dev->SetSamplerState(0, ss[i], ss_set[i]);
+
+	dev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+	dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS,
+		D3DTTFF_DISABLE);
+	dev->SetTexture(0, g_gammaCopy);
+	dev->SetVertexShader(0);
+	dev->SetPixelShader(g_gammaShader);
+	dev->SetPixelShaderConstantF(0, c0, 1);
+	dev->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+
+	/* Pixel for texel: D3D9 puts a pixel's centre on the integer, so the
+	 * quad's corners sit half a pixel up and left and every pixel samples
+	 * the centre of its own texel, point filtered. */
+	for (i = 0; i < 4; i++)
+	{
+		quad[i].x = (i & 1 ? (float)desc.Width : 0.0f) - 0.5f;
+		quad[i].y = (i & 2 ? (float)desc.Height : 0.0f) - 0.5f;
+		quad[i].z = 0.0f;
+		quad[i].rhw = 1.0f;
+		quad[i].u = i & 1 ? 1.0f : 0.0f;
+		quad[i].v = i & 2 ? 1.0f : 0.0f;
+	}
+
+	dev->BeginScene();
+	hr = dev->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0]));
+	dev->EndScene();
+
+	// Back as it was found, in the reverse order. DrawPrimitiveUP leaves
+	// stream 0 empty, so that is put back too.
+	if (target_old)
+	{
+		dev->SetRenderTarget(0, target_old);
+		target_old->Release();
+	}
+
+	dev->SetViewport(&view_old);
+	dev->SetPixelShaderConstantF(0, c0_old, 1);
+	dev->SetStreamSource(0, vb_old, vb_offset, vb_stride);
+
+	if (fvf_old)
+		dev->SetFVF(fvf_old);
+	else
+		dev->SetVertexDeclaration(decl_old);
+
+	dev->SetVertexShader(vs_old);
+	dev->SetPixelShader(ps_old);
+	dev->SetTexture(0, tex_old);
+	dev->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, ttf_old);
+	dev->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, tci_old);
+
+	for (i = 0; i < nss; i++)
+		dev->SetSamplerState(0, ss[i], ss_old[i]);
+
+	for (i = 0; i < nrs; i++)
+		dev->SetRenderState(rs[i], rs_old[i]);
+
+	if (vb_old) vb_old->Release();
+	if (decl_old) decl_old->Release();
+	if (vs_old) vs_old->Release();
+	if (ps_old) ps_old->Release();
+	if (tex_old) tex_old->Release();
+	back->Release();
+
+	if (FAILED(hr))
+	{
+		// The draw did not happen, so the back buffer is still the copy.
+		return GammaRefuse(row, "draw", hr);
+	}
+
+	return 1;
+}
+
+// After the present: the engine's own picture back into the back buffer.
+static void GammaRestore(LPDIRECT3DDEVICE9 dev)
+{
+	LPDIRECT3DSURFACE9 back = 0;
+
+	if (SUCCEEDED(dev->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &back)))
+	{
+		dev->StretchRect(g_gammaCopyLevel, 0, back, 0, D3DTEXF_NONE);
+		back->Release();
+	}
+}
+
 HRESULT DXShowFrame()
 {
 	HRESULT hr;
+	const ulong row = tomb5.gamma;
+	bool curved = 0;
+
+	if ((long)row != g_gammaNamed)
+	{
+		g_gammaNamed = (long)row;
+		GammaLog(row, 0, S_OK);
+	}
+
+	/* Before the screenshot, so that the file is the picture as shown. At
+	 * the middle - and above the top, which the registry read never lets
+	 * through - nothing at all happens here. */
+	if (row != GAMMA_MIDDLE && row <= 100)
+		curved = GammaPass(G_dxptr->lpD3DDevice, row);
 
 	/* The engine's screenshot. One new -log line per file: the read-back's
 	 * HRESULT (DeviceReadBack: the first step that failed, or
@@ -235,6 +540,10 @@ HRESULT DXShowFrame()
 	 * (hd_level.h). */
 	HDFramePresented();
 
+	// The back buffer the engine's own picture again (the gamma pass).
+	if (curved && hr != D3DERR_DEVICELOST)
+		GammaRestore(G_dxptr->lpD3DDevice);
+
 	if (hr == D3DERR_DEVICELOST)
 	{
 		// "Fullscreen" now always runs as a border-less windowed device (see DXCreate),
@@ -256,6 +565,7 @@ HRESULT DXShowFrame()
 			// space). They are released here so that the reset below can
 			// succeed at all; the next level load makes them again.
 			HDLevelDeviceLost();
+			GammaRelease();	// its copy is D3DPOOL_DEFAULT as well
 
 			HRESULT hrReset = G_dxptr->lpD3DDevice->Reset(&G_dxptr->PresentParams);
 
@@ -309,6 +619,7 @@ void DXClose()
 		// the next film makes it again (PlayFmv).
 		HDLevelDeviceLost();
 		FmvDeviceLost();
+		GammaRelease();	// the gamma pass's copy and shader
 
 		Log("Released %s @ %x - RefCnt = %d", "Direct3DDevice", G_dxptr->lpD3DDevice, G_dxptr->lpD3DDevice->Release());
 		G_dxptr->lpD3DDevice = 0;

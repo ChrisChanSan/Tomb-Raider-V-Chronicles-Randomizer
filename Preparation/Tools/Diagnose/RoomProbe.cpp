@@ -3706,6 +3706,8 @@ static bool g_vis_faces = false;
 static bool g_vis_plane = true;
 // -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
 static int g_gpu_runs = 0;
+// -gpuadd <n>: the same timing of the additive pass instead of the solid.
+static bool g_gpu_add = false;
 static int g_window_mode = HD_WINDOW_ALL;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
@@ -14309,7 +14311,8 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *   -visnear 0|1      1, the default, lists the room behind a portal the
  *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
- *                     after the picture (the print beside the draw calls) */
+ *                     after the picture (the print beside the draw calls)
+ *   -gpuadd <n>       the same of the additive pass */
 static bool VisArg(int argc, char** argv, int* at)
 {
 	const char* a = argv[*at];
@@ -14353,6 +14356,11 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_near = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-gpu"))
 		g_gpu_runs = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-gpuadd"))
+	{
+		g_gpu_runs = atoi(argv[*at + 1]);
+		g_gpu_add = true;
+	}
 	else
 		return false;
 
@@ -18994,7 +19002,9 @@ static int ProbeMain(int argc, char** argv)
 	 * cost the most - drawn n times after one warm-up draw and timed with
 	 * timestamps, after the picture is written so that the picture is the one
 	 * without it; the median and the worst in ms, the draw calls of one
-	 * draw, and the triangles of the groups drawn, all three passes. */
+	 * draw, and the triangles of the groups drawn, all three passes. With
+	 * -gpuadd the additive pass instead (the remaster's glows and the art
+	 * of a sea's surface). */
 	if (g_gpu_runs > 0 && !skyOnly)
 	{
 		IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
@@ -19017,11 +19027,13 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			q[0]->Issue(D3DISSUE_BEGIN);
 			q[1]->Issue(D3DISSUE_END);
-			DrawOneGroup(room, 0, &lighting, HD_PASS_SOLID);
+			const int timedPass = g_gpu_add ? HD_PASS_ADDITIVE : HD_PASS_SOLID;
+
+			DrawOneGroup(room, 0, &lighting, timedPass);
 
 			for (int i = 0; i < g_with_count; i++)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_SOLID);
+					timedPass);
 
 			q[2]->Issue(D3DISSUE_END);
 			q[0]->Issue(D3DISSUE_END);
@@ -19055,9 +19067,10 @@ static int ProbeMain(int argc, char** argv)
 				q[i]->Release();
 
 		std::sort(times.begin(), times.end());
-		printf("-gpu: %d run(s) of the solid room draws, median %.3f ms, worst "
+		printf("-gpu: %d run(s) of the %s room draws, median %.3f ms, worst "
 			"%.3f ms, %d draw call(s), %lld triangle(s) in %d group(s)\n",
-			(int)times.size(), times.empty() ? -1.0 : times[times.size() / 2],
+			(int)times.size(), g_gpu_add ? "additive" : "solid",
+			times.empty() ? -1.0 : times[times.size() / 2],
 			times.empty() ? -1.0 : times.back(), gpuCalls, tris,
 			g_with_count + 1);
 	}

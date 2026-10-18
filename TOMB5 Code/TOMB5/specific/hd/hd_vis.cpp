@@ -80,7 +80,7 @@ HDVisParams HDVisDefaults()
 	p.wideBare = 0.3;
 	p.edge = 2.0 / 2560.0;
 	p.staticReach = 32.0;
-	p.staticStep = 16.0;
+	p.staticStep = HD_COVER_STEP;
 	p.staticShare = 0.5;
 	return p;
 }

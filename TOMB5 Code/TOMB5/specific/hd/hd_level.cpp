@@ -7145,6 +7145,22 @@ static void HDLevelBuildHD()
 	// The models' fingerprint is on the models line; the step is without it.
 	load_ms[LOAD_OBJECTS] -= HDModelHashMs() - model_hash_ms;
 
+	/* The model shaders as the marble floors' mirror draws them, once the
+	 * models are built and the level has a mirror face (hd_model.cpp,
+	 * HDModelMirrorWarmUp); a new line with -log. */
+	HDRenderMarbleStats marbleLevel;
+
+	HDRenderMarbleStatsNow(&marbleLevel);
+
+	if (HDRenderMarbleOn() && marbleLevel.faces_level > 0)
+	{
+		const double warmed = HDModelMirrorWarmUp();
+
+		if (warmed >= 0.0 && gLogEnabled)
+			Log("HDLOG level=%s marble models warm-up %.2f ms", g_stem,
+				warmed);
+	}
+
 	/* The whole of the level's HD load in one line: the .TRG scan on the
 	 * load thread and every step of this build, the build itself as one
 	 * part (its own parts are on the built line). `ms` is their sum - what

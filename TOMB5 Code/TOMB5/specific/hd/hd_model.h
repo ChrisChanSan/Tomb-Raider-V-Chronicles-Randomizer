@@ -525,6 +525,12 @@ void HDModelLevelEnd();
  * happens while the loading bar still stands. Returns how many buffers were
  * offered; safe and a no-op with no level built. */
 int HDModelPreload();
+/* The marble floors' mirror draws the models with a clip plane on: once a
+ * level, after the models are built, one triangle through the model
+ * shaders with the plane on, so the first frame with a model in a mirror
+ * does not wait for the driver (hd_model.cpp). Returns its milliseconds,
+ * or -1 when nothing was drawn. */
+double HDModelMirrorWarmUp();
 
 // --- the frame -------------------------------------------------------------
 //

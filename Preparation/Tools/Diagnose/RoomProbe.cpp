@@ -1688,6 +1688,12 @@ static bool ShotBegin(Shot& shot, long w, long h)
 			printf("-marble: warm-up %.2f ms: target %.2f, plain %.2f, "
 				"gloss %.2f, glow %.2f, layer %.2f\n", marble, ms[0], ms[1],
 				ms[2], ms[3], ms[4]);
+
+		// And the models' shaders as the mirror draws them (hd_model.cpp).
+		const double models = marble >= 0.0 ? HDModelMirrorWarmUp() : -1.0;
+
+		if (models >= 0.0)
+			printf("-marble: models warm-up %.2f ms\n", models);
 	}
 
 	/* Magenta, not black. A room that draws nothing and a room that draws

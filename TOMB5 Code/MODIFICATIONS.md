@@ -9046,6 +9046,160 @@ picture by 1 to 3, darkening it.
 
 **Commits.** `42611668` (RoomProbe), `1b2ba953` (the split), `576c099c` (ModernTest).
 
+#### Round 4, its fix pass: the bridge's glass, and why the texels decide
+2026-10-18
+
+**What.** The review of Round 4 found the bridge left as it was, and the split's rule
+reading the page's texels and not the classic faces it was asked to read. RICH2's
+bridge is now drawn as the classic draws its glass: a pale band between its rails. The
+additive run's glass on a page with no clear texel is added whole, as the classic adds
+its glass; glass whose page marks clear places keeps the strength its alpha gives it, so
+ANDREA1's arched panes stay as they were. The reason the texels and not the classic
+faces decide the split is measured at the place of every see-through part (below).
+
+**Cause.** The bridge's pane is room group 125's part 2, material 14 in the additive run,
+`param[1]` 0.8181, 96 triangles on page 16103, texels about 18, 18, 21 at alpha 0.44
+(none under 100 of 255), vertex light about 0.29. The additive pass drew it as the texel
+times its light times the texel's alpha times `param[1]` (`MaterialAddWeight`): 0.36 of
+the texel times its light. The classic draws its glass with draw type 2, ONE / ONE, the
+texel times its light, the specular off, and reads no alpha for it (`polyinsert.cpp`).
+
+**The classic's bands.** The classic draw's own arithmetic over the classic page's
+texels of every face with effects bit 0 (a scratch tool, ClassicBand, the texel times the
+prelit light as `aTransformLightPrelightClipMesh` computes it; RoomProbe draws classic
+faces flat grey, so no classic picture can be measured): the bridge, mesh 495, a moveable
+lit at run time, between its room's ambient (48 of 255, the room header) and full light;
+ANDREA1's arched pane, static 50 in room 198, shade `0x318c`; ANDREA2's grid as a check
+against Round 4's figures.
+
+| glass | classic texels | luma added, mean | tenth | half | nine tenths |
+|---|---|---|---|---|---|
+| RICH2's bridge, mesh 495, at the room's ambient | 15,120 | 10.1 | 0 | 10.0 | 22.6 |
+| the same at full light | 15,120 | 26.9 | 0 | 26.7 | 60.4 |
+| ANDREA1's arched pane, static 50 | 3,520 | 14.2 | 7.2 | 11.5 | 28.9 |
+| ANDREA2's grid, static 59 (Round 4: 23.9, 13.1, 46.0) | 24,150 | 23.9 | 13.1 | 20.4 | 46.0 |
+
+**The rule.** `AddGlass` (`hd_render.cpp`): an additive draw call of material 14 whose
+page has no texel under 16 of 255 (`HDPageCacheSlotAlphaMin` at least
+`HD_GLASS_CLEAR_BELOW`, the split's own bound) is added whole: `draw_pass` writes its
+weight as 1 and `gPass.z` -1, and the room shader skips the multiply by the texel's alpha
+where `gPass.z` is below 0 (`step(0, gPass.z)`, 1 for every other draw call). Such a page
+is glass in every texel. A page with clear texels says with its alpha where its glass is
+and how much, and keeps it. No draw call, state or pass is added.
+
+**Measured.** RoomProbe of Round 4's head (`0452ce54`) against the fix pass, 960 x 540,
+`-time 3`, `-sky`, the walk's rooms (`-vis 1`). The material 14 glass alone over black
+(`-glow -addmat 14`):
+
+| eye | pixels | before, mean (tenth to nine tenths) | after | whole picture changed |
+|---|---|---|---|---|
+| the trview eye, 55026, -1817, 72566 to the pane's centre | 10,847 | 5.7 (3.0 to 8.0) | 16.4 (8.6 to 23.1) | 10,847 px, +10.6, max 26 |
+| nearer, 54000, -2000, 70300, the same target | 69,489 | 4.8 (2.3 to 7.6) | 13.6 (7.3 to 22.3) | 69,487 px, +8.9, max 23 |
+| ANDREA1 room 198, Round 1's eye | 152,615 | 3.0 (0.7 to 6.9) | 3.0, byte-identical | 0 |
+| ANDREA1 room 198, after the shot's eye | 129,140 | 2.9 (0.7 to 6.3) | 2.9, byte-identical | 0 |
+| ANDREA1 room 201 | 183,343 | 2.7 (0.7 to 6.1) | 2.7, byte-identical | 0 |
+
+The bridge now lies inside its classic band; its colour is the HD art's, a light grey
+(18, 16, 16 added), where the classic's is green. `-calltrace 16103` at the trview eye:
+one draw call before and after (call 192, 96 triangles, ONE / ONE, no depth write),
+`gPass` 0, 1, 0, 0 before and 0, 1, -1, 0 after. No log of the lobby in play was supplied,
+so no play eye was measured.
+
+A first build added every additive material 14 part whole, whatever its page. It brought
+ANDREA1's arched pane from 3.0 to 8.0 (5.0 to 11.2), inside its band, but it turned the
+lamp glass of RICH2 and RICH3 (page 15101: smallest alpha 12, mean 30, layers stacked
+8,520 triangles deep) white - 150 levels more on average, at most 239, where the classic
+lamp, static 17, adds 94 - so that build was dropped and the page's clear texels bound
+the rule.
+
+The 107 material 14 parts with an additive run in the fifteen levels (a scratch census
+over the `.TRG` through the engine's resolvers), one census eye a part (1,200 units off
+its box, as Round 4's eyes for the 74), Round 4's head against the fix pass:
+
+| page | levels | parts | `param[1]` | smallest alpha | added whole | changed at its eye | mean change, max | classic at its place |
+|---|---|---|---|---|---|---|---|---|
+| 1038 | RICH2 | 1 | 0.5191 | 254 | yes | 1 | +1.7, 2 | room faces, additive, 4.4 |
+| 3068 | RICH1, RICH3 | 26 | 1 | 165 | yes | 24 | +4.5 to +9.9, 31 | the shatter glass of static 57, additive (38), at 13; room faces at 10, additive (48) at one of them; none at 3 |
+| 3309 | RICH3 | 19 | 0.1833, 1 | 165 | yes | 19 | +3.5 to +19.4, 32 | room faces additive (27) at the four at 0.1833, none at 15 |
+| 11047 | ANDREA1, ANDREA2 | 19 | 0.675 | 115 | yes | 18 | +15.6 to +29.1, 71 | none at 18 (one searched over every room: none), an alpha-keyed static 29 at one (lanterns) |
+| 13066 | ANDREA1, ANDREA2 | 6 | 0.8182 | 81 | yes | 3 | +27.8 to +74.0, 133 | none (one searched over every room: none; street lamp glass) |
+| 16063 | ANDREA1 | 1 | 0.818 | 83 | yes | 1 | +2.6, 20 | static 3, opaque |
+| 16070 | ANDREA1 | 1 | 0.818 | 75 | yes | 1 | +54.9, 148 | static 62, opaque (a glass on a table) |
+| 16103 | JOBY3, JOBY5, RICH2 | 13 | 0.8181 | 100 | yes | 13 | +2.6 to +9.0, 25 | the bridge's mesh 495 (additive); none at the 12 in JOBY (one searched over every room) |
+| 15026 | RICH2 | 9 | 0.1083 | 0 | no | 0 | - | room faces, opaque |
+| 15074 | ANDREA1 | 7 | 0.818 | 0 | no | 0 | - | static 50, 66, 68: additive panes (14) in solid frames |
+| 15101 | RICH2, RICH3 | 5 | 0.5 | 12 | no | 1 (a neighbour's glass) | +4.5, 13 | static 17, additive (36 to 94) |
+
+86 parts are added whole, 21 keep their alpha. Where the classic has additive glass at
+the place, the change moves the HD glass towards it (the bridge; RICH3's four panes at
+0.1833, from about 2 to about 21 where the classic adds 27); where the classic draws
+nothing there or something solid, the HD art's glass is drawn by the same rule, without
+a reference: the lanterns of ANDREA1 and ANDREA2 and the glass on ANDREA1's table are the
+largest changes (at most 9,312 pixels at their eyes).
+
+**The 74 see-through parts and the classic faces.** The split reads the texels; the
+classic faces at the place of each of the 74 parts (a scratch tool, ClassicAt, every
+classic room face and placed static face whose centre lies in the part's box grown by 32
+units, with the texels it covers) say why they and not the classic decide:
+
+| parts | page | classic at the place | the HD part | split |
+|---|---|---|---|---|
+| ANDREA2 65, 132 | 3007 | static 59: 260 opaque quads (texel 96, 68, 40), 70 additive (14, 34, 47) | clear texels painted in the bars' colour, partial panes | yes |
+| JOBY3, JOBY5, 58 | 10072 | 57 on the ceiling lamps, statics 45 and 47 to 49: opaque, a housing of texel 11 and a white diffuser of texel 255, lit 110 to 150 (two of static 48's with a few additive faces); one none | the cover only, grey about 30 at alpha 0.59, no clear texel; the lamp's body on the same page in the group's opaque run, its glow material 2 | no |
+| RICH3 46, 5 | 10084 | static 53: 6 small opaque faces (2,618 units^2), 36 alpha-keyed; none at part 3 | no clear texel covered | no |
+| RICH2, 6 | 3309 | none at five; two opaque room faces (texel 50) at group 100 | no clear texel | no |
+| JOBY2 52, 78 | 16073 | none | no clear texel | no |
+| JOBY2 102 | 513 | 4 additive room faces (texel 18, 51, 115) | opaque texels | no |
+
+Only ANDREA2's grid has both a solid frame with additive glass in the classic and a
+frame painted on clear texels in the HD art. JOBY3's and JOBY5's lamp covers are the
+same lamps as the classic's (the classic draws them solid), but the HD page paints no
+frame or diffuser to draw solid: drawn solid, the grey cover would be a dark box where
+the classic's lamp is brightest, and the HD lamp's own light is its body and its glow.
+The room build ties no part to the classic faces it replaces (the bridge's classic mesh
+is an item, its art baked into another room's group), so the census reads them and
+ModernTest keeps its result: every see-through family splits exactly where the classic
+draws a solid frame with additive glass and its triangles cover a clear texel.
+
+**Decisions.** The rule's bound is the split's, 16 of 255, so the two glass rules read
+one number. Within the alpha run the glass half already adds the texel times its light
+with the alpha choosing the texels; the additive run's glass now does the same. The
+part's `param[1]` is not read for such glass, as the split's glass half does not read
+its 0.1. ANDREA1's arched panes stay, as the order asked: their page has clear texels
+(0.12 % of it, smallest alpha 0), and the rule that would raise them is the one that
+turned the lamp glass white. The colour of the added light is the HD art's; no colour is
+taken from the classic.
+
+**Corrections to Round 4.** The split's comment named page 3007's whole-page shares
+(80.6 % clear, 19.4 % partial) as the frame's and the panes'; under the grid's triangles
+they are 54.1 % and 45.9 %, as the record says, and the comment says so now, and that
+both of the split's numbers are the whole page's. RoomProbe's `-gpu` line had a word
+changed in its middle; it is back as it was and says `-gpuall` at its end. ModernTest's
+glass checks now hold the bodies of `GlassSplits` and `AddGlass` as the engine has them,
+blank for blank, so a change to either rule fails the test until the test follows it.
+
+**Checked.** Round 4's head against the fix pass, both RoomProbe with this pass's tool
+code: the classic views (`hd_build` 0) 7 of 7, the census eyes 15 of 15 with `hd_water` 0
+and 15 of 15 with 1, the 15 parity cameras 15 of 15 and 15 of 15, the six HD views 6 of 6
+and 6 of 6, byte-identical; ANDREA2's window at Round 4's eight eyes, the marble floors
+off and on, 16 of 16 identical (the broken-state eye among them); the 74 census eyes 65 of
+74 identical, the nine others with additive glass of their own groups in view (JOBY3 and
+JOBY5 groups 20, 30, 36, 50, 52: 51,360 to 51,996 pixels, at most 7, page 16103; RICH3
+group 46 part 17: 6,466 pixels, at most 11). The cost at the bridge's eye, 2,560 x 1,440,
+every pass timed 20 times, three runs: 196 draw calls before and after, medians 0.215,
+0.214, 0.214 ms before and 0.215, 0.215, 0.214 after.
+
+**Left.** ANDREA1's arched panes add about a fifth of what the classic adds (3.0 against
+14.2); added whole they would sit in the band (8.0), and that is the owner's to decide.
+The lanterns and the table glass of ANDREA1 and ANDREA2 have no classic glass to measure
+against and are brighter now. The bridge's added light is grey where the classic's is
+green. The classic bands are computed from the classic draw's own arithmetic, not
+measured in a classic picture. The fix pass has not been seen in the game, and no play
+eye of the lobby exists.
+
+**Commits.** `417025ea` (the additive glass and the split's comment), `1f1b9680`
+(RoomProbe's `-gpu` line), `0586b1c7` (ModernTest).
+
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15
 

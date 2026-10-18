@@ -1774,6 +1774,13 @@ it.
   through them, and its panes are added over what lies behind them the way the
   original adds its glass - a faint film of light. The window still goes with
   its break.
+  The Remaster's other glass is lit glass, added over what lies behind it:
+  the glass walls of the VCI lobby's bridge, the street lanterns and other
+  panes whose texture is glass in every texel. These are added the way the
+  original adds its glass, whole, so the bridge's panes show as a pale band
+  between its rails as they do in the original. Glass whose texture marks
+  its own clear places - ANDREA1's arched windows, the lamp glass of the
+  VCI offices - keeps the strength its texture gives it.
 - **Marble floors reflect.** The Remaster builds the polished floors of the
   VCI building - the RICH2 lobby and the halls around it, the cut scene that
   follows it and rooms of the title flyby - as a floor that is slightly

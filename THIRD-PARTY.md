@@ -3109,7 +3109,8 @@ carries the tables.
     half of its texels below the alpha test's reference draws its clear
     texels with the alpha pass's solid ranges (no alpha test, the depth
     write on) and the rest in the glass's phase. DATA: page 3007's texels
-    (80.6 % under 16, the frame's colour, 19.4 % partial, none opaque;
+    (80.6 % of the whole page under 16 and 19.4 % partial, none opaque;
+    under the grid's triangles 54.1 % clear in the frame's colour;
     856 per mille below 128, the next see-through page 116), the classic
     window mesh 571's face attributes (260 quads with effects bit 0
     clear, 70 with it set) and the HD triangles by place against them;
@@ -3154,6 +3155,39 @@ carries the tables.
     tool; the device's `DrawIndexedPrimitive` read at entry 82 of the
     `IDirect3DDevice9` table, the declaration order of the SDK's `d3d9.h`
     (PLACE).
+303. **The additive run's glass added whole** (`hd_render.cpp`, `AddGlass`,
+    `draw_pass`'s weight and `gPass.z`; `hd_room.hlsl`, the `step` on
+    `gPass.z` in the additive pass's alpha multiply) - an additive draw
+    call of material 14 whose page has no texel under 16 of 255 is added
+    as the texel times its light, its alpha and `param[1]` weighing
+    nothing. CLASSIC: draw type 2, ONE / ONE, the specular off, the
+    texture's alpha not read (`polyinsert.cpp`, `HWR_DrawSortList`).
+    DATA: the page's smallest alpha (`HDPageCacheSlotAlphaMin`) and the
+    split's bound of clear (16); the 107 additive material 14 parts of the
+    fifteen levels by page (86 on pages without a clear texel); the
+    classic bands - the bridge's mesh 495, 10.1 at its room's ambient (48)
+    to 26.9 at full light, ANDREA1's static 50, 14.2 (7.2 to 28.9) - from
+    the classic draw's own arithmetic over the classic pages' texels
+    (`aTransformLightPrelightClipMesh`). PICTURE (RoomProbe `-glow -addmat
+    14`): the bridge 5.7 before, 16.4 after; the lamp glass of page 15101
+    added whole without the bound, white, 150 levels more where the
+    classic adds 94. OWN: the bound reused from the split, the choice that
+    leaves a page with clear texels to its alpha.
+304. **The classic faces at every material 14 part's place**
+    (`MODIFICATIONS.md`, the windows' Round 4 fix pass; ModernTest's rows)
+    - the classic room and static faces at the place of the 74 see-through
+    and the 107 additive parts, by draw type, with their texels; the
+    ceiling lamps of JOBY3 and JOBY5 (statics 45, 47 to 49) under the 58
+    lamp covers of page 10072. DATA, counted with scratch tools on the
+    player's files (the classic `.TRC`, the `.TRG` and its pages through
+    the engine's resolvers); PICTURE (RoomProbe, one census eye a part).
+305. **ModernTest holds the glass rules' bodies** (`Preparation/Tools/
+    Diagnose/ModernTest.cpp`, `glass_body`, `glass_split`) - the bodies of
+    `GlassSplits` and `AddGlass` compared blank for blank with the rules
+    the test runs over the census, and the classic's agreement per family.
+    OWN.
+306. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
 
 ## Credited, but not contained here
 

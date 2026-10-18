@@ -556,6 +556,14 @@
  *     -wetnomirror    the wet floor's darkening without its mirror: the
  *                     picture less this one is the mirror alone, the soft
  *                     mirror's ripple metric's layer.
+ *     -wetstep x0,y0,x1,y1  the picture's luma (0.299 r + 0.587 g + 0.114 b)
+ *                     along the segment from pixel x0, y0 to x1, y1, one
+ *                     sample a pixel of its longer side, and the largest
+ *                     step between two neighbouring samples: a wetstep line
+ *                     after the picture's own. Across the wet floor's
+ *                     outline it measures how hard the outline is (the
+ *                     water's mirror against the marble floors'); any
+ *                     picture, with or without -tank.
  *     -tankcensus     every room's floor squares against the .TRG: the
  *                     art's copy of the room under the floor and how the
  *                     floor over it is drawn (census and censussq lines,
@@ -1687,6 +1695,58 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	return true;
 }
 
+// -wetstep: the segment the picture's luma is read along, in pixels.
+static bool g_wet_step = false;
+static int g_wet_step_at[4] = { 0, 0, 0, 0 };
+
+/* -wetstep: the luma along the segment, one sample a pixel of its longer
+ * side, the samples off the picture left out; and the largest step between
+ * two neighbouring samples, where it lies. */
+static void WetStepLine(const unsigned long* px, long w, long h)
+{
+	if (!g_wet_step)
+		return;
+
+	const int* s = g_wet_step_at;
+	const int dx = s[2] - s[0], dy = s[3] - s[1];
+	const int n = (abs(dx) > abs(dy) ? abs(dx) : abs(dy)) + 1;
+	int last = -1, step = 0, stepX = s[0], stepY = s[1], low = 255, high = 0;
+	std::string list;
+
+	for (int i = 0; i < n; i++)
+	{
+		const float t = n > 1 ? (float)i / (float)(n - 1) : 0.0f;
+		const long x = s[0] + (long)lroundf((float)dx * t);
+		const long y = s[1] + (long)lroundf((float)dy * t);
+
+		if (x < 0 || y < 0 || x >= w || y >= h)
+			continue;
+
+		const unsigned long c = px[y * w + x];
+		const int l = (int)lroundf(0.299f * (float)((c >> 16) & 255) +
+			0.587f * (float)((c >> 8) & 255) + 0.114f * (float)(c & 255));
+		char one[8];
+
+		snprintf(one, sizeof(one), list.empty() ? "%d" : " %d", l);
+		list += one;
+		low = l < low ? l : low;
+		high = l > high ? l : high;
+
+		if (last >= 0 && abs(l - last) > step)
+		{
+			step = abs(l - last);
+			stepX = (int)x;
+			stepY = (int)y;
+		}
+
+		last = l;
+	}
+
+	printf("wetstep: %d,%d to %d,%d samples %d luma %d..%d largest step %d at "
+		"%d,%d: %s\n", s[0], s[1], s[2], s[3], n, low, high, step, stepX,
+		stepY, list.c_str());
+}
+
 static bool ShotWrite(Shot& shot, const char* path)
 {
 	D3DLOCKED_RECT rect;
@@ -1752,6 +1812,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 	}
 
 	shot.readback->UnlockRect();
+	WetStepLine(pixels, shot.w, shot.h);
 
 	const double texels = (double)shot.w * (double)shot.h;
 	const bool ok = WritePng(path, pixels, shot.w, shot.h);
@@ -14011,6 +14072,7 @@ static int ProbeMain(int argc, char** argv)
 			!strcmp(argv[at], "-wetagain") ||
 			(!strcmp(argv[at], "-wetblur") && at + 1 < argc) ||
 			!strcmp(argv[at], "-wetnomirror") ||
+			(!strcmp(argv[at], "-wetstep") && at + 1 < argc) ||
 			!strcmp(argv[at], "-wetnomodels") ||
 			!strcmp(argv[at], "-tankslopes") ||
 			!strcmp(argv[at], "-tankwetall"))
@@ -14035,6 +14097,10 @@ static int ProbeMain(int argc, char** argv)
 			}
 			else if (!strcmp(argv[at], "-wetnomirror"))
 				g_wet_no_mirror = true;
+			else if (!strcmp(argv[at], "-wetstep"))
+				g_wet_step = sscanf_s(argv[++at], "%d,%d,%d,%d",
+					&g_wet_step_at[0], &g_wet_step_at[1], &g_wet_step_at[2],
+					&g_wet_step_at[3]) == 4;
 			else if (!strcmp(argv[at], "-wetlara"))
 				g_wet_lara = sscanf_s(argv[++at], "%f,%f,%f,%f,%d",
 					&g_wet_lara_at[0], &g_wet_lara_at[1], &g_wet_lara_at[2],

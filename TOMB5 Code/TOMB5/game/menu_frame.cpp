@@ -2249,6 +2249,25 @@ static long MenuSliderNumberX()
 		+ GetFixedScale(4);
 }
 
+/* Whether a slider's number carries a percent sign. Every slider's value is
+ * its share of the bar, 0..100, so the number reads as a percentage - the
+ * gamma row's too, where it is the slider's position, 50 the middle, and not
+ * a strength. Both fonts hold the sign: game/chardef.inc's row 4 (15 wide,
+ * scaled like a digit), and the HD atlas matches that row at score 1.000.
+ *
+ * The sign is drawn where the widest text, "100%", ends at least one gap,
+ * GetFixedScale(4), before the screen's edge - the same gap the number keeps
+ * after the bar's frame. The position does not move for it. Up to 4:3 the
+ * room right of the bar is a sixteenth of the screen and "100%" does not fit:
+ * 49 pixels against the 36 behind the gap at 640x480, 13 past the edge. There
+ * the number stands without the sign rather than cross the edge or push the
+ * bar; from about 1.46:1 on, 3:2 and wider, it fits at every size. */
+static bool MenuSliderSignFits()
+{
+	return MenuSliderNumberX() + GetStringLength("100%", 0, 0)
+		+ GetFixedScale(4) <= phd_winxmax + 1;
+}
+
 void MenuFrameRun()
 {
 	const menu_page* pg;
@@ -2385,8 +2404,9 @@ void MenuFrameRun()
 			/* The bar's number beside it, every frame, so it moves with the
 			 * bar while a key or the pad is held: the value the bar is given,
 			 * written as MenuSettleSlider writes it to the log, in the value
-			 * rows' font and colours. */
-			sprintf(buf, "%d",
+			 * rows' font and colours, with its percent sign where the screen
+			 * has room for it. */
+			sprintf(buf, MenuSliderSignFits() ? "%d%%" : "%d",
 				(int)(row->slider ? row->slider(row->param) : 0));
 			PrintString(MenuSliderNumberX(), y,
 				(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : 6)), buf, 0);

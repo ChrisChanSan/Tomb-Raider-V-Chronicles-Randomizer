@@ -2867,6 +2867,47 @@ carries the tables.
     found through the engine's own resolvers: 74 parts, the clear texels
     on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
     16073, RICH2's 3309 and RICH3's 10084.
+275. **The polished floor under the water** (`hd_render.cpp`, "the polished
+    floor under the water", `wet_polished`, `wet_give_way`, `g_wet_verts`;
+    `hd_water_under.h`, `HDWetCellOnFace`, `HDWetGivesWay`) - a wet point
+    on a polished floor keeps the marble floors' mirror, which mirrors that
+    height this frame, and gives its own way; its darkening and the lamps'
+    highlight stay. OWN, the rule: one plane, one planar mirror. DATA
+    (RoomProbe at RICH2's tank, the marble floors' mirror faces): the
+    marble's mirror 11.5 levels on the mean where the water lies, the
+    water's 4.3; the outline's jump 59.2 levels between neighbouring
+    pixels, 3.7 after; the vending machine's mirror 536 to 0 pixels over a
+    tilt of 28 to 43 degrees, 1,240 to 673 after; 316 of tank 182's 352
+    cells polished, 192 of tank 33's. TEXTBOOK: separating axes for a
+    triangle against a square. The tolerance of a click's sixteenth is
+    `wet_clear`'s; the unit the cell is held in by and the three corners of
+    a flat cell are free choices.
+276. **No falloff by the distance to a dry square** (`MODIFICATIONS.md`,
+    the wet floor's Round 8; nothing in the code) - measured and not built:
+    every side of a kept wet square in RICH2 faces a kept square, a square
+    the radius dropped (the front's ramp) or a wall, a raised block or a
+    tank's glass. DATA (a scratch RoomProbe build over both floors'
+    squares and the classic floor data).
+277. **The models' shaders readied at the load** (`hd_render.cpp`,
+    `wet_warm_model_shaders`, `HDRenderWaterWarmUp`) - in a level with a
+    tank's wet floor the water's warm-up makes the models' shaders out of
+    the model path's bytecode and declaration and draws one triangle
+    through five clip planes that cut it away. OWN, after this project's
+    water and marble warm-ups; DATA (RoomProbe `-wetagain`, 2,560 x 1,440,
+    a new process each run): the first frame's warm draw 76.8 to 106.0 ms
+    before, 0.63 to 0.94 after; the load 92.0 to 303.4 ms more.
+278. **The deep look only with a sea's surface** (`hd_water_under.h`,
+    `HDWaterDeepLook`; `hd_render.cpp`, the water build) - a level takes
+    the deep look when its fallback rooms outnumber its rooms under a
+    sheet more than four times and `HDWaterSurfaceRoom` names a surface
+    room. OWN, the rule, after the owner's word of 2026-10-18 that RICH3's
+    room 190 is an ordinary flooded room; DATA (the `WATERLOG` sweep, the
+    fifteen levels): JOBY4 132 against 2 and room 19, RICH3 1 against 0
+    and none; `under_deep=1` in JOBY4 alone after.
+279. **RoomProbe's wet measures** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`, `-wetstep`, the warm-up line's `wet models`; the
+    `SPLASHLOG ... wet` load line's `polished=`) - OWN, this project's log
+    and tool on the player's files (DATA).
 
 ## Credited, but not contained here
 

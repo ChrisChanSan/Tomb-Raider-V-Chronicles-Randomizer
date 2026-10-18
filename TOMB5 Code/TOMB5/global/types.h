@@ -2927,6 +2927,19 @@ struct tomb5_options	//only bools or ulongs because that's what registry likes
 	 * start of a level and dead with hd_build 0. Registry: hd_threads. */
 	ulong hd_threads;
 
+	/* The gamma row on the Display page, a slider of 0 to 100 driven like
+	 * the volume sliders. 50, the default and the middle of the bar, is the
+	 * picture as the engine draws it: no pass runs at all. Any other value
+	 * puts every presented picture through one curve just before the
+	 * present - the world, the menus over it, the inventory, the loading
+	 * bar, the credits and the films alike, windowed or full screen
+	 * (specific\dxshell.cpp, the gamma pass; the curve in
+	 * specific\hd\hd_shader\hd_gamma.hlsl): gamma = 2 ^ ((n - 50) / 50),
+	 * output = input ^ (1 / gamma), so 0 is gamma 0.5, darker, and 100 is
+	 * gamma 2, lighter. Taken at the next present. A stored value out of
+	 * range reads as 50. Registry: gamma. */
+	ulong gamma;
+
 	/* The build gate of the HD path: 1, the default, builds a level's HD
 	 * data at its load whenever an installation is found, whatever the HD
 	 * textures row (hd_enable, the draw state) says, so that the row and

@@ -658,6 +658,24 @@ static bool MenuStepVSync(long, long dir)
 	return 1;
 }
 
+/* Gamma: the picture's one slider, under the two rows that pace it. Stored
+ * and clamped here like the mouse's slider; the curve it picks and the pass
+ * that draws it live at the one present (specific/dxshell.cpp, the gamma
+ * pass), which reads tomb5.gamma on every frame - so the picture under the
+ * menu follows the bar while it moves. 50 is the middle and no pass. */
+static long MenuNumGamma(long)
+{
+	return (long)tomb5.gamma;
+}
+
+static bool MenuStepGamma(long, long dir)
+{
+	ulong old = tomb5.gamma;
+
+	tomb5.gamma = (ulong)MenuSliderStep((int)tomb5.gamma, (int)dir, 100);
+	return tomb5.gamma != old;
+}
+
 /* -------------------------------------------------------------- Graphics -- */
 /* Every row below is a case of base's Page0 or Page1
  * (tomb5/troyestuff.cpp), one function each instead of one shared
@@ -1614,7 +1632,10 @@ static const menu_row menu_rows_graphics[] =
 static const menu_row menu_rows_display[] =
 {
 	MENU_VALUE("Frame rate", MenuValFrameRate, MenuStepFrameRate, MENU_SAVE_TOMB5),
-	MENU_VALUE("VSync", MenuValVSync, MenuStepVSync, MENU_SAVE_TOMB5)
+	MENU_VALUE("VSync", MenuValVSync, MenuStepVSync, MENU_SAVE_TOMB5),
+	// A slider as the volume rows are, the same keys and pad; "Gamma" is
+	// the word in every language the table has, so it needs no string row.
+	MENU_SLIDER("Gamma", -1, MenuNumGamma, MenuStepGamma, MENU_SAVE_TOMB5, 0)
 };
 
 static const menu_row menu_rows_hud[] =

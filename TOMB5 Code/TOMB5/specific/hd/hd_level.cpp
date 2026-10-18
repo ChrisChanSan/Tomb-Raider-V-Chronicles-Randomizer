@@ -5326,16 +5326,25 @@ static void BuildStaticTables()
 					at ? named : "-", said, piece);
 
 			/* 2. And if the engine can destroy it, which piece of the art is
-			 * it? Slots 50 to 57 are the shatterable ones - the same test
-			 * control.cpp makes before it shatters one. Every piece of a
-			 * group drawn HD whose box overlaps the static's by more than
-			 * the edge, or whose plane a flat static stands at (hd_cover.h,
-			 * HDStaticPiecePaired, #209), whatever its group, whatever the
-			 * static's answer. */
-			if (mesh->static_number < 50 || mesh->static_number >= 58)
+			 * it? Slots 50 to 59 are the ones the engine takes out of the
+			 * classic list and the savegame keeps (hd_cover.h,
+			 * HDStaticShatterSlot). Every piece of a group drawn HD whose
+			 * box overlaps the static's by more than the edge, or whose
+			 * plane a flat static stands at (HDStaticPiecePaired), in any
+			 * group but the room's flipmap twin (HDStaticPieceInState),
+			 * whatever the static's answer. */
+			if (!HDStaticShatterSlot(mesh->static_number))
 				continue;
 
 			shatterable++;
+
+			/* The twin: the main room names it in flipped_room, and the
+			 * alternate is the room whose flipped_room names it. */
+			int twin = info->flipped_room;
+
+			for (int m = 0; m < number_rooms && twin < 0; m++)
+				if (room[m].flipped_room == r)
+					twin = m;
 
 			for (int p = 0; p < pieces; p++)
 			{
@@ -5343,7 +5352,8 @@ static void BuildStaticTables()
 				float pmins[3], pmaxs[3];
 
 				if (!HDRenderDestructibleInfo(p, &group, 0, pmins, pmaxs) ||
-					group < 0 || group >= groups || !g_group_hd[group])
+					group < 0 || group >= groups || !g_group_hd[group] ||
+					!HDStaticPieceInState(twin, group))
 					continue;
 
 				if (!HDStaticPiecePaired(mins, maxs, (float)(info->x - room[group].x),
@@ -5497,13 +5507,22 @@ bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
 
 /* Once per frame, before the rooms are drawn: a piece whose static the engine
  * has taken out of the classic list goes with it. At most 69 entries in the
- * whole game, so this is a walk and not a lookup. */
+ * whole game, so this is a walk and not a lookup. The static is read where
+ * its list stands now (HDStaticListRoom): a pair names the room the list was
+ * built in, and after a flip that list stands in the twin's place - ANDREA2's
+ * broken window is the static of room 65's list, cleared by the controller
+ * while room 132 holds it, and a save restores it there after its flips. */
 static void UpdateDestructibles()
 {
 	for (size_t i = 0; i < g_destruct_pairs.size(); i++)
 	{
 		const HDStaticPair& pair = g_destruct_pairs[i];
-		const MESH_INFO* mesh = &room[pair.room].mesh[pair.mesh];
+		const int at = HDStaticListRoom(g_room_group, g_room_count, pair.room);
+
+		if (at < 0)
+			continue;
+
+		const MESH_INFO* mesh = &room[at].mesh[pair.mesh];
 
 		HDRenderDestructibleHide(pair.piece, (mesh->Flags & 1) == 0);
 	}

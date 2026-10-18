@@ -471,7 +471,8 @@ number, so both rows are drawn greyed out and the cursor skips them.
 | *Dead zone* | 0–100 | **50** | How far a stick has to be pushed before it counts as pushed. The number is a **per cent of the tuned zone**, not a zone in itself: `50` reproduces every one of the engine's own eight dead-zone widths exactly, `0` is no zone at all and `100` is twice the zone. Registry: `dead_zone`. |
 
 Both are sliders, and a slider is written the moment it stops moving rather
-than on every step while you hold the key down.
+than on every step while you hold the key down. The number beside each bar is
+the row's value, the 0–100 of the table.
 
 ### The mouse
 
@@ -484,6 +485,9 @@ zone*, greyed under *Tank* like the two above:
 |---|---|---|---|
 | *Mouse sensitivity* | 0–100 | **50** | How far the camera turns for a given movement of the mouse. At `50` about two thousand counts of the mouse's sensor turn it once round (2048 exactly); `0` is a quarter of that speed, `100` four times it, and every step of the slider is the same 2.8 per cent more. Registry: `mouse_sens`. |
 | *Invert mouse* | on / off | **off** | Off, pushing the mouse away looks up, as pushing the stick forward does; on, it looks down. The stick's own direction is not affected. Registry: `mouse_invert`. |
+
+*Mouse sensitivity* is a slider like the two above, with its number beside
+the bar.
 
 The mouse turns the camera at most 11.25 degrees a tick, about a turn a
 second, about the right stick's top speed at *Camera speed* 100, so that at a
@@ -653,7 +657,11 @@ gallery **holds**, never whether the row can be reached.
 
 The page is one sorted tree rather than a single flat list: a title, then rows
 that either open another page (drawn centred) or are settings of their own
-(left-aligned, value on the right). The seven tabs:
+(left-aligned, value on the right). The six sliders — *Music volume* and *SFX
+volume* on *Audio*, *Camera speed*, *Dead zone* and *Mouse sensitivity* on
+*Controls*, *Gamma* on *Display* — are bars with their number, 0 to 100, just
+right of the bar; the number moves with the bar while you hold the key or the
+pad. The seven tabs:
 
 | Tab | Holds | Default |
 |---|---|---|
@@ -1188,8 +1196,9 @@ same way.
 *Graphics → Display*, the third row: a slider, driven like the two volume
 rows on *Audio*. With the cursor on it, hold **left** or **right** — the
 arrow keys, the keys bound to left and right, or the pad's left and right —
-and the bar moves one step a frame. It is written when the bar stops or the
-page is left, like the other tomb5 settings.
+and the bar moves one step a frame. The number beside the bar is its
+position, `0` to `100`, `50` the middle. It is written when the bar stops or
+the page is left, like the other tomb5 settings.
 
 **The middle changes nothing.** That is where a fresh installation starts, and
 there the picture is the engine's own, pixel for pixel — the curve is not run

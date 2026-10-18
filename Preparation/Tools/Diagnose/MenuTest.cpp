@@ -14,11 +14,11 @@
 /* MenuTest - the arithmetic of the options menu, checked without a game.
  *
  * Build with bmenu.bat, run with no arguments from this folder: the last
- * seven families (pad_scheme_repair, controls_mouse_rows,
+ * nine families (pad_scheme_repair, controls_mouse_rows,
  * graphics_softbody_row, graphics_water_row, graphics_shadow_row,
- * hd_switch_rows and graphics_hd_row) read engine files as text, by their
- * paths relative to it, because the tables and rows they check live in
- * files that cannot be linked here.
+ * hd_switch_rows, graphics_hd_row, display_gamma_row and slider_numbers)
+ * read engine files as text, by their paths relative to it, because the
+ * tables and rows they check live in files that cannot be linked here.
  *
  * The menu's cursor used to be a one-hot bit mask shifted by hand at five
  * call sites, so every row added above a list meant recounting a shift
@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "../../../TOMB5 Code/TOMB5/game/menu_nav.h"
 #include "../../../TOMB5 Code/TOMB5/game/key_scheme.h"
@@ -3151,6 +3152,564 @@ static void display_gamma_row()
 	free(bars);
 }
 
+/* ------------------------------------------------ the sliders' numbers -- */
+
+/* What the screen of the menu does, stated again from the engine files and
+ * held against their text (game\menu_frame.cpp cannot be linked here):
+ * specific\output.cpp's GetFixedScale, MulDiv rounding to nearest. */
+static long fixed_scale(long unit, long w, long h)
+{
+	const long x = w > 640 ? (long)(((long long)w * unit + 320) / 640) : unit;
+	const long y = h > 480 ? (long)(((long long)h * unit + 240) / 480) : unit;
+
+	return x < y ? x : y;
+}
+
+// game\text.cpp's InitFont: a glyph's width at the screen's width.
+static long glyph_width(long base, long w)
+{
+	return (short)((float)base * ((float)(w - 1) / 512.0F));
+}
+
+/* The pixels a full-size string of digits covers, as PrintString advances:
+ * each glyph is a quad of its own width, the next one starts at its end. */
+static long digits_width(const char* s, const long* digit, long w)
+{
+	long n = 0;
+
+	for (; *s; s++)
+		n += glyph_width(digit[*s - '0'], w);
+
+	return n;
+}
+
+/* The first pixel right of the bar's white frame. DoSlider draws the frame
+ * from sx - 1 to sx + w + 1, sx = 400 * phd_winxmax / 640 in floats, and
+ * DrawColoredRect passes those x unshifted as pre-transformed vertices.
+ * Direct3D 9 puts pixel centres on whole numbers and covers a pixel when
+ * left <= x < right, so the first free pixel is the edge rounded up. */
+static long slider_frame_free(long w, long h)
+{
+	const float sx = 400.0F * (float)(w - 1) / 640.0F;
+	const float right = sx + (float)fixed_scale(200, w, h) + 1.0F;
+
+	return (long)ceil(right);
+}
+
+// MenuSliderNumberX, the same arithmetic.
+static long slider_number_x(long w, long h)
+{
+	return (long)(400.0F * (float)(w - 1) / 640.0F) + fixed_scale(200, w, h)
+		+ 1 + fixed_scale(4, w, h);
+}
+
+/* A draw's colour rule as the engine's text writes it at p,
+ * "(uchar)(!enabled[i] ? A : (cur == i ? B : C))": A greyed, B under the
+ * cursor, C elsewhere. Returns 0 when the text has another form. */
+static int colour_rule(const char* p, int c[3])
+{
+	static const char* const part[3] =
+	{
+		"(uchar)(!enabled[i] ? ", " : (cur == i ? ", " : "
+	};
+	int k;
+
+	for (k = 0; k < 3; k++)
+	{
+		const size_t n = strlen(part[k]);
+		char* end;
+
+		if (!p || strncmp(p, part[k], n))
+			return 0;
+
+		c[k] = (int)strtol(p + n, &end, 10);
+
+		if (end == p + n)
+			return 0;
+
+		p = end;
+	}
+
+	return !strncmp(p, "))", 2);
+}
+
+// The colour a rule read by colour_rule gives a row.
+static int colour_of(const int c[3], int enabled, int selected)
+{
+	return !enabled ? c[0] : (selected ? c[1] : c[2]);
+}
+
+/* A value written with the engine's own format: one "%d" and no other
+ * conversion, as sprintf would write it; 0 for any other format. */
+static int format_value(const char* fmt, long v, char* out, size_t n)
+{
+	const char* d = strstr(fmt, "%d");
+
+	if (!d || memchr(fmt, '%', (size_t)(d - fmt)) || strchr(d + 2, '%'))
+		return 0;
+
+	snprintf(out, n, "%.*s%ld%s", (int)(d - fmt), fmt, v, d + 2);
+	return 1;
+}
+
+// The whole number the engine's text writes right after the prefix.
+static int number_after(const char* text, const char* prefix, long* v)
+{
+	const char* p = text ? strstr(text, prefix) : 0;
+	char* end;
+
+	if (!p)
+		return 0;
+
+	*v = strtol(p + strlen(prefix), &end, 10);
+	return end != p + strlen(prefix);
+}
+
+/* Every slider row draws its number beside its bar. Read from the tree as
+ * the rows above are: the six MENU_SLIDER rows in their tables, each one's
+ * number function and the 0..100 its step keeps the value in; the draw, in
+ * the slider kind's own block and no other, written as MenuSettleSlider
+ * writes the value, at the value rows' y in their colour rule; and the
+ * position, from DoSlider's, GetFixedScale's and the font's own arithmetic,
+ * clear of the bar and of the screen's edge at every width from 640 to
+ * 3840 in seven shapes of screen. */
+static void slider_numbers()
+{
+	static const char* const label[6] =
+	{
+		"Music Volume", "SFX Volume", "Camera speed", "Dead zone",
+		"Mouse sensitivity", "Gamma"
+	};
+	static const char* const num[6] =
+	{
+		"MenuNumMusicVolume", "MenuNumSfxVolume", "MenuNumCameraSpeed",
+		"MenuNumDeadZone", "MenuNumMouseSensitivity", "MenuNumGamma"
+	};
+	static const char* const field[6] =
+	{
+		"return MusicVolume;", "return SFXVolume;",
+		"return (long)tomb5.camera_speed;", "return (long)tomb5.dead_zone;",
+		"return (long)tomb5.mouse_sensitivity;", "return (long)tomb5.gamma;"
+	};
+	// Each row's own clamp to 0..100, one step a frame.
+	static const char* const top[6] =
+	{
+		"if (MusicVolume > 100)\r\n\t\tMusicVolume = 100;",
+		"if (SFXVolume > 100)\r\n\t\tSFXVolume = 100;",
+		"if (dir > 0 && tomb5.camera_speed < 100)\r\n\t\ttomb5.camera_speed++;",
+		"if (dir > 0 && tomb5.dead_zone < 100)\r\n\t\ttomb5.dead_zone++;",
+		"MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100)",
+		"MenuSliderStep((int)tomb5.gamma, (int)dir, 100)"
+	};
+	static const char* const bottom[6] =
+	{
+		"if (MusicVolume < 0)\r\n\t\tMusicVolume = 0;",
+		"if (SFXVolume < 0)\r\n\t\tSFXVolume = 0;",
+		"if (dir < 0 && tomb5.camera_speed > 0)\r\n\t\ttomb5.camera_speed--;",
+		"if (dir < 0 && tomb5.dead_zone > 0)\r\n\t\ttomb5.dead_zone--;",
+		"MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100)",
+		"MenuSliderStep((int)tomb5.gamma, (int)dir, 100)"
+	};
+	// Where each row's step names its top and its bottom; 0 where the
+	// bottom is MenuSliderStep's own (game\menu_nav.h, called here).
+	static const char* const top_at[6] =
+	{
+		"if (MusicVolume > ", "if (SFXVolume > ",
+		"if (dir > 0 && tomb5.camera_speed < ",
+		"if (dir > 0 && tomb5.dead_zone < ",
+		"MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, ",
+		"MenuSliderStep((int)tomb5.gamma, (int)dir, "
+	};
+	static const char* const bottom_at[6] =
+	{
+		"if (MusicVolume < ", "if (SFXVolume < ",
+		"if (dir < 0 && tomb5.camera_speed > ",
+		"if (dir < 0 && tomb5.dead_zone > ", 0, 0
+	};
+	static const char* const table[3] =
+	{
+		"static const menu_row menu_rows_audio[] =",
+		"static const menu_row menu_rows_controls[] =",
+		"static const menu_row menu_rows_display[] ="
+	};
+	static const int in_table[3] = { 2, 3, 1 };
+	// game\chardef.inc's '0' to '9', unscaled, stated again.
+	static const long want_digit[10] = { 10, 6, 9, 8, 11, 9, 9, 9, 9, 9 };
+	// Screens as width : height, swept over every width from 640 to 3840.
+	static const int shape[7][2] =
+	{
+		{ 5, 4 }, { 4, 3 }, { 16, 10 }, { 16, 9 }, { 21, 9 }, { 32, 9 },
+		{ 1, 1 }
+	};
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* bars = tree_file("../../../TOMB5 Code/TOMB5/specific/drawbars.cpp");
+	char* out = tree_file("../../../TOMB5 Code/TOMB5/specific/output.cpp");
+	char* text = tree_file("../../../TOMB5 Code/TOMB5/game/text.cpp");
+	char* defs = tree_file("../../../TOMB5 Code/TOMB5/game/chardef.inc");
+	long digit[10];
+	char found[8][64];
+	char line[8][512];
+	char fmt_s[64] = "", arg_s[160] = "", pos_s[128] = "";
+	int num_c[3] = { -1, -1, -1 }, val_c[3] = { -2, -2, -2 };
+	int num_ok = 0, val_ok = 0;
+	int rows = 0, i, k;
+
+	check(frame && bars && out && text && defs, 1,
+		"slider numbers: the five engine files are readable from here");
+
+	if (!frame || !bars || !out || !text || !defs)
+	{
+		free(frame);
+		free(bars);
+		free(out);
+		free(text);
+		free(defs);
+		return;
+	}
+
+	// The slider rows of every table, in the file's order.
+	for (const char* p = frame; p && *p; )
+	{
+		const char* nl = strchr(p, '\n');
+		const char* s = p;
+
+		while (*s == '\t' || *s == ' ')
+			s++;
+
+		if (!strncmp(s, "MENU_SLIDER(\"", 13) && rows < 8)
+		{
+			char q[2][64];
+
+			tree_quoted(s, q, 1);
+			strcpy_s(found[rows], sizeof(found[rows]), q[0]);
+
+			for (k = 0; s[k] && s[k] != '\n' && s[k] != '\r' && k < 511; k++)
+				line[rows][k] = s[k];
+
+			line[rows][k] = 0;
+			rows++;
+		}
+
+		p = nl ? nl + 1 : 0;
+	}
+
+	check(rows, 6, "slider numbers: six slider rows in the tables");
+
+	for (i = 0; i < rows && i < 6; i++)
+	{
+		char body[128];
+
+		check(strcmp(found[i], label[i]), 0,
+			"slider numbers: the six rows, in the tables' order");
+		check(strstr(line[i], num[i]) != 0, 1,
+			"slider numbers: each row's own number function");
+		snprintf(body, sizeof(body), "static long %s(long)\r\n{\r\n\t%s",
+			num[i], field[i]);
+		check(strstr(frame, body) != 0, 1,
+			"slider numbers: the function returns the stored value as is");
+		check(strstr(frame, top[i]) != 0 && strstr(frame, bottom[i]) != 0, 1,
+			"slider numbers: its step keeps the value in 0..100");
+	}
+
+	// Which pages carry them: Audio two, Controls three, Display one.
+	{
+		int total = 0;
+
+		for (const char* p = strstr(frame, "static const menu_row menu_rows_");
+			p; p = strstr(p + 1, "static const menu_row menu_rows_"))
+		{
+			const char* end = strstr(p, "};");
+			int n = 0, t;
+
+			const char* s = strstr(p, "\tMENU_SLIDER(\"");
+
+			for (; s && end && s < end; s = strstr(s + 1, "\tMENU_SLIDER(\""))
+				n++;
+
+			for (t = 0; t < 3; t++)
+				if (!strncmp(p, table[t], strlen(table[t])))
+					break;
+
+			check(n, t < 3 ? in_table[t] : 0,
+				"slider numbers: sliders on Audio, Controls, Display only");
+			total += n;
+		}
+
+		check(total, 6, "slider numbers: and those are all six");
+	}
+
+	// The draw: in the slider kind's block, and nowhere else.
+	{
+		const char* tabs = strstr(frame,
+			"\t\tif (row->kind == MROW_TAB || row->kind == MROW_ACTION)\r\n");
+		const char* tabs_end = tabs ? strstr(tabs, "\t\t\tcontinue;\r\n") : 0;
+		const char* blk = strstr(frame,
+			"\t\tif (row->kind == MROW_SLIDER)\r\n\t\t{\r\n");
+		const char* blk_end = blk ? strstr(blk, "\t\t\tcontinue;\r\n") : 0;
+		const char* bar = blk ? strstr(blk, "DoSlider(400, y + 4 - "
+			"(font_height >> 1), 200, 16, row->slider ? "
+			"row->slider(row->param) : 0,") : 0;
+		const char* fmt = blk ? strstr(blk, "sprintf(buf, \"%d\",\r\n\t\t\t\t"
+			"(int)(row->slider ? row->slider(row->param) : 0));") : 0;
+		const char* put = blk ? strstr(blk, "PrintString(MenuSliderNumberX(), "
+			"y,\r\n\t\t\t\t(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : 6)), "
+			"buf, 0);") : 0;
+		const char* val = blk_end ? strstr(blk_end, "if (row->value)\r\n\t\t\t"
+			"PrintString(phd_centerx + (phd_centerx >> 2), y, (uchar)"
+			"(!enabled[i] ? 3 : (cur == i ? 1 : 6)),") : 0;
+
+		check(tabs && tabs_end && blk && tabs_end < blk, 1,
+			"slider numbers: tabs and actions leave before the slider block");
+		check(blk && blk_end && bar && bar < blk_end, 1,
+			"slider numbers: the bar is drawn in the slider block");
+		check(fmt && put && bar < fmt && fmt < put && put < blk_end, 1,
+			"slider numbers: after it, the number, inside the same block");
+		check(val != 0, 1,
+			"slider numbers: values and bindings draw after the block");
+		check(tree_count(frame, "row->kind == MROW_SLIDER"), 1,
+			"slider numbers: one slider block in the draw");
+		check(tree_count(frame, "MenuSliderNumberX()"), 2,
+			"slider numbers: one position, used once");
+		check(tree_count(frame, "PrintString(MenuSliderNumberX(), "), 1,
+			"slider numbers: one draw of the number");
+		check(tree_count(frame, "(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : "
+			"6))"), 2, "slider numbers: the value rows' colour rule, twice");
+		check(strstr(frame, "sprintf(buf, \"%d\", (int)(row->slider ? "
+			"row->slider(row->param) : 0));") != 0, 1,
+			"slider numbers: MenuSettleSlider names the value the same way");
+		check(strstr(frame, "#include \"../specific/output.h\"") != 0, 1,
+			"slider numbers: GetFixedScale's header is included");
+
+		/* What the engine writes, read out of its text for the checks
+		 * below: the bar's value (DoSlider's pos), the number's format
+		 * and argument, and the two draws' colour rules. */
+		{
+			const char* b = bar ? bar + strlen("DoSlider(400, y + 4 - "
+				"(font_height >> 1), 200, 16, ") : 0;
+			const char* f = bar ? strstr(bar, "sprintf(buf, \"") : 0;
+			const char* q = f ? strchr(f + 14, '"') : 0;
+			const char* n = bar ? strstr(bar,
+				"PrintString(MenuSliderNumberX(), ") : 0;
+			size_t m;
+
+			for (m = 0; b && b[m] && b[m] != ',' && m + 1 < sizeof(pos_s); m++)
+				pos_s[m] = b[m];
+
+			pos_s[m] = 0;
+
+			if (f && q && q < blk_end && (size_t)(q - f - 14) < sizeof(fmt_s))
+			{
+				const char* a = q + 2;
+
+				memcpy(fmt_s, f + 14, (size_t)(q - f - 14));
+				fmt_s[q - f - 14] = 0;
+
+				while (*a == ' ' || *a == '\t' || *a == '\r' || *a == '\n')
+					a++;
+
+				for (m = 0; a[m] && strncmp(a + m, ");", 2)
+					&& m + 1 < sizeof(arg_s); m++)
+					arg_s[m] = a[m];
+
+				arg_s[m] = 0;
+			}
+
+			num_ok = n && n < blk_end
+				&& colour_rule(strstr(n, "(uchar)"), num_c);
+			val_ok = val && colour_rule(strstr(val, "(uchar)"), val_c);
+		}
+	}
+
+	// The text: the value the bar is given, written in the engine's format.
+	{
+		char want[160];
+
+		snprintf(want, sizeof(want), "(int)(%s)", pos_s);
+		check(pos_s[0] && !strcmp(arg_s, want), 1,
+			"slider numbers: the number writes the value the bar is given");
+		check(format_value(fmt_s, 0, want, sizeof(want)), 1,
+			"slider numbers: the number's format is one %d, nothing else");
+	}
+
+	/* Each row at its bottom, its middle and its top, read from its own
+	 * step in the engine's text, written with the engine's format: "0",
+	 * "50" and "100", and the top is the value that fills DoSlider's bar. */
+	{
+		long full = -1;
+
+		check(number_after(bars, "w = pos * w / ", &full) && full == 100, 1,
+			"slider numbers: DoSlider fills the whole bar at 100");
+
+		for (i = 0; i < 6; i++)
+		{
+			static const char* const want[3] = { "0", "50", "100" };
+			long lo = -1, hi = -1, at[3];
+			int ok = number_after(frame, top_at[i], &hi);
+
+			if (bottom_at[i])
+				ok = ok && number_after(frame, bottom_at[i], &lo);
+			else if (ok)
+			{
+				// The bottom MenuSliderStep holds, walked down from the top.
+				int v = (int)hi;
+
+				for (k = 0; k < 1000; k++)
+					v = MenuSliderStep(v, -1, (int)hi);
+
+				lo = v;
+
+				for (k = 0; k < 1000; k++)
+					v = MenuSliderStep(v, 1, (int)hi);
+
+				ok = v == hi;
+			}
+
+			check(ok, 1, "slider numbers: each row's step names its ends");
+			check(hi == full, 1,
+				"slider numbers: each row's top fills the bar");
+
+			at[0] = lo;
+			at[1] = (lo + hi) / 2;
+			at[2] = hi;
+
+			for (k = 0; k < 3; k++)
+			{
+				char buf[32];
+
+				check(format_value(fmt_s, at[k], buf, sizeof(buf))
+					&& !strcmp(buf, want[k]), 1,
+					"slider numbers: the text at the bottom, middle and top");
+			}
+		}
+	}
+
+	/* The colours: the number's rule read from its draw is the value rows'
+	 * rule read from theirs, 3 greyed, 1 under the cursor, 6 elsewhere. */
+	check(num_ok, 1, "slider numbers: the number's colour rule is read");
+	check(val_ok, 1, "slider numbers: the value rows' colour rule is read");
+
+	for (k = 0; k < 4; k++)
+		check(colour_of(num_c, k >> 1, k & 1), colour_of(val_c, k >> 1, k & 1),
+			"slider numbers: the number's colour is the value rows'");
+
+	check(colour_of(num_c, 1, 1), 1,
+		"slider numbers: colour 1 under the cursor");
+	check(colour_of(num_c, 1, 0), 6, "slider numbers: colour 6 elsewhere");
+	check(colour_of(num_c, 0, 1), 3, "slider numbers: colour 3 when greyed");
+	check(colour_of(num_c, 0, 0), 3,
+		"slider numbers: greyed off the cursor too");
+
+	// The arithmetic the position is held against, in the engine's text.
+	check(strstr(frame, "return long(400.0F * (float)phd_winxmax / 640.0F) "
+		"+ GetFixedScale(200) + 1\r\n\t\t+ GetFixedScale(4);") != 0, 1,
+		"slider numbers: MenuSliderNumberX is the arithmetic stated here");
+	check(strstr(bars, "sx = (float)x * (float)phd_winxmax / 640.0F;") != 0
+		&& strstr(bars, "w = (float)GetFixedScale(width);") != 0
+		&& strstr(bars, "DrawColoredRect(sx - 1, sy - 1, sx + w + 1,") != 0,
+		1, "slider numbers: DoSlider's x, width and frame");
+	check(strstr(bars, "v[0].sx = x0;") != 0 && strstr(bars, "v[1].sx = x1;")
+		!= 0 && strstr(bars, "v[2].sx = x1;") != 0
+		&& strstr(bars, "v[3].sx = x0;") != 0, 1,
+		"slider numbers: DrawColoredRect puts the frame's x unshifted");
+	check(strstr(out, "x = (phd_winwidth > w) ? MulDiv(phd_winwidth, unit, "
+		"w) : unit;") != 0 && strstr(out, "y = (phd_winheight > h) ? "
+		"MulDiv(phd_winheight, unit, h) : unit;") != 0 && strstr(out,
+		"return x < y ? x : y;") != 0, 1,
+		"slider numbers: GetFixedScale, the smaller of the two scales");
+	check(strstr(text, "w = short((float)copy[i].w * float(phd_winxmax / "
+		"512.0F));") != 0 && strstr(text, "x2 += def->w;") != 0, 1,
+		"slider numbers: the font scales by phd_winxmax / 512");
+
+	// The digits' widths, read from game\chardef.inc's rows.
+	{
+		const char* p = strstr(defs, "\t{");
+		int n = 0;
+
+		while (p && n < '9' - '!' + 1)
+		{
+			if (n >= '0' - '!')
+			{
+				const char* c = strchr(p, ',');
+
+				c = c ? strchr(c + 1, ',') : 0;
+				digit[n - ('0' - '!')] = c ? strtol(c + 1, 0, 10) : -1;
+			}
+
+			n++;
+			p = strstr(p + 1, "\n\t{");
+		}
+
+		for (k = 0; k < 10; k++)
+			check((int)digit[k], (int)want_digit[k],
+				"slider numbers: the digits' widths in game\\chardef.inc");
+	}
+
+	// The tightest layout and a wide one, to the pixel.
+	check(slider_frame_free(640, 480), 601,
+		"slider numbers: 640x480, the frame's last pixel is 600");
+	check(slider_number_x(640, 480), 604,
+		"slider numbers: 640x480, the number starts at 604");
+	check(slider_number_x(640, 480) - slider_frame_free(640, 480), 3,
+		"slider numbers: 640x480, three pixels to the frame");
+	check(digits_width("100", digit, 640), 31,
+		"slider numbers: 640x480, \"100\" is 31 pixels");
+	check(640 - (slider_number_x(640, 480) + digits_width("100", digit, 640)),
+		5, "slider numbers: 640x480, five pixels to the edge");
+	check(slider_frame_free(1920, 1080), 1651,
+		"slider numbers: 1920x1080, the frame's last pixel is 1650");
+	check(slider_number_x(1920, 1080), 1659,
+		"slider numbers: 1920x1080, the number starts at 1659");
+	check(digits_width("100", digit, 1920), 96,
+		"slider numbers: 1920x1080, \"100\" is 96 pixels");
+
+	/* Every width from 640 to 3840 in seven shapes: the widest number of
+	 * 0..100 clear of the frame by 3 pixels and of the edge by 4. */
+	for (i = 0; i < 7; i++)
+	{
+		int to_bar = 1 << 30, to_edge = 1 << 30, left = 1;
+
+		for (long w = 640; w <= 3840; w++)
+		{
+			long h = (w * shape[i][1] + shape[i][0] / 2) / shape[i][0];
+			long x, widest = 0;
+			char buf[8];
+
+			if (h < 480)
+				h = 480;
+
+			for (k = 0; k <= 100; k++)
+			{
+				snprintf(buf, sizeof(buf), "%d", k);
+
+				if (digits_width(buf, digit, w) > widest)
+					widest = digits_width(buf, digit, w);
+			}
+
+			x = slider_number_x(w, h);
+
+			if (x - slider_frame_free(w, h) < to_bar)
+				to_bar = (int)(x - slider_frame_free(w, h));
+
+			if (w - (x + widest) < to_edge)
+				to_edge = (int)(w - (x + widest));
+
+			// Right of the value column, where a value row's text starts.
+			if (x <= w / 2 + ((w / 2) >> 2))
+				left = 0;
+		}
+
+		check(to_bar >= 3, 1, "slider numbers: 3 pixels clear of the frame");
+		check(to_edge >= 4, 1, "slider numbers: 4 pixels clear of the edge");
+		check(left, 1, "slider numbers: right of the value column");
+	}
+
+	free(frame);
+	free(bars);
+	free(out);
+	free(text);
+	free(defs);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -3182,6 +3741,7 @@ int main()
 	hd_switch_rows();
 	graphics_hd_row();
 	display_gamma_row();
+	slider_numbers();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

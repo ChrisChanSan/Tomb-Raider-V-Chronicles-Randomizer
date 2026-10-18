@@ -48,6 +48,10 @@
 #include "../../../TOMB5 Code/TOMB5/game/pad_scheme.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shadow.h"	// the Shadow mode row's numbers and blob mode
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_switch.h"	// HDSwitchSet
+// game\menu_frame.h's MENU_SLIDER_TOP and MenuSliderHeld, compiled as the
+// engine compiles them; the header needs the engine's own headers first.
+#include "../../../TOMB5 Code/TOMB5/tomb5/pch.h"
+#include "../../../TOMB5 Code/TOMB5/game/menu_frame.h"
 
 static int g_checks;
 static int g_fail;
@@ -1763,7 +1767,8 @@ static void controls_mouse_rows()
 			"rows: the same gate as Camera speed and Dead zone above them");
 	}
 
-	check(strstr(frame, "MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100)") != 0, 1,
+	check(strstr(frame, "MenuSliderStep(\r\n\t\t(int)tomb5.mouse_sensitivity, "
+		"(int)dir, MENU_SLIDER_TOP)") != 0 && MENU_SLIDER_TOP == 100, 1,
 		"rows: the slider steps through MenuSliderStep over 0..100");
 	check(strstr(frame, "tomb5.mouse_invert ? \"on\" : \"off\"") != 0, 1,
 		"rows: the invert shows the table's own on and off");
@@ -3051,7 +3056,8 @@ static void display_gamma_row()
 	check(strstr(frame, "return (long)tomb5.gamma;") != 0, 1,
 		"gamma row: the bar shows tomb5.gamma");
 	check(strstr(frame, "tomb5.gamma = (ulong)MenuSliderStep("
-		"(int)tomb5.gamma, (int)dir, 100);") != 0, 1,
+		"(int)tomb5.gamma, (int)dir,\r\n\t\tMENU_SLIDER_TOP);") != 0
+		&& MENU_SLIDER_TOP == 100, 1,
 		"gamma row: the slider steps through MenuSliderStep over 0..100");
 
 	for (v = -1; v <= 101; v++)
@@ -3084,14 +3090,23 @@ static void display_gamma_row()
 	check(strstr(opts, "tomb5.gamma = 50;\r\n\t\tREG_WriteLong(buf, "
 		"tomb5.gamma);") != 0, 1, "gamma row: a first run writes 50");
 	check(strstr(opts, "REG_ReadLong(buf, tomb5.gamma, 50);\r\n\t\t"
-		"if (tomb5.gamma > 100)\r\n\t\t\ttomb5.gamma = 50;") != 0, 1,
-		"gamma row: missing reads 50, above 100 reads 50");
+		"tomb5.gamma = (ulong)MenuSliderHeld((long)tomb5.gamma, 50);") != 0,
+		1, "gamma row: missing reads 50, outside 0..100 reads 50");
 
 	/* The round trip: the save writes the field as it stands, and the read
-	 * replaces only what lies above 100 - the slider's own top - so every
-	 * value the row can reach, 0 to 100, comes back as itself. */
-	check(tree_count(opts, "tomb5.gamma = 50;"), 2,
-		"gamma row: 50 is set in two places only, the first run and the clamp");
+	 * replaces only what lies outside 0..100 - the slider's own span - so
+	 * every value the row can reach comes back as itself. */
+	{
+		int same = 1;
+
+		for (v = 0; v <= 100; v++)
+			if (MenuSliderHeld(v, 50) != v)
+				same = 0;
+
+		check(same, 1, "gamma row: every value 0..100 reads back as itself");
+	}
+	check(tree_count(opts, "tomb5.gamma = 50;"), 1,
+		"gamma row: 50 is set in one place only, the first run");
 	check(tree_count(opts, "tomb5.gamma =") + tree_count(frame,
 		"tomb5.gamma =") + tree_count(dx, "tomb5.gamma ="), 3,
 		"gamma row: and the slider's step is the one other write");
@@ -3239,17 +3254,59 @@ static int colour_of(const int c[3], int enabled, int selected)
 	return !enabled ? c[0] : (selected ? c[1] : c[2]);
 }
 
-/* A value written with the engine's own format: one "%d" and no other
- * conversion, as sprintf would write it; 0 for any other format. */
+/* A value written with the engine's own format: one "%d", "%%" as a percent
+ * sign and no other conversion, as sprintf would write it; 0 for any other
+ * format. */
 static int format_value(const char* fmt, long v, char* out, size_t n)
 {
-	const char* d = strstr(fmt, "%d");
+	size_t k = 0;
+	int conv = 0;
 
-	if (!d || memchr(fmt, '%', (size_t)(d - fmt)) || strchr(d + 2, '%'))
-		return 0;
+	for (; *fmt; fmt++)
+	{
+		char part[24] = { *fmt, 0 };
 
-	snprintf(out, n, "%.*s%ld%s", (int)(d - fmt), fmt, v, d + 2);
-	return 1;
+		if (*fmt == '%' && fmt[1] == '%')
+			fmt++;
+		else if (*fmt == '%' && fmt[1] == 'd' && !conv++)
+		{
+			snprintf(part, sizeof(part), "%ld", v);
+			fmt++;
+		}
+		else if (*fmt == '%')
+			return 0;
+
+		for (const char* p = part; *p; p++)
+		{
+			if (k + 1 >= n)
+				return 0;
+
+			out[k++] = *p;
+		}
+	}
+
+	if (n)
+		out[k] = 0;
+
+	return conv == 1;
+}
+
+/* A step's top as the engine's text writes it right after the prefix: the
+ * span's name, MENU_SLIDER_TOP, read as the value game\menu_frame.h gives
+ * it, or a whole number. */
+static int number_after(const char* text, const char* prefix, long* v);
+
+static int top_after(const char* text, const char* prefix, long* v)
+{
+	const char* p = text ? strstr(text, prefix) : 0;
+
+	if (p && !strncmp(p + strlen(prefix), "MENU_SLIDER_TOP", 15))
+	{
+		*v = MENU_SLIDER_TOP;
+		return 1;
+	}
+
+	return number_after(text, prefix, v);
 }
 
 // The whole number the engine's text writes right after the prefix.
@@ -3263,6 +3320,298 @@ static int number_after(const char* text, const char* prefix, long* v)
 
 	*v = strtol(p + strlen(prefix), &end, 10);
 	return end != p + strlen(prefix);
+}
+
+/* The pixels a slider's text covers, its digits and its percent sign, as
+ * PrintString advances: each glyph is a quad of its own width. */
+static long number_width(const char* s, const long* digit, long sign, long w)
+{
+	long n = 0;
+
+	for (; *s; s++)
+		n += glyph_width(*s == '%' ? sign : digit[*s - '0'], w);
+
+	return n;
+}
+
+// MenuSliderSignFits, the same arithmetic: phd_winxmax + 1 is the width.
+static int slider_sign_fits(long w, long h, const long* digit, long sign)
+{
+	char top[16];
+
+	snprintf(top, sizeof(top), "%d%%", MENU_SLIDER_TOP);
+	return slider_number_x(w, h) + number_width(top, digit, sign, w)
+		+ fixed_scale(4, w, h) <= w;
+}
+
+/* Where a slider's number carries its percent sign: MenuSliderSignFits's text
+ * in the engine, its rule at the layouts the record names, and every width
+ * from 640 to 3840 in seven shapes - never at 5:4, 4:3 or 1:1, at every width
+ * of the wide shapes whose height needs no 480 floor, and wherever the sign
+ * is drawn, every value's text ends at least one gap before the edge. */
+static void slider_sign_room(const char* frame, const long* digit, long sign,
+	const int (*shape)[2])
+{
+	static const int never[7] = { 1, 1, 0, 0, 0, 0, 1 };
+	int i, k;
+
+	check(strstr(frame, "static bool MenuSliderSignFits()\r\n{\r\n"
+		"\tchar top[16];\r\n\r\n\tsprintf(top, \"%d%%\", MENU_SLIDER_TOP);"
+		"\r\n\treturn MenuSliderNumberX() + GetStringLength(top, 0, 0)\r\n"
+		"\t\t+ GetFixedScale(4) <= phd_winxmax + 1;") != 0, 1,
+		"slider sign: MenuSliderSignFits is the arithmetic stated here");
+	check(strstr(frame, "#include \"text.h\"") != 0, 1,
+		"slider sign: GetStringLength's header is included");
+	check(tree_count(frame, "MenuSliderSignFits()"), 2,
+		"slider sign: one rule, asked by the number's draw only");
+
+	// 640x480, the tightest: "100%" is 49 and would run 13 past the edge.
+	check(glyph_width(sign, 640), 18, "slider sign: 640x480, the sign is 18");
+	check(number_width("100%", digit, sign, 640), 49,
+		"slider sign: 640x480, \"100%\" is 49 pixels");
+	check(640 - (slider_number_x(640, 480)
+		+ number_width("100%", digit, sign, 640)), -13,
+		"slider sign: 640x480, \"100%\" would run 13 past the edge");
+	check(slider_sign_fits(640, 480, digit, sign), 0,
+		"slider sign: 640x480, no room - the number stands alone");
+	check(slider_sign_fits(1600, 1200, digit, sign), 0,
+		"slider sign: 1600x1200, no room either");
+	check(slider_sign_fits(1280, 1024, digit, sign), 0,
+		"slider sign: 1280x1024, 5:4, no room");
+	check(slider_sign_fits(1280, 800, digit, sign), 1,
+		"slider sign: 1280x800, 16:10, the sign is drawn");
+	check(slider_sign_fits(1440, 960, digit, sign), 1,
+		"slider sign: 1440x960, 3:2, the sign is drawn");
+	check(slider_sign_fits(1920, 1080, digit, sign), 1,
+		"slider sign: 1920x1080, the sign is drawn");
+	check(number_width("100%", digit, sign, 1920), 152,
+		"slider sign: 1920x1080, \"100%\" is 152 pixels");
+	check(1920 - (slider_number_x(1920, 1080)
+		+ number_width("100%", digit, sign, 1920)), 109,
+		"slider sign: 1920x1080, 109 pixels to the edge");
+	check(slider_sign_fits(2560, 1440, digit, sign), 1,
+		"slider sign: 2560x1440, the sign is drawn");
+	check(slider_number_x(2560, 1440), 2212,
+		"slider sign: 2560x1440, the number starts at 2212");
+	check(number_width("100%", digit, sign, 2560), 201,
+		"slider sign: 2560x1440, \"100%\" is 201 pixels");
+	check(2560 - (slider_number_x(2560, 1440)
+		+ number_width("100%", digit, sign, 2560)), 147,
+		"slider sign: 2560x1440, 147 pixels to the edge");
+	// The rule's edge, near 1.46:1, at 1024 wide.
+	check(slider_sign_fits(1024, 706, digit, sign), 1,
+		"slider sign: 1024x706 still has room");
+	check(slider_sign_fits(1024, 707, digit, sign), 0,
+		"slider sign: 1024x707 has none");
+
+	for (i = 0; i < 7; i++)
+	{
+		int drawn = 0, natural = 0, natural_fit = 0, clear = 1, widest = 1;
+
+		for (long w = 640; w <= 3840; w++)
+		{
+			long h = (w * shape[i][1] + shape[i][0] / 2) / shape[i][0];
+			const int raised = h < 480;
+			int fits;
+
+			if (raised)
+				h = 480;
+
+			fits = slider_sign_fits(w, h, digit, sign);
+			drawn += fits;
+
+			if (!raised)
+			{
+				natural++;
+				natural_fit += fits;
+			}
+
+			for (k = 0; fits && k <= MENU_SLIDER_TOP; k++)
+			{
+				char buf[16];
+				long tw;
+
+				snprintf(buf, sizeof(buf), "%d%%", k);
+				tw = number_width(buf, digit, sign, w);
+
+				if (tw > number_width("100%", digit, sign, w))
+					widest = 0;
+
+				if (w - (slider_number_x(w, h) + tw) < fixed_scale(4, w, h))
+					clear = 0;
+			}
+		}
+
+		if (never[i])
+			check(drawn, 0, "slider sign: never drawn at 5:4, 4:3 or 1:1");
+		else
+			check(natural > 0 && natural_fit == natural, 1,
+				"slider sign: drawn at every natural height of a wide shape");
+
+		check(clear, 1, "slider sign: every value with it ends a gap early");
+		check(widest, 1, "slider sign: \"100%\" is the widest text with it");
+	}
+}
+
+/* The six slider keys as the registry hands them back. Each read is followed
+ * at once by game\menu_frame.h's MenuSliderHeld - the engine's own function,
+ * compiled here - with the fallback the read names, so that the row and the
+ * engine see the held value from the first frame. A value under the span, at
+ * its ends, inside it and over it comes out as stated: at the nearer end for
+ * the volumes and cam_speed, on the middle for dead_zone, mouse_sens and
+ * gamma; and nothing of it writes the registry. */
+static void slider_reads()
+{
+	static const char* const key[6] =
+	{
+		"MusicVolume", "SFXVolume", "cam_speed", "dead_zone", "mouse_sens",
+		"gamma"
+	};
+	static const char* const read[6] =
+	{
+		"REG_ReadLong((char*)\"MusicVolume\", (ulong&)MusicVolume, 80);",
+		"REG_ReadLong((char*)\"SFXVolume\", (ulong&)SFXVolume, 90);",
+		"REG_ReadLong(buf, tomb5.camera_speed, 40);\r\n",
+		"REG_ReadLong(buf, tomb5.dead_zone, 50);\r\n",
+		"REG_ReadLong(buf, tomb5.mouse_sensitivity, 50);\r\n",
+		"REG_ReadLong(buf, tomb5.gamma, 50);\r\n"
+	};
+	// The hold, up to its fallback; the tomb5 keys' stand right after the read.
+	static const char* const hold[6] =
+	{
+		"\tMusicVolume = MenuSliderHeld(MusicVolume, ",
+		"\tSFXVolume = MenuSliderHeld(SFXVolume, ",
+		"\t\ttomb5.camera_speed = (ulong)MenuSliderHeld(\r\n"
+		"\t\t\t(long)tomb5.camera_speed, ",
+		"\t\ttomb5.dead_zone = (ulong)MenuSliderHeld((long)tomb5.dead_zone, ",
+		"\t\ttomb5.mouse_sensitivity = (ulong)MenuSliderHeld(\r\n"
+		"\t\t\t(long)tomb5.mouse_sensitivity, ",
+		"\t\ttomb5.gamma = (ulong)MenuSliderHeld((long)tomb5.gamma, "
+	};
+	static const long def[6] = { 80, 90, 40, 50, 50, 50 };
+	static const long want_out[6] =
+	{
+		MENU_SLIDER_NEAREST, MENU_SLIDER_NEAREST, MENU_SLIDER_NEAREST, 50, 50,
+		50
+	};
+	// As the DWORD arrives: -1, -50, 0, inside, 100, 101, 150 and 1000.
+	static const unsigned long probe[8] =
+	{
+		0xFFFFFFFFUL, 0xFFFFFFCEUL, 0, 37, 100, 101, 150, 1000
+	};
+	static const long want[2][8] =
+	{
+		{ 0, 0, 0, 37, 100, 100, 100, 100 },	// to the nearer end
+		{ 50, 50, 0, 37, 100, 50, 50, 50 }	// to the middle
+	};
+	char* reg = tree_file("../../../TOMB5 Code/TOMB5/specific/registry.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char* head = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.h");
+	const char* body = head ? strstr(head, "inline long MenuSliderHeld(") : 0;
+	const char* body_end = body ? strstr(body, "\r\n}\r\n") : 0;
+	const char* control = reg ? strstr(reg,
+		"REG_ReadLong((char*)\"ControlMethod\"") : 0;
+	int i, k;
+
+	check(reg && opts && head && body && body_end, 1,
+		"slider reads: registry.cpp, tomb5.cpp and the hold are readable");
+
+	if (!reg || !opts || !head || !body || !body_end)
+	{
+		free(reg);
+		free(opts);
+		free(head);
+		return;
+	}
+
+	for (i = 0; i < 6; i++)
+	{
+		const char* text = i < 2 ? reg : opts;
+		const char* r = strstr(text, read[i]);
+		const char* h = r ? strstr(r, hold[i]) : 0;
+		long out = -2;
+		char what[160];
+		int next;
+
+		// The volumes' holds follow both reads, before the next key's read.
+		if (i < 2)
+			next = h && control && h < control;
+		else
+			next = h && h == r + strlen(read[i]);
+
+		snprintf(what, sizeof(what), "slider reads: %s is held right after "
+			"its read", key[i]);
+		check(next, 1, what);
+
+		if (h)
+		{
+			const char* a = h + strlen(hold[i]);
+			char* e;
+
+			if (!strncmp(a, "MENU_SLIDER_NEAREST);", 21))
+				out = MENU_SLIDER_NEAREST;
+			else
+			{
+				out = strtol(a, &e, 10);
+
+				if (e == a || strncmp(e, ");", 2))
+					out = -2;
+			}
+		}
+
+		snprintf(what, sizeof(what), "slider reads: %s's fallback", key[i]);
+		check((int)out, (int)want_out[i], what);
+		snprintf(what, sizeof(what), "slider reads: %s's default stays",
+			key[i]);
+		check((int)MenuSliderHeld(def[i], out), (int)def[i], what);
+
+		for (k = 0; k < 8; k++)
+		{
+			snprintf(what, sizeof(what), "slider reads: %s read as %ld",
+				key[i], (long)probe[k]);
+			check((int)MenuSliderHeld((long)probe[k], out),
+				(int)want[i >= 3][k], what);
+		}
+	}
+
+	check(MENU_SLIDER_NEAREST < 0, 1,
+		"slider reads: MENU_SLIDER_NEAREST lies outside the span");
+	check(tree_count(reg, "MenuSliderHeld("), 2,
+		"slider reads: registry.cpp holds the two volumes");
+	check(tree_count(opts, "MenuSliderHeld("), 4,
+		"slider reads: tomb5.cpp holds its four slider keys");
+	check(tree_count(opts, "if (tomb5.camera_speed > 100)")
+		+ tree_count(opts, "if (tomb5.dead_zone > 100)")
+		+ tree_count(opts, "if (tomb5.mouse_sensitivity > 100)")
+		+ tree_count(opts, "if (tomb5.gamma > 100)"), 0,
+		"slider reads: no second copy of the top at the reads");
+	check(strstr(head, "#define MENU_SLIDER_TOP\t100") != 0, 1,
+		"slider reads: the span's one definition");
+
+	{
+		int writes = 0;
+
+		for (const char* p = body; p < body_end; p++)
+			if (!strncmp(p, "REG_", 4))
+				writes++;
+
+		check(writes, 0, "slider reads: the hold writes nothing back");
+	}
+
+	check(strstr(reg, "REG_WriteLong((char*)\"MusicVolume\", MusicVolume);")
+		!= 0 && strstr(reg, "REG_WriteLong((char*)\"SFXVolume\", "
+		"SFXVolume);") != 0, 1,
+		"slider reads: the save writes the held volumes as they stand");
+	check(tree_count(opts, "REG_WriteLong(buf, tomb5.camera_speed);")
+		+ tree_count(opts, "REG_WriteLong(buf, tomb5.dead_zone);")
+		+ tree_count(opts, "REG_WriteLong(buf, tomb5.mouse_sensitivity);")
+		+ tree_count(opts, "REG_WriteLong(buf, tomb5.gamma);"), 8,
+		"slider reads: the four tomb5 keys are written on a first run and "
+		"in the save");
+
+	free(reg);
+	free(opts);
+	free(head);
 }
 
 /* Every slider row draws its number beside its bar. Read from the tree as
@@ -3294,12 +3643,16 @@ static void slider_numbers()
 	// Each row's own clamp to 0..100, one step a frame.
 	static const char* const top[6] =
 	{
-		"if (MusicVolume > 100)\r\n\t\tMusicVolume = 100;",
-		"if (SFXVolume > 100)\r\n\t\tSFXVolume = 100;",
-		"if (dir > 0 && tomb5.camera_speed < 100)\r\n\t\ttomb5.camera_speed++;",
-		"if (dir > 0 && tomb5.dead_zone < 100)\r\n\t\ttomb5.dead_zone++;",
-		"MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100)",
-		"MenuSliderStep((int)tomb5.gamma, (int)dir, 100)"
+		"if (MusicVolume > MENU_SLIDER_TOP)\r\n\t\t"
+		"MusicVolume = MENU_SLIDER_TOP;",
+		"if (SFXVolume > MENU_SLIDER_TOP)\r\n\t\tSFXVolume = MENU_SLIDER_TOP;",
+		"if (dir > 0 && tomb5.camera_speed < MENU_SLIDER_TOP)\r\n\t\t"
+		"tomb5.camera_speed++;",
+		"if (dir > 0 && tomb5.dead_zone < MENU_SLIDER_TOP)\r\n\t\t"
+		"tomb5.dead_zone++;",
+		"MenuSliderStep(\r\n\t\t(int)tomb5.mouse_sensitivity, (int)dir, "
+		"MENU_SLIDER_TOP)",
+		"MenuSliderStep((int)tomb5.gamma, (int)dir,\r\n\t\tMENU_SLIDER_TOP)"
 	};
 	static const char* const bottom[6] =
 	{
@@ -3307,8 +3660,9 @@ static void slider_numbers()
 		"if (SFXVolume < 0)\r\n\t\tSFXVolume = 0;",
 		"if (dir < 0 && tomb5.camera_speed > 0)\r\n\t\ttomb5.camera_speed--;",
 		"if (dir < 0 && tomb5.dead_zone > 0)\r\n\t\ttomb5.dead_zone--;",
-		"MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, 100)",
-		"MenuSliderStep((int)tomb5.gamma, (int)dir, 100)"
+		"MenuSliderStep(\r\n\t\t(int)tomb5.mouse_sensitivity, (int)dir, "
+		"MENU_SLIDER_TOP)",
+		"MenuSliderStep((int)tomb5.gamma, (int)dir,\r\n\t\tMENU_SLIDER_TOP)"
 	};
 	// Where each row's step names its top and its bottom; 0 where the
 	// bottom is MenuSliderStep's own (game\menu_nav.h, called here).
@@ -3317,8 +3671,8 @@ static void slider_numbers()
 		"if (MusicVolume > ", "if (SFXVolume > ",
 		"if (dir > 0 && tomb5.camera_speed < ",
 		"if (dir > 0 && tomb5.dead_zone < ",
-		"MenuSliderStep((int)tomb5.mouse_sensitivity, (int)dir, ",
-		"MenuSliderStep((int)tomb5.gamma, (int)dir, "
+		"MenuSliderStep(\r\n\t\t(int)tomb5.mouse_sensitivity, (int)dir, ",
+		"MenuSliderStep((int)tomb5.gamma, (int)dir,\r\n\t\t"
 	};
 	static const char* const bottom_at[6] =
 	{
@@ -3349,7 +3703,8 @@ static void slider_numbers()
 	long digit[10];
 	char found[8][64];
 	char line[8][512];
-	char fmt_s[64] = "", arg_s[160] = "", pos_s[128] = "";
+	char fmt_s[64] = "", sign_s[64] = "", arg_s[160] = "", pos_s[128] = "";
+	long sign = -1;
 	int num_c[3] = { -1, -1, -1 }, val_c[3] = { -2, -2, -2 };
 	int num_ok = 0, val_ok = 0;
 	int rows = 0, i, k;
@@ -3449,7 +3804,8 @@ static void slider_numbers()
 		const char* bar = blk ? strstr(blk, "DoSlider(400, y + 4 - "
 			"(font_height >> 1), 200, 16, row->slider ? "
 			"row->slider(row->param) : 0,") : 0;
-		const char* fmt = blk ? strstr(blk, "sprintf(buf, \"%d\",\r\n\t\t\t\t"
+		const char* fmt = blk ? strstr(blk, "sprintf(buf, MenuSliderSignFits() "
+			"? \"%d%%\" : \"%d\",\r\n\t\t\t\t"
 			"(int)(row->slider ? row->slider(row->param) : 0));") : 0;
 		const char* put = blk ? strstr(blk, "PrintString(MenuSliderNumberX(), "
 			"y,\r\n\t\t\t\t(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : 6)), "
@@ -3468,8 +3824,8 @@ static void slider_numbers()
 			"slider numbers: values and bindings draw after the block");
 		check(tree_count(frame, "row->kind == MROW_SLIDER"), 1,
 			"slider numbers: one slider block in the draw");
-		check(tree_count(frame, "MenuSliderNumberX()"), 2,
-			"slider numbers: one position, used once");
+		check(tree_count(frame, "MenuSliderNumberX()"), 3,
+			"slider numbers: one position, for the draw and the sign's room");
 		check(tree_count(frame, "PrintString(MenuSliderNumberX(), "), 1,
 			"slider numbers: one draw of the number");
 		check(tree_count(frame, "(uchar)(!enabled[i] ? 3 : (cur == i ? 1 : "
@@ -3486,8 +3842,13 @@ static void slider_numbers()
 		{
 			const char* b = bar ? bar + strlen("DoSlider(400, y + 4 - "
 				"(font_height >> 1), 200, 16, ") : 0;
-			const char* f = bar ? strstr(bar, "sprintf(buf, \"") : 0;
-			const char* q = f ? strchr(f + 14, '"') : 0;
+			static const char* const lead =
+				"sprintf(buf, MenuSliderSignFits() ? \"";
+			const char* f = bar ? strstr(bar, lead) : 0;
+			const char* s0 = f ? f + strlen(lead) : 0;
+			const char* s1 = s0 ? strchr(s0, '"') : 0;
+			const char* d0 = s1 && !strncmp(s1, "\" : \"", 5) ? s1 + 5 : 0;
+			const char* q = d0 ? strchr(d0, '"') : 0;
 			const char* n = bar ? strstr(bar,
 				"PrintString(MenuSliderNumberX(), ") : 0;
 			size_t m;
@@ -3497,12 +3858,16 @@ static void slider_numbers()
 
 			pos_s[m] = 0;
 
-			if (f && q && q < blk_end && (size_t)(q - f - 14) < sizeof(fmt_s))
+			// The format with the sign, then the one without it.
+			if (q && q < blk_end && (size_t)(s1 - s0) < sizeof(sign_s)
+				&& (size_t)(q - d0) < sizeof(fmt_s))
 			{
 				const char* a = q + 2;
 
-				memcpy(fmt_s, f + 14, (size_t)(q - f - 14));
-				fmt_s[q - f - 14] = 0;
+				memcpy(sign_s, s0, (size_t)(s1 - s0));
+				sign_s[s1 - s0] = 0;
+				memcpy(fmt_s, d0, (size_t)(q - d0));
+				fmt_s[q - d0] = 0;
 
 				while (*a == ' ' || *a == '\t' || *a == '\r' || *a == '\n')
 					a++;
@@ -3529,6 +3894,10 @@ static void slider_numbers()
 			"slider numbers: the number writes the value the bar is given");
 		check(format_value(fmt_s, 0, want, sizeof(want)), 1,
 			"slider numbers: the number's format is one %d, nothing else");
+		check(format_value(sign_s, 0, want, sizeof(want)), 1,
+			"slider numbers: the sign's format is one %d and a percent sign");
+		check(!strcmp(sign_s, "%d%%") && !strcmp(fmt_s, "%d"), 1,
+			"slider numbers: the two formats differ by the sign only");
 	}
 
 	/* Each row at its bottom, its middle and its top, read from its own
@@ -3539,12 +3908,14 @@ static void slider_numbers()
 
 		check(number_after(bars, "w = pos * w / ", &full) && full == 100, 1,
 			"slider numbers: DoSlider fills the whole bar at 100");
+		check(full == MENU_SLIDER_TOP, 1,
+			"slider numbers: MENU_SLIDER_TOP is the value of the full bar");
 
 		for (i = 0; i < 6; i++)
 		{
 			static const char* const want[3] = { "0", "50", "100" };
 			long lo = -1, hi = -1, at[3];
-			int ok = number_after(frame, top_at[i], &hi);
+			int ok = top_after(frame, top_at[i], &hi);
 
 			if (bottom_at[i])
 				ok = ok && number_after(frame, bottom_at[i], &lo);
@@ -3574,11 +3945,15 @@ static void slider_numbers()
 
 			for (k = 0; k < 3; k++)
 			{
+				static const char* const want_sign[3] = { "0%", "50%", "100%" };
 				char buf[32];
 
 				check(format_value(fmt_s, at[k], buf, sizeof(buf))
 					&& !strcmp(buf, want[k]), 1,
 					"slider numbers: the text at the bottom, middle and top");
+				check(format_value(sign_s, at[k], buf, sizeof(buf))
+					&& !strcmp(buf, want_sign[k]), 1,
+					"slider numbers: with the sign, \"0%\", \"50%\", \"100%\"");
 			}
 		}
 	}
@@ -3627,12 +4002,16 @@ static void slider_numbers()
 
 		while (p && n < '9' - '!' + 1)
 		{
-			if (n >= '0' - '!')
+			if (n >= '0' - '!' || n == '%' - '!')
 			{
 				const char* c = strchr(p, ',');
 
 				c = c ? strchr(c + 1, ',') : 0;
-				digit[n - ('0' - '!')] = c ? strtol(c + 1, 0, 10) : -1;
+
+				if (n == '%' - '!')
+					sign = c ? strtol(c + 1, 0, 10) : -1;
+				else
+					digit[n - ('0' - '!')] = c ? strtol(c + 1, 0, 10) : -1;
 			}
 
 			n++;
@@ -3642,6 +4021,11 @@ static void slider_numbers()
 		for (k = 0; k < 10; k++)
 			check((int)digit[k], (int)want_digit[k],
 				"slider numbers: the digits' widths in game\\chardef.inc");
+
+		check((int)sign, 15,
+			"slider numbers: the percent sign is 15 wide in game\\chardef.inc");
+		check('%' - '!' >= 0 && '%' - '!' < 106, 1,
+			"slider numbers: the classic font's 106 rows hold the sign");
 	}
 
 	// The tightest layout and a wide one, to the pixel.
@@ -3703,6 +4087,8 @@ static void slider_numbers()
 		check(left, 1, "slider numbers: right of the value column");
 	}
 
+	slider_sign_room(frame, digit, sign, shape);
+
 	free(frame);
 	free(bars);
 	free(out);
@@ -3742,6 +4128,7 @@ int main()
 	graphics_hd_row();
 	display_gamma_row();
 	slider_numbers();
+	slider_reads();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

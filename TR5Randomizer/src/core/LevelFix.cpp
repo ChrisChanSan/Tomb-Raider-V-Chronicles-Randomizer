@@ -151,6 +151,25 @@ int apply(Tr5Level& level, const std::string& levelName,
         warnings.push_back(buf);
     }
 
+    for (const SightWindow& k : kSightWindows)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::string error;
+        if (level.addSightWindow(k.room, k.sx, k.sz, k.sx2, k.sz2, k.toRoom,
+                                 error))
+        {
+            ++applied;
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d sector %d,%d): %s",
+                      k.reason, k.room, k.sx, k.sz, error.c_str());
+        warnings.push_back(buf);
+    }
+
     return applied;
 }
 

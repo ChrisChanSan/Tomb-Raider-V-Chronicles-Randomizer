@@ -2867,6 +2867,22 @@ carries the tables.
     found through the engine's own resolvers: 74 parts, the clear texels
     on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
     16073, RICH2's 3309 and RICH3's 10084.
+275. **ANDREA2's arch vault window** (`LevelFix.h`, `kSightWindows`;
+    `Tr5Level.cpp`, `addSightWindow`) - on every run one view window each
+    way between rooms 231 and 102 over the plane x 58,368 (102's at 58,367),
+    z 40,960 to 43,008, y -1,536 to -1,024, with no floordata, no box word
+    and no HD cut. DATA: the classic `.TRC`'s own rooms - the corners are the
+    corner-exact opening of 231's sectors (7,3) and (7,4) against 102's
+    (1,1) and (1,2), the gable of 102's two ROOF entries; the corner order
+    is the level's first wall window of each facing; the vault's other end,
+    102's portal 1 and 235's portal 6, has the same shape. 231's faces on
+    that plane stop at -1,792 over the opening and 102 has none; the arch
+    there is room 231's static 40 (box x 58,368 to 58,958, y -1,792 to
+    -1,024). PICTURE (RoomProbe, 1280 by 720): the clear colour at four
+    eyes of the arch 20,638, 67,896, 19,160 and 45,118 pixels before, 0
+    after, with the default walk and with `-vis 1`; the cut `addViewWindow`
+    would record takes 110,085 pixels of the arch's wall out at the first
+    eye. OWN: the window without the cut, chosen on that picture.
 
 ## Credited, but not contained here
 

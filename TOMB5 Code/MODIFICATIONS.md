@@ -8483,8 +8483,8 @@ Round 2 (below) mended ANDREA2's window: its grid goes with its break.
 #### Round 2: ANDREA2's window and its break
 2026-10-18
 
-**What.** Decided on 2026-10-17, put into English: ANDREA2's window ("trview Raum 132,
-Mesh 47") gets the same treatment as ANDREA1's - whole before the break, gone with it. An
+**What.** Decided on 2026-10-17, put into English: ANDREA2's window (in trview, room 132,
+mesh 47) gets the same treatment as ANDREA1's - whole before the break, gone with it. An
 older note of 2026-09-06 on the same window: the classic game breaks it in a cutscene, and
 this project showed a dark pattern of shards there for good where the Remaster shows clear
 glass. Reference pictures supplied for this project (not in the repository) show the place
@@ -8588,26 +8588,51 @@ page 3007 under the grid, 55,877 (54.1 %) have alpha below 16 and carry the bars
 (mean RGB 106, 82, 60), 47,416 (45.9 %) lie between 16 and 239 - the panes - and none is
 240 or more; 2,076 of the 2,146 triangles, all 640 horizontal ones among them (the bars'
 tops and bottoms), sample the clear texels. The present reading (`param[1]` the opacity of
-the whole part) draws the bars at nothing and the panes at a tenth of their alpha; round
-1's other reading (opaque texels opaque, `param[1]` for the rest) draws the same picture
-here, texel for texel. Over the fifteen levels the alpha run's material 14 parts with
-`param[1]` under 1 (the additive run's take the additive weight and are not this rule's):
+the whole part) draws the bars at nothing and the panes at a tenth of their alpha. Over
+the fifteen levels the alpha run's material 14 parts with `param[1]` under 1 (the
+additive run's take the additive weight and are not this rule's), one part's texels per
+row:
 
 | level | parts | page | `param[1]` | clear | partial | opaque |
 |---|---|---|---|---|---|---|
 | ANDREA2 | 2 | 3007 | 0.1 | 54.1 % | 45.9 % | 0 |
-| JOBY2 | 2 | 16073 | 0.1 | 0 | 97.4 % | 2.6 % |
+| JOBY2 | 2 | 16073 | 0.1 | 0 | 97.4 % | 2.6 % (86 texels) |
 | JOBY2 | 1 | 513 | 0.2333 | 0 | 0 | 100 % |
 | JOBY3 | 27 | 10072 | 0.1 | 0 | 100 % | 0 |
 | JOBY5 | 31 | 10072 | 0.1 | 0 | 100 % | 0 |
-| RICH2 | 6 | 3309 | 0.8417 | 0 | 100 % | 450 texels |
-| RICH3 | 5 | 10084 | 0.1 | 0 | 100 % | 20 texels |
+| RICH2 | 6 | 3309 | 0.8417 | 0 | 100 % | 75 texels |
+| RICH3 | 5 | 10084 | 0.1 | 0 | 100 % | 20 texels in one part |
 
-The opaque texels are no frames: JOBY2's page 513 is four blue panes in room 102, which
-the other reading would draw solid (the alpha test, which draws them so, differs from the
-present picture in 45,582 pixels by up to 176). ANDREA2's bars are the only clear texels
-of the 74 parts. The data supports neither reading, and a third - texels below 16 under
-such a part drawn solid - would need the shader; nothing is built.
+RICH2's six parts are one window in six rooms (groups 84, 91, 96, 100, 102 and 104, 72
+triangles and one box each), each over the same 239,700 texels with the same 75 opaque;
+of RICH3's five, one covers 29,423 texels with 20 opaque, the other four 4,843 with none.
+ANDREA2's bars are the only clear texels of the 74 parts.
+
+The readings drawn, at 960 x 540 at the owner's eye and at one eye on each other page, by
+scratch RoomProbe builds that change only the room shader's alpha output and only where a
+draw call's see-through weight is under 1 (a control build made the same way with the
+shader unchanged gives the present pictures byte for byte). Reading B is round 1's other
+reading: texels at alpha 240 and above opaque, the rest at alpha times `param[1]`. Reading
+C draws the texels below 16 opaque instead. The alpha test (`-noblend`) is neither: it
+draws the texels at 0.5 and above solid and drops the rest. Each against the present
+picture:
+
+| eye | page | reading B | reading C | the alpha test |
+|---|---|---|---|---|
+| ANDREA2, the owner's eye | 3007 | 0 px | 97,138 px, up to 245 | 167,454 px, up to 230 |
+| JOBY2 room 102 | 513 | 45,582 px, up to 150 | 0 px | 45,582 px, up to 176 |
+| JOBY2 room 52 | 16073 | 0 px | 0 px | 16,128 px, up to 34 |
+| JOBY3 room 10 | 10072 | 0 px | 0 px | 7,268 px, up to 240 |
+| RICH2 room 84 | 3309 | 1 px, by 5 | 0 px | 24,447 px, up to 24 |
+| RICH3 room 46 | 10084 | 0 px | 0 px | 2,456 px, up to 110 |
+
+The opaque texels are no frames: reading B changes nothing at ANDREA2 and draws JOBY2's
+four blue panes in room 102 solid; the few opaque texels of pages 16073 and 3309 come to
+one pixel once filtered. Reading C draws ANDREA2's bars solid in their own colour with the
+panes faint between them, as the classic draw shows the window, and by the census above
+touches no other part of the fifteen levels. So the data supports reading B nowhere and
+reading C at ANDREA2 alone; C lives in the shader, outside this round's files, so nothing
+is built and the reading is the owner's.
 
 **Decisions.** The rule reads the engine's state (slot, flip twin, Flags bit 0) and names
 no room. The flip pair's own two pieces stay apart by the twin rule rather than by the
@@ -8619,7 +8644,8 @@ identical to `8691e82` and `7d9a7323`; the 15 parity cameras and the six HD view
 and 6 of 6, ModelProbe `-all` 15 of 15 and its nine pictures 9 of 9, round 1's 13 window
 pictures (ANDREA1 198 and 201, JOBY2 57) 13 of 13 identical to `7d9a7323` and to round 1's
 own. The census is identical in twelve levels. ModernTest 15,602 checks with the window
-group's 18, 0 failed.
+group's 18, 0 failed. The texel counts are read out of the `.TRG` and the pages as the
+engine finds them (`HDScanReadTrg`, `HDScanPagePath`).
 
 **Left.** The bars (above). `hd_level.cpp`'s comment at `g_destruct_pairs` still says
 slots 50 to 57; the merge's to update. The `HDLOG flippair` line still skips the pairs

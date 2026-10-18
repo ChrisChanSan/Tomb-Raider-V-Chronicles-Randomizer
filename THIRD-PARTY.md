@@ -2830,6 +2830,16 @@ carries the tables.
     flips, each pair reading its static where its list stands. OWN, this
     project's own tool on the player's files (DATA) and the classic
     level's statics and flip pairs (CLASSIC).
+271. **The glass parts' texels and the three readings** (`MODIFICATIONS.md`,
+    the windows' Round 2, "The bars' visibility"; nothing in the code) -
+    the alpha run's material 14 parts with `param[1]` under 1 counted by
+    the texels they cover (clear below 16, opaque 240 and above), and the
+    present reading, reading B (opaque texels opaque) and reading C (clear
+    texels opaque) drawn at one eye per page. OWN, the count and the
+    readings, measured with scratch tools on the player's files (DATA),
+    found through the engine's own resolvers: 74 parts, the clear texels
+    on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
+    16073, RICH2's 3309 and RICH3's 10084.
 
 ## Credited, but not contained here
 

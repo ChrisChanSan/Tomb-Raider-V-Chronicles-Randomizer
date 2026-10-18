@@ -129,6 +129,15 @@ void HDDebrisFrameInfo(HDDebrisFrameStats* out);
 // Lets the shaders and the declaration go, with the device.
 void HDDebrisRelease();
 
+/* The look of the glass pieces a destructible part breaks into (see "the
+ * glass's look" in hd_debris_rules.h): the hue of the classic glass its
+ * static adds (HDGlassTintOf, four floats) and the gain out of that
+ * glass's band (HDGlassShardGain), for the part of `group` and `material`.
+ * Handed after HDDebrisLevelRead, which forgets them; a part with none
+ * draws its glass at its own colour and strength. */
+void HDDebrisPartLook(int group, unsigned int material, const float* tint,
+	float gain);
+
 /* The glass's hue in the room draw, defined with it in hd_render.cpp: the
  * level's classic faces the classic adds, handed once the room build is
  * done, matched against the places of the art's glass (HDGlassAtPlace)
@@ -212,6 +221,32 @@ namespace hd_debris_body
 	bool g_break_open = false;
 	HDDebrisBreakStats g_break_stats;
 
+	// The glass pieces' look of a part (HDDebrisPartLook).
+	struct Look
+	{
+		int group;
+		unsigned int material;
+		float tint[4];
+		float gain;
+	};
+
+	std::vector<Look> g_looks;
+	/* Per art of the open break: the hue times the gain, and w 1 where the
+	 * part has a look (gTint, hd_room.hlsl). */
+	std::vector<float> g_art_look;
+
+	/* How a triangle's glass is drawn, as the room draw draws the classic's
+	 * glass (hd_render.cpp): not as glass; in two halves, its frame as
+	 * before and its glass added, on a page that paints its frame on clear
+	 * texels (HDGlassFramePage); added whole, the additive run of material
+	 * 14 on a page that is glass in every texel (HDGlassWholePage). */
+	enum
+	{
+		GLASS_NONE = 0,
+		GLASS_HALVES,
+		GLASS_WHOLE
+	};
+
 	// A triangle a piece carries, offset from the piece's birth place.
 	struct FlyTri
 	{
@@ -222,6 +257,8 @@ namespace hd_debris_body
 		int page;
 		int kind;
 		float see;
+		int glass;
+		float look[4];
 	};
 
 	struct Slot
@@ -570,8 +607,36 @@ void HDDebrisLevelFree()
 
 	HDDebrisBreakEnd();
 	std::vector<Art>().swap(g_art);
+	std::vector<Look>().swap(g_looks);
 	memset(&g_level_stats, 0, sizeof(g_level_stats));
 	ForgetSlots();
+}
+
+void HDDebrisPartLook(int group, unsigned int material, const float* tint,
+	float gain)
+{
+	using namespace hd_debris_body;
+
+	if (!tint)
+		return;
+
+	Look look;
+
+	look.group = group;
+	look.material = material;
+	look.gain = gain;
+
+	for (int i = 0; i < 4; i++)
+		look.tint[i] = tint[i];
+
+	for (Look& l : g_looks)
+		if (l.group == group && l.material == material)
+		{
+			l = look;
+			return;
+		}
+
+	g_looks.push_back(look);
 }
 
 void HDDebrisSlotsForget()
@@ -617,6 +682,7 @@ bool HDDebrisBreakBegin(const HDDebrisPart* parts, int partCount,
 
 	g_face_tris.assign((size_t)faceCount, std::vector<Ref>());
 	g_art_origin.assign(g_art.size() * 2, 0.0f);
+	g_art_look.assign(g_art.size() * 4, 0.0f);
 
 	for (int k = 0; k < partCount; k++)
 		for (size_t a = 0; a < g_art.size(); a++)
@@ -630,6 +696,17 @@ bool HDDebrisBreakBegin(const HDDebrisPart* parts, int partCount,
 			g_break_stats.parts++;
 			g_art_origin[a * 2] = parts[k].originX;
 			g_art_origin[a * 2 + 1] = parts[k].originZ;
+
+			// The part's look, if the level handed one.
+			for (const Look& l : g_looks)
+				if (l.group == art.group && l.material == art.material &&
+					l.tint[3] > 0.0f)
+				{
+					for (int i = 0; i < 3; i++)
+						g_art_look[a * 4 + i] = l.tint[i] * l.gain;
+
+					g_art_look[a * 4 + 3] = 1.0f;
+				}
 
 			for (size_t t = 0; t < art.tris.size(); t++)
 			{
@@ -733,6 +810,24 @@ void HDDebrisNote(int slot, int face, long x, long y, long z)
 		fly.page = tri.page;
 		fly.kind = tri.kind;
 		fly.see = HDDebrisSeeThrough(tri.kind, art.param);
+
+		/* Its glass, by the page as the room draw reads it, and the
+		 * part's look on it. */
+		const int slot = tri.page >= 0 ? HDPageCacheSlotOf(tri.page) : -1;
+		const int alphaMin = HDPageCacheSlotAlphaMin(slot);
+
+		fly.glass = slot < 0 ? GLASS_NONE :
+			tri.kind == HD_DEBRIS_GLASS && fly.see < 1.0f &&
+			HDGlassFramePage(alphaMin,
+				HDPageCacheSlotCutoutPermille(slot)) ? GLASS_HALVES :
+			tri.kind == HD_DEBRIS_GLOW && (art.material & 0xFFu) == 14u &&
+			HDGlassWholePage(alphaMin) ? GLASS_WHOLE : GLASS_NONE;
+
+		for (int i = 0; i < 4; i++)
+			fly.look[i] = fly.glass != GLASS_NONE &&
+				ref.art * 4 + 3 < (int)g_art_look.size() ?
+				g_art_look[(size_t)ref.art * 4 + i] : 0.0f;
+
 		s.tris.push_back(fly);
 	}
 
@@ -796,12 +891,15 @@ void HDDebrisDraw(IDirect3DDevice9* device, const D3DMATRIX* projection,
 	};
 	const int* drawn = kinds[phase ? 1 : 0];
 
-	// One list of vertices per kind and page, in view space.
+	/* One list of vertices per kind and page, in view space - and per way
+	 * its glass is drawn and per look. */
 	struct Bucket
 	{
 		int kind;
 		int page;
 		float see;
+		int glass;
+		float look[4];
 		std::vector<Vertex> v;
 	};
 
@@ -820,7 +918,9 @@ void HDDebrisDraw(IDirect3DDevice9* device, const D3DMATRIX* projection,
 			Bucket* b = 0;
 
 			for (Bucket& o : buckets)
-				if (o.kind == t.kind && o.page == t.page && o.see == t.see)
+				if (o.kind == t.kind && o.page == t.page && o.see == t.see &&
+					o.glass == t.glass &&
+					!memcmp(o.look, t.look, sizeof(o.look)))
 				{
 					b = &o;
 					break;
@@ -833,6 +933,8 @@ void HDDebrisDraw(IDirect3DDevice9* device, const D3DMATRIX* projection,
 				b->kind = t.kind;
 				b->page = t.page;
 				b->see = t.see;
+				b->glass = t.glass;
+				memcpy(b->look, t.look, sizeof(b->look));
 			}
 
 			for (int k = 0; k < 3; k++)
@@ -976,29 +1078,50 @@ void HDDebrisDraw(IDirect3DDevice9* device, const D3DMATRIX* projection,
 
 			const bool glow = b.kind == HD_DEBRIS_GLOW;
 			const bool glass = b.kind == HD_DEBRIS_GLASS;
-			const float pass[4] =
-			{
-				b.kind == HD_DEBRIS_CUTOUT ? 0.5f : 0.0f,
-				glow ? 1.0f : 0.0f, 0.0f, glow ? 0.0f : 1.0f
-			};
 			const float spec[4] = { 0, 0, 0, b.see };
+			/* The glass as the room draw draws the classic's (see the enum
+			 * above): a frame with glass in it in two halves, its clear
+			 * texels first and drawn as before, then the rest added
+			 * (gPass.z 1, then -1, hd_room.hlsl); the additive run's glass
+			 * added whole (gPass.z -1). What is added takes the part's look
+			 * (gTint); every other draw a zero. */
+			const int halves = b.glass == GLASS_HALVES ? 2 : 1;
 
-			device->SetPixelShaderConstantF(4, pass, 1);
 			device->SetPixelShaderConstantF(19, spec, 1);
-			device->SetRenderState(D3DRS_ZWRITEENABLE,
-				glow || glass ? FALSE : TRUE);
-			device->SetRenderState(D3DRS_ALPHABLENDENABLE,
-				glow || glass ? TRUE : FALSE);
-			device->SetRenderState(D3DRS_SRCBLEND,
-				glow ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
-			device->SetRenderState(D3DRS_DESTBLEND,
-				glow ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
 			device->SetTexture(0, page);
-			device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
-				(UINT)(b.v.size() / 3), b.v.data(), sizeof(Vertex));
+
+			for (int h = 0; h < halves; h++)
+			{
+				const bool added = b.glass == GLASS_WHOLE || h == 1;
+				const float pass[4] =
+				{
+					b.kind == HD_DEBRIS_CUTOUT ? 0.5f : 0.0f,
+					glow ? 1.0f : 0.0f,
+					b.glass == GLASS_HALVES ? (h ? -1.0f : 1.0f) :
+						b.glass == GLASS_WHOLE ? -1.0f : 0.0f,
+					glow || added ? 0.0f : 1.0f
+				};
+
+				device->SetPixelShaderConstantF(4, pass, 1);
+				device->SetPixelShaderConstantF(37, added ? b.look : zero, 1);
+				device->SetRenderState(D3DRS_ZWRITEENABLE,
+					glow || glass ? FALSE : TRUE);
+				device->SetRenderState(D3DRS_ALPHABLENDENABLE,
+					glow || glass ? TRUE : FALSE);
+				device->SetRenderState(D3DRS_SRCBLEND,
+					glow || added ? D3DBLEND_ONE : D3DBLEND_SRCALPHA);
+				device->SetRenderState(D3DRS_DESTBLEND,
+					glow || added ? D3DBLEND_ONE : D3DBLEND_INVSRCALPHA);
+				device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+					(UINT)(b.v.size() / 3), b.v.data(), sizeof(Vertex));
+				g_frame_stats.calls++;
+			}
+
 			g_frame_stats.triangles += (int)(b.v.size() / 3);
-			g_frame_stats.calls++;
 		}
+
+	// The glass's hue goes back to none for the next bracket's draws.
+	device->SetPixelShaderConstantF(37, zero, 1);
 
 	device->SetVertexShader(keptVs);
 	device->SetPixelShader(keptPs);

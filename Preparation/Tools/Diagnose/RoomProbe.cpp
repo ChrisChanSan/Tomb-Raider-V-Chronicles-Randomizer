@@ -13455,6 +13455,21 @@ namespace probestatics
 		printf("-debris: the level's destructible parts %d, %d triangles, "
 			"read in %.1f ms\n", ls.parts, ls.triangles, ls.ms);
 
+		// Its glass pieces' look, as BuildGlassLooks hands it for the pair.
+		float tint[4], gain = 1.0f, band[3];
+		int glassFaces = 0;
+
+		if (GlassPieceLook(s, tint, &gain, band, &glassFaces))
+		{
+			for (const HDDebrisPart& part : parts)
+				HDDebrisPartLook(part.group, part.material, tint, gain);
+
+			printf("-debris: the glass pieces' look: %d classic glass faces, "
+				"band %.0f %.0f %.0f, tint %.3f %.3f %.3f %.0f, gain %.3f\n",
+				glassFaces, band[0], band[1], band[2], tint[0], tint[1],
+				tint[2], tint[3], gain);
+		}
+
 		// The room's ambient, which DrawDebris adds to a piece's colour.
 		unsigned int ambient = 0;
 		std::string ambientError;

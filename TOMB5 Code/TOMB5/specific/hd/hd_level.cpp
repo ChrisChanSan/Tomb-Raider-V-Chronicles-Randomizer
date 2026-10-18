@@ -5449,7 +5449,10 @@ static void GlassStaticLight(const MESH_DATA* data, short shade, int v,
  * room face whose texinfo has draw type 2, lit by its vertex colours, and
  * the faces of every placed static and of every moveable of one mesh at its
  * item (lit by its room's ambient) - handed to the room draw for the hue of
- * its glass (HDRenderGlassTint). */
+ * its glass (HDRenderGlassTint); and for every pair of a static and a
+ * destructible part, the look of the glass pieces the part breaks into: the
+ * hue and the band of the static's own faces the classic adds
+ * (HDDebrisPartLook). After HDDebrisLevelRead, which forgets the looks. */
 static void BuildGlassLooks()
 {
 	LARGE_INTEGER from, to, rate;
@@ -5561,13 +5564,62 @@ static void BuildGlassLooks()
 	while (HDRenderGlassTintInfo(candidates, &info))
 		candidates++;
 
+	// The glass pieces of every pair: the static's own faces' look.
+	int looks = 0;
+
+	for (size_t p = 0; p < g_destruct_pairs.size(); p++)
+	{
+		const HDStaticPair& pair = g_destruct_pairs[p];
+		const MESH_INFO* mesh = &room[pair.room].mesh[pair.mesh];
+		const MESH_DATA* data = (const MESH_DATA*)
+			meshes[static_objects[mesh->static_number].mesh_number];
+		int group = -1;
+		unsigned int material = 0;
+
+		if (!HDRenderDestructibleInfo(pair.piece, &group, &material, 0, 0))
+			continue;
+
+		std::vector<HDGlassFace> own;
+		unsigned int hist[256] = { 0 };
+
+		GlassMeshFaces(pages, data, mesh->x, mesh->y, mesh->z, mesh->y_rot,
+			[&](int v, float* rgb)
+			{
+				GlassStaticLight(data, mesh->shade, v, rgb);
+			}, own, hist);
+
+		float sum[3] = { 0.0f, 0.0f, 0.0f }, tint[4];
+
+		for (const HDGlassFace& g : own)
+			for (int i = 0; i < 3; i++)
+				sum[i] += g.colour[i] * g.area;
+
+		const float band[3] =
+		{
+			HDGlassBand(hist, 256, 0.1f), HDGlassBand(hist, 256, 0.5f),
+			HDGlassBand(hist, 256, 0.9f)
+		};
+		const float gain = HDGlassShardGain(band[1], band[2]);
+
+		HDGlassTintOf(sum, tint);
+		HDDebrisPartLook(group, material, tint, gain);
+		looks += tint[3] > 0.0f ? 1 : 0;
+
+		if (gLogEnabled)
+			Log("HDLOG level=%s glass pieces room=%d mesh=%d group=%d "
+				"material=0x%04x faces=%d tint=%.3f,%.3f,%.3f "
+				"band=%.0f,%.0f,%.0f gain=%.3f", g_stem, (int)pair.room,
+				(int)pair.mesh, group, material, (int)own.size(), tint[0],
+				tint[1], tint[2], band[0], band[1], band[2], gain);
+	}
+
 	QueryPerformanceCounter(&to);
 	QueryPerformanceFrequency(&rate);
 
 	if (gLogEnabled)
 		Log("HDLOG level=%s glass classic_faces=%d candidates=%d tinted=%d "
-			"ms=%.1f", g_stem, (int)faces.size(), candidates, tinted,
-			rate.QuadPart ?
+			"piece_looks=%d ms=%.1f", g_stem, (int)faces.size(), candidates,
+			tinted, looks, rate.QuadPart ?
 			(double)(to.QuadPart - from.QuadPart) * 1000.0 /
 			(double)rate.QuadPart : 0.0);
 }
@@ -5878,7 +5930,7 @@ static void BuildStaticTables()
 			d.parts, d.triangles, d.ms);
 	}
 
-	// The hue of the art's glass.
+	// The hue of the art's glass and the look of its pieces.
 	BuildGlassLooks();
 }
 

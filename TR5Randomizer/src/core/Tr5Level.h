@@ -490,6 +490,30 @@ public:
     bool    addViewWindow(int roomA, int sxA, int szA,
                           int roomB, int sxB, int szB, std::string& error);
 
+    // A view window along a run of border sectors, in BOTH directions, and
+    // nothing else: no floordata, no box word, no HD cut.
+    //
+    // For an opening the level's own geometry leaves open - neither room
+    // draws a face there - while no window describes it, so the portal walk
+    // never reaches the room behind it and the screen shows the clear
+    // colour. Such an opening lies in the air above a passage: Lara cannot
+    // pass it, and the floordata already runs through the stacked rooms'
+    // own links, so the sectors stay as they are. And since no face is
+    // opened, the Remaster's art there is right as it stands; a cut would
+    // only take away what stands in the opening.
+    //
+    // (sx,sz)..(sx2,sz2) is the run on roomA's border ring, one sector
+    // deep, and each room gets ONE record over it, the way Core writes the
+    // run of a wall. The height is wallWindow's over the run, the plane and
+    // the one-unit inset are addViewWindow's, and the corner order is
+    // copied from the level's first wall window that faces the same way.
+    //
+    // Repeatable: where both records already stand exactly so, nothing is
+    // written. Refused where either room has another window to the other
+    // on that plane.
+    bool    addSightWindow(int roomA, int sx, int sz, int sx2, int sz2,
+                           int roomB, std::string& error);
+
     // What a wall window has to describe, worked out from the
     // floordata instead of from the two height bytes.
     //
@@ -1038,6 +1062,12 @@ private:
     // window it just built and the window that was already there - so the
     // box comes out of one derivation whichever way the run got here.
     void hdMarkCutFromWindow(int room, int sx, int sz, int targetRoom);
+
+    // Appends one 32-byte view window to a room's portal list and moves
+    // everything the insertion moves (see the body), then reparses. The
+    // one splice behind addViewWindow and addSightWindow.
+    bool appendPortalRecord(int room, const std::vector<uint8_t>& rec,
+                            std::string& error);
 
     bool                 m_texOpen = false;
     bool                 m_texDirty = false;

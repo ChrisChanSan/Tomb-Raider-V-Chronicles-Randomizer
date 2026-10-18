@@ -170,6 +170,25 @@ int apply(Tr5Level& level, const std::string& levelName,
         warnings.push_back(buf);
     }
 
+    for (const TriggerOneShot& k : kTriggerOneShots)
+    {
+        if (!sameName(levelName, k.level)) continue;
+
+        std::string error;
+        std::vector<Tr5OneShotHit> hits;
+        if (level.setTriggerOneShot(k.room, k.kind, k.slot, hits, error))
+        {
+            ++applied;
+            continue;
+        }
+
+        char buf[400];
+        std::snprintf(buf, sizeof(buf),
+                      "LevelFix not applied (%s -> room %d): %s",
+                      k.reason, k.room, error.c_str());
+        warnings.push_back(buf);
+    }
+
     return applied;
 }
 

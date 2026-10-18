@@ -144,6 +144,19 @@ struct Tr5TriggerCmd
 };
 
 //----------------------------------------------------------------------------
+// One trigger setTriggerOneShot found: where it sits, the item its object
+// command names, and its setup word before and after. fileAt is the file
+// position of that word, so a byte comparison can name it.
+//----------------------------------------------------------------------------
+struct Tr5OneShotHit
+{
+    int      sx = 0, sz = 0;
+    int      item = 0;
+    size_t   fileAt = 0;
+    uint16_t before = 0, after = 0;
+};
+
+//----------------------------------------------------------------------------
 // The three rules for walking a floordata chain, kept as free functions
 // rather than duplicated by every reader - a copied bit layout is a
 // second chance to get it wrong. Each one names the engine line it was
@@ -446,6 +459,28 @@ public:
     // Both public wrappers above lead here - one walk, one truth.
     bool    editTriggerObject(int room, int sx, int sz, int item,
                               int newType, int newParam, std::string& error);
+
+    // Sets the one-shot bit (bit 8 of the setup word) on every trigger of
+    // this kind in this room that has an object command naming an item of
+    // this slot. The triggers are found by the data, not by sector.
+    //
+    // The word is written IN PLACE, the way musicTriggers patches a track:
+    // no chain is rebuilt, no index moves, the file keeps its size, and
+    // only the setup words' high bytes change. That is also why a chain
+    // that a sector OUTSIDE the room reads as well is refused - the bit
+    // would reach that sector too.
+    //
+    // What the bit does for an object command (_TestTriggers, control.cpp):
+    // the item it wakes gets IFL_INVISIBLE, and from then on the TO_OBJECT
+    // branch skips it for every trigger kind but SWITCH and the
+    // antitriggers. The item is woken once and never again by such a
+    // trigger.
+    //
+    // hits lists every trigger found, whether its bit was already set or
+    // not. false with error when none is found or a chain is shared.
+    bool    setTriggerOneShot(int room, int kind, int slot,
+                              std::vector<Tr5OneShotHit>& hits,
+                              std::string& error);
 
     // May a trigger be appended to this chain? Returns the obstacle or
     // nullptr. See the derivation in the implementation.

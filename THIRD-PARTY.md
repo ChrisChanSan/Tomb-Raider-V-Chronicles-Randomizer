@@ -3472,6 +3472,65 @@ carries the tables.
     OWN.
 342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
+343. **The fog bulbs as the level stores them** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`, `probefog::Take`; `MODIFICATIONS.md`, "Volumetric fog from the fog
+    bulbs") - a room header's `fogbulb` at +148 and `nFogBulbs` at +156, nine floats a
+    bulb (centre, radius, its square, den, colour 0..1), den halved in ANDREA2 and
+    ANDREA3 and mapped to (90 - den / 1024) x 0.8 + 0.2, at least 14, d = 1 / den, the
+    bulbs nearer the eye than 20,480, a bulb in a water room a sheet lies over left
+    out. CLASSIC (`global/types.h`, `ROOM_INFO` and `FOGBULB_INFO`; `drawroom.cpp`,
+    `aRoomInit` and `aBuildFogBulbList`; `hd_level.cpp`, `BulbUnderSheet`). DATA
+    (the fifteen classic `.TRC` files through the tool's own reader: 125 bulbs in ten
+    levels, d 0.0139 to 0.0140).
+344. **The fog's density, d x 1.5 x (1 - rho^2)** (`specific/hd/hd_fog.h`,
+    `HD_FOG_PEAK`, `HDFogSpan`, `HDFogColumn`; `hd_shader/hd_fog.hlsl`, `FogPS`) - zero
+    at the rim with no step, its column 2 r d (1 - b^2)^1.5 at distance b from the
+    centre, integrated exactly between the eye and the frame's depth. CLASSIC: the
+    chord times d (`drawroom.cpp`), whose most, 2 r d through the centre, the weight
+    1.5 matches. OWN: the shape, a free choice among the densities that leave the rim
+    with zero slope and hold the classic's most.
+345. **The veil, tau = column / 255 and T = exp(-tau)** (`hd_fog.h`, `HDFogTau`,
+    `HDFogTransmit`; `hd_fog.hlsl`) - the pixel dst T + colour (1 - T), the colour
+    the bulb's own. CLASSIC: the classic's 0..255 scale, the haze taken off the
+    colour and the bulb's colour times it added (`drawroom.cpp`,
+    `aRoomletTransformLight`). OWN: the exponential, under which 1 - T never exceeds
+    tau. PICTURE (RoomProbe at six eyes of ANDY3: the fog's added luma under the
+    haze's own most at each).
+346. **The breath** (`hd_fog.h`, `HD_FOG_BREATH`, `HD_FOG_CELL`, `HD_FOG_RISE`,
+    `HD_FOG_STEPS`, `HDFogHash`, `HDFogNoise`, `HDFogBreath`) - the density times
+    1 - 0.5 n, n a value noise of hashed lattice points over cells of half the bulb's
+    radius, anchored in the world, rising a quarter cell a second on the drawn clock,
+    the column taken in four pieces. OWN: the sky cloud's hash (`hd_sky.hlsl`,
+    `CloudHash`); the four numbers free choices, the breath only thinning.
+347. **The fog's place in the frame and the haze taken out** (`hd_render.cpp`, "the
+    fog bulbs' body": `fog_take`, `fog_note`, `fog_draw`; the call in
+    `HDRenderFrameEnd`) - one quad per bulb in view at the end of the bracket that
+    asks the rooms' additive pass; a drawn bulb's density uploaded as 0 (c40). OWN.
+    PICTURE (RoomProbe `-fogpass 0`: the haze out and no pass is the picture without
+    bulbs byte for byte at six eyes; `hd_fog` 0 the head's picture with the same
+    bulbs).
+348. **The frame's depth for the fog** (`hd_render.cpp`, `fog_take`) - the INTZ
+    texture the water binds (`HDRenderWaterDepthBind`) in a level that built sheets;
+    nothing without it. OWN; PLACE (`hd_level.cpp`'s water build binds it, RoomProbe's
+    `ShotBegin` for every picture).
+349. **A sphere's rectangle on the screen** (`hd_fog.h`, `HDFogBounds`) - per axis the
+    two planes through the eye that touch the sphere; the whole screen where the
+    sphere reaches the near plane, none off the screen or behind the eye. OWN
+    (geometry); ModernTest `fog_body`.
+350. **`hd_fog`, 1 by default** (`tomb5/tomb5.cpp`; `HDRenderFogSet`) - read at the
+    settings, absent and above 1 as 1. OWN. PICTURE (RoomProbe `-gpu 3 -gpuall` at
+    2,560 x 1,440, three processes per eye: 0.015 to 0.057 ms outside the bulbs,
+    0.281 ms with the eye inside one).
+351. **His reference picture's fog, as numbers, and the lumps of the mill**
+    (`MODIFICATIONS.md`, "Volumetric fog from the fog bulbs"; nothing in the code) -
+    the lumps' luma band, hue and edge; the lumps are the `.TRG`'s material 15 parts of
+    book 3273 in the additive pass. PICTURE (the owner's picture, measured and not
+    kept; RoomProbe `-calltrace all` and `-glow`). DATA (TrgProbe `-mat 15`).
+352. **RoomProbe's `-fogbulbs`, `-fogprofile`, `-hdfog` (`-fog 0|1`) and `-fogpass`,
+    and ModernTest's `fog_body`** (`Preparation/Tools/Diagnose/RoomProbe.cpp`,
+    namespace `probefog`; `ModernTest.cpp`) - the level's bulbs and the frame's, one
+    bulb's radial profile, the key, the haze out without the pass, the pass's GPU
+    time; the rule's pure functions checked. OWN, this project's tools.
 
 ## Credited, but not contained here
 

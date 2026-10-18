@@ -27660,6 +27660,190 @@ play. `S_DrawSparks`' line sparks take a negative colour past 0x5000, as before.
 `9aa1aa17` (the comments in the present tense, `SetupZRange` on `ZDepthCurve`) and
 `d56024cf` (the record's site table, parity, sparks and depth sweep).
 
+### Volumetric fog from the fog bulbs (#218)
+2026-10-19
+
+**What.** The level's fog bulbs are drawn as fog with a body of its own. Per bulb in view
+one quad over the sphere's rectangle on the screen, at the end of the bracket that asks
+the rooms' additive pass - the last HD pass of the frame, after the glass, the glows and
+the water, before the classic path's sprites and the HUD: each pixel's eye ray is cut by
+the sphere and by the frame's depth, the bulb's density is integrated along the piece
+that is left, and the pixel is veiled by it. A bulb the pass draws leaves the per-pixel
+haze of the room, model, glow and shadow receive shaders, so no bulb counts twice. The
+registry key `hd_fog` (1 by default) switches the pass; 0 draws every picture as before.
+New: `specific/hd/hd_fog.h` (the rule as pure functions) and `hd_shader/hd_fog.hlsl` with
+its `hd_fog_vs.inc` and `hd_fog_ps.inc`; RoomProbe `-fogbulbs`, `-fogprofile <bulb>`,
+`-hdfog 0|1` (or `-fog 0|1`) and `-fogpass 0`; ModernTest's group `fog_body`.
+
+**Why.** The owner, 2026-10-17 and 2026-10-18, with a picture of ANDY3's mill: "In Andy1
+haben wir die Nebelkugeln mal verbessert, die sind nicht perfekt, aber besser als die
+da. Alles um die Muehle muss noch volumetrischer Nebel werden." - in ANDY1 we once
+improved the fog bulbs; they are not perfect, but better than those there; everything
+around the mill must still become volumetric fog. The improvement he means is the fog
+bulb chord weighted with a `smoothstep` over its own range and the 45 degree cone taken
+out of the pixel shader ("The engine's own per-vertex lighting, as shader arithmetic").
+
+**Measured before any change.** The bulbs as the level stores them (RoomProbe
+`-fogbulbs`, the classic `.TRC`'s room headers: `fogbulb` at +148, `nFogBulbs` at +156,
+nine floats a bulb; `aRoomInit`'s density, halved first in ANDREA2 and ANDREA3):
+
+| Level | bulbs | rooms | radius | d | colours (0..255, count) | in water rooms | 2 r d most |
+|---|---:|---:|---|---|---|---:|---:|
+| ANDREA1 | 9 | 9 | 832..2,464 | 0.0139..0.0140 | 191,143,239 x4; 191,143,207 x2; three more | 7 | 68.5 |
+| ANDREA2 | 17 | 17 | 1,472..5,152 | 0.0139 | 207,255,223 x14; 191,255,223 x2; 143,255,191 | 16 | 143.3 |
+| ANDREA3 | 15 | 12 | 1,568..3,040 | 0.0139 | 255,191,143 x15 | 0 | 84.6 |
+| ANDY1 | 15 | 14 | 1,920 | 0.0140 | 136,168,148 x14; 40,68,48 | 0 | 53.9 |
+| ANDY2 | 9 | 9 | 1,536..1,792 | 0.0140 | 136,167,148 x9 | 0 | 50.1 |
+| ANDY3 | 14 | 6 | 1,312..2,336 | 0.0139..0.0140 | 134,168,148 x14 | 0 | 65.3 |
+| RICH1 | 10 | 10 | 2,016..3,040 | 0.0140 | 223,223,223 x4; 188,32,84 x3; three more | 0 | 85.2 |
+| RICH2 | 15 | 15 | 1,504..2,560 | 0.0139..0.0140 | 212,204,168 x9; six more | 0 | 71.4 |
+| RICH3 | 4 | 4 | 1,760..3,072 | 0.0140 | 204,152,0 x4 | 0 | 85.8 |
+| TITLE | 17 | 14 | 1,568..4,000 | 0.0140 | 152,152,152 x13; 220,164,88 x4 | 0 | 111.8 |
+
+JOBY2 to JOBY5 and RICHCUT2 hold none. The density is about 1/72 in every level; the
+classic's most for a bulb, the chord through its centre times d, is 2 r d (0..255).
+ANDY3's mill holds bulbs 7 to 11 of room 105 (radius 1,312, 256 units over the floor for
+three of them), the river below the mill-wheel house bulbs 1 and 2 of room 34.
+
+His picture is the river under the mill (an eye of this round's, 44000, 4500, 44500,
+looking at 40000, 8192, 48000, room 105, matches it), and what it shows as fog lumps is
+not the bulbs: the two mottled lumps are `.TRG` art, material 15 parts of the additive
+pass whose book is pages 3273 to 3286 (14 pages, 0.06 s; groups 10, 11, 17, 21, 34, 41,
+42, 45, 64, 84, 101, 119 and five more; RoomProbe `-calltrace all` and `-glow` there,
+TrgProbe `-mat 15`); ANDY1 and ANDY2 carry the same book. The bulbs' haze at the same
+eye adds at most 19.9 of 255 in luma, as discs with an outline on the surfaces behind.
+
+Today's haze at six eyes (RoomProbe at 1,280 x 720 on the visibility path with
+`-hdwater 1 -sky -time 3`, the head's tool with the frame's bulbs against it without;
+E1, E2, E3 are CAMLOG eyes of his ANDY3 visit, ticks 5,639, 5,710 and 5,400; the mill eye
+of the room art's round 13; M1 his picture's place; I8 an eye inside bulb 8, which his
+logs never stand in):
+
+| Eye | bulbs the pass takes | pixels | luma most / least | hue, chroma of the mean added colour |
+|---|---|---:|---|---|
+| E1 (room 35) | 2 | 64,197 | 16.2 / -0.6 | 186, 4.1 |
+| E2 (room 88) | 2 | 63,059 | 13.6 / -1.1 | 184, 3.5 |
+| E3 (room 38) | 2 | 27,930 | 18.5 / -0.5 | 173, 3.5 |
+| round 13's mill eye | 6 | 4,495 | 28.2 / -4.0 | 191, 5.1 |
+| M1 | 4 | 163,202 | 19.9 / -33.9 | 180, 3.1 |
+| I8 (inside bulb 8) | 4 | 349,547 | 13.9 / -23.6 | 166, 2.1 |
+
+The room, model and glow shaders and the shadow receive carry the haze (`BulbIntensity`);
+the water sheets do not. The profile from the centre to the rim (`-fogprofile 8`, a ray
+past a bulb onto a far surface): the classic chord's intensity and the shaders' haze are
+the same to b 0.94 (b the ray's distance from the centre over the radius) and fall from
+90 per cent at b 0.45 to 11.4 of 255 at b 0.95 and nothing at b 1 - the rim is a step
+of a tenth of the centre's value over the last twentieth of the radius. RoomProbe's
+`-classiconly` draws the classic faces flat, without bulbs; the classic haze is the
+chord formula itself, which the shaders' haze equals in the core, so each eye's measured
+most is the band's top. His reference picture, as numbers: its lumps' luma 39 to 127
+(5th and 95th percentile, median 71) over a surround of 21 to 24, hue 126, chroma 15;
+the smoothed luma rises from 10 to 90 per cent of its step over 44 to 52 pixels across a
+lump's edge at 2,560.
+
+**The rule from the data** (`hd_fog.h`). The density at a point inside the sphere is
+d x 1.5 x (1 - rho^2), rho the distance from the centre over the radius - the level's d,
+centre and radius alone. 1.5 makes the column through the centre 2 r d, the classic's
+own most, so the bulb holds no more fog along its densest line than the classic draws
+there; the column at distance b from the centre is 2 r d (1 - b^2)^1.5, which leaves the
+rim with zero slope. The column is integrated exactly along the eye ray between the eye
+(or the sphere's near side) and the frame's depth (or the far side): a surface inside the
+bulb is veiled by the fog in front of it alone, the sky behind a bulb by all of it. tau
+is the column over 255, the classic's own scale, and the pixel becomes dst T + colour
+(1 - T), T = exp(-tau), the colour the bulb's own; 1 - T never exceeds tau, so the fog
+adds no more light than the classic's haze at the same column. The breath: the density
+times 1 - 0.5 n, n a value noise of hashed lattice points (the sky cloud's hash) over
+cells of half the bulb's radius, anchored in the world and rising a quarter cell a
+second on the drawn clock (still with `hd_motion` 0); the column is taken in four equal
+pieces, each exact for the smooth density and weighted with the breath at its middle.
+The same rule in every level; the levels differ by their bulbs' numbers alone.
+
+**After.** The same six eyes, this round's tool against the head's without bulbs:
+
+| Eye | quads | fog pixels | luma most / least (haze) | hue, chroma | `-fogpass 0` = no bulbs | `hd_fog` 0 = head |
+|---|---:|---:|---|---|---|---|
+| E1 | 2 | 58,662 | 12.9 / -2.2 (16.2) | 137, 1.0 | yes | yes |
+| E2 | 2 | 55,951 | 12.2 / -1.6 (13.6) | 126, 0.6 | yes | yes |
+| E3 | 2 | 26,309 | 14.6 / -0.7 (18.5) | 130, 0.9 | yes | yes |
+| round 13's mill eye | 6 | 5,167 | 15.7 / -0.4 (28.2) | 159, 3.9 | yes | yes |
+| M1 | 4 | 152,385 | 15.9 / -1.3 (19.9) | 149, 1.3 | yes | yes |
+| I8 | 4 | 921,586 | 10.9 / -2.9 (13.9) | 123, 4.8 | yes | yes |
+
+The luma stays under the haze's own top at every eye; the hue moves from the haze's
+cyan (the darkened texel against the added colour) to the bulbs' own green, 145, and the
+reference's 126. The profile (`-fogprofile 8`): the fog over black falls from 90 per
+cent at b 0.275 to 10 per cent at b 0.90 and reaches 1.1 of 255 at b 0.95, where the
+haze stands at 11.0 - no rim; a bulb 400 pixels in radius on the screen falls over 250
+of them, against the reference's 22 to 26 at the same size. I8 changes
+the whole screen, the eye standing in the fog. The double count is ruled out by the
+pictures: `-fogpass 0` takes the drawn bulbs' haze out and leaves the pass out, and its
+picture is the picture without bulbs byte for byte at all six eyes.
+
+**The cost** (`hd_fog` 1 the default). RoomProbe at 2,560 x 1,440, three processes per
+eye, each `-gpu 3 -gpuall` with the fog's pass between timestamps of its own, NVIDIA
+GeForce RTX 5080: E1 0.029 to 0.031 ms, E2 0.025 to 0.026, E3 0.015, round 13's mill
+eye 0.020, M1 0.057 to 0.058, I8 0.281 to 0.284 (four quads, three over the whole
+screen); no bulb on the screen, no quad and no draw. Under 1 ms at every eye, so 1.
+
+**Decisions.** The haze of a drawn bulb is taken out, not kept as the fog's far term: the
+haze is the same bulb's column on the surface behind it, so kept it would veil that
+surface twice, and the pass's integral to the depth already holds what the haze held -
+its density goes up as 0, which takes it out of every `BulbIntensity` to the bit. The
+pass needs the frame's depth: the INTZ texture the water binds in a level that built
+sheets. RoomProbe binds it for every picture, so the pass asks the sheets as well and the
+tool draws it where the game does. The pass is drawn at the end of the bracket that asks
+the additive pass, the frame's last HD pass (the glow bracket in the game, RoomProbe's
+one bracket): the glass, the glows, the art's additive lumps and the water surface lie
+under the fog, not over it. The breath's numbers - 0.5 of the density, half a radius a
+cell, a quarter cell a second, four pieces - are free choices: the breath only thins, so
+the band holds whatever they are. The room's light is not in the fog's colour: the frame
+hands the renderer no room for a bulb (Left). A bulb under a sheet, or with the eye under
+water, stays as `hd_level.cpp` hands it: not in the frame.
+
+**Checked.** The nine scripts `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
+`bit` and `blips` build with exit 0; ModernTest 15,848 checks (19 new in `fog_body`: the
+whole column 4/3 and its veil the classic's 2 r d, the column at b 0.5 and 0.9, the rim
+under a thousandth at b 0.999, a ray past the sphere and a sphere behind the eye, a
+surface at the centre and one in front, the eye at the centre, 1 - T under tau, the hash
+in 0..1 folding at 64, the breath's band and its rise, the ray's tau with and without
+the breath, and the rectangle ahead, behind, over the near plane and beside the frame),
+MenuTest 44,754, InterpTest 729, LipsTest 299 with the `.OBJ` folder and 272 without
+(the cutseq file named by hand, the worktree having no game folder), 0 failed each.
+The parity, the head's tool (`d0bf4f7b`) against this round's at 960 x 540, round
+209's sets with `-surfacealways`. With no bulb, the tools' default, every picture is the
+head's: the six classic views and JOBY4's 229 eye (`hd_build` 0, `-classiconly`) 7 of
+7, the census eyes 15 of 15 with `hd_water` 0 and 15 of 15 with 1, the fifteen parity
+cameras 15 of 15 each, the six HD views 6 of 6 each. With the frame's own bulbs
+(`-fogbulbs`, handed to the head as `-bulb`) and `hd_fog` 0 every picture is the head's
+(37 of 37 that hold bulbs). With `hd_fog` 1 every picture with `hd_water` 0 is the
+head's (26 of 26: no sheets, no pass); with `hd_water` 1 the fifteen cameras hold no bulb
+the frame takes (ANDREA2's lie under sheets), the census eyes change in 2 of 9 - ANDY3
+695 pixels (bulbs 1 and 2), RICH3 5,692 (three quads) - while the pass drew quads in 3
+more that change no pixel (ANDREA1, ANDY1, RICH2: the rays meet a surface before the
+sphere) and none in the other 4 (no bulb on the screen, no quad), and the HD views
+change in ANDY3 17 (189,018 pixels, two quads) and ANDY3 34 (96,098, two quads). JOBY2
+to JOBY5 and RICHCUT2, the levels without bulbs: every picture of every set the head's.
+At the six eyes no pixel the fog changes lies outside a sphere.
+
+**Left.** In ANDREA3, RICH1 and TITLE (no water square) and with `hd_water` 0 the engine
+binds no depth texture and the bulbs keep the haze; binding the INTZ texture for a level
+with bulbs is a line in `hd_level.cpp`'s water build, outside this round's files. A room
+the HD path leaves classic keeps the classic path's per-vertex haze and takes the pass
+over it. `hd_debris.h` uploads the frame's bulbs for the broken pieces with their own
+density, so a piece inside a drawn bulb takes the haze and the pass (the glass round's
+file). The marble and wet floors' mirrors draw their rooms with the drawn bulbs' haze
+out and no pass in the mirror (the marble round's region). The room's light in the fog's
+colour needs the bulb's room, which `FillFrameLighting` (`hd_level.cpp`) does not hand
+over. The art's own fog lumps of his picture (book 3273) are drawn as before; whether
+they give way where a bulb's fog stands is a rule on `.TRG` parts in `draw_pass`, the
+owner's question. A log line for the pass belongs to `hd_level.cpp`'s frame line. Two
+lines stand outside the fog's own block in `hd_render.cpp`: the note in
+`HDRenderRoomMask` that makes the pass due and places the breath, and the shaders'
+release in `HDRenderShutdown`.
+
+**Commits.** `49e6714a` (the rule and the pass), `25c1fa73` (the key), `72a46acd`
+(RoomProbe's switches and ModernTest's group) and the record.
+
 ## 3. Randomizer changes since Beta 1.0
 
 The randomizer itself - `TR5Randomizer/`, the CLI `Randomize.exe` and the GUI
@@ -27880,6 +28064,7 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #213 | The build from a stranger's checkout (#213) |
 | #215 | The speaking heads of the cutscenes on the HD path (#215) |
 | #217 | The far plane (#217) |
+| #218 | Volumetric fog from the fog bulbs (#218) |
 | #220 | The gamma row (#220) |
 | #221 | The number beside every slider (#221) |
 | #222 | The pieces of a broken static in HD (#222) |

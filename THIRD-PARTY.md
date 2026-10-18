@@ -2867,6 +2867,62 @@ carries the tables.
     found through the engine's own resolvers: 74 parts, the clear texels
     on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
     16073, RICH2's 3309 and RICH3's 10084.
+275. **The marble mirror's plane in its clip** (`hd_render.cpp`,
+    `kMarbleClipOver` 4, now a number of its own, and `HDRenderMarbleDraw`) -
+    the reflection in the plane 4 units over the floor where the clip
+    lies, not in the floor. OWN, the rule; DATA: RoomProbe `-marblevoid`
+    at 51 eyes (the owner's 15, round 2's 28 and 8), the floor that shows
+    none of the mirrored rooms 296,133 pixels before and 274,108 after,
+    the strip at the walls' foot gone (RICH2 4582 350 to 2, W46 901 to 4,
+    A174 1,260 to 0); what is left is floor whose mirrored room is not
+    drawn (entry 280) or lies out of the target.
+276. **RoomProbe's edge measurement** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`, `-marblevoid`, `-marbleplanefloor`) - OWN, this
+    project's tool on the player's files (DATA).
+277. **The sloped marble faces in planes of their own** (`hd_render.cpp`,
+    `marble_build`, `kMarbleTiltKey`, `kMarbleTiltSame` 0.001;
+    `hd_marble_math.h`, `HDMarbleTiltPlane`, `HDMarbleTiltSame`) - OWN, the
+    rule; DATA: RoomProbe `-marblerise` over the fifteen levels, the faces
+    of the mirror's pages either within a unit of their plane or rising
+    15 units and more, nothing between: RICH2 477, RICH3 54, ANDREA2 30,
+    RICHCUT2 27, ANDREA3 4, all slopes of 0.044 to 0.252 (1 in 22 to 1 in
+    4); a slope's faces joined at the floors' 2 units (`kMarbleHeightJoin`).
+278. **The marble planes scored by what shows** (`hd_render.cpp`,
+    `marble_seen_ask`, `marble_seen_read`; `hd_marble_math.h`,
+    `HDMarbleSeenCover`) - an occlusion query a plane against the frame's
+    depth, read the next frame. OWN, the rule; DATA: ANDREA1's church at
+    tick 283 of the owner's 2026-10-17 session, -5592 and -6120 drawn with
+    0 and 1 pixels shown, -6144 left with 34,057; over 52 ticks of the
+    church the ticks with under 1,000 pixels of reflection 23 before, 4
+    after.
+279. **The marble places and their fade** (`hd_marble_math.h`,
+    `HDMarbleSlotsStep`, `HD_MARBLE_HOLD` 0.5; `hd_render.cpp`,
+    `kMarbleFadeStep` 1/8) - OWN, the rule and both numbers; DATA: the
+    stair walk of RICH2 room 45 (ticks 4855 to 4953 of the owner's
+    session, steps 0, -256, -512, -768), a set change 20,387 pixels apart
+    in one frame before, at most 605 pixels a frame after (one eighth of
+    gain, pixels more than 8 of 255 apart), at most 5,863 a tick of two
+    frames; the hold at half the best outside, as round 2's simulated hold
+    asked twice (entry 263), for the fade to settle on.
+280. **The rooms over a polished floor in its mirror** (`hd_render.cpp`,
+    `HDRenderMarbleOver`, `marble_replay_over`; `hd_level.cpp`, the level's
+    ceiling portals) - OWN, the rule; DATA: ANDREA1's church, rooms 157 and
+    186 over room 165 out of the frame's list at ticks 247 to 275 of the
+    owner's session, their reflection (the church's upper part, 2,560 to
+    4,352 units over the floor) 17,544 pixels at tick 263; a portal's
+    normal pointing into its room (TR5's room data), so down out of a
+    ceiling.
+281. **The models' warm-up for the marble mirror** (`hd_model.cpp`,
+    `HDModelMirrorWarmUp`; `hd_level.cpp`, after `HDObjectLevelBuild`) -
+    OWN, after this project's room warm-up (entry 265); DATA: the first
+    mirrored draw with Lara in RICH2's corridor 103.6 to 111.6 ms before,
+    0.6 to 2.1 ms after, the warm-up 58 to 108 ms in a fresh process (285
+    once, a driver's first run), RoomProbe `-wetlara`.
+282. **RoomProbe's slope, place and model measurements** (`Preparation/
+    Tools/Diagnose/RoomProbe.cpp`, `-marblerise`, `-marbleslots`,
+    `-marblesim`, the `marble:` line's slopes and over counts, the
+    `marbleplane:` line's seen and gain, the models' warm-up line) - OWN,
+    this project's tool on the player's files (DATA).
 
 ## Credited, but not contained here
 

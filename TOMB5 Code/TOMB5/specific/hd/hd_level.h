@@ -344,6 +344,18 @@ bool HDWaterSpray(long x, long y, long z, long strength);
 struct ITEM_INFO;
 bool HDWaterTank(const ITEM_INFO* item);
 
+/* The destructible parts of the art a breaking static is drawn by, for
+ * the pieces it breaks into (hd_debris.h; ShatterObject, game\debris.cpp,
+ * asks before it walks the faces): the first `max` into `out`, each with
+ * its group, its material and that room's origin. Returns how many there
+ * are - 0 with the world drawn classic or for a static with none, whose
+ * pieces stay classic. `listRoom` and `listIndex`, when given, take the
+ * room whose MESH_INFO list holds the static now and its place there. */
+struct MESH_INFO;
+struct HDDebrisPart;
+int HDStaticBreakParts(const MESH_INFO* mesh, HDDebrisPart* out, int max,
+	int* listRoom, int* listIndex);
+
 /* Whether a frame draws a static mesh the classic way. Worked out once at
  * level load against the .TRG's own geometry (hd_level.cpp,
  * BuildStaticTables; the rule: hd_cover.h, HDStaticAnswer);

@@ -85,6 +85,8 @@
  * a face, whether it covers the room, and which of the two a frame draws -
  * pure again (stand_* below). */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_cover.h"
+// A broken static's pieces in HD: the face rule and the blend.
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_debris_rules.h"
 // The visibility path's tables (hd_vis.cpp is linked by bmt.bat).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_vis.h"
 #include "../../../TOMB5 Code/TOMB5/vendor/trforge/src/trf_remaster/Trg.h"
@@ -24804,6 +24806,237 @@ static void level_key()
 		"level key: no key is the same as nothing", 0, 0);
 }
 
+/* debris_pieces: the pieces of a broken static in HD (hd_debris_rules.h).
+ * A triangle of the static's art goes with the classic face nearest its
+ * centroid, a place's coincident faces share it by a hash of its number,
+ * and its run gives the blend. The faces below are ANDREA2's window as the
+ * level holds it: flat in the plane x 1024 of room 132, each quad twice
+ * (the pane's two sides), its art 51 units deep around that plane. */
+static HDDebrisFace DebrisQuad(float x, float y0, float z0, float y1,
+	float z1, bool back)
+{
+	HDDebrisFace f;
+	const float c[4][3] =
+	{
+		{ x, y0, z0 }, { x, y0, z1 }, { x, y1, z1 }, { x, y1, z0 }
+	};
+
+	f.corners = 4;
+
+	for (int k = 0; k < 4; k++)
+		for (int a = 0; a < 3; a++)
+			f.corner[k][a] = c[back ? 3 - k : k][a];
+
+	return f;
+}
+
+static void debris_pieces()
+{
+	printf("the broken static's pieces: the face rule and the blend\n");
+
+	/* A face of the breaking mesh as the break walks them: the triangles,
+	 * then the quads, the corners the turned vertices at the static's place;
+	 * a corner past the vertices turned, or past 256, leaves none. */
+	{
+		const short gt3[5] = { 0, 1, 2, 7, 0 };
+		const short gt4[12] = { 0, 1, 2, 3, 9, 0, 3, 2, 1, 256, 9, 0 };
+		static short rot[257 * 3];
+		HDDebrisFace f;
+
+		for (int v = 0; v < 257; v++)
+		{
+			rot[v * 3] = (short)v;
+			rot[v * 3 + 1] = (short)(-2 * v);
+			rot[v * 3 + 2] = (short)(3 * v);
+		}
+
+		HDDebrisMeshFace(gt3, 1, gt4, 0, rot, 4, 1000, 2000, 3000, &f);
+		ok(f.corners == 3 && f.corner[2][0] == 1002.0f &&
+			f.corner[2][1] == 1996.0f && f.corner[2][2] == 3006.0f,
+			"debris: face 0 is the triangle, its corners at the place",
+			f.corners, 3);
+		HDDebrisMeshFace(gt3, 1, gt4, 1, rot, 4, 1000, 2000, 3000, &f);
+		ok(f.corners == 4 && f.corner[3][0] == 1003.0f &&
+			f.corner[3][2] == 3009.0f,
+			"debris: face 1 is the first quad", f.corners, 4);
+		HDDebrisMeshFace(gt3, 1, gt4, 1, rot, 3, 1000, 2000, 3000, &f);
+		ok(f.corners == 0, "debris: a corner past the vertices turned",
+			f.corners, 0);
+		HDDebrisMeshFace(gt3, 1, gt4, 2, rot, 257, 0, 0, 0, &f);
+		ok(f.corners == 0, "debris: a corner past the 256 the break turns",
+			f.corners, 0);
+	}
+
+	// The distance: over the middle, past a corner, beside an edge.
+	{
+		const float a[3] = { 0, 0, 0 }, b[3] = { 100, 0, 0 };
+		const float c[3] = { 0, 0, 100 };
+		const float over[3] = { 20, -26, 20 }, past[3] = { -30, 0, -40 };
+		const float side[3] = { 50, 0, -10 };
+
+		ok(fabsf(HDDebrisPointTriangle(over, a, b, c) - 26.0f) < 0.001f,
+			"debris: 26 units over a face is 26 off it",
+			(long)HDDebrisPointTriangle(over, a, b, c), 26);
+		ok(fabsf(HDDebrisPointTriangle(past, a, b, c) - 50.0f) < 0.001f,
+			"debris: past a corner the corner is nearest",
+			(long)HDDebrisPointTriangle(past, a, b, c), 50);
+		ok(fabsf(HDDebrisPointTriangle(side, a, b, c) - 10.0f) < 0.001f,
+			"debris: beside an edge the edge is nearest",
+			(long)HDDebrisPointTriangle(side, a, b, c), 10);
+	}
+
+	// A quad by both its halves; a face with no corners is never nearest.
+	{
+		const HDDebrisFace q = DebrisQuad(1024, -4096, 2048, -3840, 2304,
+			false);
+		const float far[3] = { 1024, -3900, 2100 };
+		HDDebrisFace none = q;
+
+		none.corners = 0;
+		ok(HDDebrisFaceDistance(q, far) < 0.001f,
+			"debris: a point on a quad's second half lies on it",
+			(long)HDDebrisFaceDistance(q, far), 0);
+		ok(HDDebrisFaceDistance(none, far) > 1.0e37f,
+			"debris: a face past the 256 vertices has no distance", 0, 1);
+	}
+
+	// One place: the two sides of a pane, a neighbour, a triangle.
+	{
+		HDDebrisFace f[4];
+
+		f[0] = DebrisQuad(1024, -4096, 2048, -3840, 2304, false);
+		f[1] = DebrisQuad(1024, -3840, 2048, -3584, 2304, false);
+		f[2] = DebrisQuad(1024, -4096, 2048, -3840, 2304, true);
+		f[3] = f[0];
+		f[3].corners = 3;
+
+		int place[4];
+
+		HDDebrisPlaces(f, 4, place);
+		ok(HDDebrisSamePlace(f[0], f[2]),
+			"debris: a pane's back is its front's place", 0, 1);
+		ok(!HDDebrisSamePlace(f[0], f[1]),
+			"debris: the next pane is a place of its own", 1, 0);
+		ok(!HDDebrisSamePlace(f[0], f[3]),
+			"debris: a triangle is no quad's place", 1, 0);
+		ok(place[0] == 0 && place[1] == 1 && place[2] == 0 && place[3] == 3,
+			"debris: places 0 1 0 3", place[2] * 10 + place[3], 3);
+	}
+
+	// The hash: fixed, and a fair deal between two sides.
+	{
+		int side[2] = { 0, 0 };
+
+		for (unsigned int t = 0; t < 2146; t++)
+			side[HDDebrisDeal(t, 2)]++;
+
+		ok(HDDebrisHash(1) == HDDebrisHash(1) && HDDebrisHash(1) != 1u,
+			"debris: the hash is a function and moves its input", 0, 0);
+		ok(HDDebrisDeal(12345, 1) == 0,
+			"debris: a face alone takes every triangle",
+			HDDebrisDeal(12345, 1), 0);
+		ok(side[0] > 960 && side[1] > 960,
+			"debris: 2146 triangles dealt to two sides, both near half",
+			side[0], 1073);
+	}
+
+	/* The window: 8 by 8 panes, each twice, front then back. The art over
+	 * every pane lies on that pane's two faces, half and half; with the
+	 * boxes and the places worked out ahead the answers are the same. */
+	{
+		std::vector<HDDebrisFace> f;
+
+		for (int i = 0; i < 8; i++)
+			for (int k = 0; k < 8; k++)
+				for (int side = 0; side < 2; side++)
+					f.push_back(DebrisQuad(1024, -4096.0f + i * 256,
+						2048.0f + k * 256, -3840.0f + i * 256,
+						2304.0f + k * 256, side == 1));
+
+		const int n = (int)f.size();
+		std::vector<float> boxes((size_t)n * 6);
+		std::vector<int> place((size_t)n);
+
+		for (int i = 0; i < n; i++)
+			HDDebrisFaceBox(f[(size_t)i], &boxes[(size_t)i * 6]);
+
+		HDDebrisPlaces(f.data(), n, place.data());
+
+		int same = 0, onPane = 0, sides[2] = { 0, 0 }, tri = 0;
+
+		for (int i = 0; i < 8; i++)
+			for (int k = 0; k < 8; k++)
+				for (int j = 0; j < 9; j++, tri++)
+				{
+					const float c[3] = { 998.0f + (j % 3) * 25.5f,
+						-4096.0f + i * 256 + 16 + j * 25,
+						2048.0f + k * 256 + 200 - j * 20 };
+					const int plain = HDDebrisFaceOf(f.data(), n, c,
+						(unsigned int)tri);
+					const int quick = HDDebrisFaceOf(f.data(), n, c,
+						(unsigned int)tri, boxes.data(), place.data());
+
+					same += plain == quick;
+					onPane += plain / 2 == i * 8 + k;
+					sides[plain & 1]++;
+				}
+
+		ok(same == tri, "debris: the box cut and the places change no answer",
+			same, tri);
+		ok(onPane == tri, "debris: every triangle goes with its own pane",
+			onPane, tri);
+		ok(sides[0] > 240 && sides[1] > 240,
+			"debris: and the pane's two sides share its triangles", sides[0],
+			288);
+	}
+
+	// No reach: a triangle far from the window still finds its face.
+	{
+		HDDebrisFace f[2];
+
+		f[0] = DebrisQuad(1024, -4096, 2048, -3840, 2304, false);
+		f[1] = DebrisQuad(1024, -3840, 2048, -3584, 2304, false);
+
+		const float c[3] = { 1175, -3700, 2100 };
+
+		ok(HDDebrisFaceOf(f, 2, c, 0) == 1,
+			"debris: 151 units off the window, the nearest face takes it",
+			HDDebrisFaceOf(f, 2, c, 0), 1);
+		ok(HDDebrisFaceOf(f, 0, c, 0) == -1, "debris: no face, no answer",
+			HDDebrisFaceOf(f, 0, c, 0), -1);
+	}
+
+	/* The blend, as the room draw reads a destructible part's runs: ANDREA2's
+	 * grid 0x800e in the alpha run at param[1] 0.1, ANDREA1's frame 0x8000
+	 * opaque and its pane 0x800e additive. */
+	{
+		const float grid[4] = { 2.0f, 0.1f, 0.0f, 0.0f };
+		const float none[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+		const float over[4] = { 0.0f, 1.5f, 0.0f, 0.0f };
+
+		ok(HDDebrisKindOf(0x8000u, 0) == HD_DEBRIS_SOLID,
+			"debris: an opaque run is solid", HDDebrisKindOf(0x8000u, 0),
+			HD_DEBRIS_SOLID);
+		ok(HDDebrisKindOf(0x800Eu, 1) == HD_DEBRIS_GLASS,
+			"debris: material 14's alpha run is glass",
+			HDDebrisKindOf(0x800Eu, 1), HD_DEBRIS_GLASS);
+		ok(HDDebrisKindOf(0x8000u, 1) == HD_DEBRIS_CUTOUT,
+			"debris: any other alpha run is cut", HDDebrisKindOf(0x8000u, 1),
+			HD_DEBRIS_CUTOUT);
+		ok(HDDebrisKindOf(0x800Eu, 2) == HD_DEBRIS_GLOW,
+			"debris: an additive run is a glow", HDDebrisKindOf(0x800Eu, 2),
+			HD_DEBRIS_GLOW);
+		ok(HDDebrisSeeThrough(HD_DEBRIS_GLASS, grid) == 0.1f,
+			"debris: the grid's glass at its 0.1",
+			(long)(HDDebrisSeeThrough(HD_DEBRIS_GLASS, grid) * 1000), 100);
+		ok(HDDebrisSeeThrough(HD_DEBRIS_GLASS, none) == 1.0f &&
+			HDDebrisSeeThrough(HD_DEBRIS_GLASS, over) == 1.0f,
+			"debris: an opacity outside (0, 1] is the page's own", 0, 0);
+		ok(HDDebrisSeeThrough(HD_DEBRIS_SOLID, grid) == 1.0f,
+			"debris: a solid piece is whole", 0, 0);
+	}
+}
+
 /* The far plane and the depth curve (specific\zrange_math.h): the plane's
  * number and its reason, the curve on ZFAR_SHIPPED, the depth buffer's
  * step along it, the rain's tint. */
@@ -25084,6 +25317,7 @@ int main()
 	marble_counts();
 	marble_over();
 	marble_slopes();
+	debris_pieces();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

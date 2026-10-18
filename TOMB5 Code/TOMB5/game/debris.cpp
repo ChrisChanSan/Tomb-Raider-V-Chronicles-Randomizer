@@ -1,3 +1,15 @@
+/*
+ * Modified 2026 by ChrisChanSan.
+ *
+ * Part of the TOMB5 native Windows 11 port (Direct3D 9 / XAudio2) and of the
+ * TR5 Randomizer project. The individual changes are recorded in the git
+ * history of this source tree.
+ *
+ * TOMB5 is free software: you can redistribute it and/or modify it under the
+ * terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 3 of the License, or (at your option) any later
+ * version. See the LICENSE file at the root of this source tree.
+ */
 #include "../tomb5/pch.h"
 #include "debris.h"
 #include "../specific/function_stubs.h"
@@ -5,6 +17,9 @@
 #include "../specific/3dmath.h"
 #include "control.h"
 #include "draw.h"
+#include "../specific/hd/hd_level.h"	// HDStaticBreakParts - the art
+#include "../specific/hd/hd_debris.h"	// HDDebrisNote - the pieces in HD
+#include <vector>
 
 short DebrisFlags;
 static MESH_DATA* DebrisMesh;
@@ -13,6 +28,63 @@ static long DebrisMeshC2;
 static long DebrisMeshC3;
 static long DebrisMeshAmbient;
 static long DebrisMeshFlags;
+/* The face of the mesh the next piece is made of, in the order the break
+ * walks them (the triangles, then the quads), for its look in HD; -1 for a
+ * piece of no static's break. Read only by HDDebrisNote. */
+static long DebrisMeshFace = -1;
+// The open HD break's static: the room whose list holds it, its place there.
+static int DebrisBreakRoom = -1;
+static int DebrisBreakMesh = -1;
+
+/* A static's break in HD (hd_debris.h): the parts of the art the static
+ * pairs with (hd_level.cpp) and the mesh's faces at the static's place, in
+ * the order the walk below takes them. It reads the turned vertices only:
+ * the debris array, the random numbers and the static stay as they are.
+ * No break opens with no part - the world drawn classic, a static with
+ * none, an item's break - and every piece is drawn the classic way. */
+static void DebrisHDBreakOpen(MESH_INFO* StaticMesh, MESH_DATA* mesh,
+	short* RotVerts, long nVtx)
+{
+	int listRoom = -1, listIndex = -1;
+	const int n = StaticMesh ? HDStaticBreakParts(StaticMesh, 0, 0, 0, 0) : 0;
+
+	HDDebrisBreakEnd();
+	DebrisBreakRoom = -1;
+
+	if (n <= 0)
+		return;
+
+	std::vector<HDDebrisPart> parts((size_t)n);
+
+	HDStaticBreakParts(StaticMesh, parts.data(), n, &listRoom, &listIndex);
+	DebrisBreakRoom = listRoom;
+	DebrisBreakMesh = listIndex;
+	HDDebrisBreakMesh(parts.data(), n, mesh->gt3, mesh->ngt3, mesh->gt4,
+		mesh->ngt4, RotVerts, nVtx, StaticMesh->x, StaticMesh->y,
+		StaticMesh->z);
+}
+
+/* The end of the walk: the break's line for the log, then closed, so that
+ * no later piece takes its look. */
+static void DebrisHDBreakClose()
+{
+	HDDebrisBreakStats s;
+	HDDebrisLevelStats l;
+
+	HDDebrisBreakInfo(&s);
+	HDDebrisLevelInfo(&l);
+
+	if (gLogEnabled && DebrisBreakRoom >= 0)
+		Log("HDLOG debris break level=%s room=%d mesh=%d parts=%d faces=%d "
+			"places=%d tris=%d faces_with_art=%d pieces=%d pieces_with_art=%d "
+			"tris_flying=%d ms=%.2f", l.stem, DebrisBreakRoom,
+			DebrisBreakMesh, s.parts, s.faces, s.places, s.triangles,
+			s.facesWithArt, s.pieces, s.piecesWithArt, s.trianglesFlying,
+			s.ms);
+
+	DebrisBreakRoom = -1;
+	HDDebrisBreakEnd();
+}
 
 void TriggerDebris(GAME_VECTOR* pos, void* TextInfo, short* Offsets, long* Vels, short rgb)
 {
@@ -110,6 +182,9 @@ void TriggerDebris(GAME_VECTOR* pos, void* TextInfo, short* Offsets, long* Vels,
 	}
 
 	dptr->flags = DebrisMeshFlags;
+	// The piece's look in HD, beside the array; nothing above reads it.
+	HDDebrisNote(int(dptr - debris), int(DebrisMeshFace), dptr->x, dptr->y,
+		dptr->z);
 }
 
 long GetFreeDebris()
@@ -287,10 +362,15 @@ void ShatterObject(SHATTER_ITEM* shatter_item, MESH_INFO* StaticMesh, short Num,
 	vec.room_number = RoomNumber;
 	DebrisMeshAmbient = room[RoomNumber].ambient;
 
+	/* A static's break in HD takes its pieces' looks from the static's art;
+	 * it reads the turned vertices and changes nothing here. */
+	DebrisHDBreakOpen(shatter_item ? 0 : StaticMesh, mesh, RotVerts, nVtx);
+
 	face_data = (ushort*)mesh->gt3;
 
 	while (nTris && Num)
 	{
+		DebrisMeshFace = mesh->ngt3 - nTris;
 		v1 = *face_data++;
 		v2 = *face_data++;
 		v3 = *face_data++;
@@ -368,6 +448,7 @@ void ShatterObject(SHATTER_ITEM* shatter_item, MESH_INFO* StaticMesh, short Num,
 
 	while (nQuads && Num)
 	{
+		DebrisMeshFace = mesh->ngt3 + mesh->ngt4 - nQuads;
 		v1 = *face_data++;
 		v2 = *face_data++;
 		face_data++;
@@ -441,4 +522,7 @@ void ShatterObject(SHATTER_ITEM* shatter_item, MESH_INFO* StaticMesh, short Num,
 
 		nQuads--;
 	}
+
+	DebrisMeshFace = -1;
+	DebrisHDBreakClose();
 }

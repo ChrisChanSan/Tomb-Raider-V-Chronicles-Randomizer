@@ -32,6 +32,9 @@
 #include "hd_font.h"			// the HD font's texture goes with the device
 #include "hd_life.h"			// the water's life - floats, fish, drips
 #include "hd_spring.h"			// the springs - rings, bubbles, column
+// A broken static's pieces in HD; this file holds its definitions.
+#define HD_DEBRIS_BODY
+#include "hd_debris.h"
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
 #include "../output.h"			// gPresentMinTicks - the budget follows the present
@@ -5566,6 +5569,20 @@ static void BuildStaticTables()
 	HDRenderStaticPiecesUpload();
 	HDRenderSetStaticPlaces(0, 0);
 	std::vector<HDStaticPlace>().swap(g_static_places);
+
+	/* The destructible parts' own triangles, for the pieces their statics
+	 * break into (hd_debris.h): read only in a level where a static pairs
+	 * with one. */
+	HDDebrisLevelRead(g_destruct_pairs.empty() ? 0 : HDInstallRoot(), g_stem);
+
+	if (gLogEnabled && !g_destruct_pairs.empty())
+	{
+		HDDebrisLevelStats d;
+
+		HDDebrisLevelInfo(&d);
+		Log("HDLOG level=%s debris parts=%d tris=%d ms=%.1f", g_stem,
+			d.parts, d.triangles, d.ms);
+	}
 }
 
 /* Indexed through g_room_group: a flipmap swaps two ROOM_INFO records, their
@@ -5704,6 +5721,49 @@ static void UpdateDestructibles()
 
 		HDRenderDestructibleHide(pair.piece, (mesh->Flags & 1) == 0);
 	}
+}
+
+/* The parts of the art the static `mesh` breaks into (hd_level.h): every
+ * piece paired with this MESH_INFO, read where its list stands now as
+ * UpdateDestructibles reads it, with its group, material and origin. */
+int HDStaticBreakParts(const MESH_INFO* mesh, HDDebrisPart* out, int max,
+	int* listRoom, int* listIndex)
+{
+	int n = 0;
+
+	if (!mesh || !HDLevelActive())
+		return 0;
+
+	for (size_t i = 0; i < g_destruct_pairs.size(); i++)
+	{
+		const HDStaticPair& pair = g_destruct_pairs[i];
+		const int at = HDStaticListRoom(g_room_group, g_room_count, pair.room);
+		int group = -1;
+		unsigned int material = 0;
+
+		if (at < 0 || &room[at].mesh[pair.mesh] != mesh ||
+			!HDRenderDestructibleInfo(pair.piece, &group, &material, 0, 0) ||
+			group < 0 || group >= number_rooms)
+			continue;
+
+		if (out && n < max)
+		{
+			out[n].group = group;
+			out[n].material = material;
+			out[n].originX = (float)room[group].x;
+			out[n].originZ = (float)room[group].z;
+		}
+
+		if (listRoom)
+			*listRoom = at;
+
+		if (listIndex)
+			*listIndex = pair.mesh;
+
+		n++;
+	}
+
+	return n;
 }
 
 /* A fog bulb the level puts in a water room a sheet lies over
@@ -7594,7 +7654,11 @@ void HDLevelUnload()
 		g_static_art.clear();
 		g_static_first.clear();
 		g_destruct_pairs.clear();
+		HDDebrisLevelFree();
 	}
+
+	// The pieces' looks name slots of the debris array the load empties.
+	HDDebrisSlotsForget();
 
 	/* And so does the water surface table - a roomlet number and a face
 	 * number in the room that is being freed. */
@@ -7636,6 +7700,7 @@ void HDLevelDeviceLost()
 	ReleaseWaterFramePages();
 	HDObjectDeviceLost();
 	HDSpringDeviceLost();
+	HDDebrisRelease();		// the pieces' shaders and declaration
 
 	// The font atlas was made on this device too. Its match table survives;
 	// only the texture goes.
@@ -9595,6 +9660,11 @@ void HDFrameDraw()
 	ShadowModelsPass();
 	ShadowSecond();
 
+	/* A broken static's pieces in HD, solid and cut-out, last in the
+	 * bracket: the draw writes the shader constants it needs, and nothing
+	 * of this bracket draws after it. */
+	HDDebrisDraw(App.dx.lpD3DDevice, &projection, &frame, 0);
+
 	HDRenderFrameEnd();
 
 	// The glow phase is owing, and this is what the rooms cost so far -
@@ -9807,6 +9877,9 @@ void HDFrameDrawGlow()
 
 	DrawWaterCards();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
+
+	// The pieces' glass and glows, last in this bracket as well.
+	HDDebrisDraw(App.dx.lpD3DDevice, &projection, &frame, 1);
 
 	HDRenderFrameEnd();
 

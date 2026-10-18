@@ -1453,6 +1453,16 @@ see *Lara in HD* below for which of her stays classic and why.
   picture of it would go on standing after the game has broken it. The
   Remaster gives every such copy a number of its own, and the engine takes
   that copy out of the room when the game takes the object out of the level.
+- **A broken static throws pieces of its own HD art.** The game breaks a
+  window, a crate or a pane into flying triangles, one per face of its
+  classic mesh, and each used to carry that face's classic texture - the
+  gold bars and blue panes of ANDREA2's window flew off its HD grid. Now
+  every triangle of the static's HD copy goes with the classic face it lies
+  on, and a piece made of that face carries those triangles, drawn with the
+  room's own light and blend: a bar flies as the bar, a pane stays glass.
+  Where, how far, how many and for how long the pieces fly is the game's
+  own, unchanged. A static with no HD copy, and every break while the world
+  is drawn classic, throws the classic pieces as before.
 - **The statics the Remaster has no art for are drawn the classic way, and
   only those.** A room whose Remaster art covers only part of it would
   otherwise lose every lamp, crate and post standing in the rest. The engine
@@ -3341,6 +3351,16 @@ because the room is listed, and in-window draws the frame had no room for
 (always 0). `stand_behind=` after it counts the ranges of the second number
 that are drawn pushed back, because they reach onto the faces of a listed room
 that stays classic.
+
+`HDLOG level=<stem> debris parts=<n> tris=<n> ms=<ms>` follows in a level
+where a static pairs with a piece: the destructible parts read for the pieces
+a break throws, their triangles and the read's time. At each break of such a
+static, `HDLOG debris break level=... room=<r> mesh=<m> parts=... faces=...
+places=... tris=... faces_with_art=... pieces=... pieces_with_art=...
+tris_flying=... ms=...` says how its art went to its classic faces: the faces
+and the places they stand at, the triangles dealt and the faces that took
+any, the pieces made and those that carry art, the triangles in flight, and
+the deal's time.
 
 A randomized level adds two more room reasons and a block of its own. A room
 the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the

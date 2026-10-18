@@ -112,6 +112,16 @@ beside it, and says so when the two disagree.
   size words. Every other room, every byte in front of the rooms and
   behind them, every other level and every `.hdm` stay byte-identical -
   the entry records no HD cut.
+- **A trigger set to one-shot (LevelFix, `TriggerOneShot`).** Every run
+  on RICH2 sets the one-shot bit on the two floor-laser triggers of room
+  5, so RICH2 differs from a build without it on every seed and with no
+  switches at all: the same size, exactly two bytes, each the high byte
+  of a setup word, `3E00 -> 3F00` inside the chain words `8004 3E00
+  8022`. Measured at seed 380, plain and with `mix cross allsanity 8
+  weapons`: every other `.trc` and every `.hdm` byte-identical, and the
+  log one line longer (`LevelFix 1 fixes applied`). `FixCheck` on the
+  vanilla RICH2 gives the same two words at their source offsets and
+  `BYTES 2 of 4805655 differ`.
 - **The cyborg in the cross pool.** One more foreign kind to draw
   from, so a `cross` run places a different set. Byte-identity with a
   build lacking the cyborg is claimed when the two new rows are

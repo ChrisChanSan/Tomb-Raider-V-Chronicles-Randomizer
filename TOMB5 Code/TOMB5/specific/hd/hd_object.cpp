@@ -57,7 +57,8 @@
 #include "../../game/deltapak.h"		// GLOBAL_playing_cutseq, cutseq_num - the lips
 #include "../../game/gameflow.h"		// Gameflow - the language LIPLOG names
 #include "../drawroom.h"		// mesh_vtxbuf - the classic mesh's own box
-#include "hd_object_rules.h"		// the skeleton fit
+#include "../file.h"			// changes, ranges - the pocket's anim walk
+#include "hd_object_rules.h"		// the skeleton fit and the pocket
 
 #include <math.h>
 #include <stdio.h>
@@ -113,6 +114,9 @@ namespace
 		/* The skeleton fit's worst node, in classic units, or -1 when no
 		 * node could be measured (hd_object_rules.h). */
 		float fit;
+		/* 1 = the slot slides into a pocket and its items are drawn
+		 * one-sided (hd_object_rules.h, HDPocketSide). */
+		unsigned char pocket;
 		unsigned int covered;
 		/* The "this item shows nothing" line is written once per slot per
 		 * level and not thirty times a second. */
@@ -981,6 +985,53 @@ namespace
 		}
 
 		return HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, count);
+	}
+
+	/* Whether a slot slides into a pocket (hd_object_rules.h): the walk
+	 * over its animations, read out of anims[] - the frame pointer, the
+	 * rate in the interpolation's low byte and the keyframe's size in words
+	 * in its high byte, as GetFrames reads them - and the links out of the
+	 * jump and the state changes' ranges. */
+	bool pocket_of(int slot)
+	{
+		if (!anims || slot < 0 || slot >= NUMBER_OBJECTS ||
+			!objects[slot].loaded || objects[slot].anim_index < 0)
+			return false;
+
+		auto frames = [](int anim, const short** keyframes, int* keys,
+			int* size) -> bool
+		{
+			const ANIM_STRUCT& a = anims[anim];
+			const int rate = a.interpolation & 0xFF;
+
+			*keyframes = a.frame_ptr;
+			*size = (a.interpolation >> 8) & 0xFF;
+			*keys = rate > 0 && a.frame_end >= a.frame_base
+				? (a.frame_end - a.frame_base) / rate + 1 : 0;
+			return a.frame_ptr && *keys > 0;
+		};
+
+		auto links = [](int anim, int* out, int most) -> int
+		{
+			const ANIM_STRUCT& a = anims[anim];
+			int count = 0;
+
+			if (count < most)
+				out[count++] = a.jump_anim_num;
+
+			for (int c = 0; changes && ranges && c < a.number_changes; c++)
+			{
+				const CHANGE_STRUCT& change = changes[a.change_index + c];
+
+				for (int r = 0; r < change.number_ranges && count < most; r++)
+					out[count++] =
+						ranges[change.range_index + r].link_anim_num;
+			}
+
+			return count;
+		};
+
+		return HDSlotSlidesIntoPocket(objects[slot].anim_index, frames, links);
 	}
 
 	/* ---------------------------------------------------------- the light -- */
@@ -2296,6 +2347,7 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		verdict.drift = 0;
 		verdict.worst = 0;
 		verdict.fit = -1.0f;
+		verdict.pocket = 0;
 		verdict.lift = 0;	// the floor rule below fills it
 		verdict.hd = 0;
 		verdict.why = verdict.baked ? "baked" : "no_model";
@@ -2382,6 +2434,9 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 		}
 
 		if (verdict.hd)
+			verdict.pocket = pocket_of(slot) ? 1 : 0;
+
+		if (verdict.hd)
 			g_hd_slots++;
 		else if (!verdict.baked)
 			g_classic_slots++;
@@ -2393,12 +2448,12 @@ static void ObjectLevelBuild(const char* installRoot, const char* stem,
 				covered++;
 
 		Log("HDLOG slot=%d name=%s model=%s nodes=%d maxbone=%d cover=%d "
-			"drift=%.0f/%.0f head=%d hd=%d reason=%s fit=%.0f",
+			"drift=%.0f/%.0f head=%d hd=%d reason=%s fit=%.0f pocket=%d",
 			slot, HDSlotName(slot) ? HDSlotName(slot) : "?",
 			HDModelName(slot) ? HDModelName(slot) : "-", wanted[i].nodes,
 			verdict.maxBone, covered, verdict.drift, verdict.worst,
 			HDModelHasHead(slot) ? HDModelHeadNode(slot) : -1,
-			(int)verdict.hd, verdict.why, verdict.fit);
+			(int)verdict.hd, verdict.why, verdict.fit, (int)verdict.pocket);
 	}
 
 	Log("HDLOG level=%s objects hd=%d classic=%d baked=%d (of %d loaded "
@@ -3450,6 +3505,23 @@ void HDObjectEnd()
 	// camera inside it.
 	memset(&entry.cut, 0, sizeof(entry.cut));
 	entry.cull = HD_MODEL_CULL_NONE;
+
+	/* The pocket: a door that slides into the wall folds its two panels
+	 * into one plane at its open frame, and two-sided they fight; one-sided,
+	 * as the classic draws it, each side shows its own panel
+	 * (hd_object_rules.h). A reflection's matrix is mirrored, which turns
+	 * the winding, so there the other mode keeps the same outside. */
+	switch (HDPocketSide(g_open_slot >= 0 && g_open_slot < NUMBER_OBJECTS &&
+		g_slot[g_open_slot].pocket, g_reflection))
+	{
+		case HD_POCKET_OUTSIDE: entry.cull = HD_MODEL_CULL_BACK; break;
+		case HD_POCKET_INSIDE:
+			entry.cull = HD_MODEL_CULL_BACK == HD_MODEL_CULL_CCW
+				? HD_MODEL_CULL_CW : HD_MODEL_CULL_CCW;
+			break;
+		default: break;
+	}
+
 	memset(&entry.soft, 0, sizeof(entry.soft));
 
 	/* The second map: an item whose blob gave way is drawn into it when its

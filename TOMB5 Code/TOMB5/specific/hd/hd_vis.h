@@ -661,3 +661,31 @@ inline bool HDVisClassicRoomHidden(bool groupEmpty, bool facesCovered,
 {
 	return groupEmpty && !facesCovered && classicFaces > 0 && guests > 0;
 }
+
+/* The settings revision of hd_vis an installation's registry holds (the
+ * value hd_vis_rev beside hd_vis, tomb5\tomb5.cpp). 0 - the value absent -
+ * is every registry an earlier build wrote: those wrote hd_vis 0 on their
+ * first run, or wrote the 0 an absent hd_vis read as, and the option has no
+ * row, so that 0 is a default and never a choice. 1 is a registry whose
+ * hd_vis this build or a later one has written or kept. */
+#define HD_VIS_REV	1
+
+/* The hd_vis a game runs with, from the value read (`saved`) and the
+ * revision read (`rev`, 0 when absent).
+ *
+ * Below HD_VIS_REV the saved value is an earlier build's default and is
+ * moved to 1, the visibility path, once: the caller writes the answer and
+ * the revision back, so the next start reads both as they stand. From
+ * HD_VIS_REV up the saved value is kept as it was set - a 0 written after
+ * the move stays 0 - and anything above 1 reads as 0, as before.
+ *
+ * What for: hd_vis 1 is the default now, and an installation that ran an
+ * earlier build holds the 0 that build wrote on its first run; without the
+ * revision a fresh 0 and a kept one look the same. */
+inline unsigned long HDVisSetting(unsigned long saved, unsigned long rev)
+{
+	if (rev < HD_VIS_REV)
+		return 1;
+
+	return saved > 1 ? 0 : saved;
+}

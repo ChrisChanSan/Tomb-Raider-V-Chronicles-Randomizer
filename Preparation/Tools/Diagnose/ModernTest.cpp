@@ -13195,6 +13195,63 @@ static void vis_box_side()
 		"side: in the middle of the box is on no side", 0, 0);
 }
 
+/* One start of the game as init_tomb5_stuff reads hd_vis (tomb5\tomb5.cpp):
+ * the value and its revision as the registry holds them, the answer
+ * (HDVisSetting), and both written back while the revision is below
+ * HD_VIS_REV. */
+static unsigned long vis_setting_start(unsigned long& saved,
+	unsigned long& rev)
+{
+	const unsigned long value = HDVisSetting(saved, rev);
+
+	if (rev < HD_VIS_REV)
+	{
+		saved = value;
+		rev = HD_VIS_REV;
+	}
+
+	return value;
+}
+
+/* The hd_vis migration: an earlier build's 0, a 0 set afterwards, a fresh
+ * installation. */
+static void vis_setting_migration()
+{
+	unsigned long saved = 0, rev = 0;
+
+	ok(vis_setting_start(saved, rev) == 1,
+		"vis setting: an earlier build's 0 starts as 1", (long)saved, 1);
+	ok(saved == 1 && rev == HD_VIS_REV,
+		"vis setting: the 1 and the revision are written back", (long)rev,
+		HD_VIS_REV);
+	ok(vis_setting_start(saved, rev) == 1,
+		"vis setting: the next start keeps the moved 1", (long)saved, 1);
+
+	saved = 0;	// set by hand after the move
+	ok(vis_setting_start(saved, rev) == 0,
+		"vis setting: a 0 set after the move is kept", (long)saved, 0);
+	ok(vis_setting_start(saved, rev) == 0 && saved == 0,
+		"vis setting: and kept at every start after", (long)saved, 0);
+
+	// A fresh installation: the first run writes 1 and the revision.
+	saved = 1;
+	rev = HD_VIS_REV;
+	ok(vis_setting_start(saved, rev) == 1,
+		"vis setting: a fresh installation starts as 1", (long)saved, 1);
+
+	saved = 1;
+	rev = 0;
+	ok(vis_setting_start(saved, rev) == 1 && rev == HD_VIS_REV,
+		"vis setting: an earlier build's 1 stays 1, revision set",
+		(long)rev, HD_VIS_REV);
+	ok(HDVisSetting(7, HD_VIS_REV) == 0,
+		"vis setting: above 1 reads as 0 once revised", 0, 0);
+	ok(HDVisSetting(7, 0) == 1,
+		"vis setting: above 1 from an earlier build moves to 1", 1, 1);
+	ok(HDVisSetting(0, HD_VIS_REV + 1) == 0,
+		"vis setting: a later revision keeps its 0", 0, 0);
+}
+
 /* A cube of art in the frame of the room at `ox`, `oz`: x0..x0 + s,
  * y0 - s..y0 (y down) and z0..z0 + s, each face two triangles. */
 static void vis_cube(trf::remaster::Trg& trg, float ox, float oz, float x0,
@@ -25513,6 +25570,7 @@ int main()
 	vis_enclosed_rule();
 	vis_height_rule();
 	vis_box_side();
+	vis_setting_migration();
 	vis_enclosed_tables();
 	vis_static_covers();
 	stand_overlap();

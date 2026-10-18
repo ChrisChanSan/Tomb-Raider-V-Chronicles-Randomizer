@@ -19198,12 +19198,12 @@ static int ProbeMain(int argc, char** argv)
 				q[i]->Release();
 
 		std::sort(times.begin(), times.end());
-		printf("-gpu: %d run(s) of the %s room draws, median %.3f ms, worst "
-			"%.3f ms, %d draw call(s), %lld triangle(s) in %d group(s)\n",
-			(int)times.size(), g_gpu_all ? "whole" : "solid",
-			times.empty() ? -1.0 : times[times.size() / 2],
+		// With -gpuall every pass is timed, which the line says at its end.
+		printf("-gpu: %d run(s) of the solid room draws, median %.3f ms, worst "
+			"%.3f ms, %d draw call(s), %lld triangle(s) in %d group(s)%s\n",
+			(int)times.size(), times.empty() ? -1.0 : times[times.size() / 2],
 			times.empty() ? -1.0 : times.back(), gpuCalls, tris,
-			g_with_count + 1);
+			g_with_count + 1, g_gpu_all ? ", -gpuall: every pass timed" : "");
 	}
 
 	/* -glow: the additive pass of every drawn group again, alone, onto

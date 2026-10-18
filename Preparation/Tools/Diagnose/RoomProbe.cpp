@@ -318,13 +318,25 @@
  *                     shafts - right after the sky and before the rooms,
  *                     at HDWaterLookKnobs' numbers, its GPU time printed
  *     -underlookknobs <disc shafts underside reach power cell floor deep len
- *                     waves rim>
- *                     the same with these eleven numbers in place of the
+ *                     waves rim seadisc seashafts seaunderside sheet ripple
+ *                     patches art>
+ *                     the same with these eighteen numbers in place of the
  *                     engine's (strengths, the surface light's reach, the
  *                     disc's power, the shafts' cell size, the noise's
  *                     floor, their reach under the surface, the march's
  *                     length, the way the waves' slope is kept whole over,
- *                     the window rim's width in cosine)
+ *                     the window rim's width in cosine; then where the eye
+ *                     has the sea's surface over it the three strengths,
+ *                     the sheet's, its ripple's contrast, the share the
+ *                     shafts' noise lights it by and the weight the art
+ *                     keeps)
+ *     -sea art|look|sheet
+ *                     the same at the engine's numbers but for one part:
+ *                     art the art of the sea's surface at its own weight
+ *                     and no sheet (the look's three strengths the first
+ *                     three); look the look without the sheet or the art;
+ *                     sheet the sheet alone, the art out and the look's
+ *                     three strengths 0
  *     -underlookset <disc shafts underside reach power cell floor deep len>
  *                     the study: the same shader added over the whole
  *                     frame (HDRenderWaterProbeLook), its surface the body's
@@ -2589,7 +2601,8 @@ static int g_hdwater = -1;
 static std::string g_water_file;
 /* -underlook: the sea seen from below as the game draws it
  * (HDRenderWaterLook), right after the sky; -underlookknobs the same with
- * other numbers in place of HDWaterLookKnobs' (to choose them).
+ * other numbers in place of HDWaterLookKnobs' (to choose them), -sea one
+ * part of it at those numbers (for the pictures of each part alone).
  * -underlookset: the study over the whole frame (HDRenderWaterProbeLook),
  * its surface the body's the extinction measures against, with its nine
  * numbers - the disc, the shafts and the underside's strengths, the
@@ -2646,6 +2659,34 @@ static bool UnderArg(int argc, char** argv, int* at)
 		g_under_game = true;
 		g_under_game_knobs = true;
 		*at += HD_LOOK_KNOBS;
+		return true;
+	}
+
+	if (!strcmp(argv[*at], "-sea") && *at + 1 < argc)
+	{
+		const char* part = argv[++*at];
+		float* k = g_under_game_set;
+
+		HDWaterLookKnobs(k);
+
+		if (!strcmp(part, "art"))
+		{
+			k[HD_LOOK_SEA_DISC] = k[HD_LOOK_DISC];
+			k[HD_LOOK_SEA_SHAFTS] = k[HD_LOOK_SHAFTS];
+			k[HD_LOOK_SEA_UNDERSIDE] = k[HD_LOOK_UNDERSIDE];
+			k[HD_LOOK_SHEET] = 0.0f;
+			k[HD_LOOK_ART] = 1.0f;
+		}
+		else if (!strcmp(part, "look"))
+			k[HD_LOOK_SHEET] = 0.0f;
+		else if (!strcmp(part, "sheet"))
+			k[HD_LOOK_SEA_DISC] = k[HD_LOOK_SEA_SHAFTS] =
+				k[HD_LOOK_SEA_UNDERSIDE] = 0.0f;
+		else
+			printf("-sea: '%s' is none of art, look, sheet\n", part);
+
+		g_under_game = true;
+		g_under_game_knobs = true;
 		return true;
 	}
 
@@ -3772,6 +3813,8 @@ static bool g_vis_faces = false;
 static bool g_vis_plane = true;
 // -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
 static int g_gpu_runs = 0;
+// -gpuadd <n>: the same timing of the additive pass instead of the solid.
+static bool g_gpu_add = false;
 static int g_window_mode = HD_WINDOW_ALL;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
@@ -15583,7 +15626,8 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *   -visnear 0|1      1, the default, lists the room behind a portal the
  *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
- *                     after the picture (the print beside the draw calls) */
+ *                     after the picture (the print beside the draw calls)
+ *   -gpuadd <n>       the same of the additive pass */
 /* -visheight 1: the pieces the index fill holds by an intrusion box's height
  * alone (air 2, the fill's height_at) - per piece its group, holder and
  * triangles, then the level's count - and no picture. */
@@ -15634,6 +15678,11 @@ static bool VisArg(int argc, char** argv, int* at)
 		g_gpu_runs = atoi(argv[*at + 1]);
 	else if (!strcmp(a, "-visheight"))
 		g_vis_height = atoi(argv[*at + 1]) != 0;
+	else if (!strcmp(a, "-gpuadd"))
+	{
+		g_gpu_runs = atoi(argv[*at + 1]);
+		g_gpu_add = true;
+	}
 	else
 		return false;
 
@@ -19944,11 +19993,13 @@ static int ProbeMain(int argc, char** argv)
 
 		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
-			"%.0f %.2f\n", drawn ? "drawn" : skyDrew ? "NOT drawn (no deep "
+			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f\n", drawn ?
+			"drawn" : skyDrew ? "NOT drawn (no deep "
 			"look, no -hdwater 1 or no frame under the water)" :
 			"NOT drawn (no sky)",
 			gpu, width, height, k[0], k[1], k[2], k[3], k[4], k[5], k[6],
-			k[7], k[8], k[9], k[10]);
+			k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15],
+			k[16], k[17]);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn
@@ -20344,7 +20395,9 @@ static int ProbeMain(int argc, char** argv)
 	 * cost the most - drawn n times after one warm-up draw and timed with
 	 * timestamps, after the picture is written so that the picture is the one
 	 * without it; the median and the worst in ms, the draw calls of one
-	 * draw, and the triangles of the groups drawn, all three passes. */
+	 * draw, and the triangles of the groups drawn, all three passes. With
+	 * -gpuadd the additive pass instead (the remaster's glows and the art
+	 * of a sea's surface). */
 	if (g_gpu_runs > 0 && !skyOnly)
 	{
 		IDirect3DQuery9* q[4] = { 0, 0, 0, 0 };
@@ -20367,11 +20420,13 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			q[0]->Issue(D3DISSUE_BEGIN);
 			q[1]->Issue(D3DISSUE_END);
-			DrawOneGroup(room, 0, &lighting, HD_PASS_SOLID);
+			const int timedPass = g_gpu_add ? HD_PASS_ADDITIVE : HD_PASS_SOLID;
+
+			DrawOneGroup(room, 0, &lighting, timedPass);
 
 			for (int i = 0; i < g_with_count; i++)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_SOLID);
+					timedPass);
 
 			q[2]->Issue(D3DISSUE_END);
 			q[0]->Issue(D3DISSUE_END);
@@ -20405,9 +20460,10 @@ static int ProbeMain(int argc, char** argv)
 				q[i]->Release();
 
 		std::sort(times.begin(), times.end());
-		printf("-gpu: %d run(s) of the solid room draws, median %.3f ms, worst "
+		printf("-gpu: %d run(s) of the %s room draws, median %.3f ms, worst "
 			"%.3f ms, %d draw call(s), %lld triangle(s) in %d group(s)\n",
-			(int)times.size(), times.empty() ? -1.0 : times[times.size() / 2],
+			(int)times.size(), g_gpu_add ? "additive" : "solid",
+			times.empty() ? -1.0 : times[times.size() / 2],
 			times.empty() ? -1.0 : times.back(), gpuCalls, tris,
 			g_with_count + 1);
 	}
@@ -21585,7 +21641,7 @@ static int UnderTicks(int argc, char** argv, int at)
 		const std::string a = argv[i];
 
 		look = look || a == "-underlook" || a == "-underlookknobs" ||
-			a == "-underlookset";
+			a == "-underlookset" || a == "-sea";
 		sky = sky || a == "-sky";
 		rooms = rooms || a == "-rooms";
 
@@ -21608,7 +21664,7 @@ static int UnderTicks(int argc, char** argv, int at)
 
 		const std::string q = " \"" + a + "\"";
 		int skip = a == "-underlookknobs" ? HD_LOOK_KNOBS :
-			a == "-underlookset" ? 9 : 0;
+			a == "-underlookset" ? 9 : a == "-sea" ? 1 : 0;
 
 		walkRest += q;
 		pictureRest += q;

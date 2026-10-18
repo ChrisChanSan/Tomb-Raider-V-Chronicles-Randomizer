@@ -3332,6 +3332,60 @@ carries the tables.
     random generator of its own (seed 1, a free choice) and no floor test;
     the classic look out of the `.TRC`'s 32-bit pages. OWN, this project's
     tool on the player's files (DATA).
+328. **The sea's sheet in the place of its art** (`hd_water_under.h`,
+    `HDWaterSeaOver`; `hd_render.cpp`, "the sea's sheet", `water_sea_art`, the water
+    build) - where the eye under the water has the sea's surface over it (the sheets
+    on, the deep look, the extinction's depth short of `kUnderNoSurface`) the look
+    draws the sea's sheet and the art's additive ranges draw at weight 0; over the
+    stand-in's surface, out of the water, with `hd_water` 0 and in every other level
+    nothing changes. OWN, the rule, after the owner's word of 2026-10-18 that only the
+    shape and the colour are too strong. DATA (RoomProbe, TrgProbe and DdsProbe on the
+    player's files, JOBY4): the art is room 19's part 3, material 16 in the additive
+    pass, page 3255, its box x -6,608 to 55,136, z 39,944 to 99,327, its plane y -4,269;
+    its vertices' two colours (0, 75, 49) and (0, 72, 82), its page grey (125 of 255 on
+    each channel, spread 14.6): the turquoise is the vertices' (the art adds 5.2, 47.6
+    and 45.8 straight up); the extinction counts 17 units of the 18,366 to it at that
+    eye.
+329. **The sheet's colour, ripple and edge** (`hd_water_look.hlsl`, `LookPS`'s sheet;
+    `hd_water_under.h`, `HDWaterRippleScale`, `kHDWaterSheetEdge`, `HDWaterLookKnobs`)
+    - the water's own colour (the look's light), its ripple the body's two longest
+    wave rows at 0.8 of its light, half again where a shaft leaves the surface (the
+    shafts' value noise of the cells' hash), over the art's box, coming in over 4,096
+    units from its edge, at 0.10 of the water's light. DATA: the rows (JOBY4's sea,
+    1,500 and 700 units, 38 and 16 high), the box. PICTURE (two photographs of a sea
+    from below supplied as look references, not in the repository, measured as numbers
+    only): hue 201 and 207 degrees against the art's 175 to 188. OWN: 0.10, 1.5 and the
+    4,096, set on RoomProbe pictures at eleven eyes of the dive; 0.8 the softest step
+    of 0.05 that holds every eye inside the band of 301.
+330. **The sheet dimmed as the art was** (`hd_water_under.h`, `HDWaterSheetPath`) -
+    the way the extinction counts to a point above the eye: along the ray under the
+    extinction's surface, less the clear zone, the room shader's `UnderWater`. OWN,
+    this project's extinction (the deep look's numbers); TEXTBOOK: light falls off as
+    the exponential of the way times the extinction.
+331. **The look stronger where the sheet lies** (`hd_water_under.h`,
+    `HD_LOOK_SEA_DISC`, `HD_LOOK_SEA_SHAFTS`, `HD_LOOK_SEA_UNDERSIDE`) - the disc 8,
+    the shafts 24 and the lit underside 0.24 in place of 0.2, 8 and 0.12. PICTURE (the
+    photographs as above, each cut to the photograph and 960 wide): their brightest
+    tenth 7.7 times their darkest, their mean luma 116 and 53, their pattern's spread
+    (16-pixel windows over the mean luma) 0.071 and 0.156 against 0.118 in the owner's
+    two pictures of the art with the player cut out. OWN: the band, 0.60 to 1.33 of
+    each eye's spread before (the photographs over the art), and the strengths: the
+    carry 1.5 to 3.0 (1.5 to 2.3 before), the mean luma at most 96 of 255, every eye's
+    spread inside its band at 0.61 to 0.81 of before (RoomProbe, `MODIFICATIONS.md`,
+    the sea seen from below, Round 5).
+332. **The art gives way only in a frame whose look drew the sheet**
+    (`hd_water_under.h`, `HDWaterSeaGivesWay`; `hd_render.cpp`,
+    `water_under_constants`, `g_wsea_drawn`, `g_wsea_drew`) - a flag the look's first
+    sheet sets after the water's build, and the clock of the sky's frame block the look
+    drew with against the last two clocks the brackets were begun with; the sky's
+    bracket keeps the clock before (`HDFrameSky` steps none), the room brackets share
+    the frame's. OWN; a frame drawn without the sky, and every frame before the look's
+    first sheet, keeps the art.
+333. **RoomProbe `-sea art|look|sheet`, `-gpuadd <n>`, the `-underlook` line's sea
+    numbers** (`Preparation/Tools/Diagnose/RoomProbe.cpp`) - the A/B pictures of the
+    art, the look and the sheet alone (`-sea art` draws the picture before the sheet
+    byte for byte), and the additive pass timed. OWN, this project's tool on the
+    player's files (DATA).
 
 ## Credited, but not contained here
 

@@ -55,7 +55,17 @@
  *                          reach under the surface, the march's length
  * c214        gLookMore   x the way over which the waves' slope is kept
  *                          whole (0 always whole), y the window rim's
- *                          width in cosine (0 the study's 0.08) */
+ *                          width in cosine (0 the study's 0.08), z the
+ *                          eye's depth under the art of the sea's
+ *                          surface (0: no sheet), w the extinction's
+ *                          depth (the frame's c136.w)
+ * c215        gLookBox    the art's box, world x0, x1, z0, z1
+ * c216        gLookSea    the sheet's strength, its ripple's contrast,
+ *                          the clear zone (the frame's c145.x) and one
+ *                          over the two longest rows' heights
+ * c217        gLookEdge   x the way in from the box's edge over which
+ *                          the sheet comes in, in units, y the share the
+ *                          shafts' own noise lights the sheet by */
 float4 gLookAxis[3] : register(c200);
 float4 gLookPix : register(c203);
 float4 gLookEye : register(c204);
@@ -66,6 +76,9 @@ float4 gLookWave[4] : register(c208);
 float4 gLookSigma : register(c212);
 float4 gLookShaft : register(c213);
 float4 gLookMore : register(c214);
+float4 gLookBox : register(c215);
+float4 gLookSea : register(c216);
+float4 gLookEdge : register(c217);
 
 struct LOOK_OUT
 {
@@ -143,6 +156,30 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 		col += gLookLight.rgb * exp(-t / gLookLight.w) * win *
 			(gLookGain.x * disc + gLookGain.z * sky);
 		far = min(far, t);
+	}
+
+	/* The sea's sheet in the place of its art, where the eye has that
+	 * surface over it (gLookMore.z, 0 elsewhere): the water's own colour,
+	 * dimmed as the room shader dims the art (UnderWater: the way under
+	 * the extinction's surface less the clear zone), over the art's box
+	 * alone and fading in from its edge, its ripple the body's two longest
+	 * rows' height, brighter where a shaft leaves it (LookShaft). */
+	if (gLookMore.z > 0.0f && vu.y > 1.0e-3f)
+	{
+		const float ta = gLookMore.z / vu.y;
+		const float2 at = gLookEye.xz + v.xz * ta;
+		const float inside = saturate(min(min(at.x - gLookBox.x,
+			gLookBox.y - at.x), min(at.y - gLookBox.z, gLookBox.w - at.y)) /
+			gLookEdge.x);
+		const float path = max(min(ta, gLookMore.w / vu.y) - gLookSea.z,
+			0.0f);
+		float2 tilt;
+		const float h = WaveSum(at, gLookGain.w, gLookWave[0], gLookWave[1],
+			0.0f, 0.0f, tilt);
+
+		col += gLookLight.rgb * exp(-path * gLookSigma.rgb) * gLookSea.x *
+			inside * (1.0f + gLookSea.y * h * gLookSea.w) *
+			(1.0f + gLookEdge.y * LookShaft(at, gLookGain.w));
 	}
 
 	// The light's way in the water, the flat surface's bend of it.

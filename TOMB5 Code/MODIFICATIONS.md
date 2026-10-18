@@ -25473,8 +25473,7 @@ classic path, and the sprites and effects cut at the plane (debris, shockwaves, 
 shadows, footprints, rain, sprite sparks) are now drawn between the two distances; the
 sparks, fire, smoke, blood, drips and bubbles with a cut of their own at 20,480 keep it.
 The rooms' faces were never cut by the plane, in either path, and are drawn as before. The
-depth
-curve, the rain's tint, the circle of the fog bulbs and the count of an object's box
+depth curve, the rain's tint, the circle of the fog bulbs and the count of an object's box
 corners stay on the plane the game shipped with (`ZFAR_SHIPPED`), so that everything
 nearer than 20,480 units is drawn as it was. The number and its reason are one constant,
 `ZFAR_SECTORS` in the new `specific/zrange_math.h`, which the engine, ModernTest and
@@ -25506,7 +25505,7 @@ change:
 | `specificfx.cpp` `ClipCheckPoint` 654, `DrawSkySegment` 6291, 6363 | the same for the classic sky's layers | moves; never reached, the layers' corners lie within 15,458 units of the eye |
 | `specificfx.cpp` `DoRain` 1560, 1603 | a drop's tint, 8 to 16 and 16 to 32 over the plane: a look | `ZRainTint` on `ZFAR_SHIPPED` |
 | `specificfx.cpp` `DoRain` 1570, 1614 | a drop's cut | moves |
-| `specificfx.cpp` `S_DrawDrawSparksNEW` 2363 | a sprite spark at or past the plane is not drawn and is switched off | moves |
+| `specificfx.cpp` `S_DrawDrawSparksNEW` 2363 | a sprite spark at or past the plane is not drawn and is switched off (`sptr->On = 0`) | moves: a spark on screen between 20,480 and 41,984 lives its life out (below) |
 | `specificfx.cpp` `DrawStars` 6076-6097 | the stars at the plane's rhw, in the sky's phase | derived |
 | `specificfx.cpp`, the literal `0x5000` (`S_DrawSparks`' line sparks, fire and smoke sparks, blood, drips, bubbles, the rope) | their own cut at 20,480 and a fade to black that reaches 0 there | untouched: their own look |
 | `alexstuff.cpp` `aTransformClip_D3DV` 219 | reads the vertex's sz before it is written | moves; no caller |
@@ -25515,14 +25514,20 @@ change:
 | `draw.cpp` 2293-2325 | ROOMPOP's note ("art past it is clipped in both", which the round 12 measurement refutes) and `far_plane=` (`phd_zfar`, shifted) | the note rewritten; the line prints 687865856 |
 | `hd_render.cpp` 22950-22960 | the sky's note: its slice from 0.996 lies behind the deepest depth | rewritten |
 | `hd_render.cpp` `HDRenderZConstants` 25352-25356 | `SetupZRange`'s twin for the tools, called with 20 and 20480 | the note: 20480 is the curve's scale |
+| `hd_render.h` 2952-2955 | the declaration's note: "20 and 20480 for TR5, which is what InitWindow hands SetupZRange" | untouched, outside the round's files; its second half no longer holds (Left) |
 | `hd_level.cpp` 8012, 8333, `hd_object.cpp` 1387, 3534, `hd_laradraw.cpp` 661 | the HD projections take `f_a` and `f_b` | the same values |
 | `hd_spring.cpp` `farZ = b / (a - 0.995)` | the cracks drawn to half of the depth 0.995 | the same: 10,240 |
 | `hd_room.hlsl` `SceneZ`, the water's `kWaterClip`, the wet floor's `kWetLift` | depth read back as z = b / (a - d), clips in units on it | the same curve |
 | distance fog (`tomb5.distance_fog` times 1024, 3 to 30 sectors) | darkens a vertex past its start | untouched; above 20 it had no object to darken before |
+| `hd_render.cpp` 14187 `kDeepDim` 30,000 | the light under water dimmed as exp(-depth / 30,000), depth under the water's top | untouched: a look, a vertical depth, not the view's |
+| `hd_water_under.h` 161 `HD_LOOK_REACH` 40,000 | the surface light's fall-off along the eye ray seen from below | untouched: a look, no cut |
+| `hd_water_under.h` 165 `HD_LOOK_DEEP` 40,000 | the light shafts' reach downward | untouched: a look, a vertical depth |
+| `hd_life.cpp` 248, the literal `0x5000` | the falling drops, drawn as `DrawDrips` draws a drip, not past 20,480 | untouched: life code, the drips' own cut |
 
-The water sheets, the sea seen from below and the room art have no distance of their
-own: they are room art and were drawn past 20,480 before (the surface art 19,000 to
-40,000 units from the eye included), on the same depth curve.
+The water sheets, the sea seen from below and the room art have no cut of their own: they
+are room art and were drawn past 20,480 before (the surface art 19,000 to 40,000 units
+from the eye included), on the same depth curve. Their distances above are looks - a
+fall-off over 30,000 or 40,000 units - that do not depend on the plane.
 
 **The number from the data.** `RoomProbe -farsurvey 1` puts the eye at the centre of
 every square inside every room's wall ring, at the room's middle height, walks the classic
@@ -25570,8 +25575,10 @@ and 0.995 at the scale it is built on; its slope b / z^2 is set by the near plan
 any distance - under the sky's slice from 0.996 (`HD_SKY_MINZ`) everywhere. Built on
 41,984 instead it would be a = 0.99547184, b = 19.809437: every depth on screen would
 move, by 4.9e-4 at 1,000 units (8,150 steps of a 24-bit buffer), and with it the HD path's
-projection, the water's depth reading and the springs' cut, for 0.05 % of resolution. The
-step of a 24-bit buffer in units:
+projection, the water's depth reading and the springs' cut, for 0.05 % of resolution.
+`SetupZRange` takes `f_a` and `f_b` from `ZDepthCurve` (`zrange_math.h`), the function
+ModernTest checks bit for bit against the expression on 20480: one arithmetic, not a copy
+of it. The step of a 24-bit buffer in units:
 
 | view depth | the curve on 20,480 (before and now) | the curve on 41,984 |
 |---|---|---|
@@ -25583,9 +25590,22 @@ step of a 24-bit buffer in units:
 | 41,984 | 5.30 | 5.30 |
 
 The rooms' art past 20,480 had these steps before; the objects now drawn there take them.
-At the corridor door (24,658 and 25,300 units, a step of 1.9) the pixels the moved plane
-changes at the eye moved 0, 1, 2 and 4 units along x are 1,146, 1,146, 1,147 and 1,146,
-all of them the flat items': no fight with the art around them.
+A sweep of far faces at six eyes whose walk lists things past 20,480 (HD, 2560 x 1440,
+the eye stepped 0, 1, 2, 4, 8 and 16 units along its view, `-farobjects` at 20,480
+against 41,984; the tool's depth test is on the same curve, 20 and 20480; a fight between
+two depths would show as pixels that come and go with the step and as isolated pixels):
+
+| eye | things ahead | pixels the plane adds, steps 0 to 16 | other pixels | isolated, 20,480 / 41,984 |
+|---|---|---|---|---|
+| JOBY2 room 121, round 12's eye, flips 4, 80, 81, 87, 89 | the double door, 24,655 to 25,298 | 1,146, 1,145, 1,145, 1,151, 1,153, 1,148 | 0 | 0 / 0 |
+| ANDREA3 room 20 (91648, 2560, 52736), yaw 270, pitch 20 | crumbling floors, 23,552 to 29,696 | 180, 179, 179, 178, 179, 183 | 0 | 0 / 0 |
+| RICH2 room 12 (32256, 46592), yaw 0, pitch -20 | ANIMATING5, 22,528 | 3, 2, 1, 1, 1, 1 | 0 | 9-11 / 10-12 |
+| JOBY2 room 2, yaw 105; JOBY2 room 121, yaw 75; ANDREA1 room 118, yaw 225 | 39,359; 34,231; 25,589 | 0 at every pitch from -20 to 20: behind the art | 0 | equal |
+
+The added pixels hold steady over the steps, nothing else changes, and the isolated
+pixels differ by the one or two of RICH2's small far item: no fight. No eye was found
+where a thing past 30,000 shows: at the three eyes tried for the survey's deepest ones
+they stand behind the art.
 
 **The corner count stays on the shipped plane.** `S_GetObjectBounds` counts the box
 corners between the near plane and the plane; under eight it answers -1, drawn clipped,
@@ -25629,6 +25649,17 @@ round's with `-farobjects` at 20,480 against 41,984:
 | the same, hd_water 0 `-sky` | 4 | 4 identical | 4 identical |
 | the sky's four eyes, hd_water 0 and 1 | 8 | 8 identical | 8 identical |
 
+What the table can show and what it cannot: RoomProbe draws with its own depth constants
+(`HDRenderZConstants(20, 20480)`) and compiles neither `SetupZRange` nor `InitWindow`, so
+"base against now" is the tool's own regression check and would read the same whatever
+the engine's change were. The engine's side rests on its code and on the model of it: the
+depth curve is one function, `ZDepthCurve`, that `SetupZRange` calls and ModernTest
+checks bit for bit; the corner count is the same expression on the same 20480; the cull
+is `S_GetObjectBounds` line for line in `-farobjects` and `-farcull` (the last column and
+the line below). The sprites' dimming has no picture either: RoomProbe draws no sprite, so
+its identity is ModernTest's (`ZRainTint`, which `DoRain` calls, against `DoRain`'s
+expression on 20480 at every eighth unit to 45,000), not a picture at a sprite eye.
+
 `-farcull` at the same 38 eyes with the walk's whole list: nothing joins at any of them.
 What the moved plane brings in across the fifteen levels is the survey's 224 things: JOBY2
 149 (12 of them doors), ANDREA3 40, ANDREA1 15, RICH2 11, ANDREA2 4, RICH3 3 (2 lift
@@ -25639,12 +25670,27 @@ at C1_sea_floe, 183 at A152), its GPU time within the runs' spread (three proces
 `-gpu 3` each, 0.38 to 0.45 ms before and after at the round 12 eye); the engine draws the
 things that join, 18 at the round 12 eye and 13 at tick 6300, one object each.
 
+**The sparks.** `S_DrawDrawSparksNEW` switches a sprite spark off (`sptr->On = 0`) the
+first time it is drawn at or past the plane; a spark off screen is never switched off
+there. With the plane at 41,984 a spark on screen between 20,480 and 41,984 lives its
+life out instead: `UpdateSparks` (`game/effect2.cpp`) moves and fades it, keeps its
+dynamic light, and runs its `extras`, the explosion's later bursts, out there. It holds a
+slot of the pool of 1,024 longer; on a full pool `GetFreeSpark` takes the slot with the
+least life that is neither `SF_NOKILL` nor a light's. The burn and the damage a spark
+does (`SF_FIRE`, `SF_DAMAGE`) need it inside Lara's box: a spark 20,480 units from the
+camera reaches her only where the camera stands that far from her. A change in the
+sparks' state, not only in their drawing; not measured offline.
+
 **Decisions.** The plane moves for both paths and the four cuts that are looks stay: the
 depth curve (every depth nearer than 20,480 the float it was, the HD projection, the
 water's reading and the sky's slice with it), the rain's tint, the fog bulbs' circle (a
 bulb past 20,480 would fog faces nearer than it) and the corner count. 41 sectors from
 the survey and a square's margin, not the owner's 34: JOBY2 lists statics of room 3 to
-40,806. No new key: the owner asked for the extension, not a switch.
+40,806. No new key: the owner asked for the extension, not a switch. Both `InitWindow`
+calls take the plane, the one in `winmain.cpp` too (after a display mode change), or the
+plane would fall back to 20,480 there. The sprite sparks' switch-off moves with the plane
+and does not stay at 20,480: a spark the moved plane draws is not killed for being drawn
+(the sparks above).
 
 **Checked.** The nine scripts `be`, `broom`, `btrg`, `bmodel`, `bmap`, `bmt`, `bmenu`,
 `bit` and `blips` build with exit 0; ModernTest 15,627 checks (the group `far_plane`, 15:
@@ -25653,7 +25699,8 @@ long, `ZDepthCurve` bit for bit `SetupZRange`'s with 20480, 0.995 at the shipped
 the far plane and any distance under the sky's slice, the steps at 10,000, 30,000 and the
 plane, `ZRainTint` against `DoRain`'s expression at every eighth unit to 45,000, its ends
 and its middle), MenuTest 44,272, InterpTest 729, LipsTest 299 with the `.OBJ` folder and
-272 without, 0 failed each.
+272 without, 0 failed each; the same counts after `SetupZRange` was put on `ZDepthCurve`,
+with all nine scripts built again.
 
 **Left.** The far sprites and effects are not measured: they exist only in play. The tool
 draws a door as its classic mesh, flat, in both pictures; the HD path draws the door's HD
@@ -25662,11 +25709,18 @@ survey walks every level in its first flip state. Comments outside the round's l
 still name 20480 as the far plane: `modern_camera.h` 75 and 211, `hd_object.cpp` 328 to
 330 (the ring's backdrop at 0.995), `hd_spring.cpp` 1844 ("half the far plane's distance",
 now half the curve's scale), `hd_render.cpp` 11102 and 11886 (the steps at 20,480, which
-hold). `tomb5.vcxproj` does not list `zrange_math.h` (a header the build finds by its
-include). `S_DrawSparks`' line sparks take a negative colour past 0x5000, as before.
+hold). `hd_render.h` 2952 to 2955 says `HDRenderZConstants`' 20 and 20480 are "what
+InitWindow hands SetupZRange": the first half holds, the second no longer (InitWindow
+hands 41,984, `SetupZRange` builds the curve on 20480); the header is outside the round's
+files. `tomb5.vcxproj` does not list `zrange_math.h` (a header the build finds by its
+include; the project file is outside the round's files). The sparks that now live past
+20,480 are not measured: their pool, their light and their later bursts exist only in
+play. `S_DrawSparks`' line sparks take a negative colour past 0x5000, as before.
 
 **Commits.** `038e3b55` (the plane, the depth curve kept and the cuts that are looks),
-`aaebafaa` (RoomProbe's switches and ModernTest's group) and the record's own commit.
+`aaebafaa` (RoomProbe's switches and ModernTest's group), `803cf918` (the record) and the
+fix pass's commit (the comments in the present tense, `SetupZRange` on `ZDepthCurve`, the
+record's site table, parity, sparks and depth sweep).
 
 ## 3. Randomizer changes since Beta 1.0
 

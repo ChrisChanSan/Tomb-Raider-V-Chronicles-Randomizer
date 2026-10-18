@@ -47,6 +47,7 @@
 #include "../game/interpolate_math.h"	// InterpTrailLong - the particles
 #include "hd/hd_shadow.h"		// HDShadowBlobMode - the mode a blob is drawn with
 #include "hd/hd_object.h"		// HDObjectBlobWeight - a blob going out
+#include "hd/hd_debris.h"		// HDDebrisDrawn - a piece drawn in HD
 #include "hdscreen.h"
 #include "LoadSave.h"
 
@@ -2915,6 +2916,12 @@ void DrawDebris()
 	const float pa = InterpParticleAlpha();
 	const bool trail = pa < 1.0F;
 	long moved = 0;
+	/* A piece of a static's break carries the static's HD art while the
+	 * world is drawn HD (hd_debris.h): HDFrameDraw draws it on the matrix
+	 * built below, and the classic triangle is left out. */
+	const bool hd = HDLevelActive();
+
+	HDDebrisFrameBegin();
 
 	for (int i = 0; i < 256; i++)
 	{
@@ -2938,6 +2945,12 @@ void DrawDebris()
 
 		phd_RotY(dptr->YRot << 8);
 		phd_RotX(dptr->XRot << 8);
+
+		if (hd && HDDebrisDrawn(i, aMXPtr))
+		{
+			phd_PopMatrix();
+			continue;
+		}
 
 		offsets[0] = dptr->XYZOffsets1[0];
 		offsets[1] = dptr->XYZOffsets1[1];

@@ -32,6 +32,9 @@
 #include "hd_font.h"			// the HD font's texture goes with the device
 #include "hd_life.h"			// the water's life - floats, fish, drips
 #include "hd_spring.h"			// the springs - rings, bubbles, column
+// A broken static's pieces in HD; this file holds its definitions.
+#define HD_DEBRIS_BODY
+#include "hd_debris.h"
 #include "../function_stubs.h"
 #include "../profile.h"			// PROFLOG phases
 #include "../output.h"			// gPresentMinTicks - the budget follows the present
@@ -5390,6 +5393,23 @@ static void BuildStaticTables()
 	HDRenderStaticPiecesUpload();
 	HDRenderSetStaticPlaces(0, 0);
 	std::vector<HDStaticPlace>().swap(g_static_places);
+
+	/* The destructible parts' own triangles, for the pieces their statics
+	 * break into (hd_debris.h): read only in a level where a static pairs
+	 * with one. */
+	if (g_destruct_pairs.empty())
+		HDDebrisLevelFree();
+	else
+	{
+		HDDebrisLevelStats d;
+
+		HDDebrisLevelRead(HDInstallRoot(), g_stem);
+		HDDebrisLevelInfo(&d);
+
+		if (gLogEnabled)
+			Log("HDLOG level=%s debris parts=%d tris=%d ms=%.1f", g_stem,
+				d.parts, d.triangles, d.ms);
+	}
 }
 
 /* Indexed through g_room_group: a flipmap swaps two ROOM_INFO records, their
@@ -5527,6 +5547,106 @@ static void UpdateDestructibles()
 
 		HDRenderDestructibleHide(pair.piece, (mesh->Flags & 1) == 0);
 	}
+}
+
+/* The pieces of a broken static in HD (hd_debris.h): ShatterObject asks
+ * this once it has turned the mesh's vertices and before it walks the
+ * faces. The static's HD part is the pairs' own - every piece paired with
+ * this MESH_INFO, read where its list stands now as UpdateDestructibles
+ * reads it - and the faces go over in the order the break walks them, the
+ * triangles and then the quads, each corner the turned vertex at the
+ * static's place; a face with a corner past `vertices` (the 256 the break
+ * reads) has none. Nothing without HD drawn, or for a static with no part:
+ * its pieces stay classic. The open break is closed by HDStaticBreakEnd. */
+static int g_break_room = -1;
+static int g_break_mesh = -1;
+
+void HDStaticBreak(const MESH_INFO* mesh, const MESH_DATA* data,
+	const short* rotated, int vertices)
+{
+	HDDebrisBreakEnd();
+	g_break_room = -1;
+
+	if (!mesh || !data || !rotated || !HDLevelActive())
+		return;
+
+	std::vector<HDDebrisPart> parts;
+
+	for (size_t i = 0; i < g_destruct_pairs.size(); i++)
+	{
+		const HDStaticPair& pair = g_destruct_pairs[i];
+		const int at = HDStaticListRoom(g_room_group, g_room_count, pair.room);
+		int group = -1;
+		unsigned int material = 0;
+
+		if (at < 0 || &room[at].mesh[pair.mesh] != mesh ||
+			!HDRenderDestructibleInfo(pair.piece, &group, &material, 0, 0) ||
+			group < 0 || group >= number_rooms)
+			continue;
+
+		HDDebrisPart part;
+
+		part.group = group;
+		part.material = material;
+		part.originX = (float)room[group].x;
+		part.originZ = (float)room[group].z;
+		parts.push_back(part);
+		g_break_room = at;
+		g_break_mesh = pair.mesh;
+	}
+
+	if (parts.empty())
+		return;
+
+	const int count = data->ngt3 + data->ngt4;
+	std::vector<HDDebrisFace> faces((size_t)(count > 0 ? count : 1));
+
+	for (int f = 0; f < count; f++)
+	{
+		const bool tri = f < data->ngt3;
+		const short* face = tri ? data->gt3 + f * 5 :
+			data->gt4 + (f - data->ngt3) * 6;
+		HDDebrisFace& out = faces[(size_t)f];
+
+		out.corners = tri ? 3 : 4;
+
+		for (int k = 0; k < out.corners; k++)
+		{
+			const int v = (unsigned short)face[k];
+
+			if (v >= vertices || v >= 256)
+			{
+				out.corners = 0;
+				break;
+			}
+
+			out.corner[k][0] = (float)(rotated[v * 3] + mesh->x);
+			out.corner[k][1] = (float)(rotated[v * 3 + 1] + mesh->y);
+			out.corner[k][2] = (float)(rotated[v * 3 + 2] + mesh->z);
+		}
+	}
+
+	HDDebrisBreakBegin(parts.data(), (int)parts.size(), faces.data(),
+		count);
+}
+
+/* The end of ShatterObject: the break's line for the log, then closed, so
+ * that no later piece takes its look. */
+void HDStaticBreakEnd()
+{
+	HDDebrisBreakStats s;
+
+	HDDebrisBreakInfo(&s);
+
+	if (gLogEnabled && g_break_room >= 0)
+		Log("HDLOG debris break level=%s room=%d mesh=%d parts=%d faces=%d "
+			"places=%d tris=%d faces_with_art=%d pieces=%d pieces_with_art=%d "
+			"tris_flying=%d ms=%.2f", g_stem, g_break_room, g_break_mesh,
+			s.parts, s.faces, s.places, s.triangles, s.facesWithArt,
+			s.pieces, s.piecesWithArt, s.trianglesFlying, s.ms);
+
+	g_break_room = -1;
+	HDDebrisBreakEnd();
 }
 
 /* A fog bulb the level puts in a water room a sheet lies over
@@ -7401,7 +7521,11 @@ void HDLevelUnload()
 		g_static_art.clear();
 		g_static_first.clear();
 		g_destruct_pairs.clear();
+		HDDebrisLevelFree();
 	}
+
+	// The pieces' looks name slots of the debris array the load empties.
+	HDDebrisSlotsForget();
 
 	/* And so does the water surface table - a roomlet number and a face
 	 * number in the room that is being freed. */
@@ -7443,6 +7567,7 @@ void HDLevelDeviceLost()
 	ReleaseWaterFramePages();
 	HDObjectDeviceLost();
 	HDSpringDeviceLost();
+	HDDebrisRelease();		// the pieces' shaders and declaration
 
 	// The font atlas was made on this device too. Its match table survives;
 	// only the texture goes.
@@ -9397,6 +9522,11 @@ void HDFrameDraw()
 	ShadowModelsPass();
 	ShadowSecond();
 
+	/* A broken static's pieces in HD, solid and cut-out, last in the
+	 * bracket: the draw writes the shader constants it needs, and nothing
+	 * of this bracket draws after it. */
+	HDDebrisDraw(App.dx.lpD3DDevice, &projection, &frame, 0);
+
 	HDRenderFrameEnd();
 
 	// The glow phase is owing, and this is what the rooms cost so far -
@@ -9609,6 +9739,9 @@ void HDFrameDrawGlow()
 
 	DrawWaterCards();
 	HDObjectFrameDraw(&projection, frame.bulbCount, HD_PASS_ADDITIVE);
+
+	// The pieces' glass and glows, last in this bracket as well.
+	HDDebrisDraw(App.dx.lpD3DDevice, &projection, &frame, 1);
 
 	HDRenderFrameEnd();
 

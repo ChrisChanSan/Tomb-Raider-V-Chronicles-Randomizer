@@ -2867,6 +2867,75 @@ carries the tables.
     found through the engine's own resolvers: 74 parts, the clear texels
     on ANDREA2's page 3007 alone, the opaque ones on JOBY2's pages 513 and
     16073, RICH2's 3309 and RICH3's 10084.
+275. **The gamma curve and the row's range** (`hd_gamma.hlsl`, `GammaPS`;
+    `global/types.h`, `tomb5.gamma`) - the row's number n from 0 to 100,
+    gamma = 2 ^ ((n - 50) / 50), output = input ^ (1 / gamma) per colour
+    channel, the alpha written as 1. OWN, a free choice: the power law is
+    the textbook form of a display's gamma; the middle at 50, the ends one
+    octave each way (0.5 and 2) and every step the same factor 2 ^ (1/50)
+    are this project's. PICTURE: RoomProbe `-gamma` over the six HD views
+    at 0, 30, 70 and 100, every channel within one step of the curve taken
+    on the processor; the power fitted back out of the two pictures
+    1.3207 to 1.3238 at 30 (the curve's 1.3195), 0.7574 to 0.7580 at 70
+    (0.7579), 0.4999 to 0.5002 at 100.
+276. **No device gamma ramp** (`dxshell.cpp`, the gamma pass's comment) -
+    `SetGammaRamp` acts on a full-screen exclusive swap chain only, general
+    Direct3D 9 knowledge; this engine's devices are windowed in both of its
+    modes (`DXCreate`, the border-less window, OWN since the port), so a
+    ramp would act in neither. DATA, this machine's adapters measured by a
+    scratch probe, read only: two outputs of one RTX 5080, both
+    `D3DCAPS2_FULLSCREENGAMMA` 1 and `D3DCAPS2_CANCALIBRATEGAMMA` 0; a
+    windowed device's `GetGammaRamp` is all zeros, no ramp in use; the
+    player's `-log` of 2026-10-17 reads `DXCreate: Full Screen Mode
+    (borderless windowed)` and `DXLOG window start ... windowed=1`.
+277. **The pass's form** (`dxshell.cpp`, `GammaPass`, `GammaRestore`,
+    `GammaRelease`) - the back buffer copied by `StretchRect` into a
+    render-target texture of its size, drawn back over it as one
+    pretransformed quad half a pixel up and left, point sampled, through a
+    `ps_2_0` shader without a vertex shader; every render, sampler and
+    stage state it sets read first and set back after, stream 0 and the
+    vertex declaration included; the copy and the shader released with the
+    device and before a reset - standard Direct3D 9 techniques of general
+    graphics knowledge. OWN: its place in `DXShowFrame`, before the
+    apostrophe screenshot and after the last draw of every path, and the
+    copy back after the present, which keeps the back buffer the engine's
+    own picture between frames. CLASSIC: the inventory's and the pause
+    menu's picture of the world is read out of the back buffer after the
+    present (`CreateMonoScreen`, `specific/LoadSave.cpp`). PICTURE: a
+    scratch harness built from the extracted block of `dxshell.cpp` on a
+    windowed 2560 by 1440 device: the curve within one step at 0, 30, 49,
+    70 and 100, sixteen states set back, the plain picture back in the
+    back buffer after the present at each, the copy following a new size,
+    no reference left on the device; 98 checks, 0 failed.
+278. **Nothing at 50** (`dxshell.cpp`, `GAMMA_MIDDLE`, `DXShowFrame`) - at
+    the middle no object is made and no call is added. OWN. PICTURE:
+    RoomProbe at b35b3b96 and at this round's head, the fifteen parity
+    cameras 15 of 15 (and 15 of 15 with `-gamma 50` given), the six HD
+    views 6 of 6, the six classic views 6 of 6 identical.
+279. **The cost** - the copy and the draw 0.0312, 0.0312 and 0.0313 ms, the
+    copy back 0.0149 ms in each of three runs, medians of 200 rounds at 2560
+    by 1440 on the GPU's clock (RoomProbe `-gamma 70 -gammatime 200`).
+    DATA, measured on this machine's RTX 5080.
+280. **The row** (`game/menu_frame.cpp`, `menu_rows_display`,
+    `MenuNumGamma`, `MenuStepGamma`; `tomb5/tomb5.cpp`, the key `gamma`) -
+    a slider third on the *Display* page under *Frame rate* and *VSync*,
+    the picture's page; the volume rows' kind and so their keys and pad
+    (`MenuSliderDir`), the mouse slider's step (`MenuSliderStep` over 0 to
+    100), saved with the tomb5 settings; the label the literal `Gamma`,
+    which needs no `CustomText` row; 50 on a first run, 50 for a missing
+    key and for one above 100, as `dead_zone` and `mouse_sens` read. OWN,
+    following the menu's own patterns. MenuTest's `display_gamma_row`
+    checks it in the tree (44,272 checks before, 44,612 after).
+281. **The seam and the tools** (`dxshell.cpp`, `DXLOG gamma`; RoomProbe
+    `-gamma`, `-gammatime`, `GammaProbePass`) - one `-log` line at the first
+    present and at each change, a refused step at its end once per device;
+    the probe's pass written again in `GammaPass`'s order on the engine's
+    own bytecode, the per-channel check against the curve and the power
+    fitted back by least squares on the logarithms. OWN, this project's log
+    and tools on the player's files (DATA). The dark place of the pictures,
+    JOBY5 room 37, is the room of the player's `-log` of 2026-10-17 where
+    `HDLOG laralights` reads `cur=0/0` with a dynamic light on in 423 lines:
+    its mean 64.0 of 255 at 50, 86.5 at 70, 104.2 at 85 and 121.9 at 100.
 
 ## Credited, but not contained here
 

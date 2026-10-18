@@ -2896,33 +2896,63 @@ carries the tables.
     church the ticks with under 1,000 pixels of reflection 23 before, 4
     after.
 279. **The marble places and their fade** (`hd_marble_math.h`,
-    `HDMarbleSlotsStep`, `HD_MARBLE_HOLD` 0.5; `hd_render.cpp`,
-    `kMarbleFadeStep` 1/8) - OWN, the rule and both numbers; DATA: the
-    stair walk of RICH2 room 45 (ticks 4855 to 4953 of the owner's
-    session, steps 0, -256, -512, -768), a set change 20,387 pixels apart
-    in one frame before, at most 605 pixels a frame after (one eighth of
-    gain, pixels more than 8 of 255 apart), at most 5,863 a tick of two
-    frames; the hold at half the best outside, as round 2's simulated hold
-    asked twice (entry 263), for the fade to settle on.
+    `HDMarbleSlotsStep`, `HDMarbleFadeStep`, `HD_MARBLE_HOLD` 0.5;
+    `hd_render.cpp`, `kMarbleFadeMs` 8000/60, `kMarbleFadeLongest` 50) -
+    OWN, the rule and the numbers; DATA: the stair walk of RICH2 room 45
+    (ticks 4855 to 4953 of the owner's session, steps 0, -256, -512,
+    -768), a set change 20,387 pixels apart in one frame before, at most
+    868 pixels a frame at 60 frames a second and 5,900 at 30 after
+    (pixels more than 8 of 255 apart, every frame drawn), and ANDREA1's
+    stairs from room 174 into the church (ticks 669 to 760) at most 4 and
+    2,007; the fade an eighth of a second each way at any frame rate (at
+    144 frames eight frames would be 55 ms); the hold at half the best
+    outside, as round 2's simulated hold asked twice (entry 263).
 280. **The rooms over a polished floor in its mirror** (`hd_render.cpp`,
-    `HDRenderMarbleOver`, `marble_replay_over`; `hd_level.cpp`, the level's
-    ceiling portals) - OWN, the rule; DATA: ANDREA1's church, rooms 157 and
-    186 over room 165 out of the frame's list at ticks 247 to 275 of the
-    owner's session, their reflection (the church's upper part, 2,560 to
-    4,352 units over the floor) 17,544 pixels at tick 263; a portal's
-    normal pointing into its room (TR5's room data), so down out of a
-    ceiling.
+    `HDRenderMarbleOver`, `HDRenderMarbleBeside`, `HDRenderMarbleRooms`,
+    `marble_replay_over`, `g_marble_over_depth` 3; `hd_marble_math.h`,
+    `HDMarbleOverRooms`; `hd_level.cpp`, the level's portals and flip
+    table) - OWN, the rule and the depth; DATA: ANDREA1's church, rooms 157
+    and 186 over room 165 out of the frame's list at ticks 247 to 275 of
+    the owner's session, their reflection (the church's upper part, 2,560
+    to 4,352 units over the floor) 17,544 pixels at tick 263; the same
+    rooms over room 165 beside the stairs' room 174 (ticks 449, 497, 677:
+    7,737, 3,792 and 3,839 pixels of floor showing nothing, 309, 0 and 1
+    after); RICH2's shaft, room 68 over room 66 (tick 3402, 14,629 to 0);
+    over 50 eyes 207,814 pixels at round 3, 176,722 at depth 1, 160,294 at
+    2, 146,969 at 3, the rest the sky; a portal's normal pointing into its
+    room (TR5's room data), so down out of a ceiling; the box cut against
+    the mirrored view, the flip table as `hd_level.cpp`'s `g_room_group`.
 281. **The models' warm-up for the marble mirror** (`hd_model.cpp`,
-    `HDModelMirrorWarmUp`; `hd_level.cpp`, after `HDObjectLevelBuild`) -
-    OWN, after this project's room warm-up (entry 265); DATA: the first
-    mirrored draw with Lara in RICH2's corridor 103.6 to 111.6 ms before,
-    0.6 to 2.1 ms after, the warm-up 58 to 108 ms in a fresh process (285
-    once, a driver's first run), RoomProbe `-wetlara`.
+    `HDModelMirrorWarmUp`, once for the model shaders' life; `hd_level.cpp`,
+    after `HDObjectLevelBuild`) - OWN, after this project's room warm-up
+    (entry 265); DATA: the first mirrored draw with Lara in RICH2's
+    corridor 99.3 to 111.6 ms before, 0.6 to 3.3 ms after; an item's model
+    (the holster rig alone) 0.67 to 0.68 ms with no warm-up - the wait is
+    Lara's body's; the warm-up 58 to 524 ms in a fresh process (2,813
+    once), RoomProbe `-wetlara`, `-marblemodelpart`, `-marblenomodelwarm`.
 282. **RoomProbe's slope, place and model measurements** (`Preparation/
     Tools/Diagnose/RoomProbe.cpp`, `-marblerise`, `-marbleslots`,
     `-marblesim`, the `marble:` line's slopes and over counts, the
     `marbleplane:` line's seen and gain, the models' warm-up line) - OWN,
     this project's tool on the player's files (DATA).
+283. **The crack census of the polished floors** (`hd_render.cpp`,
+    `marble_crack_collect`, `marble_crack_census`, `kMarbleCrackNear` 1;
+    RoomProbe `-marblecracks`) - OWN, the measurement and the unit; DATA:
+    the fifteen levels' kept mirror faces, 164,778 edges, 911 open: on
+    another face 238, a gap of 1 to 4 units 230 (RICH2 192, rooms 26, 28,
+    75 and 134; RICH3 38), 4 to 16 135, 16 and more 308; none at the owner's
+    places, so no rule.
+284. **The marble counts' queries and their age** (`hd_render.cpp`,
+    `marble_seen_read`, `marble_seen_ask`, `kMarbleSeenOldest` 6,
+    `kMarbleQueriesMost` 64; `hd_marble_math.h`, `HDMarbleScore`) - OWN,
+    the rule and the numbers; DATA: RoomProbe `-marblelag 8` at RICH2 3682
+    and ANDREA1 263, the answers one to two frames after the ask with
+    nothing waited for; six frames, a tenth of a second at 60, past that.
+285. **RoomProbe's fix-pass measurements** (`Preparation/Tools/Diagnose/
+    RoomProbe.cpp`, `-marbletarget`, `-marbleover`, `-marblecracks`,
+    `-marblelag`, `-marblemodelpart`, `-marblenomodelwarm`, the
+    `marbleover:` line, the `marble:` line's culled count) - OWN, this
+    project's tool on the player's files (DATA).
 
 ## Credited, but not contained here
 

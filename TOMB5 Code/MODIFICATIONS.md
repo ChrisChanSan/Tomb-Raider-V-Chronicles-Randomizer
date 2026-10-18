@@ -23524,7 +23524,8 @@ lie closer. RoomProbe's log reader takes the last `ALTERFOV` line before a walk 
 blended frame that is now the blended value the walk used.
 
 **Commits.** `8baca4e8` (the blend), `f34e369a` (`ALTERFOV`, `INTERPLOG` and
-InterpTest's group) and the record's own commit.
+InterpTest's group), the record's own commit, `6166c522` (the zoom keys named the right
+way round - duck zooms in, sprint out - and the comments' wording) and this list's own.
 
 ## 2.6 Modern controls and the options menu
 

@@ -444,6 +444,11 @@
  *                     the range's visible pixels and the second 0.
  *     -skipgroup <g>  group g is left out of the picture and counts as not
  *                     listed - the seed or a -with group; repeat for more.
+ *     -hollow         every hollow group (all its triangles overhang its
+ *                     room's box, hd_level.cpp's fourth way a room stays
+ *                     classic) is left out as -skipgroup leaves a group out,
+ *                     one "hollow:" line each: the engine draws no such
+ *                     group, while -with draws whatever group it is given.
  *     -statictable    every static mesh of the level answered as
  *                     hd_level.cpp's BuildStaticTables answers it (the same
  *                     HDRenderStaticArt), beside the answer of the rule
@@ -4024,6 +4029,7 @@ static bool g_coincide_mark = false;
  * HD_COVER_REACH, and the faces in world units. `g_stand_covered` caches each
  * holder's verdict; `g_stand_draws` are this picture's in-holder draws. */
 static bool g_stand_rule = false;
+static bool g_hollow = false;			// -hollow
 // StandState's lines held back while -statictable asks every room.
 static bool g_stand_quiet = false;
 static std::set<int> g_skip_groups;
@@ -5654,8 +5660,8 @@ namespace walkoff
 				g_vis_params.edge, t.wideMirrored, t.roomsEnclosed);
 
 			/* The rooms standing inside another whose art stands in
-			 * them (HDVisClassicRoomEnclosed asks the room drawn
-			 * classic). */
+			 * them (HDVisTables::enclosedBy; nothing is drawn from
+			 * it). */
 			for (int r = 0; r < t.rooms; r++)
 				if (t.enclosedBy[(size_t)r] >= 0)
 					printf("-vis: enclosed room=%d by=%d tris=%d\n", r,
@@ -17392,8 +17398,15 @@ static int ProbeMain(int argc, char** argv)
 			probestatics::g_list_rooms.push_back(atoi(argv[++at]));
 		else if (!strcmp(argv[at], "-staticsonly"))
 			probestatics::g_only = true;
-		else if (!strcmp(argv[at], "-skipgroup") && at + 1 < argc)
-			g_skip_groups.insert(atoi(argv[++at]));
+		else if (!strcmp(argv[at], "-hollow") ||
+			(!strcmp(argv[at], "-skipgroup") && at + 1 < argc))
+		{
+			// One branch for both: the chain is at the compiler's depth.
+			if (argv[at][1] == 'h')
+				g_hollow = true;
+			else
+				g_skip_groups.insert(atoi(argv[++at]));
+		}
 		else if (!strcmp(argv[at], "-walk") && at + 4 < argc)
 		{
 			walkSeed = atoi(argv[at + 1]);
@@ -20106,6 +20119,21 @@ static int ProbeMain(int argc, char** argv)
 		g_shimmer ? 1 : 0, (int)g_wibble, g_mesh_effect);
 	printf("animation: motion %d, clock %.2f s, water wobble %d\n",
 		g_motion ? 1 : 0, g_time, (g_water || g_shimmer) ? 1 : 0);
+
+	/* -hollow: the groups the engine draws classic for want of art in their
+	 * own box (hd_level.cpp, hollow), left out as the engine leaves them. */
+	for (int g = 0; g_hollow && g < HDRenderGroupCount(); g++)
+	{
+		const int tris = HDRenderGroupTriangles(g, -1);
+		const int over = HDRenderGroupOverhangTriangles(g);
+
+		if (tris <= 0 || over < tris)
+			continue;
+
+		g_skip_groups.insert(g);
+		printf("hollow: group %d tris %d overhang %d - not drawn\n", g, tris,
+			over);
+	}
 
 	// -stand: the frame's answers for the stand ranges, before the bracket;
 	// -statics new: the statics' pieces.

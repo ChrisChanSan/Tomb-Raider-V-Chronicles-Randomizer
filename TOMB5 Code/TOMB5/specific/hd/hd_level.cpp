@@ -3944,14 +3944,11 @@ static bool VisHidesClassicRoom(int roomIndex)
 	const int faces = r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0;
 	const int tris = HDRenderGroupTriangles(group, -1);
 
-	if (HDVisClassicRoomHidden(tris == 0, covered, faces,
-		tables->guestCount[(size_t)roomIndex]))
-		return true;
-
-	// A room standing inside another whose art models its inside.
-	return group < (int)tables->enclosedBy.size() &&
-		HDVisClassicRoomEnclosed(tris > HDRenderGroupOverhangTriangles(group),
-		covered, faces, tables->enclosedBy[(size_t)group]);
+	/* A room standing inside another (HDVisTables::enclosedBy) keeps its
+	 * faces: its own group is hollow and never drawn, and the enclosing
+	 * art covers none of them, so nothing else closes its inside. */
+	return HDVisClassicRoomHidden(tris == 0, covered, faces,
+		tables->guestCount[(size_t)roomIndex]);
 }
 
 /* Whose art stands inside whose room.

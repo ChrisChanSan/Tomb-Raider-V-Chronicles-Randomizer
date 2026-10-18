@@ -13090,6 +13090,27 @@ static void vis_hidden_room()
 		"hidden: ANDY1 212, two guests", 1, 1);
 }
 
+/* A classic room standing inside another room's box keeps its faces: JOBY2's
+ * sniper room 21, a hollow group (360 triangles, none drawn) with 12 faces
+ * no art covers, inside room 146's box. Its faces are what the broken
+ * facade window shows; whatever stands in it, only an empty group whose
+ * guests model the place is left out. */
+static void vis_enclosed_kept()
+{
+	ok(!HDVisClassicRoomHidden(false, false, 12, 0),
+		"enclosed: JOBY2 21, hollow, keeps its 12 faces", 0, 0);
+	ok(!HDVisClassicRoomHidden(false, false, 12, 1),
+		"enclosed: room 146's art in it as a guest changes nothing", 0, 0);
+	ok(!HDVisClassicRoomHidden(false, false, 12, 4),
+		"enclosed: nor do more guests", 0, 0);
+	ok(!HDVisClassicRoomHidden(false, true, 12, 1),
+		"enclosed: covered, the stand rule draws it, not this one", 0, 0);
+	ok(HDVisClassicRoomHidden(true, false, 12, 1),
+		"enclosed: the same faces round an empty group go", 1, 1);
+	ok(!HDVisClassicRoomHidden(true, false, 12, 0),
+		"enclosed: an empty group with no guest keeps them", 0, 0);
+}
+
 /* The static mesh the visibility path leaves to the art that lies on it
  * (HDVisStaticDrawnByArt): ANDY3's dormer of room 39, room 35's art on
  * 0.603 to 0.791 of its statics' samples within 32 units, and the shares
@@ -13112,25 +13133,6 @@ static void vis_static_rule()
 		"static: no art on it is never the art's", 0, 0);
 	ok(HDVisStaticDrawnByArt(1.0f, 0.5, true),
 		"static: TITLE 23, every sample, is the art's", 1, 1);
-}
-
-/* The classic room the visibility path leaves out because it stands inside
- * another (HDVisClassicRoomEnclosed): JOBY2's sniper rooms 19 and 21,
- * hollow groups inside room 146's box. */
-static void vis_enclosed_rule()
-{
-	ok(HDVisClassicRoomEnclosed(false, false, 12, 146),
-		"enclosed: JOBY2 21, hollow, uncovered, inside 146", 1, 1);
-	ok(!HDVisClassicRoomEnclosed(true, false, 12, 146),
-		"enclosed: a group with art in its box keeps its faces", 0, 0);
-	ok(!HDVisClassicRoomEnclosed(false, true, 46, 121),
-		"enclosed: covered faces stay, though a room encloses it", 0, 0);
-	ok(!HDVisClassicRoomEnclosed(false, false, 31, -1),
-		"enclosed: inside no room (ANDY3 26) keeps its faces", 0, 0);
-	ok(!HDVisClassicRoomEnclosed(false, false, 0, 146),
-		"enclosed: no classic face, nothing to leave out", 0, 0);
-	ok(HDVisClassicRoomEnclosed(false, false, 12, 0),
-		"enclosed: group 0 encloses as any other", 1, 1);
 }
 
 /* The height a triangle of an unlinked room reaches into an intrusion box
@@ -25566,8 +25568,8 @@ int main()
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();
+	vis_enclosed_kept();
 	vis_static_rule();
-	vis_enclosed_rule();
 	vis_height_rule();
 	vis_box_side();
 	vis_setting_migration();

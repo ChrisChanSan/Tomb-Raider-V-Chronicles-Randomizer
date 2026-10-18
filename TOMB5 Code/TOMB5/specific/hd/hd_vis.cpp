@@ -283,7 +283,7 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				cells[CellKey(x, z)].push_back(r);
 	}
 
-	/* The rooms standing inside another (HDVisClassicRoomEnclosed): per
+	/* The rooms standing inside another (HDVisTables::enclosedBy): per
 	 * room with an inside, the groups of the rooms linked with it whose
 	 * whole box holds that inside, and below the triangles of each one's
 	 * art in it, every triangle counted. */

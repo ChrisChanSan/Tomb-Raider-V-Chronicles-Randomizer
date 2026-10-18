@@ -187,7 +187,11 @@ struct HDVisTables
 	/* Per room: the group of a room linked with it whose box holds the
 	 * room's inside wholly and whose art stands in that inside, guestTris
 	 * triangles or more - the most of them -, -1 for none; and those
-	 * triangles (HDVisClassicRoomEnclosed). */
+	 * triangles. Noted for the HDLOG vis line and RoomProbe's -vis lines;
+	 * nothing is drawn or left out by it: a classic room standing so keeps
+	 * its faces, its own group being hollow (never drawn) and the enclosing
+	 * art covering none of its faces - JOBY2's sniper rooms 19 and 21,
+	 * whose faces are the black behind the broken facade windows. */
 	std::vector<int> enclosedBy;
 	std::vector<int> enclosedTris;
 	int roomsEnclosed = 0;
@@ -277,27 +281,6 @@ void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 inline bool HDVisStaticDrawnByArt(float share, double needed, bool groupDrawn)
 {
 	return groupDrawn && share > 0.0f && (double)share >= needed;
-}
-
-/* Whether the visibility path draws nothing of a classic room that stands
- * inside another room: a room drawn classic whose own group holds no art in
- * its own box (empty, or hollow - all its art stands elsewhere), none of
- * whose classic faces any group's art covers (neither covered nor covered
- * in part by the stand rule), and whose inside lies wholly in the box of a
- * room linked with it whose art stands in that inside (HDVisTables::
- * enclosedBy).
- *
- * What for: such a room is a classic stand-in for a place the enclosing
- * room's art models - JOBY2's two sniper rooms 19 and 21 behind the glass
- * block windows of the courtyard are hollow groups inside room 146's box,
- * and room 146's art models their insides, the bars and the walls.
- * Drawn classic, their faces stand dark in front of that art and the
- * broken window shows a black hole; left out, it shows the art. */
-inline bool HDVisClassicRoomEnclosed(bool artInBox, bool facesCovered,
-	int classicFaces, int enclosingGroup)
-{
-	return !artInBox && !facesCovered && classicFaces > 0 &&
-		enclosingGroup >= 0;
 }
 
 /* Whether a triangle whose corners span the heights y0 to y1 (y down, y0

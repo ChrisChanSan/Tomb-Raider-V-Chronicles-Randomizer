@@ -116,6 +116,36 @@ struct menu_page
 	void (*resolve)(const menu_row** rows, long* num);	// null for a page whose rows never change
 };
 
+/* Every slider row's span: its value runs from 0 to MENU_SLIDER_TOP. DoSlider
+ * fills pos * width / 100 of its bar (specific/drawbars.cpp), so the top is
+ * the full bar; each slider row's step holds its value inside the span, and
+ * the registry reads hold a stored value to it with MenuSliderHeld below. */
+#define MENU_SLIDER_TOP	100
+
+/* MenuSliderHeld's `out` for a key whose value outside the span goes to the
+ * nearer end. */
+#define MENU_SLIDER_NEAREST	-1
+
+/* A slider's value as the registry hands it back, held to 0..MENU_SLIDER_TOP
+ * before the row or the engine reads it, so that a hand-edited or stale value
+ * can neither move the bar past its ends nor push the number past the
+ * screen's edge. A value inside the span stays as it is. One outside lands on
+ * `out` when that lies inside the span - the read's own choice for a key
+ * whose value says nothing about which end was meant - and on the nearer end
+ * otherwise. The value is taken as signed, so a negative DWORD is below the
+ * span. The registry is not written here; the next save writes the held
+ * value. */
+inline long MenuSliderHeld(long value, long out)
+{
+	if (value >= 0 && value <= MENU_SLIDER_TOP)
+		return value;
+
+	if (out >= 0 && out <= MENU_SLIDER_TOP)
+		return out;
+
+	return value < 0 ? 0 : MENU_SLIDER_TOP;
+}
+
 /* One geometry for every page; font_height is never touched.
  *
  * font_height is GetFixedScale(28) (game/text.cpp), which scales with

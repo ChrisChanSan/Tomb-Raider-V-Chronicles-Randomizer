@@ -40,6 +40,7 @@
 
 #include "../game/gameflow.h"
 #include "../game/lara.h"
+#include "../game/menu_frame.h"	// MenuSliderHeld - the slider keys' reads
 #include "../specific/hd/hd_render.h"	// HDRenderMarbleSet
 
 tomb5_options tomb5;
@@ -555,8 +556,7 @@ void init_tomb5_stuff()
 		// about which end was meant.
 		sprintf(buf, "gamma");
 		REG_ReadLong(buf, tomb5.gamma, 50);
-		if (tomb5.gamma > 100)
-			tomb5.gamma = 50;
+		tomb5.gamma = (ulong)MenuSliderHeld((long)tomb5.gamma, 50);
 
 		// Absent - every older registry - reads as 1: built when found.
 		sprintf(buf, "hd_build");
@@ -623,11 +623,12 @@ void init_tomb5_stuff()
 
 		// Same clamp discipline as ego_fov/fps_mode above: a value from an
 		// older build or a hand-edited one must not hand the orbit a rate
-		// past what the slider itself can ask for.
+		// past what the slider itself can ask for. Outside the span it goes to
+		// the nearer end, a negative DWORD to 0.
 		sprintf(buf, "cam_speed");
 		REG_ReadLong(buf, tomb5.camera_speed, 40);
-		if (tomb5.camera_speed > 100)
-			tomb5.camera_speed = 100;
+		tomb5.camera_speed = (ulong)MenuSliderHeld(
+			(long)tomb5.camera_speed, MENU_SLIDER_NEAREST);
 
 		// Guarded like cam_speed above but landing on the default rather
 		// than on the nearest end, because an out-of-range value here says
@@ -635,20 +636,18 @@ void init_tomb5_stuff()
 		// value with a known feel: a hand-edited 400 would multiply every
 		// dead zone by eight and leave the sticks dead in their whole
 		// travel. Missing or out of range is 50, the value that reproduces
-		// the tuned constants (the field is a ulong, so a negative cannot
-		// arrive).
+		// the tuned constants; a negative DWORD is out of range as well.
 		sprintf(buf, "dead_zone");
 		REG_ReadLong(buf, tomb5.dead_zone, 50);
-		if (tomb5.dead_zone > 100)
-			tomb5.dead_zone = 50;
+		tomb5.dead_zone = (ulong)MenuSliderHeld((long)tomb5.dead_zone, 50);
 
 		// Missing - every older registry - reads as 50, the middle; out of
 		// range lands on the middle too, for dead_zone's reason: a hand-edited
 		// value says nothing about which end was meant.
 		sprintf(buf, "mouse_sens");
 		REG_ReadLong(buf, tomb5.mouse_sensitivity, 50);
-		if (tomb5.mouse_sensitivity > 100)
-			tomb5.mouse_sensitivity = 50;
+		tomb5.mouse_sensitivity = (ulong)MenuSliderHeld(
+			(long)tomb5.mouse_sensitivity, 50);
 
 		sprintf(buf, "mouse_invert");
 		REG_ReadBool(buf, tomb5.mouse_invert, 0);

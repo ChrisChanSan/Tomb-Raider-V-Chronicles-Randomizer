@@ -17032,6 +17032,74 @@ namespace
 	}
 }
 
+/* The model path's shaders (hd_model.cpp), here beside their one use: the
+ * wet floor's warm-up makes them once more out of the same bytecode. */
+#include "hd_shader/hd_model_vs.inc"
+#include "hd_shader/hd_model_ps.inc"
+
+/* The models' shaders drawn once through five user clip planes that cut
+ * everything away, into the warm-up's target (see the wet floor's part of
+ * HDRenderWaterWarmUp): made out of the model path's bytecode, with its
+ * vertex declaration - a place, a normal, three bones and their weights,
+ * 24 bytes - and released again; the device's planes put back. False when
+ * a shader could not be made. */
+static bool wet_warm_model_shaders()
+{
+	static const D3DVERTEXELEMENT9 elements[] =
+	{
+		{ 0, 0, D3DDECLTYPE_FLOAT3, D3DDECLMETHOD_DEFAULT,
+			D3DDECLUSAGE_POSITION, 0 },
+		{ 0, 12, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT,
+			D3DDECLUSAGE_NORMAL, 0 },
+		{ 0, 16, D3DDECLTYPE_UBYTE4, D3DDECLMETHOD_DEFAULT,
+			D3DDECLUSAGE_BLENDINDICES, 0 },
+		{ 0, 20, D3DDECLTYPE_UBYTE4N, D3DDECLMETHOD_DEFAULT,
+			D3DDECLUSAGE_BLENDWEIGHT, 0 },
+		D3DDECL_END()
+	};
+	// w >= 0 for every point before the eye: each plane cuts all away.
+	const float none[4] = { 0.0f, 0.0f, 0.0f, -1.0f };
+	IDirect3DVertexDeclaration9* decl = 0;
+	IDirect3DVertexShader9* vs = 0;
+	IDirect3DPixelShader9* ps = 0;
+	const float triangle[18] = {};
+	float planes[5][4];
+	DWORD clip = 0;
+	bool drawn = false;
+
+	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &clip);
+
+	for (int k = 0; k < 5; k++)
+	{
+		g_device->GetClipPlane((DWORD)k, planes[k]);
+		g_device->SetClipPlane((DWORD)k, none);
+	}
+
+	if (SUCCEEDED(g_device->CreateVertexDeclaration(elements, &decl)) &&
+		SUCCEEDED(g_device->CreateVertexShader((const DWORD*)kHDModelVS,
+		&vs)) && SUCCEEDED(g_device->CreatePixelShader(
+		(const DWORD*)kHDModelPS, &ps)))
+	{
+		g_device->SetVertexDeclaration(decl);
+		g_device->SetVertexShader(vs);
+		g_device->SetPixelShader(ps);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0x1F);
+		g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST, 1, triangle, 24);
+		warm_drain();
+		drawn = true;
+	}
+
+	g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, clip);
+
+	for (int k = 0; k < 5; k++)
+		g_device->SetClipPlane((DWORD)k, planes[k]);
+
+	if (decl) decl->Release();
+	if (vs) vs->Release();
+	if (ps) ps->Release();
+	return drawn;
+}
+
 /* The warm-up.
  *
  * Without it the first draw of a water sheet in a process holds its frame
@@ -17052,9 +17120,10 @@ namespace
  * render target of its own of 16 x 16 in the frame's format and without
  * a depth buffer; the queue is drained after each, the device's state put
  * back. Nothing of it reaches the frame. `ms` takes the time of each
- * (sheet, depth, under, foot, river, foam, foam depth, cards; -1 for one
- * not drawn). Returns the whole time, or -1 when nothing was warmed (no
- * sheets, no device). */
+ * (sheet, depth, under, foot, river, foam, foam depth, cards, the wet
+ * floor's targets and pixel shader, the models' shaders through the wet
+ * floor's planes; -1 for one not drawn). Returns the whole time, or -1
+ * when nothing was warmed (no sheets, no device). */
 double HDRenderWaterWarmUp(double* ms, int max)
 {
 	for (int i = 0; ms && i < max; i++)
@@ -17260,6 +17329,21 @@ double HDRenderWaterWarmUp(double* ms, int max)
 
 		if (ms && 8 < max)
 			ms[8] = warm_now_ms() - t0;
+
+		/* The models through the floor's mirror (HDRenderWaterWetModels)
+		 * are drawn with five user clip planes, and the driver readies the
+		 * models' shaders for the planes at the first such draw: 62 to 72
+		 * ms of the first wet frame (RoomProbe -wetagain, 2560 x 1440). The
+		 * level's own models are built after this warm-up, so the models'
+		 * shaders are made here once more out of the same bytecode
+		 * (hd_model_vs.inc and hd_model_ps.inc, the model path's
+		 * declaration) and draw one triangle through five planes that cut
+		 * it away: the driver readies the shaders by their code, and the
+		 * first wet frame's models' draw then takes under 1 ms. */
+		const double t1 = warm_now_ms();
+
+		if (wet_warm_model_shaders() && ms && 9 < max)
+			ms[9] = warm_now_ms() - t1;
 	}
 
 	g_device->EndScene();
@@ -17975,11 +18059,13 @@ void HDRenderWaterWetDraw(const float* toFrame)
  * the five user clip planes held its frame for about 107 ms (RoomProbe
  * -wetagain, two runs at 2560 x 1440: 107.1 and 107.7 ms, the same draw
  * without the planes 0.24 and 0.13): the driver readies the models' vertex
- * shader for the planes then. So the first frame of a level with a tank's
- * wet floor - already the load's slow frame - draws its objects once into
- * the models' target (made at the water's warm-up) with the same states
- * and five planes that cut everything away: nothing is written, the
- * shaders are readied. */
+ * shader for the planes then. The level's load readies them now
+ * (HDRenderWaterWarmUp, wet_warm_model_shaders); the first frame of a
+ * level with a tank's wet floor still draws its objects once into the
+ * models' target (made at the water's warm-up) with the same states and
+ * five planes that cut everything away - nothing is written - for a
+ * driver that readies each shader object apart: after the load's warm-up
+ * that draw takes 0.6 to 0.7 ms (RoomProbe -wetagain, three runs). */
 static void wet_warm_models(HDWetModelDraw draw, const void* projection,
 	int bulbs)
 {

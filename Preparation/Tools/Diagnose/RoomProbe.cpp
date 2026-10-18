@@ -1652,14 +1652,14 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	 * it takes away. */
 	if (!g_nowarm)
 	{
-		double ms[9];
-		const double all = HDRenderWaterWarmUp(ms, 9);
+		double ms[10];
+		const double all = HDRenderWaterWarmUp(ms, 10);
 
 		if (all >= 0.0)
 			printf("-hdwater: warm-up %.2f ms: sheet %.2f, depth %.2f, under "
 				"%.2f, foot %.2f, river %.2f, foam %.2f, foam depth %.2f, "
-				"cards %.2f, wet floor %.2f\n", all, ms[0], ms[1], ms[2],
-				ms[3], ms[4], ms[5], ms[6], ms[7], ms[8]);
+				"cards %.2f, wet floor %.2f, wet models %.2f\n", all, ms[0],
+				ms[1], ms[2], ms[3], ms[4], ms[5], ms[6], ms[7], ms[8], ms[9]);
 
 		// The marble floors' mirror, as the engine warms it a level.
 		const double marble = HDRenderMarbleWarmUp(ms, 5);

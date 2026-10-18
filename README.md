@@ -127,14 +127,14 @@ transparency and footprints.</td>
 screen refreshes at; 60 is what a fresh installation gets — VSync, and
 Gamma, a slider that lightens or darkens every picture the game shows, in a
 window or full screen; its middle, the default, changes nothing, and the
-number beside the bar says where it stands.</td>
+number beside the bar, a percentage, says where it stands.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-controls.jpg" alt="Controls"><br>
 <b>Controls</b>: Tank or Modern, the Action row that splits Interact from the
 Secondary button, the pad layout, camera speed, dead zone and mouse
-sensitivity (bars with their number beside them), targeting and the ammo
-hotkeys.</td>
+sensitivity (bars with their number, a percentage, beside them), targeting
+and the ammo hotkeys.</td>
 <td width="50%"><img src="docs/menu-key-bindings.jpg" alt="Key bindings"><br>
 <b>Key bindings</b>: every role rebindable, on the keyboard and on the pad
 alike, over as many pages as the list needs, with <i>Reset to defaults</i>
@@ -155,7 +155,7 @@ for a short load) and the loading text (the name of the level being
 loaded).</td>
 <td width="50%"><img src="docs/menu-audio.jpg" alt="Audio"><br>
 <b>Audio</b>: music and effect volume, each a bar with its number from 0 to
-100 beside it, sound quality — and the language, which can be changed while
+100 per cent beside it, sound quality — and the language, which can be changed while
 the game runs.</td>
 </tr>
 </table>

@@ -3472,6 +3472,50 @@ carries the tables.
     OWN.
 342. **RoomProbe's `-gpu` line** (`Preparation/Tools/Diagnose/
     RoomProbe.cpp`) - the line as it was, `-gpuall` named at its end. OWN.
+343. **The slider number's percent sign** (`game/menu_frame.cpp`, the slider
+    block of `MenuFrameRun`) - the value written `"%d%%"` where the sign has
+    room and `"%d"` where it has not; `MenuSettleSlider`'s `MENULOG` value
+    stays `"%d"`. OWN, the form; the answer of 2026-10-18 to how the number
+    should read ("Prozent", percent). CLASSIC: the glyph is the classic
+    font's row 4 of `game/chardef.inc`, 15 wide. DATA: the HD glyph is the
+    player's `FONT0_OG.DDS` matched at run time (score 1.000, FontProbe
+    `-match`); nothing of it is copied here.
+344. **The sign's room** (`game/menu_frame.cpp`, `MenuSliderSignFits`) - the
+    sign is drawn where the widest text, "100%" written from
+    `MENU_SLIDER_TOP`, plus one `GetFixedScale(4)` gap ends at or before the
+    screen's edge, decided per layout and not per value. OWN, the rule; the
+    gap is the one the number keeps after the frame. DATA: "100%" 49 pixels
+    against 36 behind the gap at 640x480, the rule's edge near 1.46:1
+    (1024x706 against 1024x707), measured with the font's own widths over
+    every width from 640 to 3840 in seven shapes.
+345. **No sign up to 4:3** (`game/menu_frame.cpp`, `MenuSliderSignFits`) -
+    at 5:4, 4:3 and 1:1 the number stands without the sign rather than cross
+    the edge, move the bar or the number, condense the font or borrow a
+    glyph. OWN, the decision, on the answer "so wie jetzt" (as it is now) to
+    where the number stands.
+346. **The sliders' span, `MENU_SLIDER_TOP`** (`game/menu_frame.h`; the six
+    slider steps in `game/menu_frame.cpp`) - one definition, 100, named by
+    every step's top and by the reads' hold. CLASSIC: 100 is the value at
+    which `DoSlider` fills its bar (`pos * w / 100`, `specific/drawbars.cpp`)
+    and the top the classic volume rows stepped to. OWN, the name and the one
+    place.
+347. **`MenuSliderHeld` and the reads' fallbacks** (`game/menu_frame.h`;
+    `specific/registry.cpp`, `MusicVolume`, `SFXVolume`; `tomb5/tomb5.cpp`,
+    `cam_speed`, `dead_zone`, `mouse_sens`, `gamma`) - a stored value inside
+    0..100 stays, one outside goes to the read's fallback when that lies in
+    the span and to the nearer end otherwise (`MENU_SLIDER_NEAREST`, -1); the
+    DWORD taken as signed; the registry not written by it. OWN, the rule; the
+    answer of 2026-10-18 to whether the volumes should be clamped at the read
+    ("ja", yes): the volumes go to the nearer end. The fallbacks of the four
+    tomb5 keys are their reads' own as they stood: `cam_speed` the nearer
+    end, the other three their middle, 50.
+348. **MenuTest's `slider_sign_room` and `slider_reads`, and
+    `slider_numbers` on the two formats** (`Preparation/Tools/Diagnose/
+    MenuTest.cpp`) - the sign's rule held against the engine's text, to the
+    pixel at eight layouts and swept; the six reads held against the compiled
+    `MenuSliderHeld` with eight stored values each; 44,754 checks before,
+    44,894 after. OWN, this project's tool; it includes the engine's
+    `tomb5/pch.h` and `game/menu_frame.h`.
 
 ## Credited, but not contained here
 

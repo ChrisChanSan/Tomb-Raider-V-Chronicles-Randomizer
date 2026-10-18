@@ -12901,6 +12901,8 @@ namespace probestatics
 	static std::vector<IDirect3DTexture9*> g_debris_pages;
 	// The seed room's origin: the tool's frame is that room's.
 	static float g_debris_origin[2] = { 0.0f, 0.0f };
+	// The broken static's room's ambient (ShatterObject, DebrisMeshAmbient).
+	static unsigned int g_debris_ambient = 0;
 
 	// The engine's generator (specific\function_stubs.cpp), seeded here.
 	static long DebrisRandom()
@@ -13050,6 +13052,13 @@ namespace probestatics
 		HDDebrisLevelInfo(&ls);
 		printf("-debris: the level's destructible parts %d, %d triangles, "
 			"read in %.1f ms\n", ls.parts, ls.triangles, ls.ms);
+
+		// The room's ambient, which DrawDebris adds to a piece's colour.
+		unsigned int ambient = 0;
+		std::string ambientError;
+
+		g_level.headerField(s.room, 44, ambient, ambientError);
+		g_debris_ambient = ambient;
 
 		// ShatterObject: the vertices turned by the static's y_rot.
 		const int nv = (int)(m.v.size() / 3) < 256 ? (int)(m.v.size() / 3) :
@@ -13319,9 +13328,9 @@ namespace probestatics
 
 	/* The pieces drawn the classic way, as DrawDebris and the sort list draw
 	 * them: the face's own texture with its corners 1 to 3 (without
-	 * AdjustUV's half-texel nudge), the static's colour times the prelight,
-	 * split; additive for an effects word with bit 0, else the texture's
-	 * own draw type; both sides. */
+	 * AdjustUV's half-texel nudge), the static's colour times the prelight
+	 * plus the room's ambient, split; additive for an effects word with bit
+	 * 0, else the texture's own draw type; both sides. */
 	static void DebrisDrawClassic(const float* view,
 		const D3DMATRIX* projection)
 	{
@@ -13395,8 +13404,10 @@ namespace probestatics
 				const float p[3] = { (float)d.off[k * 3],
 					(float)d.off[k * 3 + 1], (float)d.off[k * 3 + 2] };
 				const long c = d.colour[k] & 0xFF;
-				long rgb[3] = { ((c * d.r) >> 8), ((c * d.g) >> 8),
-					((c * d.b) >> 8) };
+				long rgb[3] = {
+					((c * d.r) >> 8) + (long)((g_debris_ambient >> 16) & 0xFF),
+					((c * d.g) >> 8) + (long)((g_debris_ambient >> 8) & 0xFF),
+					((c * d.b) >> 8) + (long)(g_debris_ambient & 0xFF) };
 
 				for (int i = 0; i < 3; i++)
 					rgb[i] = rgb[i] > 255 ? 255 : rgb[i];

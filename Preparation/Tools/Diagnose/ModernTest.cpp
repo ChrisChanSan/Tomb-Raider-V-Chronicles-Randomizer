@@ -22070,7 +22070,7 @@ static void water_look()
 	float k[HD_LOOK_KNOBS];
 
 	HDWaterLookKnobs(k);
-	ok(HD_LOOK_KNOBS == 11, "water look: eleven numbers", HD_LOOK_KNOBS, 11);
+	ok(HD_LOOK_KNOBS == 18, "water look: eighteen numbers", HD_LOOK_KNOBS, 18);
 	ok(k[HD_LOOK_FLOOR] > 0.0f && k[HD_LOOK_FLOOR] < 1.0f,
 		"water look: the noise's floor between 0 and 1",
 		(long)(k[HD_LOOK_FLOOR] * 100.0f), 62);
@@ -22085,6 +22085,82 @@ static void water_look()
 		k[HD_LOOK_REACH] > 0.0f && k[HD_LOOK_POWER] > 1.0f,
 		"water look: the cells, the waves' way, the reach and the power", 0,
 		0);
+}
+
+/* The sea's sheet in the place of the art of its surface (hd_water_under.h,
+ * HDWaterSeaOver, HDWaterSheetPath, HDWaterRippleScale, the knobs): the
+ * sheet only with the sheets on, in a level with the deep look, the eye
+ * under the water and the stand-in's surface over it; the way the
+ * extinction counts the room shader's; the ripple held to -1 .. 1; and the
+ * strengths inside the bands the record names. Numbers of JOBY4's dive:
+ * the eye of the straight-up picture 2,065 under the basin, the clear zone
+ * 2,048, the art 18,366 over the eye; the sea's two longest rows 38 and 16
+ * high. */
+static void water_sea()
+{
+	printf("the sea's sheet: the art's place from below\n");
+
+	const float none = 1.0e6f;
+
+	ok(HDWaterSeaOver(1, 1, 1, 2065.0f, none),
+		"sea sheet: an eye under the stand-in's surface takes it", 0, 0);
+	ok(!HDWaterSeaOver(0, 1, 1, 2065.0f, none),
+		"sea sheet: ...not with the sheets off (hd_water 0)", 0, 0);
+	ok(!HDWaterSeaOver(1, 0, 1, 2065.0f, none),
+		"sea sheet: ...not without the deep look (every other level)", 0, 0);
+	ok(!HDWaterSeaOver(1, 1, 0, 2065.0f, none),
+		"sea sheet: ...not with the eye out of the water", 0, 0);
+	ok(!HDWaterSeaOver(1, 1, 1, none, none),
+		"sea sheet: ...not over the stand-in's surface (the art's own fade)",
+		0, 0);
+	ok(HDWaterSeaOver(1, 1, 1, HDWaterUnderDepth(1, 1, 12035.0f, 12032.0f,
+		none), none),
+		"sea sheet: three units under the basin of room 7 it is there", 0, 0);
+	ok(!HDWaterSeaOver(1, 1, 1, HDWaterUnderDepth(1, 1, 11941.0f, 12032.0f,
+		none), none),
+		"sea sheet: 91 units over it, gone, as the art goes", 0, 0);
+
+	const float straight = HDWaterSheetPath(18366.0f, 1.0f, 2065.0f, 2048.0f);
+	const float slant = HDWaterSheetPath(36732.0f, 0.5f, 2065.0f, 2048.0f);
+
+	ok(straight > 16.9f && straight < 17.1f,
+		"sea sheet: straight up the way is the depth less the clear zone",
+		(long)straight, 17);
+	ok(slant > 2081.9f && slant < 2082.1f,
+		"sea sheet: at 30 degrees up twice the depth less the clear zone",
+		(long)slant, 2082);
+	ok(HDWaterSheetPath(1500.0f, 0.5f, 2065.0f, 2048.0f) == 0.0f,
+		"sea sheet: nearer than the clear zone, no way", 0, 0);
+	ok(HDWaterSheetPath(30000.0f, 0.0f, 2065.0f, 2048.0f) == 27952.0f,
+		"sea sheet: a level ray counts its whole length",
+		(long)HDWaterSheetPath(30000.0f, 0.0f, 2065.0f, 2048.0f), 27952);
+
+	const float rows[8] = { 0.0042f, 0.0f, 0.5f, 38.0f, 0.009f, 0.0f, 0.7f,
+		16.0f };
+	const float flat[8] = {};
+
+	ok(HDWaterRippleScale(rows) * 54.0f > 0.999f &&
+		HDWaterRippleScale(rows) * 54.0f < 1.001f,
+		"sea sheet: the ripple over the two rows' 54 units", 0, 0);
+	ok(HDWaterRippleScale(flat) == 0.0f,
+		"sea sheet: rows without a height, no ripple", 0, 0);
+
+	float k[HD_LOOK_KNOBS];
+
+	HDWaterLookKnobs(k);
+	ok(k[HD_LOOK_ART] == 0.0f,
+		"sea sheet: the art gives way wholly under the sheet", 0, 0);
+	ok(k[HD_LOOK_RIPPLE] > 0.0f && k[HD_LOOK_RIPPLE] < 1.0f,
+		"sea sheet: the ripple never takes the sheet below black",
+		(long)(k[HD_LOOK_RIPPLE] * 100.0f), 70);
+	ok(k[HD_LOOK_SHEET] > 0.0f && k[HD_LOOK_SHEET] < k[HD_LOOK_SEA_UNDERSIDE],
+		"sea sheet: the sheet dimmer than the lit underside",
+		(long)(k[HD_LOOK_SHEET] * 100.0f), 10);
+	ok(k[HD_LOOK_PATCHES] >= 0.0f,
+		"sea sheet: the shafts' noise only lights it", 0, 0);
+	ok(kHDWaterSheetEdge > 0.0f,
+		"sea sheet: the sheet comes in over a way in from the box's edge",
+		(long)kHDWaterSheetEdge, 4096);
 }
 
 /* The room whose art is the sea's surface (hd_water_under.h,
@@ -24412,6 +24488,7 @@ int main()
 	water_surface();
 	sky_cap();
 	water_deep();
+	water_sea();
 	wet_polish();
 	spring_table();
 	spring_file();

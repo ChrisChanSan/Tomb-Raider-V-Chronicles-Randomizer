@@ -14306,6 +14306,74 @@ namespace
 	const float kDeepReach = 0.4f;
 	const float kDeepUp = 0.8f;
 
+	/* The sea's sheet (HDRenderWaterLook, hd_water_look.hlsl). From below,
+	 * the art of the sea's surface (JOBY4's room 19, a material 16 part in
+	 * the additive pass) is its page's pattern in the vertices' colour
+	 * (red 0, so cyan) and is dimmed only along the way under the
+	 * extinction's surface - the basin of room 7, 16,000 units under the
+	 * art - less the clear zone: straight up from a dive's eye it keeps
+	 * nearly all of its light, a bright turquoise sheet over the look.
+	 * Where the eye has that surface over it (HDWaterSeaOver), the look
+	 * draws the sea's sheet in the art's place - the water's own colour,
+	 * the body's two longest wave rows for its ripple, dimmed by the same
+	 * way and drawn over the art's box alone, so it comes and goes with
+	 * the art - and the art's ranges draw at the knobs' weight
+	 * (HD_LOOK_ART, 0); anywhere else they keep their own. The build
+	 * finds the art: the sea's part of the surface room's group, its
+	 * plane its highest y (the stacked sea keeps its topmost copy), its box
+	 * in world x and z, and the ranges' own weights in their order. */
+	int g_wsea_group = -1;
+	int g_wsea_part = -1;
+	float g_wsea_y = 0.0f;
+	float g_wsea_box[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	std::vector<float> g_wsea_base;
+	// This frame: the art gives way, at that weight.
+	bool g_wsea_given = false;
+	float g_wsea_art = 0.0f;
+	float g_wsea_set = -1.0f;
+	bool g_wsea_over = false;
+	/* Whether the look drew the sheet in this frame: the clock of the
+	 * frame block it drew with (`g_wsea_drew`), against the last two
+	 * clocks the brackets were begun with. A frame's room brackets share
+	 * one clock; the sky's, which the look is drawn in, keeps the one
+	 * before (hd_level.cpp, HDFrameSky steps none). So the art gives way
+	 * only in a frame whose look drew the sheet: a frame drawn without
+	 * the sky (no outside room in its list) keeps the art. */
+	float g_wsea_drew = -1.0e30f;
+	float g_wsea_now = -1.0e30f;
+	float g_wsea_before = -1.0e30f;
+
+	/* The art's additive ranges at their own weight times g_wsea_art
+	 * (`give`) or at their own. Written only when that changes; nothing
+	 * once the level's water is gone (g_wdeep_on is cleared with it) or
+	 * where the ranges are not the ones the build counted. */
+	void water_sea_art(bool give)
+	{
+		if (!g_wdeep_on || g_wsea_group < 0 ||
+			g_wsea_group >= (int)g_groups.size())
+		{
+			g_wsea_given = false;
+			return;
+		}
+
+		if (give == g_wsea_given && (!give || g_wsea_set == g_wsea_art))
+			return;
+
+		std::vector<HDRange>& list = g_groups[(size_t)g_wsea_group].pass[2];
+		size_t k = 0;
+
+		for (size_t i = 0; i < list.size() && k < g_wsea_base.size(); i++)
+			if (list[i].ripplePart == g_wsea_part)
+			{
+				list[i].addWeight = g_wsea_base[k] * (give ? g_wsea_art :
+					1.0f);
+				k++;
+			}
+
+		g_wsea_given = give;
+		g_wsea_set = g_wsea_art;
+	}
+
 	// ModelProbe's -under (HDRenderWaterUnderProbe), and this frame's twelve.
 	float g_under_probe[9] = {};
 	bool g_under_probe_set = false;
@@ -14336,7 +14404,7 @@ namespace
 	 * the first nine by hand (the scattered colour already held to
 	 * kUnderLightTop, as RoomProbe -underwater prints it); the clear zone
 	 * is the engine's. */
-	bool water_under_constants(const HDFrameLighting* f, float* out)
+	bool water_under_fill(const HDFrameLighting* f, float* out)
 	{
 		if (f && f->under && g_under_probe_set)
 		{
@@ -14439,6 +14507,25 @@ namespace
 		g_under_known = true;
 		std::memcpy(g_under_now, out, sizeof(g_under_now));
 		return true;
+	}
+
+	/* The constants, and whether the art of the sea's surface gives way to
+	 * the look's sheet this frame (see "the sea's sheet"). */
+	bool water_under_constants(const HDFrameLighting* f, float* out)
+	{
+		const bool on = water_under_fill(f, out);
+
+		if (f && f->clock != g_wsea_now)
+		{
+			g_wsea_before = g_wsea_now;
+			g_wsea_now = f->clock;
+		}
+
+		g_wsea_over = HDWaterSeaOver(g_caustic_on ? 1 : 0, g_wdeep_on ? 1 : 0,
+			on ? 1 : 0, out[11], kUnderNoSurface);
+		water_sea_art(g_wsea_over && (g_wsea_drew == g_wsea_now ||
+			g_wsea_drew == g_wsea_before));
+		return on;
 	}
 
 	/* A foot's rings: every kFootRingMin plus up to kFootRingMore seconds by
@@ -15677,6 +15764,41 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		}
 
 		g_wlevel.underDeep = g_wdeep_on ? 1 : 0;
+
+		/* The sea's sheet (see "the sea's sheet"): the surface room's art
+		 * part that reaches highest, its plane, its box in world x and z
+		 * and its additive ranges' own weights. */
+		g_wsea_group = -1;
+		g_wsea_part = -1;
+		g_wsea_base.clear();
+		g_wsea_given = false;
+		g_wsea_set = -1.0f;
+		g_wsea_drew = -1.0e30f;
+
+		if (g_wdeep_on && surface >= 0 && surface < groups)
+		{
+			const HDGroup& sg = g_groups[(size_t)surface];
+			const HDWaterArt* best = 0;
+
+			for (const HDWaterArt& a : sg.waterArt)
+				if (!best || a.box[4] < best->box[4])
+					best = &a;
+
+			if (best)
+			{
+				g_wsea_group = surface;
+				g_wsea_part = best->part;
+				g_wsea_y = (float)best->box[4];
+				g_wsea_box[0] = (float)(best->box[0] + rooms[surface].originX);
+				g_wsea_box[1] = (float)(best->box[1] + rooms[surface].originX);
+				g_wsea_box[2] = (float)(best->box[2] + rooms[surface].originZ);
+				g_wsea_box[3] = (float)(best->box[3] + rooms[surface].originZ);
+
+				for (const HDRange& r : sg.pass[2])
+					if (r.ripplePart == g_wsea_part)
+						g_wsea_base.push_back(r.addWeight);
+			}
+		}
 	}
 
 	/* 7. The grid: 5 x 5 vertices a square, every 256 units, one range per
@@ -18404,25 +18526,29 @@ void HDRenderWaterWetRoomCopy(bool force)
 
 namespace
 {
-	/* The look's sixteen constants (hd_water_look.hlsl, c200 - c215):
+	/* The look's eighteen constants (hd_water_look.hlsl, c200 - c217):
 	 * the view's axes, the projection, the eye and its surface's depth,
 	 * the light's direction (the look's highlight direction, gWaterSun) and
 	 * its colour (the hue of `light`, its brightest channel 1), the gains
 	 * and the clock, the body's first four wave rows, the extinction
 	 * (`sigma`, the frame's c134), the shafts' numbers, the waves' fade
-	 * and the window rim's width; c215 is left 0, a register the shader
-	 * does not declare, so that the block goes up sixteen registers wide.
-	 * `knobs` in the order of HDWaterLookKnobs. */
+	 * and the window rim's width; and the sea's sheet (see "the sea's
+	 * sheet") where `sea` is given - the eye's depth under the art's
+	 * plane and the extinction's (`sea[0]`, `sea[1]`), the art's box, the
+	 * sheet's strength, ripple, clear zone, edge and patches, and the
+	 * disc's, the shafts' and the underside's strengths there in place of
+	 * the others; all 0 without it. `knobs` in the order of
+	 * HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
 		float depth, const float* sigma, const float* light,
-		const float* knobs, float* c)
+		const float* knobs, const float* sea, float* c)
 	{
 		const float* high = light;
 		const float top = high[0] > high[1] ? (high[0] > high[2] ?
 			high[0] : high[2]) : (high[1] > high[2] ? high[1] : high[2]);
 
-		std::memset(c, 0, 16 * 4 * sizeof(float));
+		std::memset(c, 0, 18 * 4 * sizeof(float));
 
 		for (int i = 0; i < 3; i++)
 			for (int k = 0; k < 3; k++)
@@ -18459,6 +18585,25 @@ namespace
 		c[55] = knobs[HD_LOOK_LENGTH];
 		c[56] = knobs[HD_LOOK_WAVES];
 		c[57] = knobs[HD_LOOK_RIM];
+
+		if (!sea)
+			return;
+
+		c[24] = knobs[HD_LOOK_SEA_DISC];
+		c[25] = knobs[HD_LOOK_SEA_SHAFTS];
+		c[26] = knobs[HD_LOOK_SEA_UNDERSIDE];
+		c[58] = sea[0];
+		c[59] = sea[1];
+
+		for (int k = 0; k < 4; k++)
+			c[60 + k] = g_wsea_box[k];
+
+		c[64] = knobs[HD_LOOK_SHEET];
+		c[65] = knobs[HD_LOOK_RIPPLE];
+		c[66] = kUnderClear;
+		c[67] = HDWaterRippleScale(look.rows);
+		c[68] = kHDWaterSheetEdge;
+		c[69] = knobs[HD_LOOK_PATCHES];
 	}
 
 	/* The look's draws of the whole picture, added to it, the shaders and
@@ -18473,8 +18618,9 @@ namespace
 	 * drawn with the sky, before the rooms, so every opaque thing of the
 	 * frame stands over them. Where the band leaves no clear - its poles
 	 * closed (HDRenderSkyCaps) - the two draws are the look's whole
-	 * picture. `gpuMs` takes the time between two GPU timestamps round
-	 * them, -1 untimed. */
+	 * picture. The sea's sheet lies at the surface and is drawn with the
+	 * first; the second takes its depth (c214.z) out. `gpuMs` takes the
+	 * time between two GPU timestamps round them, -1 untimed. */
 	bool water_look_draws(float* c, double* gpuMs)
 	{
 		const float quad[4][4] = {
@@ -18482,9 +18628,10 @@ namespace
 			{ -1.0f, -1.0f, 0.9999f, 1.0f }, { 1.0f, -1.0f, 0.9999f, 1.0f }
 		};
 		const float shafts[4] = { 0.0f, c[25], 0.0f, c[27] };
+		const float more[4] = { c[56], c[57], 0.0f, c[59] };
 
 		c[25] = 0.0f;
-		g_device->SetPixelShaderConstantF(200, c, 16);
+		g_device->SetPixelShaderConstantF(200, c, 18);
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -18518,6 +18665,7 @@ namespace
 			D3DPT_TRIANGLESTRIP, 2, quad, sizeof(quad[0])));
 
 		g_device->SetPixelShaderConstantF(206, shafts, 1);
+		g_device->SetPixelShaderConstantF(214, more, 1);
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 		drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2,
 			quad, sizeof(quad[0]))) && drawn;
@@ -18642,10 +18790,10 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 		return false;
 	}
 
-	float c[16 * 4];
+	float c[18 * 4];
 
 	water_look_constants(*look, view, persp, centreX, centreY, eyeX, eyeZ,
-		g_under_now[11], g_under_now, look->pixel + 16, knobs, c);
+		g_under_now[11], g_under_now, look->pixel + 16, knobs, 0, c);
 	held->Capture();
 	g_device->SetVertexShader(vs);
 	g_device->SetPixelShader(ps);
@@ -18678,10 +18826,13 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
  * only on open water. The band's poles are closed by its own caps
  * (HDRenderSkyCaps), with the script's layers out the only sky overhead,
  * and the look's light lies over them as over the band: nothing of the
- * frame is left at its clear. `knobs` stands in for HDWaterLookKnobs when
- * given (RoomProbe -underlookknobs). The render states, the shaders, the
- * declaration and stream 0 are put back as they were. `gpuMs` as in
- * HDRenderWaterProbeLook. */
+ * frame is left at its clear. Where the eye has the sea's surface over it
+ * (HDWaterSeaOver) the look draws the sea's sheet in the place of that
+ * art and at its own strengths there, and the art's ranges then draw at
+ * the knobs' weight for the art (see "the sea's sheet"). `knobs` stands
+ * in for HDWaterLookKnobs when given (RoomProbe -underlookknobs, -sea).
+ * The render states, the shaders, the declaration and stream 0 are put
+ * back as they were. `gpuMs` as in HDRenderWaterProbeLook. */
 bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	float persp, float centreX, float centreY, float eyeX, float eyeZ,
 	const float* knobs, double* gpuMs)
@@ -18695,14 +18846,17 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	float u[16] = {};
 	float own[HD_LOOK_KNOBS];
 
-	if (!water_under_constants(under, u) || !water_look_shaders())
-		return false;
-
 	if (!knobs)
 	{
 		HDWaterLookKnobs(own);
 		knobs = own;
 	}
+
+	// The weight the art keeps under the sheet (see "the sea's sheet").
+	g_wsea_art = knobs[HD_LOOK_ART];
+
+	if (!water_under_constants(under, u) || !water_look_shaders())
+		return false;
 
 	const D3DRENDERSTATETYPE kept[] = {
 		D3DRS_ZENABLE, D3DRS_ZFUNC, D3DRS_ZWRITEENABLE,
@@ -18727,16 +18881,25 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	g_device->GetVertexDeclaration(&decl);
 	g_device->GetStreamSource(0, &stream, &offset, &stride);
 
-	float c[16 * 4];
+	float c[18 * 4];
+	const float sea[2] = { under->underEyeY - g_wsea_y, u[11] };
 
 	water_look_constants(g_wlook_deep, view, persp, centreX, centreY, eyeX,
 		eyeZ, HDWaterLookDepth(under->underEyeY, g_wdeep_top), u, u + 4,
-		knobs, c);
+		knobs, g_wsea_over && g_wsea_group >= 0 && sea[0] > 1.0f ? sea :
+		0, c);
 	g_device->SetVertexShader(g_look_vs);
 	g_device->SetPixelShader(g_look_ps);
 	g_device->SetVertexDeclaration(g_look_decl);
 
 	const bool drawn = water_look_draws(c, gpuMs);
+
+	// The art gives way to the sheet just drawn (see "the sea's sheet").
+	if (drawn && c[58] > 0.0f)
+	{
+		g_wsea_drew = under->clock;
+		water_sea_art(true);
+	}
 
 	for (int i = 0; i < states; i++)
 		g_device->SetRenderState(kept[i], was[i]);

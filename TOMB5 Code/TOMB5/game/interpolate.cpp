@@ -1878,8 +1878,8 @@ void InterpBeginFrame(float alpha)
 		 * tick left, at the frame's alpha: alpha, not camAlpha, because the
 		 * zoom steps at a fixed rate like a clock. The frame's walk and every
 		 * view drawn before SkyDrawPhase use this value; SkyDrawPhase sets
-		 * its two through InterpZoomFOV at the same alpha. Nothing is called
-		 * when the two ticks' values are equal, as before. */
+		 * its two through InterpZoomFOV at the same alpha. AlterFOV is not
+		 * called when the blended value equals the tick's own. */
 		g_zoomOn = ModernCameraZoomTweens(g_prevZoomRange, BinocularRange,
 			g_prevZoomFov, CurrentFov,
 			GAME_FOV - MODERN_ZOOM_LENS * MODERN_ZOOM_RANGE_MIN, alpha);

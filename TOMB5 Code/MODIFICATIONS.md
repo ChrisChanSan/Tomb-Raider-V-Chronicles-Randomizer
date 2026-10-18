@@ -23419,7 +23419,7 @@ in and out. He plays at 165 Hz in the display-bound mode (`fps_mode` 2).
 
 | what | where | when |
 |---|---|---|
-| the step: 64, or 32 with the walk key, under the sprint key (in) or the duck key (out) | `camera.cpp` `BinocularCamera`, `BinocStep` | each tick |
+| the step: 64, or 32 with the walk key, under the duck key (in) or the sprint key (out) | `camera.cpp` `BinocularCamera`, `BinocStep` | each tick |
 | the clamp: 128 to 1536 | the same | each tick |
 | the view's field of view, `GAME_FOV - 7 * BinocularRange`, from the range before the tick's step | `camera.cpp` 3723 | each tick |
 | the sky's own, `GAME_FOV - BinocularRange`, and back to `7 *` after the sky | `draw.cpp` 592, 648, 749 | each frame, from the tick's range |

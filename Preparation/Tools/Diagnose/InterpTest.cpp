@@ -6318,7 +6318,7 @@ static const long ZOOM_WIDEST = ZOOM_GAME_FOV -
 /* One tick of BinocularCamera (game\camera.cpp) as the frame-rate seam sees
  * it: the capture before the tick (InterpCapturePrev), the field of view set
  * at the top of the camera from the range before the step, then the step of
- * the sprint (in) or the duck (out) key, clamped to 128..1536. `entry` is
+ * the duck (in) or the sprint (out) key, clamped to 128..1536. `entry` is
  * the tick control.cpp raises the range from 0 to 128 on, `exit` the one it
  * drops it to 0 and the field of view to GAME_FOV on. */
 struct ZoomTick
@@ -6361,8 +6361,8 @@ static void zoom_tick(ZoomTick* z, int key, bool entry, bool exit)
 
 /* The field of view a frame at `alpha` draws its walk and its view with
  * indoors (InterpBeginFrame), and the one SkyDrawPhase sets after the sky
- * (InterpZoomFOV(7)). `blend` false is the code before the seam knew the
- * zoom: the tick's own value at every alpha. */
+ * (InterpZoomFOV(7)). `blend` false is the tick-rate field of view, the
+ * tick's own value at every alpha; `blend` true is the blended one. */
 static long zoom_view(const ZoomTick* z, float alpha, bool blend)
 {
 	if (!blend || !ModernCameraZoomTweens(z->prevRange, z->range,
@@ -6402,7 +6402,7 @@ static void zoom()
 		"zoom lerp above alpha 1 is the tick's own",
 		ModernCameraZoomLerp(13664, 13216, 1.5F), 13216);
 	ok(ModernCameraZoomLerp(13216, 13664, 0.5F) == 13440,
-		"zoom lerp out (duck) at 0.5 is the middle too",
+		"zoom lerp out (sprint) at 0.5 is the middle too",
 		ModernCameraZoomLerp(13216, 13664, 0.5F), 13440);
 	ok(ModernCameraZoomLerp(13664, 13440, 0.5F) == 13552,
 		"zoom lerp of the walk key's step of 224 at 0.5",
@@ -6464,12 +6464,12 @@ static void zoom()
 	ok(!ModernCameraZoomTweens(128, 192, 13664, 13216, ZOOM_WIDEST, 1.0F),
 		"alpha 1 does not blend: fps_mode 0, the tick frames", 1, 0);
 
-	/* The reproduction: a zoom in under the sprint key, held at 1536, a
-	 * zoom out under the duck key, then the exit, ticked at 30 Hz and drawn
+	/* The reproduction: a zoom in under the duck key, held at 1536, a
+	 * zoom out under the sprint key, then the exit, ticked at 30 Hz and drawn
 	 * at 165 Hz with the seam's alpha (the time past the last tick, in
-	 * ticks). Before, five or six frames drew one value and the next jumped
-	 * by 448; now every frame of a moving zoom draws its own value, and the
-	 * values fall (in) or rise (out) one way. */
+	 * ticks). At the tick rate five or six frames draw one value and the
+	 * next jumps by 448; blended, every frame of a moving zoom draws its own
+	 * value, and the values fall (in) or rise (out) one way. */
 	{
 		const int TICKS = 64;
 		ZoomTick z = { 0, 0, ZOOM_GAME_FOV, ZOOM_GAME_FOV };
@@ -6488,7 +6488,7 @@ static void zoom()
 		int runOld = 0, runNew = 0, longestOld = 0, longestNew = 0;
 		int backwards = 0, skyBack = 0, frames = 0;
 
-		printf("  frame  tick  alpha  before     now  sky before     now\n");
+		printf("  frame  tick  alpha    tick   blend    sky tick   blend\n");
 
 		for (int k = 0; k * 30 < (TICKS - 1) * 165; k++)
 		{
@@ -6542,19 +6542,21 @@ static void zoom()
 			prevSky = sNew;
 		}
 
-		printf("  %d frames of a moving zoom: before, the longest run of one"
-			" value %d frames and the largest jump %ld; now %d and %ld\n",
+		printf("  %d frames of a moving zoom: at the tick rate the longest run"
+			" of one value %d frames and the largest jump %ld; blended %d"
+			" and %ld\n",
 			frames, longestOld, worstOld, longestNew, worstNew);
 
 		ok(longestOld >= 5 && worstOld == 448,
-			"before: runs of five or six frames, jumps of 448", longestOld, 5);
-		ok(longestNew == 1, "now: no two frames of a moving zoom alike",
+			"tick rate: runs of five or six frames, jumps of 448",
+			longestOld, 5);
+		ok(longestNew == 1, "blended: no two frames of a moving zoom alike",
 			longestNew, 1);
-		ok(worstNew <= 100, "now: no frame steps more than 100 units",
+		ok(worstNew <= 100, "blended: no frame steps more than 100 units",
 			worstNew, 100);
-		ok(backwards == 0, "now: the view moves one way between ticks",
+		ok(backwards == 0, "blended: the view moves one way between ticks",
 			backwards, 0);
-		ok(skyBack == 0, "now: the view after the sky moves one way",
+		ok(skyBack == 0, "blended: the view after the sky moves one way",
 			skyBack, 0);
 
 		// The entry tick and the exit tick draw the tick's own value.

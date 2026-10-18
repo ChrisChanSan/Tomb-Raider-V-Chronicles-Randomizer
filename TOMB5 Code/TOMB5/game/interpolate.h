@@ -109,7 +109,7 @@ bool InterpSkyWithheld();
  * through InterpZoomFOV: GAME_FOV less `factor` times the range, the range
  * blended between the two ticks at the same alpha. On every other frame,
  * and always at fps_mode 0, InterpZoomFOV is AlterFOV with the tick's own
- * value, the call SkyDrawPhase made before. InterpEndFrame puts back the
+ * value, the classic call of SkyDrawPhase. InterpEndFrame puts back the
  * field of view the classic code would have left, so the next tick finds
  * phd_persp and the floats beside it as at 30 Hz. Everything AlterFOV
  * feeds follows the blended value the way it follows the tick's: phd_persp,

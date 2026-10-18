@@ -119,6 +119,19 @@ inline int HDWaterSurfaceRoom(const int* wet, const float* ceilTop,
 	return best;
 }
 
+/* Whether a level takes the deep look (hd_render.cpp, "the deep look"): its
+ * water rooms no sheet lies over - `fallback`, the rooms that take the
+ * level's largest body - outnumber the rooms under a sheet (`sheeted`) more
+ * than `share` times, and the water has a sea's surface over the dive
+ * (`surface`, HDWaterSurfaceRoom's answer, -1 for none). A dive looks up to
+ * a surface; a flooded room's water stands under its own ceiling. JOBY4:
+ * 132 against 2 and room 19; RICH3: 1 against 0 and none. */
+inline bool HDWaterDeepLook(int fallback, int sheeted, int share,
+	int surface)
+{
+	return fallback > share * sheeted && surface >= 0;
+}
+
 /* The wet floor over a polished floor (hd_render.cpp, "the polished floor
  * under the water"), the arithmetic without a device; ModernTest checks
  * both (wet_polish).

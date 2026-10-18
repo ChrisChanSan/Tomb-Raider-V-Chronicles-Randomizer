@@ -15599,9 +15599,49 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		 * 1.50 is a sunlit room's far from the dive). 4 is a free choice
 		 * between JOBY4's 66 and the 1.33 of RICH2 and 1.22 of ANDY3, the
 		 * next ones over the fifteen levels (RoomProbe -hdwater 1 -nodraw,
-		 * the level line's under= and under_fallback=). */
-		g_wdeep_on = largest >= 0 && g_wlevel.underFallback >
-			kUnderDeepShare * g_wlevel.underRooms;
+		 * the level line's under= and under_fallback=).
+		 *
+		 * And only a sea: a level whose water has a surface over the dive,
+		 * the art of one water room laid as the sea's surface far over its
+		 * own squares (HDWaterSurfaceRoom, hd_water_under.h, asked of the
+		 * rooms as built - JOBY4's room 19, its art 851 units under the
+		 * water's top). A dive looks up to such a surface; a flooded room
+		 * has its own ceiling over its water and its art is its own floor.
+		 * RICH3 has one water room, 190 (flooded by a flip), and no sheet
+		 * over any, so it passed the share with 1 against 0; its art lies
+		 * 4,864 units under its top, no sea's surface, and it keeps the
+		 * basin's look (HDWaterDeepLook). */
+		std::vector<int> surfWet((size_t)count, 0);
+		std::vector<int> surfArt((size_t)count, 0);
+		std::vector<float> surfCeil((size_t)count, 1.0e9f);
+		std::vector<float> surfTop((size_t)count, 0.0f);
+
+		for (int r = 0; r < count; r++)
+		{
+			const HDWaterRoom& rm = rooms[r];
+
+			surfWet[(size_t)r] = (rm.flags & HD_WATER_ROOM_UNDERWATER) ? 1 : 0;
+
+			// A square of the water build: floor and ceiling both a height.
+			for (int i = 0; rm.ceiling && rm.floor && i < rm.sizeX * rm.sizeZ;
+				i++)
+				if (rm.floor[i] != -127 && rm.ceiling[i] != -127 &&
+					rm.ceiling[i] * 256.0f < surfCeil[(size_t)r])
+					surfCeil[(size_t)r] = rm.ceiling[i] * 256.0f;
+
+			if (r < groups && g_groups[(size_t)r].hasBounds)
+			{
+				surfArt[(size_t)r] = 1;
+				surfTop[(size_t)r] = g_groups[(size_t)r].mins[1] +
+					(float)rm.originY;
+			}
+		}
+
+		const int surface = HDWaterSurfaceRoom(&surfWet[0], &surfCeil[0],
+			&surfArt[0], &surfTop[0], count, kHDWaterSurfaceReach);
+
+		g_wdeep_on = largest >= 0 && HDWaterDeepLook(g_wlevel.underFallback,
+			g_wlevel.underRooms, kUnderDeepShare, surface);
 
 		if (g_wdeep_on)
 		{

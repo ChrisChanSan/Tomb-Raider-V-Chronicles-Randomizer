@@ -22154,6 +22154,42 @@ static void water_surface()
 		(long)kHDWaterSurfaceReach, 2048);
 }
 
+/* Whether a level takes the deep look (hd_water_under.h, HDWaterDeepLook):
+ * its water mostly water no sheet lies over, and a sea's surface over the
+ * dive. JOBY4: 132 fallback rooms against the 2 under its basin, the
+ * surface room 19; RICH3: its one flooded room 190 against none, no
+ * surface; RICH2 and ANDY3, the next shares over the fifteen levels, 1.33
+ * and 1.22. */
+static void water_deep()
+{
+	printf("the deep look: a sea's share and its surface\n");
+
+	const int share = 4;
+
+	ok(HDWaterDeepLook(132, 2, share, 19), "deep: JOBY4, its share and room 19",
+		HDWaterDeepLook(132, 2, share, 19) ? 1 : 0, 1);
+	ok(!HDWaterDeepLook(1, 0, share, -1), "deep: not RICH3, no surface",
+		HDWaterDeepLook(1, 0, share, -1) ? 1 : 0, 0);
+	ok(HDWaterDeepLook(1, 0, share, 190),
+		"deep: ...the share alone passed it, 1 against 0",
+		HDWaterDeepLook(1, 0, share, 190) ? 1 : 0, 1);
+	ok(!HDWaterDeepLook(132, 2, share, -1),
+		"deep: JOBY4's share without a surface is no sea",
+		HDWaterDeepLook(132, 2, share, -1) ? 1 : 0, 0);
+	ok(!HDWaterDeepLook(4, 3, share, 0), "deep: RICH2's 1.33, a surface or not",
+		HDWaterDeepLook(4, 3, share, 0) ? 1 : 0, 0);
+	ok(!HDWaterDeepLook(11, 9, share, 5), "deep: ANDY3's 1.22",
+		HDWaterDeepLook(11, 9, share, 5) ? 1 : 0, 0);
+	ok(!HDWaterDeepLook(8, 2, share, 3),
+		"deep: four times the sheeted rooms is not more than four",
+		HDWaterDeepLook(8, 2, share, 3) ? 1 : 0, 0);
+	ok(HDWaterDeepLook(9, 2, share, 0),
+		"deep: room 0 is a surface room", HDWaterDeepLook(9, 2, share, 0) ?
+		1 : 0, 1);
+	ok(!HDWaterDeepLook(0, 0, share, 19), "deep: no water room at all",
+		HDWaterDeepLook(0, 0, share, 19) ? 1 : 0, 0);
+}
+
 /* The wet floor over a polished floor (hd_water_under.h): a mirror face
  * overlapping a 256-unit cell held a unit in, and a wet point giving its own
  * mirror to the marble floors' where they mirrored its height. The cell at
@@ -24086,6 +24122,7 @@ int main()
 	art_ripple();
 	water_look();
 	water_surface();
+	water_deep();
 	wet_polish();
 	spring_table();
 	spring_file();

@@ -63,6 +63,7 @@
 #include "hd_splash_math.h"		// the water's cards
 #include "hd_water_under.h"		// the eye's depth under the water
 #include "hd_spring.h"			// a row's `spring` key
+#include "hd_sky_cap.h"			// the sky band's closed poles
 
 #include <algorithm>
 #include <array>
@@ -5700,6 +5701,9 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 		phase_ms[phase] += now - lap_at;
 		lap_at = now;
 	};
+
+	// The sky band's poles closed (HDRenderSkyCaps, the sky dome below).
+	HDRenderSkyCaps(trg, numRooms);
 
 	g_vertex_count = (int)trg.vertices.size();
 	g_room_groups = numRooms > 0 && numRooms < (int)trg.groups.size()
@@ -18115,8 +18119,8 @@ namespace
 	 * its colour (the hue of `light`, its brightest channel 1), the gains
 	 * and the clock, the body's first four wave rows, the extinction
 	 * (`sigma`, the frame's c134), the shafts' numbers, the waves' fade
-	 * and the window rim's width; the fill's colour 0 (water_look_draws
-	 * sets it for its third draw).
+	 * and the window rim's width; c215 0, the colour the shader adds
+	 * first (gLookFill), which no draw sets.
 	 * `knobs` in the order of HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
@@ -18176,13 +18180,11 @@ namespace
 	 * the water between the eye and whatever it sees and are drawn untested,
 	 * their march held to the knobs' length; on the game's path they are
 	 * drawn with the sky, before the rooms, so every opaque thing of the
-	 * frame stands over them. With `fill`, a third draw at a depth of
-	 * 0.99999, tested LESS, adds that colour where the depth buffer still
-	 * holds its clear - nothing drawn there, not even the sky's band, whose
-	 * slice ends under 0.99999 (HD_SKY_MINZ 0.996 and the band's sphere
-	 * at four blocks: 0.99998). `gpuMs` takes the time between two GPU
-	 * timestamps round them, -1 untimed. */
-	bool water_look_draws(float* c, const float* fill, double* gpuMs)
+	 * frame stands over them. Where the band leaves no clear - its poles
+	 * closed (HDRenderSkyCaps) - the two draws are the look's whole
+	 * picture. `gpuMs` takes the time between two GPU timestamps round
+	 * them, -1 untimed. */
+	bool water_look_draws(float* c, double* gpuMs)
 	{
 		const float quad[4][4] = {
 			{ -1.0f, 1.0f, 0.9999f, 1.0f }, { 1.0f, 1.0f, 0.9999f, 1.0f },
@@ -18228,23 +18230,6 @@ namespace
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_FALSE);
 		drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2,
 			quad, sizeof(quad[0]))) && drawn;
-
-		if (fill)
-		{
-			const float clear[4][4] = {
-				{ -1.0f, 1.0f, 0.99999f, 1.0f }, { 1.0f, 1.0f, 0.99999f, 1.0f },
-				{ -1.0f, -1.0f, 0.99999f, 1.0f },
-				{ 1.0f, -1.0f, 0.99999f, 1.0f }
-			};
-			const float none[4] = { 0.0f, 0.0f, 0.0f, c[27] };
-			const float colour[4] = { fill[0], fill[1], fill[2], 0.0f };
-
-			g_device->SetPixelShaderConstantF(206, none, 1);
-			g_device->SetPixelShaderConstantF(215, colour, 1);
-			g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
-			drawn = SUCCEEDED(g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP,
-				2, clear, sizeof(clear[0]))) && drawn;
-		}
 
 		if (timed)
 		{
@@ -18375,7 +18360,7 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 	g_device->SetPixelShader(ps);
 	g_device->SetVertexDeclaration(decl);
 
-	const bool drawn = water_look_draws(c, 0, gpuMs);
+	const bool drawn = water_look_draws(c, gpuMs);
 
 	held->Apply();
 	held->Release();
@@ -18399,11 +18384,11 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
  * the water's own. Drawn in the sky's place, before the rooms: the surface
  * art of the remaster (room 19 in JOBY4, additive) is added over it later,
  * and every opaque thing of the frame covers it - the shafts' light lies
- * only on open water. What the frame left at its clear, the band's open
- * poles, takes the scattered colour (water_look_draws' fill): with the
- * script's layers out nothing else covers them, and black there drew a
- * dark disc overhead. `knobs` stands in for HDWaterLookKnobs when given
- * (RoomProbe -underlookknobs). The render states, the shaders, the
+ * only on open water. The band's poles are closed by its own caps
+ * (HDRenderSkyCaps), with the script's layers out the only sky overhead,
+ * and the look's light lies over them as over the band: nothing of the
+ * frame is left at its clear. `knobs` stands in for HDWaterLookKnobs when
+ * given (RoomProbe -underlookknobs). The render states, the shaders, the
  * declaration and stream 0 are put back as they were. `gpuMs` as in
  * HDRenderWaterProbeLook. */
 bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
@@ -18460,7 +18445,7 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	g_device->SetPixelShader(g_look_ps);
 	g_device->SetVertexDeclaration(g_look_decl);
 
-	const bool drawn = water_look_draws(c, u + 4, gpuMs);
+	const bool drawn = water_look_draws(c, gpuMs);
 
 	for (int i = 0; i < states; i++)
 		g_device->SetRenderState(kept[i], was[i]);
@@ -23003,6 +22988,42 @@ static void HDRenderSkyPartOrder(std::vector<HDRange>& ranges)
 		std::stable_sort(ranges.begin(), ranges.end(), before);
 }
 
+/* The band's closed poles (hd_sky_cap.h, HDSkyCapBuild): the band ends at
+ * its last ring on either side and leaves the pole beyond to the frame's
+ * clear, which showed as a dark disc straight overhead in JOBY4, where the
+ * band is the whole sky seen from below the water. Each pole gets a disc in
+ * the last ring's own page and texture row, built into the band's own run
+ * as the .TRG is read: the same pass, the same draw call, the same depth
+ * slice, and the look's light (HDRenderWaterLook) laid over it as over the
+ * band. 64 triangles and 64 corners per band, two bands in TITLE; a band
+ * row the alpha test cuts away (the cloud levels above about 27 degrees)
+ * draws nothing in its disc either. On while HDRenderSkyCapSet leaves it
+ * on - always in the game. */
+namespace
+{
+	bool g_sky_cap_on = true;
+	HDSkyCapCount g_sky_cap_last = { 0, 0, 0, 0 };
+}
+
+void HDRenderSkyCapSet(bool on)
+{
+	g_sky_cap_on = on;
+}
+
+HDSkyCapCount HDRenderSkyCapLast()
+{
+	return g_sky_cap_last;
+}
+
+void HDRenderSkyCaps(trf::remaster::Trg& trg, int numRooms)
+{
+	const int rooms = numRooms > 0 && numRooms < (int)trg.groups.size()
+		? numRooms : (int)trg.groups.size();
+	const HDSkyCapCount none = { 0, 0, 0, 0 };
+
+	g_sky_cap_last = g_sky_cap_on ? HDSkyCapBuild(trg, rooms) : none;
+}
+
 bool HDRenderSky(const D3DMATRIX* world)
 {
 	if (!g_device || !HDRenderSkyGroups())
@@ -23048,9 +23069,9 @@ bool HDRenderSky(const D3DMATRIX* world)
  * one flat colour; JOBY4's script layers are the sea's surface seen from
  * below on the level's classic page, and JOBY4 takes the deep look, whose
  * surface the remaster's art of room 19 and HDRenderWaterLook draw
- * instead. The look and its fill of the band's open poles come only with
- * the sheets (g_caustic_on, tomb5.hd_water); with them off the layers stay
- * in, as before, so that nothing leaves the poles at the frame's clear.
+ * instead. The look comes only with the sheets (g_caustic_on,
+ * tomb5.hd_water); with them off the layers stay in, as before, drawn
+ * over the band and its closed pole (HDRenderSkyCaps).
  * RICH3 takes the deep look too (its one water room no sheet lies over,
  * the flipped room 190, against none under a sheet), and its sheets leave
  * the layers out already. */

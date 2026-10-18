@@ -36,10 +36,8 @@
  * pixel, and their normals there are drawn as noise and as dark streaks
  * where they tip a ray out of the window; so their slope is held to
  * gLookMore.x / t of itself, t the way to the surface (0: kept whole).
- * A third draw on the game's path fills what the frame left at its clear
- * (the sky band's open poles, past its last ring at 75 degrees) with
- * gLookFill, the water's scattered colour: the colour a view ray under
- * the water takes when it meets nothing. */
+ * Nothing of the frame is left at its clear for these draws to fill: the
+ * sky band's poles are closed by its own caps (hd_sky_cap.h). */
 #include "hd_room.hlsl"
 
 /* c200 - c202 gLookAxis   the view's axes in the world: world x, y, z of a
@@ -57,9 +55,7 @@
  *                          reach under the surface, the march's length
  * c214        gLookMore   x the way over which the waves' slope is kept
  *                          whole (0 always whole), y the window rim's
- *                          width in cosine (0 the study's 0.08)
- * c215        gLookFill   the colour added before the three parts (0 but
- *                          in the fill's draw) */
+ *                          width in cosine (0 the study's 0.08) */
 float4 gLookAxis[3] : register(c200);
 float4 gLookPix : register(c203);
 float4 gLookEye : register(c204);
@@ -70,7 +66,6 @@ float4 gLookWave[4] : register(c208);
 float4 gLookSigma : register(c212);
 float4 gLookShaft : register(c213);
 float4 gLookMore : register(c214);
-float4 gLookFill : register(c215);
 
 struct LOOK_OUT
 {
@@ -116,7 +111,7 @@ float4 LookPS(float2 vpos : VPOS) : COLOR0
 	const float3 sun = normalize(float3(gLookSun.x, -gLookSun.y,
 		gLookSun.z));
 	const float D = gLookEye.w;
-	float3 col = gLookFill.rgb;
+	float3 col = 0.0f;
 	float far = gLookShaft.w;
 
 	if (vu.y > 1.0e-3f)

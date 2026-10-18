@@ -99,6 +99,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 // The water seen from below: the eye's depth, Snell's window (water_under).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
+// The sky band's closed poles (sky_cap).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
 // The springs: the table, the file's key, the hashed clock (spring_*).
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_spring.h"
 /* The level's HD key: which load of a level keeps the HD data of the one
@@ -22154,6 +22156,199 @@ static void water_surface()
 		(long)kHDWaterSurfaceReach, 2048);
 }
 
+/* The sky band's caps (hd_sky_cap.h, HDSkyCapBuild), on a band shaped as
+ * the remaster's: rings at three heights, eight edges round with the seam
+ * twice (u 0 to 255), unlit, in the sky group past the rooms, between a lit
+ * cloud sheet and an unlit flat sheet (RICH3 carries one); and a room group
+ * of the same shape in front of it, which is no sky. */
+static trf::remaster::TrgVertex sky_cap_vertex(int x, int y, int z, int u,
+	int v, int light)
+{
+	trf::remaster::TrgVertex o;
+
+	o.x = (int16_t)x;
+	o.y = (int16_t)y;
+	o.z = (int16_t)z;
+	o.u = (uint8_t)u;
+	o.v = (uint8_t)v;
+	o.layer = 3;
+	o.colour1[0] = o.colour1[1] = o.colour1[2] = (uint8_t)light;
+	o.colour2[0] = o.colour2[1] = o.colour2[2] = (uint8_t)light;
+	return o;
+}
+
+/* One part of `rings` rings round the axis, at heights `ys` and radii
+ * `radius`, appended to `trg` and `g` as one run of `pass`. */
+static void sky_cap_band(trf::remaster::Trg& trg, trf::remaster::TrgGroup& g,
+	int pass, int rings, const int* ys, const int* radius, int light)
+{
+	const int seg = 8;
+	const uint32_t first = (uint32_t)trg.vertices.size();
+	trf::remaster::TrgPart part;
+
+	for (int k = 0; k < rings; k++)
+		for (int i = 0; i <= seg; i++)
+		{
+			const double a = 6.283185307179586 * i / seg;
+
+			trg.vertices.push_back(sky_cap_vertex(
+				(int)lround(radius[k] * cos(a)), ys[k],
+				(int)lround(radius[k] * sin(a)), i * 255 / seg,
+				20 + 100 * k, light));
+		}
+
+	for (int p = 0; p < 3; p++)
+		part.pass[p].start = (uint32_t)trg.indices.size();
+
+	for (int k = 0; k + 1 < rings; k++)
+		for (int i = 0; i < seg; i++)
+		{
+			const uint32_t a = first + (uint32_t)(k * (seg + 1) + i);
+			const uint32_t b = a + (uint32_t)(seg + 1);
+			const uint32_t t[6] = { a, b, b + 1, a, b + 1, a + 1 };
+
+			trg.indices.insert(trg.indices.end(), t, t + 6);
+		}
+
+	part.pass[pass].count = (uint32_t)trg.indices.size() -
+		part.pass[pass].start;
+
+	for (int p = pass + 1; p < 3; p++)
+		part.pass[p].start = (uint32_t)trg.indices.size();
+
+	g.parts.push_back(part);
+}
+
+// Whether the parts tile [0, indices) in part and pass order.
+static bool sky_cap_tiles(const trf::remaster::Trg& trg)
+{
+	uint32_t at = 0;
+
+	for (const trf::remaster::TrgGroup& g : trg.groups)
+		for (const trf::remaster::TrgPart& p : g.parts)
+			for (const trf::remaster::TrgPart::Pass& run : p.pass)
+			{
+				if (run.start != at)
+					return false;
+
+				at += run.count;
+			}
+
+	return at == trg.indices.size();
+}
+
+static void sky_cap()
+{
+	printf("the sky band's caps\n");
+
+	const int ys[3] = { -3956, 0, 3956 };
+	const int open[3] = { 1060, 4096, 1060 };
+	const int flat[1] = { -2534 };
+	const int wide[1] = { 24000 };
+	trf::remaster::Trg trg;
+
+	trg.groups.resize(2);
+	sky_cap_band(trg, trg.groups[0], 0, 3, ys, open, 0);	// a room
+	sky_cap_band(trg, trg.groups[1], 1, 3, ys, open, 90);	// lit rings
+	sky_cap_band(trg, trg.groups[1], 1, 3, ys, open, 0);	// the band
+	sky_cap_band(trg, trg.groups[1], 0, 1, flat, wide, 0);	// flat, unlit
+
+	const trf::remaster::Trg before = trg;
+	const HDSkyCapCount n = HDSkyCapBuild(trg, 1);
+	const trf::remaster::TrgPart& band = trg.groups[1].parts[1];
+	const uint32_t bandEnd = before.groups[1].parts[1].pass[1].start +
+		before.groups[1].parts[1].pass[1].count;
+
+	ok(n.bands == 1 && n.poles == 2,
+		"sky cap: one band, both its poles closed", n.bands * 10 + n.poles,
+		12);
+	ok(n.triangles == 16 && n.vertices == 16,
+		"sky cap: a wedge and a centre corner per ring edge, 8 + 8",
+		n.triangles * 100 + n.vertices, 1616);
+	ok(band.pass[1].count == before.groups[1].parts[1].pass[1].count + 48,
+		"sky cap: the wedges join the band's own run",
+		(long)band.pass[1].count, (long)before.groups[1].parts[1].pass[1].count
+		+ 48);
+	ok(sky_cap_tiles(trg) && trg.groups[1].parts[2].pass[0].start ==
+		before.groups[1].parts[2].pass[0].start + 48,
+		"sky cap: the later parts move up, the parts still tile", 0, 0);
+	ok(trg.groups[0].parts[0].pass[0].count ==
+		before.groups[0].parts[0].pass[0].count &&
+		trg.groups[1].parts[0].pass[1].count ==
+		before.groups[1].parts[0].pass[1].count &&
+		trg.groups[1].parts[2].pass[0].count ==
+		before.groups[1].parts[2].pass[0].count,
+		"sky cap: a room, a lit part and a flat sheet get none", 0, 0);
+
+	/* Each wedge: two corners of the pole ring, run the other way round
+	 * than the band's triangle on that edge, and a new corner at the ring's
+	 * centre in its plane, on the edge's page and row, its u between. */
+	int good = 0, closed = 0, dark = 0;
+
+	for (uint32_t t = bandEnd; t < bandEnd + 48; t += 3)
+	{
+		const uint32_t a = trg.indices[t], b = trg.indices[t + 1];
+		const uint32_t c = trg.indices[t + 2];
+		const trf::remaster::TrgVertex& va = trg.vertices[a];
+		const trf::remaster::TrgVertex& vb = trg.vertices[b];
+		const trf::remaster::TrgVertex& vc = trg.vertices[c];
+		const int lo = va.u < vb.u ? va.u : vb.u;
+		const int hi = va.u < vb.u ? vb.u : va.u;
+
+		good += c >= before.vertices.size() && va.y == vb.y &&
+			vc.y == va.y && (va.y == -3956 || va.y == 3956) && vc.x == 0 &&
+			vc.z == 0 && vc.v == va.v && vc.layer == va.layer &&
+			vc.u >= lo && vc.u <= hi ? 1 : 0;
+		dark += vc.colour1[0] | vc.colour1[1] | vc.colour1[2] |
+			vc.colour2[0] | vc.colour2[1] | vc.colour2[2] ? 0 : 1;
+
+		for (uint32_t s = band.pass[1].start; s < bandEnd; s += 3)
+			for (int k = 0; k < 3; k++)
+				closed += trg.indices[s + (uint32_t)k] == b &&
+					trg.indices[s + (uint32_t)((k + 1) % 3)] == a ? 1 : 0;
+	}
+
+	ok(good == 16, "sky cap: each wedge on the ring, its centre in the "
+		"ring's plane, page and row", good, 16);
+	ok(closed == 16, "sky cap: each ring edge run once each way round",
+		closed, 16);
+	ok(dark == 16 && HDSkyCapUnlit(trg, band.pass[1].start,
+		band.pass[1].count),
+		"sky cap: the wedges as unlit as the band", dark, 16);
+
+	// With every group a room nothing is a sky, and nothing changes.
+	trf::remaster::Trg rooms = before;
+	const HDSkyCapCount none = HDSkyCapBuild(rooms, 2);
+
+	ok(none.triangles == 0 && rooms.indices == before.indices &&
+		rooms.vertices.size() == before.vertices.size(),
+		"sky cap: no sky group, no wedge", none.triangles, 0);
+
+	// A pole closed already (its ring at the axis) keeps; the other closes.
+	const int pointed[3] = { 0, 4096, 1060 };
+	trf::remaster::Trg one;
+
+	one.groups.resize(1);
+	sky_cap_band(one, one.groups[0], 1, 3, ys, pointed, 0);
+
+	const HDSkyCapCount half = HDSkyCapBuild(one, 0);
+
+	ok(half.poles == 1 && half.triangles == 8 && sky_cap_tiles(one),
+		"sky cap: a pole closed already keeps, the other closes",
+		half.poles * 10 + half.triangles, 18);
+
+	// Two rings only: a band, both rings its poles.
+	const int two[2] = { -100, 100 };
+	const int twoR[2] = { 1000, 1000 };
+	trf::remaster::Trg ring;
+
+	ring.groups.resize(1);
+	sky_cap_band(ring, ring.groups[0], 1, 2, two, twoR, 0);
+
+	ok(HDSkyCapBuild(ring, 0).triangles == 0,
+		"sky cap: two heights are no band (three wanted)", 0, 0);
+}
+
 /* The classic struct stepped as UpdateSplashes steps it: at 0 the rings
  * stand where S_DrawSplashes draws them first (twice the struct's radius
  * and size), the column rises and falls back to the surface, and the life
@@ -24019,6 +24214,7 @@ int main()
 	art_ripple();
 	water_look();
 	water_surface();
+	sky_cap();
 	spring_table();
 	spring_file();
 	spring_clock();

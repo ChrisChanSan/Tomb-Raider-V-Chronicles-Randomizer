@@ -3061,9 +3061,10 @@ carries the tables.
     `MENU_SLIDER` row draws its value right of its bar, left-aligned, one
     gap of `GetFixedScale(4)` after the bar's white frame, the frame's end
     computed with `DoSlider`'s own arithmetic (400 * `phd_winxmax` / 640
-    plus `GetFixedScale(200)` plus the frame's pixel); the gap the
-    tightest layout's split, 40 pixels of room at 640x480 and "100" 31
-    wide, 4 to the bar and 5 to the edge. OWN, the placement; the request
+    plus `GetFixedScale(200)` plus the frame's pixel); the gap measured at
+    the tightest layout, 39 free pixels at 640x480 (Direct3D 9's pixel
+    centres on whole numbers make 600 the frame's last pixel) and "100" 31
+    wide, 3 to the bar and 5 to the edge. OWN, the placement; the request
     of 2026-10-18 ("Go for #221."). DATA: the digit widths of
     `game/chardef.inc` and the room measured at eight layouts and swept
     over every width from 640 to 3840 in seven shapes of screen (at least
@@ -3080,8 +3081,10 @@ carries the tables.
     engine's, the rule the value column's own in the options menu.
 296. **MenuTest's `slider_numbers`** (`Preparation/Tools/Diagnose/
     MenuTest.cpp`) - the six rows, their ranges, the draw's place in the
-    slider block, its text, colours and position held against the engine
-    files' text, the position swept; 44,619 checks before, 44,731 after.
+    slider block; its format, argument and colour rule read out of the
+    engine's draw and its text at each row's bottom, middle and top; the
+    position held against the engine files' text and swept; 44,619 checks
+    before, 44,754 after.
     OWN, this project's tool.
 
 ## Credited, but not contained here

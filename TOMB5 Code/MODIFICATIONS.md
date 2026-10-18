@@ -8859,16 +8859,15 @@ the fifteen levels as shipped.
 of its own HD art: every triangle of the static's destructible part of the `.TRG` goes
 with the classic face it lies on, and a piece made of that face carries those triangles,
 drawn with the room's own shaders, its page, its light and its blend. The pieces' place,
-flight, count, life and sound are the classic break's, untouched. A static with no part
-of the art, and every break while the world is drawn classic, throws the classic pieces
-as before. The new files are `specific/hd/hd_debris_rules.h` (the rule, pure) and
+flight, count, life and sound are the classic break's, untouched. A static with no part of
+the art, and every break while the world is drawn classic, throws the classic pieces as
+before. The new files are `specific/hd/hd_debris_rules.h` (the rule, pure) and
 `specific/hd/hd_debris.h` (the art's read, the break's table beside the debris array, the
 draw; its definitions behind `HD_DEBRIS_BODY`, which `hd_level.cpp` and RoomProbe define,
-so that neither the engine's project nor `broom.bat` changes); `game/debris.cpp` hands
-over the break and each piece's face,
-`specificfx.cpp`'s `DrawDebris` asks per piece, `hd_level.cpp` finds the static's part
-and draws the pieces last in its two brackets. RoomProbe gains `-debris`,
-`-debrisclassic` and `-debrisseed`.
+so that neither the engine's project nor `broom.bat` changes); `game/debris.cpp` opens the
+break in HD and notes each piece's face, `specificfx.cpp`'s `DrawDebris` asks per piece,
+`hd_level.cpp` names the static's parts (`HDStaticBreakParts`) and draws the pieces last
+in its two brackets. RoomProbe gains `-debris`, `-debrisclassic` and `-debrisseed`.
 
 **Why.** The owner, 2026-10-18, after breaking ANDREA2's window in the build of Oct 18
 2026 16:09:11: "Wenn das Fenster zerstoert wird sind die Partikel noch die blauen SD
@@ -8944,22 +8943,25 @@ number, and a destructible part's carries bit 15).
 **The draw.** `HDLevelBuild` reads the destructible parts once a level pairs any
 (`HDDebrisLevelRead`): the file's head and parts, then only their index runs and the
 vertices those name, by seeking - ANDREA2's five parts, 7,220 triangles, in 3.0 to 12.3 ms
-(median 4.4 of ten runs). `ShatterObject` asks `HDStaticBreak` once it has turned the
-vertices; the pairs of `UpdateDestructibles` name the static's parts, read where its list
-stands now, and `TriggerDebris` notes each piece's face beside the debris array
-(`HDDebrisNote`). `DrawDebris` builds a piece's matrix as before; a piece with a look and
-the world drawn HD (`HDLevelActive`) is noted with that matrix instead of going to the
-sort list. `HDFrameDraw` draws the solid and cut-out triangles last in its bracket,
-`HDFrameDrawGlow` the glass and the glows last in its: the vertices put into view space on
-the processor, one `DrawPrimitiveUP` per kind and page, with the room's own vertex and
-pixel shaders (`kHDRoomVS`, `kHDRoomPS`, compiled once more into the file that holds the
-definitions), the projection and the frame's fog, fog bulbs and screen; every switch of
-the room's vertex shader off, no dynamic light, no gloss, both sides drawn. The light is
-the art's baked light where the triangle stood. Every device state the draw sets is put
-back; the shader constants are the next bracket's to write. `HDLOG level=... debris
-parts=... tris=... ms=...` at the build and `HDLOG debris break level=... room=...
-mesh=... parts=... faces=... places=... tris=... faces_with_art=... pieces=...
-pieces_with_art=... tris_flying=... ms=...` at a break stand behind `-log`.
+(median 4.4 of ten runs). `ShatterObject` (`game/debris.cpp`) asks `HDStaticBreakParts`
+(`hd_level.cpp`) once it has turned the vertices: the pairs of `UpdateDestructibles` name
+the static's parts, read where its list stands now. `HDDebrisBreakMesh` makes the mesh's
+faces at the static's place in the order the walk takes them (`HDDebrisMeshFace`) and
+opens the break; `TriggerDebris` notes each piece's face beside the debris array
+(`HDDebrisNote`), and the end of the walk writes the break's line and closes it.
+`DrawDebris` builds a piece's matrix as before; a piece with a look and the world drawn HD
+(`HDLevelActive`) is noted with that matrix instead of going to the sort list.
+`HDFrameDraw` draws the solid and cut-out triangles last in its bracket, `HDFrameDrawGlow`
+the glass and the glows last in its: the vertices put into view space on the processor,
+one `DrawPrimitiveUP` per kind and page, with the room's own vertex and pixel shaders
+(`kHDRoomVS`, `kHDRoomPS`, compiled once more into the file that holds the definitions),
+the projection and the frame's fog, fog bulbs and screen; every switch of the room's
+vertex shader off, no dynamic light, no gloss, both sides drawn. The light is the art's
+baked light where the triangle stood. Every device state the draw sets is put back; the
+shader constants are the next bracket's to write. `HDLOG level=... debris parts=...
+tris=... ms=...` at the build and `HDLOG debris break level=... room=... mesh=...
+parts=... faces=... places=... tris=... faces_with_art=... pieces=... pieces_with_art=...
+tris_flying=... ms=...` at a break stand behind `-log`.
 
 **Measured.** ANDREA2's window (RoomProbe `-debris 132:0`, the tool's flight with its own
 random numbers and no floor test): 330 faces at 165 places, 2,146 triangles dealt to 234
@@ -8974,11 +8976,17 @@ break, from the hall in room 73, and ANDREA1 room 198; they are kept outside the
 repository. The classic look shows the gold bars and the blue panes; the HD look the
 window grid's brown bars, its panes at the art's 0.1.
 
-The flight: a scratch harness links `game/debris.cpp` of `dc4883fc` and of this round
-with the same stubs, breaks mesh 571 as the controller does and hashes the whole debris
-array after the break and after each of 120 `UpdateDebris` steps; with this round's hooks
-a real break is open (1 part, 2,146 triangles, 92 pieces with art). The 121 hashes and
-the random generator's last state are equal byte for byte.
+The flight: a scratch harness links `game/debris.cpp` of `dc4883fc` and of this round with
+the same stubs, breaks mesh 571 as the controller does and hashes the whole debris array
+after the break and after each of 120 `UpdateDebris` steps; with this round's hooks a real
+break is open (1 part, 2,146 triangles, 92 pieces with art). The 121 hashes and the random
+generator's last state are equal byte for byte. With the break's glue moved out of
+`hd_level.cpp`, the harness links `game/debris.cpp`'s own opening and closing and
+`hd_debris`'s own face building, and stubs only the pairing (`HDStaticBreakParts`, handing
+over group 132's part); the 121 hashes and the generator's state are again those of
+`dc4883fc`, md5 `97e9d334af18cada1401a31a3906533c` for both outputs, the break's line
+unchanged (1 part, 330 faces, 165 places, 2,146 triangles, 234 faces with art, 92 of 128
+pieces with art, 926 in flight).
 
 **The cost**, RoomProbe at the near eye, life 4, 128 pieces in flight, the draw timed with
 timestamps round it, five runs each: the HD look 926 triangles in one draw call, 0.035 to
@@ -8995,24 +9003,33 @@ pieces are drawn last in each bracket so that their shader constants touch no la
 which puts the glass after the rooms' glows. The room's own shader bytecode, not a copy
 of its lines, so the pieces follow any change to the room's light and glass.
 
-**Checked.** The nine scripts exit 0. ModernTest 15,684 checks with the debris group's 24
-(the distance, the place, the deal, a window's 576 triangles alike with and without the
-box cut, no reach, the blend), MenuTest 44,619, InterpTest 729, LipsTest 299 with the
-scratch object folder and 272 without, 0 failed (the worktree has no game folder: LipsTest
-run by hand with the classic `cutseq.bin` as its third argument; from `blips.bat` alone
-295 and 268, the nine `cutseq.bin` checks failing). Byte-identical to the tool of
-`dc4883fc`: the classic views (`hd_build` 0, 6 of 6, and to the tool of `8691e82`), the 15
-parity cameras with `hd_water` 0 and with 1 (15 of 15 each), the six HD views (6 of 6) and
-the window eyes of ANDREA2 and ANDREA1, whole and broken (6 of 6).
+**Checked.** The nine scripts exit 0. ModernTest 15,688 checks with the debris group's 28
+(the faces of the breaking mesh, the distance, the place, the deal, a window's 576
+triangles alike with and without the box cut, no reach, the blend), MenuTest 44,619,
+InterpTest 729, LipsTest 299 with the scratch object folder and 272 without, 0 failed (the
+worktree has no game folder: LipsTest run by hand with the classic `cutseq.bin` as its
+third argument; from `blips.bat` alone 295 and 268, the nine `cutseq.bin` checks failing).
+Byte-identical to the tool of `dc4883fc`: the classic views (`hd_build` 0, 6 of 6, and to
+the tool of `8691e82`), the 15 parity cameras with `hd_water` 0 and with 1 (15 of 15
+each), the six HD views (6 of 6) and the window eyes of ANDREA2 and ANDREA1, whole and
+broken (6 of 6). RoomProbe `-debris` builds its faces through the engine's own
+`HDDebrisBreakMesh` now; its pictures of the pieces (four eyes, lives 0 to 16, both looks)
+are byte-identical to those of the tool before that change, 48 of 48.
 
-**Left.** Not seen in the game. The pieces take no dynamic light and no gloss (RICH3's
-640 `0x8003` triangles fly matt). The glass pieces stand at the art's own 0.1, as the
-window's panes do, and hardly show. 30 statics have no part (TITLE 6, RICH1 12, RICH2 12)
-and break classic. The deal takes 5.2 to 20.2 ms in the frame of a large break. The tool's
-flight has no floor test, so its later lives fly on where the game's pieces settle.
+**Left.** Not seen in the game. No run proves the engine's own pairing
+(`HDStaticBreakParts`: the pairs, the list room after a flip - ANDREA2's window breaks
+with 132 and 65 swapped - and the pointer compare) or the draw inside the engine's frame:
+the harness hands the part over itself and RoomProbe pairs and projects on its own. The
+pieces take no dynamic light and no gloss (RICH3's 640 `0x8003` triangles fly matt). The
+glass pieces stand at the art's own 0.1, as the window's panes do, and hardly show. 30
+statics have no part (TITLE 6, RICH1 12, RICH2 12) and break classic. The deal takes 5.2
+to 20.2 ms in the frame of a large break. The tool's flight has no floor test, so its
+later lives fly on where the game's pieces settle.
 
-**Commits.** `b97470d5` (the rule and the draw), `e9505e8c` (the tools); the records
-in the commit after them.
+**Commits.** `b97470d5` (the rule and the draw), `e9505e8c` (the tools), `881ccbb9` (the
+records); `32797348` (the break's glue out of `hd_level.cpp` into `game/debris.cpp` and
+`hd_debris`, the ModernTest comment back on `far_plane`); these records in the commit
+after it.
 
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15

@@ -3111,10 +3111,11 @@ carries the tables.
     on the classic pages. CLASSIC. Ours: ANDREA2's window measured (mesh
     571, 330 quads, 128 pieces, pages 11 and 13, `MODIFICATIONS.md`, "The
     pieces of a broken static in HD"); the flight left byte for byte as it
-    was (a scratch harness over `game/debris.cpp` of both trees).
+    was (a scratch harness over `game/debris.cpp` of both trees); the faces
+    handed to the HD break in the walk's own order (`HDDebrisMeshFace`).
 299. **A piece's look from the static's own part** (`hd_debris_rules.h`,
-    `HDDebrisFaceOf`; `hd_level.cpp`, `HDStaticBreak`) - a triangle of the
-    static's destructible part goes with the classic face nearest its
+    `HDDebrisFaceOf`; `hd_level.cpp`, `HDStaticBreakParts`) - a triangle
+    of the static's destructible part goes with the classic face nearest its
     centroid, no reach; a face that became a piece flies its triangles, a
     face the count left out takes them with it. DATA: the part is the
     pairing's (`HDStaticPiecePaired`, `hd_cover.h`); at ANDREA2's
@@ -3137,7 +3138,7 @@ carries the tables.
     (their own entries); DATA: the runs of the game's parts (opaque, the
     alpha run of ANDREA2 and RICH2 and RICH3, the additive run of ANDREA1,
     JOBY2 and RICH3, the table in `MODIFICATIONS.md`).
-303. **The pieces' draw** (`hd_debris.cpp`, `HDDebrisDraw`; `hd_level.cpp`,
+303. **The pieces' draw** (`hd_debris.h`, `HDDebrisDraw`; `hd_level.cpp`,
     `HDFrameDraw` and `HDFrameDrawGlow`) - the room's own vertex and pixel
     shaders on vertices put into view space on the processor, one call per
     kind and page, the frame's fog, fog bulbs and screen, no dynamic light,
@@ -3146,8 +3147,7 @@ carries the tables.
 304. **The parts read by seeking** (`HDDebrisLevelRead`) - the `.TRG`'s head
     and parts, then only the destructible parts' index runs and vertices.
     DATA: the layout of entry 1; ANDREA2's five parts, 7,220 triangles, in
-    3.0 to 12.3 ms (median 4.4
-    of ten runs). OWN, the seek.
+    3.0 to 12.3 ms (median 4.4 of ten runs). OWN, the seek.
 305. **RoomProbe `-debris`, `-debrisclassic`, `-debrisseed`** - the break
     drawn at a life: the tool's copy of the break and the flight with a
     random generator of its own (seed 1, a free choice) and no floor test;

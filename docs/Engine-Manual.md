@@ -1653,7 +1653,14 @@ see *Lara in HD* below for which of her stays classic and why.
   in front of. With `hd_water` at `0` the old layers are drawn as before,
   under the Remaster's art. That art of the sea's surface is drawn at every
   frame of the dive, with the water sheets on or off, wherever the camera
-  looks: it stays in the picture as the camera swims from room to room.
+  looks: it stays in the picture as the camera swims from room to room. With
+  the water sheets on, seen from below by a camera inside the dive (lower than
+  the start cavern's pool, which the water's depth is measured from) that art
+  gives way to this engine's own sheet of the sea: a dark blue, softly rippled
+  underside in the water's own colour, lighter where a shaft of light leaves
+  it, in place of the bright turquoise pattern; the sun's glow, the lit
+  underside and the shafts are stronger there and carry the picture. Higher
+  up, outside the dive, the surface fades out exactly as before.
 
 **The people.**
 

@@ -17517,6 +17517,166 @@ under sheets keeps the basin's look by the share, as before.
 **Commits.** `d846de7f`, `ea8c2857` (the water build's comment names the channel's look)
 and `73bffc06` (the Checked part).
 
+**The sea seen from below, Round 5 (#210), 2026-10-18.** Asked for after a dive in JOBY4
+with the build of that afternoon and a flight out of the playable area with the fly cheat,
+put into English (his words beside in German): when he goes beyond the playable area with
+the fly cheat there is the turquoise water surface, behind it he faintly sees this
+project's new effect - should it be stronger and the turquoise sheet ditched, it looks out
+of place ("dahinter sehe ich leicht unseren neuen Effekt, sollen wir den staerker machen,
+und die tuerkisene Flaeche ditchen?"); then, with two photographs of a sea seen from below
+and his own picture of that day: the fading in and out is right as it is - inside the
+playable area there, outside with the fly cheat gone - only the shape and the colour are
+too strong, they swallow the whole effect, so only that is to be ditched or changed,
+closer to the pictures ("Nur die Form und Farbe sind halt zu heftig, das verschluckt den
+ganzen Effekt."). Asked before whether the look's brightness should change: stronger,
+JOBY4 only. His pictures and the photographs are reference pictures supplied for this
+project, not in the repository; the photographs are look references only, measured as
+numbers.
+
+*Cause.* What draws the sheet seen from below is the art of the sea's surface: JOBY4's
+room 19, part 3, material 16 in the additive pass (73,728 triangles, the topmost of each
+stacked copy kept, page 3255; `WATERLOG ... art room=19 part=3 class=sea`), drawn by the
+room path's own `RoomPS` - not a sheet shader - at its part's weight, with the material's
+texture ripple, and under the water through `UnderWater` with `share` 0: a glow the water
+only dims. Its turquoise is the vertices' colour (red 0: the art adds 5.2, 47.6 and 45.8
+of red, green and blue at the straight-up eye) times the page's pattern; its strength is
+the extinction's: the deep look measures the way through the water against the basin of
+room 7 (y 12,032), 16,000 units under the art, less the clear zone of 2,048 units, so from
+the dive's eyes (2,065 to 3,562 under the basin) the art keeps nearly all its light -
+straight up 17 units of water are counted of 18,366. The look (`HDRenderWaterLook`) is
+drawn before the rooms and the art is added over it. Measured at eight eyes of the dive
+(RoomProbe, 960 x 540, `-black`, `-sky -underwater -surfacealways`; four of his dive log
+of that morning - straight up in room 29, 47 degrees up in room 30, 65 up in room 49, 26
+up in room 123 - and round 2's four) and two at the stand-in's edge, three pictures each:
+the art alone (with it less without room 19), the look alone (`-underlook` less without
+it), both. In the art's region (where it adds more than 1 of luma):
+
+| eye | the art adds | its hue | its spread | the look adds | the picture's hue | spread |
+|---|---|---|---|---|---|---|
+| U85, room 29, 85 deg up | 34.8 | 177 | 0.263 | 8.8 | 188 | 0.092 |
+| U45, room 30, 47 up | 19.3 | 184 | 0.326 | 3.8 | 195 | 0.077 |
+| U65, room 49, 65 up | 14.2 | 188 | 0.331 | 9.9 | 198 | 0.058 |
+| U26, room 123, 26 up | 19.4 | 185 | 0.357 | 5.2 | 195 | 0.079 |
+| E216, room 33, 46 up | 15.5 | 184 | 0.445 | 18.0 | 197 | 0.069 |
+| T23995, room 123, 43 up | 19.9 | 185 | 0.302 | 10.4 | 195 | 0.068 |
+| T24484, room 6, 19 up | 16.1 | 186 | 0.393 | 4.1 | 196 | 0.078 |
+| L3, room 123, 50 up | 19.5 | 185 | 0.349 | 16.9 | 196 | 0.059 |
+| G628, room 119, 63 up, 283 under the basin | 34.3 | 175 | 0.338 | 10.0 | 186 | 0.114 |
+
+(the art adds and the look adds: mean luma; hue in degrees of the mean colour; the art's
+spread its luma's spread over 32-pixel windows over its mean, the picture's over 16-pixel
+windows; the band of the picture without room 19 and the look is hue 198 to 203). The art
+lays a pattern of a third of its own light over the picture in a hue of 175 to 188, the
+look adds a smooth glow at 201: the art swallows the look.
+
+*The fade.* The art goes at the playable area's edge because of the stand-in surface
+itself: an eye over the basin (a fallback room, `HDWaterUnderDepth`) counts the whole way
+of 18,000 units and more, and the art goes black. His flight from the dive rose through
+room 119 at 63 degrees up (ticks 620 to 641): 12,035 has the art at its full light, 11,941
+none (the edge's pictures, the art's region 447,057 against 64,038 pixels, its light 34.1
+against 1.5). That stays as it is.
+
+*Rule* (`hd_water_under.h`, `HDWaterSeaOver`, `HDWaterSheetPath`, `HDWaterRippleScale`,
+`HDWaterLookKnobs`; `hd_render.cpp`, "the sea's sheet", `water_sea_art`, the water build,
+`water_look_constants`, `HDRenderWaterLook`; `hd_water_look.hlsl`). Where the eye under
+the water has the sea's surface over it - the sheets on, the deep look, the extinction's
+depth short of `kUnderNoSurface` - the look draws the sea's sheet in the art's place, in
+its first draw (behind everything, depth 0.9999 tested LESS): the water's own colour (the
+look's light), dimmed by the room shader's own way (`HDWaterSheetPath`: under the basin
+along the ray, less the clear zone), over the art's box (x -6,608 to 55,136, z 39,944 to
+99,327, its plane y -4,269: the build reads the surface room's highest material 16 part)
+and coming in over 4,096 units from its edge, its ripple the body's two longest wave rows
+(`WaveSum`; 1,500 and 700 units in JOBY4) at 0.7 of its light, half again (1.5) where a
+shaft leaves the surface (`LookShaft`, the cells' hash). The art's additive ranges then
+draw at weight 0 - only in a frame whose look drew the sheet (the clock of the sky's frame
+block against the room brackets' last two; a frame drawn without the sky keeps the art).
+And there the look is stronger: the disc 8, the shafts 24, the lit underside 0.24 in place
+of 0.2, 8 and 0.12. Everywhere else - over the stand-in's surface, out of the water, with
+`hd_water` 0, in every other level - the art and the look are as before.
+
+The numbers from his look references, as numbers: the photographs' hue is 201 and 207
+degrees (his picture of the art 183); their pattern's spread (16-pixel windows over the
+mean luma, at 960 wide) 0.076 and 0.110 away from the sun, his picture of the art 0.146
+and 0.164 - so each eye's band is a half to three quarters of its own spread before; their
+brightest tenth of the picture is 7.6 times their darkest (32-pixel windows), the art's
+picture 1.5 to 2.3. The sheet's 0.10 and the patches' 1.5 keep the water between the glow
+and the shafts dark; the strengths were raised until the eyes that face the light carried
+about three times and the mean luma stayed under the brighter photograph's 116 of 255.
+
+**Measured.** After, in the art's region of before (RoomProbe as above, the tool of the
+last commit against `dc4883fc`'s):
+
+| eye | luma | hue | spread (band) | carry | the sheet adds | the look adds |
+|---|---|---|---|---|---|---|
+| U85 | 76.2 / 71.1 | 188 / 199 | 0.092 / 0.064 (0.048-0.069) | 1.88 / 1.87 | 15.6 | 23.5 |
+| U45 | 60.3 / 54.1 | 195 / 202 | 0.077 / 0.056 (0.040-0.058) | 1.78 / 1.76 | 8.8 | 8.3 |
+| U65 | 62.3 / 71.9 | 198 / 202 | 0.058 / 0.034 (0.030-0.043) | 1.93 / 2.38 | 6.5 | 27.1 |
+| U26 | 60.7 / 60.0 | 195 / 202 | 0.079 / 0.054 (0.041-0.059) | 1.63 / 1.69 | 8.8 | 15.7 |
+| E216 | 70.3 / 96.0 | 197 / 201 | 0.069 / 0.037 (0.036-0.052) | 1.49 / 1.51 | 10.1 | 49.5 |
+| T23995 | 67.1 / 74.3 | 195 / 202 | 0.068 / 0.044 (0.035-0.051) | 1.99 / 2.95 | 8.5 | 29.4 |
+| T24484 | 56.7 / 56.2 | 196 / 202 | 0.078 / 0.054 (0.041-0.059) | 1.52 / 1.86 | 7.5 | 12.5 |
+| L3 | 73.5 / 95.2 | 196 / 201 | 0.059 / 0.039 (0.031-0.044) | 2.02 / 3.00 | 8.6 | 49.8 |
+| G628 | 73.2 / 73.1 | 186 / 198 | 0.114 / 0.077 (0.059-0.086) | 1.99 / 1.86 | 18.4 | 27.0 |
+| G631 | 73.8 / 76.1 | 186 / 198 | 0.112 / 0.073 (0.058-0.084) | 2.24 / 1.98 | 18.3 | 30.5 |
+
+(before / after; carry the brightest tenth of the region's 32-pixel windows over the
+darkest; the sheet adds `-sea sheet` less without room 19 and the look, the look adds
+`-sea look` less the same.) Every eye's spread lies in its band, every hue is the water's
+own (198 to 202), the carry rises at the eyes that face the light (T23995 and L3 to 3.0,
+U65 to 2.4) and the mean luma stays at most 96. Pixels the art and the look left alone
+before: unchanged at every eye but open water near the horizon, where the sheet now covers
+the art's box past the rooms the picture lists (T24484 11,424 such pixels, by at most 33
+levels), all of them open water. Commit by commit: with the look's own strengths
+(`83020629`) the spread came to 0.041 to 0.097 and the carry 1.27 to 1.84, the picture
+darker than before (mean luma 48 to 65).
+
+The fade, at the edge (RoomProbe `-undertick` over ticks 600 to 660 of his flight and the
+four eyes', `-sky -rooms 137 -vis 1 -size 480 270 -time 3 -underlook -surfacealways
+-hdwater 1`): the `room=`, `rooms=`, `listed=` and `carried=` fields 65 of 65 identical
+before and after; from tick 632 on (the eye over the basin, 11,941 and up) the pictures 58
+of 58 byte-identical, the surface's pixels and light the same (121,578 to 127,238 pixels,
+11.58 to 14.89); under it the pictures without room 19 and the look 32 of 32 identical,
+the ones with them changed (tick 631, the eye 3 units under the basin: light 42.10 before,
+46.20 after). The edge eyes G632, G634 and G641 3 of 3 byte-identical.
+
+GPU at 2,560 x 1,440, three runs each, medians: the look (its two draws) U85 0.900 to
+0.941 ms, U45 0.904 to 0.942, T23995 0.902 to 0.939, L3 0.901 to 0.939 - 0.04 ms more, the
+sheet's branch; the frame's additive pass (RoomProbe `-gpuadd 20`, all its groups, room
+19's art among them) 0.743, 0.530, 0.881 and 0.169 ms with the art at its own weight
+(`-sea art`) and 0.744, 0.530, 0.882 and 0.168 with it at 0: the art is still drawn, at
+the same cost. `LookPS` 341 slots of 512 (234 before), `LookVS` 1; no texture.
+
+**Decisions.** The art is not touched in its own draw: its shader is the room shader of
+every room (`RoomPS`, 514 slots already), and its coverage stays the stand-in's as merged;
+it gives way by its ranges' weight, 0, which adds exactly nothing. The sheet in its place
+is the look's, so it is drawn only where the look is. Its colour is the water's, its
+ripple the water's own rows and the shafts' noise, not the photographs: they gave numbers
+only. The hard edge of the art's box from below is softened over four squares, a free
+choice; the box itself is the art's.
+
+**Checked.** With the tools of the last commit against `dc4883fc`'s: the classic path 6 of
+6 (and the same as `8691e82`'s); the fifteen cameras 15 of 15 with `hd_water` 0 and 1,
+marble floors off and on; the six HD views 6 of 6; the pond 36 of 36, the canal 4 of 4,
+the tank views 5 of 5, the band and his RICH2 eyes with `hd_water` 0, 0 with the marble
+and 1, 48 of 48 each; RICH3's room 190 6 of 6 with each key; the other levels' under views
+(ANDREA2, JOBY2) and JOBY4's air room 7 7 of 7 with each key; this round's eight JOBY4
+eyes and six edge eyes with `hd_water` 0 14 of 14; the `WATERLOG` sweep 268 of 268 lines
+identical (`under_deep=1` in JOBY4 alone). `-sea art` draws the before picture byte for
+byte at all fourteen eyes (the art at its weight, the look at its old strengths, the sheet
+at 0). ModernTest 15,679 checks with the new `water_sea` group of 19, MenuTest 44,619,
+InterpTest 729, LipsTest 299 with round 163's `.OBJ` folder and 272 without (`cutseq.bin`
+given by hand), 0 failed; the engine and all nine tools build.
+
+**Left.** Not seen in the game yet; the numbers are the probe's, which draws no Lara and
+no objects. The sheet covers the art's whole box, while the art itself is drawn only over
+the squares of the rooms a frame lists (at the probe's eyes the art ended short of the
+box's far edge, the sheet does not). The ripple is two straight-crested rows bent by the
+wave's own warp; from far up it reads as fine regular waves. The art still costs its
+additive draw at weight 0. A frame drawn under the water without the sky keeps the art.
+
+**Commits.** `83020629` (the sheet), `02da2e6b` (the look stronger), `bfc0bf56` (RoomProbe
+`-sea`), `e4b3ae60` (RoomProbe `-gpuadd`), `4424af87` (the knobs' comment).
+
 ### The marble floors' mirror (#205)
 2026-10-16
 

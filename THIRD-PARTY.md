@@ -3102,6 +3102,52 @@ carries the tables.
     and its mirror (green over red by 40, over blue by 20, above 80; the
     split at 30 per cent of the height, the screen above, the floor
     below) is a free choice read off the pictures at RICH2's tank.
+298. **The sea's sheet in the place of its art** (`hd_water_under.h`,
+    `HDWaterSeaOver`; `hd_render.cpp`, "the sea's sheet", `water_sea_art`, the water
+    build) - where the eye under the water has the sea's surface over it (the sheets
+    on, the deep look, the extinction's depth short of `kUnderNoSurface`) the look
+    draws the sea's sheet and the art's additive ranges draw at weight 0; over the
+    stand-in's surface, out of the water, with `hd_water` 0 and in every other level
+    nothing changes. OWN, the rule, after the owner's word of 2026-10-18 that only the
+    shape and the colour are too strong. DATA (RoomProbe on the player's files,
+    JOBY4): the art is room 19's part 3, material 16 in the additive pass, page 3255,
+    its box x -6,608 to 55,136, z 39,944 to 99,327, its plane y -4,269; its vertices'
+    red 0 (it adds 5.2, 47.6 and 45.8 straight up); the extinction counts 17 units of
+    the 18,366 to it at that eye.
+299. **The sheet's colour, ripple and edge** (`hd_water_look.hlsl`, `LookPS`'s sheet;
+    `hd_water_under.h`, `HDWaterRippleScale`, `kHDWaterSheetEdge`, `HDWaterLookKnobs`)
+    - the water's own colour (the look's light), its ripple the body's two longest
+    wave rows at 0.7 of its light, half again where a shaft leaves the surface (the
+    shafts' value noise of the cells' hash), over the art's box, coming in over 4,096
+    units from its edge, at 0.10 of the water's light. DATA: the rows (JOBY4's sea,
+    1,500 and 700 units, 38 and 16 high), the box. PICTURE (two photographs of a sea
+    from below supplied as look references, not in the repository, measured as numbers
+    only): hue 201 and 207 degrees against the art's 175 to 188. OWN: 0.7, 0.10, 1.5
+    and the 4,096, set on RoomProbe pictures at ten eyes of the dive.
+300. **The sheet dimmed as the art was** (`hd_water_under.h`, `HDWaterSheetPath`) -
+    the way the extinction counts to a point above the eye: along the ray under the
+    extinction's surface, less the clear zone, the room shader's `UnderWater`. OWN,
+    this project's extinction (the deep look's numbers); TEXTBOOK: light falls off as
+    the exponential of the way times the extinction.
+301. **The look stronger where the sheet lies** (`hd_water_under.h`,
+    `HD_LOOK_SEA_DISC`, `HD_LOOK_SEA_SHAFTS`, `HD_LOOK_SEA_UNDERSIDE`) - the disc 8,
+    the shafts 24 and the lit underside 0.24 in place of 0.2, 8 and 0.12. PICTURE (the
+    photographs as above): their brightest tenth 7.6 times their darkest, their
+    pattern's spread 0.076 and 0.110 against 0.146 and 0.164 in the owner's picture of
+    the art. OWN: the band, a half to three quarters of each eye's spread before, and
+    the strengths: the carry 1.5 to 3.0 (1.5 to 2.3 before), the mean luma at most 96
+    of 255, every eye's spread inside its band (RoomProbe, `MODIFICATIONS.md`, the sea
+    seen from below, Round 5).
+302. **The art gives way only in a frame whose look drew the sheet** (`hd_render.cpp`,
+    `water_under_constants`, `g_wsea_drew`) - the clock of the sky's frame block the
+    look drew with against the last two clocks the brackets were begun with; the sky's
+    bracket keeps the clock before (`HDFrameSky` steps none), the room brackets share
+    the frame's. OWN; a frame drawn without the sky keeps the art.
+303. **RoomProbe `-sea art|look|sheet`, `-gpuadd <n>`, the `-underlook` line's sea
+    numbers** (`Preparation/Tools/Diagnose/RoomProbe.cpp`) - the A/B pictures of the
+    art, the look and the sheet alone (`-sea art` draws the picture before the sheet
+    byte for byte), and the additive pass timed. OWN, this project's tool on the
+    player's files (DATA).
 
 ## Credited, but not contained here
 

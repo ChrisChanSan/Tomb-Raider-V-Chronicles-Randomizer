@@ -12911,6 +12911,28 @@ static void vis_enclosed_rule()
 		"enclosed: group 0 encloses as any other", 1, 1);
 }
 
+/* The height a triangle of an unlinked room reaches into an intrusion box
+ * (HDVisHeightReaches): JOBY2's room 30 on room 60's east wall, room 60's
+ * box from its ceiling -3,328 to its floor -1,280. */
+static void vis_height_rule()
+{
+	const float top = -3328.0f, bottom = -1280.0f, m = 32.0f;
+
+	ok(HDVisHeightReaches(-3413.0f, -3242.0f, top, bottom, m),
+		"height: room 30's triangle reaches 86 under the ceiling", 1, 1);
+	ok(!HDVisHeightReaches(-3413.0f, -3300.0f, top, bottom, m),
+		"height: 28 under the ceiling is within the margin", 0, 0);
+	ok(!HDVisHeightReaches(-3413.0f, -3296.0f, top, bottom, m),
+		"height: 32 under the ceiling is the margin itself", 0, 0);
+	ok(HDVisHeightReaches(-1400.0f, -1100.0f, top, bottom, m),
+		"height: a foot from under the floor reaching up", 1, 1);
+	ok(!HDVisHeightReaches(-1300.0f, -1100.0f, top, bottom, m),
+		"height: 20 over the floor is within the margin", 0, 0);
+	ok(!HDVisHeightReaches(-4000.0f, -3500.0f, top, bottom, m),
+		"height: wholly over the ceiling", 0, 0);
+	ok(HDVisHeightReaches(-3413.0f, -3072.0f, top, bottom, m),
+		"height: down to room 30's floor, 256 into the box", 1, 1);
+}
 
 /* A cube of art in the frame of the room at `ox`, `oz`: x0..x0 + s,
  * y0 - s..y0 (y down) and z0..z0 + s, each face two triangles. */
@@ -24198,6 +24220,7 @@ int main()
 	vis_hidden_room();
 	vis_static_rule();
 	vis_enclosed_rule();
+	vis_height_rule();
 	vis_enclosed_tables();
 	vis_static_covers();
 	stand_overlap();

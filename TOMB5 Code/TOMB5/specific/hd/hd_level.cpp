@@ -1035,6 +1035,13 @@ namespace
 				listed = g_frame[i].group == piece.holder;
 
 			const bool open = piece.face < 0 && !piece.inner;
+			/* In unlinked air (1), or held by the box's height alone (2,
+			 * the index fill's height_at: art of an unlinked room on the
+			 * plane of the holder's wall), which only the visibility path
+			 * holds to the window; on the other path it is the open half
+			 * it was. */
+			const bool air = piece.air == 1 || (piece.air == 2 && VisLevel());
+
 			if (ask)
 				whole = !listed;
 			else if (empty)
@@ -1050,8 +1057,7 @@ namespace
 			 * hollow of a pillar whose face it is drawn on, and the
 			 * answer whole is the one it has without the air. */
 			bool claimed = false;
-			const bool askPair = piece.face >= 0 ||
-				(piece.air && !listed);
+			const bool askPair = piece.face >= 0 || (air && !listed);
 
 			for (int k = 0; k < count && ask && askPair && !claimed; k++)
 			{
@@ -1077,7 +1083,7 @@ namespace
 			 * window, the coiled pipe in the hollow of JOBY2's broken
 			 * pillar by the stairs falls into shards seen from room 33
 			 * (16,177 pixels at 1280x720). */
-			if (piece.air)
+			if (air)
 			{
 				whole = claimed;
 

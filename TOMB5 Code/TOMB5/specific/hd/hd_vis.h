@@ -300,6 +300,24 @@ inline bool HDVisClassicRoomEnclosed(bool artInBox, bool facesCovered,
 		enclosingGroup >= 0;
 }
 
+/* Whether a triangle whose corners span the heights y0 to y1 (y down, y0
+ * the higher) reaches into an intrusion box's height, top to bottom, by
+ * more than `margin` - the art of an unlinked room hung into the holder's
+ * space where its centroid stands over the holder's ceiling or under its
+ * floor (hd_render.cpp, the index fill's height_at).
+ *
+ * What for: JOBY2's room 30 has its floor at y -3,072, 256 units below
+ * the ceiling of room 60 (-3,328), and two of its triangles stand on room
+ * 60's east wall plane from -3,413 to -3,242: their centroid 28 units over
+ * the box, they reach 86 units into it, and the air keeps them out by its
+ * margin, which a point on the wall's plane cannot pass. Drawn whole they
+ * are a sliver of room 30 in room 60's ceiling corner. */
+inline bool HDVisHeightReaches(float y0, float y1, float top, float bottom,
+	float margin)
+{
+	return y1 > top + margin && y0 < bottom - margin;
+}
+
 /* Whether classic face b stands in the plane of classic face a: every corner
  * of b within `tolerance` units of the plane through a's first three corners
  * (its first, third and fourth when those three lie on a line).

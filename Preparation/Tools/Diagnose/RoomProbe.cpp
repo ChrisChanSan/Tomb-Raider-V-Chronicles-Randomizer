@@ -6520,7 +6520,10 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * (whole: a listed holder's pair is whole on that face, an
 		 * unlisted holder's on any frame); and so does one no face claims
 		 * whose holder is not drawn, on its pair's surviving faces. */
-		const bool unlinked = piece.air && g_unlinked && decide >= 2;
+		/* Held by the box's height alone (air 2, the index fill's
+		 * height_at): art in unlinked air on the visibility path only. */
+		const bool air = piece.air == 1 || (piece.air == 2 && g_vis_option);
+		const bool unlinked = air && g_unlinked && decide >= 2;
 		const bool claimed = piece.face >= 0
 			? !open && ask && answer && (decide == 3 ? alive : pairAlive)
 			: ask && !drawn && pairAlive;
@@ -6574,7 +6577,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 
 		/* -viswin 1: the art in unlinked air alone held to the window, on
 		 * the claimed faces the room-art rules ask (pairAlive). */
-		if (g_vis_option && g_vis_win == 1 && piece.air)
+		if (g_vis_option && g_vis_win == 1 && air)
 			answer = piece.face >= 0 ? ask && pairAlive
 				: ask && !drawn && pairAlive;
 
@@ -6622,7 +6625,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 				piece.triangles, answer ? "whole" : "window",
 				piece.face < 0 ? " (no face)" : alive ? " (face drawn)"
 					: " (face dropped)", piece.inner ? " inner" : "",
-				piece.air ? " air" : "");
+				piece.air == 2 ? " height" : piece.air ? " air" : "");
 
 		if (say && g_vis_faces && piece.face >= 0 &&
 			(size_t)piece.face < g_faces_built.size())
@@ -13170,6 +13173,11 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
  *                     after the picture (the print beside the draw calls) */
+/* -visheight 1: the pieces the index fill holds by an intrusion box's height
+ * alone (air 2, the fill's height_at) - per piece its group, holder and
+ * triangles, then the level's count - and no picture. */
+static bool g_vis_height = false;
+
 static bool VisArg(int argc, char** argv, int* at)
 {
 	const char* a = argv[*at];
@@ -13213,6 +13221,8 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_near = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-gpu"))
 		g_gpu_runs = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visheight"))
+		g_vis_height = atoi(argv[*at + 1]) != 0;
 	else
 		return false;
 
@@ -16029,6 +16039,39 @@ static int ProbeMain(int argc, char** argv)
 	if (probestatics::g_table)
 	{
 		probestatics::Table(stem);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
+	/* -visheight 1: the pieces held by a box's height, and no picture. */
+	if (g_vis_height)
+	{
+		int pieces = 0, tris = 0, groups = 0;
+
+		for (int g = 0; g < HDRenderGroupCount(); g++)
+		{
+			bool any = false;
+
+			for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
+			{
+				HDPairRange piece;
+
+				if (!HDRenderGroupPairRange(g, j, &piece) || piece.air != 2)
+					continue;
+
+				printf("visheight: %s group=%d piece=%d holder=%d tris=%d\n",
+					stem, g, j, piece.holder, piece.triangles);
+				pieces++;
+				tris += piece.triangles;
+				any = true;
+			}
+
+			groups += any ? 1 : 0;
+		}
+
+		printf("visheight: %s pieces=%d tris=%d groups=%d\n", stem, pieces,
+			tris, groups);
 		HDRenderShutdown();
 		DropDevice();
 		return 0;

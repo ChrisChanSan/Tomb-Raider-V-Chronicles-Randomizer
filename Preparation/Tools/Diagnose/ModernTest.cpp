@@ -113,6 +113,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/loadbar_math.h"
 // The far plane and the depth curve: the numbers (far_plane).
 #include "../../../TOMB5 Code/TOMB5/specific/zrange_math.h"
+// The skeleton fit and the pocket: the object path's rules (object_rules).
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_object_rules.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -25435,6 +25437,176 @@ static void far_plane()
 		ZRainTint(10240.0f, 16.0F), 24);
 }
 
+/* A keyframe for the pocket walk: box, offset, and one rotation word per
+ * node of a two-node slot. */
+struct PocketKey
+{
+	short w[11];
+};
+
+static PocketKey pocket_key(short x0, short x1, short z0, short z1,
+	short turn)
+{
+	PocketKey k = { { x0, x1, -2048, 0, z0, z1, 0, -1024, -1024, 0, turn } };
+
+	return k;
+}
+
+static void object_rules()
+{
+	printf("the object path's rules: the skeleton fit and the pocket\n");
+
+	/* The fit: per node, the .TRM's single-weight centre against the
+	 * classic mesh's centre in the bind pose; the worst node. */
+	{
+		float trm[9] = { 0, -1732, -376, -231, -1813, -262, 195, -1783, -260 };
+		float mesh[9] = { 0, -1732, -376, -231, -1813, -262, 195, -1783, -260 };
+		int trmCount[3] = { 780, 288, 358 };
+		int meshCount[3] = { 68, 42, 48 };
+
+		ok(HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3) == 0.0f,
+			"fit: a model where the classic meshes stand reads 0",
+			(long)HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3), 0);
+
+		trm[3] += 30.0f;
+		trm[4] += 40.0f;
+		ok(fabsf(HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3) -
+			50.0f) < 0.01f, "fit: one node 30/40 off reads its 50 units",
+			(long)HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3), 50);
+
+		trmCount[1] = HD_FIT_MIN_VERTICES - 1;
+		ok(HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3) == 0.0f,
+			"fit: a node under 16 single-weight vertices is not measured",
+			(long)HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3), 0);
+
+		trmCount[1] = 288;
+		meshCount[1] = 0;
+		ok(HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3) == 0.0f,
+			"fit: a node with no classic mesh is not measured",
+			(long)HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3), 0);
+
+		meshCount[0] = meshCount[2] = 0;
+		ok(HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3) < 0.0f,
+			"fit: nothing to measure answers -1",
+			(long)HDSkeletonFitWorst(trm, trmCount, mesh, meshCount, 3), -1);
+	}
+
+	// The verdict: the drift first, the fit only for a model it refuses.
+	{
+		const float limit = 256.0f;
+
+		ok(HDSkeletonJudge(239.0f, -1.0f, limit) == HD_SKELETON_FITS,
+			"judge: a drift inside the limit fits, fit or no fit",
+			HDSkeletonJudge(239.0f, -1.0f, limit), HD_SKELETON_FITS);
+		ok(HDSkeletonJudge(256.0f, 900.0f, limit) == HD_SKELETON_FITS,
+			"judge: a drift at the limit fits, as the engine always had it",
+			HDSkeletonJudge(256.0f, 900.0f, limit), HD_SKELETON_FITS);
+		ok(HDSkeletonJudge(484.0f, 100.0f, limit) == HD_SKELETON_PLACED,
+			"judge: JOBY2's locker, drift 484 and fit 100, is placed",
+			HDSkeletonJudge(484.0f, 100.0f, limit), HD_SKELETON_PLACED);
+		ok(HDSkeletonJudge(690.0f, 256.0f, limit) == HD_SKELETON_PLACED,
+			"judge: a fit at its limit is placed",
+			HDSkeletonJudge(690.0f, 256.0f, limit), HD_SKELETON_PLACED);
+		ok(HDSkeletonJudge(1479.0f, 383.0f, limit) == HD_SKELETON_DRIFTS,
+			"judge: the nearest foreign tree, fit 383, still drifts",
+			HDSkeletonJudge(1479.0f, 383.0f, limit), HD_SKELETON_DRIFTS);
+		ok(HDSkeletonJudge(484.0f, -1.0f, limit) == HD_SKELETON_DRIFTS,
+			"judge: a fit that measured nothing vouches for nothing",
+			HDSkeletonJudge(484.0f, -1.0f, limit), HD_SKELETON_DRIFTS);
+	}
+
+	/* The boxes: a keyframe that left the rest box (touching counts) and
+	 * one that folded flat where the rest is not. */
+	{
+		const short rest[6] = { -512, 512, -2048, 0, -1536, -512 };
+		const short slid[6] = { 512, 1536, -2048, 0, -1536, -512 };
+		const short short_of[6] = { 500, 1524, -2048, 0, -1536, -512 };
+		const short flat[6] = { 512, 512, -2048, 0, -1536, -512 };
+		const short sheet[6] = { -511, 509, -1013, -873, -255, -255 };
+		const short sheetKey[6] = { -511, 509, -648, -508, -255, -255 };
+
+		ok(HDSlidBoxLeaves(rest, slid), "box: slid by its own width it left",
+			HDSlidBoxLeaves(rest, slid), 1);
+		ok(!HDSlidBoxLeaves(rest, short_of),
+			"box: 12 units short of its width it did not",
+			HDSlidBoxLeaves(rest, short_of), 0);
+		ok(HDSlidBoxFolds(rest, flat), "box: the open door's flat box folds",
+			HDSlidBoxFolds(rest, flat), 1);
+		ok(!HDSlidBoxFolds(sheet, sheetKey),
+			"box: a sheet flat at rest has not folded",
+			HDSlidBoxFolds(sheet, sheetKey), 0);
+	}
+
+	/* The walk over a slot's animations, as JOBY2's sliding door has them:
+	 * 0 the rest, 1 the slide (keys move the box, no word turns), 2 the
+	 * open frame (flat, its own words turned against the rest - allowed,
+	 * a turn counts within one animation only). 0 links to 1, 1 to 2, 2
+	 * back to 0 and to an animation that is none (-1). */
+	{
+		static PocketKey anims[3][3];
+		static int keys[3] = { 1, 3, 1 };
+		static int linked[3][2] = { { 1, -1 }, { 2, -1 }, { 0, -1 } };
+
+		anims[0][0] = pocket_key(-512, 512, -1536, -512, 0);
+		anims[1][0] = pocket_key(-512, 512, -1536, -512, 0);
+		anims[1][1] = pocket_key(0, 1024, -1536, -512, 0);
+		anims[1][2] = pocket_key(500, 1524, -1536, -512, 0);
+		anims[2][0] = pocket_key(512, 512, -1536, -512, 16384);
+
+		auto frames = [&](int a, const short** k, int* n, int* size) -> bool
+		{
+			if (a < 0 || a > 2)
+				return false;
+
+			*k = anims[a][0].w;
+			*n = keys[a];
+			*size = 11;
+			return true;
+		};
+
+		auto links = [&](int a, int* out, int most) -> int
+		{
+			int n = 0;
+
+			for (int l = 0; l < 2 && n < most; l++)
+				out[n++] = linked[a][l];
+
+			return n;
+		};
+
+		ok(HDSlotSlidesIntoPocket(0, frames, links),
+			"pocket: the sliding door that folds open is one",
+			HDSlotSlidesIntoPocket(0, frames, links), 1);
+
+		anims[1][2].w[10] = 1024;
+		ok(!HDSlotSlidesIntoPocket(0, frames, links),
+			"pocket: a node turning within the slide is none",
+			HDSlotSlidesIntoPocket(0, frames, links), 0);
+
+		anims[1][2].w[10] = 0;
+		anims[2][0] = pocket_key(1024, 2048, -1536, -512, 0);
+		ok(!HDSlotSlidesIntoPocket(0, frames, links),
+			"pocket: a door that slides away and never folds is none",
+			HDSlotSlidesIntoPocket(0, frames, links), 0);
+
+		ok(!HDSlotSlidesIntoPocket(5, frames, links),
+			"pocket: a slot whose first animation has no keys is none",
+			HDSlotSlidesIntoPocket(5, frames, links), 0);
+	}
+
+	// The side drawn: two-sided unless a pocket; a reflection turns it.
+	ok(HDPocketSide(false, false) == HD_POCKET_BOTH &&
+		HDPocketSide(false, true) == HD_POCKET_BOTH,
+		"side: no pocket keeps the two-sided draw", HDPocketSide(false, true),
+		HD_POCKET_BOTH);
+	ok(HDPocketSide(true, false) == HD_POCKET_OUTSIDE,
+		"side: a pocket draws its outside", HDPocketSide(true, false),
+		HD_POCKET_OUTSIDE);
+	ok(HDPocketSide(true, true) == HD_POCKET_INSIDE,
+		"side: a mirrored pocket takes the other mode",
+		HDPocketSide(true, true), HD_POCKET_INSIDE);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -25627,6 +25799,7 @@ int main()
 	marble_over();
 	marble_slopes();
 	debris_pieces();
+	object_rules();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

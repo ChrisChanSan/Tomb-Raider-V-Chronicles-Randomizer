@@ -132,9 +132,9 @@ struct menu_page
  * screen's edge. A value inside the span stays as it is. One outside lands on
  * `out` when that lies inside the span - the read's own choice for a key
  * whose value says nothing about which end was meant - and on the nearer end
- * otherwise. The value is taken as signed, so a negative DWORD is below the
- * span. The registry is not written here; the next save writes the held
- * value. */
+ * otherwise. It takes a long, as the two volumes are, so a negative DWORD
+ * is below the span. The registry is not written here; the next save
+ * writes the held value. */
 inline long MenuSliderHeld(long value, long out)
 {
 	if (value >= 0 && value <= MENU_SLIDER_TOP)
@@ -144,6 +144,17 @@ inline long MenuSliderHeld(long value, long out)
 		return out;
 
 	return value < 0 ? 0 : MENU_SLIDER_TOP;
+}
+
+/* MenuSliderHeld for a key read into a ulong, as the tomb5 settings are:
+ * taken in its own type, every value outside the span lies over it, so
+ * one that went to the nearer end goes to the top. */
+inline ulong MenuSliderHeldUlong(ulong value, long out)
+{
+	if (value <= MENU_SLIDER_TOP)
+		return value;
+
+	return (ulong)MenuSliderHeld(MENU_SLIDER_TOP + 1, out);
 }
 
 /* One geometry for every page; font_height is never touched.

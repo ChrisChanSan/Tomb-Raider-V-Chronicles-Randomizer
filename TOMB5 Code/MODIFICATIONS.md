@@ -3065,9 +3065,18 @@ clear at the tick's own 46 degrees, 73,381 to 83,724 turned up) holds no black p
 any pitch with either key - with `hd_water` 1 the look's fill and room 19's art over it
 (mean 35, 117, 137 from 70 to 89 degrees), with 0 the script's layers and the art (7, 101,
 104). The black disc of his steep picture was the clear in a build without the fill; the
-dark teal around it was the walk leaving room 19 out from 80 degrees up (the pole then 31,
+dark teal around it was the walk leaving room 19 out from 72 degrees up (the pole then 31,
 70, 91 and 0, 36, 44), which the #210 part's Round 3 mends. Nothing changes in the sky
 region.
+
+**Left.** The darker disc of his first picture is filled, not gone: with `hd_water` 1 the
+pole stands 6.2 to 7.8 of luma under the band round it, with a sharp edge, at every
+pitch, listed or carried (a ring 6 pixels wide either side of the pole's edge; the same
+rings elsewhere in the picture -1.4 to 0.6). The fill adds the water's scattered colour,
+27.75 of luma, where the band's last ring has 35.6; the room's art is additive and adds
+the same over both. With `hd_water` 0 the layers cover it (no darker disc). The fill
+draw stays as merged; its colour is the owner's to judge (the #210 part's Round 3,
+*Left*).
 
 **Commits.** None for the sky; this part is recorded with the #210 part's Round 3.
 
@@ -16617,7 +16626,6 @@ times over his dive, for 30, 43 and 33 ticks; that step is what is left of the v
 he reported.
 Round 3 (below) mends it: room 19's art is drawn at every frame.
 
-
 **Decisions.** The look takes the place of the SD layers as the owner decided; it is drawn
 with the sky and under `hd_water` only, in the levels the deep look takes. Its strengths
 are free choices by eye; the surface height and the colour come from the level's water.
@@ -16749,6 +16757,20 @@ carried.
 | 0 | 106 looking up, light | 0 | 14.28 to 26.55 |
 | 1 and 0 | 58 looking down, surface | 0 to 5 | 0 to 5 |
 | 1 and 0 | up ticks under half of both neighbours | - | 0 |
+| 1 | up ticks with less light than both neighbours | 4 | 10 |
+| 0 | up ticks with less light than both neighbours | 0 | 8 |
+
+Read literally - no up tick under its neighbours - the order is not met: with `hd_water`
+1, 10 of the 106 up ticks have less light than both neighbours (4 before), the deepest
+22,089 at 0.958 of its neighbours' mean (10.64 against 11.52 and 10.70; 0.953 before,
+without the art), then 21,568 at 0.979 and 22,104 at 0.989; with 0, 8, the deepest 22,117
+at 0.985. The surface's pixels: 8 with 1 (deepest 22,089 at 0.915, 0.894 before) and 14
+with 0 (22,089 at 0.932). These are the eye's own motion: 22,089 dips as deep before,
+when the art is not in the frame, and the 100 up ticks where the walk lists room 19 hold
+4 such minima of light themselves (the deepest 0.992). The tolerance the round holds them
+to is the edges' tenth: no up tick lies more than a tenth under its neighbours' mean
+(light at most 4.2 %, pixels at most 8.5 %); the steps it replaces were 0.15 to 1.08 of
+the neighbours with `hd_water` 1 and the whole of the light with 0.
 
 The six edges, `hd_water` 1 (light at the two ticks, the step, and the step over the mean
 light of the twenty neighbours):
@@ -16791,14 +16813,44 @@ pole region the black pixels of the dome alone at clear (round 2's measure):
 as the game draws them there). No black pixel in the pole region at any eye with either
 key; with `hd_water` 1 none in the picture at all; with `hd_water` 0 1,304 at 22,020, all
 of them black texels of the rocks' art (no water's colour over them without the sheets),
-the same before and after. His second picture is this case: from 80 degrees up the walk
-leaves room 19 out, the surface's art goes, and what is left is the look's fill
+the same before and after. His second picture is this case: from 72 degrees up the walk
+leaves room 19 out (the walk alone at whole degrees: listed at 70 and 71, left out at 72
+to 75, 80, 85 and 89), the surface's art goes, and what is left is the look's fill
 (`hd_water` 1, 31, 71, 91) or the dark teal layers (0, 36, 44) - his "everything dark
 teal"; the black disc of his build (no fill, no layers) is round 2's fill now. With the
 rule the pole region takes the art's colour at every pitch, the same as at 70 degrees
-where the walk lists it. The disc of his first picture is round 2's case (2,576 pixels at
-960 x 540, 4,622 here): filled by the look's third draw and covered by the art. No hole is
-left at any pitch to 89 degrees, and nothing changes in the sky region.
+where the walk lists it. No black pixel is left at any pitch to 89 degrees.
+
+The darker disc of his first picture is not mended. The pole region's mean colour and its
+black pixels do not see it; its edge does. Measured as the mean luma of a ring 6 pixels
+wide just outside the pole less one just inside, with the same two rings moved 150 and
+250 pixels to two to four other places of the same picture as controls (`fix2/disc.py`
+of the round's scratch; luma 0.299 / 0.587 / 0.114):
+
+| eye | room 19 | hd_water 1, before / after | controls | hd_water 0, so too | controls |
+|---|---|---|---|---|---|
+| 22,020 | listed | 6.3 / 6.3 | -1.4 to -0.9 | -2.8 / -2.8 | -3.4 to -1.7 |
+| 70 up | listed | 6.2 / 6.2 | -1.1 to 0.3 | -2.7 / -2.7 | -2.0 to 0.7 |
+| 75 up | carried | 7.8 / 6.5 | -0.6 to 0.0 | -0.9 / -2.5 | -0.9 to 0.2 |
+| 80 up | carried | 7.8 / 6.5 | -0.4 to 0.2 | -0.8 / -2.5 | -0.4 to 0.5 |
+| 85 up | carried | 7.8 / 6.5 | -1.4 to 0.6 | -0.8 / -2.5 | -1.9 to 1.1 |
+| 89 up | carried | 7.8 / 6.5 | -1.4 to 0.0 | -0.9 / -2.5 | -1.7 to 0.4 |
+
+With `hd_water` 1 the disc stands 6.2 to 7.8 of luma darker than the band round it, with
+a sharp edge, at every pitch; the art takes off 1.3 at most (at 80 degrees it adds 35.6
+inside and 34.3 outside: it is additive, 23,040 of its triangles, and hides nothing). The
+cause, from the frame's own numbers: the band's last ring alone (`-skyonly`) is 35.6 of
+luma; the fill adds the water's scattered colour, the look's `light` 0.0565, 0.1252,
+0.1616 (14.4, 31.9, 41.2 of 255), 27.75 of luma; the look's two other draws add the same
+light on both sides, the art nearly so, and the edge is their difference, 7.9 - the look
+over the dome alone (`-skyonly -underlook`) gives 7.5 to 7.8. With `hd_water` 0 the
+script's layers cover the pole and the band alike and no darker disc is left; the inside
+is 2.5 to 2.8 lighter wherever the art is in the frame, listed or carried (within the
+controls at 22,020 and 70 degrees, outside them at the steep eyes, where the controls lie
+within 1.9): a faint lighter disc, a third of the other key's step. So with `hd_water` 1
+the hole of his first picture is filled but still seen as a darker disc, faint through
+the art; the fill draw stays as merged (its colour is the owner's to judge, *Left*), and
+nothing changes in the sky region.
 
 *The cost* (RoomProbe `-gpu 20`, the solid room draws timed, 2,560 x 1,440, three runs):
 
@@ -16815,6 +16867,16 @@ groups drawn.) Where it is carried the frame draws room 19's 47,639 triangles (2
 opaque, 23,040 of the surface) in 18 more draw calls; the opaque pass costs 0.003 ms more,
 the surface's additive pass is not timed by the tool. Where the walk lists it nothing
 changes.
+
+The added entry also takes part in every pass that runs over the frame's entries, and
+these are not measured: `FillRoomLighting` works out room 19's lights on the processor
+once in each frame that carries it, and the shadow's receive pass (`ShadowCastPass`)
+draws every entry whose art box touches the reach of Lara's shadow - room 19's box spans
+the whole dive (the extent above), so in every carried frame with her shadow cast the
+receive draws the art once more, the whole group (`HD_WINDOW_ALL`: the entry is full) in
+its opaque and alpha-tested passes, 24,599 triangles (the additive surface takes no
+shadow). Both are what each frame where the walk lists room 19 - 1,449 of the 1,613
+ticks of his dive - already pays for it; RoomProbe draws no shadow and times neither.
 
 **Decisions.** The surface room comes from the data: the water room whose art reaches
 highest, near the water's top; no room number in the code. It is drawn in `HDFrameDraw`'s
@@ -16840,10 +16902,16 @@ objects. His first picture is not placed by content. The rule is worked out once
 at the first frame that asks, from the rooms as they stand then - in a level with flipped
 water rooms a flip before that frame would be read in its flipped state (none in JOBY4;
 RICH3's water room has its art at its floor in both records, groups 183 and 190 at y 0
-to 256). The cost of the surface's additive pass where it is
-carried is not measured. Whether RICH3 should take the deep look is open.
+to 256). The cost of the surface's additive pass, of room 19's lighting and of its
+shadow receive where it is carried is not measured. Whether RICH3 should take the deep
+look is open. The darker disc at the band's open pole with `hd_water` 1 (6.2 to 7.8 of
+luma, the fill's scattered colour against the band's last ring) is left as it is: the
+fill draw is merged as it stands and the owner has not seen it yet; taking the band's
+last ring's colour for the fill, or closing the band's pole, are the ways to it, his to
+choose.
 
-**Commits.** `332d7249` (the rule, its draw, the log and the probe), and this record.
+**Commits.** `332d7249` (the rule, its draw, the log and the probe), `20ef1ea3` and the
+following one (this record).
 
 ### The marble floors' mirror (#205)
 2026-10-16

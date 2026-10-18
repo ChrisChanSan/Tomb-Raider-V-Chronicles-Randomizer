@@ -24759,6 +24759,130 @@ exclusive chain and after a crash, was not tried (above).
 tools), `28389ba2` (the record), `3b2aa64c` (the pass at the loading bar's held
 present) and `ac9e1612` (the record's second commit).
 
+### The number beside every slider (#221)
+2026-10-18
+
+**What.** Every slider row of the options menu draws its number beside its bar: *Music
+Volume* and *SFX Volume* on *Audio*, *Camera speed*, *Dead zone* and *Mouse sensitivity*
+on *Controls*, *Gamma* on *Display*. The number is the row's value as the menu stores
+it, 0 to 100, right of the bar, in the font and colours the value rows draw their values
+in, and it is drawn every frame, so it moves with the bar while a key or the pad is
+held. Nothing else in the row changed: the bar, the label, the keys, the pad and the
+writing of the value when the bar stops are as before.
+
+**Why.** The request, 2026-10-18, to the gamma round's question whether the *Gamma* row
+should show its number beside the bar, since the volume rows show only the bar: "That
+would suit all the sliders, wouldn't it?", and to the proposal of one round for every
+slider row: "Go for #221."
+
+**The rows, measured before the change.** All six are `MENU_SLIDER` rows
+(`game/menu_frame.cpp`), and no other table holds one:
+
+| row | page | number function | stored in | range and step | first run |
+|---|---|---|---|---|---|
+| Music Volume | Audio | `MenuNumMusicVolume` | `MusicVolume` | 0..100, one a frame, clamped in `MenuStepMusicVolume` | 80 |
+| SFX Volume | Audio | `MenuNumSfxVolume` | `SFXVolume` | 0..100, one a frame, clamped in `MenuStepSfxVolume` | 90 |
+| Camera speed | Controls | `MenuNumCameraSpeed` | `tomb5.camera_speed` | 0..100, one a frame, `< 100` / `> 0` | 40 |
+| Dead zone | Controls | `MenuNumDeadZone` | `tomb5.dead_zone` | 0..100, one a frame, `< 100` / `> 0` | 50 |
+| Mouse sensitivity | Controls | `MenuNumMouseSensitivity` | `tomb5.mouse_sensitivity` | 0..100, `MenuSliderStep` | 50 |
+| Gamma | Display | `MenuNumGamma` | `tomb5.gamma` | 0..100, `MenuSliderStep` | 50 |
+
+Each number function returns the stored value as it is, and `DoSlider`
+(`specific/drawbars.cpp`) fills `pos * w / 100` of its bar, so 100 is the full bar for
+all six. The volumes run 0..100 too: the game turns them into its own scales only at the
+sound's door - music `-4000 * (100 - v) / 100` hundredths of a decibel with 0 silent
+(`ACMSetVolume`, `specific/audio.cpp`), effects `(100 - v) * 50` hundredths taken off
+(`specific/dxsound.cpp`) - and the menu's step, the registry and `MenuSettleSlider`'s
+`MENULOG` value all move and name the 0..100.
+
+**The geometry and the convention, measured.** The bar is `DoSlider(400, y + 4 -
+(font_height >> 1), 200, 16, ...)`: x = 400 * `phd_winxmax` / 640 in floats, width
+`GetFixedScale(200)` (the smaller of the width's and the height's scale against 640x480,
+`specific/output.cpp`), a white frame one pixel wider on each side. A value row draws its
+value with `PrintString(phd_centerx + (phd_centerx >> 2), y, colour, text, 0)`: the full
+size font (`game/chardef.inc`, every glyph scaled by `phd_winxmax` / 512 in
+`game/text.cpp`), left-aligned at the value column, at the row's own y, colour 1 on the
+cursor's row, 6 on the others and 3 on a greyed row (the labels are 1, 2 and 3). The
+value column and the bar start at the same x. Up to 4:3 the bar is scaled by the width
+and its frame ends a sixteenth of the screen before the edge; wider screens scale it by
+the height, and the room on the right grows:
+
+| layout | value column x | bar x, width | first pixel after the frame | room to the edge | number x | "0" / "50" / "100" wide | to the frame | to the edge |
+|---|---|---|---|---|---|---|---|---|
+| 640x480 | 400 | 399.375, 200 | 600 | 40 | 604 | 12 / 23 / 31 | 4 | 5 |
+| 1024x768 | 640 | 639.375, 320 | 960 | 64 | 966 | 19 / 36 / 49 | 6 | 9 |
+| 1280x1024 | 800 | 799.375, 400 | 1200 | 80 | 1208 | 24 / 46 / 62 | 8 | 10 |
+| 1280x720 | 800 | 799.375, 300 | 1100 | 180 | 1106 | 24 / 46 / 62 | 6 | 112 |
+| 1920x1080 | 1200 | 1199.375, 450 | 1650 | 270 | 1659 | 37 / 70 / 96 | 9 | 165 |
+| 2560x1440 | 1600 | 1599.375, 600 | 2200 | 360 | 2212 | 49 / 93 / 127 | 12 | 221 |
+| 3840x2160 | 2400 | 2399.375, 900 | 3300 | 540 | 3318 | 74 / 141 / 192 | 18 | 330 |
+| 2560x1080 | 1600 | 1599.375, 450 | 2050 | 510 | 2059 | 49 / 93 / 127 | 9 | 374 |
+
+The pages: *Audio* holds two sliders among four rows, *Controls* three among twelve (one
+page), *Display* one among three; no page pages a slider row onto a second page.
+
+**Design.** In the slider kind's own block of `MenuFrameRun`'s draw, after the bar and
+before the block's `continue`, two statements: the value the bar is given written with
+`sprintf(buf, "%d", ...)`, the very form `MenuSettleSlider` writes it in, and
+`PrintString(MenuSliderNumberX(), y, colour, buf, 0)` with the value rows' colour rule.
+`MenuSliderNumberX` is `DoSlider`'s arithmetic for the frame's right edge plus one gap of
+`GetFixedScale(4)`: the integer part of 400 * `phd_winxmax` / 640, plus
+`GetFixedScale(200)`, plus the frame's one pixel, plus the gap. The gap is the tightest
+layout's own split: at 640x480 the room right of the frame is 40 pixels and "100", the
+widest number of 0..100, is 31; the 9 left over go 4 to the bar's side and 5 to the
+edge's. Tabs and actions leave the loop before the slider block, value and binding rows
+draw after its `continue`, so no other kind reaches the number. The one new include is
+`specific/output.h`, for `GetFixedScale`.
+
+**Decisions.** Left-aligned at the bar's end, as a value row's text is at its column,
+rather than right-aligned to the screen's edge, so the number reads as the bar's own at
+every shape of screen; at 16:9 the right edge would have stood 165 pixels from the bar
+at 1920x1080. One gap, scaled, rather than a gap per layout: wider layouts only gain
+room. The number is the stored 0..100 for the volumes as well, rather than their
+decibels: the step, the registry and the log name that number, and the two volumes'
+decibel scales differ (0.4 and 0.5 a step, music's 0 silent), so the bar's number would
+be two units for one kind of row. The record of the table-driven frame above says a
+setting's value is "right-aligned": it is drawn in the right-hand column, left-aligned
+there, which is the convention this follows.
+
+**Checked.** MenuTest's new family `slider_numbers` reads the engine files as text, as the
+other row families do: the six rows in the tables' order and the tables that hold them
+(Audio 2, Controls 3, Display 1, every other table 0), each number function's `return` of
+the stored value and each step's clamp to 0..100; the draw inside the slider block, after
+the bar and before its `continue`, once, and the tab block's `continue` before it; the
+text at 0, 50 and 100; the colour rule 1, 6 and 3; the arithmetic held against
+`DoSlider`'s, `GetFixedScale`'s and the font's text and the digit widths read from
+`game/chardef.inc` (10, 6, 9, 8, 11, 9, 9, 9, 9, 9); 640x480 and 1920x1080 to the pixel
+(the frame's free pixel taken by the rasteriser's rule, a pixel covered when its centre
+lies left of the edge); and every width from 640 to 3840 in seven shapes (5:4, 4:3, 16:10,
+16:9, 21:9, 32:9, 1:1), the widest number of 0..100 at least 3 pixels clear of the frame,
+4 of the edge and right of the value column. MenuTest 44,619 checks before and 44,731
+after, 0 failed; with the gap and the colour of the engine's draw both changed by hand, 3
+of them fail. Parity: the engine's diff adds 29 lines and removes none (the include,
+`MenuSliderNumberX` and the two statements with their comment, all inside the slider
+block), so a page without a slider row runs no new statement and draws the same picture; a
+page with slider rows gains only the numbers' glyph quads, at 640x480 at most 1,178 pixels
+on *Audio*, 1,767 on *Controls* and 589 on *Display* (at "100"; 918, 1,463 and 481 at the
+first-run values), at 1920x1080 at most 8,448, 12,672 and 4,224. No renderer file is
+touched, so the world's pictures are the same by construction. ModernTest 15,638,
+InterpTest 729, LipsTest 299 with the obj folder and 272 without (the game's `cutseq.bin`
+given by its path; run with no arguments 268, the nine checks that read the file failing);
+the nine build scripts exit 0. The engine was built (`release/PCtomb5.exe`, Oct 18 2026
+16:45:35, md5 `b3cdec88d87649401659b9b79967cc2d`) and not run here.
+
+**Left.** The first look is the play test's. `MusicVolume` and `SFXVolume` are read
+from the registry without a clamp (`specific/registry.cpp`); a hand-edited value outside
+0..100 is shown as the bar is given it until the row's step clamps it, which happens on
+the first frame the cursor stands on the row, and a number of four digits or a negative
+one could reach past the edge at 4:3. Below 640 pixels of width, which the menu is not
+laid out for (`game/menu_frame.h`), the number is not kept clear of the edge. The HD
+font widens each glyph's quad by its atlas margin (`DrawChar`), a pixel or two of nearly
+clear rim that falls into the 4 and 5 pixels of air at 640x480. The menu screenshots in
+`docs/` were taken before the number and are not retaken here.
+
+**Commits.** `84abb89a` (the number), `c8b65133` (the tests) and the record's commit
+after them.
+
 ## 2.7 First person view, cheats and the -log seams
 
 Three things that share one property: they are switched on by the player and are off in
@@ -26244,3 +26368,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #215 | The speaking heads of the cutscenes on the HD path (#215) |
 | #217 | The far plane (#217) |
 | #220 | The gamma row (#220) |
+| #221 | The number beside every slider (#221) |

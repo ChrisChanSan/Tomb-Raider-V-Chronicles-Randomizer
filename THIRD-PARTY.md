@@ -3056,6 +3056,33 @@ carries the tables.
     them; ANDREA1's pane 15074 in the additive run, weight 1); the 16 the
     census's own bound of clear. OWN, the reading; the owner's choice of
     2026-10-18 ("A5 ja Lesart C bauen").
+293. **The slider's number and where it stands** (`game/menu_frame.cpp`,
+    `MenuSliderNumberX`, `MenuFrameRun`'s slider block) - every
+    `MENU_SLIDER` row draws its value right of its bar, left-aligned, one
+    gap of `GetFixedScale(4)` after the bar's white frame, the frame's end
+    computed with `DoSlider`'s own arithmetic (400 * `phd_winxmax` / 640
+    plus `GetFixedScale(200)` plus the frame's pixel); the gap the
+    tightest layout's split, 40 pixels of room at 640x480 and "100" 31
+    wide, 4 to the bar and 5 to the edge. OWN, the placement; the request
+    of 2026-10-18 ("Go for #221."). DATA: the digit widths of
+    `game/chardef.inc` and the room measured at eight layouts and swept
+    over every width from 640 to 3840 in seven shapes of screen (at least
+    3 pixels to the frame, 4 to the edge).
+294. **The number's form** (`game/menu_frame.cpp`, the slider block) - the
+    value the bar is given, written `"%d"` as `MenuSettleSlider` writes it
+    to `MENULOG`; 0 to 100 for all six rows, the volumes included, on the
+    scale their step, the registry and the log use rather than in decibels.
+    OWN.
+295. **The number's font and colours** (`PrintString`, `game/text.cpp`;
+    `FontShades`) - the full size game font, flags 0, at the row's y, and
+    the value rows' colour rule: 1 under the cursor, 6 elsewhere, 3 when the
+    row is greyed. CLASSIC: the font and its colours are the classic
+    engine's, the rule the value column's own in the options menu.
+296. **MenuTest's `slider_numbers`** (`Preparation/Tools/Diagnose/
+    MenuTest.cpp`) - the six rows, their ranges, the draw's place in the
+    slider block, its text, colours and position held against the engine
+    files' text, the position swept; 44,619 checks before, 44,731 after.
+    OWN, this project's tool.
 
 ## Credited, but not contained here
 

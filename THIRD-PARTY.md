@@ -2883,6 +2883,51 @@ carries the tables.
     after, with the default walk and with `-vis 1`; the cut `addViewWindow`
     would record takes 110,085 pixels of the arch's wall out at the first
     eye. OWN: the window without the cut, chosen on that picture.
+276. **The far plane of 41 sectors** (`zrange_math.h`, `ZFAR_SECTORS`,
+    `ZFAR_UNITS`; `gamemain.cpp` and `winmain.cpp`, the two `InitWindow`
+    calls) - objects, statics left to the classic path, sprites and effects
+    drawn to 41,984 units instead of 20,480. CLASSIC: `InitWindow`'s 20
+    sectors and the cuts on `f_mzfar`. DATA: RoomProbe `-farsurvey 1` over
+    every square of the fifteen levels, the deepest thing a walk from
+    inside a room lists 40,806 units ahead (JOBY2, a static of room 3 seen
+    from room 129), the corridor's door 34,340. OWN, the margin of one
+    square and the whole sector count over it; the owner's order of
+    2026-10-18 for the extension, in HD and SD, and his 34 sectors. The
+    sprite sparks' switch-off at the plane (`S_DrawDrawSparksNEW`) moves
+    with it, CLASSIC; OWN, the choice not to keep it at 20,480.
+277. **The depth curve on the shipped plane** (`3dmath.cpp`, `SetupZRange`;
+    `zrange_math.h`, `ZFAR_SHIPPED`, `ZDepthCurve`, `ZDepthAt`,
+    `ZDepthStep`) - sz = a - b / z with 0.005 at the near plane and 0.995 at
+    20,480, whatever the plane: a = 0.99596775, b = 19.819355, 0.99550 at
+    41,984 and under 0.996 (the sky's slice) at any distance. CLASSIC:
+    `SetupZRange`'s arithmetic and its 1 % margin, now `ZDepthCurve`, which
+    `SetupZRange` calls and ModernTest `far_plane` checks bit for bit
+    against the expression on 20480. OWN, the scale kept; the 24-bit step
+    2.71 units at 30,000, 5.30 at the plane, a curve on 41,984 0.05 %
+    finer. RoomProbe's pictures (83, byte for byte those of `b35b3b96`'s
+    tool) take neither the plane nor `SetupZRange`: they are the tool's
+    own regression check, not evidence for the engine's curve.
+278. **The corner count under the shipped plane** (`output.cpp`,
+    `S_GetObjectBounds`) - the box corners counted between the near plane
+    and 20,480; under eight the object is drawn clipped without the window
+    test. CLASSIC: the function. OWN, the count kept; DATA: on the moved
+    plane 1,158 of 5,445 distinct camera ticks of the owner's three JOBY2
+    segments would change the answer of an object nearer than 20,480.
+279. **The rain's tint and the fog bulbs' circle on the shipped plane**
+    (`specificfx.cpp`, `DoRain`, and `zrange_math.h`, `ZRainTint`;
+    `drawroom.cpp`, `aBuildFogBulbList`) - a drop's tint over 20,480 and
+    the bulbs nearer than 20,480. CLASSIC: both, on the plane and a literal
+    20480. OWN, the scale kept: a look, and no face nearer than 20,480 takes
+    a bulb's fog it never had. ModernTest `far_plane`: the tint as before
+    at every eighth unit to 45,000 (arithmetic; no sprite is drawn
+    offline).
+280. **RoomProbe's far plane** (`Preparation/Tools/Diagnose/RoomProbe.cpp`,
+    `-zfar`, `-farcull`, `-farsurvey`, `-farobjects`, namespace `farplane`)
+    - `S_GetObjectBounds` line for line on the walk's camera over the
+    classic level's items (first frame's box, y rotation) and statics
+    (visibility box), the survey's eyes and the flat items in the picture.
+    OWN, this project's tool on the player's files (DATA) and the classic
+    function (CLASSIC).
 
 ## Credited, but not contained here
 

@@ -20,6 +20,7 @@
 #include "../game/control.h"
 #include "../game/lara.h"
 #include "../game/interpolate.h"	// InterpIsTweenFrame - the poison ramp guard
+#include "zrange_math.h"		// ZDepthCurve - the depth curve
 
 PHD_VECTOR CamPos;
 SVECTOR CamRot;
@@ -905,9 +906,16 @@ void SetupZRange(long znear, long zfar)
 	f_mzfar = float(zfar >> W2V_SHIFT);
 	f_mperspoznear = f_mpersp / f_mznear;
 	f_moneoznear = mone / f_mznear;
-	f_b = f_mzfar * f_mznear * 0.99F / (f_mznear - f_mzfar);
-	f_a = 0.005F - f_b / f_mznear;
-	f_b = -f_b;
+
+	/* The depth curve, sz = f_a - f_b / z: 0.005 at the near plane and
+	 * 0.995 at ZFAR_SHIPPED, twenty sectors, and not at zfar. Built on that
+	 * scale no depth depends on the far plane: past 20,480 units the curve
+	 * rises on under f_a, 0.99597, and the HD path's projection, the
+	 * water's depth reading and the sky's slice from 0.996 take the same
+	 * f_a and f_b at any far plane. The curve's resolution is the near
+	 * plane's: a farther zfar would buy 0.05 % (zrange_math.h). The
+	 * arithmetic is ZDepthCurve's, the one ModernTest checks. */
+	ZDepthCurve(f_mznear, &f_a, &f_b);
 	f_boo = f_b / mone;
 }
 

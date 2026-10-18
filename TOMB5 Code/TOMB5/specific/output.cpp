@@ -13,6 +13,7 @@
 #include "../tomb5/pch.h"
 #include "output.h"
 #include "../specific/3dmath.h"
+#include "zrange_math.h"		// ZFAR_SHIPPED - the corners' count
 #include "../game/newinv2.h"
 #include "../specific/d3dmatrix.h"
 #include "lighting.h"
@@ -723,7 +724,14 @@ long S_GetObjectBounds(short* bounds)
 	{
 		zv = vtx[i].x * aMXPtr[M20] + vtx[i].y * aMXPtr[M21] + vtx[i].z * aMXPtr[M22] + aMXPtr[M23];
 
-		if(zv > f_mznear && zv < f_mzfar)
+		/* The corners between the near plane and ZFAR_SHIPPED, not the far
+		 * plane: the answer for an object nearer than 20,480 units does not
+		 * depend on the far plane - a box reaching past 20,480 is drawn
+		 * clipped (-1) without the window test, where a count on the far
+		 * plane would window test it - and one past 20,480, which the
+		 * origin test above lets through, is drawn clipped as past the
+		 * plane in an outside frame. */
+		if(zv > f_mznear && zv < (float)ZFAR_SHIPPED)
 		{
 			numZ++;
 			zv /= f_mpersp;

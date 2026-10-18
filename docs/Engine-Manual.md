@@ -4316,6 +4316,18 @@ every other frame is drawn as before. One seam stays: the forward jump's twist
 out of a standing jump begins its second half turned half a turn about her
 side-to-side axis, a jump in the game's own animation data.
 
+**The view distance is forty-one sectors.** The original stops drawing things at twenty
+sectors (20,480 units) from the camera: a door, a pickup, an enemy, a crate or a splash
+further away is simply not there, while the room around it is drawn, so a long corridor
+ends in an empty doorway. The engine draws them to forty-one sectors (41,984 units), with
+the HD textures and without. The number comes from the levels themselves: the farthest
+thing the game can show from inside a room stands just under forty sectors away (JOBY2,
+whose corridor door alone is 34 sectors from its far end). Everything nearer than twenty
+sectors is drawn exactly as before; the sky, the fog bulbs, fire, smoke and blood are
+unchanged. *Distance fog* darkens those things as it darkens the rooms: at its default
+of 12 everything past about 24 sectors is dark, at its highest, 30, the darkening only
+begins at 30 sectors. There is no switch for the view distance.
+
 **Room for bigger levels.** Several engine ceilings were raised — items per
 level, sound samples, active enemies, the savegame buffer. A level that would
 still exceed one stops with a clear message instead of corrupting memory.

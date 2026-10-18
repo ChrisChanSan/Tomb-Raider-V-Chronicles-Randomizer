@@ -3248,6 +3248,220 @@ static long g_clip_box[4] = { 0, 0, 0, 0 };
 static int g_tround_group = -1;
 static long g_tround_box[4] = { 0, 0, 0, 0 };
 
+/* The far plane - -zfar <units>, -farcull, -farsurvey [step], -farobjects.
+ *
+ * The engine draws an object only where S_GetObjectBounds
+ * (specific\output.cpp) lets it: its origin's view depth under the far
+ * plane, unless the frame lists an outside room, then its frame's box
+ * against the window of its room. Statics the art does not draw ask the
+ * same function, sprites and effects cut at the same plane; the rooms'
+ * faces have no such cut, classic or HD. These switches put the rule
+ * offline over the classic .TRC, on the walk's own camera:
+ *
+ *   -zfar <units>    the plane the rule takes (ZFAR_UNITS of
+ *                    specific\zrange_math.h when absent; ZFAR_SHIPPED,
+ *                    20480, gives the twenty-sector plane)
+ *   -farcull         with -walk: per direction every item and static of
+ *                    the listed rooms that lies past ZFAR_SHIPPED or whose
+ *                    answer differs, the answer at ZFAR_SHIPPED and at
+ *                    -zfar, and a FARCULL line per direction
+ *   -farsurvey [n]   every room's centre as the eye (n 0), or every n-th
+ *                    square of every room, the -walk fan from each: the
+ *                    deepest object the rule would draw at
+ *                    any plane, from inside rooms and from the outside, the
+ *                    deepest listed room corner, and how many objects each
+ *                    plane from 20 to 64 sectors still cuts
+ *   -farobjects      the items of the picture's listed rooms that the rule
+ *                    draws at -zfar, flat and orange, with the classic faces
+ *
+ * The box is the slot's first frame's (anim 0, frame 0), the rotation the
+ * item's y_rot alone - what a closed door or a lying pickup has at the
+ * load; an enemy in another pose has another box. An item with
+ * IFL_INVISIBLE and a static without its visible bit are left out; an item
+ * whose slot draws nothing (an emitter, a target) is not known offline and
+ * is counted - its slot name says what it is. */
+#include "../../../TOMB5 Code/TOMB5/specific/zrange_math.h"
+
+namespace farplane
+{
+	struct Thing
+	{
+		bool item;		// an item, else a static
+		int index;		// the item's number, or the static's in its room
+		int slot;
+		int room;
+		long x, y, z;
+		short rot;
+		short box[6];		// x, y and z, min and max
+		short off[3];		// the first frame's offset (items)
+		int mesh;		// mesh pointer index, -1 for none
+	};
+
+	static std::vector<Thing> g_things;
+	static std::vector<std::vector<int> > g_of_room;
+	static double g_zfar = ZFAR_UNITS;
+	static bool g_cull = false, g_survey = false, g_draw = false;
+	static int g_step = 0;
+	static bool g_loaded = false;
+
+	// CLOSED_DOOR1 .. LIFT_DOORS2, as the walk's doors take them.
+	static bool IsDoor(int slot)
+	{
+		return slot >= 300 && slot <= 314;
+	}
+
+	static const char* Name(const Thing& t)
+	{
+		if (!t.item)
+			return "static";
+
+		const char* name = HDSlotName(t.slot);
+
+		return name ? name : "?";
+	}
+
+	/* The level's items and statics, once: what the rule is asked over. */
+	static void Collect(const Tr5Level& level)
+	{
+		if (g_loaded)
+			return;
+
+		g_loaded = true;
+		g_things.clear();
+		g_of_room.assign((size_t)level.roomCount(), std::vector<int>());
+
+		for (int i = 0; i < level.itemCount(); i++)
+		{
+			Tr5Item it;
+			Tr5Level::MoveableInfo mi;
+			int16_t box[6];
+
+			if (!level.getItem(i, it) || it.roomNumber < 0 ||
+				it.roomNumber >= level.roomCount() || (it.flags & 0x100) ||
+				!level.moveableInfo(it.objectNumber, mi) || mi.nmeshes <= 0 ||
+				!level.frameBounds(it.objectNumber, box))
+				continue;
+
+			Thing t;
+
+			t.item = true;
+			t.index = i;
+			t.slot = it.objectNumber;
+			t.room = it.roomNumber;
+			t.x = it.x;
+			t.y = it.y;
+			t.z = it.z;
+			t.rot = it.yRot;
+
+			for (int k = 0; k < 6; k++)
+				t.box[k] = box[k];
+
+			const long long w = (long long)mi.frameOffset / 2;
+
+			for (int k = 0; k < 3; k++)
+				t.off[k] = level.debugReadFrameShort(w + 6 + k);
+
+			t.mesh = mi.meshIndex;
+			g_of_room[(size_t)t.room].push_back((int)g_things.size());
+			g_things.push_back(t);
+		}
+
+		/* The statics: the static block after the moveables, 32 bytes a
+		 * slot (slot, mesh, the visibility box, the collision box), and
+		 * every room's MESH_INFO list of 20 bytes (x, y, z, y_rot, shade,
+		 * Flags, static_number), as probestatics reads them. */
+		short vis[70][6];
+		int meshOf[70];
+		bool have[70];
+		size_t objAt = 0, frAt = 0;
+		int32_t objN = 0, frN = 0;
+		const std::vector<uint8_t>& raw = level.debugBytes();
+
+		memset(vis, 0, sizeof(vis));
+		memset(have, 0, sizeof(have));
+
+		if (level.debugModelBlocks(objAt, objN, frAt, frN))
+		{
+			size_t at = objAt + (size_t)objN * 20;
+			int n = 0;
+
+			memcpy(&n, raw.data() + at, 4);
+			at += 4;
+
+			for (int i = 0; i < n; i++, at += 32)
+			{
+				int slot = 0;
+				unsigned short mesh = 0;
+
+				memcpy(&slot, raw.data() + at, 4);
+				memcpy(&mesh, raw.data() + at + 4, 2);
+
+				if (slot < 0 || slot >= 70)
+					continue;
+
+				memcpy(vis[slot], raw.data() + at + 6, 12);
+				meshOf[slot] = mesh;
+				have[slot] = true;
+			}
+		}
+
+		std::string error;
+
+		for (int r = 0; r < level.roomCount(); r++)
+		{
+			const Tr5Room& rm = level.rooms()[(size_t)r];
+			unsigned meshOfs = 0, lightsMeshes = 0;
+
+			if (!rm.headerOffset || !level.headerField(r, 16, meshOfs, error) ||
+				!level.headerField(r, 48, lightsMeshes, error))
+				continue;
+
+			const int count = (int)(lightsMeshes >> 16);
+
+			for (int m = 0; m < count; m++)
+			{
+				const size_t at = rm.headerOffset + 208 + meshOfs +
+					(size_t)m * 20;
+
+				if (at + 20 > raw.size())
+					break;
+
+				int mx = 0, my = 0, mz = 0;
+				short rot = 0, flags = 0, slot = 0;
+
+				memcpy(&mx, raw.data() + at, 4);
+				memcpy(&my, raw.data() + at + 4, 4);
+				memcpy(&mz, raw.data() + at + 8, 4);
+				memcpy(&rot, raw.data() + at + 12, 2);
+				memcpy(&flags, raw.data() + at + 16, 2);
+				memcpy(&slot, raw.data() + at + 18, 2);
+
+				if (!(flags & 1) || slot < 0 || slot >= 70 || !have[slot])
+					continue;
+
+				Thing t;
+
+				t.item = false;
+				t.index = m;
+				t.slot = slot;
+				t.room = r;
+				t.x = mx;
+				t.y = my;
+				t.z = mz;
+				t.rot = rot;
+
+				for (int k = 0; k < 6; k++)
+					t.box[k] = vis[slot][k];
+
+				t.off[0] = t.off[1] = t.off[2] = 0;
+				t.mesh = meshOf[slot];
+				g_of_room[(size_t)r].push_back((int)g_things.size());
+				g_things.push_back(t);
+			}
+		}
+	}
+}
+
 /* -walk: the classic portal walk (game\draw.cpp, GetRoomBounds and
  * SetRoomBounds), run offline from the classic .TRC alone, with no device,
  * no .TRG and no picture - the two functions copied line for line, with
@@ -4539,6 +4753,9 @@ namespace walkoff
 		printf("-walk: %d rooms out of %s, %d closed door(s) with a portal\n",
 			(int)g_room.size(), trc.c_str(), (int)g_doors.size());
 
+		// The far plane's things (-farcull, -farsurvey).
+		farplane::Collect(level);
+
 		if (g_vis)
 			VisInputFromLevel(level, g_vis_rooms, g_vis_faces, g_vis_portals,
 				g_vis_links);
@@ -5087,6 +5304,438 @@ namespace walkoff
 }
 
 /* The whole of -walk, from the command line. Returns the process exit code. */
+namespace farplane
+{
+	// A world point in the last walk's view: right, down and forward.
+	static void View(double x, double y, double z, float* v)
+	{
+		const float d[3] = { (float)(x - (double)walkoff::g_eye[0]),
+			(float)(y - (double)walkoff::g_eye[1]),
+			(float)(z - (double)walkoff::g_eye[2]) };
+
+		for (int row = 0; row < 3; row++)
+			v[row] = walkoff::g_view[row * 3 + 0] * d[0] +
+				walkoff::g_view[row * 3 + 1] * d[1] +
+				walkoff::g_view[row * 3 + 2] * d[2];
+	}
+
+	/* S_GetObjectBounds (specific\output.cpp) over one thing, line for
+	 * line: on the last walk's camera, in the window of the room it stands
+	 * in, the origin against the plane zfar and the corners counted under
+	 * cornerFar - the engine counts them under ZFAR_SHIPPED, whatever the
+	 * plane; the survey under no plane at all, so that a thing counts only
+	 * where its box meets its window. 0 is not drawn, -1 drawn and clipped,
+	 * 1 drawn. depth is the origin's view depth, box the projected corners
+	 * that lie between the planes (l, t, r, b), empty when none does. */
+	static int Bounds(const Thing& t, double zfar, double cornerFar,
+		bool outside, float* depth, float* box)
+	{
+		const walkoff::Room& r = walkoff::g_room[(size_t)t.room];
+		const float c = (float)enginecam::PhdCos(t.rot) * (1.0f / 16384.0f);
+		const float s = (float)enginecam::PhdSin(t.rot) * (1.0f / 16384.0f);
+		const float plane = (float)zfar;
+		const float corners = (float)cornerFar;
+		const float nearZ = (float)ZNEAR_UNITS;
+		float o[3];
+
+		View((double)t.x, (double)t.y, (double)t.z, o);
+		*depth = o[2];
+		box[0] = box[1] = 1.0e9f;
+		box[2] = box[3] = -1.0e9f;
+
+		if (o[2] >= plane && !outside)
+			return 0;
+
+		float xMin = (float)0x3FFFFFFF, xMax = (float)-0x3FFFFFFF;
+		float yMin = (float)0x3FFFFFFF, yMax = (float)-0x3FFFFFFF;
+		int numZ = 0;
+
+		for (int i = 0; i < 8; i++)
+		{
+			const float bx = t.box[i & 1];
+			const float by = t.box[2 + ((i >> 1) & 1)];
+			const float bz = t.box[4 + ((i >> 2) & 1)];
+			float v[3];
+
+			View((double)t.x + bx * c + bz * s, (double)t.y + by,
+				(double)t.z + bz * c - bx * s, v);
+
+			if (v[2] > nearZ && v[2] < corners)
+			{
+				numZ++;
+
+				float zv = v[2] / walkoff::g_persp;
+
+				if (!zv)
+					zv = 1;
+
+				zv = 1 / zv;
+
+				const float xv = zv * v[0], yv = zv * v[1];
+
+				if (xv < xMin) xMin = xv;
+				if (xv > xMax) xMax = xv;
+				if (yv < yMin) yMin = yv;
+				if (yv > yMax) yMax = yv;
+			}
+		}
+
+		xMin += walkoff::g_centerx;
+		xMax += walkoff::g_centerx;
+		yMin += walkoff::g_centery;
+		yMax += walkoff::g_centery;
+
+		if (numZ)
+		{
+			box[0] = xMin;
+			box[1] = yMin;
+			box[2] = xMax;
+			box[3] = yMax;
+		}
+
+		if (numZ < 8 || xMin < 0 || yMin < 0 || walkoff::g_winxmax < xMax ||
+			walkoff::g_winymax < yMax)
+			return -1;
+
+		if (r.right >= xMin && r.bottom >= yMin && r.left <= xMax &&
+			r.top <= yMax)
+			return 1;
+
+		return 0;
+	}
+
+	/* The pixels of a box inside its room's window and the screen: the
+	 * most the thing can cover. */
+	static long BoxPixels(const Thing& t, const float* box)
+	{
+		const walkoff::Room& r = walkoff::g_room[(size_t)t.room];
+		const float l = box[0] > r.left ? box[0] : (float)r.left;
+		const float tp = box[1] > r.top ? box[1] : (float)r.top;
+		const float rt = box[2] < r.right ? box[2] : (float)r.right;
+		const float b = box[3] < r.bottom ? box[3] : (float)r.bottom;
+
+		if (rt <= l || b <= tp)
+			return 0;
+
+		return (long)((rt - l) * (b - tp));
+	}
+
+	/* `outside` as the walk leaves it (game\draw.cpp): the seed room's
+	 * ROOM_OUTSIDE, or that of any listed room. */
+	static bool Outside(int seed)
+	{
+		bool out = (walkoff::g_room[(size_t)seed].flags & 0x8) != 0;
+
+		for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+			out = out || (walkoff::g_room[(size_t)walkoff::g_drawn[i]].flags &
+				0x8) != 0;
+
+		return out;
+	}
+
+	// The deepest view depth of a listed room's box: its far corner.
+	static float FarCorner(int rn)
+	{
+		const walkoff::Room& r = walkoff::g_room[(size_t)rn];
+		float deepest = -1.0e9f;
+
+		for (int i = 0; i < 8; i++)
+		{
+			float v[3];
+
+			View((double)(r.x + ((i & 1) ? (long)r.xs * 1024 : 0)),
+				(double)((i & 2) ? r.floor : r.ceiling),
+				(double)(r.z + ((i & 4) ? (long)r.zs * 1024 : 0)), v);
+
+			if (v[2] > deepest)
+				deepest = v[2];
+		}
+
+		return deepest;
+	}
+
+	/* -farcull: the last walk's things, one line each that lies past
+	 * ZFAR_SHIPPED or whose answer differs, and the direction's line. */
+	static void Report(int seed, double yaw, double pitch)
+	{
+		const bool outside = Outside(seed);
+		int listed = 0, past = 0, appear = 0, appearDoors = 0, vanish = 0;
+		long appearPixels = 0;
+		float corner = 0.0f, drawn = 0.0f;
+		int cornerRoom = -1;
+
+		for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+		{
+			const int rn = walkoff::g_drawn[i];
+			const float fc = FarCorner(rn);
+
+			if (fc > corner)
+			{
+				corner = fc;
+				cornerRoom = rn;
+			}
+
+			for (int k : g_of_room[(size_t)rn])
+			{
+				const Thing& t = g_things[(size_t)k];
+				float depth, box[4], depth2, box2[4], depth3, box3[4];
+				const int before = Bounds(t, (double)ZFAR_SHIPPED,
+					(double)ZFAR_SHIPPED, outside, &depth, box);
+				const int after = Bounds(t, g_zfar, (double)ZFAR_SHIPPED,
+					outside, &depth2, box2);
+
+				/* The box the pixels are estimated from: all eight corners
+				 * projected, which the engine's count under ZFAR_SHIPPED
+				 * leaves out for a thing past it. */
+				Bounds(t, 1.0e9, 1.0e9, outside, &depth3, box3);
+
+				const long pixels = after ? BoxPixels(t, box3) : 0;
+
+				listed++;
+
+				if (after && depth > drawn)
+					drawn = depth;
+
+				if (depth < (float)ZFAR_SHIPPED && before == after)
+					continue;
+
+				past += depth >= (float)ZFAR_SHIPPED;
+
+				if (!before && after)
+				{
+					appear++;
+					appearDoors += IsDoor(t.slot);
+					appearPixels += pixels;
+				}
+
+				vanish += before && !after;
+				printf("FARCULL %s %d slot %d %s room %d depth %.0f "
+					"shipped=%d far=%d box=%.0f,%.0f..%.0f,%.0f px=%ld\n",
+					t.item ? "item" : "static", t.index, t.slot, Name(t),
+					t.room, depth, before, after, box3[0], box3[1], box3[2],
+					box3[3], pixels);
+			}
+		}
+
+		printf("FARCULL dir yaw %.1f pitch %.1f outside=%d rooms=%d things=%d "
+			"past_shipped=%d appear=%d doors=%d px=%ld vanish=%d "
+			"far_corner=%.0f room %d deepest_drawn=%.0f zfar=%.0f\n", yaw,
+			pitch, outside ? 1 : 0, (int)walkoff::g_drawn.size(), listed,
+			past, appear, appearDoors, appearPixels, vanish, corner,
+			cornerRoom, drawn, g_zfar);
+	}
+
+	/* -farsurvey [n]: the eyes - with n 0 (the default) every room's
+	 * centre, with n 1 or more the centre of every n-th square inside a
+	 * room's wall ring, at the room's middle height - and the fan from
+	 * each. Per thing the deepest the rule draws it at any plane (inside
+	 * frames, where the plane cuts, apart from outside frames, where it
+	 * does not), the deepest listed room corner, and the cut of each plane
+	 * from 20 to 64 sectors: how many things it still leaves out at least
+	 * once. */
+	struct Seen
+	{
+		float depth = 0.0f;
+		int seed = -1;
+		long x = 0, z = 0;
+		double yaw = 0.0;
+	};
+
+	static int Survey(const std::string& folder, const char* stem,
+		const double* yawFan, const double* pitchFan, long width,
+		long height, double fov)
+	{
+		if (!walkoff::Load(folder, stem))
+			return 5;
+
+		const double kNoPlane = 1.0e9;
+		std::vector<Seen> deepest(g_things.size());
+		std::vector<float> deepestOut(g_things.size(), 0.0f);
+		long frames = 0, outsideFrames = 0, eyes = 0;
+		float cornerOut = 0.0f;
+		Seen corner;
+		int cornerRoom = -1;
+
+		walkoff::g_notes = false;
+
+		for (size_t seed = 0; seed < walkoff::g_room.size(); seed++)
+		{
+			const walkoff::Room& r0 = walkoff::g_room[seed];
+			const int n = g_step;
+			const int x0 = n > 0 ? 1 : 0, x1 = n > 0 ? r0.xs - 1 : 1;
+			const int z0 = n > 0 ? 1 : 0, z1 = n > 0 ? r0.zs - 1 : 1;
+			const long ey = (r0.ceiling + r0.floor) / 2;
+
+			for (int sx = x0; sx < x1; sx += n > 0 ? n : 1)
+			for (int sz = z0; sz < z1; sz += n > 0 ? n : 1)
+			{
+				const long ex = n > 0 ? r0.x + (long)sx * 1024 + 512 :
+					r0.x + (long)r0.xs * 512;
+				const long ez = n > 0 ? r0.z + (long)sz * 1024 + 512 :
+					r0.z + (long)r0.zs * 512;
+
+				eyes++;
+
+				for (double pitch = pitchFan[0]; pitch <= pitchFan[1] + 1e-9;
+					pitch += pitchFan[2] > 0 ? pitchFan[2] : 1.0)
+				for (double yaw = yawFan[0]; yaw <= yawFan[1] + 1e-9;
+					yaw += yawFan[2])
+				{
+					walkoff::g_reach = false;
+					walkoff::One((int)seed, ex, ey, ez, yaw, pitch, width,
+						height, fov);
+					frames++;
+
+					const bool outside = Outside((int)seed);
+
+					outsideFrames += outside;
+
+					for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
+					{
+						const int rn = walkoff::g_drawn[i];
+						const float fc = FarCorner(rn);
+
+						if (outside && fc > cornerOut)
+							cornerOut = fc;
+
+						if (!outside && fc > corner.depth)
+						{
+							corner.depth = fc;
+							corner.seed = (int)seed;
+							corner.x = ex;
+							corner.z = ez;
+							corner.yaw = yaw;
+							cornerRoom = rn;
+						}
+
+						for (int k : g_of_room[(size_t)rn])
+						{
+							float depth, box[4];
+
+							if (!Bounds(g_things[(size_t)k], kNoPlane, kNoPlane,
+								outside, &depth, box))
+								continue;
+
+							if (outside)
+							{
+								if (depth > deepestOut[(size_t)k])
+									deepestOut[(size_t)k] = depth;
+
+								continue;
+							}
+
+							Seen& keep = deepest[(size_t)k];
+
+							if (depth > keep.depth)
+							{
+								keep.depth = depth;
+								keep.seed = (int)seed;
+								keep.x = ex;
+								keep.z = ez;
+								keep.yaw = yaw;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		static const int kSectors[] = { 20, 24, 28, 30, 32, 34, 35, 36, 38,
+			40, 48, 64 };
+		const int planes = (int)(sizeof(kSectors) / sizeof(kSectors[0]));
+		float most = 0.0f, mostDoor = 0.0f, mostOut = 0.0f;
+		int mostAt = -1, mostDoorAt = -1;
+
+		for (size_t k = 0; k < g_things.size(); k++)
+		{
+			if (deepest[k].depth > most)
+			{
+				most = deepest[k].depth;
+				mostAt = (int)k;
+			}
+
+			if (IsDoor(g_things[k].slot) && deepest[k].depth > mostDoor)
+			{
+				mostDoor = deepest[k].depth;
+				mostDoorAt = (int)k;
+			}
+
+			if (deepestOut[k] > mostOut)
+				mostOut = deepestOut[k];
+		}
+
+		printf("-farsurvey %-9s rooms=%d eyes=%ld frames=%ld "
+			"outside_frames=%ld things=%d far_corner=%.0f (room %d, eye "
+			"%ld,%ld in %d yaw %.0f) far_corner_outside=%.0f "
+			"deepest_drawn_outside=%.0f\n", stem,
+			(int)walkoff::g_room.size(), eyes, frames, outsideFrames,
+			(int)g_things.size(), corner.depth, cornerRoom, corner.x,
+			corner.z, corner.seed, corner.yaw, cornerOut, mostOut);
+
+		for (int pass = 0; pass < 2; pass++)
+		{
+			const int at = pass ? mostDoorAt : mostAt;
+
+			if (at < 0)
+			{
+				printf("-farsurvey %-9s deepest %s inside: none\n", stem,
+					pass ? "door" : "thing");
+				continue;
+			}
+
+			const Thing& t = g_things[(size_t)at];
+			const Seen& s = deepest[(size_t)at];
+
+			printf("-farsurvey %-9s deepest %s inside: %s %d slot %d %s room "
+				"%d depth %.0f from eye %ld,%ld in %d yaw %.0f\n", stem,
+				pass ? "door" : "thing", t.item ? "item" : "static", t.index,
+				t.slot, Name(t), t.room, s.depth, s.x, s.z, s.seed, s.yaw);
+		}
+
+		printf("-farcut %-9s things / doors a plane still cuts somewhere "
+			"inside:", stem);
+
+		for (int p = 0; p < planes; p++)
+		{
+			const float plane = (float)(kSectors[p] * 1024);
+			int cut = 0, cutDoors = 0;
+
+			for (size_t k = 0; k < g_things.size(); k++)
+				if (deepest[k].depth >= plane)
+				{
+					cut++;
+					cutDoors += IsDoor(g_things[k].slot);
+				}
+
+			printf(" %d:%d/%d", kSectors[p], cut, cutDoors);
+		}
+
+		printf("\n");
+
+		// The things past ZFAR_SHIPPED, deepest first.
+		std::vector<std::pair<float, int> > order;
+
+		for (size_t k = 0; k < g_things.size(); k++)
+			if (deepest[k].depth >= (float)ZFAR_SHIPPED)
+				order.push_back(std::make_pair(-deepest[k].depth, (int)k));
+
+		std::sort(order.begin(), order.end());
+
+		for (size_t i = 0; i < order.size(); i++)
+		{
+			const Thing& t = g_things[(size_t)order[i].second];
+			const Seen& s = deepest[(size_t)order[i].second];
+
+			printf("-farpast %-9s %s %d slot %d %s room %d depth %.0f eye "
+				"%ld,%ld in %d yaw %.0f\n", stem, t.item ? "item" : "static",
+				t.index, t.slot, Name(t), t.room, s.depth, s.x, s.z, s.seed,
+				s.yaw);
+		}
+
+		return 0;
+	}
+}
+
 static int RunWalk(const std::string& folder, const char* stem, int seed,
 	long ex, long ey, long ez, const double* yawFan, const double* pitchFan,
 	int want, long width, long height, double fov, bool verbose, bool reach,
@@ -5400,6 +6049,10 @@ static int RunWalk(const std::string& folder, const char* stem, int seed,
 			if (want >= 0)
 				walkoff::Why(want);
 		}
+
+		// -farcull: the far plane's rule over this direction's list.
+		if (farplane::g_cull)
+			farplane::Report(seed, yaw, pitch);
 	}
 
 	printf("-walk: %d view directions, rooms per frame %d..%d\n",
@@ -11407,6 +12060,233 @@ namespace probestatics
 	}
 }
 
+/* -farobjects: the items of the picture's listed rooms (the seed, the
+ * -with groups and the -classicroom rooms) the far plane's rule draws at
+ * -zfar, their first mesh flat and orange at the first frame's offset,
+ * both sides, into the classic faces' scene. The window is the whole
+ * screen; `outside` is any listed room's ROOM_OUTSIDE. One line per item
+ * past ZFAR_SHIPPED or culled, and a FAROBJECTS total. */
+namespace farplane
+{
+	static int Gather(const Tr5Level& level, int seed, double ox, double oy,
+		double oz, const float* view, const D3DMATRIX& projection,
+		long width, long height, std::vector<probestatics::Vtx>& out)
+	{
+		if (!g_draw)
+			return 0;
+
+		Collect(level);
+
+		std::set<int> artListed, rooms;
+
+		probestatics::Listed(seed, artListed, rooms);
+		rooms.insert(seed);
+
+		bool outside = false;
+
+		for (int rn : rooms)
+			if (rn >= 0 && rn < level.roomCount())
+				outside = outside || (level.rooms()[(size_t)rn].flags & 0x8);
+
+		const float cx = (float)width * 0.5f, cy = (float)height * 0.5f;
+		const float persp = projection._11 * cx;
+		const std::vector<uint8_t>& raw = level.debugBytes();
+		int drawn = 0, cut = 0;
+
+		const auto toView = [&](double x, double y, double z, float* v)
+		{
+			for (int k = 0; k < 3; k++)
+				v[k] = (float)(x * view[k] + y * view[4 + k] +
+					z * view[8 + k] + view[12 + k]);
+		};
+
+		for (int rn : rooms)
+		{
+			if (rn < 0 || rn >= (int)g_of_room.size())
+				continue;
+
+			for (int k : g_of_room[(size_t)rn])
+			{
+				const Thing& t = g_things[(size_t)k];
+
+				if (!t.item)
+					continue;
+
+				const double c = (double)enginecam::PhdCos(t.rot) / 16384.0;
+				const double s = (double)enginecam::PhdSin(t.rot) / 16384.0;
+				float o[3];
+
+				toView((double)t.x - ox, (double)t.y - oy, (double)t.z - oz, o);
+
+				// S_GetObjectBounds' first line and its corner count, under
+				// ZFAR_SHIPPED as the engine counts; the whole screen is the
+				// window.
+				int answer = 1;
+
+				if (o[2] >= (float)g_zfar && !outside)
+					answer = 0;
+				else
+				{
+					int numZ = 0;
+					float l = 1e9f, tp = 1e9f, r = -1e9f, b = -1e9f;
+
+					for (int i = 0; i < 8; i++)
+					{
+						const double bx = t.box[i & 1];
+						const double by = t.box[2 + ((i >> 1) & 1)];
+						const double bz = t.box[4 + ((i >> 2) & 1)];
+						float v[3];
+
+						toView((double)t.x - ox + bx * c + bz * s,
+							(double)t.y - oy + by,
+							(double)t.z - oz + bz * c - bx * s, v);
+
+						if (v[2] > (float)ZNEAR_UNITS &&
+							v[2] < (float)ZFAR_SHIPPED)
+						{
+							const float sx = cx + v[0] * persp / v[2];
+							const float sy = cy + v[1] * persp / v[2];
+
+							numZ++;
+							l = sx < l ? sx : l;
+							r = sx > r ? sx : r;
+							tp = sy < tp ? sy : tp;
+							b = sy > b ? sy : b;
+						}
+					}
+
+					if (numZ == 8 && l >= 0 && tp >= 0 && r <= cx * 2 - 1 &&
+						b <= cy * 2 - 1)
+						answer = r >= 0 && b >= 0 && l <= cx * 2 - 1 &&
+							tp <= cy * 2 - 1 ? 1 : 0;
+					else
+						answer = -1;
+				}
+
+				const size_t first = out.size();
+				const auto line = [&]()
+				{
+					if (o[2] >= (float)ZFAR_SHIPPED || !answer)
+						printf("FAROBJECTS item %d slot %d %s room %d "
+							"depth %.0f answer %d at zfar %.0f "
+							"triangles %d\n", t.index, t.slot, Name(t),
+							t.room, o[2], answer, g_zfar,
+							(int)((out.size() - first) / 3));
+				};
+
+				if (!answer)
+				{
+					line();
+					cut++;
+					continue;
+				}
+
+				size_t at = 0;
+
+				if (t.mesh < 0 || !level.debugMeshAt(t.mesh, at) ||
+					at + 12 > raw.size())
+					continue;
+
+				const auto s16 = [&](size_t p) -> int
+				{
+					short v = 0;
+
+					if (p + 2 <= raw.size())
+						memcpy(&v, raw.data() + p, 2);
+
+					return v;
+				};
+
+				const int verts = s16(at + 10) & 0xFF;
+				size_t p = at + 12;
+				std::vector<double> pos((size_t)verts * 3);
+
+				for (int v = 0; v < verts; v++, p += 6)
+				{
+					const double x = s16(p) + t.off[0];
+					const double y = s16(p + 2) + t.off[1];
+					const double z = s16(p + 4) + t.off[2];
+
+					pos[(size_t)v * 3 + 0] = (double)t.x + x * c + z * s - ox;
+					pos[(size_t)v * 3 + 1] = (double)t.y + y - oy;
+					pos[(size_t)v * 3 + 2] = (double)t.z + z * c - x * s - oz;
+				}
+
+				const int norms = s16(p);
+
+				p += 2 + (size_t)verts * (norms >= 0 ? 6 : 2);
+
+				const auto tri = [&](int a, int bb, int d)
+				{
+					if (a < 0 || bb < 0 || d < 0 || a >= verts || bb >= verts ||
+						d >= verts)
+						return;
+
+					const int at3[3] = { a, bb, d };
+
+					for (int q = 0; q < 3; q++)
+					{
+						probestatics::Vtx vtx;
+
+						vtx.x = (float)pos[(size_t)at3[q] * 3 + 0];
+						vtx.y = (float)pos[(size_t)at3[q] * 3 + 1];
+						vtx.z = (float)pos[(size_t)at3[q] * 3 + 2];
+						vtx.colour = D3DCOLOR_XRGB(255, 140, 0);
+						out.push_back(vtx);
+					}
+				};
+
+				const int quads = s16(p);
+
+				p += 2;
+
+				for (int i = 0; i < quads && quads > 0; i++, p += 12)
+				{
+					tri(s16(p), s16(p + 2), s16(p + 4));
+					tri(s16(p), s16(p + 4), s16(p + 6));
+				}
+
+				const int tris = quads >= 0 ? s16(p) : 0;
+
+				p += 2;
+
+				for (int i = 0; i < tris && tris > 0; i++, p += 10)
+					tri(s16(p), s16(p + 2), s16(p + 4));
+
+				drawn++;
+				line();
+			}
+		}
+
+		printf("FAROBJECTS drawn=%d cut=%d zfar=%.0f outside=%d\n", drawn, cut,
+			g_zfar, outside ? 1 : 0);
+		return drawn;
+	}
+}
+
+/* -zfar, -farcull, -farsurvey and -farobjects: the chain in main is at the
+ * compiler's limit of nested blocks (C1061). */
+static bool FarArg(int argc, char** argv, int* at)
+{
+	if (!strcmp(argv[*at], "-zfar") && *at + 1 < argc)
+		farplane::g_zfar = atof(argv[++*at]);
+	else if (!strcmp(argv[*at], "-farcull"))
+		farplane::g_cull = true;
+	else if (!strcmp(argv[*at], "-farobjects"))
+		farplane::g_draw = true;
+	else if (!strcmp(argv[*at], "-farsurvey"))
+	{
+		farplane::g_survey = true;
+
+		if (*at + 1 < argc && argv[*at + 1][0] != '-')
+			farplane::g_step = atoi(argv[++*at]);
+	}
+	else
+		return false;
+
+	return true;
+}
+
 /* The classic faces of -classicroom, drawn into the finished picture - see the
  * note at g_classic_rooms. Its own scene and its own state block, after the
  * state bracket of the HD frame has been checked, so the check is the HD
@@ -11422,7 +12302,8 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	long height)
 {
 	if (g_classic_rooms.empty() && !probestatics::g_rule &&
-		probestatics::g_forced.empty())
+		probestatics::g_forced.empty() &&
+		!farplane::g_draw)
 		return;
 
 	if (g_roombox.empty())
@@ -11465,6 +12346,9 @@ static void DrawClassicFaces(const char* stem, int seed, const float* view,
 	// The static meshes of -statics and -static, both sides drawn.
 	std::vector<Vtx> statics[2];
 	const int staticCount = probestatics::Gather(stem, seed, statics[1]);
+	// -farobjects: the items the far plane's rule draws, with the statics.
+	const int farCount = farplane::Gather(level, seed, ox, oy, oz, view,
+		projection, width, height, statics[1]);
 
 	for (int room : g_classic_rooms)
 	{
@@ -13929,6 +14813,9 @@ static int ProbeMain(int argc, char** argv)
 		if (UnderArg(argc, argv, &at))
 			continue;
 
+		if (FarArg(argc, argv, &at))
+			continue;
+
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)
 		{
 			width = atol(argv[at + 1]);
@@ -14778,6 +15665,19 @@ static int ProbeMain(int argc, char** argv)
 
 	/* -walk needs no device, no .TRG and no picture - only the classic
 	 * level - so it runs here, before the window exists. */
+
+	if (farplane::g_survey)
+	{
+		if (g_roombox.empty())
+		{
+			printf("-farsurvey needs -roombox <folder holding the classic "
+				".TRC>\n");
+			return 5;
+		}
+
+		return farplane::Survey(g_roombox, stem, walkYaw, walkPitch, width,
+			height, fov);
+	}
 
 	if (reachSurvey)
 	{

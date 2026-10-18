@@ -20,6 +20,7 @@
 #include "dxshell.h"
 #include "polyinsert.h"
 #include "output.h"
+#include "zrange_math.h"		// ZFAR_SHIPPED - the fog bulbs' circle
 #include "winmain.h"
 #include "gamemain.h"
 #include "texture.h"
@@ -937,7 +938,11 @@ void aBuildFogBulbList()
 			vec2.y = vec.y - CamPos.y;
 			vec2.z = vec.z - CamPos.z;
 
-			if (sqrt(SQUARE(vec2.x) + SQUARE(vec2.y) + SQUARE(vec2.z)) >= 20480)
+			/* The bulbs nearer than ZFAR_SHIPPED, twenty sectors, and not
+			 * the far plane: the circle is the bulbs' own reach, and a bulb
+			 * past it would fog faces nearer than it as well. */
+			if (sqrt(SQUARE(vec2.x) + SQUARE(vec2.y) + SQUARE(vec2.z)) >=
+				ZFAR_SHIPPED)
 				continue;
 
 			ActiveFog->visible = 1;

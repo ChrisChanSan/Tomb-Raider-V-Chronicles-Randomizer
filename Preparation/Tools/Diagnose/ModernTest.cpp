@@ -106,6 +106,8 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_levelkey.h"
 // The loading screen's rules: the row's state and the fade (load_mode).
 #include "../../../TOMB5 Code/TOMB5/specific/loadbar_math.h"
+// The far plane and the depth curve: the numbers (far_plane).
+#include "../../../TOMB5 Code/TOMB5/specific/zrange_math.h"
 #include <string.h>
 #include <algorithm>
 #include <chrono>
@@ -23855,6 +23857,97 @@ static void level_key()
 		"level key: no key is the same as nothing", 0, 0);
 }
 
+/* The far plane and the depth curve (specific\zrange_math.h): the plane's
+ * number and its reason, the curve on ZFAR_SHIPPED, the depth buffer's
+ * step along it, the rain's tint. */
+static void far_plane()
+{
+	printf("the far plane: the number, the depth curve, the rain's tint\n");
+
+	ok(ZFAR_UNITS == 41 * 1024, "far plane: 41 sectors", ZFAR_UNITS, 41 * 1024);
+
+	/* The deepest thing a walk from inside a room lists (RoomProbe
+	 * -farsurvey, JOBY2), a square's margin over it, and the smallest whole
+	 * sector count that holds both. */
+	const long deepest = 40806, margin = 1024;
+
+	ok(ZFAR_UNITS >= deepest + margin,
+		"far plane: holds the deepest listed thing and a square",
+		ZFAR_UNITS, deepest + margin);
+	ok((ZFAR_SECTORS - 1) * 1024 < deepest + margin,
+		"far plane: ...and a sector less would not",
+		(ZFAR_SECTORS - 1) * 1024, deepest + margin);
+	ok(ZFAR_UNITS >= 34 * 1024, "far plane: past the corridor's 34 sectors",
+		ZFAR_UNITS, 34 * 1024);
+
+	// InitWindow shifts it by W2V_SHIFT (14) into a long.
+	ok(((double)ZFAR_UNITS * 16384.0) < 2147483647.0,
+		"far plane: shifted by 14 it fits a long",
+		(long)(((double)ZFAR_UNITS * 16384.0) / 1024.0), 2097151);
+
+	/* The curve, bit for bit the expression on f_mzfar 20480: SetupZRange
+	 * calls ZDepthCurve. */
+	float a = 0.0f, b = 0.0f;
+	const float n = 20.0f, s = 20480.0f;
+	float oldB = s * n * 0.99F / (n - s);
+	const float oldA = 0.005F - oldB / n;
+
+	oldB = -oldB;
+	ZDepthCurve(n, &a, &b);
+	ok(a == oldA && b == oldB,
+		"depth curve: f_a and f_b of the 20480 expression, bit for bit",
+		(long)(a * 1.0e7f), (long)(oldA * 1.0e7f));
+	ok(fabs(ZDepthAt((double)ZFAR_SHIPPED) - 0.995) < 1.0e-6,
+		"depth curve: 0.995 at 20,480 units",
+		(long)(ZDepthAt((double)ZFAR_SHIPPED) * 1.0e6), 995000);
+
+	/* The sky's slice from 0.996 (HD_SKY_MINZ, hd_render.cpp): the far plane
+	 * and any distance stay under it. */
+	ok(ZDepthAt((double)ZFAR_UNITS) < 0.996,
+		"depth curve: the far plane under the sky's slice",
+		(long)(ZDepthAt((double)ZFAR_UNITS) * 1.0e6), 996000);
+	ok((double)a < 0.996, "depth curve: any distance under the sky's slice",
+		(long)((double)a * 1.0e6), 996000);
+
+	/* The 24-bit step in hundredths of a unit: 0.30 at 10,000, 2.71 at
+	 * 30,000, 5.30 at the far plane. */
+	ok((long)(ZDepthStep(10000.0, 24) * 100.0 + 0.5) == 30,
+		"depth step: 0.30 units at 10,000",
+		(long)(ZDepthStep(10000.0, 24) * 100.0 + 0.5), 30);
+	ok((long)(ZDepthStep(30000.0, 24) * 100.0 + 0.5) == 271,
+		"depth step: 2.71 units at 30,000",
+		(long)(ZDepthStep(30000.0, 24) * 100.0 + 0.5), 271);
+	ok((long)(ZDepthStep((double)ZFAR_UNITS, 24) * 100.0 + 0.5) == 530,
+		"depth step: 5.30 units at the far plane",
+		(long)(ZDepthStep((double)ZFAR_UNITS, 24) * 100.0 + 0.5), 530);
+
+	/* The rain's tint: DoRain's expression with f_mzfar 20480, over every
+	 * eighth unit from the eye to past the far plane, both scales. */
+	long differ = 0;
+
+	for (int i = 0; i <= 8 * 45000; i++)
+	{
+		const float mz = (float)i * 0.125f;
+
+		for (int k = 0; k < 2; k++)
+		{
+			const float scale = k ? 16.0F : 8.0F;
+			const long was =
+				long((1.0F - (s - mz) * (1.0F / s)) * scale + scale);
+
+			differ += ZRainTint(mz, scale) != was;
+		}
+	}
+
+	ok(differ == 0, "rain tint: the 20480 expression at every depth",
+		differ, 0);
+	ok(ZRainTint(0.0f, 8.0F) == 8 && ZRainTint(20480.0f, 8.0F) == 16,
+		"rain tint: 8 at the eye, 16 at 20,480 units",
+		ZRainTint(20480.0f, 8.0F), 16);
+	ok(ZRainTint(10240.0f, 16.0F) == 24, "rain tint: the head's 24 halfway",
+		ZRainTint(10240.0f, 16.0F), 24);
+}
+
 int main()
 {
 	printf("ModernTest - the arithmetic of the modern control\n");
@@ -24030,6 +24123,7 @@ int main()
 	spring_column();
 	marble_pages();
 	marble_rules();
+	far_plane();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

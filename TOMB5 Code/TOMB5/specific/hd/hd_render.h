@@ -2951,8 +2951,9 @@ int HDRenderVertexBytes();
 
 // The engine's own SetupZRange (specific\3dmath.cpp), as a function without
 // the engine. mznear / mzfar are the values in the float pipeline's units -
-// 20 and 20480 for TR5, which is what InitWindow hands SetupZRange before the
-// W2V shift is taken off again.
+// 20 and 20480 for TR5: the near plane InitWindow hands SetupZRange (before
+// the W2V shift is taken off again) and ZFAR_SHIPPED, the scale the depth
+// curve is built on at any far plane (zrange_math.h).
 void HDRenderZConstants(double mznear, double mzfar, double* a, double* b, double* boo);
 
 // The matrix whose depth after the w division is exactly a - b / z_view.

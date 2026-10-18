@@ -644,6 +644,7 @@
     <ClInclude Include="TOMB5\specific\devicemove.h" />
     <ClInclude Include="TOMB5\specific\devicewindow.h" />
     <ClInclude Include="TOMB5\specific\loadbar_math.h" />
+    <ClInclude Include="TOMB5\specific\zrange_math.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_folderlist.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_gloss_field.h" />
     <ClInclude Include="TOMB5\specific\hd\hd_gloss_math.h" />

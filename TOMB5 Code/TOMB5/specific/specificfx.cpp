@@ -13,6 +13,7 @@
 #include "../tomb5/pch.h"
 #include "specificfx.h"
 #include "3dmath.h"
+#include "zrange_math.h"		// ZRainTint - the drops' tint
 #include "../game/delstuff.h"
 #include "../game/control.h"
 #include "../specific/function_table.h"
@@ -1557,7 +1558,9 @@ void DoRain()
 			my = fx * D3DMView._12 + fy * D3DMView._22 + fz * D3DMView._32 + D3DMView._42;
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
 
-			c = long((1.0F - (f_mzfar - mz) * (1.0F / f_mzfar)) * 8.0F + 8.0F);
+			/* The drop's tint over ZFAR_SHIPPED and not over the far plane: a
+			 * look with its own scale, not a cut. */
+			c = ZRainTint(mz, 8.0F);
 			v[0].specular = 0xFF000000;
 			v[0].color = RGBA(c, c, c, 128);
 			v[0].tu = mx;
@@ -1600,7 +1603,7 @@ void DoRain()
 			my = fx * D3DMView._12 + fy * D3DMView._22 + fz * D3DMView._32 + D3DMView._42;
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
 
-			c = long((1.0F - (f_mzfar - mz) * (1.0F / f_mzfar)) * 16.0F + 16.0F);
+			c = ZRainTint(mz, 16.0F);
 			c <<= 1;
 			v[1].specular = 0xFF000000;
 			v[1].color = RGBA(c, c, c, 0xFF);

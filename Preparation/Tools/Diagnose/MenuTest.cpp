@@ -2926,6 +2926,197 @@ static void graphics_hd_row()
 	free(opts);
 }
 
+/* ------------------------------------------------------- the Gamma row -- */
+
+/* The Gamma row on the Display page, read from the tree as the mouse's rows
+ * are: the Display table's rows in order, the row's kind, functions, save
+ * class and the absence of a gate; that its keys and pad are the volume
+ * rows' (the same slider kind, driven by MenuSliderDir); its step, swept
+ * whole; the registry name in tomb5\tomb5.cpp (written as 50 on a first
+ * run, read with 50 for a missing or out-of-range value, saved) and a round
+ * trip through that read; the field in global\types.h; and in
+ * specific\dxshell.cpp that the pass runs nowhere at 50, that the picture
+ * goes back after the present, and that the device's release and reset
+ * take the pass's objects with them. */
+static void display_gamma_row()
+{
+	static const char* const want[3] = { "Frame rate", "VSync", "Gamma" };
+	char* frame = tree_file("../../../TOMB5 Code/TOMB5/game/menu_frame.cpp");
+	char* flow = tree_file("../../../TOMB5 Code/TOMB5/game/gameflow.cpp");
+	char* opts = tree_file("../../../TOMB5 Code/TOMB5/tomb5/tomb5.cpp");
+	char* types = tree_file("../../../TOMB5 Code/TOMB5/global/types.h");
+	char* dx = tree_file("../../../TOMB5 Code/TOMB5/specific/dxshell.cpp");
+	char* fx = tree_file(
+		"../../../TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_gamma.hlsl");
+	char label[8][64];
+	char line[8][512];
+	int rows = 0, i, v, d;
+
+	check(frame && flow && opts && types && dx && fx, 1,
+		"gamma row: the six engine files are readable from here");
+
+	if (!frame || !flow || !opts || !types || !dx || !fx)
+	{
+		free(frame);
+		free(flow);
+		free(opts);
+		free(types);
+		free(dx);
+		free(fx);
+		return;
+	}
+
+	// The Display table, row by row, as controls_mouse_rows reads Controls.
+	{
+		const char* p = strstr(frame,
+			"static const menu_row menu_rows_display[] =");
+		const char* end = p ? strstr(p, "};") : 0;
+
+		check(p != 0 && end != 0, 1, "gamma row: the Display table is found");
+
+		while (p && end && p < end && rows < 8)
+		{
+			const char* nl = strchr(p, '\n');
+			const char* s = p;
+
+			while (*s == '\t' || *s == ' ')
+				s++;
+
+			if (!strncmp(s, "MENU_", 5) && s < end)
+			{
+				char q[2][64];
+				int k = 0;
+
+				tree_quoted(s, q, 1);
+				strcpy_s(label[rows], sizeof(label[rows]), q[0]);
+
+				while (s[k] && s[k] != '\n' && s[k] != '\r' && k < 511)
+				{
+					line[rows][k] = s[k];
+					k++;
+				}
+
+				line[rows][k] = 0;
+				rows++;
+			}
+
+			p = nl ? nl + 1 : 0;
+		}
+	}
+
+	check(rows, 3, "gamma row: the Display table holds three rows");
+
+	for (i = 0; i < rows && i < 3; i++)
+		check(strcmp(label[i], want[i]), 0,
+			"gamma row: Frame rate, VSync, Gamma, in this order");
+
+	if (rows == 3)
+		check(strcmp(line[2], "MENU_SLIDER(\"Gamma\", -1, MenuNumGamma, "
+			"MenuStepGamma, MENU_SAVE_TOMB5, 0)"), 0,
+			"gamma row: a slider with its own two functions, the literal "
+			"label, saved with the tomb5 settings, never greyed");
+
+	check(strstr(frame, "MENU_TAB(\"Display\", MENU_PAGE_DISPLAY)") != 0, 1,
+		"gamma row: the Display page is the Graphics page's tab");
+	check(tree_count(frame, "MENU_SLIDER(\"Gamma\""), 1,
+		"gamma row: one row of that name");
+
+	// The label is the same word in all five columns, so it has no row.
+	check(tree_count(flow, "{ \"Gamma\","), 0,
+		"gamma row: no CustomText row - the literal is every column");
+
+	// The keys and the pad: the volume rows' own, by being their kind.
+	check(strstr(frame, "MENU_SLIDER(\"Music Volume\"") != 0 &&
+		strstr(frame, "MENU_SLIDER(\"SFX Volume\"") != 0, 1,
+		"gamma row: the two volume rows are the same slider kind");
+	{
+		const char* drive = strstr(frame, "case MROW_SLIDER:");
+		const char* next = drive ? strstr(drive, "case MROW_VALUE:") : 0;
+		const char* dir = drive ? strstr(drive, "dir = MenuSliderDir();") : 0;
+
+		check(drive != 0 && next != 0 && dir != 0 && dir < next, 1,
+			"gamma row: every slider is driven by MenuSliderDir");
+	}
+	check(strstr(frame, "if (input & IN_LEFT || keymap[DIK_LEFT])") != 0 &&
+		strstr(frame, "if (input & IN_RIGHT || keymap[DIK_RIGHT])") != 0, 1,
+		"gamma row: held LEFT/RIGHT of the pad's and keys' input, and the "
+		"arrow keys");
+
+	// The step.
+	check(strstr(frame, "return (long)tomb5.gamma;") != 0, 1,
+		"gamma row: the bar shows tomb5.gamma");
+	check(strstr(frame, "tomb5.gamma = (ulong)MenuSliderStep("
+		"(int)tomb5.gamma, (int)dir, 100);") != 0, 1,
+		"gamma row: the slider steps through MenuSliderStep over 0..100");
+
+	for (v = -1; v <= 101; v++)
+		for (d = -1; d <= 1; d++)
+		{
+			int w = v;
+
+			if (d < 0 && v > 0)
+				w = v - 1;
+
+			if (d > 0 && v < 100)
+				w = v + 1;
+
+			check(MenuSliderStep(v, d, 100), w,
+				"gamma row: one frame of the slider is one step");
+		}
+
+	check(MenuSliderStep(50, 1, 100) - 50, 1,
+		"gamma row: from the middle, one step up");
+	check(50 - MenuSliderStep(50, -1, 100), 1,
+		"gamma row: and one step down");
+
+	// The field, the registry and its round trip.
+	check(strstr(types, "\tulong gamma;") != 0, 1,
+		"gamma row: tomb5.gamma is a ulong, as the registry wants");
+	check(tree_count(opts, "sprintf(buf, \"gamma\");"), 3,
+		"gamma row: gamma is written on a first run, read and saved");
+	check(tree_count(opts, "REG_WriteLong(buf, tomb5.gamma);"), 2,
+		"gamma row: written on the first run and in the save");
+	check(strstr(opts, "tomb5.gamma = 50;\r\n\t\tREG_WriteLong(buf, "
+		"tomb5.gamma);") != 0, 1, "gamma row: a first run writes 50");
+	check(strstr(opts, "REG_ReadLong(buf, tomb5.gamma, 50);\r\n\t\t"
+		"if (tomb5.gamma > 100)\r\n\t\t\ttomb5.gamma = 50;") != 0, 1,
+		"gamma row: missing reads 50, above 100 reads 50");
+
+	/* The round trip: the save writes the field as it stands, and the read
+	 * replaces only what lies above 100 - the slider's own top - so every
+	 * value the row can reach, 0 to 100, comes back as itself. */
+	check(tree_count(opts, "tomb5.gamma = 50;"), 2,
+		"gamma row: 50 is set in two places only, the first run and the clamp");
+	check(tree_count(opts, "tomb5.gamma =") + tree_count(frame,
+		"tomb5.gamma =") + tree_count(dx, "tomb5.gamma ="), 3,
+		"gamma row: and the slider's step is the one other write");
+
+	// The pass: never at 50, the picture back after the present, released.
+	check(strstr(dx, "#define GAMMA_MIDDLE\t50") != 0, 1,
+		"gamma row: the middle is 50");
+	check(strstr(dx, "if (row != GAMMA_MIDDLE && row <= 100)\r\n\t\tcurved = "
+		"GammaPass(G_dxptr->lpD3DDevice, row);") != 0, 1,
+		"gamma row: the pass runs only away from the middle");
+	check(tree_count(dx, "GammaPass("), 2,
+		"gamma row: one pass, one caller");
+	check(strstr(dx, "if (curved && hr != D3DERR_DEVICELOST)\r\n\t\t"
+		"GammaRestore(G_dxptr->lpD3DDevice);") != 0, 1,
+		"gamma row: the engine's picture goes back after the present");
+	check(strstr(dx, "FmvDeviceLost();\r\n\t\tGammaRelease();") != 0, 1,
+		"gamma row: DXClose releases the pass's objects");
+	check(strstr(dx, "HDLevelDeviceLost();\r\n\t\t\tGammaRelease();") != 0, 1,
+		"gamma row: and so does the reset");
+	check(strstr(fx, "exp2((50.0 - gRow.x) / 50.0)") != 0, 1,
+		"gamma row: the shader's power is 2 ^ ((50 - n) / 50)");
+
+	free(frame);
+	free(flow);
+	free(opts);
+	free(types);
+	free(dx);
+	free(fx);
+}
+
 int main()
 {
 	printf("MenuTest - game\\menu_nav.h, game\\key_scheme.h, game\\pad_scheme.h\n\n");
@@ -2956,6 +3147,7 @@ int main()
 	graphics_shadow_row();
 	hd_switch_rows();
 	graphics_hd_row();
+	display_gamma_row();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);
 

@@ -115,6 +115,18 @@
  *                     additive one.
  *     -black          clear the picture to black instead of magenta. The
  *                     additive pass alone can only be measured against black.
+ *     -gamma <n>      every picture through the Gamma row's pass at n, 0 to
+ *                     100 (50, the default, runs nothing): the engine's own
+ *                     shader bytecode (hd_gamma_ps.inc) with the steps of
+ *                     specific\dxshell.cpp's GammaPass on the probe's
+ *                     target. A `gamma` line per picture holds the curve
+ *                     against the picture before the pass, per channel:
+ *                     how many are off, the worst, and the power fitted
+ *                     back out of the two pictures
+ *     -gammatime <n>  with -gamma, the pass timed n times on the GPU at the
+ *                     picture's size after the picture (`gamma cost`:
+ *                     median, min, max of the copy and the draw, and of the
+ *                     copy back)
  *     -noshore        the swell reaches the water's own edge at full height,
  *                     instead of tapering off at the shore - the before
  *                     picture out of the same build.
@@ -1687,9 +1699,381 @@ static bool ShotBegin(Shot& shot, long w, long h)
 	return true;
 }
 
+/* ---------------------------------------------------------------- gamma -- */
+
+/* -gamma: the Gamma row's pass (specific\dxshell.cpp, GammaPass and
+ * GammaRestore) over the probe's target instead of the back buffer. The
+ * engine's file cannot be linked here - it is the engine's device shell -
+ * so its steps are written again, in its order and with its states, and
+ * the bytecode is the engine's own .inc: the copy into a render-target
+ * texture of the picture's size, one pretransformed quad back over it
+ * through the curve, every state read first and set back after, and after
+ * the picture is read the plain copy put back into the target, as the
+ * engine puts it back after the present. */
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_shader/hd_gamma_ps.inc"
+
+static int g_gamma = 50;
+static int g_gamma_time = 0;
+static IDirect3DTexture9* g_gamma_copy = 0;
+static IDirect3DSurface9* g_gamma_level = 0;
+static IDirect3DPixelShader9* g_gamma_shader = 0;
+static UINT g_gamma_w = 0, g_gamma_h = 0;
+
+// -gamma and -gammatime, out of ProbeMain's chain of else-ifs (C1061).
+static bool GammaArg(int argc, char** argv, int* at)
+{
+	if (*at + 1 >= argc)
+		return false;
+
+	if (!strcmp(argv[*at], "-gamma"))
+		g_gamma = atoi(argv[++*at]);
+	else if (!strcmp(argv[*at], "-gammatime"))
+		g_gamma_time = atoi(argv[++*at]);
+	else
+		return false;
+
+	return true;
+}
+
+static void GammaProbeRelease()
+{
+	if (g_gamma_level) { g_gamma_level->Release(); g_gamma_level = 0; }
+	if (g_gamma_copy) { g_gamma_copy->Release(); g_gamma_copy = 0; }
+	if (g_gamma_shader) { g_gamma_shader->Release(); g_gamma_shader = 0; }
+	g_gamma_w = g_gamma_h = 0;
+}
+
+static bool GammaProbePass(IDirect3DSurface9* target, int row)
+{
+	static const D3DRENDERSTATETYPE rs[] =
+	{
+		D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ALPHABLENDENABLE,
+		D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE, D3DRS_FOGENABLE,
+		D3DRS_STENCILENABLE, D3DRS_SCISSORTESTENABLE, D3DRS_COLORWRITEENABLE,
+		D3DRS_SRGBWRITEENABLE, D3DRS_CLIPPLANEENABLE, D3DRS_FILLMODE
+	};
+	static const DWORD rs_set[] =
+	{
+		D3DZB_FALSE, FALSE, FALSE, FALSE, D3DCULL_NONE, FALSE, FALSE, FALSE,
+		0xF, FALSE, 0, D3DFILL_SOLID
+	};
+	static const D3DSAMPLERSTATETYPE ss[] =
+	{
+		D3DSAMP_MINFILTER, D3DSAMP_MAGFILTER, D3DSAMP_MIPFILTER,
+		D3DSAMP_ADDRESSU, D3DSAMP_ADDRESSV, D3DSAMP_SRGBTEXTURE
+	};
+	static const DWORD ss_set[] =
+	{
+		D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_NONE, D3DTADDRESS_CLAMP,
+		D3DTADDRESS_CLAMP, FALSE
+	};
+	const int nrs = (int)(sizeof(rs) / sizeof(rs[0]));
+	const int nss = (int)(sizeof(ss) / sizeof(ss[0]));
+	struct { float x, y, z, rhw, u, v; } quad[4];
+	DWORD rs_old[sizeof(rs) / sizeof(rs[0])];
+	DWORD ss_old[sizeof(ss) / sizeof(ss[0])];
+	DWORD tci_old, ttf_old, fvf_old;
+	IDirect3DSurface9* target_old = 0;
+	IDirect3DBaseTexture9* tex_old = 0;
+	IDirect3DPixelShader9* ps_old = 0;
+	IDirect3DVertexShader9* vs_old = 0;
+	IDirect3DVertexDeclaration9* decl_old = 0;
+	IDirect3DVertexBuffer9* vb_old = 0;
+	UINT vb_offset = 0, vb_stride = 0;
+	D3DVIEWPORT9 view_old;
+	D3DSURFACE_DESC desc;
+	float c0_old[4], c0[4] = { (float)row, 0, 0, 0 };
+	HRESULT hr;
+
+	target->GetDesc(&desc);
+
+	if (g_gamma_copy && (desc.Width != g_gamma_w || desc.Height != g_gamma_h))
+		GammaProbeRelease();
+
+	if (!g_gamma_copy)
+	{
+		if (FAILED(g_device->CreateTexture(desc.Width, desc.Height, 1,
+			D3DUSAGE_RENDERTARGET, desc.Format, D3DPOOL_DEFAULT, &g_gamma_copy,
+			0)) || FAILED(g_gamma_copy->GetSurfaceLevel(0, &g_gamma_level)))
+		{
+			printf("RoomProbe: -gamma: the copy texture was refused\n");
+			GammaProbeRelease();
+			return false;
+		}
+
+		g_gamma_w = desc.Width;
+		g_gamma_h = desc.Height;
+	}
+
+	if (!g_gamma_shader && FAILED(g_device->CreatePixelShader(
+		(const DWORD*)kHDGammaPS, &g_gamma_shader)))
+	{
+		printf("RoomProbe: -gamma: the shader was refused\n");
+		return false;
+	}
+
+	if (FAILED(g_device->StretchRect(target, 0, g_gamma_level, 0,
+		D3DTEXF_NONE)))
+	{
+		printf("RoomProbe: -gamma: the copy was refused\n");
+		return false;
+	}
+
+	for (int i = 0; i < nrs; i++)
+		g_device->GetRenderState(rs[i], &rs_old[i]);
+
+	for (int i = 0; i < nss; i++)
+		g_device->GetSamplerState(0, ss[i], &ss_old[i]);
+
+	g_device->GetTextureStageState(0, D3DTSS_TEXCOORDINDEX, &tci_old);
+	g_device->GetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, &ttf_old);
+	g_device->GetTexture(0, &tex_old);
+	g_device->GetPixelShader(&ps_old);
+	g_device->GetVertexShader(&vs_old);
+	g_device->GetFVF(&fvf_old);
+	g_device->GetVertexDeclaration(&decl_old);
+	g_device->GetStreamSource(0, &vb_old, &vb_offset, &vb_stride);
+	g_device->GetPixelShaderConstantF(0, c0_old, 1);
+	g_device->GetRenderTarget(0, &target_old);
+	g_device->GetViewport(&view_old);
+
+	g_device->SetRenderTarget(0, target);
+
+	for (int i = 0; i < nrs; i++)
+		g_device->SetRenderState(rs[i], rs_set[i]);
+
+	for (int i = 0; i < nss; i++)
+		g_device->SetSamplerState(0, ss[i], ss_set[i]);
+
+	g_device->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, 0);
+	g_device->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS,
+		D3DTTFF_DISABLE);
+	g_device->SetTexture(0, g_gamma_copy);
+	g_device->SetVertexShader(0);
+	g_device->SetPixelShader(g_gamma_shader);
+	g_device->SetPixelShaderConstantF(0, c0, 1);
+	g_device->SetFVF(D3DFVF_XYZRHW | D3DFVF_TEX1);
+
+	for (int i = 0; i < 4; i++)
+	{
+		quad[i].x = (i & 1 ? (float)desc.Width : 0.0f) - 0.5f;
+		quad[i].y = (i & 2 ? (float)desc.Height : 0.0f) - 0.5f;
+		quad[i].z = 0.0f;
+		quad[i].rhw = 1.0f;
+		quad[i].u = i & 1 ? 1.0f : 0.0f;
+		quad[i].v = i & 2 ? 1.0f : 0.0f;
+	}
+
+	g_device->BeginScene();
+	hr = g_device->DrawPrimitiveUP(D3DPT_TRIANGLESTRIP, 2, quad,
+		sizeof(quad[0]));
+	g_device->EndScene();
+
+	if (target_old)
+	{
+		g_device->SetRenderTarget(0, target_old);
+		target_old->Release();
+	}
+
+	g_device->SetViewport(&view_old);
+	g_device->SetPixelShaderConstantF(0, c0_old, 1);
+	g_device->SetStreamSource(0, vb_old, vb_offset, vb_stride);
+
+	if (fvf_old)
+		g_device->SetFVF(fvf_old);
+	else
+		g_device->SetVertexDeclaration(decl_old);
+
+	g_device->SetVertexShader(vs_old);
+	g_device->SetPixelShader(ps_old);
+	g_device->SetTexture(0, tex_old);
+	g_device->SetTextureStageState(0, D3DTSS_TEXTURETRANSFORMFLAGS, ttf_old);
+	g_device->SetTextureStageState(0, D3DTSS_TEXCOORDINDEX, tci_old);
+
+	for (int i = 0; i < nss; i++)
+		g_device->SetSamplerState(0, ss[i], ss_old[i]);
+
+	for (int i = 0; i < nrs; i++)
+		g_device->SetRenderState(rs[i], rs_old[i]);
+
+	if (vb_old) vb_old->Release();
+	if (decl_old) decl_old->Release();
+	if (vs_old) vs_old->Release();
+	if (ps_old) ps_old->Release();
+	if (tex_old) tex_old->Release();
+
+	if (FAILED(hr))
+		printf("RoomProbe: -gamma: the draw was refused\n");
+
+	return SUCCEEDED(hr);
+}
+
+// The plain picture back into the target, as GammaRestore does it.
+static void GammaProbeRestore(IDirect3DSurface9* target)
+{
+	g_device->StretchRect(g_gamma_level, 0, target, 0, D3DTEXF_NONE);
+}
+
+/* The target's pixels, X8R8G8B8, into `out` (w * h); false when the read
+ * back fails. */
+static bool GammaProbeRead(Shot& shot, std::vector<unsigned long>& out)
+{
+	D3DLOCKED_RECT rect;
+
+	if (FAILED(g_device->GetRenderTargetData(shot.colour, shot.readback)) ||
+		FAILED(shot.readback->LockRect(&rect, 0, D3DLOCK_READONLY)))
+		return false;
+
+	out.resize((size_t)shot.w * (size_t)shot.h);
+
+	for (long y = 0; y < shot.h; y++)
+		memcpy(&out[(size_t)y * shot.w], (const unsigned char*)rect.pBits +
+			(size_t)y * rect.Pitch, (size_t)shot.w * 4);
+
+	shot.readback->UnlockRect();
+	return true;
+}
+
+/* The pass over the shot, and the curve held against the picture before
+ * it, per channel: the engine's power is 2 ^ ((50 - n) / 50) and the
+ * reference is that power taken on the processor, rounded to the step.
+ *   gamma n=<n> power=<p> channels=<c> off=<k> worst=<steps>
+ *     fit=<power fitted back> mean=<before>-><after>/255
+ * The fit is the least squares slope of log(out) on log(in) over the
+ * channels inside (0, 255) on both sides - the power the two pictures say,
+ * independent of the formula it is checked against. */
+static bool GammaProbeShot(Shot& shot)
+{
+	std::vector<unsigned long> before, after;
+	const double power = pow(2.0, (50.0 - (double)g_gamma) / 50.0);
+	long long channels = 0, off = 0;
+	int worst = 0;
+	double sxy = 0.0, sxx = 0.0, sum_in = 0.0, sum_out = 0.0;
+
+	if (!GammaProbeRead(shot, before) || !GammaProbePass(shot.colour, g_gamma)
+		|| !GammaProbeRead(shot, after))
+	{
+		printf("RoomProbe: -gamma: the pass could not be measured\n");
+		return false;
+	}
+
+	for (size_t i = 0; i < before.size(); i++)
+		for (int s = 0; s < 24; s += 8)
+		{
+			const int in = (int)((before[i] >> s) & 255);
+			const int got = (int)((after[i] >> s) & 255);
+			const int want = (int)floor(255.0 * pow(in / 255.0, power) + 0.5);
+			const int d = got > want ? got - want : want - got;
+
+			channels++;
+			sum_in += in;
+			sum_out += got;
+
+			if (d)
+				off++;
+
+			if (d > worst)
+				worst = d;
+
+			if (in > 0 && in < 255 && got > 0 && got < 255)
+			{
+				const double x = log(in / 255.0);
+
+				sxy += x * log(got / 255.0);
+				sxx += x * x;
+			}
+		}
+
+	printf("  gamma n=%d power=%.4f channels=%lld off=%lld worst=%d fit=%.4f "
+		"mean=%.2f->%.2f/255\n", g_gamma, power, channels, off, worst,
+		sxx > 0.0 ? sxy / sxx : 0.0, channels ? sum_in / channels : 0.0,
+		channels ? sum_out / channels : 0.0);
+	return true;
+}
+
+/* -gammatime: the pass and the copy back, n times over the shot as it
+ * stands, on the GPU's clock (D3DQUERYTYPE_TIMESTAMP); the target holds the
+ * plain picture again after every round.
+ *   gamma cost <w>x<h> runs=<n> pass=<median> (<min>..<max>) ms
+ *     back=<median> (<min>..<max>) ms */
+static void GammaProbeTime(Shot& shot)
+{
+	IDirect3DQuery9* disjoint = 0;
+	IDirect3DQuery9* freq = 0;
+	IDirect3DQuery9* t[3] = { 0, 0, 0 };
+	std::vector<double> pass, back;
+
+	if (FAILED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPDISJOINT,
+		&disjoint)) || FAILED(g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMPFREQ,
+		&freq)))
+	{
+		printf("  gamma cost: the device has no timestamp queries\n");
+
+		if (disjoint) disjoint->Release();
+		return;
+	}
+
+	for (int k = 0; k < 3; k++)
+		g_device->CreateQuery(D3DQUERYTYPE_TIMESTAMP, &t[k]);
+
+	for (int run = 0; run < g_gamma_time; run++)
+	{
+		BOOL torn = TRUE;
+		UINT64 f = 0, a[3] = { 0, 0, 0 };
+
+		disjoint->Issue(D3DISSUE_BEGIN);
+		t[0]->Issue(D3DISSUE_END);
+		GammaProbePass(shot.colour, g_gamma);
+		t[1]->Issue(D3DISSUE_END);
+		GammaProbeRestore(shot.colour);
+		t[2]->Issue(D3DISSUE_END);
+		disjoint->Issue(D3DISSUE_END);
+		freq->Issue(D3DISSUE_END);
+
+		while (disjoint->GetData(&torn, sizeof(torn), D3DGETDATA_FLUSH) ==
+			S_FALSE)
+			;
+
+		while (freq->GetData(&f, sizeof(f), D3DGETDATA_FLUSH) == S_FALSE)
+			;
+
+		for (int k = 0; k < 3; k++)
+			while (t[k]->GetData(&a[k], sizeof(a[k]), D3DGETDATA_FLUSH) ==
+				S_FALSE)
+				;
+
+		if (torn || !f)
+			continue;
+
+		pass.push_back((double)(a[1] - a[0]) * 1000.0 / (double)f);
+		back.push_back((double)(a[2] - a[1]) * 1000.0 / (double)f);
+	}
+
+	std::sort(pass.begin(), pass.end());
+	std::sort(back.begin(), back.end());
+
+	if (pass.empty())
+		printf("  gamma cost: no run gave a clean clock\n");
+	else
+		printf("  gamma cost %ldx%ld runs=%d pass=%.4f (%.4f..%.4f) ms "
+			"back=%.4f (%.4f..%.4f) ms\n", shot.w, shot.h, (int)pass.size(),
+			pass[pass.size() / 2], pass.front(), pass.back(),
+			back[back.size() / 2], back.front(), back.back());
+
+	for (int k = 0; k < 3; k++)
+		if (t[k]) t[k]->Release();
+
+	freq->Release();
+	disjoint->Release();
+}
+
 static bool ShotWrite(Shot& shot, const char* path)
 {
 	D3DLOCKED_RECT rect;
+	const bool curved = g_gamma != 50;
+
+	if (curved && !GammaProbeShot(shot))
+		return false;
 
 	if (FAILED(g_device->GetRenderTargetData(shot.colour, shot.readback)))
 	{
@@ -1766,11 +2150,28 @@ static bool ShotWrite(Shot& shot, const char* path)
 	if (!ok)
 		printf("RoomProbe: writing %s failed\n", path);
 
+	// -gamma: the plain picture back first, so that a draw after this one
+	// goes over what the engine would draw over; then -gammatime, once.
+	if (curved)
+	{
+		static bool timed = false;
+
+		GammaProbeRestore(shot.colour);
+
+		if (g_gamma_time > 0 && !timed)
+		{
+			timed = true;
+			GammaProbeTime(shot);
+		}
+	}
+
 	return ok;
 }
 
 static void ShotEnd(Shot& shot)
 {
+	GammaProbeRelease();	// the copy is D3DPOOL_DEFAULT, made per shot
+
 	if (shot.oldColour)
 	{
 		g_device->SetRenderTarget(0, shot.oldColour);
@@ -13927,6 +14328,9 @@ static int ProbeMain(int argc, char** argv)
 			continue;
 
 		if (UnderArg(argc, argv, &at))
+			continue;
+
+		if (GammaArg(argc, argv, &at))
 			continue;
 
 		if (!strcmp(argv[at], "-size") && at + 2 < argc)

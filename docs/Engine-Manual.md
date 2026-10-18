@@ -473,8 +473,9 @@ number, so both rows are drawn greyed out and the cursor skips them.
 Both are sliders, and a slider is written the moment it stops moving rather
 than on every step while you hold the key down. The number beside each bar is
 the row's value, the 0–100 of the table, written as a percentage (`50%`) on
-screens of 3:2 and wider; at 4:3 and 5:4 there is no room right of the bar for
-the sign and the number stands alone. A value outside 0–100 found in the
+screens of about 1.46:1 and wider — 3:2, 16:10, 16:9 and every wider shape; on
+narrower ones — 4:3, 5:4 and 1:1 among them — there is no room right of the
+bar for the sign and the number stands alone. A value outside 0–100 found in the
 registry is put back inside when it is read: `cam_speed` on the nearer end,
 `dead_zone` on the middle, 50.
 
@@ -664,11 +665,12 @@ that either open another page (drawn centred) or are settings of their own
 (left-aligned, value on the right). The six sliders — *Music volume* and *SFX
 volume* on *Audio*, *Camera speed*, *Dead zone* and *Mouse sensitivity* on
 *Controls*, *Gamma* on *Display* — are bars with their number, 0 to 100, just
-right of the bar, written as a percentage (`50%`) on screens of 3:2 and wider,
-without the sign at 4:3 and 5:4, where it has no room; the number moves with
-the bar while you hold the key or the pad. A value outside 0 to 100 found in
-the registry is put back inside when the game reads it, before the menu or the
-sound sees it: the two volumes on the nearer end. The seven tabs:
+right of the bar, written as a percentage (`50%`) on screens of about 1.46:1
+and wider, without the sign on narrower ones (4:3, 5:4 and 1:1 among them),
+where it has no room; the number moves with the bar while you hold the key or
+the pad. A value outside 0 to 100 found in the registry is put back inside when
+the game reads it, before the menu or the sound sees it: the two volumes on the
+nearer end. The seven tabs:
 
 | Tab | Holds | Default |
 |---|---|---|
@@ -1204,10 +1206,10 @@ same way.
 rows on *Audio*. With the cursor on it, hold **left** or **right** — the
 arrow keys, the keys bound to left and right, or the pad's left and right —
 and the bar moves one step a frame. The number beside the bar is its
-position, `0%` to `100%` of the slider, `50%` the middle (at 4:3 and 5:4 the
-number without the sign); a stored value outside 0 to 100 reads as the middle.
-It is written when the bar stops or the page is left, like the other tomb5
-settings.
+position, `0%` to `100%` of the slider, `50%` the middle (on screens narrower
+than about 1.46:1, 4:3 and 5:4 among them, the number without the sign); a
+stored value outside 0 to 100 reads as the middle. It is written when the bar
+stops or the page is left, like the other tomb5 settings.
 
 **The middle changes nothing.** That is where a fresh installation starts, and
 there the picture is the engine's own, pixel for pixel — the curve is not run

@@ -22153,6 +22153,11 @@ static void water_sea()
 	ok(k[HD_LOOK_RIPPLE] > 0.0f && k[HD_LOOK_RIPPLE] < 1.0f,
 		"sea sheet: the ripple never takes the sheet below black",
 		(long)(k[HD_LOOK_RIPPLE] * 100.0f), 70);
+	ok(k[HD_LOOK_SEA_DISC] > k[HD_LOOK_DISC] &&
+		k[HD_LOOK_SEA_SHAFTS] > k[HD_LOOK_SHAFTS] &&
+		k[HD_LOOK_SEA_UNDERSIDE] > k[HD_LOOK_UNDERSIDE],
+		"sea sheet: the look stronger where the sheet takes the art's place",
+		0, 0);
 	ok(k[HD_LOOK_SHEET] > 0.0f && k[HD_LOOK_SHEET] < k[HD_LOOK_SEA_UNDERSIDE],
 		"sea sheet: the sheet dimmer than the lit underside",
 		(long)(k[HD_LOOK_SHEET] * 100.0f), 10);

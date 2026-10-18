@@ -255,8 +255,15 @@ enum
  * 0.114 is taken into.
  * The ripple is 0.7 of the sheet's light; the sheet 0.10 of the water's
  * light, half again where a shaft leaves it (1.5), so the water between
- * the glow and the shafts stays dark. With the look's own strengths there
- * the pattern's contrast comes to 0.041 to 0.097. */
+ * the glow and the shafts stays dark.
+ *
+ * And the look is stronger there, so that it carries the picture: the
+ * photographs' brightest tenth is 7.6 times their darkest, the art's 1.5
+ * to 2.3. The disc at 8 (its broad glow 0.64), the shafts at 24 and the
+ * underside at 0.24 take it to 1.5 to 3.0, the brightest at the eyes
+ * that face the light, with the mean luma at most 96 of 255, under the
+ * brighter photograph's 116, and the pattern's contrast to 0.034 to
+ * 0.077, inside each eye's band. */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -270,9 +277,9 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_LENGTH] = 5000.0f;
 	knobs[HD_LOOK_WAVES] = 1500.0f;
 	knobs[HD_LOOK_RIM] = 0.3f;
-	knobs[HD_LOOK_SEA_DISC] = 0.2f;
-	knobs[HD_LOOK_SEA_SHAFTS] = 8.0f;
-	knobs[HD_LOOK_SEA_UNDERSIDE] = 0.12f;
+	knobs[HD_LOOK_SEA_DISC] = 8.0f;
+	knobs[HD_LOOK_SEA_SHAFTS] = 24.0f;
+	knobs[HD_LOOK_SEA_UNDERSIDE] = 0.24f;
 	knobs[HD_LOOK_SHEET] = 0.10f;
 	knobs[HD_LOOK_RIPPLE] = 0.7f;
 	knobs[HD_LOOK_PATCHES] = 1.5f;

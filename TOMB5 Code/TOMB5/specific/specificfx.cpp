@@ -1559,7 +1559,7 @@ void DoRain()
 			mz = fx * D3DMView._13 + fy * D3DMView._23 + fz * D3DMView._33 + D3DMView._43;
 
 			/* The drop's tint over ZFAR_SHIPPED and not over the far plane: a
-			 * look, which the plane's move leaves as it was. */
+			 * look with its own scale, not a cut. */
 			c = ZRainTint(mz, 8.0F);
 			v[0].specular = 0xFF000000;
 			v[0].color = RGBA(c, c, c, 128);

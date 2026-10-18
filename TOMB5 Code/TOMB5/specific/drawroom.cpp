@@ -938,9 +938,9 @@ void aBuildFogBulbList()
 			vec2.y = vec.y - CamPos.y;
 			vec2.z = vec.z - CamPos.z;
 
-			/* The bulbs nearer than ZFAR_SHIPPED, the far plane the game
-			 * shipped with: the circle stays where it was, so that no face
-			 * nearer than it takes a bulb's fog it never had. */
+			/* The bulbs nearer than ZFAR_SHIPPED, twenty sectors, and not
+			 * the far plane: the circle is the bulbs' own reach, and a bulb
+			 * past it would fog faces nearer than it as well. */
 			if (sqrt(SQUARE(vec2.x) + SQUARE(vec2.y) + SQUARE(vec2.z)) >=
 				ZFAR_SHIPPED)
 				continue;

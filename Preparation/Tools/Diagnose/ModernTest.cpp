@@ -23858,8 +23858,8 @@ static void level_key()
 }
 
 /* The far plane and the depth curve (specific\zrange_math.h): the plane's
- * number and its reason, the curve that stays on the shipped plane, the
- * depth buffer's step along it, the rain's tint. */
+ * number and its reason, the curve on ZFAR_SHIPPED, the depth buffer's
+ * step along it, the rain's tint. */
 static void far_plane()
 {
 	printf("the far plane: the number, the depth curve, the rain's tint\n");
@@ -23885,7 +23885,8 @@ static void far_plane()
 		"far plane: shifted by 14 it fits a long",
 		(long)(((double)ZFAR_UNITS * 16384.0) / 1024.0), 2097151);
 
-	/* The curve, bit for bit what SetupZRange made with f_mzfar 20480. */
+	/* The curve, bit for bit the expression on f_mzfar 20480: SetupZRange
+	 * calls ZDepthCurve. */
 	float a = 0.0f, b = 0.0f;
 	const float n = 20.0f, s = 20480.0f;
 	float oldB = s * n * 0.99F / (n - s);
@@ -23894,10 +23895,10 @@ static void far_plane()
 	oldB = -oldB;
 	ZDepthCurve(n, &a, &b);
 	ok(a == oldA && b == oldB,
-		"depth curve: f_a and f_b as before, bit for bit",
+		"depth curve: f_a and f_b of the 20480 expression, bit for bit",
 		(long)(a * 1.0e7f), (long)(oldA * 1.0e7f));
 	ok(fabs(ZDepthAt((double)ZFAR_SHIPPED) - 0.995) < 1.0e-6,
-		"depth curve: 0.995 at the shipped plane",
+		"depth curve: 0.995 at 20,480 units",
 		(long)(ZDepthAt((double)ZFAR_SHIPPED) * 1.0e6), 995000);
 
 	/* The sky's slice from 0.996 (HD_SKY_MINZ, hd_render.cpp): the far plane
@@ -23921,7 +23922,7 @@ static void far_plane()
 		(long)(ZDepthStep((double)ZFAR_UNITS, 24) * 100.0 + 0.5), 530);
 
 	/* The rain's tint: DoRain's expression with f_mzfar 20480, over every
-	 * eighth unit from the eye to past the new plane, both scales. */
+	 * eighth unit from the eye to past the far plane, both scales. */
 	long differ = 0;
 
 	for (int i = 0; i <= 8 * 45000; i++)
@@ -23938,9 +23939,10 @@ static void far_plane()
 		}
 	}
 
-	ok(differ == 0, "rain tint: as before at every depth", differ, 0);
+	ok(differ == 0, "rain tint: the 20480 expression at every depth",
+		differ, 0);
 	ok(ZRainTint(0.0f, 8.0F) == 8 && ZRainTint(20480.0f, 8.0F) == 16,
-		"rain tint: 8 at the eye, 16 at the shipped plane",
+		"rain tint: 8 at the eye, 16 at 20,480 units",
 		ZRainTint(20480.0f, 8.0F), 16);
 	ok(ZRainTint(10240.0f, 16.0F) == 24, "rain tint: the head's 24 halfway",
 		ZRainTint(10240.0f, 16.0F), 24);

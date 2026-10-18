@@ -3260,7 +3260,7 @@ static long g_tround_box[4] = { 0, 0, 0, 0 };
  *
  *   -zfar <units>    the plane the rule takes (ZFAR_UNITS of
  *                    specific\zrange_math.h when absent; ZFAR_SHIPPED,
- *                    20480, is the plane before)
+ *                    20480, gives the twenty-sector plane)
  *   -farcull         with -walk: per direction every item and static of
  *                    the listed rooms that lies past ZFAR_SHIPPED or whose
  *                    answer differs, the answer at ZFAR_SHIPPED and at
@@ -5712,7 +5712,7 @@ namespace farplane
 
 		printf("\n");
 
-		// The things past the shipped plane, deepest first.
+		// The things past ZFAR_SHIPPED, deepest first.
 		std::vector<std::pair<float, int> > order;
 
 		for (size_t k = 0; k < g_things.size(); k++)

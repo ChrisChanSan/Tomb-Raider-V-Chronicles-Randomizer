@@ -29,24 +29,23 @@
  * rule at any plane, stands 40,806 units ahead (JOBY2, a static of room
  * 3 seen from room 129; RoomProbe -farsurvey over every square of the
  * fifteen levels), the corridor's double door 34,340 (the same level,
- * from room 121, 33.5 sectors), and an eye
- * elsewhere in the sampled square stands at most a square farther from
- * it: 40,806 + 1,024 = 41,830, under 41 x 1,024 = 41,984. The numbers are
- * in MODIFICATIONS.md, "The far plane". */
+ * from room 121, 33.5 sectors), and an eye elsewhere in the sampled square
+ * stands at most a square farther from it: 40,806 + 1,024 = 41,830, under
+ * 41 x 1,024 = 41,984. The numbers are in MODIFICATIONS.md, "The far
+ * plane". */
 #define ZFAR_SECTORS	41
 #define ZFAR_UNITS	(ZFAR_SECTORS * 1024)
 
-/* The near plane, unchanged: InitWindow's 20 units. */
+/* The near plane: InitWindow's 20 units. */
 #define ZNEAR_UNITS	20
 
-/* The far plane the game shipped with, twenty sectors. It stays the scale
- * of three things that are looks and not cuts:
+/* Twenty sectors, the scale of three things that are looks and not cuts:
  *
  *   the depth curve   sz = a - b / z, 0.005 at the near plane and 0.995
- *                     here. Built on this number, every depth nearer than
- *                     it is the same float as before, and the HD path's
- *                     projection, the water's depth reading and the sky's
- *                     slice (0.996 and up) keep their meaning. Past it the
+ *                     here. Built on this number no depth depends on the
+ *                     far plane, and the HD path's projection, the water's
+ *                     depth reading and the sky's slice (0.996 and up)
+ *                     take the same a and b at any far plane. Past it the
  *                     curve rises on towards a = 0.99597, under the slice
  *                     at any distance.
  *   the rain's tint   DoRain's drops brighten from 8 to 16 over it.
@@ -54,8 +53,8 @@
  */
 #define ZFAR_SHIPPED	20480
 
-/* The depth curve's two constants as SetupZRange takes them, f_a and f_b
- * (f_b already negated), in single precision as the engine has them. */
+/* The depth curve's two constants, f_a and f_b (f_b already negated), in
+ * single precision: SetupZRange's own arithmetic, called from there. */
 inline void ZDepthCurve(float mznear, float* a, float* b)
 {
 	const float scale = (float)ZFAR_SHIPPED;

@@ -2234,13 +2234,15 @@ static void MenuEnterLegacy(long page)
  * wider on each side - the same arithmetic here, so the number follows the
  * bar at every resolution.
  *
- * The gap is the tightest layout's own split. Up to 4:3 the bar's width is
+ * The gap is measured at the tightest layout. Up to 4:3 the bar's width is
  * scaled by the width, so the space right of it is a sixteenth of the
- * screen: 40 pixels at 640x480 (the frame ends at 600). "100", the widest
- * number a 0..100 slider shows, is 31 there (game/chardef.inc's digits,
- * scaled by phd_winxmax / 512 as game/text.cpp does), and the 9 left over
- * go 4 to the bar's side and 5 to the edge's. Wider screens scale the bar
- * by the height and only gain room on the right. */
+ * screen. At 640x480 the frame's right edge lies at 600.375; Direct3D 9
+ * puts pixel centres on whole numbers and DrawColoredRect adds no offset,
+ * so pixel 600 is the frame's last and 39 pixels stay free. "100", the
+ * widest number a 0..100 slider shows, is 31 there (game/chardef.inc's
+ * digits, scaled by phd_winxmax / 512 as game/text.cpp does), and the 8
+ * left over go 3 to the bar's side and 5 to the edge's. Wider screens
+ * scale the bar by the height and only gain room on the right. */
 static long MenuSliderNumberX()
 {
 	return long(400.0F * (float)phd_winxmax / 640.0F) + GetFixedScale(200) + 1

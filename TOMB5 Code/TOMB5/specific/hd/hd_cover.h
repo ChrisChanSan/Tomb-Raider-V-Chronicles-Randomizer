@@ -1118,9 +1118,9 @@ inline bool HDStaticPiecePaired(const float* mins, const float* maxs, float dx,
 	return true;
 }
 
-/* The statics the engine takes out of the classic list, slots 50 to 59
- * (SHATTER0 to SHATTER9): the savegame keeps Flags bit 0 for exactly these
- * ten (savegame.cpp) and ShatterSounds holds ten per level. A shot takes 50
+/* The statics the engine takes out of the classic list, slots 50 to 59: the
+ * savegame keeps Flags bit 0 for exactly these ten (savegame.cpp) and
+ * ShatterSounds holds ten per level. A shot takes 50
  * to 57 (control.cpp), a blow of the gladiator or of the Roman god any of
  * the ten, and an XRAY_CONTROLLER with OCB 333 every static at its own
  * place (objects.cpp): ANDREA2's window onto the hall, slot 59 in rooms 65

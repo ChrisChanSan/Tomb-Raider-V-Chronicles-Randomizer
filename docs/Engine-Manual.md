@@ -1634,7 +1634,9 @@ see *Lara in HD* below for which of her stays classic and why.
   not. Its cloud sheets lie over the panorama the way the files list them,
   from the farthest to the nearest with the panorama's haze last, so the
   clouds fill the sky to the horizon without a ring or a hard edge. The
-  moon, the stars and the lightning still draw over it: the panorama has
+  panorama's sphere is closed at both of its poles in its own colours, so
+  no hole shows straight up or straight down. The moon, the stars and the
+  lightning still draw over it: the panorama has
   clouds but no moon, and the lightning flash is painted through a layer the
   dome would otherwise have replaced - in the three Irish levels that layer
   now carries the Remaster's own cloud page instead of the old low-resolution

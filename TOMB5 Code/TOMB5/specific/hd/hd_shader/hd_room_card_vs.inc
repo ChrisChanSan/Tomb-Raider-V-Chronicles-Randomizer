@@ -107,4 +107,4 @@ const BYTE kHDRoomCardVS[] =
       2, 224,   3,   0,   0, 144, 
     255, 255,   0,   0
 };
-// bshader-stamp 493038122f5f8d0be25668721a115eb4
+// bshader-stamp 4c5c3a8d2db01a14a3c75c8cb50db61a

@@ -348,6 +348,9 @@
  *                     at every frame of a level that takes the deep look,
  *                     added to the -with list where the picture leaves it
  *                     out (hd_level.cpp, HDFrameDraw)
+ *     -skycap <0|1>   the sky band's poles closed as the game closes them
+ *                     (1, the default; hd_sky_cap.h) or left open (0); the
+ *                     count printed as `skycap:` after the build
  *     -roomplane <y x0 z0 x1 z1>
  *                     the same, on the OTHER shimmer bit - the answer a
  *                     ROOM_REFLECT + ROOM_REFLECT_CEILING room gives, which
@@ -782,6 +785,7 @@
  * from both build scripts. */
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_render.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_sky_cap.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
@@ -2428,10 +2432,19 @@ static float g_under_game_set[HD_LOOK_KNOBS] = {};
  * picture leaves it out, at its offset from the seed room. */
 static bool g_surface_room = false;
 static bool g_surface_always = false;
+/* -skycap 0|1: the sky band's poles closed (hd_sky_cap.h) or left open, for
+ * the pictures with and without; 1, as the game, unless given. */
+static bool g_sky_cap = true;
 
 // The switches, out of ProbeMain's chain of else-ifs (C1061).
 static bool UnderArg(int argc, char** argv, int* at)
 {
+	if (!strcmp(argv[*at], "-skycap") && *at + 1 < argc)
+	{
+		g_sky_cap = atoi(argv[++*at]) != 0;
+		return true;
+	}
+
 	if (!strcmp(argv[*at], "-underlook"))
 	{
 		g_under_game = true;
@@ -16957,6 +16970,8 @@ static int ProbeMain(int argc, char** argv)
 
 	LoadTimeStep(stem, "places");
 
+	HDRenderSkyCapSet(g_sky_cap);
+
 	if (!HDRenderLevelBegin(root, stem, rooms, managed, threads, &stats, &why))
 	{
 		printf("RoomProbe: HDRenderLevelBegin failed - %s\n", why);
@@ -16974,6 +16989,14 @@ static int ProbeMain(int argc, char** argv)
 
 	LoadTimeStep(stem, "begin_wall");
 	LoadTimeBuild(stem, stats);
+
+	{
+		const HDSkyCapCount cap = HDRenderSkyCapLast();
+
+		printf("skycap: %s bands=%d poles=%d triangles=%d vertices=%d\n",
+			g_sky_cap ? "on" : "off", cap.bands, cap.poles, cap.triangles,
+			cap.vertices);
+	}
 
 	if (g_loadtime)
 	{

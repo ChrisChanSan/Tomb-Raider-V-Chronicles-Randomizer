@@ -2004,8 +2004,23 @@ float4 RoomPS(VS_OUT input) : COLOR0
 	 * through this line untouched (they do not look at alpha at all: their
 	 * blend is off or ONE / ONE). In the blend phase it is the pane's
 	 * opacity times the page's own alpha, which is what makes a texel at 0.45
-	 * half there instead of gone. */
-	return float4(lit, texel.a * gSpec.w);
+	 * half there instead of gone.
+	 *
+	 * Except a clear texel of a see-through draw call: under 16 of 255 it
+	 * is drawn whole. Such a part's page paints its frame and bars on clear
+	 * texels, in their own colour, and only its panes on partial ones:
+	 * of ANDREA2's window grid (page 3007, param[1] 0.1) 2,076 of 2,146
+	 * triangles cover clear texels on average, their mean colour 106, 82,
+	 * 60, and no texel is opaque - read as alpha the bars would be drawn
+	 * at a tenth of nothing. Of the 74 material 14 parts
+	 * with an alpha run and param[1] under 1 in the fifteen levels, that
+	 * grid's two groups are the only ones with a clear texel at all, so the
+	 * panes of every other glass, and every draw call at 1, keep their
+	 * picture to the bit. */
+	const float seen = texel.a * gSpec.w;
+
+	return float4(lit, gSpec.w < 1.0f && texel.a < 16.0f / 255.0f ? 1.0f :
+		seen);
 }
 
 /* ---------------------------------------------------------- the sheet -- */

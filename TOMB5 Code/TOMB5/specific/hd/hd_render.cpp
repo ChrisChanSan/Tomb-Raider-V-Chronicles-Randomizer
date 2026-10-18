@@ -15609,8 +15609,8 @@ void HDRenderSetWaterSheets(const HDWaterRoom* rooms, int count, int section,
 		 * has its own ceiling over its water and its art is its own floor.
 		 * RICH3 has one water room, 190 (flooded by a flip), and no sheet
 		 * over any, so it passed the share with 1 against 0; its art lies
-		 * 4,864 units under its top, no sea's surface, and it keeps the
-		 * basin's look (HDWaterDeepLook). */
+		 * 4,864 units under its top, no sea's surface, and it takes the
+		 * look of its level's one body, a channel (HDWaterDeepLook). */
 		std::vector<int> surfWet((size_t)count, 0);
 		std::vector<int> surfArt((size_t)count, 0);
 		std::vector<float> surfCeil((size_t)count, 1.0e9f);
@@ -17372,7 +17372,7 @@ double HDRenderWaterWarmUp(double* ms, int max)
 
 		/* The models through the floor's mirror (HDRenderWaterWetModels)
 		 * are drawn with five user clip planes, and the driver readies the
-		 * models' shaders for the planes at the first such draw: 62 to 72
+		 * models' shaders for the planes at the first such draw: 77 to 107
 		 * ms of the first wet frame (RoomProbe -wetagain, 2560 x 1440). The
 		 * level's own models are built after this warm-up, so the models'
 		 * shaders are made here once more out of the same bytecode

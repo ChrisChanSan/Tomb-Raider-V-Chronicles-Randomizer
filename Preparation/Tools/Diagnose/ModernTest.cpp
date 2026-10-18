@@ -11043,16 +11043,46 @@ static long glass_define(const char* text, const char* name)
 	return p ? strtol(p + strlen(name), 0, 10) : -1;
 }
 
-/* The split of a see-through draw call (hd_render.cpp, GlassSplits): its
- * two numbers read out of the engine's text and its rule run over the
- * census of the fifteen levels - every material 14 part of an alpha pass
- * with param[1] under 1, page by page (RoomProbe and the page census: the
- * page's smallest alpha and its share below the alpha test's reference in
- * per mille, measured as hd_pagecache.cpp measures them), and the parts
- * beside them that must not split: a weight of 1, the additive run's glass
- * (weight 0 in the alpha pass), a clear floor. Only ANDREA2's window grid
- * and its flip twin split; the shader keeps the halves by the same clear
- * bound, and the glass half takes the classic's ONE / ONE. */
+/* The body of an engine function, from the brace after `head` to its
+ * closing brace, with every blank taken out - or an empty string. Lets a
+ * test hold the engine's own expression and not only a copy of it. */
+static void glass_body(const char* text, const char* head, char* out,
+	size_t size)
+{
+	const char* p = text ? strstr(text, head) : 0;
+	size_t n = 0;
+	int depth = 0;
+
+	out[0] = 0;
+	p = p ? strchr(p, '{') : 0;
+
+	for (; p && *p && n + 1 < size; p++)
+	{
+		if (*p == '{')
+			depth++;
+		else if (*p == '}' && --depth == 0)
+			break;
+
+		// A blank is anything at or under the space.
+		if (depth > 0 && *p != '{' && (unsigned char)*p > ' ')
+			out[n++] = *p;
+	}
+
+	out[n] = 0;
+}
+
+/* The split of a see-through draw call (hd_render.cpp, GlassSplits) and the
+ * additive run's glass (AddGlass): their numbers and their bodies read out
+ * of the engine's text, and their rules run over the census of the fifteen
+ * levels. The split: every material 14 part of an alpha pass with param[1]
+ * under 1, page by page (the page's smallest alpha and its share below the
+ * alpha test's reference in per mille, measured as hd_pagecache.cpp
+ * measures them), with what the classic draws at the parts' place (solid
+ * faces, additive ones) and whether their triangles cover a clear texel;
+ * only ANDREA2's window grid and its flip twin split, the one family where
+ * the classic draws a solid frame with additive glass AND the texels paint
+ * a frame. The additive glass: the 107 material 14 parts with an additive
+ * run, page by page; a page without a clear texel is added whole. */
 static void glass_split()
 {
 	struct Row
@@ -11063,22 +11093,52 @@ static void glass_split()
 		int clear;
 		int alphaMin;
 		int permille;
+		int classicSolid;
+		int classicGlass;
+		int clearCovered;
 		int splits;
 	};
 
 	static const Row rows[] =
 	{
-		{ "ANDREA2 65/132 page 3007", 2, 0.1f, 0, 0, 856, 1 },
-		{ "JOBY2 52/78 page 16073", 2, 0.1f, 0, 77, 12, 0 },
-		{ "JOBY2 102 page 513", 1, 0.2333f, 0, 254, 0, 0 },
-		{ "JOBY3 page 10072", 27, 0.1f, 0, 120, 46, 0 },
-		{ "JOBY5 page 10072", 31, 0.1f, 0, 120, 46, 0 },
-		{ "RICH2 page 3309", 6, 0.8417f, 0, 165, 0, 0 },
-		{ "RICH3 46 page 10084", 5, 0.1f, 0, 0, 116, 0 },
-		{ "TITLE page 2150 at weight 1", 3, 1.0f, 0, 0, 186, 0 },
-		{ "ANDREA1 page 15074, additive run", 29, 0.0f, 0, 0, 328, 0 },
-		{ "RICH2 125 page 16103, additive run", 1, 0.0f, 0, 100, 62, 0 },
-		{ "a clear floor", 1, 1.0f, 1, 231, 0, 0 }
+		{ "ANDREA2 65/132 page 3007", 2, 0.1f, 0, 0, 856, 1, 1, 1, 1 },
+		{ "JOBY2 52/78 page 16073", 2, 0.1f, 0, 77, 12, 0, 0, 0, 0 },
+		{ "JOBY2 102 page 513", 1, 0.2333f, 0, 254, 0, 0, 1, 0, 0 },
+		{ "JOBY3 page 10072", 27, 0.1f, 0, 120, 46, 1, 0, 0, 0 },
+		{ "JOBY5 page 10072", 31, 0.1f, 0, 120, 46, 1, 1, 0, 0 },
+		{ "RICH2 page 3309", 6, 0.8417f, 0, 165, 0, 1, 0, 0, 0 },
+		{ "RICH3 46 page 10084", 5, 0.1f, 0, 0, 116, 1, 0, 0, 0 },
+		{ "TITLE page 2150 at weight 1", 3, 1.0f, 0, 0, 186, 1, 0, 0, 0 },
+		{ "ANDREA1 page 15074, additive run", 29, 0.0f, 0, 0, 328, 1, 1, 0,
+			0 },
+		{ "RICH2 125 page 16103, additive run", 1, 0.0f, 0, 100, 62, 0, 1, 0,
+			0 },
+		{ "a clear floor", 1, 1.0f, 1, 231, 0, 1, 0, 0, 0 }
+	};
+
+	/* The additive run's glass by page: its parts, the page's smallest
+	 * alpha, and whether it is added whole. */
+	struct Add
+	{
+		const char* what;
+		int parts;
+		int alphaMin;
+		int whole;
+	};
+
+	static const Add adds[] =
+	{
+		{ "RICH2 6 page 1038", 1, 254, 1 },
+		{ "RICH1/RICH3 page 3068", 26, 165, 1 },
+		{ "RICH3 page 3309", 19, 165, 1 },
+		{ "ANDREA1/2 page 11047", 19, 115, 1 },
+		{ "ANDREA1/2 page 13066", 6, 81, 1 },
+		{ "ANDREA1 157 page 16063", 1, 83, 1 },
+		{ "ANDREA1 93 page 16070", 1, 75, 1 },
+		{ "JOBY3/JOBY5/RICH2 bridge page 16103", 13, 100, 1 },
+		{ "RICH2 page 15026", 9, 0, 0 },
+		{ "ANDREA1 arched panes page 15074", 7, 0, 0 },
+		{ "RICH2/RICH3 lamp glass page 15101", 5, 12, 0 }
 	};
 
 	char* render = hd_switch_text("hd_render.cpp");
@@ -11095,6 +11155,22 @@ static void glass_split()
 	ok(frame >= 116 && frame < 856, "glass split: the share sits in the "
 		"census's gap, 116 to 856 per mille", frame, 500);
 
+	/* The rules below are the engine's own: its two bodies are held here
+	 * blank for blank, so a change to either fails until this test follows
+	 * it. */
+	char body[512];
+
+	glass_body(render, "inline bool GlassSplits(", body, sizeof(body));
+	ok(!strcmp(body, "returnblend>0.0f&&blend<1.0f&&!clear&&"
+		"HDPageCacheSlotAlphaMin(slot)<HD_GLASS_CLEAR_BELOW&&"
+		"HDPageCacheSlotCutoutPermille(slot)>HD_GLASS_FRAME_PERMILLE;"),
+		"glass split: GlassSplits is the rule tested here", 0, 0);
+
+	glass_body(render, "inline bool AddGlass(", body, sizeof(body));
+	ok(!strcmp(body, "returnmaterial==HD_TRG_MATERIAL_DECAL&&"
+		"HDPageCacheSlotAlphaMin(slot)>=HD_GLASS_CLEAR_BELOW;"),
+		"glass split: AddGlass is the rule tested here", 0, 0);
+
 	int split = 0, parts = 0;
 
 	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
@@ -11106,6 +11182,21 @@ static void glass_split()
 
 		snprintf(what, sizeof(what), "glass split: %s", r.what);
 		ok(s == r.splits, what, s, r.splits);
+
+		/* And the texels' decision is the classic's where both speak: a
+		 * see-through part splits exactly where the classic draws a solid
+		 * frame with additive glass at its place and its triangles cover a
+		 * clear texel. */
+		if (r.blend > 0.0f && r.blend < 1.0f && !r.clear)
+		{
+			const int both = r.classicSolid && r.classicGlass &&
+				r.clearCovered ? 1 : 0;
+
+			snprintf(what, sizeof(what), "glass split: %s, the classic "
+				"agrees", r.what);
+			ok(s == both, what, s, both);
+		}
+
 		split += s * r.parts;
 		parts += r.blend > 0.0f && r.blend < 1.0f && !r.clear ? r.parts : 0;
 	}
@@ -11113,10 +11204,34 @@ static void glass_split()
 	ok(parts == 74, "glass split: the census's see-through parts", parts, 74);
 	ok(split == 2, "glass split: the parts that split", split, 2);
 
+	int whole = 0, added = 0;
+
+	for (size_t i = 0; i < sizeof(adds) / sizeof(adds[0]); i++)
+	{
+		const Add& a = adds[i];
+		const int w = a.alphaMin >= below ? 1 : 0;
+		char what[160];
+
+		snprintf(what, sizeof(what), "glass added whole: %s", a.what);
+		ok(w == a.whole, what, w, a.whole);
+		whole += w * a.parts;
+		added += a.parts;
+	}
+
+	ok(added == 107, "glass added whole: the census's additive glass",
+		added, 107);
+	ok(whole == 86, "glass added whole: the parts added whole", whole, 86);
+
 	int n = hd_switch_count(render,
 		"GlassSplits(range.blend, range.clear, range.pageSlot)");
 
 	ok(n == 1, "glass split: draw_pass asks the rule", n, 1);
+
+	n = hd_switch_count(render, "additive_pass && AddGlass(range.material,");
+	ok(n == 1, "glass added whole: draw_pass asks the rule", n, 1);
+
+	n = hd_switch_count(render, "additive_pass && !add_glass ?");
+	ok(n == 1, "glass added whole: its weight is 1", n, 1);
 
 	n = hd_switch_count(render, "pane_on ? D3DBLEND_ONE : D3DBLEND_SRCALPHA");
 	ok(n == 1, "glass split: the glass half adds ONE / ONE", n, 1);
@@ -11124,6 +11239,10 @@ static void glass_split()
 	n = hd_switch_count(shader,
 		"clip(gPass.z * (texel.a < 16.0f / 255.0f ? 1.0f : -1.0f));");
 	ok(n == 1, "glass split: the room shader keeps one half's texels", n, 1);
+
+	n = hd_switch_count(shader,
+		"lit *= lerp(1.0f, texel.a, gPass.y * step(0.0f, gPass.z));");
+	ok(n == 1, "glass added whole: the alpha weighs no glass", n, 1);
 
 	free(render);
 	free(shader);

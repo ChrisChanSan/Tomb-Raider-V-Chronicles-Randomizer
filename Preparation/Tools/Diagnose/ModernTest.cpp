@@ -12870,6 +12870,180 @@ static void vis_hidden_room()
 		"hidden: ANDY1 212, two guests", 1, 1);
 }
 
+/* The static mesh the visibility path leaves to the art that lies on it
+ * (HDVisStaticDrawnByArt): ANDY3's dormer of room 39, room 35's art on
+ * 0.607 to 0.790 of its statics' samples within 32 units, and the shares
+ * the rule keeps classic. */
+static void vis_static_rule()
+{
+	ok(HDVisStaticDrawnByArt(0.607f, 0.5, true),
+		"static: ANDY3 39 mesh 12, 0.607, room 35 drawn", 1, 1);
+	ok(HDVisStaticDrawnByArt(0.79f, 0.5, true),
+		"static: ANDY3 39 mesh 2, 0.790, room 35 drawn", 1, 1);
+	ok(!HDVisStaticDrawnByArt(0.79f, 0.5, false),
+		"static: the holder not drawn keeps it classic", 0, 0);
+	ok(!HDVisStaticDrawnByArt(0.474f, 0.5, true),
+		"static: JOBY5 141 mesh 7, 0.474, stays classic", 0, 0);
+	ok(HDVisStaticDrawnByArt(0.5f, 0.5, true),
+		"static: a half of its samples is enough", 1, 1);
+	ok(!HDVisStaticDrawnByArt(0.0f, 0.0, true),
+		"static: no art on it is never the art's", 0, 0);
+	ok(HDVisStaticDrawnByArt(1.0f, 0.5, true),
+		"static: TITLE 23, every sample, is the art's", 1, 1);
+}
+
+
+
+/* A cube of art in the frame of the room at `ox`, `oz`: x0..x0 + s,
+ * y0 - s..y0 (y down) and z0..z0 + s, each face two triangles. */
+static void vis_cube(trf::remaster::Trg& trg, float ox, float oz, float x0,
+	float y0, float z0, float s)
+{
+	const float c[8][3] =
+	{
+		{ x0, y0, z0 }, { x0 + s, y0, z0 }, { x0 + s, y0, z0 + s },
+		{ x0, y0, z0 + s }, { x0, y0 - s, z0 }, { x0 + s, y0 - s, z0 },
+		{ x0 + s, y0 - s, z0 + s }, { x0, y0 - s, z0 + s }
+	};
+	const int q[6][4] = { { 0, 1, 2, 3 }, { 4, 7, 6, 5 }, { 0, 4, 5, 1 },
+		{ 1, 5, 6, 2 }, { 2, 6, 7, 3 }, { 3, 7, 4, 0 } };
+
+	for (int f = 0; f < 6; f++)
+	{
+		vis_tri(trg, ox, 0, oz, c[q[f][0]], c[q[f][1]], c[q[f][2]]);
+		vis_tri(trg, ox, 0, oz, c[q[f][0]], c[q[f][2]], c[q[f][3]]);
+	}
+}
+
+/* The static covers on a level built by hand: room A (0), 6 x 6 sectors,
+ * with room C (1), 3 x 3, inside its box, and a static of C, a cube of 256
+ * units, whose faces A's art lies on within 32 units on all six sides. */
+static void vis_static_covers()
+{
+	// A at the origin, C inside it; a cube static of C at x 2048..2304.
+	std::vector<HDVisRoom> rooms(2);
+
+	for (int r = 0; r < 2; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		memset(&one, 0, sizeof(one));
+		one.x = r ? 1024 : 0;
+		one.z = r ? 1024 : 0;
+		one.xs = one.zs = r ? 3 : 6;
+		one.top = -4096;
+		one.bottom = 0;
+		one.twin = -1;
+	}
+
+	// The static's six faces, world units, wound as the cube's art.
+	std::vector<HDCoverFace> faces;
+	const float s0[3] = { 2048.0f, -512.0f, 2048.0f };
+	const double s = 256.0;
+	const double cube[8][3] =
+	{
+		{ s0[0], s0[1], s0[2] }, { s0[0] + s, s0[1], s0[2] },
+		{ s0[0] + s, s0[1], s0[2] + s }, { s0[0], s0[1], s0[2] + s },
+		{ s0[0], s0[1] - s, s0[2] }, { s0[0] + s, s0[1] - s, s0[2] },
+		{ s0[0] + s, s0[1] - s, s0[2] + s }, { s0[0], s0[1] - s, s0[2] + s }
+	};
+	const int q[6][4] = { { 0, 1, 2, 3 }, { 4, 7, 6, 5 }, { 0, 4, 5, 1 },
+		{ 1, 5, 6, 2 }, { 2, 6, 7, 3 }, { 3, 7, 4, 0 } };
+
+	for (int f = 0; f < 6; f++)
+	{
+		HDCoverFace face;
+
+		face.corners = 4;
+		face.doubleSided = 0;
+
+		for (int c = 0; c < 4; c++)
+			for (int k = 0; k < 3; k++)
+				face.v[c][k] = cube[q[f][c]][k];
+
+		faces.push_back(face);
+	}
+
+	HDVisStatic one;
+
+	one.room = 1;
+	one.mesh = 0;
+	one.firstFace = 0;
+	one.faceCount = 6;
+
+	// Room-local box: x and z from C's origin.
+	one.mins[0] = s0[0] - 1024.0f;
+	one.maxs[0] = s0[0] + (float)s - 1024.0f;
+	one.mins[1] = s0[1] - (float)s;
+	one.maxs[1] = s0[1];
+	one.mins[2] = s0[2] - 1024.0f;
+	one.maxs[2] = s0[2] + (float)s - 1024.0f;
+
+	for (int variant = 0; variant < 4; variant++)
+	{
+		trf::remaster::Trg trg;
+
+		trg.groups.resize(2);
+
+		for (int g = 0; g < 2; g++)
+		{
+			trf::remaster::TrgPart part;
+
+			part.pass[0].start = (uint32_t)trg.indices.size();
+
+			/* 0: A's art on the cube's faces, 24 units out; 1: 40 units
+			 * out, past the reach; 2: C's own art on the faces, which
+			 * holds its box's cells and answers it without asking; 3: A's
+			 * art on the cube with A's box moved away from it. */
+			const float off = variant == 1 ? 40.0f : 24.0f;
+			const bool here = variant == 2 ? g == 1 : g == 0;
+
+			if (here)
+				vis_cube(trg, g ? 1024.0f : 0.0f, g ? 1024.0f : 0.0f,
+					s0[0] - off, s0[1] + off, s0[2] - off,
+					(float)s + 2.0f * off);
+
+			part.pass[0].count = (uint32_t)trg.indices.size() -
+				part.pass[0].start;
+			trg.groups[(size_t)g].parts.push_back(part);
+		}
+
+		std::vector<HDVisRoom> asked = rooms;
+
+		if (variant == 3)
+			asked[0].x = 8192;
+
+		HDVisTables t;
+
+		HDVisStaticCovers(trg, &asked[0], 2, &one, 1, &faces[0],
+			(int)faces.size(), HDVisDefaults(), &t);
+
+		const float share = t.staticShare.empty() ? -1.0f : t.staticShare[0];
+		const int group = t.staticGroup.empty() ? -9 : t.staticGroup[0];
+
+		if (variant == 0)
+		{
+			ok(group == 0 && share > 0.99f,
+				"covers: A's art 24 units out lies on every sample",
+				(long)(share * 1000.0f), 1000);
+			ok(t.staticsHeld == 1, "covers: and the static is held",
+				t.staticsHeld, 1);
+		}
+		else if (variant == 1)
+			ok(group == -1 && share == 0.0f,
+				"covers: 40 units out is past the reach of 32",
+				(long)(share * 1000.0f), 0);
+		else if (variant == 2)
+			ok(group == -1 && t.staticsHeld == 0,
+				"covers: the room's own art holding it is not asked",
+				group, -1);
+		else
+			ok(group == -1,
+				"covers: art of a room whose box misses the static", group,
+				-1);
+	}
+}
+
 static void stand_cover()
 {
 	ok(HDCoverRoomCovered(46, 46), "stand: 46 of 46 faces is covered",
@@ -23928,6 +24102,8 @@ int main()
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();
+	vis_static_rule();
+	vis_static_covers();
 	stand_overlap();
 	stand_part();
 	stand_shadow();

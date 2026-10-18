@@ -2893,10 +2893,12 @@ carries the tables.
     alone, with two to four shifted control rings) at the eye of tick
     22,020, the same eye turned 72 to 89 degrees up and three looking-up
     eyes of the owner's JOBY4 dive log of 2026-10-18 (ticks 54,078, 66,421
-    and 20,843): 5.0 to 7.7 before, -3.0 to -0.3 after with `hd_water` 1,
-    0.0 to 0.5 for the dome alone; each sky level's poles straight up and
-    down; the dome 0.107 to 0.117 ms and the look 0.94 to 0.90 ms at 2,560
-    x 1,440. OWN, this project's tool on the player's files (DATA).
+    and 20,843): with `hd_water` 1 6.6 before at tick 22,020 and 5.0 to
+    7.7 at the steep eyes, -1.7, 1.4 and -1.3 at the three dive eyes, and
+    -3.0 to -0.3 after at all nine; 0.0 to 0.5 for the dome alone; each
+    sky level's poles straight up and down; the dome 0.107 to 0.117 ms
+    and the look 0.94 to 0.90 ms at 2,560 x 1,440. OWN, this project's
+    tool on the player's files (DATA).
 278. **RoomProbe `-skycap 0|1` and its `skycap:` line** - the band's caps
     built or left out for the A/B picture, and the count after the build.
     OWN, this project's tool.

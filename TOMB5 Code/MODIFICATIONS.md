@@ -3142,10 +3142,11 @@ levels, where the band's top row is cut away by its alpha test, and closed in th
 JOBY4 (41,252 pixels, black to 13, 35, 42), TITLE (40,666, black to 59, 59, 59) and
 ANDREA3 (9,310, its cloud sheet 123, 170, 254 under the band's faint top row, now 121,
 166, 249). The bottom pole is unchanged in ANDREA1, the three ANDY levels and TITLE and
-closed in eight: ANDREA2 (41,266 pixels, black to 20, 22, 27), ANDREA3 (20,650, to 13, 13,
-16), JOBY2 (48,803, to 2, 3, 5), JOBY4 (41,252, to 13, 35, 42), RICH1, RICH2 and RICHCUT2
-(7,332, to 1, 0, 0) and RICH3 (41,293: its ground sheet under the sky, 14, 11, 12, seen
-through the hole as a disc, now under the band's dark bottom row as all round the hole).
+closed in eight (the dome alone; the whole sky where it differs): ANDREA2 (41,266 pixels,
+black to 20, 22, 27), ANDREA3 (20,650; 15,275, to 13, 13, 16), JOBY2 (48,803, to 2, 3, 5),
+JOBY4 (41,252, to 13, 35, 42), RICH1 and RICH2 (7,332, to 1, 0, 0), RICHCUT2 (7,302;
+7,265, to 1, 0, 0) and RICH3 (41,293; 41,123: its ground sheet under the sky, 14, 11, 12,
+seen through the hole as a disc, now under the band's dark bottom row as all round it).
 The census eyes (room 0, `-sky`, `hd_water` 0 and 1) 15 of 15 each, the fifteen parity
 cameras 15 of 15 each, round 1's sky eyes 4 of 4 each and the classic views (`hd_build` 0)
 7 of 7 are byte-identical; of round 2's four JOBY4 eyes, E216 changes 3,664 pixels at the

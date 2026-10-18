@@ -15,6 +15,8 @@
 #include <limits.h>
 #include <math.h>
 
+#include <vector>
+
 /* The marble floors' places (hd_render.cpp, "the marble floors"): which
  * floor heights a frame mirrors and how strongly. Nothing here draws or
  * reads the device, so ModernTest checks the rules without one.
@@ -27,8 +29,8 @@
  *
  * The places. At most `cap` planes are mirrored, each in a place that
  * holds its plane and the strength its mirror is laid at (its gain, 0 to
- * 1). A plane in a place keeps it while it scores at least kMarbleHold of
- * the best plane outside the places, and its gain then rises by a step a
+ * 1). A plane in a place keeps it while it scores at least HD_MARBLE_HOLD
+ * of the best plane outside the places, and its gain then rises by a step a
  * frame to 1; a plane that no longer does fades out by the same step and
  * leaves the place at 0, which the best plane outside then takes, rising
  * from one step. A plane that shows nothing leaves at once - there is
@@ -55,6 +57,33 @@ inline float HDMarbleSeenCover(int pixels, int width, int height)
 		4.0f * (float)pixels / ((float)width * (float)height) : 0.0f;
 }
 
+/* A plane's score: the share of the screen its last count saw, `pixels`
+ * of a `width` by `height` view asked `age` frames ago, while that count
+ * is at most `oldest` frames old; else its `cover`, with nothing in front.
+ * `pixels` under 0 is no count. A count the GPU has not answered in that
+ * time says nothing of the view the frame now has. */
+inline float HDMarbleScore(int pixels, int age, int oldest, float cover,
+	int width, int height)
+{
+	return pixels >= 0 && age >= 0 && age <= oldest ?
+		HDMarbleSeenCover(pixels, width, height) : cover;
+}
+
+/* The gain a place moves by in a frame: the frame's time `ms` over the
+ * time a whole fade takes, `whole`; `ms` is taken at most `longest`, so a
+ * frame after a halt (a menu, a load) moves a fade by no more than one at
+ * that pace. At least 0, at most 1; 1 where `whole` is 0 or less. */
+inline float HDMarbleFadeStep(double ms, double whole, double longest)
+{
+	if (whole <= 0.0)
+		return 1.0f;
+
+	const double t = ms < 0.0 ? 0.0 : ms > longest ? longest : ms;
+	const double s = t / whole;
+
+	return s > 1.0 ? 1.0f : (float)s;
+}
+
 // The score of height y among `count` (y, score) pairs; 0 when absent.
 inline float HDMarbleScoreOf(const int* ys, const float* scores, int count,
 	int y)
@@ -67,8 +96,9 @@ inline float HDMarbleScoreOf(const int* ys, const float* scores, int count,
 }
 
 /* One frame's step of the places. `ys` and `scores` are the frame's planes
- * (any order), `step` the gain a frame (1 fills and empties at once),
- * `hold` HD_MARBLE_HOLD. Returns how many places hold a plane. */
+ * (any order), `step` the gain a frame (HDMarbleFadeStep; 1 fills and
+ * empties at once), `hold` HD_MARBLE_HOLD. Returns how many places hold a
+ * plane. */
 inline int HDMarbleSlotsStep(HDMarbleSlot* slots, int cap, const int* ys,
 	const float* scores, int count, float step, float hold)
 {
@@ -148,6 +178,80 @@ inline int HDMarbleSlotsStep(HDMarbleSlot* slots, int cap, const int* ys,
 		used += slots[s].y != INT_MIN ? 1 : 0;
 
 	return used;
+}
+
+/* The rooms over (hd_render.cpp, marble_replay_over): which rooms the
+ * frame did not draw go into the mirrors, each with the drawn room it is
+ * found from (`via`, whose matrix and light it borrows). `up[g]` are the
+ * rooms group g's ceiling portals open into, `side[g]` the rooms its
+ * other portals open into, both by room number; `table` names the group
+ * that draws each room (`rooms` long; 0 is room n drawn by group n);
+ * `drawn[g]` is 1 for a group the frame drew. `depth` 1 takes the rooms
+ * over the drawn rooms; 2 the rooms over the undrawn rooms beside them
+ * as well; 3 the rooms over those rooms as well. Each group once, the
+ * first way found. */
+struct HDMarbleOverRoom
+{
+	int group;
+	int via;
+};
+
+inline int HDMarbleGroupOf(int room, const short* table, int rooms,
+	int groups)
+{
+	const int g = room < 0 ? -1 : !table ? room :
+		room < rooms ? table[room] : -1;
+
+	return g >= 0 && g < groups ? g : -1;
+}
+
+inline void HDMarbleOverRooms(const std::vector<std::vector<int> >& up,
+	const std::vector<std::vector<int> >& side, const short* table,
+	int rooms, const std::vector<char>& drawn, int depth,
+	std::vector<HDMarbleOverRoom>& out)
+{
+	const int groups = (int)drawn.size();
+	std::vector<char> taken(drawn.begin(), drawn.end());
+
+	out.clear();
+
+	const auto take = [&](int room, int via)
+	{
+		const int g = HDMarbleGroupOf(room, table, rooms, groups);
+
+		if (g < 0 || taken[(size_t)g])
+			return;
+
+		taken[(size_t)g] = 1;
+		out.push_back({ g, via });
+	};
+
+	for (int g = 0; depth >= 1 && g < groups && g < (int)up.size(); g++)
+		if (drawn[(size_t)g])
+			for (int r : up[(size_t)g])
+				take(r, g);
+
+	for (int g = 0; depth >= 2 && g < groups && g < (int)side.size(); g++)
+		if (drawn[(size_t)g])
+			for (int s : side[(size_t)g])
+			{
+				const int n = HDMarbleGroupOf(s, table, rooms, groups);
+
+				if (n >= 0 && !drawn[(size_t)n] && n < (int)up.size())
+					for (int r : up[(size_t)n])
+						take(r, g);
+			}
+
+	const size_t found = out.size();
+
+	for (size_t i = 0; depth >= 3 && i < found; i++)
+	{
+		const HDMarbleOverRoom o = out[i];
+
+		if (o.group < (int)up.size())
+			for (int r : up[(size_t)o.group])
+				take(r, o.via);
+	}
 }
 
 /* A sloped face's plane (hd_render.cpp, marble_build): the normal of the

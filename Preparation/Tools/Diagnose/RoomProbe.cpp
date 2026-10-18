@@ -603,9 +603,44 @@
  *     -marblerise     one marblerise line a face the level's build left out
  *                     for rising across itself: its room, height, lowest
  *                     and highest corner's y, run across and rise.
+ *     -marblemodelpart n  of -wetlara only the part n (0 body, 1 head,
+ *                     2 face, 3 the holster rig - a model of its own slot,
+ *                     drawn through HDModelDraw as any item is).
+ *     -marblenomodelwarm  no warm-up of the model shaders for the mirror
+ *                     (HDModelMirrorWarmUp) before the picture: the first
+ *                     mirrored draw with a model waits as without it.
+ *     -marblelag n    n of the marble floors' warm-up draws before the
+ *                     picture, one after the other with nothing waited
+ *                     for, as the game's frames follow: one marblelag line
+ *                     a draw - the occlusion counts read, still in flight,
+ *                     and the most frames an answer came after its ask.
+ *     -marblecracks   the polished floors' edges asked whether the
+ *                     level's other triangles close them end to end - a
+ *                     neighbour floor, a wall's foot, a riser
+ *                     (HDRenderMarbleCracks): one marblecrack line an open
+ *                     edge (its room, the gap to the nearest other
+ *                     triangle, the open length of its length, the open
+ *                     piece's middle) and a marblecracks line of totals,
+ *                     the open edges by gap (under 1 unit - on another
+ *                     triangle's face -, 1 to 4, 4 to 16, 16 and over)
+ *                     with their open length. The art's copies under the
+ *                     floors are not asked.
+ *     -marbleover n   how far from the frame's rooms the rooms over the
+ *                     floors are drawn into the mirrors
+ *                     (HDRenderMarbleOverDepth): 0 none, 1 the rooms over
+ *                     the drawn rooms, 2 and over the rooms beside them,
+ *                     3 and the rooms over those rooms over (the
+ *                     engine's, where not given). The marble: line's over
+ *                     is how many were drawn into each mirror, summed, and
+ *                     culled how many lay wholly outside the mirror's view.
+ *     -marbletarget <path>  the mirror's target as the frame's last
+ *                     mirrored plane left it, written to <path> (two rows
+ *                     a row of the frame, turned in x; -marbleslots picks
+ *                     the plane): what the mirrored draw drew, and where
+ *                     -marblevoid's magenta is, nothing.
  *     -marbleplanefloor  the mirror's plane in the floor and the clip
- *                     -marbleclip units over it, as before the plane lay
- *                     in the clip (HDRenderMarblePlaneFloor).
+ *                     -marbleclip units over it (HDRenderMarblePlaneFloor),
+ *                     which leaves the strip at a wall's foot out.
  *     -marblecopies 0|1  1 keeps the art's copy of a room under its
  *                     polished floor in the level (HDRenderMarbleKeepCopies;
  *                     0, the engine's, where not given, leaves it out). The
@@ -1620,6 +1655,13 @@ static bool g_water_copy = true;
 static bool g_water_depth = true;
 // -nowarm: no warm-up of the water's shaders (HDRenderWaterWarmUp).
 static bool g_nowarm = false;
+/* -marblemodelpart n: of -wetlara's models only the part kParts[n] of
+ * ProbeWetLaraDraw (3: the holster rig, a model of its own slot drawn as
+ * any item is); -1, all of her. -marblenomodelwarm: no models' warm-up
+ * (HDModelMirrorWarmUp) before the picture. */
+static int g_marble_model_part = -1;
+static bool g_marble_no_model_warm = false;
+// -waterdepthview and -waterbend.
 static int g_water_depth_view = 0;
 static float g_water_bend = 1.0f;
 
@@ -1690,7 +1732,8 @@ static bool ShotBegin(Shot& shot, long w, long h)
 				ms[2], ms[3], ms[4]);
 
 		// And the models' shaders as the mirror draws them (hd_model.cpp).
-		const double models = marble >= 0.0 ? HDModelMirrorWarmUp() : -1.0;
+		const double models = marble >= 0.0 && !g_marble_no_model_warm ?
+			HDModelMirrorWarmUp() : -1.0;
 
 		if (models >= 0.0)
 			printf("-marble: models warm-up %.2f ms\n", models);
@@ -8591,6 +8634,12 @@ static int g_marble_engine = 0;
 static int g_marble_planes = 2;
 // -marblerise: one marblerise line a face the build left out for rising.
 static bool g_marble_rise = false;
+// -marbletarget <path>: the mirror's target written there as a picture.
+static const char* g_marble_target = 0;
+// -marblecracks: one marblecrack line an open edge, a marblecracks total.
+static bool g_marble_cracks = false;
+// -marblelag n: warm-up draws with nothing waited for (ProbeMarble).
+static int g_marble_lag = 0;
 
 static bool MarbleArg(int argc, char** argv, int* at)
 {
@@ -8725,6 +8774,52 @@ static bool MarbleArg(int argc, char** argv, int* at)
 	if (!strcmp(a, "-marblerise"))
 	{
 		g_marble_rise = true;
+		return true;
+	}
+
+	// -marblemodelpart n and -marblenomodelwarm (g_marble_model_part).
+	if (!strcmp(a, "-marblemodelpart") && more)
+	{
+		g_marble_model_part = atoi(argv[++*at]);
+		return true;
+	}
+
+	if (!strcmp(a, "-marblenomodelwarm"))
+	{
+		g_marble_no_model_warm = true;
+		return true;
+	}
+
+	// -marblelag n: the occlusion counts over n frames (ProbeMarble).
+	if (!strcmp(a, "-marblelag") && more)
+	{
+		g_marble_lag = atoi(argv[++*at]);
+		return true;
+	}
+
+	// -marblecracks: the crack census of the polished floors' edges.
+	if (!strcmp(a, "-marblecracks"))
+	{
+		HDRenderMarbleCracks(true);
+		g_marble_cracks = true;
+		return true;
+	}
+
+	/* -marbleover n: how far from the frame's rooms the rooms over the
+	 * floors are looked for (HDRenderMarbleOverDepth; 3, the engine's,
+	 * where not given; 0 none). */
+	if (!strcmp(a, "-marbleover") && more)
+	{
+		HDRenderMarbleOverDepth(atoi(argv[++*at]));
+		return true;
+	}
+
+	/* -marbletarget <path>: the mirror's target as the frame's last
+	 * mirrored plane left it, written to <path> (two rows a row of the
+	 * frame, turned in x; -marbleslots picks the plane). */
+	if (!strcmp(a, "-marbletarget") && more)
+	{
+		g_marble_target = argv[++*at];
 		return true;
 	}
 
@@ -9114,10 +9209,14 @@ static void ProbeWetLaraDraw(const void* projection, int bulbs,
 	};
 
 	for (int i = 0; i < 4; i++)
-		if (HDLaraHasPart(kParts[i]))
+		if (HDLaraHasPart(kParts[i]) && (g_marble_model_part < 0 ||
+			g_marble_model_part == i))
 			HDModelDraw(HDLaraPartSlot(kParts[i]), g_wet_lara_mats,
 				HD_LARA_NODES, light, i == 0 ? bodyMask : i == 3 ?
 				HDLaraPartCoverage(kParts[i]) : ~0u, &lighting);
+
+	if (g_marble_model_part >= 0)
+		return;
 
 	HDLaraFrame now;
 	HDLaraDraw list[8];
@@ -9303,6 +9402,23 @@ static void ProbeMarble(const void* projection)
 	MarbleTimer timer;
 
 	HDRenderMarbleQuiet(true);
+
+	/* -marblelag n: n warm-up draws first, one after the other with
+	 * nothing waited for between them, as frames follow in the game: the
+	 * occlusion counts each read, still in flight, and the oldest's age in
+	 * frames (one marblelag line a draw). */
+	for (int i = 0; i < g_marble_lag; i++)
+	{
+		HDRenderMarbleStats lag;
+
+		HDRenderMarbleNoWait(true);
+		HDRenderMarbleDraw(draw, projection, 0);
+		HDRenderMarbleNoWait(false);
+		HDRenderMarbleStatsNow(&lag);
+		printf("marblelag: %d answered %d flying %d late %d\n", i + 1,
+			lag.answered, lag.flying, lag.late);
+	}
+
 	timer.Begin();
 	HDRenderMarbleDraw(draw, projection, 0);
 
@@ -9319,12 +9435,42 @@ static void ProbeMarble(const void* projection)
 	printf("marble: planes %d drawn %d (cap %d) faces %d mirrored calls %d "
 		"wet %d; level faces %d water %d opaque %d heights %d; GPU %.4f ms "
 		"(timestamps round HDRenderMarbleDraw), first %.4f ms; spread %d "
-		"rising %d; copies %d water %d buried %d joined %d slopes %d over %d\n",
+		"rising %d; copies %d water %d buried %d joined %d slopes %d over %d "
+		"culled %d\n",
 		s.planes, s.drawn, g_marble_planes, s.faces, s.calls, s.wet,
 		s.faces_level,
 		s.water, s.opaque, s.heights, ms, first, s.spread, s.rising,
 		s.copies, s.copies_water, s.buried, s.joined, s.slopes,
-		s.over);
+		s.over, s.over_culled);
+
+	/* -marblecracks: each open edge of a mirror face, and the totals - the
+	 * edges closed, the open ones by their gap (under 1 unit, 1 to 4, 4 to
+	 * 16, 16 and over) and their open length. */
+	if (g_marble_cracks)
+	{
+		const float* c = 0;
+		int closed = 0;
+		const int open = HDRenderMarbleCrackRows(&c, &closed);
+		int bin[4] = { 0, 0, 0, 0 };
+		double length[4] = { 0.0, 0.0, 0.0, 0.0 };
+
+		for (int i = 0; i < open; i++)
+		{
+			const float* r = c + i * 7;
+			const int k = r[1] < 1.0f ? 0 : r[1] < 4.0f ? 1 : r[1] < 16.0f ?
+				2 : 3;
+
+			bin[k]++;
+			length[k] += r[2];
+			printf("marblecrack: room %d gap %.2f open %.1f of %.1f at %.0f "
+				"%.0f %.0f\n", (int)r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
+		}
+
+		printf("marblecracks: edges %d closed %d open %d; gap <1 %d (%.0f), "
+			"1-4 %d (%.0f), 4-16 %d (%.0f), 16+ %d (%.0f)\n", closed + open,
+			closed, open, bin[0], length[0], bin[1], length[1], bin[2],
+			length[2], bin[3], length[3]);
+	}
 
 	/* -marblerise: room, height, the lowest and highest corner's y, the
 	 * run across and the rise (marble_build's rising faces). */
@@ -9344,6 +9490,34 @@ static void ProbeMarble(const void* projection)
 			"gain %.3f\n", i, s.plane_y[i], s.plane_cover[i],
 			i < s.drawn ? "drawn" : "left", s.plane_room[i], s.plane_seen[i],
 			s.plane_gain[i]);
+
+	/* The rooms over: one marbleover line, each room's group, the drawn
+	 * group it came from and whether the first plane's view left it out. */
+	if (s.over_count > 0)
+	{
+		printf("marbleover: %d", s.over_count);
+
+		for (int i = 0; i < s.over_count && i < 16; i++)
+			printf(" %d<%d%s", s.over_group[i], s.over_via[i],
+				s.over_out[i] ? " out" : "");
+
+		printf("\n");
+	}
+
+	if (g_marble_target)
+	{
+		std::vector<unsigned long> px(16u << 20);
+		int w = 0, h = 0;
+		const int got = HDRenderMarbleTargetRead(&px[0], (int)px.size(),
+			&w, &h);
+
+		for (int i = 0; i < got; i++)
+			px[(size_t)i] |= 0xFF000000u;
+
+		printf("marbletarget: %s %d x %d %s\n", g_marble_target, w, h,
+			got && WritePng(g_marble_target, &px[0], w, h) ? "written" :
+			"not written");
+	}
 }
 
 /* The room behind the models' copy (HDRenderWaterWetRoomCopy) where
@@ -16787,7 +16961,8 @@ static int ProbeMain(int argc, char** argv)
 			/* The rooms over the polished floors, as the engine gives them at
 			 * the level's load (hd_level.cpp): the rooms a room's ceiling
 			 * portals open into (a portal's normal points into its room, so
-			 * down out of a ceiling). */
+			 * down out of a ceiling) and the rooms its other portals open
+			 * into. */
 			if (g_marble_engine)
 				for (int r = 0; r < level.roomCount(); r++)
 				{
@@ -16797,8 +16972,8 @@ static int ProbeMain(int argc, char** argv)
 					level.portalRecords(r, doors, why);
 
 					for (const Tr5Level::PortalRecord& d : doors)
-						if (d.ny > 0)
-							HDRenderMarbleOver(r, d.toRoom);
+						(d.ny > 0 ? HDRenderMarbleOver :
+							HDRenderMarbleBeside)(r, d.toRoom);
 				}
 
 			// -wetlara: her outfit on the card.

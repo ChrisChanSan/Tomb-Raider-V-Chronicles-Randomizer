@@ -290,6 +290,8 @@ namespace
 	IDirect3DVertexShader9* g_vs = 0;
 	IDirect3DPixelShader9* g_ps = 0;
 	IDirect3DVertexDeclaration9* g_decl = 0;
+	// The pair above warmed for the marble mirror (HDModelMirrorWarmUp).
+	bool g_mirror_warmed = false;
 	/* The projected shadow's cast shaders (hd_shadow.hlsl). Not a condition
 	 * of the model path: without them the projected shadow is refused and
 	 * the blob stays. */
@@ -3040,6 +3042,7 @@ void HDModelShutdown()
 	if (g_cast_ps) { g_cast_ps->Release(); g_cast_ps = 0; }
 	if (g_receive_ps) { g_receive_ps->Release(); g_receive_ps = 0; }
 
+	g_mirror_warmed = false;
 	g_device = 0;
 	g_in_frame = false;
 	g_in_cast = false;
@@ -4257,14 +4260,15 @@ int HDModelPreload()
 
 /* The models' warm-up for the marble floors' mirror (hd_render.cpp, "the
  * marble floors"). The mirror draws the frame's objects - Lara, the
- * items - through this path once more with a clip plane on, and the driver
- * made the model shaders again for that the first time a model stood in a
- * mirror: RoomProbe measured that first mirrored draw with Lara in it at
- * 102 to 140 ms. So once a level, after its models are built, one triangle
- * of a model is drawn through the model shaders with the plane on, into a
- * target of 16 x 16 of its own, and the queue is drained; nothing of it
- * reaches the frame, and the device's state is put back. Returns the time
- * in milliseconds, or -1 when nothing was drawn. */
+ * items, all through HDModelDraw's one pair of shaders - once more with a
+ * clip plane on, and the driver makes that pair again for the plane the
+ * first time a model stands in a mirror, a stall of about a tenth of a
+ * second (RoomProbe -wetlara). So once for the pair's life (made in
+ * HDModelInit, released in HDModelShutdown), after a level's models are
+ * built, one triangle of a model is drawn through it with the plane on,
+ * into a target of 16 x 16 of its own, and the queue is drained; nothing
+ * of it reaches the frame, and the device's state is put back. Returns
+ * the time in milliseconds, or -1 when nothing was drawn. */
 double HDModelMirrorWarmUp()
 {
 	const Model* model = 0;
@@ -4275,7 +4279,7 @@ double HDModelMirrorWarmUp()
 			at->second.indices >= 3)
 			model = &at->second;
 
-	if (!g_device || !g_vs || !g_ps || !g_decl || !model)
+	if (!g_device || !g_vs || !g_ps || !g_decl || !model || g_mirror_warmed)
 		return -1.0;
 
 	LARGE_INTEGER frequency, t0, t1;
@@ -4385,6 +4389,7 @@ double HDModelMirrorWarmUp()
 	if (depth)
 		depth->Release();
 
+	g_mirror_warmed = true;
 	QueryPerformanceCounter(&t1);
 	return (double)(t1.QuadPart - t0.QuadPart) * 1000.0 /
 		(double)frequency.QuadPart;

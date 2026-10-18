@@ -2638,7 +2638,14 @@ static void BuildWaterSheets()
 
 	/* The rooms over the polished floors (hd_render.cpp, HDRenderMarbleOver):
 	 * the rooms each room's ceiling portals open into - a portal's normal
-	 * points into its room, so down out of a ceiling. */
+	 * points into its room, so down out of a ceiling - and the rooms its
+	 * other portals open into (HDRenderMarbleBeside), by room number, and
+	 * the table that names the group drawing each room, which a flip map
+	 * changes. The portals are the art's own: the group drawing room r
+	 * holds room r's record, in every flip state. */
+	HDRenderMarbleRooms(g_room_group, g_room_count < HD_MAX_ROOMS ?
+		g_room_count : HD_MAX_ROOMS);
+
 	for (int r = 0; HDRenderMarbleOn() && r < number_rooms &&
 		r < HD_MAX_ROOMS; r++)
 	{
@@ -2650,9 +2657,10 @@ static void BuildWaterSheets()
 		const int count = *door++;
 
 		for (int i = 0; i < count; i++, door += 16)
-			if (door[2] > 0 && door[0] >= 0 && door[0] < number_rooms &&
-				door[0] < HD_MAX_ROOMS && g_room_group[door[0]] >= 0)
-				HDRenderMarbleOver(g_room_group[r], g_room_group[door[0]]);
+			if (door[0] >= 0 && door[0] < number_rooms &&
+				door[0] < HD_MAX_ROOMS)
+				(door[2] > 0 ? HDRenderMarbleOver :
+					HDRenderMarbleBeside)(g_room_group[r], door[0]);
 	}
 
 	/* And the marble floors' mirror, so the first frame with one does not

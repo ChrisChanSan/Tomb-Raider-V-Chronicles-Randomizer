@@ -2888,6 +2888,11 @@ carries the tables.
     windowed device's `GetGammaRamp` is all zeros, no ramp in use; the
     player's `-log` of 2026-10-17 reads `DXCreate: Full Screen Mode
     (borderless windowed)` and `DXLOG window start ... windowed=1`.
+    NOT MEASURED: no ramp was set, since setting one changes this machine's
+    desktop; so a ramp's effect on an exclusive chain, and whether one set
+    by a game outlives a crash or Alt+Tab, rest on the documentation and
+    were not observed, and GDI's `GetDeviceGammaRamp` of the desktop failed
+    (read 0).
 277. **The pass's form** (`dxshell.cpp`, `GammaPass`, `GammaRestore`,
     `GammaRelease`) - the back buffer copied by `StretchRect` into a
     render-target texture of its size, drawn back over it as one
@@ -2896,8 +2901,11 @@ carries the tables.
     stage state it sets read first and set back after, stream 0 and the
     vertex declaration included; the copy and the shader released with the
     device and before a reset - standard Direct3D 9 techniques of general
-    graphics knowledge. OWN: its place in `DXShowFrame`, before the
-    apostrophe screenshot and after the last draw of every path, and the
+    graphics knowledge. OWN: its place in both of the engine's presents,
+    after the last draw of every path - `DXShowFrame`, before the apostrophe
+    screenshot, and the loading bar's held present while the HD build runs
+    (`specific/drawbars.cpp`, `LoadBarPresentHeld`), the two sharing
+    `DXGammaStart` before the present and `DXGammaFinish` after it - and the
     copy back after the present, which keeps the back buffer the engine's
     own picture between frames. CLASSIC: the inventory's and the pause
     menu's picture of the world is read out of the back buffer after the
@@ -2905,10 +2913,16 @@ carries the tables.
     scratch harness built from the extracted block of `dxshell.cpp` on a
     windowed 2560 by 1440 device: the curve within one step at 0, 30, 49,
     70 and 100, sixteen states set back, the plain picture back in the
-    back buffer after the present at each, the copy following a new size,
-    no reference left on the device; 98 checks, 0 failed.
-278. **Nothing at 50** (`dxshell.cpp`, `GAMMA_MIDDLE`, `DXShowFrame`) - at
-    the middle no object is made and no call is added. OWN. PICTURE:
+    back buffer after the present at each, the copy following a new size, no
+    reference left on the device; 98 checks, 0 failed. The same harness on
+    the block with the shared steps: the held present at 50 makes no object
+    and writes one -log line, at 30, 70 and 100 `DXGammaStart`'s picture is
+    the curve's within one step and the back buffer the plain picture after
+    the held present's steps; 116 checks, 0 failed.
+278. **Nothing at 50** (`dxshell.cpp`, `GAMMA_MIDDLE`, `DXGammaStart`) -
+    at the middle no object is made and no pass runs; each present compares
+    the row with the value the -log line last named, and the first present
+    writes that line (`pass=off`, with `-log` only). OWN. PICTURE:
     RoomProbe at b35b3b96 and at this round's head, the fifteen parity
     cameras 15 of 15 (and 15 of 15 with `-gamma 50` given), the six HD
     views 6 of 6, the six classic views 6 of 6 identical.
@@ -2925,7 +2939,7 @@ carries the tables.
     which needs no `CustomText` row; 50 on a first run, 50 for a missing
     key and for one above 100, as `dead_zone` and `mouse_sens` read. OWN,
     following the menu's own patterns. MenuTest's `display_gamma_row`
-    checks it in the tree (44,272 checks before, 44,612 after).
+    checks it in the tree (44,272 checks before, 44,619 after).
 281. **The seam and the tools** (`dxshell.cpp`, `DXLOG gamma`; RoomProbe
     `-gamma`, `-gammatime`, `GammaProbePass`) - one `-log` line at the first
     present and at each change, a refused step at its end once per device;

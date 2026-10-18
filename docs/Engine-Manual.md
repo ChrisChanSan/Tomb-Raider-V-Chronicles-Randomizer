@@ -1192,7 +1192,7 @@ and the bar moves one step a frame. It is written when the bar stops or the
 page is left, like the other tomb5 settings.
 
 **The middle changes nothing.** That is where a fresh installation starts, and
-there the picture is the engine's own, pixel for pixel — no extra work is done
+there the picture is the engine's own, pixel for pixel — the curve is not run
 at all. Anywhere else every picture the game shows goes through one curve on
 its way to the screen: the levels, the menus and the inventory over them, the
 loading screen, the credits and the films, in a window and in full screen
@@ -1217,10 +1217,9 @@ middle.
 Why a curve over the picture rather than the monitor's own gamma: Direct3D 9
 sets a gamma ramp only for a full-screen exclusive device, and this build never
 makes one — full screen is a border-less window, which is what keeps Alt+Tab
-safe — so a ramp would do nothing at all here. It would also be the
-display's, not the game's: a ramp a game sets on the display can be left on
-the desktop when the game crashes before it sets it back. The curve here
-lives in the game's own frame and nowhere else. It costs about 0.05 ms a
+safe — so a ramp would do nothing at all here. A ramp would also belong to
+the display rather than to the game's window. The curve here lives in the
+game's own frame and nowhere else. It costs about 0.05 ms a
 frame at 2560 by 1440.
 
 With `-log`, one line names the setting at the start and again whenever it

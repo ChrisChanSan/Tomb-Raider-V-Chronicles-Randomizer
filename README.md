@@ -124,9 +124,9 @@ and shadow styles, PSX skies, static lighting, the underwater effect, look
 transparency and footprints.</td>
 <td width="50%"><img src="docs/menu-display.jpg" alt="Display"><br>
 <b>Display</b>, under Graphics: the frame rate — 30, 60 or whatever your
-screen refreshes at — VSync, and Gamma, a slider that lightens or darkens
-every picture the game shows, in a window or full screen; its middle changes
-nothing. 60 is what a fresh installation gets.</td>
+screen refreshes at; 60 is what a fresh installation gets — VSync, and
+Gamma, a slider that lightens or darkens every picture the game shows, in a
+window or full screen; its middle, the default, changes nothing.</td>
 </tr>
 <tr>
 <td width="50%"><img src="docs/menu-controls.jpg" alt="Controls"><br>

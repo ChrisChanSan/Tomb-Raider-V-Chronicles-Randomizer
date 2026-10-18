@@ -11035,6 +11035,100 @@ static void hd_switch_wiring()
 	free(life);
 }
 
+/* A number #defined in an engine text, or -1: the token after the name. */
+static long glass_define(const char* text, const char* name)
+{
+	const char* p = text ? strstr(text, name) : 0;
+
+	return p ? strtol(p + strlen(name), 0, 10) : -1;
+}
+
+/* The split of a see-through draw call (hd_render.cpp, GlassSplits): its
+ * two numbers read out of the engine's text and its rule run over the
+ * census of the fifteen levels - every material 14 part of an alpha pass
+ * with param[1] under 1, page by page (RoomProbe and the page census: the
+ * page's smallest alpha and its share below the alpha test's reference in
+ * per mille, measured as hd_pagecache.cpp measures them), and the parts
+ * beside them that must not split: a weight of 1, the additive run's glass
+ * (weight 0 in the alpha pass), a clear floor. Only ANDREA2's window grid
+ * and its flip twin split; the shader keeps the halves by the same clear
+ * bound, and the glass half takes the classic's ONE / ONE. */
+static void glass_split()
+{
+	struct Row
+	{
+		const char* what;
+		int parts;
+		float blend;
+		int clear;
+		int alphaMin;
+		int permille;
+		int splits;
+	};
+
+	static const Row rows[] =
+	{
+		{ "ANDREA2 65/132 page 3007", 2, 0.1f, 0, 0, 856, 1 },
+		{ "JOBY2 52/78 page 16073", 2, 0.1f, 0, 77, 12, 0 },
+		{ "JOBY2 102 page 513", 1, 0.2333f, 0, 254, 0, 0 },
+		{ "JOBY3 page 10072", 27, 0.1f, 0, 120, 46, 0 },
+		{ "JOBY5 page 10072", 31, 0.1f, 0, 120, 46, 0 },
+		{ "RICH2 page 3309", 6, 0.8417f, 0, 165, 0, 0 },
+		{ "RICH3 46 page 10084", 5, 0.1f, 0, 0, 116, 0 },
+		{ "TITLE page 2150 at weight 1", 3, 1.0f, 0, 0, 186, 0 },
+		{ "ANDREA1 page 15074, additive run", 29, 0.0f, 0, 0, 328, 0 },
+		{ "RICH2 125 page 16103, additive run", 1, 0.0f, 0, 100, 62, 0 },
+		{ "a clear floor", 1, 1.0f, 1, 231, 0, 0 }
+	};
+
+	char* render = hd_switch_text("hd_render.cpp");
+	char* shader = hd_switch_text("hd_shader/hd_room.hlsl");
+
+	ok(render && shader, "glass split: the two texts are read",
+		!!render + !!shader, 2);
+
+	const long below = glass_define(render, "#define HD_GLASS_CLEAR_BELOW");
+	const long frame = glass_define(render, "#define HD_GLASS_FRAME_PERMILLE");
+
+	ok(below == 16, "glass split: a clear texel is under 16 of 255", below,
+		16);
+	ok(frame >= 116 && frame < 856, "glass split: the share sits in the "
+		"census's gap, 116 to 856 per mille", frame, 500);
+
+	int split = 0, parts = 0;
+
+	for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); i++)
+	{
+		const Row& r = rows[i];
+		const int s = r.blend > 0.0f && r.blend < 1.0f && !r.clear &&
+			r.alphaMin < below && r.permille > frame ? 1 : 0;
+		char what[160];
+
+		snprintf(what, sizeof(what), "glass split: %s", r.what);
+		ok(s == r.splits, what, s, r.splits);
+		split += s * r.parts;
+		parts += r.blend > 0.0f && r.blend < 1.0f && !r.clear ? r.parts : 0;
+	}
+
+	ok(parts == 74, "glass split: the census's see-through parts", parts, 74);
+	ok(split == 2, "glass split: the parts that split", split, 2);
+
+	int n = hd_switch_count(render,
+		"GlassSplits(range.blend, range.clear, range.pageSlot)");
+
+	ok(n == 1, "glass split: draw_pass asks the rule", n, 1);
+
+	n = hd_switch_count(render, "pane_on ? D3DBLEND_ONE : D3DBLEND_SRCALPHA");
+	ok(n == 1, "glass split: the glass half adds ONE / ONE", n, 1);
+
+	n = hd_switch_count(shader,
+		"clip(gPass.z * (texel.a < 16.0f / 255.0f ? 1.0f : -1.0f));");
+	ok(n == 1, "glass split: the room shader keeps one half's texels", n, 1);
+
+	free(render);
+	free(shader);
+}
+
 /* The build gate and the draw, in the engine's own text. HDEnabled() is
  * the build gate - hd_build and the installation - and every reader that
  * builds or loads at the load asks it; hd_enable, the HD textures row, is
@@ -24304,6 +24398,7 @@ int main()
 	hd_switch();
 	hd_switch_option();
 	hd_switch_wiring();
+	glass_split();
 	hd_build_gate();
 	load_keep();
 	load_mode();

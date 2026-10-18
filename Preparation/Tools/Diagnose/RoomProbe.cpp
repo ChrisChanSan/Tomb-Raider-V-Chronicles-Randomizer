@@ -115,7 +115,15 @@
  *                     additive one.
  *     -black          clear the picture to black instead of magenta. The
  *                     additive pass alone can only be measured against black.
- *     -gamma <n>      every picture through the Gamma row's pass at n, 0 to
+ *     -calltrace <page>|all  every draw call of the frame that samples that
+ *                     page (or every one), in order, with its depth test,
+ *                     write and function, blend and factors, cull, gPass and
+ *                     gSpec.w and triangles (`calltrace` lines): which phase
+ *                     and which half of a split see-through draw call a
+ *                     part goes through.
+ *     -lumaat x,y     the picture's colour and luma at that pixel and over
+ *                     the 5 x 5 round it (`lumaat` line); repeatable.
+ *     -gamma <n>     every picture through the Gamma row's pass at n, 0 to
  *                     100 (50, the default, runs nothing): the engine's own
  *                     shader bytecode (hd_gamma_ps.inc) with the steps of
  *                     specific\dxshell.cpp's GammaPass on the probe's
@@ -2171,6 +2179,145 @@ static void WetCutLine(const unsigned long* px, long w, long h)
 		k[1], k[2], row, h, above, below);
 }
 
+/* -lumaat x,y: the picture's colour at that pixel and the mean over the 5 x 5
+ * pixels round it, with their luma (0.299 R + 0.587 G + 0.114 B) - a pane's
+ * strength read at a point, the picture with it against the picture without.
+ * Repeatable. */
+static std::vector<long> g_luma_at;
+
+static void LumaAtLines(const unsigned long* px, long w, long h)
+{
+	for (size_t i = 0; i + 1 < g_luma_at.size(); i += 2)
+	{
+		const long x = g_luma_at[i], y = g_luma_at[i + 1];
+
+		if (x < 0 || y < 0 || x >= w || y >= h)
+		{
+			printf("lumaat %ld,%ld: outside the picture\n", x, y);
+			continue;
+		}
+
+		double m[3] = { 0.0, 0.0, 0.0 };
+		int n = 0;
+
+		for (long dy = -2; dy <= 2; dy++)
+			for (long dx = -2; dx <= 2; dx++)
+			{
+				if (x + dx < 0 || y + dy < 0 || x + dx >= w || y + dy >= h)
+					continue;
+
+				const unsigned long c = px[(y + dy) * w + x + dx];
+
+				m[0] += (double)((c >> 16) & 255);
+				m[1] += (double)((c >> 8) & 255);
+				m[2] += (double)(c & 255);
+				n++;
+			}
+
+		const unsigned long c = px[y * w + x];
+		const int r = (int)((c >> 16) & 255), g = (int)((c >> 8) & 255);
+		const int b = (int)(c & 255);
+
+		for (int k = 0; k < 3; k++)
+			m[k] /= (double)n;
+
+		printf("lumaat %ld,%ld: rgb %d %d %d luma %.1f; 5x5 rgb %.1f %.1f %.1f "
+			"luma %.1f\n", x, y, r, g, b, 0.299 * r + 0.587 * g + 0.114 * b,
+			m[0], m[1], m[2], 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]);
+	}
+}
+
+/* -calltrace <page>|all: every draw call of the picture's frame - between its
+ * HDRenderFrameBegin and HDRenderFrameEnd - that samples that page (or every
+ * draw call), in order, with the states it was drawn with: the depth test,
+ * write and function, the blend and its two factors, the cull mode, the
+ * room shader's gPass (c4) and gSpec.w (c19), and the triangle count. Which
+ * pass a draw call belongs to is read off the order and gPass: x 0.5 the
+ * alpha pass's solid ranges, z +1 or -1 a split draw call's halves.
+ *
+ * Read off the device itself: DrawIndexedPrimitive is entry 82 of the
+ * IDirect3DDevice9 table (d3d9.h's declaration order, which is the
+ * interface's binary layout), and the tool puts its own function there for
+ * the run. The device is not a pure one (CreateDevice above), so every Get
+ * answers. */
+static bool g_call_trace = false;
+static int g_call_trace_page = -1;		// -1 = every draw call
+static bool g_call_trace_live = false;
+static int g_call_trace_n = 0;
+
+typedef HRESULT (STDMETHODCALLTYPE* DrawIndexedFn)(IDirect3DDevice9*,
+	D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+static DrawIndexedFn g_call_trace_real = 0;
+
+static HRESULT STDMETHODCALLTYPE CallTraceDraw(IDirect3DDevice9* device,
+	D3DPRIMITIVETYPE type, INT base, UINT lowest, UINT vertices, UINT start,
+	UINT primitives)
+{
+	if (g_call_trace_live)
+	{
+		IDirect3DBaseTexture9* bound = 0;
+		int page = -1;
+
+		device->GetTexture(0, &bound);
+
+		for (int s = 0; bound && s < HDPageCacheSlots(); s++)
+			if ((IDirect3DBaseTexture9*)HDPageCacheSlotTexture(s) == bound)
+			{
+				page = HDPageCachePageOfSlot(s);
+				break;
+			}
+
+		if (bound)
+			bound->Release();
+
+		if (g_call_trace_page < 0 || page == g_call_trace_page)
+		{
+			DWORD z = 0, zw = 0, zf = 0, ab = 0, sb = 0, db = 0, cull = 0;
+			float pass[4] = { 0, 0, 0, 0 }, spec[4] = { 0, 0, 0, 0 };
+
+			device->GetRenderState(D3DRS_ZENABLE, &z);
+			device->GetRenderState(D3DRS_ZWRITEENABLE, &zw);
+			device->GetRenderState(D3DRS_ZFUNC, &zf);
+			device->GetRenderState(D3DRS_ALPHABLENDENABLE, &ab);
+			device->GetRenderState(D3DRS_SRCBLEND, &sb);
+			device->GetRenderState(D3DRS_DESTBLEND, &db);
+			device->GetRenderState(D3DRS_CULLMODE, &cull);
+			device->GetPixelShaderConstantF(4, pass, 1);
+			device->GetPixelShaderConstantF(19, spec, 1);
+			printf("calltrace %d: page %d tris %u ztest %lu zwrite %lu zfunc "
+				"%lu blend %lu src %lu dst %lu cull %lu gPass %.2f %.2f %.2f "
+				"%.2f gSpec.w %.4f\n", g_call_trace_n, page, primitives, z,
+				zw, zf, ab, sb, db, cull, pass[0], pass[1], pass[2], pass[3],
+				spec[3]);
+		}
+
+		g_call_trace_n++;
+	}
+
+	return g_call_trace_real(device, type, base, lowest, vertices, start,
+		primitives);
+}
+
+// Puts CallTraceDraw into the device's table, once.
+static void CallTraceInstall()
+{
+	if (!g_call_trace || !g_device || g_call_trace_real)
+		return;
+
+	void** table = *(void***)g_device;
+	DWORD old = 0;
+
+	if (!VirtualProtect(&table[82], sizeof(void*), PAGE_READWRITE, &old))
+	{
+		printf("calltrace: the device's table cannot be written - no trace\n");
+		return;
+	}
+
+	g_call_trace_real = (DrawIndexedFn)table[82];
+	table[82] = (void*)&CallTraceDraw;
+	VirtualProtect(&table[82], sizeof(void*), old, &old);
+}
+
 static bool ShotWrite(Shot& shot, const char* path)
 {
 	D3DLOCKED_RECT rect;
@@ -2242,6 +2389,7 @@ static bool ShotWrite(Shot& shot, const char* path)
 	shot.readback->UnlockRect();
 	WetStepLine(pixels, shot.w, shot.h);
 	WetCutLine(pixels, shot.w, shot.h);
+	LumaAtLines(pixels, shot.w, shot.h);
 
 	const double texels = (double)shot.w * (double)shot.h;
 	const bool ok = WritePng(path, pixels, shot.w, shot.h);
@@ -3665,6 +3813,8 @@ static bool g_vis_faces = false;
 static bool g_vis_plane = true;
 // -gpu <n>: how many timed draws of the frame's solid passes (VisArg).
 static int g_gpu_runs = 0;
+// -gpuall: -gpu times every pass of the frame's groups, not the solid ones.
+static bool g_gpu_all = false;
 static int g_window_mode = HD_WINDOW_ALL;
 
 /* -hdm: apply the .hdm sidecar beside the classic .TRC, the way
@@ -14268,7 +14418,9 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *   -visnear 0|1      1, the default, lists the room behind a portal the
  *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
- *                     after the picture (the print beside the draw calls) */
+ *                     after the picture (the print beside the draw calls)
+ *   -gpuall           with -gpu, every pass of the groups (HD_PASS_ALL) and
+ *                     not the solid ones alone */
 static bool VisArg(int argc, char** argv, int* at)
 {
 	const char* a = argv[*at];
@@ -15322,6 +15474,34 @@ static int ProbeMain(int argc, char** argv)
 
 		if (MarbleArg(argc, argv, &at))
 			continue;
+
+		// -calltrace, -lumaat and -gpuall, for the same limit.
+		if (!strcmp(argv[at], "-gpuall"))
+		{
+			g_gpu_all = true;
+			continue;
+		}
+
+		if (!strcmp(argv[at], "-calltrace") && at + 1 < argc)
+		{
+			++at;
+			g_call_trace = true;
+			g_call_trace_page = !strcmp(argv[at], "all") ? -1 : atoi(argv[at]);
+			continue;
+		}
+
+		if (!strcmp(argv[at], "-lumaat") && at + 1 < argc)
+		{
+			long p[2] = { 0, 0 };
+
+			if (sscanf(argv[++at], "%ld,%ld", &p[0], &p[1]) == 2)
+				g_luma_at.insert(g_luma_at.end(), p, p + 2);
+			else
+				printf("RoomProbe: -lumaat wants x,y - '%s' ignored\n",
+					argv[at]);
+
+			continue;
+		}
 
 		if (SmashArg(argc, argv, &at))
 			continue;
@@ -18496,8 +18676,10 @@ static int ProbeMain(int argc, char** argv)
 	LARGE_INTEGER frameStart;
 
 	QueryPerformanceCounter(&frameStart);
+	CallTraceInstall();
 	g_device->BeginScene();
 	HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
+	g_call_trace_live = g_call_trace_real != 0;
 
 	// -splash and -tank, on the clock the bracket now holds.
 	ProbeCardsFeed();
@@ -18832,6 +19014,7 @@ static int ProbeMain(int argc, char** argv)
 			g_under_knobs[8]);
 	}
 
+	g_call_trace_live = false;
 	HDRenderFrameEnd();
 	g_device->EndScene();
 
@@ -18974,11 +19157,14 @@ static int ProbeMain(int argc, char** argv)
 			HDRenderFrameBegin((const D3DMATRIX*)view, &projection, &frame);
 			q[0]->Issue(D3DISSUE_BEGIN);
 			q[1]->Issue(D3DISSUE_END);
-			DrawOneGroup(room, 0, &lighting, HD_PASS_SOLID);
+			const unsigned int timed =
+				g_gpu_all ? HD_PASS_ALL : HD_PASS_SOLID;
+
+			DrawOneGroup(room, 0, &lighting, timed);
 
 			for (int i = 0; i < g_with_count; i++)
 				DrawOneGroup(g_with_group[i], &withWorld[i], &lighting,
-					HD_PASS_SOLID);
+					timed);
 
 			q[2]->Issue(D3DISSUE_END);
 			q[0]->Issue(D3DISSUE_END);
@@ -19012,9 +19198,10 @@ static int ProbeMain(int argc, char** argv)
 				q[i]->Release();
 
 		std::sort(times.begin(), times.end());
-		printf("-gpu: %d run(s) of the solid room draws, median %.3f ms, worst "
+		printf("-gpu: %d run(s) of the %s room draws, median %.3f ms, worst "
 			"%.3f ms, %d draw call(s), %lld triangle(s) in %d group(s)\n",
-			(int)times.size(), times.empty() ? -1.0 : times[times.size() / 2],
+			(int)times.size(), g_gpu_all ? "whole" : "solid",
+			times.empty() ? -1.0 : times[times.size() / 2],
 			times.empty() ? -1.0 : times.back(), gpuCalls, tris,
 			g_with_count + 1);
 	}

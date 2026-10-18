@@ -318,6 +318,31 @@ inline bool HDVisHeightReaches(float y0, float y1, float top, float bottom,
 	return y1 > top + margin && y0 < bottom - margin;
 }
 
+/* Whether a triangle's three corners (x and z, in the box's frame) lie in
+ * one side plane of an intrusion box, within a unit: on the plane of the
+ * holder's wall, where the air's margin keeps a point out
+ * (HDVisHeightReaches says what for). Art that only stands near a side -
+ * a beam's end, a corner's trim - is not on it. */
+inline bool HDVisOnBoxSide(const float x[3], const float z[3],
+	const float* mins, const float* maxs)
+{
+	const float side[4] = { mins[0], maxs[0], mins[2], maxs[2] };
+
+	for (int s = 0; s < 4; s++)
+	{
+		const float* v = s < 2 ? x : z;
+		bool on = true;
+
+		for (int c = 0; c < 3 && on; c++)
+			on = v[c] - side[s] <= 1.0f && side[s] - v[c] <= 1.0f;
+
+		if (on)
+			return true;
+	}
+
+	return false;
+}
+
 /* Whether classic face b stands in the plane of classic face a: every corner
  * of b within `tolerance` units of the plane through a's first three corners
  * (its first, third and fourth when those three lie on a line).

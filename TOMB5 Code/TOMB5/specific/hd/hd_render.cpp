@@ -7465,17 +7465,22 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 						if (!in && inXZ && height_at < 0)
 						{
 							float y0 = 1e30f, y1 = -1e30f;
+							float x[3], z[3];
 
 							for (int c = 0; c < 3; c++)
 							{
-								const float y = (float)trg.vertices[
-									trg.indices[first + c]].y;
+								const trf::remaster::TrgVertex& tv =
+									trg.vertices[trg.indices[first + c]];
+								const float y = (float)tv.y;
 
+								x[c] = (float)tv.x;
+								z[c] = (float)tv.z;
 								y0 = y < y0 ? y : y0;
 								y1 = y > y1 ? y : y1;
 							}
 
-							if (HDVisHeightReaches(y0, y1, box.mins[1],
+							if (HDVisOnBoxSide(x, z, box.mins, box.maxs) &&
+								HDVisHeightReaches(y0, y1, box.mins[1],
 								box.maxs[1], HD_AIR_MARGIN))
 								height_at = group.intrusionAt[k];
 						}

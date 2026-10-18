@@ -6521,8 +6521,10 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * unlisted holder's on any frame); and so does one no face claims
 		 * whose holder is not drawn, on its pair's surviving faces. */
 		/* Held by the box's height alone (air 2, the index fill's
-		 * height_at): art in unlinked air on the visibility path only. */
-		const bool air = piece.air == 1 || (piece.air == 2 && g_vis_option);
+		 * height_at): art in unlinked air on the visibility path while its
+		 * holder is drawn, as DecidePairs answers it. */
+		const bool air = piece.air == 1 ||
+			(piece.air == 2 && g_vis_option && drawn);
 		const bool unlinked = air && g_unlinked && decide >= 2;
 		const bool claimed = piece.face >= 0
 			? !open && ask && answer && (decide == 3 ? alive : pairAlive)

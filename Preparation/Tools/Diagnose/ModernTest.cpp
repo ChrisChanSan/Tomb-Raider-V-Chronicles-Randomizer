@@ -12934,6 +12934,45 @@ static void vis_height_rule()
 		"height: down to room 30's floor, 256 into the box", 1, 1);
 }
 
+/* A triangle in one side plane of an intrusion box (HDVisOnBoxSide): room
+ * 60's box of JOBY2 in room 30's frame, x 6,144..7,168, z -1,024..3,072. */
+static void vis_box_side()
+{
+	const float mins[3] = { 6144.0f, -3328.0f, -1024.0f };
+	const float maxs[3] = { 7168.0f, -1280.0f, 3072.0f };
+	const float onX[3] = { 7168.0f, 7168.0f, 7168.0f };
+	const float zA[3] = { 2389.0f, 2389.0f, 2730.0f };
+
+	ok(HDVisOnBoxSide(onX, zA, mins, maxs),
+		"side: room 30's triangle on room 60's east wall", 1, 1);
+
+	const float nearX[3] = { 7168.0f, 7509.0f, 7168.0f };
+	const float zB[3] = { 2048.0f, 2048.0f, 2048.0f };
+
+	ok(!HDVisOnBoxSide(nearX, zA, mins, maxs),
+		"side: reaching 341 into the wall is not on it", 0, 0);
+	ok(HDVisOnBoxSide(nearX, zB, mins, maxs) == false,
+		"side: z 2,048 is inside, no side there", 0, 0);
+
+	const float offX[3] = { 7169.0f, 7167.5f, 7168.9f };
+
+	ok(HDVisOnBoxSide(offX, zA, mins, maxs),
+		"side: within a unit of the plane is on it", 1, 1);
+
+	const float farX[3] = { 7170.5f, 7168.0f, 7168.0f };
+
+	ok(!HDVisOnBoxSide(farX, zA, mins, maxs),
+		"side: a corner 2.5 off the plane is not", 0, 0);
+
+	const float midX[3] = { 6500.0f, 6600.0f, 6700.0f };
+	const float onZ[3] = { -1024.0f, -1024.0f, -1023.5f };
+
+	ok(HDVisOnBoxSide(midX, onZ, mins, maxs),
+		"side: the north side, z -1,024, counts as well", 1, 1);
+	ok(!HDVisOnBoxSide(midX, zA, mins, maxs),
+		"side: in the middle of the box is on no side", 0, 0);
+}
+
 /* A cube of art in the frame of the room at `ox`, `oz`: x0..x0 + s,
  * y0 - s..y0 (y down) and z0..z0 + s, each face two triangles. */
 static void vis_cube(trf::remaster::Trg& trg, float ox, float oz, float x0,
@@ -24221,6 +24260,7 @@ int main()
 	vis_static_rule();
 	vis_enclosed_rule();
 	vis_height_rule();
+	vis_box_side();
 	vis_enclosed_tables();
 	vis_static_covers();
 	stand_overlap();

@@ -1037,10 +1037,15 @@ namespace
 			const bool open = piece.face < 0 && !piece.inner;
 			/* In unlinked air (1), or held by the box's height alone (2,
 			 * the index fill's height_at: art of an unlinked room on the
-			 * plane of the holder's wall), which only the visibility path
-			 * holds to the window; on the other path it is the open half
-			 * it was. */
-			const bool air = piece.air == 1 || (piece.air == 2 && VisLevel());
+			 * plane of the holder's wall), which the visibility path holds
+			 * to the window while the holder is drawn - the two walls
+			 * fight in one plane then; with the holder not drawn, and on
+			 * the other path, it is the open half it was. ANDREA1's room
+			 * 37 has such art on the wall plane of room 208, seen from
+			 * room 228 with room 208 not listed: cut, it left 324 pixels
+			 * of cracks at 1,280 x 720. */
+			const bool air = piece.air == 1 ||
+				(piece.air == 2 && VisLevel() && listed);
 
 			if (ask)
 				whole = !listed;

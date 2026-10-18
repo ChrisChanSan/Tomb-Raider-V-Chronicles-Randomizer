@@ -184,6 +184,13 @@ struct HDVisTables
 	/* Per face of the list handed in: the bare share of a wall face of a
 	 * room whose walls are asked, -1 for every other face. */
 	std::vector<float> faceBare;
+	/* Per room: the group of a room linked with it whose box holds the
+	 * room's inside wholly and whose art stands in that inside, guestTris
+	 * triangles or more - the most of them -, -1 for none; and those
+	 * triangles (HDVisClassicRoomEnclosed). */
+	std::vector<int> enclosedBy;
+	std::vector<int> enclosedTris;
+	int roomsEnclosed = 0;
 	/* Per static handed in (HDVisStaticCovers): the group whose art lies on
 	 * the most of its samples, -1 for none, and that share; and how many
 	 * reach staticShare. */
@@ -270,6 +277,27 @@ void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 inline bool HDVisStaticDrawnByArt(float share, double needed, bool groupDrawn)
 {
 	return groupDrawn && share > 0.0f && (double)share >= needed;
+}
+
+/* Whether the visibility path draws nothing of a classic room that stands
+ * inside another room: a room drawn classic whose own group holds no art in
+ * its own box (empty, or hollow - all its art stands elsewhere), none of
+ * whose classic faces any group's art covers (neither covered nor covered
+ * in part by the stand rule), and whose inside lies wholly in the box of a
+ * room linked with it whose art stands in that inside (HDVisTables::
+ * enclosedBy).
+ *
+ * What for: such a room is a classic stand-in for a place the enclosing
+ * room's art models - JOBY2's two sniper rooms 19 and 21 behind the glass
+ * block windows of the courtyard are hollow groups inside room 146's box,
+ * and room 146's art models their insides, the bars and the walls.
+ * Drawn classic, their faces stand dark in front of that art and the
+ * broken window shows a black hole; left out, it shows the art. */
+inline bool HDVisClassicRoomEnclosed(bool artInBox, bool facesCovered,
+	int classicFaces, int enclosingGroup)
+{
+	return !artInBox && !facesCovered && classicFaces > 0 &&
+		enclosingGroup >= 0;
 }
 
 /* Whether classic face b stands in the plane of classic face a: every corner

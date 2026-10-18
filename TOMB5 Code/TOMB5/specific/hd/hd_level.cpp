@@ -3900,10 +3900,17 @@ static bool VisHidesClassicRoom(int roomIndex)
 	const bool covered = g_group_stand_covered[group] != 0 ||
 		g_group_stand_part[group] != 0;
 	const ROOM_INFO* r = &room[roomIndex];
+	const int faces = r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0;
+	const int tris = HDRenderGroupTriangles(group, -1);
 
-	return HDVisClassicRoomHidden(HDRenderGroupTriangles(group, -1) == 0,
-		covered, r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0,
-		tables->guestCount[(size_t)roomIndex]);
+	if (HDVisClassicRoomHidden(tris == 0, covered, faces,
+		tables->guestCount[(size_t)roomIndex]))
+		return true;
+
+	// A room standing inside another whose art models its inside.
+	return group < (int)tables->enclosedBy.size() &&
+		HDVisClassicRoomEnclosed(tris > HDRenderGroupOverhangTriangles(group),
+		covered, faces, tables->enclosedBy[(size_t)group]);
 }
 
 /* Whose art stands inside whose room.
@@ -7888,7 +7895,7 @@ static int SurfaceRoom()
  *
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
  *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
- *         statics_ms=
+ *         statics_ms= enclosed=
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
@@ -7897,7 +7904,8 @@ static int SurfaceRoom()
  * openings that named a flipmap pair's other room, named by its main room
  * instead, wide_bare and edge HDVisDefaults' two numbers of the walk;
  * statics_held the static meshes the art lies on (HDVisStaticCovers) and
- * statics_ms what asking them cost. */
+ * statics_ms what asking them cost; enclosed the rooms that stand inside
+ * another whose art stands in them (HDVisTables::enclosedBy). */
 
 static int VisContents(int roomIndex)
 {
@@ -7921,11 +7929,11 @@ bool HDVisWalkOn()
 
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
-			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f",
-			g_stem, t->rooms, t->artRooms, t->wallFaces, t->bareFaces,
-			t->voidFaces, t->guestPairs, t->guestTris, t->widePortals, t->ms,
-			t->openingsTwin, p.wideBare, p.edge, t->staticsHeld,
-			t->staticMs);
+			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
+			"enclosed=%d", g_stem, t->rooms, t->artRooms, t->wallFaces,
+			t->bareFaces, t->voidFaces, t->guestPairs, t->guestTris,
+			t->widePortals, t->ms, t->openingsTwin, p.wideBare, p.edge,
+			t->staticsHeld, t->staticMs, t->roomsEnclosed);
 	}
 
 	return true;

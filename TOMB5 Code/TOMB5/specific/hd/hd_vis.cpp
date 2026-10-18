@@ -188,6 +188,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	t.wideFirst.assign((size_t)t.rooms, 0);
 	t.wideCount.assign((size_t)t.rooms, 0);
 	t.faceBare.assign((size_t)(faceCount > 0 ? faceCount : 0), -1.0f);
+	t.enclosedBy.assign((size_t)t.rooms, -1);
+	t.enclosedTris.assign((size_t)t.rooms, 0);
 
 	if (!rooms || roomCount <= 0)
 		return false;
@@ -281,6 +283,37 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				cells[CellKey(x, z)].push_back(r);
 	}
 
+	/* The rooms standing inside another (HDVisClassicRoomEnclosed): per
+	 * room with an inside, the groups of the rooms linked with it whose
+	 * whole box holds that inside, and below the triangles of each one's
+	 * art in it, every triangle counted. */
+	std::vector<std::vector<int> > around(n);
+	std::unordered_map<long long, int> enclosed;
+
+	for (int h = 0; h < roomCount; h++)
+	{
+		const HDVisRoom& in = rooms[h];
+
+		if (in.xs < 3 || in.zs < 3)
+			continue;
+
+		const long x0 = in.x + 1024, x1 = in.x + ((long)(in.xs - 1) << 10);
+		const long z0 = in.z + 1024, z1 = in.z + ((long)(in.zs - 1) << 10);
+
+		for (int g = 0; g < groups; g++)
+		{
+			const HDVisRoom& big = rooms[g];
+
+			if (Twins(rooms, g, h) || !linked(h, g) || big.x > x0 ||
+				big.x + ((long)big.xs << 10) < x1 || big.z > z0 ||
+				big.z + ((long)big.zs << 10) < z1 || big.top > in.top ||
+				big.bottom < in.bottom)
+				continue;
+
+			around[(size_t)h].push_back(g);
+		}
+	}
+
 	std::unordered_map<long long, GuestAcc> acc;
 	std::vector<std::vector<HDVisOpening> > open((size_t)roomCount);
 
@@ -322,6 +355,28 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					};
 					const auto cell = cells.find(CellKey(SectorOf(cw[0]),
 						SectorOf(cw[2])));
+
+					for (size_t i = 0; cell != cells.end() &&
+						i < cell->second.size(); i++)
+					{
+						const int h = cell->second[i];
+						const HDVisRoom& host = rooms[h];
+						const std::vector<int>& ring = around[(size_t)h];
+
+						if (std::find(ring.begin(), ring.end(), g) ==
+							ring.end() ||
+							cw[0] <= (double)(host.x + 1024) ||
+							cw[0] >= (double)(host.x +
+								((long)(host.xs - 1) << 10)) ||
+							cw[2] <= (double)(host.z + 1024) ||
+							cw[2] >= (double)(host.z +
+								((long)(host.zs - 1) << 10)) ||
+							cw[1] < (double)host.top ||
+							cw[1] > (double)host.bottom)
+							continue;
+
+						enclosed[(long long)h * 65536 + g]++;
+					}
 					// Under `guestRule` 1 and 2, the art reaching out of
 					// its own room alone (see the link table above).
 					const double slack = (double)params.overhang;
@@ -534,6 +589,26 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 		t.guestPairs++;
 		t.guestTris += guest.tris;
 	}
+
+	// The room each room stands inside: the most triangles, then the
+	// lowest group.
+	for (const std::pair<const long long, int>& one : enclosed)
+	{
+		const size_t h = (size_t)(one.first / 65536);
+		const int g = (int)(one.first % 65536);
+
+		if (one.second < params.guestTris ||
+			one.second < t.enclosedTris[h] ||
+			(one.second == t.enclosedTris[h] && g > t.enclosedBy[h]))
+			continue;
+
+		t.enclosedBy[h] = g;
+		t.enclosedTris[h] = one.second;
+	}
+
+	for (int r = 0; r < roomCount; r++)
+		if (t.enclosedBy[(size_t)r] >= 0)
+			t.roomsEnclosed++;
 
 	for (int r = 0; r < roomCount; r++)
 	{

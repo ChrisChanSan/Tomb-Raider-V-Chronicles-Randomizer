@@ -12892,6 +12892,24 @@ static void vis_static_rule()
 		"static: TITLE 23, every sample, is the art's", 1, 1);
 }
 
+/* The classic room the visibility path leaves out because it stands inside
+ * another (HDVisClassicRoomEnclosed): JOBY2's sniper rooms 19 and 21,
+ * hollow groups inside room 146's box. */
+static void vis_enclosed_rule()
+{
+	ok(HDVisClassicRoomEnclosed(false, false, 12, 146),
+		"enclosed: JOBY2 21, hollow, uncovered, inside 146", 1, 1);
+	ok(!HDVisClassicRoomEnclosed(true, false, 12, 146),
+		"enclosed: a group with art in its box keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(false, true, 46, 121),
+		"enclosed: covered (ANDREA2 124) keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(false, false, 31, -1),
+		"enclosed: inside no room (ANDY3 26) keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(false, false, 0, 146),
+		"enclosed: no classic face, nothing to leave out", 0, 0);
+	ok(HDVisClassicRoomEnclosed(false, false, 12, 0),
+		"enclosed: group 0 encloses as any other", 1, 1);
+}
 
 
 /* A cube of art in the frame of the room at `ox`, `oz`: x0..x0 + s,
@@ -12912,6 +12930,82 @@ static void vis_cube(trf::remaster::Trg& trg, float ox, float oz, float x0,
 	{
 		vis_tri(trg, ox, 0, oz, c[q[f][0]], c[q[f][1]], c[q[f][2]]);
 		vis_tri(trg, ox, 0, oz, c[q[f][0]], c[q[f][2]], c[q[f][3]]);
+	}
+}
+
+/* The enclosure table on a level built by hand: room A (0), a box of 6 x 6
+ * sectors, with room C (1), a box of 3 x 3 inside A's and linked with it by
+ * a portal, whose own group holds nothing in its box; A's art stands in C's
+ * inside. */
+static void vis_enclosed_tables()
+{
+	for (int variant = 0; variant < 4; variant++)
+	{
+		trf::remaster::Trg trg;
+		std::vector<HDVisRoom> rooms(2);
+		std::vector<HDVisPortal> portals(2);
+		// 0: as above; 1: no portal; 2: C reaches out of A's box; 3: A's
+		// art in C's inside is four triangles.
+		const long x[2] = { 0, variant == 2 ? 5120 : 1024 };
+
+		for (int r = 0; r < 2; r++)
+		{
+			HDVisRoom& one = rooms[(size_t)r];
+
+			memset(&one, 0, sizeof(one));
+			one.x = x[r];
+			one.z = r ? 1024 : 0;
+			one.xs = one.zs = r ? 3 : 6;
+			one.top = -4096;
+			one.bottom = 0;
+			one.twin = -1;
+			one.firstPortal = r;
+			one.portalCount = variant == 1 ? 0 : 1;
+		}
+
+		memset(&portals[0], 0, sizeof(HDVisPortal) * 2);
+		portals[0].to = 1;
+		portals[1].to = 0;
+		trg.groups.resize(2);
+
+		for (int g = 0; g < 2; g++)
+		{
+			trf::remaster::TrgPart part;
+
+			part.pass[0].start = (uint32_t)trg.indices.size();
+
+			// A's art in the middle of C's inside, one sector square.
+			for (int t = 0; g == 0 && t < (variant == 3 ? 4 : 12); t++)
+			{
+				const float cx = (float)x[1] + 1100.0f + t * 32.0f;
+				const float a[3] = { cx, -1000.0f, 2100.0f };
+				const float b[3] = { cx + 16.0f, -1000.0f, 2100.0f };
+				const float c[3] = { cx, -1016.0f, 2116.0f };
+
+				vis_tri(trg, 0, 0, 0, a, b, c);
+			}
+
+			part.pass[0].count = (uint32_t)trg.indices.size() -
+				part.pass[0].start;
+			trg.groups[(size_t)g].parts.push_back(part);
+		}
+
+		HDVisTables t;
+
+		HDVisBuild(trg, &rooms[0], 2, 0, 0, &portals[0], 2, 0, 0,
+			HDVisDefaults(), &t);
+
+		const int want = variant == 0 ? 0 : -1;
+		static const char* what[4] =
+		{
+			"enclosed: C inside A, linked, A's art in it",
+			"enclosed: no link, no enclosing room",
+			"enclosed: C past A's box, none",
+			"enclosed: four triangles are fewer than a guest's eight"
+		};
+
+		ok(t.enclosedBy.size() == 2 && t.enclosedBy[1] == want, what[variant],
+			t.enclosedBy.size() == 2 ? t.enclosedBy[1] : -9, want);
 	}
 }
 
@@ -24103,6 +24197,8 @@ int main()
 	vis_wall();
 	vis_hidden_room();
 	vis_static_rule();
+	vis_enclosed_rule();
+	vis_enclosed_tables();
 	vis_static_covers();
 	stand_overlap();
 	stand_part();

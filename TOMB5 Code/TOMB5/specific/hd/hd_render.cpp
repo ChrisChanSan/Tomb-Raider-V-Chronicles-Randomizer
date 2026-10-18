@@ -19505,6 +19505,14 @@ namespace
 	D3DSURFACE_DESC g_marble_desc = {};
 
 	HDRenderMarbleStats g_marble_stats = {};
+	/* The last frame's planes for RoomProbe's -marblelist, kMarbleRowWidth
+	 * floats a plane in the frame's order: its key (a floor height, or
+	 * kMarbleTiltKey and the slope's number), its faces in view, their
+	 * cover, the pixels its last count saw (-1 none), 1 when drawn, the
+	 * strength laid, the room covering the most of it, and the mirrored
+	 * draw calls it took. */
+	std::vector<float> g_marble_rows_list;
+	const int kMarbleRowWidth = 8;
 	// RoomProbe's warm-up draw: the mirrored rooms alone, nothing laid.
 	bool g_marble_quiet = false;
 	// The mirror target's rows a frame's row (marble_make): 1 or 2.
@@ -21156,6 +21164,16 @@ int HDRenderMarbleRisingFaces(const float** rows)
 	return (int)(g_marble_rise_list.size() / 6);
 }
 
+/* RoomProbe's -marblelist: the last frame's planes, eight floats a plane
+ * (g_marble_rows_list). Returns how many. */
+int HDRenderMarblePlaneRows(const float** rows)
+{
+	if (rows)
+		*rows = g_marble_rows_list.empty() ? 0 : &g_marble_rows_list[0];
+
+	return (int)(g_marble_rows_list.size() / kMarbleRowWidth);
+}
+
 void HDRenderMarbleOver(int group, int room)
 {
 	if (group < 0 || group >= (int)g_marble_over.size() || room < 0)
@@ -21285,6 +21303,7 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 {
 	g_marble_spent = true;
 	g_marble_stats = HDRenderMarbleStats();
+	g_marble_rows_list.clear();
 
 	if (!g_marble_on || !g_device || !g_in_frame || !g_card_vs ||
 		!g_marble_ps || g_marble_draws.empty() || !g_marble_faces)
@@ -21564,6 +21583,29 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 			}
 	}
 
+	for (size_t i = 0; i < planes.size(); i++)
+	{
+		const MarbleLayer& l = layers[planes[i].y];
+		const std::map<int, MarbleSeen>::const_iterator seen =
+			g_marble_seen.find(planes[i].y);
+		float room = -1.0f, most = 0.0f;
+
+		for (const std::pair<const int, float>& r : l.rooms)
+			if (r.second > most)
+			{
+				most = r.second;
+				room = (float)r.first;
+			}
+
+		const float row[kMarbleRowWidth] = { (float)planes[i].y,
+			(float)(l.verts.size() / 3), l.cover, seen != g_marble_seen.end() ?
+			(float)seen->second.pixels : -1.0f, (int)i < drawn ? 1.0f : 0.0f,
+			(int)i < drawn ? gains[i] : 0.0f, room, 0.0f };
+
+		g_marble_rows_list.insert(g_marble_rows_list.end(), row,
+			row + kMarbleRowWidth);
+	}
+
 	if (!drawn)
 	{
 		target->Release();
@@ -21692,6 +21734,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		g_marble_stats.over += marble_replay_over(overRooms, noted, clip,
 			&g_marble_stats.over_culled, i ? 0 : g_marble_stats.over_out);
 		g_marble_stats.calls += g_draw_calls - callsBefore;
+		g_marble_rows_list[(size_t)i * kMarbleRowWidth + 7] =
+			(float)(g_draw_calls - callsBefore);
 
 		if (draw && projection)
 		{

@@ -262,6 +262,70 @@ namespace LevelFix
           "heart 172 free to travel - no door, no teleporting cutscene" },
     };
 
+    // A view window that is missing over an opening the level leaves open.
+    // Rendering only: the two rooms' portal lists get one record each, the
+    // floordata and the sectors stay (Tr5Level::addSightWindow).
+    struct SightWindow
+    {
+        const char* level;                  // file name without extension
+        int room, sx, sz, sx2, sz2;         // the run on room's border ring
+        int toRoom;                         // the room behind the opening
+        const char* reason;
+    };
+
+    //------------------------------------------------------------------------
+    // Andrea2: the vault of the arch between rooms 231 and 229 shows black.
+    //
+    // Room 229 is the passage under the arch, x 58368..59392, its ceiling at
+    // -1024; room 102 sits on top of it as the arch's vault, a gable whose
+    // ceiling rises from -1024 at both sides to -1536 in the middle (ROOF
+    // entries on 102's sectors (1,1) and (1,2)). Room 231 opens onto the
+    // passage through its portal 4 to 229, from -1024 down to its floor at
+    // 256. Above that portal room 231's wall has no face - its faces at
+    // x 58368 stop at -1792 - and neither has room 102 on that side; the
+    // arch's own shape there is a static of room 231 (slot 40, its box x
+    // 58368..58958, y -1792..-1024). So the gable is open in the geometry,
+    // but no window describes it: 231 has none to 102, 102 none to 231.
+    //
+    // How it shows: the camera follows Lara through the arch at about -1030
+    // to -1170, above the passage's ceiling, and from there the only ways
+    // into 102 and into 235 (the room behind the arch) are the ceiling
+    // windows 229 -> 102, 144 -> 235 and 236 -> 235, which face away from
+    // an eye above them. The walk lists neither 102 nor 235, and what is
+    // seen of them past the arch's statics is the clear colour - 19,160 to
+    // 67,896 pixels of 1280 by 720 at four eyes of the arch (RoomProbe).
+    //
+    // The window is written as Core writes the other gable end, 102's
+    // portal 1 to 235 and 235's portal 6 back: one record per room over
+    // both sectors, z 40960..43008, from -1536 to -1024 (the corner-exact
+    // opening of 231's sectors (7,3) and (7,4) against 102's (1,1) and
+    // (1,2)). The floordata stays: whatever moves through that column
+    // already goes 231 -> 229 by the DOOR on 231's (7,3) and (7,4) and up
+    // into 102 by 229's vertical link. Besides the drawing, a window only
+    // adds a neighbour to the room lists the object tests build from windows
+    // (GetCollidedObjects, CollideStaticObjects, LaraBaddieCollision in
+    // collide.cpp): room 102 holds no item and no static, and with the
+    // camera in 102 the list gains room 231's, which a camera in 229 brings
+    // already. No face is opened either, so the Remaster's art of the arch
+    // stays whole and no cut is recorded.
+    //------------------------------------------------------------------------
+    static const SightWindow kSightWindows[] =
+    {
+        { "Andrea2", 231, 7, 3, 7, 4, 102,
+          "the arch's vault: room 102 seen from room 231 and back" },
+    };
+
+    // Not in this list, though black shows there as well - in each case the
+    // window stands in the data and is right, so no entry here can mend it:
+    //   - JOBY2, the double door between rooms 106 and 22 (items 128 and
+    //     129): the window is there; the closed door is an object, and an
+    //     object farther away than the far plane (20480) is not drawn.
+    //   - ANDREA1, rooms 103 and 59 behind 64 and 105, and ANDY3, room 95
+    //     behind 39, each for one frame: the windows are there, and the walk
+    //     refuses them by their projection against the window it holds.
+    //   - JOBY5, rooms 16 and 40: a fixed camera's cut puts the eye on the
+    //     floor window's own plane for one frame.
+
     // Apply all entries for this level. Failed entries end up as warnings in
     // "warnings"; the run continues, because a fix that was not applied does
     // not make the level any worse than before.

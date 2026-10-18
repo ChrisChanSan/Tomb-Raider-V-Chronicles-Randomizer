@@ -31,6 +31,7 @@
 #include "../game/text.h"	// GnFrameCounter
 #include "../game/interpolate.h"	// InterpNoteClassicPresent
 #include "hd/hd_level.h"	// HDFramePresented - the frame clock of -log
+#include "dxshell.h"		// DXGammaStart - the held present's gamma pass
 
 static GouraudBarColourSet healthBarColourSet =
 {
@@ -162,7 +163,9 @@ static double LoadScreenTickMs()
  * still has steps to run on them; a lost device stays lost until reset,
  * so the tail's first present finds it again after the build and resets
  * it there. The tick was waited out by S_DrawLoadBar; Sync() hands it out
- * here, as in S_DumpScreenFrame. */
+ * here, as in S_DumpScreenFrame. The Gamma row's pass and its copy back go
+ * around the present as in DXShowFrame, so that these frames carry the
+ * curve as every other frame does. */
 static void LoadBarPresentHeld()
 {
 	InterpNoteClassicPresent();
@@ -170,9 +173,11 @@ static void LoadBarPresentHeld()
 	GnFrameCounter++;
 	_EndScene();
 
+	const bool curved = DXGammaStart();
 	const HRESULT hr = App.dx.lpD3DDevice->Present(0, 0, 0, 0);
 
 	HDFramePresented();
+	DXGammaFinish(curved, hr);
 	ProfPresent();
 	App.dx.DoneBlit = 1;
 

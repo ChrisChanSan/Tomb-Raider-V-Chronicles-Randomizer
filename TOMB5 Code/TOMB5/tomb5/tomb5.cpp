@@ -272,6 +272,11 @@ void init_tomb5_stuff()
 		tomb5.hd_threads = 0;							//the machine's
 		REG_WriteLong(buf, tomb5.hd_threads);
 
+		// The Display page's slider: 50, the middle, where no pass runs.
+		sprintf(buf, "gamma");
+		tomb5.gamma = 50;
+		REG_WriteLong(buf, tomb5.gamma);
+
 		sprintf(buf, "hd_build");
 		tomb5.hd_build = 1;								//on
 		REG_WriteLong(buf, tomb5.hd_build);
@@ -544,6 +549,15 @@ void init_tomb5_stuff()
 		sprintf(buf, "hd_threads");
 		REG_ReadLong(buf, tomb5.hd_threads, 0);
 
+		// Missing - every older registry - reads as 50, the middle, where
+		// the picture is the engine's own; out of range lands on the middle
+		// too, for dead_zone's reason: a hand-edited value says nothing
+		// about which end was meant.
+		sprintf(buf, "gamma");
+		REG_ReadLong(buf, tomb5.gamma, 50);
+		if (tomb5.gamma > 100)
+			tomb5.gamma = 50;
+
 		// Absent - every older registry - reads as 1: built when found.
 		sprintf(buf, "hd_build");
 		REG_ReadLong(buf, tomb5.hd_build, 1);
@@ -800,6 +814,10 @@ void save_new_tomb5_settings()
 
 	sprintf(buf, "hd_threads");
 	REG_WriteLong(buf, tomb5.hd_threads);
+
+	// The Display page's slider.
+	sprintf(buf, "gamma");
+	REG_WriteLong(buf, tomb5.gamma);
 
 	sprintf(buf, "hd_build");
 	REG_WriteLong(buf, tomb5.hd_build);

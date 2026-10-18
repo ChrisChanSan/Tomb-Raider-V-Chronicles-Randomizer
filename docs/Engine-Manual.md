@@ -28,6 +28,7 @@ The randomizer has its own manual — [Randomizer-Manual.md](Randomizer-Manual.m
 - [tomb5 options](#tomb5-options)
 - [First person view](#first-person-view)
 - [Frame rate](#frame-rate)
+- [Gamma](#gamma)
 - [Language, and HQ music](#language-and-hq-music)
 - [The outfit changer, Mods and footsteps](#the-outfit-changer-mods-and-footsteps)
 - [Balance.txt — tuning the whole game](#balancetxt--tuning-the-whole-game)
@@ -116,6 +117,7 @@ worth knowing by name:
 |---|---|---|
 | `fps_mode` | DWORD | How many frames a second are presented. `1`, the default, is 60; `0` is the original 30; `2` is the display's own refresh rate, which needs `vsync` on. There is no uncapped mode. The *Frame rate* row on the *Display* page writes this. See **Frame rate**. |
 | `vsync` | DWORD | `1`, the default: the picture waits for the monitor, so it is never torn across the middle. `0` for the original behaviour. **The only setting in the build that is not instant** — it is read when the graphics device is made, so a change takes hold the next time the game starts (or on the next Alt+Enter or resolution change). The *VSync* row writes this. |
+| `gamma` | DWORD | The *Gamma* row on the *Display* page, `0` to `100`. `50`, the default and the middle of the bar, is the picture exactly as the engine draws it; lower is darker, higher is lighter, from the very next frame. A missing value or one above `100` reads as `50`. See **Gamma**. |
 | `hd_enable`, `hd_build` and their companions | | The Remaster art - `hd_build` builds it, `hd_enable` draws it - and the outfit the F4 changer remembers. They have a table of their own under **HD from the Remaster**; every one of them is there, with its default. |
 | `loadbar` | DWORD | The *Loadbar style* row: `0` the TR5 bar, `1` the TR4 bar, `2` off - no loading screen for a short load (see **tomb5 options**). Short is a load that builds no HD art: a savegame loaded inside the level being played, whose HD art is kept, and with `hd_build` 0, no installation or a level without its `.TRG` every load (the classic level's own read takes well under half a second). A load that builds the HD art - another level, the title, the first load after the start, the same level after the device was made anew or a file of it changed - takes one to five seconds and shows the loading screen as `0` does: the level's picture, the TR5 bar and the brake, so that the screen is never black that long. Written by the row. A registry from before this value reads the older `tr4LB` once: `1` (its default) gives the TR4 bar, `0` the TR5 one, so nobody's loading screen changes; `tr4LB` follows `loadbar` from then on. |
 | `loadbar_min_ms` | DWORD | The **brake**, `500` by default: with the TR5 or the TR4 bar the loading screen stands at least this many milliseconds from its first frame, the bar running smoothly to its end in that time; a load that takes longer ends when its work does. `0` is no brake: the bar follows the work alone and the level starts the moment the load is done. No options row. |
@@ -697,7 +699,7 @@ The other settings the original never had — *Footprints*, *Shadow mode*,
 *Loadbar style*, *Mono screen style*, *Loading text*, *Shimmer*, *Distance fog*,
 *Ammotype hotkeys*, *Look transparency*, *Static lighting*, *UW Effect* — sit on
 the tab their subject belongs to. *Graphics* holds the picture rows (plus
-*Display*, its own sub-page for *Frame rate* and *VSync* — see below), *HUD* the
+*Display*, its own sub-page for *Frame rate*, *VSync* and *Gamma* — see below), *HUD* the
 rest. *First person view* and its settings sit on *Controls*' own *View* tab, shown there
 always, not just while the switch is on (see **First person view** below);
 *Ammotype hotkeys* and *Targeting* sit on *Controls*.
@@ -715,6 +717,9 @@ Worth spelling out:
 
   See *Frame rate* further down for what the settings really do and how to
   check them.
+- **Gamma** sits under them on *Display*: a slider like the volume rows, the
+  middle by default, which changes nothing. Further right the whole picture
+  is lighter, further left darker. See **Gamma** below.
 - **Cheats** unlocks DOZY and five hotkey rows on the
   *Key bindings* page (below). The classic cheat words still need the compass
   in hand.
@@ -858,12 +863,15 @@ in the 13th Floor. That is not the option failing.
 
 ## Frame rate
 
-*Graphics → Display*, a page of its own. Two rows:
+*Graphics → Display*, a page of its own. Three rows:
 
 | row | positions | takes effect |
 |---|---|---|
 | *Frame rate* | **60** (default), **30**, **Display** | the very next frame |
 | *VSync* | **on** (default), **off** | the next time the game starts |
+| *Gamma* | a slider, **the middle** (default) | the very next frame |
+
+*Gamma* has a section of its own, **Gamma**, after this one.
 
 **60** is the default and **30** is the original. *Frame rate* can be changed
 from the pause screen in the middle of a level and the next picture is drawn
@@ -1172,6 +1180,54 @@ hand, so the honest reading is *"everything that differs is clock and
 position"* — and that is already the proof, because the fields about the
 **shape** of the run are the ones that cannot differ if the simulation ran the
 same way.
+
+---
+
+## Gamma
+
+*Graphics → Display*, the third row: a slider, driven like the two volume
+rows on *Audio*. With the cursor on it, hold **left** or **right** — the
+arrow keys, the keys bound to left and right, or the pad's left and right —
+and the bar moves one step a frame. It is written when the bar stops or the
+page is left, like the other tomb5 settings.
+
+**The middle changes nothing.** That is where a fresh installation starts, and
+there the picture is the engine's own, pixel for pixel — the curve is not run
+at all. Anywhere else every picture the game shows goes through one curve on
+its way to the screen: the levels, the menus and the inventory over them, the
+loading screen, the credits and the films, in a window and in full screen
+alike. The menu is drawn over the game, so the picture behind the pause menu
+gets lighter or darker while the bar moves.
+
+| bar | gamma | a channel at 10 % comes out at | at 50 % |
+|---|---|---|---|
+| far left, `0` | 0.5 | 1 % | 25 % |
+| `30` | 0.76 | 5 % | 40 % |
+| the middle, `50` | 1 | 10 % | 50 % |
+| `70` | 1.32 | 17 % | 59 % |
+| far right, `100` | 2 | 32 % | 71 % |
+
+The curve is gamma = 2 ^ ((bar − 50) / 50) and output = input ^ (1 / gamma),
+per colour channel: black stays black and white stays white at every
+position, and what moves is everything between — most in the dark parts,
+which is where a place too dark to see anything in needs it. Each step of the
+bar is the same factor on gamma, so the ends are one octave each way from the
+middle.
+
+Why a curve over the picture rather than the monitor's own gamma: Direct3D 9
+sets a gamma ramp only for a full-screen exclusive device, and this build never
+makes one — full screen is a border-less window, which is what keeps Alt+Tab
+safe — so a ramp would do nothing at all here. A ramp would also belong to
+the display rather than to the game's window. The curve here lives in the
+game's own frame and nowhere else. It costs about 0.05 ms a
+frame at 2560 by 1440.
+
+With `-log`, one line names the setting at the start and again whenever it
+changes: `DXLOG gamma row=<0..100> gamma=<g> power=<1/g> pass=<on|off>`. If
+the graphics card refused a step, the same line ends in `refused=` and the
+step, once, and the picture is shown without the curve. The apostrophe
+screenshot (`TombNNNN.tga`) is taken after the curve, so the file is the
+picture as it was on the screen.
 
 ---
 
@@ -4375,6 +4431,7 @@ wrote it, and each seam answers a different question:
 | the projected shadow lies on the wrong side, jumps, is too dark or too faint, or is missing on a floor | `HDLOG shadow second` — once a second of game time while it runs: `dir=` the direction it is drawn with and `target=` the one the key light gives this frame (world axes, y down; the fixed slant while `HD_SHADOW_PULL` is 0, and the two differ only while a change of the lights glides in), `strength=` the darkness drawn / the target's (0.34 with the fixed light, 0.45 the darkest the lights can give), `lights=` the lights of her list that counted and `weight=` their summed brightness times nearness, both before the pull, `slant=` degrees off straight down, `snaps=` how often it started in place that second, `cast=` frames whose map was drawn / frames it ran, `parts=` her models drawn into the map a frame, `rooms=` and `calls=` the room groups drawn again and their draw calls a frame, `ms=` the processor time of the two passes a frame, `stencil=` 1 when the depth buffer's stencil keeps any pixel from being darkened twice, `lag=` the largest angle in degrees that second between the drawn direction and the frame's target - 0 with the fixed light; with a pull above 0, near 0 while only she moves, up when the lights change and back down over about a second and a half; then the creatures' map: `others=` the creatures and items drawn into it a frame (over the frames it was drawn in; 0.0 when none was near her), `omap=` frames it was drawn / frames the shadow ran, `orooms=` the room groups drawn again a frame while it was read - hers and those only its wider reach, four sectors round her, brings in - and `oms=` the processor time of its cast pass a frame (its share of the receive is in `ms=`); then the models: `models=` Lara, the creatures, the items and the reflections drawn again to take the shadow, a frame (the mean over the frames the shadow ran), `mcalls=` their draw calls a frame, `castonly=` the creatures out of view drawn into the creatures' map a frame, `mirror=` frames in which a mirror's copy or a reflection took the shadow through the mirror / frames the shadow ran (0 outside RICH2's washrooms), `mms=` the processor time of the models' pass a frame, and `arrive=` frames in which the shadow was still coming in and the blobs going out / frames the shadow ran (8 of 30 at 30 frames a second in the second it starts, 0 afterwards) |
 | in HD a marble floor shows no reflection, or a washroom mirror shows no Lara and no doors | `HDLOG` — per level: the motion line ending in `clear_pages=` and `clear_parts=` (the see-through floor pages and the parts on them; RICH2, RICHCUT2 and TITLE have some) and `mirrors=`, one `mirrorwall` line per mirror found (`room=`, `axis=`, `plane=`, `side=`, `pane=`, `behind=`, `mirrored=`, `box=`); the level's first frame line ending in `clear_calls=`; and once a second while a mirror draws, `HDLOG mirror items= plane= room= axis= lara= hd= win=` — how many items it reflected, which glass, whether Lara was in it, how many of the items went through the HD models, and `win=` the copy's rectangle on the screen as left, top, right, bottom (right and bottom exclusive), which a reflection drawn the classic way is cut to |
 | after Alt+Enter or a resolution key the picture is wrong, untextured or gone | `DXLOG device recreated` — one line each time the graphics device is made again: `pages=` the entries of the texture page table, `moved=` those made again on the new device, `dropped=` those that could not be and are drawn untextured until the next level, `kept=` those already there, `picture=` 1 when the inventory's or load screen's picture was moved too, and `old_device_refs=` what the old device still holds afterwards - 0 is nothing; `hd=rebuilt` when the HD level was built again on the new device, `hd=classic` when it was not or there was none, and `ms=` what that build took. Beside it `HDLOG device recreated - level= rebuilt= flipped_pairs=` (the flipped room pairs set back for the build), `DXLOG window` (after `start`, a `toggle` or a resolution `mode`) with the window's styles, its and its client's rectangle, the monitor's, and the present parameters and creation flags the device reports - the line after two toggles should read as the start's - and `DXLOG screenshot hr= file= bytes=` for every file of the apostrophe key (`hr=0x00000000` is a picture read back; `DXLOG mono picture hr=` appears only when the inventory's picture could not be) |
+| the picture is lighter or darker than the *Gamma* bar says, or the bar does nothing | `DXLOG gamma` — at the first frame and at every change of the row: `row=` the bar, `gamma=` and `power=` the curve, `pass=off` at the middle and `on` elsewhere; a step the graphics card refused adds `refused=` (`copy texture`, `shader`, `copy` or `draw`) and `hr=` once, and the picture is then shown without the curve |
 | it felt like it stuttered, or dropped under 30 | `FPSLOG` — one line per second: frames presented, and the longest gap between two of them |
 | …and *why* it stuttered | `PROFLOG` — the same second split into the phases of a frame, plus one line for every frame that missed its slot |
 | the first seconds of a level feel rough | `PROFLOG … first_frame`, and the `WARMUP` line at the end of the load |

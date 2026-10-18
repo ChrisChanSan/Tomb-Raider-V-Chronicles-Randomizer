@@ -228,6 +228,13 @@ if errorlevel 1 exit /b 1
  /Fh "%SHADERDIR%\hd_sky_cloud_ps.inc" "%SHADERDIR%\hd_sky.hlsl"
 if errorlevel 1 exit /b 1
 
+rem The gamma row's pass over the presented picture (hd_gamma.hlsl,
+rem dxshell.cpp "the gamma pass"): ps_2_0, because its quad is drawn
+rem pretransformed and without a vertex shader, which ps_3_0 refuses.
+"%FXC%" /nologo /T ps_2_0 /E GammaPS /O3 /Vn kHDGammaPS ^
+ /Fh "%SHADERDIR%\hd_gamma_ps.inc" "%SHADERDIR%\hd_gamma.hlsl"
+if errorlevel 1 exit /b 1
+
 call :stamp hd_room hd_room_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_room hd_room_ps.inc
@@ -314,9 +321,11 @@ call :stamp hd_sky hd_sky_cloud_vs.inc
 if errorlevel 1 exit /b 1
 call :stamp hd_sky hd_sky_cloud_ps.inc
 if errorlevel 1 exit /b 1
+call :stamp hd_gamma hd_gamma_ps.inc
+if errorlevel 1 exit /b 1
 
 rem fxc and echo end their lines with CRLF, while .gitattributes keeps the
-rem .inc LF: without this pass git shows all 36 files modified after every
+rem .inc LF: without this pass git shows every .inc modified after every
 rem run, in their line endings alone. Rewritten with line feeds, a
 rem regenerated .inc is byte for byte the tracked one.
 set "PS=$d = $env:SHADERDIR; foreach ($f in Get-ChildItem -LiteralPath $d"
@@ -348,6 +357,7 @@ call :size "%SHADERDIR%\hd_sky_layer_vs.inc"
 call :size "%SHADERDIR%\hd_sky_layer_ps.inc"
 call :size "%SHADERDIR%\hd_sky_cloud_vs.inc"
 call :size "%SHADERDIR%\hd_sky_cloud_ps.inc"
+call :size "%SHADERDIR%\hd_gamma_ps.inc"
 exit /b 0
 
 :stamp

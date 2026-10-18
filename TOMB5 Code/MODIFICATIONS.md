@@ -24458,6 +24458,132 @@ to and the uploads in play.
 *Commits.* `d3cc638` (the build gate and the draw's gates), `6366176` (the row and the
 switch as one state), `5d9da2f` (the build gate's comment), and the record's own commit.
 
+### The gamma row (#220)
+2026-10-18
+
+**What.** A slider row, *Gamma*, on the *Display* page under *Frame rate* and *VSync*,
+from 0 to 100 with 50, the middle, as the default. Away from the middle every picture
+the engine presents goes through one curve just before the present - the world, the
+menus and the inventory over it, the loading bar, the credits, the films - in a window
+and in full screen alike, and the picture under the menu follows the bar while it
+moves. At the middle nothing runs and the picture is the engine's own, byte for byte.
+
+**Why.** The request, 2026-10-18, on a picture of a dark place lit by the flare in
+Lara's hand: "I have to do that sometimes because I have no gamma slider. When it is
+too dark, something can be invisible." Asked whether a gamma slider should go into the
+options menu: "Yes, note the gamma slider; I have been putting it off for too long", and
+"Yes, you can slot the gamma slider in any time it fits."
+
+**What the device offers, measured before the change.** A scratch probe on this machine,
+read only towards the display (no ramp set): both outputs of the RTX 5080 report
+`D3DCAPS2_FULLSCREENGAMMA` 1 and `D3DCAPS2_CANCALIBRATEGAMMA` 0, pixel shaders 3.0,
+`StretchRect` from textures, render-target `X8R8G8B8` textures; a windowed device's
+`GetGammaRamp` comes back all zeros, no ramp in use. A Direct3D 9 gamma ramp acts on a
+full-screen exclusive swap chain only, and this engine never makes one: `DXCreate`
+(`specific/dxshell.cpp`) creates the device windowed in both of its modes - full screen is
+a border-less window over the monitor at its desktop size, chosen in the port because an
+exclusive device stayed lost after Alt+Tab - and Alt+Enter (`DXToggleFullScreen`) only
+makes a new windowed device for the other mode. The player's `-log` of 2026-10-17 reads
+`DXCreate: Full Screen Mode (borderless windowed)` and `DXLOG window start ... windowed=1
+... back=2560x1440`. So the ramp would do nothing in either mode. Not measured: no ramp
+was set, since setting one changes this machine's desktop, so the ramp's effect on an
+exclusive chain and whether a ramp set by a game outlives a crash or Alt+Tab rest on the
+documentation, not on a ramp set and watched; GDI's `GetDeviceGammaRamp` of the desktop
+failed (read 0). The other way works in both modes: a final pass over the back buffer
+before the present. The same probe timed it at 2560 by 1440: the copy and the draw 0.030
+ms, the copy back 0.015 ms, the calls 0.004 ms of processor time - under one percent of a
+frame at 165 Hz. Chosen: the pass.
+
+**Design.** The engine presents in two places. `DXShowFrame`: `S_DumpScreen` (the game
+frame, the inventory, the title and pause menus), `S_DumpScreenFrame` (the loading bar
+outside the HD build, the credits) and `fmv.cpp` end there. And the loading bar's held
+frames from the loading thread's join to the tail, while the HD build runs:
+`LoadBarPresentHeld` (`specific/drawbars.cpp`) calls the device's `Present` itself. Both
+presents call `DXGammaStart` just before the device's `Present` and `DXGammaFinish` after
+`HDFramePresented` has taken the clock, so the loading screen keeps the curve through the
+build instead of jumping to the plain picture and back. Away from 50 `DXGammaStart` calls
+`GammaPass`: the back buffer copied by `StretchRect` into a render-target texture of its
+size, then drawn back over it as one pretransformed quad, half a pixel up and left so that
+every pixel reads its own texel, point sampled, through `hd_shader/hd_gamma.hlsl`'s
+`GammaPS` (`ps_2_0`, because the quad has no vertex shader and `ps_3_0` needs one). Every
+state it sets - twelve render states, six sampler states, two stage states, the texture,
+both shaders, the FVF or vertex declaration, stream 0 (which `DrawPrimitiveUP` empties),
+the constant `c0`, the target and the viewport - is read first and set back after; no
+state block, which would hold references to whatever was bound and stand in the way of a
+`Reset`. The pass runs before the apostrophe screenshot, so the file is the picture as
+shown. After the present `GammaRestore` copies the plain picture back into the back
+buffer: the inventory and the pause menu read the last presented frame out of it
+(`CreateMonoScreen`) and draw over it, and without the copy back that picture would carry
+the curve once and get it a second time. `GammaRelease` goes with `DXClose` and before the
+device-lost `Reset`; a size change makes a new copy. The curve, in the shader alone: gamma
+= 2 ^ ((n - 50) / 50), output = input ^ (1 / gamma) per channel, so 0 is gamma 0.5 (a
+channel of 0.5 sinks to 0.25) and 100 is gamma 2 (0.1 rises to 0.32); black and white stay
+where they are. The row is the volume rows' kind, `MENU_SLIDER`, so it takes their keys
+and pad (held left or right through `MenuSliderDir`), steps through `MenuSliderStep` as
+the mouse slider does, and is saved with the tomb5 settings; the value lives in
+`tomb5.gamma` (`global/types.h`), registry key `gamma`: 50 on a first run, 50 for a
+missing key and for one above 100 (`dead_zone`'s rule), saved with the other tomb5 keys.
+One new `-log` line names the value at the first present and at each change: `DXLOG gamma
+row=<0..100> gamma=<g> power=<1/g> pass=<on|off>`, with `refused=<copy
+texture|shader|copy|draw> hr=<0x...>` at its end once per device when a step fails; the
+picture is then left as it is.
+
+**Decisions.** The curve and its span are a free choice: the textbook power law, the
+middle at 50 as the dead zone and mouse sliders hold their neutral value, and one
+octave of gamma each way so that every step is the same factor, 2 ^ (1/50). The dark
+place's pictures justify the top: JOBY5 room 37 (below) reaches a mean of 121.9 of 255
+at 100 from 64.0 - as light as the lit ones among the six HD views at 50 (90.4 to
+133.0) - and its peak 203, nowhere white.
+The label is the literal *Gamma*, the same word in the five languages of the string
+table, so it has no `CustomText` row. The row is on *Display*, the page of the
+picture's own rows, rather than among the fourteen of *Graphics*. A lookup table in
+place of the power was weighed: it would make the curve exact to the step instead of
+within one, and needs a second texture and a dependent read; the one step is below
+what the eye tells apart.
+
+**Checked.** The engine's own block (`GammaPass` to `GammaRestore`, extracted verbatim
+from `dxshell.cpp` into a scratch harness on a windowed 2560 by 1440 device, the engine's
+present parameters): at 0, 30, 49, 70 and 100 every channel of a test picture holding all
+256 values of each channel is within one step of the curve taken on the processor; sixteen
+states set to odd values beforehand read back unchanged; after the present and the copy
+back the back buffer is the plain picture, 0 channels off; a 1280 by 720 device gets a
+copy of its own size; the device is released with no reference left - 98 checks, 0 failed.
+The same harness on the block with the shared steps (`DXGammaStart`, the present,
+`DXGammaFinish`, in the held present's order): at 50 nothing is made and one `-log` line
+is written, at 30, 70 and 100 `DXGammaStart`'s picture is the curve's within one step and
+the back buffer is the plain picture after `DXGammaFinish`, one line per change - 116
+checks, 0 failed. RoomProbe `-gamma` (the engine's bytecode, `GammaPass`'s steps on the
+probe's target) over the six HD views: the power fitted back out of the two pictures
+1.3207 to 1.3238 at 30 (1.3195), 0.7574 to 0.7580 at 70 (0.7579), 0.4999 to 0.5002 at 100
+(0.5), 1.9569 to 2.0004 at 0 (where the darkest channels round to 0 and leave the fit),
+every channel within one step at all four. The dark place: JOBY5 room 37, where the
+player's `-log` of 2026-10-17 has `HDLOG laralights ... cur=0/0` with a dynamic light on
+in 423 lines (the flare's), drawn at 1280 by 720 on black: mean 64.0 at 50, 86.5 at 70,
+104.2 at 85, 121.9 at 100. The cost, three runs at 2560 by 1440 of 200 rounds each on the
+GPU's clock: the copy and the draw 0.0312, 0.0312, 0.0313 ms, the copy back 0.0149 ms
+each. Parity at 50, with RoomProbe of `b35b3b96` against this round's: the fifteen parity
+cameras 15 of 15 (and 15 of 15 with `-gamma 50` given), the six HD views 6 of 6 (the
+`hd_build` 1 picture), the six classic views 6 of 6 (the `hd_build` 0 picture). MenuTest
+44272 checks before and 44619 after (seven of them that both presents take the pass, the
+start before the device's `Present` and the finish after it), 0 failed, its output
+otherwise the same; ModernTest 15612, InterpTest 729, LipsTest 299 with the obj folder and
+272 without (the game's `cutseq.bin` given by its path, the working tree having no game
+folder; without it 295 and 268, the nine checks that read the file failing); the nine
+build scripts exit 0.
+
+**Left.** The engine itself was not run here: the pictures are RoomProbe's and the
+harness's, both on the engine's shader and steps, and the first look in the game is the
+play test's. `hd_gamma.hlsl` is not listed in `tomb5.vcxproj`'s `None` items as the other
+shaders are; the build does not need it. RoomProbe writes `GammaPass`'s steps again
+because `dxshell.cpp` is the engine's device shell and cannot be linked there. The held
+present's two lines in `specific/drawbars.cpp` lie outside the files first meant for this
+change; it is the one other place the device presents. A ramp set and watched, in an
+exclusive chain and after a crash, was not tried (above).
+
+**Commits.** `c1f0ad32` (the row and the key), `db9b22df` (the pass), `ba55149d` (the
+tools), `28389ba2` (the record), `3b2aa64c` (the pass at the loading bar's held
+present) and `ac9e1612` (the record's second commit).
+
 ## 2.7 First person view, cheats and the -log seams
 
 Three things that share one property: they are switched on by the player and are off in
@@ -25942,3 +26068,4 @@ Commit subjects carry task numbers (`#NNN`). This table maps them to the entries
 | #213 | The build from a stranger's checkout (#213) |
 | #215 | The speaking heads of the cutscenes on the HD path (#215) |
 | #217 | The far plane (#217) |
+| #220 | The gamma row (#220) |

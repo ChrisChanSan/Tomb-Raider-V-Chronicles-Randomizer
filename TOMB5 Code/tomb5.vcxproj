@@ -683,6 +683,7 @@
     <None Include="TOMB5\specific\hd\hd_shader\hd_spring.hlsl" />
     <None Include="TOMB5\specific\hd\hd_shader\hd_water_look.hlsl" />
     <None Include="TOMB5\specific\hd\hd_shader\hd_wet.hlsl" />
+    <None Include="TOMB5\specific\hd\hd_shader\hd_gamma.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="TOMB5\tomb5\libs\discordRPC\discord-rpc.lib" />

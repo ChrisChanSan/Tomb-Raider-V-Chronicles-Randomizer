@@ -1101,6 +1101,9 @@
     <None Include="TOMB5\specific\hd\hd_shader\hd_wet.hlsl">
       <Filter>TOMB5\specific\hd\hd_shader</Filter>
     </None>
+    <None Include="TOMB5\specific\hd\hd_shader\hd_gamma.hlsl">
+      <Filter>TOMB5\specific\hd\hd_shader</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="tomb5.rc" />

@@ -5346,12 +5346,20 @@ namespace walkoff
 			printf("-vis: tables rooms=%d art_rooms=%d walls=%d bare=%d "
 				"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f "
 				"reach=%.0f bare_share=%.2f guest_tris_min=%d sources=%d "
-				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d\n",
+				"twin=%d wide_bare=%.2f edge=%.5f mirror=%d enclosed=%d\n",
 				t.rooms, t.artRooms, t.wallFaces, t.bareFaces, t.voidFaces,
 				t.guestPairs, t.guestTris, t.widePortals, t.ms,
 				g_vis_params.reach, g_vis_params.bare, g_vis_params.guestTris,
 				g_vis_sources, t.openingsTwin, g_vis_params.wideBare,
-				g_vis_params.edge, t.wideMirrored);
+				g_vis_params.edge, t.wideMirrored, t.roomsEnclosed);
+
+			/* The rooms standing inside another whose art stands in
+			 * them (HDVisClassicRoomEnclosed asks the room drawn
+			 * classic). */
+			for (int r = 0; r < t.rooms; r++)
+				if (t.enclosedBy[(size_t)r] >= 0)
+					printf("-vis: enclosed room=%d by=%d tris=%d\n", r,
+						t.enclosedBy[(size_t)r], t.enclosedTris[(size_t)r]);
 		}
 
 		/* The carried rooms, as CarryHostsOf (hd_render.cpp) counts
@@ -7681,7 +7689,12 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 		 * (whole: a listed holder's pair is whole on that face, an
 		 * unlisted holder's on any frame); and so does one no face claims
 		 * whose holder is not drawn, on its pair's surviving faces. */
-		const bool unlinked = piece.air && g_unlinked && decide >= 2;
+		/* Held by the box's height alone (air 2, the index fill's
+		 * height_at): art in unlinked air on the visibility path while its
+		 * holder is drawn, as DecidePairs answers it. */
+		const bool air = piece.air == 1 ||
+			(piece.air == 2 && g_vis_option && drawn);
+		const bool unlinked = air && g_unlinked && decide >= 2;
 		const bool claimed = piece.face >= 0
 			? !open && ask && answer && (decide == 3 ? alive : pairAlive)
 			: ask && !drawn && pairAlive;
@@ -7735,7 +7748,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 
 		/* -viswin 1: the art in unlinked air alone held to the window, on
 		 * the claimed faces the room-art rules ask (pairAlive). */
-		if (g_vis_option && g_vis_win == 1 && piece.air)
+		if (g_vis_option && g_vis_win == 1 && air)
 			answer = piece.face >= 0 ? ask && pairAlive
 				: ask && !drawn && pairAlive;
 
@@ -7783,7 +7796,7 @@ static bool DecideGroup(int group, int* rect, bool* full, bool* empty)
 				piece.triangles, answer ? "whole" : "window",
 				piece.face < 0 ? " (no face)" : alive ? " (face drawn)"
 					: " (face dropped)", piece.inner ? " inner" : "",
-				piece.air ? " air" : "");
+				piece.air == 2 ? " height" : piece.air ? " air" : "");
 
 		if (say && g_vis_faces && piece.face >= 0 &&
 			(size_t)piece.face < g_faces_built.size())
@@ -11561,6 +11574,17 @@ namespace probestatics
 	static bool g_only = false;		// -staticsonly
 	static bool g_table = false;		// -statictable
 	static bool g_answered = false;
+	/* The art that lies on each static (hd_vis.h, HDVisStaticCovers), read
+	 * out of the .TRG under `g_root`: -staticcover prints it, and on the
+	 * visibility path -statics new leaves a static to it as the engine
+	 * does (HDVisStaticDrawnByArt). -staticreach, -staticstep and
+	 * -staticshare set the three numbers. */
+	static std::string g_root;
+	static bool g_cover_table = false;	// -staticcover
+	static HDVisParams g_cover_params = HDVisDefaults();
+	static HDVisTables g_cover;
+	static bool g_cover_built = false;
+	static double g_cover_ms = 0.0;
 
 	/* The flipmap twin of a room as BuildStaticTables takes it: the main
 	 * room names it, the alternate is the room that names it; -1 for none.
@@ -12408,6 +12432,265 @@ namespace probestatics
 			tri(s16(p), s16(p + 2), s16(p + 4));
 	}
 
+	/* One static's faces in world units, as hd_level.cpp's VisStaticFaces
+	 * hands them to hd_vis.cpp: the vertices as Mesh turns and moves them,
+	 * a quad as four corners and a triangle as three. */
+	static void Faces(const Static& s, std::vector<HDCoverFace>& out)
+	{
+		size_t at = 0;
+		const std::vector<uint8_t>& raw = g_level.debugBytes();
+
+		if (!g_have[s.slot] || !g_level.debugMeshAt(g_mesh_of[s.slot], at) ||
+			at + 12 > raw.size())
+			return;
+
+		const auto s16 = [&](size_t p) -> int
+		{
+			short v = 0;
+
+			if (p + 2 <= raw.size())
+				memcpy(&v, raw.data() + p, 2);
+
+			return v;
+		};
+
+		const int verts = s16(at + 10) & 0xFF;
+		size_t p = at + 12;
+		std::vector<double> pos((size_t)verts * 3);
+		const double c = (double)enginecam::PhdCos(s.rot) / 16384.0;
+		const double sn = (double)enginecam::PhdSin(s.rot) / 16384.0;
+
+		for (int v = 0; v < verts; v++, p += 6)
+		{
+			const double x = s16(p), y = s16(p + 2), z = s16(p + 4);
+
+			pos[(size_t)v * 3 + 0] = (double)s.x + x * c + z * sn;
+			pos[(size_t)v * 3 + 1] = (double)s.y + y;
+			pos[(size_t)v * 3 + 2] = (double)s.z + z * c - x * sn;
+		}
+
+		const int norms = s16(p);
+
+		p += 2 + (size_t)verts * (norms >= 0 ? 6 : 2);
+
+		const auto put = [&](const int* index, int corners)
+		{
+			HDCoverFace face;
+
+			face.corners = corners;
+			face.doubleSided = 0;
+
+			for (int k = 0; k < 4; k++)
+			{
+				const int i = index[k < corners ? k : 0];
+
+				if (i < 0 || i >= verts)
+					return;
+
+				for (int a = 0; a < 3; a++)
+					face.v[k][a] = pos[(size_t)i * 3 + a];
+			}
+
+			out.push_back(face);
+		};
+
+		const int quads = s16(p);
+
+		p += 2;
+
+		for (int i = 0; i < quads && quads > 0; i++, p += 12)
+		{
+			const int q[4] = { s16(p), s16(p + 2), s16(p + 4), s16(p + 6) };
+
+			put(q, 4);
+		}
+
+		const int tris = quads >= 0 ? s16(p) : 0;
+
+		p += 2;
+
+		for (int i = 0; i < tris && tris > 0; i++, p += 10)
+		{
+			const int q[3] = { s16(p), s16(p + 2), s16(p + 4) };
+
+			put(q, 3);
+		}
+	}
+
+	/* The cover tables over g_list, built once: every static in the list's
+	 * order, its faces, each group's room origin. */
+	static void Covers(const char* stem)
+	{
+		if (g_cover_built || !Load(stem) || g_stand_rooms_built.empty())
+			return;
+
+		g_cover_built = true;
+
+		trf::remaster::Trg trg;
+		std::string error;
+
+		if (!trf::remaster::read_trg(g_root + "\\DATA\\" + stem + ".TRG", trg,
+			error))
+		{
+			printf("staticcover: %s no .TRG (%s)\n", stem, error.c_str());
+			return;
+		}
+
+		std::vector<HDVisStatic> statics;
+		std::vector<HDCoverFace> faces;
+		std::vector<HDVisRoom> rooms;
+
+		for (const Static& s : g_list)
+		{
+			HDVisStatic one;
+
+			one.room = s.room;
+			one.mesh = s.mesh;
+			one.firstFace = (int)faces.size();
+
+			for (int k = 0; k < 3; k++)
+			{
+				one.mins[k] = s.mins[k];
+				one.maxs[k] = s.maxs[k];
+			}
+
+			if (!HDStaticFlat(s.mins, s.maxs))
+				Faces(s, faces);
+
+			one.faceCount = (int)faces.size() - one.firstFace;
+			statics.push_back(one);
+		}
+
+		const auto started = std::chrono::steady_clock::now();
+
+		/* The rooms' whole boxes as BuildRoomVis hands them: the inside
+		 * of -roombox grown by its ring of wall sectors. */
+		for (size_t r = 0; r < g_boxes_built.size(); r++)
+		{
+			const HDRoomBox& b = g_boxes_built[r];
+			HDVisRoom one;
+
+			memset(&one, 0, sizeof(one));
+			one.x = (long)b.originX;
+			one.y = r < g_stand_rooms_built.size() ?
+				(long)g_stand_rooms_built[r].origin[1] : 0;
+			one.z = (long)b.originZ;
+			one.xs = (int)(b.maxs[0] / 1024.0f) + 1;
+			one.zs = (int)(b.maxs[2] / 1024.0f) + 1;
+			one.top = (long)b.mins[1] + one.y;
+			one.bottom = (long)b.maxs[1] + one.y;
+			one.twin = -1;
+			rooms.push_back(one);
+		}
+
+		HDVisStaticCovers(trg, rooms.empty() ? 0 : &rooms[0], (int)rooms.size(),
+			statics.empty() ? 0 : &statics[0], (int)statics.size(),
+			faces.empty() ? 0 : &faces[0], (int)faces.size(), g_cover_params,
+			&g_cover);
+		g_cover_ms = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - started).count();
+	}
+
+	/* -staticcover, and -staticreach, -staticstep and -staticshare with a
+	 * number each; false for any other switch. */
+	static bool CoverArg(int argc, char** argv, int* at)
+	{
+		const char* a = argv[*at];
+
+		if (!strcmp(a, "-staticcover"))
+		{
+			g_cover_table = true;
+			return true;
+		}
+
+		if (*at + 1 >= argc)
+			return false;
+
+		if (!strcmp(a, "-staticreach"))
+			g_cover_params.staticReach = atof(argv[*at + 1]);
+		else if (!strcmp(a, "-staticstep"))
+			g_cover_params.staticStep = atof(argv[*at + 1]);
+		else if (!strcmp(a, "-staticshare"))
+			g_cover_params.staticShare = atof(argv[*at + 1]);
+		else
+			return false;
+
+		(*at)++;
+		return true;
+	}
+
+	// The cover entry of g_list's static `at`: its group and share.
+	static bool Cover(size_t at, int* group, float* share)
+	{
+		if (at >= g_cover.staticGroup.size())
+			return false;
+
+		*group = g_cover.staticGroup[at];
+		*share = g_cover.staticShare[at];
+		return *group >= 0;
+	}
+
+	/* -staticcover: per static, its answer by the statics' rule
+	 * (HDStaticAnswer), its faces, the group whose art lies on the most of
+	 * its samples and that share, and `held` where the share reaches
+	 * -staticshare; then the shares of the statics answered classic,
+	 * binned, and the counts. */
+	static void CoverTable(const char* stem)
+	{
+		Answer(stem);
+		Covers(stem);
+
+		static const double edges[] = { 0.0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5,
+			0.6, 0.7, 0.8, 0.9, 1.01 };
+		const int bins = (int)(sizeof(edges) / sizeof(edges[0])) - 1;
+		std::vector<int> classic((size_t)bins, 0), other((size_t)bins, 0);
+		int held = 0, heldClassic = 0, asked = 0;
+
+		for (size_t at = 0; at < g_list.size(); at++)
+		{
+			const Static& s = g_list[at];
+			int group = -1;
+			float share = 0.0f;
+			const bool covered = Cover(at, &group, &share);
+			const bool take = covered &&
+				(double)share >= g_cover_params.staticShare;
+			int b = 0;
+
+			while (b + 1 < bins && share >= edges[b + 1])
+				b++;
+
+			if (s.art.answer == HD_STATIC_CLASSIC)
+			{
+				classic[(size_t)b]++;
+				asked++;
+			}
+			else
+				other[(size_t)b]++;
+
+			held += take ? 1 : 0;
+			heldClassic += take && s.art.answer == HD_STATIC_CLASSIC ? 1 : 0;
+
+			std::vector<HDCoverFace> own;
+
+			Faces(s, own);
+			printf("staticcover: %s room=%d mesh=%d slot=%d answer=%s "
+				"faces=%d group=%d share=%.3f%s\n", stem, s.room, s.mesh,
+				(int)s.slot, Said(s.art.answer), (int)own.size(), group,
+				share, take ? " held" : "");
+		}
+
+		for (int b = 0; b < bins; b++)
+			printf("staticcover: %s share %.2f..%.2f classic %d other %d\n",
+				stem, edges[b], edges[b + 1], classic[(size_t)b],
+				other[(size_t)b]);
+
+		printf("staticcover: %s statics=%d classic=%d held=%d held_classic=%d "
+			"reach=%.0f step=%.0f share=%.2f ms=%.0f\n", stem,
+			(int)g_list.size(), asked, held, heldClassic,
+			g_cover_params.staticReach, g_cover_params.staticStep,
+			g_cover_params.staticShare, g_cover_ms);
+	}
+
 	/* The groups this picture lists - the seed and the -with groups, less
 	 * -skipgroup - and the rooms: those and the -classicroom rooms. */
 	static void Listed(int seed, std::set<int>& artListed, std::set<int>& rooms)
@@ -12529,9 +12812,32 @@ namespace probestatics
 			if (!want && g_rule && rooms.count(s.room) && (s.flags & 1) && Named(s))
 			{
 				if (g_rule == 1)
+				{
 					want = HDStaticDrawSource(s.art.answer,
 						HolderListed(s.art, artListed), PieceDrawn(s)) ==
 						HD_STATIC_FROM_CLASSIC;
+
+					/* On the visibility path the art that lies on it
+					 * draws it where its group is listed. */
+					int group = -1;
+					float share = 0.0f;
+
+					if (want && g_vis_option)
+					{
+						Covers(stem);
+
+						if (Cover((size_t)(&s - &g_list[0]), &group, &share) &&
+							HDVisStaticDrawnByArt(share,
+								g_cover_params.staticShare,
+								artListed.count(group) != 0))
+						{
+							want = false;
+							printf("statics: room %d mesh %d slot %d left to "
+								"the art of group %d (share %.3f)\n", s.room,
+								s.mesh, (int)s.slot, group, share);
+						}
+					}
+				}
 				else
 				{
 					/* The rule before: a room drawn HD draws a static only
@@ -14269,6 +14575,11 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     eye stands at (VisNearPortals); 0 leaves that out
  *   -gpu <n>          the frame's solid room draws timed n times on the GPU
  *                     after the picture (the print beside the draw calls) */
+/* -visheight 1: the pieces the index fill holds by an intrusion box's height
+ * alone (air 2, the fill's height_at) - per piece its group, holder and
+ * triangles, then the level's count - and no picture. */
+static bool g_vis_height = false;
+
 static bool VisArg(int argc, char** argv, int* at)
 {
 	const char* a = argv[*at];
@@ -14312,6 +14623,8 @@ static bool VisArg(int argc, char** argv, int* at)
 		walkoff::g_vis_near = atoi(argv[*at + 1]) != 0;
 	else if (!strcmp(a, "-gpu"))
 		g_gpu_runs = atoi(argv[*at + 1]);
+	else if (!strcmp(a, "-visheight"))
+		g_vis_height = atoi(argv[*at + 1]) != 0;
 	else
 		return false;
 
@@ -15248,6 +15561,8 @@ static int ProbeMain(int argc, char** argv)
 	const char* stem = argv[2];
 	const int room = atoi(argv[3]);
 
+	probestatics::g_root = root;
+
 	double cx = 0, cy = 0, cz = 0, yaw = 0, pitch = 0;
 	bool haveCamera = false;
 	long width = 1280, height = 720;
@@ -15318,6 +15633,9 @@ static int ProbeMain(int argc, char** argv)
 			continue;
 
 		if (VisArg(argc, argv, &at))
+			continue;
+
+		if (probestatics::CoverArg(argc, argv, &at))
 			continue;
 
 		if (MarbleArg(argc, argv, &at))
@@ -17162,6 +17480,48 @@ static int ProbeMain(int argc, char** argv)
 	if (probestatics::g_table)
 	{
 		probestatics::Table(stem);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
+	/* -visheight 1: the pieces held by a box's height, and no picture. */
+	if (g_vis_height)
+	{
+		int pieces = 0, tris = 0, groups = 0;
+
+		for (int g = 0; g < HDRenderGroupCount(); g++)
+		{
+			bool any = false;
+
+			for (int j = 0; j < HDRenderGroupPairRanges(g); j++)
+			{
+				HDPairRange piece;
+
+				if (!HDRenderGroupPairRange(g, j, &piece) || piece.air != 2)
+					continue;
+
+				printf("visheight: %s group=%d piece=%d holder=%d tris=%d\n",
+					stem, g, j, piece.holder, piece.triangles);
+				pieces++;
+				tris += piece.triangles;
+				any = true;
+			}
+
+			groups += any ? 1 : 0;
+		}
+
+		printf("visheight: %s pieces=%d tris=%d groups=%d\n", stem, pieces,
+			tris, groups);
+		HDRenderShutdown();
+		DropDevice();
+		return 0;
+	}
+
+	/* -staticcover: the art on each static, and no picture. */
+	if (probestatics::g_cover_table)
+	{
+		probestatics::CoverTable(stem);
 		HDRenderShutdown();
 		DropDevice();
 		return 0;

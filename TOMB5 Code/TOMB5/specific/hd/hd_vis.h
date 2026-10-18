@@ -107,6 +107,20 @@ struct HDVisWide
 	short v[4][3];
 };
 
+/* A static mesh of the classic level, for the art that lies on it
+ * (HDVisStaticCovers): the room whose list holds it at the build, its index
+ * in that list, its box local to that room as the statics' rule takes it
+ * (hd_level.cpp, StaticBox), and where its triangles stand in the face list
+ * handed in beside it - world units, as DrawStaticObjects places the mesh;
+ * none for a static the engine does not draw. */
+struct HDVisStatic
+{
+	int room;
+	int mesh;
+	float mins[3], maxs[3];
+	int firstFace, faceCount;
+};
+
 /* The numbers of the tables, measured on the fifteen levels (TrgProbe
  * -vistable, RoomProbe -vis; hd_vis.cpp, HDVisDefaults, says why each):
  *
@@ -132,7 +146,13 @@ struct HDVisWide
  *              opening, still shows the room behind the portal
  *   edge       how far a portal's projection may stand off the window it
  *              is seen through and still list the room behind, as a share
- *              of the screen's width (the walk, game\draw.cpp) */
+ *              of the screen's width (the walk, game\draw.cpp)
+ *   staticReach  how far art may stand off a static mesh's face and still
+ *              lie on it
+ *   staticStep   the spacing of a static's samples
+ *   staticShare  the share of a static's samples one group's art must lie
+ *              on before the static's place is that art's
+ *              (HDVisStaticDrawnByArt) */
 struct HDVisParams
 {
 	double reach;
@@ -145,6 +165,9 @@ struct HDVisParams
 	double overhang;
 	double wideBare;
 	double edge;
+	double staticReach;
+	double staticStep;
+	double staticShare;
 };
 
 HDVisParams HDVisDefaults();
@@ -161,6 +184,20 @@ struct HDVisTables
 	/* Per face of the list handed in: the bare share of a wall face of a
 	 * room whose walls are asked, -1 for every other face. */
 	std::vector<float> faceBare;
+	/* Per room: the group of a room linked with it whose box holds the
+	 * room's inside wholly and whose art stands in that inside, guestTris
+	 * triangles or more - the most of them -, -1 for none; and those
+	 * triangles (HDVisClassicRoomEnclosed). */
+	std::vector<int> enclosedBy;
+	std::vector<int> enclosedTris;
+	int roomsEnclosed = 0;
+	/* Per static handed in (HDVisStaticCovers): the group whose art lies on
+	 * the most of its samples, -1 for none, and that share; and how many
+	 * reach staticShare. */
+	std::vector<int> staticGroup;
+	std::vector<float> staticShare;
+	int staticsHeld = 0;
+	double staticMs = 0.0;		// what asking them cost
 	// The counts of the level line.
 	int artRooms = 0;		// rooms whose walls are asked
 	int wallFaces = 0;		// their wall faces
@@ -200,9 +237,111 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 	const HDCoverFace* faces, int faceCount, const HDVisPortal* portals,
 	int portalCount, const int* links, int linkCount);
+/* The static meshes, handed in after HDVisLevelInput (which drops them) and
+ * asked by HDVisLevelBuild after the three tables (HDVisStaticCovers). */
+void HDVisLevelStatics(const HDVisStatic* statics, int staticCount,
+	const HDCoverFace* faces, int faceCount);
 void HDVisLevelBuild(const trf::remaster::Trg& trg);
 void HDVisLevelClear();
 const HDVisTables* HDVisLevelTables();
+
+/* The art that lies on each static mesh: per static, of the groups whose
+ * room's box holds the centre of the static's faces - the room it stands
+ * in, its own or another that shares the place -, the one whose art (its
+ * opaque and alpha passes) covers the most of the static's samples
+ * (HDCoverSamples at staticStep; a sample is covered by a triangle facing
+ * either way within staticReach of it), into out->staticGroup and
+ * out->staticShare. Group i is room i of `rooms`. Not asked for a static
+ * whose own room's art holds a twentieth of its box's cells
+ * (HDStaticCellsHold over the cells of the group's vertices, as the
+ * renderer's build notes them): that art draws it already. The tables'
+ * other fields are left as they are. */
+void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
+	int roomCount, const HDVisStatic* statics, int staticCount,
+	const HDCoverFace* faces, int faceCount, const HDVisParams& params,
+	HDVisTables* out);
+
+/* Whether a static mesh the frame would draw classic is left to the art on
+ * the visibility path: the share of its samples the art of one group lies
+ * on (HDVisStaticCovers) reaches `needed`, and that group is drawn this
+ * frame.
+ *
+ * What for: a static whose place another room's art models. ANDY3's mill
+ * house is room 39, standing in room 35's box; the dormer of its roof is
+ * six classic statics of room 39 - no art of room 39 is there, and room
+ * 35's art in its own box is not asked by the statics' rule (hd_cover.h,
+ * HDStaticAnswer) - and room 35's art models the dormer at the statics'
+ * own faces. Drawn with that art, the classic faces fight with it where
+ * the two lie together and stand in front of it as old texture where they
+ * do not. */
+inline bool HDVisStaticDrawnByArt(float share, double needed, bool groupDrawn)
+{
+	return groupDrawn && share > 0.0f && (double)share >= needed;
+}
+
+/* Whether the visibility path draws nothing of a classic room that stands
+ * inside another room: a room drawn classic whose own group holds no art in
+ * its own box (empty, or hollow - all its art stands elsewhere), none of
+ * whose classic faces any group's art covers (neither covered nor covered
+ * in part by the stand rule), and whose inside lies wholly in the box of a
+ * room linked with it whose art stands in that inside (HDVisTables::
+ * enclosedBy).
+ *
+ * What for: such a room is a classic stand-in for a place the enclosing
+ * room's art models - JOBY2's two sniper rooms 19 and 21 behind the glass
+ * block windows of the courtyard are hollow groups inside room 146's box,
+ * and room 146's art models their insides, the bars and the walls.
+ * Drawn classic, their faces stand dark in front of that art and the
+ * broken window shows a black hole; left out, it shows the art. */
+inline bool HDVisClassicRoomEnclosed(bool artInBox, bool facesCovered,
+	int classicFaces, int enclosingGroup)
+{
+	return !artInBox && !facesCovered && classicFaces > 0 &&
+		enclosingGroup >= 0;
+}
+
+/* Whether a triangle whose corners span the heights y0 to y1 (y down, y0
+ * the higher) reaches into an intrusion box's height, top to bottom, by
+ * more than `margin` - the art of an unlinked room hung into the holder's
+ * space where its centroid stands over the holder's ceiling or under its
+ * floor (hd_render.cpp, the index fill's height_at).
+ *
+ * What for: JOBY2's room 30 has its floor at y -3,072, 256 units below
+ * the ceiling of room 60 (-3,328), and two of its triangles stand on room
+ * 60's east wall plane from -3,413 to -3,242: their centroid 28 units over
+ * the box, they reach 86 units into it, and the air keeps them out by its
+ * margin, which a point on the wall's plane cannot pass. Drawn whole they
+ * are a sliver of room 30 in room 60's ceiling corner. */
+inline bool HDVisHeightReaches(float y0, float y1, float top, float bottom,
+	float margin)
+{
+	return y1 > top + margin && y0 < bottom - margin;
+}
+
+/* Whether a triangle's three corners (x and z, in the box's frame) lie in
+ * one side plane of an intrusion box, within a unit: on the plane of the
+ * holder's wall, where the air's margin keeps a point out
+ * (HDVisHeightReaches says what for). Art that only stands near a side -
+ * a beam's end, a corner's trim - is not on it. */
+inline bool HDVisOnBoxSide(const float x[3], const float z[3],
+	const float* mins, const float* maxs)
+{
+	const float side[4] = { mins[0], maxs[0], mins[2], maxs[2] };
+
+	for (int s = 0; s < 4; s++)
+	{
+		const float* v = s < 2 ? x : z;
+		bool on = true;
+
+		for (int c = 0; c < 3 && on; c++)
+			on = v[c] - side[s] <= 1.0f && side[s] - v[c] <= 1.0f;
+
+		if (on)
+			return true;
+	}
+
+	return false;
+}
 
 /* Whether classic face b stands in the plane of classic face a: every corner
  * of b within `tolerance` units of the plane through a's first three corners

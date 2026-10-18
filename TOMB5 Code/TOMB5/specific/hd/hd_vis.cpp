@@ -79,6 +79,9 @@ HDVisParams HDVisDefaults()
 	p.overhang = 128.0;
 	p.wideBare = 0.3;
 	p.edge = 2.0 / 2560.0;
+	p.staticReach = 32.0;
+	p.staticStep = HD_COVER_STEP;
+	p.staticShare = 0.5;
 	return p;
 }
 
@@ -185,6 +188,8 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	t.wideFirst.assign((size_t)t.rooms, 0);
 	t.wideCount.assign((size_t)t.rooms, 0);
 	t.faceBare.assign((size_t)(faceCount > 0 ? faceCount : 0), -1.0f);
+	t.enclosedBy.assign((size_t)t.rooms, -1);
+	t.enclosedTris.assign((size_t)t.rooms, 0);
 
 	if (!rooms || roomCount <= 0)
 		return false;
@@ -278,6 +283,37 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 				cells[CellKey(x, z)].push_back(r);
 	}
 
+	/* The rooms standing inside another (HDVisClassicRoomEnclosed): per
+	 * room with an inside, the groups of the rooms linked with it whose
+	 * whole box holds that inside, and below the triangles of each one's
+	 * art in it, every triangle counted. */
+	std::vector<std::vector<int> > around(n);
+	std::unordered_map<long long, int> enclosed;
+
+	for (int h = 0; h < roomCount; h++)
+	{
+		const HDVisRoom& in = rooms[h];
+
+		if (in.xs < 3 || in.zs < 3)
+			continue;
+
+		const long x0 = in.x + 1024, x1 = in.x + ((long)(in.xs - 1) << 10);
+		const long z0 = in.z + 1024, z1 = in.z + ((long)(in.zs - 1) << 10);
+
+		for (int g = 0; g < groups; g++)
+		{
+			const HDVisRoom& big = rooms[g];
+
+			if (Twins(rooms, g, h) || !linked(h, g) || big.x > x0 ||
+				big.x + ((long)big.xs << 10) < x1 || big.z > z0 ||
+				big.z + ((long)big.zs << 10) < z1 || big.top > in.top ||
+				big.bottom < in.bottom)
+				continue;
+
+			around[(size_t)h].push_back(g);
+		}
+	}
+
 	std::unordered_map<long long, GuestAcc> acc;
 	std::vector<std::vector<HDVisOpening> > open((size_t)roomCount);
 
@@ -319,6 +355,28 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 					};
 					const auto cell = cells.find(CellKey(SectorOf(cw[0]),
 						SectorOf(cw[2])));
+
+					for (size_t i = 0; cell != cells.end() &&
+						i < cell->second.size(); i++)
+					{
+						const int h = cell->second[i];
+						const HDVisRoom& host = rooms[h];
+						const std::vector<int>& ring = around[(size_t)h];
+
+						if (std::find(ring.begin(), ring.end(), g) ==
+							ring.end() ||
+							cw[0] <= (double)(host.x + 1024) ||
+							cw[0] >= (double)(host.x +
+								((long)(host.xs - 1) << 10)) ||
+							cw[2] <= (double)(host.z + 1024) ||
+							cw[2] >= (double)(host.z +
+								((long)(host.zs - 1) << 10)) ||
+							cw[1] < (double)host.top ||
+							cw[1] > (double)host.bottom)
+							continue;
+
+						enclosed[(long long)h * 65536 + g]++;
+					}
 					// Under `guestRule` 1 and 2, the art reaching out of
 					// its own room alone (see the link table above).
 					const double slack = (double)params.overhang;
@@ -531,6 +589,26 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 		t.guestPairs++;
 		t.guestTris += guest.tris;
 	}
+
+	// The room each room stands inside: the most triangles, then the
+	// lowest group.
+	for (const std::pair<const long long, int>& one : enclosed)
+	{
+		const size_t h = (size_t)(one.first / 65536);
+		const int g = (int)(one.first % 65536);
+
+		if (one.second < params.guestTris ||
+			one.second < t.enclosedTris[h] ||
+			(one.second == t.enclosedTris[h] && g > t.enclosedBy[h]))
+			continue;
+
+		t.enclosedBy[h] = g;
+		t.enclosedTris[h] = one.second;
+	}
+
+	for (int r = 0; r < roomCount; r++)
+		if (t.enclosedBy[(size_t)r] >= 0)
+			t.roomsEnclosed++;
 
 	for (int r = 0; r < roomCount; r++)
 	{
@@ -750,12 +828,269 @@ bool HDVisBuild(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
 	return true;
 }
 
+void HDVisStaticCovers(const trf::remaster::Trg& trg, const HDVisRoom* rooms,
+	int roomCount, const HDVisStatic* statics, int staticCount,
+	const HDCoverFace* faces, int faceCount, const HDVisParams& params,
+	HDVisTables* out)
+{
+	HDVisTables& t = *out;
+	const int count = statics && staticCount > 0 ? staticCount : 0;
+
+	t.staticGroup.assign((size_t)count, -1);
+	t.staticShare.assign((size_t)count, 0.0f);
+	t.staticsHeld = 0;
+
+	if (!count || !faces || faceCount <= 0 || !rooms || roomCount <= 0)
+		return;
+
+	const int groups = (int)trg.groups.size() < roomCount ?
+		(int)trg.groups.size() : roomCount;
+
+	/* The statics their own room's art holds (HDStaticCellsHold): the
+	 * 256-unit cells of the box that hold a vertex of the room's group,
+	 * room local, as the renderer's build notes them - per room, its
+	 * group's cells once. */
+	std::vector<unsigned char> ask((size_t)count, 0);
+	std::unordered_map<int, std::vector<long long> > roomCells;
+
+	for (int s = 0; s < count; s++)
+	{
+		const HDVisStatic& one = statics[s];
+
+		if (one.faceCount <= 0 || one.room < 0 || one.room >= groups)
+			continue;
+
+		std::vector<long long>& cells = roomCells[one.room];
+		const std::vector<trf::remaster::TrgPart>& parts =
+			trg.groups[(size_t)one.room].parts;
+
+		const bool fresh = cells.empty();
+
+		for (size_t q = 0; fresh && q < parts.size(); q++)
+			for (int pass = 0; pass < 3; pass++)
+			{
+				const trf::remaster::TrgPart& part = parts[q];
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned at = 0; at < run.count; at++)
+				{
+					const unsigned i = run.start + at;
+
+					if (i >= trg.indices.size() ||
+						trg.indices[i] >= trg.vertices.size())
+						break;
+
+					const trf::remaster::TrgVertex& tv =
+						trg.vertices[trg.indices[i]];
+
+					cells.push_back((((long long)(tv.x >> 8) + 4096) << 26) |
+						(((long long)(tv.y >> 8) + 4096) << 13) |
+						((long long)(tv.z >> 8) + 4096));
+				}
+			}
+
+		if (fresh)
+		{
+			std::sort(cells.begin(), cells.end());
+			cells.erase(std::unique(cells.begin(), cells.end()), cells.end());
+			cells.push_back(-1);	// sorted: the end of a room's list
+		}
+
+		int held = 0;
+
+		for (const long long key : cells)
+		{
+			bool in = key >= 0;
+
+			for (int k = 0; k < 3 && in; k++)
+			{
+				const float p = (float)(((key >> (26 - 13 * k)) & 8191) -
+					4096) * 256.0f;
+
+				in = p + 255.0f >= one.mins[k] && p <= one.maxs[k];
+			}
+
+			held += in ? 1 : 0;
+		}
+
+		int boxCells = 1;
+
+		for (int k = 0; k < 3; k++)
+			boxCells *= ((int)one.maxs[k] >> 8) - ((int)one.mins[k] >> 8) + 1;
+
+		ask[(size_t)s] = HDStaticCellsHold(held, boxCells) ? 0 : 1;
+	}
+
+	/* Each static asked: its box in world units, grown by the reach, and
+	 * the groups whose room's box holds its centre - the art of the room it
+	 * stands in, its own room's or another's. */
+	const double reach = params.staticReach;
+	std::vector<double> box((size_t)count * 6);
+	std::vector<std::vector<int> > near((size_t)groups);
+
+	for (int s = 0; s < count; s++)
+	{
+		double* b = &box[(size_t)s * 6];
+		const HDVisStatic& one = statics[s];
+
+		b[0] = b[1] = b[2] = 1e30;
+		b[3] = b[4] = b[5] = -1e30;
+
+		if (!ask[(size_t)s])
+			continue;
+
+		for (int f = one.firstFace; f < one.firstFace + one.faceCount &&
+			f >= 0 && f < faceCount; f++)
+			for (int c = 0; c < faces[f].corners; c++)
+				for (int k = 0; k < 3; k++)
+				{
+					b[k] = faces[f].v[c][k] < b[k] ? faces[f].v[c][k] : b[k];
+					b[3 + k] = faces[f].v[c][k] > b[3 + k] ?
+						faces[f].v[c][k] : b[3 + k];
+				}
+
+		if (b[0] > b[3])
+			continue;
+
+		const double centre[3] = { (b[0] + b[3]) / 2.0, (b[1] + b[4]) / 2.0,
+			(b[2] + b[5]) / 2.0 };
+
+		for (int k = 0; k < 3; k++)
+		{
+			b[k] -= reach;
+			b[3 + k] += reach;
+		}
+
+		for (int g = 0; g < groups; g++)
+		{
+			const HDVisRoom& r = rooms[g];
+
+			if (centre[0] >= (double)r.x &&
+				centre[0] <= (double)(r.x + ((long)r.xs << 10)) &&
+				centre[2] >= (double)r.z &&
+				centre[2] <= (double)(r.z + ((long)r.zs << 10)) &&
+				centre[1] >= (double)r.top && centre[1] <= (double)r.bottom)
+				near[(size_t)g].push_back(s);
+		}
+	}
+
+	/* Per static and group, the group's triangles whose box meets the
+	 * static's. */
+	std::vector<std::unordered_map<int, HDCoverSet> > sets((size_t)count);
+
+	for (int g = 0; g < groups; g++)
+	{
+		if (near[(size_t)g].empty())
+			continue;
+
+		const HDVisRoom& own = rooms[g];
+		const float origin[3] = { (float)own.x, (float)own.y, (float)own.z };
+
+		for (const trf::remaster::TrgPart& part : trg.groups[(size_t)g].parts)
+			for (int pass = 0; pass < 2; pass++)
+			{
+				const trf::remaster::TrgPart::Pass& run = part.pass[pass];
+
+				for (unsigned at = 0; at + 2 < run.count; at += 3)
+				{
+					const unsigned first = run.start + at;
+
+					if (first + 2 >= trg.indices.size())
+						break;
+
+					float v[3][3];
+					double lo[3] = { 1e30, 1e30, 1e30 };
+					double hi[3] = { -1e30, -1e30, -1e30 };
+
+					for (int c = 0; c < 3; c++)
+					{
+						const trf::remaster::TrgVertex& tv =
+							trg.vertices[trg.indices[first + (unsigned)c]];
+
+						v[c][0] = (float)tv.x;
+						v[c][1] = (float)tv.y;
+						v[c][2] = (float)tv.z;
+
+						for (int k = 0; k < 3; k++)
+						{
+							const double w = (double)v[c][k] + origin[k];
+
+							lo[k] = w < lo[k] ? w : lo[k];
+							hi[k] = w > hi[k] ? w : hi[k];
+						}
+					}
+
+					for (const int s : near[(size_t)g])
+					{
+						const double* b = &box[(size_t)s * 6];
+						HDCoverTri tri;
+
+						if (hi[0] < b[0] || lo[0] > b[3] || hi[1] < b[1] ||
+							lo[1] > b[4] || hi[2] < b[2] || lo[2] > b[5])
+							continue;
+
+						if (HDCoverMakeTri(v, origin, g, &tri))
+							sets[(size_t)s][g].tris.push_back(tri);
+					}
+				}
+			}
+	}
+
+	/* The share per static and group: the static's samples a triangle of
+	 * the group's covers, facing either way. The most first, then the
+	 * lowest group. */
+	for (int s = 0; s < count; s++)
+	{
+		const HDVisStatic& one = statics[s];
+		std::vector<int> order;
+
+		for (const auto& kv : sets[(size_t)s])
+			order.push_back(kv.first);
+
+		std::sort(order.begin(), order.end());
+
+		for (const int g : order)
+		{
+			HDCoverSet& set = sets[(size_t)s][g];
+			std::vector<int> mark(set.tris.size(), 0);
+			int stamp = 0;
+			long long samples = 0, covered = 0;
+
+			set.build();
+
+			for (int f = one.firstFace; f < one.firstFace + one.faceCount &&
+				f >= 0 && f < faceCount; f++)
+				samples += HDCoverSamples(faces[f], params.staticStep,
+					[&](const double* p, const double* nrm)
+					{
+						if (set.hits(p, nrm, reach, 0, mark, ++stamp))
+							covered++;
+					});
+
+			const float share = samples ?
+				(float)((double)covered / (double)samples) : 0.0f;
+
+			if (share > t.staticShare[(size_t)s])
+			{
+				t.staticShare[(size_t)s] = share;
+				t.staticGroup[(size_t)s] = g;
+			}
+		}
+
+		if (t.staticGroup[(size_t)s] >= 0 &&
+			(double)t.staticShare[(size_t)s] >= params.staticShare)
+			t.staticsHeld++;
+	}
+}
+
 namespace
 {
 	std::vector<HDVisRoom> g_in_rooms;
 	std::vector<HDCoverFace> g_in_faces;
 	std::vector<HDVisPortal> g_in_portals;
 	std::vector<int> g_in_links;
+	std::vector<HDVisStatic> g_in_statics;
+	std::vector<HDCoverFace> g_in_static_faces;
 	bool g_armed = false;
 	HDVisTables g_tables;
 	bool g_built = false;
@@ -784,6 +1119,19 @@ void HDVisLevelInput(const HDVisRoom* rooms, int roomCount,
 	g_armed = true;
 }
 
+void HDVisLevelStatics(const HDVisStatic* statics, int staticCount,
+	const HDCoverFace* faces, int faceCount)
+{
+	g_in_statics.clear();
+	g_in_static_faces.clear();
+
+	if (statics && staticCount > 0)
+		g_in_statics.assign(statics, statics + staticCount);
+
+	if (faces && faceCount > 0)
+		g_in_static_faces.assign(faces, faces + faceCount);
+}
+
 void HDVisLevelBuild(const trf::remaster::Trg& trg)
 {
 	if (!g_armed)
@@ -796,8 +1144,21 @@ void HDVisLevelBuild(const trf::remaster::Trg& trg)
 		(int)g_in_portals.size(), g_in_links.empty() ? 0 : &g_in_links[0],
 		(int)g_in_links.size(), HDVisDefaults(), &g_tables);
 
+	if (g_built && !g_in_statics.empty())
+	{
+		const auto started = std::chrono::steady_clock::now();
+
+		HDVisStaticCovers(trg, &g_in_rooms[0], (int)g_in_rooms.size(),
+			&g_in_statics[0], (int)g_in_statics.size(),
+			g_in_static_faces.empty() ? 0 : &g_in_static_faces[0],
+			(int)g_in_static_faces.size(), HDVisDefaults(), &g_tables);
+		g_tables.staticMs = std::chrono::duration<double, std::milli>(
+			std::chrono::steady_clock::now() - started).count();
+	}
+
 	// The inputs were only for the build.
 	std::vector<HDCoverFace>().swap(g_in_faces);
+	std::vector<HDCoverFace>().swap(g_in_static_faces);
 }
 
 void HDVisLevelClear()
@@ -809,6 +1170,8 @@ void HDVisLevelClear()
 	std::vector<HDCoverFace>().swap(g_in_faces);
 	std::vector<HDVisPortal>().swap(g_in_portals);
 	std::vector<int>().swap(g_in_links);
+	std::vector<HDVisStatic>().swap(g_in_statics);
+	std::vector<HDCoverFace>().swap(g_in_static_faces);
 }
 
 const HDVisTables* HDVisLevelTables()

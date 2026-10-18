@@ -7435,6 +7435,15 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					 * ceiling. With tomb5.hd_air off no air is asked and
 					 * the centroid alone decides. */
 					int pair_at = -1;
+					/* The first entry whose box holds the centroid in x
+					 * and z, where the corners reach into its height by
+					 * more than HD_AIR_MARGIN (HDVisHeightReaches) but no
+					 * box nor air above holds the triangle: art of an
+					 * unlinked room on the plane of the holder's wall,
+					 * which the air keeps out by its margin. A piece of
+					 * its own (air 2, by_height below) that only the
+					 * visibility path holds to the window. */
+					int height_at = -1;
 
 					for (size_t k = 0; k < group.intrusionAt.size(); k++)
 					{
@@ -7447,14 +7456,38 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 								centre[axis] > box.maxs[axis])
 								in = false;
 
-						if (!in && !airHosts.empty() &&
-							centre[0] >= box.mins[0] &&
+						const bool inXZ = centre[0] >= box.mins[0] &&
 							centre[0] <= box.maxs[0] &&
 							centre[2] >= box.mins[2] &&
-							centre[2] <= box.maxs[2])
+							centre[2] <= box.maxs[2];
+
+						if (!in && !airHosts.empty() && inXZ)
 							in = std::binary_search(airHosts.begin(),
 								airHosts.end(), std::make_pair(first,
 									box.holder));
+
+						if (!in && inXZ && height_at < 0)
+						{
+							float y0 = 1e30f, y1 = -1e30f;
+							float x[3], z[3];
+
+							for (int c = 0; c < 3; c++)
+							{
+								const trf::remaster::TrgVertex& tv =
+									trg.vertices[trg.indices[first + c]];
+								const float y = (float)tv.y;
+
+								x[c] = (float)tv.x;
+								z[c] = (float)tv.z;
+								y0 = y < y0 ? y : y0;
+								y1 = y > y1 ? y : y1;
+							}
+
+							if (HDVisOnBoxSide(x, z, box.mins, box.maxs) &&
+								HDVisHeightReaches(y0, y1, box.mins[1],
+								box.maxs[1], HD_AIR_MARGIN))
+								height_at = group.intrusionAt[k];
+						}
 
 						if (in)
 						{
@@ -7520,6 +7553,10 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 
 						stand_tag(v, stand_at, box_at, cover);
 					}
+
+					// Only where nothing else holds the triangle.
+					const bool by_height = pair_at < 0 && height_at >= 0 &&
+						!air && stand_at < 0 && box_at < 0;
 
 					if (stand_at >= 0)
 					{
@@ -7628,6 +7665,21 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 					const bool hull_air = hull && air && pair_at < 0 &&
 						stand_at < 0 && box_at < 0 && g_air_hulls;
 
+					/* Held by the height alone: a piece with no face and
+					 * not inner, air 2 - drawn whole like the open half on
+					 * the room-art path, and held to its room's window
+					 * like art in unlinked air on the visibility path
+					 * (hd_level.cpp, DecidePairs). */
+					int piece_air = air;
+
+					if (by_height)
+					{
+						pair_at = height_at;
+						face_at = -1;
+						inner = 0;
+						piece_air = 2;
+					}
+
 					if (pair_at >= 0)
 					{
 						int piece = -1;
@@ -7636,7 +7688,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							if (group.pairRanges[j].intrusion == pair_at &&
 								group.pairRanges[j].face == face_at &&
 								group.pairRanges[j].inner == inner &&
-								group.pairRanges[j].air == air)
+								group.pairRanges[j].air == piece_air)
 							{
 								piece = (int)j;
 								break;
@@ -7651,7 +7703,7 @@ bool HDRenderLevelBegin(const char* installRoot, const char* stem, int numRooms,
 							made.face = face_at;
 							made.inner = inner;
 							made.triangles = 0;
-							made.air = air;
+							made.air = piece_air;
 							made.behind = face_at >= 0 &&
 								(size_t)face_at < g_face_behind.size()
 								? g_face_behind[(size_t)face_at] : 0;

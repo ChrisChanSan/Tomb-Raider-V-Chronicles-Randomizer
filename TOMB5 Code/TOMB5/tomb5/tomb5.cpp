@@ -262,7 +262,7 @@ void init_tomb5_stuff()
 		REG_WriteLong(buf, tomb5.hd_air);
 
 		sprintf(buf, "hd_vis");
-		tomb5.hd_vis = 0;								//the portal walk's
+		tomb5.hd_vis = 1;								//the visibility path
 		REG_WriteLong(buf, tomb5.hd_vis);
 
 		// The marble floors on, two floor heights (see the read below).
@@ -524,9 +524,9 @@ void init_tomb5_stuff()
 		if (tomb5.hd_air > 2)
 			tomb5.hd_air = 1;
 
-		// Absent - every older registry - reads as 0, the portal walk's.
+		// Absent - every older registry - reads as 1, the visibility path.
 		sprintf(buf, "hd_vis");
-		REG_ReadLong(buf, tomb5.hd_vis, 0);
+		REG_ReadLong(buf, tomb5.hd_vis, 1);
 
 		if (tomb5.hd_vis > 1)
 			tomb5.hd_vis = 0;

@@ -12874,6 +12874,365 @@ static void vis_hidden_room()
 		"hidden: ANDY1 212, two guests", 1, 1);
 }
 
+/* The static mesh the visibility path leaves to the art that lies on it
+ * (HDVisStaticDrawnByArt): ANDY3's dormer of room 39, room 35's art on
+ * 0.603 to 0.791 of its statics' samples within 32 units, and the shares
+ * the rule keeps classic. */
+static void vis_static_rule()
+{
+	ok(HDVisStaticDrawnByArt(0.603f, 0.5, true),
+		"static: ANDY3 39 mesh 12, 0.603, room 35 drawn", 1, 1);
+	ok(HDVisStaticDrawnByArt(0.791f, 0.5, true),
+		"static: ANDY3 39 mesh 2, 0.791, room 35 drawn", 1, 1);
+	ok(!HDVisStaticDrawnByArt(0.791f, 0.5, false),
+		"static: the holder not drawn keeps it classic", 0, 0);
+	ok(!HDVisStaticDrawnByArt(0.475f, 0.5, true),
+		"static: JOBY5 141 mesh 7, 0.475, stays classic", 0, 0);
+	ok(!HDVisStaticDrawnByArt(0.474f, 0.5, true),
+		"static: JOBY3 137 meshes 4 and 5, 0.474, stay classic", 0, 0);
+	ok(HDVisStaticDrawnByArt(0.5f, 0.5, true),
+		"static: a half of its samples is enough", 1, 1);
+	ok(!HDVisStaticDrawnByArt(0.0f, 0.0, true),
+		"static: no art on it is never the art's", 0, 0);
+	ok(HDVisStaticDrawnByArt(1.0f, 0.5, true),
+		"static: TITLE 23, every sample, is the art's", 1, 1);
+}
+
+/* The classic room the visibility path leaves out because it stands inside
+ * another (HDVisClassicRoomEnclosed): JOBY2's sniper rooms 19 and 21,
+ * hollow groups inside room 146's box. */
+static void vis_enclosed_rule()
+{
+	ok(HDVisClassicRoomEnclosed(false, false, 12, 146),
+		"enclosed: JOBY2 21, hollow, uncovered, inside 146", 1, 1);
+	ok(!HDVisClassicRoomEnclosed(true, false, 12, 146),
+		"enclosed: a group with art in its box keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(false, true, 46, 121),
+		"enclosed: covered faces stay, though a room encloses it", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(false, false, 31, -1),
+		"enclosed: inside no room (ANDY3 26) keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomEnclosed(false, false, 0, 146),
+		"enclosed: no classic face, nothing to leave out", 0, 0);
+	ok(HDVisClassicRoomEnclosed(false, false, 12, 0),
+		"enclosed: group 0 encloses as any other", 1, 1);
+}
+
+/* The height a triangle of an unlinked room reaches into an intrusion box
+ * (HDVisHeightReaches): JOBY2's room 30 on room 60's east wall, room 60's
+ * box from its ceiling -3,328 to its floor -1,280. */
+static void vis_height_rule()
+{
+	const float top = -3328.0f, bottom = -1280.0f, m = 32.0f;
+
+	ok(HDVisHeightReaches(-3413.0f, -3242.0f, top, bottom, m),
+		"height: room 30's triangle reaches 86 under the ceiling", 1, 1);
+	ok(!HDVisHeightReaches(-3413.0f, -3300.0f, top, bottom, m),
+		"height: 28 under the ceiling is within the margin", 0, 0);
+	ok(!HDVisHeightReaches(-3413.0f, -3296.0f, top, bottom, m),
+		"height: 32 under the ceiling is the margin itself", 0, 0);
+	ok(HDVisHeightReaches(-1400.0f, -1100.0f, top, bottom, m),
+		"height: a foot from under the floor reaching up", 1, 1);
+	ok(!HDVisHeightReaches(-1300.0f, -1100.0f, top, bottom, m),
+		"height: 20 over the floor is within the margin", 0, 0);
+	ok(!HDVisHeightReaches(-4000.0f, -3500.0f, top, bottom, m),
+		"height: wholly over the ceiling", 0, 0);
+	ok(HDVisHeightReaches(-3413.0f, -3072.0f, top, bottom, m),
+		"height: down to room 30's floor, 256 into the box", 1, 1);
+}
+
+/* A triangle in one side plane of an intrusion box (HDVisOnBoxSide): room
+ * 60's box of JOBY2 in room 30's frame, x 6,144..7,168, z -1,024..3,072. */
+static void vis_box_side()
+{
+	const float mins[3] = { 6144.0f, -3328.0f, -1024.0f };
+	const float maxs[3] = { 7168.0f, -1280.0f, 3072.0f };
+	const float onX[3] = { 7168.0f, 7168.0f, 7168.0f };
+	const float zA[3] = { 2389.0f, 2389.0f, 2730.0f };
+
+	ok(HDVisOnBoxSide(onX, zA, mins, maxs),
+		"side: room 30's triangle on room 60's east wall", 1, 1);
+
+	const float nearX[3] = { 7168.0f, 7509.0f, 7168.0f };
+	const float zB[3] = { 2048.0f, 2048.0f, 2048.0f };
+
+	ok(!HDVisOnBoxSide(nearX, zA, mins, maxs),
+		"side: reaching 341 into the wall is not on it", 0, 0);
+	ok(HDVisOnBoxSide(nearX, zB, mins, maxs) == false,
+		"side: z 2,048 is inside, no side there", 0, 0);
+
+	const float offX[3] = { 7169.0f, 7167.5f, 7168.9f };
+
+	ok(HDVisOnBoxSide(offX, zA, mins, maxs),
+		"side: within a unit of the plane is on it", 1, 1);
+
+	const float farX[3] = { 7170.5f, 7168.0f, 7168.0f };
+
+	ok(!HDVisOnBoxSide(farX, zA, mins, maxs),
+		"side: a corner 2.5 off the plane is not", 0, 0);
+
+	const float midX[3] = { 6500.0f, 6600.0f, 6700.0f };
+	const float onZ[3] = { -1024.0f, -1024.0f, -1023.5f };
+
+	ok(HDVisOnBoxSide(midX, onZ, mins, maxs),
+		"side: the north side, z -1,024, counts as well", 1, 1);
+	ok(!HDVisOnBoxSide(midX, zA, mins, maxs),
+		"side: in the middle of the box is on no side", 0, 0);
+}
+
+/* A cube of art in the frame of the room at `ox`, `oz`: x0..x0 + s,
+ * y0 - s..y0 (y down) and z0..z0 + s, each face two triangles. */
+static void vis_cube(trf::remaster::Trg& trg, float ox, float oz, float x0,
+	float y0, float z0, float s)
+{
+	const float c[8][3] =
+	{
+		{ x0, y0, z0 }, { x0 + s, y0, z0 }, { x0 + s, y0, z0 + s },
+		{ x0, y0, z0 + s }, { x0, y0 - s, z0 }, { x0 + s, y0 - s, z0 },
+		{ x0 + s, y0 - s, z0 + s }, { x0, y0 - s, z0 + s }
+	};
+	const int q[6][4] = { { 0, 1, 2, 3 }, { 4, 7, 6, 5 }, { 0, 4, 5, 1 },
+		{ 1, 5, 6, 2 }, { 2, 6, 7, 3 }, { 3, 7, 4, 0 } };
+
+	for (int f = 0; f < 6; f++)
+	{
+		vis_tri(trg, ox, 0, oz, c[q[f][0]], c[q[f][1]], c[q[f][2]]);
+		vis_tri(trg, ox, 0, oz, c[q[f][0]], c[q[f][2]], c[q[f][3]]);
+	}
+}
+
+/* The enclosure table on a level built by hand: room A (0), a box of 6 x 6
+ * sectors, with room C (1), a box of 3 x 3 inside A's and linked with it by
+ * a portal, whose own group holds nothing in its box; A's art stands in C's
+ * inside. */
+static void vis_enclosed_tables()
+{
+	for (int variant = 0; variant < 5; variant++)
+	{
+		trf::remaster::Trg trg;
+		std::vector<HDVisRoom> rooms(2);
+		std::vector<HDVisPortal> portals(2);
+		// 0: as above; 1: no portal; 2: C reaches out of A's box; 3: A's
+		// art in C's inside is four triangles; 4: eight, a guest's least.
+		const long x[2] = { 0, variant == 2 ? 5120 : 1024 };
+
+		for (int r = 0; r < 2; r++)
+		{
+			HDVisRoom& one = rooms[(size_t)r];
+
+			memset(&one, 0, sizeof(one));
+			one.x = x[r];
+			one.z = r ? 1024 : 0;
+			one.xs = one.zs = r ? 3 : 6;
+			one.top = -4096;
+			one.bottom = 0;
+			one.twin = -1;
+			one.firstPortal = r;
+			one.portalCount = variant == 1 ? 0 : 1;
+		}
+
+		memset(&portals[0], 0, sizeof(HDVisPortal) * 2);
+		portals[0].to = 1;
+		portals[1].to = 0;
+		trg.groups.resize(2);
+
+		for (int g = 0; g < 2; g++)
+		{
+			trf::remaster::TrgPart part;
+
+			part.pass[0].start = (uint32_t)trg.indices.size();
+
+			// A's art in the middle of C's inside, one sector square.
+			const int tris = variant == 3 ? 4 : variant == 4 ? 8 : 12;
+
+			for (int t = 0; g == 0 && t < tris; t++)
+			{
+				const float cx = (float)x[1] + 1100.0f + t * 32.0f;
+				const float a[3] = { cx, -1000.0f, 2100.0f };
+				const float b[3] = { cx + 16.0f, -1000.0f, 2100.0f };
+				const float c[3] = { cx, -1016.0f, 2116.0f };
+
+				vis_tri(trg, 0, 0, 0, a, b, c);
+			}
+
+			part.pass[0].count = (uint32_t)trg.indices.size() -
+				part.pass[0].start;
+			trg.groups[(size_t)g].parts.push_back(part);
+		}
+
+		HDVisTables t;
+
+		HDVisBuild(trg, &rooms[0], 2, 0, 0, &portals[0], 2, 0, 0,
+			HDVisDefaults(), &t);
+
+		const int want = variant == 0 || variant == 4 ? 0 : -1;
+		static const char* what[5] =
+		{
+			"enclosed: C inside A, linked, A's art in it",
+			"enclosed: no link, no enclosing room",
+			"enclosed: C past A's box, none",
+			"enclosed: four triangles are fewer than a guest's eight",
+			"enclosed: eight triangles are enough"
+		};
+
+		ok(t.enclosedBy.size() == 2 && t.enclosedBy[1] == want, what[variant],
+			t.enclosedBy.size() == 2 ? t.enclosedBy[1] : -9, want);
+
+		if (variant == 0)
+		{
+			ok(t.enclosedBy.size() == 2 && t.enclosedBy[0] == -1,
+				"enclosed: A, whose inside holds no other art, by none",
+				t.enclosedBy.size() == 2 ? t.enclosedBy[0] : -9, -1);
+			ok(t.roomsEnclosed == 1 && t.enclosedTris.size() == 2 &&
+				t.enclosedTris[1] == 12,
+				"enclosed: one room, by A's twelve triangles",
+				t.roomsEnclosed, 1);
+		}
+	}
+}
+
+/* The static covers on a level built by hand: room A (0), 6 x 6 sectors,
+ * with room C (1), 3 x 3, inside its box, and a static of C, a cube of 256
+ * units, whose faces A's art lies on within 32 units on all six sides. */
+static void vis_static_covers()
+{
+	// A at the origin, C inside it; a cube static of C at x 2048..2304.
+	std::vector<HDVisRoom> rooms(2);
+
+	for (int r = 0; r < 2; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		memset(&one, 0, sizeof(one));
+		one.x = r ? 1024 : 0;
+		one.z = r ? 1024 : 0;
+		one.xs = one.zs = r ? 3 : 6;
+		one.top = -4096;
+		one.bottom = 0;
+		one.twin = -1;
+	}
+
+	// The static's six faces, world units, wound as the cube's art.
+	std::vector<HDCoverFace> faces;
+	const float s0[3] = { 2048.0f, -512.0f, 2048.0f };
+	const double s = 256.0;
+	const double cube[8][3] =
+	{
+		{ s0[0], s0[1], s0[2] }, { s0[0] + s, s0[1], s0[2] },
+		{ s0[0] + s, s0[1], s0[2] + s }, { s0[0], s0[1], s0[2] + s },
+		{ s0[0], s0[1] - s, s0[2] }, { s0[0] + s, s0[1] - s, s0[2] },
+		{ s0[0] + s, s0[1] - s, s0[2] + s }, { s0[0], s0[1] - s, s0[2] + s }
+	};
+	const int q[6][4] = { { 0, 1, 2, 3 }, { 4, 7, 6, 5 }, { 0, 4, 5, 1 },
+		{ 1, 5, 6, 2 }, { 2, 6, 7, 3 }, { 3, 7, 4, 0 } };
+
+	for (int f = 0; f < 6; f++)
+	{
+		HDCoverFace face;
+
+		face.corners = 4;
+		face.doubleSided = 0;
+
+		for (int c = 0; c < 4; c++)
+			for (int k = 0; k < 3; k++)
+				face.v[c][k] = cube[q[f][c]][k];
+
+		faces.push_back(face);
+	}
+
+	HDVisStatic one;
+
+	one.room = 1;
+	one.mesh = 0;
+	one.firstFace = 0;
+	one.faceCount = 6;
+
+	// Room-local box: x and z from C's origin.
+	one.mins[0] = s0[0] - 1024.0f;
+	one.maxs[0] = s0[0] + (float)s - 1024.0f;
+	one.mins[1] = s0[1] - (float)s;
+	one.maxs[1] = s0[1];
+	one.mins[2] = s0[2] - 1024.0f;
+	one.maxs[2] = s0[2] + (float)s - 1024.0f;
+
+	for (int variant = 0; variant < 6; variant++)
+	{
+		trf::remaster::Trg trg;
+
+		trg.groups.resize(2);
+
+		for (int g = 0; g < 2; g++)
+		{
+			trf::remaster::TrgPart part;
+
+			part.pass[0].start = (uint32_t)trg.indices.size();
+
+			/* 0: A's art on the cube's faces, 24 units out; 1: 40 units
+			 * out, past the reach; 2: C's own art on the faces, which
+			 * holds its box's cells and answers it without asking; 3: A's
+			 * art on the cube with A's box moved away from it; 4: as 0 with
+			 * the static in a room past the level's groups; 5: as 0 with no
+			 * faces handed in. */
+			const float off = variant == 1 ? 40.0f : 24.0f;
+			const bool here = variant == 2 ? g == 1 : g == 0;
+
+			if (here)
+				vis_cube(trg, g ? 1024.0f : 0.0f, g ? 1024.0f : 0.0f,
+					s0[0] - off, s0[1] + off, s0[2] - off,
+					(float)s + 2.0f * off);
+
+			part.pass[0].count = (uint32_t)trg.indices.size() -
+				part.pass[0].start;
+			trg.groups[(size_t)g].parts.push_back(part);
+		}
+
+		std::vector<HDVisRoom> asked = rooms;
+
+		if (variant == 3)
+			asked[0].x = 8192;
+
+		HDVisTables t;
+
+		HDVisStatic which = one;
+
+		if (variant == 4)
+			which.room = 7;
+
+		HDVisStaticCovers(trg, &asked[0], 2, &which, 1, &faces[0],
+			variant == 5 ? 0 : (int)faces.size(), HDVisDefaults(), &t);
+
+		const float share = t.staticShare.empty() ? -1.0f : t.staticShare[0];
+		const int group = t.staticGroup.empty() ? -9 : t.staticGroup[0];
+
+		if (variant == 0)
+		{
+			ok(group == 0 && share > 0.99f,
+				"covers: A's art 24 units out lies on every sample",
+				(long)(share * 1000.0f), 1000);
+			ok(t.staticsHeld == 1, "covers: and the static is held",
+				t.staticsHeld, 1);
+		}
+		else if (variant == 1)
+			ok(group == -1 && share == 0.0f,
+				"covers: 40 units out is past the reach of 32",
+				(long)(share * 1000.0f), 0);
+		else if (variant == 2)
+			ok(group == -1 && t.staticsHeld == 0,
+				"covers: the room's own art holding it is not asked",
+				group, -1);
+		else if (variant == 3)
+			ok(group == -1,
+				"covers: art of a room whose box misses the static", group,
+				-1);
+		else if (variant == 4)
+			ok(group == -1 && t.staticsHeld == 0,
+				"covers: a static of no group's room is not asked", group, -1);
+		else
+			ok(t.staticGroup.size() == 1 && group == -1 && share == 0.0f,
+				"covers: no faces, one answer of none",
+				(long)t.staticGroup.size(), 1);
+	}
+}
+
 static void stand_cover()
 {
 	ok(HDCoverRoomCovered(46, 46), "stand: 46 of 46 faces is covered",
@@ -24319,6 +24678,12 @@ int main()
 	vis_plane();
 	vis_wall();
 	vis_hidden_room();
+	vis_static_rule();
+	vis_enclosed_rule();
+	vis_height_rule();
+	vis_box_side();
+	vis_enclosed_tables();
+	vis_static_covers();
 	stand_overlap();
 	stand_part();
 	stand_shadow();

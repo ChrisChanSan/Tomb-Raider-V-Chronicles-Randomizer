@@ -1035,6 +1035,17 @@ namespace
 				listed = g_frame[i].group == piece.holder;
 
 			const bool open = piece.face < 0 && !piece.inner;
+			/* In unlinked air (1), or held by the box's height alone (2,
+			 * the index fill's height_at: art of an unlinked room on the
+			 * plane of the holder's wall), which the visibility path holds
+			 * to the window while the holder is drawn - the two walls
+			 * fight in one plane then; with the holder not drawn, and on
+			 * the other path, it is the open half it was. ANDREA1's room
+			 * 37 has such art on the wall plane of room 208, seen from
+			 * room 228 with room 208 not listed: cut, it left 324 pixels
+			 * of cracks at 1,280 x 720. */
+			const bool air = piece.air == 1 ||
+				(piece.air == 2 && VisLevel() && listed);
 
 			if (ask)
 				whole = !listed;
@@ -1051,8 +1062,7 @@ namespace
 			 * hollow of a pillar whose face it is drawn on, and the
 			 * answer whole is the one it has without the air. */
 			bool claimed = false;
-			const bool askPair = piece.face >= 0 ||
-				(piece.air && !listed);
+			const bool askPair = piece.face >= 0 || (air && !listed);
 
 			for (int k = 0; k < count && ask && askPair && !claimed; k++)
 			{
@@ -1078,7 +1088,7 @@ namespace
 			 * window, the coiled pipe in the hollow of JOBY2's broken
 			 * pillar by the stairs falls into shards seen from room 33
 			 * (16,177 pixels at 1280x720). */
-			if (piece.air)
+			if (air)
 			{
 				whole = claimed;
 
@@ -3608,6 +3618,60 @@ static void BuildStaticPlaces()
 static bool g_vis_level = false;
 static bool g_vis_logged = false;
 static std::vector<short> g_vis_main;
+/* Per room, where its statics begin in the list handed to hd_vis.cpp
+ * (HDVisLevelStatics): every MESH_INFO of every room, in the rooms' order
+ * and the lists' - the index of a room's mesh i is its first plus i. */
+static std::vector<int> g_vis_static_first;
+
+/* A static mesh's faces in world units, as DrawStaticObjects places the
+ * mesh - its MESH_DATA turned by y_rot and moved to the MESH_INFO's place,
+ * as BuildStaticTables reads its vertices -, a quad as four corners and a
+ * triangle as three; how many went in. */
+static int VisStaticFaces(const MESH_INFO* mesh, std::vector<HDCoverFace>& out)
+{
+	const STATIC_INFO* sinfo = &static_objects[mesh->static_number];
+	const MESH_DATA* data = (const MESH_DATA*)meshes[sinfo->mesh_number];
+
+	if (!data || !data->aVtx || data->nVerts <= 0)
+		return 0;
+
+	const double c = (double)phd_cos(mesh->y_rot) * (1.0 / 16384.0);
+	const double sn = (double)phd_sin(mesh->y_rot) * (1.0 / 16384.0);
+	int made = 0;
+
+	const auto put = [&](const short* index, int corners)
+	{
+		HDCoverFace face;
+
+		face.corners = corners;
+		face.doubleSided = 0;
+
+		for (int k = 0; k < 4; k++)
+		{
+			const int at = index[k < corners ? k : 0];
+
+			if (at < 0 || at >= data->nVerts)
+				return;
+
+			const ACMESHVERTEX& v = data->aVtx[at];
+
+			face.v[k][0] = (double)mesh->x + v.x * c + v.z * sn;
+			face.v[k][1] = (double)mesh->y + v.y;
+			face.v[k][2] = (double)mesh->z + v.z * c - v.x * sn;
+		}
+
+		out.push_back(face);
+		made++;
+	};
+
+	for (int q = 0; data->gt4 && q < data->ngt4; q++)
+		put(&data->gt4[q * 6], 4);
+
+	for (int q = 0; data->gt3 && q < data->ngt3; q++)
+		put(&data->gt3[q * 5], 3);
+
+	return made;
+}
 
 static bool VisLevel()
 {
@@ -3743,6 +3807,84 @@ static void BuildRoomVis()
 		faces.empty() ? 0 : &faces[0], (int)faces.size(),
 		portals.empty() ? 0 : &portals[0], (int)portals.size(),
 		links.empty() ? 0 : &links[0], (int)links.size());
+
+	/* And the static meshes, for the art that lies on them
+	 * (HDVisStaticCovers): no face for a static no slot of 0 to 69 names,
+	 * one in a room a randomizer marker names, or a flat one (HDStaticFlat:
+	 * a pane or a square laid on a wall lies on whatever art stands behind
+	 * it, which need not model it), which stay classic. */
+	std::vector<HDVisStatic> statics;
+	std::vector<HDCoverFace> meshFaces;
+
+	g_vis_static_first.assign((size_t)number_rooms + 1, 0);
+
+	for (int r = 0; r < number_rooms; r++)
+	{
+		const ROOM_INFO* info = &room[r];
+
+		g_vis_static_first[(size_t)r] = (int)statics.size();
+
+		for (int i = 0; info->mesh && i < info->num_meshes; i++)
+		{
+			const MESH_INFO* mesh = &info->mesh[i];
+			HDVisStatic one;
+
+			one.room = r;
+			one.mesh = i;
+			one.firstFace = (int)meshFaces.size();
+			one.faceCount = 0;
+
+			for (int k = 0; k < 3; k++)
+				one.mins[k] = one.maxs[k] = 0.0f;
+
+			if (mesh->static_number >= 0 && mesh->static_number < 70 &&
+				!HDMarkersRoomTouched(r))
+			{
+				StaticBox(mesh, info, one.mins, one.maxs);
+
+				if (!HDStaticFlat(one.mins, one.maxs))
+					one.faceCount = VisStaticFaces(mesh, meshFaces);
+			}
+
+			statics.push_back(one);
+		}
+	}
+
+	g_vis_static_first[(size_t)number_rooms] = (int)statics.size();
+	HDVisLevelStatics(statics.empty() ? 0 : &statics[0], (int)statics.size(),
+		meshFaces.empty() ? 0 : &meshFaces[0], (int)meshFaces.size());
+}
+
+/* Whether the visibility path leaves a static mesh the frame would draw
+ * classic to the art that lies on it (HDVisStaticDrawnByArt): the art of
+ * one group lies on enough of its samples, and a room the frame lists is
+ * drawn by that group. `group` is the room whose MESH_INFO list stands at
+ * the static's room now (g_room_group), the room of the build. */
+static int GroupOfRoom(int roomIndex);
+
+static bool VisStaticLeftToArt(int group, int meshIndex, const short* listed,
+	int listedCount)
+{
+	const HDVisTables* tables = HDVisLevelTables();
+
+	if (!g_vis_level || !tables || !listed || group < 0 ||
+		group + 1 >= (int)g_vis_static_first.size())
+		return false;
+
+	const int at = g_vis_static_first[(size_t)group] + meshIndex;
+
+	if (meshIndex < 0 || at >= g_vis_static_first[(size_t)group + 1] ||
+		at >= (int)tables->staticGroup.size())
+		return false;
+
+	const int holder = tables->staticGroup[(size_t)at];
+	bool drawn = false;
+
+	for (int i = 0; holder >= 0 && i < listedCount && !drawn; i++)
+		drawn = GroupOfRoom(listed[i]) == holder;
+
+	return HDVisStaticDrawnByArt(tables->staticShare[(size_t)at],
+		HDVisDefaults().staticShare, drawn);
 }
 
 /* Whether the visibility path draws none of a classic room's faces
@@ -3769,10 +3911,17 @@ static bool VisHidesClassicRoom(int roomIndex)
 	const bool covered = g_group_stand_covered[group] != 0 ||
 		g_group_stand_part[group] != 0;
 	const ROOM_INFO* r = &room[roomIndex];
+	const int faces = r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0;
+	const int tris = HDRenderGroupTriangles(group, -1);
 
-	return HDVisClassicRoomHidden(HDRenderGroupTriangles(group, -1) == 0,
-		covered, r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0,
-		tables->guestCount[(size_t)roomIndex]);
+	if (HDVisClassicRoomHidden(tris == 0, covered, faces,
+		tables->guestCount[(size_t)roomIndex]))
+		return true;
+
+	// A room standing inside another whose art models its inside.
+	return group < (int)tables->enclosedBy.size() &&
+		HDVisClassicRoomEnclosed(tris > HDRenderGroupOverhangTriangles(group),
+		covered, faces, tables->enclosedBy[(size_t)group]);
 }
 
 /* Whose art stands inside whose room.
@@ -5503,7 +5652,8 @@ bool HDStaticDrawnClassic(int roomIndex, int meshIndex, const short* listed,
 		entry.piece >= 0 && NoteStaticPiece(roomIndex, group, entry);
 
 	return HDStaticDrawSource(entry.answer, holderListed, pieceDrawn) ==
-		HD_STATIC_FROM_CLASSIC;
+		HD_STATIC_FROM_CLASSIC && !VisStaticLeftToArt(group, meshIndex, listed,
+		listedCount);
 }
 
 /* Once per frame, before the rooms are drawn: a piece whose static the engine
@@ -7755,14 +7905,18 @@ static int SurfaceRoom()
  * HDLOG vis, once per level at the first frame that asks, with -log:
  *
  *   HDLOG level=<stem> vis=1 rooms= art_rooms= walls= bare= void= guests=
- *         guest_tris= wide= ms= twin= wide_bare= edge=
+ *         guest_tris= wide= ms= twin= wide_bare= edge= statics_held=
+ *         statics_ms= enclosed=
  *
  * art_rooms the rooms whose walls were asked, walls their classic wall
  * faces, bare those the art leaves bare (the openings), void those with no
  * room behind, guests the (holder, group) pairs and their triangles, wide
  * the portals with a wider opening, ms the tables' build; twin the
  * openings that named a flipmap pair's other room, named by its main room
- * instead, wide_bare and edge HDVisDefaults' two numbers of the walk. */
+ * instead, wide_bare and edge HDVisDefaults' two numbers of the walk;
+ * statics_held the static meshes the art lies on (HDVisStaticCovers) and
+ * statics_ms what asking them cost; enclosed the rooms that stand inside
+ * another whose art stands in them (HDVisTables::enclosedBy). */
 
 static int VisContents(int roomIndex)
 {
@@ -7786,10 +7940,11 @@ bool HDVisWalkOn()
 
 		Log("HDLOG level=%s vis=1 rooms=%d art_rooms=%d walls=%d bare=%d "
 			"void=%d guests=%d guest_tris=%lld wide=%d ms=%.0f twin=%d "
-			"wide_bare=%.2f edge=%.5f", g_stem, t->rooms, t->artRooms,
-			t->wallFaces, t->bareFaces, t->voidFaces, t->guestPairs,
-			t->guestTris, t->widePortals, t->ms, t->openingsTwin, p.wideBare,
-			p.edge);
+			"wide_bare=%.2f edge=%.5f statics_held=%d statics_ms=%.0f "
+			"enclosed=%d", g_stem, t->rooms, t->artRooms, t->wallFaces,
+			t->bareFaces, t->voidFaces, t->guestPairs, t->guestTris,
+			t->widePortals, t->ms, t->openingsTwin, p.wideBare, p.edge,
+			t->staticsHeld, t->staticMs, t->roomsEnclosed);
 	}
 
 	return true;

@@ -3132,6 +3132,69 @@ carries the tables.
     position held against the engine files' text and swept; 44,619 checks
     before, 44,754 after.
     OWN, this project's tool.
+302. **The visibility path by default** (`tomb5/tomb5.cpp`, `hd_vis` 1 at the
+    first run and for an absent key) - OWN, the owner's decision of
+    2026-10-18 after playing the path since round 9; 0 keeps the portal walk
+    with the room-art rules.
+303. **The art that lies on a static** (`hd_vis.h`, `HDVisStatic`,
+    `HDVisStaticCovers`, `HDVisStaticDrawnByArt`, `staticReach` 32,
+    `staticStep` 64 (`HD_COVER_STEP`), `staticShare` 0.5; `hd_vis.cpp`; `hd_level.cpp`,
+    `VisStaticFaces`, `VisStaticLeftToArt`, `HDStaticDrawnClassic`) - a
+    static the frame would draw classic is left to the group whose opaque or
+    alpha art covers half its samples or more within 32 units, among the
+    groups whose room's box holds its centre, in a frame that draws that
+    group; visibility path only. CLASSIC: the statics' `MESH_INFO` place and
+    `y_rot` and their `MESH_DATA` quads and triangles, placed as
+    `DrawStaticObjects` places them. OWN, the rule and its numbers, on the
+    sampling of the stand rule (`HDCoverSamples`, `HDCoverSet`, entries of
+    the classic room drawn as art). DATA (RoomProbe `-staticcover` on the
+    player's files): 19 of the 103 classic statics at 0.603 to 1.000, the
+    rest at 0.475 and below at 32 units; at 16 the dormer of ANDY3 falls to
+    0.437, at 64 the gap is the same (0.475 against 0.617), all sampled
+    every 64 units.
+304. **Flat and own-held statics not asked** (`hd_vis.cpp`,
+    `HDVisStaticCovers`; `hd_level.cpp`, the statics handed in) - a static
+    whose own room's art holds a twentieth of its box's cells
+    (`HDStaticCellsHold`) and a flat one (`HDStaticFlat`) are not sampled.
+    OWN, both reusing the statics' rule's own tests. DATA: the level's cost
+    13 to 533 ms against 2 to 34 seconds with every static asked every 16
+    units.
+305. **The classic room inside another's art** (`hd_vis.h`,
+    `HDVisClassicRoomEnclosed`, `HDVisTables::enclosedBy`; `hd_vis.cpp`,
+    `HDVisBuild`; `hd_level.cpp`, `VisHidesClassicRoom`) - a room drawn
+    classic whose own group holds no art in its own box, no face of which
+    any art covers, and whose inside lies wholly in the box of a linked
+    room whose art stands in it with eight triangles or more draws none of
+    its faces; visibility path only. CLASSIC: the rooms' boxes, insides
+    (a ring of wall sectors in) and portal records. OWN, the rule; the
+    eight triangles are the guests' count (entry of the visibility path's
+    tables). DATA: JOBY2's rooms 19 and 21 of the 21 classic rooms with
+    faces, inside room 146's box at a share of 1.00, the next at 0.30.
+306. **Art on the holder's wall plane held by its height** (`hd_render.cpp`,
+    the index fill's `height_at` and `by_height`, the piece's `air` 2;
+    `hd_vis.h`, `HDVisHeightReaches`, `HDVisOnBoxSide`; `hd_level.cpp`,
+    `DecidePairs`) - a triangle no box and no air holds, its centroid in an
+    entry's box in x and z, its corners in one side plane of the box within
+    a unit and reaching into the box's height by more than `HD_AIR_MARGIN`,
+    is a piece held to its room's window on the visibility path while its
+    holder is drawn. CLASSIC: the intrusion boxes and the floor squares'
+    heights (`FLOOR_INFO` ceiling and floor bytes, read with SectorCheck).
+    OWN, the rule. DATA: JOBY2's room 30, floor -3,072, under room 60's
+    ceiling -3,328 by 256 units; 1,179 triangles in 155 pieces over the
+    fifteen levels.
+307. **The probes and tests of the round** (RoomProbe `-staticcover`,
+    `-staticreach`, `-staticstep`, `-staticshare`, `-statics new` on `-vis 1`,
+    `-visheight 1`, the `-vis` tables line's `enclosed=` and its `-vis:
+    enclosed` lines, the `height` of a `decide:` line; ModernTest's
+    `vis_static_rule`, `vis_enclosed_rule`, `vis_height_rule`,
+    `vis_box_side`, `vis_enclosed_tables` and `vis_static_covers`; the
+    engine's `HDLOG level= vis=1` line's `statics_held= statics_ms=
+    enclosed=`) - OWN, this project's tools on the player's files (DATA).
+308. **The mill seen from afar kept** (`MODIFICATIONS.md`, Round 13; nothing
+    in the code) - ANDY3's room 106, a guest of rooms 93 and 95, and the
+    rooms the walk reaches on from it, 105, 104, 108, 107 and 113, listed
+    from the mill-wheel house's roof. OWN, the owner's decision; DATA, his
+    log of 2026-10-17.
 
 ## Credited, but not contained here
 

@@ -327,17 +327,18 @@
  *                     at HDWaterLookKnobs' numbers, its GPU time printed
  *     -underlookknobs <disc shafts underside reach power cell floor deep len
  *                     waves rim seadisc seashafts seaunderside sheet ripple
- *                     patches art seapower>
- *                     the same with these nineteen numbers in place of the
- *                     engine's (strengths, the surface light's reach, the
- *                     disc's power, the shafts' cell size, the noise's
+ *                     patches art seapower seaturn seaswell>
+ *                     the same with these twenty-one numbers in place of
+ *                     the engine's (strengths, the surface light's reach,
+ *                     the disc's power, the shafts' cell size, the noise's
  *                     floor, their reach under the surface, the march's
  *                     length, the way the waves' slope is kept whole over,
  *                     the window rim's width in cosine; then where the eye
  *                     has the sea's surface over it the three strengths,
  *                     the sheet's, its ripple's contrast, the share the
  *                     shafts' noise lights it by and the weight the art
- *                     keeps, and the disc's power there)
+ *                     keeps, the disc's power there, and the turn and the
+ *                     height share each cell breaks the ripple by)
  *     -sea art|look|sheet
  *                     the same at the engine's numbers but for one part:
  *                     art the art of the sea's surface at its own weight
@@ -20177,13 +20178,14 @@ static int ProbeMain(int argc, char** argv)
 		printf("-underlook: %s, GPU %.4f ms (timestamps round the pass) at "
 			"%ldx%ld, knobs %.2f %.2f %.2f %.0f %.0f %.0f %.2f %.0f %.0f "
 			"%.0f %.2f, sea %.2f %.2f %.2f %.3f %.2f %.2f %.2f, power "
-			"%.2f\n", drawn ?
+			"%.2f, break %.3f %.2f\n", drawn ?
 			"drawn" : skyDrew ? "NOT drawn (no deep "
 			"look, no -hdwater 1 or no frame under the water)" :
 			"NOT drawn (no sky)",
 			gpu, width, height, k[0], k[1], k[2], k[3], k[4], k[5], k[6],
 			k[7], k[8], k[9], k[10], k[11], k[12], k[13], k[14], k[15],
-			k[16], k[17], k[HD_LOOK_SEA_POWER]);
+			k[16], k[17], k[HD_LOOK_SEA_POWER], k[HD_LOOK_SEA_TURN],
+			k[HD_LOOK_SEA_SWELL]);
 	}
 
 	/* The scene: one room, or a room and the neighbours -with names, drawn

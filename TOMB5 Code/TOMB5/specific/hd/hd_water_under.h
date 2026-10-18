@@ -200,7 +200,7 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
 	return false;
 }
 
-/* The look's nineteen numbers on the game's path, in the order of
+/* The look's twenty-one numbers on the game's path, in the order of
  * RoomProbe's -underlookknobs: the disc's, the shafts' and the underside's
  * strengths, the surface light's reach along the eye ray in units, the
  * disc's power, the shafts' cell size in units, the noise's floor (the
@@ -212,14 +212,17 @@ inline bool HDWetGivesWay(int y, const int* planeY, int drawn, int count,
  * disc's, the shafts' and the underside's strengths there, the sheet's
  * own, its ripple's contrast, the share the shafts' noise lights it by and
  * the weight the art keeps; then the disc's power there
- * (HDWaterGlowPower). */
+ * (HDWaterGlowPower), and the largest turn in radians and the largest
+ * share of height by which each of the shafts' cells breaks the sheet's
+ * ripple (hd_water_look.hlsl, SeaRipple). */
 enum
 {
 	HD_LOOK_DISC, HD_LOOK_SHAFTS, HD_LOOK_UNDERSIDE, HD_LOOK_REACH,
 	HD_LOOK_POWER, HD_LOOK_CELL, HD_LOOK_FLOOR, HD_LOOK_DEEP, HD_LOOK_LENGTH,
 	HD_LOOK_WAVES, HD_LOOK_RIM, HD_LOOK_SEA_DISC, HD_LOOK_SEA_SHAFTS,
 	HD_LOOK_SEA_UNDERSIDE, HD_LOOK_SHEET, HD_LOOK_RIPPLE, HD_LOOK_PATCHES,
-	HD_LOOK_ART, HD_LOOK_SEA_POWER, HD_LOOK_KNOBS
+	HD_LOOK_ART, HD_LOOK_SEA_POWER, HD_LOOK_SEA_TURN, HD_LOOK_SEA_SWELL,
+	HD_LOOK_KNOBS
 };
 
 /* The power of the cosine to the light whose glow falls to half its peak
@@ -289,7 +292,20 @@ inline float HDWaterGlowPower(float halfDeg)
  * and whose peak
  * over the open water's median lies under the photograph's 2.49 at the
  * three eyes that face it from open water: 4 (1.6 to 1.9; 5 and 6 lift
- * the peak over the old one, 6 to 181 against 161). */
+ * the peak over the old one, 6 to 181 against 161).
+ *
+ * The ripple's two rows ran straight across the whole sheet. Measured on
+ * the sheet alone at fifteen eyes, each 192-pixel window's spectrum: its
+ * peak over its mean (the regularity) and the share of the peak's ring
+ * within 15 degrees of the peak's direction (the straightness) were 723
+ * and 0.81, the two photographs' 253 and 341, 0.40 and 0.39. Broken per
+ * cell of the shafts' grid (SeaRipple) by a phase, a turn of up to 0.9
+ * radians and a loss of up to half the height, they are 269 and 0.42:
+ * the turn and the loss the steps of 0.3 and 0.5 whose two numbers both
+ * lie by the photographs' (turns of 0.6 left 0.51, 1.2 took the
+ * regularity to 237), every eye's pattern contrast at 0.70 to 0.87 of
+ * before, inside its band, and the luma's step across a cell's border
+ * 0.95 to 1.12 times the step inside a cell (0.99 to 1.15 before). */
 inline void HDWaterLookKnobs(float* knobs)
 {
 	knobs[HD_LOOK_DISC] = 0.2f;
@@ -311,6 +327,8 @@ inline void HDWaterLookKnobs(float* knobs)
 	knobs[HD_LOOK_PATCHES] = 1.5f;
 	knobs[HD_LOOK_ART] = 0.0f;
 	knobs[HD_LOOK_SEA_POWER] = HDWaterGlowPower(22.5f);
+	knobs[HD_LOOK_SEA_TURN] = 0.9f;
+	knobs[HD_LOOK_SEA_SWELL] = 0.5f;
 }
 
 /* The sea's surface seen from below in the art's place (hd_render.cpp,

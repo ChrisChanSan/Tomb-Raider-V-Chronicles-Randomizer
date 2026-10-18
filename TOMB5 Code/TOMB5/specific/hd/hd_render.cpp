@@ -18743,7 +18743,10 @@ void HDRenderWaterWetRoomCopy(bool force)
 
 namespace
 {
-	/* The look's eighteen constants (hd_water_look.hlsl, c200 - c217):
+	// The look's constant registers, c200 - c218 (hd_water_look.hlsl).
+	const int kLookRegs = 19;
+
+	/* The look's nineteen constants (hd_water_look.hlsl, c200 - c218):
 	 * the view's axes, the projection, the eye and its surface's depth,
 	 * the light's direction (the look's highlight direction, gWaterSun) and
 	 * its colour (the hue of `light`, its brightest channel 1), the gains
@@ -18754,8 +18757,9 @@ namespace
 	 * plane and the extinction's (`sea[0]`, `sea[1]`), the art's box, the
 	 * sheet's strength, ripple, clear zone, edge and patches, and the
 	 * disc's power and the disc's, the shafts' and the underside's
-	 * strengths there in place of the others; all 0 without it. `knobs` in
-	 * the order of HDWaterLookKnobs. */
+	 * strengths there in place of the others, and the ripple's cells
+	 * broken (the shafts' cells, the turn and the height share); all 0
+	 * without it. `knobs` in the order of HDWaterLookKnobs. */
 	void water_look_constants(const WaterLook& look, const float* view,
 		float persp, float centreX, float centreY, float eyeX, float eyeZ,
 		float depth, const float* sigma, const float* light,
@@ -18765,7 +18769,7 @@ namespace
 		const float top = high[0] > high[1] ? (high[0] > high[2] ?
 			high[0] : high[2]) : (high[1] > high[2] ? high[1] : high[2]);
 
-		std::memset(c, 0, 18 * 4 * sizeof(float));
+		std::memset(c, 0, kLookRegs * 4 * sizeof(float));
 
 		for (int i = 0; i < 3; i++)
 			for (int k = 0; k < 3; k++)
@@ -18822,6 +18826,10 @@ namespace
 		c[67] = HDWaterRippleScale(look.rows);
 		c[68] = kHDWaterSheetEdge;
 		c[69] = knobs[HD_LOOK_PATCHES];
+		c[72] = knobs[HD_LOOK_CELL] > 0.0f ? 1.0f / knobs[HD_LOOK_CELL] :
+			0.0f;
+		c[73] = knobs[HD_LOOK_SEA_TURN];
+		c[74] = knobs[HD_LOOK_SEA_SWELL];
 	}
 
 	/* The look's draws of the whole picture, added to it, the shaders and
@@ -18849,7 +18857,7 @@ namespace
 		const float more[4] = { c[56], c[57], 0.0f, c[59] };
 
 		c[25] = 0.0f;
-		g_device->SetPixelShaderConstantF(200, c, 18);
+		g_device->SetPixelShaderConstantF(200, c, kLookRegs);
 		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
 		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESS);
 		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
@@ -19008,7 +19016,7 @@ bool HDRenderWaterProbeLook(const float* view, float persp, float centreX,
 		return false;
 	}
 
-	float c[18 * 4];
+	float c[kLookRegs * 4];
 
 	water_look_constants(*look, view, persp, centreX, centreY, eyeX, eyeZ,
 		g_under_now[11], g_under_now, look->pixel + 16, knobs, 0, c);
@@ -19099,7 +19107,7 @@ bool HDRenderWaterLook(const HDFrameLighting* under, const float* view,
 	g_device->GetVertexDeclaration(&decl);
 	g_device->GetStreamSource(0, &stream, &offset, &stride);
 
-	float c[18 * 4];
+	float c[kLookRegs * 4];
 	const float sea[2] = { under->underEyeY - g_wsea_y, u[11] };
 
 	water_look_constants(g_wlook_deep, view, persp, centreX, centreY, eyeX,

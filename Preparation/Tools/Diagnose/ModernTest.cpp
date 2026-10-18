@@ -24157,9 +24157,6 @@ static void level_key()
 		"level key: no key is the same as nothing", 0, 0);
 }
 
-/* The far plane and the depth curve (specific\zrange_math.h): the plane's
- * number and its reason, the curve on ZFAR_SHIPPED, the depth buffer's
- * step along it, the rain's tint. */
 /* debris_pieces: the pieces of a broken static in HD (hd_debris_rules.h).
  * A triangle of the static's art goes with the classic face nearest its
  * centroid, a place's coincident faces share it by a hash of its number,
@@ -24187,6 +24184,39 @@ static HDDebrisFace DebrisQuad(float x, float y0, float z0, float y1,
 static void debris_pieces()
 {
 	printf("the broken static's pieces: the face rule and the blend\n");
+
+	/* A face of the breaking mesh as the break walks them: the triangles,
+	 * then the quads, the corners the turned vertices at the static's place;
+	 * a corner past the vertices turned, or past 256, leaves none. */
+	{
+		const short gt3[5] = { 0, 1, 2, 7, 0 };
+		const short gt4[12] = { 0, 1, 2, 3, 9, 0, 3, 2, 1, 256, 9, 0 };
+		static short rot[257 * 3];
+		HDDebrisFace f;
+
+		for (int v = 0; v < 257; v++)
+		{
+			rot[v * 3] = (short)v;
+			rot[v * 3 + 1] = (short)(-2 * v);
+			rot[v * 3 + 2] = (short)(3 * v);
+		}
+
+		HDDebrisMeshFace(gt3, 1, gt4, 0, rot, 4, 1000, 2000, 3000, &f);
+		ok(f.corners == 3 && f.corner[2][0] == 1002.0f &&
+			f.corner[2][1] == 1996.0f && f.corner[2][2] == 3006.0f,
+			"debris: face 0 is the triangle, its corners at the place",
+			f.corners, 3);
+		HDDebrisMeshFace(gt3, 1, gt4, 1, rot, 4, 1000, 2000, 3000, &f);
+		ok(f.corners == 4 && f.corner[3][0] == 1003.0f &&
+			f.corner[3][2] == 3009.0f,
+			"debris: face 1 is the first quad", f.corners, 4);
+		HDDebrisMeshFace(gt3, 1, gt4, 1, rot, 3, 1000, 2000, 3000, &f);
+		ok(f.corners == 0, "debris: a corner past the vertices turned",
+			f.corners, 0);
+		HDDebrisMeshFace(gt3, 1, gt4, 2, rot, 257, 0, 0, 0, &f);
+		ok(f.corners == 0, "debris: a corner past the 256 the break turns",
+			f.corners, 0);
+	}
 
 	// The distance: over the middle, past a corner, beside an edge.
 	{
@@ -24358,6 +24388,9 @@ static void debris_pieces()
 	}
 }
 
+/* The far plane and the depth curve (specific\zrange_math.h): the plane's
+ * number and its reason, the curve on ZFAR_SHIPPED, the depth buffer's
+ * step along it, the rain's tint. */
 static void far_plane()
 {
 	printf("the far plane: the number, the depth curve, the rain's tint\n");

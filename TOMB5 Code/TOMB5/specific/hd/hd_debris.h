@@ -21,9 +21,10 @@
  * the room's own shaders on the slot's matrix. A slot with no HD look is
  * drawn the classic way, as before.
  *
- * Engine-free: hd_level.cpp hands it the level, the break and the frame;
- * RoomProbe -debris hands it the same out of the files. No Log here: the
- * callers write the lines out of HDDebrisBreakInfo and HDDebrisLevelInfo.
+ * Engine-free: the engine hands it the level and the frame (hd_level.cpp)
+ * and the break (debris.cpp, ShatterObject); RoomProbe -debris hands it the
+ * same out of the files. No Log here: the callers write the lines out of
+ * HDDebrisBreakInfo and HDDebrisLevelInfo.
  *
  * The definitions stand at the end of this header, behind HD_DEBRIS_BODY:
  * one file of each program defines it before the include (hd_level.cpp in
@@ -55,6 +56,7 @@ struct HDDebrisLevelStats
 	int parts;		// destructible parts read
 	int triangles;		// their triangles, all three runs
 	double ms;		// the read's own time
+	char stem[64];		// the level the last read was asked for
 };
 
 void HDDebrisLevelInfo(HDDebrisLevelStats* out);
@@ -76,6 +78,14 @@ struct HDDebrisPart
  * a closed break: none), the piece born at x, y, z. */
 bool HDDebrisBreakBegin(const HDDebrisPart* parts, int partCount,
 	const HDDebrisFace* faces, int faceCount);
+
+/* Begin with the faces of the breaking mesh itself: its triangles `gt3`
+ * and quads `gt4` at the static's place x, y, z, out of the `vertices`
+ * vertices the break turned (HDDebrisMeshFace) - the call ShatterObject
+ * and RoomProbe -debris both make. */
+bool HDDebrisBreakMesh(const HDDebrisPart* parts, int partCount,
+	const short* gt3, int ngt3, const short* gt4, int ngt4,
+	const short* rotated, int vertices, long x, long y, long z);
 void HDDebrisBreakEnd();
 void HDDebrisNote(int slot, int face, long x, long y, long z);
 
@@ -500,6 +510,9 @@ int HDDebrisLevelRead(const char* installRoot, const char* stem)
 
 	HDDebrisLevelFree();
 
+	if (stem)
+		strncpy_s(g_level_stats.stem, stem, _TRUNCATE);
+
 	if (!installRoot || !stem || !*installRoot || !*stem)
 		return 0;
 
@@ -626,6 +639,27 @@ bool HDDebrisBreakBegin(const HDDebrisPart* parts, int partCount,
 	g_break_open = g_break_stats.parts > 0;
 	g_break_stats.ms = Now() - t0;
 	return g_break_open;
+}
+
+bool HDDebrisBreakMesh(const HDDebrisPart* parts, int partCount,
+	const short* gt3, int ngt3, const short* gt4, int ngt4,
+	const short* rotated, int vertices, long x, long y, long z)
+{
+	const int count = ngt3 + ngt4;
+
+	if (!rotated || count <= 0 || (ngt3 > 0 && !gt3) || (ngt4 > 0 && !gt4))
+	{
+		HDDebrisBreakBegin(parts, partCount, 0, 0);
+		return false;
+	}
+
+	std::vector<HDDebrisFace> faces((size_t)count);
+
+	for (int f = 0; f < count; f++)
+		HDDebrisMeshFace(gt3, ngt3, gt4, f, rotated, vertices, x, y, z,
+			&faces[(size_t)f]);
+
+	return HDDebrisBreakBegin(parts, partCount, faces.data(), count);
 }
 
 void HDDebrisBreakEnd()

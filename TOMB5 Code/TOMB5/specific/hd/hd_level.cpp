@@ -5397,18 +5397,15 @@ static void BuildStaticTables()
 	/* The destructible parts' own triangles, for the pieces their statics
 	 * break into (hd_debris.h): read only in a level where a static pairs
 	 * with one. */
-	if (g_destruct_pairs.empty())
-		HDDebrisLevelFree();
-	else
+	HDDebrisLevelRead(g_destruct_pairs.empty() ? 0 : HDInstallRoot(), g_stem);
+
+	if (gLogEnabled && !g_destruct_pairs.empty())
 	{
 		HDDebrisLevelStats d;
 
-		HDDebrisLevelRead(HDInstallRoot(), g_stem);
 		HDDebrisLevelInfo(&d);
-
-		if (gLogEnabled)
-			Log("HDLOG level=%s debris parts=%d tris=%d ms=%.1f", g_stem,
-				d.parts, d.triangles, d.ms);
+		Log("HDLOG level=%s debris parts=%d tris=%d ms=%.1f", g_stem,
+			d.parts, d.triangles, d.ms);
 	}
 }
 
@@ -5549,28 +5546,16 @@ static void UpdateDestructibles()
 	}
 }
 
-/* The pieces of a broken static in HD (hd_debris.h): ShatterObject asks
- * this once it has turned the mesh's vertices and before it walks the
- * faces. The static's HD part is the pairs' own - every piece paired with
- * this MESH_INFO, read where its list stands now as UpdateDestructibles
- * reads it - and the faces go over in the order the break walks them, the
- * triangles and then the quads, each corner the turned vertex at the
- * static's place; a face with a corner past `vertices` (the 256 the break
- * reads) has none. Nothing without HD drawn, or for a static with no part:
- * its pieces stay classic. The open break is closed by HDStaticBreakEnd. */
-static int g_break_room = -1;
-static int g_break_mesh = -1;
-
-void HDStaticBreak(const MESH_INFO* mesh, const MESH_DATA* data,
-	const short* rotated, int vertices)
+/* The parts of the art the static `mesh` breaks into (hd_level.h): every
+ * piece paired with this MESH_INFO, read where its list stands now as
+ * UpdateDestructibles reads it, with its group, material and origin. */
+int HDStaticBreakParts(const MESH_INFO* mesh, HDDebrisPart* out, int max,
+	int* listRoom, int* listIndex)
 {
-	HDDebrisBreakEnd();
-	g_break_room = -1;
+	int n = 0;
 
-	if (!mesh || !data || !rotated || !HDLevelActive())
-		return;
-
-	std::vector<HDDebrisPart> parts;
+	if (!mesh || !HDLevelActive())
+		return 0;
 
 	for (size_t i = 0; i < g_destruct_pairs.size(); i++)
 	{
@@ -5584,69 +5569,24 @@ void HDStaticBreak(const MESH_INFO* mesh, const MESH_DATA* data,
 			group < 0 || group >= number_rooms)
 			continue;
 
-		HDDebrisPart part;
-
-		part.group = group;
-		part.material = material;
-		part.originX = (float)room[group].x;
-		part.originZ = (float)room[group].z;
-		parts.push_back(part);
-		g_break_room = at;
-		g_break_mesh = pair.mesh;
-	}
-
-	if (parts.empty())
-		return;
-
-	const int count = data->ngt3 + data->ngt4;
-	std::vector<HDDebrisFace> faces((size_t)(count > 0 ? count : 1));
-
-	for (int f = 0; f < count; f++)
-	{
-		const bool tri = f < data->ngt3;
-		const short* face = tri ? data->gt3 + f * 5 :
-			data->gt4 + (f - data->ngt3) * 6;
-		HDDebrisFace& out = faces[(size_t)f];
-
-		out.corners = tri ? 3 : 4;
-
-		for (int k = 0; k < out.corners; k++)
+		if (out && n < max)
 		{
-			const int v = (unsigned short)face[k];
-
-			if (v >= vertices || v >= 256)
-			{
-				out.corners = 0;
-				break;
-			}
-
-			out.corner[k][0] = (float)(rotated[v * 3] + mesh->x);
-			out.corner[k][1] = (float)(rotated[v * 3 + 1] + mesh->y);
-			out.corner[k][2] = (float)(rotated[v * 3 + 2] + mesh->z);
+			out[n].group = group;
+			out[n].material = material;
+			out[n].originX = (float)room[group].x;
+			out[n].originZ = (float)room[group].z;
 		}
+
+		if (listRoom)
+			*listRoom = at;
+
+		if (listIndex)
+			*listIndex = pair.mesh;
+
+		n++;
 	}
 
-	HDDebrisBreakBegin(parts.data(), (int)parts.size(), faces.data(),
-		count);
-}
-
-/* The end of ShatterObject: the break's line for the log, then closed, so
- * that no later piece takes its look. */
-void HDStaticBreakEnd()
-{
-	HDDebrisBreakStats s;
-
-	HDDebrisBreakInfo(&s);
-
-	if (gLogEnabled && g_break_room >= 0)
-		Log("HDLOG debris break level=%s room=%d mesh=%d parts=%d faces=%d "
-			"places=%d tris=%d faces_with_art=%d pieces=%d pieces_with_art=%d "
-			"tris_flying=%d ms=%.2f", g_stem, g_break_room, g_break_mesh,
-			s.parts, s.faces, s.places, s.triangles, s.facesWithArt,
-			s.pieces, s.piecesWithArt, s.trianglesFlying, s.ms);
-
-	g_break_room = -1;
-	HDDebrisBreakEnd();
+	return n;
 }
 
 /* A fog bulb the level puts in a water room a sheet lies over

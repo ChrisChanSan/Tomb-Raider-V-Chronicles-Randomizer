@@ -12440,7 +12440,7 @@ namespace probestatics
 	 * 128 with no item, TriggerDebris with DebrisFlags 0, then <life> steps
 	 * of UpdateDebris without its floor and ceiling. The static's own pieces
 	 * of the art are hidden as the engine hides them once it is broken, and
-	 * hd_debris is handed the break exactly as hd_level.cpp hands it. */
+	 * hd_debris is handed the break exactly as ShatterObject hands it. */
 	static void DebrisPrepare(const char* root, const char* stem, int seed)
 	{
 		if (g_debris_room < 0)
@@ -12533,32 +12533,10 @@ namespace probestatics
 		const long vp[3] = { nv ? sum[0] / nv : 0, nv ? sum[1] / nv : 0,
 			nv ? sum[2] / nv : 0 };
 		const int nt = (int)(m.tris.size() / 5), nq = (int)(m.quads.size() / 6);
-		std::vector<HDDebrisFace> faces((size_t)(nt + nq > 0 ? nt + nq : 1));
 
-		for (int f = 0; f < nt + nq; f++)
-		{
-			const unsigned short* w = f < nt ? &m.tris[(size_t)f * 5] :
-				&m.quads[(size_t)(f - nt) * 6];
-			HDDebrisFace& out = faces[(size_t)f];
-
-			out.corners = f < nt ? 3 : 4;
-
-			for (int k = 0; k < out.corners; k++)
-			{
-				if (w[k] >= nv)
-				{
-					out.corners = 0;
-					break;
-				}
-
-				out.corner[k][0] = (float)(rot[(size_t)w[k] * 3] + s.x);
-				out.corner[k][1] = (float)(rot[(size_t)w[k] * 3 + 1] + s.y);
-				out.corner[k][2] = (float)(rot[(size_t)w[k] * 3 + 2] + s.z);
-			}
-		}
-
-		HDDebrisBreakBegin(parts.data(), (int)parts.size(), faces.data(),
-			nt + nq);
+		HDDebrisBreakMesh(parts.data(), (int)parts.size(),
+			(const short*)m.tris.data(), nt, (const short*)m.quads.data(), nq,
+			rot.data(), nv, s.x, s.y, s.z);
 		g_debris.clear();
 		g_debris_rand = g_debris_seed;
 

@@ -45,8 +45,9 @@
  * additive run a glow at weight 1 (MaterialAddWeight compares the whole
  * material number, and a destructible part's carries bit 15).
  *
- * Engine-free: the engine (hd_debris.cpp) and RoomProbe -debris use the
- * same functions, and ModernTest checks them. */
+ * Engine-free: the engine (hd_debris.h, whose definitions hd_level.cpp
+ * holds) and RoomProbe -debris use the same functions, and ModernTest
+ * checks them. */
 
 #include <math.h>
 
@@ -58,6 +59,37 @@ struct HDDebrisFace
 	float corner[4][3];
 	int corners;
 };
+
+/* Face `f` of a breaking mesh in the order ShatterObject walks them: the
+ * `ngt3` triangles of `gt3` (five shorts each, the corners first), then
+ * the quads of `gt4` (six each). Every corner is the turned vertex it
+ * names - three shorts of `rotated`, offsets from the static's place -
+ * at the place x, y, z. A corner past the `vertices` turned, or past the
+ * 256 the break turns at most, leaves the face with no corner. */
+inline void HDDebrisMeshFace(const short* gt3, int ngt3, const short* gt4,
+	int f, const short* rotated, int vertices, long x, long y, long z,
+	HDDebrisFace* out)
+{
+	const bool tri = f < ngt3;
+	const short* face = tri ? gt3 + f * 5 : gt4 + (f - ngt3) * 6;
+
+	out->corners = tri ? 3 : 4;
+
+	for (int k = 0; k < out->corners; k++)
+	{
+		const int v = (unsigned short)face[k];
+
+		if (v >= vertices || v >= 256)
+		{
+			out->corners = 0;
+			return;
+		}
+
+		out->corner[k][0] = (float)(rotated[v * 3] + x);
+		out->corner[k][1] = (float)(rotated[v * 3 + 1] + y);
+		out->corner[k][2] = (float)(rotated[v * 3 + 2] + z);
+	}
+}
 
 // The part's run a triangle lies in, as the room draw's passes name them.
 enum

@@ -23732,6 +23732,105 @@ static void marble_rules()
 		"marble: the level key names hd_marble", why ? 1 : 0, 1);
 }
 
+/* The marble floors' places (hd_marble_math.h): the pixels' share in the
+ * cover's units; places all empty take the best planes whole; a plane that
+ * shows nothing leaves at once; a plane outscored fades out a step a frame
+ * and its place is then taken from one step up; the hold keeps a plane
+ * that scores half the best outside; the cap is kept throughout. */
+static void marble_places()
+{
+	printf("the marble floors: the places and the fade\n");
+
+	ok(fabsf(HDMarbleSeenCover(960 * 540, 960, 540) - 4.0f) < 1e-5f &&
+		fabsf(HDMarbleSeenCover(960 * 135, 960, 540) - 1.0f) < 1e-5f &&
+		HDMarbleSeenCover(5, 0, 540) == 0.0f,
+		"marble places: the pixels' share, 4 the whole screen", 0, 0);
+
+	HDMarbleSlot s[2] = { { INT_MIN, 0.0f }, { INT_MIN, 0.0f } };
+	int ys[4] = { 0, -256, -512, -768 };
+	float sc[4] = { 0.5f, 0.2f, 0.1f, 0.0f };
+	int used = HDMarbleSlotsStep(s, 2, ys, sc, 4, 0.125f, HD_MARBLE_HOLD);
+
+	ok(used == 2 && s[0].y == 0 && s[1].y == -256 && s[0].gain == 1.0f &&
+		s[1].gain == 1.0f,
+		"marble places: empty places take the best two whole", used, 2);
+
+	// -512 outscores -256 by more than the hold: -256 fades, a step.
+	float sc2[4] = { 0.5f, 0.05f, 0.3f, 0.0f };
+
+	HDMarbleSlotsStep(s, 2, ys, sc2, 4, 0.125f, HD_MARBLE_HOLD);
+	ok(s[1].y == -256 && fabsf(s[1].gain - 0.875f) < 1e-6f &&
+		s[0].gain == 1.0f,
+		"marble places: an outscored plane fades a step", lroundf(s[1].gain *
+		1000.0f), 875);
+
+	int frames = 1;
+
+	while (s[1].y == -256 && frames < 20)
+	{
+		HDMarbleSlotsStep(s, 2, ys, sc2, 4, 0.125f, HD_MARBLE_HOLD);
+		frames++;
+	}
+
+	ok(frames == 8 && s[1].y == -512 && fabsf(s[1].gain - 0.125f) < 1e-6f,
+		"marble places: gone after eight steps, the next from one", frames,
+		8);
+
+	for (int i = 0; i < 10; i++)
+		HDMarbleSlotsStep(s, 2, ys, sc2, 4, 0.125f, HD_MARBLE_HOLD);
+
+	ok(s[1].y == -512 && s[1].gain == 1.0f && s[0].y == 0,
+		"marble places: the new plane rises to whole and stays", 0, 0);
+
+	// Half the best outside holds; a little less does not.
+	HDMarbleSlot h[1] = { { 0, 1.0f } };
+	int hy[2] = { 0, -256 };
+	float hold[2] = { 0.5f, 1.0f };
+	float lose[2] = { 0.49f, 1.0f };
+
+	HDMarbleSlotsStep(h, 1, hy, hold, 2, 0.125f, HD_MARBLE_HOLD);
+
+	const bool held = h[0].y == 0 && h[0].gain == 1.0f;
+
+	HDMarbleSlotsStep(h, 1, hy, lose, 2, 0.125f, HD_MARBLE_HOLD);
+	ok(held && h[0].y == 0 && fabsf(h[0].gain - 0.875f) < 1e-6f,
+		"marble places: the hold at half the best outside", 0, 0);
+
+	// What shows nothing leaves at once; a view of new planes is whole.
+	HDMarbleSlot g[2] = { { 0, 1.0f }, { -256, 0.5f } };
+	int gy[2] = { -1024, -1280 };
+	float gs[2] = { 0.4f, 0.3f };
+
+	used = HDMarbleSlotsStep(g, 2, gy, gs, 2, 0.125f, HD_MARBLE_HOLD);
+	ok(used == 2 && g[0].y == -1024 && g[1].y == -1280 &&
+		g[0].gain == 1.0f && g[1].gain == 1.0f,
+		"marble places: a plane gone leaves, a new view is whole", used, 2);
+
+	HDMarbleSlot z[2] = { { 0, 1.0f }, { -256, 1.0f } };
+	float zs[4] = { 0.5f, 0.0f, 0.2f, 0.1f };
+
+	HDMarbleSlotsStep(z, 2, ys, zs, 4, 0.125f, HD_MARBLE_HOLD);
+	ok(z[0].y == 0 && z[0].gain == 1.0f && z[1].y == -512 &&
+		fabsf(z[1].gain - 0.125f) < 1e-6f,
+		"marble places: a hidden plane's place taken from one step", 0, 0);
+
+	// The cap: never more places than it, whatever the planes.
+	HDMarbleSlot c[8];
+	int cy[6] = { 0, -256, -512, -768, -1024, -1280 };
+	float cs[6] = { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f };
+
+	for (HDMarbleSlot& one : c)
+	{
+		one.y = INT_MIN;
+		one.gain = 0.0f;
+	}
+
+	used = HDMarbleSlotsStep(c, 2, cy, cs, 6, 0.125f, HD_MARBLE_HOLD);
+	ok(used == 2 && c[0].y == -1280 && c[1].y == -1024 &&
+		c[2].y == INT_MIN,
+		"marble places: the cap holds", used, 2);
+}
+
 /* The marble floors' slopes (hd_marble_math.h): a sloped face's plane, its
  * normal up and of length 1 in either winding, its distance in world space
  * with the group's origin; a level face's plane is the floor's height; two
@@ -24093,6 +24192,7 @@ int main()
 	spring_column();
 	marble_pages();
 	marble_rules();
+	marble_places();
 	marble_slopes();
 
 	printf("\n%d checks, %d failed\n", g_checks, g_fail);

@@ -18753,6 +18753,26 @@ namespace
 	 * and highest corner's y, its run across (the longer side of its box
 	 * seen from above) and the rise over that run. */
 	std::vector<float> g_marble_rise_list;
+	/* The gain a place's mirror rises or falls by a frame: a plane comes
+	 * and goes over eight frames (hd_marble_math.h, HDMarbleSlotsStep),
+	 * where it came and went in one before. */
+	const float kMarbleFadeStep = 1.0f / 8.0f;
+	// The frame's places, kept from frame to frame (HDMarbleSlotsStep).
+	HDMarbleSlot g_marble_slots[8];
+	/* The pixels of each plane the last count saw past what stands in
+	 * front (an occlusion query of its faces against the frame's depth),
+	 * by height; the counts asked and not yet read. */
+	std::map<int, int> g_marble_seen;
+	struct MarbleQuery
+	{
+		int y;
+		IDirect3DQuery9* q;
+	};
+	std::vector<MarbleQuery> g_marble_queries;
+	// The draw before was RoomProbe's warm-up: its counts are waited for.
+	bool g_marble_after_quiet = false;
+	// RoomProbe's -marbleslots: the places of the next frame, as given.
+	std::vector<HDMarbleSlot> g_marble_force;
 	/* The sloped faces (marble_build): by group, nine floats a face as the
 	 * level's faces, and each face's plane, a number into g_marble_tilts -
 	 * four floats a plane, its normal (up, y negative) and its distance in
@@ -18793,6 +18813,12 @@ namespace
 				(*held[i])->Release();
 				*held[i] = 0;
 			}
+
+		for (MarbleQuery& m : g_marble_queries)
+			if (m.q)
+				m.q->Release();
+
+		g_marble_queries.clear();
 	}
 
 	/* The target is the frame's width and g_marble_rows times its height:
@@ -18855,9 +18881,16 @@ namespace
 		g_marble_copies_water = 0;
 		g_marble_buried = 0;
 		g_marble_rise_list.clear();
+		g_marble_seen.clear();
 		g_marble_tilt_faces.assign(g_groups.size(), std::vector<float>());
 		g_marble_tilt_id.assign(g_groups.size(), std::vector<int>());
 		g_marble_tilts.clear();
+
+		for (HDMarbleSlot& s : g_marble_slots)
+		{
+			s.y = INT_MIN;
+			s.gain = 0.0f;
+		}
 
 		for (int g = 0; g < g_room_groups && g < (int)g_groups.size(); g++)
 		{
@@ -19546,6 +19579,119 @@ namespace
 		g_device->SetTexture(1, g_field_dir);
 		g_device->SetTexture(2, g_field_rgb);
 	}
+
+	/* The counts asked by the frame before read into g_marble_seen: each
+	 * as it stands, or waited for with `wait` (RoomProbe's picture after
+	 * its warm-up draw); one not ready is dropped and its plane keeps its
+	 * last count. */
+	void marble_seen_read(bool wait)
+	{
+		for (MarbleQuery& m : g_marble_queries)
+		{
+			DWORD pixels = 0;
+			HRESULT r = m.q->GetData(&pixels, sizeof(pixels),
+				D3DGETDATA_FLUSH);
+
+			while (wait && r == S_FALSE)
+				r = m.q->GetData(&pixels, sizeof(pixels), D3DGETDATA_FLUSH);
+
+			if (r == S_OK)
+				g_marble_seen[m.y] = (int)pixels;
+
+			m.q->Release();
+		}
+
+		g_marble_queries.clear();
+	}
+
+	/* Each plane's faces drawn against the frame's depth with nothing
+	 * written, an occlusion query round each: what of the plane the eye
+	 * sees past what stands in front, for the next frame's pick. The
+	 * device's state is put back. */
+	void marble_seen_ask(const std::map<int, MarbleLayer>& layers)
+	{
+		const D3DRENDERSTATETYPE states[] =
+		{
+			D3DRS_ZENABLE, D3DRS_ZWRITEENABLE, D3DRS_ZFUNC,
+			D3DRS_ALPHABLENDENABLE, D3DRS_ALPHATESTENABLE, D3DRS_CULLMODE,
+			D3DRS_FOGENABLE, D3DRS_COLORWRITEENABLE, D3DRS_STENCILENABLE,
+			D3DRS_CLIPPLANEENABLE
+		};
+		const int count = (int)(sizeof(states) / sizeof(states[0]));
+		DWORD saved[count];
+		IDirect3DVertexShader9* vs = 0;
+		IDirect3DPixelShader9* ps = 0;
+		IDirect3DVertexDeclaration9* decl = 0;
+		IDirect3DVertexBuffer9* stream = 0;
+		IDirect3DIndexBuffer9* index = 0;
+		UINT offset = 0, stride = 0;
+		DWORD fvf = 0;
+		float keep[4];
+
+		g_device->GetVertexShader(&vs);
+		g_device->GetPixelShader(&ps);
+		g_device->GetVertexDeclaration(&decl);
+		g_device->GetFVF(&fvf);
+		g_device->GetStreamSource(0, &stream, &offset, &stride);
+		g_device->GetIndices(&index);
+		g_device->GetPixelShaderConstantF(105, keep, 1);
+
+		for (int s = 0; s < count; s++)
+			g_device->GetRenderState(states[s], &saved[s]);
+
+		// MarblePS's first branch: the cheapest pixel it draws.
+		const float quick[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+
+		g_device->SetVertexShader(g_card_vs);
+		g_device->SetPixelShader(g_marble_ps);
+		g_device->SetFVF(kCardFVF);
+		set_matrix_constant(0, g_proj);
+		g_device->SetPixelShaderConstantF(105, quick, 1);
+		g_device->SetRenderState(D3DRS_ZENABLE, D3DZB_TRUE);
+		g_device->SetRenderState(D3DRS_ZWRITEENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ZFUNC, D3DCMP_LESSEQUAL);
+		g_device->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_ALPHATESTENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_CULLMODE, D3DCULL_NONE);
+		g_device->SetRenderState(D3DRS_FOGENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_COLORWRITEENABLE, 0);
+		g_device->SetRenderState(D3DRS_STENCILENABLE, FALSE);
+		g_device->SetRenderState(D3DRS_CLIPPLANEENABLE, 0);
+
+		for (const std::pair<const int, MarbleLayer>& l : layers)
+		{
+			IDirect3DQuery9* q = 0;
+
+			if (l.second.verts.empty() ||
+				FAILED(g_device->CreateQuery(D3DQUERYTYPE_OCCLUSION, &q)) ||
+				!q)
+				continue;
+
+			q->Issue(D3DISSUE_BEGIN);
+			g_device->DrawPrimitiveUP(D3DPT_TRIANGLELIST,
+				(UINT)(l.second.verts.size() / 3), &l.second.verts[0],
+				sizeof(CardVertex));
+			q->Issue(D3DISSUE_END);
+			g_marble_queries.push_back({ l.first, q });
+		}
+
+		for (int s = 0; s < count; s++)
+			g_device->SetRenderState(states[s], saved[s]);
+
+		g_device->SetPixelShaderConstantF(105, keep, 1);
+		g_device->SetStreamSource(0, stream, offset, stride);
+		g_device->SetIndices(index);
+		g_device->SetFVF(fvf);
+		g_device->SetVertexDeclaration(decl);
+		g_device->SetVertexShader(vs);
+		g_device->SetPixelShader(ps);
+
+		if (stream) stream->Release();
+		if (index) index->Release();
+		if (decl) decl->Release();
+		if (vs) vs->Release();
+		if (ps) ps->Release();
+	}
 }
 
 /* The marble floors' warm-up. The first mirrored draw in a process waited
@@ -19803,6 +19949,14 @@ int HDRenderMarbleRisingFaces(const float** rows)
 	return (int)(g_marble_rise_list.size() / 6);
 }
 
+void HDRenderMarbleSlots(const int* ys, const float* gains, int count)
+{
+	g_marble_force.clear();
+
+	for (int i = 0; i < count && i < 8; i++)
+		g_marble_force.push_back({ ys[i], gains[i] });
+}
+
 void HDRenderMarbleVoid(bool on)
 {
 	g_marble_void = on;
@@ -20006,21 +20160,90 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		}
 	}
 
+	/* The planes scored (hd_marble_math.h): by what of each the last count
+	 * saw past what stands in front, else by its cover; then the places
+	 * stepped. RoomProbe's warm-up draw takes the best by score at full
+	 * strength and leaves the places as they stand. */
+	D3DVIEWPORT9 vp = {};
+
+	g_device->GetViewport(&vp);
+	marble_seen_read(g_marble_after_quiet);
+	g_marble_after_quiet = g_marble_quiet;
+
 	std::vector<HDMarblePlane> planes;
+	std::vector<int> ys;
+	std::vector<float> scores;
 
 	for (const std::pair<const int, MarbleLayer>& l : layers)
-		planes.push_back({ l.first, l.second.cover });
+	{
+		const std::map<int, int>::const_iterator seen =
+			g_marble_seen.find(l.first);
+		const float score = seen != g_marble_seen.end() ?
+			HDMarbleSeenCover(seen->second, (int)vp.Width, (int)vp.Height) :
+			l.second.cover;
 
-	const int drawn = planes.empty() ? 0 : HDMarblePlanesPick(&planes[0],
+		planes.push_back({ l.first, score });
+		ys.push_back(l.first);
+		scores.push_back(score);
+	}
+
+	const int ranked = planes.empty() ? 0 : HDMarblePlanesPick(&planes[0],
 		(int)planes.size(), g_marble_cap);
+	std::vector<HDMarbleSlot> use;
+
+	if (g_marble_quiet)
+		for (int i = 0; i < ranked; i++)
+			use.push_back({ planes[(size_t)i].y, 1.0f });
+	else if (!g_marble_force.empty())
+		use = g_marble_force;
+	else
+	{
+		HDMarbleSlotsStep(g_marble_slots, g_marble_cap, ys.data(),
+			scores.data(), (int)ys.size(), kMarbleFadeStep, HD_MARBLE_HOLD);
+		use.assign(g_marble_slots, g_marble_slots + g_marble_cap);
+	}
+
+	// The places' planes first, in their order, then the rest by score.
+	std::vector<HDMarblePlane> order;
+	std::vector<float> gains;
+
+	for (const HDMarbleSlot& s : use)
+		if (s.y != INT_MIN && s.gain > 0.0f && layers.count(s.y))
+		{
+			order.push_back({ s.y, HDMarbleScoreOf(ys.data(),
+				scores.data(), (int)ys.size(), s.y) });
+			gains.push_back(s.gain);
+		}
+
+	const int drawn = (int)order.size();
+
+	for (const HDMarblePlane& p : planes)
+	{
+		bool placed = false;
+
+		for (int i = 0; i < drawn; i++)
+			placed = placed || order[(size_t)i].y == p.y;
+
+		if (!placed)
+			order.push_back(p);
+	}
+
+	planes.swap(order);
+	marble_seen_ask(layers);
 
 	g_marble_stats.planes = (int)planes.size();
 	g_marble_stats.drawn = drawn;
 
 	for (size_t i = 0; i < planes.size() && i < 8; i++)
 	{
+		const std::map<int, int>::const_iterator seen =
+			g_marble_seen.find(planes[i].y);
+
 		g_marble_stats.plane_y[i] = planes[i].y;
-		g_marble_stats.plane_cover[i] = planes[i].cover;
+		g_marble_stats.plane_cover[i] = layers[planes[i].y].cover;
+		g_marble_stats.plane_seen[i] = seen != g_marble_seen.end() ?
+			seen->second : -1;
+		g_marble_stats.plane_gain[i] = (int)i < drawn ? gains[i] : 0.0f;
 		g_marble_stats.plane_room[i] = -1;
 
 		float most = 0.0f;
@@ -20040,13 +20263,11 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		return;
 	}
 
-	D3DVIEWPORT9 vp = {};
 	IDirect3DSurface9* depth = 0;
 	float keepClip[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	DWORD keepClipOn = 0;
 	float keepProj[16];
 
-	g_device->GetViewport(&vp);
 	g_device->GetDepthStencilSurface(&depth);
 	g_device->GetClipPlane(0, keepClip);
 	g_device->GetRenderState(D3DRS_CLIPPLANEENABLE, &keepClipOn);
@@ -20190,7 +20411,8 @@ void HDRenderMarbleDraw(HDWetModelDraw draw, const void* projection,
 		const float look[4] = { kMarbleF0, kWetWalls, kWetHighlight,
 			kWetPower };
 		const float march[4] = { kWetCap, 1.0f, 0.0f, 0.0f };
-		const float gain[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+		// The place's strength (the fade), MarblePS's gWetGain.x.
+		const float gain[4] = { gains[(size_t)i], 1.0f, 0.0f, 0.0f };
 		/* The flip's place in the target (MarblePS). A pixel's centre lies
 		 * on the whole number in Direct3D 9, so pixel x of the viewport
 		 * shows what the turned projection drew at 2 X + W - x, whose texel

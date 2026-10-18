@@ -591,6 +591,15 @@
  *                     that reads as held (HDRenderMarbleVoid): the picture
  *                     less the plain one is the floor that shows none of
  *                     the mirrored rooms - the strip at a wall's foot.
+ *     -marbleslots y:g,...  the planes the frame mirrors and the strength
+ *                     each is laid at (HDRenderMarbleSlots), in place of
+ *                     the places' own step: a frame of a fade as the game
+ *                     draws it.
+ *     -marblesim <file> <step> <hold> <frames>  the places stepped over a
+ *                     run of ticks without a picture (HDMarbleSlotsStep;
+ *                     -marbleplanes before it gives the cap): each line of
+ *                     the file "tick y:score ...", each output line
+ *                     "marblesim: tick y:gain ...". Exits.
  *     -marblerise     one marblerise line a face the level's build left out
  *                     for rising across itself: its room, height, lowest
  *                     and highest corner's y, run across and rise.
@@ -782,6 +791,7 @@
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_water_under.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_pagecache.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_splash_math.h"
+#include "../../../TOMB5 Code/TOMB5/specific/hd/hd_marble_math.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_light.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_dxt5.h"
 #include "../../../TOMB5 Code/TOMB5/specific/hd/hd_scan.h"
@@ -8621,6 +8631,90 @@ static bool MarbleArg(int argc, char** argv, int* at)
 		return true;
 	}
 
+	// -marbleslots y:g,y:g,...: the planes mirrored and their strength.
+	if (!strcmp(a, "-marbleslots") && more)
+	{
+		int ys[8];
+		float gains[8];
+		int n = 0;
+
+		for (const char* s = argv[++*at]; *s && n < 8; )
+		{
+			ys[n] = atoi(s);
+
+			const char* c = strchr(s, ':');
+
+			gains[n++] = c ? (float)atof(c + 1) : 1.0f;
+			s = strchr(s, ',');
+
+			if (!s)
+				break;
+
+			s++;
+		}
+
+		HDRenderMarbleSlots(ys, gains, n);
+		return true;
+	}
+
+	/* -marblesim <file> <step> <hold> <frames>: the places stepped over a
+	 * run of ticks (HDMarbleSlotsStep), each line of the file a tick and
+	 * its planes, "tick y:score y:score ...", <frames> steps a tick; one
+	 * marblesim line a tick with the places as y:gain. Nothing is drawn. */
+	if (!strcmp(a, "-marblesim") && *at + 4 < argc)
+	{
+		FILE* f = fopen(argv[*at + 1], "r");
+		const float step = (float)atof(argv[*at + 2]);
+		const float hold = (float)atof(argv[*at + 3]);
+		const int frames = atoi(argv[*at + 4]);
+		HDMarbleSlot slots[8];
+		char line[4096];
+
+		for (HDMarbleSlot& s : slots)
+		{
+			s.y = INT_MIN;
+			s.gain = 0.0f;
+		}
+
+		while (f && fgets(line, sizeof(line), f))
+		{
+			int ys[64];
+			float scores[64];
+			int n = 0;
+			char* s = line;
+			const int tick = (int)strtol(s, &s, 10);
+
+			while (n < 64)
+			{
+				char* e = 0;
+				const long y = strtol(s, &e, 10);
+
+				if (e == s || *e != ':')
+					break;
+
+				ys[n] = (int)y;
+				scores[n++] = (float)strtod(e + 1, &s);
+			}
+
+			for (int k = 0; k < frames; k++)
+				HDMarbleSlotsStep(slots, g_marble_planes, ys, scores, n, step,
+					hold);
+
+			printf("marblesim: %d", tick);
+
+			for (int k = 0; k < g_marble_planes; k++)
+				if (slots[k].y != INT_MIN)
+					printf(" %d:%.3f", slots[k].y, slots[k].gain);
+
+			printf("\n");
+		}
+
+		if (f)
+			fclose(f);
+
+		exit(0);
+	}
+
 	// -marblerise: the faces left out for rising, one line each.
 	if (!strcmp(a, "-marblerise"))
 	{
@@ -9235,11 +9329,14 @@ static void ProbeMarble(const void* projection)
 			"rise %.1f\n", (int)rise[i * 6], (int)rise[i * 6 + 1],
 			rise[i * 6 + 2], rise[i * 6 + 3], rise[i * 6 + 4], rise[i * 6 + 5]);
 
-	// One marbleplane line a plane of the frame, in the order it is ranked.
+	/* One marbleplane line a plane of the frame, the drawn first in their
+	 * places' order, then by score; the pixels the occlusion count saw and
+	 * the strength the mirror was laid at end it. */
 	for (int i = 0; i < s.planes && i < 8; i++)
-		printf("marbleplane: %d y %d cover %.5f %s room %d\n", i,
-			s.plane_y[i], s.plane_cover[i], i < s.drawn ? "drawn" : "left",
-			s.plane_room[i]);
+		printf("marbleplane: %d y %d cover %.5f %s room %d seen %d "
+			"gain %.3f\n", i, s.plane_y[i], s.plane_cover[i],
+			i < s.drawn ? "drawn" : "left", s.plane_room[i], s.plane_seen[i],
+			s.plane_gain[i]);
 }
 
 /* The room behind the models' copy (HDRenderWaterWetRoomCopy) where

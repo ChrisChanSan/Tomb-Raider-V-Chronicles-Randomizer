@@ -7016,6 +7016,179 @@ the probe; the game's frame at the four places is his to see.
 record) and `f6766f50` (the mill's pixels, the shares at the step of 64 and the tests'
 labels corrected, six checks more).
 
+**Round 14: the migration, the sniper windows, the forest lids (2026-10-18).** The owner
+played the engine with round 13 in it and answered, put into English: on the default,
+"migrate to 1; that is now the default"; on ANDY3's dormer, "top"; on JOBY2's facade
+window and its splinters, "almost"; on the 19 statics left to the art, "I will look at
+them when I get to it". He sent two pictures of JOBY2 (a glass block window of the pink
+brick facade, its lower pane broken, the grey sky in the hole; trview's room 21 from
+outside) with the words "the window behind the snipers must become fully black again. Now
+the skybox comes through there, because we no longer carry textures", and four of ANDY3
+(trview's hillside of room 27 and the forest walls round it; in the game the dark leaf
+canopy over a hollow and the trunks round it) with "there are still a few places where the
+old SD is still in the HD; the last agent found almost all of them" (reference pictures
+supplied for this project, not in the repository). No log came with them, so the window's
+eye was rebuilt from the picture and the forest's from his trview cameras.
+
+**The migration** (`tomb5/tomb5.cpp`; `hd_vis.h`, `HD_VIS_REV`, `HDVisSetting`). What a
+registry holds, measured in the settings code: every earlier build's first-run block wrote
+`hd_vis` 0, and `REG_ReadLong` writes the default of an absent value, so a registry that
+saw any earlier build holds 0 - a value no player chose, the option having no row. The
+settings carry no version of their own; the earlier migration (`hd_build`, the HD switch
+entry) needed none, because its key was new and absent read as the default. A `0` written
+by hand and a `0` an earlier build wrote look the same, so a value beside `hd_vis` now
+tells them apart: `hd_vis_rev`, absent on every registry an earlier build wrote, 1 from
+now on. A revision of this one key and not a version of all settings: a later move of
+another key cannot be read as this one, and the fog and marble keys of the other rounds
+stay untouched. At the start the engine reads both; below the revision the saved value is
+moved to 1 and both are written back, from the revision on the value is kept as set and
+anything above 1 reads as 0, as before. A fresh installation writes 1 and the revision on
+its first run. The `HDLOG settings` line ends in `hd_vis=`, and a line before it says when
+a value was moved.
+
+| Registry at the start | `hd_vis` read | revision read | runs with | written back |
+|---|---:|---:|---:|---|
+| an earlier build's (its first run) | 0 | absent (0) | 1 | `hd_vis` 1, `hd_vis_rev` 1 |
+| the next start | 1 | 1 | 1 | - |
+| 0 set by hand after the move | 0 | 1 | 0 | - (and at every start after) |
+| a fresh installation | 1 (first run) | 1 (first run) | 1 | - |
+| an earlier build's 1 | 1 | absent | 1 | both |
+| a hand-edited 7 | 7 | 1 / absent | 0 / 1 | - / both |
+
+**JOBY2's sniper windows** (his picture; the cause). The glass block windows of the
+courtyard facade look into rooms 19 and 21, the sniper rooms. Both are hollow groups: all
+360 of their triangles overhang their own box (`HD_OVERHANG_SLACK`), so the engine draws
+the rooms classic and never draws their group (`g_group_hd` 0, `GroupOfRoom` -1). Round 13
+left their classic faces out on the visibility path (the classic room inside another's
+art), on the premise that room 146's art models their insides - "the bars and walls behind
+the glass". Measured with RoomProbe's new `-hollow`, which leaves the hollow groups out as
+the engine does: the bars and the dark walls are group 21's own art, which the probe drew
+because its drivers hand every listed room to `-with`, hollow or not. Room 146's art in
+the inside covers 0 of the rooms' 12 faces, 6.5 per cent of the floor's samples and 26.1
+of the ceiling's and side walls', none of the far wall's (TrgProbe `-classicart
+-perface`). So in the game nothing was left in the hole but the sky. Pixels at 1,280 x 720
+(2,560 x 1,440 in brackets); "sky" the pixels the probe leaves clear, where the game draws
+its sky; the picture's eye rebuilt from the frame, the pillars and the boarded window
+beside it:
+
+| Eye | Sky in the frame, round 13 | after | Changed | of them sky | Went clear |
+|---|---:|---:|---:|---:|---:|
+| his picture (21,700, -6,000, 35,600) | 47,986 (191,825) | 786 (3,071) | 71,531 (285,814) | 47,201 (188,755) | 1 (1) |
+| round 13's still stand | 47,007 (187,969) | 28 (121) | 91,657 (366,624) | 46,980 (187,854) | 1 (6) |
+| own, oblique from the north (23,400, -6,300, 36,800) | 47,999 (191,469) | 8,609 (34,159) | 75,960 (303,878) | 39,390 (157,310) | 0 (0) |
+| own, room 19's window (17,000, -6,200, 29,500) | 108,100 (432,730) | 74,732 (299,333) | 56,675 (226,616) | 33,368 (133,397) | 0 (0) |
+
+The sky left after is the sky above the facade, outside the window; the 1 to 6 pixels that
+go clear are seams of the classic faces. The changed pixels at the still stand and at room
+19's window are round 13's own numbers for the classic room against left out: the frame is
+the one before round 13 again.
+
+*The rule from the data.* A classic room standing inside another keeps its faces
+(`hd_level.cpp`, `VisHidesClassicRoom`): its own group is hollow and never drawn, and the
+enclosing art covers none of its faces, so nothing else closes it. The enclosure table
+(`HDVisTables::enclosedBy`) stays for the `HDLOG vis` line and RoomProbe's `-vis` lines;
+`HDVisClassicRoomEnclosed` goes. The splinters and the broken pane are the glass's and
+untouched.
+
+**The facade window, "almost"** (round 13's item; his two JOBY2 pictures). What was left
+at round 13's eye and at his picture is the sky in the hole, the rows above - 46,980 and
+47,201 pixels. With the rooms drawn classic again, the classic faces also stand over room
+146's dark wooden reveal inside the opening (the art lying on the faces whole, which the
+stand rule leaves out while the room is listed): 44,677 pixels at the still stand and
+24,330 at his picture, black in the game as before round 13. The data offer no cleaner
+cut: the reveal lies on the classic faces, and drawn both they fight in one plane.
+
+**ANDY3's SD leftovers** (his four pictures). The places: trview's hillside is room 27
+with room 28 above it; the second trview picture looks from room 87 west at room 24 with
+room 26 above it; the canopy over a hollow in the game is the same family. Every classic
+room of the level with faces and no art in the `.TRG` (RoomProbe `-vis 1 -walk`, the new
+`classic` lines; TrgProbe `-classicart`) and every classic static (RoomProbe
+`-statictable`):
+
+| Place | Face or static | Pixels 1,280 (2,560) | Cause | Done or left |
+|---|---|---|---|---|
+| trview hillside, room 27 (75,323, 2,472, 51,152, yaw 90) | room 28, 13 faces; room 210, 15 faces | 18,469 (74,171), 8,475 (34,245) to sky | an empty group, no guest: the canopy rule asked for one | done |
+| trview, room 24 from room 87 (80,777, 1,809, 46,864, yaw 261) | room 26, 31 faces | 7,167 (29,219), 3,300 (13,790) to sky | the same | done |
+| own, room 24 under room 26, looking up | room 26 | 510,031 (2,037,998) | the same | done |
+| own, room 27 under room 28 | rooms 28 and 210 | 422,034 (1,685,609) | the same | done |
+| own, room 209 under room 210 | room 210 | 346,296 (1,382,683) | the same | done |
+| the hollows' rooms 24, 26, 27, 28, 86, 87, 209, 210 | classic statics | none | no static stands in them | - |
+| ANDY3's classic statics | room 18 mesh 1, room 39's six | - | left to the art by round 13 | - |
+| room 103 | 11 faces | not at his places | an empty group with no floor link and no guest | left |
+| room 88 (round 12's canopy) | 58 faces | none | hidden since round 12 | - |
+
+Rooms 26, 28 and 210 are lids of painted trunk walls and a leaf ceiling over the hollows
+of rooms 24, 27 and 209: empty groups (the `.TRG` holds no art at all for them), 31, 13
+and 15 faces no art covers (4.6, 0.8 and 2.0 per cent of their samples under any art), not
+under the sky, every floor square open onto the room below (12, 6 and 6 floor links, all
+to that room). The trees round the hollows are rooms 86's and 87's art standing in their
+own boxes (room 86's 211, 10 and 62 triangles reach onto the lids' faces), so they are no
+guests of the lids, and round 12's canopy rule, which wanted a guest, kept the lids: the
+old texture hanging over the new trees. Room 88, the canopy of round 12, holds the same:
+an empty group, 58 faces, every floor square over room 35; it has guests (room 35's 10,064
+triangles, room 44's 201) and has been hidden since.
+
+*The rule from the data* (`hd_vis.h`, `HDVisClassicRoomHidden`'s `floorOnArt`,
+`HDVisTables::floorRooms`; `hd_vis.cpp`, `HDVisBuild`; `hd_level.cpp`,
+`VisHidesClassicRoom`; the visibility path only). An empty, uncovered classic room is left
+out as before when its inside holds a guest, and now also when it has floor links and all
+of them name rooms drawn HD this frame. The census of the rooms with classic faces and no
+art over the fifteen levels: twelve - ANDY1 212, ANDY3 26, 28, 88, 103, 118, 122 and 210,
+RICH2 15, 16, 18 and 19. The four RICH2 rooms are covered (the stand rule draws them), the
+four with guests were hidden already, and the rule adds ANDY3's 26, 28 and 210 and no
+other: 103 has no floor link (one portal, to room 102). Every link and not one, so a room
+half over classic ground keeps its faces.
+
+**The sweep** (as round 13's: head `d0bf4f7b` against this round's tool, the visibility
+path with both and the eye one unit along x; with `hd_vis` 0 byte for byte). Every picture
+of every set is the head's to the byte on both paths: the probe's renderer is the head's
+(the round's code is the engine's visibility rules, which the probe's pictures ask only
+through `-classicroom`, and two new probe switches, neither in the sets).
+
+| Set | views | fight head / new | changed new against head | changed against old head / new | `hd_vis` 0 same |
+|---|---:|---:|---:|---:|---:|
+| 22 places (2,560 x 1,440) | 22 | 778,498 / 778,498 | 0 in 0 | 5,015,841 / 5,015,841 | 22 |
+| 131 sweep (1,280 x 720) | 131 | 234,684 / 234,684 | 0 in 0 | 1,108,500 / 1,108,500 | 131 |
+| 16 mass views | 16 | 308,471 / 308,471 | 0 in 0 | 3,694,738 / 3,694,738 | 16 |
+| 32 earlier views | 32 | 36,815 / 36,815 | 0 in 0 | 451,920 / 451,920 | 32 |
+| owner's 20 places | 20 | 177,877 / 177,877 | 0 in 0 | 12,624 / 12,624 | 20 |
+| the tower's swing (8) | 8 | 10,594 / 10,594 | 0 in 0 | 22,827 / 22,827 | 8 |
+| RICH2's lift ride (40) | 40 | 73,896 / 73,896 | 0 in 0 | 29,156 / 29,156 | 40 |
+| RICH2's fine walk (12) | 12 | 56,787 / 56,787 | 0 in 0 | 83,282 / 83,282 | - |
+| RICH2's shaft, frame 61,830 | 1 | 10,552 / 10,552 | 0 in 0 | 0 / 0 | - |
+| J33's 9 views | 9 | 5,121 / 5,121 | 0 in 0 | 0 / 0 | - |
+| the video's 32 views | 32 | 2,754 / 2,754 | 0 in 0 | 0 / 0 | - |
+| trview 151, 152 | 2 | 2,355 / 2,355 | 0 in 0 | 37,466 / 37,466 | - |
+
+The owner set of 99 (198 pictures with the eye's step), round 11's sixteen places (32),
+round 12's three and round 13's three places at both sizes, and this round's nine places
+at both sizes (the window's four eyes, the hollows' five): the head's to the byte, with
+`hd_vis` 0 too. The pictures that change are the game's, at the places of the two tables
+above, and nowhere else: the rooms the rules name are JOBY2's 19 and 21 and ANDY3's 26, 28
+and 210.
+
+**Checked.** The engine and all nine tools build from the last code commit; ModernTest
+15,847 checks (18 more than the head: 10 on the migration, 6 on the enclosed rooms kept, 8
+on the lids, 6 of round 13's on the enclosed rule gone), MenuTest 44,754, InterpTest 729,
+LipsTest 299 with the `.OBJ` folder and 272 without (the cutseq file named by hand), 0
+failed; the shaders' `.inc` untouched. Every rule asks `g_vis_level` first, so with
+`hd_vis` 0 and with `hd_build` 0 the engine draws as before; the migration changes what a
+registry an earlier build wrote reads as, once. The engine of the last code commit:
+`PCtomb5.exe` built Oct 19 2026 00:06:03, md5 `1c509c30e9d6cc7b827c154398dcf44b`.
+
+**Left.** The window's reveal is black in the game where room 146's art has dark wood (the
+classic faces over the art that lies on them); the alternative is to draw the sniper
+rooms' own art - the bars and the dark walls behind them, group 21's - which the hollow
+rule never draws: a question. RoomProbe's drivers draw hollow groups with `-with` wherever
+the walk lists them; `-hollow` makes a picture the engine's, and earlier pictures that
+list JOBY2 19 or 21, ANDREA2 124, RICHCUT2 2 to 4 or TITLE 70, 101 or 103 drew art the
+game does not. ANDY3's room 103 keeps its faces (no floor link, no guest), not at his
+places. The window's eye is rebuilt from his picture, not logged. The game's frame at the
+lids and the window is his to see.
+
+**Commits.** `9861906a` (the migration), `20208f11` (the sniper rooms keep their faces),
+`d7d27e58` (the forest lids) and the records.
+
 ### A classic room covered by another group's art is drawn as that art
 2026-10-04
 

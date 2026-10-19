@@ -12919,7 +12919,8 @@ namespace probestatics
 	static std::vector<IDirect3DTexture9*> g_debris_pages;
 	// The seed room's origin: the tool's frame is that room's.
 	static float g_debris_origin[2] = { 0.0f, 0.0f };
-	// The broken static's room's ambient (ShatterObject, DebrisMeshAmbient).
+	// The ambient DrawDebris adds: the room's for a mesh without a prelight
+	// (ShatterObject, DebrisMeshAmbient), else 0.
 	static unsigned int g_debris_ambient = 0;
 
 	// The engine's generator (specific\function_stubs.cpp), seeded here.
@@ -13466,12 +13467,14 @@ namespace probestatics
 				tint[2], tint[3], gain);
 		}
 
-		// The room's ambient, which DrawDebris adds to a piece's colour.
+		/* The room's ambient, which DrawDebris adds to a piece's colour -
+		 * only for a mesh without a prelight: ShatterObject keeps 0 for a
+		 * prelit one, whose pieces carry the prelight instead. */
 		unsigned int ambient = 0;
 		std::string ambientError;
 
 		g_level.headerField(s.room, 44, ambient, ambientError);
-		g_debris_ambient = ambient;
+		g_debris_ambient = m.prelight.empty() ? ambient : 0;
 
 		// ShatterObject: the vertices turned by the static's y_rot.
 		const int nv = (int)(m.v.size() / 3) < 256 ? (int)(m.v.size() / 3) :
@@ -13741,9 +13744,10 @@ namespace probestatics
 
 	/* The pieces drawn the classic way, as DrawDebris and the sort list draw
 	 * them: the face's own texture with its corners 1 to 3 (without
-	 * AdjustUV's half-texel nudge), the static's colour times the prelight
-	 * plus the room's ambient, split; additive for an effects word with bit
-	 * 0, else the texture's own draw type; both sides. */
+	 * AdjustUV's half-texel nudge), the static's colour times the prelight,
+	 * or the room's ambient for a mesh without one, split; additive for an
+	 * effects word with bit 0, else the texture's own draw type; both
+	 * sides. */
 	static void DebrisDrawClassic(const float* view,
 		const D3DMATRIX* projection)
 	{

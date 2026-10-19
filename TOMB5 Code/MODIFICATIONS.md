@@ -9467,6 +9467,199 @@ eye of the lobby exists.
 
 **Commits.** `417025ea` (the additive glass and the split's comment), `1f1b9680`
 (RoomProbe's `-gpu` line), `0586b1c7` (ModernTest).
+
+#### Round 5: the glass takes the classic glass's hue
+2026-10-18
+
+**What.** A draw call the room draw draws as the classic draws its glass - the glass half
+of a split (ANDREA2's window grid) and the additive run's glass added whole (RICH2's
+bridge, and the rest of the 86 parts of Round 4's fix pass) - now takes the hue of the
+classic glass at its place: the luma of its add stays where Round 4 put it and its colour
+becomes the classic glass's. ANDREA2's panes come out blue and the bridge's pane green,
+each by its own classic. A draw call with no classic glass at its place keeps the art's
+colour (the lanterns, the street lamps, the glass on ANDREA1's table), and glass the room
+draw does not draw as the classic's glass keeps its colour whatever lies under it
+(ANDREA1's arched panes, the lamp glass of RICH2 and RICH3). The rule, not a colour, is
+the decision: no colour is named anywhere in the code.
+
+**Why.** The owner, 2026-10-18, after playing Round 4 (the grid "Top", its break "Top",
+the bridge's pane "Top"), asked whether the panes should stay grey: "Ich wuerde sagen,
+lass uns einen blauen Teint machen. Dann heben wir uns ein bisschen ab und sind naeher am
+OG." - let us make a blue tint; then we stand a little apart and are closer to the
+original. The original is this engine's classic draw, whose glass is blue: the hue is
+taken from the classic texels, never from a picture.
+
+**The classic glass, measured.** GlassHue, a scratch census over the fifteen classic
+`.TRC` files and the `.TRG` beside them (the engine's resolvers): for every material 14
+part with an alpha run under 1 or an additive run (181 parts), every classic face the
+classic adds - a room face whose texinfo has draw type 2, a face of a placed static or of
+a moveable of one mesh at its item with effects bit 0 or draw type 2 - whose centre lies
+inside one of the part's triangles' boxes grown by 32 units; the face's light the room
+vertex colour, the prelight times the static's shade, or a moveable's room's ambient, each
+split as the classic splits it (doubled up to 128); the texels' mean, weighted by area
+times the light's luma, and the added colour (the texel times the light) by area, its hue
+(HSV), saturation and luma band over the texels. 40 parts have classic glass at their
+place:
+
+| glass | classic faces | texels, mean | added colour | hue, sat | band (tenth, half, nine tenths) |
+|---|---|---|---|---|---|
+| ANDREA2's grid, groups 65 and 132: static 59 | 140 (70 each) | 14.2, 34.1, 47.2 | 11.4, 27.5, 38.1 | 204, 0.70 | 13.1, 20.4, 46.0 |
+| RICH2's bridge, group 125 part 2: items 183 to 185, slot 452, mesh 495 | 24 | 16.7, 31.6, 29.7 | 6.3, 11.9, 11.2 (ambient 48) | 173, 0.47 | 0.0, 10.1, 22.7 |
+| ANDREA1's arched panes, statics 50, 66, 68 | 6 to 34 | 19.1, 35.6, 44.5 | 8.6, 16.0, 19.9 | 201, 0.57 | 7.2, 11.6, 28.9 |
+| RICH2 group 6, page 1038: room faces | 5 | 0.8, 5.8, 6.7 | 0.4, 5.0, 4.1 | 169, 0.88 | 0.0, 0.0, 17.1 |
+| RICH1 group 65, page 3068: room faces | 6 | 50.2, 46.9, 48.5 | 34.9, 32.6, 33.7 | 332, 0.07 | 1.9, 15.2, 124.3 |
+| RICH3 groups 73, 74, page 3068: room faces | 6 | 50.2, 46.9, 48.5 | 0.0, 23.5, 24.3 | 182, 1.00 | 0.9, 7.3, 62.3 |
+| RICH3 groups 120, 168 to 171, page 3068: static 57 | 80 | 56.0, 52.0, 56.0 | 39.4, 36.6, 39.4 | 300, 0.07 | 26.7, 32.1, 43.6 |
+| RICH3 groups 95, 124, 143, 146, page 3309: room faces | 12 | 17.0, 32.1, 30.3 | 4.3, 12.1, 7.6 | 146, 0.65 | 0.0, 8.3, 22.5 |
+| RICH2 and RICH3 lamp glass, page 15101: static 17 | 48 to 192 | 170.5, 168.6, 170.5 | 94.2, 93.1, 94.2 (RICH2) | 300, 0.01 | 28.3, 115.4, 160.6 |
+| JOBY2 group 102, page 513: room faces | 8 | 18.1, 51.1, 114.5 | 5.7, 16.0, 43.1 | 223, 0.84 | 11.7, 16.0, 20.5 |
+
+The ANDREA2 row repeats Round 4's figures to the tenth (11.4, 27.5, 38.1; 13.1, 20.4,
+46.0). The bridge's classic is the three tilting bridge items, one mesh each, at their
+items' places; RICH3's groups 73 and 74 sit in rooms whose vertex light has no red, so
+their classic glass adds cyan with a red of 0.
+
+Today's art at the same places - the glass half against none (a scratch build that skips
+it) at Round 4's eight window eyes, the additive material 14 over black (`-glow -addmat
+14`) elsewhere:
+
+| eye | pixels | added colour | luma (tenth, half, nine tenths) | hue, sat |
+|---|---|---|---|---|
+| the window, the eight eyes | 78,280 to 404,393 | 15.3 to 17.3, 16.2 to 18.3, 15.4 to 17.2 | 15.9 to 17.9 (13.9 to 17.3, 15.7 to 17.6, 17.9 to 19.6) | 117 to 132, 0.06 to 0.07 |
+| the bridge, the trview eye | 10,847 | 18.1, 15.7, 15.6 | 16.4 (8.6, 18.0, 23.1) | 0, 0.13 |
+| the bridge, nearer | 69,489 | 15.0, 13.0, 13.1 | 13.6 (7.3, 11.3, 22.3) | 356, 0.14 |
+| RICH1 group 65 | 262,514 | 42.2, 55.8, 56.3 | 51.8 | 182, 0.25 |
+| RICH3 group 120 part 2 | 226,229 | 44.9, 59.6, 59.5 | 55.2 | 180, 0.25 |
+| RICH3 group 73 | 118,865 | 38.6, 52.3, 50.8 | 48.0 | 173, 0.26 |
+| RICH3 group 124 | 307,857 | 17.7, 25.5, 21.2 | 22.6 | 147, 0.30 |
+| ANDREA1 room 198, Round 1's eye | 152,615 | 0.9, 3.8, 4.1 | 3.0 | 186, 0.79 |
+
+The window's panes add a grey 16, 17, 16: the art's texels are blue (51, 69, 96 on average
+under the glass half), its vertex light warm, and the product grey; the classic adds 11.4,
+27.5, 38.1. The bridge adds a warm grey where the classic adds green.
+
+**The rule** (`hd_debris_rules.h`, "the glass's look"; `hd_render.cpp`, `GlassCandidate`,
+`GlassTintPrepare`, `HDRenderGlassTint`; `hd_level.cpp`, `BuildGlassLooks`). At the room
+build the renderer keeps, for every draw call of a room group that may be drawn as glass
+(a see-through range of the alpha pass, an additive range of material 14), the boxes of
+its triangles in world units. Once the level's statics are paired (`BuildStaticTables`),
+`BuildGlassLooks` walks the classic level: every face the classic adds - room faces of
+draw type 2 with their vertex colours, the faces of every placed static with effects bit 0
+or draw type 2 at the prelight times the shade, those of every moveable of one mesh at its
+item at its room's ambient - with its added colour, the mean over its texels on the
+classic page (`Textures[]`, read locked once each) of the texel times its light
+(`HDGlassFaceColour`). The renderer matches each face whose centre lies in one of a call's
+triangle boxes grown by 32 (`HDGlassAtPlace`), counted once, and turns their added colour
+summed by area into a direction whose luma is 1 (`HDGlassTintOf`). `draw_pass` writes it
+to `gTint` (c37) where the call is drawn as the classic's glass - the split's glass half,
+the additive run's whole glass - and zero for every other call and at the top of every
+pass; the room shader puts the luma of the call's add on the direction (`lit = gTint.w > 0
+? dot(lit, luma) * gTint.rgb : lit`, after the weight), a select that leaves every other
+draw call's picture to the bit. The page tests decide at the draw as before; their two
+numbers stand in `hd_debris_rules.h` now (`HDGlassFramePage`, `HDGlassWholePage`), which
+the pieces of a broken static read too. `HDLOG level=... glass classic_faces=...
+candidates=... tinted=... piece_looks=... ms=...` at the build, behind `-log`.
+
+The census of the rule (RoomProbe `-glasshue` over the fifteen levels): 190 draw calls may
+be glass; 43 have classic glass at their place and take a hue; 26 of those are drawn as
+the classic's glass and show it:
+
+| draw calls | where | classic glass | drawn as glass | the hue in the picture |
+|---|---|---|---|---|
+| 2 | ANDREA2 65, 132, page 3007 | static 59 | the split | blue, 0.479, 1.151, 1.592 |
+| 1 | RICH2 125, page 16103 | the bridge's mesh 495 | whole | green, 0.620, 1.173, 1.105 |
+| 1 | RICH2 6, page 1038 | room faces | whole | 0.110, 1.420, 1.171 |
+| 1 | RICH1 65, page 3068 | room faces | whole | grey, 1.044, 0.976, 1.008 |
+| 15 | RICH3 73, 74, 120, 168 to 171, page 3068 | room faces, static 57 | whole | cyan (0, 1.419, 1.466) at 73, 74; grey (1.044, 0.969, 1.044) at static 57 |
+| 6 | RICH3 95, 124, 143, 146, page 3309 | room faces | whole | green, 0.461, 1.309, 0.822 |
+| 17 | ANDREA1 15074, RICH2/RICH3 15101, RICH2 100 (3309), RICH3 46 (10084), JOBY2 102 (513) | yes | no | none |
+| 147 | the lanterns, the street lamps, the table glass, JOBY's 16103, 10072, 16073, 15026, the other 3068 and 3309 | none | either | none |
+
+**Measured.** RoomProbe of `d0bf4f7b` against the round's, 960 x 540, `-time 3`, `-sky`,
+the walk's rooms (`-vis 1`). The window, the glass half against none:
+
+| eye | pixels | before: added colour, luma, hue, sat | after |
+|---|---|---|---|
+| the hall side (241) | 340,847 | 16.2, 17.3, 16.3; 16.9; 126; 0.06 | 8.1, 19.4, 26.9; 16.9; 204; 0.70 |
+| close to the bars (242) | 404,393 | 17.3, 18.3, 17.2; 17.9; 117; 0.06 | 8.6, 20.6, 28.5; 17.9; 204; 0.70 |
+| above, hall side (236) | 219,538 | 15.9, 16.9, 15.9; 16.4; 122; 0.06 | 7.9, 18.9, 26.2; 16.4; 204; 0.70 |
+| above the ledge (235, 240) | 139,309 | 15.5, 16.4, 15.5; 16.1; 122; 0.06 | 7.7, 18.5, 25.6; 16.0; 204; 0.70 |
+| ledge, tick 62750 | 145,835 | 16.2, 17.3, 16.4; 16.9; 132; 0.07 | 8.1, 19.4, 26.9; 16.9; 204; 0.70 |
+| ledge, tick 72641 | 319,564 | 15.3, 16.2, 15.4; 15.9; 125; 0.06 | 7.6, 18.2, 25.3; 15.9; 204; 0.70 |
+| Round 2's eye | 161,812 | 16.3, 17.3, 16.4; 16.9; 125; 0.06 | 8.1, 19.4, 26.9; 16.9; 204; 0.70 |
+| Round 2's broken-state eye | 78,280 | 16.0, 17.0, 16.1; 16.6; 123; 0.06 | 8.0, 19.1, 26.5; 16.6; 204; 0.70 |
+
+The luma's tenth, half and nine tenths move by at most 0.6 of a level (the hall side 14.6,
+16.7, 19.6 before and 14.1, 16.6, 19.8 after): inside the classic band of 13.1 to 46.0, as
+before; the hue and the saturation are the classic's (204, 0.70). The whole picture
+changes at exactly the glass half's pixels (78,280 to 404,393, at most 14 to 64 levels a
+channel) and nowhere else. The additive glass over black:
+
+| eye | pixels | before | after |
+|---|---|---|---|
+| the bridge, the trview eye | 10,847 | 18.1, 15.7, 15.6; 16.4; hue 0, 0.13 | 10.0, 19.2, 18.1; 16.3; hue 173, 0.48 |
+| the bridge, nearer | 69,489 | 15.0, 13.0, 13.1; 13.6; 356, 0.14 | 8.3, 16.0, 15.1; 13.6; 173, 0.48 |
+| RICH1 group 65 | 262,514 | 42.2, 55.8, 56.3; 51.8; 182, 0.25 | 54.1, 50.5, 52.2; 51.8; 332, 0.07 |
+| RICH2 group 6 | 518,400 | 2.0, 5.0, 5.0; 4.1 | 0.0, 6.0, 5.0; 4.1 |
+| RICH3 group 120 part 2 | 226,229 | 44.9, 59.6, 59.5; 55.2; 180, 0.25 | 57.6, 53.5, 57.6; 55.2; 300, 0.07 |
+| RICH3 group 73 | 118,865 | 38.6, 52.3, 50.8; 48.0; 173, 0.26 | 0.0, 68.1, 70.4; 48.0; 182, 1.00 |
+| RICH3 group 124 | 307,857 | 17.7, 25.5, 21.2; 22.6; 147, 0.30 | 10.4, 29.7, 18.6; 22.6; 146, 0.65 |
+| ANDREA1, its three eyes | 129,140 to 183,343 | 3.0, 2.9, 2.7 | byte-identical |
+| the lanterns, the table glass, the lamp glass (their census eyes) | - | - | byte-identical |
+
+The bridge is green now, its luma kept to the tenth; RICH1's glass and RICH3's static 57
+panes turn from the art's cyan to the classic's near grey, RICH3's groups 73 and 74 to the
+classic's pure cyan.
+
+**The cost**, at three of the window's eyes, 2,560 x 1,440, every pass of the groups timed
+20 times on the GPU (`-gpu 20 -gpuall`), three runs each: the draw calls as before (157,
+224, 102), the medians 0.811, 0.752, 0.927 ms before and 0.825, 0.788, 0.933 after above
+the ledge, 0.787, 0.783, 0.798 and 0.788, 0.770, 0.874 at Round 2's eye, 0.319 three times
+and 0.308 three times on the hall side - within the runs' own spread. The room pixel
+shader takes two instruction slots more (519 where it had 517, fxc's count); a pass writes
+`gTint` once at its top and once where the hue starts or ends. The pictures in the game's
+own frame order (RoomProbe `-twophase`, the solid and the blend phase in two brackets) are
+those of the one bracket, 8 of 8.
+
+**Decisions.** The hue is the classic's added colour, the texel times its light, so the
+classic's coloured room light comes with it where it lights the glass (RICH3's cyan
+rooms); the light's luma weighs nothing but its strength. The luma kept, so Round 4's
+strength stands. Faces weighted by their area, as the picture weighs them. The place is a
+triangle's box and not the part's: RICH2's group 125 has two additive floor faces of the
+room inside the part's box (89.8 grey, 2,097,152 units^2), none inside a triangle's box. A
+moveable counts where it has one mesh: the bridge's items have one, and a moveable of
+several would need its pose. The tint is computed once a level at the build, never per
+frame and never from a picture.
+
+**Checked.** `d0bf4f7b` against the round's, both RoomProbe: the classic views (`hd_build`
+0) 7 of 7, the census eyes 15 of 15 with `hd_water` 0 and 15 of 15 with 1, the 15 parity
+cameras 15 of 15 and 15 of 15, the six HD views 6 of 6 and 6 of 6, byte-identical. Round
+4's 74 census eyes 72 of 74 (the two the grid's: 249,127 pixels, at most 64 and 65), the
+107 additive census eyes 80 of 107; the 27 others see glass that takes a hue (RICH1 65,
+RICH2 6 and 125, RICH3 73, 74, 95, 120, 124, 143, 146 and 168 to 171: 70,164 to 518,400
+pixels, at most 2 to 50); the census eyes of the lanterns, the street lamps, the table
+glass and the lamp glass among the 80, byte-identical. The nine builds exit 0 (the
+engine's `PCtomb5 built Oct 19 2026 01:55:26`, md5 `a3d3f71a4f2dec80f6adc8acf3677a95`);
+ModernTest 15,879 checks with the glass hue's 48 and the split's 2 new ones, MenuTest
+44,754, InterpTest 729, LipsTest 299 with the comparison `.OBJ` folder and 272 without, 0
+failed (the worktree has no game folder: LipsTest run by hand with the classic
+`cutseq.bin` as its third argument; from `blips.bat` alone 295 and 268, the nine
+`cutseq.bin` checks failing).
+
+**Left.** Not seen in the game. The engine's classic UVs carry `AdjustUV`'s half-texel
+nudge and RoomProbe's are the file's; on an edge along a page axis the texels are the
+same, on a diagonal edge they may differ by a row. RICH1's group 65 glass and RICH3's
+static 57 windows, cyan in the art, are near grey now, as the classic draws them; RICH3's
+groups 73 and 74 pure cyan. ANDREA1's arched panes and the lamp glass have classic glass
+under them and keep the art's colour, because the room draw does not draw them as the
+classic's glass (Round 4's decision). A static drawn as a piece of the art (the static
+pieces of `HDRenderStaticArt`) takes no hue: its ranges are built after the `.TRG` is let
+go; whether one of them holds such glass is not counted. The time of the build's walk over
+the classic glass is logged (`HDLOG ... glass ... ms=`) and not measured in the game.
+
+**Commits.** `248a2b8c` (RoomProbe's classic pieces take the room's ambient, below in the
+pieces' Round 2), `6005b1ad` (the hue), `5189603e` (ModernTest).
+
 ### The pieces of a broken static in HD (#222)
 2026-10-18
 
@@ -9645,6 +9838,166 @@ later lives fly on where the game's pieces settle.
 records); `32797348` (the break's glue out of `hd_level.cpp` into `game/debris.cpp` and
 `hd_debris`, the ModernTest comment back on `far_plane`) and `b16c5270` (these
 records).
+
+#### Round 2: the glass pieces take the pane's hue and show
+2026-10-18
+
+**What.** The glass of a broken window flies now as the room draw draws the pane it came
+from: in two halves where the static's art is a frame with glass in it (the frame's pieces
+as before, the glass added ONE / ONE), and added whole where the art's glass is the
+additive run of a page that is glass in every texel. What is added takes the hue of the
+classic glass of the breaking static, as the pane in its place does (the windows' Round
+5), and is raised by the classic band's top over its middle, so the pieces show. The 30
+statics with no part of the art are looked up in the `.TRG` and in TROne's code: nothing
+in our data gives them a part, and they are parked.
+
+**Why.** The owner, 2026-10-18, after playing Round 1: the window's break "Top"; asked
+whether the shards should show more: "Ja, wenn die blau werden, sollte es noch ein extra
+Boost sein." - yes; if they become blue, an extra boost on top. On the statics with no HD
+part: "Das war mir schon mal aufgefallen, schau mal bei TROne nach, sonst als # parken." -
+I noticed that before; have a look at TROne, otherwise park it as a task. On the deal's 5
+to 20 ms in the frame of a large break: "erst mal so lassen" - leave it for now; it stays.
+
+**The classic shards, measured.** RoomProbe `-debris 132:0 <life>` at the break's eye of
+the owner's log of 2026-10-18 (`log_andrea2_window.txt`: the flip at tick 79750, the glass
+sound at 79781, the flyby's eye at tick 80313, 68754, -3005, 42553, looking at 67768,
+-2973, 42259, room 132), the lives 0 to 30 in steps of 3 - the first second - the pieces'
+added light, the picture with them against the picture with the frame's pieces alone
+(scratch builds with a knob that leaves the added pieces out). The classic look
+(`-debrisclassic`, with the room's ambient that `DrawDebris` adds, which the tool left out
+until this round) and the HD look of Round 1:
+
+| life | classic: pixels, added colour, luma (tenth, half, nine tenths), hue | HD, Round 1: pixels, luma |
+|---|---|---|
+| 0 | 30,529; 23.4, 47.0, 58.0; 41.2 (21.0, 30.4, 75.5); 199 | 34,087; -2.4 (-5.1, -2.2, -0.3) |
+| 6 | 22,950; 21.0, 40.8, 50.2; 36.0 (19.2, 28.1, 67.2); 199 | 21,745; -2.0 |
+| 12 | 16,793; 20.2, 38.9, 47.8; 34.3 (19.0, 27.3, 64.1); 199 | 13,401; -2.0 |
+| 18 | 16,244; 20.8, 41.2, 50.9; 36.2 (19.2, 28.3, 64.7); 199 | 12,857; -2.7 |
+| 24 | 15,328; 18.8, 37.8, 46.9; 33.1 (19.1, 26.9, 61.5); 200 | 11,310; -2.2 |
+| 30 | 6,163; 15.3, 34.3, 43.8; 29.7 (18.7, 25.8, 48.8); 200 | 3,673; -1.1 |
+
+The classic panes fly blue and add 30 to 41 levels on average; the HD glass at the art's
+0.1 darkened the picture by 1 to 3 levels and was not seen. Without the ambient the
+classic look added 24 to 34 (the tool's pictures of Round 1). The flyby's eye at tick
+79750 (69120, -2944, 42496), the near eye of Round 1 and the hall's (room 73) give the
+same within a level (41.3, 41.7 and 41.7 at life 0). The classic band of the pane's own
+texels at the static's light (the windows' Round 5, the census): 13.1, 20.4, 46.0; at the
+pieces' light with the ambient about 1.2 times that.
+
+**The rule** (`hd_debris_rules.h`, "the glass's look"; `hd_debris.h`; `hd_level.cpp`,
+`BuildGlassLooks`). A triangle of a piece is glass when its kind and page say the room
+draw draws it as the classic's glass: the alpha run of material 14 at a see-through weight
+under 1 on a page that paints its frame on clear texels (`HDGlassFramePage`), drawn in two
+halves - the frame's clear texels first, exactly as Round 1 drew them (`gPass.z` 1), then
+the rest added ONE / ONE with the specular off (`gPass.z` -1, `gPass.w` 0) - or the
+additive run of material 14 on a page with no clear texel (`HDGlassWholePage`), added
+whole (`gPass.z` -1). What is added takes the part's look in `gTint`: the hue of the
+breaking static's own faces the classic adds, by area (`HDGlassTintOf`), times the gain
+`HDGlassShardGain`, the band's top over its middle - the nine tenths over the half of
+those faces' texels' added luma, in whole levels (`HDGlassBand`). `BuildGlassLooks` hands
+every pair of a static and a part its look at the level build (`HDDebrisPartLook`, `HDLOG
+level=... glass pieces room=... mesh=... group=... material=... faces=... tint=...
+band=... gain=...` behind `-log`); the break carries it to the part's triangles. Every
+other triangle draws as before, and a static whose faces the classic does not add takes no
+look. The pieces' place, flight, count, life and sound are the classic break's:
+`game/debris.cpp` is untouched.
+
+The looks of the fifteen levels (RoomProbe `-pieceslook`): ANDREA2's window (rooms 65 and
+132) hue 0.479, 1.151, 1.592, band 13, 20, 46, gain 2.300, its 2,146 triangles in halves;
+RICH3's static 57 (rooms 120, 168 to 171, ten statics) hue 1.044, 0.969, 1.044, band 26,
+32, 43, gain 1.344, its 4 additive triangles added whole; ANDREA1's windows (rooms 198,
+200, 201) have a look (0.603, 1.124, 1.404, gain 2.545) but their pane's page marks clear
+places, so their pieces draw as before; JOBY2's three panes (static 50, room 57; 0.374,
+1.054, 2.366) and RICH2's statics 50 and 59 have parts of material 0 or an alpha run at
+weight 1, which are no glass of the room draw, and draw as before.
+
+**Measured.** The HD look of this round at the same eye and lives, its added light against
+the frame's pieces alone:
+
+| life | pixels | added colour | luma (tenth, half, nine tenths) | hue, sat |
+|---|---|---|---|---|
+| 0 | 36,814 | 18.5, 44.6, 61.7 | 38.7 (33.1, 38.2, 45.3) | 204, 0.70 |
+| 6 | 24,951 | 19.5, 47.1, 65.2 | 40.9 (33.1, 39.9, 47.1) | 204, 0.70 |
+| 12 | 15,478 | 21.8, 52.5, 72.6 | 45.6 (33.8, 41.8, 68.1) | 204, 0.70 |
+| 18 | 14,408 | 22.7, 54.6, 75.6 | 47.5 (33.1, 41.1, 80.7) | 204, 0.70 |
+| 24 | 13,153 | 20.6, 49.6, 68.7 | 43.1 (33.1, 40.7, 48.5) | 204, 0.70 |
+| 30 | 3,967 | 20.4, 49.1, 67.9 | 42.7 (34.8, 42.5, 48.5) | 204, 0.70 |
+
+The glass pieces add 38.7 to 47.5 levels, blue with the pane's hue and saturation; their
+half lies at 38 to 42 where the classic pieces' lies at 26 to 30, and their tenth above
+the classic's half: the upper part of the classic band, below its brightest tenth (49 to
+77). The frame's pieces, drawn alone, are byte-identical to Round 1's at all six eyes and
+eleven lives (66 of 66); the pictures with no pieces too (66 of 66); ANDREA1's window at
+its eleven lives (11 of 11). RICH3's static 57 at its census eye (room 120): its 4
+triangles fly whole, grey (the pane in place and the pieces change the picture at 179,683
+to 226,190 pixels, lives 0, 6 and 15).
+
+The flight: the scratch harness of Round 1 (`game/debris.cpp` of `dc4883fc` and of this
+round with the same stubs, ANDREA2's window broken as the controller does, the debris
+array hashed after the break and after each of 120 steps): the 121 hashes and the random
+generator's last state equal byte for byte, md5 `97e9d334af18cada1401a31a3906533c` for
+both outputs, as in Round 1; the break's line unchanged (1 part, 330 faces, 165 places,
+2,146 triangles, 234 faces with art, 92 of 128 pieces with art, 926 in flight).
+
+**The cost**, at the break's eye at life 0, 2,560 x 1,440, five runs each: the pieces one
+draw call before, two now (the frame's half and the glass's), 0.035 to 0.040 ms of GPU
+time before and 0.060 to 0.068 ms now; the rooms' 121 draw calls and their medians (0.372
+to 0.391 ms before, 0.375 to 0.386 ms now) as before.
+
+**The 30 statics with no part.** Per static, the `.TRG` at its place (StaticArt, a scratch
+reader through the engine's resolvers: every part of any group whose triangles' centroids
+lie in the static's box grown by 64 units) and RoomProbe `-smashcensus` and
+`-statictable`:
+
+| level | statics (room:index, slot) | what the `.TRG` has at the place | why `HDStaticBreakParts` finds none |
+|---|---|---|---|
+| TITLE | 113:1 (52), 113:2 (53), 113:3 (51), 114:0 to 114:2 (53) | the room's one opaque part (group 113 part 0, 13,508 triangles; group 114 part 0, 9,808), 3 to 14 % of it inside the box | the level has no destructible part at all |
+| RICH1 | 101:0, 102:0 (50); 106:0, 107:0 (52) | groups 101, 102, 106 part 0 (608 opaque and 210 additive triangles; 468 opaque), 52 to 91 % inside | the level's 5 destructible parts all pair with other statics |
+| RICH1 | 147:0 to 147:3, 150:0 to 150:3 (58, 57, 56, 55) | group 147's part 0 (10,481 opaque, 64 additive; 9,092 inside static 58's box) and part 1 (material 13, 240) | as above |
+| RICH2 | 46:8 to 46:11, 75:6 to 75:9 (58) | plates 114 by 200 units on a wall: 26 to 93 triangles of the opaque parts of groups 46, 66, 75, 79 | the level's 14 destructible parts all pair with other statics |
+| RICH2 | 57:0 to 57:3 (59, 53) | 12 to 19 triangles of group 57's part 0, 61 to 82 of group 61's | as above |
+
+The art bakes these 30 statics into the rooms' ordinary parts: no part with material bit
+15, no other name, no twin; `-statictable` answers each "art, no piece" - in HD the art
+keeps drawing the static after its break, and the classic pieces fly. TROne-main (GPLv3,
+read only): its tr5 glue draws the pieces the classic way (`games/tr5/glue/
+hostglue_fx5b.cpp`, `DrawDebris`: the face's classic texinfo and page, `AddTriZBuffer` and
+`AddTriSorted`), and its renderer hides a broken static's art only where the `.TRG` gives
+it a part of its own, material bit 15 with the static's ordinal among the room's statics
+50 to 59 in bits 8 to 14 (`host/render/game_renderer.cpp`, `g_glas_parts` and
+`set_static_shattered`). Its rule rests on the destructible parts these 30 statics do not
+have, so nothing of it is taken: **parked**. A rule that cut a static's art out of a
+room's part by its box would cut the room's walls and floors with it (RICH1 room 147:
+9,092 of 10,545 triangles inside static 58's box).
+
+**Decisions.** The glass of a piece is the room draw's glass by the same two page tests,
+so a pane and its pieces never disagree on what is glass. The hue from the breaking
+static's own faces is the pane's hue (the same 70 faces of static 59, at the same light).
+The gain is the classic's own band, its top over its middle, and not a number: the pane's
+add sits near the middle (16 to 18 against 20.4), and the owner asked for an extra boost
+on the blue, so the pieces go towards the top rather than stay at the middle. A multiplier
+on the add and not a fixed colour, so the art's texture stays in the pieces. The frame's
+half draws first, as Round 1 drew the whole triangle. The deal's cost stays, as the owner
+said.
+
+**Corrections to Round 1.** RoomProbe's `-debrisclassic` left out the room's ambient that
+`DrawDebris` adds to every piece's colour (`specificfx.cpp`; ShatterObject keeps the
+broken static's room's ambient), so its classic picture flew ANDREA2's panes at 0.8 of
+their page where the game adds them at about the page itself (room 132's ambient 48, 32,
+16 over the static's light of 102 a channel); the tool adds it now, and the record's "the
+classic look shows the gold bars and the blue panes" stands, brighter.
+
+**Checked.** As the windows' Round 5. The six break eyes at eleven lives: the frame's
+pieces 66 of 66 and the pictures with no pieces 66 of 66 byte-identical to Round 1's,
+ANDREA1's window 11 of 11; the 55 others are ANDREA2's eyes with the glass pieces in view.
+
+**Left.** Not seen in the game; no run proves the engine's own pairing of the looks
+(`BuildGlassLooks` reads the pairs of `BuildStaticTables`). The 30 statics without a part
+break classic and their art stays: parked for a task of its own. The deal's 5 to 20 ms.
+ANDREA1's window pieces keep their faint glow (their pane's page marks clear places).
+
+**Commits.** `248a2b8c` (RoomProbe's classic pieces take the room's ambient), `6082469a`
+(the glass pieces' look), `5189603e` (ModernTest).
 
 ### HD models for the pickups: the EXTRA prefix, a mod's own inventory model, and lying on the floor
 2026-09-08 - 2026-09-15

@@ -1460,6 +1460,9 @@ see *Lara in HD* below for which of her stays classic and why.
   every triangle of the static's HD copy goes with the classic face it lies
   on, and a piece made of that face carries those triangles, drawn with the
   room's own light and blend: a bar flies as the bar, a pane stays glass.
+  The glass of a broken window flies as its pane is drawn, in the colour of
+  the original's glass, and brighter than the pane, towards the top of what
+  the original's flying glass adds, so the shards are seen.
   Where, how far, how many and for how long the pieces fly is the game's
   own, unchanged. A static with no HD copy, and every break while the world
   is drawn classic, throws the classic pieces as before.
@@ -1817,6 +1820,12 @@ it.
   between its rails as they do in the original. Glass whose texture marks
   its own clear places - ANDREA1's arched windows, the lamp glass of the
   VCI offices - keeps the strength its texture gives it.
+  The glass the engine draws as the original draws its glass takes the colour
+  of the original's glass at the same place, at its own strength: ANDREA2's
+  barred window has blue panes again, the VCI bridge's glass is green, and
+  the windows of RICH1 and RICH3 take the near-grey or the cyan of the
+  original's panes there. Where the original has no glass at the place - the
+  street lanterns, the glass on a table - the Remaster's colour stays.
 - **Marble floors reflect.** The Remaster builds the polished floors of the
   VCI building - the RICH2 lobby and the halls around it, the cut scene that
   follows it and rooms of the title flyby - as a floor that is slightly
@@ -3382,6 +3391,15 @@ tris_flying=... ms=...` says how its art went to its classic faces: the faces
 and the places they stand at, the triangles dealt and the faces that took
 any, the pieces made and those that carry art, the triangles in flight, and
 the deal's time.
+
+`HDLOG level=<stem> glass pieces room=<r> mesh=<m> group=<g> material=<m>
+faces=<n> tint=<r,g,b> band=<tenth,half,nine tenths> gain=<x>` follows for
+every static that pairs with a part: the look of the glass pieces it breaks
+into - the faces the original adds on its mesh, their hue, their band and the
+gain out of it. `HDLOG level=<stem> glass classic_faces=<n> candidates=<n>
+tinted=<n> piece_looks=<n> ms=<ms>` closes the level build's walk over the
+original's glass: the faces it adds, the draw calls that may be glass, those
+that took a hue, the statics with a look, and the walk's time.
 
 A randomized level adds two more room reasons and a block of its own. A room
 the run LIFTED or BUILT reads `hd=0 reason=marker`; a room that only lost the

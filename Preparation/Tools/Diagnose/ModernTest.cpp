@@ -24558,7 +24558,7 @@ static void spring_clock()
 
 /* The marble floors' page column (hd_gloss_math.h, hd_gloss_pages.h): the
  * mirror word read at a line's end, a line of the word alone naming no
- * sheen, the file's word over the table's, and the 37 pages of the column
+ * sheen, the file's word over the table's, and the 40 pages of the column
  * in the table - the lobby's among them, which keep no sheen. */
 static void marble_pages()
 {
@@ -24608,7 +24608,8 @@ static void marble_pages()
 
 	static const int kPages[] =
 	{
-		54, 162, 246, 249, 273, 274, 285, 366, 408, 411, 960, 1002, 1010,
+		54, 162, 169, 170, 183, 246, 249, 273, 274, 285, 366, 408, 411, 960,
+		1002, 1010,
 		1029, 1045, 1046, 1047, 1048, 1049, 1053, 1054, 1063, 1070, 1079,
 		1081, 1082, 1085, 1086, 1094, 1104, 1105, 1110, 2147, 2149, 2154,
 		3314, 3315
@@ -24623,9 +24624,9 @@ static void marble_pages()
 	for (int i = 0; i < HDGlossTableSize(); i++)
 		column += kHDGlossPages[i].mirror;
 
-	ok(listed == 37 && column == 37,
-		"marble: the 37 pages of the column and no other", listed * 100 +
-		column, 3737);
+	ok(listed == 40 && column == 40,
+		"marble: the 40 pages of the column and no other", listed * 100 +
+		column, 4040);
 
 	// A lobby page in the column names no sheen: HDGlossResolve finds none.
 	const HDGloss lobby = HDGlossResolve(0, 0, false,

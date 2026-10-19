@@ -13090,11 +13090,6 @@ static void vis_hidden_room()
 		"hidden: ANDY1 212, two guests", 1, 1);
 }
 
-/* A classic room standing inside another room's box keeps its faces: JOBY2's
- * sniper room 21, a hollow group (360 triangles, none drawn) with 12 faces
- * no art covers, inside room 146's box. Its faces are what the broken
- * facade window shows; whatever stands in it, only an empty group whose
- * guests model the place is left out. */
 /* The lids of ANDY3's hollows (HDVisClassicRoomHidden's floorOnArt): rooms
  * 26, 28 and 210, empty groups with 31, 13 and 15 faces no art covers and no
  * guest, every floor link naming the HD room below (24, 27 and 209); room
@@ -13119,6 +13114,11 @@ static void vis_lid_rule()
 		"lid: ANDY3 88, guests and floor on art, goes as before", 1, 1);
 }
 
+/* A classic room standing inside another room's box keeps its faces: JOBY2's
+ * sniper room 21, a hollow group (360 triangles, none drawn) with 12 faces
+ * no art covers, inside room 146's box. Its faces are what the broken
+ * facade window shows; whatever stands in it, only an empty group whose
+ * guests model the place is left out. */
 static void vis_enclosed_kept()
 {
 	ok(!HDVisClassicRoomHidden(false, false, 12, 0, false),
@@ -13133,6 +13133,58 @@ static void vis_enclosed_kept()
 		"enclosed: the same faces round an empty group go", 1, 1);
 	ok(!HDVisClassicRoomHidden(true, false, 12, 0, false),
 		"enclosed: an empty group with no guest keeps them", 0, 0);
+}
+
+/* Whether a room's floor links all name rooms drawn HD (HDVisFloorOnArt):
+ * ANDY3's lid 26 over room 24 alone, a room half over classic ground, and
+ * the empty and null lists. */
+static void vis_floor_on_art()
+{
+	const int lid[1] = { 24 };
+	const int half[2] = { 24, 25 };
+	const int three[3] = { 27, 209, 87 };
+	const auto hd = [](int r) { return r == 24 || r == 27 || r == 209 ||
+		r == 87; };
+
+	ok(HDVisFloorOnArt(lid, 1, hd),
+		"floor on art: ANDY3 26, every link to room 24", 1, 1);
+	ok(!HDVisFloorOnArt(half, 2, hd),
+		"floor on art: one link to a classic room keeps it out", 0, 0);
+	ok(HDVisFloorOnArt(three, 3, hd),
+		"floor on art: three rooms, all drawn HD", 1, 1);
+	ok(!HDVisFloorOnArt(lid, 0, hd),
+		"floor on art: no link at all (ANDY3 103) is not on art", 0, 0);
+	ok(!HDVisFloorOnArt((const int*)0, 3, hd),
+		"floor on art: no list is not on art", 0, 0);
+	ok(!HDVisFloorOnArt(lid, 1, [](int) { return false; }),
+		"floor on art: the room below drawn classic", 0, 0);
+	ok(!HDVisFloorOnArt(three, -1, hd),
+		"floor on art: a negative count is no link", 0, 0);
+}
+
+/* Whether a listed room turns the sky on (HDVisClassicRoomOpensSky): ANDY3's
+ * lids 26, 28 and 210, left out and not under the sky; room 88, left out
+ * under the sky; JOBY2's sniper room 21, kept. */
+static void vis_opens_sky()
+{
+	ok(HDVisClassicRoomOpensSky(true, false),
+		"opens sky: ANDY3 26, left out, not under the sky", 1, 1);
+	ok(HDVisClassicRoomOpensSky(
+		HDVisClassicRoomHidden(true, false, 13, 0, true), false),
+		"opens sky: ANDY3 28 by the lid rule", 1, 1);
+	ok(HDVisClassicRoomOpensSky(
+		HDVisClassicRoomHidden(true, false, 15, 0, true), false),
+		"opens sky: ANDY3 210 by the lid rule", 1, 1);
+	ok(!HDVisClassicRoomOpensSky(true, true),
+		"opens sky: ANDY3 88 is under the sky already", 0, 0);
+	ok(!HDVisClassicRoomOpensSky(
+		HDVisClassicRoomHidden(false, false, 12, 1, false), false),
+		"opens sky: JOBY2 21, kept, closes its window", 0, 0);
+	ok(!HDVisClassicRoomOpensSky(
+		HDVisClassicRoomHidden(true, false, 11, 0, false), false),
+		"opens sky: ANDY3 103, kept, closes its window", 0, 0);
+	ok(!HDVisClassicRoomOpensSky(false, true),
+		"opens sky: a kept room under the sky adds nothing", 0, 0);
 }
 
 /* The static mesh the visibility path leaves to the art that lies on it
@@ -13385,8 +13437,72 @@ static void vis_enclosed_tables()
 				t.enclosedTris[1] == 12,
 				"enclosed: one room, by A's twelve triangles",
 				t.roomsEnclosed, 1);
+			// The verdict does not ask the enclosure: C, hollow, stays.
+			ok(!HDVisClassicRoomVerdict(t, 1, false, false, 1,
+				[](int) { return true; }),
+				"enclosed: C enclosed by A, hollow, keeps its faces", 0, 0);
 		}
 	}
+}
+
+/* The floor links' table (HDVisTables::floorRooms) and the verdict over it
+ * (HDVisClassicRoomVerdict) on a level built by hand: four rooms side by
+ * side with no art. Room 0, a lid, has three floor links to room 1, drawn
+ * HD; room 3 has links to rooms 1 and 2, and to two rooms the level does
+ * not hold; room 2 has none. */
+static void vis_floor_tables()
+{
+	trf::remaster::Trg trg;
+	std::vector<HDVisRoom> rooms(4);
+	const int links[7] = { 1, 1, 1, 1, 99, 2, -1 };
+	const int first[4] = { 0, 3, 0, 3 };
+	const int count[4] = { 3, 0, 0, 4 };
+
+	for (int r = 0; r < 4; r++)
+	{
+		HDVisRoom& one = rooms[(size_t)r];
+
+		memset(&one, 0, sizeof(one));
+		one.x = r * 8192;
+		one.xs = one.zs = 4;
+		one.top = -2048;
+		one.bottom = 0;
+		one.twin = -1;
+		one.firstLink = first[r];
+		one.linkCount = count[r];
+	}
+
+	trg.groups.resize(4);
+
+	HDVisTables t;
+
+	HDVisBuild(trg, &rooms[0], 4, 0, 0, 0, 0, links, 7, HDVisDefaults(), &t);
+
+	const auto hd = [](int r) { return r == 1; };
+	const bool sizes = t.floorFirst.size() == 4 && t.floorCount.size() == 4;
+
+	ok(sizes && t.floorCount[0] == 1 &&
+		t.floorRooms[(size_t)t.floorFirst[0]] == 1,
+		"floor table: three links to room 1 name it once",
+		sizes ? t.floorCount[0] : -1, 1);
+	ok(sizes && t.floorCount[3] == 2,
+		"floor table: links to 1, 1, 2 and two rooms not held name two",
+		sizes ? t.floorCount[3] : -1, 2);
+	ok(sizes && t.floorCount[2] == 0 && t.floorCount[1] == 0,
+		"floor table: rooms without a link name none",
+		sizes ? t.floorCount[2] : -1, 0);
+	ok(HDVisClassicRoomVerdict(t, 0, true, false, 1, hd),
+		"floor verdict: the lid over room 1 is left out", 1, 1);
+	ok(!HDVisClassicRoomVerdict(t, 3, true, false, 1, hd),
+		"floor verdict: half over classic room 2 keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomVerdict(t, 2, true, false, 1, hd),
+		"floor verdict: no floor link, no guest, keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomVerdict(t, 0, false, false, 1, hd),
+		"floor verdict: a hollow group over room 1 keeps its faces", 0, 0);
+	ok(!HDVisClassicRoomVerdict(t, 0, true, true, 1, hd),
+		"floor verdict: covered, the stand rule draws it", 0, 0);
+	ok(!HDVisClassicRoomVerdict(t, 4, true, false, 1, hd),
+		"floor verdict: a room the tables do not hold", 0, 0);
 }
 
 /* The static covers on a level built by hand: room A (0), 6 x 6 sectors,
@@ -25594,11 +25710,14 @@ int main()
 	vis_hidden_room();
 	vis_enclosed_kept();
 	vis_lid_rule();
+	vis_floor_on_art();
+	vis_opens_sky();
 	vis_static_rule();
 	vis_height_rule();
 	vis_box_side();
 	vis_setting_migration();
 	vis_enclosed_tables();
+	vis_floor_tables();
 	vis_static_covers();
 	stand_overlap();
 	stand_part();

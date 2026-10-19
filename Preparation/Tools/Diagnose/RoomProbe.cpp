@@ -449,6 +449,11 @@
  *                     classic) is left out as -skipgroup leaves a group out,
  *                     one "hollow:" line each: the engine draws no such
  *                     group, while -with draws whatever group it is given.
+ *     -opensky        with -vis 1 and -walk: `outside` (FARCULL's outside=)
+ *                     also turns on for a listed room the visibility path
+ *                     leaves out that is not under the sky, as the walk of
+ *                     game\draw.cpp turns it on (HDVisRoomOpensSky); the
+ *                     "classic" lines say opens_sky= for every such room.
  *     -statictable    every static mesh of the level answered as
  *                     hd_level.cpp's BuildStaticTables answers it (the same
  *                     HDRenderStaticArt), beside the answer of the rule
@@ -4900,6 +4905,34 @@ namespace walkoff
 		return g_group_of[(size_t)main] == group ? main : -1;
 	}
 
+	/* -opensky: the walk's `outside` also turns on for a listed room the
+	 * visibility path leaves out that is not under the sky
+	 * (HDVisRoomOpensSky, hd_level.cpp). */
+	static bool g_open_sky = false;
+
+	/* HDVisRoomOpensSky as far as the probe knows the engine's state: a room
+	 * with classic faces whose group has no art in the .TRG (g_hd), its
+	 * guests and its floor links from the tables, every floor room's art
+	 * read as g_hd reads it (no flips, hollow groups counted). The stand
+	 * rule's cover is not asked: the rooms it covers are all under the sky
+	 * (RICH2's 15 to 19), which opens nothing. */
+	static bool VisOpensSky(int rn)
+	{
+		if (!g_vis || rn < 0 || (size_t)rn >= g_vis_rooms.size() ||
+			((size_t)rn < g_hd.size() && g_hd[(size_t)rn]))
+			return false;
+
+		const bool hidden = HDVisClassicRoomVerdict(g_vis_tables, rn, true,
+			false, g_vis_rooms[(size_t)rn].faceCount, [](int to)
+			{
+				return to >= 0 && (size_t)to < g_hd.size() &&
+					g_hd[(size_t)to] != 0;
+			});
+
+		return HDVisClassicRoomOpensSky(hidden,
+			(g_vis_rooms[(size_t)rn].flags & 8) != 0);
+	}
+
 	static void VisNote(int rn, int why, char before)
 	{
 		if (rn < 0 || (size_t)rn >= g_vis_why.size() || (before & 3) ||
@@ -5705,10 +5738,10 @@ namespace walkoff
 
 				printf("-vis: classic room=%d faces=%d outside=%d "
 					"guests=%d box=%ld,%ld,%ld sectors=%dx%d y=%ld..%ld "
-					"links=%s\n", r, one.faceCount, (one.flags & 8) ? 1 : 0,
-					t.guestCount[(size_t)r], one.x, one.y, one.z, one.xs,
-					one.zs, one.top, one.bottom, to.empty() ? " -" :
-					to.c_str());
+					"links=%s opens_sky=%d\n", r, one.faceCount,
+					(one.flags & 8) ? 1 : 0, t.guestCount[(size_t)r], one.x,
+					one.y, one.z, one.xs, one.zs, one.top, one.bottom,
+					to.empty() ? " -" : to.c_str(), VisOpensSky(r) ? 1 : 0);
 			}
 		}
 
@@ -6295,14 +6328,16 @@ namespace farplane
 	}
 
 	/* `outside` as the walk leaves it (game\draw.cpp): the seed room's
-	 * ROOM_OUTSIDE, or that of any listed room. */
+	 * ROOM_OUTSIDE, or that of any listed room - with -opensky also a listed
+	 * room the visibility path leaves out over an open window. */
 	static bool Outside(int seed)
 	{
 		bool out = (walkoff::g_room[(size_t)seed].flags & 0x8) != 0;
 
 		for (size_t i = 0; i < walkoff::g_drawn.size(); i++)
 			out = out || (walkoff::g_room[(size_t)walkoff::g_drawn[i]].flags &
-				0x8) != 0;
+				0x8) != 0 || (walkoff::g_open_sky &&
+				walkoff::VisOpensSky(walkoff::g_drawn[i]));
 
 		return out;
 	}
@@ -15807,7 +15842,8 @@ static void SpringBlocks(const char* stem, std::vector<HDSpringBlock>& out,
  *                     per room with classic faces and no art: its faces,
  *                     ROOM_OUTSIDE, guests, box, and the rooms its floor
  *                     links (f) and portals (p) name, h where they have
- *                     art - what the canopy rule asks
+ *                     art - what the canopy rule asks - and opens_sky=, 1
+ *                     where the walk turns the sky on for it (-opensky)
  *   -vissrc <mask>    the tables -vis 1 asks: 1 guests, 2 openings, 4 wide
  *                     portals (7, the default, all three)
  *   -visreach <units> -visbare <share> -visguest <triangles>
@@ -17449,11 +17485,14 @@ static int ProbeMain(int argc, char** argv)
 		else if (!strcmp(argv[at], "-staticsonly"))
 			probestatics::g_only = true;
 		else if (!strcmp(argv[at], "-hollow") ||
+			!strcmp(argv[at], "-opensky") ||
 			(!strcmp(argv[at], "-skipgroup") && at + 1 < argc))
 		{
-			// One branch for both: the chain is at the compiler's depth.
+			// One branch for all three: the chain is at the compiler's depth.
 			if (argv[at][1] == 'h')
 				g_hollow = true;
+			else if (argv[at][1] == 'o')
+				walkoff::g_open_sky = true;
 			else
 				g_skip_groups.insert(atoi(argv[++at]));
 		}

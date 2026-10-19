@@ -4980,6 +4980,11 @@ void GetRoomBounds()
 
 			if (classicHere && r->flags & ROOM_OUTSIDE)
 				outside = ROOM_OUTSIDE;
+			/* A room the visibility path leaves out whose faces closed its
+			 * window (HDVisClassicRoomOpensSky, hd_vis.h): the sky stands
+			 * behind it, as behind a room under the sky. */
+			else if (classicHere && g_vis_walk && HDVisRoomOpensSky((int)rn))
+				outside = ROOM_OUTSIDE;
 		}
 
 		if (classicHere && r->flags & ROOM_OUTSIDE)

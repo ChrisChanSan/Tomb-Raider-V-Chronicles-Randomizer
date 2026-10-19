@@ -3944,26 +3944,25 @@ static bool VisHidesClassicRoom(int roomIndex)
 	const int faces = r->nRoomlets > 0 && r->nVerts > 0 ? 1 : 0;
 	const int tris = HDRenderGroupTriangles(group, -1);
 
-	// Every room its floor links name drawn HD this frame, one at least.
-	bool floorOnArt = false;
+	/* A floor room is drawn HD when GroupOfRoom names a group for it: the
+	 * level's verdict (g_group_hd) through the flip table, the same in
+	 * every frame. */
+	return HDVisClassicRoomVerdict(*tables, roomIndex, tris == 0, covered,
+		faces, [](int to) { return GroupOfRoom(to) >= 0; });
+}
 
-	if (roomIndex < (int)tables->floorCount.size())
-	{
-		const int first = tables->floorFirst[(size_t)roomIndex];
-		const int count = tables->floorCount[(size_t)roomIndex];
+/* HDVisRoomOpensSky (hd_vis.h): asked by the walk for each room it lists,
+ * once a frame, before the sky is drawn. A room a group draws has its art
+ * and never opens the sky; the rest asks the rule HDFrameRoom asks, with
+ * the room's own ROOM_OUTSIDE. */
+bool HDVisRoomOpensSky(int roomIndex)
+{
+	if (!g_vis_level || roomIndex < 0 || roomIndex >= g_room_count ||
+		roomIndex >= number_rooms || GroupOfRoom(roomIndex) >= 0)
+		return false;
 
-		floorOnArt = count > 0;
-
-		for (int i = 0; i < count && floorOnArt; i++)
-			floorOnArt = GroupOfRoom(
-				tables->floorRooms[(size_t)(first + i)]) >= 0;
-	}
-
-	/* A room standing inside another (HDVisTables::enclosedBy) keeps its
-	 * faces: its own group is hollow and never drawn, and the enclosing
-	 * art covers none of them, so nothing else closes its inside. */
-	return HDVisClassicRoomHidden(tris == 0, covered, faces,
-		tables->guestCount[(size_t)roomIndex], floorOnArt);
+	return HDVisClassicRoomOpensSky(VisHidesClassicRoom(roomIndex),
+		(room[roomIndex].flags & ROOM_OUTSIDE) != 0);
 }
 
 /* Whose art stands inside whose room.

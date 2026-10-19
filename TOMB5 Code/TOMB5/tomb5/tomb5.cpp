@@ -531,10 +531,10 @@ void init_tomb5_stuff()
 
 		/* Absent - every older registry - reads as 1, the visibility path.
 		 * A registry without hd_vis_rev was written by an earlier build,
-		 * whose first run wrote hd_vis 0: that 0 is moved to 1 once and
-		 * both values are written back; from then on the value is kept as
-		 * it is set, and anything above 1 reads as 0 (HDVisSetting,
-		 * specific\hd\hd_vis.h). */
+		 * most of which wrote hd_vis 0 on their first run: the value is
+		 * moved to 1 once and both values are written back; from then on
+		 * the value is kept as it is set, and anything above 1 reads as 0
+		 * (HDVisSetting, specific\hd\hd_vis.h). */
 		{
 			ulong saved = 1, rev = 0;
 

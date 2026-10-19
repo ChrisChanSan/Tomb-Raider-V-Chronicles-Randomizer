@@ -637,7 +637,8 @@ inline bool HDVisWallDrawn(const HDVisWallFace* faces, int count, int target,
  * nor covered in part by the stand rule), and whose inside holds a guest -
  * the art of a group linked with it, as many triangles as make a guest
  * (HDVisTables::guests) - or whose floor links all name rooms drawn HD
- * (`floorOnArt`: it has one at least, HDVisTables::floorRooms).
+ * (`floorOnArt`, HDVisFloorOnArt: the level's verdict for each room, not
+ * the frame's list).
  *
  * What for: such a room is classic scenery standing in for what the art
  * now models in its place - ANDY3's room 88 is a band of tree trunks and
@@ -656,12 +657,90 @@ inline bool HDVisClassicRoomHidden(bool groupEmpty, bool facesCovered,
 		(guests > 0 || floorOnArt);
 }
 
+/* Whether a room's floor links all name rooms drawn HD: `count` rooms from
+ * `floorRooms` (HDVisTables::floorRooms, each room once), one at least, and
+ * `drawnHD` true for every one of them. Every link and not one, so a room
+ * that lies partly over classic ground keeps its faces. `drawnHD` is asked
+ * of the level's verdicts (a group with art in its own box, through the
+ * flip table), the same in every frame. */
+template <class DrawnHD>
+inline bool HDVisFloorOnArt(const int* floorRooms, int count,
+	DrawnHD drawnHD)
+{
+	if (!floorRooms || count <= 0)
+		return false;
+
+	for (int i = 0; i < count; i++)
+		if (!drawnHD(floorRooms[i]))
+			return false;
+
+	return true;
+}
+
+/* HDVisClassicRoomHidden over the tables, as the visibility path asks it of
+ * room `room` (hd_level.cpp, VisHidesClassicRoom): its guests and its floor
+ * links read from `t`, `drawnHD` as HDVisFloorOnArt asks it. False for a
+ * room the tables do not hold.
+ *
+ * The enclosure table (HDVisTables::enclosedBy) is not asked: a room that
+ * stands inside another keeps its faces, its own group hollow and never
+ * drawn and the enclosing art covering none of them, so nothing else
+ * closes its inside - JOBY2's sniper rooms 19 and 21, whose faces are the
+ * black behind the facade's broken glass block windows. */
+template <class DrawnHD>
+inline bool HDVisClassicRoomVerdict(const HDVisTables& t, int room,
+	bool groupEmpty, bool facesCovered, int classicFaces, DrawnHD drawnHD)
+{
+	if (room < 0 || room >= t.rooms || (size_t)room >= t.guestCount.size())
+		return false;
+
+	bool onArt = false;
+
+	if ((size_t)room < t.floorCount.size() &&
+		(size_t)room < t.floorFirst.size())
+	{
+		const int first = t.floorFirst[(size_t)room];
+		const int count = t.floorCount[(size_t)room];
+
+		onArt = count > 0 && first >= 0 &&
+			first + count <= (int)t.floorRooms.size() &&
+			HDVisFloorOnArt(&t.floorRooms[(size_t)first], count, drawnHD);
+	}
+
+	return HDVisClassicRoomHidden(groupEmpty, facesCovered, classicFaces,
+		t.guestCount[(size_t)room], onArt);
+}
+
+/* Whether a room the walk lists turns the sky on: a classic room the
+ * visibility path leaves out (HDVisClassicRoomHidden) that is not under the
+ * sky itself (ROOM_OUTSIDE). The walk (game\draw.cpp, GetRoomBounds) then
+ * sets `outside` as it does for a listed room under the sky.
+ *
+ * What for: such a room's own faces closed its window, and no art covers
+ * them - ANDY3's lids 26, 28 and 210, whose leaf ceilings close the hollows
+ * of rooms 24, 27 and 209. Left out, the window shows what stands behind
+ * it: the trees of rooms 86 and 87 and, between them, the sky. The walk
+ * from inside a hollow lists no room under the sky in many directions
+ * (from room 24 looking west), and without the sky that window is the
+ * clear colour, black, turning to sky and back as the eye turns. A room
+ * left out that is under the sky (ANDY3's 88) turns it on already. */
+inline bool HDVisClassicRoomOpensSky(bool hidden, bool underSky)
+{
+	return hidden && !underSky;
+}
+
+/* The walk's question for room `roomIndex` in the flipmap state of this
+ * moment (defined in hd_level.cpp beside the rule it asks): false off the
+ * visibility path and for a room a group draws. */
+bool HDVisRoomOpensSky(int roomIndex);
+
 /* The settings revision of hd_vis an installation's registry holds (the
  * value hd_vis_rev beside hd_vis, tomb5\tomb5.cpp). 0 - the value absent -
- * is every registry an earlier build wrote: those wrote hd_vis 0 on their
- * first run, or wrote the 0 an absent hd_vis read as, and the option has no
- * row, so that 0 is a default and never a choice. 1 is a registry whose
- * hd_vis this build or a later one has written or kept. */
+ * is every registry an earlier build wrote. Most of those builds wrote
+ * hd_vis 0 on their first run, or the 0 an absent hd_vis read as; the last
+ * few before the revision wrote and read 1. The option has no row, so a 0
+ * among them is a default and never a choice. 1 is a registry whose hd_vis
+ * this build or a later one has written or kept. */
 #define HD_VIS_REV	1
 
 /* The hd_vis a game runs with, from the value read (`saved`) and the
@@ -674,8 +753,8 @@ inline bool HDVisClassicRoomHidden(bool groupEmpty, bool facesCovered,
  * the move stays 0 - and anything above 1 reads as 0, as before.
  *
  * What for: hd_vis 1 is the default now, and an installation that ran an
- * earlier build holds the 0 that build wrote on its first run; without the
- * revision a fresh 0 and a kept one look the same. */
+ * earlier build may hold the 0 that build wrote on its first run; without
+ * the revision a fresh 0 and a kept one look the same. */
 inline unsigned long HDVisSetting(unsigned long saved, unsigned long rev)
 {
 	if (rev < HD_VIS_REV)

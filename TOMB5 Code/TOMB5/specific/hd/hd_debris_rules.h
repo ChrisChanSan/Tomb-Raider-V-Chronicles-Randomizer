@@ -446,6 +446,18 @@ inline float HDGlassSplit(float v)
 	return v <= 128.0f ? v * 2.0f : 255.0f;
 }
 
+/* A static's light at one vertex as the classic draws it
+ * (aTransformLightPrelightClipMesh, output.cpp): the vertex's prelight,
+ * 0 to 255, times the static's shade - five bits a channel, red in the low
+ * five, then green, then blue, each shifted up by 3 - over 256, split
+ * (HDGlassSplit). */
+inline void HDGlassStaticLight(float prelight, short shade, float* rgb)
+{
+	for (int i = 0; i < 3; i++)
+		rgb[i] = HDGlassSplit(prelight *
+			(float)(((shade >> (5 * i)) & 0x1F) << 3) / 256.0f);
+}
+
 /* One classic face the classic adds, for the hue at its place: its centre
  * in world units, its area in square units and its added colour - the mean
  * over its texels of the texel times the face's light, 0 to 255. */

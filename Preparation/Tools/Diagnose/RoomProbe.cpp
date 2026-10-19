@@ -13162,12 +13162,8 @@ namespace probestatics
 	static void GlassStaticLight(const DebrisMesh& m, short shade, int v,
 		float* rgb)
 	{
-		const float c = m.prelight.empty() ? 255.0f :
-			(float)(m.prelight[(size_t)v] & 0xFF);
-
-		for (int i = 0; i < 3; i++)
-			rgb[i] = HDGlassSplit(c * (float)(((shade >> (10 - 5 * i)) &
-				0x1F) << 3) / 256.0f);
+		HDGlassStaticLight(m.prelight.empty() ? 255.0f :
+			(float)(m.prelight[(size_t)v] & 0xFF), shade, rgb);
 	}
 
 	/* The look of a static's glass pieces (hd_level.cpp, BuildGlassLooks):

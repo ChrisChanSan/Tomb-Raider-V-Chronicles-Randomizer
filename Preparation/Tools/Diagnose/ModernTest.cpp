@@ -11362,6 +11362,32 @@ static void glass_hue()
 		"glass hue: the classic's light split", (int)HDGlassSplit(64.0f),
 		128);
 
+	/* A static's light: the prelight times the shade, red in the shade's
+	 * low five bits as aTransformLightPrelightClipMesh reads it. */
+	glass_body(rules, "inline void HDGlassStaticLight(", body, sizeof(body));
+	ok(!strcmp(body, "for(inti=0;i<3;i++)rgb[i]=HDGlassSplit(prelight*"
+		"(float)(((shade>>(5*i))&0x1F)<<3)/256.0f);"),
+		"glass hue: HDGlassStaticLight is the rule tested here", 0, 0);
+
+	float light[3];
+
+	HDGlassStaticLight(128.0f, 0x001F, light);
+	ok(light[0] == 248.0f && light[1] == 0.0f && light[2] == 0.0f,
+		"glass hue: a shade's low five bits are its red", (int)light[0],
+		248);
+	HDGlassStaticLight(128.0f, 0x7C00, light);
+	ok(light[0] == 0.0f && light[1] == 0.0f && light[2] == 248.0f,
+		"glass hue: a shade's high five bits are its blue", (int)light[2],
+		248);
+	HDGlassStaticLight(255.0f, 0x0200, light);
+	ok(light[0] == 0.0f && light[1] == 255.0f && light[2] == 0.0f,
+		"glass hue: the middle five are green, split above 128",
+		(int)light[1], 255);
+	n = hd_switch_count(level, "HDGlassStaticLight(data->prelight ?");
+	ok(n == 1, "glass hue: the level's static light is the rule", n, 1);
+	n = hd_switch_count(level, "(10 - 5 * i)");
+	ok(n == 0, "glass hue: no shade read blue first", n, 0);
+
 	/* A face's colour on a page of two by two texels, the face over the
 	 * whole page at full light: the texels' mean, four texels counted. */
 	const unsigned char page[16] =

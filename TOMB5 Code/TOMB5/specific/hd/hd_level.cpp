@@ -5433,16 +5433,13 @@ static void GlassMeshFaces(GlassPages& pages, const MESH_DATA* data,
 }
 
 /* A static's light at vertex v as the classic draws it: the prelight - or
- * full light for a mesh lit at run time - times the static's shade, each
- * channel split. */
+ * full light for a mesh lit at run time - times the static's shade
+ * (HDGlassStaticLight). */
 static void GlassStaticLight(const MESH_DATA* data, short shade, int v,
 	float* rgb)
 {
-	const float c = data->prelight ? (float)(data->prelight[v] & 0xFF) : 255.0f;
-
-	for (int i = 0; i < 3; i++)
-		rgb[i] = HDGlassSplit(c *
-			(float)(((shade >> (10 - 5 * i)) & 0x1F) << 3) / 256.0f);
+	HDGlassStaticLight(data->prelight ? (float)(data->prelight[v] & 0xFF) :
+		255.0f, shade, rgb);
 }
 
 /* The glass's look (hd_debris_rules.h): every face the classic adds - a

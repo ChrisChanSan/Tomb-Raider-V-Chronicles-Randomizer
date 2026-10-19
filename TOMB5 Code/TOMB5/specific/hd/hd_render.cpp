@@ -3707,13 +3707,35 @@ namespace
 	HDFogLast g_fog_last = {};
 	bool g_fog_timing = false;
 	bool g_fog_draws = true;
+	// The bracket's bulbs are taken (fog_take) until its pass (fog_draw),
+	// and each taken bulb's place in the frame's upload.
+	bool g_fog_taken = false;
+	int g_fog_index[HD_MAX_BULBS];
 
 	/* The bracket's bulbs: each one whose sphere reaches the screen is
 	 * kept for the pass and its density in the upload `bulbs` (c40, eight
 	 * floats a bulb) set to 0. Nothing with hd_fog 0 or without the depth
-	 * texture, so the upload stays as it was. */
+	 * texture, so the upload stays as it was.
+	 *
+	 * Once a bracket. The marble floors' mirror hands the frame's lighting
+	 * back after its models (HDRenderMarbleDraw) while its mirrored
+	 * projection is still set, and no room asks the additive pass after it:
+	 * taken again there, the rectangles would be the mirror's and the pass
+	 * no longer due, and every bulb would lose its haze and its fog alike.
+	 * A second call keeps the bracket's bulbs, rectangles and due, and only
+	 * takes the same bulbs' haze out of the upload once more. */
 	void fog_take(const HDFrameLighting* f, float* bulbs, int count)
 	{
+		if (g_fog_taken)
+		{
+			for (int n = 0; n < g_fog_count; n++)
+				if (g_fog_index[n] < count)
+					bulbs[g_fog_index[n] * 8 + 7] = 0.0f;
+
+			return;
+		}
+
+		g_fog_taken = true;
 		g_fog_count = 0;
 		g_fog_due = false;
 		g_fog_placed = false;
@@ -3737,6 +3759,7 @@ namespace
 			if (!HDFogBounds(c, b.rad, sx, sy, znear, rect))
 				continue;
 
+			g_fog_index[g_fog_count] = j;
 			g_fog_bulb[g_fog_count++] = b;
 			bulbs[j * 8 + 7] = 0.0f;
 		}
@@ -3791,6 +3814,7 @@ namespace
 		if (g_fog_vs) { g_fog_vs->Release(); g_fog_vs = 0; }
 		if (g_fog_ps) { g_fog_ps->Release(); g_fog_ps = 0; }
 		g_fog_made = 0;
+		g_fog_taken = false;
 	}
 
 	/* The pass, at the bracket's end (HDRenderFrameEnd), when it is due and
@@ -3802,6 +3826,7 @@ namespace
 		const bool due = g_fog_due;
 
 		g_fog_due = false;
+		g_fog_taken = false;	// the next bracket takes its bulbs anew
 		g_fog_last = HDFogLast();
 		g_fog_last.offered = g_fog_count;
 		g_fog_last.placed = g_fog_placed ? 1 : 0;
